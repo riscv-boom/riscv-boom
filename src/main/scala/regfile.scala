@@ -12,8 +12,6 @@ package BOOM
 import Chisel._
 import Node._
 
-import Common._
-
  
 class RegisterFileReadPortIO extends Bundle
 {

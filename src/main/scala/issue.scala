@@ -8,7 +8,6 @@ package BOOM
 import Chisel._
 import Node._
 
-import Common._
 import FUCode._
 
 import scala.collection.mutable.ArrayBuffer

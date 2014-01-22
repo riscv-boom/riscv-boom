@@ -13,11 +13,12 @@ import Chisel._
 import Node._
 import scala.collection.mutable.ArrayBuffer
 
-import Common._
-import Common.Instructions._
-import ALU._
+import rocket.Instructions._
+import rocket.ALU._
 import FUCode._
 import uncore.constants.AddressConstants._
+
+import rocket._
 
 /* 
 
@@ -100,11 +101,11 @@ class CtrlSignals extends Bundle()
    val br_type     = UInt(width = BR_N.getWidth)
    val op2_sel     = UInt(width = OP2_X.getWidth)
    val imm_sel     = UInt(width = IS_X.getWidth)
-   val op_fcn      = Bits(width = FN_OP2.getWidth) 
+   val op_fcn      = Bits(width = SZ_ALU_FN) 
    val fcn_dw      = Bool()
    val wb_sel      = UInt(width = WB_X.getWidth)
    val rf_wen      = Bool()
-   val pcr_fcn     = Bits(width = PCR.SZ) 
+   val pcr_fcn     = Bits(width = rocket.CSR.SZ) 
    val is_load     = Bool()
    val is_sta      = Bool()
    val is_std      = Bool()
@@ -147,12 +148,13 @@ class MicroOp extends Bundle()
    val prs2_busy        = Bool()
    val stale_pdst       = UInt(width = PREG_SZ)
    val exception        = Bool()
-   val exc_cause        = UInt(width = EXC_CAUSE_SZ)  
+   val exc_cause        = UInt(width = EXC_CAUSE_SZ)  // TODO don't magic number this
    val eret             = Bool()
    val syscall          = Bool()
    val bypassable       = Bool()                      // can we bypass ALU results? (doesn't include loads, pcr, rdcycle, etc.... need to readdress this, SHOULD include PCRs?)
    val mem_cmd          = UInt(width = 4)             // sync primitives/cache flushes
    val mem_typ          = UInt(width = 3)             // memory mask type for loads/stores
+   val is_fence         = Bool()                      
    val is_store         = Bool()                      
    val is_load          = Bool()                      
    val is_unique        = Bool()                      // only allow this instruction in the pipeline 
@@ -174,7 +176,7 @@ class MicroOp extends Bundle()
 
 class FetchBundle(implicit conf: BOOMConfiguration)  extends Bundle
 {
-   val fetch_width = conf.icache.ibytes/4
+   val fetch_width = conf.rc.icache.ibytes/4
 
    val pc    = UInt(width = XPRLEN)
    val insts = Vec.fill(fetch_width) { Bits(width = 32) }
@@ -210,15 +212,17 @@ class BrResolutionInfo extends Bundle
 
 class DpathIo(implicit conf: BOOMConfiguration) extends Bundle() 
 {                                              
-   val host = new HTIFIO(conf.tl.ln.nClients)
-   val imem = new CPUFrontendIO()(conf.icache)
-   val dmem = new DCMemPortIo()(conf.dcache)
-   val ptw = (new DatapathPTWIO).flip 
+   val host = new uncore.HTIFIO(conf.rc.tl.ln.nClients)
+   val imem = new CPUFrontendIO()(conf.rc.icache)
+   val dmem = new DCMemPortIo()(conf.rc.dcache)
+   val ptw = (new rocket.DatapathPTWIO).flip 
 }
 
 class DatPath(implicit conf: BOOMConfiguration) extends Module 
 {
    val io = new DpathIo()
+
+   implicit val rc = conf.rc
  
    //**********************************
    // Pipeline State Registers
@@ -247,7 +251,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    val laq_full       = Bool()
    val stq_full       = Bool()
 
-   val pcr_status     = new Status()
+   val pcr_status     = new rocket.Status()
   
    // Register Rename State
    val ren_insts_can_proceed = Vec.fill(DECODE_WIDTH) { Bool() }
@@ -410,7 +414,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    fetchbuffer_kill         := br_unit.brinfo.mispredict || com_exception || flush_pipeline || com_eret
    
    // round off to nearest fetch boundary
-   val lsb = log2Up(conf.icache.ibytes)
+   val lsb = log2Up(conf.rc.icache.ibytes)
    val aligned_fetch_pc = Cat(io.imem.resp.bits.pc(VADDR_BITS+1-1,lsb), Bits(0,lsb)).toUInt
    fetch_bundle.pc   := aligned_fetch_pc
 
@@ -536,7 +540,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    val bp2_imm32 = Cat(Fill(bp2_inst(31),12), bi19_12, bi11, bp2_inst(30,25), bi5_1, Bits(0,1))
 
    require (FETCH_WIDTH <= 2)
-   bp2_pred_target := bp2_pc + Mux(bpd_br_idx === UInt(1), UInt(4), UInt(0)) + Sext(bp2_imm32, conf.xprlen)
+   bp2_pred_target := bp2_pc + Mux(bpd_br_idx === UInt(1), UInt(4), UInt(0)) + Sext(bp2_imm32, conf.rc.xprlen)
    
    bp2_prediction := bp2_reg_predictor_out
 
@@ -909,9 +913,11 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    
    // TODO fix this, currently hacked to do in a single cycle, having problems making this non-atomic
    require (exe_units(0).uses_pcr_wport)
-   val pcr = Module(new PCR())
+   // TODO rename from pcr to csr?
+   val pcr = Module(new rocket.CSRFile())
    pcr.io.host <> io.host
-   pcr.io.rw.addr := wb_reg_inst(31,20)      exe_units(0).io.resp(0).bits.uop.pop1
+//   pcr.io.rw.addr := wb_reg_inst(31,20)      exe_units(0).io.resp(0).bits.uop.pop1
+   pcr.io.rw.addr := exe_units(0).io.resp(0).bits.uop.pop1
    pcr.io.rw.cmd := exe_units(0).io.resp(0).bits.uop.ctrl.pcr_fcn
    pcr.io.rw.wdata := exe_units(0).io.resp(0).bits.data
    val pcr_read_out = pcr.io.rw.rdata
@@ -923,7 +929,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    pcr.io.pc        := PriorityMux(com_valids.reverse, com_uops.reverse.map(x => x.pc))
    pcr.io.exception := com_exception 
    pcr.io.cause     := com_exc_cause
-   pcr.io.eret      := com_eret
+   pcr.io.sret      := com_eret // XXX TODO  update to new RISC-V sret eret stuff
    pcr_exc_target   := pcr.io.evec
    pcr.io.badvaddr_wen := Bool(false) // TODO VM virtual memory
 
@@ -1155,9 +1161,10 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    //-------------------------------------------------------------
    //-------------------------------------------------------------
 
-   val saw_rdcycle = Bool()
-   debug(saw_rdcycle)
-   saw_rdcycle := Range(0,COMMIT_WIDTH).map(w => com_valids(w) && com_uops(w).uopc === uopRDC).reduce(_|_)
+//    TODO have a way to detect this
+//   val saw_rdcycle = Bool()
+//   debug(saw_rdcycle)
+//   saw_rdcycle := Range(0,COMMIT_WIDTH).map(w => com_valids(w) && com_uops(w).uopc === uopRDC).reduce(_|_)
 
    for (w <- 0 until DECODE_WIDTH) 
    { 
@@ -1670,7 +1677,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    
    io.ptw.ptbr := pcr.io.ptbr                   
    io.ptw.invalidate := pcr.io.fatc             
-   io.ptw.eret := com_eret
+   io.ptw.sret := com_eret // BUG XXX TODO eret
    io.ptw.status := pcr.io.status
  
    //-------------------------------------------------------------

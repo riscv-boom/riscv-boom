@@ -23,7 +23,6 @@ import Chisel._
 import Node._
 import scala.math.ceil
 
-import Common._
 
 class RobIo(machine_width: Int, num_wakeup_ports: Int)  extends Bundle()
 {
@@ -48,7 +47,7 @@ class RobIo(machine_width: Int, num_wakeup_ports: Int)  extends Bundle()
 
    val mem_xcpt_val     = Bool(INPUT)
    val mem_xcpt_uop     = new MicroOp().asInput
-   val mem_xcpt         = (new HellaCacheExceptions).asInput
+   val mem_xcpt         = (new rocket.HellaCacheExceptions).asInput
 
    // load-ordering failure - treat as exception, even though it's just a rollback/pipeline restart
    // TODO consolidate exception ports?
@@ -70,7 +69,7 @@ class RobIo(machine_width: Int, num_wakeup_ports: Int)  extends Bundle()
 
    // Handle Exceptions/ROB Rollback
    val com_exception    = Bool(OUTPUT)
-   val com_exc_cause    = UInt(OUTPUT, EXC_CAUSE_SZ)
+   val com_exc_cause    = UInt(OUTPUT, EXC_CAUSE_SZ) 
    val com_handling_exc = Bool(OUTPUT)
    val com_rbk_valids   = Vec.fill(machine_width) {Bool(OUTPUT)}
    
@@ -281,7 +280,7 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
       when (io.mem_xcpt_val && MatchBank(GetBankIdx(io.mem_xcpt_uop.rob_idx))) 
       {
          rob_exception(GetRowIdx(io.mem_xcpt_uop.rob_idx)) := Bool(true)
-         rob_exc_cause(GetRowIdx(io.mem_xcpt_uop.rob_idx)) := Mux(io.mem_xcpt.ma.ld, EXCEPTION_MA_LD, EXCEPTION_MA_ST)
+         rob_exc_cause(GetRowIdx(io.mem_xcpt_uop.rob_idx)) := Mux(io.mem_xcpt.ma.ld, UInt(rocket.Causes.misaligned_load), UInt(rocket.Causes.misaligned_store))
       }
 
       when (io.ldo_xcpt_val && MatchBank(GetBankIdx(io.ldo_xcpt_uop.rob_idx)))

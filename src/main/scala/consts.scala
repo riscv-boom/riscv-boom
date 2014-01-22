@@ -92,6 +92,9 @@ trait BOOMProcConstants
    val MAX_LD_COUNT      = (1 << MEM_ADDR_SZ)
    val MAX_BR_COUNT      = (1 << (BR_TAG_SZ)) 
 
+
+   val EXC_CAUSE_SZ = log2Up(rocket.Causes.all.max) + 1 // may or may not actually work
+
    // if pipeline goes idle, throw error
    // otherwise, reset pipeline and restart TODO on this feature
    val ON_IDLE_THROW_ERROR = true
@@ -249,7 +252,8 @@ trait ScalarOpConstants
    val uopCSRRW= Bits(30, UOPC_SZ)
    val uopCSRRS= Bits(31, UOPC_SZ)
    val uopCSRRC= Bits(32, UOPC_SZ)
-   // missing 33
+   val uopCSRRWI= Bits(30, UOPC_SZ)
+
    val uopJ    = Bits(34, UOPC_SZ)
    val uopJAL  = Bits(35, UOPC_SZ)
    val uopJALR = Bits(36, UOPC_SZ)
@@ -258,10 +262,8 @@ trait ScalarOpConstants
    val uopSRET = Bits(38, UOPC_SZ)
    val uopCFLSH= Bits(39, UOPC_SZ)
    val uopFENCE= Bits(40, UOPC_SZ)
-   
-   val uopRDC  = Bits(41, UOPC_SZ)
-   val uopRDI  = Bits(42, UOPC_SZ)
-   
+   // 41
+   // 42
    val uopADDIW= Bits(43, UOPC_SZ)
    val uopADDW = Bits(44, UOPC_SZ)
    val uopSUBW = Bits(45, UOPC_SZ)
@@ -285,7 +287,7 @@ trait ScalarOpConstants
    val uopREMW = Bits(63, UOPC_SZ)
    val uopREMUW= Bits(64, UOPC_SZ)
    
-   val uopFENCEI= Bits(65, UOPC_SZ)
+   val uopFENCEI    = Bits(65, UOPC_SZ)
    val uopMEMSPECIAL= Bits(66, UOPC_SZ)
 
    // Enable Co-processor Register Signal (ToHost Register, etc.)
@@ -317,6 +319,7 @@ trait ScalarOpConstants
    val BUBBLE  = Bits(0x4033, 32)
 
 
+   // use apply
    //val nullCtrlSignals = new CtrlSignals()
    //nullCtrlSignals.br_type     := BR_N
    //nullCtrlSignals.rf_wen      := Bool(false)
@@ -333,15 +336,29 @@ trait InterruptConstants
 {
    val CAUSE_INTERRUPT = 32
 }
-  
-//abstract trait RocketDcacheConstants extends uncore.constants.CacheConstants with uncore.constants.AddressConstants {
-//   require(OFFSET_BITS == log2Up(uncore.Constants.CACHE_DATA_SIZE_IN_BYTES))
-//   require(OFFSET_BITS <= uncore.Constants.ACQUIRE_WRITE_MASK_BITS)
-//   require(log2Up(OFFSET_BITS) <= uncore.Constants.ACQUIRE_SUBWORD_ADDR_BITS)
-//}
 
 
+trait RISCVConstants
+{
+   // abstract out instruction decode magic numbers
+   val RD_MSB  = 11
+   val RD_LSB  = 7
+   val RS1_MSB = 19
+   val RS1_LSB = 15
+   val RS2_MSB = 24
+   val RS2_LSB = 20
 
+   // location of the fifth bit in the shamt (for checking for illegal ops for SRAIW,etc.)
+   val SHAMT_5_BIT = 25
+   val LONGEST_IMM_SZ = 20
+   val X0 = UInt(0)
+   val RA = UInt(1) // return address register
+}
+
+trait ExcCauseConstants
+{
+   val MINI_EXCEPTION_MEM_ORDERING = UInt(13)
+}
 
 }
 

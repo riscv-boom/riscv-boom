@@ -24,17 +24,17 @@
 
 
 package object BOOM extends 
-  BOOM.constants.BOOMProcConstants with
+   BOOM.constants.BOOMProcConstants with
    BOOM.constants.LoadStoreUnitConstants with
    BOOM.constants.BrPredConstants with
    BOOM.constants.ScalarOpConstants with
-   Common.constants.ExcCauseConstants with 
+   BOOM.constants.ExcCauseConstants with 
 //   InterruptConstants with
 //   RocketDcacheConstants with
 //  BOOM.constants.ScalarOpConstants with
-  BOOM.constants.InterruptConstants with
-  Common.constants.RISCVConstants 
+   BOOM.constants.InterruptConstants with
+   BOOM.constants.RISCVConstants 
 //  BOOM.constants.VectorOpConstants
 {
-  val START_ADDR = 0x2000
+   val START_ADDR = 0x2000
 }

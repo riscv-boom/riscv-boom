@@ -3,8 +3,9 @@ package BOOM
 import Chisel._
 import Node._
 import uncore._
-import Common._
-import Common.Util._
+
+import rocket.ICacheConfig
+import rocket.Util._
 
 
 class FrontendReq extends Bundle {
@@ -31,7 +32,7 @@ class FrontendResp(implicit conf: ICacheConfig) extends Bundle {
 class CPUFrontendIO(implicit conf: ICacheConfig) extends Bundle {
   val req = Valid(new FrontendReq)
   val resp = Decoupled(new FrontendResp).flip
-  val ptw = new TLBPTWIO().flip
+  val ptw = new rocket.TLBPTWIO().flip
   val invalidate = Bool(OUTPUT)
 }
 
@@ -44,7 +45,7 @@ class Frontend(implicit c: ICacheConfig, tl: TileLinkConfiguration) extends Modu
   
   val btb = Module(new BTB(c.nbtb, c.ibytes/4))
   val icache = Module(new ICache)
-  val tlb = Module(new TLB(c.ntlb))
+  val tlb = Module(new rocket.TLB(c.ntlb))
 
   val s1_pc_ = Reg(UInt())
   val s1_pc = s1_pc_ & SInt(-2) // discard LSB of PC (throughout the pipeline)

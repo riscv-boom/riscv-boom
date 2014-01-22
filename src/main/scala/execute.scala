@@ -16,26 +16,16 @@ package BOOM
 import Chisel._
 import Node._
 
-import Common._
 import FUCode._
 import uncore.constants.AddressConstants._
 import uncore.constants.MemoryOpConstants._
 
  
-//class ExeUnitReq extends Bundle()
-//{
-//   val uop   = new MicroOp()
-//   val data1 = Bits(width = XPRLEN)
-//   val data2 = Bits(width = XPRLEN)
-//}
-
 class ExeUnitResp extends Bundle()
 {
    val uop = new MicroOp()
    val data = Bits(width = XPRLEN)  
    // TODO allow for muliple write ports?
-
-   // write to PCR
 }
  
 class ExecutionUnitIo(num_rf_read_ports: Int, num_rf_write_ports: Int, num_bypass_ports: Int)(implicit conf: BOOMConfiguration) extends Bundle()
@@ -61,10 +51,10 @@ class ExecutionUnitIo(num_rf_read_ports: Int, num_rf_write_ports: Int, num_bypas
 
    // only used by the mem unit
    val lsu_io = new LoadStoreUnitIo(DECODE_WIDTH)
-   val dmem   = new DCMemPortIo()(conf.dcache)
+   val dmem   = new DCMemPortIo()(conf.rc.dcache)
    val com_handling_exc = Bool(INPUT)
    val ma_xcpt_val = Bool(OUTPUT)
-   val ma_xcpt     = (new HellaCacheExceptions).asOutput
+   val ma_xcpt     = (new rocket.HellaCacheExceptions).asOutput
    val ma_xcpt_uop = new MicroOp().asOutput
 }
  

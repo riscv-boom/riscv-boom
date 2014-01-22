@@ -15,14 +15,13 @@ package BOOM
 import Chisel._
 import Node._
 
-import Common._
 
 //*************************************************************
 // IOs 
 
 // addresses being sent to the cache, delayed by two cycles so we can see if
 // they missed or not
-class CoreRequest(implicit conf: DCacheConfig) extends Bundle
+class CoreRequest(implicit conf: rocket.DCacheConfig) extends Bundle
 {
    val addr = UInt(width = conf.ppnbits.max(conf.vpnbits+1) + conf.pgidxbits)
    val miss = Bool()           // was the access a miss in the cache?
@@ -33,21 +32,21 @@ class CoreRequest(implicit conf: DCacheConfig) extends Bundle
 }
 
 // this is our access port to the cache, where we put our prefetch requests into
-class CacheReq(implicit conf: DCacheConfig) extends Bundle
+class CacheReq(implicit conf: rocket.DCacheConfig) extends Bundle
 {
    val addr = UInt(width = conf.ppnbits.max(conf.vpnbits+1) + conf.pgidxbits)
   
    override def clone = new CacheReq().asInstanceOf[this.type]
 }
 
-class CacheIO(implicit conf: DCacheConfig) extends Bundle
+class CacheIO(implicit conf: rocket.DCacheConfig) extends Bundle
 {
    val req = new DecoupledIO(new CacheReq()) 
 }
 
 //*************************************************************
 
-class Prefetcher(implicit conf: DCacheConfig) extends Module
+class Prefetcher(implicit conf: rocket.DCacheConfig) extends Module
 {
    val io = new Bundle
    {

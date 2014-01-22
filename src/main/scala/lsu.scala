@@ -46,7 +46,6 @@ package BOOM
 
 import Chisel._
 import Node._
-import Common._
 
 import scala.collection.mutable.ArrayBuffer
 import uncore.constants.AddressConstants._
@@ -433,7 +432,7 @@ class LoadStoreUnit(pl_width: Int) extends Module
       // fences/flushes are treated as stores that touch all addresses
       .elsewhen (stq_entry_val(i) && 
                   st_dep_mask(i) && 
-                  (stq_uop(i).mem_cmd === M_FENCE)) 
+                  (stq_uop(i).is_fence)) 
       {
          addr_conflicts(i) := Bool(true)
       }
@@ -444,7 +443,7 @@ class LoadStoreUnit(pl_width: Int) extends Module
       forwarding_matches(i) := Bool(false)
       when ((read_mask === write_mask) && 
             sdq_val(i) && 
-            !(stq_uop(i).mem_cmd === M_FENCE) &&
+            !(stq_uop(i).is_fence) &&
             dword_addr_matches(i))
       {
          forwarding_matches(i) := Bool(true)

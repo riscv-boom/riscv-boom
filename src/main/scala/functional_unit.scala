@@ -20,8 +20,7 @@ package BOOM
 import Chisel._
 import Node._
 
-import Common._
-import ALU._
+import rocket.ALU._
 import uncore.constants.AddressConstants._
 import uncore.constants.MemoryOpConstants._
 
@@ -75,7 +74,7 @@ class FuncUnitResp extends Bundle()
 {
    val uop = new MicroOp()
    val data = Bits(width = XPRLEN)  
-   val xcpt = (new HellaCacheExceptions)
+   val xcpt = (new rocket.HellaCacheExceptions)
 //   val xcpt = Bits(width = EXC_CAUSE_SZ)
 }
  
@@ -206,9 +205,10 @@ class ALUUnit(is_branch_unit: Boolean = false)
    // operand 2 select 
    // TODO op1 mux just for auipc? 
    val op1_data = Mux((io.req.bits.uop.uopc === uopAUIPC) , Cat((uop_pc_ >> UInt(12)), Bits(0,12)), io.req.bits.rs1_data)
-   val op2_data = Mux((io.req.bits.uop.ctrl.op2_sel.toUInt === OP2_IMM) , Sext(imm_xprlen, conf.xprlen), io.req.bits.rs2_data)
-                                                                        
-   val alu = Module(new ALU())
+   val op2_data = Mux((io.req.bits.uop.ctrl.op2_sel.toUInt === OP2_IMM) , Sext(imm_xprlen, conf.rc.xprlen), io.req.bits.rs2_data)
+
+   implicit val rc = conf.rc
+   val alu = Module(new rocket.ALU())
 
    alu.io.in1 := op1_data.toUInt
    alu.io.in2 := op2_data.toUInt
@@ -279,7 +279,7 @@ class ALUUnit(is_branch_unit: Boolean = false)
       io.br_unit.brinfo.stq_idx := uop.stq_idx
 
       // Branch/Jump Target Calculation
-      io.br_unit.brjmp_target   := Sext(imm_xprlen, conf.xprlen) + uop_pc_ // TODO use ALU for this addition?
+      io.br_unit.brjmp_target   := Sext(imm_xprlen, conf.rc.xprlen) + uop_pc_ // TODO use ALU for this addition?
       io.br_unit.jump_reg_target := alu.io.adder_out
       io.br_unit.pc             := uop_pc_
       io.br_unit.pc_plus4       := pc_plus4
@@ -325,7 +325,8 @@ class MemAddrCalcUnit()(implicit conf: BOOMConfiguration) extends PipelinedFunct
                                                                                    , is_branch_unit = false)
 {
    // perform address calculation
-   val alu = Module(new ALU())
+   implicit val rc = conf.rc
+   val alu = Module(new rocket.ALU())
 
    alu.io.in1 := io.req.bits.rs1_data.toUInt
    alu.io.in2 := Cat(io.req.bits.uop.imm_packed(19,8)).toSInt //uses special packed imm format
@@ -400,7 +401,8 @@ abstract class UnPipelinedFunctionalUnit()
 
 class MulDivUnit(implicit conf: BOOMConfiguration) extends UnPipelinedFunctionalUnit
 {
-   val muldiv = Module(new MulDiv(mulUnroll = if (conf.fastMulDiv) 8 else 1, earlyOut = conf.fastMulDiv))
+   implicit val rc = conf.rc
+   val muldiv = Module(new rocket.MulDiv(mulUnroll = if (conf.rc.fastMulDiv) 8 else 1, earlyOut = conf.rc.fastMulDiv))
    
    // request
    muldiv.io.req.valid    := io.req.valid 

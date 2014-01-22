@@ -4,8 +4,7 @@ package BOOM
 import Chisel._
 import Node._
 
-import Common.Instructions._
-import Common._
+import rocket.Instructions._
 import FUCode._
 import uncore.constants.MemoryOpConstants._
 
@@ -109,8 +108,9 @@ object Decode
                SCALL   -> List(Y, uopNOP  , FU_ALU , RT_X  , RT_X  , RT_X  , IS_X, M_N  , MSK_X , UInt(0), N, N, Y, N, Y, N), 
                SRET    -> List(Y, uopSRET , FU_ALU , RT_X  , RT_X  , RT_X  , IS_X, M_N  , MSK_X , UInt(0), N, Y, N, Y, Y, N), 
 
-               FENCE_I -> List(Y, uopFENCEI    ,FU_MEM, RT_X, RT_X, RT_X , IS_X, M_FENCE, MSK_X , UInt(0), N, N, N, N, Y, Y), 
-               FENCE   -> List(Y, uopMEMSPECIAL,FU_MEM, RT_X, RT_X, RT_X , IS_X, M_FENCE, MSK_X , UInt(0), N, N, N, N, N, N)
+               // TODO M_NOP... use ot be M_FENCE, but hellacache no longer does fences?
+               FENCE_I -> List(Y, uopFENCEI    ,FU_MEM, RT_X, RT_X, RT_X , IS_X, M_NOP  , MSK_X , UInt(0), N, N, N, N, Y, Y), 
+               FENCE   -> List(Y, uopMEMSPECIAL,FU_MEM, RT_X, RT_X, RT_X , IS_X, M_NOP  , MSK_X , UInt(0), N, N, N, N, N, N)
                )
                  
 
@@ -131,7 +131,7 @@ class DecodeUnitIo extends Bundle
       val ready = Bool() // we may be busy writing out multiple micro-ops per macro-inst or waiting on ROB to empty
    }.asOutput
 
-   val status    = new Status().asInput
+   val status    = new rocket.Status().asInput
 }
 
 // Takes in a single instruction, generates a MicroOp (or multiply micro-ops over x cycles)
@@ -160,9 +160,9 @@ class DecodeUnit extends Module
                        exc_illegal ||
                        exc_priv
                                              
-   uop.exc_cause := Mux(exc_illegal,           EXCEPTION_ILLEGAL,
-                       Mux(exc_priv,           EXCEPTION_PRIVILEGED,
-                       Mux(cs_syscall.toBool,  EXCEPTION_SYSCALL,
+   uop.exc_cause := Mux(exc_illegal,           UInt(rocket.Causes.illegal_instruction),
+                       Mux(exc_priv,           UInt(rocket.Causes.privileged_instruction),
+                       Mux(cs_syscall.toBool,  UInt(rocket.Causes.syscall),
                                                UInt(0,5))))
    
    //-------------------------------------------------------------
@@ -183,6 +183,7 @@ class DecodeUnit extends Module
    uop.mem_typ    := cs_mem_typ
    uop.is_load    := cs_uopc === uopLD
    uop.is_store   := uop.uopc === uopSTA || uop.uopc === uopMEMSPECIAL || uop.uopc === uopFENCEI
+   uop.is_fence   := uop.uopc === uopMEMSPECIAL || uop.uopc === uopFENCEI // TODO just make fence a bit in the ctrl table
    uop.is_unique  := cs_inst_unique.toBool
    uop.flush_on_commit := cs_flush_on_commit.toBool
    //treat fences, flushes as "stores that write to all addresses"

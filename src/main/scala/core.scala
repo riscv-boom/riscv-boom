@@ -7,18 +7,15 @@ package BOOM
 
 import Chisel._
 import Node._
-import Common._
-//import uncore.constants.MemoryOpConstants._
-//import Util._ 
+import uncore.HTIFIO
+import rocket.DatapathPTWIO
  
 class CoreIo(implicit conf: BOOMConfiguration) extends Bundle 
 {
-  val host = new HTIFIO(conf.tl.ln.nClients)
-  val dmem = new DCMemPortIo()(conf.dcache)
-  val imem = new CPUFrontendIO()(conf.icache)
-//  val dmem = new HellaCacheIO()(conf.dcache)
-  val ptw = new DatapathPTWIO().flip
-//  val rocc = new RoCCInterface().flip
+  val host = new HTIFIO(conf.rc.tl.ln.nClients)
+  val dmem = new DCMemPortIo()(conf.rc.dcache)
+  val imem = new CPUFrontendIO()(conf.rc.icache)
+  val ptw  = new DatapathPTWIO().flip
 }
  
 class Core(implicit conf: BOOMConfiguration) extends Module

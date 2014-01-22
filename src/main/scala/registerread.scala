@@ -17,8 +17,7 @@ import Chisel._
 import Node._
 import scala.collection.mutable.ArrayBuffer
 
-import Common._
-import ALU._
+import rocket.ALU._
 
                   
 //-------------------------------------------------------------
@@ -65,7 +64,7 @@ class RegisterRead(issue_width: Int, num_read_ports: Int, num_total_bypass_ports
    val nullCtrlSignals = new CtrlSignals()
    nullCtrlSignals.br_type     := BR_N
    nullCtrlSignals.rf_wen      := Bool(false)
-   nullCtrlSignals.pcr_fcn     := PCR.N
+   nullCtrlSignals.pcr_fcn     := rocket.CSR.N
    nullCtrlSignals.is_load     := Bool(false)
    nullCtrlSignals.is_sta      := Bool(false)
    nullCtrlSignals.is_std      := Bool(false)
@@ -222,96 +221,101 @@ class RegisterReadDecode extends Module
                              // |      |  |  use mem pipe          |      |     rf wen         |
    val rrd_csignals =        // |      |  |  |  alu fcn  wd/word?  |      |     |      wb sel  |
       ListLookup(io.rrd_uop.uopc,//|   |  |  |  |        |         |      |     |      |       |
-                           List(BR_N , Y, N, N, FN_ADD , DW_X  , OP2_RS2, IS_X, REN_0, WB_X  , PCR.N),
+                           List(BR_N , Y, N, N, FN_ADD , DW_X  , OP2_RS2, IS_X, REN_0, WB_X  , rocket.CSR.N),
             Array(                          
-               uopNOP   -> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP2_RS2, IS_X, REN_0, WB_X  , PCR.N),
+               uopNOP   -> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP2_RS2, IS_X, REN_0, WB_X  , rocket.CSR.N),
                
-               uopLD    -> List(BR_N , N, N, Y, FN_ADD , DW_XPR, OP2_IMM, IS_I, REN_0, WB_X  , PCR.N),
-               uopSTA   -> List(BR_N , N, N, Y, FN_ADD , DW_XPR, OP2_IMM, IS_S, REN_0, WB_X  , PCR.N),
-               uopSTD   -> List(BR_N , N, N, Y, FN_X   , DW_X  , OP2_RS2, IS_X, REN_0, WB_X  , PCR.N),
+               uopLD    -> List(BR_N , N, N, Y, FN_ADD , DW_XPR, OP2_IMM, IS_I, REN_0, WB_X  , rocket.CSR.N),
+               uopSTA   -> List(BR_N , N, N, Y, FN_ADD , DW_XPR, OP2_IMM, IS_S, REN_0, WB_X  , rocket.CSR.N),
+               uopSTD   -> List(BR_N , N, N, Y, FN_X   , DW_X  , OP2_RS2, IS_X, REN_0, WB_X  , rocket.CSR.N),
                
-               uopLUI   -> List(BR_N , Y, N, N, FN_OP2 , DW_XPR, OP2_IMM, IS_U, REN_1, WB_ALU, PCR.N),
+               // TODO BUG XXX fix this for not having a FN_OP2 anymore
+               uopLUI   -> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP2_IMM, IS_U, REN_1, WB_ALU, rocket.CSR.N),
                
-               uopADDI  -> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP2_IMM, IS_I, REN_1, WB_ALU, PCR.N),
-               uopANDI  -> List(BR_N , Y, N, N, FN_AND , DW_XPR, OP2_IMM, IS_I, REN_1, WB_ALU, PCR.N),
-               uopORI   -> List(BR_N , Y, N, N, FN_OR  , DW_XPR, OP2_IMM, IS_I, REN_1, WB_ALU, PCR.N),
-               uopADDI  -> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP2_IMM, IS_I, REN_1, WB_ALU, PCR.N),
-               uopANDI  -> List(BR_N , Y, N, N, FN_AND , DW_XPR, OP2_IMM, IS_I, REN_1, WB_ALU, PCR.N),
-               uopORI   -> List(BR_N , Y, N, N, FN_OR  , DW_XPR, OP2_IMM, IS_I, REN_1, WB_ALU, PCR.N),
-               uopXORI  -> List(BR_N , Y, N, N, FN_XOR , DW_XPR, OP2_IMM, IS_I, REN_1, WB_ALU, PCR.N),
-               uopSLTI  -> List(BR_N , Y, N, N, FN_SLT , DW_XPR, OP2_IMM, IS_I, REN_1, WB_ALU, PCR.N),
-               uopSLTIU -> List(BR_N , Y, N, N, FN_SLTU, DW_XPR, OP2_IMM, IS_I, REN_1, WB_ALU, PCR.N),
-               uopSLLI  -> List(BR_N , Y, N, N, FN_SL  , DW_XPR, OP2_IMM, IS_I, REN_1, WB_ALU, PCR.N),
-               uopSRAI  -> List(BR_N , Y, N, N, FN_SRA , DW_XPR, OP2_IMM, IS_I, REN_1, WB_ALU, PCR.N),
-               uopSRLI  -> List(BR_N , Y, N, N, FN_SR  , DW_XPR, OP2_IMM, IS_I, REN_1, WB_ALU, PCR.N),
+               uopADDI  -> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP2_IMM, IS_I, REN_1, WB_ALU, rocket.CSR.N),
+               uopANDI  -> List(BR_N , Y, N, N, FN_AND , DW_XPR, OP2_IMM, IS_I, REN_1, WB_ALU, rocket.CSR.N),
+               uopORI   -> List(BR_N , Y, N, N, FN_OR  , DW_XPR, OP2_IMM, IS_I, REN_1, WB_ALU, rocket.CSR.N),
+               uopADDI  -> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP2_IMM, IS_I, REN_1, WB_ALU, rocket.CSR.N),
+               uopANDI  -> List(BR_N , Y, N, N, FN_AND , DW_XPR, OP2_IMM, IS_I, REN_1, WB_ALU, rocket.CSR.N),
+               uopORI   -> List(BR_N , Y, N, N, FN_OR  , DW_XPR, OP2_IMM, IS_I, REN_1, WB_ALU, rocket.CSR.N),
+               uopXORI  -> List(BR_N , Y, N, N, FN_XOR , DW_XPR, OP2_IMM, IS_I, REN_1, WB_ALU, rocket.CSR.N),
+               uopSLTI  -> List(BR_N , Y, N, N, FN_SLT , DW_XPR, OP2_IMM, IS_I, REN_1, WB_ALU, rocket.CSR.N),
+               uopSLTIU -> List(BR_N , Y, N, N, FN_SLTU, DW_XPR, OP2_IMM, IS_I, REN_1, WB_ALU, rocket.CSR.N),
+               uopSLLI  -> List(BR_N , Y, N, N, FN_SL  , DW_XPR, OP2_IMM, IS_I, REN_1, WB_ALU, rocket.CSR.N),
+               uopSRAI  -> List(BR_N , Y, N, N, FN_SRA , DW_XPR, OP2_IMM, IS_I, REN_1, WB_ALU, rocket.CSR.N),
+               uopSRLI  -> List(BR_N , Y, N, N, FN_SR  , DW_XPR, OP2_IMM, IS_I, REN_1, WB_ALU, rocket.CSR.N),
                                             
-               uopADDIW -> List(BR_N , Y, N, N, FN_ADD , DW_32 , OP2_IMM, IS_I, REN_1, WB_ALU, PCR.N),
-               uopSLLIW -> List(BR_N , Y, N, N, FN_SL  , DW_32 , OP2_IMM, IS_I, REN_1, WB_ALU, PCR.N),
-               uopSRAIW -> List(BR_N , Y, N, N, FN_SRA , DW_32 , OP2_IMM, IS_I, REN_1, WB_ALU, PCR.N),
-               uopSRLIW -> List(BR_N , Y, N, N, FN_SR  , DW_32 , OP2_IMM, IS_I, REN_1, WB_ALU, PCR.N),
+               uopADDIW -> List(BR_N , Y, N, N, FN_ADD , DW_32 , OP2_IMM, IS_I, REN_1, WB_ALU, rocket.CSR.N),
+               uopSLLIW -> List(BR_N , Y, N, N, FN_SL  , DW_32 , OP2_IMM, IS_I, REN_1, WB_ALU, rocket.CSR.N),
+               uopSRAIW -> List(BR_N , Y, N, N, FN_SRA , DW_32 , OP2_IMM, IS_I, REN_1, WB_ALU, rocket.CSR.N),
+               uopSRLIW -> List(BR_N , Y, N, N, FN_SR  , DW_32 , OP2_IMM, IS_I, REN_1, WB_ALU, rocket.CSR.N),
                                             
-               uopADD   -> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP2_RS2, IS_X, REN_1, WB_ALU, PCR.N),
-               uopSLL   -> List(BR_N , Y, N, N, FN_SL  , DW_XPR, OP2_RS2, IS_X, REN_1, WB_ALU, PCR.N),
-               uopADD   -> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP2_RS2, IS_X, REN_1, WB_ALU, PCR.N),
-               uopSUB   -> List(BR_N , Y, N, N, FN_SUB , DW_XPR, OP2_RS2, IS_X, REN_1, WB_ALU, PCR.N),
-               uopSLT   -> List(BR_N , Y, N, N, FN_SLT , DW_XPR, OP2_RS2, IS_X, REN_1, WB_ALU, PCR.N),
-               uopSLTU  -> List(BR_N , Y, N, N, FN_SLTU, DW_XPR, OP2_RS2, IS_X, REN_1, WB_ALU, PCR.N),
-               uopAND   -> List(BR_N , Y, N, N, FN_AND , DW_XPR, OP2_RS2, IS_X, REN_1, WB_ALU, PCR.N),
-               uopOR    -> List(BR_N , Y, N, N, FN_OR  , DW_XPR, OP2_RS2, IS_X, REN_1, WB_ALU, PCR.N),
-               uopXOR   -> List(BR_N , Y, N, N, FN_XOR , DW_XPR, OP2_RS2, IS_X, REN_1, WB_ALU, PCR.N),
-               uopSRA   -> List(BR_N , Y, N, N, FN_SRA , DW_XPR, OP2_RS2, IS_X, REN_1, WB_ALU, PCR.N),
-               uopSRL   -> List(BR_N , Y, N, N, FN_SR  , DW_XPR, OP2_RS2, IS_X, REN_1, WB_ALU, PCR.N),
+               uopADD   -> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP2_RS2, IS_X, REN_1, WB_ALU, rocket.CSR.N),
+               uopSLL   -> List(BR_N , Y, N, N, FN_SL  , DW_XPR, OP2_RS2, IS_X, REN_1, WB_ALU, rocket.CSR.N),
+               uopADD   -> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP2_RS2, IS_X, REN_1, WB_ALU, rocket.CSR.N),
+               uopSUB   -> List(BR_N , Y, N, N, FN_SUB , DW_XPR, OP2_RS2, IS_X, REN_1, WB_ALU, rocket.CSR.N),
+               uopSLT   -> List(BR_N , Y, N, N, FN_SLT , DW_XPR, OP2_RS2, IS_X, REN_1, WB_ALU, rocket.CSR.N),
+               uopSLTU  -> List(BR_N , Y, N, N, FN_SLTU, DW_XPR, OP2_RS2, IS_X, REN_1, WB_ALU, rocket.CSR.N),
+               uopAND   -> List(BR_N , Y, N, N, FN_AND , DW_XPR, OP2_RS2, IS_X, REN_1, WB_ALU, rocket.CSR.N),
+               uopOR    -> List(BR_N , Y, N, N, FN_OR  , DW_XPR, OP2_RS2, IS_X, REN_1, WB_ALU, rocket.CSR.N),
+               uopXOR   -> List(BR_N , Y, N, N, FN_XOR , DW_XPR, OP2_RS2, IS_X, REN_1, WB_ALU, rocket.CSR.N),
+               uopSRA   -> List(BR_N , Y, N, N, FN_SRA , DW_XPR, OP2_RS2, IS_X, REN_1, WB_ALU, rocket.CSR.N),
+               uopSRL   -> List(BR_N , Y, N, N, FN_SR  , DW_XPR, OP2_RS2, IS_X, REN_1, WB_ALU, rocket.CSR.N),
                                             
-               uopADDW  -> List(BR_N , Y, N, N, FN_ADD , DW_32 , OP2_RS2, IS_X, REN_1, WB_ALU, PCR.N),
-               uopSUBW  -> List(BR_N , Y, N, N, FN_SUB , DW_32 , OP2_RS2, IS_X, REN_1, WB_ALU, PCR.N),
-               uopSLLW  -> List(BR_N , Y, N, N, FN_SL  , DW_32 , OP2_RS2, IS_X, REN_1, WB_ALU, PCR.N),
-               uopSRAW  -> List(BR_N , Y, N, N, FN_SRA , DW_32 , OP2_RS2, IS_X, REN_1, WB_ALU, PCR.N),
-               uopSRLW  -> List(BR_N , Y, N, N, FN_SR  , DW_32 , OP2_RS2, IS_X, REN_1, WB_ALU, PCR.N),
+               uopADDW  -> List(BR_N , Y, N, N, FN_ADD , DW_32 , OP2_RS2, IS_X, REN_1, WB_ALU, rocket.CSR.N),
+               uopSUBW  -> List(BR_N , Y, N, N, FN_SUB , DW_32 , OP2_RS2, IS_X, REN_1, WB_ALU, rocket.CSR.N),
+               uopSLLW  -> List(BR_N , Y, N, N, FN_SL  , DW_32 , OP2_RS2, IS_X, REN_1, WB_ALU, rocket.CSR.N),
+               uopSRAW  -> List(BR_N , Y, N, N, FN_SRA , DW_32 , OP2_RS2, IS_X, REN_1, WB_ALU, rocket.CSR.N),
+               uopSRLW  -> List(BR_N , Y, N, N, FN_SR  , DW_32 , OP2_RS2, IS_X, REN_1, WB_ALU, rocket.CSR.N),
                                        
-               uopMUL   -> List(BR_N , N, Y, N, FN_MUL,   DW_XPR, OP2_RS2,IS_X,  REN_1, WB_X , PCR.N),
-               uopMULH  -> List(BR_N , N, Y, N, FN_MULH,  DW_XPR, OP2_RS2,IS_X,  REN_1, WB_X , PCR.N),
-               uopMULHU -> List(BR_N , N, Y, N, FN_MULHU, DW_XPR, OP2_RS2,IS_X,  REN_1, WB_X , PCR.N),
-               uopMULHSU-> List(BR_N , N, Y, N, FN_MULHSU,DW_XPR, OP2_RS2,IS_X,  REN_1, WB_X , PCR.N),
-               uopMULW  -> List(BR_N , N, Y, N, FN_MUL,   DW_32 , OP2_RS2,IS_X,  REN_1, WB_X , PCR.N),
+               uopMUL   -> List(BR_N , N, Y, N, FN_MUL,   DW_XPR, OP2_RS2,IS_X,  REN_1, WB_X , rocket.CSR.N),
+               uopMULH  -> List(BR_N , N, Y, N, FN_MULH,  DW_XPR, OP2_RS2,IS_X,  REN_1, WB_X , rocket.CSR.N),
+               uopMULHU -> List(BR_N , N, Y, N, FN_MULHU, DW_XPR, OP2_RS2,IS_X,  REN_1, WB_X , rocket.CSR.N),
+               uopMULHSU-> List(BR_N , N, Y, N, FN_MULHSU,DW_XPR, OP2_RS2,IS_X,  REN_1, WB_X , rocket.CSR.N),
+               uopMULW  -> List(BR_N , N, Y, N, FN_MUL,   DW_32 , OP2_RS2,IS_X,  REN_1, WB_X , rocket.CSR.N),
                                         
-               uopDIV   -> List(BR_N , N, Y, N, FN_DIV , DW_XPR, OP2_RS2, IS_X, REN_1, WB_X  , PCR.N),
-               uopDIVU  -> List(BR_N , N, Y, N, FN_DIVU, DW_XPR, OP2_RS2, IS_X, REN_1, WB_X  , PCR.N),
-               uopREM   -> List(BR_N , N, Y, N, FN_REM , DW_XPR, OP2_RS2, IS_X, REN_1, WB_X  , PCR.N),
-               uopREMU  -> List(BR_N , N, Y, N, FN_REMU, DW_XPR, OP2_RS2, IS_X, REN_1, WB_X  , PCR.N),
-               uopDIVW  -> List(BR_N , N, Y, N, FN_DIV , DW_32 , OP2_RS2, IS_X, REN_1, WB_X  , PCR.N),
-               uopDIVUW -> List(BR_N , N, Y, N, FN_DIVU, DW_32 , OP2_RS2, IS_X, REN_1, WB_X  , PCR.N),
-               uopREMW  -> List(BR_N , N, Y, N, FN_REM , DW_32 , OP2_RS2, IS_X, REN_1, WB_X  , PCR.N),
-               uopREMUW -> List(BR_N , N, Y, N, FN_REMU, DW_32 , OP2_RS2, IS_X, REN_1, WB_X  , PCR.N),
+               uopDIV   -> List(BR_N , N, Y, N, FN_DIV , DW_XPR, OP2_RS2, IS_X, REN_1, WB_X  , rocket.CSR.N),
+               uopDIVU  -> List(BR_N , N, Y, N, FN_DIVU, DW_XPR, OP2_RS2, IS_X, REN_1, WB_X  , rocket.CSR.N),
+               uopREM   -> List(BR_N , N, Y, N, FN_REM , DW_XPR, OP2_RS2, IS_X, REN_1, WB_X  , rocket.CSR.N),
+               uopREMU  -> List(BR_N , N, Y, N, FN_REMU, DW_XPR, OP2_RS2, IS_X, REN_1, WB_X  , rocket.CSR.N),
+               uopDIVW  -> List(BR_N , N, Y, N, FN_DIV , DW_32 , OP2_RS2, IS_X, REN_1, WB_X  , rocket.CSR.N),
+               uopDIVUW -> List(BR_N , N, Y, N, FN_DIVU, DW_32 , OP2_RS2, IS_X, REN_1, WB_X  , rocket.CSR.N),
+               uopREMW  -> List(BR_N , N, Y, N, FN_REM , DW_32 , OP2_RS2, IS_X, REN_1, WB_X  , rocket.CSR.N),
+               uopREMUW -> List(BR_N , N, Y, N, FN_REMU, DW_32 , OP2_RS2, IS_X, REN_1, WB_X  , rocket.CSR.N),
 
-               uopBEQ   -> List(BR_EQ ,Y, N, N, FN_SUB , DW_XPR, OP2_IMM, IS_B, REN_0, WB_X  , PCR.N), // TODO OP2 irrelavent
-               uopBNE   -> List(BR_NE ,Y, N, N, FN_SUB , DW_XPR, OP2_IMM, IS_B, REN_0, WB_X  , PCR.N),
-               uopBGE   -> List(BR_GE ,Y, N, N, FN_SLT , DW_XPR, OP2_IMM, IS_B, REN_0, WB_X  , PCR.N),
-               uopBGEU  -> List(BR_GEU,Y, N, N, FN_SLTU, DW_XPR, OP2_IMM, IS_B, REN_0, WB_X  , PCR.N),
-               uopBLT   -> List(BR_LT ,Y, N, N, FN_SLT , DW_XPR, OP2_IMM, IS_B, REN_0, WB_X  , PCR.N),
-               uopBLTU  -> List(BR_LTU,Y, N, N, FN_SLTU, DW_XPR, OP2_IMM, IS_B, REN_0, WB_X  , PCR.N),
+               uopBEQ   -> List(BR_EQ ,Y, N, N, FN_SUB , DW_XPR, OP2_IMM, IS_B, REN_0, WB_X  , rocket.CSR.N), // TODO OP2 irrelavent
+               uopBNE   -> List(BR_NE ,Y, N, N, FN_SUB , DW_XPR, OP2_IMM, IS_B, REN_0, WB_X  , rocket.CSR.N),
+               uopBGE   -> List(BR_GE ,Y, N, N, FN_SLT , DW_XPR, OP2_IMM, IS_B, REN_0, WB_X  , rocket.CSR.N),
+               uopBGEU  -> List(BR_GEU,Y, N, N, FN_SLTU, DW_XPR, OP2_IMM, IS_B, REN_0, WB_X  , rocket.CSR.N),
+               uopBLT   -> List(BR_LT ,Y, N, N, FN_SLT , DW_XPR, OP2_IMM, IS_B, REN_0, WB_X  , rocket.CSR.N),
+               uopBLTU  -> List(BR_LTU,Y, N, N, FN_SLTU, DW_XPR, OP2_IMM, IS_B, REN_0, WB_X  , rocket.CSR.N),
                
 //               uopJ     -> List(BR_J , Y, N, N, FN_OP2 , DW_XPR, OP2_IMM, IS_X, REN_0, WB_X  , PCR.N), // TODO let decode detecth a uopJ? lessen need to read PC4?
-               uopJAL   -> List(BR_J , Y, N, N, FN_OP2 , DW_XPR, OP2_IMM, IS_J, REN_1, WB_PC4, PCR.N),
-               uopJALR  -> List(BR_JR, Y, N, N, FN_ADD , DW_XPR, OP2_IMM, IS_I, REN_1, WB_PC4, PCR.N),
-               uopAUIPC -> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP2_IMM, IS_U, REN_1, WB_ALU, PCR.N),
+               // TODO BUG XXX FN_OP2 used to go here
+               uopJAL   -> List(BR_J , Y, N, N, FN_ADD , DW_XPR, OP2_IMM, IS_J, REN_1, WB_PC4, rocket.CSR.N),
+               uopJALR  -> List(BR_JR, Y, N, N, FN_ADD , DW_XPR, OP2_IMM, IS_I, REN_1, WB_PC4, rocket.CSR.N),
+               uopAUIPC -> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP2_IMM, IS_U, REN_1, WB_ALU, rocket.CSR.N),
                
-               uopCSRRW -> List(BR_N , Y, N, N, FN_OP1 , DW_XPR, OP2_X, IS_X, REN_1, WB_PCR, PCR.T),
-               uopCSRRS -> List(BR_N , Y, N, N, FN_OP1 , DW_XPR, OP2_X, IS_X, REN_1, WB_PCR, PCR.S),
-               uopCSRRWI-> List(BR_N , Y, N, N, FN_OP1 , DW_XPR, OP2_X, IS_X, REN_1, WB_PCR, PCR.T), omg omg omg 
+               // TODO BUG XXX wanted to use FN_OP1, but it doesn't exist
+               uopCSRRW -> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP2_X, IS_X, REN_1, WB_PCR, rocket.CSR.W),
+               uopCSRRS -> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP2_X, IS_X, REN_1, WB_PCR, rocket.CSR.S),
+               uopCSRRWI-> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP2_X, IS_X, REN_1, WB_PCR, rocket.CSR.W) 
 //               uopMFPCR -> List(BR_N , Y, N, N, FN_OP2 , DW_XPR, OP2_X  , IS_X, REN_1, WB_PCR, PCR.F),
 //               uopCLPCR -> List(BR_N , Y, N, N, FN_OP2 , DW_XPR, OP2_IMM, IS_I, REN_1, WB_PCR, PCR.C),
 //               uopSTPCR -> List(BR_N , Y, N, N, FN_OP2 , DW_XPR, OP2_IMM, IS_I, REN_1, WB_PCR, PCR.S),
                
-               uopRDC   -> List(BR_N , Y, N, N, FN_OP2 , DW_XPR, OP2_TSC, IS_X, REN_1, WB_ALU, PCR.N),
-               uopRDI   -> List(BR_N , Y, N, N, FN_OP2 , DW_XPR, OP2_IRT, IS_X, REN_1, WB_ALU, PCR.N)
+               // 
+//               uopRDC   -> List(BR_N , Y, N, N, FN_OP2 , DW_XPR, OP2_TSC, IS_X, REN_1, WB_ALU, PCR.N),
+//               uopRDI   -> List(BR_N , Y, N, N, FN_OP2 , DW_XPR, OP2_IRT, IS_X, REN_1, WB_ALU, PCR.N)
                ));
 
    val rrd_br_type :: rrd_use_alupipe :: rrd_use_muldivpipe :: rrd_use_mempipe :: rrd_op_fcn :: rrd_fcn_dw :: rrd_op2_sel :: rrd_imm_sel :: rrd_rf_wen :: rrd_wb_sel :: rrd_pcr_fcn :: Nil = rrd_csignals;
     
    println("width of fn_add: " + FN_ADD.getWidth)
-   println("width of fn_op2: " + FN_OP2.getWidth)
+   println("width of fn_op2: " + FN_SRA.getWidth)
+   println("width of sz_alu: " + SZ_ALU_FN)
    println("width of rrd_op_fcn: " + rrd_op_fcn.getWidth)
-   require (rrd_op_fcn.getWidth == FN_OP2.getWidth)
+   require (rrd_op_fcn.getWidth == FN_SRA.getWidth)
 
 
    // rrd_use_alupipe is unused

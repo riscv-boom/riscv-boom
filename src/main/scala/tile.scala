@@ -13,8 +13,6 @@ package BOOM
 import Chisel._
 import Node._
 import uncore._
-import Common._   
-import Common.Util._   
 
  
 class BoomTile(resetSignal: Bool = null)(confIn: BOOMConfiguration) extends Module(_reset = resetSignal) with ClientCoherenceAgent
@@ -23,11 +21,14 @@ class BoomTile(resetSignal: Bool = null)(confIn: BOOMConfiguration) extends Modu
   val dcachePortId = 0
   val icachePortId = 1
   val dcachePorts = 2 //+ !confIn.rocc.isEmpty // Number of ports into D$: 1 from core, 1 from PTW, maybe 1 from RoCC
-  implicit val tlConf = confIn.tl
-  implicit val lnConf = confIn.tl.ln
-  implicit val icConf = confIn.icache
-  implicit val dcConf = confIn.dcache.copy(reqtagbits = confIn.dcacheReqTagBits + log2Up(dcachePorts), databits = confIn.xprlen)
-  implicit val conf = confIn.copy(dcache = dcConf)
+  val rc = confIn.rc
+  implicit val tlConf = rc.tl
+  implicit val lnConf = rc.tl.ln
+  implicit val icConf = rc.icache
+  implicit val dcConf = rc.dcache.copy(reqtagbits = rc.dcacheReqTagBits + log2Up(dcachePorts), databits = rc.xprlen)
+
+  implicit val new_rc : rocket.RocketConfiguration = rc.copy(dcache = dcConf)
+  implicit val bc = confIn.copy(rc = new_rc)
 
   val io = new Bundle {
     val tilelink = new TileLinkIO
@@ -36,9 +37,8 @@ class BoomTile(resetSignal: Bool = null)(confIn: BOOMConfiguration) extends Modu
 
   val core = Module(new Core)
   val icache = Module(new Frontend)
-//  val dcache = Module(new HellaCache)
   val dcache = Module(new DCacheWrapper) // wrapper for HellaCache
-  val ptw = Module(new PTW(2)) // 2 ports, 1 from I$, 1 from D$
+  val ptw = Module(new rocket.PTW(2)) // 2 ports, 1 from I$, 1 from D$
 
 // TODO add this back, but need to understand what "dmem" means (core.io.dmem is different from hellacacherequest)
 //  val dcacheArb = Module(new HellaCacheArbiter(dcachePorts))

@@ -27,11 +27,9 @@ import Chisel._
 import Node._
 
 import uncore._
-import Common._
  
-import Common.BOOMConfiguration
-import Common.DCacheConfig
-import Common.ICacheConfig
+import rocket.DCacheConfig
+import rocket.ICacheConfig
  
 
 // Track Inflight Memory Requests
@@ -154,7 +152,7 @@ class DCacheResp(implicit conf: DCacheConfig) extends Bundle
 {            
    val data   = Bits(width = conf.databits)
    val uop    = new MicroOp
-   val xcpt   = (new HellaCacheExceptions).asInput()
+   val xcpt   = (new rocket.HellaCacheExceptions).asInput()
    // TODO should nack go in here?
    
    override def clone = new DCacheResp().asInstanceOf[this.type]
@@ -172,7 +170,7 @@ class DCMemPortIo(implicit conf: DCacheConfig) extends Bundle
    val nack   = new NackInfo().asInput() 
    val flush_pipe  = Bool(OUTPUT) //exception or other misspec which flushes entire pipeline
 
-   val ptw = (new TLBPTWIO).flip
+   val ptw = (new rocket.TLBPTWIO).flip
 //   val status = new Status().asOutput
 
    val debug = new Bundle
@@ -185,7 +183,6 @@ class DCMemPortIo(implicit conf: DCacheConfig) extends Bundle
    }.asInput
 }
 
-//class DCacheWrapper(implicit conf: DCacheConfig, lnconf: LogicalNetworkConfiguration) extends Module
 class DCacheWrapper(implicit conf: DCacheConfig, lnconf: TileLinkConfiguration) extends Module
 {
    val max_num_inflight = MAX_LD_COUNT
@@ -200,7 +197,7 @@ class DCacheWrapper(implicit conf: DCacheConfig, lnconf: TileLinkConfiguration) 
 
    //------------------------------------------------------------
    // The thing we're wrapping
-   val nbdcache = Module(new HellaCache)
+   val nbdcache = Module(new rocket.HellaCache)
 
    // Hook nbdcache's tilelink straight out
    io.mem <> nbdcache.io.mem

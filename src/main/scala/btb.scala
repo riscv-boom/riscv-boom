@@ -13,8 +13,7 @@ import Chisel._
 import Node._
 
 import scala.math._
-import Common._
-//import Common.Util._
+import rocket._
 import uncore._
 
 class BTBIO extends Bundle
@@ -46,7 +45,7 @@ class BTB(entries: Int, fetch_width: Int) extends Module
   val hit_idxs = Vec.fill(entries){UInt()}
   val anyUpdate = updates.toBits.orR
 
-  val random_way = Random(entries, io.wen)
+  val random_way = rocket.Random(entries, io.wen)
   val invalid_way = valid.indexWhere((x: Bool) => !x)
   val repl_way = Mux(valid.contains(Bool(false)), invalid_way, random_way)
 
