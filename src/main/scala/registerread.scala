@@ -220,7 +220,8 @@ class RegisterReadDecode extends Module
                              // |      |  use muldiv pipe          |      immsel               pcr fcn
                              // |      |  |  use mem pipe          |      |     rf wen         |
    val rrd_csignals =        // |      |  |  |  alu fcn  wd/word?  |      |     |      wb sel  |
-      ListLookup(io.rrd_uop.uopc,//|   |  |  |  |        |         |      |     |      |       |
+      rocket.DecodeLogic(    // |      |  |  |  |        |         |      |     |      |       |
+                 io.rrd_uop.uopc,//    |  |  |  |        |         |      |     |      |       |
                            List(BR_N , Y, N, N, FN_ADD , DW_X  , OP2_RS2, IS_X, REN_0, WB_X  , rocket.CSR.N),
             Array(                          
                uopNOP   -> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP2_RS2, IS_X, REN_0, WB_X  , rocket.CSR.N),
@@ -232,9 +233,6 @@ class RegisterReadDecode extends Module
                // TODO BUG XXX fix this for not having a FN_OP2 anymore
                uopLUI   -> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP2_IMM, IS_U, REN_1, WB_ALU, rocket.CSR.N),
                
-               uopADDI  -> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP2_IMM, IS_I, REN_1, WB_ALU, rocket.CSR.N),
-               uopANDI  -> List(BR_N , Y, N, N, FN_AND , DW_XPR, OP2_IMM, IS_I, REN_1, WB_ALU, rocket.CSR.N),
-               uopORI   -> List(BR_N , Y, N, N, FN_OR  , DW_XPR, OP2_IMM, IS_I, REN_1, WB_ALU, rocket.CSR.N),
                uopADDI  -> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP2_IMM, IS_I, REN_1, WB_ALU, rocket.CSR.N),
                uopANDI  -> List(BR_N , Y, N, N, FN_AND , DW_XPR, OP2_IMM, IS_I, REN_1, WB_ALU, rocket.CSR.N),
                uopORI   -> List(BR_N , Y, N, N, FN_OR  , DW_XPR, OP2_IMM, IS_I, REN_1, WB_ALU, rocket.CSR.N),
@@ -252,7 +250,6 @@ class RegisterReadDecode extends Module
                                             
                uopADD   -> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP2_RS2, IS_X, REN_1, WB_ALU, rocket.CSR.N),
                uopSLL   -> List(BR_N , Y, N, N, FN_SL  , DW_XPR, OP2_RS2, IS_X, REN_1, WB_ALU, rocket.CSR.N),
-               uopADD   -> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP2_RS2, IS_X, REN_1, WB_ALU, rocket.CSR.N),
                uopSUB   -> List(BR_N , Y, N, N, FN_SUB , DW_XPR, OP2_RS2, IS_X, REN_1, WB_ALU, rocket.CSR.N),
                uopSLT   -> List(BR_N , Y, N, N, FN_SLT , DW_XPR, OP2_RS2, IS_X, REN_1, WB_ALU, rocket.CSR.N),
                uopSLTU  -> List(BR_N , Y, N, N, FN_SLTU, DW_XPR, OP2_RS2, IS_X, REN_1, WB_ALU, rocket.CSR.N),
@@ -300,6 +297,7 @@ class RegisterReadDecode extends Module
                uopCSRRW -> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP2_X, IS_X, REN_1, WB_PCR, rocket.CSR.W),
                uopCSRRS -> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP2_X, IS_X, REN_1, WB_PCR, rocket.CSR.S),
                uopCSRRWI-> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP2_X, IS_X, REN_1, WB_PCR, rocket.CSR.W) 
+
 //               uopMFPCR -> List(BR_N , Y, N, N, FN_OP2 , DW_XPR, OP2_X  , IS_X, REN_1, WB_PCR, PCR.F),
 //               uopCLPCR -> List(BR_N , Y, N, N, FN_OP2 , DW_XPR, OP2_IMM, IS_I, REN_1, WB_PCR, PCR.C),
 //               uopSTPCR -> List(BR_N , Y, N, N, FN_OP2 , DW_XPR, OP2_IMM, IS_I, REN_1, WB_PCR, PCR.S),

@@ -142,7 +142,7 @@ class DecodeUnit extends Module
    val uop = new MicroOp()
    uop.inst := io.enq.inst
 
-   val dec_csignals = ListLookup(uop.inst, 
+   val dec_csignals = rocket.DecodeLogic(uop.inst, 
                                  List(N, uopNOP, FU_X, RT_X, RT_X, RT_X, IS_X, M_N, MSK_X, UInt(0), N, N, N, N, N, N),
                                  Decode.table)
                                    

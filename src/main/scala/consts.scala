@@ -252,18 +252,19 @@ trait ScalarOpConstants
    val uopCSRRW= Bits(30, UOPC_SZ)
    val uopCSRRS= Bits(31, UOPC_SZ)
    val uopCSRRC= Bits(32, UOPC_SZ)
-   val uopCSRRWI= Bits(30, UOPC_SZ)
+   val uopCSRRWI=Bits(33, UOPC_SZ)
+   val uopCSRRSI=Bits(34, UOPC_SZ)
+   val uopCSRRCI=Bits(35, UOPC_SZ)
 
-   val uopJ    = Bits(34, UOPC_SZ)
-   val uopJAL  = Bits(35, UOPC_SZ)
-   val uopJALR = Bits(36, UOPC_SZ)
-   val uopAUIPC= Bits(37, UOPC_SZ)
+   val uopJ    = Bits(36, UOPC_SZ)
+   val uopJAL  = Bits(37, UOPC_SZ)
+   val uopJALR = Bits(38, UOPC_SZ)
+   val uopAUIPC= Bits(39, UOPC_SZ)
    
-   val uopSRET = Bits(38, UOPC_SZ)
-   val uopCFLSH= Bits(39, UOPC_SZ)
-   val uopFENCE= Bits(40, UOPC_SZ)
-   // 41
-   // 42
+   val uopSRET = Bits(40, UOPC_SZ)
+   val uopCFLSH= Bits(41, UOPC_SZ)
+   val uopFENCE= Bits(42, UOPC_SZ)
+   
    val uopADDIW= Bits(43, UOPC_SZ)
    val uopADDW = Bits(44, UOPC_SZ)
    val uopSUBW = Bits(45, UOPC_SZ)
