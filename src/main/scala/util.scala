@@ -94,6 +94,7 @@ object Sext
         
  
 // translates from BOOM's special "packed immediate" to a 32b signed immediate
+// Asking for U-type gives it shifted up 12 bits.
 object ImmGen
 {
    def apply(ip: Bits, isel: Bits): SInt =

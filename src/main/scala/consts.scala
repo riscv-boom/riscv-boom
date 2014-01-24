@@ -158,20 +158,22 @@ trait ScalarOpConstants
    val BR_JR  = UInt(8, 4)  // Jump Register
  
    // RS1 Operand Select Signal
-   val OP1_RS1 = UInt(0, 1) // Register Source #1
-   val OP1_LUI = UInt(1, 1) // Load Upper Immediate
-   val OP1_X   = UInt(0, 1)
+   val OP1_RS1 = UInt(0, 2) // Register Source #1
+   val OP1_ZERO= UInt(1, 2) 
+   val OP1_PCHI= UInt(2, 2) 
+   val OP1_PC  = UInt(3, 2) 
+   val OP1_X   = Bits("b??", 2)
    
    // RS2 Operand Select Signal
-   // TODO this is confusing Immediate select, ALU OP2, and RRd OP2
    val OP2_RS2 = UInt(0, 3) // Register Source #2
-   val OP2_IMM = UInt(1, 3) // immediate, I-type
-   val OP2_IMI = UInt(1, 3) // immediate, I-type
-   val OP2_IMB = UInt(2, 3) // immediate, B-type
-   val OP2_12  = UInt(3, 3) // literal 12 (for LUI shift)
-   val OP2_TSC = UInt(4, 3) // time stamp counter
-   val OP2_IRT = UInt(5, 3) // retired inst count
-   val OP2_X   = UInt(0, 3)
+   val OP2_IMM = UInt(1, 3) // immediate 
+   val OP2_ZERO= UInt(2, 3) // constant 0 
+   val OP2_FOUR= UInt(3, 3) // constant 4 (for PC+4)
+   val OP2_IMMC= UInt(4, 3) // for CSR imm found in RS1
+   val OP2_X   = Bits("b???", 3)
+
+
+
                       
    // Register File Write Enable Signal
    val REN_0   = Bool(false)

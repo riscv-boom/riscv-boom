@@ -99,6 +99,7 @@ TODO LIST:
 class CtrlSignals extends Bundle()
 {
    val br_type     = UInt(width = BR_N.getWidth)
+   val op1_sel     = UInt(width = OP1_X.getWidth)
    val op2_sel     = UInt(width = OP2_X.getWidth)
    val imm_sel     = UInt(width = IS_X.getWidth)
    val op_fcn      = Bits(width = SZ_ALU_FN) 
@@ -887,18 +888,6 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    register_read.io.bypass := bypasses
 
    //-------------------------------------------------------------
-   // Performance Counters
-   // Time Stamp Counter & Retired Instruction Counter 
-   // TODO make wide counters
-   val tsc_reg = Reg(init = UInt(0, XPRLEN))
-   val irt_reg = Reg(init = UInt(0, XPRLEN))
-   tsc_reg := tsc_reg + UInt(1)
-   irt_reg := irt_reg + PopCount(com_valids.toBits)
-
-    
-   register_read.io.tsc_reg := tsc_reg
-   register_read.io.irt_reg := irt_reg
-   //-------------------------------------------------------------
    // Privileged Co-processor 0 Register File
    // Note: Normally this would be bad in that I'm writing state before
    // committing, so to get this to work I stall the entire pipeline for
@@ -916,9 +905,8 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    // TODO rename from pcr to csr?
    val pcr = Module(new rocket.CSRFile())
    pcr.io.host <> io.host
-//   pcr.io.rw.addr := wb_reg_inst(31,20)      exe_units(0).io.resp(0).bits.uop.pop1
-   pcr.io.rw.addr := exe_units(0).io.resp(0).bits.uop.pop1
-   pcr.io.rw.cmd := exe_units(0).io.resp(0).bits.uop.ctrl.pcr_fcn
+   pcr.io.rw.addr  := ImmGen(exe_units(0).io.resp(0).bits.uop.imm_packed, IS_I) 
+   pcr.io.rw.cmd   := exe_units(0).io.resp(0).bits.uop.ctrl.pcr_fcn
    pcr.io.rw.wdata := exe_units(0).io.resp(0).bits.data
    val pcr_read_out = pcr.io.rw.rdata
 

@@ -195,17 +195,25 @@ class ALUUnit(is_branch_unit: Boolean = false)
  
    val uop = io.req.bits.uop
 
-   // TODO only let branch unit do this (one per machine)
+   // TODO only let branch unit access the PC from the ROB (one per machine)
    io.get_rob_pc.rob_idx := uop.rob_idx
    val uop_pc_ = io.get_rob_pc.curr_pc
 
    // immediate generation
    val imm_xprlen = ImmGen(uop.imm_packed, uop.ctrl.imm_sel)
 
+   // operand 1 select 
+   val op1_data = Mux(io.req.bits.uop.ctrl.op1_sel.toUInt === OP1_RS1 , io.req.bits.rs1_data,
+                  Mux(io.req.bits.uop.ctrl.op1_sel.toUInt === OP1_PCHI, Cat(uop_pc_(conf.rc.xprlen-1,12), Bits(0,12)),
+                  Mux(io.req.bits.uop.ctrl.op1_sel.toUInt === OP1_PC  , uop_pc_,
+                                                                        UInt(0))))
+   
    // operand 2 select 
-   // TODO op1 mux just for auipc? 
-   val op1_data = Mux((io.req.bits.uop.uopc === uopAUIPC) , Cat((uop_pc_ >> UInt(12)), Bits(0,12)), io.req.bits.rs1_data)
-   val op2_data = Mux((io.req.bits.uop.ctrl.op2_sel.toUInt === OP2_IMM) , Sext(imm_xprlen, conf.rc.xprlen), io.req.bits.rs2_data)
+   val op2_data = Mux(io.req.bits.uop.ctrl.op2_sel === OP2_IMM,  Sext(imm_xprlen, conf.rc.xprlen),
+                  Mux(io.req.bits.uop.ctrl.op2_sel === OP2_IMMC, io.req.bits.uop.pop1(4,0),
+                  Mux(io.req.bits.uop.ctrl.op2_sel === OP2_RS2 , io.req.bits.rs2_data,
+                  Mux(io.req.bits.uop.ctrl.op2_sel === OP2_FOUR, UInt(4),
+                                                                 UInt(0)))))
 
    implicit val rc = conf.rc
    val alu = Module(new rocket.ALU())
@@ -279,7 +287,7 @@ class ALUUnit(is_branch_unit: Boolean = false)
       io.br_unit.brinfo.stq_idx := uop.stq_idx
 
       // Branch/Jump Target Calculation
-      io.br_unit.brjmp_target   := Sext(imm_xprlen, conf.rc.xprlen) + uop_pc_ // TODO use ALU for this addition?
+      io.br_unit.brjmp_target   := Sext(imm_xprlen, conf.rc.xprlen) + uop_pc_ 
       io.br_unit.jump_reg_target := alu.io.adder_out
       io.br_unit.pc             := uop_pc_
       io.br_unit.pc_plus4       := pc_plus4
