@@ -188,10 +188,9 @@ trait ScalarOpConstants
    val DW_XPR = Bool(true) //Bool(XPRLEN==64)
    
    // Writeback Select Signal
-   val WB_ALU  = UInt(0, 2)
-   val WB_PC4  = UInt(1, 2)
-   val WB_PCR  = UInt(2, 2)
-   val WB_X    = UInt(0, 2)
+   val WB_ALU  = UInt(0, 1)
+   val WB_PCR  = UInt(1, 1)
+   val WB_X    = UInt("b?", 1)
    
    // Memory Function Type (Read,Write,Fence) Signal
                           

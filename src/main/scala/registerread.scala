@@ -271,15 +271,15 @@ class RegisterReadDecode extends Module
                uopREMW  -> List(BR_N , N, Y, N, FN_REM , DW_32 , OP1_RS1 , OP2_RS2 , IS_X, REN_1, WB_X  , rocket.CSR.N),
                uopREMUW -> List(BR_N , N, Y, N, FN_REMU, DW_32 , OP1_RS1 , OP2_RS2 , IS_X, REN_1, WB_X  , rocket.CSR.N),
 
-               uopBEQ   -> List(BR_EQ ,Y, N, N, FN_SUB , DW_XPR, OP1_X   , OP2_X   , IS_B, REN_0, WB_X  , rocket.CSR.N), // TODO OP2 irrelavent
+               uopBEQ   -> List(BR_EQ ,Y, N, N, FN_SUB , DW_XPR, OP1_X   , OP2_X   , IS_B, REN_0, WB_X  , rocket.CSR.N), 
                uopBNE   -> List(BR_NE ,Y, N, N, FN_SUB , DW_XPR, OP1_X   , OP2_X   , IS_B, REN_0, WB_X  , rocket.CSR.N),
                uopBGE   -> List(BR_GE ,Y, N, N, FN_SLT , DW_XPR, OP1_X   , OP2_X   , IS_B, REN_0, WB_X  , rocket.CSR.N),
                uopBGEU  -> List(BR_GEU,Y, N, N, FN_SLTU, DW_XPR, OP1_X   , OP2_X   , IS_B, REN_0, WB_X  , rocket.CSR.N),
                uopBLT   -> List(BR_LT ,Y, N, N, FN_SLT , DW_XPR, OP1_X   , OP2_X   , IS_B, REN_0, WB_X  , rocket.CSR.N),
                uopBLTU  -> List(BR_LTU,Y, N, N, FN_SLTU, DW_XPR, OP1_X   , OP2_X   , IS_B, REN_0, WB_X  , rocket.CSR.N),
                
-               uopJAL   -> List(BR_J , Y, N, N, FN_ADD , DW_XPR, OP1_PC  , OP2_IMM , IS_J, REN_1, WB_PC4, rocket.CSR.N),
-               uopJALR  -> List(BR_JR, Y, N, N, FN_ADD , DW_XPR, OP1_PC  , OP2_IMM , IS_I, REN_1, WB_PC4, rocket.CSR.N),
+               uopJAL   -> List(BR_J , Y, N, N, FN_ADD , DW_XPR, OP1_PC  , OP2_FOUR, IS_J, REN_1, WB_ALU, rocket.CSR.N),
+               uopJALR  -> List(BR_JR, Y, N, N, FN_ADD , DW_XPR, OP1_PC  , OP2_FOUR, IS_I, REN_1, WB_ALU, rocket.CSR.N),
                uopAUIPC -> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP1_PCHI, OP2_IMM , IS_U, REN_1, WB_ALU, rocket.CSR.N),
                
                uopCSRRW -> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP1_RS1 , OP2_ZERO, IS_X, REN_1, WB_PCR, rocket.CSR.W),

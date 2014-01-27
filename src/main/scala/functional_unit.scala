@@ -21,6 +21,7 @@ import Chisel._
 import Node._
 
 import rocket.ALU._
+import rocket.Util._
 import uncore.constants.AddressConstants._
 import uncore.constants.MemoryOpConstants._
 
@@ -99,7 +100,6 @@ class BranchUnitResp extends Bundle()
    val brjmp_target    = UInt(width = XPRLEN)
    val jump_reg_target = UInt(width = XPRLEN)
    val pc              = UInt(width = XPRLEN) // TODO this isn't really a branch_unit thing
-   val pc_plus4        = UInt(width = XPRLEN) // TODO this isn't really a branch_unit thing
 
    val brinfo = new BrResolutionInfo()
 
@@ -223,8 +223,6 @@ class ALUUnit(is_branch_unit: Boolean = false)
    alu.io.fn  := io.req.bits.uop.ctrl.op_fcn
    alu.io.dw  := io.req.bits.uop.ctrl.fcn_dw
 
-   // TODO branch unit: move to a different class and instantiate?
-   val pc_plus4 = (uop_pc_ + UInt(4))(XPRLEN-1,0)
 
    if (is_branch_unit)
    {
@@ -266,6 +264,7 @@ class ALUUnit(is_branch_unit: Boolean = false)
 //                                        (!uop.btb_pred_taken    (uop.br_prediction.isBrTaken() === TAKEN) && !uop.br_unit.taken)
 //                                       )
       
+      // JAL is taken in the front-end, so it should never mispredict
       assert (!(io.req.valid && uop.uopc === uopJAL && io.br_unit.brinfo.mispredict), "JAL was predicted as not taken")
 
       // need to tell the BTB it mispredicted and needs to update
@@ -287,20 +286,37 @@ class ALUUnit(is_branch_unit: Boolean = false)
       io.br_unit.brinfo.stq_idx := uop.stq_idx
 
       // Branch/Jump Target Calculation
-      io.br_unit.brjmp_target   := Sext(imm_xprlen, conf.rc.xprlen) + uop_pc_ 
-      io.br_unit.jump_reg_target := alu.io.adder_out
+      // TODO, we can also get rid of using jalr through this adder
+      // we can't push this through the ALU though, b/c jalr needs both PC+4 and rs1+offset
+
+      def vaSign(a0: UInt, ea: Bits) = {                                        
+         // efficient means to compress 64-bit VA into VADDR_BITS+1 bits         
+         // (VA is bad if VA(VADDR_BITS) != VA(VADDR_BITS-1))                    
+         val a = a0 >> VADDR_BITS-1                                              
+         val e = ea(VADDR_BITS,VADDR_BITS-1)                                     
+         Mux(a === UInt(0) || a === UInt(1), e != UInt(0),                       
+         Mux(a === SInt(-1) || a === SInt(-2), e === SInt(-1),                   
+            e(0)))                                                                  
+      }                                                                         
+      
+      val bj_base = Mux(uop.uopc === uopJALR, io.req.bits.rs1_data, uop_pc_)
+      val br_pred_taken = (uop.uopc != uopJALR) &&
+                          (uop.br_prediction.isBrTaken() === TAKEN || 
+                          uop.btb_pred_taken)
+      val bj_offset = Mux(br_pred_taken, SInt(4), imm_xprlen(20,0).toSInt)           
+      val bj64 = bj_base + bj_offset                                                    
+//      val bj_msb = Mux(io.ctrl.ex_jalr, vaSign(ex_rs(0), ex_br64), vaSign(ex_reg_pc, ex_br64))
+      val bj_msb = vaSign(uop_pc_, bj64)
+      val bj_addr = Cat(bj_msb, bj64(VADDR_BITS-1,0))                                   
+
+
+      io.br_unit.brjmp_target   := bj_addr
+//      io.br_unit.brjmp_target   := Sext(imm_xprlen, conf.rc.xprlen) + uop_pc_ 
+      io.br_unit.jump_reg_target:= bj_addr
       io.br_unit.pc             := uop_pc_
-      io.br_unit.pc_plus4       := pc_plus4
       io.br_unit.debug_btb_pred := uop.btb_pred_taken
       io.br_unit.debug_bht_pred := uop.br_prediction.taken
    }
-
-
-   val out_data =  Bits(width = XPRLEN)
-   if (is_branch_unit)
-      out_data := Mux(io.req.bits.uop.ctrl.wb_sel === WB_PC4, pc_plus4, alu.io.out)
-   else
-      out_data := alu.io.out
 
 
    // Bypass (bypass in Exe0 stage)
@@ -308,14 +324,14 @@ class ALUUnit(is_branch_unit: Boolean = false)
    require (num_stages == 1)  
    require (num_bypass_stages == 2)  
    io.bypass.valid(0) := io.req.valid 
-   io.bypass.data (0) := out_data
+   io.bypass.data (0) := alu.io.out
    // we must also bypass the WB stage
    io.bypass.valid(1) := io.resp.valid 
    io.bypass.data (1) := io.resp.bits.data
 
    // Response
    val reg_data = Reg(outType = Bits(width = XPRLEN)) 
-   reg_data := out_data
+   reg_data := alu.io.out
    io.resp.bits.data := reg_data
       
    // Exceptions

@@ -397,13 +397,15 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    io.imem.req.valid   := take_pc // tell front-end we had an unexpected change in the stream
    io.imem.req.bits.pc := if_pc_next
    io.imem.resp.ready  := FetchBuffer.io.enq.ready // TODO perf BUG || take_pc?
-           
+
+   // note: some cleverness here - doesn't matter direction of the branch,
+   // brjmp_target will be the opposite of the branch prediction. So all we
+   // care about is "did a misprediction occur?"
    if_pc_next := MuxCase(UInt(0xaaaa), Array (
                (com_exception || com_eret)                                                        -> pcr_exc_target,
                (flush_pipeline)                                                                   -> flush_pc, 
-               (br_unit.brinfo.valid && br_unit.brinfo.mispredict && br_unit.pc_sel === PC_PLUS4) -> br_unit.pc_plus4,
-               (br_unit.brinfo.valid && br_unit.brinfo.mispredict && br_unit.pc_sel === PC_BRJMP) -> br_unit.brjmp_target,
                (br_unit.brinfo.valid && br_unit.brinfo.mispredict && br_unit.pc_sel === PC_JALR)  -> br_unit.jump_reg_target,
+               (br_unit.brinfo.valid && br_unit.brinfo.mispredict)                                -> br_unit.brjmp_target,  
                (bp2_prediction.isBrTaken())                                                       -> bp2_pred_target
                // for now, don't let BHT overrule the BTB
 //               , (!bp2_prediction.isBrTaken() && fetch_bundle.btb_pred_taken)                       -> (io.imem.resp.bits.pc + UInt(4))(VADDR_BITS,0) // TODO somewhere else I can get this signal?
@@ -915,7 +917,8 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    pcr_status       := pcr.io.status
    // assume the last valid inst in the commit bundle is the one that is the exception/eret
    pcr.io.pc        := PriorityMux(com_valids.reverse, com_uops.reverse.map(x => x.pc))
-   pcr.io.exception := com_exception 
+   pcr.io.exception := com_exception                        
+   pcr.io.retire    := com_valids.toBits.orR // TODO this is incorrect for INTRET PopCount(com_valids.toBits)
    pcr.io.cause     := com_exc_cause
    pcr.io.sret      := com_eret // XXX TODO  update to new RISC-V sret eret stuff
    pcr_exc_target   := pcr.io.evec
@@ -1251,6 +1254,15 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
 
       if (DEBUG_FETCHBUFFER) white_space = white_space - FETCH_BUFFER_SZ
       if (DEBUG_BTB) white_space = white_space - BTB_NUM_ENTRIES - 2
+
+      // Time Stamp Counter & Retired Instruction Counter 
+      // (only used for printf and vcd dumps - the actual counters are in the CSRFile)
+      val tsc_reg = Reg(init = UInt(0, XPRLEN))
+      val irt_reg = Reg(init = UInt(0, XPRLEN))
+      tsc_reg := tsc_reg + UInt(1)
+      irt_reg := irt_reg + PopCount(com_valids.toBits)
+      debug(tsc_reg)
+      debug(irt_reg)
 
 
       var debug_string = sprintf("--- Cyc=%d , ----------------- Ret: %d ----------------------------------\n"
