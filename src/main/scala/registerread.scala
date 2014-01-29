@@ -284,8 +284,11 @@ class RegisterReadDecode extends Module
                
                uopCSRRW -> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP1_RS1 , OP2_ZERO, IS_X, REN_1, WB_PCR, rocket.CSR.W),
                uopCSRRS -> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP1_RS1 , OP2_ZERO, IS_X, REN_1, WB_PCR, rocket.CSR.S),
+               uopCSRRC -> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP1_RS1 , OP2_ZERO, IS_X, REN_1, WB_PCR, rocket.CSR.C),
                
-               uopCSRRWI-> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP1_ZERO, OP2_IMMC, IS_X, REN_1, WB_PCR, rocket.CSR.W) 
+               uopCSRRWI-> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP1_ZERO, OP2_IMMC, IS_X, REN_1, WB_PCR, rocket.CSR.W),
+               uopCSRRSI-> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP1_ZERO, OP2_IMMC, IS_X, REN_1, WB_PCR, rocket.CSR.S), 
+               uopCSRRCI-> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP1_ZERO, OP2_IMMC, IS_X, REN_1, WB_PCR, rocket.CSR.C) 
 
 //               uopJ     -> List(BR_J , Y, N, N, FN_OP2 , DW_XPR, OP2_IMM, IS_X, REN_0, WB_X  , PCR.N), // TODO let decode detecth a uopJ? lessen need to read PC4?
 //               uopMFPCR -> List(BR_N , Y, N, N, FN_OP2 , DW_XPR, OP2_X  , IS_X, REN_1, WB_PCR, PCR.F),

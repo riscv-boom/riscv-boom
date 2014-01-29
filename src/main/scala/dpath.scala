@@ -405,7 +405,8 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
                (com_exception || com_eret)                                                        -> pcr_exc_target,
                (flush_pipeline)                                                                   -> flush_pc, 
                (br_unit.brinfo.valid && br_unit.brinfo.mispredict && br_unit.pc_sel === PC_JALR)  -> br_unit.jump_reg_target,
-               (br_unit.brinfo.valid && br_unit.brinfo.mispredict)                                -> br_unit.brjmp_target,  
+               (br_unit.brinfo.valid && br_unit.brinfo.mispredict && br_unit.pc_sel === PC_BRJMP) -> br_unit.brjmp_target,  
+               (br_unit.brinfo.valid && br_unit.brinfo.mispredict && br_unit.pc_sel === PC_PLUS4) -> br_unit.pc_plus4,  
                (bp2_prediction.isBrTaken())                                                       -> bp2_pred_target
                // for now, don't let BHT overrule the BTB
 //               , (!bp2_prediction.isBrTaken() && fetch_bundle.btb_pred_taken)                       -> (io.imem.resp.bits.pc + UInt(4))(VADDR_BITS,0) // TODO somewhere else I can get this signal?
@@ -908,9 +909,16 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    val pcr = Module(new rocket.CSRFile())
    pcr.io.host <> io.host
    pcr.io.rw.addr  := ImmGen(exe_units(0).io.resp(0).bits.uop.imm_packed, IS_I) 
-   pcr.io.rw.cmd   := exe_units(0).io.resp(0).bits.uop.ctrl.pcr_fcn
-   pcr.io.rw.wdata := exe_units(0).io.resp(0).bits.data
+//   pcr.io.rw.wdata := exe_units(0).io.resp(0).bits.data
    val pcr_read_out = pcr.io.rw.rdata
+
+   val pcr_rw_cmd = exe_units(0).io.resp(0).bits.uop.ctrl.pcr_fcn
+   pcr.io.rw.cmd   := pcr_rw_cmd
+   val wb_wdata    = exe_units(0).io.resp(0).bits.data
+   pcr.io.rw.wdata := Mux(pcr_rw_cmd === CSR.S, pcr.io.rw.rdata | wb_wdata,
+                      Mux(pcr_rw_cmd === CSR.C, pcr.io.rw.rdata & ~wb_wdata,
+                                                 wb_wdata))
+
 
 
    // Extra I/O
@@ -1205,6 +1213,18 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    when (lsu_misspec) { lsu_misspec_count := lsu_misspec_count + UInt(1) }
    debug(lsu_misspec_count)
 
+
+
+   // Time Stamp Counter & Retired Instruction Counter 
+   // (only used for printf and vcd dumps - the actual counters are in the CSRFile)
+   val tsc_reg = Reg(init = UInt(0, XPRLEN))
+   val irt_reg = Reg(init = UInt(0, XPRLEN))
+   tsc_reg := tsc_reg + UInt(1)
+   irt_reg := irt_reg + PopCount(com_valids.toBits)
+   debug(tsc_reg)
+   debug(irt_reg)
+
+           
    //-------------------------------------------------------------
    //-------------------------------------------------------------
    // **** Handle Cycle-by-Cycle Printouts ****
@@ -1254,16 +1274,6 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
 
       if (DEBUG_FETCHBUFFER) white_space = white_space - FETCH_BUFFER_SZ
       if (DEBUG_BTB) white_space = white_space - BTB_NUM_ENTRIES - 2
-
-      // Time Stamp Counter & Retired Instruction Counter 
-      // (only used for printf and vcd dumps - the actual counters are in the CSRFile)
-      val tsc_reg = Reg(init = UInt(0, XPRLEN))
-      val irt_reg = Reg(init = UInt(0, XPRLEN))
-      tsc_reg := tsc_reg + UInt(1)
-      irt_reg := irt_reg + PopCount(com_valids.toBits)
-      debug(tsc_reg)
-      debug(irt_reg)
-
 
       var debug_string = sprintf("--- Cyc=%d , ----------------- Ret: %d ----------------------------------\n"
          , tsc_reg

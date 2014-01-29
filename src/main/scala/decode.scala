@@ -94,7 +94,11 @@ object Decode
                // I-type, the immediate12 holds the CSR register. 
                CSRRW   -> List(Y, uopCSRRW, FU_PCR , RT_FIX, RT_FIX, RT_X  , IS_I, M_N  , MSK_X , UInt(0), N, N, N, Y, Y, Y), 
                CSRRS   -> List(Y, uopCSRRS, FU_PCR , RT_FIX, RT_FIX, RT_X  , IS_I, M_N  , MSK_X , UInt(0), N, N, N, Y, Y, Y), 
+               CSRRC   -> List(Y, uopCSRRC, FU_PCR , RT_FIX, RT_FIX, RT_X  , IS_I, M_N  , MSK_X , UInt(0), N, N, N, Y, Y, Y), 
+               
                CSRRWI  -> List(Y, uopCSRRWI,FU_PCR , RT_FIX, RT_X  , RT_X  , IS_I, M_N  , MSK_X , UInt(0), N, N, N, Y, Y, Y), // NOTE: RT_X really means "keep the same value", since we're using RS1 to pass through an immediate
+               CSRRSI  -> List(Y, uopCSRRSI,FU_PCR , RT_FIX, RT_X  , RT_X  , IS_I, M_N  , MSK_X , UInt(0), N, N, N, Y, Y, Y), 
+               CSRRCI  -> List(Y, uopCSRRCI,FU_PCR , RT_FIX, RT_X  , RT_X  , IS_I, M_N  , MSK_X , UInt(0), N, N, N, Y, Y, Y), 
 
 //               MTPCR   -> List(Y, uopMTPCR, FU_PCR , RT_FIX, RT_PCR, RT_FIX, IS_X, M_N  , MSK_X , UInt(0), N, N, N, Y, Y, Y), 
 //               MFPCR   -> List(Y, uopMFPCR, FU_PCR , RT_FIX, RT_PCR, RT_X  , IS_X, M_N  , MSK_X , UInt(0), N, N, N, Y, Y, Y), 

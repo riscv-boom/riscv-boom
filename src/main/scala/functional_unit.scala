@@ -99,6 +99,7 @@ class BranchUnitResp extends Bundle()
 
    val brjmp_target    = UInt(width = XPRLEN)
    val jump_reg_target = UInt(width = XPRLEN)
+   val pc_plus4        = UInt(width = XPRLEN) 
    val pc              = UInt(width = XPRLEN) // TODO this isn't really a branch_unit thing
 
    val brinfo = new BrResolutionInfo()
@@ -223,7 +224,6 @@ class ALUUnit(is_branch_unit: Boolean = false)
    alu.io.fn  := io.req.bits.uop.ctrl.op_fcn
    alu.io.dw  := io.req.bits.uop.ctrl.fcn_dw
 
-
    if (is_branch_unit)
    {
       val rs1 = io.req.bits.rs1_data
@@ -232,7 +232,9 @@ class ALUUnit(is_branch_unit: Boolean = false)
       val br_ltu = (rs1.toUInt < rs2.toUInt)
       val br_lt  = (~(rs1(XPRLEN-1) ^ rs2(XPRLEN-1)) & br_ltu | 
                       rs1(XPRLEN-1) & ~rs2(XPRLEN-1)).toBool
-
+ 
+      val pc_plus4 = (uop_pc_ + UInt(4))(XPRLEN-1,0)
+    
       io.br_unit.pc_sel := Lookup(io.req.bits.uop.ctrl.br_type, PC_PLUS4,
                Array(   BR_N  -> PC_PLUS4, 
                         BR_NE -> Mux(!br_eq,  PC_BRJMP, PC_PLUS4),
@@ -244,7 +246,6 @@ class ALUUnit(is_branch_unit: Boolean = false)
                         BR_J  -> PC_BRJMP,
                         BR_JR -> PC_JALR
                         ))
-
 
 
       io.br_unit.taken      := io.req.valid &&
@@ -286,7 +287,6 @@ class ALUUnit(is_branch_unit: Boolean = false)
       io.br_unit.brinfo.stq_idx := uop.stq_idx
 
       // Branch/Jump Target Calculation
-      // TODO, we can also get rid of using jalr through this adder
       // we can't push this through the ALU though, b/c jalr needs both PC+4 and rs1+offset
 
       def vaSign(a0: UInt, ea: Bits) = {                                        
@@ -300,19 +300,19 @@ class ALUUnit(is_branch_unit: Boolean = false)
       }                                                                         
       
       val bj_base = Mux(uop.uopc === uopJALR, io.req.bits.rs1_data, uop_pc_)
-      val br_pred_taken = (uop.uopc != uopJALR) &&
-                          (uop.br_prediction.isBrTaken() === TAKEN || 
-                          uop.btb_pred_taken)
-      val bj_offset = Mux(br_pred_taken, SInt(4), imm_xprlen(20,0).toSInt)           
+//      val br_pred_taken = (uop.uopc != uopJALR) &&
+//                          (uop.br_prediction.isBrTaken() === TAKEN || 
+//                          uop.btb_pred_taken)
+//      val bj_offset = Mux(br_pred_taken, SInt(4), imm_xprlen(20,0).toSInt)           
+      val bj_offset = imm_xprlen(20,0).toSInt
       val bj64 = bj_base + bj_offset                                                    
-//      val bj_msb = Mux(io.ctrl.ex_jalr, vaSign(ex_rs(0), ex_br64), vaSign(ex_reg_pc, ex_br64))
-      val bj_msb = vaSign(uop_pc_, bj64)
+      val bj_msb = Mux(uop.uopc === uopJALR, vaSign(io.req.bits.rs1_data, bj64), vaSign(uop_pc_, bj64))
       val bj_addr = Cat(bj_msb, bj64(VADDR_BITS-1,0))                                   
 
 
       io.br_unit.brjmp_target   := bj_addr
-//      io.br_unit.brjmp_target   := Sext(imm_xprlen, conf.rc.xprlen) + uop_pc_ 
       io.br_unit.jump_reg_target:= bj_addr
+      io.br_unit.pc_plus4       := pc_plus4
       io.br_unit.pc             := uop_pc_
       io.br_unit.debug_btb_pred := uop.btb_pred_taken
       io.br_unit.debug_bht_pred := uop.br_prediction.taken

@@ -18,7 +18,8 @@ import uncore._
 class BoomTile(resetSignal: Bool = null)(confIn: BOOMConfiguration) extends Module(_reset = resetSignal) with ClientCoherenceAgent
 {
 
-  // Override some of the external inputs 
+  // Override some of the external inputs  (until we have a better story anyways)
+
   val memPorts = 2 // Number of ports to outer memory system from tile: 1 from I$, 1 from D$
   val dcachePortId = 0
   val icachePortId = 1
@@ -26,11 +27,13 @@ class BoomTile(resetSignal: Bool = null)(confIn: BOOMConfiguration) extends Modu
   val rc = confIn.rc
   implicit val tlConf = rc.tl
   implicit val lnConf = rc.tl.ln
-  implicit val icConf = rc.icache.copy(ibytes = (FETCH_WIDTH*4))
+  implicit val icConf = rc.icache.copy(ibytes = (FETCH_WIDTH*4), nbtb= BTB_NUM_ENTRIES)
   implicit val dcConf = rc.dcache.copy(reqtagbits = rc.dcacheReqTagBits + log2Up(dcachePorts), databits = rc.xprlen)
 
   implicit val new_rc : rocket.RocketConfiguration = rc.copy(icache = icConf, dcache = dcConf)
   implicit val bc = confIn.copy(rc = new_rc)
+
+  require (rc.xprlen == 64)
 
   val io = new Bundle {
     val tilelink = new TileLinkIO

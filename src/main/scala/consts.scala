@@ -57,7 +57,7 @@ trait BOOMProcConstants
    val ENABLE_ALU_BYPASSING = true
    val ENABLE_REGFILE_BYPASSING = true    // bypass regfile write ports to read ports
  
-   val BTB_NUM_ENTRIES = 8
+   val BTB_NUM_ENTRIES = 4
  
    val IC_NUM_SETS = 128
    val IC_NUM_WAYS = 2
