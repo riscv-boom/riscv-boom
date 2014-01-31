@@ -12,11 +12,11 @@ object Decode
 {
                         //                                                                             wakeup_delay 
                         //     is val inst?                  rs1 regtype     imm sel                   |   bypassable (aka, known, fixed latency)
-                        //     |  micro-opcode               |       rs2 type|                         |   |  is eret
+                        //     |  micro-opcode               |       rs2 type|                         |   |  is sret
                         //     |  |         func unit        |       |       |    mem    mem           |   |  |  is syscall
-                        //     |  |         |        dst     |       |       |     cmd    msk          |   |  |  |  is privileged
-                        //     |  |         |        regtype |       |       |     |      |            |   |  |  |  |  is inst unique? (clear pipeline for it)
-                        //     |  |         |        |       |       |       |     |      |            |   |  |  |  |  |  flush on commit
+                        //     |  |         |        dst     |       |       |     cmd    msk          |   |  |  |  is inst unique? (clear pipeline for it)
+                        //     |  |         |        regtype |       |       |     |      |            |   |  |  |  |  flush on commit
+                        //     |  |         |        |       |       |       |     |      |            |   |  |  |  |  |  is csr
    val table =          //List(N, uopNOP  , FU_X   , RT_X  , RT_X  , RT_X  , IS_X, M_N  , MSK_X , UInt(0), N, N, N, N, N, N),
             Array(        
                LD      -> List(Y, uopLD   , FU_MEM , RT_FIX, RT_FIX, RT_X  , IS_I, M_XRD, MSK_D , UInt(3), N, N, N, N, N, N),
@@ -100,21 +100,14 @@ object Decode
                CSRRSI  -> List(Y, uopCSRRSI,FU_PCR , RT_FIX, RT_X  , RT_X  , IS_I, M_N  , MSK_X , UInt(0), N, N, N, Y, Y, Y), 
                CSRRCI  -> List(Y, uopCSRRCI,FU_PCR , RT_FIX, RT_X  , RT_X  , IS_I, M_N  , MSK_X , UInt(0), N, N, N, Y, Y, Y), 
 
-//               MTPCR   -> List(Y, uopMTPCR, FU_PCR , RT_FIX, RT_PCR, RT_FIX, IS_X, M_N  , MSK_X , UInt(0), N, N, N, Y, Y, Y), 
-//               MFPCR   -> List(Y, uopMFPCR, FU_PCR , RT_FIX, RT_PCR, RT_X  , IS_X, M_N  , MSK_X , UInt(0), N, N, N, Y, Y, Y), 
-//               CLEARPCR-> List(Y, uopCLPCR, FU_PCR , RT_FIX, RT_PCR, RT_X  , IS_I, M_N  , MSK_X , UInt(0), N, N, N, Y, Y, Y), 
-//               SETPCR  -> List(Y, uopSTPCR, FU_PCR , RT_FIX, RT_PCR, RT_X  , IS_I, M_N  , MSK_X , UInt(0), N, N, N, Y, Y, Y), 
+               SCALL   -> List(Y, uopNOP  , FU_ALU , RT_X  , RT_X  , RT_X  , IS_X, M_N  , MSK_X , UInt(0), N, N, Y, Y, N, N), 
+               SRET    -> List(Y, uopSRET , FU_ALU , RT_X  , RT_X  , RT_X  , IS_X, M_N  , MSK_X , UInt(0), N, Y, N, Y, N, N), 
 
-               // TODO guarantee that these instructions will be monotonic, maybe just make "unique"
-//               RDCYCLE  -> List(Y, uopRDC , FU_CNTR, RT_FIX, RT_X  , RT_X  , IS_X, M_N  , MSK_X , UInt(1), Y, N, N, N, N, N), 
-//               RDINSTRET-> List(Y, uopRDI , FU_CNTR, RT_FIX, RT_X  , RT_X  , IS_X, M_N  , MSK_X , UInt(1), Y, N, N, N, N, N), 
-
-               SCALL   -> List(Y, uopNOP  , FU_ALU , RT_X  , RT_X  , RT_X  , IS_X, M_N  , MSK_X , UInt(0), N, N, Y, N, Y, N), 
-               SRET    -> List(Y, uopSRET , FU_ALU , RT_X  , RT_X  , RT_X  , IS_X, M_N  , MSK_X , UInt(0), N, Y, N, Y, Y, N), 
-
-               // TODO M_NOP... use ot be M_FENCE, but hellacache no longer does fences?
-               FENCE_I -> List(Y, uopFENCEI    ,FU_MEM, RT_X, RT_X, RT_X , IS_X, M_NOP  , MSK_X , UInt(0), N, N, N, N, Y, Y), 
+               FENCE_I -> List(Y, uopFENCEI    ,FU_MEM, RT_X, RT_X, RT_X , IS_X, M_NOP  , MSK_X , UInt(0), N, N, N, Y, Y, N), 
                FENCE   -> List(Y, uopMEMSPECIAL,FU_MEM, RT_X, RT_X, RT_X , IS_X, M_NOP  , MSK_X , UInt(0), N, N, N, N, N, N)
+               
+               // TODO M_NOP... use ot be M_FENCE, but hellacache no longer does fences?
+               // TODO guarantee that these instructions will be monotonic, maybe just make "unique"
                )
                  
 
@@ -139,7 +132,7 @@ class DecodeUnitIo extends Bundle
 }
 
 // Takes in a single instruction, generates a MicroOp (or multiply micro-ops over x cycles)
-class DecodeUnit extends Module
+class DecodeUnit(implicit conf: BOOMConfiguration) extends Module
 {
    val io = new DecodeUnitIo
 
@@ -150,22 +143,41 @@ class DecodeUnit extends Module
                                  List(N, uopNOP, FU_X, RT_X, RT_X, RT_X, IS_X, M_N, MSK_X, UInt(0), N, N, N, N, N, N),
                                  Decode.table)
                                    
-   val cs_inst_val :: cs_uopc :: cs_fu_code :: cs_dst_type :: cs_rs1_type :: cs_rs2_type :: cs_imm_sel :: cs_mem_cmd :: cs_mem_typ :: cs_wakeup_delay :: cs_bypassable :: cs_eret :: cs_syscall :: cs_privileged :: cs_inst_unique :: cs_flush_on_commit :: Nil = dec_csignals
+   val cs_inst_val :: cs_uopc :: cs_fu_code :: cs_dst_type :: cs_rs1_type :: cs_rs2_type :: cs_imm_sel :: cs_mem_cmd :: cs_mem_typ :: cs_wakeup_delay :: cs_bypassable :: cs_sret :: cs_syscall :: cs_inst_unique :: cs_flush_on_commit :: cs_csr_en :: Nil = dec_csignals
    
 
    // Exception Handling
-   val exc_illegal = !cs_inst_val 
-   val exc_priv    = cs_privileged.toBool && !(io.status.s)
+   val exc_illegal    = !cs_inst_val 
 
-   uop.eret      := cs_eret.toBool
+   val fp_csrs = rocket.CSRs.fcsr :: rocket.CSRs.frm :: rocket.CSRs.fflags :: Nil
+   val legal_csrs = if (conf.rc.fpu) rocket.CSRs.all.toSet else rocket.CSRs.all.toSet -- fp_csrs
+
+   val raddr1         = uop.inst(RS1_MSB,RS1_LSB)
+   val csr_addr       = uop.inst(CSR_ADDR_MSB, CSR_ADDR_LSB)
+//   val id_csr_wen = id_raddr1 != UInt(0) || !Vec(CSR.S, CSR.C).contains(id_csr)
+   val csr_wen        = Bool(false) // TODO XXX BUG
+//                        !(raddr1 === UInt(0) || cs_
+   val csr_privileged = cs_csr_en.toBool &&
+                        (csr_addr(9,8) != UInt(0) ||
+                         csr_addr(11,10) != UInt(0) && csr_wen)
+   val csr_invalid    = cs_csr_en.toBool && !Vec(legal_csrs.map(UInt(_))).contains(csr_addr)       
+   
+   // flush pipeline on CSR writes that may have side effects
+   //val id_csr_flush = {   
+   //  val safe_csrs = CSRs.sup0 :: CSRs.sup1 :: CSRs.epc :: Nil
+   //  cs_csr_en && id_csr_wen && DecodeLogic(id_csr_addr, legal_csrs -- safe_csrs, safe_csrs)   
+   //}
+   val exc_privileged = (csr_privileged || cs_sret.toBool) && !(io.status.s)
+
+   uop.sret      := cs_sret.toBool
    uop.syscall   := cs_syscall.toBool
    
    uop.exception := cs_syscall.toBool  ||
                        exc_illegal ||
-                       exc_priv
+                       exc_privileged
                                              
    uop.exc_cause := Mux(exc_illegal,           UInt(rocket.Causes.illegal_instruction),
-                       Mux(exc_priv,           UInt(rocket.Causes.privileged_instruction),
+                       Mux(exc_privileged,     UInt(rocket.Causes.privileged_instruction),
                        Mux(cs_syscall.toBool,  UInt(rocket.Causes.syscall),
                                                UInt(0,5))))
    
@@ -253,7 +265,7 @@ class BranchDecode extends Module
                BGEU    -> List(uopBGEU , Bool(true), IS_B),
                BLT     -> List(uopBLT  , Bool(true), IS_B),
                BLTU    -> List(uopBLTU , Bool(true), IS_B)
-//               ERET    -> List(uopERET , Bool(true), IS_X)
+//               SRET    -> List(uopSRET , Bool(true), IS_X)
             ))
 
    val bpd_brtype_ :: bpd_br_val :: bpd_imm_sel_ :: Nil = bpd_csignals

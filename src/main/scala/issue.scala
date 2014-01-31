@@ -344,7 +344,7 @@ class IssueUnit(issue_width: Int, num_wakeup_ports: Int) extends Module
       {
          temp_1stuop_val (w) := io.dis_mask(w) && 
                                  !io.dis_uops(w).exception &&
-                                 !io.dis_uops(w).eret &&
+                                 !io.dis_uops(w).sret &&
                                  !io.dis_uops(w).syscall &&
                                  io.dis_uops(w).uopc != uopMEMSPECIAL && 
                                  io.dis_uops(w).uopc != uopFENCEI &&

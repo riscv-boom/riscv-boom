@@ -72,12 +72,12 @@ TODO LIST:
       - difficult to do for store queue
       - kills only apply to partial sections (commit head), no easy way to track count
 
-   how best to handle ERET, SYSCALL, etc.
-      i think just have ERET set exception bit in ROB, don't even serialize pipeline?
+   how best to handle SRET, SYSCALL, etc.
+      i think just have SRET set exception bit in ROB, don't even serialize pipeline?
 
    exception -> com -> evec target, 
-   but what about WHEN to handle eret (syscall at commit, like any exception), and how to clear the pipeline
-   for now, handle eret, syscall at commit
+   but what about WHEN to handle sret (syscall at commit, like any exception), and how to clear the pipeline
+   for now, handle sret, syscall at commit
 
    break apart atomic PCR stuff?
 
@@ -150,7 +150,7 @@ class MicroOp extends Bundle()
    val stale_pdst       = UInt(width = PREG_SZ)
    val exception        = Bool()
    val exc_cause        = UInt(width = EXC_CAUSE_SZ)  // TODO don't magic number this
-   val eret             = Bool()
+   val sret             = Bool()
    val syscall          = Bool()
    val bypassable       = Bool()                      // can we bypass ALU results? (doesn't include loads, pcr, rdcycle, etc.... need to readdress this, SHOULD include PCRs?)
    val mem_cmd          = UInt(width = 4)             // sync primitives/cache flushes
@@ -385,11 +385,11 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    val if_stalled = Bool() // if FetchBuffer backs up, we have to stall the front-end
    if_stalled := !(FetchBuffer.io.enq.ready)
 
-   val com_eret = (Range(0,DECODE_WIDTH).map{i => com_valids(i) && com_uops(i).eret}).reduce(_|_) 
+   val com_sret = (Range(0,DECODE_WIDTH).map{i => com_valids(i) && com_uops(i).sret}).reduce(_|_) 
 
    val take_pc = br_unit.brinfo.mispredict || 
                  flush_pipeline || 
-                 com_eret ||
+                 com_sret ||
                  (bp2_val && bp2_prediction.isBrTaken() && !(io.imem.resp.bits.taken) && !if_stalled) //|| // TODO this seems way too low-level, to get this backpressure signal correct
 //                 (bp2_val && !bp2_prediction.isBrTaken() && fetch_bundle.btb_pred_taken && !if_stalled) // for now, don't let BHT overrule BTB
 
@@ -402,7 +402,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    // brjmp_target will be the opposite of the branch prediction. So all we
    // care about is "did a misprediction occur?"
    if_pc_next := MuxCase(UInt(0xaaaa), Array (
-               (com_exception || com_eret)                                                        -> pcr_exc_target,
+               (com_exception || com_sret)                                                        -> pcr_exc_target,
                (flush_pipeline)                                                                   -> flush_pc, 
                (br_unit.brinfo.valid && br_unit.brinfo.mispredict && br_unit.pc_sel === PC_JALR)  -> br_unit.jump_reg_target,
                (br_unit.brinfo.valid && br_unit.brinfo.mispredict && br_unit.pc_sel === PC_BRJMP) -> br_unit.brjmp_target,  
@@ -415,7 +415,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    // Fetch Buffer
    FetchBuffer.io.enq.valid := io.imem.resp.valid && !fetchbuffer_kill
    FetchBuffer.io.enq.bits  := fetch_bundle
-   fetchbuffer_kill         := br_unit.brinfo.mispredict || com_exception || flush_pipeline || com_eret
+   fetchbuffer_kill         := br_unit.brinfo.mispredict || com_exception || flush_pipeline || com_sret
    
    // round off to nearest fetch boundary
    val lsb = log2Up(conf.rc.icache.ibytes)
@@ -923,12 +923,12 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
 
    // Extra I/O
    pcr_status       := pcr.io.status
-   // assume the last valid inst in the commit bundle is the one that is the exception/eret
+   // assume the last valid inst in the commit bundle is the one that is the exception/sret
    pcr.io.pc        := PriorityMux(com_valids.reverse, com_uops.reverse.map(x => x.pc))
    pcr.io.exception := com_exception                        
    pcr.io.retire    := com_valids.toBits.orR // TODO this is incorrect for INTRET PopCount(com_valids.toBits)
    pcr.io.cause     := com_exc_cause
-   pcr.io.sret      := com_eret // XXX TODO  update to new RISC-V sret eret stuff
+   pcr.io.sret      := com_sret 
    pcr_exc_target   := pcr.io.evec
    pcr.io.badvaddr_wen := Bool(false) // TODO VM virtual memory
 
@@ -1687,7 +1687,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    
    io.ptw.ptbr := pcr.io.ptbr                   
    io.ptw.invalidate := pcr.io.fatc             
-   io.ptw.sret := com_eret // BUG XXX TODO eret
+   io.ptw.sret := com_sret 
    io.ptw.status := pcr.io.status
  
    //-------------------------------------------------------------

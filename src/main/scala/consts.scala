@@ -17,7 +17,7 @@ trait BOOMProcConstants
    //************************************
    // Debug Support
    val COMMIT_LOG_PRINTF = false // dump commit state, for comparision against ISA sim 
-   val DEBUG_PRINTF = true // use the Chisel printf functionality 
+   val DEBUG_PRINTF = false // use the Chisel printf functionality 
    val DEBUG_FETCHBUFFER = false // print out the fetch buffer
    val DEBUG_BTB = false
    
@@ -349,6 +349,9 @@ trait RISCVConstants
    val RS1_LSB = 15
    val RS2_MSB = 24
    val RS2_LSB = 20
+
+   val CSR_ADDR_MSB = 31
+   val CSR_ADDR_LSB = 20
 
    // location of the fifth bit in the shamt (for checking for illegal ops for SRAIW,etc.)
    val SHAMT_5_BIT = 25
