@@ -157,9 +157,13 @@ class DecodeUnit(implicit conf: BOOMConfiguration) extends Module
    val csr_addr       = uop.inst(CSR_ADDR_MSB, CSR_ADDR_LSB)
    val csr_en         = cs_csr_cmd != CSR.N
    val csr_wen        = raddr1 != UInt(0) || !Vec(CSR.S, CSR.C).contains(cs_csr_cmd)
-   val csr_privileged = csr_en &&
-                        (csr_addr(9,8) != UInt(0) ||
-                         csr_addr(11,10) != UInt(0) && csr_wen)
+   val exc_csr_privileged = csr_en &&
+                        (csr_addr(11,10) === UInt(3) && csr_wen ||
+                         csr_addr(11,10) === UInt(2) ||
+                         csr_addr(11,10) === UInt(1) && !io.status.s ||
+                         csr_addr(9,8) >= UInt(2) ||
+                         csr_addr(9,8) === UInt(1) && !io.status.s && csr_wen)
+
    val csr_invalid    = csr_en && !Vec(legal_csrs.map(UInt(_))).contains(csr_addr)       
    
    // flush pipeline on CSR writes that may have side effects
@@ -167,7 +171,7 @@ class DecodeUnit(implicit conf: BOOMConfiguration) extends Module
    //  val safe_csrs = CSRs.sup0 :: CSRs.sup1 :: CSRs.epc :: Nil
    //  cs_csr_en && id_csr_wen && DecodeLogic(id_csr_addr, legal_csrs -- safe_csrs, safe_csrs)   
    //}
-   val exc_privileged = (csr_privileged || cs_sret.toBool) && !(io.status.s)
+   val exc_privileged = exc_csr_privileged || (cs_sret.toBool && !(io.status.s))
 
    uop.sret      := cs_sret.toBool
    uop.syscall   := cs_syscall.toBool

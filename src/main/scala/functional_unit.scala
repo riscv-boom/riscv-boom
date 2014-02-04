@@ -266,7 +266,8 @@ class ALUUnit(is_branch_unit: Boolean = false)
 //                                       )
       
       // JAL is taken in the front-end, so it should never mispredict
-      assert (!(io.req.valid && uop.uopc === uopJAL && io.br_unit.brinfo.mispredict), "JAL was predicted as not taken")
+//  TODO XXX it's possible if branch (not predicted) followed by a JAL would mean the JAL is predicted "not taken"
+//      assert (!(io.req.valid && uop.uopc === uopJAL && io.br_unit.brinfo.mispredict), "JAL was predicted as not taken")
 
       // need to tell the BTB it mispredicted and needs to update
       // TODO currently only telling BTB about branches and JAL, should also use JALR
