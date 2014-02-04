@@ -15,7 +15,7 @@ import Node._
 import uncore._
 
  
-class BoomTile(resetSignal: Bool = null)(confIn: BOOMConfiguration) extends Module(_reset = resetSignal) with ClientCoherenceAgent
+class BoomTile(resetSignal: Bool = null)(confIn: BOOMConfiguration) extends Module(_reset = resetSignal) 
 {
 
   // Override some of the external inputs  (until we have a better story anyways)
