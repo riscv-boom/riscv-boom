@@ -229,6 +229,7 @@ class DecodeUnit(implicit conf: BOOMConfiguration) extends Module
                  (uop.uopc === uopJAL)  ||
                  (uop.uopc === uopJALR)
 
+   uop.is_jal := (uop.uopc === uopJAL) 
    uop.is_jump:= (uop.uopc === uopJAL) ||
                  (uop.uopc === uopJALR) 
    uop.is_ret := (uop.uopc === uopJALR) &&
@@ -252,31 +253,32 @@ class BranchDecode extends Module
       val inst    = Bits(INPUT, 32)
 
       val is_br   = Bool(OUTPUT)
+      val is_jal  = Bool(OUTPUT)
       val brtype  = Bits(OUTPUT, UOPC_SZ)
       val imm_sel = UInt(OUTPUT, IS_X.getWidth)
    }
-     
-   val bpd_csignals =
-      ListLookup(io.inst,
-                          List(uopNOP  , Bool(false), IS_X),
-            Array(        /*           | is       | Br   */
-                          /*           |  Br?     | Type */
-               JAL     -> List(uopJAL  , Bool(true), IS_J),
-               JALR    -> List(uopJALR , Bool(true), IS_I),
-               BEQ     -> List(uopBEQ  , Bool(true), IS_B),
-               BNE     -> List(uopBNE  , Bool(true), IS_B),
-               BGE     -> List(uopBGE  , Bool(true), IS_B),
-               BGEU    -> List(uopBGEU , Bool(true), IS_B),
-               BLT     -> List(uopBLT  , Bool(true), IS_B),
-               BLTU    -> List(uopBLTU , Bool(true), IS_B)
-//               SRET    -> List(uopSRET , Bool(true), IS_X)
+                          //            is br?
+                          //            |  is jal?
+   val bpd_csignals =     //            |  |  br type
+      rocket.DecodeLogic(io.inst, //    |  |  | 
+                          List(uopNOP , N, N, IS_X),
+            Array(
+               JAL     -> List(uopJAL , N, Y, IS_J),
+               JALR    -> List(uopJALR, N, N, IS_I),
+               BEQ     -> List(uopBEQ , Y, N, IS_B),
+               BNE     -> List(uopBNE , Y, N, IS_B),
+               BGE     -> List(uopBGE , Y, N, IS_B),
+               BGEU    -> List(uopBGEU, Y, N, IS_B),
+               BLT     -> List(uopBLT , Y, N, IS_B),
+               BLTU    -> List(uopBLTU, Y, N, IS_B)
             ))
 
-   val bpd_brtype_ :: bpd_br_val :: bpd_imm_sel_ :: Nil = bpd_csignals
+   val brtype_ :: is_br_ :: is_jal_ :: imm_sel_ :: Nil = bpd_csignals
 
-   io.is_br   := bpd_br_val.toBool
-   io.brtype  := bpd_brtype_.toBits
-   io.imm_sel := bpd_imm_sel_
+   io.is_br   := is_br_.toBool
+   io.is_jal  := is_jal_.toBool
+   io.brtype  := brtype_.toBits
+   io.imm_sel := imm_sel_
 }
 
 

@@ -255,6 +255,7 @@ class ALUUnit(is_branch_unit: Boolean = false)
       // assumption is BHT prediction and BTB prediction are mutually exclusive
       io.br_unit.brinfo.mispredict := io.req.valid && 
                                       uop.is_br_or_jmp &&
+                                      !(uop.is_jal) && // TODO XXX is this the proper way to do this? can we remove more JAL stuff from the branch unit?
                                        (((io.br_unit.taken ^ (uop.br_prediction.isBrTaken() === TAKEN)) && !uop.btb_pred_taken) || // BHT was wrong
                                        (!io.br_unit.taken && uop.btb_pred_taken) || // BTB was wrong
                                        (io.br_unit.taken && uop.btb_pred_taken && (io.br_unit.pc_sel === PC_JALR) && 
@@ -266,8 +267,8 @@ class ALUUnit(is_branch_unit: Boolean = false)
 //                                       )
       
       // JAL is taken in the front-end, so it should never mispredict
-//  TODO XXX it's possible if branch (not predicted) followed by a JAL would mean the JAL is predicted "not taken"
-//      assert (!(io.req.valid && uop.uopc === uopJAL && io.br_unit.brinfo.mispredict), "JAL was predicted as not taken")
+      //  TODO XXX it's possible if branch (not predicted) followed by a JAL would mean the JAL is predicted "not taken"
+      //assert (!(io.req.valid && uop.uopc === uopJAL && io.br_unit.brinfo.mispredict), "JAL was predicted as not taken")
 
       // need to tell the BTB it mispredicted and needs to update
       // TODO currently only telling BTB about branches and JAL, should also use JALR

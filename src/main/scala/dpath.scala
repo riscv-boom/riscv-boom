@@ -127,6 +127,7 @@ class MicroOp extends Bundle()
    val wakeup_delay     = UInt(width = log2Up(MAX_WAKEUP_DELAY))
    val is_br_or_jmp     = Bool()                      // is this micro-op a (branch or jump) vs. a regular PC+4 inst?
    val is_jump          = Bool()                      // is this a jump? (note: not mutually exclusive with br_valid)
+   val is_jal           = Bool()                      // is this a JAL? used for branch unit
    val is_ret           = Bool()                      // is jalr with rd=x0, rs1=x1
    val br_mask          = Bits(width = MAX_BR_COUNT)
    val br_tag           = UInt(width = BR_TAG_SZ)
@@ -239,9 +240,10 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
   
    // Branch Predict State
    val bp2_val        = Bool()
+   val bp2_take_pc    = Bool()
+   val bp2_pred_target= UInt(width=XPRLEN)
    val bp2_reg_predictor_out = Reg(outType=new BrPrediction()) 
    val bp2_prediction = new BrPrediction() 
-   val bp2_pred_target= UInt(width=XPRLEN)
 
    // Instruction Decode State
    val dec_uops       = Vec.fill(DECODE_WIDTH) {new MicroOp()}
@@ -390,7 +392,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    val take_pc = br_unit.brinfo.mispredict || 
                  flush_pipeline || 
                  com_sret ||
-                 (bp2_val && bp2_prediction.isBrTaken() && !(io.imem.resp.bits.taken) && !if_stalled) //|| // TODO this seems way too low-level, to get this backpressure signal correct
+                 (bp2_take_pc && !(io.imem.resp.bits.taken) && !if_stalled) //|| // TODO this seems way too low-level, to get this backpressure signal correct
 //                 (bp2_val && !bp2_prediction.isBrTaken() && fetch_bundle.btb_pred_taken && !if_stalled) // for now, don't let BHT overrule BTB
 
 
@@ -407,7 +409,8 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
                (br_unit.brinfo.valid && br_unit.brinfo.mispredict && br_unit.pc_sel === PC_JALR)  -> br_unit.jump_reg_target,
                (br_unit.brinfo.valid && br_unit.brinfo.mispredict && br_unit.pc_sel === PC_BRJMP) -> br_unit.brjmp_target,  
                (br_unit.brinfo.valid && br_unit.brinfo.mispredict && br_unit.pc_sel === PC_PLUS4) -> br_unit.pc_plus4,  
-               (bp2_prediction.isBrTaken())                                                       -> bp2_pred_target
+               (bp2_take_pc)                                                                  -> bp2_pred_target
+//               (bp2_prediction.isBrTaken())                                                       -> bp2_pred_target
                // for now, don't let BHT overrule the BTB
 //               , (!bp2_prediction.isBrTaken() && fetch_bundle.btb_pred_taken)                       -> (io.imem.resp.bits.pc + UInt(4))(VADDR_BITS,0) // TODO somewhere else I can get this signal?
                ))
@@ -502,52 +505,60 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
 
    //-------------------------------------------------------------
    // Branch Decode (BP2 Stage)
-   // Assumption: only predict one branch per fetch packet. 
-   
-   bp2_val     := io.imem.resp.valid
-   val bp2_inst = Bits()
-   val bp2_pc   = aligned_fetch_pc
- 
+   // 
+   // Only predict one branch per fetch packet. 
+   // But in parallel look for JAL and compute targets. Finally
+   // look at branch prediction and arbitrate PC selection between
+   // the predicted branch and the JALs.
+   //
+   // Attach prediction to first branch in the packet.
+   // kill all instructions behind the branch (if pred taken).
+   // Otherwise, all other branches are predicted "not taken".
+   // JALs are handled differently (first JAL is taken of course).
 
-   var bpd_brtype = uopNOP
-   var bpd_br_val = Bool(false)
-   var bpd_imm_sel = IS_X
-   var bpd_br_idx = UInt(0) // which word in the packet is the branch?
+   bp2_val    := io.imem.resp.valid
+   val bp2_pc = aligned_fetch_pc
  
-                           
-   for (i <- 0 until FETCH_WIDTH)
+   val bpd_br_val  = Bool()
+   val bpd_br_idx  = UInt() // which word in the packet is the branch?
+   val bpd_jal_val = Bool()
+   val bpd_jal_idx = UInt() // and which is the jal?
+                
+   bpd_br_val  := Bool(false)
+   bpd_jal_val := Bool(false)
+   bpd_br_idx  := UInt(0)
+   bpd_jal_idx := UInt(0)
+
+   // look for branches and JALs in the fetch packet
+   for (i <- FETCH_WIDTH-1 to 0 by -1)
    {
-      // attach prediction to first branch in the packet:
-      // kill all instructions behind the branch (if pred taken)
-      // otherwise, all other branches are predicted "not taken"
       val bpd_decoder = Module(new BranchDecode)
-      bpd_decoder.io.inst := fetch_bundle.insts(i) //bp2_inst  garbage, get the correct inst
+      bpd_decoder.io.inst := fetch_bundle.insts(i) 
        
-      bpd_brtype    = Mux(bpd_br_val, bpd_brtype, bpd_decoder.io.brtype)
-      bpd_imm_sel   = Mux(bpd_br_val, bpd_imm_sel, bpd_decoder.io.imm_sel)
-      bpd_br_idx    = Mux(bpd_br_val, bpd_br_idx, UInt(i))
-      
-      // found a branch yet?
-      bpd_br_val    = (bpd_decoder.io.is_br && io.imem.resp.bits.mask(i)) | bpd_br_val
+      when (bpd_decoder.io.is_br && io.imem.resp.bits.mask(i)) 
+      {
+         bpd_br_val := Bool(true)
+         bpd_br_idx := UInt(i)
+      }
+      when (bpd_decoder.io.is_jal && io.imem.resp.bits.mask(i))
+      {
+         bpd_jal_val := Bool(true)
+         bpd_jal_idx := UInt(i)
+      }
    }
-   
-   // pull out the instruction we are predicting on, to compute its branch target
-   bp2_inst := fetch_bundle.insts(bpd_br_idx)
 
-   // Immediates (only care about branches and jumps though)
-   val bi19_12 = Mux(bpd_imm_sel === IS_B, Fill(bp2_inst(31),8)
-                                         , bp2_inst(19,12))
-   val bi11    = Mux(bpd_imm_sel === IS_B, bp2_inst(7)
-                                         , bp2_inst(20))
-   val bi5_1   = Mux(bpd_imm_sel === IS_B, bp2_inst(11,8)
-                                         , bp2_inst(24,21))
-   val bp2_imm32 = Cat(Fill(bp2_inst(31),12), bi19_12, bi11, bp2_inst(30,25), bi5_1, Bits(0,1))
-
+   // pull out the instruction(s) we are predicting on, to compute the branch and jal targets
+   val binst  = fetch_bundle.insts(bpd_br_idx)
+   val jinst  = fetch_bundle.insts(bpd_jal_idx)
+   val bp2_br_imm32  = Cat(Fill(binst(31),12), Fill(binst(31),8), binst(7), binst(30,25), binst(11,8), Bits(0,1))
+   val bp2_jal_imm32 = Cat(Fill(jinst(31),12), jinst(19,12), jinst(20), jinst(30,25), jinst(24,21), Bits(0,1))
+   val bp2_brpred_target  = UInt(width=conf.rc.xprlen)
+   val bp2_jalpred_target = UInt(width=conf.rc.xprlen)
    require (FETCH_WIDTH <= 2)
-   bp2_pred_target := bp2_pc + Mux(bpd_br_idx === UInt(1), UInt(4), UInt(0)) + Sext(bp2_imm32, conf.rc.xprlen)
-   
-   bp2_prediction := bp2_reg_predictor_out
+   bp2_brpred_target  := bp2_pc + Mux(bpd_br_idx === UInt(1), UInt(4), UInt(0)) + Sext(bp2_br_imm32, conf.rc.xprlen)
+   bp2_jalpred_target := bp2_pc + Mux(bpd_jal_idx === UInt(1), UInt(4), UInt(0)) + Sext(bp2_jal_imm32, conf.rc.xprlen)
 
+   bp2_prediction := bp2_reg_predictor_out
    val bht_pred_taken = Bool()
 
    if (USE_BRANCH_PREDICTOR)
@@ -556,18 +567,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
 
       when (bp2_val && bpd_br_val)
       {
-         when (bpd_brtype === uopJAL)
-         {
-            bht_pred_taken := TAKEN
-         }
-         .elsewhen (bpd_brtype === uopJALR) 
-         {
-            bht_pred_taken := NOT_TAKEN 
-         }
-         .otherwise
-         {
-            bht_pred_taken := bp2_reg_predictor_out.taken
-         }
+         bht_pred_taken := bp2_reg_predictor_out.taken
       }
    }
    else
@@ -575,16 +575,45 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
       bht_pred_taken := NOT_TAKEN
    }
 
+
+   // did the BTB predict JAL *AND* was it the first JAL in the fetch packet
+   val btb_predicted_our_jal = fetch_bundle.btb_pred_taken &&
+                               bpd_jal_val &&
+                               (bpd_jal_idx === fetch_bundle.btb_pred_taken_idx)
+
+   // who's prediction do we take? the branch or the JAL?
+   // if the jump is earlier, we take it and kill everything after. 
+   // if the branch is earlier and Taken, we take it and kill everything after.
+   // if the branch is earlier and NotTaken, we take the JAL and kill
+   //    everything after the JAL (and assume that all other branches are also
+   //    NotTaken).
+   val br_wins = Bool() // does the br or the jal redirect the pc?
+   br_wins := Bool(true)
+   when (bpd_jal_val && ( bpd_jal_idx < bpd_br_idx))
+   {
+      br_wins := Bool(false)
+   }
+   .elsewhen (!bht_pred_taken)
+   {
+      br_wins := Bool(false)
+   }
+ 
+   // Tell the PC Select we want to redirect the PC (and to which PC)
+   bp2_take_pc     := bp2_val && ((bpd_jal_val && !btb_predicted_our_jal) || 
+                                  (bpd_br_val && bht_pred_taken))
+   bp2_pred_target := Mux(br_wins, bp2_brpred_target, bp2_jalpred_target)
+
+
    // TODO it's the job of the BHT to verify that if the BTB predicts on a JAL, it got it right.  That's known and perfect
    // BHT does not overrule the BTB on branches
-   // 
+   // i'm not sure we can know the correct information at this stage (i.e., target)
+   //assert (!(btb_predicted_our_jal &&  ), "BTB predicted incorrect JAL target")
 
    // TODO add RAS, in which JAL xd==x1 is a CALL (push)
    //                       JALR sd==x1 is a CALL (push), JALR rd=x0,rs1=x1 is a POP, otherwise JALR shouldn't touch the RAS
 
-   // don't override the BTB... unless it's a JAL.  always take them (b/c the backend won't allocate a branch mask for it!)
-   bp2_prediction.taken := (bht_pred_taken && !io.imem.resp.bits.taken) || 
-                           bpd_brtype === uopJAL
+   // don't override the BTB on branches.  
+   bp2_prediction.taken := (bht_pred_taken && !io.imem.resp.bits.taken && br_wins) 
 
 
    // pass info into FetchBuffer
@@ -604,12 +633,15 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
                            (fetch_bundle.btb_pred_taken && fetch_bundle.btb_pred_taken_idx === UInt(0)) // BTB is killing second inst
                               , Bits(2,2), Bits(0,2))
 
+   val jal_kill_mask = Bits(width = FETCH_WIDTH)
+   jal_kill_mask := Fill(bpd_jal_val, FETCH_WIDTH) & (SInt(-1, FETCH_WIDTH) << UInt(1) << bpd_jal_idx)
+
    require (FETCH_WIDTH <= 2)
 //   val bpd_kill_mask = Mux(bpd_br_val && bpd2_prediction.taken,
 //                          (~Bits(1, FETCH_WIDTH)) << (bpd_br_idx),
 //                          Bits(0, FETCH_WIDTH))
         
-   fetch_bundle.mask := (io.imem.resp.bits.mask & ~bpd_kill_mask) 
+   fetch_bundle.mask := (io.imem.resp.bits.mask & ~bpd_kill_mask & ~jal_kill_mask) 
 
 
    //-------------------------------------------------------------
@@ -1310,7 +1342,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
 
 
       // Fetch Stage 2
-      debug_string = sprintf("%s  I$ Response: (%s) IF2_PC= 0x%x (mask:0x%x) \033[1;35m%s\033[0m  -------- BrPred2: (%s,%s,%s %d) [pred_targ: 0x%x] killmsk: 0x%x --->> (0x%x)\n"  
+      debug_string = sprintf("%s  I$ Response: (%s) IF2_PC= 0x%x (mask:0x%x) \033[1;35m%s\033[0m  -------- BrPred2: (%s,%s,%s,%s,%s %d,%d) [pred_targ: 0x%x] killmsk: 0x%x --->> (0x%x)\n"  
          , debug_string
          , Mux(io.imem.resp.valid && !fetchbuffer_kill, Str(mgt + "V" + end), Str(grn + "-" + end))
          , fetch_bundle.pc(19,0)
@@ -1319,7 +1351,10 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
          , Mux(bp2_val, Str("V"), Str("-"))
          , Mux(bpd_br_val, Str("B"), Str("-"))
          , Mux(bp2_prediction.taken, Str("T"), Str("n"))
+         , Mux(bpd_jal_val, Str("J"), Str("-"))
+         , Mux(btb_predicted_our_jal, Str("C"), Str("-"))
          , bpd_br_idx
+         , bpd_jal_idx
          , bp2_pred_target(19,0)
          , bpd_kill_mask
          , fetch_bundle.mask
