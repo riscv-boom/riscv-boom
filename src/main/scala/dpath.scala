@@ -958,13 +958,12 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    // assume the last valid inst in the commit bundle is the one that is the exception/sret
    pcr.io.pc        := PriorityMux(com_valids.reverse, com_uops.reverse.map(x => x.pc))
    pcr.io.exception := com_exception                        
-   pcr.io.retire    := com_valids.toBits.orR // TODO this is incorrect for INTRET PopCount(com_valids.toBits)
+   pcr.io.retire    := PopCount(com_valids.toBits)
    pcr.io.cause     := com_exc_cause
    pcr.io.sret      := com_sret 
    pcr_exc_target   := pcr.io.evec
    pcr.io.badvaddr_wen := Bool(false) // TODO VM virtual memory
 
-   
    // --------------------------------------
    // Register File 
    
@@ -1255,7 +1254,25 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    irt_reg := irt_reg + PopCount(com_valids.toBits)
    debug(tsc_reg)
    debug(irt_reg)
+    
 
+   // UARCH Counters
+   pcr.io.uarch_counters.foreach(_ := Bool(false))
+
+   pcr.io.uarch_counters(0) := br_unit.brinfo.valid
+   pcr.io.uarch_counters(1) := br_unit.brinfo.mispredict
+   pcr.io.uarch_counters(2) := com_exception
+   pcr.io.uarch_counters(3) := !rob_rdy
+   pcr.io.uarch_counters(4) := laq_full
+   pcr.io.uarch_counters(5) := stq_full
+   pcr.io.uarch_counters(6) := branch_mask_full.reduce(_|_)
+   pcr.io.uarch_counters(7) := tsc_reg
+   pcr.io.uarch_counters(8) := irt_reg
+   pcr.io.uarch_counters(9) :=  Bool(true)
+   pcr.io.uarch_counters(10) := Bool(true)
+   pcr.io.uarch_counters(11) := Bool(true)
+
+                                      
            
    //-------------------------------------------------------------
    //-------------------------------------------------------------

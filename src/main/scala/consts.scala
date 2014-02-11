@@ -160,8 +160,7 @@ trait ScalarOpConstants
    // RS1 Operand Select Signal
    val OP1_RS1 = UInt(0, 2) // Register Source #1
    val OP1_ZERO= UInt(1, 2) 
-   val OP1_PCHI= UInt(2, 2) 
-   val OP1_PC  = UInt(3, 2) 
+   val OP1_PC  = UInt(2, 2) 
    val OP1_X   = Bits("b??", 2)
    
    // RS2 Operand Select Signal

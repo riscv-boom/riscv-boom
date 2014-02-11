@@ -205,9 +205,8 @@ class ALUUnit(is_branch_unit: Boolean = false)
 
    // operand 1 select 
    val op1_data = Mux(io.req.bits.uop.ctrl.op1_sel.toUInt === OP1_RS1 , io.req.bits.rs1_data,
-                  Mux(io.req.bits.uop.ctrl.op1_sel.toUInt === OP1_PCHI, Cat(uop_pc_(conf.rc.xprlen-1,12), Bits(0,12)),
                   Mux(io.req.bits.uop.ctrl.op1_sel.toUInt === OP1_PC  , uop_pc_,
-                                                                        UInt(0))))
+                                                                        UInt(0)))
    
    // operand 2 select 
    val op2_data = Mux(io.req.bits.uop.ctrl.op2_sel === OP2_IMM,  Sext(imm_xprlen, conf.rc.xprlen),

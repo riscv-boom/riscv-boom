@@ -280,7 +280,7 @@ class RegisterReadDecode extends Module
                
                uopJAL   -> List(BR_J , Y, N, N, FN_ADD , DW_XPR, OP1_PC  , OP2_FOUR, IS_J, REN_1, WB_ALU, rocket.CSR.N),
                uopJALR  -> List(BR_JR, Y, N, N, FN_ADD , DW_XPR, OP1_PC  , OP2_FOUR, IS_I, REN_1, WB_ALU, rocket.CSR.N),
-               uopAUIPC -> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP1_PCHI, OP2_IMM , IS_U, REN_1, WB_ALU, rocket.CSR.N),
+               uopAUIPC -> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP1_PC  , OP2_IMM , IS_U, REN_1, WB_ALU, rocket.CSR.N),
                
                uopCSRRW -> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP1_RS1 , OP2_ZERO, IS_X, REN_1, WB_PCR, rocket.CSR.W),
                uopCSRRS -> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP1_RS1 , OP2_ZERO, IS_X, REN_1, WB_PCR, rocket.CSR.S),
