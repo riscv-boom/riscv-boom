@@ -105,7 +105,7 @@ object Decode
                SRET    -> List(Y, uopSRET , FU_ALU , RT_X  , RT_X  , RT_X  , IS_X, M_N  , MSK_X , UInt(0), N, Y, N, Y, N, CSR.N), 
 
                FENCE_I -> List(Y, uopFENCEI    ,FU_MEM, RT_X, RT_X, RT_X , IS_X, M_NOP  , MSK_X , UInt(0), N, N, N, Y, Y, CSR.N), 
-               FENCE   -> List(Y, uopMEMSPECIAL,FU_MEM, RT_X, RT_X, RT_X , IS_X, M_NOP  , MSK_X , UInt(0), N, N, N, N, N, CSR.N)
+               FENCE   -> List(Y, uopMEMSPECIAL,FU_MEM, RT_X, RT_X, RT_X , IS_X, M_NOP  , MSK_X , UInt(0), N, N, N, Y, Y, CSR.N) // TODO PERF make fence higher performance
                
                // TODO M_NOP... use ot be M_FENCE, but hellacache no longer does fences?
                // TODO guarantee that these instructions will be monotonic, maybe just make "unique"

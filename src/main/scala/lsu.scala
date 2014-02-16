@@ -902,7 +902,7 @@ class LoadStoreUnit(pl_width: Int) extends Module
           
          for (i <- 0 until num_st_entries)
          {
-            when (!stq_committed(i))
+            when (!stq_committed(i)) // && !io.commit_store_mask(w)) // (is this worth the extra logic?) 
             {
                saq_val(i)            := Bool(false)
                sdq_val(i)            := Bool(false)

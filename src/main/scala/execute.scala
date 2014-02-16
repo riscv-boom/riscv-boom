@@ -259,6 +259,7 @@ class MemExeUnit()(implicit conf: BOOMConfiguration) extends ExecutionUnit(num_r
    // HellaCache Req 
    lsu.io.dmem_req_ready := io.dmem.req.ready
 
+   // TODO get rid of com_handling and guard with an assert?
    io.dmem.req.valid     := Mux(io.com_handling_exc && lsu.io.memreq_uop.is_load, Bool(false), 
                                                                               lsu.io.memreq_val)
    io.dmem.req.bits.addr  := lsu.io.memreq_addr

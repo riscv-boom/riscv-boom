@@ -39,6 +39,7 @@ BOOM has the following (conceptual) stages:
    
 
 BUGS:
+  scall isn't being counted as a retired instruction
 
 Questions:
 
@@ -392,9 +393,9 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    val take_pc = br_unit.brinfo.mispredict || 
                  flush_pipeline || 
                  com_sret ||
-                 (bp2_take_pc && !(io.imem.resp.bits.taken) && !if_stalled) //|| // TODO this seems way too low-level, to get this backpressure signal correct
-//                 (bp2_val && !bp2_prediction.isBrTaken() && fetch_bundle.btb_pred_taken && !if_stalled) // for now, don't let BHT overrule BTB
+                 (bp2_take_pc && !if_stalled) //|| // TODO this seems way too low-level, to get this backpressure signal correct
 
+   assert (!(com_exception && !flush_pipeline), "exception occurred, but pipeline flush signal not set!")
 
    io.imem.req.valid   := take_pc // tell front-end we had an unexpected change in the stream
    io.imem.req.bits.pc := if_pc_next
@@ -409,10 +410,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
                (br_unit.brinfo.valid && br_unit.brinfo.mispredict && br_unit.pc_sel === PC_JALR)  -> br_unit.jump_reg_target,
                (br_unit.brinfo.valid && br_unit.brinfo.mispredict && br_unit.pc_sel === PC_BRJMP) -> br_unit.brjmp_target,  
                (br_unit.brinfo.valid && br_unit.brinfo.mispredict && br_unit.pc_sel === PC_PLUS4) -> br_unit.pc_plus4,  
-               (bp2_take_pc)                                                                  -> bp2_pred_target
-//               (bp2_prediction.isBrTaken())                                                       -> bp2_pred_target
-               // for now, don't let BHT overrule the BTB
-//               , (!bp2_prediction.isBrTaken() && fetch_bundle.btb_pred_taken)                       -> (io.imem.resp.bits.pc + UInt(4))(VADDR_BITS,0) // TODO somewhere else I can get this signal?
+               (bp2_take_pc)                                                                      -> bp2_pred_target
                ))
                                     
    // Fetch Buffer
@@ -431,7 +429,6 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    }
    fetch_bundle.btb_pred_taken := io.imem.resp.bits.taken 
    fetch_bundle.btb_pred_taken_idx:= io.imem.resp.bits.taken_idx 
-
 
    val xcpt_ma   = io.imem.resp.bits.xcpt_ma // TODO need to handle these exceptions
    val xcpt_if   = io.imem.resp.bits.xcpt_if // inst fault - pagefault, could be on wrong branch
@@ -599,15 +596,40 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    }
  
    // Tell the PC Select we want to redirect the PC (and to which PC)
+   // but don't let the BTB's branch predictions get overruled
    bp2_take_pc     := bp2_val && ((bpd_jal_val && !btb_predicted_our_jal) || 
-                                  (bpd_br_val && bht_pred_taken))
+                                  (bpd_br_val && bht_pred_taken && !fetch_bundle.btb_pred_taken))
    bp2_pred_target := Mux(br_wins, bp2_brpred_target, bp2_jalpred_target)
 
 
-   // TODO it's the job of the BHT to verify that if the BTB predicts on a JAL, it got it right.  That's known and perfect
+   // It's the job of the BHT to verify that if the BTB predicts on a JAL, it got it right. 
+   // It must also check that the BTB didn't miss the JAL and predict on a later branch
+
+   // if the jal wins and the btb predicted, did the btb predict the jal? if not, overrule the BTB.
+//   when (!br_wins && fetch_bundle.btb_pred_taken && fetch_bundle.btb_pred_taken_idx != bpd_jal_idx)
+//   {
+//      // the BTB screwed up and let a jal through, so we have to redirect the PC now
+//      bp2_take_pc := Bool(true)
+//   }
+
+
+
    // BHT does not overrule the BTB on branches
-   // i'm not sure we can know the correct information at this stage (i.e., target)
-   //assert (!(btb_predicted_our_jal &&  ), "BTB predicted incorrect JAL target")
+   // check that the BTB predicted the correct jal target
+//   assert (!(btb_predicted_our_jal && bp2_jalpred_target != io.imem.resp.bits.debug_taken_pc), "BTB predicted incorrect JAL target")
+   // TODO is there a way to check the BTB branch prediction? 
+   // TODO generalize the assert that checks for the BTB pred_idx
+   require (FETCH_WIDTH <= 2)
+   val btb_predicted_inst = fetch_bundle.insts(fetch_bundle.btb_pred_taken_idx)
+   val btb_predicted_inst_pc =  bp2_pc + Mux(fetch_bundle.btb_pred_taken_idx === UInt(1), UInt(4), UInt(0))  + Sext(DebugGetBJImm(btb_predicted_inst), conf.rc.xprlen)
+//   assert (!(!Reg(next=(Reg(next=reset.toBool))) &&
+   val throw_assert = (!(!Reg(next=(Reg(next=reset.toBool)))) &&
+               io.imem.resp.valid && 
+               io.imem.resp.bits.taken && 
+               !DebugIsJALR(btb_predicted_inst) && 
+               btb_predicted_inst_pc != io.imem.resp.bits.debug_taken_pc)
+//   , 
+//               "BTB predicted incorrect target.")
 
    // TODO add RAS, in which JAL xd==x1 is a CALL (push)
    //                       JALR sd==x1 is a CALL (push), JALR rd=x0,rs1=x1 is a POP, otherwise JALR shouldn't touch the RAS
@@ -955,8 +977,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
 
    // Extra I/O
    pcr_status       := pcr.io.status
-   // assume the last valid inst in the commit bundle is the one that is the exception/sret
-   pcr.io.pc        := PriorityMux(com_valids.reverse, com_uops.reverse.map(x => x.pc))
+   pcr.io.pc        := flush_pc
    pcr.io.exception := com_exception                        
    pcr.io.retire    := PopCount(com_valids.toBits)
    pcr.io.cause     := com_exc_cause
@@ -1174,10 +1195,9 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    //-------------------------------------------------------------
    // **** Flush Pipeline ****
    //-------------------------------------------------------------
+   // flush on exceptions, miniexeptions, and after some special instructions
 
-   flush_pipeline := rob.io.flush_val || 
-                     (Range(0,DECODE_WIDTH).map{i => com_valids(i) && com_uops(i).flush_on_commit}).reduce(_|_)
-   
+   flush_pipeline := rob.io.flush_val  
    flush_pc       := rob.io.flush_pc
 
    for (w <- 0 until exe_units.length)
@@ -1209,7 +1229,8 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    val idle_cycles = Reg(init = UInt(0, 14))
    when (com_valids.toBits.orR)
    {
-      idle_cycles := UInt(0)
+//      idle_cycles := UInt(0) ^ (rob.io.com_valids.toBits ^ rob.io.com_valids.toBits)
+      idle_cycles := UInt(0) ^ (rob.io.com_valids(0) ^ rob.io.com_valids(0)) ^ (rob.io.com_valids(1) ^ rob.io.com_valids(1)) // weird chisel bug we're trying to solve
    }
    .otherwise
    {
@@ -1250,29 +1271,35 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    // (only used for printf and vcd dumps - the actual counters are in the CSRFile)
    val tsc_reg = Reg(init = UInt(0, XPRLEN))
    val irt_reg = Reg(init = UInt(0, XPRLEN))
+   val irt_user_reg = Reg(init = UInt(0, XPRLEN))
    tsc_reg := tsc_reg + UInt(1)
-   irt_reg := irt_reg + PopCount(com_valids.toBits)
+   irt_reg := irt_reg + PopCount(com_valids.toBits) // TODO doesn't count some instructions like scall (which looks like an exception)
+   when (!(pcr.io.status.s)) { irt_user_reg := irt_user_reg + PopCount(com_valids.toBits) }
    debug(tsc_reg)
    debug(irt_reg)
-    
+   debug(irt_user_reg)
+
 
    // UARCH Counters
    pcr.io.uarch_counters.foreach(_ := Bool(false))
 
-   pcr.io.uarch_counters(0) := br_unit.brinfo.valid
-   pcr.io.uarch_counters(1) := br_unit.brinfo.mispredict
-   pcr.io.uarch_counters(2) := com_exception
-   pcr.io.uarch_counters(3) := !rob_rdy
-   pcr.io.uarch_counters(4) := laq_full
-   pcr.io.uarch_counters(5) := stq_full
-   pcr.io.uarch_counters(6) := branch_mask_full.reduce(_|_)
-   pcr.io.uarch_counters(7) := tsc_reg
-   pcr.io.uarch_counters(8) := irt_reg
-   pcr.io.uarch_counters(9) :=  Bool(true)
-   pcr.io.uarch_counters(10) := Bool(true)
-   pcr.io.uarch_counters(11) := Bool(true)
-
-                                      
+   //pcr.io.uarch_counters(0) := br_unit.brinfo.valid
+   //pcr.io.uarch_counters(1) := br_unit.brinfo.mispredict
+   //pcr.io.uarch_counters(2) := com_exception
+   //pcr.io.uarch_counters(3) := !rob_rdy
+   //pcr.io.uarch_counters(4) := laq_full
+   //pcr.io.uarch_counters(5) := stq_full
+   //pcr.io.uarch_counters(6) := branch_mask_full.reduce(_|_)
+   //pcr.io.uarch_counters(7) := tsc_reg
+   //pcr.io.uarch_counters(8) := irt_reg
+   //pcr.io.uarch_counters(9) :=  Bool(true)
+   //pcr.io.uarch_counters(10) := Bool(true)
+   //pcr.io.uarch_counters(11) := Bool(true)
+   //pcr.io.uarch_counters(12) := Bool(true)
+   //pcr.io.uarch_counters(13) := Bool(true)
+   //pcr.io.uarch_counters(14) := Bool(true)
+   //pcr.io.uarch_counters(15) := Bool(true)
+   //                                   
            
    //-------------------------------------------------------------
    //-------------------------------------------------------------
@@ -1324,16 +1351,18 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
       if (DEBUG_FETCHBUFFER) white_space = white_space - FETCH_BUFFER_SZ
       if (DEBUG_BTB) white_space = white_space - BTB_NUM_ENTRIES - 2
 
-      var debug_string = sprintf("--- Cyc=%d , ----------------- Ret: %d ----------------------------------\n"
+      var debug_string = sprintf("--- Cyc=%d , ----------------- Ret: %d ---------------------------------- User Retired: %d\n"
          , tsc_reg
          , irt_reg & UInt(0xffffff)
+         , irt_user_reg & UInt(0xffffff)
          )
 
 
       // Front-end
 
       // Fetch Stage 1
-      debug_string = sprintf("%s  BrPred1:        (IF1_PC= 0x%x - Predict:%s) ------ PC: [%s%s%s%s-%s for br_id: %d, msk:%x, sel: %d: %s next: 0x%x]\n"
+//      debug_string = sprintf("%s  BrPred1:        (IF1_PC= 0x%x - Predict:%s) ------ PC: [%s%s%s%s-%s for br_id: %d, msk:%x, sel: %d: %s next: 0x%x]\n"
+      debug_string = sprintf("%s  BrPred1:        (IF1_PC= 0x%x - Predict:%s) ------ PC: [%s%s%s%s-%s for br_id: %d, msk:%x, sel: %d: %s next: 0x%x] btbinfo: %d %s 0x%x?=0x%x [0x%x]\n" // TODO delete me
          , debug_string
          , io.imem.resp.bits.bht_pc(19,0)
          , Mux(br_predictor.io.prediction_info.taken, Str("T"), Str("-"))
@@ -1347,6 +1376,11 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
          , br_unit.pc_sel
          , Mux(take_pc, Str("TAKE_PC"), Str(" "))
          , if_pc_next
+         , io.imem.resp.bits.taken
+         , Mux(DebugIsJALR(btb_predicted_inst), Str("JR"), Str("BJ"))
+         , btb_predicted_inst_pc  
+         , io.imem.resp.bits.debug_taken_pc 
+         , btb_predicted_inst
          )
 
       def InstsStr(insts: Bits, width: Int) =
@@ -1427,7 +1461,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
             )
       }
              
-      debug_string = sprintf("%s) State: (%s:%s %s %s \033[1;31m%s\033[0m %s %s)\n"
+      debug_string = sprintf("%s) State: (%s:%s %s %s \033[1;31m%s\033[0m %s %s) %s %s\n"
          , debug_string
          , Mux(rob.io.debug.state === UInt(0), Str("RESET"),
            Mux(rob.io.debug.state === UInt(1), Str("NORMAL"),
@@ -1440,6 +1474,8 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
          , Mux(flush_pipeline, Str("FLUSH_PIPELINE"), Str(" "))
          , Mux(branch_mask_full.reduce(_|_), Str("BR_MSK_FULL"), Str(" "))
          , Mux(io.dmem.req.ready, Str("D$_Rdy"), Str("D$_BSY"))
+         , Mux(pcr.io.status.s, Str("SUPERVISOR"), Str("USERMODE"))
+         , Mux(throw_assert, Str("ASSERT"), Str("_"))
          )
       
 
@@ -1483,12 +1519,14 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
             )
       }
 
+      
 
       debug_string = sprintf("%s Exct(%s%d) Commit(%x)                  freelist: 0x%x\n"
          , debug_string
          , Mux(com_exception, Str("E"), Str("-"))
          , com_exc_cause
-         , rob.io.com_valids.toBits
+//         , rob.io.com_valids.toBits breaks CHisel Verilog :(
+         , com_valids.toBits
          , rename_stage.io.debug.freelist
          )
 
@@ -1711,10 +1749,17 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
 
    if (COMMIT_LOG_PRINTF)
    {
+      var found_scall = Bool(false)
       for (w <- 0 until COMMIT_WIDTH)
       {
-         when (com_valids(w) && !(pcr.io.status.s))
+         when ((com_valids(w) && !(pcr.io.status.s)) || 
+               (com_exception && com_exc_cause === UInt(rocket.Causes.syscall) && com_uops(w).syscall && !found_scall)
+               )
          {
+            found_scall = found_scall || 
+                          (com_exception && 
+                          com_exc_cause === UInt(rocket.Causes.syscall) && 
+                          com_uops(w).syscall)
             when (com_uops(w).ldst_rtype === RT_FIX)
             {
                printf("\n@@@ 0x%x (0x%x) x%d 0x%x"

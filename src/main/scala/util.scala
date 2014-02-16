@@ -10,6 +10,9 @@ package BOOM
 import Chisel._
 import Node._
 
+import rocket.Instructions._
+import rocket._
+
 object IsKilledByBranch
 {
    def apply(brinfo: BrResolutionInfo, uop: MicroOp): Bool =
@@ -110,6 +113,48 @@ object ImmGen
       
       return Cat(sign, i30_20, i19_12, i11, i10_5, i4_1, i0).toSInt
    }
+}
+
+object DebugIsJALR
+{
+   def apply(inst: Bits): Bool =
+   {
+      // TODO CHisel not sure why this won't compile
+//      val is_jalr = rocket.DecodeLogic(inst, List(Bool(false)),
+//                                       Array(
+//                                       JALR -> Bool(true)))
+      inst(6,0) === UInt("b1100111")
+   }
+}
+
+// take an instruction and output its branch or jal target. Only used for a
+// debug assert (no where else would we jump straight from instruction bits to
+// a target).
+object DebugGetBJImm
+{
+   def apply(inst: Bits): UInt =
+   {
+      // TODO Chisel not sure why this won't compile
+      //val csignals =     
+      //rocket.DecodeLogic(inst,
+      //                    List(Bool(false), Bool(false)),
+      //      Array(
+      //         BEQ     -> List(Bool(true ), Bool(false)),
+      //         BNE     -> List(Bool(true ), Bool(false)),
+      //         BGE     -> List(Bool(true ), Bool(false)),
+      //         BGEU    -> List(Bool(true ), Bool(false)),
+      //         BLT     -> List(Bool(true ), Bool(false)),
+      //         BLTU    -> List(Bool(true ), Bool(false))
+      //      ))
+      //val is_br :: nothing :: Nil = csignals
+
+   val is_br = (inst(6,0) === UInt("b1100011"))
+
+   val br_targ = Cat(Fill(inst(31),12), Fill(inst(31),8), inst(7), inst(30,25), inst(11,8), Bits(0,1))
+   val jal_targ= Cat(Fill(inst(31),12), inst(19,12), inst(20), inst(30,25), inst(24,21), Bits(0,1))
+
+   Mux(is_br, br_targ, jal_targ)
+  }
 }
 
 }

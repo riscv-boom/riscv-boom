@@ -15,6 +15,8 @@
 // NOTES: 
 //    - Currently we do not compress out bubbles in the ROB. 
 //    - commit_width is tied directly to the dispatch_width.
+//    - Exceptions are only taken when at the head of the commit bundle. 
+//      This helps deal with loads, stores, and refetch instructions.
 //
 
 package BOOM
@@ -36,7 +38,7 @@ class RobIo(machine_width: Int, num_wakeup_ports: Int)  extends Bundle()
    // Write-back Stage
    // (Update of ROB)
    // Instruction is no longer busy and can be committed
-   // currently all supported exceptions are detected in Decode
+   // currently all supported exceptions are detected in Decode (except load-ordering failures)
    val wb_valids        = Vec.fill(num_wakeup_ports) { Bool(INPUT) }
    val wb_rob_idxs      = Vec.fill(num_wakeup_ports) { UInt(INPUT, ROB_ADDR_SZ) }
    
@@ -215,7 +217,7 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
    // **************************************************************************
    // --------------------------------------------------------------------------
    // **************************************************************************
-    
+
    for (w <- 0 until width)
    {
       def MatchBank(bank_idx: UInt): Bool = (bank_idx === UInt(w))
@@ -226,7 +228,7 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
       val rob_uop       = Vec.fill(num_rob_rows) {Reg(new MicroOp())} // one write port - dispatch
                                                            // fake write ports - clearing on commit,
                                                            // rollback, branch_kill
-      val rob_exception = Mem(Bool(), num_rob_rows)
+      val rob_exception = Mem(Bool(), num_rob_rows)        // TODO consolidate into the com_uop? what's the best for Chisel?
       val rob_exc_cause = Mem(UInt(width=EXC_CAUSE_SZ), num_rob_rows)
 
       //-----------------------------------------------
@@ -289,8 +291,8 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
          rob_exc_cause(GetRowIdx(io.ldo_xcpt_uop.rob_idx)) := MINI_EXCEPTION_MEM_ORDERING
       }
  
-      can_throw_exception(w) := rob_val(rob_head) && rob_exception(rob_head)
-      
+      can_throw_exception(w) := rob_val(rob_head) && rob_exception(rob_head) 
+
       
       //-----------------------------------------------
       // Commit or Rollback
@@ -402,36 +404,47 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
    // Commit Logic
    // need to take a "can_commit" array, and let the first can_commits commit
    // previous instructions may block the commit of younger instructions in the commit bundle
-   // e.g., exception, or (valid && busy)
+   // e.g., exception, or (valid && busy).
+   // Finally, don't throw an exception if there are instructions in front of
+   // it that want to commit (only throw exception when head of the bundle).
    
    var block_commit = (rob_state != s_normal) && (rob_state != s_wait_till_empty)
+   var will_throw_exception = Bool(false)
+   var block_xcpt   = Bool(false) // TODO we can relax this constraint, so long
+                                  // as we handle committing stores in
+                                  // conjuction with exceptions, and exceptions
+                                  // with flush_on_commit (I think).
 
    for (w <- 0 until width)
    {
-      will_commit(w) := can_commit(w) && !can_throw_exception(w) && !block_commit 
-      block_commit   = (rob_head_vals(w) && 
-                        (!can_commit(w) || can_throw_exception(w))) | block_commit
+      will_throw_exception = (can_throw_exception(w) && !block_commit && !block_xcpt) || will_throw_exception
+//      will_throw_exception = (can_throw_exception(w) && !block_commit) || will_throw_exception
+
+      will_commit(w)       := can_commit(w) && !can_throw_exception(w) && !block_commit 
+      block_commit         = (rob_head_vals(w) && 
+                             (!can_commit(w) || can_throw_exception(w))) | block_commit
+      block_xcpt           = will_commit(w)
    }
  
    // exception must be in the commit bundle
+   exception_thrown    := will_throw_exception
    val is_mini_exception = io.com_exc_cause === MINI_EXCEPTION_MEM_ORDERING
-   exception_thrown    := can_throw_exception.reduce(_|_)
-   io.com_exception    := (rob_state === s_rollback && (rob_tail === rob_head)) && !is_mini_exception
+//   io.com_exception    := (rob_state === s_rollback && (rob_tail === rob_head)) && !is_mini_exception delete me, i throw exception at the end of rob rollback
+   io.com_exception    := exception_thrown && !is_mini_exception
    io.com_exc_cause    := PriorityMux(can_throw_exception, rob_head_eflags)
-   io.com_handling_exc := exception_thrown  // TODO get rid of com_handling_exc?
+   io.com_handling_exc := exception_thrown  // TODO get rid of com_handling_exc? used to handle loads coming back from the $ probbaly unnecessary
 
    io.lsu_misspec := exception_thrown && io.com_exc_cause === MINI_EXCEPTION_MEM_ORDERING
 
-   // NOTE: Only let the true head of the ROB redirect the PC
-   // this means exceptions, etc. must be the head of the ROB (i.e., can't
-   // commit some instructions and let a later instruction throw an exception
-   // or cause a flush).
    // TODO BUG XXX what if eret and inst_valid excp in same bundle and bad load?
-   val refetch_inst = is_mini_exception
+   // flush PC, say an instruction needs to flush the pipeline and refetch either itself or PC+4
+   // Note: exception must be the first valid instruction in the commit bundle
+   val refetch_inst = exception_thrown //is_mini_exception
    io.flush_pc  := rob_pc_hob.read(rob_head) + 
                    PriorityMux(rob_head_vals, Range(0,width).map(w => UInt(w << 2))) + 
                    Mux(refetch_inst, UInt(0), UInt(4))
-   io.flush_val := exception_thrown
+   io.flush_val := exception_thrown ||
+                     (Range(0,width).map{i => io.com_valids(i) && io.com_uops(i).flush_on_commit}).reduce(_|_)
 
    // -----------------------------------------------
    // ROB Head Logic

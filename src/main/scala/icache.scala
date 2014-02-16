@@ -21,7 +21,8 @@ class FrontendResp(implicit conf: ICacheConfig) extends Bundle {
   val pc = UInt(width = VADDR_BITS+1)  // ID stage PC
   val data = Bits(width = conf.ibytes*8)
   val taken = Bool() // the BTB took the branch
-  val taken_idx  = UInt() // the BTB took the branch, which inst in the packet had the branch
+  val taken_idx = UInt() // the BTB took the branch, which inst in the packet had the branch
+  val debug_taken_pc = UInt() // debug -- remember the target from the BTB
   val xcpt_ma = Bool()
   val xcpt_if = Bool()
   val bht_pc = UInt(width = VADDR_BITS+1) // IF stage PC
@@ -55,6 +56,7 @@ class Frontend(implicit c: ICacheConfig, tl: TileLinkConfiguration) extends Modu
   val s2_btb_hit = Reg(init=Bool(false))
   val s2_btb_hit_idx = Reg(UInt())
   val s2_xcpt_if = Reg(init=Bool(false))
+  val s2_debug_taken_pc = Reg(UInt())
 
   val btbTarget = Cat(btb.io.target(VADDR_BITS-1), btb.io.target)
   
@@ -84,6 +86,7 @@ class Frontend(implicit c: ICacheConfig, tl: TileLinkConfiguration) extends Modu
       s2_btb_hit := btb.io.hit
       s2_btb_hit_idx := btb.io.hit_idx
       s2_xcpt_if := tlb.io.resp.xcpt_if
+      s2_debug_taken_pc := btbTarget
     }
   }
   when (io.cpu.req.valid) {
@@ -128,6 +131,7 @@ class Frontend(implicit c: ICacheConfig, tl: TileLinkConfiguration) extends Modu
   io.cpu.resp.bits.data := icache.io.resp.bits.datablock >> (s2_pc(log2Up(c.databits/8)-1,log2Up(c.ibytes)) << log2Up(c.ibytes*8))
   io.cpu.resp.bits.taken := s2_btb_hit
   io.cpu.resp.bits.taken_idx := s2_btb_hit_idx
+  io.cpu.resp.bits.debug_taken_pc := s2_debug_taken_pc
   io.cpu.resp.bits.xcpt_ma := s2_pc(log2Up(c.ibytes)-1,0) != UInt(0)
   io.cpu.resp.bits.xcpt_if := s2_xcpt_if
   io.cpu.resp.bits.bht_pc := s1_pc
