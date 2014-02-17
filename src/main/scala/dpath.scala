@@ -1645,7 +1645,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
 //      val lsu_io = (exe_units.find(_.is_mem_unit).get).io.lsu_io // for debug printing... assume only one has a mem_unit
       for (i <- 0 until NUM_LSU_ENTRIES)
       {
-         debug_string = sprintf("%s         ldq[%d]=(%s%s%s%s%s%s) st_dep(%d,m=%x) 0x%x %s %s   saq[%d]=(%s%s%s%s%s%s) 0x%x -> 0x%x %s %s %s"
+         debug_string = sprintf("%s         ldq[%d]=(%s%s%s%s%s%s%d) st_dep(%d,m=%x) 0x%x %s %s   saq[%d]=(%s%s%s%s%s%s) 0x%x -> 0x%x %s %s %s"
             , debug_string
             , UInt(i, MEM_ADDR_SZ)
             , Mux(lsu_io.debug.entry(i).laq_allocated, Str("V"), Str("-"))
@@ -1654,6 +1654,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
             , Mux(lsu_io.debug.entry(i).laq_succeeded, Str("S"), Str("-"))
             , Mux(lsu_io.debug.entry(i).laq_failure, Str("F"), Str("_"))
             , Mux(lsu_io.debug.entry(i).laq_forwarded_std_val, Str("X"), Str("_"))
+            , lsu_io.debug.entry(i).laq_forwarded_stq_idx
             , lsu_io.debug.entry(i).laq_yng_st_idx
             , lsu_io.debug.entry(i).laq_st_dep_mask
             , lsu_io.debug.entry(i).laq_addr(19,0)

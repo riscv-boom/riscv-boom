@@ -138,6 +138,7 @@ class LoadStoreUnitIo(pl_width: Int)  extends Bundle()
          val laq_succeeded = Bool()
          val laq_failure = Bool()
          val laq_forwarded_std_val = Bool()
+         val laq_forwarded_stq_idx = UInt(width=MEM_ADDR_SZ)
          val laq_yng_st_idx = UInt(width=MEM_ADDR_SZ)
          val laq_st_dep_mask= Bits(width=NUM_LSU_ENTRIES)
 
@@ -442,7 +443,6 @@ class LoadStoreUnit(pl_width: Int) extends Module
       // TODO we can be fancier perhaps, like (r_mask & w_mask === r_mask)
       forwarding_matches(i) := Bool(false)
       when ((read_mask === write_mask) && 
-            sdq_val(i) && 
             !(stq_uop(i).is_fence) &&
             dword_addr_matches(i))
       {
@@ -498,8 +498,7 @@ class LoadStoreUnit(pl_width: Int) extends Module
 
    // a store could commit and clear out the data between when we check for
    // std_val and when we read out the data on the next cycle
-//   val r_std_still_valid = Reg(sdq_val(r_forward_std_idx.toBits), Bool(false))
-   val r_std_still_valid = Reg(next = sdq_val(r_forward_std_idx))
+   val r_sdq_val_for_forwarding = Reg(next = sdq_val(r_forward_std_idx))
 
    //-------------------------------------------------------------
    //-------------------------------------------------------------
@@ -518,7 +517,7 @@ class LoadStoreUnit(pl_width: Int) extends Module
    // tell the data path we will give it data
    // time the forwarding of the data to coincide with what would be a HIT from
    // the cache (to only use one port)            
-   io.forward_val  := Mux(io.nack.valid && !io.nack.cache_nack && !wb_forwarding_kill && r_std_still_valid, 
+   io.forward_val  := Mux(io.nack.valid && !io.nack.cache_nack && !wb_forwarding_kill && r_sdq_val_for_forwarding, 
                                                                                        Reg(next=r_forward_std_val),
                                                                                        Bool(false))
    io.forward_data :=  Reg(next=
@@ -859,8 +858,8 @@ class LoadStoreUnit(pl_width: Int) extends Module
       }
    
    
-      // handle case where sdq_val is no longer true (store was committed)
-      when (!io.nack.cache_nack && io.nack.isload && !wb_forwarding_kill && Reg(next=r_forward_std_val) && !(r_std_still_valid))
+      // handle case where sdq_val is no longer true (store was committed) or was never valid
+      when (!io.nack.cache_nack && io.nack.isload && !wb_forwarding_kill && Reg(next=r_forward_std_val) && !(r_sdq_val_for_forwarding))
       {
          laq_executed(io.nack.lsu_idx) := Bool(false)
       }
@@ -982,6 +981,7 @@ class LoadStoreUnit(pl_width: Int) extends Module
       io.debug.entry(i).laq_succeeded := laq_succeeded(i)
       io.debug.entry(i).laq_failure := laq_failure(i)
       io.debug.entry(i).laq_forwarded_std_val := laq_forwarded_std_val(i)
+      io.debug.entry(i).laq_forwarded_stq_idx := laq_forwarded_stq_idx(i)
       io.debug.entry(i).laq_addr := laq_addr(i)
       io.debug.entry(i).laq_yng_st_idx := laq_yng_st_idx(i)
       io.debug.entry(i).laq_st_dep_mask := laq_st_dep_mask(i)
