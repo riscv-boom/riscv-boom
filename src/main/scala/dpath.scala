@@ -1281,25 +1281,24 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
 
 
    // UARCH Counters
-   pcr.io.uarch_counters.foreach(_ := Bool(false))
-
-   //pcr.io.uarch_counters(0) := br_unit.brinfo.valid
-   //pcr.io.uarch_counters(1) := br_unit.brinfo.mispredict
-   //pcr.io.uarch_counters(2) := com_exception
-   //pcr.io.uarch_counters(3) := !rob_rdy
-   //pcr.io.uarch_counters(4) := laq_full
-   //pcr.io.uarch_counters(5) := stq_full
-   //pcr.io.uarch_counters(6) := branch_mask_full.reduce(_|_)
-   //pcr.io.uarch_counters(7) := tsc_reg
-   //pcr.io.uarch_counters(8) := irt_reg
-   //pcr.io.uarch_counters(9) :=  Bool(true)
-   //pcr.io.uarch_counters(10) := Bool(true)
-   //pcr.io.uarch_counters(11) := Bool(true)
-   //pcr.io.uarch_counters(12) := Bool(true)
-   //pcr.io.uarch_counters(13) := Bool(true)
-   //pcr.io.uarch_counters(14) := Bool(true)
-   //pcr.io.uarch_counters(15) := Bool(true)
-   //                                   
+   //pcr.io.uarch_counters.foreach(_ := Bool(false))
+   pcr.io.uarch_counters(0) := br_unit.brinfo.valid
+   pcr.io.uarch_counters(1) := br_unit.brinfo.mispredict
+   pcr.io.uarch_counters(2) := com_exception
+   pcr.io.uarch_counters(3) := !rob_rdy
+   pcr.io.uarch_counters(4) := laq_full
+   pcr.io.uarch_counters(5) := stq_full
+   pcr.io.uarch_counters(6) := branch_mask_full.reduce(_|_)
+   pcr.io.uarch_counters(7) := tsc_reg
+   pcr.io.uarch_counters(8) := irt_reg
+   pcr.io.uarch_counters(9) :=  Bool(true)
+   pcr.io.uarch_counters(10) := Bool(true)
+   pcr.io.uarch_counters(11) := Bool(true)
+   pcr.io.uarch_counters(12) := Bool(true)
+   pcr.io.uarch_counters(13) := Bool(true)
+   pcr.io.uarch_counters(14) := Bool(true)
+   pcr.io.uarch_counters(15) := Bool(true)
+                                      
            
    //-------------------------------------------------------------
    //-------------------------------------------------------------
