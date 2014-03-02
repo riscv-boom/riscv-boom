@@ -1172,7 +1172,13 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
       // branch resolution
       rob.io.br_unit <> br_unit
 
-      rob.io.get_pc <> exe_units(brunit_idx).io.get_rob_pc
+      // branch unit fetches PC from ROB cycle earlier than needed (for critical path reasons)
+       
+      // branch unit requests PCs from ROB during register read
+      rob.io.get_pc.rob_idx := iss_uops(brunit_idx).rob_idx
+      exe_units(brunit_idx).io.get_rob_pc.curr_pc  := Reg(next=rob.io.get_pc.curr_pc)
+      exe_units(brunit_idx).io.get_rob_pc.next_val := Reg(next=rob.io.get_pc.next_val)
+      exe_units(brunit_idx).io.get_rob_pc.next_pc  := Reg(next=rob.io.get_pc.next_pc)
       
       // LSU <> ROB
       lsu_misspec := rob.io.lsu_misspec   

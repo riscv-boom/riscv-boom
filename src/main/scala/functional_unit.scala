@@ -197,7 +197,7 @@ class ALUUnit(is_branch_unit: Boolean = false)
    val uop = io.req.bits.uop
 
    // TODO only let branch unit access the PC from the ROB (one per machine)
-   io.get_rob_pc.rob_idx := uop.rob_idx
+//   io.get_rob_pc.rob_idx := uop.rob_idx
    val uop_pc_ = io.get_rob_pc.curr_pc
 
    // immediate generation
@@ -254,7 +254,7 @@ class ALUUnit(is_branch_unit: Boolean = false)
       // assumption is BHT prediction and BTB prediction are mutually exclusive
       io.br_unit.brinfo.mispredict := io.req.valid && 
                                       uop.is_br_or_jmp &&
-                                      !(uop.is_jal) && // TODO XXX is this the proper way to do this? can we remove more JAL stuff from the branch unit?
+                                      !(uop.is_jal) && // TODO XXX is this the proper way to do this? can we remove more JAL stuff from the branch unit? jal should just be a NOP.
                                        (((io.br_unit.taken ^ (uop.br_prediction.isBrTaken() === TAKEN)) && !uop.btb_pred_taken) || // BHT was wrong
                                        (!io.br_unit.taken && uop.btb_pred_taken) || // BTB was wrong
                                        (io.br_unit.taken && uop.btb_pred_taken && (io.br_unit.pc_sel === PC_JALR) && 
