@@ -92,17 +92,18 @@ class BranchUnitResp extends Bundle()
 {
    // TODO maybe just add pc_sel, btb_mispredict to branch resolution
    // TODO REMOVE WIDTH once Chisel gets its act together
-   val pc_sel         = Bits(width = PC_PLUS4.getWidth)
+   val take_pc        = Bool()
+   val pc_sel         = Bits(width = PC_PLUS4.getWidth)   
    val taken          = Bool()
    val btb_mispredict = Bool()
-   val rob_idx        = UInt(width = ROB_ADDR_SZ)
+//   val rob_idx        = UInt(width = ROB_ADDR_SZ)
 
    val brjmp_target    = UInt(width = XPRLEN)
    val jump_reg_target = UInt(width = XPRLEN)
    val pc_plus4        = UInt(width = XPRLEN) 
    val pc              = UInt(width = XPRLEN) // TODO this isn't really a branch_unit thing
 
-   val brinfo = new BrResolutionInfo()
+   val brinfo = new BrResolutionInfo() // NOTE: delayed a cycle!
 
    val debug_btb_pred = Bool() // just for debug, did the BTB and BHT predict taken?
    val debug_bht_pred = Bool()
@@ -225,6 +226,23 @@ class ALUUnit(is_branch_unit: Boolean = false)
 
    if (is_branch_unit)
    {
+      // The Branch Unit redirects the PC immediately, but delays the mispredict
+      // signal a cycle (for critical path reasons)
+
+      // Did I just get killed by the previous cycle's branch? 
+      // Or by a flush pipeline?
+      val killed = Bool()
+      killed := Bool(false)
+      when (io.req.bits.kill ||
+            (io.brinfo.valid && 
+               io.brinfo.mispredict && 
+               maskMatch(io.brinfo.mask, io.req.bits.uop.br_mask)
+            ))
+      {
+         killed := Bool(true)
+      }
+
+
       val rs1 = io.req.bits.rs1_data
       val rs2 = io.req.bits.rs2_data
       val br_eq  = (rs1 === rs2)
@@ -247,45 +265,48 @@ class ALUUnit(is_branch_unit: Boolean = false)
                         ))
 
 
-      io.br_unit.taken      := io.req.valid &&
-                            uop.is_br_or_jmp &&
-                            (io.br_unit.pc_sel != PC_PLUS4) 
+      io.br_unit.taken := io.req.valid &&
+                          !killed &&
+                          uop.is_br_or_jmp &&
+                          (io.br_unit.pc_sel != PC_PLUS4)
 
       // assumption is BHT prediction and BTB prediction are mutually exclusive
-      io.br_unit.brinfo.mispredict := io.req.valid && 
-                                      uop.is_br_or_jmp &&
-                                      !(uop.is_jal) && // TODO XXX is this the proper way to do this? can we remove more JAL stuff from the branch unit? jal should just be a NOP.
-                                       (((io.br_unit.taken ^ (uop.br_prediction.isBrTaken() === TAKEN)) && !uop.btb_pred_taken) || // BHT was wrong
-                                       (!io.br_unit.taken && uop.btb_pred_taken) || // BTB was wrong
-                                       (io.br_unit.taken && uop.btb_pred_taken && (io.br_unit.pc_sel === PC_JALR) && 
-                                          (!io.get_rob_pc.next_val || (io.get_rob_pc.next_pc != io.br_unit.jump_reg_target))) // BTB was right, but wrong target for JALR
-                                       )                         
-
-//                                       ((uop.btb_pred_taken && !io.br_unit.taken) || // BTB was wrong (BHT was set to false)
-//                                        (!uop.btb_pred_taken    (uop.br_prediction.isBrTaken() === TAKEN) && !uop.br_unit.taken)
-//                                       )
-      
       // JAL is taken in the front-end, so it should never mispredict
-      //  TODO XXX it's possible if branch (not predicted) followed by a JAL would mean the JAL is predicted "not taken"
-      //assert (!(io.req.valid && uop.uopc === uopJAL && io.br_unit.brinfo.mispredict), "JAL was predicted as not taken")
+//      io.br_unit.brinfo.mispredict := io.req.valid && 
+      val mispredict = io.req.valid && 
+                       !killed &&
+                       uop.is_br_or_jmp &&
+                       !(uop.is_jal) && // TODO XXX is this the proper way to do this? can we remove more JAL stuff from the branch unit? jal should just be a NOP.
+                       (((io.br_unit.taken ^ (uop.br_prediction.isBrTaken() === TAKEN)) && !uop.btb_pred_taken) || // BHT was wrong
+                       (!io.br_unit.taken && uop.btb_pred_taken) || // BTB was wrong
+                       (io.br_unit.taken && uop.btb_pred_taken && (io.br_unit.pc_sel === PC_JALR) && 
+                       (!io.get_rob_pc.next_val || (io.get_rob_pc.next_pc != io.br_unit.jump_reg_target))) // BTB was right, but wrong target for JALR
+                       )                         
+//                     ((uop.btb_pred_taken && !io.br_unit.taken) || // BTB was wrong (BHT was set to false)
+//                     (!uop.btb_pred_taken    (uop.br_prediction.isBrTaken() === TAKEN) && !uop.br_unit.taken)
+//                     )
+      
+      io.br_unit.take_pc := mispredict
 
       // need to tell the BTB it mispredicted and needs to update
       // TODO currently only telling BTB about branches and JAL, should also use JALR
       io.br_unit.btb_mispredict := io.req.valid && 
                                     uop.is_br_or_jmp && 
+                                    !killed &&
 //                                    !uop.is_ret && let jr ra be held in the btb too
                                        // push/call is rd=x1
                                        // pop/return is rd=x0, rs1=x1
 //                                    !uop.is_jump && 
                                     (io.br_unit.taken ^ uop.btb_pred_taken)
 
-      io.br_unit.brinfo.valid   := io.req.valid && uop.is_br_or_jmp
-      io.br_unit.brinfo.mask    := UInt(1) << uop.br_tag
-      io.br_unit.brinfo.exe_mask:= uop.br_mask
-      io.br_unit.brinfo.tag     := uop.br_tag
-      io.br_unit.brinfo.rob_idx := uop.rob_idx
-      io.br_unit.brinfo.ldq_idx := uop.ldq_idx
-      io.br_unit.brinfo.stq_idx := uop.stq_idx
+      io.br_unit.brinfo.valid      := Reg(next = io.req.valid && uop.is_br_or_jmp && !killed)
+      io.br_unit.brinfo.mispredict := Reg(next = mispredict)
+      io.br_unit.brinfo.mask       := Reg(next = UInt(1) << uop.br_tag)
+      io.br_unit.brinfo.exe_mask   := Reg(next = uop.br_mask)
+      io.br_unit.brinfo.tag        := Reg(next = uop.br_tag)
+      io.br_unit.brinfo.rob_idx    := Reg(next = uop.rob_idx)
+      io.br_unit.brinfo.ldq_idx    := Reg(next = uop.ldq_idx)
+      io.br_unit.brinfo.stq_idx    := Reg(next = uop.stq_idx)
 
       // Branch/Jump Target Calculation
       // we can't push this through the ALU though, b/c jalr needs both PC+4 and rs1+offset

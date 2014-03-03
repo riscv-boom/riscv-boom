@@ -19,7 +19,7 @@ trait BOOMProcConstants
    val COMMIT_LOG_PRINTF = false // dump commit state, for comparision against ISA sim 
    val DEBUG_PRINTF = false // use the Chisel printf functionality 
    val DEBUG_FETCHBUFFER = false // print out the fetch buffer
-   val DEBUG_BTB = false 
+   val DEBUG_BTB = false
    
    
    //************************************
@@ -78,7 +78,7 @@ trait BOOMProcConstants
    // size of the unified, physical register file
    val PHYS_REG_COUNT = 64; require(PHYS_REG_COUNT > 32)
 
-   val BR_TAG_SZ   = 2   // log number of branches we can speculate simultaneously
+   val BR_TAG_SZ   = 3   // log number of branches we can speculate simultaneously
    require(BR_TAG_SZ >=1)
    
    val FETCH_BUFFER_SZ = 4 // number of instructions that can be stored between fetch + decode

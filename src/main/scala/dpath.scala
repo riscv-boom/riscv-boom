@@ -390,7 +390,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
 
    val com_sret = (Range(0,DECODE_WIDTH).map{i => com_valids(i) && com_uops(i).sret}).reduce(_|_) 
 
-   val take_pc = br_unit.brinfo.mispredict || 
+   val take_pc = br_unit.take_pc || 
                  flush_pipeline || 
                  com_sret ||
                  (bp2_take_pc && !if_stalled) //|| // TODO this seems way too low-level, to get this backpressure signal correct
@@ -405,12 +405,12 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    // brjmp_target will be the opposite of the branch prediction. So all we
    // care about is "did a misprediction occur?"
    if_pc_next := MuxCase(UInt(0xaaaa), Array (
-               (com_exception || com_sret)                                                        -> pcr_exc_target,
-               (flush_pipeline)                                                                   -> flush_pc, 
-               (br_unit.brinfo.valid && br_unit.brinfo.mispredict && br_unit.pc_sel === PC_JALR)  -> br_unit.jump_reg_target,
-               (br_unit.brinfo.valid && br_unit.brinfo.mispredict && br_unit.pc_sel === PC_BRJMP) -> br_unit.brjmp_target,  
-               (br_unit.brinfo.valid && br_unit.brinfo.mispredict && br_unit.pc_sel === PC_PLUS4) -> br_unit.pc_plus4,  
-               (bp2_take_pc)                                                                      -> bp2_pred_target
+               (com_exception || com_sret)                      -> pcr_exc_target,
+               (flush_pipeline)                                 -> flush_pc, 
+               (br_unit.take_pc && br_unit.pc_sel === PC_JALR)  -> br_unit.jump_reg_target,
+               (br_unit.take_pc && br_unit.pc_sel === PC_BRJMP) -> br_unit.brjmp_target,  
+               (br_unit.take_pc && br_unit.pc_sel === PC_PLUS4) -> br_unit.pc_plus4,  
+               (bp2_take_pc)                                    -> bp2_pred_target
                ))
                                     
    // Fetch Buffer
@@ -440,9 +440,9 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
       // probably don't tell it about JR for returns... needs RAS, but needs to use ROB, etc.
       // tell BTB it mispredicted (update the BTB)
       // also, handle case where BHT overrules BTB, must clear entry to prevent infinite loop?
-      io.imem.req.bits.mispredict := (br_unit.brinfo.valid && br_unit.btb_mispredict) //|| (!bp2_prediction.isBrTaken() && fetch_bundle.btb_pred_taken)
+      io.imem.req.bits.mispredict := br_unit.take_pc
       // tell BTB if branch was taken, otherwise, BTB will clear entry itself on mispredict and !ntaken (if exe_jalr || !btb_hit)
-      io.imem.req.bits.taken      := (br_unit.brinfo.valid && br_unit.btb_mispredict && br_unit.taken) //&& !(!bp2_prediction.isBrTaken() && fetch_bundle.btb_pred_takeN)
+      io.imem.req.bits.taken      := (br_unit.btb_mispredict && br_unit.taken) //&& !(!bp2_prediction.isBrTaken() && fetch_bundle.btb_pred_takeN)
    }
    else
    {
@@ -597,22 +597,15 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
  
    // Tell the PC Select we want to redirect the PC (and to which PC)
    // but don't let the BTB's branch predictions get overruled
-   bp2_take_pc     := bp2_val && ((bpd_jal_val && !btb_predicted_our_jal) || 
+   bp2_take_pc     := !(br_unit.brinfo.mispredict) && 
+                      bp2_val && 
+                      ((bpd_jal_val && !btb_predicted_our_jal) || 
                                   (bpd_br_val && bht_pred_taken && !fetch_bundle.btb_pred_taken))
    bp2_pred_target := Mux(br_wins, bp2_brpred_target, bp2_jalpred_target)
 
 
    // It's the job of the BHT to verify that if the BTB predicts on a JAL, it got it right. 
    // It must also check that the BTB didn't miss the JAL and predict on a later branch
-
-   // if the jal wins and the btb predicted, did the btb predict the jal? if not, overrule the BTB.
-//   when (!br_wins && fetch_bundle.btb_pred_taken && fetch_bundle.btb_pred_taken_idx != bpd_jal_idx)
-//   {
-//      // the BTB screwed up and let a jal through, so we have to redirect the PC now
-//      bp2_take_pc := Bool(true)
-//   }
-
-
 
    // BHT does not overrule the BTB on branches
    // check that the BTB predicted the correct jal target
@@ -1416,42 +1409,42 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
          , fetch_bundle.mask
          )
           
-      if (DEBUG_FETCHBUFFER)
-      {                                                  
-         for (i <- 0 until FETCH_BUFFER_SZ)
-         {
-            val entry = FetchBuffer.ram(UInt(i))
-            // only shows the first instruction in the bundle...
-            if (i == 0)
-               debug_string = sprintf("%s    FetchBuffer: [PC:0x%x %x %s) %s %d %s] %s %s %s %s %s\n"
-                  , debug_string
-                  , entry.pc(19,0)
-                  , entry.mask.toBits
-                  , InstsStr(entry.insts.toBits, FETCH_WIDTH) 
-                  , Mux(entry.btb_pred_taken, Str("B"), Str(" "))
-                  , entry.btb_pred_taken_idx
-                  , Mux(entry.br_predictions(0).taken, Str("H"), Str(" "))
-                  , Mux(FetchBuffer.deq_ptr === UInt(i), Str("H"), Str(" "))
-                  , Mux(FetchBuffer.enq_ptr === UInt(i), Str("T"), Str(" "))
-                  , Mux(FetchBuffer.do_flow, Str(mgt + "FLOW" + end), Str( grn + " " + end))
-                  , Mux(fetchbuffer_kill, Str("KILL"), Str(" "))
-                  , Mux(FetchBuffer.full, Str("FULL"), Str(" "))
+      //if (DEBUG_FETCHBUFFER)
+      //{                                                  
+      //   for (i <- 0 until FETCH_BUFFER_SZ)
+      //   {
+      //      val entry = FetchBuffer.ram(UInt(i))
+      //      // only shows the first instruction in the bundle...
+      //      if (i == 0)
+      //         debug_string = sprintf("%s    FetchBuffer: [PC:0x%x %x %s) %s %d %s] %s %s %s %s %s\n"
+      //            , debug_string
+      //            , entry.pc(19,0)
+      //            , entry.mask.toBits
+      //            , InstsStr(entry.insts.toBits, FETCH_WIDTH) 
+      //            , Mux(entry.btb_pred_taken, Str("B"), Str(" "))
+      //            , entry.btb_pred_taken_idx
+      //            , Mux(entry.br_predictions(0).taken, Str("H"), Str(" "))
+      //            , Mux(FetchBuffer.deq_ptr === UInt(i), Str("H"), Str(" "))
+      //            , Mux(FetchBuffer.enq_ptr === UInt(i), Str("T"), Str(" "))
+      //            , Mux(FetchBuffer.do_flow, Str(mgt + "FLOW" + end), Str( grn + " " + end))
+      //            , Mux(fetchbuffer_kill, Str("KILL"), Str(" "))
+      //            , Mux(FetchBuffer.full, Str("FULL"), Str(" "))
 
-                  )
-            else
-               debug_string = sprintf("%s                 [PC:0x%x %x %s) %s %d %s] %s %s  \n"
-                  , debug_string
-                  , entry.pc(19,0)
-                  , entry.mask.toBits
-                  , InstsStr(entry.insts.toBits, FETCH_WIDTH) 
-                  , Mux(entry.btb_pred_taken, Str("B"), Str(" "))
-                  , entry.btb_pred_taken_idx
-                  , Mux(entry.br_predictions(0).taken, Str("H"), Str(" "))
-                  , Mux(FetchBuffer.deq_ptr === UInt(i), Str("H"), Str(" "))
-                  , Mux(FetchBuffer.enq_ptr === UInt(i), Str("T"), Str(" "))
-                  )
-         }
-      }
+      //            )
+      //      else
+      //         debug_string = sprintf("%s                 [PC:0x%x %x %s) %s %d %s] %s %s  \n"
+      //            , debug_string
+      //            , entry.pc(19,0)
+      //            , entry.mask.toBits
+      //            , InstsStr(entry.insts.toBits, FETCH_WIDTH) 
+      //            , Mux(entry.btb_pred_taken, Str("B"), Str(" "))
+      //            , entry.btb_pred_taken_idx
+      //            , Mux(entry.br_predictions(0).taken, Str("H"), Str(" "))
+      //            , Mux(FetchBuffer.deq_ptr === UInt(i), Str("H"), Str(" "))
+      //            , Mux(FetchBuffer.enq_ptr === UInt(i), Str("T"), Str(" "))
+      //            )
+      //   }
+      //}
 
       // Back-end
       debug_string = sprintf("%sDec:  ("
@@ -1504,23 +1497,23 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
       {
          debug_string = sprintf("%s       [ISA:%d,%d,%d] [Phs:%d(%s)%d[%s](%s)%d[%s](%s)] " 
             , debug_string
-            , rename_stage.io.dec_uops(w).ldst
-            , rename_stage.io.dec_uops(w).lrs1
-            , rename_stage.io.dec_uops(w).lrs2
+            , dec_uops(w).ldst
+            , dec_uops(w).lrs1
+            , dec_uops(w).lrs2
             , dis_uops(w).pdst
-            , Mux(rename_stage.io.dec_uops(w).ldst_rtype === UInt(0), Str("X")
-              , Mux(rename_stage.io.dec_uops(w).ldst_rtype === UInt(3), Str("-")
-              , Mux(rename_stage.io.dec_uops(w).ldst_rtype === UInt(1), Str("C"), Str("?"))))
+            , Mux(dec_uops(w).ldst_rtype === UInt(0), Str("X")
+              , Mux(dec_uops(w).ldst_rtype === UInt(3), Str("-")
+              , Mux(dec_uops(w).ldst_rtype === UInt(1), Str("C"), Str("?"))))
             , dis_uops(w).pop1
             , Mux(rename_stage.io.ren_uops(w).prs1_busy, Str("B"), Str("R"))
-            , Mux(rename_stage.io.dec_uops(w).lrs1_rtype === UInt(0), Str("X")
-              , Mux(rename_stage.io.dec_uops(w).lrs1_rtype === UInt(3), Str("-")
-              , Mux(rename_stage.io.dec_uops(w).lrs1_rtype === UInt(1), Str("C"), Str("?"))))
+            , Mux(dec_uops(w).lrs1_rtype === UInt(0), Str("X")
+               , Mux(dec_uops(w).lrs1_rtype === UInt(3), Str("-")
+               , Mux(dec_uops(w).lrs1_rtype === UInt(1), Str("C"), Str("?"))))
             , dis_uops(w).pop2
             , Mux(rename_stage.io.ren_uops(w).prs2_busy, Str("B"), Str("R"))
-            , Mux(rename_stage.io.dec_uops(w).lrs2_rtype === UInt(0), Str("X")
-              , Mux(rename_stage.io.dec_uops(w).lrs2_rtype === UInt(3), Str("-")
-              , Mux(rename_stage.io.dec_uops(w).lrs2_rtype === UInt(1), Str("C"), Str("?"))))
+            , Mux(dec_uops(w).lrs2_rtype === UInt(0), Str("X")
+               , Mux(dec_uops(w).lrs2_rtype === UInt(3), Str("-")
+               , Mux(dec_uops(w).lrs2_rtype === UInt(1), Str("C"), Str("?"))))
             )
       }
 

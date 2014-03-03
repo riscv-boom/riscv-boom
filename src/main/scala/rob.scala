@@ -270,8 +270,9 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
 
       when (io.br_unit.brinfo.valid && MatchBank(GetBankIdx(io.br_unit.brinfo.rob_idx)))
       {
-         rob_uop(GetRowIdx(io.br_unit.brinfo.rob_idx)).br_was_taken := io.br_unit.taken
-         rob_uop(GetRowIdx(io.br_unit.brinfo.rob_idx)).btb_mispredicted := io.br_unit.btb_mispredict
+         // these signals need to be delayed a cycle to match the brinfo signals
+         rob_uop(GetRowIdx(io.br_unit.brinfo.rob_idx)).br_was_taken     := Reg(next=io.br_unit.taken)
+         rob_uop(GetRowIdx(io.br_unit.brinfo.rob_idx)).btb_mispredicted := Reg(next=io.br_unit.btb_mispredict)
       }
 
 
