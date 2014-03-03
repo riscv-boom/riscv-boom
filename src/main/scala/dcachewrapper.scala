@@ -49,6 +49,8 @@ class LoadReqSlotIo extends Bundle
    val was_killed = Bool(OUTPUT) // should we filter out returning mem op?
 }
 
+// note: I don't check incoming requests for branch-kills, because the MAddr
+// unit will have already killed them.
 class LoadReqSlot extends Module
 {
    val io = new LoadReqSlotIo()
@@ -60,30 +62,33 @@ class LoadReqSlot extends Module
    val br_killed = Bool()
    br_killed := Bool(false)
 
-
    when (io.clear)
    {
       valid      := Bool(false)
-      was_killed := Bool(false)
    }
    .elsewhen (io.wen)
    {
       valid      := Bool(true)
-      was_killed := br_killed || io.flush_pipe
+      was_killed := io.flush_pipe
       uop        := io.in_uop
-      //br_mask is handled differently below
    }
    .elsewhen (io.flush_pipe || br_killed)
    {
       was_killed := Bool(true)
    }
-  
+
 
    // Handle the Branch Mask
-   val old_br_mask = Mux(io.wen, io.in_uop.br_mask, uop.br_mask)
-   val entry_match = maskMatch(io.brinfo.mask, old_br_mask)
+//   val old_br_mask = Mux(io.wen, io.in_uop.br_mask, uop.br_mask)
+//   val entry_match = maskMatch(io.brinfo.mask, old_br_mask)
 
-   when (io.brinfo.valid && entry_match)
+   // Note: no need to check/clr br_mask for incoming uop, as previous MAddr
+   // unit will have already performed that for us
+   when (io.wen)
+   {
+      uop.br_mask := io.in_uop.br_mask
+   }
+   .elsewhen (io.brinfo.valid && maskMatch(io.brinfo.mask, uop.br_mask))
    {
       when (io.brinfo.mispredict)
       {
@@ -92,14 +97,15 @@ class LoadReqSlot extends Module
       }
       .otherwise
       {
-         val new_msk = old_br_mask & ~io.brinfo.mask
-         uop.br_mask := new_msk
+//         val new_msk = old_br_mask & ~io.brinfo.mask
+         uop.br_mask := uop.br_mask & ~io.brinfo.mask
       }
    }
-   .otherwise
-   {
-      uop.br_mask := old_br_mask
-   }
+//   .otherwise
+//   {
+//      uop.br_mask := old_br_mask
+//      uop.br_mask := old_br_mask
+//   }
 
 
    // outputs
