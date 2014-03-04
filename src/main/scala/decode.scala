@@ -396,12 +396,11 @@ class BranchMaskGenerationLogic(val pl_width: Int) extends Module
 
 
       val is_full   = Vec.fill(pl_width) { Bool(OUTPUT) } // tell decoders the branch
-//      val is_full   = Bits(OUTPUT, MAX_BR_COUNT) // tell decoders the branch
-                                                 // mask has filled up, but on
-                                                 // the granularity of an
-                                                 // individual micro-op (so
-                                                 // some micro-ops can go
-                                                 // through)
+                                                          // mask has filled up, but on
+                                                          // the granularity of an
+                                                          // individual micro-op (so
+                                                          // some micro-ops can go
+                                                          // through)
       
       val brinfo         = new BrResolutionInfo().asInput
       val flush_pipeline = Bool(INPUT)

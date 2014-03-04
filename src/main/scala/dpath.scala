@@ -117,7 +117,7 @@ class CtrlSignals extends Bundle()
 // TODO Chisel ability to union this Bundle for different types of Uops?
 class MicroOp extends Bundle()
 {
-   val valid            = Bool()                   // is this uop valid? or has it been masked out, used by fetch buffer
+   val valid            = Bool()                   // is this uop valid? or has it been masked out, used by fetch buffer and Decode stage
    
    val uopc             = Bits(width = UOPC_SZ)
    val inst             = Bits(width = 32)          
@@ -247,8 +247,9 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    val bp2_prediction = new BrPrediction() 
 
    // Instruction Decode State
+   val dec_valids     = Vec.fill(DECODE_WIDTH) {Bool()}  // is the incoming, decoded instruction valid? It may be held up though. TODO confusing wrt dec_mask?
    val dec_uops       = Vec.fill(DECODE_WIDTH) {new MicroOp()}
-   val dec_mask       = Vec.fill(DECODE_WIDTH) {Bool()} 
+   val dec_mask       = Vec.fill(DECODE_WIDTH) {Bool()}  // will the inst progress down the pipeline?
    val dec_rdy        = Bool()
 
    val rob_rdy        = Bool()
@@ -698,13 +699,15 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    for (w <- 0 until DECODE_WIDTH)
    {
       val decode_unit = Module(new DecodeUnit)
-      decode_unit.io.enq.inst := Mux(fetched_inst_valid && dec_fbundle(w).valid && !dec_finished_mask(w), dec_fbundle(w).inst, BUBBLE)
+      dec_valids(w) := fetched_inst_valid && dec_fbundle(w).valid && !dec_finished_mask(w) // TODO a way to do this without being confusing wrt dec_mask?
+//      decode_unit.io.enq.inst := Mux(fetched_inst_valid && dec_fbundle(w).valid && !dec_finished_mask(w), dec_fbundle(w).inst, BUBBLE)
+      decode_unit.io.enq.inst := dec_fbundle(w).inst
       decode_unit.io.status   := pcr_status
 
       // stall this instruction?
       // TODO tailor this to only care if a given instruction uses a resource?
       val stall_me = (  !(ren_insts_can_proceed(w)) 
-                     || (dec_uops(w).is_unique && !rob_empty) 
+                     || (dec_valids(w) && dec_uops(w).is_unique && !rob_empty) 
                      || !rob_rdy 
                      || laq_full 
                      || stq_full 
@@ -716,14 +719,11 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
 
       // stall the next instruction following me in the decode bundle?
       dec_stall_next_inst  = stall_me ||
-                             dec_uops(w).is_unique 
+                             (dec_valids(w) && dec_uops(w).is_unique)
                              
 
-
-      // is this instruction valid? I will progress down the pipeline if true.
-      dec_mask(w) := fetched_inst_valid && 
-                     dec_fbundle(w).valid && 
-                     !dec_finished_mask(w) &&
+      // is this instruction valid and not stalled? I will progress down the pipeline if true.
+      dec_mask(w) := dec_valids(w) &&
                      !stall_me
 
       dec_uops(w)                := decode_unit.io.deq.uop
@@ -755,7 +755,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    for (w <- 0 until DECODE_WIDTH)
    {
       // TODO don't allocate mask for some jumps already handled by front-end!
-      dec_brmask_logic.io.is_branch(w) := dec_uops(w).is_br_or_jmp
+      dec_brmask_logic.io.is_branch(w) := (dec_valids(w) && dec_uops(w).is_br_or_jmp)
       dec_brmask_logic.io.will_fire(w) := dis_mask(w) 
 
       dec_uops(w).br_tag  := dec_brmask_logic.io.br_tag(w)

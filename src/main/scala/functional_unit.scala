@@ -278,9 +278,9 @@ class ALUUnit(is_branch_unit: Boolean = false)
                        uop.is_br_or_jmp &&
                        !(uop.is_jal) && // TODO XXX is this the proper way to do this? can we remove more JAL stuff from the branch unit? jal should just be a NOP.
                        (((io.br_unit.taken ^ (uop.br_prediction.isBrTaken() === TAKEN)) && !uop.btb_pred_taken) || // BHT was wrong
-                       (!io.br_unit.taken && uop.btb_pred_taken) || // BTB was wrong
-                       (io.br_unit.taken && uop.btb_pred_taken && (io.br_unit.pc_sel === PC_JALR) && 
-                       (!io.get_rob_pc.next_val || (io.get_rob_pc.next_pc != io.br_unit.jump_reg_target))) // BTB was right, but wrong target for JALR
+                         (!io.br_unit.taken && uop.btb_pred_taken) || // BTB was wrong
+                         (io.br_unit.taken && uop.btb_pred_taken && (io.br_unit.pc_sel === PC_JALR) && 
+                         (!io.get_rob_pc.next_val || (io.get_rob_pc.next_pc != io.br_unit.jump_reg_target))) // BTB was right, but wrong target for JALR
                        )                         
 //                     ((uop.btb_pred_taken && !io.br_unit.taken) || // BTB was wrong (BHT was set to false)
 //                     (!uop.btb_pred_taken    (uop.br_prediction.isBrTaken() === TAKEN) && !uop.br_unit.taken)

@@ -31,6 +31,7 @@ class RenameMapTableElementIo(pl_width: Int) extends Bundle()
    val br_mispredict_tag  = UInt(INPUT, BR_TAG_SZ)
 
    // rollback (on exceptions)
+   // TODO REMOVE THIS ROLLBACK PORT, since wens is mutually exclusive with rollback_wens
    val rollback_wen        = Bool(INPUT) 
    val rollback_stale_pdst = UInt(INPUT, PREG_SZ)
 
@@ -478,7 +479,7 @@ class RenameStage(pl_width: Int, num_wb_ports: Int) extends Module
 
       for (w <- 0 until pl_width)
       {
-         map_table_io(i).wens(w)          := io.ren_uops(w).ldst === UInt(i) &&
+         map_table_io(i).wens(w)          :=   io.ren_uops(w).ldst === UInt(i) &&
                                                io.ren_mask(w) &&
                                                io.ren_uops(w).ldst_val &&
                                                io.ren_uops(w).ldst_rtype === RT_FIX &&
@@ -517,9 +518,9 @@ class RenameStage(pl_width: Int, num_wb_ports: Int) extends Module
       // Handle bypassing new physical destinations to operands (and stale destination)
       for (xx <- 0 until w)
       {
-         rs1_cases   ++= Array(((io.ren_uops(w).lrs1_rtype === RT_FIX) && io.ren_uops(xx).ldst_val && (io.ren_uops(w).lrs1 === io.ren_uops(xx).ldst),  (io.ren_uops(xx).pdst)))
-         rs2_cases   ++= Array(((io.ren_uops(w).lrs2_rtype === RT_FIX) && io.ren_uops(xx).ldst_val && (io.ren_uops(w).lrs2 === io.ren_uops(xx).ldst),  (io.ren_uops(xx).pdst)))
-         stale_cases ++= Array(( io.ren_uops(w).ldst_val               && io.ren_uops(xx).ldst_val && (io.ren_uops(w).ldst === io.ren_uops(xx).ldst),  (io.ren_uops(xx).pdst)))
+         rs1_cases  ++= Array(((io.ren_uops(w).lrs1_rtype === RT_FIX) && io.ren_mask(xx) && io.ren_uops(xx).ldst_val && (io.ren_uops(w).lrs1 === io.ren_uops(xx).ldst), (io.ren_uops(xx).pdst)))
+         rs2_cases  ++= Array(((io.ren_uops(w).lrs2_rtype === RT_FIX) && io.ren_mask(xx) && io.ren_uops(xx).ldst_val && (io.ren_uops(w).lrs2 === io.ren_uops(xx).ldst), (io.ren_uops(xx).pdst)))
+         stale_cases++= Array(( io.ren_uops(w).ldst_val               && io.ren_mask(xx) && io.ren_uops(xx).ldst_val && (io.ren_uops(w).ldst === io.ren_uops(xx).ldst), (io.ren_uops(xx).pdst)))
       }
       
       // add default case where we can just read the map table for our information
