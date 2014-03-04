@@ -343,8 +343,10 @@ class BusyTable(pipeline_width: Int, num_wb_ports: Int) extends Module
 {
    val io = new BusyTableIo(pipeline_width, num_wb_ports)
  
-   def BUSY     = Bool(true)
-   def NOT_BUSY = Bool(false)
+//   def BUSY     = Bool(true)
+//   def NOT_BUSY = Bool(false)
+   val BUSY     = Bool(true)
+   val NOT_BUSY = Bool(false)
     
    val table_bsy = Vec.fill(PHYS_REG_COUNT){ Reg(init = NOT_BUSY) }
 
