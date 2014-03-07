@@ -63,7 +63,8 @@ class LoadStoreUnitIo(pl_width: Int)  extends Bundle()
    // allows us to know which stores get killed by branch mispeculation
    val dec_st_vals        = Vec.fill(pl_width) { Bool(INPUT) }
    val dec_ld_vals        = Vec.fill(pl_width) { Bool(INPUT) }
-   val dec_uops           = Vec.fill(pl_width) {new MicroOp().asInput}
+   val dec_uops           = Vec.fill(pl_width) {new MicroOp()}.asInput
+//   val dec_uops           = Vec.fill(pl_width) {new MicroOp().asInput} is broken
 
    val new_ldq_idx        = UInt(OUTPUT, MEM_ADDR_SZ)
    val new_stq_idx        = UInt(OUTPUT, MEM_ADDR_SZ)
@@ -301,7 +302,6 @@ class LoadStoreUnit(pl_width: Int) extends Module
 
       st_enq_idx = Mux(io.dec_st_vals(w), WrapInc(st_enq_idx, num_st_entries), 
                                           st_enq_idx)
-//      st_enq_idx = Mux(io.dec_st_vals(w), st_enq_idx + UInt(1), st_enq_idx)
    
    }
 
@@ -336,7 +336,6 @@ class LoadStoreUnit(pl_width: Int) extends Module
    io.lsu_clr_bsy_valid := io.exe_resp.valid && 
                            ((exe_uop.ctrl.is_sta && sdq_val(exe_uop.stq_idx)) || 
                            (exe_uop.ctrl.is_std && saq_val(exe_uop.stq_idx)))
-//                           (exe_uop.is_load || exe_uop.ctrl.is_sta || exe_uop.ctrl.is_std)
    io.lsu_clr_bsy_rob_idx := exe_uop.rob_idx
  
    //-------------------------------------------------------------
@@ -571,7 +570,8 @@ class LoadStoreUnit(pl_width: Int) extends Module
    io.memreq_wdata   := Bits(0)
    io.memreq_uop     := io.exe_resp.bits.uop
 
-   // TODO what is the proper order here?
+//   when (io.dmem_req_ready) // TODO add this to improve path
+//   {
    when (req_fire_load_fast || req_fire_load_sleeper)
    {
       io.memreq_val   := Bool(true)
@@ -594,6 +594,7 @@ class LoadStoreUnit(pl_width: Int) extends Module
 
       stq_executed(stq_head) := Bool(true)
    }
+//   }
     
    //-------------------------------------------------------------
    // Handle Memory Responses

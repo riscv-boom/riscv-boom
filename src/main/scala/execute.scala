@@ -235,7 +235,7 @@ class MemExeUnit()(implicit conf: BOOMConfiguration) extends ExecutionUnit(num_r
    lsu.io.commit_load_mask   := io.lsu_io.commit_load_mask
     
    lsu.io.brinfo             := io.brinfo
-   lsu.io.lsu_misspec := io.lsu_io.lsu_misspec 
+   lsu.io.lsu_misspec        := io.lsu_io.lsu_misspec 
    lsu.io.exception          := io.lsu_io.exception
    lsu.io.nack               <> io.dmem.nack
           
@@ -245,8 +245,6 @@ class MemExeUnit()(implicit conf: BOOMConfiguration) extends ExecutionUnit(num_r
    io.lsu_io.laq_empty := lsu.io.laq_empty
    io.lsu_io.stq_full := lsu.io.stq_full
    io.lsu_io.stq_empty := lsu.io.stq_empty
-//   io.lsu_io.lsu_misspec := lsu.io.lsu_misspec
-//   io.lsu_io.lsu_misspec_pdst := lsu.io.lsu_misspec_pdst
    io.lsu_io.lsu_clr_bsy_valid := lsu.io.lsu_clr_bsy_valid // HACK TODO need a better way to clear the busy bits in the ROB
    io.lsu_io.lsu_clr_bsy_rob_idx := lsu.io.lsu_clr_bsy_rob_idx // HACK TODO need a better way to clear the busy bits in the rob
    io.lsu_io.ldo_xcpt_val := lsu.io.ldo_xcpt_val
@@ -394,8 +392,6 @@ class ALUMulDMemExeUnit(is_branch_unit: Boolean = false, shares_pcr_wport: Boole
    io.lsu_io.laq_empty := lsu.io.laq_empty
    io.lsu_io.stq_full := lsu.io.stq_full
    io.lsu_io.stq_empty := lsu.io.stq_empty
-//   io.lsu_io.lsu_misspec := lsu.io.lsu_misspec
-//   io.lsu_io.lsu_misspec_pdst := lsu.io.lsu_misspec_pdst
    io.lsu_io.lsu_clr_bsy_valid := lsu.io.lsu_clr_bsy_valid // HACK TODO need a better way to clear the busy bits in the ROB
    io.lsu_io.lsu_clr_bsy_rob_idx := lsu.io.lsu_clr_bsy_rob_idx // HACK TODO need a better way to clear the busy bits in the rob
    io.lsu_io.ldo_xcpt_val := lsu.io.ldo_xcpt_val

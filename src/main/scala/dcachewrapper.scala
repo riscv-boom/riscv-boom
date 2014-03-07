@@ -17,8 +17,7 @@
 //    branch/kill signals will filter resp_val signals, but otherwise continue on
 
 
-// TODO
-// handle memory misalignment exceptions...
+// TODO handle memory misalignment exceptions...
 
 package BOOM
 {
@@ -59,6 +58,9 @@ class LoadReqSlot extends Module
    val was_killed = Reg(init=Bool(false))
    val uop        = Reg(outType=(new MicroOp()))
 
+   // did the existing uop get killed by a branch?
+   // Note: no need to check/clr br_mask for incoming uop, as previous MAddr
+   // unit will have already performed that for us.
    val br_killed = Bool()
    br_killed := Bool(false)
 
@@ -77,36 +79,26 @@ class LoadReqSlot extends Module
       was_killed := Bool(true)
    }
 
-
-   // Handle the Branch Mask
-//   val old_br_mask = Mux(io.wen, io.in_uop.br_mask, uop.br_mask)
-//   val entry_match = maskMatch(io.brinfo.mask, old_br_mask)
-
-   // Note: no need to check/clr br_mask for incoming uop, as previous MAddr
-   // unit will have already performed that for us
+   val bmask_match = io.brinfo.valid && maskMatch(io.brinfo.mask, uop.br_mask)
+   
+   // Handle the Branch Mask (incoming already handled)
    when (io.wen)
    {
       uop.br_mask := io.in_uop.br_mask
    }
-   .elsewhen (io.brinfo.valid && maskMatch(io.brinfo.mask, uop.br_mask))
+   .elsewhen (bmask_match)
+   {
+      uop.br_mask := uop.br_mask & ~io.brinfo.mask
+   }
+
+   // handle branch killed
+   when (bmask_match)
    {
       when (io.brinfo.mispredict)
       {
          br_killed := Bool(true)
-         uop.br_mask := Bits(0)
-      }
-      .otherwise
-      {
-//         val new_msk = old_br_mask & ~io.brinfo.mask
-         uop.br_mask := uop.br_mask & ~io.brinfo.mask
       }
    }
-//   .otherwise
-//   {
-//      uop.br_mask := old_br_mask
-//      uop.br_mask := old_br_mask
-//   }
-
 
    // outputs
    io.valid      := valid
@@ -114,26 +106,6 @@ class LoadReqSlot extends Module
    io.out_uop    := uop
 }
  
-//class StoreDataGen extends Module 
-//{
-//   val io = new Bundle 
-//   {
-//      val typ  = Bits(INPUT, 3)
-//      val din  = Bits(INPUT, 64)
-//      val dout = Bits(OUTPUT, 64)
-//   }
-//
-//   val word = (io.typ === MT_W) || (io.typ === MT_WU)
-//   val half = (io.typ === MT_H) || (io.typ === MT_HU)
-//   val byte_ = (io.typ === MT_B) || (io.typ === MT_BU)
-//
-//   io.dout :=  Mux(byte_, Fill(8, io.din( 7,0)),
-//               Mux(half,  Fill(4, io.din(15,0)),
-//               Mux(word,  Fill(2, io.din(31,0)),
-//                          io.din)))
-//}
-                                                          
-
 class DCacheReq(implicit conf: DCacheConfig) extends Bundle
 {
    val addr    = UInt(width = conf.ppnbits.max(conf.vpnbits+1) + conf.pgidxbits)
@@ -365,8 +337,6 @@ class DCacheWrapper(implicit conf: DCacheConfig, lnconf: TileLinkConfiguration) 
       io.core.debug.ld_req_slot(i).killed := inflight_load_buffer(i).was_killed
       io.core.debug.ld_req_slot(i).uop := inflight_load_buffer(i).out_uop
    }
-
-
 
    //------------------------------------------------------------
 

@@ -92,9 +92,14 @@ class RobIo(machine_width: Int, num_wakeup_ports: Int)  extends Bundle()
    val lsu_misspec      = Bool(OUTPUT)
 
    // When flushing pipeline, need to reset to PC+4 relative to the head of the ROB
-   // but because we're doing superscalar commit, the actual flush pc may not be the rob_head pc+4, but rather the last committed instruction in the commit group.
-   val flush_val        = Bool(OUTPUT)
+   // but because we're doing superscalar commit, the actual flush pc may not
+   // be the rob_head pc+4, but rather the last committed instruction in the
+   // commit group.
+   // Finally, we redirect the PC ASAP, but flush the pipeline a cycle later
+   // (to get it off the critical path).
+   val flush_take_pc    = Bool(OUTPUT)
    val flush_pc         = UInt(OUTPUT, XPRLEN)
+   val flush_pipeline   = Bool(OUTPUT)
    
    // Stall Decode as appropriate
    val empty            = Bool(OUTPUT)
@@ -419,7 +424,6 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
    for (w <- 0 until width)
    {
       will_throw_exception = (can_throw_exception(w) && !block_commit && !block_xcpt) || will_throw_exception
-//      will_throw_exception = (can_throw_exception(w) && !block_commit) || will_throw_exception
 
       will_commit(w)       := can_commit(w) && !can_throw_exception(w) && !block_commit 
       block_commit         = (rob_head_vals(w) && 
@@ -430,22 +434,24 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
    // exception must be in the commit bundle
    exception_thrown    := will_throw_exception
    val is_mini_exception = io.com_exc_cause === MINI_EXCEPTION_MEM_ORDERING
-//   io.com_exception    := (rob_state === s_rollback && (rob_tail === rob_head)) && !is_mini_exception delete me, i throw exception at the end of rob rollback
    io.com_exception    := exception_thrown && !is_mini_exception
    io.com_exc_cause    := PriorityMux(can_throw_exception, rob_head_eflags)
    io.com_handling_exc := exception_thrown  // TODO get rid of com_handling_exc? used to handle loads coming back from the $ probbaly unnecessary
 
-   io.lsu_misspec := exception_thrown && io.com_exc_cause === MINI_EXCEPTION_MEM_ORDERING
+   io.lsu_misspec := Reg(next=exception_thrown && io.com_exc_cause === MINI_EXCEPTION_MEM_ORDERING)
 
    // TODO BUG XXX what if eret and inst_valid excp in same bundle and bad load?
    // flush PC, say an instruction needs to flush the pipeline and refetch either itself or PC+4
    // Note: exception must be the first valid instruction in the commit bundle
-   val refetch_inst = exception_thrown //is_mini_exception
+   val refetch_inst = exception_thrown 
    io.flush_pc  := rob_pc_hob.read(rob_head) + 
                    PriorityMux(rob_head_vals, Range(0,width).map(w => UInt(w << 2))) + 
                    Mux(refetch_inst, UInt(0), UInt(4))
-   io.flush_val := exception_thrown ||
+   val flush_val = exception_thrown ||
                      (Range(0,width).map{i => io.com_valids(i) && io.com_uops(i).flush_on_commit}).reduce(_|_)
+
+   io.flush_take_pc  := flush_val
+   io.flush_pipeline := Reg(next=flush_val)
 
    // -----------------------------------------------
    // ROB Head Logic

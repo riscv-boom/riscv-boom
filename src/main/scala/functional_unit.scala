@@ -76,7 +76,6 @@ class FuncUnitResp extends Bundle()
    val uop = new MicroOp()
    val data = Bits(width = XPRLEN)  
    val xcpt = (new rocket.HellaCacheExceptions)
-//   val xcpt = Bits(width = EXC_CAUSE_SZ)
 }
  
 class BypassData(num_bypass_ports:Int) extends Bundle()
@@ -90,13 +89,10 @@ class BypassData(num_bypass_ports:Int) extends Bundle()
  
 class BranchUnitResp extends Bundle()
 {
-   // TODO maybe just add pc_sel, btb_mispredict to branch resolution
-   // TODO REMOVE WIDTH once Chisel gets its act together
    val take_pc        = Bool()
    val pc_sel         = Bits(width = PC_PLUS4.getWidth)   
    val taken          = Bool()
    val btb_mispredict = Bool()
-//   val rob_idx        = UInt(width = ROB_ADDR_SZ)
 
    val brjmp_target    = UInt(width = XPRLEN)
    val jump_reg_target = UInt(width = XPRLEN)
@@ -117,11 +113,11 @@ abstract class FunctionalUnit(is_pipelined: Boolean
                               extends Module
 {
    val io = new FunctionalUnitIo(num_stages, num_bypass_stages)
-//   val is_var_latency = false
 }
 
 
-
+// Note: this helps track which uops get killed while in intermediate stages,
+// but it is the job of the consumer to check for kills on the same cycle as consumption
 abstract class PipelinedFunctionalUnit(val num_stages: Int, 
                                        val num_bypass_stages: Int,
                                        val earliest_bypass_stage: Int,
@@ -157,7 +153,8 @@ abstract class PipelinedFunctionalUnit(val num_stages: Int,
       }
 
       // handle outgoing (branch could still kill it)
-      io.resp.valid    := r_valids(num_stages-1) && !IsKilledByBranch(io.brinfo, r_uops(num_stages-1)) && !io.req.bits.kill
+      // consumer must also check for pipeline flushes (kills)
+      io.resp.valid    := r_valids(num_stages-1) && !IsKilledByBranch(io.brinfo, r_uops(num_stages-1)) // && !io.req.bits.kill
       io.resp.bits.uop := r_uops(num_stages-1)
       io.resp.bits.uop.br_mask := GetNewBrMask(io.brinfo, r_uops(num_stages-1))
    }
@@ -166,7 +163,7 @@ abstract class PipelinedFunctionalUnit(val num_stages: Int,
       require (num_stages == 0)
       // pass req straight through to response
       
-      io.resp.valid    := io.req.valid && !IsKilledByBranch(io.brinfo, io.req.bits.uop) && !io.req.bits.kill
+      io.resp.valid    := io.req.valid && !IsKilledByBranch(io.brinfo, io.req.bits.uop) // && !io.req.bits.kill TODO remove kill signals, let consumer deal with it?
       io.resp.bits.uop := io.req.bits.uop
       io.resp.bits.uop.br_mask := GetNewBrMask(io.brinfo, io.req.bits.uop)
    }
@@ -193,21 +190,25 @@ class ALUUnit(is_branch_unit: Boolean = false)
                                                                            , earliest_bypass_stage = 0
                                                                            , is_branch_unit = is_branch_unit)
 {
-
- 
    val uop = io.req.bits.uop
-
-   // TODO only let branch unit access the PC from the ROB (one per machine)
-//   io.get_rob_pc.rob_idx := uop.rob_idx
-   val uop_pc_ = io.get_rob_pc.curr_pc
 
    // immediate generation
    val imm_xprlen = ImmGen(uop.imm_packed, uop.ctrl.imm_sel)
 
    // operand 1 select 
-   val op1_data = Mux(io.req.bits.uop.ctrl.op1_sel.toUInt === OP1_RS1 , io.req.bits.rs1_data,
-                  Mux(io.req.bits.uop.ctrl.op1_sel.toUInt === OP1_PC  , uop_pc_,
-                                                                        UInt(0)))
+   var op1_data: Bits = null
+   if (is_branch_unit)
+   {
+      //io.get_rob_pc.rob_idx := uop.rob_idx
+      op1_data = Mux(io.req.bits.uop.ctrl.op1_sel.toUInt === OP1_RS1 , io.req.bits.rs1_data,
+                 Mux(io.req.bits.uop.ctrl.op1_sel.toUInt === OP1_PC  , io.get_rob_pc.curr_pc,
+                                                                       UInt(0)))
+   }
+   else
+   {
+      op1_data = Mux(io.req.bits.uop.ctrl.op1_sel.toUInt === OP1_RS1 , io.req.bits.rs1_data,
+                                                                       UInt(0))
+   }
    
    // operand 2 select 
    val op2_data = Mux(io.req.bits.uop.ctrl.op2_sel === OP2_IMM,  Sext(imm_xprlen, conf.rc.xprlen),
@@ -226,6 +227,8 @@ class ALUUnit(is_branch_unit: Boolean = false)
 
    if (is_branch_unit)
    {
+      val uop_pc_ = io.get_rob_pc.curr_pc
+
       // The Branch Unit redirects the PC immediately, but delays the mispredict
       // signal a cycle (for critical path reasons)
 
@@ -403,8 +406,6 @@ class MemAddrCalcUnit()(implicit conf: BOOMConfiguration) extends PipelinedFunct
    io.resp.bits.xcpt.ma.st := ma_st
    io.resp.bits.xcpt.pf.ld := Bool(false)
    io.resp.bits.xcpt.pf.st := Bool(false)
-
-
 }
  
 

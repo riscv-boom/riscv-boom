@@ -231,8 +231,9 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    // Pipeline State Registers
    // Forward Declared Wires
 
-   val flush_pipeline = Bool()  // kill entire pipeline (i.e., exception, load misspeculations)
+   val flush_take_pc  = Bool()  // redirect PC due to a flush
    val flush_pc       = UInt() 
+   val flush_pipeline = Bool()  // kill entire pipeline (i.e., exception, load misspeculations)
 
    // Instruction Fetch State
    val if_pc_next     = UInt(width = XPRLEN)
@@ -392,11 +393,11 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    val com_sret = (Range(0,DECODE_WIDTH).map{i => com_valids(i) && com_uops(i).sret}).reduce(_|_) 
 
    val take_pc = br_unit.take_pc || 
-                 flush_pipeline || 
+                 flush_take_pc || 
                  com_sret ||
                  (bp2_take_pc && !if_stalled) //|| // TODO this seems way too low-level, to get this backpressure signal correct
 
-   assert (!(com_exception && !flush_pipeline), "exception occurred, but pipeline flush signal not set!")
+//   assert (!(Reg(next=com_exception) && !flush_pipeline), "exception occurred, but pipeline flush signal not set!")
 
    io.imem.req.valid   := take_pc // tell front-end we had an unexpected change in the stream
    io.imem.req.bits.pc := if_pc_next
@@ -407,7 +408,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    // care about is "did a misprediction occur?"
    if_pc_next := MuxCase(UInt(0xaaaa), Array (
                (com_exception || com_sret)                      -> pcr_exc_target,
-               (flush_pipeline)                                 -> flush_pc, 
+               (flush_take_pc)                                  -> flush_pc, 
                (br_unit.take_pc && br_unit.pc_sel === PC_JALR)  -> br_unit.jump_reg_target,
                (br_unit.take_pc && br_unit.pc_sel === PC_BRJMP) -> br_unit.brjmp_target,  
                (br_unit.take_pc && br_unit.pc_sel === PC_PLUS4) -> br_unit.pc_plus4,  
@@ -1196,7 +1197,8 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    //-------------------------------------------------------------
    // flush on exceptions, miniexeptions, and after some special instructions
 
-   flush_pipeline := rob.io.flush_val  
+   flush_take_pc  := rob.io.flush_take_pc
+   flush_pipeline := rob.io.flush_pipeline
    flush_pc       := rob.io.flush_pc
 
    for (w <- 0 until exe_units.length)
@@ -1359,8 +1361,8 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
       // Front-end
 
       // Fetch Stage 1
-//      debug_string = sprintf("%s  BrPred1:        (IF1_PC= 0x%x - Predict:%s) ------ PC: [%s%s%s%s-%s for br_id: %d, msk:%x, sel: %d: %s next: 0x%x]\n"
-      debug_string = sprintf("%s  BrPred1:        (IF1_PC= 0x%x - Predict:%s) ------ PC: [%s%s%s%s-%s for br_id: %d, msk:%x, sel: %d: %s next: 0x%x] btbinfo: %d %s 0x%x?=0x%x [0x%x]\n" // TODO delete me
+      debug_string = sprintf("%s  BrPred1:        (IF1_PC= 0x%x - Predict:%s) ------ PC: [%s%s%s%s-%s for br_id: %d, msk:%x, sel: %d: %s %s next: 0x%x]\n"
+//      debug_string = sprintf("%s  BrPred1:        (IF1_PC= 0x%x - Predict:%s) ------ PC: [%s%s%s%s-%s for br_id: %d, msk:%x, sel: %d: %s next: 0x%x] btbinfo: %d %s 0x%x?=0x%x [0x%x]\n" // TODO delete me
          , debug_string
          , io.imem.resp.bits.bht_pc(19,0)
          , Mux(br_predictor.io.prediction_info.taken, Str("T"), Str("-"))
@@ -1373,12 +1375,17 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
          , UInt(0) //br_unit.brinfo.mask
          , br_unit.pc_sel
          , Mux(take_pc, Str("TAKE_PC"), Str(" "))
+         , Mux(bp2_take_pc && !if_stalled, Str("BP2"), 
+           Mux(br_unit.take_pc, Str("BRU "),
+           Mux(flush_take_pc, Str("FLSH"),
+           Mux(com_sret, Str("SRET"),
+                              Str(" ")))))
          , if_pc_next
-         , io.imem.resp.bits.taken
-         , Mux(DebugIsJALR(btb_predicted_inst), Str("JR"), Str("BJ"))
-         , btb_predicted_inst_pc  
-         , io.imem.resp.bits.debug_taken_pc 
-         , btb_predicted_inst
+//         , io.imem.resp.bits.taken
+//         , Mux(DebugIsJALR(btb_predicted_inst), Str("JR"), Str("BJ"))
+//         , btb_predicted_inst_pc  
+//         , io.imem.resp.bits.debug_taken_pc 
+//         , btb_predicted_inst
          )
 
       def InstsStr(insts: Bits, width: Int) =

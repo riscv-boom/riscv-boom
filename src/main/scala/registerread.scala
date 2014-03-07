@@ -298,10 +298,6 @@ class RegisterReadDecode extends Module
 
    val rrd_br_type :: rrd_use_alupipe :: rrd_use_muldivpipe :: rrd_use_mempipe :: rrd_op_fcn :: rrd_fcn_dw :: rrd_op1_sel :: rrd_op2_sel :: rrd_imm_sel :: rrd_rf_wen :: rrd_wb_sel :: rrd_pcr_fcn :: Nil = rrd_csignals;
     
-   println("width of fn_add: " + FN_ADD.getWidth)
-   println("width of fn_op2: " + FN_SRA.getWidth)
-   println("width of sz_alu: " + SZ_ALU_FN)
-   println("width of rrd_op_fcn: " + rrd_op_fcn.getWidth)
    require (rrd_op_fcn.getWidth == FN_SRA.getWidth)
 
 

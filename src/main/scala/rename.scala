@@ -342,7 +342,8 @@ class BusyTableIo(pipeline_width: Int, num_wb_ports: Int) extends Bundle()
 class BusyTable(pipeline_width: Int, num_wb_ports: Int) extends Module
 {
    val io = new BusyTableIo(pipeline_width, num_wb_ports)
- 
+
+// chisel can't handle def's here :(
 //   def BUSY     = Bool(true)
 //   def NOT_BUSY = Bool(false)
    val BUSY     = Bool(true)
