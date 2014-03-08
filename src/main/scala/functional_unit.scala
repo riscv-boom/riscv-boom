@@ -302,7 +302,8 @@ class ALUUnit(is_branch_unit: Boolean = false)
 //                                    !uop.is_jump && 
                                     (io.br_unit.taken ^ uop.btb_pred_taken)
 
-      io.br_unit.brinfo.valid      := Reg(next = io.req.valid && uop.is_br_or_jmp && !killed)
+      // note: jal doesn't allocate a branch-mask, so don't clear a br-mask bit
+      io.br_unit.brinfo.valid      := Reg(next = io.req.valid && uop.is_br_or_jmp && !uop.is_jal && !killed)
       io.br_unit.brinfo.mispredict := Reg(next = mispredict)
       io.br_unit.brinfo.mask       := Reg(next = UInt(1) << uop.br_tag)
       io.br_unit.brinfo.exe_mask   := Reg(next = uop.br_mask)
