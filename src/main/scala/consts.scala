@@ -171,13 +171,9 @@ trait ScalarOpConstants
    val OP2_IMMC= UInt(4, 3) // for CSR imm found in RS1
    val OP2_X   = Bits("b???", 3)
 
-
-
-                      
    // Register File Write Enable Signal
    val REN_0   = Bool(false)
    val REN_1   = Bool(true)
-   val REN_X   = Bool(false)
            
    // Is 32b Word or 64b Doubldword?
    val SZ_DW = 1 
@@ -204,14 +200,15 @@ trait ScalarOpConstants
    val IS_B   = UInt(2, 3)  //SB-Type (BR)
    val IS_U   = UInt(3, 3)  //U-Type  (LUI/AUIPC)     
    val IS_J   = UInt(4, 3)  //UJ-Type (J/JAL)   
-   val IS_X   = UInt(0, 3)  
+   val IS_X   = UInt("b???", 3)  
 
 
    // Decode Stage Control Signals
    val RT_FIX   = UInt(0, 2)
-   val RT_PCR   = UInt(1, 2)
+//   val RT_PCR   = UInt(1, 2) // deprecated, since it's passed via immediate field
+   val RT_PAS   = UInt(1, 2) // pass-through (pop1 := lrs1, etc)
+   val RT_X     = UInt(1, 2) // not-a-register (but shouldn't get a busy-bit, etc.)
    val RT_FLT   = UInt(2, 2)
-   val RT_X     = UInt(3, 2)
    
    // Micro-op opcodes
    // TODO use an enum

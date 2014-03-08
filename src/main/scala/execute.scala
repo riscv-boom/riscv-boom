@@ -270,7 +270,6 @@ class MemExeUnit()(implicit conf: BOOMConfiguration) extends ExecutionUnit(num_r
    val memresp_val    = Mux(io.com_handling_exc && io.dmem.resp.bits.uop.is_load, Bool(false), 
                                                 lsu.io.forward_val || io.dmem.resp.valid)
 
-
    val memresp_rf_wen = (io.dmem.resp.valid && (io.dmem.resp.bits.uop.mem_cmd === M_XRD)) || 
                            lsu.io.forward_val
    val memresp_uop    = Mux(lsu.io.forward_val, lsu.io.forward_uop,

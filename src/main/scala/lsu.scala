@@ -516,9 +516,14 @@ class LoadStoreUnit(pl_width: Int) extends Module
    // tell the data path we will give it data
    // time the forwarding of the data to coincide with what would be a HIT from
    // the cache (to only use one port)            
-   io.forward_val  := Mux(io.nack.valid && !io.nack.cache_nack && !wb_forwarding_kill && r_sdq_val_for_forwarding, 
+//   io.forward_val  := Mux(io.nack.valid && !io.nack.cache_nack && !wb_forwarding_kill && r_sdq_val_for_forwarding, 
+   io.forward_val  := Mux(io.nack.valid && !wb_forwarding_kill && r_sdq_val_for_forwarding, 
                                                                                        Reg(next=r_forward_std_val),
                                                                                        Bool(false))
+
+   // test that we are never forwarding at the same the cache is returning data AND nacking us
+   assert (!(io.forward_val && io.nack.valid && io.nack.cache_nack && io.memresp_val), "LSU shenangians.")
+
    io.forward_data :=  Reg(next=
                         LoadDataGenerator(sdq_data(r_forward_std_idx.toBits).toUInt, 
                         Reg(next=l_uop.mem_typ))
@@ -844,28 +849,53 @@ class LoadStoreUnit(pl_width: Int) extends Module
 
    //-------------------------------------------------------------
    // Handle Nacks
-   // the data cache may nack our requests, requiring us to resend
+   // the data cache may nack our requests, requiring us to resend our, the
+   // forwarding logic (from the STD) may be "nacking" us, in which case, we
+   // ignore the nack (the nack is for the D$, not the LSU).
+
+   val clr_ld = Bool()
+   clr_ld := Bool(false)
 
    when (io.nack.valid)
    {
-      when (io.nack.isload && 
-            (io.nack.cache_nack || !Reg(next=r_forward_std_val))) //TODO BUG, does this properly hande branch mispredicts?
-      {
-         laq_executed(io.nack.lsu_idx) := Bool(false)
-      }
-      .elsewhen (!io.nack.isload)
+      // the cache nacked our store
+      when (!io.nack.isload)
       {
          stq_executed(io.nack.lsu_idx) := Bool(false)
       }
-   
+      // the nackee is a load
+      .otherwise
+      {
+         // we're trying to forward a load from the STD
+         when (Reg(next=r_forward_std_val))
+         {
+            // handle case where sdq_val is no longer true (store was
+            // committed) or was never valid
+            // If wb_forwarding_kill, the br has already reset the load for us
+            when (!wb_forwarding_kill && !(r_sdq_val_for_forwarding))
+            {
+               clr_ld := Bool(true)
+            }
+         }
+         .otherwise
+         {
+            // TODO do I need to check cache_nack?
+            clr_ld := Bool(true)
+         }
+
+         when (clr_ld)
+         {
+            laq_executed(io.nack.lsu_idx) := Bool(false)
+         }
+      }
+   }
+
    
       // handle case where sdq_val is no longer true (store was committed) or was never valid
-      when (!io.nack.cache_nack && io.nack.isload && !wb_forwarding_kill && Reg(next=r_forward_std_val) && !(r_sdq_val_for_forwarding))
-      {
-         laq_executed(io.nack.lsu_idx) := Bool(false)
-      }
-   
-   }
+//      when (!io.nack.cache_nack && io.nack.isload && !wb_forwarding_kill && Reg(next=r_forward_std_val) && !(r_sdq_val_for_forwarding))
+//      {
+//         laq_executed(io.nack.lsu_idx) := Bool(false)
+//      }
 
    //-------------------------------------------------------------
    // Exception / Reset

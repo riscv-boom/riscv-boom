@@ -945,10 +945,6 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    // MTPCR/MFPCR so I never speculate these instructions.
    // TODO rename k0, k1, as they could use it
    // flush pipeline on all writes (because they could goof things up like writing base reg)
-   // TODO only let cr0 do set/clear, since the below is non-atomic
-   // Currently....  - take PCR[pop1] and put into rs1, mark as RT_PCR,
-   //                - set ALU to FN_OP1
-   //                - hide RF[rs2] inside uop.imm, 
    // scratch everything, let's just have the ROB execute this uop
    
    // TODO fix this, currently hacked to do in a single cycle, having problems making this non-atomic

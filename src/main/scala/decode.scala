@@ -97,9 +97,9 @@ object Decode
                CSRRS   -> List(Y, uopCSRRS, FU_PCR , RT_FIX, RT_FIX, RT_X  , IS_I, M_N  , MSK_X , UInt(0), N, N, N, Y, Y, CSR.S), 
                CSRRC   -> List(Y, uopCSRRC, FU_PCR , RT_FIX, RT_FIX, RT_X  , IS_I, M_N  , MSK_X , UInt(0), N, N, N, Y, Y, CSR.C), 
                
-               CSRRWI  -> List(Y, uopCSRRWI,FU_PCR , RT_FIX, RT_X  , RT_X  , IS_I, M_N  , MSK_X , UInt(0), N, N, N, Y, Y, CSR.W), // NOTE: RT_X really means "keep the same value", since we're using RS1 to pass through an immediate
-               CSRRSI  -> List(Y, uopCSRRSI,FU_PCR , RT_FIX, RT_X  , RT_X  , IS_I, M_N  , MSK_X , UInt(0), N, N, N, Y, Y, CSR.S), 
-               CSRRCI  -> List(Y, uopCSRRCI,FU_PCR , RT_FIX, RT_X  , RT_X  , IS_I, M_N  , MSK_X , UInt(0), N, N, N, Y, Y, CSR.C), 
+               CSRRWI  -> List(Y, uopCSRRWI,FU_PCR , RT_FIX, RT_PAS, RT_X  , IS_I, M_N  , MSK_X , UInt(0), N, N, N, Y, Y, CSR.W), 
+               CSRRSI  -> List(Y, uopCSRRSI,FU_PCR , RT_FIX, RT_PAS, RT_X  , IS_I, M_N  , MSK_X , UInt(0), N, N, N, Y, Y, CSR.S), 
+               CSRRCI  -> List(Y, uopCSRRCI,FU_PCR , RT_FIX, RT_PAS, RT_X  , IS_I, M_N  , MSK_X , UInt(0), N, N, N, Y, Y, CSR.C), 
 
                SCALL   -> List(Y, uopNOP  , FU_ALU , RT_X  , RT_X  , RT_X  , IS_X, M_N  , MSK_X , UInt(0), N, N, Y, Y, N, CSR.N), 
                SRET    -> List(Y, uopSRET , FU_ALU , RT_X  , RT_X  , RT_X  , IS_X, M_N  , MSK_X , UInt(0), N, Y, N, Y, N, CSR.N), 

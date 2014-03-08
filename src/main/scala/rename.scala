@@ -339,6 +339,7 @@ class BusyTableIo(pipeline_width: Int, num_wb_ports: Int) extends Bundle()
 }
 
 // TODO what do i do with this during misspeculation? probably clear as "not busy" anymore? 
+// Register P0 is always NOT_BUSY, and cannot be set to BUSY
 class BusyTable(pipeline_width: Int, num_wb_ports: Int) extends Module
 {
    val io = new BusyTableIo(pipeline_width, num_wb_ports)
@@ -363,7 +364,7 @@ class BusyTable(pipeline_width: Int, num_wb_ports: Int) extends Module
  
    for (w <- 0 until pipeline_width)
    {        
-      when (io.write_valid(w))
+      when (io.write_valid(w) && io.write_pdst(w) != UInt(0))
       {
          table_bsy(io.write_pdst(w)) := BUSY
       }
@@ -511,7 +512,7 @@ class RenameStage(pl_width: Int, num_wb_ports: Int) extends Module
       }
    }
 
-
+   // Bypass the physical register mappings
    for (w <- 0 until pl_width)
    {
       var rs1_cases =  Array((Bool(false),  UInt(0,PREG_SZ)))
@@ -554,16 +555,11 @@ class RenameStage(pl_width: Int, num_wb_ports: Int) extends Module
          bsy_table.io.read_in(w).prs1  := io.ren_uops(w).pop1
          bsy_table.io.read_in(w).prs2  := io.ren_uops(w).pop2
          // todo may be overly conservative with mt_val check
-         io.ren_uops(w).prs1_busy := (bsy_table.io.read_out(w).prs1_busy && 
-                                 io.ren_uops(w).lrs1_rtype === RT_FIX && 
-                                 io.ren_uops(w).lrs1 != UInt(0))
-         io.ren_uops(w).prs2_busy := (bsy_table.io.read_out(w).prs2_busy && 
-                                 io.ren_uops(w).lrs2_rtype === RT_FIX && 
-                                 io.ren_uops(w).lrs2 != UInt(0))
+         io.ren_uops(w).prs1_busy := bsy_table.io.read_out(w).prs1_busy && io.ren_uops(w).lrs1_rtype === RT_FIX 
+         io.ren_uops(w).prs2_busy := bsy_table.io.read_out(w).prs2_busy && io.ren_uops(w).lrs2_rtype === RT_FIX 
  
           // Updating the Table (new busy register)
          bsy_table.io.write_valid(w) := freelist_can_allocate(w) &&
-                                        !io.kill && // TODO do we really care about all of this?, does kill already go into bsy_table logic?
                                         io.ren_mask(w) && 
                                         io.ren_uops(w).ldst_val &&
                                         (io.ren_uops(w).ldst_rtype === RT_FIX)
