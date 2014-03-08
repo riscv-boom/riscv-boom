@@ -756,7 +756,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    for (w <- 0 until DECODE_WIDTH)
    {
       // TODO don't allocate mask for some jumps already handled by front-end!
-      dec_brmask_logic.io.is_branch(w) := (dec_valids(w) && dec_uops(w).is_br_or_jmp)
+      dec_brmask_logic.io.is_branch(w) := (dec_valids(w) && dec_uops(w).is_br_or_jmp && !dec_uops(w).is_jal)
       dec_brmask_logic.io.will_fire(w) := dis_mask(w) 
 
       dec_uops(w).br_tag  := dec_brmask_logic.io.br_tag(w)

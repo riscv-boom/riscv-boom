@@ -244,7 +244,7 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
          rob_val(rob_tail)       := Bool(true)
          rob_bsy(rob_tail)       := io.dis_uops(w).uopc != uopSRET &&  // TODO do I need to do this for eret? or should I treat it like it's an exception
                                     io.dis_uops(w).uopc != uopMEMSPECIAL &&
-                                    io.dis_uops(w).uopc != uopFENCEI
+                                    io.dis_uops(w).uopc != uopFENCEI 
          rob_uop(rob_tail)       := io.dis_uops(w)
          rob_exception(rob_tail) := io.dis_uops(w).exception 
          rob_exc_cause(rob_tail) := io.dis_uops(w).exc_cause

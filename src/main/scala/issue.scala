@@ -342,6 +342,7 @@ class IssueUnit(issue_width: Int, num_wakeup_ports: Int) extends Module
 
       for (w <- 0 until DISPATCH_WIDTH)
       {
+         // TODO add ctrl bit for "allocates iss_slot"
          temp_1stuop_val (w) := io.dis_mask(w) && 
                                  !io.dis_uops(w).exception &&
                                  !io.dis_uops(w).sret &&
