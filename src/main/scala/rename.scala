@@ -340,15 +340,15 @@ class BusyTableIo(pipeline_width: Int, num_wb_ports: Int) extends Bundle()
 
 // TODO what do i do with this during misspeculation? probably clear as "not busy" anymore? 
 // Register P0 is always NOT_BUSY, and cannot be set to BUSY
+// Note: I do NOT bypass from newly busied registers to the read ports.
+// That bypass check should be done elsewhere (this is to get it off the
+// critical path).
 class BusyTable(pipeline_width: Int, num_wb_ports: Int) extends Module
 {
    val io = new BusyTableIo(pipeline_width, num_wb_ports)
 
-// chisel can't handle def's here :(
-//   def BUSY     = Bool(true)
-//   def NOT_BUSY = Bool(false)
-   val BUSY     = Bool(true)
-   val NOT_BUSY = Bool(false)
+   def BUSY     = Bool(true)
+   def NOT_BUSY = Bool(false)
     
    val table_bsy = Vec.fill(PHYS_REG_COUNT){ Reg(init = NOT_BUSY) }
 
@@ -383,18 +383,9 @@ class BusyTable(pipeline_width: Int, num_wb_ports: Int) extends Module
          prs2_just_cleared = (io.old_valids(i) && (io.old_pdsts(i) === io.read_in(w).prs2)) | prs2_just_cleared
       }
 
-      // handle bypassing a setting of the busy-bit
-      var prs1_just_busied = Bool(false)
-      var prs2_just_busied = Bool(false)
-
-      for (ww <- 0 until pipeline_width)
-      {
-         prs1_just_busied = io.write_valid(ww) && (io.write_pdst(ww) === io.read_in(w).prs1) | prs1_just_busied
-         prs2_just_busied = io.write_valid(ww) && (io.write_pdst(ww) === io.read_in(w).prs2) | prs2_just_busied
-      }
-      
-      io.read_out(w).prs1_busy := (table_bsy.read(io.read_in(w).prs1) && !prs1_just_cleared) || prs1_just_busied
-      io.read_out(w).prs2_busy := (table_bsy.read(io.read_in(w).prs2) && !prs2_just_cleared) || prs2_just_busied
+      // note: no bypassing of the newly busied (that is done outside this module)  
+      io.read_out(w).prs1_busy := (table_bsy.read(io.read_in(w).prs1) && !prs1_just_cleared) 
+      io.read_out(w).prs2_busy := (table_bsy.read(io.read_in(w).prs2) && !prs2_just_cleared) 
    }
 
    // debug
@@ -512,12 +503,26 @@ class RenameStage(pl_width: Int, num_wb_ports: Int) extends Module
       }
    }
 
+   // read out the map-table entries ASAP, then deal with bypassing busy-bits and actually prs1/prs2 later
+   val map_table_output = Vec.fill(pl_width) {new Bundle{val prs1=UInt(); val prs2=UInt();}}
+   for (w <- 0 until pl_width)
+   {
+      map_table_output(w).prs1 := map_table_io(io.ren_uops(w).lrs1).element
+      map_table_output(w).prs2 := map_table_io(io.ren_uops(w).lrs2).element
+   }
+
    // Bypass the physical register mappings
+   val prs1_was_bypassed = Vec.fill(pl_width) {Bool()}
+   val prs2_was_bypassed = Vec.fill(pl_width) {Bool()}
+
    for (w <- 0 until pl_width)
    {
       var rs1_cases =  Array((Bool(false),  UInt(0,PREG_SZ)))
       var rs2_cases =  Array((Bool(false),  UInt(0,PREG_SZ)))
       var stale_cases= Array((Bool(false),  UInt(0,PREG_SZ)))
+   
+      prs1_was_bypassed(w) := Bool(false)
+      prs2_was_bypassed(w) := Bool(false)
 
       // Handle bypassing new physical destinations to operands (and stale destination)
       for (xx <- 0 until w)
@@ -525,11 +530,16 @@ class RenameStage(pl_width: Int, num_wb_ports: Int) extends Module
          rs1_cases  ++= Array(((io.ren_uops(w).lrs1_rtype === RT_FIX) && io.ren_mask(xx) && io.ren_uops(xx).ldst_val && (io.ren_uops(w).lrs1 === io.ren_uops(xx).ldst), (io.ren_uops(xx).pdst)))
          rs2_cases  ++= Array(((io.ren_uops(w).lrs2_rtype === RT_FIX) && io.ren_mask(xx) && io.ren_uops(xx).ldst_val && (io.ren_uops(w).lrs2 === io.ren_uops(xx).ldst), (io.ren_uops(xx).pdst)))
          stale_cases++= Array(( io.ren_uops(w).ldst_val               && io.ren_mask(xx) && io.ren_uops(xx).ldst_val && (io.ren_uops(w).ldst === io.ren_uops(xx).ldst), (io.ren_uops(xx).pdst)))
+
+         when ((io.ren_uops(w).lrs1_rtype === RT_FIX) && io.ren_mask(xx) && io.ren_uops(xx).ldst_val && (io.ren_uops(w).lrs1 === io.ren_uops(xx).ldst))
+            { prs1_was_bypassed(w) := Bool(true) }
+         when ((io.ren_uops(w).lrs2_rtype === RT_FIX) && io.ren_mask(xx) && io.ren_uops(xx).ldst_val && (io.ren_uops(w).lrs2 === io.ren_uops(xx).ldst))
+            { prs2_was_bypassed(w) := Bool(true) }
       }
       
       // add default case where we can just read the map table for our information
-      rs1_cases   ++= Array(((io.ren_uops(w).lrs1_rtype === RT_FIX) && (io.ren_uops(w).lrs1 != UInt(0)), map_table_io(io.ren_uops(w).lrs1).element))
-      rs2_cases   ++= Array(((io.ren_uops(w).lrs2_rtype === RT_FIX) && (io.ren_uops(w).lrs2 != UInt(0)), map_table_io(io.ren_uops(w).lrs2).element))
+      rs1_cases   ++= Array(((io.ren_uops(w).lrs1_rtype === RT_FIX) && (io.ren_uops(w).lrs1 != UInt(0)), map_table_output(w).prs1))
+      rs2_cases   ++= Array(((io.ren_uops(w).lrs2_rtype === RT_FIX) && (io.ren_uops(w).lrs2 != UInt(0)), map_table_output(w).prs2))
 
       io.ren_uops(w).pop1       := MuxCase(io.ren_uops(w).lrs1, rs1_cases)
       io.ren_uops(w).pop2       := MuxCase(io.ren_uops(w).lrs2, rs2_cases)
@@ -552,11 +562,16 @@ class RenameStage(pl_width: Int, num_wb_ports: Int) extends Module
       for (w <- 0 until pl_width)
       {
          // Reading the Busy Bits
-         bsy_table.io.read_in(w).prs1  := io.ren_uops(w).pop1
-         bsy_table.io.read_in(w).prs2  := io.ren_uops(w).pop2
-         // todo may be overly conservative with mt_val check
-         io.ren_uops(w).prs1_busy := bsy_table.io.read_out(w).prs1_busy && io.ren_uops(w).lrs1_rtype === RT_FIX 
-         io.ren_uops(w).prs2_busy := bsy_table.io.read_out(w).prs2_busy && io.ren_uops(w).lrs2_rtype === RT_FIX 
+         // for critical path reasons, we speculatively read out the busy-bits assuming no dependencies between uops
+         // then verify if the uop actually uses a register and if it depends on a newly unfreed register
+         bsy_table.io.read_in(w).prs1  := map_table_output(w).prs1 
+         bsy_table.io.read_in(w).prs2  := map_table_output(w).prs2 
+         
+         io.ren_uops(w).prs1_busy := io.ren_uops(w).lrs1_rtype === RT_FIX &&
+                                       (bsy_table.io.read_out(w).prs1_busy || prs1_was_bypassed(w))
+         io.ren_uops(w).prs2_busy := io.ren_uops(w).lrs2_rtype === RT_FIX &&
+                                       (bsy_table.io.read_out(w).prs2_busy || prs2_was_bypassed(w))
+
  
           // Updating the Table (new busy register)
          bsy_table.io.write_valid(w) := freelist_can_allocate(w) &&
@@ -570,7 +585,7 @@ class RenameStage(pl_width: Int, num_wb_ports: Int) extends Module
       bsy_table.io.old_valids := io.wb_valids
       bsy_table.io.old_pdsts := io.wb_pdsts
 
- 
+
    //-------------------------------------------------------------
    // Free List (Fixed Point)
 

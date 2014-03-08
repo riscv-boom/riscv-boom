@@ -522,7 +522,7 @@ class LoadStoreUnit(pl_width: Int) extends Module
                                                                                        Bool(false))
 
    // test that we are never forwarding at the same the cache is returning data AND nacking us
-   assert (!(io.forward_val && io.nack.valid && io.nack.cache_nack && io.memresp_val), "LSU shenangians.")
+//   assert (!(io.forward_val && io.nack.valid && io.nack.cache_nack && io.memresp_val), "LSU shenangians.")
 
    io.forward_data :=  Reg(next=
                         LoadDataGenerator(sdq_data(r_forward_std_idx.toBits).toUInt, 
