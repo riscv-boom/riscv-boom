@@ -236,8 +236,7 @@ class DCacheWrapper(implicit conf: DCacheConfig, lnconf: TileLinkConfiguration) 
    m1_inflight_tag := Reg(next=enq_idx)
 
    val enq_idx_1h = (Bits(1) << enq_idx) & 
-                  Fill(enq_val, max_num_inflight) &
-                  Fill(enq_rdy, max_num_inflight)
+                  Fill((enq_val & enq_rdy & nbdcache.io.cpu.req.ready), max_num_inflight) 
 
 
    for (i <- 0 until max_num_inflight)
@@ -247,7 +246,7 @@ class DCacheWrapper(implicit conf: DCacheConfig, lnconf: TileLinkConfiguration) 
 
    // NOTE: if !enq_rdy, then we have to kill the memory request, and nack the LSU
    // inflight load buffer resource hazard
-   val iflb_kill = Reg(next=(enq_val && !enq_rdy))
+   val iflb_kill = Reg(next=(enq_val && (!enq_rdy || !nbdcache.io.cpu.req.ready)))
 
 
 
@@ -284,7 +283,7 @@ class DCacheWrapper(implicit conf: DCacheConfig, lnconf: TileLinkConfiguration) 
 
    val prefetch_req_val = prefetcher.io.cache.req.valid && Bool(ENABLE_PREFETCHING)
 
-   io.core.req.ready        := enq_rdy && nbdcache.io.cpu.req.ready // only !ready when handling fence...
+   io.core.req.ready              := enq_rdy && nbdcache.io.cpu.req.ready 
    nbdcache.io.cpu.req.valid      := (io.core.req.valid || prefetch_req_val)
    nbdcache.io.cpu.req.bits.kill  := io.core.req.bits.kill || iflb_kill
                                           // kills request sent out last cycle
@@ -301,7 +300,7 @@ class DCacheWrapper(implicit conf: DCacheConfig, lnconf: TileLinkConfiguration) 
    
    // note: nacks come two cycles after a response, so I'm delaying everything
    // properly to line up stores, loads, nacks, and subword loads
-   val was_store  = !m2_req_uop.is_load && Reg(next=Reg(next=io.core.req.valid))  // was two cycles ago a store request?
+   val was_store  = !m2_req_uop.is_load && Reg(next=Reg(next=(io.core.req.valid && nbdcache.io.cpu.req.ready)))  // was two cycles ago a store request?
 
    
    // Todo add entry valid bit?
@@ -319,10 +318,11 @@ class DCacheWrapper(implicit conf: DCacheConfig, lnconf: TileLinkConfiguration) 
    //------------------------------------------------------------
    // handle nacks from the cache (or from the IFLB or the LSU)
 
-   io.core.nack.valid     := (nbdcache.io.cpu.resp.bits.nack) || Reg(next=io.core.req.bits.kill) || Reg(next=iflb_kill)
+   io.core.nack.valid     := (nbdcache.io.cpu.resp.bits.nack) || Reg(next=io.core.req.bits.kill) || Reg(next=iflb_kill) || 
+                              Reg(next=Reg(next=(io.core.req.valid && !(nbdcache.io.cpu.req.ready))))
    io.core.nack.lsu_idx   := Mux(m2_req_uop.is_load, m2_req_uop.ldq_idx, m2_req_uop.stq_idx)
    io.core.nack.isload    := m2_req_uop.is_load
-   io.core.nack.cache_nack:= nbdcache.io.cpu.resp.bits.nack || Reg(next=iflb_kill)
+   io.core.nack.cache_nack:= nbdcache.io.cpu.resp.bits.nack || Reg(next=iflb_kill) || Reg(next=Reg(next= (!(nbdcache.io.cpu.req.ready))))
    
    //------------------------------------------------------------
    // Handle exceptions

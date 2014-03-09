@@ -357,7 +357,7 @@ class LoadStoreUnit(pl_width: Int) extends Module
    if (ENABLE_SPECULATE_LOADS)
    {
       // fire loads once address has been calculated
-      req_fire_load_fast := io.exe_resp.valid && io.exe_resp.bits.uop.ctrl.is_load && io.dmem_req_ready
+      req_fire_load_fast := io.exe_resp.valid && io.exe_resp.bits.uop.ctrl.is_load 
    }
    else
    {
@@ -376,9 +376,7 @@ class LoadStoreUnit(pl_width: Int) extends Module
    when (laq_addr_val(lidx) &&
          laq_allocated(lidx) &&
          !laq_executed(lidx) &&
-         !laq_failure(lidx) && 
-//         (io.rob_ld_mask.toBits != Bits(0)) &&  // TODO BUG XXX LOADS a way for ROB to wake up load at commit?
-         io.dmem_req_ready) 
+         !laq_failure(lidx))  
    {
       req_fire_load_sleeper := Bool(true)
    }
@@ -455,7 +453,8 @@ class LoadStoreUnit(pl_width: Int) extends Module
    forwarding_age_logic.io.addr_matches    := forwarding_matches.toBits()
    forwarding_age_logic.io.youngest_st_idx := laq_yng_st_idx(ld_iss_idx)
  
-   when ((req_fire_load_fast || req_fire_load_sleeper) && forwarding_age_logic.io.forwarding_val)
+   // TODO get rid of dmem.req.ready, since the dcwrapper will already send us a nack if it's not ready
+   when ((req_fire_load_fast || req_fire_load_sleeper) && forwarding_age_logic.io.forwarding_val && io.dmem_req_ready)
    {
       laq_forwarded_std_val(l_uop.ldq_idx) := Bool(true)
       laq_forwarded_stq_idx(l_uop.ldq_idx) := forwarding_age_logic.io.forwarding_idx
@@ -481,7 +480,7 @@ class LoadStoreUnit(pl_width: Int) extends Module
    }
    .otherwise
    {
-      r_forward_std_val := (req_fire_load_fast || req_fire_load_sleeper) && forwarding_age_logic.io.forwarding_val 
+      r_forward_std_val := (req_fire_load_fast || req_fire_load_sleeper) && forwarding_age_logic.io.forwarding_val && io.dmem_req_ready
    }
 
    val mem_new_br_mask = Bits()
@@ -516,7 +515,6 @@ class LoadStoreUnit(pl_width: Int) extends Module
    // tell the data path we will give it data
    // time the forwarding of the data to coincide with what would be a HIT from
    // the cache (to only use one port)            
-//   io.forward_val  := Mux(io.nack.valid && !io.nack.cache_nack && !wb_forwarding_kill && r_sdq_val_for_forwarding, 
    io.forward_val  := Mux(io.nack.valid && !wb_forwarding_kill && r_sdq_val_for_forwarding, 
                                                                                        Reg(next=r_forward_std_val),
                                                                                        Bool(false))
@@ -549,8 +547,7 @@ class LoadStoreUnit(pl_width: Int) extends Module
 
    when (stq_entry_val(stq_head) &&
          stq_committed(stq_head) && 
-         !stq_executed(stq_head) &&  
-         io.dmem_req_ready) 
+         !stq_executed(stq_head))
    {
       req_fire_store := Bool(true)
    }
@@ -575,8 +572,6 @@ class LoadStoreUnit(pl_width: Int) extends Module
    io.memreq_wdata   := Bits(0)
    io.memreq_uop     := io.exe_resp.bits.uop
 
-//   when (io.dmem_req_ready) // TODO add this to improve path
-//   {
    when (req_fire_load_fast || req_fire_load_sleeper)
    {
       io.memreq_val   := Bool(true)
@@ -599,7 +594,6 @@ class LoadStoreUnit(pl_width: Int) extends Module
 
       stq_executed(stq_head) := Bool(true)
    }
-//   }
     
    //-------------------------------------------------------------
    // Handle Memory Responses
@@ -649,9 +643,10 @@ class LoadStoreUnit(pl_width: Int) extends Module
 
    // need to bypass the Execute bit for a load that's being sent to memory
    // on the same cycle a store address is coming in 
+   // TODO is this deprecated?
    val laq_is_executing = Vec.fill(num_ld_entries) {Bool()}
    for (i <- 0 until num_ld_entries) { laq_is_executing(i) := Bool(false) }
-   when (io.memreq_val && !req_fire_store) 
+   when (io.memreq_val && !req_fire_store && io.dmem_req_ready) 
    {
       laq_is_executing(ld_iss_idx) := Bool(true)
    }
@@ -879,7 +874,6 @@ class LoadStoreUnit(pl_width: Int) extends Module
          }
          .otherwise
          {
-            // TODO do I need to check cache_nack?
             clr_ld := Bool(true)
          }
 
@@ -891,12 +885,6 @@ class LoadStoreUnit(pl_width: Int) extends Module
    }
 
    
-      // handle case where sdq_val is no longer true (store was committed) or was never valid
-//      when (!io.nack.cache_nack && io.nack.isload && !wb_forwarding_kill && Reg(next=r_forward_std_val) && !(r_sdq_val_for_forwarding))
-//      {
-//         laq_executed(io.nack.lsu_idx) := Bool(false)
-//      }
-
    //-------------------------------------------------------------
    // Exception / Reset
  
