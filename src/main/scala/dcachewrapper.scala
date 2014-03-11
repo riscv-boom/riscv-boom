@@ -64,14 +64,17 @@ class LoadReqSlot extends Module
    val br_killed = Bool()
    br_killed := Bool(false)
 
-   when (io.clear)
+   // only allow the clearing of a valid entry
+   // otherwise we might overwrite an incoming entry
+   when (io.clear && valid)
    {
+      //assert (valid)
       valid      := Bool(false)
    }
    .elsewhen (io.wen)
    {
       valid      := Bool(true)
-      was_killed := io.flush_pipe
+      was_killed := io.flush_pipe // TODO does this handle being killed by a branch on insertion for sleeping loads?
       uop        := io.in_uop
    }
    .elsewhen (io.flush_pipe || br_killed)
@@ -147,12 +150,20 @@ class DCMemPortIo(implicit conf: DCacheConfig) extends Bundle
    val brinfo = new BrResolutionInfo().asOutput() 
    val nack   = new NackInfo().asInput() 
    val flush_pipe  = Bool(OUTPUT) //exception or other misspec which flushes entire pipeline
+   val ordered = Bool(OUTPUT) // is the dcache ordered? (fence is done)
 
    val ptw = (new rocket.TLBPTWIO).flip
 //   val status = new Status().asOutput
 
    val debug = new Bundle
    {
+      val memreq = Bool()
+      val memresp = Bool()
+      val req_kill = Bool()
+      val nack = Bool()
+      val cache_nack = Bool()
+      val cache_resp_idx = UInt(width=log2Up(MAX_LD_COUNT))
+
       val ld_req_slot = Vec.fill(MAX_LD_COUNT) { new Bundle {
          val valid = Bool()
          val killed = Bool()
@@ -201,7 +212,7 @@ class DCacheWrapper(implicit conf: DCacheConfig, lnconf: TileLinkConfiguration) 
    for (i <- 0 until max_num_inflight)
    {
       inflight_load_buffer(i).clear       := (nbdcache_load_ack && nbdcache.io.cpu.resp.bits.tag === UInt(i)) ||
-                                             (nbdcache.io.cpu.resp.bits.nack && m2_req_uop.is_load && m2_inflight_tag === UInt(i) && Reg(next=Reg(next=(enq_val && enq_rdy)))) || // TODO ues Delay
+                                             (nbdcache.io.cpu.resp.bits.nack && m2_req_uop.is_load && m2_inflight_tag === UInt(i) && Reg(next=Reg(next=(enq_val && enq_rdy)))) || 
                                              (io.core.req.bits.kill && m1_inflight_tag === UInt(i) && Reg(next=(enq_val && enq_rdy))) // don't clr random entry, make sure m1_tag is correct
       inflight_load_buffer(i).brinfo      := io.core.brinfo
       inflight_load_buffer(i).flush_pipe  := io.core.flush_pipe
@@ -225,7 +236,7 @@ class DCacheWrapper(implicit conf: DCacheConfig, lnconf: TileLinkConfiguration) 
    enq_rdy := Bool(false)
    for (i <- 0 until max_num_inflight)
    {
-      when (!inflight_load_buffer(i).valid)
+      when (!inflight_load_buffer(i).valid && nbdcache.io.cpu.req.ready)
       {
          enq_rdy := Bool(true)
       }
@@ -235,18 +246,20 @@ class DCacheWrapper(implicit conf: DCacheConfig, lnconf: TileLinkConfiguration) 
    m2_inflight_tag := Reg(next=Reg(next=enq_idx))
    m1_inflight_tag := Reg(next=enq_idx)
 
+   val enq_can_occur = enq_val && enq_rdy 
+
    val enq_idx_1h = (Bits(1) << enq_idx) & 
-                  Fill((enq_val & enq_rdy & nbdcache.io.cpu.req.ready), max_num_inflight) 
+                  Fill(enq_can_occur, max_num_inflight) 
 
 
    for (i <- 0 until max_num_inflight)
    {
-      inflight_load_buffer(i).wen := enq_idx_1h(i) && enq_val
+      inflight_load_buffer(i).wen := enq_idx_1h(i) 
    }
 
    // NOTE: if !enq_rdy, then we have to kill the memory request, and nack the LSU
    // inflight load buffer resource hazard
-   val iflb_kill = Reg(next=(enq_val && (!enq_rdy || !nbdcache.io.cpu.req.ready)))
+   val iflb_kill = Reg(next=(enq_val && !enq_rdy))
 
 
 
@@ -258,18 +271,18 @@ class DCacheWrapper(implicit conf: DCacheConfig, lnconf: TileLinkConfiguration) 
    // listen in on the core<->cache requests/responses, and insert our own
    // prefetch requests to the data cache
 
-   val prefetcher = Module(new Prefetcher())
-       
-      prefetcher.io.core_requests.valid := Reg(next=Reg(next=io.core.req.valid))
-      prefetcher.io.core_requests.bits.addr := Reg(next=Reg(next=io.core.req.bits.addr))
-      // TODO add back miss, secondary_miss to the nbdcache
-      prefetcher.io.core_requests.bits.miss := Bool(false) //Reg(next=Reg(next=io.core.req.valid)) && nbdcache.io.cpu.resp.bits.miss
-      prefetcher.io.core_requests.bits.secondary_miss := Bool(false) 
-//                                                         Reg(next=Reg(next=io.core.req.valid)) && 
-//                                                         nbdcache.io.cpu.resp.bits.miss &&
-//                                                         nbdcache.io.cpu.resp.bits.secondary_miss
-
-      prefetcher.io.cache.req.ready := !io.core.req.valid && nbdcache.io.cpu.req.ready
+//   val prefetcher = Module(new Prefetcher())
+//       
+//      prefetcher.io.core_requests.valid := Reg(next=Reg(next=io.core.req.valid))
+//      prefetcher.io.core_requests.bits.addr := Reg(next=Reg(next=io.core.req.bits.addr))
+//      // TODO add back miss, secondary_miss to the nbdcache
+//      prefetcher.io.core_requests.bits.miss := Bool(false) //Reg(next=Reg(next=io.core.req.valid)) && nbdcache.io.cpu.resp.bits.miss
+//      prefetcher.io.core_requests.bits.secondary_miss := Bool(false) 
+////                                                         Reg(next=Reg(next=io.core.req.valid)) && 
+////                                                         nbdcache.io.cpu.resp.bits.miss &&
+////                                                         nbdcache.io.cpu.resp.bits.secondary_miss
+//
+//      prefetcher.io.cache.req.ready := !io.core.req.valid && nbdcache.io.cpu.req.ready
 
    
 
@@ -281,15 +294,16 @@ class DCacheWrapper(implicit conf: DCacheConfig, lnconf: TileLinkConfiguration) 
 //      store_data_gen.io.din := io.core.req.bits.data
    
 
-   val prefetch_req_val = prefetcher.io.cache.req.valid && Bool(ENABLE_PREFETCHING)
+//   val prefetch_req_val = prefetcher.io.cache.req.valid && Bool(ENABLE_PREFETCHING)
+   val prefetch_req_val = Bool(false)
 
    io.core.req.ready              := enq_rdy && nbdcache.io.cpu.req.ready 
    nbdcache.io.cpu.req.valid      := (io.core.req.valid || prefetch_req_val)
    nbdcache.io.cpu.req.bits.kill  := io.core.req.bits.kill || iflb_kill
                                           // kills request sent out last cycle
    nbdcache.io.cpu.req.bits.typ   := io.core.req.bits.uop.mem_typ
-   nbdcache.io.cpu.req.bits.addr  := Mux(io.core.req.valid, io.core.req.bits.addr,
-                                                            prefetcher.io.cache.req.bits.addr)
+//   nbdcache.io.cpu.req.bits.addr  := Mux(io.core.req.valid, io.core.req.bits.addr,prefetcher.io.cache.req.bits.addr) TODO get core.req.valid off critical path here
+   nbdcache.io.cpu.req.bits.addr  := io.core.req.bits.addr
    nbdcache.io.cpu.req.bits.tag   := Cat(!io.core.req.valid, new_inflight_tag)
    nbdcache.io.cpu.req.bits.cmd   := Mux(io.core.req.valid, io.core.req.bits.uop.mem_cmd, M_PFW)
    nbdcache.io.cpu.req.bits.data  := Reg(next=io.core.req.bits.data) //notice this is delayed a cycle
@@ -325,11 +339,19 @@ class DCacheWrapper(implicit conf: DCacheConfig, lnconf: TileLinkConfiguration) 
    io.core.nack.cache_nack:= nbdcache.io.cpu.resp.bits.nack || Reg(next=iflb_kill) || Reg(next=Reg(next= (!(nbdcache.io.cpu.req.ready))))
    
    //------------------------------------------------------------
-   // Handle exceptions
+   // Handle exceptions and fences
    io.core.resp.bits.xcpt := nbdcache.io.cpu.xcpt
+   io.core.ordered := nbdcache.io.cpu.ordered
    
    //------------------------------------------------------------
    // debug
+
+   io.core.debug.memreq := io.core.req.valid
+   io.core.debug.memresp := io.core.resp.valid
+   io.core.debug.req_kill := io.core.req.bits.kill
+   io.core.debug.nack := io.core.nack.valid
+   io.core.debug.cache_nack := io.core.nack.cache_nack
+   io.core.debug.cache_resp_idx := resp_idx
 
    for (i <- 0 until max_num_inflight)
    {

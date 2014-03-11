@@ -17,7 +17,7 @@ trait BOOMProcConstants
    //************************************
    // Debug Support
    val COMMIT_LOG_PRINTF = false // dump commit state, for comparision against ISA sim 
-   val DEBUG_PRINTF = false // use the Chisel printf functionality 
+   val DEBUG_PRINTF = true // use the Chisel printf functionality 
    val DEBUG_FETCHBUFFER = false // print out the fetch buffer
    val DEBUG_BTB = false
    
@@ -128,6 +128,7 @@ trait BrPredConstants
 
 trait ScalarOpConstants
 {
+   val X = Bool.DC
    val Y = Bool(true)
    val N = Bool(false)
 
@@ -213,6 +214,7 @@ trait ScalarOpConstants
    // Micro-op opcodes
    // TODO use an enum
    val UOPC_SZ = 9
+   val uopX    = Bits("b?????????", UOPC_SZ)
    val uopNOP  = Bits( 0, UOPC_SZ)
    val uopLD   = Bits( 1, UOPC_SZ)
    val uopSTA  = Bits( 2, UOPC_SZ)  // store address generation
@@ -296,7 +298,7 @@ trait ScalarOpConstants
    val PCR_S   = UInt(4,3)    // set pcr
         
    // Memory Mask Type Signal
-   val MSK_X   = UInt(4, 3)
+   val MSK_X   = UInt("b???", 3)
    val MSK_B   = UInt(0, 3)
    val MSK_H   = UInt(1, 3)
    val MSK_W   = UInt(2, 3)
@@ -304,10 +306,6 @@ trait ScalarOpConstants
    val MSK_BU  = UInt(4, 3)
    val MSK_HU  = UInt(5, 3)
    val MSK_WU  = UInt(6, 3)
-
- 
-   // Cache Flushes & Sync Primitives 
-   val M_N      = Bits("b000",4)
 
    // The Bubble Instruction (Machine generated NOP)
    // Insert (XOR x0,x0,x0) which is different from software compiler 

@@ -701,7 +701,6 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    {
       val decode_unit = Module(new DecodeUnit)
       dec_valids(w) := fetched_inst_valid && dec_fbundle(w).valid && !dec_finished_mask(w) // TODO a way to do this without being confusing wrt dec_mask?
-//      decode_unit.io.enq.inst := Mux(fetched_inst_valid && dec_fbundle(w).valid && !dec_finished_mask(w), dec_fbundle(w).inst, BUBBLE)
       decode_unit.io.enq.inst := dec_fbundle(w).inst
       decode_unit.io.status   := pcr_status
 
@@ -755,7 +754,6 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
 
    for (w <- 0 until DECODE_WIDTH)
    {
-      // TODO don't allocate mask for some jumps already handled by front-end!
       dec_brmask_logic.io.is_branch(w) := (dec_valids(w) && dec_uops(w).is_br_or_jmp && !dec_uops(w).is_jal)
       dec_brmask_logic.io.will_fire(w) := dis_mask(w) 
 
@@ -1241,6 +1239,8 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
 
    debug(throw_idle_error)
    debug(lsu_misspec)
+
+//   assert (!(throw_idle_error))
  
                 
    //-------------------------------------------------------------
@@ -1338,11 +1338,11 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
       val u_cyn = "\033[4;36m"
       val u_wht = "\033[4;37m"
       
-      var white_space = 43  - NUM_LSU_ENTRIES - INTEGER_ISSUE_SLOT_COUNT - (NUM_ROB_ENTRIES/COMMIT_WIDTH)
+      var white_space = 42  - NUM_LSU_ENTRIES - INTEGER_ISSUE_SLOT_COUNT - (NUM_ROB_ENTRIES/COMMIT_WIDTH)
       // for 1440 monitor 
-//      var white_space = 36  - NUM_LSU_ENTRIES - INTEGER_ISSUE_SLOT_COUNT - (NUM_ROB_ENTRIES/COMMIT_WIDTH) 
+//      var white_space = 35  - NUM_LSU_ENTRIES - INTEGER_ISSUE_SLOT_COUNT - (NUM_ROB_ENTRIES/COMMIT_WIDTH) 
       // for tinier demo screens
-//      var white_space = 28  - NUM_LSU_ENTRIES - INTEGER_ISSUE_SLOT_COUNT - (NUM_ROB_ENTRIES/COMMIT_WIDTH)
+//      var white_space = 27  - NUM_LSU_ENTRIES - INTEGER_ISSUE_SLOT_COUNT - (NUM_ROB_ENTRIES/COMMIT_WIDTH)
 
       if (DEBUG_FETCHBUFFER) white_space = white_space - FETCH_BUFFER_SZ
       if (DEBUG_BTB) white_space = white_space - BTB_NUM_ENTRIES - 2
@@ -1643,6 +1643,15 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
 
       // Load/Store Unit
 
+      debug_string = sprintf("%s  Mem[%s,%s:%d,%s,%s %s]\n"
+            , debug_string
+            , Mux(io.dmem.debug.memreq, Str("MREQ"), Str(" "))
+            , Mux(io.dmem.debug.memresp, Str("MRESP"), Str(" "))
+            , io.dmem.debug.cache_resp_idx
+            , Mux(io.dmem.debug.req_kill, Str("KILL"), Str(" "))
+            , Mux(io.dmem.debug.nack, Str("NACK"), Str(" "))
+            , Mux(io.dmem.debug.cache_nack, Str("CN"), Str(" "))
+            )
 //      val lsu_io = (exe_units.find(_.is_mem_unit).get).io.lsu_io // for debug printing... assume only one has a mem_unit
       for (i <- 0 until NUM_LSU_ENTRIES)
       {

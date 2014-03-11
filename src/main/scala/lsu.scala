@@ -64,7 +64,6 @@ class LoadStoreUnitIo(pl_width: Int)  extends Bundle()
    val dec_st_vals        = Vec.fill(pl_width) { Bool(INPUT) }
    val dec_ld_vals        = Vec.fill(pl_width) { Bool(INPUT) }
    val dec_uops           = Vec.fill(pl_width) {new MicroOp()}.asInput
-//   val dec_uops           = Vec.fill(pl_width) {new MicroOp().asInput} is broken
 
    val new_ldq_idx        = UInt(OUTPUT, MEM_ADDR_SZ)
    val new_stq_idx        = UInt(OUTPUT, MEM_ADDR_SZ)
@@ -73,7 +72,6 @@ class LoadStoreUnitIo(pl_width: Int)  extends Bundle()
    val exe_resp           = (new ValidIO(new ExeUnitResp)).flip
    
    // Commit Stage
-   // (Free no-longer used LSU entry).
    val commit_store_mask  = Vec.fill(pl_width) {Bool(INPUT)}
    val commit_load_mask   = Vec.fill(pl_width) {Bool(INPUT)}
 
@@ -119,6 +117,7 @@ class LoadStoreUnitIo(pl_width: Int)  extends Bundle()
 // causign stuff to dissapear
 //   val dmem = new DCMemPortIo().flip()
    val dmem_req_ready = Bool(INPUT)
+   val dmem_is_ordered = Bool(INPUT)
 
    val debug = new Bundle
    {
@@ -515,9 +514,10 @@ class LoadStoreUnit(pl_width: Int) extends Module
    // tell the data path we will give it data
    // time the forwarding of the data to coincide with what would be a HIT from
    // the cache (to only use one port)            
-   io.forward_val  := Mux(io.nack.valid && !wb_forwarding_kill && r_sdq_val_for_forwarding, 
-                                                                                       Reg(next=r_forward_std_val),
-                                                                                       Bool(false))
+   io.forward_val  := Reg(next=r_forward_std_val) && !wb_forwarding_kill && r_sdq_val_for_forwarding 
+//   io.forward_val  := Mux(io.nack.valid && !wb_forwarding_kill && r_sdq_val_for_forwarding, 
+//                                                                                       Reg(next=r_forward_std_val),
+//                                                                                       Bool(false))
 
    // test that we are never forwarding at the same the cache is returning data AND nacking us
 //   assert (!(io.forward_val && io.nack.valid && io.nack.cache_nack && io.memresp_val), "LSU shenangians.")
@@ -547,7 +547,8 @@ class LoadStoreUnit(pl_width: Int) extends Module
 
    when (stq_entry_val(stq_head) &&
          stq_committed(stq_head) && 
-         !stq_executed(stq_head))
+         !stq_executed(stq_head) &&
+         !(stq_uop(stq_head).is_fence))
    {
       req_fire_store := Bool(true)
    }
@@ -637,7 +638,7 @@ class LoadStoreUnit(pl_width: Int) extends Module
 
    val s_addr      = io.exe_resp.bits.data.toUInt
    val st_mask     = GenByteMask(s_addr, exe_uop.mem_typ)
-   val st_is_fence = (exe_uop.uopc === uopMEMSPECIAL || exe_uop.uopc === uopFENCEI)
+   val st_is_fence = exe_uop.is_fence //(exe_uop.uopc === uopMEMSPECIAL || exe_uop.uopc === uopFENCEI)
    val stq_idx     = exe_uop.stq_idx
    val failed_loads = Vec.fill(num_ld_entries) {Bool()}
 
@@ -801,7 +802,11 @@ class LoadStoreUnit(pl_width: Int) extends Module
    stq_commit_head := temp_stq_commit_head 
    
    // store has been committed AND successfully sent data to memory
-   clear_store := stq_succeeded(stq_head) && stq_entry_val(stq_head)
+   when (stq_entry_val(stq_head) && stq_committed(stq_head))
+   {
+      clear_store := Mux(stq_uop(stq_head).is_fence, io.dmem_is_ordered,
+                                                     stq_succeeded(stq_head))
+   }
  
    when (clear_store)
    {
