@@ -16,11 +16,11 @@ object Decode
                         //                                                                                  |       bypassable (aka, known/fixed latency)
                         //                                                   imm sel                        |       |  br/jmp
                         //     is val inst?                  rs1 regtype     |     is_load                  |       |  |  is jal
-                        //     |  micro-opcode               |       rs2 type|     |  is_store              |       |  |  | is sret
-                        //     |  |         func unit        |       |       |     |  |  is_fence           |       |  |  | |  is syscall
-                        //     |  |         |        dst     |       |       |     |  |  |  mem    mem      |       |  |  | |  |  is unique? (clear pipeline for it)
-                        //     |  |         |        regtype |       |       |     |  |  |  cmd    msk      |       |  |  | |  |  |  flush on commit
-                        //     |  |         |        |       |       |       |     |  |  |  |      |        |       |  |  | |  |  |  |  csr cmd
+                        //     |  micro-opcode               |       rs2 type|     |  is_store              |       |  |  |  is sret
+                        //     |  |         func unit        |       |       |     |  |  is_fence           |       |  |  |  |  is syscall
+                        //     |  |         |        dst     |       |       |     |  |  |  mem    mem      |       |  |  |  |  |  is unique? (clear pipeline for it)
+                        //     |  |         |        regtype |       |       |     |  |  |  cmd    msk      |       |  |  |  |  |  |  flush on commit
+                        //     |  |         |        |       |       |       |     |  |  |  |      |        |       |  |  |  |  |  |  |  csr cmd
    val table = Array(        
                LD      -> List(Y, uopLD   , FU_MEM , RT_FIX, RT_FIX, RT_X  , IS_I, Y, N, N, M_XRD, MSK_D , UInt(3), N, N, N, N, N, N, N, CSR.N),
                LW      -> List(Y, uopLD   , FU_MEM , RT_FIX, RT_FIX, RT_X  , IS_I, Y, N, N, M_XRD, MSK_W , UInt(3), N, N, N, N, N, N, N, CSR.N),

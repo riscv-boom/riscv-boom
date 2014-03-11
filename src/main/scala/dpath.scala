@@ -418,7 +418,8 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    // Fetch Buffer
    FetchBuffer.io.enq.valid := io.imem.resp.valid && !fetchbuffer_kill
    FetchBuffer.io.enq.bits  := fetch_bundle
-   fetchbuffer_kill         := br_unit.brinfo.mispredict || com_exception || flush_pipeline || com_sret
+   // delay sret signal for critical path reasons, but okay b/c we're still in the shadow of the PC redirect
+   fetchbuffer_kill         := br_unit.brinfo.mispredict || com_exception || flush_pipeline || Reg(next=com_sret)
    
    // round off to nearest fetch boundary
    val lsb = log2Up(conf.rc.icache.ibytes)

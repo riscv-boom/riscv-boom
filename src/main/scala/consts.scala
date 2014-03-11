@@ -17,7 +17,7 @@ trait BOOMProcConstants
    //************************************
    // Debug Support
    val COMMIT_LOG_PRINTF = false // dump commit state, for comparision against ISA sim 
-   val DEBUG_PRINTF = true // use the Chisel printf functionality 
+   val DEBUG_PRINTF = false // use the Chisel printf functionality 
    val DEBUG_FETCHBUFFER = false // print out the fetch buffer
    val DEBUG_BTB = false
    

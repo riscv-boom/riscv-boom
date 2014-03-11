@@ -431,10 +431,10 @@ class ALUMulDMemExeUnit(is_branch_unit: Boolean = false, shares_pcr_wport: Boole
 
    // Hook up loads and multiplies to the 2nd write port
    io.resp(1).valid                := memresp_val || muldiv.io.resp.valid
-   io.resp(1).bits.uop             := Mux(muldiv.io.resp.valid, muldiv.io.resp.bits.uop, memresp_uop)
+   io.resp(1).bits.uop             := Mux(memresp_val, memresp_uop, muldiv.io.resp.bits.uop)
    io.resp(1).bits.uop.pdst_rtype  := RT_FIX // TODO why is this necessary? shouldn't memresp_uop already be giving us this?
-   io.resp(1).bits.uop.ctrl.rf_wen := Mux(muldiv.io.resp.valid, muldiv.io.resp.bits.uop.ctrl.rf_wen, memresp_rf_wen)
-   io.resp(1).bits.data            := Mux(muldiv.io.resp.valid, muldiv.io.resp.bits.data, memresp_data)
+   io.resp(1).bits.uop.ctrl.rf_wen := Mux(memresp_val, memresp_rf_wen, muldiv.io.resp.bits.uop.ctrl.rf_wen)
+   io.resp(1).bits.data            := Mux(memresp_val, memresp_data, muldiv.io.resp.bits.data)
  
 }
  

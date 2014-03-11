@@ -105,7 +105,7 @@ class LoadStoreUnitIo(pl_width: Int)  extends Bundle()
 
 
    val lsu_misspec        = Bool(INPUT)  // TODO generalize to "pipeline flush"? // TODO rename misspec to ld_order_failure, or lsu_trap?
-   val lsu_clr_bsy_valid  = Bool(OUTPUT) // HACK: let the stores/loads clear out the busy bit in the ROB
+   val lsu_clr_bsy_valid  = Bool(OUTPUT) // HACK: let the stores clear out the busy bit in the ROB
    val lsu_clr_bsy_rob_idx= UInt(OUTPUT, width=ROB_ADDR_SZ)
 
    val ldo_xcpt_val       = Bool(OUTPUT)
