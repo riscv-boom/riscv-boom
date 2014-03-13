@@ -1279,7 +1279,6 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
 
 
    // UARCH Counters
-   //pcr.io.uarch_counters.foreach(_ := Bool(false))
    pcr.io.uarch_counters(0) := br_unit.brinfo.valid
    pcr.io.uarch_counters(1) := br_unit.brinfo.mispredict
    pcr.io.uarch_counters(2) := com_exception
@@ -1764,9 +1763,12 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
       var found_scall = Bool(false)
       for (w <- 0 until COMMIT_WIDTH)
       {
-         when ((com_valids(w) && !(pcr.io.status.s)) || 
-               (com_exception && com_exc_cause === UInt(rocket.Causes.syscall) && com_uops(w).syscall && !found_scall)
-               )
+//         when ((com_valids(w) && !(pcr.io.status.s)) || 
+//               (com_exception && com_exc_cause === UInt(rocket.Causes.syscall) && com_uops(w).syscall && !found_scall)
+//               )
+         when (com_valids(w) ||
+               (com_exception && com_exc_cause === UInt(rocket.Causes.syscall) && com_uops(w).syscall)
+              )
          {
             found_scall = found_scall || 
                           (com_exception && 

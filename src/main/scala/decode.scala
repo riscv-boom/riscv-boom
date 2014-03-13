@@ -242,33 +242,30 @@ class BranchDecode extends Module
    val io = new Bundle
    {
       val inst    = Bits(INPUT, 32)
-
       val is_br   = Bool(OUTPUT)
       val is_jal  = Bool(OUTPUT)
-      val brtype  = Bits(OUTPUT, UOPC_SZ)
       val imm_sel = UInt(OUTPUT, IS_X.getWidth)
    }
-                          //            is br?
-                          //            |  is jal?
-   val bpd_csignals =     //            |  |  br type
-      rocket.DecodeLogic(io.inst, //    |  |  | 
-                          List(uopNOP , N, N, IS_X),
+                          //   is br?
+                          //   |  is jal?
+   val bpd_csignals =     //   |  |  br type
+      rocket.DecodeLogic(io.inst,//  | 
+                          List(N, N, IS_X),
             Array(
-               JAL     -> List(uopJAL , N, Y, IS_J),
-               JALR    -> List(uopJALR, N, N, IS_I),
-               BEQ     -> List(uopBEQ , Y, N, IS_B),
-               BNE     -> List(uopBNE , Y, N, IS_B),
-               BGE     -> List(uopBGE , Y, N, IS_B),
-               BGEU    -> List(uopBGEU, Y, N, IS_B),
-               BLT     -> List(uopBLT , Y, N, IS_B),
-               BLTU    -> List(uopBLTU, Y, N, IS_B)
+               JAL     -> List(N, Y, IS_J),
+               JALR    -> List(N, N, IS_I),
+               BEQ     -> List(Y, N, IS_B),
+               BNE     -> List(Y, N, IS_B),
+               BGE     -> List(Y, N, IS_B),
+               BGEU    -> List(Y, N, IS_B),
+               BLT     -> List(Y, N, IS_B),
+               BLTU    -> List(Y, N, IS_B)
             ))
 
-   val brtype_ :: is_br_ :: is_jal_ :: imm_sel_ :: Nil = bpd_csignals
+   val is_br_ :: is_jal_ :: imm_sel_ :: Nil = bpd_csignals
 
    io.is_br   := is_br_.toBool
    io.is_jal  := is_jal_.toBool
-   io.brtype  := brtype_.toBits
    io.imm_sel := imm_sel_
 }
 

@@ -111,7 +111,7 @@ class RobIo(machine_width: Int, num_wakeup_ports: Int)  extends Bundle()
    {
       val state = UInt()
       val rob_head = UInt(width = ROB_ADDR_SZ)
-      val entry = Vec.fill(1 << ROB_ADDR_SZ) { new Bundle {
+      val entry = Vec.fill(NUM_ROB_ENTRIES) { new Bundle {
          val valid = Bool()
          val busy = Bool()
          val uop = new MicroOp()
@@ -129,6 +129,10 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
    val io = new RobIo(width, num_wakeup_ports)
 
    val num_rob_rows = num_rob_entries / width
+   require (num_rob_rows % 2 == 0) // this is due to how rob PCs are stored in two banks
+                                   // and in getting next-pc causes wrap
+                                   // around, thus the banks must have equal
+                                   // numbers of items.
 
    println("    Machine Width: " + width)
    println("    Rob Entries  : " + num_rob_entries)
@@ -191,7 +195,7 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
    //       - execute by the Br Unit for target calculation at idx X.
    //       - execute by the Br Unit to get actual target at idx X+1.
 
-   val rob_pc_hob = new RobPCs(width)
+   val rob_pc_hob = new RobPCs(width, num_rob_rows)
 
    when (io.dis_mask.reduce(_|_))
    {
@@ -204,16 +208,6 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
    io.get_pc.curr_pc := curr_row_pc + Cat(GetBankIdx(io.get_pc.rob_idx), Bits(0,2))
    
    val next_bank_idx = if (width == 1) UInt(0) else PriorityEncoder(rob_brt_vals.toBits)
-   // Chisel barfing, so let's write it ourselves
-//   val next_bank_idx = UInt()
-//   next_bank_idx := UInt(0)
-//   for (w <- width-1 to 0 by -1)
-//   {
-//      when (rob_brt_vals(w))
-//      {
-//         next_bank_idx := UInt(w)
-//      }
-//   }
 
    io.get_pc.next_pc := next_row_pc + Cat(next_bank_idx, Bits(0,2))
    io.get_pc.next_val := (GetRowIdx(io.get_pc.rob_idx)+UInt(1)) != rob_tail
@@ -360,7 +354,7 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
       rob_head_eflags(w)   := rob_exc_cause(rob_head)
       rob_head_is_store(w) := rob_uop(rob_head).is_store
       rob_head_is_load(w)  := rob_uop(rob_head).is_load
-      rob_brt_vals(w)      := rob_val(GetRowIdx(io.get_pc.rob_idx) + UInt(1))
+      rob_brt_vals(w)      := rob_val(WrapInc(GetRowIdx(io.get_pc.rob_idx), num_rob_rows))
        
       // -----------------------------------------------
       // debugging write ports that should not be synthesized
@@ -459,7 +453,7 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
    // update when committed ALL valid instructions in commit_bundle
    when ((io.com_valids.toBits != Bits(0)) && ((will_commit.toBits ^ rob_head_vals.toBits) === Bits(0))) 
    {
-      rob_head := rob_head + UInt(1, ROB_ADDR_SZ)
+      rob_head := WrapInc(rob_head, num_rob_rows)
    }
                   
    // -----------------------------------------------
@@ -467,16 +461,18 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
 
    when (rob_state === s_rollback && rob_tail != rob_head) 
    {
-      rob_tail := rob_tail - UInt(1)
+      rob_tail := WrapDec(rob_tail, num_rob_rows)
    }
    .elsewhen (io.br_unit.brinfo.valid && io.br_unit.brinfo.mispredict)
    {
-      rob_tail := GetRowIdx(io.br_unit.brinfo.rob_idx) + UInt(1)
+      rob_tail := WrapInc(GetRowIdx(io.br_unit.brinfo.rob_idx), num_rob_rows)
    }
    .elsewhen (io.dis_mask.toBits != Bits(0))
    {
-      rob_tail := rob_tail + UInt(1)
+      rob_tail := WrapInc(rob_tail, num_rob_rows)
    }
+
+   // assert !(rob_tail >= (num_rob_entries/width))
 
    // -----------------------------------------------
    // Full Logic
@@ -484,7 +480,7 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
    // TODO can we let the ROB fill up completely?
    // can we track "maybe_full"? 
    // maybe full is reset on branch mispredict
-   val full = (rob_tail + UInt(1) === rob_head) 
+   val full = WrapInc(rob_tail, num_rob_rows) === rob_head
 
    io.empty := rob_head === rob_tail
 
@@ -553,16 +549,6 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
    }
           
    //--------------------------------------------------
-   // Counters
-   
-   val rob_full_count = Reg(init = UInt(0, XPRLEN))
-   when (full) { rob_full_count := rob_full_count + UInt(1) }
-   debug(rob_full_count)
-   // SYNTH make wide-counter
-   //val rob_full_count = WideCounter(width=XPRLEN, inc=full)
-   //debug(rob_full_count.value)
-    
-   //--------------------------------------------------
    // Handle passing out signals to printf in dpath
    
    io.debug.state    := rob_state
@@ -570,7 +556,7 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
    
  
    // this object holds the high-order bits of the PC of each ROB row
-   class RobPCs(width: Int)
+   class RobPCs(width: Int, num_rob_rows: Int)
    {
       val pc_shift = if (width == 1) 2 else (log2Up(width) + 2)
       val pc_hob_width = XPRLEN - pc_shift
@@ -585,44 +571,41 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
       {
          val rdata = Bits(width=XPRLEN)
          rdata := bank0(row_idx >> UInt(1)) << UInt(pc_shift)
+         // damn chisel demands a "default"
          when (row_idx(0))
          {
             rdata := bank1(row_idx >> UInt(1)) << UInt(pc_shift)
          }
-         // damn chisel demands a "default"
-         //.otherwise
-         //{
-         //   rdata := bank1(row_idx >> UInt(1)) << UInt(pc_shift)
-         //}
          rdata
       }
 
-      // returns the row_idx and row_idx+1 PC (lob zeroed out)
+      // returns the row_idx and row_idx+1 PCs (lob zeroed out)
       def read2 (row_idx: UInt) =
       {
-         val addr0 = Mux(row_idx(0), row_idx + UInt(2), row_idx)
-         
-         val data0 = bank0(addr0 >> UInt(1)) << UInt(pc_shift)
+         // addr0, left shifted by 1 (makes wrap around logic easier)
+         val addr0_ls1 = Mux(row_idx(0), WrapInc(row_idx >> UInt(1), num_rob_rows/2), 
+                                         row_idx >> UInt(1))
+         val data0 = bank0(addr0_ls1) << UInt(pc_shift)
          val data1 = bank1(row_idx >> UInt(1)) << UInt(pc_shift)
          
-         val ret0 = UInt(width = XPRLEN)
-         val ret1 = UInt(width = XPRLEN)
-         ret0 := Mux(row_idx(0), data1, data0)
-         ret1 := Mux(row_idx(0), data0, data1)
+         val curr_pc = UInt(width = XPRLEN)
+         val next_pc = UInt(width = XPRLEN)
+         curr_pc := Mux(row_idx(0), data1, data0) 
+         next_pc := Mux(row_idx(0), data0, data1) 
 
-         (ret0, ret1)
+         (curr_pc, next_pc)
       }
 
       // takes rob_row_idx, write in PC (with low-order bits zeroed out)
-      def write (waddr: UInt, data: UInt) = 
+      def write (waddr_row: UInt, data: UInt) = 
       {
-         when (waddr(0))
+         when (waddr_row(0))
          {
-            bank1(waddr >> UInt(1)) := data >> UInt(pc_shift)
+            bank1(waddr_row >> UInt(1)) := data >> UInt(pc_shift)
          }
          .otherwise
          {
-            bank0(waddr >> UInt(1)) := data >> UInt(pc_shift)
+            bank0(waddr_row >> UInt(1)) := data >> UInt(pc_shift)
          }
       }
    }   

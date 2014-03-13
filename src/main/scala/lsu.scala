@@ -634,8 +634,6 @@ class LoadStoreUnit(pl_width: Int) extends Module
    // At Store Execute (address generation)...
    //    Check the incoming store address against younger loads that have executed.
    //    Look for memory ordering failures.
-//   val failed_loads = Vec.fill(num_ld_entries) {Bool()}
-
    val s_addr      = io.exe_resp.bits.data.toUInt
    val st_mask     = GenByteMask(s_addr, exe_uop.mem_typ)
    val st_is_fence = exe_uop.is_fence //(exe_uop.uopc === uopMEMSPECIAL || exe_uop.uopc === uopFENCEI)
@@ -712,7 +710,7 @@ class LoadStoreUnit(pl_width: Int) extends Module
    val l_idx = PriorityEncoder(temp_bits)
    debug(temp_bits)
 
-   // TODO always bad out the input to PECircular() to pow2
+   // TODO always pad out the input to PECircular() to pow2
    // convert it to vec[bool], then in.padTo(1 << log2Up(in.size), Bool(false))
    io.ldo_xcpt_uop := laq_uop(Mux(l_idx >= UInt(num_ld_entries), l_idx - UInt(num_ld_entries), l_idx))
     

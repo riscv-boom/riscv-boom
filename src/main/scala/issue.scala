@@ -149,11 +149,11 @@ class IntegerIssueSlot(num_slow_wakeup_ports: Int) extends Module
          }
       }
    }
-   .elsewhen (!slot_valid || io.issue)
-   {
-      next_p1 := Bool(false)
-      next_p2 := Bool(false)
-   }
+//   .elsewhen (!slot_valid || io.issue)
+//   {
+//      next_p1 := Bool(false)
+//      next_p2 := Bool(false)
+//   }
    .otherwise
    {
       // slot is valid...

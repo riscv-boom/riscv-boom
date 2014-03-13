@@ -58,18 +58,32 @@ object PerformShiftRegister
       reg_val
    }
 }
-  
+   
 // Increment the input "value", wrapping it if necessary.
 object WrapInc
 {
-   def apply(value: UInt, max_value: Int): UInt =
+   def apply(value: UInt, max: Int): UInt =
    {
-      if (isPow2(max_value))
-         (value + UInt(1))(log2Up(max_value)-1,0)
+      if (isPow2(max))
+         (value + UInt(1))(log2Up(max)-1,0)
       else
       {
-         val wrap = (value === UInt(max_value-1))
+         val wrap = (value === UInt(max-1))
          Mux(wrap, UInt(0), value + UInt(1))
+      }
+   }
+} 
+// Decrement the input "value", wrapping it if necessary.
+object WrapDec
+{
+   def apply(value: UInt, max: Int): UInt =
+   {
+      if (isPow2(max))
+         (value - UInt(1))(log2Up(max)-1,0)
+      else
+      {
+         val wrap = (value === UInt(0))
+         Mux(wrap, UInt(max-1), value - UInt(1))
       }
    }
 }
