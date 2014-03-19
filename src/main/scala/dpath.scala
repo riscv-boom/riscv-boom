@@ -1371,10 +1371,10 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
          , UInt(0) //br_unit.brinfo.mask
          , br_unit.pc_sel
          , Mux(take_pc, Str("TAKE_PC"), Str(" "))
-         , Mux(bp2_take_pc && !if_stalled, Str("BP2"), 
-           Mux(br_unit.take_pc, Str("BRU "),
+         , Mux(com_sret, Str("SRET"),
            Mux(flush_take_pc, Str("FLSH"),
-           Mux(com_sret, Str("SRET"),
+           Mux(br_unit.take_pc, Str("BRU "),
+           Mux(bp2_take_pc && !if_stalled, Str("BP2"), 
                               Str(" ")))))
          , if_pc_next
 //         , io.imem.resp.bits.taken

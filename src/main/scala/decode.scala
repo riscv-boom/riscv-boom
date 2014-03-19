@@ -150,7 +150,7 @@ class DecodeUnit(implicit conf: BOOMConfiguration) extends Module
    val exc_illegal    = !cs_inst_val 
 
    val fp_csrs = rocket.CSRs.fcsr :: rocket.CSRs.frm :: rocket.CSRs.fflags :: Nil
-   val legal_csrs = if (conf.rc.fpu) rocket.CSRs.all.toSet else rocket.CSRs.all.toSet -- fp_csrs
+   val legal_csrs = if (!conf.rc.fpu.isEmpty) rocket.CSRs.all.toSet else rocket.CSRs.all.toSet -- fp_csrs
 
    val raddr1         = uop.inst(RS1_MSB,RS1_LSB)
    val csr_addr       = uop.inst(CSR_ADDR_MSB, CSR_ADDR_LSB)
