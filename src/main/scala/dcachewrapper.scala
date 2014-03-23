@@ -150,7 +150,7 @@ class DCMemPortIo(implicit conf: DCacheConfig) extends Bundle
    val brinfo = new BrResolutionInfo().asOutput() 
    val nack   = new NackInfo().asInput() 
    val flush_pipe  = Bool(OUTPUT) //exception or other misspec which flushes entire pipeline
-   val ordered = Bool(OUTPUT) // is the dcache ordered? (fence is done)
+   val ordered = Bool(INPUT) // is the dcache ordered? (fence is done)
 
    val ptw = (new rocket.TLBPTWIO).flip
 //   val status = new Status().asOutput

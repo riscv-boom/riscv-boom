@@ -36,7 +36,10 @@ BOOM has the following (conceptual) stages:
   mem - Memory    
   wb  - Writeback
   com - Commit
-   
+
+Notes:
+   Fence.i is handled by holding up pipeline, inserting fencei, then waiting
+   for STQ to drain before fetching next instruction and clearing I$.
 
 BUGS:
   scall isn't being counted as a retired instruction
@@ -461,7 +464,6 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
  
    // must flush cache on process change
    // if PCR tells me "flush due to TLB", also flush BTB
-   // TODO XXX is this how to properly perform a fencei?
    io.imem.invalidate := Range(0,DECODE_WIDTH).map{i => com_valids(i) && com_uops(i).uopc === uopFENCEI}.reduce(_|_)
 //                        pcr_ptbr_wen // invalidate on process switch (page table
                                      // walker updated base register)
@@ -1041,6 +1043,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
 
    val lsu_clr_bsy_valid = Bool()
    val lsu_clr_bsy_rob_idx = UInt()
+   val lsu_fencei_rdy = Bool()
    
 
    lsu_io = (exe_units.find(_.is_mem_unit).get).io.lsu_io // for debug printing... assume only one has a mem_unit
@@ -1061,6 +1064,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    lsu_io.commit_load_mask  := com_ld_mask
    lsu_clr_bsy_valid        := lsu_io.lsu_clr_bsy_valid
    lsu_clr_bsy_rob_idx      := lsu_io.lsu_clr_bsy_rob_idx
+   lsu_fencei_rdy           := lsu_io.lsu_fencei_rdy
 
    lsu_io.exception         := com_exception
    lsu_io.lsu_misspec       := lsu_misspec      
@@ -1173,6 +1177,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
       lsu_misspec := rob.io.lsu_misspec   
       rob.io.lsu_clr_bsy_valid   := lsu_clr_bsy_valid
       rob.io.lsu_clr_bsy_rob_idx := lsu_clr_bsy_rob_idx
+      rob.io.lsu_fencei_rdy      := lsu_fencei_rdy
       
       // Commit (ROB outputs)
       com_valids  := rob.io.com_valids

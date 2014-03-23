@@ -106,7 +106,7 @@ object Decode
                SCALL   -> List(Y, uopNOP  , FU_ALU , RT_X  , RT_X  , RT_X  , IS_X, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, Y, Y, N, CSR.N), 
                SRET    -> List(Y, uopSRET , FU_ALU , RT_X  , RT_X  , RT_X  , IS_X, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, Y, N, Y, N, CSR.N), 
 
-               FENCE_I -> List(Y, uopFENCEI    ,FU_MEM, RT_X, RT_X, RT_X   , IS_X, N, Y, Y, M_X  , MSK_X , UInt(0), N, N, N, N, N, Y, Y, CSR.N), 
+               FENCE_I -> List(Y, uopFENCEI    ,FU_MEM, RT_X, RT_X, RT_X   , IS_X, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, Y, Y, CSR.N), 
                FENCE   -> List(Y, uopMEMSPECIAL,FU_MEM, RT_X, RT_X, RT_X   , IS_X, N, Y, Y, M_X  , MSK_X , UInt(0), N, N, N, N, N, Y, Y, CSR.N) // TODO PERF make fence higher performance
                )
                  

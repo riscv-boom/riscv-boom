@@ -247,6 +247,7 @@ class MemExeUnit()(implicit conf: BOOMConfiguration) extends ExecutionUnit(num_r
    io.lsu_io.stq_empty := lsu.io.stq_empty
    io.lsu_io.lsu_clr_bsy_valid := lsu.io.lsu_clr_bsy_valid // HACK TODO need a better way to clear the busy bits in the ROB
    io.lsu_io.lsu_clr_bsy_rob_idx := lsu.io.lsu_clr_bsy_rob_idx // HACK TODO need a better way to clear the busy bits in the rob
+   io.lsu_io.lsu_fencei_rdy := lsu.io.lsu_fencei_rdy 
    io.lsu_io.ldo_xcpt_val := lsu.io.ldo_xcpt_val
    io.lsu_io.ldo_xcpt_uop := lsu.io.ldo_xcpt_uop
    io.lsu_io.debug := lsu.io.debug
@@ -394,6 +395,7 @@ class ALUMulDMemExeUnit(is_branch_unit: Boolean = false, shares_pcr_wport: Boole
    io.lsu_io.stq_empty := lsu.io.stq_empty
    io.lsu_io.lsu_clr_bsy_valid := lsu.io.lsu_clr_bsy_valid // HACK TODO need a better way to clear the busy bits in the ROB
    io.lsu_io.lsu_clr_bsy_rob_idx := lsu.io.lsu_clr_bsy_rob_idx // HACK TODO need a better way to clear the busy bits in the rob
+   io.lsu_io.lsu_fencei_rdy := lsu.io.lsu_fencei_rdy 
    io.lsu_io.ldo_xcpt_val := lsu.io.ldo_xcpt_val
    io.lsu_io.ldo_xcpt_uop := lsu.io.ldo_xcpt_uop
    io.lsu_io.debug := lsu.io.debug
