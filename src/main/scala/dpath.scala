@@ -161,6 +161,7 @@ class MicroOp extends Bundle()
    val mem_cmd          = UInt(width = 4)             // sync primitives/cache flushes
    val mem_typ          = UInt(width = 3)             // memory mask type for loads/stores
    val is_fence         = Bool()                      
+   val is_fencei        = Bool()                      
    val is_store         = Bool()                      
    val is_load          = Bool()                      
    val is_unique        = Bool()                      // only allow this instruction in the pipeline 
@@ -358,6 +359,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    
    // Memory State
    var lsu_io:LoadStoreUnitIo = null
+   lsu_io = (exe_units.find(_.is_mem_unit).get).io.lsu_io // assume only one mem_unit
    
    // Writeback State
 
@@ -464,7 +466,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
  
    // must flush cache on process change
    // if PCR tells me "flush due to TLB", also flush BTB
-   io.imem.invalidate := Range(0,DECODE_WIDTH).map{i => com_valids(i) && com_uops(i).uopc === uopFENCEI}.reduce(_|_)
+   io.imem.invalidate := Range(0,DECODE_WIDTH).map{i => com_valids(i) && com_uops(i).is_fencei}.reduce(_|_)
 //                        pcr_ptbr_wen // invalidate on process switch (page table
                                      // walker updated base register)
    
@@ -718,6 +720,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
                      || br_unit.brinfo.mispredict
                      || flush_pipeline 
                      || dec_stall_next_inst
+                     || (dec_valids(w) && dec_uops(w).is_fencei && !lsu_io.lsu_fencei_rdy)
                      )
 
       // stall the next instruction following me in the decode bundle?
@@ -1041,12 +1044,6 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    val com_st_mask = Vec.fill(DECODE_WIDTH) {Bool()}
    val com_ld_mask = Vec.fill(DECODE_WIDTH) {Bool()}
 
-   val lsu_clr_bsy_valid = Bool()
-   val lsu_clr_bsy_rob_idx = UInt()
-   val lsu_fencei_rdy = Bool()
-   
-
-   lsu_io = (exe_units.find(_.is_mem_unit).get).io.lsu_io // for debug printing... assume only one has a mem_unit
       
    // enqueue basic store info in Decode 
    lsu_io.dec_uops := dec_uops
@@ -1062,9 +1059,6 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
 
    lsu_io.commit_store_mask := com_st_mask
    lsu_io.commit_load_mask  := com_ld_mask
-   lsu_clr_bsy_valid        := lsu_io.lsu_clr_bsy_valid
-   lsu_clr_bsy_rob_idx      := lsu_io.lsu_clr_bsy_rob_idx
-   lsu_fencei_rdy           := lsu_io.lsu_fencei_rdy
 
    lsu_io.exception         := com_exception
    lsu_io.lsu_misspec       := lsu_misspec      
@@ -1175,9 +1169,8 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
       
       // LSU <> ROB
       lsu_misspec := rob.io.lsu_misspec   
-      rob.io.lsu_clr_bsy_valid   := lsu_clr_bsy_valid
-      rob.io.lsu_clr_bsy_rob_idx := lsu_clr_bsy_rob_idx
-      rob.io.lsu_fencei_rdy      := lsu_fencei_rdy
+      rob.io.lsu_clr_bsy_valid   := lsu_io.lsu_clr_bsy_valid
+      rob.io.lsu_clr_bsy_rob_idx := lsu_io.lsu_clr_bsy_rob_idx
       
       // Commit (ROB outputs)
       com_valids  := rob.io.com_valids
@@ -1657,7 +1650,6 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
             , Mux(io.dmem.debug.nack, Str("NACK"), Str(" "))
             , Mux(io.dmem.debug.cache_nack, Str("CN"), Str(" "))
             )
-//      val lsu_io = (exe_units.find(_.is_mem_unit).get).io.lsu_io // for debug printing... assume only one has a mem_unit
       for (i <- 0 until NUM_LSU_ENTRIES)
       {
          debug_string = sprintf("%s         ldq[%d]=(%s%s%s%s%s%s%d) st_dep(%d,m=%x) 0x%x %s %s   saq[%d]=(%s%s%s%s%s%s) 0x%x -> 0x%x %s %s %s"

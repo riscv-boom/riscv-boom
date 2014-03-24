@@ -68,7 +68,6 @@ class RobIo(machine_width: Int, num_wakeup_ports: Int)  extends Bundle()
 
    val lsu_clr_bsy_valid = Bool(INPUT)
    val lsu_clr_bsy_rob_idx = UInt(INPUT, ROB_ADDR_SZ)
-   val lsu_fencei_rdy    = Bool(INPUT)
 
    // Handle Exceptions/ROB Rollback
    val com_exception    = Bool(OUTPUT)
@@ -238,7 +237,8 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
       {
          rob_val(rob_tail)       := Bool(true)
          rob_bsy(rob_tail)       := io.dis_uops(w).uopc != uopSRET &&  // TODO do I need to do this for eret? or should I treat it like it's an exception
-                                    io.dis_uops(w).uopc != uopMEMSPECIAL 
+                                    io.dis_uops(w).uopc != uopMEMSPECIAL &&
+                                    !(io.dis_uops(w).is_fencei)
          rob_uop(rob_tail)       := io.dis_uops(w)
          rob_exception(rob_tail) := io.dis_uops(w).exception 
          rob_exc_cause(rob_tail) := io.dis_uops(w).exc_cause
@@ -298,10 +298,7 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
       // Commit or Rollback
 
       // can this instruction commit? (the check for exceptions/rob_state happens later) 
-      can_commit(w) := rob_val(rob_head) && (!(rob_bsy(rob_head)) || 
-                                            (rob_uop(rob_head).uopc === uopFENCEI && io.lsu_fencei_rdy) 
-                                            // TODO HACK better way to handle fencei? this is too special case, and possibly on the critical path
-                                            )
+      can_commit(w) := rob_val(rob_head) && !(rob_bsy(rob_head)) 
 
       val com_idx = UInt() 
       com_idx := rob_head
