@@ -151,6 +151,7 @@ class LoadStoreUnitIo(pl_width: Int)  extends Bundle()
          val stq_executed = Bool()
          val stq_succeeded = Bool()
          val stq_committed = Bool()
+         val stq_uop = new MicroOp()
       }}
    }.asOutput
 }
@@ -738,6 +739,7 @@ class LoadStoreUnit(pl_width: Int) extends Module
          stq_uop(i).br_mask := Bits(0)
          
          st_brkilled_mask(i):= Bool(true)
+         // TODO add an assert to catch clearing a committed store
       }
       .elsewhen(io.brinfo.valid && !io.brinfo.mispredict && entry_match && stq_entry_val(i))
       {
@@ -1018,6 +1020,7 @@ class LoadStoreUnit(pl_width: Int) extends Module
       io.debug.entry(i).stq_committed := stq_committed(i)
       io.debug.entry(i).saq_addr := saq_addr(i)
       io.debug.entry(i).sdq_data := sdq_data(i)
+      io.debug.entry(i).stq_uop  := stq_uop(i)
    }
 
 }

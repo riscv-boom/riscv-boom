@@ -393,6 +393,10 @@ class BranchMaskGenerationLogic(val pl_width: Int) extends Module
       
       val brinfo         = new BrResolutionInfo().asInput
       val flush_pipeline = Bool(INPUT)
+
+      val debug = new Bundle {
+         val branch_mask = Bits(width = MAX_BR_COUNT)
+      }.asOutput()
    }
 
    val branch_mask       = Reg(init = Bits(0, MAX_BR_COUNT))
@@ -444,6 +448,8 @@ class BranchMaskGenerationLogic(val pl_width: Int) extends Module
    {
       branch_mask := GetNewBrMask(io.brinfo, curr_br_mask)
    }
+
+   io.debug.branch_mask := branch_mask
 
 }
 

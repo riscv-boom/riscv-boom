@@ -1460,7 +1460,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
             )
       }
              
-      debug_string = sprintf("%s) State: (%s:%s %s %s \033[1;31m%s\033[0m %s %s) %s %s\n"
+      debug_string = sprintf("%s) State: (%s:%s %s %s \033[1;31m%s\033[0m %s %s) BMsk:%x %s %s\n"
          , debug_string
          , Mux(rob.io.debug.state === UInt(0), Str("RESET"),
            Mux(rob.io.debug.state === UInt(1), Str("NORMAL"),
@@ -1473,6 +1473,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
          , Mux(flush_pipeline, Str("FLUSH_PIPELINE"), Str(" "))
          , Mux(branch_mask_full.reduce(_|_), Str("BR_MSK_FULL"), Str(" "))
          , Mux(io.dmem.req.ready, Str("D$_Rdy"), Str("D$_BSY"))
+         , dec_brmask_logic.io.debug.branch_mask
          , Mux(pcr.io.status.s, Str("SUPERVISOR"), Str("USERMODE"))
          , Mux(throw_assert, Str("ASSERT"), Str("_"))
          )
@@ -1652,7 +1653,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
             )
       for (i <- 0 until NUM_LSU_ENTRIES)
       {
-         debug_string = sprintf("%s         ldq[%d]=(%s%s%s%s%s%s%d) st_dep(%d,m=%x) 0x%x %s %s   saq[%d]=(%s%s%s%s%s%s) 0x%x -> 0x%x %s %s %s"
+         debug_string = sprintf("%s         ldq[%d]=(%s%s%s%s%s%s%d) st_dep(%d,m=%x) 0x%x %s %s   saq[%d]=(%s%s%s%s%s%s) b:%x 0x%x -> 0x%x %s %s %s"
             , debug_string
             , UInt(i, MEM_ADDR_SZ)
             , Mux(lsu_io.debug.entry(i).laq_allocated, Str("V"), Str("-"))
@@ -1676,6 +1677,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
             , Mux(lsu_io.debug.entry(i).stq_committed, Str("C"), Str("-"))
             , Mux(lsu_io.debug.entry(i).stq_executed, Str("E"), Str("-"))
             , Mux(lsu_io.debug.entry(i).stq_succeeded, Str("S"), Str("-"))
+            , lsu_io.debug.entry(i).stq_uop.br_mask
             , lsu_io.debug.entry(i).saq_addr(19,0)
             , lsu_io.debug.entry(i).sdq_data
             
