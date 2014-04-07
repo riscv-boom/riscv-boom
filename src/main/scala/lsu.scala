@@ -8,11 +8,11 @@
 // Load/Store Unit is made up of the Load-Address Queue, the Store-Address
 // Queue, and the Store-Data queue (LAQ, SAQ, and SDQ). 
 //
-// Stores are sent to memory at commit, loads are executed optimstically ASAP,
-// and re-executed if a misspeculation was discovered (or a hazard
-// prevented execution).
-// If a LoadAddr and StoreAddr match, the Load can receive its data by
-// forwarding data out of the Store-Data Queue.
+// Stores are sent to memory at (well, after) commit, loads are executed
+// optimstically ASAP.  If a misspeculation was discovered, the pipeline is
+// cleared. Loads put to sleep are retried.  If a LoadAddr and StoreAddr match,
+// the Load can receive its data by forwarding data out of the Store-Data
+// Queue.
 
 // Currently, loads are sent to memory immediately, and in parallel do an
 // associative search of the SAQ, on entering the LSU. If a hit on the SAQ
@@ -235,7 +235,8 @@ class LoadStoreUnit(pl_width: Int) extends Module
    val ld_iss_val = Bool()
    val st_iss_val = Bool()
 
-   // for now, only execute slow loads at commit time
+   // for now, only execute the sleeping load at the head of the LAQ
+   // wasteful if the laq_head has already been executed
    slow_ld_iss_idx := laq_head
     
    clear_store := Bool(false)                     
@@ -406,6 +407,10 @@ class LoadStoreUnit(pl_width: Int) extends Module
    // a full address match
    val forwarding_matches  = Vec.fill(num_st_entries) { Bool() } 
   
+   val force_ld_to_sleep = Bool()
+   force_ld_to_sleep := Bool(false)
+
+   // TODO totally refactor how conflict/forwarding logic is generated
    for (i <- 0 until num_st_entries)
    {
       val s_addr = saq_addr(i)
@@ -446,7 +451,16 @@ class LoadStoreUnit(pl_width: Int) extends Module
       {
          forwarding_matches(i) := Bool(true)
       }
+   
+      // did a load see a conflicting store (sb->lw) or a fence? if so, put the load to sleep
+      when ((stq_entry_val(i) && st_dep_mask(i) && stq_uop(i).is_fence) || 
+            (dword_addr_matches(i) && (l_uop.mem_typ != stq_uop(i).mem_typ) && ((read_mask & write_mask) != Bits(0))))
+      {
+         force_ld_to_sleep := Bool(true)
+      }
    }
+
+
 
 
    
@@ -481,7 +495,7 @@ class LoadStoreUnit(pl_width: Int) extends Module
    }
    .otherwise
    {
-      r_forward_std_val := (req_fire_load_fast || req_fire_load_sleeper) && forwarding_age_logic.io.forwarding_val && io.dmem_req_ready
+      r_forward_std_val := (req_fire_load_fast || req_fire_load_sleeper) && forwarding_age_logic.io.forwarding_val && !force_ld_to_sleep && io.dmem_req_ready
    }
 
    val mem_new_br_mask = Bits()
