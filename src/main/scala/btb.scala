@@ -31,7 +31,7 @@ class BTBIO(implicit conf: BTBConfig) extends Bundle
 
  
 // fully-associative branch target buffer
-class BTB(implicit conf: BTBConfig) extends Module
+class BTB(fetchWidth: Int)(implicit conf: BTBConfig) extends Module
 {
   val io = new BTBIO
 
@@ -57,18 +57,18 @@ class BTB(implicit conf: BTBConfig) extends Module
     
     // for superscalar, store which inst is the branch in the tag, but don't
     // check against it
-    val msk_sz = if (conf.fetchWidth == 1) 2 else (log2Up(conf.fetchWidth) + 2)
+    val msk_sz = if (fetchWidth == 1) 2 else (log2Up(fetchWidth) + 2)
     val check_mask = Cat(Fill(conf.as.vaddrBits-msk_sz, Bits(1,1)), Fill(msk_sz, Bits(0,1)))
 
     val tag_check = tag & check_mask
     // idx of the predicting branch
     val hit_idx = UInt()
-    if (conf.fetchWidth == 1) hit_idx := UInt(0)
+    if (fetchWidth == 1) hit_idx := UInt(0)
                           hit_idx := tag(msk_sz-1,2)
 
     // is the branch masked off by the PC? 
     val br_too_old = Bool()
-    if (conf.fetchWidth == 1) br_too_old := Bool(false)
+    if (fetchWidth == 1) br_too_old := Bool(false)
     else                  br_too_old := io.current_pc(msk_sz-1,2) > hit_idx
 
     hits(i)     := valid(i) && tag_check === (io.current_pc & check_mask) && !br_too_old

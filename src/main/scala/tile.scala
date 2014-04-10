@@ -28,7 +28,7 @@ class BoomTile(resetSignal: Bool = null)(confIn: BOOMConfiguration) extends Modu
   val rc = confIn.rc
   implicit val tlConf = rc.tl
   implicit val lnConf = rc.tl.ln
-  implicit val icConf = rc.icache.copy(ibytes = (FETCH_WIDTH*4), btb = BTBConfig(rc.as, BTB_NUM_ENTRIES, rc.icache.btb.nras, FETCH_WIDTH))
+  implicit val icConf = rc.icache.copy(ibytes = (FETCH_WIDTH*4), btb = rc.icache.btb.copy(entries = BTB_NUM_ENTRIES))
   implicit val dcConf = rc.dcache.copy(reqtagbits = rc.dcacheReqTagBits + log2Up(dcachePorts), databits = rc.xprlen)
 
   implicit val new_rc : rocket.RocketConfiguration = rc.copy(icache = icConf, dcache = dcConf, retireWidth = COMMIT_WIDTH)

@@ -8,7 +8,6 @@ import rocket.ICacheConfig
 import rocket.ICache
 import rocket.Util._
 
-
 class FrontendReq(implicit conf: ICacheConfig) extends Bundle {
   val pc = UInt(width = conf.as.vaddrBits+1)
   val mispredict = Bool()
@@ -47,7 +46,7 @@ class Frontend(implicit c: ICacheConfig) extends Module
     val mem = new UncachedTileLinkIO
   }
   
-  val btb = Module(new BTB()(c.btb))
+  val btb = Module(new BTB(FETCH_WIDTH)(c.btb))
   val icache = Module(new ICache)
   val tlb = Module(new rocket.TLB(c.ntlb))
 
