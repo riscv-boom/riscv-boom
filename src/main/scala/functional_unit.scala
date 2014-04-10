@@ -22,7 +22,6 @@ import Node._
 
 import rocket.ALU._
 import rocket.Util._
-import uncore.constants.AddressConstants._
 import uncore.constants.MemoryOpConstants._
 
 
@@ -317,10 +316,10 @@ class ALUUnit(is_branch_unit: Boolean = false)
       // we can't push this through the ALU though, b/c jalr needs both PC+4 and rs1+offset
 
       def vaSign(a0: UInt, ea: Bits) = {                                        
-         // efficient means to compress 64-bit VA into VADDR_BITS+1 bits         
-         // (VA is bad if VA(VADDR_BITS) != VA(VADDR_BITS-1))                    
-         val a = a0 >> VADDR_BITS-1                                              
-         val e = ea(VADDR_BITS,VADDR_BITS-1)                                     
+         // efficient means to compress 64-bit VA into rc.as.vaddrBits+1 bits         
+         // (VA is bad if VA(rc.as.vaddrBits) != VA(rc.as.vaddrBits-1))                    
+         val a = a0 >> rc.as.vaddrBits-1
+         val e = ea(rc.as.vaddrBits,rc.as.vaddrBits-1)                                     
          Mux(a === UInt(0) || a === UInt(1), e != UInt(0),                       
          Mux(a === SInt(-1) || a === SInt(-2), e === SInt(-1),                   
             e(0)))                                                                  
@@ -334,7 +333,7 @@ class ALUUnit(is_branch_unit: Boolean = false)
       val bj_offset = imm_xprlen(20,0).toSInt
       val bj64 = bj_base + bj_offset                                                    
       val bj_msb = Mux(uop.uopc === uopJALR, vaSign(io.req.bits.rs1_data, bj64), vaSign(uop_pc_, bj64))
-      val bj_addr = Cat(bj_msb, bj64(VADDR_BITS-1,0))                                   
+      val bj_addr = Cat(bj_msb, bj64(rc.as.vaddrBits-1,0))                                   
 
 
       io.br_unit.brjmp_target   := bj_addr
@@ -386,9 +385,9 @@ class MemAddrCalcUnit()(implicit conf: BOOMConfiguration) extends PipelinedFunct
    alu.io.dw  := DW_XPR
                    
    val adder_out = alu.io.adder_out
-   val ea_sign = Mux(adder_out(VADDR_BITS-1), ~adder_out(63,VADDR_BITS) === UInt(0), 
-                                                       adder_out(63,VADDR_BITS) != UInt(0))
-   val effective_address = Cat(ea_sign, adder_out(VADDR_BITS-1,0)).toUInt         
+   val ea_sign = Mux(adder_out(rc.as.vaddrBits-1), ~adder_out(63,rc.as.vaddrBits) === UInt(0), 
+                                                       adder_out(63,rc.as.vaddrBits) != UInt(0))
+   val effective_address = Cat(ea_sign, adder_out(rc.as.vaddrBits-1,0)).toUInt         
                                
    // TODO only use one register read port
    io.resp.bits.data := Mux(io.req.bits.uop.uopc === uopSTD, io.req.bits.rs2_data,

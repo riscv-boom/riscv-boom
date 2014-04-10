@@ -152,7 +152,7 @@ class DCMemPortIo(implicit conf: DCacheConfig) extends Bundle
    val flush_pipe  = Bool(OUTPUT) //exception or other misspec which flushes entire pipeline
    val ordered = Bool(INPUT) // is the dcache ordered? (fence is done)
 
-   val ptw = (new rocket.TLBPTWIO).flip
+   val ptw = new rocket.TLBPTWIO()(conf.as).flip
 //   val status = new Status().asOutput
 
    val debug = new Bundle

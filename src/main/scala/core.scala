@@ -15,7 +15,7 @@ class CoreIo(implicit conf: BOOMConfiguration) extends Bundle
   val host = new HTIFIO(conf.rc.tl.ln.nClients)
   val dmem = new DCMemPortIo()(conf.rc.dcache)
   val imem = new CPUFrontendIO()(conf.rc.icache)
-  val ptw  = new DatapathPTWIO().flip
+  val ptw  = new DatapathPTWIO()(conf.rc.as).flip
 }
  
 class Core(implicit conf: BOOMConfiguration) extends Module

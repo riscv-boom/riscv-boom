@@ -16,7 +16,6 @@ import scala.collection.mutable.ArrayBuffer
 import rocket.Instructions._
 import rocket.ALU._
 import FUCode._
-import uncore.constants.AddressConstants._
 
 import rocket._
 
@@ -222,7 +221,7 @@ class DpathIo(implicit conf: BOOMConfiguration) extends Bundle()
    val host = new uncore.HTIFIO(conf.rc.tl.ln.nClients)
    val imem = new CPUFrontendIO()(conf.rc.icache)
    val dmem = new DCMemPortIo()(conf.rc.dcache)
-   val ptw = (new rocket.DatapathPTWIO).flip 
+   val ptw =  new rocket.DatapathPTWIO()(conf.rc.as).flip 
 }
 
 class DatPath(implicit conf: BOOMConfiguration) extends Module 
@@ -241,7 +240,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
 
    // Instruction Fetch State
    val if_pc_next     = UInt(width = XPRLEN)
-   val pcr_exc_target = UInt(width = VADDR_BITS) // chisel bug todo remove this width
+   val pcr_exc_target = UInt(width = rc.as.vaddrBits) // chisel bug todo remove this width
    
   
    // Branch Predict State
@@ -428,7 +427,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    
    // round off to nearest fetch boundary
    val lsb = log2Up(conf.rc.icache.ibytes)
-   val aligned_fetch_pc = Cat(io.imem.resp.bits.pc(VADDR_BITS+1-1,lsb), Bits(0,lsb)).toUInt
+   val aligned_fetch_pc = Cat(io.imem.resp.bits.pc(rc.as.vaddrBits+1-1,lsb), Bits(0,lsb)).toUInt
    fetch_bundle.pc   := aligned_fetch_pc
 
    for (i <- 0 until FETCH_WIDTH)

@@ -13,6 +13,7 @@ package BOOM
 import Chisel._
 import Node._
 import uncore._
+import rocket.BTBConfig
 
  
 class BoomTile(resetSignal: Bool = null)(confIn: BOOMConfiguration) extends Module(_reset = resetSignal) 
@@ -27,7 +28,7 @@ class BoomTile(resetSignal: Bool = null)(confIn: BOOMConfiguration) extends Modu
   val rc = confIn.rc
   implicit val tlConf = rc.tl
   implicit val lnConf = rc.tl.ln
-  implicit val icConf = rc.icache.copy(ibytes = (FETCH_WIDTH*4), nbtb= BTB_NUM_ENTRIES)
+  implicit val icConf = rc.icache.copy(ibytes = (FETCH_WIDTH*4), btb = BTBConfig(rc.as, BTB_NUM_ENTRIES, rc.icache.btb.nras, FETCH_WIDTH))
   implicit val dcConf = rc.dcache.copy(reqtagbits = rc.dcacheReqTagBits + log2Up(dcachePorts), databits = rc.xprlen)
 
   implicit val new_rc : rocket.RocketConfiguration = rc.copy(icache = icConf, dcache = dcConf, retireWidth = COMMIT_WIDTH)
@@ -41,7 +42,7 @@ class BoomTile(resetSignal: Bool = null)(confIn: BOOMConfiguration) extends Modu
   }
 
   val core = Module(new Core)
-  val icache = Module(new Frontend)
+  val icache = Module(new Frontend()(icConf))
   val dcache = Module(new DCacheWrapper) // wrapper for HellaCache
   val ptw = Module(new rocket.PTW(2)) // 2 ports, 1 from I$, 1 from D$
 
@@ -75,11 +76,10 @@ class BoomTile(resetSignal: Bool = null)(confIn: BOOMConfiguration) extends Modu
   memArb.io.out.grant <> io.tilelink.grant
   io.tilelink.grant_ack <> memArb.io.out.grant_ack
   dcache.io.mem.probe <> io.tilelink.probe
-  io.tilelink.release.data <> dcache.io.mem.release.data
-  io.tilelink.release.meta.valid   := dcache.io.mem.release.meta.valid
-  dcache.io.mem.release.meta.ready := io.tilelink.release.meta.ready
-  io.tilelink.release.meta.bits := dcache.io.mem.release.meta.bits
-  io.tilelink.release.meta.bits.payload.client_xact_id :=  Cat(dcache.io.mem.release.meta.bits.payload.client_xact_id, UInt(dcachePortId, log2Up(memPorts))) // Mimic client id extension done by UncachedTileLinkIOArbiter for Acquires from either client)
+  io.tilelink.release.valid   := dcache.io.mem.release.valid
+  dcache.io.mem.release.ready := io.tilelink.release.ready
+  io.tilelink.release.bits := dcache.io.mem.release.bits
+  io.tilelink.release.bits.payload.client_xact_id :=  Cat(dcache.io.mem.release.bits.payload.client_xact_id, UInt(dcachePortId, log2Up(memPorts))) // Mimic client id extension done by UncachedTileLinkIOArbiter for Acquires from either client)
 }
 
 }

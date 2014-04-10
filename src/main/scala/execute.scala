@@ -17,9 +17,7 @@ import Chisel._
 import Node._
 
 import FUCode._
-import uncore.constants.AddressConstants._
 import uncore.constants.MemoryOpConstants._
-
  
 class ExeUnitResp extends Bundle()
 {
