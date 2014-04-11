@@ -717,8 +717,8 @@ class LoadStoreUnit(pl_width: Int)(implicit conf: BOOMConfiguration) extends Mod
    // detect which loads get marked as failures, but broadcast to the ROB the oldest failing load
    io.ldo_xcpt_val := failed_loads.reduce(_|_)
    // TODO abstract into a util
-//      PriorityEncoder(Vec.tabulate(num_ld_entries)(i => failed_loads(i) && UInt(i) < laq_head) ++ failed_loads)
-   val temp_bits = (Vec(Vec.tabulate(num_ld_entries)(i => failed_loads(i) && UInt(i) < laq_head) ++ failed_loads)).toBits
+//      PriorityEncoder(Vec.tabulate(num_ld_entries)(i => failed_loads(i) && UInt(i) >= laq_head) ++ failed_loads)
+   val temp_bits = (Vec(Vec.tabulate(num_ld_entries)(i => failed_loads(i) && UInt(i) >= laq_head) ++ failed_loads)).toBits
    val l_idx = PriorityEncoder(temp_bits)
    debug(temp_bits)
 
