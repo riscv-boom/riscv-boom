@@ -133,28 +133,11 @@ class IntegerIssueSlot(num_slow_wakeup_ports: Int) extends Module
          }
       }
    }
-//   .elsewhen (!slot_valid || io.issue)
-//   {
-//      next_p1 := Bool(false)
-//      next_p2 := Bool(false)
-//   }
    .otherwise
    {
       // slot is valid...
       next_p1 := slot_p1 
       next_p2 := slot_p2 
-
-      //for (i <- 0 until num_fast_wakeup_ports)
-      //{
-      //   when (io.fast_wakeup_vals(i) && (io.fast_wakeup_dsts(i) === slotUop.pop1))
-      //   {
-      //      next_p1_sb := next_p1_sb.bitSet(io.fast_wakeup_uops(i).wakeup_delay, Bool(true))
-      //   }
-      //   when (io.fast_wakeup_vals(i) && (io.fast_wakeup_dsts(i) === slotUop.pop2))
-      //   {
-      //      next_p2_sb := next_p2_sb.bitSet(io.fast_wakeup_uops(i).wakeup_delay, Bool(true))
-      //   }
-      //}
 
       for (i <- 0 until num_slow_wakeup_ports)
       {
@@ -190,7 +173,8 @@ class IntegerIssueSlot(num_slow_wakeup_ports: Int) extends Module
    val high_priority = Bool()
 
    high_priority := Bool(false)
-   //high_priority := slotUop.is_br_or_jmp // <<-- is the uop a branch or jmp instruction?
+//   high_priority := slotUop.is_br_or_jmp // <<-- is the uop a branch or jmp instruction?
+
 
 
    //------------------------------------------------------------- 
@@ -239,7 +223,6 @@ class IssueUnitIO(issue_width: Int, num_wakeup_ports: Int) extends Bundle
          val valid   = Bool()
          val uop     = new MicroOp()
          val request = Bool()
-         val request_hp = Bool()
          val issue   = Bool()
          val in_wen  = Bool()
          val p1      = Bool()
@@ -450,7 +433,6 @@ class IssueUnit(issue_width: Int, num_wakeup_ports: Int) extends Module
       io.debug.slot(i).valid   := issue_slot_io(i).valid
       io.debug.slot(i).uop     := issue_slot_io(i).outUop
       io.debug.slot(i).request := issue_slot_io(i).request
-      io.debug.slot(i).request_hp := issue_slot_io(i).request_hp
       io.debug.slot(i).issue   := issue_slot_io(i).issue
       io.debug.slot(i).in_wen  := issue_slot_io(i).in_wen
       
