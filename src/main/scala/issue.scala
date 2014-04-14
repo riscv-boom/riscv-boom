@@ -14,10 +14,8 @@ import scala.collection.mutable.ArrayBuffer
   
 //------------------------------------------------------------- 
 // Entry Slot in the Issue Station                              
-//                                                              
 
 class IntegerIssueSlotIo(num_wakeup_ports: Int) extends Bundle()
-//class IntegerIssueSlotIo(num_fast_wakeup_ports: Int, num_slow_wakeup_ports: Int) extends Bundle()
 {
    val id_num         = UInt(INPUT)
                       
@@ -25,15 +23,12 @@ class IntegerIssueSlotIo(num_wakeup_ports: Int) extends Bundle()
    val request        = Bool(OUTPUT)
    val issue          = Bool(INPUT) 
    
+   val request_hp     = Bool(OUTPUT) // high priority request 
+   
    val kill           = Bool(INPUT)
    
    val brinfo         = new BrResolutionInfo().asInput()
    
-   // fast wakeup comes from just-issued uops with known, fixed latencies
-//   val fast_wakeup_vals    = Vec.fill(num_fast_wakeup_ports) { Bool(INPUT) }
-//   val fast_wakeup_dsts    = Vec.fill(num_fast_wakeup_ports) { UInt(INPUT, PREG_SZ) }
-//   val fast_wakeup_uopc    = Vec.fill(num_fast_wakeup_ports) { UInt(INPUT, UOPC_SZ) } // provides the wakeup timer info
-
    // slow wakeup for uops with variable, unknown latencies (cache misses, div, etc.)
    val wakeup_vals    = Vec.fill(num_wakeup_ports) { Bool(INPUT) }
    val wakeup_dsts    = Vec.fill(num_wakeup_ports) { UInt(INPUT, PREG_SZ) }
@@ -48,18 +43,7 @@ class IntegerIssueSlotIo(num_wakeup_ports: Int) extends Bundle()
       val p1 = Bool()
       val p2 = Bool()
    }.asOutput
-
 }
-
-//class IntegerIssueSlot(num_fast_wakeup_ports: Int, num_slow_wakeup_ports: Int) extends Module
- 
-//   val io = new IntegerIssueSlotIo(num_fast_wakeup_ports, num_slow_wakeup_ports)
-//   val next_p1_sb = Bits(width = log2Up(MAX_WAKEUP_DELAY))
-//   val next_p2_sb = Bits(width = log2Up(MAX_WAKEUP_DELAY))
-//   val p1_scoreboard = Reg(resetVal = Bits(0,log2Up(MAX_WAKEUP_DELAY)), data = (next_p1_sb>>1))
-//   val p2_scoreboard = Reg(resetVal = Bits(0,log2Up(MAX_WAKEUP_DELAY)), data = (next_p2_sb>>1))
-//   next_p1_sb := p1_scoreboard
-//   next_p2_sb := p2_scoreboard
 
 class IntegerIssueSlot(num_slow_wakeup_ports: Int) extends Module
 {
@@ -197,9 +181,22 @@ class IntegerIssueSlot(num_slow_wakeup_ports: Int) extends Module
       slotUop.br_mask := GetNewBrMask(io.brinfo, slotUop)
    }
 
+   //------------------------------------------------------------- 
+   // High Priority Request
+   // Allow the issue window to demand a "high priority" request.
+   // The issue-select logic will consider high priority requests first 
+   // (if enabled).
 
+   val high_priority = Bool()
+
+   high_priority := Bool(false)
+   //high_priority := slotUop.is_br_or_jmp // <<-- is the uop a branch or jmp instruction?
+
+
+   //------------------------------------------------------------- 
    // Request Logic
-   io.request  := slot_valid && slot_p1 && slot_p2 && !io.kill 
+   io.request    := slot_valid && slot_p1 && slot_p2 && !io.kill 
+   io.request_hp := io.request && high_priority
    
    //assign outputs
    io.valid    := slot_valid
@@ -242,6 +239,7 @@ class IssueUnitIO(issue_width: Int, num_wakeup_ports: Int) extends Bundle
          val valid   = Bool()
          val uop     = new MicroOp()
          val request = Bool()
+         val request_hp = Bool()
          val issue   = Bool()
          val in_wen  = Bool()
          val p1      = Bool()
@@ -369,43 +367,73 @@ class IssueUnit(issue_width: Int, num_wakeup_ports: Int) extends Module
 
    //-------------------------------------------------------------
    // Issue Select Logic                                        
-
-   val indices = Vec.fill(issue_width) { UInt(width = log2Up(INTEGER_ISSUE_SLOT_COUNT)) }
+ 
+//   val requests:Bits = null
+//   val requests = (Vec(
+//                     Vec.tabulate(INTEGER_ISSUE_SLOT_COUNT)(i => issue_slot_io(i).request_hp) ++
+//                     Vec.tabulate(INTEGER_ISSUE_SLOT_COUNT)(i => issue_slot_io(i).request)  
+//                     )).toBits
+ 
+   val num_requestors = INTEGER_ISSUE_SLOT_COUNT
 
    for (w <- 0 until issue_width)
    {
-      indices(w) := UInt(0)
       io.iss_valids(w) := Bool(false)
       io.iss_uops(w)   := nullUop
    }
 
    // TODO can we use flatten to get an array of bools on issue_slot(*).request?
-   val request_not_satisfied = Array.fill(INTEGER_ISSUE_SLOT_COUNT){Bool()}
+   val lo_request_not_satisfied = Array.fill(num_requestors){Bool()}
+   val hi_request_not_satisfied = Array.fill(num_requestors){Bool()}
 
-   for (i <- 0 until INTEGER_ISSUE_SLOT_COUNT)
+   for (i <- 0 until num_requestors)
    {
-      request_not_satisfied(i) = issue_slot_io(i).request.toBool
-      issue_slot_io(i).issue  := Bool(false) // default
+      lo_request_not_satisfied(i) = issue_slot_io(i).request
+      hi_request_not_satisfied(i) = issue_slot_io(i).request_hp
+      issue_slot_io(i).issue := Bool(false) // default
    }
    
  
    for (w <- 0 until issue_width)
    {
       var port_issued = Bool(false) 
-      for (i <- 0 until INTEGER_ISSUE_SLOT_COUNT)
+
+      // first look for high priority requests
+      for (i <- 0 until num_requestors)
       {
          val can_allocate = (issue_slot_io(i).outUop.fu_code & io.fu_types(w)) != Bits(0)
          
-         when (request_not_satisfied(i) && can_allocate && !port_issued)
+         when (hi_request_not_satisfied(i) && can_allocate && !port_issued)
          {
             issue_slot_io(i).issue := Bool(true) 
             io.iss_valids(w)       := Bool(true)
             io.iss_uops(w)         := issue_slot_io(i).outUop
          }
 
-         port_issued              = (request_not_satisfied(i) && can_allocate) | port_issued
+         val port_already_in_use     = port_issued
+         port_issued                 = (hi_request_not_satisfied(i) && can_allocate) | port_issued
+         // deassert lo_request if hi_request is 1.
+         lo_request_not_satisfied(i) = (lo_request_not_satisfied(i) && !hi_request_not_satisfied(i))
          // if request is 0, stay 0. only stay 1 if request is true and can't allocate
-         request_not_satisfied(i) = (request_not_satisfied(i) && !can_allocate) 
+         hi_request_not_satisfied(i) = (hi_request_not_satisfied(i) && (!can_allocate || port_already_in_use))
+      }
+
+      // now look for low priority requests
+      for (i <- 0 until num_requestors)
+      {
+         val can_allocate = (issue_slot_io(i).outUop.fu_code & io.fu_types(w)) != Bits(0)
+         
+         when (lo_request_not_satisfied(i) && can_allocate && !port_issued)
+         {
+            issue_slot_io(i).issue := Bool(true) 
+            io.iss_valids(w)       := Bool(true)
+            io.iss_uops(w)         := issue_slot_io(i).outUop
+         }
+
+         val port_already_in_use     = port_issued
+         port_issued                 = (lo_request_not_satisfied(i) && can_allocate) | port_issued
+         // if request is 0, stay 0. only stay 1 if request is true and can't allocate or port already in use
+         lo_request_not_satisfied(i) = (lo_request_not_satisfied(i) && (!can_allocate || port_already_in_use)) 
       }
    }
 
@@ -422,6 +450,7 @@ class IssueUnit(issue_width: Int, num_wakeup_ports: Int) extends Module
       io.debug.slot(i).valid   := issue_slot_io(i).valid
       io.debug.slot(i).uop     := issue_slot_io(i).outUop
       io.debug.slot(i).request := issue_slot_io(i).request
+      io.debug.slot(i).request_hp := issue_slot_io(i).request_hp
       io.debug.slot(i).issue   := issue_slot_io(i).issue
       io.debug.slot(i).in_wen  := issue_slot_io(i).in_wen
       
