@@ -1223,7 +1223,9 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    when (com_valids.toBits.orR)
    {
 //      idle_cycles := UInt(0) ^ (rob.io.com_valids.toBits ^ rob.io.com_valids.toBits)
-      idle_cycles := UInt(0) ^ (rob.io.com_valids(0) ^ rob.io.com_valids(0)) ^ (rob.io.com_valids(1) ^ rob.io.com_valids(1)) // weird chisel bug we're trying to solve
+//      idle_cycles := UInt(0) ^ (rob.io.com_valids(0) ^ rob.io.com_valids(0)) ^ (rob.io.com_valids(1) ^ rob.io.com_valids(1)) // weird chisel bug we're trying to solve
+//      idle_cycles := UInt(0) ^ rob.io.com_valids.map(_^_).foldLeft(_^_)
+      idle_cycles := UInt(0) 
    }
    .otherwise
    {

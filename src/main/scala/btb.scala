@@ -52,6 +52,8 @@ class BTB(fetchWidth: Int)(implicit conf: BTBConfig) extends Module
    var debug_string = sprintf(" ")
 
 
+   println("Fetch Width = " + (fetchWidth))
+
   for (i <- 0 until conf.entries) {
     val tag = Reg(UInt())
     
@@ -64,12 +66,12 @@ class BTB(fetchWidth: Int)(implicit conf: BTBConfig) extends Module
     // idx of the predicting branch
     val hit_idx = UInt()
     if (fetchWidth == 1) hit_idx := UInt(0)
-                          hit_idx := tag(msk_sz-1,2)
+    else                 hit_idx := tag(msk_sz-1,2)
 
     // is the branch masked off by the PC? 
     val br_too_old = Bool()
     if (fetchWidth == 1) br_too_old := Bool(false)
-    else                  br_too_old := io.current_pc(msk_sz-1,2) > hit_idx
+    else                 br_too_old := io.current_pc(msk_sz-1,2) > hit_idx
 
     hits(i)     := valid(i) && tag_check === (io.current_pc & check_mask) && !br_too_old
     updates(i)  := valid(i) && tag_check === (io.correct_pc & check_mask)
