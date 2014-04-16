@@ -52,8 +52,6 @@ class BTB(fetchWidth: Int)(implicit conf: BTBConfig) extends Module
    var debug_string = sprintf(" ")
 
 
-   println("Fetch Width = " + (fetchWidth))
-
   for (i <- 0 until conf.entries) {
     val tag = Reg(UInt())
     

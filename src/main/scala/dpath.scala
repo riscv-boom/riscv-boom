@@ -1276,24 +1276,23 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    debug(irt_reg)
    debug(irt_user_reg)
 
-
    // UARCH Counters
-   pcr.io.uarch_counters(0) := br_unit.brinfo.valid
-   pcr.io.uarch_counters(1) := br_unit.brinfo.mispredict
-   pcr.io.uarch_counters(2) := com_exception
-   pcr.io.uarch_counters(3) := !rob_rdy
-   pcr.io.uarch_counters(4) := laq_full
-   pcr.io.uarch_counters(5) := stq_full
-   pcr.io.uarch_counters(6) := branch_mask_full.reduce(_|_)
-   pcr.io.uarch_counters(7) := tsc_reg
-   pcr.io.uarch_counters(8) := irt_reg
-   pcr.io.uarch_counters(9) :=  Bool(true)
-   pcr.io.uarch_counters(10) := Bool(true)
-   pcr.io.uarch_counters(11) := Bool(true)
-   pcr.io.uarch_counters(12) := Bool(true)
-   pcr.io.uarch_counters(13) := Bool(true)
-   pcr.io.uarch_counters(14) := Bool(true)
-   pcr.io.uarch_counters(15) := Bool(true)
+   pcr.io.uarch_counters(0)  := br_unit.brinfo.valid
+   pcr.io.uarch_counters(1)  := br_unit.brinfo.mispredict
+   pcr.io.uarch_counters(2)  := com_exception
+   pcr.io.uarch_counters(3)  := !rob_rdy
+   pcr.io.uarch_counters(4)  := laq_full
+   pcr.io.uarch_counters(5)  := stq_full
+   pcr.io.uarch_counters(6)  := branch_mask_full.reduce(_|_)
+   pcr.io.uarch_counters(7)  := Bool(true)
+   pcr.io.uarch_counters(8)  := Bool(true)
+   pcr.io.uarch_counters(9)  := lsu_io.counters.ld_valid
+   pcr.io.uarch_counters(10) := lsu_io.counters.ld_forwarded
+   pcr.io.uarch_counters(11) := lsu_io.counters.ld_sleep
+   pcr.io.uarch_counters(12) := lsu_io.counters.ld_order_fail
+   pcr.io.uarch_counters(13) := com_uops.map(_.is_br_or_jmp.toUInt).reduce(_+_)
+   pcr.io.uarch_counters(14) := com_uops.map(_.is_store.toUInt).reduce(_+_)
+   pcr.io.uarch_counters(15) := com_uops.map(_.is_load.toUInt).reduce(_+_)
                                       
            
    //-------------------------------------------------------------

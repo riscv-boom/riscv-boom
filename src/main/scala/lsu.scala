@@ -116,6 +116,15 @@ class LoadStoreUnitIo(pl_width: Int)  extends Bundle()
    val dmem_req_ready = Bool(INPUT)
    val dmem_is_ordered = Bool(INPUT)
 
+   val counters = new Bundle
+   {
+      val ld_valid = Bool() // a load address micro-op has entered the LSU
+      val ld_forwarded = Bool()
+      val ld_sleep = Bool()
+      val ld_killed = Bool()
+      val ld_order_fail = Bool()
+   }.asOutput
+
    val debug = new Bundle
    {
       // TODO for some wierd reason, these variables MUST be declared with widths, or inference hangs (perhaps due to how LSU gets seen by dpath.scala?
@@ -625,7 +634,7 @@ class LoadStoreUnit(pl_width: Int)(implicit conf: BOOMConfiguration) extends Mod
           
    //-------------------------------------------------------------
    //-------------------------------------------------------------
-   // Search LAQ for misspeculated loads (when a store is committed)
+   // Search LAQ for misspeculated loads (when a store is executed)
    //-------------------------------------------------------------
    //-------------------------------------------------------------
 
@@ -648,7 +657,7 @@ class LoadStoreUnit(pl_width: Int)(implicit conf: BOOMConfiguration) extends Mod
    //    Look for memory ordering failures.
    val s_addr      = io.exe_resp.bits.data.toUInt
    val st_mask     = GenByteMask(s_addr, exe_uop.mem_typ)
-   val st_is_fence = exe_uop.is_fence //(exe_uop.uopc === uopMEMSPECIAL || exe_uop.uopc === uopFENCEI)
+   val st_is_fence = exe_uop.is_fence 
    val stq_idx     = exe_uop.stq_idx
    val failed_loads = Vec.fill(num_ld_entries) {Bool()}
 
@@ -716,7 +725,6 @@ class LoadStoreUnit(pl_width: Int)(implicit conf: BOOMConfiguration) extends Mod
  
    // detect which loads get marked as failures, but broadcast to the ROB the oldest failing load
    io.ldo_xcpt_val := failed_loads.reduce(_|_)
-   // TODO abstract into a util
 //      PriorityEncoder(Vec.tabulate(num_ld_entries)(i => failed_loads(i) && UInt(i) >= laq_head) ++ failed_loads)
    val temp_bits = (Vec(Vec.tabulate(num_ld_entries)(i => failed_loads(i) && UInt(i) >= laq_head) ++ failed_loads)).toBits
    val l_idx = PriorityEncoder(temp_bits)
@@ -867,6 +875,9 @@ class LoadStoreUnit(pl_width: Int)(implicit conf: BOOMConfiguration) extends Mod
    val clr_ld = Bool()
    clr_ld := Bool(false)
 
+   val ld_was_put_to_sleep = Bool()
+   ld_was_put_to_sleep := Bool(false)
+
    when (io.nack.valid)
    {
       // the cache nacked our store
@@ -896,6 +907,7 @@ class LoadStoreUnit(pl_width: Int)(implicit conf: BOOMConfiguration) extends Mod
          when (clr_ld)
          {
             laq_executed(io.nack.lsu_idx) := Bool(false)
+            ld_was_put_to_sleep := Bool(true)
          }
       }
    }
@@ -998,7 +1010,14 @@ class LoadStoreUnit(pl_width: Int)(implicit conf: BOOMConfiguration) extends Mod
    io.lsu_fencei_rdy := io.stq_empty && io.dmem_is_ordered
 
    //-------------------------------------------------------------
-   // Debug outputs
+   // Debug & Counter outputs
+
+
+   io.counters.ld_valid      := io.exe_resp.valid && exe_uop.ctrl.is_load
+   io.counters.ld_forwarded  := io.forward_val
+   io.counters.ld_sleep      :=  ld_was_put_to_sleep
+   io.counters.ld_killed     := Bool(false) // unsure what definition of this should be! 
+   io.counters.ld_order_fail := io.ldo_xcpt_val
 
    io.debug.laq_head := laq_head
    io.debug.laq_tail := laq_tail
