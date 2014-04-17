@@ -34,13 +34,13 @@ trait BOOMProcConstants
    // Superscalar Widths
 
    // number of words we can fetch every cycle
-   val FETCH_WIDTH      = 2; require(FETCH_WIDTH == 1 || FETCH_WIDTH == 2)
+   val FETCH_WIDTH      = 1; require(FETCH_WIDTH == 1 || FETCH_WIDTH == 2)
 
-   val DECODE_WIDTH     = FETCH_WIDTH ; require(DECODE_WIDTH <= FETCH_WIDTH)
+   val DECODE_WIDTH     = FETCH_WIDTH; require(DECODE_WIDTH <= FETCH_WIDTH)
    val DISPATCH_WIDTH   = DECODE_WIDTH 
    val COMMIT_WIDTH     = DISPATCH_WIDTH
 
-   val ISSUE_WIDTH      = 2; require (ISSUE_WIDTH <= 3)
+   val ISSUE_WIDTH      = 1; require (ISSUE_WIDTH <= 3)
 
    
    //************************************
@@ -54,8 +54,8 @@ trait BOOMProcConstants
 
    val ENABLE_PREFETCHING   = false
    val ENABLE_BTB           = true
-   val ENABLE_ALU_BYPASSING = true
-   val ENABLE_REGFILE_BYPASSING = true    // bypass regfile write ports to read ports
+   val ENABLE_ALU_BYPASSING =  true
+   val ENABLE_REGFILE_BYPASSING = true // bypass regfile write ports to read ports
  
    val BTB_NUM_ENTRIES = 4
  
@@ -65,11 +65,11 @@ trait BOOMProcConstants
    val DC_NUM_WAYS = 2
    val DC_NUM_MSHR = 2    // secondary miss handler
 
-   val INTEGER_ISSUE_SLOT_COUNT = 14
-   val NUM_ROB_ENTRIES          = 32 // number of ROB entries (e.g., 32 entries for R10k)
+   val INTEGER_ISSUE_SLOT_COUNT = 8
+   val NUM_ROB_ENTRIES          = 14 // number of ROB entries (e.g., 32 entries for R10k)
    val NUM_ROB_ROWS             = NUM_ROB_ENTRIES/DECODE_WIDTH; require (NUM_ROB_ROWS % 2 == 0) 
 
-   val NUM_LSU_ENTRIES          = 8   // number of LD/ST entries
+   val NUM_LSU_ENTRIES          = 8  // number of LD/ST entries
    require (isPow2(NUM_LSU_ENTRIES))
    val ROB_ADDR_SZ = log2Up(NUM_ROB_ENTRIES) 
    val MEM_ADDR_SZ = log2Up(NUM_LSU_ENTRIES)
@@ -99,7 +99,7 @@ trait BOOMProcConstants
    // if pipeline goes idle, throw error
    // otherwise, reset pipeline and restart TODO on this feature
    val ON_IDLE_THROW_ERROR = true
-                                                      
+
 }
 
 trait LoadStoreUnitConstants
@@ -210,6 +210,7 @@ trait ScalarOpConstants
 //   val RT_PCR   = UInt(1, 2) // deprecated, since it's passed via immediate field
    val RT_PAS   = UInt(1, 2) // pass-through (pop1 := lrs1, etc)
    val RT_X     = UInt(1, 2) // not-a-register (but shouldn't get a busy-bit, etc.)
+                             // TODO rename RT_NAR
    val RT_FLT   = UInt(2, 2)
    
    // Micro-op opcodes
@@ -292,7 +293,7 @@ trait ScalarOpConstants
    val uopMEMSPECIAL= Bits(66, UOPC_SZ)
 
    // Enable Co-processor Register Signal (ToHost Register, etc.)
-   val PCR_N   = UInt(0,3)    // do nothing
+//   val PCR_N   = UInt(0,3)    // do nothing
    val PCR_F   = UInt(1,3)    // mfpcr
    val PCR_T   = UInt(2,3)    // mtpcr
    val PCR_C   = UInt(3,3)    // clear pcr
@@ -316,17 +317,34 @@ trait ScalarOpConstants
    val BUBBLE  = Bits(0x4033, 32)
 
 
-   // use apply
-   //val nullCtrlSignals = new CtrlSignals()
-   //nullCtrlSignals.br_type     := BR_N
-   //nullCtrlSignals.rf_wen      := Bool(false)
-   //nullCtrlSignals.pcr_fcn     := PCR_N
-   //nullCtrlSignals.is_load     := Bool(false)
-   //nullCtrlSignals.is_sta      := Bool(false)
-   //nullCtrlSignals.is_std      := Bool(false)
+   def NullMicroOp(): MicroOp =  
+   {
+      val uop = new MicroOp()
+      uop.uopc       := uopNOP // TODO may be unnecessary
+      uop.inst       := BUBBLE
+      uop.pc         := UInt(0) // TODO may be unncessary
+      uop.bypassable := Bool(false)
+      uop.is_store   := Bool(false)
+      uop.is_load    := Bool(false)
+      uop.is_load    := Bool(false)
+      uop.pdst       := UInt(0)
+      uop.pdst_rtype := RT_X
+      // TODO these unnecessary? used in regread stage?
+      uop.valid      := Bool(false)
+      uop.is_br_or_jmp := Bool(false)
+      
+      val cs = new CtrlSignals()
+      cs.br_type     := BR_N
+      cs.rf_wen      := Bool(false)
+      cs.pcr_fcn     := rocket.CSR.N
+      cs.is_load     := Bool(false)
+      cs.is_sta      := Bool(false)
+      cs.is_std      := Bool(false)
+     
+      uop.ctrl := cs
+      uop
+   }
 
-//   val nullUop = new MicroOp()
-//   nullUop.ctrl := nullCtrlSignals
 }
 
 trait InterruptConstants 

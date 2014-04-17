@@ -56,30 +56,9 @@ class IntegerIssueSlot(num_slow_wakeup_ports: Int) extends Module
    val slot_p1       = Reg(init = Bool(false), next = next_p1)
    val slot_p2       = Reg(init = Bool(false), next = next_p2)
 
-   val slotUop = Reg(outType = new MicroOp()) 
+   val slotUop = Reg(init = NullMicroOp) 
+   // TODO do I really need reset in the issue window? or is valid signal reset enough? (say, bypass network seeing pop1/pop2 as Z/Xs)
 
-   when (reset)
-   {
-      // TODO do I really need reset in the issue window? or is valid signal reset enough? (say, bypass network seeing pop1/pop2 as Z/Xs)
-      slotUop.inst := BUBBLE
-      // TODO chisel bug pukes on globally defined bundles, need to use "def"
-//      slotUop.ctrl := nullCtrlSignals
-      slotUop.ctrl.br_type     := BR_N
-      slotUop.ctrl.rf_wen      := Bool(false)
-      slotUop.ctrl.pcr_fcn     := PCR_N
-      slotUop.ctrl.is_load     := Bool(false)
-      slotUop.ctrl.is_sta      := Bool(false)
-      slotUop.ctrl.is_std      := Bool(false)
-
-      slotUop.bypassable := Bool(false)
-      slotUop.is_store := Bool(false)
-      slotUop.is_load := Bool(false)
-      slotUop.is_load := Bool(false)
-      slotUop.pdst := UInt(0)
-      slotUop.pdst_rtype := RT_X
-   }
-
-   
    when (io.kill || io.issue)
    {
       slot_valid   := Bool(false)
@@ -237,21 +216,8 @@ class IssueUnit(issue_width: Int, num_wakeup_ports: Int) extends Module
 
    val iss_valid      = Bool()
      
-   val nullCtrlSignals = new CtrlSignals()
-   nullCtrlSignals.br_type     := BR_N
-   nullCtrlSignals.rf_wen      := Bool(false)
-   nullCtrlSignals.pcr_fcn     := PCR_N
-   nullCtrlSignals.is_load     := Bool(false)
-   nullCtrlSignals.is_sta      := Bool(false)
-   nullCtrlSignals.is_std      := Bool(false)
                                   
-   val nullUop = new MicroOp()
-   nullUop.valid := Bool(false)
-   nullUop.uopc := uopNOP
-   nullUop.inst := BUBBLE
-   nullUop.pc   := UInt(0)
-   nullUop.ctrl := nullCtrlSignals
-   nullUop.is_br_or_jmp:= Bool(false)
+   val nullUop = NullMicroOp
    nullUop.pdst := UInt(0) // TODO what do I need here? maybe not this one.
    nullUop.pop1 := UInt(0)
    nullUop.pop2 := UInt(0)

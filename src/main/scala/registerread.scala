@@ -55,25 +55,6 @@ class RegisterRead(issue_width: Int, num_read_ports: Int, num_total_bypass_ports
    val exe_reg_rs2_data = Vec.fill(issue_width) { Reg(outType = Bits(width = XPRLEN))  }
    
 
-
-
-
-   val nullCtrlSignals = new CtrlSignals()
-   nullCtrlSignals.br_type     := BR_N
-   nullCtrlSignals.rf_wen      := Bool(false)
-   nullCtrlSignals.pcr_fcn     := rocket.CSR.N
-   nullCtrlSignals.is_load     := Bool(false)
-   nullCtrlSignals.is_sta      := Bool(false)
-   nullCtrlSignals.is_std      := Bool(false)
-                                  
-   val nullUop = new MicroOp()
-   nullUop.valid := Bool(false)
-   nullUop.uopc := uopNOP
-   nullUop.inst := BUBBLE
-   nullUop.pc   := UInt(0)
-   nullUop.ctrl := nullCtrlSignals
-   nullUop.is_br_or_jmp:= Bool(false)
-        
    //-------------------------------------------------------------
    // hook up inputs 
 
@@ -118,7 +99,7 @@ class RegisterRead(issue_width: Int, num_read_ports: Int, num_total_bypass_ports
       
       exe_reg_valids(w) := Mux(rrd_kill, Bool(false), rrd_valids(w))
       // TODO use only the valids signal, don't require us to set nullUop
-      exe_reg_uops(w)   := Mux(rrd_kill, nullUop, rrd_uops(w))
+      exe_reg_uops(w)   := Mux(rrd_kill, NullMicroOp, rrd_uops(w))
 
       exe_reg_uops(w).br_mask := GetNewBrMask(io.brinfo, rrd_uops(w))
    }

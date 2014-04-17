@@ -47,27 +47,21 @@ Questions:
 
 TODO LIST:
 
-   JAL shouldn't take up a branch slot; handled by the BTB, or at least the BHT
-   well, the write-back needs to occur
-
    better IW back pressure (requires worst case on store slots)
-   add counters, for cache hits, branch pred accurancy
+   add counters, for cache hits
    add branch counter in ROB (was predicted correctly)
 
    make brpred use synchronous memory
 
-   add register between issue select and register read
+   add (optional) register between issue select and register read
 
    add RAS (make dhrystone score go up)
-
-   add back BTB
 
    have ROB issue mtpcr, etc.? poison bit in inst to roll back ROB
       - could give it its own issue_slot only it writes to at commit
 
    allow for under-provisioned regfile ports
    allow for load-use speculation
-   add a register between issue select and register read
 
    add wait-bit memory disambiguation speculation to loads in the LSU 
 
@@ -77,10 +71,6 @@ TODO LIST:
 
    how best to handle SRET, SYSCALL, etc.
       i think just have SRET set exception bit in ROB, don't even serialize pipeline?
-
-   exception -> com -> evec target, 
-   but what about WHEN to handle sret (syscall at commit, like any exception), and how to clear the pipeline
-   for now, handle sret, syscall at commit
 
    break apart atomic PCR stuff?
 
@@ -121,19 +111,19 @@ class MicroOp extends Bundle()
 {
    val valid            = Bool()                   // is this uop valid? or has it been masked out, used by fetch buffer and Decode stage
    
-   val uopc             = Bits(width = UOPC_SZ)
+   val uopc             = Bits(width = UOPC_SZ)    // micro-op code
    val inst             = Bits(width = 32)          
    val pc               = UInt(width = XPRLEN)
-   val fu_code          = Bits(width = FUC_SZ)
+   val fu_code          = Bits(width = FUC_SZ)     // which functional unit do we use?
    val ctrl             = new CtrlSignals
    
-   val wakeup_delay     = UInt(width = log2Up(MAX_WAKEUP_DELAY))
+   val wakeup_delay     = UInt(width = log2Up(MAX_WAKEUP_DELAY)) // unused
    val is_br_or_jmp     = Bool()                      // is this micro-op a (branch or jump) vs. a regular PC+4 inst?
    val is_jump          = Bool()                      // is this a jump? (note: not mutually exclusive with br_valid)
    val is_jal           = Bool()                      // is this a JAL? used for branch unit
-   val is_ret           = Bool()                      // is jalr with rd=x0, rs1=x1
-   val br_mask          = Bits(width = MAX_BR_COUNT)
-   val br_tag           = UInt(width = BR_TAG_SZ)
+   val is_ret           = Bool()                      // is jalr with rd=x0, rs1=x1? (i.e., a return)
+   val br_mask          = Bits(width = MAX_BR_COUNT)  // which branches are we being speculated under?
+   val br_tag           = UInt(width = BR_TAG_SZ)     
    val br_prediction    = new BrPrediction            // set by Bpd stage
 
    val br_was_taken     = Bool()                      // set by Exe stage
@@ -348,13 +338,13 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
 
    val bypasses = new BypassData(num_total_bypass_ports)
 
-   val issue_width = exe_units.length // TODO allow exe_units to have multiple issue ports
-   val iss_valids     = Vec.fill(issue_width) {Bool()}
-   val iss_uops       = Vec.fill(issue_width) {new MicroOp()}
+   val issue_width           = exe_units.length // TODO allow exe_units to have multiple issue ports
+   val iss_valids            = Vec.fill(issue_width) {Bool()}
+   val iss_uops              = Vec.fill(issue_width) {new MicroOp()}
 
    val br_unit               = new BranchUnitResp()
    
-   val throw_idle_error = Reg(init = Bool(false))
+   val throw_idle_error      = Reg(init = Bool(false))
    
    // Memory State
    var lsu_io:LoadStoreUnitIo = null
@@ -1093,7 +1083,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
                                                 exe_units(i).io.resp(j).bits.uop.ctrl.rf_wen &&
                                                 exe_units(i).io.resp(j).bits.uop.pdst_rtype === RT_FIX
             regfile.io.write_ports(cnt).addr := exe_units(i).io.resp(j).bits.uop.pdst
-            regfile.io.write_ports(cnt).data := Mux(exe_units(i).io.resp(j).bits.uop.ctrl.pcr_fcn != PCR_N, pcr_read_out,
+            regfile.io.write_ports(cnt).data := Mux(exe_units(i).io.resp(j).bits.uop.ctrl.pcr_fcn != rocket.CSR.N, pcr_read_out,
                                                                                           exe_units(i).io.resp(j).bits.data)
          }
          else
@@ -1295,11 +1285,6 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    pcr.io.uarch_counters(14) := PopCount((Range(0,COMMIT_WIDTH)).map{w => com_valids(w) && com_uops(w).is_store})
    pcr.io.uarch_counters(15) := PopCount((Range(0,COMMIT_WIDTH)).map{w => com_valids(w) && com_uops(w).is_load})
                                       
-   
-   val my_uarch_counters_13 = Reg(init=UInt(0, conf.rc.xprlen)); my_uarch_counters_13 := my_uarch_counters_13 + lsu_io.counters.ld_valid
-   val my_uarch_counters_14 = Reg(init=UInt(0, conf.rc.xprlen)); my_uarch_counters_14 := my_uarch_counters_14 + lsu_io.counters.ld_forwarded
-   val my_uarch_counters_15 = Reg(init=UInt(0, conf.rc.xprlen)); my_uarch_counters_15 := my_uarch_counters_15 + lsu_io.counters.ld_order_fail
-           
    //-------------------------------------------------------------
    //-------------------------------------------------------------
    // **** Handle Cycle-by-Cycle Printouts ****
@@ -1801,11 +1786,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    //-------------------------------------------------------------
    // Page Table Walker
    
-   io.ptw.ptbr := pcr.io.ptbr |
-         my_uarch_counters_13 ^ my_uarch_counters_13 ^
-         my_uarch_counters_14 ^ my_uarch_counters_14 ^
-         my_uarch_counters_15 ^ my_uarch_counters_15 
-
+   io.ptw.ptbr := pcr.io.ptbr 
    io.ptw.invalidate := pcr.io.fatc             
    io.ptw.sret := com_sret 
    io.ptw.status := pcr.io.status

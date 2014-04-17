@@ -169,14 +169,6 @@ class LoadStoreUnit(pl_width: Int)(implicit conf: BOOMConfiguration) extends Mod
    val num_st_entries = NUM_LSU_ENTRIES 
 
     
-   val nullUop = new MicroOp()
-   nullUop.uopc := uopNOP
-   nullUop.inst := BUBBLE
-   nullUop.pc   := UInt(0)
-   nullUop.is_load:= Bool(false)
-   nullUop.is_store:=Bool(false)
-
-  
    // Load-Address Queue
    val laq_addr_val  = Vec.fill(num_ld_entries) { Reg(Bool()) }
    val laq_addr      = Vec.fill(num_ld_entries) { Reg(UInt(width = XPRLEN)) }
@@ -920,6 +912,8 @@ class LoadStoreUnit(pl_width: Int)(implicit conf: BOOMConfiguration) extends Mod
    val st_exc_killed_mask = Vec.fill(num_st_entries) {Bool()}
    (0 until num_st_entries).map(i => st_exc_killed_mask(i) := Bool(false))
 
+   val null_uop = NullMicroOp
+
    when (reset.toBool || io.exception || io.lsu_misspec)
    {
       laq_head := UInt(0, MEM_ADDR_SZ)
@@ -939,7 +933,7 @@ class LoadStoreUnit(pl_width: Int)(implicit conf: BOOMConfiguration) extends Mod
          }
          for (i <- 0 until num_st_entries)
          {
-            stq_uop(i) := nullUop
+            stq_uop(i) := null_uop
          }
       }
       .otherwise // exception/lsu_misspec
