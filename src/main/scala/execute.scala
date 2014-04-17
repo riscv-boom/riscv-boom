@@ -224,18 +224,19 @@ class MemExeUnit()(implicit conf: BOOMConfiguration) extends ExecutionUnit(num_r
    val lsu = Module(new LoadStoreUnit(DECODE_WIDTH))
  
    // TODO does this interface have to be so verbose? for the LSU connections
-   lsu.io.dec_st_vals        := io.lsu_io.dec_st_vals
-   lsu.io.dec_ld_vals        := io.lsu_io.dec_ld_vals
-   lsu.io.dec_uops           := io.lsu_io.dec_uops
+   lsu.io.dec_st_vals       := io.lsu_io.dec_st_vals
+   lsu.io.dec_ld_vals       := io.lsu_io.dec_ld_vals
+   lsu.io.dec_uops          := io.lsu_io.dec_uops
 
    
-   lsu.io.commit_store_mask  := io.lsu_io.commit_store_mask
-   lsu.io.commit_load_mask   := io.lsu_io.commit_load_mask
+   lsu.io.commit_store_mask := io.lsu_io.commit_store_mask
+   lsu.io.commit_load_mask  := io.lsu_io.commit_load_mask
     
-   lsu.io.brinfo             := io.brinfo
-   lsu.io.lsu_misspec        := io.lsu_io.lsu_misspec 
-   lsu.io.exception          := io.lsu_io.exception
-   lsu.io.nack               <> io.dmem.nack
+   lsu.io.brinfo            := io.brinfo
+   lsu.io.lsu_misspec       := io.lsu_io.lsu_misspec 
+   lsu.io.exception         := io.lsu_io.exception
+   lsu.io.nack              <> io.dmem.nack
+   lsu.io.counters          <> io.lsu_io.counters
           
    io.lsu_io.new_ldq_idx := lsu.io.new_ldq_idx
    io.lsu_io.new_stq_idx := lsu.io.new_stq_idx
@@ -384,6 +385,8 @@ class ALUMulDMemExeUnit(is_branch_unit: Boolean = false, shares_pcr_wport: Boole
    lsu.io.exception          := io.lsu_io.exception
    lsu.io.lsu_misspec        := io.lsu_io.lsu_misspec 
    lsu.io.nack               <> io.dmem.nack
+
+   lsu.io.counters <> io.lsu_io.counters
           
    io.lsu_io.new_ldq_idx := lsu.io.new_ldq_idx
    io.lsu_io.new_stq_idx := lsu.io.new_stq_idx

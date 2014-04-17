@@ -906,9 +906,10 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
       }
 
       // Fast Wakeup (uses just-issued uops)
+
       if (exe_units(i).is_bypassable)
       {
-         issue_unit.io.wakeup_vals(wu_idx)  := iss_valids(i) && (iss_uops(i).pdst_rtype === RT_FIX) && (iss_uops(i).bypassable)
+         issue_unit.io.wakeup_vals(wu_idx)  := iss_valids(i) && (iss_uops(i).pdst_rtype === RT_FIX) && (iss_uops(i).bypassable) && Bool(ENABLE_ALU_BYPASSING)
          issue_unit.io.wakeup_pdsts(wu_idx) := iss_uops(i).pdst
          wu_idx += 1
       }
@@ -1240,7 +1241,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    debug(throw_idle_error)
    debug(lsu_misspec)
 
-//   assert (!(throw_idle_error))
+   assert (!(throw_idle_error), "Pipeline has hung.")
  
                 
    //-------------------------------------------------------------
@@ -1290,10 +1291,14 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    pcr.io.uarch_counters(10) := lsu_io.counters.ld_forwarded
    pcr.io.uarch_counters(11) := lsu_io.counters.ld_sleep
    pcr.io.uarch_counters(12) := lsu_io.counters.ld_order_fail
-   pcr.io.uarch_counters(13) := com_uops.map(_.is_br_or_jmp.toUInt).reduce(_+_)
-   pcr.io.uarch_counters(14) := com_uops.map(_.is_store.toUInt).reduce(_+_)
-   pcr.io.uarch_counters(15) := com_uops.map(_.is_load.toUInt).reduce(_+_)
+   pcr.io.uarch_counters(13) := PopCount((Range(0,COMMIT_WIDTH)).map{w => com_valids(w) && com_uops(w).is_br_or_jmp})
+   pcr.io.uarch_counters(14) := PopCount((Range(0,COMMIT_WIDTH)).map{w => com_valids(w) && com_uops(w).is_store})
+   pcr.io.uarch_counters(15) := PopCount((Range(0,COMMIT_WIDTH)).map{w => com_valids(w) && com_uops(w).is_load})
                                       
+   
+   val my_uarch_counters_13 = Reg(init=UInt(0, conf.rc.xprlen)); my_uarch_counters_13 := my_uarch_counters_13 + lsu_io.counters.ld_valid
+   val my_uarch_counters_14 = Reg(init=UInt(0, conf.rc.xprlen)); my_uarch_counters_14 := my_uarch_counters_14 + lsu_io.counters.ld_forwarded
+   val my_uarch_counters_15 = Reg(init=UInt(0, conf.rc.xprlen)); my_uarch_counters_15 := my_uarch_counters_15 + lsu_io.counters.ld_order_fail
            
    //-------------------------------------------------------------
    //-------------------------------------------------------------
@@ -1336,7 +1341,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
       val u_cyn = "\033[4;36m"
       val u_wht = "\033[4;37m"
       
-      var white_space = 42  - NUM_LSU_ENTRIES - INTEGER_ISSUE_SLOT_COUNT - (NUM_ROB_ENTRIES/COMMIT_WIDTH)
+      var white_space = 43  - NUM_LSU_ENTRIES - INTEGER_ISSUE_SLOT_COUNT - (NUM_ROB_ENTRIES/COMMIT_WIDTH)
       // for 1440 monitor 
 //      var white_space = 35  - NUM_LSU_ENTRIES - INTEGER_ISSUE_SLOT_COUNT - (NUM_ROB_ENTRIES/COMMIT_WIDTH) 
       // for tinier demo screens
@@ -1715,7 +1720,8 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
                    Str(" t2"), Str(" t3"), Str(" t4"), Str(" gp"))
 
 
-      if (white_space > 0)
+//      if (white_space > 0)
+      if (false)
       {
          for (x <- 0 until 7)
          {
@@ -1795,7 +1801,11 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    //-------------------------------------------------------------
    // Page Table Walker
    
-   io.ptw.ptbr := pcr.io.ptbr                   
+   io.ptw.ptbr := pcr.io.ptbr |
+         my_uarch_counters_13 ^ my_uarch_counters_13 ^
+         my_uarch_counters_14 ^ my_uarch_counters_14 ^
+         my_uarch_counters_15 ^ my_uarch_counters_15 
+
    io.ptw.invalidate := pcr.io.fatc             
    io.ptw.sret := com_sret 
    io.ptw.status := pcr.io.status
