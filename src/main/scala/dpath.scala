@@ -1705,7 +1705,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
       
       // Rename Map Tables / ISA Register File
       val xpr_to_string = 
-              AVec(Str(" x0"), Str(" ra"), Str(" s0"), Str(" s1"),
+              Vec(Str(" x0"), Str(" ra"), Str(" s0"), Str(" s1"),
                    Str(" s2"), Str(" s3"), Str(" s4"), Str(" s5"),
                    Str(" s6"), Str(" s7"), Str(" s8"), Str(" s9"),
                    Str("s10"), Str("s11"), Str(" sp"), Str(" tp"),
