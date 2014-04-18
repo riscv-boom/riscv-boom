@@ -16,6 +16,7 @@ class CoreIo(implicit conf: BOOMConfiguration) extends Bundle
   val dmem = new DCMemPortIo()(conf.rc.dcache)
   val imem = new CPUFrontendIO()(conf.rc.icache)
   val ptw  = new DatapathPTWIO()(conf.rc.as).flip
+  val counters = new CacheCounters().asInput
 }
  
 class Core(implicit conf: BOOMConfiguration) extends Module
@@ -30,6 +31,8 @@ class Core(implicit conf: BOOMConfiguration) extends Module
   dpath.io.host <> io.host
 
   dpath.io.ptw <> io.ptw 
+
+  dpath.io.counters <> io.counters
 }
  
 }

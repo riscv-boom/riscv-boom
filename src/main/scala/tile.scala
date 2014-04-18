@@ -80,6 +80,16 @@ class BoomTile(resetSignal: Bool = null)(confIn: BOOMConfiguration) extends Modu
   dcache.io.mem.release.ready := io.tilelink.release.ready
   io.tilelink.release.bits := dcache.io.mem.release.bits
   io.tilelink.release.bits.payload.client_xact_id :=  Cat(dcache.io.mem.release.bits.payload.client_xact_id, UInt(dcachePortId, log2Up(memPorts))) // Mimic client id extension done by UncachedTileLinkIOArbiter for Acquires from either client)
+
+
+  // Cache Counters
+  val cache_counters = new CacheCounters()
+  cache_counters.dc_miss := dcache.io.mem.acquire.fire().toBool
+  // TODO track cache writebacks
+//     val dcache_wbacks = Counter(dcache.io.mem.releases.fire()) // also check hasdata property
+  cache_counters.ic_miss := icache.io.mem.acquire.fire()
+  core.io.counters := cache_counters
+
 }
 
 }

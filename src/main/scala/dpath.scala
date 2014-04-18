@@ -201,6 +201,14 @@ class BrResolutionInfo extends Bundle
    val ldq_idx    = UInt(width = MEM_ADDR_SZ)  // track the "tail" of loads and stores, so we can
    val stq_idx    = UInt(width = MEM_ADDR_SZ)  // quickly reset the LSU on a mispredict
 }
+
+class CacheCounters(implicit conf: BOOMConfiguration) extends Bundle
+{
+//   val dc_misses = UInt(width = conf.rc.xprlen)
+   val dc_miss = Bool()
+//   val ic_misses = UInt(width = conf.rc.xprlen)
+   val ic_miss = Bool()
+}
       
 //-------------------------------------------------------------
 //-------------------------------------------------------------
@@ -212,6 +220,7 @@ class DpathIo(implicit conf: BOOMConfiguration) extends Bundle()
    val imem = new CPUFrontendIO()(conf.rc.icache)
    val dmem = new DCMemPortIo()(conf.rc.dcache)
    val ptw =  new rocket.DatapathPTWIO()(conf.rc.as).flip 
+   val counters = new CacheCounters().asInput
 }
 
 class DatPath(implicit conf: BOOMConfiguration) extends Module 
@@ -969,6 +978,16 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    pcr_exc_target   := pcr.io.evec
    pcr.io.badvaddr_wen := Bool(false) // TODO VM virtual memory
 
+   when(com_exc_cause != UInt(6) && com_exception)
+   {
+      printf("Exception that's not a SYSCALL error problem, PC: 0x%x\n", 
+         Reg(next=flush_pc)
+         )
+
+   }
+
+   assert(!Reg(next=(com_exc_cause != UInt(6) && com_exception)), "Exception that's not a SYSCALL")
+
    // --------------------------------------
    // Register File 
    
@@ -1275,8 +1294,8 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    pcr.io.uarch_counters(4)  := laq_full
    pcr.io.uarch_counters(5)  := stq_full
    pcr.io.uarch_counters(6)  := branch_mask_full.reduce(_|_)
-   pcr.io.uarch_counters(7)  := Bool(true)
-   pcr.io.uarch_counters(8)  := Bool(true)
+   pcr.io.uarch_counters(7)  := io.counters.ic_miss
+   pcr.io.uarch_counters(8)  := io.counters.dc_miss
    pcr.io.uarch_counters(9)  := lsu_io.counters.ld_valid
    pcr.io.uarch_counters(10) := lsu_io.counters.ld_forwarded
    pcr.io.uarch_counters(11) := lsu_io.counters.ld_sleep

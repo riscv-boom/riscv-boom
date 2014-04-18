@@ -57,6 +57,8 @@ class IntegerIssueSlot(num_slow_wakeup_ports: Int) extends Module
    val slot_p2       = Reg(init = Bool(false), next = next_p2)
 
    val slotUop = Reg(init = NullMicroOp) 
+   
+   
    // TODO do I really need reset in the issue window? or is valid signal reset enough? (say, bypass network seeing pop1/pop2 as Z/Xs)
 
    when (io.kill || io.issue)
