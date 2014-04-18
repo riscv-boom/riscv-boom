@@ -453,7 +453,7 @@ class MulDivUnit(implicit conf: BOOMConfiguration) extends UnPipelinedFunctional
    val muldiv = Module(new rocket.MulDiv(mulUnroll = if (conf.rc.fastMulDiv) 8 else 1, earlyOut = conf.rc.fastMulDiv))
    
    // request
-   muldiv.io.req.valid    := io.req.valid 
+   muldiv.io.req.valid    := io.req.valid && !this.do_kill
    muldiv.io.req.bits.dw  := io.req.bits.uop.ctrl.fcn_dw
    muldiv.io.req.bits.fn  := io.req.bits.uop.ctrl.op_fcn 
    muldiv.io.req.bits.in1 := io.req.bits.rs1_data
