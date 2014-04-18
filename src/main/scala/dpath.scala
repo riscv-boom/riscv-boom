@@ -327,7 +327,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
       }
    }
 
-   val num_wakeup_ports      = num_slow_wakeup_ports + num_fast_wakeup_ports
+   val num_wakeup_ports = num_slow_wakeup_ports + num_fast_wakeup_ports
 
    println("   Num RF Read Ports    : " + num_rf_read_ports)
    println("   Num RF Write Ports   : " + num_rf_write_ports + "\n")
@@ -899,7 +899,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
 
       if (exe_units(i).is_bypassable)
       {
-         issue_unit.io.wakeup_vals(wu_idx)  := iss_valids(i) && (iss_uops(i).pdst_rtype === RT_FIX) && (iss_uops(i).bypassable) && Bool(ENABLE_ALU_BYPASSING)
+         issue_unit.io.wakeup_vals(wu_idx)  := iss_valids(i) && (iss_uops(i).pdst_rtype === RT_FIX) && (iss_uops(i).bypassable)
          issue_unit.io.wakeup_pdsts(wu_idx) := iss_uops(i).pdst
          wu_idx += 1
       }
@@ -1326,7 +1326,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
       val u_cyn = "\033[4;36m"
       val u_wht = "\033[4;37m"
       
-      var white_space = 43  - NUM_LSU_ENTRIES - INTEGER_ISSUE_SLOT_COUNT - (NUM_ROB_ENTRIES/COMMIT_WIDTH)
+      var white_space = 42  - NUM_LSU_ENTRIES - INTEGER_ISSUE_SLOT_COUNT - (NUM_ROB_ENTRIES/COMMIT_WIDTH)
       // for 1440 monitor 
 //      var white_space = 35  - NUM_LSU_ENTRIES - INTEGER_ISSUE_SLOT_COUNT - (NUM_ROB_ENTRIES/COMMIT_WIDTH) 
       // for tinier demo screens
@@ -1705,8 +1705,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
                    Str(" t2"), Str(" t3"), Str(" t4"), Str(" gp"))
 
 
-//      if (white_space > 0)
-      if (false)
+      if (white_space > 0)
       {
          for (x <- 0 until 7)
          {

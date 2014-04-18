@@ -79,7 +79,7 @@ class ALUExeUnit(is_branch_unit: Boolean = false, shares_pcr_wport: Boolean = fa
                                        extends ExecutionUnit(num_rf_read_ports = 2
                                                             , num_rf_write_ports = 1
                                                             , num_bypass_stages = 2
-                                                            , bypassable = true
+                                                            , bypassable = true && ENABLE_ALU_BYPASSING
                                                             , is_mem_unit = false
                                                             , uses_pcr_wport = shares_pcr_wport
                                                             , is_branch_unit = is_branch_unit)
@@ -133,7 +133,7 @@ class MulDExeUnit()(implicit conf: BOOMConfiguration) extends ExecutionUnit(num_
 
 class ALUMulDExeUnit(is_branch_unit: Boolean = false, shares_pcr_wport: Boolean = false)
                                        (implicit conf: BOOMConfiguration) 
-                                       extends ExecutionUnit(num_rf_read_ports = 2, num_rf_write_ports = 1, num_bypass_stages = 2, bypassable = true, is_mem_unit = false, uses_pcr_wport = shares_pcr_wport, is_branch_unit = is_branch_unit)
+                                       extends ExecutionUnit(num_rf_read_ports = 2, num_rf_write_ports = 1, num_bypass_stages = 2, bypassable = true && ENABLE_ALU_BYPASSING, is_mem_unit = false, uses_pcr_wport = shares_pcr_wport, is_branch_unit = is_branch_unit)
 {
    val muldiv_busy = Bool()
    io.fu_types := (FU_ALU |
@@ -292,7 +292,7 @@ class MemExeUnit()(implicit conf: BOOMConfiguration) extends ExecutionUnit(num_r
 }
    
  
-class ALUMulDMemExeUnit(is_branch_unit: Boolean = false, shares_pcr_wport: Boolean = false)(implicit conf: BOOMConfiguration) extends ExecutionUnit(num_rf_read_ports = 2, num_rf_write_ports = 2, num_bypass_stages = 2, bypassable = true, is_mem_unit = true, uses_pcr_wport = shares_pcr_wport, is_branch_unit = is_branch_unit)
+class ALUMulDMemExeUnit(is_branch_unit: Boolean = false, shares_pcr_wport: Boolean = false)(implicit conf: BOOMConfiguration) extends ExecutionUnit(num_rf_read_ports = 2, num_rf_write_ports = 2, num_bypass_stages = 2, bypassable = true && ENABLE_ALU_BYPASSING, is_mem_unit = true, uses_pcr_wport = shares_pcr_wport, is_branch_unit = is_branch_unit)
 {
    val muldiv_busy = Bool()
    io.fu_types := (FU_ALU |
