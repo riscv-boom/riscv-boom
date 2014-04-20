@@ -422,18 +422,18 @@ abstract class UnPipelinedFunctionalUnit()
    val r_uop = Reg(outType = new MicroOp()) 
 
    val do_kill = Bool()
-   do_kill := io.req.bits.kill
+   do_kill := io.req.bits.kill // irrelevant default
 
    when (io.req.fire())
    {
       // update incoming uop
-      do_kill := IsKilledByBranch(io.brinfo, io.req.bits.uop)
+      do_kill := IsKilledByBranch(io.brinfo, io.req.bits.uop) || io.req.bits.kill
       r_uop := io.req.bits.uop
       r_uop.br_mask := GetNewBrMask(io.brinfo, io.req.bits.uop)
    }
    .otherwise
    {
-      do_kill := IsKilledByBranch(io.brinfo, r_uop)
+      do_kill := IsKilledByBranch(io.brinfo, r_uop) || io.req.bits.kill
       r_uop.br_mask := GetNewBrMask(io.brinfo, r_uop)
    }
 

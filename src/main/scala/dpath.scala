@@ -978,15 +978,15 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    pcr_exc_target   := pcr.io.evec
    pcr.io.badvaddr_wen := Bool(false) // TODO VM virtual memory
 
-   when(com_exc_cause != UInt(6) && com_exception)
-   {
-      printf("Exception that's not a SYSCALL error problem, PC: 0x%x\n", 
-         Reg(next=flush_pc)
-         )
+   //when(com_exc_cause != UInt(6) && com_exception)
+   //{
+   //   printf("Exception that's not a SYSCALL error problem, PC: 0x%x\n", 
+   //      Reg(next=flush_pc)
+   //      )
 
-   }
+   //}
 
-   assert(!Reg(next=(com_exc_cause != UInt(6) && com_exception)), "Exception that's not a SYSCALL")
+   //assert(!Reg(next=(com_exc_cause != UInt(6) && com_exception)), "Exception that's not a SYSCALL")
 
    // --------------------------------------
    // Register File 
