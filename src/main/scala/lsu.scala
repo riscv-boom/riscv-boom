@@ -189,6 +189,7 @@ class LoadStoreUnit(pl_width: Int)(implicit conf: BOOMConfiguration) extends Mod
    val laq_forwarded_stq_idx= Vec.fill(num_ld_entries) { Reg(UInt(width = MEM_ADDR_SZ)) }  // which store did get store-load forwarded data from? compare later to see I got things correct
 //   val laq_block_val    = Vec.fill(num_ld_entries) { Reg() { Bool() } }                     // something is blocking us from executing
 //   val laq_block_id     = Vec.fill(num_ld_entries) { Reg() { UInt(width = MEM_ADDR_SZ) } }  // something is blocking us from executing, listen for this ID to wakeup
+   val debug_laq_put_to_sleep = Vec.fill(num_ld_entries) { Reg(Bool()) }                      // did a load get put to sleep at least once?
    
    // Store-Address Queue
    val saq_val       = Vec.fill(num_st_entries) { Reg(Bool()) }
@@ -279,7 +280,8 @@ class LoadStoreUnit(pl_width: Int)(implicit conf: BOOMConfiguration) extends Mod
          laq_executed (ld_enq_idx)    := Bool(false)
          laq_succeeded(ld_enq_idx)    := Bool(false)
          laq_failure  (ld_enq_idx)    := Bool(false)
-         laq_forwarded_std_val(ld_enq_idx) := Bool(false)
+         laq_forwarded_std_val(ld_enq_idx)  := Bool(false)
+         debug_laq_put_to_sleep(ld_enq_idx) := Bool(false)
       }
       ld_enq_idx = Mux(io.dec_ld_vals(w), WrapInc(ld_enq_idx, num_ld_entries), 
                                           ld_enq_idx)
@@ -867,8 +869,12 @@ class LoadStoreUnit(pl_width: Int)(implicit conf: BOOMConfiguration) extends Mod
    val clr_ld = Bool()
    clr_ld := Bool(false)
 
+   // did the load execute, but was then killed/nacked (will overcount)?
+   val ld_was_killed       = Bool()
+   // did the load execute, but was then killed/nacked (only high once per load)?
    val ld_was_put_to_sleep = Bool()
-   ld_was_put_to_sleep := Bool(false)
+   ld_was_killed           := Bool(false)
+   ld_was_put_to_sleep     := Bool(false)
 
    when (io.nack.valid)
    {
@@ -899,7 +905,9 @@ class LoadStoreUnit(pl_width: Int)(implicit conf: BOOMConfiguration) extends Mod
          when (clr_ld)
          {
             laq_executed(io.nack.lsu_idx) := Bool(false)
-            ld_was_put_to_sleep := Bool(true)
+            debug_laq_put_to_sleep(io.nack.lsu_idx) := Bool(true)
+            ld_was_killed := Bool(true)
+            ld_was_put_to_sleep := !debug_laq_put_to_sleep(io.nack.lsu_idx)
          }
       }
    }
@@ -1009,8 +1017,8 @@ class LoadStoreUnit(pl_width: Int)(implicit conf: BOOMConfiguration) extends Mod
 
    io.counters.ld_valid      := io.exe_resp.valid && exe_uop.ctrl.is_load
    io.counters.ld_forwarded  := io.forward_val
-   io.counters.ld_sleep      :=  ld_was_put_to_sleep
-   io.counters.ld_killed     := Bool(false) // unsure what definition of this should be! 
+   io.counters.ld_sleep      := ld_was_put_to_sleep
+   io.counters.ld_killed     := ld_was_killed
    io.counters.ld_order_fail := io.ldo_xcpt_val
 
    io.debug.laq_head := laq_head
