@@ -18,6 +18,7 @@ trait BOOMProcConstants
    // Debug Support
    val COMMIT_LOG_PRINTF = false // dump commit state, for comparision against ISA sim 
    val DEBUG_PRINTF = false // use the Chisel printf functionality 
+   val DEBUG_ENABLE_COLOR = true // provide color to print outs? requires a VIM plugin to work properly
    val DEBUG_FETCHBUFFER = false // print out the fetch buffer
    val DEBUG_BTB = false
    
@@ -34,13 +35,13 @@ trait BOOMProcConstants
    // Superscalar Widths
 
    // number of words we can fetch every cycle
-   val FETCH_WIDTH      = 2; require(FETCH_WIDTH == 1 || FETCH_WIDTH == 2)
+   val FETCH_WIDTH      = 1; require(FETCH_WIDTH == 1 || FETCH_WIDTH == 2)
 
    val DECODE_WIDTH     = FETCH_WIDTH; require(DECODE_WIDTH <= FETCH_WIDTH)
    val DISPATCH_WIDTH   = DECODE_WIDTH 
    val COMMIT_WIDTH     = DISPATCH_WIDTH
 
-   val ISSUE_WIDTH      = 2; require (ISSUE_WIDTH <= 3)
+   val ISSUE_WIDTH      = 1; require (ISSUE_WIDTH <= 3)
 
    
    //************************************
@@ -66,7 +67,7 @@ trait BOOMProcConstants
    val DC_NUM_MSHR = 2    // secondary miss handler
 
    val INTEGER_ISSUE_SLOT_COUNT = 12
-   val NUM_ROB_ENTRIES          = 28 // number of ROB entries (e.g., 32 entries for R10k)
+   val NUM_ROB_ENTRIES          = 32 // number of ROB entries (e.g., 32 entries for R10k)
    val NUM_ROB_ROWS             = NUM_ROB_ENTRIES/DECODE_WIDTH; require (NUM_ROB_ROWS % 2 == 0) 
 
    val NUM_LSU_ENTRIES          = 8  // number of LD/ST entries
@@ -77,7 +78,7 @@ trait BOOMProcConstants
    val MAX_WAKEUP_DELAY = 3 // unused
 
    // size of the unified, physical register file
-   val PHYS_REG_COUNT = 64; require(PHYS_REG_COUNT > 32)
+   val PHYS_REG_COUNT = 64; require(PHYS_REG_COUNT >= (32 + DECODE_WIDTH))
 
    val BR_TAG_SZ   = 3   // log number of branches we can speculate simultaneously
    require(BR_TAG_SZ >=1)
