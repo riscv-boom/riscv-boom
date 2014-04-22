@@ -1318,37 +1318,37 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
       // color codes for output files
       // if you use VIM to view, you'll need the AnsiEsc plugin.
       // 1 is bold, 2 is background, 4 is k
-      val blk = "\033[1;30m"
-      val red = "\033[1;31m"
-      val grn = "\033[1;32m"
-      val ylw = "\033[1;33m"
-      val blu = "\033[1;34m"
-      val mgt = "\033[1;35m"
-      val cyn = "\033[1;36m"
-      val wht = "\033[1;37m"
-      val end = "\033[0m"
+      val blk   = if (DEBUG_ENABLE_COLOR) "\033[1;30m" else ""
+      val red   = if (DEBUG_ENABLE_COLOR) "\033[1;31m" else ""
+      val grn   = if (DEBUG_ENABLE_COLOR) "\033[1;32m" else ""
+      val ylw   = if (DEBUG_ENABLE_COLOR) "\033[1;33m" else ""
+      val blu   = if (DEBUG_ENABLE_COLOR) "\033[1;34m" else ""
+      val mgt   = if (DEBUG_ENABLE_COLOR) "\033[1;35m" else ""
+      val cyn   = if (DEBUG_ENABLE_COLOR) "\033[1;36m" else ""
+      val wht   = if (DEBUG_ENABLE_COLOR) "\033[1;37m" else ""
+      val end   = if (DEBUG_ENABLE_COLOR) "\033[0m"
        
-      val b_blk = "\033[2;30m"
-      val b_red = "\033[2;31m"
-      val b_grn = "\033[2;32m"
-      val b_ylw = "\033[2;33m"
-      val b_blu = "\033[2;34m"
-      val b_mgt = "\033[2;35m"
-      val b_cyn = "\033[2;36m"
-      val b_wht = "\033[2;37m"
+      val b_blk = if (DEBUG_ENABLE_COLOR) "\033[2;30m" else ""
+      val b_red = if (DEBUG_ENABLE_COLOR) "\033[2;31m" else ""
+      val b_grn = if (DEBUG_ENABLE_COLOR) "\033[2;32m" else ""
+      val b_ylw = if (DEBUG_ENABLE_COLOR) "\033[2;33m" else ""
+      val b_blu = if (DEBUG_ENABLE_COLOR) "\033[2;34m" else ""
+      val b_mgt = if (DEBUG_ENABLE_COLOR) "\033[2;35m" else ""
+      val b_cyn = if (DEBUG_ENABLE_COLOR) "\033[2;36m" else ""
+      val b_wht = if (DEBUG_ENABLE_COLOR) "\033[2;37m" else ""
        
-      val u_blk = "\033[4;30m"
-      val u_red = "\033[4;31m"
-      val u_grn = "\033[4;32m"
-      val u_ylw = "\033[4;33m"
-      val u_blu = "\033[4;34m"
-      val u_mgt = "\033[4;35m"
-      val u_cyn = "\033[4;36m"
-      val u_wht = "\033[4;37m"
+      val u_blk = if (DEBUG_ENABLE_COLOR) "\033[4;30m" else ""
+      val u_red = if (DEBUG_ENABLE_COLOR) "\033[4;31m" else ""
+      val u_grn = if (DEBUG_ENABLE_COLOR) "\033[4;32m" else ""
+      val u_ylw = if (DEBUG_ENABLE_COLOR) "\033[4;33m" else ""
+      val u_blu = if (DEBUG_ENABLE_COLOR) "\033[4;34m" else ""
+      val u_mgt = if (DEBUG_ENABLE_COLOR) "\033[4;35m" else ""
+      val u_cyn = if (DEBUG_ENABLE_COLOR) "\033[4;36m" else ""
+      val u_wht = if (DEBUG_ENABLE_COLOR) "\033[4;37m" else ""
       
-      var white_space = 42  - NUM_LSU_ENTRIES - INTEGER_ISSUE_SLOT_COUNT - (NUM_ROB_ENTRIES/COMMIT_WIDTH)
+      var white_space = 56  - NUM_LSU_ENTRIES - INTEGER_ISSUE_SLOT_COUNT - (NUM_ROB_ENTRIES/COMMIT_WIDTH)
+//      var white_space = 42  - NUM_LSU_ENTRIES - INTEGER_ISSUE_SLOT_COUNT - (NUM_ROB_ENTRIES/COMMIT_WIDTH)
       // for 1440 monitor 
-//      var white_space = 35  - NUM_LSU_ENTRIES - INTEGER_ISSUE_SLOT_COUNT - (NUM_ROB_ENTRIES/COMMIT_WIDTH) 
       // for tinier demo screens
 //      var white_space = 27  - NUM_LSU_ENTRIES - INTEGER_ISSUE_SLOT_COUNT - (NUM_ROB_ENTRIES/COMMIT_WIDTH)
 

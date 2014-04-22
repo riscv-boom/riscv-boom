@@ -266,7 +266,6 @@ class RenameFreeList(num_phys_registers: Int // number of physical registers
    when (!io.br_mispredict_val)
    {
       free_list := (free_list & ~(just_allocated_mask)) | (enq_mask.reduce(_|_))
-//      free_list := (free_list & ~(just_allocated_mask)) | enq_mask
    }
 
    // Handle Misprediction
@@ -338,7 +337,6 @@ class BusyTableIo(pipeline_width: Int, num_wb_ports: Int) extends Bundle()
    }.asOutput
 }
 
-// TODO what do i do with this during misspeculation? probably clear as "not busy" anymore? 
 // Register P0 is always NOT_BUSY, and cannot be set to BUSY
 // Note: I do NOT bypass from newly busied registers to the read ports.
 // That bypass check should be done elsewhere (this is to get it off the
@@ -456,7 +454,8 @@ class RenameStage(pl_width: Int, num_wb_ports: Int) extends Module
       io.ren_uops(w)         := io.dec_uops(w)
       io.ren_uops(w).br_mask := GetNewBrMask(io.brinfo, io.dec_uops(w))
 
-      ren_br_vals(w)       := Mux(io.dec_mask(w), io.dec_uops(w).is_br_or_jmp, Bool(false))
+      ren_br_vals(w)       := Mux(io.dec_mask(w), io.dec_uops(w).is_br_or_jmp && !io.dec_uops(w).is_jal, Bool(false))
+      // TODO create a bit "allocates_br_msk" instead
                             
       io.ren_uops(w).pdst_rtype := io.dec_uops(w).ldst_rtype
    }
