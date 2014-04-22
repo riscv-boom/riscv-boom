@@ -48,8 +48,8 @@ class LoadReqSlotIo extends Bundle
    val was_killed = Bool(OUTPUT) // should we filter out returning mem op?
 }
 
-// note: I don't check incoming requests for branch-kills, because the MAddr
-// unit will have already killed them.
+// Note: Anything incoming that gets killed by br or exception is still marked
+// as "valid", since it also got sent to the datacache.
 class LoadReqSlot extends Module
 {
    val io = new LoadReqSlotIo()
@@ -59,10 +59,12 @@ class LoadReqSlot extends Module
    val uop        = Reg(outType=(new MicroOp()))
 
    // did the existing uop get killed by a branch?
-   // Note: no need to check/clr br_mask for incoming uop, as previous MAddr
-   // unit will have already performed that for us.
    val br_killed = Bool()
    br_killed := Bool(false)
+   // Note: we need to check/clr br_mask for incoming uop, despite previous MAddr
+   // unit will have already performed that for us, the LSU waking up loads may not have.
+   val br_killed_incoming = Bool()
+   br_killed_incoming := Bool(false)
 
    // only allow the clearing of a valid entry
    // otherwise we might overwrite an incoming entry
@@ -74,7 +76,7 @@ class LoadReqSlot extends Module
    .elsewhen (io.wen)
    {
       valid      := Bool(true)
-      was_killed := io.flush_pipe // TODO does this handle being killed by a branch on insertion for sleeping loads?
+      was_killed := io.flush_pipe || br_killed_incoming 
       uop        := io.in_uop
    }
    .elsewhen (io.flush_pipe || br_killed)
@@ -83,11 +85,12 @@ class LoadReqSlot extends Module
    }
 
    val bmask_match = io.brinfo.valid && maskMatch(io.brinfo.mask, uop.br_mask)
+   val bmask_match_incoming = io.brinfo.valid && maskMatch(io.brinfo.mask, io.in_uop.br_mask)
    
-   // Handle the Branch Mask (incoming already handled)
+   // Handle the Branch Mask (incoming not necessarily handled, if coming uop from LSU)
    when (io.wen)
    {
-      uop.br_mask := io.in_uop.br_mask
+      uop.br_mask := io.in_uop.br_mask & ~io.brinfo.mask
    }
    .elsewhen (bmask_match)
    {
@@ -95,11 +98,15 @@ class LoadReqSlot extends Module
    }
 
    // handle branch killed
-   when (bmask_match)
+   when (io.brinfo.mispredict)
    {
-      when (io.brinfo.mispredict)
+      when (bmask_match)
       {
          br_killed := Bool(true)
+      }
+      when (bmask_match_incoming)
+      {
+         br_killed_incoming := Bool(true)
       }
    }
 

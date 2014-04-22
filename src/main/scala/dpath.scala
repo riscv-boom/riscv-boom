@@ -1353,7 +1353,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
 //      var white_space = 27  - NUM_LSU_ENTRIES - INTEGER_ISSUE_SLOT_COUNT - (NUM_ROB_ENTRIES/COMMIT_WIDTH)
 
       if (DEBUG_FETCHBUFFER) white_space = white_space - FETCH_BUFFER_SZ
-      if (DEBUG_BTB) white_space = white_space - BTB_NUM_ENTRIES - 2
+      if (DEBUG_BTB) white_space = white_space - BTB_NUM_ENTRIES - 1
 
       var debug_string = sprintf("--- Cyc=%d , ----------------- Ret: %d ---------------------------------- User Retired: %d\n"
          , tsc_reg
