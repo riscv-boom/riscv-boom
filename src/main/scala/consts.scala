@@ -77,7 +77,7 @@ trait BOOMProcConstants
    val MAX_WAKEUP_DELAY = 3 // unused
 
    // size of the unified, physical register file
-   val PHYS_REG_COUNT = 33; require(PHYS_REG_COUNT >= (32 + DECODE_WIDTH))
+   val PHYS_REG_COUNT = 64; require(PHYS_REG_COUNT >= (32 + DECODE_WIDTH))
 
    val BR_TAG_SZ   = 3   // log number of branches we can speculate simultaneously
    require(BR_TAG_SZ >=1)
