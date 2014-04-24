@@ -16,11 +16,10 @@ trait BOOMProcConstants
 {
    //************************************
    // Debug Support
-   val COMMIT_LOG_PRINTF = false // dump commit state, for comparision against ISA sim 
-   val DEBUG_PRINTF = false // use the Chisel printf functionality 
-   val DEBUG_ENABLE_COLOR = true // provide color to print outs? requires a VIM plugin to work properly
-   val DEBUG_FETCHBUFFER = false // print out the fetch buffer
-   val DEBUG_BTB = false
+   val DEBUG_PRINTF = false         // use the Chisel printf functionality 
+   val COMMIT_LOG_PRINTF = false    // dump commit state, for comparision against ISA sim 
+   val DEBUG_ENABLE_COLOR = false   // provide color to print outs? requires a VIM plugin to work properly :(
+   val DEBUG_BTB = false            // printf the BTB too
    
    
    //************************************
@@ -120,7 +119,7 @@ trait BrPredConstants
    val TAKEN = Bool(true)
                      
    // Uses a History Table of n-bit counters
-   val USE_BRANCH_PREDICTOR = false
+   val USE_BRANCH_PREDICTOR = true
    val BPRED_DESIGN    = "BP_R10K"
 //   val BPRED_DESIGN    = "BP_21264"
 //   val BPRED_DESIGN    = "BP_GSHARE"
