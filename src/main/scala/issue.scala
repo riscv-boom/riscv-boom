@@ -58,9 +58,6 @@ class IntegerIssueSlot(num_slow_wakeup_ports: Int) extends Module
 
    val slotUop = Reg(init = NullMicroOp) 
    
-   
-   // TODO do I really need reset in the issue window? or is valid signal reset enough? (say, bypass network seeing pop1/pop2 as Z/Xs)
-
    when (io.kill || io.issue)
    {
       slot_valid   := Bool(false)
@@ -87,14 +84,12 @@ class IntegerIssueSlot(num_slow_wakeup_ports: Int) extends Module
             slotUop.lrs2_rtype := RT_X
          }
       }
-
    }
    
    
    // Wakeup Compare Logic
    next_p1 := Bool(false)
    next_p2 := Bool(false)
-
    
    when (io.in_wen)
    {
@@ -148,14 +143,20 @@ class IntegerIssueSlot(num_slow_wakeup_ports: Int) extends Module
    //------------------------------------------------------------- 
    // High Priority Request
    // Allow the issue window to demand a "high priority" request.
-   // The issue-select logic will consider high priority requests first 
-   // (if enabled).
+   // The issue-select logic will consider high priority requests first.
+
+   // Hi 152 students! You should only need to modify code in here!
+   //
+   // - "slot_valid" is a signal that is high when the slot uop is valid.
+   // - "slotUop" contains the micro-op in this slot. 
+   // - The signal "io.in_wen" is high when a new uop is being written into the slot.
+   // - The signal "io.request" is high when the uop is requesting to be issued.
+   // - The signal "io.issue" is high when the uop is being issued. 
 
    val high_priority = Bool()
 
    high_priority := Bool(false)
 //   high_priority := slotUop.is_br_or_jmp // <<-- is the uop a branch or jmp instruction?
-
 
 
    //------------------------------------------------------------- 

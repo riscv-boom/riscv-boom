@@ -55,7 +55,7 @@ trait BOOMProcConstants
 
    val ENABLE_PREFETCHING   = false
    val ENABLE_BTB           = true
-   val ENABLE_ALU_BYPASSING =  true
+   val ENABLE_ALU_BYPASSING =  true 
    val ENABLE_REGFILE_BYPASSING = true // bypass regfile write ports to read ports
  
    val BTB_NUM_ENTRIES = 4
@@ -78,7 +78,7 @@ trait BOOMProcConstants
    val MAX_WAKEUP_DELAY = 3 // unused
 
    // size of the unified, physical register file
-   val PHYS_REG_COUNT = 64; require(PHYS_REG_COUNT >= (32 + DECODE_WIDTH))
+   val PHYS_REG_COUNT = 33; require(PHYS_REG_COUNT >= (32 + DECODE_WIDTH))
 
    val BR_TAG_SZ   = 3   // log number of branches we can speculate simultaneously
    require(BR_TAG_SZ >=1)
@@ -108,7 +108,10 @@ trait LoadStoreUnitConstants
    val ENABLE_STOREDATA_FORWARDING = true // allow stores to forward data to depending loads 
    require (ENABLE_STOREDATA_FORWARDING == true) // required to for younger loads to read out of the committed store buffer
 
-   val ENABLE_SPECULATE_LOADS = true // allow loads to speculate - otherwise execute at commit (EaC is currently broken...)
+   val ENABLE_SPECULATE_LOADS = true      // allow loads to speculate - otherwise 
+                                          // loads are sent to memory in-order
+                                          // (retried once the load is the head of
+                                          // the LAQ).
 }
     
 trait BrPredConstants
@@ -117,7 +120,7 @@ trait BrPredConstants
    val TAKEN = Bool(true)
                      
    // Uses a History Table of n-bit counters
-   val USE_BRANCH_PREDICTOR = true
+   val USE_BRANCH_PREDICTOR = false
    val BPRED_DESIGN    = "BP_R10K"
 //   val BPRED_DESIGN    = "BP_21264"
 //   val BPRED_DESIGN    = "BP_GSHARE"
