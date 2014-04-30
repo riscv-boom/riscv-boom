@@ -35,6 +35,7 @@ class BoomTile(resetSignal: Bool = null)(confIn: BOOMConfiguration) extends Modu
   implicit val bc = confIn.copy(rc = new_rc)
 
   require (rc.xprlen == 64)
+  require (rc.vm == false)
 
   val io = new Bundle {
     val tilelink = new TileLinkIO

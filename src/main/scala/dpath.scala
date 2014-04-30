@@ -166,6 +166,11 @@ class MicroOp extends Bundle()
    val lrs1_rtype       = UInt(width=2)
    val lrs2_rtype       = UInt(width=2)
 
+   // exception information
+   val xcpt_ma          = Bool()
+   val xcpt_if          = Bool()
+
+
    // purely debug information
    val debug_wdata      = Bits(width=XPRLEN)
 }
@@ -180,11 +185,10 @@ class FetchBundle(implicit conf: BOOMConfiguration)  extends Bundle
    
    val br_predictions = Vec.fill(fetch_width) { new BrPrediction } // set by Bpd stage
    val btb_pred_taken = Bool()
-   val btb_pred_taken_idx = UInt(width=log2Up(fetch_width)) //TODO am i breaking things?
+   val btb_pred_taken_idx = UInt(width=log2Up(fetch_width)) 
 
-   // TODO add exception tracking from InstFetch
-//   val xcpt_ma 
-//   val xcpt_if
+   val xcpt_ma = Bool()
+   val xcpt_if = Bool()
   override def clone = new FetchBundle().asInstanceOf[this.type]
 }
 
@@ -239,7 +243,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
 
    // Instruction Fetch State
    val if_pc_next     = UInt(width = XPRLEN)
-   val pcr_exc_target = UInt(width = rc.as.vaddrBits) // chisel bug todo remove this width
+   val pcr_exc_target = UInt(width = rc.as.vaddrBits) 
    
   
    // Branch Predict State
@@ -406,6 +410,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    io.imem.req.bits.pc := if_pc_next
    io.imem.resp.ready  := FetchBuffer.io.enq.ready // TODO perf BUG || take_pc?
 
+
    // note: some cleverness here - doesn't matter direction of the branch,
    // brjmp_target will be the opposite of the branch prediction. So all we
    // care about is "did a misprediction occur?"
@@ -436,9 +441,12 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    fetch_bundle.btb_pred_taken := io.imem.resp.bits.taken 
    fetch_bundle.btb_pred_taken_idx:= io.imem.resp.bits.taken_idx 
 
-   val xcpt_ma   = io.imem.resp.bits.xcpt_ma // TODO need to handle these exceptions
-   val xcpt_if   = io.imem.resp.bits.xcpt_if // inst fault - pagefault, could be on wrong branch
+   fetch_bundle.xcpt_ma := io.imem.resp.bits.xcpt_ma 
+   fetch_bundle.xcpt_if := io.imem.resp.bits.xcpt_if // inst fault - pagefault, could be on wrong branch though
 
+   // check for unallowed exceptions
+   assert(!(com_exception && (com_exc_cause === UInt(rocket.Causes.misaligned_fetch) ||
+                              com_exc_cause === UInt(rocket.Causes.fault_fetch))), "Exception thrown by IMEM, not yet supported.")
  
    if (ENABLE_BTB)
    {
@@ -704,8 +712,10 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    {
       val decode_unit = Module(new DecodeUnit)
       dec_valids(w) := fetched_inst_valid && dec_fbundle(w).valid && !dec_finished_mask(w) // TODO a way to do this without being confusing wrt dec_mask?
-      decode_unit.io.enq.inst := dec_fbundle(w).inst
-      decode_unit.io.status   := pcr_status
+      decode_unit.io.enq.inst    := dec_fbundle(w).inst
+      decode_unit.io.enq.xcpt_ma := dec_fbundle(w).xcpt_ma
+      decode_unit.io.enq.xcpt_if := dec_fbundle(w).xcpt_if
+      decode_unit.io.status      := pcr_status
 
       // stall this instruction?
       // TODO tailor this to only care if a given instruction uses a resource?
@@ -965,7 +975,6 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    pcr.io.rw.wdata := Mux(pcr_rw_cmd === CSR.S, pcr.io.rw.rdata | wb_wdata,
                       Mux(pcr_rw_cmd === CSR.C, pcr.io.rw.rdata & ~wb_wdata,
                                                  wb_wdata))
-
 
 
    // Extra I/O
@@ -1346,8 +1355,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
       val u_cyn = if (DEBUG_ENABLE_COLOR) "\033[4;36m" else ""
       val u_wht = if (DEBUG_ENABLE_COLOR) "\033[4;37m" else ""
       
-      var white_space = 56  - NUM_LSU_ENTRIES - INTEGER_ISSUE_SLOT_COUNT - (NUM_ROB_ENTRIES/COMMIT_WIDTH)
-//      var white_space = 42  - NUM_LSU_ENTRIES - INTEGER_ISSUE_SLOT_COUNT - (NUM_ROB_ENTRIES/COMMIT_WIDTH)
+      var white_space = 42  - NUM_LSU_ENTRIES - INTEGER_ISSUE_SLOT_COUNT - (NUM_ROB_ENTRIES/COMMIT_WIDTH)
       // for 1440 monitor 
       // for tinier demo screens
 //      var white_space = 27  - NUM_LSU_ENTRIES - INTEGER_ISSUE_SLOT_COUNT - (NUM_ROB_ENTRIES/COMMIT_WIDTH)
@@ -1764,6 +1772,20 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
       }
 
       printf("%s", debug_string)
+   }
+   else
+   {
+      // provides "am i still alive?" prinouts
+      //when (tsc_reg(12,0) === UInt(8191))
+      //{
+      //   printf("Cycle: %d, PC: 0x%x, Inst: 0x%x (DASM(%x)),idle_cycles: %d\n"
+      //      , tsc_reg
+      //      , com_uops(0).pc
+      //      , com_uops(0).inst
+      //      , com_uops(0).inst
+      //      , idle_cycles
+      //      )
+      //}
    }
 
    if (COMMIT_LOG_PRINTF)

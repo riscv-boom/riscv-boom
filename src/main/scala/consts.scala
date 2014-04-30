@@ -79,8 +79,8 @@ trait BOOMProcConstants
    // size of the unified, physical register file
    val PHYS_REG_COUNT = 64; require(PHYS_REG_COUNT >= (32 + DECODE_WIDTH))
 
-   val BR_TAG_SZ   = 3   // log number of branches we can speculate simultaneously
-   require(BR_TAG_SZ >=1)
+   val MAX_BR_COUNT = 8   // number of branches we can speculate simultaneously
+   require(MAX_BR_COUNT >=2)
    
    val FETCH_BUFFER_SZ = 4 // number of instructions that can be stored between fetch + decode
    
@@ -91,7 +91,7 @@ trait BOOMProcConstants
    val PREG_SZ           = log2Up(PHYS_REG_COUNT)   
    val MAX_ST_COUNT      = (1 << MEM_ADDR_SZ)
    val MAX_LD_COUNT      = (1 << MEM_ADDR_SZ)
-   val MAX_BR_COUNT      = (1 << (BR_TAG_SZ)) 
+   val BR_TAG_SZ         = log2Up(MAX_BR_COUNT)
 
 
    val EXC_CAUSE_SZ = log2Up(rocket.Causes.all.max) + 1 // may or may not actually work

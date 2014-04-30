@@ -119,6 +119,8 @@ class DecodeUnitIo extends Bundle
    val enq = new Bundle
    {
       val inst  = Bits(width = XPRLEN)
+      val xcpt_ma = Bool()
+      val xcpt_if = Bool()
    }.asInput
 
    val deq = new Bundle
@@ -177,18 +179,23 @@ class DecodeUnit(implicit conf: BOOMConfiguration) extends Module
    
    uop.exception := cs_syscall.toBool  ||
                        exc_illegal ||
-                       exc_privileged
-                                             
-   uop.exc_cause := Mux(exc_illegal,           UInt(rocket.Causes.illegal_instruction),
-                       Mux(exc_privileged,     UInt(rocket.Causes.privileged_instruction),
-                       Mux(cs_syscall.toBool,  UInt(rocket.Causes.syscall),
-                                               UInt(0,5))))
-   
+                       exc_privileged ||
+                       io.enq.xcpt_ma ||
+                       io.enq.xcpt_if 
+
+   // note: priority here is very important
+   uop.exc_cause := Mux(io.enq.xcpt_ma,     UInt(rocket.Causes.misaligned_fetch),
+                    Mux(io.enq.xcpt_if,     UInt(rocket.Causes.fault_fetch),
+                    Mux(exc_illegal,        UInt(rocket.Causes.illegal_instruction),
+                    Mux(exc_privileged,     UInt(rocket.Causes.privileged_instruction),
+                    Mux(cs_syscall.toBool,  UInt(rocket.Causes.syscall),
+                                            UInt(0,5))))))
+
    //-------------------------------------------------------------
-    
+
    uop.uopc       := cs_uopc
    uop.fu_code    := cs_fu_code
-     
+
    uop.ldst       := uop.inst(RD_MSB,RD_LSB).toUInt
    uop.lrs1       := uop.inst(RS1_MSB,RS1_LSB).toUInt
    uop.lrs2       := uop.inst(RS2_MSB,RS2_LSB).toUInt
@@ -206,10 +213,10 @@ class DecodeUnit(implicit conf: BOOMConfiguration) extends Module
    uop.is_fencei  := cs_is_fencei.toBool
    uop.is_unique  := cs_inst_unique.toBool
    uop.flush_on_commit := cs_flush_on_commit.toBool
-   
+
    uop.wakeup_delay := cs_wakeup_delay
    uop.bypassable   := cs_bypassable.toBool
-  
+
    //-------------------------------------------------------------
    // immediates
 
@@ -218,9 +225,9 @@ class DecodeUnit(implicit conf: BOOMConfiguration) extends Module
    uop.imm_packed := Cat(uop.inst(31,25), di24_20, uop.inst(19,12))
 
    //-------------------------------------------------------------
-   
+
    uop.is_br_or_jmp := cs_br_or_jmp.toBool
-   
+
    uop.is_jal := cs_is_jal.toBool
    uop.is_jump:= (uop.uopc === uopJAL) ||
                  (uop.uopc === uopJALR) 
@@ -340,6 +347,8 @@ class FetchSerializerNtoM(implicit conf: BOOMConfiguration) extends Module
    io.deq.bits(0).br_prediction  := io.enq.bits.br_predictions(inst_idx)
    io.deq.bits(0).btb_pred_taken := io.enq.bits.btb_pred_taken
    io.deq.bits(0).valid          := io.enq.bits.mask(0)
+   io.deq.bits(0).xcpt_ma        := io.enq.bits.xcpt_ma(inst_idx)
+   io.deq.bits(0).xcpt_if        := io.enq.bits.xcpt_if(inst_idx)
 
 
 
@@ -357,7 +366,9 @@ class FetchSerializerNtoM(implicit conf: BOOMConfiguration) extends Module
          io.deq.bits(i).btb_pred_taken := Mux(io.enq.bits.btb_pred_taken_idx === UInt(i), 
                                                              io.enq.bits.btb_pred_taken, 
                                                              Bool(false))
-         io.deq.bits(i).valid := io.enq.bits.mask(i)
+         io.deq.bits(i).valid   := io.enq.bits.mask(i)
+         io.deq.bits(i).xcpt_ma := io.enq.bits.xcpt_ma(i)
+         io.deq.bits(i).xcpt_if := io.enq.bits.xcpt_if(i)
       }
 
       io.enq.ready := io.deq.ready
