@@ -131,7 +131,8 @@ class Frontend(implicit c: ICacheConfig) extends Module
   io.cpu.resp.bits.taken := s2_btb_hit
   io.cpu.resp.bits.taken_idx := s2_btb_hit_idx
   io.cpu.resp.bits.debug_taken_pc := s2_debug_taken_pc
-  io.cpu.resp.bits.xcpt_ma := s2_pc(log2Up(c.ibytes)-1,0) != UInt(0)
+//  io.cpu.resp.bits.xcpt_ma := s2_pc(log2Up(c.ibytes)-1,0) != UInt(0)
+  io.cpu.resp.bits.xcpt_ma := s2_pc(1,0) != UInt(0)
   io.cpu.resp.bits.xcpt_if := s2_xcpt_if
   io.cpu.resp.bits.bht_pc := s1_pc
 }

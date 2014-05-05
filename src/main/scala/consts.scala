@@ -118,12 +118,13 @@ trait BrPredConstants
    val NOT_TAKEN = Bool(false)
    val TAKEN = Bool(true)
                      
-   // Uses a History Table of n-bit counters
    val USE_BRANCH_PREDICTOR = true
+   
+   // Uses a History Table of n-bit counters
    val BPRED_DESIGN    = "BP_R10K"
-//   val BPRED_DESIGN    = "BP_21264"
-//   val BPRED_DESIGN    = "BP_GSHARE"
-//   val BPRED_DESIGN    = "BP_GLOBAL"
+   //val BPRED_DESIGN    = "BP_21264"
+   //val BPRED_DESIGN    = "BP_GSHARE"
+   //val BPRED_DESIGN    = "BP_GLOBAL"
    val NUM_BHT_ENTRIES = 128  
    val BHT_COUNTER_SZ = 2  
    val NUM_LHIST_ENTRIES = 128  

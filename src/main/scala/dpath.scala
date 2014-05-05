@@ -445,8 +445,8 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    fetch_bundle.xcpt_if := io.imem.resp.bits.xcpt_if // inst fault - pagefault, could be on wrong branch though
 
    // check for unallowed exceptions
-   assert(!(com_exception && (com_exc_cause === UInt(rocket.Causes.misaligned_fetch) ||
-                              com_exc_cause === UInt(rocket.Causes.fault_fetch))), "Exception thrown by IMEM, not yet supported.")
+   assert(!Reg(init=Bool(false),next=(com_exception && (com_exc_cause === UInt(rocket.Causes.misaligned_fetch) ||
+                              com_exc_cause === UInt(rocket.Causes.fault_fetch)))), "Exception thrown by IMEM, not yet supported.")
  
    if (ENABLE_BTB)
    {

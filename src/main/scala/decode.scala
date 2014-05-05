@@ -367,8 +367,8 @@ class FetchSerializerNtoM(implicit conf: BOOMConfiguration) extends Module
                                                              io.enq.bits.btb_pred_taken, 
                                                              Bool(false))
          io.deq.bits(i).valid   := io.enq.bits.mask(i)
-         io.deq.bits(i).xcpt_ma := io.enq.bits.xcpt_ma(i)
-         io.deq.bits(i).xcpt_if := io.enq.bits.xcpt_if(i)
+         io.deq.bits(i).xcpt_ma := io.enq.bits.xcpt_ma
+         io.deq.bits(i).xcpt_if := io.enq.bits.xcpt_if
       }
 
       io.enq.ready := io.deq.ready

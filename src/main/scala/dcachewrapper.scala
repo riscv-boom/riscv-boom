@@ -90,7 +90,8 @@ class LoadReqSlot extends Module
    // Handle the Branch Mask (incoming not necessarily handled, if coming uop from LSU)
    when (io.wen)
    {
-      uop.br_mask := io.in_uop.br_mask & ~io.brinfo.mask
+      uop.br_mask := Mux(io.brinfo.valid, (io.in_uop.br_mask & ~io.brinfo.mask),
+                                          (io.in_uop.br_mask))
    }
    .elsewhen (bmask_match)
    {
