@@ -447,7 +447,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    // check for unallowed exceptions
    assert(!Reg(init=Bool(false),next=(com_exception && (com_exc_cause === UInt(rocket.Causes.misaligned_fetch) ||
                               com_exc_cause === UInt(rocket.Causes.fault_fetch)))), "Exception thrown by IMEM, not yet supported.")
- 
+
    if (ENABLE_BTB)
    {
       // teach the BTB at execute
@@ -456,7 +456,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
       // also, handle case where BHT overrules BTB, must clear entry to prevent infinite loop?
       io.imem.req.bits.mispredict := br_unit.take_pc
       // tell BTB if branch was taken, otherwise, BTB will clear entry itself on mispredict and !ntaken (if exe_jalr || !btb_hit)
-      io.imem.req.bits.taken      := (br_unit.btb_mispredict && br_unit.taken) //&& !(!bp2_prediction.isBrTaken() && fetch_bundle.btb_pred_takeN)
+      io.imem.req.bits.taken      := (br_unit.btb_mispredict && br_unit.taken)
    }
    else
    {
@@ -464,18 +464,18 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
       io.imem.req.bits.taken      := Bool(false) // tell it nothing is ever taken
    }
 
-   io.imem.req.bits.currentpc := br_unit.pc  // updating BTB with "current pc" in exe 
-   io.imem.req.bits.btb_correct_target := Mux(br_unit.pc_sel === PC_JALR, br_unit.jump_reg_target, 
+   io.imem.req.bits.currentpc := br_unit.pc  // updating BTB with "current pc" in exe
+   io.imem.req.bits.btb_correct_target := Mux(br_unit.pc_sel === PC_JALR, br_unit.jump_reg_target,
                                                                           br_unit.brjmp_target)
 
 
- 
+
    // must flush cache on process change
    // if PCR tells me "flush due to TLB", also flush BTB
    io.imem.invalidate := Range(0,DECODE_WIDTH).map{i => com_valids(i) && com_uops(i).is_fencei}.reduce(_|_)
 //                        pcr_ptbr_wen // invalidate on process switch (page table
                                      // walker updated base register)
-   
+
    //io.imem.ptw := ...  // hooked straight up to tlb.io.ptw TODO
 //   io.imem.ptw.status := pcr_status // hooked straight up to tlb.io.ptw TODO
 
@@ -645,15 +645,15 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
                                bpd_jal_val &&
                                (bpd_jal_idx === fetch_bundle.btb_pred_taken_idx)
    // check that the BTB predicted the correct jal target
-   assert (!(btb_predicted_our_jal && bp2_jalpred_target != io.imem.resp.bits.debug_taken_pc), "BTB predicted incorrect JAL target")
+   assert (!Reg(init=Bool(false), next=(bp2_val && btb_predicted_our_jal && bp2_jalpred_target != io.imem.resp.bits.debug_taken_pc)), "BTB predicted incorrect JAL target")
    
    // TODO generalize the assert that checks for the BTB pred_idx
    require (FETCH_WIDTH <= 2)
    val btb_predicted_inst = fetch_bundle.insts(fetch_bundle.btb_pred_taken_idx)
    val btb_predicted_inst_pc =  bp2_pc + Mux(fetch_bundle.btb_pred_taken_idx === UInt(1), UInt(4), UInt(0))  + Sext(DebugGetBJImm(btb_predicted_inst), conf.rc.xprlen)
    assert (!(io.imem.resp.valid && 
-             io.imem.resp.bits.taken && 
-             !DebugIsJALR(btb_predicted_inst) && 
+             io.imem.resp.bits.taken &&
+             !DebugIsJALR(btb_predicted_inst) &&
              btb_predicted_inst_pc != io.imem.resp.bits.debug_taken_pc),
            "BTB predicted incorrect target.")
 
