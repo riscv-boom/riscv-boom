@@ -404,7 +404,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
                  com_sret ||
                  (bp2_take_pc && !if_stalled) //|| // TODO this seems way too low-level, to get this backpressure signal correct
 
-//   assert (!(Reg(next=com_exception) && !flush_pipeline), "exception occurred, but pipeline flush signal not set!")
+   assert (!(Reg(next=com_exception) && !flush_pipeline), "exception occurred, but pipeline flush signal not set!")
 
    io.imem.req.valid   := take_pc // tell front-end we had an unexpected change in the stream
    io.imem.req.bits.pc := if_pc_next
@@ -517,9 +517,11 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    // Branch Decode (BP2 Stage)
    // 
    // Only predict one branch per fetch packet. 
-   // But in parallel look for JAL and compute targets. Finally
+   // But in parallel look for JAL and compute targets. Then
    // look at branch prediction and arbitrate PC selection between
-   // the predicted branch and the JALs.
+   // the predicted branch and the JALs. Finally, compare BP2 
+   // prediction against the BTB prediction and decide if the 
+   // BP2 prediction overrides.
    //
    // Attach prediction to first branch in the packet.
    // kill all instructions behind the branch (if pred taken).
@@ -530,9 +532,9 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    val bp2_pc = aligned_fetch_pc
  
    val bpd_br_val  = Bool()
-   val bpd_br_idx  = UInt() // which word in the packet is the branch?
+   val bpd_br_idx  = UInt() // which word in the packet is the first branch?
    val bpd_jal_val = Bool()
-   val bpd_jal_idx = UInt() // and which is the jal?
+   val bpd_jal_idx = UInt() // and which is the first jal?
                 
    bpd_br_val  := Bool(false)
    bpd_jal_val := Bool(false)
@@ -568,6 +570,8 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    bp2_brpred_target  := bp2_pc + Mux(bpd_br_idx === UInt(1), UInt(4), UInt(0)) + Sext(bp2_br_imm32, conf.rc.xprlen)
    bp2_jalpred_target := bp2_pc + Mux(bpd_jal_idx === UInt(1), UInt(4), UInt(0)) + Sext(bp2_jal_imm32, conf.rc.xprlen)
 
+
+   // access the Branch Predictor to get a prediction
    bp2_prediction := bp2_reg_predictor_out
    val bht_pred_taken = Bool()
 
@@ -586,11 +590,6 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    }
 
 
-   // did the BTB predict JAL *AND* was it the first JAL in the fetch packet
-   val btb_predicted_our_jal = fetch_bundle.btb_pred_taken &&
-                               bpd_jal_val &&
-                               (bpd_jal_idx === fetch_bundle.btb_pred_taken_idx)
-
    // who's prediction do we take? the branch or the JAL?
    // if the jump is earlier, we take it and kill everything after. 
    // if the branch is earlier and Taken, we take it and kill everything after.
@@ -599,7 +598,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    //    NotTaken).
    val br_wins = Bool() // does the br or the jal redirect the pc?
    br_wins := Bool(true)
-   when (bpd_jal_val && ( bpd_jal_idx < bpd_br_idx))
+   when (bpd_jal_val && (bpd_jal_idx < bpd_br_idx))
    {
       br_wins := Bool(false)
    }
@@ -608,40 +607,61 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
       br_wins := Bool(false)
    }
  
-   // Tell the PC Select we want to redirect the PC (and to which PC)
-   // but don't let the BTB's branch predictions get overruled
-   bp2_take_pc     := !(br_unit.brinfo.mispredict) && 
-                      bp2_val && 
-                      ((bpd_jal_val && !btb_predicted_our_jal) || 
-                                  (bpd_br_val && bht_pred_taken && !fetch_bundle.btb_pred_taken))
+   // Does the branch predictor want to redirect the PC? This is before we've
+   // arbitrated with the BTB. 
+   val bp2_wants_to_take_pc = !(br_unit.brinfo.mispredict) &&
+                           bp2_val && 
+                           ((br_wins && bpd_br_val && bht_pred_taken) ||
+                           (!br_wins && bpd_jal_val))
+
    bp2_pred_target := Mux(br_wins, bp2_brpred_target, bp2_jalpred_target)
 
+   // the instruction the branch predictor is predicting on
+   val bp2_pred_idx = Mux(br_wins, bpd_br_idx, bpd_jal_idx)
 
-   // It's the job of the BHT to verify that if the BTB predicts on a JAL, it got it right. 
+
+   // does the BHT get to change the pc? Or does the BTB's actions win?
+   // The BTB wins if it predicts UNLESS the bht redirects a jump that's earlier than the BTB's prediction.
+//   val bp2_bht_predicts_on_jal = bp2_val && bpd_jal_val && !br_wins 
+   val bp2_bht_overrides_btb = bp2_val && 
+                               bpd_jal_val &&
+                               !br_wins && 
+                               fetch_bundle.btb_pred_taken &&
+                               (bp2_pred_idx < fetch_bundle.btb_pred_taken_idx)
+
+   bp2_take_pc := bp2_wants_to_take_pc && 
+                  (!fetch_bundle.btb_pred_taken || bp2_bht_overrides_btb)
+
+
+
+
+
+
+   // It's the job of the BHT to verify that if the BTB predicts on a JAL, it got it right.
    // It must also check that the BTB didn't miss the JAL and predict on a later branch
 
-   // BHT does not overrule the BTB on branches
+   // did the BTB predict JAL *AND* was it the first JAL in the fetch packet
+   val btb_predicted_our_jal = fetch_bundle.btb_pred_taken &&
+                               bpd_jal_val &&
+                               (bpd_jal_idx === fetch_bundle.btb_pred_taken_idx)
    // check that the BTB predicted the correct jal target
-//   assert (!(btb_predicted_our_jal && bp2_jalpred_target != io.imem.resp.bits.debug_taken_pc), "BTB predicted incorrect JAL target")
-   // TODO is there a way to check the BTB branch prediction? 
+   assert (!(btb_predicted_our_jal && bp2_jalpred_target != io.imem.resp.bits.debug_taken_pc), "BTB predicted incorrect JAL target")
+   
    // TODO generalize the assert that checks for the BTB pred_idx
    require (FETCH_WIDTH <= 2)
    val btb_predicted_inst = fetch_bundle.insts(fetch_bundle.btb_pred_taken_idx)
    val btb_predicted_inst_pc =  bp2_pc + Mux(fetch_bundle.btb_pred_taken_idx === UInt(1), UInt(4), UInt(0))  + Sext(DebugGetBJImm(btb_predicted_inst), conf.rc.xprlen)
-//   assert (!(!Reg(next=(Reg(next=reset.toBool))) &&
-   val throw_assert = (!(!Reg(next=(Reg(next=reset.toBool)))) &&
-               io.imem.resp.valid && 
-               io.imem.resp.bits.taken && 
-               !DebugIsJALR(btb_predicted_inst) && 
-               btb_predicted_inst_pc != io.imem.resp.bits.debug_taken_pc)
-//   , 
-//               "BTB predicted incorrect target.")
+   assert (!(io.imem.resp.valid && 
+             io.imem.resp.bits.taken && 
+             !DebugIsJALR(btb_predicted_inst) && 
+             btb_predicted_inst_pc != io.imem.resp.bits.debug_taken_pc),
+           "BTB predicted incorrect target.")
 
    // TODO add RAS, in which JAL xd==x1 is a CALL (push)
    //                       JALR sd==x1 is a CALL (push), JALR rd=x0,rs1=x1 is a POP, otherwise JALR shouldn't touch the RAS
 
-   // don't override the BTB on branches.  
-   bp2_prediction.taken := (bht_pred_taken && !io.imem.resp.bits.taken && br_wins) 
+   // don't override the BTB on branches, unless the BHT predicted on_jal and its earlier than the BTB's prediction.
+   bp2_prediction.taken := (bht_pred_taken && !io.imem.resp.bits.taken && br_wins)
 
 
    // pass info into FetchBuffer
@@ -1477,7 +1497,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
             )
       }
              
-      debug_string = sprintf("%s) State: (%s:%s %s %s \033[1;31m%s\033[0m %s %s) BMsk:%x %s %s\n"
+      debug_string = sprintf("%s) State: (%s:%s %s %s \033[1;31m%s\033[0m %s %s) BMsk:%x %s\n"
          , debug_string
          , Mux(rob.io.debug.state === UInt(0), Str("RESET"),
            Mux(rob.io.debug.state === UInt(1), Str("NORMAL"),
@@ -1492,7 +1512,6 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
          , Mux(io.dmem.req.ready, Str("D$_Rdy"), Str("D$_BSY"))
          , dec_brmask_logic.io.debug.branch_mask
          , Mux(pcr.io.status.s, Str("SUPERVISOR"), Str("USERMODE"))
-         , Mux(throw_assert, Str("ASSERT"), Str("_"))
          )
       
 
