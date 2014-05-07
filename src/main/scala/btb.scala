@@ -93,7 +93,6 @@ class BTB(fetchWidth: Int)(implicit conf: BTBConfig) extends Module
    val end = "\033[0m"
    if (DEBUG_PRINTF && DEBUG_BTB)
    {
-//      printf("%s %s idx:%d PC= 0x%x Target= 0x%x\n\n\n", debug_string
       printf("%s %s idx:%d PC= 0x%x Target= 0x%x\n", debug_string
          , Mux(hits.toBits.orR, Str(mgt + "HIT" + end), Str(grn + "   " + end))
          , io.hit_idx

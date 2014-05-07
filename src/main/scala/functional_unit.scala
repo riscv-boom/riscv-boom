@@ -287,6 +287,12 @@ class ALUUnit(is_branch_unit: Boolean = false)
 //                     ((uop.btb_pred_taken && !io.br_unit.taken) || // BTB was wrong (BHT was set to false)
 //                     (!uop.btb_pred_taken    (uop.br_prediction.isBrTaken() === TAKEN) && !uop.br_unit.taken)
 //                     )
+
+      //TODO can we assert that if a branch is taken it went to the proper location?
+      //when (branch_is_taken)
+      //{
+      //   assert (uop_pc_  "Branch jumped to wrong target!")
+      //}
       
       io.br_unit.take_pc := mispredict
 
@@ -305,7 +311,6 @@ class ALUUnit(is_branch_unit: Boolean = false)
       io.br_unit.brinfo.valid      := Reg(next = io.req.valid && uop.is_br_or_jmp && !uop.is_jal && !killed)
       io.br_unit.brinfo.mispredict := Reg(next = mispredict)
       io.br_unit.brinfo.mask       := Reg(next = UInt(1) << uop.br_tag)
-//      io.br_unit.brinfo.exe_mask   := Reg(next = uop.br_mask)
       io.br_unit.brinfo.exe_mask   := Reg(next = GetNewBrMask(io.brinfo, uop.br_mask))
       io.br_unit.brinfo.tag        := Reg(next = uop.br_tag)
       io.br_unit.brinfo.rob_idx    := Reg(next = uop.rob_idx)

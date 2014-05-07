@@ -141,15 +141,23 @@ class DecodeUnit(implicit conf: BOOMConfiguration) extends Module
    val uop = new MicroOp()
    uop.inst := io.enq.inst
 
-   val dec_csignals = rocket.DecodeLogic(uop.inst, 
+   val dec_csignals = rocket.DecodeLogic(uop.inst,
                                  Decode.default,
                                  Decode.table)
                                    
    val cs_inst_val :: cs_uopc :: cs_fu_code :: cs_dst_type :: cs_rs1_type :: cs_rs2_type :: cs_imm_sel :: cs_is_load :: cs_is_store :: cs_is_fence :: cs_is_fencei :: cs_mem_cmd :: cs_mem_typ :: cs_wakeup_delay :: cs_bypassable :: cs_br_or_jmp :: cs_is_jal :: cs_sret :: cs_syscall :: cs_inst_unique :: cs_flush_on_commit :: cs_csr_cmd :: Nil = dec_csignals
-   
+
 
    // Exception Handling
-   val exc_illegal    = !cs_inst_val 
+   val exc_illegal    = !cs_inst_val
+
+   var exc_interrupts = (0 until io.status.ip.getWidth).map(i => (io.status.im(i) && io.status.ip(i), UInt(BigInt(1) << (conf.rc.xprlen-1) | i)))
+   val (exc_interrupt_unmasked, exc_interrupt_cause) = checkExceptions(exc_interrupts)
+   val exc_interrupt = io.status.ei && exc_interrupt_unmasked
+
+   def checkExceptions(x: Seq[(Bool, UInt)]) =
+      (x.map(_._1).reduce(_||_), PriorityMux(x))
+
 
    val fp_csrs = rocket.CSRs.fcsr :: rocket.CSRs.frm :: rocket.CSRs.fflags :: Nil
    val legal_csrs = if (!conf.rc.fpu.isEmpty) rocket.CSRs.all.toSet else rocket.CSRs.all.toSet -- fp_csrs
@@ -165,8 +173,8 @@ class DecodeUnit(implicit conf: BOOMConfiguration) extends Module
                          csr_addr(9,8) >= UInt(2) ||
                          csr_addr(9,8) === UInt(1) && !io.status.s && csr_wen)
 
-   val csr_invalid    = csr_en && !Vec(legal_csrs.map(UInt(_))).contains(csr_addr)       
-   
+   val csr_invalid    = csr_en && !Vec(legal_csrs.map(UInt(_))).contains(csr_addr)
+
    // flush pipeline on CSR writes that may have side effects
    //val id_csr_flush = {   
    //  val safe_csrs = CSRs.sup0 :: CSRs.sup1 :: CSRs.epc :: Nil
@@ -181,15 +189,17 @@ class DecodeUnit(implicit conf: BOOMConfiguration) extends Module
                        exc_illegal ||
                        exc_privileged ||
                        io.enq.xcpt_ma ||
-                       io.enq.xcpt_if 
+                       io.enq.xcpt_if ||
+                       exc_interrupt
 
    // note: priority here is very important
-   uop.exc_cause := Mux(io.enq.xcpt_ma,     UInt(rocket.Causes.misaligned_fetch),
+   uop.exc_cause := Mux(exc_interrupt,      exc_interrupt_cause,
+                    Mux(io.enq.xcpt_ma,     UInt(rocket.Causes.misaligned_fetch),
                     Mux(io.enq.xcpt_if,     UInt(rocket.Causes.fault_fetch),
                     Mux(exc_illegal,        UInt(rocket.Causes.illegal_instruction),
                     Mux(exc_privileged,     UInt(rocket.Causes.privileged_instruction),
                     Mux(cs_syscall.toBool,  UInt(rocket.Causes.syscall),
-                                            UInt(0,5))))))
+                                            UInt(0,5)))))))
 
    //-------------------------------------------------------------
 
