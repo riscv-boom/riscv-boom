@@ -145,7 +145,6 @@ class MicroOp extends Bundle()
    val exception        = Bool()
    val exc_cause        = UInt(width = EXC_CAUSE_SZ)  // TODO don't magic number this
    val sret             = Bool()
-   val syscall          = Bool()
    val bypassable       = Bool()                      // can we bypass ALU results? (doesn't include loads, pcr, rdcycle, etc.... need to readdress this, SHOULD include PCRs?)
    val mem_cmd          = UInt(width = 4)             // sync primitives/cache flushes
    val mem_typ          = UInt(width = 3)             // memory mask type for loads/stores
@@ -1007,15 +1006,6 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    pcr_exc_target   := pcr.io.evec
    pcr.io.badvaddr_wen := Bool(false) // TODO VM virtual memory
 
-   //when(com_exc_cause != UInt(6) && com_exception)
-   //{
-   //   printf("Exception that's not a SYSCALL error problem, PC: 0x%x\n", 
-   //      Reg(next=flush_pc)
-   //      )
-
-   //}
-
-   //assert(!Reg(next=(com_exc_cause != UInt(6) && com_exception)), "Exception that's not a SYSCALL")
 
    // --------------------------------------
    // Register File 
@@ -1813,16 +1803,13 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
       for (w <- 0 until COMMIT_WIDTH)
       {
 //         when ((com_valids(w) && !(pcr.io.status.s)) || 
-//               (com_exception && com_exc_cause === UInt(rocket.Causes.syscall) && com_uops(w).syscall && !found_scall)
+//               (com_exception && com_exc_cause === UInt(rocket.Causes.syscall) && !found_scall)
 //               )
-         when (com_valids(w) ||
-               (com_exception && com_exc_cause === UInt(rocket.Causes.syscall) && com_uops(w).syscall)
-              )
+         when (com_valids(w) || (com_exception && com_exc_cause === UInt(rocket.Causes.syscall)))
          {
             found_scall = found_scall || 
                           (com_exception && 
-                          com_exc_cause === UInt(rocket.Causes.syscall) && 
-                          com_uops(w).syscall)
+                          com_exc_cause === UInt(rocket.Causes.syscall))
             when (com_uops(w).ldst_rtype === RT_FIX)
             {
                printf("\n@@@ 0x%x (0x%x) x%d 0x%x"
