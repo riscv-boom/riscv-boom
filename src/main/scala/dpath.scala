@@ -143,7 +143,7 @@ class MicroOp extends Bundle()
    val prs2_busy        = Bool()
    val stale_pdst       = UInt(width = PREG_SZ)
    val exception        = Bool()
-   val exc_cause        = UInt(width = EXC_CAUSE_SZ)  // TODO don't magic number this
+   val exc_cause        = UInt(width = XPRLEN)  
    val sret             = Bool()
    val bypassable       = Bool()                      // can we bypass ALU results? (doesn't include loads, pcr, rdcycle, etc.... need to readdress this, SHOULD include PCRs?)
    val mem_cmd          = UInt(width = 4)             // sync primitives/cache flushes
@@ -1006,6 +1006,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    pcr_exc_target   := pcr.io.evec
    pcr.io.badvaddr_wen := Bool(false) // TODO VM virtual memory
 
+   when (pcr.io.status.ip(7)) { printf("Found IP!: %d\n", pcr.io.status.ip) }
 
    // --------------------------------------
    // Register File 
@@ -1614,7 +1615,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
                , rob.io.debug.entry(r_idx+0).uop.pc(31,0)
                , rob.io.debug.entry(r_idx+0).uop.inst
                , Mux(rob.io.debug.entry(r_idx+0).exception, Str("E"), Str("-"))
-               , rob.io.debug.entry(r_idx+0).eflags
+               , rob.io.debug.entry(r_idx+0).eflags(7,0)
                )
          }
          else if (COMMIT_WIDTH == 2)
@@ -1634,9 +1635,9 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
                , rob.io.debug.entry(r_idx+0).uop.inst
                , rob.io.debug.entry(r_idx+1).uop.inst
                , Mux(rob.io.debug.entry(r_idx+0).exception, Str("E"), Str("-"))
-               , rob.io.debug.entry(r_idx+0).eflags
+               , rob.io.debug.entry(r_idx+0).eflags(7,0)
                , Mux(rob.io.debug.entry(r_idx+1).exception, Str("E"), Str("-"))
-               , rob.io.debug.entry(r_idx+1).eflags
+               , rob.io.debug.entry(r_idx+1).eflags(7,0)
                )
          }
          else

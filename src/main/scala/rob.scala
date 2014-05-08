@@ -64,14 +64,14 @@ class RobIo(machine_width: Int, num_wakeup_ports: Int)  extends Bundle()
 
    // tell the LSU how many stores and loads are being committed
    val com_st_mask      = Vec.fill(machine_width) {Bool(OUTPUT)}
-   val com_ld_mask      = Vec.fill(machine_width) {Bool(OUTPUT)} 
+   val com_ld_mask      = Vec.fill(machine_width) {Bool(OUTPUT)}
 
    val lsu_clr_bsy_valid = Bool(INPUT)
    val lsu_clr_bsy_rob_idx = UInt(INPUT, ROB_ADDR_SZ)
 
    // Handle Exceptions/ROB Rollback
    val com_exception    = Bool(OUTPUT)
-   val com_exc_cause    = UInt(OUTPUT, EXC_CAUSE_SZ) 
+   val com_exc_cause    = UInt(OUTPUT, XPRLEN)
    val com_handling_exc = Bool(OUTPUT)
    val com_rbk_valids   = Vec.fill(machine_width) {Bool(OUTPUT)}
    
@@ -116,7 +116,7 @@ class RobIo(machine_width: Int, num_wakeup_ports: Int)  extends Bundle()
          val busy = Bool()
          val uop = new MicroOp()
          val exception = Bool()
-         val eflags = UInt() 
+         val eflags = UInt(width=XPRLEN)
       }}
    }.asOutput
 }
@@ -228,7 +228,7 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
                                                            // fake write ports - clearing on commit,
                                                            // rollback, branch_kill
       val rob_exception = Mem(Bool(), num_rob_rows)        // TODO consolidate into the com_uop? what's the best for Chisel?
-      val rob_exc_cause = Mem(UInt(width=EXC_CAUSE_SZ), num_rob_rows)
+      val rob_exc_cause = Mem(UInt(width=XPRLEN), num_rob_rows)
 
       //-----------------------------------------------
       // Dispatch: Add Entry to ROB
