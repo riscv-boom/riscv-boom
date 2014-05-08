@@ -979,13 +979,11 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    // flush pipeline on all writes (because they could goof things up like writing base reg)
    // scratch everything, let's just have the ROB execute this uop
    
-   // TODO fix this, currently hacked to do in a single cycle, having problems making this non-atomic
    require (exe_units(0).uses_pcr_wport)
    // TODO rename from pcr to csr?
    val pcr = Module(new rocket.CSRFile())
    pcr.io.host <> io.host
    pcr.io.rw.addr  := ImmGen(exe_units(0).io.resp(0).bits.uop.imm_packed, IS_I) 
-//   pcr.io.rw.wdata := exe_units(0).io.resp(0).bits.data
    val pcr_read_out = pcr.io.rw.rdata
 
    val pcr_rw_cmd = exe_units(0).io.resp(0).bits.uop.ctrl.pcr_fcn
@@ -1005,8 +1003,6 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    pcr.io.sret      := com_sret 
    pcr_exc_target   := pcr.io.evec
    pcr.io.badvaddr_wen := Bool(false) // TODO VM virtual memory
-
-   when (pcr.io.status.ip(7)) { printf("Found IP!: %d\n", pcr.io.status.ip) }
 
    // --------------------------------------
    // Register File 
