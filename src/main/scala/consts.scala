@@ -34,13 +34,14 @@ trait BOOMProcConstants
    // Superscalar Widths
 
    // number of words we can fetch every cycle
-   val FETCH_WIDTH      = 1; require(FETCH_WIDTH == 1 || FETCH_WIDTH == 2)
+   val FETCH_WIDTH      = 2; require(FETCH_WIDTH == 1 || FETCH_WIDTH == 2)
+   // number of micro-ops we can issue every cycle
+   val ISSUE_WIDTH      = 2; require (ISSUE_WIDTH <= 3)
 
+   // implicit 
    val DECODE_WIDTH     = FETCH_WIDTH; require(DECODE_WIDTH <= FETCH_WIDTH)
    val DISPATCH_WIDTH   = DECODE_WIDTH 
    val COMMIT_WIDTH     = DISPATCH_WIDTH
-
-   val ISSUE_WIDTH      = 1; require (ISSUE_WIDTH <= 3)
 
    
    //************************************
@@ -66,8 +67,10 @@ trait BOOMProcConstants
    val DC_NUM_MSHR = 2    // secondary miss handler
 
    val INTEGER_ISSUE_SLOT_COUNT = 12
-   val NUM_ROB_ENTRIES          = 32 // number of ROB entries (e.g., 32 entries for R10k)
-   val NUM_ROB_ROWS             = NUM_ROB_ENTRIES/DECODE_WIDTH; require (NUM_ROB_ROWS % 2 == 0) 
+   val NUM_ROB_ENTRIES          = 28 // number of ROB entries (e.g., 32 entries for R10k)
+   val NUM_ROB_ROWS             = NUM_ROB_ENTRIES/DECODE_WIDTH
+   require (NUM_ROB_ROWS % 2 == 0) 
+   require (NUM_ROB_ENTRIES % DECODE_WIDTH == 0)
 
    val NUM_LSU_ENTRIES          = 8  // number of LD/ST entries
    require (isPow2(NUM_LSU_ENTRIES))
@@ -93,8 +96,6 @@ trait BOOMProcConstants
    val MAX_LD_COUNT      = (1 << MEM_ADDR_SZ)
    val BR_TAG_SZ         = log2Up(MAX_BR_COUNT)
 
-
-   val EXC_CAUSE_SZ = log2Up(rocket.Causes.all.max) + 1 // may or may not actually work
 
    // if pipeline goes idle, throw error
    // otherwise, reset pipeline and restart TODO on this feature
