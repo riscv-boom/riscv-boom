@@ -192,20 +192,21 @@ class DecodeUnit(implicit conf: BOOMConfiguration) extends Module
    uop.exception := cs_syscall.toBool   ||
                        cs_sbreak.toBool ||
                        exc_illegal      ||
+                       csr_invalid      ||
                        exc_privileged   ||
                        io.enq.xcpt_ma   ||
                        io.enq.xcpt_if   ||
                        exc_interrupt
 
    // note: priority here is very important
-   uop.exc_cause := Mux(exc_interrupt,      exc_interrupt_cause,
-                    Mux(io.enq.xcpt_ma,     UInt(rocket.Causes.misaligned_fetch),
-                    Mux(io.enq.xcpt_if,     UInt(rocket.Causes.fault_fetch),
-                    Mux(exc_illegal,        UInt(rocket.Causes.illegal_instruction),
-                    Mux(exc_privileged,     UInt(rocket.Causes.privileged_instruction),
-                    Mux(cs_syscall.toBool,  UInt(rocket.Causes.syscall),
-                    Mux(cs_sbreak.toBool,   UInt(rocket.Causes.breakpoint),
-                                            UInt(0,5))))))))
+   uop.exc_cause := Mux(exc_interrupt,              exc_interrupt_cause,
+                    Mux(io.enq.xcpt_ma,             UInt(rocket.Causes.misaligned_fetch),
+                    Mux(io.enq.xcpt_if,             UInt(rocket.Causes.fault_fetch),
+                    Mux(exc_illegal || csr_invalid, UInt(rocket.Causes.illegal_instruction),
+                    Mux(exc_privileged,             UInt(rocket.Causes.privileged_instruction),
+                    Mux(cs_syscall.toBool,          UInt(rocket.Causes.syscall),
+                    Mux(cs_sbreak.toBool,           UInt(rocket.Causes.breakpoint),
+                                                    UInt(0,5))))))))
 
    //-------------------------------------------------------------
 
