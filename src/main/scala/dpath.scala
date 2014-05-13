@@ -736,10 +736,16 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
       decode_unit.io.enq.xcpt_if := dec_fbundle(w).xcpt_if
       decode_unit.io.status      := pcr_status
 
+      var prev_insts_in_bundle_valid = Bool(false)
+      for (i <- 0 until w)
+      {
+         prev_insts_in_bundle_valid = prev_insts_in_bundle_valid | dec_valids(i)
+      }
+
       // stall this instruction?
       // TODO tailor this to only care if a given instruction uses a resource?
       val stall_me = (  !(ren_insts_can_proceed(w)) 
-                     || (dec_valids(w) && dec_uops(w).is_unique && !rob_empty) 
+                     || (dec_valids(w) && dec_uops(w).is_unique && (!rob_empty || prev_insts_in_bundle_valid))
                      || !rob_rdy 
                      || laq_full 
                      || stq_full 
@@ -1810,6 +1816,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
             when (com_uops(w).ldst_rtype === RT_FIX)
             {
                printf("\n@@@ 0x%x (0x%x) x%d 0x%x"
+//               printf("\n0x%x (0x%x) x%d 0x%x"
                   , com_uops(w).pc
                   , com_uops(w).inst
                   , com_uops(w).inst(RD_MSB,RD_LSB)
@@ -1818,6 +1825,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
             .otherwise
             {
                printf("\n@@@ 0x%x (0x%x)", com_uops(w).pc, com_uops(w).inst)
+//               printf("\n0x%x (0x%x)", com_uops(w).pc, com_uops(w).inst)
             }
          }
       }
