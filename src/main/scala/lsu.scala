@@ -109,7 +109,7 @@ class LoadStoreUnitIo(pl_width: Int)  extends Bundle()
    val ldo_xcpt_uop       = new MicroOp().asOutput()
 
    // cache nacks
-   val nack               = new NackInfo().asInput() 
+   val nack               = new NackInfo().asInput()
 
 // causign stuff to dissapear
 //   val dmem = new DCMemPortIo().flip()
@@ -161,17 +161,19 @@ class LoadStoreUnitIo(pl_width: Int)  extends Bundle()
    }.asOutput
 }
    
-class LoadStoreUnit(pl_width: Int)(implicit conf: BOOMConfiguration) extends Module 
+class LoadStoreUnit(pl_width: Int)(implicit conf: BOOMConfiguration) extends Module
 {
    val io = new LoadStoreUnitIo(pl_width)
 
-   val num_ld_entries = NUM_LSU_ENTRIES 
-   val num_st_entries = NUM_LSU_ENTRIES 
+   val num_ld_entries = NUM_LSU_ENTRIES
+   val num_st_entries = NUM_LSU_ENTRIES
 
     
    // Load-Address Queue
+//   val laq_addr_val  = Reg(init=UInt(0,width=num_ld_entries))  //TODO buggy due to chisel - try again soon
    val laq_addr_val  = Vec.fill(num_ld_entries) { Reg(Bool()) }
-   val laq_addr      = Vec.fill(num_ld_entries) { Reg(UInt(width = XPRLEN)) }
+   val laq_addr      = Mem(UInt(width=XPRLEN), num_ld_entries) 
+
    val laq_allocated = Vec.fill(num_ld_entries) { Reg(Bool()) } // entry has been allocated
    val laq_executed  = Vec.fill(num_ld_entries) { Reg(Bool()) } // load has been issued to memory (immediately set this bit)
    val laq_succeeded = Vec.fill(num_ld_entries) { Reg(Bool()) } // load has returned from memory, but may still have an ordering failure
@@ -193,7 +195,8 @@ class LoadStoreUnit(pl_width: Int)(implicit conf: BOOMConfiguration) extends Mod
    
    // Store-Address Queue
    val saq_val       = Vec.fill(num_st_entries) { Reg(Bool()) }
-   val saq_addr      = Vec.fill(num_st_entries) { Reg(UInt(width = XPRLEN)) }
+//   val saq_addr      = Vec.fill(num_st_entries) { Reg(UInt(width = XPRLEN)) }
+   val saq_addr      = Mem(UInt(width=XPRLEN),num_st_entries) 
    
    // Store-Data Queue
    val sdq_val       = Vec.fill(num_st_entries) { Reg(Bool()) }
@@ -214,7 +217,7 @@ class LoadStoreUnit(pl_width: Int)(implicit conf: BOOMConfiguration) extends Mod
    val stq_tail = Reg(UInt()) // point to next available, open entry
    val stq_commit_head = Reg(UInt()) // point to next store to commit
 
-   val clear_store = Bool()                     
+   val clear_store = Bool()
 
 
    val live_store_mask = Reg(init = Bits(0, num_st_entries))
@@ -236,9 +239,9 @@ class LoadStoreUnit(pl_width: Int)(implicit conf: BOOMConfiguration) extends Mod
    // for now, only execute the sleeping load at the head of the LAQ
    // wasteful if the laq_head has already been executed
    slow_ld_iss_idx := laq_head
-    
-   clear_store := Bool(false)                     
-   
+
+   clear_store := Bool(false)
+
 
 
 
@@ -256,9 +259,9 @@ class LoadStoreUnit(pl_width: Int)(implicit conf: BOOMConfiguration) extends Mod
    // Enqueue new entries
    //-------------------------------------------------------------
    //-------------------------------------------------------------
-    
+
    // Decode stage ----------------------------
-   
+
    var ld_enq_idx = laq_tail
    var st_enq_idx = stq_tail
 
@@ -308,11 +311,11 @@ class LoadStoreUnit(pl_width: Int)(implicit conf: BOOMConfiguration) extends Mod
 
    laq_tail := ld_enq_idx
    stq_tail := st_enq_idx
-   
+
 
    //-------------------------------------------------------------
    // Execute stage ---------------------------
-   
+
    val exe_uop = io.exe_resp.bits.uop
 
    when (exe_uop.ctrl.is_load && io.exe_resp.valid) 
@@ -781,7 +784,6 @@ class LoadStoreUnit(pl_width: Int)(implicit conf: BOOMConfiguration) extends Mod
       {
          laq_allocated(i)   := Bool(false)
          laq_addr_val(i)    := Bool(false)
-         laq_uop(i).br_mask := Bits(0) // SYNTH?
       }
       .elsewhen(io.brinfo.valid && !io.brinfo.mispredict && entry_match && laq_allocated(i))
       {
@@ -829,11 +831,10 @@ class LoadStoreUnit(pl_width: Int)(implicit conf: BOOMConfiguration) extends Mod
       stq_executed(stq_head)    := Bool(false)
       stq_succeeded(stq_head)   := Bool(false)
       stq_committed(stq_head)   := Bool(false)
-      saq_addr(stq_head)        := UInt(0)
-      stq_uop(stq_head).br_mask := Bits(0)
+//      saq_addr(stq_head)        := UInt(0)
+//      stq_uop(stq_head).br_mask := Bits(0)
 
       stq_head := WrapInc(stq_head, num_st_entries)
-//      stq_head := stq_head + UInt(1)
    }
     
 
@@ -849,12 +850,11 @@ class LoadStoreUnit(pl_width: Int)(implicit conf: BOOMConfiguration) extends Mod
          laq_succeeded(idx)         := Bool(false)
          laq_failure  (idx)         := Bool(false)
          laq_forwarded_std_val(idx) := Bool(false)
-         laq_addr(idx)              := UInt(0)
-         laq_uop(idx).br_mask       := Bits(0)
+//         laq_addr(idx)              := UInt(0)
+//         laq_uop(idx).br_mask       := Bits(0)
       }
       
       temp_laq_head = Mux(io.commit_load_mask(w), WrapInc(temp_laq_head, num_ld_entries), temp_laq_head)
-//      temp_laq_head = Mux(io.commit_load_mask(w), temp_laq_head + UInt(1), temp_laq_head)
    }
    laq_head := temp_laq_head
      
@@ -961,6 +961,7 @@ class LoadStoreUnit(pl_width: Int)(implicit conf: BOOMConfiguration) extends Mod
       }
 
 
+//      laq_addr_val := UInt(0)
       for (i <- 0 until num_ld_entries)
       {
          laq_addr_val(i)    := Bool(false)

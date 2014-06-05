@@ -46,11 +46,11 @@ class RegisterRead(issue_width: Int, num_read_ports: Int, num_total_bypass_ports
    }
    
    
-   val rrd_valids     = Vec.fill(issue_width) { Bool() }
-   val rrd_uops       = Vec.fill(issue_width) { new MicroOp() }
+   val rrd_valids       = Vec.fill(issue_width) { Bool() }
+   val rrd_uops         = Vec.fill(issue_width) { new MicroOp() }
  
-   val exe_reg_valids = Vec.fill(issue_width) { Reg(init = Bool(false)) }
-   val exe_reg_uops   = Vec.fill(issue_width) { Reg(outType = new MicroOp())  }
+   val exe_reg_valids   = Vec.fill(issue_width) { Reg(init = Bool(false)) }
+   val exe_reg_uops     = Vec.fill(issue_width) { Reg(outType = new MicroOp())  }
    val exe_reg_rs1_data = Vec.fill(issue_width) { Reg(outType = Bits(width = XPRLEN))  }
    val exe_reg_rs2_data = Vec.fill(issue_width) { Reg(outType = Bits(width = XPRLEN))  }
    

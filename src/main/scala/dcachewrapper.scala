@@ -270,7 +270,12 @@ class DCacheWrapper(implicit conf: DCacheConfig, lnconf: TileLinkConfiguration) 
    val iflb_kill = Reg(next=(enq_val && !enq_rdy))
 
 
+   // try to catch if there's a resource leak
+   val full_counter = Reg(init=UInt(0,32))
+   when (enq_rdy) { full_counter := UInt(0) }
+   .otherwise     { full_counter := full_counter + UInt(1) }
 
+   assert(full_counter <= UInt(10000), "Inflight buffers have been busy for 10k cycles. Probably a resource leak.")
 
  
    //------------------------------------------------------------

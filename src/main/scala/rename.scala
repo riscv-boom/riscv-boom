@@ -14,8 +14,8 @@ import Node._
 
 import scala.collection.mutable.ArrayBuffer
 
-//-------------------------------------------------------------                 
-//-------------------------------------------------------------                 
+//-------------------------------------------------------------
+//-------------------------------------------------------------
  
 class RenameMapTableElementIo(pl_width: Int) extends Bundle()
 {
@@ -51,10 +51,9 @@ class RenameMapTableElement(pipeline_width: Int) extends Module
    // unwilling to trust that.
 
    val element = Reg(init = UInt(0, PREG_SZ)) 
-  
+
    // handle branch speculation
-//   val element_br_copies = Mem(out=UInt(width = PREG_SZ), n=MAX_BR_COUNT)
-   val element_br_copies = Vec.fill(MAX_BR_COUNT) { Reg(UInt(width=PREG_SZ)) }
+   val element_br_copies = Mem(out=UInt(width = PREG_SZ), n=MAX_BR_COUNT)
 
    // this is possibly the hardest piece of code I have ever had to reason about in my LIFE.
    // Or maybe that's the 5am talking.
@@ -102,8 +101,8 @@ class RenameMapTableElement(pipeline_width: Int) extends Module
    io.element  := element
 }
  
-//-------------------------------------------------------------                 
-//-------------------------------------------------------------                 
+//-------------------------------------------------------------
+//-------------------------------------------------------------
  
 class FreeListIo(num_phys_registers: Int, pl_width: Int) extends Bundle()
 {
@@ -154,9 +153,7 @@ class RenameFreeList(num_phys_registers: Int // number of physical registers
    val allocation_lists = Vec.fill(MAX_BR_COUNT) { Reg(outType=Bits(width = num_phys_registers)) }
 
    val enq_mask = Vec.fill(pl_width) {Bits(width = num_phys_registers)}
-//   val enq_mask = Bits(width = num_phys_registers)
-//   var enq_mask = Bits(0, width = num_phys_registers)
-   
+
    // ------------------------------------------
    // find new,free physical registers
 
@@ -222,7 +219,7 @@ class RenameFreeList(num_phys_registers: Int // number of physical registers
    // to enforce a write priority to allocation_lists()
    val br_cleared = Vec.fill(MAX_BR_COUNT) { Bool() }
    for (i <- 0 until MAX_BR_COUNT) { br_cleared(i) := Bool(false) }
-     
+
    for (w <- pl_width-1 to 0 by -1)
    {
       // When branching, start a fresh copy of the allocation_list 
@@ -232,12 +229,12 @@ class RenameFreeList(num_phys_registers: Int // number of physical registers
          allocation_lists(io.ren_br_tags(w)) := just_allocated_mask
          br_cleared(io.ren_br_tags(w)) := Bool(true)
       }
-   
+
       // check that we both request a register and was able to allocate a register
       just_allocated_mask = Mux(io.req_preg_vals(w) && allocated(w), requested_pregs_oh(w) | just_allocated_mask,
                                                                      just_allocated_mask)
    }
-   
+
    for (i <- 0 until MAX_BR_COUNT)
    {
       when (!br_cleared(i))
@@ -245,8 +242,8 @@ class RenameFreeList(num_phys_registers: Int // number of physical registers
          allocation_lists(i) := allocation_lists(i) | just_allocated_mask
       }
    }
-   
-   
+
+
    // ** Set enqueued PREG to "Free" ** //
    for (w <- 0 until pl_width)
    {
@@ -260,7 +257,7 @@ class RenameFreeList(num_phys_registers: Int // number of physical registers
          enq_mask(w) := UInt(1) << io.rollback_pdsts(w)
       }
    }
-      
+
 
    // Update the Free List
    when (!io.br_mispredict_val)
@@ -295,14 +292,14 @@ class RenameFreeList(num_phys_registers: Int // number of physical registers
 }
 
 
-//-------------------------------------------------------------                 
-//-------------------------------------------------------------                 
- 
+//-------------------------------------------------------------
+//-------------------------------------------------------------
+
 class BTReadPortIn extends Bundle
 {
    val prs1        = UInt(width = PREG_SZ)
    val prs2        = UInt(width = PREG_SZ)
-}                 
+}
 class BTReadPortOut extends Bundle
 {
    val prs1_busy   = Bool()
@@ -332,9 +329,10 @@ class BusyTableIo(pipeline_width: Int, num_wb_ports: Int) extends Bundle()
    val old_valids  = Vec.fill(num_wb_ports) { Bool().asInput }
    val old_pdsts = Vec.fill(num_wb_ports) { UInt(width = PREG_SZ).asInput }
    
-   val debug = new Bundle {
-      val is_busy = Vec.fill(PHYS_REG_COUNT) { Bool() }
-   }.asOutput
+   val debug = new Bundle 
+   {
+      val bsy_table= UInt(OUTPUT, width=PHYS_REG_COUNT)
+   }
 }
 
 // Register P0 is always NOT_BUSY, and cannot be set to BUSY
@@ -347,8 +345,8 @@ class BusyTable(pipeline_width: Int, num_wb_ports: Int) extends Module
 
    def BUSY     = Bool(true)
    def NOT_BUSY = Bool(false)
-    
-   val table_bsy = Vec.fill(PHYS_REG_COUNT){ Reg(init = NOT_BUSY) }
+
+   val table_bsy = Reg(init=UInt(0,PHYS_REG_COUNT))
 
    // write ports unbusy-ing registers TODO come up with better name than "old_*"
    // TODO need to get rid of so many write ports
@@ -359,22 +357,22 @@ class BusyTable(pipeline_width: Int, num_wb_ports: Int) extends Module
          table_bsy(io.old_pdsts(wb_idx)) := NOT_BUSY
       }
    }
- 
+
    for (w <- 0 until pipeline_width)
-   {        
+   {
       when (io.write_valid(w) && io.write_pdst(w) != UInt(0))
       {
          table_bsy(io.write_pdst(w)) := BUSY
       }
    }
- 
+
 
    for (w <- 0 until pipeline_width)
    {
       // handle bypassing a clearing of the busy-bit
       var prs1_just_cleared = Bool(false)
       var prs2_just_cleared = Bool(false)
-      
+
       for (i <- 0 until num_wb_ports)
       {
          prs1_just_cleared = (io.old_valids(i) && (io.old_pdsts(i) === io.read_in(w).prs1)) | prs1_just_cleared
@@ -382,15 +380,12 @@ class BusyTable(pipeline_width: Int, num_wb_ports: Int) extends Module
       }
 
       // note: no bypassing of the newly busied (that is done outside this module)  
-      io.read_out(w).prs1_busy := (table_bsy.read(io.read_in(w).prs1) && !prs1_just_cleared) 
-      io.read_out(w).prs2_busy := (table_bsy.read(io.read_in(w).prs2) && !prs2_just_cleared) 
+      io.read_out(w).prs1_busy := (table_bsy(io.read_in(w).prs1) && !prs1_just_cleared) 
+      io.read_out(w).prs2_busy := (table_bsy(io.read_in(w).prs2) && !prs2_just_cleared) 
    }
 
    // debug
-   for (i <- 0 until PHYS_REG_COUNT)
-   {
-      io.debug.is_busy(i) := table_bsy(i)
-   }
+   io.debug.bsy_table := table_bsy
 }
  
 //-------------------------------------------------------------                 
@@ -402,11 +397,11 @@ class RenameStageIO(pl_width: Int, num_wb_ports: Int) extends Bundle
 {
    val ren_mask  = Vec.fill(pl_width) {Bool().asOutput} // mask of valid instructions
    val inst_can_proceed = Vec.fill(pl_width) {Bool(OUTPUT)}
-   
+
    val kill      = Bool(INPUT)
 
    val dec_mask  = Vec.fill(pl_width){ Bool().asInput } 
-   
+
    val dec_uops  = Vec.fill(pl_width) {new MicroOp().asInput}
    val ren_uops  = Vec.fill(pl_width) {new MicroOp().asOutput}
 
@@ -422,7 +417,7 @@ class RenameStageIO(pl_width: Int, num_wb_ports: Int) extends Bundle
    val com_valids = Vec.fill(pl_width) {Bool(INPUT)}
    val com_uops   = Vec.fill(pl_width) {new MicroOp().asInput}
    val com_rbk_valids = Vec.fill(pl_width) {Bool(INPUT)}
-   
+
 
    // debug
    val debug = new Bundle {
@@ -432,10 +427,10 @@ class RenameStageIO(pl_width: Int, num_wb_ports: Int) extends Bundle
          val rbk_wen = Bool()
          val element = UInt()
       }}
-      val bsy_table = Vec.fill(PHYS_REG_COUNT) { Bool() }
+      val bsy_table = UInt(width=PHYS_REG_COUNT)
    }.asOutput
 }
-       
+
 
 class RenameStage(pl_width: Int, num_wb_ports: Int) extends Module
 {
@@ -443,7 +438,7 @@ class RenameStage(pl_width: Int, num_wb_ports: Int) extends Module
 
    val ren_br_vals = Vec.fill(pl_width) { Bool() }
    val freelist_can_allocate = Vec.fill(pl_width) { Bool() }
-  
+
    //-------------------------------------------------------------
    // Set outputs up... we'll write in the pop*/pdst info below
    for (w <- 0 until pl_width)
@@ -459,11 +454,11 @@ class RenameStage(pl_width: Int, num_wb_ports: Int) extends Module
                             
       io.ren_uops(w).pdst_rtype := io.dec_uops(w).ldst_rtype
    }
-    
-    
+
+
    //-------------------------------------------------------------
    // Rename Table
- 
+
    val map_table_io = Vec.fill(LOGICAL_REG_COUNT) { Module(new RenameMapTableElement(DECODE_WIDTH)).io } 
 
    for (i <- 0 until LOGICAL_REG_COUNT)
@@ -485,7 +480,7 @@ class RenameStage(pl_width: Int, num_wb_ports: Int) extends Module
          map_table_io(i).ren_br_vals(w)   := ren_br_vals(w)
          map_table_io(i).ren_br_tags(w)   := io.ren_uops(w).br_tag
       }
-     
+
       map_table_io(i).br_mispredict       := io.brinfo.mispredict
       map_table_io(i).br_mispredict_tag   := io.brinfo.tag
    }
@@ -519,7 +514,7 @@ class RenameStage(pl_width: Int, num_wb_ports: Int) extends Module
       var rs1_cases =  Array((Bool(false),  UInt(0,PREG_SZ)))
       var rs2_cases =  Array((Bool(false),  UInt(0,PREG_SZ)))
       var stale_cases= Array((Bool(false),  UInt(0,PREG_SZ)))
-   
+
       prs1_was_bypassed(w) := Bool(false)
       prs2_was_bypassed(w) := Bool(false)
 
@@ -535,7 +530,7 @@ class RenameStage(pl_width: Int, num_wb_ports: Int) extends Module
          when ((io.ren_uops(w).lrs2_rtype === RT_FIX) && io.ren_mask(xx) && io.ren_uops(xx).ldst_val && (io.ren_uops(w).lrs2 === io.ren_uops(xx).ldst))
             { prs2_was_bypassed(w) := Bool(true) }
       }
-      
+
       // add default case where we can just read the map table for our information
       rs1_cases   ++= Array(((io.ren_uops(w).lrs1_rtype === RT_FIX) && (io.ren_uops(w).lrs1 != UInt(0)), map_table_output(w).prs1))
       rs2_cases   ++= Array(((io.ren_uops(w).lrs2_rtype === RT_FIX) && (io.ren_uops(w).lrs2 != UInt(0)), map_table_output(w).prs2))
@@ -550,28 +545,28 @@ class RenameStage(pl_width: Int, num_wb_ports: Int) extends Module
    // Busy Table (For Fixed Point GPRs)
 
    val freelist_req_pregs = Vec.fill(pl_width) { UInt(width = PREG_SZ) }
- 
+
    // 3 WB ports for now
    // 1st is back-to-back bypassable ALU ops
    // 2nd is memory/muldiv
    // TODO 3rd is ALU ops that aren't bypassable... can maybe remove this? or set TTL countdown on 1st port?
    // TODO optimize - too many write ports, but how to deal with that? (slow + fast...)
    val bsy_table = Module(new BusyTable(pipeline_width = pl_width, num_wb_ports = num_wb_ports))
-   
+
       for (w <- 0 until pl_width)
       {
          // Reading the Busy Bits
          // for critical path reasons, we speculatively read out the busy-bits assuming no dependencies between uops
          // then verify if the uop actually uses a register and if it depends on a newly unfreed register
-         bsy_table.io.read_in(w).prs1  := map_table_output(w).prs1 
-         bsy_table.io.read_in(w).prs2  := map_table_output(w).prs2 
-         
+         bsy_table.io.read_in(w).prs1  := map_table_output(w).prs1
+         bsy_table.io.read_in(w).prs2  := map_table_output(w).prs2
+
          io.ren_uops(w).prs1_busy := io.ren_uops(w).lrs1_rtype === RT_FIX &&
                                        (bsy_table.io.read_out(w).prs1_busy || prs1_was_bypassed(w))
          io.ren_uops(w).prs2_busy := io.ren_uops(w).lrs2_rtype === RT_FIX &&
                                        (bsy_table.io.read_out(w).prs2_busy || prs2_was_bypassed(w))
 
- 
+
           // Updating the Table (new busy register)
          bsy_table.io.write_valid(w) := freelist_can_allocate(w) &&
                                         io.ren_mask(w) && 
@@ -589,7 +584,7 @@ class RenameStage(pl_width: Int, num_wb_ports: Int) extends Module
    // Free List (Fixed Point)
 
    val freelist = Module(new RenameFreeList(PHYS_REG_COUNT, pl_width, zero_is_zero = true))
-      
+
       for (w <- 0 until pl_width)
       {
          freelist.io.req_preg_vals(w) := (io.inst_can_proceed(w) &&
@@ -599,7 +594,7 @@ class RenameStage(pl_width: Int, num_wb_ports: Int) extends Module
                                          (io.ren_uops(w).ldst_rtype === RT_FIX))
       }
       freelist_req_pregs := freelist.io.req_pregs
- 
+
       for (w <- 0 until pl_width)
       {
          freelist.io.enq_vals(w)    := io.com_valids(w) &&
@@ -616,17 +611,17 @@ class RenameStage(pl_width: Int, num_wb_ports: Int) extends Module
                                         (io.com_uops(w).pdst_rtype === RT_FIX)
          freelist.io.rollback_pdsts(w) := io.com_uops(w).pdst
       }
-      
+
       freelist.io.br_mispredict_val := io.brinfo.mispredict
       freelist.io.br_mispredict_tag := io.brinfo.tag
-      
- 
+
+
    // for some instructions, pass through the logical destination as the physical destination
    // (admittedly, not sure which ones anymore. MTPCR has been removed)
    for (w <- 0 until pl_width)
    {
-      io.ren_uops(w).pdst := Mux((io.ren_uops(w).ldst_val && (io.ren_uops(w).ldst_rtype === RT_FIX)), 
-                                                                              freelist_req_pregs(w), 
+      io.ren_uops(w).pdst := Mux((io.ren_uops(w).ldst_val && (io.ren_uops(w).ldst_rtype === RT_FIX)),
+                                                                              freelist_req_pregs(w),
                                                                               io.ren_uops(w).ldst)
    }
 
@@ -639,7 +634,7 @@ class RenameStage(pl_width: Int, num_wb_ports: Int) extends Module
       io.inst_can_proceed(w) := ((freelist.io.can_allocate(w) && io.ren_uops(w).ldst_rtype === RT_FIX) || io.ren_uops(w).ldst_rtype != RT_FIX) && io.dis_inst_can_proceed(w)
    }
 
-               
+
    //-------------------------------------------------------------
    // Debug signals
 
@@ -650,13 +645,10 @@ class RenameStage(pl_width: Int, num_wb_ports: Int) extends Module
       io.debug.map_table(i).rbk_wen := map_table_io(i).rollback_wen
       io.debug.map_table(i).element := map_table_io(i).element
    }
-   for (i <- 0 until PHYS_REG_COUNT)
-   {
-      io.debug.bsy_table(i) := bsy_table.io.debug.is_busy(i)
-   }
+   io.debug.bsy_table:= bsy_table.io.debug.bsy_table
 }
 
 
 
-} 
+}
 
