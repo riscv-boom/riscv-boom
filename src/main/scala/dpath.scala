@@ -1340,33 +1340,33 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
       // color codes for output files
       // if you use VIM to view, you'll need the AnsiEsc plugin.
       // 1 is bold, 2 is background, 4 is k
-      val blk   = if (DEBUG_ENABLE_COLOR) "\033[1;30m" else ""
-      val red   = if (DEBUG_ENABLE_COLOR) "\033[1;31m" else ""
-      val grn   = if (DEBUG_ENABLE_COLOR) "\033[1;32m" else ""
-      val ylw   = if (DEBUG_ENABLE_COLOR) "\033[1;33m" else ""
-      val blu   = if (DEBUG_ENABLE_COLOR) "\033[1;34m" else ""
-      val mgt   = if (DEBUG_ENABLE_COLOR) "\033[1;35m" else ""
-      val cyn   = if (DEBUG_ENABLE_COLOR) "\033[1;36m" else ""
-      val wht   = if (DEBUG_ENABLE_COLOR) "\033[1;37m" else ""
+      val blk   = if (DEBUG_ENABLE_COLOR) "\033[1;30m" else " "
+      val red   = if (DEBUG_ENABLE_COLOR) "\033[1;31m" else " "
+      val grn   = if (DEBUG_ENABLE_COLOR) "\033[1;32m" else " "
+      val ylw   = if (DEBUG_ENABLE_COLOR) "\033[1;33m" else " "
+      val blu   = if (DEBUG_ENABLE_COLOR) "\033[1;34m" else " "
+      val mgt   = if (DEBUG_ENABLE_COLOR) "\033[1;35m" else " "
+      val cyn   = if (DEBUG_ENABLE_COLOR) "\033[1;36m" else " "
+      val wht   = if (DEBUG_ENABLE_COLOR) "\033[1;37m" else " "
       val end   = if (DEBUG_ENABLE_COLOR) "\033[0m"
        
-      val b_blk = if (DEBUG_ENABLE_COLOR) "\033[2;30m" else ""
-      val b_red = if (DEBUG_ENABLE_COLOR) "\033[2;31m" else ""
-      val b_grn = if (DEBUG_ENABLE_COLOR) "\033[2;32m" else ""
-      val b_ylw = if (DEBUG_ENABLE_COLOR) "\033[2;33m" else ""
-      val b_blu = if (DEBUG_ENABLE_COLOR) "\033[2;34m" else ""
-      val b_mgt = if (DEBUG_ENABLE_COLOR) "\033[2;35m" else ""
-      val b_cyn = if (DEBUG_ENABLE_COLOR) "\033[2;36m" else ""
-      val b_wht = if (DEBUG_ENABLE_COLOR) "\033[2;37m" else ""
+      val b_blk = if (DEBUG_ENABLE_COLOR) "\033[2;30m" else " "
+      val b_red = if (DEBUG_ENABLE_COLOR) "\033[2;31m" else " "
+      val b_grn = if (DEBUG_ENABLE_COLOR) "\033[2;32m" else " "
+      val b_ylw = if (DEBUG_ENABLE_COLOR) "\033[2;33m" else " "
+      val b_blu = if (DEBUG_ENABLE_COLOR) "\033[2;34m" else " "
+      val b_mgt = if (DEBUG_ENABLE_COLOR) "\033[2;35m" else " "
+      val b_cyn = if (DEBUG_ENABLE_COLOR) "\033[2;36m" else " "
+      val b_wht = if (DEBUG_ENABLE_COLOR) "\033[2;37m" else " "
        
-      val u_blk = if (DEBUG_ENABLE_COLOR) "\033[4;30m" else ""
-      val u_red = if (DEBUG_ENABLE_COLOR) "\033[4;31m" else ""
-      val u_grn = if (DEBUG_ENABLE_COLOR) "\033[4;32m" else ""
-      val u_ylw = if (DEBUG_ENABLE_COLOR) "\033[4;33m" else ""
-      val u_blu = if (DEBUG_ENABLE_COLOR) "\033[4;34m" else ""
-      val u_mgt = if (DEBUG_ENABLE_COLOR) "\033[4;35m" else ""
-      val u_cyn = if (DEBUG_ENABLE_COLOR) "\033[4;36m" else ""
-      val u_wht = if (DEBUG_ENABLE_COLOR) "\033[4;37m" else ""
+      val u_blk = if (DEBUG_ENABLE_COLOR) "\033[4;30m" else " "
+      val u_red = if (DEBUG_ENABLE_COLOR) "\033[4;31m" else " "
+      val u_grn = if (DEBUG_ENABLE_COLOR) "\033[4;32m" else " "
+      val u_ylw = if (DEBUG_ENABLE_COLOR) "\033[4;33m" else " "
+      val u_blu = if (DEBUG_ENABLE_COLOR) "\033[4;34m" else " "
+      val u_mgt = if (DEBUG_ENABLE_COLOR) "\033[4;35m" else " "
+      val u_cyn = if (DEBUG_ENABLE_COLOR) "\033[4;36m" else " "
+      val u_wht = if (DEBUG_ENABLE_COLOR) "\033[4;37m" else " "
       
       var white_space = 42  - NUM_LSU_ENTRIES - INTEGER_ISSUE_SLOT_COUNT - (NUM_ROB_ENTRIES/COMMIT_WIDTH)
       // for 1440 monitor 
@@ -1374,21 +1374,22 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
 //      var white_space = 27  - NUM_LSU_ENTRIES - INTEGER_ISSUE_SLOT_COUNT - (NUM_ROB_ENTRIES/COMMIT_WIDTH)
 
       if (DEBUG_BTB) white_space = white_space - BTB_NUM_ENTRIES - 1
-
-      var debug_string = sprintf("--- Cyc=%d , ----------------- Ret: %d ---------------------------------- User Retired: %d\n"
+ 
+      def InstsStr(insts: Bits, width: Int) =
+      {
+         var string = sprintf("")
+         for (w <- 0 until width)
+            string = sprintf("%s(DASM(%x))", string, insts(((w+1)*32)-1,w*32))
+         string
+      }
+          
+      // Front-end
+      printf("--- Cyc=%d , ----------------- Ret: %d ---------------------------------- User Retired: %d\n  BrPred1:        (IF1_PC= 0x%x - Predict:%s) ------ PC: [%s%s%s%s-%s for br_id: %d, msk:%x, sel: %d: %s %s next: 0x%x]\nI$ Response: (%s) IF2_PC= 0x%x (mask:0x%x) \033[1;35m%s\033[0m  -------- BrPred2: (%s,%s,%s,%s,%s %d,%d) [pred_targ: 0x%x] killmsk: 0x%x --->> (0x%x)\n"  
          , tsc_reg
          , irt_reg & UInt(0xffffff)
          , irt_user_reg & UInt(0xffffff)
-         )
-
-
-      // Front-end
-
-      // Fetch Stage 1
-      debug_string = sprintf("%s  BrPred1:        (IF1_PC= 0x%x - Predict:%s) ------ PC: [%s%s%s%s-%s for br_id: %d, msk:%x, sel: %d: %s %s next: 0x%x]\n"
-//      debug_string = sprintf("%s  BrPred1:        (IF1_PC= 0x%x - Predict:%s) ------ PC: [%s%s%s%s-%s for br_id: %d, msk:%x, sel: %d: %s next: 0x%x] btbinfo: %d %s 0x%x?=0x%x [0x%x]\n" // TODO delete me
-         , debug_string
          , io.imem.resp.bits.bht_pc(19,0)
+      // Fetch Stage 1
          , Mux(br_predictor.io.prediction_info.taken, Str("T"), Str("-"))
          , Mux(br_unit.brinfo.valid, Str("V"), Str("-"))
          , Mux(br_unit.taken, Str("T"), Str("-"))
@@ -1405,25 +1406,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
            Mux(bp2_take_pc && !if_stalled, Str("BP2"), 
                               Str(" ")))))
          , if_pc_next
-//         , io.imem.resp.bits.taken
-//         , Mux(DebugIsJALR(btb_predicted_inst), Str("JR"), Str("BJ"))
-//         , btb_predicted_inst_pc  
-//         , io.imem.resp.bits.debug_taken_pc 
-//         , btb_predicted_inst
-         )
-
-      def InstsStr(insts: Bits, width: Int) =
-      {
-         var string = sprintf("")
-         for (w <- 0 until width)
-            string = sprintf("%s(DASM(%x))", string, insts(((w+1)*32)-1,w*32))
-         string
-      }
-
-
       // Fetch Stage 2
-      debug_string = sprintf("%s  I$ Response: (%s) IF2_PC= 0x%x (mask:0x%x) \033[1;35m%s\033[0m  -------- BrPred2: (%s,%s,%s,%s,%s %d,%d) [pred_targ: 0x%x] killmsk: 0x%x --->> (0x%x)\n"  
-         , debug_string
          , Mux(io.imem.resp.valid && !fetchbuffer_kill, Str(mgt + "V" + end), Str(grn + "-" + end))
          , fetch_bundle.pc(19,0)
          , io.imem.resp.bits.mask
@@ -1440,58 +1423,20 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
          , fetch_bundle.mask
          )
           
-      //if (DEBUG_FETCHBUFFER)
-      //{                                                  
-      //   for (i <- 0 until FETCH_BUFFER_SZ)
-      //   {
-      //      val entry = FetchBuffer.ram(UInt(i))
-      //      // only shows the first instruction in the bundle...
-      //      if (i == 0)
-      //         debug_string = sprintf("%s    FetchBuffer: [PC:0x%x %x %s) %s %d %s] %s %s %s %s %s\n"
-      //            , debug_string
-      //            , entry.pc(19,0)
-      //            , entry.mask.toBits
-      //            , InstsStr(entry.insts.toBits, FETCH_WIDTH) 
-      //            , Mux(entry.btb_pred_taken, Str("B"), Str(" "))
-      //            , entry.btb_pred_taken_idx
-      //            , Mux(entry.br_predictions(0).taken, Str("H"), Str(" "))
-      //            , Mux(FetchBuffer.deq_ptr === UInt(i), Str("H"), Str(" "))
-      //            , Mux(FetchBuffer.enq_ptr === UInt(i), Str("T"), Str(" "))
-      //            , Mux(FetchBuffer.do_flow, Str(mgt + "FLOW" + end), Str( grn + " " + end))
-      //            , Mux(fetchbuffer_kill, Str("KILL"), Str(" "))
-      //            , Mux(FetchBuffer.full, Str("FULL"), Str(" "))
-
-      //            )
-      //      else
-      //         debug_string = sprintf("%s                 [PC:0x%x %x %s) %s %d %s] %s %s  \n"
-      //            , debug_string
-      //            , entry.pc(19,0)
-      //            , entry.mask.toBits
-      //            , InstsStr(entry.insts.toBits, FETCH_WIDTH) 
-      //            , Mux(entry.btb_pred_taken, Str("B"), Str(" "))
-      //            , entry.btb_pred_taken_idx
-      //            , Mux(entry.br_predictions(0).taken, Str("H"), Str(" "))
-      //            , Mux(FetchBuffer.deq_ptr === UInt(i), Str("H"), Str(" "))
-      //            , Mux(FetchBuffer.enq_ptr === UInt(i), Str("T"), Str(" "))
-      //            )
-      //   }
-      //}
-
       // Back-end
-      debug_string = sprintf("%sDec:  ("
-         , debug_string
-         )
-
       for (w <- 0 until DECODE_WIDTH)
       {
-         debug_string = sprintf("%s[0x%x]                        "
-            , debug_string
-            , rename_stage.io.ren_uops(w).pc(19,0)
-            )
+         if (w == 0)
+         {
+            printf("Dec:  ([0x%x]                        ", rename_stage.io.ren_uops(w).pc(19,0))
+         }
+         else
+         {
+            printf("[0x%x]                        ", rename_stage.io.ren_uops(w).pc(19,0))
+         }
       }
              
-      debug_string = sprintf("%s) State: (%s:%s %s %s \033[1;31m%s\033[0m %s %s) BMsk:%x %s\n"
-         , debug_string
+      printf(") State: (%s:%s %s %s \033[1;31m%s\033[0m %s %s) BMsk:%x %s\n"
          , Mux(rob.io.debug.state === UInt(0), Str("RESET"),
            Mux(rob.io.debug.state === UInt(1), Str("NORMAL"),
            Mux(rob.io.debug.state === UInt(2), Str("ROLLBK"),
@@ -1510,24 +1455,18 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
 
       for (w <- 0 until DECODE_WIDTH)
       {
-//         debug_string = sprintf("%s(%s%s) \033[1;31mDASM(%x)\033[0m |  "
-         debug_string = sprintf("%s(%s%s) " + red + "DASM(%x)" + end + " |  "
-            , debug_string
+         printf("(%s%s) " + red + "DASM(%x)" + end + " |  "
             , Mux(fetched_inst_valid && dec_fbundle(w).valid && !dec_finished_mask(w), Str("V"), Str("-"))
             , Mux(dec_mask(w), Str("V"), Str("-"))
             , dec_fbundle(w).inst
             )
       }
 
-      debug_string = sprintf("%s)\n          fin(%x)"
-         , debug_string
-         , dec_finished_mask
-         )
+      printf(")\n          fin(%x)", dec_finished_mask)
 
       for (w <- 0 until DECODE_WIDTH)
       {
-         debug_string = sprintf("%s       [ISA:%d,%d,%d] [Phs:%d(%s)%d[%s](%s)%d[%s](%s)] " 
-            , debug_string
+         printf("       [ISA:%d,%d,%d] [Phs:%d(%s)%d[%s](%s)%d[%s](%s)] " 
             , dec_uops(w).ldst
             , dec_uops(w).lrs1
             , dec_uops(w).lrs2
@@ -1550,11 +1489,9 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
 
       
 
-      debug_string = sprintf("%s Exct(%s%d) Commit(%x)                  freelist: 0x%x\n"
-         , debug_string
+      printf(" Exct(%s%d) Commit(%x)                  freelist: 0x%x\n"
          , Mux(com_exception, Str("E"), Str("-"))
          , com_exc_cause
-//         , rob.io.com_valids.toBits breaks CHisel Verilog :(
          , com_valids.toBits
          , rename_stage.io.debug.freelist
          )
@@ -1562,8 +1499,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
       // Issue Window
       for (i <- 0 until INTEGER_ISSUE_SLOT_COUNT)
       {
-         debug_string = sprintf("%s  integer_issue_slot[%d](%s)(Req:%s):wen=%s P:(%s,%s) OP:(%d,%d) PDST:%d %s [%s[DASM(%x)]"+end+" 0x%x: %d] ri:%d bm=%d imm=0x%x\n" 
-            , debug_string
+         printf("  integer_issue_slot[%d](%s)(Req:%s):wen=%s P:(%s,%s) OP:(%d,%d) PDST:%d %s [%s[DASM(%x)]"+end+" 0x%x: %d] ri:%d bm=%d imm=0x%x\n" 
             , UInt(i, log2Up(INTEGER_ISSUE_SLOT_COUNT)) 
             , Mux(issue_unit.io.debug.slot(i).valid, Str("V"), Str("-"))
             , Mux(issue_unit.io.debug.slot(i).request, Str(u_red + "R" + end), Str(grn + "-" + end))
@@ -1599,8 +1535,8 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
          val row = if (COMMIT_WIDTH == 1) r_idx else (r_idx >> log2Up(COMMIT_WIDTH))
          val r_head = rob.io.debug.rob_head
          val r_tail = rob.io.curr_rob_tail
-         debug_string = sprintf("%s    rob[%d] %s ("
-            , debug_string
+         
+         printf("    rob[%d] %s ("
             , UInt(row, ROB_ADDR_SZ)
             , Mux(r_head === UInt(row) && r_tail === UInt(row), Str("HEAD,TL->"),
               Mux(r_head === UInt(row), Str("HEAD --->"),
@@ -1610,8 +1546,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
 
          if (COMMIT_WIDTH == 1)
          {
-            debug_string = sprintf("%s(%s)(%s) 0x%x [DASM(%x)] %s%d "
-               , debug_string
+            printf("(%s)(%s) 0x%x [DASM(%x)] %s%d "
                , Mux(rob.io.debug.entry(r_idx+0).valid, Str(b_cyn + "V" + end), Str(grn + " " + end))
                , Mux(rob.io.debug.entry(r_idx+0).busy, Str(b_ylw + "B" + end),  Str(grn + " " + end))
                , rob.io.debug.entry(r_idx+0).uop.pc(31,0)
@@ -1623,8 +1558,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
          else if (COMMIT_WIDTH == 2)
          {
             val row_is_val = rob.io.debug.entry(r_idx+0).valid || rob.io.debug.entry(r_idx+1).valid
-            debug_string = sprintf("%s(%s%s)(%s%s) 0x%x %x [%sDASM(%x)][DASM(%x)" + end + "] %s%d,%s%d "
-               , debug_string
+            printf("(%s%s)(%s%s) 0x%x %x [%sDASM(%x)][DASM(%x)" + end + "] %s%d,%s%d "
                , Mux(rob.io.debug.entry(r_idx+0).valid, Str(b_cyn + "V" + end), Str(grn + " " + end))
                , Mux(rob.io.debug.entry(r_idx+1).valid, Str(b_cyn + "V" + end), Str(grn + " " + end))
                , Mux(rob.io.debug.entry(r_idx+0).busy,  Str(b_ylw + "B" + end), Str(grn + " " + end))
@@ -1650,8 +1584,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
          var temp_idx = r_idx
          for (w <- 0 until COMMIT_WIDTH)
          {
-            debug_string = sprintf("%s(d:%s p%d, bm:%x %s sdt:%d) " 
-               , debug_string
+            printf("(d:%s p%d, bm:%x %s sdt:%d) " 
                , Mux(rob.io.debug.entry(temp_idx).uop.pdst_rtype === UInt(0), Str("X"),
                  Mux(rob.io.debug.entry(temp_idx).uop.pdst_rtype === UInt(1), Str("C"),
                  Mux(rob.io.debug.entry(temp_idx).uop.pdst_rtype === UInt(3), Str("-"), Str("?"))))
@@ -1659,20 +1592,18 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
                , rob.io.debug.entry    (temp_idx).uop.br_mask 
                , Mux(rob.io.debug.entry(temp_idx).uop.br_was_taken, Str("T"), Str("-"))
                , rob.io.debug.entry    (temp_idx).uop.stale_pdst
-//               , rob.io.debug.entry    (temp_idx).isstore
             )
             temp_idx = temp_idx + 1
          }
          
          r_idx = r_idx + COMMIT_WIDTH
 
-         debug_string = sprintf("%s\n", debug_string)
+         printf("\n")
       }
 
       // Load/Store Unit
 
-      debug_string = sprintf("%s  Mem[%s,%s:%d,%s,%s %s]\n"
-            , debug_string
+      printf("  Mem[%s,%s:%d,%s,%s %s]\n"
             , Mux(io.dmem.debug.memreq, Str("MREQ"), Str(" "))
             , Mux(io.dmem.debug.memresp, Str("MRESP"), Str(" "))
             , io.dmem.debug.cache_resp_idx
@@ -1682,8 +1613,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
             )
       for (i <- 0 until NUM_LSU_ENTRIES)
       {
-         debug_string = sprintf("%s         ldq[%d]=(%s%s%s%s%s%s%d) st_dep(%d,m=%x) 0x%x %s %s   saq[%d]=(%s%s%s%s%s%s) b:%x 0x%x -> 0x%x %s %s %s"
-            , debug_string
+         printf("         ldq[%d]=(%s%s%s%s%s%s%d) st_dep(%d,m=%x) 0x%x %s %s   saq[%d]=(%s%s%s%s%s%s) b:%x 0x%x -> 0x%x %s %s %s"
             , UInt(i, MEM_ADDR_SZ)
             , Mux(lsu_io.debug.entry(i).laq_allocated, Str("V"), Str("-"))
             , Mux(lsu_io.debug.entry(i).laq_addr_val, Str("A"), Str("-"))
@@ -1717,8 +1647,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
 
          if (i < io.dmem.debug.ld_req_slot.size)
          {
-            debug_string = sprintf("%s                 ld_req_slot[%d]=(%s%s) - laq_idx:%d pdst: %d bm:%x"
-               , debug_string
+            printf("                 ld_req_slot[%d]=(%s%s) - laq_idx:%d pdst: %d bm:%x"
                , UInt(i)
                , Mux(io.dmem.debug.ld_req_slot(i).valid, Str("V"), Str("-"))
                , Mux(io.dmem.debug.ld_req_slot(i).killed, Str("K"), Str("-"))
@@ -1728,7 +1657,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
             )
          }
 
-         debug_string = sprintf("%s\n", debug_string)
+         printf("\n")
 
       }
       
@@ -1748,7 +1677,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
       {
          for (x <- 0 until 7)
          {
-            if (x != 0) debug_string = sprintf("%s\n", debug_string)
+            if (x != 0) printf("\n")
 
             for (y <- 0 until 5)
             {
@@ -1758,8 +1687,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
                {
                   val phs_reg = rename_stage.io.debug.map_table(i).element
 
-                  debug_string = sprintf("%s %sx%d(%s)=p%d[0x%x](%s)"
-                     , debug_string
+                  printf(" %sx%d(%s)=p%d[0x%x](%s)"
                      , Mux(rename_stage.io.debug.map_table(i).rbk_wen, Str("E"), Str(" "))
                      , UInt(i, LREG_SZ)
                      , xpr_to_string(i)
@@ -1770,7 +1698,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
                }
             }
          }
-         debug_string = sprintf("%s\n", debug_string)
+         printf("\n")
       }
       else
       {
@@ -1780,43 +1708,32 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
       
       for (x <- 0 until white_space)
       {
-         debug_string = sprintf("%s\n", debug_string)
+         printf("\n")
       }
+   } // End DEBUG_PRINTF
 
-      printf("%s", debug_string)
-   }
-   else
-   {
-      // provides "am i still alive?" prinouts
-      //when (tsc_reg(12,0) === UInt(8191))
-      //{
-      //   printf("Cycle: %d, PC: 0x%x, Inst: 0x%x (DASM(%x)),idle_cycles: %d\n"
-      //      , tsc_reg
-      //      , com_uops(0).pc
-      //      , com_uops(0).inst
-      //      , com_uops(0).inst
-      //      , idle_cycles
-      //      )
-      //}
-   }
+
 
    if (COMMIT_LOG_PRINTF)
    {
       var found_scall = Bool(false)
+      var new_commit_cnt = UInt(0)
       for (w <- 0 until COMMIT_WIDTH)
       {
-//         when ((com_valids(w) && !(pcr.io.status.s)) || 
-//               (com_exception && com_exc_cause === UInt(rocket.Causes.syscall) && !found_scall)
-//               )
-         when (com_valids(w) || (com_exception && com_exc_cause === UInt(rocket.Causes.syscall)))
+         when ((com_valids(w) && !(pcr.io.status.s)) || 
+               (com_exception && com_exc_cause === UInt(rocket.Causes.syscall) && 
+                  com_uops(w).exc_cause === UInt(rocket.Causes.syscall) &&
+                  !found_scall)
+               )
          {
             found_scall = found_scall || 
                           (com_exception && 
-                          com_exc_cause === UInt(rocket.Causes.syscall))
+                             com_exc_cause === UInt(rocket.Causes.syscall) &&
+                             com_uops(w).exc_cause === UInt(rocket.Causes.syscall))
             when (com_uops(w).ldst_rtype === RT_FIX)
             {
-               printf("\n@@@ 0x%x (0x%x) x%d 0x%x"
-//               printf("\n0x%x (0x%x) x%d 0x%x"
+               //printf("\n@@@ 0x%x (0x%x) x%d 0x%x"
+               printf("\n0x%x (0x%x) x%d 0x%x"
                   , com_uops(w).pc
                   , com_uops(w).inst
                   , com_uops(w).inst(RD_MSB,RD_LSB)
@@ -1824,8 +1741,8 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
             }
             .otherwise
             {
-               printf("\n@@@ 0x%x (0x%x)", com_uops(w).pc, com_uops(w).inst)
-//               printf("\n0x%x (0x%x)", com_uops(w).pc, com_uops(w).inst)
+               //printf("\n@@@ 0x%x (0x%x)", com_uops(w).pc, com_uops(w).inst)
+               printf("\n0x%x (0x%x)", com_uops(w).pc, com_uops(w).inst)
             }
          }
       }
