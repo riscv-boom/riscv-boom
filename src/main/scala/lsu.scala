@@ -6,7 +6,7 @@
 // 2012 Jun 3
 //
 // Load/Store Unit is made up of the Load-Address Queue, the Store-Address
-// Queue, and the Store-Data queue (LAQ, SAQ, and SDQ). 
+// Queue, and the Store-Data queue (LAQ, SAQ, and SDQ).
 //
 // Stores are sent to memory at (well, after) commit, loads are executed
 // optimstically ASAP.  If a misspeculation was discovered, the pipeline is
@@ -24,9 +24,9 @@
 
 // Memory ordering violations are detected by stores at their addr-gen time by
 // associatively searching the LAQ for newer loads that have been issued to
-// memory. 
+// memory.
 
-// The store queue contains both speculated and committed stores. 
+// The store queue contains both speculated and committed stores.
 
 // Only one port to memory... loads and stores have to fight for it, West Side
 // Story style.
@@ -54,7 +54,7 @@ import uncore.constants.MemoryOpConstants._
 
 class LoadStoreUnitIo(pl_width: Int)  extends Bundle()
 {
-   // Decode Stage                                                 
+   // Decode Stage
    // Track which stores are "alive" in the pipeline
    // allows us to know which stores get killed by branch mispeculation
    val dec_st_vals        = Vec.fill(pl_width) { Bool(INPUT) }
@@ -63,18 +63,18 @@ class LoadStoreUnitIo(pl_width: Int)  extends Bundle()
 
    val new_ldq_idx        = UInt(OUTPUT, MEM_ADDR_SZ)
    val new_stq_idx        = UInt(OUTPUT, MEM_ADDR_SZ)
-   
+
    // Execute Stage
    val exe_resp           = (new ValidIO(new ExeUnitResp)).flip
-   
+
    // Commit Stage
    val commit_store_mask  = Vec.fill(pl_width) {Bool(INPUT)}
    val commit_load_mask   = Vec.fill(pl_width) {Bool(INPUT)}
 
    // Send out Memory Request
-   val memreq_val         = Bool(OUTPUT) 
-   val memreq_addr        = UInt(OUTPUT, XPRLEN) 
-   val memreq_wdata       = Bits(OUTPUT, XPRLEN) 
+   val memreq_val         = Bool(OUTPUT)
+   val memreq_addr        = UInt(OUTPUT, XPRLEN)
+   val memreq_wdata       = Bits(OUTPUT, XPRLEN)
    val memreq_uop         = new MicroOp().asOutput()
 
    val memreq_kill        = Bool(OUTPUT) // kill request sent out last cycle
@@ -83,14 +83,14 @@ class LoadStoreUnitIo(pl_width: Int)  extends Bundle()
    val forward_val        = Bool(OUTPUT)
    val forward_data       = Bits(OUTPUT, XPRLEN)
    val forward_uop        = new MicroOp().asOutput() // the load microop (for its pdst)
-    
+
    // Receive Memory Response
-   val memresp_val        = Bool(INPUT) 
+   val memresp_val        = Bool(INPUT)
    val memresp_uop        = new MicroOp().asInput()
-    
+
    // Handle Branch Misspeculations
    val brinfo             = new BrResolutionInfo().asInput()
-  
+
    // Stall Decode as appropriate
    val laq_full           = Bool(OUTPUT)
    val laq_empty          = Bool(OUTPUT)
@@ -103,7 +103,7 @@ class LoadStoreUnitIo(pl_width: Int)  extends Bundle()
    val lsu_misspec        = Bool(INPUT)  // TODO generalize to "pipeline flush"? // TODO rename misspec to ld_order_failure, or lsu_trap?
    val lsu_clr_bsy_valid  = Bool(OUTPUT) // HACK: let the stores clear out the busy bit in the ROB
    val lsu_clr_bsy_rob_idx= UInt(OUTPUT, width=ROB_ADDR_SZ)
-   val lsu_fencei_rdy     = Bool(OUTPUT) 
+   val lsu_fencei_rdy     = Bool(OUTPUT)
 
    val ldo_xcpt_val       = Bool(OUTPUT)
    val ldo_xcpt_uop       = new MicroOp().asOutput()
@@ -160,7 +160,7 @@ class LoadStoreUnitIo(pl_width: Int)  extends Bundle()
       }}
    }.asOutput
 }
-   
+
 class LoadStoreUnit(pl_width: Int)(implicit conf: BOOMConfiguration) extends Module
 {
    val io = new LoadStoreUnitIo(pl_width)
@@ -168,18 +168,18 @@ class LoadStoreUnit(pl_width: Int)(implicit conf: BOOMConfiguration) extends Mod
    val num_ld_entries = NUM_LSU_ENTRIES
    val num_st_entries = NUM_LSU_ENTRIES
 
-    
+
    // Load-Address Queue
 //   val laq_addr_val  = Reg(init=UInt(0,width=num_ld_entries))  //TODO buggy due to chisel - try again soon
    val laq_addr_val  = Vec.fill(num_ld_entries) { Reg(Bool()) }
-   val laq_addr      = Mem(UInt(width=XPRLEN), num_ld_entries) 
+   val laq_addr      = Mem(UInt(width=XPRLEN), num_ld_entries)
 
    val laq_allocated = Vec.fill(num_ld_entries) { Reg(Bool()) } // entry has been allocated
    val laq_executed  = Vec.fill(num_ld_entries) { Reg(Bool()) } // load has been issued to memory (immediately set this bit)
    val laq_succeeded = Vec.fill(num_ld_entries) { Reg(Bool()) } // load has returned from memory, but may still have an ordering failure
 //   val laq_request   = Vec.fill(num_ld_entries) { Reg(resetVal = Bool(false)) } // sleeper load requesting issue to memory (perhaps stores broadcast, sees its store-set finished up)
    val laq_failure   = Vec.fill(num_ld_entries) { Reg(init = Bool(false)) } // ordering fail, must retry (at commit time, which requires a rollback)
-   
+
    val laq_uop       = Vec.fill(num_ld_entries) { Reg(new MicroOp()) }
 
 
@@ -187,22 +187,22 @@ class LoadStoreUnit(pl_width: Int)(implicit conf: BOOMConfiguration) extends Mod
    val laq_st_dep_mask = Vec.fill(num_ld_entries) { Reg(Bits(width = num_st_entries)) }// list of stores we might depend (cleared when a store commits)
 //   val laq_st_wait_mask = Vec.fill(num_ld_entries) { Reg() { Bits(width = num_st_entries) } }// list of stores we might depend on whose addresses are not yet computed
    val laq_yng_st_idx   = Vec.fill(num_ld_entries) { Reg(UInt(width = MEM_ADDR_SZ)) }  // between oldest and youngest (dep_mask can't establish age :( ), "aka store coloring" if you're Intel TODO perhaps just use laq_uop.stq_idx? should be same thing
-   val laq_forwarded_std_val= Vec.fill(num_ld_entries) { Reg(Bool()) }                     
+   val laq_forwarded_std_val= Vec.fill(num_ld_entries) { Reg(Bool()) }
    val laq_forwarded_stq_idx= Vec.fill(num_ld_entries) { Reg(UInt(width = MEM_ADDR_SZ)) }  // which store did get store-load forwarded data from? compare later to see I got things correct
 //   val laq_block_val    = Vec.fill(num_ld_entries) { Reg() { Bool() } }                     // something is blocking us from executing
 //   val laq_block_id     = Vec.fill(num_ld_entries) { Reg() { UInt(width = MEM_ADDR_SZ) } }  // something is blocking us from executing, listen for this ID to wakeup
    val debug_laq_put_to_sleep = Vec.fill(num_ld_entries) { Reg(Bool()) }                      // did a load get put to sleep at least once?
-   
+
    // Store-Address Queue
    val saq_val       = Vec.fill(num_st_entries) { Reg(Bool()) }
 //   val saq_addr      = Vec.fill(num_st_entries) { Reg(UInt(width = XPRLEN)) }
-   val saq_addr      = Mem(UInt(width=XPRLEN),num_st_entries) 
-   
+   val saq_addr      = Mem(UInt(width=XPRLEN),num_st_entries)
+
    // Store-Data Queue
    val sdq_val       = Vec.fill(num_st_entries) { Reg(Bool()) }
    val sdq_data      = Vec.fill(num_st_entries) { Reg(Bits(width = XPRLEN)) }
-   
-   // Shared Store Information 
+
+   // Shared Store Information
    // Write this information in Decode
    val stq_entry_val = Vec.fill(num_st_entries) { Reg(Bool()) } // this may be valid, but not TRUE (on exceptions, this doesn't get cleared but STQ_TAIL gets moved)
    val stq_executed  = Vec.fill(num_st_entries) { Reg(Bool()) } // sent to mem
@@ -231,7 +231,7 @@ class LoadStoreUnit(pl_width: Int)(implicit conf: BOOMConfiguration) extends Mod
    //-------------------------------------------------------------
 
    val ld_iss_idx = UInt(width = MEM_ADDR_SZ)      // index of the load we went to memory
-   val slow_ld_iss_idx = UInt(width = MEM_ADDR_SZ) // index of the "waken up" load 
+   val slow_ld_iss_idx = UInt(width = MEM_ADDR_SZ) // index of the "waken up" load
                                                    // (may or may not be sent to memory)
    val ld_iss_val = Bool()
    val st_iss_val = Bool()
@@ -272,7 +272,7 @@ class LoadStoreUnit(pl_width: Int)(implicit conf: BOOMConfiguration) extends Mod
          // TODO is it better to read out ld_idx?
          // val ld_enq_idx = io.dec_uops(w).ldq_idx
          laq_uop(ld_enq_idx)          := io.dec_uops(w)
-         laq_st_dep_mask(ld_enq_idx)  := next_live_store_mask 
+         laq_st_dep_mask(ld_enq_idx)  := next_live_store_mask
 //         laq_st_dep_mask(ld_enq_idx)  := Mux(clear_store, live_store_mask & ~(Bits(1) << stq_head), live_store_mask)
 
          // TODO I think this is actually just uop.stq_idx!!!
@@ -286,14 +286,14 @@ class LoadStoreUnit(pl_width: Int)(implicit conf: BOOMConfiguration) extends Mod
          laq_forwarded_std_val(ld_enq_idx)  := Bool(false)
          debug_laq_put_to_sleep(ld_enq_idx) := Bool(false)
       }
-      ld_enq_idx = Mux(io.dec_ld_vals(w), WrapInc(ld_enq_idx, num_ld_entries), 
+      ld_enq_idx = Mux(io.dec_ld_vals(w), WrapInc(ld_enq_idx, num_ld_entries),
                                           ld_enq_idx)
 //      ld_enq_idx = Mux(io.dec_ld_vals(w), ld_enq_idx + UInt(1), ld_enq_idx)
-        
+
       when (io.dec_st_vals(w))
       {
          stq_uop(st_enq_idx)       := io.dec_uops(w)
-         
+
          stq_entry_val(st_enq_idx) := Bool(true)
          saq_val      (st_enq_idx) := Bool(false)
          sdq_val      (st_enq_idx) := Bool(false)
@@ -301,12 +301,12 @@ class LoadStoreUnit(pl_width: Int)(implicit conf: BOOMConfiguration) extends Mod
          stq_succeeded(st_enq_idx) := Bool(false)
          stq_committed(st_enq_idx) := Bool(false)
       }
-      next_live_store_mask = Mux(io.dec_st_vals(w), next_live_store_mask | (Bits(1) << st_enq_idx), 
+      next_live_store_mask = Mux(io.dec_st_vals(w), next_live_store_mask | (Bits(1) << st_enq_idx),
                                                     next_live_store_mask)
 
-      st_enq_idx = Mux(io.dec_st_vals(w), WrapInc(st_enq_idx, num_st_entries), 
+      st_enq_idx = Mux(io.dec_st_vals(w), WrapInc(st_enq_idx, num_st_entries),
                                           st_enq_idx)
-   
+
    }
 
    laq_tail := ld_enq_idx
@@ -318,30 +318,30 @@ class LoadStoreUnit(pl_width: Int)(implicit conf: BOOMConfiguration) extends Mod
 
    val exe_uop = io.exe_resp.bits.uop
 
-   when (exe_uop.ctrl.is_load && io.exe_resp.valid) 
+   when (exe_uop.ctrl.is_load && io.exe_resp.valid)
    {
       laq_addr_val(exe_uop.ldq_idx)      := Bool(true)
       laq_addr    (exe_uop.ldq_idx)      := io.exe_resp.bits.data.toUInt
       laq_uop     (exe_uop.ldq_idx).pdst := exe_uop.pdst
    }
-    
+
    when (exe_uop.ctrl.is_sta && io.exe_resp.valid)
    {
       saq_val (exe_uop.stq_idx) := Bool(true)
       saq_addr(exe_uop.stq_idx) := io.exe_resp.bits.data.toUInt
    }
-    
+
    when (exe_uop.ctrl.is_std && io.exe_resp.valid)
    {
       sdq_val (exe_uop.stq_idx) := Bool(true)
       sdq_data(exe_uop.stq_idx) := io.exe_resp.bits.data.toUInt
    }
 
-   io.lsu_clr_bsy_valid := io.exe_resp.valid && 
-                           ((exe_uop.ctrl.is_sta && sdq_val(exe_uop.stq_idx)) || 
+   io.lsu_clr_bsy_valid := io.exe_resp.valid &&
+                           ((exe_uop.ctrl.is_sta && sdq_val(exe_uop.stq_idx)) ||
                            (exe_uop.ctrl.is_std && saq_val(exe_uop.stq_idx)))
    io.lsu_clr_bsy_rob_idx := exe_uop.rob_idx
- 
+
    //-------------------------------------------------------------
    //-------------------------------------------------------------
    // Memory Issue Logic
@@ -351,8 +351,8 @@ class LoadStoreUnit(pl_width: Int)(implicit conf: BOOMConfiguration) extends Mod
    // 2a. - sleeper load    (wokenup- sleeper)
    // 2b. - sleeper load    (commit - sleeper)
    //     - retry load      (commit - rollback)
-   // 3. store 
-   
+   // 3. store
+
 
    // *** FAST LOAD ***
 
@@ -361,14 +361,14 @@ class LoadStoreUnit(pl_width: Int)(implicit conf: BOOMConfiguration) extends Mod
    if (ENABLE_SPECULATE_LOADS)
    {
       // fire loads once address has been calculated
-      req_fire_load_fast := io.exe_resp.valid && io.exe_resp.bits.uop.ctrl.is_load 
+      req_fire_load_fast := io.exe_resp.valid && io.exe_resp.bits.uop.ctrl.is_load
    }
    else
    {
-      req_fire_load_fast := Bool(false) 
+      req_fire_load_fast := Bool(false)
    }
 
-       
+
    // *** SLOW LOAD (waken up) ***
    val req_fire_load_sleeper = Bool()
    req_fire_load_sleeper := Bool(false)
@@ -380,35 +380,35 @@ class LoadStoreUnit(pl_width: Int)(implicit conf: BOOMConfiguration) extends Mod
    when (laq_addr_val(lidx) &&
          laq_allocated(lidx) &&
          !laq_executed(lidx) &&
-         !laq_failure(lidx))  
+         !laq_failure(lidx))
    {
       req_fire_load_sleeper := Bool(true)
    }
-    
-   
+
+
    //-------------------------------------------------------------
    // Load Issue Datapath (ALL loads need to use this path,
    //    to handle forwarding from the STORE QUEUE, etc.)
-   // search entire STORE QUEUE for match on fast load
+   // search entire STORE QUEUE for match on load
    //-------------------------------------------------------------
    // does the incoming load match any store addresses?
-   // TODO this need to be fully translated physical addresses
-   // forwarding requires a full address check
- 
+   // WARNING: this need to be fully translated physical addresses,
+   //    as forwarding requires a full address check.
+
    ld_iss_idx := Mux(req_fire_load_fast, exe_uop.ldq_idx, slow_ld_iss_idx)
    val l_addr  = Mux(req_fire_load_fast, io.exe_resp.bits.data.toUInt, laq_addr(ld_iss_idx))
    val l_uop   = Mux(req_fire_load_fast, exe_uop, laq_uop(ld_iss_idx))
    val read_mask = GenByteMask(l_addr, l_uop.mem_typ)
-   val st_dep_mask = laq_st_dep_mask(ld_iss_idx) 
-   
+   val st_dep_mask = laq_st_dep_mask(ld_iss_idx)
+
    // do the double-word addr match? (doesn't necessarily mean a conflict or forward)
-   val dword_addr_matches = Vec.fill(num_st_entries) { Bool() } 
+   val dword_addr_matches = Vec.fill(num_st_entries) { Bool() }
    // there is some overlap on the bytes, and you may need to put to sleep the load
    // (either data not ready, or not a perfect match between addr and type)
-   val addr_conflicts     = Vec.fill(num_st_entries) { Bool() } 
+   val addr_conflicts     = Vec.fill(num_st_entries) { Bool() }
    // a full address match
-   val forwarding_matches  = Vec.fill(num_st_entries) { Bool() } 
-  
+   val forwarding_matches  = Vec.fill(num_st_entries) { Bool() }
+
    val force_ld_to_sleep = Bool()
    force_ld_to_sleep := Bool(false)
 
@@ -418,14 +418,14 @@ class LoadStoreUnit(pl_width: Int)(implicit conf: BOOMConfiguration) extends Mod
       val s_addr = saq_addr(i)
 
       dword_addr_matches(i) := Bool(false)
-      
-      when (stq_entry_val(i) && 
-            st_dep_mask(i) && 
+
+      when (stq_entry_val(i) &&
+            st_dep_mask(i) &&
             saq_val(i) && (s_addr(conf.rc.as.paddrBits,3) === l_addr(conf.rc.as.paddrBits,3)))
       {
          dword_addr_matches(i) := Bool(true)
       }
-          
+
       // check the lower-order bits for overlap/conflicts and matches
       addr_conflicts(i) := Bool(false)
       val write_mask = GenByteMask(s_addr, stq_uop(i).mem_typ)
@@ -436,26 +436,26 @@ class LoadStoreUnit(pl_width: Int)(implicit conf: BOOMConfiguration) extends Mod
          addr_conflicts(i) := Bool(true)
       }
       // fences/flushes are treated as stores that touch all addresses
-      .elsewhen (stq_entry_val(i) && 
-                  st_dep_mask(i) && 
-                  (stq_uop(i).is_fence)) 
+      .elsewhen (stq_entry_val(i) &&
+                  st_dep_mask(i) &&
+                  (stq_uop(i).is_fence))
       {
          addr_conflicts(i) := Bool(true)
       }
-          
+
 
       // exact match on masks? we can forward the data, if data is also present!
       // TODO we can be fancier perhaps, like (r_mask & w_mask === r_mask)
       forwarding_matches(i) := Bool(false)
-      when ((read_mask === write_mask) && 
+      when ((read_mask === write_mask) &&
             !(stq_uop(i).is_fence) &&
             dword_addr_matches(i))
       {
          forwarding_matches(i) := Bool(true)
       }
-   
+
       // did a load see a conflicting store (sb->lw) or a fence? if so, put the load to sleep
-      when ((stq_entry_val(i) && st_dep_mask(i) && stq_uop(i).is_fence) || 
+      when ((stq_entry_val(i) && st_dep_mask(i) && stq_uop(i).is_fence) ||
             (dword_addr_matches(i) && (l_uop.mem_typ != stq_uop(i).mem_typ) && ((read_mask & write_mask) != Bits(0))))
       {
          force_ld_to_sleep := Bool(true)
@@ -463,35 +463,33 @@ class LoadStoreUnit(pl_width: Int)(implicit conf: BOOMConfiguration) extends Mod
    }
 
 
-
-
-   
    val forwarding_age_logic = Module(new ForwardingAgeLogic(num_st_entries))
    forwarding_age_logic.io.addr_matches    := forwarding_matches.toBits()
    forwarding_age_logic.io.youngest_st_idx := laq_yng_st_idx(ld_iss_idx)
- 
+
    // TODO get rid of dmem.req.ready, since the dcwrapper will already send us a nack if it's not ready
    when ((req_fire_load_fast || req_fire_load_sleeper) && forwarding_age_logic.io.forwarding_val && io.dmem_req_ready)
    {
       laq_forwarded_std_val(l_uop.ldq_idx) := Bool(true)
       laq_forwarded_stq_idx(l_uop.ldq_idx) := forwarding_age_logic.io.forwarding_idx
    }
-      
+
    //-------------------------------------------------------------
    //-------------------------------------------------------------
-   // Cache Access Cycle
- 
+   // Cache Access Cycle (St->Ld Forwarding Path)
+
    val r_memreq_kill     = Reg(init = Bool(false))
    val r_forward_std_val = Reg(init = Bool(false))
-   val r_forward_std_idx = Reg(outType = UInt()) 
+   val r_forward_std_idx = Reg(outType = UInt())
    val r_mem_uop         = Reg(next=l_uop)
-        
+   r_mem_uop.br_mask    := GetNewBrMask(io.brinfo, l_uop)
+
    // kill load request to mem if address matches (we will either sleep load, or forward data)
    r_memreq_kill     := (req_fire_load_fast || req_fire_load_sleeper) && addr_conflicts.toBits != Bits(0)
    r_forward_std_idx := forwarding_age_logic.io.forwarding_idx
-                         
+
    // kill forwarding if branch mispredict
-   when (io.brinfo.valid && io.brinfo.mispredict && maskMatch(io.brinfo.mask, r_mem_uop.br_mask))
+   when (io.brinfo.valid && io.brinfo.mispredict && maskMatch(io.brinfo.mask, l_uop.br_mask))
    {
       r_forward_std_val := Bool(false)
    }
@@ -500,51 +498,52 @@ class LoadStoreUnit(pl_width: Int)(implicit conf: BOOMConfiguration) extends Mod
       r_forward_std_val := (req_fire_load_fast || req_fire_load_sleeper) && forwarding_age_logic.io.forwarding_val && !force_ld_to_sleep && io.dmem_req_ready
    }
 
-   val mem_new_br_mask = Bits()
-   mem_new_br_mask := r_mem_uop.br_mask
-   
-   when (io.brinfo.valid)
-   {
-      mem_new_br_mask := r_mem_uop.br_mask & ~io.brinfo.mask
-   }
-       
    io.memreq_kill := r_memreq_kill
 
-
-   // a store could commit and clear out the data between when we check for
-   // std_val and when we read out the data on the next cycle
-   val r_sdq_val_for_forwarding = Reg(next = sdq_val(r_forward_std_idx))
-
    //-------------------------------------------------------------
    //-------------------------------------------------------------
-   // Writeback Cycle (for store-data forwarding)
+   // Writeback Cycle (St->Ld Forwarding Path)
+   //
+   // Notes:
+   //    - Time the forwarding of the data to coincide with what would be a HIT
+   //       from the cache (to only use one port).
+   //    - And Be careful: a store could commit and clear out the data between
+   //       when we check for std_val and when we read out the data on the next
+   //       cycle.
 
-   val r_wb_uop = Reg(next = r_mem_uop)
-   r_wb_uop.br_mask := mem_new_br_mask
+   val r_wb_forward_std_val        = Reg(init = Bool(false))
+   val r_wb_uop                    = Reg(next = r_mem_uop)
+       r_wb_uop.br_mask           := GetNewBrMask(io.brinfo, r_mem_uop)
+   val r_wb_sdq_val_for_forwarding = Reg(next = sdq_val(r_forward_std_idx))
 
-   val wb_forwarding_kill = Bool()
-   wb_forwarding_kill := Bool(false)
-   when (io.brinfo.valid && io.brinfo.mispredict && maskMatch(io.brinfo.mask, r_wb_uop.br_mask))
+   when (io.brinfo.valid && io.brinfo.mispredict && maskMatch(io.brinfo.mask, r_mem_uop.br_mask))
    {
-      wb_forwarding_kill := Bool(true)
+      r_wb_forward_std_val := Bool(false)
+   }
+   .otherwise
+   {
+      r_wb_forward_std_val := r_forward_std_val
    }
 
-   // tell the data path we will give it data
-   // time the forwarding of the data to coincide with what would be a HIT from
-   // the cache (to only use one port)            
-   io.forward_val  := Reg(next=r_forward_std_val) && !wb_forwarding_kill && r_sdq_val_for_forwarding 
-//   io.forward_val  := Mux(io.nack.valid && !wb_forwarding_kill && r_sdq_val_for_forwarding, 
-//                                                                                       Reg(next=r_forward_std_val),
-//                                                                                       Bool(false))
 
-   // test that we are never forwarding at the same the cache is returning data AND nacking us
-//   assert (!(io.forward_val && io.nack.valid && io.nack.cache_nack && io.memresp_val), "LSU shenangians.")
+   io.forward_val := Bool(false)
+   when (io.brinfo.valid && io.brinfo.mispredict && maskMatch(io.brinfo.mask, r_wb_uop.br_mask))
+   {
+      io.forward_val := Bool(false)
+   }
+   .otherwise
+   {
+      io.forward_val := r_wb_forward_std_val && r_wb_sdq_val_for_forwarding
+   }
 
    io.forward_data :=  Reg(next=
-                        LoadDataGenerator(sdq_data(r_forward_std_idx.toBits).toUInt, 
+                        LoadDataGenerator(sdq_data(r_forward_std_idx.toBits).toUInt,
                         Reg(next=l_uop.mem_typ))
                         )
    io.forward_uop  := r_wb_uop
+
+   // TODO: test that we are never forwarding at the same the cache is returning data AND nacking us
+   // assert (!(io.forward_val && io.nack.valid && io.nack.cache_nack && io.memresp_val), "LSU shenangians.")
 
 
    //-------------------------------------------------------------
@@ -552,19 +551,19 @@ class LoadStoreUnit(pl_width: Int)(implicit conf: BOOMConfiguration) extends Mod
    // *** SLOW LOAD ***
    //-------------------------------------------------------------
    //-------------------------------------------------------------
-   
-        
+
+
    //-------------------------------------------------------------
    //-------------------------------------------------------------
    // *** STORES ***
    //-------------------------------------------------------------
    //-------------------------------------------------------------
-   
+
    val req_fire_store = Bool()
    req_fire_store := Bool(false)
 
    when (stq_entry_val(stq_head) &&
-         stq_committed(stq_head) && 
+         stq_committed(stq_head) &&
          !stq_executed(stq_head) &&
          !(stq_uop(stq_head).is_fence))
    {
@@ -604,16 +603,16 @@ class LoadStoreUnit(pl_width: Int)(implicit conf: BOOMConfiguration) extends Mod
    .elsewhen(req_fire_store)
    {
       // store at commit stage
-      // well actually, treat STQ as a store buffer, so we 
-      // can fire stores once they've been marked as committed. 
+      // well actually, treat STQ as a store buffer, so we
+      // can fire stores once they've been marked as committed.
       io.memreq_val   := Bool(true)
       io.memreq_addr  := saq_addr(stq_head)
-      io.memreq_wdata := sdq_data(stq_head) 
+      io.memreq_wdata := sdq_data(stq_head)
       io.memreq_uop   := stq_uop (stq_head)
 
       stq_executed(stq_head) := Bool(true)
    }
-    
+
    //-------------------------------------------------------------
    // Handle Memory Responses
 
@@ -628,7 +627,7 @@ class LoadStoreUnit(pl_width: Int)(implicit conf: BOOMConfiguration) extends Mod
          stq_succeeded(io.memresp_uop.stq_idx) := Bool(true)
       }
    }
-          
+
    //-------------------------------------------------------------
    //-------------------------------------------------------------
    // Search LAQ for misspeculated loads (when a store is executed)
@@ -639,7 +638,7 @@ class LoadStoreUnit(pl_width: Int)(implicit conf: BOOMConfiguration) extends Mod
    // 1) Could check at Commit: any loads here are by definition younger
    //    (except not really true once going superscalar). Other problem is the
    //    search bandwidth must match the commit bandwidth, which is way over
-   //    provisioned and very expensive.. 
+   //    provisioned and very expensive..
    // 2) Check at Execute: need to ignore loads with which we don't match their
    //    dependence matrix, but only need to search for as many stores as we let
    //    perform address generation. Other big factor is we can figure out loads
@@ -648,22 +647,22 @@ class LoadStoreUnit(pl_width: Int)(implicit conf: BOOMConfiguration) extends Mod
    //    stores).
 
    // TODO check Chisel performance on pushing invariants inside of for loops
-  
+
    // At Store Execute (address generation)...
    //    Check the incoming store address against younger loads that have executed.
    //    Look for memory ordering failures.
    val s_addr      = io.exe_resp.bits.data.toUInt
    val st_mask     = GenByteMask(s_addr, exe_uop.mem_typ)
-   val st_is_fence = exe_uop.is_fence 
+   val st_is_fence = exe_uop.is_fence
    val stq_idx     = exe_uop.stq_idx
    val failed_loads = Vec.fill(num_ld_entries) {Bool()}
 
    // need to bypass the Execute bit for a load that's being sent to memory
-   // on the same cycle a store address is coming in 
+   // on the same cycle a store address is coming in
    // TODO is this deprecated?
    val laq_is_executing = Vec.fill(num_ld_entries) {Bool()}
    for (i <- 0 until num_ld_entries) { laq_is_executing(i) := Bool(false) }
-   when (io.memreq_val && !req_fire_store && io.dmem_req_ready) 
+   when (io.memreq_val && !req_fire_store && io.dmem_req_ready)
    {
       laq_is_executing(ld_iss_idx) := Bool(true)
    }
@@ -672,7 +671,7 @@ class LoadStoreUnit(pl_width: Int)(implicit conf: BOOMConfiguration) extends Mod
    {
       val l_addr = laq_addr(i)
       val ld_mask = GenByteMask(l_addr, laq_uop(i).mem_typ)
-      failed_loads(i) := Bool(false) 
+      failed_loads(i) := Bool(false)
 
       when (io.exe_resp.valid  && exe_uop.ctrl.is_sta)
       {
@@ -692,7 +691,7 @@ class LoadStoreUnit(pl_width: Int)(implicit conf: BOOMConfiguration) extends Mod
                failed_loads(i)   := Bool(true)
             }
             // NOTE: this address check doesn't necessarily have to be across all address bits
-            .elsewhen ((s_addr(conf.rc.as.paddrBits,3) === l_addr(conf.rc.as.paddrBits,3)) && 
+            .elsewhen ((s_addr(conf.rc.as.paddrBits,3) === l_addr(conf.rc.as.paddrBits,3)) &&
                   laq_allocated(i) &&
                   laq_addr_val(i) &&
                   (laq_executed(i) || laq_is_executing(i)) // CODE REVIEW, is this the proper way to bypass this information?
@@ -705,10 +704,10 @@ class LoadStoreUnit(pl_width: Int)(implicit conf: BOOMConfiguration) extends Mod
                // and if not, then fail OR
                // if it was forwarded but not us, was the forwarded store older than me
                // head < forwarded < youngest?
-               when (((st_mask & ld_mask) != Bits(0)) &&            
-                    (!laq_forwarded_std_val(i) || 
+               when (((st_mask & ld_mask) != Bits(0)) &&
+                    (!laq_forwarded_std_val(i) ||
                       ((fid != stq_idx) && (Cat(yid < stq_idx, yid) < Cat(fid < stq_idx, fid))))
-                  ) 
+                  )
                {
                   laq_executed(i)   := Bool(false)
                   laq_failure(i)    := Bool(true)
@@ -719,7 +718,7 @@ class LoadStoreUnit(pl_width: Int)(implicit conf: BOOMConfiguration) extends Mod
          }
       }
    }
- 
+
    // detect which loads get marked as failures, but broadcast to the ROB the oldest failing load
    io.ldo_xcpt_val := failed_loads.reduce(_|_)
 //      PriorityEncoder(Vec.tabulate(num_ld_entries)(i => failed_loads(i) && UInt(i) >= laq_head) ++ failed_loads)
@@ -730,21 +729,21 @@ class LoadStoreUnit(pl_width: Int)(implicit conf: BOOMConfiguration) extends Mod
    // TODO always pad out the input to PECircular() to pow2
    // convert it to vec[bool], then in.padTo(1 << log2Up(in.size), Bool(false))
    io.ldo_xcpt_uop := laq_uop(Mux(l_idx >= UInt(num_ld_entries), l_idx - UInt(num_ld_entries), l_idx))
-    
-    
+
+
    //-------------------------------------------------------------
    // Kill speculated entries on branch mispredict
    //-------------------------------------------------------------
    //-------------------------------------------------------------
-         
+
    val st_brkilled_mask = Vec.fill(num_st_entries) { Bool() }
 
    for (i <- 0 until num_st_entries)
    {
-      //kill instruction if mispredict & br mask match 
+      //kill instruction if mispredict & br mask match
       val br_mask     = stq_uop(i).br_mask
       val entry_match = maskMatch(io.brinfo.mask, br_mask);
-      
+
       st_brkilled_mask(i) := Bool(false)
       when (io.brinfo.valid && io.brinfo.mispredict && entry_match && stq_entry_val(i))
       {
@@ -752,7 +751,7 @@ class LoadStoreUnit(pl_width: Int)(implicit conf: BOOMConfiguration) extends Mod
          saq_val(i)         := Bool(false)
          sdq_val(i)         := Bool(false)
          stq_uop(i).br_mask := Bits(0)
-         
+
          st_brkilled_mask(i):= Bool(true)
          // TODO add an assert to catch clearing a committed store
       }
@@ -762,7 +761,7 @@ class LoadStoreUnit(pl_width: Int)(implicit conf: BOOMConfiguration) extends Mod
          val new_msk = br_mask & ~io.brinfo.mask;
          stq_uop(i).br_mask := new_msk;
       }
-   }    
+   }
 
 
    when (io.brinfo.valid && io.brinfo.mispredict)
@@ -771,15 +770,15 @@ class LoadStoreUnit(pl_width: Int)(implicit conf: BOOMConfiguration) extends Mod
       laq_tail := io.brinfo.ldq_idx
    }
 
- 
+
    //-------------------------------------------------------------
    // Kill speculated entries on branch mispredict
    for (i <- 0 until num_ld_entries)
    {
-      //kill instruction if mispredict & br mask match 
+      //kill instruction if mispredict & br mask match
       val br_mask     = laq_uop(i).br_mask
       val entry_match = maskMatch(io.brinfo.mask, br_mask);
-      
+
       when (io.brinfo.valid && io.brinfo.mispredict && entry_match && laq_allocated(i))
       {
          laq_allocated(i)   := Bool(false)
@@ -792,15 +791,15 @@ class LoadStoreUnit(pl_width: Int)(implicit conf: BOOMConfiguration) extends Mod
          laq_uop(i).br_mask := new_msk;
       }
    }
-    
-    
-      
+
+
+
    //-------------------------------------------------------------
    //-------------------------------------------------------------
    // dequeue old entries on commit
    //-------------------------------------------------------------
    //-------------------------------------------------------------
- 
+
    var temp_stq_commit_head = stq_commit_head
    for (w <- 0 until pl_width)
    {
@@ -809,20 +808,20 @@ class LoadStoreUnit(pl_width: Int)(implicit conf: BOOMConfiguration) extends Mod
       {
          stq_committed(temp_stq_commit_head) := Bool(true)
       }
-      
+
       temp_stq_commit_head = Mux(io.commit_store_mask(w), WrapInc(temp_stq_commit_head, num_st_entries), temp_stq_commit_head)
 //      temp_stq_commit_head = Mux(io.commit_store_mask(w), temp_stq_commit_head + UInt(1), temp_stq_commit_head)
    }
 
-   stq_commit_head := temp_stq_commit_head 
-   
+   stq_commit_head := temp_stq_commit_head
+
    // store has been committed AND successfully sent data to memory
    when (stq_entry_val(stq_head) && stq_committed(stq_head))
    {
       clear_store := Mux(stq_uop(stq_head).is_fence, io.dmem_is_ordered,
                                                      stq_succeeded(stq_head))
    }
- 
+
    when (clear_store)
    {
       stq_entry_val(stq_head)   := Bool(false)
@@ -836,13 +835,13 @@ class LoadStoreUnit(pl_width: Int)(implicit conf: BOOMConfiguration) extends Mod
 
       stq_head := WrapInc(stq_head, num_st_entries)
    }
-    
+
 
    var temp_laq_head = laq_head
    for (w <- 0 until pl_width)
    {
       val idx = temp_laq_head
-      when (io.commit_load_mask(w)) 
+      when (io.commit_load_mask(w))
       {
          laq_allocated(idx)         := Bool(false)
          laq_addr_val (idx)         := Bool(false)
@@ -853,11 +852,11 @@ class LoadStoreUnit(pl_width: Int)(implicit conf: BOOMConfiguration) extends Mod
 //         laq_addr(idx)              := UInt(0)
 //         laq_uop(idx).br_mask       := Bits(0)
       }
-      
+
       temp_laq_head = Mux(io.commit_load_mask(w), WrapInc(temp_laq_head, num_ld_entries), temp_laq_head)
    }
    laq_head := temp_laq_head
-     
+
 
 
    //-------------------------------------------------------------
@@ -887,12 +886,11 @@ class LoadStoreUnit(pl_width: Int)(implicit conf: BOOMConfiguration) extends Mod
       .otherwise
       {
          // we're trying to forward a load from the STD
-         when (Reg(next=r_forward_std_val))
+         when (r_wb_forward_std_val)
          {
             // handle case where sdq_val is no longer true (store was
             // committed) or was never valid
-            // If wb_forwarding_kill, the br has already reset the load for us
-            when (!wb_forwarding_kill && !(r_sdq_val_for_forwarding))
+            when (!(r_wb_sdq_val_for_forwarding))
             {
                clr_ld := Bool(true)
             }
@@ -912,10 +910,10 @@ class LoadStoreUnit(pl_width: Int)(implicit conf: BOOMConfiguration) extends Mod
       }
    }
 
-   
+
    //-------------------------------------------------------------
    // Exception / Reset
- 
+
    // for the live_store_mask, need to kill stores that haven't been committed
    val st_exc_killed_mask = Vec.fill(num_st_entries) {Bool()}
    (0 until num_st_entries).map(i => st_exc_killed_mask(i) := Bool(false))
@@ -946,11 +944,11 @@ class LoadStoreUnit(pl_width: Int)(implicit conf: BOOMConfiguration) extends Mod
       }
       .otherwise // exception/lsu_misspec
       {
-         stq_tail := stq_commit_head 
-          
+         stq_tail := stq_commit_head
+
          for (i <- 0 until num_st_entries)
          {
-            when (!stq_committed(i)) // && !io.commit_store_mask(w)) // (is this worth the extra logic?) 
+            when (!stq_committed(i)) // && !io.commit_store_mask(w)) // (is this worth the extra logic?)
             {
                saq_val(i)            := Bool(false)
                sdq_val(i)            := Bool(false)
@@ -977,12 +975,12 @@ class LoadStoreUnit(pl_width: Int)(implicit conf: BOOMConfiguration) extends Mod
    // (could maybe be re-produced from the stq_head/stq_tail, but need to know include spec_killed entries)
 
    // TODO is this the most efficient way to compute the live store mask?
-   live_store_mask := next_live_store_mask & 
-                        ~(st_brkilled_mask.toBits) & 
+   live_store_mask := next_live_store_mask &
+                        ~(st_brkilled_mask.toBits) &
                         ~(st_exc_killed_mask.toBits)
 
    //-------------------------------------------------------------
-   
+
    val laq_maybe_full = (laq_allocated.toBits != Bits(0))
    // TODO fill entire STQ - stores are difficult, due to lsu_misspecs/exceptions don't clear all stq_entry_vals
    // TODO i don't believe older chris; try this again
@@ -1043,7 +1041,7 @@ class LoadStoreUnit(pl_width: Int)(implicit conf: BOOMConfiguration) extends Mod
       io.debug.entry(i).laq_addr := laq_addr(i)
       io.debug.entry(i).laq_yng_st_idx := laq_yng_st_idx(i)
       io.debug.entry(i).laq_st_dep_mask := laq_st_dep_mask(i)
-      
+
       io.debug.entry(i).stq_entry_val := stq_entry_val(i)
       io.debug.entry(i).saq_val := saq_val(i)
       io.debug.entry(i).sdq_val := sdq_val(i)
@@ -1057,7 +1055,7 @@ class LoadStoreUnit(pl_width: Int)(implicit conf: BOOMConfiguration) extends Mod
 
 }
 
- 
+
 // take an address and generate an 8-bit mask of which bytes within a double-word are touched
 object GenByteMask
 {
@@ -1088,8 +1086,8 @@ object LoadDataGenerator
      val word  = (mem_type === MT_W) || (mem_type === MT_WU)
      val half  = (mem_type === MT_H) || (mem_type === MT_HU)
      val byte_ = (mem_type === MT_B) || (mem_type === MT_BU)
-     val dword = (mem_type === MT_D) 
-    
+     val dword = (mem_type === MT_D)
+
       val out = Mux (dword, data,
                 Mux (word , Cat(Fill(32, sext & data(31)), data(31, 0)),
                 Mux (half , Cat(Fill(48, sext & data(15)), data(15, 0)),
@@ -1099,12 +1097,12 @@ object LoadDataGenerator
    }
 }
 
-class ForwardingAgeLogic(num_entries: Int) extends Module 
+class ForwardingAgeLogic(num_entries: Int) extends Module
 {
    val io = new Bundle
    {
       val addr_matches    = Bits(INPUT, num_entries) // bit vector of addresses that match between the load and the SAQ
-      val youngest_st_idx = UInt(INPUT, MEM_ADDR_SZ) // needed to get "age" 
+      val youngest_st_idx = UInt(INPUT, MEM_ADDR_SZ) // needed to get "age"
 
       val forwarding_val  = Bool(OUTPUT)
       val forwarding_idx  = UInt(OUTPUT, MEM_ADDR_SZ)
@@ -1124,7 +1122,7 @@ class ForwardingAgeLogic(num_entries: Int) extends Module
 
    // Priority encoder with moving tail: double length
    val matches = Bits(width = 2*num_entries)
-   matches := Cat(io.addr_matches & age_mask.toBits, 
+   matches := Cat(io.addr_matches & age_mask.toBits,
                   io.addr_matches)
 
 
@@ -1135,13 +1133,13 @@ class ForwardingAgeLogic(num_entries: Int) extends Module
    // look for youngest, approach from the oldest side, let the last one found stick
    for (i <- 0 until (2*num_entries))
    {
-      when (matches(i)) 
+      when (matches(i))
       {
          found_match := Bool(true)
          io.forwarding_idx := Mux(UInt(i) >= UInt(num_entries), UInt(i-num_entries), UInt(i))
       }
    }
-   
+
 
    if (ENABLE_STOREDATA_FORWARDING)
    {
@@ -1154,6 +1152,6 @@ class ForwardingAgeLogic(num_entries: Int) extends Module
 }
 
 
- 
 
-} 
+
+}

@@ -116,7 +116,7 @@ abstract class FunctionalUnit(is_pipelined: Boolean
 
 
 // Note: this helps track which uops get killed while in intermediate stages,
-// but it is the job of the consumer to check for kills on the same cycle as consumption
+// but it is the job of the consumer to check for kills on the same cycle as consumption!!!
 abstract class PipelinedFunctionalUnit(val num_stages: Int, 
                                        val num_bypass_stages: Int,
                                        val earliest_bypass_stage: Int,
@@ -162,7 +162,7 @@ abstract class PipelinedFunctionalUnit(val num_stages: Int,
       require (num_stages == 0)
       // pass req straight through to response
       
-      io.resp.valid    := io.req.valid && !IsKilledByBranch(io.brinfo, io.req.bits.uop) // && !io.req.bits.kill TODO remove kill signals, let consumer deal with it?
+      io.resp.valid    := io.req.valid && !IsKilledByBranch(io.brinfo, io.req.bits.uop) // && !io.req.bits.kill TODO remove kill signals, let consumer deal with it. the LSU already handles it. and this hurts critical path.
       io.resp.bits.uop := io.req.bits.uop
       io.resp.bits.uop.br_mask := GetNewBrMask(io.brinfo, io.req.bits.uop)
    }
@@ -388,12 +388,12 @@ class MemAddrCalcUnit()(implicit conf: BOOMConfiguration) extends PipelinedFunct
 
    alu.io.fn  := FN_ADD
    alu.io.dw  := DW_XPR
-                   
+
    val adder_out = alu.io.adder_out
-   val ea_sign = Mux(adder_out(rc.as.vaddrBits-1), ~adder_out(63,rc.as.vaddrBits) === UInt(0), 
-                                                       adder_out(63,rc.as.vaddrBits) != UInt(0))
-   val effective_address = Cat(ea_sign, adder_out(rc.as.vaddrBits-1,0)).toUInt         
-                               
+   val ea_sign = Mux(adder_out(rc.as.vaddrBits-1), ~adder_out(63,rc.as.vaddrBits) === UInt(0),
+                                                    adder_out(63,rc.as.vaddrBits) != UInt(0))
+   val effective_address = Cat(ea_sign, adder_out(rc.as.vaddrBits-1,0)).toUInt
+
    // TODO only use one register read port
    io.resp.bits.data := Mux(io.req.bits.uop.uopc === uopSTD, io.req.bits.rs2_data,
                                                              effective_address)
