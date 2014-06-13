@@ -49,9 +49,6 @@ class BTB(fetchWidth: Int)(implicit conf: BTBConfig) extends Module
   val invalid_way = valid.indexWhere((x: Bool) => !x)
   val repl_way = Mux(valid.contains(Bool(false)), invalid_way, random_way)
 
-   var debug_string = sprintf(" ")
-
-
   for (i <- 0 until conf.entries) {
     val tag = Reg(UInt())
     
@@ -84,17 +81,20 @@ class BTB(fetchWidth: Int)(implicit conf: BTBConfig) extends Module
       }
     }
 
-    debug_string = sprintf("%s\n   BTB[%d] (%s)- tag= 0x%x , target= 0x%x   tagchk(0x%x)", 
-      debug_string, UInt(i), Mux(valid(i), Str("V"), Str("-")), tag, targets(i), tag_check)
+    if (DEBUG_PRINTF && DEBUG_BTB)
+    {
+       printf("\n   BTB[%d] (%s)- tag= 0x%x , target= 0x%x   tagchk(0x%x)",
+         UInt(i), Mux(valid(i), Str("V"), Str("-")), tag, targets(i), tag_check)
+    }
   }
 
-   val mgt = "\033[2;35m"
-   val grn = "\033[1;32m"
-   val end = "\033[0m"
    if (DEBUG_PRINTF && DEBUG_BTB)
    {
-      printf("%s %s idx:%d PC= 0x%x Target= 0x%x\n", debug_string
-         , Mux(hits.toBits.orR, Str(mgt + "HIT" + end), Str(grn + "   " + end))
+      val mgt = if (DEBUG_ENABLE_COLOR) "\033[2;35m" else " "
+      val grn = if (DEBUG_ENABLE_COLOR) "\033[1;32m" else " "
+      val end = if (DEBUG_ENABLE_COLOR) "\033[0m"    else " "
+      printf(" %s idx:%d PC= 0x%x Target= 0x%x\n"
+         , Mux(hits.toBits.orR, Str(mgt + "HIT" + end), Str(grn + " " + end))
          , io.hit_idx
          , io.current_pc(31,0)
          , io.target(31,0)

@@ -1171,7 +1171,16 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
             rob.io.debug_wb_valids(cnt) := exe_units(w).io.resp(j).valid && 
                                            exe_units(w).io.resp(j).bits.uop.ctrl.rf_wen &&
                                            exe_units(w).io.resp(j).bits.uop.pdst_rtype === RT_FIX
-            rob.io.debug_wb_wdata(cnt) := exe_units(w).io.resp(j).bits.data
+             if (exe_units(w).uses_pcr_wport && (j == 0))
+             {
+               rob.io.debug_wb_wdata(cnt) := Mux(exe_units(w).io.resp(j).bits.uop.ctrl.pcr_fcn != rocket.CSR.N,
+                                                   pcr_read_out,
+                                                   exe_units(w).io.resp(j).bits.data)
+             }
+             else
+             {
+               rob.io.debug_wb_wdata(cnt) := exe_units(w).io.resp(j).bits.data
+             }
             cnt += 1
          }
 
@@ -1348,7 +1357,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
       val mgt   = if (DEBUG_ENABLE_COLOR) "\033[1;35m" else " "
       val cyn   = if (DEBUG_ENABLE_COLOR) "\033[1;36m" else " "
       val wht   = if (DEBUG_ENABLE_COLOR) "\033[1;37m" else " "
-      val end   = if (DEBUG_ENABLE_COLOR) "\033[0m"
+      val end   = if (DEBUG_ENABLE_COLOR) "\033[0m"    else ""
        
       val b_blk = if (DEBUG_ENABLE_COLOR) "\033[2;30m" else " "
       val b_red = if (DEBUG_ENABLE_COLOR) "\033[2;31m" else " "
@@ -1603,13 +1612,14 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
 
       // Load/Store Unit
 
-      printf("  Mem[%s,%s:%d,%s,%s %s]\n"
+      printf("  Mem[%s,%s:%d,%s,%s %s %s]\n"
             , Mux(io.dmem.debug.memreq, Str("MREQ"), Str(" "))
             , Mux(io.dmem.debug.memresp, Str("MRESP"), Str(" "))
             , io.dmem.debug.cache_resp_idx
             , Mux(io.dmem.debug.req_kill, Str("KILL"), Str(" "))
             , Mux(io.dmem.debug.nack, Str("NACK"), Str(" "))
             , Mux(io.dmem.debug.cache_nack, Str("CN"), Str(" "))
+            , Mux(lsu_io.forward_val, Str("FWD"), Str(" "))
             )
       for (i <- 0 until NUM_LSU_ENTRIES)
       {
@@ -1716,33 +1726,23 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
 
    if (COMMIT_LOG_PRINTF)
    {
-      var found_scall = Bool(false)
       var new_commit_cnt = UInt(0)
       for (w <- 0 until COMMIT_WIDTH)
       {
-         when ((com_valids(w) && !(pcr.io.status.s)) || 
-               (com_exception && com_exc_cause === UInt(rocket.Causes.syscall) && 
-                  com_uops(w).exc_cause === UInt(rocket.Causes.syscall) &&
-                  !found_scall)
-               )
+         when (com_valids(w) && (pcr.io.status.ei || com_uops(w).sret))
          {
-            found_scall = found_scall || 
-                          (com_exception && 
-                             com_exc_cause === UInt(rocket.Causes.syscall) &&
-                             com_uops(w).exc_cause === UInt(rocket.Causes.syscall))
-            when (com_uops(w).ldst_rtype === RT_FIX)
+            when (com_uops(w).ldst_rtype === RT_FIX && com_uops(w).ldst != UInt(0))
             {
-               //printf("\n@@@ 0x%x (0x%x) x%d 0x%x"
-               printf("\n0x%x (0x%x) x%d 0x%x"
+               printf("0x%x (0x%x) x%d 0x%x\n"
                   , com_uops(w).pc
                   , com_uops(w).inst
                   , com_uops(w).inst(RD_MSB,RD_LSB)
-                  , com_uops(w).debug_wdata)
+                  , com_uops(w).debug_wdata
+                  )
             }
             .otherwise
             {
-               //printf("\n@@@ 0x%x (0x%x)", com_uops(w).pc, com_uops(w).inst)
-               printf("\n0x%x (0x%x)", com_uops(w).pc, com_uops(w).inst)
+               printf("0x%x (0x%x)\n", com_uops(w).pc, com_uops(w).inst)
             }
          }
       }
