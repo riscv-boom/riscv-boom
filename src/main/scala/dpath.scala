@@ -1282,19 +1282,19 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    debug(lsu_misspec)
 
    assert (!(throw_idle_error), "Pipeline has hung.")
- 
-                
+
+
    //-------------------------------------------------------------
    // Counters
 
    val laq_full_count = Reg(init = UInt(0, XPRLEN))
    when (laq_full) { laq_full_count := laq_full_count + UInt(1) }
    debug(laq_full_count)
-            
+
    val stq_full_count = Reg(init = UInt(0, XPRLEN))
    when (stq_full) { stq_full_count := stq_full_count + UInt(1) }
    debug(stq_full_count)
-       
+
    val stalls = Reg(init = UInt(0, XPRLEN))
    when (!dec_rdy) { stalls := stalls + UInt(1) }
    debug(stalls)
@@ -1309,13 +1309,13 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    // (only used for printf and vcd dumps - the actual counters are in the CSRFile)
    val tsc_reg = Reg(init = UInt(0, XPRLEN))
    val irt_reg = Reg(init = UInt(0, XPRLEN))
-   val irt_user_reg = Reg(init = UInt(0, XPRLEN))
+   val irt_ei_reg = Reg(init = UInt(0, XPRLEN))
    tsc_reg := tsc_reg + UInt(1)
-   irt_reg := irt_reg + PopCount(com_valids.toBits) // TODO doesn't count some instructions like scall (which looks like an exception)
-   when (!(pcr.io.status.s)) { irt_user_reg := irt_user_reg + PopCount(com_valids.toBits) }
+   irt_reg := irt_reg + PopCount(com_valids.toBits)
+   when (pcr.io.status.ei) { irt_ei_reg := irt_ei_reg + PopCount(com_valids.toBits) }
    debug(tsc_reg)
    debug(irt_reg)
-   debug(irt_user_reg)
+   debug(irt_ei_reg)
 
    // UARCH Counters
    pcr.io.uarch_counters(0)  := br_unit.brinfo.valid
@@ -1335,7 +1335,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    pcr.io.uarch_counters(13) := PopCount((Range(0,COMMIT_WIDTH)).map{w => com_valids(w) && com_uops(w).is_br_or_jmp})
    pcr.io.uarch_counters(14) := PopCount((Range(0,COMMIT_WIDTH)).map{w => com_valids(w) && com_uops(w).is_store})
    pcr.io.uarch_counters(15) := PopCount((Range(0,COMMIT_WIDTH)).map{w => com_valids(w) && com_uops(w).is_load})
-                                      
+
    //-------------------------------------------------------------
    //-------------------------------------------------------------
    // **** Handle Cycle-by-Cycle Printouts ****
@@ -1396,7 +1396,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
       printf("--- Cyc=%d , ----------------- Ret: %d ---------------------------------- User Retired: %d\n  BrPred1:        (IF1_PC= 0x%x - Predict:%s) ------ PC: [%s%s%s%s-%s for br_id: %d, msk:%x, sel: %d: %s %s next: 0x%x]\nI$ Response: (%s) IF2_PC= 0x%x (mask:0x%x) \033[1;35m%s\033[0m  -------- BrPred2: (%s,%s,%s,%s,%s %d,%d) [pred_targ: 0x%x] killmsk: 0x%x --->> (0x%x)\n"  
          , tsc_reg
          , irt_reg & UInt(0xffffff)
-         , irt_user_reg & UInt(0xffffff)
+         , irt_ei_reg & UInt(0xffffff)
          , io.imem.resp.bits.bht_pc(19,0)
       // Fetch Stage 1
          , Mux(br_predictor.io.prediction_info.taken, Str("T"), Str("-"))
@@ -1733,16 +1733,17 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
          {
             when (com_uops(w).ldst_rtype === RT_FIX && com_uops(w).ldst != UInt(0))
             {
-               printf("0x%x (0x%x) x%d 0x%x\n"
+               printf("0x%x (0x%x) x%d 0x%x |%d\n"
                   , com_uops(w).pc
                   , com_uops(w).inst
                   , com_uops(w).inst(RD_MSB,RD_LSB)
                   , com_uops(w).debug_wdata
+                  , tsc_reg
                   )
             }
             .otherwise
             {
-               printf("0x%x (0x%x)\n", com_uops(w).pc, com_uops(w).inst)
+               printf("0x%x (0x%x) |%d\n", com_uops(w).pc, com_uops(w).inst, tsc_reg)
             }
          }
       }
