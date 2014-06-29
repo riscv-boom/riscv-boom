@@ -312,13 +312,27 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
       io.com_valids(w)     := will_commit(w)
       io.com_rbk_valids(w) := (rob_state === s_rollback) &&
                               rob_val(com_idx) &&
-                              rob_uop(com_idx).pdst_rtype === RT_FIX
+                              rob_uop(com_idx).pdst_rtype === RT_FIX &&
+                              Bool(!ENABLE_COMMIT_MAP_TABLE)
       io.com_uops(w)       := rob_uop(com_idx) 
 
       when (rob_state === s_rollback)
       {
          rob_val(com_idx)       := Bool(false)
          rob_exception(com_idx) := Bool(false)
+      }
+
+      if (ENABLE_COMMIT_MAP_TABLE)
+      {
+         when (Reg(next=exception_thrown))
+         {
+            for (i <- 0 until num_rob_rows)
+            {
+               rob_val(i)      := Bool(false)
+               rob_bsy(i)      := Bool(false)
+               rob_uop(i).inst := BUBBLE
+            }
+         }
       }
       
       // -----------------------------------------------
@@ -474,6 +488,15 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
 
    // assert !(rob_tail >= (num_rob_entries/width))
 
+   if (ENABLE_COMMIT_MAP_TABLE)
+   {
+      when (Reg(next=exception_thrown))
+      {
+         rob_tail := UInt(0)
+         rob_head := UInt(0)
+      }
+   }
+
    // -----------------------------------------------
    // Full Logic
    
@@ -494,45 +517,94 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
    //-----------------------------------------------
    
    // ROB FSM
-   switch (rob_state)
+   if (!ENABLE_COMMIT_MAP_TABLE)
    {
-      is (s_reset)
+       switch (rob_state)
       {
-         rob_state := s_normal
-      }
-      is (s_normal)
-      {
-         when (exception_thrown)
+         is (s_reset)
          {
-            rob_state := s_rollback
+            rob_state := s_normal
          }
-         .otherwise 
+         is (s_normal)
          {
-            for (w <- 0 until width)
+            when (exception_thrown)
             {
-               when (io.dis_mask(w) && io.dis_uops(w).is_unique)
+               rob_state := s_rollback
+            }
+            .otherwise 
+            {
+               for (w <- 0 until width)
                {
-                  rob_state := s_wait_till_empty
+                  when (io.dis_mask(w) && io.dis_uops(w).is_unique)
+                  {
+                     rob_state := s_wait_till_empty
+                  }
                }
             }
          }
+         is (s_rollback)
+         {
+            when (rob_tail  === rob_head)
+            {
+               rob_state := s_normal
+            }
+         }
+         is (s_wait_till_empty)
+         {
+            when (exception_thrown)
+            {
+               rob_state := s_rollback
+            }
+            .elsewhen (rob_tail === rob_head)
+            {
+               rob_state := s_normal
+            }
+         }
       }
-      is (s_rollback)
+   }
+   else
+   {
+      switch (rob_state)
       {
-         when (rob_tail  === rob_head)
+         is (s_reset)
          {
             rob_state := s_normal
          }
-      }
-      is (s_wait_till_empty)
-      {
-         when (exception_thrown)
+         is (s_normal)
          {
-            rob_state := s_rollback
+            when (exception_thrown)
+            {
+               ;
+//               rob_state := s_rollback
+            }
+            .otherwise 
+            {
+               for (w <- 0 until width)
+               {
+                  when (io.dis_mask(w) && io.dis_uops(w).is_unique)
+                  {
+                     rob_state := s_wait_till_empty
+                  }
+               }
+            }
          }
-         .elsewhen (rob_tail === rob_head)
+         is (s_rollback)
          {
-            rob_state := s_normal
+            when (rob_tail  === rob_head)
+            {
+               rob_state := s_normal
+            }
+         }
+         is (s_wait_till_empty)
+         {
+            when (exception_thrown)
+            {
+               ; //rob_state := s_rollback
+            }
+            .elsewhen (rob_tail === rob_head)
+            {
+               rob_state := s_normal
+            }
          }
       }
    }

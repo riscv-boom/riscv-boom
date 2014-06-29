@@ -340,9 +340,11 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    }
 
    val num_wakeup_ports = num_slow_wakeup_ports + num_fast_wakeup_ports
+   val rf_cost = (num_rf_read_ports+num_rf_write_ports)*(num_rf_read_ports+2*num_rf_write_ports)
 
    println("   Num RF Read Ports    : " + num_rf_read_ports)
    println("   Num RF Write Ports   : " + num_rf_write_ports + "\n")
+   println("   RF Cost (R+W)*(R+2W) : " + rf_cost + "\n")
    println("   Num Slow Wakeup Ports: " + num_slow_wakeup_ports)
    println("   Num Fast Wakeup Ports: " + num_fast_wakeup_ports)
    println("   Num Bypass Ports     : " + num_total_bypass_ports)
@@ -836,6 +838,8 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    
    rename_stage.io.kill     := br_unit.brinfo.mispredict || flush_pipeline
    rename_stage.io.brinfo   := br_unit.brinfo
+   
+   rename_stage.io.flush_pipeline := flush_pipeline // TODO temp refactor
 
    for (w <- 0 until DECODE_WIDTH)
    {
@@ -1445,7 +1449,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
          }
       }
              
-      printf(") State: (%s:%s %s %s \033[1;31m%s\033[0m %s %s) BMsk:%x %s\n"
+      printf(") State: (%s:%s %s %s \033[1;31m%s\033[0m %s %s) BMsk:%x %s %s %s\n"
          , Mux(rob.io.debug.state === UInt(0), Str("RESET"),
            Mux(rob.io.debug.state === UInt(1), Str("NORMAL"),
            Mux(rob.io.debug.state === UInt(2), Str("ROLLBK"),
@@ -1459,6 +1463,8 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
          , Mux(io.dmem.req.ready, Str("D$_Rdy"), Str("D$_BSY"))
          , dec_brmask_logic.io.debug.branch_mask
          , Mux(pcr.io.status.s, Str("SUPERVISOR"), Str("USERMODE"))
+         , Mux(pcr.io.status.ei, Str("EI"), Str("-"))
+         , Mux(pcr.io.status.pei, Str("PEI"), Str("-"))
          )
       
 
@@ -1498,11 +1504,14 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
 
       
 
-      printf(" Exct(%s%d) Commit(%x)                  freelist: 0x%x\n"
+      printf(" Exct(%s%d) Commit(%x) fl: 0x%x (%d) is: 0x%x (%d)\n"
          , Mux(com_exception, Str("E"), Str("-"))
          , com_exc_cause
          , com_valids.toBits
          , rename_stage.io.debug.freelist
+         , PopCount(rename_stage.io.debug.freelist)
+         , rename_stage.io.debug.isprlist
+         , PopCount(rename_stage.io.debug.isprlist)
          )
 
       // Issue Window
@@ -1697,11 +1706,12 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
                {
                   val phs_reg = rename_stage.io.debug.map_table(i).element
 
-                  printf(" %sx%d(%s)=p%d[0x%x](%s)"
+                  printf(" %sx%d(%s)=p%d,p%d[0x%x](%s)"
                      , Mux(rename_stage.io.debug.map_table(i).rbk_wen, Str("E"), Str(" "))
                      , UInt(i, LREG_SZ)
                      , xpr_to_string(i)
                      , phs_reg
+                     , rename_stage.io.debug.map_table(i).committed_element
                      , regfile.io.debug.registers(phs_reg)
                      , Mux(rename_stage.io.debug.bsy_table(phs_reg), Str("b"), Str("_"))
                   )
@@ -1729,6 +1739,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
       var new_commit_cnt = UInt(0)
       for (w <- 0 until COMMIT_WIDTH)
       {
+//         when (com_valids(w) && (pcr.io.status.ei || (com_uops(w).sret && pcr.io.status.pei)))
          when (com_valids(w) && (pcr.io.status.ei || com_uops(w).sret))
          {
             when (com_uops(w).ldst_rtype === RT_FIX && com_uops(w).ldst != UInt(0))

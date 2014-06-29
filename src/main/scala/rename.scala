@@ -35,6 +35,12 @@ class RenameMapTableElementIo(pl_width: Int) extends Bundle()
    val rollback_wen        = Bool(INPUT) 
    val rollback_stale_pdst = UInt(INPUT, PREG_SZ)
 
+   // TODO scr option
+   val flush_pipeline      = Bool(INPUT)
+   val commit_wen          = Bool(INPUT)
+   val commit_pdst         = UInt(INPUT, PREG_SZ)
+   val committed_element   = UInt(OUTPUT, PREG_SZ)
+
    override def clone = new RenameMapTableElementIo(pl_width).asInstanceOf[this.type]
 }
 
@@ -54,6 +60,7 @@ class RenameMapTableElement(pipeline_width: Int) extends Module
 
    // handle branch speculation
    val element_br_copies = Mem(out=UInt(width = PREG_SZ), n=MAX_BR_COUNT)
+
 
    // this is possibly the hardest piece of code I have ever had to reason about in my LIFE.
    // Or maybe that's the 5am talking.
@@ -96,6 +103,20 @@ class RenameMapTableElement(pipeline_width: Int) extends Module
       // give write priority to the last instruction in the bundle
       element := PriorityMux(io.wens.reverse, io.ren_pdsts.reverse)
    }
+
+   if (ENABLE_COMMIT_MAP_TABLE)
+   {
+      val committed_element = Reg(init=UInt(0,PREG_SZ))
+      when (io.commit_wen)
+      {
+         committed_element := io.commit_pdst
+      }
+      when (io.flush_pipeline)
+      {
+         element := committed_element
+      }
+      io.committed_element := committed_element
+   }
    
    // outputs
    io.element  := element
@@ -128,8 +149,17 @@ class FreeListIo(num_phys_registers: Int, pl_width: Int) extends Bundle()
    val rollback_wens  = Vec.fill(pl_width) {Bool(INPUT)}
    val rollback_pdsts = Vec.fill(pl_width) {UInt(INPUT, log2Up(num_phys_registers))}
 
+   // or... 
+   // TODO there are TWO free-list IOs now, based on constants. What is the best way to handle these two designs? perhaps freelist.scala, and instantiate which-ever one I want?
+   // TODO naming is inconsistent 
+   // TODO combine with rollback, whatever?
+   val flush_pipeline = Bool(INPUT)
+   val commit_wens    = Vec.fill(pl_width) {Bool(INPUT)}
+   val commit_pdsts   = Vec.fill(pl_width) {UInt(INPUT, log2Up(num_phys_registers))} // remove from ISPR list
+
    val debug = new Bundle {
-      val freelist = Bits()
+      val freelist = Bits(width=num_phys_registers)
+      val isprlist = Bits(width=num_phys_registers)
    }.asOutput
 }
 
@@ -152,7 +182,7 @@ class RenameFreeList(num_phys_registers: Int // number of physical registers
    // can quickly reset pipeline on branch mispredict
    val allocation_lists = Vec.fill(MAX_BR_COUNT) { Reg(outType=Bits(width = num_phys_registers)) }
 
-   val enq_mask = Vec.fill(pl_width) {Bits(width = num_phys_registers)}
+   val enq_mask = Vec.fill(pl_width) {Bits(width = num_phys_registers)} // TODO why is this a Vec? can I do this all on one bit-vector?
 
    // ------------------------------------------
    // find new,free physical registers
@@ -179,7 +209,6 @@ class RenameFreeList(num_phys_registers: Int // number of physical registers
          requested_pregs_oh_array(w)(i) = can_allocate && !allocated(w)
 
          next_allocated(w) := can_allocate | allocated(w)
-//         next_allocated(w) = can_allocate | allocated(w)
          can_allocate = can_allocate && allocated(w)
       }
 
@@ -281,6 +310,48 @@ class RenameFreeList(num_phys_registers: Int // number of physical registers
          allocation_lists(i) := allocation_lists(i) & ~allocation_list
       }
    }
+
+
+   // OPTIONALLY: handle single-cycle resets
+   // "inflight speculative physical registers" list track registers that are
+   // given out speculatively, and remove them once their instruction is
+   // committed. If a branch mispredicts, use the branch's "allocation_list" to
+   // clear out those registers.
+   if (ENABLE_COMMIT_MAP_TABLE)
+   {
+      val ispr_list= Reg(init=Bits(0,num_phys_registers))
+
+      val com_mask = Vec.fill(pl_width) {Bits(width=num_phys_registers)}
+      for (w <- 0 until pl_width)
+      {
+         com_mask(w) := Bits(0,width=num_phys_registers)  
+         when (io.commit_wens(w))
+         {
+            com_mask(w) := UInt(1) << io.commit_pdsts(w)
+         }
+      }
+
+      when (io.flush_pipeline)
+      {
+         ispr_list := Bits(0)
+      }
+      .elsewhen (io.br_mispredict_val)
+      {
+         ispr_list := ~allocation_list & ispr_list & ~(com_mask.reduce(_|_))
+      }
+      .otherwise
+      {
+         ispr_list := (ispr_list & ~(com_mask.reduce(_|_))) | just_allocated_mask
+      }
+
+
+      when (io.flush_pipeline)
+      {
+         free_list := free_list | ispr_list
+      }
+      io.debug.isprlist := ispr_list
+   }
+
 
    
    // ** SET OUTPUTS ** //
@@ -418,14 +489,17 @@ class RenameStageIO(pl_width: Int, num_wb_ports: Int) extends Bundle
    val com_uops   = Vec.fill(pl_width) {new MicroOp().asInput}
    val com_rbk_valids = Vec.fill(pl_width) {Bool(INPUT)}
 
+   val flush_pipeline = Bool(INPUT) // TODO only used for SCR (single-cycle reset)
 
    // debug
    val debug = new Bundle {
-      val freelist = Bits()
+      val freelist = Bits(width=PHYS_REG_COUNT)
+      val isprlist = Bits(width=PHYS_REG_COUNT)
       val map_table = Vec.fill(LOGICAL_REG_COUNT) {new Bundle{
          val valid   = Bool()
          val rbk_wen = Bool()
          val element = UInt()
+         val committed_element = UInt()
       }}
       val bsy_table = UInt(width=PHYS_REG_COUNT)
    }.asOutput
@@ -465,6 +539,9 @@ class RenameStage(pl_width: Int, num_wb_ports: Int) extends Module
    {
       map_table_io(i).rollback_wen := Bool(false)
       map_table_io(i).rollback_stale_pdst := io.com_uops(0).stale_pdst
+      
+      map_table_io(i).commit_wen := Bool(false)
+      map_table_io(i).commit_pdst := io.com_uops(0).pdst
 
       for (w <- 0 until pl_width)
       {
@@ -483,6 +560,8 @@ class RenameStage(pl_width: Int, num_wb_ports: Int) extends Module
 
       map_table_io(i).br_mispredict       := io.brinfo.mispredict
       map_table_io(i).br_mispredict_tag   := io.brinfo.tag
+
+      map_table_io(i).flush_pipeline      := io.flush_pipeline
    }
 
    // backwards, because rollback must give highest priority to 0 (the oldest instruction)
@@ -494,6 +573,19 @@ class RenameStage(pl_width: Int, num_wb_ports: Int) extends Module
       {
          map_table_io(ldst).rollback_wen        := Bool(true)
          map_table_io(ldst).rollback_stale_pdst := io.com_uops(w).stale_pdst
+      }
+   }
+
+   if (ENABLE_COMMIT_MAP_TABLE)
+   {
+      for (w <- 0 until pl_width)
+      {
+         val ldst = io.com_uops(w).ldst
+         when (io.com_valids(w) && io.com_uops(w).pdst_rtype === RT_FIX)
+         {
+            map_table_io(ldst).commit_wen := Bool(true)
+            map_table_io(ldst).commit_pdst := io.com_uops(w).pdst
+         }
       }
    }
 
@@ -610,10 +702,17 @@ class RenameStage(pl_width: Int, num_wb_ports: Int) extends Module
                                         (io.com_uops(w).pdst != UInt(0)) &&
                                         (io.com_uops(w).pdst_rtype === RT_FIX)
          freelist.io.rollback_pdsts(w) := io.com_uops(w).pdst
+
+         freelist.io.commit_wens(w) := io.com_valids(w) &&
+                                       (io.com_uops(w).pdst != UInt(0)) &&
+                                       (io.com_uops(w).pdst_rtype === RT_FIX)
+         freelist.io.commit_pdsts(w) := io.com_uops(w).pdst
       }
 
       freelist.io.br_mispredict_val := io.brinfo.mispredict
       freelist.io.br_mispredict_tag := io.brinfo.tag
+
+      freelist.io.flush_pipeline := io.flush_pipeline
 
 
    // for some instructions, pass through the logical destination as the physical destination
@@ -639,11 +738,13 @@ class RenameStage(pl_width: Int, num_wb_ports: Int) extends Module
    // Debug signals
 
    io.debug.freelist := freelist.io.debug.freelist
+   io.debug.isprlist := freelist.io.debug.isprlist
 
    for (i <- 0 until LOGICAL_REG_COUNT)
    {
       io.debug.map_table(i).rbk_wen := map_table_io(i).rollback_wen
       io.debug.map_table(i).element := map_table_io(i).element
+      io.debug.map_table(i).committed_element := map_table_io(i).committed_element
    }
    io.debug.bsy_table:= bsy_table.io.debug.bsy_table
 }

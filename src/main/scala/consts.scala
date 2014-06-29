@@ -11,21 +11,21 @@ package constants
 
 import Chisel._
 import Node._
-   
+
 trait BOOMProcConstants
 {
    //************************************
    // Debug Support
-   val DEBUG_PRINTF = false         // use the Chisel printf functionality 
-   val COMMIT_LOG_PRINTF = false    // dump commit state, for comparision against ISA sim 
+   val DEBUG_PRINTF = false         // use the Chisel printf functionality
+   val COMMIT_LOG_PRINTF = false    // dump commit state, for comparision against ISA sim
    val DEBUG_ENABLE_COLOR = false   // provide color to print outs? requires a VIM plugin to work properly :(
    val DEBUG_BTB = false            // printf the BTB too
-   
-   
+
+
    //************************************
    // Machine Parameters
    val XPRLEN = 64           // native width of machine
-                             // (i.e., the width of a register in 
+                             // (i.e., the width of a register in
                              // the general-purpose register file)
    require(XPRLEN == 64)     // additional work required to make rv32 available
 
@@ -36,30 +36,32 @@ trait BOOMProcConstants
    // number of words we can fetch every cycle
    val FETCH_WIDTH      = 2; require(FETCH_WIDTH == 1 || FETCH_WIDTH == 2)
    // number of micro-ops we can issue every cycle
-   val ISSUE_WIDTH      = 2; require (ISSUE_WIDTH <= 3)
+   val ISSUE_WIDTH      = 2; require(ISSUE_WIDTH <= 3)
 
-   // implicit 
+   // implicit
    val DECODE_WIDTH     = FETCH_WIDTH; require(DECODE_WIDTH <= FETCH_WIDTH)
-   val DISPATCH_WIDTH   = DECODE_WIDTH 
+   val DISPATCH_WIDTH   = DECODE_WIDTH
    val COMMIT_WIDTH     = DISPATCH_WIDTH
 
-   
+
    //************************************
-   // Pipelining 
-   
+   // Pipelining
+
    val ENABLE_FETCH_BUFFER_FLOW_THROUGH = true
 
 
    //************************************
    // Extra Knobs and Features
 
-   val ENABLE_PREFETCHING   = false
-   val ENABLE_BTB           = true
-   val ENABLE_ALU_BYPASSING =  true 
-   val ENABLE_REGFILE_BYPASSING = true // bypass regfile write ports to read ports
- 
-   val BTB_NUM_ENTRIES = 4
- 
+   val ENABLE_PREFETCHING        = false
+   val ENABLE_BTB                = true
+   val ENABLE_ALU_BYPASSING      = true
+   val ENABLE_REGFILE_BYPASSING  = true  // bypass regfile write ports to read ports
+   val ENABLE_COMMIT_MAP_TABLE   = false // track the committed rename state; allows
+                                         // for single-cycle resets.
+
+   val BTB_NUM_ENTRIES = 32
+
    val IC_NUM_SETS = 128
    val IC_NUM_WAYS = 2
    val DC_NUM_SETS = 128
@@ -69,29 +71,29 @@ trait BOOMProcConstants
    val INTEGER_ISSUE_SLOT_COUNT = 12
    val NUM_ROB_ENTRIES          = 28 // number of ROB entries (e.g., 32 entries for R10k)
    val NUM_ROB_ROWS             = NUM_ROB_ENTRIES/DECODE_WIDTH
-   require (NUM_ROB_ROWS % 2 == 0) 
+   require (NUM_ROB_ROWS % 2 == 0)
    require (NUM_ROB_ENTRIES % DECODE_WIDTH == 0)
 
    val NUM_LSU_ENTRIES          = 8  // number of LD/ST entries
    require (isPow2(NUM_LSU_ENTRIES))
-   val ROB_ADDR_SZ = log2Up(NUM_ROB_ENTRIES) 
+   val ROB_ADDR_SZ = log2Up(NUM_ROB_ENTRIES)
    val MEM_ADDR_SZ = log2Up(NUM_LSU_ENTRIES)
 
    val MAX_WAKEUP_DELAY = 3 // unused
 
    // size of the unified, physical register file
-   val PHYS_REG_COUNT = 64; require(PHYS_REG_COUNT >= (32 + DECODE_WIDTH))
+   val PHYS_REG_COUNT = 50; require(PHYS_REG_COUNT >= (32 + DECODE_WIDTH))
 
    val MAX_BR_COUNT = 8   // number of branches we can speculate simultaneously
    require(MAX_BR_COUNT >=2)
-   
+
    val FETCH_BUFFER_SZ = 4 // number of instructions that can be stored between fetch + decode
-   
+
 
    // Implicitly calculated constants
    val LOGICAL_REG_COUNT = 32
    val LREG_SZ           = log2Up(LOGICAL_REG_COUNT)
-   val PREG_SZ           = log2Up(PHYS_REG_COUNT)   
+   val PREG_SZ           = log2Up(PHYS_REG_COUNT)
    val MAX_ST_COUNT      = (1 << MEM_ADDR_SZ)
    val MAX_LD_COUNT      = (1 << MEM_ADDR_SZ)
    val BR_TAG_SZ         = log2Up(MAX_BR_COUNT)
@@ -105,32 +107,32 @@ trait BOOMProcConstants
 
 trait LoadStoreUnitConstants
 {
-   val ENABLE_STOREDATA_FORWARDING = true // allow stores to forward data to depending loads 
+   val ENABLE_STOREDATA_FORWARDING = true // allow stores to forward data to depending loads
    require (ENABLE_STOREDATA_FORWARDING == true) // required to for younger loads to read out of the committed store buffer
 
-   val ENABLE_SPECULATE_LOADS = true      // allow loads to speculate - otherwise 
+   val ENABLE_SPECULATE_LOADS = true      // allow loads to speculate - otherwise
                                           // loads are sent to memory in-order
                                           // (retried once the load is the head of
                                           // the LAQ).
 }
-    
+
 trait BrPredConstants
 {
    val NOT_TAKEN = Bool(false)
    val TAKEN = Bool(true)
-                     
+
    val USE_BRANCH_PREDICTOR = true
-   
+
    // Uses a History Table of n-bit counters
    val BPRED_DESIGN    = "BP_R10K"
    //val BPRED_DESIGN    = "BP_21264"
    //val BPRED_DESIGN    = "BP_GSHARE"
    //val BPRED_DESIGN    = "BP_GLOBAL"
-   val NUM_BHT_ENTRIES = 128  
-   val BHT_COUNTER_SZ = 2  
-   val NUM_LHIST_ENTRIES = 128  
+   val NUM_BHT_ENTRIES = 128
+   val BHT_COUNTER_SZ = 2
+   val NUM_LHIST_ENTRIES = 128
 }
- 
+
 
 trait ScalarOpConstants
 {
@@ -138,21 +140,21 @@ trait ScalarOpConstants
    val Y = Bool(true)
    val N = Bool(false)
 
-    
+
    //************************************
-   // Control Signals 
-                
+   // Control Signals
+
    // PC Select Signal
    val PC_PLUS4 = Bits(0, 2)  // PC + 4
-   val PC_BRJMP = Bits(1, 2)  // brjmp_target 
+   val PC_BRJMP = Bits(1, 2)  // brjmp_target
    val PC_JALR  = Bits(2, 2)  // jump_reg_target
-   
+
    // PC Select Signal (for the oracle)
    val PC_4   = UInt(0, 3)  // PC + 4
    val PC_BR  = UInt(1, 3)  // branch_target
    val PC_J   = UInt(2, 3)  // jump_target
    val PC_JR  = UInt(3, 3)  // jump_reg_target
-      
+
    // Branch Type
    val BR_N   = UInt(0, 4)  // Next
    val BR_NE  = UInt(1, 4)  // Branch on NotEqual
@@ -161,19 +163,19 @@ trait ScalarOpConstants
    val BR_GEU = UInt(4, 4)  // Branch on Greater/Equal Unsigned
    val BR_LT  = UInt(5, 4)  // Branch on Less Than
    val BR_LTU = UInt(6, 4)  // Branch on Less Than Unsigned
-   val BR_J   = UInt(7, 4)  // Jump 
+   val BR_J   = UInt(7, 4)  // Jump
    val BR_JR  = UInt(8, 4)  // Jump Register
- 
+
    // RS1 Operand Select Signal
    val OP1_RS1 = UInt(0, 2) // Register Source #1
-   val OP1_ZERO= UInt(1, 2) 
-   val OP1_PC  = UInt(2, 2) 
+   val OP1_ZERO= UInt(1, 2)
+   val OP1_PC  = UInt(2, 2)
    val OP1_X   = Bits("b??", 2)
-   
+
    // RS2 Operand Select Signal
    val OP2_RS2 = UInt(0, 3) // Register Source #2
-   val OP2_IMM = UInt(1, 3) // immediate 
-   val OP2_ZERO= UInt(2, 3) // constant 0 
+   val OP2_IMM = UInt(1, 3) // immediate
+   val OP2_ZERO= UInt(2, 3) // constant 0
    val OP2_FOUR= UInt(3, 3) // constant 4 (for PC+4)
    val OP2_IMMC= UInt(4, 3) // for CSR imm found in RS1
    val OP2_X   = Bits("b???", 3)
@@ -181,43 +183,42 @@ trait ScalarOpConstants
    // Register File Write Enable Signal
    val REN_0   = Bool(false)
    val REN_1   = Bool(true)
-           
+
    // Is 32b Word or 64b Doubldword?
-   val SZ_DW = 1 
+   val SZ_DW = 1
    val DW_X   = Bool(true) //Bool(XPRLEN==64)
    val DW_32  = Bool(false)
    val DW_64  = Bool(true)
    val DW_XPR = Bool(true) //Bool(XPRLEN==64)
-   
+
    // Writeback Select Signal
    val WB_ALU  = UInt(0, 1)
    val WB_PCR  = UInt(1, 1)
    val WB_X    = UInt("b?", 1)
-   
+
    // Memory Function Type (Read,Write,Fence) Signal
-                          
+
    // Memory Enable Signal
    val MEN_0   = Bool(false)
    val MEN_1   = Bool(true)
    val MEN_X   = Bool(false)
-                     
+
    // Immediate Extend Select
-   val IS_I   = UInt(0, 3)  //I-Type  (LD,ALU) 
+   val IS_I   = UInt(0, 3)  //I-Type  (LD,ALU)
    val IS_S   = UInt(1, 3)  //S-Type  (ST)
    val IS_B   = UInt(2, 3)  //SB-Type (BR)
-   val IS_U   = UInt(3, 3)  //U-Type  (LUI/AUIPC)     
-   val IS_J   = UInt(4, 3)  //UJ-Type (J/JAL)   
-   val IS_X   = UInt("b???", 3)  
+   val IS_U   = UInt(3, 3)  //U-Type  (LUI/AUIPC)
+   val IS_J   = UInt(4, 3)  //UJ-Type (J/JAL)
+   val IS_X   = UInt("b???", 3)
 
 
    // Decode Stage Control Signals
    val RT_FIX   = UInt(0, 2)
-//   val RT_PCR   = UInt(1, 2) // deprecated, since it's passed via immediate field
    val RT_PAS   = UInt(1, 2) // pass-through (pop1 := lrs1, etc)
    val RT_X     = UInt(1, 2) // not-a-register (but shouldn't get a busy-bit, etc.)
                              // TODO rename RT_NAR
    val RT_FLT   = UInt(2, 2)
-   
+
    // Micro-op opcodes
    // TODO use an enum
    val UOPC_SZ = 9
@@ -227,7 +228,7 @@ trait ScalarOpConstants
    val uopSTA  = Bits( 2, UOPC_SZ)  // store address generation
    val uopSTD  = Bits( 3, UOPC_SZ)  // store data generation
    val uopLUI  = Bits( 4, UOPC_SZ)
-                 
+
    val uopADDI = Bits( 5, UOPC_SZ)
    val uopANDI = Bits( 6, UOPC_SZ)
    val uopORI  = Bits( 7, UOPC_SZ)
@@ -248,7 +249,7 @@ trait ScalarOpConstants
    val uopXOR  = Bits(21, UOPC_SZ)
    val uopSRA  = Bits(22, UOPC_SZ)
    val uopSRL  = Bits(23, UOPC_SZ)
-   
+
    val uopBEQ  = Bits(24, UOPC_SZ)
    val uopBNE  = Bits(25, UOPC_SZ)
    val uopBGE  = Bits(26, UOPC_SZ)
@@ -266,11 +267,11 @@ trait ScalarOpConstants
    val uopJAL  = Bits(37, UOPC_SZ)
    val uopJALR = Bits(38, UOPC_SZ)
    val uopAUIPC= Bits(39, UOPC_SZ)
-   
+
    val uopSRET = Bits(40, UOPC_SZ)
    val uopCFLSH= Bits(41, UOPC_SZ)
    val uopFENCE= Bits(42, UOPC_SZ)
-   
+
    val uopADDIW= Bits(43, UOPC_SZ)
    val uopADDW = Bits(44, UOPC_SZ)
    val uopSUBW = Bits(45, UOPC_SZ)
@@ -293,7 +294,7 @@ trait ScalarOpConstants
    val uopDIVUW= Bits(62, UOPC_SZ)
    val uopREMW = Bits(63, UOPC_SZ)
    val uopREMUW= Bits(64, UOPC_SZ)
-   
+
    val uopFENCEI    = Bits(65, UOPC_SZ)
    val uopMEMSPECIAL= Bits(66, UOPC_SZ)
 
@@ -303,7 +304,7 @@ trait ScalarOpConstants
    val PCR_T   = UInt(2,3)    // mtpcr
    val PCR_C   = UInt(3,3)    // clear pcr
    val PCR_S   = UInt(4,3)    // set pcr
-        
+
    // Memory Mask Type Signal
    val MSK_X   = UInt("b???", 3)
    val MSK_B   = UInt(0, 3)
@@ -315,14 +316,14 @@ trait ScalarOpConstants
    val MSK_WU  = UInt(6, 3)
 
    // The Bubble Instruction (Machine generated NOP)
-   // Insert (XOR x0,x0,x0) which is different from software compiler 
+   // Insert (XOR x0,x0,x0) which is different from software compiler
    // generated NOPs which are (ADDI x0, x0, 0).
    // Reasoning for this is to let visualizers and stat-trackers differentiate
    // between software NOPs and machine-generated Bubbles in the pipeline.
    val BUBBLE  = Bits(0x4033, 32)
 
 
-   def NullMicroOp(): MicroOp =  
+   def NullMicroOp(): MicroOp =
    {
       val uop = new MicroOp()
       uop.uopc       := uopNOP // TODO may be unnecessary
@@ -336,7 +337,7 @@ trait ScalarOpConstants
       // TODO these unnecessary? used in regread stage?
       uop.valid      := Bool(false)
       uop.is_br_or_jmp := Bool(false)
-      
+
       val cs = new CtrlSignals()
       cs.br_type     := BR_N
       cs.rf_wen      := Bool(false)
@@ -344,14 +345,14 @@ trait ScalarOpConstants
       cs.is_load     := Bool(false)
       cs.is_sta      := Bool(false)
       cs.is_std      := Bool(false)
-     
+
       uop.ctrl := cs
       uop
    }
 
 }
 
-trait InterruptConstants 
+trait InterruptConstants
 {
    val CAUSE_INTERRUPT = 32
 }
