@@ -1477,11 +1477,11 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
             )
       }
 
-      printf(")\n          fin(%x)", dec_finished_mask)
+      printf(")\n   fin(%x)", dec_finished_mask)
 
       for (w <- 0 until DECODE_WIDTH)
       {
-         printf("       [ISA:%d,%d,%d] [Phs:%d(%s)%d[%s](%s)%d[%s](%s)] " 
+         printf("  [ISA:%d,%d,%d] [Phs:%d(%s)%d[%s](%s)%d[%s](%s)] " 
             , dec_uops(w).ldst
             , dec_uops(w).lrs1
             , dec_uops(w).lrs2
@@ -1502,9 +1502,9 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
             )
       }
 
-      
 
-      printf(" Exct(%s%d) Commit(%x) fl: 0x%x (%d) is: 0x%x (%d)\n"
+
+      printf("Exct(%s%d) Commit(%x) fl: 0x%x (%d) is: 0x%x (%d)\n"
          , Mux(com_exception, Str("E"), Str("-"))
          , com_exc_cause
          , com_valids.toBits
@@ -1518,7 +1518,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
       for (i <- 0 until INTEGER_ISSUE_SLOT_COUNT)
       {
          printf("  integer_issue_slot[%d](%s)(Req:%s):wen=%s P:(%s,%s) OP:(%d,%d) PDST:%d %s [%s[DASM(%x)]"+end+" 0x%x: %d] ri:%d bm=%d imm=0x%x\n" 
-            , UInt(i, log2Up(INTEGER_ISSUE_SLOT_COUNT)) 
+            , UInt(i, log2Up(INTEGER_ISSUE_SLOT_COUNT))
             , Mux(issue_unit.io.debug.slot(i).valid, Str("V"), Str("-"))
             , Mux(issue_unit.io.debug.slot(i).request, Str(u_red + "R" + end), Str(grn + "-" + end))
             , Mux(issue_unit.io.debug.slot(i).in_wen, Str(u_wht + "W" + end),  Str(grn + " " + end))

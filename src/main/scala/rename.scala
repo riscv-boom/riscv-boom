@@ -154,8 +154,8 @@ class FreeListIo(num_phys_registers: Int, pl_width: Int) extends Bundle()
    // TODO naming is inconsistent 
    // TODO combine with rollback, whatever?
    val flush_pipeline = Bool(INPUT)
-   val commit_wens    = Vec.fill(pl_width) {Bool(INPUT)}
-   val commit_pdsts   = Vec.fill(pl_width) {UInt(INPUT, log2Up(num_phys_registers))} // remove from ISPR list
+   val com_wens       = Vec.fill(pl_width) {Bool(INPUT)}
+   val com_uops       = Vec.fill(pl_width) {new MicroOp().asInput()} 
 
    val debug = new Bundle {
       val freelist = Bits(width=num_phys_registers)
@@ -313,43 +313,32 @@ class RenameFreeList(num_phys_registers: Int // number of physical registers
 
 
    // OPTIONALLY: handle single-cycle resets
-   // "inflight speculative physical registers" list track registers that are
-   // given out speculatively, and remove them once their instruction is
-   // committed. If a branch mispredicts, use the branch's "allocation_list" to
-   // clear out those registers.
+   // Committed Free List tracks what the free list is at the commit point, 
+   // allowing for a single-cycle reset of the rename state on a pipeline flush.
    if (ENABLE_COMMIT_MAP_TABLE)
    {
-      val ispr_list= Reg(init=Bits(0,num_phys_registers))
+      val committed_free_list = Reg(init=(~Bits(1,num_phys_registers)))
 
       val com_mask = Vec.fill(pl_width) {Bits(width=num_phys_registers)}
+      val stale_mask = Vec.fill(pl_width) {Bits(width=num_phys_registers)}
       for (w <- 0 until pl_width)
       {
          com_mask(w) := Bits(0,width=num_phys_registers)  
-         when (io.commit_wens(w))
+         stale_mask(w) := Bits(0,width=num_phys_registers)
+         when (io.com_wens(w))
          {
-            com_mask(w) := UInt(1) << io.commit_pdsts(w)
+            com_mask(w) := UInt(1) << io.com_uops(w).pdst
+            stale_mask(w) := UInt(1) << io.com_uops(w).stale_pdst
          }
       }
 
-      when (io.flush_pipeline)
-      {
-         ispr_list := Bits(0)
-      }
-      .elsewhen (io.br_mispredict_val)
-      {
-         ispr_list := ~allocation_list & ispr_list & ~(com_mask.reduce(_|_))
-      }
-      .otherwise
-      {
-         ispr_list := (ispr_list & ~(com_mask.reduce(_|_))) | just_allocated_mask
-      }
-
+      committed_free_list := (committed_free_list & ~(com_mask.reduce(_|_))) | stale_mask.reduce(_|_)
 
       when (io.flush_pipeline)
       {
-         free_list := free_list | ispr_list
+         free_list := committed_free_list
       }
-      io.debug.isprlist := ispr_list
+      io.debug.isprlist := committed_free_list
    }
 
 
@@ -703,10 +692,10 @@ class RenameStage(pl_width: Int, num_wb_ports: Int) extends Module
                                         (io.com_uops(w).pdst_rtype === RT_FIX)
          freelist.io.rollback_pdsts(w) := io.com_uops(w).pdst
 
-         freelist.io.commit_wens(w) := io.com_valids(w) &&
+         freelist.io.com_wens(w)    := io.com_valids(w) &&
                                        (io.com_uops(w).pdst != UInt(0)) &&
                                        (io.com_uops(w).pdst_rtype === RT_FIX)
-         freelist.io.commit_pdsts(w) := io.com_uops(w).pdst
+         freelist.io.com_uops(w)    := io.com_uops(w)
       }
 
       freelist.io.br_mispredict_val := io.brinfo.mispredict
