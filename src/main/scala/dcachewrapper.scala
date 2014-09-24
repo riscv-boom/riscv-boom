@@ -115,7 +115,7 @@ class LoadReqSlot extends Module
  
 class DCacheReq extends Bundle with BOOMCoreParameters
 {
-   val addr    = UInt(width = params(PPNBits).max(params(VPNBits) + 1) + params(PgIdxBits))
+   val addr    = UInt(width = coreMaxAddrBits)
    val uop     = new MicroOp()
    val data    = Bits(width = coreDataBits)
    val kill    = Bool()    // e.g., LSU detects load misspeculation 

@@ -17,23 +17,13 @@ import rocket.CoreName
 import rocket.NTilePorts
 import rocket.NPTWPorts
 import rocket.PTW
+import rocket.Tile
 
  
-class BoomTile(resetSignal: Bool = null) extends Module(_reset = resetSignal) 
-{
+class BOOMTile(resetSignal: Bool = null) extends Tile(resetSignal) {
 
-  // Override some of the external inputs  (until we have a better story anyways)
-
-  val memPorts = 2 // Number of ports to outer memory system from tile: 1 from I$, 1 from D$
   val dcachePortId = 0
   val icachePortId = 1
-  val dcachePorts = 2 //+ !confIn.rocc.isEmpty // Number of ports into D$: 1 from core, 1 from PTW, maybe 1 from RoCC
-
-
-  val io = new Bundle {
-    val tilelink = new TileLinkIO
-    val host = new HTIFIO
-  }
 
   val core = Module(new Core, { case CoreName => "BOOM"})
   val icache = Module(new Frontend, { case CacheName => "L1I"; case CoreName => "BOOM" })
@@ -41,6 +31,7 @@ class BoomTile(resetSignal: Bool = null) extends Module(_reset = resetSignal)
   val ptw = Module(new PTW(params(NPTWPorts)))
 
 // TODO add this back, but need to understand what "dmem" means (core.io.dmem is different from hellacacherequest)
+//  val dcachePorts = 2 //+ !confIn.rocc.isEmpty // Number of ports into D$: 1 from core, 1 from PTW, maybe 1 from RoCC
 //  val dcacheArb = Module(new HellaCacheArbiter(dcachePorts))
 //  dcacheArb.io.requestor(0) <> ptw.io.mem
 //  dcacheArb.io.requestor(1) <> core.io.dmem
