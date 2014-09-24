@@ -14,6 +14,7 @@ package BOOM
 
 import Chisel._
 import Node._
+import uncore.BlockOffBits
 
 
 //*************************************************************
@@ -21,32 +22,29 @@ import Node._
 
 // addresses being sent to the cache, delayed by two cycles so we can see if
 // they missed or not
-class CoreRequest(implicit conf: rocket.DCacheConfig) extends Bundle
+class CoreRequest extends BOOMCoreBundle
 {
-   val addr = UInt(width = conf.ppnbits.max(conf.vpnbits+1) + conf.pgidxbits)
+   val addr = UInt(width = coreMaxAddrBits)
    val miss = Bool()           // was the access a miss in the cache?
    val secondary_miss = Bool() // was the access a secondary miss? 
                                // (i.e., the cache is already servicing a miss
                                // to the same cache line
-   override def clone = new CoreRequest().asInstanceOf[this.type]
 }
 
 // this is our access port to the cache, where we put our prefetch requests into
-class CacheReq(implicit conf: rocket.DCacheConfig) extends Bundle
+class CacheReq extends BOOMCoreBundle
 {
-   val addr = UInt(width = conf.ppnbits.max(conf.vpnbits+1) + conf.pgidxbits)
-  
-   override def clone = new CacheReq().asInstanceOf[this.type]
+   val addr = UInt(width = coreMaxAddrBits)
 }
 
-class CacheIO(implicit conf: rocket.DCacheConfig) extends Bundle
+class CacheIO extends Bundle
 {
    val req = new DecoupledIO(new CacheReq()) 
 }
 
 //*************************************************************
 
-class Prefetcher(implicit conf: rocket.DCacheConfig) extends Module
+class Prefetcher extends Module 
 {
    val io = new Bundle
    {
@@ -97,7 +95,7 @@ class Prefetcher(implicit conf: rocket.DCacheConfig) extends Module
    }
 
    // fetch the next cache line
-   request_queue.io.enq.bits.addr := io.core_requests.bits.addr + UInt(1 << conf.offbits)
+   request_queue.io.enq.bits.addr := io.core_requests.bits.addr + UInt(1 << params(BlockOffBits))
    
     
    // hook up our request to the outside world (notice the interfaces match)

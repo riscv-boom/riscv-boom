@@ -8,18 +8,30 @@ package BOOM
 import Chisel._
 import Node._
 import uncore.HTIFIO
-import rocket.DatapathPTWIO
+import rocket._
+import uncore.VAddrBits
  
-class CoreIo(implicit conf: BOOMConfiguration) extends Bundle 
+case object FetchWidth extends Field[Int]
+abstract trait BOOMCoreParameters extends rocket.CoreParameters {
+  require(xprLen == 64)
+  require(params(UseVM) == false)
+  val fetchWidth = params(FetchWidth)
+  val vaddrBits = params(VAddrBits)
+  val fastMulDiv = params(FastMulDiv)
+}
+
+abstract class BOOMCoreBundle extends Bundle with BOOMCoreParameters
+
+class CoreIo() extends Bundle 
 {
-  val host = new HTIFIO(conf.rc.tl.ln.nClients)
-  val dmem = new DCMemPortIo()(conf.rc.dcache)
-  val imem = new CPUFrontendIO()(conf.rc.icache)
-  val ptw  = new DatapathPTWIO()(conf.rc.as).flip
+  val host = new HTIFIO
+  val dmem = new DCMemPortIo
+  val imem = new CPUFrontendIO
+  val ptw  = new DatapathPTWIO().flip
   val counters = new CacheCounters().asInput
 }
  
-class Core(implicit conf: BOOMConfiguration) extends Module
+class Core() extends Module
 {
   val io = new CoreIo()
   

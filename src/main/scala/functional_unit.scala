@@ -41,7 +41,7 @@ import FUCode._
  
 // TODO if a branch unit... how to add extra to IO in subclass?
 
-class FunctionalUnitIo(num_stages: Int, num_bypass_stages: Int)(implicit conf: BOOMConfiguration) extends Bundle()
+class FunctionalUnitIo(num_stages: Int, num_bypass_stages: Int) extends Bundle()
 {
    val req     = (new DecoupledIO(new FuncUnitReq)).flip
    val resp    = (new DecoupledIO(new FuncUnitResp))
@@ -108,7 +108,6 @@ abstract class FunctionalUnit(is_pipelined: Boolean
                               , num_stages: Int
                               , num_bypass_stages: Int
                               , has_branch_unit : Boolean = false)
-                              (implicit conf: BOOMConfiguration)
                               extends Module
 {
    val io = new FunctionalUnitIo(num_stages, num_bypass_stages)
@@ -121,7 +120,6 @@ abstract class PipelinedFunctionalUnit(val num_stages: Int,
                                        val num_bypass_stages: Int,
                                        val earliest_bypass_stage: Int,
                                        is_branch_unit: Boolean = false)
-                                       (implicit conf: BOOMConfiguration) 
                                        extends FunctionalUnit(is_pipelined = true
                                                               , num_stages = num_stages
                                                               , num_bypass_stages = num_bypass_stages
@@ -183,11 +181,10 @@ abstract class PipelinedFunctionalUnit(val num_stages: Int,
 }
 
 class ALUUnit(is_branch_unit: Boolean = false)
-                                          (implicit conf: BOOMConfiguration) 
                                           extends PipelinedFunctionalUnit(num_stages = 1
                                                                            , num_bypass_stages = 2
                                                                            , earliest_bypass_stage = 0
-                                                                           , is_branch_unit = is_branch_unit)
+                                                                           , is_branch_unit = is_branch_unit) with BOOMCoreParameters
 {
    val uop = io.req.bits.uop
 
@@ -210,13 +207,12 @@ class ALUUnit(is_branch_unit: Boolean = false)
    }
    
    // operand 2 select 
-   val op2_data = Mux(io.req.bits.uop.ctrl.op2_sel === OP2_IMM,  Sext(imm_xprlen, conf.rc.xprlen),
+   val op2_data = Mux(io.req.bits.uop.ctrl.op2_sel === OP2_IMM,  Sext(imm_xprlen, xprLen),
                   Mux(io.req.bits.uop.ctrl.op2_sel === OP2_IMMC, io.req.bits.uop.pop1(4,0),
                   Mux(io.req.bits.uop.ctrl.op2_sel === OP2_RS2 , io.req.bits.rs2_data,
                   Mux(io.req.bits.uop.ctrl.op2_sel === OP2_FOUR, UInt(4),
                                                                  UInt(0)))))
 
-   implicit val rc = conf.rc
    val alu = Module(new rocket.ALU())
 
    alu.io.in1 := op1_data.toUInt
@@ -323,8 +319,8 @@ class ALUUnit(is_branch_unit: Boolean = false)
       def vaSign(a0: UInt, ea: Bits) = {                                        
          // efficient means to compress 64-bit VA into rc.as.vaddrBits+1 bits         
          // (VA is bad if VA(rc.as.vaddrBits) != VA(rc.as.vaddrBits-1))                    
-         val a = a0 >> rc.as.vaddrBits-1
-         val e = ea(rc.as.vaddrBits,rc.as.vaddrBits-1)                                     
+         val a = a0 >> vaddrBits-1
+         val e = ea(vaddrBits,vaddrBits-1)                                     
          Mux(a === UInt(0) || a === UInt(1), e != UInt(0),                       
          Mux(a === SInt(-1) || a === SInt(-2), e === SInt(-1),                   
             e(0)))                                                                  
@@ -338,7 +334,7 @@ class ALUUnit(is_branch_unit: Boolean = false)
       val bj_offset = imm_xprlen(20,0).toSInt
       val bj64 = bj_base + bj_offset                                                    
       val bj_msb = Mux(uop.uopc === uopJALR, vaSign(io.req.bits.rs1_data, bj64), vaSign(uop_pc_, bj64))
-      val bj_addr = Cat(bj_msb, bj64(rc.as.vaddrBits-1,0))                                   
+      val bj_addr = Cat(bj_msb, bj64(vaddrBits-1,0))                                   
 
 
       io.br_unit.brjmp_target   := bj_addr
@@ -374,13 +370,12 @@ class ALUUnit(is_branch_unit: Boolean = false)
 
 
 // passes in base+imm to calculate addresses, and passes store data, to the LSU
-class MemAddrCalcUnit()(implicit conf: BOOMConfiguration) extends PipelinedFunctionalUnit(num_stages = 0
+class MemAddrCalcUnit extends PipelinedFunctionalUnit(num_stages = 0
                                                                                    , num_bypass_stages = 0
                                                                                    , earliest_bypass_stage = 0
-                                                                                   , is_branch_unit = false)
+                                                                                   , is_branch_unit = false) with BOOMCoreParameters
 {
    // perform address calculation
-   implicit val rc = conf.rc
    val alu = Module(new rocket.ALU())
 
    alu.io.in1 := io.req.bits.rs1_data.toUInt
@@ -390,9 +385,9 @@ class MemAddrCalcUnit()(implicit conf: BOOMConfiguration) extends PipelinedFunct
    alu.io.dw  := DW_XPR
 
    val adder_out = alu.io.adder_out
-   val ea_sign = Mux(adder_out(rc.as.vaddrBits-1), ~adder_out(63,rc.as.vaddrBits) === UInt(0),
-                                                    adder_out(63,rc.as.vaddrBits) != UInt(0))
-   val effective_address = Cat(ea_sign, adder_out(rc.as.vaddrBits-1,0)).toUInt
+   val ea_sign = Mux(adder_out(vaddrBits-1), ~adder_out(63,vaddrBits) === UInt(0),
+                                                    adder_out(63,vaddrBits) != UInt(0))
+   val effective_address = Cat(ea_sign, adder_out(vaddrBits-1,0)).toUInt
 
    // TODO only use one register read port
    io.resp.bits.data := Mux(io.req.bits.uop.uopc === uopSTD, io.req.bits.rs2_data,
@@ -417,12 +412,11 @@ class MemAddrCalcUnit()(implicit conf: BOOMConfiguration) extends PipelinedFunct
 
 // unpipelined, can only hold a single MicroOp at a time
 // assumes at least one register between request and response
-abstract class UnPipelinedFunctionalUnit()
-                                       (implicit conf: BOOMConfiguration) 
+abstract class UnPipelinedFunctionalUnit
                                        extends FunctionalUnit(is_pipelined = false
                                                             , num_stages = 1
                                                             , num_bypass_stages = 0
-                                                            , has_branch_unit = false)
+                                                            , has_branch_unit = false) with BOOMCoreParameters
 {
    val r_uop = Reg(outType = new MicroOp()) 
 
@@ -452,10 +446,9 @@ abstract class UnPipelinedFunctionalUnit()
 }
  
 
-class MulDivUnit(implicit conf: BOOMConfiguration) extends UnPipelinedFunctionalUnit
+class MulDivUnit extends UnPipelinedFunctionalUnit with BOOMCoreParameters
 {
-   implicit val rc = conf.rc
-   val muldiv = Module(new rocket.MulDiv(mulUnroll = if (conf.rc.fastMulDiv) 8 else 1, earlyOut = conf.rc.fastMulDiv))
+   val muldiv = Module(new rocket.MulDiv(mulUnroll = if (fastMulDiv) 8 else 1, earlyOut = fastMulDiv))
    
    // request
    muldiv.io.req.valid    := io.req.valid && !this.do_kill

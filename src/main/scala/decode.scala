@@ -136,7 +136,7 @@ class DecodeUnitIo extends Bundle
 }
 
 // Takes in a single instruction, generates a MicroOp (or multiply micro-ops over x cycles)
-class DecodeUnit(implicit conf: BOOMConfiguration) extends Module
+class DecodeUnit() extends Module
 {
    val io = new DecodeUnitIo
 
@@ -156,7 +156,7 @@ class DecodeUnit(implicit conf: BOOMConfiguration) extends Module
    // Exception Handling
    val exc_illegal    = !cs_inst_val
 
-   var exc_interrupts = (0 until io.status.ip.getWidth).map(i => (io.status.im(i) && io.status.ip(i), UInt(BigInt(1) << (conf.rc.xprlen-1) | i)))
+   var exc_interrupts = (0 until io.status.ip.getWidth).map(i => (io.status.im(i) && io.status.ip(i), UInt(BigInt(1) << (params(XprLen)-1) | i)))
    val (exc_interrupt_unmasked, exc_interrupt_cause) = checkExceptions(exc_interrupts)
    val exc_interrupt = io.status.ei && exc_interrupt_unmasked
 
@@ -165,7 +165,7 @@ class DecodeUnit(implicit conf: BOOMConfiguration) extends Module
 
 
    val fp_csrs = rocket.CSRs.fcsr :: rocket.CSRs.frm :: rocket.CSRs.fflags :: Nil
-   val legal_csrs = if (!conf.rc.fpu.isEmpty) rocket.CSRs.all.toSet else rocket.CSRs.all.toSet -- fp_csrs
+   val legal_csrs = if (!params(BuildFPU).isEmpty) rocket.CSRs.all.toSet else rocket.CSRs.all.toSet -- fp_csrs
 
    val raddr1         = uop.inst(RS1_MSB,RS1_LSB)
    val csr_addr       = uop.inst(CSR_ADDR_MSB, CSR_ADDR_LSB)
@@ -295,7 +295,7 @@ class BranchDecode extends Module
 }
 
 
-class FetchSerializerIO(implicit conf: BOOMConfiguration) extends Bundle
+class FetchSerializerIO() extends Bundle
 {
    val enq = new DecoupledIO(new FetchBundle()).flip
    val deq = new DecoupledIO(Vec.fill(DECODE_WIDTH){new MicroOp()}) 
@@ -311,7 +311,7 @@ class FetchSerializerIO(implicit conf: BOOMConfiguration) extends Bundle
 // connect a N-word wide Fetch Buffer with a M-word decode
 // currently only works for 2 wide fetch to 1 wide decode, OR N:N fetch/decode
 // TODO instead of counter, clear mask bits as instructions are finished?
-class FetchSerializerNtoM(implicit conf: BOOMConfiguration) extends Module
+class FetchSerializerNtoM() extends Module
 {
    val io = new FetchSerializerIO
 

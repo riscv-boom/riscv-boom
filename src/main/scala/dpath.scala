@@ -107,13 +107,13 @@ class CtrlSignals extends Bundle()
 
  
 // TODO Chisel ability to union this Bundle for different types of Uops?
-class MicroOp extends Bundle()
+class MicroOp extends Bundle() with BOOMCoreParameters
 {
    val valid            = Bool()                   // is this uop valid? or has it been masked out, used by fetch buffer and Decode stage
    
    val uopc             = Bits(width = UOPC_SZ)    // micro-op code
    val inst             = Bits(width = 32)          
-   val pc               = UInt(width = XPRLEN)
+   val pc               = UInt(width = xprLen)
    val fu_code          = Bits(width = FUC_SZ)     // which functional unit do we use?
    val ctrl             = new CtrlSignals
    
@@ -143,7 +143,7 @@ class MicroOp extends Bundle()
    val prs2_busy        = Bool()
    val stale_pdst       = UInt(width = PREG_SZ)
    val exception        = Bool()
-   val exc_cause        = UInt(width = XPRLEN)  
+   val exc_cause        = UInt(width = xprLen)  
    val sret             = Bool()
    val bypassable       = Bool()                      // can we bypass ALU results? (doesn't include loads, pcr, rdcycle, etc.... need to readdress this, SHOULD include PCRs?)
    val mem_cmd          = UInt(width = 4)             // sync primitives/cache flushes
@@ -171,20 +171,18 @@ class MicroOp extends Bundle()
 
 
    // purely debug information
-   val debug_wdata      = Bits(width=XPRLEN)
+   val debug_wdata      = Bits(width=xprLen)
 }
 
-class FetchBundle(implicit conf: BOOMConfiguration)  extends Bundle
+class FetchBundle() extends Bundle with BOOMCoreParameters
 {
-   val fetch_width = conf.rc.icache.ibytes/4
-
-   val pc    = UInt(width = XPRLEN)
-   val insts = Vec.fill(fetch_width) { Bits(width = 32) }
-   val mask  = Bits(width = fetch_width) // mark which words are valid instructions
+   val pc    = UInt(width = xprLen)
+   val insts = Vec.fill(fetchWidth) { Bits(width = 32) }
+   val mask  = Bits(width = fetchWidth) // mark which words are valid instructions
    
-   val br_predictions = Vec.fill(fetch_width) { new BrPrediction } // set by Bpd stage
+   val br_predictions = Vec.fill(fetchWidth) { new BrPrediction } // set by Bpd stage
    val btb_pred_taken = Bool()
-   val btb_pred_taken_idx = UInt(width=log2Up(fetch_width)) 
+   val btb_pred_taken_idx = UInt(width=log2Up(fetchWidth)) 
 
    val xcpt_ma = Bool()
    val xcpt_if = Bool()
@@ -205,11 +203,11 @@ class BrResolutionInfo extends Bundle
    val stq_idx    = UInt(width = MEM_ADDR_SZ)  // quickly reset the LSU on a mispredict
 }
 
-class CacheCounters(implicit conf: BOOMConfiguration) extends Bundle
+class CacheCounters() extends Bundle
 {
-//   val dc_misses = UInt(width = conf.rc.xprlen)
+//   val dc_misses = UInt(width = xprLen)
    val dc_miss = Bool()
-//   val ic_misses = UInt(width = conf.rc.xprlen)
+//   val ic_misses = UInt(width = xprLen)
    val ic_miss = Bool()
 }
       
@@ -217,21 +215,19 @@ class CacheCounters(implicit conf: BOOMConfiguration) extends Bundle
 //-------------------------------------------------------------
 //-------------------------------------------------------------   
 
-class DpathIo(implicit conf: BOOMConfiguration) extends Bundle() 
+class DpathIo() extends Bundle() 
 {                                              
-   val host = new uncore.HTIFIO(conf.rc.tl.ln.nClients)
-   val imem = new CPUFrontendIO()(conf.rc.icache)
-   val dmem = new DCMemPortIo()(conf.rc.dcache)
-   val ptw =  new rocket.DatapathPTWIO()(conf.rc.as).flip 
+   val host = new uncore.HTIFIO
+   val imem = new CPUFrontendIO
+   val dmem = new DCMemPortIo
+   val ptw =  new rocket.DatapathPTWIO().flip 
    val counters = new CacheCounters().asInput
 }
 
-class DatPath(implicit conf: BOOMConfiguration) extends Module 
+class DatPath() extends Module with BOOMCoreParameters
 {
    val io = new DpathIo()
 
-   implicit val rc = conf.rc
- 
    //**********************************
    // Pipeline State Registers
    // Forward Declared Wires
@@ -241,14 +237,14 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    val flush_pipeline = Bool()  // kill entire pipeline (i.e., exception, load misspeculations)
 
    // Instruction Fetch State
-   val if_pc_next     = UInt(width = XPRLEN)
-   val pcr_exc_target = UInt(width = rc.as.vaddrBits) 
+   val if_pc_next     = UInt(width = xprLen)
+   val pcr_exc_target = UInt(width = vaddrBits)
    
   
    // Branch Predict State
    val bp2_val        = Bool()
    val bp2_take_pc    = Bool()
-   val bp2_pred_target= UInt(width=XPRLEN)
+   val bp2_pred_target= UInt(width=xprLen)
    val bp2_reg_predictor_out = Reg(outType=new BrPrediction()) 
    val bp2_prediction = new BrPrediction() 
 
@@ -431,11 +427,12 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    fetchbuffer_kill         := br_unit.brinfo.mispredict || com_exception || flush_pipeline || Reg(next=com_sret)
    
    // round off to nearest fetch boundary
-   val lsb = log2Up(conf.rc.icache.ibytes)
-   val aligned_fetch_pc = Cat(io.imem.resp.bits.pc(rc.as.vaddrBits+1-1,lsb), Bits(0,lsb)).toUInt
+   // val lsb = log2Up(conf.rc.icache.ibytes) XXXXXX
+   val lsb = log2Up(fetchWidth * 4)
+   val aligned_fetch_pc = Cat(io.imem.resp.bits.pc(vaddrBits+1-1,lsb), Bits(0,lsb)).toUInt
    fetch_bundle.pc   := aligned_fetch_pc
 
-   for (i <- 0 until FETCH_WIDTH)
+   for (i <- 0 until fetchWidth)
    {
       fetch_bundle.insts(i) := io.imem.resp.bits.data(i*32+32-1, i*32)
    }
@@ -543,7 +540,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    bpd_jal_idx := UInt(0)
 
    // look for branches and JALs in the fetch packet
-   for (i <- FETCH_WIDTH-1 to 0 by -1)
+   for (i <- fetchWidth-1 to 0 by -1)
    {
       val bpd_decoder = Module(new BranchDecode)
       bpd_decoder.io.inst := fetch_bundle.insts(i) 
@@ -565,11 +562,11 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    val jinst  = fetch_bundle.insts(bpd_jal_idx)
    val bp2_br_imm32  = Cat(Fill(binst(31),12), Fill(binst(31),8), binst(7), binst(30,25), binst(11,8), Bits(0,1))
    val bp2_jal_imm32 = Cat(Fill(jinst(31),12), jinst(19,12), jinst(20), jinst(30,25), jinst(24,21), Bits(0,1))
-   val bp2_brpred_target  = UInt(width=conf.rc.xprlen)
-   val bp2_jalpred_target = UInt(width=conf.rc.xprlen)
-   require (FETCH_WIDTH <= 2)
-   bp2_brpred_target  := bp2_pc + Mux(bpd_br_idx === UInt(1), UInt(4), UInt(0)) + Sext(bp2_br_imm32, conf.rc.xprlen)
-   bp2_jalpred_target := bp2_pc + Mux(bpd_jal_idx === UInt(1), UInt(4), UInt(0)) + Sext(bp2_jal_imm32, conf.rc.xprlen)
+   val bp2_brpred_target  = UInt(width=xprLen)
+   val bp2_jalpred_target = UInt(width=xprLen)
+   require (fetchWidth <= 2)
+   bp2_brpred_target  := bp2_pc + Mux(bpd_br_idx === UInt(1), UInt(4), UInt(0)) + Sext(bp2_br_imm32, xprLen)
+   bp2_jalpred_target := bp2_pc + Mux(bpd_jal_idx === UInt(1), UInt(4), UInt(0)) + Sext(bp2_jal_imm32, xprLen)
 
 
    // access the Branch Predictor to get a prediction
@@ -649,9 +646,9 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    assert (!Reg(init=Bool(false), next=(bp2_val && btb_predicted_our_jal && bp2_jalpred_target != io.imem.resp.bits.debug_taken_pc)), "BTB predicted incorrect JAL target")
    
    // TODO generalize the assert that checks for the BTB pred_idx
-   require (FETCH_WIDTH <= 2)
+   require (fetchWidth <= 2)
    val btb_predicted_inst = fetch_bundle.insts(fetch_bundle.btb_pred_taken_idx)
-   val btb_predicted_inst_pc =  bp2_pc + Mux(fetch_bundle.btb_pred_taken_idx === UInt(1), UInt(4), UInt(0))  + Sext(DebugGetBJImm(btb_predicted_inst), conf.rc.xprlen)
+   val btb_predicted_inst_pc =  bp2_pc + Mux(fetch_bundle.btb_pred_taken_idx === UInt(1), UInt(4), UInt(0))  + Sext(DebugGetBJImm(btb_predicted_inst), xprLen)
    assert (!(io.imem.resp.valid && 
              io.imem.resp.bits.taken &&
              !DebugIsJALR(btb_predicted_inst) &&
@@ -666,7 +663,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
 
 
    // pass info into FetchBuffer
-   for (i <- 0 until FETCH_WIDTH)
+   for (i <- 0 until fetchWidth)
    {
       // push in a "null" prediction for ignored branches (and non-branches)
       fetch_bundle.br_predictions(i).taken := Bool(false)
@@ -682,13 +679,13 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
                            (fetch_bundle.btb_pred_taken && fetch_bundle.btb_pred_taken_idx === UInt(0)) // BTB is killing second inst
                               , Bits(2,2), Bits(0,2))
 
-   val jal_kill_mask = Bits(width = FETCH_WIDTH)
-   jal_kill_mask := Fill(bpd_jal_val, FETCH_WIDTH) & (SInt(-1, FETCH_WIDTH) << UInt(1) << bpd_jal_idx)
+   val jal_kill_mask = Bits(width = fetchWidth)
+   jal_kill_mask := Fill(bpd_jal_val, fetchWidth) & (SInt(-1, fetchWidth) << UInt(1) << bpd_jal_idx)
 
-   require (FETCH_WIDTH <= 2)
+   require (fetchWidth <= 2)
 //   val bpd_kill_mask = Mux(bpd_br_val && bpd2_prediction.taken,
-//                          (~Bits(1, FETCH_WIDTH)) << (bpd_br_idx),
-//                          Bits(0, FETCH_WIDTH))
+//                          (~Bits(1, fetchWidth)) << (bpd_br_idx),
+//                          Bits(0, fetchWidth))
         
    fetch_bundle.mask := (io.imem.resp.bits.mask & ~bpd_kill_mask & ~jal_kill_mask) 
 
@@ -706,7 +703,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    val dec_finished_mask = Reg(init = Bits(0, DECODE_WIDTH))
 
    // TODO need to figure out how to generalize this logic to other width disparities
-   require (DECODE_WIDTH == FETCH_WIDTH)
+   require (DECODE_WIDTH == fetchWidth)
 
    //-------------------------------------------------------------
    // Pull out instructions and send to the Decoders
@@ -1291,19 +1288,19 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
    //-------------------------------------------------------------
    // Counters
 
-   val laq_full_count = Reg(init = UInt(0, XPRLEN))
+   val laq_full_count = Reg(init = UInt(0, xprLen))
    when (laq_full) { laq_full_count := laq_full_count + UInt(1) }
    debug(laq_full_count)
 
-   val stq_full_count = Reg(init = UInt(0, XPRLEN))
+   val stq_full_count = Reg(init = UInt(0, xprLen))
    when (stq_full) { stq_full_count := stq_full_count + UInt(1) }
    debug(stq_full_count)
 
-   val stalls = Reg(init = UInt(0, XPRLEN))
+   val stalls = Reg(init = UInt(0, xprLen))
    when (!dec_rdy) { stalls := stalls + UInt(1) }
    debug(stalls)
 
-   val lsu_misspec_count = Reg(init = UInt(0, XPRLEN))
+   val lsu_misspec_count = Reg(init = UInt(0, xprLen))
    when (lsu_misspec) { lsu_misspec_count := lsu_misspec_count + UInt(1) }
    debug(lsu_misspec_count)
 
@@ -1311,9 +1308,9 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
 
    // Time Stamp Counter & Retired Instruction Counter 
    // (only used for printf and vcd dumps - the actual counters are in the CSRFile)
-   val tsc_reg = Reg(init = UInt(0, XPRLEN))
-   val irt_reg = Reg(init = UInt(0, XPRLEN))
-   val irt_ei_reg = Reg(init = UInt(0, XPRLEN))
+   val tsc_reg = Reg(init = UInt(0, xprLen))
+   val irt_reg = Reg(init = UInt(0, xprLen))
+   val irt_ei_reg = Reg(init = UInt(0, xprLen))
    tsc_reg := tsc_reg + UInt(1)
    irt_reg := irt_reg + PopCount(com_valids.toBits)
    when (pcr.io.status.ei) { irt_ei_reg := irt_ei_reg + PopCount(com_valids.toBits) }
@@ -1423,7 +1420,7 @@ class DatPath(implicit conf: BOOMConfiguration) extends Module
          , Mux(io.imem.resp.valid && !fetchbuffer_kill, Str(mgt + "V" + end), Str(grn + "-" + end))
          , fetch_bundle.pc(19,0)
          , io.imem.resp.bits.mask
-         , InstsStr(io.imem.resp.bits.data, FETCH_WIDTH)
+         , InstsStr(io.imem.resp.bits.data, fetchWidth)
          , Mux(bp2_val, Str("V"), Str("-"))
          , Mux(bpd_br_val, Str("B"), Str("-"))
          , Mux(bp2_prediction.taken, Str("T"), Str("n"))

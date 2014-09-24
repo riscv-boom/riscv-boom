@@ -27,10 +27,6 @@ import Node._
 
 import uncore._
  
-import rocket.DCacheConfig
-import rocket.ICacheConfig
- 
-
 // Track Inflight Memory Requests
 class LoadReqSlotIo extends Bundle
 {
@@ -117,14 +113,12 @@ class LoadReqSlot extends Module
    io.out_uop    := uop
 }
  
-class DCacheReq(implicit conf: DCacheConfig) extends Bundle
+class DCacheReq extends Bundle with BOOMCoreParameters
 {
-   val addr    = UInt(width = conf.ppnbits.max(conf.vpnbits+1) + conf.pgidxbits)
+   val addr    = UInt(width = params(PPNBits).max(params(VPNBits) + 1) + params(PgIdxBits))
    val uop     = new MicroOp()
-   val data    = Bits(width = conf.databits)
+   val data    = Bits(width = coreDataBits)
    val kill    = Bool()    // e.g., LSU detects load misspeculation 
-
-   override def clone = new DCacheReq().asInstanceOf[this.type]
 }
 
 class NackInfo extends Bundle
@@ -137,19 +131,17 @@ class NackInfo extends Bundle
                            // LSU nacks for address conflicts/forwarding
 }
                                                                                
-class DCacheResp(implicit conf: DCacheConfig) extends Bundle 
+class DCacheResp extends Bundle with BOOMCoreParameters
 {            
-   val data   = Bits(width = conf.databits)
+   val data   = Bits(width = coreDataBits)
    val uop    = new MicroOp
    val xcpt   = (new rocket.HellaCacheExceptions).asInput()
    // TODO should nack go in here?
-   
-   override def clone = new DCacheResp().asInstanceOf[this.type]
 }
 
 
 // from pov of datapath
-class DCMemPortIo(implicit conf: DCacheConfig) extends Bundle 
+class DCMemPortIo extends Bundle 
 {
    // TODO provide "hellacacheIO" to connect to D$ (via an arbiter)
    val req    = (new DecoupledIO(new DCacheReq))
@@ -160,7 +152,7 @@ class DCMemPortIo(implicit conf: DCacheConfig) extends Bundle
    val flush_pipe  = Bool(OUTPUT) //exception or other misspec which flushes entire pipeline
    val ordered = Bool(INPUT) // is the dcache ordered? (fence is done)
 
-   val ptw = new rocket.TLBPTWIO()(conf.as).flip
+   val ptw = new rocket.TLBPTWIO().flip
 //   val status = new Status().asOutput
 
    val debug = new Bundle
@@ -180,7 +172,7 @@ class DCMemPortIo(implicit conf: DCacheConfig) extends Bundle
    }.asInput
 }
 
-class DCacheWrapper(implicit conf: DCacheConfig, lnconf: TileLinkConfiguration) extends Module
+class DCacheWrapper extends Module
 {
    val max_num_inflight = MAX_LD_COUNT
    isPow2(max_num_inflight)

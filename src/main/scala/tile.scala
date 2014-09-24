@@ -13,10 +13,13 @@ package BOOM
 import Chisel._
 import Node._
 import uncore._
-import rocket.BTBConfig
+import rocket.CoreName
+import rocket.NTilePorts
+import rocket.NPTWPorts
+import rocket.PTW
 
  
-class BoomTile(resetSignal: Bool = null)(confIn: BOOMConfiguration) extends Module(_reset = resetSignal) 
+class BoomTile(resetSignal: Bool = null) extends Module(_reset = resetSignal) 
 {
 
   // Override some of the external inputs  (until we have a better story anyways)
@@ -25,27 +28,17 @@ class BoomTile(resetSignal: Bool = null)(confIn: BOOMConfiguration) extends Modu
   val dcachePortId = 0
   val icachePortId = 1
   val dcachePorts = 2 //+ !confIn.rocc.isEmpty // Number of ports into D$: 1 from core, 1 from PTW, maybe 1 from RoCC
-  val rc = confIn.rc
-  implicit val tlConf = rc.tl
-  implicit val lnConf = rc.tl.ln
-  implicit val icConf = rc.icache.copy(ibytes = (FETCH_WIDTH*4), btb = rc.icache.btb.copy(entries = BTB_NUM_ENTRIES))
-  implicit val dcConf = rc.dcache.copy(reqtagbits = rc.dcacheReqTagBits + log2Up(dcachePorts), databits = rc.xprlen)
 
-  implicit val new_rc : rocket.RocketConfiguration = rc.copy(icache = icConf, dcache = dcConf, retireWidth = COMMIT_WIDTH)
-  implicit val bc = confIn.copy(rc = new_rc)
-
-  require (rc.xprlen == 64)
-  require (rc.vm == false)
 
   val io = new Bundle {
     val tilelink = new TileLinkIO
-    val host = new HTIFIO(lnConf.nClients)
+    val host = new HTIFIO
   }
 
-  val core = Module(new Core)
-  val icache = Module(new Frontend()(icConf))
-  val dcache = Module(new DCacheWrapper) // wrapper for HellaCache
-  val ptw = Module(new rocket.PTW(2)) // 2 ports, 1 from I$, 1 from D$
+  val core = Module(new Core, { case CoreName => "BOOM"})
+  val icache = Module(new Frontend, { case CacheName => "L1I"; case CoreName => "BOOM" })
+  val dcache = Module(new DCacheWrapper, { case CacheName => "L1D" })
+  val ptw = Module(new PTW(params(NPTWPorts)))
 
 // TODO add this back, but need to understand what "dmem" means (core.io.dmem is different from hellacacherequest)
 //  val dcacheArb = Module(new HellaCacheArbiter(dcachePorts))
@@ -69,7 +62,7 @@ class BoomTile(resetSignal: Bool = null)(confIn: BOOMConfiguration) extends Modu
   core.io.dmem <> dcache.io.core 
   core.io.ptw <> ptw.io.dpath
 
-  val memArb = Module(new UncachedTileLinkIOArbiterThatAppendsArbiterId(memPorts))
+  val memArb = Module(new UncachedTileLinkIOArbiterThatAppendsArbiterId(params(NTilePorts)))
   memArb.io.in(dcachePortId) <> dcache.io.mem
   memArb.io.in(icachePortId) <> icache.io.mem
 
@@ -80,7 +73,7 @@ class BoomTile(resetSignal: Bool = null)(confIn: BOOMConfiguration) extends Modu
   io.tilelink.release.valid   := dcache.io.mem.release.valid
   dcache.io.mem.release.ready := io.tilelink.release.ready
   io.tilelink.release.bits := dcache.io.mem.release.bits
-  io.tilelink.release.bits.payload.client_xact_id :=  Cat(dcache.io.mem.release.bits.payload.client_xact_id, UInt(dcachePortId, log2Up(memPorts))) // Mimic client id extension done by UncachedTileLinkIOArbiter for Acquires from either client)
+  io.tilelink.release.bits.payload.client_xact_id :=  Cat(dcache.io.mem.release.bits.payload.client_xact_id, UInt(dcachePortId, log2Up(params(NTilePorts)))) // Mimic client id extension done by UncachedTileLinkIOArbiter for Acquires from either client)
 
 
   // Cache Counters

@@ -47,6 +47,7 @@ package BOOM
 import Chisel._
 import Node._
 import uncore.constants.MemoryOpConstants._
+import uncore.PAddrBits
 
 ///////////////////////////////////////////////////////////
 // LSU
@@ -161,7 +162,7 @@ class LoadStoreUnitIo(pl_width: Int)  extends Bundle()
    }.asOutput
 }
 
-class LoadStoreUnit(pl_width: Int)(implicit conf: BOOMConfiguration) extends Module
+class LoadStoreUnit(pl_width: Int) extends Module
 {
    val io = new LoadStoreUnitIo(pl_width)
 
@@ -421,7 +422,7 @@ class LoadStoreUnit(pl_width: Int)(implicit conf: BOOMConfiguration) extends Mod
 
       when (stq_entry_val(i) &&
             st_dep_mask(i) &&
-            saq_val(i) && (s_addr(conf.rc.as.paddrBits,3) === l_addr(conf.rc.as.paddrBits,3)))
+            saq_val(i) && (s_addr(params(PAddrBits),3) === l_addr(params(PAddrBits),3)))
       {
          dword_addr_matches(i) := Bool(true)
       }
@@ -691,7 +692,7 @@ class LoadStoreUnit(pl_width: Int)(implicit conf: BOOMConfiguration) extends Mod
                failed_loads(i)   := Bool(true)
             }
             // NOTE: this address check doesn't necessarily have to be across all address bits
-            .elsewhen ((s_addr(conf.rc.as.paddrBits,3) === l_addr(conf.rc.as.paddrBits,3)) &&
+            .elsewhen ((s_addr(params(PAddrBits),3) === l_addr(params(PAddrBits),3)) &&
                   laq_allocated(i) &&
                   laq_addr_val(i) &&
                   (laq_executed(i) || laq_is_executing(i)) // CODE REVIEW, is this the proper way to bypass this information?
