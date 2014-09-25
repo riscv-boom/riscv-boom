@@ -468,7 +468,7 @@ class LoadStoreUnit(pl_width: Int) extends Module
    forwarding_age_logic.io.addr_matches    := forwarding_matches.toBits()
    forwarding_age_logic.io.youngest_st_idx := laq_yng_st_idx(ld_iss_idx)
 
-   // TODO get rid of dmem.req.ready, since the dcwrapper will already send us a nack if it's not ready
+   // TODO get rid of dmem.req.ready, since the dcwrapper will already send us a nack if it's not ready?
    when ((req_fire_load_fast || req_fire_load_sleeper) && forwarding_age_logic.io.forwarding_val && io.dmem_req_ready)
    {
       laq_forwarded_std_val(l_uop.ldq_idx) := Bool(true)
@@ -706,9 +706,7 @@ class LoadStoreUnit(pl_width: Int) extends Module
                // head < forwarded < youngest?
                when (((st_mask & ld_mask) != Bits(0)) &&
                     (!laq_forwarded_std_val(i) ||
-                      ((fid != stq_idx) && (Cat(yid < stq_idx, yid) < Cat(fid < stq_idx, fid))))
-                      // TODO CODEREVIEW
-//                      ((fid != stq_idx) && (Cat(stq_idx < yid, stq_idx) < Cat(fid < yid, fid))))
+                      ((fid != stq_idx) && (Cat(stq_idx < yid, stq_idx) > Cat(fid < yid, fid))))
                   )
                {
                   laq_executed(i)   := Bool(false)
@@ -908,6 +906,7 @@ class LoadStoreUnit(pl_width: Int) extends Module
             debug_laq_put_to_sleep(io.nack.lsu_idx) := Bool(true)
             ld_was_killed := Bool(true)
             ld_was_put_to_sleep := !debug_laq_put_to_sleep(io.nack.lsu_idx)
+            laq_forwarded_std_val(io.nack.lsu_idx) := Bool(false)
          }
       }
    }
