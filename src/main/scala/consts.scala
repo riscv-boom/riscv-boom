@@ -36,7 +36,7 @@ trait BOOMProcConstants
    // number of words we can fetch every cycle
    val FETCH_WIDTH      = 1; require(FETCH_WIDTH == 1 || FETCH_WIDTH == 2)
    // number of micro-ops we can issue every cycle
-   val ISSUE_WIDTH      = 2; require(ISSUE_WIDTH <= 3)
+   val ISSUE_WIDTH      = 1; require(ISSUE_WIDTH <= 3)
 
    // implicit
    val DECODE_WIDTH     = FETCH_WIDTH; require(DECODE_WIDTH <= FETCH_WIDTH)

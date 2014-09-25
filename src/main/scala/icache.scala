@@ -125,7 +125,7 @@ class Frontend extends Module with BOOMCoreParameters
      io.cpu.resp.bits.mask := Mux(s2_pc(2), Bits(2), Bits(3))
   }
   io.cpu.resp.bits.pc := s2_pc
-  io.cpu.resp.bits.data := icache.io.resp.bits.datablock >> (s2_pc(log2Up(params(RowBits))-1,log2Up(fetchWidth*4)) << log2Up(fetchWidth * 4 * 8))
+  io.cpu.resp.bits.data := icache.io.resp.bits.datablock >> (s2_pc(log2Up(params(RowBits)/8)-1,log2Up(fetchWidth*4)) << log2Up(fetchWidth * 4 * 8))
   io.cpu.resp.bits.taken := s2_btb_hit
   io.cpu.resp.bits.taken_idx := s2_btb_hit_idx
   io.cpu.resp.bits.debug_taken_pc := s2_debug_taken_pc
