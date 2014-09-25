@@ -660,10 +660,9 @@ class LoadStoreUnit(pl_width: Int) extends Module
 
    // need to bypass the Execute bit for a load that's being sent to memory
    // on the same cycle a store address is coming in
-   // TODO is this deprecated?
    val laq_is_executing = Vec.fill(num_ld_entries) {Bool()}
    for (i <- 0 until num_ld_entries) { laq_is_executing(i) := Bool(false) }
-   when (io.memreq_val && !req_fire_store && io.dmem_req_ready)
+   when (io.memreq_val && io.memreq_uop.is_load && io.dmem_req_ready)
    {
       laq_is_executing(ld_iss_idx) := Bool(true)
    }
@@ -708,6 +707,8 @@ class LoadStoreUnit(pl_width: Int) extends Module
                when (((st_mask & ld_mask) != Bits(0)) &&
                     (!laq_forwarded_std_val(i) ||
                       ((fid != stq_idx) && (Cat(yid < stq_idx, yid) < Cat(fid < stq_idx, fid))))
+                      // TODO CODEREVIEW
+//                      ((fid != stq_idx) && (Cat(stq_idx < yid, stq_idx) < Cat(fid < yid, fid))))
                   )
                {
                   laq_executed(i)   := Bool(false)

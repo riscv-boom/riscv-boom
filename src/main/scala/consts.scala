@@ -69,7 +69,7 @@ trait BOOMProcConstants
    val DC_NUM_MSHR = 2    // secondary miss handler
 
    val INTEGER_ISSUE_SLOT_COUNT = 12
-   val NUM_ROB_ENTRIES          = 32 // number of ROB entries (e.g., 32 entries for R10k)
+   val NUM_ROB_ENTRIES          = 20 // number of ROB entries (e.g., 32 entries for R10k)
    val NUM_ROB_ROWS             = NUM_ROB_ENTRIES/DECODE_WIDTH
    require (NUM_ROB_ROWS % 2 == 0)
    require (NUM_ROB_ENTRIES % DECODE_WIDTH == 0)
