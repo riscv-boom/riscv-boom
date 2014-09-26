@@ -31,7 +31,7 @@ import scala.collection.mutable.ArrayBuffer
 // use this Bundle as information on the prediction (taken, not taken)
 // pass down the pipeline with the micro-op to "remember" meta-data like
 // agreement of predictors, etc.
-class BrPrediction extends Bundle()
+class BrPrediction extends Bundle
 {
    // (store both information on taken/not taken, and on agreement/disagreement)
    val taken = Bool()
@@ -45,17 +45,16 @@ class BrPrediction extends Bundle()
    def isLocalPrTaken() = local_taken
 }
         
-//class BrPredictorIo[T <: Data]()(prediction => T)  extends Bundle()
-class BrPredictorIo()  extends Bundle()
+class BrPredictorIo()  extends BOOMCoreBundle
 {
    // perform prediction
-   val curr_pc         = UInt(INPUT, XPRLEN)
+   val curr_pc         = UInt(INPUT, xprLen)
    val prediction_info = new BrPrediction().asOutput()
 //   val prediction_info = prediction.asOutput
 
    // update prediction
    val update_wen      = Bool(INPUT)
-   val update_pc       = UInt(INPUT, XPRLEN)
+   val update_pc       = UInt(INPUT, xprLen)
    val update_taken    = Bool(INPUT)                  // what actually happened
    val update_pred     = new BrPrediction().asInput() // the prediction info 
 //   val update_pred     = prediction.asInput //new BrPrediction().asInput() // the prediction info 
@@ -63,7 +62,7 @@ class BrPredictorIo()  extends Bundle()
 
 //Inputs: 
 //  pc_lsb - let the datapath recommend the lowest bit to use when indexing the predictor
-abstract class BrPredictor(pc_lsb: Int = 2) extends Module
+abstract class BrPredictor(pc_lsb: Int = 2) extends Module with BOOMCoreParameters
 {   
    val io = new BrPredictorIo()
 }
@@ -89,12 +88,12 @@ class SimpleBrPredictor(num_entries: Int = 128, counter_sz: Int = 2, pc_lsb: Int
    val counter_table = Module(new CounterTable(num_entries, counter_sz))
 
    // Choosing which bits to index off of the PC is bit of an art-form...
-   counter_table.io.predict_index := io.curr_pc(XPRLEN-1,pc_lsb)
+   counter_table.io.predict_index := io.curr_pc(xprLen-1,pc_lsb)
    prediction                     := counter_table.io.predict_taken
 
    // update counter table
    counter_table.io.update_taken  := io.update_taken
-   counter_table.io.update_index  := io.update_pc(XPRLEN-1,pc_lsb)
+   counter_table.io.update_index  := io.update_pc(xprLen-1,pc_lsb)
    counter_table.io.update_wen    := io.update_wen
 
    io.prediction_info.taken := prediction
@@ -126,12 +125,12 @@ class GShareBrPredictor(num_entries: Int = 128, counter_sz: Int = 2, pc_lsb: Int
    val counter_table  = Module(new CounterTable(num_entries, counter_sz))
 
    val prediction = counter_table.io.predict_taken
-   counter_table.io.predict_index := io.curr_pc(XPRLEN-1,pc_lsb) ^ global_history.toUInt
+   counter_table.io.predict_index := io.curr_pc(xprLen-1,pc_lsb) ^ global_history.toUInt
 
    // update counter table
    counter_table.io.update_wen   := io.update_wen
    counter_table.io.update_taken := io.update_taken
-   counter_table.io.update_index := io.update_pc(XPRLEN-1,pc_lsb) ^ global_history.toUInt
+   counter_table.io.update_index := io.update_pc(xprLen-1,pc_lsb) ^ global_history.toUInt
 
    //update history register
    when (io.update_wen)

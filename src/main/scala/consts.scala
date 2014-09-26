@@ -12,7 +12,7 @@ package constants
 import Chisel._
 import Node._
 
-trait BOOMProcConstants
+trait BOOMDebugConstants
 {
    //************************************
    // Debug Support
@@ -20,89 +20,6 @@ trait BOOMProcConstants
    val COMMIT_LOG_PRINTF = false    // dump commit state, for comparision against ISA sim
    val DEBUG_ENABLE_COLOR = false   // provide color to print outs? requires a VIM plugin to work properly :(
    val DEBUG_BTB = false            // printf the BTB too
-
-
-   //************************************
-   // Machine Parameters
-   val XPRLEN = 64           // native width of machine
-                             // (i.e., the width of a register in
-                             // the general-purpose register file)
-   require(XPRLEN == 64)     // additional work required to make rv32 available
-
-
-   //************************************
-   // Superscalar Widths
-
-   // number of words we can fetch every cycle
-   val FETCH_WIDTH      = 1; require(FETCH_WIDTH == 1 || FETCH_WIDTH == 2)
-   // number of micro-ops we can issue every cycle
-   val ISSUE_WIDTH      = 1; require(ISSUE_WIDTH <= 3)
-
-   // implicit
-   val DECODE_WIDTH     = FETCH_WIDTH; require(DECODE_WIDTH <= FETCH_WIDTH)
-   val DISPATCH_WIDTH   = DECODE_WIDTH
-   val COMMIT_WIDTH     = DISPATCH_WIDTH
-
-
-   //************************************
-   // Pipelining
-
-   val ENABLE_FETCH_BUFFER_FLOW_THROUGH = true
-
-
-   //************************************
-   // Extra Knobs and Features
-
-   val ENABLE_PREFETCHING        = false
-   val ENABLE_BTB                = true
-   val ENABLE_ALU_BYPASSING      = true
-   val ENABLE_REGFILE_BYPASSING  = true  // bypass regfile write ports to read ports
-   val ENABLE_COMMIT_MAP_TABLE   = false // track the committed rename state; allows
-                                         // for single-cycle resets.
-
-   val BTB_NUM_ENTRIES = 32
-
-   val IC_NUM_SETS = 128
-   val IC_NUM_WAYS = 2
-   val DC_NUM_SETS = 128
-   val DC_NUM_WAYS = 2
-   val DC_NUM_MSHR = 2    // secondary miss handler
-
-   val INTEGER_ISSUE_SLOT_COUNT = 12
-   val NUM_ROB_ENTRIES          = 20 // number of ROB entries (e.g., 32 entries for R10k)
-   val NUM_ROB_ROWS             = NUM_ROB_ENTRIES/DECODE_WIDTH
-   require (NUM_ROB_ROWS % 2 == 0)
-   require (NUM_ROB_ENTRIES % DECODE_WIDTH == 0)
-
-   val NUM_LSU_ENTRIES          = 8 // number of LD/ST entries
-   require (isPow2(NUM_LSU_ENTRIES))
-   val ROB_ADDR_SZ = log2Up(NUM_ROB_ENTRIES)
-   val MEM_ADDR_SZ = log2Up(NUM_LSU_ENTRIES)
-
-   val MAX_WAKEUP_DELAY = 3 // unused
-
-   // size of the unified, physical register file
-   val PHYS_REG_COUNT = 50; require(PHYS_REG_COUNT >= (32 + DECODE_WIDTH))
-
-   val MAX_BR_COUNT = 8   // number of branches we can speculate simultaneously
-   require(MAX_BR_COUNT >=2)
-
-   val FETCH_BUFFER_SZ = 4 // number of instructions that can be stored between fetch + decode
-
-
-   // Implicitly calculated constants
-   val LOGICAL_REG_COUNT = 32
-   val LREG_SZ           = log2Up(LOGICAL_REG_COUNT)
-   val PREG_SZ           = log2Up(PHYS_REG_COUNT)
-   val MAX_ST_COUNT      = (1 << MEM_ADDR_SZ)
-   val MAX_LD_COUNT      = (1 << MEM_ADDR_SZ)
-   val BR_TAG_SZ         = log2Up(MAX_BR_COUNT)
-
-
-   // if pipeline goes idle, throw error
-   // otherwise, reset pipeline and restart TODO on this feature
-   val ON_IDLE_THROW_ERROR = true
-
 }
 
 trait LoadStoreUnitConstants
@@ -186,10 +103,10 @@ trait ScalarOpConstants
 
    // Is 32b Word or 64b Doubldword?
    val SZ_DW = 1
-   val DW_X   = Bool(true) //Bool(XPRLEN==64)
+   val DW_X   = Bool(true) //Bool(xprLen==64)
    val DW_32  = Bool(false)
    val DW_64  = Bool(true)
-   val DW_XPR = Bool(true) //Bool(XPRLEN==64)
+   val DW_XPR = Bool(true) //Bool(xprLen==64)
 
    // Writeback Select Signal
    val WB_ALU  = UInt(0, 1)

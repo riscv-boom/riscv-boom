@@ -121,7 +121,7 @@ class DCacheReq extends Bundle with BOOMCoreParameters
    val kill    = Bool()    // e.g., LSU detects load misspeculation 
 }
 
-class NackInfo extends Bundle
+class NackInfo extends BOOMCoreBundle
 {
    val valid      = Bool()
    val lsu_idx    = UInt(width = MEM_ADDR_SZ)
@@ -131,7 +131,7 @@ class NackInfo extends Bundle
                            // LSU nacks for address conflicts/forwarding
 }
                                                                                
-class DCacheResp extends Bundle with BOOMCoreParameters
+class DCacheResp extends BOOMCoreBundle 
 {            
    val data   = Bits(width = coreDataBits)
    val uop    = new MicroOp
@@ -141,7 +141,7 @@ class DCacheResp extends Bundle with BOOMCoreParameters
 
 
 // from pov of datapath
-class DCMemPortIo extends Bundle 
+class DCMemPortIo extends BOOMCoreBundle 
 {
    // TODO provide "hellacacheIO" to connect to D$ (via an arbiter)
    val req    = (new DecoupledIO(new DCacheReq))
@@ -155,7 +155,7 @@ class DCMemPortIo extends Bundle
    val ptw = new rocket.TLBPTWIO().flip
 //   val status = new Status().asOutput
 
-   val debug = new Bundle
+   val debug = new BOOMCoreBundle
    {
       val memreq = Bool()
       val memresp = Bool()
@@ -172,7 +172,7 @@ class DCMemPortIo extends Bundle
    }.asInput
 }
 
-class DCacheWrapper extends Module
+class DCacheWrapper extends Module with BOOMCoreParameters
 {
    val max_num_inflight = MAX_LD_COUNT
    isPow2(max_num_inflight)

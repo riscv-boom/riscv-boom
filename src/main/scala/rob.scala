@@ -26,7 +26,7 @@ import Node._
 import scala.math.ceil
 
 
-class RobIo(machine_width: Int, num_wakeup_ports: Int)  extends Bundle()
+class RobIo(machine_width: Int, num_wakeup_ports: Int)  extends BOOMCoreBundle
 {
    // Dispatch Stage                                                 
    // (Write Instruction to ROB from Dispatch Stage)                 
@@ -45,7 +45,7 @@ class RobIo(machine_width: Int, num_wakeup_ports: Int)  extends Bundle()
    // track side-effects for debug purposes.
    // Also need to know when loads write back, whereas we don't need loads to unbusy.
    val debug_wb_valids  = Vec.fill(num_wakeup_ports) { Bool(INPUT) }
-   val debug_wb_wdata   = Vec.fill(num_wakeup_ports) { Bits(INPUT, XPRLEN) }
+   val debug_wb_wdata   = Vec.fill(num_wakeup_ports) { Bits(INPUT, xprLen) }
 
    val mem_xcpt_val     = Bool(INPUT)
    val mem_xcpt_uop     = new MicroOp().asInput
@@ -71,7 +71,7 @@ class RobIo(machine_width: Int, num_wakeup_ports: Int)  extends Bundle()
 
    // Handle Exceptions/ROB Rollback
    val com_exception    = Bool(OUTPUT)
-   val com_exc_cause    = UInt(OUTPUT, XPRLEN)
+   val com_exc_cause    = UInt(OUTPUT, xprLen)
    val com_handling_exc = Bool(OUTPUT)
    val com_rbk_valids   = Vec.fill(machine_width) {Bool(OUTPUT)}
    
@@ -82,9 +82,9 @@ class RobIo(machine_width: Int, num_wakeup_ports: Int)  extends Bundle()
    val get_pc = new Bundle
    {
       val rob_idx  = UInt(INPUT, ROB_ADDR_SZ) 
-      val curr_pc  = UInt(OUTPUT, XPRLEN)
+      val curr_pc  = UInt(OUTPUT, xprLen)
       val next_val = Bool(OUTPUT)             // the next_pc may not be valid (stalled or still being fetched)
-      val next_pc  = UInt(OUTPUT, XPRLEN)
+      val next_pc  = UInt(OUTPUT, xprLen)
    }
 
    // Handle Additional Misspeculations (LSU)
@@ -98,7 +98,7 @@ class RobIo(machine_width: Int, num_wakeup_ports: Int)  extends Bundle()
    // Finally, we redirect the PC ASAP, but flush the pipeline a cycle later
    // (to get it off the critical path).
    val flush_take_pc    = Bool(OUTPUT)
-   val flush_pc         = UInt(OUTPUT, XPRLEN)
+   val flush_pc         = UInt(OUTPUT, xprLen)
    val flush_pipeline   = Bool(OUTPUT)
    
    // Stall Decode as appropriate
@@ -107,7 +107,7 @@ class RobIo(machine_width: Int, num_wakeup_ports: Int)  extends Bundle()
 
 
    // pass out debug information to high-level printf
-   val debug = new Bundle
+   val debug = new BOOMCoreBundle
    {
       val state = UInt()
       val rob_head = UInt(width = ROB_ADDR_SZ)
@@ -116,7 +116,7 @@ class RobIo(machine_width: Int, num_wakeup_ports: Int)  extends Bundle()
          val busy = Bool()
          val uop = new MicroOp()
          val exception = Bool()
-         val eflags = UInt(width=XPRLEN)
+         val eflags = UInt(width=xprLen)
       }}
    }.asOutput
 }
@@ -124,7 +124,7 @@ class RobIo(machine_width: Int, num_wakeup_ports: Int)  extends Bundle()
 
 // width = the dispatch and commit width of the processor
 // num_wakeup_ports = self-explanatory
-class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Module 
+class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Module with BOOMCoreParameters 
 {
    val io = new RobIo(width, num_wakeup_ports)
 
@@ -228,7 +228,7 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
                                                            // fake write ports - clearing on commit,
                                                            // rollback, branch_kill
       val rob_exception = Mem(Bool(), num_rob_rows)        // TODO consolidate into the com_uop? what's the best for Chisel?
-      val rob_exc_cause = Mem(UInt(width=XPRLEN), num_rob_rows)
+      val rob_exc_cause = Mem(UInt(width=xprLen), num_rob_rows)
 
       //-----------------------------------------------
       // Dispatch: Add Entry to ROB
@@ -631,7 +631,7 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
    class RobPCs(width: Int, num_rob_rows: Int)
    {
       val pc_shift = if (width == 1) 2 else (log2Up(width) + 2)
-      val pc_hob_width = XPRLEN - pc_shift
+      val pc_hob_width = xprLen - pc_shift
 
       // bank this so we only need 1 read port to handle branches, which read
       // row X and row X+1
@@ -641,7 +641,7 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
       // takes rob_row_idx, returns PC (with low-order bits zeroed out)
       def  read (row_idx: UInt) = 
       {
-         val rdata = Bits(width=XPRLEN)
+         val rdata = Bits(width=xprLen)
          rdata := bank0(row_idx >> UInt(1)) << UInt(pc_shift)
          // damn chisel demands a "default"
          when (row_idx(0))
@@ -660,8 +660,8 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
          val data0 = bank0(addr0_ls1) << UInt(pc_shift)
          val data1 = bank1(row_idx >> UInt(1)) << UInt(pc_shift)
          
-         val curr_pc = UInt(width = XPRLEN)
-         val next_pc = UInt(width = XPRLEN)
+         val curr_pc = UInt(width = xprLen)
+         val next_pc = UInt(width = xprLen)
          curr_pc := Mux(row_idx(0), data1, data0) 
          next_pc := Mux(row_idx(0), data0, data1) 
 

@@ -13,39 +13,39 @@ import Chisel._
 import Node._
 
  
-class RegisterFileReadPortIO extends Bundle
+class RegisterFileReadPortIO extends BOOMCoreBundle
 {
    val addr = UInt(INPUT, PREG_SZ) 
-   val data = Bits(OUTPUT, XPRLEN)
+   val data = Bits(OUTPUT, xprLen)
 }
   
-class RegisterFileWritePortIO extends Bundle
+class RegisterFileWritePortIO extends BOOMCoreBundle
 {
    val wen  = Bool(INPUT)
    val addr = UInt(INPUT, PREG_SZ) 
-   val data = Bits(INPUT, XPRLEN)
+   val data = Bits(INPUT, xprLen)
 }
                                                                           
 
-class RegisterFile(num_registers: Int, num_read_ports: Int, num_write_ports: Int, enable_bypassing: Boolean) extends Module
+class RegisterFile(num_registers: Int, num_read_ports: Int, num_write_ports: Int, enable_bypassing: Boolean) extends Module with BOOMCoreParameters
 {
-   val io = new Bundle 
+   val io = new BOOMCoreBundle 
    {
       val read_ports = Vec.fill(num_read_ports) { (new RegisterFileReadPortIO()) }
       val write_ports = Vec.fill(num_write_ports) { (new RegisterFileWritePortIO()) }
 
-      val debug = new Bundle {
-         val registers = Vec.fill(num_registers) { Bits(width = XPRLEN) }
+      val debug = new BOOMCoreBundle {
+         val registers = Vec.fill(num_registers) { Bits(width = xprLen) }
       }.asOutput
    }
 
    // --------------------------------------------------------------
 
-   val regfile = Mem(out=Bits(width=XPRLEN), n=num_registers) 
+   val regfile = Mem(out=Bits(width=xprLen), n=num_registers) 
 
    // --------------------------------------------------------------
 
-   val read_data = Vec.fill(num_read_ports) { Bits(width = XPRLEN) }
+   val read_data = Vec.fill(num_read_ports) { Bits(width = xprLen) }
    for (i <- 0 until num_read_ports)
    {
       read_data(i) := Mux(io.read_ports(i).addr === UInt(0), Bits(0), 

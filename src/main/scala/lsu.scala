@@ -49,11 +49,7 @@ import Node._
 import uncore.constants.MemoryOpConstants._
 import uncore.PAddrBits
 
-///////////////////////////////////////////////////////////
-// LSU
-///////////////////////////////////////////////////////////
-
-class LoadStoreUnitIo(pl_width: Int)  extends Bundle()
+class LoadStoreUnitIo(pl_width: Int) extends BOOMCoreBundle
 {
    // Decode Stage
    // Track which stores are "alive" in the pipeline
@@ -74,15 +70,15 @@ class LoadStoreUnitIo(pl_width: Int)  extends Bundle()
 
    // Send out Memory Request
    val memreq_val         = Bool(OUTPUT)
-   val memreq_addr        = UInt(OUTPUT, XPRLEN)
-   val memreq_wdata       = Bits(OUTPUT, XPRLEN)
+   val memreq_addr        = UInt(OUTPUT, xprLen)
+   val memreq_wdata       = Bits(OUTPUT, xprLen)
    val memreq_uop         = new MicroOp().asOutput()
 
    val memreq_kill        = Bool(OUTPUT) // kill request sent out last cycle
 
    // Forward Store Data to Register File
    val forward_val        = Bool(OUTPUT)
-   val forward_data       = Bits(OUTPUT, XPRLEN)
+   val forward_data       = Bits(OUTPUT, xprLen)
    val forward_uop        = new MicroOp().asOutput() // the load microop (for its pdst)
 
    // Receive Memory Response
@@ -126,9 +122,8 @@ class LoadStoreUnitIo(pl_width: Int)  extends Bundle()
       val ld_order_fail = Bool()
    }.asOutput
 
-   val debug = new Bundle
+   val debug = new BOOMCoreBundle
    {
-      // TODO for some wierd reason, these variables MUST be declared with widths, or inference hangs (perhaps due to how LSU gets seen by dpath.scala?
       val laq_head        = UInt(width=MEM_ADDR_SZ)
       val laq_tail        = UInt(width=MEM_ADDR_SZ)
       val stq_head        = UInt(width=MEM_ADDR_SZ)
@@ -139,7 +134,7 @@ class LoadStoreUnitIo(pl_width: Int)  extends Bundle()
       val stq_maybe_full  = Bool()
       val entry = Vec.fill(NUM_LSU_ENTRIES) { new Bundle {
          val laq_addr_val = Bool()
-         val laq_addr = UInt(width=XPRLEN)
+         val laq_addr = UInt(width=xprLen)
          val laq_allocated = Bool()
          val laq_executed = Bool()
          val laq_succeeded = Bool()
@@ -148,12 +143,12 @@ class LoadStoreUnitIo(pl_width: Int)  extends Bundle()
          val laq_forwarded_stq_idx = UInt(width=MEM_ADDR_SZ)
          val laq_yng_st_idx = UInt(width=MEM_ADDR_SZ)
          val laq_st_dep_mask= Bits(width=NUM_LSU_ENTRIES)
-
+         
          val stq_entry_val = Bool()
          val saq_val = Bool()
          val sdq_val = Bool()
-         val saq_addr = UInt(width=XPRLEN)
-         val sdq_data = Bits(width=XPRLEN)
+         val saq_addr = UInt(width=xprLen)
+         val sdq_data = Bits(width=xprLen)
          val stq_executed = Bool()
          val stq_succeeded = Bool()
          val stq_committed = Bool()
@@ -162,7 +157,7 @@ class LoadStoreUnitIo(pl_width: Int)  extends Bundle()
    }.asOutput
 }
 
-class LoadStoreUnit(pl_width: Int) extends Module
+class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
 {
    val io = new LoadStoreUnitIo(pl_width)
 
@@ -173,7 +168,7 @@ class LoadStoreUnit(pl_width: Int) extends Module
    // Load-Address Queue
 //   val laq_addr_val  = Reg(init=UInt(0,width=num_ld_entries))  //TODO buggy due to chisel - try again soon
    val laq_addr_val  = Vec.fill(num_ld_entries) { Reg(Bool()) }
-   val laq_addr      = Mem(UInt(width=XPRLEN), num_ld_entries)
+   val laq_addr      = Mem(UInt(width=xprLen), num_ld_entries)
 
    val laq_allocated = Vec.fill(num_ld_entries) { Reg(Bool()) } // entry has been allocated
    val laq_executed  = Vec.fill(num_ld_entries) { Reg(Bool()) } // load has been issued to memory (immediately set this bit)
@@ -196,12 +191,12 @@ class LoadStoreUnit(pl_width: Int) extends Module
 
    // Store-Address Queue
    val saq_val       = Vec.fill(num_st_entries) { Reg(Bool()) }
-//   val saq_addr      = Vec.fill(num_st_entries) { Reg(UInt(width = XPRLEN)) }
-   val saq_addr      = Mem(UInt(width=XPRLEN),num_st_entries)
+//   val saq_addr      = Vec.fill(num_st_entries) { Reg(UInt(width = xprLen)) }
+   val saq_addr      = Mem(UInt(width=xprLen),num_st_entries)
 
    // Store-Data Queue
    val sdq_val       = Vec.fill(num_st_entries) { Reg(Bool()) }
-   val sdq_data      = Vec.fill(num_st_entries) { Reg(Bits(width = XPRLEN)) }
+   val sdq_data      = Vec.fill(num_st_entries) { Reg(Bits(width = xprLen)) }
 
    // Shared Store Information
    // Write this information in Decode
@@ -1098,7 +1093,7 @@ object LoadDataGenerator
    }
 }
 
-class ForwardingAgeLogic(num_entries: Int) extends Module
+class ForwardingAgeLogic(num_entries: Int) extends Module with BOOMCoreParameters
 {
    val io = new Bundle
    {

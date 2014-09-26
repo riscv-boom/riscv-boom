@@ -15,7 +15,7 @@ import scala.collection.mutable.ArrayBuffer
 //------------------------------------------------------------- 
 // Entry Slot in the Issue Station                              
 
-class IntegerIssueSlotIo(num_wakeup_ports: Int) extends Bundle()
+class IntegerIssueSlotIo(num_wakeup_ports: Int) extends BOOMCoreBundle
 {
    val id_num         = UInt(INPUT)
                       
@@ -45,7 +45,7 @@ class IntegerIssueSlotIo(num_wakeup_ports: Int) extends Bundle()
    }.asOutput
 }
 
-class IntegerIssueSlot(num_slow_wakeup_ports: Int) extends Module
+class IntegerIssueSlot(num_slow_wakeup_ports: Int) extends Module with BOOMCoreParameters
 {
    val io = new IntegerIssueSlotIo(num_slow_wakeup_ports)
 
@@ -178,7 +178,7 @@ class IntegerIssueSlot(num_slow_wakeup_ports: Int) extends Module
 
 
 
-class IssueUnitIO(issue_width: Int, num_wakeup_ports: Int) extends Bundle
+class IssueUnitIO(issue_width: Int, num_wakeup_ports: Int) extends BOOMCoreBundle
 {
    // TODO pass in as "implicit conf" object
    val dis_mask  = Vec.fill(DISPATCH_WIDTH) { Bool(INPUT) }   
@@ -199,7 +199,7 @@ class IssueUnitIO(issue_width: Int, num_wakeup_ports: Int) extends Bundle
    val wakeup_vals = Vec.fill(num_wakeup_ports) { Bool(INPUT) }
    val wakeup_pdsts = Vec.fill(num_wakeup_ports) { UInt(INPUT, PREG_SZ) }
 
-   val debug = new Bundle
+   val debug = new BOOMCoreBundle
    {
       val slot = Vec.fill(INTEGER_ISSUE_SLOT_COUNT) { new Bundle {
          val valid   = Bool()
@@ -213,7 +213,7 @@ class IssueUnitIO(issue_width: Int, num_wakeup_ports: Int) extends Bundle
    }.asOutput
 }
 
-class IssueUnit(issue_width: Int, num_wakeup_ports: Int) extends Module
+class IssueUnit(issue_width: Int, num_wakeup_ports: Int) extends Module with BOOMCoreParameters
 {
    val io = new IssueUnitIO(issue_width, num_wakeup_ports)
 

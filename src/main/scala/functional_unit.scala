@@ -41,7 +41,7 @@ import FUCode._
  
 // TODO if a branch unit... how to add extra to IO in subclass?
 
-class FunctionalUnitIo(num_stages: Int, num_bypass_stages: Int) extends Bundle()
+class FunctionalUnitIo(num_stages: Int, num_bypass_stages: Int) extends BOOMCoreBundle
 {
    val req     = (new DecoupledIO(new FuncUnitReq)).flip
    val resp    = (new DecoupledIO(new FuncUnitResp))
@@ -55,48 +55,48 @@ class FunctionalUnitIo(num_stages: Int, num_bypass_stages: Int) extends Bundle()
    val get_rob_pc = new Bundle 
    {
       val rob_idx = UInt(OUTPUT, ROB_ADDR_SZ) 
-      val curr_pc = UInt(INPUT, XPRLEN)
+      val curr_pc = UInt(INPUT, xprLen)
       val next_val= Bool(INPUT)
-      val next_pc = UInt(INPUT, XPRLEN)
+      val next_pc = UInt(INPUT, xprLen)
    }
 }
 
-class FuncUnitReq extends Bundle()
+class FuncUnitReq extends BOOMCoreBundle
 {
    val uop = new MicroOp()
-   val rs1_data = Bits(width = XPRLEN) 
-   val rs2_data = Bits(width = XPRLEN)
+   val rs1_data = Bits(width = xprLen) 
+   val rs2_data = Bits(width = xprLen)
 
    val kill = Bool() // kill everything
 }
 
-class FuncUnitResp extends Bundle()
+class FuncUnitResp extends BOOMCoreBundle
 {
    val uop = new MicroOp()
-   val data = Bits(width = XPRLEN)  
+   val data = Bits(width = xprLen)  
    val xcpt = (new rocket.HellaCacheExceptions)
 }
  
-class BypassData(num_bypass_ports:Int) extends Bundle()
+class BypassData(num_bypass_ports:Int) extends BOOMCoreBundle
 {
    val valid = Vec.fill(num_bypass_ports){ Bool() }
    val uop   = Vec.fill(num_bypass_ports){ new MicroOp() }
-   val data  = Vec.fill(num_bypass_ports){ Bits(width = XPRLEN) }
+   val data  = Vec.fill(num_bypass_ports){ Bits(width = xprLen) }
 
    def get_num_ports: Int = num_bypass_ports
 }
  
-class BranchUnitResp extends Bundle()
+class BranchUnitResp extends BOOMCoreBundle
 {
    val take_pc        = Bool()
    val pc_sel         = Bits(width = PC_PLUS4.getWidth)   
    val taken          = Bool()
    val btb_mispredict = Bool()
 
-   val brjmp_target    = UInt(width = XPRLEN)
-   val jump_reg_target = UInt(width = XPRLEN)
-   val pc_plus4        = UInt(width = XPRLEN) 
-   val pc              = UInt(width = XPRLEN) // TODO this isn't really a branch_unit thing
+   val brjmp_target    = UInt(width = xprLen)
+   val jump_reg_target = UInt(width = xprLen)
+   val pc_plus4        = UInt(width = xprLen) 
+   val pc              = UInt(width = xprLen) // TODO this isn't really a branch_unit thing
 
    val brinfo = new BrResolutionInfo() // NOTE: delayed a cycle!
 
@@ -245,10 +245,10 @@ class ALUUnit(is_branch_unit: Boolean = false)
       val rs2 = io.req.bits.rs2_data
       val br_eq  = (rs1 === rs2)
       val br_ltu = (rs1.toUInt < rs2.toUInt)
-      val br_lt  = (~(rs1(XPRLEN-1) ^ rs2(XPRLEN-1)) & br_ltu | 
-                      rs1(XPRLEN-1) & ~rs2(XPRLEN-1)).toBool
+      val br_lt  = (~(rs1(xprLen-1) ^ rs2(xprLen-1)) & br_ltu | 
+                      rs1(xprLen-1) & ~rs2(xprLen-1)).toBool
  
-      val pc_plus4 = (uop_pc_ + UInt(4))(XPRLEN-1,0)
+      val pc_plus4 = (uop_pc_ + UInt(4))(xprLen-1,0)
     
       io.br_unit.pc_sel := Lookup(io.req.bits.uop.ctrl.br_type, PC_PLUS4,
                Array(   BR_N  -> PC_PLUS4, 
@@ -357,7 +357,7 @@ class ALUUnit(is_branch_unit: Boolean = false)
    io.bypass.data (1) := io.resp.bits.data
 
    // Response
-   val reg_data = Reg(outType = Bits(width = XPRLEN)) 
+   val reg_data = Reg(outType = Bits(width = xprLen)) 
    reg_data := alu.io.out
    io.resp.bits.data := reg_data
       

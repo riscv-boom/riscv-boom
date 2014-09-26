@@ -24,9 +24,9 @@ import rocket.ALU._
 //-------------------------------------------------------------
 //-------------------------------------------------------------   
 
-class RegisterRead(issue_width: Int, num_read_ports: Int, num_total_bypass_ports: Int) extends Module
+class RegisterRead(issue_width: Int, num_read_ports: Int, num_total_bypass_ports: Int) extends Module with BOOMCoreParameters
 {
-   val io = new Bundle
+   val io = new BOOMCoreBundle
    {
       // issued micro-ops
       val iss_valids = Vec.fill(issue_width) { Bool(INPUT) }
@@ -51,8 +51,8 @@ class RegisterRead(issue_width: Int, num_read_ports: Int, num_total_bypass_ports
  
    val exe_reg_valids   = Vec.fill(issue_width) { Reg(init = Bool(false)) }
    val exe_reg_uops     = Vec.fill(issue_width) { Reg(outType = new MicroOp())  }
-   val exe_reg_rs1_data = Vec.fill(issue_width) { Reg(outType = Bits(width = XPRLEN))  }
-   val exe_reg_rs2_data = Vec.fill(issue_width) { Reg(outType = Bits(width = XPRLEN))  }
+   val exe_reg_rs1_data = Vec.fill(issue_width) { Reg(outType = Bits(width = xprLen))  }
+   val exe_reg_rs2_data = Vec.fill(issue_width) { Reg(outType = Bits(width = xprLen))  }
    
 
    //-------------------------------------------------------------
@@ -110,15 +110,16 @@ class RegisterRead(issue_width: Int, num_read_ports: Int, num_total_bypass_ports
    // BYPASS MUXES -----------------------------------------------
    // performed at the end of the register read stage
 
-   val bypassed_rs1_data = Vec.fill(issue_width) { Bits(width = XPRLEN) }
-   val bypassed_rs2_data = Vec.fill(issue_width) { Bits(width = XPRLEN) }
+   val bypassed_rs1_data = Vec.fill(issue_width) { Bits(width = xprLen) }
+   val bypassed_rs2_data = Vec.fill(issue_width) { Bits(width = xprLen) }
 
-   if (ENABLE_ALU_BYPASSING)
+//   if (ENABLE_ALU_BYPASSING)
+   if (true)
    {
       for (w <- 0 until issue_width)
       {
-         var rs1_cases = Array((Bool(false), Bits(0, XPRLEN)))
-         var rs2_cases = Array((Bool(false), Bits(0, XPRLEN)))
+         var rs1_cases = Array((Bool(false), Bits(0, xprLen)))
+         var rs2_cases = Array((Bool(false), Bits(0, xprLen)))
 
          val pop1       = rrd_uops(w).pop1
          val lrs1_rtype = rrd_uops(w).lrs1_rtype
@@ -172,9 +173,9 @@ class RegisterRead(issue_width: Int, num_read_ports: Int, num_total_bypass_ports
 //-------------------------------------------------------------
 //-------------------------------------------------------------   
 
-class RegisterReadDecode extends Module
+class RegisterReadDecode extends Module 
 {
-   val io = new Bundle
+   val io = new BOOMCoreBundle
    {
       val iss_valid = Bool(INPUT)
       val iss_uop   = new MicroOp().asInput()

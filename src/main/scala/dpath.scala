@@ -107,7 +107,7 @@ class CtrlSignals extends Bundle()
 
  
 // TODO Chisel ability to union this Bundle for different types of Uops?
-class MicroOp extends Bundle() with BOOMCoreParameters
+class MicroOp extends BOOMCoreBundle 
 {
    val valid            = Bool()                   // is this uop valid? or has it been masked out, used by fetch buffer and Decode stage
    
@@ -174,15 +174,15 @@ class MicroOp extends Bundle() with BOOMCoreParameters
    val debug_wdata      = Bits(width=xprLen)
 }
 
-class FetchBundle() extends Bundle with BOOMCoreParameters
+class FetchBundle extends Bundle with BOOMCoreParameters
 {
    val pc    = UInt(width = xprLen)
-   val insts = Vec.fill(fetchWidth) { Bits(width = 32) }
-   val mask  = Bits(width = fetchWidth) // mark which words are valid instructions
+   val insts = Vec.fill(FETCH_WIDTH) { Bits(width = 32) }
+   val mask  = Bits(width = FETCH_WIDTH) // mark which words are valid instructions
    
-   val br_predictions = Vec.fill(fetchWidth) { new BrPrediction } // set by Bpd stage
+   val br_predictions = Vec.fill(FETCH_WIDTH) { new BrPrediction } // set by Bpd stage
    val btb_pred_taken = Bool()
-   val btb_pred_taken_idx = UInt(width=log2Up(fetchWidth)) 
+   val btb_pred_taken_idx = UInt(width=log2Up(FETCH_WIDTH)) 
 
    val xcpt_ma = Bool()
    val xcpt_if = Bool()
@@ -190,7 +190,7 @@ class FetchBundle() extends Bundle with BOOMCoreParameters
 }
 
  
-class BrResolutionInfo extends Bundle
+class BrResolutionInfo extends BOOMCoreBundle
 {
    val valid      = Bool()
    val mispredict = Bool()
@@ -278,6 +278,8 @@ class DatPath() extends Module with BOOMCoreParameters
    else if (DECODE_WIDTH == 2) println("\n   ~*** Two-wide Machine ***~\n")
    else if (DECODE_WIDTH == 4) println("\n   ~*** Four-wide Machine ***~\n")
    else println("\n ~*** Unknown Machine Width ***~\n")
+
+   require (ISSUE_WIDTH <= 3)
 
    if (ISSUE_WIDTH == 1)
    {
@@ -428,11 +430,11 @@ class DatPath() extends Module with BOOMCoreParameters
    
    // round off to nearest fetch boundary
    // val lsb = log2Up(conf.rc.icache.ibytes) XXXXXX
-   val lsb = log2Up(fetchWidth * 4)
+   val lsb = log2Up(FETCH_WIDTH * 4)
    val aligned_fetch_pc = Cat(io.imem.resp.bits.pc(vaddrBits+1-1,lsb), Bits(0,lsb)).toUInt
    fetch_bundle.pc   := aligned_fetch_pc
 
-   for (i <- 0 until fetchWidth)
+   for (i <- 0 until FETCH_WIDTH)
    {
       fetch_bundle.insts(i) := io.imem.resp.bits.data(i*32+32-1, i*32)
    }
@@ -540,7 +542,7 @@ class DatPath() extends Module with BOOMCoreParameters
    bpd_jal_idx := UInt(0)
 
    // look for branches and JALs in the fetch packet
-   for (i <- fetchWidth-1 to 0 by -1)
+   for (i <- FETCH_WIDTH-1 to 0 by -1)
    {
       val bpd_decoder = Module(new BranchDecode)
       bpd_decoder.io.inst := fetch_bundle.insts(i) 
@@ -564,7 +566,7 @@ class DatPath() extends Module with BOOMCoreParameters
    val bp2_jal_imm32 = Cat(Fill(jinst(31),12), jinst(19,12), jinst(20), jinst(30,25), jinst(24,21), Bits(0,1))
    val bp2_brpred_target  = UInt(width=xprLen)
    val bp2_jalpred_target = UInt(width=xprLen)
-   require (fetchWidth <= 2)
+   require (FETCH_WIDTH <= 2)
    bp2_brpred_target  := bp2_pc + Mux(bpd_br_idx === UInt(1), UInt(4), UInt(0)) + Sext(bp2_br_imm32, xprLen)
    bp2_jalpred_target := bp2_pc + Mux(bpd_jal_idx === UInt(1), UInt(4), UInt(0)) + Sext(bp2_jal_imm32, xprLen)
 
@@ -646,7 +648,7 @@ class DatPath() extends Module with BOOMCoreParameters
    assert (!Reg(init=Bool(false), next=(bp2_val && btb_predicted_our_jal && bp2_jalpred_target != io.imem.resp.bits.debug_taken_pc)), "BTB predicted incorrect JAL target")
    
    // TODO generalize the assert that checks for the BTB pred_idx
-   require (fetchWidth <= 2)
+   require (FETCH_WIDTH <= 2)
    val btb_predicted_inst = fetch_bundle.insts(fetch_bundle.btb_pred_taken_idx)
    val btb_predicted_inst_pc =  bp2_pc + Mux(fetch_bundle.btb_pred_taken_idx === UInt(1), UInt(4), UInt(0))  + Sext(DebugGetBJImm(btb_predicted_inst), xprLen)
    assert (!(io.imem.resp.valid && 
@@ -663,7 +665,7 @@ class DatPath() extends Module with BOOMCoreParameters
 
 
    // pass info into FetchBuffer
-   for (i <- 0 until fetchWidth)
+   for (i <- 0 until FETCH_WIDTH)
    {
       // push in a "null" prediction for ignored branches (and non-branches)
       fetch_bundle.br_predictions(i).taken := Bool(false)
@@ -679,13 +681,13 @@ class DatPath() extends Module with BOOMCoreParameters
                            (fetch_bundle.btb_pred_taken && fetch_bundle.btb_pred_taken_idx === UInt(0)) // BTB is killing second inst
                               , Bits(2,2), Bits(0,2))
 
-   val jal_kill_mask = Bits(width = fetchWidth)
-   jal_kill_mask := Fill(bpd_jal_val, fetchWidth) & (SInt(-1, fetchWidth) << UInt(1) << bpd_jal_idx)
+   val jal_kill_mask = Bits(width = FETCH_WIDTH)
+   jal_kill_mask := Fill(bpd_jal_val, FETCH_WIDTH) & (SInt(-1, FETCH_WIDTH) << UInt(1) << bpd_jal_idx)
 
-   require (fetchWidth <= 2)
+   require (FETCH_WIDTH <= 2)
 //   val bpd_kill_mask = Mux(bpd_br_val && bpd2_prediction.taken,
-//                          (~Bits(1, fetchWidth)) << (bpd_br_idx),
-//                          Bits(0, fetchWidth))
+//                          (~Bits(1, FETCH_WIDTH)) << (bpd_br_idx),
+//                          Bits(0, FETCH_WIDTH))
         
    fetch_bundle.mask := (io.imem.resp.bits.mask & ~bpd_kill_mask & ~jal_kill_mask) 
 
@@ -703,7 +705,7 @@ class DatPath() extends Module with BOOMCoreParameters
    val dec_finished_mask = Reg(init = Bits(0, DECODE_WIDTH))
 
    // TODO need to figure out how to generalize this logic to other width disparities
-   require (DECODE_WIDTH == fetchWidth)
+   require (DECODE_WIDTH == FETCH_WIDTH)
 
    //-------------------------------------------------------------
    // Pull out instructions and send to the Decoders
@@ -1378,10 +1380,7 @@ class DatPath() extends Module with BOOMCoreParameters
       val u_cyn = if (DEBUG_ENABLE_COLOR) "\033[4;36m" else " "
       val u_wht = if (DEBUG_ENABLE_COLOR) "\033[4;37m" else " "
       
-      var white_space = 42  - NUM_LSU_ENTRIES - INTEGER_ISSUE_SLOT_COUNT - (NUM_ROB_ENTRIES/COMMIT_WIDTH)
-      // for 1440 monitor 
-      // for tinier demo screens
-//      var white_space = 27  - NUM_LSU_ENTRIES - INTEGER_ISSUE_SLOT_COUNT - (NUM_ROB_ENTRIES/COMMIT_WIDTH)
+      var white_space = 42  - NUM_LSU_ENTRIES- INTEGER_ISSUE_SLOT_COUNT - (NUM_ROB_ENTRIES/COMMIT_WIDTH)
 
       if (DEBUG_BTB) white_space = white_space - BTB_NUM_ENTRIES - 1
  
@@ -1420,7 +1419,7 @@ class DatPath() extends Module with BOOMCoreParameters
          , Mux(io.imem.resp.valid && !fetchbuffer_kill, Str(mgt + "V" + end), Str(grn + "-" + end))
          , fetch_bundle.pc(19,0)
          , io.imem.resp.bits.mask
-         , InstsStr(io.imem.resp.bits.data, fetchWidth)
+         , InstsStr(io.imem.resp.bits.data, FETCH_WIDTH)
          , Mux(bp2_val, Str("V"), Str("-"))
          , Mux(bpd_br_val, Str("B"), Str("-"))
          , Mux(bp2_prediction.taken, Str("T"), Str("n"))

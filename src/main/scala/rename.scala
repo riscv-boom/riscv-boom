@@ -17,7 +17,7 @@ import scala.collection.mutable.ArrayBuffer
 //-------------------------------------------------------------
 //-------------------------------------------------------------
  
-class RenameMapTableElementIo(pl_width: Int) extends Bundle()
+class RenameMapTableElementIo(pl_width: Int) extends BOOMCoreBundle
 {
    val element            = UInt(OUTPUT, PREG_SZ)
    
@@ -44,7 +44,7 @@ class RenameMapTableElementIo(pl_width: Int) extends Bundle()
    override def clone = new RenameMapTableElementIo(pl_width).asInstanceOf[this.type]
 }
 
-class RenameMapTableElement(pipeline_width: Int) extends Module
+class RenameMapTableElement(pipeline_width: Int) extends Module with BOOMCoreParameters
 {
    val io = new RenameMapTableElementIo(pipeline_width)
   
@@ -125,7 +125,7 @@ class RenameMapTableElement(pipeline_width: Int) extends Module
 //-------------------------------------------------------------
 //-------------------------------------------------------------
  
-class FreeListIo(num_phys_registers: Int, pl_width: Int) extends Bundle()
+class FreeListIo(num_phys_registers: Int, pl_width: Int) extends BOOMCoreBundle
 {
    val req_preg_vals = Vec.fill(pl_width) { Bool(INPUT) }
    val req_pregs     = Vec.fill(pl_width) { UInt(OUTPUT, log2Up(num_phys_registers)) }
@@ -171,7 +171,7 @@ class FreeListIo(num_phys_registers: Int, pl_width: Int) extends Bundle()
 class RenameFreeList(num_phys_registers: Int // number of physical registers
                     , pl_width: Int          // pipeline width ("dispatch group size")
                     , zero_is_zero: Boolean  // is the zero register always zero? TRUE for XPRs, FALSE for FPRs. TODO not fully supported (since we hide behind P0 in this logic)
-                     ) extends Module
+                     ) extends Module with BOOMCoreParameters
 {
    val io = new FreeListIo(num_phys_registers, pl_width)
 
@@ -355,7 +355,7 @@ class RenameFreeList(num_phys_registers: Int // number of physical registers
 //-------------------------------------------------------------
 //-------------------------------------------------------------
 
-class BTReadPortIn extends Bundle
+class BTReadPortIn extends BOOMCoreBundle
 {
    val prs1        = UInt(width = PREG_SZ)
    val prs2        = UInt(width = PREG_SZ)
@@ -366,7 +366,7 @@ class BTReadPortOut extends Bundle
    val prs2_busy   = Bool()
 }
 
-class BTWritePort extends Bundle
+class BTWritePort extends BOOMCoreBundle
 {
    // "New" PReg, which is being dispatched and thus will be busy
    val valid   = Bool()
@@ -375,7 +375,7 @@ class BTWritePort extends Bundle
 }
 
 // internally bypasses newly busy registers (.write) to the read ports (.read)
-class BusyTableIo(pipeline_width: Int, num_wb_ports: Int) extends Bundle()
+class BusyTableIo(pipeline_width: Int, num_wb_ports: Int) extends BOOMCoreBundle
 {
    // reading out the busy bits
    val read_in  = Vec.fill(pipeline_width) { new BTReadPortIn().asInput }
@@ -388,8 +388,9 @@ class BusyTableIo(pipeline_width: Int, num_wb_ports: Int) extends Bundle()
    // "Old" PReg, which is being written back, and thus will be !Busy
    val old_valids  = Vec.fill(num_wb_ports) { Bool().asInput }
    val old_pdsts = Vec.fill(num_wb_ports) { UInt(width = PREG_SZ).asInput }
-   
-   val debug = new Bundle 
+
+   // TODO remove constant from here, pass in as an argument
+   val debug = new BOOMCoreBundle 
    {
       val bsy_table= UInt(OUTPUT, width=PHYS_REG_COUNT)
    }
@@ -399,7 +400,7 @@ class BusyTableIo(pipeline_width: Int, num_wb_ports: Int) extends Bundle()
 // Note: I do NOT bypass from newly busied registers to the read ports.
 // That bypass check should be done elsewhere (this is to get it off the
 // critical path).
-class BusyTable(pipeline_width: Int, num_wb_ports: Int) extends Module
+class BusyTable(pipeline_width: Int, num_wb_ports: Int) extends Module with BOOMCoreParameters
 {
    val io = new BusyTableIo(pipeline_width, num_wb_ports)
 
@@ -453,7 +454,7 @@ class BusyTable(pipeline_width: Int, num_wb_ports: Int) extends Module
 //-------------------------------------------------------------                 
 //-------------------------------------------------------------                 
  
-class RenameStageIO(pl_width: Int, num_wb_ports: Int) extends Bundle
+class RenameStageIO(pl_width: Int, num_wb_ports: Int) extends BOOMCoreBundle
 {
    val ren_mask  = Vec.fill(pl_width) {Bool().asOutput} // mask of valid instructions
    val inst_can_proceed = Vec.fill(pl_width) {Bool(OUTPUT)}
@@ -495,7 +496,7 @@ class RenameStageIO(pl_width: Int, num_wb_ports: Int) extends Bundle
 }
 
 
-class RenameStage(pl_width: Int, num_wb_ports: Int) extends Module
+class RenameStage(pl_width: Int, num_wb_ports: Int) extends Module with BOOMCoreParameters
 {
    val io = new RenameStageIO(pl_width, num_wb_ports)
 

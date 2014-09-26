@@ -5,7 +5,7 @@
 // Christopher Celio
 // 2012 Feb 5
 //
-// Describes a simple RISC-V Out-of-Order processor
+// Describes a RISC-V Out-of-Order processor tile
 
 package BOOM
 {
@@ -20,8 +20,8 @@ import rocket.PTW
 import rocket.Tile
 
  
-class BOOMTile(resetSignal: Bool = null) extends Tile(resetSignal) {
-
+class BOOMTile(resetSignal: Bool = null) extends Tile(resetSignal) 
+{
   val dcachePortId = 0
   val icachePortId = 1
 
@@ -30,23 +30,8 @@ class BOOMTile(resetSignal: Bool = null) extends Tile(resetSignal) {
   val dcache = Module(new DCacheWrapper, { case CacheName => "L1D" })
   val ptw = Module(new PTW(params(NPTWPorts)))
 
-// TODO add this back, but need to understand what "dmem" means (core.io.dmem is different from hellacacherequest)
-//  val dcachePorts = 2 //+ !confIn.rocc.isEmpty // Number of ports into D$: 1 from core, 1 from PTW, maybe 1 from RoCC
-//  val dcacheArb = Module(new HellaCacheArbiter(dcachePorts))
-//  dcacheArb.io.requestor(0) <> ptw.io.mem
-//  dcacheArb.io.requestor(1) <> core.io.dmem
-//  dcache.io.core <> dcacheArb.io.mem
-
   ptw.io.requestor(0) <> icache.io.cpu.ptw
   ptw.io.requestor(1) <> dcache.io.core.ptw 
-
-//  if (!conf.rocc.isEmpty) {
-//    val dcIF = Module(new SimpleHellaCacheIF)
-//    val rocc = Module((conf.rocc.get)(conf))
-//    dcIF.io.requestor <> rocc.io.mem
-//    core.io.rocc <> rocc.io
-//    dcacheArb.io.requestor(2) <> dcIF.io.cache
-//  }
 
   core.io.host <> io.host
   core.io.imem <> icache.io.cpu
