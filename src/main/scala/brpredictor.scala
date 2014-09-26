@@ -22,11 +22,7 @@ package BOOM
 import Chisel._
 import Node._
 
-//import Constants._
-//import Common._
-
 import scala.collection.mutable.ArrayBuffer
-
 
 // use this Bundle as information on the prediction (taken, not taken)
 // pass down the pipeline with the micro-op to "remember" meta-data like
@@ -151,7 +147,7 @@ class TournamentBrPredictor(num_bht_entries: Int = 128, counter_sz: Int = 2, num
    val global_history  = Reg(outType=Bits(width = global_hist_sz))
    val g_counter_table = Module(new CounterTable(1 << global_hist_sz, counter_sz))
    val a_counter_table = Module(new CounterTable(256, counter_sz))
-   val l_hist_table    = Vec.fill(NUM_LHIST_ENTRIES) { Reg(outType=Bits(width = log2Up(num_bht_entries))) }
+   val l_hist_table    = Vec.fill(num_lhist_entries) { Reg(outType=Bits(width = log2Up(num_bht_entries))) }
    val l_counter_table = Module(new CounterTable(num_bht_entries, counter_sz+1))
        
    

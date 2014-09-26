@@ -14,49 +14,22 @@ import Node._
 
 trait BOOMDebugConstants
 {
-   //************************************
-   // Debug Support
    val DEBUG_PRINTF = false         // use the Chisel printf functionality
    val COMMIT_LOG_PRINTF = false    // dump commit state, for comparision against ISA sim
    val DEBUG_ENABLE_COLOR = false   // provide color to print outs? requires a VIM plugin to work properly :(
-   val DEBUG_BTB = false            // printf the BTB too
-}
-
-trait LoadStoreUnitConstants
-{
-   val ENABLE_STOREDATA_FORWARDING = true // allow stores to forward data to depending loads
-   require (ENABLE_STOREDATA_FORWARDING == true) // required to for younger loads to read out of the committed store buffer
-
-   val ENABLE_SPECULATE_LOADS = true      // allow loads to speculate - otherwise
-                                          // loads are sent to memory in-order
-                                          // (retried once the load is the head of
-                                          // the LAQ).
 }
 
 trait BrPredConstants
 {
    val NOT_TAKEN = Bool(false)
    val TAKEN = Bool(true)
-
-   val USE_BRANCH_PREDICTOR = true
-
-   // Uses a History Table of n-bit counters
-   val BPRED_DESIGN    = "BP_R10K"
-   //val BPRED_DESIGN    = "BP_21264"
-   //val BPRED_DESIGN    = "BP_GSHARE"
-   //val BPRED_DESIGN    = "BP_GLOBAL"
-   val NUM_BHT_ENTRIES = 128
-   val BHT_COUNTER_SZ = 2
-   val NUM_LHIST_ENTRIES = 128
 }
-
 
 trait ScalarOpConstants
 {
    val X = Bool.DC
    val Y = Bool(true)
    val N = Bool(false)
-
 
    //************************************
    // Control Signals
@@ -112,8 +85,6 @@ trait ScalarOpConstants
    val WB_ALU  = UInt(0, 1)
    val WB_PCR  = UInt(1, 1)
    val WB_X    = UInt("b?", 1)
-
-   // Memory Function Type (Read,Write,Fence) Signal
 
    // Memory Enable Signal
    val MEN_0   = Bool(false)
@@ -216,7 +187,7 @@ trait ScalarOpConstants
    val uopMEMSPECIAL= Bits(66, UOPC_SZ)
 
    // Enable Co-processor Register Signal (ToHost Register, etc.)
-//   val PCR_N   = UInt(0,3)    // do nothing
+   //val PCR_N   = UInt(0,3)    // do nothing
    val PCR_F   = UInt(1,3)    // mfpcr
    val PCR_T   = UInt(2,3)    // mtpcr
    val PCR_C   = UInt(3,3)    // clear pcr
@@ -273,7 +244,6 @@ trait InterruptConstants
 {
    val CAUSE_INTERRUPT = 32
 }
-
 
 trait RISCVConstants
 {

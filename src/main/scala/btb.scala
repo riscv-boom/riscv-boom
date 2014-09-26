@@ -35,6 +35,8 @@ class BTB(fetchWidth: Int) extends Module with BTBParameters
 {
   val io = new BTBIO
 
+  println ("    BTB Entries  : " + entries)
+
   var hit_reduction = Bool(false)
   val update = Bool()
   var update_reduction = Bool(false)
@@ -80,27 +82,7 @@ class BTB(fetchWidth: Int) extends Module with BTBParameters
         targets(i) := io.correct_target
       }
     }
-
-    if (DEBUG_PRINTF && DEBUG_BTB)
-    {
-       printf("\n   BTB[%d] (%s)- tag= 0x%x , target= 0x%x   tagchk(0x%x)",
-         UInt(i), Mux(valid(i), Str("V"), Str("-")), tag, targets(i), tag_check)
-    }
   }
-
-   if (DEBUG_PRINTF && DEBUG_BTB)
-   {
-      val mgt = if (DEBUG_ENABLE_COLOR) "\033[2;35m" else " "
-      val grn = if (DEBUG_ENABLE_COLOR) "\033[1;32m" else " "
-      val end = if (DEBUG_ENABLE_COLOR) "\033[0m"    else " "
-      printf(" %s idx:%d PC= 0x%x Target= 0x%x\n"
-         , Mux(hits.toBits.orR, Str(mgt + "HIT" + end), Str(grn + " " + end))
-         , io.hit_idx
-         , io.current_pc(31,0)
-         , io.target(31,0)
-         )
-   }
-
 
   io.hit    := hits.toBits.orR
   io.target := Mux1H(hits, targets)

@@ -1,7 +1,6 @@
 
 package object BOOM extends 
    BOOM.constants.BOOMDebugConstants with
-   BOOM.constants.LoadStoreUnitConstants with
    BOOM.constants.BrPredConstants with
    BOOM.constants.ScalarOpConstants with
    BOOM.constants.ExcCauseConstants with 

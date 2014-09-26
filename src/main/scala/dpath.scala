@@ -390,7 +390,7 @@ class DatPath() extends Module with BOOMCoreParameters
    val FetchBuffer = Module(new Queue(gen=new FetchBundle,
                                 entries=FETCH_BUFFER_SZ,
                                 pipe=false,
-                                flow=ENABLE_FETCH_BUFFER_FLOW_THROUGH,
+                                flow=params(EnableFetchBufferFlowThrough),
                                 _reset=(fetchbuffer_kill || reset.toBool)))
 
    val if_stalled = Bool() // if FetchBuffer backs up, we have to stall the front-end
@@ -448,7 +448,7 @@ class DatPath() extends Module with BOOMCoreParameters
    assert(!Reg(init=Bool(false),next=(com_exception && (com_exc_cause === UInt(rocket.Causes.misaligned_fetch) ||
                               com_exc_cause === UInt(rocket.Causes.fault_fetch)))), "Exception thrown by IMEM, not yet supported.")
 
-   if (ENABLE_BTB)
+   if (params(EnableBTB))
    {
       // teach the BTB at execute
       // probably don't tell it about JR for returns... needs RAS, but needs to use ROB, etc.
@@ -492,11 +492,16 @@ class DatPath() extends Module with BOOMCoreParameters
    //-------------------------------------------------------------
    // Branch Prediction (BP1 Stage)
    
-   val br_predictor = if (BPRED_DESIGN == "BP_R10K")       { Module(new SimpleBrPredictor(NUM_BHT_ENTRIES, BHT_COUNTER_SZ, pc_lsb = lsb)) } 
-                     else if (BPRED_DESIGN == "BP_GSHARE") { Module(new GShareBrPredictor(NUM_BHT_ENTRIES, BHT_COUNTER_SZ, pc_lsb = lsb)) }
-                     else if (BPRED_DESIGN == "BP_GLOBAL") { Module(new GlobalOnlyBrPredictor(NUM_BHT_ENTRIES, BHT_COUNTER_SZ, pc_lsb = lsb)) }
-                     else if (BPRED_DESIGN == "BP_21264")  { Module(new TournamentBrPredictor(NUM_BHT_ENTRIES, BHT_COUNTER_SZ, NUM_LHIST_ENTRIES, pc_lsb = lsb)) }
-                     else                                  { Module(new SimpleBrPredictor(NUM_BHT_ENTRIES, BHT_COUNTER_SZ, pc_lsb = lsb)) } 
+   val bpred_design      = params(BrPredDesign)
+   val num_bht_entries   = params(NumBhtEntries)
+   val bht_counter_sz    = params(BhtCounterSz)
+   val num_lhist_entries = params(NumLHistEntries)
+
+   val br_predictor = if (bpred_design == "BP_R10K")       { Module(new SimpleBrPredictor(num_bht_entries, bht_counter_sz, pc_lsb = lsb)) } 
+                     else if (bpred_design == "BP_GSHARE") { Module(new GShareBrPredictor(num_bht_entries, bht_counter_sz, pc_lsb = lsb)) }
+                     else if (bpred_design == "BP_GLOBAL") { Module(new GlobalOnlyBrPredictor(num_bht_entries, bht_counter_sz, pc_lsb = lsb)) }
+                     else if (bpred_design == "BP_21264")  { Module(new TournamentBrPredictor(num_bht_entries, bht_counter_sz, num_lhist_entries, pc_lsb = lsb)) }
+                     else                                  { Module(new SimpleBrPredictor(num_bht_entries, bht_counter_sz, pc_lsb = lsb)) } 
       
    // align on fetch boundary
    br_predictor.io.curr_pc := io.imem.resp.bits.bht_pc
@@ -575,7 +580,7 @@ class DatPath() extends Module with BOOMCoreParameters
    bp2_prediction := bp2_reg_predictor_out
    val bht_pred_taken = Bool()
 
-   if (USE_BRANCH_PREDICTOR)
+   if (params(UseBranchPredictor))
    {
       bht_pred_taken := NOT_TAKEN
 
@@ -1382,8 +1387,6 @@ class DatPath() extends Module with BOOMCoreParameters
       
       var white_space = 42  - NUM_LSU_ENTRIES- INTEGER_ISSUE_SLOT_COUNT - (NUM_ROB_ENTRIES/COMMIT_WIDTH)
 
-      if (DEBUG_BTB) white_space = white_space - BTB_NUM_ENTRIES - 1
- 
       def InstsStr(insts: Bits, width: Int) =
       {
          var string = sprintf("")

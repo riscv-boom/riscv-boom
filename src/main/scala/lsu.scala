@@ -1137,14 +1137,7 @@ class ForwardingAgeLogic(num_entries: Int) extends Module with BOOMCoreParameter
    }
 
 
-   if (ENABLE_STOREDATA_FORWARDING)
-   {
-      io.forwarding_val := found_match
-   }
-   else
-   {
-      io.forwarding_val := Bool(false)
-   }
+   io.forwarding_val := found_match
 }
 
 
