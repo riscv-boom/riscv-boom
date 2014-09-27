@@ -90,9 +90,7 @@ class LoadStoreUnitIo(pl_width: Int) extends BOOMCoreBundle
 
    // Stall Decode as appropriate
    val laq_full           = Bool(OUTPUT)
-   val laq_empty          = Bool(OUTPUT)
    val stq_full           = Bool(OUTPUT)
-   val stq_empty          = Bool(OUTPUT)
 
    val exception          = Bool(INPUT) // kill everything
 
@@ -276,6 +274,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
          laq_yng_st_idx(ld_enq_idx)   := st_enq_idx
 
          laq_allocated(ld_enq_idx)    := Bool(true)
+         laq_addr_val (ld_enq_idx)    := Bool(false)
          laq_executed (ld_enq_idx)    := Bool(false)
          laq_succeeded(ld_enq_idx)    := Bool(false)
          laq_failure  (ld_enq_idx)    := Bool(false)
@@ -998,13 +997,12 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
 
    io.laq_full  := laq_is_full
    io.stq_full  := stq_is_full
-   io.laq_empty := laq_tail === laq_head
-   io.stq_empty := stq_tail === stq_head
+   val stq_empty = stq_tail === stq_head //&& !stq_maybe_full
 
    io.new_ldq_idx := laq_tail
    io.new_stq_idx := stq_tail
 
-   io.lsu_fencei_rdy := io.stq_empty && io.dmem_is_ordered
+   io.lsu_fencei_rdy := stq_empty && io.dmem_is_ordered
 
    //-------------------------------------------------------------
    // Debug & Counter outputs
