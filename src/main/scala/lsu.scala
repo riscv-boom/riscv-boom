@@ -92,10 +92,8 @@ class LoadStoreUnitIo(pl_width: Int) extends BOOMCoreBundle
    val laq_full           = Bool(OUTPUT)
    val stq_full           = Bool(OUTPUT)
 
-   val exception          = Bool(INPUT) // kill everything
-
-
-   val lsu_misspec        = Bool(INPUT)  // TODO generalize to "pipeline flush"? // TODO rename misspec to ld_order_failure, or lsu_trap?
+   val exception          = Bool(INPUT) // TODO kill everything, rename to pipeline flush?
+   val lsu_misspec        = Bool(INPUT)  // TODO generalize to "pipeline flush"? // TODO rename misspec to ld_order_failure, or lsu_trap? this seems redudant
    val lsu_clr_bsy_valid  = Bool(OUTPUT) // HACK: let the stores clear out the busy bit in the ROB
    val lsu_clr_bsy_rob_idx= UInt(OUTPUT, width=ROB_ADDR_SZ)
    val lsu_fencei_rdy     = Bool(OUTPUT)
@@ -758,7 +756,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    }
 
 
-   when (io.brinfo.valid && io.brinfo.mispredict)
+   when (io.brinfo.valid && io.brinfo.mispredict && !io.exception)
    {
       stq_tail := io.brinfo.stq_idx
       laq_tail := io.brinfo.ldq_idx

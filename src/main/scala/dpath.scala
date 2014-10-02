@@ -1099,7 +1099,7 @@ class DatPath() extends Module with BOOMCoreParameters
    lsu_io.commit_store_mask := com_st_mask
    lsu_io.commit_load_mask  := com_ld_mask
 
-   lsu_io.exception         := com_exception
+   lsu_io.exception         := flush_pipeline //com_exception, com.exception comes too early, will fight against a branch that resolves same cycle as an exception
    lsu_io.lsu_misspec       := lsu_misspec      
 
    // Handle Branch Mispeculations
