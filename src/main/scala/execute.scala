@@ -341,7 +341,6 @@ class ALUMulDMemExeUnit(is_branch_unit: Boolean = false, shares_pcr_wport: Boole
    // Outputs ----------------------------------
    // hook up responses
 
-   io.resp(0).ready := Bool(true) // did I make the -wi happy?
    io.resp(0) <> alu.io.resp
  
 
