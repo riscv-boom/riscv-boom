@@ -1226,13 +1226,23 @@ class DatPath() extends Module with BOOMCoreParameters
 
       com_st_mask := rob.io.com_st_mask
       com_ld_mask := rob.io.com_ld_mask
-   
+
       com_exception    := rob.io.com_exception    // on for only a single cycle (to PCR)
       com_exc_cause    := rob.io.com_exc_cause
       com_handling_exc := rob.io.com_handling_exc // on for duration of roll-back
       com_rbk_valids   := rob.io.com_rbk_valids
-      
-    
+
+
+   // throw assertion failure if a store or load have a misaligned or vm fault
+   // as neither are supported as of yet.
+   require (params(UseVM) == false)
+   assert (!(com_exception &&
+             (com_exc_cause === UInt(rocket.Causes.misaligned_load) ||
+              com_exc_cause === UInt(rocket.Causes.fault_load) ||
+              com_exc_cause === UInt(rocket.Causes.misaligned_store) ||
+              com_exc_cause === UInt(rocket.Causes.fault_store))),
+             "An unsupported memory exception occurred (misaligned st/ld or faulting st/ld).")
+
    //-------------------------------------------------------------
    // **** Flush Pipeline ****
    //-------------------------------------------------------------
