@@ -22,6 +22,7 @@ case object BhtCounterSz extends Field[Int]
 case object NumLHistEntries extends Field[Int]
 case object EnableFetchBufferFlowThrough extends Field[Boolean]
 case object EnableBTB extends Field[Boolean]
+case object EnableUarchCounters extends Field[Boolean]
 case object EnablePrefetching extends Field[Boolean]
 case object EnableCommitMapTable extends Field[Boolean]
 

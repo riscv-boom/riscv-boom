@@ -1336,23 +1336,31 @@ class DatPath() extends Module with BOOMCoreParameters
    debug(irt_ei_reg)
 
    // UARCH Counters
-   pcr.io.uarch_counters(0)  := br_unit.brinfo.valid
-   pcr.io.uarch_counters(1)  := br_unit.brinfo.mispredict
-//   pcr.io.uarch_counters(2)  := com_exception
-   pcr.io.uarch_counters(2)  := !rob_rdy
-   pcr.io.uarch_counters(3)  := laq_full
-   pcr.io.uarch_counters(4)  := stq_full
-   pcr.io.uarch_counters(5)  := branch_mask_full.reduce(_|_)
-   pcr.io.uarch_counters(6)  := io.counters.ic_miss
-   pcr.io.uarch_counters(7)  := io.counters.dc_miss
-   pcr.io.uarch_counters(8)  := lsu_io.counters.ld_valid
-   pcr.io.uarch_counters(9)  := lsu_io.counters.ld_forwarded
-   pcr.io.uarch_counters(10) := lsu_io.counters.ld_sleep
-   pcr.io.uarch_counters(11) := lsu_io.counters.ld_killed
-   pcr.io.uarch_counters(12) := lsu_io.counters.ld_order_fail
-   pcr.io.uarch_counters(13) := PopCount((Range(0,COMMIT_WIDTH)).map{w => com_valids(w) && com_uops(w).is_br_or_jmp})
-   pcr.io.uarch_counters(14) := PopCount((Range(0,COMMIT_WIDTH)).map{w => com_valids(w) && com_uops(w).is_store})
-   pcr.io.uarch_counters(15) := PopCount((Range(0,COMMIT_WIDTH)).map{w => com_valids(w) && com_uops(w).is_load})
+   // these take up a significant amount of area, so don't enable them lightly
+   if (params(EnableUarchCounters))
+   {
+      pcr.io.uarch_counters(0)  := br_unit.brinfo.valid
+      pcr.io.uarch_counters(1)  := br_unit.brinfo.mispredict
+   //   pcr.io.uarch_counters(2)  := com_exception
+      pcr.io.uarch_counters(2)  := !rob_rdy
+      pcr.io.uarch_counters(3)  := laq_full
+      pcr.io.uarch_counters(4)  := stq_full
+      pcr.io.uarch_counters(5)  := branch_mask_full.reduce(_|_)
+      pcr.io.uarch_counters(6)  := io.counters.ic_miss
+      pcr.io.uarch_counters(7)  := io.counters.dc_miss
+      pcr.io.uarch_counters(8)  := lsu_io.counters.ld_valid
+      pcr.io.uarch_counters(9)  := lsu_io.counters.ld_forwarded
+      pcr.io.uarch_counters(10) := lsu_io.counters.ld_sleep
+      pcr.io.uarch_counters(11) := lsu_io.counters.ld_killed
+      pcr.io.uarch_counters(12) := lsu_io.counters.ld_order_fail
+      pcr.io.uarch_counters(13) := PopCount((Range(0,COMMIT_WIDTH)).map{w => com_valids(w) && com_uops(w).is_br_or_jmp})
+      pcr.io.uarch_counters(14) := PopCount((Range(0,COMMIT_WIDTH)).map{w => com_valids(w) && com_uops(w).is_store})
+      pcr.io.uarch_counters(15) := PopCount((Range(0,COMMIT_WIDTH)).map{w => com_valids(w) && com_uops(w).is_load})
+   }
+   else
+   {
+      pcr.io.uarch_counters.foreach(_ := Bool(false))
+   }
 
    //-------------------------------------------------------------
    //-------------------------------------------------------------
