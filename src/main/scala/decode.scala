@@ -251,6 +251,8 @@ class DecodeUnit() extends Module
    uop.is_ret := (uop.uopc === uopJALR) &&
                  (uop.ldst === X0) &&
                  (uop.lrs1 === RA)
+   uop.is_call:= (uop.uopc === uopJALR) &&
+                 (uop.lrs1 === X0)
 
 
    //-------------------------------------------------------------
@@ -359,7 +361,8 @@ class FetchSerializerNtoM() extends Module with BOOMCoreParameters
 
    io.deq.bits(0).pc             := io.enq.bits.pc + Mux(inst_idx.orR,UInt(4),UInt(0))
    io.deq.bits(0).inst           := io.enq.bits.insts(inst_idx)
-   io.deq.bits(0).br_prediction  := io.enq.bits.br_predictions(inst_idx)
+   io.deq.bits(0).btb_hit        := io.enq.bits.btb_resp_valid
+   io.deq.bits(0).btb_resp       := io.enq.bits.btb_resp
    io.deq.bits(0).btb_pred_taken := io.enq.bits.btb_pred_taken
    io.deq.bits(0).valid          := io.enq.bits.mask(0)
    io.deq.bits(0).xcpt_ma        := io.enq.bits.xcpt_ma(inst_idx)
@@ -377,7 +380,10 @@ class FetchSerializerNtoM() extends Module with BOOMCoreParameters
       {
          io.deq.bits(i).pc := io.enq.bits.pc + UInt(i << 2)
          io.deq.bits(i).inst := io.enq.bits.insts(i)
-         io.deq.bits(i).br_prediction  := io.enq.bits.br_predictions(i)
+         io.deq.bits(i).btb_hit := Mux(io.enq.bits.btb_pred_taken_idx === UInt(i),
+                                                             io.enq.bits.btb_resp_valid,
+                                                             Bool(false))
+         io.deq.bits(i).btb_resp := io.enq.bits.btb_resp // TODO XXX BUG what do we need to supress in this bundle?
          io.deq.bits(i).btb_pred_taken := Mux(io.enq.bits.btb_pred_taken_idx === UInt(i), 
                                                              io.enq.bits.btb_pred_taken, 
                                                              Bool(false))

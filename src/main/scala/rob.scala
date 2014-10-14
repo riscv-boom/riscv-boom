@@ -76,7 +76,7 @@ class RobIo(machine_width: Int, num_wakeup_ports: Int)  extends BOOMCoreBundle
    val com_rbk_valids   = Vec.fill(machine_width) {Bool(OUTPUT)}
    
    // Handle Branch Misspeculations
-   val br_unit          = new BranchUnitResp().asInput()
+   val br_unit          = new BranchUnitResp().asInput
         
    // Let the Branch Unit read out an instruction's PC
    val get_pc = new Bundle
@@ -210,7 +210,9 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
    val next_bank_idx = if (width == 1) UInt(0) else PriorityEncoder(rob_brt_vals.toBits)
 
    io.get_pc.next_pc := next_row_pc + Cat(next_bank_idx, Bits(0,2))
-   io.get_pc.next_val := (GetRowIdx(io.get_pc.rob_idx)+UInt(1)) != rob_tail
+   // TODO BUG PERF bypass incoming entries so that fast branches can have this information
+   // TODO is this logic broken if the ROB can fill up completely? should I look at valid bit instead?
+   io.get_pc.next_val := WrapInc(GetRowIdx(io.get_pc.rob_idx), num_rob_rows) != rob_tail
  
    
    // **************************************************************************
@@ -271,7 +273,7 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
       {
          // these signals need to be delayed a cycle to match the brinfo signals
          rob_uop(GetRowIdx(io.br_unit.brinfo.rob_idx)).br_was_taken     := Reg(next=io.br_unit.taken)
-         rob_uop(GetRowIdx(io.br_unit.brinfo.rob_idx)).btb_mispredicted := Reg(next=io.br_unit.btb_mispredict)
+//         rob_uop(GetRowIdx(io.br_unit.brinfo.rob_idx)).btb_mispredicted := Reg(next=io.br_unit.btb_mispredict)
       }
 
 
@@ -485,7 +487,6 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
    {
       rob_tail := WrapInc(rob_tail, num_rob_rows)
    }
-
    // assert !(rob_tail >= (num_rob_entries/width))
 
    if (params(EnableCommitMapTable))

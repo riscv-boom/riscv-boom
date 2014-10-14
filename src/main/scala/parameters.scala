@@ -5,7 +5,6 @@ import Chisel._
 import Node._
 import rocket._
 
-case object FetchWidth extends Field[Int]
 case object DecodeWidth extends Field[Int]
 case object DispatchWidth extends Field[Int]
 case object IssueWidth extends Field[Int]
@@ -15,11 +14,6 @@ case object NumLsuEntries extends Field[Int]
 case object NumPhysRegisters extends Field[Int]
 case object MaxBrCount extends Field[Int]
 case object FetchBufferSz extends Field[Int]
-case object UseBranchPredictor extends Field[Boolean]
-case object BrPredDesign extends Field[String]
-case object NumBhtEntries extends Field[Int]
-case object BhtCounterSz extends Field[Int]
-case object NumLHistEntries extends Field[Int]
 case object EnableFetchBufferFlowThrough extends Field[Boolean]
 case object EnableBTB extends Field[Boolean]
 case object EnableUarchCounters extends Field[Boolean]

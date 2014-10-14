@@ -183,29 +183,29 @@ class RegisterReadDecode extends Module
       val rrd_valid = Bool(OUTPUT)
       val rrd_uop   = new MicroOp().asOutput()
    }
-        
+
    // Issued Instruction
    val rrd_valid = io.iss_valid
    io.rrd_uop   := io.iss_uop
 
-                             
+
                              // br type
                              // |      use alu pipe              op1 sel   op2 sel
-                             // |      |  use muldiv pipe        |         |        immsel               pcr fcn
-                             // |      |  |  use mem pipe        |         |        |     rf wen         |
-   val rrd_csignals =        // |      |  |  |  alu fcn  wd/word?|         |        |     |      wb sel  |
-      rocket.DecodeLogic(    // |      |  |  |  |        |       |         |        |     |      |       |
-                 io.rrd_uop.uopc,//    |  |  |  |        |       |         |        |     |      |       |
+                             // |      |  use muldiv pipe        |         |         immsel               pcr fcn
+                             // |      |  |  use mem pipe        |         |         |     rf wen         |
+   val rrd_csignals =        // |      |  |  |  alu fcn  wd/word?|         |         |     |      wb sel  |
+      rocket.DecodeLogic(    // |      |  |  |  |        |       |         |         |     |      |       |
+                 io.rrd_uop.uopc,//    |  |  |  |        |       |         |         |     |      |       |
                            List(BR_N , Y, N, N, FN_ADD , DW_X  , OP1_X   , OP2_X   , IS_X, REN_0, WB_X  , rocket.CSR.N),
             Array(                          
                uopNOP   -> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP1_X   , OP2_X   , IS_X, REN_0, WB_X  , rocket.CSR.N), // TODO remove, not required
-               
+
                uopLD    -> List(BR_N , N, N, Y, FN_ADD , DW_XPR, OP1_RS1 , OP2_IMM , IS_I, REN_0, WB_X  , rocket.CSR.N),
                uopSTA   -> List(BR_N , N, N, Y, FN_ADD , DW_XPR, OP1_RS1 , OP2_IMM , IS_S, REN_0, WB_X  , rocket.CSR.N),
                uopSTD   -> List(BR_N , N, N, Y, FN_X   , DW_X  , OP1_RS1 , OP2_RS2 , IS_X, REN_0, WB_X  , rocket.CSR.N),
-               
+
                uopLUI   -> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP1_ZERO, OP2_IMM , IS_U, REN_1, WB_ALU, rocket.CSR.N),
-               
+
                uopADDI  -> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP1_RS1 , OP2_IMM , IS_I, REN_1, WB_ALU, rocket.CSR.N),
                uopANDI  -> List(BR_N , Y, N, N, FN_AND , DW_XPR, OP1_RS1 , OP2_IMM , IS_I, REN_1, WB_ALU, rocket.CSR.N),
                uopORI   -> List(BR_N , Y, N, N, FN_OR  , DW_XPR, OP1_RS1 , OP2_IMM , IS_I, REN_1, WB_ALU, rocket.CSR.N),

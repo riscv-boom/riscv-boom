@@ -50,7 +50,7 @@ class FunctionalUnitIo(num_stages: Int, num_bypass_stages: Int) extends BOOMCore
 
    val bypass  = new BypassData(num_bypass_stages).asOutput()
    
-   val br_unit = new BranchUnitResp().asOutput()
+   val br_unit = new BranchUnitResp().asOutput
 
    val get_rob_pc = new Bundle 
    {
@@ -89,19 +89,16 @@ class BypassData(num_bypass_ports:Int) extends BOOMCoreBundle
 class BranchUnitResp extends BOOMCoreBundle
 {
    val take_pc        = Bool()
-   val pc_sel         = Bits(width = PC_PLUS4.getWidth)   
+   val target         = UInt(width = xprLen)
    val taken          = Bool()
-   val btb_mispredict = Bool()
 
-   val brjmp_target    = UInt(width = xprLen)
-   val jump_reg_target = UInt(width = xprLen)
-   val pc_plus4        = UInt(width = xprLen) 
    val pc              = UInt(width = xprLen) // TODO this isn't really a branch_unit thing
 
-   val brinfo = new BrResolutionInfo() // NOTE: delayed a cycle!
+   val brinfo          = new BrResolutionInfo() // NOTE: delayed a cycle!
+   val btb_update_valid = Bool() // TODO turn this into a directed bundle so we can fold this into btb_update?
+   val btb_update      = new rocket.BTBUpdate   
 
-   val debug_btb_pred = Bool() // just for debug, did the BTB and BHT predict taken?
-   val debug_bht_pred = Bool()
+   val debug_btb_pred  = Bool() // just for debug, did the BTB and BHT predict taken?
 }
 
 abstract class FunctionalUnit(is_pipelined: Boolean 
@@ -250,7 +247,7 @@ class ALUUnit(is_branch_unit: Boolean = false)
  
       val pc_plus4 = (uop_pc_ + UInt(4))(xprLen-1,0)
     
-      io.br_unit.pc_sel := Lookup(io.req.bits.uop.ctrl.br_type, PC_PLUS4,
+      val pc_sel = Lookup(io.req.bits.uop.ctrl.br_type, PC_PLUS4,
                Array(   BR_N  -> PC_PLUS4, 
                         BR_NE -> Mux(!br_eq,  PC_BRJMP, PC_PLUS4),
                         BR_EQ -> Mux( br_eq,  PC_BRJMP, PC_PLUS4),
@@ -262,48 +259,37 @@ class ALUUnit(is_branch_unit: Boolean = false)
                         BR_JR -> PC_JALR
                         ))
 
+      val bj_addr = UInt()
+//      val jreg_target = bj_addr
 
       io.br_unit.taken := io.req.valid &&
                           !killed &&
                           uop.is_br_or_jmp &&
-                          (io.br_unit.pc_sel != PC_PLUS4)
+                          (pc_sel != PC_PLUS4)
 
-      // assumption is BHT prediction and BTB prediction are mutually exclusive
       // JAL is taken in the front-end, so it should never mispredict
-//      io.br_unit.brinfo.mispredict := io.req.valid && 
       val mispredict = io.req.valid && 
                        !killed &&
                        uop.is_br_or_jmp &&
                        !(uop.is_jal) && // TODO XXX is this the proper way to do this? can we remove more JAL stuff from the branch unit? jal should just be a NOP.
-                       (((io.br_unit.taken ^ (uop.br_prediction.isBrTaken() === TAKEN)) && !uop.btb_pred_taken) || // BHT was wrong
-                         (!io.br_unit.taken && uop.btb_pred_taken) || // BTB was wrong
-                         (io.br_unit.taken && uop.btb_pred_taken && (io.br_unit.pc_sel === PC_JALR) && 
-                         (!io.get_rob_pc.next_val || (io.get_rob_pc.next_pc != io.br_unit.jump_reg_target))) // BTB was right, but wrong target for JALR
+//                       ((io.br_unit.taken ^ uop.btb_pred_taken) || // BTB was wrong this assumes BTB doesn't say "taken" for PC+4
+                       (// BTB was wrong
+                       (pc_sel === PC_PLUS4 && (uop.btb_pred_taken || !io.get_rob_pc.next_val || (io.get_rob_pc.next_pc != (uop_pc_ + UInt(4))))) ||
+                       (pc_sel != PC_PLUS4 && (!uop.btb_pred_taken || !io.get_rob_pc.next_val || (io.get_rob_pc.next_pc != bj_addr)))
+//                       (uop.btb_pred_taken && pc_sel === PC_JALR && (!io.get_rob_pc.next_val || (io.get_rob_pc.next_pc != jreg_target))) // BTB was right, but wrong target for JALR
+//                       (pc_sel === PC_JALR && (!uop.btb_pred_taken || !opg
                        )                         
-//                     ((uop.btb_pred_taken && !io.br_unit.taken) || // BTB was wrong (BHT was set to false)
-//                     (!uop.btb_pred_taken    (uop.br_prediction.isBrTaken() === TAKEN) && !uop.br_unit.taken)
-//                     )
 
-      //TODO can we assert that if a branch is taken it went to the proper location?
-      //when (branch_is_taken)
-      //{
-      //   assert (uop_pc_  "Branch jumped to wrong target!")
-      //}
-      
+      // TODO assert is there a way to verify the branch prediction jumped to the correct address?
+      //val bad_jmp_target_error = io.req.valid && uop.is_br_or_jmp && !uop.is_jump && (bj_addr != ???)
+      //assert (!(br_bad_jmp_target_error), "Branch jumped to the wrong target address.")
+
+
       io.br_unit.take_pc := mispredict
-
-      // need to tell the BTB it mispredicted and needs to update
-      // TODO currently only telling BTB about branches and JAL, should also use JALR
-      io.br_unit.btb_mispredict := io.req.valid && 
-                                    uop.is_br_or_jmp && 
-                                    !killed &&
-//                                    !uop.is_ret && let jr ra be held in the btb too
-                                       // push/call is rd=x1
-                                       // pop/return is rd=x0, rs1=x1
-//                                    !uop.is_jump && 
-                                    (io.br_unit.taken ^ uop.btb_pred_taken)
+      io.br_unit.target := Mux(pc_sel === PC_PLUS4, pc_plus4, bj_addr)
 
       // note: jal doesn't allocate a branch-mask, so don't clear a br-mask bit
+      // branch resolution delayed a cycle for critical path reasons
       io.br_unit.brinfo.valid      := Reg(next = io.req.valid && uop.is_br_or_jmp && !uop.is_jal && !killed)
       io.br_unit.brinfo.mispredict := Reg(next = mispredict)
       io.br_unit.brinfo.mask       := Reg(next = UInt(1) << uop.br_tag)
@@ -312,6 +298,23 @@ class ALUUnit(is_branch_unit: Boolean = false)
       io.br_unit.brinfo.rob_idx    := Reg(next = uop.rob_idx)
       io.br_unit.brinfo.ldq_idx    := Reg(next = uop.ldq_idx)
       io.br_unit.brinfo.stq_idx    := Reg(next = uop.stq_idx)
+
+      // updates the BTB same cycle as PC redirect
+      io.br_unit.btb_update_valid            := io.req.valid && uop.is_br_or_jmp && !killed  // did a branch or jump  occur?
+      io.br_unit.btb_update.pc               := (uop_pc_) // what should the tag check be?
+                                                                     require (params(rocket.FetchWidth) == 1) // TODO BUG XXX compute actual fetch pc
+      io.br_unit.btb_update.br_pc            := (uop_pc_)
+      io.br_unit.btb_update.target           := io.br_unit.target //bj_addr // what should the target be on the tag hit?
+      io.br_unit.btb_update.returnAddr       := (pc_plus4)           // return address for the RAS?
+      io.br_unit.btb_update.prediction.valid := (uop.btb_hit)        // did this branch have a BTB hit in fetch?
+      io.br_unit.btb_update.prediction.bits  := (uop.btb_resp)       // give the BTB back its BTBResp
+      io.br_unit.btb_update.taken            := (io.br_unit.taken)   // was this branch "taken"
+      io.br_unit.btb_update.incorrectTarget  := (mispredict)         // did we mispredict? or is this "when we want to update the Target"
+      io.br_unit.btb_update.isJump           := (uop.is_jump) 
+      io.br_unit.btb_update.isCall           := (uop.is_call)        // TODO verify 
+      io.br_unit.btb_update.isReturn         := (uop.is_ret)
+                                    
+
 
       // Branch/Jump Target Calculation
       // we can't push this through the ALU though, b/c jalr needs both PC+4 and rs1+offset
@@ -327,22 +330,13 @@ class ALUUnit(is_branch_unit: Boolean = false)
       }                                                                         
       
       val bj_base = Mux(uop.uopc === uopJALR, io.req.bits.rs1_data, uop_pc_)
-//      val br_pred_taken = (uop.uopc != uopJALR) &&
-//                          (uop.br_prediction.isBrTaken() === TAKEN || 
-//                          uop.btb_pred_taken)
-//      val bj_offset = Mux(br_pred_taken, SInt(4), imm_xprlen(20,0).toSInt)           
       val bj_offset = imm_xprlen(20,0).toSInt
       val bj64 = bj_base + bj_offset                                                    
       val bj_msb = Mux(uop.uopc === uopJALR, vaSign(io.req.bits.rs1_data, bj64), vaSign(uop_pc_, bj64))
-      val bj_addr = Cat(bj_msb, bj64(vaddrBits-1,0))                                   
+      bj_addr := Cat(bj_msb, bj64(vaddrBits-1,0))                                   
 
-
-      io.br_unit.brjmp_target   := bj_addr
-      io.br_unit.jump_reg_target:= bj_addr
-      io.br_unit.pc_plus4       := pc_plus4
       io.br_unit.pc             := uop_pc_
       io.br_unit.debug_btb_pred := uop.btb_pred_taken
-      io.br_unit.debug_bht_pred := uop.br_prediction.taken
    }
 
 

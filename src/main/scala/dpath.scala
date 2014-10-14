@@ -19,7 +19,7 @@ import FUCode._
 
 import rocket._
 
-/* 
+/*
 
 BOOM has the following (conceptual) stages:
   if1 - Instruction Fetch 1 (I$ access)
@@ -32,7 +32,7 @@ BOOM has the following (conceptual) stages:
   iss - Issue
   rrd - Register Read
   exe - Execute
-  mem - Memory    
+  mem - Memory
   wb  - Writeback
   com - Commit
 
@@ -63,7 +63,7 @@ TODO LIST:
    allow for under-provisioned regfile ports
    allow for load-use speculation
 
-   add wait-bit memory disambiguation speculation to loads in the LSU 
+   add wait-bit memory disambiguation speculation to loads in the LSU
 
    allow queues to fill up completely (change full/head/tail logic)
       - difficult to do for store queue
@@ -74,12 +74,12 @@ TODO LIST:
 
    break apart atomic PCR stuff?
 
-   fpu 
+   fpu
 
    hit-under-miss icache
 
    stream fetchers, way-prediction
- 
+
 */
 
 
@@ -87,7 +87,7 @@ TODO LIST:
 // TODO I can't promise these signals get killed/cleared on a mispredict,
 // so I should listen to the corresponding valid bit
 // okay, for example, on a bypassing, we listen to rf_wen to see if bypass is valid,
-// but we "could" be bypassing to a branch which kills us (false positive cobinational loop), 
+// but we "could" be bypassing to a branch which kills us (false positive cobinational loop),
 // so we have to keep the rf_wen enabled, and not dependent on a branch kill signal
 class CtrlSignals extends Bundle()
 {
@@ -95,41 +95,42 @@ class CtrlSignals extends Bundle()
    val op1_sel     = UInt(width = OP1_X.getWidth)
    val op2_sel     = UInt(width = OP2_X.getWidth)
    val imm_sel     = UInt(width = IS_X.getWidth)
-   val op_fcn      = Bits(width = SZ_ALU_FN) 
+   val op_fcn      = Bits(width = SZ_ALU_FN)
    val fcn_dw      = Bool()
    val wb_sel      = UInt(width = WB_X.getWidth)
    val rf_wen      = Bool()
-   val pcr_fcn     = Bits(width = rocket.CSR.SZ) 
+   val pcr_fcn     = Bits(width = rocket.CSR.SZ)
    val is_load     = Bool()
    val is_sta      = Bool()
    val is_std      = Bool()
 }
 
- 
+
 // TODO Chisel ability to union this Bundle for different types of Uops?
-class MicroOp extends BOOMCoreBundle 
+class MicroOp extends BOOMCoreBundle
 {
    val valid            = Bool()                   // is this uop valid? or has it been masked out, used by fetch buffer and Decode stage
-   
+
    val uopc             = Bits(width = UOPC_SZ)    // micro-op code
-   val inst             = Bits(width = 32)          
+   val inst             = Bits(width = 32)
    val pc               = UInt(width = xprLen)
    val fu_code          = Bits(width = FUC_SZ)     // which functional unit do we use?
    val ctrl             = new CtrlSignals
-   
+
    val wakeup_delay     = UInt(width = log2Up(MAX_WAKEUP_DELAY)) // unused
    val is_br_or_jmp     = Bool()                      // is this micro-op a (branch or jump) vs. a regular PC+4 inst?
    val is_jump          = Bool()                      // is this a jump? (note: not mutually exclusive with br_valid)
    val is_jal           = Bool()                      // is this a JAL? used for branch unit
    val is_ret           = Bool()                      // is jalr with rd=x0, rs1=x1? (i.e., a return)
+   val is_call          = Bool()                      //
    val br_mask          = Bits(width = MAX_BR_COUNT)  // which branches are we being speculated under?
-   val br_tag           = UInt(width = BR_TAG_SZ)     
-   val br_prediction    = new BrPrediction            // set by Bpd stage
+   val br_tag           = UInt(width = BR_TAG_SZ)
 
    val br_was_taken     = Bool()                      // set by Exe stage
 
+   val btb_hit          = Bool()                      // btb hit on this instruction
+   val btb_resp         = new rocket.BTBResp
    val btb_pred_taken   = Bool()
-   val btb_mispredicted = Bool()
 
    val imm_packed       = Bits(width = LONGEST_IMM_SZ) // densely pack the imm in decode... then translate and sign-extend in execute
    val rob_idx          = UInt(width = ROB_ADDR_SZ)
@@ -143,16 +144,16 @@ class MicroOp extends BOOMCoreBundle
    val prs2_busy        = Bool()
    val stale_pdst       = UInt(width = PREG_SZ)
    val exception        = Bool()
-   val exc_cause        = UInt(width = xprLen)  
+   val exc_cause        = UInt(width = xprLen)
    val sret             = Bool()
    val bypassable       = Bool()                      // can we bypass ALU results? (doesn't include loads, pcr, rdcycle, etc.... need to readdress this, SHOULD include PCRs?)
    val mem_cmd          = UInt(width = 4)             // sync primitives/cache flushes
    val mem_typ          = UInt(width = 3)             // memory mask type for loads/stores
-   val is_fence         = Bool()                      
-   val is_fencei        = Bool()                      
-   val is_store         = Bool()                      
-   val is_load          = Bool()                      
-   val is_unique        = Bool()                      // only allow this instruction in the pipeline 
+   val is_fence         = Bool()
+   val is_fencei        = Bool()
+   val is_store         = Bool()
+   val is_load          = Bool()
+   val is_unique        = Bool()                      // only allow this instruction in the pipeline
                                                       // (tell ROB to un-ready until empty)
    val flush_on_commit  = Bool()                      // some instructions need to flush the pipeline behind them
 
@@ -176,29 +177,34 @@ class MicroOp extends BOOMCoreBundle
 
 class FetchBundle extends Bundle with BOOMCoreParameters
 {
+//   val resp = new rocket.FrontEndResp // TODO consolidate everything into this
    val pc    = UInt(width = xprLen)
    val insts = Vec.fill(FETCH_WIDTH) { Bits(width = 32) }
    val mask  = Bits(width = FETCH_WIDTH) // mark which words are valid instructions
-   
-   val br_predictions = Vec.fill(FETCH_WIDTH) { new BrPrediction } // set by Bpd stage
+
+   val btb_resp_valid = Bool()
+   val btb_resp = new rocket.BTBResp
+   // TODO BUG XXX remove these two signals once things work
    val btb_pred_taken = Bool()
-   val btb_pred_taken_idx = UInt(width=log2Up(FETCH_WIDTH)) 
+   val btb_pred_taken_idx = UInt(width=log2Up(FETCH_WIDTH))
 
    val xcpt_ma = Bool()
    val xcpt_if = Bool()
   override def clone = new FetchBundle().asInstanceOf[this.type]
 }
 
- 
+
 class BrResolutionInfo extends BOOMCoreBundle
 {
    val valid      = Bool()
    val mispredict = Bool()
-   val mask       = Bits(width = MAX_BR_COUNT) // the resolve mask 
+   val mask       = Bits(width = MAX_BR_COUNT) // the resolve mask
    val tag        = UInt(width = BR_TAG_SZ)    // the branch tag that was resolved
    val exe_mask   = Bits(width = MAX_BR_COUNT) // the br_mask of the actual branch uop
                                                // used to reset the dec_br_mask
-   val rob_idx    = UInt(width = ROB_ADDR_SZ)  
+
+
+   val rob_idx    = UInt(width = ROB_ADDR_SZ)
    val ldq_idx    = UInt(width = MEM_ADDR_SZ)  // track the "tail" of loads and stores, so we can
    val stq_idx    = UInt(width = MEM_ADDR_SZ)  // quickly reset the LSU on a mispredict
 }
@@ -210,17 +216,17 @@ class CacheCounters() extends Bundle
 //   val ic_misses = UInt(width = xprLen)
    val ic_miss = Bool()
 }
-      
-//-------------------------------------------------------------
-//-------------------------------------------------------------
-//-------------------------------------------------------------   
 
-class DpathIo() extends Bundle() 
-{                                              
+//-------------------------------------------------------------
+//-------------------------------------------------------------
+//-------------------------------------------------------------
+
+class DpathIo() extends Bundle()
+{
    val host = new uncore.HTIFIO
-   val imem = new CPUFrontendIO
+   val imem = new rocket.CPUFrontendIO
    val dmem = new DCMemPortIo
-   val ptw =  new rocket.DatapathPTWIO().flip 
+   val ptw =  new rocket.DatapathPTWIO().flip
    val counters = new CacheCounters().asInput
 }
 
@@ -233,20 +239,20 @@ class DatPath() extends Module with BOOMCoreParameters
    // Forward Declared Wires
 
    val flush_take_pc  = Bool()  // redirect PC due to a flush
-   val flush_pc       = UInt() 
+   val flush_pc       = UInt()
    val flush_pipeline = Bool()  // kill entire pipeline (i.e., exception, load misspeculations)
 
    // Instruction Fetch State
    val if_pc_next     = UInt(width = xprLen)
    val pcr_exc_target = UInt(width = vaddrBits)
-   
-  
+
+
    // Branch Predict State
    val bp2_val        = Bool()
    val bp2_take_pc    = Bool()
    val bp2_pred_target= UInt(width=xprLen)
-   val bp2_reg_predictor_out = Reg(outType=new BrPrediction()) 
-   val bp2_prediction = new BrPrediction() 
+   val bp2_reg_predictor_out = Reg(outType=new BrPrediction())
+   val bp2_prediction = new BrPrediction()
 
    // Instruction Decode State
    val dec_valids     = Vec.fill(DECODE_WIDTH) {Bool()}  // is the incoming, decoded instruction valid? It may be held up though. TODO confusing wrt dec_mask?
@@ -259,7 +265,7 @@ class DatPath() extends Module with BOOMCoreParameters
    val stq_full       = Bool()
 
    val pcr_status     = new rocket.Status()
-  
+
    // Register Rename State
    val ren_insts_can_proceed = Vec.fill(DECODE_WIDTH) { Bool() }
 
@@ -284,7 +290,7 @@ class DatPath() extends Module with BOOMCoreParameters
    if (ISSUE_WIDTH == 1)
    {
       println("\n    -== Single Issue ==- \n")
-      val mem_unit  = Module(new ALUMulDMemExeUnit(is_branch_unit = true, 
+      val mem_unit  = Module(new ALUMulDMemExeUnit(is_branch_unit = true,
                                           shares_pcr_wport = true))
       exe_units += mem_unit
       mem_unit.io.dmem <> io.dmem
@@ -294,7 +300,7 @@ class DatPath() extends Module with BOOMCoreParameters
       println("\n    -== Dual Issue ==- \n")
       // TODO make a ALU/Mem unit, or a ALU-i/Mem unit
       val mem_unit = Module(new ALUMulDMemExeUnit())
-      exe_units += Module(new ALUExeUnit(is_branch_unit = true, 
+      exe_units += Module(new ALUExeUnit(is_branch_unit = true,
                                           shares_pcr_wport = true))
       exe_units += mem_unit
       mem_unit.io.dmem <> io.dmem
@@ -302,7 +308,7 @@ class DatPath() extends Module with BOOMCoreParameters
    else
    {
       println("\n    -== Triple Issue ==- \n")
-      val alu_unit    = Module(new ALUExeUnit(is_branch_unit = true, 
+      val alu_unit    = Module(new ALUExeUnit(is_branch_unit = true,
                                      shares_pcr_wport = true))
       val muld_unit   = Module(new ALUMulDExeUnit())
       //val muld_unit = Module(new MulDExeUnit())
@@ -314,7 +320,7 @@ class DatPath() extends Module with BOOMCoreParameters
    }
 
    val num_rf_read_ports = 2*exe_units.length
-    
+
    var num_rf_write_ports = 0
    var num_total_bypass_ports = 0
    var num_fast_wakeup_ports = 0 // +1 for each exe_unit that allows bypassing
@@ -355,18 +361,18 @@ class DatPath() extends Module with BOOMCoreParameters
    val iss_uops              = Vec.fill(issue_width) {new MicroOp()}
 
    val br_unit               = new BranchUnitResp()
-   
+
    val throw_idle_error      = Reg(init = Bool(false))
-   
+
    // Memory State
    var lsu_io:LoadStoreUnitIo = null
    lsu_io = (exe_units.find(_.is_mem_unit).get).io.lsu_io // assume only one mem_unit
-   
+
    // Writeback State
 
    // Commit Stage
    val com_valids            = Vec.fill(DECODE_WIDTH) {Bool()}
-   val com_uops              = Vec.fill(DECODE_WIDTH) {new MicroOp()}  
+   val com_uops              = Vec.fill(DECODE_WIDTH) {new MicroOp()}
    val com_exception         = Bool()
    val com_exc_cause         = UInt()
    val com_handling_exc      = Bool()
@@ -383,7 +389,7 @@ class DatPath() extends Module with BOOMCoreParameters
    // **** Fetch Stage/Frontend ****
    //-------------------------------------------------------------
    //-------------------------------------------------------------
-   
+
    val fetchbuffer_kill = Bool()
    val fetch_bundle = new FetchBundle()
 
@@ -396,10 +402,10 @@ class DatPath() extends Module with BOOMCoreParameters
    val if_stalled = Bool() // if FetchBuffer backs up, we have to stall the front-end
    if_stalled := !(FetchBuffer.io.enq.ready)
 
-   val com_sret = (Range(0,DECODE_WIDTH).map{i => com_valids(i) && com_uops(i).sret}).reduce(_|_) 
+   val com_sret = (Range(0,DECODE_WIDTH).map{i => com_valids(i) && com_uops(i).sret}).reduce(_|_)
 
-   val take_pc = br_unit.take_pc || 
-                 flush_take_pc || 
+   val take_pc = br_unit.take_pc ||
+                 flush_take_pc ||
                  com_sret ||
                  (bp2_take_pc && !if_stalled) //|| // TODO this seems way too low-level, to get this backpressure signal correct
 
@@ -409,25 +415,17 @@ class DatPath() extends Module with BOOMCoreParameters
    io.imem.req.bits.pc := if_pc_next
    io.imem.resp.ready  := FetchBuffer.io.enq.ready // TODO perf BUG || take_pc?
 
+   if_pc_next :=  Mux((com_exception || com_sret), pcr_exc_target,
+                  Mux(flush_take_pc              , flush_pc,
+                  Mux(br_unit.take_pc            , br_unit.target,
+                                                   bp2_pred_target))) // bp2_take_pc
 
-   // note: some cleverness here - doesn't matter direction of the branch,
-   // brjmp_target will be the opposite of the branch prediction. So all we
-   // care about is "did a misprediction occur?"
-   if_pc_next := MuxCase(UInt(0xaaaa), Array (
-               (com_exception || com_sret)                      -> pcr_exc_target,
-               (flush_take_pc)                                  -> flush_pc, 
-               (br_unit.take_pc && br_unit.pc_sel === PC_JALR)  -> br_unit.jump_reg_target,
-               (br_unit.take_pc && br_unit.pc_sel === PC_BRJMP) -> br_unit.brjmp_target,  
-               (br_unit.take_pc && br_unit.pc_sel === PC_PLUS4) -> br_unit.pc_plus4,  
-               (bp2_take_pc)                                    -> bp2_pred_target
-               ))
-                                    
    // Fetch Buffer
    FetchBuffer.io.enq.valid := io.imem.resp.valid && !fetchbuffer_kill
    FetchBuffer.io.enq.bits  := fetch_bundle
    // delay sret signal for critical path reasons, but okay b/c we're still in the shadow of the PC redirect
    fetchbuffer_kill         := br_unit.brinfo.mispredict || com_exception || flush_pipeline || Reg(next=com_sret)
-   
+
    // round off to nearest fetch boundary
    // val lsb = log2Up(conf.rc.icache.ibytes) XXXXXX
    val lsb = log2Up(FETCH_WIDTH * 4)
@@ -436,37 +434,42 @@ class DatPath() extends Module with BOOMCoreParameters
 
    for (i <- 0 until FETCH_WIDTH)
    {
-      fetch_bundle.insts(i) := io.imem.resp.bits.data(i*32+32-1, i*32)
+      fetch_bundle.insts(i) := io.imem.resp.bits.data(i)
    }
-   fetch_bundle.btb_pred_taken := io.imem.resp.bits.taken 
-   fetch_bundle.btb_pred_taken_idx:= io.imem.resp.bits.taken_idx 
+   fetch_bundle.btb_resp_valid  := io.imem.btb_resp.valid
+   fetch_bundle.btb_resp := io.imem.btb_resp.bits
+   fetch_bundle.btb_pred_taken := io.imem.btb_resp.bits.taken && io.imem.btb_resp.valid
+   fetch_bundle.btb_pred_taken_idx:= io.imem.btb_resp.bits.bridx
 
-   fetch_bundle.xcpt_ma := io.imem.resp.bits.xcpt_ma 
-   fetch_bundle.xcpt_if := io.imem.resp.bits.xcpt_if // inst fault - pagefault, could be on wrong branch though
+   fetch_bundle.xcpt_ma := io.imem.resp.bits.xcpt_ma
+   fetch_bundle.xcpt_if := io.imem.resp.bits.xcpt_if
 
    // check for unallowed exceptions
    assert(!Reg(init=Bool(false),next=(com_exception && (com_exc_cause === UInt(rocket.Causes.misaligned_fetch) ||
                               com_exc_cause === UInt(rocket.Causes.fault_fetch)))), "Exception thrown by IMEM, not yet supported.")
 
-   if (params(EnableBTB))
-   {
-      // teach the BTB at execute
-      // probably don't tell it about JR for returns... needs RAS, but needs to use ROB, etc.
-      // tell BTB it mispredicted (update the BTB)
-      // also, handle case where BHT overrules BTB, must clear entry to prevent infinite loop?
-      io.imem.req.bits.mispredict := br_unit.take_pc
-      // tell BTB if branch was taken, otherwise, BTB will clear entry itself on mispredict and !ntaken (if exe_jalr || !btb_hit)
-      io.imem.req.bits.taken      := (br_unit.btb_mispredict && br_unit.taken)
-   }
-   else
-   {
-      io.imem.req.bits.mispredict := Bool(false) // never update BTB...
-      io.imem.req.bits.taken      := Bool(false) // tell it nothing is ever taken
-   }
 
-   io.imem.req.bits.currentpc := br_unit.pc  // updating BTB with "current pc" in exe
-   io.imem.req.bits.btb_correct_target := Mux(br_unit.pc_sel === PC_JALR, br_unit.jump_reg_target,
-                                                                          br_unit.brjmp_target)
+   // TODO turn this into an I/O so we can bundle this up
+//   io.imem.btb_update <> br_unit.btb_update
+   // TODO flush_take_pc should probably be given to the branch unit, instead of resetting it here
+   io.imem.btb_update.valid  := br_unit.btb_update_valid && !flush_take_pc
+
+   io.imem.btb_update.bits.pc := br_unit.btb_update.pc
+   io.imem.btb_update.bits.br_pc := br_unit.btb_update.br_pc
+   io.imem.btb_update.bits.target := br_unit.btb_update.target
+   io.imem.btb_update.bits.returnAddr := br_unit.btb_update.returnAddr
+
+   io.imem.btb_update.bits.prediction.valid := br_unit.btb_update.prediction.valid
+   io.imem.btb_update.bits.prediction.bits := br_unit.btb_update.prediction.bits
+   io.imem.btb_update.bits.taken := br_unit.btb_update.taken
+   io.imem.btb_update.bits.incorrectTarget := br_unit.btb_update.incorrectTarget
+   io.imem.btb_update.bits.isJump := br_unit.btb_update.isJump
+   io.imem.btb_update.bits.isCall := br_unit.btb_update.isCall
+   io.imem.btb_update.bits.isReturn := br_unit.btb_update.isReturn
+
+
+
+
 
 
 
@@ -477,7 +480,7 @@ class DatPath() extends Module with BOOMCoreParameters
                                      // walker updated base register)
 
    //io.imem.ptw := ...  // hooked straight up to tlb.io.ptw TODO
-//   io.imem.ptw.status := pcr_status // hooked straight up to tlb.io.ptw TODO
+   //io.imem.ptw.status := pcr_status // hooked straight up to tlb.io.ptw TODO
 
    //-------------------------------------------------------------
    //-------------------------------------------------------------
@@ -488,44 +491,26 @@ class DatPath() extends Module with BOOMCoreParameters
    // These stages are effectively in parallel with instruction fetch and
    // decode.  BHT look-up is in parallel with I$ access, and Branch Decode
    // occurs before fetch buffer insertion.
-   
+
    //-------------------------------------------------------------
    // Branch Prediction (BP1 Stage)
-   
-   val bpred_design      = params(BrPredDesign)
-   val num_bht_entries   = params(NumBhtEntries)
-   val bht_counter_sz    = params(BhtCounterSz)
-   val num_lhist_entries = params(NumLHistEntries)
 
-   val br_predictor = if (bpred_design == "BP_R10K")       { Module(new SimpleBrPredictor(num_bht_entries, bht_counter_sz, pc_lsb = lsb)) } 
-                     else if (bpred_design == "BP_GSHARE") { Module(new GShareBrPredictor(num_bht_entries, bht_counter_sz, pc_lsb = lsb)) }
-                     else if (bpred_design == "BP_GLOBAL") { Module(new GlobalOnlyBrPredictor(num_bht_entries, bht_counter_sz, pc_lsb = lsb)) }
-                     else if (bpred_design == "BP_21264")  { Module(new TournamentBrPredictor(num_bht_entries, bht_counter_sz, num_lhist_entries, pc_lsb = lsb)) }
-                     else                                  { Module(new SimpleBrPredictor(num_bht_entries, bht_counter_sz, pc_lsb = lsb)) } 
-      
-   // align on fetch boundary
-   br_predictor.io.curr_pc := io.imem.resp.bits.bht_pc
- 
-   // TODO PERF I'm only letting one branch update the machine at a time...
-   val b_update_wens = Range(0,COMMIT_WIDTH).map(w => com_valids(w) && com_uops(w).is_br_or_jmp && !com_uops(w).is_jump)
-   val b_idx = PriorityEncoder(b_update_wens)
-   br_predictor.io.update_wen   := b_update_wens.reduce(_|_)
-   br_predictor.io.update_pc    := com_uops(b_idx).pc
-   br_predictor.io.update_taken := com_uops(b_idx).br_was_taken 
-   br_predictor.io.update_pred  := com_uops(b_idx).br_prediction 
-   
-      
-   bp2_reg_predictor_out := br_predictor.io.prediction_info
+   // TODO the "backing" branch predictor is being removed for now
+   // it has been replaced by the GShared predictor in the rocket FrontEnd
+   // adding this predictor back will require a more careful design that
+   // properly accounts for super-scalar predictions and updates and works
+   // properly with the frontend's predictors.
 
+   bp2_reg_predictor_out.taken := Bool(false)
 
    //-------------------------------------------------------------
    // Branch Decode (BP2 Stage)
-   // 
-   // Only predict one branch per fetch packet. 
+   //
+   // Only predict one branch per fetch packet.
    // But in parallel look for JAL and compute targets. Then
    // look at branch prediction and arbitrate PC selection between
-   // the predicted branch and the JALs. Finally, compare BP2 
-   // prediction against the BTB prediction and decide if the 
+   // the predicted branch and the JALs. Finally, compare BP2
+   // prediction against the BTB prediction and decide if the
    // BP2 prediction overrides.
    //
    // Attach prediction to first branch in the packet.
@@ -535,28 +520,19 @@ class DatPath() extends Module with BOOMCoreParameters
 
    bp2_val    := io.imem.resp.valid
    val bp2_pc = aligned_fetch_pc
- 
-   val bpd_br_val  = Bool()
-   val bpd_br_idx  = UInt() // which word in the packet is the first branch?
+
    val bpd_jal_val = Bool()
    val bpd_jal_idx = UInt() // and which is the first jal?
-                
-   bpd_br_val  := Bool(false)
+
    bpd_jal_val := Bool(false)
-   bpd_br_idx  := UInt(0)
    bpd_jal_idx := UInt(0)
 
    // look for branches and JALs in the fetch packet
    for (i <- FETCH_WIDTH-1 to 0 by -1)
    {
       val bpd_decoder = Module(new BranchDecode)
-      bpd_decoder.io.inst := fetch_bundle.insts(i) 
-       
-      when (bpd_decoder.io.is_br && io.imem.resp.bits.mask(i)) 
-      {
-         bpd_br_val := Bool(true)
-         bpd_br_idx := UInt(i)
-      }
+      bpd_decoder.io.inst := fetch_bundle.insts(i)
+
       when (bpd_decoder.io.is_jal && io.imem.resp.bits.mask(i))
       {
          bpd_jal_val := Bool(true)
@@ -565,80 +541,32 @@ class DatPath() extends Module with BOOMCoreParameters
    }
 
    // pull out the instruction(s) we are predicting on, to compute the branch and jal targets
-   val binst  = fetch_bundle.insts(bpd_br_idx)
    val jinst  = fetch_bundle.insts(bpd_jal_idx)
-   val bp2_br_imm32  = Cat(Fill(binst(31),12), Fill(binst(31),8), binst(7), binst(30,25), binst(11,8), Bits(0,1))
    val bp2_jal_imm32 = Cat(Fill(jinst(31),12), jinst(19,12), jinst(20), jinst(30,25), jinst(24,21), Bits(0,1))
-   val bp2_brpred_target  = UInt(width=xprLen)
    val bp2_jalpred_target = UInt(width=xprLen)
    require (FETCH_WIDTH <= 2)
-   bp2_brpred_target  := bp2_pc + Mux(bpd_br_idx === UInt(1), UInt(4), UInt(0)) + Sext(bp2_br_imm32, xprLen)
    bp2_jalpred_target := bp2_pc + Mux(bpd_jal_idx === UInt(1), UInt(4), UInt(0)) + Sext(bp2_jal_imm32, xprLen)
 
-
-   // access the Branch Predictor to get a prediction
-   bp2_prediction := bp2_reg_predictor_out
-   val bht_pred_taken = Bool()
-
-   if (params(UseBranchPredictor))
-   {
-      bht_pred_taken := NOT_TAKEN
-
-      when (bp2_val && bpd_br_val)
-      {
-         bht_pred_taken := bp2_reg_predictor_out.taken
-      }
-   }
-   else
-   {
-      bht_pred_taken := NOT_TAKEN
-   }
-
-
-   // who's prediction do we take? the branch or the JAL?
-   // if the jump is earlier, we take it and kill everything after. 
-   // if the branch is earlier and Taken, we take it and kill everything after.
-   // if the branch is earlier and NotTaken, we take the JAL and kill
-   //    everything after the JAL (and assume that all other branches are also
-   //    NotTaken).
-   val br_wins = Bool() // does the br or the jal redirect the pc?
-   br_wins := Bool(true)
-   when (bpd_jal_val && (bpd_jal_idx < bpd_br_idx))
-   {
-      br_wins := Bool(false)
-   }
-   .elsewhen (!bht_pred_taken)
-   {
-      br_wins := Bool(false)
-   }
- 
    // Does the branch predictor want to redirect the PC? This is before we've
-   // arbitrated with the BTB. 
+   // arbitrated with the BTB.
    val bp2_wants_to_take_pc = !(br_unit.brinfo.mispredict) &&
-                           bp2_val && 
-                           ((br_wins && bpd_br_val && bht_pred_taken) ||
-                           (!br_wins && bpd_jal_val))
+                           bp2_val &&
+                           bpd_jal_val
 
-   bp2_pred_target := Mux(br_wins, bp2_brpred_target, bp2_jalpred_target)
+   bp2_pred_target := bp2_jalpred_target
 
    // the instruction the branch predictor is predicting on
-   val bp2_pred_idx = Mux(br_wins, bpd_br_idx, bpd_jal_idx)
+   val bp2_pred_idx = bpd_jal_idx
 
-
-   // does the BHT get to change the pc? Or does the BTB's actions win?
-   // The BTB wins if it predicts UNLESS the bht redirects a jump that's earlier than the BTB's prediction.
-//   val bp2_bht_predicts_on_jal = bp2_val && bpd_jal_val && !br_wins 
-   val bp2_bht_overrides_btb = bp2_val && 
+   // does the BP2 stage get to change the pc? Or does the BTB's actions win?
+   // The BTB wins if it predicts UNLESS BP2 redirects a jump that's earlier than the BTB's prediction.
+   val bp2_bht_overrides_btb = bp2_val &&
                                bpd_jal_val &&
-                               !br_wins && 
-                               fetch_bundle.btb_pred_taken &&
+                               fetch_bundle.btb_resp_valid &&
                                (bp2_pred_idx < fetch_bundle.btb_pred_taken_idx)
 
-   bp2_take_pc := bp2_wants_to_take_pc && 
+   bp2_take_pc := bp2_wants_to_take_pc &&
                   (!fetch_bundle.btb_pred_taken || bp2_bht_overrides_btb)
-
-
-
 
 
 
@@ -650,51 +578,22 @@ class DatPath() extends Module with BOOMCoreParameters
                                bpd_jal_val &&
                                (bpd_jal_idx === fetch_bundle.btb_pred_taken_idx)
    // check that the BTB predicted the correct jal target
-   assert (!Reg(init=Bool(false), next=(bp2_val && btb_predicted_our_jal && bp2_jalpred_target != io.imem.resp.bits.debug_taken_pc)), "BTB predicted incorrect JAL target")
-   
+//   assert (!Reg(init=Bool(false), next=(bp2_val && btb_predicted_our_jal && bp2_jalpred_target != io.imem.resp.bits.debug_taken_pc)), "BTB predicted incorrect JAL target")
+
    // TODO generalize the assert that checks for the BTB pred_idx
    require (FETCH_WIDTH <= 2)
    val btb_predicted_inst = fetch_bundle.insts(fetch_bundle.btb_pred_taken_idx)
    val btb_predicted_inst_pc =  bp2_pc + Mux(fetch_bundle.btb_pred_taken_idx === UInt(1), UInt(4), UInt(0))  + Sext(DebugGetBJImm(btb_predicted_inst), xprLen)
-   assert (!(io.imem.resp.valid && 
-             io.imem.resp.bits.taken &&
-             !DebugIsJALR(btb_predicted_inst) &&
-             btb_predicted_inst_pc != io.imem.resp.bits.debug_taken_pc),
-           "BTB predicted incorrect target.")
-
-   // TODO add RAS, in which JAL xd==x1 is a CALL (push)
-   //                       JALR sd==x1 is a CALL (push), JALR rd=x0,rs1=x1 is a POP, otherwise JALR shouldn't touch the RAS
-
-   // don't override the BTB on branches, unless the BHT predicted on_jal and its earlier than the BTB's prediction.
-   bp2_prediction.taken := (bht_pred_taken && !io.imem.resp.bits.taken && br_wins)
-
-
-   // pass info into FetchBuffer
-   for (i <- 0 until FETCH_WIDTH)
-   {
-      // push in a "null" prediction for ignored branches (and non-branches)
-      fetch_bundle.br_predictions(i).taken := Bool(false)
-      fetch_bundle.br_predictions(i).agreement := Bool(false)
-      fetch_bundle.br_predictions(i).local_taken := Bool(false)
-   }
-   
-   fetch_bundle.br_predictions(bpd_br_idx) := bp2_prediction
-
-   // TODO need to generalize this, and also make this more resilient to different timings.
-   // perhaps the icache response should mask out the BTB-killed instructions
-   val bpd_kill_mask = Mux((bpd_br_val && (bpd_br_idx === UInt(0)) && bp2_prediction.taken) || // BHT is killing second inst
-                           (fetch_bundle.btb_pred_taken && fetch_bundle.btb_pred_taken_idx === UInt(0)) // BTB is killing second inst
-                              , Bits(2,2), Bits(0,2))
+   //assert (!(io.imem.resp.valid &&
+   //          io.imem.resp.bits.taken &&
+   //          !DebugIsJALR(btb_predicted_inst) &&
+   //          btb_predicted_inst_pc != io.imem.resp.bits.debug_taken_pc),
+   //        "BTB predicted incorrect target.")
 
    val jal_kill_mask = Bits(width = FETCH_WIDTH)
    jal_kill_mask := Fill(bpd_jal_val, FETCH_WIDTH) & (SInt(-1, FETCH_WIDTH) << UInt(1) << bpd_jal_idx)
 
-   require (FETCH_WIDTH <= 2)
-//   val bpd_kill_mask = Mux(bpd_br_val && bpd2_prediction.taken,
-//                          (~Bits(1, FETCH_WIDTH)) << (bpd_br_idx),
-//                          Bits(0, FETCH_WIDTH))
-        
-   fetch_bundle.mask := (io.imem.resp.bits.mask & ~bpd_kill_mask & ~jal_kill_mask) 
+   fetch_bundle.mask := (io.imem.resp.bits.mask & ~jal_kill_mask)
 
 
    //-------------------------------------------------------------
@@ -717,13 +616,13 @@ class DatPath() extends Module with BOOMCoreParameters
 
    val dec_serializer = Module(new FetchSerializerNtoM)
    dec_serializer.io.enq <> FetchBuffer.io.deq
-   
+
    dec_serializer.io.kill := fetchbuffer_kill
    dec_serializer.io.deq.ready := dec_rdy
 
-   val fetched_inst_valid = dec_serializer.io.deq.valid 
+   val fetched_inst_valid = dec_serializer.io.deq.valid
    val dec_fbundle        = dec_serializer.io.deq.bits
-                
+
    //-------------------------------------------------------------
    // Decoders
 
@@ -731,7 +630,7 @@ class DatPath() extends Module with BOOMCoreParameters
    var dec_stall_next_inst = Bool(false)
 
    // stall fetch/dcode because we ran out of branch tags
-   val branch_mask_full = Vec.fill(DECODE_WIDTH) { Bool() } 
+   val branch_mask_full = Vec.fill(DECODE_WIDTH) { Bool() }
 
    for (w <- 0 until DECODE_WIDTH)
    {
@@ -750,14 +649,14 @@ class DatPath() extends Module with BOOMCoreParameters
 
       // stall this instruction?
       // TODO tailor this to only care if a given instruction uses a resource?
-      val stall_me = (  !(ren_insts_can_proceed(w)) 
+      val stall_me = (  !(ren_insts_can_proceed(w))
                      || (dec_valids(w) && dec_uops(w).is_unique && (!rob_empty || prev_insts_in_bundle_valid))
-                     || !rob_rdy 
-                     || laq_full 
-                     || stq_full 
-                     || branch_mask_full(w) 
+                     || !rob_rdy
+                     || laq_full
+                     || stq_full
+                     || branch_mask_full(w)
                      || br_unit.brinfo.mispredict
-                     || flush_pipeline 
+                     || flush_pipeline
                      || dec_stall_next_inst
                      || (dec_valids(w) && dec_uops(w).is_fencei && !lsu_io.lsu_fencei_rdy)
                      )
@@ -765,18 +664,21 @@ class DatPath() extends Module with BOOMCoreParameters
       // stall the next instruction following me in the decode bundle?
       dec_stall_next_inst  = stall_me ||
                              (dec_valids(w) && dec_uops(w).is_unique)
-                             
+
 
       // is this instruction valid and not stalled? I will progress down the pipeline if true.
       dec_mask(w) := dec_valids(w) &&
                      !stall_me
 
+      // TODO refactor this... it's a source of bugs if new fields are added to fbundle
+      // probably make fbundle return a uop instead of an inst with extra stuff on the side.
       dec_uops(w)                := decode_unit.io.deq.uop
       dec_uops(w).pc             := dec_fbundle(w).pc
-      dec_uops(w).br_prediction  := dec_fbundle(w).br_prediction
       dec_uops(w).btb_pred_taken := dec_fbundle(w).btb_pred_taken
+      dec_uops(w).btb_hit        := dec_fbundle(w).btb_hit
+      dec_uops(w).btb_resp       := dec_fbundle(w).btb_resp
    }
- 
+
    // all decoders are empty and ready for new instructions
    dec_rdy := !(dec_stall_next_inst)
 
@@ -800,7 +702,7 @@ class DatPath() extends Module with BOOMCoreParameters
    for (w <- 0 until DECODE_WIDTH)
    {
       dec_brmask_logic.io.is_branch(w) := (dec_valids(w) && dec_uops(w).is_br_or_jmp && !dec_uops(w).is_jal)
-      dec_brmask_logic.io.will_fire(w) := dis_mask(w) 
+      dec_brmask_logic.io.will_fire(w) := dis_mask(w)
 
       dec_uops(w).br_tag  := dec_brmask_logic.io.br_tag(w)
       dec_uops(w).br_mask := dec_brmask_logic.io.br_mask(w)
@@ -810,7 +712,7 @@ class DatPath() extends Module with BOOMCoreParameters
 
    //-------------------------------------------------------------
    // LD/ST Unit Allocation Logic
-   
+
    // TODO this is dupliciated logic with the the LSU... do we need ldq_idx/stq eisewhere?
    val new_ldq_idx = UInt()
    val new_stq_idx = UInt()
@@ -828,8 +730,8 @@ class DatPath() extends Module with BOOMCoreParameters
 //      new_lidx = Mux(dec_mask(w) && dec_uops(w).is_load, new_lidx + UInt(1), new_lidx)
 //      new_sidx = Mux(dec_mask(w) && dec_uops(w).is_store, new_sidx + UInt(1), new_sidx)
    }
-   
-   
+
+
    //-------------------------------------------------------------
    //-------------------------------------------------------------
    // **** Register Rename Stage ****
@@ -839,15 +741,15 @@ class DatPath() extends Module with BOOMCoreParameters
    val rename_stage = Module(new RenameStage(DECODE_WIDTH, num_wakeup_ports))
 
    rename_stage.io.dis_inst_can_proceed := dis_insts_can_proceed
-   
+
    rename_stage.io.kill     := br_unit.brinfo.mispredict || flush_pipeline
    rename_stage.io.brinfo   := br_unit.brinfo
-   
+
    rename_stage.io.flush_pipeline := flush_pipeline // TODO temp refactor
 
    for (w <- 0 until DECODE_WIDTH)
    {
-      rename_stage.io.dec_mask(w) := dec_mask(w) 
+      rename_stage.io.dec_mask(w) := dec_mask(w)
    }
 
    rename_stage.io.dec_uops := dec_uops
@@ -859,7 +761,7 @@ class DatPath() extends Module with BOOMCoreParameters
       // Slow Wakeup (uses write-port to register file)
       for (j <- 0 until exe_units(i).num_rf_write_ports)
       {
-         rename_stage.io.wb_valids(wu_idx) := exe_units(i).io.resp(j).valid && 
+         rename_stage.io.wb_valids(wu_idx) := exe_units(i).io.resp(j).valid &&
                                               exe_units(i).io.resp(j).bits.uop.ctrl.rf_wen &&
                                               exe_units(i).io.resp(j).bits.uop.pdst_rtype === RT_FIX
          rename_stage.io.wb_pdsts(wu_idx)  := exe_units(i).io.resp(j).bits.uop.pdst
@@ -876,7 +778,7 @@ class DatPath() extends Module with BOOMCoreParameters
    }
    require (wu_idx == num_wakeup_ports)
 
-   
+
    rename_stage.io.com_valids := com_valids
    rename_stage.io.com_uops := com_uops
    rename_stage.io.com_rbk_valids := com_rbk_valids
@@ -886,13 +788,13 @@ class DatPath() extends Module with BOOMCoreParameters
    // **** Dispatch Stage ****
    //-------------------------------------------------------------
    //-------------------------------------------------------------
-   
+
    // TODO get rid of, let the ROB handle this...?
    val dis_curr_rob_row_idx = UInt(width = ROB_ADDR_SZ)
 
    for (w <- 0 until DECODE_WIDTH)
    {
-      dis_mask(w)         := rename_stage.io.ren_mask(w) 
+      dis_mask(w)         := rename_stage.io.ren_mask(w)
       dis_uops(w)         := rename_stage.io.ren_uops(w)
       dis_uops(w).br_mask := GetNewBrMask(br_unit.brinfo, rename_stage.io.ren_uops(w))
 
@@ -926,7 +828,7 @@ class DatPath() extends Module with BOOMCoreParameters
 
       issue_unit.io.fu_types(w) := exe_units(w).io.fu_types
    }
-   
+
    dis_insts_can_proceed := issue_unit.io.dis_inst_can_proceed
 
 
@@ -940,7 +842,7 @@ class DatPath() extends Module with BOOMCoreParameters
       // Slow Wakeup (uses write-port to register file)
       for (j <- 0 until exe_units(i).num_rf_write_ports)
       {
-         issue_unit.io.wakeup_vals(wu_idx)  := exe_units(i).io.resp(j).valid && 
+         issue_unit.io.wakeup_vals(wu_idx)  := exe_units(i).io.resp(j).valid &&
                                                exe_units(i).io.resp(j).bits.uop.ctrl.rf_wen &&
                                                exe_units(i).io.resp(j).bits.uop.pdst_rtype === RT_FIX
          issue_unit.io.wakeup_pdsts(wu_idx) := exe_units(i).io.resp(j).bits.uop.pdst
@@ -958,13 +860,13 @@ class DatPath() extends Module with BOOMCoreParameters
    }
    require (wu_idx == num_wakeup_ports)
 
-   
+
    //-------------------------------------------------------------
    //-------------------------------------------------------------
    // **** Register Read Stage ****
    //-------------------------------------------------------------
    //-------------------------------------------------------------
-   
+
    // Register Read <- Issue (rrd <- iss)
 
 
@@ -992,12 +894,12 @@ class DatPath() extends Module with BOOMCoreParameters
    // TODO rename k0, k1, as they could use it
    // flush pipeline on all writes (because they could goof things up like writing base reg)
    // scratch everything, let's just have the ROB execute this uop
-   
+
    require (exe_units(0).uses_pcr_wport)
    // TODO rename from pcr to csr?
    val pcr = Module(new rocket.CSRFile())
    pcr.io.host <> io.host
-   pcr.io.rw.addr  := ImmGen(exe_units(0).io.resp(0).bits.uop.imm_packed, IS_I) 
+   pcr.io.rw.addr  := ImmGen(exe_units(0).io.resp(0).bits.uop.imm_packed, IS_I)
    val pcr_read_out = pcr.io.rw.rdata
 
    val pcr_rw_cmd = exe_units(0).io.resp(0).bits.uop.ctrl.pcr_fcn
@@ -1011,25 +913,25 @@ class DatPath() extends Module with BOOMCoreParameters
    // Extra I/O
    pcr_status       := pcr.io.status
    pcr.io.pc        := flush_pc
-   pcr.io.exception := com_exception                        
+   pcr.io.exception := com_exception
    pcr.io.retire    := PopCount(com_valids.toBits)
    pcr.io.cause     := com_exc_cause
-   pcr.io.sret      := com_sret 
+   pcr.io.sret      := com_sret
    pcr_exc_target   := pcr.io.evec
    pcr.io.badvaddr_wen := Bool(false) // TODO VM virtual memory
 
    // --------------------------------------
-   // Register File 
-   
+   // Register File
+
    val regfile = Module(new RegisterFile(PHYS_REG_COUNT, num_rf_read_ports, num_rf_write_ports, ENABLE_REGFILE_BYPASSING))
 
-  
+
    // --------------------------------------
-   // Read Ports 
+   // Read Ports
 
    regfile.io.read_ports <> register_read.io.rf_read_ports
 
-   
+
    //-------------------------------------------------------------
    //-------------------------------------------------------------
    // **** Execute Stage ****
@@ -1057,8 +959,8 @@ class DatPath() extends Module with BOOMCoreParameters
       }
    }
    require (idx == num_total_bypass_ports)
- 
-   
+
+
    var br_cnt = 0
    var brunit_idx = 0
    for (w <- 0 until exe_units.length)
@@ -1072,27 +974,27 @@ class DatPath() extends Module with BOOMCoreParameters
       }
    }
    require (br_cnt == 1)
-    
+
 
    //-------------------------------------------------------------
    //-------------------------------------------------------------
    // **** Memory Stage ****
    //-------------------------------------------------------------
    //-------------------------------------------------------------
-   
+
    val com_st_mask = Vec.fill(DECODE_WIDTH) {Bool()}
    val com_ld_mask = Vec.fill(DECODE_WIDTH) {Bool()}
 
-      
-   // enqueue basic store info in Decode 
+
+   // enqueue basic store info in Decode
    lsu_io.dec_uops := dec_uops
 
 
    for (w <- 0 until DECODE_WIDTH)
    {
       lsu_io.dec_st_vals(w) := dec_mask(w) && rename_stage.io.inst_can_proceed(w) && !com_exception && dec_uops(w).is_store
-      lsu_io.dec_ld_vals(w) := dec_mask(w) && rename_stage.io.inst_can_proceed(w) && !com_exception && dec_uops(w).is_load 
-      
+      lsu_io.dec_ld_vals(w) := dec_mask(w) && rename_stage.io.inst_can_proceed(w) && !com_exception && dec_uops(w).is_load
+
       lsu_io.dec_uops(w).rob_idx := dis_uops(w).rob_idx // for debug purposes (comit logging)
    }
 
@@ -1100,27 +1002,27 @@ class DatPath() extends Module with BOOMCoreParameters
    lsu_io.commit_load_mask  := com_ld_mask
 
    lsu_io.exception         := flush_pipeline //com_exception, com.exception comes too early, will fight against a branch that resolves same cycle as an exception
-   lsu_io.lsu_misspec       := lsu_misspec      
+   lsu_io.lsu_misspec       := lsu_misspec
 
    // Handle Branch Mispeculations
    lsu_io.brinfo      := br_unit.brinfo
    io.dmem.brinfo     := br_unit.brinfo
-            
-            
+
+
    laq_full    := lsu_io.laq_full
    stq_full    := lsu_io.stq_full
    new_ldq_idx := lsu_io.new_ldq_idx
    new_stq_idx := lsu_io.new_stq_idx
-                             
+
    io.dmem.flush_pipe := flush_pipeline
 
-                   
+
    //-------------------------------------------------------------
    //-------------------------------------------------------------
    // **** Writeback Stage ****
    //-------------------------------------------------------------
    //-------------------------------------------------------------
-        
+
    var cnt = 0
    for (i <- 0 until exe_units.length)
    {
@@ -1146,14 +1048,14 @@ class DatPath() extends Module with BOOMCoreParameters
          cnt += 1
       }
    }
- 
-   
+
+
    //-------------------------------------------------------------
    //-------------------------------------------------------------
    // **** Commit Stage ****
    //-------------------------------------------------------------
    //-------------------------------------------------------------
-   
+
    val rob  = Module(new Rob(DECODE_WIDTH, NUM_ROB_ENTRIES, num_slow_wakeup_ports))
 
       // Dispatch
@@ -1174,9 +1076,9 @@ class DatPath() extends Module with BOOMCoreParameters
          {
             rob.io.wb_valids(cnt) := exe_units(w).io.resp(j).valid && !(exe_units(w).io.resp(j).bits.uop.is_store)
             rob.io.wb_rob_idxs(cnt) := exe_units(w).io.resp(j).bits.uop.rob_idx
-            
+
             // for commit logging...
-            rob.io.debug_wb_valids(cnt) := exe_units(w).io.resp(j).valid && 
+            rob.io.debug_wb_valids(cnt) := exe_units(w).io.resp(j).valid &&
                                            exe_units(w).io.resp(j).bits.uop.ctrl.rf_wen &&
                                            exe_units(w).io.resp(j).bits.uop.pdst_rtype === RT_FIX
              if (exe_units(w).uses_pcr_wport && (j == 0))
@@ -1205,21 +1107,30 @@ class DatPath() extends Module with BOOMCoreParameters
       }
 
       // branch resolution
-      rob.io.br_unit <> br_unit
+//      rob.io.br_unit <> br_unit
+
+      rob.io.br_unit.take_pc := br_unit.take_pc
+      rob.io.br_unit.target := br_unit.target
+      rob.io.br_unit.taken := br_unit.taken
+//      rob.io.br_unit.pc := br_unit.pc
+      rob.io.br_unit.brinfo := br_unit.brinfo
+      rob.io.br_unit.btb_update_valid := br_unit.btb_update_valid
+      rob.io.br_unit.btb_update := br_unit.btb_update
+      rob.io.br_unit.debug_btb_pred := br_unit.debug_btb_pred
 
       // branch unit fetches PC from ROB cycle earlier than needed (for critical path reasons)
-       
+
       // branch unit requests PCs from ROB during register read
       rob.io.get_pc.rob_idx := iss_uops(brunit_idx).rob_idx
       exe_units(brunit_idx).io.get_rob_pc.curr_pc  := Reg(next=rob.io.get_pc.curr_pc)
       exe_units(brunit_idx).io.get_rob_pc.next_val := Reg(next=rob.io.get_pc.next_val)
       exe_units(brunit_idx).io.get_rob_pc.next_pc  := Reg(next=rob.io.get_pc.next_pc)
-      
+
       // LSU <> ROB
-      lsu_misspec := rob.io.lsu_misspec   
+      lsu_misspec := rob.io.lsu_misspec
       rob.io.lsu_clr_bsy_valid   := lsu_io.lsu_clr_bsy_valid
       rob.io.lsu_clr_bsy_rob_idx := lsu_io.lsu_clr_bsy_rob_idx
-      
+
       // Commit (ROB outputs)
       com_valids  := rob.io.com_valids
       com_uops    := rob.io.com_uops
@@ -1256,7 +1167,7 @@ class DatPath() extends Module with BOOMCoreParameters
    {
       exe_units(w).io.req.bits.kill := flush_pipeline
    }
- 
+
    //-------------------------------------------------------------
    //-------------------------------------------------------------
    // **** Outputs to the External World ****
@@ -1268,10 +1179,10 @@ class DatPath() extends Module with BOOMCoreParameters
 //   debug(saw_rdcycle)
 //   saw_rdcycle := Range(0,COMMIT_WIDTH).map(w => com_valids(w) && com_uops(w).uopc === uopRDC).reduce(_|_)
 
-   for (w <- 0 until DECODE_WIDTH) 
-   { 
-      debug(com_uops(w).inst) 
-      debug(com_valids(w)) 
+   for (w <- 0 until DECODE_WIDTH)
+   {
+      debug(com_uops(w).inst)
+      debug(com_valids(w))
    }
    debug(br_unit.brinfo.valid)
    debug(br_unit.brinfo.mispredict)
@@ -1284,13 +1195,13 @@ class DatPath() extends Module with BOOMCoreParameters
 //      idle_cycles := UInt(0) ^ (rob.io.com_valids.toBits ^ rob.io.com_valids.toBits)
 //      idle_cycles := UInt(0) ^ (rob.io.com_valids(0) ^ rob.io.com_valids(0)) ^ (rob.io.com_valids(1) ^ rob.io.com_valids(1)) // weird chisel bug we're trying to solve
 //      idle_cycles := UInt(0) ^ rob.io.com_valids.map(_^_).foldLeft(_^_)
-      idle_cycles := UInt(0) 
+      idle_cycles := UInt(0)
    }
    .otherwise
    {
       idle_cycles := idle_cycles + UInt(1)
    }
- 
+
    when (idle_cycles === UInt(1 << 12))
    {
       throw_idle_error := Bool(true)
@@ -1323,7 +1234,7 @@ class DatPath() extends Module with BOOMCoreParameters
 
 
 
-   // Time Stamp Counter & Retired Instruction Counter 
+   // Time Stamp Counter & Retired Instruction Counter
    // (only used for printf and vcd dumps - the actual counters are in the CSRFile)
    val tsc_reg = Reg(init = UInt(0, xprLen))
    val irt_reg = Reg(init = UInt(0, xprLen))
@@ -1339,6 +1250,7 @@ class DatPath() extends Module with BOOMCoreParameters
    // these take up a significant amount of area, so don't enable them lightly
    if (params(EnableUarchCounters))
    {
+      println("\n   UArch Counters Enabled\n")
       pcr.io.uarch_counters(0)  := br_unit.brinfo.valid
       pcr.io.uarch_counters(1)  := br_unit.brinfo.mispredict
    //   pcr.io.uarch_counters(2)  := com_exception
@@ -1359,6 +1271,7 @@ class DatPath() extends Module with BOOMCoreParameters
    }
    else
    {
+      println("\n   UArch Counters Disabled\n")
       pcr.io.uarch_counters.foreach(_ := Bool(false))
    }
 
@@ -1367,11 +1280,11 @@ class DatPath() extends Module with BOOMCoreParameters
    // **** Handle Cycle-by-Cycle Printouts ****
    //-------------------------------------------------------------
    //-------------------------------------------------------------
-   
+
    if (DEBUG_PRINTF)
    {
       println("\n Chisel Printout Enabled\n")
-          
+
       // color codes for output files
       // if you use VIM to view, you'll need the AnsiEsc plugin.
       // 1 is bold, 2 is background, 4 is k
@@ -1384,7 +1297,7 @@ class DatPath() extends Module with BOOMCoreParameters
       val cyn   = if (DEBUG_ENABLE_COLOR) "\033[1;36m" else " "
       val wht   = if (DEBUG_ENABLE_COLOR) "\033[1;37m" else " "
       val end   = if (DEBUG_ENABLE_COLOR) "\033[0m"    else ""
-       
+
       val b_blk = if (DEBUG_ENABLE_COLOR) "\033[2;30m" else " "
       val b_red = if (DEBUG_ENABLE_COLOR) "\033[2;31m" else " "
       val b_grn = if (DEBUG_ENABLE_COLOR) "\033[2;32m" else " "
@@ -1393,7 +1306,7 @@ class DatPath() extends Module with BOOMCoreParameters
       val b_mgt = if (DEBUG_ENABLE_COLOR) "\033[2;35m" else " "
       val b_cyn = if (DEBUG_ENABLE_COLOR) "\033[2;36m" else " "
       val b_wht = if (DEBUG_ENABLE_COLOR) "\033[2;37m" else " "
-       
+
       val u_blk = if (DEBUG_ENABLE_COLOR) "\033[4;30m" else " "
       val u_red = if (DEBUG_ENABLE_COLOR) "\033[4;31m" else " "
       val u_grn = if (DEBUG_ENABLE_COLOR) "\033[4;32m" else " "
@@ -1402,8 +1315,8 @@ class DatPath() extends Module with BOOMCoreParameters
       val u_mgt = if (DEBUG_ENABLE_COLOR) "\033[4;35m" else " "
       val u_cyn = if (DEBUG_ENABLE_COLOR) "\033[4;36m" else " "
       val u_wht = if (DEBUG_ENABLE_COLOR) "\033[4;37m" else " "
-      
-      var white_space = 42  - NUM_LSU_ENTRIES- INTEGER_ISSUE_SLOT_COUNT - (NUM_ROB_ENTRIES/COMMIT_WIDTH)
+
+      var white_space = 41  - NUM_LSU_ENTRIES- INTEGER_ISSUE_SLOT_COUNT - (NUM_ROB_ENTRIES/COMMIT_WIDTH)
 
       def InstsStr(insts: Bits, width: Int) =
       {
@@ -1412,47 +1325,45 @@ class DatPath() extends Module with BOOMCoreParameters
             string = sprintf("%s(DASM(%x))", string, insts(((w+1)*32)-1,w*32))
          string
       }
-          
+
       // Front-end
-      printf("--- Cyc=%d , ----------------- Ret: %d ---------------------------------- User Retired: %d\n  BrPred1:        (IF1_PC= 0x%x - Predict:%s) ------ PC: [%s%s%s%s-%s for br_id: %d, msk:%x, sel: %d: %s %s next: 0x%x]\nI$ Response: (%s) IF2_PC= 0x%x (mask:0x%x) \033[1;35m%s\033[0m  -------- BrPred2: (%s,%s,%s,%s,%s %d,%d) [pred_targ: 0x%x] killmsk: 0x%x --->> (0x%x)\n"  
+      printf("--- Cyc=%d , ----------------- Ret: %d ---------------------------------- User Retired: %d\n  BrPred1:        (IF1_PC= n/a - Predict:n/a) ------ PC: [%s%s%s-%s for br_id: %d, %s %s next: 0x%x]\nI$ Response: (%s) IF2_PC= 0x%x (mask:0x%x) \033[1;35m%s\033[0m  -------- BrPred2: (%s,%s,%s,%s,%s %d) [btbtarg: 0x%x pred_targ: 0x%x] jkillmsk: 0x%x --->> (0x%x)\n"
          , tsc_reg
          , irt_reg & UInt(0xffffff)
          , irt_ei_reg & UInt(0xffffff)
-         , io.imem.resp.bits.bht_pc(19,0)
       // Fetch Stage 1
-         , Mux(br_predictor.io.prediction_info.taken, Str("T"), Str("-"))
          , Mux(br_unit.brinfo.valid, Str("V"), Str("-"))
          , Mux(br_unit.taken, Str("T"), Str("-"))
          , Mux(br_unit.debug_btb_pred, Str("B"), Str("_"))
-         , Mux(br_unit.debug_bht_pred, Str("H"), Str("_"))
          , Mux(br_unit.brinfo.mispredict, Str(b_mgt + "MISPREDICT" + end), Str(grn + "          " + end))
          , br_unit.brinfo.tag
-         , UInt(0) //br_unit.brinfo.mask
-         , br_unit.pc_sel
          , Mux(take_pc, Str("TAKE_PC"), Str(" "))
          , Mux(com_sret, Str("SRET"),
            Mux(flush_take_pc, Str("FLSH"),
            Mux(br_unit.take_pc, Str("BRU "),
-           Mux(bp2_take_pc && !if_stalled, Str("BP2"), 
+           Mux(bp2_take_pc && !if_stalled, Str("BP2"),
                               Str(" ")))))
          , if_pc_next
       // Fetch Stage 2
          , Mux(io.imem.resp.valid && !fetchbuffer_kill, Str(mgt + "V" + end), Str(grn + "-" + end))
          , fetch_bundle.pc(19,0)
          , io.imem.resp.bits.mask
-         , InstsStr(io.imem.resp.bits.data, FETCH_WIDTH)
+         , InstsStr(io.imem.resp.bits.data.toBits, FETCH_WIDTH)
          , Mux(bp2_val, Str("V"), Str("-"))
-         , Mux(bpd_br_val, Str("B"), Str("-"))
-         , Mux(bp2_prediction.taken, Str("T"), Str("n"))
+         , Mux(io.imem.btb_resp.valid, Str("H"), Str("-"))
+//         , Mux(bpd_br_val, Str("B"), Str("-"))
+         , Mux(io.imem.btb_resp.bits.taken, Str("T"), Str("-"))
+//         , Mux(bp2_prediction.taken, Str("T"), Str("n"))
          , Mux(bpd_jal_val, Str("J"), Str("-"))
          , Mux(btb_predicted_our_jal, Str("C"), Str("-"))
-         , bpd_br_idx
+//         , bpd_br_idx
          , bpd_jal_idx
+         , io.imem.btb_resp.bits.target(19,0)
          , bp2_pred_target(19,0)
-         , bpd_kill_mask
+         , jal_kill_mask
          , fetch_bundle.mask
          )
-          
+
       // Back-end
       for (w <- 0 until DECODE_WIDTH)
       {
@@ -1465,7 +1376,7 @@ class DatPath() extends Module with BOOMCoreParameters
             printf("[0x%x]                        ", rename_stage.io.ren_uops(w).pc(19,0))
          }
       }
-             
+
       printf(") State: (%s:%s %s %s \033[1;31m%s\033[0m %s %s) BMsk:%x %s %s %s\n"
          , Mux(rob.io.debug.state === UInt(0), Str("RESET"),
            Mux(rob.io.debug.state === UInt(1), Str("NORMAL"),
@@ -1483,7 +1394,7 @@ class DatPath() extends Module with BOOMCoreParameters
          , Mux(pcr.io.status.ei, Str("EI"), Str("-"))
          , Mux(pcr.io.status.pei, Str("PEI"), Str("-"))
          )
-      
+
 
       for (w <- 0 until DECODE_WIDTH)
       {
@@ -1498,7 +1409,7 @@ class DatPath() extends Module with BOOMCoreParameters
 
       for (w <- 0 until DECODE_WIDTH)
       {
-         printf("  [ISA:%d,%d,%d] [Phs:%d(%s)%d[%s](%s)%d[%s](%s)] " 
+         printf("  [ISA:%d,%d,%d] [Phs:%d(%s)%d[%s](%s)%d[%s](%s)] "
             , dec_uops(w).ldst
             , dec_uops(w).lrs1
             , dec_uops(w).lrs2
@@ -1531,10 +1442,25 @@ class DatPath() extends Module with BOOMCoreParameters
          , PopCount(rename_stage.io.debug.isprlist)
          )
 
+      // branch unit
+      printf("                          Branch Unit: %s,%s,%d PC=0x%x, %d Targ=0x%x NPC=%d,0x%x %d%d%d RetAddr: 0x%x\n"
+         , Mux(br_unit.brinfo.valid,Str("V"), Str(" "))
+         , Mux(br_unit.brinfo.mispredict, Str("M"), Str(" "))
+         , br_unit.taken
+         , br_unit.btb_update.br_pc(19,0)
+         , br_unit.btb_update_valid
+         , br_unit.btb_update.target(19,0)
+         , exe_units(brunit_idx).io.get_rob_pc.next_val
+         , exe_units(brunit_idx).io.get_rob_pc.next_pc(19,0)
+         , br_unit.btb_update.isJump
+         , br_unit.btb_update.isCall
+         , br_unit.btb_update.isReturn
+         , br_unit.btb_update.returnAddr(19,0)
+      )
       // Issue Window
       for (i <- 0 until INTEGER_ISSUE_SLOT_COUNT)
       {
-         printf("  integer_issue_slot[%d](%s)(Req:%s):wen=%s P:(%s,%s) OP:(%d,%d) PDST:%d %s [%s[DASM(%x)]"+end+" 0x%x: %d] ri:%d bm=%d imm=0x%x\n" 
+         printf("  integer_issue_slot[%d](%s)(Req:%s):wen=%s P:(%s,%s) OP:(%d,%d) PDST:%d %s [%s[DASM(%x)]"+end+" 0x%x: %d] ri:%d bm=%d imm=0x%x\n"
             , UInt(i, log2Up(INTEGER_ISSUE_SLOT_COUNT))
             , Mux(issue_unit.io.debug.slot(i).valid, Str("V"), Str("-"))
             , Mux(issue_unit.io.debug.slot(i).request, Str(u_red + "R" + end), Str(grn + "-" + end))
@@ -1550,10 +1476,10 @@ class DatPath() extends Module with BOOMCoreParameters
             , Mux(issue_unit.io.debug.slot(i).valid, Str(b_wht), Str(grn))
             , issue_unit.io.debug.slot(i).uop.inst
             , issue_unit.io.debug.slot(i).uop.pc(31,0)
-            , issue_unit.io.debug.slot(i).uop.uopc  // getUopStr 
+            , issue_unit.io.debug.slot(i).uop.uopc  // getUopStr
             , issue_unit.io.debug.slot(i).uop.rob_idx
-            , issue_unit.io.debug.slot(i).uop.br_mask 
-            , issue_unit.io.debug.slot(i).uop.imm_packed 
+            , issue_unit.io.debug.slot(i).uop.br_mask
+            , issue_unit.io.debug.slot(i).uop.imm_packed
             )
       }
 
@@ -1570,7 +1496,7 @@ class DatPath() extends Module with BOOMCoreParameters
          val row = if (COMMIT_WIDTH == 1) r_idx else (r_idx >> log2Up(COMMIT_WIDTH))
          val r_head = rob.io.debug.rob_head
          val r_tail = rob.io.curr_rob_tail
-         
+
          printf("    rob[%d] %s ("
             , UInt(row, ROB_ADDR_SZ)
             , Mux(r_head === UInt(row) && r_tail === UInt(row), Str("HEAD,TL->"),
@@ -1600,7 +1526,7 @@ class DatPath() extends Module with BOOMCoreParameters
                , Mux(rob.io.debug.entry(r_idx+1).busy,  Str(b_ylw + "B" + end), Str(grn + " " + end))
                , rob.io.debug.entry(r_idx+0).uop.pc(31,0)
                , rob.io.debug.entry(r_idx+1).uop.pc(15,0)
-               , Mux(r_head === UInt(row) && row_is_val, Str(b_red), 
+               , Mux(r_head === UInt(row) && row_is_val, Str(b_red),
                  Mux(row_is_val                        , Str(b_cyn),
                                                          Str(grn)))
                , rob.io.debug.entry(r_idx+0).uop.inst
@@ -1619,18 +1545,18 @@ class DatPath() extends Module with BOOMCoreParameters
          var temp_idx = r_idx
          for (w <- 0 until COMMIT_WIDTH)
          {
-            printf("(d:%s p%d, bm:%x %s sdt:%d) " 
+            printf("(d:%s p%d, bm:%x %s sdt:%d) "
                , Mux(rob.io.debug.entry(temp_idx).uop.pdst_rtype === UInt(0), Str("X"),
                  Mux(rob.io.debug.entry(temp_idx).uop.pdst_rtype === UInt(1), Str("C"),
                  Mux(rob.io.debug.entry(temp_idx).uop.pdst_rtype === UInt(3), Str("-"), Str("?"))))
                , rob.io.debug.entry    (temp_idx).uop.pdst
-               , rob.io.debug.entry    (temp_idx).uop.br_mask 
+               , rob.io.debug.entry    (temp_idx).uop.br_mask
                , Mux(rob.io.debug.entry(temp_idx).uop.br_was_taken, Str("T"), Str("-"))
                , rob.io.debug.entry    (temp_idx).uop.stale_pdst
             )
             temp_idx = temp_idx + 1
          }
-         
+
          r_idx = r_idx + COMMIT_WIDTH
 
          printf("\n")
@@ -1675,7 +1601,7 @@ class DatPath() extends Module with BOOMCoreParameters
             , lsu_io.debug.entry(i).stq_uop.br_mask
             , lsu_io.debug.entry(i).saq_addr(19,0)
             , lsu_io.debug.entry(i).sdq_data
-            
+
             , Mux(lsu_io.debug.stq_head === UInt(i), Str("<- H "), Str(" "))
             , Mux(lsu_io.debug.stq_commit_head === UInt(i), Str("C "), Str(" "))
             , Mux(lsu_io.debug.stq_tail=== UInt(i), Str("T "), Str(" "))
@@ -1696,9 +1622,9 @@ class DatPath() extends Module with BOOMCoreParameters
          printf("\n")
 
       }
-      
+
       // Rename Map Tables / ISA Register File
-      val xpr_to_string = 
+      val xpr_to_string =
               Vec(Str(" x0"), Str(" ra"), Str(" s0"), Str(" s1"),
                    Str(" s2"), Str(" s3"), Str(" s4"), Str(" s5"),
                    Str(" s6"), Str(" s7"), Str(" s8"), Str(" s9"),
@@ -1719,30 +1645,31 @@ class DatPath() extends Module with BOOMCoreParameters
             {
                val i = x + y*7
 
-               if (i < 32) 
+               if (i < 32)
                {
-                  val phs_reg = rename_stage.io.debug.map_table(i).element
-
-                  printf(" %sx%d(%s)=p%d,p%d[0x%x](%s)"
-                     , Mux(rename_stage.io.debug.map_table(i).rbk_wen, Str("E"), Str(" "))
-                     , UInt(i, LREG_SZ)
-                     , xpr_to_string(i)
-                     , phs_reg
-                     , rename_stage.io.debug.map_table(i).committed_element
-                     , regfile.io.debug.registers(phs_reg)
-                     , Mux(rename_stage.io.debug.bsy_table(phs_reg), Str("b"), Str("_"))
-                  )
+//                  val phs_reg = rename_stage.io.debug.map_table(i).element
+//
+//                  printf(" %sx%d(%s)=p%d,p%d[0x%x](%s)"
+//                     , Mux(rename_stage.io.debug.map_table(i).rbk_wen, Str("E"), Str(" "))
+//                     , UInt(i, LREG_SZ)
+//                     , xpr_to_string(i)
+//                     , phs_reg
+//                     , rename_stage.io.debug.map_table(i).committed_element
+//                     , regfile.io.debug.registers(phs_reg)
+//                     , Mux(rename_stage.io.debug.bsy_table(phs_reg), Str("b"), Str("_"))
+//                  )
                }
             }
          }
          printf("\n")
+//         printf("TempPeek: 0x%x\n", io.imem.btb_resp.bits.temp_peek)
       }
       else
       {
          // if not enough room, get rid of RF display, add back 7 lines
          white_space = white_space + 7;
       }
-      
+
       for (x <- 0 until white_space)
       {
          printf("\n")
@@ -1761,33 +1688,35 @@ class DatPath() extends Module with BOOMCoreParameters
          {
             when (com_uops(w).ldst_rtype === RT_FIX && com_uops(w).ldst != UInt(0))
             {
-               printf("0x%x (0x%x) x%d 0x%x |%d\n"
+//               printf("@@@ 0x%x (0x%x) x%d 0x%x |%d\n"
+               printf("@@@ 0x%x (0x%x) x%d 0x%x\n"
                   , com_uops(w).pc
                   , com_uops(w).inst
                   , com_uops(w).inst(RD_MSB,RD_LSB)
                   , com_uops(w).debug_wdata
-                  , tsc_reg
+//                  , tsc_reg
                   )
             }
             .otherwise
             {
-               printf("0x%x (0x%x) |%d\n", com_uops(w).pc, com_uops(w).inst, tsc_reg)
+//               printf("@@@ 0x%x (0x%x) |%d\n", com_uops(w).pc, com_uops(w).inst, tsc_reg)
+               printf("@@@ 0x%x (0x%x)\n", com_uops(w).pc, com_uops(w).inst)
             }
          }
       }
    }
 
 
-                                                
+
    //-------------------------------------------------------------
    //-------------------------------------------------------------
    // Page Table Walker
-   
-   io.ptw.ptbr := pcr.io.ptbr 
-   io.ptw.invalidate := pcr.io.fatc             
-   io.ptw.sret := com_sret 
+
+   io.ptw.ptbr := pcr.io.ptbr
+   io.ptw.invalidate := pcr.io.fatc
+   io.ptw.sret := com_sret
    io.ptw.status := pcr.io.status
- 
+
    //-------------------------------------------------------------
    //-------------------------------------------------------------
    // **** Handle Reset Signal ****
@@ -1799,5 +1728,5 @@ class DatPath() extends Module with BOOMCoreParameters
    //}
 }
 
- 
+
 }

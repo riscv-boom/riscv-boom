@@ -38,7 +38,7 @@ class ExecutionUnitIo(num_rf_read_ports: Int, num_rf_write_ports: Int, num_bypas
    val brinfo  = new BrResolutionInfo().asInput()
    
    // only used by the branch unit
-   val br_unit = new BranchUnitResp().asOutput()
+   val br_unit = new BranchUnitResp().asOutput
    val get_rob_pc = new Bundle 
    {
       val rob_idx = UInt(OUTPUT, ROB_ADDR_SZ) 

@@ -16,7 +16,7 @@ class CoreIo() extends Bundle
 {
    val host = new HTIFIO
    val dmem = new DCMemPortIo
-   val imem = new CPUFrontendIO
+   val imem = new rocket.CPUFrontendIO
    val ptw  = new DatapathPTWIO().flip
    val counters = new CacheCounters().asInput
 }
