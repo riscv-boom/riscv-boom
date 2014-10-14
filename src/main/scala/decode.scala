@@ -120,19 +120,15 @@ class DecodeUnitIo extends BOOMCoreBundle
 {
    val enq = new Bundle
    {
-      val inst  = Bits(width = xprLen)
-      val xcpt_ma = Bool()
-      val xcpt_if = Bool()
+      val uop = new MicroOp
    }.asInput
 
    val deq = new Bundle
    {
-      val valid = Bool() // not valid if we are getting stalled
-      val uop   = new MicroOp()
-      val ready = Bool() // we may be busy writing out multiple micro-ops per macro-inst or waiting on ROB to empty
+      val uop = new MicroOp
    }.asOutput
 
-   val status    = new rocket.Status().asInput
+   val status = new rocket.Status().asInput
 }
 
 // Takes in a single instruction, generates a MicroOp (or multiply micro-ops over x cycles)
@@ -141,7 +137,7 @@ class DecodeUnit() extends Module
    val io = new DecodeUnitIo
 
    val uop = new MicroOp()
-   uop.inst := io.enq.inst
+   uop := io.enq.uop
 
    val dec_csignals = rocket.DecodeLogic(uop.inst,
                                  Decode.default,
@@ -194,14 +190,14 @@ class DecodeUnit() extends Module
                        exc_illegal      ||
                        csr_invalid      ||
                        exc_privileged   ||
-                       io.enq.xcpt_ma   ||
-                       io.enq.xcpt_if   ||
+                       uop.xcpt_ma      ||
+                       uop.xcpt_if      ||
                        exc_interrupt
 
    // note: priority here is very important
    uop.exc_cause := Mux(exc_interrupt,              exc_interrupt_cause,
-                    Mux(io.enq.xcpt_ma,             UInt(rocket.Causes.misaligned_fetch),
-                    Mux(io.enq.xcpt_if,             UInt(rocket.Causes.fault_fetch),
+                    Mux(uop.xcpt_ma,                UInt(rocket.Causes.misaligned_fetch),
+                    Mux(uop.xcpt_if,                UInt(rocket.Causes.fault_fetch),
                     Mux(exc_illegal || csr_invalid, UInt(rocket.Causes.illegal_instruction),
                     Mux(exc_privileged,             UInt(rocket.Causes.privileged_instruction),
                     Mux(cs_syscall.toBool,          UInt(rocket.Causes.syscall),
@@ -361,9 +357,8 @@ class FetchSerializerNtoM() extends Module with BOOMCoreParameters
 
    io.deq.bits(0).pc             := io.enq.bits.pc + Mux(inst_idx.orR,UInt(4),UInt(0))
    io.deq.bits(0).inst           := io.enq.bits.insts(inst_idx)
-   io.deq.bits(0).btb_hit        := io.enq.bits.btb_resp_valid
+   io.deq.bits(0).btb_resp_valid := io.enq.bits.btb_resp_valid
    io.deq.bits(0).btb_resp       := io.enq.bits.btb_resp
-   io.deq.bits(0).btb_pred_taken := io.enq.bits.btb_pred_taken
    io.deq.bits(0).valid          := io.enq.bits.mask(0)
    io.deq.bits(0).xcpt_ma        := io.enq.bits.xcpt_ma(inst_idx)
    io.deq.bits(0).xcpt_if        := io.enq.bits.xcpt_if(inst_idx)
@@ -378,16 +373,18 @@ class FetchSerializerNtoM() extends Module with BOOMCoreParameters
       // 1:1, so pass everything straight through!
       for (i <- 0 until DECODE_WIDTH)
       {
-         io.deq.bits(i).pc := io.enq.bits.pc + UInt(i << 2)
-         io.deq.bits(i).inst := io.enq.bits.insts(i)
-         io.deq.bits(i).btb_hit := Mux(io.enq.bits.btb_pred_taken_idx === UInt(i),
+         io.deq.bits(i).valid          := io.enq.bits.mask(i)
+         io.deq.bits(i).pc             := io.enq.bits.pc + UInt(i << 2)
+         io.deq.bits(i).fetch_pc_lob   := io.enq.bits.pc 
+         io.deq.bits(i).inst           := io.enq.bits.insts(i)
+         io.deq.bits(i).btb_resp_valid := Mux(io.enq.bits.btb_pred_taken_idx === UInt(i),
                                                              io.enq.bits.btb_resp_valid,
                                                              Bool(false))
-         io.deq.bits(i).btb_resp := io.enq.bits.btb_resp // TODO XXX BUG what do we need to supress in this bundle?
-         io.deq.bits(i).btb_pred_taken := Mux(io.enq.bits.btb_pred_taken_idx === UInt(i), 
-                                                             io.enq.bits.btb_pred_taken, 
-                                                             Bool(false))
-         io.deq.bits(i).valid   := io.enq.bits.mask(i)
+         io.deq.bits(i).btb_resp       := io.enq.bits.btb_resp 
+         when (io.enq.bits.btb_pred_taken_idx != UInt(i))
+         {
+            io.deq.bits(i).btb_resp.taken := Bool(false)
+         }
          io.deq.bits(i).xcpt_ma := io.enq.bits.xcpt_ma
          io.deq.bits(i).xcpt_if := io.enq.bits.xcpt_if
       }

@@ -51,11 +51,9 @@ TODO LIST:
    add counters, for cache hits
    add branch counter in ROB (was predicted correctly)
 
-   make brpred use synchronous memory
+   add a backing branch predictor that uses synchronous memory
 
    add (optional) register between issue select and register read
-
-   add RAS (make dhrystone score go up)
 
    have ROB issue mtpcr, etc.? poison bit in inst to roll back ROB
       - could give it its own issue_slot only it writes to at commit
@@ -72,8 +70,6 @@ TODO LIST:
    how best to handle SRET, SYSCALL, etc.
       i think just have SRET set exception bit in ROB, don't even serialize pipeline?
 
-   break apart atomic PCR stuff?
-
    fpu
 
    hit-under-miss icache
@@ -86,7 +82,7 @@ TODO LIST:
 //-------------------------------------------------------------
 // TODO I can't promise these signals get killed/cleared on a mispredict,
 // so I should listen to the corresponding valid bit
-// okay, for example, on a bypassing, we listen to rf_wen to see if bypass is valid,
+// For example, on a bypassing, we listen to rf_wen to see if bypass is valid,
 // but we "could" be bypassing to a branch which kills us (false positive cobinational loop),
 // so we have to keep the rf_wen enabled, and not dependent on a branch kill signal
 class CtrlSignals extends Bundle()
@@ -128,9 +124,9 @@ class MicroOp extends BOOMCoreBundle
 
    val br_was_taken     = Bool()                      // set by Exe stage
 
-   val btb_hit          = Bool()                      // btb hit on this instruction
+   val fetch_pc_lob     = UInt(width = log2Up(FETCH_WIDTH*coreInstBytes)) // track which PC was used to fetch this instruction
+   val btb_resp_valid   = Bool()                      // btb hit on this instruction
    val btb_resp         = new rocket.BTBResp
-   val btb_pred_taken   = Bool()
 
    val imm_packed       = Bits(width = LONGEST_IMM_SZ) // densely pack the imm in decode... then translate and sign-extend in execute
    val rob_idx          = UInt(width = ROB_ADDR_SZ)
@@ -185,8 +181,8 @@ class FetchBundle extends Bundle with BOOMCoreParameters
    val btb_resp_valid = Bool()
    val btb_resp = new rocket.BTBResp
    // TODO BUG XXX remove these two signals once things work
-   val btb_pred_taken = Bool()
    val btb_pred_taken_idx = UInt(width=log2Up(FETCH_WIDTH))
+   // TODO BUG XXX bypass rob info as we're missing a lot of performance there
 
    val xcpt_ma = Bool()
    val xcpt_if = Bool()
@@ -427,8 +423,7 @@ class DatPath() extends Module with BOOMCoreParameters
    fetchbuffer_kill         := br_unit.brinfo.mispredict || com_exception || flush_pipeline || Reg(next=com_sret)
 
    // round off to nearest fetch boundary
-   // val lsb = log2Up(conf.rc.icache.ibytes) XXXXXX
-   val lsb = log2Up(FETCH_WIDTH * 4)
+   val lsb = log2Up(FETCH_WIDTH * coreInstBytes)
    val aligned_fetch_pc = Cat(io.imem.resp.bits.pc(vaddrBits+1-1,lsb), Bits(0,lsb)).toUInt
    fetch_bundle.pc   := aligned_fetch_pc
 
@@ -438,7 +433,6 @@ class DatPath() extends Module with BOOMCoreParameters
    }
    fetch_bundle.btb_resp_valid  := io.imem.btb_resp.valid
    fetch_bundle.btb_resp := io.imem.btb_resp.bits
-   fetch_bundle.btb_pred_taken := io.imem.btb_resp.bits.taken && io.imem.btb_resp.valid
    fetch_bundle.btb_pred_taken_idx:= io.imem.btb_resp.bits.bridx
 
    fetch_bundle.xcpt_ma := io.imem.resp.bits.xcpt_ma
@@ -566,7 +560,7 @@ class DatPath() extends Module with BOOMCoreParameters
                                (bp2_pred_idx < fetch_bundle.btb_pred_taken_idx)
 
    bp2_take_pc := bp2_wants_to_take_pc &&
-                  (!fetch_bundle.btb_pred_taken || bp2_bht_overrides_btb)
+                  (!(fetch_bundle.btb_resp_valid && fetch_bundle.btb_resp.taken) || bp2_bht_overrides_btb)
 
 
 
@@ -574,7 +568,8 @@ class DatPath() extends Module with BOOMCoreParameters
    // It must also check that the BTB didn't miss the JAL and predict on a later branch
 
    // did the BTB predict JAL *AND* was it the first JAL in the fetch packet
-   val btb_predicted_our_jal = fetch_bundle.btb_pred_taken &&
+   val btb_predicted_our_jal = fetch_bundle.btb_resp_valid &&
+                               fetch_bundle.btb_resp.taken &&
                                bpd_jal_val &&
                                (bpd_jal_idx === fetch_bundle.btb_pred_taken_idx)
    // check that the BTB predicted the correct jal target
@@ -636,16 +631,10 @@ class DatPath() extends Module with BOOMCoreParameters
    {
       val decode_unit = Module(new DecodeUnit)
       dec_valids(w) := fetched_inst_valid && dec_fbundle(w).valid && !dec_finished_mask(w) // TODO a way to do this without being confusing wrt dec_mask?
-      decode_unit.io.enq.inst    := dec_fbundle(w).inst
-      decode_unit.io.enq.xcpt_ma := dec_fbundle(w).xcpt_ma
-      decode_unit.io.enq.xcpt_if := dec_fbundle(w).xcpt_if
+      decode_unit.io.enq.uop     := dec_fbundle(w)
       decode_unit.io.status      := pcr_status
 
-      var prev_insts_in_bundle_valid = Bool(false)
-      for (i <- 0 until w)
-      {
-         prev_insts_in_bundle_valid = prev_insts_in_bundle_valid | dec_valids(i)
-      }
+      val prev_insts_in_bundle_valid = Range(0,w).map{i => dec_valids(i)}.foldLeft(Bool(false))(_|_)
 
       // stall this instruction?
       // TODO tailor this to only care if a given instruction uses a resource?
@@ -665,18 +654,8 @@ class DatPath() extends Module with BOOMCoreParameters
       dec_stall_next_inst  = stall_me ||
                              (dec_valids(w) && dec_uops(w).is_unique)
 
-
-      // is this instruction valid and not stalled? I will progress down the pipeline if true.
-      dec_mask(w) := dec_valids(w) &&
-                     !stall_me
-
-      // TODO refactor this... it's a source of bugs if new fields are added to fbundle
-      // probably make fbundle return a uop instead of an inst with extra stuff on the side.
-      dec_uops(w)                := decode_unit.io.deq.uop
-      dec_uops(w).pc             := dec_fbundle(w).pc
-      dec_uops(w).btb_pred_taken := dec_fbundle(w).btb_pred_taken
-      dec_uops(w).btb_hit        := dec_fbundle(w).btb_hit
-      dec_uops(w).btb_resp       := dec_fbundle(w).btb_resp
+      dec_mask(w) := dec_valids(w) && !stall_me
+      dec_uops(w) := decode_unit.io.deq.uop
    }
 
    // all decoders are empty and ready for new instructions
