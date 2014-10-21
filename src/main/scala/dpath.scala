@@ -456,7 +456,7 @@ class DatPath() extends Module with BOOMCoreParameters
    io.imem.btb_update.bits.prediction.valid := br_unit.btb_update.prediction.valid
    io.imem.btb_update.bits.prediction.bits := br_unit.btb_update.prediction.bits
    io.imem.btb_update.bits.taken := br_unit.btb_update.taken
-   io.imem.btb_update.bits.incorrectTarget := br_unit.btb_update.incorrectTarget
+   io.imem.btb_update.bits.mispredict := br_unit.btb_update.mispredict
    io.imem.btb_update.bits.isJump := br_unit.btb_update.isJump
    io.imem.btb_update.bits.isCall := br_unit.btb_update.isCall
    io.imem.btb_update.bits.isReturn := br_unit.btb_update.isReturn
@@ -1306,7 +1306,7 @@ class DatPath() extends Module with BOOMCoreParameters
       }
 
       // Front-end
-      printf("--- Cyc=%d , ----------------- Ret: %d ---------------------------------- User Retired: %d\n  BrPred1:        (IF1_PC= n/a - Predict:n/a) ------ PC: [%s%s%s-%s for br_id: %d, %s %s next: 0x%x]\nI$ Response: (%s) IF2_PC= 0x%x (mask:0x%x) \033[1;35m%s\033[0m  -------- BrPred2: (%s,%s,%s,%s,%s %d) [btbtarg: 0x%x pred_targ: 0x%x] jkillmsk: 0x%x --->> (0x%x)\n"
+      printf("--- Cyc=%d , ----------------- Ret: %d ---------------------------------- User Retired: %d\n  BrPred1:        (IF1_PC= n/a - Predict:n/a) ------ PC: [%s%s%s-%s for br_id: %d, %s %s next: 0x%x]\nI$ Response: (%s) IF2_PC= 0x%x (mask:0x%x) \033[1;35m%s\033[0m  ----BrPred2:(%s,%s,%s,%s,%s %d) [btbtarg: 0x%x predtarg: 0x%x] jkilmsk:0x%x ->(0x%x)\n"
          , tsc_reg
          , irt_reg & UInt(0xffffff)
          , irt_ei_reg & UInt(0xffffff)
@@ -1325,7 +1325,7 @@ class DatPath() extends Module with BOOMCoreParameters
          , if_pc_next
       // Fetch Stage 2
          , Mux(io.imem.resp.valid && !fetchbuffer_kill, Str(mgt + "V" + end), Str(grn + "-" + end))
-         , fetch_bundle.pc(19,0)
+         , io.imem.resp.bits.pc
          , io.imem.resp.bits.mask
          , InstsStr(io.imem.resp.bits.data.toBits, FETCH_WIDTH)
          , Mux(bp2_val, Str("V"), Str("-"))
@@ -1626,6 +1626,7 @@ class DatPath() extends Module with BOOMCoreParameters
 
                if (i < 32)
                {
+                  // TODO update to the latest Chisel and put this back in
 //                  val phs_reg = rename_stage.io.debug.map_table(i).element
 //
 //                  printf(" %sx%d(%s)=p%d,p%d[0x%x](%s)"
@@ -1662,24 +1663,21 @@ class DatPath() extends Module with BOOMCoreParameters
       var new_commit_cnt = UInt(0)
       for (w <- 0 until COMMIT_WIDTH)
       {
-//         when (com_valids(w) && (pcr.io.status.ei || (com_uops(w).sret && pcr.io.status.pei)))
          when (com_valids(w) && (pcr.io.status.ei || com_uops(w).sret))
          {
             when (com_uops(w).ldst_rtype === RT_FIX && com_uops(w).ldst != UInt(0))
             {
-//               printf("@@@ 0x%x (0x%x) x%d 0x%x |%d\n"
-               printf("@@@ 0x%x (0x%x) x%d 0x%x\n"
+               printf("@@@ 0x%x (0x%x) x%d 0x%x |%d\n"
                   , com_uops(w).pc
                   , com_uops(w).inst
                   , com_uops(w).inst(RD_MSB,RD_LSB)
                   , com_uops(w).debug_wdata
-//                  , tsc_reg
+                  , tsc_reg
                   )
             }
             .otherwise
             {
-//               printf("@@@ 0x%x (0x%x) |%d\n", com_uops(w).pc, com_uops(w).inst, tsc_reg)
-               printf("@@@ 0x%x (0x%x)\n", com_uops(w).pc, com_uops(w).inst)
+               printf("@@@ 0x%x (0x%x) |%d\n", com_uops(w).pc, com_uops(w).inst, tsc_reg)
             }
          }
       }
