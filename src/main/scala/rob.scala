@@ -199,7 +199,7 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
 
    when (io.dis_mask.reduce(_|_))
    {
-      rob_pc_hob.write(rob_tail, io.dis_uops(0).pc)
+      rob_pc_hob.write(rob_tail, io.dis_uops(0).pc) // internally, the RobPCs zero out low-order bits
    }
    
    // the br unit needs to read out two consecutive ROBs
@@ -209,11 +209,13 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
    
    val next_bank_idx = if (width == 1) UInt(0) else PriorityEncoder(rob_brt_vals.toBits)
 
-   io.get_pc.next_pc := next_row_pc + Cat(next_bank_idx, Bits(0,2))
-   // TODO BUG PERF bypass incoming entries so that fast branches can have this information
    // TODO is this logic broken if the ROB can fill up completely? should I look at valid bit instead?
-   io.get_pc.next_val := WrapInc(GetRowIdx(io.get_pc.rob_idx), num_rob_rows) != rob_tail
+   val rob_pc_hob_next_val = WrapInc(GetRowIdx(io.get_pc.rob_idx), num_rob_rows) != rob_tail
  
+   val bypass_next_pc = (io.dis_uops(0).pc & SInt(-(DECODE_WIDTH*coreInstBytes))) + Cat(next_bank_idx, Bits(0,2))
+   
+   io.get_pc.next_val := rob_pc_hob_next_val || io.dis_mask.reduce(_|_)
+   io.get_pc.next_pc := Mux(rob_pc_hob_next_val, next_row_pc + Cat(next_bank_idx, Bits(0,2)), bypass_next_pc)
    
    // **************************************************************************
    // --------------------------------------------------------------------------
