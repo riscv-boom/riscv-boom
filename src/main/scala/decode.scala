@@ -242,7 +242,8 @@ class DecodeUnit() extends Module
    uop.is_br_or_jmp := cs_br_or_jmp.toBool
 
    uop.is_jal := cs_is_jal.toBool
-   uop.is_jump:= (uop.uopc === uopJAL) ||
+//   uop.is_jump:= (uop.uopc === uopJAL) ||
+   uop.is_jump:= cs_is_jal ||
                  (uop.uopc === uopJALR) 
    uop.is_ret := (uop.uopc === uopJALR) &&
                  (uop.ldst === X0) &&
@@ -355,7 +356,8 @@ class FetchSerializerNtoM() extends Module with BOOMCoreParameters
       io.enq.ready := io.deq.ready 
    }
 
-   io.deq.bits(0).pc             := io.enq.bits.pc + Mux(inst_idx.orR,UInt(4),UInt(0))
+   io.deq.bits(0).pc             := io.enq.bits.pc
+   io.deq.bits(0).fetch_pc_lob   := io.enq.bits.pc
    io.deq.bits(0).inst           := io.enq.bits.insts(inst_idx)
    io.deq.bits(0).btb_resp_valid := io.enq.bits.btb_resp_valid
    io.deq.bits(0).btb_resp       := io.enq.bits.btb_resp
@@ -374,7 +376,7 @@ class FetchSerializerNtoM() extends Module with BOOMCoreParameters
       for (i <- 0 until DECODE_WIDTH)
       {
          io.deq.bits(i).valid          := io.enq.bits.mask(i)
-         io.deq.bits(i).pc             := io.enq.bits.pc + UInt(i << 2)
+         io.deq.bits(i).pc             := (io.enq.bits.pc & SInt(-(FETCH_WIDTH*coreInstBytes))) + UInt(i << 2)
          io.deq.bits(i).fetch_pc_lob   := io.enq.bits.pc 
          io.deq.bits(i).inst           := io.enq.bits.insts(i)
          io.deq.bits(i).btb_resp_valid := Mux(io.enq.bits.btb_pred_taken_idx === UInt(i),

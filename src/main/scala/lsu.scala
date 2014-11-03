@@ -853,9 +853,9 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
 
    //-------------------------------------------------------------
    // Handle Nacks
-   // the data cache may nack our requests, requiring us to resend our, the
-   // forwarding logic (from the STD) may be "nacking" us, in which case, we
-   // ignore the nack (the nack is for the D$, not the LSU).
+   // the data cache may nack our requests, requiring us to resend our request,
+   // the forwarding logic (from the STD) may be "nacking" us, in which case,
+   // we ignore the nack (the nack is for the D$, not the LSU).
 
    val clr_ld = Bool()
    clr_ld := Bool(false)

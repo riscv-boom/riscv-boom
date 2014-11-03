@@ -271,7 +271,7 @@ class ALUUnit(is_branch_unit: Boolean = false)
       val mispredict = io.req.valid && 
                        !killed &&
                        uop.is_br_or_jmp &&
-                       !(uop.is_jal) && // TODO XXX is this the proper way to do this? can we remove more JAL stuff from the branch unit? jal should just be a NOP.
+                       !(uop.is_jal) && // TODO XXX is this the proper way to do this? can we remove more JAL stuff from the branch unit? jal should just be a NOP, except it needs the PC for wb
 //                       ((io.br_unit.taken ^ uop.btb_pred_taken) || // BTB was wrong this assumes BTB doesn't say "taken" for PC+4
                        (// BTB was wrong
                        (pc_sel === PC_PLUS4 && ((uop.btb_resp_valid && uop.btb_resp.taken) || !io.get_rob_pc.next_val || (io.get_rob_pc.next_pc != (uop_pc_ + UInt(4))))) ||
@@ -301,7 +301,8 @@ class ALUUnit(is_branch_unit: Boolean = false)
 
       // updates the BTB same cycle as PC redirect
       val lsb = log2Ceil(FETCH_WIDTH*coreInstBytes)
-      io.br_unit.btb_update_valid            := io.req.valid && uop.is_br_or_jmp && !killed  // did a branch or jump  occur?
+      // TODO remove jal from redirecting the PC? it should NEVER "mispredict!"
+      io.br_unit.btb_update_valid            := io.req.valid && uop.is_br_or_jmp && !uop.is_jal && !killed  // did a branch or jump  occur?
       io.br_unit.btb_update.pc               := ((uop_pc_ >> lsb) << lsb) + uop.fetch_pc_lob // what pc should the tag check be on?
       io.br_unit.btb_update.br_pc            := (uop_pc_)
       io.br_unit.btb_update.target           := io.br_unit.target //bj_addr // what should the target be on the tag hit?
