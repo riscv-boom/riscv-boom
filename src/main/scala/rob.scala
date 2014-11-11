@@ -212,7 +212,8 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
    // TODO is this logic broken if the ROB can fill up completely? should I look at valid bit instead?
    val rob_pc_hob_next_val = WrapInc(GetRowIdx(io.get_pc.rob_idx), num_rob_rows) != rob_tail
  
-   val bypass_next_pc = (io.dis_uops(0).pc & SInt(-(DECODE_WIDTH*coreInstBytes))) + Cat(next_bank_idx, Bits(0,2))
+   val bypass_next_bank_idx = if (width == 1) UInt(0) else PriorityEncoder(io.dis_mask.toBits)
+   val bypass_next_pc = (io.dis_uops(0).pc & SInt(-(DECODE_WIDTH*coreInstBytes))) + Cat(bypass_next_bank_idx, Bits(0,2))
    
    io.get_pc.next_val := rob_pc_hob_next_val || io.dis_mask.reduce(_|_)
    io.get_pc.next_pc := Mux(rob_pc_hob_next_val, next_row_pc + Cat(next_bank_idx, Bits(0,2)), bypass_next_pc)
