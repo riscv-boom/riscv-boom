@@ -22,7 +22,7 @@ object Decode
                         //     |  |         |        dst     |       |       |     |  |  |  |  mem    mem     |        |  |  |  |  |  |  is unique? (clear pipeline for it)
                         //     |  |         |        regtype |       |       |     |  |  |  |  cmd    msk     |        |  |  |  |  |  |  |  flush on commit
                         //     |  |         |        |       |       |       |     |  |  |  |  |      |       |        |  |  |  |  |  |  |  |  csr cmd
-   val table = Array(        
+   val table = Array(
                LD      -> List(Y, uopLD   , FU_MEM , RT_FIX, RT_FIX, RT_X  , IS_I, Y, N, N, N, M_XRD, MSK_D , UInt(3), N, N, N, N, N, N, N, N, CSR.N),
                LW      -> List(Y, uopLD   , FU_MEM , RT_FIX, RT_FIX, RT_X  , IS_I, Y, N, N, N, M_XRD, MSK_W , UInt(3), N, N, N, N, N, N, N, N, CSR.N),
                LWU     -> List(Y, uopLD   , FU_MEM , RT_FIX, RT_FIX, RT_X  , IS_I, Y, N, N, N, M_XRD, MSK_WU, UInt(3), N, N, N, N, N, N, N, N, CSR.N),
@@ -30,12 +30,12 @@ object Decode
                LHU     -> List(Y, uopLD   , FU_MEM , RT_FIX, RT_FIX, RT_X  , IS_I, Y, N, N, N, M_XRD, MSK_HU, UInt(3), N, N, N, N, N, N, N, N, CSR.N),
                LB      -> List(Y, uopLD   , FU_MEM , RT_FIX, RT_FIX, RT_X  , IS_I, Y, N, N, N, M_XRD, MSK_B , UInt(3), N, N, N, N, N, N, N, N, CSR.N),
                LBU     -> List(Y, uopLD   , FU_MEM , RT_FIX, RT_FIX, RT_X  , IS_I, Y, N, N, N, M_XRD, MSK_BU, UInt(3), N, N, N, N, N, N, N, N, CSR.N),
-               
+
                SD      -> List(Y, uopSTA  , FU_MEM , RT_X  , RT_FIX, RT_FIX, IS_S, N, Y, N, N, M_XWR, MSK_D , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
                SW      -> List(Y, uopSTA  , FU_MEM , RT_X  , RT_FIX, RT_FIX, IS_S, N, Y, N, N, M_XWR, MSK_W , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
                SH      -> List(Y, uopSTA  , FU_MEM , RT_X  , RT_FIX, RT_FIX, IS_S, N, Y, N, N, M_XWR, MSK_H , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
                SB      -> List(Y, uopSTA  , FU_MEM , RT_X  , RT_FIX, RT_FIX, IS_S, N, Y, N, N, M_XWR, MSK_B , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
-               
+
                LUI     -> List(Y, uopLUI  , FU_ALU , RT_FIX, RT_X  , RT_X  , IS_U, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
 
                ADDI    -> List(Y, uopADDI , FU_ALU , RT_FIX, RT_FIX, RT_X  , IS_I, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
@@ -47,29 +47,29 @@ object Decode
                SLLI    -> List(Y, uopSLLI , FU_ALU , RT_FIX, RT_FIX, RT_X  , IS_I, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
                SRAI    -> List(Y, uopSRAI , FU_ALU , RT_FIX, RT_FIX, RT_X  , IS_I, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
                SRLI    -> List(Y, uopSRLI , FU_ALU , RT_FIX, RT_FIX, RT_X  , IS_I, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
-               
+
                ADDIW   -> List(Y, uopADDIW, FU_ALU , RT_FIX, RT_FIX, RT_X  , IS_I, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
                SLLIW   -> List(Y, uopSLLIW, FU_ALU , RT_FIX, RT_FIX, RT_X  , IS_I, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
                SRAIW   -> List(Y, uopSRAIW, FU_ALU , RT_FIX, RT_FIX, RT_X  , IS_I, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
                SRLIW   -> List(Y, uopSRLIW, FU_ALU , RT_FIX, RT_FIX, RT_X  , IS_I, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
 
-               SLL     -> List(Y, uopSLL  , FU_ALU , RT_FIX, RT_FIX, RT_FIX, IS_I, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N), 
-               ADD     -> List(Y, uopADD  , FU_ALU , RT_FIX, RT_FIX, RT_FIX, IS_I, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N), 
+               SLL     -> List(Y, uopSLL  , FU_ALU , RT_FIX, RT_FIX, RT_FIX, IS_I, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
+               ADD     -> List(Y, uopADD  , FU_ALU , RT_FIX, RT_FIX, RT_FIX, IS_I, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
                SUB     -> List(Y, uopSUB  , FU_ALU , RT_FIX, RT_FIX, RT_FIX, IS_I, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
-               SLT     -> List(Y, uopSLT  , FU_ALU , RT_FIX, RT_FIX, RT_FIX, IS_I, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N), 
-               SLTU    -> List(Y, uopSLTU , FU_ALU , RT_FIX, RT_FIX, RT_FIX, IS_I, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N), 
-               AND     -> List(Y, uopAND  , FU_ALU , RT_FIX, RT_FIX, RT_FIX, IS_I, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N), 
-               OR      -> List(Y, uopOR   , FU_ALU , RT_FIX, RT_FIX, RT_FIX, IS_I, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N), 
-               XOR     -> List(Y, uopXOR  , FU_ALU , RT_FIX, RT_FIX, RT_FIX, IS_I, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N), 
-               SRA     -> List(Y, uopSRA  , FU_ALU , RT_FIX, RT_FIX, RT_FIX, IS_I, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N), 
+               SLT     -> List(Y, uopSLT  , FU_ALU , RT_FIX, RT_FIX, RT_FIX, IS_I, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
+               SLTU    -> List(Y, uopSLTU , FU_ALU , RT_FIX, RT_FIX, RT_FIX, IS_I, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
+               AND     -> List(Y, uopAND  , FU_ALU , RT_FIX, RT_FIX, RT_FIX, IS_I, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
+               OR      -> List(Y, uopOR   , FU_ALU , RT_FIX, RT_FIX, RT_FIX, IS_I, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
+               XOR     -> List(Y, uopXOR  , FU_ALU , RT_FIX, RT_FIX, RT_FIX, IS_I, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
+               SRA     -> List(Y, uopSRA  , FU_ALU , RT_FIX, RT_FIX, RT_FIX, IS_I, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
                SRL     -> List(Y, uopSRL  , FU_ALU , RT_FIX, RT_FIX, RT_FIX, IS_X, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
-               
-               ADDW    -> List(Y, uopADDW , FU_ALU , RT_FIX, RT_FIX, RT_FIX, IS_I, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N), 
-               SUBW    -> List(Y, uopSUBW , FU_ALU , RT_FIX, RT_FIX, RT_FIX, IS_I, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N), 
-               SLLW    -> List(Y, uopSLLW , FU_ALU , RT_FIX, RT_FIX, RT_FIX, IS_I, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N), 
-               SRAW    -> List(Y, uopSRAW , FU_ALU , RT_FIX, RT_FIX, RT_FIX, IS_I, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N), 
+
+               ADDW    -> List(Y, uopADDW , FU_ALU , RT_FIX, RT_FIX, RT_FIX, IS_I, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
+               SUBW    -> List(Y, uopSUBW , FU_ALU , RT_FIX, RT_FIX, RT_FIX, IS_I, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
+               SLLW    -> List(Y, uopSLLW , FU_ALU , RT_FIX, RT_FIX, RT_FIX, IS_I, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
+               SRAW    -> List(Y, uopSRAW , FU_ALU , RT_FIX, RT_FIX, RT_FIX, IS_I, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
                SRLW    -> List(Y, uopSRLW , FU_ALU , RT_FIX, RT_FIX, RT_FIX, IS_X, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
-               
+
                MUL     -> List(Y, uopMUL  , FU_MULD, RT_FIX, RT_FIX, RT_FIX, IS_X, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
                MULH    -> List(Y, uopMULH , FU_MULD, RT_FIX, RT_FIX, RT_FIX, IS_X, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
                MULHU   -> List(Y, uopMULHU, FU_MULD, RT_FIX, RT_FIX, RT_FIX, IS_X, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
@@ -94,24 +94,24 @@ object Decode
                BGEU    -> List(Y, uopBGEU , FU_BRU , RT_X  , RT_FIX, RT_FIX, IS_B, N, N, N, N, M_X  , MSK_X , UInt(0), N, Y, N, N, N, N, N, N, CSR.N),
                BLT     -> List(Y, uopBLT  , FU_BRU , RT_X  , RT_FIX, RT_FIX, IS_B, N, N, N, N, M_X  , MSK_X , UInt(0), N, Y, N, N, N, N, N, N, CSR.N),
                BLTU    -> List(Y, uopBLTU , FU_BRU , RT_X  , RT_FIX, RT_FIX, IS_B, N, N, N, N, M_X  , MSK_X , UInt(0), N, Y, N, N, N, N, N, N, CSR.N),
-               
-               // I-type, the immediate12 holds the CSR register. 
-               CSRRW   -> List(Y, uopCSRRW, FU_PCR , RT_FIX, RT_FIX, RT_X  , IS_I, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, Y, Y, CSR.W), 
-               CSRRS   -> List(Y, uopCSRRS, FU_PCR , RT_FIX, RT_FIX, RT_X  , IS_I, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, Y, Y, CSR.S), 
-               CSRRC   -> List(Y, uopCSRRC, FU_PCR , RT_FIX, RT_FIX, RT_X  , IS_I, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, Y, Y, CSR.C), 
-               
-               CSRRWI  -> List(Y, uopCSRRWI,FU_PCR , RT_FIX, RT_PAS, RT_X  , IS_I, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, Y, Y, CSR.W), 
-               CSRRSI  -> List(Y, uopCSRRSI,FU_PCR , RT_FIX, RT_PAS, RT_X  , IS_I, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, Y, Y, CSR.S), 
-               CSRRCI  -> List(Y, uopCSRRCI,FU_PCR , RT_FIX, RT_PAS, RT_X  , IS_I, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, Y, Y, CSR.C), 
 
-               SCALL   -> List(Y, uopNOP  , FU_ALU , RT_X  , RT_X  , RT_X  , IS_X, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, Y, N, Y, N, CSR.N), 
-               SRET    -> List(Y, uopSRET , FU_ALU , RT_X  , RT_X  , RT_X  , IS_X, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, Y, N, N, Y, N, CSR.N), 
-               SBREAK  -> List(Y, uopNOP  , FU_ALU , RT_X  , RT_X  , RT_X  , IS_X, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, Y, Y, N, CSR.N), 
+               // I-type, the immediate12 holds the CSR register.
+               CSRRW   -> List(Y, uopCSRRW, FU_PCR , RT_FIX, RT_FIX, RT_X  , IS_I, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, Y, Y, CSR.W),
+               CSRRS   -> List(Y, uopCSRRS, FU_PCR , RT_FIX, RT_FIX, RT_X  , IS_I, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, Y, Y, CSR.S),
+               CSRRC   -> List(Y, uopCSRRC, FU_PCR , RT_FIX, RT_FIX, RT_X  , IS_I, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, Y, Y, CSR.C),
 
-               FENCE_I -> List(Y, uopNOP  , FU_X   , RT_X  , RT_X  , RT_X  , IS_X, N, N, N, Y, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, Y, Y, CSR.N), 
+               CSRRWI  -> List(Y, uopCSRRWI,FU_PCR , RT_FIX, RT_PAS, RT_X  , IS_I, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, Y, Y, CSR.W),
+               CSRRSI  -> List(Y, uopCSRRSI,FU_PCR , RT_FIX, RT_PAS, RT_X  , IS_I, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, Y, Y, CSR.S),
+               CSRRCI  -> List(Y, uopCSRRCI,FU_PCR , RT_FIX, RT_PAS, RT_X  , IS_I, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, Y, Y, CSR.C),
+
+               SCALL   -> List(Y, uopNOP  , FU_ALU , RT_X  , RT_X  , RT_X  , IS_X, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, Y, N, Y, N, CSR.N),
+               SRET    -> List(Y, uopSRET , FU_ALU , RT_X  , RT_X  , RT_X  , IS_X, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, Y, N, N, Y, N, CSR.N),
+               SBREAK  -> List(Y, uopNOP  , FU_ALU , RT_X  , RT_X  , RT_X  , IS_X, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, Y, Y, N, CSR.N),
+
+               FENCE_I -> List(Y, uopNOP  , FU_X   , RT_X  , RT_X  , RT_X  , IS_X, N, N, N, Y, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, Y, Y, CSR.N),
                FENCE   -> List(Y, uopMEMSPECIAL,FU_MEM, RT_X, RT_X, RT_X   , IS_X, N, Y, Y, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, Y, Y, CSR.N) // TODO PERF make fence higher performance
                )
-                 
+
 
 }
 
@@ -143,11 +143,11 @@ class DecodeUnit() extends Module
                                  Decode.default,
                                  Decode.table)
 
-   val (cs_inst_val: Bool) :: cs_uopc :: cs_fu_code :: cs_dst_type :: cs_rs1_type :: cs_rs2_type :: cs_imm_sel :: dec_cs0 = dec_csignals 
+   val (cs_inst_val: Bool) :: cs_uopc :: cs_fu_code :: cs_dst_type :: cs_rs1_type :: cs_rs2_type :: cs_imm_sel :: dec_cs0 = dec_csignals
    val (cs_is_load: Bool)  :: (cs_is_store: Bool)   :: (cs_is_fence: Bool)  :: (cs_is_fencei: Bool)   :: cs_mem_cmd :: cs_mem_typ :: dec_cs1 = dec_cs0
    val cs_wakeup_delay     :: (cs_bypassable: Bool) :: (cs_br_or_jmp: Bool) :: (cs_is_jal: Bool)      :: dec_cs2 = dec_cs1
    val (cs_sret: Bool)     :: (cs_syscall: Bool)    :: (cs_sbreak: Bool)    :: (cs_inst_unique: Bool) :: (cs_flush_on_commit: Bool) :: cs_csr_cmd :: Nil = dec_cs2
-   
+
 
    // Exception Handling
    val exc_illegal    = !cs_inst_val
@@ -177,14 +177,14 @@ class DecodeUnit() extends Module
    val csr_invalid    = csr_en && !Vec(legal_csrs.map(UInt(_))).contains(csr_addr)
 
    // flush pipeline on CSR writes that may have side effects
-   //val id_csr_flush = {   
+   //val id_csr_flush = {
    //  val safe_csrs = CSRs.sup0 :: CSRs.sup1 :: CSRs.epc :: Nil
-   //  cs_csr_en && id_csr_wen && DecodeLogic(id_csr_addr, legal_csrs -- safe_csrs, safe_csrs)   
+   //  cs_csr_en && id_csr_wen && DecodeLogic(id_csr_addr, legal_csrs -- safe_csrs, safe_csrs)
    //}
    val exc_privileged = exc_csr_privileged || (cs_sret.toBool && !(io.status.s))
 
    uop.sret      := cs_sret.toBool
-   
+
    uop.exception := cs_syscall.toBool   ||
                        cs_sbreak.toBool ||
                        exc_illegal      ||
@@ -221,7 +221,7 @@ class DecodeUnit() extends Module
    uop.mem_cmd    := cs_mem_cmd.toUInt
    uop.mem_typ    := cs_mem_typ
    uop.is_load    := cs_is_load.toBool
-   uop.is_store   := cs_is_store.toBool  
+   uop.is_store   := cs_is_store.toBool
    uop.is_fence   := cs_is_fence.toBool
    uop.is_fencei  := cs_is_fencei.toBool
    uop.is_unique  := cs_inst_unique.toBool
@@ -239,22 +239,19 @@ class DecodeUnit() extends Module
 
    //-------------------------------------------------------------
 
-   uop.is_br_or_jmp := cs_br_or_jmp.toBool
-
-   uop.is_jal := cs_is_jal.toBool
-//   uop.is_jump:= (uop.uopc === uopJAL) ||
-   uop.is_jump:= cs_is_jal ||
-                 (uop.uopc === uopJALR) 
-   uop.is_ret := (uop.uopc === uopJALR) &&
-                 (uop.ldst === X0) &&
-                 (uop.lrs1 === RA)
-   uop.is_call:= (uop.uopc === uopJALR) &&
-                 (uop.lrs1 === X0)
+   uop.is_br_or_jmp := cs_br_or_jmp
+   uop.is_jal       := cs_is_jal
+   uop.is_jump      := cs_is_jal || (uop.uopc === uopJALR)
+   uop.is_ret       := (uop.uopc === uopJALR) &&
+                       (uop.ldst === X0) &&
+                       (uop.lrs1 === RA)
+   uop.is_call      := (uop.uopc === uopJALR || uop.uopc === uopJAL) &&
+                       (uop.ldst === RA)
 
 
    //-------------------------------------------------------------
 
-   io.deq.uop   := uop
+   io.deq.uop := uop
 
    //-------------------------------------------------------------
 
@@ -268,38 +265,38 @@ class BranchDecode extends Module
       val inst    = Bits(INPUT, 32)
       val is_br   = Bool(OUTPUT)
       val is_jal  = Bool(OUTPUT)
-      val imm_sel = UInt(OUTPUT, IS_X.getWidth)
-   }
-                          //   is br?
+      val is_jalr = Bool(OUTPUT)
+   }                      //   is br?
                           //   |  is jal?
-   val bpd_csignals =     //   |  |  br type
-      rocket.DecodeLogic(io.inst,//  | 
-                          List(N, N, IS_X),
+                          //   |  |  is jalr?
+   val bpd_csignals =     //   |  |  |  br type
+      rocket.DecodeLogic(io.inst,//  |  |
+                          List(N, N, N, IS_X),
             Array(
-               JAL     -> List(N, Y, IS_J),
-               JALR    -> List(N, N, IS_I),
-               BEQ     -> List(Y, N, IS_B),
-               BNE     -> List(Y, N, IS_B),
-               BGE     -> List(Y, N, IS_B),
-               BGEU    -> List(Y, N, IS_B),
-               BLT     -> List(Y, N, IS_B),
-               BLTU    -> List(Y, N, IS_B)
+               JAL     -> List(N, Y, N, IS_J),
+               JALR    -> List(N, N, Y, IS_I),
+               BEQ     -> List(Y, N, N, IS_B),
+               BNE     -> List(Y, N, N, IS_B),
+               BGE     -> List(Y, N, N, IS_B),
+               BGEU    -> List(Y, N, N, IS_B),
+               BLT     -> List(Y, N, N, IS_B),
+               BLTU    -> List(Y, N, N, IS_B)
             ))
 
-   val is_br_ :: is_jal_ :: imm_sel_ :: Nil = bpd_csignals
+   val (cs_is_br: Bool) :: (cs_is_jal: Bool) :: (cs_is_jalr:Bool) :: imm_sel_ :: Nil = bpd_csignals
 
-   io.is_br   := is_br_.toBool
-   io.is_jal  := is_jal_.toBool
-   io.imm_sel := imm_sel_
+   io.is_br   := cs_is_br
+   io.is_jal  := cs_is_jal
+   io.is_jalr := cs_is_jalr
 }
 
 
 class FetchSerializerIO() extends BOOMCoreBundle
 {
    val enq = new DecoupledIO(new FetchBundle()).flip
-   val deq = new DecoupledIO(Vec.fill(DECODE_WIDTH){new MicroOp()}) 
-      
-   val kill = Bool(INPUT) 
+   val deq = new DecoupledIO(Vec.fill(DECODE_WIDTH){new MicroOp()})
+
+   val kill = Bool(INPUT)
 
   override def clone = new FetchSerializerIO().asInstanceOf[this.type]
 }
@@ -331,7 +328,7 @@ class FetchSerializerNtoM() extends Module with BOOMCoreParameters
 
    //-------------------------------------------------------------
    // Compute Enqueue Ready (get the next bundle)
-   io.enq.ready := io.deq.ready && 
+   io.enq.ready := io.deq.ready &&
                      (io.enq.bits.mask != Bits(3) || (counter === UInt(1)))
 
 
@@ -347,19 +344,20 @@ class FetchSerializerNtoM() extends Module with BOOMCoreParameters
       counter := counter + UInt(1)
    }
 
-   
+
    //-------------------------------------------------------------
    // override all the above logic for FW==1
    if (FETCH_WIDTH == 1)
    {
       inst_idx := UInt(0)
-      io.enq.ready := io.deq.ready 
+      io.enq.ready := io.deq.ready
    }
 
    io.deq.bits(0).pc             := io.enq.bits.pc
    io.deq.bits(0).fetch_pc_lob   := io.enq.bits.pc
    io.deq.bits(0).inst           := io.enq.bits.insts(inst_idx)
    io.deq.bits(0).btb_resp_valid := io.enq.bits.btb_resp_valid
+   io.deq.bits(0).btb_hit        := io.enq.bits.btb_resp_valid
    io.deq.bits(0).btb_resp       := io.enq.bits.btb_resp
    io.deq.bits(0).valid          := io.enq.bits.mask(0)
    io.deq.bits(0).xcpt_ma        := io.enq.bits.xcpt_ma(inst_idx)
@@ -377,12 +375,13 @@ class FetchSerializerNtoM() extends Module with BOOMCoreParameters
       {
          io.deq.bits(i).valid          := io.enq.bits.mask(i)
          io.deq.bits(i).pc             := (io.enq.bits.pc & SInt(-(FETCH_WIDTH*coreInstBytes))) + UInt(i << 2)
-         io.deq.bits(i).fetch_pc_lob   := io.enq.bits.pc 
+         io.deq.bits(i).fetch_pc_lob   := io.enq.bits.pc
          io.deq.bits(i).inst           := io.enq.bits.insts(i)
-         io.deq.bits(i).btb_resp_valid := Mux(io.enq.bits.btb_pred_taken_idx === UInt(i),
+         io.deq.bits(i).btb_resp_valid := io.enq.bits.btb_resp_valid
+         io.deq.bits(i).btb_hit        := Mux(io.enq.bits.btb_pred_taken_idx === UInt(i),
                                                              io.enq.bits.btb_resp_valid,
                                                              Bool(false))
-         io.deq.bits(i).btb_resp       := io.enq.bits.btb_resp 
+         io.deq.bits(i).btb_resp       := io.enq.bits.btb_resp
          when (io.enq.bits.btb_pred_taken_idx != UInt(i))
          {
             io.deq.bits(i).btb_resp.taken := Bool(false)
@@ -394,16 +393,16 @@ class FetchSerializerNtoM() extends Module with BOOMCoreParameters
       io.enq.ready := io.deq.ready
    }
 
-   // Pipe valid straight through, since conceptually, 
+   // Pipe valid straight through, since conceptually,
    // we are just an extension of the Fetch Buffer
    io.deq.valid := io.enq.valid
- 
+
 }
 
 
 // track the current "branch mask", and give out the branch mask to each micro-op in Decode
 // (each micro-op in the machine has a branch mask which says which branches it
-// is being speculated under. 
+// is being speculated under.
 class BranchMaskGenerationLogic(val pl_width: Int) extends Module with BOOMCoreParameters
 {
    val io = new Bundle
@@ -421,7 +420,7 @@ class BranchMaskGenerationLogic(val pl_width: Int) extends Module with BOOMCoreP
                                                           // individual micro-op (so
                                                           // some micro-ops can go
                                                           // through)
-      
+
       val brinfo         = new BrResolutionInfo().asInput
       val flush_pipeline = Bool(INPUT)
 
@@ -435,13 +434,13 @@ class BranchMaskGenerationLogic(val pl_width: Int) extends Module with BOOMCoreP
    //-------------------------------------------------------------
    // Give out the branch mask and branch tag to each micro-op
 
-   var curr_br_mask = branch_mask 
+   var curr_br_mask = branch_mask
 
    for (w <- 0 until pl_width)
    {
-      io.is_full(w) := (curr_br_mask === ~(Bits(0,MAX_BR_COUNT))) && io.is_branch(w) 
+      io.is_full(w) := (curr_br_mask === ~(Bits(0,MAX_BR_COUNT))) && io.is_branch(w)
       io.br_mask(w) := GetNewBrMask(io.brinfo, curr_br_mask)
-       
+
 
       // find br_tag and compute next br_mask
       val new_br_mask = Bits(width = MAX_BR_COUNT)
@@ -460,7 +459,7 @@ class BranchMaskGenerationLogic(val pl_width: Int) extends Module with BOOMCoreP
 
       io.br_tag(w)  := new_br_tag
 
-      curr_br_mask = Mux(io.is_branch(w) && io.will_fire(w), new_br_mask 
+      curr_br_mask = Mux(io.is_branch(w) && io.will_fire(w), new_br_mask
                                                            , curr_br_mask)
    }
 

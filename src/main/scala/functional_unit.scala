@@ -38,7 +38,7 @@ object FUCode
    val FU_MEM  = Bits(32, FUC_SZ)
 }
 import FUCode._
- 
+
 // TODO if a branch unit... how to add extra to IO in subclass?
 
 class FunctionalUnitIo(num_stages: Int, num_bypass_stages: Int) extends BOOMCoreBundle
@@ -49,12 +49,12 @@ class FunctionalUnitIo(num_stages: Int, num_bypass_stages: Int) extends BOOMCore
    val brinfo  = new BrResolutionInfo().asInput()
 
    val bypass  = new BypassData(num_bypass_stages).asOutput()
-   
+
    val br_unit = new BranchUnitResp().asOutput
 
-   val get_rob_pc = new Bundle 
+   val get_rob_pc = new Bundle
    {
-      val rob_idx = UInt(OUTPUT, ROB_ADDR_SZ) 
+      val rob_idx = UInt(OUTPUT, ROB_ADDR_SZ)
       val curr_pc = UInt(INPUT, xprLen)
       val next_val= Bool(INPUT)
       val next_pc = UInt(INPUT, xprLen)
@@ -64,7 +64,7 @@ class FunctionalUnitIo(num_stages: Int, num_bypass_stages: Int) extends BOOMCore
 class FuncUnitReq extends BOOMCoreBundle
 {
    val uop = new MicroOp()
-   val rs1_data = Bits(width = xprLen) 
+   val rs1_data = Bits(width = xprLen)
    val rs2_data = Bits(width = xprLen)
 
    val kill = Bool() // kill everything
@@ -73,10 +73,10 @@ class FuncUnitReq extends BOOMCoreBundle
 class FuncUnitResp extends BOOMCoreBundle
 {
    val uop = new MicroOp()
-   val data = Bits(width = xprLen)  
+   val data = Bits(width = xprLen)
    val xcpt = (new rocket.HellaCacheExceptions)
 }
- 
+
 class BypassData(num_bypass_ports:Int) extends BOOMCoreBundle
 {
    val valid = Vec.fill(num_bypass_ports){ Bool() }
@@ -85,7 +85,7 @@ class BypassData(num_bypass_ports:Int) extends BOOMCoreBundle
 
    def get_num_ports: Int = num_bypass_ports
 }
- 
+
 class BranchUnitResp extends BOOMCoreBundle
 {
    val take_pc        = Bool()
@@ -96,12 +96,13 @@ class BranchUnitResp extends BOOMCoreBundle
 
    val brinfo          = new BrResolutionInfo() // NOTE: delayed a cycle!
    val btb_update_valid = Bool() // TODO turn this into a directed bundle so we can fold this into btb_update?
-   val btb_update      = new rocket.BTBUpdate   
+   val btb_update      = new rocket.BTBUpdate
+   val bht_update      = Valid(new rocket.BHTUpdate)
 
    val debug_btb_pred  = Bool() // just for debug, did the BTB and BHT predict taken?
 }
 
-abstract class FunctionalUnit(is_pipelined: Boolean 
+abstract class FunctionalUnit(is_pipelined: Boolean
                               , num_stages: Int
                               , num_bypass_stages: Int
                               , has_branch_unit : Boolean = false)
@@ -113,7 +114,7 @@ abstract class FunctionalUnit(is_pipelined: Boolean
 
 // Note: this helps track which uops get killed while in intermediate stages,
 // but it is the job of the consumer to check for kills on the same cycle as consumption!!!
-abstract class PipelinedFunctionalUnit(val num_stages: Int, 
+abstract class PipelinedFunctionalUnit(val num_stages: Int,
                                        val num_bypass_stages: Int,
                                        val earliest_bypass_stage: Int,
                                        is_branch_unit: Boolean = false)
@@ -126,7 +127,7 @@ abstract class PipelinedFunctionalUnit(val num_stages: Int,
    io.req.ready := Bool(true)
 
    val r_valids = Vec.fill(num_stages) { Reg(init = Bool(false)) }
-   val r_uops   = Vec.fill(num_stages) { Reg(outType =  new MicroOp()) } 
+   val r_uops   = Vec.fill(num_stages) { Reg(outType =  new MicroOp()) }
 
 
    if (num_stages >= 1)
@@ -156,7 +157,7 @@ abstract class PipelinedFunctionalUnit(val num_stages: Int,
    {
       require (num_stages == 0)
       // pass req straight through to response
-      
+
       io.resp.valid    := io.req.valid && !IsKilledByBranch(io.brinfo, io.req.bits.uop) // && !io.req.bits.kill TODO remove kill signals, let consumer deal with it. the LSU already handles it. and this hurts critical path.
       io.resp.bits.uop := io.req.bits.uop
       io.resp.bits.uop.br_mask := GetNewBrMask(io.brinfo, io.req.bits.uop)
@@ -166,14 +167,14 @@ abstract class PipelinedFunctionalUnit(val num_stages: Int,
    if (num_bypass_stages > 0 && earliest_bypass_stage == 0)
    {
       io.bypass.uop(0) := io.req.bits.uop
-      
+
       for (i <- 1 until num_bypass_stages)
       {
          io.bypass.uop(i) := r_uops(i-1)
 
       }
    }
-    
+
 
 }
 
@@ -188,7 +189,7 @@ class ALUUnit(is_branch_unit: Boolean = false)
    // immediate generation
    val imm_xprlen = ImmGen(uop.imm_packed, uop.ctrl.imm_sel)
 
-   // operand 1 select 
+   // operand 1 select
    var op1_data: Bits = null
    if (is_branch_unit)
    {
@@ -202,8 +203,8 @@ class ALUUnit(is_branch_unit: Boolean = false)
       op1_data = Mux(io.req.bits.uop.ctrl.op1_sel.toUInt === OP1_RS1 , io.req.bits.rs1_data,
                                                                        UInt(0))
    }
-   
-   // operand 2 select 
+
+   // operand 2 select
    val op2_data = Mux(io.req.bits.uop.ctrl.op2_sel === OP2_IMM,  Sext(imm_xprlen, xprLen),
                   Mux(io.req.bits.uop.ctrl.op2_sel === OP2_IMMC, io.req.bits.uop.pop1(4,0),
                   Mux(io.req.bits.uop.ctrl.op2_sel === OP2_RS2 , io.req.bits.rs2_data,
@@ -224,13 +225,13 @@ class ALUUnit(is_branch_unit: Boolean = false)
       // The Branch Unit redirects the PC immediately, but delays the mispredict
       // signal a cycle (for critical path reasons)
 
-      // Did I just get killed by the previous cycle's branch? 
+      // Did I just get killed by the previous cycle's branch?
       // Or by a flush pipeline?
       val killed = Bool()
       killed := Bool(false)
       when (io.req.bits.kill ||
-            (io.brinfo.valid && 
-               io.brinfo.mispredict && 
+            (io.brinfo.valid &&
+               io.brinfo.mispredict &&
                maskMatch(io.brinfo.mask, io.req.bits.uop.br_mask)
             ))
       {
@@ -242,13 +243,13 @@ class ALUUnit(is_branch_unit: Boolean = false)
       val rs2 = io.req.bits.rs2_data
       val br_eq  = (rs1 === rs2)
       val br_ltu = (rs1.toUInt < rs2.toUInt)
-      val br_lt  = (~(rs1(xprLen-1) ^ rs2(xprLen-1)) & br_ltu | 
+      val br_lt  = (~(rs1(xprLen-1) ^ rs2(xprLen-1)) & br_ltu |
                       rs1(xprLen-1) & ~rs2(xprLen-1)).toBool
- 
+
       val pc_plus4 = (uop_pc_ + UInt(4))(xprLen-1,0)
-    
+
       val pc_sel = Lookup(io.req.bits.uop.ctrl.br_type, PC_PLUS4,
-               Array(   BR_N  -> PC_PLUS4, 
+               Array(   BR_N  -> PC_PLUS4,
                         BR_NE -> Mux(!br_eq,  PC_BRJMP, PC_PLUS4),
                         BR_EQ -> Mux( br_eq,  PC_BRJMP, PC_PLUS4),
                         BR_GE -> Mux(!br_lt,  PC_BRJMP, PC_PLUS4),
@@ -268,17 +269,17 @@ class ALUUnit(is_branch_unit: Boolean = false)
                           (pc_sel != PC_PLUS4)
 
       // JAL is taken in the front-end, so it should never mispredict
-      val mispredict = io.req.valid && 
+      val mispredict = io.req.valid &&
                        !killed &&
                        uop.is_br_or_jmp &&
                        !(uop.is_jal) && // TODO XXX is this the proper way to do this? can we remove more JAL stuff from the branch unit? jal should just be a NOP, except it needs the PC for wb
+                                        // TODO treat a JAL with rd=x0 differently, squash away in decode.
 //                       ((io.br_unit.taken ^ uop.btb_pred_taken) || // BTB was wrong this assumes BTB doesn't say "taken" for PC+4
                        (// BTB was wrong
-                       (pc_sel === PC_PLUS4 && ((uop.btb_resp_valid && uop.btb_resp.taken) || !io.get_rob_pc.next_val || (io.get_rob_pc.next_pc != (uop_pc_ + UInt(4))))) ||
-                       (pc_sel != PC_PLUS4 && (!(uop.btb_resp_valid && uop.btb_resp.taken) || !io.get_rob_pc.next_val || (io.get_rob_pc.next_pc != bj_addr)))
-//                       (uop.btb_pred_taken && pc_sel === PC_JALR && (!io.get_rob_pc.next_val || (io.get_rob_pc.next_pc != jreg_target))) // BTB was right, but wrong target for JALR
-//                       (pc_sel === PC_JALR && (!uop.btb_pred_taken || !opg
-                       )                         
+                          (pc_sel === PC_PLUS4 && (uop.btb_hit && uop.btb_resp.taken)) ||
+                          (pc_sel != PC_PLUS4 && !(uop.btb_hit && uop.btb_resp.taken)) ||
+                          (pc_sel === PC_JALR && (!io.get_rob_pc.next_val || (io.get_rob_pc.next_pc != bj_addr))) // BTB was right, but wrong target for JALR
+                       )
 
       // TODO assert is there a way to verify the branch prediction jumped to the correct address?
       //val bad_jmp_target_error = io.req.valid && uop.is_br_or_jmp && !uop.is_jump && (bj_addr != ???)
@@ -302,39 +303,44 @@ class ALUUnit(is_branch_unit: Boolean = false)
       // updates the BTB same cycle as PC redirect
       val lsb = log2Ceil(FETCH_WIDTH*coreInstBytes)
       // TODO remove jal from redirecting the PC? it should NEVER "mispredict!"
-      io.br_unit.btb_update_valid            := io.req.valid && uop.is_br_or_jmp && !uop.is_jal && !killed  // did a branch or jump  occur?
+
+      // did a branch or jalr occur AND did we mispredict? AND was it taken? (i.e., should we update the BTB)
+      io.br_unit.btb_update_valid            := io.req.valid && uop.is_br_or_jmp && !uop.is_jal && mispredict && io.br_unit.taken && !killed
       io.br_unit.btb_update.pc               := ((uop_pc_ >> lsb) << lsb) + uop.fetch_pc_lob // what pc should the tag check be on?
-      io.br_unit.btb_update.br_pc            := (uop_pc_)
-      io.br_unit.btb_update.target           := io.br_unit.target //bj_addr // what should the target be on the tag hit?
-      io.br_unit.btb_update.returnAddr       := (pc_plus4)           // return address for the RAS?
-      io.br_unit.btb_update.prediction.valid := (uop.btb_resp_valid) // did this branch have a BTB hit in fetch?
-      io.br_unit.btb_update.prediction.bits  := (uop.btb_resp)       // give the BTB back its BTBResp
-      io.br_unit.btb_update.taken            := (io.br_unit.taken)   // was this branch "taken"
-      io.br_unit.btb_update.mispredict       := (mispredict)         // did we mispredict? or is this "when we want to update the Target"
-      io.br_unit.btb_update.isJump           := (uop.is_jump) 
-      io.br_unit.btb_update.isCall           := (uop.is_call)        // TODO verify 
-      io.br_unit.btb_update.isReturn         := (uop.is_ret)
-                                    
+      io.br_unit.btb_update.br_pc            := uop_pc_
+      io.br_unit.btb_update.target           := io.br_unit.target & SInt(-coreInstBytes) //bj_addr // what should the target be on the tag hit?
+      io.br_unit.btb_update.prediction.valid := uop.btb_resp_valid // did this branch's fetch packet  have a BTB hit in fetch?
+      io.br_unit.btb_update.prediction.bits  := uop.btb_resp       // give the BTB back its BTBResp
+      io.br_unit.btb_update.taken            := io.br_unit.taken   // was this branch "taken"
+      io.br_unit.btb_update.isJump           := uop.is_jump
+      io.br_unit.btb_update.isReturn         := uop.is_ret
+
+      io.br_unit.bht_update.valid                 := io.req.valid && uop.is_br_or_jmp && !uop.is_jump && !killed // update on all branches
+      io.br_unit.bht_update.bits.taken            := io.br_unit.taken   // was this branch "taken"
+      io.br_unit.bht_update.bits.mispredict       := mispredict
+      io.br_unit.bht_update.bits.prediction.valid := uop.btb_resp_valid
+      io.br_unit.bht_update.bits.prediction.bits  := uop.btb_resp
+      io.br_unit.bht_update.bits.pc               := ((uop_pc_ >> lsb) << lsb) + uop.fetch_pc_lob // what pc should the tag check be on?
 
 
       // Branch/Jump Target Calculation
       // we can't push this through the ALU though, b/c jalr needs both PC+4 and rs1+offset
 
-      def vaSign(a0: UInt, ea: Bits) = {                                        
-         // efficient means to compress 64-bit VA into rc.as.vaddrBits+1 bits         
-         // (VA is bad if VA(rc.as.vaddrBits) != VA(rc.as.vaddrBits-1))                    
+      def vaSign(a0: UInt, ea: Bits) = {
+         // efficient means to compress 64-bit VA into rc.as.vaddrBits+1 bits
+         // (VA is bad if VA(rc.as.vaddrBits) != VA(rc.as.vaddrBits-1))
          val a = a0 >> vaddrBits-1
-         val e = ea(vaddrBits,vaddrBits-1)                                     
-         Mux(a === UInt(0) || a === UInt(1), e != UInt(0),                       
-         Mux(a === SInt(-1) || a === SInt(-2), e === SInt(-1),                   
-            e(0)))                                                                  
-      }                                                                         
-      
+         val e = ea(vaddrBits,vaddrBits-1)
+         Mux(a === UInt(0) || a === UInt(1), e != UInt(0),
+         Mux(a === SInt(-1) || a === SInt(-2), e === SInt(-1),
+            e(0)))
+      }
+
       val bj_base = Mux(uop.uopc === uopJALR, io.req.bits.rs1_data, uop_pc_)
       val bj_offset = imm_xprlen(20,0).toSInt
-      val bj64 = bj_base + bj_offset                                                    
+      val bj64 = bj_base + bj_offset
       val bj_msb = Mux(uop.uopc === uopJALR, vaSign(io.req.bits.rs1_data, bj64), vaSign(uop_pc_, bj64))
-      bj_addr := Cat(bj_msb, bj64(vaddrBits-1,0))                                   
+      bj_addr := Cat(bj_msb, bj64(vaddrBits-1,0))
 
       io.br_unit.pc             := uop_pc_
       io.br_unit.debug_btb_pred := uop.btb_resp_valid && uop.btb_resp.taken
@@ -343,19 +349,19 @@ class ALUUnit(is_branch_unit: Boolean = false)
 
    // Bypass (bypass in Exe0 stage)
    // for the ALU, we can bypass after the first stage
-   require (num_stages == 1)  
-   require (num_bypass_stages == 2)  
-   io.bypass.valid(0) := io.req.valid 
+   require (num_stages == 1)
+   require (num_bypass_stages == 2)
+   io.bypass.valid(0) := io.req.valid
    io.bypass.data (0) := alu.io.out
    // we must also bypass the WB stage
-   io.bypass.valid(1) := io.resp.valid 
+   io.bypass.valid(1) := io.resp.valid
    io.bypass.data (1) := io.resp.bits.data
 
    // Response
-   val reg_data = Reg(outType = Bits(width = xprLen)) 
+   val reg_data = Reg(outType = Bits(width = xprLen))
    reg_data := alu.io.out
    io.resp.bits.data := reg_data
-      
+
    // Exceptions
    io.resp.bits.xcpt.ma.ld := Bool(false)
    io.resp.bits.xcpt.ma.st := Bool(false)
@@ -390,11 +396,11 @@ class MemAddrCalcUnit extends PipelinedFunctionalUnit(num_stages = 0
 
    // Handle misaligned exceptions
    val typ = io.req.bits.uop.mem_typ
-   val misaligned = 
+   val misaligned =
       (((typ === MT_H) || (typ === MT_HU)) && (effective_address(0) != Bits(0))) ||
       (((typ === MT_W) || (typ === MT_WU)) && (effective_address(1,0) != Bits(0))) ||
       ((typ === MT_D) && (effective_address(2,0) != Bits(0)))
-    
+
    val ma_ld = io.req.valid && io.req.bits.uop.uopc === uopLD && misaligned
    val ma_st = io.req.valid && io.req.bits.uop.uopc === uopSTA && misaligned
 
@@ -403,7 +409,7 @@ class MemAddrCalcUnit extends PipelinedFunctionalUnit(num_stages = 0
    io.resp.bits.xcpt.pf.ld := Bool(false)
    io.resp.bits.xcpt.pf.st := Bool(false)
 }
- 
+
 
 // unpipelined, can only hold a single MicroOp at a time
 // assumes at least one register between request and response
@@ -413,7 +419,7 @@ abstract class UnPipelinedFunctionalUnit
                                                             , num_bypass_stages = 0
                                                             , has_branch_unit = false) with BOOMCoreParameters
 {
-   val r_uop = Reg(outType = new MicroOp()) 
+   val r_uop = Reg(outType = new MicroOp())
 
    val do_kill = Bool()
    do_kill := io.req.bits.kill // irrelevant default
@@ -439,28 +445,28 @@ abstract class UnPipelinedFunctionalUnit
 //   io.bypass.uop(0)   := io.resp.bits.uop
 //   io.bypass.data(0)  := io.resp.bits.data
 }
- 
+
 
 class MulDivUnit extends UnPipelinedFunctionalUnit with BOOMCoreParameters
 {
    val muldiv = Module(new rocket.MulDiv(mulUnroll = if (fastMulDiv) 8 else 1, earlyOut = fastMulDiv))
-   
+
    // request
    muldiv.io.req.valid    := io.req.valid && !this.do_kill
    muldiv.io.req.bits.dw  := io.req.bits.uop.ctrl.fcn_dw
-   muldiv.io.req.bits.fn  := io.req.bits.uop.ctrl.op_fcn 
+   muldiv.io.req.bits.fn  := io.req.bits.uop.ctrl.op_fcn
    muldiv.io.req.bits.in1 := io.req.bits.rs1_data
    muldiv.io.req.bits.in2 := io.req.bits.rs2_data
    io.req.ready           := muldiv.io.req.ready
-   
+
    // handle pipeline kills and branch misspeculations
-   muldiv.io.kill         := this.do_kill 
+   muldiv.io.kill         := this.do_kill
 
    // response
    io.resp.valid          := muldiv.io.resp.valid
-   muldiv.io.resp.ready   := io.resp.ready 
+   muldiv.io.resp.ready   := io.resp.ready
    io.resp.bits.data      := muldiv.io.resp.bits.data
-   
+
    // exceptions
    io.resp.bits.xcpt.ma.ld := Bool(false)
    io.resp.bits.xcpt.ma.st := Bool(false)
@@ -468,5 +474,5 @@ class MulDivUnit extends UnPipelinedFunctionalUnit with BOOMCoreParameters
    io.resp.bits.xcpt.pf.st := Bool(false)
 }
 
-} 
+}
 

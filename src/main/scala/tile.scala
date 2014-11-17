@@ -26,7 +26,7 @@ class BOOMTile(resetSignal: Bool = null) extends Tile(resetSignal)
   val icachePortId = 1
 
   val core = Module(new Core, { case CoreName => "BOOM"})
-  val icache = Module(new rocket.Frontend, { case CacheName => "L1I"; case CoreName => "BOOM" })
+  val icache = Module(new rocket.Frontend(btb_updates_out_of_order=true), { case CacheName => "L1I"; case CoreName => "BOOM" })
   val dcache = Module(new DCacheWrapper, { case CacheName => "L1D" })
   val ptw = Module(new PTW(params(NPTWPorts)))
 
