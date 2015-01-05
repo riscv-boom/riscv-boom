@@ -1128,7 +1128,7 @@ class ForwardingAgeLogic(num_entries: Int) extends Module with BOOMCoreParameter
       when (matches(i))
       {
          found_match := Bool(true)
-         io.forwarding_idx := Mux(UInt(i) >= UInt(num_entries), UInt(i-num_entries), UInt(i))
+         io.forwarding_idx := UInt(i % num_entries)
       }
    }
 
