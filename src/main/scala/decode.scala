@@ -130,7 +130,13 @@ object Decode
                AMOMIN_D-> List(Y, uopAMO_AG, FU_MEM, RT_FIX, RT_FIX, RT_FIX, IS_X, N, Y, Y, N, N, M_XA_MIN, MSK_D,UInt(0),N, N, N, N, N, N, Y, Y, CSR.N),
                AMOMINU_D->List(Y, uopAMO_AG, FU_MEM, RT_FIX, RT_FIX, RT_FIX, IS_X, N, Y, Y, N, N, M_XA_MINU,MSK_D,UInt(0),N, N, N, N, N, N, Y, Y, CSR.N),
                AMOMAX_D-> List(Y, uopAMO_AG, FU_MEM, RT_FIX, RT_FIX, RT_FIX, IS_X, N, Y, Y, N, N, M_XA_MAX, MSK_D,UInt(0),N, N, N, N, N, N, Y, Y, CSR.N),
-               AMOMAXU_D->List(Y, uopAMO_AG, FU_MEM, RT_FIX, RT_FIX, RT_FIX, IS_X, N, Y, Y, N, N, M_XA_MAXU,MSK_D,UInt(0),N, N, N, N, N, N, Y, Y, CSR.N)
+               AMOMAXU_D->List(Y, uopAMO_AG, FU_MEM, RT_FIX, RT_FIX, RT_FIX, IS_X, N, Y, Y, N, N, M_XA_MAXU,MSK_D,UInt(0),N, N, N, N, N, N, Y, Y, CSR.N),
+
+               LR_W    -> List(Y, uopAMO_AG, FU_MEM, RT_FIX, RT_FIX, RT_FIX, IS_X, N, Y, Y, N, N, M_XLR   , MSK_W,UInt(0),N, N, N, N, N, N, Y, Y, CSR.N), // TODO optimize LR, SC
+               LR_D    -> List(Y, uopAMO_AG, FU_MEM, RT_FIX, RT_FIX, RT_FIX, IS_X, N, Y, Y, N, N, M_XLR   , MSK_D,UInt(0),N, N, N, N, N, N, Y, Y, CSR.N), // note this generates two micro-ops
+               SC_W    -> List(Y, uopAMO_AG, FU_MEM, RT_FIX, RT_FIX, RT_FIX, IS_X, N, Y, Y, N, N, M_XSC   , MSK_W,UInt(0),N, N, N, N, N, N, Y, Y, CSR.N), // which isn't needed
+               SC_D    -> List(Y, uopAMO_AG, FU_MEM, RT_FIX, RT_FIX, RT_FIX, IS_X, N, Y, Y, N, N, M_XSC   , MSK_D,UInt(0),N, N, N, N, N, N, Y, Y, CSR.N)
+
                )
 
 
