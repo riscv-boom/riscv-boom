@@ -8,7 +8,7 @@
 // We need to track inflight loads that may have been misspeculated, and filter
 // them out before they can be returned to the pipeline (we do not want to hold
 // up pipeline resources like LD/ST entries on them).
-
+//
 // Also, the hellacache was designed for a 5-stage pipeline, and has some
 // pecularities regarding nacks, kills, store-data forwarding, etc.
 //
@@ -37,7 +37,7 @@ class LoadReqSlotIo extends Bundle
 
    val clear      = Bool(INPUT) // kill slot immediately (either nacked or succeeded)
    val brinfo     = new BrResolutionInfo().asInput() 
-   val flush_pipe = Bool(INPUT) // exceptions, etc. but keep slot valid
+   val flush_pipe = Bool(INPUT) // exceptions, etc. but keep slot valid (ignore if entry is non-speculative. e.g., AMOs)
    
    val out_uop    = new MicroOp().asOutput() //need ldq_idx
 
@@ -66,7 +66,6 @@ class LoadReqSlot extends Module
    // otherwise we might overwrite an incoming entry
    when (io.clear && valid)
    {
-      //assert (valid)
       valid      := Bool(false)
    }
    .elsewhen (io.wen)
@@ -109,7 +108,9 @@ class LoadReqSlot extends Module
 
    // outputs
    io.valid      := valid
-   io.was_killed := was_killed || br_killed //handles branch killing us same cycle as resp is valid
+   // "was killed" handles branch killing us same cycle as resp is valid. AMOs
+   // are currently handled as non-speculative, so they can never be killed.
+   io.was_killed := (was_killed || br_killed) && !uop.is_amo 
    io.out_uop    := uop
 }
  
@@ -206,7 +207,7 @@ class DCacheWrapper extends Module with BOOMCoreParameters
    val m2_inflight_tag  = Bits() // two cycles ago, aka now in the Mem2 Stage
    val m2_req_uop       = Reg(next=Reg(next=io.core.req.bits.uop)) // nack signals come two cycles later
    
-   val enq_val = io.core.req.valid && io.core.req.bits.uop.is_load
+   val enq_val = io.core.req.valid && (io.core.req.bits.uop.is_load || io.core.req.bits.uop.is_amo)
    val enq_rdy = Bool()
         
    for (i <- 0 until max_num_inflight)
@@ -309,7 +310,7 @@ class DCacheWrapper extends Module with BOOMCoreParameters
    nbdcache.io.cpu.req.bits.typ   := io.core.req.bits.uop.mem_typ
 //   nbdcache.io.cpu.req.bits.addr  := Mux(io.core.req.valid, io.core.req.bits.addr,prefetcher.io.cache.req.bits.addr) TODO get core.req.valid off critical path here
    nbdcache.io.cpu.req.bits.addr  := io.core.req.bits.addr
-   nbdcache.io.cpu.req.bits.tag   := Cat(!io.core.req.valid, new_inflight_tag)
+   nbdcache.io.cpu.req.bits.tag   := Cat(!io.core.req.valid, new_inflight_tag) // TODO is there a reason i'm doing this req.valid Cat? 
    nbdcache.io.cpu.req.bits.cmd   := Mux(io.core.req.valid, io.core.req.bits.uop.mem_cmd, M_PFW)
    nbdcache.io.cpu.req.bits.data  := Reg(next=io.core.req.bits.data) //notice this is delayed a cycle
    nbdcache.io.cpu.req.bits.phys  := Bool(true) // use physical address? otherwise, use status bit of is VM enabled
@@ -319,21 +320,21 @@ class DCacheWrapper extends Module with BOOMCoreParameters
    
    // note: nacks come two cycles after a response, so I'm delaying everything
    // properly to line up stores, loads, nacks, and subword loads
-   val was_store  = !m2_req_uop.is_load && Reg(next=Reg(next=(io.core.req.valid && nbdcache.io.cpu.req.ready)))  // was two cycles ago a store request?
+   val was_store_and_not_amo = m2_req_uop.is_store && !m2_req_uop.is_amo && Reg(next=Reg(next=(io.core.req.valid && nbdcache.io.cpu.req.ready)))  // was two cycles ago a store request?
 
    
    // Todo add entry valid bit?
-   val resp_idx   = nbdcache.io.cpu.resp.bits.tag
+   val resp_idx = nbdcache.io.cpu.resp.bits.tag
 
-   io.core.resp.valid := Mux(nbdcache_load_ack,                            !inflight_load_buffer(resp_idx).was_killed, // hide loads that were killed due to branches, etc.
-                         Mux(was_store && !nbdcache.io.cpu.resp.bits.nack,  Bool(true),    // stores succeed quietly, so valid if no nack
-                                                                            Bool(false)))  // filter out nacked responses
+   io.core.resp.valid := Mux(nbdcache_load_ack,                                         !inflight_load_buffer(resp_idx).was_killed, // hide loads that were killed due to branches, etc.
+                         Mux(was_store_and_not_amo && !nbdcache.io.cpu.resp.bits.nack,  Bool(true),    // stores succeed quietly, so valid if no nack
+                                                                                        Bool(false)))  // filter out nacked responses
 
    io.core.resp.bits.data := nbdcache.io.cpu.resp.bits.data_subword   // comes out the same cycle as the resp.valid signal
                                                                       // but is a few gates slower than resp.bits.data 
    
    io.core.resp.bits.uop := Mux(nbdcache_load_ack, inflight_load_buffer(resp_idx).out_uop,
-                                                            m2_req_uop)
+                                                   m2_req_uop)
    //------------------------------------------------------------
    // handle nacks from the cache (or from the IFLB or the LSU)
 

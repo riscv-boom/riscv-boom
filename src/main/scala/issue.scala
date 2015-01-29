@@ -69,8 +69,8 @@ class IntegerIssueSlot(num_slow_wakeup_ports: Int) extends Module with BOOMCoreP
       slotUop    := io.inUop
 
       // special case breaking up insts into micro-ops
-      // for now, only stores supported
-      when (io.inUop.uopc === uopSTA)
+      // for now, only stores/amos supported
+      when (io.inUop.uopc === uopSTA || io.inUop.uopc === uopAMO_AG)
       {
          when (io.is_2nd_uop)
          {
@@ -97,7 +97,7 @@ class IntegerIssueSlot(num_slow_wakeup_ports: Int) extends Module with BOOMCoreP
       next_p2 := !(io.inUop.prs2_busy)
 
       // only for stores for now..
-      when (io.inUop.uopc === uopSTA)
+      when (io.inUop.uopc === uopSTA || io.inUop.uopc === uopAMO_AG)
       {
          when (io.is_2nd_uop)
          {
@@ -301,7 +301,7 @@ class IssueUnit(issue_width: Int, num_wakeup_ports: Int) extends Module with BOO
                                  entry_wen_oh_array(i)(2*w)  
 
          temp_2nduop_val(w)  := io.dis_mask(w) && 
-                                 io.dis_uops(w).uopc === uopSTA &&
+                                 (io.dis_uops(w).uopc === uopSTA || io.dis_uops(w).uopc === uopAMO_AG) &&
                                  !io.dis_uops(w).exception &&
                                  entry_wen_oh_array(i)(2*w+1)
 

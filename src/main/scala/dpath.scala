@@ -151,9 +151,10 @@ class MicroOp extends BOOMCoreBundle
    val mem_typ          = UInt(width = 3)             // memory mask type for loads/stores
    val is_fence         = Bool()
    val is_fencei        = Bool()
-   val is_store         = Bool()
+   val is_store         = Bool()                      // TODO AMOs are also considered stores?
+   val is_amo           = Bool()                      //
    val is_load          = Bool()
-   val is_unique        = Bool()                      // only allow this instruction in the pipeline
+   val is_unique        = Bool()                      // only allow this instruction in the pipeline, wait for STQ to drain, clear fetch after it
                                                       // (tell ROB to un-ready until empty)
    val flush_on_commit  = Bool()                      // some instructions need to flush the pipeline behind them
 
@@ -1626,14 +1627,14 @@ class DatPath() extends Module with BOOMCoreParameters
 
       // Rename Map Tables / ISA Register File
       val xpr_to_string =
-              Vec(Str(" x0"), Str(" ra"), Str(" s0"), Str(" s1"),
-                   Str(" s2"), Str(" s3"), Str(" s4"), Str(" s5"),
-                   Str(" s6"), Str(" s7"), Str(" s8"), Str(" s9"),
-                   Str("s10"), Str("s11"), Str(" sp"), Str(" tp"),
-                   Str(" v0"), Str(" v1"), Str(" a0"), Str(" a1"),
+              Vec(Str(" x0"), Str(" ra"), Str(" sp"), Str(" gp"),
+                   Str(" tp"), Str(" t0"), Str(" t1"), Str(" t2"),
+                   Str(" s0"), Str(" s1"), Str(" a0"), Str(" a1"),
                    Str(" a2"), Str(" a3"), Str(" a4"), Str(" a5"),
-                   Str(" a6"), Str(" a7"), Str(" t0"), Str(" t1"),
-                   Str(" t2"), Str(" t3"), Str(" t4"), Str(" gp"))
+                   Str(" a6"), Str(" a7"), Str(" s2"), Str(" s3"),
+                   Str(" s4"), Str(" s5"), Str(" s6"), Str(" s7"),
+                   Str(" s8"), Str(" s9"), Str("s10"), Str("s11"),
+                   Str(" t3"), Str(" t4"), Str(" t5"), Str(" t6"))
 
 
       if (white_space > 0)
@@ -1649,17 +1650,17 @@ class DatPath() extends Module with BOOMCoreParameters
                if (i < 32)
                {
                   // TODO update to the latest Chisel and put this back in
-//                  val phs_reg = rename_stage.io.debug.map_table(i).element
+                  val phs_reg = rename_stage.io.debug.map_table(i).element
 //
-//                  printf(" %sx%d(%s)=p%d,p%d[0x%x](%s)"
-//                     , Mux(rename_stage.io.debug.map_table(i).rbk_wen, Str("E"), Str(" "))
-//                     , UInt(i, LREG_SZ)
-//                     , xpr_to_string(i)
-//                     , phs_reg
-//                     , rename_stage.io.debug.map_table(i).committed_element
-//                     , regfile.io.debug.registers(phs_reg)
-//                     , Mux(rename_stage.io.debug.bsy_table(phs_reg), Str("b"), Str("_"))
-//                  )
+                  printf(" %sx%d(%s)=p%d,p%d[0x%x](%s)"
+                     , Mux(rename_stage.io.debug.map_table(i).rbk_wen, Str("E"), Str(" "))
+                     , UInt(i, LREG_SZ)
+                     , xpr_to_string(i)
+                     , phs_reg
+                     , UInt(0) //rename_stage.io.debug.map_table(i).committed_element
+                     , regfile.io.debug.registers(phs_reg)
+                     , Mux(rename_stage.io.debug.bsy_table(phs_reg), Str("b"), Str("_"))
+                  )
                }
             }
          }
@@ -1690,19 +1691,19 @@ class DatPath() extends Module with BOOMCoreParameters
          {
             when (com_uops(w).ldst_rtype === RT_FIX && com_uops(w).ldst != UInt(0))
             {
-//               printf("@@@ 0x%x (0x%x) x%d 0x%x |%d\n"
-               printf("@@@ 0x%x (0x%x) x%d 0x%x\n"
+               printf("0x%x (0x%x) x%d 0x%x |%d\n"
+//               printf("@@@ 0x%x (0x%x) x%d 0x%x\n"
                   , com_uops(w).pc
                   , com_uops(w).inst
                   , com_uops(w).inst(RD_MSB,RD_LSB)
                   , com_uops(w).debug_wdata
-//                  , tsc_reg
+                  , tsc_reg
                   )
             }
             .otherwise
             {
-//               printf("@@@ 0x%x (0x%x) |%d\n", com_uops(w).pc, com_uops(w).inst, tsc_reg)
-               printf("@@@ 0x%x (0x%x)\n", com_uops(w).pc, com_uops(w).inst)
+               printf("0x%x (0x%x) |%d\n", com_uops(w).pc, com_uops(w).inst, tsc_reg)
+//               printf("@@@ 0x%x (0x%x)\n", com_uops(w).pc, com_uops(w).inst)
             }
          }
       }

@@ -279,8 +279,7 @@ class MemExeUnit extends ExecutionUnit(num_rf_read_ports = 2, num_rf_write_ports
    //anything....
    val memresp_val    = Mux(io.com_handling_exc && io.dmem.resp.bits.uop.is_load, Bool(false), 
                                                 lsu.io.forward_val || io.dmem.resp.valid)
-
-   val memresp_rf_wen = (io.dmem.resp.valid && (io.dmem.resp.bits.uop.mem_cmd === M_XRD)) || 
+   val memresp_rf_wen = (io.dmem.resp.valid && (io.dmem.resp.bits.uop.mem_cmd === M_XRD || io.dmem.resp.bits.uop.is_amo)) ||  // TODO should I refactor this to use is_load?
                            lsu.io.forward_val
    val memresp_uop    = Mux(lsu.io.forward_val, lsu.io.forward_uop,
                                                 io.dmem.resp.bits.uop)
@@ -426,7 +425,7 @@ class ALUMulDMemExeUnit(is_branch_unit: Boolean = false, shares_pcr_wport: Boole
                                                 lsu.io.forward_val || io.dmem.resp.valid)
 
 
-   val memresp_rf_wen = (io.dmem.resp.valid && (io.dmem.resp.bits.uop.mem_cmd === M_XRD)) || 
+   val memresp_rf_wen = (io.dmem.resp.valid && (io.dmem.resp.bits.uop.mem_cmd === M_XRD || io.dmem.resp.bits.uop.is_amo)) || 
                            lsu.io.forward_val
    val memresp_uop    = Mux(lsu.io.forward_val, lsu.io.forward_uop,
                                                 io.dmem.resp.bits.uop)

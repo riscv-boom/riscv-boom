@@ -320,8 +320,9 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
 
    when (exe_uop.ctrl.is_sta && io.exe_resp.valid)
    {
-      saq_val (exe_uop.stq_idx) := Bool(true)
-      saq_addr(exe_uop.stq_idx) := io.exe_resp.bits.data.toUInt
+      saq_val (exe_uop.stq_idx)       := Bool(true)
+      saq_addr(exe_uop.stq_idx)       := io.exe_resp.bits.data.toUInt
+      stq_uop (exe_uop.stq_idx).pdst  := exe_uop.pdst // needed for amo's
    }
 
    when (exe_uop.ctrl.is_std && io.exe_resp.valid)
@@ -447,8 +448,8 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
          forwarding_matches(i) := Bool(true)
       }
 
-      // did a load see a conflicting store (sb->lw) or a fence? if so, put the load to sleep
-      when ((stq_entry_val(i) && st_dep_mask(i) && stq_uop(i).is_fence) ||
+      // did a load see a conflicting store (sb->lw) or a fence/AMO? if so, put the load to sleep
+      when ((stq_entry_val(i) && st_dep_mask(i) && (stq_uop(i).is_fence || stq_uop(i).is_amo)) ||
             (dword_addr_matches(i) && (l_uop.mem_typ != stq_uop(i).mem_typ) && ((read_mask & write_mask) != Bits(0))))
       {
          force_ld_to_sleep := Bool(true)
