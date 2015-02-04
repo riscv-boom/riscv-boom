@@ -380,10 +380,9 @@ class MemAddrCalcUnit extends PipelinedFunctionalUnit(num_stages = 0
    val alu = Module(new rocket.ALU())
 
    alu.io.in1 := io.req.bits.rs1_data.toUInt
-//   alu.io.in2 := Mux(io.req.bits.uop.ctrl.op2_sel === OP2_ZERO,
-   alu.io.in2 := Mux(io.req.bits.uop.is_amo,
+   alu.io.in2 := Mux(io.req.bits.uop.ctrl.op2_sel === OP2_ZERO,
                      SInt(0),
-                     Cat(io.req.bits.uop.imm_packed(19,8)).toSInt) //uses special packed imm format
+                     io.req.bits.uop.imm_packed(19,8).toSInt) //uses special packed imm format
 
    alu.io.fn  := FN_ADD
    alu.io.dw  := DW_XPR

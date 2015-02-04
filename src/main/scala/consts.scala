@@ -14,9 +14,9 @@ import Node._
 
 trait BOOMDebugConstants
 {
-   val DEBUG_PRINTF = false         // use the Chisel printf functionality
-   val COMMIT_LOG_PRINTF = false    // dump commit state, for comparision against ISA sim
-   val DEBUG_ENABLE_COLOR = false   // provide color to print outs? requires a VIM plugin to work properly :(
+   val DEBUG_PRINTF        = false // use the Chisel printf functionality
+   val COMMIT_LOG_PRINTF   = false // dump commit state, for comparision against ISA sim
+   val DEBUG_ENABLE_COLOR  = false // provide color to print outs? requires a VIM plugin to work properly :(
 }
 
 trait BrPredConstants
@@ -185,6 +185,7 @@ trait ScalarOpConstants
 
    val uopFENCEI    = Bits(65, UOPC_SZ)
    val uopMEMSPECIAL= Bits(66, UOPC_SZ)
+   val uopAMO_AG    = Bits(67, UOPC_SZ) // AMO-address gen (use normal STD for datagen)
 
    // Enable Co-processor Register Signal (ToHost Register, etc.)
    //val PCR_N   = UInt(0,3)    // do nothing
