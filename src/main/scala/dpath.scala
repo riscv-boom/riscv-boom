@@ -1024,11 +1024,24 @@ class DatPath() extends Module with BOOMCoreParameters
    //-------------------------------------------------------------
    //-------------------------------------------------------------
 
+   val tsc_reg = Reg(init = UInt(0, xprLen))
+
    var cnt = 0
    for (i <- 0 until exe_units.length)
    {
       for (j <- 0 until exe_units(i).num_rf_write_ports)
       {
+         when (exe_units(i).io.resp(j).valid &&
+                 exe_units(i).io.resp(j).bits.uop.ctrl.rf_wen &&
+                 exe_units(i).io.resp(j).bits.uop.pdst_rtype === RT_FIX &&
+                 exe_units(i).io.resp(j).bits.uop.is_amo)
+         {
+            // for the commit log 
+            printf("x%d p%d 0x%x |%d\n", exe_units(i).io.resp(j).bits.uop.ldst
+                                   , exe_units(i).io.resp(j).bits.uop.pdst
+                                   , exe_units(i).io.resp(j).bits.data, tsc_reg)
+         }
+
          if (exe_units(i).uses_pcr_wport && (j == 0))
          {
             regfile.io.write_ports(cnt).wen  := exe_units(i).io.resp(j).valid &&
@@ -1237,7 +1250,7 @@ class DatPath() extends Module with BOOMCoreParameters
 
    // Time Stamp Counter & Retired Instruction Counter
    // (only used for printf and vcd dumps - the actual counters are in the CSRFile)
-   val tsc_reg = Reg(init = UInt(0, xprLen))
+//   val tsc_reg = Reg(init = UInt(0, xprLen))
    val irt_reg = Reg(init = UInt(0, xprLen))
    val irt_ei_reg = Reg(init = UInt(0, xprLen))
    tsc_reg := tsc_reg + UInt(1)
@@ -1687,12 +1700,21 @@ class DatPath() extends Module with BOOMCoreParameters
       for (w <- 0 until COMMIT_WIDTH)
       {
          when (com_valids(w) && (pcr.io.status.ei || com_uops(w).sret))
-//         when (com_valids(w))
          {
-            when (com_uops(w).ldst_rtype === RT_FIX && com_uops(w).ldst != UInt(0))
+            when (com_uops(w).ldst_rtype === RT_FIX && com_uops(w).ldst != UInt(0) && com_uops(w).is_amo)
+            {
+               // the writeback data is invalid at commit time, so leave it blank
+               printf("0x%x (0x%x) x%d p%d 0xXXXXXXXXXXXXXXXX |%d\n"
+                  , com_uops(w).pc
+                  , com_uops(w).inst
+                  , com_uops(w).inst(RD_MSB,RD_LSB)
+                  , com_uops(w).pdst
+                  , tsc_reg
+                  )
+            }
+            .elsewhen (com_uops(w).ldst_rtype === RT_FIX && com_uops(w).ldst != UInt(0))
             {
                printf("0x%x (0x%x) x%d 0x%x |%d\n"
-//               printf("@@@ 0x%x (0x%x) x%d 0x%x\n"
                   , com_uops(w).pc
                   , com_uops(w).inst
                   , com_uops(w).inst(RD_MSB,RD_LSB)
@@ -1703,7 +1725,6 @@ class DatPath() extends Module with BOOMCoreParameters
             .otherwise
             {
                printf("0x%x (0x%x) |%d\n", com_uops(w).pc, com_uops(w).inst, tsc_reg)
-//               printf("@@@ 0x%x (0x%x)\n", com_uops(w).pc, com_uops(w).inst)
             }
          }
       }
