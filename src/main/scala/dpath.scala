@@ -1037,9 +1037,12 @@ class DatPath() extends Module with BOOMCoreParameters
                  exe_units(i).io.resp(j).bits.uop.is_amo)
          {
             // for the commit log 
-            printf("x%d p%d 0x%x |%d\n", exe_units(i).io.resp(j).bits.uop.ldst
-                                   , exe_units(i).io.resp(j).bits.uop.pdst
-                                   , exe_units(i).io.resp(j).bits.data, tsc_reg)
+            when (com_valids(w) && (pcr.io.status.ei || com_uops(w).sret))
+            {
+               printf("x%d p%d 0x%x |%d\n", exe_units(i).io.resp(j).bits.uop.ldst
+                                      , exe_units(i).io.resp(j).bits.uop.pdst
+                                      , exe_units(i).io.resp(j).bits.data, tsc_reg)
+            }
          }
 
          if (exe_units(i).uses_pcr_wport && (j == 0))
