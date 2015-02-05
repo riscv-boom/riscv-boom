@@ -174,6 +174,7 @@ class MicroOp extends BOOMCoreBundle
 
    // purely debug information
    val debug_wdata      = Bits(width=xprLen)
+   val debug_ei_enabled = Bool()             
 }
 
 class FetchBundle extends Bundle with BOOMCoreParameters
@@ -1034,15 +1035,15 @@ class DatPath() extends Module with BOOMCoreParameters
          when (exe_units(i).io.resp(j).valid &&
                  exe_units(i).io.resp(j).bits.uop.ctrl.rf_wen &&
                  exe_units(i).io.resp(j).bits.uop.pdst_rtype === RT_FIX &&
-                 exe_units(i).io.resp(j).bits.uop.is_amo)
+                 exe_units(i).io.resp(j).bits.uop.is_amo &&
+                 exe_units(i).io.resp(j).bits.uop.debug_ei_enabled)
          {
             // for the commit log 
-            when (com_valids(w) && (pcr.io.status.ei || com_uops(w).sret))
-            {
-               printf("x%d p%d 0x%x |%d\n", exe_units(i).io.resp(j).bits.uop.ldst
-                                      , exe_units(i).io.resp(j).bits.uop.pdst
-                                      , exe_units(i).io.resp(j).bits.data, tsc_reg)
-            }
+            printf("x%d p%d 0x%x |%d\n"
+                                   , exe_units(i).io.resp(j).bits.uop.ldst
+                                   , exe_units(i).io.resp(j).bits.uop.pdst
+                                   , exe_units(i).io.resp(j).bits.data
+                                   , tsc_reg)
          }
 
          if (exe_units(i).uses_pcr_wport && (j == 0))
@@ -1708,6 +1709,7 @@ class DatPath() extends Module with BOOMCoreParameters
             {
                // the writeback data is invalid at commit time, so leave it blank
                printf("0x%x (0x%x) x%d p%d 0xXXXXXXXXXXXXXXXX |%d\n"
+//               printf("@@@ 0x%x (0x%x) x%d p%d 0xXXXXXXXXXXXXXXXX\n"
                   , com_uops(w).pc
                   , com_uops(w).inst
                   , com_uops(w).inst(RD_MSB,RD_LSB)
@@ -1718,6 +1720,7 @@ class DatPath() extends Module with BOOMCoreParameters
             .elsewhen (com_uops(w).ldst_rtype === RT_FIX && com_uops(w).ldst != UInt(0))
             {
                printf("0x%x (0x%x) x%d 0x%x |%d\n"
+//               printf("@@@ 0x%x (0x%x) x%d 0x%x\n"
                   , com_uops(w).pc
                   , com_uops(w).inst
                   , com_uops(w).inst(RD_MSB,RD_LSB)
@@ -1728,6 +1731,7 @@ class DatPath() extends Module with BOOMCoreParameters
             .otherwise
             {
                printf("0x%x (0x%x) |%d\n", com_uops(w).pc, com_uops(w).inst, tsc_reg)
+//               printf("@@@ 0x%x (0x%x)\n", com_uops(w).pc, com_uops(w).inst)
             }
          }
       }
