@@ -231,6 +231,8 @@ class DecodeUnit() extends Module
                     Mux(cs_sbreak.toBool,           UInt(rocket.Causes.breakpoint),
                                                     UInt(0,5))))))))
 
+   uop.debug_ei_enabled := io.status.ei
+
    //-------------------------------------------------------------
 
    uop.uopc       := cs_uopc

@@ -662,7 +662,7 @@ class DatPath() extends Module with BOOMCoreParameters
       // stall this instruction?
       // TODO tailor this to only care if a given instruction uses a resource?
       val stall_me = (  !(ren_insts_can_proceed(w))
-                     || (dec_valids(w) && dec_uops(w).is_unique && (!rob_empty || prev_insts_in_bundle_valid))
+                     || (dec_valids(w) && dec_uops(w).is_unique && (!rob_empty || !lsu_io.lsu_fencei_rdy || prev_insts_in_bundle_valid))
                      || !rob_rdy
                      || laq_full
                      || stq_full
@@ -1032,18 +1032,21 @@ class DatPath() extends Module with BOOMCoreParameters
    {
       for (j <- 0 until exe_units(i).num_rf_write_ports)
       {
-         when (exe_units(i).io.resp(j).valid &&
-                 exe_units(i).io.resp(j).bits.uop.ctrl.rf_wen &&
-                 exe_units(i).io.resp(j).bits.uop.pdst_rtype === RT_FIX &&
-                 exe_units(i).io.resp(j).bits.uop.is_amo &&
-                 exe_units(i).io.resp(j).bits.uop.debug_ei_enabled)
+         if (COMMIT_LOG_PRINTF)
          {
-            // for the commit log 
-            printf("x%d p%d 0x%x |%d\n"
-                                   , exe_units(i).io.resp(j).bits.uop.ldst
-                                   , exe_units(i).io.resp(j).bits.uop.pdst
-                                   , exe_units(i).io.resp(j).bits.data
-                                   , tsc_reg)
+            when (exe_units(i).io.resp(j).valid &&
+                    exe_units(i).io.resp(j).bits.uop.ctrl.rf_wen &&
+                    exe_units(i).io.resp(j).bits.uop.pdst_rtype === RT_FIX &&
+                    exe_units(i).io.resp(j).bits.uop.is_amo &&
+                    exe_units(i).io.resp(j).bits.uop.debug_ei_enabled)
+            {
+               // for the commit log 
+               printf("x%d p%d 0x%x |%d\n"
+                                      , exe_units(i).io.resp(j).bits.uop.ldst
+                                      , exe_units(i).io.resp(j).bits.uop.pdst
+                                      , exe_units(i).io.resp(j).bits.data
+                                      , tsc_reg)
+            }
          }
 
          if (exe_units(i).uses_pcr_wport && (j == 0))
@@ -1703,13 +1706,14 @@ class DatPath() extends Module with BOOMCoreParameters
       var new_commit_cnt = UInt(0)
       for (w <- 0 until COMMIT_WIDTH)
       {
-         when (com_valids(w) && (pcr.io.status.ei || com_uops(w).sret))
+         val commit_log_enabled = if (COMMIT_LOG_EI_ONLY) (pcr.io.status.ei || com_uops(w).sret) else Bool(true)
+
+         when (com_valids(w) && commit_log_enabled)
          {
             when (com_uops(w).ldst_rtype === RT_FIX && com_uops(w).ldst != UInt(0) && com_uops(w).is_amo)
             {
                // the writeback data is invalid at commit time, so leave it blank
                printf("0x%x (0x%x) x%d p%d 0xXXXXXXXXXXXXXXXX |%d\n"
-//               printf("@@@ 0x%x (0x%x) x%d p%d 0xXXXXXXXXXXXXXXXX\n"
                   , com_uops(w).pc
                   , com_uops(w).inst
                   , com_uops(w).inst(RD_MSB,RD_LSB)
@@ -1720,7 +1724,6 @@ class DatPath() extends Module with BOOMCoreParameters
             .elsewhen (com_uops(w).ldst_rtype === RT_FIX && com_uops(w).ldst != UInt(0))
             {
                printf("0x%x (0x%x) x%d 0x%x |%d\n"
-//               printf("@@@ 0x%x (0x%x) x%d 0x%x\n"
                   , com_uops(w).pc
                   , com_uops(w).inst
                   , com_uops(w).inst(RD_MSB,RD_LSB)
@@ -1731,7 +1734,6 @@ class DatPath() extends Module with BOOMCoreParameters
             .otherwise
             {
                printf("0x%x (0x%x) |%d\n", com_uops(w).pc, com_uops(w).inst, tsc_reg)
-//               printf("@@@ 0x%x (0x%x)\n", com_uops(w).pc, com_uops(w).inst)
             }
          }
       }
