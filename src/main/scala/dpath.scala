@@ -1034,11 +1034,13 @@ class DatPath() extends Module with BOOMCoreParameters
       {
          if (COMMIT_LOG_PRINTF)
          {
+            val commit_log_enabled = if (COMMIT_LOG_EI_ONLY) exe_units(i).io.resp(j).bits.uop.debug_ei_enabled
+                                     else Bool(true)
             when (exe_units(i).io.resp(j).valid &&
                     exe_units(i).io.resp(j).bits.uop.ctrl.rf_wen &&
                     exe_units(i).io.resp(j).bits.uop.pdst_rtype === RT_FIX &&
                     exe_units(i).io.resp(j).bits.uop.is_amo &&
-                    exe_units(i).io.resp(j).bits.uop.debug_ei_enabled)
+                    commit_log_enabled)
             {
                // for the commit log 
                printf("x%d p%d 0x%x |%d\n"
@@ -1095,7 +1097,7 @@ class DatPath() extends Module with BOOMCoreParameters
       {
          for (j <- 0 until exe_units(w).num_rf_write_ports)
          {
-            rob.io.wb_valids(cnt) := exe_units(w).io.resp(j).valid && !(exe_units(w).io.resp(j).bits.uop.is_store)
+            rob.io.wb_valids(cnt) := exe_units(w).io.resp(j).valid && !(exe_units(w).io.resp(j).bits.uop.is_store && !exe_units(w).io.resp(j).bits.uop.is_amo)
             rob.io.wb_rob_idxs(cnt) := exe_units(w).io.resp(j).bits.uop.rob_idx
 
             // for commit logging...

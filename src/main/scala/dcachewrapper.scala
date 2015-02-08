@@ -37,7 +37,7 @@ class LoadReqSlotIo extends Bundle
 
    val clear      = Bool(INPUT) // kill slot immediately (either nacked or succeeded)
    val brinfo     = new BrResolutionInfo().asInput() 
-   val flush_pipe = Bool(INPUT) // exceptions, etc. but keep slot valid (ignore if entry is non-speculative. e.g., AMOs)
+   val flush_pipe = Bool(INPUT) // exceptions, etc. but keep slot valid
    
    val out_uop    = new MicroOp().asOutput() //need ldq_idx
 
@@ -108,9 +108,8 @@ class LoadReqSlot extends Module
 
    // outputs
    io.valid      := valid
-   // "was killed" handles branch killing us same cycle as resp is valid. AMOs
-   // are currently handled as non-speculative, so they can never be killed.
-   io.was_killed := (was_killed || br_killed) && !uop.is_amo 
+   // "was killed" handles branch killing us same cycle as resp is valid. 
+   io.was_killed := (was_killed || br_killed)
    io.out_uop    := uop
 }
  

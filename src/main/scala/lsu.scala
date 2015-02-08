@@ -32,13 +32,13 @@
 // Story style.
 
 // TODO:
-//    wake up sleeping loads earlier than commit.
+//    wake up sleeping loads that aren't at the head of the LAQ
 //    Add predicting structure for ordering failures
 //    currently won't STD forward if DMEM is busy
 //    committed stores leave the STQ too slowly, need to send out 1/cycle throughput
 
 // BUGS?
-//    is it possible to starve out stores and deadlock the machine?
+//    XXX BUG TODO is it possible to starve out stores and deadlock the machine?
 
 
 package BOOM
@@ -104,7 +104,7 @@ class LoadStoreUnitIo(pl_width: Int) extends BOOMCoreBundle
    // cache nacks
    val nack               = new NackInfo().asInput()
 
-// causign stuff to dissapear
+// causing stuff to dissapear
 //   val dmem = new DCMemPortIo().flip()
    val dmem_req_ready = Bool(INPUT)
    val dmem_is_ordered = Bool(INPUT)
@@ -195,7 +195,6 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    val sdq_data      = Vec.fill(num_st_entries) { Reg(Bits(width = xprLen)) }
 
    // Shared Store Information
-   // Write this information in Decode
    val stq_entry_val = Vec.fill(num_st_entries) { Reg(Bool()) } // this may be valid, but not TRUE (on exceptions, this doesn't get cleared but STQ_TAIL gets moved)
    val stq_executed  = Vec.fill(num_st_entries) { Reg(Bool()) } // sent to mem
    val stq_succeeded = Vec.fill(num_st_entries) { Reg(Bool()) } // returned  TODO needed, or can we just advance the stq_head?
@@ -322,7 +321,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    {
       saq_val (exe_uop.stq_idx)       := Bool(true)
       saq_addr(exe_uop.stq_idx)       := io.exe_resp.bits.data.toUInt
-      stq_uop (exe_uop.stq_idx).pdst  := exe_uop.pdst // needed for amo's
+      stq_uop (exe_uop.stq_idx).pdst  := exe_uop.pdst // needed for amo's TODO this is expensive, can we get around this?
    }
 
    when (exe_uop.ctrl.is_std && io.exe_resp.valid)
@@ -332,6 +331,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    }
 
    io.lsu_clr_bsy_valid := io.exe_resp.valid &&
+                           !exe_uop.is_amo &&
                            ((exe_uop.ctrl.is_sta && sdq_val(exe_uop.stq_idx)) ||
                            (exe_uop.ctrl.is_std && saq_val(exe_uop.stq_idx)))
    io.lsu_clr_bsy_rob_idx := exe_uop.rob_idx
@@ -557,7 +557,11 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    req_fire_store := Bool(false)
 
    when (stq_entry_val(stq_head) &&
-         stq_committed(stq_head) &&
+         (stq_committed(stq_head) || 
+            (stq_uop(stq_head).is_amo &&
+            saq_val(stq_head) &&
+            sdq_val(stq_head)
+            )) &&
          !stq_executed(stq_head) &&
          !(stq_uop(stq_head).is_fence))
    {
@@ -823,8 +827,6 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
       stq_executed(stq_head)    := Bool(false)
       stq_succeeded(stq_head)   := Bool(false)
       stq_committed(stq_head)   := Bool(false)
-//      saq_addr(stq_head)        := UInt(0)
-//      stq_uop(stq_head).br_mask := Bits(0)
 
       stq_head := WrapInc(stq_head, num_st_entries)
    }
