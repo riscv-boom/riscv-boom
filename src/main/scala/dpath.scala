@@ -1032,25 +1032,6 @@ class DatPath() extends Module with BOOMCoreParameters
    {
       for (j <- 0 until exe_units(i).num_rf_write_ports)
       {
-         if (COMMIT_LOG_PRINTF)
-         {
-            val commit_log_enabled = if (COMMIT_LOG_EI_ONLY) exe_units(i).io.resp(j).bits.uop.debug_ei_enabled
-                                     else Bool(true)
-            when (exe_units(i).io.resp(j).valid &&
-                    exe_units(i).io.resp(j).bits.uop.ctrl.rf_wen &&
-                    exe_units(i).io.resp(j).bits.uop.pdst_rtype === RT_FIX &&
-                    exe_units(i).io.resp(j).bits.uop.is_amo &&
-                    commit_log_enabled)
-            {
-               // for the commit log 
-               printf("x%d p%d 0x%x |%d\n"
-                                      , exe_units(i).io.resp(j).bits.uop.ldst
-                                      , exe_units(i).io.resp(j).bits.uop.pdst
-                                      , exe_units(i).io.resp(j).bits.data
-                                      , tsc_reg)
-            }
-         }
-
          if (exe_units(i).uses_pcr_wport && (j == 0))
          {
             regfile.io.write_ports(cnt).wen  := exe_units(i).io.resp(j).valid &&
@@ -1712,18 +1693,7 @@ class DatPath() extends Module with BOOMCoreParameters
 
          when (com_valids(w) && commit_log_enabled)
          {
-            when (com_uops(w).ldst_rtype === RT_FIX && com_uops(w).ldst != UInt(0) && com_uops(w).is_amo)
-            {
-               // the writeback data is invalid at commit time, so leave it blank
-               printf("0x%x (0x%x) x%d p%d 0xXXXXXXXXXXXXXXXX |%d\n"
-                  , com_uops(w).pc
-                  , com_uops(w).inst
-                  , com_uops(w).inst(RD_MSB,RD_LSB)
-                  , com_uops(w).pdst
-                  , tsc_reg
-                  )
-            }
-            .elsewhen (com_uops(w).ldst_rtype === RT_FIX && com_uops(w).ldst != UInt(0))
+            when (com_uops(w).ldst_rtype === RT_FIX && com_uops(w).ldst != UInt(0))
             {
                printf("0x%x (0x%x) x%d 0x%x |%d\n"
                   , com_uops(w).pc
