@@ -293,7 +293,7 @@ class MemExeUnit extends ExecutionUnit(num_rf_read_ports = 2, num_rf_write_ports
    // Hook up loads to the response
    io.resp(0).valid := memresp_val
    io.resp(0).bits.uop := memresp_uop
-   io.resp(0).bits.uop.pdst_rtype := RT_FIX
+   io.resp(0).bits.uop.pdst_rtype := RT_FIX // TODO delete, or figure this out properly
    io.resp(0).bits.uop.ctrl.rf_wen := memresp_rf_wen
    io.resp(0).bits.data := memresp_data
 

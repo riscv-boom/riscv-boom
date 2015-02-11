@@ -82,8 +82,6 @@ class RegisterRead(issue_width: Int, num_read_ports: Int, num_total_bypass_ports
       val i = w*2
       val rs1_addr = rrd_uops(w).pop1
       val rs2_addr = rrd_uops(w).pop2
-      val rs1_oen  = rrd_uops(w).lrs1_rtype == RT_FIX
-      val rs2_oen  = rrd_uops(w).lrs2_rtype == RT_FIX
 
       // TODO allow for execute pipelines to only use one register read port
       io.rf_read_ports(i+0).addr := rs1_addr
@@ -129,8 +127,8 @@ class RegisterRead(issue_width: Int, num_read_ports: Int, num_total_bypass_ports
          for (b <- 0 until io.bypass.get_num_ports)
          {
             // can't use "io.bypass.valid(b) since it would create a combinational loop on branch kills"
-            rs1_cases ++= Array((io.bypass.valid(b) && (pop1 === io.bypass.uop(b).pdst) && io.bypass.uop(b).ctrl.rf_wen && (lrs1_rtype === RT_FIX) && (pop1 != UInt(0)), io.bypass.data(b)))
-            rs2_cases ++= Array((io.bypass.valid(b) && (pop2 === io.bypass.uop(b).pdst) && io.bypass.uop(b).ctrl.rf_wen && (lrs2_rtype === RT_FIX) && (pop2 != UInt(0)), io.bypass.data(b)))
+            rs1_cases ++= Array((io.bypass.valid(b) && (pop1 === io.bypass.uop(b).pdst) && io.bypass.uop(b).ctrl.rf_wen && (lrs1_rtype === RT_FIX || lrs1_rtype === RT_FLT) && (pop1 != UInt(0)), io.bypass.data(b)))
+            rs2_cases ++= Array((io.bypass.valid(b) && (pop2 === io.bypass.uop(b).pdst) && io.bypass.uop(b).ctrl.rf_wen && (lrs2_rtype === RT_FIX || lrs2_rtype === RT_FLT) && (pop2 != UInt(0)), io.bypass.data(b)))
          }
 
          bypassed_rs1_data(w) := MuxCase(rrd_rs1_data(w), rs1_cases)
@@ -198,8 +196,6 @@ class RegisterReadDecode extends Module
                  io.rrd_uop.uopc,//    |  |  |  |        |       |         |         |     |      |       |
                            List(BR_N , Y, N, N, FN_ADD , DW_X  , OP1_X   , OP2_X   , IS_X, REN_0, WB_X  , rocket.CSR.N),
             Array(
-               uopNOP   -> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP1_X   , OP2_X   , IS_X, REN_0, WB_X  , rocket.CSR.N), // TODO remove, not required
-
                uopLD    -> List(BR_N , N, N, Y, FN_ADD , DW_XPR, OP1_RS1 , OP2_IMM , IS_I, REN_0, WB_X  , rocket.CSR.N),
                uopSTA   -> List(BR_N , N, N, Y, FN_ADD , DW_XPR, OP1_RS1 , OP2_IMM , IS_S, REN_0, WB_X  , rocket.CSR.N),
                uopSTD   -> List(BR_N , N, N, Y, FN_X   , DW_X  , OP1_RS1 , OP2_RS2 , IS_X, REN_0, WB_X  , rocket.CSR.N),
@@ -273,21 +269,16 @@ class RegisterReadDecode extends Module
                uopCSRRWI-> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP1_ZERO, OP2_IMMC, IS_X, REN_1, WB_PCR, rocket.CSR.W),
                uopCSRRSI-> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP1_ZERO, OP2_IMMC, IS_X, REN_1, WB_PCR, rocket.CSR.S),
                uopCSRRCI-> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP1_ZERO, OP2_IMMC, IS_X, REN_1, WB_PCR, rocket.CSR.C)
-
-//               uopJ     -> List(BR_J , Y, N, N, FN_OP2 , DW_XPR, OP2_IMM, IS_X, REN_0, WB_X  , PCR.N), // TODO let decode detecth a uopJ? lessen need to read PC4?
-//               uopMFPCR -> List(BR_N , Y, N, N, FN_OP2 , DW_XPR, OP2_X  , IS_X, REN_1, WB_PCR, PCR.F),
-//               uopCLPCR -> List(BR_N , Y, N, N, FN_OP2 , DW_XPR, OP2_IMM, IS_I, REN_1, WB_PCR, PCR.C),
-//               uopSTPCR -> List(BR_N , Y, N, N, FN_OP2 , DW_XPR, OP2_IMM, IS_I, REN_1, WB_PCR, PCR.S),
                ));
 
-   val rrd_br_type :: rrd_use_alupipe :: rrd_use_muldivpipe :: rrd_use_mempipe :: rrd_op_fcn :: rrd_fcn_dw :: rrd_op1_sel :: rrd_op2_sel :: rrd_imm_sel :: rrd_rf_wen :: rrd_wb_sel :: rrd_pcr_fcn :: Nil = rrd_csignals;
+   val rrd_br_type :: rrd_use_alupipe :: rrd_use_muldivpipe :: rrd_use_mempipe :: rrd_op_fcn :: rrd_fcn_dw :: rrd_op1_sel :: rrd_op2_sel :: rrd_imm_sel :: (rrd_rf_wen: Bool) :: rrd_wb_sel :: rrd_pcr_fcn :: Nil = rrd_csignals;
 
    require (rrd_op_fcn.getWidth == FN_SRA.getWidth)
 
 
    // rrd_use_alupipe is unused
    io.rrd_uop.ctrl.br_type := rrd_br_type
-   io.rrd_uop.ctrl.rf_wen  := rrd_rf_wen.toBool //TODO mux off if x0?
+   io.rrd_uop.ctrl.rf_wen  := rrd_rf_wen
    io.rrd_uop.ctrl.op1_sel := rrd_op1_sel
    io.rrd_uop.ctrl.op2_sel := rrd_op2_sel
    io.rrd_uop.ctrl.imm_sel := rrd_imm_sel

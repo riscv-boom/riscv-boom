@@ -68,7 +68,8 @@ abstract trait BOOMCoreParameters extends rocket.CoreParameters
    // Implicitly calculated constants
    val NUM_ROB_ROWS      = NUM_ROB_ENTRIES/DECODE_WIDTH
    val ROB_ADDR_SZ       = log2Up(NUM_ROB_ENTRIES)
-   val LOGICAL_REG_COUNT = 32
+   // the f-registers are mapped into the space above the x-registers
+   val LOGICAL_REG_COUNT = if (params(BuildFPU).isEmpty) 32 else 64 
    val LREG_SZ           = log2Up(LOGICAL_REG_COUNT)
    val PREG_SZ           = log2Up(PHYS_REG_COUNT)
    val MEM_ADDR_SZ       = log2Up(NUM_LSU_ENTRIES)
@@ -76,7 +77,7 @@ abstract trait BOOMCoreParameters extends rocket.CoreParameters
    val MAX_LD_COUNT      = (1 << MEM_ADDR_SZ)
    val BR_TAG_SZ         = log2Up(MAX_BR_COUNT)
 
-   require (PHYS_REG_COUNT >= (32 + DECODE_WIDTH))
+   require (PHYS_REG_COUNT >= (LOGICAL_REG_COUNT + DECODE_WIDTH))
    require (MAX_BR_COUNT >=2)
    require (NUM_ROB_ROWS % 2 == 0)
    require (NUM_ROB_ENTRIES % DECODE_WIDTH == 0)

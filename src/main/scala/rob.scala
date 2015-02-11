@@ -317,7 +317,7 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
       io.com_valids(w)     := will_commit(w)
       io.com_rbk_valids(w) := (rob_state === s_rollback) &&
                               rob_val(com_idx) &&
-                              rob_uop(com_idx).pdst_rtype === RT_FIX &&
+                              (rob_uop(com_idx).pdst_rtype === RT_FIX || rob_uop(com_idx).pdst_rtype === RT_FLT) &&
                               Bool(!params(EnableCommitMapTable))
       io.com_uops(w)       := rob_uop(com_idx) 
 

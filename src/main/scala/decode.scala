@@ -9,7 +9,7 @@ import rocket._
 import FUCode._
 import uncore.constants.MemoryOpConstants._
 
-object Decode
+object XDecode
 {
    val default =          List(N, uopX    , FU_X   ,UInt("b??",2),UInt("b??",2),UInt("b??",2), IS_X, X,X,X,X,N,M_X, MSK_X,UInt("b??"), X, X, X, X, X, X, N, X, CSR.X)
                         //                                                                                       wakeup_delay
@@ -136,10 +136,40 @@ object Decode
                LR_D    -> List(Y, uopAMO_AG, FU_MEM, RT_FIX, RT_FIX, RT_FIX, IS_X, N, Y, Y, N, N, M_XLR   , MSK_D,UInt(0),N, N, N, N, N, N, Y, Y, CSR.N), // note this generates two micro-ops
                SC_W    -> List(Y, uopAMO_AG, FU_MEM, RT_FIX, RT_FIX, RT_FIX, IS_X, N, Y, Y, N, N, M_XSC   , MSK_W,UInt(0),N, N, N, N, N, N, Y, Y, CSR.N), // which isn't needed
                SC_D    -> List(Y, uopAMO_AG, FU_MEM, RT_FIX, RT_FIX, RT_FIX, IS_X, N, Y, Y, N, N, M_XSC   , MSK_D,UInt(0),N, N, N, N, N, N, Y, Y, CSR.N)
-
                )
 
 
+}
+
+object FDecode extends DecodeConstants
+{
+  val table = Array(
+                //               jal                                                               renf1             fence.i
+                //               | jalr                                                            | renf2           | sret
+                //         fp_val| | renx2                                                         | | renf3         | | syscall
+                //         | rocc| | | renx1     s_alu1                          mem_val           | | | wfd         | | |
+                //   val   | | br| | | | s_alu2  |       imm    dw     alu       | mem_cmd mem_type| | | | div       | | |
+                //   |     | | | | | | | |       |       |      |      |         | |         |     | | | | | wxd     | | | fence
+                //   |     | | | | | | | |       |       |      |      |         | |         |     | | | | | | csr   | | | | amo
+                //   |     | | | | | | | |       |       |      |      |         | |         |     | | | | | | |     | | | | |
+//    FCVT_S_D->  List(Y,    Y,N,N,N,N,N,N,A2_X,   A1_X,   IMM_X, DW_X,  FN_X,     N,M_X,      MT_X, Y,N,N,Y,N,N,CSR.N,N,N,N,N,N),
+//    FCVT_D_S->  List(Y,    Y,N,N,N,N,N,N,A2_X,   A1_X,   IMM_X, DW_X,  FN_X,     N,M_X,      MT_X, Y,N,N,Y,N,N,CSR.N,N,N,N,N,N),
+//    FSGNJ_S->   List(Y,    Y,N,N,N,N,N,N,A2_X,   A1_X,   IMM_X, DW_X,  FN_X,     N,M_X,      MT_X, Y,Y,N,Y,N,N,CSR.N,N,N,N,N,N),
+                        //                                                                                       wakeup_delay
+                        //                                                   imm sel                             |        bypassable (aka, known/fixed latency)
+                        //                                                   |     is_load                       |        |  br/jmp
+                        //     is val inst?                  rs1 regtype     |     |  is_store                   |        |  |  is jal
+                        //     |  micro-opcode               |       rs2 type|     |  |  is_amo                  |        |  |  |  is sret
+                        //     |  |         func unit        |       |       |     |  |  |  is_fence             |        |  |  |  |  is syscall
+                        //     |  |         |                |       |       |     |  |  |  |  is_fencei         |        |  |  |  |  |  is sbreak
+                        //     |  |         |        dst     |       |       |     |  |  |  |  |  mem    mem     |        |  |  |  |  |  |  is unique? (clear pipeline for it)
+                        //     |  |         |        regtype |       |       |     |  |  |  |  |  cmd    msk     |        |  |  |  |  |  |  |  flush on commit
+                        //     |  |         |        |       |       |       |     |  |  |  |  |  |      |       |        |  |  |  |  |  |  |  |  csr cmd
+               FLW     -> List(Y, uopLD   , FU_MEM , RT_FLT, RT_FIX, RT_X  , IS_I, Y, N, N, N, N, M_XRD, MSK_W , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+               FLD     -> List(Y, uopLD   , FU_MEM , RT_FLT, RT_FIX, RT_X  , IS_I, Y, N, N, N, N, M_XRD, MSK_D , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+               FSW     -> List(Y, uopSTA  , FU_MEM , RT_X  , RT_FIX, RT_FLT, IS_S, N, Y, N, N, N, M_XWR, MSK_W , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+               FSD     -> List(Y, uopSTA  , FU_MEM , RT_X  , RT_FIX, RT_FLT, IS_S, N, Y, N, N, N, M_XWR, MSK_D , UInt(0), N, N, N, N, N, N, N, N, CSR.N)
+    )
 }
 
 
@@ -166,9 +196,13 @@ class DecodeUnit() extends Module
    val uop = new MicroOp()
    uop := io.enq.uop
 
+
+   var decode_table = XDecode.table
+   if (!params(BuildFPU).isEmpty) decode_table ++= FDecode.table
+
    val dec_csignals = rocket.DecodeLogic(uop.inst,
-                                 Decode.default,
-                                 Decode.table)
+                                 XDecode.default,
+                                 decode_table)
 
    val (cs_inst_val: Bool) :: cs_uopc :: cs_fu_code :: cs_dst_type :: cs_rs1_type :: cs_rs2_type :: cs_imm_sel :: dec_cs0 = dec_csignals
    val (cs_is_load: Bool)  :: (cs_is_store: Bool)   :: (cs_is_amo: Bool)    :: (cs_is_fence: Bool)    :: (cs_is_fencei: Bool)   :: cs_mem_cmd :: cs_mem_typ :: dec_cs1 = dec_cs0
@@ -238,9 +272,12 @@ class DecodeUnit() extends Module
    uop.uopc       := cs_uopc
    uop.fu_code    := cs_fu_code
 
-   uop.ldst       := uop.inst(RD_MSB,RD_LSB).toUInt
-   uop.lrs1       := uop.inst(RS1_MSB,RS1_LSB).toUInt
-   uop.lrs2       := uop.inst(RS2_MSB,RS2_LSB).toUInt
+   // x-registers placed in 0-31, f-registers placed in 32-63.
+   // This allows us to straight-up compare register specifiers and not need to
+   // verify the rtypes (e.g., bypassing in rename).
+   uop.ldst       := Cat(cs_dst_type === RT_FLT, uop.inst(RD_MSB,RD_LSB))
+   uop.lrs1       := Cat(cs_rs1_type === RT_FLT, uop.inst(RS1_MSB,RS1_LSB))
+   uop.lrs2       := Cat(cs_rs2_type === RT_FLT, uop.inst(RS2_MSB,RS2_LSB))
 
    uop.ldst_val   := (cs_dst_type != RT_X && (uop.ldst != UInt(0)))
    uop.ldst_rtype := cs_dst_type

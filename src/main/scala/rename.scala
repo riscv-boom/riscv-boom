@@ -170,7 +170,6 @@ class FreeListIo(num_phys_registers: Int, pl_width: Int) extends BOOMCoreBundle
 // register exists
 class RenameFreeList(num_phys_registers: Int // number of physical registers
                     , pl_width: Int          // pipeline width ("dispatch group size")
-                    , zero_is_zero: Boolean  // is the zero register always zero? TRUE for XPRs, FALSE for FPRs. TODO not fully supported (since we hide behind P0 in this logic)
                      ) extends Module with BOOMCoreParameters
 {
    val io = new FreeListIo(num_phys_registers, pl_width)
@@ -199,7 +198,7 @@ class RenameFreeList(num_phys_registers: Int // number of physical registers
    }
 
 
-   for (i <- 1 until num_phys_registers) // zero_is_zero
+   for (i <- 1 until num_phys_registers) // note: p0 stays zero
    {
       val next_allocated = Vec.fill(pl_width){Bool()}
       var can_allocate = free_list(i)
@@ -539,7 +538,7 @@ class RenameStage(pl_width: Int, num_wb_ports: Int) extends Module with BOOMCore
          map_table_io(i).wens(w)          :=   io.ren_uops(w).ldst === UInt(i) &&
                                                io.ren_mask(w) &&
                                                io.ren_uops(w).ldst_val &&
-                                               io.ren_uops(w).ldst_rtype === RT_FIX &&
+                                               (io.ren_uops(w).ldst_rtype === RT_FIX || io.ren_uops(w).ldst_rtype === RT_FLT) &&
                                                !io.kill &&
                                                io.inst_can_proceed(w) && 
                                                freelist_can_allocate(w)
@@ -572,7 +571,7 @@ class RenameStage(pl_width: Int, num_wb_ports: Int) extends Module with BOOMCore
       for (w <- 0 until pl_width)
       {
          val ldst = io.com_uops(w).ldst
-         when (io.com_valids(w) && io.com_uops(w).pdst_rtype === RT_FIX)
+         when (io.com_valids(w) && (io.com_uops(w).pdst_rtype === RT_FIX || io.com_uops(w).pdst_rtype === RT_FLT))
          {
             map_table_io(ldst).commit_wen := Bool(true)
             map_table_io(ldst).commit_pdst := io.com_uops(w).pdst
@@ -604,19 +603,21 @@ class RenameStage(pl_width: Int, num_wb_ports: Int) extends Module with BOOMCore
       // Handle bypassing new physical destinations to operands (and stale destination)
       for (xx <- 0 until w)
       {
-         rs1_cases  ++= Array(((io.ren_uops(w).lrs1_rtype === RT_FIX) && io.ren_mask(xx) && io.ren_uops(xx).ldst_val && (io.ren_uops(w).lrs1 === io.ren_uops(xx).ldst), (io.ren_uops(xx).pdst)))
-         rs2_cases  ++= Array(((io.ren_uops(w).lrs2_rtype === RT_FIX) && io.ren_mask(xx) && io.ren_uops(xx).ldst_val && (io.ren_uops(w).lrs2 === io.ren_uops(xx).ldst), (io.ren_uops(xx).pdst)))
+         rs1_cases  ++= Array(((io.ren_uops(w).lrs1_rtype === RT_FIX || 
+                           io.ren_uops(w).lrs1_rtype === RT_FLT) && io.ren_mask(xx) && io.ren_uops(xx).ldst_val && (io.ren_uops(w).lrs1 === io.ren_uops(xx).ldst), (io.ren_uops(xx).pdst)))
+         rs2_cases  ++= Array(((io.ren_uops(w).lrs2_rtype === RT_FIX || 
+                           io.ren_uops(w).lrs2_rtype === RT_FLT) && io.ren_mask(xx) && io.ren_uops(xx).ldst_val && (io.ren_uops(w).lrs2 === io.ren_uops(xx).ldst), (io.ren_uops(xx).pdst)))
          stale_cases++= Array(( io.ren_uops(w).ldst_val               && io.ren_mask(xx) && io.ren_uops(xx).ldst_val && (io.ren_uops(w).ldst === io.ren_uops(xx).ldst), (io.ren_uops(xx).pdst)))
 
-         when ((io.ren_uops(w).lrs1_rtype === RT_FIX) && io.ren_mask(xx) && io.ren_uops(xx).ldst_val && (io.ren_uops(w).lrs1 === io.ren_uops(xx).ldst))
+         when ((io.ren_uops(w).lrs1_rtype === RT_FIX || io.ren_uops(w).lrs1_rtype === RT_FLT) && io.ren_mask(xx) && io.ren_uops(xx).ldst_val && (io.ren_uops(w).lrs1 === io.ren_uops(xx).ldst))
             { prs1_was_bypassed(w) := Bool(true) }
-         when ((io.ren_uops(w).lrs2_rtype === RT_FIX) && io.ren_mask(xx) && io.ren_uops(xx).ldst_val && (io.ren_uops(w).lrs2 === io.ren_uops(xx).ldst))
+         when ((io.ren_uops(w).lrs2_rtype === RT_FIX || io.ren_uops(w).lrs2_rtype === RT_FLT) && io.ren_mask(xx) && io.ren_uops(xx).ldst_val && (io.ren_uops(w).lrs2 === io.ren_uops(xx).ldst))
             { prs2_was_bypassed(w) := Bool(true) }
       }
 
       // add default case where we can just read the map table for our information
-      rs1_cases   ++= Array(((io.ren_uops(w).lrs1_rtype === RT_FIX) && (io.ren_uops(w).lrs1 != UInt(0)), map_table_output(w).prs1))
-      rs2_cases   ++= Array(((io.ren_uops(w).lrs2_rtype === RT_FIX) && (io.ren_uops(w).lrs2 != UInt(0)), map_table_output(w).prs2))
+      rs1_cases   ++= Array(((io.ren_uops(w).lrs1_rtype === RT_FIX || io.ren_uops(w).lrs1_rtype === RT_FLT) && (io.ren_uops(w).lrs1 != UInt(0)), map_table_output(w).prs1))
+      rs2_cases   ++= Array(((io.ren_uops(w).lrs2_rtype === RT_FIX || io.ren_uops(w).lrs2_rtype === RT_FLT) && (io.ren_uops(w).lrs2 != UInt(0)), map_table_output(w).prs2))
 
       io.ren_uops(w).pop1       := MuxCase(io.ren_uops(w).lrs1, rs1_cases)
       io.ren_uops(w).pop2       := MuxCase(io.ren_uops(w).lrs2, rs2_cases)
@@ -625,7 +626,7 @@ class RenameStage(pl_width: Int, num_wb_ports: Int) extends Module with BOOMCore
 
 
    //-------------------------------------------------------------
-   // Busy Table (For Fixed Point GPRs)
+   // Busy Table 
 
    val freelist_req_pregs = Vec.fill(pl_width) { UInt(width = PREG_SZ) }
 
@@ -644,9 +645,9 @@ class RenameStage(pl_width: Int, num_wb_ports: Int) extends Module with BOOMCore
          bsy_table.io.read_in(w).prs1  := map_table_output(w).prs1
          bsy_table.io.read_in(w).prs2  := map_table_output(w).prs2
 
-         io.ren_uops(w).prs1_busy := io.ren_uops(w).lrs1_rtype === RT_FIX &&
+         io.ren_uops(w).prs1_busy := (io.ren_uops(w).lrs1_rtype === RT_FIX || io.ren_uops(w).lrs1_rtype === RT_FLT) &&
                                        (bsy_table.io.read_out(w).prs1_busy || prs1_was_bypassed(w))
-         io.ren_uops(w).prs2_busy := io.ren_uops(w).lrs2_rtype === RT_FIX &&
+         io.ren_uops(w).prs2_busy := (io.ren_uops(w).lrs2_rtype === RT_FIX || io.ren_uops(w).lrs2_rtype === RT_FLT) &&
                                        (bsy_table.io.read_out(w).prs2_busy || prs2_was_bypassed(w))
 
 
@@ -654,7 +655,7 @@ class RenameStage(pl_width: Int, num_wb_ports: Int) extends Module with BOOMCore
          bsy_table.io.write_valid(w) := freelist_can_allocate(w) &&
                                         io.ren_mask(w) && 
                                         io.ren_uops(w).ldst_val &&
-                                        (io.ren_uops(w).ldst_rtype === RT_FIX)
+                                        (io.ren_uops(w).ldst_rtype === RT_FIX || io.ren_uops(w).ldst_rtype === RT_FLT)
          bsy_table.io.write_pdst(w) := freelist_req_pregs(w)
       }
  
@@ -664,9 +665,9 @@ class RenameStage(pl_width: Int, num_wb_ports: Int) extends Module with BOOMCore
 
 
    //-------------------------------------------------------------
-   // Free List (Fixed Point)
+   // Free List
 
-   val freelist = Module(new RenameFreeList(PHYS_REG_COUNT, pl_width, zero_is_zero = true))
+   val freelist = Module(new RenameFreeList(PHYS_REG_COUNT, pl_width))
 
       for (w <- 0 until pl_width)
       {
@@ -674,14 +675,15 @@ class RenameStage(pl_width: Int, num_wb_ports: Int) extends Module with BOOMCore
                                          !io.kill &&
                                          io.ren_mask(w) && 
                                          io.ren_uops(w).ldst_val &&
-                                         (io.ren_uops(w).ldst_rtype === RT_FIX))
+                                         (io.ren_uops(w).ldst_rtype === RT_FIX || io.ren_uops(w).ldst_rtype === RT_FLT))
       }
       freelist_req_pregs := freelist.io.req_pregs
 
       for (w <- 0 until pl_width)
       {
          freelist.io.enq_vals(w)    := io.com_valids(w) &&
-                                       (io.com_uops(w).pdst_rtype === RT_FIX) && (io.com_uops(w).stale_pdst != UInt(0))
+                                       (io.com_uops(w).pdst_rtype === RT_FIX || io.com_uops(w).pdst_rtype === RT_FLT) && 
+                                       (io.com_uops(w).stale_pdst != UInt(0))
          freelist.io.enq_pregs(w)   := io.com_uops(w).stale_pdst
                 
          freelist.io.ren_br_vals(w) := ren_br_vals(w)
@@ -691,12 +693,12 @@ class RenameStage(pl_width: Int, num_wb_ports: Int) extends Module with BOOMCore
 
          freelist.io.rollback_wens(w)  := io.com_rbk_valids(w) && 
                                         (io.com_uops(w).pdst != UInt(0)) &&
-                                        (io.com_uops(w).pdst_rtype === RT_FIX)
+                                        (io.com_uops(w).pdst_rtype === RT_FIX || io.com_uops(w).pdst_rtype === RT_FLT)
          freelist.io.rollback_pdsts(w) := io.com_uops(w).pdst
 
          freelist.io.com_wens(w)    := io.com_valids(w) &&
                                        (io.com_uops(w).pdst != UInt(0)) &&
-                                       (io.com_uops(w).pdst_rtype === RT_FIX)
+                                       (io.com_uops(w).pdst_rtype === RT_FIX || io.com_uops(w).pdst_rtype === RT_FLT)
          freelist.io.com_uops(w)    := io.com_uops(w)
       }
 
@@ -706,13 +708,10 @@ class RenameStage(pl_width: Int, num_wb_ports: Int) extends Module with BOOMCore
       freelist.io.flush_pipeline := io.flush_pipeline
 
 
-   // for some instructions, pass through the logical destination as the physical destination
-   // (admittedly, not sure which ones anymore. MTPCR has been removed)
+   // x0 is a special-case and should not be renamed
    for (w <- 0 until pl_width)
    {
-      io.ren_uops(w).pdst := Mux((io.ren_uops(w).ldst_val && (io.ren_uops(w).ldst_rtype === RT_FIX)),
-                                                                              freelist_req_pregs(w),
-                                                                              io.ren_uops(w).ldst)
+      io.ren_uops(w).pdst := Mux(io.ren_uops(w).ldst === UInt(0), UInt(0), freelist_req_pregs(w))
    }
 
 
@@ -721,7 +720,9 @@ class RenameStage(pl_width: Int, num_wb_ports: Int) extends Module with BOOMCore
    // Outputs
    for (w <- 0 until pl_width)
    {
-      io.inst_can_proceed(w) := ((freelist.io.can_allocate(w) && io.ren_uops(w).ldst_rtype === RT_FIX) || io.ren_uops(w).ldst_rtype != RT_FIX) && io.dis_inst_can_proceed(w)
+      // TODO REFACTOR, make == rt_x?
+      io.inst_can_proceed(w) := ((freelist.io.can_allocate(w) && (io.ren_uops(w).ldst_rtype === RT_FIX || io.ren_uops(w).ldst_rtype === RT_FLT)) || 
+                                    (io.ren_uops(w).ldst_rtype != RT_FIX && io.ren_uops(w).ldst_rtype != RT_FLT)) && io.dis_inst_can_proceed(w)
    }
 
 
