@@ -152,9 +152,12 @@ object FDecode extends DecodeConstants
                 //   |     | | | | | | | |       |       |      |      |         | |         |     | | | | | wxd     | | | fence
                 //   |     | | | | | | | |       |       |      |      |         | |         |     | | | | | | csr   | | | | amo
                 //   |     | | | | | | | |       |       |      |      |         | |         |     | | | | | | |     | | | | |
-//    FCVT_S_D->  List(Y,    Y,N,N,N,N,N,N,A2_X,   A1_X,   IMM_X, DW_X,  FN_X,     N,M_X,      MT_X, Y,N,N,Y,N,N,CSR.N,N,N,N,N,N),
-//    FCVT_D_S->  List(Y,    Y,N,N,N,N,N,N,A2_X,   A1_X,   IMM_X, DW_X,  FN_X,     N,M_X,      MT_X, Y,N,N,Y,N,N,CSR.N,N,N,N,N,N),
-//    FSGNJ_S->   List(Y,    Y,N,N,N,N,N,N,A2_X,   A1_X,   IMM_X, DW_X,  FN_X,     N,M_X,      MT_X, Y,Y,N,Y,N,N,CSR.N,N,N,N,N,N),
+//    FCVT_S_D->  List(Y,  Y,N,N,N,N,N,N,A2_X,   A1_X,   IMM_X, DW_X,  FN_X,     N,M_X,      MT_X, Y,N,N,Y,N,N,CSR.N,N,N,N,N,N),
+//    FCVT_D_S->  List(Y,  Y,N,N,N,N,N,N,A2_X,   A1_X,   IMM_X, DW_X,  FN_X,     N,M_X,      MT_X, Y,N,N,Y,N,N,CSR.N,N,N,N,N,N),
+//    FSGNJ_S->   List(Y,  Y,N,N,N,N,N,N,A2_X,   A1_X,   IMM_X, DW_X,  FN_X,     N,M_X,      MT_X, Y,Y,N,Y,N,N,CSR.N,N,N,N,N,N),
+
+//    FMV_S_X->   List(Y,  Y,N,N,N,N,N,Y,A2_X,   A1_RS1, IMM_X, DW_X,  FN_X,     N,M_X,      MT_X, N,N,N,Y,N,N,CSR.N,N,N,N,N,N),
+//    FMV_D_X->   List(Y,  Y,N,N,N,N,N,Y,A2_X,   A1_RS1, IMM_X, DW_X,  FN_X,     N,M_X,      MT_X, N,N,N,Y,N,N,CSR.N,N,N,N,N,N),
                         //                                                                                       wakeup_delay
                         //                                                   imm sel                             |        bypassable (aka, known/fixed latency)
                         //                                                   |     is_load                       |        |  br/jmp
@@ -169,6 +172,9 @@ object FDecode extends DecodeConstants
                FLD     -> List(Y, uopLD   , FU_MEM , RT_FLT, RT_FIX, RT_X  , IS_I, Y, N, N, N, N, M_XRD, MSK_D , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
                FSW     -> List(Y, uopSTA  , FU_MEM , RT_X  , RT_FIX, RT_FLT, IS_S, N, Y, N, N, N, M_XWR, MSK_W , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
                FSD     -> List(Y, uopSTA  , FU_MEM , RT_X  , RT_FIX, RT_FLT, IS_S, N, Y, N, N, N, M_XWR, MSK_D , UInt(0), N, N, N, N, N, N, N, N, CSR.N)
+
+//               FMV_S_X -> List(Y, uopFMV  , FU_ALU , RT_FLT, RT_FIX, RT_X  , IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N)
+//               FMV_D_X -> List(Y, uopFMV  , FU_ALU , RT_FLT, RT_FIX, RT_X  , IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N)
     )
 }
 
@@ -228,6 +234,8 @@ class DecodeUnit() extends Module
    val csr_addr       = uop.inst(CSR_ADDR_MSB, CSR_ADDR_LSB)
    val csr_en         = cs_csr_cmd != CSR.N
    val csr_wen        = raddr1 != UInt(0) || !Vec(CSR.S, CSR.C).contains(cs_csr_cmd)
+//   val csr_fp         = Bool(!params(BuildFPU).isEmpty) && csr_en && rocket.DecodeLogic(csr_addr, fp_csrs, rocket.CSRs.all.toSet -- fp_csrs) TODO
+   val csr_fp         = Bool(false)
    val exc_csr_privileged = csr_en &&
                         (csr_addr(11,10) === UInt(3) && csr_wen ||
                          csr_addr(11,10) === UInt(2) ||
@@ -244,6 +252,10 @@ class DecodeUnit() extends Module
    //}
    val exc_privileged = exc_csr_privileged || (cs_sret.toBool && !(io.status.s))
 
+   // TODO what is the fp_disabled exception?
+   val cs_inst_is_fp = Bool(false) // TODO implement this in the table
+   val exc_fp_disabled = (cs_inst_is_fp || csr_fp) && !io.status.ef
+
    uop.sret      := cs_sret.toBool
 
    uop.exception := cs_syscall.toBool   ||
@@ -253,7 +265,8 @@ class DecodeUnit() extends Module
                        exc_privileged   ||
                        uop.xcpt_ma      ||
                        uop.xcpt_if      ||
-                       exc_interrupt
+                       exc_interrupt    ||
+                       exc_fp_disabled
 
    // note: priority here is very important
    uop.exc_cause := Mux(exc_interrupt,              exc_interrupt_cause,
@@ -261,9 +274,13 @@ class DecodeUnit() extends Module
                     Mux(uop.xcpt_if,                UInt(rocket.Causes.fault_fetch),
                     Mux(exc_illegal || csr_invalid, UInt(rocket.Causes.illegal_instruction),
                     Mux(exc_privileged,             UInt(rocket.Causes.privileged_instruction),
+
+
+//                    ((id_ctrl.fp || id_csr_fp) && !io.dpath.status.ef,UInt(Causes.fp_disabled)),
+                    Mux(exc_fp_disabled,            UInt(rocket.Causes.fp_disabled),
                     Mux(cs_syscall.toBool,          UInt(rocket.Causes.syscall),
                     Mux(cs_sbreak.toBool,           UInt(rocket.Causes.breakpoint),
-                                                    UInt(0,5))))))))
+                                                    UInt(0,5)))))))))
 
    uop.debug_ei_enabled := io.status.ei
 

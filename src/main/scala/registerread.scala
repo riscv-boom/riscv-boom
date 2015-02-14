@@ -24,7 +24,11 @@ import rocket.ALU._
 //-------------------------------------------------------------
 //-------------------------------------------------------------
 
-class RegisterRead(issue_width: Int, num_read_ports: Int, num_total_bypass_ports: Int) extends Module with BOOMCoreParameters
+class RegisterRead(issue_width: Int
+                  , num_read_ports: Int
+                  , num_total_bypass_ports: Int
+                  , register_width: Int
+                  ) extends Module with BOOMCoreParameters
 {
    val io = new BOOMCoreBundle
    {
@@ -33,12 +37,12 @@ class RegisterRead(issue_width: Int, num_read_ports: Int, num_total_bypass_ports
       val iss_uops   = Vec.fill(issue_width) { new MicroOp().asInput() }
 
       // interface with register file's read ports
-      val rf_read_ports = Vec.fill(num_read_ports) { new RegisterFileReadPortIO }.flip
+      val rf_read_ports = Vec.fill(num_read_ports) { new RegisterFileReadPortIO(PREG_SZ, xprLen) }.flip
 
-      val bypass = new BypassData(num_total_bypass_ports).asInput()
+      val bypass = new BypassData(num_total_bypass_ports, register_width).asInput()
 
       // send micro-ops to the execution pipelines
-      val exe_reqs = Vec.fill(issue_width) { (new DecoupledIO(new FuncUnitReq)) }
+      val exe_reqs = Vec.fill(issue_width) { (new DecoupledIO(new FuncUnitReq(register_width))) }
 
 
       val kill   = Bool(INPUT)

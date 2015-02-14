@@ -364,7 +364,8 @@ class DatPath() extends Module with BOOMCoreParameters
    println("   Num Bypass Ports     : " + num_total_bypass_ports)
    println("")
 
-   val bypasses = new BypassData(num_total_bypass_ports)
+   val register_width = if (params(BuildFPU).isEmpty) xprLen else 65
+   val bypasses = new BypassData(num_total_bypass_ports, register_width)
 
    val issue_width           = exe_units.length // TODO allow exe_units to have multiple issue ports
    val iss_valids            = Vec.fill(issue_width) {Bool()}
@@ -879,7 +880,10 @@ class DatPath() extends Module with BOOMCoreParameters
    // Register Read <- Issue (rrd <- iss)
 
 
-   val register_read = Module(new RegisterRead(issue_width, num_rf_read_ports, num_total_bypass_ports))
+   val register_read = Module(new RegisterRead(issue_width
+                                               , num_rf_read_ports
+                                               , num_total_bypass_ports
+                                               , register_width))
 
 // TODO why the fuck does this change code behavior
 //   register_read.io.iss_valids := iss_valids
@@ -928,11 +932,19 @@ class DatPath() extends Module with BOOMCoreParameters
    pcr.io.sret      := com_sret
    pcr_exc_target   := pcr.io.evec
    pcr.io.badvaddr_wen := Bool(false) // TODO VM virtual memory
+   
+   // TODO FPU come from the commit stage?
+   pcr.io.fcsr_flags.valid := Bool(false)
+   pcr.io.fcsr_flags.bits := Bits(0)
 
    // --------------------------------------
    // Register File
 
-   val regfile = Module(new RegisterFile(PHYS_REG_COUNT, num_rf_read_ports, num_rf_write_ports, ENABLE_REGFILE_BYPASSING))
+   val regfile = Module(new RegisterFile(PHYS_REG_COUNT
+                                        , num_rf_read_ports
+                                        , num_rf_write_ports
+                                        , register_width
+                                        , ENABLE_REGFILE_BYPASSING))
 
 
    // --------------------------------------
@@ -1039,6 +1051,17 @@ class DatPath() extends Module with BOOMCoreParameters
    {
       for (j <- 0 until exe_units(i).num_rf_write_ports)
       {
+         if (!(params(BuildFPU).isEmpty) && exe_units(i).data_width > 64)
+         {
+            assert (!(exe_units(i).io.resp(j).valid &&
+                      exe_units(i).io.resp(j).bits.uop.ctrl.rf_wen &&
+                      exe_units(i).io.resp(j).bits.uop.pdst_rtype === RT_FIX &&
+                      exe_units(i).io.resp(j).bits.data(64).toBool),
+                      "the 65th bit was set on a fixed point write-back to the regfile.")
+         }
+
+
+
          if (exe_units(i).uses_pcr_wport && (j == 0))
          {
             regfile.io.write_ports(cnt).wen  := exe_units(i).io.resp(j).valid &&

@@ -188,6 +188,8 @@ trait ScalarOpConstants
    val uopMEMSPECIAL= Bits(66, UOPC_SZ)
    val uopAMO_AG    = Bits(67, UOPC_SZ) // AMO-address gen (use normal STD for datagen)
 
+   val uopFMV       = Bits(68, UOPC_SZ)
+
    // Enable Co-processor Register Signal (ToHost Register, etc.)
    //val PCR_N   = UInt(0,3)    // do nothing
    val PCR_F   = UInt(1,3)    // mfpcr

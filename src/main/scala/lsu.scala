@@ -62,7 +62,7 @@ class LoadStoreUnitIo(pl_width: Int) extends BOOMCoreBundle
    val new_stq_idx        = UInt(OUTPUT, MEM_ADDR_SZ)
 
    // Execute Stage
-   val exe_resp           = (new ValidIO(new ExeUnitResp)).flip
+   val exe_resp           = (new ValidIO(new ExeUnitResp(xprLen))).flip
 
    // Commit Stage
    val commit_store_mask  = Vec.fill(pl_width) {Bool(INPUT)}

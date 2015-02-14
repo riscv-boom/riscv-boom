@@ -19,21 +19,26 @@ import Node._
 import FUCode._
 import uncore.constants.MemoryOpConstants._
  
-class ExeUnitResp extends BOOMCoreBundle 
+class ExeUnitResp(data_width: Int) extends BOOMCoreBundle 
 {
    val uop = new MicroOp()
-   val data = Bits(width = xprLen)  
-   // TODO allow for muliple write ports?
+   val data = Bits(width = data_width)  
+
+   override def clone = new ExeUnitResp(data_width).asInstanceOf[this.type]
 }
  
-class ExecutionUnitIo(num_rf_read_ports: Int, num_rf_write_ports: Int, num_bypass_ports: Int) extends Bundle with BOOMCoreParameters
+class ExecutionUnitIo(num_rf_read_ports: Int
+                     , num_rf_write_ports: Int
+                     , num_bypass_ports: Int
+                     , data_width: Int
+                     ) extends Bundle with BOOMCoreParameters
 {
    // describe which functional units we support (used by the issue window)
    val fu_types = Bits(OUTPUT, FUC_SZ)
 
-   val req     = (new DecoupledIO(new FuncUnitReq)).flip
-   val resp    = Vec.fill(num_rf_write_ports) { (new DecoupledIO(new ExeUnitResp)) }
-   val bypass  = new BypassData(num_bypass_ports).asOutput()
+   val req     = (new DecoupledIO(new FuncUnitReq(data_width))).flip
+   val resp    = Vec.fill(num_rf_write_ports) { (new DecoupledIO(new ExeUnitResp(data_width))) }
+   val bypass  = new BypassData(num_bypass_ports, data_width).asOutput()
 
    val brinfo  = new BrResolutionInfo().asInput()
    
@@ -59,14 +64,16 @@ class ExecutionUnitIo(num_rf_read_ports: Int, num_rf_write_ports: Int, num_bypas
 abstract class ExecutionUnit(val num_rf_read_ports: Int
                             , val num_rf_write_ports: Int
                             , val num_bypass_stages: Int
+                            , val data_width: Int
                             , var bypassable: Boolean = false
                             , val is_mem_unit: Boolean = false
                             , var uses_pcr_wport: Boolean = false
-                            , is_branch_unit: Boolean = false) extends Module with BOOMCoreParameters
+                            ,     is_branch_unit: Boolean = false
+                            ) extends Module with BOOMCoreParameters
 {
-   val io = new ExecutionUnitIo(num_rf_read_ports, num_rf_write_ports, num_bypass_stages)
+   val io = new ExecutionUnitIo(num_rf_read_ports, num_rf_write_ports
+                               , num_bypass_stages, data_width)
 
-//   bypassable = bypassable && ENABLE_ALU_BYPASSING
    val uses_rf_wport = false
 
    if (!is_mem_unit)
@@ -81,14 +88,17 @@ abstract class ExecutionUnit(val num_rf_read_ports: Int
 }
 
 
-class ALUExeUnit(is_branch_unit: Boolean = false, shares_pcr_wport: Boolean = false)
-                                       extends ExecutionUnit(num_rf_read_ports = 2
-                                                            , num_rf_write_ports = 1
-                                                            , num_bypass_stages = 2
-                                                            , bypassable = true 
-                                                            , is_mem_unit = false
-                                                            , uses_pcr_wport = shares_pcr_wport
-                                                            , is_branch_unit = is_branch_unit)
+class ALUExeUnit(is_branch_unit: Boolean = false
+                , shares_pcr_wport: Boolean = false
+                ) extends ExecutionUnit(num_rf_read_ports = 2
+                                       , num_rf_write_ports = 1
+                                       , num_bypass_stages = 2
+                                       , data_width = 64 // TODO need to use xprLen here
+                                       , bypassable = true 
+                                       , is_mem_unit = false
+                                       , uses_pcr_wport = shares_pcr_wport
+                                       , is_branch_unit = is_branch_unit
+                                       )
 {
    io.fu_types := FU_ALU |
                   FU_CNTR |
@@ -113,12 +123,15 @@ class ALUExeUnit(is_branch_unit: Boolean = false, shares_pcr_wport: Boolean = fa
    {
       io.br_unit.brinfo.valid := Bool(false)
    }
-
    
 }
  
  
-class MulDExeUnit extends ExecutionUnit(num_rf_read_ports = 2, num_rf_write_ports = 1, num_bypass_stages = 0)
+class MulDExeUnit extends ExecutionUnit(num_rf_read_ports = 2
+                                       , num_rf_write_ports = 1
+                                       , num_bypass_stages = 0
+                                       , data_width = 64 // TODO need to use xprLen here
+                                       )
 {
    val muldiv_busy = Bool()
    io.fu_types := Mux(!muldiv_busy, FU_MULD, Bits(0))
@@ -137,14 +150,17 @@ class MulDExeUnit extends ExecutionUnit(num_rf_read_ports = 2, num_rf_write_port
 // TODO listed as FIFOs, but not using ready signal
 
 
-class ALUMulDExeUnit(is_branch_unit: Boolean = false, shares_pcr_wport: Boolean = false)
-                                       extends ExecutionUnit(num_rf_read_ports = 2
-                                                            , num_rf_write_ports = 1
-                                                            , num_bypass_stages = 2
-                                                            , bypassable = true
-                                                            , is_mem_unit = false
-                                                            , uses_pcr_wport = shares_pcr_wport
-                                                            , is_branch_unit = is_branch_unit)
+class ALUMulDExeUnit(is_branch_unit: Boolean = false
+                    , shares_pcr_wport: Boolean = false
+                    ) extends ExecutionUnit(num_rf_read_ports = 2
+                                           , num_rf_write_ports = 1
+                                           , num_bypass_stages = 2
+                                           , data_width = 64 // TODO need to use xprLen here
+                                           , bypassable = true
+                                           , is_mem_unit = false
+                                           , uses_pcr_wport = shares_pcr_wport
+                                           , is_branch_unit = is_branch_unit
+                                           )
 {
    val muldiv_busy = Bool()
    io.fu_types := (FU_ALU |
@@ -213,11 +229,14 @@ class ALUMulDExeUnit(is_branch_unit: Boolean = false, shares_pcr_wport: Boolean 
                                                          muldiv.io.resp.bits.data)
  
 }
-
-
  
 
-class MemExeUnit extends ExecutionUnit(num_rf_read_ports = 2, num_rf_write_ports = 1, num_bypass_stages = 0, bypassable = false, is_mem_unit = true)
+class MemExeUnit extends ExecutionUnit(num_rf_read_ports = 2
+                                      , num_rf_write_ports = 1
+                                      , num_bypass_stages = 0
+                                      , data_width = 64 // TODO need to use xprLen here
+                                      , bypassable = false
+                                      , is_mem_unit = true)
 {
    io.fu_types := FU_MEM
 
@@ -300,7 +319,16 @@ class MemExeUnit extends ExecutionUnit(num_rf_read_ports = 2, num_rf_write_ports
 }
    
  
-class ALUMulDMemExeUnit(is_branch_unit: Boolean = false, shares_pcr_wport: Boolean = false) extends ExecutionUnit(num_rf_read_ports = 2, num_rf_write_ports = 2, num_bypass_stages = 2, bypassable = true, is_mem_unit = true, uses_pcr_wport = shares_pcr_wport, is_branch_unit = is_branch_unit)
+class ALUMulDMemExeUnit(is_branch_unit: Boolean = false
+                       , shares_pcr_wport: Boolean = false
+                       ) extends ExecutionUnit(num_rf_read_ports = 2
+                                              , num_rf_write_ports = 2
+                                              , num_bypass_stages = 2
+                                              , data_width = 64 // TODO need to use xprLen here
+                                              , bypassable = true
+                                              , is_mem_unit = true
+                                              , uses_pcr_wport = shares_pcr_wport
+                                              , is_branch_unit = is_branch_unit)
 {
    val muldiv_busy = Bool()
    io.fu_types := (FU_ALU |
