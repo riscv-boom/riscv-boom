@@ -173,6 +173,10 @@ class MicroOp extends BOOMCoreBundle
    val lrs1_rtype       = UInt(width=2)
    val lrs2_rtype       = UInt(width=2)
 
+   // floating point information
+   val fp_val           = Bool()             // is a floating-point instruction
+   val fp_single        = Bool()             // single-precision floating point
+
    // exception information
    val xcpt_ma          = Bool()
    val xcpt_if          = Bool()

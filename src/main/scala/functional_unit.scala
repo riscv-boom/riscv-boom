@@ -22,6 +22,7 @@ import Node._
 
 import rocket.ALU._
 import rocket.Util._
+import rocket.BuildFPU
 import uncore.constants.MemoryOpConstants._
 
 
@@ -71,7 +72,7 @@ class FuncUnitReq(data_width: Int) extends BOOMCoreBundle
    val rs2_data = Bits(width = data_width)
 
    val kill = Bool() // kill everything
-   
+
    override def clone = new FuncUnitReq(data_width).asInstanceOf[this.type]
 }
 
@@ -80,7 +81,7 @@ class FuncUnitResp(data_width: Int) extends BOOMCoreBundle
    val uop = new MicroOp()
    val data = Bits(width = data_width)
    val xcpt = (new rocket.HellaCacheExceptions)
-   
+
    override def clone = new FuncUnitResp(data_width).asInstanceOf[this.type]
 }
 
@@ -193,8 +194,8 @@ class ALUUnit(is_branch_unit: Boolean = false)
              extends PipelinedFunctionalUnit(num_stages = 1
                                             , num_bypass_stages = 2
                                             , earliest_bypass_stage = 0
-                                            , data_width = 64  //xprLen 
-                                            , is_branch_unit = is_branch_unit) 
+                                            , data_width = 64  //xprLen
+                                            , is_branch_unit = is_branch_unit)
              with BOOMCoreParameters
 {
    val uop = io.req.bits.uop
@@ -384,10 +385,11 @@ class ALUUnit(is_branch_unit: Boolean = false)
 
 
 // passes in base+imm to calculate addresses, and passes store data, to the LSU
+// for floating point, 65bit FP store-data needs to be decoded into 64bit FP form
 class MemAddrCalcUnit extends PipelinedFunctionalUnit(num_stages = 0
                                                      , num_bypass_stages = 0
                                                      , earliest_bypass_stage = 0
-                                                     , data_width = 64 // TODO
+                                                     , data_width = 65 // TODO enable this only if FP is enabled?
                                                      , is_branch_unit = false) with BOOMCoreParameters
 {
    // perform address calculation
@@ -406,9 +408,25 @@ class MemAddrCalcUnit extends PipelinedFunctionalUnit(num_stages = 0
                                                     adder_out(63,vaddrBits) != UInt(0))
    val effective_address = Cat(ea_sign, adder_out(vaddrBits-1,0)).toUInt
 
+   // compute store data
+   // requires decoding 65-bit FP data
+   val unrec_s = hardfloat.recodedFloatNToFloatN(io.req.bits.rs2_data, 23, 9)
+   val unrec_d = hardfloat.recodedFloatNToFloatN(io.req.bits.rs2_data, 52, 12)
+   val unrec_out = Mux(io.req.bits.uop.fp_single, Cat(Fill(32, unrec_s(31)), unrec_s), unrec_d)
+
+   var store_data:Bits = null
+   if (params(BuildFPU).isEmpty)
+      store_data = io.req.bits.rs2_data
+   else
+      store_data = Mux(io.req.bits.uop.fp_val, unrec_out
+                                             , io.req.bits.rs2_data)
+
    // TODO only use one register read port
-   io.resp.bits.data := Mux(io.req.bits.uop.uopc === uopSTD, io.req.bits.rs2_data,
-                                                             effective_address)
+   io.resp.bits.data := Mux(io.req.bits.uop.ctrl.is_std, store_data
+                                                       , effective_address)
+
+   if (data_width > 63)
+      assert (io.resp.bits.data(64).toBool === Bool(false), "65th bit set in MemCalcAddrUnit.")
 
    // Handle misaligned exceptions
    val typ = io.req.bits.uop.mem_typ
