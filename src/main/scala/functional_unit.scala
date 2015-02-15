@@ -29,7 +29,7 @@ import uncore.constants.MemoryOpConstants._
 object FUCode
 {
    // bit mask, since a given execution pipeline may support multiple functional units
-   val FUC_SZ = 7
+   val FUC_SZ = 8
    val FU_X    = Bits("b???????", FUC_SZ)
    val FU_ALU  = Bits( 1, FUC_SZ)
    val FU_BRU  = Bits( 2, FUC_SZ)
@@ -37,6 +37,7 @@ object FUCode
    val FU_PCR  = Bits( 8, FUC_SZ)
    val FU_MULD = Bits(16, FUC_SZ)
    val FU_MEM  = Bits(32, FUC_SZ)
+   val FU_FPU  = Bits(64, FUC_SZ)
 }
 import FUCode._
 

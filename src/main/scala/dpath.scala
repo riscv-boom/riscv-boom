@@ -909,11 +909,11 @@ class DatPath() extends Module with BOOMCoreParameters
    // committing, so to get this to work I stall the entire pipeline for
    // MTPCR/MFPCR so I never speculate these instructions.
    // TODO rename k0, k1, as they could use it
+   // TODO update the naming here; pcr/mtpcr/etc. is outdated
    // flush pipeline on all writes (because they could goof things up like writing base reg)
-   // scratch everything, let's just have the ROB execute this uop
+   // TODO scratch everything, let's just have the ROB execute this uop?
 
    require (exe_units(0).uses_pcr_wport)
-   // TODO rename from pcr to csr?
    val pcr = Module(new rocket.CSRFile())
    pcr.io.host <> io.host
    pcr.io.rw.addr  := ImmGen(exe_units(0).io.resp(0).bits.uop.imm_packed, IS_I)
@@ -935,9 +935,9 @@ class DatPath() extends Module with BOOMCoreParameters
    pcr.io.cause     := com_exc_cause
    pcr.io.sret      := com_sret
    pcr_exc_target   := pcr.io.evec
-   pcr.io.badvaddr_wen := Bool(false) // TODO VM virtual memory
+   pcr.io.badvaddr_wen := Bool(false); require (params(UseVM) == false) // TODO VM virtual memory
    
-   // TODO FPU come from the commit stage?
+   // TODO BUG XXX FPU come from the commit stage?
    pcr.io.fcsr_flags.valid := Bool(false)
    pcr.io.fcsr_flags.bits := Bits(0)
 

@@ -55,8 +55,8 @@ class RegisterRead(issue_width: Int
 
    val exe_reg_valids   = Vec.fill(issue_width) { Reg(init = Bool(false)) }
    val exe_reg_uops     = Vec.fill(issue_width) { Reg(outType = new MicroOp())  }
-   val exe_reg_rs1_data = Vec.fill(issue_width) { Reg(outType = Bits(width = xprLen))  }
-   val exe_reg_rs2_data = Vec.fill(issue_width) { Reg(outType = Bits(width = xprLen))  }
+   val exe_reg_rs1_data = Vec.fill(issue_width) { Reg(outType = Bits(width = register_width))  }
+   val exe_reg_rs2_data = Vec.fill(issue_width) { Reg(outType = Bits(width = register_width))  }
 
 
    //-------------------------------------------------------------
@@ -115,7 +115,7 @@ class RegisterRead(issue_width: Int
    val bypassed_rs1_data = Vec.fill(issue_width) { Bits(width = xprLen) }
    val bypassed_rs2_data = Vec.fill(issue_width) { Bits(width = xprLen) }
 
-//   if (ENABLE_ALU_BYPASSING)
+//   if (ENABLE_BYPASSING_NETWORK)
    if (true)
    {
       for (w <- 0 until issue_width)
