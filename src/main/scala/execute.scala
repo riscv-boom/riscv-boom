@@ -18,6 +18,7 @@ import Node._
 
 import FUCode._
 import uncore.constants.MemoryOpConstants._
+import rocket.BuildFPU
  
 class ExeUnitResp(data_width: Int) extends BOOMCoreBundle 
 {
@@ -155,7 +156,7 @@ class ALUMulDExeUnit(is_branch_unit: Boolean = false
                     ) extends ExecutionUnit(num_rf_read_ports = 2
                                            , num_rf_write_ports = 1
                                            , num_bypass_stages = 2
-                                           , data_width = 64 // TODO need to use xprLen here
+                                           , data_width = 64 // TODO need to use xprlen
                                            , bypassable = true
                                            , is_mem_unit = false
                                            , uses_pcr_wport = shares_pcr_wport
@@ -234,7 +235,7 @@ class ALUMulDExeUnit(is_branch_unit: Boolean = false
 class MemExeUnit extends ExecutionUnit(num_rf_read_ports = 2
                                       , num_rf_write_ports = 1
                                       , num_bypass_stages = 0
-                                      , data_width = 64 // TODO need to use xprLen here
+                                      , data_width = 65 // TODO need to know if params(BuildFPU).isEmpty here
                                       , bypassable = false
                                       , is_mem_unit = true)
 {
@@ -302,8 +303,28 @@ class MemExeUnit extends ExecutionUnit(num_rf_read_ports = 2
                            lsu.io.forward_val
    val memresp_uop    = Mux(lsu.io.forward_val, lsu.io.forward_uop,
                                                 io.dmem.resp.bits.uop)
-   val memresp_data   = Mux(lsu.io.forward_val, lsu.io.forward_data, 
-                                                io.dmem.resp.bits.data)
+    
+   var memresp_data:Bits = null
+   if (params(BuildFPU).isEmpty)
+   {
+      memresp_data = Mux(lsu.io.forward_val, lsu.io.forward_data 
+                                           , io.dmem.resp.bits.data)
+   }
+   else
+   {
+      //recode FP values
+      val typ = io.dmem.resp.bits.typ
+      val load_single = typ === MT_W || typ === MT_WU
+      val rec_s = hardfloat.floatNToRecodedFloatN(io.dmem.resp.bits.data, 23, 9)
+      val rec_d = hardfloat.floatNToRecodedFloatN(io.dmem.resp.bits.data, 52, 12)
+      val fp_load_data_recoded = Mux(load_single, Cat(SInt(-1, 32), rec_s), rec_d)
+
+      memresp_data = Mux(lsu.io.forward_val, lsu.io.forward_data 
+                   , Mux(memresp_uop.fp_val, fp_load_data_recoded
+                                           , io.dmem.resp.bits.data_subword))
+   }
+ 
+
 
    lsu.io.memresp_val := memresp_val
    lsu.io.memresp_uop := memresp_uop
@@ -312,7 +333,7 @@ class MemExeUnit extends ExecutionUnit(num_rf_read_ports = 2
    // Hook up loads to the response
    io.resp(0).valid := memresp_val
    io.resp(0).bits.uop := memresp_uop
-   io.resp(0).bits.uop.pdst_rtype := RT_FIX // TODO delete, or figure this out properly
+   io.resp(0).bits.uop.pdst_rtype := Mux(memresp_uop.fp_val, RT_FLT, RT_FIX) 
    io.resp(0).bits.uop.ctrl.rf_wen := memresp_rf_wen
    io.resp(0).bits.data := memresp_data
 
@@ -324,7 +345,7 @@ class ALUMulDMemExeUnit(is_branch_unit: Boolean = false
                        ) extends ExecutionUnit(num_rf_read_ports = 2
                                               , num_rf_write_ports = 2
                                               , num_bypass_stages = 2
-                                              , data_width = 64 // TODO need to use xprLen here
+                                              , data_width = 65 // TODO need to use params(BuildFPU).isEmpty here
                                               , bypassable = true
                                               , is_mem_unit = true
                                               , uses_pcr_wport = shares_pcr_wport
@@ -447,7 +468,7 @@ class ALUMulDMemExeUnit(is_branch_unit: Boolean = false
    io.dmem.req.bits.uop   := lsu.io.memreq_uop
    io.dmem.req.bits.kill  := lsu.io.memreq_kill // load kill request sent to memory
    
-   // I should be timing forwarding to coincide with dmem resps, so I'm not clobbering
+   // I'm timing forwarding to coincide with dmem resps, so I'm not clobbering
    //anything....
    memresp_val    := Mux(io.com_handling_exc && io.dmem.resp.bits.uop.is_load, Bool(false), 
                                                 lsu.io.forward_val || io.dmem.resp.valid)
@@ -457,8 +478,26 @@ class ALUMulDMemExeUnit(is_branch_unit: Boolean = false
                            lsu.io.forward_val
    val memresp_uop    = Mux(lsu.io.forward_val, lsu.io.forward_uop,
                                                 io.dmem.resp.bits.uop)
-   val memresp_data   = Mux(lsu.io.forward_val, lsu.io.forward_data, 
-                                                io.dmem.resp.bits.data)
+
+   var memresp_data:Bits = null
+   if (params(BuildFPU).isEmpty)
+   {
+      memresp_data = Mux(lsu.io.forward_val, lsu.io.forward_data 
+                                           , io.dmem.resp.bits.data)
+   }
+   else
+   {
+      //recode FP values
+      val typ = io.dmem.resp.bits.typ
+      val load_single = typ === MT_W || typ === MT_WU
+      val rec_s = hardfloat.floatNToRecodedFloatN(io.dmem.resp.bits.data, 23, 9)
+      val rec_d = hardfloat.floatNToRecodedFloatN(io.dmem.resp.bits.data, 52, 12)
+      val fp_load_data_recoded = Mux(load_single, Cat(SInt(-1, 32), rec_s), rec_d)
+
+      memresp_data = Mux(lsu.io.forward_val, lsu.io.forward_data 
+                   , Mux(memresp_uop.fp_val, fp_load_data_recoded
+                                           , io.dmem.resp.bits.data_subword))
+   }
 
    lsu.io.memresp_val   := memresp_val
    lsu.io.memresp_uop   := memresp_uop
@@ -467,10 +506,11 @@ class ALUMulDMemExeUnit(is_branch_unit: Boolean = false
    // Hook up loads and multiplies to the 2nd write port
    io.resp(1).valid                := memresp_val || muldiv.io.resp.valid
    io.resp(1).bits.uop             := Mux(memresp_val, memresp_uop, muldiv.io.resp.bits.uop)
-   io.resp(1).bits.uop.pdst_rtype  := RT_FIX // TODO why is this necessary? shouldn't memresp_uop already be giving us this?
+   io.resp(1).bits.uop.pdst_rtype  := Mux(memresp_uop.fp_val, RT_FLT, RT_FIX)
    io.resp(1).bits.uop.ctrl.rf_wen := Mux(memresp_val, memresp_rf_wen, muldiv.io.resp.bits.uop.ctrl.rf_wen)
    io.resp(1).bits.data            := Mux(memresp_val, memresp_data, muldiv.io.resp.bits.data)
  
 }
+
  
 }

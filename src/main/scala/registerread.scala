@@ -37,7 +37,7 @@ class RegisterRead(issue_width: Int
       val iss_uops   = Vec.fill(issue_width) { new MicroOp().asInput() }
 
       // interface with register file's read ports
-      val rf_read_ports = Vec.fill(num_read_ports) { new RegisterFileReadPortIO(PREG_SZ, xprLen) }.flip
+      val rf_read_ports = Vec.fill(num_read_ports) { new RegisterFileReadPortIO(PREG_SZ, register_width) }.flip
 
       val bypass = new BypassData(num_total_bypass_ports, register_width).asInput()
 
@@ -112,16 +112,16 @@ class RegisterRead(issue_width: Int
    // BYPASS MUXES -----------------------------------------------
    // performed at the end of the register read stage
 
-   val bypassed_rs1_data = Vec.fill(issue_width) { Bits(width = xprLen) }
-   val bypassed_rs2_data = Vec.fill(issue_width) { Bits(width = xprLen) }
+   val bypassed_rs1_data = Vec.fill(issue_width) { Bits(width = register_width) }
+   val bypassed_rs2_data = Vec.fill(issue_width) { Bits(width = register_width) }
 
 //   if (ENABLE_BYPASSING_NETWORK)
    if (true)
    {
       for (w <- 0 until issue_width)
       {
-         var rs1_cases = Array((Bool(false), Bits(0, xprLen)))
-         var rs2_cases = Array((Bool(false), Bits(0, xprLen)))
+         var rs1_cases = Array((Bool(false), Bits(0, register_width)))
+         var rs2_cases = Array((Bool(false), Bits(0, register_width)))
 
          val pop1       = rrd_uops(w).pop1
          val lrs1_rtype = rrd_uops(w).lrs1_rtype

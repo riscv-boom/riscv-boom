@@ -476,10 +476,6 @@ abstract class UnPipelinedFunctionalUnit
 
    // assumes at least one pipeline register between request and response
    io.resp.bits.uop := r_uop
-
-//   io.bypass.valid(0) := Bool(false) // io.resp.valid
-//   io.bypass.uop(0)   := io.resp.bits.uop
-//   io.bypass.data(0)  := io.resp.bits.data
 }
 
 

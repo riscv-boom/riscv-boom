@@ -135,9 +135,11 @@ class NackInfo extends BOOMCoreBundle
 
 class DCacheResp extends BOOMCoreBundle
 {
-   val data   = Bits(width = coreDataBits)
-   val uop    = new MicroOp
-   val xcpt   = (new rocket.HellaCacheExceptions).asInput()
+   val data         = Bits(width = coreDataBits)
+   val data_subword = Bits(width = coreDataBits)
+   val uop          = new MicroOp
+   val typ          = Bits(width = MT_SZ)
+   val xcpt         = (new rocket.HellaCacheExceptions).asInput()
    // TODO should nack go in here?
 }
 
@@ -334,24 +336,11 @@ class DCacheWrapper extends Module with BOOMCoreParameters
    io.core.resp.bits.uop := Mux(nbdcache_load_ack, inflight_load_buffer(resp_idx).out_uop,
                                                    m2_req_uop)
 
-   if (params(BuildFPU).isEmpty)
-   {  // comes out the same cycle as the resp.valid signal
-      // but is a few gates slower than resp.bits.data
-      io.core.resp.bits.data := nbdcache.io.cpu.resp.bits.data_subword
-   }
-   else
-   {
-      //recode FP values
-      // TODO TIMING fp load response - this stuff is almost certainly on the critical path
-      val load_resp = nbdcache.io.cpu.resp.bits
-      val load_single = load_resp.typ === MT_W || load_resp.typ === MT_WU
-      val rec_s = hardfloat.floatNToRecodedFloatN(load_resp.data, 23, 9)
-      val rec_d = hardfloat.floatNToRecodedFloatN(load_resp.data, 52, 12)
-      val load_data_recoded = Mux(load_single, Cat(SInt(-1, 32), rec_s), rec_d)
-
-      io.core.resp.bits.data := Mux(io.core.resp.bits.uop.fp_val, load_data_recoded
-                                                                , nbdcache.io.cpu.resp.bits.data_subword)
-   }
+   // comes out the same cycle as the resp.valid signal
+   // but is a few gates slower than resp.bits.data
+   io.core.resp.bits.data_subword := nbdcache.io.cpu.resp.bits.data_subword
+   io.core.resp.bits.data         := nbdcache.io.cpu.resp.bits.data
+   io.core.resp.bits.typ          := nbdcache.io.cpu.resp.bits.typ
 
    //------------------------------------------------------------
    // handle nacks from the cache (or from the IFLB or the LSU)
