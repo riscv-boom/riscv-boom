@@ -93,7 +93,7 @@ class ALUExeUnit(is_branch_unit: Boolean = false
                 , shares_pcr_wport: Boolean = false
                 ) extends ExecutionUnit(num_rf_read_ports = 2
                                        , num_rf_write_ports = 1
-                                       , num_bypass_stages = 2
+                                       , num_bypass_stages = 1
                                        , data_width = 64 // TODO need to use xprLen here
                                        , bypassable = true 
                                        , is_mem_unit = false
@@ -155,7 +155,7 @@ class ALUMulDExeUnit(is_branch_unit: Boolean = false
                     , shares_pcr_wport: Boolean = false
                     ) extends ExecutionUnit(num_rf_read_ports = 2
                                            , num_rf_write_ports = 1
-                                           , num_bypass_stages = 2
+                                           , num_bypass_stages = 1
                                            , data_width = 64 // TODO need to use xprlen
                                            , bypassable = true
                                            , is_mem_unit = false
@@ -246,7 +246,7 @@ class MemExeUnit extends ExecutionUnit(num_rf_read_ports = 2
    maddrcalc.io.req <> io.req
    
    maddrcalc.io.brinfo <> io.brinfo 
-   io.bypass <> maddrcalc.io.bypass  // TODO this is not where the bypassing should occur from
+   io.bypass <> maddrcalc.io.bypass  // TODO this is not where the bypassing should occur from, is there any bypassing happening?!
  
    io.ma_xcpt_val := maddrcalc.io.resp.bits.xcpt.toBits != Bits(0) && maddrcalc.io.resp.valid
    io.ma_xcpt     := maddrcalc.io.resp.bits.xcpt
@@ -344,7 +344,7 @@ class ALUMulDMemExeUnit(is_branch_unit: Boolean = false
                        , shares_pcr_wport: Boolean = false
                        ) extends ExecutionUnit(num_rf_read_ports = 2
                                               , num_rf_write_ports = 2
-                                              , num_bypass_stages = 2
+                                              , num_bypass_stages = 1
                                               , data_width = 65 // TODO need to use params(BuildFPU).isEmpty here
                                               , bypassable = true
                                               , is_mem_unit = true

@@ -171,7 +171,9 @@ abstract class PipelinedFunctionalUnit(val num_stages: Int,
       require (num_stages == 0)
       // pass req straight through to response
 
-      io.resp.valid    := io.req.valid && !IsKilledByBranch(io.brinfo, io.req.bits.uop) // && !io.req.bits.kill TODO remove kill signals, let consumer deal with it. the LSU already handles it. and this hurts critical path.
+      // valid doesn't check kill signals, let consumer deal with it.
+      // The LSU already handles it and this hurts critical path.
+      io.resp.valid    := io.req.valid && !IsKilledByBranch(io.brinfo, io.req.bits.uop)
       io.resp.bits.uop := io.req.bits.uop
       io.resp.bits.uop.br_mask := GetNewBrMask(io.brinfo, io.req.bits.uop)
    }
@@ -193,7 +195,7 @@ abstract class PipelinedFunctionalUnit(val num_stages: Int,
 
 class ALUUnit(is_branch_unit: Boolean = false)
              extends PipelinedFunctionalUnit(num_stages = 1
-                                            , num_bypass_stages = 2
+                                            , num_bypass_stages = 1
                                             , earliest_bypass_stage = 0
                                             , data_width = 64  //xprLen
                                             , is_branch_unit = is_branch_unit)
@@ -365,12 +367,9 @@ class ALUUnit(is_branch_unit: Boolean = false)
    // Bypass (bypass in Exe0 stage)
    // for the ALU, we can bypass after the first stage
    require (num_stages == 1)
-   require (num_bypass_stages == 2)
+   require (num_bypass_stages == 1)
    io.bypass.valid(0) := io.req.valid
    io.bypass.data (0) := alu.io.out
-   // we must also bypass the WB stage
-   io.bypass.valid(1) := io.resp.valid
-   io.bypass.data (1) := io.resp.bits.data
 
    // Response
    val reg_data = Reg(outType = Bits(width = xprLen))
