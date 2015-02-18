@@ -158,23 +158,38 @@ object FDecode extends DecodeConstants
 
 //    FMV_S_X->   List(Y,  Y,N,N,N,N,N,Y,A2_X,   A1_RS1, IMM_X, DW_X,  FN_X,     N,M_X,      MT_X, N,N,N,Y,N,N,CSR.N,N,N,N,N,N),
 //    FMV_D_X->   List(Y,  Y,N,N,N,N,N,Y,A2_X,   A1_RS1, IMM_X, DW_X,  FN_X,     N,M_X,      MT_X, N,N,N,Y,N,N,CSR.N,N,N,N,N,N),
-                        //                                                                                            wakeup_delay
-                        //                                                        imm sel                             |        bypassable (aka, known/fixed latency)
-                        //                                                        |     is_load                       |        |  br/jmp
-                        //     is val inst?                       rs1 regtype     |     |  is_store                   |        |  |  is jal
-                        //     |  is fp inst?                     |       rs2 type|     |  |  is_amo                  |        |  |  |  is sret
-                        //     |  |  is single-prec?              |       |       |     |  |  |  is_fence             |        |  |  |  |  is syscall
-                        //     |  |  |  micro-code                |       |       |     |  |  |  |  is_fencei         |        |  |  |  |  |  is sbreak
-                        //     |  |  |  |         func    dst     |       |       |     |  |  |  |  |  mem    mem     |        |  |  |  |  |  |  is unique? (clear pipeline for it)
-                        //     |  |  |  |         unit    regtype |       |       |     |  |  |  |  |  cmd    msk     |        |  |  |  |  |  |  |  flush on commit
-                        //     |  |  |  |         |       |       |       |       |     |  |  |  |  |  |      |       |        |  |  |  |  |  |  |  |  csr cmd
-               FLW     -> List(Y, Y, Y, uopLD   , FU_MEM, RT_FLT, RT_FIX, RT_X  , IS_I, Y, N, N, N, N, M_XRD, MSK_W , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
-               FLD     -> List(Y, Y, N, uopLD   , FU_MEM, RT_FLT, RT_FIX, RT_X  , IS_I, Y, N, N, N, N, M_XRD, MSK_D , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
-               FSW     -> List(Y, Y, Y, uopSTA  , FU_MEM, RT_X  , RT_FIX, RT_FLT, IS_S, N, Y, N, N, N, M_XWR, MSK_W , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
-               FSD     -> List(Y, Y, N, uopSTA  , FU_MEM, RT_X  , RT_FIX, RT_FLT, IS_S, N, Y, N, N, N, M_XWR, MSK_D , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+//    FMV_X_S->   List(Y,  Y,N,N,N,N,N,N,A2_X,   A1_X,   IMM_X, DW_X,  FN_X,     N,M_X,      MT_X, Y,N,N,N,N,Y,CSR.N,N,N,N,N,N),
+//    FMV_X_D->   List(Y,  Y,N,N,N,N,N,N,A2_X,   A1_X,   IMM_X, DW_X,  FN_X,     N,M_X,      MT_X, Y,N,N,N,N,Y,CSR.N,N,N,N,N,N),
+                        //                                                                                              wakeup_delay
+                        //                                                          imm sel                             |        bypassable (aka, known/fixed latency)
+                        //                                                          |     is_load                       |        |  br/jmp
+                        //     is val inst?                         rs1 regtype     |     |  is_store                   |        |  |  is jal
+                        //     |  is fp inst?                       |       rs2 type|     |  |  is_amo                  |        |  |  |  is sret
+                        //     |  |  is single-prec?                |       |       |     |  |  |  is_fence             |        |  |  |  |  is syscall
+                        //     |  |  |  micro-code                  |       |       |     |  |  |  |  is_fencei         |        |  |  |  |  |  is sbreak
+                        //     |  |  |  |           func    dst     |       |       |     |  |  |  |  |  mem    mem     |        |  |  |  |  |  |  is unique? (clear pipeline for it)
+                        //     |  |  |  |           unit    regtype |       |       |     |  |  |  |  |  cmd    msk     |        |  |  |  |  |  |  |  flush on commit
+                        //     |  |  |  |           |       |       |       |       |     |  |  |  |  |  |      |       |        |  |  |  |  |  |  |  |  csr cmd
+               FLW     -> List(Y, Y, Y, uopLD     , FU_MEM, RT_FLT, RT_FIX, RT_X  , IS_I, Y, N, N, N, N, M_XRD, MSK_W , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+               FLD     -> List(Y, Y, N, uopLD     , FU_MEM, RT_FLT, RT_FIX, RT_X  , IS_I, Y, N, N, N, N, M_XRD, MSK_D , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+               FSW     -> List(Y, Y, Y, uopSTA    , FU_MEM, RT_X  , RT_FIX, RT_FLT, IS_S, N, Y, N, N, N, M_XWR, MSK_W , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+               FSD     -> List(Y, Y, N, uopSTA    , FU_MEM, RT_X  , RT_FIX, RT_FLT, IS_S, N, Y, N, N, N, M_XWR, MSK_D , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
 
-               FMV_S_X -> List(Y, Y, Y, uopFMV  , FU_FPU, RT_FLT, RT_FIX, RT_X  , IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
-               FMV_D_X -> List(Y, Y, N, uopFMV  , FU_FPU, RT_FLT, RT_FIX, RT_X  , IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N)
+               // TODO consolidate ctrl signals? tons of opc's here
+               // not convinced "single-prec" is being used for the fmv 
+               FMV_S_X -> List(Y, Y, Y, uopFMV_S_X, FU_FPU, RT_FLT, RT_FIX, RT_X  , IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+               FMV_D_X -> List(Y, Y, N, uopFMV_D_X, FU_FPU, RT_FLT, RT_FIX, RT_X  , IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+               FMV_X_S -> List(Y, Y, Y, uopFMV_X_S, FU_FPU, RT_FIX, RT_FLT, RT_X  , IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+               FMV_X_D -> List(Y, Y, N, uopFMV_X_D, FU_FPU, RT_FIX, RT_FLT, RT_X  , IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+
+               FSGNJ_S -> List(Y, Y, Y, uopFSGNJ_S, FU_FPU, RT_FLT, RT_FLT, RT_FLT, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+               FSGNJ_D -> List(Y, Y, Y, uopFSGNJ_D, FU_FPU, RT_FLT, RT_FLT, RT_FLT, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+               FSGNJX_S-> List(Y, Y, Y, uopFSGNJ_S, FU_FPU, RT_FLT, RT_FLT, RT_FLT, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+               FSGNJX_D-> List(Y, Y, N, uopFSGNJ_D, FU_FPU, RT_FLT, RT_FLT, RT_FLT, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+               FSGNJN_S-> List(Y, Y, N, uopFSGNJ_S, FU_FPU, RT_FLT, RT_FLT, RT_FLT, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+               FSGNJN_D-> List(Y, Y, N, uopFSGNJ_D, FU_FPU, RT_FLT, RT_FLT, RT_FLT, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N) 
+
+
     )
 }
 

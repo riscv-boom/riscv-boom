@@ -94,7 +94,6 @@ class CtrlSignals extends Bundle()
    val imm_sel     = UInt(width = IS_X.getWidth)
    val op_fcn      = Bits(width = SZ_ALU_FN)
    val fcn_dw      = Bool()
-   val wb_sel      = UInt(width = WB_X.getWidth)
    val rf_wen      = Bool()
    val pcr_fcn     = Bits(width = rocket.CSR.SZ)
    val is_load     = Bool()
@@ -304,8 +303,18 @@ class DatPath() extends Module with BOOMCoreParameters
    if (ISSUE_WIDTH == 1)
    {
       println("\n    -== Single Issue ==- \n")
-      val mem_unit  = Module(new ALUMulDMemExeUnit(is_branch_unit = true,
+      var mem_unit:ExecutionUnit  = null
+      if (params(BuildFPU).isEmpty)
+      {
+         println ("   FPU Unit Enabled\n")
+         mem_unit = Module(new ALUMulDMemExeUnit(is_branch_unit = true,
                                           shares_pcr_wport = true))
+      }
+      else
+      {
+         mem_unit = Module(new FPUALUMulDMemExeUnit(is_branch_unit = true,
+                                          shares_pcr_wport = true))
+      }
       exe_units += mem_unit
       mem_unit.io.dmem <> io.dmem
    }
@@ -776,6 +785,7 @@ class DatPath() extends Module with BOOMCoreParameters
       {
          rename_stage.io.wb_valids(wu_idx) := exe_units(i).io.resp(j).valid &&
                                               exe_units(i).io.resp(j).bits.uop.ctrl.rf_wen &&       // TODO? is rf_wen redudant?!
+//                                              !exe_units(i).io.resp(j).bits.uop.bypassable &&       TODO BUG XXX add this line in
                                               (exe_units(i).io.resp(j).bits.uop.pdst_rtype === RT_FIX || 
                                                  exe_units(i).io.resp(j).bits.uop.pdst_rtype === RT_FLT)
          rename_stage.io.wb_pdsts(wu_idx)  := exe_units(i).io.resp(j).bits.uop.pdst
@@ -788,6 +798,7 @@ class DatPath() extends Module with BOOMCoreParameters
          rename_stage.io.wb_valids(wu_idx) := iss_valids(i) && (iss_uops(i).pdst_rtype === RT_FIX || iss_uops(i).pdst_rtype === RT_FLT) && (iss_uops(i).bypassable)
          rename_stage.io.wb_pdsts(wu_idx)  := iss_uops(i).pdst
          wu_idx += 1
+         assert (!(iss_uops(i).pdst_rtype === RT_FLT && iss_uops(i).bypassable), "Bypassing FP is not supported.")
       }
    }
    require (wu_idx == num_wakeup_ports)
@@ -858,6 +869,7 @@ class DatPath() extends Module with BOOMCoreParameters
       {
          issue_unit.io.wakeup_vals(wu_idx)  := exe_units(i).io.resp(j).valid &&
                                                exe_units(i).io.resp(j).bits.uop.ctrl.rf_wen && // TODO get rid of other rtype checks
+                                               // TODO BUG XXX only check for !bypassable
                                                (exe_units(i).io.resp(j).bits.uop.pdst_rtype === RT_FIX || exe_units(i).io.resp(j).bits.uop.pdst_rtype === RT_FLT)
          issue_unit.io.wakeup_pdsts(wu_idx) := exe_units(i).io.resp(j).bits.uop.pdst
          wu_idx += 1
@@ -920,12 +932,14 @@ class DatPath() extends Module with BOOMCoreParameters
    val pcr_read_out = pcr.io.rw.rdata
 
    val pcr_rw_cmd = exe_units(0).io.resp(0).bits.uop.ctrl.pcr_fcn
-   pcr.io.rw.cmd   := pcr_rw_cmd
+   pcr.io.rw.cmd   := Mux(exe_units(0).io.resp(0).valid, pcr_rw_cmd, CSR.N) 
    val wb_wdata    = exe_units(0).io.resp(0).bits.data
    pcr.io.rw.wdata := Mux(pcr_rw_cmd === CSR.S, pcr.io.rw.rdata | wb_wdata,
                       Mux(pcr_rw_cmd === CSR.C, pcr.io.rw.rdata & ~wb_wdata,
                                                  wb_wdata))
 
+   // TODO is there anything else that's going on spuriously?
+   assert (!(pcr_rw_cmd != CSR.N && !exe_units(0).io.resp(0).valid), "PCR is being written to spuriously.")
 
    // Extra I/O
    pcr_status       := pcr.io.status
@@ -937,9 +951,13 @@ class DatPath() extends Module with BOOMCoreParameters
    pcr_exc_target   := pcr.io.evec
    pcr.io.badvaddr_wen := Bool(false); require (params(UseVM) == false) // TODO VM virtual memory
    
-   // TODO BUG XXX FPU come from the commit stage?
+   // TODO BUG XXX FPU write to the fcsr_flags at commit
+   // reading requires serializing the entire pipeline
    pcr.io.fcsr_flags.valid := Bool(false)
    pcr.io.fcsr_flags.bits := Bits(0)
+
+//   exe_units.map(_.io <> pcr.io)
+//   exe_units.map(_.io.fcsr_rm := pcr.io.fcsr_rm)
 
    // --------------------------------------
    // Register File
@@ -1055,7 +1073,7 @@ class DatPath() extends Module with BOOMCoreParameters
    {
       for (j <- 0 until exe_units(i).num_rf_write_ports)
       {
-         if (!(params(BuildFPU).isEmpty) && exe_units(i).data_width > 64)
+         if (exe_units(i).data_width > 64)
          {
             assert (!(exe_units(i).io.resp(j).valid &&
                       exe_units(i).io.resp(j).bits.uop.ctrl.rf_wen &&
@@ -1119,6 +1137,7 @@ class DatPath() extends Module with BOOMCoreParameters
             rob.io.debug_wb_valids(cnt) := exe_units(w).io.resp(j).valid &&
                                            exe_units(w).io.resp(j).bits.uop.ctrl.rf_wen &&
                                            (exe_units(w).io.resp(j).bits.uop.pdst_rtype === RT_FIX || exe_units(w).io.resp(j).bits.uop.pdst_rtype === RT_FLT)
+            rob.io.debug_wb_pdsts(cnt)  := exe_units(w).io.resp(j).bits.uop.pdst
              if (exe_units(w).uses_pcr_wport && (j == 0))
              {
                rob.io.debug_wb_wdata(cnt) := Mux(exe_units(w).io.resp(j).bits.uop.ctrl.pcr_fcn != rocket.CSR.N,
@@ -1249,6 +1268,7 @@ class DatPath() extends Module with BOOMCoreParameters
    debug(lsu_misspec)
 
    assert (!(throw_idle_error), "Pipeline has hung.")
+   // TODO XXX stuff an error code down the csr_tohost to end the run
 
 
    //-------------------------------------------------------------

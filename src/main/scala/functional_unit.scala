@@ -57,6 +57,9 @@ class FunctionalUnitIo(num_stages: Int
 
    val br_unit = new BranchUnitResp().asOutput
 
+   // only used by the fpu unit
+   val fcsr_rm = Bits(INPUT, rocket.FPConstants.RM_SZ)
+
    val get_rob_pc = new Bundle
    {
       val rob_idx = UInt(OUTPUT, ROB_ADDR_SZ)
@@ -157,7 +160,10 @@ abstract class PipelinedFunctionalUnit(val num_stages: Int,
          r_uops(i)   := r_uops(i-1)
          r_uops(i).br_mask := GetNewBrMask(io.brinfo, r_uops(i-1))
 
-         io.bypass.uop(i-1) := r_uops(i-1)
+         if (num_bypass_stages != 0)// && i > earliest_bypass_stage)
+         {
+            io.bypass.uop(i-1) := r_uops(i-1)
+         }
       }
 
       // handle outgoing (branch could still kill it)
@@ -193,9 +199,9 @@ abstract class PipelinedFunctionalUnit(val num_stages: Int,
 
 }
 
-class ALUUnit(is_branch_unit: Boolean = false)
-             extends PipelinedFunctionalUnit(num_stages = 1
-                                            , num_bypass_stages = 1
+class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)
+             extends PipelinedFunctionalUnit(num_stages = num_stages
+                                            , num_bypass_stages = num_stages
                                             , earliest_bypass_stage = 0
                                             , data_width = 64  //xprLen
                                             , is_branch_unit = is_branch_unit)
@@ -363,18 +369,35 @@ class ALUUnit(is_branch_unit: Boolean = false)
       io.br_unit.debug_btb_pred := uop.btb_resp_valid && uop.btb_resp.taken
    }
 
+   // Response
+   // TODO add clock gate on resp bits from functional units
+//   io.resp.bits.data := RegEnable(alu.io.out, io.req.valid)
+//   val reg_data = Reg(outType = Bits(width = xprLen))
+//   reg_data := alu.io.out
+//   io.resp.bits.data := reg_data
 
-   // Bypass (bypass in Exe0 stage)
-   // for the ALU, we can bypass after the first stage
-   require (num_stages == 1)
-   require (num_bypass_stages == 1)
+   val r_val  = Vec.fill(num_stages) { Reg(init = Bool(false)) }
+   val r_data = Vec.fill(num_stages) { Reg(Bits(xprLen)) }
+   r_val (0) := io.req.valid
+   r_data(0) := alu.io.out
+   for (i <- 1 until num_stages)
+   {
+      r_val(i)  := r_val(i-1)
+      r_data(i) := r_data(i-1)
+   }
+   io.resp.bits.data := r_data(num_stages-1)
+
+   // Bypass
+   // for the ALU, we can bypass same cycle as compute
+   require (num_stages >= 1)
+   require (num_bypass_stages >= 1)
    io.bypass.valid(0) := io.req.valid
    io.bypass.data (0) := alu.io.out
-
-   // Response
-   val reg_data = Reg(outType = Bits(width = xprLen))
-   reg_data := alu.io.out
-   io.resp.bits.data := reg_data
+   for (i <- 1 until num_stages)
+   {
+      io.bypass.valid(i) := r_val(i-1)
+      io.bypass.data (i) := r_data(i-1)
+   }
 
    // Exceptions
    io.resp.bits.xcpt.ma.ld := Bool(false)
@@ -443,6 +466,40 @@ class MemAddrCalcUnit extends PipelinedFunctionalUnit(num_stages = 0
    io.resp.bits.xcpt.pf.ld := Bool(false)
    io.resp.bits.xcpt.pf.st := Bool(false)
 }
+
+
+
+// currently, bypassing is unsupported!
+// All FP instructions are padded out to the max latency unit for easy
+// write-port scheduling.
+class FPUUnit extends PipelinedFunctionalUnit(num_stages = 3
+                                            , num_bypass_stages = 0
+                                            , earliest_bypass_stage = 0
+                                            , data_width = 65)
+              with BOOMCoreParameters
+{
+//   val uop = io.req.bits.uop
+
+   val fpu = Module(new FPU())
+
+   // TODO just straight up hook up the req fpu.io.req <> io.req ?
+   fpu.io.valid   := io.req.valid
+   fpu.io.uop     := io.req.bits.uop
+   fpu.io.in1     := io.req.bits.rs1_data
+   fpu.io.in2     := io.req.bits.rs2_data
+   fpu.io.fcsr_rm := io.fcsr_rm
+
+
+   // Response
+//   val reg_data = Reg(Bits(width=65))
+//   reg_data := fpu.io.resp.bits.data
+//   io.resp.bits.data := reg_data
+//   io.resp <> fpu.io.resp
+   // TODO how close can I match these I/Os?
+   io.resp.bits.data := fpu.io.resp.bits.data
+}
+
+
 
 
 // unpipelined, can only hold a single MicroOp at a time

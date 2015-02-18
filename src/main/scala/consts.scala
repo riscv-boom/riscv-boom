@@ -15,7 +15,7 @@ import Node._
 trait BOOMDebugConstants
 {
    val DEBUG_PRINTF        = false // use the Chisel printf functionality
-   val DEBUG_ENABLE_COLOR  = false // provide color to print outs? requires a VIM plugin to work properly :(
+   val DEBUG_ENABLE_COLOR  = true  // provide color to print outs? requires a VIM plugin to work properly :(
    val COMMIT_LOG_PRINTF   = false // dump commit state, for comparision against ISA sim
    val COMMIT_LOG_EI_ONLY  = true  // print out commit log only when interrupts enabled
 }
@@ -81,11 +81,6 @@ trait ScalarOpConstants
    val DW_32  = Bool(false)
    val DW_64  = Bool(true)
    val DW_XPR = Bool(true) //Bool(xprLen==64)
-
-   // Writeback Select Signal
-   val WB_ALU  = UInt(0, 1)
-   val WB_PCR  = UInt(1, 1)
-   val WB_X    = UInt("b?", 1)
 
    // Memory Enable Signal
    val MEN_0   = Bool(false)
@@ -188,7 +183,36 @@ trait ScalarOpConstants
    val uopMEMSPECIAL= Bits(66, UOPC_SZ)
    val uopAMO_AG    = Bits(67, UOPC_SZ) // AMO-address gen (use normal STD for datagen)
 
-   val uopFMV       = Bits(68, UOPC_SZ)
+   // TODO provide a micro-op for each instruction, going into the FPU,
+   // so that we use the FPUDecode table... refactor so these signals are created
+   // in Decode
+   val uopFMV_S_X   = Bits(68, UOPC_SZ)
+   val uopFMV_D_X   = Bits(69, UOPC_SZ)
+   val uopFMV_X_S   = Bits(70, UOPC_SZ)
+   val uopFMV_X_D   = Bits(71, UOPC_SZ)
+
+   val uopFSGNJ_S   = Bits(72, UOPC_SZ)
+   val uopFSGNJ_D   = Bits(73, UOPC_SZ)
+
+   //val FCMD_ADD =    Bits("b0??00")
+   //val FCMD_SUB =    Bits("b0??01")
+   //val FCMD_MUL =    Bits("b0??10")
+   //val FCMD_MADD =   Bits("b1??00")
+   //val FCMD_MSUB =   Bits("b1??01")
+   //val FCMD_NMSUB =  Bits("b1??10")
+   //val FCMD_NMADD =  Bits("b1??11")
+   //val FCMD_DIV =    Bits("b?0?11")
+   //val FCMD_SQRT =   Bits("b?1?11")
+   //val FCMD_SGNJ =   Bits("b??1?0")
+   //val FCMD_MINMAX = Bits("b?01?1")
+   //val FCMD_CVT_FF = Bits("b??0??")
+   //val FCMD_CVT_IF = Bits("b?10??")
+   //val FCMD_CMP =    Bits("b?01??")
+   //val FCMD_CVT_FI = Bits("b??0??")
+   //val FCMD_X =      Bits("b?????")
+
+
+
 
    // Enable Co-processor Register Signal (ToHost Register, etc.)
    //val PCR_N   = UInt(0,3)    // do nothing

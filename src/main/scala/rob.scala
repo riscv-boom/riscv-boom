@@ -12,10 +12,10 @@
 //
 // ASSUMPTION: dispatch groups are aligned to the PC.
 //
-// NOTES: 
-//    - Currently we do not compress out bubbles in the ROB. 
+// NOTES:
+//    - Currently we do not compress out bubbles in the ROB.
 //    - commit_width is tied directly to the dispatch_width.
-//    - Exceptions are only taken when at the head of the commit bundle. 
+//    - Exceptions are only taken when at the head of the commit bundle.
 //      This helps deal with loads, stores, and refetch instructions.
 //
 
@@ -28,12 +28,12 @@ import scala.math.ceil
 
 class RobIo(machine_width: Int, num_wakeup_ports: Int)  extends BOOMCoreBundle
 {
-   // Dispatch Stage                                                 
-   // (Write Instruction to ROB from Dispatch Stage)                 
+   // Dispatch Stage
+   // (Write Instruction to ROB from Dispatch Stage)
    val dis_mask         = Vec.fill(machine_width) { Bool(INPUT) }
    val dis_uops         = Vec.fill(machine_width) { new MicroOp().asInput() }
 
-   val curr_rob_tail    = UInt(OUTPUT, ROB_ADDR_SZ) 
+   val curr_rob_tail    = UInt(OUTPUT, ROB_ADDR_SZ)
 
    // Write-back Stage
    // (Update of ROB)
@@ -41,11 +41,12 @@ class RobIo(machine_width: Int, num_wakeup_ports: Int)  extends BOOMCoreBundle
    // currently all supported exceptions are detected in Decode (except load-ordering failures)
    val wb_valids        = Vec.fill(num_wakeup_ports) { Bool(INPUT) }
    val wb_rob_idxs      = Vec.fill(num_wakeup_ports) { UInt(INPUT, ROB_ADDR_SZ) }
-   
+
    // track side-effects for debug purposes.
    // Also need to know when loads write back, whereas we don't need loads to unbusy.
    val debug_wb_valids  = Vec.fill(num_wakeup_ports) { Bool(INPUT) }
-   val debug_wb_wdata   = Vec.fill(num_wakeup_ports) { Bits(INPUT, xprLen) }
+   val debug_wb_pdsts   = Vec.fill(num_wakeup_ports) { Bits(INPUT, PREG_SZ) }
+   val debug_wb_wdata   = Vec.fill(num_wakeup_ports) { Bits(INPUT, 65) }
 
    val mem_xcpt_val     = Bool(INPUT)
    val mem_xcpt_uop     = new MicroOp().asInput
@@ -55,7 +56,7 @@ class RobIo(machine_width: Int, num_wakeup_ports: Int)  extends BOOMCoreBundle
    // TODO consolidate exception ports?
    val ldo_xcpt_val     = Bool(INPUT)
    val ldo_xcpt_uop     = new MicroOp().asInput
-   
+
    // Commit Stage
    // (Free no-longer used register).
    // Also used for rollback.
@@ -74,14 +75,14 @@ class RobIo(machine_width: Int, num_wakeup_ports: Int)  extends BOOMCoreBundle
    val com_exc_cause    = UInt(OUTPUT, xprLen)
    val com_handling_exc = Bool(OUTPUT)
    val com_rbk_valids   = Vec.fill(machine_width) {Bool(OUTPUT)}
-   
+
    // Handle Branch Misspeculations
    val br_unit          = new BranchUnitResp().asInput
-        
+
    // Let the Branch Unit read out an instruction's PC
    val get_pc = new Bundle
    {
-      val rob_idx  = UInt(INPUT, ROB_ADDR_SZ) 
+      val rob_idx  = UInt(INPUT, ROB_ADDR_SZ)
       val curr_pc  = UInt(OUTPUT, xprLen)
       val next_val = Bool(OUTPUT)             // the next_pc may not be valid (stalled or still being fetched)
       val next_pc  = UInt(OUTPUT, xprLen)
@@ -100,7 +101,7 @@ class RobIo(machine_width: Int, num_wakeup_ports: Int)  extends BOOMCoreBundle
    val flush_take_pc    = Bool(OUTPUT)
    val flush_pc         = UInt(OUTPUT, xprLen)
    val flush_pipeline   = Bool(OUTPUT)
-   
+
    // Stall Decode as appropriate
    val empty            = Bool(OUTPUT)
    val ready            = Bool(OUTPUT) // busy unrolling...
@@ -120,11 +121,11 @@ class RobIo(machine_width: Int, num_wakeup_ports: Int)  extends BOOMCoreBundle
       }}
    }.asOutput
 }
- 
+
 
 // width = the dispatch and commit width of the processor
 // num_wakeup_ports = self-explanatory
-class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Module with BOOMCoreParameters 
+class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Module with BOOMCoreParameters
 {
    val io = new RobIo(width, num_wakeup_ports)
 
@@ -142,42 +143,42 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
 
    val s_reset :: s_normal :: s_rollback :: s_wait_till_empty :: Nil = Enum(UInt(),4)
    val rob_state = Reg(init = s_reset)
-                   
-                    
-   //commit entries at the head, and unwind exceptions from the tail 
+
+
+   //commit entries at the head, and unwind exceptions from the tail
    val rob_head = Reg(init = UInt(0, log2Up(num_rob_rows)))
    val rob_tail = Reg(init = UInt(0, log2Up(num_rob_rows)))
-                                     
+
    val will_commit         = Vec.fill(width) {Bool()}
    val can_commit          = Vec.fill(width) {Bool()}
    val can_throw_exception = Vec.fill(width) {Bool()}
    val rob_head_vals       = Vec.fill(width) {Bool()} // are the instructions at the head valid?
-   val rob_head_is_store   = Vec.fill(width) {Bool()}  
-   val rob_head_is_load    = Vec.fill(width) {Bool()}  
-   val rob_head_eflags     = Vec.fill(width) {UInt()} 
-   
+   val rob_head_is_store   = Vec.fill(width) {Bool()}
+   val rob_head_is_load    = Vec.fill(width) {Bool()}
+   val rob_head_eflags     = Vec.fill(width) {UInt()}
+
    // valid bits at the branch target
    // the br_unit needs to verify the target PC, but it must read out the valid bits
    // for that row
-   val rob_brt_vals        = Vec.fill(width) {Bool()} 
-   
-   val exception_thrown = Bool() 
-   
+   val rob_brt_vals        = Vec.fill(width) {Bool()}
+
+   val exception_thrown = Bool()
+
 
    //--------------------------------------------------
    // Utility
 
-   def GetRowIdx(rob_idx: UInt): UInt = 
+   def GetRowIdx(rob_idx: UInt): UInt =
    {
       if (width == 1) return rob_idx
-      else return rob_idx >> UInt(log2Up(width)) 
+      else return rob_idx >> UInt(log2Up(width))
    }
-   def GetBankIdx(rob_idx: UInt): UInt = 
+   def GetBankIdx(rob_idx: UInt): UInt =
    {
-      if(width == 1) { return UInt(0) } 
+      if(width == 1) { return UInt(0) }
       else           { return rob_idx(log2Up(width)-1, 0).toUInt }
    }
-                                          
+
 
    // **************************************************************************
    // --------------------------------------------------------------------------
@@ -190,7 +191,7 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
    // into the ROB row.
    //
    // The ROB PC information is written by dispatch at rob_tail.
-   // The ROB PC information is read 
+   // The ROB PC information is read
    //       - commit for flush PC at rob_head.
    //       - execute by the Br Unit for target calculation at idx X.
    //       - execute by the Br Unit to get actual target at idx X+1.
@@ -201,23 +202,23 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
    {
       rob_pc_hob.write(rob_tail, io.dis_uops(0).pc) // internally, the RobPCs zero out low-order bits
    }
-   
+
    // the br unit needs to read out two consecutive ROBs
    val (curr_row_pc, next_row_pc) = rob_pc_hob.read2(GetRowIdx(io.get_pc.rob_idx))
 
    io.get_pc.curr_pc := curr_row_pc + Cat(GetBankIdx(io.get_pc.rob_idx), Bits(0,2))
-   
+
    val next_bank_idx = if (width == 1) UInt(0) else PriorityEncoder(rob_brt_vals.toBits)
 
    // TODO is this logic broken if the ROB can fill up completely? should I look at valid bit instead?
    val rob_pc_hob_next_val = WrapInc(GetRowIdx(io.get_pc.rob_idx), num_rob_rows) != rob_tail
- 
+
    val bypass_next_bank_idx = if (width == 1) UInt(0) else PriorityEncoder(io.dis_mask.toBits)
    val bypass_next_pc = (io.dis_uops(0).pc & SInt(-(DECODE_WIDTH*coreInstBytes))) + Cat(bypass_next_bank_idx, Bits(0,2))
-   
+
    io.get_pc.next_val := rob_pc_hob_next_val || io.dis_mask.reduce(_|_)
    io.get_pc.next_pc := Mux(rob_pc_hob_next_val, next_row_pc + Cat(next_bank_idx, Bits(0,2)), bypass_next_pc)
-   
+
    // **************************************************************************
    // --------------------------------------------------------------------------
    // **************************************************************************
@@ -225,8 +226,8 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
    for (w <- 0 until width)
    {
       def MatchBank(bank_idx: UInt): Bool = (bank_idx === UInt(w))
-     
-      // one bank 
+
+      // one bank
       val rob_val       = Vec.fill(num_rob_rows) {Reg(init = Bool(false))}
       val rob_bsy       = Mem(Bool(), num_rob_rows)
       val rob_uop       = Vec.fill(num_rob_rows) {Reg(new MicroOp())} // one write port - dispatch
@@ -245,16 +246,16 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
                                     io.dis_uops(w).uopc != uopMEMSPECIAL &&
                                     !(io.dis_uops(w).is_fencei)
          rob_uop(rob_tail)       := io.dis_uops(w)
-         rob_exception(rob_tail) := io.dis_uops(w).exception 
+         rob_exception(rob_tail) := io.dis_uops(w).exception
          rob_exc_cause(rob_tail) := io.dis_uops(w).exc_cause
-         rob_uop(rob_tail).br_was_taken := Bool(false) // remove me SYNTH? 
+         rob_uop(rob_tail).br_was_taken := Bool(false) // remove me SYNTH?
       }
       .elsewhen (io.dis_mask.reduce(_|_))
       {
          rob_uop(rob_tail).inst := BUBBLE // just for debug purposes
       }
 
-       
+
       //-----------------------------------------------
       // Writeback
 
@@ -282,9 +283,9 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
 
       //-----------------------------------------------
       // Exceptions
-      // only support execute-time exceptions from memory     
+      // only support execute-time exceptions from memory
 
-      when (io.mem_xcpt_val && MatchBank(GetBankIdx(io.mem_xcpt_uop.rob_idx))) 
+      when (io.mem_xcpt_val && MatchBank(GetBankIdx(io.mem_xcpt_uop.rob_idx)))
       {
          rob_exception(GetRowIdx(io.mem_xcpt_uop.rob_idx)) := Bool(true)
          rob_exc_cause(GetRowIdx(io.mem_xcpt_uop.rob_idx)) := Mux(io.mem_xcpt.ma.ld, UInt(rocket.Causes.misaligned_load), UInt(rocket.Causes.misaligned_store))
@@ -295,23 +296,23 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
          rob_exception(GetRowIdx(io.ldo_xcpt_uop.rob_idx)) := Bool(true)
          rob_exc_cause(GetRowIdx(io.ldo_xcpt_uop.rob_idx)) := MINI_EXCEPTION_MEM_ORDERING
       }
- 
-      can_throw_exception(w) := rob_val(rob_head) && rob_exception(rob_head) 
 
-      
+      can_throw_exception(w) := rob_val(rob_head) && rob_exception(rob_head)
+
+
       //-----------------------------------------------
       // Commit or Rollback
 
-      // can this instruction commit? (the check for exceptions/rob_state happens later) 
-      can_commit(w) := rob_val(rob_head) && !(rob_bsy(rob_head)) 
+      // can this instruction commit? (the check for exceptions/rob_state happens later)
+      can_commit(w) := rob_val(rob_head) && !(rob_bsy(rob_head))
 
-      val com_idx = UInt() 
+      val com_idx = UInt()
       com_idx := rob_head
       when (rob_state === s_rollback)
       {
          com_idx := rob_tail
       }
-      
+
       // use the same "com_uop" for both rollback AND commit
       // Perform Commit
       io.com_valids(w)     := will_commit(w)
@@ -319,7 +320,7 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
                               rob_val(com_idx) &&
                               (rob_uop(com_idx).pdst_rtype === RT_FIX || rob_uop(com_idx).pdst_rtype === RT_FLT) &&
                               Bool(!params(EnableCommitMapTable))
-      io.com_uops(w)       := rob_uop(com_idx) 
+      io.com_uops(w)       := rob_uop(com_idx)
 
       when (rob_state === s_rollback)
       {
@@ -339,7 +340,7 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
             }
          }
       }
-      
+
       // -----------------------------------------------
       // Kill speculated entries on branch mispredict
       for (i <- 0 until num_rob_rows)
@@ -347,7 +348,7 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
          val br_mask = rob_uop(i).br_mask
          val entry_match = rob_val(i) && maskMatch(io.br_unit.brinfo.mask, br_mask)
 
-         //kill instruction if mispredict & br mask match 
+         //kill instruction if mispredict & br mask match
          when (io.br_unit.brinfo.valid && io.br_unit.brinfo.mispredict && entry_match)
          {
             rob_val(i) := Bool(false)
@@ -361,7 +362,7 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
       }
 
       // -----------------------------------------------
-      // Commit 
+      // Commit
       when (will_commit(w))
       {
          rob_val(rob_head) := Bool(false)
@@ -374,7 +375,7 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
       rob_head_is_store(w) := rob_uop(rob_head).is_store
       rob_head_is_load(w)  := rob_uop(rob_head).is_load
       rob_brt_vals(w)      := rob_val(WrapInc(GetRowIdx(io.get_pc.rob_idx), num_rob_rows))
-       
+
       // -----------------------------------------------
       // debugging write ports that should not be synthesized
       when (will_commit(w))
@@ -386,23 +387,30 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
          rob_uop(rob_tail).inst := BUBBLE
       }
 
-       
+
       //--------------------------------------------------
       // Debug: for debug purposes, track side-effects to all register destinations
-      
+
       for (i <- 0 until num_wakeup_ports)
       {
          val rob_idx = io.wb_rob_idxs(i)
          when (io.debug_wb_valids(i) && MatchBank(GetBankIdx(rob_idx)))
          {
+            // TODO FPU translate FPU to 64-bit
             rob_uop(GetRowIdx(rob_idx)).debug_wdata := io.debug_wb_wdata(i)
          }
+         val temp_uop = rob_uop(GetRowIdx(io.wb_rob_idxs(i)))
+         assert (!(io.wb_valids(i) &&
+                  MatchBank(GetBankIdx(io.wb_rob_idxs(i))) &&
+                  temp_uop.ldst_val &&
+                  temp_uop.pdst != io.debug_wb_pdsts(i)),
+                  "ROB writeback occurred to the wrong pdst.")
       }
       io.com_uops(w).debug_wdata := rob_uop(rob_head).debug_wdata
-       
+
       //--------------------------------------------------
       // Debug: handle passing out signals to printf in dpath
-      
+
       for (i <- 0 until num_rob_rows)
       {
          io.debug.entry(w + i*width).valid := rob_val(i)
@@ -414,11 +422,11 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
       }
 
    } //for (w <- 0 until width)
-    
+
    // **************************************************************************
    // --------------------------------------------------------------------------
    // **************************************************************************
-    
+
    // -----------------------------------------------
    // Commit Logic
    // need to take a "can_commit" array, and let the first can_commits commit
@@ -426,7 +434,7 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
    // e.g., exception, or (valid && busy).
    // Finally, don't throw an exception if there are instructions in front of
    // it that want to commit (only throw exception when head of the bundle).
-   
+
    var block_commit = (rob_state != s_normal) && (rob_state != s_wait_till_empty)
    var will_throw_exception = Bool(false)
    var block_xcpt   = Bool(false) // TODO we can relax this constraint, so long
@@ -438,12 +446,12 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
    {
       will_throw_exception = (can_throw_exception(w) && !block_commit && !block_xcpt) || will_throw_exception
 
-      will_commit(w)       := can_commit(w) && !can_throw_exception(w) && !block_commit 
-      block_commit         = (rob_head_vals(w) && 
+      will_commit(w)       := can_commit(w) && !can_throw_exception(w) && !block_commit
+      block_commit         = (rob_head_vals(w) &&
                              (!can_commit(w) || can_throw_exception(w))) | block_commit
       block_xcpt           = will_commit(w)
    }
- 
+
    // exception must be in the commit bundle
    exception_thrown    := will_throw_exception
    val is_mini_exception = io.com_exc_cause === MINI_EXCEPTION_MEM_ORDERING
@@ -456,9 +464,9 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
    // TODO BUG XXX what if eret and inst_valid excp in same bundle and bad load?
    // flush PC, say an instruction needs to flush the pipeline and refetch either itself or PC+4
    // Note: exception must be the first valid instruction in the commit bundle
-   val refetch_inst = exception_thrown 
-   io.flush_pc  := rob_pc_hob.read(rob_head) + 
-                   PriorityMux(rob_head_vals, Range(0,width).map(w => UInt(w << 2))) + 
+   val refetch_inst = exception_thrown
+   io.flush_pc  := rob_pc_hob.read(rob_head) +
+                   PriorityMux(rob_head_vals, Range(0,width).map(w => UInt(w << 2))) +
                    Mux(refetch_inst, UInt(0), UInt(4))
    val flush_val = exception_thrown ||
                      (Range(0,width).map{i => io.com_valids(i) && io.com_uops(i).flush_on_commit}).reduce(_|_)
@@ -468,17 +476,17 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
 
    // -----------------------------------------------
    // ROB Head Logic
-   
+
    // update when committed ALL valid instructions in commit_bundle
-   when ((io.com_valids.toBits != Bits(0)) && ((will_commit.toBits ^ rob_head_vals.toBits) === Bits(0))) 
+   when ((io.com_valids.toBits != Bits(0)) && ((will_commit.toBits ^ rob_head_vals.toBits) === Bits(0)))
    {
       rob_head := WrapInc(rob_head, num_rob_rows)
    }
-                  
+
    // -----------------------------------------------
    // ROB Tail Logic
 
-   when (rob_state === s_rollback && rob_tail != rob_head) 
+   when (rob_state === s_rollback && rob_tail != rob_head)
    {
       rob_tail := WrapDec(rob_tail, num_rob_rows)
    }
@@ -503,9 +511,9 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
 
    // -----------------------------------------------
    // Full Logic
-   
+
    // TODO can we let the ROB fill up completely?
-   // can we track "maybe_full"? 
+   // can we track "maybe_full"?
    // maybe full is reset on branch mispredict
    val full = WrapInc(rob_tail, num_rob_rows) === rob_head
 
@@ -515,11 +523,11 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
 
 
    io.ready := (rob_state === s_normal) && !full
-                                     
+
    //-----------------------------------------------
    //-----------------------------------------------
    //-----------------------------------------------
-   
+
    // ROB FSM
    if (!params(EnableCommitMapTable))
    {
@@ -535,7 +543,7 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
             {
                rob_state := s_rollback
             }
-            .otherwise 
+            .otherwise
             {
                for (w <- 0 until width)
                {
@@ -581,7 +589,7 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
                ;
 //               rob_state := s_rollback
             }
-            .otherwise 
+            .otherwise
             {
                for (w <- 0 until width)
                {
@@ -612,8 +620,8 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
          }
       }
    }
-       
-   
+
+
    // -----------------------------------------------
    // Outputs
 
@@ -621,16 +629,16 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
    {
       // tell LSU it is ready to its stores and loads
       io.com_st_mask(w) := io.com_valids(w) && rob_head_is_store(w)
-      io.com_ld_mask(w) := io.com_valids(w) && rob_head_is_load(w) 
+      io.com_ld_mask(w) := io.com_valids(w) && rob_head_is_load(w)
    }
-          
+
    //--------------------------------------------------
    // Handle passing out signals to printf in dpath
-   
+
    io.debug.state    := rob_state
    io.debug.rob_head := rob_head
-   
- 
+
+
    // this object holds the high-order bits of the PC of each ROB row
    class RobPCs(width: Int, num_rob_rows: Int)
    {
@@ -640,10 +648,10 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
       // bank this so we only need 1 read port to handle branches, which read
       // row X and row X+1
       val bank0 = Mem(UInt(width=pc_hob_width), ceil(num_rob_rows/2).toInt)
-      val bank1 = Mem(UInt(width=pc_hob_width), ceil(num_rob_rows/2).toInt) 
+      val bank1 = Mem(UInt(width=pc_hob_width), ceil(num_rob_rows/2).toInt)
 
       // takes rob_row_idx, returns PC (with low-order bits zeroed out)
-      def  read (row_idx: UInt) = 
+      def  read (row_idx: UInt) =
       {
          val rdata = Bits(width=xprLen)
          rdata := bank0(row_idx >> UInt(1)) << UInt(pc_shift)
@@ -659,21 +667,21 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
       def read2 (row_idx: UInt) =
       {
          // addr0, left shifted by 1 (makes wrap around logic easier)
-         val addr0_ls1 = Mux(row_idx(0), WrapInc(row_idx >> UInt(1), num_rob_rows/2), 
+         val addr0_ls1 = Mux(row_idx(0), WrapInc(row_idx >> UInt(1), num_rob_rows/2),
                                          row_idx >> UInt(1))
          val data0 = bank0(addr0_ls1) << UInt(pc_shift)
          val data1 = bank1(row_idx >> UInt(1)) << UInt(pc_shift)
-         
+
          val curr_pc = UInt(width = xprLen)
          val next_pc = UInt(width = xprLen)
-         curr_pc := Mux(row_idx(0), data1, data0) 
-         next_pc := Mux(row_idx(0), data0, data1) 
+         curr_pc := Mux(row_idx(0), data1, data0)
+         next_pc := Mux(row_idx(0), data0, data1)
 
          (curr_pc, next_pc)
       }
 
       // takes rob_row_idx, write in PC (with low-order bits zeroed out)
-      def write (waddr_row: UInt, data: UInt) = 
+      def write (waddr_row: UInt, data: UInt) =
       {
          when (waddr_row(0))
          {
@@ -684,5 +692,5 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
             bank0(waddr_row >> UInt(1)) := data >> UInt(pc_shift)
          }
       }
-   }   
+   }
 }
