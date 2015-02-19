@@ -242,10 +242,9 @@ trait ScalarOpConstants
    def NullMicroOp(): MicroOp =
    {
       val uop = new MicroOp()
-      uop.uopc       := uopNOP // TODO may be unnecessary
-      uop.inst       := BUBBLE
-      uop.pc         := UInt(0) // TODO may be unncessary
+      uop.uopc       := uopNOP // maybe not required, but helps on asserts that try to catch spurious behavior
       uop.bypassable := Bool(false)
+      uop.fp_val     := Bool(false)
       uop.is_store   := Bool(false)
       uop.is_load    := Bool(false)
       uop.pdst       := UInt(0)

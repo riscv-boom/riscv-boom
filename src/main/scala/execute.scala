@@ -672,8 +672,8 @@ class FPUALUMulDMemExeUnit(is_branch_unit: Boolean = false
 
    // I'm timing forwarding to coincide with dmem resps, so I'm not clobbering
    //anything....
-   memresp_val    := Mux(io.com_handling_exc && io.dmem.resp.bits.uop.is_load, Bool(false),
-                                                lsu.io.forward_val || io.dmem.resp.valid)
+   memresp_val := Mux(io.com_handling_exc && io.dmem.resp.bits.uop.is_load, Bool(false),
+                                               lsu.io.forward_val || io.dmem.resp.valid)
 
 
    val memresp_rf_wen = (io.dmem.resp.valid && (io.dmem.resp.bits.uop.mem_cmd === M_XRD || io.dmem.resp.bits.uop.is_amo)) ||
@@ -696,19 +696,22 @@ class FPUALUMulDMemExeUnit(is_branch_unit: Boolean = false
       val rec_d = hardfloat.floatNToRecodedFloatN(io.dmem.resp.bits.data, 52, 12)
       val fp_load_data_recoded = Mux(load_single, Cat(SInt(-1, 32), rec_s), rec_d)
 
-      memresp_data = Mux(lsu.io.forward_val, lsu.io.forward_data
-                   , Mux(memresp_uop.fp_val, fp_load_data_recoded
-                                           , io.dmem.resp.bits.data_subword))
+      memresp_data = Mux(lsu.io.forward_val,           lsu.io.forward_data
+                   , Mux(io.dmem.resp.bits.uop.fp_val, fp_load_data_recoded
+                                                     , io.dmem.resp.bits.data_subword))
    }
 
    lsu.io.memresp_val   := memresp_val
    lsu.io.memresp_uop   := memresp_uop
 
 
+   val debug_memresp_uop_fp_val = memresp_uop.fp_val
+   when (Bool(false)) { printf("%d", debug_memresp_uop_fp_val) }
+
    // Hook up loads and multiplies to the 2nd write port
    io.resp(1).valid                := memresp_val || muldiv.io.resp.valid
    io.resp(1).bits.uop             := Mux(memresp_val, memresp_uop, muldiv.io.resp.bits.uop)
-   io.resp(1).bits.uop.pdst_rtype  := Mux(memresp_uop.fp_val, RT_FLT, RT_FIX)
+   io.resp(1).bits.uop.pdst_rtype  := Mux(memresp_uop.fp_val, RT_FLT, RT_FIX) //TODO get rid of this rtype set on memory returns, it's causing XX bugs
    io.resp(1).bits.uop.ctrl.rf_wen := Mux(memresp_val, memresp_rf_wen, muldiv.io.resp.bits.uop.ctrl.rf_wen)
    io.resp(1).bits.data            := Mux(memresp_val, memresp_data, muldiv.io.resp.bits.data)
 

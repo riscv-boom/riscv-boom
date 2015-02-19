@@ -61,7 +61,6 @@ class IntegerIssueSlot(num_slow_wakeup_ports: Int) extends Module with BOOMCoreP
    when (io.kill || io.issue)
    {
       slot_valid   := Bool(false)
-      slotUop.inst := BUBBLE
    }
    .elsewhen (io.in_wen)
    {
@@ -133,7 +132,6 @@ class IntegerIssueSlot(num_slow_wakeup_ports: Int) extends Module with BOOMCoreP
    when (IsKilledByBranch(io.brinfo, slotUop))
    {
       slot_valid   := Bool(false)
-      slotUop.inst := BUBBLE
    }
    when (!io.in_wen)
    {
