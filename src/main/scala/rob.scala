@@ -39,13 +39,11 @@ class RobIo(machine_width: Int, num_wakeup_ports: Int)  extends BOOMCoreBundle
    // (Update of ROB)
    // Instruction is no longer busy and can be committed
    // currently all supported exceptions are detected in Decode (except load-ordering failures)
-   val wb_valids        = Vec.fill(num_wakeup_ports) { Bool(INPUT) }
-   val wb_rob_idxs      = Vec.fill(num_wakeup_ports) { UInt(INPUT, ROB_ADDR_SZ) }
+   val wb_resps = Vec.fill(num_wakeup_ports) { Valid(new ExeUnitResp(65)).flip }
 
    // track side-effects for debug purposes.
    // Also need to know when loads write back, whereas we don't need loads to unbusy.
    val debug_wb_valids  = Vec.fill(num_wakeup_ports) { Bool(INPUT) }
-   val debug_wb_pdsts   = Vec.fill(num_wakeup_ports) { Bits(INPUT, PREG_SZ) }
    val debug_wb_wdata   = Vec.fill(num_wakeup_ports) { Bits(INPUT, 65) }
 
    val mem_xcpt_val     = Bool(INPUT)
@@ -62,6 +60,8 @@ class RobIo(machine_width: Int, num_wakeup_ports: Int)  extends BOOMCoreBundle
    // Also used for rollback.
    val com_valids       = Vec.fill(machine_width) {Bool(OUTPUT)}
    val com_uops         = Vec.fill(machine_width) {new MicroOp().asOutput()}
+   val com_fflags_val   = Bool(OUTPUT)
+   val com_fflags       = Bits(OUTPUT, 5)
 
    // tell the LSU how many stores and loads are being committed
    val com_st_mask      = Vec.fill(machine_width) {Bool(OUTPUT)}
@@ -72,7 +72,7 @@ class RobIo(machine_width: Int, num_wakeup_ports: Int)  extends BOOMCoreBundle
 
    // Handle Exceptions/ROB Rollback
    val com_exception    = Bool(OUTPUT)
-   val com_exc_cause    = UInt(OUTPUT, xprLen)
+   val com_exc_cause    = UInt(OUTPUT, 5)
    val com_handling_exc = Bool(OUTPUT)
    val com_rbk_valids   = Vec.fill(machine_width) {Bool(OUTPUT)}
 
@@ -234,7 +234,8 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
                                                            // fake write ports - clearing on commit,
                                                            // rollback, branch_kill
       val rob_exception = Mem(Bool(), num_rob_rows)        // TODO consolidate into the com_uop? what's the best for Chisel?
-      val rob_exc_cause = Mem(UInt(width=xprLen), num_rob_rows)
+      val rob_exc_cause = Mem(UInt(width=xprLen), num_rob_rows) // holds exception code OR it holds the fcsr_flags
+                                                                // (must look into the rob_uop to figure out if FP inst)
 
       //-----------------------------------------------
       // Dispatch: Add Entry to ROB
@@ -261,10 +262,24 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
 
       for (i <- 0 until num_wakeup_ports)
       {
-         when (io.wb_valids(i) && MatchBank(GetBankIdx(io.wb_rob_idxs(i))))
+         val wb_resp = io.wb_resps(i)
+         val wb_uop = wb_resp.bits.uop
+         val row_idx = GetRowIdx(wb_uop.rob_idx)
+         when (wb_resp.valid && MatchBank(GetBankIdx(wb_uop.rob_idx)))
          {
-            rob_bsy(GetRowIdx(io.wb_rob_idxs(i))) := Bool(false)
+            rob_bsy(row_idx) := Bool(false)
+
+            // TODO is there a way to only check wakeup ports that can throw fp exceptions?
+            when (wb_uop.fp_val && !(wb_uop.is_load || wb_uop.is_store))
+            {
+               rob_exc_cause(row_idx) := wb_resp.bits.exc
+            }
          }
+         // TODO Chisel can asserts be wrapped by when statements?
+         assert (!(wb_resp.valid && MatchBank(GetBankIdx(wb_uop.rob_idx)) &&
+                  wb_uop.fp_val && !(wb_uop.is_load || wb_uop.is_store) &&
+                  rob_exc_cause(row_idx) != Bits(0)),
+                  "FP instruction writing back exc bits is overriding an existing exception.")
       }
 
       // TODO HACK: Loads and Stores have a separate method to clear busy bits
@@ -277,7 +292,6 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
       {
          // these signals need to be delayed a cycle to match the brinfo signals
          rob_uop(GetRowIdx(io.br_unit.brinfo.rob_idx)).br_was_taken     := Reg(next=io.br_unit.taken)
-//         rob_uop(GetRowIdx(io.br_unit.brinfo.rob_idx)).btb_mispredicted := Reg(next=io.br_unit.btb_mispredict)
       }
 
 
@@ -285,6 +299,7 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
       // Exceptions
       // only support execute-time exceptions from memory
 
+      // TODO can we consolidate the write port on mem exceptions and fp exceptions?
       when (io.mem_xcpt_val && MatchBank(GetBankIdx(io.mem_xcpt_uop.rob_idx)))
       {
          rob_exception(GetRowIdx(io.mem_xcpt_uop.rob_idx)) := Bool(true)
@@ -393,17 +408,17 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
 
       for (i <- 0 until num_wakeup_ports)
       {
-         val rob_idx = io.wb_rob_idxs(i)
+         val rob_idx = io.wb_resps(i).bits.uop.rob_idx
          when (io.debug_wb_valids(i) && MatchBank(GetBankIdx(rob_idx)))
          {
             // TODO FPU translate FPU to 64-bit
             rob_uop(GetRowIdx(rob_idx)).debug_wdata := io.debug_wb_wdata(i)
          }
-         val temp_uop = rob_uop(GetRowIdx(io.wb_rob_idxs(i)))
-         assert (!(io.wb_valids(i) &&
-                  MatchBank(GetBankIdx(io.wb_rob_idxs(i))) &&
+         val temp_uop = rob_uop(GetRowIdx(rob_idx))
+         assert (!(io.wb_resps(i).valid &&
+                  MatchBank(GetBankIdx(rob_idx)) &&
                   temp_uop.ldst_val &&
-                  temp_uop.pdst != io.debug_wb_pdsts(i)),
+                  temp_uop.pdst != io.wb_resps(i).bits.uop.pdst),
                   "ROB writeback occurred to the wrong pdst.")
       }
       io.com_uops(w).debug_wdata := rob_uop(rob_head).debug_wdata
@@ -473,6 +488,33 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
 
    io.flush_take_pc  := flush_val
    io.flush_pipeline := Reg(next=flush_val)
+
+   // -----------------------------------------------
+   // FP Exceptions
+   // send fflags bits to the CSRFile to accrue
+
+   val fflags = Vec.fill(width) {Bits()}
+   val fflags_val = Vec.fill(width) {Bool()}
+   for (w <- 0 until width)
+   {
+      // TODO can I relax the ld/st constraint?
+      fflags_val(w) := io.com_valids(w) &&
+                      io.com_uops(w).fp_val &&
+                      !(io.com_uops(w).is_load || io.com_uops(w).is_store)
+      fflags(w)     := Mux(fflags_val(w), rob_head_eflags(w), Bits(0))
+
+      assert (!(io.com_valids(w) &&
+               !io.com_uops(w).fp_val &&
+               rob_head_eflags(w) != Bits(0)),
+               "Committed non-FP instruction has non-zero exception bits.")
+      assert (!(io.com_valids(w) &&
+               io.com_uops(w).fp_val &&
+               (io.com_uops(w).is_load || io.com_uops(w).is_store) &&
+               rob_head_eflags(w) != Bits(0)),
+               "Committed FP load or store has non-zero exception bits.")
+   }
+   io.com_fflags_val := fflags_val.reduce(_|_)
+   io.com_fflags     := fflags.reduce(_|_)
 
    // -----------------------------------------------
    // ROB Head Logic

@@ -85,6 +85,7 @@ class FuncUnitResp(data_width: Int) extends BOOMCoreBundle
    val uop = new MicroOp()
    val data = Bits(width = data_width)
    val xcpt = (new rocket.HellaCacheExceptions)
+   val exc  = Bits(width = 5) // FP-only TODO consolidate exception bits?
 
    override def clone = new FuncUnitResp(data_width).asInstanceOf[this.type]
 }
@@ -497,6 +498,7 @@ class FPUUnit extends PipelinedFunctionalUnit(num_stages = 3
 //   io.resp <> fpu.io.resp
    // TODO how close can I match these I/Os?
    io.resp.bits.data := fpu.io.resp.bits.data
+   io.resp.bits.exc := fpu.io.resp.bits.exc
 }
 
 

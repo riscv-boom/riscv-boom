@@ -24,6 +24,7 @@ class ExeUnitResp(data_width: Int) extends BOOMCoreBundle
 {
    val uop = new MicroOp()
    val data = Bits(width = data_width)
+   val exc = Bits(width = 5) // only used by fpu TODO a way to only add this for FPU responses?
 
    override def clone = new ExeUnitResp(data_width).asInstanceOf[this.type]
 }
@@ -585,6 +586,8 @@ class FPUALUMulDMemExeUnit(is_branch_unit: Boolean = false
    io.resp(0).valid     := alu.io.resp.valid || fpu.io.resp.valid
    io.resp(0).bits.uop  := Mux(fpu.io.resp.valid, fpu.io.resp.bits.uop, alu.io.resp.bits.uop)
    io.resp(0).bits.data := Mux(fpu.io.resp.valid, fpu.io.resp.bits.data, alu.io.resp.bits.data)
+
+   io.resp(0).bits.exc := fpu.io.resp.bits.exc
 
    assert (!(alu.io.resp.valid && fpu.io.resp.valid)
       , "ALU and FPU are fighting over the write port.")

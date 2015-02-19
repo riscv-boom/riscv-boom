@@ -136,20 +136,20 @@ class MicroOp extends BOOMCoreBundle
    val pdst             = UInt(width = PREG_SZ)
    val pop1             = UInt(width = PREG_SZ)
    val pop2             = UInt(width = PREG_SZ)
-   
+
 //   val xdst_val         = Bool()                      // destination is renamed x-reg (but not x0)
 //   val fdst_val         = Bool()                      // destination is f-reg
-//   val rs1_val          = Bool()                      
-//   val rs2_val          = Bool()                      
-//   val rs3_val          = Bool()                      
-//   val rd_val           = Bool()                      
+//   val rs1_val          = Bool()
+//   val rs2_val          = Bool()
+//   val rs3_val          = Bool()
+//   val rd_val           = Bool()
 
    val pdst_rtype       = UInt(width = 2)             // TODO get rid of this? use ldst_rtype?
    val prs1_busy        = Bool()
    val prs2_busy        = Bool()
    val stale_pdst       = UInt(width = PREG_SZ)
    val exception        = Bool()
-   val exc_cause        = UInt(width = xprLen)
+   val exc_cause        = UInt(width = 5); require(5>=rocket.Causes.all.map(log2Up(_)).max)
    val sret             = Bool()
    val bypassable       = Bool()                      // can we bypass ALU results? (doesn't include loads, pcr, rdcycle, etc.... need to readdress this, SHOULD include PCRs?)
    val mem_cmd          = UInt(width = 4)             // sync primitives/cache flushes
@@ -183,7 +183,7 @@ class MicroOp extends BOOMCoreBundle
 
    // purely debug information
    val debug_wdata      = Bits(width=xprLen)
-   val debug_ei_enabled = Bool()             
+   val debug_ei_enabled = Bool()
 }
 
 class FetchBundle extends Bundle with BOOMCoreParameters
@@ -400,6 +400,9 @@ class DatPath() extends Module with BOOMCoreParameters
    val com_exception         = Bool()
    val com_exc_cause         = UInt()
    val com_handling_exc      = Bool()
+
+   val com_fflags_val        = Bool()
+   val com_fflags            = Bits()
 
    val com_rbk_valids        = Vec.fill(DECODE_WIDTH) {Bool()}
 
@@ -786,7 +789,7 @@ class DatPath() extends Module with BOOMCoreParameters
          rename_stage.io.wb_valids(wu_idx) := exe_units(i).io.resp(j).valid &&
                                               exe_units(i).io.resp(j).bits.uop.ctrl.rf_wen &&       // TODO? is rf_wen redudant?!
 //                                              !exe_units(i).io.resp(j).bits.uop.bypassable &&       TODO BUG XXX add this line in
-                                              (exe_units(i).io.resp(j).bits.uop.pdst_rtype === RT_FIX || 
+                                              (exe_units(i).io.resp(j).bits.uop.pdst_rtype === RT_FIX ||
                                                  exe_units(i).io.resp(j).bits.uop.pdst_rtype === RT_FLT)
          rename_stage.io.wb_pdsts(wu_idx)  := exe_units(i).io.resp(j).bits.uop.pdst
          wu_idx += 1
@@ -932,7 +935,7 @@ class DatPath() extends Module with BOOMCoreParameters
    val pcr_read_out = pcr.io.rw.rdata
 
    val pcr_rw_cmd = exe_units(0).io.resp(0).bits.uop.ctrl.pcr_fcn
-   pcr.io.rw.cmd   := Mux(exe_units(0).io.resp(0).valid, pcr_rw_cmd, CSR.N) 
+   pcr.io.rw.cmd   := Mux(exe_units(0).io.resp(0).valid, pcr_rw_cmd, CSR.N)
    val wb_wdata    = exe_units(0).io.resp(0).bits.data
    pcr.io.rw.wdata := Mux(pcr_rw_cmd === CSR.S, pcr.io.rw.rdata | wb_wdata,
                       Mux(pcr_rw_cmd === CSR.C, pcr.io.rw.rdata & ~wb_wdata,
@@ -950,14 +953,12 @@ class DatPath() extends Module with BOOMCoreParameters
    pcr.io.sret      := com_sret
    pcr_exc_target   := pcr.io.evec
    pcr.io.badvaddr_wen := Bool(false); require (params(UseVM) == false) // TODO VM virtual memory
-   
-   // TODO BUG XXX FPU write to the fcsr_flags at commit
-   // reading requires serializing the entire pipeline
-   pcr.io.fcsr_flags.valid := Bool(false)
-   pcr.io.fcsr_flags.bits := Bits(0)
 
-//   exe_units.map(_.io <> pcr.io)
-//   exe_units.map(_.io.fcsr_rm := pcr.io.fcsr_rm)
+   // reading requires serializing the entire pipeline
+   pcr.io.fcsr_flags.valid := com_fflags_val
+   pcr.io.fcsr_flags.bits := com_fflags
+
+   exe_units.map(_.io.fcsr_rm := pcr.io.fcsr_rm)
 
    // --------------------------------------
    // Register File
@@ -1130,14 +1131,13 @@ class DatPath() extends Module with BOOMCoreParameters
       {
          for (j <- 0 until exe_units(w).num_rf_write_ports)
          {
-            rob.io.wb_valids(cnt) := exe_units(w).io.resp(j).valid && !(exe_units(w).io.resp(j).bits.uop.is_store && !exe_units(w).io.resp(j).bits.uop.is_amo)
-            rob.io.wb_rob_idxs(cnt) := exe_units(w).io.resp(j).bits.uop.rob_idx
+            rob.io.wb_resps(cnt).valid := exe_units(w).io.resp(j).valid && !(exe_units(w).io.resp(j).bits.uop.is_store && !exe_units(w).io.resp(j).bits.uop.is_amo)
+            rob.io.wb_resps(cnt).bits <> exe_units(w).io.resp(j).bits
 
             // for commit logging...
             rob.io.debug_wb_valids(cnt) := exe_units(w).io.resp(j).valid &&
                                            exe_units(w).io.resp(j).bits.uop.ctrl.rf_wen &&
                                            (exe_units(w).io.resp(j).bits.uop.pdst_rtype === RT_FIX || exe_units(w).io.resp(j).bits.uop.pdst_rtype === RT_FLT)
-            rob.io.debug_wb_pdsts(cnt)  := exe_units(w).io.resp(j).bits.uop.pdst
              if (exe_units(w).uses_pcr_wport && (j == 0))
              {
                rob.io.debug_wb_wdata(cnt) := Mux(exe_units(w).io.resp(j).bits.uop.ctrl.pcr_fcn != rocket.CSR.N,
@@ -1164,12 +1164,10 @@ class DatPath() extends Module with BOOMCoreParameters
       }
 
       // branch resolution
-//      rob.io.br_unit <> br_unit
-
+//      rob.io.br_unit <> br_unit // TODO figure out why this errors out
       rob.io.br_unit.take_pc := br_unit.take_pc
       rob.io.br_unit.target := br_unit.target
       rob.io.br_unit.taken := br_unit.taken
-//      rob.io.br_unit.pc := br_unit.pc
       rob.io.br_unit.brinfo := br_unit.brinfo
       rob.io.br_unit.btb_update_valid := br_unit.btb_update_valid
       rob.io.br_unit.btb_update := br_unit.btb_update
@@ -1189,11 +1187,13 @@ class DatPath() extends Module with BOOMCoreParameters
       rob.io.lsu_clr_bsy_rob_idx := lsu_io.lsu_clr_bsy_rob_idx
 
       // Commit (ROB outputs)
-      com_valids  := rob.io.com_valids
-      com_uops    := rob.io.com_uops
+      com_valids       := rob.io.com_valids
+      com_uops         := rob.io.com_uops
+      com_fflags_val   := rob.io.com_fflags_val
+      com_fflags       := rob.io.com_fflags
 
-      com_st_mask := rob.io.com_st_mask
-      com_ld_mask := rob.io.com_ld_mask
+      com_st_mask      := rob.io.com_st_mask
+      com_ld_mask      := rob.io.com_ld_mask
 
       com_exception    := rob.io.com_exception    // on for only a single cycle (to PCR)
       com_exc_cause    := rob.io.com_exc_cause
@@ -1696,7 +1696,7 @@ class DatPath() extends Module with BOOMCoreParameters
                    Str(" s4"), Str(" s5"), Str(" s6"), Str(" s7"),
                    Str(" s8"), Str(" s9"), Str("s10"), Str("s11"),
                    Str(" t3"), Str(" t4"), Str(" t5"), Str(" t6"))
-                    
+
       val fpr_to_string =
               Vec( Str("ft0"), Str("ft1"), Str("ft2"), Str("ft3"),
                    Str("ft4"), Str("ft5"), Str("ft6"), Str("ft7"),
@@ -1706,7 +1706,7 @@ class DatPath() extends Module with BOOMCoreParameters
                    Str("fs4"), Str("fs5"), Str("fs6"), Str("fs7"),
                    Str("fs8"), Str("fs9"), Str("fs10"), Str("fs11"),
                    Str("ft8"), Str("ft9"), Str("ft10"), Str("ft11"))
-                    
+
 
       if (white_space > 7)
       {
@@ -1783,7 +1783,7 @@ class DatPath() extends Module with BOOMCoreParameters
          val commit_log_enabled = if (COMMIT_LOG_EI_ONLY) (pcr.io.status.ei || com_uops(w).sret) else Bool(true)
 
          when (com_valids(w) && commit_log_enabled)
-         {   
+         {
             when (com_uops(w).ldst_rtype === RT_FIX && com_uops(w).ldst != UInt(0))
             {
                printf("0x%x (0x%x) x%d 0x%x |%d\n"
