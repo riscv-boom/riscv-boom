@@ -248,7 +248,7 @@ trait ScalarOpConstants
       uop.is_store   := Bool(false)
       uop.is_load    := Bool(false)
       uop.pdst       := UInt(0)
-      uop.pdst_rtype := RT_X
+      uop.dst_rtype  := RT_X
       // TODO these unnecessary? used in regread stage?
       uop.valid      := Bool(false)
       uop.is_br_or_jmp := Bool(false)

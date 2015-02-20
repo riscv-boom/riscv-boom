@@ -222,7 +222,7 @@ class IssueUnit(issue_width: Int, num_wakeup_ports: Int) extends Module with BOO
    nullUop.pdst := UInt(0) // TODO what do I need here? maybe not this one.
    nullUop.pop1 := UInt(0)
    nullUop.pop2 := UInt(0)
-   nullUop.pdst_rtype := RT_X
+   nullUop.dst_rtype := RT_X
    nullUop.lrs1_rtype := RT_X
    nullUop.lrs2_rtype := RT_X
  

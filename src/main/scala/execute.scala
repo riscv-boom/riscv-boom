@@ -337,7 +337,6 @@ class MemExeUnit extends ExecutionUnit(num_rf_read_ports = 2
    // Hook up loads to the response
    io.resp(0).valid := memresp_val
    io.resp(0).bits.uop := memresp_uop
-   io.resp(0).bits.uop.pdst_rtype := Mux(memresp_uop.fp_val, RT_FLT, RT_FIX)
    io.resp(0).bits.uop.ctrl.rf_wen := memresp_rf_wen
    io.resp(0).bits.data := memresp_data
 
@@ -510,7 +509,6 @@ class ALUMulDMemExeUnit(is_branch_unit: Boolean = false
    // Hook up loads and multiplies to the 2nd write port
    io.resp(1).valid                := memresp_val || muldiv.io.resp.valid
    io.resp(1).bits.uop             := Mux(memresp_val, memresp_uop, muldiv.io.resp.bits.uop)
-   io.resp(1).bits.uop.pdst_rtype  := Mux(memresp_uop.fp_val, RT_FLT, RT_FIX)
    io.resp(1).bits.uop.ctrl.rf_wen := Mux(memresp_val, memresp_rf_wen, muldiv.io.resp.bits.uop.ctrl.rf_wen)
    io.resp(1).bits.data            := Mux(memresp_val, memresp_data, muldiv.io.resp.bits.data)
 
@@ -704,15 +702,10 @@ class FPUALUMulDMemExeUnit(is_branch_unit: Boolean = false
    lsu.io.memresp_val   := memresp_val
    lsu.io.memresp_uop   := memresp_uop
 
-
-   val debug_memresp_uop_fp_val = memresp_uop.fp_val
-   when (Bool(false)) { printf("%d", debug_memresp_uop_fp_val) }
-
    // Hook up loads and multiplies to the 2nd write port
    io.resp(1).valid                := memresp_val || muldiv.io.resp.valid
    io.resp(1).bits.uop             := Mux(memresp_val, memresp_uop, muldiv.io.resp.bits.uop)
-   io.resp(1).bits.uop.pdst_rtype  := Mux(memresp_uop.fp_val, RT_FLT, RT_FIX) //TODO get rid of this rtype set on memory returns, it's causing XX bugs
-   io.resp(1).bits.uop.ctrl.rf_wen := Mux(memresp_val, memresp_rf_wen, muldiv.io.resp.bits.uop.ctrl.rf_wen)
+   io.resp(1).bits.uop.ctrl.rf_wen := Mux(memresp_val, memresp_rf_wen, muldiv.io.resp.bits.uop.ctrl.rf_wen)  // TODO get rid of this, it should come from the thing below
    io.resp(1).bits.data            := Mux(memresp_val, memresp_data, muldiv.io.resp.bits.data)
 
 }

@@ -137,14 +137,6 @@ class MicroOp extends BOOMCoreBundle
    val pop1             = UInt(width = PREG_SZ)
    val pop2             = UInt(width = PREG_SZ)
 
-//   val xdst_val         = Bool()                      // destination is renamed x-reg (but not x0)
-//   val fdst_val         = Bool()                      // destination is f-reg
-//   val rs1_val          = Bool()
-//   val rs2_val          = Bool()
-//   val rs3_val          = Bool()
-//   val rd_val           = Bool()
-
-   val pdst_rtype       = UInt(width = 2)             // TODO get rid of this? use ldst_rtype?
    val prs1_busy        = Bool()
    val prs2_busy        = Bool()
    val stale_pdst       = UInt(width = PREG_SZ)
@@ -157,7 +149,7 @@ class MicroOp extends BOOMCoreBundle
    val is_fence         = Bool()
    val is_fencei        = Bool()
    val is_store         = Bool()                      // TODO AMOs are also considered stores?
-   val is_amo           = Bool()                      //
+   val is_amo           = Bool()
    val is_load          = Bool()
    val is_unique        = Bool()                      // only allow this instruction in the pipeline, wait for STQ to drain, clear fetch after it
                                                       // (tell ROB to un-ready until empty)
@@ -168,7 +160,7 @@ class MicroOp extends BOOMCoreBundle
    val lrs1             = UInt(width=LREG_SZ)
    val lrs2             = UInt(width=LREG_SZ)
    val ldst_val         = Bool()              // is there a destination? invalid for stores, rd==x0, etc. TODO is there anytime the destination is pass through?
-   val ldst_rtype       = UInt(width=2)
+   val dst_rtype        = UInt(width=2)
    val lrs1_rtype       = UInt(width=2)
    val lrs2_rtype       = UInt(width=2)
 
@@ -789,8 +781,8 @@ class DatPath() extends Module with BOOMCoreParameters
          rename_stage.io.wb_valids(wu_idx) := exe_units(i).io.resp(j).valid &&
                                               exe_units(i).io.resp(j).bits.uop.ctrl.rf_wen &&       // TODO? is rf_wen redudant?!
 //                                              !exe_units(i).io.resp(j).bits.uop.bypassable &&       TODO BUG XXX add this line in
-                                              (exe_units(i).io.resp(j).bits.uop.pdst_rtype === RT_FIX ||
-                                                 exe_units(i).io.resp(j).bits.uop.pdst_rtype === RT_FLT)
+                                              (exe_units(i).io.resp(j).bits.uop.dst_rtype === RT_FIX ||
+                                                 exe_units(i).io.resp(j).bits.uop.dst_rtype === RT_FLT)
          rename_stage.io.wb_pdsts(wu_idx)  := exe_units(i).io.resp(j).bits.uop.pdst
          wu_idx += 1
       }
@@ -798,10 +790,10 @@ class DatPath() extends Module with BOOMCoreParameters
       // Fast Wakeup (uses just-issued uops)
       if (exe_units(i).is_bypassable)
       {
-         rename_stage.io.wb_valids(wu_idx) := iss_valids(i) && (iss_uops(i).pdst_rtype === RT_FIX || iss_uops(i).pdst_rtype === RT_FLT) && (iss_uops(i).bypassable)
+         rename_stage.io.wb_valids(wu_idx) := iss_valids(i) && (iss_uops(i).dst_rtype === RT_FIX || iss_uops(i).dst_rtype === RT_FLT) && (iss_uops(i).bypassable)
          rename_stage.io.wb_pdsts(wu_idx)  := iss_uops(i).pdst
          wu_idx += 1
-         assert (!(iss_uops(i).pdst_rtype === RT_FLT && iss_uops(i).bypassable), "Bypassing FP is not supported.")
+         assert (!(iss_uops(i).dst_rtype === RT_FLT && iss_uops(i).bypassable), "Bypassing FP is not supported.")
       }
    }
    require (wu_idx == num_wakeup_ports)
@@ -873,7 +865,7 @@ class DatPath() extends Module with BOOMCoreParameters
          issue_unit.io.wakeup_vals(wu_idx)  := exe_units(i).io.resp(j).valid &&
                                                exe_units(i).io.resp(j).bits.uop.ctrl.rf_wen && // TODO get rid of other rtype checks
                                                // TODO BUG XXX only check for !bypassable
-                                               (exe_units(i).io.resp(j).bits.uop.pdst_rtype === RT_FIX || exe_units(i).io.resp(j).bits.uop.pdst_rtype === RT_FLT)
+                                               (exe_units(i).io.resp(j).bits.uop.dst_rtype === RT_FIX || exe_units(i).io.resp(j).bits.uop.dst_rtype === RT_FLT)
          issue_unit.io.wakeup_pdsts(wu_idx) := exe_units(i).io.resp(j).bits.uop.pdst
          wu_idx += 1
       }
@@ -882,7 +874,7 @@ class DatPath() extends Module with BOOMCoreParameters
 
       if (exe_units(i).is_bypassable)
       {
-         issue_unit.io.wakeup_vals(wu_idx)  := iss_valids(i) && (iss_uops(i).pdst_rtype === RT_FIX || iss_uops(i).pdst_rtype === RT_FLT) && iss_uops(i).ldst_val && (iss_uops(i).bypassable)
+         issue_unit.io.wakeup_vals(wu_idx)  := iss_valids(i) && (iss_uops(i).dst_rtype === RT_FIX || iss_uops(i).dst_rtype === RT_FLT) && iss_uops(i).ldst_val && (iss_uops(i).bypassable)
          issue_unit.io.wakeup_pdsts(wu_idx) := iss_uops(i).pdst
          wu_idx += 1
       }
@@ -1078,7 +1070,7 @@ class DatPath() extends Module with BOOMCoreParameters
          {
             assert (!(exe_units(i).io.resp(j).valid &&
                       exe_units(i).io.resp(j).bits.uop.ctrl.rf_wen &&
-                      exe_units(i).io.resp(j).bits.uop.pdst_rtype === RT_FIX &&
+                      exe_units(i).io.resp(j).bits.uop.dst_rtype === RT_FIX &&
                       exe_units(i).io.resp(j).bits.data(64).toBool),
                       "the 65th bit was set on a fixed point write-back to the regfile.")
          }
@@ -1089,7 +1081,7 @@ class DatPath() extends Module with BOOMCoreParameters
          {
             regfile.io.write_ports(cnt).wen  := exe_units(i).io.resp(j).valid &&
                                                 exe_units(i).io.resp(j).bits.uop.ctrl.rf_wen && // TODO get rid of other checks
-                                                (exe_units(i).io.resp(j).bits.uop.pdst_rtype === RT_FIX || exe_units(i).io.resp(j).bits.uop.pdst_rtype === RT_FLT)
+                                                (exe_units(i).io.resp(j).bits.uop.dst_rtype === RT_FIX || exe_units(i).io.resp(j).bits.uop.dst_rtype === RT_FLT)
             regfile.io.write_ports(cnt).addr := exe_units(i).io.resp(j).bits.uop.pdst
             regfile.io.write_ports(cnt).data := Mux(exe_units(i).io.resp(j).bits.uop.ctrl.pcr_fcn != rocket.CSR.N, pcr_read_out,
                                                                                           exe_units(i).io.resp(j).bits.data)
@@ -1098,7 +1090,7 @@ class DatPath() extends Module with BOOMCoreParameters
          {
             regfile.io.write_ports(cnt).wen  := exe_units(i).io.resp(j).valid &&
                                                 exe_units(i).io.resp(j).bits.uop.ctrl.rf_wen && // TODO get rid of other checks
-                                                (exe_units(i).io.resp(j).bits.uop.pdst_rtype === RT_FIX || exe_units(i).io.resp(j).bits.uop.pdst_rtype === RT_FLT)
+                                                (exe_units(i).io.resp(j).bits.uop.dst_rtype === RT_FIX || exe_units(i).io.resp(j).bits.uop.dst_rtype === RT_FLT)
             regfile.io.write_ports(cnt).addr := exe_units(i).io.resp(j).bits.uop.pdst
             regfile.io.write_ports(cnt).data := exe_units(i).io.resp(j).bits.data
          }
@@ -1137,7 +1129,7 @@ class DatPath() extends Module with BOOMCoreParameters
             // for commit logging...
             rob.io.debug_wb_valids(cnt) := exe_units(w).io.resp(j).valid &&
                                            exe_units(w).io.resp(j).bits.uop.ctrl.rf_wen &&
-                                           (exe_units(w).io.resp(j).bits.uop.pdst_rtype === RT_FIX || exe_units(w).io.resp(j).bits.uop.pdst_rtype === RT_FLT)
+                                           (exe_units(w).io.resp(j).bits.uop.dst_rtype === RT_FIX || exe_units(w).io.resp(j).bits.uop.dst_rtype === RT_FLT)
              if (exe_units(w).uses_pcr_wport && (j == 0))
              {
                rob.io.debug_wb_wdata(cnt) := Mux(exe_units(w).io.resp(j).bits.uop.ctrl.pcr_fcn != rocket.CSR.N,
@@ -1474,10 +1466,10 @@ class DatPath() extends Module with BOOMCoreParameters
             , dec_uops(w).lrs1
             , dec_uops(w).lrs2
             , dis_uops(w).pdst
-            , Mux(dec_uops(w).ldst_rtype   === RT_FIX, Str("X")
-              , Mux(dec_uops(w).ldst_rtype === RT_X  , Str("-")
-              , Mux(dec_uops(w).ldst_rtype === RT_FLT, Str("f")
-              , Mux(dec_uops(w).ldst_rtype === RT_PAS, Str("C"), Str("?")))))
+            , Mux(dec_uops(w).dst_rtype   === RT_FIX, Str("X")
+              , Mux(dec_uops(w).dst_rtype === RT_X  , Str("-")
+              , Mux(dec_uops(w).dst_rtype === RT_FLT, Str("f")
+              , Mux(dec_uops(w).dst_rtype === RT_PAS, Str("C"), Str("?")))))
             , dis_uops(w).pop1
             , Mux(rename_stage.io.ren_uops(w).prs1_busy, Str("B"), Str("R"))
             , Mux(dec_uops(w).lrs1_rtype    === RT_FIX, Str("X")
@@ -1531,10 +1523,10 @@ class DatPath() extends Module with BOOMCoreParameters
             , issue_unit.io.debug.slot(i).uop.pop1
             , issue_unit.io.debug.slot(i).uop.pop2
             , issue_unit.io.debug.slot(i).uop.pdst
-            , Mux(issue_unit.io.debug.slot(i).uop.pdst_rtype === RT_FIX, Str("X"),
-              Mux(issue_unit.io.debug.slot(i).uop.pdst_rtype === RT_X, Str("-"),
-              Mux(issue_unit.io.debug.slot(i).uop.pdst_rtype === RT_FLT, Str("f"),
-              Mux(issue_unit.io.debug.slot(i).uop.pdst_rtype === RT_PAS, Str("C"), Str("?")))))
+            , Mux(issue_unit.io.debug.slot(i).uop.dst_rtype === RT_FIX, Str("X"),
+              Mux(issue_unit.io.debug.slot(i).uop.dst_rtype === RT_X, Str("-"),
+              Mux(issue_unit.io.debug.slot(i).uop.dst_rtype === RT_FLT, Str("f"),
+              Mux(issue_unit.io.debug.slot(i).uop.dst_rtype === RT_PAS, Str("C"), Str("?")))))
             , Mux(issue_unit.io.debug.slot(i).valid, Str(b_wht), Str(grn))
             , issue_unit.io.debug.slot(i).uop.inst
             , issue_unit.io.debug.slot(i).uop.pc(31,0)
@@ -1608,10 +1600,10 @@ class DatPath() extends Module with BOOMCoreParameters
          for (w <- 0 until COMMIT_WIDTH)
          {
             printf("(d:%s p%d, bm:%x %s sdt:%d) "
-               , Mux(rob.io.debug.entry(temp_idx).uop.pdst_rtype === RT_FIX, Str("X"),
-                 Mux(rob.io.debug.entry(temp_idx).uop.pdst_rtype === RT_PAS, Str("C"),
-                 Mux(rob.io.debug.entry(temp_idx).uop.pdst_rtype === RT_FLT, Str("f"),
-                 Mux(rob.io.debug.entry(temp_idx).uop.pdst_rtype === RT_X, Str("-"), Str("?")))))
+               , Mux(rob.io.debug.entry(temp_idx).uop.dst_rtype === RT_FIX, Str("X"),
+                 Mux(rob.io.debug.entry(temp_idx).uop.dst_rtype === RT_PAS, Str("C"),
+                 Mux(rob.io.debug.entry(temp_idx).uop.dst_rtype === RT_FLT, Str("f"),
+                 Mux(rob.io.debug.entry(temp_idx).uop.dst_rtype === RT_X, Str("-"), Str("?")))))
                , rob.io.debug.entry    (temp_idx).uop.pdst
                , rob.io.debug.entry    (temp_idx).uop.br_mask
                , Mux(rob.io.debug.entry(temp_idx).uop.br_was_taken, Str("T"), Str("-"))
@@ -1784,7 +1776,7 @@ class DatPath() extends Module with BOOMCoreParameters
 
          when (com_valids(w) && commit_log_enabled)
          {
-            when (com_uops(w).ldst_rtype === RT_FIX && com_uops(w).ldst != UInt(0))
+            when (com_uops(w).dst_rtype === RT_FIX && com_uops(w).ldst != UInt(0))
             {
                printf("0x%x (0x%x) x%d 0x%x |%d\n"
                   , com_uops(w).pc
@@ -1794,7 +1786,7 @@ class DatPath() extends Module with BOOMCoreParameters
                   , tsc_reg
                   )
             }
-            .elsewhen (com_uops(w).ldst_rtype === RT_FLT)
+            .elsewhen (com_uops(w).dst_rtype === RT_FLT)
             {
                printf("0x%x (0x%x) f%d 0x%x |%d\n"
                   , com_uops(w).pc

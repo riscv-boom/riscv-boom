@@ -136,7 +136,7 @@ class FPU extends Module with BOOMCoreParameters
 
    val fp_ctrl = fp_decoder.io.sigs
 
-   val fp_rm = Mux(io.uop.inst(14,12) === Bits(7), io.fcsr_rm, io.uop.inst(14,12))
+   val fp_rm = Mux(io.uop.inst(14,12) === Bits(7), io.fcsr_rm, io.uop.inst(14,12)) // TODO FIXME XXX put information elsewhere in uop, this is the rm (founding mode)
 
    val req = new rocket.FPInput
    req := fp_ctrl
