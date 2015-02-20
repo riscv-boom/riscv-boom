@@ -141,7 +141,7 @@ class MicroOp extends BOOMCoreBundle
    val prs2_busy        = Bool()
    val stale_pdst       = UInt(width = PREG_SZ)
    val exception        = Bool()
-   val exc_cause        = UInt(width = 5); require(5>=rocket.Causes.all.map(log2Up(_)).max)
+   val exc_cause        = UInt(width = xprLen)
    val sret             = Bool()
    val bypassable       = Bool()                      // can we bypass ALU results? (doesn't include loads, pcr, rdcycle, etc.... need to readdress this, SHOULD include PCRs?)
    val mem_cmd          = UInt(width = 4)             // sync primitives/cache flushes
@@ -165,8 +165,8 @@ class MicroOp extends BOOMCoreBundle
    val lrs2_rtype       = UInt(width=2)
 
    // floating point information
-   val fp_val           = Bool()             // is a floating-point instruction
-   val fp_single        = Bool()             // single-precision floating point
+   val fp_val           = Bool()             // is a floating-point instruction? If it's non-ld/st it will write back exception bits to the fcsr
+   val fp_single        = Bool()             // single-precision floating point 
 
    // exception information
    val xcpt_ma          = Bool()
@@ -1130,16 +1130,22 @@ class DatPath() extends Module with BOOMCoreParameters
             rob.io.debug_wb_valids(cnt) := exe_units(w).io.resp(j).valid &&
                                            exe_units(w).io.resp(j).bits.uop.ctrl.rf_wen &&
                                            (exe_units(w).io.resp(j).bits.uop.dst_rtype === RT_FIX || exe_units(w).io.resp(j).bits.uop.dst_rtype === RT_FLT)
-             if (exe_units(w).uses_pcr_wport && (j == 0))
-             {
-               rob.io.debug_wb_wdata(cnt) := Mux(exe_units(w).io.resp(j).bits.uop.ctrl.pcr_fcn != rocket.CSR.N,
-                                                   pcr_read_out,
-                                                   exe_units(w).io.resp(j).bits.data)
-             }
-             else
-             {
-               rob.io.debug_wb_wdata(cnt) := exe_units(w).io.resp(j).bits.data
-             }
+
+            val data = exe_units(w).io.resp(j).bits.data
+            val unrec_s = hardfloat.recodedFloatNToFloatN(data, 23, 9)
+            val unrec_d = hardfloat.recodedFloatNToFloatN(data, 52, 12)
+            val unrec_out = Mux(exe_units(w).io.resp(j).bits.uop.fp_single, Cat(Fill(32, unrec_s(31)), unrec_s), unrec_d)
+
+            if (exe_units(w).uses_pcr_wport && (j == 0))
+            {
+               rob.io.debug_wb_wdata(cnt) := Mux(exe_units(w).io.resp(j).bits.uop.ctrl.pcr_fcn != rocket.CSR.N, pcr_read_out,
+                                             Mux(exe_units(w).io.resp(j).bits.uop.fp_val, unrec_out,
+                                                                                          data))
+            }
+            else
+            {
+               rob.io.debug_wb_wdata(cnt) := Mux(exe_units(w).io.resp(j).bits.uop.fp_val, unrec_out, data)
+            }
             cnt += 1
          }
 
@@ -1778,27 +1784,18 @@ class DatPath() extends Module with BOOMCoreParameters
          {
             when (com_uops(w).dst_rtype === RT_FIX && com_uops(w).ldst != UInt(0))
             {
-               printf("0x%x (0x%x) x%d 0x%x |%d\n"
-                  , com_uops(w).pc
-                  , com_uops(w).inst
-                  , com_uops(w).inst(RD_MSB,RD_LSB)
-                  , com_uops(w).debug_wdata
-                  , tsc_reg
-                  )
+//               printf("0x%x (0x%x) x%d 0x%x |%d\n", com_uops(w).pc, com_uops(w).inst, com_uops(w).inst(RD_MSB,RD_LSB), com_uops(w).debug_wdata, tsc_reg)
+               printf("0x%x (0x%x) x%d 0x%x\n", com_uops(w).pc, com_uops(w).inst, com_uops(w).inst(RD_MSB,RD_LSB), com_uops(w).debug_wdata)
             }
             .elsewhen (com_uops(w).dst_rtype === RT_FLT)
             {
-               printf("0x%x (0x%x) f%d 0x%x |%d\n"
-                  , com_uops(w).pc
-                  , com_uops(w).inst
-                  , com_uops(w).inst(RD_MSB,RD_LSB)
-                  , com_uops(w).debug_wdata
-                  , tsc_reg
-                  )
+//               printf("0x%x (0x%x) f%d 0x%x |%d\n", com_uops(w).pc, com_uops(w).inst, com_uops(w).inst(RD_MSB,RD_LSB), com_uops(w).debug_wdata, tsc_reg)
+               printf("0x%x (0x%x) f%d 0x%x\n", com_uops(w).pc, com_uops(w).inst, com_uops(w).inst(RD_MSB,RD_LSB), com_uops(w).debug_wdata)
             }
             .otherwise
             {
-               printf("0x%x (0x%x) |%d\n", com_uops(w).pc, com_uops(w).inst, tsc_reg)
+//               printf("0x%x (0x%x) |%d\n", com_uops(w).pc, com_uops(w).inst, tsc_reg)
+               printf("0x%x (0x%x)\n", com_uops(w).pc, com_uops(w).inst)
             }
          }
       }

@@ -44,7 +44,7 @@ class RobIo(machine_width: Int, num_wakeup_ports: Int)  extends BOOMCoreBundle
    // track side-effects for debug purposes.
    // Also need to know when loads write back, whereas we don't need loads to unbusy.
    val debug_wb_valids  = Vec.fill(num_wakeup_ports) { Bool(INPUT) }
-   val debug_wb_wdata   = Vec.fill(num_wakeup_ports) { Bits(INPUT, 65) }
+   val debug_wb_wdata   = Vec.fill(num_wakeup_ports) { Bits(INPUT, xprLen) }
 
    val mem_xcpt_val     = Bool(INPUT)
    val mem_xcpt_uop     = new MicroOp().asInput
@@ -72,7 +72,7 @@ class RobIo(machine_width: Int, num_wakeup_ports: Int)  extends BOOMCoreBundle
 
    // Handle Exceptions/ROB Rollback
    val com_exception    = Bool(OUTPUT)
-   val com_exc_cause    = UInt(OUTPUT, 5)
+   val com_exc_cause    = UInt(OUTPUT, xprLen)
    val com_handling_exc = Bool(OUTPUT)
    val com_rbk_valids   = Vec.fill(machine_width) {Bool(OUTPUT)}
 
@@ -411,7 +411,6 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
          val rob_idx = io.wb_resps(i).bits.uop.rob_idx
          when (io.debug_wb_valids(i) && MatchBank(GetBankIdx(rob_idx)))
          {
-            // TODO FPU translate FPU to 64-bit
             rob_uop(GetRowIdx(rob_idx)).debug_wdata := io.debug_wb_wdata(i)
          }
          val temp_uop = rob_uop(GetRowIdx(rob_idx))
