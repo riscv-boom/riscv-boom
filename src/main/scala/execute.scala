@@ -573,6 +573,7 @@ class FPUALUMulDMemExeUnit(is_branch_unit: Boolean = false
    fpu.io.req.bits.uop        := io.req.bits.uop
    fpu.io.req.bits.rs1_data   := io.req.bits.rs1_data
    fpu.io.req.bits.rs2_data   := io.req.bits.rs2_data
+   fpu.io.req.bits.rs3_data   := io.req.bits.rs3_data
    fpu.io.req.bits.kill       := io.req.bits.kill
    fpu.io.brinfo              := io.brinfo
    fpu.io.fcsr_rm             := io.fcsr_rm

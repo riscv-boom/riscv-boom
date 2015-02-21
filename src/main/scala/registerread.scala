@@ -57,6 +57,7 @@ class RegisterRead(issue_width: Int
    val exe_reg_uops     = Vec.fill(issue_width) { Reg(outType = new MicroOp())  }
    val exe_reg_rs1_data = Vec.fill(issue_width) { Reg(outType = Bits(width = register_width))  }
    val exe_reg_rs2_data = Vec.fill(issue_width) { Reg(outType = Bits(width = register_width))  }
+   val exe_reg_rs3_data = Vec.fill(issue_width) { Reg(outType = Bits(width = register_width))  }
 
 
    //-------------------------------------------------------------
@@ -80,19 +81,23 @@ class RegisterRead(issue_width: Int
 
    val rrd_rs1_data   = Vec.fill(issue_width) { Bits() }
    val rrd_rs2_data   = Vec.fill(issue_width) { Bits() }
+   val rrd_rs3_data   = Vec.fill(issue_width) { Bits() }
 
    for (w <- 0 until issue_width)
    {
       val i = w*2
       val rs1_addr = rrd_uops(w).pop1
       val rs2_addr = rrd_uops(w).pop2
+      val rs3_addr = rrd_uops(w).pop3
 
       // TODO allow for execute pipelines to only use one register read port
       io.rf_read_ports(i+0).addr := rs1_addr
       io.rf_read_ports(i+1).addr := rs2_addr
+      io.rf_read_ports(i+2).addr := rs3_addr
 
       rrd_rs1_data(w) := io.rf_read_ports(i+0).data
       rrd_rs2_data(w) := io.rf_read_ports(i+1).data
+      rrd_rs3_data(w) := io.rf_read_ports(i+2).data
 
       val rrd_kill = Mux(io.kill,       Bool(true),
                      Mux(io.brinfo.valid && io.brinfo.mispredict
@@ -156,6 +161,8 @@ class RegisterRead(issue_width: Int
 
    exe_reg_rs1_data := bypassed_rs1_data
    exe_reg_rs2_data := bypassed_rs2_data
+   exe_reg_rs3_data := rrd_rs3_data // no bypassing of this TODO add assert that checks bypassing to verify there isn't something it hits
+   // TODO add assert to detect bypass conflicts on non-bypassable things
 
 
    //-------------------------------------------------------------
@@ -166,6 +173,7 @@ class RegisterRead(issue_width: Int
       io.exe_reqs(w).bits.uop := exe_reg_uops(w)
       io.exe_reqs(w).bits.rs1_data := exe_reg_rs1_data(w)
       io.exe_reqs(w).bits.rs2_data := exe_reg_rs2_data(w)
+      io.exe_reqs(w).bits.rs3_data := exe_reg_rs3_data(w)
    }
 
 

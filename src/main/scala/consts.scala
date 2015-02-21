@@ -314,6 +314,8 @@ trait RISCVConstants
    val RS1_LSB = 15
    val RS2_MSB = 24
    val RS2_LSB = 20
+   val RS3_MSB = 31
+   val RS3_LSB = 27
 
    val CSR_ADDR_MSB = 31
    val CSR_ADDR_LSB = 20

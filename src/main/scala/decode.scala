@@ -11,131 +11,131 @@ import uncore.constants.MemoryOpConstants._
 
 object XDecode
 {
-   val default = List(N, N, X, uopX    , FU_X   ,UInt("b??",2),UInt("b??",2),UInt("b??",2), IS_X, X,X,X,X,N,M_X, MSK_X,UInt("b??"), X, X, X, X, X, X, N, X, CSR.X)
-            //                                                                                             wakeup_delay
-            //     is val inst?                                        imm sel                             |        bypassable (aka, known/fixed latency)
-            //     |  is fp inst?                                      |     is_load                       |        |  br/jmp
-            //     |  |  is single-prec?               rs1 regtype     |     |  is_store                   |        |  |  is jal
-            //     |  |  |  micro-code                 |       rs2 type|     |  |  is_amo                  |        |  |  |  is sret
-            //     |  |  |  |         func unit        |       |       |     |  |  |  is_fence             |        |  |  |  |  is syscall
-            //     |  |  |  |         |                |       |       |     |  |  |  |  is_fencei         |        |  |  |  |  |  is sbreak
-            //     |  |  |  |         |        dst     |       |       |     |  |  |  |  |  mem    mem     |        |  |  |  |  |  |  is unique? (clear pipeline for it)
-            //     |  |  |  |         |        regtype |       |       |     |  |  |  |  |  cmd    msk     |        |  |  |  |  |  |  |  flush on commit
-            //     |  |  |  |         |        |       |       |       |     |  |  |  |  |  |      |       |        |  |  |  |  |  |  |  |  csr cmd
-   val table = Array(//  |  |         |        |       |       |       |     |  |  |  |  |  |      |       |        |  |  |  |  |  |  |  |  |
-   LD      -> List(Y, N, X, uopLD   , FU_MEM , RT_FIX, RT_FIX, RT_X  , IS_I, Y, N, N, N, N, M_XRD, MSK_D , UInt(3), N, N, N, N, N, N, N, N, CSR.N),
-   LW      -> List(Y, N, X, uopLD   , FU_MEM , RT_FIX, RT_FIX, RT_X  , IS_I, Y, N, N, N, N, M_XRD, MSK_W , UInt(3), N, N, N, N, N, N, N, N, CSR.N),
-   LWU     -> List(Y, N, X, uopLD   , FU_MEM , RT_FIX, RT_FIX, RT_X  , IS_I, Y, N, N, N, N, M_XRD, MSK_WU, UInt(3), N, N, N, N, N, N, N, N, CSR.N),
-   LH      -> List(Y, N, X, uopLD   , FU_MEM , RT_FIX, RT_FIX, RT_X  , IS_I, Y, N, N, N, N, M_XRD, MSK_H , UInt(3), N, N, N, N, N, N, N, N, CSR.N),
-   LHU     -> List(Y, N, X, uopLD   , FU_MEM , RT_FIX, RT_FIX, RT_X  , IS_I, Y, N, N, N, N, M_XRD, MSK_HU, UInt(3), N, N, N, N, N, N, N, N, CSR.N),
-   LB      -> List(Y, N, X, uopLD   , FU_MEM , RT_FIX, RT_FIX, RT_X  , IS_I, Y, N, N, N, N, M_XRD, MSK_B , UInt(3), N, N, N, N, N, N, N, N, CSR.N),
-   LBU     -> List(Y, N, X, uopLD   , FU_MEM , RT_FIX, RT_FIX, RT_X  , IS_I, Y, N, N, N, N, M_XRD, MSK_BU, UInt(3), N, N, N, N, N, N, N, N, CSR.N),
+   val default = List(N, N, X, uopX    , FU_X   ,UInt("b??",2),UInt("b??",2),UInt("b??",2),X, IS_X, X,X,X,X,N,M_X, MSK_X,UInt("b??"), X, X, X, X, X, X, N, X, CSR.X)
+            //                                                         frs3_en                               wakeup_delay
+            //     is val inst?                                        | imm sel                             |        bypassable (aka, known/fixed latency)
+            //     |  is fp inst?                                      | |     is_load                       |        |  br/jmp
+            //     |  |  is single-prec?               rs1 regtype     | |     |  is_store                   |        |  |  is jal
+            //     |  |  |  micro-code                 |       rs2 type| |     |  |  is_amo                  |        |  |  |  is sret
+            //     |  |  |  |         func unit        |       |       | |     |  |  |  is_fence             |        |  |  |  |  is syscall
+            //     |  |  |  |         |                |       |       | |     |  |  |  |  is_fencei         |        |  |  |  |  |  is sbreak
+            //     |  |  |  |         |        dst     |       |       | |     |  |  |  |  |  mem    mem     |        |  |  |  |  |  |  is unique? (clear pipeline for it)
+            //     |  |  |  |         |        regtype |       |       | |     |  |  |  |  |  cmd    msk     |        |  |  |  |  |  |  |  flush on commit
+            //     |  |  |  |         |        |       |       |       | |     |  |  |  |  |  |      |       |        |  |  |  |  |  |  |  |  csr cmd
+   val table = Array(//  |  |         |        |       |       |       | |     |  |  |  |  |  |      |       |        |  |  |  |  |  |  |  |  |
+   LD      -> List(Y, N, X, uopLD   , FU_MEM , RT_FIX, RT_FIX, RT_X  , N, IS_I, Y, N, N, N, N, M_XRD, MSK_D , UInt(3), N, N, N, N, N, N, N, N, CSR.N),
+   LW      -> List(Y, N, X, uopLD   , FU_MEM , RT_FIX, RT_FIX, RT_X  , N, IS_I, Y, N, N, N, N, M_XRD, MSK_W , UInt(3), N, N, N, N, N, N, N, N, CSR.N),
+   LWU     -> List(Y, N, X, uopLD   , FU_MEM , RT_FIX, RT_FIX, RT_X  , N, IS_I, Y, N, N, N, N, M_XRD, MSK_WU, UInt(3), N, N, N, N, N, N, N, N, CSR.N),
+   LH      -> List(Y, N, X, uopLD   , FU_MEM , RT_FIX, RT_FIX, RT_X  , N, IS_I, Y, N, N, N, N, M_XRD, MSK_H , UInt(3), N, N, N, N, N, N, N, N, CSR.N),
+   LHU     -> List(Y, N, X, uopLD   , FU_MEM , RT_FIX, RT_FIX, RT_X  , N, IS_I, Y, N, N, N, N, M_XRD, MSK_HU, UInt(3), N, N, N, N, N, N, N, N, CSR.N),
+   LB      -> List(Y, N, X, uopLD   , FU_MEM , RT_FIX, RT_FIX, RT_X  , N, IS_I, Y, N, N, N, N, M_XRD, MSK_B , UInt(3), N, N, N, N, N, N, N, N, CSR.N),
+   LBU     -> List(Y, N, X, uopLD   , FU_MEM , RT_FIX, RT_FIX, RT_X  , N, IS_I, Y, N, N, N, N, M_XRD, MSK_BU, UInt(3), N, N, N, N, N, N, N, N, CSR.N),
 
-   SD      -> List(Y, N, X, uopSTA  , FU_MEM , RT_X  , RT_FIX, RT_FIX, IS_S, N, Y, N, N, N, M_XWR, MSK_D , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
-   SW      -> List(Y, N, X, uopSTA  , FU_MEM , RT_X  , RT_FIX, RT_FIX, IS_S, N, Y, N, N, N, M_XWR, MSK_W , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
-   SH      -> List(Y, N, X, uopSTA  , FU_MEM , RT_X  , RT_FIX, RT_FIX, IS_S, N, Y, N, N, N, M_XWR, MSK_H , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
-   SB      -> List(Y, N, X, uopSTA  , FU_MEM , RT_X  , RT_FIX, RT_FIX, IS_S, N, Y, N, N, N, M_XWR, MSK_B , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   SD      -> List(Y, N, X, uopSTA  , FU_MEM , RT_X  , RT_FIX, RT_FIX, N, IS_S, N, Y, N, N, N, M_XWR, MSK_D , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   SW      -> List(Y, N, X, uopSTA  , FU_MEM , RT_X  , RT_FIX, RT_FIX, N, IS_S, N, Y, N, N, N, M_XWR, MSK_W , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   SH      -> List(Y, N, X, uopSTA  , FU_MEM , RT_X  , RT_FIX, RT_FIX, N, IS_S, N, Y, N, N, N, M_XWR, MSK_H , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   SB      -> List(Y, N, X, uopSTA  , FU_MEM , RT_X  , RT_FIX, RT_FIX, N, IS_S, N, Y, N, N, N, M_XWR, MSK_B , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
 
-   LUI     -> List(Y, N, X, uopLUI  , FU_ALU , RT_FIX, RT_X  , RT_X  , IS_U, N, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
+   LUI     -> List(Y, N, X, uopLUI  , FU_ALU , RT_FIX, RT_X  , RT_X  , N, IS_U, N, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
 
-   ADDI    -> List(Y, N, X, uopADDI , FU_ALU , RT_FIX, RT_FIX, RT_X  , IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
-   ANDI    -> List(Y, N, X, uopANDI , FU_ALU , RT_FIX, RT_FIX, RT_X  , IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
-   ORI     -> List(Y, N, X, uopORI  , FU_ALU , RT_FIX, RT_FIX, RT_X  , IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
-   XORI    -> List(Y, N, X, uopXORI , FU_ALU , RT_FIX, RT_FIX, RT_X  , IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
-   SLTI    -> List(Y, N, X, uopSLTI , FU_ALU , RT_FIX, RT_FIX, RT_X  , IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
-   SLTIU   -> List(Y, N, X, uopSLTIU, FU_ALU , RT_FIX, RT_FIX, RT_X  , IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
-   SLLI    -> List(Y, N, X, uopSLLI , FU_ALU , RT_FIX, RT_FIX, RT_X  , IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
-   SRAI    -> List(Y, N, X, uopSRAI , FU_ALU , RT_FIX, RT_FIX, RT_X  , IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
-   SRLI    -> List(Y, N, X, uopSRLI , FU_ALU , RT_FIX, RT_FIX, RT_X  , IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
+   ADDI    -> List(Y, N, X, uopADDI , FU_ALU , RT_FIX, RT_FIX, RT_X  , N, IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
+   ANDI    -> List(Y, N, X, uopANDI , FU_ALU , RT_FIX, RT_FIX, RT_X  , N, IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
+   ORI     -> List(Y, N, X, uopORI  , FU_ALU , RT_FIX, RT_FIX, RT_X  , N, IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
+   XORI    -> List(Y, N, X, uopXORI , FU_ALU , RT_FIX, RT_FIX, RT_X  , N, IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
+   SLTI    -> List(Y, N, X, uopSLTI , FU_ALU , RT_FIX, RT_FIX, RT_X  , N, IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
+   SLTIU   -> List(Y, N, X, uopSLTIU, FU_ALU , RT_FIX, RT_FIX, RT_X  , N, IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
+   SLLI    -> List(Y, N, X, uopSLLI , FU_ALU , RT_FIX, RT_FIX, RT_X  , N, IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
+   SRAI    -> List(Y, N, X, uopSRAI , FU_ALU , RT_FIX, RT_FIX, RT_X  , N, IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
+   SRLI    -> List(Y, N, X, uopSRLI , FU_ALU , RT_FIX, RT_FIX, RT_X  , N, IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
 
-   ADDIW   -> List(Y, N, X, uopADDIW, FU_ALU , RT_FIX, RT_FIX, RT_X  , IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
-   SLLIW   -> List(Y, N, X, uopSLLIW, FU_ALU , RT_FIX, RT_FIX, RT_X  , IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
-   SRAIW   -> List(Y, N, X, uopSRAIW, FU_ALU , RT_FIX, RT_FIX, RT_X  , IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
-   SRLIW   -> List(Y, N, X, uopSRLIW, FU_ALU , RT_FIX, RT_FIX, RT_X  , IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
+   ADDIW   -> List(Y, N, X, uopADDIW, FU_ALU , RT_FIX, RT_FIX, RT_X  , N, IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
+   SLLIW   -> List(Y, N, X, uopSLLIW, FU_ALU , RT_FIX, RT_FIX, RT_X  , N, IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
+   SRAIW   -> List(Y, N, X, uopSRAIW, FU_ALU , RT_FIX, RT_FIX, RT_X  , N, IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
+   SRLIW   -> List(Y, N, X, uopSRLIW, FU_ALU , RT_FIX, RT_FIX, RT_X  , N, IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
 
-   SLL     -> List(Y, N, X, uopSLL  , FU_ALU , RT_FIX, RT_FIX, RT_FIX, IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
-   ADD     -> List(Y, N, X, uopADD  , FU_ALU , RT_FIX, RT_FIX, RT_FIX, IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
-   SUB     -> List(Y, N, X, uopSUB  , FU_ALU , RT_FIX, RT_FIX, RT_FIX, IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
-   SLT     -> List(Y, N, X, uopSLT  , FU_ALU , RT_FIX, RT_FIX, RT_FIX, IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
-   SLTU    -> List(Y, N, X, uopSLTU , FU_ALU , RT_FIX, RT_FIX, RT_FIX, IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
-   AND     -> List(Y, N, X, uopAND  , FU_ALU , RT_FIX, RT_FIX, RT_FIX, IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
-   OR      -> List(Y, N, X, uopOR   , FU_ALU , RT_FIX, RT_FIX, RT_FIX, IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
-   XOR     -> List(Y, N, X, uopXOR  , FU_ALU , RT_FIX, RT_FIX, RT_FIX, IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
-   SRA     -> List(Y, N, X, uopSRA  , FU_ALU , RT_FIX, RT_FIX, RT_FIX, IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
-   SRL     -> List(Y, N, X, uopSRL  , FU_ALU , RT_FIX, RT_FIX, RT_FIX, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
+   SLL     -> List(Y, N, X, uopSLL  , FU_ALU , RT_FIX, RT_FIX, RT_FIX, N, IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
+   ADD     -> List(Y, N, X, uopADD  , FU_ALU , RT_FIX, RT_FIX, RT_FIX, N, IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
+   SUB     -> List(Y, N, X, uopSUB  , FU_ALU , RT_FIX, RT_FIX, RT_FIX, N, IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
+   SLT     -> List(Y, N, X, uopSLT  , FU_ALU , RT_FIX, RT_FIX, RT_FIX, N, IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
+   SLTU    -> List(Y, N, X, uopSLTU , FU_ALU , RT_FIX, RT_FIX, RT_FIX, N, IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
+   AND     -> List(Y, N, X, uopAND  , FU_ALU , RT_FIX, RT_FIX, RT_FIX, N, IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
+   OR      -> List(Y, N, X, uopOR   , FU_ALU , RT_FIX, RT_FIX, RT_FIX, N, IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
+   XOR     -> List(Y, N, X, uopXOR  , FU_ALU , RT_FIX, RT_FIX, RT_FIX, N, IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
+   SRA     -> List(Y, N, X, uopSRA  , FU_ALU , RT_FIX, RT_FIX, RT_FIX, N, IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
+   SRL     -> List(Y, N, X, uopSRL  , FU_ALU , RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
 
-   ADDW    -> List(Y, N, X, uopADDW , FU_ALU , RT_FIX, RT_FIX, RT_FIX, IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
-   SUBW    -> List(Y, N, X, uopSUBW , FU_ALU , RT_FIX, RT_FIX, RT_FIX, IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
-   SLLW    -> List(Y, N, X, uopSLLW , FU_ALU , RT_FIX, RT_FIX, RT_FIX, IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
-   SRAW    -> List(Y, N, X, uopSRAW , FU_ALU , RT_FIX, RT_FIX, RT_FIX, IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
-   SRLW    -> List(Y, N, X, uopSRLW , FU_ALU , RT_FIX, RT_FIX, RT_FIX, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
+   ADDW    -> List(Y, N, X, uopADDW , FU_ALU , RT_FIX, RT_FIX, RT_FIX, N, IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
+   SUBW    -> List(Y, N, X, uopSUBW , FU_ALU , RT_FIX, RT_FIX, RT_FIX, N, IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
+   SLLW    -> List(Y, N, X, uopSLLW , FU_ALU , RT_FIX, RT_FIX, RT_FIX, N, IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
+   SRAW    -> List(Y, N, X, uopSRAW , FU_ALU , RT_FIX, RT_FIX, RT_FIX, N, IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
+   SRLW    -> List(Y, N, X, uopSRLW , FU_ALU , RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(1), Y, N, N, N, N, N, N, N, CSR.N),
 
-   MUL     -> List(Y, N, X, uopMUL  , FU_MULD, RT_FIX, RT_FIX, RT_FIX, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
-   MULH    -> List(Y, N, X, uopMULH , FU_MULD, RT_FIX, RT_FIX, RT_FIX, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
-   MULHU   -> List(Y, N, X, uopMULHU, FU_MULD, RT_FIX, RT_FIX, RT_FIX, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
-   MULHSU  -> List(Y, N, X, uopMULHSU,FU_MULD, RT_FIX, RT_FIX, RT_FIX, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
-   MULW    -> List(Y, N, X, uopMULW , FU_MULD, RT_FIX, RT_FIX, RT_FIX, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   MUL     -> List(Y, N, X, uopMUL  , FU_MULD, RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   MULH    -> List(Y, N, X, uopMULH , FU_MULD, RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   MULHU   -> List(Y, N, X, uopMULHU, FU_MULD, RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   MULHSU  -> List(Y, N, X, uopMULHSU,FU_MULD, RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   MULW    -> List(Y, N, X, uopMULW , FU_MULD, RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
 
-   DIV     -> List(Y, N, X, uopDIV  , FU_MULD, RT_FIX, RT_FIX, RT_FIX, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
-   DIVU    -> List(Y, N, X, uopDIVU , FU_MULD, RT_FIX, RT_FIX, RT_FIX, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
-   REM     -> List(Y, N, X, uopREM  , FU_MULD, RT_FIX, RT_FIX, RT_FIX, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
-   REMU    -> List(Y, N, X, uopREMU , FU_MULD, RT_FIX, RT_FIX, RT_FIX, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
-   DIVW    -> List(Y, N, X, uopDIVW , FU_MULD, RT_FIX, RT_FIX, RT_FIX, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
-   DIVUW   -> List(Y, N, X, uopDIVUW, FU_MULD, RT_FIX, RT_FIX, RT_FIX, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
-   REMW    -> List(Y, N, X, uopREMW , FU_MULD, RT_FIX, RT_FIX, RT_FIX, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
-   REMUW   -> List(Y, N, X, uopREMUW, FU_MULD, RT_FIX, RT_FIX, RT_FIX, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   DIV     -> List(Y, N, X, uopDIV  , FU_MULD, RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   DIVU    -> List(Y, N, X, uopDIVU , FU_MULD, RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   REM     -> List(Y, N, X, uopREM  , FU_MULD, RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   REMU    -> List(Y, N, X, uopREMU , FU_MULD, RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   DIVW    -> List(Y, N, X, uopDIVW , FU_MULD, RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   DIVUW   -> List(Y, N, X, uopDIVUW, FU_MULD, RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   REMW    -> List(Y, N, X, uopREMW , FU_MULD, RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   REMUW   -> List(Y, N, X, uopREMUW, FU_MULD, RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
 
-   AUIPC   -> List(Y, N, X, uopAUIPC, FU_BRU , RT_FIX, RT_X  , RT_X  , IS_U, N, N, N, N, N, M_X  , MSK_X , UInt(1), N, N, N, N, N, N, N, N, CSR.N), // use BRU for the PC read
-   JAL     -> List(Y, N, X, uopJAL  , FU_BRU , RT_FIX, RT_X  , RT_X  , IS_J, N, N, N, N, N, M_X  , MSK_X , UInt(1), N, Y, Y, N, N, N, N, N, CSR.N),
-   JALR    -> List(Y, N, X, uopJALR , FU_BRU , RT_FIX, RT_FIX, RT_X  , IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(1), N, Y, N, N, N, N, N, N, CSR.N),
-   BEQ     -> List(Y, N, X, uopBEQ  , FU_BRU , RT_X  , RT_FIX, RT_FIX, IS_B, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, Y, N, N, N, N, N, N, CSR.N),
-   BNE     -> List(Y, N, X, uopBNE  , FU_BRU , RT_X  , RT_FIX, RT_FIX, IS_B, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, Y, N, N, N, N, N, N, CSR.N),
-   BGE     -> List(Y, N, X, uopBGE  , FU_BRU , RT_X  , RT_FIX, RT_FIX, IS_B, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, Y, N, N, N, N, N, N, CSR.N),
-   BGEU    -> List(Y, N, X, uopBGEU , FU_BRU , RT_X  , RT_FIX, RT_FIX, IS_B, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, Y, N, N, N, N, N, N, CSR.N),
-   BLT     -> List(Y, N, X, uopBLT  , FU_BRU , RT_X  , RT_FIX, RT_FIX, IS_B, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, Y, N, N, N, N, N, N, CSR.N),
-   BLTU    -> List(Y, N, X, uopBLTU , FU_BRU , RT_X  , RT_FIX, RT_FIX, IS_B, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, Y, N, N, N, N, N, N, CSR.N),
+   AUIPC   -> List(Y, N, X, uopAUIPC, FU_BRU , RT_FIX, RT_X  , RT_X  , N, IS_U, N, N, N, N, N, M_X  , MSK_X , UInt(1), N, N, N, N, N, N, N, N, CSR.N), // use BRU for the PC read
+   JAL     -> List(Y, N, X, uopJAL  , FU_BRU , RT_FIX, RT_X  , RT_X  , N, IS_J, N, N, N, N, N, M_X  , MSK_X , UInt(1), N, Y, Y, N, N, N, N, N, CSR.N),
+   JALR    -> List(Y, N, X, uopJALR , FU_BRU , RT_FIX, RT_FIX, RT_X  , N, IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(1), N, Y, N, N, N, N, N, N, CSR.N),
+   BEQ     -> List(Y, N, X, uopBEQ  , FU_BRU , RT_X  , RT_FIX, RT_FIX, N, IS_B, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, Y, N, N, N, N, N, N, CSR.N),
+   BNE     -> List(Y, N, X, uopBNE  , FU_BRU , RT_X  , RT_FIX, RT_FIX, N, IS_B, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, Y, N, N, N, N, N, N, CSR.N),
+   BGE     -> List(Y, N, X, uopBGE  , FU_BRU , RT_X  , RT_FIX, RT_FIX, N, IS_B, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, Y, N, N, N, N, N, N, CSR.N),
+   BGEU    -> List(Y, N, X, uopBGEU , FU_BRU , RT_X  , RT_FIX, RT_FIX, N, IS_B, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, Y, N, N, N, N, N, N, CSR.N),
+   BLT     -> List(Y, N, X, uopBLT  , FU_BRU , RT_X  , RT_FIX, RT_FIX, N, IS_B, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, Y, N, N, N, N, N, N, CSR.N),
+   BLTU    -> List(Y, N, X, uopBLTU , FU_BRU , RT_X  , RT_FIX, RT_FIX, N, IS_B, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, Y, N, N, N, N, N, N, CSR.N),
 
    // I-type, the immediate12 holds the CSR register.
-   CSRRW   -> List(Y, N, X, uopCSRRW, FU_PCR , RT_FIX, RT_FIX, RT_X  , IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, Y, Y, CSR.W),
-   CSRRS   -> List(Y, N, X, uopCSRRS, FU_PCR , RT_FIX, RT_FIX, RT_X  , IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, Y, Y, CSR.S),
-   CSRRC   -> List(Y, N, X, uopCSRRC, FU_PCR , RT_FIX, RT_FIX, RT_X  , IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, Y, Y, CSR.C),
+   CSRRW   -> List(Y, N, X, uopCSRRW, FU_PCR , RT_FIX, RT_FIX, RT_X  , N, IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, Y, Y, CSR.W),
+   CSRRS   -> List(Y, N, X, uopCSRRS, FU_PCR , RT_FIX, RT_FIX, RT_X  , N, IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, Y, Y, CSR.S),
+   CSRRC   -> List(Y, N, X, uopCSRRC, FU_PCR , RT_FIX, RT_FIX, RT_X  , N, IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, Y, Y, CSR.C),
 
-   CSRRWI  -> List(Y, N, X, uopCSRRWI,FU_PCR , RT_FIX, RT_PAS, RT_X  , IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, Y, Y, CSR.W),
-   CSRRSI  -> List(Y, N, X, uopCSRRSI,FU_PCR , RT_FIX, RT_PAS, RT_X  , IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, Y, Y, CSR.S),
-   CSRRCI  -> List(Y, N, X, uopCSRRCI,FU_PCR , RT_FIX, RT_PAS, RT_X  , IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, Y, Y, CSR.C),
+   CSRRWI  -> List(Y, N, X, uopCSRRWI,FU_PCR , RT_FIX, RT_PAS, RT_X  , N, IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, Y, Y, CSR.W),
+   CSRRSI  -> List(Y, N, X, uopCSRRSI,FU_PCR , RT_FIX, RT_PAS, RT_X  , N, IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, Y, Y, CSR.S),
+   CSRRCI  -> List(Y, N, X, uopCSRRCI,FU_PCR , RT_FIX, RT_PAS, RT_X  , N, IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, Y, Y, CSR.C),
 
-   SCALL   -> List(Y, N, X, uopNOP  , FU_ALU , RT_X  , RT_X  , RT_X  , IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, Y, N, Y, N, CSR.N),
-   SRET    -> List(Y, N, X, uopSRET , FU_ALU , RT_X  , RT_X  , RT_X  , IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, Y, N, N, Y, N, CSR.N),
-   SBREAK  -> List(Y, N, X, uopNOP  , FU_ALU , RT_X  , RT_X  , RT_X  , IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, Y, Y, N, CSR.N),
+   SCALL   -> List(Y, N, X, uopNOP  , FU_ALU , RT_X  , RT_X  , RT_X  , N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, Y, N, Y, N, CSR.N),
+   SRET    -> List(Y, N, X, uopSRET , FU_ALU , RT_X  , RT_X  , RT_X  , N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, Y, N, N, Y, N, CSR.N),
+   SBREAK  -> List(Y, N, X, uopNOP  , FU_ALU , RT_X  , RT_X  , RT_X  , N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, Y, Y, N, CSR.N),
 
-   FENCE_I -> List(Y, N, X, uopNOP  , FU_X   , RT_X  , RT_X  , RT_X  , IS_X, N, N, N, N, Y, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, Y, Y, CSR.N),
-   FENCE   -> List(Y, N, X, uopMEMSPECIAL,FU_MEM, RT_X, RT_X, RT_X   , IS_X, N, Y, N, Y, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, Y, Y, CSR.N), // TODO PERF make fence higher performance
+   FENCE_I -> List(Y, N, X, uopNOP  , FU_X   , RT_X  , RT_X  , RT_X  , N, IS_X, N, N, N, N, Y, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, Y, Y, CSR.N),
+   FENCE   -> List(Y, N, X, uopMEMSPECIAL,FU_MEM, RT_X, RT_X, RT_X   , N, IS_X, N, Y, N, Y, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, Y, Y, CSR.N), // TODO PERF make fence higher performance
 
    // A-type
-   AMOADD_W-> List(Y, N, X, uopAMO_AG, FU_MEM, RT_FIX, RT_FIX, RT_FIX, IS_X, N, Y, Y, N, N, M_XA_ADD, MSK_W,UInt(0),N, N, N, N, N, N, Y, Y, CSR.N), //TODO make AMOs higherperformance
-   AMOXOR_W-> List(Y, N, X, uopAMO_AG, FU_MEM, RT_FIX, RT_FIX, RT_FIX, IS_X, N, Y, Y, N, N, M_XA_XOR, MSK_W,UInt(0),N, N, N, N, N, N, Y, Y, CSR.N), //TODO should I mark "Is_store"?
-   AMOSWAP_W->List(Y, N, X, uopAMO_AG, FU_MEM, RT_FIX, RT_FIX, RT_FIX, IS_X, N, Y, Y, N, N, M_XA_SWAP,MSK_W,UInt(0),N, N, N, N, N, N, Y, Y, CSR.N),
-   AMOAND_W-> List(Y, N, X, uopAMO_AG, FU_MEM, RT_FIX, RT_FIX, RT_FIX, IS_X, N, Y, Y, N, N, M_XA_AND, MSK_W,UInt(0),N, N, N, N, N, N, Y, Y, CSR.N),
-   AMOOR_W -> List(Y, N, X, uopAMO_AG, FU_MEM, RT_FIX, RT_FIX, RT_FIX, IS_X, N, Y, Y, N, N, M_XA_OR,  MSK_W,UInt(0),N, N, N, N, N, N, Y, Y, CSR.N),
-   AMOMIN_W-> List(Y, N, X, uopAMO_AG, FU_MEM, RT_FIX, RT_FIX, RT_FIX, IS_X, N, Y, Y, N, N, M_XA_MIN, MSK_W,UInt(0),N, N, N, N, N, N, Y, Y, CSR.N),
-   AMOMINU_W->List(Y, N, X, uopAMO_AG, FU_MEM, RT_FIX, RT_FIX, RT_FIX, IS_X, N, Y, Y, N, N, M_XA_MINU,MSK_W,UInt(0),N, N, N, N, N, N, Y, Y, CSR.N),
-   AMOMAX_W-> List(Y, N, X, uopAMO_AG, FU_MEM, RT_FIX, RT_FIX, RT_FIX, IS_X, N, Y, Y, N, N, M_XA_MAX, MSK_W,UInt(0),N, N, N, N, N, N, Y, Y, CSR.N),
-   AMOMAXU_W->List(Y, N, X, uopAMO_AG, FU_MEM, RT_FIX, RT_FIX, RT_FIX, IS_X, N, Y, Y, N, N, M_XA_MAXU,MSK_W,UInt(0),N, N, N, N, N, N, Y, Y, CSR.N),
+   AMOADD_W-> List(Y, N, X, uopAMO_AG, FU_MEM, RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, Y, Y, N, N, M_XA_ADD, MSK_W,UInt(0),N, N, N, N, N, N, Y, Y, CSR.N), //TODO make AMOs higherperformance
+   AMOXOR_W-> List(Y, N, X, uopAMO_AG, FU_MEM, RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, Y, Y, N, N, M_XA_XOR, MSK_W,UInt(0),N, N, N, N, N, N, Y, Y, CSR.N), //TODO should I mark "Is_store"?
+   AMOSWAP_W->List(Y, N, X, uopAMO_AG, FU_MEM, RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, Y, Y, N, N, M_XA_SWAP,MSK_W,UInt(0),N, N, N, N, N, N, Y, Y, CSR.N),
+   AMOAND_W-> List(Y, N, X, uopAMO_AG, FU_MEM, RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, Y, Y, N, N, M_XA_AND, MSK_W,UInt(0),N, N, N, N, N, N, Y, Y, CSR.N),
+   AMOOR_W -> List(Y, N, X, uopAMO_AG, FU_MEM, RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, Y, Y, N, N, M_XA_OR,  MSK_W,UInt(0),N, N, N, N, N, N, Y, Y, CSR.N),
+   AMOMIN_W-> List(Y, N, X, uopAMO_AG, FU_MEM, RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, Y, Y, N, N, M_XA_MIN, MSK_W,UInt(0),N, N, N, N, N, N, Y, Y, CSR.N),
+   AMOMINU_W->List(Y, N, X, uopAMO_AG, FU_MEM, RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, Y, Y, N, N, M_XA_MINU,MSK_W,UInt(0),N, N, N, N, N, N, Y, Y, CSR.N),
+   AMOMAX_W-> List(Y, N, X, uopAMO_AG, FU_MEM, RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, Y, Y, N, N, M_XA_MAX, MSK_W,UInt(0),N, N, N, N, N, N, Y, Y, CSR.N),
+   AMOMAXU_W->List(Y, N, X, uopAMO_AG, FU_MEM, RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, Y, Y, N, N, M_XA_MAXU,MSK_W,UInt(0),N, N, N, N, N, N, Y, Y, CSR.N),
 
-   AMOADD_D-> List(Y, N, X, uopAMO_AG, FU_MEM, RT_FIX, RT_FIX, RT_FIX, IS_X, N, Y, Y, N, N, M_XA_ADD, MSK_D,UInt(0),N, N, N, N, N, N, Y, Y, CSR.N),
-   AMOXOR_D-> List(Y, N, X, uopAMO_AG, FU_MEM, RT_FIX, RT_FIX, RT_FIX, IS_X, N, Y, Y, N, N, M_XA_XOR, MSK_D,UInt(0),N, N, N, N, N, N, Y, Y, CSR.N),
-   AMOSWAP_D->List(Y, N, X, uopAMO_AG, FU_MEM, RT_FIX, RT_FIX, RT_FIX, IS_X, N, Y, Y, N, N, M_XA_SWAP,MSK_D,UInt(0),N, N, N, N, N, N, Y, Y, CSR.N),
-   AMOAND_D-> List(Y, N, X, uopAMO_AG, FU_MEM, RT_FIX, RT_FIX, RT_FIX, IS_X, N, Y, Y, N, N, M_XA_AND, MSK_D,UInt(0),N, N, N, N, N, N, Y, Y, CSR.N),
-   AMOOR_D -> List(Y, N, X, uopAMO_AG, FU_MEM, RT_FIX, RT_FIX, RT_FIX, IS_X, N, Y, Y, N, N, M_XA_OR,  MSK_D,UInt(0),N, N, N, N, N, N, Y, Y, CSR.N),
-   AMOMIN_D-> List(Y, N, X, uopAMO_AG, FU_MEM, RT_FIX, RT_FIX, RT_FIX, IS_X, N, Y, Y, N, N, M_XA_MIN, MSK_D,UInt(0),N, N, N, N, N, N, Y, Y, CSR.N),
-   AMOMINU_D->List(Y, N, X, uopAMO_AG, FU_MEM, RT_FIX, RT_FIX, RT_FIX, IS_X, N, Y, Y, N, N, M_XA_MINU,MSK_D,UInt(0),N, N, N, N, N, N, Y, Y, CSR.N),
-   AMOMAX_D-> List(Y, N, X, uopAMO_AG, FU_MEM, RT_FIX, RT_FIX, RT_FIX, IS_X, N, Y, Y, N, N, M_XA_MAX, MSK_D,UInt(0),N, N, N, N, N, N, Y, Y, CSR.N),
-   AMOMAXU_D->List(Y, N, X, uopAMO_AG, FU_MEM, RT_FIX, RT_FIX, RT_FIX, IS_X, N, Y, Y, N, N, M_XA_MAXU,MSK_D,UInt(0),N, N, N, N, N, N, Y, Y, CSR.N),
+   AMOADD_D-> List(Y, N, X, uopAMO_AG, FU_MEM, RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, Y, Y, N, N, M_XA_ADD, MSK_D,UInt(0),N, N, N, N, N, N, Y, Y, CSR.N),
+   AMOXOR_D-> List(Y, N, X, uopAMO_AG, FU_MEM, RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, Y, Y, N, N, M_XA_XOR, MSK_D,UInt(0),N, N, N, N, N, N, Y, Y, CSR.N),
+   AMOSWAP_D->List(Y, N, X, uopAMO_AG, FU_MEM, RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, Y, Y, N, N, M_XA_SWAP,MSK_D,UInt(0),N, N, N, N, N, N, Y, Y, CSR.N),
+   AMOAND_D-> List(Y, N, X, uopAMO_AG, FU_MEM, RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, Y, Y, N, N, M_XA_AND, MSK_D,UInt(0),N, N, N, N, N, N, Y, Y, CSR.N),
+   AMOOR_D -> List(Y, N, X, uopAMO_AG, FU_MEM, RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, Y, Y, N, N, M_XA_OR,  MSK_D,UInt(0),N, N, N, N, N, N, Y, Y, CSR.N),
+   AMOMIN_D-> List(Y, N, X, uopAMO_AG, FU_MEM, RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, Y, Y, N, N, M_XA_MIN, MSK_D,UInt(0),N, N, N, N, N, N, Y, Y, CSR.N),
+   AMOMINU_D->List(Y, N, X, uopAMO_AG, FU_MEM, RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, Y, Y, N, N, M_XA_MINU,MSK_D,UInt(0),N, N, N, N, N, N, Y, Y, CSR.N),
+   AMOMAX_D-> List(Y, N, X, uopAMO_AG, FU_MEM, RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, Y, Y, N, N, M_XA_MAX, MSK_D,UInt(0),N, N, N, N, N, N, Y, Y, CSR.N),
+   AMOMAXU_D->List(Y, N, X, uopAMO_AG, FU_MEM, RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, Y, Y, N, N, M_XA_MAXU,MSK_D,UInt(0),N, N, N, N, N, N, Y, Y, CSR.N),
 
-   LR_W    -> List(Y, N, X, uopAMO_AG, FU_MEM, RT_FIX, RT_FIX, RT_FIX, IS_X, N, Y, Y, N, N, M_XLR   , MSK_W,UInt(0),N, N, N, N, N, N, Y, Y, CSR.N), // TODO optimize LR, SC
-   LR_D    -> List(Y, N, X, uopAMO_AG, FU_MEM, RT_FIX, RT_FIX, RT_FIX, IS_X, N, Y, Y, N, N, M_XLR   , MSK_D,UInt(0),N, N, N, N, N, N, Y, Y, CSR.N), // note LR generates 2 micro-ops,
-   SC_W    -> List(Y, N, X, uopAMO_AG, FU_MEM, RT_FIX, RT_FIX, RT_FIX, IS_X, N, Y, Y, N, N, M_XSC   , MSK_W,UInt(0),N, N, N, N, N, N, Y, Y, CSR.N), // one which isn't needed
-   SC_D    -> List(Y, N, X, uopAMO_AG, FU_MEM, RT_FIX, RT_FIX, RT_FIX, IS_X, N, Y, Y, N, N, M_XSC   , MSK_D,UInt(0),N, N, N, N, N, N, Y, Y, CSR.N)
+   LR_W    -> List(Y, N, X, uopAMO_AG, FU_MEM, RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, Y, Y, N, N, M_XLR   , MSK_W,UInt(0),N, N, N, N, N, N, Y, Y, CSR.N), // TODO optimize LR, SC
+   LR_D    -> List(Y, N, X, uopAMO_AG, FU_MEM, RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, Y, Y, N, N, M_XLR   , MSK_D,UInt(0),N, N, N, N, N, N, Y, Y, CSR.N), // note LR generates 2 micro-ops,
+   SC_W    -> List(Y, N, X, uopAMO_AG, FU_MEM, RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, Y, Y, N, N, M_XSC   , MSK_W,UInt(0),N, N, N, N, N, N, Y, Y, CSR.N), // one which isn't needed
+   SC_D    -> List(Y, N, X, uopAMO_AG, FU_MEM, RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, Y, Y, N, N, M_XSC   , MSK_D,UInt(0),N, N, N, N, N, N, Y, Y, CSR.N)
    )
 
 
@@ -144,93 +144,93 @@ object XDecode
 object FDecode extends DecodeConstants
 {
   val table = Array(
-            //                                                                                              wakeup_delay
-            //                                                          imm sel                             |        bypassable (aka, known/fixed latency)
-            //                                                          |     is_load                       |        |  br/jmp
-            //     is val inst?                         rs1 regtype     |     |  is_store                   |        |  |  is jal
-            //     |  is fp inst?                       |       rs2 type|     |  |  is_amo                  |        |  |  |  is sret
-            //     |  |  is dst single-prec?            |       |       |     |  |  |  is_fence             |        |  |  |  |  is syscall
-            //     |  |  |  micro-code                  |       |       |     |  |  |  |  is_fencei         |        |  |  |  |  |  is sbreak
-            //     |  |  |  |           func    dst     |       |       |     |  |  |  |  |  mem    mem     |        |  |  |  |  |  |  is unique? (clear pipeline for it)
-            //     |  |  |  |           unit    regtype |       |       |     |  |  |  |  |  cmd    msk     |        |  |  |  |  |  |  |  flush on commit
-            //     |  |  |  |           |       |       |       |       |     |  |  |  |  |  |      |       |        |  |  |  |  |  |  |  |  csr cmd
-   FLW     -> List(Y, Y, Y, uopLD     , FU_MEM, RT_FLT, RT_FIX, RT_X  , IS_I, Y, N, N, N, N, M_XRD, MSK_W , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
-   FLD     -> List(Y, Y, N, uopLD     , FU_MEM, RT_FLT, RT_FIX, RT_X  , IS_I, Y, N, N, N, N, M_XRD, MSK_D , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
-   FSW     -> List(Y, Y, Y, uopSTA    , FU_MEM, RT_X  , RT_FIX, RT_FLT, IS_S, N, Y, N, N, N, M_XWR, MSK_W , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
-   FSD     -> List(Y, Y, N, uopSTA    , FU_MEM, RT_X  , RT_FIX, RT_FLT, IS_S, N, Y, N, N, N, M_XWR, MSK_D , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+            //                                                          frs3_en                             wakeup_delay
+            //                                                          | imm sel                             |        bypassable (aka, known/fixed latency)
+            //                                                          | |     is_load                       |        |  br/jmp
+            //     is val inst?                         rs1 regtype     | |     |  is_store                   |        |  |  is jal
+            //     |  is fp inst?                       |       rs2 type| |     |  |  is_amo                  |        |  |  |  is sret
+            //     |  |  is dst single-prec?            |       |       | |     |  |  |  is_fence             |        |  |  |  |  is syscall
+            //     |  |  |  micro-code                  |       |       | |     |  |  |  |  is_fencei         |        |  |  |  |  |  is sbreak
+            //     |  |  |  |           func    dst     |       |       | |     |  |  |  |  |  mem    mem     |        |  |  |  |  |  |  is unique? (clear pipeline for it)
+            //     |  |  |  |           unit    regtype |       |       | |     |  |  |  |  |  cmd    msk     |        |  |  |  |  |  |  |  flush on commit
+            //     |  |  |  |           |       |       |       |       | |     |  |  |  |  |  |      |       |        |  |  |  |  |  |  |  |  csr cmd
+   FLW     -> List(Y, Y, Y, uopLD     , FU_MEM, RT_FLT, RT_FIX, RT_X  , N, IS_I, Y, N, N, N, N, M_XRD, MSK_W , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   FLD     -> List(Y, Y, N, uopLD     , FU_MEM, RT_FLT, RT_FIX, RT_X  , N, IS_I, Y, N, N, N, N, M_XRD, MSK_D , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   FSW     -> List(Y, Y, Y, uopSTA    , FU_MEM, RT_X  , RT_FIX, RT_FLT, N, IS_S, N, Y, N, N, N, M_XWR, MSK_W , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   FSD     -> List(Y, Y, N, uopSTA    , FU_MEM, RT_X  , RT_FIX, RT_FLT, N, IS_S, N, Y, N, N, N, M_XWR, MSK_D , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
 
    // TODO consolidate ctrl signals? tons of opc's here
    // not convinced "single-prec" is being used for the fmv
-   FCLASS_S-> List(Y, Y, Y, uopFCLASS_S,FU_FPU, RT_FIX, RT_FLT, RT_X  , IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
-   FCLASS_D-> List(Y, Y, N, uopFCLASS_D,FU_FPU, RT_FIX, RT_FLT, RT_X  , IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   FCLASS_S-> List(Y, Y, Y, uopFCLASS_S,FU_FPU, RT_FIX, RT_FLT, RT_X  , N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   FCLASS_D-> List(Y, Y, N, uopFCLASS_D,FU_FPU, RT_FIX, RT_FLT, RT_X  , N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
 
 
-   FMV_S_X -> List(Y, Y, Y, uopFMV_S_X, FU_FPU, RT_FLT, RT_FIX, RT_X  , IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
-   FMV_D_X -> List(Y, Y, N, uopFMV_D_X, FU_FPU, RT_FLT, RT_FIX, RT_X  , IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
-   FMV_X_S -> List(Y, Y, Y, uopFMV_X_S, FU_FPU, RT_FIX, RT_FLT, RT_X  , IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
-   FMV_X_D -> List(Y, Y, N, uopFMV_X_D, FU_FPU, RT_FIX, RT_FLT, RT_X  , IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   FMV_S_X -> List(Y, Y, Y, uopFMV_S_X, FU_FPU, RT_FLT, RT_FIX, RT_X  , N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   FMV_D_X -> List(Y, Y, N, uopFMV_D_X, FU_FPU, RT_FLT, RT_FIX, RT_X  , N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   FMV_X_S -> List(Y, Y, Y, uopFMV_X_S, FU_FPU, RT_FIX, RT_FLT, RT_X  , N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   FMV_X_D -> List(Y, Y, N, uopFMV_X_D, FU_FPU, RT_FIX, RT_FLT, RT_X  , N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
 
-   FSGNJ_S -> List(Y, Y, Y, uopFSGNJ_S, FU_FPU, RT_FLT, RT_FLT, RT_FLT, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
-   FSGNJ_D -> List(Y, Y, Y, uopFSGNJ_D, FU_FPU, RT_FLT, RT_FLT, RT_FLT, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
-   FSGNJX_S-> List(Y, Y, Y, uopFSGNJ_S, FU_FPU, RT_FLT, RT_FLT, RT_FLT, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
-   FSGNJX_D-> List(Y, Y, N, uopFSGNJ_D, FU_FPU, RT_FLT, RT_FLT, RT_FLT, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
-   FSGNJN_S-> List(Y, Y, N, uopFSGNJ_S, FU_FPU, RT_FLT, RT_FLT, RT_FLT, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
-   FSGNJN_D-> List(Y, Y, N, uopFSGNJ_D, FU_FPU, RT_FLT, RT_FLT, RT_FLT, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   FSGNJ_S -> List(Y, Y, Y, uopFSGNJ_S, FU_FPU, RT_FLT, RT_FLT, RT_FLT, N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   FSGNJ_D -> List(Y, Y, Y, uopFSGNJ_D, FU_FPU, RT_FLT, RT_FLT, RT_FLT, N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   FSGNJX_S-> List(Y, Y, Y, uopFSGNJ_S, FU_FPU, RT_FLT, RT_FLT, RT_FLT, N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   FSGNJX_D-> List(Y, Y, N, uopFSGNJ_D, FU_FPU, RT_FLT, RT_FLT, RT_FLT, N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   FSGNJN_S-> List(Y, Y, N, uopFSGNJ_S, FU_FPU, RT_FLT, RT_FLT, RT_FLT, N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   FSGNJN_D-> List(Y, Y, N, uopFSGNJ_D, FU_FPU, RT_FLT, RT_FLT, RT_FLT, N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
 
    // FP to FP
-   FCVT_S_D-> List(Y, Y, Y, uopFCVT_S_D,FU_FPU, RT_FLT, RT_FLT, RT_X  , IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
-   FCVT_D_S-> List(Y, Y, N, uopFCVT_D_S,FU_FPU, RT_FLT, RT_FLT, RT_X  , IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   FCVT_S_D-> List(Y, Y, Y, uopFCVT_S_D,FU_FPU, RT_FLT, RT_FLT, RT_X  , N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   FCVT_D_S-> List(Y, Y, N, uopFCVT_D_S,FU_FPU, RT_FLT, RT_FLT, RT_X  , N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
 
    //// Int to FP
-   FCVT_S_W-> List(Y, Y, Y, uopFCVT_S_W ,FU_FPU,RT_FLT, RT_FIX, RT_X  , IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
-   FCVT_S_WU->List(Y, Y, Y, uopFCVT_S_WU,FU_FPU,RT_FLT, RT_FIX, RT_X  , IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
-   FCVT_S_L-> List(Y, Y, Y, uopFCVT_S_L ,FU_FPU,RT_FLT, RT_FIX, RT_X  , IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
-   FCVT_S_LU->List(Y, Y, Y, uopFCVT_S_LU,FU_FPU,RT_FLT, RT_FIX, RT_X  , IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   FCVT_S_W-> List(Y, Y, Y, uopFCVT_S_W ,FU_FPU,RT_FLT, RT_FIX, RT_X  , N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   FCVT_S_WU->List(Y, Y, Y, uopFCVT_S_WU,FU_FPU,RT_FLT, RT_FIX, RT_X  , N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   FCVT_S_L-> List(Y, Y, Y, uopFCVT_S_L ,FU_FPU,RT_FLT, RT_FIX, RT_X  , N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   FCVT_S_LU->List(Y, Y, Y, uopFCVT_S_LU,FU_FPU,RT_FLT, RT_FIX, RT_X  , N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
 
-   FCVT_D_W-> List(Y, Y, N, uopFCVT_D_W ,FU_FPU,RT_FLT, RT_FIX, RT_X  , IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
-   FCVT_D_WU->List(Y, Y, N, uopFCVT_D_WU,FU_FPU,RT_FLT, RT_FIX, RT_X  , IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
-   FCVT_D_L-> List(Y, Y, N, uopFCVT_D_L ,FU_FPU,RT_FLT, RT_FIX, RT_X  , IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
-   FCVT_D_LU->List(Y, Y, N, uopFCVT_D_LU,FU_FPU,RT_FLT, RT_FIX, RT_X  , IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   FCVT_D_W-> List(Y, Y, N, uopFCVT_D_W ,FU_FPU,RT_FLT, RT_FIX, RT_X  , N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   FCVT_D_WU->List(Y, Y, N, uopFCVT_D_WU,FU_FPU,RT_FLT, RT_FIX, RT_X  , N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   FCVT_D_L-> List(Y, Y, N, uopFCVT_D_L ,FU_FPU,RT_FLT, RT_FIX, RT_X  , N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   FCVT_D_LU->List(Y, Y, N, uopFCVT_D_LU,FU_FPU,RT_FLT, RT_FIX, RT_X  , N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
 
    // FP to Int
-   FCVT_W_S-> List(Y, Y, Y, uopFCVT_W_S ,FU_FPU,RT_FIX, RT_FLT, RT_X  , IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
-   FCVT_WU_S->List(Y, Y, Y, uopFCVT_WU_S,FU_FPU,RT_FIX, RT_FLT, RT_X  , IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
-   FCVT_L_S-> List(Y, Y, Y, uopFCVT_L_S ,FU_FPU,RT_FIX, RT_FLT, RT_X  , IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
-   FCVT_LU_S->List(Y, Y, Y, uopFCVT_LU_S,FU_FPU,RT_FIX, RT_FLT, RT_X  , IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   FCVT_W_S-> List(Y, Y, Y, uopFCVT_W_S ,FU_FPU,RT_FIX, RT_FLT, RT_X  , N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   FCVT_WU_S->List(Y, Y, Y, uopFCVT_WU_S,FU_FPU,RT_FIX, RT_FLT, RT_X  , N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   FCVT_L_S-> List(Y, Y, Y, uopFCVT_L_S ,FU_FPU,RT_FIX, RT_FLT, RT_X  , N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   FCVT_LU_S->List(Y, Y, Y, uopFCVT_LU_S,FU_FPU,RT_FIX, RT_FLT, RT_X  , N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
 
-   FCVT_W_D-> List(Y, Y, N, uopFCVT_W_D ,FU_FPU,RT_FIX, RT_FLT, RT_X  , IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
-   FCVT_WU_D->List(Y, Y, N, uopFCVT_WU_D,FU_FPU,RT_FIX, RT_FLT, RT_X  , IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
-   FCVT_L_D-> List(Y, Y, N, uopFCVT_L_D ,FU_FPU,RT_FIX, RT_FLT, RT_X  , IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
-   FCVT_LU_D->List(Y, Y, N, uopFCVT_LU_D,FU_FPU,RT_FIX, RT_FLT, RT_X  , IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   FCVT_W_D-> List(Y, Y, N, uopFCVT_W_D ,FU_FPU,RT_FIX, RT_FLT, RT_X  , N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   FCVT_WU_D->List(Y, Y, N, uopFCVT_WU_D,FU_FPU,RT_FIX, RT_FLT, RT_X  , N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   FCVT_L_D-> List(Y, Y, N, uopFCVT_L_D ,FU_FPU,RT_FIX, RT_FLT, RT_X  , N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   FCVT_LU_D->List(Y, Y, N, uopFCVT_LU_D,FU_FPU,RT_FIX, RT_FLT, RT_X  , N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
 
    // "fp_single" is used for wb_data formatting
-   FEQ_S    ->List(Y, Y, Y, uopFEQ_S  , FU_FPU, RT_FIX, RT_FLT, RT_FLT, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
-   FLT_S    ->List(Y, Y, Y, uopFLT_S  , FU_FPU, RT_FIX, RT_FLT, RT_FLT, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
-   FLE_S    ->List(Y, Y, Y, uopFLE_S  , FU_FPU, RT_FIX, RT_FLT, RT_FLT, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
-   FEQ_D    ->List(Y, Y, N, uopFEQ_D  , FU_FPU, RT_FIX, RT_FLT, RT_FLT, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
-   FLT_D    ->List(Y, Y, N, uopFLT_D  , FU_FPU, RT_FIX, RT_FLT, RT_FLT, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
-   FLE_D    ->List(Y, Y, N, uopFLE_D  , FU_FPU, RT_FIX, RT_FLT, RT_FLT, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   FEQ_S    ->List(Y, Y, Y, uopFEQ_S  , FU_FPU, RT_FIX, RT_FLT, RT_FLT, N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   FLT_S    ->List(Y, Y, Y, uopFLT_S  , FU_FPU, RT_FIX, RT_FLT, RT_FLT, N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   FLE_S    ->List(Y, Y, Y, uopFLE_S  , FU_FPU, RT_FIX, RT_FLT, RT_FLT, N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   FEQ_D    ->List(Y, Y, N, uopFEQ_D  , FU_FPU, RT_FIX, RT_FLT, RT_FLT, N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   FLT_D    ->List(Y, Y, N, uopFLT_D  , FU_FPU, RT_FIX, RT_FLT, RT_FLT, N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   FLE_D    ->List(Y, Y, N, uopFLE_D  , FU_FPU, RT_FIX, RT_FLT, RT_FLT, N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
 
-   FMIN_S   ->List(Y, Y, Y, uopFMIN_S , FU_FPU, RT_FLT, RT_FLT, RT_FLT, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
-   FMAX_S   ->List(Y, Y, Y, uopFMAX_S , FU_FPU, RT_FLT, RT_FLT, RT_FLT, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
-   FMIN_D   ->List(Y, Y, N, uopFMIN_D , FU_FPU, RT_FLT, RT_FLT, RT_FLT, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
-   FMAX_D   ->List(Y, Y, N, uopFMAX_D , FU_FPU, RT_FLT, RT_FLT, RT_FLT, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   FMIN_S   ->List(Y, Y, Y, uopFMIN_S , FU_FPU, RT_FLT, RT_FLT, RT_FLT, N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   FMAX_S   ->List(Y, Y, Y, uopFMAX_S , FU_FPU, RT_FLT, RT_FLT, RT_FLT, N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   FMIN_D   ->List(Y, Y, N, uopFMIN_D , FU_FPU, RT_FLT, RT_FLT, RT_FLT, N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   FMAX_D   ->List(Y, Y, N, uopFMAX_D , FU_FPU, RT_FLT, RT_FLT, RT_FLT, N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
 
-   FADD_S   ->List(Y, Y, Y, uopFADD_S , FU_FPU, RT_FLT, RT_FLT, RT_FLT, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
-   FSUB_S   ->List(Y, Y, Y, uopFSUB_S , FU_FPU, RT_FLT, RT_FLT, RT_FLT, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
-   FMUL_S   ->List(Y, Y, Y, uopFMUL_S , FU_FPU, RT_FLT, RT_FLT, RT_FLT, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
-   FADD_D   ->List(Y, Y, N, uopFADD_D , FU_FPU, RT_FLT, RT_FLT, RT_FLT, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
-   FSUB_D   ->List(Y, Y, N, uopFSUB_D , FU_FPU, RT_FLT, RT_FLT, RT_FLT, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
-   FMUL_D   ->List(Y, Y, N, uopFMUL_D , FU_FPU, RT_FLT, RT_FLT, RT_FLT, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   FADD_S   ->List(Y, Y, Y, uopFADD_S , FU_FPU, RT_FLT, RT_FLT, RT_FLT, N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   FSUB_S   ->List(Y, Y, Y, uopFSUB_S , FU_FPU, RT_FLT, RT_FLT, RT_FLT, N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   FMUL_S   ->List(Y, Y, Y, uopFMUL_S , FU_FPU, RT_FLT, RT_FLT, RT_FLT, N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   FADD_D   ->List(Y, Y, N, uopFADD_D , FU_FPU, RT_FLT, RT_FLT, RT_FLT, N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   FSUB_D   ->List(Y, Y, N, uopFSUB_D , FU_FPU, RT_FLT, RT_FLT, RT_FLT, N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   FMUL_D   ->List(Y, Y, N, uopFMUL_D , FU_FPU, RT_FLT, RT_FLT, RT_FLT, N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
 
-   FMADD_S  ->List(Y, Y, Y, uopFMADD_S, FU_FPU, RT_FLT, RT_FLT, RT_FLT, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
-   FMSUB_S  ->List(Y, Y, Y, uopFMSUB_S, FU_FPU, RT_FLT, RT_FLT, RT_FLT, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
-   FNMADD_S ->List(Y, Y, Y, uopFNMADD_S,FU_FPU, RT_FLT, RT_FLT, RT_FLT, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
-   FNMSUB_S ->List(Y, Y, Y, uopFNMSUB_S,FU_FPU, RT_FLT, RT_FLT, RT_FLT, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
-   FMADD_D  ->List(Y, Y, N, uopFMADD_D, FU_FPU, RT_FLT, RT_FLT, RT_FLT, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
-   FMSUB_D  ->List(Y, Y, N, uopFMSUB_D, FU_FPU, RT_FLT, RT_FLT, RT_FLT, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
-   FNMADD_D ->List(Y, Y, N, uopFNMADD_D,FU_FPU, RT_FLT, RT_FLT, RT_FLT, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
-   FNMSUB_D ->List(Y, Y, N, uopFNMSUB_D,FU_FPU, RT_FLT, RT_FLT, RT_FLT, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N)
+   FMADD_S  ->List(Y, Y, Y, uopFMADD_S, FU_FPU, RT_FLT, RT_FLT, RT_FLT, Y, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   FMSUB_S  ->List(Y, Y, Y, uopFMSUB_S, FU_FPU, RT_FLT, RT_FLT, RT_FLT, Y, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   FNMADD_S ->List(Y, Y, Y, uopFNMADD_S,FU_FPU, RT_FLT, RT_FLT, RT_FLT, Y, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   FNMSUB_S ->List(Y, Y, Y, uopFNMSUB_S,FU_FPU, RT_FLT, RT_FLT, RT_FLT, Y, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   FMADD_D  ->List(Y, Y, N, uopFMADD_D, FU_FPU, RT_FLT, RT_FLT, RT_FLT, Y, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   FMSUB_D  ->List(Y, Y, N, uopFMSUB_D, FU_FPU, RT_FLT, RT_FLT, RT_FLT, Y, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   FNMADD_D ->List(Y, Y, N, uopFNMADD_D,FU_FPU, RT_FLT, RT_FLT, RT_FLT, Y, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N),
+   FNMSUB_D ->List(Y, Y, N, uopFNMSUB_D,FU_FPU, RT_FLT, RT_FLT, RT_FLT, Y, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, N, N, CSR.N)
 
    )
 }
@@ -267,7 +267,7 @@ class DecodeUnit() extends Module
                                  XDecode.default,
                                  decode_table)
 
-   val (cs_inst_val: Bool) :: (cs_fp_val: Bool)     :: (cs_fp_single: Bool) :: cs_uopc :: cs_fu_code :: cs_dst_type :: cs_rs1_type :: cs_rs2_type :: cs_imm_sel :: dec_cs0 = dec_csignals
+   val (cs_inst_val: Bool) :: (cs_fp_val: Bool)     :: (cs_fp_single: Bool) :: cs_uopc :: cs_fu_code :: cs_dst_type :: cs_rs1_type :: cs_rs2_type :: cs_frs3_en :: cs_imm_sel :: dec_cs0 = dec_csignals
    val (cs_is_load: Bool)  :: (cs_is_store: Bool)   :: (cs_is_amo: Bool)    :: (cs_is_fence: Bool)    :: (cs_is_fencei: Bool)   :: cs_mem_cmd :: cs_mem_typ :: dec_cs1 = dec_cs0
    val cs_wakeup_delay     :: (cs_bypassable: Bool) :: (cs_br_or_jmp: Bool) :: (cs_is_jal: Bool)      :: dec_cs2 = dec_cs1
    val (cs_sret: Bool)     :: (cs_syscall: Bool)    :: (cs_sbreak: Bool)    :: (cs_inst_unique: Bool) :: (cs_flush_on_commit: Bool) :: cs_csr_cmd :: Nil = dec_cs2
@@ -351,11 +351,13 @@ class DecodeUnit() extends Module
    uop.ldst       := Cat(cs_dst_type === RT_FLT, uop.inst(RD_MSB,RD_LSB))
    uop.lrs1       := Cat(cs_rs1_type === RT_FLT, uop.inst(RS1_MSB,RS1_LSB))
    uop.lrs2       := Cat(cs_rs2_type === RT_FLT, uop.inst(RS2_MSB,RS2_LSB))
+   uop.lrs3       := Cat(Bool(true),             uop.inst(RS3_MSB,RS3_LSB)) // TODO do I need to remove this for integer-only?
 
    uop.ldst_val   := (cs_dst_type != RT_X && (uop.ldst != UInt(0)))
    uop.dst_rtype  := cs_dst_type
    uop.lrs1_rtype := cs_rs1_type
    uop.lrs2_rtype := cs_rs2_type
+   uop.frs3_en    := cs_frs3_en
 
    uop.fp_val     := cs_fp_val
    uop.fp_single  := cs_fp_single

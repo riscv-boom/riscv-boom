@@ -136,9 +136,11 @@ class MicroOp extends BOOMCoreBundle
    val pdst             = UInt(width = PREG_SZ)
    val pop1             = UInt(width = PREG_SZ)
    val pop2             = UInt(width = PREG_SZ)
+   val pop3             = UInt(width = PREG_SZ)
 
    val prs1_busy        = Bool()
    val prs2_busy        = Bool()
+   val prs3_busy        = Bool()
    val stale_pdst       = UInt(width = PREG_SZ)
    val exception        = Bool()
    val exc_cause        = UInt(width = xprLen)
@@ -159,10 +161,12 @@ class MicroOp extends BOOMCoreBundle
    val ldst             = UInt(width=LREG_SZ)
    val lrs1             = UInt(width=LREG_SZ)
    val lrs2             = UInt(width=LREG_SZ)
+   val lrs3             = UInt(width=LREG_SZ)
    val ldst_val         = Bool()              // is there a destination? invalid for stores, rd==x0, etc. TODO is there anytime the destination is pass through?
    val dst_rtype        = UInt(width=2)
    val lrs1_rtype       = UInt(width=2)
    val lrs2_rtype       = UInt(width=2)
+   val frs3_en          = Bool()
 
    // floating point information
    val fp_val           = Bool()             // is a floating-point instruction? If it's non-ld/st it will write back exception bits to the fcsr
@@ -298,12 +302,13 @@ class DatPath() extends Module with BOOMCoreParameters
       var mem_unit:ExecutionUnit  = null
       if (params(BuildFPU).isEmpty)
       {
-         println ("   FPU Unit Enabled\n")
+         println ("\n   FPU Unit Disabled\n")
          mem_unit = Module(new ALUMulDMemExeUnit(is_branch_unit = true,
                                           shares_pcr_wport = true))
       }
       else
       {
+         println ("\n   FPU Unit Enabled\n")
          mem_unit = Module(new FPUALUMulDMemExeUnit(is_branch_unit = true,
                                           shares_pcr_wport = true))
       }
@@ -334,7 +339,7 @@ class DatPath() extends Module with BOOMCoreParameters
       exe_units += mem_unit
    }
 
-   val num_rf_read_ports = 2*exe_units.length
+   val num_rf_read_ports = 3*exe_units.length // TODO BUG XXX correct this logic
 
    var num_rf_write_ports = 0
    var num_total_bypass_ports = 0
@@ -359,7 +364,7 @@ class DatPath() extends Module with BOOMCoreParameters
    }
 
    val num_wakeup_ports = num_slow_wakeup_ports + num_fast_wakeup_ports
-   val rf_cost = (num_rf_read_ports+num_rf_write_ports)*(num_rf_read_ports+2*num_rf_write_ports)
+   val rf_cost = (num_rf_read_ports+num_rf_write_ports)*(num_rf_read_ports+2*num_rf_write_ports) // TODO this number is wrong
 
    println("   Num RF Read Ports    : " + num_rf_read_ports)
    println("   Num RF Write Ports   : " + num_rf_write_ports + "\n")
@@ -1467,10 +1472,11 @@ class DatPath() extends Module with BOOMCoreParameters
 
       for (w <- 0 until DECODE_WIDTH)
       {
-         printf("  [ISA:%d,%d,%d] [Phs:%d(%s)%d[%s](%s)%d[%s](%s)] "
+         printf("  [ISA:%d,%d,%d,%d] [Phs:%d(%s)%d[%s](%s)%d[%s](%s)%d[%s](%s)] "
             , dec_uops(w).ldst
             , dec_uops(w).lrs1
             , dec_uops(w).lrs2
+            , dec_uops(w).lrs3
             , dis_uops(w).pdst
             , Mux(dec_uops(w).dst_rtype   === RT_FIX, Str("X")
               , Mux(dec_uops(w).dst_rtype === RT_X  , Str("-")
@@ -1488,6 +1494,9 @@ class DatPath() extends Module with BOOMCoreParameters
                , Mux(dec_uops(w).lrs2_rtype === RT_X  , Str("-")
                , Mux(dec_uops(w).lrs2_rtype === RT_FLT, Str("f")
                , Mux(dec_uops(w).lrs2_rtype === RT_PAS, Str("C"), Str("?")))))
+            , dis_uops(w).pop3
+            , Mux(rename_stage.io.ren_uops(w).prs3_busy, Str("B"), Str("R"))
+            , Mux(dec_uops(w).frs3_en, Str("f"), Str("-"))
             )
       }
 
@@ -1519,15 +1528,17 @@ class DatPath() extends Module with BOOMCoreParameters
       // Issue Window
       for (i <- 0 until INTEGER_ISSUE_SLOT_COUNT)
       {
-         printf("  integer_issue_slot[%d](%s)(Req:%s):wen=%s P:(%s,%s) OP:(%d,%d) PDST:%d %s [%s[DASM(%x)]"+end+" 0x%x: %d] ri:%d bm=%d imm=0x%x\n"
+         printf("  integer_issue_slot[%d](%s)(Req:%s):wen=%s P:(%s,%s,%s) OP:(%d,%d,%d) PDST:%d %s [%s[DASM(%x)]"+end+" 0x%x: %d] ri:%d bm=%d imm=0x%x\n"
             , UInt(i, log2Up(INTEGER_ISSUE_SLOT_COUNT))
             , Mux(issue_unit.io.debug.slot(i).valid, Str("V"), Str("-"))
             , Mux(issue_unit.io.debug.slot(i).request, Str(u_red + "R" + end), Str(grn + "-" + end))
             , Mux(issue_unit.io.debug.slot(i).in_wen, Str(u_wht + "W" + end),  Str(grn + " " + end))
             , Mux(issue_unit.io.debug.slot(i).p1, Str("!"), Str(" "))
             , Mux(issue_unit.io.debug.slot(i).p2, Str("!"), Str(" "))
+            , Mux(issue_unit.io.debug.slot(i).p3, Str("!"), Str(" "))
             , issue_unit.io.debug.slot(i).uop.pop1
             , issue_unit.io.debug.slot(i).uop.pop2
+            , issue_unit.io.debug.slot(i).uop.pop3
             , issue_unit.io.debug.slot(i).uop.pdst
             , Mux(issue_unit.io.debug.slot(i).uop.dst_rtype === RT_FIX, Str("X"),
               Mux(issue_unit.io.debug.slot(i).uop.dst_rtype === RT_X, Str("-"),

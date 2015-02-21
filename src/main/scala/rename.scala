@@ -13,6 +13,7 @@ import Chisel._
 import Node._
 
 import scala.collection.mutable.ArrayBuffer
+import rocket.BuildFPU
 
 //-------------------------------------------------------------
 //-------------------------------------------------------------
@@ -217,17 +218,17 @@ class RenameFreeList(num_phys_registers: Int // number of physical registers
    for (w <- 0 until pl_width)
    {
       requested_pregs_oh(w) := Vec(requested_pregs_oh_array(w)).toBits
-      requested_pregs(w) := OHToUInt(requested_pregs_oh(w))
 
-      // TODO use OHToUInt here
-      //requested_pregs(w) := UInt(0)
-      //for (i <- 0 until num_phys_registers)
-      //{
-      //   when (requested_pregs_oh(w)(i))
-      //   {
-      //      requested_pregs(w) := UInt(i)
-      //   }
-      //}
+      // TODO use OHToUInt here once it's been fixed in Chisel (Issue #372)
+//      requested_pregs(w) := OHToUInt(requested_pregs_oh(w))
+      requested_pregs(w) := UInt(0)
+      for (i <- 0 until num_phys_registers)
+      {
+         when (requested_pregs_oh(w)(i))
+         {
+            requested_pregs(w) := UInt(i)
+         }
+      }
    }
 
 
@@ -354,94 +355,69 @@ class RenameFreeList(num_phys_registers: Int // number of physical registers
 //-------------------------------------------------------------
 //-------------------------------------------------------------
 
-class BTReadPortIn extends BOOMCoreBundle
-{
-   val prs1        = UInt(width = PREG_SZ)
-   val prs2        = UInt(width = PREG_SZ)
-}
-class BTReadPortOut extends Bundle
-{
-   val prs1_busy   = Bool()
-   val prs2_busy   = Bool()
-}
-
-class BTWritePort extends BOOMCoreBundle
-{
-   // "New" PReg, which is being dispatched and thus will be busy
-   val valid   = Bool()
-   val pdst    = UInt(PREG_SZ)
-//   val new_br_mask = Bits(MAX_BR_COUNT) TODO do I need to handle clearing/resetting on speculative instructions?
-}
-
 // internally bypasses newly busy registers (.write) to the read ports (.read)
-class BusyTableIo(pipeline_width: Int, num_wb_ports: Int) extends BOOMCoreBundle
+// num_operands is the maximum number of operands per instruction (.e.g., 2 normally, but 3 if FMAs are supported)
+class BusyTableIo(pipeline_width:Int, num_read_ports:Int, num_wb_ports:Int) extends BOOMCoreBundle
 {
    // reading out the busy bits
-   val read_in  = Vec.fill(pipeline_width) { new BTReadPortIn().asInput }
-   val read_out = Vec.fill(pipeline_width) { new BTReadPortOut().asOutput }
+   val p_rs           = Vec.fill(num_read_ports) {UInt(INPUT, width=PREG_SZ)}
+   val p_rs_busy      = Vec.fill(num_read_ports) {Bool(OUTPUT)}
 
-   // marking new registers as being busy
-   val write_valid = Vec.fill(pipeline_width) { Bool(INPUT) }
-   val write_pdst  = Vec.fill(pipeline_width) { UInt(INPUT, PREG_SZ) }
+   def prs(i:Int, w:Int)      = p_rs     (w+i*pipeline_width)
+   def prs_busy(i:Int, w:Int) = p_rs_busy(w+i*pipeline_width)
 
-   // "Old" PReg, which is being written back, and thus will be !Busy
-   val old_valids  = Vec.fill(num_wb_ports) { Bool().asInput }
-   val old_pdsts = Vec.fill(num_wb_ports) { UInt(width = PREG_SZ).asInput }
+   // marking new registers as busy
+   val allocated_pdst = Vec.fill(pipeline_width) {(new ValidIO(UInt(width=PREG_SZ))).flip}
 
-   // TODO remove constant from here, pass in as an argument
-   val debug = new BOOMCoreBundle
-   {
-      val bsy_table= UInt(OUTPUT, width=PHYS_REG_COUNT)
-   }
+   // marking registers being written back as unbusy
+   val unbusy_pdst    = Vec.fill(num_wb_ports) {(new ValidIO(UInt(width = PREG_SZ))).flip}
+
+   val debug = new BOOMCoreBundle{val bsy_table= Bits(OUTPUT, width=PHYS_REG_COUNT)}
 }
 
 // Register P0 is always NOT_BUSY, and cannot be set to BUSY
 // Note: I do NOT bypass from newly busied registers to the read ports.
 // That bypass check should be done elsewhere (this is to get it off the
 // critical path).
-class BusyTable(pipeline_width: Int, num_wb_ports: Int) extends Module with BOOMCoreParameters
+// Max_operands 
+class BusyTable(pipeline_width:Int, num_read_ports:Int, num_wb_ports:Int) extends Module with BOOMCoreParameters
 {
-   val io = new BusyTableIo(pipeline_width, num_wb_ports)
+   val io = new BusyTableIo(pipeline_width, num_read_ports, num_wb_ports)
 
    def BUSY     = Bool(true)
    def NOT_BUSY = Bool(false)
 
-   val table_bsy = Reg(init=UInt(0,PHYS_REG_COUNT))
+   val table_bsy = Reg(init=Bits(0,PHYS_REG_COUNT))
 
-   // write ports unbusy-ing registers TODO come up with better name than "old_*"
-   // TODO need to get rid of so many write ports
    for (wb_idx <- 0 until num_wb_ports)
    {
-      when (io.old_valids(wb_idx))
+      when (io.unbusy_pdst(wb_idx).valid)
       {
-         table_bsy(io.old_pdsts(wb_idx)) := NOT_BUSY
+         table_bsy(io.unbusy_pdst(wb_idx).bits) := NOT_BUSY
       }
    }
 
    for (w <- 0 until pipeline_width)
    {
-      when (io.write_valid(w) && io.write_pdst(w) != UInt(0))
+      when (io.allocated_pdst(w).valid && io.allocated_pdst(w).bits != UInt(0))
       {
-         table_bsy(io.write_pdst(w)) := BUSY
+         table_bsy(io.allocated_pdst(w).bits) := BUSY
       }
    }
 
 
-   for (w <- 0 until pipeline_width)
+   // handle bypassing a clearing of the busy-bit
+   for (ridx <- 0 until num_read_ports)
    {
-      // handle bypassing a clearing of the busy-bit
-      var prs1_just_cleared = Bool(false)
-      var prs2_just_cleared = Bool(false)
-
-      for (i <- 0 until num_wb_ports)
-      {
-         prs1_just_cleared = (io.old_valids(i) && (io.old_pdsts(i) === io.read_in(w).prs1)) | prs1_just_cleared
-         prs2_just_cleared = (io.old_valids(i) && (io.old_pdsts(i) === io.read_in(w).prs2)) | prs2_just_cleared
-      }
+      val just_cleared = io.unbusy_pdst.map(p => p.valid && (p.bits === io.p_rs(ridx))).reduce(_|_)
+//      var just_cleared = Bool(false)
+//      for (i <- 0 until num_wb_ports)
+//      {
+//         just_cleared = (io.unbusy_pdst(i).valid && (io.unbusy_pdst(i).bits === io.p_rs(ridx))) | just_cleared
+//      }
 
       // note: no bypassing of the newly busied (that is done outside this module)
-      io.read_out(w).prs1_busy := (table_bsy(io.read_in(w).prs1) && !prs1_just_cleared)
-      io.read_out(w).prs2_busy := (table_bsy(io.read_in(w).prs2) && !prs2_just_cleared)
+      io.p_rs_busy(ridx) := (table_bsy(io.p_rs(ridx)) && !just_cleared)
    }
 
    // debug
@@ -502,6 +478,8 @@ class RenameStage(pl_width: Int, num_wb_ports: Int) extends Module with BOOMCore
 
    val ren_br_vals = Vec.fill(pl_width) { Bool() }
    val freelist_can_allocate = Vec.fill(pl_width) { Bool() }
+
+   val max_operands = if(params(BuildFPU).isEmpty) 2 else 3
 
    //-------------------------------------------------------------
    // Set outputs up... we'll write in the pop*/pdst info below
@@ -577,26 +555,36 @@ class RenameStage(pl_width: Int, num_wb_ports: Int) extends Module with BOOMCore
       }
    }
 
-   // read out the map-table entries ASAP, then deal with bypassing busy-bits and actually prs1/prs2 later
-   val map_table_output = Vec.fill(pl_width) {new Bundle{val prs1=UInt(); val prs2=UInt();}}
+   // read out the map-table entries ASAP, then deal with bypassing busy-bits later
+   private val map_table_output = Vec.fill(pl_width*max_operands) {UInt(width=PREG_SZ)}
+   def map_table_prs1(w:Int) = map_table_output(w+0*pl_width)
+   def map_table_prs2(w:Int) = map_table_output(w+1*pl_width)
+   def map_table_prs3(w:Int) = map_table_output(w+2*pl_width)
+
+
    for (w <- 0 until pl_width)
    {
-      map_table_output(w).prs1 := map_table_io(io.ren_uops(w).lrs1).element
-      map_table_output(w).prs2 := map_table_io(io.ren_uops(w).lrs2).element
+      map_table_prs1(w) := map_table_io(io.ren_uops(w).lrs1).element
+      map_table_prs2(w) := map_table_io(io.ren_uops(w).lrs2).element
+      if (max_operands > 2) 
+         map_table_prs3(w) := map_table_io(io.ren_uops(w).lrs3).element
    }
 
    // Bypass the physical register mappings
    val prs1_was_bypassed = Vec.fill(pl_width) {Bool()}
    val prs2_was_bypassed = Vec.fill(pl_width) {Bool()}
+   val prs3_was_bypassed = Vec.fill(pl_width) {Bool()}
 
    for (w <- 0 until pl_width)
    {
       var rs1_cases =  Array((Bool(false),  UInt(0,PREG_SZ)))
       var rs2_cases =  Array((Bool(false),  UInt(0,PREG_SZ)))
+      var rs3_cases =  Array((Bool(false),  UInt(0,PREG_SZ)))
       var stale_cases= Array((Bool(false),  UInt(0,PREG_SZ)))
 
       prs1_was_bypassed(w) := Bool(false)
       prs2_was_bypassed(w) := Bool(false)
+      prs3_was_bypassed(w) := Bool(false)
 
       // Handle bypassing new physical destinations to operands (and stale destination)
       for (xx <- 0 until w)
@@ -605,61 +593,74 @@ class RenameStage(pl_width: Int, num_wb_ports: Int) extends Module with BOOMCore
                            io.ren_uops(w).lrs1_rtype === RT_FLT) && io.ren_mask(xx) && io.ren_uops(xx).ldst_val && (io.ren_uops(w).lrs1 === io.ren_uops(xx).ldst), (io.ren_uops(xx).pdst)))
          rs2_cases  ++= Array(((io.ren_uops(w).lrs2_rtype === RT_FIX ||
                            io.ren_uops(w).lrs2_rtype === RT_FLT) && io.ren_mask(xx) && io.ren_uops(xx).ldst_val && (io.ren_uops(w).lrs2 === io.ren_uops(xx).ldst), (io.ren_uops(xx).pdst)))
-         stale_cases++= Array(( io.ren_uops(w).ldst_val               && io.ren_mask(xx) && io.ren_uops(xx).ldst_val && (io.ren_uops(w).ldst === io.ren_uops(xx).ldst), (io.ren_uops(xx).pdst)))
+         rs3_cases  ++= Array((io.ren_uops(w).frs3_en            && io.ren_mask(xx) && io.ren_uops(xx).ldst_val && (io.ren_uops(w).lrs3 === io.ren_uops(xx).ldst), (io.ren_uops(xx).pdst)))
+         stale_cases++= Array(( io.ren_uops(w).ldst_val          && io.ren_mask(xx) && io.ren_uops(xx).ldst_val && (io.ren_uops(w).ldst === io.ren_uops(xx).ldst), (io.ren_uops(xx).pdst)))
 
          when ((io.ren_uops(w).lrs1_rtype === RT_FIX || io.ren_uops(w).lrs1_rtype === RT_FLT) && io.ren_mask(xx) && io.ren_uops(xx).ldst_val && (io.ren_uops(w).lrs1 === io.ren_uops(xx).ldst))
             { prs1_was_bypassed(w) := Bool(true) }
          when ((io.ren_uops(w).lrs2_rtype === RT_FIX || io.ren_uops(w).lrs2_rtype === RT_FLT) && io.ren_mask(xx) && io.ren_uops(xx).ldst_val && (io.ren_uops(w).lrs2 === io.ren_uops(xx).ldst))
             { prs2_was_bypassed(w) := Bool(true) }
+         when (io.ren_uops(w).frs3_en                                                         && io.ren_mask(xx) && io.ren_uops(xx).ldst_val && (io.ren_uops(w).lrs3 === io.ren_uops(xx).ldst))
+            { prs3_was_bypassed(w) := Bool(true) }
       }
 
       // add default case where we can just read the map table for our information
-      rs1_cases   ++= Array(((io.ren_uops(w).lrs1_rtype === RT_FIX || io.ren_uops(w).lrs1_rtype === RT_FLT) && (io.ren_uops(w).lrs1 != UInt(0)), map_table_output(w).prs1))
-      rs2_cases   ++= Array(((io.ren_uops(w).lrs2_rtype === RT_FIX || io.ren_uops(w).lrs2_rtype === RT_FLT) && (io.ren_uops(w).lrs2 != UInt(0)), map_table_output(w).prs2))
+      rs1_cases   ++= Array(((io.ren_uops(w).lrs1_rtype === RT_FIX || io.ren_uops(w).lrs1_rtype === RT_FLT) && (io.ren_uops(w).lrs1 != UInt(0)), map_table_prs1(w)))
+      rs2_cases   ++= Array(((io.ren_uops(w).lrs2_rtype === RT_FIX || io.ren_uops(w).lrs2_rtype === RT_FLT) && (io.ren_uops(w).lrs2 != UInt(0)), map_table_prs2(w)))
+      rs3_cases   ++= Array((io.ren_uops(w).frs3_en  && (io.ren_uops(w).lrs3 != UInt(0)), map_table_prs3(w)))
 
-      io.ren_uops(w).pop1       := MuxCase(io.ren_uops(w).lrs1, rs1_cases)
-      io.ren_uops(w).pop2       := MuxCase(io.ren_uops(w).lrs2, rs2_cases)
-      io.ren_uops(w).stale_pdst := MuxCase(map_table_io(io.ren_uops(w).ldst).element, stale_cases)
+      io.ren_uops(w).pop1                       := MuxCase(io.ren_uops(w).lrs1, rs1_cases)
+      io.ren_uops(w).pop2                       := MuxCase(io.ren_uops(w).lrs2, rs2_cases)
+      if (max_operands > 2){io.ren_uops(w).pop3 := MuxCase(io.ren_uops(w).lrs3, rs3_cases)}
+      io.ren_uops(w).stale_pdst                 := MuxCase(map_table_io(io.ren_uops(w).ldst).element, stale_cases)
+
    }
 
 
    //-------------------------------------------------------------
    // Busy Table
 
-   val freelist_req_pregs = Vec.fill(pl_width) { UInt(width = PREG_SZ) }
+   val freelist_req_pregs = Vec.fill(pl_width) {UInt(width=PREG_SZ)}
 
    // 3 WB ports for now
    // 1st is back-to-back bypassable ALU ops
    // 2nd is memory/muldiv
    // TODO 3rd is ALU ops that aren't bypassable... can maybe remove this? or set TTL countdown on 1st port?
    // TODO optimize - too many write ports, but how to deal with that? (slow + fast...)
-   val bsy_table = Module(new BusyTable(pipeline_width = pl_width, num_wb_ports = num_wb_ports))
+   val bsy_table = Module(new BusyTable(pipeline_width=pl_width, num_read_ports = pl_width*max_operands, num_wb_ports=num_wb_ports))
 
       for (w <- 0 until pl_width)
       {
          // Reading the Busy Bits
          // for critical path reasons, we speculatively read out the busy-bits assuming no dependencies between uops
          // then verify if the uop actually uses a register and if it depends on a newly unfreed register
-         bsy_table.io.read_in(w).prs1  := map_table_output(w).prs1
-         bsy_table.io.read_in(w).prs2  := map_table_output(w).prs2
+         bsy_table.io.prs(0,w) := map_table_prs1(w)
+         bsy_table.io.prs(1,w) := map_table_prs2(w)
 
-         io.ren_uops(w).prs1_busy := (io.ren_uops(w).lrs1_rtype === RT_FIX || io.ren_uops(w).lrs1_rtype === RT_FLT) &&
-                                       (bsy_table.io.read_out(w).prs1_busy || prs1_was_bypassed(w))
-         io.ren_uops(w).prs2_busy := (io.ren_uops(w).lrs2_rtype === RT_FIX || io.ren_uops(w).lrs2_rtype === RT_FLT) &&
-                                       (bsy_table.io.read_out(w).prs2_busy || prs2_was_bypassed(w))
+         io.ren_uops(w).prs1_busy := (io.ren_uops(w).lrs1_rtype === RT_FIX || io.ren_uops(w).lrs1_rtype === RT_FLT) && (bsy_table.io.prs_busy(0,w) || prs1_was_bypassed(w))
+         io.ren_uops(w).prs2_busy := (io.ren_uops(w).lrs2_rtype === RT_FIX || io.ren_uops(w).lrs2_rtype === RT_FLT) && (bsy_table.io.prs_busy(1,w) || prs2_was_bypassed(w))
+         
+         if (max_operands > 2)
+         {
+            bsy_table.io.prs(2,w) := map_table_prs3(w)
+            io.ren_uops(w).prs3_busy := (io.ren_uops(w).frs3_en) && (bsy_table.io.prs_busy(2,w) || prs3_was_bypassed(w))
+         }
 
 
           // Updating the Table (new busy register)
-         bsy_table.io.write_valid(w) := freelist_can_allocate(w) &&
-                                        io.ren_mask(w) &&
-                                        io.ren_uops(w).ldst_val &&
-                                        (io.ren_uops(w).dst_rtype === RT_FIX || io.ren_uops(w).dst_rtype === RT_FLT)
-         bsy_table.io.write_pdst(w) := freelist_req_pregs(w)
+         bsy_table.io.allocated_pdst(w).valid := freelist_can_allocate(w) &&
+                                                  io.ren_mask(w) &&
+                                                  io.ren_uops(w).ldst_val &&
+                                                  (io.ren_uops(w).dst_rtype === RT_FIX || io.ren_uops(w).dst_rtype === RT_FLT)
+         bsy_table.io.allocated_pdst(w).bits  := freelist_req_pregs(w)
       }
 
       // Clear Busy-bit
-      bsy_table.io.old_valids := io.wb_valids
-      bsy_table.io.old_pdsts := io.wb_pdsts
+      for (i <- 0 until num_wb_ports)
+      {
+         bsy_table.io.unbusy_pdst(i).valid := io.wb_valids(i)
+         bsy_table.io.unbusy_pdst(i).bits  := io.wb_pdsts(i)
+      }
 
 
    //-------------------------------------------------------------
@@ -719,8 +720,9 @@ class RenameStage(pl_width: Int, num_wb_ports: Int) extends Module with BOOMCore
    for (w <- 0 until pl_width)
    {
       // TODO REFACTOR, make == rt_x?
-      io.inst_can_proceed(w) := ((freelist.io.can_allocate(w) && (io.ren_uops(w).dst_rtype === RT_FIX || io.ren_uops(w).dst_rtype === RT_FLT)) ||
-                                    (io.ren_uops(w).dst_rtype != RT_FIX && io.ren_uops(w).dst_rtype != RT_FLT)) && io.dis_inst_can_proceed(w)
+      io.inst_can_proceed(w) := (freelist.io.can_allocate(w) ||
+                                 (io.ren_uops(w).dst_rtype != RT_FIX && io.ren_uops(w).dst_rtype != RT_FLT)) && 
+                                io.dis_inst_can_proceed(w)
    }
 
 

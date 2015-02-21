@@ -42,6 +42,7 @@ class IntegerIssueSlotIo(num_wakeup_ports: Int) extends BOOMCoreBundle
    val debug = new Bundle { 
       val p1 = Bool()
       val p2 = Bool()
+      val p3 = Bool()
    }.asOutput
 }
 
@@ -51,10 +52,12 @@ class IntegerIssueSlot(num_slow_wakeup_ports: Int) extends Module with BOOMCoreP
 
    val next_p1 = Bool()
    val next_p2 = Bool()
+   val next_p3 = Bool()
 
    val slot_valid    = Reg(init = Bool(false))
    val slot_p1       = Reg(init = Bool(false), next = next_p1)
    val slot_p2       = Reg(init = Bool(false), next = next_p2)
+   val slot_p3       = Reg(init = Bool(false), next = next_p3)
 
    val slotUop = Reg(init = NullMicroOp) 
    
@@ -89,11 +92,13 @@ class IntegerIssueSlot(num_slow_wakeup_ports: Int) extends Module with BOOMCoreP
    // Wakeup Compare Logic
    next_p1 := Bool(false)
    next_p2 := Bool(false)
+   next_p3 := Bool(false)
    
    when (io.in_wen)
    {
       next_p1 := !(io.inUop.prs1_busy)
       next_p2 := !(io.inUop.prs2_busy)
+      next_p3 := !(io.inUop.prs3_busy)
 
       // only for stores for now..
       when (io.inUop.uopc === uopSTA || io.inUop.uopc === uopAMO_AG)
@@ -113,6 +118,7 @@ class IntegerIssueSlot(num_slow_wakeup_ports: Int) extends Module with BOOMCoreP
       // slot is valid...
       next_p1 := slot_p1 
       next_p2 := slot_p2 
+      next_p3 := slot_p3 
 
       for (i <- 0 until num_slow_wakeup_ports)
       {
@@ -123,6 +129,10 @@ class IntegerIssueSlot(num_slow_wakeup_ports: Int) extends Module with BOOMCoreP
          when (io.wakeup_vals(i) && (io.wakeup_dsts(i) === slotUop.pop2))
          {
             next_p2 := Bool(true)
+         }
+         when (io.wakeup_vals(i) && (io.wakeup_dsts(i) === slotUop.pop3))
+         {
+            next_p3 := Bool(true)
          }
       }
    }
@@ -159,7 +169,7 @@ class IntegerIssueSlot(num_slow_wakeup_ports: Int) extends Module with BOOMCoreP
 
    //------------------------------------------------------------- 
    // Request Logic
-   io.request    := slot_valid && slot_p1 && slot_p2 && !io.kill 
+   io.request    := slot_valid && slot_p1 && slot_p2 && slot_p3 && !io.kill 
    io.request_hp := io.request && high_priority
    
    //assign outputs
@@ -169,6 +179,7 @@ class IntegerIssueSlot(num_slow_wakeup_ports: Int) extends Module with BOOMCoreP
    // debug outputs
    io.debug.p1 := slot_p1
    io.debug.p2 := slot_p2
+   io.debug.p3 := slot_p3
 }
 
 //-------------------------------------------------------------
@@ -207,6 +218,7 @@ class IssueUnitIO(issue_width: Int, num_wakeup_ports: Int) extends BOOMCoreBundl
          val in_wen  = Bool()
          val p1      = Bool()
          val p2      = Bool()
+         val p3      = Bool()
       }}
    }.asOutput
 }
@@ -222,6 +234,7 @@ class IssueUnit(issue_width: Int, num_wakeup_ports: Int) extends Module with BOO
    nullUop.pdst := UInt(0) // TODO what do I need here? maybe not this one.
    nullUop.pop1 := UInt(0)
    nullUop.pop2 := UInt(0)
+   nullUop.pop3 := UInt(0)
    nullUop.dst_rtype := RT_X
    nullUop.lrs1_rtype := RT_X
    nullUop.lrs2_rtype := RT_X
@@ -404,6 +417,7 @@ class IssueUnit(issue_width: Int, num_wakeup_ports: Int) extends Module with BOO
       
       io.debug.slot(i).p1 := issue_slot_io(i).debug.p1
       io.debug.slot(i).p2 := issue_slot_io(i).debug.p2
+      io.debug.slot(i).p3 := issue_slot_io(i).debug.p3
    }
    
 

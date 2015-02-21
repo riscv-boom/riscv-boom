@@ -72,8 +72,10 @@ class FunctionalUnitIo(num_stages: Int
 class FuncUnitReq(data_width: Int) extends BOOMCoreBundle
 {
    val uop = new MicroOp()
+   // TODO make rs_data a Vec
    val rs1_data = Bits(width = data_width)
    val rs2_data = Bits(width = data_width)
+   val rs3_data = Bits(width = data_width) // only used for FMA units
 
    val kill = Bool() // kill everything
 
@@ -488,6 +490,7 @@ class FPUUnit extends PipelinedFunctionalUnit(num_stages = 3
    fpu.io.uop     := io.req.bits.uop
    fpu.io.in1     := io.req.bits.rs1_data
    fpu.io.in2     := io.req.bits.rs2_data
+   fpu.io.in3     := io.req.bits.rs3_data
    fpu.io.fcsr_rm := io.fcsr_rm
 
 
