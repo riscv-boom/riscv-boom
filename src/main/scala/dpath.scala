@@ -785,7 +785,7 @@ class DatPath() extends Module with BOOMCoreParameters
       {
          rename_stage.io.wb_valids(wu_idx) := exe_units(i).io.resp(j).valid &&
                                               exe_units(i).io.resp(j).bits.uop.ctrl.rf_wen &&       // TODO? is rf_wen redudant?!
-//                                              !exe_units(i).io.resp(j).bits.uop.bypassable &&       TODO BUG XXX add this line in
+                                              !exe_units(i).io.resp(j).bits.uop.bypassable &&
                                               (exe_units(i).io.resp(j).bits.uop.dst_rtype === RT_FIX ||
                                                  exe_units(i).io.resp(j).bits.uop.dst_rtype === RT_FLT)
          rename_stage.io.wb_pdsts(wu_idx)  := exe_units(i).io.resp(j).bits.uop.pdst
@@ -869,7 +869,7 @@ class DatPath() extends Module with BOOMCoreParameters
       {
          issue_unit.io.wakeup_vals(wu_idx)  := exe_units(i).io.resp(j).valid &&
                                                exe_units(i).io.resp(j).bits.uop.ctrl.rf_wen && // TODO get rid of other rtype checks
-                                               // TODO BUG XXX only check for !bypassable
+                                               !exe_units(i).io.resp(j).bits.uop.bypassable &&
                                                (exe_units(i).io.resp(j).bits.uop.dst_rtype === RT_FIX || exe_units(i).io.resp(j).bits.uop.dst_rtype === RT_FLT)
          issue_unit.io.wakeup_pdsts(wu_idx) := exe_units(i).io.resp(j).bits.uop.pdst
          wu_idx += 1
