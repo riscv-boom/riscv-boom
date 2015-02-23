@@ -169,8 +169,8 @@ class MicroOp extends BOOMCoreBundle
    val frs3_en          = Bool()
 
    // floating point information
-   val fp_val           = Bool()             // is a floating-point instruction? If it's non-ld/st it will write back exception bits to the fcsr
-   val fp_single        = Bool()             // single-precision floating point 
+   val fp_val           = Bool()             // is a floating-point instruction (F- or D-extension)? If it's non-ld/st it will write back exception bits to the fcsr
+   val fp_single        = Bool()             // single-precision floating point instruction (F-extension)
 
    // exception information
    val xcpt_ma          = Bool()
@@ -1128,24 +1128,27 @@ class DatPath() extends Module with BOOMCoreParameters
       {
          for (j <- 0 until exe_units(w).num_rf_write_ports)
          {
-            rob.io.wb_resps(cnt).valid := exe_units(w).io.resp(j).valid && !(exe_units(w).io.resp(j).bits.uop.is_store && !exe_units(w).io.resp(j).bits.uop.is_amo)
+            val wb_uop = exe_units(w).io.resp(j).bits.uop
+            rob.io.wb_resps(cnt).valid := exe_units(w).io.resp(j).valid && !(wb_uop.is_store && !wb_uop.is_amo)
             rob.io.wb_resps(cnt).bits <> exe_units(w).io.resp(j).bits
 
             // for commit logging...
             rob.io.debug_wb_valids(cnt) := exe_units(w).io.resp(j).valid &&
-                                           exe_units(w).io.resp(j).bits.uop.ctrl.rf_wen &&
-                                           (exe_units(w).io.resp(j).bits.uop.dst_rtype === RT_FIX || exe_units(w).io.resp(j).bits.uop.dst_rtype === RT_FLT)
+                                           wb_uop.ctrl.rf_wen &&
+                                           (wb_uop.dst_rtype === RT_FIX || wb_uop.dst_rtype === RT_FLT)
 
             val data = exe_units(w).io.resp(j).bits.data
             val unrec_s = hardfloat.recodedFloatNToFloatN(data, 23, 9)
             val unrec_d = hardfloat.recodedFloatNToFloatN(data, 52, 12)
-            val unrec_out = Mux(exe_units(w).io.resp(j).bits.uop.fp_single, Cat(Fill(32, unrec_s(31)), unrec_s), unrec_d)
+            val unrec_out = Mux(wb_uop.fp_single, Cat(Fill(32, unrec_s(31)), unrec_s), unrec_d)
+//            val is_negnan_s = UInt(0xffffffff) === unrec_s && wb_uop.fp_single
 
             if (exe_units(w).uses_pcr_wport && (j == 0))
             {
-               rob.io.debug_wb_wdata(cnt) := Mux(exe_units(w).io.resp(j).bits.uop.ctrl.pcr_fcn != rocket.CSR.N, pcr_read_out,
-                                             Mux(exe_units(w).io.resp(j).bits.uop.fp_val, unrec_out,
-                                                                                          data))
+               rob.io.debug_wb_wdata(cnt) := Mux(wb_uop.ctrl.pcr_fcn != rocket.CSR.N, pcr_read_out,
+//                                             Mux(wb_uop.fp_val && wb_uop.dst_rtype === RT_FLT && is_negnan_s, UInt(0xffffffff),
+                                             Mux(wb_uop.fp_val && wb_uop.dst_rtype === RT_FLT, unrec_out,
+                                                                                               data))
             }
             else
             {
@@ -1796,17 +1799,17 @@ class DatPath() extends Module with BOOMCoreParameters
             when (com_uops(w).dst_rtype === RT_FIX && com_uops(w).ldst != UInt(0))
             {
 //               printf("0x%x (0x%x) x%d 0x%x |%d\n", com_uops(w).pc, com_uops(w).inst, com_uops(w).inst(RD_MSB,RD_LSB), com_uops(w).debug_wdata, tsc_reg)
-               printf("0x%x (0x%x) x%d 0x%x\n", com_uops(w).pc, com_uops(w).inst, com_uops(w).inst(RD_MSB,RD_LSB), com_uops(w).debug_wdata)
+               printf("@@@ 0x%x (0x%x) x%d 0x%x\n", com_uops(w).pc, com_uops(w).inst, com_uops(w).inst(RD_MSB,RD_LSB), com_uops(w).debug_wdata)
             }
             .elsewhen (com_uops(w).dst_rtype === RT_FLT)
             {
 //               printf("0x%x (0x%x) f%d 0x%x |%d\n", com_uops(w).pc, com_uops(w).inst, com_uops(w).inst(RD_MSB,RD_LSB), com_uops(w).debug_wdata, tsc_reg)
-               printf("0x%x (0x%x) f%d 0x%x\n", com_uops(w).pc, com_uops(w).inst, com_uops(w).inst(RD_MSB,RD_LSB), com_uops(w).debug_wdata)
+               printf("@@@ 0x%x (0x%x) f%d 0x%x\n", com_uops(w).pc, com_uops(w).inst, com_uops(w).inst(RD_MSB,RD_LSB), com_uops(w).debug_wdata)
             }
             .otherwise
             {
 //               printf("0x%x (0x%x) |%d\n", com_uops(w).pc, com_uops(w).inst, tsc_reg)
-               printf("0x%x (0x%x)\n", com_uops(w).pc, com_uops(w).inst)
+               printf("@@@ 0x%x (0x%x)\n", com_uops(w).pc, com_uops(w).inst)
             }
          }
       }
