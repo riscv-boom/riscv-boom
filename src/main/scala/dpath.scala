@@ -302,13 +302,13 @@ class DatPath() extends Module with BOOMCoreParameters
       var mem_unit:ExecutionUnit  = null
       if (params(BuildFPU).isEmpty)
       {
-         println ("\n   FPU Unit Disabled\n")
+         println ("\n    FPU Unit Disabled\n")
          mem_unit = Module(new ALUMulDMemExeUnit(is_branch_unit = true,
                                           shares_pcr_wport = true))
       }
       else
       {
-         println ("\n   FPU Unit Enabled\n")
+         println ("\n    FPU Unit Enabled\n")
          mem_unit = Module(new FPUALUMulDMemExeUnit(is_branch_unit = true,
                                           shares_pcr_wport = true))
       }
@@ -317,11 +317,21 @@ class DatPath() extends Module with BOOMCoreParameters
    }
    else if (ISSUE_WIDTH == 2)
    {
-      println("\n    -== Dual Issue ==- \n")
       // TODO make a ALU/Mem unit, or a ALU-i/Mem unit
+      println("\n    -== Dual Issue ==- \n")
       val mem_unit = Module(new ALUMulDMemExeUnit())
-      exe_units += Module(new ALUExeUnit(is_branch_unit = true,
-                                          shares_pcr_wport = true))
+      if (params(BuildFPU).isEmpty)
+      {
+         println ("\n    FPU Unit Disabled\n")
+         exe_units += Module(new ALUExeUnit(is_branch_unit = true,
+                                             shares_pcr_wport = true))
+      }
+      else
+      {
+         println ("\n    FPU Unit Enabled\n")
+         exe_units += Module(new FPUALUExeUnit(is_branch_unit = true,
+                                             shares_pcr_wport = true))
+      }
       exe_units += mem_unit
       mem_unit.io.dmem <> io.dmem
    }
@@ -339,32 +349,16 @@ class DatPath() extends Module with BOOMCoreParameters
       exe_units += mem_unit
    }
 
-   val num_rf_read_ports = 3*exe_units.length // TODO BUG XXX correct this logic
-
-   var num_rf_write_ports = 0
-   var num_total_bypass_ports = 0
-   var num_fast_wakeup_ports = 0 // +1 for each exe_unit that allows bypassing
-   var num_slow_wakeup_ports = 0 // +1 for each exe_unit that writes to the regfile (not the LSU)
-   for (w <- 0 until exe_units.length)
-   {
-      for (j <- 0 until exe_units(w).num_rf_write_ports)
-      {
-         num_slow_wakeup_ports += 1
-         num_rf_write_ports += 1
-      }
-
-      if (exe_units(w).is_bypassable)
-      {
-         num_fast_wakeup_ports += 1
-         for (i <- 0 until exe_units(w).get_num_bypass_ports)
-         {
-            num_total_bypass_ports = num_total_bypass_ports + 1
-         }
-      }
-   }
+   val num_rf_read_ports = exe_units.map(_.num_rf_read_ports).reduce[Int](_+_)
+   val num_rf_write_ports = exe_units.map(_.num_rf_write_ports).reduce[Int](_+_)
+   val num_total_bypass_ports = exe_units.withFilter(_.is_bypassable).map(_.num_bypass_ports).reduce[Int](_+_)
+   val num_fast_wakeup_ports = exe_units.count(_.is_bypassable)
+   val num_slow_wakeup_ports = num_rf_write_ports // currently have every write-port also be a slow-wakeup-port TODO reduce this number
+//   val num_slow_wakeup_ports = exe_units.map(_.num_variable_write_ports).reduce[Int](_+_)
+   // the slow write ports to the regfile are variable latency, and thus can't be bypassed
 
    val num_wakeup_ports = num_slow_wakeup_ports + num_fast_wakeup_ports
-   val rf_cost = (num_rf_read_ports+num_rf_write_ports)*(num_rf_read_ports+2*num_rf_write_ports) // TODO this number is wrong
+   val rf_cost = (num_rf_read_ports+num_rf_write_ports)*(num_rf_read_ports+2*num_rf_write_ports)
 
    println("   Num RF Read Ports    : " + num_rf_read_ports)
    println("   Num RF Write Ports   : " + num_rf_write_ports + "\n")
@@ -373,11 +367,12 @@ class DatPath() extends Module with BOOMCoreParameters
    println("   Num Fast Wakeup Ports: " + num_fast_wakeup_ports)
    println("   Num Bypass Ports     : " + num_total_bypass_ports)
    println("")
+//   require(num_wakeup_ports == num_rf_write_ports) TODO 
 
    val register_width = if (params(BuildFPU).isEmpty) xprLen else 65
    val bypasses = new BypassData(num_total_bypass_ports, register_width)
 
-   val issue_width           = exe_units.length // TODO allow exe_units to have multiple issue ports
+   val issue_width           = exe_units.length // TODO allow exe_units to have multiple issue ports?
    val iss_valids            = Vec.fill(issue_width) {Bool()}
    val iss_uops              = Vec.fill(issue_width) {new MicroOp()}
 
@@ -387,7 +382,8 @@ class DatPath() extends Module with BOOMCoreParameters
 
    // Memory State
    var lsu_io:LoadStoreUnitIo = null
-   lsu_io = (exe_units.find(_.is_mem_unit).get).io.lsu_io // assume only one mem_unit
+   lsu_io = (exe_units.find(_.is_mem_unit).get).io.lsu_io 
+   require (exe_units.count(_.is_mem_unit) == 1) // assume only one mem_unit
 
    // Writeback State
 
@@ -778,8 +774,19 @@ class DatPath() extends Module with BOOMCoreParameters
    ren_insts_can_proceed := rename_stage.io.inst_can_proceed
 
    var wu_idx = 0
+   // loop through each issue-port (exe_units are statically connected to an issue-port)
    for (i <- 0 until exe_units.length)
    {
+      // Fast Wakeup (uses just-issued uops) that have known latencies
+      if (exe_units(i).is_bypassable)
+      {
+         rename_stage.io.wb_valids(wu_idx) := iss_valids(i) && (iss_uops(i).dst_rtype === RT_FIX || iss_uops(i).dst_rtype === RT_FLT) && (iss_uops(i).bypassable)
+         rename_stage.io.wb_pdsts(wu_idx)  := iss_uops(i).pdst
+         wu_idx += 1
+         assert (!(iss_uops(i).dst_rtype === RT_FLT && iss_uops(i).bypassable), "Bypassing FP is not supported.")
+      }
+
+
       // Slow Wakeup (uses write-port to register file)
       for (j <- 0 until exe_units(i).num_rf_write_ports)
       {
@@ -792,14 +799,6 @@ class DatPath() extends Module with BOOMCoreParameters
          wu_idx += 1
       }
 
-      // Fast Wakeup (uses just-issued uops)
-      if (exe_units(i).is_bypassable)
-      {
-         rename_stage.io.wb_valids(wu_idx) := iss_valids(i) && (iss_uops(i).dst_rtype === RT_FIX || iss_uops(i).dst_rtype === RT_FLT) && (iss_uops(i).bypassable)
-         rename_stage.io.wb_pdsts(wu_idx)  := iss_uops(i).pdst
-         wu_idx += 1
-         assert (!(iss_uops(i).dst_rtype === RT_FLT && iss_uops(i).bypassable), "Bypassing FP is not supported.")
-      }
    }
    require (wu_idx == num_wakeup_ports)
 
@@ -895,13 +894,13 @@ class DatPath() extends Module with BOOMCoreParameters
 
    // Register Read <- Issue (rrd <- iss)
 
-
    val register_read = Module(new RegisterRead(issue_width
                                                , num_rf_read_ports
+                                               , exe_units.map(_.num_rf_read_ports)
                                                , num_total_bypass_ports
                                                , register_width))
 
-// TODO why the fuck does this change code behavior
+// TODO Chisel why the fuck does this change code behavior
 //   register_read.io.iss_valids := iss_valids
 //   register_read.io.iss_uops := iss_uops
    for (w <- 0 until issue_width)
@@ -989,7 +988,7 @@ class DatPath() extends Module with BOOMCoreParameters
 
       if (exe_units(w).is_bypassable)
       {
-         for (i <- 0 until exe_units(w).get_num_bypass_ports)
+         for (i <- 0 until exe_units(w).num_bypass_ports)
          {
             println("  Hooking up bypasses for idx = " + idx + ", exe_unit #" + w)
             bypasses.valid(idx) := exe_units(w).io.bypass.valid(i)
@@ -1110,7 +1109,7 @@ class DatPath() extends Module with BOOMCoreParameters
    //-------------------------------------------------------------
    //-------------------------------------------------------------
 
-   val rob  = Module(new Rob(DECODE_WIDTH, NUM_ROB_ENTRIES, num_slow_wakeup_ports))
+   val rob  = Module(new Rob(DECODE_WIDTH, NUM_ROB_ENTRIES, num_slow_wakeup_ports)) // TODO the ROB writeback is off the regfile, which is a different set
 
       // Dispatch
       rob_rdy := rob.io.ready

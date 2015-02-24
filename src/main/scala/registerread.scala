@@ -25,7 +25,11 @@ import rocket.ALU._
 //-------------------------------------------------------------
 
 class RegisterRead(issue_width: Int
-                  , num_read_ports: Int
+                  , num_total_read_ports: Int
+                  , num_read_ports_array: ArrayBuffer[Int]
+                                             // each exe_unit must tell us how many max
+                                             // operands it can accept (the sum should equal
+                                             // num_total_read_ports)
                   , num_total_bypass_ports: Int
                   , register_width: Int
                   ) extends Module with BOOMCoreParameters
@@ -37,7 +41,7 @@ class RegisterRead(issue_width: Int
       val iss_uops   = Vec.fill(issue_width) { new MicroOp().asInput() }
 
       // interface with register file's read ports
-      val rf_read_ports = Vec.fill(num_read_ports) { new RegisterFileReadPortIO(PREG_SZ, register_width) }.flip
+      val rf_read_ports = Vec.fill(num_total_read_ports) { new RegisterFileReadPortIO(PREG_SZ, register_width) }.flip
 
       val bypass = new BypassData(num_total_bypass_ports, register_width).asInput()
 
@@ -78,26 +82,29 @@ class RegisterRead(issue_width: Int
    //-------------------------------------------------------------
    // read ports
 
+   require (num_total_read_ports == num_read_ports_array.reduce(_+_))
 
    val rrd_rs1_data   = Vec.fill(issue_width) { Bits() }
    val rrd_rs2_data   = Vec.fill(issue_width) { Bits() }
    val rrd_rs3_data   = Vec.fill(issue_width) { Bits() }
 
+   var idx = 0 // index into flattened read_ports array
    for (w <- 0 until issue_width)
    {
-      val i = w*2
+      val num_read_ports = num_read_ports_array(w)
+      println ("Max Operands: " + num_read_ports)
+
       val rs1_addr = rrd_uops(w).pop1
       val rs2_addr = rrd_uops(w).pop2
       val rs3_addr = rrd_uops(w).pop3
 
-      // TODO allow for execute pipelines to only use one register read port
-      io.rf_read_ports(i+0).addr := rs1_addr
-      io.rf_read_ports(i+1).addr := rs2_addr
-      io.rf_read_ports(i+2).addr := rs3_addr
+      if (num_read_ports > 0) io.rf_read_ports(idx+0).addr := rs1_addr
+      if (num_read_ports > 1) io.rf_read_ports(idx+1).addr := rs2_addr
+      if (num_read_ports > 2) io.rf_read_ports(idx+2).addr := rs3_addr
 
-      rrd_rs1_data(w) := io.rf_read_ports(i+0).data
-      rrd_rs2_data(w) := io.rf_read_ports(i+1).data
-      rrd_rs3_data(w) := io.rf_read_ports(i+2).data
+      if (num_read_ports > 0) rrd_rs1_data(w) := io.rf_read_ports(idx+0).data
+      if (num_read_ports > 1) rrd_rs2_data(w) := io.rf_read_ports(idx+1).data
+      if (num_read_ports > 2) rrd_rs3_data(w) := io.rf_read_ports(idx+2).data
 
       val rrd_kill = Mux(io.kill,       Bool(true),
                      Mux(io.brinfo.valid && io.brinfo.mispredict
@@ -109,6 +116,8 @@ class RegisterRead(issue_width: Int
       exe_reg_uops(w)   := Mux(rrd_kill, NullMicroOp, rrd_uops(w))
 
       exe_reg_uops(w).br_mask := GetNewBrMask(io.brinfo, rrd_uops(w))
+
+      idx += num_read_ports
    }
 
 
@@ -117,14 +126,20 @@ class RegisterRead(issue_width: Int
    // BYPASS MUXES -----------------------------------------------
    // performed at the end of the register read stage
 
+   // NOTES: this code is fairly hard-coded. Sorry.
+   // ASSUMPTIONS:
+   //    -rs3 is used for FPU ops which are NOT bypassed (so don't check
+   //       them!).
+
    val bypassed_rs1_data = Vec.fill(issue_width) { Bits(width = register_width) }
    val bypassed_rs2_data = Vec.fill(issue_width) { Bits(width = register_width) }
 
 //   if (ENABLE_BYPASSING_NETWORK)
-   if (true)
-   {
+//   if (true)
+//   {
       for (w <- 0 until issue_width)
       {
+         val num_read_ports = num_read_ports_array(w)
          var rs1_cases = Array((Bool(false), Bits(0, register_width)))
          var rs2_cases = Array((Bool(false), Bits(0, register_width)))
 
@@ -140,15 +155,15 @@ class RegisterRead(issue_width: Int
             rs2_cases ++= Array((io.bypass.valid(b) && (pop2 === io.bypass.uop(b).pdst) && io.bypass.uop(b).ctrl.rf_wen && (lrs2_rtype === RT_FIX || lrs2_rtype === RT_FLT) && (pop2 != UInt(0)), io.bypass.data(b)))
          }
 
-         bypassed_rs1_data(w) := MuxCase(rrd_rs1_data(w), rs1_cases)
-         bypassed_rs2_data(w) := MuxCase(rrd_rs2_data(w), rs2_cases)
+         if (num_read_ports > 0) bypassed_rs1_data(w) := MuxCase(rrd_rs1_data(w), rs1_cases)
+         if (num_read_ports > 1) bypassed_rs2_data(w) := MuxCase(rrd_rs2_data(w), rs2_cases)
       }
-   }
-   else
-   {
-      bypassed_rs1_data := rrd_rs1_data
-      bypassed_rs2_data := rrd_rs2_data
-   }
+//   }
+//   else
+//   {
+//      bypassed_rs1_data := rrd_rs1_data
+//      bypassed_rs2_data := rrd_rs2_data
+//   }
 
 
 
@@ -159,21 +174,28 @@ class RegisterRead(issue_width: Int
    //-------------------------------------------------------------
    //-------------------------------------------------------------
 
-   exe_reg_rs1_data := bypassed_rs1_data
-   exe_reg_rs2_data := bypassed_rs2_data
-   exe_reg_rs3_data := rrd_rs3_data // no bypassing of this TODO add assert that checks bypassing to verify there isn't something it hits
+   for (w <- 0 until issue_width)
+   {
+      val num_read_ports = num_read_ports_array(w)
+      if (num_read_ports > 0) exe_reg_rs1_data(w) := bypassed_rs1_data(w)
+      if (num_read_ports > 1) exe_reg_rs2_data(w) := bypassed_rs2_data(w)
+      if (num_read_ports > 2) exe_reg_rs3_data(w) := rrd_rs3_data(w)
+      // ASSUMPTION: rs3 is FPU which is NOT bypassed
+   }
    // TODO add assert to detect bypass conflicts on non-bypassable things
-
+   // TODO add assert that checks bypassing to verify there isn't something it hits rs3
 
    //-------------------------------------------------------------
    // set outputs to execute pipelines
    for (w <- 0 until issue_width)
    {
+      val num_read_ports = num_read_ports_array(w)
+
       io.exe_reqs(w).valid    := exe_reg_valids(w)
       io.exe_reqs(w).bits.uop := exe_reg_uops(w)
-      io.exe_reqs(w).bits.rs1_data := exe_reg_rs1_data(w)
-      io.exe_reqs(w).bits.rs2_data := exe_reg_rs2_data(w)
-      io.exe_reqs(w).bits.rs3_data := exe_reg_rs3_data(w)
+      if (num_read_ports > 0) io.exe_reqs(w).bits.rs1_data := exe_reg_rs1_data(w)
+      if (num_read_ports > 1) io.exe_reqs(w).bits.rs2_data := exe_reg_rs2_data(w)
+      if (num_read_ports > 2) io.exe_reqs(w).bits.rs3_data := exe_reg_rs3_data(w)
    }
 
 

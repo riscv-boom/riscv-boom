@@ -70,6 +70,7 @@ abstract class ExecutionUnit(val num_rf_read_ports: Int
                             , val num_rf_write_ports: Int
                             , val num_bypass_stages: Int
                             , val data_width: Int
+                            , val num_variable_write_ports: Int = 0
                             , var bypassable: Boolean = false
                             , val is_mem_unit: Boolean = false
                             , var uses_pcr_wport: Boolean = false
@@ -87,9 +88,9 @@ abstract class ExecutionUnit(val num_rf_read_ports: Int
    }
 
 
-   def get_num_bypass_ports: Int = num_bypass_stages
-   def has_branch_unit     : Boolean = is_branch_unit
-   def is_bypassable       : Boolean = bypassable
+   def num_bypass_ports: Int = num_bypass_stages
+   def has_branch_unit : Boolean = is_branch_unit
+   def is_bypassable   : Boolean = bypassable
 }
 
 
@@ -131,11 +132,86 @@ class ALUExeUnit(is_branch_unit: Boolean = false
 
 }
 
+class FPUALUExeUnit(is_branch_unit: Boolean = false
+                , shares_pcr_wport: Boolean = false
+                ) extends ExecutionUnit(num_rf_read_ports = 3
+                                       , num_rf_write_ports = 1
+                                       , num_bypass_stages = 3 // TODO FPU LATENCY ADAM
+                                       , data_width = 65
+                                       , bypassable = true
+                                       , is_mem_unit = false
+                                       , uses_pcr_wport = shares_pcr_wport
+                                       , is_branch_unit = is_branch_unit
+                                       )
+{
+   io.fu_types := FU_ALU |
+                  FU_CNTR |
+                  FU_FPU |
+                  (Mux(Bool(shares_pcr_wport), FU_PCR, Bits(0))) |
+                  (Mux(Bool(is_branch_unit), FU_BRU, Bits(0)))
+
+
+   // ALU Unit -------------------------------
+   val alu = Module(new ALUUnit(is_branch_unit = is_branch_unit, num_stages=3)) // TODO FPU LATENCY
+   alu.io.req.valid         := io.req.valid &&
+                                   ((io.req.bits.uop.fu_code === FU_ALU) ||
+                                   (io.req.bits.uop.fu_code === FU_BRU) ||
+                                   (io.req.bits.uop.fu_code === FU_PCR) ||
+                                   (io.req.bits.uop.fu_code === FU_CNTR))
+   alu.io.req.bits.uop      := io.req.bits.uop
+   alu.io.req.bits.kill     := io.req.bits.kill
+   alu.io.req.bits.rs1_data := io.req.bits.rs1_data
+   alu.io.req.bits.rs2_data := io.req.bits.rs2_data
+
+   alu.io.brinfo <> io.brinfo
+   io.bypass <> alu.io.bypass
+
+   // branch unit is embedded inside the ALU
+   if (is_branch_unit)
+   {
+      io.br_unit <> alu.io.br_unit
+      alu.io.get_rob_pc <> io.get_rob_pc
+   }
+   else
+   {
+      io.br_unit.brinfo.valid := Bool(false)
+   }
+
+
+   // FPU Unit -----------------------
+
+   val fpu = Module(new FPUUnit())
+   fpu.io.req.valid           := io.req.valid &&
+                                 io.req.bits.uop.fu_code === FU_FPU
+   fpu.io.req.bits.uop        := io.req.bits.uop
+   fpu.io.req.bits.rs1_data   := io.req.bits.rs1_data
+   fpu.io.req.bits.rs2_data   := io.req.bits.rs2_data
+   fpu.io.req.bits.rs3_data   := io.req.bits.rs3_data
+   fpu.io.req.bits.kill       := io.req.bits.kill
+   fpu.io.fcsr_rm             := io.fcsr_rm
+   // TODO use bundle interfacing
+
+   fpu.io.brinfo <> io.brinfo
+
+   // Outputs (Write Port #0)  ---------------
+
+   io.resp(0).valid     := alu.io.resp.valid || fpu.io.resp.valid
+   io.resp(0).bits.uop  := Mux(fpu.io.resp.valid, fpu.io.resp.bits.uop, alu.io.resp.bits.uop)
+   io.resp(0).bits.data := Mux(fpu.io.resp.valid, fpu.io.resp.bits.data, alu.io.resp.bits.data)
+
+   io.resp(0).bits.exc := fpu.io.resp.bits.exc
+
+   assert (!(alu.io.resp.valid && fpu.io.resp.valid)
+      , "ALU and FPU are fighting over the write port.")
+
+}
+
 
 class MulDExeUnit extends ExecutionUnit(num_rf_read_ports = 2
                                        , num_rf_write_ports = 1
                                        , num_bypass_stages = 0
                                        , data_width = 64 // TODO need to use xprLen here
+                                       , num_variable_write_ports = 1
                                        )
 {
    val muldiv_busy = Bool()
@@ -161,6 +237,7 @@ class ALUMulDExeUnit(is_branch_unit: Boolean = false
                                            , num_rf_write_ports = 1
                                            , num_bypass_stages = 1
                                            , data_width = 64 // TODO need to use xprlen
+                                           , num_variable_write_ports = 1
                                            , bypassable = true
                                            , is_mem_unit = false
                                            , uses_pcr_wport = shares_pcr_wport
@@ -236,10 +313,11 @@ class ALUMulDExeUnit(is_branch_unit: Boolean = false
 }
 
 
-class MemExeUnit extends ExecutionUnit(num_rf_read_ports = 2
+class MemExeUnit extends ExecutionUnit(num_rf_read_ports = 2 // TODO make this 1, requires MemAddrCalcUnit to accept store data on rs1_data port
                                       , num_rf_write_ports = 1
                                       , num_bypass_stages = 0
                                       , data_width = 65 // TODO need to know if params(BuildFPU).isEmpty here
+                                      , num_variable_write_ports = 1
                                       , bypassable = false
                                       , is_mem_unit = true)
 {
@@ -349,6 +427,7 @@ class ALUMulDMemExeUnit(is_branch_unit: Boolean = false
                                               , num_rf_write_ports = 2
                                               , num_bypass_stages = 1
                                               , data_width = 65 // TODO need to use params(BuildFPU).isEmpty here
+                                              , num_variable_write_ports = 1
                                               , bypassable = true
                                               , is_mem_unit = true
                                               , uses_pcr_wport = shares_pcr_wport
@@ -521,6 +600,7 @@ class FPUALUMulDMemExeUnit(is_branch_unit: Boolean = false
                                               , num_rf_write_ports = 2
                                               , num_bypass_stages = 3 // TODO FPU_LATENCY Adam
                                               , data_width = 65
+                                              , num_variable_write_ports = 1
                                               , bypassable = true
                                               , is_mem_unit = true
                                               , uses_pcr_wport = shares_pcr_wport
@@ -542,7 +622,7 @@ class FPUALUMulDMemExeUnit(is_branch_unit: Boolean = false
 
 
    // ALU Unit -------------------------------
-   val alu = Module(new ALUUnit(is_branch_unit = true, num_stages=3))
+   val alu = Module(new ALUUnit(is_branch_unit = true, num_stages=3)) // TODO FPU LATENCY
    alu.io.req.valid         := io.req.valid &&
                                     ((io.req.bits.uop.fu_code === FU_ALU) ||
                                      (io.req.bits.uop.fu_code === FU_BRU) ||
@@ -552,6 +632,8 @@ class FPUALUMulDMemExeUnit(is_branch_unit: Boolean = false
    alu.io.req.bits.kill     := io.req.bits.kill
    alu.io.req.bits.rs1_data := io.req.bits.rs1_data
    alu.io.req.bits.rs2_data := io.req.bits.rs2_data
+
+   alu.io.brinfo <> io.brinfo
 
    // branch unit is embedded inside the ALU
    if (is_branch_unit)
@@ -575,10 +657,9 @@ class FPUALUMulDMemExeUnit(is_branch_unit: Boolean = false
    fpu.io.req.bits.rs2_data   := io.req.bits.rs2_data
    fpu.io.req.bits.rs3_data   := io.req.bits.rs3_data
    fpu.io.req.bits.kill       := io.req.bits.kill
-   fpu.io.brinfo              := io.brinfo
    fpu.io.fcsr_rm             := io.fcsr_rm
+   fpu.io.brinfo <> io.brinfo
    // TODO use bundle interfacing
-   // TODO exception/status information/rm/etc.
 
    // Outputs (Write Port #0)  ---------------
 
@@ -600,18 +681,14 @@ class FPUALUMulDMemExeUnit(is_branch_unit: Boolean = false
    muldiv.io.req.bits.uop        := io.req.bits.uop
    muldiv.io.req.bits.rs1_data   := io.req.bits.rs1_data
    muldiv.io.req.bits.rs2_data   := io.req.bits.rs2_data
-   muldiv.io.brinfo              := io.brinfo
    muldiv.io.req.bits.kill       := io.req.bits.kill
+
+   muldiv.io.brinfo <> io.brinfo
 
    muldiv.io.resp.ready := !memresp_val //share write port with the memory
 
    muldiv_busy := !muldiv.io.req.ready || (io.req.valid && io.req.bits.uop.fu_code === FU_MULD)
 
-
-   // Branch Resolution ------------------------
-
-   alu.io.brinfo <> io.brinfo
-   muldiv.io.brinfo <> io.brinfo
 
    // Bypassing --------------------------------
    // (only the ALU is bypassable)
@@ -688,7 +765,7 @@ class FPUALUMulDMemExeUnit(is_branch_unit: Boolean = false
    }
    else
    {
-      // TODO CODE REVIEW throwing resources to try and salvage critical path... 
+      // TODO CODE REVIEW throwing resources to try and salvage critical path...
       //recode FP values
       // I'm doing this twice for two different paths (cache path and forwarding path)!
       val typ = io.dmem.resp.bits.typ
