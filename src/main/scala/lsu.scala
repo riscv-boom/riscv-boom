@@ -350,20 +350,14 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    // *** FAST LOAD ***
 
    val req_fire_load_fast = Bool()
+   val req_fire_store = Bool()
+   val req_fire_load_sleeper = Bool()
 
-   if (ENABLE_SPECULATE_LOADS)
-   {
-      // fire loads once address has been calculated
-      req_fire_load_fast := io.exe_resp.valid && io.exe_resp.bits.uop.ctrl.is_load
-   }
-   else
-   {
-      req_fire_load_fast := Bool(false)
-   }
+   // fire loads once address has been calculated
+   req_fire_load_fast := io.exe_resp.valid && io.exe_resp.bits.uop.ctrl.is_load
 
 
    // *** SLOW LOAD (waken up) ***
-   val req_fire_load_sleeper = Bool()
    req_fire_load_sleeper := Bool(false)
    val lidx = slow_ld_iss_idx
 
@@ -414,7 +408,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
 
       when (stq_entry_val(i) &&
             st_dep_mask(i) &&
-            saq_val(i) && (s_addr(params(PAddrBits),3) === l_addr(params(PAddrBits),3)))
+            saq_val(i) && (s_addr(params(PAddrBits),3) === l_addr(params(PAddrBits),3))) // TODO VM virtual memory (do a search everywhere for paddrbits
       {
          dword_addr_matches(i) := Bool(true)
       }
@@ -448,7 +442,8 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
       }
 
       // did a load see a conflicting store (sb->lw) or a fence/AMO? if so, put the load to sleep
-      when ((stq_entry_val(i) && st_dep_mask(i) && (stq_uop(i).is_fence || stq_uop(i).is_amo)) ||
+      // TODO this shuts down all loads so long as there is a store live in the dependent mask
+      when ((stq_entry_val(i) && st_dep_mask(i) && (stq_uop(i).is_fence || stq_uop(i).is_amo || Bool(DISABLE_STORE_FORWARDING) )) ||
             (dword_addr_matches(i) && (l_uop.mem_typ != stq_uop(i).mem_typ) && ((read_mask & write_mask) != Bits(0))))
       {
          force_ld_to_sleep := Bool(true)
@@ -460,7 +455,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    forwarding_age_logic.io.addr_matches    := forwarding_matches.toBits()
    forwarding_age_logic.io.youngest_st_idx := laq_yng_st_idx(ld_iss_idx)
 
-   when ((req_fire_load_fast || req_fire_load_sleeper) && forwarding_age_logic.io.forwarding_val && io.dmem_req_ready)
+   when ((req_fire_load_fast || req_fire_load_sleeper) && !req_fire_store  && forwarding_age_logic.io.forwarding_val && io.dmem_req_ready)
    {
       laq_forwarded_std_val(l_uop.ldq_idx) := Bool(true)
       laq_forwarded_stq_idx(l_uop.ldq_idx) := forwarding_age_logic.io.forwarding_idx
@@ -477,7 +472,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    r_mem_uop.br_mask    := GetNewBrMask(io.brinfo, l_uop)
 
    // kill load request to mem if address matches (we will either sleep load, or forward data)
-   r_memreq_kill     := (req_fire_load_fast || req_fire_load_sleeper) && addr_conflicts.toBits != Bits(0)
+   r_memreq_kill     := (req_fire_load_fast || req_fire_load_sleeper) && addr_conflicts.toBits != Bits(0) && !req_fire_store
    r_forward_std_idx := forwarding_age_logic.io.forwarding_idx
 
    // kill forwarding if branch mispredict
@@ -487,7 +482,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    }
    .otherwise
    {
-      r_forward_std_val := (req_fire_load_fast || req_fire_load_sleeper) && forwarding_age_logic.io.forwarding_val && !force_ld_to_sleep && io.dmem_req_ready
+      r_forward_std_val := (req_fire_load_fast || req_fire_load_sleeper) && forwarding_age_logic.io.forwarding_val && !force_ld_to_sleep && io.dmem_req_ready && !req_fire_store
    }
 
    io.memreq_kill := r_memreq_kill
@@ -551,7 +546,6 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    //-------------------------------------------------------------
    //-------------------------------------------------------------
 
-   val req_fire_store = Bool()
    req_fire_store := Bool(false)
 
    when (stq_entry_val(stq_head) &&
@@ -586,17 +580,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    io.memreq_wdata   := Bits(0)
    io.memreq_uop     := io.exe_resp.bits.uop
 
-   when (req_fire_load_fast || req_fire_load_sleeper)
-   {
-      io.memreq_val   := Bool(true)
-      io.memreq_addr  := l_addr
-      io.memreq_wdata := Bits(0)
-      io.memreq_uop   := l_uop
-
-      laq_executed(ld_iss_idx) := Bool(true)
-      laq_failure(ld_iss_idx)  := Bool(false)
-   }
-   .elsewhen(req_fire_store)
+   when(req_fire_store)
    {
       // store at commit stage
       // well actually, treat STQ as a store buffer, so we
@@ -607,6 +591,16 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
       io.memreq_uop   := stq_uop (stq_head)
 
       stq_executed(stq_head) := Bool(true)
+   }
+   .elsewhen (req_fire_load_fast || req_fire_load_sleeper)
+   {
+      io.memreq_val   := Bool(true)
+      io.memreq_addr  := l_addr
+      io.memreq_wdata := Bits(0)
+      io.memreq_uop   := l_uop
+
+      laq_executed(ld_iss_idx) := Bool(true)
+      laq_failure(ld_iss_idx)  := Bool(false)
    }
 
    //-------------------------------------------------------------

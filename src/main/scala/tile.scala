@@ -31,10 +31,10 @@ class BOOMTile(resetSignal: Bool = null) extends Tile(resetSignal)
   val dc_shim = Module(new DCacheShim)
   val ptw = Module(new PTW(params(NPTWPorts)))
 
-//  val dcArb = Module(new rocket.HellaCacheArbiter(params(rocket.NDCachePorts)))
-//  dcArb.io.requestor(0) <> ptw.io.mem
-//  dcArb.io.requestor(1) <> core.io.dmem
-//  dcArb.io.mem <> dcache.io.core
+  val dcArb = Module(new rocket.HellaCacheArbiter(params(rocket.NDCachePorts)))
+  dcArb.io.requestor(0) <> ptw.io.mem
+  dcArb.io.requestor(1) <> dc_shim.io.dmem 
+  dcArb.io.mem <> dcache.io.cpu
 
   ptw.io.requestor(0) <> icache.io.cpu.ptw
   ptw.io.requestor(1) <> dcache.io.cpu.ptw
@@ -42,7 +42,6 @@ class BOOMTile(resetSignal: Bool = null) extends Tile(resetSignal)
   core.io.host <> io.host
   core.io.imem <> icache.io.cpu
   core.io.dmem <> dc_shim.io.core
-  dc_shim.io.dmem <> dcache.io.cpu
   core.io.ptw <> ptw.io.dpath
 
   val memArb = Module(new UncachedTileLinkIOArbiterThatAppendsArbiterId(params(NTilePorts)))

@@ -291,7 +291,7 @@ class DecodeUnit() extends Module
    val csr_addr       = uop.inst(CSR_ADDR_MSB, CSR_ADDR_LSB)
    val csr_en         = cs_csr_cmd != CSR.N
    val csr_wen        = raddr1 != UInt(0) || !Vec(CSR.S, CSR.C).contains(cs_csr_cmd)
-//   val csr_fp         = Bool(!params(BuildFPU).isEmpty) && csr_en && rocket.DecodeLogic(csr_addr, fp_csrs, rocket.CSRs.all.toSet -- fp_csrs) TODO
+//   val csr_fp         = Bool(!params(BuildFPU).isEmpty) && csr_en && rocket.DecodeLogic(csr_addr, fp_csrs, rocket.CSRs.all.toSet -- fp_csrs) TODO XXX need to throw error if FP is disabled
    val csr_fp         = Bool(false)
    val exc_csr_privileged = csr_en &&
                         (csr_addr(11,10) === UInt(3) && csr_wen ||

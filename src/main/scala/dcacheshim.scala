@@ -296,7 +296,7 @@ class DCacheShim extends Module with BOOMCoreParameters
    io.dmem.req.bits.tag   := Cat(!io.core.req.valid, new_inflight_tag) // TODO is there a reason i'm doing this req.valid Cat?
    io.dmem.req.bits.cmd   := Mux(io.core.req.valid, io.core.req.bits.uop.mem_cmd, M_PFW)
    io.dmem.req.bits.data  := Reg(next=io.core.req.bits.data) //notice this is delayed a cycle
-   io.dmem.req.bits.phys  := Bool(true) // use physical address? otherwise, use status bit of is VM enabled
+   io.dmem.req.bits.phys  := Bool(false) // use physical address? if false, use status bit of "is VM enabled"
 
    //------------------------------------------------------------
    // handle responses and nacks
