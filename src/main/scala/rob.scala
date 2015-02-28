@@ -303,7 +303,14 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
       when (io.mem_xcpt_val && MatchBank(GetBankIdx(io.mem_xcpt_uop.rob_idx)))
       {
          rob_exception(GetRowIdx(io.mem_xcpt_uop.rob_idx)) := Bool(true)
-         rob_exc_cause(GetRowIdx(io.mem_xcpt_uop.rob_idx)) := Mux(io.mem_xcpt.ma.ld, UInt(rocket.Causes.misaligned_load), UInt(rocket.Causes.misaligned_store))
+         rob_exc_cause(GetRowIdx(io.mem_xcpt_uop.rob_idx)) := Mux(io.mem_xcpt.ma.ld, UInt(rocket.Causes.misaligned_load),
+                                                              Mux(io.mem_xcpt.ma.st, UInt(rocket.Causes.misaligned_store),
+                                                              Mux(io.mem_xcpt.pf.ld, UInt(rocket.Causes.fault_load),
+                                                              Mux(io.mem_xcpt.pf.st, UInt(rocket.Causes.fault_store),
+                                                                                     SInt(0)))))
+         assert ((io.mem_xcpt.ma.ld || io.mem_xcpt.ma.st || io.mem_xcpt.pf.ld || io.mem_xcpt.pf.st),
+               "Memory exception - no exception type set by data cache.")
+
       }
 
       when (io.ldo_xcpt_val && MatchBank(GetBankIdx(io.ldo_xcpt_uop.rob_idx)))
