@@ -14,6 +14,7 @@ import rocket.DFMALatency
 // TODO get rid of this decoder and move into the Decode stage? Or the RRd stage?
 // most of these signals are already created, just need to be translated
 // to the ROcket FPU-speak
+// move rm from inst into the uop
 class UOPCodeFPUDecoder extends Module
 {
   val io = new Bundle {
@@ -106,89 +107,81 @@ class UOPCodeFPUDecoder extends Module
 }
 
 
-//TODO
-// fromint_data -> which register does that come in form?
-// fcsr_flags -> how to get that data to the ROB
-//                and then get the ROB to write it at commit time
-// stages -> figure out how many stages "3" latency corresponds to, get the registers in the correct place and the FPUUnit to understand it, and then pad out the ALU to the correct length
-
 class FPU extends Module with BOOMCoreParameters
 {
    val io = new Bundle
    {
-//      val dpath = (new DpathFPUIO).flip
-      val valid   = Bool(INPUT)
-      val in1     = Bits(INPUT,  width = 65)
-      val in2     = Bits(INPUT,  width = 65)
-      val in3     = Bits(INPUT,  width = 65)
-      val uop     = new MicroOp().asInput
-      val fcsr_rm = Bits(INPUT, rocket.FPConstants.RM_SZ)
-
+      val req = new ValidIO(new Bundle
+         {
+            val uop      = new MicroOp()
+            val rs1_data = Bits(width = 65)
+            val rs2_data = Bits(width = 65)
+            val rs3_data = Bits(width = 65)
+            val fcsr_rm  = Bits(width = rocket.FPConstants.RM_SZ)
+         }).flip
       val resp = new ValidIO(new ExeUnitResp(65))
-      val fcsr_flags = Valid(Bits(width = rocket.FPConstants.FLAGS_SZ))
    }
 
    // all FP units are padded out to the same latency for easy scheduling of
    // the write port
 //   val test = params(DFMALatency) TODO BUG why is this returning "Nothing"?
-//   println ("    FPU Latency: " + test)
    val fpu_latency = 3
+   val io_req = io.req.bits
 
    val fp_decoder = Module(new UOPCodeFPUDecoder)
-   fp_decoder.io.uopc:= io.uop.uopc
+   fp_decoder.io.uopc:= io_req.uop.uopc
 
    val fp_ctrl = fp_decoder.io.sigs
 
-   val fp_rm = Mux(io.uop.inst(14,12) === Bits(7), io.fcsr_rm, io.uop.inst(14,12)) // TODO FIXME XXX put information elsewhere in uop, this is the rm (founding mode)
+   val fp_rm = Mux(io_req.uop.inst(14,12) === Bits(7), io_req.fcsr_rm, io_req.uop.inst(14,12)) // TODO FIXME XXX put information elsewhere in uop, this is the rm (founding mode)
 
    val req = new rocket.FPInput
    req := fp_ctrl
    req.rm := fp_rm
-   req.in1 := io.in1
-   req.in2 := io.in2
-   req.in3 := io.in3
-   when (fp_ctrl.swap23) { req.in3 := io.in2 } // TODO move this elsewhere? this feels expensive
+   req.in1 := io_req.rs1_data
+   req.in2 := io_req.rs2_data
+   req.in3 := io_req.rs3_data
+   when (fp_ctrl.swap23) { req.in3 := io_req.rs2_data } // TODO move this elsewhere? this feels expensive
 
-   req.typ := io.uop.inst(21,20) // TODO FIXME XXX put typ elsewhere in uop
+   req.typ := io_req.uop.inst(21,20) // TODO FIXME XXX put typ elsewhere in uop
 
 
-   // TODO haven't added in yet the 3rd input, or the swap mechanics?
    val dfma = Module(new rocket.FPUFMAPipe(fpu_latency, 52, 12))
-   dfma.io.in.valid := io.valid && fp_ctrl.fma && !fp_ctrl.single
+   dfma.io.in.valid := io.req.valid && fp_ctrl.fma && !fp_ctrl.single
    dfma.io.in.bits := req
 
 
    val sfma = Module(new rocket.FPUFMAPipe(fpu_latency, 23, 9))
-   sfma.io.in.valid := io.valid && fp_ctrl.fma && fp_ctrl.single
+   sfma.io.in.valid := io.req.valid && fp_ctrl.fma && fp_ctrl.single
    sfma.io.in.bits := req
 
 
    val ifpu = Module(new rocket.IntToFP(fpu_latency)) // 3 for rocket
-   ifpu.io.in.valid := io.valid && fp_ctrl.fromint
+   ifpu.io.in.valid := io.req.valid && fp_ctrl.fromint
    ifpu.io.in.bits := req
-   assert (!(io.valid && fp_ctrl.fromint && req.in1(64).toBool),
+   assert (!(io.req.valid && fp_ctrl.fromint && req.in1(64).toBool),
             "IntToFP integer input has 65th high-order bit set!")
 
 
    val fpiu = Module(new rocket.FPToInt)
-   fpiu.io.in.valid := io.valid && (fp_ctrl.toint || fp_ctrl.cmd === FCMD_MINMAX)
+   fpiu.io.in.valid := io.req.valid && (fp_ctrl.toint || fp_ctrl.cmd === FCMD_MINMAX)
    fpiu.io.in.bits := req
    val fpiu_out = Pipe(Reg(next=fpiu.io.in.valid && !fp_ctrl.fastpipe),
                        fpiu.io.out.bits, fpu_latency-1)
+   
    val fpiu_result  = new rocket.FPResult
    fpiu_result.data := fpiu_out.bits.toint
    fpiu_result.exc  := fpiu_out.bits.exc
 
 
    val fpmu = Module(new rocket.FPToFP(fpu_latency)) // latency 2 for rocket
-   fpmu.io.in.valid := io.valid && fp_ctrl.fastpipe
+   fpmu.io.in.valid := io.req.valid && fp_ctrl.fastpipe
    fpmu.io.in.bits := req
    fpmu.io.lt := fpiu.io.out.bits.lt
 
 
 
    // Response (all FP units have been padded out to the same latency)
-   // TODO BUG these outputs may be invalid, need to check against the ctrl signals?
    io.resp.valid := ifpu.io.out.valid ||
                     fpiu_out.valid ||
                     fpmu.io.out.valid ||

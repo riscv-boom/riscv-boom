@@ -487,29 +487,11 @@ class FPUUnit extends PipelinedFunctionalUnit(num_stages = 3
                                             , data_width = 65)
               with BOOMCoreParameters
 {
-//   val uop = io.req.bits.uop
-
    val fpu = Module(new FPU())
-
-   // TODO just straight up hook up the req fpu.io.req <> io.req ?
-   fpu.io.valid   := io.req.valid
-   fpu.io.uop     := io.req.bits.uop
-   fpu.io.in1     := io.req.bits.rs1_data
-   fpu.io.in2     := io.req.bits.rs2_data
-   fpu.io.in3     := io.req.bits.rs3_data
-   fpu.io.fcsr_rm := io.fcsr_rm
-
-
-   // Response
-//   val reg_data = Reg(Bits(width=65))
-//   reg_data := fpu.io.resp.bits.data
-//   io.resp.bits.data := reg_data
-//   io.resp <> fpu.io.resp
-   // TODO how close can I match these I/Os?
-   io.resp.bits.data := fpu.io.resp.bits.data
-   io.resp.bits.exc := fpu.io.resp.bits.exc
+   fpu.io.req <> io.req
+   fpu.io.req.bits.fcsr_rm := io.fcsr_rm
+   io.resp <> fpu.io.resp
 }
-
 
 
 
