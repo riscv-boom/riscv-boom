@@ -378,7 +378,7 @@ class DatPath() extends Module with BOOMCoreParameters
 
    val br_unit               = new BranchUnitResp()
 
-   val throw_idle_error      = Reg(init = Bool(false))
+   val watchdog_trigger      = Bool() 
 
    // Memory State
    var lsu_io:LoadStoreUnitIo = null
@@ -464,14 +464,11 @@ class DatPath() extends Module with BOOMCoreParameters
                               com_exc_cause === UInt(rocket.Causes.fault_fetch)))), "Exception thrown by IMEM, not yet supported.")
 
 
-   // TODO turn this into an I/O so we can bundle this up? Is there a way to Mux two bundles in?
-//   io.imem.btb_update <> br_unit.btb_update
    // TODO flush_take_pc should probably be given to the branch unit, instead of resetting it here?
    val jal_opc = UInt(0x6f)
    val jalr_opc = UInt(0x67)
    def GetUop(inst: Bits): Bits = inst(6,0)
    def IsCall(inst: Bits): Bool = (inst === JAL || inst === JALR) && inst(RD_MSB,RD_LSB) === RA
-//   def IsCall(inst: Bits): Bool = (GetUop(inst) === jal_opc || GetUop(inst) === jalr_opc) && inst(RD_MSB,RD_LSB) === RA TODO deleteme
    def IsReturn(inst: Bits): Bool = GetUop(inst) === jalr_opc && inst(RD_MSB,RD_LSB) === X0 && inst(RS1_MSB,RS1_LSB) === RA
 
    io.imem.btb_update.valid           := (br_unit.btb_update_valid || (bp2_take_pc && !if_stalled && !br_unit.take_pc)) && !flush_take_pc && !com_sret
@@ -505,9 +502,6 @@ class DatPath() extends Module with BOOMCoreParameters
    io.imem.invalidate := Range(0,DECODE_WIDTH).map{i => com_valids(i) && com_uops(i).is_fencei}.reduce(_|_)
 //                        pcr_ptbr_wen // invalidate on process switch (page table
                                      // walker updated base register)
-
-   //io.imem.ptw := ...  // hooked straight up to tlb.io.ptw TODO
-   //io.imem.ptw.status := pcr_status // hooked straight up to tlb.io.ptw TODO
 
    //-------------------------------------------------------------
    //-------------------------------------------------------------
@@ -919,23 +913,32 @@ class DatPath() extends Module with BOOMCoreParameters
    // Note: Normally this would be bad in that I'm writing state before
    // committing, so to get this to work I stall the entire pipeline for
    // MTPCR/MFPCR so I never speculate these instructions.
-   // TODO rename k0, k1, as they could use it
+   // TODO rename k0 as it could use it
    // TODO update the naming here; pcr/mtpcr/etc. is outdated
    // flush pipeline on all writes (because they could goof things up like writing base reg)
    // TODO scratch everything, let's just have the ROB execute this uop?
 
+   // if we catch a pipeline hang, let us puke out to the tohost register so we
+   // can catch this in the hardware
+
    require (exe_units(0).uses_pcr_wport)
    val pcr = Module(new rocket.CSRFile())
-   pcr.io.host <> io.host
-   pcr.io.rw.addr  := ImmGen(exe_units(0).io.resp(0).bits.uop.imm_packed, IS_I)
-   val pcr_read_out = pcr.io.rw.rdata
-
    val pcr_rw_cmd = exe_units(0).io.resp(0).bits.uop.ctrl.pcr_fcn
-   pcr.io.rw.cmd   := Mux(exe_units(0).io.resp(0).valid, pcr_rw_cmd, CSR.N)
-   val wb_wdata    = exe_units(0).io.resp(0).bits.data
-   pcr.io.rw.wdata := Mux(pcr_rw_cmd === CSR.S, pcr.io.rw.rdata | wb_wdata,
+   val wb_wdata = exe_units(0).io.resp(0).bits.data
+
+   pcr.io.host <> io.host
+   val pcr_read_out = pcr.io.rw.rdata
+   pcr.io.rw.addr  := Mux(watchdog_trigger, UInt(rocket.CSRs.tohost),
+                                    ImmGen(exe_units(0).io.resp(0).bits.uop.imm_packed, IS_I))
+
+   pcr.io.rw.cmd   := Mux(watchdog_trigger,              rocket.CSR.W,
+                      Mux(exe_units(0).io.resp(0).valid, pcr_rw_cmd, 
+                                                         CSR.N))
+   pcr.io.rw.wdata := Mux(watchdog_trigger, Bits(WATCHDOG_ERR_NO << 1 | 1),
+                      Mux(pcr_rw_cmd === CSR.S, pcr.io.rw.rdata | wb_wdata,
                       Mux(pcr_rw_cmd === CSR.C, pcr.io.rw.rdata & ~wb_wdata,
-                                                 wb_wdata))
+                                                 wb_wdata)))
+   
 
    // TODO is there anything else that's going on spuriously?
    assert (!(pcr_rw_cmd != CSR.N && !exe_units(0).io.resp(0).valid), "PCR is being written to spuriously.")
@@ -948,7 +951,7 @@ class DatPath() extends Module with BOOMCoreParameters
    pcr.io.cause     := com_exc_cause
    pcr.io.sret      := com_sret
    pcr_exc_target   := pcr.io.evec
-   pcr.io.badvaddr_wen := Bool(false); require (params(UseVM) == false) // TODO VM virtual memory
+   pcr.io.badvaddr_wen := Bool(false) // TODO VM virtual memory
 
    // reading requires serializing the entire pipeline
    pcr.io.fcsr_flags.valid := com_fflags_val
@@ -1063,7 +1066,6 @@ class DatPath() extends Module with BOOMCoreParameters
    //-------------------------------------------------------------
    //-------------------------------------------------------------
 
-   val tsc_reg = Reg(init = UInt(0, xprLen))
 
    var cnt = 0
    for (i <- 0 until exe_units.length)
@@ -1208,7 +1210,7 @@ class DatPath() extends Module with BOOMCoreParameters
 
    // throw assertion failure if a store or load have a misaligned or vm fault
    // as neither are supported as of yet.
-   require (params(UseVM) == false)
+   //require (params(UseVM) == false) TODO VM virtual memory
    assert (!(com_exception &&
              (com_exc_cause === UInt(rocket.Causes.misaligned_load) ||
               com_exc_cause === UInt(rocket.Causes.fault_load) ||
@@ -1236,11 +1238,6 @@ class DatPath() extends Module with BOOMCoreParameters
    //-------------------------------------------------------------
    //-------------------------------------------------------------
 
-//    TODO have a way to detect this
-//   val saw_rdcycle = Bool()
-//   debug(saw_rdcycle)
-//   saw_rdcycle := Range(0,COMMIT_WIDTH).map(w => com_valids(w) && com_uops(w).uopc === uopRDC).reduce(_|_)
-
    for (w <- 0 until DECODE_WIDTH)
    {
       debug(com_uops(w).inst)
@@ -1249,31 +1246,11 @@ class DatPath() extends Module with BOOMCoreParameters
    debug(br_unit.brinfo.valid)
    debug(br_unit.brinfo.mispredict)
 
-   // detect pipeline freezes
-   // if building an actual chip, then flush & restart pipeline...
-   val idle_cycles = Reg(init = UInt(0, 14))
-   when (com_valids.toBits.orR)
-   {
-//      idle_cycles := UInt(0) ^ (rob.io.com_valids.toBits ^ rob.io.com_valids.toBits)
-//      idle_cycles := UInt(0) ^ (rob.io.com_valids(0) ^ rob.io.com_valids(0)) ^ (rob.io.com_valids(1) ^ rob.io.com_valids(1)) // weird chisel bug we're trying to solve
-//      idle_cycles := UInt(0) ^ rob.io.com_valids.map(_^_).foldLeft(_^_)
-      idle_cycles := UInt(0)
-   }
-   .otherwise
-   {
-      idle_cycles := idle_cycles + UInt(1)
-   }
-
-   when (idle_cycles === UInt(1 << 12))
-   {
-      throw_idle_error := Bool(true)
-   }
-
-   debug(throw_idle_error)
-   debug(lsu_misspec)
-
-   assert (!(throw_idle_error), "Pipeline has hung.")
-   // TODO XXX stuff an error code down the csr_tohost to end the run
+   // detect pipeline freezes and throw error
+   val idle_cycles = WideCounter(15)
+   when (com_valids.toBits.orR) { idle_cycles := UInt(0) }
+   watchdog_trigger := Reg(next=idle_cycles.value(14)) // 32k cycles
+   assert (!(idle_cycles.value(13)), "Pipeline has hung.") // 16k cycles
 
 
    //-------------------------------------------------------------
@@ -1299,7 +1276,7 @@ class DatPath() extends Module with BOOMCoreParameters
 
    // Time Stamp Counter & Retired Instruction Counter
    // (only used for printf and vcd dumps - the actual counters are in the CSRFile)
-//   val tsc_reg = Reg(init = UInt(0, xprLen))
+   val tsc_reg = Reg(init = UInt(0, xprLen))
    val irt_reg = Reg(init = UInt(0, xprLen))
    val irt_ei_reg = Reg(init = UInt(0, xprLen))
    tsc_reg := tsc_reg + UInt(1)

@@ -33,6 +33,11 @@ trait ScalarOpConstants
    val N = Bool(false)
 
    //************************************
+   // Extra Constants
+   val WATCHDOG_ERR_NO = 0xffff // tohost error number
+
+
+   //************************************
    // Control Signals
 
    // PC Select Signal
