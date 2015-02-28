@@ -19,23 +19,30 @@ import rocket.NPTWPorts
 import rocket.PTW
 import rocket.Tile
 
- 
-class BOOMTile(resetSignal: Bool = null) extends Tile(resetSignal) 
+
+class BOOMTile(resetSignal: Bool = null) extends Tile(resetSignal)
 {
   val dcachePortId = 0
   val icachePortId = 1
 
   val core = Module(new Core, { case CoreName => "BOOM"})
   val icache = Module(new rocket.Frontend(btb_updates_out_of_order=true), { case CacheName => "L1I"; case CoreName => "BOOM" })
-  val dcache = Module(new DCacheWrapper, { case CacheName => "L1D" })
+  val dcache = Module(new rocket.HellaCache, { case CacheName => "L1D" })
+  val dc_shim = Module(new DCacheShim)
   val ptw = Module(new PTW(params(NPTWPorts)))
 
+//  val dcArb = Module(new rocket.HellaCacheArbiter(params(rocket.NDCachePorts)))
+//  dcArb.io.requestor(0) <> ptw.io.mem
+//  dcArb.io.requestor(1) <> core.io.dmem
+//  dcArb.io.mem <> dcache.io.core
+
   ptw.io.requestor(0) <> icache.io.cpu.ptw
-  ptw.io.requestor(1) <> dcache.io.core.ptw 
+  ptw.io.requestor(1) <> dcache.io.cpu.ptw
 
   core.io.host <> io.host
   core.io.imem <> icache.io.cpu
-  core.io.dmem <> dcache.io.core 
+  core.io.dmem <> dc_shim.io.core
+  dc_shim.io.dmem <> dcache.io.cpu
   core.io.ptw <> ptw.io.dpath
 
   val memArb = Module(new UncachedTileLinkIOArbiterThatAppendsArbiterId(params(NTilePorts)))

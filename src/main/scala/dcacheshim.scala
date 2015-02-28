@@ -1,5 +1,5 @@
 //**************************************************************************
-// Data Cache Wrapper to the Hella-Cache
+// Data Cache Shim/Wrapper to the Hella-Cache
 //--------------------------------------------------------------------------
 //
 // Christopher Celio
@@ -15,9 +15,6 @@
 // Contract:
 //    everything put in here will be executed by memory
 //    branch/kill signals will filter resp_val signals, but otherwise continue on
-
-
-// TODO handle memory misalignment exceptions...
 
 package BOOM
 {
@@ -147,7 +144,6 @@ class DCacheResp extends BOOMCoreBundle
 // from pov of datapath
 class DCMemPortIo extends BOOMCoreBundle
 {
-   // TODO provide "hellacacheIO" to connect to D$ (via an arbiter)
    val req    = (new DecoupledIO(new DCacheReq))
    val resp   = (new ValidIO(new DCacheResp)).flip
 
@@ -155,9 +151,6 @@ class DCMemPortIo extends BOOMCoreBundle
    val nack   = new NackInfo().asInput()
    val flush_pipe  = Bool(OUTPUT) //exception or other misspec which flushes entire pipeline
    val ordered = Bool(INPUT) // is the dcache ordered? (fence is done)
-
-   val ptw = new rocket.TLBPTWIO().flip
-//   val status = new Status().asOutput
 
    val debug = new BOOMCoreBundle
    {
@@ -176,7 +169,7 @@ class DCMemPortIo extends BOOMCoreBundle
    }.asInput
 }
 
-class DCacheWrapper extends Module with BOOMCoreParameters
+class DCacheShim extends Module with BOOMCoreParameters
 {
    val max_num_inflight = MAX_LD_COUNT
    isPow2(max_num_inflight)
@@ -184,25 +177,12 @@ class DCacheWrapper extends Module with BOOMCoreParameters
    val io = new Bundle
    {
       val core = (new DCMemPortIo()).flip
-      val mem  = new TileLinkIO
+      val dmem = new rocket.HellaCacheIO
    }
-
-
-   //------------------------------------------------------------
-   // The thing we're wrapping
-   val nbdcache = Module(new rocket.HellaCache)
-
-   // Hook nbdcache's tilelink straight out
-   io.mem <> nbdcache.io.mem
-
-//   nbdcache.io.cpu.ptw.status := io.core.status
-   nbdcache.io.cpu.ptw <> io.core.ptw
 
    // we are going to ignore store acks (for now at least), so filter them out and only listen to load acks
    // we know the store succeeded if it was not nacked
-   val nbdcache_load_ack = nbdcache.io.cpu.resp.valid && nbdcache.io.cpu.resp.bits.has_data
-
-   //------------------------------------------------------------
+   val cache_load_ack = io.dmem.resp.valid && io.dmem.resp.bits.has_data
 
    val inflight_load_buffer  = Vec.fill(max_num_inflight) {Module(new LoadReqSlot()).io}
 
@@ -215,8 +195,8 @@ class DCacheWrapper extends Module with BOOMCoreParameters
 
    for (i <- 0 until max_num_inflight)
    {
-      inflight_load_buffer(i).clear       := (nbdcache_load_ack && nbdcache.io.cpu.resp.bits.tag === UInt(i)) ||
-                                             (nbdcache.io.cpu.resp.bits.nack && m2_req_uop.is_load && m2_inflight_tag === UInt(i) && Reg(next=Reg(next=(enq_val && enq_rdy)))) ||
+      inflight_load_buffer(i).clear       := (cache_load_ack && io.dmem.resp.bits.tag === UInt(i)) ||
+                                             (io.dmem.resp.bits.nack && m2_req_uop.is_load && m2_inflight_tag === UInt(i) && Reg(next=Reg(next=(enq_val && enq_rdy)))) ||
                                              (io.core.req.bits.kill && m1_inflight_tag === UInt(i) && Reg(next=(enq_val && enq_rdy))) // don't clr random entry, make sure m1_tag is correct
       inflight_load_buffer(i).brinfo      := io.core.brinfo
       inflight_load_buffer(i).flush_pipe  := io.core.flush_pipe
@@ -240,7 +220,7 @@ class DCacheWrapper extends Module with BOOMCoreParameters
    enq_rdy := Bool(false)
    for (i <- 0 until max_num_inflight)
    {
-      when (!inflight_load_buffer(i).valid && nbdcache.io.cpu.req.ready)
+      when (!inflight_load_buffer(i).valid && io.dmem.req.ready)
       {
          enq_rdy := Bool(true)
       }
@@ -306,55 +286,55 @@ class DCacheWrapper extends Module with BOOMCoreParameters
 //   val prefetch_req_val = prefetcher.io.cache.req.valid && Bool(ENABLE_PREFETCHING)
    val prefetch_req_val = Bool(false)
 
-   io.core.req.ready              := enq_rdy && nbdcache.io.cpu.req.ready
-   nbdcache.io.cpu.req.valid      := (io.core.req.valid || prefetch_req_val)
-   nbdcache.io.cpu.req.bits.kill  := io.core.req.bits.kill || iflb_kill
+   io.core.req.ready              := enq_rdy && io.dmem.req.ready
+   io.dmem.req.valid      := (io.core.req.valid || prefetch_req_val)
+   io.dmem.req.bits.kill  := io.core.req.bits.kill || iflb_kill
                                           // kills request sent out last cycle
-   nbdcache.io.cpu.req.bits.typ   := io.core.req.bits.uop.mem_typ
-//   nbdcache.io.cpu.req.bits.addr  := Mux(io.core.req.valid, io.core.req.bits.addr,prefetcher.io.cache.req.bits.addr) TODO get core.req.valid off critical path here
-   nbdcache.io.cpu.req.bits.addr  := io.core.req.bits.addr
-   nbdcache.io.cpu.req.bits.tag   := Cat(!io.core.req.valid, new_inflight_tag) // TODO is there a reason i'm doing this req.valid Cat?
-   nbdcache.io.cpu.req.bits.cmd   := Mux(io.core.req.valid, io.core.req.bits.uop.mem_cmd, M_PFW)
-   nbdcache.io.cpu.req.bits.data  := Reg(next=io.core.req.bits.data) //notice this is delayed a cycle
-   nbdcache.io.cpu.req.bits.phys  := Bool(true) // use physical address? otherwise, use status bit of is VM enabled
+   io.dmem.req.bits.typ   := io.core.req.bits.uop.mem_typ
+//   io.dmem.req.bits.addr  := Mux(io.core.req.valid, io.core.req.bits.addr,prefetcher.io.cache.req.bits.addr) TODO get core.req.valid off critical path here
+   io.dmem.req.bits.addr  := io.core.req.bits.addr
+   io.dmem.req.bits.tag   := Cat(!io.core.req.valid, new_inflight_tag) // TODO is there a reason i'm doing this req.valid Cat?
+   io.dmem.req.bits.cmd   := Mux(io.core.req.valid, io.core.req.bits.uop.mem_cmd, M_PFW)
+   io.dmem.req.bits.data  := Reg(next=io.core.req.bits.data) //notice this is delayed a cycle
+   io.dmem.req.bits.phys  := Bool(true) // use physical address? otherwise, use status bit of is VM enabled
 
    //------------------------------------------------------------
    // handle responses and nacks
 
    // note: nacks come two cycles after a response, so I'm delaying everything
    // properly to line up stores, loads, nacks, and subword loads
-   val was_store_and_not_amo = m2_req_uop.is_store && !m2_req_uop.is_amo && Reg(next=Reg(next=(io.core.req.valid && nbdcache.io.cpu.req.ready)))  // was two cycles ago a store request?
+   val was_store_and_not_amo = m2_req_uop.is_store && !m2_req_uop.is_amo && Reg(next=Reg(next=(io.core.req.valid && io.dmem.req.ready)))  // was two cycles ago a store request?
 
 
    // Todo add entry valid bit?
-   val resp_idx = nbdcache.io.cpu.resp.bits.tag
+   val resp_idx = io.dmem.resp.bits.tag
 
-   io.core.resp.valid := Mux(nbdcache_load_ack,                                         !inflight_load_buffer(resp_idx).was_killed, // hide loads that were killed due to branches, etc.
-                         Mux(was_store_and_not_amo && !nbdcache.io.cpu.resp.bits.nack,  Bool(true),    // stores succeed quietly, so valid if no nack
-                                                                                        Bool(false)))  // filter out nacked responses
+   io.core.resp.valid := Mux(cache_load_ack,                              !inflight_load_buffer(resp_idx).was_killed, // hide loads that were killed due to branches, etc.
+                         Mux(was_store_and_not_amo && !io.dmem.resp.bits.nack,  Bool(true),    // stores succeed quietly, so valid if no nack
+                                                                             Bool(false)))  // filter out nacked responses
 
-   io.core.resp.bits.uop := Mux(nbdcache_load_ack, inflight_load_buffer(resp_idx).out_uop,
+   io.core.resp.bits.uop := Mux(cache_load_ack, inflight_load_buffer(resp_idx).out_uop,
                                                    m2_req_uop)
 
    // comes out the same cycle as the resp.valid signal
    // but is a few gates slower than resp.bits.data
-   io.core.resp.bits.data_subword := nbdcache.io.cpu.resp.bits.data_subword
-   io.core.resp.bits.data         := nbdcache.io.cpu.resp.bits.data
-   io.core.resp.bits.typ          := nbdcache.io.cpu.resp.bits.typ
+   io.core.resp.bits.data_subword := io.dmem.resp.bits.data_subword
+   io.core.resp.bits.data         := io.dmem.resp.bits.data
+   io.core.resp.bits.typ          := io.dmem.resp.bits.typ
 
    //------------------------------------------------------------
    // handle nacks from the cache (or from the IFLB or the LSU)
 
-   io.core.nack.valid     := (nbdcache.io.cpu.resp.bits.nack) || Reg(next=io.core.req.bits.kill) || Reg(next=iflb_kill) ||
-                              Reg(next=Reg(next=(io.core.req.valid && !(nbdcache.io.cpu.req.ready))))
+   io.core.nack.valid     := (io.dmem.resp.bits.nack) || Reg(next=io.core.req.bits.kill) || Reg(next=iflb_kill) ||
+                              Reg(next=Reg(next=(io.core.req.valid && !(io.dmem.req.ready))))
    io.core.nack.lsu_idx   := Mux(m2_req_uop.is_load, m2_req_uop.ldq_idx, m2_req_uop.stq_idx)
    io.core.nack.isload    := m2_req_uop.is_load
-   io.core.nack.cache_nack:= nbdcache.io.cpu.resp.bits.nack || Reg(next=iflb_kill) || Reg(next=Reg(next= (!(nbdcache.io.cpu.req.ready))))
+   io.core.nack.cache_nack:= io.dmem.resp.bits.nack || Reg(next=iflb_kill) || Reg(next=Reg(next= (!(io.dmem.req.ready))))
 
    //------------------------------------------------------------
    // Handle exceptions and fences
-   io.core.resp.bits.xcpt := nbdcache.io.cpu.xcpt
-   io.core.ordered := nbdcache.io.cpu.ordered
+   io.core.resp.bits.xcpt := io.dmem.xcpt
+   io.core.ordered := io.dmem.ordered
 
    //------------------------------------------------------------
    // debug

@@ -37,9 +37,6 @@
 //    currently won't STD forward if DMEM is busy
 //    committed stores leave the STQ too slowly, need to send out 1/cycle throughput
 
-// BUGS?
-//    XXX BUG TODO is it possible to starve out stores and deadlock the machine?
-
 
 package BOOM
 {
@@ -106,7 +103,9 @@ class LoadStoreUnitIo(pl_width: Int) extends BOOMCoreBundle
 
 // causing stuff to dissapear
 //   val dmem = new DCMemPortIo().flip()
-   val dmem_req_ready = Bool(INPUT)
+   val dmem_req_ready = Bool(INPUT)    // arbiter can back-pressure us (or MSHRs can fill up).
+                                       // TODO refactor - maybe get rid of this signal, since we turn it into
+                                       // a nack two cycles later in the cache wrapper.
    val dmem_is_ordered = Bool(INPUT)
 
    val counters = new Bundle
@@ -139,7 +138,7 @@ class LoadStoreUnitIo(pl_width: Int) extends BOOMCoreBundle
          val laq_forwarded_stq_idx = UInt(width=MEM_ADDR_SZ)
          val laq_yng_st_idx = UInt(width=MEM_ADDR_SZ)
          val laq_st_dep_mask= Bits(width=NUM_LSU_ENTRIES)
-         
+
          val stq_entry_val = Bool()
          val saq_val = Bool()
          val sdq_val = Bool()
@@ -227,7 +226,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    val ld_iss_val = Bool()
    val st_iss_val = Bool()
 
-   // for now, only execute the sleeping load at the head of the LAQ
+   // TODO for now, only execute the sleeping load at the head of the LAQ
    // wasteful if the laq_head has already been executed
    slow_ld_iss_idx := laq_head
 
@@ -461,7 +460,6 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    forwarding_age_logic.io.addr_matches    := forwarding_matches.toBits()
    forwarding_age_logic.io.youngest_st_idx := laq_yng_st_idx(ld_iss_idx)
 
-   // TODO get rid of dmem.req.ready, since the dcwrapper will already send us a nack if it's not ready?
    when ((req_fire_load_fast || req_fire_load_sleeper) && forwarding_age_logic.io.forwarding_val && io.dmem_req_ready)
    {
       laq_forwarded_std_val(l_uop.ldq_idx) := Bool(true)
@@ -557,7 +555,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    req_fire_store := Bool(false)
 
    when (stq_entry_val(stq_head) &&
-         (stq_committed(stq_head) || 
+         (stq_committed(stq_head) ||
             (stq_uop(stq_head).is_amo &&
             saq_val(stq_head) &&
             sdq_val(stq_head)

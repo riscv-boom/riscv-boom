@@ -379,7 +379,6 @@ class BusyTableIo(pipeline_width:Int, num_read_ports:Int, num_wb_ports:Int) exte
 // Note: I do NOT bypass from newly busied registers to the read ports.
 // That bypass check should be done elsewhere (this is to get it off the
 // critical path).
-// Max_operands 
 class BusyTable(pipeline_width:Int, num_read_ports:Int, num_wb_ports:Int) extends Module with BOOMCoreParameters
 {
    val io = new BusyTableIo(pipeline_width, num_read_ports, num_wb_ports)
