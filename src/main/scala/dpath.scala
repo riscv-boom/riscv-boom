@@ -296,19 +296,24 @@ class DatPath() extends Module with BOOMCoreParameters
 
    require (ISSUE_WIDTH <= 3)
 
+   if (ISSUE_WIDTH == 1) println("\n    -== Single Issue ==- \n")
+   if (ISSUE_WIDTH == 2) println("\n    -== Dual Issue ==- \n")
+   if (ISSUE_WIDTH == 3) println("\n    -== Triple Issue ==- \n")
+   if (params(BuildFPU).isEmpty) println ("\n    FPU Unit Disabled")
+   else                          println ("\n    FPU Unit Enabled")
+   if (params(UseVM)) println ("    VM Enabled\n")
+   else               println ("    VM Disabled\n")
+
    if (ISSUE_WIDTH == 1)
    {
-      println("\n    -== Single Issue ==- \n")
       var mem_unit:ExecutionUnit  = null
       if (params(BuildFPU).isEmpty)
       {
-         println ("\n    FPU Unit Disabled\n")
          mem_unit = Module(new ALUMulDMemExeUnit(is_branch_unit = true,
                                           shares_pcr_wport = true))
       }
       else
       {
-         println ("\n    FPU Unit Enabled\n")
          mem_unit = Module(new FPUALUMulDMemExeUnit(is_branch_unit = true,
                                           shares_pcr_wport = true))
       }
@@ -318,17 +323,14 @@ class DatPath() extends Module with BOOMCoreParameters
    else if (ISSUE_WIDTH == 2)
    {
       // TODO make a ALU/Mem unit, or a ALU-i/Mem unit
-      println("\n    -== Dual Issue ==- \n")
       val mem_unit = Module(new ALUMulDMemExeUnit())
       if (params(BuildFPU).isEmpty)
       {
-         println ("\n    FPU Unit Disabled\n")
          exe_units += Module(new ALUExeUnit(is_branch_unit = true,
                                              shares_pcr_wport = true))
       }
       else
       {
-         println ("\n    FPU Unit Enabled\n")
          exe_units += Module(new FPUALUExeUnit(is_branch_unit = true,
                                              shares_pcr_wport = true))
       }
@@ -337,7 +339,6 @@ class DatPath() extends Module with BOOMCoreParameters
    }
    else
    {
-      println("\n    -== Triple Issue ==- \n")
       val alu_unit    = Module(new ALUExeUnit(is_branch_unit = true,
                                      shares_pcr_wport = true))
       val muld_unit   = Module(new ALUMulDExeUnit())
@@ -349,6 +350,7 @@ class DatPath() extends Module with BOOMCoreParameters
       exe_units += mem_unit
    }
 
+   require (exe_units.length != 0)
    val num_rf_read_ports = exe_units.map(_.num_rf_read_ports).reduce[Int](_+_)
    val num_rf_write_ports = exe_units.map(_.num_rf_write_ports).reduce[Int](_+_)
    val num_total_bypass_ports = exe_units.withFilter(_.is_bypassable).map(_.num_bypass_ports).reduce[Int](_+_)
@@ -367,7 +369,7 @@ class DatPath() extends Module with BOOMCoreParameters
    println("   Num Fast Wakeup Ports: " + num_fast_wakeup_ports)
    println("   Num Bypass Ports     : " + num_total_bypass_ports)
    println("")
-//   require(num_wakeup_ports == num_rf_write_ports) TODO 
+//   require(num_wakeup_ports == num_rf_write_ports) TODO
 
    val register_width = if (params(BuildFPU).isEmpty) xprLen else 65
    val bypasses = new BypassData(num_total_bypass_ports, register_width)
@@ -378,11 +380,11 @@ class DatPath() extends Module with BOOMCoreParameters
 
    val br_unit               = new BranchUnitResp()
 
-   val watchdog_trigger      = Bool() 
+   val watchdog_trigger      = Bool()
 
    // Memory State
    var lsu_io:LoadStoreUnitIo = null
-   lsu_io = (exe_units.find(_.is_mem_unit).get).io.lsu_io 
+   lsu_io = (exe_units.find(_.is_mem_unit).get).io.lsu_io
    require (exe_units.count(_.is_mem_unit) == 1) // assume only one mem_unit
 
    // Writeback State
@@ -460,8 +462,9 @@ class DatPath() extends Module with BOOMCoreParameters
    fetch_bundle.xcpt_if := io.imem.resp.bits.xcpt_if
 
    // check for unallowed exceptions
-   assert(!Reg(init=Bool(false),next=(com_exception && (com_exc_cause === UInt(rocket.Causes.misaligned_fetch) ||
-                              com_exc_cause === UInt(rocket.Causes.fault_fetch)))), "Exception thrown by IMEM, not yet supported.")
+   // TODO deleteme
+//   assert(!Reg(init=Bool(false),next=(com_exception && (com_exc_cause === UInt(rocket.Causes.misaligned_fetch) ||
+//                              com_exc_cause === UInt(rocket.Causes.fault_fetch)))), "Exception thrown by IMEM, not yet supported.")
 
 
    // TODO flush_take_pc should probably be given to the branch unit, instead of resetting it here?
@@ -932,13 +935,13 @@ class DatPath() extends Module with BOOMCoreParameters
                                     ImmGen(exe_units(0).io.resp(0).bits.uop.imm_packed, IS_I))
 
    pcr.io.rw.cmd   := Mux(watchdog_trigger,              rocket.CSR.W,
-                      Mux(exe_units(0).io.resp(0).valid, pcr_rw_cmd, 
+                      Mux(exe_units(0).io.resp(0).valid, pcr_rw_cmd,
                                                          CSR.N))
    pcr.io.rw.wdata := Mux(watchdog_trigger, Bits(WATCHDOG_ERR_NO << 1 | 1),
                       Mux(pcr_rw_cmd === CSR.S, pcr.io.rw.rdata | wb_wdata,
                       Mux(pcr_rw_cmd === CSR.C, pcr.io.rw.rdata & ~wb_wdata,
                                                  wb_wdata)))
-   
+
 
    // TODO is there anything else that's going on spuriously?
    assert (!(pcr_rw_cmd != CSR.N && !exe_units(0).io.resp(0).valid), "PCR is being written to spuriously.")
@@ -951,7 +954,8 @@ class DatPath() extends Module with BOOMCoreParameters
    pcr.io.cause     := com_exc_cause
    pcr.io.sret      := com_sret
    pcr_exc_target   := pcr.io.evec
-   pcr.io.badvaddr_wen := Bool(false) // TODO VM virtual memory
+   pcr.io.badvaddr_wen := com_exception // don't care for non-memory exceptions,
+                                        // so we can write to this for ALL exceptions
 
    // reading requires serializing the entire pipeline
    pcr.io.fcsr_flags.valid := com_fflags_val
