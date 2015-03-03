@@ -96,8 +96,8 @@ class CtrlSignals extends Bundle()
    val fcn_dw      = Bool()
    val rf_wen      = Bool()
    val pcr_fcn     = Bits(width = rocket.CSR.SZ)
-   val is_load     = Bool()
-   val is_sta      = Bool()
+   val is_load     = Bool()   // will invoke TLB address lookup
+   val is_sta      = Bool()   // will invoke TLB address lookup
    val is_std      = Bool()
 }
 
@@ -150,7 +150,7 @@ class MicroOp extends BOOMCoreBundle
    val mem_typ          = UInt(width = 3)             // memory mask type for loads/stores
    val is_fence         = Bool()
    val is_fencei        = Bool()
-   val is_store         = Bool()                      // TODO AMOs are also considered stores?
+   val is_store         = Bool()                      // AMOs are considered stores (anything that goes into the STQ, including fences)
    val is_amo           = Bool()
    val is_load          = Bool()
    val is_unique        = Bool()                      // only allow this instruction in the pipeline, wait for STQ to drain, clear fetch after it
@@ -232,7 +232,8 @@ class DpathIo() extends Bundle()
    val host = new uncore.HTIFIO
    val imem = new rocket.CPUFrontendIO
    val dmem = new DCMemPortIo
-   val ptw =  new rocket.DatapathPTWIO().flip
+   val ptw_dat  =  new rocket.DatapathPTWIO().flip
+   val ptw_tlb  =  new rocket.TLBPTWIO()
    val counters = new CacheCounters().asInput
 }
 
@@ -1048,8 +1049,7 @@ class DatPath() extends Module with BOOMCoreParameters
    lsu_io.commit_store_mask := com_st_mask
    lsu_io.commit_load_mask  := com_ld_mask
 
-   lsu_io.exception         := flush_pipeline //com_exception, com.exception comes too early, will fight against a branch that resolves same cycle as an exception
-   lsu_io.lsu_misspec       := lsu_misspec
+   lsu_io.exception         := flush_pipeline || lsu_misspec //com_exception, com.exception comes too early, will fight against a branch that resolves same cycle as an exception
 
    // Handle Branch Mispeculations
    lsu_io.brinfo      := br_unit.brinfo
@@ -1423,7 +1423,7 @@ class DatPath() extends Module with BOOMCoreParameters
          }
       }
 
-      printf(") State: (%s:%s %s %s \033[1;31m%s\033[0m %s %s) BMsk:%x %s %s %s\n"
+      printf(") State: (%s:%s %s %s %s \033[1;31m%s\033[0m %s %s) BMsk:%x %s %s %s\n"
          , Mux(rob.io.debug.state === UInt(0), Str("RESET"),
            Mux(rob.io.debug.state === UInt(1), Str("NORMAL"),
            Mux(rob.io.debug.state === UInt(2), Str("ROLLBK"),
@@ -1432,6 +1432,7 @@ class DatPath() extends Module with BOOMCoreParameters
          , Mux(rob_rdy,Str("_"), Str("!ROB_RDY"))
          , Mux(laq_full, Str("LAQ_FULL"), Str("_"))
          , Mux(stq_full, Str("STQ_FULL"), Str("_"))
+         , Mux(lsu_io.debug.stq_maybe_full, Str("Smaybe"), Str("_"))
          , Mux(flush_pipeline, Str("FLUSH_PIPELINE"), Str(" "))
          , Mux(branch_mask_full.reduce(_|_), Str("BR_MSK_FULL"), Str(" "))
          , Mux(io.dmem.req.ready, Str("D$_Rdy"), Str("D$_BSY"))
@@ -1801,10 +1802,12 @@ class DatPath() extends Module with BOOMCoreParameters
    //-------------------------------------------------------------
    // Page Table Walker
 
-   io.ptw.ptbr := pcr.io.ptbr
-   io.ptw.invalidate := pcr.io.fatc
-   io.ptw.sret := com_sret
-   io.ptw.status := pcr.io.status
+   io.ptw_tlb <> lsu_io.ptw
+
+   io.ptw_dat.ptbr := pcr.io.ptbr
+   io.ptw_dat.invalidate := pcr.io.fatc
+   io.ptw_dat.sret := com_sret
+   io.ptw_dat.status := pcr.io.status
 
    //-------------------------------------------------------------
    //-------------------------------------------------------------

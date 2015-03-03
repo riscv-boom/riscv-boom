@@ -109,11 +109,12 @@ object XDecode
    SBREAK  -> List(Y, N, X, uopNOP  , FU_ALU , RT_X  , RT_X  , RT_X  , N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, Y, Y, N, CSR.N),
 
    FENCE_I -> List(Y, N, X, uopNOP  , FU_X   , RT_X  , RT_X  , RT_X  , N, IS_X, N, N, N, N, Y, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, Y, Y, CSR.N),
-   FENCE   -> List(Y, N, X, uopMEMSPECIAL,FU_MEM, RT_X, RT_X, RT_X   , N, IS_X, N, Y, N, Y, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, Y, Y, CSR.N), // TODO PERF make fence higher performance
+   FENCE   -> List(Y, N, X, uopFENCE, FU_MEM , RT_X  , RT_X  , RT_X  , N, IS_X, N, Y, N, Y, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, Y, Y, CSR.N), // TODO PERF make fence higher performance
+                                                                                                                                                       // currently serializes pipeline
 
    // A-type
    AMOADD_W-> List(Y, N, X, uopAMO_AG, FU_MEM, RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, Y, Y, N, N, M_XA_ADD, MSK_W,UInt(0),N, N, N, N, N, N, Y, Y, CSR.N), //TODO make AMOs higherperformance
-   AMOXOR_W-> List(Y, N, X, uopAMO_AG, FU_MEM, RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, Y, Y, N, N, M_XA_XOR, MSK_W,UInt(0),N, N, N, N, N, N, Y, Y, CSR.N), //TODO should I mark "Is_store"?
+   AMOXOR_W-> List(Y, N, X, uopAMO_AG, FU_MEM, RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, Y, Y, N, N, M_XA_XOR, MSK_W,UInt(0),N, N, N, N, N, N, Y, Y, CSR.N),
    AMOSWAP_W->List(Y, N, X, uopAMO_AG, FU_MEM, RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, Y, Y, N, N, M_XA_SWAP,MSK_W,UInt(0),N, N, N, N, N, N, Y, Y, CSR.N),
    AMOAND_W-> List(Y, N, X, uopAMO_AG, FU_MEM, RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, Y, Y, N, N, M_XA_AND, MSK_W,UInt(0),N, N, N, N, N, N, Y, Y, CSR.N),
    AMOOR_W -> List(Y, N, X, uopAMO_AG, FU_MEM, RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, Y, Y, N, N, M_XA_OR,  MSK_W,UInt(0),N, N, N, N, N, N, Y, Y, CSR.N),

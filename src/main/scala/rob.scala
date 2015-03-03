@@ -244,7 +244,7 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
       {
          rob_val(rob_tail)       := Bool(true)
          rob_bsy(rob_tail)       := io.dis_uops(w).uopc != uopSRET &&  // TODO do I need to do this for eret? or should I treat it like it's an exception
-                                    io.dis_uops(w).uopc != uopMEMSPECIAL &&
+                                    !io.dis_uops(w).is_fence &&
                                     !(io.dis_uops(w).is_fencei)
          rob_uop(rob_tail)       := io.dis_uops(w)
          rob_exception(rob_tail) := io.dis_uops(w).exception
@@ -307,7 +307,7 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
                                                               Mux(io.mem_xcpt.ma.st, UInt(rocket.Causes.misaligned_store),
                                                               Mux(io.mem_xcpt.pf.ld, UInt(rocket.Causes.fault_load),
                                                               Mux(io.mem_xcpt.pf.st, UInt(rocket.Causes.fault_store),
-                                                                                     SInt(0)))))
+                                                                                     UInt(0)))))
          assert ((io.mem_xcpt.ma.ld || io.mem_xcpt.ma.st || io.mem_xcpt.pf.ld || io.mem_xcpt.pf.st),
                "Memory exception - no exception type set by data cache.")
 

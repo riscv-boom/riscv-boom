@@ -337,6 +337,7 @@ class MemExeUnit extends ExecutionUnit(num_rf_read_ports = 2 // TODO make this 1
    val lsu = Module(new LoadStoreUnit(DECODE_WIDTH))
 
    // TODO does this interface have to be so verbose? for the LSU connections
+   // we want "lsu.io <> io.lsu_io"
    lsu.io.dec_st_vals       := io.lsu_io.dec_st_vals
    lsu.io.dec_ld_vals       := io.lsu_io.dec_ld_vals
    lsu.io.dec_uops          := io.lsu_io.dec_uops
@@ -346,7 +347,6 @@ class MemExeUnit extends ExecutionUnit(num_rf_read_ports = 2 // TODO make this 1
    lsu.io.commit_load_mask  := io.lsu_io.commit_load_mask
 
    lsu.io.brinfo            := io.brinfo
-   lsu.io.lsu_misspec       := io.lsu_io.lsu_misspec
    lsu.io.exception         := io.lsu_io.exception
    lsu.io.nack              <> io.dmem.nack
    lsu.io.counters          <> io.lsu_io.counters
@@ -365,9 +365,12 @@ class MemExeUnit extends ExecutionUnit(num_rf_read_ports = 2 // TODO make this 1
    // enqueue addresses,st-data at the end of Execute
    lsu.io.exe_resp <> maddrcalc.io.resp
 
+   lsu.io.ptw <> io.lsu_io.ptw
+
    // HellaCache Req
    lsu.io.dmem_req_ready := io.dmem.req.ready
    lsu.io.dmem_is_ordered:= io.dmem.ordered
+
 
    // TODO get rid of com_handling and guard with an assert?
    io.dmem.req.valid     := Mux(io.com_handling_exc && lsu.io.memreq_uop.is_load, Bool(false),
@@ -408,8 +411,8 @@ class MemExeUnit extends ExecutionUnit(num_rf_read_ports = 2 // TODO make this 1
 
 
 
-   lsu.io.memresp_val := memresp_val
-   lsu.io.memresp_uop := memresp_uop
+   lsu.io.memresp_uop.valid := memresp_val
+   lsu.io.memresp_uop.bits  := memresp_uop
 
 
    // Hook up loads to the response
@@ -520,7 +523,6 @@ class ALUMulDMemExeUnit(is_branch_unit: Boolean = false
    lsu.io.commit_load_mask  := io.lsu_io.commit_load_mask
 
    lsu.io.brinfo            := io.brinfo
-   lsu.io.lsu_misspec       := io.lsu_io.lsu_misspec
    lsu.io.exception         := io.lsu_io.exception
    lsu.io.nack              <> io.dmem.nack
    lsu.io.counters          <> io.lsu_io.counters
@@ -538,6 +540,8 @@ class ALUMulDMemExeUnit(is_branch_unit: Boolean = false
 
    // enqueue addresses,st-data at the end of Execute
    lsu.io.exe_resp <> maddrcalc.io.resp
+
+   lsu.io.ptw <> io.lsu_io.ptw
 
    // HellaCache Req
    lsu.io.dmem_req_ready := io.dmem.req.ready
@@ -581,8 +585,8 @@ class ALUMulDMemExeUnit(is_branch_unit: Boolean = false
                                            , io.dmem.resp.bits.data_subword))
    }
 
-   lsu.io.memresp_val   := memresp_val
-   lsu.io.memresp_uop   := memresp_uop
+   lsu.io.memresp_uop.valid := memresp_val
+   lsu.io.memresp_uop.bits  := memresp_uop
 
 
    // Hook up loads and multiplies to the 2nd write port
@@ -716,7 +720,6 @@ class FPUALUMulDMemExeUnit(is_branch_unit: Boolean = false
    lsu.io.commit_load_mask  := io.lsu_io.commit_load_mask
 
    lsu.io.brinfo            := io.brinfo
-   lsu.io.lsu_misspec       := io.lsu_io.lsu_misspec
    lsu.io.exception         := io.lsu_io.exception
    lsu.io.nack              <> io.dmem.nack
    lsu.io.counters          <> io.lsu_io.counters
@@ -734,6 +737,8 @@ class FPUALUMulDMemExeUnit(is_branch_unit: Boolean = false
 
    // enqueue addresses,st-data at the end of Execute
    lsu.io.exe_resp <> maddrcalc.io.resp
+
+   lsu.io.ptw <> io.lsu_io.ptw
 
    // HellaCache Req
    lsu.io.dmem_req_ready := io.dmem.req.ready
@@ -786,8 +791,8 @@ class FPUALUMulDMemExeUnit(is_branch_unit: Boolean = false
                                                                            io.dmem.resp.bits.data_subword)))
    }
 
-   lsu.io.memresp_val   := memresp_val
-   lsu.io.memresp_uop   := memresp_uop
+   lsu.io.memresp_uop.valid := memresp_val
+   lsu.io.memresp_uop.bits  := memresp_uop
 
    // Hook up loads and multiplies to the 2nd write port
    io.resp(1).valid                := memresp_val || muldiv.io.resp.valid

@@ -50,18 +50,11 @@ abstract trait BOOMCoreParameters extends rocket.CoreParameters
 
    //************************************
    // Load/Store Unit
-   
-   val DISABLE_STORE_FORWARDING = true  // for now, in getting VM working, turn
-                                        // off ability to forward store data to
-                                        // dependent loads
 
    //************************************
    // Extra Knobs and Features
    val ENABLE_REGFILE_BYPASSING  = true  // bypass regfile write ports to read ports
    val MAX_WAKEUP_DELAY = 3              // unused
-//   val ON_IDLE_THROW_ERROR = true        // if pipeline goes idle, throw error
-                                         // otherwise, reset pipeline and
-                                         // restart. TODO on this feature.
 
    //************************************
    // Implicitly calculated constants
@@ -84,6 +77,8 @@ abstract trait BOOMCoreParameters extends rocket.CoreParameters
 
    //************************************
    // Non-BOOM parameters
+
+   val corePAddrBits = params(uncore.PAddrBits)
 
    val vaddrBits = params(uncore.VAddrBits)
    val fastMulDiv = params(FastMulDiv)

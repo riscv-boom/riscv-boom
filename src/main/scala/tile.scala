@@ -33,16 +33,24 @@ class BOOMTile(resetSignal: Bool = null) extends Tile(resetSignal)
 
   val dcArb = Module(new rocket.HellaCacheArbiter(params(rocket.NDCachePorts)))
   dcArb.io.requestor(0) <> ptw.io.mem
-  dcArb.io.requestor(1) <> dc_shim.io.dmem 
+  dcArb.io.requestor(1) <> dc_shim.io.dmem
   dcArb.io.mem <> dcache.io.cpu
 
   ptw.io.requestor(0) <> icache.io.cpu.ptw
-  ptw.io.requestor(1) <> dcache.io.cpu.ptw
+  ptw.io.requestor(1) <> core.io.ptw_tlb
+
+  // the dcache's built-in TLB will be unused, but it still needs some of the
+  // status/sret signals for things such as lr/sc
+  //ptw.io.requestor(1) <> dcache.io.cpu.ptw
+  dcache.io.cpu.ptw.sret := ptw.io.requestor(1).sret
+  dcache.io.cpu.ptw.status <> ptw.io.requestor(1).status
+  dcache.io.cpu.ptw.invalidate := ptw.io.requestor(1).invalidate
 
   core.io.host <> io.host
   core.io.imem <> icache.io.cpu
   core.io.dmem <> dc_shim.io.core
-  core.io.ptw <> ptw.io.dpath
+  core.io.ptw_dat <> ptw.io.dpath
+
 
   val memArb = Module(new UncachedTileLinkIOArbiterThatAppendsArbiterId(params(NTilePorts)))
   memArb.io.in(dcachePortId) <> dcache.io.mem

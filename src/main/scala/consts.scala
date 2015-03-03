@@ -185,7 +185,7 @@ trait ScalarOpConstants
    val uopREMUW= Bits(64, UOPC_SZ)
 
    val uopFENCEI    = Bits(65, UOPC_SZ)
-   val uopMEMSPECIAL= Bits(66, UOPC_SZ)
+   //               = Bits(66, UOPC_SZ)
    val uopAMO_AG    = Bits(67, UOPC_SZ) // AMO-address gen (use normal STD for datagen)
 
    // TODO provide a micro-op for each instruction, going into the FPU,
