@@ -90,7 +90,7 @@ class LoadStoreUnitIo(pl_width: Int) extends BOOMCoreBundle
    val laq_full           = Bool(OUTPUT)
    val stq_full           = Bool(OUTPUT)
 
-   val exception          = Bool(INPUT) // TODO kill everything, rename to pipeline flush?
+   val exception          = Bool(INPUT)
    val lsu_clr_bsy_valid  = Bool(OUTPUT) // HACK: let the stores clear out the busy bit in the ROB
    val lsu_clr_bsy_rob_idx= UInt(OUTPUT, width=ROB_ADDR_SZ)
    val lsu_fencei_rdy     = Bool(OUTPUT)
@@ -218,14 +218,6 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    var next_live_store_mask = Mux(clear_store, live_store_mask & ~(Bits(1) << stq_head),
                                                 live_store_mask)
 
-
-   //-------------------------------------------------------------
-   //-------------------------------------------------------------
-   // Pipeline Registers
-   //-------------------------------------------------------------
-   //-------------------------------------------------------------
-   // TODO simplify the LSU logic and let the synthesis tools retime everything
-
    //-------------------------------------------------------------
    //-------------------------------------------------------------
    // Load Wakeup Ctrl Code
@@ -330,29 +322,23 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    dtlb.io.req.bits.vpn := exe_vaddr >> UInt(params(PgIdxBits))
    dtlb.io.req.bits.instruction := Bool(false)
 
-//   TODO BUG XXX pass around xcpt bits
-   val xcpt_pf_ld = dtlb.io.resp.xcpt_ld && exe_uop.ctrl.is_load && io.exe_resp.valid
-   val xcpt_pf_st = dtlb.io.resp.xcpt_st && exe_uop.ctrl.is_sta && io.exe_resp.valid
-   // io.exe_resp.bits.xcpt.... incoming can be a misaligned exception
-//   io.xcpt...
-      //when (io.mem_xcpt_val && MatchBank(GetBankIdx(io.mem_xcpt_uop.rob_idx)))
-      //{
-      //   rob_exception(GetRowIdx(io.mem_xcpt_uop.rob_idx)) := Bool(true)
-      //   rob_exc_cause(GetRowIdx(io.mem_xcpt_uop.rob_idx)) := Mux(io.mem_xcpt.ma.ld, UInt(rocket.Causes.misaligned_load),
-      //                                                        Mux(io.mem_xcpt.ma.st, UInt(rocket.Causes.misaligned_store),
-      //                                                        Mux(io.mem_xcpt.pf.ld, UInt(rocket.Causes.fault_load),
-      //                                                        Mux(io.mem_xcpt.pf.st, UInt(rocket.Causes.fault_store),
-      //                                                                               UInt(0)))))
-
-      //}
-
+   // exceptions
+   val pf_ld = dtlb.io.resp.xcpt_ld && exe_uop.ctrl.is_load && io.exe_resp.valid
+   val pf_st = dtlb.io.resp.xcpt_st && exe_uop.ctrl.is_sta && io.exe_resp.valid
+   val mem_xcpt_valid = Reg(next=(io.exe_resp.valid && (io.exe_resp.bits.xcpt.valid || pf_ld || pf_st)), init=Bool(false))
+   val mem_xcpt_cause = Reg(next=(Mux(io.exe_resp.bits.xcpt.valid, io.exe_resp.bits.xcpt.bits.cause,
+                                  Mux(exe_uop.ctrl.is_load,        UInt(rocket.Causes.fault_load),
+                                                                   UInt(rocket.Causes.fault_store)))))
 
    assert (!(exe_uop.ctrl.is_sta && exe_uop.is_fence), "Fence is pretending to talk to the TLB")
 
-   val tlb_nack = dtlb.io.req.valid && dtlb.io.resp.miss // TODO BUG XXX VM do something with this nack
+   // nack
+   val tlb_nack = dtlb.io.req.valid && dtlb.io.resp.miss
 
 
+   // output
    val exe_paddr = Cat(dtlb.io.resp.ppn, exe_vaddr(params(PgIdxBits)-1,0))
+
 
 
    //-------------------
@@ -609,8 +595,8 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    val wb_uop             = Reg(next=mem_ld_uop)
    wb_uop.br_mask        := GetNewBrMask(io.brinfo, mem_ld_uop)
 
-   // kill load request to mem if address matches (we will either sleep load, or forward data)
-   io.memreq_kill     := mem_ld_req_fired && addr_conflicts.toBits != Bits(0)
+   // kill load request to mem if address matches (we will either sleep load, or forward data) or TLB miss
+   io.memreq_kill     := tlb_nack || (mem_ld_req_fired && addr_conflicts.toBits != Bits(0))
    wb_forward_std_idx := forwarding_age_logic.io.forwarding_idx
 
    // kill forwarding if branch mispredict
@@ -744,11 +730,13 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
 
    // TODO always pad out the input to PECircular() to pow2
    // convert it to vec[bool], then in.padTo(1 << log2Up(in.size), Bool(false))
-//   io.ldo_xcpt_uop := laq_uop(Mux(l_idx >= UInt(num_ld_entries), l_idx - UInt(num_ld_entries), l_idx))
 
-   io.xcpt.valid := failed_loads.reduce(_|_)
-   io.xcpt.bits.uop := laq_uop(Mux(l_idx >= UInt(num_ld_entries), l_idx - UInt(num_ld_entries), l_idx))
-   io.xcpt.bits.cause := MINI_EXCEPTION_MEM_ORDERING
+   // one exception port, but multiple causes!
+   // - 1) the incoming store-address finds a faulting load (it is by definition younger)
+   // - 2) the incoming load or store address is excepting. It must be older and thus takes precedent.
+   io.xcpt.valid := failed_loads.reduce(_|_) || mem_xcpt_valid
+   io.xcpt.bits.uop := Mux(mem_xcpt_valid, mem_uop, laq_uop(Mux(l_idx >= UInt(num_ld_entries), l_idx - UInt(num_ld_entries), l_idx)))
+   io.xcpt.bits.cause := Mux(mem_xcpt_valid, mem_xcpt_cause, MINI_EXCEPTION_MEM_ORDERING)
 
 
 
