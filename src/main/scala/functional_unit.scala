@@ -92,8 +92,7 @@ class FuncUnitResp(data_width: Int) extends BOOMCoreBundle
 {
    val uop = new MicroOp()
    val data = Bits(width = data_width)
-   val xcpt = (new rocket.HellaCacheExceptions)
-   val exc  = Bits(width = 5) // FP-only TODO consolidate exception bits?
+   val xcpt = new ValidIO(new ExecuteTimeExceptions)
 
    override def clone = new FuncUnitResp(data_width).asInstanceOf[this.type]
 }
@@ -409,10 +408,7 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)
    }
 
    // Exceptions
-   io.resp.bits.xcpt.ma.ld := Bool(false)
-   io.resp.bits.xcpt.ma.st := Bool(false)
-   io.resp.bits.xcpt.pf.ld := Bool(false)
-   io.resp.bits.xcpt.pf.st := Bool(false)
+   io.resp.bits.xcpt.valid := Bool(false)
 }
 
 
@@ -470,10 +466,10 @@ class MemAddrCalcUnit extends PipelinedFunctionalUnit(num_stages = 0
    val ma_ld = io.req.valid && io.req.bits.uop.uopc === uopLD && misaligned
    val ma_st = io.req.valid && (io.req.bits.uop.uopc === uopSTA || io.req.bits.uop.uopc === uopAMO_AG) && misaligned
 
-   io.resp.bits.xcpt.ma.ld := ma_ld
-   io.resp.bits.xcpt.ma.st := ma_st
-   io.resp.bits.xcpt.pf.ld := Bool(false)
-   io.resp.bits.xcpt.pf.st := Bool(false)
+   io.resp.bits.xcpt.valid := ma_ld || ma_st
+   io.resp.bits.xcpt.bits.cause := Mux(ma_ld, rocket.Causes.misaligned_load,
+                                              rocket.Causes.misaligned_store)
+   assert (!(ma_ld && ma_st), "Mutually-exclusive exceptions are firing.")
 }
 
 
@@ -491,6 +487,7 @@ class FPUUnit extends PipelinedFunctionalUnit(num_stages = 3
    fpu.io.req <> io.req
    fpu.io.req.bits.fcsr_rm := io.fcsr_rm
    io.resp <> fpu.io.resp
+   io.resp.bits.xcpt.bits.uop := io.resp.bits.uop
 }
 
 
@@ -549,10 +546,7 @@ class MulDivUnit extends UnPipelinedFunctionalUnit with BOOMCoreParameters
    io.resp.bits.data      := muldiv.io.resp.bits.data
 
    // exceptions
-   io.resp.bits.xcpt.ma.ld := Bool(false)
-   io.resp.bits.xcpt.ma.st := Bool(false)
-   io.resp.bits.xcpt.pf.ld := Bool(false)
-   io.resp.bits.xcpt.pf.st := Bool(false)
+   io.resp.bits.xcpt.valid := Bool(false)
 }
 
 }

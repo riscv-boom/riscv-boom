@@ -335,6 +335,7 @@ trait RISCVConstants
 trait ExcCauseConstants
 {
    val MINI_EXCEPTION_MEM_ORDERING = UInt(13)
+   require (!rocket.Causes.all.contains(13))
 }
 
 }

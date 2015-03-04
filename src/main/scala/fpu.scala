@@ -168,7 +168,7 @@ class FPU extends Module with BOOMCoreParameters
    fpiu.io.in.bits := req
    val fpiu_out = Pipe(Reg(next=fpiu.io.in.valid && !fp_ctrl.fastpipe),
                        fpiu.io.out.bits, fpu_latency-1)
-   
+
    val fpiu_result  = new rocket.FPResult
    fpiu_result.data := fpiu_out.bits.toint
    fpiu_result.exc  := fpiu_out.bits.exc
@@ -187,11 +187,15 @@ class FPU extends Module with BOOMCoreParameters
                     fpmu.io.out.valid ||
                     sfma.io.out.valid ||
                     dfma.io.out.valid
-   io.resp.bits := Mux(dfma.io.out.valid, dfma.io.out.bits,
+   val fpu_out   = Mux(dfma.io.out.valid, dfma.io.out.bits,
                    Mux(sfma.io.out.valid, sfma.io.out.bits,
                    Mux(ifpu.io.out.valid, ifpu.io.out.bits,
                    Mux(fpiu_out.valid,    fpiu_result,
                                           fpmu.io.out.bits))))
+
+   io.resp.bits.data            := fpu_out.data
+   io.resp.bits.xcpt.valid      := io.resp.valid
+   io.resp.bits.xcpt.bits.cause := fpu_out.exc
 }
 
 }

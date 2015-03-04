@@ -26,7 +26,10 @@ import Node._
 import scala.math.ceil
 
 
-class RobIo(machine_width: Int, num_wakeup_ports: Int)  extends BOOMCoreBundle
+class RobIo(machine_width: Int
+            , num_wakeup_ports: Int
+            , num_exception_ports: Int
+            )  extends BOOMCoreBundle
 {
    // Dispatch Stage
    // (Write Instruction to ROB from Dispatch Stage)
@@ -46,14 +49,7 @@ class RobIo(machine_width: Int, num_wakeup_ports: Int)  extends BOOMCoreBundle
    val debug_wb_valids  = Vec.fill(num_wakeup_ports) { Bool(INPUT) }
    val debug_wb_wdata   = Vec.fill(num_wakeup_ports) { Bits(INPUT, xprLen) }
 
-   val mem_xcpt_val     = Bool(INPUT)
-   val mem_xcpt_uop     = new MicroOp().asInput
-   val mem_xcpt         = (new rocket.HellaCacheExceptions).asInput
-
-   // load-ordering failure - treat as exception, even though it's just a rollback/pipeline restart
-   // TODO consolidate exception ports?
-   val ldo_xcpt_val     = Bool(INPUT)
-   val ldo_xcpt_uop     = new MicroOp().asInput
+   val xcpts = Vec.fill(num_exception_ports) { new ValidIO(new ExecuteTimeExceptions()).flip }
 
    // Commit Stage
    // (Free no-longer used register).
@@ -125,9 +121,14 @@ class RobIo(machine_width: Int, num_wakeup_ports: Int)  extends BOOMCoreBundle
 
 // width = the dispatch and commit width of the processor
 // num_wakeup_ports = self-explanatory
-class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Module with BOOMCoreParameters
+// num_exception_ports = number of execute-time exception wb ports from FPUs, LSU
+class Rob(width: Int
+         , num_rob_entries: Int
+         , num_wakeup_ports: Int
+         , num_exception_ports: Int
+         ) extends Module with BOOMCoreParameters
 {
-   val io = new RobIo(width, num_wakeup_ports)
+   val io = new RobIo(width, num_wakeup_ports, num_exception_ports)
 
    val num_rob_rows = num_rob_entries / width
    require (num_rob_rows % 2 == 0) // this is due to how rob PCs are stored in two banks
@@ -235,7 +236,8 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
                                                            // rollback, branch_kill
       val rob_exception = Mem(Bool(), num_rob_rows)        // TODO consolidate into the com_uop? what's the best for Chisel?
       val rob_exc_cause = Mem(UInt(width=xprLen), num_rob_rows) // holds exception code OR it holds the fcsr_flags
-                                                                // (must look into the rob_uop to figure out if FP inst)
+                                                                // (must look into the rob_uop to figure out if FP inst & !ld/st)
+                                                                // TODO compress rob_exc_cause size down, xprLen is insanity
 
       //-----------------------------------------------
       // Dispatch: Add Entry to ROB
@@ -268,12 +270,6 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
          when (wb_resp.valid && MatchBank(GetBankIdx(wb_uop.rob_idx)))
          {
             rob_bsy(row_idx) := Bool(false)
-
-            // TODO is there a way to only check wakeup ports that can throw fp exceptions?
-            when (wb_uop.fp_val && !(wb_uop.is_load || wb_uop.is_store))
-            {
-               rob_exc_cause(row_idx) := wb_resp.bits.exc
-            }
          }
          // TODO Chisel can asserts be wrapped by when statements?
          assert (!(wb_resp.valid && MatchBank(GetBankIdx(wb_uop.rob_idx)) &&
@@ -296,27 +292,21 @@ class Rob(width: Int, num_rob_entries: Int, num_wakeup_ports: Int) extends Modul
 
 
       //-----------------------------------------------
-      // Exceptions
-      // only support execute-time exceptions from memory
+      // Exceptions (Execute Time)
+      // most exceptions are caught at Decode, except memory-related exceptions
+      // and also FP flags, which share the same field, albiet, for a slightly
+      // different purpose.
 
-      // TODO can we consolidate the write port on mem exceptions and fp exceptions?
-      when (io.mem_xcpt_val && MatchBank(GetBankIdx(io.mem_xcpt_uop.rob_idx)))
+      // TODO AREA only write in the oldest exception, to reduce port count!
+      for (i <- 0 until num_exception_ports)
       {
-         rob_exception(GetRowIdx(io.mem_xcpt_uop.rob_idx)) := Bool(true)
-         rob_exc_cause(GetRowIdx(io.mem_xcpt_uop.rob_idx)) := Mux(io.mem_xcpt.ma.ld, UInt(rocket.Causes.misaligned_load),
-                                                              Mux(io.mem_xcpt.ma.st, UInt(rocket.Causes.misaligned_store),
-                                                              Mux(io.mem_xcpt.pf.ld, UInt(rocket.Causes.fault_load),
-                                                              Mux(io.mem_xcpt.pf.st, UInt(rocket.Causes.fault_store),
-                                                                                     UInt(0)))))
-         assert ((io.mem_xcpt.ma.ld || io.mem_xcpt.ma.st || io.mem_xcpt.pf.ld || io.mem_xcpt.pf.st),
-               "Memory exception - no exception type set by data cache.")
-
-      }
-
-      when (io.ldo_xcpt_val && MatchBank(GetBankIdx(io.ldo_xcpt_uop.rob_idx)))
-      {
-         rob_exception(GetRowIdx(io.ldo_xcpt_uop.rob_idx)) := Bool(true)
-         rob_exc_cause(GetRowIdx(io.ldo_xcpt_uop.rob_idx)) := MINI_EXCEPTION_MEM_ORDERING
+         val xcpt_uop = io.xcpts(i).bits.uop
+         when (io.xcpts(i).valid && MatchBank(GetBankIdx(xcpt_uop.rob_idx)))
+         {
+            // FPU instructions write their fflags into here, but they aren't exceptions!
+            rob_exception(GetRowIdx(xcpt_uop.rob_idx)) := !(xcpt_uop.fp_val && !(xcpt_uop.is_load || xcpt_uop.is_store))
+            rob_exc_cause(GetRowIdx(xcpt_uop.rob_idx)) := io.xcpts(i).bits.cause
+         }
       }
 
       can_throw_exception(w) := rob_val(rob_head) && rob_exception(rob_head)

@@ -136,7 +136,6 @@ class DCacheResp extends BOOMCoreBundle
    val data_subword = Bits(width = coreDataBits)
    val uop          = new MicroOp
    val typ          = Bits(width = MT_SZ)
-   val xcpt         = (new rocket.HellaCacheExceptions).asInput()
    // TODO should nack go in here?
 }
 
@@ -333,8 +332,11 @@ class DCacheShim extends Module with BOOMCoreParameters
 
    //------------------------------------------------------------
    // Handle exceptions and fences
-   io.core.resp.bits.xcpt := io.dmem.xcpt
    io.core.ordered := io.dmem.ordered
+
+   // we handle all of the memory exceptions (unaligned and faulting) in the LSU
+   assert (!(io.dmem.resp.valid && (io.dmem.xcpt.ma.ld || io.dmem.xcpt.ma.st || io.dmem.xcpt.pf.ld || io.dmem.xcpt.pf.st)),
+      "Data cache returned an exception, which BOOM handles elsewhere.")
 
    //------------------------------------------------------------
    // debug

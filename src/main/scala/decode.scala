@@ -326,6 +326,7 @@ class DecodeUnit() extends Module
                        exc_fp_disabled
 
    // note: priority here is very important
+   // TODO cause compression, this is XPRLEN and we can compress that out
    uop.exc_cause := Mux(exc_interrupt,              exc_interrupt_cause,
                     Mux(uop.xcpt_ma,                UInt(rocket.Causes.misaligned_fetch),
                     Mux(uop.xcpt_if,                UInt(rocket.Causes.fault_fetch),

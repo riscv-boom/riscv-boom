@@ -95,8 +95,7 @@ class LoadStoreUnitIo(pl_width: Int) extends BOOMCoreBundle
    val lsu_clr_bsy_rob_idx= UInt(OUTPUT, width=ROB_ADDR_SZ)
    val lsu_fencei_rdy     = Bool(OUTPUT)
 
-   val ldo_xcpt_val       = Bool(OUTPUT)
-   val ldo_xcpt_uop       = new MicroOp().asOutput()
+   val xcpt = new ValidIO(new ExecuteTimeExceptions)
 
    // cache nacks
    val nack               = new NackInfo().asInput()
@@ -334,7 +333,19 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
 //   TODO BUG XXX pass around xcpt bits
    val xcpt_pf_ld = dtlb.io.resp.xcpt_ld && exe_uop.ctrl.is_load && io.exe_resp.valid
    val xcpt_pf_st = dtlb.io.resp.xcpt_st && exe_uop.ctrl.is_sta && io.exe_resp.valid
+   // io.exe_resp.bits.xcpt.... incoming can be a misaligned exception
 //   io.xcpt...
+      //when (io.mem_xcpt_val && MatchBank(GetBankIdx(io.mem_xcpt_uop.rob_idx)))
+      //{
+      //   rob_exception(GetRowIdx(io.mem_xcpt_uop.rob_idx)) := Bool(true)
+      //   rob_exc_cause(GetRowIdx(io.mem_xcpt_uop.rob_idx)) := Mux(io.mem_xcpt.ma.ld, UInt(rocket.Causes.misaligned_load),
+      //                                                        Mux(io.mem_xcpt.ma.st, UInt(rocket.Causes.misaligned_store),
+      //                                                        Mux(io.mem_xcpt.pf.ld, UInt(rocket.Causes.fault_load),
+      //                                                        Mux(io.mem_xcpt.pf.st, UInt(rocket.Causes.fault_store),
+      //                                                                               UInt(0)))))
+
+      //}
+
 
    assert (!(exe_uop.ctrl.is_sta && exe_uop.is_fence), "Fence is pretending to talk to the TLB")
 
@@ -727,13 +738,18 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    }
 
    // detect which loads get marked as failures, but broadcast to the ROB the oldest failing load
-   io.ldo_xcpt_val := failed_loads.reduce(_|_)
+//   io.ldo_xcpt_val := failed_loads.reduce(_|_)
    val temp_bits = (Vec(Vec.tabulate(num_ld_entries)(i => failed_loads(i) && UInt(i) >= laq_head) ++ failed_loads)).toBits
    val l_idx = PriorityEncoder(temp_bits)
 
    // TODO always pad out the input to PECircular() to pow2
    // convert it to vec[bool], then in.padTo(1 << log2Up(in.size), Bool(false))
-   io.ldo_xcpt_uop := laq_uop(Mux(l_idx >= UInt(num_ld_entries), l_idx - UInt(num_ld_entries), l_idx))
+//   io.ldo_xcpt_uop := laq_uop(Mux(l_idx >= UInt(num_ld_entries), l_idx - UInt(num_ld_entries), l_idx))
+
+   io.xcpt.valid := failed_loads.reduce(_|_)
+   io.xcpt.bits.uop := laq_uop(Mux(l_idx >= UInt(num_ld_entries), l_idx - UInt(num_ld_entries), l_idx))
+   io.xcpt.bits.cause := MINI_EXCEPTION_MEM_ORDERING
+
 
 
    //-------------------------------------------------------------
@@ -999,7 +1015,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    io.counters.ld_forwarded  := io.forward_val
    io.counters.ld_sleep      := ld_was_put_to_sleep
    io.counters.ld_killed     := ld_was_killed
-   io.counters.ld_order_fail := io.ldo_xcpt_val
+   io.counters.ld_order_fail := failed_loads.reduce(_|_)
 
    io.debug.laq_head := laq_head
    io.debug.laq_tail := laq_tail

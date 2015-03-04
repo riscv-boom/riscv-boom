@@ -143,7 +143,7 @@ class MicroOp extends BOOMCoreBundle
    val prs3_busy        = Bool()
    val stale_pdst       = UInt(width = PREG_SZ)
    val exception        = Bool()
-   val exc_cause        = UInt(width = xprLen)
+   val exc_cause        = UInt(width = xprLen)        // TODO compress this down, xprlen is insnaity
    val sret             = Bool()
    val bypassable       = Bool()                      // can we bypass ALU results? (doesn't include loads, pcr, rdcycle, etc.... need to readdress this, SHOULD include PCRs?)
    val mem_cmd          = UInt(width = 4)             // sync primitives/cache flushes
@@ -1115,7 +1115,8 @@ class DatPath() extends Module with BOOMCoreParameters
    //-------------------------------------------------------------
    //-------------------------------------------------------------
 
-   val rob  = Module(new Rob(DECODE_WIDTH, NUM_ROB_ENTRIES, num_slow_wakeup_ports)) // TODO the ROB writeback is off the regfile, which is a different set
+   val num_exception_ports = exe_units.withFilter(_.can_cause_exceptions).map(_.num_rf_write_ports).reduce[Int](_+_)
+   val rob  = Module(new Rob(DECODE_WIDTH, NUM_ROB_ENTRIES, num_slow_wakeup_ports, num_exception_ports)) // TODO the ROB writeback is off the regfile, which is a different set
 
       // Dispatch
       rob_rdy := rob.io.ready
@@ -1129,6 +1130,7 @@ class DatPath() extends Module with BOOMCoreParameters
 
       // Writeback
       cnt = 0
+      var e_cnt = 0 // rob exception port index
       for (w <- 0 until exe_units.length)
       {
          for (j <- 0 until exe_units(w).num_rf_write_ports)
@@ -1159,19 +1161,17 @@ class DatPath() extends Module with BOOMCoreParameters
             {
                rob.io.debug_wb_wdata(cnt) := Mux(exe_units(w).io.resp(j).bits.uop.fp_val, unrec_out, data)
             }
+
+
+            if (exe_units(w).can_cause_exceptions)
+            {
+               rob.io.xcpts(e_cnt) <> exe_units(w).io.resp(j).bits.xcpt
+               e_cnt += 1
+            }
+
             cnt += 1
          }
 
-         if (exe_units(w).is_mem_unit)
-         {
-            // memory exceptions
-            rob.io.mem_xcpt_val := exe_units(w).io.ma_xcpt_val
-            rob.io.mem_xcpt_uop := exe_units(w).io.ma_xcpt_uop
-            rob.io.mem_xcpt     := exe_units(w).io.ma_xcpt
-
-            rob.io.ldo_xcpt_val := exe_units(w).io.lsu_io.ldo_xcpt_val
-            rob.io.ldo_xcpt_uop := exe_units(w).io.lsu_io.ldo_xcpt_uop
-         }
       }
 
       // branch resolution
@@ -1214,7 +1214,6 @@ class DatPath() extends Module with BOOMCoreParameters
 
    // throw assertion failure if a store or load have a misaligned or vm fault
    // as neither are supported as of yet.
-   //require (params(UseVM) == false) TODO VM virtual memory
    assert (!(com_exception &&
              (com_exc_cause === UInt(rocket.Causes.misaligned_load) ||
               com_exc_cause === UInt(rocket.Causes.fault_load) ||
