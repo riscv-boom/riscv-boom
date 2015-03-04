@@ -38,7 +38,8 @@ class ExeUnitResp(data_width: Int) extends BOOMCoreBundle
 class ExecuteTimeExceptions extends Bundle
 {
    val uop = new MicroOp()
-   val cause = Bits(width=log2Up(rocket.Causes.all.max))
+   val cause = Bits(width=math.max(rocket.FPConstants.FLAGS_SZ,
+                                   log2Up(rocket.Causes.all.max)))
 }
 
 class ExecutionUnitIo(num_rf_read_ports: Int
