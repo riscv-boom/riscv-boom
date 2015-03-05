@@ -181,12 +181,12 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
 //   val laq_request   = Vec.fill(num_ld_entries) { Reg(resetVal = Bool(false)) } // TODO sleeper load requesting issue to memory (perhaps stores broadcast, sees its store-set finished up)
    val laq_failure   = Vec.fill(num_ld_entries) { Reg(init = Bool(false)) } // ordering fail, must retry (at commit time, which requires a rollback)
    val laq_uop       = Vec.fill(num_ld_entries) { Reg(new MicroOp()) }
+   //laq_uop.stq_idx between oldest and youngest (dep_mask can't establish age :( ), "aka store coloring" if you're Intel
 
 
    // track window of stores we depend on
    val laq_st_dep_mask = Vec.fill(num_ld_entries) { Reg(Bits(width = num_st_entries)) }// list of stores we might depend (cleared when a store commits)
 //   val laq_st_wait_mask = Vec.fill(num_ld_entries) { Reg() { Bits(width = num_st_entries) } }// TODO list of stores we might depend on whose addresses are not yet computed
-   val laq_yng_st_idx   = Vec.fill(num_ld_entries) { Reg(UInt(width = MEM_ADDR_SZ)) }  // between oldest and youngest (dep_mask can't establish age :( ), "aka store coloring" if you're Intel TODO perhaps just use laq_uop.stq_idx? should be same thing
    val laq_forwarded_std_val= Vec.fill(num_ld_entries) { Reg(Bool()) }
    val laq_forwarded_stq_idx= Vec.fill(num_ld_entries) { Reg(UInt(width = MEM_ADDR_SZ)) }  // which store did get store-load forwarded data from? compare later to see I got things correct
 //   val laq_block_val    = Vec.fill(num_ld_entries) { Reg() { Bool() } }                     // TODO something is blocking us from executing
@@ -253,10 +253,6 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
          laq_uop(ld_enq_idx)          := io.dec_uops(w)
          laq_st_dep_mask(ld_enq_idx)  := next_live_store_mask
 
-         // TODO I think this is actually just uop.stq_idx!!!
-//         laq_yng_st_idx(ld_enq_idx)   := io.dec_uops(w).stq_idx
-         laq_yng_st_idx(ld_enq_idx)   := st_enq_idx
-
          laq_allocated(ld_enq_idx)    := Bool(true)
          laq_addr_val (ld_enq_idx)    := Bool(false)
          laq_executed (ld_enq_idx)    := Bool(false)
@@ -265,7 +261,6 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
          laq_forwarded_std_val(ld_enq_idx)  := Bool(false)
          debug_laq_put_to_sleep(ld_enq_idx) := Bool(false)
       }
-      assert (!(io.dec_ld_vals(w) && st_enq_idx != io.dec_uops(w).stq_idx), "if I never see this assert, I can delete laq_yng_st_idx") // TODO check up on me
       ld_enq_idx = Mux(io.dec_ld_vals(w), WrapInc(ld_enq_idx, num_ld_entries),
                                           ld_enq_idx)
 
@@ -667,7 +662,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
 
    val forwarding_age_logic = Module(new ForwardingAgeLogic(num_st_entries))
    forwarding_age_logic.io.addr_matches    := forwarding_matches.toBits()
-   forwarding_age_logic.io.youngest_st_idx := laq_yng_st_idx(Reg(next=exe_ld_uop.ldq_idx))
+   forwarding_age_logic.io.youngest_st_idx := laq_uop(Reg(next=exe_ld_uop.ldq_idx)).stq_idx
 
    when (mem_ld_req_fired && forwarding_age_logic.io.forwarding_val && !tlb_miss)
    {
@@ -795,7 +790,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
                   laq_executed(i)
                   )
             {
-               val yid = laq_yng_st_idx(i)
+               val yid = laq_uop(i).stq_idx
                val fid = laq_forwarded_stq_idx(i)
                // double-words match, now check for conflict of byte masks,
                // then check if it was forwarded from us,
@@ -1129,7 +1124,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
       io.debug.entry(i).laq_forwarded_std_val := laq_forwarded_std_val(i)
       io.debug.entry(i).laq_forwarded_stq_idx := laq_forwarded_stq_idx(i)
       io.debug.entry(i).laq_addr := laq_addr(i)
-      io.debug.entry(i).laq_yng_st_idx := laq_yng_st_idx(i)
+      io.debug.entry(i).laq_yng_st_idx := laq_uop(i).stq_idx
       io.debug.entry(i).laq_st_dep_mask := laq_st_dep_mask(i)
 
       io.debug.entry(i).stq_entry_val := stq_entry_val(i)
