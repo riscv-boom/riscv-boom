@@ -440,7 +440,9 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
 
    when (laq_allocated (laq_retry_idx) &&
          laq_addr_val  (laq_retry_idx) &&
-         laq_is_virtual(laq_retry_idx))
+         laq_is_virtual(laq_retry_idx) &&
+         !laq_executed (laq_retry_idx) // perf lose, but simplifies control
+         )
    {
       can_fire_load_retry := Bool(true)
    }
@@ -472,9 +474,6 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
       can_fire_sta_retry := Bool(true)
    }
 
-
-
-   assert (!(can_fire_sta_retry || can_fire_load_retry), "VM is unsupported right now.")
 
    assert (!(can_fire_store_commit && saq_is_virtual(stq_head)),
             "a committed store is trying to fire to memory that has a bad paddr.")
@@ -528,7 +527,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    when (will_fire_load_incoming || will_fire_load_retry)
    {
       laq_addr_val  (exe_tlb_uop.ldq_idx)      := Bool(true)
-      laq_addr      (exe_tlb_uop.ldq_idx)      := exe_tlb_paddr
+      laq_addr      (exe_tlb_uop.ldq_idx)      := Mux(tlb_miss, exe_vaddr, exe_tlb_paddr)
       laq_uop       (exe_tlb_uop.ldq_idx).pdst := exe_tlb_uop.pdst
       laq_is_virtual(exe_tlb_uop.ldq_idx)      := tlb_miss
    }
@@ -536,7 +535,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    when (will_fire_sta_incoming || will_fire_sta_retry)
    {
       saq_val       (exe_tlb_uop.stq_idx)      := Bool(true)
-      saq_addr      (exe_tlb_uop.stq_idx)      := exe_tlb_paddr
+      saq_addr      (exe_tlb_uop.stq_idx)      := Mux(tlb_miss, exe_vaddr, exe_tlb_paddr)
       stq_uop       (exe_tlb_uop.stq_idx).pdst := exe_tlb_uop.pdst // needed for amo's TODO this is expensive, can we get around this?
       saq_is_virtual(exe_tlb_uop.stq_idx)      := tlb_miss
    }
@@ -573,8 +572,8 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
 
 
    // tell the ROB to clear the busy bit on the incoming store
-   io.lsu_clr_bsy_valid := Reg(next=(will_fire_sta_incoming || will_fire_std_incoming), init=Bool(false)) &&
-                           !tlb_miss &&
+   io.lsu_clr_bsy_valid := (Reg(next=(will_fire_sta_incoming || will_fire_sta_retry), init=Bool(false)) && !mem_tlb_miss ||
+                            Reg(next=(will_fire_std_incoming), init=Bool(false))) &&
                            !mem_tlb_uop.is_amo &&
                            ((mem_tlb_uop.ctrl.is_sta && sdq_val(mem_tlb_uop.stq_idx)) ||
                            (mem_tlb_uop.ctrl.is_std && saq_val(mem_tlb_uop.stq_idx) && !saq_is_virtual(mem_tlb_uop.stq_idx)))
