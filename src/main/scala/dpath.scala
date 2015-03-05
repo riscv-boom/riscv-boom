@@ -1619,7 +1619,7 @@ class DatPath() extends Module with BOOMCoreParameters
 
       // Load/Store Unit
 
-      printf("  Mem[%s,%s:%d,%s,%s %s %s]\n"
+      printf("  Mem[%s,%s:%d,%s,%s %s %s] %s\n"
             , Mux(io.dmem.debug.memreq, Str("MREQ"), Str(" "))
             , Mux(io.dmem.debug.memresp, Str("MRESP"), Str(" "))
             , io.dmem.debug.cache_resp_idx
@@ -1627,10 +1627,11 @@ class DatPath() extends Module with BOOMCoreParameters
             , Mux(io.dmem.debug.nack, Str("NACK"), Str(" "))
             , Mux(io.dmem.debug.cache_nack, Str("CN"), Str(" "))
             , Mux(lsu_io.forward_val, Str("FWD"), Str(" "))
+            , Mux(lsu_io.debug.tlb_miss, Str("TLB-MISS"), Str("-"))
             )
       for (i <- 0 until NUM_LSU_ENTRIES)
       {
-         printf("         ldq[%d]=(%s%s%s%s%s%s%d) st_dep(%d,m=%x) 0x%x %s %s   saq[%d]=(%s%s%s%s%s%s) b:%x 0x%x -> 0x%x %s %s %s"
+         printf("         ldq[%d]=(%s%s%s%s%s%s%d) st_dep(%d,m=%x) 0x%x %s %s   saq[%d]=(%s%s%s%s%s%s%s) b:%x 0x%x -> 0x%x %s %s %s"
             , UInt(i, MEM_ADDR_SZ)
             , Mux(lsu_io.debug.entry(i).laq_allocated, Str("V"), Str("-"))
             , Mux(lsu_io.debug.entry(i).laq_addr_val, Str("A"), Str("-"))
@@ -1653,6 +1654,7 @@ class DatPath() extends Module with BOOMCoreParameters
             , Mux(lsu_io.debug.entry(i).stq_committed, Str("C"), Str("-"))
             , Mux(lsu_io.debug.entry(i).stq_executed, Str("E"), Str("-"))
             , Mux(lsu_io.debug.entry(i).stq_succeeded, Str("S"), Str("-"))
+            , Mux(lsu_io.debug.entry(i).saq_is_virtual, Str("T"), Str("-"))
             , lsu_io.debug.entry(i).stq_uop.br_mask
             , lsu_io.debug.entry(i).saq_addr(19,0)
             , lsu_io.debug.entry(i).sdq_data

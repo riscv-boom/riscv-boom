@@ -32,10 +32,12 @@
 // Story style.
 
 // TODO:
-//    wake up sleeping loads that aren't at the head of the LAQ
-//    Add predicting structure for ordering failures
-//    currently won't STD forward if DMEM is busy
-//    committed stores leave the STQ too slowly, need to send out 1/cycle throughput
+//    - wake up sleeping loads that aren't at the head of the LAQ
+//    - Add predicting structure for ordering failures
+//    - currently won't STD forward if DMEM is busy
+//    - committed stores leave the STQ too slowly, need to send out 1/cycle throughput
+//    - ability to turn off things if VM is disabled
+//    - reconsider port count of the wakeup, retry stuff
 
 
 package BOOM
@@ -123,6 +125,7 @@ class LoadStoreUnitIo(pl_width: Int) extends BOOMCoreBundle
 
    val debug = new BOOMCoreBundle
    {
+      val tlb_miss        = Bool()
       val laq_head        = UInt(width=MEM_ADDR_SZ)
       val laq_tail        = UInt(width=MEM_ADDR_SZ)
       val stq_head        = UInt(width=MEM_ADDR_SZ)
@@ -151,6 +154,7 @@ class LoadStoreUnitIo(pl_width: Int) extends BOOMCoreBundle
          val stq_executed = Bool()
          val stq_succeeded = Bool()
          val stq_committed = Bool()
+         val saq_is_virtual = Bool()
          val stq_uop = new MicroOp()
       }}
    }.asOutput
@@ -168,9 +172,10 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    // Load-Address Queue
 //   val laq_addr_val  = Reg(init=UInt(0,width=num_ld_entries))  //TODO buggy due to chisel - try again soon
    val laq_addr_val  = Vec.fill(num_ld_entries) { Reg(Bool()) }
-   val laq_addr      = Mem(UInt(width=corePAddrBits), num_ld_entries)
+   val laq_addr      = Mem(UInt(width=coreMaxAddrBits), num_ld_entries)
 
    val laq_allocated = Vec.fill(num_ld_entries) { Reg(Bool()) } // entry has been allocated
+   val laq_is_virtual= Vec.fill(num_ld_entries) { Reg(Bool()) } // address in LAQ is a virtual address. There was a tlb_miss and a retry is required.
    val laq_executed  = Vec.fill(num_ld_entries) { Reg(Bool()) } // load has been issued to memory (immediately set this bit)
    val laq_succeeded = Vec.fill(num_ld_entries) { Reg(Bool()) } // load has returned from memory, but may still have an ordering failure
 //   val laq_request   = Vec.fill(num_ld_entries) { Reg(resetVal = Bool(false)) } // TODO sleeper load requesting issue to memory (perhaps stores broadcast, sees its store-set finished up)
@@ -190,7 +195,8 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
 
    // Store-Address Queue
    val saq_val       = Vec.fill(num_st_entries) { Reg(Bool()) }
-   val saq_addr      = Mem(UInt(width=corePAddrBits),num_st_entries)
+   val saq_is_virtual= Vec.fill(num_ld_entries) { Reg(Bool()) } // address in SAQ is a virtual address. There was a tlb_miss and a retry is required.
+   val saq_addr      = Mem(UInt(width=coreMaxAddrBits),num_st_entries)
 
    // Store-Data Queue
    val sdq_val       = Vec.fill(num_st_entries) { Reg(Bool()) }
@@ -201,7 +207,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    // TODO not convinced I actually need stq_entry_val; I think other ctrl signals gate this off
    val stq_entry_val = Vec.fill(num_st_entries) { Reg(Bool()) } // this may be valid, but not TRUE (on exceptions, this doesn't get cleared but STQ_TAIL gets moved)
    val stq_executed  = Vec.fill(num_st_entries) { Reg(Bool()) } // sent to mem
-   val stq_succeeded = Vec.fill(num_st_entries) { Reg(Bool()) } // returned  TODO needed, or can we just advance the stq_head?
+   val stq_succeeded = Vec.fill(num_st_entries) { Reg(Bool()) } // returned  TODO is this needed, or can we just advance the stq_head?
    val stq_committed = Vec.fill(num_st_entries) { Reg(Bool()) } // the ROB has committed us, so we can now send our store to memory
 
 
@@ -212,7 +218,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    val stq_commit_head = Reg(UInt()) // point to next store to commit
 
    val clear_store = Bool()
-
+   clear_store := Bool(false)
 
    val live_store_mask = Reg(init = Bits(0, num_st_entries))
    var next_live_store_mask = Mux(clear_store, live_store_mask & ~(Bits(1) << stq_head),
@@ -220,20 +226,9 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
 
    //-------------------------------------------------------------
    //-------------------------------------------------------------
-   // Load Wakeup Ctrl Code
+   // Enqueue new entries
    //-------------------------------------------------------------
    //-------------------------------------------------------------
-
-   val exe_ld_iss_idx = UInt(width = MEM_ADDR_SZ)      // index of the load we sent to memory
-   val exe_slow_ld_iss_idx = UInt(width = MEM_ADDR_SZ) // index of the "waken up" load
-                                                   // (may or may not be sent to memory)
-
-   // TODO for now, only execute the sleeping load at the head of the LAQ
-   // wasteful if the laq_head has already been executed
-   exe_slow_ld_iss_idx := laq_head
-
-   clear_store := Bool(false)
-
 
    // put this earlier than Enqueue, since this is lower priority to laq_st_dep_mask
    for (i <- 0 until num_ld_entries)
@@ -243,12 +238,6 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
          laq_st_dep_mask(i) := laq_st_dep_mask(i) & ~(Bits(1) << stq_head)
       }
    }
-
-   //-------------------------------------------------------------
-   //-------------------------------------------------------------
-   // Enqueue new entries
-   //-------------------------------------------------------------
-   //-------------------------------------------------------------
 
    // Decode stage ----------------------------
 
@@ -305,88 +294,166 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
 
    //-------------------------------------------------------------
    //-------------------------------------------------------------
-   // Execute stage
+   // Execute stage (access TLB, send requests to Memory)
    //-------------------------------------------------------------
    //-------------------------------------------------------------
-   // access TLB
-   // send load request to memory
 
-   val exe_uop = io.exe_resp.bits.uop
-   val exe_vaddr = io.exe_resp.bits.data.toUInt
+   //--------------------------------------------
+   // Controller Logic (arbitrate TLB, D$ access)
+   //
+   // There are roughly two some-what coupled datapaths here and 7 potential users.
+   // AddrGen -> TLB -> LAQ/SAQ/D$
+   // LAQ/SAQ -> optionally TLB -> D$
+
+   val will_fire_load_incoming = Bool() // uses TLB, D$, SAQ-search
+   val will_fire_sta_incoming  = Bool() // uses TLB,     LAQ-search
+   val will_fire_std_incoming  = Bool() // uses -
+   val will_fire_sta_retry     = Bool() // uses TLB
+   val will_fire_load_retry    = Bool() // uses TLB, D$, SAQ-search
+   val will_fire_store_commit  = Bool() // uses      D$
+   val will_fire_load_wakeup   = Bool() // uses      D$, SAQ-search
+
+   val can_fire_sta_retry      = Bool()
+   val can_fire_load_retry     = Bool()
+   val can_fire_store_commit   = Bool()
+   val can_fire_load_wakeup    = Bool()
+
+   // defaults
+   will_fire_load_incoming := Bool(false)
+   will_fire_sta_incoming  := Bool(false)
+   will_fire_std_incoming  := Bool(false)
+   will_fire_sta_retry     := Bool(false)
+   will_fire_load_retry    := Bool(false)
+   will_fire_store_commit  := Bool(false)
+   will_fire_load_wakeup   := Bool(false)
+
+   val dc_avail = Bool(); dc_avail := Bool(true)
+   val tlb_avail= Bool(); tlb_avail:= Bool(true)
+
+   // give first priority to incoming uops
+   when (io.exe_resp.valid)
+   {
+      when (io.exe_resp.bits.uop.ctrl.is_load)
+      {
+         will_fire_load_incoming := Bool(true)
+         dc_avail  := Bool(false)
+         tlb_avail := Bool(false)
+      }
+      when (io.exe_resp.bits.uop.ctrl.is_sta)
+      {
+         will_fire_sta_incoming := Bool(true)
+         tlb_avail := Bool(false)
+      }
+      when (io.exe_resp.bits.uop.ctrl.is_std)
+      {
+         will_fire_std_incoming := Bool(true)
+      }
+   }
+
+   when (tlb_avail)
+   {
+      when (can_fire_sta_retry)
+      {
+         will_fire_sta_retry := Bool(true)
+      }
+      .elsewhen (can_fire_load_retry)
+      {
+         will_fire_load_retry := Bool(true)
+         dc_avail := Bool(false)
+      }
+   }
+
+   when (dc_avail)
+   {
+      // TODO allow dyanmic priority here
+      will_fire_store_commit := can_fire_store_commit
+      will_fire_load_wakeup  := !can_fire_store_commit && can_fire_load_wakeup
+   }
+
+   //--------------------------------------------
+   // TLB Access
+
+   val stq_retry_idx = UInt()
+   val laq_retry_idx = UInt()
+
+
+   // micro-op going through the TLB generate paddr's. If this is a load, it will continue
+   // to the D$ and search the SAQ.
+   val exe_tlb_uop = Mux(will_fire_sta_retry,  stq_uop(stq_retry_idx),
+                     Mux(will_fire_load_retry, laq_uop(laq_retry_idx),
+                                               io.exe_resp.bits.uop))
+
+   val exe_vaddr   = Mux(will_fire_sta_retry,  saq_addr(stq_retry_idx),
+                     Mux(will_fire_load_retry, laq_addr(laq_retry_idx),
+                                               io.exe_resp.bits.data.toUInt))
 
    val dtlb = Module(new rocket.TLB(params(rocket.NDTLBEntries)))
    dtlb.io.ptw <> io.ptw
-   dtlb.io.req.valid := io.exe_resp.valid && (exe_uop.ctrl.is_load || exe_uop.ctrl.is_sta)
+   dtlb.io.req.valid := will_fire_load_incoming ||
+                        will_fire_sta_incoming ||
+                        will_fire_sta_retry ||
+                        will_fire_load_retry
    dtlb.io.req.bits.passthrough := Bool(false) // lets status.vm decide
    dtlb.io.req.bits.asid := UInt(0)
    dtlb.io.req.bits.vpn := exe_vaddr >> UInt(params(PgIdxBits))
    dtlb.io.req.bits.instruction := Bool(false)
 
    // exceptions
-   val pf_ld = dtlb.io.resp.xcpt_ld && exe_uop.ctrl.is_load && io.exe_resp.valid
-   val pf_st = dtlb.io.resp.xcpt_st && exe_uop.ctrl.is_sta && io.exe_resp.valid
-   val mem_xcpt_valid = Reg(next=(io.exe_resp.valid && (io.exe_resp.bits.xcpt.valid || pf_ld || pf_st)), init=Bool(false))
-   val mem_xcpt_cause = Reg(next=(Mux(io.exe_resp.bits.xcpt.valid, io.exe_resp.bits.xcpt.bits.cause,
-                                  Mux(exe_uop.ctrl.is_load,        UInt(rocket.Causes.fault_load),
+   val pf_ld = dtlb.io.req.valid && dtlb.io.resp.xcpt_ld && exe_tlb_uop.ctrl.is_load
+   val pf_st = dtlb.io.req.valid && dtlb.io.resp.xcpt_st && exe_tlb_uop.ctrl.is_sta
+   val mem_xcpt_valid = Reg(next=(dtlb.io.req.valid && (pf_ld || pf_st)) ||
+                                 (io.exe_resp.valid && io.exe_resp.bits.xcpt.valid),
+                            init=Bool(false))
+   val mem_xcpt_cause = Reg(next=(Mux(io.exe_resp.valid &&
+                                      io.exe_resp.bits.xcpt.valid, io.exe_resp.bits.xcpt.bits.cause,
+                                  Mux(exe_tlb_uop.ctrl.is_load,    UInt(rocket.Causes.fault_load),
                                                                    UInt(rocket.Causes.fault_store)))))
 
-   assert (!(exe_uop.ctrl.is_sta && exe_uop.is_fence), "Fence is pretending to talk to the TLB")
+   assert (!(exe_tlb_uop.ctrl.is_sta && exe_tlb_uop.is_fence), "Fence is pretending to talk to the TLB")
 
-   // nack
-   val tlb_nack = dtlb.io.req.valid && dtlb.io.resp.miss
+   val tlb_miss = dtlb.io.req.valid && (dtlb.io.resp.miss || !dtlb.io.req.ready)
 
 
    // output
-   val exe_paddr = Cat(dtlb.io.resp.ppn, exe_vaddr(params(PgIdxBits)-1,0))
+   val exe_tlb_paddr = Cat(dtlb.io.resp.ppn, exe_vaddr(params(PgIdxBits)-1,0))
 
 
 
-   //-------------------
-   // Memory Issue Logic
-   //
-   // priority:
-   // 1. incoming load ("fast" load, send to D$ immediately)
-   // 2. store         (after it has been committed)
-   // 3. sleeper load  (retry a "slow" load from the LAQ)
-   //
-   // note: need to be concerned about deadlocking machine
+   //-------------------------------------
+   // Can-fire Logic & Wakeup/Retry Select
 
+   // *** Wakeup Load from LAQ ***
+   can_fire_load_wakeup := Bool(false)
 
-   // *** FAST LOAD ***
+   // TODO for now, only execute the sleeping load at the head of the LAQ
+   // wasteful if the laq_head has already been executed
+   val exe_ld_idx_wakeup = laq_head
 
-   val can_fire_load_fast = Bool()
-   val can_fire_store = Bool()
-   val can_fire_load_sleeper = Bool()
-
-   // TODO allow priorities to be dynamic
-   val will_fire_load = can_fire_load_fast || (can_fire_load_sleeper && !can_fire_store)
-   val will_fire_store = can_fire_store && !can_fire_load_fast
-
-   val slow_load_is_fired = !can_fire_store && !can_fire_load_fast && can_fire_load_sleeper
-
-   assert (!((will_fire_load || will_fire_store) &&
-            will_fire_load && will_fire_store),
-      "LSU: multiply requests being issued simultaneously")
-
-   // fire loads once address has been calculated
-   can_fire_load_fast := io.exe_resp.valid && io.exe_resp.bits.uop.ctrl.is_load
-
-   // *** SLOW LOAD (waken up) ***
-   can_fire_load_sleeper := Bool(false)
-   val lidx = exe_slow_ld_iss_idx
-
-   // TODO provide some mechanism for throttling this load/switching priorities with stores
-   when (laq_addr_val(lidx) &&
-         laq_allocated(lidx) &&
-         !laq_executed(lidx) &&
-         !laq_failure(lidx))
+   when (laq_addr_val   (exe_ld_idx_wakeup) &&
+         !laq_is_virtual(exe_ld_idx_wakeup) &&
+         laq_allocated  (exe_ld_idx_wakeup) &&
+         !laq_executed  (exe_ld_idx_wakeup) &&
+         !laq_failure   (exe_ld_idx_wakeup))
    {
-      can_fire_load_sleeper := Bool(true)
+      can_fire_load_wakeup := Bool(true)
    }
+
+   // *** Retry Load TLB-lookup from LAQ ***
+
+   can_fire_load_retry := Bool(false)
+   laq_retry_idx := exe_ld_idx_wakeup
+
+   when (laq_allocated (laq_retry_idx) &&
+         laq_addr_val  (laq_retry_idx) &&
+         laq_is_virtual(laq_retry_idx))
+   {
+      can_fire_load_retry := Bool(true)
+   }
+
 
    // *** STORES ***
 
-   can_fire_store := Bool(false)
+   can_fire_store_commit := Bool(false)
 
    when (stq_entry_val(stq_head) &&
          (stq_committed(stq_head) ||
@@ -397,9 +464,25 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
          !stq_executed(stq_head) &&
          !(stq_uop(stq_head).is_fence))
    {
-      can_fire_store := Bool(true)
+      can_fire_store_commit := Bool(true)
    }
 
+   can_fire_sta_retry := Bool(false)
+   stq_retry_idx := stq_commit_head
+
+   when (stq_entry_val (stq_retry_idx) &&
+         saq_val       (stq_retry_idx) &&
+         saq_is_virtual(stq_retry_idx))
+   {
+      can_fire_sta_retry := Bool(true)
+   }
+
+
+
+   assert (!(can_fire_sta_retry || can_fire_load_retry), "VM is unsupported right now.")
+
+   assert (!(can_fire_store_commit && saq_is_virtual(stq_head)),
+            "a committed store is trying to fire to memory that has a bad paddr.")
 
 
    //-------------------------
@@ -410,10 +493,8 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    // 2. Sleeper Load    ("from the LAQ")
    // 3. Store at Commit ("from SAQ")
 
-   val exe_ld_slow_addr = laq_addr(exe_slow_ld_iss_idx)
-   val exe_ld_addr = Mux(can_fire_load_fast, exe_paddr, exe_ld_slow_addr)
-   val exe_ld_uop  = Mux(can_fire_load_fast, exe_uop, laq_uop(exe_slow_ld_iss_idx))
-   exe_ld_iss_idx := Mux(can_fire_load_fast, exe_uop.ldq_idx, exe_slow_ld_iss_idx)
+   val exe_ld_addr = Mux(will_fire_load_incoming || will_fire_load_retry, exe_tlb_paddr, laq_addr(exe_ld_idx_wakeup))
+   val exe_ld_uop  = Mux(will_fire_load_incoming || will_fire_load_retry, exe_tlb_uop,   laq_uop(exe_ld_idx_wakeup))
 
    // defaults
    io.memreq_val     := Bool(false)
@@ -421,7 +502,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    io.memreq_wdata   := sdq_data(stq_head)
    io.memreq_uop     := exe_ld_uop
 
-   when(will_fire_store)
+   when(will_fire_store_commit)
    {
       io.memreq_val   := Bool(true)
       io.memreq_addr  := saq_addr(stq_head)
@@ -429,38 +510,46 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
 
       stq_executed(stq_head) := Bool(true)
    }
-   .elsewhen (will_fire_load)
+   .elsewhen (will_fire_load_incoming || will_fire_load_retry || will_fire_load_wakeup)
    {
       io.memreq_val   := Bool(true)
       io.memreq_addr  := exe_ld_addr
       io.memreq_uop   := exe_ld_uop
 
-      laq_executed(exe_ld_iss_idx) := Bool(true)
-      laq_failure(exe_ld_iss_idx)  := Bool(false)
+      laq_executed(exe_ld_uop.ldq_idx) := Bool(true)
+      laq_failure (exe_ld_uop.ldq_idx)  := Bool(false)
    }
+
+   // TODO check width inference
+   val count_fires = Cat(UInt(0,3),will_fire_store_commit.toUInt) + will_fire_load_incoming.toUInt + will_fire_load_retry.toUInt + will_fire_load_wakeup.toUInt
+   assert (count_fires <= UInt(1), "Multiple requestors firing to the data cache.")
+
+
 
 
    //-------------------------------------------------------------
-   // Write PAddr into the LAQ/SAQ
+   // Write Addr into the LAQ/SAQ
 
-   when (exe_uop.ctrl.is_load && io.exe_resp.valid)
+   when (will_fire_load_incoming || will_fire_load_retry)
    {
-      laq_addr_val(exe_uop.ldq_idx)      := Bool(true)
-      laq_addr    (exe_uop.ldq_idx)      := exe_paddr
-      laq_uop     (exe_uop.ldq_idx).pdst := exe_uop.pdst
+      laq_addr_val  (exe_tlb_uop.ldq_idx)      := Bool(true)
+      laq_addr      (exe_tlb_uop.ldq_idx)      := exe_tlb_paddr
+      laq_uop       (exe_tlb_uop.ldq_idx).pdst := exe_tlb_uop.pdst
+      laq_is_virtual(exe_tlb_uop.ldq_idx)      := tlb_miss
    }
 
-   when (exe_uop.ctrl.is_sta && io.exe_resp.valid)
+   when (will_fire_sta_incoming || will_fire_sta_retry)
    {
-      saq_val (exe_uop.stq_idx)       := Bool(true)
-      saq_addr(exe_uop.stq_idx)       := exe_paddr
-      stq_uop (exe_uop.stq_idx).pdst  := exe_uop.pdst // needed for amo's TODO this is expensive, can we get around this?
+      saq_val       (exe_tlb_uop.stq_idx)      := Bool(true)
+      saq_addr      (exe_tlb_uop.stq_idx)      := exe_tlb_paddr
+      stq_uop       (exe_tlb_uop.stq_idx).pdst := exe_tlb_uop.pdst // needed for amo's TODO this is expensive, can we get around this?
+      saq_is_virtual(exe_tlb_uop.stq_idx)      := tlb_miss
    }
 
-   when (exe_uop.ctrl.is_std && io.exe_resp.valid)
+   when (will_fire_std_incoming)
    {
-      sdq_val (exe_uop.stq_idx) := Bool(true)
-      sdq_data(exe_uop.stq_idx) := io.exe_resp.bits.data.toUInt
+      sdq_val (io.exe_resp.bits.uop.stq_idx) := Bool(true)
+      sdq_data(io.exe_resp.bits.uop.stq_idx) := io.exe_resp.bits.data.toUInt
    }
 
 
@@ -472,28 +561,29 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
 
    // search SAQ/LAQ for matches
 
-   val mem_paddr = Reg(next=exe_paddr)
-   val mem_uop   = Reg(next=exe_uop)
-   mem_uop.br_mask   := GetNewBrMask(io.brinfo, exe_uop)
+   val mem_tlb_paddr = Reg(next=exe_tlb_paddr)
+   val mem_tlb_uop   = Reg(next=exe_tlb_uop)
+   mem_tlb_uop.br_mask := GetNewBrMask(io.brinfo, exe_tlb_uop)
+   val mem_tlb_miss = Reg(next=tlb_miss, init=Bool(false))
 
    // the load address that will search the SAQ (either a fast load or a retry load)
-   val mem_ld_addr = Mux(Reg(next=slow_load_is_fired), Reg(next=exe_ld_slow_addr), mem_paddr)
+   val mem_ld_addr = Mux(Reg(next=will_fire_load_wakeup), Reg(next=laq_addr(exe_ld_idx_wakeup)), mem_tlb_paddr)
    val mem_ld_uop  = Reg(next=exe_ld_uop)
    mem_ld_uop.br_mask := GetNewBrMask(io.brinfo, exe_ld_uop)
 
 
-   val mem_ld_req_fired = Reg(next=will_fire_load)
-
-
-   val mem_is_st_valid = Reg(next=io.exe_resp.valid, init=Bool(false))
+   val mem_ld_req_fired = Reg(next=(will_fire_load_incoming ||
+                                    will_fire_load_retry ||
+                                    will_fire_load_wakeup))
 
 
    // tell the ROB to clear the busy bit on the incoming store
-   io.lsu_clr_bsy_valid := mem_is_st_valid &&
-                           !mem_uop.is_amo &&
-                           ((mem_uop.ctrl.is_sta && sdq_val(mem_uop.stq_idx)) ||
-                           (mem_uop.ctrl.is_std && saq_val(mem_uop.stq_idx)))
-   io.lsu_clr_bsy_rob_idx := mem_uop.rob_idx
+   io.lsu_clr_bsy_valid := Reg(next=(will_fire_sta_incoming || will_fire_std_incoming), init=Bool(false)) &&
+                           !tlb_miss &&
+                           !mem_tlb_uop.is_amo &&
+                           ((mem_tlb_uop.ctrl.is_sta && sdq_val(mem_tlb_uop.stq_idx)) ||
+                           (mem_tlb_uop.ctrl.is_std && saq_val(mem_tlb_uop.stq_idx) && !saq_is_virtual(mem_tlb_uop.stq_idx)))
+   io.lsu_clr_bsy_rob_idx := mem_tlb_uop.rob_idx
 
    //-------------------------------------------------------------
    // Load Issue Datapath (ALL loads need to use this path,
@@ -505,7 +595,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    // forwarding requires a full address check.
 
    val read_mask = GenByteMask(mem_ld_addr, mem_ld_uop.mem_typ)
-   val st_dep_mask = laq_st_dep_mask(Reg(next=exe_ld_iss_idx))
+   val st_dep_mask = laq_st_dep_mask(Reg(next=exe_ld_uop.ldq_idx))
 
    // do the double-word addr match? (doesn't necessarily mean a conflict or forward)
    val dword_addr_matches = Vec.fill(num_st_entries) { Bool() }
@@ -528,6 +618,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
       when (stq_entry_val(i) &&
             st_dep_mask(i) &&
             saq_val(i) &&
+            !saq_is_virtual(i) &&
             (s_addr(corePAddrBits-1,3) === mem_ld_addr(corePAddrBits-1,3)))
       {
          dword_addr_matches(i) := Bool(true)
@@ -576,9 +667,9 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
 
    val forwarding_age_logic = Module(new ForwardingAgeLogic(num_st_entries))
    forwarding_age_logic.io.addr_matches    := forwarding_matches.toBits()
-   forwarding_age_logic.io.youngest_st_idx := laq_yng_st_idx(Reg(next=exe_ld_iss_idx))
+   forwarding_age_logic.io.youngest_st_idx := laq_yng_st_idx(Reg(next=exe_ld_uop.ldq_idx))
 
-   when (mem_ld_req_fired && forwarding_age_logic.io.forwarding_val)
+   when (mem_ld_req_fired && forwarding_age_logic.io.forwarding_val && !tlb_miss)
    {
       laq_forwarded_std_val(mem_ld_uop.ldq_idx) := Bool(true)
       laq_forwarded_stq_idx(mem_ld_uop.ldq_idx) := forwarding_age_logic.io.forwarding_idx
@@ -596,7 +687,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    wb_uop.br_mask        := GetNewBrMask(io.brinfo, mem_ld_uop)
 
    // kill load request to mem if address matches (we will either sleep load, or forward data) or TLB miss
-   io.memreq_kill     := tlb_nack || (mem_ld_req_fired && addr_conflicts.toBits != Bits(0))
+   io.memreq_kill     := mem_tlb_miss || (mem_ld_req_fired && addr_conflicts.toBits != Bits(0))
    wb_forward_std_idx := forwarding_age_logic.io.forwarding_idx
 
    // kill forwarding if branch mispredict
@@ -606,7 +697,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    }
    .otherwise
    {
-      wb_forward_std_val := mem_ld_req_fired && forwarding_age_logic.io.forwarding_val && !force_ld_to_sleep
+      wb_forward_std_val := mem_ld_req_fired && forwarding_age_logic.io.forwarding_val && !force_ld_to_sleep && !mem_tlb_miss
    }
 
    // Notes:
@@ -666,10 +757,10 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    //    Check the incoming store address against younger loads that have
    //    executed, looking for memory ordering failures. This check occurs the
    //    cycle after address generation and TLB lookup.
-   val st_addr     = mem_paddr
-   val st_mask     = GenByteMask(st_addr, mem_uop.mem_typ)
-   val st_is_fence = mem_uop.is_fence
-   val stq_idx     = mem_uop.stq_idx
+   val st_addr     = mem_tlb_paddr
+   val st_mask     = GenByteMask(st_addr, mem_tlb_uop.mem_typ)
+   val st_is_fence = mem_tlb_uop.is_fence
+   val stq_idx     = mem_tlb_uop.stq_idx
    val failed_loads = Vec.fill(num_ld_entries) {Bool()}
 
    for (i <- 0 until num_ld_entries)
@@ -678,7 +769,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
       val l_mask = GenByteMask(l_addr, laq_uop(i).mem_typ)
       failed_loads(i) := Bool(false)
 
-      when (mem_is_st_valid && mem_uop.ctrl.is_sta)
+      when (Reg(next=io.exe_resp.valid,init=Bool(false)) && mem_tlb_uop.ctrl.is_sta)
       {
          // does the load depend on this store?
          // TODO CODE REVIEW what's the best way to perform this bit extract?
@@ -687,6 +778,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
             when (st_is_fence &&
                   laq_allocated(i) &&
                   laq_addr_val(i) &&
+                  !laq_is_virtual(i) &&
                   laq_executed(i))
             {
                // fences, flushes are like stores that hit all addresses
@@ -699,6 +791,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
             .elsewhen ((st_addr(corePAddrBits-1,3) === l_addr(corePAddrBits-1,3)) &&
                   laq_allocated(i) &&
                   laq_addr_val(i) &&
+                  !laq_is_virtual(i) &&
                   laq_executed(i)
                   )
             {
@@ -735,7 +828,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    // - 1) the incoming store-address finds a faulting load (it is by definition younger)
    // - 2) the incoming load or store address is excepting. It must be older and thus takes precedent.
    io.xcpt.valid := failed_loads.reduce(_|_) || mem_xcpt_valid
-   io.xcpt.bits.uop := Mux(mem_xcpt_valid, mem_uop, laq_uop(Mux(l_idx >= UInt(num_ld_entries), l_idx - UInt(num_ld_entries), l_idx)))
+   io.xcpt.bits.uop := Mux(mem_xcpt_valid, mem_tlb_uop, laq_uop(Mux(l_idx >= UInt(num_ld_entries), l_idx - UInt(num_ld_entries), l_idx)))
    io.xcpt.bits.cause := Mux(mem_xcpt_valid, mem_xcpt_cause, MINI_EXCEPTION_MEM_ORDERING)
 
 
@@ -996,15 +1089,27 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    io.lsu_fencei_rdy := stq_empty && io.dmem_is_ordered
 
    //-------------------------------------------------------------
+   // Assertions
+
+   // some assertions are making code too difficult to follow
+   assert(!(laq_allocated(exe_ld_idx_wakeup) &&
+            laq_addr_val (exe_ld_idx_wakeup) &&
+            laq_is_virtual(exe_ld_idx_wakeup) &&
+            laq_failure(exe_ld_idx_wakeup)),
+            "Load without physical address marked as having failed.")
+
+
+   //-------------------------------------------------------------
    // Debug & Counter outputs
 
 
-   io.counters.ld_valid      := io.exe_resp.valid && exe_uop.ctrl.is_load
+   io.counters.ld_valid      := io.exe_resp.valid && io.exe_resp.bits.uop.ctrl.is_load
    io.counters.ld_forwarded  := io.forward_val
    io.counters.ld_sleep      := ld_was_put_to_sleep
    io.counters.ld_killed     := ld_was_killed
    io.counters.ld_order_fail := failed_loads.reduce(_|_)
 
+   io.debug.tlb_miss := tlb_miss
    io.debug.laq_head := laq_head
    io.debug.laq_tail := laq_tail
    io.debug.stq_head := stq_head
@@ -1033,6 +1138,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
       io.debug.entry(i).stq_executed := stq_executed(i)
       io.debug.entry(i).stq_succeeded := stq_succeeded(i)
       io.debug.entry(i).stq_committed := stq_committed(i)
+      io.debug.entry(i).saq_is_virtual := saq_is_virtual(i)
       io.debug.entry(i).saq_addr := saq_addr(i)
       io.debug.entry(i).sdq_data := sdq_data(i)
       io.debug.entry(i).stq_uop  := stq_uop(i)
