@@ -296,14 +296,16 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    //--------------------------------------------
    // Controller Logic (arbitrate TLB, D$ access)
    //
-   // There are roughly two some-what coupled datapaths here and 7 potential users.
-   // AddrGen -> TLB -> LAQ/SAQ/D$
-   // LAQ/SAQ -> optionally TLB -> D$
+   // There are a couple some-what coupled datapaths here and 7 potential users.
+   // AddrGen -> TLB -> LAQ/D$ (for loads) or SAQ/ROB (for stores)
+   // LAQ     -> optionally TLB -> D$
+   // SAQ     -> TLB -> ROB
+   // And uopSTAs and uopSTDs fight over the ROB unbusy port.
 
    val will_fire_load_incoming = Bool() // uses TLB, D$, SAQ-search
-   val will_fire_sta_incoming  = Bool() // uses TLB,     LAQ-search
-   val will_fire_std_incoming  = Bool() // uses -
-   val will_fire_sta_retry     = Bool() // uses TLB
+   val will_fire_sta_incoming  = Bool() // uses TLB,     LAQ-search, ROB
+   val will_fire_std_incoming  = Bool() // uses                      ROB
+   val will_fire_sta_retry     = Bool() // uses TLB,                 ROB
    val will_fire_load_retry    = Bool() // uses TLB, D$, SAQ-search
    val will_fire_store_commit  = Bool() // uses      D$
    val will_fire_load_wakeup   = Bool() // uses      D$, SAQ-search
@@ -324,6 +326,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
 
    val dc_avail = Bool(); dc_avail := Bool(true)
    val tlb_avail= Bool(); tlb_avail:= Bool(true)
+   val rob_avail= Bool(); rob_avail:= Bool(true)
 
    // give first priority to incoming uops
    when (io.exe_resp.valid)
@@ -338,16 +341,18 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
       {
          will_fire_sta_incoming := Bool(true)
          tlb_avail := Bool(false)
+         rob_avail := Bool(false)
       }
       when (io.exe_resp.bits.uop.ctrl.is_std)
       {
          will_fire_std_incoming := Bool(true)
+         rob_avail := Bool(false)
       }
    }
 
    when (tlb_avail)
    {
-      when (can_fire_sta_retry)
+      when (can_fire_sta_retry && rob_avail)
       {
          will_fire_sta_retry := Bool(true)
       }
@@ -373,7 +378,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
 
 
    // micro-op going through the TLB generate paddr's. If this is a load, it will continue
-   // to the D$ and search the SAQ.
+   // to the D$ and search the SAQ. uopSTD also uses this uop.
    val exe_tlb_uop = Mux(will_fire_sta_retry,  stq_uop(stq_retry_idx),
                      Mux(will_fire_load_retry, laq_uop(laq_retry_idx),
                                                io.exe_resp.bits.uop))
@@ -558,7 +563,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    val mem_tlb_paddr = Reg(next=exe_tlb_paddr)
    val mem_tlb_uop   = Reg(next=exe_tlb_uop)
    mem_tlb_uop.br_mask := GetNewBrMask(io.brinfo, exe_tlb_uop)
-   val mem_tlb_miss = Reg(next=tlb_miss, init=Bool(false))
+   val mem_tlb_miss  = Reg(next=tlb_miss, init=Bool(false))
 
    // the load address that will search the SAQ (either a fast load or a retry load)
    val mem_ld_addr = Mux(Reg(next=will_fire_load_wakeup), Reg(next=laq_addr(exe_ld_idx_wakeup)), mem_tlb_paddr)
@@ -566,17 +571,26 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    mem_ld_uop.br_mask := GetNewBrMask(io.brinfo, exe_ld_uop)
 
 
-   val mem_ld_req_fired = Reg(next=(will_fire_load_incoming ||
+   val mem_fired_ld = Reg(next=(will_fire_load_incoming ||
                                     will_fire_load_retry ||
                                     will_fire_load_wakeup))
+   val mem_fired_sta = Reg(next=(will_fire_sta_incoming || will_fire_sta_retry), init=Bool(false))
+   val mem_fired_std = Reg(next=will_fire_std_incoming, init=Bool(false))
 
 
    // tell the ROB to clear the busy bit on the incoming store
-   io.lsu_clr_bsy_valid := (Reg(next=(will_fire_sta_incoming || will_fire_sta_retry), init=Bool(false)) && !mem_tlb_miss ||
-                            Reg(next=(will_fire_std_incoming), init=Bool(false))) &&
-                           !mem_tlb_uop.is_amo &&
-                           ((mem_tlb_uop.ctrl.is_sta && sdq_val(mem_tlb_uop.stq_idx)) ||
-                           (mem_tlb_uop.ctrl.is_std && saq_val(mem_tlb_uop.stq_idx) && !saq_is_virtual(mem_tlb_uop.stq_idx)))
+
+   io.lsu_clr_bsy_valid := Bool(false)
+   when (mem_fired_sta && !mem_tlb_miss)
+   {
+      io.lsu_clr_bsy_valid := sdq_val(mem_tlb_uop.stq_idx) && !mem_tlb_uop.is_amo
+   }
+   .elsewhen (mem_fired_std)
+   {
+      io.lsu_clr_bsy_valid := saq_val(mem_tlb_uop.stq_idx) &&
+                              !saq_is_virtual(mem_tlb_uop.stq_idx) &&
+                              !mem_tlb_uop.is_amo
+   }
    io.lsu_clr_bsy_rob_idx := mem_tlb_uop.rob_idx
 
    //-------------------------------------------------------------
@@ -663,7 +677,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    forwarding_age_logic.io.addr_matches    := forwarding_matches.toBits()
    forwarding_age_logic.io.youngest_st_idx := laq_uop(Reg(next=exe_ld_uop.ldq_idx)).stq_idx
 
-   when (mem_ld_req_fired && forwarding_age_logic.io.forwarding_val && !tlb_miss)
+   when (mem_fired_ld && forwarding_age_logic.io.forwarding_val && !tlb_miss)
    {
       laq_forwarded_std_val(mem_ld_uop.ldq_idx) := Bool(true)
       laq_forwarded_stq_idx(mem_ld_uop.ldq_idx) := forwarding_age_logic.io.forwarding_idx
@@ -681,7 +695,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    wb_uop.br_mask        := GetNewBrMask(io.brinfo, mem_ld_uop)
 
    // kill load request to mem if address matches (we will either sleep load, or forward data) or TLB miss
-   io.memreq_kill     := mem_tlb_miss || (mem_ld_req_fired && addr_conflicts.toBits != Bits(0))
+   io.memreq_kill     := mem_tlb_miss || (mem_fired_ld && addr_conflicts.toBits != Bits(0))
    wb_forward_std_idx := forwarding_age_logic.io.forwarding_idx
 
    // kill forwarding if branch mispredict
@@ -691,7 +705,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    }
    .otherwise
    {
-      wb_forward_std_val := mem_ld_req_fired && forwarding_age_logic.io.forwarding_val && !force_ld_to_sleep && !mem_tlb_miss
+      wb_forward_std_val := mem_fired_ld && forwarding_age_logic.io.forwarding_val && !force_ld_to_sleep && !mem_tlb_miss
    }
 
    // Notes:
