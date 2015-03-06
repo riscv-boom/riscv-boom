@@ -519,9 +519,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
       laq_failure (exe_ld_uop.ldq_idx)  := Bool(false)
    }
 
-   // TODO check width inference
-   val count_fires = Cat(UInt(0,3),will_fire_store_commit.toUInt) + will_fire_load_incoming.toUInt + will_fire_load_retry.toUInt + will_fire_load_wakeup.toUInt
-   assert (count_fires <= UInt(1), "Multiple requestors firing to the data cache.")
+   assert (PopCount(Vec(will_fire_store_commit, will_fire_load_incoming, will_fire_load_retry, will_fire_load_wakeup)) <= UInt(1), "Multiple requestors firing to the data cache.")
 
 
 
@@ -561,7 +559,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    // search SAQ/LAQ for matches
 
    val mem_tlb_paddr = Reg(next=exe_tlb_paddr)
-   val mem_tlb_uop   = Reg(next=exe_tlb_uop)
+   val mem_tlb_uop   = Reg(next=exe_tlb_uop) // not valid for std_incoming!
    mem_tlb_uop.br_mask := GetNewBrMask(io.brinfo, exe_tlb_uop)
    val mem_tlb_miss  = Reg(next=tlb_miss, init=Bool(false))
 
@@ -581,17 +579,23 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    // tell the ROB to clear the busy bit on the incoming store
 
    io.lsu_clr_bsy_valid := Bool(false)
+   io.lsu_clr_bsy_rob_idx := mem_tlb_uop.rob_idx
    when (mem_fired_sta && !mem_tlb_miss)
    {
-      io.lsu_clr_bsy_valid := sdq_val(mem_tlb_uop.stq_idx) && !mem_tlb_uop.is_amo
-   }
-   .elsewhen (mem_fired_std)
-   {
-      io.lsu_clr_bsy_valid := saq_val(mem_tlb_uop.stq_idx) &&
-                              !saq_is_virtual(mem_tlb_uop.stq_idx) &&
+      io.lsu_clr_bsy_valid := sdq_val(mem_tlb_uop.stq_idx) &&
                               !mem_tlb_uop.is_amo
+      io.lsu_clr_bsy_rob_idx := mem_tlb_uop.rob_idx
    }
-   io.lsu_clr_bsy_rob_idx := mem_tlb_uop.rob_idx
+   when (mem_fired_std)
+   {
+      val mem_std_uop = Reg(next=io.exe_resp.bits.uop)
+      io.lsu_clr_bsy_valid := saq_val(mem_std_uop.stq_idx) &&
+                              !saq_is_virtual(mem_std_uop.stq_idx) &&
+                              !mem_std_uop.is_amo
+   io.lsu_clr_bsy_rob_idx := mem_std_uop.rob_idx
+   }
+
+   assert (PopCount(Vec(mem_fired_sta, mem_fired_std)) <= UInt(1), "STA and STD firing.")
 
    //-------------------------------------------------------------
    // Load Issue Datapath (ALL loads need to use this path,
