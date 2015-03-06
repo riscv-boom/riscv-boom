@@ -395,6 +395,7 @@ class DatPath() extends Module with BOOMCoreParameters
    val com_uops              = Vec.fill(DECODE_WIDTH) {new MicroOp()}
    val com_exception         = Bool()
    val com_exc_cause         = UInt()
+   val com_exc_badvaddr      = UInt()
    val com_handling_exc      = Bool()
 
    val com_fflags_val        = Bool()
@@ -462,11 +463,8 @@ class DatPath() extends Module with BOOMCoreParameters
    fetch_bundle.xcpt_ma := io.imem.resp.bits.xcpt_ma
    fetch_bundle.xcpt_if := io.imem.resp.bits.xcpt_if
 
-   // check for unallowed exceptions
-   // TODO deleteme
-//   assert(!Reg(init=Bool(false),next=(com_exception && (com_exc_cause === UInt(rocket.Causes.misaligned_fetch) ||
-//                              com_exc_cause === UInt(rocket.Causes.fault_fetch)))), "Exception thrown by IMEM, not yet supported.")
-
+   assert(!Reg(init=Bool(false),next=(com_exception && com_exc_cause === UInt(rocket.Causes.misaligned_fetch))),
+      "Exception thrown by IMEM, misaligned fetch not yet supported.")
 
    // TODO flush_take_pc should probably be given to the branch unit, instead of resetting it here?
    val jal_opc = UInt(0x6f)
@@ -938,10 +936,11 @@ class DatPath() extends Module with BOOMCoreParameters
    pcr.io.rw.cmd   := Mux(watchdog_trigger,              rocket.CSR.W,
                       Mux(exe_units(0).io.resp(0).valid, pcr_rw_cmd,
                                                          CSR.N))
-   pcr.io.rw.wdata := Mux(watchdog_trigger, Bits(WATCHDOG_ERR_NO << 1 | 1),
+   pcr.io.rw.wdata := Mux(watchdog_trigger,     Bits(WATCHDOG_ERR_NO << 1 | 1),
+                      Mux(com_exception,        com_exc_badvaddr,
                       Mux(pcr_rw_cmd === CSR.S, pcr.io.rw.rdata | wb_wdata,
                       Mux(pcr_rw_cmd === CSR.C, pcr.io.rw.rdata & ~wb_wdata,
-                                                 wb_wdata)))
+                                                wb_wdata))))
 
 
    // TODO is there anything else that's going on spuriously?
@@ -955,8 +954,9 @@ class DatPath() extends Module with BOOMCoreParameters
    pcr.io.cause     := com_exc_cause
    pcr.io.sret      := com_sret
    pcr_exc_target   := pcr.io.evec
+//   pcr.io.badvaddr_wen := pcr.io.exception // TODO CHISEL BUG generates bad Verilog, "io_exception" is what it hooks up
    pcr.io.badvaddr_wen := com_exception // don't care for non-memory exceptions,
-                                        // so we can write to this for ALL exceptions
+                                           // so we can write to this for ALL exceptions
 
    // reading requires serializing the entire pipeline
    pcr.io.fcsr_flags.valid := com_fflags_val
@@ -1208,6 +1208,7 @@ class DatPath() extends Module with BOOMCoreParameters
 
       com_exception    := rob.io.com_exception    // on for only a single cycle (to PCR)
       com_exc_cause    := rob.io.com_exc_cause
+      com_exc_badvaddr := rob.io.com_badvaddr
       com_handling_exc := rob.io.com_handling_exc // on for duration of roll-back
       com_rbk_valids   := rob.io.com_rbk_valids
 

@@ -71,6 +71,7 @@ class RobIo(machine_width: Int
    val com_exc_cause    = UInt(OUTPUT, xprLen)
    val com_handling_exc = Bool(OUTPUT)
    val com_rbk_valids   = Vec.fill(machine_width) {Bool(OUTPUT)}
+   val com_badvaddr     = UInt(OUTPUT, xprLen)
 
    // Handle Branch Misspeculations
    val br_unit          = new BranchUnitResp().asInput
@@ -157,6 +158,7 @@ class Rob(width: Int
    val rob_head_is_store   = Vec.fill(width) {Bool()}
    val rob_head_is_load    = Vec.fill(width) {Bool()}
    val rob_head_eflags     = Vec.fill(width) {UInt()}
+   val rob_head_badvaddr   = Vec.fill(width) {UInt()}
 
    // valid bits at the branch target
    // the br_unit needs to verify the target PC, but it must read out the valid bits
@@ -165,6 +167,10 @@ class Rob(width: Int
 
    val exception_thrown = Bool()
 
+   // exception info
+   // TODO implement tracking having only the oldest exception in the ROB!
+   val reg_badvaddr = Reg(UInt(width=xprLen))
+   val reg_badvaddr_rob_idx = Reg(UInt())
 
    //--------------------------------------------------
    // Utility
@@ -238,6 +244,7 @@ class Rob(width: Int
       val rob_exc_cause = Mem(UInt(width=xprLen), num_rob_rows) // holds exception code OR it holds the fcsr_flags
                                                                 // (must look into the rob_uop to figure out if FP inst & !ld/st)
                                                                 // TODO compress rob_exc_cause size down, xprLen is insanity
+      val rob_badvaddr  = Mem(UInt(width=xprLen), num_rob_rows) // TODO compress this out
 
       //-----------------------------------------------
       // Dispatch: Add Entry to ROB
@@ -306,6 +313,7 @@ class Rob(width: Int
             // FPU instructions write their fflags into here, but they aren't exceptions!
             rob_exception(GetRowIdx(xcpt_uop.rob_idx)) := !(xcpt_uop.fp_val && !(xcpt_uop.is_load || xcpt_uop.is_store))
             rob_exc_cause(GetRowIdx(xcpt_uop.rob_idx)) := io.xcpts(i).bits.cause
+            rob_badvaddr (GetRowIdx(xcpt_uop.rob_idx)) := io.xcpts(i).bits.badvaddr
          }
       }
 
@@ -384,6 +392,7 @@ class Rob(width: Int
       // Outputs
       rob_head_vals(w)     := rob_val(rob_head)
       rob_head_eflags(w)   := rob_exc_cause(rob_head)
+      rob_head_badvaddr(w) := rob_badvaddr(rob_head)
       rob_head_is_store(w) := rob_uop(rob_head).is_store
       rob_head_is_load(w)  := rob_uop(rob_head).is_load
       rob_brt_vals(w)      := rob_val(WrapInc(GetRowIdx(io.get_pc.rob_idx), num_rob_rows))
@@ -471,6 +480,11 @@ class Rob(width: Int
    io.com_handling_exc := exception_thrown  // TODO get rid of com_handling_exc? used to handle loads coming back from the $ probbaly unnecessary
 
    io.lsu_misspec := Reg(next=exception_thrown && io.com_exc_cause === MINI_EXCEPTION_MEM_ORDERING)
+   val exc_is_if = io.com_exc_cause === UInt(rocket.Causes.misaligned_fetch) ||
+                   io.com_exc_cause === UInt(rocket.Causes.fault_fetch)
+   io.com_badvaddr := Mux(exc_is_if, io.flush_pc,
+                                     PriorityMux(can_throw_exception, rob_head_badvaddr))
+
 
    // TODO BUG XXX what if eret and inst_valid excp in same bundle and bad load?
    // flush PC, say an instruction needs to flush the pipeline and refetch either itself or PC+4

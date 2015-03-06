@@ -399,17 +399,19 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    dtlb.io.req.bits.instruction := Bool(false)
 
    // exceptions
-   val pf_ld = dtlb.io.req.valid && dtlb.io.resp.xcpt_ld && exe_tlb_uop.ctrl.is_load
-   val pf_st = dtlb.io.req.valid && dtlb.io.resp.xcpt_st && exe_tlb_uop.ctrl.is_sta
+   val pf_ld = dtlb.io.req.valid && dtlb.io.resp.xcpt_ld && exe_tlb_uop.is_load
+   val pf_st = dtlb.io.req.valid && dtlb.io.resp.xcpt_st && exe_tlb_uop.is_store
    val mem_xcpt_valid = Reg(next=(dtlb.io.req.valid && (pf_ld || pf_st)) ||
                                  (io.exe_resp.valid && io.exe_resp.bits.xcpt.valid),
                             init=Bool(false))
    val mem_xcpt_cause = Reg(next=(Mux(io.exe_resp.valid &&
                                       io.exe_resp.bits.xcpt.valid, io.exe_resp.bits.xcpt.bits.cause,
-                                  Mux(exe_tlb_uop.ctrl.is_load,    UInt(rocket.Causes.fault_load),
+                                  Mux(exe_tlb_uop.is_load,         UInt(rocket.Causes.fault_load),
                                                                    UInt(rocket.Causes.fault_store)))))
+   io.xcpt.bits.badvaddr := Reg(next=exe_vaddr) // TODO BUG sign-extend! (ish)
+                                                // TODO is there another register we can use instead?
 
-   assert (!(exe_tlb_uop.ctrl.is_sta && exe_tlb_uop.is_fence), "Fence is pretending to talk to the TLB")
+   assert (!(dtlb.io.req.valid && exe_tlb_uop.is_fence), "Fence is pretending to talk to the TLB")
 
    val tlb_miss = dtlb.io.req.valid && (dtlb.io.resp.miss || !dtlb.io.req.ready)
 
@@ -446,8 +448,8 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    when (laq_allocated (laq_retry_idx) &&
          laq_addr_val  (laq_retry_idx) &&
          laq_is_virtual(laq_retry_idx) &&
-         !laq_executed (laq_retry_idx) // perf lose, but simplifies control
-         )
+         !laq_executed (laq_retry_idx) && // perf lose, but simplifies control
+         Reg(next=dtlb.io.req.ready))
    {
       can_fire_load_retry := Bool(true)
    }
@@ -475,7 +477,8 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
 
    when (stq_entry_val (stq_retry_idx) &&
          saq_val       (stq_retry_idx) &&
-         saq_is_virtual(stq_retry_idx))
+         saq_is_virtual(stq_retry_idx) &&
+         Reg(next=dtlb.io.req.ready))
    {
       can_fire_sta_retry := Bool(true)
    }
@@ -782,7 +785,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
       val l_mask = GenByteMask(l_addr, laq_uop(i).mem_typ)
       failed_loads(i) := Bool(false)
 
-      when (Reg(next=io.exe_resp.valid,init=Bool(false)) && mem_tlb_uop.ctrl.is_sta)
+      when (Reg(next=(will_fire_sta_incoming || will_fire_sta_retry),init=Bool(false)))
       {
          // does the load depend on this store?
          // TODO CODE REVIEW what's the best way to perform this bit extract?
@@ -1116,7 +1119,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    // Debug & Counter outputs
 
 
-   io.counters.ld_valid      := io.exe_resp.valid && io.exe_resp.bits.uop.ctrl.is_load
+   io.counters.ld_valid      := io.exe_resp.valid && io.exe_resp.bits.uop.is_load
    io.counters.ld_forwarded  := io.forward_val
    io.counters.ld_sleep      := ld_was_put_to_sleep
    io.counters.ld_killed     := ld_was_killed

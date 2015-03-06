@@ -35,11 +35,12 @@ class ExeUnitResp(data_width: Int) extends BOOMCoreBundle
    override def clone = new ExeUnitResp(data_width).asInstanceOf[this.type]
 }
 
-class ExecuteTimeExceptions extends Bundle
+class ExecuteTimeExceptions extends BOOMCoreBundle
 {
    val uop = new MicroOp()
    val cause = Bits(width=math.max(rocket.FPConstants.FLAGS_SZ,
                                    log2Up(rocket.Causes.all.max)))
+   val badvaddr = UInt(width=xprLen)
 }
 
 class ExecutionUnitIo(num_rf_read_ports: Int
