@@ -461,6 +461,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
          (stq_committed(stq_head) ||
             (stq_uop(stq_head).is_amo &&
             saq_val(stq_head) &&
+            !saq_is_virtual(stq_head) &&
             sdq_val(stq_head)
             )) &&
          !stq_executed(stq_head) &&

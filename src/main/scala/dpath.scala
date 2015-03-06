@@ -1212,14 +1212,14 @@ class DatPath() extends Module with BOOMCoreParameters
       com_rbk_valids   := rob.io.com_rbk_valids
 
 
-   // throw assertion failure if a store or load have a misaligned or vm fault
-   // as neither are supported as of yet.
+   // throw assertion failure if a store or load have a misaligned exception
+   // since the C compiler will not generate these, so it's more likely
+   // to be a hardware failure.
    assert (!(com_exception &&
              (com_exc_cause === UInt(rocket.Causes.misaligned_load) ||
-              com_exc_cause === UInt(rocket.Causes.fault_load) ||
-              com_exc_cause === UInt(rocket.Causes.misaligned_store) ||
-              com_exc_cause === UInt(rocket.Causes.fault_store))),
-             "An unsupported memory exception occurred (misaligned st/ld or faulting st/ld).")
+              com_exc_cause === UInt(rocket.Causes.misaligned_store)
+              )),
+             "An unsupported memory exception occurred (misaligned st/ld).")
 
    //-------------------------------------------------------------
    // **** Flush Pipeline ****
