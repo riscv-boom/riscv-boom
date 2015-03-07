@@ -1617,7 +1617,7 @@ class DatPath() extends Module with BOOMCoreParameters
 
       // Load/Store Unit
 
-      printf("  Mem[%s,%s:%d,%s,%s %s %s] %s RobXcpt[%s%d r:%d b:%x bva:0x%x]\n"
+      printf("  Mem[%s,%s:%d,%s,%s %s %s] %s %s RobXcpt[%s%d r:%d b:%x bva:0x%x]\n"
             , Mux(io.dmem.debug.memreq, Str("MREQ"), Str(" "))
             , Mux(io.dmem.debug.memresp, Str("MRESP"), Str(" "))
             , io.dmem.debug.cache_resp_idx
@@ -1626,6 +1626,7 @@ class DatPath() extends Module with BOOMCoreParameters
             , Mux(io.dmem.debug.cache_nack, Str("CN"), Str(" "))
             , Mux(lsu_io.forward_val, Str("FWD"), Str(" "))
             , Mux(lsu_io.debug.tlb_miss, Str("TLB-MISS"), Str("-"))
+            , Mux(lsu_io.debug.tlb_ready, Str("TLB-RDY"), Str("-"))
             , Mux(rob.io.debug.xcpt_val, Str("E"),Str("-"))
             , rob.io.debug.xcpt_uop.exc_cause
             , rob.io.debug.xcpt_uop.rob_idx

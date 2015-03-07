@@ -83,7 +83,7 @@ class LoadStoreUnitIo(pl_width: Int) extends BOOMCoreBundle
    val forward_uop        = new MicroOp().asOutput() // the load microop (for its pdst)
 
    // Receive Memory Response
-   val memresp_uop        = new ValidIO(new MicroOp()).flip
+   val memresp            = new ValidIO(new MicroOp()).flip
 
    // Handle Branch Misspeculations
    val brinfo             = new BrResolutionInfo().asInput()
@@ -125,7 +125,6 @@ class LoadStoreUnitIo(pl_width: Int) extends BOOMCoreBundle
 
    val debug = new BOOMCoreBundle
    {
-      val tlb_miss        = Bool()
       val laq_head        = UInt(width=MEM_ADDR_SZ)
       val laq_tail        = UInt(width=MEM_ADDR_SZ)
       val stq_head        = UInt(width=MEM_ADDR_SZ)
@@ -134,6 +133,8 @@ class LoadStoreUnitIo(pl_width: Int) extends BOOMCoreBundle
       val live_store_mask = Bits(width=NUM_LSU_ENTRIES)
       val laq_maybe_full  = Bool()
       val stq_maybe_full  = Bool()
+      val tlb_miss        = Bool()
+      val tlb_ready       = Bool()
       val entry = Vec.fill(NUM_LSU_ENTRIES) { new Bundle {
          val laq_addr_val = Bool()
          val laq_addr = UInt(width=xprLen)
@@ -702,7 +703,8 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    wb_uop.br_mask        := GetNewBrMask(io.brinfo, mem_ld_uop)
 
    // kill load request to mem if address matches (we will either sleep load, or forward data) or TLB miss
-   io.memreq_kill     := mem_tlb_miss || (mem_fired_ld && addr_conflicts.toBits != Bits(0))
+   io.memreq_kill     := (mem_tlb_miss && Reg(next=dtlb.io.req.valid)) ||
+                         (mem_fired_ld && addr_conflicts.toBits != Bits(0))
    wb_forward_std_idx := forwarding_age_logic.io.forwarding_idx
 
    // kill forwarding if branch mispredict
@@ -736,15 +738,15 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    // Handle Memory Responses
    //------------------------
 
-   when (io.memresp_uop.valid)
+   when (io.memresp.valid)
    {
-      when (io.memresp_uop.bits.is_load)
+      when (io.memresp.bits.is_load)
       {
-         laq_succeeded(io.memresp_uop.bits.ldq_idx) := Bool(true)
+         laq_succeeded(io.memresp.bits.ldq_idx) := Bool(true)
       }
       .otherwise
       {
-         stq_succeeded(io.memresp_uop.bits.stq_idx) := Bool(true)
+         stq_succeeded(io.memresp.bits.stq_idx) := Bool(true)
       }
    }
 
@@ -1123,7 +1125,6 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    io.counters.ld_killed     := ld_was_killed
    io.counters.ld_order_fail := failed_loads.reduce(_|_)
 
-   io.debug.tlb_miss := tlb_miss
    io.debug.laq_head := laq_head
    io.debug.laq_tail := laq_tail
    io.debug.stq_head := stq_head
@@ -1132,6 +1133,8 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    io.debug.live_store_mask := live_store_mask
    io.debug.laq_maybe_full := laq_maybe_full
    io.debug.stq_maybe_full := stq_maybe_full
+   io.debug.tlb_miss := tlb_miss
+   io.debug.tlb_ready:= dtlb.io.req.ready
 
    for (i <- 0 until NUM_LSU_ENTRIES)
    {

@@ -304,13 +304,12 @@ class DCacheShim extends Module with BOOMCoreParameters
    // properly to line up stores, loads, nacks, and subword loads
    val was_store_and_not_amo = m2_req_uop.is_store && !m2_req_uop.is_amo && Reg(next=Reg(next=(io.core.req.valid && io.dmem.req.ready)))  // was two cycles ago a store request?
 
-
    // Todo add entry valid bit?
    val resp_idx = io.dmem.resp.bits.tag
 
-   io.core.resp.valid := Mux(cache_load_ack,                              !inflight_load_buffer(resp_idx).was_killed, // hide loads that were killed due to branches, etc.
+   io.core.resp.valid := Mux(cache_load_ack,                                    !inflight_load_buffer(resp_idx).was_killed, // hide loads that were killed due to branches, etc.
                          Mux(was_store_and_not_amo && !io.dmem.resp.bits.nack,  Bool(true),    // stores succeed quietly, so valid if no nack
-                                                                             Bool(false)))  // filter out nacked responses
+                                                                                Bool(false)))  // filter out nacked responses
 
    io.core.resp.bits.uop := Mux(cache_load_ack, inflight_load_buffer(resp_idx).out_uop,
                                                    m2_req_uop)
@@ -329,6 +328,8 @@ class DCacheShim extends Module with BOOMCoreParameters
    io.core.nack.lsu_idx   := Mux(m2_req_uop.is_load, m2_req_uop.ldq_idx, m2_req_uop.stq_idx)
    io.core.nack.isload    := m2_req_uop.is_load
    io.core.nack.cache_nack:= io.dmem.resp.bits.nack || Reg(next=iflb_kill) || Reg(next=Reg(next= (!(io.dmem.req.ready))))
+
+   assert(!(was_store_and_not_amo && Reg(next=io.core.req.bits.kill)), "the LSU nacked a store.")
 
    //------------------------------------------------------------
    // Handle exceptions and fences

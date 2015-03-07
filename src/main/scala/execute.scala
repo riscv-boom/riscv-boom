@@ -416,8 +416,8 @@ class MemExeUnit extends ExecutionUnit(num_rf_read_ports = 2 // TODO make this 1
 
 
 
-   lsu.io.memresp_uop.valid := memresp_val
-   lsu.io.memresp_uop.bits  := memresp_uop
+   lsu.io.memresp.valid := memresp_val
+   lsu.io.memresp.bits  := memresp_uop
 
 
    // Hook up loads to the response
@@ -584,8 +584,8 @@ class ALUMulDMemExeUnit(is_branch_unit: Boolean = false
                                            , io.dmem.resp.bits.data_subword))
    }
 
-   lsu.io.memresp_uop.valid := memresp_val
-   lsu.io.memresp_uop.bits  := memresp_uop
+   lsu.io.memresp.valid := memresp_val
+   lsu.io.memresp.bits  := memresp_uop
 
 
    // Hook up loads and multiplies to the 2nd write port
@@ -786,8 +786,8 @@ class FPUALUMulDMemExeUnit(is_branch_unit: Boolean = false
                                                                            io.dmem.resp.bits.data_subword)))
    }
 
-   lsu.io.memresp_uop.valid := memresp_val
-   lsu.io.memresp_uop.bits  := memresp_uop
+   lsu.io.memresp.valid := memresp_val
+   lsu.io.memresp.bits  := memresp_uop
 
    // Hook up loads and multiplies to the 2nd write port
    io.resp(1).valid                := memresp_val || muldiv.io.resp.valid
