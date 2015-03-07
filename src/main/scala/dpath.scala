@@ -931,7 +931,7 @@ class DatPath() extends Module with BOOMCoreParameters
    pcr.io.host <> io.host
    val pcr_read_out = pcr.io.rw.rdata
    pcr.io.rw.addr  := Mux(watchdog_trigger, UInt(rocket.CSRs.tohost),
-                                    ImmGen(exe_units(0).io.resp(0).bits.uop.imm_packed, IS_I))
+                                    ImmGen(exe_units(0).io.resp(0).bits.uop.imm_packed, IS_I).toUInt)
 
    pcr.io.rw.cmd   := Mux(watchdog_trigger,              rocket.CSR.W,
                       Mux(exe_units(0).io.resp(0).valid, pcr_rw_cmd,
@@ -1115,8 +1115,8 @@ class DatPath() extends Module with BOOMCoreParameters
    //-------------------------------------------------------------
    //-------------------------------------------------------------
 
-   val num_exception_ports = exe_units.withFilter(_.can_cause_exceptions).map(_.num_rf_write_ports).reduce[Int](_+_)
-   val rob  = Module(new Rob(DECODE_WIDTH, NUM_ROB_ENTRIES, num_slow_wakeup_ports, num_exception_ports)) // TODO the ROB writeback is off the regfile, which is a different set
+   val num_fpu_ports = exe_units.withFilter(_.has_fpu).map(_.num_rf_write_ports).reduce[Int](_+_)
+   val rob  = Module(new Rob(DECODE_WIDTH, NUM_ROB_ENTRIES, num_slow_wakeup_ports, num_fpu_ports)) // TODO the ROB writeback is off the regfile, which is a different set
 
       // Dispatch
       rob_rdy := rob.io.ready
@@ -1163,9 +1163,9 @@ class DatPath() extends Module with BOOMCoreParameters
             }
 
 
-            if (exe_units(w).can_cause_exceptions)
+            if (exe_units(w).has_fpu)
             {
-               rob.io.xcpts(e_cnt) <> exe_units(w).io.resp(j).bits.xcpt
+               rob.io.fflags(e_cnt) <> exe_units(w).io.resp(j).bits.fflags
                e_cnt += 1
             }
 
@@ -1196,6 +1196,7 @@ class DatPath() extends Module with BOOMCoreParameters
       lsu_misspec := rob.io.lsu_misspec
       rob.io.lsu_clr_bsy_valid   := lsu_io.lsu_clr_bsy_valid
       rob.io.lsu_clr_bsy_rob_idx := lsu_io.lsu_clr_bsy_rob_idx
+      rob.io.lxcpt <> lsu_io.xcpt
 
       // Commit (ROB outputs)
       com_valids       := rob.io.com_valids
@@ -1211,7 +1212,6 @@ class DatPath() extends Module with BOOMCoreParameters
       com_exc_badvaddr := rob.io.com_badvaddr
       com_handling_exc := rob.io.com_handling_exc // on for duration of roll-back
       com_rbk_valids   := rob.io.com_rbk_valids
-
 
    // throw assertion failure if a store or load have a misaligned exception
    // since the C compiler will not generate these, so it's more likely
@@ -1562,19 +1562,18 @@ class DatPath() extends Module with BOOMCoreParameters
 
          if (COMMIT_WIDTH == 1)
          {
-            printf("(%s)(%s) 0x%x [DASM(%x)] %s%d "
+            printf("(%s)(%s) 0x%x [DASM(%x)] %s "
                , Mux(rob.io.debug.entry(r_idx+0).valid, Str(b_cyn + "V" + end), Str(grn + " " + end))
                , Mux(rob.io.debug.entry(r_idx+0).busy, Str(b_ylw + "B" + end),  Str(grn + " " + end))
                , rob.io.debug.entry(r_idx+0).uop.pc(31,0)
                , rob.io.debug.entry(r_idx+0).uop.inst
                , Mux(rob.io.debug.entry(r_idx+0).exception, Str("E"), Str("-"))
-               , rob.io.debug.entry(r_idx+0).eflags(7,0)
                )
          }
          else if (COMMIT_WIDTH == 2)
          {
             val row_is_val = rob.io.debug.entry(r_idx+0).valid || rob.io.debug.entry(r_idx+1).valid
-            printf("(%s%s)(%s%s) 0x%x %x [%sDASM(%x)][DASM(%x)" + end + "] %s%d,%s%d "
+            printf("(%s%s)(%s%s) 0x%x %x [%sDASM(%x)][DASM(%x)" + end + "] %s,%s "
                , Mux(rob.io.debug.entry(r_idx+0).valid, Str(b_cyn + "V" + end), Str(grn + " " + end))
                , Mux(rob.io.debug.entry(r_idx+1).valid, Str(b_cyn + "V" + end), Str(grn + " " + end))
                , Mux(rob.io.debug.entry(r_idx+0).busy,  Str(b_ylw + "B" + end), Str(grn + " " + end))
@@ -1587,9 +1586,7 @@ class DatPath() extends Module with BOOMCoreParameters
                , rob.io.debug.entry(r_idx+0).uop.inst
                , rob.io.debug.entry(r_idx+1).uop.inst
                , Mux(rob.io.debug.entry(r_idx+0).exception, Str("E"), Str("-"))
-               , rob.io.debug.entry(r_idx+0).eflags(7,0)
                , Mux(rob.io.debug.entry(r_idx+1).exception, Str("E"), Str("-"))
-               , rob.io.debug.entry(r_idx+1).eflags(7,0)
                )
          }
          else
@@ -1620,7 +1617,7 @@ class DatPath() extends Module with BOOMCoreParameters
 
       // Load/Store Unit
 
-      printf("  Mem[%s,%s:%d,%s,%s %s %s] %s\n"
+      printf("  Mem[%s,%s:%d,%s,%s %s %s] %s RobXcpt[%s%d r:%d b:%x bva:0x%x]\n"
             , Mux(io.dmem.debug.memreq, Str("MREQ"), Str(" "))
             , Mux(io.dmem.debug.memresp, Str("MRESP"), Str(" "))
             , io.dmem.debug.cache_resp_idx
@@ -1629,6 +1626,11 @@ class DatPath() extends Module with BOOMCoreParameters
             , Mux(io.dmem.debug.cache_nack, Str("CN"), Str(" "))
             , Mux(lsu_io.forward_val, Str("FWD"), Str(" "))
             , Mux(lsu_io.debug.tlb_miss, Str("TLB-MISS"), Str("-"))
+            , Mux(rob.io.debug.xcpt_val, Str("E"),Str("-"))
+            , rob.io.debug.xcpt_uop.exc_cause
+            , rob.io.debug.xcpt_uop.rob_idx
+            , rob.io.debug.xcpt_uop.br_mask
+            , rob.io.debug.xcpt_badvaddr
             )
       for (i <- 0 until NUM_LSU_ENTRIES)
       {

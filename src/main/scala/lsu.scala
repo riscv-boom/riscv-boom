@@ -62,7 +62,7 @@ class LoadStoreUnitIo(pl_width: Int) extends BOOMCoreBundle
    val new_stq_idx        = UInt(OUTPUT, MEM_ADDR_SZ)
 
    // Execute Stage
-   val exe_resp           = (new ValidIO(new ExeUnitResp(xprLen))).flip
+   val exe_resp           = (new ValidIO(new FuncUnitResp(xprLen))).flip
 
    // Commit Stage
    val commit_store_mask  = Vec.fill(pl_width) {Bool(INPUT)}
@@ -97,7 +97,7 @@ class LoadStoreUnitIo(pl_width: Int) extends BOOMCoreBundle
    val lsu_clr_bsy_rob_idx= UInt(OUTPUT, width=ROB_ADDR_SZ)
    val lsu_fencei_rdy     = Bool(OUTPUT)
 
-   val xcpt = new ValidIO(new ExecuteTimeExceptions)
+   val xcpt = new ValidIO(new LSUExceptions)
 
    // cache nacks
    val nack               = new NackInfo().asInput()
@@ -402,14 +402,13 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    val pf_ld = dtlb.io.req.valid && dtlb.io.resp.xcpt_ld && exe_tlb_uop.is_load
    val pf_st = dtlb.io.req.valid && dtlb.io.resp.xcpt_st && exe_tlb_uop.is_store
    val mem_xcpt_valid = Reg(next=(dtlb.io.req.valid && (pf_ld || pf_st)) ||
-                                 (io.exe_resp.valid && io.exe_resp.bits.xcpt.valid),
+                                 (io.exe_resp.valid && io.exe_resp.bits.mxcpt.valid),
                             init=Bool(false))
    val mem_xcpt_cause = Reg(next=(Mux(io.exe_resp.valid &&
-                                      io.exe_resp.bits.xcpt.valid, io.exe_resp.bits.xcpt.bits.cause,
+                                      io.exe_resp.bits.mxcpt.valid, io.exe_resp.bits.mxcpt.bits,
                                   Mux(exe_tlb_uop.is_load,         UInt(rocket.Causes.fault_load),
                                                                    UInt(rocket.Causes.fault_store)))))
-   io.xcpt.bits.badvaddr := Reg(next=exe_vaddr) // TODO BUG sign-extend! (ish)
-                                                // TODO is there another register we can use instead?
+   io.xcpt.bits.badvaddr := Reg(next=exe_vaddr) // TODO is there another register we can use instead?
 
    assert (!(dtlb.io.req.valid && exe_tlb_uop.is_fence), "Fence is pretending to talk to the TLB")
 
@@ -846,7 +845,6 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    io.xcpt.valid := failed_loads.reduce(_|_) || mem_xcpt_valid
    io.xcpt.bits.uop := Mux(mem_xcpt_valid, mem_tlb_uop, laq_uop(Mux(l_idx >= UInt(num_ld_entries), l_idx - UInt(num_ld_entries), l_idx)))
    io.xcpt.bits.cause := Mux(mem_xcpt_valid, mem_xcpt_cause, MINI_EXCEPTION_MEM_ORDERING)
-
 
 
    //-------------------------------------------------------------

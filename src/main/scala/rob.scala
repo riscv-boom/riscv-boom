@@ -28,7 +28,7 @@ import scala.math.ceil
 
 class RobIo(machine_width: Int
             , num_wakeup_ports: Int
-            , num_exception_ports: Int
+            , num_fpu_ports: Int
             )  extends BOOMCoreBundle
 {
    // Dispatch Stage
@@ -49,7 +49,8 @@ class RobIo(machine_width: Int
    val debug_wb_valids  = Vec.fill(num_wakeup_ports) { Bool(INPUT) }
    val debug_wb_wdata   = Vec.fill(num_wakeup_ports) { Bits(INPUT, xprLen) }
 
-   val xcpts = Vec.fill(num_exception_ports) { new ValidIO(new ExecuteTimeExceptions()).flip }
+   val fflags = Vec.fill(num_fpu_ports) { new ValidIO(new FFlagsResp()).flip }
+   val lxcpt = new ValidIO(new LSUExceptions()).flip
 
    // Commit Stage
    // (Free no-longer used register).
@@ -109,12 +110,14 @@ class RobIo(machine_width: Int
    {
       val state = UInt()
       val rob_head = UInt(width = ROB_ADDR_SZ)
+      val xcpt_val = Bool()
+      val xcpt_uop = new MicroOp()
+      val xcpt_badvaddr = UInt(width = xprLen)
       val entry = Vec.fill(NUM_ROB_ENTRIES) { new Bundle {
          val valid = Bool()
          val busy = Bool()
          val uop = new MicroOp()
          val exception = Bool()
-         val eflags = UInt(width=xprLen)
       }}
    }.asOutput
 }
@@ -122,14 +125,14 @@ class RobIo(machine_width: Int
 
 // width = the dispatch and commit width of the processor
 // num_wakeup_ports = self-explanatory
-// num_exception_ports = number of execute-time exception wb ports from FPUs, LSU
+// num_fpu_ports = number of FPU units that will write back fflags
 class Rob(width: Int
          , num_rob_entries: Int
          , num_wakeup_ports: Int
-         , num_exception_ports: Int
+         , num_fpu_ports: Int
          ) extends Module with BOOMCoreParameters
 {
-   val io = new RobIo(width, num_wakeup_ports, num_exception_ports)
+   val io = new RobIo(width, num_wakeup_ports, num_fpu_ports)
 
    val num_rob_rows = num_rob_entries / width
    require (num_rob_rows % 2 == 0) // this is due to how rob PCs are stored in two banks
@@ -157,8 +160,7 @@ class Rob(width: Int
    val rob_head_vals       = Vec.fill(width) {Bool()} // are the instructions at the head valid?
    val rob_head_is_store   = Vec.fill(width) {Bool()}
    val rob_head_is_load    = Vec.fill(width) {Bool()}
-   val rob_head_eflags     = Vec.fill(width) {UInt()}
-   val rob_head_badvaddr   = Vec.fill(width) {UInt()}
+   val rob_head_fflags     = Vec.fill(width) {Bits(width=rocket.FPConstants.FLAGS_SZ)}
 
    // valid bits at the branch target
    // the br_unit needs to verify the target PC, but it must read out the valid bits
@@ -168,9 +170,10 @@ class Rob(width: Int
    val exception_thrown = Bool()
 
    // exception info
-   // TODO implement tracking having only the oldest exception in the ROB!
-   val reg_badvaddr = Reg(UInt(width=xprLen))
-   val reg_badvaddr_rob_idx = Reg(UInt())
+   // TODO compress xcpt cause size
+   val r_xcpt_val       = Reg(init=Bool(false))
+   val r_xcpt_uop       = Reg(new MicroOp())
+   val r_xcpt_badvaddr  = Reg(UInt(width=coreMaxAddrBits))
 
    //--------------------------------------------------
    // Utility
@@ -241,10 +244,7 @@ class Rob(width: Int
                                                            // fake write ports - clearing on commit,
                                                            // rollback, branch_kill
       val rob_exception = Mem(Bool(), num_rob_rows)        // TODO consolidate into the com_uop? what's the best for Chisel?
-      val rob_exc_cause = Mem(UInt(width=xprLen), num_rob_rows) // holds exception code OR it holds the fcsr_flags
-                                                                // (must look into the rob_uop to figure out if FP inst & !ld/st)
-                                                                // TODO compress rob_exc_cause size down, xprLen is insanity
-      val rob_badvaddr  = Mem(UInt(width=xprLen), num_rob_rows) // TODO compress this out
+      val rob_fflags    = Mem(Bits(width=rocket.FPConstants.FLAGS_SZ), num_rob_rows)
 
       //-----------------------------------------------
       // Dispatch: Add Entry to ROB
@@ -257,7 +257,7 @@ class Rob(width: Int
                                     !(io.dis_uops(w).is_fencei)
          rob_uop(rob_tail)       := io.dis_uops(w)
          rob_exception(rob_tail) := io.dis_uops(w).exception
-         rob_exc_cause(rob_tail) := io.dis_uops(w).exc_cause
+         rob_fflags(rob_tail)    := Bits(0)
          rob_uop(rob_tail).br_was_taken := Bool(false) // remove me SYNTH?
       }
       .elsewhen (io.dis_mask.reduce(_|_))
@@ -278,14 +278,13 @@ class Rob(width: Int
          {
             rob_bsy(row_idx) := Bool(false)
          }
-         // TODO Chisel can asserts be wrapped by when statements?
-         assert (!(wb_resp.valid && MatchBank(GetBankIdx(wb_uop.rob_idx)) &&
-                  wb_uop.fp_val && !(wb_uop.is_load || wb_uop.is_store) &&
-                  rob_exc_cause(row_idx) != Bits(0)),
-                  "FP instruction writing back exc bits is overriding an existing exception.")
+//         assert (!(wb_resp.valid && MatchBank(GetBankIdx(wb_uop.rob_idx)) &&
+//                  wb_uop.fp_val && !(wb_uop.is_load || wb_uop.is_store) &&
+//                  rob_exc_cause(row_idx) != Bits(0)),
+//                  "FP instruction writing back exc bits is overriding an existing exception.")
       }
 
-      // TODO HACK: Loads and Stores have a separate method to clear busy bits
+      // TODO HACK: Stores have a separate method to clear busy bits
       when (io.lsu_clr_bsy_valid && MatchBank(GetBankIdx(io.lsu_clr_bsy_rob_idx)))
       {
          rob_bsy(GetRowIdx(io.lsu_clr_bsy_rob_idx)) := Bool(false)
@@ -294,31 +293,30 @@ class Rob(width: Int
       when (io.br_unit.brinfo.valid && MatchBank(GetBankIdx(io.br_unit.brinfo.rob_idx)))
       {
          // these signals need to be delayed a cycle to match the brinfo signals
-         rob_uop(GetRowIdx(io.br_unit.brinfo.rob_idx)).br_was_taken     := Reg(next=io.br_unit.taken)
+         rob_uop(GetRowIdx(io.br_unit.brinfo.rob_idx)).br_was_taken := Reg(next=io.br_unit.taken)
       }
 
 
       //-----------------------------------------------
-      // Exceptions (Execute Time)
-      // most exceptions are caught at Decode, except memory-related exceptions
-      // and also FP flags, which share the same field, albiet, for a slightly
-      // different purpose.
-
-      // TODO AREA only write in the oldest exception, to reduce port count!
-      for (i <- 0 until num_exception_ports)
+      // Accruing fflags
+      for (i <- 0 until num_fpu_ports)
       {
-         val xcpt_uop = io.xcpts(i).bits.uop
-         when (io.xcpts(i).valid && MatchBank(GetBankIdx(xcpt_uop.rob_idx)))
+         val fflag_uop = io.fflags(i).bits.uop
+         when (io.fflags(i).valid && MatchBank(GetBankIdx(fflag_uop.rob_idx)))
          {
-            // FPU instructions write their fflags into here, but they aren't exceptions!
-            rob_exception(GetRowIdx(xcpt_uop.rob_idx)) := !(xcpt_uop.fp_val && !(xcpt_uop.is_load || xcpt_uop.is_store))
-            rob_exc_cause(GetRowIdx(xcpt_uop.rob_idx)) := io.xcpts(i).bits.cause
-            rob_badvaddr (GetRowIdx(xcpt_uop.rob_idx)) := io.xcpts(i).bits.badvaddr
+            rob_fflags(GetRowIdx(fflag_uop.rob_idx)) := io.fflags(i).bits.flags
          }
       }
 
-      can_throw_exception(w) := rob_val(rob_head) && rob_exception(rob_head)
+      //-----------------------------------------------------
+      // Exceptions
+      // (the cause bits are compressed and stored elsewhere)
 
+      when (io.lxcpt.valid && MatchBank(GetBankIdx(io.lxcpt.bits.uop.rob_idx)))
+      {
+         rob_exception(GetRowIdx(io.lxcpt.bits.uop.rob_idx)) := Bool(true)
+      }
+      can_throw_exception(w) := rob_val(rob_head) && rob_exception(rob_head)
 
       //-----------------------------------------------
       // Commit or Rollback
@@ -391,8 +389,7 @@ class Rob(width: Int
       // -----------------------------------------------
       // Outputs
       rob_head_vals(w)     := rob_val(rob_head)
-      rob_head_eflags(w)   := rob_exc_cause(rob_head)
-      rob_head_badvaddr(w) := rob_badvaddr(rob_head)
+      rob_head_fflags(w)   := rob_fflags(rob_head)
       rob_head_is_store(w) := rob_uop(rob_head).is_store
       rob_head_is_load(w)  := rob_uop(rob_head).is_load
       rob_brt_vals(w)      := rob_val(WrapInc(GetRowIdx(io.get_pc.rob_idx), num_rob_rows))
@@ -438,7 +435,6 @@ class Rob(width: Int
          io.debug.entry(w + i*width).uop := rob_uop(UInt(i))
          io.debug.entry(w + i*width).uop.pc := rob_pc_hob.read(UInt(i,log2Up(num_rob_rows))) + UInt(w << 2)
          io.debug.entry(w + i*width).exception := rob_exception(UInt(i))
-         io.debug.entry(w + i*width).eflags := rob_exc_cause(UInt(i))
       }
 
    } //for (w <- 0 until width)
@@ -446,6 +442,7 @@ class Rob(width: Int
    // **************************************************************************
    // --------------------------------------------------------------------------
    // **************************************************************************
+
 
    // -----------------------------------------------
    // Commit Logic
@@ -476,14 +473,11 @@ class Rob(width: Int
    exception_thrown    := will_throw_exception
    val is_mini_exception = io.com_exc_cause === MINI_EXCEPTION_MEM_ORDERING
    io.com_exception    := exception_thrown && !is_mini_exception
-   io.com_exc_cause    := PriorityMux(can_throw_exception, rob_head_eflags)
+   io.com_exc_cause    := r_xcpt_uop.exc_cause
    io.com_handling_exc := exception_thrown  // TODO get rid of com_handling_exc? used to handle loads coming back from the $ probbaly unnecessary
 
    io.lsu_misspec := Reg(next=exception_thrown && io.com_exc_cause === MINI_EXCEPTION_MEM_ORDERING)
-   val exc_is_if = io.com_exc_cause === UInt(rocket.Causes.misaligned_fetch) ||
-                   io.com_exc_cause === UInt(rocket.Causes.fault_fetch)
-   io.com_badvaddr := Mux(exc_is_if, io.flush_pc,
-                                     PriorityMux(can_throw_exception, rob_head_badvaddr))
+   io.com_badvaddr := Sext(r_xcpt_badvaddr,xprLen)
 
 
    // TODO BUG XXX what if eret and inst_valid excp in same bundle and bad load?
@@ -511,20 +505,66 @@ class Rob(width: Int
       fflags_val(w) := io.com_valids(w) &&
                       io.com_uops(w).fp_val &&
                       !(io.com_uops(w).is_load || io.com_uops(w).is_store)
-      fflags(w)     := Mux(fflags_val(w), rob_head_eflags(w), Bits(0))
+      fflags(w)     := rob_head_fflags(w)
 
       assert (!(io.com_valids(w) &&
                !io.com_uops(w).fp_val &&
-               rob_head_eflags(w) != Bits(0)),
+               rob_head_fflags(w) != Bits(0)),
                "Committed non-FP instruction has non-zero exception bits.")
       assert (!(io.com_valids(w) &&
                io.com_uops(w).fp_val &&
                (io.com_uops(w).is_load || io.com_uops(w).is_store) &&
-               rob_head_eflags(w) != Bits(0)),
+               rob_head_fflags(w) != Bits(0)),
                "Committed FP load or store has non-zero exception bits.")
    }
    io.com_fflags_val := fflags_val.reduce(_|_)
    io.com_fflags     := fflags.reduce(_|_)
+
+   // -----------------------------------------------
+   // Exception Tracking Logic
+   // only store the oldest exception, since only one can happen!
+
+   // is i0 older than i1? (closest to zero)
+   def IsOlder(i0: UInt, i1: UInt, tail: UInt) =
+   {
+      (Cat(i0 < tail, i0) < Cat(i1 < tail, i1))
+   }
+
+   val next_xcpt_uop = new MicroOp()
+   next_xcpt_uop := r_xcpt_uop
+   val dis_xcpts = Vec.fill(width) {Bool()}
+   for (i <- 0 until width)
+   {
+      dis_xcpts(i) := io.dis_mask(i) && io.dis_uops(i).exception
+   }
+
+   when (io.lxcpt.valid)
+   {
+      val new_xcpt_uop = io.lxcpt.bits.uop
+      when (!r_xcpt_val || IsOlder(new_xcpt_uop.rob_idx, r_xcpt_uop.rob_idx, rob_tail))
+      {
+         r_xcpt_val      := Bool(true)
+         next_xcpt_uop   := new_xcpt_uop
+         next_xcpt_uop.exc_cause := io.lxcpt.bits.cause
+         r_xcpt_badvaddr := io.lxcpt.bits.badvaddr
+      }
+   }
+   .elsewhen (!r_xcpt_val && dis_xcpts.reduce(_|_))
+   {
+      val idx = dis_xcpts.indexWhere{i: Bool => i}
+
+      // if no exception yet, dispatch exception wins
+      r_xcpt_val      := Bool(true)
+      next_xcpt_uop   := io.dis_uops(idx)
+      r_xcpt_badvaddr := io.dis_uops(0).pc + (idx << UInt(2)) // TODO BUG check about overflow
+   }
+
+   r_xcpt_uop         := next_xcpt_uop
+   r_xcpt_uop.br_mask := GetNewBrMask(io.br_unit.brinfo, next_xcpt_uop)
+   when (io.flush_pipeline || IsKilledByBranch(io.br_unit.brinfo, next_xcpt_uop))
+   {
+      r_xcpt_val := Bool(false)
+   }
 
    // -----------------------------------------------
    // ROB Head Logic
@@ -689,7 +729,9 @@ class Rob(width: Int
 
    io.debug.state    := rob_state
    io.debug.rob_head := rob_head
-
+   io.debug.xcpt_val := r_xcpt_val
+   io.debug.xcpt_uop := r_xcpt_uop
+   io.debug.xcpt_badvaddr := r_xcpt_badvaddr
 
    // this object holds the high-order bits of the PC of each ROB row
    // PCs are stored as vaddrBits+1 in size, but extended out to xprLen when read

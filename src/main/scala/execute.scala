@@ -24,23 +24,21 @@ class ExeUnitResp(data_width: Int) extends BOOMCoreBundle
 {
    val uop = new MicroOp()
    val data = Bits(width = data_width)
-   val xcpt = new ValidIO(new ExecuteTimeExceptions) // used by FPU and LSU
-                                                     // TODO this is
-                                                     // misleading, since for
-                                                     // the LSU the xcpt
-                                                     // doesn't match the
-                                                     // output from the resp
-                                                     // bundle
-
+   val fflags = new ValidIO(new FFlagsResp) // write fflags to ROB
    override def clone = new ExeUnitResp(data_width).asInstanceOf[this.type]
 }
 
-class ExecuteTimeExceptions extends BOOMCoreBundle
+class FFlagsResp extends BOOMCoreBundle
 {
    val uop = new MicroOp()
-   val cause = Bits(width=math.max(rocket.FPConstants.FLAGS_SZ,
-                                   log2Up(rocket.Causes.all.max)))
-   val badvaddr = UInt(width=xprLen)
+   val flags = Bits(width=rocket.FPConstants.FLAGS_SZ)
+}
+
+class LSUExceptions extends BOOMCoreBundle
+{
+   val uop = new MicroOp()
+   val cause = Bits(width=log2Up(rocket.Causes.all.max))
+   val badvaddr = UInt(width=coreMaxAddrBits)
 }
 
 class ExecutionUnitIo(num_rf_read_ports: Int
@@ -75,9 +73,6 @@ class ExecutionUnitIo(num_rf_read_ports: Int
    val lsu_io = new LoadStoreUnitIo(DECODE_WIDTH)
    val dmem   = new DCMemPortIo()
    val com_handling_exc = Bool(INPUT)
-//   val ma_xcpt_val = Bool(OUTPUT)
-//   val ma_xcpt     = (new rocket.HellaCacheExceptions).asOutput
-//   val ma_xcpt_uop = new MicroOp().asOutput
 }
 
 abstract class ExecutionUnit(val num_rf_read_ports: Int
@@ -86,10 +81,10 @@ abstract class ExecutionUnit(val num_rf_read_ports: Int
                             , val data_width: Int
                             , val num_variable_write_ports: Int = 0
                             , var bypassable: Boolean           = false
-                            , val can_cause_exceptions: Boolean = false
                             , val is_mem_unit: Boolean          = false
                             , var uses_pcr_wport: Boolean       = false
                             ,     is_branch_unit: Boolean       = false
+                            , val has_fpu       : Boolean       = false // can return fflags
                             ) extends Module with BOOMCoreParameters
 {
    val io = new ExecutionUnitIo(num_rf_read_ports, num_rf_write_ports
@@ -97,14 +92,10 @@ abstract class ExecutionUnit(val num_rf_read_ports: Int
 
    val uses_rf_wport = false
 
-   if (!can_cause_exceptions)
+   if (!has_fpu)
    {
-      for (i <- 0 until num_rf_write_ports)
-      {
-         io.resp(i).bits.xcpt.valid := Bool(false)
-      }
+      io.resp.map(_.bits.fflags.valid := Bool(false))
    }
-
 
    def num_bypass_ports: Int = num_bypass_stages
    def has_branch_unit : Boolean = is_branch_unit
@@ -157,10 +148,10 @@ class FPUALUExeUnit(is_branch_unit: Boolean = false
                                        , num_bypass_stages = 3 // TODO FPU LATENCY ADAM
                                        , data_width = 65
                                        , bypassable = true
-                                       , can_cause_exceptions = true
                                        , is_mem_unit = false
                                        , uses_pcr_wport = shares_pcr_wport
                                        , is_branch_unit = is_branch_unit
+                                       , has_fpu = true
                                        )
 {
    io.fu_types := FU_ALU |
@@ -218,7 +209,7 @@ class FPUALUExeUnit(is_branch_unit: Boolean = false
    io.resp(0).bits.uop  := Mux(fpu.io.resp.valid, fpu.io.resp.bits.uop, alu.io.resp.bits.uop)
    io.resp(0).bits.data := Mux(fpu.io.resp.valid, fpu.io.resp.bits.data, alu.io.resp.bits.data)
 
-   io.resp(0).bits.xcpt <> fpu.io.resp.bits.xcpt
+   io.resp(0).bits.fflags <> fpu.io.resp.bits.fflags
 
    assert (!(alu.io.resp.valid && fpu.io.resp.valid)
       , "ALU and FPU are fighting over the write port.")
@@ -338,7 +329,6 @@ class MemExeUnit extends ExecutionUnit(num_rf_read_ports = 2 // TODO make this 1
                                       , data_width = 65 // TODO need to know if params(BuildFPU).isEmpty here
                                       , num_variable_write_ports = 1
                                       , bypassable = false
-                                      , can_cause_exceptions = true
                                       , is_mem_unit = true)
 {
    io.fu_types := FU_MEM
@@ -435,10 +425,6 @@ class MemExeUnit extends ExecutionUnit(num_rf_read_ports = 2 // TODO make this 1
    io.resp(0).bits.uop := memresp_uop
    io.resp(0).bits.uop.ctrl.rf_wen := memresp_rf_wen
    io.resp(0).bits.data := memresp_data
-
-   io.resp(0).bits.xcpt <> lsu.io.xcpt
-
-
 }
 
 
@@ -450,7 +436,6 @@ class ALUMulDMemExeUnit(is_branch_unit: Boolean = false
                                               , data_width = 65 // TODO need to use params(BuildFPU).isEmpty here
                                               , num_variable_write_ports = 1
                                               , bypassable = true
-                                              , can_cause_exceptions = true
                                               , is_mem_unit = true
                                               , uses_pcr_wport = shares_pcr_wport
                                               , is_branch_unit = is_branch_unit)
@@ -555,6 +540,7 @@ class ALUMulDMemExeUnit(is_branch_unit: Boolean = false
    lsu.io.exe_resp <> maddrcalc.io.resp
 
    lsu.io.ptw <> io.lsu_io.ptw
+   lsu.io.xcpt <> io.lsu_io.xcpt
 
    // HellaCache Req
    lsu.io.dmem_req_ready := io.dmem.req.ready
@@ -607,8 +593,6 @@ class ALUMulDMemExeUnit(is_branch_unit: Boolean = false
    io.resp(1).bits.uop             := Mux(memresp_val, memresp_uop, muldiv.io.resp.bits.uop)
    io.resp(1).bits.uop.ctrl.rf_wen := Mux(memresp_val, memresp_rf_wen, muldiv.io.resp.bits.uop.ctrl.rf_wen)
    io.resp(1).bits.data            := Mux(memresp_val, memresp_data, muldiv.io.resp.bits.data)
-
-   io.resp(1).bits.xcpt <> lsu.io.xcpt
 }
 
 // TODO add the FPU as an input flag to prevent too many separate classes here?
@@ -620,10 +604,11 @@ class FPUALUMulDMemExeUnit(is_branch_unit: Boolean = false
                                               , data_width = 65
                                               , num_variable_write_ports = 1
                                               , bypassable = true
-                                              , can_cause_exceptions = true
                                               , is_mem_unit = true
                                               , uses_pcr_wport = shares_pcr_wport
-                                              , is_branch_unit = is_branch_unit)
+                                              , is_branch_unit = is_branch_unit
+                                              , has_fpu = true
+                                             )
 {
    require(!params(BuildFPU).isEmpty)
 
@@ -686,7 +671,7 @@ class FPUALUMulDMemExeUnit(is_branch_unit: Boolean = false
    io.resp(0).bits.uop  := Mux(fpu.io.resp.valid, fpu.io.resp.bits.uop, alu.io.resp.bits.uop)
    io.resp(0).bits.data := Mux(fpu.io.resp.valid, fpu.io.resp.bits.data, alu.io.resp.bits.data)
 
-   io.resp(0).bits.xcpt <> fpu.io.resp.bits.xcpt
+   io.resp(0).bits.fflags <> fpu.io.resp.bits.fflags
 
    assert (!(alu.io.resp.valid && fpu.io.resp.valid)
       , "ALU and FPU are fighting over the write port.")
@@ -748,6 +733,7 @@ class FPUALUMulDMemExeUnit(is_branch_unit: Boolean = false
    lsu.io.exe_resp <> maddrcalc.io.resp
 
    lsu.io.ptw <> io.lsu_io.ptw
+   lsu.io.xcpt <> io.lsu_io.xcpt
 
    // HellaCache Req
    lsu.io.dmem_req_ready := io.dmem.req.ready
@@ -808,8 +794,7 @@ class FPUALUMulDMemExeUnit(is_branch_unit: Boolean = false
    io.resp(1).bits.uop             := Mux(memresp_val, memresp_uop, muldiv.io.resp.bits.uop)
    io.resp(1).bits.uop.ctrl.rf_wen := Mux(memresp_val, memresp_rf_wen, muldiv.io.resp.bits.uop.ctrl.rf_wen)  // TODO get rid of this, it should come from the thing below
    io.resp(1).bits.data            := Mux(memresp_val, memresp_data, muldiv.io.resp.bits.data)
-
-   io.resp(1).bits.xcpt <> lsu.io.xcpt
+   io.resp(1).bits.fflags.valid    := Bool(false)
 }
 
 

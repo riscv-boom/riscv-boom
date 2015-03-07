@@ -186,9 +186,9 @@ class FPU extends Module with BOOMCoreParameters
                    Mux(fpiu_out.valid,    fpiu_result,
                                           fpmu.io.out.bits))))
 
-   io.resp.bits.data            := fpu_out.data
-   io.resp.bits.xcpt.valid      := io.resp.valid
-   io.resp.bits.xcpt.bits.cause := fpu_out.exc
+   io.resp.bits.data              := fpu_out.data
+   io.resp.bits.fflags.valid      := io.resp.valid
+   io.resp.bits.fflags.bits.flags := fpu_out.exc
 }
 
 }
