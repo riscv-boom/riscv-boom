@@ -703,7 +703,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    wb_uop.br_mask        := GetNewBrMask(io.brinfo, mem_ld_uop)
 
    // kill load request to mem if address matches (we will either sleep load, or forward data) or TLB miss
-   io.memreq_kill     := (mem_tlb_miss && Reg(next=dtlb.io.req.valid)) ||
+   io.memreq_kill     := (mem_tlb_miss && Reg(next=(will_fire_load_incoming || will_fire_load_retry))) ||
                          (mem_fired_ld && addr_conflicts.toBits != Bits(0))
    wb_forward_std_idx := forwarding_age_logic.io.forwarding_idx
 
