@@ -109,7 +109,7 @@ class MicroOp extends BOOMCoreBundle
 
    val uopc             = Bits(width = UOPC_SZ)    // micro-op code
    val inst             = Bits(width = 32)
-   val pc               = UInt(width = xprLen)
+   val pc               = UInt(width = coreMaxAddrBits)
    val fu_code          = Bits(width = FUC_SZ)     // which functional unit do we use?
    val ctrl             = new CtrlSignals
 
@@ -1782,12 +1782,12 @@ class DatPath() extends Module with BOOMCoreParameters
             when (com_uops(w).dst_rtype === RT_FIX && com_uops(w).ldst != UInt(0))
             {
 //               printf("0x%x (0x%x) x%d 0x%x |%d\n", com_uops(w).pc, com_uops(w).inst, com_uops(w).inst(RD_MSB,RD_LSB), com_uops(w).debug_wdata, tsc_reg)
-               printf("@@@ 0x%x (0x%x) x%d 0x%x\n", com_uops(w).pc, com_uops(w).inst, com_uops(w).inst(RD_MSB,RD_LSB), com_uops(w).debug_wdata)
+               printf("@@@ 0x%x (0x%x) x%d 0x%x\n", Sext(com_uops(w).pc(vaddrBits,0), xprLen), com_uops(w).inst, com_uops(w).inst(RD_MSB,RD_LSB), com_uops(w).debug_wdata)
             }
             .elsewhen (com_uops(w).dst_rtype === RT_FLT)
             {
 //               printf("0x%x (0x%x) f%d 0x%x |%d\n", com_uops(w).pc, com_uops(w).inst, com_uops(w).inst(RD_MSB,RD_LSB), com_uops(w).debug_wdata, tsc_reg)
-               printf("@@@ 0x%x (0x%x) f%d 0x%x\n", com_uops(w).pc, com_uops(w).inst, com_uops(w).inst(RD_MSB,RD_LSB), com_uops(w).debug_wdata)
+               printf("@@@ 0x%x (0x%x) f%d 0x%x\n", Sext(com_uops(w).pc(vaddrBits,0), xprLen), com_uops(w).inst, com_uops(w).inst(RD_MSB,RD_LSB), com_uops(w).debug_wdata)
             }
             .otherwise
             {

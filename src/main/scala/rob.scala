@@ -692,10 +692,11 @@ class Rob(width: Int
 
 
    // this object holds the high-order bits of the PC of each ROB row
+   // PCs are stored as vaddrBits+1 in size, but extended out to xprLen when read
    class RobPCs(width: Int, num_rob_rows: Int)
    {
       val pc_shift = if (width == 1) 2 else (log2Up(width) + 2)
-      val pc_hob_width = xprLen - pc_shift
+      val pc_hob_width = (vaddrBits+1) - pc_shift
 
       // bank this so we only need 1 read port to handle branches, which read
       // row X and row X+1
@@ -712,7 +713,7 @@ class Rob(width: Int
          {
             rdata := bank1(row_idx >> UInt(1)) << UInt(pc_shift)
          }
-         rdata
+         Sext(rdata(vaddrBits,0), xprLen)
       }
 
       // returns the row_idx and row_idx+1 PCs (lob zeroed out)
@@ -728,20 +729,23 @@ class Rob(width: Int
          val next_pc = UInt(width = xprLen)
          curr_pc := Mux(row_idx(0), data1, data0)
          next_pc := Mux(row_idx(0), data0, data1)
+         val curr_pc_ext = Sext(curr_pc(vaddrBits,0), xprLen)
+         val next_pc_ext = Sext(next_pc(vaddrBits,0), xprLen)
 
-         (curr_pc, next_pc)
+         (curr_pc_ext, next_pc_ext)
       }
 
       // takes rob_row_idx, write in PC (with low-order bits zeroed out)
       def write (waddr_row: UInt, data: UInt) =
       {
+         val data_in = data(vaddrBits,0) >> UInt(pc_shift)
          when (waddr_row(0))
          {
-            bank1(waddr_row >> UInt(1)) := data >> UInt(pc_shift)
+            bank1(waddr_row >> UInt(1)) := data_in
          }
          .otherwise
          {
-            bank0(waddr_row >> UInt(1)) := data >> UInt(pc_shift)
+            bank0(waddr_row >> UInt(1)) := data_in
          }
       }
    }

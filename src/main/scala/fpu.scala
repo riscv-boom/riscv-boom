@@ -14,7 +14,6 @@ import rocket.DFMALatency
 // TODO get rid of this decoder and move into the Decode stage? Or the RRd stage?
 // most of these signals are already created, just need to be translated
 // to the ROcket FPU-speak
-// move rm from inst into the uop
 class UOPCodeFPUDecoder extends Module
 {
   val io = new Bundle {
@@ -26,9 +25,8 @@ class UOPCodeFPUDecoder extends Module
    val Y = Bool(true)
    val X = Bool(false)
    val decoder = rocket.DecodeLogic(io.uopc,
-      // TODO get rid of some of these signals
-      // such as ldst, swap32, wen?
-      // remove wen -> it refers to the FP register file
+      // Note: not all of these signals are used or necessary, but we're
+      // constrained by the need to fit the rocket.FPU units' ctrl signals.
       //                                          swap32
       //                  cmd                     | single
       //                  |            ldst       | | fromint
@@ -39,67 +37,63 @@ class UOPCodeFPUDecoder extends Module
       //                  |            | | | | |  | | | | | | |
       List               (FCMD_X,      X,X,X,X,X, X,X,X,X,X,X,X),
       Array(
-       //FLW      -> List(FCMD_X,      Y,Y,N,N,N, X,Y,N,N,N,N,N),
-       //FLD      -> List(FCMD_X,      Y,Y,N,N,N, X,N,N,N,N,N,N),
-       //FSW      -> List(FCMD_MV_XF,  Y,N,N,Y,N, X,Y,N,Y,N,N,N),
-       //FSD      -> List(FCMD_MV_XF,  Y,N,N,Y,N, X,N,N,Y,N,N,N),
-      uopFCLASS_S -> List(FCMD_MV_XF,  N,N,Y,N,N, X,Y,N,Y,N,N,Y),
-      uopFCLASS_D -> List(FCMD_MV_XF,  N,N,Y,N,N, X,N,N,Y,N,N,Y),
-      uopFMV_S_X  -> List(FCMD_MV_FX,  N,Y,N,N,N, X,Y,Y,N,N,N,Y),
-      uopFMV_D_X  -> List(FCMD_MV_FX,  N,Y,N,N,N, X,N,Y,N,N,N,Y),
-      uopFMV_X_S  -> List(FCMD_MV_XF,  N,N,Y,N,N, X,Y,N,Y,N,N,Y),
-      uopFMV_X_D  -> List(FCMD_MV_XF,  N,N,Y,N,N, X,N,N,Y,N,N,Y),
+      uopFCLASS_S -> List(FCMD_MV_XF,  X,X,Y,N,N, X,Y,N,Y,N,N,Y),
+      uopFCLASS_D -> List(FCMD_MV_XF,  X,X,Y,N,N, X,N,N,Y,N,N,Y),
+      uopFMV_S_X  -> List(FCMD_MV_FX,  X,X,N,N,N, X,Y,Y,N,N,N,Y),
+      uopFMV_D_X  -> List(FCMD_MV_FX,  X,X,N,N,N, X,N,Y,N,N,N,Y),
+      uopFMV_X_S  -> List(FCMD_MV_XF,  X,X,Y,N,N, X,Y,N,Y,N,N,Y),
+      uopFMV_X_D  -> List(FCMD_MV_XF,  X,X,Y,N,N, X,N,N,Y,N,N,Y),
 
-      uopFCVT_S_D -> List(FCMD_CVT_FF, N,Y,Y,N,N, X,Y,N,N,Y,N,Y),
-      uopFCVT_D_S -> List(FCMD_CVT_FF, N,Y,Y,N,N, X,N,N,N,Y,N,Y),
+      uopFCVT_S_D -> List(FCMD_CVT_FF, X,X,Y,N,N, X,Y,N,N,Y,N,Y),
+      uopFCVT_D_S -> List(FCMD_CVT_FF, X,X,Y,N,N, X,N,N,N,Y,N,Y),
 
-      uopFCVT_S_W -> List(FCMD_CVT_FI, N,Y,N,N,N, X,Y,Y,N,N,N,Y),
-      uopFCVT_S_WU-> List(FCMD_CVT_FI, N,Y,N,N,N, X,Y,Y,N,N,N,Y),
-      uopFCVT_S_L -> List(FCMD_CVT_FI, N,Y,N,N,N, X,Y,Y,N,N,N,Y),
-      uopFCVT_S_LU-> List(FCMD_CVT_FI, N,Y,N,N,N, X,Y,Y,N,N,N,Y),
-      uopFCVT_D_W -> List(FCMD_CVT_FI, N,Y,N,N,N, X,N,Y,N,N,N,Y),
-      uopFCVT_D_WU-> List(FCMD_CVT_FI, N,Y,N,N,N, X,N,Y,N,N,N,Y),
-      uopFCVT_D_L -> List(FCMD_CVT_FI, N,Y,N,N,N, X,N,Y,N,N,N,Y),
-      uopFCVT_D_LU-> List(FCMD_CVT_FI, N,Y,N,N,N, X,N,Y,N,N,N,Y),
-      uopFCVT_W_S -> List(FCMD_CVT_IF, N,N,Y,N,N, X,Y,N,Y,N,N,Y),
-      uopFCVT_WU_S-> List(FCMD_CVT_IF, N,N,Y,N,N, X,Y,N,Y,N,N,Y),
-      uopFCVT_L_S -> List(FCMD_CVT_IF, N,N,Y,N,N, X,Y,N,Y,N,N,Y),
-      uopFCVT_LU_S-> List(FCMD_CVT_IF, N,N,Y,N,N, X,Y,N,Y,N,N,Y),
-      uopFCVT_W_D -> List(FCMD_CVT_IF, N,N,Y,N,N, X,N,N,Y,N,N,Y),
-      uopFCVT_WU_D-> List(FCMD_CVT_IF, N,N,Y,N,N, X,N,N,Y,N,N,Y),
-      uopFCVT_L_D -> List(FCMD_CVT_IF, N,N,Y,N,N, X,N,N,Y,N,N,Y),
-      uopFCVT_LU_D-> List(FCMD_CVT_IF, N,N,Y,N,N, X,N,N,Y,N,N,Y),
+      uopFCVT_S_W -> List(FCMD_CVT_FI, X,X,N,N,N, X,Y,Y,N,N,N,Y),
+      uopFCVT_S_WU-> List(FCMD_CVT_FI, X,X,N,N,N, X,Y,Y,N,N,N,Y),
+      uopFCVT_S_L -> List(FCMD_CVT_FI, X,X,N,N,N, X,Y,Y,N,N,N,Y),
+      uopFCVT_S_LU-> List(FCMD_CVT_FI, X,X,N,N,N, X,Y,Y,N,N,N,Y),
+      uopFCVT_D_W -> List(FCMD_CVT_FI, X,X,N,N,N, X,N,Y,N,N,N,Y),
+      uopFCVT_D_WU-> List(FCMD_CVT_FI, X,X,N,N,N, X,N,Y,N,N,N,Y),
+      uopFCVT_D_L -> List(FCMD_CVT_FI, X,X,N,N,N, X,N,Y,N,N,N,Y),
+      uopFCVT_D_LU-> List(FCMD_CVT_FI, X,X,N,N,N, X,N,Y,N,N,N,Y),
+      uopFCVT_W_S -> List(FCMD_CVT_IF, X,X,Y,N,N, X,Y,N,Y,N,N,Y),
+      uopFCVT_WU_S-> List(FCMD_CVT_IF, X,X,Y,N,N, X,Y,N,Y,N,N,Y),
+      uopFCVT_L_S -> List(FCMD_CVT_IF, X,X,Y,N,N, X,Y,N,Y,N,N,Y),
+      uopFCVT_LU_S-> List(FCMD_CVT_IF, X,X,Y,N,N, X,Y,N,Y,N,N,Y),
+      uopFCVT_W_D -> List(FCMD_CVT_IF, X,X,Y,N,N, X,N,N,Y,N,N,Y),
+      uopFCVT_WU_D-> List(FCMD_CVT_IF, X,X,Y,N,N, X,N,N,Y,N,N,Y),
+      uopFCVT_L_D -> List(FCMD_CVT_IF, X,X,Y,N,N, X,N,N,Y,N,N,Y),
+      uopFCVT_LU_D-> List(FCMD_CVT_IF, X,X,Y,N,N, X,N,N,Y,N,N,Y),
 
-      uopFEQ_S    -> List(FCMD_CMP,    N,N,Y,Y,N, N,Y,N,Y,N,N,N),
-      uopFLT_S    -> List(FCMD_CMP,    N,N,Y,Y,N, N,Y,N,Y,N,N,N),
-      uopFLE_S    -> List(FCMD_CMP,    N,N,Y,Y,N, N,Y,N,Y,N,N,N),
-      uopFEQ_D    -> List(FCMD_CMP,    N,N,Y,Y,N, N,N,N,Y,N,N,N),
-      uopFLT_D    -> List(FCMD_CMP,    N,N,Y,Y,N, N,N,N,Y,N,N,N),
-      uopFLE_D    -> List(FCMD_CMP,    N,N,Y,Y,N, N,N,N,Y,N,N,N),
+      uopFEQ_S    -> List(FCMD_CMP,    X,X,Y,Y,N, N,Y,N,Y,N,N,N),
+      uopFLT_S    -> List(FCMD_CMP,    X,X,Y,Y,N, N,Y,N,Y,N,N,N),
+      uopFLE_S    -> List(FCMD_CMP,    X,X,Y,Y,N, N,Y,N,Y,N,N,N),
+      uopFEQ_D    -> List(FCMD_CMP,    X,X,Y,Y,N, N,N,N,Y,N,N,N),
+      uopFLT_D    -> List(FCMD_CMP,    X,X,Y,Y,N, N,N,N,Y,N,N,N),
+      uopFLE_D    -> List(FCMD_CMP,    X,X,Y,Y,N, N,N,N,Y,N,N,N),
 
-      uopFSGNJ_S  -> List(FCMD_SGNJ,   N,Y,Y,Y,N, N,Y,N,N,Y,N,N),
-      uopFSGNJ_D  -> List(FCMD_SGNJ,   N,Y,Y,Y,N, N,N,N,N,Y,N,N),
+      uopFSGNJ_S  -> List(FCMD_SGNJ,   X,X,Y,Y,N, N,Y,N,N,Y,N,N),
+      uopFSGNJ_D  -> List(FCMD_SGNJ,   X,X,Y,Y,N, N,N,N,N,Y,N,N),
 
-      uopFMIN_S   -> List(FCMD_MINMAX, N,Y,Y,Y,N, N,Y,N,N,Y,N,N),
-      uopFMAX_S   -> List(FCMD_MINMAX, N,Y,Y,Y,N, N,Y,N,N,Y,N,N),
-      uopFMIN_D   -> List(FCMD_MINMAX, N,Y,Y,Y,N, N,N,N,N,Y,N,N),
-      uopFMAX_D   -> List(FCMD_MINMAX, N,Y,Y,Y,N, N,N,N,N,Y,N,N),
+      uopFMIN_S   -> List(FCMD_MINMAX, X,X,Y,Y,N, N,Y,N,N,Y,N,N),
+      uopFMAX_S   -> List(FCMD_MINMAX, X,X,Y,Y,N, N,Y,N,N,Y,N,N),
+      uopFMIN_D   -> List(FCMD_MINMAX, X,X,Y,Y,N, N,N,N,N,Y,N,N),
+      uopFMAX_D   -> List(FCMD_MINMAX, X,X,Y,Y,N, N,N,N,N,Y,N,N),
 
-      uopFADD_S   -> List(FCMD_ADD,    N,Y,Y,Y,N, Y,Y,N,N,N,Y,Y),
-      uopFSUB_S   -> List(FCMD_SUB,    N,Y,Y,Y,N, Y,Y,N,N,N,Y,Y),
-      uopFMUL_S   -> List(FCMD_MUL,    N,Y,Y,Y,N, N,Y,N,N,N,Y,Y),
-      uopFADD_D   -> List(FCMD_ADD,    N,Y,Y,Y,N, Y,N,N,N,N,Y,Y),
-      uopFSUB_D   -> List(FCMD_SUB,    N,Y,Y,Y,N, Y,N,N,N,N,Y,Y),
-      uopFMUL_D   -> List(FCMD_MUL,    N,Y,Y,Y,N, N,N,N,N,N,Y,Y),
+      uopFADD_S   -> List(FCMD_ADD,    X,X,Y,Y,N, Y,Y,N,N,N,Y,Y),
+      uopFSUB_S   -> List(FCMD_SUB,    X,X,Y,Y,N, Y,Y,N,N,N,Y,Y),
+      uopFMUL_S   -> List(FCMD_MUL,    X,X,Y,Y,N, N,Y,N,N,N,Y,Y),
+      uopFADD_D   -> List(FCMD_ADD,    X,X,Y,Y,N, Y,N,N,N,N,Y,Y),
+      uopFSUB_D   -> List(FCMD_SUB,    X,X,Y,Y,N, Y,N,N,N,N,Y,Y),
+      uopFMUL_D   -> List(FCMD_MUL,    X,X,Y,Y,N, N,N,N,N,N,Y,Y),
 
-      uopFMADD_S  -> List(FCMD_MADD,   N,Y,Y,Y,Y, N,Y,N,N,N,Y,Y),
-      uopFMSUB_S  -> List(FCMD_MSUB,   N,Y,Y,Y,Y, N,Y,N,N,N,Y,Y),
-      uopFNMADD_S -> List(FCMD_NMADD,  N,Y,Y,Y,Y, N,Y,N,N,N,Y,Y),
-      uopFNMSUB_S -> List(FCMD_NMSUB,  N,Y,Y,Y,Y, N,Y,N,N,N,Y,Y),
-      uopFMADD_D  -> List(FCMD_MADD,   N,Y,Y,Y,Y, N,N,N,N,N,Y,Y),
-      uopFMSUB_D  -> List(FCMD_MSUB,   N,Y,Y,Y,Y, N,N,N,N,N,Y,Y),
-      uopFNMADD_D -> List(FCMD_NMADD,  N,Y,Y,Y,Y, N,N,N,N,N,Y,Y),
-      uopFNMSUB_D -> List(FCMD_NMSUB,  N,Y,Y,Y,Y, N,N,N,N,N,Y,Y)
+      uopFMADD_S  -> List(FCMD_MADD,   X,X,Y,Y,Y, N,Y,N,N,N,Y,Y),
+      uopFMSUB_S  -> List(FCMD_MSUB,   X,X,Y,Y,Y, N,Y,N,N,N,Y,Y),
+      uopFNMADD_S -> List(FCMD_NMADD,  X,X,Y,Y,Y, N,Y,N,N,N,Y,Y),
+      uopFNMSUB_S -> List(FCMD_NMSUB,  X,X,Y,Y,Y, N,Y,N,N,N,Y,Y),
+      uopFMADD_D  -> List(FCMD_MADD,   X,X,Y,Y,Y, N,N,N,N,N,Y,Y),
+      uopFMSUB_D  -> List(FCMD_MSUB,   X,X,Y,Y,Y, N,N,N,N,N,Y,Y),
+      uopFNMADD_D -> List(FCMD_NMADD,  X,X,Y,Y,Y, N,N,N,N,N,Y,Y),
+      uopFNMSUB_D -> List(FCMD_NMSUB,  X,X,Y,Y,Y, N,N,N,N,N,Y,Y)
           ))
   val s = io.sigs
   Vec(s.cmd, s.ldst, s.wen, s.ren1, s.ren2, s.ren3, s.swap23, s.single, s.fromint,
@@ -132,8 +126,7 @@ class FPU extends Module with BOOMCoreParameters
    fp_decoder.io.uopc:= io_req.uop.uopc
 
    val fp_ctrl = fp_decoder.io.sigs
-
-   val fp_rm = Mux(io_req.uop.inst(14,12) === Bits(7), io_req.fcsr_rm, io_req.uop.inst(14,12)) // TODO FIXME XXX put information elsewhere in uop, this is the rm (founding mode)
+   val fp_rm = Mux(ImmGenRm(io_req.uop.imm_packed) === Bits(7), io_req.fcsr_rm, ImmGenRm(io_req.uop.imm_packed))
 
    val req = new rocket.FPInput
    req := fp_ctrl
@@ -141,9 +134,9 @@ class FPU extends Module with BOOMCoreParameters
    req.in1 := io_req.rs1_data
    req.in2 := io_req.rs2_data
    req.in3 := io_req.rs3_data
-   when (fp_ctrl.swap23) { req.in3 := io_req.rs2_data } // TODO move this elsewhere? this feels expensive
+   when (fp_ctrl.swap23) { req.in3 := io_req.rs2_data }
 
-   req.typ := io_req.uop.inst(21,20) // TODO FIXME XXX put typ elsewhere in uop
+   req.typ := ImmGenTyp(io_req.uop.imm_packed)
 
 
    val dfma = Module(new rocket.FPUFMAPipe(fpu_latency, 52, 12))
