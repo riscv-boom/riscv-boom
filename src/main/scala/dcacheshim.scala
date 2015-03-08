@@ -336,8 +336,10 @@ class DCacheShim extends Module with BOOMCoreParameters
    io.core.ordered := io.dmem.ordered
 
    // we handle all of the memory exceptions (unaligned and faulting) in the LSU
-   assert (!(io.dmem.resp.valid && (io.dmem.xcpt.ma.ld || io.dmem.xcpt.ma.st || io.dmem.xcpt.pf.ld || io.dmem.xcpt.pf.st)),
-      "Data cache returned an exception, which BOOM handles elsewhere.")
+   assert (!(io.core.resp.valid && io.dmem.xcpt.ma.ld), "Data cache returned an misaligned load exception, which BOOM handles elsewhere.")
+   assert (!(io.core.resp.valid && io.dmem.xcpt.ma.st), "Data cache returned an misaligned store exception, which BOOM handles elsewhere.")
+   assert (!(io.core.resp.valid && io.dmem.xcpt.pf.ld), "Data cache returned an faulting load exception, which BOOM handles elsewhere.")
+   assert (!(io.core.resp.valid && io.dmem.xcpt.pf.st), "Data cache returned an faulting store exception, which BOOM handles elsewhere.")
 
    //------------------------------------------------------------
    // debug

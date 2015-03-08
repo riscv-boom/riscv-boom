@@ -135,6 +135,9 @@ class LoadStoreUnitIo(pl_width: Int) extends BOOMCoreBundle
       val stq_maybe_full  = Bool()
       val tlb_miss        = Bool()
       val tlb_ready       = Bool()
+      val will_fires      = Bits(width=7)
+      val can_fires       = Bits(width=7)
+      val mem_fired_ld    = Bool()
       val entry = Vec.fill(NUM_LSU_ENTRIES) { new Bundle {
          val laq_addr_val = Bool()
          val laq_addr = UInt(width=xprLen)
@@ -400,6 +403,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    dtlb.io.req.bits.instruction := Bool(false)
 
    // exceptions
+   val ma_ld = io.exe_resp.valid && io.exe_resp.bits.mxcpt.valid && exe_tlb_uop.is_load
    val pf_ld = dtlb.io.req.valid && dtlb.io.resp.xcpt_ld && exe_tlb_uop.is_load
    val pf_st = dtlb.io.req.valid && dtlb.io.resp.xcpt_st && exe_tlb_uop.is_store
    val mem_xcpt_valid = Reg(next=(dtlb.io.req.valid && (pf_ld || pf_st)) ||
@@ -449,6 +453,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
          laq_addr_val  (laq_retry_idx) &&
          laq_is_virtual(laq_retry_idx) &&
          !laq_executed (laq_retry_idx) && // perf lose, but simplifies control
+         !laq_failure  (laq_retry_idx) &&
          Reg(next=dtlb.io.req.ready))
    {
       can_fire_load_retry := Bool(true)
@@ -505,7 +510,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    io.memreq_wdata   := sdq_data(stq_head)
    io.memreq_uop     := exe_ld_uop
 
-   when(will_fire_store_commit)
+   when (will_fire_store_commit)
    {
       io.memreq_val   := Bool(true)
       io.memreq_addr  := saq_addr(stq_head)
@@ -520,7 +525,8 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
       io.memreq_uop   := exe_ld_uop
 
       laq_executed(exe_ld_uop.ldq_idx) := Bool(true)
-      laq_failure (exe_ld_uop.ldq_idx)  := Bool(false)
+      laq_failure (exe_ld_uop.ldq_idx) := (will_fire_load_incoming && (ma_ld || pf_ld)) ||
+                                          (will_fire_load_retry && pf_ld)
    }
 
    assert (PopCount(Vec(will_fire_store_commit, will_fire_load_incoming, will_fire_load_retry, will_fire_load_wakeup)) <= UInt(1), "Multiple requestors firing to the data cache.")
@@ -578,6 +584,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
                                     will_fire_load_wakeup))
    val mem_fired_sta = Reg(next=(will_fire_sta_incoming || will_fire_sta_retry), init=Bool(false))
    val mem_fired_std = Reg(next=will_fire_std_incoming, init=Bool(false))
+   debug(mem_fired_ld)
 
 
    // tell the ROB to clear the busy bit on the incoming store
@@ -703,7 +710,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    wb_uop.br_mask        := GetNewBrMask(io.brinfo, mem_ld_uop)
 
    // kill load request to mem if address matches (we will either sleep load, or forward data) or TLB miss
-   io.memreq_kill     := (mem_tlb_miss && Reg(next=(will_fire_load_incoming || will_fire_load_retry))) ||
+   io.memreq_kill     := ((mem_tlb_miss || Reg(next=pf_ld || ma_ld)) && Reg(next=(will_fire_load_incoming || will_fire_load_retry))) ||
                          (mem_fired_ld && addr_conflicts.toBits != Bits(0))
    wb_forward_std_idx := forwarding_age_logic.io.forwarding_idx
 
@@ -1135,6 +1142,18 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    io.debug.stq_maybe_full := stq_maybe_full
    io.debug.tlb_miss := tlb_miss
    io.debug.tlb_ready:= dtlb.io.req.ready
+   io.debug.will_fires := Vec(will_fire_load_wakeup,
+                              will_fire_store_commit,
+                              will_fire_load_retry,
+                              will_fire_sta_retry,
+                              will_fire_std_incoming,
+                              will_fire_sta_incoming,
+                              will_fire_load_incoming).toBits
+   io.debug.can_fires := Vec( can_fire_load_wakeup,
+                              can_fire_store_commit,
+                              can_fire_load_retry,
+                              can_fire_sta_retry,Bits(0,3)).toBits
+   io.debug.mem_fired_ld := mem_fired_ld
 
    for (i <- 0 until NUM_LSU_ENTRIES)
    {

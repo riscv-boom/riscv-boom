@@ -177,7 +177,7 @@ abstract class PipelinedFunctionalUnit(val num_stages: Int,
 
       // handle outgoing (branch could still kill it)
       // consumer must also check for pipeline flushes (kills)
-      io.resp.valid    := r_valids(num_stages-1) && !IsKilledByBranch(io.brinfo, r_uops(num_stages-1)) // && !io.req.bits.kill
+      io.resp.valid    := r_valids(num_stages-1) && !IsKilledByBranch(io.brinfo, r_uops(num_stages-1))
       io.resp.bits.uop := r_uops(num_stages-1)
       io.resp.bits.uop.br_mask := GetNewBrMask(io.brinfo, r_uops(num_stages-1))
    }

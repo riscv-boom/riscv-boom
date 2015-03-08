@@ -118,6 +118,7 @@ class RobIo(machine_width: Int
          val busy = Bool()
          val uop = new MicroOp()
          val exception = Bool()
+         //val fflags = Bits(width=rocket.FPConstants.FLAGS_SZ)
       }}
    }.asOutput
 }
@@ -278,13 +279,15 @@ class Rob(width: Int
          {
             rob_bsy(row_idx) := Bool(false)
          }
+         // TODO check that fflags aren't overwritten
+         // TODO check that the wb is to a valid ROB entry, give it a time stamp
 //         assert (!(wb_resp.valid && MatchBank(GetBankIdx(wb_uop.rob_idx)) &&
 //                  wb_uop.fp_val && !(wb_uop.is_load || wb_uop.is_store) &&
 //                  rob_exc_cause(row_idx) != Bits(0)),
 //                  "FP instruction writing back exc bits is overriding an existing exception.")
       }
 
-      // TODO HACK: Stores have a separate method to clear busy bits
+      // Stores have a separate method to clear busy bits
       when (io.lsu_clr_bsy_valid && MatchBank(GetBankIdx(io.lsu_clr_bsy_rob_idx)))
       {
          rob_bsy(GetRowIdx(io.lsu_clr_bsy_rob_idx)) := Bool(false)
@@ -435,6 +438,7 @@ class Rob(width: Int
          io.debug.entry(w + i*width).uop := rob_uop(UInt(i))
          io.debug.entry(w + i*width).uop.pc := rob_pc_hob.read(UInt(i,log2Up(num_rob_rows))) + UInt(w << 2)
          io.debug.entry(w + i*width).exception := rob_exception(UInt(i))
+         //io.debug.entry(w + i*width).fflags := rob_fflags(UInt(i))
       }
 
    } //for (w <- 0 until width)

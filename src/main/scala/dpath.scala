@@ -1251,9 +1251,9 @@ class DatPath() extends Module with BOOMCoreParameters
    debug(br_unit.brinfo.mispredict)
 
    // detect pipeline freezes and throw error
-   val idle_cycles = WideCounter(15)
+   val idle_cycles = WideCounter(20)
    when (com_valids.toBits.orR) { idle_cycles := UInt(0) }
-   watchdog_trigger := Reg(next=idle_cycles.value(14)) // 32k cycles
+   watchdog_trigger := Reg(next=idle_cycles.value(19)) // 14: 32k cycles, 19b -> 128k
    assert (!(idle_cycles.value(13)), "Pipeline has hung.") // 16k cycles
 
 
@@ -1568,6 +1568,7 @@ class DatPath() extends Module with BOOMCoreParameters
                , rob.io.debug.entry(r_idx+0).uop.pc(31,0)
                , rob.io.debug.entry(r_idx+0).uop.inst
                , Mux(rob.io.debug.entry(r_idx+0).exception, Str("E"), Str("-"))
+               //, rob.io.debug.entry(r_idx+0).fflags
                )
          }
          else if (COMMIT_WIDTH == 2)
@@ -1617,7 +1618,7 @@ class DatPath() extends Module with BOOMCoreParameters
 
       // Load/Store Unit
 
-      printf("  Mem[%s,%s:%d,%s,%s %s %s] %s %s RobXcpt[%s%d r:%d b:%x bva:0x%x]\n"
+      printf("  Mem[%s,%s:%d,%s,%s %s %s] %s %s RobXcpt[%s%d r:%d b:%x bva:0x%x]w:%x,c:%x\n"
             , Mux(io.dmem.debug.memreq, Str("MREQ"), Str(" "))
             , Mux(io.dmem.debug.memresp, Str("MRESP"), Str(" "))
             , io.dmem.debug.cache_resp_idx
@@ -1632,6 +1633,8 @@ class DatPath() extends Module with BOOMCoreParameters
             , rob.io.debug.xcpt_uop.rob_idx
             , rob.io.debug.xcpt_uop.br_mask
             , rob.io.debug.xcpt_badvaddr
+            , lsu_io.debug.will_fires
+            , lsu_io.debug.can_fires
             )
       for (i <- 0 until NUM_LSU_ENTRIES)
       {
