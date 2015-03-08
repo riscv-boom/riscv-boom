@@ -1121,17 +1121,6 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    io.lsu_fencei_rdy := stq_empty && io.dmem_is_ordered
 
    //-------------------------------------------------------------
-   // Assertions
-
-   // some assertions are making code too difficult to follow
-   assert(!(laq_allocated(exe_ld_idx_wakeup) &&
-            laq_addr_val (exe_ld_idx_wakeup) &&
-            laq_is_virtual(exe_ld_idx_wakeup) &&
-            laq_failure(exe_ld_idx_wakeup)),
-            "Load without physical address marked as having failed.")
-
-
-   //-------------------------------------------------------------
    // Debug & Counter outputs
 
 

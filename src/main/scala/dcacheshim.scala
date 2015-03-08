@@ -273,19 +273,13 @@ class DCacheShim extends Module with BOOMCoreParameters
 //      prefetcher.io.cache.req.ready := !io.core.req.valid && nbdcache.io.cpu.req.ready
 
 
-
    //------------------------------------------------------------
    // hook up requests
-
-//   val store_data_gen = Module(new StoreDataGen())
-//      store_data_gen.io.typ := io.core.req.bits.uop.mem_typ
-//      store_data_gen.io.din := io.core.req.bits.data
-
 
 //   val prefetch_req_val = prefetcher.io.cache.req.valid && Bool(ENABLE_PREFETCHING)
    val prefetch_req_val = Bool(false)
 
-   io.core.req.ready              := enq_rdy && io.dmem.req.ready
+   io.core.req.ready      := enq_rdy && io.dmem.req.ready
    io.dmem.req.valid      := (io.core.req.valid || prefetch_req_val)
    io.dmem.req.bits.kill  := io.core.req.bits.kill || iflb_kill
                                           // kills request sent out last cycle
@@ -336,10 +330,10 @@ class DCacheShim extends Module with BOOMCoreParameters
    io.core.ordered := io.dmem.ordered
 
    // we handle all of the memory exceptions (unaligned and faulting) in the LSU
-   assert (!(io.core.resp.valid && io.dmem.xcpt.ma.ld), "Data cache returned an misaligned load exception, which BOOM handles elsewhere.")
-   assert (!(io.core.resp.valid && io.dmem.xcpt.ma.st), "Data cache returned an misaligned store exception, which BOOM handles elsewhere.")
-   assert (!(io.core.resp.valid && io.dmem.xcpt.pf.ld), "Data cache returned an faulting load exception, which BOOM handles elsewhere.")
-   assert (!(io.core.resp.valid && io.dmem.xcpt.pf.st), "Data cache returned an faulting store exception, which BOOM handles elsewhere.")
+   assert (!(io.core.resp.valid && RegNext(io.dmem.xcpt.ma.ld)), "Data cache returned an misaligned load exception, which BOOM handles elsewhere.")
+   assert (!(io.core.resp.valid && RegNext(io.dmem.xcpt.ma.st)), "Data cache returned an misaligned store exception, which BOOM handles elsewhere.")
+   assert (!(io.core.resp.valid && RegNext(io.dmem.xcpt.pf.ld)), "Data cache returned an faulting load exception, which BOOM handles elsewhere.")
+   assert (!(io.core.resp.valid && RegNext(io.dmem.xcpt.pf.st)), "Data cache returned an faulting store exception, which BOOM handles elsewhere.")
 
    //------------------------------------------------------------
    // debug
