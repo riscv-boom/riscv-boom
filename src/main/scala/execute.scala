@@ -209,7 +209,11 @@ class FPUALUExeUnit(is_branch_unit: Boolean = false
    io.resp(0).bits.uop  := Mux(fpu.io.resp.valid, fpu.io.resp.bits.uop, alu.io.resp.bits.uop)
    io.resp(0).bits.data := Mux(fpu.io.resp.valid, fpu.io.resp.bits.data, alu.io.resp.bits.data)
 
-   io.resp(0).bits.fflags <> fpu.io.resp.bits.fflags
+   // TODO is there a way to override a single signal in a bundle?
+//   io.resp(0).bits.fflags <> fpu.io.resp.bits.fflags
+   io.resp(0).bits.fflags.valid      := fpu.io.resp.valid
+   io.resp(0).bits.fflags.bits.uop   := fpu.io.resp.bits.fflags.bits.uop
+   io.resp(0).bits.fflags.bits.flags := fpu.io.resp.bits.fflags.bits.flags
 
    assert (!(alu.io.resp.valid && fpu.io.resp.valid)
       , "ALU and FPU are fighting over the write port.")
@@ -671,7 +675,10 @@ class FPUALUMulDMemExeUnit(is_branch_unit: Boolean = false
    io.resp(0).bits.uop  := Mux(fpu.io.resp.valid, fpu.io.resp.bits.uop, alu.io.resp.bits.uop)
    io.resp(0).bits.data := Mux(fpu.io.resp.valid, fpu.io.resp.bits.data, alu.io.resp.bits.data)
 
-   io.resp(0).bits.fflags <> fpu.io.resp.bits.fflags
+//   io.resp(0).bits.fflags <> fpu.io.resp.bits.fflags
+   io.resp(0).bits.fflags.valid      := fpu.io.resp.valid
+   io.resp(0).bits.fflags.bits.uop   := fpu.io.resp.bits.fflags.bits.uop
+   io.resp(0).bits.fflags.bits.flags := fpu.io.resp.bits.fflags.bits.flags
 
    assert (!(alu.io.resp.valid && fpu.io.resp.valid)
       , "ALU and FPU are fighting over the write port.")
