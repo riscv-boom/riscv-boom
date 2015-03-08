@@ -12,17 +12,17 @@ import uncore.constants.MemoryOpConstants._
 object XDecode
 {
    val default = List(N, N, X, uopX    , FU_X   ,UInt("b??",2),UInt("b??",2),UInt("b??",2),X, IS_X, X,X,X,X,N,M_X, MSK_X,UInt("b??"), X, X, X, X, X, X, N, X, CSR.X)
-            //                                                         frs3_en                               wakeup_delay
-            //     is val inst?                                        | imm sel                             |        bypassable (aka, known/fixed latency)
-            //     |  is fp inst?                                      | |     is_load                       |        |  br/jmp
-            //     |  |  is single-prec?               rs1 regtype     | |     |  is_store                   |        |  |  is jal
-            //     |  |  |  micro-code                 |       rs2 type| |     |  |  is_amo                  |        |  |  |  is sret
-            //     |  |  |  |         func unit        |       |       | |     |  |  |  is_fence             |        |  |  |  |  is syscall
-            //     |  |  |  |         |                |       |       | |     |  |  |  |  is_fencei         |        |  |  |  |  |  is sbreak
-            //     |  |  |  |         |        dst     |       |       | |     |  |  |  |  |  mem    mem     |        |  |  |  |  |  |  is unique? (clear pipeline for it)
-            //     |  |  |  |         |        regtype |       |       | |     |  |  |  |  |  cmd    msk     |        |  |  |  |  |  |  |  flush on commit
-            //     |  |  |  |         |        |       |       |       | |     |  |  |  |  |  |      |       |        |  |  |  |  |  |  |  |  csr cmd
-   val table = Array(//  |  |         |        |       |       |       | |     |  |  |  |  |  |      |       |        |  |  |  |  |  |  |  |  |
+            //                                                         frs3_en                                wakeup_delay
+            //     is val inst?                                        |  imm sel                             |        bypassable (aka, known/fixed latency)
+            //     |  is fp inst?                                      |  |     is_load                       |        |  br/jmp
+            //     |  |  is single-prec?               rs1 regtype     |  |     |  is_store                   |        |  |  is jal
+            //     |  |  |  micro-code                 |       rs2 type|  |     |  |  is_amo                  |        |  |  |  is sret
+            //     |  |  |  |         func unit        |       |       |  |     |  |  |  is_fence             |        |  |  |  |  is syscall
+            //     |  |  |  |         |                |       |       |  |     |  |  |  |  is_fencei         |        |  |  |  |  |  is sbreak
+            //     |  |  |  |         |        dst     |       |       |  |     |  |  |  |  |  mem    mem     |        |  |  |  |  |  |  is unique? (clear pipeline for it)
+            //     |  |  |  |         |        regtype |       |       |  |     |  |  |  |  |  cmd    msk     |        |  |  |  |  |  |  |  flush on commit
+            //     |  |  |  |         |        |       |       |       |  |     |  |  |  |  |  |      |       |        |  |  |  |  |  |  |  |  csr cmd
+   val table = Array(//  |  |         |        |       |       |       |  |     |  |  |  |  |  |      |       |        |  |  |  |  |  |  |  |  |
    LD      -> List(Y, N, X, uopLD   , FU_MEM , RT_FIX, RT_FIX, RT_X  , N, IS_I, Y, N, N, N, N, M_XRD, MSK_D , UInt(3), N, N, N, N, N, N, N, N, CSR.N),
    LW      -> List(Y, N, X, uopLD   , FU_MEM , RT_FIX, RT_FIX, RT_X  , N, IS_I, Y, N, N, N, N, M_XRD, MSK_W , UInt(3), N, N, N, N, N, N, N, N, CSR.N),
    LWU     -> List(Y, N, X, uopLD   , FU_MEM , RT_FIX, RT_FIX, RT_X  , N, IS_I, Y, N, N, N, N, M_XRD, MSK_WU, UInt(3), N, N, N, N, N, N, N, N, CSR.N),

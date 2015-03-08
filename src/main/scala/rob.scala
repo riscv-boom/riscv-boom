@@ -474,6 +474,7 @@ class Rob(width: Int
    }
 
    // exception must be in the commit bundle
+   // Note: exception must be the first valid instruction in the commit bundle
    exception_thrown    := will_throw_exception
    val is_mini_exception = io.com_exc_cause === MINI_EXCEPTION_MEM_ORDERING
    io.com_exception    := exception_thrown && !is_mini_exception
@@ -483,10 +484,6 @@ class Rob(width: Int
    io.lsu_misspec := Reg(next=exception_thrown && io.com_exc_cause === MINI_EXCEPTION_MEM_ORDERING)
    io.com_badvaddr := Sext(r_xcpt_badvaddr,xprLen)
 
-
-   // TODO BUG XXX what if eret and inst_valid excp in same bundle and bad load?
-   // flush PC, say an instruction needs to flush the pipeline and refetch either itself or PC+4
-   // Note: exception must be the first valid instruction in the commit bundle
    val refetch_inst = exception_thrown
    io.flush_pc  := rob_pc_hob.read(rob_head) +
                    PriorityMux(rob_head_vals, Range(0,width).map(w => UInt(w << 2))) +

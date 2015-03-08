@@ -126,7 +126,7 @@ class NackInfo extends BOOMCoreBundle
    val lsu_idx    = UInt(width = MEM_ADDR_SZ)
    val isload     = Bool()
    val cache_nack = Bool() // was the cache nacking us, or the LSU
-                           // cache nacks for stuctural hazards
+                           // cache nacks for stuctural hazards (MUST kill st->ld forwardings)
                            // LSU nacks for address conflicts/forwarding
 }
 
@@ -306,7 +306,7 @@ class DCacheShim extends Module with BOOMCoreParameters
                                                                                 Bool(false)))  // filter out nacked responses
 
    io.core.resp.bits.uop := Mux(cache_load_ack, inflight_load_buffer(resp_idx).out_uop,
-                                                   m2_req_uop)
+                                                m2_req_uop)
 
    // comes out the same cycle as the resp.valid signal
    // but is a few gates slower than resp.bits.data

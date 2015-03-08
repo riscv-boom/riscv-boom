@@ -744,7 +744,9 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    }
    .otherwise
    {
-      io.forward_val := wb_forward_std_val && sdq_val(wb_forward_std_idx)
+      io.forward_val := wb_forward_std_val &&
+                        sdq_val(wb_forward_std_idx) &&
+                        !(io.nack.valid && io.nack.cache_nack)
    }
    io.forward_data := LoadDataGenerator(sdq_data(wb_forward_std_idx).toUInt, wb_uop.mem_typ)
    io.forward_uop  := wb_uop
@@ -1006,7 +1008,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
          {
             // handle case where sdq_val is no longer true (store was
             // committed) or was never valid
-            when (!(sdq_val(wb_forward_std_idx)))
+            when (!(sdq_val(wb_forward_std_idx)) || (io.nack.valid && io.nack.cache_nack))
             {
                clr_ld := Bool(true)
             }
