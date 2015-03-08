@@ -568,23 +568,29 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
 
    // search SAQ/LAQ for matches
 
-   val mem_tlb_paddr = Reg(next=exe_tlb_paddr)
-   val mem_tlb_uop   = Reg(next=exe_tlb_uop) // not valid for std_incoming!
+   val mem_tlb_paddr    = Reg(next=exe_tlb_paddr)
+   val mem_tlb_uop      = Reg(next=exe_tlb_uop) // not valid for std_incoming!
    mem_tlb_uop.br_mask := GetNewBrMask(io.brinfo, exe_tlb_uop)
-   val mem_tlb_miss  = Reg(next=tlb_miss, init=Bool(false))
+   val mem_tlb_miss     = Reg(next=tlb_miss, init=Bool(false))
+   val mem_ld_used_tlb  = RegNext(will_fire_load_incoming || will_fire_load_retry)
 
    // the load address that will search the SAQ (either a fast load or a retry load)
    val mem_ld_addr = Mux(Reg(next=will_fire_load_wakeup), Reg(next=laq_addr(exe_ld_idx_wakeup)), mem_tlb_paddr)
    val mem_ld_uop  = Reg(next=exe_ld_uop)
    mem_ld_uop.br_mask := GetNewBrMask(io.brinfo, exe_ld_uop)
-
+   val mem_ld_killed = Bool() // was a load killed in execute
 
    val mem_fired_ld = Reg(next=(will_fire_load_incoming ||
                                     will_fire_load_retry ||
                                     will_fire_load_wakeup))
    val mem_fired_sta = Reg(next=(will_fire_sta_incoming || will_fire_sta_retry), init=Bool(false))
    val mem_fired_std = Reg(next=will_fire_std_incoming, init=Bool(false))
-   debug(mem_fired_ld)
+
+   mem_ld_killed := Bool(false)
+   when (IsKilledByBranch(io.brinfo, exe_ld_uop) || io.exception)
+   {
+      mem_ld_killed := Bool(true) && mem_fired_ld
+   }
 
 
    // tell the ROB to clear the busy bit on the incoming store
@@ -709,9 +715,11 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    val wb_uop             = Reg(next=mem_ld_uop)
    wb_uop.br_mask        := GetNewBrMask(io.brinfo, mem_ld_uop)
 
+
    // kill load request to mem if address matches (we will either sleep load, or forward data) or TLB miss
-   io.memreq_kill     := ((mem_tlb_miss || Reg(next=pf_ld || ma_ld)) && Reg(next=(will_fire_load_incoming || will_fire_load_retry))) ||
-                         (mem_fired_ld && addr_conflicts.toBits != Bits(0))
+   io.memreq_kill     := (mem_ld_used_tlb && (mem_tlb_miss || Reg(next=pf_ld || ma_ld))) ||
+                         (mem_fired_ld && addr_conflicts.toBits != Bits(0)) ||
+                         mem_ld_killed
    wb_forward_std_idx := forwarding_age_logic.io.forwarding_idx
 
    // kill forwarding if branch mispredict
@@ -721,7 +729,8 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    }
    .otherwise
    {
-      wb_forward_std_val := mem_fired_ld && forwarding_age_logic.io.forwarding_val && !force_ld_to_sleep && !mem_tlb_miss
+      wb_forward_std_val := mem_fired_ld && forwarding_age_logic.io.forwarding_val &&
+                           !force_ld_to_sleep && !(mem_tlb_miss && mem_ld_used_tlb) && !mem_ld_killed && !io.exception
    }
 
    // Notes:
