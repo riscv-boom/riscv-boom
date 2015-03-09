@@ -1113,7 +1113,7 @@ class DatPath() extends Module with BOOMCoreParameters
    //-------------------------------------------------------------
    //-------------------------------------------------------------
 
-   val num_fpu_ports = exe_units.withFilter(_.has_fpu).map(_.num_rf_write_ports).reduce[Int](_+_)
+   val num_fpu_ports = exe_units.withFilter(_.has_fpu).map(_.num_rf_write_ports).foldLeft(0)(_+_)
    val rob  = Module(new Rob(DECODE_WIDTH, NUM_ROB_ENTRIES, num_slow_wakeup_ports, num_fpu_ports)) // TODO the ROB writeback is off the regfile, which is a different set
 
       // Dispatch
@@ -1748,7 +1748,7 @@ class DatPath() extends Module with BOOMCoreParameters
             {
                val i = x + y*7
 
-               if (i < 32)
+               if (i < 32 && !params(BuildFPU).isEmpty)
                {
                   val phs_reg = rename_stage.io.debug.map_table(i+32).element
 
@@ -1796,7 +1796,7 @@ class DatPath() extends Module with BOOMCoreParameters
             .otherwise
             {
 //               printf("0x%x (0x%x) |%d\n", com_uops(w).pc, com_uops(w).inst, tsc_reg)
-               printf("@@@ 0x%x (0x%x)\n", com_uops(w).pc, com_uops(w).inst)
+               printf("@@@ 0x%x (0x%x)\n", Sext(com_uops(w).pc(vaddrBits,0), xprLen), com_uops(w).inst)
             }
          }
       }

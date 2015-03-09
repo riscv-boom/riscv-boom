@@ -402,7 +402,7 @@ class MemExeUnit extends ExecutionUnit(num_rf_read_ports = 2 // TODO make this 1
    if (params(BuildFPU).isEmpty)
    {
       memresp_data = Mux(lsu.io.forward_val, lsu.io.forward_data
-                                           , io.dmem.resp.bits.data)
+                                           , io.dmem.resp.bits.data_subword)
    }
    else
    {
@@ -572,7 +572,7 @@ class ALUMulDMemExeUnit(is_branch_unit: Boolean = false
    if (params(BuildFPU).isEmpty)
    {
       memresp_data = Mux(lsu.io.forward_val, lsu.io.forward_data
-                                           , io.dmem.resp.bits.data)
+                                           , io.dmem.resp.bits.data_subword)
    }
    else
    {
@@ -768,7 +768,7 @@ class FPUALUMulDMemExeUnit(is_branch_unit: Boolean = false
    if (params(BuildFPU).isEmpty)
    {
       memresp_data = Mux(lsu.io.forward_val, lsu.io.forward_data
-                                           , io.dmem.resp.bits.data)
+                                           , io.dmem.resp.bits.data_subword)
    }
    else
    {

@@ -555,7 +555,7 @@ class RenameStage(pl_width: Int, num_wb_ports: Int) extends Module with BOOMCore
    }
 
    // read out the map-table entries ASAP, then deal with bypassing busy-bits later
-   private val map_table_output = Vec.fill(pl_width*max_operands) {UInt(width=PREG_SZ)}
+   private val map_table_output = Vec.fill(pl_width*3) {UInt(width=PREG_SZ)}
    def map_table_prs1(w:Int) = map_table_output(w+0*pl_width)
    def map_table_prs2(w:Int) = map_table_output(w+1*pl_width)
    def map_table_prs3(w:Int) = map_table_output(w+2*pl_width)
@@ -567,6 +567,8 @@ class RenameStage(pl_width: Int, num_wb_ports: Int) extends Module with BOOMCore
       map_table_prs2(w) := map_table_io(io.ren_uops(w).lrs2).element
       if (max_operands > 2) 
          map_table_prs3(w) := map_table_io(io.ren_uops(w).lrs3).element
+      else
+         map_table_prs3(w) := UInt(0)
    }
 
    // Bypass the physical register mappings
@@ -643,6 +645,10 @@ class RenameStage(pl_width: Int, num_wb_ports: Int) extends Module with BOOMCore
          {
             bsy_table.io.prs(2,w) := map_table_prs3(w)
             io.ren_uops(w).prs3_busy := (io.ren_uops(w).frs3_en) && (bsy_table.io.prs_busy(2,w) || prs3_was_bypassed(w))
+         }
+         else
+         {
+            io.ren_uops(w).prs3_busy := Bool(false)
          }
 
 
