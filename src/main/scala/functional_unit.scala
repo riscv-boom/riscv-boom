@@ -293,7 +293,6 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)
                         ))
 
       val bj_addr = UInt()
-//      val jreg_target = bj_addr
 
       io.br_unit.taken := io.req.valid &&
                           !killed &&

@@ -332,8 +332,6 @@ class DecodeUnit() extends Module
                     Mux(uop.xcpt_if,                UInt(rocket.Causes.fault_fetch),
                     Mux(exc_illegal || csr_invalid, UInt(rocket.Causes.illegal_instruction),
                     Mux(exc_privileged,             UInt(rocket.Causes.privileged_instruction),
-
-
 //                    ((id_ctrl.fp || id_csr_fp) && !io.dpath.status.ef,UInt(Causes.fp_disabled)),
                     Mux(exc_fp_disabled,            UInt(rocket.Causes.fp_disabled),
                     Mux(cs_syscall.toBool,          UInt(rocket.Causes.syscall),

@@ -97,7 +97,7 @@ class RobIo(machine_width: Int
    // Finally, we redirect the PC ASAP, but flush the pipeline a cycle later
    // (to get it off the critical path).
    val flush_take_pc    = Bool(OUTPUT)
-   val flush_pc         = UInt(OUTPUT, xprLen)
+   val flush_pc         = UInt(OUTPUT, vaddrBits+1)
    val flush_pipeline   = Bool(OUTPUT)
 
    // Stall Decode as appropriate
@@ -526,6 +526,7 @@ class Rob(width: Int
    // only store the oldest exception, since only one can happen!
 
    // is i0 older than i1? (closest to zero)
+   // provide the tail_ptr to the queue
    def IsOlder(i0: UInt, i1: UInt, tail: UInt) =
    {
       (Cat(i0 < tail, i0) < Cat(i1 < tail, i1))

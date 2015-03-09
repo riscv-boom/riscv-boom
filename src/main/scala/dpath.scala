@@ -250,8 +250,8 @@ class DatPath() extends Module with BOOMCoreParameters
    val flush_pipeline = Bool()  // kill entire pipeline (i.e., exception, load misspeculations)
 
    // Instruction Fetch State
-   val if_pc_next     = UInt(width = xprLen)
-   val pcr_exc_target = UInt(width = vaddrBits)
+   val if_pc_next     = UInt(width = vaddrBits+1)
+   val pcr_exc_target = UInt(width = vaddrBits+1)
 
 
    // Branch Predict State
@@ -260,8 +260,8 @@ class DatPath() extends Module with BOOMCoreParameters
    val bp2_jalr_val          = Bool()
    val bp2_take_pc           = Bool()
    val bp2_wants_to_take_pc  = Bool()
-   val bp2_pred_target       = UInt(width=xprLen)
-   val bp2_pc_of_jmp_inst    = UInt(width=xprLen)
+   val bp2_pred_target       = UInt(width=vaddrBits+1)
+   val bp2_pc_of_jmp_inst    = UInt(width=vaddrBits+1)
    val bp2_jmp_inst          = Bits()
 
    // Instruction Decode State
@@ -441,7 +441,7 @@ class DatPath() extends Module with BOOMCoreParameters
 
    if_pc_next :=  Mux((com_exception || com_sret), pcr_exc_target,
                   Mux(flush_take_pc              , flush_pc,
-                  Mux(br_unit.take_pc            , br_unit.target,
+                  Mux(br_unit.take_pc            , br_unit.target(vaddrBits,0),
                                                    bp2_pred_target))) // bp2_take_pc
 
    // Fetch Buffer
@@ -741,8 +741,6 @@ class DatPath() extends Module with BOOMCoreParameters
 
       new_lidx = Mux(dec_mask(w) && dec_uops(w).is_load,  WrapInc(new_lidx, NUM_LSU_ENTRIES), new_lidx)
       new_sidx = Mux(dec_mask(w) && dec_uops(w).is_store, WrapInc(new_sidx, NUM_LSU_ENTRIES), new_sidx)
-//      new_lidx = Mux(dec_mask(w) && dec_uops(w).is_load, new_lidx + UInt(1), new_lidx)
-//      new_sidx = Mux(dec_mask(w) && dec_uops(w).is_store, new_sidx + UInt(1), new_sidx)
    }
 
 
@@ -1251,9 +1249,9 @@ class DatPath() extends Module with BOOMCoreParameters
    debug(br_unit.brinfo.mispredict)
 
    // detect pipeline freezes and throw error
-   val idle_cycles = WideCounter(20)
-   when (com_valids.toBits.orR) { idle_cycles := UInt(0) }
-   watchdog_trigger := Reg(next=idle_cycles.value(19)) // 14: 32k cycles, 19b -> 128k
+   val idle_cycles = WideCounter(32)
+   when (com_valids.toBits.orR || reset.toBool) { idle_cycles := UInt(0) }
+   watchdog_trigger := Reg(next=idle_cycles.value(30)) // 14: 32k cycles, 19b -> 128k
    assert (!(idle_cycles.value(13)), "Pipeline has hung.") // 16k cycles
 
 
@@ -1618,7 +1616,7 @@ class DatPath() extends Module with BOOMCoreParameters
 
       // Load/Store Unit
 
-      printf("  Mem[%s,%s:%d,%s,%s %s %s] %s %s RobXcpt[%s%d r:%d b:%x bva:0x%x]w:%x,c:%x\n"
+      printf("  Mem[%s,%s:%d,%s,%s %s %s] %s %s RobXcpt[%s%x r:%d b:%x bva:0x%x]w:%x,c:%x\n"
             , Mux(io.dmem.debug.memreq, Str("MREQ"), Str(" "))
             , Mux(io.dmem.debug.memresp, Str("MRESP"), Str(" "))
             , io.dmem.debug.cache_resp_idx
