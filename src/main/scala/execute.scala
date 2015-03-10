@@ -61,9 +61,9 @@ class ExecutionUnitIo(num_rf_read_ports: Int
    val get_rob_pc = new Bundle
    {
       val rob_idx = UInt(OUTPUT, ROB_ADDR_SZ)
-      val curr_pc = UInt(INPUT, xprLen)
+      val curr_pc = UInt(INPUT, xLen)
       val next_val= Bool(INPUT)
-      val next_pc = UInt(INPUT, xprLen)
+      val next_pc = UInt(INPUT, xLen)
    }
 
    // only used by the fpu unit
@@ -108,7 +108,7 @@ class ALUExeUnit(is_branch_unit: Boolean = false
                 ) extends ExecutionUnit(num_rf_read_ports = 2
                                        , num_rf_write_ports = 1
                                        , num_bypass_stages = 1
-                                       , data_width = 64 // TODO need to use xprLen here
+                                       , data_width = 64 // TODO need to use xLen here
                                        , bypassable = true
                                        , is_mem_unit = false
                                        , uses_pcr_wport = shares_pcr_wport
@@ -224,7 +224,7 @@ class FPUALUExeUnit(is_branch_unit: Boolean = false
 class MulDExeUnit extends ExecutionUnit(num_rf_read_ports = 2
                                        , num_rf_write_ports = 1
                                        , num_bypass_stages = 0
-                                       , data_width = 64 // TODO need to use xprLen here
+                                       , data_width = 64 // TODO need to use xLen here
                                        , num_variable_write_ports = 1
                                        )
 {

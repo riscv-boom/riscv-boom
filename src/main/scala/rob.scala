@@ -47,7 +47,7 @@ class RobIo(machine_width: Int
    // track side-effects for debug purposes.
    // Also need to know when loads write back, whereas we don't need loads to unbusy.
    val debug_wb_valids  = Vec.fill(num_wakeup_ports) { Bool(INPUT) }
-   val debug_wb_wdata   = Vec.fill(num_wakeup_ports) { Bits(INPUT, xprLen) }
+   val debug_wb_wdata   = Vec.fill(num_wakeup_ports) { Bits(INPUT, xLen) }
 
    val fflags = Vec.fill(num_fpu_ports) { new ValidIO(new FFlagsResp()).flip }
    val lxcpt = new ValidIO(new LSUExceptions()).flip
@@ -69,10 +69,10 @@ class RobIo(machine_width: Int
 
    // Handle Exceptions/ROB Rollback
    val com_exception    = Bool(OUTPUT)
-   val com_exc_cause    = UInt(OUTPUT, xprLen)
+   val com_exc_cause    = UInt(OUTPUT, xLen)
    val com_handling_exc = Bool(OUTPUT)
    val com_rbk_valids   = Vec.fill(machine_width) {Bool(OUTPUT)}
-   val com_badvaddr     = UInt(OUTPUT, xprLen)
+   val com_badvaddr     = UInt(OUTPUT, xLen)
 
    // Handle Branch Misspeculations
    val br_unit          = new BranchUnitResp().asInput
@@ -81,9 +81,9 @@ class RobIo(machine_width: Int
    val get_pc = new Bundle
    {
       val rob_idx  = UInt(INPUT, ROB_ADDR_SZ)
-      val curr_pc  = UInt(OUTPUT, xprLen)
+      val curr_pc  = UInt(OUTPUT, xLen)
       val next_val = Bool(OUTPUT)             // the next_pc may not be valid (stalled or still being fetched)
-      val next_pc  = UInt(OUTPUT, xprLen)
+      val next_pc  = UInt(OUTPUT, xLen)
    }
 
    // Handle Additional Misspeculations (LSU)
@@ -112,7 +112,7 @@ class RobIo(machine_width: Int
       val rob_head = UInt(width = ROB_ADDR_SZ)
       val xcpt_val = Bool()
       val xcpt_uop = new MicroOp()
-      val xcpt_badvaddr = UInt(width = xprLen)
+      val xcpt_badvaddr = UInt(width = xLen)
       val entry = Vec.fill(NUM_ROB_ENTRIES) { new Bundle {
          val valid = Bool()
          val busy = Bool()
@@ -482,7 +482,7 @@ class Rob(width: Int
    io.com_handling_exc := exception_thrown  // TODO get rid of com_handling_exc? used to handle loads coming back from the $ probbaly unnecessary
 
    io.lsu_misspec := Reg(next=exception_thrown && io.com_exc_cause === MINI_EXCEPTION_MEM_ORDERING)
-   io.com_badvaddr := Sext(r_xcpt_badvaddr,xprLen)
+   io.com_badvaddr := Sext(r_xcpt_badvaddr,xLen)
 
    val refetch_inst = exception_thrown
    io.flush_pc  := rob_pc_hob.read(rob_head) +
@@ -736,7 +736,7 @@ class Rob(width: Int
    io.debug.xcpt_badvaddr := r_xcpt_badvaddr
 
    // this object holds the high-order bits of the PC of each ROB row
-   // PCs are stored as vaddrBits+1 in size, but extended out to xprLen when read
+   // PCs are stored as vaddrBits+1 in size, but extended out to xLen when read
    class RobPCs(width: Int, num_rob_rows: Int)
    {
       val pc_shift = if (width == 1) 2 else (log2Up(width) + 2)
@@ -750,14 +750,14 @@ class Rob(width: Int
       // takes rob_row_idx, returns PC (with low-order bits zeroed out)
       def  read (row_idx: UInt) =
       {
-         val rdata = Bits(width=xprLen)
+         val rdata = Bits(width=xLen)
          rdata := bank0(row_idx >> UInt(1)) << UInt(pc_shift)
          // damn chisel demands a "default"
          when (row_idx(0))
          {
             rdata := bank1(row_idx >> UInt(1)) << UInt(pc_shift)
          }
-         Sext(rdata(vaddrBits,0), xprLen)
+         Sext(rdata(vaddrBits,0), xLen)
       }
 
       // returns the row_idx and row_idx+1 PCs (lob zeroed out)
@@ -769,12 +769,12 @@ class Rob(width: Int
          val data0 = bank0(addr0_ls1) << UInt(pc_shift)
          val data1 = bank1(row_idx >> UInt(1)) << UInt(pc_shift)
 
-         val curr_pc = UInt(width = xprLen)
-         val next_pc = UInt(width = xprLen)
+         val curr_pc = UInt(width = xLen)
+         val next_pc = UInt(width = xLen)
          curr_pc := Mux(row_idx(0), data1, data0)
          next_pc := Mux(row_idx(0), data0, data1)
-         val curr_pc_ext = Sext(curr_pc(vaddrBits,0), xprLen)
-         val next_pc_ext = Sext(next_pc(vaddrBits,0), xprLen)
+         val curr_pc_ext = Sext(curr_pc(vaddrBits,0), xLen)
+         val next_pc_ext = Sext(next_pc(vaddrBits,0), xLen)
 
          (curr_pc_ext, next_pc_ext)
       }

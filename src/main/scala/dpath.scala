@@ -143,7 +143,7 @@ class MicroOp extends BOOMCoreBundle
    val prs3_busy        = Bool()
    val stale_pdst       = UInt(width = PREG_SZ)
    val exception        = Bool()
-   val exc_cause        = UInt(width = xprLen)        // TODO compress this down, xprlen is insnaity
+   val exc_cause        = UInt(width = xLen)        // TODO compress this down, xlen is insnaity
    val sret             = Bool()
    val bypassable       = Bool()                      // can we bypass ALU results? (doesn't include loads, pcr, rdcycle, etc.... need to readdress this, SHOULD include PCRs?)
    val mem_cmd          = UInt(width = 4)             // sync primitives/cache flushes
@@ -178,14 +178,14 @@ class MicroOp extends BOOMCoreBundle
 
 
    // purely debug information
-   val debug_wdata      = Bits(width=xprLen)
+   val debug_wdata      = Bits(width=xLen)
    val debug_ei_enabled = Bool()
 }
 
 class FetchBundle extends Bundle with BOOMCoreParameters
 {
 //   val resp = new rocket.FrontEndResp // TODO consolidate everything into this
-   val pc    = UInt(width = xprLen)
+   val pc    = UInt(width = vaddrBits+1)
    val insts = Vec.fill(FETCH_WIDTH) { Bits(width = 32) }
    val mask  = Bits(width = FETCH_WIDTH) // mark which words are valid instructions
 
@@ -217,9 +217,7 @@ class BrResolutionInfo extends BOOMCoreBundle
 
 class CacheCounters() extends Bundle
 {
-//   val dc_misses = UInt(width = xprLen)
    val dc_miss = Bool()
-//   val ic_misses = UInt(width = xprLen)
    val ic_miss = Bool()
 }
 
@@ -372,7 +370,7 @@ class DatPath() extends Module with BOOMCoreParameters
    println("")
 //   require(num_wakeup_ports == num_rf_write_ports) TODO
 
-   val register_width = if (params(BuildFPU).isEmpty) xprLen else 65
+   val register_width = if (params(BuildFPU).isEmpty) xLen else 65
    val bypasses = new BypassData(num_total_bypass_ports, register_width)
 
    val issue_width           = exe_units.length // TODO allow exe_units to have multiple issue ports?
@@ -565,9 +563,9 @@ class DatPath() extends Module with BOOMCoreParameters
    val jinst = fetch_bundle.insts(bp2_jmp_idx)
    bp2_jmp_inst := jinst
    val bp2_jal_imm32 = Cat(Fill(jinst(31),12), jinst(19,12), jinst(20), jinst(30,25), jinst(24,21), Bits(0,1))
-   val bp2_jalpred_target = UInt(width=xprLen)
+   val bp2_jalpred_target = UInt(width=xLen)
    require (FETCH_WIDTH <= 2)
-   bp2_jalpred_target := (bp2_aligned_pc + Mux(bp2_jmp_idx === UInt(1), UInt(4), UInt(0)) + Sext(bp2_jal_imm32, xprLen)) & SInt(-coreInstBytes)
+   bp2_jalpred_target := (bp2_aligned_pc + Mux(bp2_jmp_idx === UInt(1), UInt(4), UInt(0)) + Sext(bp2_jal_imm32, xLen)) & SInt(-coreInstBytes)
 
    bp2_pc_of_jmp_inst := bp2_aligned_pc + (bp2_jmp_idx * UInt(4))
 
@@ -613,7 +611,7 @@ class DatPath() extends Module with BOOMCoreParameters
    // TODO generalize the assert that checks for the BTB pred_idx
    require (FETCH_WIDTH <= 2)
    val btb_predicted_inst = fetch_bundle.insts(fetch_bundle.btb_pred_taken_idx)
-   val btb_predicted_inst_pc =  bp2_aligned_pc + Mux(fetch_bundle.btb_pred_taken_idx === UInt(1), UInt(4), UInt(0))  + Sext(DebugGetBJImm(btb_predicted_inst), xprLen)
+   val btb_predicted_inst_pc =  bp2_aligned_pc + Mux(fetch_bundle.btb_pred_taken_idx === UInt(1), UInt(4), UInt(0))  + Sext(DebugGetBJImm(btb_predicted_inst), xLen)
    //assert (!(io.imem.resp.valid &&
    //          io.imem.resp.bits.taken &&
    //          !DebugIsJALR(btb_predicted_inst) &&
@@ -1258,19 +1256,19 @@ class DatPath() extends Module with BOOMCoreParameters
    //-------------------------------------------------------------
    // Counters
 
-   val laq_full_count = Reg(init = UInt(0, xprLen))
+   val laq_full_count = Reg(init = UInt(0, xLen))
    when (laq_full) { laq_full_count := laq_full_count + UInt(1) }
    debug(laq_full_count)
 
-   val stq_full_count = Reg(init = UInt(0, xprLen))
+   val stq_full_count = Reg(init = UInt(0, xLen))
    when (stq_full) { stq_full_count := stq_full_count + UInt(1) }
    debug(stq_full_count)
 
-   val stalls = Reg(init = UInt(0, xprLen))
+   val stalls = Reg(init = UInt(0, xLen))
    when (!dec_rdy) { stalls := stalls + UInt(1) }
    debug(stalls)
 
-   val lsu_misspec_count = Reg(init = UInt(0, xprLen))
+   val lsu_misspec_count = Reg(init = UInt(0, xLen))
    when (lsu_misspec) { lsu_misspec_count := lsu_misspec_count + UInt(1) }
    debug(lsu_misspec_count)
 
@@ -1278,9 +1276,9 @@ class DatPath() extends Module with BOOMCoreParameters
 
    // Time Stamp Counter & Retired Instruction Counter
    // (only used for printf and vcd dumps - the actual counters are in the CSRFile)
-   val tsc_reg = Reg(init = UInt(0, xprLen))
-   val irt_reg = Reg(init = UInt(0, xprLen))
-   val irt_ei_reg = Reg(init = UInt(0, xprLen))
+   val tsc_reg = Reg(init = UInt(0, xLen))
+   val irt_reg = Reg(init = UInt(0, xLen))
+   val irt_ei_reg = Reg(init = UInt(0, xLen))
    tsc_reg := tsc_reg + UInt(1)
    irt_reg := irt_reg + PopCount(com_valids.toBits)
    when (pcr.io.status.ei) { irt_ei_reg := irt_ei_reg + PopCount(com_valids.toBits) }
@@ -1785,18 +1783,18 @@ class DatPath() extends Module with BOOMCoreParameters
          {
             when (com_uops(w).dst_rtype === RT_FIX && com_uops(w).ldst != UInt(0))
             {
-//               printf("0x%x (0x%x) x%d 0x%x |%d\n", com_uops(w).pc, com_uops(w).inst, com_uops(w).inst(RD_MSB,RD_LSB), com_uops(w).debug_wdata, tsc_reg)
-               printf("@@@ 0x%x (0x%x) x%d 0x%x\n", Sext(com_uops(w).pc(vaddrBits,0), xprLen), com_uops(w).inst, com_uops(w).inst(RD_MSB,RD_LSB), com_uops(w).debug_wdata)
+               printf("0x%x (0x%x) x%d 0x%x |%d\n", Sext(com_uops(w).pc(vaddrBits,0), xLen), com_uops(w).inst, com_uops(w).inst(RD_MSB,RD_LSB), com_uops(w).debug_wdata, tsc_reg)
+//               printf("@@@ 0x%x (0x%x) x%d 0x%x\n", Sext(com_uops(w).pc(vaddrBits,0), xLen), com_uops(w).inst, com_uops(w).inst(RD_MSB,RD_LSB), com_uops(w).debug_wdata)
             }
             .elsewhen (com_uops(w).dst_rtype === RT_FLT)
             {
-//               printf("0x%x (0x%x) f%d 0x%x |%d\n", com_uops(w).pc, com_uops(w).inst, com_uops(w).inst(RD_MSB,RD_LSB), com_uops(w).debug_wdata, tsc_reg)
-               printf("@@@ 0x%x (0x%x) f%d 0x%x\n", Sext(com_uops(w).pc(vaddrBits,0), xprLen), com_uops(w).inst, com_uops(w).inst(RD_MSB,RD_LSB), com_uops(w).debug_wdata)
+               printf("0x%x (0x%x) f%d 0x%x |%d\n", Sext(com_uops(w).pc(vaddrBits,0), xLen), com_uops(w).inst, com_uops(w).inst(RD_MSB,RD_LSB), com_uops(w).debug_wdata, tsc_reg)
+//               printf("@@@ 0x%x (0x%x) f%d 0x%x\n", Sext(com_uops(w).pc(vaddrBits,0), xLen), com_uops(w).inst, com_uops(w).inst(RD_MSB,RD_LSB), com_uops(w).debug_wdata)
             }
             .otherwise
             {
-//               printf("0x%x (0x%x) |%d\n", com_uops(w).pc, com_uops(w).inst, tsc_reg)
-               printf("@@@ 0x%x (0x%x)\n", Sext(com_uops(w).pc(vaddrBits,0), xprLen), com_uops(w).inst)
+               printf("0x%x (0x%x) |%d\n\n", Sext(com_uops(w).pc(vaddrBits,0), xLen), com_uops(w).inst, tsc_reg)
+//               printf("@@@ 0x%x (0x%x)\n", Sext(com_uops(w).pc(vaddrBits,0), xLen), com_uops(w).inst)
             }
          }
       }
@@ -1812,8 +1810,8 @@ class DatPath() extends Module with BOOMCoreParameters
 
    io.ptw_dat.ptbr := pcr.io.ptbr
    io.ptw_dat.invalidate := pcr.io.fatc
-   io.ptw_dat.sret := com_sret
    io.ptw_dat.status := pcr.io.status
+   io.dmem.sret := com_sret
 
    //-------------------------------------------------------------
    //-------------------------------------------------------------

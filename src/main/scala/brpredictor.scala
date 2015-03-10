@@ -44,13 +44,13 @@ class BrPrediction extends Bundle
 class BrPredictorIo()  extends BOOMCoreBundle
 {
    // perform prediction
-   val curr_pc         = UInt(INPUT, xprLen)
+   val curr_pc         = UInt(INPUT, xLen)
    val prediction_info = new BrPrediction().asOutput()
 //   val prediction_info = prediction.asOutput
 
    // update prediction
    val update_wen      = Bool(INPUT)
-   val update_pc       = UInt(INPUT, xprLen)
+   val update_pc       = UInt(INPUT, xLen)
    val update_taken    = Bool(INPUT)                  // what actually happened
    val update_pred     = new BrPrediction().asInput() // the prediction info 
 //   val update_pred     = prediction.asInput //new BrPrediction().asInput() // the prediction info 
@@ -84,12 +84,12 @@ class SimpleBrPredictor(num_entries: Int = 128, counter_sz: Int = 2, pc_lsb: Int
    val counter_table = Module(new CounterTable(num_entries, counter_sz))
 
    // Choosing which bits to index off of the PC is bit of an art-form...
-   counter_table.io.predict_index := io.curr_pc(xprLen-1,pc_lsb)
+   counter_table.io.predict_index := io.curr_pc(xLen-1,pc_lsb)
    prediction                     := counter_table.io.predict_taken
 
    // update counter table
    counter_table.io.update_taken  := io.update_taken
-   counter_table.io.update_index  := io.update_pc(xprLen-1,pc_lsb)
+   counter_table.io.update_index  := io.update_pc(xLen-1,pc_lsb)
    counter_table.io.update_wen    := io.update_wen
 
    io.prediction_info.taken := prediction
@@ -121,12 +121,12 @@ class GShareBrPredictor(num_entries: Int = 128, counter_sz: Int = 2, pc_lsb: Int
    val counter_table  = Module(new CounterTable(num_entries, counter_sz))
 
    val prediction = counter_table.io.predict_taken
-   counter_table.io.predict_index := io.curr_pc(xprLen-1,pc_lsb) ^ global_history.toUInt
+   counter_table.io.predict_index := io.curr_pc(xLen-1,pc_lsb) ^ global_history.toUInt
 
    // update counter table
    counter_table.io.update_wen   := io.update_wen
    counter_table.io.update_taken := io.update_taken
-   counter_table.io.update_index := io.update_pc(xprLen-1,pc_lsb) ^ global_history.toUInt
+   counter_table.io.update_index := io.update_pc(xLen-1,pc_lsb) ^ global_history.toUInt
 
    //update history register
    when (io.update_wen)

@@ -143,12 +143,13 @@ class DCacheResp extends BOOMCoreBundle
 // from pov of datapath
 class DCMemPortIo extends BOOMCoreBundle
 {
-   val req    = (new DecoupledIO(new DCacheReq))
-   val resp   = (new ValidIO(new DCacheResp)).flip
+   val req     = (new DecoupledIO(new DCacheReq))
+   val resp    = (new ValidIO(new DCacheResp)).flip
 
-   val brinfo = new BrResolutionInfo().asOutput()
-   val nack   = new NackInfo().asInput()
+   val brinfo  = new BrResolutionInfo().asOutput()
+   val nack    = new NackInfo().asInput()
    val flush_pipe  = Bool(OUTPUT) //exception or other misspec which flushes entire pipeline
+   val sret    = Bool(OUTPUT) // should the dcache clear ld/sc reservations?
    val ordered = Bool(INPUT) // is the dcache ordered? (fence is done)
 
    val debug = new BOOMCoreBundle

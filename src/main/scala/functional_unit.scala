@@ -63,9 +63,9 @@ class FunctionalUnitIo(num_stages: Int
    val get_rob_pc = new Bundle
    {
       val rob_idx = UInt(OUTPUT, ROB_ADDR_SZ)
-      val curr_pc = UInt(INPUT, xprLen)
+      val curr_pc = UInt(INPUT, xLen)
       val next_val= Bool(INPUT)
-      val next_pc = UInt(INPUT, xprLen)
+      val next_pc = UInt(INPUT, xLen)
    }
 }
 
@@ -110,10 +110,10 @@ class BypassData(num_bypass_ports: Int, data_width: Int) extends BOOMCoreBundle
 class BranchUnitResp extends BOOMCoreBundle
 {
    val take_pc         = Bool()
-   val target          = UInt(width = xprLen)
+   val target          = UInt(width = xLen)
    val taken           = Bool()
 
-   val pc              = UInt(width = xprLen) // TODO this isn't really a branch_unit thing
+   val pc              = UInt(width = xLen) // TODO this isn't really a branch_unit thing
 
    val brinfo          = new BrResolutionInfo() // NOTE: delayed a cycle!
    val btb_update_valid= Bool() // TODO turn this into a directed bundle so we can fold this into btb_update?
@@ -212,7 +212,7 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)
              extends PipelinedFunctionalUnit(num_stages = num_stages
                                             , num_bypass_stages = num_stages
                                             , earliest_bypass_stage = 0
-                                            , data_width = 64  //xprLen
+                                            , data_width = 64  //xLen
                                             , is_branch_unit = is_branch_unit)
              with BOOMCoreParameters
 {
@@ -237,7 +237,7 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)
    }
 
    // operand 2 select
-   val op2_data = Mux(io.req.bits.uop.ctrl.op2_sel === OP2_IMM,  Sext(imm_xprlen, xprLen),
+   val op2_data = Mux(io.req.bits.uop.ctrl.op2_sel === OP2_IMM,  Sext(imm_xprlen, xLen),
                   Mux(io.req.bits.uop.ctrl.op2_sel === OP2_IMMC, io.req.bits.uop.pop1(4,0),
                   Mux(io.req.bits.uop.ctrl.op2_sel === OP2_RS2 , io.req.bits.rs2_data,
                   Mux(io.req.bits.uop.ctrl.op2_sel === OP2_FOUR, UInt(4),
@@ -275,10 +275,10 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)
       val rs2 = io.req.bits.rs2_data
       val br_eq  = (rs1 === rs2)
       val br_ltu = (rs1.toUInt < rs2.toUInt)
-      val br_lt  = (~(rs1(xprLen-1) ^ rs2(xprLen-1)) & br_ltu |
-                      rs1(xprLen-1) & ~rs2(xprLen-1)).toBool
+      val br_lt  = (~(rs1(xLen-1) ^ rs2(xLen-1)) & br_ltu |
+                      rs1(xLen-1) & ~rs2(xLen-1)).toBool
 
-      val pc_plus4 = (uop_pc_ + UInt(4))(xprLen-1,0)
+      val pc_plus4 = (uop_pc_ + UInt(4))(xLen-1,0)
 
       val pc_sel = Lookup(io.req.bits.uop.ctrl.br_type, PC_PLUS4,
                Array(   BR_N  -> PC_PLUS4,
@@ -380,12 +380,12 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)
    // Response
    // TODO add clock gate on resp bits from functional units
 //   io.resp.bits.data := RegEnable(alu.io.out, io.req.valid)
-//   val reg_data = Reg(outType = Bits(width = xprLen))
+//   val reg_data = Reg(outType = Bits(width = xLen))
 //   reg_data := alu.io.out
 //   io.resp.bits.data := reg_data
 
    val r_val  = Vec.fill(num_stages) { Reg(init = Bool(false)) }
-   val r_data = Vec.fill(num_stages) { Reg(Bits(xprLen)) }
+   val r_data = Vec.fill(num_stages) { Reg(Bits(xLen)) }
    r_val (0) := io.req.valid
    r_data(0) := alu.io.out
    for (i <- 1 until num_stages)

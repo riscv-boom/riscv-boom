@@ -22,7 +22,7 @@ case object EnableCommitMapTable extends Field[Boolean]
 
 abstract trait BOOMCoreParameters extends rocket.CoreParameters
 {
-   require(xprLen == 64)
+   require(xLen == 64)
 
    //************************************
    // Superscalar Widths
@@ -80,7 +80,6 @@ abstract trait BOOMCoreParameters extends rocket.CoreParameters
 
    val corePAddrBits = params(uncore.PAddrBits)
 
-   val vaddrBits = params(uncore.VAddrBits)
    val fastMulDiv = params(FastMulDiv)
 
 }

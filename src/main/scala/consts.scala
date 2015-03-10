@@ -15,7 +15,7 @@ import Node._
 trait BOOMDebugConstants
 {
    val DEBUG_PRINTF        = false // use the Chisel printf functionality
-   val DEBUG_ENABLE_COLOR  = true  // provide color to print outs? requires a VIM plugin to work properly :(
+   val DEBUG_ENABLE_COLOR  = false // provide color to print outs? requires a VIM plugin to work properly :(
    val COMMIT_LOG_PRINTF   = false // dump commit state, for comparision against ISA sim
    val COMMIT_LOG_EI_ONLY  = true  // print out commit log only when interrupts enabled
 }
@@ -82,10 +82,10 @@ trait ScalarOpConstants
 
    // Is 32b Word or 64b Doubldword?
    val SZ_DW = 1
-   val DW_X   = Bool(true) //Bool(xprLen==64)
+   val DW_X   = Bool(true) //Bool(xLen==64)
    val DW_32  = Bool(false)
    val DW_64  = Bool(true)
-   val DW_XPR = Bool(true) //Bool(xprLen==64)
+   val DW_XPR = Bool(true) //Bool(xLen==64)
 
    // Memory Enable Signal
    val MEN_0   = Bool(false)

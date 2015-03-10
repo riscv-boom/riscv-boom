@@ -36,15 +36,15 @@ class BOOMTile(resetSignal: Bool = null) extends Tile(resetSignal)
   dcArb.io.requestor(1) <> dc_shim.io.dmem
   dcArb.io.mem <> dcache.io.cpu
 
-  ptw.io.requestor(0) <> icache.io.cpu.ptw
+  ptw.io.requestor(0) <> icache.io.ptw
   ptw.io.requestor(1) <> core.io.ptw_tlb
 
   // the dcache's built-in TLB will be unused, but it still needs some of the
   // status/sret signals for things such as lr/sc
   //ptw.io.requestor(1) <> dcache.io.cpu.ptw
-  dcache.io.cpu.ptw.sret := ptw.io.requestor(1).sret
-  dcache.io.cpu.ptw.status <> ptw.io.requestor(1).status
-  dcache.io.cpu.ptw.invalidate := ptw.io.requestor(1).invalidate
+  dcache.io.cpu.sret := core.io.dmem.sret
+  dcache.io.ptw.status <> ptw.io.requestor(1).status
+  dcache.io.ptw.invalidate := ptw.io.requestor(1).invalidate
 
   core.io.host <> io.host
   core.io.imem <> icache.io.cpu

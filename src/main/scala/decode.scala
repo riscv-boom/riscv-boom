@@ -277,7 +277,7 @@ class DecodeUnit() extends Module
    // Exception Handling
    val exc_illegal    = !cs_inst_val
 
-   var exc_interrupts = (0 until io.status.ip.getWidth).map(i => (io.status.im(i) && io.status.ip(i), UInt(BigInt(1) << (params(XprLen)-1) | i)))
+   var exc_interrupts = (0 until io.status.ip.getWidth).map(i => (io.status.im(i) && io.status.ip(i), UInt(BigInt(1) << (params(XLen)-1) | i)))
    val (exc_interrupt_unmasked, exc_interrupt_cause) = checkExceptions(exc_interrupts)
    val exc_interrupt = io.status.ei && exc_interrupt_unmasked
 

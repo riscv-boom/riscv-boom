@@ -62,7 +62,7 @@ class LoadStoreUnitIo(pl_width: Int) extends BOOMCoreBundle
    val new_stq_idx        = UInt(OUTPUT, MEM_ADDR_SZ)
 
    // Execute Stage
-   val exe_resp           = (new ValidIO(new FuncUnitResp(xprLen))).flip
+   val exe_resp           = (new ValidIO(new FuncUnitResp(xLen))).flip
 
    // Commit Stage
    val commit_store_mask  = Vec.fill(pl_width) {Bool(INPUT)}
@@ -71,7 +71,7 @@ class LoadStoreUnitIo(pl_width: Int) extends BOOMCoreBundle
    // Send out Memory Request
    val memreq_val         = Bool(OUTPUT)
    val memreq_addr        = UInt(OUTPUT, corePAddrBits)
-   val memreq_wdata       = Bits(OUTPUT, xprLen)
+   val memreq_wdata       = Bits(OUTPUT, xLen)
    val memreq_uop         = new MicroOp().asOutput()
 
    val memreq_kill        = Bool(OUTPUT) // kill request sent out last cycle
@@ -79,7 +79,7 @@ class LoadStoreUnitIo(pl_width: Int) extends BOOMCoreBundle
    // Forward Store Data to Register File
    // TODO turn into forward bundle
    val forward_val        = Bool(OUTPUT)
-   val forward_data       = Bits(OUTPUT, xprLen)
+   val forward_data       = Bits(OUTPUT, xLen)
    val forward_uop        = new MicroOp().asOutput() // the load microop (for its pdst)
 
    // Receive Memory Response
@@ -140,7 +140,7 @@ class LoadStoreUnitIo(pl_width: Int) extends BOOMCoreBundle
       val mem_fired_ld    = Bool()
       val entry = Vec.fill(NUM_LSU_ENTRIES) { new Bundle {
          val laq_addr_val = Bool()
-         val laq_addr = UInt(width=xprLen)
+         val laq_addr = UInt(width=xLen)
          val laq_allocated = Bool()
          val laq_executed = Bool()
          val laq_succeeded = Bool()
@@ -153,8 +153,8 @@ class LoadStoreUnitIo(pl_width: Int) extends BOOMCoreBundle
          val stq_entry_val = Bool()
          val saq_val = Bool()
          val sdq_val = Bool()
-         val saq_addr = UInt(width=xprLen)
-         val sdq_data = Bits(width=xprLen)
+         val saq_addr = UInt(width=xLen)
+         val sdq_data = Bits(width=xLen)
          val stq_executed = Bool()
          val stq_succeeded = Bool()
          val stq_committed = Bool()
@@ -204,7 +204,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
 
    // Store-Data Queue
    val sdq_val       = Vec.fill(num_st_entries) { Reg(Bool()) }
-   val sdq_data      = Vec.fill(num_st_entries) { Reg(Bits(width = xprLen)) }
+   val sdq_data      = Vec.fill(num_st_entries) { Reg(Bits(width = xLen)) }
 
    // Shared Store Queue Information
    val stq_uop       = Vec.fill(num_st_entries) { Reg(new MicroOp()) }
@@ -391,7 +391,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
                      Mux(will_fire_load_retry, laq_addr(laq_retry_idx),
                                                io.exe_resp.bits.data.toUInt))
 
-   val dtlb = Module(new rocket.TLB(params(rocket.NDTLBEntries)))
+   val dtlb = Module(new rocket.TLB)
    dtlb.io.ptw <> io.ptw
    dtlb.io.req.valid := will_fire_load_incoming ||
                         will_fire_sta_incoming ||
