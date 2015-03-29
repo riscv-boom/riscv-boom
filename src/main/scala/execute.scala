@@ -34,13 +34,6 @@ class FFlagsResp extends BOOMCoreBundle
    val flags = Bits(width=rocket.FPConstants.FLAGS_SZ)
 }
 
-class LSUExceptions extends BOOMCoreBundle
-{
-   val uop = new MicroOp()
-   val cause = Bits(width=log2Up(rocket.Causes.all.max))
-   val badvaddr = UInt(width=coreMaxAddrBits)
-}
-
 class ExecutionUnitIo(num_rf_read_ports: Int
                      , num_rf_write_ports: Int
                      , num_bypass_ports: Int
@@ -82,7 +75,7 @@ abstract class ExecutionUnit(val num_rf_read_ports: Int
                             , val num_variable_write_ports: Int = 0
                             , var bypassable: Boolean           = false
                             , val is_mem_unit: Boolean          = false
-                            , var uses_pcr_wport: Boolean       = false
+                            , var uses_csr_wport: Boolean       = false
                             ,     is_branch_unit: Boolean       = false
                             , val has_fpu       : Boolean       = false // can return fflags
                             ) extends Module with BOOMCoreParameters
@@ -104,20 +97,20 @@ abstract class ExecutionUnit(val num_rf_read_ports: Int
 
 
 class ALUExeUnit(is_branch_unit: Boolean = false
-                , shares_pcr_wport: Boolean = false
+                , shares_csr_wport: Boolean = false
                 ) extends ExecutionUnit(num_rf_read_ports = 2
                                        , num_rf_write_ports = 1
                                        , num_bypass_stages = 1
                                        , data_width = 64 // TODO need to use xLen here
                                        , bypassable = true
                                        , is_mem_unit = false
-                                       , uses_pcr_wport = shares_pcr_wport
+                                       , uses_csr_wport = shares_csr_wport
                                        , is_branch_unit = is_branch_unit
                                        )
 {
    io.fu_types := FU_ALU |
                   FU_CNTR |
-                  (Mux(Bool(shares_pcr_wport), FU_PCR, Bits(0))) |
+                  (Mux(Bool(shares_csr_wport), FU_CSR, Bits(0))) |
                   (Mux(Bool(is_branch_unit), FU_BRU, Bits(0)))
 
 
@@ -142,14 +135,14 @@ class ALUExeUnit(is_branch_unit: Boolean = false
 }
 
 class FPUALUExeUnit(is_branch_unit: Boolean = false
-                , shares_pcr_wport: Boolean = false
+                , shares_csr_wport: Boolean = false
                 ) extends ExecutionUnit(num_rf_read_ports = 3
                                        , num_rf_write_ports = 1
                                        , num_bypass_stages = 3 // TODO FPU LATENCY ADAM
                                        , data_width = 65
                                        , bypassable = true
                                        , is_mem_unit = false
-                                       , uses_pcr_wport = shares_pcr_wport
+                                       , uses_csr_wport = shares_csr_wport
                                        , is_branch_unit = is_branch_unit
                                        , has_fpu = true
                                        )
@@ -157,7 +150,7 @@ class FPUALUExeUnit(is_branch_unit: Boolean = false
    io.fu_types := FU_ALU |
                   FU_CNTR |
                   FU_FPU |
-                  (Mux(Bool(shares_pcr_wport), FU_PCR, Bits(0))) |
+                  (Mux(Bool(shares_csr_wport), FU_CSR, Bits(0))) |
                   (Mux(Bool(is_branch_unit), FU_BRU, Bits(0)))
 
 
@@ -166,7 +159,7 @@ class FPUALUExeUnit(is_branch_unit: Boolean = false
    alu.io.req.valid         := io.req.valid &&
                                    ((io.req.bits.uop.fu_code === FU_ALU) ||
                                    (io.req.bits.uop.fu_code === FU_BRU) ||
-                                   (io.req.bits.uop.fu_code === FU_PCR) ||
+                                   (io.req.bits.uop.fu_code === FU_CSR) ||
                                    (io.req.bits.uop.fu_code === FU_CNTR))
    alu.io.req.bits.uop      := io.req.bits.uop
    alu.io.req.bits.kill     := io.req.bits.kill
@@ -246,7 +239,7 @@ class MulDExeUnit extends ExecutionUnit(num_rf_read_ports = 2
 
 
 class ALUMulDExeUnit(is_branch_unit: Boolean = false
-                    , shares_pcr_wport: Boolean = false
+                    , shares_csr_wport: Boolean = false
                     ) extends ExecutionUnit(num_rf_read_ports = 2
                                            , num_rf_write_ports = 1
                                            , num_bypass_stages = 1
@@ -254,7 +247,7 @@ class ALUMulDExeUnit(is_branch_unit: Boolean = false
                                            , num_variable_write_ports = 1
                                            , bypassable = true
                                            , is_mem_unit = false
-                                           , uses_pcr_wport = shares_pcr_wport
+                                           , uses_csr_wport = shares_csr_wport
                                            , is_branch_unit = is_branch_unit
                                            )
 {
@@ -262,7 +255,7 @@ class ALUMulDExeUnit(is_branch_unit: Boolean = false
    io.fu_types := (FU_ALU |
                   FU_CNTR |
                   (Mux(!muldiv_busy, FU_MULD, Bits(0))) |
-                  (Mux(Bool(shares_pcr_wport), FU_PCR, Bits(0))) |
+                  (Mux(Bool(shares_csr_wport), FU_CSR, Bits(0))) |
                   (Mux(Bool(is_branch_unit), FU_BRU, Bits(0))))
 
 
@@ -271,7 +264,7 @@ class ALUMulDExeUnit(is_branch_unit: Boolean = false
    alu.io.req.valid         := io.req.valid &&
                                     ((io.req.bits.uop.fu_code === FU_ALU) ||
                                      (io.req.bits.uop.fu_code === FU_BRU) ||
-                                     (io.req.bits.uop.fu_code === FU_PCR) ||
+                                     (io.req.bits.uop.fu_code === FU_CSR) ||
                                      (io.req.bits.uop.fu_code === FU_CNTR))
    alu.io.req.bits.uop      := io.req.bits.uop
    alu.io.req.bits.kill     := io.req.bits.kill
@@ -433,7 +426,7 @@ class MemExeUnit extends ExecutionUnit(num_rf_read_ports = 2 // TODO make this 1
 
 
 class ALUMulDMemExeUnit(is_branch_unit: Boolean = false
-                       , shares_pcr_wport: Boolean = false
+                       , shares_csr_wport: Boolean = false
                        ) extends ExecutionUnit(num_rf_read_ports = 2
                                               , num_rf_write_ports = 2
                                               , num_bypass_stages = 1
@@ -441,7 +434,7 @@ class ALUMulDMemExeUnit(is_branch_unit: Boolean = false
                                               , num_variable_write_ports = 1
                                               , bypassable = true
                                               , is_mem_unit = true
-                                              , uses_pcr_wport = shares_pcr_wport
+                                              , uses_csr_wport = shares_csr_wport
                                               , is_branch_unit = is_branch_unit)
 {
    val muldiv_busy = Bool()
@@ -449,7 +442,7 @@ class ALUMulDMemExeUnit(is_branch_unit: Boolean = false
                   FU_CNTR |
                   FU_MEM |
                   (Mux(!muldiv_busy, FU_MULD, Bits(0))) |
-                  (Mux(Bool(shares_pcr_wport), FU_PCR, Bits(0))) |
+                  (Mux(Bool(shares_csr_wport), FU_CSR, Bits(0))) |
                   (Mux(Bool(is_branch_unit), FU_BRU, Bits(0))))
 
 
@@ -461,7 +454,7 @@ class ALUMulDMemExeUnit(is_branch_unit: Boolean = false
    alu.io.req.valid         := io.req.valid &&
                                     ((io.req.bits.uop.fu_code === FU_ALU) ||
                                      (io.req.bits.uop.fu_code === FU_BRU) ||
-                                     (io.req.bits.uop.fu_code === FU_PCR) ||
+                                     (io.req.bits.uop.fu_code === FU_CSR) ||
                                      (io.req.bits.uop.fu_code === FU_CNTR))
    alu.io.req.bits.uop      := io.req.bits.uop
    alu.io.req.bits.kill     := io.req.bits.kill
@@ -601,7 +594,7 @@ class ALUMulDMemExeUnit(is_branch_unit: Boolean = false
 
 // TODO add the FPU as an input flag to prevent too many separate classes here?
 class FPUALUMulDMemExeUnit(is_branch_unit: Boolean = false
-                       , shares_pcr_wport: Boolean = false
+                       , shares_csr_wport: Boolean = false
                        ) extends ExecutionUnit(num_rf_read_ports = 3
                                               , num_rf_write_ports = 2
                                               , num_bypass_stages = 3 // TODO FPU_LATENCY Adam
@@ -609,7 +602,7 @@ class FPUALUMulDMemExeUnit(is_branch_unit: Boolean = false
                                               , num_variable_write_ports = 1
                                               , bypassable = true
                                               , is_mem_unit = true
-                                              , uses_pcr_wport = shares_pcr_wport
+                                              , uses_csr_wport = shares_csr_wport
                                               , is_branch_unit = is_branch_unit
                                               , has_fpu = true
                                              )
@@ -622,7 +615,7 @@ class FPUALUMulDMemExeUnit(is_branch_unit: Boolean = false
                   FU_MEM |
                   FU_FPU |
                   (Mux(!muldiv_busy, FU_MULD, Bits(0))) |
-                  (Mux(Bool(shares_pcr_wport), FU_PCR, Bits(0))) |
+                  (Mux(Bool(shares_csr_wport), FU_CSR, Bits(0))) |
                   (Mux(Bool(is_branch_unit), FU_BRU, Bits(0))))
 
 
@@ -634,7 +627,7 @@ class FPUALUMulDMemExeUnit(is_branch_unit: Boolean = false
    alu.io.req.valid         := io.req.valid &&
                                     ((io.req.bits.uop.fu_code === FU_ALU) ||
                                      (io.req.bits.uop.fu_code === FU_BRU) ||
-                                     (io.req.bits.uop.fu_code === FU_PCR) ||
+                                     (io.req.bits.uop.fu_code === FU_CSR) ||
                                      (io.req.bits.uop.fu_code === FU_CNTR))
    alu.io.req.bits.uop      := io.req.bits.uop
    alu.io.req.bits.kill     := io.req.bits.kill

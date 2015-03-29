@@ -252,12 +252,7 @@ trait ScalarOpConstants
    val uopFNMADD_D  = Bits(116,UOPC_SZ)
    val uopFNMSUB_D  = Bits(117,UOPC_SZ)
 
-   // Enable Co-processor Register Signal (ToHost Register, etc.)
-   //val PCR_N   = UInt(0,3)    // do nothing
-   val PCR_F   = UInt(1,3)    // mfpcr
-   val PCR_T   = UInt(2,3)    // mtpcr
-   val PCR_C   = UInt(3,3)    // clear pcr
-   val PCR_S   = UInt(4,3)    // set pcr
+   val uopSYSTEM    = Bits(118, UOPC_SZ) // pass uop down the CSR pipeline and let it handle it
 
    // Memory Mask Type Signal
    val MSK_X   = UInt("b???", 3)
@@ -294,7 +289,7 @@ trait ScalarOpConstants
       val cs = new CtrlSignals()
       cs.br_type     := BR_N
       cs.rf_wen      := Bool(false)
-      cs.pcr_fcn     := rocket.CSR.N
+      cs.csr_cmd     := rocket.CSR.N
       cs.is_load     := Bool(false)
       cs.is_sta      := Bool(false)
       cs.is_std      := Bool(false)
@@ -303,11 +298,6 @@ trait ScalarOpConstants
       uop
    }
 
-}
-
-trait InterruptConstants
-{
-   val CAUSE_INTERRUPT = 32
 }
 
 trait RISCVConstants

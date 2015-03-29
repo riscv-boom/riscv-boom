@@ -306,7 +306,6 @@ class IssueUnit(issue_width: Int, num_wakeup_ports: Int) extends Module with BOO
          // TODO add ctrl bit for "allocates iss_slot"
          temp_1stuop_val (w) := io.dis_mask(w) &&
                                  !io.dis_uops(w).exception &&
-                                 !io.dis_uops(w).sret &&
                                  !io.dis_uops(w).is_fence &&
                                  !io.dis_uops(w).is_fencei &&
                                  entry_wen_oh_array(i)(2*w)

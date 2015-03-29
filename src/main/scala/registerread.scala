@@ -223,7 +223,7 @@ class RegisterReadDecode extends Module
 
                              // br type
                              // |      use alu pipe              op1 sel   op2 sel
-                             // |      |  use muldiv pipe        |         |         immsel       pcr fcn
+                             // |      |  use muldiv pipe        |         |         immsel       csr_cmd
                              // |      |  |  use mem pipe        |         |         |     rf wen |
    val rrd_csignals =        // |      |  |  |  alu fcn  wd/word?|         |         |     |      |
       rocket.DecodeLogic(    // |      |  |  |  |        |       |         |         |     |      |
@@ -296,13 +296,15 @@ class RegisterReadDecode extends Module
                uopJALR  -> List(BR_JR, Y, N, N, FN_ADD , DW_XPR, OP1_PC  , OP2_FOUR, IS_I, REN_1, rocket.CSR.N),
                uopAUIPC -> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP1_PC  , OP2_IMM , IS_U, REN_1, rocket.CSR.N),
 
-               uopCSRRW -> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP1_RS1 , OP2_ZERO, IS_X, REN_1, rocket.CSR.W),
-               uopCSRRS -> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP1_RS1 , OP2_ZERO, IS_X, REN_1, rocket.CSR.S),
-               uopCSRRC -> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP1_RS1 , OP2_ZERO, IS_X, REN_1, rocket.CSR.C),
+               uopCSRRW -> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP1_RS1 , OP2_ZERO, IS_I, REN_1, rocket.CSR.W),
+               uopCSRRS -> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP1_RS1 , OP2_ZERO, IS_I, REN_1, rocket.CSR.S),
+               uopCSRRC -> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP1_RS1 , OP2_ZERO, IS_I, REN_1, rocket.CSR.C),
 
-               uopCSRRWI-> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP1_ZERO, OP2_IMMC, IS_X, REN_1, rocket.CSR.W),
-               uopCSRRSI-> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP1_ZERO, OP2_IMMC, IS_X, REN_1, rocket.CSR.S),
-               uopCSRRCI-> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP1_ZERO, OP2_IMMC, IS_X, REN_1, rocket.CSR.C),
+               uopCSRRWI-> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP1_ZERO, OP2_IMMC, IS_I, REN_1, rocket.CSR.W),
+               uopCSRRSI-> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP1_ZERO, OP2_IMMC, IS_I, REN_1, rocket.CSR.S),
+               uopCSRRCI-> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP1_ZERO, OP2_IMMC, IS_I, REN_1, rocket.CSR.C),
+
+               uopSYSTEM-> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP1_ZERO, OP2_IMMC, IS_I, REN_0, rocket.CSR.I),
 
                // floating-point
                uopFCLASS_S->List(BR_N, Y, N, N, FN_X   , DW_X  , OP1_X   , OP2_X   , IS_X, REN_1, rocket.CSR.N),
@@ -363,10 +365,9 @@ class RegisterReadDecode extends Module
                uopFMSUB_D ->List(BR_N, Y, N, N, FN_X   , DW_X  , OP1_X   , OP2_X   , IS_X, REN_1, rocket.CSR.N),
                uopFNMADD_D->List(BR_N, Y, N, N, FN_X   , DW_X  , OP1_X   , OP2_X   , IS_X, REN_1, rocket.CSR.N),
                uopFNMSUB_D->List(BR_N, Y, N, N, FN_X   , DW_X  , OP1_X   , OP2_X   , IS_X, REN_1, rocket.CSR.N)
+               ))
 
-               ));
-
-   val rrd_br_type :: rrd_use_alupipe :: rrd_use_muldivpipe :: rrd_use_mempipe :: rrd_op_fcn :: rrd_fcn_dw :: rrd_op1_sel :: rrd_op2_sel :: rrd_imm_sel :: (rrd_rf_wen: Bool) :: rrd_pcr_fcn :: Nil = rrd_csignals;
+   val rrd_br_type :: rrd_use_alupipe :: rrd_use_muldivpipe :: rrd_use_mempipe :: rrd_op_fcn :: rrd_fcn_dw :: rrd_op1_sel :: rrd_op2_sel :: rrd_imm_sel :: (rrd_rf_wen: Bool) :: rrd_csr_cmd :: Nil = rrd_csignals;
 
    require (rrd_op_fcn.getWidth == FN_SRA.getWidth)
 
@@ -379,11 +380,13 @@ class RegisterReadDecode extends Module
    io.rrd_uop.ctrl.imm_sel := rrd_imm_sel
    io.rrd_uop.ctrl.op_fcn  := rrd_op_fcn.toBits
    io.rrd_uop.ctrl.fcn_dw  := rrd_fcn_dw.toBool
-   io.rrd_uop.ctrl.pcr_fcn := rrd_pcr_fcn
    io.rrd_uop.ctrl.is_load := io.rrd_uop.uopc === uopLD
    io.rrd_uop.ctrl.is_sta  := io.rrd_uop.uopc === uopSTA || io.rrd_uop.uopc === uopAMO_AG
    io.rrd_uop.ctrl.is_std  := io.rrd_uop.uopc === uopSTD
 
+   val raddr1 = io.rrd_uop.pop1 // although renamed, it'll stay 0 if lrs1 = 0
+   val csr_ren = (rrd_csr_cmd === rocket.CSR.S || rrd_csr_cmd === rocket.CSR.C) && raddr1 === UInt(0)
+   io.rrd_uop.ctrl.csr_cmd := Mux(csr_ren, rocket.CSR.R, rrd_csr_cmd)
 
    //-------------------------------------------------------------
    // set outputs

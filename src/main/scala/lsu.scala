@@ -97,7 +97,7 @@ class LoadStoreUnitIo(pl_width: Int) extends BOOMCoreBundle
    val lsu_clr_bsy_rob_idx= UInt(OUTPUT, width=ROB_ADDR_SZ)
    val lsu_fencei_rdy     = Bool(OUTPUT)
 
-   val xcpt = new ValidIO(new LSUExceptions)
+   val xcpt = new ValidIO(new Exception)
 
    // cache nacks
    val nack               = new NackInfo().asInput()

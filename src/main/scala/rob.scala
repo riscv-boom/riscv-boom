@@ -25,6 +25,13 @@ import Chisel._
 import Node._
 import scala.math.ceil
 
+class Exception extends BOOMCoreBundle
+{
+   val uop = new MicroOp()
+   val cause = Bits(width=log2Up(rocket.Causes.all.max))
+   val badvaddr = UInt(width=coreMaxAddrBits)
+}
+
 
 class RobIo(machine_width: Int
             , num_wakeup_ports: Int
@@ -50,7 +57,9 @@ class RobIo(machine_width: Int
    val debug_wb_wdata   = Vec.fill(num_wakeup_ports) { Bits(INPUT, xLen) }
 
    val fflags = Vec.fill(num_fpu_ports) { new ValidIO(new FFlagsResp()).flip }
-   val lxcpt = new ValidIO(new LSUExceptions()).flip
+   val lxcpt = new ValidIO(new Exception()).flip // LSU
+   val bxcpt = new ValidIO(new Exception()).flip // BRU
+   val cxcpt = new ValidIO(new Exception()).flip // CSR
 
    // Commit Stage
    // (Free no-longer used register).
@@ -319,6 +328,10 @@ class Rob(width: Int
       {
          rob_exception(GetRowIdx(io.lxcpt.bits.uop.rob_idx)) := Bool(true)
       }
+      when (io.bxcpt.valid && MatchBank(GetBankIdx(io.bxcpt.bits.uop.rob_idx)))
+      {
+         rob_exception(GetRowIdx(io.bxcpt.bits.uop.rob_idx)) := Bool(true)
+      }
       can_throw_exception(w) := rob_val(rob_head) && rob_exception(rob_head)
 
       //-----------------------------------------------
@@ -475,7 +488,7 @@ class Rob(width: Int
 
    // exception must be in the commit bundle
    // Note: exception must be the first valid instruction in the commit bundle
-   exception_thrown    := will_throw_exception
+   exception_thrown    := will_throw_exception || io.cxcpt.valid
    val is_mini_exception = io.com_exc_cause === MINI_EXCEPTION_MEM_ORDERING
    io.com_exception    := exception_thrown && !is_mini_exception
    io.com_exc_cause    := r_xcpt_uop.exc_cause
@@ -540,15 +553,15 @@ class Rob(width: Int
       dis_xcpts(i) := io.dis_mask(i) && io.dis_uops(i).exception
    }
 
-   when (io.lxcpt.valid)
+   when (io.lxcpt.valid || io.bxcpt.valid)
    {
-      val new_xcpt_uop = io.lxcpt.bits.uop
+      val new_xcpt_uop = Mux(io.lxcpt.valid, io.lxcpt.bits.uop, io.bxcpt.bits.uop)
       when (!r_xcpt_val || IsOlder(new_xcpt_uop.rob_idx, r_xcpt_uop.rob_idx, rob_tail))
       {
-         r_xcpt_val      := Bool(true)
-         next_xcpt_uop   := new_xcpt_uop
-         next_xcpt_uop.exc_cause := io.lxcpt.bits.cause
-         r_xcpt_badvaddr := io.lxcpt.bits.badvaddr
+         r_xcpt_val              := Bool(true)
+         next_xcpt_uop           := new_xcpt_uop
+         next_xcpt_uop.exc_cause := Mux(io.lxcpt.valid, io.lxcpt.bits.cause, io.bxcpt.bits.cause)
+         r_xcpt_badvaddr         := Mux(io.lxcpt.valid, io.lxcpt.bits.badvaddr, io.bxcpt.bits.badvaddr)
       }
    }
    .elsewhen (!r_xcpt_val && dis_xcpts.reduce(_|_))

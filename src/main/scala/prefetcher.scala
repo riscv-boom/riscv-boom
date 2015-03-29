@@ -14,8 +14,6 @@ package BOOM
 
 import Chisel._
 import Node._
-import uncore.BlockOffBits
-
 
 //*************************************************************
 // IOs 
@@ -95,7 +93,7 @@ class Prefetcher extends Module
    }
 
    // fetch the next cache line
-   request_queue.io.enq.bits.addr := io.core_requests.bits.addr + UInt(1 << params(BlockOffBits))
+   request_queue.io.enq.bits.addr := io.core_requests.bits.addr + UInt(1 << params(uncore.CacheBlockOffsetBits))
    
     
    // hook up our request to the outside world (notice the interfaces match)

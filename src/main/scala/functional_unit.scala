@@ -34,7 +34,7 @@ object FUCode
    val FU_ALU  = Bits( 1, FUC_SZ)
    val FU_BRU  = Bits( 2, FUC_SZ)
    val FU_CNTR = Bits( 4, FUC_SZ)
-   val FU_PCR  = Bits( 8, FUC_SZ)
+   val FU_CSR  = Bits( 8, FUC_SZ)
    val FU_MULD = Bits(16, FUC_SZ)
    val FU_MEM  = Bits(32, FUC_SZ)
    val FU_FPU  = Bits(64, FUC_SZ)
@@ -119,6 +119,8 @@ class BranchUnitResp extends BOOMCoreBundle
    val btb_update_valid= Bool() // TODO turn this into a directed bundle so we can fold this into btb_update?
    val btb_update      = new rocket.BTBUpdate
    val bht_update      = Valid(new rocket.BHTUpdate)
+
+   val xcpt            = Valid(new Exception)
 
    val debug_btb_pred  = Bool() // just for debug, did the BTB and BHT predict taken?
 }
@@ -371,10 +373,16 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)
       val bj_offset = imm_xprlen(20,0).toSInt
       val bj64 = bj_base + bj_offset
       val bj_msb = Mux(uop.uopc === uopJALR, vaSign(io.req.bits.rs1_data, bj64), vaSign(uop_pc_, bj64))
-      bj_addr := Cat(bj_msb, bj64(vaddrBits-1,0))
+      bj_addr := (Cat(bj_msb, bj64(vaddrBits-1,0)) & SInt(-2)).toUInt
 
       io.br_unit.pc             := uop_pc_
       io.br_unit.debug_btb_pred := uop.btb_resp_valid && uop.btb_resp.taken
+
+      // handle misaligned branch/jmp targets
+      io.br_unit.xcpt.valid     := bj_addr(1) && io.req.valid && mispredict
+      io.br_unit.xcpt.bits.uop  := uop
+      io.br_unit.xcpt.bits.cause:= rocket.Causes.misaligned_fetch
+      io.br_unit.xcpt.bits.badvaddr:= bj_addr // TODO is there a better way to get this information to the CSR file? maybe use brinfo.target?
    }
 
    // Response

@@ -19,6 +19,7 @@ class CoreIo() extends Bundle
    val imem = new rocket.CPUFrontendIO
    val ptw_dat  = new DatapathPTWIO().flip
    val ptw_tlb  = new TLBPTWIO()
+   val rocc     = new rocket.RoCCInterface().flip
    val counters = new CacheCounters().asInput
 }
 
