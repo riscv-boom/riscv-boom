@@ -795,6 +795,8 @@ class FPUALUMulDMemExeUnit(is_branch_unit: Boolean = false
    io.resp(1).bits.uop.ctrl.rf_wen := Mux(memresp_val, memresp_rf_wen, muldiv.io.resp.bits.uop.ctrl.rf_wen)  // TODO get rid of this, it should come from the thing below
    io.resp(1).bits.data            := Mux(memresp_val, memresp_data, muldiv.io.resp.bits.data)
    io.resp(1).bits.fflags.valid    := Bool(false)
+   io.resp(1).bits.fflags.bits.uop := NullMicroOp
+   io.resp(1).bits.fflags.bits.flags:= Bits(0)
 }
 
 

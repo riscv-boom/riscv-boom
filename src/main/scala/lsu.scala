@@ -401,6 +401,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    dtlb.io.req.bits.asid := UInt(0)
    dtlb.io.req.bits.vpn := exe_vaddr >> UInt(params(PgIdxBits))
    dtlb.io.req.bits.instruction := Bool(false)
+   dtlb.io.req.bits.store := will_fire_sta_incoming || will_fire_sta_retry
 
    // exceptions
    val ma_ld = io.exe_resp.valid && io.exe_resp.bits.mxcpt.valid && exe_tlb_uop.is_load
