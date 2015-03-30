@@ -587,7 +587,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    val mem_fired_std = Reg(next=will_fire_std_incoming, init=Bool(false))
 
    mem_ld_killed := Bool(false)
-   when (IsKilledByBranch(io.brinfo, exe_ld_uop) || io.exception)
+   when (Reg(next=(IsKilledByBranch(io.brinfo, exe_ld_uop) || io.exception)) || io.exception)
    {
       mem_ld_killed := Bool(true) && mem_fired_ld
    }

@@ -433,11 +433,12 @@ class Rob(width: Int
             rob_uop(GetRowIdx(rob_idx)).debug_wdata := io.debug_wb_wdata(i)
          }
          val temp_uop = rob_uop(GetRowIdx(rob_idx))
-         assert (!(io.wb_resps(i).valid &&
-                  MatchBank(GetBankIdx(rob_idx)) &&
-                  ((temp_uop.ldst_val && temp_uop.pdst != io.wb_resps(i).bits.uop.pdst) ||
-                     !rob_val(GetRowIdx(rob_idx)))
-                  ),
+
+         assert (!(io.wb_resps(i).valid && MatchBank(GetBankIdx(rob_idx)) &&
+                     !rob_val(GetRowIdx(rob_idx))),
+                  "ROB writeback occurred to an invalid ROB entry.")
+         assert (!(io.wb_resps(i).valid && MatchBank(GetBankIdx(rob_idx)) &&
+                  temp_uop.ldst_val && temp_uop.pdst != io.wb_resps(i).bits.uop.pdst),
                   "ROB writeback occurred to the wrong pdst.")
       }
       io.com_uops(w).debug_wdata := rob_uop(rob_head).debug_wdata
