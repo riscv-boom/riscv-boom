@@ -435,8 +435,9 @@ class Rob(width: Int
          val temp_uop = rob_uop(GetRowIdx(rob_idx))
          assert (!(io.wb_resps(i).valid &&
                   MatchBank(GetBankIdx(rob_idx)) &&
-                  temp_uop.ldst_val &&
-                  temp_uop.pdst != io.wb_resps(i).bits.uop.pdst),
+                  ((temp_uop.ldst_val && temp_uop.pdst != io.wb_resps(i).bits.uop.pdst) ||
+                     !rob_val(GetRowIdx(rob_idx)))
+                  ),
                   "ROB writeback occurred to the wrong pdst.")
       }
       io.com_uops(w).debug_wdata := rob_uop(rob_head).debug_wdata
@@ -511,15 +512,17 @@ class Rob(width: Int
    // FP Exceptions
    // send fflags bits to the CSRFile to accrue
 
-   val fflags = Vec.fill(width) {Bits()}
    val fflags_val = Vec.fill(width) {Bool()}
+   val fflags     = Vec.fill(width) {Bits(width=rocket.FPConstants.FLAGS_SZ)}
+
    for (w <- 0 until width)
    {
       // TODO can I relax the ld/st constraint?
       fflags_val(w) := io.com_valids(w) &&
-                      io.com_uops(w).fp_val &&
+                       io.com_uops(w).fp_val &&
                       !(io.com_uops(w).is_load || io.com_uops(w).is_store)
-      fflags(w)     := rob_head_fflags(w)
+
+      fflags(w) := Mux(fflags_val(w), rob_head_fflags(w), Bits(0))
 
       assert (!(io.com_valids(w) &&
                !io.com_uops(w).fp_val &&

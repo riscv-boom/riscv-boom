@@ -154,12 +154,14 @@ class DCMemPortIo extends BOOMCoreBundle
 
    val debug = new BOOMCoreBundle
    {
-      val memreq = Bool()
-      val memresp = Bool()
+      val memreq_val = Bool()
+      val memreq_lidx = UInt(width=MEM_ADDR_SZ)
+      val memresp_val = Bool()
       val req_kill = Bool()
       val nack = Bool()
       val cache_nack = Bool()
-      val cache_resp_idx = UInt(width=log2Up(MAX_LD_COUNT))
+      val cache_resp_tag = UInt(width=log2Up(MAX_LD_COUNT))
+      val cache_not_ready = Bool()
 
       val ld_req_slot = Vec.fill(MAX_LD_COUNT) { new Bundle {
          val valid = Bool()
@@ -282,14 +284,12 @@ class DCacheShim extends Module with BOOMCoreParameters
 
    io.core.req.ready      := enq_rdy && io.dmem.req.ready
    io.dmem.req.valid      := (io.core.req.valid || prefetch_req_val)
-   io.dmem.req.bits.kill  := io.core.req.bits.kill || iflb_kill
-                                          // kills request sent out last cycle
+   io.dmem.req.bits.kill  := io.core.req.bits.kill || iflb_kill // kills request sent out last cycle
    io.dmem.req.bits.typ   := io.core.req.bits.uop.mem_typ
-//   io.dmem.req.bits.addr  := Mux(io.core.req.valid, io.core.req.bits.addr,prefetcher.io.cache.req.bits.addr) TODO get core.req.valid off critical path here
    io.dmem.req.bits.addr  := io.core.req.bits.addr
-   io.dmem.req.bits.tag   := Cat(!io.core.req.valid, new_inflight_tag) // TODO is there a reason i'm doing this req.valid Cat?
+   io.dmem.req.bits.tag   := new_inflight_tag
    io.dmem.req.bits.cmd   := Mux(io.core.req.valid, io.core.req.bits.uop.mem_cmd, M_PFW)
-   io.dmem.req.bits.data  := Reg(next=io.core.req.bits.data) //notice this is delayed a cycle
+   io.dmem.req.bits.data  := Reg(next=io.core.req.bits.data) //notice this is delayed a cycle!
    io.dmem.req.bits.phys  := Bool(true) // we always use physical addresses here, as we've already done our own translations
 
    //------------------------------------------------------------
@@ -300,13 +300,13 @@ class DCacheShim extends Module with BOOMCoreParameters
    val was_store_and_not_amo = m2_req_uop.is_store && !m2_req_uop.is_amo && Reg(next=Reg(next=(io.core.req.valid && io.dmem.req.ready)))  // was two cycles ago a store request?
 
    // Todo add entry valid bit?
-   val resp_idx = io.dmem.resp.bits.tag
+   val resp_tag = io.dmem.resp.bits.tag
 
-   io.core.resp.valid := Mux(cache_load_ack,                                    !inflight_load_buffer(resp_idx).was_killed, // hide loads that were killed due to branches, etc.
+   io.core.resp.valid := Mux(cache_load_ack,                                    !inflight_load_buffer(resp_tag).was_killed, // hide loads that were killed due to branches, etc.
                          Mux(was_store_and_not_amo && !io.dmem.resp.bits.nack,  Bool(true),    // stores succeed quietly, so valid if no nack
                                                                                 Bool(false)))  // filter out nacked responses
 
-   io.core.resp.bits.uop := Mux(cache_load_ack, inflight_load_buffer(resp_idx).out_uop,
+   io.core.resp.bits.uop := Mux(cache_load_ack, inflight_load_buffer(resp_tag).out_uop,
                                                 m2_req_uop)
 
    // comes out the same cycle as the resp.valid signal
@@ -339,12 +339,15 @@ class DCacheShim extends Module with BOOMCoreParameters
    //------------------------------------------------------------
    // debug
 
-   io.core.debug.memreq := io.core.req.valid
-   io.core.debug.memresp := io.core.resp.valid
+   io.core.debug.memreq_val := io.core.req.valid
+   io.core.debug.memreq_lidx := Mux(io.core.req.bits.uop.is_load, io.core.req.bits.uop.ldq_idx, io.core.req.bits.uop.stq_idx)
+   io.core.debug.memresp_val := io.core.resp.valid
+   io.core.debug.memresp_val := io.core.resp.valid
    io.core.debug.req_kill := io.core.req.bits.kill
    io.core.debug.nack := io.core.nack.valid
    io.core.debug.cache_nack := io.core.nack.cache_nack
-   io.core.debug.cache_resp_idx := resp_idx
+   io.core.debug.cache_resp_tag := resp_tag
+   io.core.debug.cache_not_ready := !io.core.req.ready
 
    for (i <- 0 until max_num_inflight)
    {

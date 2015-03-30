@@ -20,9 +20,9 @@ class BOOMTile(resetSignal: Bool = null) extends rocket.Tile(resetSignal)
    val dcachePortId = 0
    val icachePortId = 1
 
-   val core = Module(new Core, { case CoreName => "BOOM"})
-   val icache = Module(new rocket.Frontend(btb_updates_out_of_order=true), { case CacheName => "L1I"; case CoreName => "BOOM" })
-   val dcache = Module(new rocket.HellaCache, { case CacheName => "L1D" })
+   val core = Module(new Core, {case CoreName => "BOOM"})
+   val icache = Module(new rocket.Frontend(btb_updates_out_of_order=true), {case CacheName => "L1I"; case CoreName => "BOOM"})
+   val dcache = Module(new rocket.HellaCache, {case CacheName => "L1D"})
    val dc_shim = Module(new DCacheShim)
    val ptw = Module(new rocket.PTW(params(rocket.NPTWPorts)))
 

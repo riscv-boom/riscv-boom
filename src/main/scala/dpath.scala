@@ -228,7 +228,7 @@ class DatPath() extends Module with BOOMCoreParameters
 {
    val io = new DpathIo()
 
-   val csr = Module(new rocket.CSRFile())
+   val csr = Module(new rocket.CSRFile, {case CoreName => "BOOM"})
 
    //**********************************
    // Pipeline State Registers
@@ -328,15 +328,22 @@ class DatPath() extends Module with BOOMCoreParameters
    }
    else
    {
-      val alu_unit    = Module(new ALUExeUnit(is_branch_unit = true,
-                                     shares_csr_wport = true))
-      val muld_unit   = Module(new ALUMulDExeUnit())
-      //val muld_unit = Module(new MulDExeUnit())
       val mem_unit    = Module(new MemExeUnit())
-      mem_unit.io.dmem <> io.dmem
-      exe_units += alu_unit
+      val muld_unit   = Module(new ALUMulDExeUnit())
+      if (params(BuildFPU).isEmpty)
+      {
+         exe_units += Module(new ALUExeUnit(is_branch_unit = true,
+                                        shares_csr_wport = true))
+      }
+      else
+      {
+         exe_units += Module(new FPUALUExeUnit(is_branch_unit = true,
+                                             shares_csr_wport = true))
+
+      }
       exe_units += muld_unit
       exe_units += mem_unit
+      mem_unit.io.dmem <> io.dmem
    }
 
    require (exe_units.length != 0)
@@ -1096,7 +1103,7 @@ class DatPath() extends Module with BOOMCoreParameters
 
       // Writeback
       cnt = 0
-      var e_cnt = 0 // rob exception port index
+      var f_cnt = 0 // rob fflags port index
       for (w <- 0 until exe_units.length)
       {
          for (j <- 0 until exe_units(w).num_rf_write_ports)
@@ -1111,33 +1118,39 @@ class DatPath() extends Module with BOOMCoreParameters
                                            (wb_uop.dst_rtype === RT_FIX || wb_uop.dst_rtype === RT_FLT)
 
             val data = exe_units(w).io.resp(j).bits.data
-            val unrec_s = hardfloat.recodedFloatNToFloatN(data, 23, 9)
-            val unrec_d = hardfloat.recodedFloatNToFloatN(data, 52, 12)
-            val unrec_out = Mux(wb_uop.fp_single, Cat(Fill(32, unrec_s(31)), unrec_s), unrec_d)
-//            val is_negnan_s = UInt(0xffffffff) === unrec_s && wb_uop.fp_single
-
-            if (exe_units(w).uses_csr_wport && (j == 0))
+            if (exe_units(w).has_fpu)
             {
-               rob.io.debug_wb_wdata(cnt) := Mux(wb_uop.ctrl.csr_cmd != rocket.CSR.N, csr.io.rw.rdata,
-//                                             Mux(wb_uop.fp_val && wb_uop.dst_rtype === RT_FLT && is_negnan_s, UInt(0xffffffff),
-                                             Mux(wb_uop.fp_val && wb_uop.dst_rtype === RT_FLT, unrec_out,
-                                                                                               data))
+               rob.io.fflags(f_cnt) <> exe_units(w).io.resp(j).bits.fflags
+               f_cnt += 1
+               val unrec_s = hardfloat.recodedFloatNToFloatN(data, 23, 9)
+               val unrec_d = hardfloat.recodedFloatNToFloatN(data, 52, 12)
+               val unrec_out = Mux(wb_uop.fp_single, Cat(Fill(32, unrec_s(31)), unrec_s), unrec_d)
+               //val is_negnan_s = UInt(0xffffffff) === unrec_s && wb_uop.fp_single
+               if (exe_units(w).uses_csr_wport && (j == 0))
+               {
+                  rob.io.debug_wb_wdata(cnt) := Mux(wb_uop.ctrl.csr_cmd != rocket.CSR.N, csr.io.rw.rdata,
+                                                //Mux(wb_uop.fp_val && wb_uop.dst_rtype === RT_FLT && is_negnan_s, UInt(0xffffffff),
+                                                Mux(wb_uop.fp_val && wb_uop.dst_rtype === RT_FLT, unrec_out,
+                                                                                                  data))
+               }
+               else
+               {
+                  rob.io.debug_wb_wdata(cnt) := Mux(exe_units(w).io.resp(j).bits.uop.fp_val, unrec_out, data)
+               }
             }
             else
             {
-               rob.io.debug_wb_wdata(cnt) := Mux(exe_units(w).io.resp(j).bits.uop.fp_val, unrec_out, data)
+               if (exe_units(w).uses_csr_wport && (j == 0))
+               {
+                  rob.io.debug_wb_wdata(cnt) := Mux(wb_uop.ctrl.csr_cmd != rocket.CSR.N, csr.io.rw.rdata,data)
+               }
+               else
+               {
+                  rob.io.debug_wb_wdata(cnt) := data
+               }
             }
-
-
-            if (exe_units(w).has_fpu)
-            {
-               rob.io.fflags(e_cnt) <> exe_units(w).io.resp(j).bits.fflags
-               e_cnt += 1
-            }
-
             cnt += 1
          }
-
       }
 
       // branch resolution
@@ -1254,7 +1267,8 @@ class DatPath() extends Module with BOOMCoreParameters
       csr.io.uarch_counters(2)  := !rob_rdy
       csr.io.uarch_counters(3)  := laq_full
       csr.io.uarch_counters(4)  := stq_full
-      csr.io.uarch_counters(5)  := branch_mask_full.reduce(_|_)
+      csr.io.uarch_counters(5)  := !issue_unit.io.dis_inst_can_proceed.reduce(_|_)
+//      csr.io.uarch_counters(5)  := branch_mask_full.reduce(_|_)
       csr.io.uarch_counters(6)  := io.counters.ic_miss
       csr.io.uarch_counters(7)  := io.counters.dc_miss
       csr.io.uarch_counters(8)  := lsu_io.counters.ld_valid
@@ -1569,11 +1583,13 @@ class DatPath() extends Module with BOOMCoreParameters
 
       // Load/Store Unit
 
-      printf("  Mem[%s,%s:%d,%s,%s %s %s] %s %s RobXcpt[%s%x r:%d b:%x bva:0x%x]w:%x,c:%x\n"
-            , Mux(io.dmem.debug.memreq, Str("MREQ"), Str(" "))
-            , Mux(io.dmem.debug.memresp, Str("MRESP"), Str(" "))
-            , io.dmem.debug.cache_resp_idx
-            , Mux(io.dmem.debug.req_kill, Str("KILL"), Str(" "))
+      printf("  Mem[%s l%d](%s:%d),%s,%s %s %s %s] %s %s RobXcpt[%s%x r:%d b:%x bva:0x%x]w:%x,c:%x\n"
+            , Mux(io.dmem.debug.memreq_val, Str("MREQ"), Str(" "))
+            , io.dmem.debug.memreq_lidx
+            , Mux(io.dmem.debug.memresp_val, Str("MRESP"), Str(" "))
+            , io.dmem.debug.cache_resp_tag
+            , Mux(io.dmem.debug.req_kill, Str("RKILL"), Str(" "))
+            , Mux(io.dmem.debug.cache_not_ready, Str("CBUSY"), Str(" "))
             , Mux(io.dmem.debug.nack, Str("NACK"), Str(" "))
             , Mux(io.dmem.debug.cache_nack, Str("CN"), Str(" "))
             , Mux(lsu_io.forward_val, Str("FWD"), Str(" "))
