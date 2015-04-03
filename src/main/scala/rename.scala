@@ -588,12 +588,12 @@ class RenameStage(pl_width: Int, num_wb_ports: Int) extends Module with BOOMCore
       prs3_was_bypassed(w) := Bool(false)
 
       // Handle bypassing new physical destinations to operands (and stale destination)
-      for (xx <- 0 until w)
+      for (xx <- w-1 to 0 by -1)
       {
-         rs1_cases  ++= Array(((io.ren_uops(w).lrs1_rtype === RT_FIX ||
-                           io.ren_uops(w).lrs1_rtype === RT_FLT) && io.ren_mask(xx) && io.ren_uops(xx).ldst_val && (io.ren_uops(w).lrs1 === io.ren_uops(xx).ldst), (io.ren_uops(xx).pdst)))
-         rs2_cases  ++= Array(((io.ren_uops(w).lrs2_rtype === RT_FIX ||
-                           io.ren_uops(w).lrs2_rtype === RT_FLT) && io.ren_mask(xx) && io.ren_uops(xx).ldst_val && (io.ren_uops(w).lrs2 === io.ren_uops(xx).ldst), (io.ren_uops(xx).pdst)))
+         rs1_cases  ++= Array(((io.ren_uops(w).lrs1_rtype === RT_FIX || io.ren_uops(w).lrs1_rtype === RT_FLT)
+                                                                 && io.ren_mask(xx) && io.ren_uops(xx).ldst_val && (io.ren_uops(w).lrs1 === io.ren_uops(xx).ldst), (io.ren_uops(xx).pdst)))
+         rs2_cases  ++= Array(((io.ren_uops(w).lrs2_rtype === RT_FIX || io.ren_uops(w).lrs2_rtype === RT_FLT)
+                                                                 && io.ren_mask(xx) && io.ren_uops(xx).ldst_val && (io.ren_uops(w).lrs2 === io.ren_uops(xx).ldst), (io.ren_uops(xx).pdst)))
          rs3_cases  ++= Array((io.ren_uops(w).frs3_en            && io.ren_mask(xx) && io.ren_uops(xx).ldst_val && (io.ren_uops(w).lrs3 === io.ren_uops(xx).ldst), (io.ren_uops(xx).pdst)))
          stale_cases++= Array(( io.ren_uops(w).ldst_val          && io.ren_mask(xx) && io.ren_uops(xx).ldst_val && (io.ren_uops(w).ldst === io.ren_uops(xx).ldst), (io.ren_uops(xx).pdst)))
 

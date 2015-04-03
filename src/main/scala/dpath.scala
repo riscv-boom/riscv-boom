@@ -550,10 +550,8 @@ class DatPath() extends Module with BOOMCoreParameters
    bp2_jmp_inst := jinst
    val bp2_jal_imm32 = Cat(Fill(jinst(31),12), jinst(19,12), jinst(20), jinst(30,25), jinst(24,21), Bits(0,1))
    val bp2_jalpred_target = UInt(width=xLen)
-   require (FETCH_WIDTH <= 2)
-   bp2_jalpred_target := (bp2_aligned_pc + Mux(bp2_jmp_idx === UInt(1), UInt(4), UInt(0)) + Sext(bp2_jal_imm32, xLen)) & SInt(-coreInstBytes)
-
-   bp2_pc_of_jmp_inst := bp2_aligned_pc + (bp2_jmp_idx * UInt(4))
+   bp2_pc_of_jmp_inst := bp2_aligned_pc + (bp2_jmp_idx << UInt(2))
+   bp2_jalpred_target := (bp2_pc_of_jmp_inst + Sext(bp2_jal_imm32, xLen)) & SInt(-coreInstBytes)
 
    if (DEBUG_PRINTF)
    {
@@ -595,9 +593,8 @@ class DatPath() extends Module with BOOMCoreParameters
 //   assert (!Reg(init=Bool(false), next=(bp2_val && btb_predicted_our_jal && bp2_jalpred_target != io.imem.resp.bits.debug_taken_pc)), "BTB predicted incorrect JAL target")
 
    // TODO generalize the assert that checks for the BTB pred_idx
-   require (FETCH_WIDTH <= 2)
    val btb_predicted_inst = fetch_bundle.insts(fetch_bundle.btb_pred_taken_idx)
-   val btb_predicted_inst_pc =  bp2_aligned_pc + Mux(fetch_bundle.btb_pred_taken_idx === UInt(1), UInt(4), UInt(0))  + Sext(DebugGetBJImm(btb_predicted_inst), xLen)
+   val btb_predicted_inst_pc =  bp2_aligned_pc + (fetch_bundle.btb_pred_taken_idx << UInt(2))  + Sext(DebugGetBJImm(btb_predicted_inst), xLen)
    //assert (!(io.imem.resp.valid &&
    //          io.imem.resp.bits.taken &&
    //          !DebugIsJALR(btb_predicted_inst) &&
@@ -1553,6 +1550,34 @@ class DatPath() extends Module with BOOMCoreParameters
                , rob.io.debug.entry(r_idx+1).uop.inst
                , Mux(rob.io.debug.entry(r_idx+0).exception, Str("E"), Str("-"))
                , Mux(rob.io.debug.entry(r_idx+1).exception, Str("E"), Str("-"))
+               )
+         } 
+         else if (COMMIT_WIDTH == 4)
+         {
+            val row_is_val = rob.io.debug.entry(r_idx+0).valid || rob.io.debug.entry(r_idx+1).valid || rob.io.debug.entry(r_idx+2).valid || rob.io.debug.entry(r_idx+3).valid
+            printf("(%s%s%s%s)(%s%s%s%s) 0x%x %x %x %x [%sDASM(%x)][DASM(%x)][DASM(%x)][DASM(%x)" + end + "]%s%s%s%s"
+               , Mux(rob.io.debug.entry(r_idx+0).valid, Str(b_cyn + "V" + end), Str(grn + " " + end))
+               , Mux(rob.io.debug.entry(r_idx+1).valid, Str(b_cyn + "V" + end), Str(grn + " " + end))
+               , Mux(rob.io.debug.entry(r_idx+2).valid, Str(b_cyn + "V" + end), Str(grn + " " + end))
+               , Mux(rob.io.debug.entry(r_idx+3).valid, Str(b_cyn + "V" + end), Str(grn + " " + end))
+               , Mux(rob.io.debug.entry(r_idx+0).busy,  Str(b_ylw + "B" + end), Str(grn + " " + end))
+               , Mux(rob.io.debug.entry(r_idx+1).busy,  Str(b_ylw + "B" + end), Str(grn + " " + end))
+               , Mux(rob.io.debug.entry(r_idx+2).busy,  Str(b_ylw + "B" + end), Str(grn + " " + end))
+               , Mux(rob.io.debug.entry(r_idx+3).busy,  Str(b_ylw + "B" + end), Str(grn + " " + end))
+               , rob.io.debug.entry(r_idx+0).uop.pc(23,0)
+               , rob.io.debug.entry(r_idx+1).uop.pc(15,0)
+               , rob.io.debug.entry(r_idx+2).uop.pc(15,0)
+               , rob.io.debug.entry(r_idx+3).uop.pc(15,0)
+               , Mux(r_head === UInt(row) && row_is_val, Str(b_red),
+                 Mux(row_is_val                        , Str(b_cyn), Str(grn)))
+               , rob.io.debug.entry(r_idx+0).uop.inst
+               , rob.io.debug.entry(r_idx+1).uop.inst
+               , rob.io.debug.entry(r_idx+2).uop.inst
+               , rob.io.debug.entry(r_idx+3).uop.inst
+               , Mux(rob.io.debug.entry(r_idx+0).exception, Str("E"), Str("-"))
+               , Mux(rob.io.debug.entry(r_idx+1).exception, Str("E"), Str("-"))
+               , Mux(rob.io.debug.entry(r_idx+2).exception, Str("E"), Str("-"))
+               , Mux(rob.io.debug.entry(r_idx+3).exception, Str("E"), Str("-"))
                )
          }
          else

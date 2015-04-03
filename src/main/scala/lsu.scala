@@ -391,7 +391,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
                      Mux(will_fire_load_retry, laq_addr(laq_retry_idx),
                                                io.exe_resp.bits.data.toUInt))
 
-   val dtlb = Module(new rocket.TLB)
+   val dtlb = Module(new rocket.TLB, {case uncore.CacheName => "L1D"})
    dtlb.io.ptw <> io.ptw
    dtlb.io.req.valid := will_fire_load_incoming ||
                         will_fire_sta_incoming ||

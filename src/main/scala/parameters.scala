@@ -33,7 +33,7 @@ abstract trait BOOMCoreParameters extends rocket.CoreParameters
    val COMMIT_WIDTH     = params(RetireWidth)
 
    require (DECODE_WIDTH == COMMIT_WIDTH)
-   require (FETCH_WIDTH == 1 || FETCH_WIDTH == 2)
+   require (isPow2(FETCH_WIDTH))
    require (DECODE_WIDTH <= FETCH_WIDTH)
 
    //************************************
