@@ -283,11 +283,11 @@ class DatPath() extends Module with BOOMCoreParameters
    else if (DECODE_WIDTH == 4) println("\n   ~*** Four-wide Machine ***~\n")
    else println("\n ~*** Unknown Machine Width ***~\n")
 
-   require (ISSUE_WIDTH <= 3)
-
+   require (ISSUE_WIDTH <= 4)
    if (ISSUE_WIDTH == 1) println("\n    -== Single Issue ==- \n")
    if (ISSUE_WIDTH == 2) println("\n    -== Dual Issue ==- \n")
    if (ISSUE_WIDTH == 3) println("\n    -== Triple Issue ==- \n")
+   if (ISSUE_WIDTH == 4) println("\n    -== Quad Issue ==- \n")
    if (params(BuildFPU).isEmpty) println ("\n    FPU Unit Disabled")
    else                          println ("\n    FPU Unit Enabled")
    if (params(UseVM)) println ("    VM Enabled\n")
@@ -315,33 +315,39 @@ class DatPath() extends Module with BOOMCoreParameters
       val mem_unit = Module(new ALUMulDMemExeUnit())
       if (params(BuildFPU).isEmpty)
       {
-         exe_units += Module(new ALUExeUnit(is_branch_unit = true,
-                                             shares_csr_wport = true))
+         exe_units += Module(new ALUExeUnit(is_branch_unit = true, shares_csr_wport = true))
       }
       else
       {
-         exe_units += Module(new FPUALUExeUnit(is_branch_unit = true,
-                                             shares_csr_wport = true))
+         exe_units += Module(new FPUALUExeUnit(is_branch_unit = true,shares_csr_wport = true))
       }
       exe_units += mem_unit
       mem_unit.io.dmem <> io.dmem
    }
-   else
+   else if (ISSUE_WIDTH == 3)
    {
       val mem_unit    = Module(new MemExeUnit())
       val muld_unit   = Module(new ALUMulDExeUnit())
       if (params(BuildFPU).isEmpty)
       {
-         exe_units += Module(new ALUExeUnit(is_branch_unit = true,
-                                        shares_csr_wport = true))
+         exe_units += Module(new ALUExeUnit(is_branch_unit = true, shares_csr_wport = true))
       }
       else
       {
-         exe_units += Module(new FPUALUExeUnit(is_branch_unit = true,
-                                             shares_csr_wport = true))
+         exe_units += Module(new FPUALUExeUnit(is_branch_unit = true,shares_csr_wport = true))
 
       }
       exe_units += muld_unit
+      exe_units += mem_unit
+      mem_unit.io.dmem <> io.dmem
+   }
+   else
+   {  // 4-wide issue
+      val mem_unit    = Module(new MemExeUnit())
+      require (!params(BuildFPU).isEmpty)
+      exe_units += Module(new FPUALUExeUnit(is_branch_unit = true, shares_csr_wport = true))
+      exe_units += Module(new ALUMulDExeUnit())
+      exe_units += Module(new ALUMulDExeUnit())
       exe_units += mem_unit
       mem_unit.io.dmem <> io.dmem
    }
@@ -1780,17 +1786,17 @@ class DatPath() extends Module with BOOMCoreParameters
          {
             when (com_uops(w).dst_rtype === RT_FIX && com_uops(w).ldst != UInt(0))
             {
-               printf("0x%x (0x%x) x%d 0x%x |%d\n", Sext(com_uops(w).pc(vaddrBits,0), xLen), com_uops(w).inst, com_uops(w).inst(RD_MSB,RD_LSB), com_uops(w).debug_wdata, tsc_reg)
+               printf("@@@ 0x%x (0x%x) x%d 0x%x |%d\n", Sext(com_uops(w).pc(vaddrBits,0), xLen), com_uops(w).inst, com_uops(w).inst(RD_MSB,RD_LSB), com_uops(w).debug_wdata, tsc_reg)
 //               printf("@@@ 0x%x (0x%x) x%d 0x%x\n", Sext(com_uops(w).pc(vaddrBits,0), xLen), com_uops(w).inst, com_uops(w).inst(RD_MSB,RD_LSB), com_uops(w).debug_wdata)
             }
             .elsewhen (com_uops(w).dst_rtype === RT_FLT)
             {
-               printf("0x%x (0x%x) f%d 0x%x |%d\n", Sext(com_uops(w).pc(vaddrBits,0), xLen), com_uops(w).inst, com_uops(w).inst(RD_MSB,RD_LSB), com_uops(w).debug_wdata, tsc_reg)
+               printf("@@@ 0x%x (0x%x) f%d 0x%x |%d\n", Sext(com_uops(w).pc(vaddrBits,0), xLen), com_uops(w).inst, com_uops(w).inst(RD_MSB,RD_LSB), com_uops(w).debug_wdata, tsc_reg)
 //               printf("@@@ 0x%x (0x%x) f%d 0x%x\n", Sext(com_uops(w).pc(vaddrBits,0), xLen), com_uops(w).inst, com_uops(w).inst(RD_MSB,RD_LSB), com_uops(w).debug_wdata)
             }
             .otherwise
             {
-               printf("0x%x (0x%x) |%d\n\n", Sext(com_uops(w).pc(vaddrBits,0), xLen), com_uops(w).inst, tsc_reg)
+               printf("@@@ 0x%x (0x%x) |%d\n\n", Sext(com_uops(w).pc(vaddrBits,0), xLen), com_uops(w).inst, tsc_reg)
 //               printf("@@@ 0x%x (0x%x)\n", Sext(com_uops(w).pc(vaddrBits,0), xLen), com_uops(w).inst)
             }
          }

@@ -92,7 +92,6 @@ class RegisterRead(issue_width: Int
    for (w <- 0 until issue_width)
    {
       val num_read_ports = num_read_ports_array(w)
-      println ("Max Operands: " + num_read_ports)
 
       val rs1_addr = rrd_uops(w).pop1
       val rs2_addr = rrd_uops(w).pop2

@@ -150,11 +150,12 @@ class Rob(width: Int
                                    // around, thus the banks must have equal
                                    // numbers of items.
 
-   println("    Machine Width: " + width)
-   println("    Rob Entries  : " + num_rob_entries)
-   println("    Rob Rows     : " + num_rob_rows)
-   println("    Rob Row size : " + log2Up(num_rob_rows))
-   println("    log2UP(width): " + log2Up(width))
+   println("    Machine Width  : " + width); require (isPow2(width))
+   println("    Rob Entries    : " + num_rob_entries)
+   println("    Rob Rows       : " + num_rob_rows)
+   println("    Rob Row size   : " + log2Up(num_rob_rows))
+   println("    log2UP(width)  : " + log2Up(width))
+   println("    log2Ceil(width): " + log2Ceil(width))
 
    val s_reset :: s_normal :: s_rollback :: s_wait_till_empty :: Nil = Enum(UInt(),4)
    val rob_state = Reg(init = s_reset)
@@ -163,6 +164,7 @@ class Rob(width: Int
    //commit entries at the head, and unwind exceptions from the tail
    val rob_head = Reg(init = UInt(0, log2Up(num_rob_rows)))
    val rob_tail = Reg(init = UInt(0, log2Up(num_rob_rows)))
+   val rob_tail_idx = rob_tail << UInt(log2Ceil(width))
 
    val will_commit         = Vec.fill(width) {Bool()}
    val can_commit          = Vec.fill(width) {Bool()}
@@ -190,8 +192,8 @@ class Rob(width: Int
 
    def GetRowIdx(rob_idx: UInt): UInt =
    {
-      if (width == 1) return rob_idx
-      else return rob_idx >> UInt(log2Up(width))
+      if (width == 1) return rob_idx // TODO remove this, should be unnecessary with Ceil 
+      else return rob_idx >> UInt(log2Ceil(width))
    }
    def GetBankIdx(rob_idx: UInt): UInt =
    {
@@ -560,7 +562,7 @@ class Rob(width: Int
    when (io.lxcpt.valid || io.bxcpt.valid)
    {
       val new_xcpt_uop = Mux(io.lxcpt.valid, io.lxcpt.bits.uop, io.bxcpt.bits.uop)
-      when (!r_xcpt_val || IsOlder(new_xcpt_uop.rob_idx, r_xcpt_uop.rob_idx, rob_tail))
+      when (!r_xcpt_val || IsOlder(new_xcpt_uop.rob_idx, r_xcpt_uop.rob_idx, rob_tail_idx))
       {
          r_xcpt_val              := Bool(true)
          next_xcpt_uop           := new_xcpt_uop
@@ -584,6 +586,9 @@ class Rob(width: Int
    {
       r_xcpt_val := Bool(false)
    }
+
+   assert (!(exception_thrown && !io.cxcpt.valid && !r_xcpt_val), 
+      "ROB trying to throw an exception, but it doesn't have a valid xcpt_cause")
 
    // -----------------------------------------------
    // ROB Head Logic
@@ -626,6 +631,7 @@ class Rob(width: Int
    // TODO can we let the ROB fill up completely?
    // can we track "maybe_full"?
    // maybe full is reset on branch mispredict
+   // ALSO must handle xcpt tail/age logic if we do this!
    val full = WrapInc(rob_tail, num_rob_rows) === rob_head
 
    io.empty := rob_head === rob_tail
