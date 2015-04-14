@@ -74,6 +74,7 @@ abstract trait BOOMCoreParameters extends rocket.CoreParameters
    require (NUM_ROB_ROWS % 2 == 0)
    require (NUM_ROB_ENTRIES % DECODE_WIDTH == 0)
    require (isPow2(NUM_LSU_ENTRIES))
+   require ((NUM_LSU_ENTRIES-1) > DECODE_WIDTH)
 
    //************************************
    // Non-BOOM parameters

@@ -559,25 +559,28 @@ class Rob(width: Int
       dis_xcpts(i) := io.dis_mask(i) && io.dis_uops(i).exception
    }
 
-   when (io.lxcpt.valid || io.bxcpt.valid)
+   when (!(io.flush_pipeline || exception_thrown) && rob_state != s_rollback)
    {
-      val new_xcpt_uop = Mux(io.lxcpt.valid, io.lxcpt.bits.uop, io.bxcpt.bits.uop)
-      when (!r_xcpt_val || IsOlder(new_xcpt_uop.rob_idx, r_xcpt_uop.rob_idx, rob_tail_idx))
+      when (io.lxcpt.valid || io.bxcpt.valid)
       {
-         r_xcpt_val              := Bool(true)
-         next_xcpt_uop           := new_xcpt_uop
-         next_xcpt_uop.exc_cause := Mux(io.lxcpt.valid, io.lxcpt.bits.cause, io.bxcpt.bits.cause)
-         r_xcpt_badvaddr         := Mux(io.lxcpt.valid, io.lxcpt.bits.badvaddr, io.bxcpt.bits.badvaddr)
+         val new_xcpt_uop = Mux(io.lxcpt.valid, io.lxcpt.bits.uop, io.bxcpt.bits.uop)
+         when (!r_xcpt_val || IsOlder(new_xcpt_uop.rob_idx, r_xcpt_uop.rob_idx, rob_tail_idx))
+         {
+            r_xcpt_val              := Bool(true)
+            next_xcpt_uop           := new_xcpt_uop
+            next_xcpt_uop.exc_cause := Mux(io.lxcpt.valid, io.lxcpt.bits.cause, io.bxcpt.bits.cause)
+            r_xcpt_badvaddr         := Mux(io.lxcpt.valid, io.lxcpt.bits.badvaddr, io.bxcpt.bits.badvaddr)
+         }
       }
-   }
-   .elsewhen (!r_xcpt_val && dis_xcpts.reduce(_|_))
-   {
-      val idx = dis_xcpts.indexWhere{i: Bool => i}
+      .elsewhen (!r_xcpt_val && dis_xcpts.reduce(_|_))
+      {
+         val idx = dis_xcpts.indexWhere{i: Bool => i}
 
-      // if no exception yet, dispatch exception wins
-      r_xcpt_val      := Bool(true)
-      next_xcpt_uop   := io.dis_uops(idx)
-      r_xcpt_badvaddr := io.dis_uops(0).pc + (idx << UInt(2)) // TODO BUG check about overflow
+         // if no exception yet, dispatch exception wins
+         r_xcpt_val      := Bool(true)
+         next_xcpt_uop   := io.dis_uops(idx)
+         r_xcpt_badvaddr := io.dis_uops(0).pc + (idx << UInt(2))
+      }
    }
 
    r_xcpt_uop         := next_xcpt_uop
@@ -589,6 +592,10 @@ class Rob(width: Int
 
    assert (!(exception_thrown && !io.cxcpt.valid && !r_xcpt_val), 
       "ROB trying to throw an exception, but it doesn't have a valid xcpt_cause")
+
+// not possible to stop all xcpts coming in, since the flush signal goes out a cycle later 
+//   assert (!(rob_state === s_rollback && (io.lxcpt.valid || io.bxcpt.valid)),
+//      "Exception incoming during rollback - exception should have been killed.")
 
    // -----------------------------------------------
    // ROB Head Logic
@@ -632,6 +639,7 @@ class Rob(width: Int
    // can we track "maybe_full"?
    // maybe full is reset on branch mispredict
    // ALSO must handle xcpt tail/age logic if we do this!
+   // also must handle rob_pc valid logic.
    val full = WrapInc(rob_tail, num_rob_rows) === rob_head
 
    io.empty := rob_head === rob_tail

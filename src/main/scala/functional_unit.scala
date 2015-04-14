@@ -379,7 +379,7 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)
       io.br_unit.debug_btb_pred := uop.btb_resp_valid && uop.btb_resp.taken
 
       // handle misaligned branch/jmp targets
-      io.br_unit.xcpt.valid     := bj_addr(1) && io.req.valid && mispredict
+      io.br_unit.xcpt.valid     := bj_addr(1) && io.req.valid && mispredict && !killed
       io.br_unit.xcpt.bits.uop  := uop
       io.br_unit.xcpt.bits.cause:= rocket.Causes.misaligned_fetch
       io.br_unit.xcpt.bits.badvaddr:= bj_addr // TODO is there a better way to get this information to the CSR file? maybe use brinfo.target?

@@ -407,8 +407,9 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    val ma_ld = io.exe_resp.valid && io.exe_resp.bits.mxcpt.valid && exe_tlb_uop.is_load
    val pf_ld = dtlb.io.req.valid && dtlb.io.resp.xcpt_ld && exe_tlb_uop.is_load
    val pf_st = dtlb.io.req.valid && dtlb.io.resp.xcpt_st && exe_tlb_uop.is_store
-   val mem_xcpt_valid = Reg(next=(dtlb.io.req.valid && (pf_ld || pf_st)) ||
-                                 (io.exe_resp.valid && io.exe_resp.bits.mxcpt.valid),
+   val mem_xcpt_valid = Reg(next=((dtlb.io.req.valid && (pf_ld || pf_st)) ||
+                                 (io.exe_resp.valid && io.exe_resp.bits.mxcpt.valid)) &&
+                                 !io.exception,
                             init=Bool(false))
    val mem_xcpt_cause = Reg(next=(Mux(io.exe_resp.valid &&
                                       io.exe_resp.bits.mxcpt.valid, io.exe_resp.bits.mxcpt.bits,
