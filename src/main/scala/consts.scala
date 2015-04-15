@@ -252,7 +252,12 @@ trait ScalarOpConstants
    val uopFNMADD_D  = Bits(116,UOPC_SZ)
    val uopFNMSUB_D  = Bits(117,UOPC_SZ)
 
-   val uopSYSTEM    = Bits(118, UOPC_SZ) // pass uop down the CSR pipeline and let it handle it
+   val uopFDIV_S    = Bits(117,UOPC_SZ)
+   val uopFDIV_D    = Bits(118,UOPC_SZ)
+   val uopFSQRT_S   = Bits(119,UOPC_SZ)
+   val uopFSQRT_D   = Bits(120,UOPC_SZ)
+
+   val uopSYSTEM    = Bits(121, UOPC_SZ) // pass uop down the CSR pipeline and let it handle it
 
    // Memory Mask Type Signal
    val MSK_X   = UInt("b???", 3)

@@ -930,9 +930,6 @@ class DatPath() extends Module with BOOMCoreParameters
    csr.io.cause     := com_exc_cause
 
    csr_take_pc      := csr.io.csr_xcpt || csr.io.eret
-   csr.io.mbadaddr_wen := com_exception
-                                        // don't care for non-memory exceptions,
-                                        // so we can write to this for ALL exceptions
 
    // reading requires serializing the entire pipeline
    csr.io.fcsr_flags.valid := com_fflags_val
@@ -1811,10 +1808,10 @@ class DatPath() extends Module with BOOMCoreParameters
 
    io.ptw_tlb <> lsu_io.ptw
 
-   io.ptw_dat.ptbr := csr.io.ptbr
+   io.ptw_dat.ptbr       := csr.io.ptbr
    io.ptw_dat.invalidate := csr.io.fatc
-   io.ptw_dat.status := csr.io.status
-   io.dmem.sret := com_exception
+   io.ptw_dat.status     := csr.io.status
+   io.dmem.invalidate_lr := com_exception
 
    //-------------------------------------------------------------
    //-------------------------------------------------------------

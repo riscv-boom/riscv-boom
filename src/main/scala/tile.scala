@@ -37,7 +37,7 @@ class BOOMTile(resetSignal: Bool = null) extends rocket.Tile(resetSignal)
    // the dcache's built-in TLB will be unused, but it still needs some of the
    // status/sret signals for things such as lr/sc
    //ptw.io.requestor(1) <> dcache.io.cpu.ptw
-   dcache.io.cpu.sret := core.io.dmem.sret
+   dcache.io.cpu.invalidate_lr := core.io.dmem.invalidate_lr
    dcache.io.ptw.status <> ptw.io.requestor(1).status
    dcache.io.ptw.invalidate := ptw.io.requestor(1).invalidate
 
