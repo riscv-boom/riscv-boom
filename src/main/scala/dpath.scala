@@ -170,6 +170,9 @@ class MicroOp extends BOOMCoreBundle
    // purely debug information
    val debug_wdata      = Bits(width=xLen)
    val debug_ei_enabled = Bool()
+
+   
+   def fu_code_is(_fu: Bits) = fu_code === _fu
 }
 
 class FetchBundle extends Bundle with BOOMCoreParameters
@@ -319,35 +322,34 @@ class DatPath() extends Module with BOOMCoreParameters
       }
       else
       {
-         exe_units += Module(new FPUALUExeUnit(is_branch_unit = true,shares_csr_wport = true))
+         exe_units += Module(new FPUALUMulExeUnit(is_branch_unit = true,shares_csr_wport = true))
       }
       exe_units += mem_unit
       mem_unit.io.dmem <> io.dmem
    }
    else if (ISSUE_WIDTH == 3)
    {
-      val mem_unit    = Module(new MemExeUnit())
-      val muld_unit   = Module(new ALUMulDExeUnit())
       if (params(BuildFPU).isEmpty)
       {
          exe_units += Module(new ALUExeUnit(is_branch_unit = true, shares_csr_wport = true))
       }
       else
       {
-         exe_units += Module(new FPUALUExeUnit(is_branch_unit = true,shares_csr_wport = true))
-
+         exe_units += Module(new FPUALUMulExeUnit(is_branch_unit = true,shares_csr_wport = true))
       }
-      exe_units += muld_unit
+      exe_units += Module(new ALUDivExeUnit)
+      val mem_unit = Module(new MemExeUnit())
       exe_units += mem_unit
       mem_unit.io.dmem <> io.dmem
    }
    else
    {  // 4-wide issue
-      val mem_unit    = Module(new MemExeUnit())
+//      val mem_unit    = Module(new MemExeUnit())
+      val mem_unit    = Module(new ALUMulDMemExeUnit()) // TODO move muld elsewhere
       require (!params(BuildFPU).isEmpty)
-      exe_units += Module(new FPUALUExeUnit(is_branch_unit = true, shares_csr_wport = true))
-      exe_units += Module(new ALUMulDExeUnit())
-      exe_units += Module(new ALUMulDExeUnit())
+      exe_units += Module(new FPUALUMulExeUnit(is_branch_unit = true, shares_csr_wport = true))
+      exe_units += Module(new ALUExeUnit)
+      exe_units += Module(new ALUMulExeUnit)
       exe_units += mem_unit
       mem_unit.io.dmem <> io.dmem
    }

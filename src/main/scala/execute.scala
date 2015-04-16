@@ -8,6 +8,10 @@
 // The issue window schedules micro-ops onto a specific execution pipeline
 // A given execution pipeline may contain multiple functional units; one or two
 // read ports, and one or more writeports.
+//
+// TODO provide an easier way to describe which functional units you want
+// instead of providing a ton of hand-written variants.
+// FPU+ALU+MUL+DIV+MEM, etc.
 
 
 package BOOM
@@ -95,7 +99,7 @@ abstract class ExecutionUnit(val num_rf_read_ports: Int
    def is_bypassable   : Boolean = bypassable
 }
 
-
+ 
 class ALUExeUnit(is_branch_unit: Boolean = false
                 , shares_csr_wport: Boolean = false
                 ) extends ExecutionUnit(num_rf_read_ports = 2
@@ -134,7 +138,68 @@ class ALUExeUnit(is_branch_unit: Boolean = false
 
 }
 
-class FPUALUExeUnit(is_branch_unit: Boolean = false
+// TODO how to combine with above aluexeunit? 
+class ALUMulExeUnit(is_branch_unit: Boolean = false
+                , shares_csr_wport: Boolean = false
+                ) extends ExecutionUnit(num_rf_read_ports = 2
+                                       , num_rf_write_ports = 1
+                                       , num_bypass_stages = 3
+                                       , data_width = 64 // TODO need to use xLen here
+                                       , bypassable = true
+                                       , is_mem_unit = false
+                                       , uses_csr_wport = shares_csr_wport
+                                       , is_branch_unit = is_branch_unit
+                                       )
+{
+   io.fu_types := FU_ALU |
+                  FU_CNTR |
+                  FU_MUL |
+                  (Mux(Bool(shares_csr_wport), FU_CSR, Bits(0))) |
+                  (Mux(Bool(is_branch_unit), FU_BRU, Bits(0)))
+
+
+   // ALU Unit -------------------------------
+   val alu = Module(new ALUUnit(is_branch_unit = is_branch_unit, num_stages=IMUL_STAGES))
+   alu.io.req.valid         := io.req.valid &&
+                                   ((io.req.bits.uop.fu_code === FU_ALU) ||
+                                   (io.req.bits.uop.fu_code === FU_BRU) ||
+                                   (io.req.bits.uop.fu_code === FU_CSR) ||
+                                   (io.req.bits.uop.fu_code === FU_CNTR))
+   alu.io.req.bits.uop      := io.req.bits.uop
+   alu.io.req.bits.kill     := io.req.bits.kill
+   alu.io.req.bits.rs1_data := io.req.bits.rs1_data
+   alu.io.req.bits.rs2_data := io.req.bits.rs2_data
+   alu.io.brinfo <> io.brinfo
+   io.bypass <> alu.io.bypass
+
+   // branch unit is embedded inside the ALU
+   if (is_branch_unit)
+   {
+      io.br_unit <> alu.io.br_unit
+      alu.io.get_rob_pc <> io.get_rob_pc
+   }
+   else
+   {
+      io.br_unit.brinfo.valid := Bool(false)
+   }
+ 
+   // Pipelined, IMul Unit ------------------
+   val imul = Module(new PipelinedMulUnit(IMUL_STAGES))
+   imul.io.req.valid := io.req.valid && io.req.bits.uop.fu_code_is(FU_MUL)
+   imul.io.req.bits.uop      := io.req.bits.uop
+   imul.io.req.bits.rs1_data := io.req.bits.rs1_data
+   imul.io.req.bits.rs2_data := io.req.bits.rs2_data
+   imul.io.req.bits.kill     := io.req.bits.kill
+   imul.io.brinfo <> io.brinfo
+
+   // Outputs (Write Port #0)  ---------------
+   io.resp(0).valid     := alu.io.resp.valid || imul.io.resp.valid
+   io.resp(0).bits.uop  := Mux(imul.io.resp.valid, imul.io.resp.bits.uop, alu.io.resp.bits.uop)
+   io.resp(0).bits.data := Mux(imul.io.resp.valid, imul.io.resp.bits.data, alu.io.resp.bits.data)
+    
+}
+
+class FPUALUMulExeUnit(is_branch_unit: Boolean = false
                 , shares_csr_wport: Boolean = false
                 ) extends ExecutionUnit(num_rf_read_ports = 3
                                        , num_rf_write_ports = 1
@@ -150,6 +215,7 @@ class FPUALUExeUnit(is_branch_unit: Boolean = false
    io.fu_types := FU_ALU |
                   FU_CNTR |
                   FU_FPU |
+                  FU_MUL |
                   (Mux(Bool(shares_csr_wport), FU_CSR, Bits(0))) |
                   (Mux(Bool(is_branch_unit), FU_BRU, Bits(0)))
 
@@ -179,7 +245,15 @@ class FPUALUExeUnit(is_branch_unit: Boolean = false
    {
       io.br_unit.brinfo.valid := Bool(false)
    }
-
+ 
+   // Pipelined, IMul Unit ------------------
+   val imul = Module(new PipelinedMulUnit(IMUL_STAGES))
+   imul.io.req.valid := io.req.valid && io.req.bits.uop.fu_code_is(FU_MUL)
+   imul.io.req.bits.uop      := io.req.bits.uop
+   imul.io.req.bits.rs1_data := io.req.bits.rs1_data
+   imul.io.req.bits.rs2_data := io.req.bits.rs2_data
+   imul.io.req.bits.kill     := io.req.bits.kill
+   imul.io.brinfo <> io.brinfo
 
    // FPU Unit -----------------------
 
@@ -198,9 +272,13 @@ class FPUALUExeUnit(is_branch_unit: Boolean = false
 
    // Outputs (Write Port #0)  ---------------
 
-   io.resp(0).valid     := alu.io.resp.valid || fpu.io.resp.valid
-   io.resp(0).bits.uop  := Mux(fpu.io.resp.valid, fpu.io.resp.bits.uop, alu.io.resp.bits.uop)
-   io.resp(0).bits.data := Mux(fpu.io.resp.valid, fpu.io.resp.bits.data, alu.io.resp.bits.data)
+   io.resp(0).valid     := alu.io.resp.valid || fpu.io.resp.valid || imul.io.resp.valid
+   io.resp(0).bits.uop  := Mux(fpu.io.resp.valid,  fpu.io.resp.bits.uop, 
+                           Mux(imul.io.resp.valid, imul.io.resp.bits.uop,
+                                                   alu.io.resp.bits.uop))
+   io.resp(0).bits.data := Mux(fpu.io.resp.valid,  fpu.io.resp.bits.data,
+                           Mux(imul.io.resp.valid, imul.io.resp.bits.data,
+                                                   alu.io.resp.bits.data))
 
    // TODO is there a way to override a single signal in a bundle?
 //   io.resp(0).bits.fflags <> fpu.io.resp.bits.fflags
@@ -208,8 +286,8 @@ class FPUALUExeUnit(is_branch_unit: Boolean = false
    io.resp(0).bits.fflags.bits.uop   := fpu.io.resp.bits.fflags.bits.uop
    io.resp(0).bits.fflags.bits.flags := fpu.io.resp.bits.fflags.bits.flags
 
-   assert (!(alu.io.resp.valid && fpu.io.resp.valid)
-      , "ALU and FPU are fighting over the write port.")
+   assert (PopCount(List(alu,fpu,imul).map(_.io.resp.valid)) <= UInt(1)
+      , "ALU,IMUL, and/or FPU are fighting over the write port.")
 
 }
 
@@ -222,7 +300,7 @@ class MulDExeUnit extends ExecutionUnit(num_rf_read_ports = 2
                                        )
 {
    val muldiv_busy = Bool()
-   io.fu_types := Mux(!muldiv_busy, FU_MULD, Bits(0))
+   io.fu_types := Mux(!muldiv_busy, FU_MUL | FU_DIV, Bits(0))
 
    val muldiv = Module(new MulDivUnit())
    muldiv.io.req <> io.req
@@ -238,7 +316,7 @@ class MulDExeUnit extends ExecutionUnit(num_rf_read_ports = 2
 // TODO listed as FIFOs, but not using ready signal
 
 
-class ALUMulDExeUnit(is_branch_unit: Boolean = false
+class ALUDivExeUnit(is_branch_unit: Boolean = false
                     , shares_csr_wport: Boolean = false
                     ) extends ExecutionUnit(num_rf_read_ports = 2
                                            , num_rf_write_ports = 1
@@ -254,7 +332,7 @@ class ALUMulDExeUnit(is_branch_unit: Boolean = false
    val muldiv_busy = Bool()
    io.fu_types := (FU_ALU |
                   FU_CNTR |
-                  (Mux(!muldiv_busy, FU_MULD, Bits(0))) |
+                  (Mux(!muldiv_busy, FU_DIV, Bits(0))) |
                   (Mux(Bool(shares_csr_wport), FU_CSR, Bits(0))) |
                   (Mux(Bool(is_branch_unit), FU_BRU, Bits(0))))
 
@@ -287,7 +365,7 @@ class ALUMulDExeUnit(is_branch_unit: Boolean = false
    val muldiv = Module(new MulDivUnit())
 
    muldiv.io.req.valid           := io.req.valid &&
-                                    (io.req.bits.uop.fu_code === FU_MULD)
+                                    (io.req.bits.uop.fu_code === FU_DIV)
    muldiv.io.req.bits.uop        := io.req.bits.uop
    muldiv.io.req.bits.rs1_data   := io.req.bits.rs1_data
    muldiv.io.req.bits.rs2_data   := io.req.bits.rs2_data
@@ -296,7 +374,7 @@ class ALUMulDExeUnit(is_branch_unit: Boolean = false
 
    muldiv.io.resp.ready := !alu.io.resp.valid // share write port with the ALU
 
-   muldiv_busy := !muldiv.io.req.ready || (io.req.valid && io.req.bits.uop.fu_code === FU_MULD)
+   muldiv_busy := !muldiv.io.req.ready || (io.req.valid && io.req.bits.uop.fu_code_is(FU_DIV))
 
    // Branch Resolution ------------------------
 
@@ -427,6 +505,7 @@ class MemExeUnit extends ExecutionUnit(num_rf_read_ports = 2 // TODO make this 1
 
 class ALUMulDMemExeUnit(is_branch_unit: Boolean = false
                        , shares_csr_wport: Boolean = false
+                       , use_slow_mul: Boolean = false
                        ) extends ExecutionUnit(num_rf_read_ports = 2
                                               , num_rf_write_ports = 2
                                               , num_bypass_stages = 1
@@ -441,7 +520,8 @@ class ALUMulDMemExeUnit(is_branch_unit: Boolean = false
    io.fu_types := (FU_ALU |
                   FU_CNTR |
                   FU_MEM |
-                  (Mux(!muldiv_busy, FU_MULD, Bits(0))) |
+                  (Mux(!muldiv_busy, FU_DIV, Bits(0))) |
+                  (Mux(!muldiv_busy && Bool(use_slow_mul), FU_MUL, Bits(0))) |
                   (Mux(Bool(shares_csr_wport), FU_CSR, Bits(0))) |
                   (Mux(Bool(is_branch_unit), FU_BRU, Bits(0))))
 
@@ -482,7 +562,7 @@ class ALUMulDMemExeUnit(is_branch_unit: Boolean = false
    val muldiv = Module(new MulDivUnit())
 
    muldiv.io.req.valid           := io.req.valid &&
-                                    (io.req.bits.uop.fu_code === FU_MULD)
+                                    (io.req.bits.uop.fu_code === FU_DIV)
    muldiv.io.req.bits.uop        := io.req.bits.uop
    muldiv.io.req.bits.rs1_data   := io.req.bits.rs1_data
    muldiv.io.req.bits.rs2_data   := io.req.bits.rs2_data
@@ -491,7 +571,7 @@ class ALUMulDMemExeUnit(is_branch_unit: Boolean = false
 
    muldiv.io.resp.ready := !memresp_val //share write port with the memory
 
-   muldiv_busy := !muldiv.io.req.ready || (io.req.valid && io.req.bits.uop.fu_code === FU_MULD)
+   muldiv_busy := !muldiv.io.req.ready || (io.req.valid && io.req.bits.uop.fu_code === FU_DIV)
 
    // Branch Resolution ------------------------
 
@@ -595,6 +675,7 @@ class ALUMulDMemExeUnit(is_branch_unit: Boolean = false
 // TODO add the FPU as an input flag to prevent too many separate classes here?
 class FPUALUMulDMemExeUnit(is_branch_unit: Boolean = false
                        , shares_csr_wport: Boolean = false
+                       , use_slow_mul    : Boolean = false
                        ) extends ExecutionUnit(num_rf_read_ports = 3
                                               , num_rf_write_ports = 2
                                               , num_bypass_stages = 3 // TODO FPU_LATENCY Adam
@@ -614,7 +695,9 @@ class FPUALUMulDMemExeUnit(is_branch_unit: Boolean = false
                   FU_CNTR |
                   FU_MEM |
                   FU_FPU |
-                  (Mux(!muldiv_busy, FU_MULD, Bits(0))) |
+                  (Mux(!muldiv_busy, FU_DIV, Bits(0))) |
+                  (Mux(!muldiv_busy && Bool(use_slow_mul), FU_MUL, Bits(0))) |
+                  (Mux(Bool(!use_slow_mul), FU_MUL, Bits(0))) |
                   (Mux(Bool(shares_csr_wport), FU_CSR, Bits(0))) |
                   (Mux(Bool(is_branch_unit), FU_BRU, Bits(0))))
 
@@ -625,10 +708,10 @@ class FPUALUMulDMemExeUnit(is_branch_unit: Boolean = false
    // ALU Unit -------------------------------
    val alu = Module(new ALUUnit(is_branch_unit = true, num_stages=3)) // TODO FPU LATENCY
    alu.io.req.valid         := io.req.valid &&
-                                    ((io.req.bits.uop.fu_code === FU_ALU) ||
-                                     (io.req.bits.uop.fu_code === FU_BRU) ||
-                                     (io.req.bits.uop.fu_code === FU_CSR) ||
-                                     (io.req.bits.uop.fu_code === FU_CNTR))
+                                    (io.req.bits.uop.fu_code_is(FU_ALU) ||
+                                     io.req.bits.uop.fu_code_is(FU_BRU) ||
+                                     io.req.bits.uop.fu_code_is(FU_CSR) ||
+                                     io.req.bits.uop.fu_code_is(FU_CNTR))
    alu.io.req.bits.uop      := io.req.bits.uop
    alu.io.req.bits.kill     := io.req.bits.kill
    alu.io.req.bits.rs1_data := io.req.bits.rs1_data
@@ -652,7 +735,7 @@ class FPUALUMulDMemExeUnit(is_branch_unit: Boolean = false
 
    val fpu = Module(new FPUUnit())
    fpu.io.req.valid           := io.req.valid &&
-                                 io.req.bits.uop.fu_code === FU_FPU
+                                 io.req.bits.uop.fu_code_is(FU_FPU)
    fpu.io.req.bits.uop        := io.req.bits.uop
    fpu.io.req.bits.rs1_data   := io.req.bits.rs1_data
    fpu.io.req.bits.rs2_data   := io.req.bits.rs2_data
@@ -676,12 +759,21 @@ class FPUALUMulDMemExeUnit(is_branch_unit: Boolean = false
    assert (!(alu.io.resp.valid && fpu.io.resp.valid)
       , "ALU and FPU are fighting over the write port.")
 
-
+   // Pipelined, IMul Unit -----------------------
+   val imul = Module(new PipelinedMulUnit(IMUL_STAGES))
+   imul.io.req.valid := io.req.valid && (io.req.bits.uop.fu_code_is(FU_MUL) && Bool(!use_slow_mul))
+   imul.io.req.bits.uop      := io.req.bits.uop
+   imul.io.req.bits.rs1_data := io.req.bits.rs1_data
+   imul.io.req.bits.rs2_data := io.req.bits.rs2_data
+   imul.io.req.bits.kill     := io.req.bits.kill
+   imul.io.brinfo <> io.brinfo
+   
    // Mul/Div/Rem Unit -----------------------
    val muldiv = Module(new MulDivUnit())
 
    muldiv.io.req.valid           := io.req.valid &&
-                                    (io.req.bits.uop.fu_code === FU_MULD)
+                                    (io.req.bits.uop.fu_code_is(FU_DIV) ||
+                                    (io.req.bits.uop.fu_code_is(FU_MUL) && Bool(use_slow_mul)))
    muldiv.io.req.bits.uop        := io.req.bits.uop
    muldiv.io.req.bits.rs1_data   := io.req.bits.rs1_data
    muldiv.io.req.bits.rs2_data   := io.req.bits.rs2_data
@@ -691,7 +783,9 @@ class FPUALUMulDMemExeUnit(is_branch_unit: Boolean = false
 
    muldiv.io.resp.ready := !memresp_val //share write port with the memory
 
-   muldiv_busy := !muldiv.io.req.ready || (io.req.valid && io.req.bits.uop.fu_code === FU_MULD)
+   muldiv_busy := !muldiv.io.req.ready || 
+                  (io.req.valid && (io.req.bits.uop.fu_code_is(FU_DIV) ||
+                                   (io.req.bits.uop.fu_code_is(FU_MUL) && Bool(use_slow_mul))))
 
 
    // Bypassing --------------------------------

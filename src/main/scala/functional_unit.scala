@@ -31,13 +31,14 @@ object FUCode
    // bit mask, since a given execution pipeline may support multiple functional units
    val FUC_SZ = 8
    val FU_X    = Bits("b???????", FUC_SZ)
-   val FU_ALU  = Bits( 1, FUC_SZ)
-   val FU_BRU  = Bits( 2, FUC_SZ)
-   val FU_CNTR = Bits( 4, FUC_SZ)
-   val FU_CSR  = Bits( 8, FUC_SZ)
-   val FU_MULD = Bits(16, FUC_SZ)
-   val FU_MEM  = Bits(32, FUC_SZ)
-   val FU_FPU  = Bits(64, FUC_SZ)
+   val FU_ALU  = Bits(  1, FUC_SZ)
+   val FU_BRU  = Bits(  2, FUC_SZ)
+   val FU_MEM  = Bits(  4, FUC_SZ)
+   val FU_MUL  = Bits(  8, FUC_SZ)
+   val FU_DIV  = Bits( 16, FUC_SZ)
+   val FU_FPU  = Bits( 32, FUC_SZ)
+   val FU_CNTR = Bits( 64, FUC_SZ)
+   val FU_CSR  = Bits(128, FUC_SZ)
 }
 import FUCode._
 
@@ -554,5 +555,23 @@ class MulDivUnit extends UnPipelinedFunctionalUnit with BOOMCoreParameters
    io.resp.bits.data      := muldiv.io.resp.bits.data
 }
 
+class PipelinedMulUnit(num_stages: Int) 
+      extends PipelinedFunctionalUnit (num_stages = num_stages
+                                      , num_bypass_stages = 0
+                                      , earliest_bypass_stage = 0
+                                      , data_width = 64) with BOOMCoreParameters
+{
+   val imul = Module(new IMul(num_stages))
+   // request
+   imul.io.valid := io.req.valid
+   imul.io.in0   := io.req.bits.rs1_data
+   imul.io.in1   := io.req.bits.rs2_data
+   imul.io.dw    := io.req.bits.uop.ctrl.fcn_dw
+   imul.io.fn    := io.req.bits.uop.ctrl.op_fcn
+
+   // response
+   io.resp.bits.data      := imul.io.out
+}
+ 
 }
 

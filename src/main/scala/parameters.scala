@@ -48,6 +48,8 @@ abstract trait BOOMCoreParameters extends rocket.CoreParameters
    //************************************
    // Pipelining
 
+   val IMUL_STAGES = 3 // TODO move this to the parameter configuration file
+
    //************************************
    // Load/Store Unit
 
