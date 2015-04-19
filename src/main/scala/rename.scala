@@ -12,7 +12,6 @@ package BOOM
 import Chisel._
 import Node._
 
-import scala.collection.mutable.ArrayBuffer
 import rocket.BuildFPU
 
 //-------------------------------------------------------------

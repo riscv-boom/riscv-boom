@@ -133,7 +133,6 @@ class FPU extends Module with BOOMCoreParameters
 
    val fp_decoder = Module(new UOPCodeFPUDecoder)
    fp_decoder.io.uopc:= io_req.uop.uopc
-
    val fp_ctrl = fp_decoder.io.sigs
    val fp_rm = Mux(ImmGenRm(io_req.uop.imm_packed) === Bits(7), io_req.fcsr_rm, ImmGenRm(io_req.uop.imm_packed))
 
@@ -196,6 +195,10 @@ class FPU extends Module with BOOMCoreParameters
    io.resp.bits.data              := fpu_out.data
    io.resp.bits.fflags.valid      := io.resp.valid
    io.resp.bits.fflags.bits.flags := fpu_out.exc
+
+// TODO why is this assertion failing?
+//   assert (PopCount(Vec(ifpu.io.out, fpiu_out, fpmu.io.out, sfma.io.out, dfma.io.out).map(_.valid)) <= UInt(1),
+//      "Multiple FPU units are firing requests.")
 }
 
 }

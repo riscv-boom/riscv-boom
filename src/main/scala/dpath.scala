@@ -298,61 +298,59 @@ class DatPath() extends Module with BOOMCoreParameters
 
    if (ISSUE_WIDTH == 1)
    {
-      var mem_unit:ExecutionUnit  = null
-      if (params(BuildFPU).isEmpty)
-      {
-         mem_unit = Module(new ALUMulDMemExeUnit(is_branch_unit = true,
-                                          shares_csr_wport = true))
-      }
-      else
-      {
-         mem_unit = Module(new FPUALUMulDMemExeUnit(is_branch_unit = true,
-                                          shares_csr_wport = true))
-      }
-      exe_units += mem_unit
-      mem_unit.io.dmem <> io.dmem
+      exe_units += Module(new ALUMemExeUnit(is_branch_unit   = true
+                                          , shares_csr_wport = true
+                                          , fp_mem_support   = !params(BuildFPU).isEmpty
+                                          , has_fpu          = !params(BuildFPU).isEmpty
+                                          , has_mul          = true
+                                          , has_div          = true
+                                          , use_slow_mul     = false
+                                          ))
+      exe_units(0).io.dmem <> io.dmem
    }
    else if (ISSUE_WIDTH == 2)
    {
       // TODO make a ALU/Mem unit, or a ALU-i/Mem unit
-      val mem_unit = Module(new ALUMulDMemExeUnit())
-      if (params(BuildFPU).isEmpty)
-      {
-         exe_units += Module(new ALUExeUnit(is_branch_unit = true, shares_csr_wport = true))
-      }
-      else
-      {
-         exe_units += Module(new FPUALUMulExeUnit(is_branch_unit = true,shares_csr_wport = true))
-      }
-      exe_units += mem_unit
-      mem_unit.io.dmem <> io.dmem
-   }
-   else if (ISSUE_WIDTH == 3)
-   {
-      if (params(BuildFPU).isEmpty)
-      {
-         exe_units += Module(new ALUExeUnit(is_branch_unit = true, shares_csr_wport = true))
-      }
-      else
-      {
-         exe_units += Module(new FPUALUMulExeUnit(is_branch_unit = true,shares_csr_wport = true))
-      }
-      exe_units += Module(new ALUDivExeUnit)
-      val mem_unit = Module(new MemExeUnit())
-      exe_units += mem_unit
-      mem_unit.io.dmem <> io.dmem
+      exe_units += Module(new ALUExeUnit(is_branch_unit      = true
+                                          , shares_csr_wport = true
+                                          , has_fpu          = !params(BuildFPU).isEmpty
+                                          , has_mul          = true
+                                          ))
+      exe_units += Module(new ALUMemExeUnit(fp_mem_support   = !params(BuildFPU).isEmpty
+                                          , has_div          = true
+                                          ))
+      exe_units(1).io.dmem <> io.dmem
    }
    else
-   {  // 4-wide issue
-//      val mem_unit    = Module(new MemExeUnit())
-      val mem_unit    = Module(new ALUMulDMemExeUnit()) // TODO move muld elsewhere
-      require (!params(BuildFPU).isEmpty)
-      exe_units += Module(new FPUALUMulExeUnit(is_branch_unit = true, shares_csr_wport = true))
-      exe_units += Module(new ALUExeUnit)
-      exe_units += Module(new ALUMulExeUnit)
-      exe_units += mem_unit
-      mem_unit.io.dmem <> io.dmem
+   {
+      require (false )
    }
+//   else if (ISSUE_WIDTH == 3)
+//   {
+//      if (params(BuildFPU).isEmpty)
+//      {
+//         exe_units += Module(new ALUExeUnit(is_branch_unit = true, shares_csr_wport = true))
+//      }
+//      else
+//      {
+//         exe_units += Module(new FPUALUMulExeUnit(is_branch_unit = true,shares_csr_wport = true))
+//      }
+//      exe_units += Module(new ALUDivExeUnit)
+//      val mem_unit = Module(new MemExeUnit())
+//      exe_units += mem_unit
+//      mem_unit.io.dmem <> io.dmem
+//   }
+//   else
+//   {  // 4-wide issue
+////      val mem_unit    = Module(new MemExeUnit())
+//      val mem_unit    = Module(new ALUMulDMemExeUnit()) // TODO move muld elsewhere
+//      require (!params(BuildFPU).isEmpty)
+//      exe_units += Module(new FPUALUMulExeUnit(is_branch_unit = true, shares_csr_wport = true))
+//      exe_units += Module(new ALUExeUnit)
+//      exe_units += Module(new ALUExeUnit(has_mul = true))
+//      exe_units += mem_unit
+//      mem_unit.io.dmem <> io.dmem
+//   }
 
    require (exe_units.length != 0)
    val num_rf_read_ports = exe_units.map(_.num_rf_read_ports).reduce[Int](_+_)
@@ -909,19 +907,18 @@ class DatPath() extends Module with BOOMCoreParameters
    // can catch this in the hardware
 
    require (exe_units(0).uses_csr_wport)
-   val csr_rw_cmd = exe_units(0).io.resp(0).bits.uop.ctrl.csr_cmd
+
+   val csr_rw_cmd = Mux(exe_units(0).io.resp(0).valid, exe_units(0).io.resp(0).bits.uop.ctrl.csr_cmd, CSR.N)
    val wb_wdata = exe_units(0).io.resp(0).bits.data
 
    csr.io.host <> io.host
+//   this isnt going to work, doesn't match up with getting data from csr file
    csr.io.rw.addr  := Mux(watchdog_trigger, UInt(rocket.CSRs.tohost),
                                             ImmGen(exe_units(0).io.resp(0).bits.uop.imm_packed, IS_I).toUInt)
-
-   csr.io.rw.cmd   := Mux(watchdog_trigger,              rocket.CSR.W,
-                      Mux(exe_units(0).io.resp(0).valid, csr_rw_cmd,
-                                                         CSR.N))
-   csr.io.rw.wdata := Mux(watchdog_trigger,     Bits(WATCHDOG_ERR_NO << 1 | 1),
-                      Mux(com_exception,        com_exc_badvaddr,
-                                                wb_wdata))
+   csr.io.rw.cmd   := Mux(watchdog_trigger, rocket.CSR.W, csr_rw_cmd)
+   csr.io.rw.wdata := Mux(watchdog_trigger, Bits(WATCHDOG_ERR_NO << 1 | 1),
+                      Mux(com_exception,    com_exc_badvaddr,
+                                            wb_wdata))
 
    assert (!(csr_rw_cmd != CSR.N && !exe_units(0).io.resp(0).valid), "CSRFile is being written to spuriously.")
 
