@@ -321,36 +321,32 @@ class DatPath() extends Module with BOOMCoreParameters
                                           ))
       exe_units(1).io.dmem <> io.dmem
    }
-   else
+   else if (ISSUE_WIDTH == 3)
    {
-      require (false )
+      exe_units += Module(new ALUExeUnit(is_branch_unit = true
+                                          , shares_csr_wport = true
+                                          , has_fpu = !params(BuildFPU).isEmpty))
+      exe_units += Module(new ALUExeUnit(has_div = true))
+      exe_units += Module(new MemExeUnit())
+      exe_units(2).io.dmem <> io.dmem
    }
-//   else if (ISSUE_WIDTH == 3)
-//   {
-//      if (params(BuildFPU).isEmpty)
-//      {
-//         exe_units += Module(new ALUExeUnit(is_branch_unit = true, shares_csr_wport = true))
-//      }
-//      else
-//      {
-//         exe_units += Module(new FPUALUMulExeUnit(is_branch_unit = true,shares_csr_wport = true))
-//      }
-//      exe_units += Module(new ALUDivExeUnit)
-//      val mem_unit = Module(new MemExeUnit())
-//      exe_units += mem_unit
-//      mem_unit.io.dmem <> io.dmem
-//   }
-//   else
-//   {  // 4-wide issue
-////      val mem_unit    = Module(new MemExeUnit())
-//      val mem_unit    = Module(new ALUMulDMemExeUnit()) // TODO move muld elsewhere
-//      require (!params(BuildFPU).isEmpty)
-//      exe_units += Module(new FPUALUMulExeUnit(is_branch_unit = true, shares_csr_wport = true))
-//      exe_units += Module(new ALUExeUnit)
-//      exe_units += Module(new ALUExeUnit(has_mul = true))
-//      exe_units += mem_unit
-//      mem_unit.io.dmem <> io.dmem
-//   }
+   else
+   {  // 4-wide issue
+      exe_units += Module(new ALUExeUnit(is_branch_unit = true
+                                          , shares_csr_wport = true
+                                          , has_fpu = !params(BuildFPU).isEmpty
+                                          , has_mul = true
+                                          ))
+      exe_units += Module(new ALUExeUnit)
+      exe_units += Module(new ALUExeUnit(has_div = true))
+      exe_units += Module(new MemExeUnit())
+      exe_units(3).io.dmem <> io.dmem
+   }
+
+   require (exe_units.map(_.is_mem_unit).reduce(_|_), "Datapath is missing a memory unit.")
+   require (exe_units.map(_.has_mul).reduce(_|_), "Datapath is missing a multiplier.")
+   require (exe_units.map(_.has_div).reduce(_|_), "Datapath is missing a divider.")
+   require (exe_units.map(_.has_fpu).reduce(_|_) == !params(BuildFPU).isEmpty, "Datapath is missing a fpu.")
 
    require (exe_units.length != 0)
    val num_rf_read_ports = exe_units.map(_.num_rf_read_ports).reduce[Int](_+_)
@@ -704,7 +700,8 @@ class DatPath() extends Module with BOOMCoreParameters
 
    for (w <- 0 until DECODE_WIDTH)
    {
-      dec_brmask_logic.io.is_branch(w) := (dec_valids(w) && dec_uops(w).is_br_or_jmp && !dec_uops(w).is_jal)
+//      dec_brmask_logic.io.is_branch(w) := (dec_valids(w) && dec_uops(w).is_br_or_jmp && !dec_uops(w).is_jal)
+      dec_brmask_logic.io.is_branch(w) := (dec_uops(w).is_br_or_jmp && !dec_uops(w).is_jal)
       dec_brmask_logic.io.will_fire(w) := dis_mask(w)
 
       dec_uops(w).br_tag  := dec_brmask_logic.io.br_tag(w)
@@ -908,7 +905,9 @@ class DatPath() extends Module with BOOMCoreParameters
 
    require (exe_units(0).uses_csr_wport)
 
-   val csr_rw_cmd = Mux(exe_units(0).io.resp(0).valid, exe_units(0).io.resp(0).bits.uop.ctrl.csr_cmd, CSR.N)
+//   val csr_rw_cmd = Mux(exe_units(0).io.resp(0).valid, exe_units(0).io.resp(0).bits.uop.ctrl.csr_cmd, CSR.N)
+   // for critical path reasons, we aren't zero'ing this out if resp is not valid
+   val csr_rw_cmd = exe_units(0).io.resp(0).bits.uop.ctrl.csr_cmd
    val wb_wdata = exe_units(0).io.resp(0).bits.data
 
    csr.io.host <> io.host

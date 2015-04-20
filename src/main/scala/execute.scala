@@ -77,6 +77,8 @@ abstract class ExecutionUnit(val num_rf_read_ports: Int
                             , var uses_csr_wport: Boolean       = false
                             ,     is_branch_unit: Boolean       = false
                             , val has_fpu       : Boolean       = false // can return fflags
+                            , val has_mul       : Boolean       = false
+                            , val has_div       : Boolean       = false
                             ) extends Module with BOOMCoreParameters
 {
    val io = new ExecutionUnitIo(num_rf_read_ports, num_rf_write_ports
@@ -109,6 +111,8 @@ class ALUExeUnit(is_branch_unit   : Boolean = false
                                       , uses_csr_wport = shares_csr_wport
                                       , is_branch_unit = is_branch_unit
                                       , has_fpu = has_fpu
+                                      , has_mul = has_mul
+                                      , has_div = has_div
                                       )
 {
    val muldiv_busy = Bool()
@@ -395,6 +399,8 @@ class ALUMemExeUnit(is_branch_unit    : Boolean = false
                                           , uses_csr_wport = shares_csr_wport
                                           , is_branch_unit = is_branch_unit
                                           , has_fpu = has_fpu
+                                          , has_mul = has_mul
+                                          , has_div = has_div
                                           )
 {
    println ("     ExeUnit--")
@@ -500,8 +506,8 @@ class ALUMemExeUnit(is_branch_unit    : Boolean = false
    val muldiv = Module(new MulDivUnit())
 
    muldiv.io.req.valid           := io.req.valid &&
-                                    (io.req.bits.uop.fu_code_is(FU_DIV) ||
-                                    (io.req.bits.uop.fu_code_is(FU_MUL) && Bool(use_slow_mul)))
+                                    ((io.req.bits.uop.fu_code_is(FU_DIV) && Bool(has_div)) ||
+                                    (io.req.bits.uop.fu_code_is(FU_MUL) && Bool(has_mul && use_slow_mul)))
    muldiv.io.req.bits.uop        := io.req.bits.uop
    muldiv.io.req.bits.rs1_data   := io.req.bits.rs1_data
    muldiv.io.req.bits.rs2_data   := io.req.bits.rs2_data
@@ -513,7 +519,7 @@ class ALUMemExeUnit(is_branch_unit    : Boolean = false
 
    muldiv_busy := !muldiv.io.req.ready ||
                   (io.req.valid && (io.req.bits.uop.fu_code_is(FU_DIV) ||
-                                   (io.req.bits.uop.fu_code_is(FU_MUL) && Bool(use_slow_mul))))
+                                   (io.req.bits.uop.fu_code_is(FU_MUL) && Bool(has_mul && use_slow_mul))))
 
 
    // Bypassing --------------------------------
@@ -609,10 +615,20 @@ class ALUMemExeUnit(is_branch_unit    : Boolean = false
    lsu.io.memresp.valid := memresp_val
    lsu.io.memresp.bits  := memresp_uop
 
-   io.resp(1).valid                := memresp_val || muldiv.io.resp.valid
-   io.resp(1).bits.uop             := Mux(memresp_val, memresp_uop, muldiv.io.resp.bits.uop)
-   io.resp(1).bits.uop.ctrl.rf_wen := Mux(memresp_val, memresp_rf_wen, muldiv.io.resp.bits.uop.ctrl.rf_wen)  // TODO get rid of this, it should come from the thing below
-   io.resp(1).bits.data            := Mux(memresp_val, memresp_data, muldiv.io.resp.bits.data)
+   if (has_div || (has_mul && use_slow_mul))
+   {
+      io.resp(1).valid                := memresp_val || muldiv.io.resp.valid
+      io.resp(1).bits.uop             := Mux(memresp_val, memresp_uop, muldiv.io.resp.bits.uop)
+      io.resp(1).bits.uop.ctrl.rf_wen := Mux(memresp_val, memresp_rf_wen, muldiv.io.resp.bits.uop.ctrl.rf_wen)  // TODO get rid of this, it should come from the thing below
+      io.resp(1).bits.data            := Mux(memresp_val, memresp_data, muldiv.io.resp.bits.data)
+   }
+   else
+   {
+      io.resp(1).valid                := memresp_val
+      io.resp(1).bits.uop             := memresp_uop
+      io.resp(1).bits.uop.ctrl.rf_wen := memresp_rf_wen
+      io.resp(1).bits.data            := memresp_data
+   }
    io.resp(1).bits.fflags.valid    := Bool(false)
    io.resp(1).bits.fflags.bits.uop := NullMicroOp
    io.resp(1).bits.fflags.bits.flags:= Bits(0)
