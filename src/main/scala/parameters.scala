@@ -9,7 +9,7 @@ case object DecodeWidth extends Field[Int]
 case object DispatchWidth extends Field[Int]
 case object IssueWidth extends Field[Int]
 case object NumRobEntries extends Field[Int]
-case object NumIntIssueSlotEntries extends Field[Int]
+case object NumIssueSlotEntries extends Field[Int]
 case object NumLsuEntries extends Field[Int]
 case object NumPhysRegisters extends Field[Int]
 case object MaxBrCount extends Field[Int]
@@ -38,12 +38,12 @@ abstract trait BOOMCoreParameters extends rocket.CoreParameters
 
    //************************************
    // Data Structure Sizes
-   val NUM_ROB_ENTRIES          = params(NumRobEntries)     // number of ROB entries (e.g., 32 entries for R10k)
-   val INTEGER_ISSUE_SLOT_COUNT = params(NumIntIssueSlotEntries)
-   val NUM_LSU_ENTRIES          = params(NumLsuEntries)     // number of LD/ST entries
-   val MAX_BR_COUNT             = params(MaxBrCount)        // number of branches we can speculate simultaneously
-   val PHYS_REG_COUNT           = params(NumPhysRegisters)  // size of the unified, physical register file
-   val FETCH_BUFFER_SZ          = params(FetchBufferSz)     // number of instructions that stored between fetch&decode
+   val NUM_ROB_ENTRIES  = params(NumRobEntries)     // number of ROB entries (e.g., 32 entries for R10k)
+   val ISSUE_SLOT_COUNT = params(NumIssueSlotEntries)
+   val NUM_LSU_ENTRIES  = params(NumLsuEntries)     // number of LD/ST entries
+   val MAX_BR_COUNT     = params(MaxBrCount)        // number of branches we can speculate simultaneously
+   val PHYS_REG_COUNT   = params(NumPhysRegisters)  // size of the unified, physical register file
+   val FETCH_BUFFER_SZ  = params(FetchBufferSz)     // number of instructions that stored between fetch&decode
 
    //************************************
    // Pipelining

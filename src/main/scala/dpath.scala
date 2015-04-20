@@ -325,7 +325,9 @@ class DatPath() extends Module with BOOMCoreParameters
    {
       exe_units += Module(new ALUExeUnit(is_branch_unit = true
                                           , shares_csr_wport = true
-                                          , has_fpu = !params(BuildFPU).isEmpty))
+                                          , has_fpu = !params(BuildFPU).isEmpty
+                                          , has_mul      = true
+                                          ))
       exe_units += Module(new ALUExeUnit(has_div = true))
       exe_units += Module(new MemExeUnit())
       exe_units(2).io.dmem <> io.dmem
@@ -700,8 +702,10 @@ class DatPath() extends Module with BOOMCoreParameters
 
    for (w <- 0 until DECODE_WIDTH)
    {
-//      dec_brmask_logic.io.is_branch(w) := (dec_valids(w) && dec_uops(w).is_br_or_jmp && !dec_uops(w).is_jal)
-      dec_brmask_logic.io.is_branch(w) := (dec_uops(w).is_br_or_jmp && !dec_uops(w).is_jal)
+////      dec_brmask_logic.io.is_branch(w) := (dec_valids(w) && dec_uops(w).is_br_or_jmp && !dec_uops(w).is_jal)
+//   dec_fbundle(w).valid?  i think also too slow
+//   fetched_inst_valid? no, too slow
+      dec_brmask_logic.io.is_branch(w) := !dec_finished_mask(w) && dec_uops(w).is_br_or_jmp && !dec_uops(w).is_jal
       dec_brmask_logic.io.will_fire(w) := dis_mask(w)
 
       dec_uops(w).br_tag  := dec_brmask_logic.io.br_tag(w)
@@ -1325,7 +1329,7 @@ class DatPath() extends Module with BOOMCoreParameters
       val u_cyn = if (DEBUG_ENABLE_COLOR) "\033[4;36m" else " "
       val u_wht = if (DEBUG_ENABLE_COLOR) "\033[4;37m" else " "
 
-      var white_space = 47  - NUM_LSU_ENTRIES- INTEGER_ISSUE_SLOT_COUNT - (NUM_ROB_ENTRIES/COMMIT_WIDTH)
+      var white_space = 47  - NUM_LSU_ENTRIES- ISSUE_SLOT_COUNT - (NUM_ROB_ENTRIES/COMMIT_WIDTH)
 
       def InstsStr(insts: Bits, width: Int) =
       {
@@ -1473,10 +1477,10 @@ class DatPath() extends Module with BOOMCoreParameters
          , br_unit.btb_update.isReturn
       )
       // Issue Window
-      for (i <- 0 until INTEGER_ISSUE_SLOT_COUNT)
+      for (i <- 0 until ISSUE_SLOT_COUNT)
       {
          printf("  integer_issue_slot[%d](%s)(Req:%s):wen=%s P:(%s,%s,%s) OP:(%d,%d,%d) PDST:%d %s [%s[DASM(%x)]"+end+" 0x%x: %d] ri:%d bm=%d imm=0x%x\n"
-            , UInt(i, log2Up(INTEGER_ISSUE_SLOT_COUNT))
+            , UInt(i, log2Up(ISSUE_SLOT_COUNT))
             , Mux(issue_unit.io.debug.slot(i).valid, Str("V"), Str("-"))
             , Mux(issue_unit.io.debug.slot(i).request, Str(u_red + "R" + end), Str(grn + "-" + end))
             , Mux(issue_unit.io.debug.slot(i).in_wen, Str(u_wht + "W" + end),  Str(grn + " " + end))

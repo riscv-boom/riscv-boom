@@ -3,6 +3,8 @@ import Chisel._
 import Node._
 
 import rocket.ALU._
+// TODO can repurpose the FN_* ctrl signals,
+// as we don't overlap with the ALU
 
 class IMul(imul_stages: Int) extends Module
 {

@@ -15,7 +15,7 @@ import scala.collection.mutable.ArrayBuffer
 //-------------------------------------------------------------
 // Entry Slot in the Issue Station
 
-class IntegerIssueSlotIo(num_wakeup_ports: Int) extends BOOMCoreBundle
+class IssueSlotIo(num_wakeup_ports: Int) extends BOOMCoreBundle
 {
    val id_num         = UInt(INPUT)
 
@@ -46,9 +46,9 @@ class IntegerIssueSlotIo(num_wakeup_ports: Int) extends BOOMCoreBundle
    }.asOutput
 }
 
-class IntegerIssueSlot(num_slow_wakeup_ports: Int) extends Module with BOOMCoreParameters
+class IssueSlot(num_slow_wakeup_ports: Int) extends Module with BOOMCoreParameters
 {
-   val io = new IntegerIssueSlotIo(num_slow_wakeup_ports)
+   val io = new IssueSlotIo(num_slow_wakeup_ports)
 
    val next_p1 = Bool()
    val next_p2 = Bool()
@@ -210,7 +210,7 @@ class IssueUnitIO(issue_width: Int, num_wakeup_ports: Int) extends BOOMCoreBundl
 
    val debug = new BOOMCoreBundle
    {
-      val slot = Vec.fill(INTEGER_ISSUE_SLOT_COUNT) { new Bundle {
+      val slot = Vec.fill(ISSUE_SLOT_COUNT) { new Bundle {
          val valid   = Bool()
          val uop     = new MicroOp()
          val request = Bool()
@@ -243,14 +243,14 @@ class IssueUnit(issue_width: Int, num_wakeup_ports: Int) extends Module with BOO
    //-------------------------------------------------------------
    // Issue Table
 
-   val issue_slot_io = Vec.fill(INTEGER_ISSUE_SLOT_COUNT) { Module(new IntegerIssueSlot(num_wakeup_ports)).io }
+   val issue_slot_io = Vec.fill(ISSUE_SLOT_COUNT) { Module(new IssueSlot(num_wakeup_ports)).io }
 
    // double width, since some instructions break into two micro-ops
-   val entry_wen_oh  = Vec.fill(INTEGER_ISSUE_SLOT_COUNT){ Bits(width=DISPATCH_WIDTH) }
-   val entry_wen_2nd = Vec.fill(INTEGER_ISSUE_SLOT_COUNT){Bool()}
+   val entry_wen_oh  = Vec.fill(ISSUE_SLOT_COUNT){ Bits(width=DISPATCH_WIDTH) }
+   val entry_wen_2nd = Vec.fill(ISSUE_SLOT_COUNT){Bool()}
 
 
-   for (i <- 0 until INTEGER_ISSUE_SLOT_COUNT)
+   for (i <- 0 until ISSUE_SLOT_COUNT)
    {
       issue_slot_io(i).id_num := UInt(i)
 
@@ -272,11 +272,11 @@ class IssueUnit(issue_width: Int, num_wakeup_ports: Int) extends Module with BOO
    // Dispatch/Entry Logic
    // find a slot to enter a new dispatched instruction
 
-   val entry_wen_oh_array = Array.fill(INTEGER_ISSUE_SLOT_COUNT,2*DISPATCH_WIDTH){Bool(false)}
+   val entry_wen_oh_array = Array.fill(ISSUE_SLOT_COUNT,2*DISPATCH_WIDTH){Bool(false)}
    var allocated = Vec.fill(2*DISPATCH_WIDTH){Bool(false)} // did an instruction find an issue width?
 
 
-   for (i <- 0 until INTEGER_ISSUE_SLOT_COUNT)
+   for (i <- 0 until ISSUE_SLOT_COUNT)
    {
       var next_allocated = Vec.fill(2*DISPATCH_WIDTH){Bool()}
       var can_allocate = !(issue_slot_io(i).valid)
@@ -296,7 +296,7 @@ class IssueUnit(issue_width: Int, num_wakeup_ports: Int) extends Module with BOO
 
    // if we can find an issue slot, do we actually need it?
    // also, translate from Scala data structures to Chisel Vecs
-   for (i <- 0 until INTEGER_ISSUE_SLOT_COUNT)
+   for (i <- 0 until ISSUE_SLOT_COUNT)
    {
       val temp_1stuop_val = Vec.fill(DISPATCH_WIDTH){Bool()}
       val temp_2nduop_val = Vec.fill(DISPATCH_WIDTH){Bool()}
@@ -331,11 +331,11 @@ class IssueUnit(issue_width: Int, num_wakeup_ports: Int) extends Module with BOO
 
 //   val requests:Bits = null
 //   val requests = (Vec(
-//                     Vec.tabulate(INTEGER_ISSUE_SLOT_COUNT)(i => issue_slot_io(i).request_hp) ++
-//                     Vec.tabulate(INTEGER_ISSUE_SLOT_COUNT)(i => issue_slot_io(i).request)
+//                     Vec.tabulate(ISSUE_SLOT_COUNT)(i => issue_slot_io(i).request_hp) ++
+//                     Vec.tabulate(ISSUE_SLOT_COUNT)(i => issue_slot_io(i).request)
 //                     )).toBits
 
-   val num_requestors = INTEGER_ISSUE_SLOT_COUNT
+   val num_requestors = ISSUE_SLOT_COUNT
 
    for (w <- 0 until issue_width)
    {
@@ -406,7 +406,7 @@ class IssueUnit(issue_width: Int, num_wakeup_ports: Int) extends Module with BOO
    //-------------------------------------------------------------
    // pass printf debug info out to higher level module
 
-   for (i <- 0 until INTEGER_ISSUE_SLOT_COUNT)
+   for (i <- 0 until ISSUE_SLOT_COUNT)
    {
       io.debug.slot(i).valid   := issue_slot_io(i).valid
       io.debug.slot(i).uop     := issue_slot_io(i).outUop
