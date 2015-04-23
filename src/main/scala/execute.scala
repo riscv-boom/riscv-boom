@@ -231,6 +231,8 @@ class ALUExeUnit(is_branch_unit   : Boolean = false
    io.resp(0).valid    := fu_units.map(_.io.resp.valid).reduce(_|_)
    io.resp(0).bits.uop := new MicroOp().fromBits(PriorityMux(fu_units.map(f => (f.io.resp.valid, f.io.resp.bits.uop.toBits))))
    io.resp(0).bits.data:= PriorityMux(fu_units.map(f => (f.io.resp.valid, f.io.resp.bits.data.toBits))).toBits
+   // pulled out for critical path reasons
+   io.resp(0).bits.uop.csr_addr := ImmGen(alu.io.resp.bits.uop.imm_packed, IS_I).toUInt
    io.resp(0).bits.uop.ctrl.csr_cmd := alu.io.resp.bits.uop.ctrl.csr_cmd
 
    assert ((PopCount(fu_units.map(_.io.resp.valid)) <= UInt(1) && !muldiv_resp_valid) ||
@@ -489,6 +491,8 @@ class ALUMemExeUnit(is_branch_unit    : Boolean = false
    io.resp(0).valid    := fu_units.map(_.io.resp.valid).reduce(_|_)
    io.resp(0).bits.uop := new MicroOp().fromBits(PriorityMux(fu_units.map(f => (f.io.resp.valid, f.io.resp.bits.uop.toBits))))
    io.resp(0).bits.data:= PriorityMux(fu_units.map(f => (f.io.resp.valid, f.io.resp.bits.data.toBits))).toBits
+   // pulled out for critical path reasons
+   io.resp(0).bits.uop.csr_addr := ImmGen(alu.io.resp.bits.uop.imm_packed, IS_I).toUInt
    io.resp(0).bits.uop.ctrl.csr_cmd := alu.io.resp.bits.uop.ctrl.csr_cmd
 
 //   io.resp(0).bits.fflags <> fpu.io.resp.bits.fflags

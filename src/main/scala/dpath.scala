@@ -107,6 +107,7 @@ class MicroOp extends BOOMCoreBundle
    val ctrl             = new CtrlSignals
 
    val wakeup_delay     = UInt(width = log2Up(MAX_WAKEUP_DELAY)) // unused
+   val allocate_brtag   = Bool()                      // does this allocate a branch tag? (is branch or JR but not JAL)
    val is_br_or_jmp     = Bool()                      // is this micro-op a (branch or jump) vs. a regular PC+4 inst?
    val is_jump          = Bool()                      // is this a jump? (note: not mutually exclusive with br_valid)
    val is_jal           = Bool()                      // is this a JAL? used for branch unit
@@ -123,6 +124,7 @@ class MicroOp extends BOOMCoreBundle
    val btb_hit          = Bool()                      // btb hit on this instruction
 
    val imm_packed       = Bits(width = LONGEST_IMM_SZ) // densely pack the imm in decode... then translate and sign-extend in execute
+   val csr_addr         = UInt(width = CSR_ADDR_SZ) // only used for critical path reasons in Exe
    val rob_idx          = UInt(width = ROB_ADDR_SZ)
    val ldq_idx          = UInt(width = MEM_ADDR_SZ)
    val stq_idx          = UInt(width = MEM_ADDR_SZ)
@@ -257,9 +259,9 @@ class DatPath() extends Module with BOOMCoreParameters
    val bp2_jmp_inst          = Bits()
 
    // Instruction Decode State
-   val dec_valids     = Vec.fill(DECODE_WIDTH) {Bool()}  // is the incoming, decoded instruction valid? It may be held up though. TODO confusing wrt dec_mask?
+   val dec_valids     = Vec.fill(DECODE_WIDTH) {Bool()}  // is the incoming, decoded instruction valid? It may be held up though. 
    val dec_uops       = Vec.fill(DECODE_WIDTH) {new MicroOp()}
-   val dec_mask       = Vec.fill(DECODE_WIDTH) {Bool()}  // will the inst progress down the pipeline?
+   val dec_will_fire  = Vec.fill(DECODE_WIDTH) {Bool()}  // can the instruction fire beyond decode? (can still be stopped in ren or dis)
    val dec_rdy        = Bool()
 
    val rob_rdy        = Bool()
@@ -412,6 +414,8 @@ class DatPath() extends Module with BOOMCoreParameters
    // **** Fetch Stage/Frontend ****
    //-------------------------------------------------------------
    //-------------------------------------------------------------
+
+   val kill_frontend = br_unit.brinfo.mispredict || flush_pipeline
 
    val fetchbuffer_kill = Bool()
    val fetch_bundle = new FetchBundle()
@@ -650,11 +654,11 @@ class DatPath() extends Module with BOOMCoreParameters
    for (w <- 0 until DECODE_WIDTH)
    {
       val decode_unit = Module(new DecodeUnit)
-      dec_valids(w) := fetched_inst_valid && dec_fbundle(w).valid && !dec_finished_mask(w) // TODO a way to do this without being confusing wrt dec_mask?
-      decode_unit.io.enq.uop     := dec_fbundle(w)
-      decode_unit.io.status      := csr.io.status
-      decode_unit.io.interrupt   := csr.io.interrupt
-      decode_unit.io.interrupt_cause   := csr.io.interrupt_cause
+      dec_valids(w)                  := fetched_inst_valid && dec_fbundle(w).valid && !dec_finished_mask(w)
+      decode_unit.io.enq.uop         := dec_fbundle(w)
+      decode_unit.io.status          := csr.io.status
+      decode_unit.io.interrupt       := csr.io.interrupt
+      decode_unit.io.interrupt_cause := csr.io.interrupt_cause
 
       val prev_insts_in_bundle_valid = Range(0,w).map{i => dec_valids(i)}.foldLeft(Bool(false))(_|_)
 
@@ -676,8 +680,8 @@ class DatPath() extends Module with BOOMCoreParameters
       dec_stall_next_inst  = stall_me ||
                              (dec_valids(w) && dec_uops(w).is_unique)
 
-      dec_mask(w) := dec_valids(w) && !stall_me
-      dec_uops(w) := decode_unit.io.deq.uop
+      dec_will_fire(w) := dec_valids(w) && !stall_me && !kill_frontend
+      dec_uops(w)      := decode_unit.io.deq.uop
    }
 
    // all decoders are empty and ready for new instructions
@@ -689,7 +693,7 @@ class DatPath() extends Module with BOOMCoreParameters
    }
    .otherwise
    {
-      dec_finished_mask := dec_mask.toBits | dec_finished_mask
+      dec_finished_mask := dec_will_fire.toBits | dec_finished_mask
    }
 
    //-------------------------------------------------------------
@@ -705,8 +709,8 @@ class DatPath() extends Module with BOOMCoreParameters
 ////      dec_brmask_logic.io.is_branch(w) := (dec_valids(w) && dec_uops(w).is_br_or_jmp && !dec_uops(w).is_jal)
 //   dec_fbundle(w).valid?  i think also too slow
 //   fetched_inst_valid? no, too slow
-      dec_brmask_logic.io.is_branch(w) := !dec_finished_mask(w) && dec_uops(w).is_br_or_jmp && !dec_uops(w).is_jal
-      dec_brmask_logic.io.will_fire(w) := dis_mask(w)
+      dec_brmask_logic.io.is_branch(w) := !dec_finished_mask(w) && dec_uops(w).allocate_brtag
+      dec_brmask_logic.io.will_fire(w) :=  dis_mask(w) && dec_uops(w).allocate_brtag // ren, dis can back pressure us
 
       dec_uops(w).br_tag  := dec_brmask_logic.io.br_tag(w)
       dec_uops(w).br_mask := dec_brmask_logic.io.br_mask(w)
@@ -729,8 +733,8 @@ class DatPath() extends Module with BOOMCoreParameters
       dec_uops(w).ldq_idx := new_lidx
       dec_uops(w).stq_idx := new_sidx
 
-      new_lidx = Mux(dec_mask(w) && dec_uops(w).is_load,  WrapInc(new_lidx, NUM_LSU_ENTRIES), new_lidx)
-      new_sidx = Mux(dec_mask(w) && dec_uops(w).is_store, WrapInc(new_sidx, NUM_LSU_ENTRIES), new_sidx)
+      new_lidx = Mux(dec_will_fire(w) && dec_uops(w).is_load,  WrapInc(new_lidx, NUM_LSU_ENTRIES), new_lidx)
+      new_sidx = Mux(dec_will_fire(w) && dec_uops(w).is_store, WrapInc(new_sidx, NUM_LSU_ENTRIES), new_sidx)
    }
 
 
@@ -744,14 +748,14 @@ class DatPath() extends Module with BOOMCoreParameters
 
    rename_stage.io.dis_inst_can_proceed := dis_insts_can_proceed
 
-   rename_stage.io.kill     := br_unit.brinfo.mispredict || flush_pipeline
+   rename_stage.io.kill     := kill_frontend // mispredict or flush
    rename_stage.io.brinfo   := br_unit.brinfo
 
    rename_stage.io.flush_pipeline := flush_pipeline // TODO temp refactor
 
    for (w <- 0 until DECODE_WIDTH)
    {
-      rename_stage.io.dec_mask(w) := dec_mask(w)
+      rename_stage.io.dec_mask(w) := dec_will_fire(w)
    }
 
    rename_stage.io.dec_uops := dec_uops
@@ -909,15 +913,13 @@ class DatPath() extends Module with BOOMCoreParameters
 
    require (exe_units(0).uses_csr_wport)
 
-//   val csr_rw_cmd = Mux(exe_units(0).io.resp(0).valid, exe_units(0).io.resp(0).bits.uop.ctrl.csr_cmd, CSR.N)
    // for critical path reasons, we aren't zero'ing this out if resp is not valid
    val csr_rw_cmd = exe_units(0).io.resp(0).bits.uop.ctrl.csr_cmd
    val wb_wdata = exe_units(0).io.resp(0).bits.data
 
    csr.io.host <> io.host
 //   this isnt going to work, doesn't match up with getting data from csr file
-   csr.io.rw.addr  := Mux(watchdog_trigger, UInt(rocket.CSRs.tohost),
-                                            ImmGen(exe_units(0).io.resp(0).bits.uop.imm_packed, IS_I).toUInt)
+   csr.io.rw.addr  := Mux(watchdog_trigger, UInt(rocket.CSRs.tohost), exe_units(0).io.resp(0).bits.uop.csr_addr)
    csr.io.rw.cmd   := Mux(watchdog_trigger, rocket.CSR.W, csr_rw_cmd)
    csr.io.rw.wdata := Mux(watchdog_trigger, Bits(WATCHDOG_ERR_NO << 1 | 1),
                       Mux(com_exception,    com_exc_badvaddr,
@@ -1015,8 +1017,8 @@ class DatPath() extends Module with BOOMCoreParameters
 
    for (w <- 0 until DECODE_WIDTH)
    {
-      lsu_io.dec_st_vals(w) := dec_mask(w) && rename_stage.io.inst_can_proceed(w) && !com_exception && dec_uops(w).is_store
-      lsu_io.dec_ld_vals(w) := dec_mask(w) && rename_stage.io.inst_can_proceed(w) && !com_exception && dec_uops(w).is_load
+      lsu_io.dec_st_vals(w) := dec_will_fire(w) && rename_stage.io.inst_can_proceed(w) && !com_exception && dec_uops(w).is_store
+      lsu_io.dec_ld_vals(w) := dec_will_fire(w) && rename_stage.io.inst_can_proceed(w) && !com_exception && dec_uops(w).is_load
 
       lsu_io.dec_uops(w).rob_idx := dis_uops(w).rob_idx // for debug purposes (comit logging)
    }
@@ -1414,7 +1416,7 @@ class DatPath() extends Module with BOOMCoreParameters
       {
          printf("(%s%s) " + red + "DASM(%x)" + end + " |  "
             , Mux(fetched_inst_valid && dec_fbundle(w).valid && !dec_finished_mask(w), Str("V"), Str("-"))
-            , Mux(dec_mask(w), Str("V"), Str("-"))
+            , Mux(dec_will_fire(w), Str("V"), Str("-"))
             , dec_fbundle(w).inst
             )
       }

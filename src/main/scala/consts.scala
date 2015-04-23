@@ -15,7 +15,7 @@ import Node._
 trait BOOMDebugConstants
 {
    val DEBUG_PRINTF        = false // use the Chisel printf functionality
-   val DEBUG_ENABLE_COLOR  = false // provide color to print outs? requires a VIM plugin to work properly :(
+   val DEBUG_ENABLE_COLOR  = true  // provide color to print outs? requires a VIM plugin to work properly :(
    val COMMIT_LOG_PRINTF   = false // dump commit state, for comparision against ISA sim
    val COMMIT_LOG_EI_ONLY  = true  // print out commit log only when interrupts enabled
 }
@@ -319,6 +319,7 @@ trait RISCVConstants
 
    val CSR_ADDR_MSB = 31
    val CSR_ADDR_LSB = 20
+   val CSR_ADDR_SZ = 12
 
    // location of the fifth bit in the shamt (for checking for illegal ops for SRAIW,etc.)
    val SHAMT_5_BIT = 25

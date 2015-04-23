@@ -483,14 +483,10 @@ class RenameStage(pl_width: Int, num_wb_ports: Int) extends Module with BOOMCore
    // Set outputs up... we'll write in the pop*/pdst info below
    for (w <- 0 until pl_width)
    {
-
-      io.ren_mask(w) := io.dec_mask(w) && io.inst_can_proceed(w) && !io.kill
-
+      io.ren_mask(w)         := io.dec_mask(w) && io.inst_can_proceed(w) && !io.kill
       io.ren_uops(w)         := io.dec_uops(w)
       io.ren_uops(w).br_mask := GetNewBrMask(io.brinfo, io.dec_uops(w))
-
-      ren_br_vals(w)       := Mux(io.dec_mask(w), io.dec_uops(w).is_br_or_jmp && !io.dec_uops(w).is_jal, Bool(false))
-      // TODO create a bit "allocates_br_msk" instead
+      ren_br_vals(w)         := Mux(io.dec_mask(w), io.dec_uops(w).allocate_brtag, Bool(false))
    }
 
 
