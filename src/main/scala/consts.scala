@@ -17,7 +17,7 @@ trait BOOMDebugConstants
    val DEBUG_PRINTF        = false // use the Chisel printf functionality
    val DEBUG_ENABLE_COLOR  = true  // provide color to print outs? requires a VIM plugin to work properly :(
    val COMMIT_LOG_PRINTF   = false // dump commit state, for comparision against ISA sim
-   val COMMIT_LOG_EI_ONLY  = true  // print out commit log only when interrupts enabled
+   val COMMIT_LOG_EI_ONLY  = false // print out commit log only when interrupts enabled
 }
 
 trait BrPredConstants
@@ -326,6 +326,25 @@ trait RISCVConstants
    val LONGEST_IMM_SZ = 20
    val X0 = UInt(0)
    val RA = UInt(1) // return address register
+
+   val jal_opc = UInt(0x6f)
+   val jalr_opc = UInt(0x67)
+   def GetUop(inst: Bits): Bits = inst(6,0)
+   def GetRd (inst: Bits): UInt = inst(RD_MSB,RD_LSB)
+   def GetRs1(inst: Bits): UInt = inst(RS1_MSB,RS1_LSB)
+   def IsCall(inst: Bits): Bool = (inst === rocket.Instructions.JAL || inst === rocket.Instructions.JALR) && GetRd(inst) === RA
+//   def IsReturn(inst: Bits): Bool = GetUop(inst) === jalr_opc && GetRd(inst) === X0 && GetRs1(inst) === RA
+
+   def ComputeBranchTarget(pc: UInt, inst: Bits, xlen: Int, coreInstBytes: Int): UInt =
+   {
+      val b_imm32 = Cat(Fill(inst(31),20), inst(7), inst(30,25), inst(11,8), Bits(0,1))
+      (pc + Sext(b_imm32, xlen)).toBits & SInt(-coreInstBytes)
+   }
+   def ComputeJALTarget(pc: UInt, inst: Bits, xlen: Int, coreInstBytes: Int): UInt =
+   {
+      val j_imm32 = Cat(Fill(inst(31),12), inst(19,12), inst(20), inst(30,25), inst(24,21), Bits(0,1))
+      (pc + Sext(j_imm32, xlen)).toBits & SInt(-coreInstBytes)
+   }
 }
 
 trait ExcCauseConstants
