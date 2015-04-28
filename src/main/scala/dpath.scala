@@ -123,6 +123,8 @@ class MicroOp extends BOOMCoreBundle
    val btb_resp         = new rocket.BTBResp
    val btb_hit          = Bool()                      // btb hit on this instruction
 
+   val bpd_taken        = Bool()                      // bht predicted TAKEN. TODO can we conslidate this with the BTB taken?
+
    val imm_packed       = Bits(width = LONGEST_IMM_SZ) // densely pack the imm in decode... then translate and sign-extend in execute
    val csr_addr         = UInt(width = CSR_ADDR_SZ) // only used for critical path reasons in Exe
    val rob_idx          = UInt(width = ROB_ADDR_SZ)
@@ -183,6 +185,7 @@ class FetchBundle extends Bundle with BOOMCoreParameters
    val pc    = UInt(width = vaddrBits+1)
    val insts = Vec.fill(FETCH_WIDTH) { Bits(width = 32) }
    val mask  = Bits(width = FETCH_WIDTH) // mark which words are valid instructions
+   val bpd_takens = Bits(width = FETCH_WIDTH) // mark which words are predicted taken
 
    val btb_resp_valid = Bool()
    val btb_resp = new rocket.BTBResp
@@ -488,7 +491,7 @@ class DatPath() extends Module with BOOMCoreParameters
    val bpd_stage = Module(new BranchPredictionStage(FETCH_WIDTH))
    bpd_stage.io.imem <> io.imem
    bpd_stage.io.ras_update <> io.imem.ras_update
-   bpd_stage.io.brinfo <> br_unit.brinfo
+   bpd_stage.io.br_unit := br_unit
    bpd_stage.io.kill := flush_take_pc
    bpd_stage.io.prediction.ready := if_stalled
 
@@ -500,6 +503,11 @@ class DatPath() extends Module with BOOMCoreParameters
    bpd_kill_mask := Fill(bp2_take_pc, FETCH_WIDTH) & 
                     (SInt(-1, FETCH_WIDTH) << UInt(1) << bpd_stage.io.prediction.bits.idx)
    fetch_bundle.mask := (io.imem.resp.bits.mask & ~bpd_kill_mask)
+
+   fetch_bundle.bpd_takens := Mux(bp2_take_pc, Bits(1) << bpd_stage.io.prediction.bits.idx,
+                                               Bits(0))
+
+   assert (PopCount(fetch_bundle.bpd_takens) <= UInt(1), "BHT taken popcount >= 2")
 
    //-------------------------------------------------------------
    //-------------------------------------------------------------

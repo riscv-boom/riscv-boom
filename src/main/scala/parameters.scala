@@ -16,6 +16,7 @@ case object MaxBrCount extends Field[Int]
 case object FetchBufferSz extends Field[Int]
 case object EnableFetchBufferFlowThrough extends Field[Boolean]
 case object EnableBTB extends Field[Boolean]
+case object EnableBranchPredictor extends Field[Boolean]
 case object EnableUarchCounters extends Field[Boolean]
 case object EnablePrefetching extends Field[Boolean]
 case object EnableCommitMapTable extends Field[Boolean]
@@ -55,6 +56,7 @@ abstract trait BOOMCoreParameters extends rocket.CoreParameters
 
    //************************************
    // Extra Knobs and Features
+   val ENABLE_BRANCH_PREDICTOR = params(EnableBranchPredictor)
    val ENABLE_REGFILE_BYPASSING  = true  // bypass regfile write ports to read ports
    val MAX_WAKEUP_DELAY = 3              // unused
 

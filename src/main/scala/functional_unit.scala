@@ -119,6 +119,7 @@ class BranchUnitResp extends BOOMCoreBundle
    val btb_update_valid= Bool() // TODO turn this into a directed bundle so we can fold this into btb_update?
    val btb_update      = new rocket.BTBUpdate
    val bht_update      = Valid(new rocket.BHTUpdate)
+   val bpd_update      = Valid(new BrpdUpdate)
 
    val xcpt            = Valid(new Exception)
 
@@ -308,10 +309,12 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)
                        !(uop.is_jal) && // TODO XXX is this the proper way to do this? can we remove more JAL stuff from the branch unit? jal should just be a NOP, except it needs the PC for wb
                                         // TODO treat a JAL with rd=x0 differently, squash away in decode.
 //                       ((io.br_unit.taken ^ uop.btb_pred_taken) || // BTB was wrong this assumes BTB doesn't say "taken" for PC+4
-                       (// BTB was wrong
-                          (pc_sel === PC_PLUS4 && (uop.btb_hit && uop.btb_resp.taken)) ||
+                       (// BTB was wrong or BPD was wrong
+                          ((pc_sel === PC_PLUS4 && (uop.btb_hit && uop.btb_resp.taken)) ||
                           (pc_sel != PC_PLUS4 && !(uop.btb_hit && uop.btb_resp.taken)) ||
-                          (pc_sel === PC_JALR && (!io.get_rob_pc.next_val || (io.get_rob_pc.next_pc != bj_addr))) // BTB was right, but wrong target for JALR
+                          (pc_sel === PC_JALR && (!io.get_rob_pc.next_val || (io.get_rob_pc.next_pc != bj_addr)))) || // BTB was right, but wrong target for JALR
+                          // BPD was wrong
+                          (uop.bpd_taken && !io.br_unit.taken)
                        )
 
       // TODO assert is there a way to verify the branch prediction jumped to the correct address?
@@ -354,6 +357,11 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)
       io.br_unit.bht_update.bits.prediction.valid := uop.btb_resp_valid
       io.br_unit.bht_update.bits.prediction.bits  := uop.btb_resp
       io.br_unit.bht_update.bits.pc               := ((uop_pc_ >> lsb) << lsb) + uop.fetch_pc_lob // what pc should the tag check be on?
+
+      io.br_unit.bpd_update.valid                 := io.br_unit.bht_update.valid
+      io.br_unit.bpd_update.bits.taken            := io.br_unit.taken
+      io.br_unit.bpd_update.bits.mispredict       := mispredict
+      io.br_unit.bpd_update.bits.pc               := ((uop_pc_ >> lsb) << lsb) //io.br_unit.bht_update.bits.pc
 
 
       // Branch/Jump Target Calculation

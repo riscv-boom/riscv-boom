@@ -519,6 +519,7 @@ class FetchSerializerNtoM() extends Module with BOOMCoreParameters
    io.deq.bits(0).btb_resp_valid := io.enq.bits.btb_resp_valid
    io.deq.bits(0).btb_hit        := io.enq.bits.btb_resp_valid
    io.deq.bits(0).btb_resp       := io.enq.bits.btb_resp
+   io.deq.bits(0).bpd_taken      := io.enq.bits.bpd_takens(0)
    io.deq.bits(0).valid          := io.enq.bits.mask(0)
    io.deq.bits(0).xcpt_if        := io.enq.bits.xcpt_if(inst_idx)
 
@@ -541,6 +542,7 @@ class FetchSerializerNtoM() extends Module with BOOMCoreParameters
                                                              io.enq.bits.btb_resp_valid,
                                                              Bool(false))
          io.deq.bits(i).btb_resp       := io.enq.bits.btb_resp
+         io.deq.bits(i).bpd_taken      := io.enq.bits.bpd_takens(i)
          when (io.enq.bits.btb_pred_taken_idx != UInt(i))
          {
             io.deq.bits(i).btb_resp.taken := Bool(false)

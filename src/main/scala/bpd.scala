@@ -39,7 +39,7 @@ class BranchPredictionStage (fetch_width: Int) extends Module with BOOMCoreParam
       val imem       = new rocket.CPUFrontendIO
       val prediction = Decoupled(new BranchPrediction(fetch_width))
       val ras_update = Valid(new rocket.RASUpdate)
-      val brinfo     = new BrResolutionInfo().asInput
+      val br_unit    = new BranchUnitResp().asInput
       val kill       = Bool(INPUT) // e.g., pipeline flush
    }
 
@@ -47,7 +47,22 @@ class BranchPredictionStage (fetch_width: Int) extends Module with BOOMCoreParam
    // Branch Prediction (BP1 Stage)
 
    val r_bht_predictions = Vec.fill(fetch_width) {Reg(Bool())}
-   r_bht_predictions.map(_ := Bool(false))
+
+   var br_predictor: BrPredictor = null 
+                                                  
+   if (ENABLE_BRANCH_PREDICTOR)
+   {
+      br_predictor = Module(new TwobcBrPredictor(num_entries = 1024))
+      br_predictor.io.curr_pc := io.imem.resp.bits.pc
+
+      br_predictor.io.update <> io.br_unit.bpd_update
+      r_bht_predictions.map(_ := br_predictor.io.resp.taken)
+      
+   }
+   else
+   {
+      r_bht_predictions.map(_ := Bool(false))
+   }
 
    //-------------------------------------------------------------
    // Branch Decode (BP2 Stage)
