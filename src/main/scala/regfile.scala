@@ -38,9 +38,9 @@ class RegisterFile( num_registers: Int
       val read_ports = Vec.fill(num_read_ports) { (new RegisterFileReadPortIO(PREG_SZ, register_width)) }
       val write_ports = Vec.fill(num_write_ports) { (new RegisterFileWritePortIO(PREG_SZ, register_width)) }
 
-      val debug = new BOOMCoreBundle {
-         val registers = Vec.fill(num_registers) { Bits(width = register_width) }
-      }.asOutput
+//      val debug = new BOOMCoreBundle {
+//         val registers = Vec.fill(num_registers) { Bits(width = register_width) }
+//      }.asOutput
    }
 
    // --------------------------------------------------------------
@@ -99,10 +99,10 @@ class RegisterFile( num_registers: Int
 
 
    // Debug
-   for (i <- 0 until num_registers)
-   {
-      io.debug.registers(i) := regfile(UInt(i))
-   }
+//   for (i <- 0 until num_registers)
+//   {
+//      io.debug.registers(i) := regfile(UInt(i))
+//   }
 }
 
 

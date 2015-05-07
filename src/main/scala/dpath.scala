@@ -179,7 +179,7 @@ class MicroOp extends BOOMCoreBundle
    val debug_wdata      = Bits(width=xLen)
    val debug_ei_enabled = Bool()
 
-   
+
    def fu_code_is(_fu: Bits) = fu_code === _fu
 }
 
@@ -189,7 +189,7 @@ class FetchBundle extends Bundle with BOOMCoreParameters
    val insts       = Vec.fill(FETCH_WIDTH) {Bits(width = 32)}
    val mask        = Bits(width = FETCH_WIDTH) // mark which words are valid instructions
    val xcpt_if     = Bool()
-   
+
    val pred_resp   = new BranchPredictionResp
    val predictions = Vec.fill(FETCH_WIDTH) {new BranchPrediction}
   override def clone = new FetchBundle().asInstanceOf[this.type]
@@ -256,7 +256,7 @@ class DatPath() extends Module with BOOMCoreParameters
    val bp2_is_jump       = Bool()
 
    // Instruction Decode State
-   val dec_valids     = Vec.fill(DECODE_WIDTH) {Bool()}  // is the incoming, decoded instruction valid? It may be held up though. 
+   val dec_valids     = Vec.fill(DECODE_WIDTH) {Bool()}  // is the incoming, decoded instruction valid? It may be held up though.
    val dec_uops       = Vec.fill(DECODE_WIDTH) {new MicroOp()}
    val dec_will_fire  = Vec.fill(DECODE_WIDTH) {Bool()}  // can the instruction fire beyond decode? (can still be stopped in ren or dis)
    val dec_rdy        = Bool()
@@ -494,9 +494,9 @@ class DatPath() extends Module with BOOMCoreParameters
    bp2_pred_target := bpd_stage.io.req.bits.target
    bp2_pc_of_br_inst := bpd_stage.io.req.bits.br_pc
    bp2_is_jump := bpd_stage.io.req.bits.is_jump
-   
+
    val bpd_kill_mask = Bits(width = FETCH_WIDTH)
-   bpd_kill_mask := Fill(bp2_take_pc, FETCH_WIDTH) & 
+   bpd_kill_mask := Fill(bp2_take_pc, FETCH_WIDTH) &
                     (SInt(-1, FETCH_WIDTH) << UInt(1) << bpd_stage.io.req.bits.idx)
    fetch_bundle.mask := (io.imem.resp.bits.mask & ~bpd_kill_mask)
    fetch_bundle.pred_resp := bpd_stage.io.pred_resp
@@ -1447,7 +1447,7 @@ class DatPath() extends Module with BOOMCoreParameters
                , Mux(rob.io.debug.entry(r_idx+0).exception, Str("E"), Str("-"))
                , Mux(rob.io.debug.entry(r_idx+1).exception, Str("E"), Str("-"))
                )
-         } 
+         }
          else if (COMMIT_WIDTH == 4)
          {
             val row_is_val = rob.io.debug.entry(r_idx+0).valid || rob.io.debug.entry(r_idx+1).valid || rob.io.debug.entry(r_idx+2).valid || rob.io.debug.entry(r_idx+3).valid
@@ -1575,6 +1575,7 @@ class DatPath() extends Module with BOOMCoreParameters
 
       }
 
+
       // Rename Map Tables / ISA Register File
       val xpr_to_string =
               Vec(Str(" x0"), Str(" ra"), Str(" sp"), Str(" gp"),
@@ -1597,64 +1598,64 @@ class DatPath() extends Module with BOOMCoreParameters
                    Str("ft8"), Str("ft9"), Str("ft10"), Str("ft11"))
 
 
-      if (white_space > 7)
-      {
-         white_space -= 7
-         for (x <- 0 until 7)
-         {
-            if (x != 0) printf("\n")
+      //if (white_space > 7)
+      //{
+      //   white_space -= 7
+      //   for (x <- 0 until 7)
+      //   {
+      //      if (x != 0) printf("\n")
 
-            for (y <- 0 until 5)
-            {
-               val i = x + y*7
+      //      for (y <- 0 until 5)
+      //      {
+      //         val i = x + y*7
 
-               if (i < 32)
-               {
-                  val phs_reg = rename_stage.io.debug.map_table(i).element
+      //         if (i < 32)
+      //         {
+      //            val phs_reg = rename_stage.io.debug.map_table(i).element
 
-                  printf(" %sx%d(%s)=p%d[0x%x](%s)"
-                     , Mux(rename_stage.io.debug.map_table(i).rbk_wen, Str("E"), Str(" "))
-                     , UInt(i, LREG_SZ)
-                     , xpr_to_string(i)
-                     , phs_reg
-                     //, rename_stage.io.debug.map_table(i).committed_element
-                     , regfile.io.debug.registers(phs_reg)
-                     , Mux(rename_stage.io.debug.bsy_table(phs_reg), Str("b"), Str("_"))
-                  )
-               }
-            }
-         }
-         printf("\n")
-      }
-      if (white_space > 7)
-      {
-         white_space -= 7
-         printf("\n")
-         for (x <- 0 until 7)
-         {
-            if (x != 0) printf("\n")
+      //            printf(" %sx%d(%s)=p%d[0x%x](%s)"
+      //               , Mux(rename_stage.io.debug.map_table(i).rbk_wen, Str("E"), Str(" "))
+      //               , UInt(i, LREG_SZ)
+      //               , xpr_to_string(i)
+      //               , phs_reg
+      //               //, rename_stage.io.debug.map_table(i).committed_element
+      //               , regfile.io.debug.registers(phs_reg)
+      //               , Mux(rename_stage.io.debug.bsy_table(phs_reg), Str("b"), Str("_"))
+      //            )
+      //         }
+      //      }
+      //   }
+      //   printf("\n")
+      //}
+      //if (white_space > 7)
+      //{
+      //   white_space -= 7
+      //   printf("\n")
+      //   for (x <- 0 until 7)
+      //   {
+      //      if (x != 0) printf("\n")
 
-            for (y <- 0 until 5)
-            {
-               val i = x + y*7
+      //      for (y <- 0 until 5)
+      //      {
+      //         val i = x + y*7
 
-               if (i < 32 && !params(BuildFPU).isEmpty)
-               {
-                  val phs_reg = rename_stage.io.debug.map_table(i+32).element
+      //         if (i < 32 && !params(BuildFPU).isEmpty)
+      //         {
+      //            val phs_reg = rename_stage.io.debug.map_table(i+32).element
 
-                  printf(" %sf%d(%s)=p%d[0x%x](%s)"
-                     , Mux(rename_stage.io.debug.map_table(i).rbk_wen, Str("E"), Str(" "))
-                     , UInt(i, LREG_SZ)
-                     , fpr_to_string(i)
-                     , phs_reg
-                     //, rename_stage.io.debug.map_table(i).committed_element
-                     , regfile.io.debug.registers(phs_reg)
-                     , Mux(rename_stage.io.debug.bsy_table(phs_reg), Str("b"), Str("_"))
-                  )
-               }
-            }
-         }
-      }
+      //            printf(" %sf%d(%s)=p%d[0x%x](%s)"
+      //               , Mux(rename_stage.io.debug.map_table(i).rbk_wen, Str("E"), Str(" "))
+      //               , UInt(i, LREG_SZ)
+      //               , fpr_to_string(i)
+      //               , phs_reg
+      //               //, rename_stage.io.debug.map_table(i).committed_element
+      //               , regfile.io.debug.registers(phs_reg)
+      //               , Mux(rename_stage.io.debug.bsy_table(phs_reg), Str("b"), Str("_"))
+      //            )
+      //         }
+      //      }
+      //   }
+      //}
 
       for (x <- 0 until white_space)
       {

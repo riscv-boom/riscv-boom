@@ -78,7 +78,7 @@ class BranchPredictionStage (fetch_width: Int) extends Module with BOOMCoreParam
       if (ENABLE_BRANCH_PREDICTOR)
       {
          val br_predictor = Module(new GshareBrPredictor(fetch_width = fetch_width
-                                                   , num_entries = 1024
+                                                   , num_entries = BPD_NUM_ENTRIES
                                                    , history_length = GHIST_LENGTH))
          br_predictor.io.req_pc := io.imem.npc
          br_predictor.io.update <> io.br_unit.bpd_update
@@ -194,6 +194,21 @@ class BranchPredictionStage (fetch_width: Int) extends Module with BOOMCoreParam
          , aligned_pc, Mux(io.req.valid, Str("TAKE"), Str(" -- ")), io.req.bits.target, io.req.bits.idx
          , predictions.toBits, br_idx, is_br.toBits, is_jal.toBits, jal_idx, Mux(br_wins, Str("BR"), Str("JA")), Mux(btb_overrides, Str("BO"), Str("--"))
          )
+   }
+
+   //-------------------------------------------------------------
+
+   when (io.imem.resp.valid && io.imem.btb_resp.valid && io.imem.btb_resp.bits.taken)
+   {
+   // TODO assert check that the BTB is not predicting an instruction that it masked off
+      val msk = io.imem.btb_resp.bits.mask
+      val idx = io.imem.btb_resp.bits.bridx
+      val targ = Mux(is_br(idx), br_targs(idx), jal_targs(idx))
+
+      when (!is_jr(idx))
+      {
+         assert (io.imem.btb_resp.bits.target === targ, "BTB is jumping to an invalid target.")
+      }
    }
 
    //-------------------------------------------------------------

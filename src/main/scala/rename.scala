@@ -458,13 +458,13 @@ class RenameStageIO(pl_width: Int, num_wb_ports: Int) extends BOOMCoreBundle
    val debug = new Bundle {
       val freelist = Bits(width=PHYS_REG_COUNT)
       val isprlist = Bits(width=PHYS_REG_COUNT)
-      val map_table = Vec.fill(LOGICAL_REG_COUNT) {new Bundle{
-         val valid   = Bool()
-         val rbk_wen = Bool()
-         // TODO chisel bug confuses I/O direction if this is added in
-         val element = UInt(width=PREG_SZ)
-//         val committed_element = UInt(width=PREG_SZ)
-      }}
+      //val map_table = Vec.fill(LOGICAL_REG_COUNT) {new Bundle{
+      //   val valid   = Bool()
+      //   val rbk_wen = Bool()
+      //   // TODO chisel bug confuses I/O direction if this is added in
+      //   val element = UInt(width=PREG_SZ)
+//    //     val committed_element = UInt(width=PREG_SZ)
+      //}}
       val bsy_table = UInt(width=PHYS_REG_COUNT)
    }.asOutput
 }
@@ -732,12 +732,12 @@ class RenameStage(pl_width: Int, num_wb_ports: Int) extends Module with BOOMCore
    io.debug.freelist := freelist.io.debug.freelist
    io.debug.isprlist := freelist.io.debug.isprlist
 
-   for (i <- 0 until LOGICAL_REG_COUNT)
-   {
-      io.debug.map_table(i).rbk_wen := map_table_io(i).rollback_wen
-      io.debug.map_table(i).element := map_table_io(i).element
-   //   io.debug.map_table(i).committed_element := map_table_io(i).committed_element
-   }
+//   for (i <- 0 until LOGICAL_REG_COUNT)
+//   {
+//      io.debug.map_table(i).rbk_wen := map_table_io(i).rollback_wen
+//      io.debug.map_table(i).element := map_table_io(i).element
+//   //   io.debug.map_table(i).committed_element := map_table_io(i).committed_element
+//   }
    io.debug.bsy_table:= bsy_table.io.debug.bsy_table
 }
 
