@@ -639,6 +639,10 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    val force_ld_to_sleep = Bool()
    force_ld_to_sleep := Bool(false)
 
+   // do the load and store memory types match (aka, B == BU, H == HU, W == WU)
+   def MemTypesMatch(typ_1: UInt, typ_2: UInt) = typ_1(1,0) === typ_2(1,0)
+
+
    // TODO totally refactor how conflict/forwarding logic is generated
    for (i <- 0 until num_st_entries)
    {
@@ -688,7 +692,8 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
                st_dep_mask(i) &&
                (stq_uop(i).is_fence || stq_uop(i).is_amo)) ||
             (dword_addr_matches(i) &&
-               (mem_ld_uop.mem_typ != stq_uop(i).mem_typ) &&
+//               (mem_ld_uop.mem_typ != stq_uop(i).mem_typ) &&
+               (!MemTypesMatch(mem_ld_uop.mem_typ, stq_uop(i).mem_typ)) &&
                ((read_mask & write_mask) != Bits(0))))
       {
          force_ld_to_sleep := Bool(true)
@@ -1177,6 +1182,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
       io.debug.entry(i).stq_succeeded := stq_succeeded(i)
       io.debug.entry(i).stq_committed := stq_committed(i)
       io.debug.entry(i).saq_is_virtual := saq_is_virtual(i)
+//      io.debug.entry(i).saq_is_virtual := saq_is_virtual(i) ^ (write_masks.reduce(_|_) === Bits(0)) ^ force_sleeps(i)
       io.debug.entry(i).saq_addr := saq_addr(i)
       io.debug.entry(i).sdq_data := sdq_data(i)
       io.debug.entry(i).stq_uop  := stq_uop(i)
