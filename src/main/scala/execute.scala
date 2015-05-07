@@ -57,6 +57,7 @@ class ExecutionUnitIo(num_rf_read_ports: Int
       val next_val= Bool(INPUT)
       val next_pc = UInt(INPUT, xLen)
    }
+   val get_pred = new GetPredictionInfo
 
    // only used by the fpu unit
    val fcsr_rm = Bits(INPUT, rocket.FPConstants.RM_SZ)
@@ -152,6 +153,7 @@ class ALUExeUnit(is_branch_unit   : Boolean = false
    {
       io.br_unit <> alu.io.br_unit
       alu.io.get_rob_pc <> io.get_rob_pc
+      alu.io.get_pred <> io.get_pred
    }
    else
    {
@@ -446,6 +448,7 @@ class ALUMemExeUnit(is_branch_unit    : Boolean = false
    {
       io.br_unit <> alu.io.br_unit
       alu.io.get_rob_pc <> io.get_rob_pc
+      alu.io.get_pred <> io.get_pred
    }
    else
    {

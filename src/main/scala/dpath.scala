@@ -79,6 +79,7 @@ TODO LIST:
 // For example, on a bypassing, we listen to rf_wen to see if bypass is valid,
 // but we "could" be bypassing to a branch which kills us (false positive cobinational loop),
 // so we have to keep the rf_wen enabled, and not dependent on a branch kill signal
+// TODO REFACTOR this should no longer be true, as bypass occurs in stage before branch resolution
 class CtrlSignals extends Bundle()
 {
    val br_type     = UInt(width = BR_N.getWidth)
@@ -109,21 +110,24 @@ class MicroOp extends BOOMCoreBundle
    val wakeup_delay     = UInt(width = log2Up(MAX_WAKEUP_DELAY)) // unused
    val allocate_brtag   = Bool()                      // does this allocate a branch tag? (is branch or JR but not JAL)
    val is_br_or_jmp     = Bool()                      // is this micro-op a (branch or jump) vs. a regular PC+4 inst?
-   val is_jump          = Bool()                      // is this a jump? (note: not mutually exclusive with br_valid)
+   val is_jump          = Bool()                      // is this a jump?
    val is_jal           = Bool()                      // is this a JAL? used for branch unit
    val is_ret           = Bool()                      // is jalr with rd=x0, rs1=x1? (i.e., a return)
    val is_call          = Bool()                      //
    val br_mask          = Bits(width = MAX_BR_COUNT)  // which branches are we being speculated under?
    val br_tag           = UInt(width = BR_TAG_SZ)
 
-   val br_was_taken     = Bool()                      // set by Exe stage
+   val br_was_mispredicted = Bool()                   // (for stat tracking)
 
    val fetch_pc_lob     = UInt(width = log2Up(FETCH_WIDTH*coreInstBytes)) // track which PC was used to fetch this instruction
-   val btb_resp_valid   = Bool()                      // btb hit on this fetch packet (necessary to prevent duplicate entries in BTB)
-   val btb_resp         = new rocket.BTBResp
-   val btb_hit          = Bool()                      // btb hit on this instruction
+//   val btb_resp_valid   = Bool()                      // btb hit on this fetch packet (necessary to prevent duplicate entries in BTB)
+//   val btb_resp         = new rocket.BTBResp
+//   val btb_hit          = Bool()                      // btb hit on this instruction
 
-   val bpd_taken        = Bool()                      // bht predicted TAKEN. TODO can we conslidate this with the BTB taken?
+   val br_prediction    = new BranchPrediction
+
+//   val bpd_taken        = Bool()                      // bht predicted TAKEN. TODO can we conslidate this with the BTB taken? this MUST be true IF the BHT's prediction was used (and false if BTB was used).
+//   val bpd_history      = Bits(width = GHIST_LENGTH)  // TODO remove and push into the ROB
 
    val imm_packed       = Bits(width = LONGEST_IMM_SZ) // densely pack the imm in decode... then translate and sign-extend in execute
    val csr_addr         = UInt(width = CSR_ADDR_SZ) // only used for critical path reasons in Exe
@@ -181,18 +185,13 @@ class MicroOp extends BOOMCoreBundle
 
 class FetchBundle extends Bundle with BOOMCoreParameters
 {
-//   val resp = new rocket.FrontEndResp // TODO consolidate everything into this
-   val pc    = UInt(width = vaddrBits+1)
-   val insts = Vec.fill(FETCH_WIDTH) { Bits(width = 32) }
-   val mask  = Bits(width = FETCH_WIDTH) // mark which words are valid instructions
-   val bpd_takens = Bits(width = FETCH_WIDTH) // mark which words are predicted taken
-
-   val btb_resp_valid = Bool()
-   val btb_resp = new rocket.BTBResp
-   // TODO BUG XXX remove these two signals once things work
-   val btb_pred_taken_idx = UInt(width=log2Up(FETCH_WIDTH))
-
-   val xcpt_if = Bool()
+   val pc          = UInt(width = vaddrBits+1)
+   val insts       = Vec.fill(FETCH_WIDTH) {Bits(width = 32)}
+   val mask        = Bits(width = FETCH_WIDTH) // mark which words are valid instructions
+   val xcpt_if     = Bool()
+   
+   val pred_resp   = new BranchPredictionResp
+   val predictions = Vec.fill(FETCH_WIDTH) {new BranchPrediction}
   override def clone = new FetchBundle().asInstanceOf[this.type]
 }
 
@@ -205,8 +204,6 @@ class BrResolutionInfo extends BOOMCoreBundle
    val tag        = UInt(width = BR_TAG_SZ)    // the branch tag that was resolved
    val exe_mask   = Bits(width = MAX_BR_COUNT) // the br_mask of the actual branch uop
                                                // used to reset the dec_br_mask
-
-
    val rob_idx    = UInt(width = ROB_ADDR_SZ)
    val ldq_idx    = UInt(width = MEM_ADDR_SZ)  // track the "tail" of loads and stores, so we can
    val stq_idx    = UInt(width = MEM_ADDR_SZ)  // quickly reset the LSU on a mispredict
@@ -256,6 +253,7 @@ class DatPath() extends Module with BOOMCoreParameters
    val bp2_take_pc       = Bool()
    val bp2_pred_target   = UInt(width=vaddrBits+1)
    val bp2_pc_of_br_inst = UInt(width=vaddrBits+1)
+   val bp2_is_jump       = Bool()
 
    // Instruction Decode State
    val dec_valids     = Vec.fill(DECODE_WIDTH) {Bool()}  // is the incoming, decoded instruction valid? It may be held up though. 
@@ -335,12 +333,12 @@ class DatPath() extends Module with BOOMCoreParameters
    }
    else
    {  // 4-wide issue
-      exe_units += Module(new ALUExeUnit(is_branch_unit = true
+      exe_units += Module(new ALUExeUnit(is_branch_unit = false
                                           , shares_csr_wport = true
                                           , has_fpu = !params(BuildFPU).isEmpty
                                           , has_mul = true
                                           ))
-      exe_units += Module(new ALUExeUnit)
+      exe_units += Module(new ALUExeUnit(is_branch_unit = true))
       exe_units += Module(new ALUExeUnit(has_div = true))
       exe_units += Module(new MemExeUnit())
       exe_units(3).io.dmem <> io.dmem
@@ -437,7 +435,7 @@ class DatPath() extends Module with BOOMCoreParameters
 
    io.imem.req.valid   := take_pc // tell front-end we had an unexpected change in the stream
    io.imem.req.bits.pc := if_pc_next
-   io.imem.resp.ready  := FetchBuffer.io.enq.ready // TODO perf BUG || take_pc?
+   io.imem.resp.ready  := !(if_stalled) // TODO perf BUG || take_pc?
 
    if_pc_next :=  Mux(com_exception || csr_take_pc, csr.io.evec,
                   Mux(flush_take_pc               , flush_pc,
@@ -450,17 +448,14 @@ class DatPath() extends Module with BOOMCoreParameters
    fetchbuffer_kill         := br_unit.brinfo.mispredict || com_exception || flush_pipeline || csr_take_pc
 
    fetch_bundle.pc := io.imem.resp.bits.pc
-
+   fetch_bundle.xcpt_if := io.imem.resp.bits.xcpt_if
    for (i <- 0 until FETCH_WIDTH)
    {
       fetch_bundle.insts(i) := io.imem.resp.bits.data(i)
    }
-   fetch_bundle.btb_resp_valid    := io.imem.btb_resp.valid
-   fetch_bundle.btb_resp          := io.imem.btb_resp.bits
-   fetch_bundle.btb_pred_taken_idx:= io.imem.btb_resp.bits.bridx
-   fetch_bundle.xcpt_if           := io.imem.resp.bits.xcpt_if
 
-   io.imem.btb_update.valid           := (br_unit.btb_update_valid || (bp2_take_pc && !if_stalled && !br_unit.take_pc)) &&
+   // TODO only update in BP2 for JALs?
+   io.imem.btb_update.valid := (br_unit.btb_update_valid || (bp2_take_pc && bp2_is_jump && !if_stalled && !br_unit.take_pc)) &&
                                           !flush_take_pc &&
                                           !csr_take_pc
 
@@ -471,7 +466,7 @@ class DatPath() extends Module with BOOMCoreParameters
 
    io.imem.btb_update.bits.prediction := Mux(br_unit.btb_update_valid, br_unit.btb_update.prediction, io.imem.btb_resp)
    io.imem.btb_update.bits.taken      := Mux(br_unit.btb_update_valid, br_unit.btb_update.taken, bp2_take_pc && !if_stalled)
-   io.imem.btb_update.bits.isJump     := Mux(br_unit.btb_update_valid, br_unit.btb_update.isJump, Bool(true))
+   io.imem.btb_update.bits.isJump     := Mux(br_unit.btb_update_valid, br_unit.btb_update.isJump, bp2_is_jump)
    io.imem.btb_update.bits.isReturn   := Mux(br_unit.btb_update_valid, br_unit.btb_update.isReturn, Bool(false))
 
    io.imem.bht_update := br_unit.bht_update
@@ -493,21 +488,19 @@ class DatPath() extends Module with BOOMCoreParameters
    bpd_stage.io.ras_update <> io.imem.ras_update
    bpd_stage.io.br_unit := br_unit
    bpd_stage.io.kill := flush_take_pc
-   bpd_stage.io.prediction.ready := if_stalled
+   bpd_stage.io.req.ready := !if_stalled
 
-   bp2_take_pc := bpd_stage.io.prediction.valid
-   bp2_pred_target := bpd_stage.io.prediction.bits.target
-   bp2_pc_of_br_inst := bpd_stage.io.prediction.bits.br_pc
+   bp2_take_pc := bpd_stage.io.req.valid
+   bp2_pred_target := bpd_stage.io.req.bits.target
+   bp2_pc_of_br_inst := bpd_stage.io.req.bits.br_pc
+   bp2_is_jump := bpd_stage.io.req.bits.is_jump
    
    val bpd_kill_mask = Bits(width = FETCH_WIDTH)
    bpd_kill_mask := Fill(bp2_take_pc, FETCH_WIDTH) & 
-                    (SInt(-1, FETCH_WIDTH) << UInt(1) << bpd_stage.io.prediction.bits.idx)
+                    (SInt(-1, FETCH_WIDTH) << UInt(1) << bpd_stage.io.req.bits.idx)
    fetch_bundle.mask := (io.imem.resp.bits.mask & ~bpd_kill_mask)
-
-   fetch_bundle.bpd_takens := Mux(bp2_take_pc, Bits(1) << bpd_stage.io.prediction.bits.idx,
-                                               Bits(0))
-
-   assert (PopCount(fetch_bundle.bpd_takens) <= UInt(1), "BHT taken popcount >= 2")
+   fetch_bundle.pred_resp := bpd_stage.io.pred_resp
+   fetch_bundle.predictions := bpd_stage.io.predictions
 
    //-------------------------------------------------------------
    //-------------------------------------------------------------
@@ -548,8 +541,8 @@ class DatPath() extends Module with BOOMCoreParameters
    for (w <- 0 until DECODE_WIDTH)
    {
       val decode_unit = Module(new DecodeUnit)
-      dec_valids(w)                  := fetched_inst_valid && dec_fbundle(w).valid && !dec_finished_mask(w)
-      decode_unit.io.enq.uop         := dec_fbundle(w)
+      dec_valids(w)                  := fetched_inst_valid && dec_fbundle.uops(w).valid && !dec_finished_mask(w)
+      decode_unit.io.enq.uop         := dec_fbundle.uops(w)
       decode_unit.io.status          := csr.io.status
       decode_unit.io.interrupt       := csr.io.interrupt
       decode_unit.io.interrupt_cause := csr.io.interrupt_cause
@@ -994,6 +987,7 @@ class DatPath() extends Module with BOOMCoreParameters
 
       rob.io.dis_uops := dis_uops
       rob.io.dis_mask := dis_mask
+      rob.io.dis_pred_info := dec_fbundle.pred_resp
 
       dis_curr_rob_row_idx  := rob.io.curr_rob_tail
 
@@ -1054,12 +1048,14 @@ class DatPath() extends Module with BOOMCoreParameters
       // branch resolution
       rob.io.br_unit <> br_unit.asInput()
 
-      // branch unit requests PCs from ROB during register read
+      // branch unit requests PCs and predictions from ROB during register read
       // (fetch PC from ROB cycle earlier than needed for critical path reasons)
       rob.io.get_pc.rob_idx := iss_uops(brunit_idx).rob_idx
+      rob.io.get_pred.rob_idx:= iss_uops(brunit_idx).rob_idx
       exe_units(brunit_idx).io.get_rob_pc.curr_pc  := Reg(next=rob.io.get_pc.curr_pc)
       exe_units(brunit_idx).io.get_rob_pc.next_val := Reg(next=rob.io.get_pc.next_val)
       exe_units(brunit_idx).io.get_rob_pc.next_pc  := Reg(next=rob.io.get_pc.next_pc)
+      exe_units(brunit_idx).io.get_pred.info       := Reg(next=rob.io.get_pred.info)
 
       // LSU <> ROB
       lsu_misspec := rob.io.lsu_misspec
@@ -1160,15 +1156,19 @@ class DatPath() extends Module with BOOMCoreParameters
    if (params(EnableUarchCounters))
    {
       println("\n   UArch Counters Enabled\n")
-      csr.io.uarch_counters(0)  := br_unit.brinfo.valid
-      csr.io.uarch_counters(1)  := br_unit.brinfo.mispredict
+      csr.io.uarch_counters(0)  := PopCount((Range(0,COMMIT_WIDTH)).map{w => com_valids(w) && com_uops(w).is_br_or_jmp && !com_uops(w).is_jal})
+      csr.io.uarch_counters(1)  := PopCount((Range(0,COMMIT_WIDTH)).map{w => com_valids(w) && com_uops(w).is_br_or_jmp && com_uops(w).br_was_mispredicted})
+//      csr.io.uarch_counters(0)  := br_unit.brinfo.valid
+//      csr.io.uarch_counters(1)  := br_unit.brinfo.mispredict
       csr.io.uarch_counters(2)  := !rob_rdy
       csr.io.uarch_counters(3)  := laq_full
       csr.io.uarch_counters(4)  := stq_full
       csr.io.uarch_counters(5)  := !issue_unit.io.dis_inst_can_proceed.reduce(_|_)
-//      csr.io.uarch_counters(5)  := branch_mask_full.reduce(_|_)
-      csr.io.uarch_counters(6)  := io.counters.ic_miss
-      csr.io.uarch_counters(7)  := io.counters.dc_miss
+//      csr.io.uarch_counters(6)  := branch_mask_full.reduce(_|_)
+//      csr.io.uarch_counters(6)  := io.counters.ic_miss
+      csr.io.uarch_counters(6)  := br_unit.brinfo.valid
+      csr.io.uarch_counters(7)  := br_unit.brinfo.mispredict
+//      csr.io.uarch_counters(7)  := io.counters.dc_miss
       csr.io.uarch_counters(8)  := lsu_io.counters.ld_valid
       csr.io.uarch_counters(9)  := lsu_io.counters.ld_forwarded
       csr.io.uarch_counters(10) := lsu_io.counters.ld_sleep
@@ -1304,9 +1304,9 @@ class DatPath() extends Module with BOOMCoreParameters
       for (w <- 0 until DECODE_WIDTH)
       {
          printf("(%s%s) " + red + "DASM(%x)" + end + " |  "
-            , Mux(fetched_inst_valid && dec_fbundle(w).valid && !dec_finished_mask(w), Str("V"), Str("-"))
+            , Mux(fetched_inst_valid && dec_fbundle.uops(w).valid && !dec_finished_mask(w), Str("V"), Str("-"))
             , Mux(dec_will_fire(w), Str("V"), Str("-"))
-            , dec_fbundle(w).inst
+            , dec_fbundle.uops(w).inst
             )
       }
 
@@ -1491,7 +1491,7 @@ class DatPath() extends Module with BOOMCoreParameters
                  Mux(rob.io.debug.entry(temp_idx).uop.dst_rtype === RT_X, Str("-"), Str("?")))))
                , rob.io.debug.entry    (temp_idx).uop.pdst
                , rob.io.debug.entry    (temp_idx).uop.br_mask
-               , Mux(rob.io.debug.entry(temp_idx).uop.br_was_taken, Str("T"), Str("-"))
+               , Mux(rob.io.debug.entry(temp_idx).uop.br_was_mispredicted, Str("M"), Str("-"))//remove me TODO
                , rob.io.debug.entry    (temp_idx).uop.stale_pdst
             )
             temp_idx = temp_idx + 1

@@ -42,6 +42,7 @@ class RobIo(machine_width: Int
    // (Write Instruction to ROB from Dispatch Stage)
    val dis_mask         = Vec.fill(machine_width) { Bool(INPUT) }
    val dis_uops         = Vec.fill(machine_width) { new MicroOp().asInput() }
+   val dis_pred_info    = new BranchPredictionResp().asInput
 
    val curr_rob_tail    = UInt(OUTPUT, ROB_ADDR_SZ)
 
@@ -94,6 +95,7 @@ class RobIo(machine_width: Int
       val next_val = Bool(OUTPUT)             // the next_pc may not be valid (stalled or still being fetched)
       val next_pc  = UInt(OUTPUT, xLen)
    }
+   val get_pred = new GetPredictionInfo().flip
 
    // Handle Additional Misspeculations (LSU)
    // tell the LSU a misspec occurred
@@ -192,7 +194,7 @@ class Rob(width: Int
 
    def GetRowIdx(rob_idx: UInt): UInt =
    {
-      if (width == 1) return rob_idx // TODO remove this, should be unnecessary with Ceil 
+      if (width == 1) return rob_idx // TODO remove this, should be unnecessary with Ceil
       else return rob_idx >> UInt(log2Ceil(width))
    }
    def GetBankIdx(rob_idx: UInt): UInt =
@@ -244,6 +246,19 @@ class Rob(width: Int
    // **************************************************************************
    // --------------------------------------------------------------------------
    // **************************************************************************
+   // store expensive branch prediction information here (per br-tag)
+//   val pred_table = Mem(new BranchPredictionResp, num_rob_rows)
+   // TODO use Mem(), but it chokes on the undefines in VCS
+   val pred_table = Vec.fill(num_rob_rows) {Reg(new BranchPredictionResp)}
+   when (io.dis_mask.reduce(_|_))
+   {
+      pred_table(rob_tail) := io.dis_pred_info
+   }
+
+   io.get_pred.info := pred_table(GetRowIdx(io.get_pred.rob_idx))
+   // **************************************************************************
+   // --------------------------------------------------------------------------
+   // **************************************************************************
 
    for (w <- 0 until width)
    {
@@ -270,7 +285,7 @@ class Rob(width: Int
          rob_uop(rob_tail)       := io.dis_uops(w)
          rob_exception(rob_tail) := io.dis_uops(w).exception
          rob_fflags(rob_tail)    := Bits(0)
-         rob_uop(rob_tail).br_was_taken := Bool(false) // remove me SYNTH?
+         rob_uop(rob_tail).br_was_mispredicted := Bool(false)
       }
       .elsewhen (io.dis_mask.reduce(_|_))
       {
@@ -307,7 +322,7 @@ class Rob(width: Int
       when (io.br_unit.brinfo.valid && MatchBank(GetBankIdx(io.br_unit.brinfo.rob_idx)))
       {
          // these signals need to be delayed a cycle to match the brinfo signals
-         rob_uop(GetRowIdx(io.br_unit.brinfo.rob_idx)).br_was_taken := Reg(next=io.br_unit.taken)
+         rob_uop(GetRowIdx(io.br_unit.brinfo.rob_idx)).br_was_mispredicted := io.br_unit.brinfo.mispredict
       }
 
 
@@ -590,10 +605,10 @@ class Rob(width: Int
       r_xcpt_val := Bool(false)
    }
 
-   assert (!(exception_thrown && !io.cxcpt.valid && !r_xcpt_val), 
+   assert (!(exception_thrown && !io.cxcpt.valid && !r_xcpt_val),
       "ROB trying to throw an exception, but it doesn't have a valid xcpt_cause")
 
-// not possible to stop all xcpts coming in, since the flush signal goes out a cycle later 
+// not possible to stop all xcpts coming in, since the flush signal goes out a cycle later
 //   assert (!(rob_state === s_rollback && (io.lxcpt.valid || io.bxcpt.valid)),
 //      "Exception incoming during rollback - exception should have been killed.")
 

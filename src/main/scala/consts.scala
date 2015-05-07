@@ -15,7 +15,7 @@ import Node._
 trait BOOMDebugConstants
 {
    val DEBUG_PRINTF        = false // use the Chisel printf functionality
-   val DEBUG_ENABLE_COLOR  = true  // provide color to print outs? requires a VIM plugin to work properly :(
+   val DEBUG_ENABLE_COLOR  = false // provide color to print outs? requires a VIM plugin to work properly :(
    val COMMIT_LOG_PRINTF   = false // dump commit state, for comparision against ISA sim
    val COMMIT_LOG_EI_ONLY  = false // print out commit log only when interrupts enabled
 }
@@ -44,12 +44,6 @@ trait ScalarOpConstants
    val PC_PLUS4 = Bits(0, 2)  // PC + 4
    val PC_BRJMP = Bits(1, 2)  // brjmp_target
    val PC_JALR  = Bits(2, 2)  // jump_reg_target
-
-   // PC Select Signal (for the oracle)
-   val PC_4   = UInt(0, 3)  // PC + 4
-   val PC_BR  = UInt(1, 3)  // branch_target
-   val PC_J   = UInt(2, 3)  // jump_target
-   val PC_JR  = UInt(3, 3)  // jump_reg_target
 
    // Branch Type
    val BR_N   = UInt(0, 4)  // Next
@@ -333,7 +327,7 @@ trait RISCVConstants
    def GetRd (inst: Bits): UInt = inst(RD_MSB,RD_LSB)
    def GetRs1(inst: Bits): UInt = inst(RS1_MSB,RS1_LSB)
    def IsCall(inst: Bits): Bool = (inst === rocket.Instructions.JAL || inst === rocket.Instructions.JALR) && GetRd(inst) === RA
-//   def IsReturn(inst: Bits): Bool = GetUop(inst) === jalr_opc && GetRd(inst) === X0 && GetRs1(inst) === RA
+   def IsReturn(inst: Bits): Bool = GetUop(inst) === jalr_opc && GetRd(inst) === X0 && GetRs1(inst) === RA
 
    def ComputeBranchTarget(pc: UInt, inst: Bits, xlen: Int, coreInstBytes: Int): UInt =
    {

@@ -60,6 +60,8 @@ class FunctionalUnitIo(num_stages: Int
    // only used by the fpu unit
    val fcsr_rm = Bits(INPUT, rocket.FPConstants.RM_SZ)
 
+   // only used by branch unit
+   // TODO name this, so ROB can also instantiate it
    val get_rob_pc = new Bundle
    {
       val rob_idx = UInt(OUTPUT, ROB_ADDR_SZ)
@@ -67,6 +69,13 @@ class FunctionalUnitIo(num_stages: Int
       val next_val= Bool(INPUT)
       val next_pc = UInt(INPUT, xLen)
    }
+   val get_pred = new GetPredictionInfo
+}
+
+class GetPredictionInfo extends BOOMCoreBundle
+{
+   val rob_idx = UInt(OUTPUT, ROB_ADDR_SZ)
+   val info = new BranchPredictionResp().asInput
 }
 
 class FuncUnitReq(data_width: Int) extends BOOMCoreBundle
@@ -119,7 +128,7 @@ class BranchUnitResp extends BOOMCoreBundle
    val btb_update_valid= Bool() // TODO turn this into a directed bundle so we can fold this into btb_update?
    val btb_update      = new rocket.BTBUpdate
    val bht_update      = Valid(new rocket.BHTUpdate)
-   val bpd_update      = Valid(new BrpdUpdate)
+   val bpd_update      = Valid(new BpdUpdate)
 
    val xcpt            = Valid(new Exception)
 
@@ -228,7 +237,6 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)
    var op1_data: Bits = null
    if (is_branch_unit)
    {
-      //io.get_rob_pc.rob_idx := uop.rob_idx
       op1_data = Mux(io.req.bits.uop.ctrl.op1_sel.toUInt === OP1_RS1 , io.req.bits.rs1_data,
                  Mux(io.req.bits.uop.ctrl.op1_sel.toUInt === OP1_PC  , io.get_rob_pc.curr_pc,
                                                                        UInt(0)))
@@ -302,20 +310,74 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)
                           uop.is_br_or_jmp &&
                           (pc_sel != PC_PLUS4)
 
-      // JAL is taken in the front-end, so it should never mispredict
-      val mispredict = io.req.valid &&
-                       !killed &&
-                       uop.is_br_or_jmp &&
-                       !(uop.is_jal) && // TODO XXX is this the proper way to do this? can we remove more JAL stuff from the branch unit? jal should just be a NOP, except it needs the PC for wb
-                                        // TODO treat a JAL with rd=x0 differently, squash away in decode.
-//                       ((io.br_unit.taken ^ uop.btb_pred_taken) || // BTB was wrong this assumes BTB doesn't say "taken" for PC+4
-                       (// BTB was wrong or BPD was wrong
-                          ((pc_sel === PC_PLUS4 && (uop.btb_hit && uop.btb_resp.taken)) ||
-                          (pc_sel != PC_PLUS4 && !(uop.btb_hit && uop.btb_resp.taken)) ||
-                          (pc_sel === PC_JALR && (!io.get_rob_pc.next_val || (io.get_rob_pc.next_pc != bj_addr)))) || // BTB was right, but wrong target for JALR
-                          // BPD was wrong
-                          (uop.bpd_taken && !io.br_unit.taken)
-                       )
+      //// JAL is taken in the front-end, so it should never mispredict
+      //val mispredict = io.req.valid &&
+      //                 !killed &&
+      //                 uop.is_br_or_jmp &&
+      //                 !(uop.is_jal) && // TODO XXX is this the proper way to do this? can we remove more JAL stuff from the branch unit? jal should just be a NOP, except it needs the PC for wb
+      //                                  // TODO treat a JAL with rd=x0 differently, squash away in decode.
+//    //                   ((io.br_unit.taken ^ uop.btb_pred_taken) || // BTB was wrong this assumes BTB doesn't say "taken" for PC+4
+      //                 (// BTB was wrong or BPD was wrong
+      //                    ((pc_sel === PC_PLUS4 && (uop.btb_hit && uop.btb_resp.taken)) ||
+      //                    (pc_sel != PC_PLUS4 && !(uop.btb_hit && uop.btb_resp.taken)) ||
+      //                    (pc_sel === PC_JALR && (!io.get_rob_pc.next_val || (io.get_rob_pc.next_pc != bj_addr))))  // BTB was right, but wrong target for JALR
+      //                 )
+
+      // "mispredict" means that a branch has been resolved and it must be killed
+      val mispredict = Bool(); mispredict := Bool(false)
+
+      val is_br_or_jalr  = io.req.valid && !killed && uop.is_br_or_jmp && !uop.is_jal
+
+      // did the BTB predict a br or jmp incorrectly?
+      // (do we need to reset its history and teach it a new target?)
+      val btb_mispredict = Bool(); btb_mispredict := Bool(false)
+
+      // did the bpd predict incorrectly (aka, should we correct its prediction?)
+      val bpd_mispredict = Bool(); bpd_mispredict := Bool(false)
+
+      when (is_br_or_jalr)
+      {
+         when (pc_sel === PC_JALR)
+         {
+            // only the BTB can predict JALRs (must also check it predicted taken)
+            btb_mispredict := !io.get_rob_pc.next_val || (io.get_rob_pc.next_pc != bj_addr) ||
+                              !io.get_pred.info.btb_resp.taken || !uop.br_prediction.btb_hit
+            bpd_mispredict := Bool(false)
+         }
+         when (pc_sel === PC_PLUS4)
+         {
+            btb_mispredict := uop.br_prediction.btb_hit && io.get_pred.info.btb_resp.taken
+            bpd_mispredict := uop.br_prediction.bpd_predict_taken
+         }
+         when (pc_sel === PC_BRJMP)
+         {
+            btb_mispredict := !uop.br_prediction.btb_hit || (uop.br_prediction.btb_hit && !io.get_pred.info.btb_resp.taken)
+            bpd_mispredict := !uop.br_prediction.bpd_predict_taken
+         }
+      }
+
+      when (is_br_or_jalr && pc_sel === PC_BRJMP && !mispredict && io.get_rob_pc.next_val)
+      {
+         assert (io.get_rob_pc.next_pc === bj_addr, "Branch is taken to the wrong target.")
+      }
+
+      when (is_br_or_jalr)
+      {
+         when (pc_sel === PC_JALR)
+         {
+            mispredict := btb_mispredict
+         }
+         when (pc_sel === PC_PLUS4)
+         {
+            mispredict := Mux(uop.br_prediction.wasBTB, btb_mispredict, bpd_mispredict)
+         }
+         when (pc_sel === PC_BRJMP)
+         {
+            mispredict := Mux(uop.br_prediction.wasBTB, btb_mispredict, bpd_mispredict)
+         }
+      }
+
+      // TODO assert that the BTB actually predicted these things?
 
       // TODO assert is there a way to verify the branch prediction jumped to the correct address?
       //val bad_jmp_target_error = io.req.valid && uop.is_br_or_jmp && !uop.is_jump && (bj_addr != ???)
@@ -338,30 +400,39 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)
 
       // updates the BTB same cycle as PC redirect
       val lsb = log2Ceil(FETCH_WIDTH*coreInstBytes)
-      // TODO remove jal from redirecting the PC? it should NEVER "mispredict!"
 
       // did a branch or jalr occur AND did we mispredict? AND was it taken? (i.e., should we update the BTB)
-      io.br_unit.btb_update_valid            := io.req.valid && uop.is_br_or_jmp && !uop.is_jal && mispredict && io.br_unit.taken && !killed
-      io.br_unit.btb_update.pc               := ((uop_pc_ >> lsb) << lsb) + uop.fetch_pc_lob // what pc should the tag check be on?
+      io.br_unit.btb_update_valid            := is_br_or_jalr && mispredict && io.br_unit.taken
+      io.br_unit.btb_update.pc               := ((uop_pc_ >> lsb) << lsb) + uop.fetch_pc_lob // tell the BTB which pc to tag check against
       io.br_unit.btb_update.br_pc            := uop_pc_
-      io.br_unit.btb_update.target           := io.br_unit.target & SInt(-coreInstBytes) //bj_addr // what should the target be on the tag hit?
-      io.br_unit.btb_update.prediction.valid := uop.btb_resp_valid // did this branch's fetch packet  have a BTB hit in fetch?
-      io.br_unit.btb_update.prediction.bits  := uop.btb_resp       // give the BTB back its BTBResp
-      io.br_unit.btb_update.taken            := io.br_unit.taken   // was this branch "taken"
+      io.br_unit.btb_update.target           := io.br_unit.target & SInt(-coreInstBytes)
+      io.br_unit.btb_update.prediction.valid := io.get_pred.info.btb_resp_valid // did this branch's fetch packet have a BTB hit in fetch?
+      io.br_unit.btb_update.prediction.bits  := io.get_pred.info.btb_resp       // give the BTB back its BTBResp
+      io.br_unit.btb_update.taken            := io.br_unit.taken   // was this branch/jal/jalr "taken"
       io.br_unit.btb_update.isJump           := uop.is_jump
       io.br_unit.btb_update.isReturn         := uop.is_ret
 
-      io.br_unit.bht_update.valid                 := io.req.valid && uop.is_br_or_jmp && !uop.is_jump && !killed // update on all branches
+      io.br_unit.bht_update.valid                 := io.req.valid && uop.is_br_or_jmp && !uop.is_jump && !killed // update on all branches (but not jal/jalr)
       io.br_unit.bht_update.bits.taken            := io.br_unit.taken   // was this branch "taken"
-      io.br_unit.bht_update.bits.mispredict       := mispredict
-      io.br_unit.bht_update.bits.prediction.valid := uop.btb_resp_valid
-      io.br_unit.bht_update.bits.prediction.bits  := uop.btb_resp
+      io.br_unit.bht_update.bits.mispredict       := btb_mispredict     // need to reset the history in the BHT that is updated only on BTB hits
+      io.br_unit.bht_update.bits.prediction.valid := io.get_pred.info.btb_resp_valid // only update if this was a hit in the BTB
+      io.br_unit.bht_update.bits.prediction.bits  := io.get_pred.info.btb_resp
       io.br_unit.bht_update.bits.pc               := ((uop_pc_ >> lsb) << lsb) + uop.fetch_pc_lob // what pc should the tag check be on?
 
       io.br_unit.bpd_update.valid                 := io.br_unit.bht_update.valid
       io.br_unit.bpd_update.bits.taken            := io.br_unit.taken
       io.br_unit.bpd_update.bits.mispredict       := mispredict
-      io.br_unit.bpd_update.bits.pc               := ((uop_pc_ >> lsb) << lsb) //io.br_unit.bht_update.bits.pc
+      io.br_unit.bpd_update.bits.bpd_mispredict   := bpd_mispredict
+      io.br_unit.bpd_update.bits.pc               := ((uop_pc_ >> lsb) << lsb) + uop.fetch_pc_lob
+      io.br_unit.bpd_update.bits.br_pc            := uop_pc_
+      io.br_unit.bpd_update.bits.history          := io.get_pred.info.bpd_history
+
+      // is the br_pc the last instruction in the fetch bundle?
+      val is_last_inst = if (FETCH_WIDTH == 1) Bool(true)
+                         else ((uop_pc_ >> UInt(log2Up(coreInstBytes))) & Fill(log2Up(FETCH_WIDTH), Bits(1))) === UInt(FETCH_WIDTH-1)
+      io.br_unit.bpd_update.bits.new_pc_same_packet := !(io.br_unit.taken) && !is_last_inst
+
+      require (coreInstBytes == 4)
 
 
       // Branch/Jump Target Calculation
@@ -384,7 +455,7 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)
       bj_addr := (Cat(bj_msb, bj64(vaddrBits-1,0)) & SInt(-2)).toUInt
 
       io.br_unit.pc             := uop_pc_
-      io.br_unit.debug_btb_pred := uop.btb_resp_valid && uop.btb_resp.taken
+      io.br_unit.debug_btb_pred := io.get_pred.info.btb_resp_valid && io.get_pred.info.btb_resp.taken
 
       // handle misaligned branch/jmp targets
       io.br_unit.xcpt.valid     := bj_addr(1) && io.req.valid && mispredict && !killed
@@ -562,7 +633,7 @@ class MulDivUnit extends UnPipelinedFunctionalUnit with BOOMCoreParameters
    io.resp.bits.data      := muldiv.io.resp.bits.data
 }
 
-class PipelinedMulUnit(num_stages: Int) 
+class PipelinedMulUnit(num_stages: Int)
       extends PipelinedFunctionalUnit (num_stages = num_stages
                                       , num_bypass_stages = 0
                                       , earliest_bypass_stage = 0
@@ -579,6 +650,6 @@ class PipelinedMulUnit(num_stages: Int)
    // response
    io.resp.bits.data      := imul.io.out
 }
- 
+
 }
 

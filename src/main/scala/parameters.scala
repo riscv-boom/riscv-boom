@@ -57,6 +57,7 @@ abstract trait BOOMCoreParameters extends rocket.CoreParameters
    //************************************
    // Extra Knobs and Features
    val ENABLE_BRANCH_PREDICTOR = params(EnableBranchPredictor)
+   val GHIST_LENGTH = 30
    val ENABLE_REGFILE_BYPASSING  = true  // bypass regfile write ports to read ports
    val MAX_WAKEUP_DELAY = 3              // unused
 

@@ -78,7 +78,7 @@ object XDecode extends DecodeConstants
             //     |  |  is single-prec?               rs1 regtype     |  |     |  is_store                   |        |  |  is jal
             //     |  |  |  micro-code                 |       rs2 type|  |     |  |  is_amo                  |        |  |  |  allocate_brtag
             //     |  |  |  |         func unit        |       |       |  |     |  |  |  is_fence             |        |  |  |  |
-            //     |  |  |  |         |                |       |       |  |     |  |  |  |  is_fencei         |        |  |  |  |  
+            //     |  |  |  |         |                |       |       |  |     |  |  |  |  is_fencei         |        |  |  |  |
             //     |  |  |  |         |        dst     |       |       |  |     |  |  |  |  |  mem    mem     |        |  |  |  |  is unique? (clear pipeline for it)
             //     |  |  |  |         |        regtype |       |       |  |     |  |  |  |  |  cmd    msk     |        |  |  |  |  |  flush on commit
             //     |  |  |  |         |        |       |       |       |  |     |  |  |  |  |  |      |       |        |  |  |  |  |  |  csr cmd
@@ -451,23 +451,26 @@ class BranchDecode extends Module
 }
 
 
-class FetchSerializerIO() extends BOOMCoreBundle
+class FetchSerializerResp extends BOOMCoreBundle
+{
+   val uops = Vec.fill(DECODE_WIDTH){new MicroOp()}
+   val pred_resp = new BranchPredictionResp()
+}
+class FetchSerializerIO extends BOOMCoreBundle
 {
    val enq = new DecoupledIO(new FetchBundle()).flip
-   val deq = new DecoupledIO(Vec.fill(DECODE_WIDTH){new MicroOp()})
-
+   val deq = new DecoupledIO(new FetchSerializerResp)
    val kill = Bool(INPUT)
 
-  override def clone = new FetchSerializerIO().asInstanceOf[this.type]
+//  override def clone = new FetchSerializerIO().asInstanceOf[this.type]
 }
-
 
 
 // TODO horrific hodgepodge, needs refactoring
 // connect a N-word wide Fetch Buffer with a M-word decode
 // currently only works for 2 wide fetch to 1 wide decode, OR N:N fetch/decode
 // TODO instead of counter, clear mask bits as instructions are finished?
-class FetchSerializerNtoM() extends Module with BOOMCoreParameters
+class FetchSerializerNtoM extends Module with BOOMCoreParameters
 {
    val io = new FetchSerializerIO
 
@@ -513,17 +516,12 @@ class FetchSerializerNtoM() extends Module with BOOMCoreParameters
       io.enq.ready := io.deq.ready
    }
 
-   io.deq.bits(0).pc             := io.enq.bits.pc
-   io.deq.bits(0).fetch_pc_lob   := io.enq.bits.pc
-   io.deq.bits(0).inst           := io.enq.bits.insts(inst_idx)
-   io.deq.bits(0).btb_resp_valid := io.enq.bits.btb_resp_valid
-   io.deq.bits(0).btb_hit        := io.enq.bits.btb_resp_valid
-   io.deq.bits(0).btb_resp       := io.enq.bits.btb_resp
-   io.deq.bits(0).bpd_taken      := io.enq.bits.bpd_takens(0)
-   io.deq.bits(0).valid          := io.enq.bits.mask(0)
-   io.deq.bits(0).xcpt_if        := io.enq.bits.xcpt_if(inst_idx)
-
-
+   io.deq.bits.uops(0).pc             := io.enq.bits.pc
+   io.deq.bits.uops(0).fetch_pc_lob   := io.enq.bits.pc
+   io.deq.bits.uops(0).inst           := io.enq.bits.insts(inst_idx)
+   io.deq.bits.uops(0).br_prediction  := io.enq.bits.predictions(inst_idx)
+   io.deq.bits.uops(0).valid          := io.enq.bits.mask(0)
+   io.deq.bits.uops(0).xcpt_if        := io.enq.bits.xcpt_if(inst_idx)
 
    //-------------------------------------------------------------
    // override all the above logic for DW>1
@@ -533,29 +531,20 @@ class FetchSerializerNtoM() extends Module with BOOMCoreParameters
       // 1:1, so pass everything straight through!
       for (i <- 0 until DECODE_WIDTH)
       {
-         io.deq.bits(i).valid          := io.enq.bits.mask(i)
-         io.deq.bits(i).pc             := (io.enq.bits.pc & SInt(-(FETCH_WIDTH*coreInstBytes))) + UInt(i << 2)
-         io.deq.bits(i).fetch_pc_lob   := io.enq.bits.pc
-         io.deq.bits(i).inst           := io.enq.bits.insts(i)
-         io.deq.bits(i).btb_resp_valid := io.enq.bits.btb_resp_valid
-         io.deq.bits(i).btb_hit        := Mux(io.enq.bits.btb_pred_taken_idx === UInt(i),
-                                                             io.enq.bits.btb_resp_valid,
-                                                             Bool(false))
-         io.deq.bits(i).btb_resp       := io.enq.bits.btb_resp
-         io.deq.bits(i).bpd_taken      := io.enq.bits.bpd_takens(i)
-         when (io.enq.bits.btb_pred_taken_idx != UInt(i))
-         {
-            io.deq.bits(i).btb_resp.taken := Bool(false)
-         }
-         io.deq.bits(i).xcpt_if := io.enq.bits.xcpt_if
+         io.deq.bits.uops(i).valid          := io.enq.bits.mask(i)
+         io.deq.bits.uops(i).pc             := (io.enq.bits.pc & SInt(-(FETCH_WIDTH*coreInstBytes))) + UInt(i << 2)
+         io.deq.bits.uops(i).fetch_pc_lob   := io.enq.bits.pc
+         io.deq.bits.uops(i).inst           := io.enq.bits.insts(i)
+         io.deq.bits.uops(i).xcpt_if        := io.enq.bits.xcpt_if
+         io.deq.bits.uops(i).br_prediction  := io.enq.bits.predictions(i)
       }
-
       io.enq.ready := io.deq.ready
    }
 
    // Pipe valid straight through, since conceptually,
    // we are just an extension of the Fetch Buffer
    io.deq.valid := io.enq.valid
+   io.deq.bits.pred_resp := io.enq.bits.pred_resp
 
 }
 
