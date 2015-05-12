@@ -175,4 +175,51 @@ object DebugGetBJImm
   }
 }
 
+object AgePriorityEncoder
+{
+   def apply(in: Bits, head: UInt): UInt = 
+   {
+//      val temp_bits = Cat(Vec.tabulate(in.getWidth())(i => in(i) && UInt(i) >= head).toBits, in)
+//      PriorityEncoder(temp_bits)
+
+// 100 T 3  7
+// 000 T 2
+// 000 T 1
+// 100 T 0  4
+
+// 100 T 3  <<--- head
+// 000 f 2
+// 000 f 1
+// 100 f 0
+
+
+      val size = in.getWidth()
+      val mask = Vec.fill(in.getWidth()) {Bool()}
+      for (i <- 0 until size)
+      {
+         mask(i) := Bool(true)
+         when (UInt(i) > head)
+         {
+            mask(i) := Bool(false)
+         }
+      }
+
+      val temp_bits = Bits(width = 2*size)
+      temp_bits := Cat(in & mask.toBits, in)
+
+      val found = Bool(); found := Bool(false)
+      val idx = UInt(); 
+      idx := UInt(0)
+      for (i <- 0 until (2*size))
+      {
+         when (temp_bits(i))
+         {
+            found := Bool(true)
+            idx := UInt(i % size)
+         }
+      }
+      idx
+   }
+}
+
 }
