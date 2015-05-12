@@ -350,7 +350,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
 
    val exe_vaddr   = Mux(will_fire_sta_retry,  saq_addr(stq_retry_idx),
                      Mux(will_fire_load_retry, laq_addr(laq_retry_idx),
-                                               io.exe_resp.bits.data.toUInt))
+                                               io.exe_resp.bits.addr.toUInt))
 
    val dtlb = Module(new rocket.TLB, {case uncore.CacheName => "L1D"})
    dtlb.io.ptw <> io.ptw
@@ -560,13 +560,18 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
 
    io.lsu_clr_bsy_valid := Bool(false)
    io.lsu_clr_bsy_rob_idx := mem_tlb_uop.rob_idx
-   when (mem_fired_sta && !mem_tlb_miss)
+   when (mem_fired_sta && !mem_tlb_miss && mem_fired_std)
+   {
+      io.lsu_clr_bsy_valid := !mem_tlb_uop.is_amo
+      io.lsu_clr_bsy_rob_idx := mem_tlb_uop.rob_idx
+   }
+   .elsewhen (mem_fired_sta && !mem_tlb_miss)
    {
       io.lsu_clr_bsy_valid := sdq_val(mem_tlb_uop.stq_idx) &&
                               !mem_tlb_uop.is_amo
       io.lsu_clr_bsy_rob_idx := mem_tlb_uop.rob_idx
    }
-   when (mem_fired_std)
+   .elsewhen (mem_fired_std)
    {
       val mem_std_uop = Reg(next=io.exe_resp.bits.uop)
       io.lsu_clr_bsy_valid := saq_val(mem_std_uop.stq_idx) &&
@@ -574,8 +579,6 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
                               !mem_std_uop.is_amo
    io.lsu_clr_bsy_rob_idx := mem_std_uop.rob_idx
    }
-
-   assert (PopCount(Vec(mem_fired_sta, mem_fired_std)) <= UInt(1), "STA and STD firing.")
 
    //-------------------------------------------------------------
    // Load Issue Datapath (ALL loads need to use this path,

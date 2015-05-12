@@ -853,7 +853,9 @@ class Rob(width: Int
       }
    }
 
-   printf("  RobXcpt[%s%x r:%d b:%x bva:0x%x]\n"
+   if (DEBUG_PRINTF_ROB)
+   {
+      printf("  RobXcpt[%s%x r:%d b:%x bva:0x%x]\n"
             , Mux(io.debug.xcpt_val, Str("E"),Str("-"))
             , io.debug.xcpt_uop.exc_cause
             , io.debug.xcpt_uop.rob_idx
@@ -861,8 +863,6 @@ class Rob(width: Int
             , io.debug.xcpt_badvaddr
             )
 
-   if (DEBUG_PRINTF_ROB)
-   {
       var r_idx = 0
       for (i <- 0 until (NUM_ROB_ENTRIES/COMMIT_WIDTH))
       {

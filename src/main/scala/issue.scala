@@ -68,7 +68,8 @@ class IssueSlot(num_slow_wakeup_ports: Int) extends Module with BOOMCoreParamete
 
    val slotUop = Reg(init = NullMicroOp)
 
-   when (io.kill || (io.issue && (slot_state === s_valid_1)))
+   when (io.kill || (io.issue && (slot_state === s_valid_1)) ||
+                    (io.issue && (slot_state === s_valid_2) && slot_p1 && slot_p2))
    {
       slot_state := s_invalid
    }
@@ -178,7 +179,11 @@ class IssueSlot(num_slow_wakeup_ports: Int) extends Module with BOOMCoreParamete
    io.request_hp := io.request && high_priority
    when (slot_state === s_valid_2)
    {
-      when (slot_p1)
+      when (slot_p1 && slot_p2)
+      {
+         ; // send out the entire instruction as one uop
+      }
+      .elsewhen (slot_p1)
       {
          io.outUop.uopc := slotUop.uopc
          io.outUop.lrs2_rtype := RT_X

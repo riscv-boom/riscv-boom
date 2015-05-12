@@ -102,6 +102,7 @@ class FuncUnitResp(data_width: Int) extends BOOMCoreBundle
    val uop = new MicroOp()
    val data = Bits(width = data_width)
    val fflags = new ValidIO(new FFlagsResp)
+   val addr = UInt(width = vaddrBits+1) // only for maddr -> LSU
    val mxcpt = new ValidIO(Bits(width=rocket.Causes.all.max)) //only for maddr->LSU
 
    override def clone = new FuncUnitResp(data_width).asInstanceOf[this.type]
@@ -502,20 +503,10 @@ class MemAddrCalcUnit extends PipelinedFunctionalUnit(num_stages = 0
                                                      , is_branch_unit = false) with BOOMCoreParameters
 {
    // perform address calculation
-   val alu = Module(new rocket.ALU())
-
-   alu.io.in1 := io.req.bits.rs1_data.toUInt
-   alu.io.in2 := Mux(io.req.bits.uop.ctrl.op2_sel === OP2_ZERO,
-                     SInt(0),
-                     io.req.bits.uop.imm_packed(19,8).toSInt) //uses special packed imm format
-
-   alu.io.fn  := FN_ADD
-   alu.io.dw  := DW_XPR
-
-   val adder_out = alu.io.adder_out
-   val ea_sign = Mux(adder_out(vaddrBits-1), ~adder_out(63,vaddrBits) === UInt(0),
-                                                    adder_out(63,vaddrBits) != UInt(0))
-   val effective_address = Cat(ea_sign, adder_out(vaddrBits-1,0)).toUInt
+   val sum = io.req.bits.rs1_data.toUInt + io.req.bits.uop.imm_packed(19,8).toSInt
+   val ea_sign = Mux(sum(vaddrBits-1), ~sum(63,vaddrBits) === UInt(0),
+                                        sum(63,vaddrBits) != UInt(0))
+   val effective_address = Cat(ea_sign, sum(vaddrBits-1,0)).toUInt
 
    // compute store data
    // requires decoding 65-bit FP data
@@ -529,13 +520,14 @@ class MemAddrCalcUnit extends PipelinedFunctionalUnit(num_stages = 0
    else
       store_data = Mux(io.req.bits.uop.fp_val, unrec_out
                                              , io.req.bits.rs2_data)
-
-   // TODO only use one register read port
-   io.resp.bits.data := Mux(io.req.bits.uop.ctrl.is_std, store_data
-                                                       , effective_address)
+   io.resp.bits.addr := effective_address
+   io.resp.bits.data := store_data
 
    if (data_width > 63)
-      assert (io.resp.bits.data(64).toBool === Bool(false), "65th bit set in MemCalcAddrUnit.")
+   {
+      assert (!(io.req.valid && io.req.bits.uop.ctrl.is_std && 
+         io.resp.bits.data(64).toBool === Bool(true)), "65th bit set in MemAddrCalcUnit.")
+   }
 
    // Handle misaligned exceptions
    val typ = io.req.bits.uop.mem_typ

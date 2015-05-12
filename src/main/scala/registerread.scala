@@ -157,14 +157,6 @@ class RegisterRead(issue_width: Int
          if (num_read_ports > 0) bypassed_rs1_data(w) := MuxCase(rrd_rs1_data(w), rs1_cases)
          if (num_read_ports > 1) bypassed_rs2_data(w) := MuxCase(rrd_rs2_data(w), rs2_cases)
       }
-//   }
-//   else
-//   {
-//      bypassed_rs1_data := rrd_rs1_data
-//      bypassed_rs2_data := rrd_rs2_data
-//   }
-
-
 
 
    //-------------------------------------------------------------
@@ -381,7 +373,12 @@ class RegisterReadDecode extends Module
    io.rrd_uop.ctrl.fcn_dw  := rrd_fcn_dw.toBool
    io.rrd_uop.ctrl.is_load := io.rrd_uop.uopc === uopLD
    io.rrd_uop.ctrl.is_sta  := io.rrd_uop.uopc === uopSTA || io.rrd_uop.uopc === uopAMO_AG
-   io.rrd_uop.ctrl.is_std  := io.rrd_uop.uopc === uopSTD
+   io.rrd_uop.ctrl.is_std  := io.rrd_uop.uopc === uopSTD || (io.rrd_uop.ctrl.is_sta && io.rrd_uop.lrs2_rtype != RT_X)
+
+   when (io.rrd_uop.uopc === uopAMO_AG)
+   {
+      io.rrd_uop.imm_packed := UInt(0)
+   }
 
    val raddr1 = io.rrd_uop.pop1 // although renamed, it'll stay 0 if lrs1 = 0
    val csr_ren = (rrd_csr_cmd === rocket.CSR.S || rrd_csr_cmd === rocket.CSR.C) && raddr1 === UInt(0)
