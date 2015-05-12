@@ -322,7 +322,6 @@ class MemExeUnit extends ExecutionUnit(num_rf_read_ports = 2 // TODO make this 1
    io.lsu_io.lsu_clr_bsy_valid := lsu.io.lsu_clr_bsy_valid // HACK TODO need a better way to clear the busy bits in the ROB
    io.lsu_io.lsu_clr_bsy_rob_idx := lsu.io.lsu_clr_bsy_rob_idx // HACK TODO need a better way to clear the busy bits in the rob
    io.lsu_io.lsu_fencei_rdy := lsu.io.lsu_fencei_rdy
-   io.lsu_io.debug := lsu.io.debug
 
    // enqueue addresses,st-data at the end of Execute
    lsu.io.exe_resp <> maddrcalc.io.resp
@@ -560,7 +559,6 @@ class ALUMemExeUnit(is_branch_unit    : Boolean = false
    io.lsu_io.lsu_clr_bsy_valid := lsu.io.lsu_clr_bsy_valid // HACK TODO need a better way to clear the busy bits in the ROB
    io.lsu_io.lsu_clr_bsy_rob_idx := lsu.io.lsu_clr_bsy_rob_idx // HACK TODO need a better way to clear the busy bits in the rob
    io.lsu_io.lsu_fencei_rdy := lsu.io.lsu_fencei_rdy
-   io.lsu_io.debug := lsu.io.debug
 
    // enqueue addresses,st-data at the end of Execute
    lsu.io.exe_resp <> maddrcalc.io.resp

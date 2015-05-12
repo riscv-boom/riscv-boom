@@ -45,8 +45,9 @@ package BOOM
 
 import Chisel._
 import Node._
-import uncore.constants.MemoryOpConstants._
 
+import rocket.Str
+import uncore.constants.MemoryOpConstants._
 import uncore.PgIdxBits
 
 class LoadStoreUnitIo(pl_width: Int) extends BOOMCoreBundle
@@ -121,46 +122,6 @@ class LoadStoreUnitIo(pl_width: Int) extends BOOMCoreBundle
       val ld_sleep = Bool()
       val ld_killed = Bool()
       val ld_order_fail = Bool()
-   }.asOutput
-
-   val debug = new BOOMCoreBundle
-   {
-      val laq_head        = UInt(width=MEM_ADDR_SZ)
-      val laq_tail        = UInt(width=MEM_ADDR_SZ)
-      val stq_head        = UInt(width=MEM_ADDR_SZ)
-      val stq_tail        = UInt(width=MEM_ADDR_SZ)
-      val stq_commit_head = UInt(width=MEM_ADDR_SZ)
-      val live_store_mask = Bits(width=NUM_LSU_ENTRIES)
-      val laq_maybe_full  = Bool()
-      val stq_maybe_full  = Bool()
-      val tlb_miss        = Bool()
-      val tlb_ready       = Bool()
-      val will_fires      = Bits(width=7)
-      val can_fires       = Bits(width=7)
-      val mem_fired_ld    = Bool()
-      val entry = Vec.fill(NUM_LSU_ENTRIES) { new Bundle {
-         val laq_addr_val = Bool()
-         val laq_addr = UInt(width=xLen)
-         val laq_allocated = Bool()
-         val laq_executed = Bool()
-         val laq_succeeded = Bool()
-         val laq_failure = Bool()
-         val laq_forwarded_std_val = Bool()
-         val laq_forwarded_stq_idx = UInt(width=MEM_ADDR_SZ)
-         val laq_yng_st_idx = UInt(width=MEM_ADDR_SZ)
-         val laq_st_dep_mask= Bits(width=NUM_LSU_ENTRIES)
-
-         val stq_entry_val = Bool()
-         val saq_val = Bool()
-         val sdq_val = Bool()
-         val saq_addr = UInt(width=xLen)
-         val sdq_data = Bits(width=xLen)
-         val stq_executed = Bool()
-         val stq_succeeded = Bool()
-         val stq_committed = Bool()
-         val saq_is_virtual = Bool()
-         val stq_uop = new MicroOp()
-      }}
    }.asOutput
 }
 
@@ -1132,62 +1093,51 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    //-------------------------------------------------------------
    // Debug & Counter outputs
 
-
    io.counters.ld_valid      := io.exe_resp.valid && io.exe_resp.bits.uop.is_load
    io.counters.ld_forwarded  := io.forward_val
    io.counters.ld_sleep      := ld_was_put_to_sleep
    io.counters.ld_killed     := ld_was_killed
    io.counters.ld_order_fail := failed_loads.reduce(_|_)
 
-   io.debug.laq_head := laq_head
-   io.debug.laq_tail := laq_tail
-   io.debug.stq_head := stq_head
-   io.debug.stq_tail := stq_tail
-   io.debug.stq_commit_head := stq_commit_head
-   io.debug.live_store_mask := live_store_mask
-   io.debug.laq_maybe_full := laq_maybe_full
-   io.debug.stq_maybe_full := stq_maybe_full
-   io.debug.tlb_miss := tlb_miss
-   io.debug.tlb_ready:= dtlb.io.req.ready
-   io.debug.will_fires := Vec(will_fire_load_wakeup,
-                              will_fire_store_commit,
-                              will_fire_load_retry,
-                              will_fire_sta_retry,
-                              will_fire_std_incoming,
-                              will_fire_sta_incoming,
-                              will_fire_load_incoming).toBits
-   io.debug.can_fires := Vec( can_fire_load_wakeup,
-                              can_fire_store_commit,
-                              can_fire_load_retry,
-                              can_fire_sta_retry,Bits(0,3)).toBits
-   io.debug.mem_fired_ld := mem_fired_ld
-
-   for (i <- 0 until NUM_LSU_ENTRIES)
+   if (DEBUG_PRINTF_LSU)
    {
-      io.debug.entry(i).laq_addr_val := laq_addr_val(i)
-      io.debug.entry(i).laq_allocated := laq_allocated(i)
-      io.debug.entry(i).laq_executed := laq_executed(i)
-      io.debug.entry(i).laq_succeeded := laq_succeeded(i)
-      io.debug.entry(i).laq_failure := laq_failure(i)
-      io.debug.entry(i).laq_forwarded_std_val := laq_forwarded_std_val(i)
-      io.debug.entry(i).laq_forwarded_stq_idx := laq_forwarded_stq_idx(i)
-      io.debug.entry(i).laq_addr := laq_addr(i)
-      io.debug.entry(i).laq_yng_st_idx := laq_uop(i).stq_idx
-      io.debug.entry(i).laq_st_dep_mask := laq_st_dep_mask(i)
+      for (i <- 0 until NUM_LSU_ENTRIES)
+      {
+         val t_laddr = laq_addr(i)
+         val t_saddr = saq_addr(i)
+         printf("         ldq[%d]=(%s%s%s%s%s%s%d) st_dep(%d,m=%x) 0x%x %s %s   saq[%d]=(%s%s%s%s%s%s%s) b:%x 0x%x -> 0x%x %s %s %s\n"
+            , UInt(i, MEM_ADDR_SZ)
+            , Mux(laq_allocated(i), Str("V"), Str("-"))
+            , Mux(laq_addr_val(i), Str("A"), Str("-"))
+            , Mux(laq_executed(i), Str("E"), Str("-"))
+            , Mux(laq_succeeded(i), Str("S"), Str("-"))
+            , Mux(laq_failure(i), Str("F"), Str("_"))
+            , Mux(laq_forwarded_std_val(i), Str("X"), Str("_"))
+            , laq_forwarded_stq_idx(i)
+            , laq_uop(i).stq_idx // youngest dep-store
+            , laq_st_dep_mask(i)
+            , t_laddr(19,0)
 
-      io.debug.entry(i).stq_entry_val := stq_entry_val(i)
-      io.debug.entry(i).saq_val := saq_val(i)
-      io.debug.entry(i).sdq_val := sdq_val(i)
-      io.debug.entry(i).stq_executed := stq_executed(i)
-      io.debug.entry(i).stq_succeeded := stq_succeeded(i)
-      io.debug.entry(i).stq_committed := stq_committed(i)
-      io.debug.entry(i).saq_is_virtual := saq_is_virtual(i)
-//      io.debug.entry(i).saq_is_virtual := saq_is_virtual(i) ^ (write_masks.reduce(_|_) === Bits(0)) ^ force_sleeps(i)
-      io.debug.entry(i).saq_addr := saq_addr(i)
-      io.debug.entry(i).sdq_data := sdq_data(i)
-      io.debug.entry(i).stq_uop  := stq_uop(i)
-   }
+            , Mux(laq_head === UInt(i), Str("<- H "), Str(" "))
+            , Mux(laq_tail=== UInt(i), Str("T "), Str(" "))
 
+            , UInt(i, MEM_ADDR_SZ)
+            , Mux(stq_entry_val(i), Str("V"), Str("-"))
+            , Mux(saq_val(i), Str("A"), Str("-"))
+            , Mux(sdq_val(i), Str("D"), Str("-"))
+            , Mux(stq_committed(i), Str("C"), Str("-"))
+            , Mux(stq_executed(i), Str("E"), Str("-"))
+            , Mux(stq_succeeded(i), Str("S"), Str("-"))
+            , Mux(saq_is_virtual(i), Str("T"), Str("-"))
+            , stq_uop(i).br_mask
+            , t_saddr(19,0)
+            , sdq_data(i)
+
+            , Mux(stq_head === UInt(i), Str("<- H "), Str(" "))
+            , Mux(stq_commit_head === UInt(i), Str("C "), Str(" "))
+            , Mux(stq_tail=== UInt(i), Str("T "), Str(" "))
+         )
+      }}
 }
 
 

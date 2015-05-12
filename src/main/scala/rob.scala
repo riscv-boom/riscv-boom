@@ -25,6 +25,8 @@ import Chisel._
 import Node._
 import scala.math.ceil
 
+import rocket.Str
+
 class Exception extends BOOMCoreBundle
 {
    val uop = new MicroOp()
@@ -203,6 +205,15 @@ class Rob(width: Int
       else           { return rob_idx(log2Up(width)-1, 0).toUInt }
    }
 
+   // **************************************************************************
+   // Debug
+
+   val debug_entry = Vec.fill(NUM_ROB_ENTRIES) { new Bundle {
+         val valid = Bool()
+         val busy = Bool()
+         val uop = new MicroOp()
+         val exception = Bool()
+      }}
 
    // **************************************************************************
    // --------------------------------------------------------------------------
@@ -463,14 +474,16 @@ class Rob(width: Int
       //--------------------------------------------------
       // Debug: handle passing out signals to printf in dpath
 
-      for (i <- 0 until num_rob_rows)
+      if (DEBUG_PRINTF_ROB)
       {
-         io.debug.entry(w + i*width).valid := rob_val(i)
-         io.debug.entry(w + i*width).busy := rob_bsy(UInt(i))
-         io.debug.entry(w + i*width).uop := rob_uop(UInt(i))
-         io.debug.entry(w + i*width).uop.pc := rob_pc_hob.read(UInt(i,log2Up(num_rob_rows))) + UInt(w << 2)
-         io.debug.entry(w + i*width).exception := rob_exception(UInt(i))
-         //io.debug.entry(w + i*width).fflags := rob_fflags(UInt(i))
+         for (i <- 0 until num_rob_rows)
+         {
+            debug_entry(w + i*width).valid := rob_val(i)
+            debug_entry(w + i*width).busy := rob_bsy(UInt(i))
+            debug_entry(w + i*width).uop := rob_uop(UInt(i))
+            debug_entry(w + i*width).uop.pc := rob_pc_hob.read(UInt(i,log2Up(num_rob_rows))) + UInt(w << 2)
+            debug_entry(w + i*width).exception := rob_exception(UInt(i))
+         }
       }
 
    } //for (w <- 0 until width)
@@ -839,4 +852,119 @@ class Rob(width: Int
          }
       }
    }
+
+   printf("  RobXcpt[%s%x r:%d b:%x bva:0x%x]\n"
+            , Mux(io.debug.xcpt_val, Str("E"),Str("-"))
+            , io.debug.xcpt_uop.exc_cause
+            , io.debug.xcpt_uop.rob_idx
+            , io.debug.xcpt_uop.br_mask
+            , io.debug.xcpt_badvaddr
+            )
+
+   if (DEBUG_PRINTF_ROB)
+   {
+      var r_idx = 0
+      for (i <- 0 until (NUM_ROB_ENTRIES/COMMIT_WIDTH))
+      {
+//            rob[ 0]           (  )(  ) 0x00002000 [ -                       ][unknown                  ]    ,   (d:X p 1, bm:0 - sdt: 0) (d:- p 3, bm:f - sdt:60)
+//            rob[ 1]           (  )(B ) 0xc71cb68e [flw     fa3, -961(s11)   ][ -                       ] E31,   (d:- p22, bm:e T sdt:57) (d:- p 0, bm:0 - sdt: 0)
+//            rob[ 2] HEAD ---> (vv)( b) 0x00002008 [lui     ra, 0x2          ][addi    ra, ra, 704      ]    ,   (d:x p 2, bm:1 - sdt: 0) (d:x p 3, bm:1 - sdt: 2)
+//            rob[ 3]           (vv)(bb) 0x00002010 [lw      s1, 0(ra)        ][lui     t3, 0xff0        ]    ,   (d:x p 4, bm:0 - sdt: 0) (d:x p 5, bm:0 - sdt: 0)
+//            rob[ 4]      TL-> (v )(b ) 0x00002018 [addiw   t3, t3, 255      ][li      t2, 2            ]    ,   (d:x p 6, bm:0 - sdt: 5) (d:x p 7, bm:0 - sdt: 0)
+
+         val row = if (COMMIT_WIDTH == 1) r_idx else (r_idx >> log2Up(COMMIT_WIDTH))
+         val r_head = rob_head
+         val r_tail = rob_tail
+
+         printf("    rob[%d] %s ("
+            , UInt(row, ROB_ADDR_SZ)
+            , Mux(r_head === UInt(row) && r_tail === UInt(row), Str("HEAD,TL->"),
+              Mux(r_head === UInt(row), Str("HEAD --->"),
+              Mux(r_tail === UInt(row), Str("     TL->"),
+                                        Str(" "))))
+            )
+
+         if (COMMIT_WIDTH == 1)
+         {
+            printf("(%s)(%s) 0x%x [DASM(%x)] %s "
+               , Mux(debug_entry(r_idx+0).valid, Str(b_cyn + "V" + end), Str(grn + " " + end))
+               , Mux(debug_entry(r_idx+0).busy, Str(b_ylw + "B" + end),  Str(grn + " " + end))
+               , debug_entry(r_idx+0).uop.pc(31,0)
+               , debug_entry(r_idx+0).uop.inst
+               , Mux(debug_entry(r_idx+0).exception, Str("E"), Str("-"))
+               )
+         }
+         else if (COMMIT_WIDTH == 2)
+         {
+            val row_is_val = debug_entry(r_idx+0).valid || debug_entry(r_idx+1).valid
+            printf("(%s%s)(%s%s) 0x%x %x [%sDASM(%x)][DASM(%x)" + end + "] %s,%s "
+               , Mux(debug_entry(r_idx+0).valid, Str(b_cyn + "V" + end), Str(grn + " " + end))
+               , Mux(debug_entry(r_idx+1).valid, Str(b_cyn + "V" + end), Str(grn + " " + end))
+               , Mux(debug_entry(r_idx+0).busy,  Str(b_ylw + "B" + end), Str(grn + " " + end))
+               , Mux(debug_entry(r_idx+1).busy,  Str(b_ylw + "B" + end), Str(grn + " " + end))
+               , debug_entry(r_idx+0).uop.pc(31,0)
+               , debug_entry(r_idx+1).uop.pc(15,0)
+               , Mux(r_head === UInt(row) && row_is_val, Str(b_red),
+                 Mux(row_is_val                        , Str(b_cyn),
+                                                         Str(grn)))
+               , debug_entry(r_idx+0).uop.inst
+               , debug_entry(r_idx+1).uop.inst
+               , Mux(debug_entry(r_idx+0).exception, Str("E"), Str("-"))
+               , Mux(debug_entry(r_idx+1).exception, Str("E"), Str("-"))
+               )
+         }
+         else if (COMMIT_WIDTH == 4)
+         {
+            val row_is_val = debug_entry(r_idx+0).valid || debug_entry(r_idx+1).valid || debug_entry(r_idx+2).valid || debug_entry(r_idx+3).valid
+            printf("(%s%s%s%s)(%s%s%s%s) 0x%x %x %x %x [%sDASM(%x)][DASM(%x)][DASM(%x)][DASM(%x)" + end + "]%s%s%s%s"
+               , Mux(debug_entry(r_idx+0).valid, Str(b_cyn + "V" + end), Str(grn + " " + end))
+               , Mux(debug_entry(r_idx+1).valid, Str(b_cyn + "V" + end), Str(grn + " " + end))
+               , Mux(debug_entry(r_idx+2).valid, Str(b_cyn + "V" + end), Str(grn + " " + end))
+               , Mux(debug_entry(r_idx+3).valid, Str(b_cyn + "V" + end), Str(grn + " " + end))
+               , Mux(debug_entry(r_idx+0).busy,  Str(b_ylw + "B" + end), Str(grn + " " + end))
+               , Mux(debug_entry(r_idx+1).busy,  Str(b_ylw + "B" + end), Str(grn + " " + end))
+               , Mux(debug_entry(r_idx+2).busy,  Str(b_ylw + "B" + end), Str(grn + " " + end))
+               , Mux(debug_entry(r_idx+3).busy,  Str(b_ylw + "B" + end), Str(grn + " " + end))
+               , debug_entry(r_idx+0).uop.pc(23,0)
+               , debug_entry(r_idx+1).uop.pc(15,0)
+               , debug_entry(r_idx+2).uop.pc(15,0)
+               , debug_entry(r_idx+3).uop.pc(15,0)
+               , Mux(r_head === UInt(row) && row_is_val, Str(b_red),
+                 Mux(row_is_val                        , Str(b_cyn), Str(grn)))
+               , debug_entry(r_idx+0).uop.inst
+               , debug_entry(r_idx+1).uop.inst
+               , debug_entry(r_idx+2).uop.inst
+               , debug_entry(r_idx+3).uop.inst
+               , Mux(debug_entry(r_idx+0).exception, Str("E"), Str("-"))
+               , Mux(debug_entry(r_idx+1).exception, Str("E"), Str("-"))
+               , Mux(debug_entry(r_idx+2).exception, Str("E"), Str("-"))
+               , Mux(debug_entry(r_idx+3).exception, Str("E"), Str("-"))
+               )
+         }
+         else
+         {
+            println("  BOOM's Chisel printf does not support commit_width >= " + COMMIT_WIDTH)
+         }
+
+         var temp_idx = r_idx
+         for (w <- 0 until COMMIT_WIDTH)
+         {
+            printf("(d:%s p%d, bm:%x sdt:%d) "
+               , Mux(debug_entry(temp_idx).uop.dst_rtype === RT_FIX, Str("X"),
+                 Mux(debug_entry(temp_idx).uop.dst_rtype === RT_PAS, Str("C"),
+                 Mux(debug_entry(temp_idx).uop.dst_rtype === RT_FLT, Str("f"),
+                 Mux(debug_entry(temp_idx).uop.dst_rtype === RT_X, Str("-"), Str("?")))))
+               , debug_entry    (temp_idx).uop.pdst
+               , debug_entry    (temp_idx).uop.br_mask
+               , debug_entry    (temp_idx).uop.stale_pdst
+            )
+            temp_idx = temp_idx + 1
+         }
+
+         r_idx = r_idx + COMMIT_WIDTH
+
+         printf("\n")
+      }
+   }
+
 }

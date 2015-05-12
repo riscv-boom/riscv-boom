@@ -18,6 +18,42 @@ trait BOOMDebugConstants
    val DEBUG_ENABLE_COLOR  = false // provide color to print outs? requires a VIM plugin to work properly :(
    val COMMIT_LOG_PRINTF   = false // dump commit state, for comparision against ISA sim
    val COMMIT_LOG_EI_ONLY  = false // print out commit log only when interrupts enabled
+
+   // turn off stuff to dramatically reduce Chisel node count
+   val DEBUG_PRINTF_LSU    = true && DEBUG_PRINTF
+   val DEBUG_PRINTF_ROB    = true && DEBUG_PRINTF
+
+
+   // color codes for output files
+   // if you use VIM to view, you'll need the AnsiEsc plugin.
+   // 1 is bold, 2 is background, 4 is underlined
+   val blk   = if (DEBUG_ENABLE_COLOR) "\033[1;30m" else " "
+   val red   = if (DEBUG_ENABLE_COLOR) "\033[1;31m" else " "
+   val grn   = if (DEBUG_ENABLE_COLOR) "\033[1;32m" else " "
+   val ylw   = if (DEBUG_ENABLE_COLOR) "\033[1;33m" else " "
+   val blu   = if (DEBUG_ENABLE_COLOR) "\033[1;34m" else " "
+   val mgt   = if (DEBUG_ENABLE_COLOR) "\033[1;35m" else " "
+   val cyn   = if (DEBUG_ENABLE_COLOR) "\033[1;36m" else " "
+   val wht   = if (DEBUG_ENABLE_COLOR) "\033[1;37m" else " "
+   val end   = if (DEBUG_ENABLE_COLOR) "\033[0m"    else ""
+
+   val b_blk = if (DEBUG_ENABLE_COLOR) "\033[2;30m" else " "
+   val b_red = if (DEBUG_ENABLE_COLOR) "\033[2;31m" else " "
+   val b_grn = if (DEBUG_ENABLE_COLOR) "\033[2;32m" else " "
+   val b_ylw = if (DEBUG_ENABLE_COLOR) "\033[2;33m" else " "
+   val b_blu = if (DEBUG_ENABLE_COLOR) "\033[2;34m" else " "
+   val b_mgt = if (DEBUG_ENABLE_COLOR) "\033[2;35m" else " "
+   val b_cyn = if (DEBUG_ENABLE_COLOR) "\033[2;36m" else " "
+   val b_wht = if (DEBUG_ENABLE_COLOR) "\033[2;37m" else " "
+
+   val u_blk = if (DEBUG_ENABLE_COLOR) "\033[4;30m" else " "
+   val u_red = if (DEBUG_ENABLE_COLOR) "\033[4;31m" else " "
+   val u_grn = if (DEBUG_ENABLE_COLOR) "\033[4;32m" else " "
+   val u_ylw = if (DEBUG_ENABLE_COLOR) "\033[4;33m" else " "
+   val u_blu = if (DEBUG_ENABLE_COLOR) "\033[4;34m" else " "
+   val u_mgt = if (DEBUG_ENABLE_COLOR) "\033[4;35m" else " "
+   val u_cyn = if (DEBUG_ENABLE_COLOR) "\033[4;36m" else " "
+   val u_wht = if (DEBUG_ENABLE_COLOR) "\033[4;37m" else " "
 }
 
 trait BrPredConstants
@@ -182,9 +218,6 @@ trait ScalarOpConstants
    //               = Bits(66, UOPC_SZ)
    val uopAMO_AG    = Bits(67, UOPC_SZ) // AMO-address gen (use normal STD for datagen)
 
-   // TODO provide a micro-op for each instruction, going into the FPU,
-   // so that we use the FPUDecode table... refactor so these signals are created
-   // in Decode
    val uopFMV_S_X   = Bits(68, UOPC_SZ)
    val uopFMV_D_X   = Bits(69, UOPC_SZ)
    val uopFMV_X_S   = Bits(70, UOPC_SZ)

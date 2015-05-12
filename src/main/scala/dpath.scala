@@ -1174,9 +1174,12 @@ class DatPath() extends Module with BOOMCoreParameters
       csr.io.uarch_counters(10) := lsu_io.counters.ld_sleep
       csr.io.uarch_counters(11) := lsu_io.counters.ld_killed
       csr.io.uarch_counters(12) := lsu_io.counters.ld_order_fail
-      csr.io.uarch_counters(13) := PopCount((Range(0,COMMIT_WIDTH)).map{w => com_valids(w) && com_uops(w).is_br_or_jmp})
-      csr.io.uarch_counters(14) := PopCount((Range(0,COMMIT_WIDTH)).map{w => com_valids(w) && com_uops(w).is_store})
-      csr.io.uarch_counters(15) := PopCount((Range(0,COMMIT_WIDTH)).map{w => com_valids(w) && com_uops(w).is_load})
+//      csr.io.uarch_counters(13) := PopCount((Range(0,COMMIT_WIDTH)).map{w => com_valids(w) && com_uops(w).is_br_or_jmp})
+      csr.io.uarch_counters(13) := br_unit.bht_update.bits.mispredict && !br_unit.bpd_update.bits.bpd_mispredict
+      csr.io.uarch_counters(14) := br_unit.bpd_update.valid && br_unit.bpd_update.bits.bpd_mispredict // BPD Mispredict
+      csr.io.uarch_counters(15) := br_unit.bht_update.valid && br_unit.bht_update.bits.mispredict // BTB mispredict
+//      csr.io.uarch_counters(14) := PopCount((Range(0,COMMIT_WIDTH)).map{w => com_valids(w) && com_uops(w).is_store})
+//      csr.io.uarch_counters(15) := PopCount((Range(0,COMMIT_WIDTH)).map{w => com_valids(w) && com_uops(w).is_load})
    }
    else
    {
@@ -1194,38 +1197,7 @@ class DatPath() extends Module with BOOMCoreParameters
    {
       println("\n Chisel Printout Enabled\n")
 
-      // color codes for output files
-      // if you use VIM to view, you'll need the AnsiEsc plugin.
-      // 1 is bold, 2 is background, 4 is k
-      val blk   = if (DEBUG_ENABLE_COLOR) "\033[1;30m" else " "
-      val red   = if (DEBUG_ENABLE_COLOR) "\033[1;31m" else " "
-      val grn   = if (DEBUG_ENABLE_COLOR) "\033[1;32m" else " "
-      val ylw   = if (DEBUG_ENABLE_COLOR) "\033[1;33m" else " "
-      val blu   = if (DEBUG_ENABLE_COLOR) "\033[1;34m" else " "
-      val mgt   = if (DEBUG_ENABLE_COLOR) "\033[1;35m" else " "
-      val cyn   = if (DEBUG_ENABLE_COLOR) "\033[1;36m" else " "
-      val wht   = if (DEBUG_ENABLE_COLOR) "\033[1;37m" else " "
-      val end   = if (DEBUG_ENABLE_COLOR) "\033[0m"    else ""
-
-      val b_blk = if (DEBUG_ENABLE_COLOR) "\033[2;30m" else " "
-      val b_red = if (DEBUG_ENABLE_COLOR) "\033[2;31m" else " "
-      val b_grn = if (DEBUG_ENABLE_COLOR) "\033[2;32m" else " "
-      val b_ylw = if (DEBUG_ENABLE_COLOR) "\033[2;33m" else " "
-      val b_blu = if (DEBUG_ENABLE_COLOR) "\033[2;34m" else " "
-      val b_mgt = if (DEBUG_ENABLE_COLOR) "\033[2;35m" else " "
-      val b_cyn = if (DEBUG_ENABLE_COLOR) "\033[2;36m" else " "
-      val b_wht = if (DEBUG_ENABLE_COLOR) "\033[2;37m" else " "
-
-      val u_blk = if (DEBUG_ENABLE_COLOR) "\033[4;30m" else " "
-      val u_red = if (DEBUG_ENABLE_COLOR) "\033[4;31m" else " "
-      val u_grn = if (DEBUG_ENABLE_COLOR) "\033[4;32m" else " "
-      val u_ylw = if (DEBUG_ENABLE_COLOR) "\033[4;33m" else " "
-      val u_blu = if (DEBUG_ENABLE_COLOR) "\033[4;34m" else " "
-      val u_mgt = if (DEBUG_ENABLE_COLOR) "\033[4;35m" else " "
-      val u_cyn = if (DEBUG_ENABLE_COLOR) "\033[4;36m" else " "
-      val u_wht = if (DEBUG_ENABLE_COLOR) "\033[4;37m" else " "
-
-      var white_space = 47  - NUM_LSU_ENTRIES- ISSUE_SLOT_COUNT - (NUM_ROB_ENTRIES/COMMIT_WIDTH)
+      var white_space = 47  - NUM_LSU_ENTRIES- ISSUE_SLOT_COUNT - (NUM_ROB_ENTRIES/COMMIT_WIDTH) - io.dmem.debug.ld_req_slot.size
 
       def InstsStr(insts: Bits, width: Int) =
       {
@@ -1279,7 +1251,9 @@ class DatPath() extends Module with BOOMCoreParameters
          }
       }
 
-      printf(") State: (%s:%s %s %s %s \033[1;31m%s\033[0m %s %s) BMsk:%x Mode:%s %s\n"
+      if (DEBUG_PRINTF_ROB)
+      {
+         printf(") State: (%s: %s %s %s \033[1;31m%s\033[0m %s %s) BMsk:%x Mode:%s %s\n"
          , Mux(rob.io.debug.state === UInt(0), Str("RESET"),
            Mux(rob.io.debug.state === UInt(1), Str("NORMAL"),
            Mux(rob.io.debug.state === UInt(2), Str("ROLLBK"),
@@ -1288,7 +1262,6 @@ class DatPath() extends Module with BOOMCoreParameters
          , Mux(rob_rdy,Str("_"), Str("!ROB_RDY"))
          , Mux(laq_full, Str("LAQ_FULL"), Str("_"))
          , Mux(stq_full, Str("STQ_FULL"), Str("_"))
-         , Mux(lsu_io.debug.stq_maybe_full, Str("Smaybe"), Str("_"))
          , Mux(flush_pipeline, Str("FLUSH_PIPELINE"), Str(" "))
          , Mux(branch_mask_full.reduce(_|_), Str("BR_MSK_FULL"), Str(" "))
          , Mux(io.dmem.req.ready, Str("D$_Rdy"), Str("D$_BSY"))
@@ -1299,6 +1272,7 @@ class DatPath() extends Module with BOOMCoreParameters
                                                  Str("?"))))
          , Mux(csr.io.status.ie, Str("EI"), Str("-"))
          )
+      }
 
 
       for (w <- 0 until DECODE_WIDTH)
@@ -1396,115 +1370,7 @@ class DatPath() extends Module with BOOMCoreParameters
             )
       }
 
-      //ROB
-      var r_idx = 0
-      for (i <- 0 until (NUM_ROB_ENTRIES/COMMIT_WIDTH))
-      {
-//            rob[ 0]           (  )(  ) 0x00002000 [ -                       ][unknown                  ]    ,   (d:X p 1, bm:0 - sdt: 0) (d:- p 3, bm:f - sdt:60)
-//            rob[ 1]           (  )(B ) 0xc71cb68e [flw     fa3, -961(s11)   ][ -                       ] E31,   (d:- p22, bm:e T sdt:57) (d:- p 0, bm:0 - sdt: 0)
-//            rob[ 2] HEAD ---> (vv)( b) 0x00002008 [lui     ra, 0x2          ][addi    ra, ra, 704      ]    ,   (d:x p 2, bm:1 - sdt: 0) (d:x p 3, bm:1 - sdt: 2)
-//            rob[ 3]           (vv)(bb) 0x00002010 [lw      s1, 0(ra)        ][lui     t3, 0xff0        ]    ,   (d:x p 4, bm:0 - sdt: 0) (d:x p 5, bm:0 - sdt: 0)
-//            rob[ 4]      TL-> (v )(b ) 0x00002018 [addiw   t3, t3, 255      ][li      t2, 2            ]    ,   (d:x p 6, bm:0 - sdt: 5) (d:x p 7, bm:0 - sdt: 0)
-
-         val row = if (COMMIT_WIDTH == 1) r_idx else (r_idx >> log2Up(COMMIT_WIDTH))
-         val r_head = rob.io.debug.rob_head
-         val r_tail = rob.io.curr_rob_tail
-
-         printf("    rob[%d] %s ("
-            , UInt(row, ROB_ADDR_SZ)
-            , Mux(r_head === UInt(row) && r_tail === UInt(row), Str("HEAD,TL->"),
-              Mux(r_head === UInt(row), Str("HEAD --->"),
-              Mux(r_tail === UInt(row), Str("     TL->"),
-                                        Str(" "))))
-            )
-
-         if (COMMIT_WIDTH == 1)
-         {
-            printf("(%s)(%s) 0x%x [DASM(%x)] %s "
-               , Mux(rob.io.debug.entry(r_idx+0).valid, Str(b_cyn + "V" + end), Str(grn + " " + end))
-               , Mux(rob.io.debug.entry(r_idx+0).busy, Str(b_ylw + "B" + end),  Str(grn + " " + end))
-               , rob.io.debug.entry(r_idx+0).uop.pc(31,0)
-               , rob.io.debug.entry(r_idx+0).uop.inst
-               , Mux(rob.io.debug.entry(r_idx+0).exception, Str("E"), Str("-"))
-               //, rob.io.debug.entry(r_idx+0).fflags
-               )
-         }
-         else if (COMMIT_WIDTH == 2)
-         {
-            val row_is_val = rob.io.debug.entry(r_idx+0).valid || rob.io.debug.entry(r_idx+1).valid
-            printf("(%s%s)(%s%s) 0x%x %x [%sDASM(%x)][DASM(%x)" + end + "] %s,%s "
-               , Mux(rob.io.debug.entry(r_idx+0).valid, Str(b_cyn + "V" + end), Str(grn + " " + end))
-               , Mux(rob.io.debug.entry(r_idx+1).valid, Str(b_cyn + "V" + end), Str(grn + " " + end))
-               , Mux(rob.io.debug.entry(r_idx+0).busy,  Str(b_ylw + "B" + end), Str(grn + " " + end))
-               , Mux(rob.io.debug.entry(r_idx+1).busy,  Str(b_ylw + "B" + end), Str(grn + " " + end))
-               , rob.io.debug.entry(r_idx+0).uop.pc(31,0)
-               , rob.io.debug.entry(r_idx+1).uop.pc(15,0)
-               , Mux(r_head === UInt(row) && row_is_val, Str(b_red),
-                 Mux(row_is_val                        , Str(b_cyn),
-                                                         Str(grn)))
-               , rob.io.debug.entry(r_idx+0).uop.inst
-               , rob.io.debug.entry(r_idx+1).uop.inst
-               , Mux(rob.io.debug.entry(r_idx+0).exception, Str("E"), Str("-"))
-               , Mux(rob.io.debug.entry(r_idx+1).exception, Str("E"), Str("-"))
-               )
-         }
-         else if (COMMIT_WIDTH == 4)
-         {
-            val row_is_val = rob.io.debug.entry(r_idx+0).valid || rob.io.debug.entry(r_idx+1).valid || rob.io.debug.entry(r_idx+2).valid || rob.io.debug.entry(r_idx+3).valid
-            printf("(%s%s%s%s)(%s%s%s%s) 0x%x %x %x %x [%sDASM(%x)][DASM(%x)][DASM(%x)][DASM(%x)" + end + "]%s%s%s%s"
-               , Mux(rob.io.debug.entry(r_idx+0).valid, Str(b_cyn + "V" + end), Str(grn + " " + end))
-               , Mux(rob.io.debug.entry(r_idx+1).valid, Str(b_cyn + "V" + end), Str(grn + " " + end))
-               , Mux(rob.io.debug.entry(r_idx+2).valid, Str(b_cyn + "V" + end), Str(grn + " " + end))
-               , Mux(rob.io.debug.entry(r_idx+3).valid, Str(b_cyn + "V" + end), Str(grn + " " + end))
-               , Mux(rob.io.debug.entry(r_idx+0).busy,  Str(b_ylw + "B" + end), Str(grn + " " + end))
-               , Mux(rob.io.debug.entry(r_idx+1).busy,  Str(b_ylw + "B" + end), Str(grn + " " + end))
-               , Mux(rob.io.debug.entry(r_idx+2).busy,  Str(b_ylw + "B" + end), Str(grn + " " + end))
-               , Mux(rob.io.debug.entry(r_idx+3).busy,  Str(b_ylw + "B" + end), Str(grn + " " + end))
-               , rob.io.debug.entry(r_idx+0).uop.pc(23,0)
-               , rob.io.debug.entry(r_idx+1).uop.pc(15,0)
-               , rob.io.debug.entry(r_idx+2).uop.pc(15,0)
-               , rob.io.debug.entry(r_idx+3).uop.pc(15,0)
-               , Mux(r_head === UInt(row) && row_is_val, Str(b_red),
-                 Mux(row_is_val                        , Str(b_cyn), Str(grn)))
-               , rob.io.debug.entry(r_idx+0).uop.inst
-               , rob.io.debug.entry(r_idx+1).uop.inst
-               , rob.io.debug.entry(r_idx+2).uop.inst
-               , rob.io.debug.entry(r_idx+3).uop.inst
-               , Mux(rob.io.debug.entry(r_idx+0).exception, Str("E"), Str("-"))
-               , Mux(rob.io.debug.entry(r_idx+1).exception, Str("E"), Str("-"))
-               , Mux(rob.io.debug.entry(r_idx+2).exception, Str("E"), Str("-"))
-               , Mux(rob.io.debug.entry(r_idx+3).exception, Str("E"), Str("-"))
-               )
-         }
-         else
-         {
-            println("  BOOM's Chisel printf does not support commit_width >= " + COMMIT_WIDTH)
-         }
-
-         var temp_idx = r_idx
-         for (w <- 0 until COMMIT_WIDTH)
-         {
-            printf("(d:%s p%d, bm:%x %s sdt:%d) "
-               , Mux(rob.io.debug.entry(temp_idx).uop.dst_rtype === RT_FIX, Str("X"),
-                 Mux(rob.io.debug.entry(temp_idx).uop.dst_rtype === RT_PAS, Str("C"),
-                 Mux(rob.io.debug.entry(temp_idx).uop.dst_rtype === RT_FLT, Str("f"),
-                 Mux(rob.io.debug.entry(temp_idx).uop.dst_rtype === RT_X, Str("-"), Str("?")))))
-               , rob.io.debug.entry    (temp_idx).uop.pdst
-               , rob.io.debug.entry    (temp_idx).uop.br_mask
-               , Mux(rob.io.debug.entry(temp_idx).uop.br_was_mispredicted, Str("M"), Str("-"))//remove me TODO
-               , rob.io.debug.entry    (temp_idx).uop.stale_pdst
-            )
-            temp_idx = temp_idx + 1
-         }
-
-         r_idx = r_idx + COMMIT_WIDTH
-
-         printf("\n")
-      }
-
-      // Load/Store Unit
-
-      printf("  Mem[%s l%d](%s:%d),%s,%s %s %s %s] %s %s RobXcpt[%s%x r:%d b:%x bva:0x%x]w:%x,c:%x\n"
+      printf("  Mem[%s l%d](%s:%d),%s,%s %s %s %s]\n"
             , Mux(io.dmem.debug.memreq_val, Str("MREQ"), Str(" "))
             , io.dmem.debug.memreq_lidx
             , Mux(io.dmem.debug.memresp_val, Str("MRESP"), Str(" "))
@@ -1514,67 +1380,21 @@ class DatPath() extends Module with BOOMCoreParameters
             , Mux(io.dmem.debug.nack, Str("NACK"), Str(" "))
             , Mux(io.dmem.debug.cache_nack, Str("CN"), Str(" "))
             , Mux(lsu_io.forward_val, Str("FWD"), Str(" "))
-            , Mux(lsu_io.debug.tlb_miss, Str("TLB-MISS"), Str("-"))
-            , Mux(lsu_io.debug.tlb_ready, Str("TLB-RDY"), Str("-"))
-            , Mux(rob.io.debug.xcpt_val, Str("E"),Str("-"))
-            , rob.io.debug.xcpt_uop.exc_cause
-            , rob.io.debug.xcpt_uop.rob_idx
-            , rob.io.debug.xcpt_uop.br_mask
-            , rob.io.debug.xcpt_badvaddr
-            , lsu_io.debug.will_fires
-            , lsu_io.debug.can_fires
-            )
-      for (i <- 0 until NUM_LSU_ENTRIES)
+            //, Mux(lsu_io.debug.tlb_miss, Str("TLB-MISS"), Str("-"))
+            //, Mux(lsu_io.debug.tlb_ready, Str("TLB-RDY"), Str("-"))
+      )
+
+      for (i <- 0 until io.dmem.debug.ld_req_slot.size)
       {
-         printf("         ldq[%d]=(%s%s%s%s%s%s%d) st_dep(%d,m=%x) 0x%x %s %s   saq[%d]=(%s%s%s%s%s%s%s) b:%x 0x%x -> 0x%x %s %s %s"
-            , UInt(i, MEM_ADDR_SZ)
-            , Mux(lsu_io.debug.entry(i).laq_allocated, Str("V"), Str("-"))
-            , Mux(lsu_io.debug.entry(i).laq_addr_val, Str("A"), Str("-"))
-            , Mux(lsu_io.debug.entry(i).laq_executed, Str("E"), Str("-"))
-            , Mux(lsu_io.debug.entry(i).laq_succeeded, Str("S"), Str("-"))
-            , Mux(lsu_io.debug.entry(i).laq_failure, Str("F"), Str("_"))
-            , Mux(lsu_io.debug.entry(i).laq_forwarded_std_val, Str("X"), Str("_"))
-            , lsu_io.debug.entry(i).laq_forwarded_stq_idx
-            , lsu_io.debug.entry(i).laq_yng_st_idx
-            , lsu_io.debug.entry(i).laq_st_dep_mask
-            , lsu_io.debug.entry(i).laq_addr(19,0)
-
-            , Mux(lsu_io.debug.laq_head === UInt(i), Str("<- H "), Str(" "))
-            , Mux(lsu_io.debug.laq_tail=== UInt(i), Str("T "), Str(" "))
-
-            , UInt(i, MEM_ADDR_SZ)
-            , Mux(lsu_io.debug.entry(i).stq_entry_val, Str("V"), Str("-"))
-            , Mux(lsu_io.debug.entry(i).saq_val, Str("A"), Str("-"))
-            , Mux(lsu_io.debug.entry(i).sdq_val, Str("D"), Str("-"))
-            , Mux(lsu_io.debug.entry(i).stq_committed, Str("C"), Str("-"))
-            , Mux(lsu_io.debug.entry(i).stq_executed, Str("E"), Str("-"))
-            , Mux(lsu_io.debug.entry(i).stq_succeeded, Str("S"), Str("-"))
-            , Mux(lsu_io.debug.entry(i).saq_is_virtual, Str("T"), Str("-"))
-            , lsu_io.debug.entry(i).stq_uop.br_mask
-            , lsu_io.debug.entry(i).saq_addr(19,0)
-            , lsu_io.debug.entry(i).sdq_data
-
-            , Mux(lsu_io.debug.stq_head === UInt(i), Str("<- H "), Str(" "))
-            , Mux(lsu_io.debug.stq_commit_head === UInt(i), Str("C "), Str(" "))
-            , Mux(lsu_io.debug.stq_tail=== UInt(i), Str("T "), Str(" "))
-            )
-
-         if (i < io.dmem.debug.ld_req_slot.size)
-         {
-            printf("                 ld_req_slot[%d]=(%s%s) - laq_idx:%d pdst: %d bm:%x"
-               , UInt(i)
-               , Mux(io.dmem.debug.ld_req_slot(i).valid, Str("V"), Str("-"))
-               , Mux(io.dmem.debug.ld_req_slot(i).killed, Str("K"), Str("-"))
-               , io.dmem.debug.ld_req_slot(i).uop.ldq_idx
-               , io.dmem.debug.ld_req_slot(i).uop.pdst
-               , io.dmem.debug.ld_req_slot(i).uop.br_mask
-            )
-         }
-
-         printf("\n")
-
+         printf("     ld_req_slot[%d]=(%s%s) - laq_idx:%d pdst: %d bm:%x\n"
+            , UInt(i)
+            , Mux(io.dmem.debug.ld_req_slot(i).valid, Str("V"), Str("-"))
+            , Mux(io.dmem.debug.ld_req_slot(i).killed, Str("K"), Str("-"))
+            , io.dmem.debug.ld_req_slot(i).uop.ldq_idx
+            , io.dmem.debug.ld_req_slot(i).uop.pdst
+            , io.dmem.debug.ld_req_slot(i).uop.br_mask
+         )
       }
-
 
       // Rename Map Tables / ISA Register File
       val xpr_to_string =
