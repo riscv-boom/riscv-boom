@@ -15,10 +15,10 @@ import scala.collection.mutable.ArrayBuffer
 //-------------------------------------------------------------
 // Entry Slot in the Issue Station
 
+// stores (and AMOs) are "broken down" into 2 uops, but stored within a single issue-slot.
+
 class IssueSlotIo(num_wakeup_ports: Int) extends BOOMCoreBundle
 {
-   val id_num         = UInt(INPUT)
-
    val valid          = Bool(OUTPUT)
    val request        = Bool(OUTPUT)
    val issue          = Bool(INPUT)
@@ -34,7 +34,6 @@ class IssueSlotIo(num_wakeup_ports: Int) extends BOOMCoreBundle
    val wakeup_dsts    = Vec.fill(num_wakeup_ports) { UInt(INPUT, PREG_SZ) }
 
    val in_wen         = Bool(INPUT)
-   val is_2nd_uop     = Bool(INPUT)
    val inUop          = new MicroOp().asInput()
 
    val outUop         = new MicroOp().asOutput()
@@ -50,44 +49,54 @@ class IssueSlot(num_slow_wakeup_ports: Int) extends Module with BOOMCoreParamete
 {
    val io = new IssueSlotIo(num_slow_wakeup_ports)
 
+   // slot invalid?
+   // slot is valid, holding 1 uop
+   // slot is valid, holds 2 uops (like a store)
+   val s_invalid :: s_valid_1 :: s_valid_2 :: Nil = Enum(UInt(),3)
+   def isInvalid = slot_state === s_invalid
+   def isValid = slot_state != s_invalid
+
    val next_p1 = Bool()
    val next_p2 = Bool()
    val next_p3 = Bool()
 
-   val slot_valid    = Reg(init = Bool(false))
+   val slot_state    = Reg(init = s_invalid)
    val slot_p1       = Reg(init = Bool(false), next = next_p1)
    val slot_p2       = Reg(init = Bool(false), next = next_p2)
    val slot_p3       = Reg(init = Bool(false), next = next_p3)
+   val slot_is_2uops = Reg(Bool())
 
    val slotUop = Reg(init = NullMicroOp)
 
-   when (io.kill || io.issue)
+   when (io.kill || (io.issue && (slot_state === s_valid_1)))
    {
-      slot_valid   := Bool(false)
+      slot_state := s_invalid
+   }
+   .elsewhen (io.issue && (slot_state === s_valid_2))
+   {
+      slot_state := s_valid_1
+      when (slot_p1)
+      {
+         slotUop.uopc := uopSTD
+         slotUop.lrs1_rtype := RT_X
+      }
+      .otherwise
+      {
+         slotUop.lrs2_rtype := RT_X
+      }
    }
    .elsewhen (io.in_wen)
    {
-      slot_valid := Bool(true)
+      slot_state := s_valid_1
       slotUop    := io.inUop
 
-      // special case breaking up insts into micro-ops
+      // special case "storing" 2 uops within one issue slot
       // for now, only stores/amos supported
       when (io.inUop.uopc === uopSTA || io.inUop.uopc === uopAMO_AG)
       {
-         when (io.is_2nd_uop)
-         {
-            slotUop.uopc := uopSTD
-            slotUop.lrs1_rtype := RT_X
-            slotUop.lrs2_rtype := RT_FIX
-         }
-         .otherwise
-         {
-            slotUop.lrs1_rtype := RT_FIX
-            slotUop.lrs2_rtype := RT_X
-         }
+         slot_state := s_valid_2
       }
    }
-
 
    // Wakeup Compare Logic
    next_p1 := Bool(false)
@@ -99,23 +108,9 @@ class IssueSlot(num_slow_wakeup_ports: Int) extends Module with BOOMCoreParamete
       next_p1 := !(io.inUop.prs1_busy)
       next_p2 := !(io.inUop.prs2_busy)
       next_p3 := !(io.inUop.prs3_busy)
-
-      // only for stores for now..
-      when (io.inUop.uopc === uopSTA || io.inUop.uopc === uopAMO_AG)
-      {
-         when (io.is_2nd_uop)
-         {
-            next_p1 := Bool(true)
-         }
-         .otherwise
-         {
-            next_p2 := Bool(true)
-         }
-      }
    }
    .otherwise
    {
-      // slot is valid...
       next_p1 := slot_p1
       next_p2 := slot_p2
       next_p3 := slot_p3
@@ -137,11 +132,10 @@ class IssueSlot(num_slow_wakeup_ports: Int) extends Module with BOOMCoreParamete
       }
    }
 
-
    // Handle branch misspeculations
    when (IsKilledByBranch(io.brinfo, slotUop))
    {
-      slot_valid   := Bool(false)
+      slot_state   := s_invalid
    }
    when (!io.in_wen)
    {
@@ -153,28 +147,48 @@ class IssueSlot(num_slow_wakeup_ports: Int) extends Module with BOOMCoreParamete
    // Allow the issue window to demand a "high priority" request.
    // The issue-select logic will consider high priority requests first.
 
-   // Hi 152 students! You should only need to modify code in here!
-   //
-   // - "slot_valid" is a signal that is high when the slot uop is valid.
-   // - "slotUop" contains the micro-op in this slot.
-   // - The signal "io.in_wen" is high when a new uop is being written into the slot.
-   // - The signal "io.request" is high when the uop is requesting to be issued.
-   // - The signal "io.issue" is high when the uop is being issued.
-
    val high_priority = Bool()
 
-//   high_priority := Bool(false)
-   high_priority := slotUop.is_br_or_jmp // <<-- is the uop a branch or jmp instruction?
+   high_priority := Bool(false)
+//   high_priority := slotUop.is_br_or_jmp // <<-- is the uop a branch or jmp instruction?
 
 
    //-------------------------------------------------------------
    // Request Logic
-   io.request    := slot_valid && slot_p1 && slot_p2 && slot_p3 && !io.kill
-   io.request_hp := io.request && high_priority
+   io.request    := (slot_state === s_valid_1 || slot_state === s_valid_2) &&
+                     slot_p1 && slot_p2 && slot_p3 && !io.kill
+
+   when (slot_state === s_valid_1)
+   {
+      io.request := slot_p1 && slot_p2 && slot_p3 && !io.kill
+   }
+   .elsewhen (slot_state === s_valid_2)
+   {
+      io.request := (slot_p1 || slot_p2)  && !io.kill
+   }
+   .otherwise
+   {
+      io.request := Bool(false)
+   }
+
 
    //assign outputs
-   io.valid    := slot_valid
-   io.outUop   := slotUop
+   io.valid      := isValid
+   io.outUop     := slotUop
+   io.request_hp := io.request && high_priority
+   when (slot_state === s_valid_2)
+   {
+      when (slot_p1)
+      {
+         io.outUop.uopc := slotUop.uopc
+         io.outUop.lrs2_rtype := RT_X
+      }
+      .elsewhen (slot_p2)
+      {
+         io.outUop.uopc := uopSTD
+         io.outUop.lrs1_rtype := RT_X
+      }
+   }
 
    // debug outputs
    io.debug.p1 := slot_p1
@@ -231,7 +245,7 @@ class IssueUnit(issue_width: Int, num_wakeup_ports: Int) extends Module with BOO
 
 
    val nullUop = NullMicroOp
-   nullUop.pdst := UInt(0) // TODO what do I need here? maybe not this one.
+   nullUop.pdst := UInt(0)
    nullUop.pop1 := UInt(0)
    nullUop.pop2 := UInt(0)
    nullUop.pop3 := UInt(0)
@@ -245,18 +259,13 @@ class IssueUnit(issue_width: Int, num_wakeup_ports: Int) extends Module with BOO
 
    val issue_slot_io = Vec.fill(ISSUE_SLOT_COUNT) { Module(new IssueSlot(num_wakeup_ports)).io }
 
-   // double width, since some instructions break into two micro-ops
    val entry_wen_oh  = Vec.fill(ISSUE_SLOT_COUNT){ Bits(width=DISPATCH_WIDTH) }
-   val entry_wen_2nd = Vec.fill(ISSUE_SLOT_COUNT){Bool()}
 
 
    for (i <- 0 until ISSUE_SLOT_COUNT)
    {
-      issue_slot_io(i).id_num := UInt(i)
-
       issue_slot_io(i).in_wen := entry_wen_oh(i).orR
       issue_slot_io(i).inUop  := Mux1H(entry_wen_oh(i), io.dis_uops)
-      issue_slot_io(i).is_2nd_uop := entry_wen_2nd(i)
 
       for (w <- 0 until num_wakeup_ports)
       {
@@ -272,21 +281,20 @@ class IssueUnit(issue_width: Int, num_wakeup_ports: Int) extends Module with BOO
    // Dispatch/Entry Logic
    // find a slot to enter a new dispatched instruction
 
-   val entry_wen_oh_array = Array.fill(ISSUE_SLOT_COUNT,2*DISPATCH_WIDTH){Bool(false)}
-   var allocated = Vec.fill(2*DISPATCH_WIDTH){Bool(false)} // did an instruction find an issue width?
+   val entry_wen_oh_array = Array.fill(ISSUE_SLOT_COUNT,DISPATCH_WIDTH){Bool(false)}
+   var allocated = Vec.fill(DISPATCH_WIDTH){Bool(false)} // did an instruction find an issue width?
 
 
    for (i <- 0 until ISSUE_SLOT_COUNT)
    {
-      var next_allocated = Vec.fill(2*DISPATCH_WIDTH){Bool()}
+      var next_allocated = Vec.fill(DISPATCH_WIDTH){Bool()}
       var can_allocate = !(issue_slot_io(i).valid)
 
-      for (w <- 0 until 2*DISPATCH_WIDTH)
+      for (w <- 0 until DISPATCH_WIDTH)
       {
          entry_wen_oh_array(i)(w) = can_allocate && !(allocated(w))
 
          next_allocated(w) := can_allocate | allocated(w)
-//         next_allocated(w) = can_allocate | allocated(w)
          can_allocate = can_allocate && allocated(w)
       }
 
@@ -298,32 +306,23 @@ class IssueUnit(issue_width: Int, num_wakeup_ports: Int) extends Module with BOO
    // also, translate from Scala data structures to Chisel Vecs
    for (i <- 0 until ISSUE_SLOT_COUNT)
    {
-      val temp_1stuop_val = Vec.fill(DISPATCH_WIDTH){Bool()}
-      val temp_2nduop_val = Vec.fill(DISPATCH_WIDTH){Bool()}
+      val temp_uop_val = Vec.fill(DISPATCH_WIDTH){Bool()}
 
       for (w <- 0 until DISPATCH_WIDTH)
       {
          // TODO add ctrl bit for "allocates iss_slot"
-         temp_1stuop_val (w) := io.dis_mask(w) &&
-                                 !io.dis_uops(w).exception &&
-                                 !io.dis_uops(w).is_fence &&
-                                 !io.dis_uops(w).is_fencei &&
-                                 entry_wen_oh_array(i)(2*w)
-
-         temp_2nduop_val(w)  := io.dis_mask(w) &&
-                                 (io.dis_uops(w).uopc === uopSTA || io.dis_uops(w).uopc === uopAMO_AG) &&
-                                 !io.dis_uops(w).exception &&
-                                 entry_wen_oh_array(i)(2*w+1)
-
+         temp_uop_val (w) := io.dis_mask(w) &&
+                             !io.dis_uops(w).exception &&
+                             !io.dis_uops(w).is_fence &&
+                             !io.dis_uops(w).is_fencei &&
+                             entry_wen_oh_array(i)(w)
       }
-      entry_wen_oh(i) := temp_1stuop_val.toBits | temp_2nduop_val.toBits
-      entry_wen_2nd(i) := (temp_2nduop_val).reduce(_|_)
+      entry_wen_oh(i) := temp_uop_val.toBits
    }
 
    for (w <- 0 until DISPATCH_WIDTH)
    {
-      // TODO don't require everything to be allocated, when we aren't a store
-      io.dis_inst_can_proceed(w) := allocated(2*w) && allocated(2*w+1)
+      io.dis_inst_can_proceed(w) := allocated(w)
    }
 
    //-------------------------------------------------------------
