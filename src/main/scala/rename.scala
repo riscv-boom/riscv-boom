@@ -217,17 +217,7 @@ class RenameFreeList(num_phys_registers: Int // number of physical registers
    for (w <- 0 until pl_width)
    {
       requested_pregs_oh(w) := Vec(requested_pregs_oh_array(w)).toBits
-
-      // TODO use OHToUInt here once it's been fixed in Chisel (Issue #372)
-//      requested_pregs(w) := OHToUInt(requested_pregs_oh(w))
-      requested_pregs(w) := UInt(0)
-      for (i <- 0 until num_phys_registers)
-      {
-         when (requested_pregs_oh(w)(i))
-         {
-            requested_pregs(w) := UInt(i)
-         }
-      }
+      requested_pregs(w) := PriorityEncoder(requested_pregs_oh(w))
    }
 
 

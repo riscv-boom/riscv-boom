@@ -141,9 +141,10 @@ class BranchPredictionStage (fetch_width: Int) extends Module with BOOMCoreParam
 
    // TODO can we assert that a jump is taken
    val jal_overrides = jal_val && (jal_idx < io.imem.btb_resp.bits.bridx || !io.imem.btb_resp.bits.taken)
-   val btb_overrides = io.imem.btb_resp.valid && !jal_overrides  // btb predicted on this fetch packet
+   val btb_overrides = io.imem.btb_resp.valid && !jal_overrides //&& // btb predicted on this fetch packet
+   // TODO debug the below stuff
 //                       io.imem.btb_resp.bits.taken &&
-//                       (io.imem.btb_resp.bits.bridx <= io.prediction.bits.idx)
+//                       (io.imem.btb_resp.bits.bridx <= io.req.bits.idx)
 
    io.req.valid        := io.imem.resp.valid && (br_val || jal_val) && !btb_overrides
    io.req.bits.target  := Mux(br_wins, br_targs(br_idx), jal_targs(jal_idx))
@@ -200,11 +201,9 @@ class BranchPredictionStage (fetch_width: Int) extends Module with BOOMCoreParam
 
    when (io.imem.resp.valid && io.imem.btb_resp.valid && io.imem.btb_resp.bits.taken)
    {
-   // TODO assert check that the BTB is not predicting an instruction that it masked off
       val msk = io.imem.btb_resp.bits.mask
       val idx = io.imem.btb_resp.bits.bridx
       val targ = Mux(is_br(idx), br_targs(idx), jal_targs(idx))
-
       when (!is_jr(idx))
       {
          assert (io.imem.btb_resp.bits.target === targ, "BTB is jumping to an invalid target.")

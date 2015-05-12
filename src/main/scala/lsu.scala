@@ -396,7 +396,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
 
    // TODO for now, only execute the sleeping load at the head of the LAQ (wasteful if the laq_head has hady been executed)
    // TODO make option to only wakeup load at the head (to compare to old behavior)
-   val exe_ld_idx_wakeup = AgePriorityEncoder(laq_addr_val.toBits & ~laq_executed.toBits, laq_head)
+   val exe_ld_idx_wakeup = AgePriorityEncoder((0 until num_ld_entries).map(i => laq_addr_val(i) & ~laq_executed(i)), laq_head)
 
 
    when (laq_addr_val   (exe_ld_idx_wakeup) &&
@@ -825,6 +825,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
 
    // detect which loads get marked as failures, but broadcast to the ROB the oldest failing load
    // TODO encapsulate this in an age-based  priority-encoder 
+//   val l_idx = AgePriorityEncoder((Vec(Vec.tabulate(num_ld_entries)(i => failed_loads(i) && UInt(i) >= laq_head) ++ failed_loads)).toBits)
    val temp_bits = (Vec(Vec.tabulate(num_ld_entries)(i => failed_loads(i) && UInt(i) >= laq_head) ++ failed_loads)).toBits
    val l_idx = PriorityEncoder(temp_bits)
 

@@ -150,8 +150,8 @@ class IssueSlot(num_slow_wakeup_ports: Int) extends Module with BOOMCoreParamete
 
    val high_priority = Bool()
 
-   high_priority := Bool(false)
-//   high_priority := slotUop.is_br_or_jmp // <<-- is the uop a branch or jmp instruction?
+//   high_priority := Bool(false)
+   high_priority := slotUop.is_br_or_jmp // <<-- is the uop a branch or jmp instruction?
 
 
    //-------------------------------------------------------------
