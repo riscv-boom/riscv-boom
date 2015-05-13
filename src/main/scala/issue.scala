@@ -9,6 +9,7 @@ import Chisel._
 import Node._
 
 import FUCode._
+import rocket.Str
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -208,7 +209,6 @@ class IssueSlot(num_slow_wakeup_ports: Int) extends Module with BOOMCoreParamete
 
 class IssueUnitIO(issue_width: Int, num_wakeup_ports: Int) extends BOOMCoreBundle
 {
-   // TODO pass in as "implicit conf" object
    val dis_mask  = Vec.fill(DISPATCH_WIDTH) { Bool(INPUT) }
    val dis_uops  = Vec.fill(DISPATCH_WIDTH) { new MicroOp().asInput() }
    val dis_inst_can_proceed = Vec.fill(DISPATCH_WIDTH) { Bool(OUTPUT) }
@@ -226,20 +226,6 @@ class IssueUnitIO(issue_width: Int, num_wakeup_ports: Int) extends BOOMCoreBundl
    // val wakeup = Vec.fill(...) { new WakeUp.asInput() }
    val wakeup_vals = Vec.fill(num_wakeup_ports) { Bool(INPUT) }
    val wakeup_pdsts = Vec.fill(num_wakeup_ports) { UInt(INPUT, PREG_SZ) }
-
-   val debug = new BOOMCoreBundle
-   {
-      val slot = Vec.fill(ISSUE_SLOT_COUNT) { new Bundle {
-         val valid   = Bool()
-         val uop     = new MicroOp()
-         val request = Bool()
-         val issue   = Bool()
-         val in_wen  = Bool()
-         val p1      = Bool()
-         val p2      = Bool()
-         val p3      = Bool()
-      }}
-   }.asOutput
 }
 
 class IssueUnit(issue_width: Int, num_wakeup_ports: Int) extends Module with BOOMCoreParameters
@@ -404,25 +390,37 @@ class IssueUnit(issue_width: Int, num_wakeup_ports: Int) extends Module with BOO
 
 
    //-------------------------------------------------------------
-   // set up outputs
 
-
-   //-------------------------------------------------------------
-   // pass printf debug info out to higher level module
-
-   for (i <- 0 until ISSUE_SLOT_COUNT)
+   if (DEBUG_PRINTF)
    {
-      io.debug.slot(i).valid   := issue_slot_io(i).valid
-      io.debug.slot(i).uop     := issue_slot_io(i).outUop
-      io.debug.slot(i).request := issue_slot_io(i).request
-      io.debug.slot(i).issue   := issue_slot_io(i).issue
-      io.debug.slot(i).in_wen  := issue_slot_io(i).in_wen
-
-      io.debug.slot(i).p1 := issue_slot_io(i).debug.p1
-      io.debug.slot(i).p2 := issue_slot_io(i).debug.p2
-      io.debug.slot(i).p3 := issue_slot_io(i).debug.p3
+      for (i <- 0 until ISSUE_SLOT_COUNT)
+      {
+         printf("  integer_issue_slot[%d](%s)(Req:%s):wen=%s P:(%s,%s,%s) OP:(%d,%d,%d) PDST:%d %s [%s[DASM(%x)]"+end+" 0x%x: %d] ri:%d bm=%d imm=0x%x\n"
+            , UInt(i, log2Up(ISSUE_SLOT_COUNT))
+            , Mux(issue_slot_io(i).valid, Str("V"), Str("-"))
+            , Mux(issue_slot_io(i).request, Str(u_red + "R" + end), Str(grn + "-" + end))
+            , Mux(issue_slot_io(i).in_wen, Str(u_wht + "W" + end),  Str(grn + " " + end))
+            , Mux(issue_slot_io(i).debug.p1, Str("!"), Str(" "))
+            , Mux(issue_slot_io(i).debug.p2, Str("!"), Str(" "))
+            , Mux(issue_slot_io(i).debug.p3, Str("!"), Str(" "))
+            , issue_slot_io(i).outUop.pop1
+            , issue_slot_io(i).outUop.pop2
+            , issue_slot_io(i).outUop.pop3
+            , issue_slot_io(i).outUop.pdst
+            , Mux(issue_slot_io(i).outUop.dst_rtype === RT_FIX, Str("X"),
+              Mux(issue_slot_io(i).outUop.dst_rtype === RT_X, Str("-"),
+              Mux(issue_slot_io(i).outUop.dst_rtype === RT_FLT, Str("f"),
+              Mux(issue_slot_io(i).outUop.dst_rtype === RT_PAS, Str("C"), Str("?")))))
+            , Mux(issue_slot_io(i).valid, Str(b_wht), Str(grn))
+            , issue_slot_io(i).outUop.inst
+            , issue_slot_io(i).outUop.pc(31,0)
+            , issue_slot_io(i).outUop.uopc
+            , issue_slot_io(i).outUop.rob_idx
+            , issue_slot_io(i).outUop.br_mask
+            , issue_slot_io(i).outUop.imm_packed
+            )
+      }
    }
-
 
 }
 

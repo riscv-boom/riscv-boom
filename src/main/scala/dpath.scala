@@ -1341,35 +1341,7 @@ class DatPath() extends Module with BOOMCoreParameters
          , br_unit.btb_update.isJump
          , br_unit.btb_update.isReturn
       )
-      // Issue Window
-      for (i <- 0 until ISSUE_SLOT_COUNT)
-      {
-         printf("  integer_issue_slot[%d](%s)(Req:%s):wen=%s P:(%s,%s,%s) OP:(%d,%d,%d) PDST:%d %s [%s[DASM(%x)]"+end+" 0x%x: %d] ri:%d bm=%d imm=0x%x\n"
-            , UInt(i, log2Up(ISSUE_SLOT_COUNT))
-            , Mux(issue_unit.io.debug.slot(i).valid, Str("V"), Str("-"))
-            , Mux(issue_unit.io.debug.slot(i).request, Str(u_red + "R" + end), Str(grn + "-" + end))
-            , Mux(issue_unit.io.debug.slot(i).in_wen, Str(u_wht + "W" + end),  Str(grn + " " + end))
-            , Mux(issue_unit.io.debug.slot(i).p1, Str("!"), Str(" "))
-            , Mux(issue_unit.io.debug.slot(i).p2, Str("!"), Str(" "))
-            , Mux(issue_unit.io.debug.slot(i).p3, Str("!"), Str(" "))
-            , issue_unit.io.debug.slot(i).uop.pop1
-            , issue_unit.io.debug.slot(i).uop.pop2
-            , issue_unit.io.debug.slot(i).uop.pop3
-            , issue_unit.io.debug.slot(i).uop.pdst
-            , Mux(issue_unit.io.debug.slot(i).uop.dst_rtype === RT_FIX, Str("X"),
-              Mux(issue_unit.io.debug.slot(i).uop.dst_rtype === RT_X, Str("-"),
-              Mux(issue_unit.io.debug.slot(i).uop.dst_rtype === RT_FLT, Str("f"),
-              Mux(issue_unit.io.debug.slot(i).uop.dst_rtype === RT_PAS, Str("C"), Str("?")))))
-            , Mux(issue_unit.io.debug.slot(i).valid, Str(b_wht), Str(grn))
-            , issue_unit.io.debug.slot(i).uop.inst
-            , issue_unit.io.debug.slot(i).uop.pc(31,0)
-            , issue_unit.io.debug.slot(i).uop.uopc  // getUopStr
-            , issue_unit.io.debug.slot(i).uop.rob_idx
-            , issue_unit.io.debug.slot(i).uop.br_mask
-            , issue_unit.io.debug.slot(i).uop.imm_packed
-            )
-      }
-
+      
       printf("  Mem[%s l%d](%s:%d),%s,%s %s %s %s]\n"
             , Mux(io.dmem.debug.memreq_val, Str("MREQ"), Str(" "))
             , io.dmem.debug.memreq_lidx
