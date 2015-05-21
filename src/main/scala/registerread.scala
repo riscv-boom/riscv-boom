@@ -105,7 +105,7 @@ class RegisterRead(issue_width: Int
       if (num_read_ports > 1) rrd_rs2_data(w) := io.rf_read_ports(idx+1).data
       if (num_read_ports > 2) rrd_rs3_data(w) := io.rf_read_ports(idx+2).data
 
-      val rrd_kill = Mux(io.kill,       Bool(true),
+      val rrd_kill = Mux(io.kill, Bool(true),
                      Mux(io.brinfo.valid && io.brinfo.mispredict
                                        , maskMatch(rrd_uops(w).br_mask, io.brinfo.mask)
                                        , Bool(false)))

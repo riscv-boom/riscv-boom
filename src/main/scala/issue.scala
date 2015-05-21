@@ -18,7 +18,7 @@ import scala.collection.mutable.ArrayBuffer
 
 // stores (and AMOs) are "broken down" into 2 uops, but stored within a single issue-slot.
 
-class IssueSlotIo(num_wakeup_ports: Int) extends BOOMCoreBundle
+class IssueSlotIoDeprecated(num_wakeup_ports: Int) extends BOOMCoreBundle
 {
    val valid          = Bool(OUTPUT)
    val request        = Bool(OUTPUT)
@@ -46,9 +46,9 @@ class IssueSlotIo(num_wakeup_ports: Int) extends BOOMCoreBundle
    }.asOutput
 }
 
-class IssueSlot(num_slow_wakeup_ports: Int) extends Module with BOOMCoreParameters
+class IssueSlotDeprecated(num_slow_wakeup_ports: Int) extends Module with BOOMCoreParameters
 {
-   val io = new IssueSlotIo(num_slow_wakeup_ports)
+   val io = new IssueSlotIoDeprecated(num_slow_wakeup_ports)
 
    // slot invalid?
    // slot is valid, holding 1 uop
@@ -207,7 +207,7 @@ class IssueSlot(num_slow_wakeup_ports: Int) extends Module with BOOMCoreParamete
 
 
 
-class IssueUnitIO(issue_width: Int, num_wakeup_ports: Int) extends BOOMCoreBundle
+class IssueUnitIOStatic(issue_width: Int, num_wakeup_ports: Int) extends BOOMCoreBundle
 {
    val dis_mask  = Vec.fill(DISPATCH_WIDTH) { Bool(INPUT) }
    val dis_uops  = Vec.fill(DISPATCH_WIDTH) { new MicroOp().asInput() }
@@ -228,32 +228,19 @@ class IssueUnitIO(issue_width: Int, num_wakeup_ports: Int) extends BOOMCoreBundl
    val wakeup_pdsts = Vec.fill(num_wakeup_ports) { UInt(INPUT, PREG_SZ) }
 }
 
-class IssueUnit(issue_width: Int, num_wakeup_ports: Int) extends Module with BOOMCoreParameters
+class IssueUnitStatic(num_issue_slots: Int, issue_width: Int, num_wakeup_ports: Int) extends Module with BOOMCoreParameters
 {
-   val io = new IssueUnitIO(issue_width, num_wakeup_ports)
-
-   val iss_valid      = Bool()
-
-
-   val nullUop = NullMicroOp
-   nullUop.pdst := UInt(0)
-   nullUop.pop1 := UInt(0)
-   nullUop.pop2 := UInt(0)
-   nullUop.pop3 := UInt(0)
-   nullUop.dst_rtype := RT_X
-   nullUop.lrs1_rtype := RT_X
-   nullUop.lrs2_rtype := RT_X
-
+   val io = new IssueUnitIOStatic(issue_width, num_wakeup_ports)
 
    //-------------------------------------------------------------
    // Issue Table
 
-   val issue_slot_io = Vec.fill(ISSUE_SLOT_COUNT) { Module(new IssueSlot(num_wakeup_ports)).io }
+   val issue_slot_io = Vec.fill(num_issue_slots) { Module(new IssueSlotDeprecated(num_wakeup_ports)).io }
 
-   val entry_wen_oh  = Vec.fill(ISSUE_SLOT_COUNT){ Bits(width=DISPATCH_WIDTH) }
+   val entry_wen_oh  = Vec.fill(num_issue_slots){ Bits(width=DISPATCH_WIDTH) }
 
 
-   for (i <- 0 until ISSUE_SLOT_COUNT)
+   for (i <- 0 until num_issue_slots)
    {
       issue_slot_io(i).in_wen := entry_wen_oh(i).orR
       issue_slot_io(i).inUop  := Mux1H(entry_wen_oh(i), io.dis_uops)
@@ -272,11 +259,11 @@ class IssueUnit(issue_width: Int, num_wakeup_ports: Int) extends Module with BOO
    // Dispatch/Entry Logic
    // find a slot to enter a new dispatched instruction
 
-   val entry_wen_oh_array = Array.fill(ISSUE_SLOT_COUNT,DISPATCH_WIDTH){Bool(false)}
+   val entry_wen_oh_array = Array.fill(num_issue_slots,DISPATCH_WIDTH){Bool(false)}
    var allocated = Vec.fill(DISPATCH_WIDTH){Bool(false)} // did an instruction find an issue width?
 
 
-   for (i <- 0 until ISSUE_SLOT_COUNT)
+   for (i <- 0 until num_issue_slots)
    {
       var next_allocated = Vec.fill(DISPATCH_WIDTH){Bool()}
       var can_allocate = !(issue_slot_io(i).valid)
@@ -295,7 +282,7 @@ class IssueUnit(issue_width: Int, num_wakeup_ports: Int) extends Module with BOO
 
    // if we can find an issue slot, do we actually need it?
    // also, translate from Scala data structures to Chisel Vecs
-   for (i <- 0 until ISSUE_SLOT_COUNT)
+   for (i <- 0 until num_issue_slots)
    {
       val temp_uop_val = Vec.fill(DISPATCH_WIDTH){Bool()}
 
@@ -319,18 +306,18 @@ class IssueUnit(issue_width: Int, num_wakeup_ports: Int) extends Module with BOO
    //-------------------------------------------------------------
    // Issue Select Logic
 
-//   val requests:Bits = null
-//   val requests = (Vec(
-//                     Vec.tabulate(ISSUE_SLOT_COUNT)(i => issue_slot_io(i).request_hp) ++
-//                     Vec.tabulate(ISSUE_SLOT_COUNT)(i => issue_slot_io(i).request)
-//                     )).toBits
-
-   val num_requestors = ISSUE_SLOT_COUNT
+   val num_requestors = num_issue_slots
 
    for (w <- 0 until issue_width)
    {
       io.iss_valids(w) := Bool(false)
-      io.iss_uops(w)   := nullUop
+      io.iss_uops(w)   := NullMicroOp
+      // unsure if this is overkill
+      io.iss_uops(w).pop1 := UInt(0)
+      io.iss_uops(w).pop2 := UInt(0)
+      io.iss_uops(w).pop3 := UInt(0)
+      io.iss_uops(w).lrs1_rtype := RT_X
+      io.iss_uops(w).lrs2_rtype := RT_X
    }
 
    // TODO can we use flatten to get an array of bools on issue_slot(*).request?
@@ -393,10 +380,10 @@ class IssueUnit(issue_width: Int, num_wakeup_ports: Int) extends Module with BOO
 
    if (DEBUG_PRINTF)
    {
-      for (i <- 0 until ISSUE_SLOT_COUNT)
+      for (i <- 0 until num_issue_slots)
       {
          printf("  integer_issue_slot[%d](%s)(Req:%s):wen=%s P:(%s,%s,%s) OP:(%d,%d,%d) PDST:%d %s [%s[DASM(%x)]"+end+" 0x%x: %d] ri:%d bm=%d imm=0x%x\n"
-            , UInt(i, log2Up(ISSUE_SLOT_COUNT))
+            , UInt(i, log2Up(num_issue_slots))
             , Mux(issue_slot_io(i).valid, Str("V"), Str("-"))
             , Mux(issue_slot_io(i).request, Str(u_red + "R" + end), Str(grn + "-" + end))
             , Mux(issue_slot_io(i).in_wen, Str(u_wht + "W" + end),  Str(grn + " " + end))
@@ -421,7 +408,6 @@ class IssueUnit(issue_width: Int, num_wakeup_ports: Int) extends Module with BOO
             )
       }
    }
-
 }
 
 }

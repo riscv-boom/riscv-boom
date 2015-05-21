@@ -76,6 +76,8 @@ trait ScalarOpConstants
    //************************************
    // Control Signals
 
+   val s_invalid :: s_valid_1 :: s_valid_2 :: Nil = Enum(UInt(),3)
+
    // PC Select Signal
    val PC_PLUS4 = Bits(0, 2)  // PC + 4
    val PC_BRJMP = Bits(1, 2)  // brjmp_target
@@ -314,8 +316,8 @@ trait ScalarOpConstants
       uop.is_load    := Bool(false)
       uop.pdst       := UInt(0)
       uop.dst_rtype  := RT_X
-      // TODO these unnecessary? used in regread stage?
       uop.valid      := Bool(false)
+      // TODO these unnecessary? used in regread stage?
       uop.is_br_or_jmp := Bool(false)
 
       val cs = new CtrlSignals()

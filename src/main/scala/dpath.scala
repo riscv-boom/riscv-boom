@@ -100,6 +100,8 @@ class CtrlSignals extends Bundle()
 class MicroOp extends BOOMCoreBundle
 {
    val valid            = Bool()                   // is this uop valid? or has it been masked out, used by fetch buffer and Decode stage
+   val iw_state         = UInt(width = 2) // what is the next state of this uop in the issue window? useful for the compacting queue? TODO or is this not really belong here?
+
 
    val uopc             = Bits(width = UOPC_SZ)    // micro-op code
    val inst             = Bits(width = 32)
@@ -695,6 +697,7 @@ class DatPath() extends Module with BOOMCoreParameters
    {
       dis_mask(w)         := rename_stage.io.ren_mask(w)
       dis_uops(w)         := rename_stage.io.ren_uops(w)
+      // TODO probably don't need to do this, since we're going ot do it in the issue window?
       dis_uops(w).br_mask := GetNewBrMask(br_unit.brinfo, rename_stage.io.ren_uops(w))
 
       // note: this assumes uops haven't been shifted - there's a 1:1 match between PC's LSBs and "w" here
@@ -712,7 +715,7 @@ class DatPath() extends Module with BOOMCoreParameters
    //-------------------------------------------------------------
    //-------------------------------------------------------------
 
-   val issue_unit = Module(new IssueUnit(issue_width, num_wakeup_ports))
+   val issue_unit = Module(new IssueUnit(params(NumIssueSlotEntries), issue_width, num_wakeup_ports))
 
    // Input (Dispatch)
    issue_unit.io.dis_mask  := dis_mask
@@ -741,11 +744,11 @@ class DatPath() extends Module with BOOMCoreParameters
       // Slow Wakeup (uses write-port to register file)
       for (j <- 0 until exe_units(i).num_rf_write_ports)
       {
-         issue_unit.io.wakeup_vals(wu_idx)  := exe_units(i).io.resp(j).valid &&
-                                               exe_units(i).io.resp(j).bits.uop.ctrl.rf_wen && // TODO get rid of other rtype checks
-                                               !exe_units(i).io.resp(j).bits.uop.bypassable &&
-                                               (exe_units(i).io.resp(j).bits.uop.dst_rtype === RT_FIX || exe_units(i).io.resp(j).bits.uop.dst_rtype === RT_FLT)
-         issue_unit.io.wakeup_pdsts(wu_idx) := exe_units(i).io.resp(j).bits.uop.pdst
+         issue_unit.io.wakeup_pdsts(wu_idx).valid := exe_units(i).io.resp(j).valid &&
+                                                     exe_units(i).io.resp(j).bits.uop.ctrl.rf_wen && // TODO get rid of other rtype checks
+                                                     !exe_units(i).io.resp(j).bits.uop.bypassable &&
+                                                     (exe_units(i).io.resp(j).bits.uop.dst_rtype === RT_FIX || exe_units(i).io.resp(j).bits.uop.dst_rtype === RT_FLT)
+         issue_unit.io.wakeup_pdsts(wu_idx).bits  := exe_units(i).io.resp(j).bits.uop.pdst
          wu_idx += 1
       }
 
@@ -753,8 +756,8 @@ class DatPath() extends Module with BOOMCoreParameters
 
       if (exe_units(i).is_bypassable)
       {
-         issue_unit.io.wakeup_vals(wu_idx)  := iss_valids(i) && (iss_uops(i).dst_rtype === RT_FIX || iss_uops(i).dst_rtype === RT_FLT) && iss_uops(i).ldst_val && (iss_uops(i).bypassable)
-         issue_unit.io.wakeup_pdsts(wu_idx) := iss_uops(i).pdst
+         issue_unit.io.wakeup_pdsts(wu_idx).valid := iss_valids(i) && (iss_uops(i).dst_rtype === RT_FIX || iss_uops(i).dst_rtype === RT_FLT) && iss_uops(i).ldst_val && (iss_uops(i).bypassable)
+         issue_unit.io.wakeup_pdsts(wu_idx).bits  := iss_uops(i).pdst
          wu_idx += 1
       }
    }
@@ -1197,7 +1200,7 @@ class DatPath() extends Module with BOOMCoreParameters
    {
       println("\n Chisel Printout Enabled\n")
 
-      var white_space = 47  - NUM_LSU_ENTRIES- ISSUE_SLOT_COUNT - (NUM_ROB_ENTRIES/COMMIT_WIDTH) - io.dmem.debug.ld_req_slot.size
+      var white_space = 48  - NUM_LSU_ENTRIES- params(NumIssueSlotEntries) - (NUM_ROB_ENTRIES/COMMIT_WIDTH) - io.dmem.debug.ld_req_slot.size
 
       def InstsStr(insts: Bits, width: Int) =
       {
@@ -1341,7 +1344,7 @@ class DatPath() extends Module with BOOMCoreParameters
          , br_unit.btb_update.isJump
          , br_unit.btb_update.isReturn
       )
-      
+
       printf("  Mem[%s l%d](%s:%d),%s,%s %s %s %s]\n"
             , Mux(io.dmem.debug.memreq_val, Str("MREQ"), Str(" "))
             , io.dmem.debug.memreq_lidx

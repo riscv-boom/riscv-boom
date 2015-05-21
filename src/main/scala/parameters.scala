@@ -41,7 +41,6 @@ abstract trait BOOMCoreParameters extends rocket.CoreParameters
    //************************************
    // Data Structure Sizes
    val NUM_ROB_ENTRIES  = params(NumRobEntries)     // number of ROB entries (e.g., 32 entries for R10k)
-   val ISSUE_SLOT_COUNT = params(NumIssueSlotEntries)
    val NUM_LSU_ENTRIES  = params(NumLsuEntries)     // number of LD/ST entries
    val MAX_BR_COUNT     = params(MaxBrCount)        // number of branches we can speculate simultaneously
    val PHYS_REG_COUNT   = params(NumPhysRegisters)  // size of the unified, physical register file
