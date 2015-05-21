@@ -12,7 +12,7 @@ import FUCode._
  
 // stores (and AMOs) are "broken down" into 2 uops, but stored within a single issue-slot.
 
-class IssueSlotIo(issue_width: Int, num_wakeup_ports: Int) extends BOOMCoreBundle
+class IssueSlotIo(num_wakeup_ports: Int) extends BOOMCoreBundle
 {
    val valid          = Bool(OUTPUT)
    val will_be_valid  = Bool(OUTPUT) // TODO code review, do we need this signal so explicitely?
@@ -37,9 +37,9 @@ class IssueSlotIo(issue_width: Int, num_wakeup_ports: Int) extends BOOMCoreBundl
    }.asOutput
 }
 
-class IssueSlot(issue_width: Int, num_slow_wakeup_ports: Int) extends Module with BOOMCoreParameters
+class IssueSlot(num_slow_wakeup_ports: Int) extends Module with BOOMCoreParameters
 {
-   val io = new IssueSlotIo(issue_width, num_slow_wakeup_ports)
+   val io = new IssueSlotIo(num_slow_wakeup_ports)
 
    // slot invalid?
    // slot is valid, holding 1 uop

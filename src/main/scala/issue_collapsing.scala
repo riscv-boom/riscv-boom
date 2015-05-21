@@ -48,14 +48,17 @@ class IssueUnit(num_issue_slots: Int, issue_width: Int, num_wakeup_ports: Int) e
    //-------------------------------------------------------------
    // Issue Table
 
-   val issue_slots = Vec.fill(num_issue_slots) {Module(new IssueSlot(issue_width, num_wakeup_ports)).io}
+   val issue_slots = Vec.fill(num_issue_slots) {Module(new IssueSlot(num_wakeup_ports)).io}
    
    
    //-------------------------------------------------------------
    // Figure out how much to shift entries by
 
+   val MAX_SHIFT = DISPATCH_WIDTH
+
+
    val vacants = issue_slots.map(s => !(s.valid)) ++ io.dis_mask.map(!_.toBool)
-   val shamts_oh = Array.fill(num_requestors+DISPATCH_WIDTH) {Bits(width=issue_width)}
+   val shamts_oh = Array.fill(num_requestors+DISPATCH_WIDTH) {Bits(width=MAX_SHIFT)}
    // track how many to shift up this entry by by counting previous vacant spots
    def SaturatingCounterOH(count_oh:Bits, inc: Bool, max: Int): Bits =
    {
@@ -74,14 +77,12 @@ class IssueUnit(num_issue_slots: Int, issue_width: Int, num_wakeup_ports: Int) e
    shamts_oh(0) := Bits(0)
    for (i <- 1 until num_requestors + DISPATCH_WIDTH)
    {
-      shamts_oh(i) := SaturatingCounterOH(shamts_oh(i-1), vacants(i-1), issue_width)
+      shamts_oh(i) := SaturatingCounterOH(shamts_oh(i-1), vacants(i-1), MAX_SHIFT)
    }
 
    //-------------------------------------------------------------
 
-   // which entries' uops  will still be next cycle? (not being issued and vacated)
-//   val will_be_valid = (0 until num_requestors).map(i => 
-//      !vacants(i) && !issue_slots(i).grant) ++ io.dis_mask.map(_.toBool)
+   // which entries' uops will still be next cycle? (not being issued and vacated)
    val will_be_valid = (0 until num_requestors).map(i => issue_slots(i).will_be_valid) ++ io.dis_mask.map(_.toBool)
 
    val dis_uops = Array.fill(DISPATCH_WIDTH) {new MicroOp()}
@@ -102,11 +103,13 @@ class IssueUnit(num_issue_slots: Int, issue_width: Int, num_wakeup_ports: Int) e
    {
       issue_slots(i).in_uop.valid := Bool(false)
       issue_slots(i).in_uop.bits  := uops(i+1)
-      for (j <- issue_width to 1 by -1)
+//      for (j <- MAX_SHIFT to 1 by -1)
+      for (j <- 1 to MAX_SHIFT by 1)
       {
-         println ("IssueSlot: " + i + ", hooking up IS(i+j=" + (i+j) + ", for j=" + j)
+//         println ("IssueSlot: " + i + ", hooking up IS(i+j=" + (i+j) + ", for j=" + j + ", shamts_oh(" + (i+j) + ") === Bits(" + (1 << (j-1)) + ")")
          when (shamts_oh(i+j) === Bits(1 << (j-1)))
          {
+//            printf("issue_slot(%d), shamts_oh(%d) true, input valid(i+j=%d): %d\n", UInt(i), UInt(i+j), UInt(i+j), will_be_valid(i+j))
             issue_slots(i).in_uop.valid := will_be_valid(i+j)
             issue_slots(i).in_uop.bits  := uops(i+j)
          }
@@ -123,7 +126,7 @@ class IssueUnit(num_issue_slots: Int, issue_width: Int, num_wakeup_ports: Int) e
 
    for (w <- 0 until DISPATCH_WIDTH)
    {
-      io.dis_inst_can_proceed(w) := shamts_oh(num_requestors+w) != Bits(0)
+      io.dis_inst_can_proceed(w) := shamts_oh(num_requestors+w) >= Bits(1 << w)
    }
 
    //-------------------------------------------------------------
@@ -142,14 +145,12 @@ class IssueUnit(num_issue_slots: Int, issue_width: Int, num_wakeup_ports: Int) e
       io.iss_uops(w).lrs2_rtype := RT_X
    }
 
-//   val request_not_satisfied = issue_slots.map(s => s.request)
    val requests = issue_slots.map(s => s.request)
    val port_issued = Array.fill(issue_width){Bool()}
    for (w <- 0 until issue_width)
    {
       port_issued(w) = Bool(false)
    }
-//   port_issued.map(e => e = Bool(false))
    
    for (i <- 0 until num_requestors)
    {
@@ -179,12 +180,13 @@ class IssueUnit(num_issue_slots: Int, issue_width: Int, num_wakeup_ports: Int) e
 
    if (DEBUG_PRINTF)
    {
-      var vacants_bits = Bits(0)
+      //var vacants_bits = Bits(0)
       for (x <- 0 until num_requestors+DISPATCH_WIDTH)
       {
-         vacants_bits = (vacants_bits << UInt(1)) | vacants(x)
+//         vacants_bits = (vacants_bits << UInt(1)) | vacants(x)
+         printf(" shamt_oh(%d):%x\n", UInt(x), shamts_oh(x))
       }
-      printf("  Vacants: 0x%x\n", vacants_bits)
+//      printf("  Vacants: 0x%x\n", vacants_bits)
 
       for (i <- 0 until num_issue_slots)
       {
