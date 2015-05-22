@@ -288,10 +288,10 @@ class DatPath() extends Module with BOOMCoreParameters
    else println("\n ~*** Unknown Machine Width ***~\n")
 
    require (ISSUE_WIDTH <= 4)
-   if (ISSUE_WIDTH == 1) println("\n    -== Single Issue ==- \n")
-   if (ISSUE_WIDTH == 2) println("\n    -== Dual Issue ==- \n")
-   if (ISSUE_WIDTH == 3) println("\n    -== Triple Issue ==- \n")
-   if (ISSUE_WIDTH == 4) println("\n    -== Quad Issue ==- \n")
+   if (ISSUE_WIDTH == 1) println("    -== Single Issue ==- \n")
+   if (ISSUE_WIDTH == 2) println("    -== Dual Issue ==- \n")
+   if (ISSUE_WIDTH == 3) println("    -== Triple Issue ==- \n")
+   if (ISSUE_WIDTH == 4) println("    -== Quad Issue ==- \n")
    if (params(BuildFPU).isEmpty) println ("\n    FPU Unit Disabled")
    else                          println ("\n    FPU Unit Enabled")
    if (params(UseVM)) println ("    VM Enabled\n")
@@ -363,7 +363,19 @@ class DatPath() extends Module with BOOMCoreParameters
    val num_wakeup_ports = num_slow_wakeup_ports + num_fast_wakeup_ports
    val rf_cost = (num_rf_read_ports+num_rf_write_ports)*(num_rf_read_ports+2*num_rf_write_ports)
 
-   println("   Num RF Read Ports    : " + num_rf_read_ports)
+   val iss_str = if (params(EnableAgePriorityIssue)) " (Age-based Priority)"
+                 else " (Static Priority)"
+   println("\n   Fetch Width          : " + FETCH_WIDTH)
+   println("   Issue Width          : " + ISSUE_WIDTH)
+   println("   ROB Size             : " + NUM_ROB_ENTRIES)
+   println("   Issue Window Size    : " + params(NumIssueSlotEntries) + iss_str)
+   println("   Load/Store Unit Size : " + params(NumLsuEntries) + "/" + params(NumLsuEntries))
+   println("   Num Phys. Registers  : " + params(NumPhysRegisters))
+   println("   Max Branch Count     : " + params(MaxBrCount))
+   println("   BTB Size             : " + params(NBTBEntries))
+   println("   RAS Size             : " + params(NRAS))
+
+   println("\n   Num RF Read Ports    : " + num_rf_read_ports)
    println("   Num RF Write Ports   : " + num_rf_write_ports + "\n")
    println("   RF Cost (R+W)*(R+2W) : " + rf_cost + "\n")
    println("   Num Slow Wakeup Ports: " + num_slow_wakeup_ports)
@@ -715,7 +727,10 @@ class DatPath() extends Module with BOOMCoreParameters
    //-------------------------------------------------------------
    //-------------------------------------------------------------
 
-   val issue_unit = Module(new IssueUnit(params(NumIssueSlotEntries), issue_width, num_wakeup_ports))
+   val issue_unit = if (params(EnableAgePriorityIssue))
+                        Module(new IssueUnitCollasping(params(NumIssueSlotEntries), issue_width, num_wakeup_ports))
+                    else
+                        Module(new IssueUnitStatic(params(NumIssueSlotEntries), issue_width, num_wakeup_ports))
 
    // Input (Dispatch)
    issue_unit.io.dis_mask  := dis_mask
@@ -731,7 +746,7 @@ class DatPath() extends Module with BOOMCoreParameters
       issue_unit.io.fu_types(w) := exe_units(w).io.fu_types
    }
 
-   dis_insts_can_proceed := issue_unit.io.dis_inst_can_proceed
+   dis_insts_can_proceed := issue_unit.io.dis_readys
 
 
 
@@ -865,7 +880,7 @@ class DatPath() extends Module with BOOMCoreParameters
       {
          for (i <- 0 until exe_units(w).num_bypass_ports)
          {
-            println("  Hooking up bypasses for idx = " + idx + ", exe_unit #" + w)
+            //println("  Hooking up bypasses for idx = " + idx + ", exe_unit #" + w)
             bypasses.valid(idx) := exe_units(w).io.bypass.valid(i)
             bypasses.uop(idx)   := exe_units(w).io.bypass.uop(i)
             bypasses.data(idx)  := exe_units(w).io.bypass.data(i)
@@ -882,7 +897,7 @@ class DatPath() extends Module with BOOMCoreParameters
    {
       if (exe_units(w).has_branch_unit)
       {
-         println("  Hooking up Branch Unit for exe_unit #" + w)
+         //println("  Hooking up Branch Unit for exe_unit #" + w)
          br_unit <> exe_units(w).io.br_unit
          br_cnt = br_cnt + 1
          brunit_idx = w
@@ -1166,7 +1181,7 @@ class DatPath() extends Module with BOOMCoreParameters
       csr.io.uarch_counters(2)  := !rob_rdy
       csr.io.uarch_counters(3)  := laq_full
       csr.io.uarch_counters(4)  := stq_full
-      csr.io.uarch_counters(5)  := !issue_unit.io.dis_inst_can_proceed.reduce(_|_)
+      csr.io.uarch_counters(5)  := !issue_unit.io.dis_readys.reduce(_|_)
 //      csr.io.uarch_counters(6)  := branch_mask_full.reduce(_|_)
 //      csr.io.uarch_counters(6)  := io.counters.ic_miss
       csr.io.uarch_counters(6)  := br_unit.brinfo.valid

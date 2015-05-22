@@ -1,22 +1,20 @@
 //**************************************************************************
 // RISCV Processor Issue Slot Logic
 //--------------------------------------------------------------------------
-//
-// Entry Slot in the Issue Station
+// stores (and AMOs) are "broken down" into 2 uops, but stored within a single issue-slot.
 
 package BOOM
 
 import Chisel._
 import Node._
 import FUCode._
- 
-// stores (and AMOs) are "broken down" into 2 uops, but stored within a single issue-slot.
 
 class IssueSlotIo(num_wakeup_ports: Int) extends BOOMCoreBundle
 {
    val valid          = Bool(OUTPUT)
    val will_be_valid  = Bool(OUTPUT) // TODO code review, do we need this signal so explicitely?
    val request        = Bool(OUTPUT)
+   val request_hp     = Bool(OUTPUT)
    val grant          = Bool(INPUT)
 
    val brinfo         = new BrResolutionInfo().asInput()
@@ -25,8 +23,6 @@ class IssueSlotIo(num_wakeup_ports: Int) extends BOOMCoreBundle
 
    val wakeup_dsts    = Vec.fill(num_wakeup_ports) {Valid(UInt(width = PREG_SZ)).flip}
    val in_uop         = Valid(new MicroOp()).flip // if valid, this WILL overwrite an entry!
-   // TODO refactor: can we consolidate this?
-//   val updated_state  = UInt(OUTPUT, width=2)
    val updated_uop    = new MicroOp().asOutput() // the updated slot uop; will be shifted upwards in a collasping queue.
    val uop            = new MicroOp().asOutput() // the current Slot's uop. Sent down the pipeline when issued.
 
@@ -177,6 +173,7 @@ class IssueSlot(num_slow_wakeup_ports: Int) extends Module with BOOMCoreParamete
 
    //-------------------------------------------------------------
    // Request Logic
+   io.request_hp := Bool(false)
    io.request    := isValid && slot_p1 && slot_p2 && slot_p3 && !io.kill
 
    when (slot_state === s_valid_1)
