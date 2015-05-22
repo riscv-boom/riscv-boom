@@ -83,7 +83,11 @@ class IssueUnit(num_issue_slots: Int, issue_width: Int, num_wakeup_ports: Int) e
    //-------------------------------------------------------------
 
    // which entries' uops will still be next cycle? (not being issued and vacated)
-   val will_be_valid = (0 until num_requestors).map(i => issue_slots(i).will_be_valid) ++ io.dis_mask.map(_.toBool)
+   val will_be_valid = (0 until num_requestors).map(i => issue_slots(i).will_be_valid) ++
+                       (0 until DISPATCH_WIDTH).map(i => io.dis_mask(i) &&
+                                                         !io.dis_uops(i).exception &&
+                                                         !io.dis_uops(i).is_fence &&
+                                                         !io.dis_uops(i).is_fencei)
 
    val dis_uops = Array.fill(DISPATCH_WIDTH) {new MicroOp()}
    for (w <- 0 until DISPATCH_WIDTH)
@@ -103,13 +107,10 @@ class IssueUnit(num_issue_slots: Int, issue_width: Int, num_wakeup_ports: Int) e
    {
       issue_slots(i).in_uop.valid := Bool(false)
       issue_slots(i).in_uop.bits  := uops(i+1)
-//      for (j <- MAX_SHIFT to 1 by -1)
       for (j <- 1 to MAX_SHIFT by 1)
       {
-//         println ("IssueSlot: " + i + ", hooking up IS(i+j=" + (i+j) + ", for j=" + j + ", shamts_oh(" + (i+j) + ") === Bits(" + (1 << (j-1)) + ")")
          when (shamts_oh(i+j) === Bits(1 << (j-1)))
          {
-//            printf("issue_slot(%d), shamts_oh(%d) true, input valid(i+j=%d): %d\n", UInt(i), UInt(i+j), UInt(i+j), will_be_valid(i+j))
             issue_slots(i).in_uop.valid := will_be_valid(i+j)
             issue_slots(i).in_uop.bits  := uops(i+j)
          }
@@ -180,17 +181,8 @@ class IssueUnit(num_issue_slots: Int, issue_width: Int, num_wakeup_ports: Int) e
 
    if (DEBUG_PRINTF)
    {
-      //var vacants_bits = Bits(0)
-      for (x <- 0 until num_requestors+DISPATCH_WIDTH)
-      {
-//         vacants_bits = (vacants_bits << UInt(1)) | vacants(x)
-         printf(" shamt_oh(%d):%x\n", UInt(x), shamts_oh(x))
-      }
-//      printf("  Vacants: 0x%x\n", vacants_bits)
-
       for (i <- 0 until num_issue_slots)
       {
-
          printf("  integer_issue_slot[%d](%s)(Req:%s):wen=%s P:(%s,%s,%s) OP:(%d,%d,%d) PDST:%d %s [%s[DASM(%x)]"+end+" 0x%x: %d] ri:%d bm=%d imm=0x%x sh:%x\n"
             , UInt(i, log2Up(num_issue_slots))
             , Mux(issue_slots(i).valid, Str("V"), Str("-"))

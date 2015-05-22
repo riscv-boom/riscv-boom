@@ -1200,7 +1200,7 @@ class DatPath() extends Module with BOOMCoreParameters
    {
       println("\n Chisel Printout Enabled\n")
 
-      var white_space = 48  - NUM_LSU_ENTRIES- params(NumIssueSlotEntries) - (NUM_ROB_ENTRIES/COMMIT_WIDTH) - io.dmem.debug.ld_req_slot.size
+      var white_space = 49 - NUM_LSU_ENTRIES- params(NumIssueSlotEntries) - (NUM_ROB_ENTRIES/COMMIT_WIDTH) - io.dmem.debug.ld_req_slot.size
 
       def InstsStr(insts: Bits, width: Int) =
       {
