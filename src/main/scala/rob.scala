@@ -34,6 +34,16 @@ class Exception extends BOOMCoreBundle
    val badvaddr = UInt(width=coreMaxAddrBits)
 }
 
+// provide a port for a FU to get the PC of an instruction from the ROB
+class RobPCRequest extends BOOMCoreBundle
+{
+   val rob_idx  = UInt(INPUT, ROB_ADDR_SZ)
+   val curr_pc  = UInt(OUTPUT, vaddrBits+1)
+   // the next_pc may not be valid (stalled or still being fetched)
+   val next_val = Bool(OUTPUT)
+   val next_pc  = UInt(OUTPUT, vaddrBits+1)
+}
+
 
 class RobIo(machine_width: Int
             , num_wakeup_ports: Int
@@ -90,13 +100,7 @@ class RobIo(machine_width: Int
    val br_unit          = new BranchUnitResp().asInput
 
    // Let the Branch Unit read out an instruction's PC
-   val get_pc = new Bundle
-   {
-      val rob_idx  = UInt(INPUT, ROB_ADDR_SZ)
-      val curr_pc  = UInt(OUTPUT, xLen)
-      val next_val = Bool(OUTPUT)             // the next_pc may not be valid (stalled or still being fetched)
-      val next_pc  = UInt(OUTPUT, xLen)
-   }
+   val get_pc = new RobPCRequest()
    val get_pred = new GetPredictionInfo().flip
 
    // Handle Additional Misspeculations (LSU)

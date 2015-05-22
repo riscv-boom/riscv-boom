@@ -50,13 +50,7 @@ class ExecutionUnitIo(num_rf_read_ports: Int
 
    // only used by the branch unit
    val br_unit = new BranchUnitResp().asOutput
-   val get_rob_pc = new Bundle
-   {
-      val rob_idx = UInt(OUTPUT, ROB_ADDR_SZ)
-      val curr_pc = UInt(INPUT, xLen)
-      val next_val= Bool(INPUT)
-      val next_pc = UInt(INPUT, xLen)
-   }
+   val get_rob_pc = new RobPCRequest().flip
    val get_pred = new GetPredictionInfo
 
    // only used by the fpu unit

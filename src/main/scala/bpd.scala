@@ -91,7 +91,6 @@ class BranchPredictionStage (fetch_width: Int) extends Module with BOOMCoreParam
       {
          (Bool(false), new BpdResp().fromBits(Bits(0)))
       }
-//   val bht_predictions = Pipe(bpd_valid, bpd_bits)
 
    //-------------------------------------------------------------
    // Branch Decode (BP2 Stage)
@@ -206,44 +205,12 @@ class BranchPredictionStage (fetch_width: Int) extends Module with BOOMCoreParam
       val targ = Mux(is_br(idx), br_targs(idx), jal_targs(idx))
       when (!is_jr(idx))
       {
-         assert (io.imem.btb_resp.bits.target === targ, "BTB is jumping to an invalid target.")
+         assert (io.imem.btb_resp.bits.target === targ(vaddrBits-1,0), "BTB is jumping to an invalid target.")
       }
    }
-
-   //-------------------------------------------------------------
-   // does the BP2 stage get to change the pc? Or does the BTB's actions win?
-   // The BTB wins if it predicts UNLESS BP2 redirects a jump that's earlier than the BTB's prediction.
-//   val override_btb = bp2_val &&
-//                      bp2_jal_val &&
-//                      io.imem.btb_resp.valid
-//                      (bp2_pred_idx < io.imem.btb_resp.bits.bridx)
-
-//   bp2_take_pc := bp2_wants_to_take_pc &&
-//                  (!(io.imem.btb_resp.valid && io.imem.btb_resp.bits.taken) || bp2_bht_overrides_btb)
-
-   //-------------------------------------------------------------
-   // TODO assert to catch if a JAL gets by (like behind a JALR) that doesn't redirect
-   // (bne, jal) -> verify the JAL is predicted taken if the bne isn't
-
-
-   // TODO assert here?
-   // It's the job of the BHT to verify that if the BTB predicts on a JAL, it got it right.
-   // It must also check that the BTB didn't miss the JAL and predict on a later branch
-
-//   // did the BTB predict JAL *AND* was it the first JAL in the fetch packet
-//   val btb_predicted_our_jal = io.imem.btb_resp.valid &&
-//                               io.imem.btb_resp.bits.taken &&
-//                               bp2_jal_val &&
-//                               (bp2_jmp_idx === io.imem.btb_resp.bits.bridx)
-//
-
-
-
 }
 
 //-------------------------------------------------------------
 //-------------------------------------------------------------
-//-------------------------------------------------------------
-
 
 }

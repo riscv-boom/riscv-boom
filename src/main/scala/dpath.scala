@@ -809,7 +809,7 @@ class DatPath() extends Module with BOOMCoreParameters
 
    csr.io.host <> io.host
 //   this isnt going to work, doesn't match up with getting data from csr file
-   csr.io.rw.addr  := Mux(watchdog_trigger, UInt(rocket.CSRs.tohost), exe_units(0).io.resp(0).bits.uop.csr_addr)
+   csr.io.rw.addr  := Mux(watchdog_trigger, UInt(rocket.CSRs.mtohost), exe_units(0).io.resp(0).bits.uop.csr_addr)
    csr.io.rw.cmd   := Mux(watchdog_trigger, rocket.CSR.W, csr_rw_cmd)
    csr.io.rw.wdata := Mux(watchdog_trigger, Bits(WATCHDOG_ERR_NO << 1 | 1),
                       Mux(com_exception,    com_exc_badvaddr,

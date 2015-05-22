@@ -62,13 +62,7 @@ class FunctionalUnitIo(num_stages: Int
 
    // only used by branch unit
    // TODO name this, so ROB can also instantiate it
-   val get_rob_pc = new Bundle
-   {
-      val rob_idx = UInt(OUTPUT, ROB_ADDR_SZ)
-      val curr_pc = UInt(INPUT, xLen)
-      val next_val= Bool(INPUT)
-      val next_pc = UInt(INPUT, xLen)
-   }
+   val get_rob_pc = new RobPCRequest().flip
    val get_pred = new GetPredictionInfo
 }
 
@@ -120,10 +114,10 @@ class BypassData(num_bypass_ports: Int, data_width: Int) extends BOOMCoreBundle
 class BranchUnitResp extends BOOMCoreBundle
 {
    val take_pc         = Bool()
-   val target          = UInt(width = xLen)
+   val target          = UInt(width = vaddrBits+1)
    val taken           = Bool()
 
-   val pc              = UInt(width = xLen) // TODO this isn't really a branch_unit thing
+   val pc              = UInt(width = vaddrBits+1) // TODO this isn't really a branch_unit thing
 
    val brinfo          = new BrResolutionInfo() // NOTE: delayed a cycle!
    val btb_update_valid= Bool() // TODO turn this into a directed bundle so we can fold this into btb_update?
@@ -239,7 +233,7 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)
    if (is_branch_unit)
    {
       op1_data = Mux(io.req.bits.uop.ctrl.op1_sel.toUInt === OP1_RS1 , io.req.bits.rs1_data,
-                 Mux(io.req.bits.uop.ctrl.op1_sel.toUInt === OP1_PC  , io.get_rob_pc.curr_pc,
+                 Mux(io.req.bits.uop.ctrl.op1_sel.toUInt === OP1_PC  , Sext(io.get_rob_pc.curr_pc, xLen),
                                                                        UInt(0)))
    }
    else
@@ -282,7 +276,6 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)
          killed := Bool(true)
       }
 
-
       val rs1 = io.req.bits.rs1_data
       val rs2 = io.req.bits.rs2_data
       val br_eq  = (rs1 === rs2)
@@ -290,7 +283,7 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)
       val br_lt  = (~(rs1(xLen-1) ^ rs2(xLen-1)) & br_ltu |
                       rs1(xLen-1) & ~rs2(xLen-1)).toBool
 
-      val pc_plus4 = (uop_pc_ + UInt(4))(xLen-1,0)
+      val pc_plus4 = (uop_pc_ + UInt(4))(vaddrBits,0)
 
       val pc_sel = Lookup(io.req.bits.uop.ctrl.br_type, PC_PLUS4,
                Array(   BR_N  -> PC_PLUS4,
@@ -310,19 +303,6 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)
                           !killed &&
                           uop.is_br_or_jmp &&
                           (pc_sel != PC_PLUS4)
-
-      //// JAL is taken in the front-end, so it should never mispredict
-      //val mispredict = io.req.valid &&
-      //                 !killed &&
-      //                 uop.is_br_or_jmp &&
-      //                 !(uop.is_jal) && // TODO XXX is this the proper way to do this? can we remove more JAL stuff from the branch unit? jal should just be a NOP, except it needs the PC for wb
-      //                                  // TODO treat a JAL with rd=x0 differently, squash away in decode.
-//    //                   ((io.br_unit.taken ^ uop.btb_pred_taken) || // BTB was wrong this assumes BTB doesn't say "taken" for PC+4
-      //                 (// BTB was wrong or BPD was wrong
-      //                    ((pc_sel === PC_PLUS4 && (uop.btb_hit && uop.btb_resp.taken)) ||
-      //                    (pc_sel != PC_PLUS4 && !(uop.btb_hit && uop.btb_resp.taken)) ||
-      //                    (pc_sel === PC_JALR && (!io.get_rob_pc.next_val || (io.get_rob_pc.next_pc != bj_addr))))  // BTB was right, but wrong target for JALR
-      //                 )
 
       // "mispredict" means that a branch has been resolved and it must be killed
       val mispredict = Bool(); mispredict := Bool(false)
