@@ -173,8 +173,10 @@ class IssueSlot(num_slow_wakeup_ports: Int) extends Module with BOOMCoreParamete
 
    //-------------------------------------------------------------
    // Request Logic
-   io.request_hp := Bool(false)
-   io.request    := isValid && slot_p1 && slot_p2 && slot_p3 && !io.kill
+   io.request := isValid && slot_p1 && slot_p2 && slot_p3 && !io.kill
+   val high_priority = slotUop.is_br_or_jmp
+   io.request_hp := io.request && high_priority
+//   io.request_hp := Bool(false)
 
    when (slot_state === s_valid_1)
    {

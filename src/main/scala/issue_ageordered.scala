@@ -126,8 +126,9 @@ class IssueUnitCollasping(num_issue_slots: Int, issue_width: Int, num_wakeup_por
             io.iss_valids(w) := Bool(true)
             io.iss_uops(w) := issue_slots(i).uop
          }
-         port_issued(w) = (requests(i) && !uop_issued  && can_allocate) | port_issued(w)
-         uop_issued = (requests(i) && can_allocate) | uop_issued
+         val was_port_issued_yet = port_issued(w)
+         port_issued(w) = (requests(i) && !uop_issued && can_allocate) | port_issued(w)
+         uop_issued = (requests(i) && can_allocate && !was_port_issued_yet) | uop_issued
       }
    }
 

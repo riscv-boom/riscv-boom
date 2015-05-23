@@ -364,7 +364,7 @@ class DatPath() extends Module with BOOMCoreParameters
    val rf_cost = (num_rf_read_ports+num_rf_write_ports)*(num_rf_read_ports+2*num_rf_write_ports)
 
    val iss_str = if (params(EnableAgePriorityIssue)) " (Age-based Priority)"
-                 else " (Static Priority)"
+                 else " (Unordered Priority)"
    println("\n   Fetch Width          : " + FETCH_WIDTH)
    println("   Issue Width          : " + ISSUE_WIDTH)
    println("   ROB Size             : " + NUM_ROB_ENTRIES)
