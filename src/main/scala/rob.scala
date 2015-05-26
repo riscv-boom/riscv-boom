@@ -576,13 +576,8 @@ class Rob(width: Int
    // Exception Tracking Logic
    // only store the oldest exception, since only one can happen!
 
-   // is i0 older than i1? (closest to zero)
-   // provide the tail_ptr to the queue
-   def IsOlder(i0: UInt, i1: UInt, tail: UInt) =
-   {
-      (Cat(i0 < tail, i0) < Cat(i1 < tail, i1))
-   }
-
+   // is i0 older than i1? (closest to zero). Provide the tail_ptr to the queue.
+   def IsOlder(i0: UInt, i1: UInt, tail: UInt) = (Cat(i0 < tail, i0) < Cat(i1 < tail, i1))
    val next_xcpt_uop = new MicroOp()
    next_xcpt_uop := r_xcpt_uop
    val dis_xcpts = Vec.fill(width) {Bool()}

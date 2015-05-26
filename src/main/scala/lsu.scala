@@ -181,6 +181,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    val stq_head = Reg(UInt()) // point to next store to clear from STQ (i.e., send to memory)
    val stq_tail = Reg(UInt()) // point to next available, open entry
    val stq_commit_head = Reg(UInt()) // point to next store to commit
+   val stq_execute_head = Reg(UInt()) // point to next store to execute
 
    val clear_store = Bool()
    clear_store := Bool(false)
@@ -428,15 +429,15 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
 
    can_fire_store_commit := Bool(false)
 
-   when (stq_entry_val(stq_head) &&
-         (stq_committed(stq_head) ||
-            (stq_uop(stq_head).is_amo &&
-            saq_val(stq_head) &&
-            !saq_is_virtual(stq_head) &&
-            sdq_val(stq_head)
+   when (stq_entry_val(stq_execute_head) &&
+         (stq_committed(stq_execute_head) ||
+            (stq_uop(stq_execute_head).is_amo &&
+            saq_val(stq_execute_head) &&
+            !saq_is_virtual(stq_execute_head) &&
+            sdq_val(stq_execute_head)
             )) &&
-         !stq_executed(stq_head) &&
-         !(stq_uop(stq_head).is_fence))
+         !stq_executed(stq_execute_head) &&
+         !(stq_uop(stq_execute_head).is_fence))
    {
       can_fire_store_commit := Bool(true)
    }
@@ -453,8 +454,17 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    }
 
 
-   assert (!(can_fire_store_commit && saq_is_virtual(stq_head)),
+   assert (!(can_fire_store_commit && saq_is_virtual(stq_execute_head)),
             "a committed store is trying to fire to memory that has a bad paddr.")
+
+//   assert (stq_entry_val(stq_execute_head) ||
+//            stq_head === stq_execute_head || stq_tail === stq_execute_head,
+//            "stq_execute_head got off track.")
+   when (!(stq_entry_val(stq_execute_head) ||
+            stq_head === stq_execute_head || stq_tail === stq_execute_head))
+   {
+      printf("stq_execute_head got off track.: %d, %d, %d", stq_head, stq_execute_head, stq_tail)
+   }
 
 
    //-------------------------
@@ -471,16 +481,24 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    // defaults
    io.memreq_val     := Bool(false)
    io.memreq_addr    := exe_ld_addr
-   io.memreq_wdata   := sdq_data(stq_head)
+   io.memreq_wdata   := sdq_data(stq_execute_head)
    io.memreq_uop     := exe_ld_uop
 
+   val mem_fired_st = Reg(init = Bool(false))
+   mem_fired_st := Bool(false)
    when (will_fire_store_commit)
    {
-      io.memreq_val   := Bool(true)
-      io.memreq_addr  := saq_addr(stq_head)
-      io.memreq_uop   := stq_uop (stq_head)
+      io.memreq_addr  := saq_addr(stq_execute_head)
+      io.memreq_uop   := stq_uop (stq_execute_head)
 
-      stq_executed(stq_head) := Bool(true)
+      // prevent this store going out if an earlier store just got nacked!
+      when (!(io.nack.valid && !io.nack.isload))
+      {
+         io.memreq_val   := Bool(true)
+         stq_executed(stq_execute_head) := Bool(true)
+         stq_execute_head := WrapInc(stq_execute_head, num_st_entries)
+         mem_fired_st := Bool(true)
+      }
    }
    .elsewhen (will_fire_load_incoming || will_fire_load_retry || will_fire_load_wakeup)
    {
@@ -691,7 +709,8 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    // kill load request to mem if address matches (we will either sleep load, or forward data) or TLB miss
    io.memreq_kill     := (mem_ld_used_tlb && (mem_tlb_miss || Reg(next=pf_ld || ma_ld))) ||
                          (mem_fired_ld && addr_conflicts.toBits != Bits(0)) ||
-                         mem_ld_killed
+                         mem_ld_killed ||
+                         (mem_fired_st && io.nack.valid && !io.nack.isload)
    wb_forward_std_idx := forwarding_age_logic.io.forwarding_idx
 
    // kill forwarding if branch mispredict
@@ -824,7 +843,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    }
 
    // detect which loads get marked as failures, but broadcast to the ROB the oldest failing load
-   // TODO encapsulate this in an age-based  priority-encoder 
+   // TODO encapsulate this in an age-based  priority-encoder
 //   val l_idx = AgePriorityEncoder((Vec(Vec.tabulate(num_ld_entries)(i => failed_loads(i) && UInt(i) >= laq_head) ++ failed_loads)).toBits)
    val temp_bits = (Vec(Vec.tabulate(num_ld_entries)(i => failed_loads(i) && UInt(i) >= laq_head) ++ failed_loads)).toBits
    val l_idx = PriorityEncoder(temp_bits)
@@ -927,6 +946,10 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
       stq_committed(stq_head)   := Bool(false)
 
       stq_head := WrapInc(stq_head, num_st_entries)
+      when (stq_uop(stq_head).is_fence)
+      {
+         stq_execute_head := WrapInc(stq_execute_head, num_st_entries)
+      }
    }
 
 
@@ -966,12 +989,17 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    ld_was_killed           := Bool(false)
    ld_was_put_to_sleep     := Bool(false)
 
+   def IsOlder(i0: UInt, i1: UInt, tail: UInt) = (Cat(i0 <= tail, i0) < Cat(i1 <= tail, i1))
    when (io.nack.valid)
    {
       // the cache nacked our store
       when (!io.nack.isload)
       {
          stq_executed(io.nack.lsu_idx) := Bool(false)
+         when (IsOlder(io.nack.lsu_idx, stq_execute_head, stq_tail))
+         {
+            stq_execute_head := io.nack.lsu_idx
+         }
       }
       // the nackee is a load
       .otherwise
@@ -1022,6 +1050,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
          stq_head := UInt(0, MEM_ADDR_SZ)
          stq_tail := UInt(0, MEM_ADDR_SZ)
          stq_commit_head := UInt(0, MEM_ADDR_SZ)
+         stq_execute_head := UInt(0, MEM_ADDR_SZ)
 
          for (i <- 0 until num_st_entries)
          {
@@ -1111,7 +1140,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
       {
          val t_laddr = laq_addr(i)
          val t_saddr = saq_addr(i)
-         printf("         ldq[%d]=(%s%s%s%s%s%s%d) st_dep(%d,m=%x) 0x%x %s %s   saq[%d]=(%s%s%s%s%s%s%s) b:%x 0x%x -> 0x%x %s %s %s\n"
+         printf("         ldq[%d]=(%s%s%s%s%s%s%d) st_dep(%d,m=%x) 0x%x %s %s   saq[%d]=(%s%s%s%s%s%s%s) b:%x 0x%x -> 0x%x %s %s %s %s\n"
             , UInt(i, MEM_ADDR_SZ)
             , Mux(laq_allocated(i), Str("V"), Str("-"))
             , Mux(laq_addr_val(i), Str("A"), Str("-"))
@@ -1140,6 +1169,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
             , sdq_data(i)
 
             , Mux(stq_head === UInt(i), Str("<- H "), Str(" "))
+            , Mux(stq_execute_head === UInt(i), Str("E "), Str(" "))
             , Mux(stq_commit_head === UInt(i), Str("C "), Str(" "))
             , Mux(stq_tail=== UInt(i), Str("T "), Str(" "))
          )
