@@ -83,9 +83,11 @@ class IssueUnitCollasping(num_issue_slots: Int, issue_width: Int, num_wakeup_por
    // Dispatch/Entry Logic
    // did we find a spot to slide the new dispatched uops into?
 
+   val will_be_available = (0 until num_issue_slots).map(i => (!issue_slots(i).will_be_valid || issue_slots(i).clear) && !(issue_slots(i).in_uop.valid))
+   val num_available = PopCount(will_be_available)
    for (w <- 0 until DISPATCH_WIDTH)
    {
-      io.dis_readys(w) := shamts_oh(num_issue_slots+w) >= Bits(1 << w)
+      io.dis_readys(w) := RegNext(num_available > UInt(w))
    }
 
    //-------------------------------------------------------------
