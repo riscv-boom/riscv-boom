@@ -9,8 +9,7 @@ class DefaultBOOMConfig extends ChiselConfig (
          // Top-Level
          case CoreName => "BOOM"
          case XLen => 64
-         case UseVM => true
-         case BuildFPU => Some(() => Module(new rocket.FPU))
+         case FDivSqrt => false
          case NPTWPorts => 2
          case CoreInstBits => 32
     
