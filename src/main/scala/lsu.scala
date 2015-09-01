@@ -48,7 +48,7 @@ import Node._
 
 import rocket.Str
 import uncore.constants.MemoryOpConstants._
-import uncore.PgIdxBits
+import junctions.PgIdxBits
 
 class LoadStoreUnitIo(pl_width: Int) extends BOOMCoreBundle
 {

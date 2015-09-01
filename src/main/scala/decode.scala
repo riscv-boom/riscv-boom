@@ -13,7 +13,7 @@ abstract trait DecodeConstants
 {
   val xpr64 = Y // TODO inform this from xLen
 
-  val decode_default =
+  val decode_default: List[BitPat] =
             //                                                         frs3_en                                wakeup_delay
             //     is val inst?                                        |  imm sel                             |                    bypassable (aka, known/fixed latency)
             //     |  is fp inst?                                      |  |     is_load                       |                    |  br/jmp
@@ -24,9 +24,10 @@ abstract trait DecodeConstants
             //     |  |  |  |         |        dst     |       |       |  |     |  |  |  |  |  mem    mem     |                    |  |  |  |  is unique? (clear pipeline for it)
             //     |  |  |  |         |        regtype |       |       |  |     |  |  |  |  |  cmd    msk     |                    |  |  |  |  |  flush on commit
             //     |  |  |  |         |        |       |       |       |  |     |  |  |  |  |  |      |       |                    |  |  |  |  |  |  csr cmd
-              List(N, N, X, uopX    , FU_X   ,UInt("b??",2),UInt("b??",2),UInt("b??",2),X, IS_X, X,X,X,X,N,M_X, MSK_X,UInt("b??"), X, X, X, X, N, X, CSR.X)
+//            List(N, N, X, uopX    , FU_X   ,UInt("b??",2),UInt("b??",2),UInt("b??",2),X, IS_X, X,X,X,X,N,M_X, MSK_X,UInt("b??"), X, X, X, X, N, X, CSR.X)
+              List(N, N, X, uopX    , FU_X   ,RT_X,BitPat.DC(2),BitPat.DC(2),X,IS_X,X,X,X,X,N, M_X,   MSK_X,  BitPat.DC(2),        X, X, X, X, N, X, CSR.X)
 
-  val table: Array[(UInt, List[UInt])]
+  val table: Array[(BitPat, List[BitPat])]
 }
 
 class CtrlSigs extends Bundle
@@ -58,13 +59,40 @@ class CtrlSigs extends Bundle
    val csr_cmd         = Bits(width = rocket.CSR.SZ)
    val rocc            = Bool()
 
-   def decode(inst: UInt, table: Iterable[(UInt, List[UInt])]) = {
-      val decoder = DecodeLogic(inst, XDecode.decode_default, table)
-         Vec(legal, fp_val, fp_single, uopc, fu_code, dst_type, rs1_type
-            , rs2_type, frs3_en, imm_sel, is_load, is_store, is_amo
-            , is_fence, is_fencei, mem_cmd, mem_typ, wakeup_delay, bypassable
-            , br_or_jmp, is_jal, allocate_brtag, inst_unique, flush_on_commit, csr_cmd) := decoder
-         rocc := Bool(false)
+   def decode(inst: UInt, table: Iterable[(BitPat, List[BitPat])]) = {
+      val decoder = rocket.DecodeLogic(inst, XDecode.decode_default, table)
+      val sigs = 
+         Seq(legal, fp_val, fp_single, uopc, fu_code, dst_type, rs1_type
+         , rs2_type, frs3_en, imm_sel, is_load, is_store, is_amo
+         , is_fence, is_fencei, mem_cmd, mem_typ, wakeup_delay, bypassable
+         , br_or_jmp, is_jal, allocate_brtag, inst_unique, flush_on_commit, csr_cmd)
+      sigs zip decoder map {case(s,d) => s := d}
+      //legal := Bool(false)
+      //fp_val := Bool(false)
+      //fp_single := Bool(false)
+      //uopc := Bits(0)
+      //fu_code := Bits(0)
+      //dst_type := RT_X
+      //rs1_type := RT_X
+      //rs2_type := RT_X
+      //frs3_en := Bool(false)
+      //imm_sel := IS_I //IS_X
+      //is_load := Bool(false)
+      //is_store := Bool(false)
+      //is_amo := Bool(false)
+      //is_fence := Bool(false)
+      //is_fencei := Bool(false)
+      //mem_cmd := Bits(0)
+      //wakeup_delay := Bits(0)
+      //bypassable := Bool(false)
+      //br_or_jmp:= Bool(false)
+      //is_jal:= Bool(false)
+      //allocate_brtag:= Bool(false)
+      //inst_unique:= Bool(false)
+      //flush_on_commit:= Bool(false)
+      //csr_cmd := rocket.CSR.N
+
+      rocc := Bool(false)
       this
    }
 }
@@ -82,7 +110,7 @@ object XDecode extends DecodeConstants
             //     |  |  |  |         |        dst     |       |       |  |     |  |  |  |  |  mem    mem     |        |  |  |  |  is unique? (clear pipeline for it)
             //     |  |  |  |         |        regtype |       |       |  |     |  |  |  |  |  cmd    msk     |        |  |  |  |  |  flush on commit
             //     |  |  |  |         |        |       |       |       |  |     |  |  |  |  |  |      |       |        |  |  |  |  |  |  csr cmd
-   val table = Array(//  |  |         |        |       |       |       |  |     |  |  |  |  |  |      |       |        |  |  |  |  |  |  |
+   val table: Array[(BitPat, List[BitPat])] = Array(// |       |       |  |     |  |  |  |  |  |      |       |        |  |  |  |  |  |  |
    LD      -> List(Y, N, X, uopLD   , FU_MEM , RT_FIX, RT_FIX, RT_X  , N, IS_I, Y, N, N, N, N, M_XRD, MSK_D , UInt(3), N, N, N, N, N, N, CSR.N),
    LW      -> List(Y, N, X, uopLD   , FU_MEM , RT_FIX, RT_FIX, RT_X  , N, IS_I, Y, N, N, N, N, M_XRD, MSK_W , UInt(3), N, N, N, N, N, N, CSR.N),
    LWU     -> List(Y, N, X, uopLD   , FU_MEM , RT_FIX, RT_FIX, RT_X  , N, IS_I, Y, N, N, N, N, M_XRD, MSK_WU, UInt(3), N, N, N, N, N, N, CSR.N),
@@ -169,6 +197,7 @@ object XDecode extends DecodeConstants
    SBREAK  -> List(Y, N, X, uopSYSTEM,FU_CSR , RT_X  , RT_X  , RT_X  , N, IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, Y, N, CSR.I),
    SRET    -> List(Y, N, X, uopSYSTEM,FU_CSR , RT_X  , RT_X  , RT_X  , N, IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, Y, N, CSR.I),
    MRTS    -> List(Y, N, X, uopSYSTEM,FU_CSR , RT_X  , RT_X  , RT_X  , N, IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, Y, N, CSR.I),
+
    WFI     -> List(Y, N, X, uopNOP   ,FU_X   , RT_X  , RT_X  , RT_X  , N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, Y, Y, CSR.N), // implemented as a NOP
 
    FENCE_I -> List(Y, N, X, uopNOP  , FU_X   , RT_X  , RT_X  , RT_X  , N, IS_X, N, N, N, N, Y, M_X  , MSK_X , UInt(0), N, N, N, N, Y, Y, CSR.N),
@@ -204,7 +233,7 @@ object XDecode extends DecodeConstants
 
 object FDecode extends DecodeConstants
 {
-  val table = Array(
+  val table: Array[(BitPat, List[BitPat])] = Array(
             //                                                          frs3_en                                wakeup_delay
             //                                                          |  imm sel                             |        bypassable (aka, known/fixed latency)
             //                                                          |  |     is_load                       |        |  br/jmp
@@ -427,13 +456,17 @@ class BranchDecode extends Module
       val is_br   = Bool(OUTPUT)
       val is_jal  = Bool(OUTPUT)
       val is_jalr = Bool(OUTPUT)
-   }                      //   is br?
-                          //   |  is jal?
-                          //   |  |  is jalr?
-   val bpd_csignals =     //   |  |  |  br type
-      rocket.DecodeLogic(io.inst,//  |  |
+   }
+
+   val bpd_csignals =
+      rocket.DecodeLogic(io.inst,
                           List(N, N, N, IS_X),
-            Array(
+////                          //   is br?
+////                          //   |  is jal?
+////                          //   |  |  is jalr?
+////                          //   |  |  |  br type
+////                          //   |  |  |  |
+            Array[(BitPat, List[BitPat])](
                JAL     -> List(N, Y, N, IS_J),
                JALR    -> List(N, N, Y, IS_I),
                BEQ     -> List(Y, N, N, IS_B),

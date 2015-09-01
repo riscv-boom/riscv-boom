@@ -64,9 +64,12 @@ trait BrPredConstants
 
 trait ScalarOpConstants
 {
-   val X = Bool.DC
-   val Y = Bool(true)
-   val N = Bool(false)
+   val X = BitPat("b?")
+   val Y = BitPat("b0")
+   val N = BitPat("b1")
+//   val X = Bool.DC
+//   val Y = Bool(true)
+//   val N = Bool(false)
 
    //************************************
    // Extra Constants
@@ -98,7 +101,7 @@ trait ScalarOpConstants
    val OP1_RS1 = UInt(0, 2) // Register Source #1
    val OP1_ZERO= UInt(1, 2)
    val OP1_PC  = UInt(2, 2)
-   val OP1_X   = Bits("b??", 2)
+   val OP1_X   = BitPat("b??")
 
    // RS2 Operand Select Signal
    val OP2_RS2 = UInt(0, 3) // Register Source #2
@@ -106,7 +109,7 @@ trait ScalarOpConstants
    val OP2_ZERO= UInt(2, 3) // constant 0
    val OP2_FOUR= UInt(3, 3) // constant 4 (for PC+4)
    val OP2_IMMC= UInt(4, 3) // for CSR imm found in RS1
-   val OP2_X   = Bits("b???", 3)
+   val OP2_X   = BitPat("b???")
 
    // Register File Write Enable Signal
    val REN_0   = Bool(false)
@@ -130,7 +133,7 @@ trait ScalarOpConstants
    val IS_B   = UInt(2, 3)  //SB-Type (BR)
    val IS_U   = UInt(3, 3)  //U-Type  (LUI/AUIPC)
    val IS_J   = UInt(4, 3)  //UJ-Type (J/JAL)
-   val IS_X   = UInt("b???", 3)
+   val IS_X   = BitPat("b???")
 
 
    // Decode Stage Control Signals
@@ -143,7 +146,7 @@ trait ScalarOpConstants
    // Micro-op opcodes
    // TODO use an enum
    val UOPC_SZ = 9
-   val uopX    = Bits("b?????????", UOPC_SZ)
+   val uopX    = BitPat.DC(UOPC_SZ)
    val uopNOP  = Bits( 0, UOPC_SZ)
    val uopLD   = Bits( 1, UOPC_SZ)
    val uopSTA  = Bits( 2, UOPC_SZ)  // store address generation
@@ -289,7 +292,7 @@ trait ScalarOpConstants
    val uopSYSTEM    = Bits(121, UOPC_SZ) // pass uop down the CSR pipeline and let it handle it
 
    // Memory Mask Type Signal
-   val MSK_X   = UInt("b???", 3)
+   val MSK_X   = BitPat("b???")
    val MSK_B   = UInt(0, 3)
    val MSK_H   = UInt(1, 3)
    val MSK_W   = UInt(2, 3)

@@ -87,7 +87,7 @@ abstract trait BOOMCoreParameters extends rocket.CoreParameters
    //************************************
    // Non-BOOM parameters
 
-   val corePAddrBits = params(uncore.PAddrBits)
+   val corePAddrBits = params(junctions.PAddrBits)
 
    val fastMulDiv = params(FastMulDiv)
 

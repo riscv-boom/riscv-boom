@@ -51,8 +51,8 @@ class DefaultBOOMConfig extends ChiselConfig (
    },
    knobValues = {
       case "NTiles" => 1
-      case "FETCH_WIDTH" => 4
-      case "ISSUE_WIDTH" => 4
+      case "FETCH_WIDTH" => 1
+      case "ISSUE_WIDTH" => 1
       case "ROB_ENTRIES" => 24
       case "ISSUE_ENTRIES" => 12
       case "LSU_ENTRIES" => 8

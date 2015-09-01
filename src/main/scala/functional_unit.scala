@@ -30,7 +30,7 @@ object FUCode
 {
    // bit mask, since a given execution pipeline may support multiple functional units
    val FUC_SZ = 7
-   val FU_X    = Bits("b???????", FUC_SZ)
+   val FU_X    = BitPat.DC(FUC_SZ)
    val FU_ALU  = Bits(  1, FUC_SZ)
    val FU_BRU  = Bits(  2, FUC_SZ)
    val FU_MEM  = Bits(  4, FUC_SZ)
