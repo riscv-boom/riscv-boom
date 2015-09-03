@@ -1226,7 +1226,7 @@ class DatPath() extends Module with BOOMCoreParameters
       }
 
       // Front-end
-      printf("--- Cyc=%d , ----------------- Ret: %d ---------------------------------- User Retired: %d\n  BrPred1:        (IF1_PC= n/a - Predict:n/a) ------ PC: [%s%s%s-%s for br_id: %d, %s %s next: 0x%x ifst:%d]\nI$ Response: (%s) IF2_PC= 0x%x (mask:0x%x) \033[1;35m%s\033[0m  ----BrPred2:(%s,%s) [btbtarg: 0x%x] jkilmsk:0x%x ->(0x%x)\n"
+      printf("--- Cyc=%d , ----------------- Ret: %d ---------------------------------- User Retired: %d\n  BrPred1:        (IF1_PC= n/a - Predict:n/a) ------ PC: [%s%s%s-%s for br_id: %d, %s %s next: 0x%x ifst:%d]\nI$ Response: (%s) IF2_PC= 0x%x (mask:0x%x) \u001b[1;35m%s\u001b[0m  ----BrPred2:(%s,%s) [btbtarg: 0x%x] jkilmsk:0x%x ->(0x%x)\n"
          , tsc_reg
          , irt_reg & UInt(0xffffff)
          , irt_ei_reg & UInt(0xffffff)
@@ -1271,7 +1271,7 @@ class DatPath() extends Module with BOOMCoreParameters
 
       if (DEBUG_PRINTF_ROB)
       {
-         printf(") State: (%s: %s %s %s \033[1;31m%s\033[0m %s %s) BMsk:%x Mode:%s %s\n"
+         printf(") State: (%s: %s %s %s \u001b[1;31m%s\u001b[0m %s %s) BMsk:%x Mode:%s %s\n"
          , Mux(rob.io.debug.state === UInt(0), Str("RESET"),
            Mux(rob.io.debug.state === UInt(1), Str("NORMAL"),
            Mux(rob.io.debug.state === UInt(2), Str("ROLLBK"),

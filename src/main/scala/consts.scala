@@ -27,33 +27,33 @@ trait BOOMDebugConstants
    // color codes for output files
    // if you use VIM to view, you'll need the AnsiEsc plugin.
    // 1 is bold, 2 is background, 4 is underlined
-   val blk   = if (DEBUG_ENABLE_COLOR) "\033[1;30m" else " "
-   val red   = if (DEBUG_ENABLE_COLOR) "\033[1;31m" else " "
-   val grn   = if (DEBUG_ENABLE_COLOR) "\033[1;32m" else " "
-   val ylw   = if (DEBUG_ENABLE_COLOR) "\033[1;33m" else " "
-   val blu   = if (DEBUG_ENABLE_COLOR) "\033[1;34m" else " "
-   val mgt   = if (DEBUG_ENABLE_COLOR) "\033[1;35m" else " "
-   val cyn   = if (DEBUG_ENABLE_COLOR) "\033[1;36m" else " "
-   val wht   = if (DEBUG_ENABLE_COLOR) "\033[1;37m" else " "
-   val end   = if (DEBUG_ENABLE_COLOR) "\033[0m"    else ""
+   val blk   = if (DEBUG_ENABLE_COLOR) "\u001b[1;30m" else " "
+   val red   = if (DEBUG_ENABLE_COLOR) "\u001b[1;31m" else " "
+   val grn   = if (DEBUG_ENABLE_COLOR) "\u001b[1;32m" else " "
+   val ylw   = if (DEBUG_ENABLE_COLOR) "\u001b[1;33m" else " "
+   val blu   = if (DEBUG_ENABLE_COLOR) "\u001b[1;34m" else " "
+   val mgt   = if (DEBUG_ENABLE_COLOR) "\u001b[1;35m" else " "
+   val cyn   = if (DEBUG_ENABLE_COLOR) "\u001b[1;36m" else " "
+   val wht   = if (DEBUG_ENABLE_COLOR) "\u001b[1;37m" else " "
+   val end   = if (DEBUG_ENABLE_COLOR) "\u001b[0m"    else ""
 
-   val b_blk = if (DEBUG_ENABLE_COLOR) "\033[2;30m" else " "
-   val b_red = if (DEBUG_ENABLE_COLOR) "\033[2;31m" else " "
-   val b_grn = if (DEBUG_ENABLE_COLOR) "\033[2;32m" else " "
-   val b_ylw = if (DEBUG_ENABLE_COLOR) "\033[2;33m" else " "
-   val b_blu = if (DEBUG_ENABLE_COLOR) "\033[2;34m" else " "
-   val b_mgt = if (DEBUG_ENABLE_COLOR) "\033[2;35m" else " "
-   val b_cyn = if (DEBUG_ENABLE_COLOR) "\033[2;36m" else " "
-   val b_wht = if (DEBUG_ENABLE_COLOR) "\033[2;37m" else " "
+   val b_blk = if (DEBUG_ENABLE_COLOR) "\u001b[2;30m" else " "
+   val b_red = if (DEBUG_ENABLE_COLOR) "\u001b[2;31m" else " "
+   val b_grn = if (DEBUG_ENABLE_COLOR) "\u001b[2;32m" else " "
+   val b_ylw = if (DEBUG_ENABLE_COLOR) "\u001b[2;33m" else " "
+   val b_blu = if (DEBUG_ENABLE_COLOR) "\u001b[2;34m" else " "
+   val b_mgt = if (DEBUG_ENABLE_COLOR) "\u001b[2;35m" else " "
+   val b_cyn = if (DEBUG_ENABLE_COLOR) "\u001b[2;36m" else " "
+   val b_wht = if (DEBUG_ENABLE_COLOR) "\u001b[2;37m" else " "
 
-   val u_blk = if (DEBUG_ENABLE_COLOR) "\033[4;30m" else " "
-   val u_red = if (DEBUG_ENABLE_COLOR) "\033[4;31m" else " "
-   val u_grn = if (DEBUG_ENABLE_COLOR) "\033[4;32m" else " "
-   val u_ylw = if (DEBUG_ENABLE_COLOR) "\033[4;33m" else " "
-   val u_blu = if (DEBUG_ENABLE_COLOR) "\033[4;34m" else " "
-   val u_mgt = if (DEBUG_ENABLE_COLOR) "\033[4;35m" else " "
-   val u_cyn = if (DEBUG_ENABLE_COLOR) "\033[4;36m" else " "
-   val u_wht = if (DEBUG_ENABLE_COLOR) "\033[4;37m" else " "
+   val u_blk = if (DEBUG_ENABLE_COLOR) "\u001b[4;30m" else " "
+   val u_red = if (DEBUG_ENABLE_COLOR) "\u001b[4;31m" else " "
+   val u_grn = if (DEBUG_ENABLE_COLOR) "\u001b[4;32m" else " "
+   val u_ylw = if (DEBUG_ENABLE_COLOR) "\u001b[4;33m" else " "
+   val u_blu = if (DEBUG_ENABLE_COLOR) "\u001b[4;34m" else " "
+   val u_mgt = if (DEBUG_ENABLE_COLOR) "\u001b[4;35m" else " "
+   val u_cyn = if (DEBUG_ENABLE_COLOR) "\u001b[4;36m" else " "
+   val u_wht = if (DEBUG_ENABLE_COLOR) "\u001b[4;37m" else " "
 }
 
 trait BrPredConstants
@@ -65,11 +65,8 @@ trait BrPredConstants
 trait ScalarOpConstants
 {
    val X = BitPat("b?")
-   val Y = BitPat("b0")
-   val N = BitPat("b1")
-//   val X = Bool.DC
-//   val Y = Bool(true)
-//   val N = Bool(false)
+   val Y = Bool(true)
+   val N = Bool(false)
 
    //************************************
    // Extra Constants

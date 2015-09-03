@@ -67,31 +67,6 @@ class CtrlSigs extends Bundle
          , is_fence, is_fencei, mem_cmd, mem_typ, wakeup_delay, bypassable
          , br_or_jmp, is_jal, allocate_brtag, inst_unique, flush_on_commit, csr_cmd)
       sigs zip decoder map {case(s,d) => s := d}
-      //legal := Bool(false)
-      //fp_val := Bool(false)
-      //fp_single := Bool(false)
-      //uopc := Bits(0)
-      //fu_code := Bits(0)
-      //dst_type := RT_X
-      //rs1_type := RT_X
-      //rs2_type := RT_X
-      //frs3_en := Bool(false)
-      //imm_sel := IS_I //IS_X
-      //is_load := Bool(false)
-      //is_store := Bool(false)
-      //is_amo := Bool(false)
-      //is_fence := Bool(false)
-      //is_fencei := Bool(false)
-      //mem_cmd := Bits(0)
-      //wakeup_delay := Bits(0)
-      //bypassable := Bool(false)
-      //br_or_jmp:= Bool(false)
-      //is_jal:= Bool(false)
-      //allocate_brtag:= Bool(false)
-      //inst_unique:= Bool(false)
-      //flush_on_commit:= Bool(false)
-      //csr_cmd := rocket.CSR.N
-
       rocc := Bool(false)
       this
    }
@@ -234,26 +209,24 @@ object XDecode extends DecodeConstants
 object FDecode extends DecodeConstants
 {
   val table: Array[(BitPat, List[BitPat])] = Array(
-            //                                                          frs3_en                                wakeup_delay
-            //                                                          |  imm sel                             |        bypassable (aka, known/fixed latency)
-            //                                                          |  |     is_load                       |        |  br/jmp
-            //     is val inst?                         rs1 regtype     |  |     |  is_store                   |        |  |  is jal
-            //     |  is fp inst?                       |       rs2 type|  |     |  |  is_amo                  |        |  |  |  allocate_brtag
-            //     |  |  is dst single-prec?            |       |       |  |     |  |  |  is_fence             |        |  |  |  |
-            //     |  |  |  micro-code                  |       |       |  |     |  |  |  |  is_fencei         |        |  |  |  |
-            //     |  |  |  |           func    dst     |       |       |  |     |  |  |  |  |  mem    mem     |        |  |  |  |  is unique? (clear pipeline for it)
-            //     |  |  |  |           unit    regtype |       |       |  |     |  |  |  |  |  cmd    msk     |        |  |  |  |  |  flush on commit
-            //     |  |  |  |           |       |       |       |       |  |     |  |  |  |  |  |      |       |        |  |  |  |  |  |  csr cmd
-   FLW     -> List(Y, Y, Y, uopLD     , FU_MEM, RT_FLT, RT_FIX, RT_X  , N, IS_I, Y, N, N, N, N, M_XRD, MSK_W , UInt(0), N, N, N, N, N, N, CSR.N),
-   FLD     -> List(Y, Y, N, uopLD     , FU_MEM, RT_FLT, RT_FIX, RT_X  , N, IS_I, Y, N, N, N, N, M_XRD, MSK_D , UInt(0), N, N, N, N, N, N, CSR.N),
-   FSW     -> List(Y, Y, Y, uopSTA    , FU_MEM, RT_X  , RT_FIX, RT_FLT, N, IS_S, N, Y, N, N, N, M_XWR, MSK_W , UInt(0), N, N, N, N, N, N, CSR.N),
-   FSD     -> List(Y, Y, N, uopSTA    , FU_MEM, RT_X  , RT_FIX, RT_FLT, N, IS_S, N, Y, N, N, N, M_XWR, MSK_D , UInt(0), N, N, N, N, N, N, CSR.N),
+             //                                                          frs3_en                                wakeup_delay
+             //                                                          |  imm sel                             |        bypassable (aka, known/fixed latency)
+             //                                                          |  |     is_load                       |        |  br/jmp
+             //     is val inst?                         rs1 regtype     |  |     |  is_store                   |        |  |  is jal
+             //     |  is fp inst?                       |       rs2 type|  |     |  |  is_amo                  |        |  |  |  allocate_brtag
+             //     |  |  is dst single-prec?            |       |       |  |     |  |  |  is_fence             |        |  |  |  |
+             //     |  |  |  micro-code                  |       |       |  |     |  |  |  |  is_fencei         |        |  |  |  |
+             //     |  |  |  |           func    dst     |       |       |  |     |  |  |  |  |  mem    mem     |        |  |  |  |  is unique? (clear pipeline for it)
+             //     |  |  |  |           unit    regtype |       |       |  |     |  |  |  |  |  cmd    msk     |        |  |  |  |  |  flush on commit
+             //     |  |  |  |           |       |       |       |       |  |     |  |  |  |  |  |      |       |        |  |  |  |  |  |  csr cmd
+   FLW      -> List(Y, Y, Y, uopLD     , FU_MEM, RT_FLT, RT_FIX, RT_X  , N, IS_I, Y, N, N, N, N, M_XRD, MSK_W , UInt(0), N, N, N, N, N, N, CSR.N),
+   FLD      -> List(Y, Y, N, uopLD     , FU_MEM, RT_FLT, RT_FIX, RT_X  , N, IS_I, Y, N, N, N, N, M_XRD, MSK_D , UInt(0), N, N, N, N, N, N, CSR.N),
+   FSW      -> List(Y, Y, Y, uopSTA    , FU_MEM, RT_X  , RT_FIX, RT_FLT, N, IS_S, N, Y, N, N, N, M_XWR, MSK_W , UInt(0), N, N, N, N, N, N, CSR.N),
+   FSD      -> List(Y, Y, N, uopSTA    , FU_MEM, RT_X  , RT_FIX, RT_FLT, N, IS_S, N, Y, N, N, N, M_XWR, MSK_D , UInt(0), N, N, N, N, N, N, CSR.N),
 
-   // TODO consolidate ctrl signals? tons of opc's here
    // not convinced "single-prec" is being used for the fmv
    FCLASS_S-> List(Y, Y, Y, uopFCLASS_S,FU_FPU, RT_FIX, RT_FLT, RT_X  , N, IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, CSR.N),
    FCLASS_D-> List(Y, Y, N, uopFCLASS_D,FU_FPU, RT_FIX, RT_FLT, RT_X  , N, IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, CSR.N),
-
 
    FMV_S_X -> List(Y, Y, Y, uopFMV_S_X, FU_FPU, RT_FLT, RT_FIX, RT_X  , N, IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, CSR.N),
    FMV_D_X -> List(Y, Y, N, uopFMV_D_X, FU_FPU, RT_FLT, RT_FIX, RT_X  , N, IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, CSR.N),
@@ -271,7 +244,7 @@ object FDecode extends DecodeConstants
    FCVT_S_D-> List(Y, Y, Y, uopFCVT_S_D,FU_FPU, RT_FLT, RT_FLT, RT_X  , N, IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, CSR.N),
    FCVT_D_S-> List(Y, Y, N, uopFCVT_D_S,FU_FPU, RT_FLT, RT_FLT, RT_X  , N, IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, CSR.N),
 
-   //// Int to FP
+   // Int to FP
    FCVT_S_W-> List(Y, Y, Y, uopFCVT_S_W ,FU_FPU,RT_FLT, RT_FIX, RT_X  , N, IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, CSR.N),
    FCVT_S_WU->List(Y, Y, Y, uopFCVT_S_WU,FU_FPU,RT_FLT, RT_FIX, RT_X  , N, IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, CSR.N),
    FCVT_S_L-> List(Y, Y, Y, uopFCVT_S_L ,FU_FPU,RT_FLT, RT_FIX, RT_X  , N, IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, CSR.N),
@@ -297,6 +270,7 @@ object FDecode extends DecodeConstants
    FEQ_S    ->List(Y, Y, Y, uopFEQ_S  , FU_FPU, RT_FIX, RT_FLT, RT_FLT, N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, CSR.N),
    FLT_S    ->List(Y, Y, Y, uopFLT_S  , FU_FPU, RT_FIX, RT_FLT, RT_FLT, N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, CSR.N),
    FLE_S    ->List(Y, Y, Y, uopFLE_S  , FU_FPU, RT_FIX, RT_FLT, RT_FLT, N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, CSR.N),
+
    FEQ_D    ->List(Y, Y, N, uopFEQ_D  , FU_FPU, RT_FIX, RT_FLT, RT_FLT, N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, CSR.N),
    FLT_D    ->List(Y, Y, N, uopFLT_D  , FU_FPU, RT_FIX, RT_FLT, RT_FLT, N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, CSR.N),
    FLE_D    ->List(Y, Y, N, uopFLE_D  , FU_FPU, RT_FIX, RT_FLT, RT_FLT, N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, CSR.N),
@@ -354,21 +328,10 @@ class DecodeUnit() extends Module
 
    var decode_table = XDecode.table
    if (!params(BuildFPU).isEmpty) decode_table ++= FDecode.table
+
    val cs = new CtrlSigs().decode(uop.inst, decode_table)
 
    // Exception Handling
-   //val raddr1      = uop.inst(RS1_MSB,RS1_LSB)
-   //val csr_en      = cs.csr_cmd != CSR.N
-   //val system_insn = cs.csr_cmd === CSR.I
-   //val csr_ren     = (cs.csr_cmd === CSR.S || cs.csr_cmd === CSR.C) && raddr1 === UInt(0)
-   //val csr_cmd     = Mux(csr_ren, CSR.R, cs.csr_cmd)
-   //val csr_addr    = uop.inst(CSR_ADDR_MSB, CSR_ADDR_LSB)
-   // this is overly conservative
-   //val safe_csrs = CSRs.sscratch :: CSRs.sepc :: CSRs.mscratch :: CSRs.mepc :: CSRs.mcause :: CSRs.mbadaddr :: Nil
-   //val legal_csrs = collection.mutable.LinkedHashSet(CSRs.all:_*)
-   // flush pipeline on CSR writes that may have side effects TODO I'm currently flushing on ALL CSRs
-   //val id_csr_flush = system_insn || (csr_en && !csr_ren && !DecodeLogic(csr_addr, safe_csrs, legal_csrs -- safe_csrs))
-
    val id_illegal_insn = !cs.legal ||
       cs.fp_val && !io.status.fs.orR ||
       cs.rocc && !io.status.xs.orR
@@ -460,7 +423,7 @@ class BranchDecode extends Module
 
    val bpd_csignals =
       rocket.DecodeLogic(io.inst,
-                          List(N, N, N, IS_X),
+                  List[BitPat](N, N, N, IS_X),
 ////                          //   is br?
 ////                          //   |  is jal?
 ////                          //   |  |  is jalr?
@@ -495,8 +458,6 @@ class FetchSerializerIO extends BOOMCoreBundle
    val enq = new DecoupledIO(new FetchBundle()).flip
    val deq = new DecoupledIO(new FetchSerializerResp)
    val kill = Bool(INPUT)
-
-//  override def clone = new FetchSerializerIO().asInstanceOf[this.type]
 }
 
 
