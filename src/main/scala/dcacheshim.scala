@@ -198,7 +198,7 @@ class DCacheShim extends Module with BOOMCoreParameters
    for (i <- 0 until max_num_inflight)
    {
       inflight_load_buffer(i).clear       := (cache_load_ack && io.dmem.resp.bits.tag === UInt(i)) ||
-                                             (io.dmem.resp.bits.nack && m2_req_uop.is_load && m2_inflight_tag === UInt(i) && Reg(next=Reg(next=(enq_val && enq_rdy)))) ||
+                                             (io.dmem.resp.bits.nack && (m2_req_uop.is_load || m2_req_uop.is_amo) && m2_inflight_tag === UInt(i) && Reg(next=Reg(next=(enq_val && enq_rdy)))) ||
                                              (io.core.req.bits.kill && m1_inflight_tag === UInt(i) && Reg(next=(enq_val && enq_rdy))) // don't clr random entry, make sure m1_tag is correct
       inflight_load_buffer(i).brinfo      := io.core.brinfo
       inflight_load_buffer(i).flush_pipe  := io.core.flush_pipe
