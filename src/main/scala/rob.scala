@@ -620,6 +620,13 @@ class Rob(width: Int
    assert (!(exception_thrown && !io.cxcpt.valid && !r_xcpt_val),
       "ROB trying to throw an exception, but it doesn't have a valid xcpt_cause")
 
+   assert (!(io.empty && r_xcpt_val),
+      "ROB is empty, but believes it has an outstanding exception.")
+
+   assert (!(will_throw_exception && (GetRowIdx(r_xcpt_uop.rob_idx) != rob_head)),
+      "ROB is throwing an exception, but the stored exception information's " +
+      "rob_idx does not match the rob_head")
+
 // not possible to stop all xcpts coming in, since the flush signal goes out a cycle later
 //   assert (!(rob_state === s_rollback && (io.lxcpt.valid || io.bxcpt.valid)),
 //      "Exception incoming during rollback - exception should have been killed.")
@@ -738,8 +745,7 @@ class Rob(width: Int
          {
             when (exception_thrown)
             {
-               ;
-//               rob_state := s_rollback
+               ; //rob_state := s_rollback
             }
             .otherwise
             {
@@ -855,7 +861,7 @@ class Rob(width: Int
    if (DEBUG_PRINTF_ROB)
    {
       printf("  RobXcpt[%s%x r:%d b:%x bva:0x%x]\n"
-            , Mux(io.debug.xcpt_val, Str("E"),Str("-"))
+            , Mux(r_xcpt_val, Str("E"),Str("-"))
             , io.debug.xcpt_uop.exc_cause
             , io.debug.xcpt_uop.rob_idx
             , io.debug.xcpt_uop.br_mask
