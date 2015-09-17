@@ -17,7 +17,6 @@ trait BOOMDebugConstants
    val DEBUG_PRINTF        = false // use the Chisel printf functionality
    val DEBUG_ENABLE_COLOR  = false // provide color to print outs? requires a VIM plugin to work properly :(
    val COMMIT_LOG_PRINTF   = false // dump commit state, for comparision against ISA sim
-   val COMMIT_LOG_EI_ONLY  = false // print out commit log only when interrupts enabled
 
    // turn off stuff to dramatically reduce Chisel node count
    val DEBUG_PRINTF_LSU    = true && DEBUG_PRINTF
@@ -308,7 +307,7 @@ trait ScalarOpConstants
 
    def NullMicroOp(): MicroOp =
    {
-      val uop = new MicroOp()
+      val uop = Wire(new MicroOp())
       uop.uopc       := uopNOP // maybe not required, but helps on asserts that try to catch spurious behavior
       uop.bypassable := Bool(false)
       uop.fp_val     := Bool(false)
@@ -320,7 +319,7 @@ trait ScalarOpConstants
       // TODO these unnecessary? used in regread stage?
       uop.is_br_or_jmp := Bool(false)
 
-      val cs = new CtrlSignals()
+      val cs = Wire(new CtrlSignals())
       cs.br_type     := BR_N
       cs.rf_wen      := Bool(false)
       cs.csr_cmd     := rocket.CSR.N

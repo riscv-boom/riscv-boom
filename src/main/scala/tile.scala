@@ -68,10 +68,8 @@ class BOOMTile(resetSignal: Bool = null) extends rocket.Tile(resetSignal)
      }.getOrElse(icache.io.mem)
 
    // Cache Counters
-   val cache_counters = new CacheCounters()
-   cache_counters.dc_miss := dcache.io.mem.acquire.fire().toBool
-   cache_counters.ic_miss := icache.io.mem.acquire.fire()
-   core.io.counters := cache_counters
+   core.io.counters.dc_miss := dcache.io.mem.acquire.fire().toBool
+   core.io.counters.ic_miss := icache.io.mem.acquire.fire()
 }
 
 }

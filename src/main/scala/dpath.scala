@@ -1028,18 +1028,19 @@ class DatPath() extends Module with BOOMCoreParameters
                                            (wb_uop.dst_rtype === RT_FIX || wb_uop.dst_rtype === RT_FLT)
 
             val data = exe_units(w).io.resp(j).bits.data
-            if (exe_units(w).has_fpu)
+            if (exe_units(w).has_fpu || (exe_units(w).is_mem_unit && !params(BuildFPU).isEmpty))
             {
-               rob.io.fflags(f_cnt) <> exe_units(w).io.resp(j).bits.fflags
-               f_cnt += 1
+               if (exe_units(w).has_fpu)
+               {
+                  rob.io.fflags(f_cnt) <> exe_units(w).io.resp(j).bits.fflags
+                  f_cnt += 1
+               }
                val unrec_s = hardfloat.recodedFloatNToFloatN(data, 23, 9)
                val unrec_d = hardfloat.recodedFloatNToFloatN(data, 52, 12)
-               val unrec_out = Mux(wb_uop.fp_single, Cat(Fill(32, unrec_s(31)), unrec_s), unrec_d)
-               //val is_negnan_s = UInt(0xffffffff) === unrec_s && wb_uop.fp_single
+               val unrec_out     = Mux(wb_uop.fp_single, Cat(UInt(0,32), unrec_s), unrec_d)
                if (exe_units(w).uses_csr_wport && (j == 0))
                {
                   rob.io.debug_wb_wdata(cnt) := Mux(wb_uop.ctrl.csr_cmd != rocket.CSR.N, csr.io.rw.rdata,
-                                                //Mux(wb_uop.fp_val && wb_uop.dst_rtype === RT_FLT && is_negnan_s, UInt(0xffffffff),
                                                 Mux(wb_uop.fp_val && wb_uop.dst_rtype === RT_FLT, unrec_out,
                                                                                                   data))
                }
@@ -1052,7 +1053,7 @@ class DatPath() extends Module with BOOMCoreParameters
             {
                if (exe_units(w).uses_csr_wport && (j == 0))
                {
-                  rob.io.debug_wb_wdata(cnt) := Mux(wb_uop.ctrl.csr_cmd != rocket.CSR.N, csr.io.rw.rdata,data)
+                  rob.io.debug_wb_wdata(cnt) := Mux(wb_uop.ctrl.csr_cmd != rocket.CSR.N, csr.io.rw.rdata, data)
                }
                else
                {
@@ -1480,25 +1481,24 @@ class DatPath() extends Module with BOOMCoreParameters
       var new_commit_cnt = UInt(0)
       for (w <- 0 until COMMIT_WIDTH)
       {
-//         val commit_log_enabled = if (COMMIT_LOG_EI_ONLY) (csr.io.status.ie || com_uops(w).sret) else Bool(true)
-         val commit_log_enabled = if (COMMIT_LOG_EI_ONLY) (csr.io.status.ie) else Bool(true)
+         val priv = csr.io.status.prv
 
-         when (com_valids(w) && commit_log_enabled)
+         when (com_valids(w))
          {
             when (com_uops(w).dst_rtype === RT_FIX && com_uops(w).ldst != UInt(0))
             {
 //               printf("@@@ 0x%x (0x%x) x%d 0x%x |%d\n", Sext(com_uops(w).pc(vaddrBits,0), xLen), com_uops(w).inst, com_uops(w).inst(RD_MSB,RD_LSB), com_uops(w).debug_wdata, tsc_reg)
-               printf("@@@ 0x%x (0x%x) x%d 0x%x\n", Sext(com_uops(w).pc(vaddrBits,0), xLen), com_uops(w).inst, com_uops(w).inst(RD_MSB,RD_LSB), com_uops(w).debug_wdata)
+               printf("@@@ %d 0x%x (0x%x) x%d 0x%x\n", priv, Sext(com_uops(w).pc(vaddrBits,0), xLen), com_uops(w).inst, com_uops(w).inst(RD_MSB,RD_LSB), com_uops(w).debug_wdata)
             }
             .elsewhen (com_uops(w).dst_rtype === RT_FLT)
             {
 //               printf("@@@ 0x%x (0x%x) f%d 0x%x |%d\n", Sext(com_uops(w).pc(vaddrBits,0), xLen), com_uops(w).inst, com_uops(w).inst(RD_MSB,RD_LSB), com_uops(w).debug_wdata, tsc_reg)
-               printf("@@@ 0x%x (0x%x) f%d 0x%x\n", Sext(com_uops(w).pc(vaddrBits,0), xLen), com_uops(w).inst, com_uops(w).inst(RD_MSB,RD_LSB), com_uops(w).debug_wdata)
+               printf("@@@ %d 0x%x (0x%x) f%d 0x%x\n", priv, Sext(com_uops(w).pc(vaddrBits,0), xLen), com_uops(w).inst, com_uops(w).inst(RD_MSB,RD_LSB), com_uops(w).debug_wdata)
             }
             .otherwise
             {
 //               printf("@@@ 0x%x (0x%x) |%d\n\n", Sext(com_uops(w).pc(vaddrBits,0), xLen), com_uops(w).inst, tsc_reg)
-               printf("@@@ 0x%x (0x%x)\n", Sext(com_uops(w).pc(vaddrBits,0), xLen), com_uops(w).inst)
+               printf("@@@ %d 0x%x (0x%x)\n", priv, Sext(com_uops(w).pc(vaddrBits,0), xLen), com_uops(w).inst)
             }
          }
       }
