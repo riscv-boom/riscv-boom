@@ -458,14 +458,14 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    assert (!(can_fire_store_commit && saq_is_virtual(stq_execute_head)),
             "a committed store is trying to fire to memory that has a bad paddr.")
 
-//   assert (stq_entry_val(stq_execute_head) ||
-//            stq_head === stq_execute_head || stq_tail === stq_execute_head,
-//            "stq_execute_head got off track.")
-   when (!(stq_entry_val(stq_execute_head) ||
-            stq_head === stq_execute_head || stq_tail === stq_execute_head))
-   {
-      printf("stq_execute_head got off track.: %d, %d, %d", stq_head, stq_execute_head, stq_tail)
-   }
+   assert (stq_entry_val(stq_execute_head) ||
+            stq_head === stq_execute_head || stq_tail === stq_execute_head,
+            "stq_execute_head got off track.")
+//   when (!(stq_entry_val(stq_execute_head) ||
+//            stq_head === stq_execute_head || stq_tail === stq_execute_head))
+//   {
+//      printf("stq_execute_head got off track.: %d, %d, %d", stq_head, stq_execute_head, stq_tail)
+//   }
 
 
    //-------------------------
@@ -530,7 +530,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
 
    when (will_fire_sta_incoming || will_fire_sta_retry)
    {
-      saq_val       (exe_tlb_uop.stq_idx)      := Bool(true)
+      saq_val       (exe_tlb_uop.stq_idx)      := !pf_st // prevent AMOs from executing!
       saq_addr      (exe_tlb_uop.stq_idx)      := Mux(tlb_miss, exe_vaddr, exe_tlb_paddr)
       stq_uop       (exe_tlb_uop.stq_idx).pdst := exe_tlb_uop.pdst // needed for amo's TODO this is expensive, can we get around this?
       saq_is_virtual(exe_tlb_uop.stq_idx)      := tlb_miss
