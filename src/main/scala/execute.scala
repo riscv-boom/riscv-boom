@@ -360,9 +360,16 @@ class MemExeUnit extends ExecutionUnit(num_rf_read_ports = 2 // TODO make this 1
       val rec_d = hardfloat.floatNToRecodedFloatN(io.dmem.resp.bits.data, 52, 12)
       val fp_load_data_recoded = Mux(load_single, Cat(SInt(-1, 32), rec_s), rec_d)
 
-      memresp_data = Mux(lsu.io.forward_val, lsu.io.forward_data
-                   , Mux(memresp_uop.fp_val, fp_load_data_recoded
-                                           , io.dmem.resp.bits.data_subword))
+      val typ_f = lsu.io.forward_uop.mem_typ
+      val load_single_f = typ_f === MT_W || typ_f === MT_WU
+      val rec_s_f = hardfloat.floatNToRecodedFloatN(lsu.io.forward_data, 23, 9)
+      val rec_d_f = hardfloat.floatNToRecodedFloatN(lsu.io.forward_data, 52, 12)
+      val fp_load_data_recoded_forwarded = Mux(load_single_f, Cat(SInt(-1,32), rec_s_f), rec_d_f)
+
+      memresp_data = Mux(lsu.io.forward_val && !lsu.io.forward_uop.fp_val, lsu.io.forward_data,
+                     Mux(lsu.io.forward_val && lsu.io.forward_uop.fp_val , fp_load_data_recoded_forwarded,
+                     Mux(memresp_uop.fp_val                              , fp_load_data_recoded,
+                                                                           io.dmem.resp.bits.data_subword)))
    }
 
 
@@ -593,6 +600,7 @@ class ALUMemExeUnit(is_branch_unit    : Boolean = false
       // TODO CODE REVIEW throwing resources to try and salvage critical path...
       //recode FP values
       // I'm doing this twice for two different paths (cache path and forwarding path)!
+      // Also, this code is duplicated elsewhere - can we refactor this out?
       val typ = io.dmem.resp.bits.typ
       val load_single = typ === MT_W || typ === MT_WU
       val rec_s = hardfloat.floatNToRecodedFloatN(io.dmem.resp.bits.data, 23, 9)
