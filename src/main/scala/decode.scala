@@ -328,7 +328,7 @@ class DecodeUnit() extends Module
    var decode_table = XDecode.table
    if (!params(BuildFPU).isEmpty) decode_table ++= FDecode.table
 
-   val cs = new CtrlSigs().decode(uop.inst, decode_table)
+   val cs = Wire(new CtrlSigs()).decode(uop.inst, decode_table)
 
    // Exception Handling
    val id_illegal_insn = !cs.legal ||

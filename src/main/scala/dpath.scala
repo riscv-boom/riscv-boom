@@ -379,7 +379,7 @@ class DatPath() extends Module with BOOMCoreParameters
 //   require(num_wakeup_ports == num_rf_write_ports) TODO
 
    val register_width = if (params(BuildFPU).isEmpty) xLen else 65
-   val bypasses = (new BypassData(num_total_bypass_ports, register_width))
+   val bypasses = Wire(new BypassData(num_total_bypass_ports, register_width))
 
    val issue_width           = exe_units.length // TODO allow exe_units to have multiple issue ports?
    val iss_valids            = Wire(Vec(issue_width, Bool()))
