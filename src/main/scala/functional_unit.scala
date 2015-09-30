@@ -88,7 +88,7 @@ class FuncUnitReq(data_width: Int) extends BOOMCoreBundle
 
    val kill = Bool() // kill everything
 
-   override def clone = new FuncUnitReq(data_width).asInstanceOf[this.type]
+   override def cloneType: this.type = new FuncUnitReq(data_width).asInstanceOf[this.type]
 }
 
 class FuncUnitResp(data_width: Int) extends BOOMCoreBundle
@@ -99,7 +99,7 @@ class FuncUnitResp(data_width: Int) extends BOOMCoreBundle
    val addr = UInt(width = vaddrBits+1) // only for maddr -> LSU
    val mxcpt = new ValidIO(Bits(width=rocket.Causes.all.max)) //only for maddr->LSU
 
-   override def clone = new FuncUnitResp(data_width).asInstanceOf[this.type]
+   override def cloneType: this.type = new FuncUnitResp(data_width).asInstanceOf[this.type]
 }
 
 class BypassData(num_bypass_ports: Int, data_width: Int) extends BOOMCoreBundle

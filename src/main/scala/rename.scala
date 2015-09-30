@@ -41,7 +41,7 @@ class RenameMapTableElementIo(pl_width: Int) extends BOOMCoreBundle
    val commit_pdst         = UInt(INPUT, PREG_SZ)
    val committed_element   = UInt(OUTPUT, PREG_SZ)
 
-   override def clone = new RenameMapTableElementIo(pl_width).asInstanceOf[this.type]
+   override def cloneType: this.type = new RenameMapTableElementIo(pl_width).asInstanceOf[this.type]
 }
 
 class RenameMapTableElement(pipeline_width: Int) extends Module with BOOMCoreParameters

@@ -29,7 +29,7 @@ class RedirectRequest (fetch_width: Int) extends BOOMCoreBundle
    val br_pc   = UInt(width = vaddrBits+1) // PC of the instruction changing control flow (to update the BTB with jumps)
    val idx     = UInt(width = log2Up(fetch_width)) // idx of br in fetch bundle (to mask out the appropriate fetch instructions)
    val is_jump = Bool() // (only valid if redirect request is valid)
-  override def clone = new RedirectRequest(fetch_width).asInstanceOf[this.type]
+  override def cloneType: this.type = new RedirectRequest(fetch_width).asInstanceOf[this.type]
 }
 
 // this information is shared across the entire fetch packet, stored in the ROB

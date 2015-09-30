@@ -25,7 +25,7 @@ class ExeUnitResp(data_width: Int) extends BOOMCoreBundle
    val uop = new MicroOp()
    val data = Bits(width = data_width)
    val fflags = new ValidIO(new FFlagsResp) // write fflags to ROB
-   override def clone = new ExeUnitResp(data_width).asInstanceOf[this.type]
+   override def cloneType: this.type = new ExeUnitResp(data_width).asInstanceOf[this.type]
 }
 
 class FFlagsResp extends BOOMCoreBundle
