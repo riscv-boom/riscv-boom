@@ -34,7 +34,7 @@ trait BOOMDebugConstants
    val mgt   = if (DEBUG_ENABLE_COLOR) "\u001b[1;35m" else " "
    val cyn   = if (DEBUG_ENABLE_COLOR) "\u001b[1;36m" else " "
    val wht   = if (DEBUG_ENABLE_COLOR) "\u001b[1;37m" else " "
-   val end   = if (DEBUG_ENABLE_COLOR) "\u001b[0m"    else ""
+   val end   = if (DEBUG_ENABLE_COLOR) "\u001b[0m"    else " "
 
    val b_blk = if (DEBUG_ENABLE_COLOR) "\u001b[2;30m" else " "
    val b_red = if (DEBUG_ENABLE_COLOR) "\u001b[2;31m" else " "

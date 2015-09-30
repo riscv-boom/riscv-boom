@@ -179,7 +179,7 @@ class RenameFreeList(num_phys_registers: Int // number of physical registers
 
    // track all allocations that have occurred since branch passed by
    // can quickly reset pipeline on branch mispredict
-   val allocation_lists = Vec.fill(MAX_BR_COUNT) { Reg(outType=Bits(width = num_phys_registers)) }
+   val allocation_lists = Reg(Vec(MAX_BR_COUNT, Bits(width = num_phys_registers)))
 
    val enq_mask = Wire(Vec(pl_width, Bits(width = num_phys_registers))) // TODO why is this a Vec? can I do this all on one bit-vector?
 
@@ -308,8 +308,8 @@ class RenameFreeList(num_phys_registers: Int // number of physical registers
    {
       val committed_free_list = Reg(init=(~Bits(1,num_phys_registers)))
 
-      val com_mask = Vec.fill(pl_width) {Bits(width=num_phys_registers)}
-      val stale_mask = Vec.fill(pl_width) {Bits(width=num_phys_registers)}
+      val com_mask = Wire(Vec(pl_width, Bits(width=num_phys_registers)))
+      val stale_mask = Wire(Vec(pl_width, Bits(width=num_phys_registers)))
       for (w <- 0 until pl_width)
       {
          com_mask(w) := Bits(0,width=num_phys_registers)

@@ -136,44 +136,44 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
 
    // Load-Address Queue
 //   val laq_addr_val  = Reg(init=UInt(0,width=num_ld_entries))  //TODO buggy due to chisel - try again soon
-   val laq_addr_val  = Vec.fill(num_ld_entries) { Reg(Bool()) }
+   val laq_addr_val  = Reg(Vec(num_ld_entries, Bool()))
    val laq_addr      = Mem(UInt(width=coreMaxAddrBits), num_ld_entries)
 
-   val laq_allocated = Vec.fill(num_ld_entries) { Reg(Bool()) } // entry has been allocated
-   val laq_is_virtual= Vec.fill(num_ld_entries) { Reg(Bool()) } // address in LAQ is a virtual address. There was a tlb_miss and a retry is required.
-   val laq_executed  = Vec.fill(num_ld_entries) { Reg(Bool()) } // load has been issued to memory (immediately set this bit)
-   val laq_succeeded = Vec.fill(num_ld_entries) { Reg(Bool()) } // load has returned from memory, but may still have an ordering failure
-//   val laq_request   = Vec.fill(num_ld_entries) { Reg(resetVal = Bool(false)) } // TODO sleeper load requesting issue to memory (perhaps stores broadcast, sees its store-set finished up)
-   val laq_failure   = Vec.fill(num_ld_entries) { Reg(init = Bool(false)) } // ordering fail, must retry (at commit time, which requires a rollback)
-   val laq_uop       = Vec.fill(num_ld_entries) { Reg(new MicroOp()) }
+   val laq_allocated = Reg(Vec(num_ld_entries, Bool())) // entry has been allocated
+   val laq_is_virtual= Reg(Vec(num_ld_entries, Bool())) // address in LAQ is a virtual address. There was a tlb_miss and a retry is required.
+   val laq_executed  = Reg(Vec(num_ld_entries, Bool())) // load has been issued to memory (immediately set this bit)
+   val laq_succeeded = Reg(Vec(num_ld_entries, Bool())) // load has returned from memory, but may still have an ordering failure
+   val laq_failure   = Reg(init = Vec.fill(num_ld_entries) { Bool(false) })  // ordering fail, must retry (at commit time, which requires a rollback)
+   val laq_uop       = Reg(Vec(num_ld_entries, new MicroOp()))
    //laq_uop.stq_idx between oldest and youngest (dep_mask can't establish age :( ), "aka store coloring" if you're Intel
+//   val laq_request   = Vec.fill(num_ld_entries) { Reg(resetVal = Bool(false)) } // TODO sleeper load requesting issue to memory (perhaps stores broadcast, sees its store-set finished up)
 
 
    // track window of stores we depend on
-   val laq_st_dep_mask = Vec.fill(num_ld_entries) { Reg(Bits(width = num_st_entries)) }// list of stores we might depend (cleared when a store commits)
+   val laq_st_dep_mask        = Reg(Vec(num_ld_entries, Bits(width = num_st_entries))) // list of stores we might depend (cleared when a store commits)
+   val laq_forwarded_std_val  = Reg(Vec(num_ld_entries, Bool()))
+   val laq_forwarded_stq_idx  = Reg(Vec(num_ld_entries, UInt(width = MEM_ADDR_SZ)))    // which store did get store-load forwarded data from? compare later to see I got things correct
+   val debug_laq_put_to_sleep = Reg(Vec(num_ld_entries, Bool()))                       // did a load get put to sleep at least once?
 //   val laq_st_wait_mask = Vec.fill(num_ld_entries) { Reg() { Bits(width = num_st_entries) } }// TODO list of stores we might depend on whose addresses are not yet computed
-   val laq_forwarded_std_val= Vec.fill(num_ld_entries) { Reg(Bool()) }
-   val laq_forwarded_stq_idx= Vec.fill(num_ld_entries) { Reg(UInt(width = MEM_ADDR_SZ)) }  // which store did get store-load forwarded data from? compare later to see I got things correct
 //   val laq_block_val    = Vec.fill(num_ld_entries) { Reg() { Bool() } }                     // TODO something is blocking us from executing
 //   val laq_block_id     = Vec.fill(num_ld_entries) { Reg() { UInt(width = MEM_ADDR_SZ) } }  // TODO something is blocking us from executing, listen for this ID to wakeup
-   val debug_laq_put_to_sleep = Vec.fill(num_ld_entries) { Reg(Bool()) }                      // did a load get put to sleep at least once?
 
    // Store-Address Queue
-   val saq_val       = Vec.fill(num_st_entries) { Reg(Bool()) }
-   val saq_is_virtual= Vec.fill(num_ld_entries) { Reg(Bool()) } // address in SAQ is a virtual address. There was a tlb_miss and a retry is required.
+   val saq_val       = Reg(Vec(num_st_entries, Bool()))
+   val saq_is_virtual= Reg(Vec(num_ld_entries, Bool())) // address in SAQ is a virtual address. There was a tlb_miss and a retry is required.
    val saq_addr      = Mem(UInt(width=coreMaxAddrBits),num_st_entries)
 
    // Store-Data Queue
-   val sdq_val       = Vec.fill(num_st_entries) { Reg(Bool()) }
-   val sdq_data      = Vec.fill(num_st_entries) { Reg(Bits(width = xLen)) }
+   val sdq_val       = Reg(Vec(num_st_entries, Bool()))
+   val sdq_data      = Reg(Vec(num_st_entries, Bits(width = xLen)))
 
    // Shared Store Queue Information
-   val stq_uop       = Vec.fill(num_st_entries) { Reg(new MicroOp()) }
+   val stq_uop       = Reg(Vec(num_st_entries, new MicroOp()))
    // TODO not convinced I actually need stq_entry_val; I think other ctrl signals gate this off
-   val stq_entry_val = Vec.fill(num_st_entries) { Reg(Bool()) } // this may be valid, but not TRUE (on exceptions, this doesn't get cleared but STQ_TAIL gets moved)
-   val stq_executed  = Vec.fill(num_st_entries) { Reg(Bool()) } // sent to mem
-   val stq_succeeded = Vec.fill(num_st_entries) { Reg(Bool()) } // returned  TODO is this needed, or can we just advance the stq_head?
-   val stq_committed = Vec.fill(num_st_entries) { Reg(Bool()) } // the ROB has committed us, so we can now send our store to memory
+   val stq_entry_val = Reg(Vec(num_st_entries, Bool())) // this may be valid, but not TRUE (on exceptions, this doesn't get cleared but STQ_TAIL gets moved)
+   val stq_executed  = Reg(Vec(num_st_entries, Bool())) // sent to mem
+   val stq_succeeded = Reg(Vec(num_st_entries, Bool())) // returned  TODO is this needed, or can we just advance the stq_head?
+   val stq_committed = Reg(Vec(num_st_entries, Bool())) // the ROB has committed us, so we can now send our store to memory
 
 
    val laq_head = Reg(UInt())

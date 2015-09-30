@@ -57,11 +57,11 @@ class RegisterRead(issue_width: Int
    val rrd_valids       = Wire(Vec(issue_width, Bool()))
    val rrd_uops         = Wire(Vec(issue_width, new MicroOp()))
 
-   val exe_reg_valids   = Vec.fill(issue_width) { Reg(init = Bool(false)) }
-   val exe_reg_uops     = Vec.fill(issue_width) { Reg(outType = new MicroOp())  }
-   val exe_reg_rs1_data = Vec.fill(issue_width) { Reg(outType = Bits(width = register_width))  }
-   val exe_reg_rs2_data = Vec.fill(issue_width) { Reg(outType = Bits(width = register_width))  }
-   val exe_reg_rs3_data = Vec.fill(issue_width) { Reg(outType = Bits(width = register_width))  }
+   val exe_reg_valids   = Reg(init = Vec.fill(issue_width) { Bool(false) })
+   val exe_reg_uops     = Reg(Vec(issue_width, new MicroOp()))
+   val exe_reg_rs1_data = Reg(Vec(issue_width, Bits(width = register_width)))
+   val exe_reg_rs2_data = Reg(Vec(issue_width, Bits(width = register_width)))
+   val exe_reg_rs3_data = Reg(Vec(issue_width, Bits(width = register_width)))
 
 
    //-------------------------------------------------------------

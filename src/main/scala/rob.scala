@@ -280,9 +280,9 @@ class Rob(width: Int
       def MatchBank(bank_idx: UInt): Bool = (bank_idx === UInt(w))
 
       // one bank
-      val rob_val       = Vec.fill(num_rob_rows) {Reg(init = Bool(false))}
+      val rob_val       = Reg(init = Vec.fill(num_rob_rows){Bool(false)})
       val rob_bsy       = Mem(Bool(), num_rob_rows)
-      val rob_uop       = Vec.fill(num_rob_rows) {Reg(new MicroOp())} // one write port - dispatch
+      val rob_uop       = Reg(Vec(num_rob_rows, new MicroOp())) // one write port - dispatch
                                                            // fake write ports - clearing on commit,
                                                            // rollback, branch_kill
       val rob_exception = Mem(Bool(), num_rob_rows)        // TODO consolidate into the com_uop? what's the best for Chisel?
