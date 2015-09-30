@@ -120,16 +120,10 @@ class MicroOp extends BOOMCoreBundle
    val br_tag           = UInt(width = BR_TAG_SZ)
 
    val br_was_mispredicted = Bool()                   // (for stat tracking)
-
-   val fetch_pc_lob     = UInt(width = log2Up(FETCH_WIDTH*coreInstBytes)) // track which PC was used to fetch this instruction
-//   val btb_resp_valid   = Bool()                      // btb hit on this fetch packet (necessary to prevent duplicate entries in BTB)
-//   val btb_resp         = new rocket.BTBResp
-//   val btb_hit          = Bool()                      // btb hit on this instruction
-
    val br_prediction    = new BranchPrediction
 
-//   val bpd_taken        = Bool()                      // bht predicted TAKEN. TODO can we conslidate this with the BTB taken? this MUST be true IF the BHT's prediction was used (and false if BTB was used).
-//   val bpd_history      = Bits(width = GHIST_LENGTH)  // TODO remove and push into the ROB
+   val fetch_pc_lob     = UInt(width = log2Up(FETCH_WIDTH*coreInstBytes)) // track which PC was used to fetch this instruction
+
 
    val imm_packed       = Bits(width = LONGEST_IMM_SZ) // densely pack the imm in decode... then translate and sign-extend in execute
    val csr_addr         = UInt(width = CSR_ADDR_SZ) // only used for critical path reasons in Exe
@@ -194,7 +188,7 @@ class FetchBundle extends Bundle with BOOMCoreParameters
 
    val pred_resp   = new BranchPredictionResp
    val predictions = Vec.fill(FETCH_WIDTH) {new BranchPrediction}
-  override def clone = new FetchBundle().asInstanceOf[this.type]
+  override def cloneType: this.type = new FetchBundle().asInstanceOf[this.type]
 }
 
 
@@ -242,40 +236,40 @@ class DatPath() extends Module with BOOMCoreParameters
    // Pipeline State Registers
    // Forward Declared Wires
 
-   val flush_take_pc  = Bool()  // redirect PC due to a flush
-   val flush_pc       = UInt()
-   val flush_pipeline = Bool()  // kill entire pipeline (i.e., exception, load misspeculations)
+   val flush_take_pc  = Wire(Bool())  // redirect PC due to a flush
+   val flush_pc       = Wire(UInt())
+   val flush_pipeline = Wire(Bool())  // kill entire pipeline (i.e., exception, load misspeculations)
 
    // Instruction Fetch State
-   val if_pc_next     = UInt(width = vaddrBits+1)
-   val csr_take_pc    = Bool()
+   val if_pc_next     = Wire(UInt(width = vaddrBits+1))
+   val csr_take_pc    = Wire(Bool())
 
 
    // Branch Predict State
-   val bp2_take_pc       = Bool()
-   val bp2_pred_target   = UInt(width=vaddrBits+1)
-   val bp2_pc_of_br_inst = UInt(width=vaddrBits+1)
-   val bp2_is_jump       = Bool()
+   val bp2_take_pc       = Wire(Bool())
+   val bp2_pred_target   = Wire(UInt(width=vaddrBits+1))
+   val bp2_pc_of_br_inst = Wire(UInt(width=vaddrBits+1))
+   val bp2_is_jump       = Wire(Bool())
 
    // Instruction Decode State
-   val dec_valids     = Vec.fill(DECODE_WIDTH) {Bool()}  // is the incoming, decoded instruction valid? It may be held up though.
-   val dec_uops       = Vec.fill(DECODE_WIDTH) {new MicroOp()}
-   val dec_will_fire  = Vec.fill(DECODE_WIDTH) {Bool()}  // can the instruction fire beyond decode? (can still be stopped in ren or dis)
-   val dec_rdy        = Bool()
+   val dec_valids     = Wire(Vec(DECODE_WIDTH, Bool()))  // is the incoming, decoded instruction valid? It may be held up though.
+   val dec_uops       = Wire(Vec(DECODE_WIDTH, new MicroOp()))
+   val dec_will_fire  = Wire(Vec(DECODE_WIDTH, Bool()))  // can the instruction fire beyond decode? (can still be stopped in ren or dis)
+   val dec_rdy        = Wire(Bool())
 
-   val rob_rdy        = Bool()
-   val laq_full       = Bool()
-   val stq_full       = Bool()
+   val rob_rdy        = Wire(Bool())
+   val laq_full       = Wire(Bool())
+   val stq_full       = Wire(Bool())
 
 
    // Register Rename State
-   val ren_insts_can_proceed = Vec.fill(DECODE_WIDTH) { Bool() }
+   val ren_insts_can_proceed = Wire(Vec(DECODE_WIDTH, Bool()))
 
    // Dispatch State
-   val dis_valid      = Bool() // used to insert into ROB, IW TODO: (let uops have valid signals?)
-   val dis_insts_can_proceed = Vec.fill(DISPATCH_WIDTH) { Bool() }
-   val dis_mask       = Vec.fill(DISPATCH_WIDTH) { Bool() } // true if uop WILL enter IW/ROB
-   val dis_uops       = Vec.fill(DISPATCH_WIDTH) { new MicroOp() }
+   val dis_valid      = Wire(Bool()) // used to insert into ROB, IW TODO: (let uops have valid signals?)
+   val dis_insts_can_proceed = Wire(Vec(DISPATCH_WIDTH, Bool()))
+   val dis_mask       = Wire(Vec(DISPATCH_WIDTH, Bool())) // true if uop WILL enter IW/ROB
+   val dis_uops       = Wire(Vec(DISPATCH_WIDTH, new MicroOp()))
 
 
    // Issue State/Register Read/Execute State
@@ -385,15 +379,15 @@ class DatPath() extends Module with BOOMCoreParameters
 //   require(num_wakeup_ports == num_rf_write_ports) TODO
 
    val register_width = if (params(BuildFPU).isEmpty) xLen else 65
-   val bypasses = new BypassData(num_total_bypass_ports, register_width)
+   val bypasses = (new BypassData(num_total_bypass_ports, register_width))
 
    val issue_width           = exe_units.length // TODO allow exe_units to have multiple issue ports?
-   val iss_valids            = Vec.fill(issue_width) {Bool()}
-   val iss_uops              = Vec.fill(issue_width) {new MicroOp()}
+   val iss_valids            = Wire(Vec(issue_width, Bool()))
+   val iss_uops              = Wire(Vec(issue_width, new MicroOp()))
 
-   val br_unit               = new BranchUnitResp()
+   val br_unit               = Wire(new BranchUnitResp())
 
-   val watchdog_trigger      = Bool()
+   val watchdog_trigger      = Wire(Bool())
 
    // Memory State
    var lsu_io:LoadStoreUnitIo = null
@@ -403,21 +397,21 @@ class DatPath() extends Module with BOOMCoreParameters
    // Writeback State
 
    // Commit Stage
-   val com_valids            = Vec.fill(DECODE_WIDTH) {Bool()}
-   val com_uops              = Vec.fill(DECODE_WIDTH) {new MicroOp()}
-   val com_exception         = Bool() // ROB or CSRFile is asserting an exception
-   val com_exc_cause         = UInt()
-   val com_exc_badvaddr      = UInt()
-   val com_handling_exc      = Bool()
+   val com_valids            = Wire(Vec(DECODE_WIDTH, Bool()))
+   val com_uops              = Wire(Vec(DECODE_WIDTH, new MicroOp()))
+   val com_exception         = Wire(Bool()) // ROB or CSRFile is asserting an exception
+   val com_exc_cause         = Wire(UInt())
+   val com_exc_badvaddr      = Wire(UInt())
+   val com_handling_exc      = Wire(Bool())
 
-   val com_fflags_val        = Bool()
-   val com_fflags            = Bits()
+   val com_fflags_val        = Wire(Bool())
+   val com_fflags            = Wire(Bits())
 
-   val com_rbk_valids        = Vec.fill(DECODE_WIDTH) {Bool()}
+   val com_rbk_valids        = Wire(Vec(DECODE_WIDTH, Bool()))
 
-   val lsu_misspec           = Bool()
+   val lsu_misspec           = Wire(Bool())
 
-   val rob_empty             = Bool()
+   val rob_empty             = Wire(Bool())
 
 
    //-------------------------------------------------------------
@@ -428,8 +422,8 @@ class DatPath() extends Module with BOOMCoreParameters
 
    val kill_frontend = br_unit.brinfo.mispredict || flush_pipeline
 
-   val fetchbuffer_kill = Bool()
-   val fetch_bundle = new FetchBundle()
+   val fetchbuffer_kill = Wire(Bool())
+   val fetch_bundle = Wire(new FetchBundle())
 
    val FetchBuffer = Module(new Queue(gen=new FetchBundle,
                                 entries=FETCH_BUFFER_SZ,
@@ -437,7 +431,7 @@ class DatPath() extends Module with BOOMCoreParameters
                                 flow=params(EnableFetchBufferFlowThrough),
                                 _reset=(fetchbuffer_kill || reset.toBool)))
 
-   val if_stalled = Bool() // if FetchBuffer backs up, we have to stall the front-end
+   val if_stalled = Wire(Bool()) // if FetchBuffer backs up, we have to stall the front-end
    if_stalled := !(FetchBuffer.io.enq.ready)
 
    val take_pc = br_unit.take_pc ||
@@ -469,9 +463,16 @@ class DatPath() extends Module with BOOMCoreParameters
    }
 
    // TODO only update in BP2 for JALs?
-   io.imem.btb_update.valid := (br_unit.btb_update_valid || (bp2_take_pc && bp2_is_jump && !if_stalled && !br_unit.take_pc)) &&
+   if (params(EnableBTB))
+   {
+      io.imem.btb_update.valid := (br_unit.btb_update_valid || (bp2_take_pc && bp2_is_jump && !if_stalled && !br_unit.take_pc)) &&
                                           !flush_take_pc &&
                                           !csr_take_pc
+   } 
+   else 
+   {
+      io.imem.btb_update.valid := Bool(false)
+   }
 
    // if branch unit mispredicts, jump in decode is no longer valid
    io.imem.btb_update.bits.pc         := Mux(br_unit.btb_update_valid, br_unit.btb_update.pc, io.imem.resp.bits.pc)
@@ -509,7 +510,7 @@ class DatPath() extends Module with BOOMCoreParameters
    bp2_pc_of_br_inst := bpd_stage.io.req.bits.br_pc
    bp2_is_jump := bpd_stage.io.req.bits.is_jump
 
-   val bpd_kill_mask = Bits(width = FETCH_WIDTH)
+   val bpd_kill_mask = Wire(Bits(width = FETCH_WIDTH))
    bpd_kill_mask := Fill(bp2_take_pc, FETCH_WIDTH) &
                     (SInt(-1, FETCH_WIDTH) << UInt(1) << bpd_stage.io.req.bits.idx)
    fetch_bundle.mask := (io.imem.resp.bits.mask & ~bpd_kill_mask)
@@ -550,7 +551,7 @@ class DatPath() extends Module with BOOMCoreParameters
    var dec_stall_next_inst = Bool(false)
 
    // stall fetch/dcode because we ran out of branch tags
-   val branch_mask_full = Vec.fill(DECODE_WIDTH) { Bool() }
+   val branch_mask_full = Wire(Vec(DECODE_WIDTH, Bool()))
 
    for (w <- 0 until DECODE_WIDTH)
    {
@@ -623,8 +624,8 @@ class DatPath() extends Module with BOOMCoreParameters
    // LD/ST Unit Allocation Logic
 
    // TODO this is dupliciated logic with the the LSU... do we need ldq_idx/stq eisewhere?
-   val new_ldq_idx = UInt()
-   val new_stq_idx = UInt()
+   val new_ldq_idx = Wire(UInt())
+   val new_stq_idx = Wire(UInt())
 
    var new_lidx = new_ldq_idx
    var new_sidx = new_stq_idx
@@ -703,7 +704,7 @@ class DatPath() extends Module with BOOMCoreParameters
    //-------------------------------------------------------------
 
    // TODO get rid of, let the ROB handle this...?
-   val dis_curr_rob_row_idx = UInt(width = ROB_ADDR_SZ)
+   val dis_curr_rob_row_idx = Wire(UInt(width = ROB_ADDR_SZ))
 
    for (w <- 0 until DECODE_WIDTH)
    {
@@ -912,8 +913,8 @@ class DatPath() extends Module with BOOMCoreParameters
    //-------------------------------------------------------------
    //-------------------------------------------------------------
 
-   val com_st_mask = Vec.fill(DECODE_WIDTH) {Bool()}
-   val com_ld_mask = Vec.fill(DECODE_WIDTH) {Bool()}
+   val com_st_mask = Wire(Vec(DECODE_WIDTH, Bool()))
+   val com_ld_mask = Wire(Vec(DECODE_WIDTH, Bool()))
 
 
    // enqueue basic store info in Decode
@@ -1181,8 +1182,10 @@ class DatPath() extends Module with BOOMCoreParameters
 //      csr.io.uarch_counters(1)  := br_unit.brinfo.mispredict
       csr.io.uarch_counters(2)  := !rob_rdy
       csr.io.uarch_counters(3)  := laq_full
-      csr.io.uarch_counters(4)  := stq_full
-      csr.io.uarch_counters(5)  := !issue_unit.io.dis_readys.reduce(_|_)
+//      csr.io.uarch_counters(4)  := stq_full
+      csr.io.uarch_counters(4) := PopCount((Range(0,COMMIT_WIDTH)).map{w => com_valids(w) && (com_uops(w).is_store || com_uops(w).is_load)})
+      csr.io.uarch_counters(5)  := io.counters.dc_miss
+//      csr.io.uarch_counters(5)  := !issue_unit.io.dis_readys.reduce(_|_)
 //      csr.io.uarch_counters(6)  := branch_mask_full.reduce(_|_)
 //      csr.io.uarch_counters(6)  := io.counters.ic_miss
       csr.io.uarch_counters(6)  := br_unit.brinfo.valid
@@ -1246,7 +1249,7 @@ class DatPath() extends Module with BOOMCoreParameters
          , if_pc_next
          , if_stalled
       // Fetch Stage 2
-         , Mux(io.imem.resp.valid && !fetchbuffer_kill, Str(mgt + "V" + end), Str(grn + "-" + end))
+         , Mux(io.imem.resp.valid && !fetchbuffer_kill, Str(mgt + "v" + end), Str(grn + "-" + end))
          , io.imem.resp.bits.pc
          , io.imem.resp.bits.mask
          , InstsStr(io.imem.resp.bits.data.toBits, FETCH_WIDTH)
@@ -1297,7 +1300,7 @@ class DatPath() extends Module with BOOMCoreParameters
       for (w <- 0 until DECODE_WIDTH)
       {
          printf("(%s%s) " + red + "DASM(%x)" + end + " |  "
-            , Mux(fetched_inst_valid && dec_fbundle.uops(w).valid && !dec_finished_mask(w), Str("V"), Str("-"))
+            , Mux(fetched_inst_valid && dec_fbundle.uops(w).valid && !dec_finished_mask(w), Str("v"), Str("-"))
             , Mux(dec_will_fire(w), Str("V"), Str("-"))
             , dec_fbundle.uops(w).inst
             )

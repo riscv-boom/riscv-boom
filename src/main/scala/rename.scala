@@ -181,15 +181,15 @@ class RenameFreeList(num_phys_registers: Int // number of physical registers
    // can quickly reset pipeline on branch mispredict
    val allocation_lists = Vec.fill(MAX_BR_COUNT) { Reg(outType=Bits(width = num_phys_registers)) }
 
-   val enq_mask = Vec.fill(pl_width) {Bits(width = num_phys_registers)} // TODO why is this a Vec? can I do this all on one bit-vector?
+   val enq_mask = Wire(Vec(pl_width, Bits(width = num_phys_registers))) // TODO why is this a Vec? can I do this all on one bit-vector?
 
    // ------------------------------------------
    // find new,free physical registers
 
    val requested_pregs_oh_array = Array.fill(pl_width,num_phys_registers){Bool(false)}
-   val requested_pregs_oh       = Vec.fill(pl_width){Bits(width=num_phys_registers)}
-   val requested_pregs          = Vec.fill(pl_width){UInt(width=log2Up(num_phys_registers))}
-   var allocated                = Vec.fill(pl_width){Bool()} // did each inst get allocated a register?
+   val requested_pregs_oh       = Wire(Vec(pl_width, Bits(width=num_phys_registers)))
+   val requested_pregs          = Wire(Vec(pl_width, UInt(width=log2Up(num_phys_registers))))
+   var allocated                = Wire(Vec(pl_width, Bool())) // did each inst get allocated a register?
 
    // init
    for (w <- 0 until pl_width)
@@ -200,7 +200,7 @@ class RenameFreeList(num_phys_registers: Int // number of physical registers
 
    for (i <- 1 until num_phys_registers) // note: p0 stays zero
    {
-      val next_allocated = Vec.fill(pl_width){Bool()}
+      val next_allocated = Wire(Vec(pl_width, Bool()))
       var can_allocate = free_list(i)
 
       for (w <- 0 until pl_width)
@@ -223,8 +223,8 @@ class RenameFreeList(num_phys_registers: Int // number of physical registers
 
    // ------------------------------------------
    // Calculate next Free List
-   val req_free_list = Bits(width = num_phys_registers)
-   val enq_free_list = Bits(width = num_phys_registers)
+   val req_free_list = Wire(Bits(width = num_phys_registers))
+   val enq_free_list = Wire(Bits(width = num_phys_registers))
    req_free_list := free_list
    enq_free_list := free_list
 
@@ -235,7 +235,7 @@ class RenameFreeList(num_phys_registers: Int // number of physical registers
 
    // track which allocation_lists just got cleared out by a branch,
    // to enforce a write priority to allocation_lists()
-   val br_cleared = Vec.fill(MAX_BR_COUNT) { Bool() }
+   val br_cleared = Wire(Vec(MAX_BR_COUNT, Bool()))
    for (i <- 0 until MAX_BR_COUNT) { br_cleared(i) := Bool(false) }
 
    for (w <- pl_width-1 to 0 by -1)
@@ -285,7 +285,7 @@ class RenameFreeList(num_phys_registers: Int // number of physical registers
 
    // Handle Misprediction
    //merge misspeculated allocation_list with free_list
-   val allocation_list = Bits(width = num_phys_registers)
+   val allocation_list = Wire(Bits(width = num_phys_registers))
    allocation_list := allocation_lists(io.br_mispredict_tag)
 
    when (io.br_mispredict_val)
@@ -464,8 +464,8 @@ class RenameStage(pl_width: Int, num_wb_ports: Int) extends Module with BOOMCore
 {
    val io = new RenameStageIO(pl_width, num_wb_ports)
 
-   val ren_br_vals = Vec.fill(pl_width) { Bool() }
-   val freelist_can_allocate = Vec.fill(pl_width) { Bool() }
+   val ren_br_vals = Wire(Vec(pl_width, Bool()))
+   val freelist_can_allocate = Wire(Vec(pl_width, Bool()))
 
    val max_operands = if(params(BuildFPU).isEmpty) 2 else 3
 
@@ -540,7 +540,7 @@ class RenameStage(pl_width: Int, num_wb_ports: Int) extends Module with BOOMCore
    }
 
    // read out the map-table entries ASAP, then deal with bypassing busy-bits later
-   private val map_table_output = Vec.fill(pl_width*3) {UInt(width=PREG_SZ)}
+   private val map_table_output = Wire(Vec(pl_width*3, UInt(width=PREG_SZ)))
    def map_table_prs1(w:Int) = map_table_output(w+0*pl_width)
    def map_table_prs2(w:Int) = map_table_output(w+1*pl_width)
    def map_table_prs3(w:Int) = map_table_output(w+2*pl_width)
@@ -557,9 +557,9 @@ class RenameStage(pl_width: Int, num_wb_ports: Int) extends Module with BOOMCore
    }
 
    // Bypass the physical register mappings
-   val prs1_was_bypassed = Vec.fill(pl_width) {Bool()}
-   val prs2_was_bypassed = Vec.fill(pl_width) {Bool()}
-   val prs3_was_bypassed = Vec.fill(pl_width) {Bool()}
+   val prs1_was_bypassed = Wire(Vec(pl_width, Bool()))
+   val prs2_was_bypassed = Wire(Vec(pl_width, Bool()))
+   val prs3_was_bypassed = Wire(Vec(pl_width, Bool()))
 
    for (w <- 0 until pl_width)
    {
@@ -606,7 +606,7 @@ class RenameStage(pl_width: Int, num_wb_ports: Int) extends Module with BOOMCore
    //-------------------------------------------------------------
    // Busy Table
 
-   val freelist_req_pregs = Vec.fill(pl_width) {UInt(width=PREG_SZ)}
+   val freelist_req_pregs = Wire(Vec(pl_width, UInt(width=PREG_SZ)))
 
    // 3 WB ports for now
    // 1st is back-to-back bypassable ALU ops

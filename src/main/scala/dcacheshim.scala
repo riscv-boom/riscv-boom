@@ -54,11 +54,11 @@ class LoadReqSlot extends Module
    val uop        = Reg(outType=(new MicroOp()))
 
    // did the existing uop get killed by a branch?
-   val br_killed = Bool()
+   val br_killed = Wire(Bool())
    br_killed := Bool(false)
    // Note: we need to check/clr br_mask for incoming uop, despite previous MAddr
    // unit will have already performed that for us, the LSU waking up loads may not have.
-   val br_killed_incoming = Bool()
+   val br_killed_incoming = Wire(Bool())
    br_killed_incoming := Bool(false)
 
    // only allow the clearing of a valid entry
@@ -188,12 +188,12 @@ class DCacheShim extends Module with BOOMCoreParameters
 
    val inflight_load_buffer  = Vec.fill(max_num_inflight) {Module(new LoadReqSlot()).io}
 
-   val m1_inflight_tag  = Bits() // one cycle ago, aka now in the Mem1 Stage
-   val m2_inflight_tag  = Bits() // two cycles ago, aka now in the Mem2 Stage
+   val m1_inflight_tag  = Wire(Bits()) // one cycle ago, aka now in the Mem1 Stage
+   val m2_inflight_tag  = Wire(Bits()) // two cycles ago, aka now in the Mem2 Stage
    val m2_req_uop       = Reg(next=Reg(next=io.core.req.bits.uop)) // nack signals come two cycles later
 
    val enq_val = io.core.req.valid && (io.core.req.bits.uop.is_load || io.core.req.bits.uop.is_amo)
-   val enq_rdy = Bool()
+   val enq_rdy = Wire(Bool())
 
    for (i <- 0 until max_num_inflight)
    {
@@ -207,7 +207,7 @@ class DCacheShim extends Module with BOOMCoreParameters
 
 
    // dispatch/entry logic
-   val enq_idx = UInt(width = log2Up(max_num_inflight))
+   val enq_idx = Wire(UInt(width = log2Up(max_num_inflight)))
    enq_idx := UInt(0)
 
    for (i <- max_num_inflight-1 to 0 by -1)

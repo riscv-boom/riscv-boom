@@ -37,10 +37,6 @@ class RegisterFile( num_registers: Int
    {
       val read_ports = Vec.fill(num_read_ports) { (new RegisterFileReadPortIO(PREG_SZ, register_width)) }
       val write_ports = Vec.fill(num_write_ports) { (new RegisterFileWritePortIO(PREG_SZ, register_width)) }
-
-//      val debug = new BOOMCoreBundle {
-//         val registers = Vec.fill(num_registers) { Bits(width = register_width) }
-//      }.asOutput
    }
 
    // --------------------------------------------------------------
@@ -49,7 +45,8 @@ class RegisterFile( num_registers: Int
 
    // --------------------------------------------------------------
 
-   val read_data = Vec.fill(num_read_ports) { Bits(width = register_width) }
+   val read_data = Wire(Vec(num_read_ports, Bits(width = register_width)))
+
    for (i <- 0 until num_read_ports)
    {
       read_data(i) := Mux(io.read_ports(i).addr === UInt(0), Bits(0),

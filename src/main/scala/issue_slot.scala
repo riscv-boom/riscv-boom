@@ -43,10 +43,10 @@ class IssueSlot(num_slow_wakeup_ports: Int) extends Module with BOOMCoreParamete
    def isInvalid = slot_state === s_invalid
    def isValid = slot_state != s_invalid
 
-   val updated_state = UInt() // the next state of this slot (which might then get moved to a new slot)
-   val next_p1  = Bool()
-   val next_p2  = Bool()
-   val next_p3  = Bool()
+   val updated_state = Wire(UInt()) // the next state of this slot (which might then get moved to a new slot)
+   val next_p1  = Wire(Bool())
+   val next_p2  = Wire(Bool())
+   val next_p3  = Wire(Bool())
 
    val slot_state    = Reg(init = s_invalid)
    val slot_p1       = Reg(init = Bool(false), next = next_p1)
@@ -122,9 +122,9 @@ class IssueSlot(num_slow_wakeup_ports: Int) extends Module with BOOMCoreParamete
    // these signals are the "next_p*" for the current slot's micro-op.
    // they are important for shifting the current slotUop up to an other entry.
    // TODO need a better name for these signals
-   val out_p1 = Bool(); out_p1 := slot_p1
-   val out_p2 = Bool(); out_p2 := slot_p2
-   val out_p3 = Bool(); out_p3 := slot_p3
+   val out_p1 = Wire(Bool()); out_p1 := slot_p1
+   val out_p2 = Wire(Bool()); out_p2 := slot_p2
+   val out_p3 = Wire(Bool()); out_p3 := slot_p3
 
    when (io.in_uop.valid)
    {

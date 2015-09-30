@@ -70,10 +70,10 @@ class BranchPredictionStage (fetch_width: Int) extends Module with BOOMCoreParam
    //-------------------------------------------------------------
    // Branch Prediction (BP1 Stage)
 
-   val bp2_br_seen = Bool()  // did we see a branch to make a prediction?
-                             // (and not overridden by an earlier jal)
-   val bp2_br_taken = Bool() // was there a taken branch in the bp2 stage
-                             // we use this to update the bpd's history register speculatively
+   val bp2_br_seen = Wire(Bool())  // did we see a branch to make a prediction?
+                                   // (and not overridden by an earlier jal)
+   val bp2_br_taken = Wire(Bool()) // was there a taken branch in the bp2 stage
+                                   // we use this to update the bpd's history register speculatively
    val (bpd_valid, bpd_bits) =
       if (ENABLE_BRANCH_PREDICTOR)
       {
@@ -104,11 +104,11 @@ class BranchPredictionStage (fetch_width: Int) extends Module with BOOMCoreParam
    // round off to nearest fetch boundary
    val aligned_pc = io.imem.resp.bits.pc & SInt(-(fetch_width*coreInstBytes))
 
-   val is_br     = Vec.fill(fetch_width) {Bool()}
-   val is_jal    = Vec.fill(fetch_width) {Bool()}
-   val is_jr     = Vec.fill(fetch_width) {Bool()}
-   val br_targs  = Vec.fill(fetch_width) {UInt(width=vaddrBits+1)}
-   val jal_targs = Vec.fill(fetch_width) {UInt(width=vaddrBits+1)}
+   val is_br     = Wire(Vec(fetch_width, Bool()))
+   val is_jal    = Wire(Vec(fetch_width, Bool()))
+   val is_jr     = Wire(Vec(fetch_width, Bool()))
+   val br_targs  = Wire(Vec(fetch_width, UInt(width=vaddrBits+1)))
+   val jal_targs = Wire(Vec(fetch_width, UInt(width=vaddrBits+1)))
 
    for (i <- 0 until fetch_width)
    {

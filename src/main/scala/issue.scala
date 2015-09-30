@@ -42,7 +42,7 @@ abstract class IssueUnit(num_issue_slots: Int, issue_width: Int, num_wakeup_port
    // Set up the dispatch uops
    // special case "storing" 2 uops within one issue slot.
 
-   val dis_uops = Array.fill(DISPATCH_WIDTH) {new MicroOp()}
+   val dis_uops = Array.fill(DISPATCH_WIDTH) {Wire(new MicroOp())}
    for (w <- 0 until DISPATCH_WIDTH)
    {
       dis_uops(w) := io.dis_uops(w)

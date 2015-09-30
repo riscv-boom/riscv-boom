@@ -143,7 +143,7 @@ class FPU extends Module with BOOMCoreParameters
    val fp_ctrl = fp_decoder.io.sigs
    val fp_rm = Mux(ImmGenRm(io_req.uop.imm_packed) === Bits(7), io_req.fcsr_rm, ImmGenRm(io_req.uop.imm_packed))
 
-   val req = new rocket.FPInput
+   val req = Wire(new rocket.FPInput)
    req := fp_ctrl
    req.rm := fp_rm
    req.in1 := io_req.rs1_data
@@ -177,7 +177,7 @@ class FPU extends Module with BOOMCoreParameters
    val fpiu_out = Pipe(Reg(next=fpiu.io.in.valid && !fp_ctrl.fastpipe),
                        fpiu.io.out.bits, fpu_latency-1)
 
-   val fpiu_result  = new rocket.FPResult
+   val fpiu_result  = Wire(new rocket.FPResult)
    fpiu_result.data := fpiu_out.bits.toint
    fpiu_result.exc  := fpiu_out.bits.exc
 

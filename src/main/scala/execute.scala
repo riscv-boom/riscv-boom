@@ -416,7 +416,7 @@ class ALUMemExeUnit(is_branch_unit    : Boolean = false
    else if (has_div) println ("       - Div")
    println ("       - Mem")
 
-   val muldiv_busy = Bool()
+   val muldiv_busy = Wire(Bool())
    io.fu_types := FU_ALU |
                   FU_MEM |
                   Mux(Bool(has_fpu), FU_FPU, Bits(0)) |
@@ -427,7 +427,7 @@ class ALUMemExeUnit(is_branch_unit    : Boolean = false
                   Mux(Bool(is_branch_unit), FU_BRU, Bits(0))
 
 
-   val memresp_val = Bool()
+   val memresp_val = Wire(Bool())
 
 
    // ALU Unit -------------------------------

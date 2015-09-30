@@ -265,7 +265,7 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)
 
       // Did I just get killed by the previous cycle's branch?
       // Or by a flush pipeline?
-      val killed = Bool()
+      val killed = Wire(Bool())
       killed := Bool(false)
       when (io.req.bits.kill ||
             (io.brinfo.valid &&
@@ -297,7 +297,7 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)
                         BR_JR -> PC_JALR
                         ))
 
-      val bj_addr = UInt()
+      val bj_addr = Wire(UInt())
 
       io.br_unit.taken := io.req.valid &&
                           !killed &&
@@ -305,16 +305,16 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)
                           (pc_sel != PC_PLUS4)
 
       // "mispredict" means that a branch has been resolved and it must be killed
-      val mispredict = Bool(); mispredict := Bool(false)
+      val mispredict = Wire(Bool()); mispredict := Bool(false)
 
       val is_br_or_jalr  = io.req.valid && !killed && uop.is_br_or_jmp && !uop.is_jal
 
       // did the BTB predict a br or jmp incorrectly?
       // (do we need to reset its history and teach it a new target?)
-      val btb_mispredict = Bool(); btb_mispredict := Bool(false)
+      val btb_mispredict = Wire(Bool()); btb_mispredict := Bool(false)
 
       // did the bpd predict incorrectly (aka, should we correct its prediction?)
-      val bpd_mispredict = Bool(); bpd_mispredict := Bool(false)
+      val bpd_mispredict = Wire(Bool()); bpd_mispredict := Bool(false)
 
       when (is_br_or_jalr)
       {
@@ -556,7 +556,7 @@ abstract class UnPipelinedFunctionalUnit
 {
    val r_uop = Reg(outType = new MicroOp())
 
-   val do_kill = Bool()
+   val do_kill = Wire(Bool())
    do_kill := io.req.bits.kill // irrelevant default
 
    when (io.req.fire())

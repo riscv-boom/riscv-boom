@@ -29,11 +29,11 @@ class IssueUnitCollasping(num_issue_slots: Int, issue_width: Int, num_wakeup_por
 
 
    val vacants = issue_slots.map(s => !(s.valid)) ++ io.dis_mask.map(!_.toBool)
-   val shamts_oh = Array.fill(num_issue_slots+DISPATCH_WIDTH) {Bits(width=MAX_SHIFT)}
+   val shamts_oh = Array.fill(num_issue_slots+DISPATCH_WIDTH) {Wire(Bits(width=MAX_SHIFT))}
    // track how many to shift up this entry by by counting previous vacant spots
    def SaturatingCounterOH(count_oh:Bits, inc: Bool, max: Int): Bits =
    {
-      val next = Bits(width=max)
+      val next = Wire(Bits(width=max))
       next := count_oh
       when (count_oh === Bits(0) && inc)
       {

@@ -51,7 +51,7 @@ class BrTableUpdate extends BOOMCoreBundle
 {
    val hash_idx   = UInt(width = vaddrBits)
    val br_pc      = UInt(width = log2Up(FETCH_WIDTH)+log2Ceil(coreInstBytes)) // which word in the fetch packet does the update correspond to?
-   val new_value  = Bits(width=FETCH_WIDTH)
+   val new_value  = Bits(width=FETCH_WIDTH) // TODO BUG XXX is this broken? delete comment if I forget what this means
 }
 
 
@@ -82,11 +82,13 @@ class GshareBrPredictor(fetch_width: Int
    ) extends BrPredictor
 {
    //------------------------------------------------------------
+
    private def hash (addr: UInt, hist: Bits) =
       (addr >> UInt(log2Up(fetch_width*coreInstBytes))) ^ hist
+
    private def GenWMask(addr: UInt) =
-      if (FETCH_WIDTH == 1) Bits(1)
-      else Bits(1) << ((addr >> UInt(log2Ceil(coreInstBytes))) & SInt(-1,FETCH_WIDTH))
+      if (FETCH_WIDTH == 1) Bits(1).toBools
+      else (Bits(1) << ((addr >> UInt(log2Ceil(coreInstBytes))) & SInt(-1,FETCH_WIDTH))).toBools
 
    //------------------------------------------------------------
    val r_ghist = Reg(Bits(width = history_length))
@@ -103,8 +105,9 @@ class GshareBrPredictor(fetch_width: Int
 
    // prediction bits
    // hysteresis bits
-   val p_table = Mem(Bits(width=fetch_width), num_entries/fetch_width, seqRead=true)
-   val h_table = Mem(Bits(width=fetch_width), num_entries/fetch_width, seqRead=true)
+   val p_table = SeqMem(num_entries/fetch_width, Vec(Bits(width=1), fetch_width))
+   val h_table = SeqMem(num_entries/fetch_width, Vec(Bits(width=1), fetch_width))
+
 
    // buffer writes to the h-table as required
    val hwq = Module(new Queue(new BpdUpdate, entries=4))
@@ -125,13 +128,12 @@ class GshareBrPredictor(fetch_width: Int
    val pwq = Module(new Queue(new BrTableUpdate, entries=2))
    pwq.io.deq.ready := Bool(true)
    val pwq_deq_br_pc = pwq.io.deq.bits.br_pc
-//   val p_wmask = GenWMask(pwq.io.deq.bits.br_pc)
    val p_wmask = GenWMask(pwq_deq_br_pc)
    when (pwq.io.deq.valid)
    {
       io.resp.valid := RegNext(RegNext(Bool(false)))
       val waddr = pwq.io.deq.bits.hash_idx
-      val wdata = pwq.io.deq.bits.new_value
+      val wdata = Vec.fill(fetch_width)(pwq.io.deq.bits.new_value)
       p_table.write(waddr, wdata, p_wmask)
    }
    .otherwise // must always read this or SRAM gives garbage
@@ -143,7 +145,7 @@ class GshareBrPredictor(fetch_width: Int
 
    when (!stall)
    {
-      p_out := p_table(p_addr)
+      p_out := p_table.read(p_addr).toBits
    }
 
    io.resp.bits.takens := p_out
@@ -169,9 +171,10 @@ class GshareBrPredictor(fetch_width: Int
    {
       val waddr = hash(hwq.io.deq.bits.pc, hwq.io.deq.bits.history)
       val wmask = GenWMask(hwq.io.deq.bits.br_pc)
-      h_table.write(waddr, hwq.io.deq.bits.taken, wmask)
+      val wdata = Vec.fill(fetch_width)(hwq.io.deq.bits.taken.toUInt)
+      h_table.write(waddr, wdata, wmask)
    }
-   h_out := h_table(h_addr)
+   h_out := h_table.read(h_addr).toBits
    pwq.io.enq.valid          := r_pwq_valid
    pwq.io.enq.bits.hash_idx  := Reg(next=u_addr)
    pwq.io.enq.bits.br_pc     := Reg(next=io.update.bits.br_pc)

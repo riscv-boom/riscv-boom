@@ -54,8 +54,8 @@ class RegisterRead(issue_width: Int
    }
 
 
-   val rrd_valids       = Vec.fill(issue_width) { Bool() }
-   val rrd_uops         = Vec.fill(issue_width) { new MicroOp() }
+   val rrd_valids       = Wire(Vec(issue_width, Bool()))
+   val rrd_uops         = Wire(Vec(issue_width, new MicroOp()))
 
    val exe_reg_valids   = Vec.fill(issue_width) { Reg(init = Bool(false)) }
    val exe_reg_uops     = Vec.fill(issue_width) { Reg(outType = new MicroOp())  }
@@ -84,9 +84,9 @@ class RegisterRead(issue_width: Int
 
    require (num_total_read_ports == num_read_ports_array.reduce(_+_))
 
-   val rrd_rs1_data   = Vec.fill(issue_width) { Bits() }
-   val rrd_rs2_data   = Vec.fill(issue_width) { Bits() }
-   val rrd_rs3_data   = Vec.fill(issue_width) { Bits() }
+   val rrd_rs1_data   = Wire(Vec(issue_width, Bits()))
+   val rrd_rs2_data   = Wire(Vec(issue_width, Bits()))
+   val rrd_rs3_data   = Wire(Vec(issue_width, Bits()))
 
    var idx = 0 // index into flattened read_ports array
    for (w <- 0 until issue_width)
@@ -130,8 +130,8 @@ class RegisterRead(issue_width: Int
    //    -rs3 is used for FPU ops which are NOT bypassed (so don't check
    //       them!).
 
-   val bypassed_rs1_data = Vec.fill(issue_width) { Bits(width = register_width) }
-   val bypassed_rs2_data = Vec.fill(issue_width) { Bits(width = register_width) }
+   val bypassed_rs1_data = Wire(Vec(issue_width, Bits(width = register_width)))
+   val bypassed_rs2_data = Wire(Vec(issue_width, Bits(width = register_width)))
 
 //   if (ENABLE_BYPASSING_NETWORK)
 //   if (true)

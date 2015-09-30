@@ -322,7 +322,7 @@ class DecodeUnit() extends Module
 {
    val io = new DecodeUnitIo
 
-   val uop = new MicroOp()
+   val uop = Wire(new MicroOp())
    uop := io.enq.uop
 
    var decode_table = XDecode.table
@@ -469,7 +469,7 @@ class FetchSerializerNtoM extends Module with BOOMCoreParameters
    val io = new FetchSerializerIO
 
    val counter = Reg(init = UInt(0, log2Up(FETCH_WIDTH)))
-   val inst_idx = UInt()
+   val inst_idx = Wire(UInt())
    inst_idx := UInt(0)
 
    //-------------------------------------------------------------
@@ -579,7 +579,7 @@ class BranchMaskGenerationLogic(val pl_width: Int) extends Module with BOOMCoreP
    // Give out the branch tag to each branch micro-op
 
    var allocate_mask = branch_mask
-   val tag_masks = Vec.fill(pl_width) {Bits(width=MAX_BR_COUNT)}
+   val tag_masks = Wire(Vec(pl_width, Bits(width=MAX_BR_COUNT)))
 
    for (w <- 0 until pl_width)
    {
@@ -587,7 +587,7 @@ class BranchMaskGenerationLogic(val pl_width: Int) extends Module with BOOMCoreP
       io.is_full(w) := (allocate_mask === ~(Bits(0,MAX_BR_COUNT))) && io.is_branch(w)
 
       // find br_tag and compute next br_mask
-      val new_br_tag = UInt(width = BR_TAG_SZ)
+      val new_br_tag = Wire(UInt(width = BR_TAG_SZ))
       new_br_tag := UInt(0)
       tag_masks(w) := Bits(0)
 

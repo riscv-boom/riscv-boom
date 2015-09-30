@@ -174,20 +174,20 @@ class Rob(width: Int
    val rob_tail = Reg(init = UInt(0, log2Up(num_rob_rows)))
    val rob_tail_idx = rob_tail << UInt(log2Ceil(width))
 
-   val will_commit         = Vec.fill(width) {Bool()}
-   val can_commit          = Vec.fill(width) {Bool()}
-   val can_throw_exception = Vec.fill(width) {Bool()}
-   val rob_head_vals       = Vec.fill(width) {Bool()} // are the instructions at the head valid?
-   val rob_head_is_store   = Vec.fill(width) {Bool()}
-   val rob_head_is_load    = Vec.fill(width) {Bool()}
-   val rob_head_fflags     = Vec.fill(width) {Bits(width=rocket.FPConstants.FLAGS_SZ)}
+   val will_commit         = Wire(Vec(width, Bool()))
+   val can_commit          = Wire(Vec(width, Bool()))
+   val can_throw_exception = Wire(Vec(width, Bool()))
+   val rob_head_vals       = Wire(Vec(width, Bool())) // are the instructions at the head valid?
+   val rob_head_is_store   = Wire(Vec(width, Bool()))
+   val rob_head_is_load    = Wire(Vec(width, Bool()))
+   val rob_head_fflags     = Wire(Vec(width, Bits(width=rocket.FPConstants.FLAGS_SZ)))
 
    // valid bits at the branch target
    // the br_unit needs to verify the target PC, but it must read out the valid bits
    // for that row
-   val rob_brt_vals        = Vec.fill(width) {Bool()}
+   val rob_brt_vals        = Wire(Vec(width, Bool()))
 
-   val exception_thrown = Bool()
+   val exception_thrown = Wire(Bool())
 
    // exception info
    // TODO compress xcpt cause size
@@ -372,7 +372,7 @@ class Rob(width: Int
       // can this instruction commit? (the check for exceptions/rob_state happens later)
       can_commit(w) := rob_val(rob_head) && !(rob_bsy(rob_head))
 
-      val com_idx = UInt()
+      val com_idx = Wire(UInt())
       com_idx := rob_head
       when (rob_state === s_rollback)
       {
@@ -547,8 +547,8 @@ class Rob(width: Int
    // FP Exceptions
    // send fflags bits to the CSRFile to accrue
 
-   val fflags_val = Vec.fill(width) {Bool()}
-   val fflags     = Vec.fill(width) {Bits(width=rocket.FPConstants.FLAGS_SZ)}
+   val fflags_val = Wire(Vec(width, Bool()))
+   val fflags     = Wire(Vec(width, Bits(width=rocket.FPConstants.FLAGS_SZ)))
 
    for (w <- 0 until width)
    {
@@ -578,9 +578,9 @@ class Rob(width: Int
 
    // is i0 older than i1? (closest to zero). Provide the tail_ptr to the queue.
    def IsOlder(i0: UInt, i1: UInt, tail: UInt) = (Cat(i0 < tail, i0) < Cat(i1 < tail, i1))
-   val next_xcpt_uop = new MicroOp()
+   val next_xcpt_uop = Wire(new MicroOp())
    next_xcpt_uop := r_xcpt_uop
-   val dis_xcpts = Vec.fill(width) {Bool()}
+   val dis_xcpts = Wire(Vec(width, Bool()))
    for (i <- 0 until width)
    {
       dis_xcpts(i) := io.dis_mask(i) && io.dis_uops(i).exception
@@ -814,7 +814,7 @@ class Rob(width: Int
       // takes rob_row_idx, returns PC (with low-order bits zeroed out)
       def  read (row_idx: UInt) =
       {
-         val rdata = Bits(width=xLen)
+         val rdata = Wire(Bits(width=xLen))
          rdata := bank0(row_idx >> UInt(1)) << UInt(pc_shift)
          // damn chisel demands a "default"
          when (row_idx(0))
@@ -833,8 +833,8 @@ class Rob(width: Int
          val data0 = bank0(addr0_ls1) << UInt(pc_shift)
          val data1 = bank1(row_idx >> UInt(1)) << UInt(pc_shift)
 
-         val curr_pc = UInt(width = xLen)
-         val next_pc = UInt(width = xLen)
+         val curr_pc = Wire(UInt(width = xLen))
+         val next_pc = Wire(UInt(width = xLen))
          curr_pc := Mux(row_idx(0), data1, data0)
          next_pc := Mux(row_idx(0), data0, data1)
          val curr_pc_ext = Sext(curr_pc(vaddrBits,0), xLen)

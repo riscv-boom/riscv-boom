@@ -183,7 +183,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    val stq_commit_head = Reg(UInt()) // point to next store to commit
    val stq_execute_head = Reg(UInt()) // point to next store to execute
 
-   val clear_store = Bool()
+   val clear_store = Wire(Bool())
    clear_store := Bool(false)
 
    val live_store_mask = Reg(init = Bits(0, num_st_entries))
@@ -268,18 +268,18 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    // SAQ     -> TLB -> ROB
    // And uopSTAs and uopSTDs fight over the ROB unbusy port.
 
-   val will_fire_load_incoming = Bool() // uses TLB, D$, SAQ-search
-   val will_fire_sta_incoming  = Bool() // uses TLB,     LAQ-search, ROB
-   val will_fire_std_incoming  = Bool() // uses                      ROB
-   val will_fire_sta_retry     = Bool() // uses TLB,                 ROB
-   val will_fire_load_retry    = Bool() // uses TLB, D$, SAQ-search
-   val will_fire_store_commit  = Bool() // uses      D$
-   val will_fire_load_wakeup   = Bool() // uses      D$, SAQ-search
+   val will_fire_load_incoming = Wire(Bool()) // uses TLB, D$, SAQ-search
+   val will_fire_sta_incoming  = Wire(Bool()) // uses TLB,     LAQ-search, ROB
+   val will_fire_std_incoming  = Wire(Bool()) // uses                      ROB
+   val will_fire_sta_retry     = Wire(Bool()) // uses TLB,                 ROB
+   val will_fire_load_retry    = Wire(Bool()) // uses TLB, D$, SAQ-search
+   val will_fire_store_commit  = Wire(Bool()) // uses      D$
+   val will_fire_load_wakeup   = Wire(Bool()) // uses      D$, SAQ-search
 
-   val can_fire_sta_retry      = Bool()
-   val can_fire_load_retry     = Bool()
-   val can_fire_store_commit   = Bool()
-   val can_fire_load_wakeup    = Bool()
+   val can_fire_sta_retry      = Wire(Bool())
+   val can_fire_load_retry     = Wire(Bool())
+   val can_fire_store_commit   = Wire(Bool())
+   val can_fire_load_wakeup    = Wire(Bool())
 
    // defaults
    will_fire_load_incoming := Bool(false)
@@ -290,9 +290,9 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    will_fire_store_commit  := Bool(false)
    will_fire_load_wakeup   := Bool(false)
 
-   val dc_avail = Bool(); dc_avail := Bool(true)
-   val tlb_avail= Bool(); tlb_avail:= Bool(true)
-   val rob_avail= Bool(); rob_avail:= Bool(true)
+   val dc_avail = Wire(Bool()); dc_avail := Bool(true)
+   val tlb_avail= Wire(Bool()); tlb_avail:= Bool(true)
+   val rob_avail= Wire(Bool()); rob_avail:= Bool(true)
 
    // give first priority to incoming uops
    when (io.exe_resp.valid)
@@ -339,8 +339,8 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    //--------------------------------------------
    // TLB Access
 
-   val stq_retry_idx = UInt()
-   val laq_retry_idx = UInt()
+   val stq_retry_idx = Wire(UInt())
+   val laq_retry_idx = Wire(UInt())
 
 
    // micro-op going through the TLB generate paddr's. If this is a load, it will continue
@@ -561,7 +561,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    val mem_ld_addr = Mux(Reg(next=will_fire_load_wakeup), Reg(next=laq_addr(exe_ld_idx_wakeup)), mem_tlb_paddr)
    val mem_ld_uop  = Reg(next=exe_ld_uop)
    mem_ld_uop.br_mask := GetNewBrMask(io.brinfo, exe_ld_uop)
-   val mem_ld_killed = Bool() // was a load killed in execute
+   val mem_ld_killed = Wire(Bool()) // was a load killed in execute
 
    val mem_fired_ld = Reg(next=(will_fire_load_incoming ||
                                     will_fire_load_retry ||
@@ -613,14 +613,14 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    val st_dep_mask = laq_st_dep_mask(Reg(next=exe_ld_uop.ldq_idx))
 
    // do the double-word addr match? (doesn't necessarily mean a conflict or forward)
-   val dword_addr_matches = Vec.fill(num_st_entries) { Bool() }
+   val dword_addr_matches = Wire(Vec(num_st_entries, Bool()))
    // if there is some overlap on the bytes, you may need to put to sleep the load
    // (either data not ready, or not a perfect match between addr and type)
-   val addr_conflicts     = Vec.fill(num_st_entries) { Bool() }
+   val addr_conflicts     = Wire(Vec(num_st_entries, Bool()))
    // a full address match
-   val forwarding_matches  = Vec.fill(num_st_entries) { Bool() }
+   val forwarding_matches  = Wire(Vec(num_st_entries, Bool()))
 
-   val force_ld_to_sleep = Bool()
+   val force_ld_to_sleep = Wire(Bool())
    force_ld_to_sleep := Bool(false)
 
    // do the load and store memory types match (aka, B == BU, H == HU, W == WU)
@@ -788,7 +788,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    val st_mask     = GenByteMask(st_addr, mem_tlb_uop.mem_typ)
    val st_is_fence = mem_tlb_uop.is_fence
    val stq_idx     = mem_tlb_uop.stq_idx
-   val failed_loads = Vec.fill(num_ld_entries) {Bool()}
+   val failed_loads = Wire(Vec(num_ld_entries, Bool()))
 
    for (i <- 0 until num_ld_entries)
    {
@@ -865,7 +865,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    //-------------------------------------------------------------
    //-------------------------------------------------------------
 
-   val st_brkilled_mask = Vec.fill(num_st_entries) {Bool()}
+   val st_brkilled_mask = Wire(Vec(num_st_entries, Bool()))
    for (i <- 0 until num_st_entries)
    {
       st_brkilled_mask(i) := Bool(false)
@@ -980,13 +980,13 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    // the forwarding logic (from the STD) may be "nacking" us, in which case,
    // we ignore the nack (the nack is for the D$, not the LSU).
 
-   val clr_ld = Bool()
+   val clr_ld = Wire(Bool())
    clr_ld := Bool(false)
 
    // did the load execute, but was then killed/nacked (will overcount)?
-   val ld_was_killed       = Bool()
+   val ld_was_killed       = Wire(Bool())
    // did the load execute, but was then killed/nacked (only high once per load)?
-   val ld_was_put_to_sleep = Bool()
+   val ld_was_put_to_sleep = Wire(Bool())
    ld_was_killed           := Bool(false)
    ld_was_put_to_sleep     := Bool(false)
 
@@ -1036,7 +1036,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    // Exception / Reset
 
    // for the live_store_mask, need to kill stores that haven't been committed
-   val st_exc_killed_mask = Vec.fill(num_st_entries) {Bool()}
+   val st_exc_killed_mask = Wire(Vec(num_st_entries, Bool()))
    (0 until num_st_entries).map(i => st_exc_killed_mask(i) := Bool(false))
 
    val null_uop = NullMicroOp
@@ -1183,7 +1183,7 @@ object GenByteMask
 {
    def apply(addr: UInt, typ: UInt): Bits =
    {
-      val mask = Bits(width = 8)
+      val mask = Wire(Bits(width = 8))
       mask := MuxCase(Bits(255,8), Array(
                    (typ === MT_B || typ === MT_BU) -> (Bits(1, 8) << addr(2,0)),
                    (typ === MT_H || typ === MT_HU) -> (Bits(3, 8) << (addr(2,1) << UInt(1))),
@@ -1229,7 +1229,7 @@ class ForwardingAgeLogic(num_entries: Int) extends Module with BOOMCoreParameter
    }
 
    // generating mask that zeroes out anything younger than tail
-   val age_mask = Vec.fill(num_entries) { Bool() }
+   val age_mask = Wire(Vec(num_entries, Bool()))
    for (i <- 0 until num_entries)
    {
       age_mask(i) := Bool(true)
@@ -1240,12 +1240,12 @@ class ForwardingAgeLogic(num_entries: Int) extends Module with BOOMCoreParameter
    }
 
    // Priority encoder with moving tail: double length
-   val matches = Bits(width = 2*num_entries)
+   val matches = Wire(Bits(width = 2*num_entries))
    matches := Cat(io.addr_matches & age_mask.toBits,
                   io.addr_matches)
 
 
-   val found_match = Bool()
+   val found_match = Wire(Bool())
    found_match       := Bool(false)
    io.forwarding_idx := UInt(0)
 
