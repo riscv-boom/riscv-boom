@@ -109,6 +109,7 @@ class BypassData(num_bypass_ports: Int, data_width: Int) extends BOOMCoreBundle
    val data  = Vec.fill(num_bypass_ports){ Bits(width = data_width) }
 
    def get_num_ports: Int = num_bypass_ports
+   override def cloneType: this.type = new BypassData(num_bypass_ports, data_width).asInstanceOf[this.type]
 }
 
 class BranchUnitResp extends BOOMCoreBundle
@@ -540,7 +541,7 @@ class FPUUnit extends PipelinedFunctionalUnit(num_stages = 3
    val fpu = Module(new FPU())
    fpu.io.req <> io.req
    fpu.io.req.bits.fcsr_rm := io.fcsr_rm
-   io.resp <> fpu.io.resp
+   io.resp := fpu.io.resp
    io.resp.bits.fflags.bits.uop := io.resp.bits.uop
 }
 
