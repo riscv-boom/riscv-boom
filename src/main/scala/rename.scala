@@ -59,7 +59,7 @@ class RenameMapTableElement(pipeline_width: Int) extends Module with BOOMCorePar
    val element = Reg(init = UInt(0, PREG_SZ))
 
    // handle branch speculation
-   val element_br_copies = Mem(out=UInt(width = PREG_SZ), n=MAX_BR_COUNT)
+   val element_br_copies = Mem(MAX_BR_COUNT, UInt(width = PREG_SZ))
 
 
    // this is possibly the hardest piece of code I have ever had to reason about in my LIFE.

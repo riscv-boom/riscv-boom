@@ -212,12 +212,14 @@ class Rob(width: Int
    // **************************************************************************
    // Debug
 
-   val debug_entry = Vec.fill(NUM_ROB_ENTRIES) { new Bundle {
+   class DebugRobBundle extends BOOMCoreBundle {
          val valid = Bool()
          val busy = Bool()
          val uop = new MicroOp()
          val exception = Bool()
-      }}
+         override def cloneType: this.type = new DebugRobBundle().asInstanceOf[this.type]
+      }
+   val debug_entry = Wire(Vec(NUM_ROB_ENTRIES, new DebugRobBundle))
 
    // **************************************************************************
    // --------------------------------------------------------------------------
@@ -281,12 +283,12 @@ class Rob(width: Int
 
       // one bank
       val rob_val       = Reg(init = Vec.fill(num_rob_rows){Bool(false)})
-      val rob_bsy       = Mem(Bool(), num_rob_rows)
+      val rob_bsy       = Mem(num_rob_rows, Bool())
       val rob_uop       = Reg(Vec(num_rob_rows, new MicroOp())) // one write port - dispatch
                                                            // fake write ports - clearing on commit,
                                                            // rollback, branch_kill
-      val rob_exception = Mem(Bool(), num_rob_rows)        // TODO consolidate into the com_uop? what's the best for Chisel?
-      val rob_fflags    = Mem(Bits(width=rocket.FPConstants.FLAGS_SZ), num_rob_rows)
+      val rob_exception = Mem(num_rob_rows, Bool())        // TODO consolidate into the com_uop? what's the best for Chisel?
+      val rob_fflags    = Mem(num_rob_rows, Bits(width=rocket.FPConstants.FLAGS_SZ))
 
       //-----------------------------------------------
       // Dispatch: Add Entry to ROB

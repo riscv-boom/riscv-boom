@@ -137,7 +137,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    // Load-Address Queue
 //   val laq_addr_val  = Reg(init=UInt(0,width=num_ld_entries))  //TODO buggy due to chisel - try again soon
    val laq_addr_val  = Reg(Vec(num_ld_entries, Bool()))
-   val laq_addr      = Mem(UInt(width=coreMaxAddrBits), num_ld_entries)
+   val laq_addr      = Mem(num_ld_entries, UInt(width=coreMaxAddrBits))
 
    val laq_allocated = Reg(Vec(num_ld_entries, Bool())) // entry has been allocated
    val laq_is_virtual= Reg(Vec(num_ld_entries, Bool())) // address in LAQ is a virtual address. There was a tlb_miss and a retry is required.
@@ -160,8 +160,8 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
 
    // Store-Address Queue
    val saq_val       = Reg(Vec(num_st_entries, Bool()))
-   val saq_is_virtual= Reg(Vec(num_ld_entries, Bool())) // address in SAQ is a virtual address. There was a tlb_miss and a retry is required.
-   val saq_addr      = Mem(UInt(width=coreMaxAddrBits),num_st_entries)
+   val saq_is_virtual= Reg(Vec(num_st_entries, Bool())) // address in SAQ is a virtual address. There was a tlb_miss and a retry is required.
+   val saq_addr      = Mem(num_st_entries, UInt(width=coreMaxAddrBits))
 
    // Store-Data Queue
    val sdq_val       = Reg(Vec(num_st_entries, Bool()))
@@ -381,6 +381,9 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    io.xcpt.bits.badvaddr := Reg(next=exe_vaddr) // TODO is there another register we can use instead?
 
    assert (!(dtlb.io.req.valid && exe_tlb_uop.is_fence), "Fence is pretending to talk to the TLB")
+   assert (!(io.exe_resp.bits.mxcpt.valid && io.exe_resp.valid && 
+            !(io.exe_resp.bits.uop.ctrl.is_load || io.exe_resp.bits.uop.ctrl.is_sta))
+            , "A uop that's not a load or store-address is throwing a memory exception.")
 
    val tlb_miss = dtlb.io.req.valid && (dtlb.io.resp.miss || !dtlb.io.req.ready)
 

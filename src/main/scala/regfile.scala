@@ -41,7 +41,7 @@ class RegisterFile( num_registers: Int
 
    // --------------------------------------------------------------
 
-   val regfile = Mem(Bits(width=register_width), num_registers)
+   val regfile = Mem(num_registers, Bits(width=register_width))
 
    // --------------------------------------------------------------
 
