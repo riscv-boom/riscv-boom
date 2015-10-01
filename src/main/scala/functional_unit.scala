@@ -8,10 +8,7 @@
 // If regfile bypassing is disabled, then the functional unit must do its own
 // bypassing in here on the WB stage (i.e., bypassing the io.resp.data)
 
-// QUESTIONS
-//    is there a way to have a plug-able output bundle?  (adder_out...)
-//
-//    is there a way to pass in the FU logic itself? or do I have to wrap all possible instances?
+// TODO: explore possibility of conditional IO fields?
 
 
 package BOOM
@@ -541,8 +538,11 @@ class FPUUnit extends PipelinedFunctionalUnit(num_stages = 3
    val fpu = Module(new FPU())
    fpu.io.req <> io.req
    fpu.io.req.bits.fcsr_rm := io.fcsr_rm
-   io.resp := fpu.io.resp
-   io.resp.bits.fflags.bits.uop := io.resp.bits.uop
+
+   io.resp.bits.data              := fpu.io.resp.bits.data
+   io.resp.bits.fflags.valid      := fpu.io.resp.bits.fflags.valid
+   io.resp.bits.fflags.bits.uop   := io.resp.bits.uop
+   io.resp.bits.fflags.bits.flags := fpu.io.resp.bits.fflags.bits.flags // kill me now
 }
 
 
