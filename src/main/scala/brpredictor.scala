@@ -81,6 +81,10 @@ class GshareBrPredictor(fetch_width: Int
                         , history_length: Int = 12
    ) extends BrPredictor
 {
+   println ("Building (" + (num_entries * 2/8/1024) +
+      " kB) GShare Predictor, with " + history_length + " bits of history for(" +
+      fetch_width + "-wide fetch)")
+
    //------------------------------------------------------------
 
    private def hash (addr: UInt, hist: Bits) =
@@ -92,16 +96,18 @@ class GshareBrPredictor(fetch_width: Int
 
    //------------------------------------------------------------
    val r_ghist = Reg(Bits(width = history_length))
+   val curr_ghist = Wire(Bits(width = history_length))
 
-   // detect if the new target PC
+   // "massage" the history for the scenario where the mispredted branch is not taken
+   // AND we're having to refetch the rest of the fetch_packet,  or something XXX BUG
    val fixed_history = Cat(io.update.bits.history, io.update.bits.taken)
-   val curr_ghist
-      = Mux(io.update.valid &&
-            io.update.bits.bpd_mispredict &&
-            io.update.bits.new_pc_same_packet, io.update.bits.history,
-        Mux(io.update.valid &&
-            io.update.bits.bpd_mispredict    , fixed_history,
-                                             r_ghist))
+   curr_ghist :=
+         Mux(io.update.valid &&
+             io.update.bits.bpd_mispredict &&
+             io.update.bits.new_pc_same_packet, io.update.bits.history,
+         Mux(io.update.valid &&
+             io.update.bits.bpd_mispredict    , fixed_history,
+                                                r_ghist))
 
    // prediction bits
    // hysteresis bits
@@ -113,17 +119,16 @@ class GshareBrPredictor(fetch_width: Int
    val hwq = Module(new Queue(new BpdUpdate, entries=4))
    hwq.io.enq <> io.update
 
-   val p_addr = Reg(UInt())
-   val h_addr = Reg(UInt())
-   val p_out = Reg(Bits())
-   val h_out = Bits()
-
    val u_addr = hash(io.update.bits.pc, io.update.bits.history)
+
 
    //------------------------------------------------------------
    // p-table
+   val p_addr = Wire(UInt())
+   val last_p_addr = RegNext(p_addr)
+   val p_out = Reg(Bits())
 
-   val stall = !io.resp.ready
+   val stall = !io.resp.ready // TODO FIXME this feels too low-level
 
    val pwq = Module(new Queue(new BrTableUpdate, entries=2))
    pwq.io.deq.ready := Bool(true)
@@ -140,8 +145,9 @@ class GshareBrPredictor(fetch_width: Int
    {
       // get prediction
       io.resp.valid := RegNext(RegNext(Bool(true)))
-      p_addr := Mux(stall, p_addr, hash(io.req_pc, curr_ghist))
    }
+
+   p_addr := Mux(stall, last_p_addr, hash(io.req_pc, curr_ghist))
 
    when (!stall)
    {
@@ -155,30 +161,20 @@ class GshareBrPredictor(fetch_width: Int
 
    //------------------------------------------------------------
    // h-table
-   hwq.io.deq.ready := Bool(true)
-   val r_pwq_valid = Reg(init=Bool(false))
-   r_pwq_valid := Bool(false)
-   when (io.update.valid && io.update.bits.bpd_mispredict)
-   {
-      // read table to update the p-table
-      h_addr := u_addr
-      hwq.io.deq.ready := Bool(false)
-
-      // send data to the p-table
-      r_pwq_valid := Bool(true)
-   }
-   .elsewhen (hwq.io.deq.valid)
+   // read table to update the p-table
+   val h_ren = io.update.valid && io.update.bits.bpd_mispredict
+   hwq.io.deq.ready := !h_ren
+   when (!h_ren && hwq.io.deq.valid)
    {
       val waddr = hash(hwq.io.deq.bits.pc, hwq.io.deq.bits.history)
       val wmask = GenWMask(hwq.io.deq.bits.br_pc)
       val wdata = Vec.fill(fetch_width)(hwq.io.deq.bits.taken.toUInt)
       h_table.write(waddr, wdata, wmask)
    }
-   h_out := h_table.read(h_addr).toBits
-   pwq.io.enq.valid          := r_pwq_valid
+   pwq.io.enq.valid          := Reg(next=h_ren)
    pwq.io.enq.bits.hash_idx  := Reg(next=u_addr)
    pwq.io.enq.bits.br_pc     := Reg(next=io.update.bits.br_pc)
-   pwq.io.enq.bits.new_value := h_out
+   pwq.io.enq.bits.new_value := h_table.read(u_addr, h_ren).toBits
 
    //------------------------------------------------------------
 
