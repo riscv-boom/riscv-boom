@@ -17,7 +17,7 @@ import rocket.BuildFPU
 //-------------------------------------------------------------
 //-------------------------------------------------------------
 
-class RenameMapTableElementIo(pl_width: Int) extends BOOMCoreBundle
+class RenameMapTableElementIo(pl_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
    val element            = UInt(OUTPUT, PREG_SZ)
 
@@ -44,7 +44,7 @@ class RenameMapTableElementIo(pl_width: Int) extends BOOMCoreBundle
    override def clone = new RenameMapTableElementIo(pl_width).asInstanceOf[this.type]
 }
 
-class RenameMapTableElement(pipeline_width: Int) extends Module with BOOMCoreParameters
+class RenameMapTableElement(pipeline_width: Int)(implicit p: Parameters) extends BoomModule()(p)
 {
    val io = new RenameMapTableElementIo(pipeline_width)
 
@@ -125,7 +125,7 @@ class RenameMapTableElement(pipeline_width: Int) extends Module with BOOMCorePar
 //-------------------------------------------------------------
 //-------------------------------------------------------------
 
-class FreeListIo(num_phys_registers: Int, pl_width: Int) extends BOOMCoreBundle
+class FreeListIo(num_phys_registers: Int, pl_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
    val req_preg_vals = Vec.fill(pl_width) { Bool(INPUT) }
    val req_pregs     = Vec.fill(pl_width) { UInt(OUTPUT, log2Up(num_phys_registers)) }
@@ -170,7 +170,7 @@ class FreeListIo(num_phys_registers: Int, pl_width: Int) extends BOOMCoreBundle
 // register exists
 class RenameFreeList(num_phys_registers: Int // number of physical registers
                     , pl_width: Int          // pipeline width ("dispatch group size")
-                     ) extends Module with BOOMCoreParameters
+                     )(implicit p: Parameters) extends BoomModule()(p)
 {
    val io = new FreeListIo(num_phys_registers, pl_width)
 
@@ -346,7 +346,7 @@ class RenameFreeList(num_phys_registers: Int // number of physical registers
 
 // internally bypasses newly busy registers (.write) to the read ports (.read)
 // num_operands is the maximum number of operands per instruction (.e.g., 2 normally, but 3 if FMAs are supported)
-class BusyTableIo(pipeline_width:Int, num_read_ports:Int, num_wb_ports:Int) extends BOOMCoreBundle
+class BusyTableIo(pipeline_width:Int, num_read_ports:Int, num_wb_ports:Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
    // reading out the busy bits
    val p_rs           = Vec.fill(num_read_ports) {UInt(INPUT, width=PREG_SZ)}
@@ -361,14 +361,14 @@ class BusyTableIo(pipeline_width:Int, num_read_ports:Int, num_wb_ports:Int) exte
    // marking registers being written back as unbusy
    val unbusy_pdst    = Vec.fill(num_wb_ports) {(new ValidIO(UInt(width = PREG_SZ))).flip}
 
-   val debug = new BOOMCoreBundle{val bsy_table= Bits(OUTPUT, width=PHYS_REG_COUNT)}
+   val debug = new Bundle { val bsy_table= Bits(OUTPUT, width=PHYS_REG_COUNT) }
 }
 
 // Register P0 is always NOT_BUSY, and cannot be set to BUSY
 // Note: I do NOT bypass from newly busied registers to the read ports.
 // That bypass check should be done elsewhere (this is to get it off the
 // critical path).
-class BusyTable(pipeline_width:Int, num_read_ports:Int, num_wb_ports:Int) extends Module with BOOMCoreParameters
+class BusyTable(pipeline_width:Int, num_read_ports:Int, num_wb_ports:Int)(implicit p: Parameters) extends BoomModule()(p)
 {
    val io = new BusyTableIo(pipeline_width, num_read_ports, num_wb_ports)
 
@@ -417,7 +417,7 @@ class BusyTable(pipeline_width:Int, num_read_ports:Int, num_wb_ports:Int) extend
 //-------------------------------------------------------------
 //-------------------------------------------------------------
 
-class RenameStageIO(pl_width: Int, num_wb_ports: Int) extends BOOMCoreBundle
+class RenameStageIO(pl_width: Int, num_wb_ports: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
    val ren_mask  = Vec.fill(pl_width) {Bool().asOutput} // mask of valid instructions
    val inst_can_proceed = Vec.fill(pl_width) {Bool(OUTPUT)}
@@ -460,7 +460,7 @@ class RenameStageIO(pl_width: Int, num_wb_ports: Int) extends BOOMCoreBundle
 }
 
 
-class RenameStage(pl_width: Int, num_wb_ports: Int) extends Module with BOOMCoreParameters
+class RenameStage(pl_width: Int, num_wb_ports: Int)(implicit p: Parameters) extends BoomModule()(p)
 {
    val io = new RenameStageIO(pl_width, num_wb_ports)
 

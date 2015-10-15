@@ -13,13 +13,13 @@ import Chisel._
 import Node._
 
 
-class RegisterFileReadPortIO(addr_width: Int, data_width: Int) extends BOOMCoreBundle
+class RegisterFileReadPortIO(addr_width: Int, data_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
    val addr = UInt(INPUT, addr_width)
    val data = Bits(OUTPUT, data_width)
 }
 
-class RegisterFileWritePortIO(addr_width: Int, data_width: Int) extends BOOMCoreBundle
+class RegisterFileWritePortIO(addr_width: Int, data_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
    val wen  = Bool(INPUT)
    val addr = UInt(INPUT, addr_width)
@@ -31,14 +31,15 @@ class RegisterFile( num_registers: Int
                   , num_read_ports: Int
                   , num_write_ports: Int
                   , register_width: Int
-                  , enable_bypassing: Boolean) extends Module with BOOMCoreParameters
+                  , enable_bypassing: Boolean)
+                  (implicit p: Parameters) extends BoomModule()(p)
 {
-   val io = new BOOMCoreBundle
+   val io = new BoomBundle()(p)
    {
       val read_ports = Vec.fill(num_read_ports) { (new RegisterFileReadPortIO(PREG_SZ, register_width)) }
       val write_ports = Vec.fill(num_write_ports) { (new RegisterFileWritePortIO(PREG_SZ, register_width)) }
 
-//      val debug = new BOOMCoreBundle {
+//      val debug = new BoomBundle()(p) {
 //         val registers = Vec.fill(num_registers) { Bits(width = register_width) }
 //      }.asOutput
    }

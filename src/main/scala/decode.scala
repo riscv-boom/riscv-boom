@@ -296,7 +296,7 @@ object FDecode extends DecodeConstants
 }
 
 
-class DecodeUnitIo extends BOOMCoreBundle
+class DecodeUnitIo(implicit p: Parameters) extends BoomBundle()(p)
 {
    val enq = new Bundle
    {
@@ -452,12 +452,12 @@ class BranchDecode extends Module
 }
 
 
-class FetchSerializerResp extends BOOMCoreBundle
+class FetchSerializerResp(implicit p: Parameters) extends BoomBundle()(p)
 {
    val uops = Vec.fill(DECODE_WIDTH){new MicroOp()}
    val pred_resp = new BranchPredictionResp()
 }
-class FetchSerializerIO extends BOOMCoreBundle
+class FetchSerializerIO(implicit p: Parameters) extends BoomBundle()(p)
 {
    val enq = new DecoupledIO(new FetchBundle()).flip
    val deq = new DecoupledIO(new FetchSerializerResp)
@@ -471,7 +471,7 @@ class FetchSerializerIO extends BOOMCoreBundle
 // connect a N-word wide Fetch Buffer with a M-word decode
 // currently only works for 2 wide fetch to 1 wide decode, OR N:N fetch/decode
 // TODO instead of counter, clear mask bits as instructions are finished?
-class FetchSerializerNtoM extends Module with BOOMCoreParameters
+class FetchSerializerNtoM(implicit p: Parameters) extends BoomModule()(p)
 {
    val io = new FetchSerializerIO
 
@@ -553,7 +553,7 @@ class FetchSerializerNtoM extends Module with BOOMCoreParameters
 // track the current "branch mask", and give out the branch mask to each micro-op in Decode
 // (each micro-op in the machine has a branch mask which says which branches it
 // is being speculated under).
-class BranchMaskGenerationLogic(val pl_width: Int) extends Module with BOOMCoreParameters
+class BranchMaskGenerationLogic(val pl_width: Int)(implicit p: Parameters) extends BoomModule()(p)
 {
    val io = new Bundle
    {

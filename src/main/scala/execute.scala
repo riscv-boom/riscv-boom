@@ -20,7 +20,7 @@ import FUCode._
 import uncore.constants.MemoryOpConstants._
 import rocket.BuildFPU
 
-class ExeUnitResp(data_width: Int) extends BOOMCoreBundle
+class ExeUnitResp(data_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
    val uop = new MicroOp()
    val data = Bits(width = data_width)
@@ -28,7 +28,7 @@ class ExeUnitResp(data_width: Int) extends BOOMCoreBundle
    override def clone = new ExeUnitResp(data_width).asInstanceOf[this.type]
 }
 
-class FFlagsResp extends BOOMCoreBundle
+class FFlagsResp(implicit p: Parameters) extends BoomBundle()(p)
 {
    val uop = new MicroOp()
    val flags = Bits(width=rocket.FPConstants.FLAGS_SZ)
@@ -38,7 +38,7 @@ class ExecutionUnitIo(num_rf_read_ports: Int
                      , num_rf_write_ports: Int
                      , num_bypass_ports: Int
                      , data_width: Int
-                     ) extends Bundle with BOOMCoreParameters
+                     )(implicit p: Parameters) extends BoomBundle()(p)
 {
    // describe which functional units we support (used by the issue window)
    val fu_types = Bits(OUTPUT, FUC_SZ)
@@ -74,7 +74,7 @@ abstract class ExecutionUnit(val num_rf_read_ports: Int
                             , val has_fpu       : Boolean       = false // can return fflags
                             , val has_mul       : Boolean       = false
                             , val has_div       : Boolean       = false
-                            ) extends Module with BOOMCoreParameters
+                            )(implicit p: Parameters) extends BoomModule()(p)
 {
    val io = new ExecutionUnitIo(num_rf_read_ports, num_rf_write_ports
                                , num_bypass_stages, data_width)
@@ -97,7 +97,7 @@ class ALUExeUnit(is_branch_unit   : Boolean = false
                 , has_mul         : Boolean = false
                 , has_div         : Boolean = false
                 , use_slow_mul    : Boolean = false
-                ) extends ExecutionUnit(num_rf_read_ports = if (has_fpu) 3 else 2
+                )(implicit p: Parameters) extends ExecutionUnit(num_rf_read_ports = if (has_fpu) 3 else 2
                                       , num_rf_write_ports = 1
                                       , num_bypass_stages = if (has_fpu || (has_mul && !use_slow_mul)) 3 else 1 // TODO FPU LATENCY ADAM
                                       , data_width = if (has_fpu) 65 else 64
@@ -108,7 +108,7 @@ class ALUExeUnit(is_branch_unit   : Boolean = false
                                       , has_fpu = has_fpu
                                       , has_mul = has_mul
                                       , has_div = has_div
-                                      )
+                                      )(p)
 {
    val muldiv_busy = Bool()
    val has_muldiv = has_div || (has_mul && use_slow_mul)

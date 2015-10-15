@@ -10,9 +10,12 @@ import Node._
 import rocket._
 import uncore.HTIFIO
 
-abstract class BOOMCoreBundle extends Bundle with BOOMCoreParameters
+abstract class BoomModule(implicit val p: Parameters) extends Module()(p)
+  with HasBoomCoreParameters
+class BoomBundle(implicit val p: Parameters) extends junctions.ParameterizedBundle()(p)
+  with HasBoomCoreParameters
 
-class CoreIo() extends Bundle
+class CoreIo(implicit p: Parameters) extends BoomBundle()(p)
 {
    val host = new HTIFIO
    val dmem = new DCMemPortIo
@@ -23,7 +26,7 @@ class CoreIo() extends Bundle
    val counters = new CacheCounters().asInput
 }
 
-class Core() extends Module
+class Core(implicit p: Parameters) extends BoomModule()(p)
 {
    val io = new CoreIo()
 

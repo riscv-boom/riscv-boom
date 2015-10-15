@@ -15,18 +15,19 @@ import Node._
 import uncore._
 import rocket.CoreName
 
-class BOOMTile(resetSignal: Bool = null) extends rocket.Tile(resetSignal)
+class BOOMTile(resetSignal: Bool = null)(implicit p: Parameters) extends rocket.Tile(resetSignal)(p)
 {
    val dcachePortId = 0
    val icachePortId = 1
 
-   val core = Module(new Core, {case CoreName => "BOOM"})
-   val icache = Module(new rocket.Frontend(btb_updates_out_of_order=true), {case CacheName => "L1I"; case CoreName => "BOOM"})
-   val dcache = Module(new rocket.HellaCache, {case CacheName => "L1D"})
-   val dc_shim = Module(new DCacheShim)
-   val ptw = Module(new rocket.PTW(params(rocket.NPTWPorts)))
+   val dcacheParams = p.alterPartial({ case CacheName => "L1D" })
+   val core = Module(new Core()(p.alterPartial({case CoreName => "BOOM"})))
+   val icache = Module(new rocket.Frontend()(p.alterPartial({case CacheName => "L1I"; case CoreName => "BOOM"})))
+   val dcache = Module(new rocket.HellaCache()(dcacheParams)
+   val dc_shim = Module(new DCacheShim()(dcacheParams))
+   val ptw = Module(new rocket.PTW(p(rocket.NPTWPorts)(dcacheParams)))
 
-   val dcArb = Module(new rocket.HellaCacheArbiter(params(rocket.NDCachePorts)))
+   val dcArb = Module(new rocket.HellaCacheArbiter(p(rocket.NDCachePorts))(dcacheParams))
    dcArb.io.requestor(0) <> ptw.io.mem
    dcArb.io.requestor(1) <> dc_shim.io.dmem
    dcArb.io.mem <> dcache.io.cpu
@@ -54,7 +55,7 @@ class BOOMTile(resetSignal: Bool = null) extends rocket.Tile(resetSignal)
    io.uncached <> params(rocket.BuildRoCC).map { buildItHere =>
       val rocc = buildItHere()
       val memArb = Module(new uncore.ClientTileLinkIOArbiter(3))
-      val dcIF = Module(new rocket.SimpleHellaCacheIF)
+      val dcIF = Module(new rocket.SimpleHellaCacheIF()(dcacheParams))
       core.io.rocc <> rocc.io
       dcIF.io.requestor <> rocc.io.mem
       dcArb.io.requestor(2) <> dcIF.io.cache

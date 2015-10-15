@@ -50,7 +50,7 @@ import rocket.Str
 import uncore.constants.MemoryOpConstants._
 import uncore.PgIdxBits
 
-class LoadStoreUnitIo(pl_width: Int) extends BOOMCoreBundle
+class LoadStoreUnitIo(pl_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
    // Decode Stage
    // Track which stores are "alive" in the pipeline
@@ -126,7 +126,7 @@ class LoadStoreUnitIo(pl_width: Int) extends BOOMCoreBundle
 }
 
 
-class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
+class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(p)
 {
    val io = new LoadStoreUnitIo(pl_width)
 
@@ -353,7 +353,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
                      Mux(will_fire_load_retry, laq_addr(laq_retry_idx),
                                                io.exe_resp.bits.addr.toUInt))
 
-   val dtlb = Module(new rocket.TLB, {case uncore.CacheName => "L1D"})
+   val dtlb = Module(new rocket.TLB()(p.alterPartial({case uncore.CacheName => "L1D"})))
    dtlb.io.ptw <> io.ptw
    dtlb.io.req.valid := will_fire_load_incoming ||
                         will_fire_sta_incoming ||
@@ -361,7 +361,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
                         will_fire_load_retry
    dtlb.io.req.bits.passthrough := Bool(false) // lets status.vm decide
    dtlb.io.req.bits.asid := UInt(0)
-   dtlb.io.req.bits.vpn := exe_vaddr >> UInt(params(PgIdxBits))
+   dtlb.io.req.bits.vpn := exe_vaddr >> UInt(corePgIdxBits)
    dtlb.io.req.bits.instruction := Bool(false)
    dtlb.io.req.bits.store := will_fire_sta_incoming || will_fire_sta_retry
 
@@ -385,7 +385,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
 
 
    // output
-   val exe_tlb_paddr = Cat(dtlb.io.resp.ppn, exe_vaddr(params(PgIdxBits)-1,0))
+   val exe_tlb_paddr = Cat(dtlb.io.resp.ppn, exe_vaddr(corePgIdxBits-1,0))
 
 
 
@@ -1216,7 +1216,7 @@ object LoadDataGenerator
    }
 }
 
-class ForwardingAgeLogic(num_entries: Int) extends Module with BOOMCoreParameters
+class ForwardingAgeLogic(num_entries: Int)(implicit p: Parameters) extends BoomModule()(p)
 {
    val io = new Bundle
    {

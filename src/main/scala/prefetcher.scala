@@ -20,7 +20,7 @@ import Node._
 
 // addresses being sent to the cache, delayed by two cycles so we can see if
 // they missed or not
-class CoreRequest extends BOOMCoreBundle
+class CoreRequest(implicit p: Parameters) extends BoomBundle()(p)
 {
    val addr = UInt(width = coreMaxAddrBits)
    val miss = Bool()           // was the access a miss in the cache?
@@ -30,7 +30,7 @@ class CoreRequest extends BOOMCoreBundle
 }
 
 // this is our access port to the cache, where we put our prefetch requests into
-class CacheReq extends BOOMCoreBundle
+class CacheReq(implicit p: Parameters) extends BoomBundle()(p)
 {
    val addr = UInt(width = coreMaxAddrBits)
 }
@@ -42,7 +42,7 @@ class CacheIO extends Bundle
 
 //*************************************************************
 
-class Prefetcher extends Module 
+class Prefetcher(implicit p: Parameters) extends BoomModule()(p)
 {
    val io = new Bundle
    {

@@ -28,9 +28,7 @@ class DefaultBOOMConfig extends ChiselConfig (
          case MaxBrCount => Knob("MAX_BR_COUNT")
 
          // Front-end
-         case EnableBTB => true
-         case NBTBEntries => if(site(CoreName) == "BOOM") 62 else 62
-         case NRAS => 8
+         case BTBKey => BTBParameters(enabled = true, nEntries = 62, nRAS = 8, updatesOutOfOrder = true)
          case FetchBufferSz => 4
 
          // Branch Predictor

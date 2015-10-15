@@ -16,7 +16,7 @@ import scala.collection.mutable.ArrayBuffer
 //-------------------------------------------------------------
 //-------------------------------------------------------------
 
-class IssueUnitIO(issue_width: Int, num_wakeup_ports: Int) extends BOOMCoreBundle
+class IssueUnitIO(issue_width: Int, num_wakeup_ports: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
    val dis_mask       = Vec.fill(DISPATCH_WIDTH) { Bool(INPUT) }
    val dis_uops       = Vec.fill(DISPATCH_WIDTH) { new MicroOp().asInput() }
@@ -34,7 +34,7 @@ class IssueUnitIO(issue_width: Int, num_wakeup_ports: Int) extends BOOMCoreBundl
 
 }
 
-abstract class IssueUnit(num_issue_slots: Int, issue_width: Int, num_wakeup_ports: Int) extends Module with BOOMCoreParameters
+abstract class IssueUnit(num_issue_slots: Int, issue_width: Int, num_wakeup_ports: Int)(implicit p: Parameters) extends BoomModule()(p)
 {
    val io = new IssueUnitIO(issue_width, num_wakeup_ports)
 

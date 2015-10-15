@@ -46,7 +46,7 @@ import FUCode._
 class FunctionalUnitIo(num_stages: Int
                       , num_bypass_stages: Int
                       , data_width: Int
-                      ) extends BOOMCoreBundle
+                      )(implicit p: Parameters) extends BoomBundle()(p)
 {
    val req     = (new DecoupledIO(new FuncUnitReq(data_width))).flip
    val resp    = (new DecoupledIO(new FuncUnitResp(data_width)))
@@ -66,13 +66,13 @@ class FunctionalUnitIo(num_stages: Int
    val get_pred = new GetPredictionInfo
 }
 
-class GetPredictionInfo extends BOOMCoreBundle
+class GetPredictionInfo(implicit p: Parameters) extends BoomBundle()(p)
 {
    val rob_idx = UInt(OUTPUT, ROB_ADDR_SZ)
    val info = new BranchPredictionResp().asInput
 }
 
-class FuncUnitReq(data_width: Int) extends BOOMCoreBundle
+class FuncUnitReq(data_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
    val uop = new MicroOp()
 
@@ -88,10 +88,10 @@ class FuncUnitReq(data_width: Int) extends BOOMCoreBundle
 
    val kill = Bool() // kill everything
 
-   override def clone = new FuncUnitReq(data_width).asInstanceOf[this.type]
+   override def clone = new FuncUnitReq(data_width)(p).asInstanceOf[this.type]
 }
 
-class FuncUnitResp(data_width: Int) extends BOOMCoreBundle
+class FuncUnitResp(data_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
    val uop = new MicroOp()
    val data = Bits(width = data_width)
@@ -99,10 +99,10 @@ class FuncUnitResp(data_width: Int) extends BOOMCoreBundle
    val addr = UInt(width = vaddrBits+1) // only for maddr -> LSU
    val mxcpt = new ValidIO(Bits(width=rocket.Causes.all.max)) //only for maddr->LSU
 
-   override def clone = new FuncUnitResp(data_width).asInstanceOf[this.type]
+   override def clone = new FuncUnitResp(data_width)(p).asInstanceOf[this.type]
 }
 
-class BypassData(num_bypass_ports: Int, data_width: Int) extends BOOMCoreBundle
+class BypassData(num_bypass_ports: Int, data_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
    val valid = Vec.fill(num_bypass_ports){ Bool() }
    val uop   = Vec.fill(num_bypass_ports){ new MicroOp() }
@@ -111,7 +111,7 @@ class BypassData(num_bypass_ports: Int, data_width: Int) extends BOOMCoreBundle
    def get_num_ports: Int = num_bypass_ports
 }
 
-class BranchUnitResp extends BOOMCoreBundle
+class BranchUnitResp(implicit p: Parameters) extends BoomBundle()(p)
 {
    val take_pc         = Bool()
    val target          = UInt(width = vaddrBits+1)
@@ -135,7 +135,7 @@ abstract class FunctionalUnit(is_pipelined: Boolean
                               , num_bypass_stages: Int
                               , data_width: Int
                               , has_branch_unit: Boolean = false)
-                              extends Module
+                              (implicit p: Parameters) extends BoomModule()(p)
 {
    val io = new FunctionalUnitIo(num_stages, num_bypass_stages, data_width)
 //   val data_width = params(XPRLEN)
@@ -149,11 +149,11 @@ abstract class PipelinedFunctionalUnit(val num_stages: Int,
                                        val earliest_bypass_stage: Int,
                                        val data_width: Int,
                                        is_branch_unit: Boolean = false
-                                      ) extends FunctionalUnit(is_pipelined = true
+                                      )(implicit p: Parameters) extends FunctionalUnit(is_pipelined = true
                                                               , num_stages = num_stages
                                                               , num_bypass_stages = num_bypass_stages
                                                               , data_width = data_width
-                                                              , has_branch_unit = is_branch_unit)
+                                                              , has_branch_unit = is_branch_unit)(p)
 {
    // pipelined functional unit is always ready
    io.req.ready := Bool(true)
@@ -215,13 +215,12 @@ abstract class PipelinedFunctionalUnit(val num_stages: Int,
 
 }
 
-class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)
+class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: Parameters)
              extends PipelinedFunctionalUnit(num_stages = num_stages
                                             , num_bypass_stages = num_stages
                                             , earliest_bypass_stage = 0
                                             , data_width = 64  //xLen
-                                            , is_branch_unit = is_branch_unit)
-             with BOOMCoreParameters
+                                            , is_branch_unit = is_branch_unit)(p)
 {
    val uop = io.req.bits.uop
 
@@ -476,11 +475,11 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)
 
 // passes in base+imm to calculate addresses, and passes store data, to the LSU
 // for floating point, 65bit FP store-data needs to be decoded into 64bit FP form
-class MemAddrCalcUnit extends PipelinedFunctionalUnit(num_stages = 0
+class MemAddrCalcUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(num_stages = 0
                                                      , num_bypass_stages = 0
                                                      , earliest_bypass_stage = 0
                                                      , data_width = 65 // TODO enable this only if FP is enabled?
-                                                     , is_branch_unit = false) with BOOMCoreParameters
+                                                     , is_branch_unit = false)(p)
 {
    // perform address calculation
    val sum = io.req.bits.rs1_data.toUInt + io.req.bits.uop.imm_packed(19,8).toSInt
@@ -530,11 +529,10 @@ class MemAddrCalcUnit extends PipelinedFunctionalUnit(num_stages = 0
 // currently, bypassing is unsupported!
 // All FP instructions are padded out to the max latency unit for easy
 // write-port scheduling.
-class FPUUnit extends PipelinedFunctionalUnit(num_stages = 3
+class FPUUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(num_stages = 3
                                             , num_bypass_stages = 0
                                             , earliest_bypass_stage = 0
-                                            , data_width = 65)
-              with BOOMCoreParameters
+                                            , data_width = 65)(p)
 {
    val fpu = Module(new FPU())
    fpu.io.req <> io.req
@@ -547,12 +545,12 @@ class FPUUnit extends PipelinedFunctionalUnit(num_stages = 3
 
 // unpipelined, can only hold a single MicroOp at a time
 // assumes at least one register between request and response
-abstract class UnPipelinedFunctionalUnit
+abstract class UnPipelinedFunctionalUnit(implicit p: Parameters)
                                        extends FunctionalUnit(is_pipelined = false
                                                             , num_stages = 1
                                                             , num_bypass_stages = 0
                                                             , data_width = 64
-                                                            , has_branch_unit = false) with BOOMCoreParameters
+                                                            , has_branch_unit = false)(p)
 {
    val r_uop = Reg(outType = new MicroOp())
 
@@ -578,9 +576,11 @@ abstract class UnPipelinedFunctionalUnit
 }
 
 
-class MulDivUnit extends UnPipelinedFunctionalUnit with BOOMCoreParameters
+class MulDivUnit(implicit p: Parameters) extends UnPipelinedFunctionalUnit()(p)
 {
-   val muldiv = Module(new rocket.MulDiv(mulUnroll = if (fastMulDiv) 8 else 1, earlyOut = fastMulDiv))
+   val muldiv = Module(new MulDiv(width = xLen,
+                                  unroll = if(usingFastMulDiv) 8 else 1,
+                                  earlyOut = usingFastMulDiv))
 
    // request
    muldiv.io.req.valid    := io.req.valid && !this.do_kill
@@ -599,11 +599,11 @@ class MulDivUnit extends UnPipelinedFunctionalUnit with BOOMCoreParameters
    io.resp.bits.data      := muldiv.io.resp.bits.data
 }
 
-class PipelinedMulUnit(num_stages: Int)
+class PipelinedMulUnit(num_stages: Int)(implicit p: Parameters)
       extends PipelinedFunctionalUnit (num_stages = num_stages
                                       , num_bypass_stages = 0
                                       , earliest_bypass_stage = 0
-                                      , data_width = 64) with BOOMCoreParameters
+                                      , data_width = 64)(p)
 {
    val imul = Module(new IMul(num_stages))
    // request

@@ -97,7 +97,7 @@ class CtrlSignals extends Bundle()
 
 
 // TODO Chisel ability to union this Bundle for different types of Uops?
-class MicroOp extends BOOMCoreBundle
+class MicroOp(implicit p: Parameters) extends BoomBundle()(p)
 {
    val valid            = Bool()                   // is this uop valid? or has it been masked out, used by fetch buffer and Decode stage
    val iw_state         = UInt(width = 2) // what is the next state of this uop in the issue window? useful for the compacting queue? TODO or is this not really belong here?
@@ -185,7 +185,7 @@ class MicroOp extends BOOMCoreBundle
    def fu_code_is(_fu: Bits) = fu_code === _fu
 }
 
-class FetchBundle extends Bundle with BOOMCoreParameters
+class FetchBundle(implicit p: Parameters) extends BoomBundle()(p)
 {
    val pc          = UInt(width = vaddrBits+1)
    val insts       = Vec.fill(FETCH_WIDTH) {Bits(width = 32)}
@@ -198,7 +198,7 @@ class FetchBundle extends Bundle with BOOMCoreParameters
 }
 
 
-class BrResolutionInfo extends BOOMCoreBundle
+class BrResolutionInfo(implicit p: Parameters) extends BoomBundle()(p)
 {
    val valid      = Bool()
    val mispredict = Bool()
@@ -221,7 +221,7 @@ class CacheCounters() extends Bundle
 //-------------------------------------------------------------
 //-------------------------------------------------------------
 
-class DpathIo() extends Bundle()
+class DpathIo(implicit p: Parameters) extends BoomBundle()(p)
 {
    val host     = new uncore.HTIFIO
    val imem     = new rocket.CPUFrontendIO
@@ -232,11 +232,11 @@ class DpathIo() extends Bundle()
    val counters = new CacheCounters().asInput
 }
 
-class DatPath() extends Module with BOOMCoreParameters
+class DatPath(implicit p: Parameters) extends BoomModule()(p)
 {
    val io = new DpathIo()
 
-   val csr = Module(new rocket.CSRFile, {case CoreName => "BOOM"})
+   val csr = Module(new rocket.CSRFile()(p.alterPartial({case CoreName => "BOOM"})))
 
    //**********************************
    // Pipeline State Registers

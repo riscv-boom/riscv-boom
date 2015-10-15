@@ -16,7 +16,7 @@ package BOOM
 import Chisel._
 import Node._
 
-class BpdResp extends BOOMCoreBundle
+class BpdResp(implicit p: Parameters) extends BoomBundle()(p)
 {
    val takens = Bits(width = FETCH_WIDTH)
    val history = Bits(width = GHIST_LENGTH)
@@ -27,7 +27,7 @@ class BpdResp extends BOOMCoreBundle
 //    - 1) correct the history if the processor mispredicted
 //    - 2) correct the p-table if it mispredicted (the processor may have been correct though)
 //    - 3) strengthen the h-table (on all branch resolutions)
-class BpdUpdate extends BOOMCoreBundle
+class BpdUpdate(implicit p: Parameters) extends BoomBundle()(p)
 {
    // the fetch pc (points to start of the fetch packet)
    // which word in the fetch packet does the update correspond to?
@@ -47,7 +47,7 @@ class BpdUpdate extends BOOMCoreBundle
    val new_pc_same_packet = Bool()
 }
 
-class BrTableUpdate extends BOOMCoreBundle
+class BrTableUpdate(implicit p: Parameters) extends BoomBundle()(p)
 {
    val hash_idx   = UInt(width = vaddrBits)
    val br_pc      = UInt(width = log2Up(FETCH_WIDTH)+log2Ceil(coreInstBytes)) // which word in the fetch packet does the update correspond to?
@@ -58,12 +58,12 @@ class BrTableUpdate extends BOOMCoreBundle
 
 // BP2 stage needs to speculatively update the history register with what the
 // processor decided to do (takes BTB's effect into account)
-class GHistUpdate extends BOOMCoreBundle
+class GHistUpdate(implicit p: Parameters) extends BoomBundle()(p)
 {
    val taken = Bool()
 }
 
-class BrPredictorIo extends BOOMCoreBundle
+class BrPredictorIo(implicit p: Parameters) extends BoomBundle()(p)
 {
    val req_pc = UInt(INPUT, width = vaddrBits)
    val resp   = Decoupled(new BpdResp)
@@ -71,7 +71,7 @@ class BrPredictorIo extends BOOMCoreBundle
    val update = Valid(new BpdUpdate).flip // from branch-unit (actual update)
 }
 
-abstract class BrPredictor extends Module with BOOMCoreParameters
+abstract class BrPredictor(implicit p: Parameters) extends BoomModule()(p)
 {
    val io = new BrPredictorIo
 }
@@ -79,7 +79,7 @@ abstract class BrPredictor extends Module with BOOMCoreParameters
 class GshareBrPredictor(fetch_width: Int
                         , num_entries: Int = 4096
                         , history_length: Int = 12
-   ) extends BrPredictor
+   )(implicit p: Parameters) extends BrPredictor()(p)
 {
    //------------------------------------------------------------
    private def hash (addr: UInt, hist: Bits) =

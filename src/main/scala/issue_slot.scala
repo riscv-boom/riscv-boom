@@ -9,7 +9,7 @@ import Chisel._
 import Node._
 import FUCode._
 
-class IssueSlotIo(num_wakeup_ports: Int) extends BOOMCoreBundle
+class IssueSlotIo(num_wakeup_ports: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
    val valid          = Bool(OUTPUT)
    val will_be_valid  = Bool(OUTPUT) // TODO code review, do we need this signal so explicitely?
@@ -33,7 +33,7 @@ class IssueSlotIo(num_wakeup_ports: Int) extends BOOMCoreBundle
    }.asOutput
 }
 
-class IssueSlot(num_slow_wakeup_ports: Int) extends Module with BOOMCoreParameters
+class IssueSlot(num_slow_wakeup_ports: Int)(implicit p: Parameters) extends BoomModule()(p)
 {
    val io = new IssueSlotIo(num_slow_wakeup_ports)
 

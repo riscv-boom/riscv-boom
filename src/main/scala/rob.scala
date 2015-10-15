@@ -27,7 +27,7 @@ import scala.math.ceil
 
 import rocket.Str
 
-class Exception extends BOOMCoreBundle
+class Exception(implicit p: Parameters) extends BoomBundle()(p)
 {
    val uop = new MicroOp()
    val cause = Bits(width=log2Up(rocket.Causes.all.max))
@@ -35,7 +35,7 @@ class Exception extends BOOMCoreBundle
 }
 
 // provide a port for a FU to get the PC of an instruction from the ROB
-class RobPCRequest extends BOOMCoreBundle
+class RobPCRequest(implicit p: Parameters) extends BoomBundle()(p)
 {
    val rob_idx  = UInt(INPUT, ROB_ADDR_SZ)
    val curr_pc  = UInt(OUTPUT, vaddrBits+1)
@@ -48,7 +48,7 @@ class RobPCRequest extends BOOMCoreBundle
 class RobIo(machine_width: Int
             , num_wakeup_ports: Int
             , num_fpu_ports: Int
-            )  extends BOOMCoreBundle
+            )(implicit p: Parameters)  extends BoomBundle()(p)
 {
    // Dispatch Stage
    // (Write Instruction to ROB from Dispatch Stage)
@@ -123,7 +123,7 @@ class RobIo(machine_width: Int
 
 
    // pass out debug information to high-level printf
-   val debug = new BOOMCoreBundle
+   val debug = new Bundle
    {
       val state = UInt()
       val rob_head = UInt(width = ROB_ADDR_SZ)
@@ -148,7 +148,7 @@ class Rob(width: Int
          , num_rob_entries: Int
          , num_wakeup_ports: Int
          , num_fpu_ports: Int
-         ) extends Module with BOOMCoreParameters
+         )(implicit p: Parameters) extends BoomModule()(p)
 {
    val io = new RobIo(width, num_wakeup_ports, num_fpu_ports)
 
