@@ -72,6 +72,7 @@ trait HasBoomCoreParameters extends rocket.HasCoreParameters
    val ENABLE_BRANCH_PREDICTOR = params(EnableBranchPredictor)
    val ENABLE_REGFILE_BYPASSING  = true  // bypass regfile write ports to read ports
    val MAX_WAKEUP_DELAY = 3              // unused
+   val ENABLE_COMMIT_MAP_TABLE = p(EnableCommitMapTable)
 
    //************************************
    // Implicitly calculated constants

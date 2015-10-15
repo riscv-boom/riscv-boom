@@ -98,9 +98,9 @@ class Prefetcher(implicit p: Parameters) extends BoomModule()(p)
    }
 
    // fetch the next cache line
-   request_queue.io.enq.bits.addr := io.core_requests.bits.addr + UInt(1 << params(uncore.CacheBlockOffsetBits))
-
-
+   request_queue.io.enq.bits.addr := io.core_requests.bits.addr + UInt(1 << p(uncore.CacheBlockOffsetBits))
+   
+    
    // hook up our request to the outside world (notice the interfaces match)
    io.cache.req <> request_queue.io.deq
 

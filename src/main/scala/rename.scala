@@ -109,7 +109,7 @@ class RenameMapTableElement(pipeline_width: Int)(implicit p: Parameters) extends
       element := PriorityMux(io.wens.reverse, io.ren_pdsts.reverse)
    }
 
-   if (params(EnableCommitMapTable))
+   if (ENABLE_COMMIT_MAP_TABLE)
    {
       val committed_element = Reg(init=UInt(0,PREG_SZ))
       when (io.commit_wen)
@@ -311,7 +311,7 @@ class RenameFreeList(num_phys_registers: Int // number of physical registers
    // OPTIONALLY: handle single-cycle resets
    // Committed Free List tracks what the free list is at the commit point,
    // allowing for a single-cycle reset of the rename state on a pipeline flush.
-   if (params(EnableCommitMapTable))
+   if (ENABLE_COMMIT_MAP_TABLE)
    {
       val committed_free_list = Reg(init=(~Bits(1,num_phys_registers)))
 
@@ -462,7 +462,7 @@ class RenameStage(pl_width: Int, num_wb_ports: Int)(implicit p: Parameters) exte
    val ren_br_vals = Wire(Vec(pl_width, Bool()))
    val freelist_can_allocate = Wire(Vec(pl_width, Bool()))
 
-   val max_operands = if(params(BuildFPU).isEmpty) 2 else 3
+   val max_operands = if(!usingFPU) 2 else 3
 
    //-------------------------------------------------------------
    // Set outputs up... we'll write in the pop*/pdst info below
@@ -522,7 +522,7 @@ class RenameStage(pl_width: Int, num_wb_ports: Int)(implicit p: Parameters) exte
       }
    }
 
-   if (params(EnableCommitMapTable))
+   if (ENABLE_COMMIT_MAP_TABLE)
    {
       for (w <- 0 until pl_width)
       {

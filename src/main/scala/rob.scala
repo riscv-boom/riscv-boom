@@ -422,7 +422,7 @@ class Rob(width: Int
       io.com_rbk_valids(w) := (rob_state === s_rollback) &&
                               rob_val(com_idx) &&
                               (rob_uop(com_idx).dst_rtype === RT_FIX || rob_uop(com_idx).dst_rtype === RT_FLT) &&
-                              Bool(!params(EnableCommitMapTable))
+                              Bool(!ENABLE_COMMIT_MAP_TABLE)
       io.com_uops(w)       := rob_uop(com_idx)
 
       when (rob_state === s_rollback)
@@ -431,7 +431,7 @@ class Rob(width: Int
          rob_exception(com_idx) := Bool(false)
       }
 
-      if (params(EnableCommitMapTable))
+      if (ENABLE_COMMIT_MAP_TABLE)
       {
          when (Reg(next=exception_thrown))
          {
@@ -707,7 +707,7 @@ class Rob(width: Int
    }
    // assert !(rob_tail >= (num_rob_entries/width))
 
-   if (params(EnableCommitMapTable))
+   if (ENABLE_COMMIT_MAP_TABLE)
    {
       when (Reg(next=exception_thrown))
       {
@@ -738,7 +738,7 @@ class Rob(width: Int
    //-----------------------------------------------
 
    // ROB FSM
-   if (!params(EnableCommitMapTable))
+   if (!ENABLE_COMMIT_MAP_TABLE)
    {
        switch (rob_state)
       {

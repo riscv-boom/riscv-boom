@@ -140,7 +140,6 @@ abstract class FunctionalUnit(is_pipelined: Boolean
                               (implicit p: Parameters) extends BoomModule()(p)
 {
    val io = new FunctionalUnitIo(num_stages, num_bypass_stages, data_width)
-//   val data_width = params(XPRLEN)
 }
 
 
@@ -518,7 +517,7 @@ class MemAddrCalcUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(nu
    val unrec_out = Mux(io.req.bits.uop.fp_single, Cat(Fill(32, unrec_s(31)), unrec_s), unrec_d)
 
    var store_data:Bits = null
-   if (params(BuildFPU).isEmpty) store_data = io.req.bits.rs2_data
+   if (!usingFPU) store_data = io.req.bits.rs2_data
    else store_data = Mux(io.req.bits.uop.fp_val, unrec_out, io.req.bits.rs2_data)
 
    io.resp.bits.addr := effective_address

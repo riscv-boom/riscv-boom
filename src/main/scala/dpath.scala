@@ -272,17 +272,17 @@ class DatPath(implicit p: Parameters) extends BoomModule()(p)
    if (ISSUE_WIDTH == 2) println("    -== Dual Issue ==- \n")
    if (ISSUE_WIDTH == 3) println("    -== Triple Issue ==- \n")
    if (ISSUE_WIDTH == 4) println("    -== Quad Issue ==- \n")
-   if (params(BuildFPU).isEmpty) println ("\n    FPU Unit Disabled")
-   else                          println ("\n    FPU Unit Enabled")
-   if (params(UseVM)) println ("    VM Enabled\n")
-   else               println ("    VM Disabled\n")
+   if (!usingFPU) println ("\n    FPU Unit Disabled")
+   else           println ("\n    FPU Unit Enabled")
+   if (usingVM)) println ("    VM Enabled\n")
+   else          println ("    VM Disabled\n")
 
    if (ISSUE_WIDTH == 1)
    {
       exe_units += Module(new ALUMemExeUnit(is_branch_unit   = true
                                           , shares_csr_wport = true
-                                          , fp_mem_support   = !params(BuildFPU).isEmpty
-                                          , has_fpu          = !params(BuildFPU).isEmpty
+                                          , fp_mem_support   = usingFPU
+                                          , has_fpu          = usingFPU
                                           , has_mul          = true
                                           , has_div          = true
                                           , use_slow_mul     = false
@@ -292,10 +292,10 @@ class DatPath(implicit p: Parameters) extends BoomModule()(p)
    {
       exe_units += Module(new ALUExeUnit(is_branch_unit      = true
                                           , shares_csr_wport = true
-                                          , has_fpu          = !params(BuildFPU).isEmpty
+                                          , has_fpu          = usingFPU
                                           , has_mul          = true
                                           ))
-      exe_units += Module(new ALUMemExeUnit(fp_mem_support   = !params(BuildFPU).isEmpty
+      exe_units += Module(new ALUMemExeUnit(fp_mem_support   = usingFPU
                                           , has_div          = true
                                           ))
    }
@@ -303,7 +303,7 @@ class DatPath(implicit p: Parameters) extends BoomModule()(p)
    {
       exe_units += Module(new ALUExeUnit(is_branch_unit = true
                                           , shares_csr_wport = true
-                                          , has_fpu = !params(BuildFPU).isEmpty
+                                          , has_fpu = usingFPU
                                           , has_mul      = true
                                           ))
       exe_units += Module(new ALUExeUnit(has_div = true))
@@ -313,7 +313,7 @@ class DatPath(implicit p: Parameters) extends BoomModule()(p)
    {  // 4-wide issue
       exe_units += Module(new ALUExeUnit(is_branch_unit = false
                                           , shares_csr_wport = true
-                                          , has_fpu = !params(BuildFPU).isEmpty
+                                          , has_fpu = usingFPU
                                           , has_mul = true
                                           ))
       exe_units += Module(new ALUExeUnit(is_branch_unit = true))
@@ -326,7 +326,7 @@ class DatPath(implicit p: Parameters) extends BoomModule()(p)
    require (exe_units.map(_.is_mem_unit).reduce(_|_), "Datapath is missing a memory unit.")
    require (exe_units.map(_.has_mul).reduce(_|_), "Datapath is missing a multiplier.")
    require (exe_units.map(_.has_div).reduce(_|_), "Datapath is missing a divider.")
-   require (exe_units.map(_.has_fpu).reduce(_|_) == !params(BuildFPU).isEmpty, "Datapath is missing a fpu.")
+   require (exe_units.map(_.has_fpu).reduce(_|_) == usingFPU, "Datapath is missing a fpu.")
 
    require (exe_units.length != 0)
    val num_rf_read_ports = exe_units.map(_.num_rf_read_ports).reduce[Int](_+_)
@@ -341,17 +341,17 @@ class DatPath(implicit p: Parameters) extends BoomModule()(p)
    val num_wakeup_ports = num_slow_wakeup_ports + num_fast_wakeup_ports
    val rf_cost = (num_rf_read_ports+num_rf_write_ports)*(num_rf_read_ports+2*num_rf_write_ports)
 
-   val iss_str = if (params(EnableAgePriorityIssue)) " (Age-based Priority)"
+   val iss_str = if (p(EnableAgePriorityIssue)) " (Age-based Priority)"
                  else " (Unordered Priority)"
    println("\n   Fetch Width          : " + FETCH_WIDTH)
    println("   Issue Width          : " + ISSUE_WIDTH)
    println("   ROB Size             : " + NUM_ROB_ENTRIES)
-   println("   Issue Window Size    : " + params(NumIssueSlotEntries) + iss_str)
-   println("   Load/Store Unit Size : " + params(NumLsuEntries) + "/" + params(NumLsuEntries))
-   println("   Num Phys. Registers  : " + params(NumPhysRegisters))
-   println("   Max Branch Count     : " + params(MaxBrCount))
-   println("   BTB Size             : " + params(NBTBEntries))
-   println("   RAS Size             : " + params(NRAS))
+   println("   Issue Window Size    : " + p(NumIssueSlotEntries) + iss_str)
+   println("   Load/Store Unit Size : " + p(NumLsuEntries) + "/" + p(NumLsuEntries))
+   println("   Num Phys. Registers  : " + p(NumPhysRegisters))
+   println("   Max Branch Count     : " + p(MaxBrCount))
+   println("   BTB Size             : " + p(rocket.BtbKey).nEntries)
+   println("   RAS Size             : " + p(rocket.BtbKey).nRAS)
 
    println("\n   Num RF Read Ports    : " + num_rf_read_ports)
    println("   Num RF Write Ports   : " + num_rf_write_ports + "\n")
@@ -368,7 +368,7 @@ class DatPath(implicit p: Parameters) extends BoomModule()(p)
    val brunit_idx = exe_units.indexWhere(_.hasBranchUnit)
    br_unit <> exe_units(brunit_idx).io.br_unit
 
-   val register_width = if (params(BuildFPU).isEmpty) xLen else 65
+   val register_width = if (!usingFPU) xLen else 65
    val bypasses = Wire(new BypassData(num_total_bypass_ports, register_width))
 
    val issue_width           = exe_units.length
@@ -416,7 +416,7 @@ class DatPath(implicit p: Parameters) extends BoomModule()(p)
    val FetchBuffer = Module(new Queue(gen=new FetchBundle,
                                 entries=FETCH_BUFFER_SZ,
                                 pipe=false,
-                                flow=params(EnableFetchBufferFlowThrough),
+                                flow=p(EnableFetchBufferFlowThrough),
                                 _reset=(fetchbuffer_kill || reset.toBool)))
 
    val if_stalled = Wire(Bool()) // if FetchBuffer backs up, we have to stall the front-end
@@ -754,10 +754,10 @@ class DatPath(implicit p: Parameters) extends BoomModule()(p)
    //-------------------------------------------------------------
    //-------------------------------------------------------------
 
-   val issue_unit = if (params(EnableAgePriorityIssue))
-                        Module(new IssueUnitCollasping(params(NumIssueSlotEntries), issue_width, num_wakeup_ports))
+   val issue_unit = if (p(EnableAgePriorityIssue))
+                        Module(new IssueUnitCollasping(p(NumIssueSlotEntries), issue_width, num_wakeup_ports))
                     else
-                        Module(new IssueUnitStatic(params(NumIssueSlotEntries), issue_width, num_wakeup_ports))
+                        Module(new IssueUnitStatic(p(NumIssueSlotEntries), issue_width, num_wakeup_ports))
 
    // Input (Dispatch)
    issue_unit.io.dis_mask  := dis_mask
@@ -1186,7 +1186,7 @@ class DatPath(implicit p: Parameters) extends BoomModule()(p)
 
    // UARCH Counters
    // these take up a significant amount of area, so don't enable them lightly
-   if (params(EnableUarchCounters))
+   if (p(EnableUarchCounters))
    {
       println("\n   UArch Counters Enabled\n")
       csr.io.uarch_counters(0)  := PopCount((Range(0,COMMIT_WIDTH)).map{w => com_valids(w) && com_uops(w).is_br_or_jmp && !com_uops(w).is_jal})
@@ -1239,7 +1239,7 @@ class DatPath(implicit p: Parameters) extends BoomModule()(p)
    {
       println("\n Chisel Printout Enabled\n")
 
-      var whitespace = 56 - NUM_LSU_ENTRIES- params(NumIssueSlotEntries) - (NUM_ROB_ENTRIES/COMMIT_WIDTH) - io.dmem.debug.ld_req_slot.size - NUM_BROB_ENTRIES
+      var whitespace = 56 - NUM_LSU_ENTRIES- p(NumIssueSlotEntries) - (NUM_ROB_ENTRIES/COMMIT_WIDTH) - io.dmem.debug.ld_req_slot.size - NUM_BROB_ENTRIES
 
       def InstsStr(insts: Bits, width: Int) =
       {

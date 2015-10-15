@@ -278,13 +278,13 @@ class MulDExeUnit extends ExecutionUnit(num_rf_read_ports = 2
 // TODO listed as FIFOs, but not using ready signal
 
 
-class MemExeUnit extends ExecutionUnit(num_rf_read_ports = 2 // TODO make this 1, requires MemAddrCalcUnit to accept store data on rs1_data port
+class MemExeUnit(implicit p: Parameters) extends ExecutionUnit(num_rf_read_ports = 2 // TODO make this 1, requires MemAddrCalcUnit to accept store data on rs1_data port
                                       , num_rf_write_ports = 1
                                       , num_bypass_stages = 0
-                                      , data_width = 65 // TODO need to know if params(BuildFPU).isEmpty here
+                                      , data_width = if(p(BuildFPU).isEmpty) p(XLen) else 65
                                       , num_variable_write_ports = 1
                                       , bypassable = false
-                                      , is_mem_unit = true)
+                                      , is_mem_unit = true)(p)
 {
    println ("     ExeUnit--")
    println ("       - Mem")
@@ -352,7 +352,7 @@ class MemExeUnit extends ExecutionUnit(num_rf_read_ports = 2 // TODO make this 1
                                                 io.dmem.resp.bits.uop)
 
    var memresp_data:Bits = null
-   if (params(BuildFPU).isEmpty)
+   if (!usingFPU)
    {
       memresp_data = Mux(lsu.io.forward_val, lsu.io.forward_data
                                            , io.dmem.resp.bits.data_subword)

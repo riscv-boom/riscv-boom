@@ -58,8 +58,8 @@ class BOOMTile(resetSignal: Bool = null)(implicit p: Parameters) extends rocket.
    io.cached <> dcache.io.mem
    // If so specified, build an RoCC module and wire it in
    // otherwise, just hookup the icache
-   io.uncached <> params(rocket.BuildRoCC).map { buildItHere =>
-      val rocc = buildItHere()
+   io.uncached <> p(rocket.BuildRoCC).map { buildItHere =>
+      val rocc = buildItHere(p)
       val memArb = Module(new uncore.ClientTileLinkIOArbiter(3))
       val dcIF = Module(new rocket.SimpleHellaCacheIF()(dcacheParams))
       core.io.rocc <> rocc.io
