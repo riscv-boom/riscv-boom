@@ -316,7 +316,7 @@ class DecodeUnitIo(implicit p: Parameters) extends BoomBundle()(p)
 }
 
 // Takes in a single instruction, generates a MicroOp (or multiply micro-ops over x cycles)
-class DecodeUnit() extends Module
+class DecodeUnit(implicit p: Parameters) extends BoomModule()(p)
 {
    val io = new DecodeUnitIo
 
@@ -324,7 +324,7 @@ class DecodeUnit() extends Module
    uop := io.enq.uop
 
    var decode_table = XDecode.table
-   if (!params(BuildFPU).isEmpty) decode_table ++= FDecode.table
+   if (usingFPU) decode_table ++= FDecode.table
    val cs = new CtrlSigs().decode(uop.inst, decode_table)
 
    // Exception Handling
