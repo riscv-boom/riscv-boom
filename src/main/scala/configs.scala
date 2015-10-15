@@ -37,6 +37,7 @@ class DefaultBOOMConfig extends ChiselConfig (
          case EnableBTBContainsBranches => false // don't send branches to BTB
          case NBTBEntries => if(site(CoreName) == "BOOM") 64 else 62
          case NRAS => 8
+         case BTBKey => BTBParameters(enabled = true, nEntries = 62, nRAS = 8, updatesOutOfOrder = true)
          case FetchBufferSz => 4
 
          // Branch Predictor

@@ -32,7 +32,7 @@ import rocket.BuildFPU
 
 
 // Track Inflight Memory Requests
-class LoadReqSlotIo extends Bundle
+class LoadReqSlotIo(implicit p: Parameters) extends BoomBundle()(p)
 {
    val valid      = Bool(OUTPUT) // slot has an entry
 
@@ -50,7 +50,7 @@ class LoadReqSlotIo extends Bundle
 
 // Note: Anything incoming that gets killed by br or exception is still marked
 // as "valid", since it also got sent to the datacache.
-class LoadReqSlot extends Module
+class LoadReqSlot(implicit p: Parameters) extends BoomModule()(p)
 {
    val io = new LoadReqSlotIo()
 
@@ -117,7 +117,7 @@ class LoadReqSlot extends Module
    io.out_uop    := uop
 }
 
-class DCacheReq extends Bundle with BOOMCoreParameters
+class DCacheReq(implicit p: Parameters) extends BoomBundle()(p)
 {
    val addr    = UInt(width = coreMaxAddrBits)
    val uop     = new MicroOp()
@@ -125,7 +125,7 @@ class DCacheReq extends Bundle with BOOMCoreParameters
    val kill    = Bool()    // e.g., LSU detects load misspeculation
 }
 
-class NackInfo extends BOOMCoreBundle
+class NackInfo(implicit p: Parameters) extends BoomBundle()(p)
 {
    val valid      = Bool()
    val lsu_idx    = UInt(width = MEM_ADDR_SZ)
@@ -135,7 +135,7 @@ class NackInfo extends BOOMCoreBundle
                            // LSU nacks for address conflicts/forwarding
 }
 
-class DCacheResp extends BOOMCoreBundle
+class DCacheResp(implicit p: Parameters) extends BoomBundle()(p)
 {
    val data         = Bits(width = coreDataBits)
    val data_subword = Bits(width = coreDataBits)
@@ -146,7 +146,7 @@ class DCacheResp extends BOOMCoreBundle
 
 
 // from pov of datapath
-class DCMemPortIo extends BOOMCoreBundle
+class DCMemPortIo(implicit p: Parameters) extends BoomBundle()(p)
 {
    val req     = (new DecoupledIO(new DCacheReq))
    val resp    = (new ValidIO(new DCacheResp)).flip
@@ -157,7 +157,7 @@ class DCMemPortIo extends BOOMCoreBundle
    val invalidate_lr = Bool(OUTPUT) // should the dcache clear ld/sc reservations?
    val ordered = Bool(INPUT)        // is the dcache ordered? (fence is done)
 
-   val debug = new BOOMCoreBundle
+   val debug = new BoomBundle()(p)
    {
       val memreq_val = Bool()
       val memreq_lidx = UInt(width=MEM_ADDR_SZ)
@@ -176,7 +176,7 @@ class DCMemPortIo extends BOOMCoreBundle
    }.asInput
 }
 
-class DCacheShim extends Module with BOOMCoreParameters
+class DCacheShim(implicit p: Parameters) extends BoomModule()(p)
 {
    val max_num_inflight = MAX_LD_COUNT
    isPow2(max_num_inflight)

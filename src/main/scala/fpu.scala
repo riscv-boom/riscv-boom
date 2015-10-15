@@ -122,7 +122,7 @@ class UOPCodeFPUDecoder extends Module
 }
 
 
-class FPU extends Module with BOOMCoreParameters
+class FPU(implicit p: Parameters) extends BoomModule()(p)
 {
    val io = new Bundle
    {

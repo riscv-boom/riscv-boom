@@ -27,21 +27,21 @@ import Node._
 
 import rocket.Str
 
-class RedirectRequest (fetch_width: Int) extends BOOMCoreBundle
+class RedirectRequest(fetch_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
    val target  = UInt(width = vaddrBits+1)
    val br_pc   = UInt(width = vaddrBits+1) // PC of the instruction changing control flow (to update the BTB with jumps)
    val idx     = UInt(width = log2Up(fetch_width)) // idx of br in fetch bundle (to mask out the appropriate fetch
                                                    // instructions)
    val is_jump = Bool() // (only valid if redirect request is valid)
-   override def cloneType: this.type = new RedirectRequest(fetch_width).asInstanceOf[this.type]
+  override def clone = new RedirectRequest(fetch_width)(p).asInstanceOf[this.type]
 }
 
 // this information is shared across the entire fetch packet, and stored in the
 // branch snapshots. Since it's not unique to an instruction, it could be
 // compressed further. It can be de-allocated once the branch is resolved in
 // Execute.
-class BranchPredictionResp extends BOOMCoreBundle // TODO rename BranchPredictionResolutionInfo?
+class BranchPredictionResp(implicit p: Parameters) extends BoomBundle()(p) // TODO rename BranchPredictionResolutionInfo?
 {
    val btb_resp_valid = Bool()
    val btb_resp       = new rocket.BTBResp
@@ -54,7 +54,7 @@ class BranchPredictionResp extends BOOMCoreBundle // TODO rename BranchPredictio
 }
 
 // give this to each instruction/uop and pass this down the pipeline to the branch-unit
-class BranchPrediction extends BOOMCoreBundle
+class BranchPrediction(implicit p: Parameters) extends BoomBundle()(p)
 {
    val bpd_predict_taken= Bool() // did the bpd predict taken for this instruction?
    val btb_hit          = Bool() // this instruction was the br/jmp predicted by the BTB
@@ -66,9 +66,9 @@ class BranchPrediction extends BOOMCoreBundle
    def wasBTB = btb_predicted
 }
 
-class BranchPredictionStage (fetch_width: Int) extends Module with BOOMCoreParameters
+class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p) 
 {
-   val io = new BOOMCoreBundle
+   val io = new BoomBundle()(p)
    {
       val imem       = new rocket.CPUFrontendIO
       val req        = Decoupled(new RedirectRequest(fetch_width))

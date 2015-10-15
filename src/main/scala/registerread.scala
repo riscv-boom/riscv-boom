@@ -37,9 +37,9 @@ class RegisterRead(issue_width: Int
                                              // num_total_read_ports)
                   , num_total_bypass_ports: Int
                   , register_width: Int
-                  ) extends Module with BOOMCoreParameters
+                  )(implicit p: Parameters) extends BoomModule()(p) 
 {
-   val io = new BOOMCoreBundle
+   val io = new BoomBundle()(p)
    {
       // issued micro-ops
       val iss_valids = Vec.fill(issue_width) { Bool(INPUT) }
@@ -201,7 +201,7 @@ class RegisterRead(issue_width: Int
 //-------------------------------------------------------------
 //-------------------------------------------------------------
 
-class RRdCtrlSigs extends Bundle
+class RRdCtrlSigs(implicit p: Parameters) extends BoomBundle()(p)
 {
    val br_type          = UInt(width = BR_N.getWidth)
    val use_alupipe      = Bool()
@@ -225,9 +225,9 @@ class RRdCtrlSigs extends Bundle
    }
 }
 
-class RegisterReadDecode extends Module
+class RegisterReadDecode(implicit p: Parameters) extends BoomModule()(p)
 {
-   val io = new BOOMCoreBundle
+   val io = new BoomBundle()(p)
    {
       val iss_valid = Bool(INPUT)
       val iss_uop   = new MicroOp().asInput()

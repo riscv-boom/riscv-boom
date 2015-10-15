@@ -18,7 +18,7 @@ package boom
 import Chisel._
 import Node._
 
-class BrTableUpdate extends BOOMCoreBundle
+class BrTableUpdate(implicit p: Parametrs) extends BoomBundle()(p)
 {
    val hash_idx   = UInt(width = vaddrBits)
    val executed   = Bits(width = FETCH_WIDTH) // which words in the fetch packet does the update correspond to?
@@ -26,7 +26,7 @@ class BrTableUpdate extends BOOMCoreBundle
 }
 
 
-class GShareResp extends BOOMCoreBundle
+class GShareResp(implicit p: Parameters) extends BoomBundle()(p)
 {
    val history = Bits(width = GHIST_LENGTH) // stored in snapshots (dealloc after Execute)
    val index =  Bits(width = GHIST_LENGTH) // needed to update predictor at Commit
@@ -35,7 +35,7 @@ class GShareResp extends BOOMCoreBundle
 class GshareBrPredictor(fetch_width: Int
                         , num_entries: Int = 4096
                         , history_length: Int = 12
-   ) extends BrPredictor(fetch_width, history_length)
+   )(implicit p: Parameters) extends BrPredictor(fetch_width, history_length)(p)
 {
    println ("\tBuilding (" + (num_entries * fetch_width * 2/8/1024) +
       " kB) GShare Predictor, with " + history_length + " bits of history for (" +
