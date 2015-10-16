@@ -562,6 +562,7 @@ class DatPath() extends Module with BOOMCoreParameters
 
    // allow early instructions to stall later instructions
    var dec_stall_next_inst = Bool(false)
+   var dec_last_inst_was_stalled = Bool(false)
 
    // stall fetch/dcode because we ran out of branch tags
    val branch_mask_full = Wire(Vec(DECODE_WIDTH, Bool()))
@@ -579,23 +580,24 @@ class DatPath() extends Module with BOOMCoreParameters
 
       // stall this instruction?
       // TODO tailor this to only care if a given instruction uses a resource?
-      val stall_me = (  !(ren_insts_can_proceed(w))
-                     || (dec_valids(w) && dec_uops(w).is_unique && (!rob_empty || !lsu_io.lsu_fencei_rdy || prev_insts_in_bundle_valid))
-                     || !rob_rdy
-                     || laq_full
-                     || stq_full
-                     || branch_mask_full(w)
-                     || br_unit.brinfo.mispredict
-                     || flush_pipeline
-                     || dec_stall_next_inst
-                     || !bpd_stage.io.brob.allocate.ready
-                     || (dec_valids(w) && dec_uops(w).is_fencei && !lsu_io.lsu_fencei_rdy)
-                     ) &&
-                     dec_valids(w)
+      val stall_me = (dec_valids(w) &&
+                        (  !(ren_insts_can_proceed(w))
+                        || (dec_valids(w) && dec_uops(w).is_unique && (!rob_empty || !lsu_io.lsu_fencei_rdy || prev_insts_in_bundle_valid))
+                        || !rob_rdy
+                        || laq_full
+                        || stq_full
+                        || branch_mask_full(w)
+                        || br_unit.brinfo.mispredict
+                        || flush_pipeline
+                        || dec_stall_next_inst
+                        || !bpd_stage.io.brob.allocate.ready
+                        || (dec_valids(w) && dec_uops(w).is_fencei && !lsu_io.lsu_fencei_rdy)
+                        )) ||
+                     dec_last_inst_was_stalled
 
       // stall the next instruction following me in the decode bundle?
-      dec_stall_next_inst  = stall_me ||
-                             (dec_valids(w) && dec_uops(w).is_unique)
+      dec_last_inst_was_stalled = stall_me
+      dec_stall_next_inst  = stall_me || (dec_valids(w) && dec_uops(w).is_unique)
 
       dec_will_fire(w) := dec_valids(w) && !stall_me && !kill_frontend
       dec_uops(w)      := decode_unit.io.deq.uop
