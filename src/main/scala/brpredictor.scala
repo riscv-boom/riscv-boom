@@ -1,25 +1,46 @@
 //**************************************************************************
-// RISCV Branch Predictor
+// RISCV Branch Predictor (abstract class)
 //--------------------------------------------------------------------------
 //
 // Christopher Celio
-// 2015 Apr 28
+// 2015 Oct 12
 
-// TODO bank (or dual-port) the p-table to allow predictions AND updates (optionally)
-// TODO pass history down now (not hooked up to anything in bpd.scala)
-// TODO store history with branch tag
-// TODO don't read SRAM every cycle if stalled (need extra state to store data while stalled)
+// provide an abstract class for branch predictors. Also provides support by
+// maintaining the global history. However, sub-classes may want to implement
+// their own, optimized implementation of global history (e.g. if history is
+// very long!).
+
 
 package BOOM
-{
 
 import Chisel._
 import Node._
 
+import rocket.Str
+ 
+class BrPredictorIo extends BOOMCoreBundle
+{
+   val req_pc = UInt(INPUT, width = vaddrBits)
+   val resp = Decoupled(new BpdResp)
+   val hist_update_spec = Valid(new GHistUpdate).flip // speculative update to ghist
+// TODO brinfo, or br_unit instead?
+   val br_resolution = Valid(new BpdUpdate).flip // from branch-unit
+   val brob = new BrobBackendIo
+   val flush = Bool(INPUT) // pipeline flush
+}
+    
 class BpdResp extends BOOMCoreBundle
 {
    val takens = Bits(width = FETCH_WIDTH)
    val history = Bits(width = GHIST_LENGTH)
+}
+ 
+// BP2 stage needs to speculatively update the history register with what the
+// processor decided to do (takes BTB's effect into account).
+// Also used for updating the commit-copy during commit.
+class GHistUpdate extends BOOMCoreBundle
+{
+   val taken = Bool()
 }
 
 // update comes from the branch-unit with the actual outcome
@@ -47,147 +68,228 @@ class BpdUpdate extends BOOMCoreBundle
    val new_pc_same_packet = Bool()
 }
 
-class BrTableUpdate extends BOOMCoreBundle
-{
-   val hash_idx   = UInt(width = vaddrBits)
-   val br_pc      = UInt(width = log2Up(FETCH_WIDTH)+log2Ceil(coreInstBytes)) // which word in the fetch packet does the update correspond to?
-   val new_value  = Bits(width=FETCH_WIDTH) // TODO BUG XXX is this broken? delete comment if I forget what this means
-}
+// commit update information on the entire fetch packet
+//class BrCommitUpdate extends BOOMCoreBundle
+//{
+//   val com_brob_idx = UInt(width=BROB_ADDR_SZ)
+//   val kill = Bool()
+//}
 
+//--------------------------------------------------------------------------
+//--------------------------------------------------------------------------
 
-
-// BP2 stage needs to speculatively update the history register with what the
-// processor decided to do (takes BTB's effect into account)
-class GHistUpdate extends BOOMCoreBundle
-{
-   val taken = Bool()
-}
-
-class BrPredictorIo extends BOOMCoreBundle
-{
-   val req_pc = UInt(INPUT, width = vaddrBits)
-   val resp   = Decoupled(new BpdResp)
-   val ghist  = Valid(new GHistUpdate).flip // speculative update
-   val update = Valid(new BpdUpdate).flip // from branch-unit (actual update)
-}
-
-abstract class BrPredictor extends Module with BOOMCoreParameters
+abstract class BrPredictor(val history_length: Int) extends Module with BOOMCoreParameters
 {
    val io = new BrPredictorIo
-}
 
-class GshareBrPredictor(fetch_width: Int
-                        , num_entries: Int = 4096
-                        , history_length: Int = 12
-   ) extends BrPredictor
+   // the (speculative) global history wire (used for accessing the branch predictor state).
+   val ghistory = Wire(Bits(width = history_length))
+ 
+   // the (speculative) global history register. Needs to be massaged before usably by the bpd.
+   private val r_ghistory = Reg(init = Bits(0, width = history_length))
+  
+   // we need to maintain a copy of the commit history, in-case we need to
+   // reset it on a pipeline replay.
+   private val r_ghistory_commit_copy = Reg(init = Bits(0, width = history_length))
+
+
+   // Bypass some history modifications before it can be used by the predictor
+   // hash functions. For example, "massage" the history for the scenario where
+   // the mispredicted branch is not taken AND we're having to refetch the rest
+   // of the fetch_packet.
+   private val fixed_history = Cat(io.br_resolution.bits.history, io.br_resolution.bits.taken)
+   ghistory :=
+      Mux(io.flush,                       r_ghistory_commit_copy,
+      Mux(io.br_resolution.valid &&
+          io.br_resolution.bits.bpd_mispredict &&
+          io.br_resolution.bits.new_pc_same_packet, io.br_resolution.bits.history,
+      Mux(io.br_resolution.valid &&
+          io.br_resolution.bits.bpd_mispredict    , fixed_history,
+                                                    r_ghistory)))
+
+   when (io.flush)
+   {
+      r_ghistory := r_ghistory_commit_copy
+   }
+   when (io.br_resolution.valid && io.br_resolution.bits.mispredict)
+   {
+      r_ghistory := fixed_history
+   }
+   .elsewhen (io.hist_update_spec.valid)
+   {
+      r_ghistory := Cat(r_ghistory, io.hist_update_spec.bits.taken)
+   }
+    
+   // -----------------------------------------------
+   
+   val brob = Module(new BranchReorderBuffer(NUM_BROB_ENTRIES))
+   brob.io.backend <> io.brob
+    
+   
+   when (brob.io.backend.deallocate.valid)
+   {
+      r_ghistory_commit_copy := Cat(r_ghistory_commit_copy, brob.io.backend.deallocate.bits.taken)
+   }
+
+   if (DEBUG_PRINTF)
+   {
+      printf(" predictor: ghist: 0x%x, r_ghist: 0x%x commit: 0x%x\n"
+         , ghistory
+         , r_ghistory
+         , r_ghistory_commit_copy
+         )
+   }
+}
+ 
+//--------------------------------------------------------------------------
+//--------------------------------------------------------------------------
+
+// The BranchReorderBuffer holds all inflight branchs for the purposes of
+// bypassing inflight prediction updates to the predictor. It also holds expensive predictor state needed for updating the predictor at commit time.
+
+
+class BrobBackendIo extends BOOMCoreBundle
 {
-   println ("Building (" + (num_entries * 2/8/1024) +
-      " kB) GShare Predictor, with " + history_length + " bits of history for(" +
-      fetch_width + "-wide fetch)")
+   val allocate = Decoupled(new BrobEntry).flip // Decode/Dispatch stage, allocate new brob entry
+   val allocate_brob_tail = UInt(OUTPUT, width = BROB_ADDR_SZ) // tell Decode which entry gets allocated
 
-   //------------------------------------------------------------
-
-   private def hash (addr: UInt, hist: Bits) =
-      (addr >> UInt(log2Up(fetch_width*coreInstBytes))) ^ hist
-
-   private def GenWMask(addr: UInt) =
-      if (FETCH_WIDTH == 1) Bits(1).toBools
-      else (Bits(1) << ((addr >> UInt(log2Ceil(coreInstBytes))) & SInt(-1,FETCH_WIDTH))).toBools
-
-   //------------------------------------------------------------
-   val r_ghist = Reg(Bits(width = history_length))
-   val curr_ghist = Wire(Bits(width = history_length))
-
-   // "massage" the history for the scenario where the mispredted branch is not taken
-   // AND we're having to refetch the rest of the fetch_packet,  or something XXX BUG
-   val fixed_history = Cat(io.update.bits.history, io.update.bits.taken)
-   curr_ghist :=
-         Mux(io.update.valid &&
-             io.update.bits.bpd_mispredict &&
-             io.update.bits.new_pc_same_packet, io.update.bits.history,
-         Mux(io.update.valid &&
-             io.update.bits.bpd_mispredict    , fixed_history,
-                                                r_ghist))
-
-   // prediction bits
-   // hysteresis bits
-   val p_table = SeqMem(num_entries/fetch_width, Vec(Bits(width=1), fetch_width))
-   val h_table = SeqMem(num_entries/fetch_width, Vec(Bits(width=1), fetch_width))
-
-
-   // buffer writes to the h-table as required
-   val hwq = Module(new Queue(new BpdUpdate, entries=4))
-   hwq.io.enq <> io.update
-
-   val u_addr = hash(io.update.bits.pc, io.update.bits.history)
-
-
-   //------------------------------------------------------------
-   // p-table
-   val p_addr = Wire(UInt())
-   val last_p_addr = RegNext(p_addr)
-   val p_out = Reg(Bits())
-
-   val stall = !io.resp.ready // TODO FIXME this feels too low-level
-
-   val pwq = Module(new Queue(new BrTableUpdate, entries=2))
-   pwq.io.deq.ready := Bool(true)
-   val pwq_deq_br_pc = pwq.io.deq.bits.br_pc
-   val p_wmask = GenWMask(pwq_deq_br_pc)
-   when (pwq.io.deq.valid)
-   {
-      io.resp.valid := RegNext(RegNext(Bool(false)))
-      val waddr = pwq.io.deq.bits.hash_idx
-      val wdata = Vec.fill(fetch_width)(pwq.io.deq.bits.new_value)
-      p_table.write(waddr, wdata, p_wmask)
-   }
-   .otherwise // must always read this or SRAM gives garbage
-   {
-      // get prediction
-      io.resp.valid := RegNext(RegNext(Bool(true)))
-   }
-
-   p_addr := Mux(stall, last_p_addr, hash(io.req_pc, curr_ghist))
-
-   when (!stall)
-   {
-      p_out := p_table.read(p_addr).toBits
-   }
-
-   io.resp.bits.takens := p_out
-   io.resp.bits.history := RegNext(RegNext(curr_ghist))
-
-   require (coreInstBytes == 4)
-
-   //------------------------------------------------------------
-   // h-table
-   // read table to update the p-table
-   val h_ren = io.update.valid && io.update.bits.bpd_mispredict
-   hwq.io.deq.ready := !h_ren
-   when (!h_ren && hwq.io.deq.valid)
-   {
-      val waddr = hash(hwq.io.deq.bits.pc, hwq.io.deq.bits.history)
-      val wmask = GenWMask(hwq.io.deq.bits.br_pc)
-      val wdata = Vec.fill(fetch_width)(hwq.io.deq.bits.taken.toUInt)
-      h_table.write(waddr, wdata, wmask)
-   }
-   pwq.io.enq.valid          := Reg(next=h_ren)
-   pwq.io.enq.bits.hash_idx  := Reg(next=u_addr)
-   pwq.io.enq.bits.br_pc     := Reg(next=io.update.bits.br_pc)
-   pwq.io.enq.bits.new_value := h_table.read(u_addr, h_ren).toBits
-
-   //------------------------------------------------------------
-
-   when (io.update.valid && io.update.bits.mispredict)
-   {
-      r_ghist := fixed_history
-   }
-   .elsewhen (io.ghist.valid)
-   {
-      r_ghist := Cat(r_ghist, io.ghist.bits.taken)
-   }
-
+   val deallocate = Valid(new BrobEntry).flip // Commmit stage, from the ROB
+   
+   val br_unit = new BranchUnitResp().asInput  // reset tail on mispredicts
+   val flush = Bool(INPUT) // wipe the ROB
 }
 
+class BrobEntry extends BOOMCoreBundle
+{
+   val executed   = Bool()      
+   val taken      = Bool()
+   val mispredict = Bool()
+   val brob_idx   = UInt(width = BROB_ADDR_SZ)
+   
+   val rob_idx    = UInt(width = ROB_ADDR_SZ) // debug purposes
+
+   val pred_info = new BranchPredictionResp
 }
 
+class BranchReorderBuffer(num_entries: Int) extends Module
+{
+   val io = new BOOMCoreBundle
+   {
+      // connection to BOOM's ROB/backend/etc.
+      val backend = new BrobBackendIo
+
+      // update predictor at commit
+      val commit_entry = Valid(new BrobEntry)
+
+      // forward predictions
+      // TODO enable bypassing of information
+   //  val pred_req = Valid(new // from fetch, requesting if a prediction matches an inflight entry.
+   //  val pred_resp = Valid(new // from fetch, return a prediction
+   }
+
+   println ("\t    BROB Size (" + num_entries + ") entries)")
+
+   // each entry corresponds to a fetch-packet
+   // ROB shouldn't send "deallocate signal" until the entire packet has finished committing.
+   val entries  = Reg(Vec(num_entries, new BrobEntry()))
+   val head_ptr = Reg(init = UInt(0, log2Up(num_entries)))
+   val tail_ptr = Reg(init = UInt(0, log2Up(num_entries)))
+
+   val br_resolution_valid = io.backend.br_unit.brinfo.valid && Reg(next=io.backend.br_unit.bpd_update.valid)
+   // -----------------------------------------------
+   when (io.backend.allocate.valid)
+   {
+      entries(tail_ptr) := io.backend.allocate.bits
+      tail_ptr := WrapInc(tail_ptr, num_entries)
+
+      assert (tail_ptr === io.backend.allocate.bits.brob_idx, "allocate incorrect entry")
+   }
+   when (io.backend.deallocate.valid)
+   {
+      head_ptr := WrapInc(head_ptr, num_entries)
+
+      assert (entries(head_ptr).executed === Bool(true), "Committing an entry not executed.")
+      assert (head_ptr === io.backend.deallocate.bits.brob_idx , "Committing wrong entry.")
+   }
+   when (io.backend.br_unit.brinfo.valid && 
+         io.backend.br_unit.brinfo.is_jr &&
+         io.backend.br_unit.brinfo.mispredict)
+   {
+      // jalr isn't allocated an entry, but if it mispredicts we need to reset the BROB 
+      // to the state the JALR saw when it was fetched/decoded.
+      tail_ptr := io.backend.br_unit.brinfo.brob_idx
+   }
+   when (io.backend.br_unit.brinfo.valid && 
+         !io.backend.br_unit.brinfo.is_jr &&
+         Reg(next=io.backend.br_unit.bpd_update.valid))
+   {
+      entries(io.backend.br_unit.brinfo.brob_idx).executed := Bool(true)
+      entries(io.backend.br_unit.brinfo.brob_idx).taken := io.backend.br_unit.taken
+      when (io.backend.br_unit.brinfo.mispredict)
+      {
+         tail_ptr := WrapInc(io.backend.br_unit.brinfo.brob_idx, num_entries)
+      }
+   }
+   when (io.backend.flush)
+   {
+      head_ptr := UInt(0)
+      tail_ptr := UInt(0)
+   }
+
+   // -----------------------------------------------
+   // outputs
+   io.commit_entry.valid := io.backend.deallocate.valid
+   io.commit_entry.bits := entries(head_ptr)
+
+   // TODO allow filling the entire BROB ROB.
+   // I had difficulty getting the "maybe_full" correct when dealing with
+   // mispredicts from jr's while already full.
+   val maybe_full = Reg(init=Bool(false))
+   val full = (head_ptr === tail_ptr) && maybe_full
+
+   val do_alloc = io.backend.allocate.valid && !full
+   val do_dealloc = io.backend.deallocate.valid
+   when (io.backend.flush || 
+         ((io.backend.br_unit.brinfo.valid && 
+         io.backend.br_unit.brinfo.mispredict) && 
+         io.backend.br_unit.brinfo.brob_idx != tail_ptr))
+   {
+      maybe_full := Bool(false)
+   }
+   .elsewhen (do_alloc != do_dealloc)
+   {
+      maybe_full := do_alloc
+   }
+//   val full = (head_ptr === WrapInc(tail_ptr, num_entries))
+   io.backend.allocate.ready := !full
+
+   assert (!(full && io.backend.allocate.valid), "Trying to allocate entry while full.")
+
+   io.backend.allocate_brob_tail := tail_ptr
+
+   // -----------------------------------------------
+
+   if (DEBUG_PRINTF)
+   {
+      for (i <- 0 until num_entries)
+      {
+         printf (" brob[%d] (%s) r=%d, hist=%x"
+            , UInt(i, log2Up(num_entries))
+            , Mux(entries(i).executed && entries(i).taken, Str("E,T"), 
+              Mux(entries(i).executed && !entries(i).taken, Str("E,n"), 
+                  Str("_,_")))
+            , entries(i).rob_idx
+            , entries(i).pred_info.bpd_history
+            )
+         
+         printf("%s %s %s\n"
+            ,  Mux(head_ptr === UInt(i) && tail_ptr === UInt(i), Str("<-HEAD TL"),
+               Mux(head_ptr === UInt(i),                         Str("<-HEAD   "),
+               Mux(tail_ptr === UInt(i),                         Str("<-     TL"),
+                                                                 Str(" "))))
+            , Mux(full, Str("F"), Str("_")) 
+            , Mux(maybe_full, Str("M"), Str("_")) 
+            )
+      }
+   }
+}

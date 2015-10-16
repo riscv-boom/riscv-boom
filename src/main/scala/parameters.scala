@@ -60,6 +60,8 @@ abstract trait BOOMCoreParameters extends rocket.CoreParameters
    val ENABLE_BRANCH_PREDICTOR = params(EnableBranchPredictor)
    val BPD_SIZE_IN_KB = params(BranchPredictorSizeInKB)
    val BPD_NUM_ENTRIES = BPD_SIZE_IN_KB*1024*8/2 // computation for GShare
+//   val BPD_NUM_ENTRIES = (256) // computation for GShare
+//   val BPD_NUM_ENTRIES = (4096) // computation for GShare
    val GHIST_LENGTH = log2Up(BPD_NUM_ENTRIES)
    val ENABLE_REGFILE_BYPASSING  = true  // bypass regfile write ports to read ports
    val MAX_WAKEUP_DELAY = 3              // unused
@@ -76,6 +78,8 @@ abstract trait BOOMCoreParameters extends rocket.CoreParameters
    val MAX_ST_COUNT      = (1 << MEM_ADDR_SZ)
    val MAX_LD_COUNT      = (1 << MEM_ADDR_SZ)
    val BR_TAG_SZ         = log2Up(MAX_BR_COUNT)
+   val NUM_BROB_ENTRIES  = NUM_ROB_ENTRIES/3
+   val BROB_ADDR_SZ      = log2Up(NUM_BROB_ENTRIES)
 
    require (PHYS_REG_COUNT >= (LOGICAL_REG_COUNT + DECODE_WIDTH))
    require (MAX_BR_COUNT >=2)

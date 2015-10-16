@@ -35,10 +35,12 @@ class Exception extends BOOMCoreBundle
 }
 
 // provide a port for a FU to get the PC of an instruction from the ROB
+// and the BROB index too.
 class RobPCRequest extends BOOMCoreBundle
 {
    val rob_idx  = UInt(INPUT, ROB_ADDR_SZ)
    val curr_pc  = UInt(OUTPUT, vaddrBits+1)
+   val curr_brob_idx = UInt(OUTPUT, BROB_ADDR_SZ)
    // the next_pc may not be valid (stalled or still being fetched)
    val next_val = Bool(OUTPUT)
    val next_pc  = UInt(OUTPUT, vaddrBits+1)
@@ -55,6 +57,9 @@ class RobIo(machine_width: Int
    val dis_mask         = Vec.fill(machine_width) { Bool(INPUT) }
    val dis_uops         = Vec.fill(machine_width) { new MicroOp().asInput() }
    val dis_pred_info    = new BranchPredictionResp().asInput
+   val dis_has_br_in_packet = Bool(INPUT)
+   val dis_partial_stall= Bool(INPUT) // we're dispatching only a partial packet, and stalling on the rest of it (don't advance the tail ptr)
+   val dis_new_packet   = Bool(INPUT) // we're dispatching the first (and perhaps only) part of a dispatch packet.
 
    val curr_rob_tail    = UInt(OUTPUT, ROB_ADDR_SZ)
 
@@ -117,10 +122,14 @@ class RobIo(machine_width: Int
    val flush_pc         = UInt(OUTPUT, vaddrBits+1)
    val flush_pipeline   = Bool(OUTPUT)
 
+   val flush_brob       = Bool(OUTPUT)
+
    // Stall Decode as appropriate
    val empty            = Bool(OUTPUT)
    val ready            = Bool(OUTPUT) // busy unrolling...
 
+   // communicate with the branch-reorder buffer
+   val brob_deallocate  = Valid(new BrobEntry)
 
    // pass out debug information to high-level printf
    val debug = new BOOMCoreBundle
@@ -180,6 +189,7 @@ class Rob(width: Int
    val rob_head_vals       = Wire(Vec(width, Bool())) // are the instructions at the head valid?
    val rob_head_is_store   = Wire(Vec(width, Bool()))
    val rob_head_is_load    = Wire(Vec(width, Bool()))
+   val rob_head_is_branch  = Wire(Vec(width, Bool()))
    val rob_head_fflags     = Wire(Vec(width, Bits(width=rocket.FPConstants.FLAGS_SZ)))
 
    // valid bits at the branch target
@@ -266,6 +276,7 @@ class Rob(width: Int
    // store expensive branch prediction information here (per br-tag)
 //   val pred_table = Mem(new BranchPredictionResp, num_rob_rows)
    // TODO use Mem(), but it chokes on the undefines in VCS
+   // TODO move this info to the BROB and Rename Br Snapshots, too expensive!
    val pred_table = Vec.fill(num_rob_rows) {Reg(new BranchPredictionResp)}
    when (io.dis_mask.reduce(_|_))
    {
@@ -273,9 +284,41 @@ class Rob(width: Int
    }
 
    io.get_pred.info := pred_table(GetRowIdx(io.get_pred.rob_idx))
+    
+   //-----------------------------------------------
+   // Branch Reorder Buffer
+
+   val finished_committing_row = Wire(Bool())
+   val r_partial_row = Reg(init = Bool(false))
+
+   // TODO abstract out the "RobRowMetaData"
+   val row_metadata_brob_idx = Mem(num_rob_rows, UInt(width = BROB_ADDR_SZ))
+   val row_metadata_has_branch= Mem(num_rob_rows, Bool())
+   when (io.dis_mask.reduce(_|_) && io.dis_new_packet)
+   {
+      row_metadata_brob_idx(rob_tail) := io.dis_uops(0).brob_idx
+      row_metadata_has_branch(rob_tail) := io.dis_has_br_in_packet
+      r_partial_row := io.dis_partial_stall
+   }
+   .elsewhen (io.dis_mask.reduce(_|_) && !io.dis_new_packet)
+   {
+      r_partial_row := io.dis_partial_stall
+   }
+
+
+ 
+   io.brob_deallocate.valid := finished_committing_row && row_metadata_has_branch(rob_head)
+   io.brob_deallocate.bits.brob_idx := row_metadata_brob_idx(rob_head)
+   
+   io.get_pc.curr_brob_idx := row_metadata_brob_idx(GetRowIdx(io.get_pc.rob_idx))
+
+   // HACK to deal with SRET changing PC, but not setting flush_pipeline.
+   io.flush_brob := (rob_state === s_wait_till_empty) 
+
    // **************************************************************************
    // --------------------------------------------------------------------------
    // **************************************************************************
+
 
    for (w <- 0 until width)
    {
@@ -304,7 +347,7 @@ class Rob(width: Int
          rob_fflags(rob_tail)    := Bits(0)
          rob_uop(rob_tail).br_was_mispredicted := Bool(false)
       }
-      .elsewhen (io.dis_mask.reduce(_|_))
+      .elsewhen (io.dis_mask.reduce(_|_) && !rob_val(rob_tail))
       {
          rob_uop(rob_tail).inst := BUBBLE // just for debug purposes
       }
@@ -635,9 +678,16 @@ class Rob(width: Int
 
    // -----------------------------------------------
    // ROB Head Logic
-
+    
+   // remember if we're still waiting on the rest of the dispatch packet, and prevent
+   // the rob_head from advancing if it commits a partial parket before we
+   // dispatch the rest of it.
    // update when committed ALL valid instructions in commit_bundle
-   when ((io.com_valids.toBits != Bits(0)) && ((will_commit.toBits ^ rob_head_vals.toBits) === Bits(0)))
+
+   finished_committing_row := (io.com_valids.toBits != Bits(0)) && 
+                              ((will_commit.toBits ^ rob_head_vals.toBits) === Bits(0)) &&
+                              !(r_partial_row && rob_head === rob_tail)
+   when (finished_committing_row)
    {
       rob_head := WrapInc(rob_head, num_rob_rows)
    }
@@ -653,7 +703,7 @@ class Rob(width: Int
    {
       rob_tail := WrapInc(GetRowIdx(io.br_unit.brinfo.rob_idx), num_rob_rows)
    }
-   .elsewhen (io.dis_mask.toBits != Bits(0))
+   .elsewhen (io.dis_mask.toBits != Bits(0) && !io.dis_partial_stall)
    {
       rob_tail := WrapInc(rob_tail, num_rob_rows)
    }
@@ -678,7 +728,7 @@ class Rob(width: Int
    // also must handle rob_pc valid logic.
    val full = WrapInc(rob_tail, num_rob_rows) === rob_head
 
-   io.empty := rob_head === rob_tail
+   io.empty := (rob_head === rob_tail) && (rob_head_vals.toBits === Bits(0))
 
    io.curr_rob_tail := rob_tail
 
@@ -717,7 +767,7 @@ class Rob(width: Int
          }
          is (s_rollback)
          {
-            when (rob_tail  === rob_head)
+            when (io.empty)
             {
                rob_state := s_normal
             }
@@ -728,7 +778,7 @@ class Rob(width: Int
             {
                rob_state := s_rollback
             }
-            .elsewhen (rob_tail === rob_head)
+            .elsewhen (io.empty)
             {
                rob_state := s_normal
             }
@@ -810,8 +860,8 @@ class Rob(width: Int
 
       // bank this so we only need 1 read port to handle branches, which read
       // row X and row X+1
-      val bank0 = Mem(UInt(width=pc_hob_width), ceil(num_rob_rows/2).toInt)
-      val bank1 = Mem(UInt(width=pc_hob_width), ceil(num_rob_rows/2).toInt)
+      val bank0 = Mem(ceil(num_rob_rows/2).toInt, UInt(width=pc_hob_width))
+      val bank1 = Mem(ceil(num_rob_rows/2).toInt, UInt(width=pc_hob_width))
 
       // takes rob_row_idx, returns PC (with low-order bits zeroed out)
       def  read (row_idx: UInt) =
@@ -904,7 +954,9 @@ class Rob(width: Int
          else if (COMMIT_WIDTH == 2)
          {
             val row_is_val = debug_entry(r_idx+0).valid || debug_entry(r_idx+1).valid
-            printf("(%s%s)(%s%s) 0x%x %x [%sDASM(%x)][DASM(%x)" + end + "] %s,%s "
+            printf("%d %x (%s%s)(%s%s) 0x%x %x [%sDASM(%x)][DASM(%x)" + end + "] %s,%s "
+               , row_metadata_brob_idx(row) 
+               , row_metadata_has_branch(row)
                , Mux(debug_entry(r_idx+0).valid, Str(b_cyn + "V" + end), Str(grn + " " + end))
                , Mux(debug_entry(r_idx+1).valid, Str(b_cyn + "V" + end), Str(grn + " " + end))
                , Mux(debug_entry(r_idx+0).busy,  Str(b_ylw + "B" + end), Str(grn + " " + end))

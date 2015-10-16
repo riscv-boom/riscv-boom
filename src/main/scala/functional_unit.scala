@@ -370,13 +370,16 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)
       io.br_unit.brinfo.rob_idx    := Reg(next = uop.rob_idx)
       io.br_unit.brinfo.ldq_idx    := Reg(next = uop.ldq_idx)
       io.br_unit.brinfo.stq_idx    := Reg(next = uop.stq_idx)
+      io.br_unit.brinfo.brob_idx   := Reg(next = io.get_rob_pc.curr_brob_idx)
+      io.br_unit.brinfo.is_jr      := Reg(next = pc_sel === PC_JALR)
 
       // updates the BTB same cycle as PC redirect
       val lsb = log2Ceil(FETCH_WIDTH*coreInstBytes)
 
       // did a branch or jalr occur AND did we mispredict? AND was it taken? (i.e., should we update the BTB)
       val fetch_pc = ((uop_pc_ >> lsb) << lsb) + uop.fetch_pc_lob
-      io.br_unit.btb_update_valid            := is_br_or_jalr && mispredict && io.br_unit.taken
+      io.br_unit.btb_update_valid            := is_br_or_jalr && mispredict && uop.is_jump // BUG XXX TEMPORARY
+//      io.br_unit.btb_update_valid            := is_br_or_jalr && mispredict && io.br_unit.taken
       io.br_unit.btb_update.pc               := fetch_pc // tell the BTB which pc to tag check against
       io.br_unit.btb_update.br_pc            := uop_pc_
       io.br_unit.btb_update.target           := io.br_unit.target & SInt(-coreInstBytes)
@@ -386,14 +389,16 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)
       io.br_unit.btb_update.isJump           := uop.is_jump
       io.br_unit.btb_update.isReturn         := uop.is_ret
 
-      io.br_unit.bht_update.valid                 := io.req.valid && uop.is_br_or_jmp && !uop.is_jump && !killed // update on all branches (but not jal/jalr)
+      io.br_unit.bht_update.valid                 := Bool(false) // TODO XXX TEMPORARY
+//      io.br_unit.bht_update.valid                 := io.req.valid && uop.is_br_or_jmp && !uop.is_jump && !killed // update on all branches (but not jal/jalr)
       io.br_unit.bht_update.bits.taken            := io.br_unit.taken   // was this branch "taken"
       io.br_unit.bht_update.bits.mispredict       := btb_mispredict     // need to reset the history in the BHT that is updated only on BTB hits
       io.br_unit.bht_update.bits.prediction.valid := io.get_pred.info.btb_resp_valid // only update if this was a hit in the BTB
       io.br_unit.bht_update.bits.prediction.bits  := io.get_pred.info.btb_resp
       io.br_unit.bht_update.bits.pc               := fetch_pc // what pc should the tag check be on?
 
-      io.br_unit.bpd_update.valid                 := io.br_unit.bht_update.valid
+      io.br_unit.bpd_update.valid                 := io.req.valid && uop.is_br_or_jmp && !uop.is_jump && !killed // update on all branches (but not jal/jalr)
+//      io.br_unit.bpd_update.valid                 := io.br_unit.bht_update.valid
       io.br_unit.bpd_update.bits.taken            := io.br_unit.taken
       io.br_unit.bpd_update.bits.mispredict       := mispredict
       io.br_unit.bpd_update.bits.bpd_mispredict   := bpd_mispredict

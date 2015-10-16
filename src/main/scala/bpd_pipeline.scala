@@ -16,7 +16,6 @@
 // mispredicted and kill everything behind it anyways).
 
 package BOOM
-{
 
 import Chisel._
 import Node._
@@ -29,27 +28,31 @@ class RedirectRequest (fetch_width: Int) extends BOOMCoreBundle
    val br_pc   = UInt(width = vaddrBits+1) // PC of the instruction changing control flow (to update the BTB with jumps)
    val idx     = UInt(width = log2Up(fetch_width)) // idx of br in fetch bundle (to mask out the appropriate fetch instructions)
    val is_jump = Bool() // (only valid if redirect request is valid)
-  override def cloneType: this.type = new RedirectRequest(fetch_width).asInstanceOf[this.type]
+   override def cloneType: this.type = new RedirectRequest(fetch_width).asInstanceOf[this.type]
 }
 
 // this information is shared across the entire fetch packet, stored in the ROB
-// (conceptually anyways), and not given to the uop
+// (conceptually anyways), and not given to the uop.
 class BranchPredictionResp extends BOOMCoreBundle
 {
-   val bpd_history     = Bits(width = GHIST_LENGTH)
-   val btb_resp_valid  = Bool()
-   val btb_resp        = new rocket.BTBResp
+//   val br_in_packet   = Bool() // was there a branch in the packet? allocates a BROB entry.
+   val bpd_history    = Bits(width = GHIST_LENGTH)
+   val btb_resp_valid = Bool()
+   val btb_resp       = new rocket.BTBResp
+
+   // used to tell front-end how to mask off instructions
+   val has_jr         = Bool()
+   val jr_idx         = UInt(width = log2Up(FETCH_WIDTH))
 }
 
 // give this to each instruction/uop and pass this down the pipeline to the branch-unit
 class BranchPrediction extends BOOMCoreBundle
 {
-   // only update bpd_history on a pipeline misprediction
-   // need to update the p-table on a bpd_misprediction
-   val bpd_predict_taken= Bool() // did the bpd predict taken for this instruction? (if this differs from the true direction we need to train the p-table)
-
+   val bpd_predict_taken= Bool() // did the bpd predict taken for this instruction?
    val btb_hit          = Bool() // this instruction was the br/jmp predicted by the BTB
    val btb_predicted    = Bool() // BTB gets credit for the prediction otherwise check the BPD
+
+   val is_br            = Bool() // is this instruction a branch?
 
    def wasBTB = btb_predicted
 }
@@ -64,6 +67,8 @@ class BranchPredictionStage (fetch_width: Int) extends Module with BOOMCoreParam
       val predictions= Vec.fill(fetch_width) {new BranchPrediction().asOutput}
       val ras_update = Valid(new rocket.RASUpdate)
       val br_unit    = new BranchUnitResp().asInput
+
+      val brob       = new BrobBackendIo
       val kill       = Bool(INPUT) // e.g., pipeline flush
    }
 
@@ -81,10 +86,14 @@ class BranchPredictionStage (fetch_width: Int) extends Module with BOOMCoreParam
                                                    , num_entries = BPD_NUM_ENTRIES
                                                    , history_length = GHIST_LENGTH))
          br_predictor.io.req_pc := io.imem.npc
-         br_predictor.io.update <> io.br_unit.bpd_update
-         br_predictor.io.ghist.valid := bp2_br_seen && io.req.ready
-         br_predictor.io.ghist.bits.taken := bp2_br_taken
+         br_predictor.io.br_resolution <> io.br_unit.bpd_update
+         br_predictor.io.hist_update_spec.valid := bp2_br_seen && io.req.ready
+         br_predictor.io.hist_update_spec.bits.taken := bp2_br_taken
          br_predictor.io.resp.ready := io.req.ready
+
+         br_predictor.io.brob <> io.brob
+         br_predictor.io.flush := io.kill
+
          (br_predictor.io.resp.valid, br_predictor.io.resp.bits)
       }
       else
@@ -155,8 +164,19 @@ class BranchPredictionStage (fetch_width: Int) extends Module with BOOMCoreParam
    io.pred_resp.btb_resp_valid := io.imem.btb_resp.valid
    io.pred_resp.btb_resp       := io.imem.btb_resp.bits
 
+   val jr_idx = PriorityEncoder(is_jr.toBits)
+   io.pred_resp.has_jr         := is_jr.reduce(_|_) //&&
+//                                  (!jal_val || (jr_idx < jal_idx)) &&
+//                                  (!br_val 
+   io.pred_resp.jr_idx         := PriorityEncoder(is_jr.toBits)
+
+   // verify there are branches ahead of any jals/jalrs
+   // DELETEME
+//   io.pred_resp.br_in_packet   := is_br.toBits.orR // BROKEN! if <j,br>
+
    for (w <- 0 until FETCH_WIDTH)
    {
+      io.predictions(w).is_br := is_br(w)
       io.predictions(w).bpd_predict_taken := predictions(w) && bpd_valid
       io.predictions(w).btb_predicted := btb_overrides
       io.predictions(w).btb_hit := Mux(io.imem.btb_resp.bits.bridx === UInt(w),
@@ -210,7 +230,3 @@ class BranchPredictionStage (fetch_width: Int) extends Module with BOOMCoreParam
    }
 }
 
-//-------------------------------------------------------------
-//-------------------------------------------------------------
-
-}

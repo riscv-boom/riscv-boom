@@ -130,6 +130,7 @@ class MicroOp extends BOOMCoreBundle
    val rob_idx          = UInt(width = ROB_ADDR_SZ)
    val ldq_idx          = UInt(width = MEM_ADDR_SZ)
    val stq_idx          = UInt(width = MEM_ADDR_SZ)
+   val brob_idx         = UInt(width = BROB_ADDR_SZ)
    val pdst             = UInt(width = PREG_SZ)
    val pop1             = UInt(width = PREG_SZ)
    val pop2             = UInt(width = PREG_SZ)
@@ -203,6 +204,8 @@ class BrResolutionInfo extends BOOMCoreBundle
    val rob_idx    = UInt(width = ROB_ADDR_SZ)
    val ldq_idx    = UInt(width = MEM_ADDR_SZ)  // track the "tail" of loads and stores, so we can
    val stq_idx    = UInt(width = MEM_ADDR_SZ)  // quickly reset the LSU on a mispredict
+   val brob_idx   = UInt(width = BROB_ADDR_SZ) // quickly reset the Branch-ROB on a mispredict
+   val is_jr      = Bool() 
 }
 
 class CacheCounters() extends Bundle
@@ -510,10 +513,20 @@ class DatPath() extends Module with BOOMCoreParameters
    bp2_pc_of_br_inst := bpd_stage.io.req.bits.br_pc
    bp2_is_jump := bpd_stage.io.req.bits.is_jump
 
-   val bpd_kill_mask = Wire(Bits(width = FETCH_WIDTH))
-   bpd_kill_mask := Fill(bp2_take_pc, FETCH_WIDTH) &
-                    (SInt(-1, FETCH_WIDTH) << UInt(1) << bpd_stage.io.req.bits.idx)
-   fetch_bundle.mask := (io.imem.resp.bits.mask & ~bpd_kill_mask)
+   def KillMask(m_enable: Bool, m_idx: UInt, m_width: Int) = 
+   {
+      val mask = Wire(Bits(width = m_width))
+      mask := Fill(m_enable, m_width) & (SInt(-1, m_width) << UInt(1) << m_idx)
+      mask
+   }
+   // mask out instructions after predicted branch
+   val bpd_kill_mask = KillMask(bp2_take_pc, bpd_stage.io.req.bits.idx, FETCH_WIDTH) 
+   // mask out instructions after first jr (doesn't matter if predicted correctly or not!)
+//   val jr_kill_mask = Bits(0,FETCH_WIDTH)
+   val jr_kill_mask = KillMask(bpd_stage.io.pred_resp.has_jr, 
+                               bpd_stage.io.pred_resp.jr_idx,
+                              FETCH_WIDTH)
+   fetch_bundle.mask := (io.imem.resp.bits.mask & ~bpd_kill_mask & ~jr_kill_mask)
    fetch_bundle.pred_resp := bpd_stage.io.pred_resp
    fetch_bundle.predictions := bpd_stage.io.predictions
 
@@ -575,8 +588,10 @@ class DatPath() extends Module with BOOMCoreParameters
                      || br_unit.brinfo.mispredict
                      || flush_pipeline
                      || dec_stall_next_inst
+                     || !bpd_stage.io.brob.allocate.ready
                      || (dec_valids(w) && dec_uops(w).is_fencei && !lsu_io.lsu_fencei_rdy)
-                     )
+                     ) &&
+                     dec_valids(w)
 
       // stall the next instruction following me in the decode bundle?
       dec_stall_next_inst  = stall_me ||
@@ -608,9 +623,6 @@ class DatPath() extends Module with BOOMCoreParameters
 
    for (w <- 0 until DECODE_WIDTH)
    {
-////      dec_brmask_logic.io.is_branch(w) := (dec_valids(w) && dec_uops(w).is_br_or_jmp && !dec_uops(w).is_jal)
-//   dec_fbundle(w).valid?  i think also too slow
-//   fetched_inst_valid? no, too slow
       dec_brmask_logic.io.is_branch(w) := !dec_finished_mask(w) && dec_uops(w).allocate_brtag
       dec_brmask_logic.io.will_fire(w) :=  dis_mask(w) && dec_uops(w).allocate_brtag // ren, dis can back pressure us
 
@@ -719,7 +731,21 @@ class DatPath() extends Module with BOOMCoreParameters
          dis_uops(w).rob_idx := dis_curr_rob_row_idx
       else
          dis_uops(w).rob_idx := Cat(dis_curr_rob_row_idx, UInt(w, log2Up(DECODE_WIDTH)))
+   
+      dis_uops(w).brob_idx := bpd_stage.io.brob.allocate_brob_tail
+
    }
+ 
+   val dec_has_br_in_packet = Range(0,DECODE_WIDTH).map{w => dec_valids(w) && dec_uops(w).br_prediction.is_br}.reduce(_|_)
+
+
+   bpd_stage.io.brob.allocate.valid := dis_mask.reduce(_|_) && 
+                                       dec_finished_mask === Bits(0) &&
+                                       dec_has_br_in_packet
+   bpd_stage.io.brob.allocate.bits.executed := Bool(false)
+   bpd_stage.io.brob.allocate.bits.rob_idx := dis_uops(0).rob_idx
+   bpd_stage.io.brob.allocate.bits.brob_idx := dis_uops(0).brob_idx
+   bpd_stage.io.brob.allocate.bits.pred_info := dec_fbundle.pred_resp
 
 
    //-------------------------------------------------------------
@@ -1007,6 +1033,9 @@ class DatPath() extends Module with BOOMCoreParameters
       rob.io.dis_uops := dis_uops
       rob.io.dis_mask := dis_mask
       rob.io.dis_pred_info := dec_fbundle.pred_resp
+      rob.io.dis_has_br_in_packet := dec_has_br_in_packet
+      rob.io.dis_partial_stall := !dec_rdy && !dis_mask(DECODE_WIDTH-1)
+      rob.io.dis_new_packet := dec_finished_mask === Bits(0)
 
       dis_curr_rob_row_idx  := rob.io.curr_rob_tail
 
@@ -1073,6 +1102,7 @@ class DatPath() extends Module with BOOMCoreParameters
       rob.io.get_pc.rob_idx := iss_uops(brunit_idx).rob_idx
       rob.io.get_pred.rob_idx:= iss_uops(brunit_idx).rob_idx
       exe_units(brunit_idx).io.get_rob_pc.curr_pc  := Reg(next=rob.io.get_pc.curr_pc)
+      exe_units(brunit_idx).io.get_rob_pc.curr_brob_idx  := Reg(next=rob.io.get_pc.curr_brob_idx)
       exe_units(brunit_idx).io.get_rob_pc.next_val := Reg(next=rob.io.get_pc.next_val)
       exe_units(brunit_idx).io.get_rob_pc.next_pc  := Reg(next=rob.io.get_pc.next_pc)
       exe_units(brunit_idx).io.get_pred.info       := Reg(next=rob.io.get_pred.info)
@@ -1102,6 +1132,10 @@ class DatPath() extends Module with BOOMCoreParameters
       com_exc_badvaddr := rob.io.com_badvaddr
       com_handling_exc := rob.io.com_handling_exc // on for duration of roll-back
       com_rbk_valids   := rob.io.com_rbk_valids
+
+      bpd_stage.io.brob.deallocate <> rob.io.brob_deallocate
+      bpd_stage.io.brob.br_unit <> br_unit.asInput()
+      bpd_stage.io.brob.flush := flush_pipeline || rob.io.flush_brob
 
    //-------------------------------------------------------------
    // **** Flush Pipeline ****
@@ -1183,7 +1217,7 @@ class DatPath() extends Module with BOOMCoreParameters
       csr.io.uarch_counters(2)  := !rob_rdy
       csr.io.uarch_counters(3)  := laq_full
 //      csr.io.uarch_counters(4)  := stq_full
-      csr.io.uarch_counters(4) := PopCount((Range(0,COMMIT_WIDTH)).map{w => com_valids(w) && (com_uops(w).is_store || com_uops(w).is_load)})
+      csr.io.uarch_counters(4)  := PopCount((Range(0,COMMIT_WIDTH)).map{w => com_valids(w) && (com_uops(w).is_store || com_uops(w).is_load)})
       csr.io.uarch_counters(5)  := io.counters.dc_miss
 //      csr.io.uarch_counters(5)  := !issue_unit.io.dis_readys.reduce(_|_)
 //      csr.io.uarch_counters(6)  := branch_mask_full.reduce(_|_)
@@ -1193,13 +1227,15 @@ class DatPath() extends Module with BOOMCoreParameters
 //      csr.io.uarch_counters(7)  := io.counters.dc_miss
       csr.io.uarch_counters(8)  := lsu_io.counters.ld_valid
       csr.io.uarch_counters(9)  := lsu_io.counters.ld_forwarded
-      csr.io.uarch_counters(10) := lsu_io.counters.ld_sleep
-      csr.io.uarch_counters(11) := lsu_io.counters.ld_killed
-      csr.io.uarch_counters(12) := lsu_io.counters.ld_order_fail
-//      csr.io.uarch_counters(13) := PopCount((Range(0,COMMIT_WIDTH)).map{w => com_valids(w) && com_uops(w).is_br_or_jmp})
-      csr.io.uarch_counters(13) := br_unit.bht_update.bits.mispredict && !br_unit.bpd_update.bits.bpd_mispredict
-      csr.io.uarch_counters(14) := br_unit.bpd_update.valid && br_unit.bpd_update.bits.bpd_mispredict // BPD Mispredict
-      csr.io.uarch_counters(15) := br_unit.bht_update.valid && br_unit.bht_update.bits.mispredict // BTB mispredict
+//      csr.io.uarch_counters(10) := lsu_io.counters.ld_sleep
+//      csr.io.uarch_counters(10) := lsu_io.counters.ld_killed
+//      csr.io.uarch_counters(10) := lsu_io.counters.ld_order_fail
+      csr.io.uarch_counters(10) := br_unit.bpd_update.valid && br_unit.brinfo.mispredict
+      csr.io.uarch_counters(11) := br_unit.bpd_update.valid // provide base-line on the number of updates, vs mispredicts
+      csr.io.uarch_counters(12) := br_unit.bpd_update.valid && !br_unit.bht_update.bits.mispredict && br_unit.bpd_update.bits.bpd_mispredict // BTB correct, BPD wrong
+      csr.io.uarch_counters(13) := br_unit.bpd_update.valid && br_unit.bht_update.bits.mispredict && !br_unit.bpd_update.bits.bpd_mispredict // BPD correct, BTB wrong
+      csr.io.uarch_counters(14) := br_unit.bpd_update.valid && br_unit.bpd_update.bits.bpd_mispredict // BPD mispredicts
+      csr.io.uarch_counters(15) := br_unit.bht_update.valid && br_unit.bht_update.bits.mispredict // BTB mispredicts
 //      csr.io.uarch_counters(14) := PopCount((Range(0,COMMIT_WIDTH)).map{w => com_valids(w) && com_uops(w).is_store})
 //      csr.io.uarch_counters(15) := PopCount((Range(0,COMMIT_WIDTH)).map{w => com_valids(w) && com_uops(w).is_load})
    }
@@ -1219,7 +1255,7 @@ class DatPath() extends Module with BOOMCoreParameters
    {
       println("\n Chisel Printout Enabled\n")
 
-      var white_space = 49 - NUM_LSU_ENTRIES- params(NumIssueSlotEntries) - (NUM_ROB_ENTRIES/COMMIT_WIDTH) - io.dmem.debug.ld_req_slot.size
+      var whitespace = 51 - NUM_LSU_ENTRIES- params(NumIssueSlotEntries) - (NUM_ROB_ENTRIES/COMMIT_WIDTH) - io.dmem.debug.ld_req_slot.size
 
       def InstsStr(insts: Bits, width: Int) =
       {
@@ -1471,7 +1507,7 @@ class DatPath() extends Module with BOOMCoreParameters
       //   }
       //}
 
-      for (x <- 0 until white_space)
+      for (x <- 0 until whitespace)
       {
          printf("\n")
       }

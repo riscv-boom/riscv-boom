@@ -110,7 +110,7 @@ class ALUExeUnit(is_branch_unit   : Boolean = false
                                       , has_div = has_div
                                       )
 {
-   val muldiv_busy = Bool()
+   val muldiv_busy = Wire(Bool())
    val has_muldiv = has_div || (has_mul && use_slow_mul)
 
    println ("     ExeUnit--")
@@ -196,7 +196,7 @@ class ALUExeUnit(is_branch_unit   : Boolean = false
 
    // Mul/Div/Rem Unit -----------------------
    var muldiv: MulDivUnit = null
-   val muldiv_resp_valid = Bool()
+   val muldiv_resp_valid = Wire(Bool())
    muldiv_resp_valid := Bool(false)
    muldiv_busy := Bool(false)
 
@@ -255,7 +255,7 @@ class MulDExeUnit extends ExecutionUnit(num_rf_read_ports = 2
 {
    println ("     ExeUnit--")
    println ("       - Mul/Div")
-   val muldiv_busy = Bool()
+   val muldiv_busy = Wire(Bool())
    io.fu_types := Mux(!muldiv_busy, FU_MUL | FU_DIV, Bits(0))
 
    val muldiv = Module(new MulDivUnit())
