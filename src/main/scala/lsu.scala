@@ -45,6 +45,7 @@ package BOOM
 
 import Chisel._
 import Node._
+import cde.Parameters
 
 import rocket.Str
 import uncore.constants.MemoryOpConstants._

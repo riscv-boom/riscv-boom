@@ -21,6 +21,7 @@ package BOOM
 
 import Chisel._
 import Node._
+import cde.Parameters
 
 import uncore._
 import rocket.BuildFPU

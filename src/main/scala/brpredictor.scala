@@ -15,6 +15,7 @@ package BOOM
 
 import Chisel._
 import Node._
+import cde.Parameters
 
 class BpdResp(implicit p: Parameters) extends BoomBundle()(p)
 {

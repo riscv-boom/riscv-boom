@@ -24,7 +24,7 @@ package BOOM
 import Chisel._
 import Node._
 import scala.math.ceil
-
+import cde.Parameters
 import rocket.Str
 
 class Exception(implicit p: Parameters) extends BoomBundle()(p)

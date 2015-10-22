@@ -5,6 +5,7 @@ package BOOM
 
 import Chisel._
 import Node._
+import cde.Parameters
 
 import rocket.FPConstants._
 import rocket.FPUCtrlSigs

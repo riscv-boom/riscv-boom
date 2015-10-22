@@ -8,6 +8,7 @@ package BOOM
 import Chisel._
 import Node._
 import FUCode._
+import cde.Parameters
 
 class IssueSlotIo(num_wakeup_ports: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {

@@ -4,6 +4,7 @@ package BOOM
 import Chisel._
 import Node._
 import rocket._
+import cde.{Parameters, Field}
 
 case object DecodeWidth extends Field[Int]
 case object DispatchWidth extends Field[Int]

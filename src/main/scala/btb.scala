@@ -11,6 +11,7 @@ package BOOM
 
 import Chisel._
 import Node._
+import cde.Parameters
 
 import scala.math._
 import rocket._
