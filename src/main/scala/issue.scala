@@ -11,6 +11,7 @@ package boom
 {
 import Chisel._
 import Node._
+import cde.Parameters
 
 import FUCode._
 import rocket.Str

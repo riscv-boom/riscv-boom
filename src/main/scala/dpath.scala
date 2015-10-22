@@ -16,6 +16,7 @@ package boom
 
 import Chisel._
 import Node._
+import cde.Parameters
 import scala.collection.mutable.ArrayBuffer
 
 import rocket.Instructions._

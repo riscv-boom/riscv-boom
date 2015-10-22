@@ -19,6 +19,7 @@ import Chisel._
 import Node._
 import uncore._
 import rocket.CoreName
+import cde.Parameters
 
 class BOOMTile(resetSignal: Bool = null)(implicit p: Parameters) extends rocket.Tile(resetSignal)(p)
 {

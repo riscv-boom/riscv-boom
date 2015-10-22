@@ -8,6 +8,7 @@ package boom
 
 import Chisel._
 import Node._
+import cde.Parameters
 
 import rocket.Instructions._
 import rocket._
