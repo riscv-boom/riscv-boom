@@ -53,8 +53,6 @@ TODO LIST:
    better IW back pressure (requires worst case on store slots)
    add branch counter in ROB (was predicted correctly)
 
-   add a backing branch predictor that uses synchronous memory
-
    add (optional) register between issue select and register read
 
    allow for under-provisioned regfile ports
@@ -74,12 +72,12 @@ TODO LIST:
 
 
 //-------------------------------------------------------------
-// TODO I can't promise these signals get killed/cleared on a mispredict,
+// NOTE: I can't promise these signals get killed/cleared on a mispredict,
 // so I should listen to the corresponding valid bit
 // For example, on a bypassing, we listen to rf_wen to see if bypass is valid,
 // but we "could" be bypassing to a branch which kills us (false positive cobinational loop),
 // so we have to keep the rf_wen enabled, and not dependent on a branch kill signal
-// TODO REFACTOR this should no longer be true, as bypass occurs in stage before branch resolution
+// TODO REFACTOR this, as this should no longer be true, as bypass occurs in stage before branch resolution
 class CtrlSignals extends Bundle()
 {
    val br_type     = UInt(width = BR_N.getWidth)
@@ -744,10 +742,11 @@ class DatPath() extends Module with BOOMCoreParameters
    bpd_stage.io.brob.allocate.valid := dis_mask.reduce(_|_) && 
                                        dec_finished_mask === Bits(0) &&
                                        dec_has_br_in_packet
-   bpd_stage.io.brob.allocate.bits.executed := Bool(false)
+   bpd_stage.io.brob.allocate.bits.executed.map{_ := Bool(false)}
+   bpd_stage.io.brob.allocate.bits.taken.map{_ := Bool(false)}
+   bpd_stage.io.brob.allocate.bits.mispredict.map{_ := Bool(false)}
    bpd_stage.io.brob.allocate.bits.rob_idx := dis_uops(0).rob_idx
    bpd_stage.io.brob.allocate.bits.brob_idx := dis_uops(0).brob_idx
-   bpd_stage.io.brob.allocate.bits.pred_info := dec_fbundle.pred_resp
 
 
    //-------------------------------------------------------------
@@ -1257,7 +1256,7 @@ class DatPath() extends Module with BOOMCoreParameters
    {
       println("\n Chisel Printout Enabled\n")
 
-      var whitespace = 51 - NUM_LSU_ENTRIES- params(NumIssueSlotEntries) - (NUM_ROB_ENTRIES/COMMIT_WIDTH) - io.dmem.debug.ld_req_slot.size
+      var whitespace = 56 - NUM_LSU_ENTRIES- params(NumIssueSlotEntries) - (NUM_ROB_ENTRIES/COMMIT_WIDTH) - io.dmem.debug.ld_req_slot.size - NUM_BROB_ENTRIES
 
       def InstsStr(insts: Bits, width: Int) =
       {

@@ -33,12 +33,13 @@ class RedirectRequest (fetch_width: Int) extends BOOMCoreBundle
 
 // this information is shared across the entire fetch packet, stored in the ROB
 // (conceptually anyways), and not given to the uop.
-class BranchPredictionResp extends BOOMCoreBundle
+// TODO move this to the branch snapshots? so we can de-allocate once resolved.
+class BranchPredictionResp extends BOOMCoreBundle // rename BranchPredictionResolutionInfo?
 {
-//   val br_in_packet   = Bool() // was there a branch in the packet? allocates a BROB entry.
-   val bpd_history    = Bits(width = GHIST_LENGTH)
    val btb_resp_valid = Bool()
    val btb_resp       = new rocket.BTBResp
+   
+   val bpd_resp       = new BpdResp
 
    // used to tell front-end how to mask off instructions
    val has_jr         = Bool()
@@ -68,7 +69,7 @@ class BranchPredictionStage (fetch_width: Int) extends Module with BOOMCoreParam
       val ras_update = Valid(new rocket.RASUpdate)
       val br_unit    = new BranchUnitResp().asInput
 
-      val brob       = new BrobBackendIo
+      val brob       = new BrobBackendIo(fetch_width)
       val kill       = Bool(INPUT) // e.g., pipeline flush
    }
 
@@ -87,7 +88,8 @@ class BranchPredictionStage (fetch_width: Int) extends Module with BOOMCoreParam
                                                    , history_length = GHIST_LENGTH))
          br_predictor.io.req_pc := io.imem.npc
          br_predictor.io.br_resolution <> io.br_unit.bpd_update
-         br_predictor.io.hist_update_spec.valid := bp2_br_seen && io.req.ready
+         // TODO BUG XXX i suspect this is completely and utterly broken. what about <bne,jr,bne> or  <bne,j,bne>. What about <csr, bne>/<b,csr,b>? does unique/pipeline replaysincrement ghistory when they shouldn't?
+         br_predictor.io.hist_update_spec.valid := bp2_br_seen && io.req.ready 
          br_predictor.io.hist_update_spec.bits.taken := bp2_br_taken
          br_predictor.io.resp.ready := io.req.ready
 
@@ -160,19 +162,14 @@ class BranchPredictionStage (fetch_width: Int) extends Module with BOOMCoreParam
    io.req.bits.br_pc   := aligned_pc + (io.req.bits.idx << UInt(2))
    io.req.bits.is_jump := !br_wins
 
-   io.pred_resp.bpd_history    := bpd_bits.history
-   io.pred_resp.btb_resp_valid := io.imem.btb_resp.valid
-   io.pred_resp.btb_resp       := io.imem.btb_resp.bits
+   io.pred_resp.bpd_resp.info.history := bpd_bits.info.history
+   io.pred_resp.btb_resp_valid   := io.imem.btb_resp.valid
+   io.pred_resp.btb_resp         := io.imem.btb_resp.bits
 
    val jr_idx = PriorityEncoder(is_jr.toBits)
-   io.pred_resp.has_jr         := is_jr.reduce(_|_) //&&
-//                                  (!jal_val || (jr_idx < jal_idx)) &&
-//                                  (!br_val 
+   io.pred_resp.has_jr         := is_jr.reduce(_|_)
    io.pred_resp.jr_idx         := PriorityEncoder(is_jr.toBits)
 
-   // verify there are branches ahead of any jals/jalrs
-   // DELETEME
-//   io.pred_resp.br_in_packet   := is_br.toBits.orR // BROKEN! if <j,br>
 
    for (w <- 0 until FETCH_WIDTH)
    {

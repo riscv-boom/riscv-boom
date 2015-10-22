@@ -338,7 +338,7 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)
 
       when (is_br_or_jalr && pc_sel === PC_BRJMP && !mispredict && io.get_rob_pc.next_val)
       {
-         assert (io.get_rob_pc.next_pc === bj_addr, "Branch is taken to the wrong target.")
+         assert (io.get_rob_pc.next_pc === bj_addr, "[FuncUnit] branch is taken to the wrong target.")
       }
 
       when (is_br_or_jalr)
@@ -404,7 +404,7 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)
       io.br_unit.bpd_update.bits.bpd_mispredict   := bpd_mispredict
       io.br_unit.bpd_update.bits.pc               := fetch_pc
       io.br_unit.bpd_update.bits.br_pc            := uop_pc_
-      io.br_unit.bpd_update.bits.history          := io.get_pred.info.bpd_history
+      io.br_unit.bpd_update.bits.history          := io.get_pred.info.bpd_resp.info.history
 
       // is the br_pc the last instruction in the fetch bundle?
       val is_last_inst = if (FETCH_WIDTH == 1) Bool(true)

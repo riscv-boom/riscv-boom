@@ -8,9 +8,10 @@
 
 // Bank the ROB, such that each "dispatch" group gets its own row of the ROB,
 // and each instruction in the dispatch group goes to a different bank.
-// We can compress out the PC by only saving the high-order bits.
+// We can compress out the PC by only saving the high-order bits!
 //
-// ASSUMPTION: dispatch groups are aligned to the PC.
+// ASSUMPTIONS: 
+//    - dispatch groups are aligned to the PC.
 //
 // NOTES:
 //    - Currently we do not compress out bubbles in the ROB.
@@ -80,7 +81,7 @@ class RobIo(machine_width: Int
    val cxcpt = new ValidIO(new Exception()).flip // CSR
 
    // Commit Stage
-   // (Free no-longer used register).
+   // (Free no-longer used physical register).
    // Also used for rollback.
    val com_valids       = Vec.fill(machine_width) {Bool(OUTPUT)}
    val com_uops         = Vec.fill(machine_width) {new MicroOp().asOutput()}
@@ -129,7 +130,7 @@ class RobIo(machine_width: Int
    val ready            = Bool(OUTPUT) // busy unrolling...
 
    // communicate with the branch-reorder buffer
-   val brob_deallocate  = Valid(new BrobEntry)
+   val brob_deallocate  = Valid(new BrobDeallocateIdx)
 
    // pass out debug information to high-level printf
    val debug = new BOOMCoreBundle
@@ -139,13 +140,12 @@ class RobIo(machine_width: Int
       val xcpt_val = Bool()
       val xcpt_uop = new MicroOp()
       val xcpt_badvaddr = UInt(width = xLen)
-      val entry = Vec.fill(NUM_ROB_ENTRIES) { new Bundle {
-         val valid = Bool()
-         val busy = Bool()
-         val uop = new MicroOp()
-         val exception = Bool()
-         //val fflags = Bits(width=rocket.FPConstants.FLAGS_SZ)
-      }}
+//      val entry = Vec.fill(NUM_ROB_ENTRIES) { new Bundle {
+//         val valid = Bool()
+//         val busy = Bool()
+//         val uop = new MicroOp()
+//         val exception = Bool()
+//      }}
    }.asOutput
 }
 
@@ -261,8 +261,8 @@ class Rob(width: Int
 
    val next_bank_idx = if (width == 1) UInt(0) else PriorityEncoder(rob_brt_vals.toBits)
 
-   // TODO is this logic broken if the ROB can fill up completely? should I look at valid bit instead?
-   val rob_pc_hob_next_val = WrapInc(GetRowIdx(io.get_pc.rob_idx), num_rob_rows) != rob_tail
+   // TODO is this logic broken if the ROB can fill up completely?
+   val rob_pc_hob_next_val = rob_brt_vals.reduce(_|_)
 
    val bypass_next_bank_idx = if (width == 1) UInt(0) else PriorityEncoder(io.dis_mask.toBits)
    val bypass_next_pc = (io.dis_uops(0).pc & SInt(-(DECODE_WIDTH*coreInstBytes))) + Cat(bypass_next_bank_idx, Bits(0,2))
@@ -513,10 +513,10 @@ class Rob(width: Int
 
          assert (!(io.wb_resps(i).valid && MatchBank(GetBankIdx(rob_idx)) &&
                      !rob_val(GetRowIdx(rob_idx))),
-                  "ROB writeback occurred to an invalid ROB entry.")
+                  "[ROB] writeback occurred to an invalid ROB entry.")
          assert (!(io.wb_resps(i).valid && MatchBank(GetBankIdx(rob_idx)) &&
                   temp_uop.ldst_val && temp_uop.pdst != io.wb_resps(i).bits.uop.pdst),
-                  "ROB writeback occurred to the wrong pdst.")
+                  "[ROB] writeback occurred to the wrong pdst.")
       }
       io.com_uops(w).debug_wdata := rob_uop(rob_head).debug_wdata
 
