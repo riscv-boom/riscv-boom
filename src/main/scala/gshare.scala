@@ -33,9 +33,9 @@ class GshareBrPredictor(fetch_width: Int
                         , history_length: Int = 12
    ) extends BrPredictor(fetch_width, history_length)
 {
-   println ("\tBuilding (" + (num_entries * 2/8/1024) +
+   println ("\tBuilding (" + (num_entries * fetch_width * 2/8/1024) +
       " kB) GShare Predictor, with " + history_length + " bits of history for (" +
-      fetch_width + "-wide fetch)")
+      fetch_width + "-wide fetch) and " + num_entries + " entries.")
 
    private def Hash (addr: UInt, hist: Bits) =
       (addr >> UInt(log2Up(fetch_width*coreInstBytes))) ^ hist
@@ -43,17 +43,14 @@ class GshareBrPredictor(fetch_width: Int
    //------------------------------------------------------------
    // prediction bits
    // hysteresis bits
-   val p_table = SeqMem(num_entries/fetch_width, Vec(fetch_width, Bits(width=1)))
-   val h_table = SeqMem(num_entries/fetch_width, Vec(fetch_width, Bits(width=1)))
+   val p_table = SeqMem(num_entries, Vec(fetch_width, Bits(width=1)))
+   val h_table = SeqMem(num_entries, Vec(fetch_width, Bits(width=1)))
 
 
    // buffer writes to the h-table as required
-//   val hwq = Module(new Queue(new BpdUpdate, entries=4))
    val hwq = Module(new Queue(new BrobEntry(fetch_width), entries=4))
-//   hwq.io.enq <> io.br_resolution garbage
    hwq.io.enq <> commit
 
-//   val u_addr = hash(io.br_resolution.bits.pc, io.br_resolution.bits.history)
    val u_addr = commit.bits.info.info.index
 
 
@@ -70,7 +67,7 @@ class GshareBrPredictor(fetch_width: Int
    val pwq = Module(new Queue(new BrTableUpdate, entries=2))
    pwq.io.deq.ready := Bool(true)
    val p_wmask = pwq.io.deq.bits.executed.toBools
-   
+
    io.resp.valid := Bool(true)
    when (pwq.io.deq.valid)
    {
@@ -108,7 +105,7 @@ class GshareBrPredictor(fetch_width: Int
       // TODO post ChiselIssue. Chisel needs to be able to have SeqMem take a Vec of Bools
       val waddr = hwq.io.deq.bits.info.info.index
       val wmask = hwq.io.deq.bits.executed
-      val wdata = Vec(hwq.io.deq.bits.executed.map(_.toUInt))
+      val wdata = Vec(hwq.io.deq.bits.taken.map(_.toUInt))
       h_table.write(waddr, wdata, wmask)
    }
    pwq.io.enq.valid          := RegNext(h_ren)
