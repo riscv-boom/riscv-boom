@@ -10,7 +10,7 @@
 // and each instruction in the dispatch group goes to a different bank.
 // We can compress out the PC by only saving the high-order bits!
 //
-// ASSUMPTIONS: 
+// ASSUMPTIONS:
 //    - dispatch groups are aligned to the PC.
 //
 // NOTES:
@@ -57,8 +57,7 @@ class RobIo(machine_width: Int
    // (Write Instruction to ROB from Dispatch Stage)
    val dis_mask         = Vec.fill(machine_width) { Bool(INPUT) }
    val dis_uops         = Vec.fill(machine_width) { new MicroOp().asInput() }
-   val dis_pred_info    = new BranchPredictionResp().asInput
-   val dis_has_br_in_packet = Bool(INPUT)
+   val dis_has_br_or_jalr_in_packet = Bool(INPUT)
    val dis_partial_stall= Bool(INPUT) // we're dispatching only a partial packet, and stalling on the rest of it (don't advance the tail ptr)
    val dis_new_packet   = Bool(INPUT) // we're dispatching the first (and perhaps only) part of a dispatch packet.
 
@@ -107,7 +106,6 @@ class RobIo(machine_width: Int
 
    // Let the Branch Unit read out an instruction's PC
    val get_pc = new RobPCRequest()
-   val get_pred = new GetPredictionInfo().flip
 
    // Handle Additional Misspeculations (LSU)
    // tell the LSU a misspec occurred
@@ -273,18 +271,7 @@ class Rob(width: Int
    // **************************************************************************
    // --------------------------------------------------------------------------
    // **************************************************************************
-   // store expensive branch prediction information here (per br-tag)
-//   val pred_table = Mem(new BranchPredictionResp, num_rob_rows)
-   // TODO use Mem(), but it chokes on the undefines in VCS
-   // TODO move this info to the BROB and Rename Br Snapshots, too expensive!
-   val pred_table = Vec.fill(num_rob_rows) {Reg(new BranchPredictionResp)}
-   when (io.dis_mask.reduce(_|_))
-   {
-      pred_table(rob_tail) := io.dis_pred_info
-   }
 
-   io.get_pred.info := pred_table(GetRowIdx(io.get_pred.rob_idx))
-    
    //-----------------------------------------------
    // Branch Reorder Buffer
 
@@ -293,11 +280,11 @@ class Rob(width: Int
 
    // TODO abstract out the "RobRowMetaData"
    val row_metadata_brob_idx = Mem(num_rob_rows, UInt(width = BROB_ADDR_SZ))
-   val row_metadata_has_branch= Mem(num_rob_rows, Bool())
+   val row_metadata_has_brorjalr= Mem(num_rob_rows, Bool())
    when (io.dis_mask.reduce(_|_) && io.dis_new_packet)
    {
       row_metadata_brob_idx(rob_tail) := io.dis_uops(0).brob_idx
-      row_metadata_has_branch(rob_tail) := io.dis_has_br_in_packet
+      row_metadata_has_brorjalr(rob_tail) := io.dis_has_br_or_jalr_in_packet
       r_partial_row := io.dis_partial_stall
    }
    .elsewhen (io.dis_mask.reduce(_|_) && !io.dis_new_packet)
@@ -306,14 +293,14 @@ class Rob(width: Int
    }
 
 
- 
-   io.brob_deallocate.valid := finished_committing_row && row_metadata_has_branch(rob_head)
+
+   io.brob_deallocate.valid := finished_committing_row && row_metadata_has_brorjalr(rob_head)
    io.brob_deallocate.bits.brob_idx := row_metadata_brob_idx(rob_head)
-   
+
    io.get_pc.curr_brob_idx := row_metadata_brob_idx(GetRowIdx(io.get_pc.rob_idx))
 
    // HACK to deal with SRET changing PC, but not setting flush_pipeline.
-   io.flush_brob := (rob_state === s_wait_till_empty) 
+   io.flush_brob := (rob_state === s_wait_till_empty)
 
    // **************************************************************************
    // --------------------------------------------------------------------------
@@ -678,13 +665,13 @@ class Rob(width: Int
 
    // -----------------------------------------------
    // ROB Head Logic
-    
+
    // remember if we're still waiting on the rest of the dispatch packet, and prevent
    // the rob_head from advancing if it commits a partial parket before we
    // dispatch the rest of it.
    // update when committed ALL valid instructions in commit_bundle
 
-   finished_committing_row := (io.com_valids.toBits != Bits(0)) && 
+   finished_committing_row := (io.com_valids.toBits != Bits(0)) &&
                               ((will_commit.toBits ^ rob_head_vals.toBits) === Bits(0)) &&
                               !(r_partial_row && rob_head === rob_tail)
    when (finished_committing_row)
@@ -955,8 +942,8 @@ class Rob(width: Int
          {
             val row_is_val = debug_entry(r_idx+0).valid || debug_entry(r_idx+1).valid
             printf("%d %x (%s%s)(%s%s) 0x%x %x [%sDASM(%x)][DASM(%x)" + end + "] %s,%s "
-               , row_metadata_brob_idx(row) 
-               , row_metadata_has_branch(row)
+               , row_metadata_brob_idx(row)
+               , row_metadata_has_brorjalr(row)
                , Mux(debug_entry(r_idx+0).valid, Str(b_cyn + "V" + end), Str(grn + " " + end))
                , Mux(debug_entry(r_idx+1).valid, Str(b_cyn + "V" + end), Str(grn + " " + end))
                , Mux(debug_entry(r_idx+0).busy,  Str(b_ylw + "B" + end), Str(grn + " " + end))

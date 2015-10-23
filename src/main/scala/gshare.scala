@@ -6,8 +6,6 @@
 // 2015 Apr 28
 
 // TODO bank (or dual-port) the p-table to allow predictions AND updates (optionally)
-// TODO pass history down now (not hooked up to anything in bpd.scala)
-// TODO store history with branch tag
 // TODO don't read SRAM every cycle if stalled (need extra state to store data while stalled)
 
 package BOOM
@@ -35,7 +33,7 @@ class GshareBrPredictor(fetch_width: Int
                         , history_length: Int = 12
    ) extends BrPredictor(fetch_width, history_length)
 {
-   println ("Building (" + (num_entries * 2/8/1024) +
+   println ("\tBuilding (" + (num_entries * 2/8/1024) +
       " kB) GShare Predictor, with " + history_length + " bits of history for (" +
       fetch_width + "-wide fetch)")
 

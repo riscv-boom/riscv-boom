@@ -78,7 +78,7 @@ abstract trait BOOMCoreParameters extends rocket.CoreParameters
    val MAX_ST_COUNT      = (1 << MEM_ADDR_SZ)
    val MAX_LD_COUNT      = (1 << MEM_ADDR_SZ)
    val BR_TAG_SZ         = log2Up(MAX_BR_COUNT)
-   val NUM_BROB_ENTRIES  = NUM_ROB_ENTRIES/3
+   val NUM_BROB_ENTRIES  = NUM_ROB_ROWS //TODO explore smaller BROBs
    val BROB_ADDR_SZ      = log2Up(NUM_BROB_ENTRIES)
 
    require (PHYS_REG_COUNT >= (LOGICAL_REG_COUNT + DECODE_WIDTH))

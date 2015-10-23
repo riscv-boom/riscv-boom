@@ -126,12 +126,10 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int) extends Mo
 
    val brob = Module(new BranchReorderBuffer(fetch_width, NUM_BROB_ENTRIES))
    brob.io.backend <> io.brob
-//   commit := brob.io.commit_entry.bits.info
    commit := brob.io.commit_entry
 
    when (brob.io.backend.deallocate.valid)
    {
-//      r_ghistory_commit_copy := Cat(r_ghistory_commit_copy, commit.taken)
       r_ghistory_commit_copy := Cat(r_ghistory_commit_copy, commit.bits.taken.reduce(_|_))
    }
 
@@ -149,8 +147,19 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int) extends Mo
 //--------------------------------------------------------------------------
 
 // The BranchReorderBuffer holds all inflight branchs for the purposes of
-// bypassing inflight prediction updates to the predictor. It also holds expensive predictor state needed for updating the predictor at commit time.
+// bypassing inflight prediction updates to the predictor. It also holds
+// expensive predictor state needed for updating the predictor at commit time.
 
+// NOTE: JALRs also go into the BROB. Their effect is ignored for the purposes
+// of updating the branch predictor, as it is the job of the BTB and not the
+// BPD to predict JALRs.  However, as JALRs can mispredict and kill inflight
+// instructions, it GREATLY simplifies the BROB misprediction handling logic to
+// include JALR in the BROB entries (as the brob_tail must be reset on a
+// misprediction).  This is further exacerbated by superscalar issues
+// <-,br,jalr,br>, in which how the brob_tail is reset depends on whether or
+// not a valid branch is before the jalr instruction (and what if the br has
+// already been committed?). Yuck. But it does waste BROB entries to include
+// JALRs.
 
 class BrobBackendIo(fetch_width: Int) extends BOOMCoreBundle
 {
@@ -170,39 +179,17 @@ class BrobDeallocateIdx extends BOOMCoreBundle
 
 // Each "entry" corresponds to a single fetch packet.
 // Each fetch packet may contain up to W branches, where W is the fetch_width.
-// NOTE: the consumer is in charge of using the "mispredict" bit-vector to
-// generate a mask to kill executed, taken bit-vectors. This is handled when
-// building the "commit_entry". TODO change this behavior.
 class BrobEntry(fetch_width: Int) extends BOOMCoreBundle
 {
-   val executed   = Vec.fill(fetch_width) {Bool()}
+   val executed   = Vec.fill(fetch_width) {Bool()} // mark that a branch executed (and should update the predictor).
    val taken      = Vec.fill(fetch_width) {Bool()}
-   val mispredict = Vec.fill(fetch_width) {Bool()} //did bpd mispredict this br?
+   val mispredict = Vec.fill(fetch_width) {Bool()} //did bpd mispredict this br? (aka, should we update the predictor).
    val brob_idx   = UInt(width = BROB_ADDR_SZ)
 
-   val rob_idx    = UInt(width = ROB_ADDR_SZ) // debug purposes
+   val debug_executed = Bool() // did a br or jalr get executed? verify we're not deallocating an empty entry.
+   val debug_rob_idx = UInt(width = ROB_ADDR_SZ)
 
-//   val pred_info = new BranchPredictionResp
-//      - bpd_history
-//      - btb_resp_valid
-//      - btb_resp
-//      - has_jr
-//      - jr_idx
-
-//   TODO hook up the br_resolution to the BpdUpdate.
-//   TODO can we refactor gshare to not need to recompute the indices?
-
-//   yuck
    val info = new BpdResp
-   // history,
-   // index
-
-//   val info = new BpdUpdate
-//   things we need
-//   bpd_mispredict
-//   pc  (for index hash)
-//   br_pc
-//   history (for index hash)
 
   override def cloneType: this.type = new BrobEntry(fetch_width).asInstanceOf[this.type]
 }
@@ -218,7 +205,7 @@ class BranchReorderBuffer(fetch_width: Int, num_entries: Int) extends Module wit
       val commit_entry = Valid(new BrobEntry(fetch_width))
 
       // forward predictions
-      // TODO enable bypassing of information
+      // TODO enable bypassing of information. See if there's a "match", and then forward the outcome.
    //  val pred_req = Valid(new // from fetch, requesting if a prediction matches an inflight entry.
    //  val pred_resp = Valid(new // from fetch, return a prediction
    }
@@ -231,8 +218,11 @@ class BranchReorderBuffer(fetch_width: Int, num_entries: Int) extends Module wit
    val head_ptr = Reg(init = UInt(0, log2Up(num_entries)))
    val tail_ptr = Reg(init = UInt(0, log2Up(num_entries)))
 
-   val br_resolution_valid = io.backend.br_unit.brinfo.valid &&
-                             Reg(next=io.backend.br_unit.bpd_update.valid)
+   val br_unit = Wire(new BranchUnitResp())
+   br_unit <> io.backend.br_unit
+
+   val br_resolution_valid = br_unit.brinfo.valid &&
+                             Reg(next=br_unit.bpd_update.valid)
 
    private def GetIdx(addr: UInt) =
       if (fetch_width == 1) UInt(0)
@@ -251,34 +241,39 @@ class BranchReorderBuffer(fetch_width: Int, num_entries: Int) extends Module wit
    {
       head_ptr := WrapInc(head_ptr, num_entries)
 
-      assert (entries(head_ptr).executed.reduce(_|_) === Bool(true),
-         "[BROB] Committing an entry with no executed branches.")
+      assert (entries(head_ptr).debug_executed === Bool(true),
+         "[BROB] Committing an entry with no executed branches or jalrs.")
       assert (head_ptr === io.backend.deallocate.bits.brob_idx ,
          "[BROB] Committing wrong entry.")
    }
-   when (io.backend.br_unit.brinfo.valid &&
-         io.backend.br_unit.brinfo.is_jr &&
-         io.backend.br_unit.brinfo.mispredict)
+
+   val idx = GetIdx(Reg(next=br_unit.bpd_update.bits.br_pc))
+   when (br_unit.brinfo.valid)
    {
-      // jalr isn't allocated an entry, but if it mispredicts we need to reset the BROB
-      // to the state the JALR saw when it was fetched/decoded.
-      tail_ptr := io.backend.br_unit.brinfo.brob_idx
-      // TODO BUG XXX what if <br, jalr, br> ??? is it +1, or +0
-   }
-   val idx = GetIdx(Reg(next=io.backend.br_unit.bpd_update.bits.br_pc))
-   when (io.backend.br_unit.brinfo.valid &&
-         !io.backend.br_unit.brinfo.is_jr &&
-         Reg(next=io.backend.br_unit.bpd_update.valid))
-   {
-      entries(io.backend.br_unit.brinfo.brob_idx).executed(idx) := Bool(true)
-      entries(io.backend.br_unit.brinfo.brob_idx).taken(idx) := io.backend.br_unit.taken
-      when (io.backend.br_unit.brinfo.mispredict)
+      entries(br_unit.brinfo.brob_idx).executed(idx) := br_unit.brinfo.is_br
+      entries(br_unit.brinfo.brob_idx).taken(idx) := br_unit.taken
+      entries(br_unit.brinfo.brob_idx).debug_executed := Bool(true)
+
+      when (br_unit.brinfo.mispredict)
       {
-         entries(io.backend.br_unit.brinfo.brob_idx).mispredict(idx) := io.backend.br_unit.bpd_update.bits.bpd_mispredict
-         tail_ptr := WrapInc(io.backend.br_unit.brinfo.brob_idx, num_entries)
+         entries(br_unit.brinfo.brob_idx).mispredict(idx) :=
+            br_unit.bpd_update.bits.bpd_mispredict
+
+         // clear the executed bits behind this instruction
+         // (as they are on the misspeculated path)
+         for (w <- 0 until fetch_width)
+         {
+            when (UInt(w) > idx)
+            {
+               entries(br_unit.brinfo.brob_idx).executed(w) := Bool(false)
+            }
+         }
+
+         tail_ptr := WrapInc(br_unit.brinfo.brob_idx, num_entries)
       }
       require (coreInstBytes == 4)
    }
+
    when (io.backend.flush)
    {
       head_ptr := UInt(0)
@@ -288,44 +283,15 @@ class BranchReorderBuffer(fetch_width: Int, num_entries: Int) extends Module wit
    // -----------------------------------------------
    // outputs
    io.commit_entry.valid := io.backend.deallocate.valid
-   val com_entry = entries(head_ptr)
-   // TODO refactor to perform the kill when the mispredict occurs. doesn't
-   // require a read, but does require a write-mask to kill some entries. Would
-   // have to refactor the entries() structure?
-
-   // 0000 | 1111 -> 0000 1111
-   // 1000 | 0111 -> 0000 1111
-   // 0100 | 1011 -> 1000 0111
-   // 0010 | 1101 -> 1100 0011
-   // 0001 | 1110 -> 1110 0001
-
-
-   val kill_mask = Wire(Vec(fetch_width, Bool()))
-   val misses = com_entry.mispredict
-   var found_miss = Bool(false)
-   for (w <- 0 until fetch_width)
-   {
-      kill_mask(w) := Bool(false)
-      when (found_miss)
-      {
-         kill_mask(w) := Bool(true)
-      }
-      found_miss = misses(w) | found_miss
-   }
-
-   io.commit_entry.bits := com_entry
-   io.commit_entry.bits.executed := Range(0,fetch_width).map{i => com_entry.executed(i) & ~kill_mask(i)}
-   io.commit_entry.bits.taken    := Range(0,fetch_width).map{i => com_entry.taken(i) & ~kill_mask(i)}
+   io.commit_entry.bits := entries(head_ptr)
 
    // TODO allow filling the entire BROB ROB.
    // I had difficulty getting the "maybe_full" correct when dealing with
    // mispredicts from jr's and branches while already full.
 //   val maybe_full = Reg(init=Bool(false))
 //   val full = (head_ptr === tail_ptr) && maybe_full
-   val full = (head_ptr === WrapInc(tail_ptr, num_entries))
-
-   val do_alloc = io.backend.allocate.valid && !full
-   val do_dealloc = io.backend.deallocate.valid
+//   val do_alloc = io.backend.allocate.valid && !full
+//   val do_dealloc = io.backend.deallocate.valid
 //   when (io.backend.flush ||
 //         ((io.backend.br_unit.brinfo.valid &&
 //         io.backend.br_unit.brinfo.mispredict) &&
@@ -337,6 +303,8 @@ class BranchReorderBuffer(fetch_width: Int, num_entries: Int) extends Module wit
 //   {
 //      maybe_full := do_alloc
 //   }
+
+   val full = (head_ptr === WrapInc(tail_ptr, num_entries))
    io.backend.allocate.ready := !full
 
    assert (!(full && io.backend.allocate.valid), "Trying to allocate entry while full.")
@@ -353,7 +321,7 @@ class BranchReorderBuffer(fetch_width: Int, num_entries: Int) extends Module wit
             , UInt(i, log2Up(num_entries))
             , entries(i).executed.toBits
             , entries(i).taken.toBits
-            , entries(i).rob_idx
+            , entries(i).debug_rob_idx
             , entries(i).info.info.history
             , entries(i).info.info.index
             , idx
@@ -364,8 +332,6 @@ class BranchReorderBuffer(fetch_width: Int, num_entries: Int) extends Module wit
                Mux(head_ptr === UInt(i),                         Str("<-HEAD   "),
                Mux(tail_ptr === UInt(i),                         Str("<-     TL"),
                                                                  Str(" "))))
-//            , Mux(full, Str("F"), Str("_"))
-//            , Mux(maybe_full, Str("M"), Str("_"))
             )
       }
    }

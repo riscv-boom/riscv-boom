@@ -65,7 +65,7 @@ class FunctionalUnitIo(num_stages: Int
 
 class GetPredictionInfo extends BOOMCoreBundle
 {
-   val rob_idx = UInt(OUTPUT, ROB_ADDR_SZ)
+   val br_tag = UInt(OUTPUT, BR_TAG_SZ)
    val info = new BranchPredictionResp().asInput
 }
 
@@ -371,6 +371,7 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)
       io.br_unit.brinfo.ldq_idx    := Reg(next = uop.ldq_idx)
       io.br_unit.brinfo.stq_idx    := Reg(next = uop.stq_idx)
       io.br_unit.brinfo.brob_idx   := Reg(next = io.get_rob_pc.curr_brob_idx)
+      io.br_unit.brinfo.is_br      := Reg(next = uop.is_br_or_jmp && !uop.is_jump)
       io.br_unit.brinfo.is_jr      := Reg(next = pc_sel === PC_JALR)
 
       // updates the BTB same cycle as PC redirect

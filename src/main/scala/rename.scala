@@ -393,22 +393,14 @@ class BusyTable(pipeline_width:Int, num_read_ports:Int, num_wb_ports:Int) extend
       }
    }
 
-
    // handle bypassing a clearing of the busy-bit
    for (ridx <- 0 until num_read_ports)
    {
       val just_cleared = io.unbusy_pdst.map(p => p.valid && (p.bits === io.p_rs(ridx))).reduce(_|_)
-//      var just_cleared = Bool(false)
-//      for (i <- 0 until num_wb_ports)
-//      {
-//         just_cleared = (io.unbusy_pdst(i).valid && (io.unbusy_pdst(i).bits === io.p_rs(ridx))) | just_cleared
-//      }
-
       // note: no bypassing of the newly busied (that is done outside this module)
       io.p_rs_busy(ridx) := (table_bsy(io.p_rs(ridx)) && !just_cleared)
    }
 
-   // debug
    io.debug.bsy_table := table_bsy
 }
 
@@ -429,7 +421,11 @@ class RenameStageIO(pl_width: Int, num_wb_ports: Int) extends BOOMCoreBundle
    val dec_uops  = Vec.fill(pl_width) {new MicroOp().asInput}
    val ren_uops  = Vec.fill(pl_width) {new MicroOp().asOutput}
 
+   val ren_pred_info = new BranchPredictionResp().asInput
+
+   // branch resolution (execute)
    val brinfo    = new BrResolutionInfo().asInput
+   val get_pred  = new GetPredictionInfo().flip
 
    val dis_inst_can_proceed = Vec.fill(DISPATCH_WIDTH) {Bool(INPUT)}
 
@@ -444,17 +440,9 @@ class RenameStageIO(pl_width: Int, num_wb_ports: Int) extends BOOMCoreBundle
 
    val flush_pipeline = Bool(INPUT) // TODO only used for SCR (single-cycle reset)
 
-   // debug
    val debug = new Bundle {
       val freelist = Bits(width=PHYS_REG_COUNT)
       val isprlist = Bits(width=PHYS_REG_COUNT)
-      //val map_table = Vec.fill(LOGICAL_REG_COUNT) {new Bundle{
-      //   val valid   = Bool()
-      //   val rbk_wen = Bool()
-      //   // TODO chisel bug confuses I/O direction if this is added in
-      //   val element = UInt(width=PREG_SZ)
-//    //     val committed_element = UInt(width=PREG_SZ)
-      //}}
       val bsy_table = UInt(width=PHYS_REG_COUNT)
    }.asOutput
 }
@@ -550,7 +538,7 @@ class RenameStage(pl_width: Int, num_wb_ports: Int) extends Module with BOOMCore
    {
       map_table_prs1(w) := map_table_io(io.ren_uops(w).lrs1).element
       map_table_prs2(w) := map_table_io(io.ren_uops(w).lrs2).element
-      if (max_operands > 2) 
+      if (max_operands > 2)
          map_table_prs3(w) := map_table_io(io.ren_uops(w).lrs3).element
       else
          map_table_prs3(w) := UInt(0)
@@ -625,7 +613,7 @@ class RenameStage(pl_width: Int, num_wb_ports: Int) extends Module with BOOMCore
 
          io.ren_uops(w).prs1_busy := (io.ren_uops(w).lrs1_rtype === RT_FIX || io.ren_uops(w).lrs1_rtype === RT_FLT) && (bsy_table.io.prs_busy(0,w) || prs1_was_bypassed(w))
          io.ren_uops(w).prs2_busy := (io.ren_uops(w).lrs2_rtype === RT_FIX || io.ren_uops(w).lrs2_rtype === RT_FLT) && (bsy_table.io.prs_busy(1,w) || prs2_was_bypassed(w))
-         
+
          if (max_operands > 2)
          {
             bsy_table.io.prs(2,w) := map_table_prs3(w)
@@ -704,6 +692,25 @@ class RenameStage(pl_width: Int, num_wb_ports: Int) extends Module with BOOMCore
    }
 
 
+   //-------------------------------------------------------------
+   // Branch Predictor Snapshots
+
+   // Each branch prediction must snapshot the predictor (history state, etc.).
+   // On a mispredict, the snapshot must be used to reset the predictor.
+   // TODO use Mem(), but it chokes on the undefines in VCS
+   //val prediction_copies = Mem(MAX_BR_COUNT, new BranchPredictionResp)
+   val prediction_copies = Vec.fill(MAX_BR_COUNT) {Reg(new BranchPredictionResp)}
+
+   for (w <- 0 until pl_width)
+   {
+      when(ren_br_vals(w))
+      {
+         prediction_copies(io.ren_uops(w).br_tag) := io.ren_pred_info
+      }
+   }
+
+   io.get_pred.info := prediction_copies(io.get_pred.br_tag)
+
 
    //-------------------------------------------------------------
    // Outputs
@@ -711,7 +718,7 @@ class RenameStage(pl_width: Int, num_wb_ports: Int) extends Module with BOOMCore
    {
       // TODO REFACTOR, make == rt_x?
       io.inst_can_proceed(w) := (freelist.io.can_allocate(w) ||
-                                 (io.ren_uops(w).dst_rtype != RT_FIX && io.ren_uops(w).dst_rtype != RT_FLT)) && 
+                                 (io.ren_uops(w).dst_rtype != RT_FIX && io.ren_uops(w).dst_rtype != RT_FLT)) &&
                                 io.dis_inst_can_proceed(w)
    }
 
@@ -719,16 +726,9 @@ class RenameStage(pl_width: Int, num_wb_ports: Int) extends Module with BOOMCore
    //-------------------------------------------------------------
    // Debug signals
 
-   io.debug.freelist := freelist.io.debug.freelist
-   io.debug.isprlist := freelist.io.debug.isprlist
-
-//   for (i <- 0 until LOGICAL_REG_COUNT)
-//   {
-//      io.debug.map_table(i).rbk_wen := map_table_io(i).rollback_wen
-//      io.debug.map_table(i).element := map_table_io(i).element
-//   //   io.debug.map_table(i).committed_element := map_table_io(i).committed_element
-//   }
-   io.debug.bsy_table:= bsy_table.io.debug.bsy_table
+   io.debug.freelist  := freelist.io.debug.freelist
+   io.debug.isprlist  := freelist.io.debug.isprlist
+   io.debug.bsy_table := bsy_table.io.debug.bsy_table
 }
 
 

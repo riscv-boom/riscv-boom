@@ -110,7 +110,7 @@ class MicroOp extends BOOMCoreBundle
    val wakeup_delay     = UInt(width = log2Up(MAX_WAKEUP_DELAY)) // unused
    val allocate_brtag   = Bool()                      // does this allocate a branch tag? (is branch or JR but not JAL)
    val is_br_or_jmp     = Bool()                      // is this micro-op a (branch or jump) vs. a regular PC+4 inst?
-   val is_jump          = Bool()                      // is this a jump?
+   val is_jump          = Bool()                      // is this a jump? (jal or jalr)
    val is_jal           = Bool()                      // is this a JAL? used for branch unit
    val is_ret           = Bool()                      // is jalr with rd=x0, rs1=x1? (i.e., a return)
    val is_call          = Bool()                      //
@@ -203,7 +203,8 @@ class BrResolutionInfo extends BOOMCoreBundle
    val ldq_idx    = UInt(width = MEM_ADDR_SZ)  // track the "tail" of loads and stores, so we can
    val stq_idx    = UInt(width = MEM_ADDR_SZ)  // quickly reset the LSU on a mispredict
    val brob_idx   = UInt(width = BROB_ADDR_SZ) // quickly reset the Branch-ROB on a mispredict
-   val is_jr      = Bool() 
+   val is_br      = Bool()
+   val is_jr      = Bool()
 }
 
 class CacheCounters() extends Bundle
@@ -379,14 +380,18 @@ class DatPath() extends Module with BOOMCoreParameters
    println("")
 //   require(num_wakeup_ports == num_rf_write_ports) TODO
 
+
+   val br_unit = Wire(new BranchUnitResp())
+   require (exe_units.count(_.has_branch_unit) == 1)
+   val brunit_idx = exe_units.indexWhere(_.has_branch_unit)
+   br_unit <> exe_units(brunit_idx).io.br_unit
+
    val register_width = if (params(BuildFPU).isEmpty) xLen else 65
    val bypasses = Wire(new BypassData(num_total_bypass_ports, register_width))
 
    val issue_width           = exe_units.length // TODO allow exe_units to have multiple issue ports?
    val iss_valids            = Wire(Vec(issue_width, Bool()))
    val iss_uops              = Wire(Vec(issue_width, new MicroOp()))
-
-   val br_unit               = Wire(new BranchUnitResp())
 
    val watchdog_trigger      = Wire(Bool())
 
@@ -469,8 +474,8 @@ class DatPath() extends Module with BOOMCoreParameters
       io.imem.btb_update.valid := (br_unit.btb_update_valid || (bp2_take_pc && bp2_is_jump && !if_stalled && !br_unit.take_pc)) &&
                                           !flush_take_pc &&
                                           !csr_take_pc
-   } 
-   else 
+   }
+   else
    {
       io.imem.btb_update.valid := Bool(false)
    }
@@ -511,17 +516,17 @@ class DatPath() extends Module with BOOMCoreParameters
    bp2_pc_of_br_inst := bpd_stage.io.req.bits.br_pc
    bp2_is_jump := bpd_stage.io.req.bits.is_jump
 
-   def KillMask(m_enable: Bool, m_idx: UInt, m_width: Int) = 
+   def KillMask(m_enable: Bool, m_idx: UInt, m_width: Int) =
    {
       val mask = Wire(Bits(width = m_width))
       mask := Fill(m_enable, m_width) & (SInt(-1, m_width) << UInt(1) << m_idx)
       mask
    }
    // mask out instructions after predicted branch
-   val bpd_kill_mask = KillMask(bp2_take_pc, bpd_stage.io.req.bits.idx, FETCH_WIDTH) 
+   val bpd_kill_mask = KillMask(bp2_take_pc, bpd_stage.io.req.bits.idx, FETCH_WIDTH)
    // mask out instructions after first jr (doesn't matter if predicted correctly or not!)
 //   val jr_kill_mask = Bits(0,FETCH_WIDTH)
-   val jr_kill_mask = KillMask(bpd_stage.io.pred_resp.has_jr, 
+   val jr_kill_mask = KillMask(bpd_stage.io.pred_resp.has_jr,
                                bpd_stage.io.pred_resp.jr_idx,
                               FETCH_WIDTH)
    fetch_bundle.mask := (io.imem.resp.bits.mask & ~bpd_kill_mask & ~jr_kill_mask)
@@ -661,9 +666,12 @@ class DatPath() extends Module with BOOMCoreParameters
    val rename_stage = Module(new RenameStage(DECODE_WIDTH, num_wakeup_ports))
 
    rename_stage.io.dis_inst_can_proceed := dis_insts_can_proceed
+   rename_stage.io.ren_pred_info := dec_fbundle.pred_resp
 
    rename_stage.io.kill     := kill_frontend // mispredict or flush
    rename_stage.io.brinfo   := br_unit.brinfo
+   rename_stage.io.get_pred.br_tag        := iss_uops(brunit_idx).br_tag
+   exe_units(brunit_idx).io.get_pred.info := Reg(next=rename_stage.io.get_pred.info)
 
    rename_stage.io.flush_pipeline := flush_pipeline // TODO temp refactor
 
@@ -731,21 +739,24 @@ class DatPath() extends Module with BOOMCoreParameters
          dis_uops(w).rob_idx := dis_curr_rob_row_idx
       else
          dis_uops(w).rob_idx := Cat(dis_curr_rob_row_idx, UInt(w, log2Up(DECODE_WIDTH)))
-   
+
       dis_uops(w).brob_idx := bpd_stage.io.brob.allocate_brob_tail
 
    }
- 
-   val dec_has_br_in_packet = Range(0,DECODE_WIDTH).map{w => dec_valids(w) && dec_uops(w).br_prediction.is_br}.reduce(_|_)
+
+   val dec_has_br_or_jalr_in_packet =
+      Range(0,DECODE_WIDTH).map{w =>
+         dec_valids(w) && dec_uops(w).br_prediction.is_br_or_jalr}.reduce(_|_)
 
 
-   bpd_stage.io.brob.allocate.valid := dis_mask.reduce(_|_) && 
+   bpd_stage.io.brob.allocate.valid := dis_mask.reduce(_|_) &&
                                        dec_finished_mask === Bits(0) &&
-                                       dec_has_br_in_packet
+                                       dec_has_br_or_jalr_in_packet
    bpd_stage.io.brob.allocate.bits.executed.map{_ := Bool(false)}
    bpd_stage.io.brob.allocate.bits.taken.map{_ := Bool(false)}
    bpd_stage.io.brob.allocate.bits.mispredict.map{_ := Bool(false)}
-   bpd_stage.io.brob.allocate.bits.rob_idx := dis_uops(0).rob_idx
+   bpd_stage.io.brob.allocate.bits.debug_executed := Bool(false)
+   bpd_stage.io.brob.allocate.bits.debug_rob_idx := dis_uops(0).rob_idx
    bpd_stage.io.brob.allocate.bits.brob_idx := dis_uops(0).brob_idx
 
 
@@ -919,21 +930,6 @@ class DatPath() extends Module with BOOMCoreParameters
    require (idx == num_total_bypass_ports)
 
 
-   var br_cnt = 0
-   var brunit_idx = 0
-   for (w <- 0 until exe_units.length)
-   {
-      if (exe_units(w).has_branch_unit)
-      {
-         //println("  Hooking up Branch Unit for exe_unit #" + w)
-         br_unit <> exe_units(w).io.br_unit
-         br_cnt = br_cnt + 1
-         brunit_idx = w
-      }
-   }
-   require (br_cnt == 1)
-
-
    //-------------------------------------------------------------
    //-------------------------------------------------------------
    // **** Memory Stage ****
@@ -1033,8 +1029,7 @@ class DatPath() extends Module with BOOMCoreParameters
 
       rob.io.dis_uops := dis_uops
       rob.io.dis_mask := dis_mask
-      rob.io.dis_pred_info := dec_fbundle.pred_resp
-      rob.io.dis_has_br_in_packet := dec_has_br_in_packet
+      rob.io.dis_has_br_or_jalr_in_packet := dec_has_br_or_jalr_in_packet
       rob.io.dis_partial_stall := !dec_rdy && !dis_mask(DECODE_WIDTH-1)
       rob.io.dis_new_packet := dec_finished_mask === Bits(0)
 
@@ -1101,12 +1096,10 @@ class DatPath() extends Module with BOOMCoreParameters
       // branch unit requests PCs and predictions from ROB during register read
       // (fetch PC from ROB cycle earlier than needed for critical path reasons)
       rob.io.get_pc.rob_idx := iss_uops(brunit_idx).rob_idx
-      rob.io.get_pred.rob_idx:= iss_uops(brunit_idx).rob_idx
       exe_units(brunit_idx).io.get_rob_pc.curr_pc  := Reg(next=rob.io.get_pc.curr_pc)
       exe_units(brunit_idx).io.get_rob_pc.curr_brob_idx  := Reg(next=rob.io.get_pc.curr_brob_idx)
       exe_units(brunit_idx).io.get_rob_pc.next_val := Reg(next=rob.io.get_pc.next_val)
       exe_units(brunit_idx).io.get_rob_pc.next_pc  := Reg(next=rob.io.get_pc.next_pc)
-      exe_units(brunit_idx).io.get_pred.info       := Reg(next=rob.io.get_pred.info)
 
       // LSU <> ROB
       lsu_misspec := rob.io.lsu_misspec

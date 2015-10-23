@@ -31,10 +31,11 @@ class RedirectRequest (fetch_width: Int) extends BOOMCoreBundle
    override def cloneType: this.type = new RedirectRequest(fetch_width).asInstanceOf[this.type]
 }
 
-// this information is shared across the entire fetch packet, stored in the ROB
-// (conceptually anyways), and not given to the uop.
-// TODO move this to the branch snapshots? so we can de-allocate once resolved.
-class BranchPredictionResp extends BOOMCoreBundle // rename BranchPredictionResolutionInfo?
+// this information is shared across the entire fetch packet, and stored in the
+// branch snapshots. Since it's not unique to an instruction, it could be
+// compressed further. It can be de-allocated once the branch is resolved in
+// Execute.
+class BranchPredictionResp extends BOOMCoreBundle // TODO rename BranchPredictionResolutionInfo?
 {
    val btb_resp_valid = Bool()
    val btb_resp       = new rocket.BTBResp
@@ -53,7 +54,8 @@ class BranchPrediction extends BOOMCoreBundle
    val btb_hit          = Bool() // this instruction was the br/jmp predicted by the BTB
    val btb_predicted    = Bool() // BTB gets credit for the prediction otherwise check the BPD
 
-   val is_br            = Bool() // is this instruction a branch?
+   val is_br_or_jalr    = Bool() // is this instruction a branch or jalr? 
+                                 // (need to allocate brob entry).
 
    def wasBTB = btb_predicted
 }
@@ -173,7 +175,7 @@ class BranchPredictionStage (fetch_width: Int) extends Module with BOOMCoreParam
 
    for (w <- 0 until FETCH_WIDTH)
    {
-      io.predictions(w).is_br := is_br(w)
+      io.predictions(w).is_br_or_jalr := is_br(w) || is_jr(w)
       io.predictions(w).bpd_predict_taken := predictions(w) && bpd_valid
       io.predictions(w).btb_predicted := btb_overrides
       io.predictions(w).btb_hit := Mux(io.imem.btb_resp.bits.bridx === UInt(w),
