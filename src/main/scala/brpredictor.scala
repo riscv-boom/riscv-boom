@@ -91,7 +91,7 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int) extends Mo
    private val r_ghistory = Reg(init = Bits(0, width = history_length))
 
    // we need to maintain a copy of the commit history, in-case we need to
-   // reset it on a pipeline replay.
+   // reset it on a pipeline flush/replay.
    private val r_ghistory_commit_copy = Reg(init = Bits(0, width = history_length))
 
 
@@ -128,7 +128,7 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int) extends Mo
    brob.io.backend <> io.brob
    commit := brob.io.commit_entry
 
-   when (brob.io.backend.deallocate.valid)
+   when (commit.valid)
    {
       r_ghistory_commit_copy := Cat(r_ghistory_commit_copy, commit.bits.taken.reduce(_|_))
    }
@@ -251,13 +251,13 @@ class BranchReorderBuffer(fetch_width: Int, num_entries: Int) extends Module wit
    when (br_unit.brinfo.valid)
    {
       entries(br_unit.brinfo.brob_idx).executed(idx) := br_unit.brinfo.is_br
-      entries(br_unit.brinfo.brob_idx).taken(idx) := br_unit.taken
+      entries(br_unit.brinfo.brob_idx).taken(idx) := br_unit.brinfo.taken
       entries(br_unit.brinfo.brob_idx).debug_executed := Bool(true)
 
       when (br_unit.brinfo.mispredict)
       {
          entries(br_unit.brinfo.brob_idx).mispredict(idx) :=
-            br_unit.bpd_update.bits.bpd_mispredict
+            Reg(next=br_unit.bpd_update.bits.bpd_mispredict)
 
          // clear the executed bits behind this instruction
          // (as they are on the misspeculated path)
@@ -317,10 +317,11 @@ class BranchReorderBuffer(fetch_width: Int, num_entries: Int) extends Module wit
    {
       for (i <- 0 until num_entries)
       {
-         printf (" brob[%d] (%x) T=%x r=%d, hist=%x, %d, br_upd_idx=%d "
+         printf (" brob[%d] (%x) T=%x m=%x r=%d, hist=%x, 0x%x, br_upd_idx=%d "
             , UInt(i, log2Up(num_entries))
             , entries(i).executed.toBits
             , entries(i).taken.toBits
+            , entries(i).mispredict.toBits
             , entries(i).debug_rob_idx
             , entries(i).info.info.history
             , entries(i).info.info.index

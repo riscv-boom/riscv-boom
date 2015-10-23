@@ -203,6 +203,7 @@ class BrResolutionInfo extends BOOMCoreBundle
    val ldq_idx    = UInt(width = MEM_ADDR_SZ)  // track the "tail" of loads and stores, so we can
    val stq_idx    = UInt(width = MEM_ADDR_SZ)  // quickly reset the LSU on a mispredict
    val brob_idx   = UInt(width = BROB_ADDR_SZ) // quickly reset the Branch-ROB on a mispredict
+   val taken      = Bool()                     // which direction did the branch go? 
    val is_br      = Bool()
    val is_jr      = Bool()
 }
@@ -758,6 +759,7 @@ class DatPath() extends Module with BOOMCoreParameters
    bpd_stage.io.brob.allocate.bits.debug_executed := Bool(false)
    bpd_stage.io.brob.allocate.bits.debug_rob_idx := dis_uops(0).rob_idx
    bpd_stage.io.brob.allocate.bits.brob_idx := dis_uops(0).brob_idx
+   bpd_stage.io.brob.allocate.bits.info := dec_fbundle.pred_resp.bpd_resp
 
 
    //-------------------------------------------------------------
@@ -1191,13 +1193,10 @@ class DatPath() extends Module with BOOMCoreParameters
    // (only used for printf and vcd dumps - the actual counters are in the CSRFile)
    val tsc_reg = Reg(init = UInt(0, xLen))
    val irt_reg = Reg(init = UInt(0, xLen))
-   val irt_ei_reg = Reg(init = UInt(0, xLen))
    tsc_reg := tsc_reg + UInt(1)
    irt_reg := irt_reg + PopCount(com_valids.toBits)
-   when (csr.io.status.ie) { irt_ei_reg := irt_ei_reg + PopCount(com_valids.toBits) }
    debug(tsc_reg)
    debug(irt_reg)
-   debug(irt_ei_reg)
 
    // UARCH Counters
    // these take up a significant amount of area, so don't enable them lightly
@@ -1260,13 +1259,12 @@ class DatPath() extends Module with BOOMCoreParameters
       }
 
       // Front-end
-      printf("--- Cyc=%d , ----------------- Ret: %d ---------------------------------- User Retired: %d\n  BrPred1:        (IF1_PC= n/a - Predict:n/a) ------ PC: [%s%s%s-%s for br_id: %d, %s %s next: 0x%x ifst:%d]\nI$ Response: (%s) IF2_PC= 0x%x (mask:0x%x) \u001b[1;35m%s\u001b[0m  ----BrPred2:(%s,%s) [btbtarg: 0x%x] jkilmsk:0x%x ->(0x%x)\n"
+      printf("--- Cyc=%d , ----------------- Ret: %d ----------------------------------\n  BrPred1:        (IF1_PC= n/a - Predict:n/a) ------ PC: [%s%s%s-%s for br_id: %d, %s %s next: 0x%x ifst:%d]\nI$ Response: (%s) IF2_PC= 0x%x (mask:0x%x) \u001b[1;35m%s\u001b[0m  ----BrPred2:(%s,%s) [btbtarg: 0x%x] jkilmsk:0x%x ->(0x%x)\n"
          , tsc_reg
          , irt_reg & UInt(0xffffff)
-         , irt_ei_reg & UInt(0xffffff)
       // Fetch Stage 1
          , Mux(br_unit.brinfo.valid, Str("V"), Str("-"))
-         , Mux(br_unit.taken, Str("T"), Str("-"))
+         , Mux(br_unit.brinfo.taken, Str("T"), Str("-"))
          , Mux(br_unit.debug_btb_pred, Str("B"), Str("_"))
          , Mux(br_unit.brinfo.mispredict, Str(b_mgt + "MISPREDICT" + end), Str(grn + "          " + end))
          , br_unit.brinfo.tag
@@ -1384,7 +1382,7 @@ class DatPath() extends Module with BOOMCoreParameters
       printf("                          Branch Unit: %s,%s,%d PC=0x%x, %d Targ=0x%x NPC=%d,0x%x %d%d\n"
          , Mux(br_unit.brinfo.valid,Str("V"), Str(" "))
          , Mux(br_unit.brinfo.mispredict, Str("M"), Str(" "))
-         , br_unit.taken
+         , br_unit.brinfo.taken
          , br_unit.btb_update.br_pc(19,0)
          , br_unit.btb_update_valid
          , br_unit.btb_update.target(19,0)

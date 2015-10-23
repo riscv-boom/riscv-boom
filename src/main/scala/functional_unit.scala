@@ -113,7 +113,6 @@ class BranchUnitResp extends BOOMCoreBundle
 {
    val take_pc         = Bool()
    val target          = UInt(width = vaddrBits+1)
-   val taken           = Bool()
 
    val pc              = UInt(width = vaddrBits+1) // TODO this isn't really a branch_unit thing
 
@@ -298,10 +297,11 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)
 
       val bj_addr = Wire(UInt())
 
-      io.br_unit.taken := io.req.valid &&
-                          !killed &&
-                          uop.is_br_or_jmp &&
-                          (pc_sel != PC_PLUS4)
+//      io.br_unit.taken := io.req.valid &&
+      val is_taken = io.req.valid &&
+                     !killed &&
+                     uop.is_br_or_jmp &&
+                     (pc_sel != PC_PLUS4)
 
       // "mispredict" means that a branch has been resolved and it must be killed
       val mispredict = Wire(Bool()); mispredict := Bool(false)
@@ -373,6 +373,7 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)
       io.br_unit.brinfo.brob_idx   := Reg(next = io.get_rob_pc.curr_brob_idx)
       io.br_unit.brinfo.is_br      := Reg(next = uop.is_br_or_jmp && !uop.is_jump)
       io.br_unit.brinfo.is_jr      := Reg(next = pc_sel === PC_JALR)
+      io.br_unit.brinfo.taken      := Reg(next = is_taken)
 
       // updates the BTB same cycle as PC redirect
       val lsb = log2Ceil(FETCH_WIDTH*coreInstBytes)
@@ -386,13 +387,13 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)
       io.br_unit.btb_update.target           := io.br_unit.target & SInt(-coreInstBytes)
       io.br_unit.btb_update.prediction.valid := io.get_pred.info.btb_resp_valid // did this branch's fetch packet have a BTB hit in fetch?
       io.br_unit.btb_update.prediction.bits  := io.get_pred.info.btb_resp       // give the BTB back its BTBResp
-      io.br_unit.btb_update.taken            := io.br_unit.taken   // was this branch/jal/jalr "taken"
+      io.br_unit.btb_update.taken            := is_taken   // was this branch/jal/jalr "taken"
       io.br_unit.btb_update.isJump           := uop.is_jump
       io.br_unit.btb_update.isReturn         := uop.is_ret
 
       io.br_unit.bht_update.valid                 := Bool(false) // TODO XXX TEMPORARY
 //      io.br_unit.bht_update.valid                 := io.req.valid && uop.is_br_or_jmp && !uop.is_jump && !killed // update on all branches (but not jal/jalr)
-      io.br_unit.bht_update.bits.taken            := io.br_unit.taken   // was this branch "taken"
+      io.br_unit.bht_update.bits.taken            := is_taken   // was this branch "taken"
       io.br_unit.bht_update.bits.mispredict       := btb_mispredict     // need to reset the history in the BHT that is updated only on BTB hits
       io.br_unit.bht_update.bits.prediction.valid := io.get_pred.info.btb_resp_valid // only update if this was a hit in the BTB
       io.br_unit.bht_update.bits.prediction.bits  := io.get_pred.info.btb_resp
@@ -400,7 +401,7 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)
 
       io.br_unit.bpd_update.valid                 := io.req.valid && uop.is_br_or_jmp && !uop.is_jump && !killed // update on all branches (but not jal/jalr)
 //      io.br_unit.bpd_update.valid                 := io.br_unit.bht_update.valid
-      io.br_unit.bpd_update.bits.taken            := io.br_unit.taken
+      io.br_unit.bpd_update.bits.taken            := is_taken
       io.br_unit.bpd_update.bits.mispredict       := mispredict
       io.br_unit.bpd_update.bits.bpd_mispredict   := bpd_mispredict
       io.br_unit.bpd_update.bits.pc               := fetch_pc
@@ -410,7 +411,7 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)
       // is the br_pc the last instruction in the fetch bundle?
       val is_last_inst = if (FETCH_WIDTH == 1) Bool(true)
                          else ((uop_pc_ >> UInt(log2Up(coreInstBytes))) & Fill(log2Up(FETCH_WIDTH), Bits(1))) === UInt(FETCH_WIDTH-1)
-      io.br_unit.bpd_update.bits.new_pc_same_packet := !(io.br_unit.taken) && !is_last_inst
+      io.br_unit.bpd_update.bits.new_pc_same_packet := !(is_taken) && !is_last_inst
 
       require (coreInstBytes == 4)
 

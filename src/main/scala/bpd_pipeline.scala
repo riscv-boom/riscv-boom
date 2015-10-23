@@ -164,7 +164,7 @@ class BranchPredictionStage (fetch_width: Int) extends Module with BOOMCoreParam
    io.req.bits.br_pc   := aligned_pc + (io.req.bits.idx << UInt(2))
    io.req.bits.is_jump := !br_wins
 
-   io.pred_resp.bpd_resp.info.history := bpd_bits.info.history
+   io.pred_resp.bpd_resp.info    := bpd_bits.info
    io.pred_resp.btb_resp_valid   := io.imem.btb_resp.valid
    io.pred_resp.btb_resp         := io.imem.btb_resp.bits
 
