@@ -15,7 +15,7 @@ import Node._
 trait BOOMDebugConstants
 {
    val DEBUG_PRINTF        = false // use the Chisel printf functionality
-   val DEBUG_ENABLE_COLOR  = false // provide color to print outs? requires a VIM plugin to work properly :(
+   val DEBUG_ENABLE_COLOR  = true  // provide color to print outs? requires a VIM plugin to work properly :(
    val COMMIT_LOG_PRINTF   = false // dump commit state, for comparision against ISA sim
 
    // turn off stuff to dramatically reduce Chisel node count
@@ -188,7 +188,7 @@ trait ScalarOpConstants
    val uopJALR = Bits(38, UOPC_SZ)
    val uopAUIPC= Bits(39, UOPC_SZ)
 
-   val uopSRET = Bits(40, UOPC_SZ)
+//   val uopSRET = Bits(40, UOPC_SZ)
    val uopCFLSH= Bits(41, UOPC_SZ)
    val uopFENCE= Bits(42, UOPC_SZ)
 

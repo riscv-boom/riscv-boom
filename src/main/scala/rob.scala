@@ -300,10 +300,8 @@ class Rob(width: Int
    io.get_pc.curr_brob_idx := row_metadata_brob_idx(GetRowIdx(io.get_pc.rob_idx))
 
    // HACK to deal with SRET changing PC, but not setting flush_pipeline.
-   // this is broken b/c of <bne, csr>. state changes, THEN commits csr. 
-//   io.flush_brob := (rob_state === s_wait_till_empty)
-// TODO BUG XXX delete this code, since it's not needed?
-   io.flush_brob := Bool(false)
+   io.flush_brob := Range(0, width).map(i => 
+      io.dis_mask(i) && io.dis_uops(i).is_unique).reduce(_|_)
 
    // **************************************************************************
    // --------------------------------------------------------------------------
@@ -329,8 +327,7 @@ class Rob(width: Int
       when (io.dis_mask(w))
       {
          rob_val(rob_tail)       := Bool(true)
-         rob_bsy(rob_tail)       := io.dis_uops(w).uopc != uopSRET &&  // TODO do I need to do this for eret? or should I treat it like it's an exception
-                                    !io.dis_uops(w).is_fence &&
+         rob_bsy(rob_tail)       := !io.dis_uops(w).is_fence &&
                                     !(io.dis_uops(w).is_fencei)
          rob_uop(rob_tail)       := io.dis_uops(w)
          rob_exception(rob_tail) := io.dis_uops(w).exception

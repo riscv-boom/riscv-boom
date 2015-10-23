@@ -745,9 +745,12 @@ class DatPath() extends Module with BOOMCoreParameters
 
    }
 
+   val dis_has_unique = Range(0,DISPATCH_WIDTH).map{w =>
+      dis_mask(w) && dis_uops(w).is_unique}.reduce(_|_)
    val dec_has_br_or_jalr_in_packet =
       Range(0,DECODE_WIDTH).map{w =>
-         dec_valids(w) && dec_uops(w).br_prediction.is_br_or_jalr}.reduce(_|_)
+         dec_valids(w) && dec_uops(w).br_prediction.is_br_or_jalr}.reduce(_|_) &&
+      !dis_has_unique
 
 
    bpd_stage.io.brob.allocate.valid := dis_mask.reduce(_|_) &&
