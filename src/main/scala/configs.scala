@@ -28,7 +28,8 @@ class DefaultBOOMConfig extends ChiselConfig (
          case MaxBrCount => Knob("MAX_BR_COUNT")
 
          // Front-end
-         case EnableBTB => false // only gates off updates :(
+         case EnableBTB => true // only gates off updates :(
+         case EnableBTBContainsBranches => false // don't send branches to BTB
          case NBTBEntries => if(site(CoreName) == "BOOM") 64 else 62
          case NRAS => 8
          case FetchBufferSz => 4

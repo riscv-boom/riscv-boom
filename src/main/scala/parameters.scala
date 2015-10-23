@@ -16,6 +16,7 @@ case object MaxBrCount extends Field[Int]
 case object FetchBufferSz extends Field[Int]
 case object EnableFetchBufferFlowThrough extends Field[Boolean]
 case object EnableBTB extends Field[Boolean]
+case object EnableBTBContainsBranches extends Field[Boolean]
 case object EnableBranchPredictor extends Field[Boolean]
 case object BranchPredictorSizeInKB extends Field[Int]
 case object EnableAgePriorityIssue extends Field[Boolean]
@@ -60,6 +61,7 @@ abstract trait BOOMCoreParameters extends rocket.CoreParameters
    val BPD_SIZE_IN_KB = params(BranchPredictorSizeInKB)
    val BPD_NUM_ENTRIES = BPD_SIZE_IN_KB*1024*8/FETCH_WIDTH/2 // computation for GShare
    val GHIST_LENGTH = log2Up(BPD_NUM_ENTRIES)
+//   val GHIST_LENGTH = log2Up(BPD_NUM_ENTRIES)
 
    //************************************
    // Extra Knobs and Features
