@@ -292,6 +292,11 @@ class Rob(width: Int
       r_partial_row := io.dis_partial_stall
    }
 
+   when (io.flush_brob)
+   {
+      row_metadata_has_brorjalr(rob_tail) := Bool(false)
+   }
+
 
 
    io.brob_deallocate.valid := finished_committing_row && row_metadata_has_brorjalr(rob_head)
