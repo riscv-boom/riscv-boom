@@ -300,7 +300,10 @@ class Rob(width: Int
    io.get_pc.curr_brob_idx := row_metadata_brob_idx(GetRowIdx(io.get_pc.rob_idx))
 
    // HACK to deal with SRET changing PC, but not setting flush_pipeline.
-   io.flush_brob := (rob_state === s_wait_till_empty)
+   // this is broken b/c of <bne, csr>. state changes, THEN commits csr. 
+//   io.flush_brob := (rob_state === s_wait_till_empty)
+// TODO BUG XXX delete this code, since it's not needed?
+   io.flush_brob := Bool(false)
 
    // **************************************************************************
    // --------------------------------------------------------------------------
