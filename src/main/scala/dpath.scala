@@ -1207,7 +1207,7 @@ class DatPath() extends Module with BOOMCoreParameters
    {
       println("\n   UArch Counters Enabled\n")
       csr.io.uarch_counters(0)  := PopCount((Range(0,COMMIT_WIDTH)).map{w => com_valids(w) && com_uops(w).is_br_or_jmp && !com_uops(w).is_jal})
-      csr.io.uarch_counters(1)  := PopCount((Range(0,COMMIT_WIDTH)).map{w => com_valids(w) && com_uops(w).is_br_or_jmp && com_uops(w).br_was_mispredicted})
+      csr.io.uarch_counters(1)  := PopCount((Range(0,COMMIT_WIDTH)).map{w => com_valids(w) && com_uops(w).is_br_or_jmp && !com_uops(w).is_jal && com_uops(w).br_was_mispredicted})
 //      csr.io.uarch_counters(0)  := br_unit.brinfo.valid
 //      csr.io.uarch_counters(1)  := br_unit.brinfo.mispredict
       csr.io.uarch_counters(2)  := !rob_rdy
@@ -1225,8 +1225,8 @@ class DatPath() extends Module with BOOMCoreParameters
       csr.io.uarch_counters(9)  := lsu_io.counters.ld_forwarded
 //      csr.io.uarch_counters(10) := lsu_io.counters.ld_sleep
 //      csr.io.uarch_counters(10) := lsu_io.counters.ld_killed
-//      csr.io.uarch_counters(10) := lsu_io.counters.ld_order_fail
-      csr.io.uarch_counters(10) := br_unit.bpd_update.valid && br_unit.brinfo.mispredict
+      csr.io.uarch_counters(10) := lsu_io.counters.ld_order_fail
+//      csr.io.uarch_counters(10) := br_unit.bpd_update.valid && br_unit.brinfo.mispredict
       csr.io.uarch_counters(11) := br_unit.bpd_update.valid // provide base-line on the number of updates, vs mispredicts
       csr.io.uarch_counters(12) := br_unit.bpd_update.valid && !br_unit.bht_update.bits.mispredict && br_unit.bpd_update.bits.bpd_mispredict // BTB correct, BPD wrong
       csr.io.uarch_counters(13) := br_unit.bpd_update.valid && br_unit.bht_update.bits.mispredict && !br_unit.bpd_update.bits.bpd_mispredict // BPD correct, BTB wrong
@@ -1240,6 +1240,11 @@ class DatPath() extends Module with BOOMCoreParameters
       println("\n   UArch Counters Disabled\n")
       csr.io.uarch_counters.foreach(_ := Bool(false))
    }
+
+   assert (!(Range(0,COMMIT_WIDTH).map{w =>
+      com_valids(w) && com_uops(w).is_br_or_jmp && com_uops(w).is_jal &&
+      com_uops(w).br_was_mispredicted}.reduce(_|_)),
+      "[dpath] A committed JAL was marked as having been mispredicted.")
 
    //-------------------------------------------------------------
    //-------------------------------------------------------------
