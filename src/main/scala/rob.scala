@@ -613,8 +613,10 @@ class Rob(width: Int
    // Exception Tracking Logic
    // only store the oldest exception, since only one can happen!
 
-   // is i0 older than i1? (closest to zero). Provide the tail_ptr to the queue.
-   def IsOlder(i0: UInt, i1: UInt, tail: UInt) = (Cat(i0 < tail, i0) < Cat(i1 < tail, i1))
+   // is i0 older than i1? (closest to zero). Provide the tail_ptr to the
+   // queue. This is Cat(i1 <= tail, i1) because the rob_tail can point to a
+   // valid (partially dispatched) row.
+   def IsOlder(i0: UInt, i1: UInt, tail: UInt) = (Cat(i0 <= tail, i0) < Cat(i1 <= tail, i1))
    val next_xcpt_uop = Wire(new MicroOp())
    next_xcpt_uop := r_xcpt_uop
    val dis_xcpts = Wire(Vec(width, Bool()))
@@ -627,7 +629,10 @@ class Rob(width: Int
    {
       when (io.lxcpt.valid || io.bxcpt.valid)
       {
-         val new_xcpt_uop = Mux(io.lxcpt.valid, io.lxcpt.bits.uop, io.bxcpt.bits.uop)
+         val load_is_older = (io.lxcpt.valid && !io.bxcpt.valid) ||
+                             (io.lxcpt.valid && io.bxcpt.valid &&
+                                 IsOlder(io.lxcpt.bits.uop.rob_idx, io.bxcpt.bits.uop.rob_idx, rob_tail_idx))
+         val new_xcpt_uop = Mux(load_is_older, io.lxcpt.bits.uop, io.bxcpt.bits.uop)
          when (!r_xcpt_val || IsOlder(new_xcpt_uop.rob_idx, r_xcpt_uop.rob_idx, rob_tail_idx))
          {
             r_xcpt_val              := Bool(true)
