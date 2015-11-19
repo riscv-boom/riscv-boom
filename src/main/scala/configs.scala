@@ -92,7 +92,7 @@ class WithMediumBOOMs extends ChiselConfig(
       case "FETCH_WIDTH" => 2 
       case "ISSUE_WIDTH" => 2 
       case "ROB_ENTRIES" => 32
-      case "ISSUE_ENTRIES" => 20
+      case "ISSUE_ENTRIES" => 16
       case "LSU_ENTRIES" => 8
       case "PHYS_REGISTERS" => 110
       case "MAX_BR_COUNT" => 8
