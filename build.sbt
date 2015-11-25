@@ -4,4 +4,5 @@ version := "1.0"
 
 name := "boom"
 
-scalaVersion := "2.10.2"
+scalaVersion := "2.11.6"
+
