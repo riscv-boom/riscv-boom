@@ -1,7 +1,12 @@
-package BOOM
+//******************************************************************************
+// Copyright (c) 2015, The Regents of the University of California (Regents).
+// All Rights Reserved. See LICENSE for license details.
+//------------------------------------------------------------------------------
+
+package boom
 {
-   // fdiv, fsqrt unsupported.
-   // (this FPU currently only supports fixed latency ops)
+   // Note: fdiv, fsqrt unsupported.
+   // Note: (this FPU currently only supports fixed latency ops)
 
 import Chisel._
 import Node._

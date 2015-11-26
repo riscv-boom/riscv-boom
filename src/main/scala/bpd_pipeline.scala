@@ -1,6 +1,11 @@
-//**************************************************************************
+//******************************************************************************
+// Copyright (c) 2015, The Regents of the University of California (Regents).
+// All Rights Reserved. See LICENSE for license details.
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // RISCV Processor Branch Prediction Pipeline
-//--------------------------------------------------------------------------
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 //
 // Christopher Celio
 // 2014 Apr 23
@@ -15,7 +20,7 @@
 // Currently, I ignore JALRs (either the BTB took care of it or it'll get
 // mispredicted and kill everything behind it anyways).
 
-package BOOM
+package boom
 
 import Chisel._
 import Node._
@@ -39,7 +44,7 @@ class BranchPredictionResp extends BOOMCoreBundle // TODO rename BranchPredictio
 {
    val btb_resp_valid = Bool()
    val btb_resp       = new rocket.BTBResp
-   
+
    val bpd_resp       = new BpdResp
 
    // used to tell front-end how to mask off instructions
@@ -54,7 +59,7 @@ class BranchPrediction extends BOOMCoreBundle
    val btb_hit          = Bool() // this instruction was the br/jmp predicted by the BTB
    val btb_predicted    = Bool() // BTB gets credit for the prediction otherwise check the BPD
 
-   val is_br_or_jalr    = Bool() // is this instruction a branch or jalr? 
+   val is_br_or_jalr    = Bool() // is this instruction a branch or jalr?
                                  // (need to allocate brob entry).
 
    def wasBTB = btb_predicted
@@ -91,7 +96,7 @@ class BranchPredictionStage (fetch_width: Int) extends Module with BOOMCoreParam
          br_predictor.io.req_pc := io.imem.npc
          br_predictor.io.br_resolution <> io.br_unit.bpd_update
          // TODO BUG XXX i suspect this is completely and utterly broken. what about <bne,jr,bne> or  <bne,j,bne>. What about <csr, bne>/<b,csr,b>? does unique/pipeline replaysincrement ghistory when they shouldn't?
-         br_predictor.io.hist_update_spec.valid := bp2_br_seen && io.req.ready 
+         br_predictor.io.hist_update_spec.valid := bp2_br_seen && io.req.ready
          br_predictor.io.hist_update_spec.bits.taken := bp2_br_taken
          br_predictor.io.resp.ready := io.req.ready
 

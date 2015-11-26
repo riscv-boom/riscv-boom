@@ -1,4 +1,9 @@
-package BOOM
+//******************************************************************************
+// Copyright (c) 2015, The Regents of the University of California (Regents).
+// All Rights Reserved. See LICENSE for license details.
+//------------------------------------------------------------------------------
+
+package boom
 import Chisel._
 import Node._
 

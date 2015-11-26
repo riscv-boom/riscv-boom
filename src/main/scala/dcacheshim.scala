@@ -1,6 +1,11 @@
-//**************************************************************************
+//******************************************************************************
+// Copyright (c) 2015, The Regents of the University of California (Regents).
+// All Rights Reserved. See LICENSE for license details.
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // Data Cache Shim/Wrapper to the Hella-Cache
-//--------------------------------------------------------------------------
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 //
 // Christopher Celio
 // 2012 Oct 15
@@ -16,7 +21,7 @@
 //    everything put in here will be executed by memory
 //    branch/kill signals will filter resp_val signals, but otherwise continue on
 
-package BOOM
+package boom
 {
 
 import Chisel._

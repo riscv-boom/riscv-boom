@@ -1,6 +1,11 @@
-//**************************************************************************
+//******************************************************************************
+// Copyright (c) 2015, The Regents of the University of California (Regents).
+// All Rights Reserved. See LICENSE for license details.
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // RISCV GShare Branch Predictor
-//--------------------------------------------------------------------------
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 //
 // Christopher Celio
 // 2015 Apr 28
@@ -8,7 +13,7 @@
 // TODO bank (or dual-port) the p-table to allow predictions AND updates (optionally)
 // TODO don't read SRAM every cycle if stalled (need extra state to store data while stalled)
 
-package BOOM
+package boom
 
 import Chisel._
 import Node._
@@ -17,7 +22,6 @@ class BrTableUpdate extends BOOMCoreBundle
 {
    val hash_idx   = UInt(width = vaddrBits)
    val executed   = Bits(width = FETCH_WIDTH) // which words in the fetch packet does the update correspond to?
-//   val br_pc      = UInt(width = log2Up(FETCH_WIDTH)+log2Ceil(coreInstBytes)) // which word in the fetch packet does the update correspond to?
    val new_value  = Bits(width=FETCH_WIDTH)
 }
 

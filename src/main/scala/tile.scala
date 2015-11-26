@@ -1,13 +1,18 @@
-//**************************************************************************
+//******************************************************************************
+// Copyright (c) 2015, The Regents of the University of California (Regents).
+// All Rights Reserved. See LICENSE for license details.
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // RISCV Processor Tile
-//--------------------------------------------------------------------------
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 //
 // Christopher Celio
 // 2012 Feb 5
 //
 // Describes a RISC-V Out-of-Order processor tile
 
-package BOOM
+package boom
 {
 
 import Chisel._
@@ -21,7 +26,8 @@ class BOOMTile(resetSignal: Bool = null) extends rocket.Tile(resetSignal)
    val icachePortId = 1
 
    val core = Module(new Core, {case CoreName => "BOOM"})
-   val icache = Module(new rocket.Frontend(btb_updates_out_of_order=true), {case CacheName => "L1I"; case CoreName => "BOOM"})
+   val icache = Module(new rocket.Frontend(btb_updates_out_of_order=true), {case CacheName => "L1I";
+                                                                            case CoreName => "BOOM"})
    val dcache = Module(new rocket.HellaCache, {case CacheName => "L1D"})
    val dc_shim = Module(new DCacheShim)
    val ptw = Module(new rocket.PTW(params(rocket.NPTWPorts)))

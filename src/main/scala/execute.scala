@@ -1,6 +1,11 @@
-//**************************************************************************
+//******************************************************************************
+// Copyright (c) 2015, The Regents of the University of California (Regents).
+// All Rights Reserved. See LICENSE for license details.
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // Execution Units
-//--------------------------------------------------------------------------
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 //
 // Christopher Celio
 // 2013 Apr 27
@@ -9,7 +14,7 @@
 // A given execution pipeline may contain multiple functional units; one or more
 // read ports, and one or more writeports.
 
-package BOOM
+package boom
 {
 
 import Chisel._
@@ -86,9 +91,9 @@ abstract class ExecutionUnit(val num_rf_read_ports: Int
       io.resp.map(_.bits.fflags.valid := Bool(false))
    }
 
-   def num_bypass_ports: Int = num_bypass_stages
-   def has_branch_unit : Boolean = is_branch_unit
-   def is_bypassable   : Boolean = bypassable
+   def numBypassPorts: Int = num_bypass_stages
+   def hasBranchUnit : Boolean = is_branch_unit
+   def isBypassable  : Boolean = bypassable
 }
 
 class ALUExeUnit(is_branch_unit   : Boolean = false

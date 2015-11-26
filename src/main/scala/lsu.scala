@@ -1,6 +1,11 @@
-//**************************************************************************
+//******************************************************************************
+// Copyright (c) 2015, The Regents of the University of California (Regents).
+// All Rights Reserved. See LICENSE for license details.
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // RISCV Out-of-Order Load/Store Unit
-//--------------------------------------------------------------------------
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 //
 // Christopher Celio
 // 2012 Jun 3
@@ -40,7 +45,7 @@
 //    - reconsider port count of the wakeup, retry stuff
 
 
-package BOOM
+package boom
 {
 
 import Chisel._
@@ -381,7 +386,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
    io.xcpt.bits.badvaddr := Reg(next=exe_vaddr) // TODO is there another register we can use instead?
 
    assert (!(dtlb.io.req.valid && exe_tlb_uop.is_fence), "Fence is pretending to talk to the TLB")
-   assert (!(io.exe_resp.bits.mxcpt.valid && io.exe_resp.valid && 
+   assert (!(io.exe_resp.bits.mxcpt.valid && io.exe_resp.valid &&
             !(io.exe_resp.bits.uop.ctrl.is_load || io.exe_resp.bits.uop.ctrl.is_sta))
             , "A uop that's not a load or store-address is throwing a memory exception.")
 
@@ -515,7 +520,8 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
                                           (will_fire_load_retry && pf_ld)
    }
 
-   assert (PopCount(Vec(will_fire_store_commit, will_fire_load_incoming, will_fire_load_retry, will_fire_load_wakeup)) <= UInt(1), "Multiple requestors firing to the data cache.")
+   assert (PopCount(Vec(will_fire_store_commit, will_fire_load_incoming, will_fire_load_retry, will_fire_load_wakeup))
+      <= UInt(1), "Multiple requestors firing to the data cache.")
 
 
 

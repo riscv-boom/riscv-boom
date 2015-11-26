@@ -1,6 +1,11 @@
-//**************************************************************************
+//******************************************************************************
+// Copyright (c) 2015, The Regents of the University of California (Regents).
+// All Rights Reserved. See LICENSE for license details.
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // Data Prefetcher
-//--------------------------------------------------------------------------
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 //
 // Christopher Celio
 // 2013 Mar 3
@@ -9,14 +14,14 @@
 // (between the core and the data cache), and issue data prefetch requests to
 // the cache via the front side (sharing the request port with the core).
 
-package BOOM
+package boom
 {
 
 import Chisel._
 import Node._
 
 //*************************************************************
-// IOs 
+// IOs
 
 // addresses being sent to the cache, delayed by two cycles so we can see if
 // they missed or not
@@ -24,7 +29,7 @@ class CoreRequest extends BOOMCoreBundle
 {
    val addr = UInt(width = coreMaxAddrBits)
    val miss = Bool()           // was the access a miss in the cache?
-   val secondary_miss = Bool() // was the access a secondary miss? 
+   val secondary_miss = Bool() // was the access a secondary miss?
                                // (i.e., the cache is already servicing a miss
                                // to the same cache line
 }
@@ -37,12 +42,12 @@ class CacheReq extends BOOMCoreBundle
 
 class CacheIO extends Bundle
 {
-   val req = new DecoupledIO(new CacheReq()) 
+   val req = new DecoupledIO(new CacheReq())
 }
 
 //*************************************************************
 
-class Prefetcher extends Module 
+class Prefetcher extends Module
 {
    val io = new Bundle
    {
@@ -52,7 +57,7 @@ class Prefetcher extends Module
 
 
    // ********** ENTER YOUR CODE HERE ************
-   // 
+   //
    // CURRENT BEHAVIOR:
    //  This example code listens to the core, and fetches the next cache-line if
    //  the core's request missed in the cache.
@@ -62,7 +67,7 @@ class Prefetcher extends Module
    //  given size, or spends multiple cycles spitting out multiple requests
    //  (say, fetching the next 8 lines after a miss...).
    //
-   // GO CRAZY!  
+   // GO CRAZY!
    //
    // - Chris
    //
@@ -78,13 +83,13 @@ class Prefetcher extends Module
    // Both ends implement the FIFOIO interface, which has three parts:
    //    - valid
    //    - ready
-   //    - bits   
-   
+   //    - bits
+
 
    // set default value on output
    request_queue.io.enq.valid := Bool(false)
 
-   // if we see a request and it was a miss, prefetch the next line 
+   // if we see a request and it was a miss, prefetch the next line
    // however, ignore it if it's a secondary miss (we've already sent out our
    // prefetch request the first time we saw a miss to this cache line).
    when (io.core_requests.valid && io.core_requests.bits.miss && !io.core_requests.bits.secondary_miss)
@@ -94,11 +99,11 @@ class Prefetcher extends Module
 
    // fetch the next cache line
    request_queue.io.enq.bits.addr := io.core_requests.bits.addr + UInt(1 << params(uncore.CacheBlockOffsetBits))
-   
-    
+
+
    // hook up our request to the outside world (notice the interfaces match)
    io.cache.req <> request_queue.io.deq
-    
+
    // ********************************************
    // ********************************************
 

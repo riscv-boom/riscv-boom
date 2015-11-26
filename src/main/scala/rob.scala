@@ -1,6 +1,11 @@
-//**************************************************************************
-// RISCV Re-order Buffer
-//--------------------------------------------------------------------------
+//******************************************************************************
+// Copyright (c) 2015, The Regents of the University of California (Regents).
+// All Rights Reserved. See LICENSE for license details.
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
+// Re-order Buffer
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 //
 // Christopher Celio
 // 2013 Oct 18
@@ -20,7 +25,7 @@
 //      This helps deal with loads, stores, and refetch instructions.
 //
 
-package BOOM
+package boom
 
 import Chisel._
 import Node._
@@ -58,7 +63,8 @@ class RobIo(machine_width: Int
    val dis_mask         = Vec.fill(machine_width) { Bool(INPUT) }
    val dis_uops         = Vec.fill(machine_width) { new MicroOp().asInput() }
    val dis_has_br_or_jalr_in_packet = Bool(INPUT)
-   val dis_partial_stall= Bool(INPUT) // we're dispatching only a partial packet, and stalling on the rest of it (don't advance the tail ptr)
+   val dis_partial_stall= Bool(INPUT) // we're dispatching only a partial packet, and stalling on the rest of it (don't
+                                      // advance the tail ptr)
    val dis_new_packet   = Bool(INPUT) // we're dispatching the first (and perhaps only) part of a dispatch packet.
 
    val curr_rob_tail    = UInt(OUTPUT, ROB_ADDR_SZ)
@@ -138,12 +144,6 @@ class RobIo(machine_width: Int
       val xcpt_val = Bool()
       val xcpt_uop = new MicroOp()
       val xcpt_badvaddr = UInt(width = xLen)
-//      val entry = Vec.fill(NUM_ROB_ENTRIES) { new Bundle {
-//         val valid = Bool()
-//         val busy = Bool()
-//         val uop = new MicroOp()
-//         val exception = Bool()
-//      }}
    }.asOutput
 }
 
@@ -305,7 +305,7 @@ class Rob(width: Int
    io.get_pc.curr_brob_idx := row_metadata_brob_idx(GetRowIdx(io.get_pc.rob_idx))
 
    // HACK to deal with SRET changing PC, but not setting flush_pipeline.
-   io.flush_brob := Range(0, width).map(i => 
+   io.flush_brob := Range(0, width).map(i =>
       io.dis_mask(i) && io.dis_uops(i).is_unique).reduce(_|_)
 
    // **************************************************************************
@@ -323,7 +323,7 @@ class Rob(width: Int
       val rob_uop       = Reg(Vec(num_rob_rows, new MicroOp())) // one write port - dispatch
                                                            // fake write ports - clearing on commit,
                                                            // rollback, branch_kill
-      val rob_exception = Mem(num_rob_rows, Bool())        // TODO consolidate into the com_uop? what's the best for Chisel?
+      val rob_exception = Mem(num_rob_rows, Bool())
       val rob_fflags    = Mem(num_rob_rows, Bits(width=rocket.FPConstants.FLAGS_SZ))
 
       //-----------------------------------------------
@@ -565,7 +565,8 @@ class Rob(width: Int
    val is_mini_exception = io.com_exc_cause === MINI_EXCEPTION_MEM_ORDERING
    io.com_exception    := exception_thrown && !is_mini_exception
    io.com_exc_cause    := r_xcpt_uop.exc_cause
-   io.com_handling_exc := exception_thrown  // TODO get rid of com_handling_exc? used to handle loads coming back from the $ probbaly unnecessary
+   // TODO get rid of com_handling_exc? used to handle loads coming back from the $ probbaly unnecessary
+   io.com_handling_exc := exception_thrown
 
    io.lsu_misspec := Reg(next=exception_thrown && io.com_exc_cause === MINI_EXCEPTION_MEM_ORDERING)
    io.com_badvaddr := Sext(r_xcpt_badvaddr,xLen)
@@ -918,6 +919,7 @@ class Rob(width: Int
             )
 
       var r_idx = 0
+      // scalastyle:off
       for (i <- 0 until (NUM_ROB_ENTRIES/COMMIT_WIDTH))
       {
 //            rob[ 0]           (  )(  ) 0x00002000 [ -                       ][unknown                  ]    ,   (d:X p 1, bm:0 - sdt: 0) (d:- p 3, bm:f - sdt:60)
@@ -1021,6 +1023,7 @@ class Rob(width: Int
 
          printf("\n")
       }
+      // scalastyle:off
    }
 
 }

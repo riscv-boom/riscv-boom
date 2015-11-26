@@ -1,10 +1,13 @@
-//**************************************************************************
+//******************************************************************************
+// Copyright (c) 2015, The Regents of the University of California (Regents).
+// All Rights Reserved. See LICENSE for license details.
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // RISCV BOOM Utility Functions
-//--------------------------------------------------------------------------
-// include stuff in here that is specific to BOOM
-// otherwise, put functions in ../common/util.h
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 
-package BOOM
+package boom
 {
 
 import Chisel._
@@ -17,38 +20,38 @@ object IsKilledByBranch
 {
    def apply(brinfo: BrResolutionInfo, uop: MicroOp): Bool =
    {
-      return (brinfo.valid && 
-              brinfo.mispredict && 
+      return (brinfo.valid &&
+              brinfo.mispredict &&
               maskMatch(brinfo.mask, uop.br_mask))
    }
 }
-   
+
 object GetNewBrMask
 {
    def apply(brinfo: BrResolutionInfo, uop: MicroOp): Bits =
    {
       return Mux(brinfo.valid, (uop.br_mask & ~brinfo.mask),
-                               uop.br_mask) 
+                               uop.br_mask)
    }
    def apply(brinfo: BrResolutionInfo, br_mask: Bits): Bits =
    {
       return Mux(brinfo.valid, (br_mask & ~brinfo.mask),
-                               br_mask) 
+                               br_mask)
    }
 }
- 
+
 //do two masks have at least 1 bit match?
 object maskMatch
 {
    def apply(msk1: Bits, msk2: Bits): Bool = (msk1 & msk2) != Bits(0)
 }
-   
+
 //clear one-bit in the Mask as specified by the idx
 object clearMaskBit
 {
    def apply(msk: Bits, idx: UInt): Bits = (msk & ~(Bits(1) << idx))(msk.getWidth-1, 0)
 }
-  
+
 //shift a register over by one bit
 object PerformShiftRegister
 {
@@ -58,28 +61,32 @@ object PerformShiftRegister
       reg_val
    }
 }
-   
+
 // Increment the input "value", wrapping it if necessary.
 object WrapInc
 {
    def apply(value: UInt, max: Int): UInt =
    {
       if (isPow2(max))
+      {
          (value + UInt(1))(log2Up(max)-1,0)
+      }
       else
       {
          val wrap = (value === UInt(max-1))
          Mux(wrap, UInt(0), value + UInt(1))
       }
    }
-} 
+}
 // Decrement the input "value", wrapping it if necessary.
 object WrapDec
 {
    def apply(value: UInt, max: Int): UInt =
    {
       if (isPow2(max))
+      {
          (value - UInt(1))(log2Up(max)-1,0)
+      }
       else
       {
          val wrap = (value === UInt(0))
@@ -87,7 +94,7 @@ object WrapDec
       }
    }
 }
-         
+
 
 object RotateL1
 {
@@ -95,7 +102,7 @@ object RotateL1
    {
       val w = signal.getWidth
       val out = Cat(signal(w-2,0), signal(w-1))
-      
+
       return out
    }
 }
@@ -103,13 +110,13 @@ object RotateL1
 
 object Sext
 {
-   def apply(x: Bits, length: Int): Bits = 
+   def apply(x: Bits, length: Int): Bits =
    {
       return Cat(Fill(x(x.getWidth-1), (length-x.getWidth)), x)
    }
 }
-        
- 
+
+
 // translates from BOOM's special "packed immediate" to a 32b signed immediate
 // Asking for U-type gives it shifted up 12 bits.
 object ImmGen
@@ -124,7 +131,7 @@ object ImmGen
       val i10_5  = Mux(isel === IS_U, SInt(0), ip(18,14).toSInt)
       val i4_1   = Mux(isel === IS_U, SInt(0), ip(13,9).toSInt)
       val i0     = Mux(isel === IS_S || isel === IS_I, ip(8).toSInt, SInt(0))
-      
+
       return Cat(sign, i30_20, i19_12, i11, i10_5, i4_1, i0).toSInt
    }
 }
@@ -153,7 +160,7 @@ object DebugGetBJImm
    def apply(inst: Bits): UInt =
    {
       // TODO Chisel not sure why this won't compile
-      //val csignals =     
+      //val csignals =
       //rocket.DecodeLogic(inst,
       //                    List(Bool(false), Bool(false)),
       //      Array(

@@ -1,9 +1,13 @@
-//**************************************************************************
+//******************************************************************************
+// Copyright (c) 2015, The Regents of the University of California (Regents).
+// All Rights Reserved. See LICENSE for license details.
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // RISCV Processor Issue Logic
-//--------------------------------------------------------------------------
-//
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 
-package BOOM
+package boom
 {
 import Chisel._
 import Node._
@@ -34,7 +38,8 @@ class IssueUnitIO(issue_width: Int, num_wakeup_ports: Int) extends BOOMCoreBundl
 
 }
 
-abstract class IssueUnit(num_issue_slots: Int, issue_width: Int, num_wakeup_ports: Int) extends Module with BOOMCoreParameters
+abstract class IssueUnit(num_issue_slots: Int, issue_width: Int, num_wakeup_ports: Int) extends Module
+   with BOOMCoreParameters
 {
    val io = new IssueUnitIO(issue_width, num_wakeup_ports)
 
@@ -68,7 +73,8 @@ abstract class IssueUnit(num_issue_slots: Int, issue_width: Int, num_wakeup_port
    {
       for (i <- 0 until num_issue_slots)
       {
-         printf("  integer_issue_slot[%d](%s)(Req:%s):wen=%s P:(%s,%s,%s) OP:(%d,%d,%d) PDST:%d %s [%s[DASM(%x)]"+end+" 0x%x: %d] ri:%d bm=%d imm=0x%x\n"
+         printf("  integer_issue_slot[%d](%s)(Req:%s):wen=%s P:(%s,%s,%s) OP:(%d,%d,%d) PDST:%d %s [%s[DASM(%x)]"+
+               end+" 0x%x: %d] ri:%d bm=%d imm=0x%x\n"
             , UInt(i, log2Up(num_issue_slots))
             , Mux(issue_slots(i).valid, Str("V"), Str("-"))
             , Mux(issue_slots(i).request, Str(u_red + "R" + end), Str(grn + "-" + end))
@@ -91,7 +97,6 @@ abstract class IssueUnit(num_issue_slots: Int, issue_width: Int, num_wakeup_port
             , issue_slots(i).uop.rob_idx
             , issue_slots(i).uop.br_mask
             , issue_slots(i).uop.imm_packed
-//            , shamts_oh(i)
             )
       }
    }

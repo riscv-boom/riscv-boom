@@ -1,4 +1,8 @@
-package BOOM
+//******************************************************************************
+// Copyright (c) 2015, The Regents of the University of California (Regents).
+// All Rights Reserved. See LICENSE for license details.
+//------------------------------------------------------------------------------
+package boom
 {
 
 import Chisel._
@@ -57,7 +61,7 @@ abstract trait BOOMCoreParameters extends rocket.CoreParameters
    // Load/Store Unit
 
    //************************************
-   // Branch Prediction 
+   // Branch Prediction
    val BPD_SIZE_IN_KB = params(BranchPredictorSizeInKB)
    val BPD_NUM_ENTRIES = BPD_SIZE_IN_KB*1024*8/FETCH_WIDTH/2 // computation for GShare
    val GHIST_LENGTH = log2Up(BPD_NUM_ENTRIES)
@@ -74,7 +78,7 @@ abstract trait BOOMCoreParameters extends rocket.CoreParameters
    val NUM_ROB_ROWS      = NUM_ROB_ENTRIES/DECODE_WIDTH
    val ROB_ADDR_SZ       = log2Up(NUM_ROB_ENTRIES)
    // the f-registers are mapped into the space above the x-registers
-   val LOGICAL_REG_COUNT = if (params(BuildFPU).isEmpty) 32 else 64 
+   val LOGICAL_REG_COUNT = if (params(BuildFPU).isEmpty) 32 else 64
    val LREG_SZ           = log2Up(LOGICAL_REG_COUNT)
    val PREG_SZ           = log2Up(PHYS_REG_COUNT)
    val MEM_ADDR_SZ       = log2Up(NUM_LSU_ENTRIES)

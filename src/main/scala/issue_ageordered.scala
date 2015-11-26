@@ -1,9 +1,14 @@
-//**************************************************************************
+//******************************************************************************
+// Copyright (c) 2015, The Regents of the University of California (Regents).
+// All Rights Reserved. See LICENSE for license details.
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // RISCV Processor Issue Logic
-//--------------------------------------------------------------------------
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 //
 
-package BOOM
+package boom
 {
 import Chisel._
 import Node._
@@ -16,7 +21,7 @@ import scala.collection.mutable.ArrayBuffer
 //-------------------------------------------------------------
 //-------------------------------------------------------------
 
-class IssueUnitCollasping(num_issue_slots: Int, issue_width: Int, num_wakeup_ports: Int) extends 
+class IssueUnitCollasping(num_issue_slots: Int, issue_width: Int, num_wakeup_ports: Int) extends
       IssueUnit(num_issue_slots, issue_width, num_wakeup_ports)
 {
    //-------------------------------------------------------------
@@ -83,7 +88,8 @@ class IssueUnitCollasping(num_issue_slots: Int, issue_width: Int, num_wakeup_por
    // Dispatch/Entry Logic
    // did we find a spot to slide the new dispatched uops into?
 
-   val will_be_available = (0 until num_issue_slots).map(i => (!issue_slots(i).will_be_valid || issue_slots(i).clear) && !(issue_slots(i).in_uop.valid))
+   val will_be_available = (0 until num_issue_slots).map(i =>
+                              (!issue_slots(i).will_be_valid || issue_slots(i).clear) && !(issue_slots(i).in_uop.valid))
    val num_available = PopCount(will_be_available)
    for (w <- 0 until DISPATCH_WIDTH)
    {
@@ -112,7 +118,7 @@ class IssueUnitCollasping(num_issue_slots: Int, issue_width: Int, num_wakeup_por
    {
       port_issued(w) = Bool(false)
    }
-   
+
    for (i <- 0 until num_issue_slots)
    {
       issue_slots(i).grant := Bool(false)

@@ -1,6 +1,11 @@
-//**************************************************************************
+//******************************************************************************
+// Copyright (c) 2015, The Regents of the University of California (Regents).
+// All Rights Reserved. See LICENSE for license details.
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // Functional Units
-//--------------------------------------------------------------------------
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 //
 // Christopher Celio
 // 2013 Mar 10
@@ -11,7 +16,7 @@
 // TODO: explore possibility of conditional IO fields?
 
 
-package BOOM
+package boom
 {
 
 import Chisel._
@@ -105,7 +110,7 @@ class BypassData(num_bypass_ports: Int, data_width: Int) extends BOOMCoreBundle
    val uop   = Vec.fill(num_bypass_ports){ new MicroOp() }
    val data  = Vec.fill(num_bypass_ports){ Bits(width = data_width) }
 
-   def get_num_ports: Int = num_bypass_ports
+   def getNumPorts: Int = num_bypass_ports
    override def cloneType: this.type = new BypassData(num_bypass_ports, data_width).asInstanceOf[this.type]
 }
 
@@ -331,7 +336,8 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)
          }
          when (pc_sel === PC_BRJMP)
          {
-            btb_mispredict := !uop.br_prediction.btb_hit || (uop.br_prediction.btb_hit && !io.get_pred.info.btb_resp.taken)
+            btb_mispredict := !uop.br_prediction.btb_hit ||
+                              (uop.br_prediction.btb_hit && !io.get_pred.info.btb_resp.taken)
             bpd_mispredict := !uop.br_prediction.bpd_predict_taken
          }
       }
@@ -396,15 +402,17 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)
       io.br_unit.btb_update.pc               := fetch_pc // tell the BTB which pc to tag check against
       io.br_unit.btb_update.br_pc            := uop_pc_
       io.br_unit.btb_update.target           := io.br_unit.target & SInt(-coreInstBytes)
-      io.br_unit.btb_update.prediction.valid := io.get_pred.info.btb_resp_valid // did this branch's fetch packet have a BTB hit in fetch?
+      io.br_unit.btb_update.prediction.valid := io.get_pred.info.btb_resp_valid // did this branch's fetch packet have
+                                                                                // a BTB hit in fetch?
       io.br_unit.btb_update.prediction.bits  := io.get_pred.info.btb_resp       // give the BTB back its BTBResp
       io.br_unit.btb_update.taken            := is_taken   // was this branch/jal/jalr "taken"
       io.br_unit.btb_update.isJump           := uop.is_jump
       io.br_unit.btb_update.isReturn         := uop.is_ret
 
       io.br_unit.bht_update.bits.taken            := is_taken   // was this branch "taken"
-      io.br_unit.bht_update.bits.mispredict       := btb_mispredict     // need to reset the history in the BHT that is updated only on BTB hits
-      io.br_unit.bht_update.bits.prediction.valid := io.get_pred.info.btb_resp_valid // only update if this was a hit in the BTB
+      io.br_unit.bht_update.bits.mispredict       := btb_mispredict     // need to reset the history in the BHT
+                                                                        // that is updated only on BTB hits
+      io.br_unit.bht_update.bits.prediction.valid := io.get_pred.info.btb_resp_valid // only update if hit in the BTB
       io.br_unit.bht_update.bits.prediction.bits  := io.get_pred.info.btb_resp
       io.br_unit.bht_update.bits.pc               := fetch_pc // what pc should the tag check be on?
 
@@ -417,8 +425,9 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)
       io.br_unit.bpd_update.bits.history          := io.get_pred.info.bpd_resp.info.history
 
       // is the br_pc the last instruction in the fetch bundle?
-      val is_last_inst = if (FETCH_WIDTH == 1) Bool(true)
-                         else ((uop_pc_ >> UInt(log2Up(coreInstBytes))) & Fill(log2Up(FETCH_WIDTH), Bits(1))) === UInt(FETCH_WIDTH-1)
+      val is_last_inst = if (FETCH_WIDTH == 1) { Bool(true) }
+                         else { ((uop_pc_ >> UInt(log2Up(coreInstBytes))) &
+                                 Fill(log2Up(FETCH_WIDTH), Bits(1))) === UInt(FETCH_WIDTH-1) }
       io.br_unit.bpd_update.bits.new_pc_same_packet := !(is_taken) && !is_last_inst
 
       require (coreInstBytes == 4)
@@ -427,7 +436,7 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)
       // Branch/Jump Target Calculation
       // we can't push this through the ALU though, b/c jalr needs both PC+4 and rs1+offset
 
-      def vaSign(a0: UInt, ea: Bits) = {
+      def vaSign(a0: UInt, ea: Bits):Bool = {
          // efficient means to compress 64-bit VA into rc.as.vaddrBits+1 bits
          // (VA is bad if VA(rc.as.vaddrBits) != VA(rc.as.vaddrBits-1))
          val a = a0 >> vaddrBits-1
@@ -450,7 +459,8 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)
       io.br_unit.xcpt.valid     := bj_addr(1) && io.req.valid && mispredict && !killed
       io.br_unit.xcpt.bits.uop  := uop
       io.br_unit.xcpt.bits.cause:= rocket.Causes.misaligned_fetch
-      io.br_unit.xcpt.bits.badvaddr:= bj_addr // TODO is there a better way to get this information to the CSR file? maybe use brinfo.target?
+      // TODO is there a better way to get this information to the CSR file? maybe use brinfo.target?
+      io.br_unit.xcpt.bits.badvaddr:= bj_addr
    }
 
    // Response
@@ -509,11 +519,9 @@ class MemAddrCalcUnit extends PipelinedFunctionalUnit(num_stages = 0
    val unrec_out = Mux(io.req.bits.uop.fp_single, Cat(Fill(32, unrec_s(31)), unrec_s), unrec_d)
 
    var store_data:Bits = null
-   if (params(BuildFPU).isEmpty)
-      store_data = io.req.bits.rs2_data
-   else
-      store_data = Mux(io.req.bits.uop.fp_val, unrec_out
-                                             , io.req.bits.rs2_data)
+   if (params(BuildFPU).isEmpty) store_data = io.req.bits.rs2_data
+   else store_data = Mux(io.req.bits.uop.fp_val, unrec_out, io.req.bits.rs2_data)
+
    io.resp.bits.addr := effective_address
    io.resp.bits.data := store_data
 

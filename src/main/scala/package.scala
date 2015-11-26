@@ -1,10 +1,14 @@
+//******************************************************************************
+// Copyright (c) 2015, The Regents of the University of California (Regents).
+// All Rights Reserved. See LICENSE for license details.
+//------------------------------------------------------------------------------
 
-package object BOOM extends 
-   BOOM.constants.BOOMDebugConstants with
-   BOOM.constants.BrPredConstants with
-   BOOM.constants.ScalarOpConstants with
-   BOOM.constants.ExcCauseConstants with 
-   BOOM.constants.RISCVConstants 
+package object boom extends
+   boom.constants.BOOMDebugConstants with
+   boom.constants.BrPredConstants with
+   boom.constants.ScalarOpConstants with
+   boom.constants.ExcCauseConstants with
+   boom.constants.RISCVConstants
 {
    val START_ADDR = 0x100
 }

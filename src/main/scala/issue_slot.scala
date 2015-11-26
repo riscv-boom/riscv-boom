@@ -1,9 +1,14 @@
-//**************************************************************************
+//******************************************************************************
+// Copyright (c) 2015, The Regents of the University of California (Regents).
+// All Rights Reserved. See LICENSE for license details.
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // RISCV Processor Issue Slot Logic
 //--------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // stores (and AMOs) are "broken down" into 2 uops, but stored within a single issue-slot.
 
-package BOOM
+package boom
 
 import Chisel._
 import Node._
@@ -88,7 +93,7 @@ class IssueSlot(num_slow_wakeup_ports: Int) extends Module with BOOMCoreParamete
    // defaults
    updated_state := slot_state
 
-   when (io.kill || 
+   when (io.kill ||
          (io.grant && (slot_state === s_valid_1)) ||
          (io.grant && (slot_state === s_valid_2) && slot_p1 && slot_p2))
    {
@@ -164,12 +169,12 @@ class IssueSlot(num_slow_wakeup_ports: Int) extends Module with BOOMCoreParamete
    {
       updated_state := s_invalid
    }
-     
+
    when (!io.in_uop.valid)
    {
       slotUop.br_mask := out_br_mask
    }
- 
+
 
    //-------------------------------------------------------------
    // Request Logic
@@ -227,4 +232,4 @@ class IssueSlot(num_slow_wakeup_ports: Int) extends Module with BOOMCoreParamete
    io.debug.p2 := slot_p2
    io.debug.p3 := slot_p3
 }
- 
+

@@ -1,12 +1,17 @@
-//**************************************************************************
+//******************************************************************************
+// Copyright (c) 2015, The Regents of the University of California (Regents).
+// All Rights Reserved. See LICENSE for license details.
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // RISCV Processor Datapath: Rename Logic
-//--------------------------------------------------------------------------
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 //
 // Christopher Celio
 // 2012 Feb 14
 
 
-package BOOM
+package boom
 {
 
 import Chisel._
@@ -134,8 +139,8 @@ class FreeListIo(num_phys_registers: Int, pl_width: Int) extends BOOMCoreBundle
    val enq_vals      = Vec.fill(pl_width) {Bool(INPUT)}
    val enq_pregs     = Vec.fill(pl_width) {UInt(INPUT, log2Up(num_phys_registers))}
 
-   // do we have space to service incoming requests?
-   val can_allocate  = Vec.fill(pl_width) {Bool(OUTPUT)} // is there a register that we can allocate to this inst? (per inst granularity)
+   // do we have space to service incoming requests? (per inst granularity)
+   val can_allocate  = Vec.fill(pl_width) {Bool(OUTPUT)}
 
    // handle branches (save copy of freelist on branch, merge on mispredict)
    val ren_br_vals   = Vec.fill(pl_width) {Bool(INPUT)}
@@ -150,7 +155,8 @@ class FreeListIo(num_phys_registers: Int, pl_width: Int) extends BOOMCoreBundle
    val rollback_pdsts = Vec.fill(pl_width) {UInt(INPUT, log2Up(num_phys_registers))}
 
    // or...
-   // TODO there are TWO free-list IOs now, based on constants. What is the best way to handle these two designs? perhaps freelist.scala, and instantiate which-ever one I want?
+   // TODO there are TWO free-list IOs now, based on constants. What is the best way to handle these two designs?
+   // perhaps freelist.scala, and instantiate which-ever one I want?
    // TODO naming is inconsistent
    // TODO combine with rollback, whatever?
    val flush_pipeline = Bool(INPUT)
@@ -181,7 +187,8 @@ class RenameFreeList(num_phys_registers: Int // number of physical registers
    // can quickly reset pipeline on branch mispredict
    val allocation_lists = Reg(Vec(MAX_BR_COUNT, Bits(width = num_phys_registers)))
 
-   val enq_mask = Wire(Vec(pl_width, Bits(width = num_phys_registers))) // TODO why is this a Vec? can I do this all on one bit-vector?
+   // TODO why is this a Vec? can I do this all on one bit-vector?
+   val enq_mask = Wire(Vec(pl_width, Bits(width = num_phys_registers)))
 
    // ------------------------------------------
    // find new,free physical registers
@@ -352,8 +359,8 @@ class BusyTableIo(pipeline_width:Int, num_read_ports:Int, num_wb_ports:Int) exte
    val p_rs           = Vec.fill(num_read_ports) {UInt(INPUT, width=PREG_SZ)}
    val p_rs_busy      = Vec.fill(num_read_ports) {Bool(OUTPUT)}
 
-   def prs(i:Int, w:Int)      = p_rs     (w+i*pipeline_width)
-   def prs_busy(i:Int, w:Int) = p_rs_busy(w+i*pipeline_width)
+   def prs(i:Int, w:Int):UInt      = p_rs     (w+i*pipeline_width)
+   def prs_busy(i:Int, w:Int):Bool = p_rs_busy(w+i*pipeline_width)
 
    // marking new registers as busy
    val allocated_pdst = Vec.fill(pipeline_width) {(new ValidIO(UInt(width=PREG_SZ))).flip}
@@ -483,23 +490,24 @@ class RenameStage(pl_width: Int, num_wb_ports: Int) extends Module with BOOMCore
 
       for (w <- 0 until pl_width)
       {
-         map_table_io(i).wens(w)          :=   io.ren_uops(w).ldst === UInt(i) &&
-                                               io.ren_mask(w) &&
-                                               io.ren_uops(w).ldst_val &&
-                                               (io.ren_uops(w).dst_rtype === RT_FIX || io.ren_uops(w).dst_rtype === RT_FLT) &&
-                                               !io.kill &&
-                                               io.inst_can_proceed(w) &&
-                                               freelist_can_allocate(w)
-         map_table_io(i).ren_pdsts(w)     := io.ren_uops(w).pdst
+         map_table_io(i).wens(w)        := io.ren_uops(w).ldst === UInt(i) &&
+                                           io.ren_mask(w) &&
+                                           io.ren_uops(w).ldst_val &&
+                                           (io.ren_uops(w).dst_rtype === RT_FIX ||
+                                             io.ren_uops(w).dst_rtype === RT_FLT) &&
+                                           !io.kill &&
+                                           io.inst_can_proceed(w) &&
+                                           freelist_can_allocate(w)
+         map_table_io(i).ren_pdsts(w)   := io.ren_uops(w).pdst
 
-         map_table_io(i).ren_br_vals(w)   := ren_br_vals(w)
-         map_table_io(i).ren_br_tags(w)   := io.ren_uops(w).br_tag
+         map_table_io(i).ren_br_vals(w) := ren_br_vals(w)
+         map_table_io(i).ren_br_tags(w) := io.ren_uops(w).br_tag
       }
 
-      map_table_io(i).br_mispredict       := io.brinfo.mispredict
-      map_table_io(i).br_mispredict_tag   := io.brinfo.tag
+      map_table_io(i).br_mispredict     := io.brinfo.mispredict
+      map_table_io(i).br_mispredict_tag := io.brinfo.tag
 
-      map_table_io(i).flush_pipeline      := io.flush_pipeline
+      map_table_io(i).flush_pipeline    := io.flush_pipeline
    }
 
    // backwards, because rollback must give highest priority to 0 (the oldest instruction)
@@ -561,6 +569,7 @@ class RenameStage(pl_width: Int, num_wb_ports: Int) extends Module with BOOMCore
       prs3_was_bypassed(w) := Bool(false)
 
       // Handle bypassing new physical destinations to operands (and stale destination)
+      // scalastyle:off
       for (xx <- w-1 to 0 by -1)
       {
          rs1_cases  ++= Array(((io.ren_uops(w).lrs1_rtype === RT_FIX || io.ren_uops(w).lrs1_rtype === RT_FLT)
@@ -640,6 +649,7 @@ class RenameStage(pl_width: Int, num_wb_ports: Int) extends Module with BOOMCore
          bsy_table.io.unbusy_pdst(i).bits  := io.wb_pdsts(i)
       }
 
+   // scalastyle:on
 
    //-------------------------------------------------------------
    // Free List

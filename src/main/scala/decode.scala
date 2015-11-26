@@ -1,4 +1,9 @@
-package BOOM
+//******************************************************************************
+// Copyright (c) 2015, The Regents of the University of California (Regents).
+// All Rights Reserved. See LICENSE for license details.
+//------------------------------------------------------------------------------
+
+package boom
 {
 
 import Chisel._
@@ -9,8 +14,10 @@ import rocket._
 import FUCode._
 import uncore.constants.MemoryOpConstants._
 
+
 abstract trait DecodeConstants
 {
+// scalastyle:off
   val xpr64 = Y // TODO inform this from xLen
 
   val decode_default: List[BitPat] =
@@ -24,10 +31,10 @@ abstract trait DecodeConstants
             //     |  |  |  |         |        dst     |       |       |  |     |  |  |  |  |  mem    mem     |                    |  |  |  |  is unique? (clear pipeline for it)
             //     |  |  |  |         |        regtype |       |       |  |     |  |  |  |  |  cmd    msk     |                    |  |  |  |  |  flush on commit
             //     |  |  |  |         |        |       |       |       |  |     |  |  |  |  |  |      |       |                    |  |  |  |  |  |  csr cmd
-//            List(N, N, X, uopX    , FU_X   ,UInt("b??",2),UInt("b??",2),UInt("b??",2),X, IS_X, X,X,X,X,N,M_X, MSK_X,UInt("b??"), X, X, X, X, N, X, CSR.X)
               List(N, N, X, uopX    , FU_X   ,RT_X,BitPat.DC(2),BitPat.DC(2),X,IS_X,X,X,X,X,N, M_X,   MSK_X,  BitPat.DC(2),        X, X, X, X, N, X, CSR.X)
 
   val table: Array[(BitPat, List[BitPat])]
+// scalastyle:on
 }
 
 class CtrlSigs extends Bundle
@@ -61,7 +68,7 @@ class CtrlSigs extends Bundle
 
    def decode(inst: UInt, table: Iterable[(BitPat, List[BitPat])]) = {
       val decoder = rocket.DecodeLogic(inst, XDecode.decode_default, table)
-      val sigs = 
+      val sigs =
          Seq(legal, fp_val, fp_single, uopc, fu_code, dst_type, rs1_type
          , rs2_type, frs3_en, imm_sel, is_load, is_store, is_amo
          , is_fence, is_fencei, mem_cmd, mem_typ, wakeup_delay, bypassable
@@ -75,6 +82,7 @@ class CtrlSigs extends Bundle
 
 object XDecode extends DecodeConstants
 {
+// scalastyle:off
             //                                                         frs3_en                                wakeup_delay
             //     is val inst?                                        |  imm sel                             |        bypassable (aka, known/fixed latency)
             //     |  is fp inst?                                      |  |     is_load                       |        |  br/jmp
@@ -204,10 +212,12 @@ object XDecode extends DecodeConstants
    SC_W    -> List(Y, N, X, uopAMO_AG, FU_MEM, RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, Y, Y, N, N, M_XSC   , MSK_W,UInt(0),N, N, N, N, Y, Y, CSR.N), // one which isn't needed
    SC_D    -> List(Y, N, X, uopAMO_AG, FU_MEM, RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, Y, Y, N, N, M_XSC   , MSK_D,UInt(0),N, N, N, N, Y, Y, CSR.N)
    )
+// scalastyle:on
 }
 
 object FDecode extends DecodeConstants
 {
+// scalastyle:off
   val table: Array[(BitPat, List[BitPat])] = Array(
              //                                                          frs3_en                                wakeup_delay
              //                                                          |  imm sel                             |        bypassable (aka, known/fixed latency)
@@ -295,6 +305,8 @@ object FDecode extends DecodeConstants
    FNMADD_D ->List(Y, Y, N, uopFNMADD_D,FU_FPU, RT_FLT, RT_FLT, RT_FLT, Y, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, CSR.N),
    FNMSUB_D ->List(Y, Y, N, uopFNMSUB_D,FU_FPU, RT_FLT, RT_FLT, RT_FLT, Y, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, CSR.N)
    )
+
+// scalastyle:on
 }
 
 

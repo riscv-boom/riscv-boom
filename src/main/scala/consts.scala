@@ -1,11 +1,16 @@
-//**************************************************************************
+//******************************************************************************
+// Copyright (c) 2015, The Regents of the University of California (Regents).
+// All Rights Reserved. See LICENSE for license details.
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // RISCV Processor Constants
-//--------------------------------------------------------------------------
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 //
 // Christopher Celio
 // 2011 May 28
 
-package BOOM
+package boom
 package constants
 {
 
@@ -113,10 +118,10 @@ trait ScalarOpConstants
 
    // Is 32b Word or 64b Doubldword?
    val SZ_DW = 1
-   val DW_X   = Bool(true) //Bool(xLen==64)
+   val DW_X   = Bool(true) // Bool(xLen==64)
    val DW_32  = Bool(false)
    val DW_64  = Bool(true)
-   val DW_XPR = Bool(true) //Bool(xLen==64)
+   val DW_XPR = Bool(true) // Bool(xLen==64)
 
    // Memory Enable Signal
    val MEN_0   = Bool(false)
@@ -124,11 +129,11 @@ trait ScalarOpConstants
    val MEN_X   = Bool(false)
 
    // Immediate Extend Select
-   val IS_I   = UInt(0, 3)  //I-Type  (LD,ALU)
-   val IS_S   = UInt(1, 3)  //S-Type  (ST)
-   val IS_B   = UInt(2, 3)  //SB-Type (BR)
-   val IS_U   = UInt(3, 3)  //U-Type  (LUI/AUIPC)
-   val IS_J   = UInt(4, 3)  //UJ-Type (J/JAL)
+   val IS_I   = UInt(0, 3)  // I-Type  (LD,ALU)
+   val IS_S   = UInt(1, 3)  // S-Type  (ST)
+   val IS_B   = UInt(2, 3)  // SB-Type (BR)
+   val IS_U   = UInt(3, 3)  // U-Type  (LUI/AUIPC)
+   val IS_J   = UInt(4, 3)  // UJ-Type (J/JAL)
    val IS_X   = BitPat("b???")
 
 

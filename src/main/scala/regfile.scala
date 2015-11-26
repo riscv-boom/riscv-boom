@@ -1,12 +1,17 @@
-//**************************************************************************
+//******************************************************************************
+// Copyright (c) 2015, The Regents of the University of California (Regents).
+// All Rights Reserved. See LICENSE for license details.
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // RISCV Processor Datapath Register File
-//--------------------------------------------------------------------------
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 //
 // Christopher Celio
 // 2013 May 1
 
 
-package BOOM
+package boom
 {
 
 import Chisel._
@@ -90,10 +95,9 @@ class RegisterFile( num_registers: Int
 //         printf("writeport[%d], %s -> p%d = 0x%x\n", UInt(i), Mux(io.write_ports(i).wen, Str("WEN"), Str(" "))
 //            , io.write_ports(i).addr
 //            , io.write_ports(i).data
-//            );
+//            )
 //      }
    }
-
 
    // Debug
 //   for (i <- 0 until num_registers)

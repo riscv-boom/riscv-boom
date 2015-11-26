@@ -1,9 +1,14 @@
-//**************************************************************************
+//******************************************************************************
+// Copyright (c) 2015, The Regents of the University of California (Regents).
+// All Rights Reserved. See LICENSE for license details.
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // RISCV Processor Issue Logic
-//--------------------------------------------------------------------------
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 //
 
-package BOOM
+package boom
 
 import Chisel._
 import Node._
@@ -12,8 +17,8 @@ import FUCode._
 import rocket.Str
 
 import scala.collection.mutable.ArrayBuffer
-  
-class IssueUnitStatic(num_issue_slots: Int, issue_width: Int, num_wakeup_ports: Int) extends 
+
+class IssueUnitStatic(num_issue_slots: Int, issue_width: Int, num_wakeup_ports: Int) extends
       IssueUnit(num_issue_slots, issue_width, num_wakeup_ports)
 {
    //-------------------------------------------------------------
@@ -150,4 +155,4 @@ class IssueUnitStatic(num_issue_slots: Int, issue_width: Int, num_wakeup_ports: 
       }
    }
 }
- 
+

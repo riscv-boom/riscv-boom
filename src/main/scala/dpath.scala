@@ -1,12 +1,17 @@
-//**************************************************************************
+//******************************************************************************
+// Copyright (c) 2015, The Regents of the University of California (Regents).
+// All Rights Reserved. See LICENSE for license details.
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // RISCV Processor Datapath
-//--------------------------------------------------------------------------
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 //
 // Christopher Celio
 // 2012 Feb 14
 
 
-package BOOM
+package boom
 {
 
 import Chisel._
@@ -203,7 +208,7 @@ class BrResolutionInfo extends BOOMCoreBundle
    val ldq_idx    = UInt(width = MEM_ADDR_SZ)  // track the "tail" of loads and stores, so we can
    val stq_idx    = UInt(width = MEM_ADDR_SZ)  // quickly reset the LSU on a mispredict
    val brob_idx   = UInt(width = BROB_ADDR_SZ) // quickly reset the Branch-ROB on a mispredict
-   val taken      = Bool()                     // which direction did the branch go? 
+   val taken      = Bool()                     // which direction did the branch go?
    val is_br      = Bool()
    val is_jr      = Bool()
 }
@@ -351,8 +356,8 @@ class DatPath() extends Module with BOOMCoreParameters
    require (exe_units.length != 0)
    val num_rf_read_ports = exe_units.map(_.num_rf_read_ports).reduce[Int](_+_)
    val num_rf_write_ports = exe_units.map(_.num_rf_write_ports).reduce[Int](_+_)
-   val num_total_bypass_ports = exe_units.withFilter(_.is_bypassable).map(_.num_bypass_ports).reduce[Int](_+_)
-   val num_fast_wakeup_ports = exe_units.count(_.is_bypassable)
+   val num_total_bypass_ports = exe_units.withFilter(_.isBypassable).map(_.numBypassPorts).reduce[Int](_+_)
+   val num_fast_wakeup_ports = exe_units.count(_.isBypassable)
    val num_slow_wakeup_ports = num_rf_write_ports // currently have every write-port also be a slow-wakeup-port TODO reduce this number
 //   val num_slow_wakeup_ports = exe_units.map(_.num_variable_write_ports).reduce[Int](_+_)
    // the slow write ports to the regfile are variable latency, and thus can't be bypassed
@@ -383,8 +388,8 @@ class DatPath() extends Module with BOOMCoreParameters
 
 
    val br_unit = Wire(new BranchUnitResp())
-   require (exe_units.count(_.has_branch_unit) == 1)
-   val brunit_idx = exe_units.indexWhere(_.has_branch_unit)
+   require (exe_units.count(_.hasBranchUnit) == 1)
+   val brunit_idx = exe_units.indexWhere(_.hasBranchUnit)
    br_unit <> exe_units(brunit_idx).io.br_unit
 
    val register_width = if (params(BuildFPU).isEmpty) xLen else 65
@@ -689,7 +694,7 @@ class DatPath() extends Module with BOOMCoreParameters
    for (i <- 0 until exe_units.length)
    {
       // Fast Wakeup (uses just-issued uops) that have known latencies
-      if (exe_units(i).is_bypassable)
+      if (exe_units(i).isBypassable)
       {
          rename_stage.io.wb_valids(wu_idx) := iss_valids(i) && (iss_uops(i).dst_rtype === RT_FIX || iss_uops(i).dst_rtype === RT_FLT) && (iss_uops(i).bypassable)
          rename_stage.io.wb_pdsts(wu_idx)  := iss_uops(i).pdst
@@ -813,7 +818,7 @@ class DatPath() extends Module with BOOMCoreParameters
 
       // Fast Wakeup (uses just-issued uops)
 
-      if (exe_units(i).is_bypassable)
+      if (exe_units(i).isBypassable)
       {
          issue_unit.io.wakeup_pdsts(wu_idx).valid := iss_valids(i) && (iss_uops(i).dst_rtype === RT_FIX || iss_uops(i).dst_rtype === RT_FLT) && iss_uops(i).ldst_val && (iss_uops(i).bypassable)
          issue_unit.io.wakeup_pdsts(wu_idx).bits  := iss_uops(i).pdst
@@ -920,9 +925,9 @@ class DatPath() extends Module with BOOMCoreParameters
       exe_units(w).io.com_handling_exc := com_handling_exc // TODO get rid of this?
 
 
-      if (exe_units(w).is_bypassable)
+      if (exe_units(w).isBypassable)
       {
-         for (i <- 0 until exe_units(w).num_bypass_ports)
+         for (i <- 0 until exe_units(w).numBypassPorts)
          {
             //println("  Hooking up bypasses for idx = " + idx + ", exe_unit #" + w)
             bypasses.valid(idx) := exe_units(w).io.bypass.valid(i)
