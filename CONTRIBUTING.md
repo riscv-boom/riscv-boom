@@ -9,4 +9,4 @@ and try to verify the behavior differs from the Spike RISC-V ISA simulator.
 
 **Style Guide**
 
-You can invoke "make checkstyle" to verify that your changes respect the style guide.
+You can invoke `make checkstyle` to verify that your changes respect the style guide.
