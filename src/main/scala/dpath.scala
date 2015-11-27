@@ -48,31 +48,19 @@ Notes:
    Fence.i is handled by holding up pipeline, inserting fencei, then waiting
    for STQ to drain before fetching next instruction and clearing I$.
 
-BUGS:
-  scall isn't being counted as a retired instruction
-
 Questions:
 
 TODO LIST:
 
    better IW back pressure (requires worst case on store slots)
-   add branch counter in ROB (was predicted correctly)
 
    add (optional) register between issue select and register read
 
-   allow for under-provisioned regfile ports
    allow for load-use speculation
-
-   add wait-bit memory disambiguation speculation to loads in the LSU
 
    allow queues to fill up completely (change full/head/tail logic)
       - difficult to do for store queue
       - kills only apply to partial sections (commit head), no easy way to track count
-
-   hit-under-miss icache
-
-   stream fetchers, way-prediction
-
 */
 
 
