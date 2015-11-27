@@ -1,7 +1,7 @@
 The Berkeley Out-of-Order RISC-V Processor
 ================================================
 
-This is the source repository for the RV64G RISC-V Berkeley Out-of-Order Machine (BOOM), 
+This is the source repository for the RV64G RISC-V superscalar Berkeley Out-of-Order Machine (BOOM), 
 written in the [Chisel hardware construction language](http://chisel.eecs.berkeley.edu). BOOM 
 is a synthesizable core that targets ASIC processes. It can run on an FPGA (50 MHz on a zc706), 
 but optimizing it to be an FPGA soft-core is a non-goal.
@@ -13,7 +13,7 @@ ISA | RISC-V (RV64G)
 Synthesizable |√
 FPGA |√
 Parameterized |√
-Floating Point (IEE 754-2008) |√
+Floating Point (IEEE 754-2008) |√
 Atomic Memory Op Support |√
 Caches |√
 Viritual Memory |√
@@ -24,8 +24,7 @@ Linux |√
 
 This repository is **NOT A SELF-RUNNING** repository. To instantiate a BOOM core, please use the Rocket chip generator found in the rocket-chip git repository (https://github.com/ucb-bar/rocket-chip).
 
-BOOM depends on the Chisel project. It also depends on Rocket, uncore, and
-junction source codes.
+BOOM depends on the Chisel project. It also depends on [Rocket](https://github.com/ucb-bar/rocket), [uncore](https://github.com/ucb-bar/uncore), and [junction](https://github.com/ucb-bar/junctions) source codes.
 
 
 **Directions**
@@ -39,7 +38,7 @@ To build a BOOM C++ emulator and run BOOM through a couple of simple tests:
    $ git submodule update --init
    $ cd riscv-tools
    $ git submodule update --init --recursive riscv-tests
-   cd emulator; make run CONFIG=BOOMCPPConfig
+   $ cd ../emulator; make run CONFIG=BOOMCPPConfig
 ````
 
 **More Info**
