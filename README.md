@@ -17,7 +17,7 @@ Floating Point (IEEE 754-2008) |√
 Atomic Memory Op Support |√
 Caches |√
 Viritual Memory |√
-Linux |√
+Boots Linux |√
 
 
 **Requirements**
@@ -32,7 +32,7 @@ BOOM depends on the Chisel project. It also depends on [Rocket](https://github.c
 To build a BOOM C++ emulator and run BOOM through a couple of simple tests:
 
 ````
-   $ git clone git@github.com:ucb-bar/rocket-chip.git
+   $ git clone https://github.com/ucb-bar/rocket-chip.git
    $ cd rocket-chip
    $ git checkout boom
    $ git submodule update --init
@@ -53,8 +53,6 @@ To build a BOOM C++ emulator and run BOOM through a couple of simple tests:
 The RISC-V privileged ISA and platform specs are still in flux. BOOM will do its best to stay up-to-date with it!
 
 BOOM is a work-in-progress and remains in active development.
-
-BOOM makes no promises as to its correctness.
 
 
 **FAQ**
