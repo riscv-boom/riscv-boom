@@ -19,6 +19,7 @@ Caches |√
 Viritual Memory |√
 Boots Linux |√
 
+See the [wiki](https://github.com/ucb-bar/riscv-boom/wiki) for more info.
 
 **Requirements**
 
@@ -43,6 +44,7 @@ To build a BOOM C++ emulator and run BOOM through a couple of simple tests:
 
 **More Info**
 
+* **The Wiki** - https://github.com/ucb-bar/riscv-boom/wiki
 * **Tech Report** - The Berkeley Out-of-Order Machine (BOOM): An Industry-Competitive, Synthesizable, Parameterized RISC-V Processor (https://www.eecs.berkeley.edu/Pubs/TechRpts/2015/EECS-2015-167.html)
 * **Slides** - RISC-V Workshop #2 (http://riscv.org/workshop-jun2015/riscv-boom-workshop-june2015.pdf)
 * **Video** - RISC-V Workshop #2 (https://www.youtube.com/watch?v=z8UInbiQbdA)
