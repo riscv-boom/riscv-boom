@@ -20,7 +20,7 @@ import rocket.DFMALatency
 
 // TODO get rid of this decoder and move into the Decode stage? Or the RRd stage?
 // most of these signals are already created, just need to be translated
-// to the ROcket FPU-speak
+// to the Rocket FPU-speak
 class UOPCodeFPUDecoder extends Module
 {
   val io = new Bundle {

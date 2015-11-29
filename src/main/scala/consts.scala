@@ -20,7 +20,7 @@ import Node._
 trait BOOMDebugConstants
 {
    val DEBUG_PRINTF        = false // use the Chisel printf functionality
-   val DEBUG_ENABLE_COLOR  = true  // provide color to print outs? requires a VIM plugin to work properly :(
+   val DEBUG_ENABLE_COLOR  = false // provide color to print outs. Requires a VIM plugin to work properly :(
    val COMMIT_LOG_PRINTF   = false // dump commit state, for comparision against ISA sim
 
    // turn off stuff to dramatically reduce Chisel node count
@@ -365,7 +365,8 @@ trait RISCVConstants
    def GetUop(inst: Bits): Bits = inst(6,0)
    def GetRd (inst: Bits): UInt = inst(RD_MSB,RD_LSB)
    def GetRs1(inst: Bits): UInt = inst(RS1_MSB,RS1_LSB)
-   def IsCall(inst: Bits): Bool = (inst === rocket.Instructions.JAL || inst === rocket.Instructions.JALR) && GetRd(inst) === RA
+   def IsCall(inst: Bits): Bool = (inst === rocket.Instructions.JAL || 
+                                  inst === rocket.Instructions.JALR) && GetRd(inst) === RA
    def IsReturn(inst: Bits): Bool = GetUop(inst) === jalr_opc && GetRd(inst) === X0 && GetRs1(inst) === RA
 
    def ComputeBranchTarget(pc: UInt, inst: Bits, xlen: Int, coreInstBytes: Int): UInt =

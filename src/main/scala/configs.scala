@@ -33,14 +33,14 @@ class DefaultBOOMConfig extends ChiselConfig (
          case MaxBrCount => Knob("MAX_BR_COUNT")
 
          // Front-end
-         case EnableBTB => true // only gates off updates :(
+         case EnableBTB => true // for now, only gates off updates to BTB
          case EnableBTBContainsBranches => false // don't send branches to BTB
          case NBTBEntries => if(site(CoreName) == "BOOM") 64 else 62
          case NRAS => 8
          case FetchBufferSz => 4
 
          // Branch Predictor
-         case EnableBranchPredictor => true
+         case EnableBranchPredictor => false
          case BranchPredictorSizeInKB => Knob("BPD_SIZE_IN_KB")
 
          // Pipelining
@@ -121,5 +121,10 @@ class WithMegaBOOMs extends ChiselConfig(
       case "LSU_ENTRIES" => 32
       case "PHYS_REGISTERS" => 128
       case "MAX_BR_COUNT" => 8
+      case "L1D_MSHRS" => 4
+      case "L1D_WAYS" => 8
+      case "L1D_SETS" => 64
+      case "L1I_WAYS" => 8
+      case "L1I_SETS" => 64
    }
 )

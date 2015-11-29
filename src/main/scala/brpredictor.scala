@@ -15,7 +15,6 @@
 // their own, optimized implementation of global history (e.g. if history is
 // very long!).
 
-
 package boom
 
 import Chisel._
@@ -106,7 +105,7 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int) extends Mo
    // of the fetch_packet.
    private val fixed_history = Cat(io.br_resolution.bits.history, io.br_resolution.bits.taken)
    ghistory :=
-      Mux(io.flush,                       r_ghistory_commit_copy,
+      Mux(io.flush,                                 r_ghistory_commit_copy,
       Mux(io.br_resolution.valid &&
           io.br_resolution.bits.bpd_mispredict &&
           io.br_resolution.bits.new_pc_same_packet, io.br_resolution.bits.history,
@@ -148,8 +147,8 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int) extends Mo
    }
 }
 
-//--------------------------------------------------------------------------
-//--------------------------------------------------------------------------
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 
 // The BranchReorderBuffer holds all inflight branchs for the purposes of
 // bypassing inflight prediction updates to the predictor. It also holds
@@ -188,7 +187,7 @@ class BrobEntry(fetch_width: Int) extends BOOMCoreBundle
 {
    val executed   = Vec.fill(fetch_width) {Bool()} // mark that a branch executed (and should update the predictor).
    val taken      = Vec.fill(fetch_width) {Bool()}
-   val mispredict = Vec.fill(fetch_width) {Bool()} //did bpd mispredict this br? (aka, should we update the predictor).
+   val mispredict = Vec.fill(fetch_width) {Bool()} // did bpd mispredict this br? (aka, should we update the predictor).
    val brob_idx   = UInt(width = BROB_ADDR_SZ)
 
    val debug_executed = Bool() // did a br or jalr get executed? verify we're not deallocating an empty entry.
@@ -211,8 +210,8 @@ class BranchReorderBuffer(fetch_width: Int, num_entries: Int) extends Module wit
 
       // forward predictions
       // TODO enable bypassing of information. See if there's a "match", and then forward the outcome.
-   //  val pred_req = Valid(new // from fetch, requesting if a prediction matches an inflight entry.
-   //  val pred_resp = Valid(new // from fetch, return a prediction
+      //val pred_req = Valid(new // from fetch, requesting if a prediction matches an inflight entry.
+      //val pred_resp = Valid(new // from fetch, return a prediction
    }
 
    println ("\tBROB (w=" + fetch_width + ") Size (" + num_entries + ") entries")

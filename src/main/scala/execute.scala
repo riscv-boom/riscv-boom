@@ -104,7 +104,7 @@ class ALUExeUnit(is_branch_unit   : Boolean = false
                 , use_slow_mul    : Boolean = false
                 ) extends ExecutionUnit(num_rf_read_ports = if (has_fpu) 3 else 2
                                       , num_rf_write_ports = 1
-                                      , num_bypass_stages = if (has_fpu || (has_mul && !use_slow_mul)) 3 else 1 // TODO FPU LATENCY ADAM
+                                      , num_bypass_stages = if (has_fpu || (has_mul && !use_slow_mul)) 3 else 1 // TODO FPU LATENCY
                                       , data_width = if (has_fpu) 65 else 64
                                       , bypassable = true
                                       , is_mem_unit = false
@@ -243,7 +243,7 @@ class ALUExeUnit(is_branch_unit   : Boolean = false
    if (has_fpu)
    {
    // TODO is there a way to override a single signal in a bundle?
-//   io.resp(0).bits.fflags <> fpu.io.resp.bits.fflags
+   // io.resp(0).bits.fflags <> fpu.io.resp.bits.fflags
       io.resp(0).bits.fflags.valid      := fpu.io.resp.valid
       io.resp(0).bits.fflags.bits.uop   := fpu.io.resp.bits.fflags.bits.uop
       io.resp(0).bits.fflags.bits.flags := fpu.io.resp.bits.fflags.bits.flags
@@ -318,8 +318,8 @@ class MemExeUnit extends ExecutionUnit(num_rf_read_ports = 2 // TODO make this 1
    io.lsu_io.new_stq_idx := lsu.io.new_stq_idx
    io.lsu_io.laq_full := lsu.io.laq_full
    io.lsu_io.stq_full := lsu.io.stq_full
-   io.lsu_io.lsu_clr_bsy_valid := lsu.io.lsu_clr_bsy_valid // HACK TODO need a better way to clear the busy bits in the ROB
-   io.lsu_io.lsu_clr_bsy_rob_idx := lsu.io.lsu_clr_bsy_rob_idx // HACK TODO need a better way to clear the busy bits in the rob
+   io.lsu_io.lsu_clr_bsy_valid := lsu.io.lsu_clr_bsy_valid // TODO is there a better way to clear the busy bits in the ROB
+   io.lsu_io.lsu_clr_bsy_rob_idx := lsu.io.lsu_clr_bsy_rob_idx
    io.lsu_io.lsu_fencei_rdy := lsu.io.lsu_fencei_rdy
 
    // enqueue addresses,st-data at the end of Execute
@@ -400,7 +400,7 @@ class ALUMemExeUnit(is_branch_unit    : Boolean = false
                     , use_slow_mul    : Boolean = false
                     ) extends ExecutionUnit(num_rf_read_ports = if (has_fpu) 3 else 2
                                           , num_rf_write_ports = 2
-                                          , num_bypass_stages = if (has_fpu || (has_mul && !use_slow_mul)) 3 else 1// TODO FPU_LATENCY Adam
+                                          , num_bypass_stages = if (has_fpu || (has_mul && !use_slow_mul)) 3 else 1// TODO FPU_LATENCY
                                           , data_width = if (fp_mem_support) 65 else 64
                                           , num_variable_write_ports = 1
                                           , bypassable = true
@@ -562,8 +562,8 @@ class ALUMemExeUnit(is_branch_unit    : Boolean = false
    io.lsu_io.new_stq_idx := lsu.io.new_stq_idx
    io.lsu_io.laq_full := lsu.io.laq_full
    io.lsu_io.stq_full := lsu.io.stq_full
-   io.lsu_io.lsu_clr_bsy_valid := lsu.io.lsu_clr_bsy_valid // HACK TODO need a better way to clear the busy bits in the ROB
-   io.lsu_io.lsu_clr_bsy_rob_idx := lsu.io.lsu_clr_bsy_rob_idx // HACK TODO need a better way to clear the busy bits in the rob
+   io.lsu_io.lsu_clr_bsy_valid := lsu.io.lsu_clr_bsy_valid
+   io.lsu_io.lsu_clr_bsy_rob_idx := lsu.io.lsu_clr_bsy_rob_idx
    io.lsu_io.lsu_fencei_rdy := lsu.io.lsu_fencei_rdy
 
    // enqueue addresses,st-data at the end of Execute

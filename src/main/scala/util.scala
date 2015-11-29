@@ -144,7 +144,7 @@ object DebugIsJALR
 {
    def apply(inst: Bits): Bool =
    {
-      // TODO CHisel not sure why this won't compile
+      // TODO Chisel not sure why this won't compile
 //      val is_jalr = rocket.DecodeLogic(inst, List(Bool(false)),
 //                                       Array(
 //                                       JALR -> Bool(true)))

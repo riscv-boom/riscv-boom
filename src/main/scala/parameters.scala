@@ -36,7 +36,7 @@ abstract trait BOOMCoreParameters extends rocket.CoreParameters
    // Superscalar Widths
    val FETCH_WIDTH      = params(FetchWidth)       // number of insts we can fetch
    val DECODE_WIDTH     = params(DecodeWidth)
-   val DISPATCH_WIDTH   = params(DispatchWidth) // number of insts put into the IssueWindow
+   val DISPATCH_WIDTH   = params(DispatchWidth)    // number of insts put into the IssueWindow
    val ISSUE_WIDTH      = params(IssueWidth)
    val COMMIT_WIDTH     = params(RetireWidth)
 
@@ -46,11 +46,11 @@ abstract trait BOOMCoreParameters extends rocket.CoreParameters
 
    //************************************
    // Data Structure Sizes
-   val NUM_ROB_ENTRIES  = params(NumRobEntries)     // number of ROB entries (e.g., 32 entries for R10k)
-   val NUM_LSU_ENTRIES  = params(NumLsuEntries)     // number of LD/ST entries
-   val MAX_BR_COUNT     = params(MaxBrCount)        // number of branches we can speculate simultaneously
-   val PHYS_REG_COUNT   = params(NumPhysRegisters)  // size of the unified, physical register file
-   val FETCH_BUFFER_SZ  = params(FetchBufferSz)     // number of instructions that stored between fetch&decode
+   val NUM_ROB_ENTRIES  = params(NumRobEntries)    // number of ROB entries (e.g., 32 entries for R10k)
+   val NUM_LSU_ENTRIES  = params(NumLsuEntries)    // number of LD/ST entries
+   val MAX_BR_COUNT     = params(MaxBrCount)       // number of branches we can speculate simultaneously
+   val PHYS_REG_COUNT   = params(NumPhysRegisters) // size of the unified, physical register file
+   val FETCH_BUFFER_SZ  = params(FetchBufferSz)    // number of instructions that stored between fetch&decode
 
    //************************************
    // Pipelining
@@ -65,7 +65,6 @@ abstract trait BOOMCoreParameters extends rocket.CoreParameters
    val BPD_SIZE_IN_KB = params(BranchPredictorSizeInKB)
    val BPD_NUM_ENTRIES = BPD_SIZE_IN_KB*1024*8/FETCH_WIDTH/2 // computation for GShare
    val GHIST_LENGTH = log2Up(BPD_NUM_ENTRIES)
-//   val GHIST_LENGTH = log2Up(BPD_NUM_ENTRIES)
 
    //************************************
    // Extra Knobs and Features

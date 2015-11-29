@@ -6,7 +6,8 @@
 // RISCV Processor Issue Slot Logic
 //--------------------------------------------------------------------------
 //------------------------------------------------------------------------------
-// stores (and AMOs) are "broken down" into 2 uops, but stored within a single issue-slot.
+//
+// Note: stores (and AMOs) are "broken down" into 2 uops, but stored within a single issue-slot.
 
 package boom
 
@@ -200,7 +201,8 @@ class IssueSlot(num_slow_wakeup_ports: Int) extends Module with BOOMCoreParamete
    //assign outputs
    io.valid         := isValid
    io.uop           := slotUop
-   io.will_be_valid := isValid && !(io.grant && ((slot_state === s_valid_1) || (slot_state === s_valid_2) && slot_p1 && slot_p2))
+   io.will_be_valid := isValid && 
+                       !(io.grant && ((slot_state === s_valid_1) || (slot_state === s_valid_2) && slot_p1 && slot_p2))
 
    io.updated_uop           := slotUop
    io.updated_uop.iw_state  := updated_state

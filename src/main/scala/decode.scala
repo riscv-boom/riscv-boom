@@ -187,7 +187,7 @@ object XDecode extends DecodeConstants
    FENCE   -> List(Y, N, X, uopFENCE, FU_MEM , RT_X  , RT_X  , RT_X  , N, IS_X, N, Y, N, Y, N, M_X  , MSK_X , UInt(0), N, N, N, N, Y, Y, CSR.N), // TODO PERF make fence higher performance
                                                                                                                                                  // currently serializes pipeline
    // A-type
-   AMOADD_W-> List(Y, N, X, uopAMO_AG, FU_MEM, RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, Y, Y, N, N, M_XA_ADD, MSK_W,UInt(0),N, N, N, N, Y, Y, CSR.N), //TODO make AMOs higherperformance
+   AMOADD_W-> List(Y, N, X, uopAMO_AG, FU_MEM, RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, Y, Y, N, N, M_XA_ADD, MSK_W,UInt(0),N, N, N, N, Y, Y, CSR.N), // TODO make AMOs higherperformance
    AMOXOR_W-> List(Y, N, X, uopAMO_AG, FU_MEM, RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, Y, Y, N, N, M_XA_XOR, MSK_W,UInt(0),N, N, N, N, Y, Y, CSR.N),
    AMOSWAP_W->List(Y, N, X, uopAMO_AG, FU_MEM, RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, Y, Y, N, N, M_XA_SWAP,MSK_W,UInt(0),N, N, N, N, Y, Y, CSR.N),
    AMOAND_W-> List(Y, N, X, uopAMO_AG, FU_MEM, RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, Y, Y, N, N, M_XA_AND, MSK_W,UInt(0),N, N, N, N, Y, Y, CSR.N),
@@ -435,11 +435,11 @@ class BranchDecode extends Module
    val bpd_csignals =
       rocket.DecodeLogic(io.inst,
                   List[BitPat](N, N, N, IS_X),
-////                          //   is br?
-////                          //   |  is jal?
-////                          //   |  |  is jalr?
-////                          //   |  |  |  br type
-////                          //   |  |  |  |
+////                      //   is br?
+////                      //   |  is jal?
+////                      //   |  |  is jalr?
+////                      //   |  |  |  br type
+////                      //   |  |  |  |
             Array[(BitPat, List[BitPat])](
                JAL     -> List(N, Y, N, IS_J),
                JALR    -> List(N, N, Y, IS_I),
