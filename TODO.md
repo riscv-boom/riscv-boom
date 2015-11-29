@@ -11,8 +11,3 @@ Here's a short list of TODO ideas:
    * Allow for under-provisioned register file ports.
 
    * Add support for RV64C. Requires modifications to Rocket's icache as well.
-
-Known bugs:
-
-   * scall isn't being counted as a retired instruction.
-
