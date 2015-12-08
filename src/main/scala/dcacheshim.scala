@@ -204,13 +204,13 @@ class DCacheShim extends Module with BOOMCoreParameters
    {
       // don't clr random entry, make sure m1_tag is correct
       inflight_load_buffer(i).clear       := (cache_load_ack && io.dmem.resp.bits.tag === UInt(i)) ||
-                                             (io.dmem.resp.bits.nack && 
-                                                (m2_req_uop.is_load || m2_req_uop.is_amo) && 
-                                                m2_inflight_tag === UInt(i) && 
+                                             (io.dmem.resp.bits.nack &&
+                                                (m2_req_uop.is_load || m2_req_uop.is_amo) &&
+                                                m2_inflight_tag === UInt(i) &&
                                                 Reg(next=Reg(next=(enq_val && enq_rdy)))) ||
-                                             (io.core.req.bits.kill && 
-                                                m1_inflight_tag === UInt(i) && 
-                                                Reg(next=(enq_val && enq_rdy))) 
+                                             (io.core.req.bits.kill &&
+                                                m1_inflight_tag === UInt(i) &&
+                                                Reg(next=(enq_val && enq_rdy)))
       inflight_load_buffer(i).brinfo      := io.core.brinfo
       inflight_load_buffer(i).flush_pipe  := io.core.flush_pipe
       inflight_load_buffer(i).in_uop      := io.core.req.bits.uop
@@ -277,7 +277,7 @@ class DCacheShim extends Module with BOOMCoreParameters
 //
 //      prefetcher.io.core_requests.valid := Reg(next=Reg(next=io.core.req.valid))
 //      prefetcher.io.core_requests.bits.addr := Reg(next=Reg(next=io.core.req.bits.addr))
-//      prefetcher.io.core_requests.bits.miss := Reg(next=Reg(next=io.core.req.valid)) && 
+//      prefetcher.io.core_requests.bits.miss := Reg(next=Reg(next=io.core.req.valid)) &&
 //                                               nbdcache.io.cpu.resp.bits.miss
 //      prefetcher.io.core_requests.bits.secondary_miss := Bool(false)
 ////                                                         Reg(next=Reg(next=io.core.req.valid)) &&
@@ -301,7 +301,7 @@ class DCacheShim extends Module with BOOMCoreParameters
    io.dmem.req.bits.tag   := new_inflight_tag
    io.dmem.req.bits.cmd   := Mux(io.core.req.valid, io.core.req.bits.uop.mem_cmd, M_PFW)
    io.dmem.req.bits.data  := Reg(next=io.core.req.bits.data) //notice this is delayed a cycle!
-   io.dmem.req.bits.phys  := Bool(true) // we always use physical addresses here, 
+   io.dmem.req.bits.phys  := Bool(true) // we always use physical addresses here,
                                         // as we've already done our own translations.
 
    //------------------------------------------------------------
@@ -310,16 +310,16 @@ class DCacheShim extends Module with BOOMCoreParameters
    // note: nacks come two cycles after a response, so I'm delaying everything
    // properly to line up stores, loads, nacks, and subword loads.
    // was two cycles ago a store request?
-   val was_store_and_not_amo = m2_req_uop.is_store && 
-                               !m2_req_uop.is_amo && 
-                               Reg(next=Reg(next=(io.core.req.valid && io.dmem.req.ready)))  
+   val was_store_and_not_amo = m2_req_uop.is_store &&
+                               !m2_req_uop.is_amo &&
+                               Reg(next=Reg(next=(io.core.req.valid && io.dmem.req.ready)))
 
    // Todo add entry valid bit?
    val resp_tag = io.dmem.resp.bits.tag
 
    io.core.resp.valid := Mux(cache_load_ack,                    !inflight_load_buffer(resp_tag).was_killed, // hide loads that were killed due to branches, etc.
-                         Mux(was_store_and_not_amo && 
-                              !io.dmem.resp.bits.nack && 
+                         Mux(was_store_and_not_amo &&
+                              !io.dmem.resp.bits.nack &&
                               !Reg(next=io.core.req.bits.kill), Bool(true),    // stores succeed quietly, so valid if no nack
                                                                 Bool(false)))  // filter out nacked responses
 
@@ -339,8 +339,8 @@ class DCacheShim extends Module with BOOMCoreParameters
                               Reg(next=Reg(next=(io.core.req.valid && !(io.dmem.req.ready))))
    io.core.nack.lsu_idx   := Mux(m2_req_uop.is_load, m2_req_uop.ldq_idx, m2_req_uop.stq_idx)
    io.core.nack.isload    := m2_req_uop.is_load
-   io.core.nack.cache_nack:= io.dmem.resp.bits.nack || 
-                              Reg(next=iflb_kill) || 
+   io.core.nack.cache_nack:= io.dmem.resp.bits.nack ||
+                              Reg(next=iflb_kill) ||
                               Reg(next=Reg(next= (!(io.dmem.req.ready))))
 
    //------------------------------------------------------------
@@ -348,20 +348,20 @@ class DCacheShim extends Module with BOOMCoreParameters
    io.core.ordered := io.dmem.ordered
 
    // we handle all of the memory exceptions (unaligned and faulting) in the LSU
-   assert (!(io.core.resp.valid && RegNext(io.dmem.xcpt.ma.ld)), 
+   assert (!(io.core.resp.valid && RegNext(io.dmem.xcpt.ma.ld)),
       "Data cache returned an misaligned load exception, which BOOM handles elsewhere.")
-   assert (!(io.core.resp.valid && RegNext(io.dmem.xcpt.ma.st)), 
+   assert (!(io.core.resp.valid && RegNext(io.dmem.xcpt.ma.st)),
       "Data cache returned an misaligned store exception, which BOOM handles elsewhere.")
-   assert (!(io.core.resp.valid && RegNext(io.dmem.xcpt.pf.ld)), 
+   assert (!(io.core.resp.valid && RegNext(io.dmem.xcpt.pf.ld)),
       "Data cache returned an faulting load exception, which BOOM handles elsewhere.")
-   assert (!(io.core.resp.valid && RegNext(io.dmem.xcpt.pf.st)), 
+   assert (!(io.core.resp.valid && RegNext(io.dmem.xcpt.pf.st)),
       "Data cache returned an faulting store exception, which BOOM handles elsewhere.")
 
    //------------------------------------------------------------
    // debug
 
    io.core.debug.memreq_val := io.core.req.valid
-   io.core.debug.memreq_lidx := Mux(io.core.req.bits.uop.is_load, io.core.req.bits.uop.ldq_idx, 
+   io.core.debug.memreq_lidx := Mux(io.core.req.bits.uop.is_load, io.core.req.bits.uop.ldq_idx,
                                                                   io.core.req.bits.uop.stq_idx)
    io.core.debug.memresp_val := io.core.resp.valid
    io.core.debug.memresp_val := io.core.resp.valid

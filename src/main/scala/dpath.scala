@@ -76,7 +76,7 @@ class CtrlSignals extends Bundle()
 // TODO Chisel ability to union this Bundle for different types of Uops?
 class MicroOp extends BOOMCoreBundle
 {
-   val valid            = Bool()                      // is this uop valid? or has it been masked out, 
+   val valid            = Bool()                      // is this uop valid? or has it been masked out,
                                                       // used by fetch buffer and Decode stage
    val iw_state         = UInt(width = 2)             // what is the next state of this uop in the issue window? useful
                                                       // for the compacting queue? TODO or is this not really belong
@@ -105,7 +105,7 @@ class MicroOp extends BOOMCoreBundle
                                                                           // instruction
 
 
-   val imm_packed       = Bits(width = LONGEST_IMM_SZ) // densely pack the imm in decode... 
+   val imm_packed       = Bits(width = LONGEST_IMM_SZ) // densely pack the imm in decode...
                                                        // then translate and sign-extend in execute
    val csr_addr         = UInt(width = CSR_ADDR_SZ)    // only used for critical path reasons in Exe
    val rob_idx          = UInt(width = ROB_ADDR_SZ)
@@ -337,7 +337,7 @@ class DatPath() extends Module with BOOMCoreParameters
    val num_total_bypass_ports = exe_units.withFilter(_.isBypassable).map(_.numBypassPorts).reduce[Int](_+_)
    val num_fast_wakeup_ports = exe_units.count(_.isBypassable)
    // TODO reduce this number
-   val num_slow_wakeup_ports = num_rf_write_ports // currently have every write-port also be a slow-wakeup-port 
+   val num_slow_wakeup_ports = num_rf_write_ports // currently have every write-port also be a slow-wakeup-port
    // val num_slow_wakeup_ports = exe_units.map(_.num_variable_write_ports).reduce[Int](_+_)
    // the slow write ports to the regfile are variable latency, and thus can't be bypassed
 
@@ -456,7 +456,7 @@ class DatPath() extends Module with BOOMCoreParameters
    // TODO only update in BP2 for JALs?
    if (params(EnableBTB))
    {
-      io.imem.btb_update.valid := (br_unit.btb_update_valid || 
+      io.imem.btb_update.valid := (br_unit.btb_update_valid ||
                                     (bp2_take_pc && bp2_is_jump && !if_stalled && !br_unit.take_pc)) &&
                                   !flush_take_pc &&
                                   !csr_take_pc
@@ -675,8 +675,8 @@ class DatPath() extends Module with BOOMCoreParameters
       // Fast Wakeup (uses just-issued uops) that have known latencies
       if (exe_units(i).isBypassable)
       {
-         rename_stage.io.wb_valids(wu_idx) := iss_valids(i) && 
-                                              (iss_uops(i).dst_rtype === RT_FIX || iss_uops(i).dst_rtype === RT_FLT) && 
+         rename_stage.io.wb_valids(wu_idx) := iss_valids(i) &&
+                                              (iss_uops(i).dst_rtype === RT_FIX || iss_uops(i).dst_rtype === RT_FLT) &&
                                               (iss_uops(i).bypassable)
          rename_stage.io.wb_pdsts(wu_idx)  := iss_uops(i).pdst
          wu_idx += 1
@@ -792,7 +792,7 @@ class DatPath() extends Module with BOOMCoreParameters
          issue_unit.io.wakeup_pdsts(wu_idx).valid := exe_units(i).io.resp(j).valid &&
                                                      exe_units(i).io.resp(j).bits.uop.ctrl.rf_wen && // TODO get rid of other rtype checks
                                                      !exe_units(i).io.resp(j).bits.uop.bypassable &&
-                                                     (exe_units(i).io.resp(j).bits.uop.dst_rtype === RT_FIX || 
+                                                     (exe_units(i).io.resp(j).bits.uop.dst_rtype === RT_FIX ||
                                                       exe_units(i).io.resp(j).bits.uop.dst_rtype === RT_FLT)
          issue_unit.io.wakeup_pdsts(wu_idx).bits  := exe_units(i).io.resp(j).bits.uop.pdst
          wu_idx += 1
@@ -802,9 +802,9 @@ class DatPath() extends Module with BOOMCoreParameters
 
       if (exe_units(i).isBypassable)
       {
-         issue_unit.io.wakeup_pdsts(wu_idx).valid := iss_valids(i) && 
-                                                     (iss_uops(i).dst_rtype === RT_FIX || iss_uops(i).dst_rtype === RT_FLT) && 
-                                                     iss_uops(i).ldst_val && 
+         issue_unit.io.wakeup_pdsts(wu_idx).valid := iss_valids(i) &&
+                                                     (iss_uops(i).dst_rtype === RT_FIX || iss_uops(i).dst_rtype === RT_FLT) &&
+                                                     iss_uops(i).ldst_val &&
                                                      (iss_uops(i).bypassable)
          issue_unit.io.wakeup_pdsts(wu_idx).bits  := iss_uops(i).pdst
          wu_idx += 1
@@ -1153,7 +1153,7 @@ class DatPath() extends Module with BOOMCoreParameters
    // detect pipeline freezes and throw error
    val idle_cycles = WideCounter(32)
    when (com_valids.toBits.orR || reset.toBool) { idle_cycles := UInt(0) }
-   watchdog_trigger := Reg(next=idle_cycles.value(30)) 
+   watchdog_trigger := Reg(next=idle_cycles.value(30))
    assert (!(idle_cycles.value(13)), "Pipeline has hung.")
 
 

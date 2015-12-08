@@ -365,7 +365,7 @@ trait RISCVConstants
    def GetUop(inst: Bits): Bits = inst(6,0)
    def GetRd (inst: Bits): UInt = inst(RD_MSB,RD_LSB)
    def GetRs1(inst: Bits): UInt = inst(RS1_MSB,RS1_LSB)
-   def IsCall(inst: Bits): Bool = (inst === rocket.Instructions.JAL || 
+   def IsCall(inst: Bits): Bool = (inst === rocket.Instructions.JAL ||
                                   inst === rocket.Instructions.JALR) && GetRd(inst) === RA
    def IsReturn(inst: Bits): Bool = GetUop(inst) === jalr_opc && GetRd(inst) === X0 && GetRs1(inst) === RA
 

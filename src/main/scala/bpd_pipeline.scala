@@ -31,7 +31,8 @@ class RedirectRequest (fetch_width: Int) extends BOOMCoreBundle
 {
    val target  = UInt(width = vaddrBits+1)
    val br_pc   = UInt(width = vaddrBits+1) // PC of the instruction changing control flow (to update the BTB with jumps)
-   val idx     = UInt(width = log2Up(fetch_width)) // idx of br in fetch bundle (to mask out the appropriate fetch instructions)
+   val idx     = UInt(width = log2Up(fetch_width)) // idx of br in fetch bundle (to mask out the appropriate fetch
+                                                   // instructions)
    val is_jump = Bool() // (only valid if redirect request is valid)
    override def cloneType: this.type = new RedirectRequest(fetch_width).asInstanceOf[this.type]
 }
@@ -95,7 +96,8 @@ class BranchPredictionStage (fetch_width: Int) extends Module with BOOMCoreParam
                                                    , history_length = GHIST_LENGTH))
          br_predictor.io.req_pc := io.imem.npc
          br_predictor.io.br_resolution <> io.br_unit.bpd_update
-         // TODO BUG XXX i suspect this is completely and utterly broken. what about <bne,jr,bne> or  <bne,j,bne>. What about <csr, bne>/<b,csr,b>? does unique/pipeline replaysincrement ghistory when they shouldn't?
+         // TODO BUG XXX i suspect this is completely and utterly broken. what about <bne,jr,bne> or  <bne,j,bne>. What
+         // about <csr, bne>/<b,csr,b>? does unique/pipeline replaysincrement ghistory when they shouldn't?
          br_predictor.io.hist_update_spec.valid := bp2_br_seen && io.req.ready
          br_predictor.io.hist_update_spec.bits.taken := bp2_br_taken
          br_predictor.io.resp.ready := io.req.ready
@@ -187,7 +189,9 @@ class BranchPredictionStage (fetch_width: Int) extends Module with BOOMCoreParam
                                           io.imem.btb_resp.valid, Bool(false))
    }
 
-   bp2_br_seen := io.imem.resp.valid && is_br.reduce(_|_) && (!jal_val || (PriorityEncoder(is_br.toBits) < PriorityEncoder(is_jal.toBits)))
+   bp2_br_seen := io.imem.resp.valid && 
+                  is_br.reduce(_|_) && 
+                  (!jal_val || (PriorityEncoder(is_br.toBits) < PriorityEncoder(is_jal.toBits)))
    bp2_br_taken := (br_val && br_wins) || (io.imem.btb_resp.valid && io.imem.btb_resp.bits.taken)
 
    //-------------------------------------------------------------
@@ -216,7 +220,8 @@ class BranchPredictionStage (fetch_width: Int) extends Module with BOOMCoreParam
    {
       printf("bp2_aligned_pc: 0x%x BHT:(%s 0x%x, %d) p:%x (%d) b:%x j:%x (%d) %s %s\n"
          , aligned_pc, Mux(io.req.valid, Str("TAKE"), Str(" -- ")), io.req.bits.target, io.req.bits.idx
-         , predictions.toBits, br_idx, is_br.toBits, is_jal.toBits, jal_idx, Mux(br_wins, Str("BR"), Str("JA")), Mux(btb_overrides, Str("BO"), Str("--"))
+         , predictions.toBits, br_idx, is_br.toBits, is_jal.toBits, jal_idx
+         , Mux(br_wins, Str("BR"), Str("JA")), Mux(btb_overrides, Str("BO"), Str("--"))
          )
    }
 
