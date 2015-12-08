@@ -40,7 +40,6 @@
 //    - wake up sleeping loads that aren't at the head of the LAQ
 //    - Add predicting structure for ordering failures
 //    - currently won't STD forward if DMEM is busy
-//    - committed stores leave the STQ too slowly, need to send out 1/cycle throughput
 //    - ability to turn off things if VM is disabled
 //    - reconsider port count of the wakeup, retry stuff
 
