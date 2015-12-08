@@ -371,7 +371,8 @@ class DecodeUnit() extends Module
    uop.ldst       := Cat(cs.dst_type === RT_FLT, uop.inst(RD_MSB,RD_LSB))
    uop.lrs1       := Cat(cs.rs1_type === RT_FLT, uop.inst(RS1_MSB,RS1_LSB))
    uop.lrs2       := Cat(cs.rs2_type === RT_FLT, uop.inst(RS2_MSB,RS2_LSB))
-   uop.lrs3       := Cat(Bool(true),             uop.inst(RS3_MSB,RS3_LSB)) // TODO do I need to remove this for integer-only?
+   uop.lrs3       := Cat(Bool(true),             uop.inst(RS3_MSB,RS3_LSB))
+   // TODO do I need to remove (uop.lrs3) for integer-only? Or do synthesis tools properly remove it?
 
    uop.ldst_val   := (cs.dst_type != RT_X && (uop.ldst != UInt(0)))
    uop.dst_rtype  := cs.dst_type

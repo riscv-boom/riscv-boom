@@ -314,17 +314,17 @@ class DCacheShim extends Module with BOOMCoreParameters
                                !m2_req_uop.is_amo &&
                                Reg(next=Reg(next=(io.core.req.valid && io.dmem.req.ready)))
 
-   // Todo add entry valid bit?
+   // TODO add entry valid bit?
    val resp_tag = io.dmem.resp.bits.tag
 
-   io.core.resp.valid := Mux(cache_load_ack,                    !inflight_load_buffer(resp_tag).was_killed, // hide loads that were killed due to branches, etc.
+   // Note: stores succeed quietly, and so are valid if no nack is received.
+   io.core.resp.valid := Mux(cache_load_ack,                    !inflight_load_buffer(resp_tag).was_killed,
                          Mux(was_store_and_not_amo &&
                               !io.dmem.resp.bits.nack &&
-                              !Reg(next=io.core.req.bits.kill), Bool(true),    // stores succeed quietly, so valid if no nack
-                                                                Bool(false)))  // filter out nacked responses
+                              !Reg(next=io.core.req.bits.kill), Bool(true),
+                                                                Bool(false)))
 
-   io.core.resp.bits.uop := Mux(cache_load_ack, inflight_load_buffer(resp_tag).out_uop,
-                                                m2_req_uop)
+   io.core.resp.bits.uop := Mux(cache_load_ack, inflight_load_buffer(resp_tag).out_uop, m2_req_uop)
 
    // comes out the same cycle as the resp.valid signal
    // but is a few gates slower than resp.bits.data

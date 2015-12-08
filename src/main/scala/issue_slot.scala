@@ -201,7 +201,7 @@ class IssueSlot(num_slow_wakeup_ports: Int) extends Module with BOOMCoreParamete
    //assign outputs
    io.valid         := isValid
    io.uop           := slotUop
-   io.will_be_valid := isValid && 
+   io.will_be_valid := isValid &&
                        !(io.grant && ((slot_state === s_valid_1) || (slot_state === s_valid_2) && slot_p1 && slot_p2))
 
    io.updated_uop           := slotUop

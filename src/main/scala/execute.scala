@@ -230,7 +230,8 @@ class ALUExeUnit(is_branch_unit   : Boolean = false
    // Outputs (Write Port #0)  ---------------
 
    io.resp(0).valid    := fu_units.map(_.io.resp.valid).reduce(_|_)
-   io.resp(0).bits.uop := new MicroOp().fromBits(PriorityMux(fu_units.map(f => (f.io.resp.valid, f.io.resp.bits.uop.toBits))))
+   io.resp(0).bits.uop := new MicroOp().fromBits(
+                              PriorityMux(fu_units.map(f => (f.io.resp.valid, f.io.resp.bits.uop.toBits))))
    io.resp(0).bits.data:= PriorityMux(fu_units.map(f => (f.io.resp.valid, f.io.resp.bits.data.toBits))).toBits
    // pulled out for critical path reasons
    io.resp(0).bits.uop.csr_addr := ImmGen(alu.io.resp.bits.uop.imm_packed, IS_I).toUInt

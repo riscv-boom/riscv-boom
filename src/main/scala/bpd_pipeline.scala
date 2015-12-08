@@ -189,8 +189,8 @@ class BranchPredictionStage (fetch_width: Int) extends Module with BOOMCoreParam
                                           io.imem.btb_resp.valid, Bool(false))
    }
 
-   bp2_br_seen := io.imem.resp.valid && 
-                  is_br.reduce(_|_) && 
+   bp2_br_seen := io.imem.resp.valid &&
+                  is_br.reduce(_|_) &&
                   (!jal_val || (PriorityEncoder(is_br.toBits) < PriorityEncoder(is_jal.toBits)))
    bp2_br_taken := (br_val && br_wins) || (io.imem.btb_resp.valid && io.imem.btb_resp.bits.taken)
 
