@@ -33,6 +33,7 @@ BOOM depends on the Chisel project. It also depends on [Rocket](https://github.c
 To build a BOOM C++ emulator and run BOOM through a couple of simple tests:
 
 ````
+   $ export ROCKETCHIP_ADDONS="boom"
    $ git clone https://github.com/ucb-bar/rocket-chip.git
    $ cd rocket-chip
    $ git checkout boom
