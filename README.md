@@ -19,7 +19,9 @@ Caches |√
 Viritual Memory |√
 Boots Linux |√
 
-See the [wiki](https://github.com/ucb-bar/riscv-boom/wiki) for more info.
+For documentation on BOOM visit (https://ccelio.github.io/riscv-boom-doc).
+
+The [wiki](https://github.com/ucb-bar/riscv-boom/wiki) may also have more information. 
 
 **Requirements**
 
