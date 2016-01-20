@@ -287,11 +287,9 @@ class DatPath() extends Module with BOOMCoreParameters
                                           , has_div          = true
                                           , use_slow_mul     = false
                                           ))
-      exe_units(0).io.dmem <> io.dmem
    }
    else if (ISSUE_WIDTH == 2)
    {
-      // TODO make a ALU/Mem unit, or a ALU-i/Mem unit
       exe_units += Module(new ALUExeUnit(is_branch_unit      = true
                                           , shares_csr_wport = true
                                           , has_fpu          = !params(BuildFPU).isEmpty
@@ -300,7 +298,6 @@ class DatPath() extends Module with BOOMCoreParameters
       exe_units += Module(new ALUMemExeUnit(fp_mem_support   = !params(BuildFPU).isEmpty
                                           , has_div          = true
                                           ))
-      exe_units(1).io.dmem <> io.dmem
    }
    else if (ISSUE_WIDTH == 3)
    {
@@ -311,7 +308,6 @@ class DatPath() extends Module with BOOMCoreParameters
                                           ))
       exe_units += Module(new ALUExeUnit(has_div = true))
       exe_units += Module(new MemExeUnit())
-      exe_units(2).io.dmem <> io.dmem
    }
    else
    {  // 4-wide issue
@@ -323,8 +319,9 @@ class DatPath() extends Module with BOOMCoreParameters
       exe_units += Module(new ALUExeUnit(is_branch_unit = true))
       exe_units += Module(new ALUExeUnit(has_div = true))
       exe_units += Module(new MemExeUnit())
-      exe_units(3).io.dmem <> io.dmem
    }
+
+   (exe_units.find(_.is_mem_unit).get).io.dmem <> io.dmem
 
    require (exe_units.map(_.is_mem_unit).reduce(_|_), "Datapath is missing a memory unit.")
    require (exe_units.map(_.has_mul).reduce(_|_), "Datapath is missing a multiplier.")
