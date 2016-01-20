@@ -23,11 +23,18 @@ For documentation on BOOM visit (https://ccelio.github.io/riscv-boom-doc).
 
 The [wiki](https://github.com/ucb-bar/riscv-boom/wiki) may also have more information. 
 
-**Requirements**
+**Important!**
 
 This repository is **NOT A SELF-RUNNING** repository. To instantiate a BOOM core, please use the Rocket chip generator found in the rocket-chip git repository (https://github.com/ucb-bar/rocket-chip).
 
 BOOM depends on the Chisel project. It also depends on [Rocket](https://github.com/ucb-bar/rocket), [uncore](https://github.com/ucb-bar/uncore), and [junction](https://github.com/ucb-bar/junctions) source codes.
+
+
+**Requirements**
+
+These instructions assume you have already installed the [riscv-tools](https://github.com/riscv/riscv-tools) toolchain.
+
+If you have not, follow additional instructions below.
 
 
 **Directions**
@@ -44,6 +51,31 @@ To build a BOOM C++ emulator and run BOOM through a couple of simple tests:
    $ git submodule update --init --recursive riscv-tests
    $ cd ../emulator; make run CONFIG=BOOMCPPConfig
 ````
+ 
+**Installing the RISC-V Toolchain**
+
+The following (modified) instructions will also build the RISC-V toolchain (if
+you have not already do so). You will need to set the $RISCV environment
+variable (where the toolchain will be installed) and you will need to add
+$RISCV/bin to your $PATH.
+
+````
+   $ export RISCV=/path/to/install/riscv/toolchain
+   $ export PATH="${PATH}:$RISCV/bin"
+   $ export ROCKETCHIP_ADDONS="boom"
+   $ git clone https://github.com/ucb-bar/rocket-chip.git
+   $ cd rocket-chip
+   $ git checkout boom
+   $ git submodule update --init
+   $ cd riscv-tools
+   $ git submodule update --init --recursive
+   $ ./build.sh
+   $ cd ../emulator; make run CONFIG=BOOMCPPConfig
+````
+
+For more detailed information on the toolchain, visit 
+[the riscv-tools repository](https://github.com/riscv/riscv-tools).
+
 
 **More Info**
 
