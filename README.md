@@ -82,8 +82,10 @@ For more detailed information on the toolchain, visit
 **More Info**
 
 * **The Design Spec** - https://ccelio.github.io/riscv-boom-doc
+* **Google group:** - https://groups.google.com/forum/#!forum/riscv-boom
 * **The Wiki** - https://github.com/ucb-bar/riscv-boom/wiki
 * **Tech Report** - The Berkeley Out-of-Order Machine (BOOM): An Industry-Competitive, Synthesizable, Parameterized RISC-V Processor (https://www.eecs.berkeley.edu/Pubs/TechRpts/2015/EECS-2015-167.html)
+* **Slides** - RISC_V Workshop #3 (http://riscv.org/workshop-jan2016/Wed1345%20RISCV%20Workshop%203%20BOOM.pdf)
 * **Slides** - RISC-V Workshop #2 (http://riscv.org/workshop-jun2015/riscv-boom-workshop-june2015.pdf)
 * **Video** - RISC-V Workshop #2 (https://www.youtube.com/watch?v=z8UInbiQbdA)
 
