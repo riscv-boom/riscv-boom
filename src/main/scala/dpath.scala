@@ -204,8 +204,8 @@ class CacheCounters() extends Bundle
 
 class DpathIo(implicit p: Parameters) extends BoomBundle()(p)
 {
-   val host     = new uncore.HTIFIO
-   val imem     = new rocket.CPUFrontendIO
+   val host     = new uncore.HtifIO
+   val imem     = new rocket.FrontendIO
    val dmem     = new DCMemPortIo
    val ptw_dat  = new rocket.DatapathPTWIO().flip
    val ptw_tlb  = new rocket.TLBPTWIO()
@@ -275,8 +275,8 @@ class DatPath(implicit p: Parameters) extends BoomModule()(p)
    if (ISSUE_WIDTH == 4) println("    -== Quad Issue ==- \n")
    if (!usingFPU) println ("\n    FPU Unit Disabled")
    else           println ("\n    FPU Unit Enabled")
-   if (usingVM)) println ("    VM Enabled\n")
-   else          println ("    VM Disabled\n")
+   if (usingVM)   println ("    VM Enabled\n")
+   else           println ("    VM Disabled\n")
 
    if (ISSUE_WIDTH == 1)
    {
@@ -452,7 +452,7 @@ class DatPath(implicit p: Parameters) extends BoomModule()(p)
    }
 
    // TODO only update in BP2 for JALs?
-   if (params(EnableBTB))
+   if (p(EnableBTB))
    {
       io.imem.btb_update.valid := (br_unit.btb_update_valid ||
                                     (bp2_take_pc && bp2_is_jump && !if_stalled && !br_unit.take_pc)) &&
@@ -1043,15 +1043,15 @@ class DatPath(implicit p: Parameters) extends BoomModule()(p)
                                            (wb_uop.dst_rtype === RT_FIX || wb_uop.dst_rtype === RT_FLT)
 
             val data = exe_units(w).io.resp(j).bits.data
-            if (exe_units(w).has_fpu || (exe_units(w).is_mem_unit && !params(BuildFPU).isEmpty))
+            if (exe_units(w).has_fpu || (exe_units(w).is_mem_unit && usingFPU))
             {
                if (exe_units(w).has_fpu)
                {
                   rob.io.fflags(f_cnt) <> exe_units(w).io.resp(j).bits.fflags
                   f_cnt += 1
                }
-               val unrec_s = hardfloat.recodedFloatNToFloatN(data, 23, 9)
-               val unrec_d = hardfloat.recodedFloatNToFloatN(data, 52, 12)
+               val unrec_s = hardfloat.fNFromRecFN(8, 24, data)
+               val unrec_d = hardfloat.fNFromRecFN(11, 53, data)
                val unrec_out     = Mux(wb_uop.fp_single, Cat(UInt(0,32), unrec_s), unrec_d)
                if (exe_units(w).uses_csr_wport && (j == 0))
                {

@@ -14,18 +14,18 @@ import Chisel._
 import Node._
 import cde.Parameters
 import rocket._
-import uncore.HTIFIO
+import uncore.HtifIO
 
-abstract class BoomModule(implicit val p: Parameters) extends Module()(p)
+abstract class BoomModule(implicit val p: Parameters) extends Module
   with HasBoomCoreParameters
 class BoomBundle(implicit val p: Parameters) extends junctions.ParameterizedBundle()(p)
   with HasBoomCoreParameters
 
 class CoreIo(implicit p: Parameters) extends BoomBundle()(p)
 {
-   val host = new HTIFIO
+   val host = new HtifIO
    val dmem = new DCMemPortIo
-   val imem = new rocket.CPUFrontendIO
+   val imem = new rocket.FrontendIO
    val ptw_dat  = new DatapathPTWIO().flip
    val ptw_tlb  = new TLBPTWIO()
    val rocc     = new rocket.RoCCInterface().flip

@@ -25,7 +25,6 @@ import cde.Parameters
 
 import rocket.ALU._
 import rocket.Util._
-import rocket.BuildFPU
 import uncore.constants.MemoryOpConstants._
 
 
@@ -91,7 +90,7 @@ class FuncUnitReq(data_width: Int)(implicit p: Parameters) extends BoomBundle()(
 
    val kill = Bool() // kill everything
 
-   override def clone = new FuncUnitReq(data_width)(p).asInstanceOf[this.type]
+   override def cloneType = new FuncUnitReq(data_width)(p).asInstanceOf[this.type]
 }
 
 class FuncUnitResp(data_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
@@ -102,7 +101,7 @@ class FuncUnitResp(data_width: Int)(implicit p: Parameters) extends BoomBundle()
    val addr = UInt(width = vaddrBits+1) // only for maddr -> LSU
    val mxcpt = new ValidIO(Bits(width=rocket.Causes.all.max)) //only for maddr->LSU
 
-   override def clone = new FuncUnitResp(data_width)(p).asInstanceOf[this.type]
+   override def cloneType = new FuncUnitResp(data_width)(p).asInstanceOf[this.type]
 }
 
 class BypassData(num_bypass_ports: Int, data_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
@@ -386,7 +385,7 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
       // did a branch or jalr occur AND did we mispredict? AND was it taken? (i.e., should we update the BTB)
       val fetch_pc = ((uop_pc_ >> lsb) << lsb) + uop.fetch_pc_lob
 
-      if (params(EnableBTBContainsBranches))
+      if (p(EnableBTBContainsBranches))
       {
          io.br_unit.btb_update_valid := is_br_or_jalr && mispredict && is_taken
          // update on all branches (but not jal/jalr)
@@ -513,8 +512,8 @@ class MemAddrCalcUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(nu
 
    // compute store data
    // requires decoding 65-bit FP data
-   val unrec_s = hardfloat.recodedFloatNToFloatN(io.req.bits.rs2_data, 23, 9)
-   val unrec_d = hardfloat.recodedFloatNToFloatN(io.req.bits.rs2_data, 52, 12)
+   val unrec_s = hardfloat.fNFromRecFN(8, 24, io.req.bits.rs2_data)
+   val unrec_d = hardfloat.fNFromRecFN(11, 53, io.req.bits.rs2_data)
    val unrec_out = Mux(io.req.bits.uop.fp_single, Cat(Fill(32, unrec_s(31)), unrec_s), unrec_d)
 
    var store_data:Bits = null
@@ -603,7 +602,7 @@ abstract class UnPipelinedFunctionalUnit(implicit p: Parameters)
 
 class MulDivUnit(implicit p: Parameters) extends UnPipelinedFunctionalUnit()(p)
 {
-   val muldiv = Module(new MulDiv(width = xLen,
+   val muldiv = Module(new rocket.MulDiv(width = xLen,
                                   unroll = if(usingFastMulDiv) 8 else 1,
                                   earlyOut = usingFastMulDiv))
 

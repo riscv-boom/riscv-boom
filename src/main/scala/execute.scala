@@ -23,8 +23,8 @@ import cde.Parameters
 import scala.collection.mutable.ArrayBuffer
 
 import FUCode._
+import rocket.{UseFPU, XLen}
 import uncore.constants.MemoryOpConstants._
-import rocket.BuildFPU
 
 class ExeUnitResp(data_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
@@ -253,7 +253,8 @@ class ALUExeUnit(is_branch_unit   : Boolean = false
 }
 
 
-class MulDExeUnit extends ExecutionUnit(num_rf_read_ports = 2
+class MulDExeUnit(implicit p: Parameters) 
+   extends ExecutionUnit(num_rf_read_ports = 2
                                        , num_rf_write_ports = 1
                                        , num_bypass_stages = 0
                                        , data_width = 64 // TODO need to use xLen here
@@ -282,7 +283,7 @@ class MulDExeUnit extends ExecutionUnit(num_rf_read_ports = 2
 class MemExeUnit(implicit p: Parameters) extends ExecutionUnit(num_rf_read_ports = 2 // TODO make this 1, requires MemAddrCalcUnit to accept store data on rs1_data port
                                       , num_rf_write_ports = 1
                                       , num_bypass_stages = 0
-                                      , data_width = if(p(BuildFPU).isEmpty) p(XLen) else 65
+                                      , data_width = if(!p(UseFPU)) p(XLen) else 65
                                       , num_variable_write_ports = 1
                                       , bypassable = false
                                       , is_mem_unit = true)(p)
@@ -363,14 +364,14 @@ class MemExeUnit(implicit p: Parameters) extends ExecutionUnit(num_rf_read_ports
       //recode FP values
       val typ = io.dmem.resp.bits.typ
       val load_single = typ === MT_W || typ === MT_WU
-      val rec_s = hardfloat.floatNToRecodedFloatN(io.dmem.resp.bits.data, 23, 9)
-      val rec_d = hardfloat.floatNToRecodedFloatN(io.dmem.resp.bits.data, 52, 12)
+      val rec_s = hardfloat.recFNFromFN(8, 24, io.dmem.resp.bits.data)
+      val rec_d = hardfloat.recFNFromFN(11, 53, io.dmem.resp.bits.data)
       val fp_load_data_recoded = Mux(load_single, Cat(SInt(-1, 32), rec_s), rec_d)
 
       val typ_f = lsu.io.forward_uop.mem_typ
       val load_single_f = typ_f === MT_W || typ_f === MT_WU
-      val rec_s_f = hardfloat.floatNToRecodedFloatN(lsu.io.forward_data, 23, 9)
-      val rec_d_f = hardfloat.floatNToRecodedFloatN(lsu.io.forward_data, 52, 12)
+      val rec_s_f = hardfloat.recFNFromFN(8, 24, lsu.io.forward_data)
+      val rec_d_f = hardfloat.recFNFromFN(11, 53, lsu.io.forward_data)
       val fp_load_data_recoded_forwarded = Mux(load_single_f, Cat(SInt(-1,32), rec_s_f), rec_d_f)
 
       memresp_data = Mux(lsu.io.forward_val && !lsu.io.forward_uop.fp_val, lsu.io.forward_data,
@@ -400,7 +401,7 @@ class ALUMemExeUnit(is_branch_unit    : Boolean = false
                     , has_mul         : Boolean = false
                     , has_div         : Boolean = false
                     , use_slow_mul    : Boolean = false
-                    ) extends ExecutionUnit(num_rf_read_ports = if (has_fpu) 3 else 2
+                    )(implicit p: Parameters) extends ExecutionUnit(num_rf_read_ports = if (has_fpu) 3 else 2
                                           , num_rf_write_ports = 2
                                           , num_bypass_stages = if (has_fpu || (has_mul && !use_slow_mul)) 3 else 1// TODO FPU_LATENCY
                                           , data_width = if (fp_mem_support) 65 else 64
@@ -610,14 +611,14 @@ class ALUMemExeUnit(is_branch_unit    : Boolean = false
       // Also, this code is duplicated elsewhere - can we refactor this out?
       val typ = io.dmem.resp.bits.typ
       val load_single = typ === MT_W || typ === MT_WU
-      val rec_s = hardfloat.floatNToRecodedFloatN(io.dmem.resp.bits.data, 23, 9)
-      val rec_d = hardfloat.floatNToRecodedFloatN(io.dmem.resp.bits.data, 52, 12)
+      val rec_s = hardfloat.recFNFromFN(8, 24, io.dmem.resp.bits.data)
+      val rec_d = hardfloat.recFNFromFN(11, 53, io.dmem.resp.bits.data)
       val fp_load_data_recoded = Mux(load_single, Cat(SInt(-1, 32), rec_s), rec_d)
 
       val typ_f = lsu.io.forward_uop.mem_typ
       val load_single_f = typ_f === MT_W || typ_f === MT_WU
-      val rec_s_f = hardfloat.floatNToRecodedFloatN(lsu.io.forward_data, 23, 9)
-      val rec_d_f = hardfloat.floatNToRecodedFloatN(lsu.io.forward_data, 52, 12)
+      val rec_s_f = hardfloat.recFNFromFN(8, 24, lsu.io.forward_data)
+      val rec_d_f = hardfloat.recFNFromFN(11, 53, lsu.io.forward_data)
       val fp_load_data_recoded_forwarded = Mux(load_single_f, Cat(SInt(-1,32), rec_s_f), rec_d_f)
 
       memresp_data = Mux(lsu.io.forward_val && !lsu.io.forward_uop.fp_val, lsu.io.forward_data,

@@ -140,7 +140,7 @@ class FPU(implicit p: Parameters) extends BoomModule()(p)
 
    // all FP units are padded out to the same latency for easy scheduling of
    // the write port
-//   val test = params(DFMALatency) TODO BUG why is this returning "Nothing"?
+//   val test = p(DFMALatency) TODO BUG why is this returning "Nothing"?
    val fpu_latency = 3
    val io_req = io.req.bits
 

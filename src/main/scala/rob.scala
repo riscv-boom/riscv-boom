@@ -220,7 +220,7 @@ class Rob(width: Int
    // **************************************************************************
    // Debug
 
-   class DebugRobBundle extends BOOMCoreBundle {
+   class DebugRobBundle extends BoomBundle()(p) {
          val valid = Bool()
          val busy = Bool()
          val uop = new MicroOp()

@@ -17,8 +17,9 @@ package boom
 
 import Chisel._
 import Node._
+import cde.Parameters
 
-class BrTableUpdate(implicit p: Parametrs) extends BoomBundle()(p)
+class BrTableUpdate(implicit p: Parameters) extends BoomBundle()(p)
 {
    val hash_idx   = UInt(width = vaddrBits)
    val executed   = Bits(width = FETCH_WIDTH) // which words in the fetch packet does the update correspond to?

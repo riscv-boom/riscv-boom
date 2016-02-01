@@ -70,7 +70,6 @@ trait HasBoomCoreParameters extends rocket.HasCoreParameters
 
    //************************************
    // Extra Knobs and Features
-   val ENABLE_BRANCH_PREDICTOR = params(EnableBranchPredictor)
    val ENABLE_REGFILE_BYPASSING  = true  // bypass regfile write ports to read ports
    val MAX_WAKEUP_DELAY = 3              // unused
    val ENABLE_COMMIT_MAP_TABLE = p(EnableCommitMapTable)
@@ -100,9 +99,9 @@ trait HasBoomCoreParameters extends rocket.HasCoreParameters
    //************************************
    // Non-BOOM parameters
 
-//   val fastMulDiv = params(FastMulDiv)
-   val corePAddrBits = p(uncore.PAddrBits)
-   val corePgIdxBits = p(uncore.PgIdxBits)
+//   val fastMulDiv = p(FastMulDiv)
+   val corePAddrBits = p(junctions.PAddrBits)
+   val corePgIdxBits = p(junctions.PgIdxBits)
 }
 
 

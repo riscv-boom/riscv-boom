@@ -71,7 +71,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
 {
    val io = new BoomBundle()(p)
    {
-      val imem       = new rocket.CPUFrontendIO
+      val imem       = new rocket.FrontendIO
       val req        = Decoupled(new RedirectRequest(fetch_width))
       val pred_resp  = new BranchPredictionResp().asOutput
       val predictions= Vec.fill(fetch_width) {new BranchPrediction().asOutput}

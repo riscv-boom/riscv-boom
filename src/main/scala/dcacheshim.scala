@@ -29,7 +29,6 @@ import Node._
 import cde.Parameters
 
 import uncore._
-import rocket.BuildFPU
 
 
 // Track Inflight Memory Requests
@@ -329,8 +328,9 @@ class DCacheShim(implicit p: Parameters) extends BoomModule()(p)
 
    // comes out the same cycle as the resp.valid signal
    // but is a few gates slower than resp.bits.data
-   io.core.resp.bits.data_subword := io.dmem.resp.bits.data_subword
-   io.core.resp.bits.data         := io.dmem.resp.bits.data
+   // TODO change resp bundle to match the new hellacache resp bundle
+   io.core.resp.bits.data_subword := io.dmem.resp.bits.data
+   io.core.resp.bits.data         := io.dmem.resp.bits.data_word_bypass
    io.core.resp.bits.typ          := io.dmem.resp.bits.typ
 
    //------------------------------------------------------------

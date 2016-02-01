@@ -201,9 +201,9 @@ class BrobEntry(fetch_width: Int)(implicit p: Parameters) extends BoomBundle()(p
   override def cloneType: this.type = new BrobEntry(fetch_width).asInstanceOf[this.type]
 }
 
-class BranchReorderBuffer(fetch_width: Int, num_entries: Int)(implicit p: Parametrs) extends BoomModule()(p)
+class BranchReorderBuffer(fetch_width: Int, num_entries: Int)(implicit p: Parameters) extends BoomModule()(p)
 {
-   val io = new BOOMCoreBundle
+   val io = new BoomBundle()(p)
    {
       // connection to BOOM's ROB/backend/etc.
       val backend = new BrobBackendIo(fetch_width)

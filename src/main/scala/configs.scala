@@ -16,7 +16,6 @@ class DefaultBOOMConfig extends Config (
          case CoreName => "BOOM"
          case XLen => 64
          case FDivSqrt => false
-         case NPTWPorts => 2
          case CoreInstBits => 32
 
          // Superscalar Widths
@@ -36,9 +35,7 @@ class DefaultBOOMConfig extends Config (
          // Front-end
          case EnableBTB => true // for now, only gates off updates to BTB
          case EnableBTBContainsBranches => false // don't send branches to BTB
-         case NBTBEntries => if(site(CoreName) == "BOOM") 64 else 62
-         case NRAS => 8
-         case BTBKey => BTBParameters(enabled = true, nEntries = 62, nRAS = 8, updatesOutOfOrder = true)
+         case BtbKey => BtbParameters(enabled = true, nEntries = 64, nRAS = 8, updatesOutOfOrder = true)
          case FetchBufferSz => 4
 
          // Branch Predictor

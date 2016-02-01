@@ -41,7 +41,7 @@ class CacheReq(implicit p: Parameters) extends BoomBundle()(p)
    val addr = UInt(width = coreMaxAddrBits)
 }
 
-class CacheIO extends Bundle
+class CacheIO(implicit p: Parameters) extends BoomBundle()(p)
 {
    val req = new DecoupledIO(new CacheReq())
 }

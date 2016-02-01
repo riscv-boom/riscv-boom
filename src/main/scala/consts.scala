@@ -16,6 +16,7 @@ package constants
 
 import Chisel._
 import Node._
+import cde.Parameters
 
 trait BOOMDebugConstants
 {
@@ -310,9 +311,9 @@ trait ScalarOpConstants
    val BUBBLE  = Bits(0x4033, 32)
 
 
-   def NullMicroOp(): MicroOp =
+   def NullMicroOp()(implicit p: Parameters): MicroOp =
    {
-      val uop = Wire(new MicroOp())
+      val uop = Wire(new MicroOp()(p))
       uop.uopc       := uopNOP // maybe not required, but helps on asserts that try to catch spurious behavior
       uop.bypassable := Bool(false)
       uop.fp_val     := Bool(false)
