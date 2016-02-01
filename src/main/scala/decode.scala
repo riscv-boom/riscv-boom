@@ -375,7 +375,7 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule()(p)
    uop.lrs3       := Cat(Bool(true),             uop.inst(RS3_MSB,RS3_LSB))
    // TODO do I need to remove (uop.lrs3) for integer-only? Or do synthesis tools properly remove it?
 
-   uop.ldst_val   := (cs.dst_type != RT_X && (uop.ldst != UInt(0)))
+   uop.ldst_val   := (cs.dst_type =/= RT_X && (uop.ldst =/= UInt(0)))
    uop.dst_rtype  := cs.dst_type
    uop.lrs1_rtype := cs.rs1_type
    uop.lrs2_rtype := cs.rs2_type
@@ -500,7 +500,7 @@ class FetchSerializerNtoM(implicit p: Parameters) extends BoomModule()(p)
    //-------------------------------------------------------------
    // Compute Enqueue Ready (get the next bundle)
    io.enq.ready := io.deq.ready &&
-                     (io.enq.bits.mask != Bits(3) || (counter === UInt(1)))
+                     (io.enq.bits.mask =/= Bits(3) || (counter === UInt(1)))
 
 
    //-------------------------------------------------------------

@@ -67,7 +67,7 @@ class RegisterFile( num_registers: Int
       for (i <- 0 until num_read_ports)
       {
          val bypass_ens = io.write_ports.map(x => x.wen &&
-                                                  x.addr != UInt(0) &&
+                                                  x.addr =/= UInt(0) &&
                                                   x.addr === io.read_ports(i).addr)
 
          val bypass_data = Mux1H(Vec(bypass_ens), Vec(io.write_ports.map(_.data)))
@@ -87,7 +87,7 @@ class RegisterFile( num_registers: Int
 
    for (i <- 0 until num_write_ports)
    {
-      when (io.write_ports(i).wen && (io.write_ports(i).addr != UInt(0)))
+      when (io.write_ports(i).wen && (io.write_ports(i).addr =/= UInt(0)))
       {
          regfile(io.write_ports(i).addr) := io.write_ports(i).data
       }

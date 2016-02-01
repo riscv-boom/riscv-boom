@@ -657,7 +657,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
       val write_mask = GenByteMask(s_addr, stq_uop(i).mem_typ)
 
       // if overlap on bytes and dword matches, the address conflicts!
-      when (((read_mask & write_mask) != Bits(0)) && dword_addr_matches(i))
+      when (((read_mask & write_mask) =/= Bits(0)) && dword_addr_matches(i))
       {
          addr_conflicts(i) := Bool(true)
       }
@@ -685,9 +685,9 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
                st_dep_mask(i) &&
                (stq_uop(i).is_fence || stq_uop(i).is_amo)) ||
             (dword_addr_matches(i) &&
-//               (mem_ld_uop.mem_typ != stq_uop(i).mem_typ) &&
+//               (mem_ld_uop.mem_typ =/= stq_uop(i).mem_typ) &&
                (!MemTypesMatch(mem_ld_uop.mem_typ, stq_uop(i).mem_typ)) &&
-               ((read_mask & write_mask) != Bits(0))))
+               ((read_mask & write_mask) =/= Bits(0))))
       {
          force_ld_to_sleep := Bool(true)
       }
@@ -718,7 +718,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
 
    // kill load request to mem if address matches (we will either sleep load, or forward data) or TLB miss
    io.memreq_kill     := (mem_ld_used_tlb && (mem_tlb_miss || Reg(next=pf_ld || ma_ld))) ||
-                         (mem_fired_ld && addr_conflicts.toBits != Bits(0)) ||
+                         (mem_fired_ld && addr_conflicts.toBits =/= Bits(0)) ||
                          mem_ld_killed ||
                          (mem_fired_st && io.nack.valid && !io.nack.isload)
    wb_forward_std_idx := forwarding_age_logic.io.forwarding_idx
@@ -809,7 +809,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
       {
          // does the load depend on this store?
          // TODO CODE REVIEW what's the best way to perform this bit extract?
-         when ((laq_st_dep_mask(i) & (UInt(1) << stq_idx)) != Bits(0))
+         when ((laq_st_dep_mask(i) & (UInt(1) << stq_idx)) =/= Bits(0))
          {
             when (st_is_fence &&
                   laq_allocated(i) &&
@@ -838,9 +838,9 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
                // and if not, then fail OR
                // if it was forwarded but not us, was the forwarded store older than me
                // head < forwarded < youngest?
-               when (((st_mask & l_mask) != Bits(0)) &&
+               when (((st_mask & l_mask) =/= Bits(0)) &&
                     (!laq_forwarded_std_val(i) ||
-                      ((fid != stq_idx) && (Cat(stq_idx < yid, stq_idx) > Cat(fid < yid, fid)))))
+                      ((fid =/= stq_idx) && (Cat(stq_idx < yid, stq_idx) > Cat(fid < yid, fid)))))
                {
                   laq_executed(i)   := Bool(false)
                   laq_failure(i)    := Bool(true)
@@ -1110,8 +1110,8 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
 
    //-------------------------------------------------------------
 
-   val laq_maybe_full = (laq_allocated.toBits != Bits(0))
-   val stq_maybe_full = (stq_entry_val.toBits != Bits(0))
+   val laq_maybe_full = (laq_allocated.toBits =/= Bits(0))
+   val stq_maybe_full = (stq_entry_val.toBits =/= Bits(0))
 
    var laq_is_full = Bool(false)
    var stq_is_full = Bool(false)

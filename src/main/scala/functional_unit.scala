@@ -303,7 +303,7 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
       val is_taken = io.req.valid &&
                      !killed &&
                      uop.is_br_or_jmp &&
-                     (pc_sel != PC_PLUS4)
+                     (pc_sel =/= PC_PLUS4)
 
       // "mispredict" means that a branch has been resolved and it must be killed
       val mispredict = Wire(Bool()); mispredict := Bool(false)
@@ -323,7 +323,7 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
          when (pc_sel === PC_JALR)
          {
             // only the BTB can predict JALRs (must also check it predicted taken)
-            btb_mispredict := !io.get_rob_pc.next_val || (io.get_rob_pc.next_pc != bj_addr) ||
+            btb_mispredict := !io.get_rob_pc.next_val || (io.get_rob_pc.next_pc =/= bj_addr) ||
                               !io.get_pred.info.btb_resp.taken || !uop.br_prediction.btb_hit
             bpd_mispredict := Bool(false)
          }
@@ -436,10 +436,10 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
 
       def vaSign(a0: UInt, ea: Bits):Bool = {
          // efficient means to compress 64-bit VA into rc.as.vaddrBits+1 bits
-         // (VA is bad if VA(rc.as.vaddrBits) != VA(rc.as.vaddrBits-1))
+         // (VA is bad if VA(rc.as.vaddrBits) =/= VA(rc.as.vaddrBits-1))
          val a = a0 >> vaddrBits-1
          val e = ea(vaddrBits,vaddrBits-1)
-         Mux(a === UInt(0) || a === UInt(1), e != UInt(0),
+         Mux(a === UInt(0) || a === UInt(1), e =/= UInt(0),
          Mux(a === SInt(-1) || a === SInt(-2), e === SInt(-1),
             e(0)))
       }
@@ -507,7 +507,7 @@ class MemAddrCalcUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(nu
    // perform address calculation
    val sum = io.req.bits.rs1_data.toUInt + io.req.bits.uop.imm_packed(19,8).toSInt
    val ea_sign = Mux(sum(vaddrBits-1), ~sum(63,vaddrBits) === UInt(0),
-                                        sum(63,vaddrBits) != UInt(0))
+                                        sum(63,vaddrBits) =/= UInt(0))
    val effective_address = Cat(ea_sign, sum(vaddrBits-1,0)).toUInt
 
    // compute store data
@@ -532,9 +532,9 @@ class MemAddrCalcUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(nu
    // Handle misaligned exceptions
    val typ = io.req.bits.uop.mem_typ
    val misaligned =
-      (((typ === MT_H) || (typ === MT_HU)) && (effective_address(0) != Bits(0))) ||
-      (((typ === MT_W) || (typ === MT_WU)) && (effective_address(1,0) != Bits(0))) ||
-      ((typ === MT_D) && (effective_address(2,0) != Bits(0)))
+      (((typ === MT_H) || (typ === MT_HU)) && (effective_address(0) =/= Bits(0))) ||
+      (((typ === MT_W) || (typ === MT_WU)) && (effective_address(1,0) =/= Bits(0))) ||
+      ((typ === MT_D) && (effective_address(2,0) =/= Bits(0)))
 
    val ma_ld = io.req.valid && io.req.bits.uop.uopc === uopLD && misaligned
    val ma_st = io.req.valid && (io.req.bits.uop.uopc === uopSTA || io.req.bits.uop.uopc === uopAMO_AG) && misaligned

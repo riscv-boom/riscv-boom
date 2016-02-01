@@ -302,11 +302,11 @@ class BranchReorderBuffer(fetch_width: Int, num_entries: Int)(implicit p: Parame
 //   when (io.backend.flush ||
 //         ((io.backend.br_unit.brinfo.valid &&
 //         io.backend.br_unit.brinfo.mispredict) &&
-//         io.backend.br_unit.brinfo.brob_idx != tail_ptr)) <<--- broken
+//         io.backend.br_unit.brinfo.brob_idx =/= tail_ptr)) <<--- broken
 //   {
 //      maybe_full := Bool(false)
 //   }
-//   .elsewhen (do_alloc != do_dealloc)
+//   .elsewhen (do_alloc =/= do_dealloc)
 //   {
 //      maybe_full := do_alloc
 //   }

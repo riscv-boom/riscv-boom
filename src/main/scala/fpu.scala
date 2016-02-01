@@ -123,18 +123,30 @@ class UOPCodeFPUDecoder extends Module
 }
 
 
+class FpuReq()(implicit p: Parameters) extends BoomBundle()(p)
+{
+   val uop      = new MicroOp()
+   val rs1_data = Bits(width = 65)
+   val rs2_data = Bits(width = 65)
+   val rs3_data = Bits(width = 65)
+   val fcsr_rm  = Bits(width = rocket.FPConstants.RM_SZ)
+
+   override def cloneType = new FpuReq()(p).asInstanceOf[this.type]
+}
+
 class FPU(implicit p: Parameters) extends BoomModule()(p)
 {
    val io = new Bundle
    {
-      val req = new ValidIO(new Bundle
-         {
-            val uop      = new MicroOp()
-            val rs1_data = Bits(width = 65)
-            val rs2_data = Bits(width = 65)
-            val rs3_data = Bits(width = 65)
-            val fcsr_rm  = Bits(width = rocket.FPConstants.RM_SZ)
-         }).flip
+//      val req = new ValidIO(new Bundle()
+//         {
+//            val uop      = new MicroOp()
+//            val rs1_data = Bits(width = 65)
+//            val rs2_data = Bits(width = 65)
+//            val rs3_data = Bits(width = 65)
+//            val fcsr_rm  = Bits(width = rocket.FPConstants.RM_SZ)
+//         }).flip
+      val req = new ValidIO(new FpuReq).flip
       val resp = new ValidIO(new ExeUnitResp(65))
    }
 

@@ -48,7 +48,7 @@ class IssueSlot(num_slow_wakeup_ports: Int)(implicit p: Parameters) extends Boom
    // slot is valid, holding 1 uop
    // slot is valid, holds 2 uops (like a store)
    def isInvalid = slot_state === s_invalid
-   def isValid = slot_state != s_invalid
+   def isValid = slot_state =/= s_invalid
 
    val updated_state = Wire(UInt()) // the next state of this slot (which might then get moved to a new slot)
    val next_p1  = Wire(Bool())

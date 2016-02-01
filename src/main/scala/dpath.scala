@@ -859,7 +859,7 @@ class DatPath(implicit p: Parameters) extends BoomModule()(p)
                       Mux(com_exception,    com_exc_badvaddr,
                                             wb_wdata))
 
-   assert (!(csr_rw_cmd != CSR.N && !exe_units(0).io.resp(0).valid), "CSRFile is being written to spuriously.")
+   assert (!(csr_rw_cmd =/= CSR.N && !exe_units(0).io.resp(0).valid), "CSRFile is being written to spuriously.")
 
    // Extra I/O
    csr.io.pc        := flush_pc
@@ -988,7 +988,7 @@ class DatPath(implicit p: Parameters) extends BoomModule()(p)
                                                 exe_units(i).io.resp(j).bits.uop.ctrl.rf_wen && // TODO get rid of other checks
                                                 (exe_units(i).io.resp(j).bits.uop.dst_rtype === RT_FIX || exe_units(i).io.resp(j).bits.uop.dst_rtype === RT_FLT)
             regfile.io.write_ports(cnt).addr := exe_units(i).io.resp(j).bits.uop.pdst
-            regfile.io.write_ports(cnt).data := Mux(exe_units(i).io.resp(j).bits.uop.ctrl.csr_cmd != rocket.CSR.N, csr.io.rw.rdata,
+            regfile.io.write_ports(cnt).data := Mux(exe_units(i).io.resp(j).bits.uop.ctrl.csr_cmd =/= rocket.CSR.N, csr.io.rw.rdata,
                                                                                           exe_units(i).io.resp(j).bits.data)
          }
          else
@@ -1055,7 +1055,7 @@ class DatPath(implicit p: Parameters) extends BoomModule()(p)
                val unrec_out     = Mux(wb_uop.fp_single, Cat(UInt(0,32), unrec_s), unrec_d)
                if (exe_units(w).uses_csr_wport && (j == 0))
                {
-                  rob.io.debug_wb_wdata(cnt) := Mux(wb_uop.ctrl.csr_cmd != rocket.CSR.N, csr.io.rw.rdata,
+                  rob.io.debug_wb_wdata(cnt) := Mux(wb_uop.ctrl.csr_cmd =/= rocket.CSR.N, csr.io.rw.rdata,
                                                 Mux(wb_uop.fp_val && wb_uop.dst_rtype === RT_FLT, unrec_out,
                                                                                                   data))
                }
@@ -1068,7 +1068,7 @@ class DatPath(implicit p: Parameters) extends BoomModule()(p)
             {
                if (exe_units(w).uses_csr_wport && (j == 0))
                {
-                  rob.io.debug_wb_wdata(cnt) := Mux(wb_uop.ctrl.csr_cmd != rocket.CSR.N, csr.io.rw.rdata, data)
+                  rob.io.debug_wb_wdata(cnt) := Mux(wb_uop.ctrl.csr_cmd =/= rocket.CSR.N, csr.io.rw.rdata, data)
                }
                else
                {
@@ -1448,7 +1448,7 @@ class DatPath(implicit p: Parameters) extends BoomModule()(p)
 
          when (com_valids(w))
          {
-            when (com_uops(w).dst_rtype === RT_FIX && com_uops(w).ldst != UInt(0))
+            when (com_uops(w).dst_rtype === RT_FIX && com_uops(w).ldst =/= UInt(0))
             {
                printf("%d 0x%x (0x%x) x%d 0x%x\n", priv, Sext(com_uops(w).pc(vaddrBits,0), xLen), com_uops(w).inst, com_uops(w).inst(RD_MSB,RD_LSB), com_uops(w).debug_wdata)
             }

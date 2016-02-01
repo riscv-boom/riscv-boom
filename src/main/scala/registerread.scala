@@ -156,8 +156,10 @@ class RegisterRead(issue_width: Int
          for (b <- 0 until io.bypass.getNumPorts)
          {
             // can't use "io.bypass.valid(b) since it would create a combinational loop on branch kills"
-            rs1_cases ++= Array((io.bypass.valid(b) && (pop1 === io.bypass.uop(b).pdst) && io.bypass.uop(b).ctrl.rf_wen && (lrs1_rtype === RT_FIX || lrs1_rtype === RT_FLT) && (pop1 != UInt(0)), io.bypass.data(b)))
-            rs2_cases ++= Array((io.bypass.valid(b) && (pop2 === io.bypass.uop(b).pdst) && io.bypass.uop(b).ctrl.rf_wen && (lrs2_rtype === RT_FIX || lrs2_rtype === RT_FLT) && (pop2 != UInt(0)), io.bypass.data(b)))
+            rs1_cases ++= Array((io.bypass.valid(b) && (pop1 === io.bypass.uop(b).pdst) && io.bypass.uop(b).ctrl.rf_wen
+               && (lrs1_rtype === RT_FIX || lrs1_rtype === RT_FLT) && (pop1 =/= UInt(0)), io.bypass.data(b)))
+            rs2_cases ++= Array((io.bypass.valid(b) && (pop2 === io.bypass.uop(b).pdst) && io.bypass.uop(b).ctrl.rf_wen
+               && (lrs2_rtype === RT_FIX || lrs2_rtype === RT_FLT) && (pop2 =/= UInt(0)), io.bypass.data(b)))
          }
 
          if (num_read_ports > 0) bypassed_rs1_data(w) := MuxCase(rrd_rs1_data(w), rs1_cases)
@@ -401,7 +403,7 @@ class RegisterReadDecode(implicit p: Parameters) extends BoomModule()(p)
    io.rrd_uop.ctrl.fcn_dw  := rrd_cs.fcn_dw.toBool
    io.rrd_uop.ctrl.is_load := io.rrd_uop.uopc === uopLD
    io.rrd_uop.ctrl.is_sta  := io.rrd_uop.uopc === uopSTA || io.rrd_uop.uopc === uopAMO_AG
-   io.rrd_uop.ctrl.is_std  := io.rrd_uop.uopc === uopSTD || (io.rrd_uop.ctrl.is_sta && io.rrd_uop.lrs2_rtype != RT_X)
+   io.rrd_uop.ctrl.is_std  := io.rrd_uop.uopc === uopSTD || (io.rrd_uop.ctrl.is_sta && io.rrd_uop.lrs2_rtype =/= RT_X)
 
    when (io.rrd_uop.uopc === uopAMO_AG)
    {

@@ -81,7 +81,7 @@ class IssueUnitCollasping(num_issue_slots: Int, issue_width: Int, num_wakeup_por
       issue_slots(i).wakeup_dsts  := io.wakeup_pdsts
       issue_slots(i).brinfo       := io.brinfo
       issue_slots(i).kill         := io.flush_pipeline
-      issue_slots(i).clear        := shamts_oh(i) != Bits(0)
+      issue_slots(i).clear        := shamts_oh(i) =/= Bits(0)
    }
 
    //-------------------------------------------------------------
@@ -126,7 +126,7 @@ class IssueUnitCollasping(num_issue_slots: Int, issue_width: Int, num_wakeup_por
 
       for (w <- 0 until issue_width)
       {
-         val can_allocate = (issue_slots(i).uop.fu_code & io.fu_types(w)) != Bits(0)
+         val can_allocate = (issue_slots(i).uop.fu_code & io.fu_types(w)) =/= Bits(0)
 
          when (requests(i) && !uop_issued && can_allocate && !port_issued(w))
          {

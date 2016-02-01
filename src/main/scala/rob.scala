@@ -361,7 +361,7 @@ class Rob(width: Int
          // TODO check that the wb is to a valid ROB entry, give it a time stamp
 //         assert (!(wb_resp.valid && MatchBank(GetBankIdx(wb_uop.rob_idx)) &&
 //                  wb_uop.fp_val && !(wb_uop.is_load || wb_uop.is_store) &&
-//                  rob_exc_cause(row_idx) != Bits(0)),
+//                  rob_exc_cause(row_idx) =/= Bits(0)),
 //                  "FP instruction writing back exc bits is overriding an existing exception.")
       }
 
@@ -507,7 +507,7 @@ class Rob(width: Int
                      !rob_val(GetRowIdx(rob_idx))),
                   "[ROB] writeback occurred to an invalid ROB entry.")
          assert (!(io.wb_resps(i).valid && MatchBank(GetBankIdx(rob_idx)) &&
-                  temp_uop.ldst_val && temp_uop.pdst != io.wb_resps(i).bits.uop.pdst),
+                  temp_uop.ldst_val && temp_uop.pdst =/= io.wb_resps(i).bits.uop.pdst),
                   "[ROB] writeback occurred to the wrong pdst.")
       }
       io.com_uops(w).debug_wdata := rob_uop(rob_head).debug_wdata
@@ -542,7 +542,7 @@ class Rob(width: Int
    // Finally, don't throw an exception if there are instructions in front of
    // it that want to commit (only throw exception when head of the bundle).
 
-   var block_commit = (rob_state != s_normal) && (rob_state != s_wait_till_empty)
+   var block_commit = (rob_state =/= s_normal) && (rob_state =/= s_wait_till_empty)
    var will_throw_exception = Bool(false)
    var block_xcpt   = Bool(false) // TODO we can relax this constraint, so long
                                   // as we handle committing stores in
@@ -599,12 +599,12 @@ class Rob(width: Int
 
       assert (!(io.com_valids(w) &&
                !io.com_uops(w).fp_val &&
-               rob_head_fflags(w) != Bits(0)),
+               rob_head_fflags(w) =/= Bits(0)),
                "Committed non-FP instruction has non-zero exception bits.")
       assert (!(io.com_valids(w) &&
                io.com_uops(w).fp_val &&
                (io.com_uops(w).is_load || io.com_uops(w).is_store) &&
-               rob_head_fflags(w) != Bits(0)),
+               rob_head_fflags(w) =/= Bits(0)),
                "Committed FP load or store has non-zero exception bits.")
    }
    io.com_fflags_val := fflags_val.reduce(_|_)
@@ -626,7 +626,7 @@ class Rob(width: Int
       dis_xcpts(i) := io.dis_mask(i) && io.dis_uops(i).exception
    }
 
-   when (!(io.flush_pipeline || exception_thrown) && rob_state != s_rollback)
+   when (!(io.flush_pipeline || exception_thrown) && rob_state =/= s_rollback)
    {
       when (io.lxcpt.valid || io.bxcpt.valid)
       {
@@ -666,7 +666,7 @@ class Rob(width: Int
    assert (!(io.empty && r_xcpt_val),
       "ROB is empty, but believes it has an outstanding exception.")
 
-   assert (!(will_throw_exception && (GetRowIdx(r_xcpt_uop.rob_idx) != rob_head)),
+   assert (!(will_throw_exception && (GetRowIdx(r_xcpt_uop.rob_idx) =/= rob_head)),
       "ROB is throwing an exception, but the stored exception information's " +
       "rob_idx does not match the rob_head")
 
@@ -682,7 +682,7 @@ class Rob(width: Int
    // dispatch the rest of it.
    // update when committed ALL valid instructions in commit_bundle
 
-   finished_committing_row := (io.com_valids.toBits != Bits(0)) &&
+   finished_committing_row := (io.com_valids.toBits =/= Bits(0)) &&
                               ((will_commit.toBits ^ rob_head_vals.toBits) === Bits(0)) &&
                               !(r_partial_row && rob_head === rob_tail)
    when (finished_committing_row)
@@ -693,7 +693,7 @@ class Rob(width: Int
    // -----------------------------------------------
    // ROB Tail Logic
 
-   when (rob_state === s_rollback && rob_tail != rob_head)
+   when (rob_state === s_rollback && rob_tail =/= rob_head)
    {
       rob_tail := WrapDec(rob_tail, num_rob_rows)
    }
@@ -701,7 +701,7 @@ class Rob(width: Int
    {
       rob_tail := WrapInc(GetRowIdx(io.br_unit.brinfo.rob_idx), num_rob_rows)
    }
-   .elsewhen (io.dis_mask.toBits != Bits(0) && !io.dis_partial_stall)
+   .elsewhen (io.dis_mask.toBits =/= Bits(0) && !io.dis_partial_stall)
    {
       rob_tail := WrapInc(rob_tail, num_rob_rows)
    }

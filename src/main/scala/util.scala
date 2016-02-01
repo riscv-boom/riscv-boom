@@ -43,7 +43,7 @@ object GetNewBrMask
 //do two masks have at least 1 bit match?
 object maskMatch
 {
-   def apply(msk1: Bits, msk2: Bits): Bool = (msk1 & msk2) != Bits(0)
+   def apply(msk1: Bits, msk2: Bits): Bool = (msk1 & msk2) =/= Bits(0)
 }
 
 //clear one-bit in the Mask as specified by the idx
