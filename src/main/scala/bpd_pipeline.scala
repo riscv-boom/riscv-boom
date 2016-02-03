@@ -35,7 +35,7 @@ class RedirectRequest(fetch_width: Int)(implicit p: Parameters) extends BoomBund
    val idx     = UInt(width = log2Up(fetch_width)) // idx of br in fetch bundle (to mask out the appropriate fetch
                                                    // instructions)
    val is_jump = Bool() // (only valid if redirect request is valid)
-  override def clone = new RedirectRequest(fetch_width)(p).asInstanceOf[this.type]
+  override def cloneType = new RedirectRequest(fetch_width)(p).asInstanceOf[this.type]
 }
 
 // this information is shared across the entire fetch packet, and stored in the
@@ -110,6 +110,9 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
       }
       else
       {
+         require (false) // TODO don't currently support turning on bpd (needs at least a brob to store btb info)
+         io.brob.allocate.ready := Bool(true)
+         io.brob.allocate_brob_tail := UInt(0)
          (Bool(false), new BpdResp().fromBits(Bits(0)))
       }
 

@@ -130,29 +130,19 @@ class FpuReq()(implicit p: Parameters) extends BoomBundle()(p)
    val rs2_data = Bits(width = 65)
    val rs3_data = Bits(width = 65)
    val fcsr_rm  = Bits(width = rocket.FPConstants.RM_SZ)
-
-   override def cloneType = new FpuReq()(p).asInstanceOf[this.type]
 }
 
 class FPU(implicit p: Parameters) extends BoomModule()(p)
 {
    val io = new Bundle
    {
-//      val req = new ValidIO(new Bundle()
-//         {
-//            val uop      = new MicroOp()
-//            val rs1_data = Bits(width = 65)
-//            val rs2_data = Bits(width = 65)
-//            val rs3_data = Bits(width = 65)
-//            val fcsr_rm  = Bits(width = rocket.FPConstants.RM_SZ)
-//         }).flip
       val req = new ValidIO(new FpuReq).flip
       val resp = new ValidIO(new ExeUnitResp(65))
    }
 
    // all FP units are padded out to the same latency for easy scheduling of
    // the write port
-//   val test = p(DFMALatency) TODO BUG why is this returning "Nothing"?
+//   val test = p(rocket.DFMALatency) // TODO BUG why is this returning "Nothing"?
    val fpu_latency = 3
    val io_req = io.req.bits
 

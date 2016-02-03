@@ -33,7 +33,7 @@ class BrPredictorIo(fetch_width: Int)(implicit p: Parameters) extends BoomBundle
    val brob = new BrobBackendIo(fetch_width)
    val flush = Bool(INPUT) // pipeline flush
 
-   override def clone = new BrPredictorIo(fetch_width)(p).asInstanceOf[this.type]
+   override def cloneType = new BrPredictorIo(fetch_width)(p).asInstanceOf[this.type]
 }
 
 class BpdResp(implicit p: Parameters) extends BoomBundle()(p)

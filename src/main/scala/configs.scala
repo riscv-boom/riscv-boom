@@ -39,7 +39,7 @@ class DefaultBOOMConfig extends Config (
          case FetchBufferSz => 4
 
          // Branch Predictor
-         case EnableBranchPredictor => false
+         case EnableBranchPredictor => true
          case BranchPredictorSizeInKB => Knob("BPD_SIZE_IN_KB")
 
          // Pipelining

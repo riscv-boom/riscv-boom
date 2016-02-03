@@ -1240,7 +1240,8 @@ class DatPath(implicit p: Parameters) extends BoomModule()(p)
    {
       println("\n Chisel Printout Enabled\n")
 
-      var whitespace = 56 - NUM_LSU_ENTRIES- p(NumIssueSlotEntries) - (NUM_ROB_ENTRIES/COMMIT_WIDTH) - io.dmem.debug.ld_req_slot.size - NUM_BROB_ENTRIES
+      var whitespace = 27+56 - NUM_LSU_ENTRIES- p(NumIssueSlotEntries) - (NUM_ROB_ENTRIES/COMMIT_WIDTH) -
+         io.dmem.debug.ld_req_slot.size // - NUM_BROB_ENTRIES
 
       def InstsStr(insts: Bits, width: Int) =
       {
