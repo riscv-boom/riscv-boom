@@ -162,12 +162,12 @@ class FPU(implicit p: Parameters) extends BoomModule()(p)
    req.typ := ImmGenTyp(io_req.uop.imm_packed)
 
 
-   val dfma = Module(new rocket.FPUFMAPipe(fpu_latency, 52, 12))
+   val dfma = Module(new rocket.FPUFMAPipe(latency = fpu_latency, expWidth = 11, sigWidth = 53))
    dfma.io.in.valid := io.req.valid && fp_ctrl.fma && !fp_ctrl.single
    dfma.io.in.bits := req
 
 
-   val sfma = Module(new rocket.FPUFMAPipe(fpu_latency, 23, 9))
+   val sfma = Module(new rocket.FPUFMAPipe(latency = fpu_latency, expWidth = 8, sigWidth = 24))
    sfma.io.in.valid := io.req.valid && fp_ctrl.fma && fp_ctrl.single
    sfma.io.in.bits := req
 
@@ -184,6 +184,7 @@ class FPU(implicit p: Parameters) extends BoomModule()(p)
    fpiu.io.in.bits := req
    val fpiu_out = Pipe(Reg(next=fpiu.io.in.valid && !fp_ctrl.fastpipe),
                        fpiu.io.out.bits, fpu_latency-1)
+
 
    val fpiu_result  = Wire(new rocket.FPResult)
    fpiu_result.data := fpiu_out.bits.toint
