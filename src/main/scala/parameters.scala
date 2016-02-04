@@ -79,7 +79,7 @@ trait HasBoomCoreParameters extends rocket.HasCoreParameters
    val NUM_ROB_ROWS      = NUM_ROB_ENTRIES/DECODE_WIDTH
    val ROB_ADDR_SZ       = log2Up(NUM_ROB_ENTRIES)
    // the f-registers are mapped into the space above the x-registers
-   val LOGICAL_REG_COUNT = if (usingFPU) 32 else 64 
+   val LOGICAL_REG_COUNT = if (usingFPU) 64 else 32
    val LREG_SZ           = log2Up(LOGICAL_REG_COUNT)
    val PREG_SZ           = log2Up(PHYS_REG_COUNT)
    val MEM_ADDR_SZ       = log2Up(NUM_LSU_ENTRIES)
