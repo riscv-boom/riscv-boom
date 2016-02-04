@@ -169,7 +169,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
 //                       io.imem.btb_resp.bits.taken &&
 //                       (io.imem.btb_resp.bits.bridx <= io.req.bits.idx)
 
-   io.req.valid        := io.imem.resp.valid && (br_val || jal_val) && !btb_overrides
+   io.req.valid        := io.imem.resp.valid && (br_val || jal_val) && !btb_overrides && !io.imem.resp.bits.xcpt_if
    io.req.bits.target  := Mux(br_wins, br_targs(br_idx), jal_targs(jal_idx))
    io.req.bits.idx     := Mux(br_wins, br_idx, jal_idx)
    io.req.bits.br_pc   := aligned_pc + (io.req.bits.idx << UInt(2))
@@ -193,9 +193,8 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
                                           io.imem.btb_resp.valid, Bool(false))
    }
 
-   bp2_br_seen := io.imem.resp.valid &&
-                  is_br.reduce(_|_) &&
-                  (!jal_val || (PriorityEncoder(is_br.toBits) < PriorityEncoder(is_jal.toBits)))
+   bp2_br_seen := io.imem.resp.valid && !io.imem.resp.bits.xcpt_if &&
+                  is_br.reduce(_|_) && (!jal_val || (PriorityEncoder(is_br.toBits) < PriorityEncoder(is_jal.toBits)))
    bp2_br_taken := (br_val && br_wins) || (io.imem.btb_resp.valid && io.imem.btb_resp.bits.taken)
 
    //-------------------------------------------------------------
@@ -209,6 +208,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    val is_call  = IsCall(jmp_inst)
    val is_ret   = IsReturn(jmp_inst)
    io.imem.ras_update.valid           := io.imem.resp.valid &&
+                                         !io.imem.resp.bits.xcpt_if &&
                                          jumps.orR &&
                                          !br_wins &&
                                          io.req.ready &&
@@ -231,7 +231,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
 
    //-------------------------------------------------------------
 
-   when (io.imem.resp.valid && io.imem.btb_resp.valid && io.imem.btb_resp.bits.taken)
+   when (io.imem.resp.valid && io.imem.btb_resp.valid && io.imem.btb_resp.bits.taken && !io.imem.resp.bits.xcpt_if)
    {
       val msk = io.imem.btb_resp.bits.mask
       val idx = io.imem.btb_resp.bits.bridx
