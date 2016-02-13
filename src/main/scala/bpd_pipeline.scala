@@ -67,7 +67,7 @@ class BranchPrediction(implicit p: Parameters) extends BoomBundle()(p)
    def wasBTB = btb_predicted
 }
 
-class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p) 
+class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p)
 {
    val io = new BoomBundle()(p)
    {

@@ -136,7 +136,7 @@ object ImmGen
    }
 }
 
-// store the rounding-mode, and fun. type for FP in the packed immediate as well
+// store the rounding-mode and func type for FP in the packed immediate as well
 object ImmGenRm { def apply(ip: Bits): UInt = { return ip(2,0) }}
 object ImmGenTyp { def apply(ip: Bits): UInt = { return ip(9,8) }} // only works if !(IS_B or IS_S)
 

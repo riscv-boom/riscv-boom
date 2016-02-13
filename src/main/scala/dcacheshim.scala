@@ -317,12 +317,11 @@ class DCacheShim(implicit p: Parameters) extends BoomModule()(p)
    // TODO add entry valid bit?
    val resp_tag = io.dmem.resp.bits.tag
 
-   // Note: stores succeed quietly, and so are valid if no nack is received.
-   io.core.resp.valid := Mux(cache_load_ack,                    !inflight_load_buffer(resp_tag).was_killed,
+   io.core.resp.valid := Mux(cache_load_ack,                    !inflight_load_buffer(resp_tag).was_killed, // hide loads that were killed due to branches, etc.
                          Mux(was_store_and_not_amo &&
                               !io.dmem.resp.bits.nack &&
-                              !Reg(next=io.core.req.bits.kill), Bool(true),
-                                                                Bool(false)))
+                              !Reg(next=io.core.req.bits.kill), Bool(true),    // stores succeed quietly, so valid if no nack
+                                                                Bool(false)))  // filter out nacked responses
 
    io.core.resp.bits.uop := Mux(cache_load_ack, inflight_load_buffer(resp_tag).out_uop, m2_req_uop)
 

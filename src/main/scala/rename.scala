@@ -461,7 +461,7 @@ class RenameStage(pl_width: Int, num_wb_ports: Int)(implicit p: Parameters) exte
    val ren_br_vals = Wire(Vec(pl_width, Bool()))
    val freelist_can_allocate = Wire(Vec(pl_width, Bool()))
 
-   val max_operands = if(!usingFPU) 2 else 3
+   val max_operands = if(usingFPU) 3 else 2
 
    //-------------------------------------------------------------
    // Set outputs up... we'll write in the pop*/pdst info below

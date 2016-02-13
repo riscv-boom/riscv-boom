@@ -39,7 +39,7 @@ class IssueUnitIO(issue_width: Int, num_wakeup_ports: Int)(implicit p: Parameter
 
 }
 
-abstract class IssueUnit(num_issue_slots: Int, issue_width: Int, num_wakeup_ports: Int)(implicit p: Parameters) 
+abstract class IssueUnit(num_issue_slots: Int, issue_width: Int, num_wakeup_ports: Int)(implicit p: Parameters)
    extends BoomModule()(p)
 {
    val io = new IssueUnitIO(issue_width, num_wakeup_ports)

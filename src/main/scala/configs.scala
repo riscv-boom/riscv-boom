@@ -15,7 +15,7 @@ class DefaultBOOMConfig extends Config (
          // Top-Level
          case CoreName => "BOOM"
          case XLen => 64
-         case FDivSqrt => false
+         case FDivSqrt => true
          case CoreInstBits => 32
 
          // Superscalar Widths
@@ -78,11 +78,11 @@ class WithNoBoomCounters extends Config (
     case EnableUarchCounters => false
   }
 )
-                                       
+
 class WithSmallBOOMs extends Config(
-   knobValues = { 
-      case "FETCH_WIDTH" => 1 
-      case "ISSUE_WIDTH" => 1 
+   knobValues = {
+      case "FETCH_WIDTH" => 1
+      case "ISSUE_WIDTH" => 1
       case "ROB_ENTRIES" => 24
       case "ISSUE_ENTRIES" => 12
       case "LSU_ENTRIES" => 8
@@ -93,9 +93,9 @@ class WithSmallBOOMs extends Config(
 
 // try to match the Cortex-A9
 class WithMediumBOOMs extends Config(
-   knobValues = { 
-      case "FETCH_WIDTH" => 2 
-      case "ISSUE_WIDTH" => 3 
+   knobValues = {
+      case "FETCH_WIDTH" => 2
+      case "ISSUE_WIDTH" => 3
       case "ROB_ENTRIES" => 48
       case "ISSUE_ENTRIES" => 20
       case "LSU_ENTRIES" => 16
@@ -112,9 +112,9 @@ class WithMediumBOOMs extends Config(
 
 // try to match the Cortex-A15
 class WithMegaBOOMs extends Config(
-   knobValues = { 
-      case "FETCH_WIDTH" => 4 
-      case "ISSUE_WIDTH" => 4 
+   knobValues = {
+      case "FETCH_WIDTH" => 4
+      case "ISSUE_WIDTH" => 4
       case "ROB_ENTRIES" => 128
       case "ISSUE_ENTRIES" => 28
       case "LSU_ENTRIES" => 32
