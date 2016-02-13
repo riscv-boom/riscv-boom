@@ -13,8 +13,7 @@
 // If regfile bypassing is disabled, then the functional unit must do its own
 // bypassing in here on the WB stage (i.e., bypassing the io.resp.data)
 
-// TODO: explore possibility of conditional IO fields?
-
+// TODO: explore possibility of conditional IO fields? if a branch unit... how to add extra to IO in subclass?
 
 package boom
 {
@@ -31,19 +30,18 @@ import uncore.constants.MemoryOpConstants._
 object FUCode
 {
    // bit mask, since a given execution pipeline may support multiple functional units
-   val FUC_SZ = 7
-   val FU_X    = BitPat.DC(FUC_SZ)
-   val FU_ALU  = Bits(  1, FUC_SZ)
-   val FU_BRU  = Bits(  2, FUC_SZ)
-   val FU_MEM  = Bits(  4, FUC_SZ)
-   val FU_MUL  = Bits(  8, FUC_SZ)
-   val FU_DIV  = Bits( 16, FUC_SZ)
-   val FU_FPU  = Bits( 32, FUC_SZ)
-   val FU_CSR  = Bits( 64, FUC_SZ)
+   val FUC_SZ = 8
+   val FU_X   = BitPat.DC(FUC_SZ)
+   val FU_ALU = Bits(  1, FUC_SZ)
+   val FU_BRU = Bits(  2, FUC_SZ)
+   val FU_MEM = Bits(  4, FUC_SZ)
+   val FU_MUL = Bits(  8, FUC_SZ)
+   val FU_DIV = Bits( 16, FUC_SZ)
+   val FU_FPU = Bits( 32, FUC_SZ)
+   val FU_CSR = Bits( 64, FUC_SZ)
+   val FU_FDV = Bits(128, FUC_SZ)
 }
 import FUCode._
-
-// TODO if a branch unit... how to add extra to IO in subclass?
 
 class FunctionalUnitIo(num_stages: Int
                       , num_bypass_stages: Int

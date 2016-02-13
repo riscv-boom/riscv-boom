@@ -296,7 +296,7 @@ object FDecode extends DecodeConstants
    FADD_D   ->List(Y, Y, N, uopFADD_D , FU_FPU, RT_FLT, RT_FLT, RT_FLT, N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, CSR.N),
    FSUB_D   ->List(Y, Y, N, uopFSUB_D , FU_FPU, RT_FLT, RT_FLT, RT_FLT, N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, CSR.N),
    FMUL_D   ->List(Y, Y, N, uopFMUL_D , FU_FPU, RT_FLT, RT_FLT, RT_FLT, N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, CSR.N),
-
+   
    FMADD_S  ->List(Y, Y, Y, uopFMADD_S, FU_FPU, RT_FLT, RT_FLT, RT_FLT, Y, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, CSR.N),
    FMSUB_S  ->List(Y, Y, Y, uopFMSUB_S, FU_FPU, RT_FLT, RT_FLT, RT_FLT, Y, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, CSR.N),
    FNMADD_S ->List(Y, Y, Y, uopFNMADD_S,FU_FPU, RT_FLT, RT_FLT, RT_FLT, Y, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, CSR.N),
@@ -307,6 +307,28 @@ object FDecode extends DecodeConstants
    FNMSUB_D ->List(Y, Y, N, uopFNMSUB_D,FU_FPU, RT_FLT, RT_FLT, RT_FLT, Y, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, CSR.N)
    )
 
+// scalastyle:on
+}
+
+object FDivSqrtDecode extends DecodeConstants
+{
+// scalastyle:off
+  val table: Array[(BitPat, List[BitPat])] = Array(
+             //                                                          frs3_en                                wakeup_delay
+             //                                                          |  imm sel                             |        bypassable (aka, known/fixed latency)
+             //                                                          |  |     is_load                       |        |  br/jmp
+             //     is val inst?                         rs1 regtype     |  |     |  is_store                   |        |  |  is jal
+             //     |  is fp inst?                       |       rs2 type|  |     |  |  is_amo                  |        |  |  |  allocate_brtag
+             //     |  |  is dst single-prec?            |       |       |  |     |  |  |  is_fence             |        |  |  |  |
+             //     |  |  |  micro-opcode                |       |       |  |     |  |  |  |  is_fencei         |        |  |  |  |
+             //     |  |  |  |           func    dst     |       |       |  |     |  |  |  |  |  mem    mem     |        |  |  |  |  is unique? (clear pipeline for it)
+             //     |  |  |  |           unit    regtype |       |       |  |     |  |  |  |  |  cmd    msk     |        |  |  |  |  |  flush on commit
+             //     |  |  |  |           |       |       |       |       |  |     |  |  |  |  |  |      |       |        |  |  |  |  |  |  csr cmd
+   FDIV_S    ->List(Y, Y, Y, uopFDIV_S , FU_FDV, RT_FLT, RT_FLT, RT_FLT, N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, CSR.N),
+   FDIV_D    ->List(Y, Y, N, uopFDIV_D , FU_FDV, RT_FLT, RT_FLT, RT_FLT, N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, CSR.N),
+   FSQRT_S   ->List(Y, Y, Y, uopFSQRT_S, FU_FDV, RT_FLT, RT_FLT, RT_X  , N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, CSR.N),
+   FSQRT_D   ->List(Y, Y, N, uopFSQRT_D, FU_FDV, RT_FLT, RT_FLT, RT_X  , N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, CSR.N)
+   )
 // scalastyle:on
 }
 
@@ -340,6 +362,7 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule()(p)
 
    var decode_table = XDecode.table
    if (usingFPU) decode_table ++= FDecode.table
+   if (usingFPU && usingFDivSqrt) decode_table ++= FDivSqrtDecode.table
 
    val cs = Wire(new CtrlSigs()).decode(uop.inst, decode_table)
 
@@ -375,7 +398,7 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule()(p)
    uop.lrs3       := Cat(Bool(true),             uop.inst(RS3_MSB,RS3_LSB))
    // TODO do I need to remove (uop.lrs3) for integer-only? Or do synthesis tools properly remove it?
 
-   uop.ldst_val   := (cs.dst_type =/= RT_X && (uop.ldst =/= UInt(0)))
+   uop.ldst_val   := (cs.dst_type =/= RT_X && uop.ldst =/= UInt(0))
    uop.dst_rtype  := cs.dst_type
    uop.lrs1_rtype := cs.rs1_type
    uop.lrs2_rtype := cs.rs2_type

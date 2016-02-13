@@ -38,7 +38,7 @@ class RegisterRead(issue_width: Int
                                              // num_total_read_ports)
                   , num_total_bypass_ports: Int
                   , register_width: Int
-                  )(implicit p: Parameters) extends BoomModule()(p) 
+                  )(implicit p: Parameters) extends BoomModule()(p)
 {
    val io = new BoomBundle()(p)
    {
@@ -228,6 +228,7 @@ class RRdCtrlSigs(implicit p: Parameters) extends BoomBundle()(p)
    }
 }
 
+// TODO break up the rrd decode table based on the supported ISA extensions (int, fp, fdiv/sqrt)
 class RegisterReadDecode(implicit p: Parameters) extends BoomModule()(p)
 {
    val io = new BoomBundle()(p)
@@ -387,7 +388,12 @@ class RegisterReadDecode(implicit p: Parameters) extends BoomModule()(p)
          BitPat(uopFMADD_D) ->List(BR_N, Y, N, N, FN_X   , DW_X  , OP1_X   , OP2_X   , IS_X, REN_1, rocket.CSR.N),
          BitPat(uopFMSUB_D) ->List(BR_N, Y, N, N, FN_X   , DW_X  , OP1_X   , OP2_X   , IS_X, REN_1, rocket.CSR.N),
          BitPat(uopFNMADD_D)->List(BR_N, Y, N, N, FN_X   , DW_X  , OP1_X   , OP2_X   , IS_X, REN_1, rocket.CSR.N),
-         BitPat(uopFNMSUB_D)->List(BR_N, Y, N, N, FN_X   , DW_X  , OP1_X   , OP2_X   , IS_X, REN_1, rocket.CSR.N)
+         BitPat(uopFNMSUB_D)->List(BR_N, Y, N, N, FN_X   , DW_X  , OP1_X   , OP2_X   , IS_X, REN_1, rocket.CSR.N),
+
+         BitPat(uopFDIV_S)  ->List(BR_N, N, Y, N, FN_X   , DW_X  , OP1_X   , OP2_X   , IS_X, REN_1, rocket.CSR.N),
+         BitPat(uopFDIV_D)  ->List(BR_N, N, Y, N, FN_X   , DW_X  , OP1_X   , OP2_X   , IS_X, REN_1, rocket.CSR.N),
+         BitPat(uopFSQRT_S) ->List(BR_N, N, Y, N, FN_X   , DW_X  , OP1_X   , OP2_X   , IS_X, REN_1, rocket.CSR.N),
+         BitPat(uopFSQRT_D) ->List(BR_N, N, Y, N, FN_X   , DW_X  , OP1_X   , OP2_X   , IS_X, REN_1, rocket.CSR.N)
          )
 
    val rrd_cs = Wire(new RRdCtrlSigs()).decode(io.rrd_uop.uopc, default, table)

@@ -77,24 +77,22 @@ abstract class ExecutionUnit(val num_rf_read_ports: Int
                             , val is_mem_unit: Boolean          = false
                             , var uses_csr_wport: Boolean       = false
                             ,     is_branch_unit: Boolean       = false
-                            , val has_fpu       : Boolean       = false // can return fflags
+                            , val has_fpu       : Boolean       = false
                             , val has_mul       : Boolean       = false
                             , val has_div       : Boolean       = false
+                            , val has_fdiv      : Boolean       = false
                             )(implicit p: Parameters) extends BoomModule()(p)
 {
    val io = new ExecutionUnitIo(num_rf_read_ports, num_rf_write_ports
                                , num_bypass_stages, data_width)
 
-   val uses_rf_wport = false
-
-   if (!has_fpu)
-   {
-      io.resp.map(_.bits.fflags.valid := Bool(false))
-   }
+   io.resp.map(_.bits.fflags.valid := Bool(false))
 
    def numBypassPorts: Int = num_bypass_stages
    def hasBranchUnit : Boolean = is_branch_unit
    def isBypassable  : Boolean = bypassable
+   def hasFFlags     : Boolean = has_fpu || has_fdiv
+   // TODO add "number of fflag ports", so we can properly account for FPU+Mem combinations
 }
 
 class ALUExeUnit(is_branch_unit   : Boolean = false
@@ -102,22 +100,25 @@ class ALUExeUnit(is_branch_unit   : Boolean = false
                 , has_fpu         : Boolean = false
                 , has_mul         : Boolean = false
                 , has_div         : Boolean = false
+                , has_fdiv        : Boolean = false
                 , use_slow_mul    : Boolean = false
                 )(implicit p: Parameters) extends ExecutionUnit(num_rf_read_ports = if (has_fpu) 3 else 2
                                       , num_rf_write_ports = 1
                                       , num_bypass_stages = if (has_fpu || (has_mul && !use_slow_mul)) 3 else 1 // TODO FPU LATENCY
-                                      , data_width = if (has_fpu) 65 else 64
+                                      , data_width = if (has_fpu || has_fdiv) 65 else 64
                                       , bypassable = true
                                       , is_mem_unit = false
                                       , uses_csr_wport = shares_csr_wport
                                       , is_branch_unit = is_branch_unit
-                                      , has_fpu = has_fpu
-                                      , has_mul = has_mul
-                                      , has_div = has_div
+                                      , has_fpu  = has_fpu
+                                      , has_mul  = has_mul
+                                      , has_div  = has_div
+                                      , has_fdiv = has_fdiv
                                       )(p)
 {
-   val muldiv_busy = Wire(Bool())
    val has_muldiv = has_div || (has_mul && use_slow_mul)
+
+   require(p(rocket.DFMALatency) == 3) // fix the above num_bypass_stages==3 hack before removing this line
 
    println ("     ExeUnit--")
    println ("       - ALU")
@@ -126,6 +127,13 @@ class ALUExeUnit(is_branch_unit   : Boolean = false
    if (has_div && has_mul && use_slow_mul) println ("       - Mul/Div (unpipelined)")
    else if (has_mul && use_slow_mul) println ("       - Mul (unpipelined)")
    else if (has_div) println ("       - Div")
+   if (has_fdiv) println ("       - FDiv/FSqrt")
+
+   val muldiv_busy = Wire(init=Bool(false))
+   val fdiv_busy = Wire(init=Bool(false))
+
+   // The Functional Units --------------------
+   val fu_units = ArrayBuffer[FunctionalUnit]()
 
    io.fu_types := FU_ALU |
                   Mux(Bool(has_fpu), FU_FPU, Bits(0)) |
@@ -133,7 +141,8 @@ class ALUExeUnit(is_branch_unit   : Boolean = false
                   (Mux(!muldiv_busy && Bool(has_mul && use_slow_mul), FU_MUL, Bits(0))) |
                   (Mux(!muldiv_busy && Bool(has_div), FU_DIV, Bits(0))) |
                   (Mux(Bool(shares_csr_wport), FU_CSR, Bits(0))) |
-                  (Mux(Bool(is_branch_unit), FU_BRU, Bits(0)))
+                  (Mux(Bool(is_branch_unit), FU_BRU, Bits(0))) |
+                  Mux(!fdiv_busy && Bool(has_fdiv), FU_FDV, Bits(0))
 
 
    // ALU Unit -------------------------------
@@ -159,10 +168,11 @@ class ALUExeUnit(is_branch_unit   : Boolean = false
    {
       io.br_unit.brinfo.valid := Bool(false)
    }
+   fu_units += alu
 
    // Pipelined, IMul Unit ------------------
    var imul: PipelinedMulUnit = null
-   if (has_mul)
+   if (has_mul && !use_slow_mul)
    {
       imul = Module(new PipelinedMulUnit(IMUL_STAGES))
       imul.io.req.valid         := io.req.valid && io.req.bits.uop.fu_code_is(FU_MUL)
@@ -171,10 +181,14 @@ class ALUExeUnit(is_branch_unit   : Boolean = false
       imul.io.req.bits.rs2_data := io.req.bits.rs2_data
       imul.io.req.bits.kill     := io.req.bits.kill
       imul.io.brinfo <> io.brinfo
+      fu_units += imul
    }
 
    // FPU Unit -----------------------
    var fpu: FPUUnit = null
+   val fpu_resp_val = Wire(init=Bool(false))
+   val fpu_resp_fflags = Wire(new ValidIO(new FFlagsResp()))
+   fpu_resp_fflags.valid := Bool(false)
    if (has_fpu)
    {
       fpu = Module(new FPUUnit())
@@ -185,27 +199,52 @@ class ALUExeUnit(is_branch_unit   : Boolean = false
       fpu.io.req.bits.rs3_data   := io.req.bits.rs3_data
       fpu.io.req.bits.kill       := io.req.bits.kill
       fpu.io.fcsr_rm             := io.fcsr_rm
-      // TODO use bundle interfacing
       fpu.io.brinfo <> io.brinfo
+      fpu_resp_val := fpu.io.resp.valid
+      fpu_resp_fflags := fpu.io.resp.bits.fflags
+      fu_units += fpu
    }
-
-   // The Functional Units --------------------
-   val fu_units = ArrayBuffer[FunctionalUnit]()
-   fu_units += alu
-   if (has_mul && !use_slow_mul) fu_units += imul
-   if (has_fpu) fu_units += fpu
 
    // Bypassing ------------------------------
    // (only the ALU is bypassable)
 
    io.bypass <> alu.io.bypass
 
+   // FDiv/FSqrt Unit -----------------------
+   var fdivsqrt: FDivSqrtUnit = null
+   val fdiv_resp_val = Wire(init=Bool(false))
+   val fdiv_resp_uop = Wire(new MicroOp())
+   val fdiv_resp_data = Wire(Bits(width=65))
+   val fdiv_resp_fflags = Wire(new ValidIO(new FFlagsResp()))
+   fdiv_resp_fflags.valid := Bool(false)
+   if (has_fdiv)
+   {
+      fdivsqrt = Module(new FDivSqrtUnit())
+      fdivsqrt.io.req.valid         := io.req.valid && io.req.bits.uop.fu_code_is(FU_FDV)
+      fdivsqrt.io.req.bits.uop      := io.req.bits.uop
+      fdivsqrt.io.req.bits.rs1_data := io.req.bits.rs1_data
+      fdivsqrt.io.req.bits.rs2_data := io.req.bits.rs2_data
+      fdivsqrt.io.req.bits.kill     := io.req.bits.kill
+      fdivsqrt.io.fcsr_rm           := io.fcsr_rm
+      fdivsqrt.io.brinfo <> io.brinfo
+
+      // share write port with the pipelined units
+      fdivsqrt.io.resp.ready := !(fu_units.map(_.io.resp.valid).reduce(_|_))
+
+      fdiv_busy := !fdivsqrt.io.req.ready || (io.req.valid && io.req.bits.uop.fu_code_is(FU_FDV))
+
+      fdiv_resp_val := fdivsqrt.io.resp.valid
+      fdiv_resp_uop := fdivsqrt.io.resp.bits.uop
+      fdiv_resp_data := fdivsqrt.io.resp.bits.data
+      fdiv_resp_fflags := fdivsqrt.io.resp.bits.fflags
+
+      fu_units += fdivsqrt
+   }
+
    // Mul/Div/Rem Unit -----------------------
    var muldiv: MulDivUnit = null
-   val muldiv_resp_valid = Wire(Bool())
-   muldiv_resp_valid := Bool(false)
-   muldiv_busy := Bool(false)
-
+   val muldiv_resp_val = Wire(Bool())
+   muldiv_resp_val := Bool(false)
    if (has_muldiv)
    {
       muldiv = Module(new MulDivUnit())
@@ -221,63 +260,57 @@ class ALUExeUnit(is_branch_unit   : Boolean = false
       // share write port with the pipelined units
       muldiv.io.resp.ready := !(fu_units.map(_.io.resp.valid).reduce(_|_))
 
-      muldiv_resp_valid := muldiv.io.resp.valid
+      muldiv_resp_val := muldiv.io.resp.valid
       muldiv_busy := !muldiv.io.req.ready ||
                      (io.req.valid && (io.req.bits.uop.fu_code_is(FU_DIV) ||
                                       (io.req.bits.uop.fu_code_is(FU_MUL) && Bool(has_mul && use_slow_mul))))
+      fu_units += muldiv
    }
-   if (has_muldiv) fu_units += muldiv
 
    // Outputs (Write Port #0)  ---------------
 
    io.resp(0).valid    := fu_units.map(_.io.resp.valid).reduce(_|_)
    io.resp(0).bits.uop := new MicroOp().fromBits(
-                              PriorityMux(fu_units.map(f => (f.io.resp.valid, f.io.resp.bits.uop.toBits))))
+                           PriorityMux(fu_units.map(f => (f.io.resp.valid, f.io.resp.bits.uop.toBits))))
    io.resp(0).bits.data:= PriorityMux(fu_units.map(f => (f.io.resp.valid, f.io.resp.bits.data.toBits))).toBits
    // pulled out for critical path reasons
    io.resp(0).bits.uop.csr_addr := ImmGen(alu.io.resp.bits.uop.imm_packed, IS_I).toUInt
    io.resp(0).bits.uop.ctrl.csr_cmd := alu.io.resp.bits.uop.ctrl.csr_cmd
 
-   assert ((PopCount(fu_units.map(_.io.resp.valid)) <= UInt(1) && !muldiv_resp_valid) ||
-          (PopCount(fu_units.map(_.io.resp.valid)) <= UInt(2) && muldiv_resp_valid)
-      , "Multiple functional units are fighting over the write port.")
+   io.resp(0).bits.fflags := Mux(fpu_resp_val, fpu_resp_fflags, fdiv_resp_fflags)
 
-   if (has_fpu)
-   {
-   // TODO is there a way to override a single signal in a bundle?
-   // io.resp(0).bits.fflags <> fpu.io.resp.bits.fflags
-      io.resp(0).bits.fflags.valid      := fpu.io.resp.valid
-      io.resp(0).bits.fflags.bits.uop   := fpu.io.resp.bits.fflags.bits.uop
-      io.resp(0).bits.fflags.bits.flags := fpu.io.resp.bits.fflags.bits.flags
-   }
+   assert ((PopCount(fu_units.map(_.io.resp.valid)) <= UInt(1) && !muldiv_resp_val && !fdiv_resp_val) ||
+          (PopCount(fu_units.map(_.io.resp.valid)) <= UInt(2) && (muldiv_resp_val || fdiv_resp_val)) ||
+          (PopCount(fu_units.map(_.io.resp.valid)) <= UInt(3) && muldiv_resp_val && fdiv_resp_val)
+      , "Multiple functional units are fighting over the write port.")
 }
 
-
-class MulDExeUnit(implicit p: Parameters) 
+class FDivSqrtExeUnit(implicit p: Parameters)
    extends ExecutionUnit(num_rf_read_ports = 2
                                        , num_rf_write_ports = 1
                                        , num_bypass_stages = 0
-                                       , data_width = 64 // TODO need to use xLen here
+                                       , data_width = 65
                                        , num_variable_write_ports = 1
+                                       , has_fdiv = true
                                        )
 {
    println ("     ExeUnit--")
-   println ("       - Mul/Div")
-   val muldiv_busy = Wire(Bool())
-   io.fu_types := Mux(!muldiv_busy, FU_MUL | FU_DIV, Bits(0))
+   println ("       - FDiv/FSqrt")
+   val fdiv_busy = Wire(Bool())
+   io.fu_types := Mux(!fdiv_busy, FU_FDV, Bits(0))
 
-   val muldiv = Module(new MulDivUnit())
-   muldiv.io.req <> io.req
+   val fdivsqrt = Module(new FDivSqrtUnit())
+   fdivsqrt.io.req <> io.req
+   fdivsqrt.io.fcsr_rm    := io.fcsr_rm
+   io.resp(0).valid       := fdivsqrt.io.resp.valid
+   io.resp(0).bits.uop    := fdivsqrt.io.resp.bits.uop
+   io.resp(0).bits.data   := fdivsqrt.io.resp.bits.data
+   io.resp(0).bits.fflags := fdivsqrt.io.resp.bits.fflags
+   fdivsqrt.io.brinfo <> io.brinfo
+   io.bypass <> fdivsqrt.io.bypass
 
-   io.resp(0) <> muldiv.io.resp
-   io.resp(0).ready := Bool(true)
-
-   muldiv.io.brinfo <> io.brinfo
-   io.bypass <> muldiv.io.bypass
-
-   muldiv_busy := !muldiv.io.req.ready || (io.req.valid)
+   fdiv_busy := !fdivsqrt.io.req.ready || io.req.valid
 }
-// TODO listed as FIFOs, but not using ready signal
 
 
 class MemExeUnit(implicit p: Parameters) extends ExecutionUnit(num_rf_read_ports = 2 // TODO make this 1, requires MemAddrCalcUnit to accept store data on rs1_data port
@@ -400,6 +433,7 @@ class ALUMemExeUnit(is_branch_unit    : Boolean = false
                     , has_fpu         : Boolean = false
                     , has_mul         : Boolean = false
                     , has_div         : Boolean = false
+                    , has_fdiv        : Boolean = false
                     , use_slow_mul    : Boolean = false
                     )(implicit p: Parameters) extends ExecutionUnit(num_rf_read_ports = if (has_fpu) 3 else 2
                                           , num_rf_write_ports = 2
@@ -413,6 +447,7 @@ class ALUMemExeUnit(is_branch_unit    : Boolean = false
                                           , has_fpu = has_fpu
                                           , has_mul = has_mul
                                           , has_div = has_div
+                                          , has_fdiv = has_fdiv
                                           )
 {
    println ("     ExeUnit--")
@@ -422,9 +457,11 @@ class ALUMemExeUnit(is_branch_unit    : Boolean = false
    if (has_div && has_mul && use_slow_mul) println ("       - Mul/Div (unpipelined)")
    else if (has_mul && use_slow_mul) println ("       - Mul (unpipelined)")
    else if (has_div) println ("       - Div")
+   if (has_fdiv) println ("       - FDiv/FSqrt")
    println ("       - Mem")
 
    val muldiv_busy = Wire(Bool())
+   val fdiv_busy = Wire(Bool())
    io.fu_types := FU_ALU |
                   FU_MEM |
                   Mux(Bool(has_fpu), FU_FPU, Bits(0)) |
@@ -432,10 +469,12 @@ class ALUMemExeUnit(is_branch_unit    : Boolean = false
                   (Mux(!muldiv_busy && Bool(use_slow_mul), FU_MUL, Bits(0))) |
                   (Mux(!muldiv_busy && Bool(has_div), FU_DIV, Bits(0))) |
                   (Mux(Bool(shares_csr_wport), FU_CSR, Bits(0))) |
-                  Mux(Bool(is_branch_unit), FU_BRU, Bits(0))
+                  Mux(Bool(is_branch_unit), FU_BRU, Bits(0)) |
+                  Mux(!fdiv_busy && Bool(has_fdiv), FU_FDV, Bits(0))
 
 
    val memresp_val = Wire(Bool())
+   val fdiv_resp_val = Wire(Bool())
 
 
    // ALU Unit -------------------------------
@@ -506,7 +545,6 @@ class ALUMemExeUnit(is_branch_unit    : Boolean = false
    io.resp(0).bits.uop.csr_addr := ImmGen(alu.io.resp.bits.uop.imm_packed, IS_I).toUInt
    io.resp(0).bits.uop.ctrl.csr_cmd := alu.io.resp.bits.uop.ctrl.csr_cmd
 
-//   io.resp(0).bits.fflags <> fpu.io.resp.bits.fflags
    if (has_fpu)
    {
       io.resp(0).bits.fflags.valid      := fpu.io.resp.valid
@@ -518,24 +556,65 @@ class ALUMemExeUnit(is_branch_unit    : Boolean = false
       , "Multiple functional units are fighting over the write port.")
 
    // Mul/Div/Rem Unit -----------------------
-   val muldiv = Module(new MulDivUnit())
+   var muldiv: MulDivUnit = null
+   val muldiv_resp_val = Wire(Bool())
+   val muldiv_resp_uop = Wire(new MicroOp())
+   val muldiv_resp_data = Wire(Bits(width=64))
+   muldiv_resp_val := Bool(false)
+   muldiv_busy := Bool(false)
+   if (has_div || (has_mul && use_slow_mul))
+   {
+      muldiv = Module(new MulDivUnit())
 
-   muldiv.io.req.valid           := io.req.valid &&
-                                    ((io.req.bits.uop.fu_code_is(FU_DIV) && Bool(has_div)) ||
-                                    (io.req.bits.uop.fu_code_is(FU_MUL) && Bool(has_mul && use_slow_mul)))
-   muldiv.io.req.bits.uop        := io.req.bits.uop
-   muldiv.io.req.bits.rs1_data   := io.req.bits.rs1_data
-   muldiv.io.req.bits.rs2_data   := io.req.bits.rs2_data
-   muldiv.io.req.bits.kill       := io.req.bits.kill
+      muldiv.io.req.valid           := io.req.valid &&
+                                       ((io.req.bits.uop.fu_code_is(FU_DIV) && Bool(has_div)) ||
+                                       (io.req.bits.uop.fu_code_is(FU_MUL) && Bool(has_mul && use_slow_mul)))
+      muldiv.io.req.bits.uop        := io.req.bits.uop
+      muldiv.io.req.bits.rs1_data   := io.req.bits.rs1_data
+      muldiv.io.req.bits.rs2_data   := io.req.bits.rs2_data
+      muldiv.io.req.bits.kill       := io.req.bits.kill
 
-   muldiv.io.brinfo <> io.brinfo
+      muldiv.io.brinfo <> io.brinfo
 
-   muldiv.io.resp.ready := !memresp_val //share write port with the memory
+      muldiv.io.resp.ready := !memresp_val && !fdiv_resp_val //share write port with the memory, fdiv
 
-   muldiv_busy := !muldiv.io.req.ready ||
-                  (io.req.valid && (io.req.bits.uop.fu_code_is(FU_DIV) ||
-                                   (io.req.bits.uop.fu_code_is(FU_MUL) && Bool(has_mul && use_slow_mul))))
+      muldiv_resp_val := muldiv.io.resp.valid
+      muldiv_resp_uop := muldiv.io.resp.bits.uop
+      muldiv_resp_data:= muldiv.io.resp.bits.data
+      muldiv_busy := !muldiv.io.req.ready ||
+                     (io.req.valid && (io.req.bits.uop.fu_code_is(FU_DIV) ||
+                                      (io.req.bits.uop.fu_code_is(FU_MUL) && Bool(has_mul && use_slow_mul))))
+   }
 
+
+   // FDiv/FSqrt Unit -----------------------
+   var fdivsqrt: FDivSqrtUnit = null
+   val fdiv_resp_uop = Wire(new MicroOp())
+   val fdiv_resp_data = Wire(Bits(width=65))
+   val fdiv_resp_fflags = Wire(new ValidIO(new FFlagsResp()))
+   fdiv_resp_val := Bool(false)
+   fdiv_resp_fflags.valid := Bool(false)
+   fdiv_busy := Bool(false)
+   if (has_fdiv)
+   {
+      fdivsqrt = Module(new FDivSqrtUnit())
+      fdivsqrt.io.req.valid         := io.req.valid && io.req.bits.uop.fu_code_is(FU_FDV)
+      fdivsqrt.io.req.bits.uop      := io.req.bits.uop
+      fdivsqrt.io.req.bits.rs1_data := io.req.bits.rs1_data
+      fdivsqrt.io.req.bits.rs2_data := io.req.bits.rs2_data
+      fdivsqrt.io.req.bits.kill     := io.req.bits.kill
+      fdivsqrt.io.fcsr_rm           := io.fcsr_rm
+      fdivsqrt.io.brinfo <> io.brinfo
+
+      fdivsqrt.io.resp.ready := !memresp_val //share write port with memory
+
+      fdiv_busy := !fdivsqrt.io.req.ready || (io.req.valid && io.req.bits.uop.fu_code_is(FU_FDV))
+
+      fdiv_resp_val := fdivsqrt.io.resp.valid
+      fdiv_resp_uop := fdivsqrt.io.resp.bits.uop
+      fdiv_resp_data := fdivsqrt.io.resp.bits.data
+      fdiv_resp_fflags := fdivsqrt.io.resp.bits.fflags
+   }
 
    // Bypassing --------------------------------
    // (only the ALU is bypassable)
@@ -586,8 +665,7 @@ class ALUMemExeUnit(is_branch_unit    : Boolean = false
    io.dmem.req.bits.uop   := lsu.io.memreq_uop
    io.dmem.req.bits.kill  := lsu.io.memreq_kill // load kill request sent to memory
 
-   // I'm timing forwarding to coincide with dmem resps, so I'm not clobbering
-   //anything....
+   // I'm timing forwarding to coincide with dmem resps, so I'm not clobbering anything...
    memresp_val := Mux(io.com_handling_exc && io.dmem.resp.bits.uop.is_load, Bool(false),
                                                lsu.io.forward_val || io.dmem.resp.valid)
 
@@ -630,23 +708,17 @@ class ALUMemExeUnit(is_branch_unit    : Boolean = false
    lsu.io.memresp.valid := memresp_val
    lsu.io.memresp.bits  := memresp_uop
 
-   if (has_div || (has_mul && use_slow_mul))
-   {
-      io.resp(1).valid                := memresp_val || muldiv.io.resp.valid
-      io.resp(1).bits.uop             := Mux(memresp_val, memresp_uop, muldiv.io.resp.bits.uop)
-      io.resp(1).bits.uop.ctrl.rf_wen := Mux(memresp_val, memresp_rf_wen, muldiv.io.resp.bits.uop.ctrl.rf_wen)  // TODO get rid of this, it should come from the thing below
-      io.resp(1).bits.data            := Mux(memresp_val, memresp_data, muldiv.io.resp.bits.data)
-   }
-   else
-   {
-      io.resp(1).valid                := memresp_val
-      io.resp(1).bits.uop             := memresp_uop
-      io.resp(1).bits.uop.ctrl.rf_wen := memresp_rf_wen
-      io.resp(1).bits.data            := memresp_data
-   }
-   io.resp(1).bits.fflags.valid    := Bool(false)
-   io.resp(1).bits.fflags.bits.uop := NullMicroOp
-   io.resp(1).bits.fflags.bits.flags:= Bits(0)
+   io.resp(1).valid                := memresp_val || fdiv_resp_val || muldiv_resp_val
+   io.resp(1).bits.uop             := MuxCase(memresp_uop, Seq(
+                                       memresp_val -> memresp_uop,
+                                       fdiv_resp_val -> fdiv_resp_uop,
+                                       muldiv_resp_val -> muldiv_resp_uop))
+   io.resp(1).bits.uop.ctrl.rf_wen := (memresp_val && memresp_rf_wen) || fdiv_resp_val || muldiv_resp_val
+   io.resp(1).bits.data            := MuxCase(memresp_data, Seq(
+                                       memresp_val -> memresp_data,
+                                       fdiv_resp_val -> fdiv_resp_data,
+                                       muldiv_resp_val -> muldiv_resp_data))
+   io.resp(1).bits.fflags          := fdiv_resp_fflags
 }
 
 

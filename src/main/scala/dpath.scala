@@ -273,10 +273,12 @@ class DatPath(implicit p: Parameters) extends BoomModule()(p)
    if (ISSUE_WIDTH == 2) println("    -== Dual Issue ==- \n")
    if (ISSUE_WIDTH == 3) println("    -== Triple Issue ==- \n")
    if (ISSUE_WIDTH == 4) println("    -== Quad Issue ==- \n")
-   if (!usingFPU) println ("\n    FPU Unit Disabled")
-   else           println ("\n    FPU Unit Enabled")
-   if (usingVM)   println ("    VM Enabled\n")
-   else           println ("    VM Disabled\n")
+   if (usingFPU)         println ("\n    FPU Unit Enabled")
+   else                  println ("\n    FPU Unit Disabled")
+   if (usingVM)          println ("    VM       Enabled")
+   else                  println ("    VM       Disabled")
+   if (usingFDivSqrt)    println ("    FDivSqrt Enabled\n")
+   else                  println ("    FDivSqrt Disabled\n")
 
    if (ISSUE_WIDTH == 1)
    {
@@ -287,6 +289,7 @@ class DatPath(implicit p: Parameters) extends BoomModule()(p)
                                           , has_mul          = true
                                           , has_div          = true
                                           , use_slow_mul     = false
+                                          , has_fdiv         = usingFPU && usingFDivSqrt
                                           ))
    }
    else if (ISSUE_WIDTH == 2)
@@ -298,27 +301,33 @@ class DatPath(implicit p: Parameters) extends BoomModule()(p)
                                           ))
       exe_units += Module(new ALUMemExeUnit(fp_mem_support   = usingFPU
                                           , has_div          = true
+                                          , has_fdiv         = usingFPU && usingFDivSqrt
                                           ))
    }
    else if (ISSUE_WIDTH == 3)
    {
-      exe_units += Module(new ALUExeUnit(is_branch_unit = true
+      exe_units += Module(new ALUExeUnit(is_branch_unit      = true
                                           , shares_csr_wport = true
-                                          , has_fpu = usingFPU
-                                          , has_mul      = true
+                                          , has_fpu          = usingFPU
+                                          , has_mul          = true
                                           ))
-      exe_units += Module(new ALUExeUnit(has_div = true))
+      exe_units += Module(new ALUExeUnit(has_div             = true
+                                          , has_fdiv         = usingFPU && usingFDivSqrt
+                                          ))
       exe_units += Module(new MemExeUnit())
    }
    else
-   {  // 4-wide issue
-      exe_units += Module(new ALUExeUnit(is_branch_unit = false
+   {
+      require (ISSUE_WIDTH == 4)
+      exe_units += Module(new ALUExeUnit(is_branch_unit      = false
                                           , shares_csr_wport = true
-                                          , has_fpu = usingFPU
-                                          , has_mul = true
+                                          , has_fpu          = usingFPU
+                                          , has_mul          = true
                                           ))
-      exe_units += Module(new ALUExeUnit(is_branch_unit = true))
-      exe_units += Module(new ALUExeUnit(has_div = true))
+      exe_units += Module(new ALUExeUnit(is_branch_unit      = true))
+      exe_units += Module(new ALUExeUnit(has_div             = true
+                                          , has_fdiv         = usingFPU && usingFDivSqrt
+                                          ))
       exe_units += Module(new MemExeUnit())
    }
 
@@ -327,7 +336,7 @@ class DatPath(implicit p: Parameters) extends BoomModule()(p)
    require (exe_units.map(_.is_mem_unit).reduce(_|_), "Datapath is missing a memory unit.")
    require (exe_units.map(_.has_mul).reduce(_|_), "Datapath is missing a multiplier.")
    require (exe_units.map(_.has_div).reduce(_|_), "Datapath is missing a divider.")
-   require (exe_units.map(_.has_fpu).reduce(_|_) == usingFPU, "Datapath is missing a fpu.")
+   require (exe_units.map(_.has_fpu).reduce(_|_) == usingFPU, "Datapath is missing a fpu (or has an fpu and shouldnt).")
 
    require (exe_units.length != 0)
    val num_rf_read_ports = exe_units.map(_.num_rf_read_ports).reduce[Int](_+_)
@@ -382,6 +391,7 @@ class DatPath(implicit p: Parameters) extends BoomModule()(p)
    var lsu_io:LoadStoreUnitIo = null
    lsu_io = (exe_units.find(_.is_mem_unit).get).io.lsu_io
    require (exe_units.count(_.is_mem_unit) == 1) // assume only one mem_unit
+   (exe_units.find(_.is_mem_unit).get).io.dmem <> io.dmem
 
    // Writeback State
 
@@ -1010,7 +1020,8 @@ class DatPath(implicit p: Parameters) extends BoomModule()(p)
    //-------------------------------------------------------------
    //-------------------------------------------------------------
 
-   val num_fpu_ports = exe_units.withFilter(_.has_fpu).map(_.num_rf_write_ports).foldLeft(0)(_+_)
+   // TODO bug, this can return too many fflag ports,e.g., the FPU is shared with the mem unit and thus has two wb ports
+   val num_fpu_ports = exe_units.withFilter(_.hasFFlags).map(_.num_rf_write_ports).foldLeft(0)(_+_)
    val rob  = Module(new Rob(DECODE_WIDTH, NUM_ROB_ENTRIES, num_slow_wakeup_ports, num_fpu_ports)) // TODO the ROB writeback is off the regfile, which is a different set
 
       // Dispatch
@@ -1043,9 +1054,9 @@ class DatPath(implicit p: Parameters) extends BoomModule()(p)
                                            (wb_uop.dst_rtype === RT_FIX || wb_uop.dst_rtype === RT_FLT)
 
             val data = exe_units(w).io.resp(j).bits.data
-            if (exe_units(w).has_fpu || (exe_units(w).is_mem_unit && usingFPU))
+            if (exe_units(w).hasFFlags || (exe_units(w).is_mem_unit && usingFPU))
             {
-               if (exe_units(w).has_fpu)
+               if (exe_units(w).hasFFlags)
                {
                   rob.io.fflags(f_cnt) <> exe_units(w).io.resp(j).bits.fflags
                   f_cnt += 1
@@ -1240,8 +1251,8 @@ class DatPath(implicit p: Parameters) extends BoomModule()(p)
    {
       println("\n Chisel Printout Enabled\n")
 
-      var whitespace = 27+56 - NUM_LSU_ENTRIES- p(NumIssueSlotEntries) - (NUM_ROB_ENTRIES/COMMIT_WIDTH) -
-         io.dmem.debug.ld_req_slot.size // - NUM_BROB_ENTRIES
+      var whitespace = 59 - 12 - NUM_LSU_ENTRIES- p(NumIssueSlotEntries) - (NUM_ROB_ENTRIES/COMMIT_WIDTH) -
+         io.dmem.debug.ld_req_slot.size //- NUM_BROB_ENTRIES
 
       def InstsStr(insts: Bits, width: Int) =
       {

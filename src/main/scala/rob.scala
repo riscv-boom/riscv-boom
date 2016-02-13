@@ -171,6 +171,7 @@ class Rob(width: Int
    println("    Rob Row size   : " + log2Up(num_rob_rows))
    println("    log2UP(width)  : " + log2Up(width))
    println("    log2Ceil(width): " + log2Ceil(width))
+   println("    FPU FFlag Ports: " + num_fpu_ports)
 
    val s_reset :: s_normal :: s_rollback :: s_wait_till_empty :: Nil = Enum(UInt(),4)
    val rob_state = Reg(init = s_reset)
@@ -600,12 +601,12 @@ class Rob(width: Int
       assert (!(io.com_valids(w) &&
                !io.com_uops(w).fp_val &&
                rob_head_fflags(w) =/= Bits(0)),
-               "Committed non-FP instruction has non-zero exception bits.")
+               "Committed non-FP instruction has non-zero fflag bits.")
       assert (!(io.com_valids(w) &&
                io.com_uops(w).fp_val &&
                (io.com_uops(w).is_load || io.com_uops(w).is_store) &&
                rob_head_fflags(w) =/= Bits(0)),
-               "Committed FP load or store has non-zero exception bits.")
+               "Committed FP load or store has non-zero fflag bits.")
    }
    io.com_fflags_val := fflags_val.reduce(_|_)
    io.com_fflags     := fflags.reduce(_|_)
