@@ -146,7 +146,7 @@ trait ScalarOpConstants
                              // TODO rename RT_NAR
 
    // Micro-op opcodes
-   // TODO use an enum
+   // TODO change micro-op opcodes into using enum
    val UOPC_SZ = 9
    val uopX    = BitPat.DC(UOPC_SZ)
    val uopNOP  = Bits( 0, UOPC_SZ)
@@ -286,12 +286,12 @@ trait ScalarOpConstants
    val uopFNMADD_D  = Bits(116,UOPC_SZ)
    val uopFNMSUB_D  = Bits(117,UOPC_SZ)
 
-   val uopFDIV_S    = Bits(117,UOPC_SZ)
-   val uopFDIV_D    = Bits(118,UOPC_SZ)
-   val uopFSQRT_S   = Bits(119,UOPC_SZ)
-   val uopFSQRT_D   = Bits(120,UOPC_SZ)
+   val uopFDIV_S    = Bits(118,UOPC_SZ)
+   val uopFDIV_D    = Bits(119,UOPC_SZ)
+   val uopFSQRT_S   = Bits(120,UOPC_SZ)
+   val uopFSQRT_D   = Bits(121,UOPC_SZ)
 
-   val uopSYSTEM    = Bits(121, UOPC_SZ) // pass uop down the CSR pipeline and let it handle it
+   val uopSYSTEM    = Bits(122, UOPC_SZ) // pass uop down the CSR pipeline and let it handle it
 
    // Memory Mask Type Signal
    val MSK_X   = BitPat("b???")
