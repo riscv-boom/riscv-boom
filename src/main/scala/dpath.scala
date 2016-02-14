@@ -331,8 +331,6 @@ class DatPath(implicit p: Parameters) extends BoomModule()(p)
       exe_units += Module(new MemExeUnit())
    }
 
-   (exe_units.find(_.is_mem_unit).get).io.dmem <> io.dmem
-
    require (exe_units.map(_.is_mem_unit).reduce(_|_), "Datapath is missing a memory unit.")
    require (exe_units.map(_.has_mul).reduce(_|_), "Datapath is missing a multiplier.")
    require (exe_units.map(_.has_div).reduce(_|_), "Datapath is missing a divider.")
@@ -1251,8 +1249,8 @@ class DatPath(implicit p: Parameters) extends BoomModule()(p)
    {
       println("\n Chisel Printout Enabled\n")
 
-      var whitespace = 59 - 12 - NUM_LSU_ENTRIES- p(NumIssueSlotEntries) - (NUM_ROB_ENTRIES/COMMIT_WIDTH) -
-         io.dmem.debug.ld_req_slot.size //- NUM_BROB_ENTRIES
+      var whitespace = 59 - 12 - NUM_LSU_ENTRIES- p(NumIssueSlotEntries) - (NUM_ROB_ENTRIES/COMMIT_WIDTH) //-
+         io.dmem.debug.ld_req_slot.size - NUM_BROB_ENTRIES
 
       def InstsStr(insts: Bits, width: Int) =
       {
