@@ -150,6 +150,23 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int)(implicit p
    }
 }
 
+
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
+
+// act as a "null" branch predictor (it makes no predictions).
+// However, we need to instantiate a branch predictor, as it contains the Branch
+// ROB which tracks all of the inflight prediction state and performs the
+// updates at commit as necessary.
+class NullBrPredictor(fetch_width: Int
+                     , history_length: Int = 12
+   )(implicit p: Parameters) extends BrPredictor(fetch_width, history_length)(p)
+{
+   io.resp.valid := Bool(false)
+   io.resp.bits := new BpdResp().fromBits(Bits(0))
+}
+
+
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
 

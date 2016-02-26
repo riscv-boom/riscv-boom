@@ -89,32 +89,34 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
                                    // (and not overridden by an earlier jal)
    val bp2_br_taken = Wire(Bool()) // was there a taken branch in the bp2 stage
                                    // we use this to update the bpd's history register speculatively
-   val (bpd_valid, bpd_bits) =
-      if (ENABLE_BRANCH_PREDICTOR)
-      {
-         val br_predictor = Module(new GshareBrPredictor(fetch_width = fetch_width
-                                                   , num_entries = BPD_NUM_ENTRIES
-                                                   , history_length = GHIST_LENGTH))
-         br_predictor.io.req_pc := io.imem.npc
-         br_predictor.io.br_resolution <> io.br_unit.bpd_update
-         // TODO BUG XXX i suspect this is completely and utterly broken. what about <bne,jr,bne> or  <bne,j,bne>. What
-         // about <csr, bne>/<b,csr,b>? does unique/pipeline replaysincrement ghistory when they shouldn't?
-         br_predictor.io.hist_update_spec.valid := bp2_br_seen && io.req.ready
-         br_predictor.io.hist_update_spec.bits.taken := bp2_br_taken
-         br_predictor.io.resp.ready := io.req.ready
 
-         br_predictor.io.brob <> io.brob
-         br_predictor.io.flush := io.kill
+   var br_predictor: BrPredictor = null
+   if (ENABLE_BRANCH_PREDICTOR)
+   {
+      br_predictor = Module(new GshareBrPredictor(fetch_width = fetch_width
+                                                , num_entries = BPD_NUM_ENTRIES
+                                                , history_length = GHIST_LENGTH))
+   }
+   else
+   {
+      br_predictor = Module(new NullBrPredictor(fetch_width = fetch_width
+                                                , history_length = GHIST_LENGTH))
+   }
 
-         (br_predictor.io.resp.valid, br_predictor.io.resp.bits)
-      }
-      else
-      {
-         require (false) // TODO don't currently support turning on bpd (needs at least a brob to store btb info)
-         io.brob.allocate.ready := Bool(true)
-         io.brob.allocate_brob_tail := UInt(0)
-         (Bool(false), new BpdResp().fromBits(Bits(0)))
-      }
+   br_predictor.io.req_pc := io.imem.npc
+   br_predictor.io.br_resolution <> io.br_unit.bpd_update
+   // TODO BUG XXX i suspect this is completely and utterly broken. what about <bne,jr,bne> or  <bne,j,bne>. What
+   // about <csr, bne>/<b,csr,b>? does unique/pipeline replaysincrement ghistory when they shouldn't?
+   br_predictor.io.hist_update_spec.valid := bp2_br_seen && io.req.ready
+   br_predictor.io.hist_update_spec.bits.taken := bp2_br_taken
+   br_predictor.io.resp.ready := io.req.ready
+
+   br_predictor.io.brob <> io.brob
+   br_predictor.io.flush := io.kill
+
+   val bpd_valid = br_predictor.io.resp.valid
+   val bpd_bits = br_predictor.io.resp.bits
+
 
    //-------------------------------------------------------------
    // Branch Decode (BP2 Stage)
