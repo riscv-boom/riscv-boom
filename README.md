@@ -44,7 +44,6 @@ If you have not, follow additional instructions below.
 To build a BOOM C++ emulator and run BOOM through a couple of simple tests:
 
 ````
-   $ export ROCKETCHIP_ADDONS="boom"
    $ git clone https://github.com/ucb-bar/rocket-chip.git
    $ cd rocket-chip
    $ git checkout boom
@@ -86,6 +85,7 @@ For more detailed information on the toolchain, visit
 * **The Wiki** - https://github.com/ucb-bar/riscv-boom/wiki
 * **Tech Report** - The Berkeley Out-of-Order Machine (BOOM): An Industry-Competitive, Synthesizable, Parameterized RISC-V Processor (https://www.eecs.berkeley.edu/Pubs/TechRpts/2015/EECS-2015-167.html)
 * **Slides** - RISC_V Workshop #3 (http://riscv.org/workshop-jan2016/Wed1345%20RISCV%20Workshop%203%20BOOM.pdf)
+* **Video** - RISC-V Workshop #3 (https://www.youtube.com/watch?v=JuJDPbzWpR0)
 * **Slides** - RISC-V Workshop #2 (http://riscv.org/workshop-jun2015/riscv-boom-workshop-june2015.pdf)
 * **Video** - RISC-V Workshop #2 (https://www.youtube.com/watch?v=z8UInbiQbdA)
 
