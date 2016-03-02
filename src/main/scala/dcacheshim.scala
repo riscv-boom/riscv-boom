@@ -141,12 +141,11 @@ class DCacheResp(implicit p: Parameters) extends BoomBundle()(p)
    val data_subword = Bits(width = coreDataBits)
    val uop          = new MicroOp
    val typ          = Bits(width = MT_SZ)
-   // TODO should nack go in here?
 }
 
 
 // from pov of datapath
-class DCMemPortIo(implicit p: Parameters) extends BoomBundle()(p)
+class DCMemPortIO(implicit p: Parameters) extends BoomBundle()(p)
 {
    val req     = (new DecoupledIO(new DCacheReq))
    val resp    = (new ValidIO(new DCacheResp)).flip
@@ -183,7 +182,7 @@ class DCacheShim(implicit p: Parameters) extends BoomModule()(p)
 
    val io = new Bundle
    {
-      val core = (new DCMemPortIo()).flip
+      val core = (new DCMemPortIO()).flip
       val dmem = new rocket.HellaCacheIO
    }
 

@@ -112,6 +112,23 @@ class BypassData(num_bypass_ports: Int, data_width: Int)(implicit p: Parameters)
    override def cloneType: this.type = new BypassData(num_bypass_ports, data_width).asInstanceOf[this.type]
 }
 
+class BrResolutionInfo(implicit p: Parameters) extends BoomBundle()(p)
+{
+   val valid      = Bool()
+   val mispredict = Bool()
+   val mask       = Bits(width = MAX_BR_COUNT) // the resolve mask
+   val tag        = UInt(width = BR_TAG_SZ)    // the branch tag that was resolved
+   val exe_mask   = Bits(width = MAX_BR_COUNT) // the br_mask of the actual branch uop
+                                               // used to reset the dec_br_mask
+   val rob_idx    = UInt(width = ROB_ADDR_SZ)
+   val ldq_idx    = UInt(width = MEM_ADDR_SZ)  // track the "tail" of loads and stores, so we can
+   val stq_idx    = UInt(width = MEM_ADDR_SZ)  // quickly reset the LSU on a mispredict
+   val brob_idx   = UInt(width = BROB_ADDR_SZ) // quickly reset the Branch-ROB on a mispredict
+   val taken      = Bool()                     // which direction did the branch go?
+   val is_br      = Bool()
+   val is_jr      = Bool()
+}
+
 class BranchUnitResp(implicit p: Parameters) extends BoomBundle()(p)
 {
    val take_pc         = Bool()

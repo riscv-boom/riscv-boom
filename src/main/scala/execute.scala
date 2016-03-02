@@ -40,7 +40,7 @@ class FFlagsResp(implicit p: Parameters) extends BoomBundle()(p)
    val flags = Bits(width=rocket.FPConstants.FLAGS_SZ)
 }
 
-class ExecutionUnitIo(num_rf_read_ports: Int
+class ExecutionUnitIO(num_rf_read_ports: Int
                      , num_rf_write_ports: Int
                      , num_bypass_ports: Int
                      , data_width: Int
@@ -63,8 +63,8 @@ class ExecutionUnitIo(num_rf_read_ports: Int
    val fcsr_rm = Bits(INPUT, rocket.FPConstants.RM_SZ)
 
    // only used by the mem unit
-   val lsu_io = new LoadStoreUnitIo(DECODE_WIDTH)
-   val dmem   = new DCMemPortIo()
+   val lsu_io = new LoadStoreUnitIO(DECODE_WIDTH)
+   val dmem   = new DCMemPortIO()
    val com_handling_exc = Bool(INPUT)
 }
 
@@ -83,7 +83,7 @@ abstract class ExecutionUnit(val num_rf_read_ports: Int
                             , val has_fdiv      : Boolean       = false
                             )(implicit p: Parameters) extends BoomModule()(p)
 {
-   val io = new ExecutionUnitIo(num_rf_read_ports, num_rf_write_ports
+   val io = new ExecutionUnitIO(num_rf_read_ports, num_rf_write_ports
                                , num_bypass_stages, data_width)
 
    io.resp.map(_.bits.fflags.valid := Bool(false))

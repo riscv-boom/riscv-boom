@@ -17,16 +17,14 @@ package boom
 
 import Chisel._
 import Node._
-import uncore._
-import rocket.CoreName
 import cde.Parameters
 
 class BOOMTile(resetSignal: Bool = null)(implicit p: Parameters) extends rocket.Tile(resetSignal)(p)
 {
-   val core = Module(new Core()(p.alterPartial({case CoreName => "BOOM"})))
+   val core = Module(new BOOMCore()(p.alterPartial({case rocket.CoreName => "BOOM"})))
    val icache = Module(new rocket.Frontend()(p.alterPartial({
-      case CacheName => "L1I"
-      case CoreName => "BOOM"})))
+      case uncore.CacheName => "L1I"
+      case rocket.CoreName => "BOOM"})))
    val dcache = Module(new rocket.HellaCache()(dcacheParams))
    val dc_shim = Module(new DCacheShim()(dcacheParams))
    val ptw = Module(new rocket.PTW(nPTWPorts)(dcacheParams))
@@ -73,7 +71,7 @@ class BOOMTile(resetSignal: Bool = null)(implicit p: Parameters) extends rocket.
    io.uncached <> Seq(icache.io.mem)
 
    // Cache Counters
-   core.io.counters.dc_miss := dcache.io.mem.acquire.fire().toBool
+   core.io.counters.dc_miss := dcache.io.mem.acquire.fire()
    core.io.counters.ic_miss := icache.io.mem.acquire.fire()
 }
 

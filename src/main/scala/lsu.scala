@@ -55,7 +55,7 @@ import rocket.Str
 import uncore.constants.MemoryOpConstants._
 import junctions.PgIdxBits
 
-class LoadStoreUnitIo(pl_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
+class LoadStoreUnitIO(pl_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
    // Decode Stage
    // Track which stores are "alive" in the pipeline
@@ -109,7 +109,7 @@ class LoadStoreUnitIo(pl_width: Int)(implicit p: Parameters) extends BoomBundle(
    val nack               = new NackInfo().asInput()
 
 // causing stuff to dissapear
-//   val dmem = new DCMemPortIo().flip()
+//   val dmem = new DCMemPortIO().flip()
    val dmem_is_ordered = Bool(INPUT)
    val dmem_req_ready = Bool(INPUT)    // arbiter can back-pressure us (or MSHRs can fill up).
                                        // although this is also turned into a
@@ -133,7 +133,7 @@ class LoadStoreUnitIo(pl_width: Int)(implicit p: Parameters) extends BoomBundle(
 
 class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(p)
 {
-   val io = new LoadStoreUnitIo(pl_width)
+   val io = new LoadStoreUnitIO(pl_width)
 
    val num_ld_entries = NUM_LSU_ENTRIES
    val num_st_entries = NUM_LSU_ENTRIES
