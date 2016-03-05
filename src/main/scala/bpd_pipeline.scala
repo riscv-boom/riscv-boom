@@ -93,7 +93,13 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    var br_predictor: BrPredictor = null
    if (ENABLE_BRANCH_PREDICTOR)
    {
-      br_predictor = Module(new GshareBrPredictor(fetch_width = fetch_width
+      //br_predictor = Module(new TageBrPredictor(fetch_width = fetch_width
+      //                                          , num_tables = 4
+      //                                          , table_sizes = Seq(4096, 4096, 2048, 2048)
+      //                                          , history_lengths = Seq(5, 15, 44, 130)
+      //                                          , tag_sizes = Seq(10, 10, 10, 12)
+      //                                          ))
+      br_predictor = Module(new SimpleGShareBrPredictor(fetch_width = fetch_width
                                                 , num_entries = BPD_NUM_ENTRIES
                                                 , history_length = GHIST_LENGTH))
    }

@@ -51,7 +51,7 @@ class BoomBundle(implicit val p: Parameters) extends junctions.ParameterizedBund
 // NOTE: I can't promise these signals get killed/cleared on a mispredict,
 // so I should listen to the corresponding valid bit
 // For example, on a bypassing, we listen to rf_wen to see if bypass is valid,
-// but we "could" be bypassing to a branch which kills us (false positive cobinational loop),
+// but we "could" be bypassing to a branch which kills us (a false positive combinational loop),
 // so we have to keep the rf_wen enabled, and not dependent on a branch kill signal
 // TODO REFACTOR this, as this should no longer be true, as bypass occurs in stage before branch resolution
 class CtrlSignals extends Bundle()
@@ -733,7 +733,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
                                        dec_has_br_or_jalr_in_packet
    bpd_stage.io.brob.allocate.bits.executed.map{_ := Bool(false)}
    bpd_stage.io.brob.allocate.bits.taken.map{_ := Bool(false)}
-   bpd_stage.io.brob.allocate.bits.mispredict.map{_ := Bool(false)}
+   bpd_stage.io.brob.allocate.bits.mispredicted.map{_ := Bool(false)}
    bpd_stage.io.brob.allocate.bits.debug_executed := Bool(false)
    bpd_stage.io.brob.allocate.bits.debug_rob_idx := dis_uops(0).rob_idx
    bpd_stage.io.brob.allocate.bits.brob_idx := dis_uops(0).brob_idx

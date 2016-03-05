@@ -19,21 +19,13 @@ import Chisel._
 import Node._
 import cde.Parameters
 
-class BrTableUpdate(implicit p: Parameters) extends BoomBundle()(p)
-{
-   val hash_idx   = UInt(width = vaddrBits)
-   val executed   = Bits(width = FETCH_WIDTH) // which words in the fetch packet does the update correspond to?
-   val new_value  = Bits(width=FETCH_WIDTH)
-}
-
-
 class GShareResp(implicit p: Parameters) extends BoomBundle()(p)
 {
    val history = Bits(width = GHIST_LENGTH) // stored in snapshots (dealloc after Execute)
-   val index =  Bits(width = GHIST_LENGTH) // needed to update predictor at Commit
+   val index = Bits(width = GHIST_LENGTH) // needed to update predictor at Commit
 }
 
-class GshareBrPredictor(fetch_width: Int
+class GShareBrPredictor(fetch_width: Int
                         , num_entries: Int = 4096
                         , history_length: Int = 12
    )(implicit p: Parameters) extends BrPredictor(fetch_width, history_length)(p)
@@ -67,6 +59,15 @@ class GshareBrPredictor(fetch_width: Int
 
    val stall = !io.resp.ready // TODO FIXME this feels too low-level
 
+
+   class BrTableUpdate extends Bundle
+   {
+      val idx        = UInt(width = log2Up(num_entries))
+      val executed   = Bits(width = FETCH_WIDTH) // which words in the fetch packet does the update correspond to?
+      val new_value  = Bits(width=FETCH_WIDTH)
+   }
+
+
    // TODO add 2nd port
    // TODO add banking
    val pwq = Module(new Queue(new BrTableUpdate, entries=2))
@@ -77,7 +78,7 @@ class GshareBrPredictor(fetch_width: Int
    when (pwq.io.deq.valid)
    {
 //      io.resp.valid := RegNext(RegNext(Bool(false)))
-      val waddr = pwq.io.deq.bits.hash_idx
+      val waddr = pwq.io.deq.bits.idx
       val wdata = Vec.fill(fetch_width)(pwq.io.deq.bits.new_value)
       p_table.write(waddr, wdata, p_wmask)
    }
@@ -103,7 +104,7 @@ class GshareBrPredictor(fetch_width: Int
    //------------------------------------------------------------
    // h-table
    // read table to update the p-table (only if a mispredict occurred)
-   val h_ren = commit.valid && commit.bits.mispredict.reduce(_|_)
+   val h_ren = commit.valid && commit.bits.mispredicted.reduce(_|_)
    hwq.io.deq.ready := !h_ren
    when (!h_ren && hwq.io.deq.valid)
    {
@@ -114,7 +115,7 @@ class GshareBrPredictor(fetch_width: Int
       h_table.write(waddr, wdata, wmask)
    }
    pwq.io.enq.valid          := RegNext(h_ren)
-   pwq.io.enq.bits.hash_idx  := RegNext(u_addr)
+   pwq.io.enq.bits.idx       := RegNext(u_addr)
    pwq.io.enq.bits.executed  := RegNext(commit.bits.executed.toBits)
    pwq.io.enq.bits.new_value := h_table.read(u_addr, h_ren).toBits
 
