@@ -65,6 +65,8 @@ class GShareBrPredictor(fetch_width: Int
       val idx        = UInt(width = log2Up(num_entries))
       val executed   = Bits(width = FETCH_WIDTH) // which words in the fetch packet does the update correspond to?
       val new_value  = Bits(width=FETCH_WIDTH)
+
+      override def cloneType: this.type = new BrTableUpdate().asInstanceOf[this.type]
    }
 
 

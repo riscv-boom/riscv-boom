@@ -99,7 +99,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
       //                                          , history_lengths = Seq(5, 15, 44, 130)
       //                                          , tag_sizes = Seq(10, 10, 10, 12)
       //                                          ))
-      br_predictor = Module(new SimpleGShareBrPredictor(fetch_width = fetch_width
+      br_predictor = Module(new GShareBrPredictor(fetch_width = fetch_width
                                                 , num_entries = BPD_NUM_ENTRIES
                                                 , history_length = GHIST_LENGTH))
    }
