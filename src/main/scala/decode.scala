@@ -374,6 +374,7 @@ class DecodeUnit() extends Module
    uop.lrs3       := Cat(Bool(true),             uop.inst(RS3_MSB,RS3_LSB))
    // TODO do I need to remove (uop.lrs3) for integer-only? Or do synthesis tools properly remove it?
 
+
    uop.ldst_val   := (cs.dst_type != RT_X && (uop.ldst != UInt(0)))
    uop.dst_rtype  := cs.dst_type
    uop.lrs1_rtype := cs.rs1_type
@@ -529,6 +530,7 @@ class FetchSerializerNtoM extends Module with BOOMCoreParameters
    io.deq.bits.uops(0).br_prediction  := io.enq.bits.predictions(inst_idx)
    io.deq.bits.uops(0).valid          := io.enq.bits.mask(0)
    io.deq.bits.uops(0).xcpt_if        := io.enq.bits.xcpt_if(inst_idx)
+   io.deq.bits.uops(0).debug_events_tsc := io.enq.bits.debug_events_tsc
 
    //-------------------------------------------------------------
    // override all the above logic for DW>1
@@ -544,6 +546,7 @@ class FetchSerializerNtoM extends Module with BOOMCoreParameters
          io.deq.bits.uops(i).inst           := io.enq.bits.insts(i)
          io.deq.bits.uops(i).xcpt_if        := io.enq.bits.xcpt_if
          io.deq.bits.uops(i).br_prediction  := io.enq.bits.predictions(i)
+         io.deq.bits.uops(i).debug_events_tsc := io.enq.bits.debug_events_tsc
       }
       io.enq.ready := io.deq.ready
    }
@@ -648,4 +651,3 @@ class BranchMaskGenerationLogic(val pl_width: Int) extends Module with BOOMCoreP
 }
 
 }
-

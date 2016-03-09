@@ -72,6 +72,20 @@ class CtrlSignals extends Bundle()
    val is_std      = Bool()
 }
 
+// TODO: fix the tabing to 3 spaces
+class StageEvents extends Bundle()
+{
+   val fetch_tsc           = UInt(width = 64)
+   val decode_tsc          = UInt(width = 64)
+   val rename_tsc          = UInt(width = 64)
+   val dispatch_tsc        = UInt(width = 64)
+   val issue_tsc           = UInt(width = 64)
+   val register_read_tsc   = UInt(width = 64)
+   val execute_tsc         = UInt(width = 64)
+   val memory_tsc          = UInt(width = 64)
+   val write_tsc           = UInt(width = 64)
+   val commit_tsc          = UInt(width = 64)
+}
 
 // TODO Chisel ability to union this Bundle for different types of Uops?
 class MicroOp extends BOOMCoreBundle
@@ -156,7 +170,7 @@ class MicroOp extends BOOMCoreBundle
    // purely debug information
    val debug_wdata      = Bits(width=xLen)
    val debug_ei_enabled = Bool()
-
+   val debug_events_tsc = new StageEvents    // stage event timestamps
 
    def fu_code_is(_fu: Bits) = fu_code === _fu
 }
@@ -170,6 +184,8 @@ class FetchBundle extends Bundle with BOOMCoreParameters
 
    val pred_resp   = new BranchPredictionResp
    val predictions = Vec.fill(FETCH_WIDTH) {new BranchPrediction}
+
+   val debug_events_tsc = new StageEvents       // stage event timestamps
   override def cloneType: this.type = new FetchBundle().asInstanceOf[this.type]
 }
 
@@ -287,9 +303,11 @@ class DatPath() extends Module with BOOMCoreParameters
                                           , has_div          = true
                                           , use_slow_mul     = false
                                           ))
+      exe_units(0).io.dmem <> io.dmem
    }
    else if (ISSUE_WIDTH == 2)
    {
+      // TODO make a ALU/Mem unit, or a ALU-i/Mem unit
       exe_units += Module(new ALUExeUnit(is_branch_unit      = true
                                           , shares_csr_wport = true
                                           , has_fpu          = !params(BuildFPU).isEmpty
@@ -401,6 +419,9 @@ class DatPath() extends Module with BOOMCoreParameters
 
    val rob_empty             = Wire(Bool())
 
+   // Debug Counters
+   val tsc_reg = Reg(init = UInt(0, xLen))
+   val irt_reg = Reg(init = UInt(0, xLen))
 
    //-------------------------------------------------------------
    //-------------------------------------------------------------
@@ -445,6 +466,13 @@ class DatPath() extends Module with BOOMCoreParameters
 
    fetch_bundle.pc := io.imem.resp.bits.pc
    fetch_bundle.xcpt_if := io.imem.resp.bits.xcpt_if
+   fetch_bundle.debug_events_tsc.fetch_tsc := tsc_reg
+
+   // Zero out issue, wb, and sotre timestamps for fence instructions
+   fetch_bundle.debug_events_tsc.issue_tsc := UInt(0, 64)
+   fetch_bundle.debug_events_tsc.write_tsc := UInt(0, 64)
+   fetch_bundle.debug_events_tsc.memory_tsc := UInt(0, 64)
+
    for (i <- 0 until FETCH_WIDTH)
    {
       fetch_bundle.insts(i) := io.imem.resp.bits.data(i)
@@ -586,6 +614,7 @@ class DatPath() extends Module with BOOMCoreParameters
 
       dec_will_fire(w) := dec_valids(w) && !stall_me && !kill_frontend
       dec_uops(w)      := decode_unit.io.deq.uop
+      dec_uops(w).debug_events_tsc.decode_tsc := tsc_reg
    }
 
    // all decoders are empty and ready for new instructions
@@ -714,6 +743,7 @@ class DatPath() extends Module with BOOMCoreParameters
    {
       dis_mask(w)         := rename_stage.io.ren_mask(w)
       dis_uops(w)         := rename_stage.io.ren_uops(w)
+      dis_uops(w).debug_events_tsc.rename_tsc := tsc_reg
       // TODO probably don't need to do this, since we're going ot do it in the issue window?
       dis_uops(w).br_mask := GetNewBrMask(br_unit.brinfo, rename_stage.io.ren_uops(w))
 
@@ -762,6 +792,10 @@ class DatPath() extends Module with BOOMCoreParameters
    // Input (Dispatch)
    issue_unit.io.dis_mask  := dis_mask
    issue_unit.io.dis_uops  := dis_uops
+   for (i <- 0 until DISPATCH_WIDTH)
+   {
+      issue_unit.io.dis_uops(i).debug_events_tsc.dispatch_tsc  := tsc_reg
+   }
 
    // Output (Issue)
 
@@ -1010,7 +1044,7 @@ class DatPath() extends Module with BOOMCoreParameters
    //-------------------------------------------------------------
 
    val num_fpu_ports = exe_units.withFilter(_.has_fpu).map(_.num_rf_write_ports).foldLeft(0)(_+_)
-   val rob  = Module(new Rob(DECODE_WIDTH, NUM_ROB_ENTRIES, num_slow_wakeup_ports, num_fpu_ports)) // TODO the ROB writeback is off the regfile, which is a different set
+   val rob  = Module(new Rob(DECODE_WIDTH, NUM_ROB_ENTRIES, ISSUE_WIDTH, num_slow_wakeup_ports, num_fpu_ports)) // TODO the ROB writeback is off the regfile, which is a different set
 
       // Dispatch
       rob_rdy := rob.io.ready
@@ -1020,6 +1054,9 @@ class DatPath() extends Module with BOOMCoreParameters
       rob.io.dis_has_br_or_jalr_in_packet := dec_has_br_or_jalr_in_packet
       rob.io.dis_partial_stall := !dec_rdy && !dis_mask(DECODE_WIDTH-1)
       rob.io.dis_new_packet := dec_finished_mask === Bits(0)
+      rob.io.tsc := tsc_reg
+      rob.io.iss_valids := iss_valids
+      rob.io.iss_uops := iss_uops
 
       dis_curr_rob_row_idx  := rob.io.curr_rob_tail
 
@@ -1103,6 +1140,7 @@ class DatPath() extends Module with BOOMCoreParameters
       // Commit (ROB outputs)
       com_valids       := rob.io.com_valids
       com_uops         := rob.io.com_uops
+
       com_fflags_val   := rob.io.com_fflags_val
       com_fflags       := rob.io.com_fflags
 
@@ -1177,9 +1215,7 @@ class DatPath() extends Module with BOOMCoreParameters
 
    // Time Stamp Counter & Retired Instruction Counter
    // (only used for printf and vcd dumps - the actual counters are in the CSRFile)
-   val tsc_reg = Reg(init = UInt(0, xLen))
-   val irt_reg = Reg(init = UInt(0, xLen))
-   tsc_reg := tsc_reg + UInt(1)
+   tsc_reg := tsc_reg + Mux(Bool(O3PIPEVIEW_PRINTF), O3_CYCLE_TIME, UInt(1))
    irt_reg := irt_reg + PopCount(com_valids.toBits)
    debug(tsc_reg)
    debug(irt_reg)
@@ -1463,7 +1499,24 @@ class DatPath() extends Module with BOOMCoreParameters
       }
    }
 
+   // When O3PipeView enabled, dump instruction timestamps on commit.
+   if (O3PIPEVIEW_PRINTF)
+   {
+      for (i <- 0 until COMMIT_WIDTH)
+      {
+         when (com_valids(i))
+         {
+            printf("O3PipeView:fetch:%d:0x%x:0:%d:DASM(%x)\n", com_uops(i).debug_events_tsc.fetch_tsc, com_uops(i).inst, irt_reg + PopCount(com_valids.slice(0, i)), com_uops(i).inst)
+            printf("O3PipeView:decode:%d\n", com_uops(i).debug_events_tsc.decode_tsc)
+            printf("O3PipeView:rename:%d\n", com_uops(i).debug_events_tsc.rename_tsc)
+            printf("O3PipeView:dispatch:%d\n", com_uops(i).debug_events_tsc.dispatch_tsc)
+            printf("O3PipeView:issue:%d\n", com_uops(i).debug_events_tsc.issue_tsc)
+            printf("O3PipeView:complete:%d\n", com_uops(i).debug_events_tsc.write_tsc)
+            printf("O3PipeView:retire:%d:store:%d\n", tsc_reg, com_uops(i).debug_events_tsc.memory_tsc)
+         }
+      }
 
+   }
 
    //-------------------------------------------------------------
    //-------------------------------------------------------------
