@@ -56,7 +56,7 @@ class DefaultBOOMConfig extends Config (
    },
    knobValues = {
       case "NTiles" => 1
-      case "FETCH_WIDTH" => 2
+      case "FETCH_WIDTH" => 1
       case "ISSUE_WIDTH" => 3
       case "ROB_ENTRIES" => 48
       case "ISSUE_ENTRIES" => 20

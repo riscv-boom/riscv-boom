@@ -91,14 +91,17 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
                                    // we use this to update the bpd's history register speculatively
 
    var br_predictor: BrPredictor = null
-   if (ENABLE_BRANCH_PREDICTOR)
+   if (ENABLE_BRANCH_PREDICTOR && WHICH_BPD == "TAGE")
    {
-      //br_predictor = Module(new TageBrPredictor(fetch_width = fetch_width
-      //                                          , num_tables = 4
-      //                                          , table_sizes = Seq(4096, 4096, 2048, 2048)
-      //                                          , history_lengths = Seq(5, 15, 44, 130)
-      //                                          , tag_sizes = Seq(10, 10, 10, 12)
-      //                                          ))
+      br_predictor = Module(new TageBrPredictor(fetch_width = fetch_width,
+                                                num_tables = TAGE_TABLE_COUNT,
+                                                table_sizes = TAGE_TABLE_SIZES,
+                                                history_lengths = TAGE_HIST_LENGTHS,
+                                                tag_sizes = TAGE_TAG_SIZES
+                                                ))
+   }
+   else if (ENABLE_BRANCH_PREDICTOR && WHICH_BPD == "GSHARE")
+   {
       br_predictor = Module(new GShareBrPredictor(fetch_width = fetch_width
                                                 , num_entries = BPD_NUM_ENTRIES
                                                 , history_length = GHIST_LENGTH))

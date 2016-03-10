@@ -66,7 +66,16 @@ trait HasBoomCoreParameters extends rocket.HasCoreParameters
    val BPD_SIZE_IN_KB = p(BranchPredictorSizeInKB)
    val BPD_NUM_ENTRIES = BPD_SIZE_IN_KB*1024*8/FETCH_WIDTH/2 // computation for GShare
    val ENABLE_BRANCH_PREDICTOR = p(EnableBranchPredictor)
-   val GHIST_LENGTH = log2Up(BPD_NUM_ENTRIES)
+   val WHICH_BPD = "TAGE"
+//   val GHIST_LENGTH = log2Up(BPD_NUM_ENTRIES)
+
+   // Tage Parameters
+   val TAGE_TABLE_COUNT = 3
+   val TAGE_TABLE_SIZES = Seq(16, 8, 8)
+   val TAGE_HIST_LENGTHS = Seq(4, 16, 64)
+   val TAGE_TAG_SIZES = Seq(10, 10, 12)
+   val GHIST_LENGTH =  TAGE_HIST_LENGTHS.max // TODO XXX get rid of this method of setting ghistory size, requires answer in functional unit
+ 
 
    //************************************
    // Extra Knobs and Features

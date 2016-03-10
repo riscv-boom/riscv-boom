@@ -23,18 +23,6 @@ import cde.Parameters
 
 import rocket.Str
 
-class BrPredictorIo(fetch_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
-{
-   val req_pc = UInt(INPUT, width = vaddrBits)
-   val resp = Decoupled(new BpdResp)
-   val hist_update_spec = Valid(new GHistUpdate).flip // speculative update to ghist
-// TODO brinfo, or br_unit instead? do I actually need br_unit?
-   val br_resolution = Valid(new BpdUpdate).flip // from branch-unit
-   val brob = new BrobBackendIo(fetch_width)
-   val flush = Bool(INPUT) // pipeline flush
-
-   override def cloneType = new BrPredictorIo(fetch_width)(p).asInstanceOf[this.type]
-}
 
 // This is the response packet from the branch predictor. The predictor is
 // expecting to receive it back when it needs to perform an update.
@@ -46,8 +34,7 @@ class BpdResp(implicit p: Parameters) extends BoomBundle()(p)
    // probable solution is to turn it into a Bits() of a parameterized width,
    // which is set by querying the subclass.
 //   val info = new GShareResp
-   val info = new GShareResp
-//   val info = new TageResp(history_length = 130, index_length = 12)
+   val info = new TageResp(history_length = 64, index_length = 4, num_tables = 3, max_tag_sz = 12)
    // Step 1. add a println to see how to query TagePredictor class?
    //          - can we add an override function to brpredictor?
    // Step 2. pass in to BpdResp the number of bits we want.
@@ -59,7 +46,7 @@ class BpdResp(implicit p: Parameters) extends BoomBundle()(p)
 // BP2 stage needs to speculatively update the history register with what the
 // processor decided to do (takes BTB's effect into account).
 // Also used for updating the commit-copy during commit.
-class GHistUpdate(implicit p: Parameters) extends BoomBundle()(p)
+class GHistUpdate extends Bundle
 {
    val taken = Bool()
 }
@@ -94,7 +81,16 @@ class BpdUpdate(implicit p: Parameters) extends BoomBundle()(p)
 
 abstract class BrPredictor(fetch_width: Int, val history_length: Int)(implicit p: Parameters) extends BoomModule()(p)
 {
-   val io = new BrPredictorIo(fetch_width)
+   val io = new BoomBundle()(p)
+   {
+      val req_pc = UInt(INPUT, width = vaddrBits)
+      val resp = Decoupled(new BpdResp)
+      val hist_update_spec = Valid(new GHistUpdate).flip // speculative update to ghist
+   // TODO brinfo, or br_unit instead? do I actually need br_unit?
+      val br_resolution = Valid(new BpdUpdate).flip // from branch-unit
+      val brob = new BrobBackendIo(fetch_width)
+      val flush = Bool(INPUT) // pipeline flush
+   }
 
    // the (speculative) global history wire (used for accessing the branch predictor state).
    val ghistory = Wire(Bits(width = history_length))
@@ -356,7 +352,7 @@ class BranchReorderBuffer(fetch_width: Int, num_entries: Int)(implicit p: Parame
    {
       for (i <- 0 until num_entries)
       {
-         printf (" brob[%d] (%x) T=%x m=%x r=%d, hist=%x, 0x%x, br_upd_idx=%d "
+         printf (" brob[%d] (%x) T=%x m=%x r=%d, hist=%x, 0x%x, brPC= 0x%x br_upd_idx=%d "
             , UInt(i, log2Up(num_entries))
             , entries(i).executed.toBits
             , entries(i).taken.toBits
@@ -364,6 +360,7 @@ class BranchReorderBuffer(fetch_width: Int, num_entries: Int)(implicit p: Parame
             , entries(i).debug_rob_idx
             , entries(i).info.info.history
             , entries(i).info.info.index
+            , entries(i).info.info.br_pc
             , idx
             )
 
