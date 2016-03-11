@@ -202,17 +202,17 @@ class TageTable(
 
    private def IdxHash (addr: UInt, hist: Bits) =
    {
-//      (addr >> UInt(4))(index_sz-1,0)
       ((addr >> UInt(log2Up(fetch_width*coreInstBytes))) ^ Fold(hist, history_length))(index_sz-1,0)
    }
 
    private def TagHash (addr: UInt, hist: Bits) =
    {
-      // the tag is computed by pc[7:0] ^ CSR1[7:0] ^ (CSR2[6:0]<<1).
-//      (addr >> UInt(4))(tag_sz-1,0)
-      (addr >> UInt(log2Up(fetch_width*coreInstBytes)))(tag_sz-1,0) ^
+      // the tag is computed by pc[n:0] ^ CSR1[n:0] ^ (CSR2[n-1:0]<<1).
+      val tag_hash =
+         (addr >> UInt(log2Up(fetch_width*coreInstBytes))) ^
          Fold(hist, history_length) ^
          (Fold(hist, history_length-1) << UInt(1))
+      tag_hash(tag_sz-1,0)
    }
 
    // saturating increment or decrement
