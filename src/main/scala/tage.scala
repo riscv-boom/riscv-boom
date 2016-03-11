@@ -142,7 +142,9 @@ class TageBrPredictor(
          num_entries    = table_sizes(i),
          history_length = history_lengths(i),
          tag_sz         = tag_sizes(i),
-         counter_sz     = 2))
+         counter_sz     = 2,
+         id = i
+         ))
       table.io.InitializeIo()
 
       // send prediction request

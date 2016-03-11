@@ -153,7 +153,8 @@ class TageTable(
    num_entries: Int,
    history_length: Int,
    tag_sz: Int,
-   counter_sz: Int
+   counter_sz: Int,
+   id: Int = 0
    )(implicit p: Parameters) extends BoomModule()(p)
 {
    val index_sz = log2Up(num_entries)
@@ -193,16 +194,31 @@ class TageTable(
    //clearUBit() TODO XXX
 
 
-   // TODO XXX implement Fold in TAGE
    private def Fold (input: Bits, compressed_length: Int) =
    {
-      if (history_length < compressed_length) input
-      else input(compressed_length-1, 0)
+      val clen = compressed_length
+      val hlen = history_length
+      if (hlen <= clen)
+      {
+         input
+      }
+      else
+      {
+         var res = Bits(0,clen)
+         var remaining = input.toUInt
+         for (i <- 0 to hlen by clen)
+         {
+            val len = if (i + clen > hlen ) (hlen - i) else clen
+            res = res(clen-1,0) ^ remaining(len-1,0)
+            remaining = remaining >> UInt(len)
+         }
+         res
+      }
    }
 
    private def IdxHash (addr: UInt, hist: Bits) =
    {
-      ((addr >> UInt(log2Up(fetch_width*coreInstBytes))) ^ Fold(hist, history_length))(index_sz-1,0)
+      ((addr >> UInt(log2Up(fetch_width*coreInstBytes))) ^ Fold(hist, index_sz))(index_sz-1,0)
    }
 
    private def TagHash (addr: UInt, hist: Bits) =
@@ -210,8 +226,8 @@ class TageTable(
       // the tag is computed by pc[n:0] ^ CSR1[n:0] ^ (CSR2[n-1:0]<<1).
       val tag_hash =
          (addr >> UInt(log2Up(fetch_width*coreInstBytes))) ^
-         Fold(hist, history_length) ^
-         (Fold(hist, history_length-1) << UInt(1))
+         Fold(hist,  index_sz) ^
+         (Fold(hist, index_sz-1) << UInt(1))
       tag_hash(tag_sz-1,0)
    }
 
@@ -331,6 +347,7 @@ class TageTable(
 
    if (DEBUG_PRINTF_TAGE)
    {
+      require (num_entries < 64) // for sanity sake
       printf("TAGETable: PC: 0x%x history: 0x%x, tag[%d]=0x%x, p_tag=0x%x " + mgt + "%s\n" + end,
          io.if_req_pc,
          io.if_req_history + UInt(0,64),
@@ -346,7 +363,7 @@ class TageTable(
          for (j <- 0 until 4)
          {
             printf("(%d) [tag=0x%x] [c=%d] [u=%d] " + red + "PC=0x%x hist=0x%x " + end,
-               UInt(i+j,4),
+               UInt(i+j,8),
                tag_table(UInt(i+j)) & UInt(0xffff),
                counter_table(UInt(i+j)),
                ubit_table(UInt(i+j)),
