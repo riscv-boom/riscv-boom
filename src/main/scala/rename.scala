@@ -16,13 +16,12 @@ package boom
 
 import Chisel._
 import Node._
-
-import rocket.BuildFPU
+import cde.Parameters
 
 //-------------------------------------------------------------
 //-------------------------------------------------------------
 
-class RenameMapTableElementIo(pl_width: Int) extends BOOMCoreBundle
+class RenameMapTableElementIo(pl_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
    val element            = UInt(OUTPUT, PREG_SZ)
 
@@ -49,7 +48,7 @@ class RenameMapTableElementIo(pl_width: Int) extends BOOMCoreBundle
    override def cloneType: this.type = new RenameMapTableElementIo(pl_width).asInstanceOf[this.type]
 }
 
-class RenameMapTableElement(pipeline_width: Int) extends Module with BOOMCoreParameters
+class RenameMapTableElement(pipeline_width: Int)(implicit p: Parameters) extends BoomModule()(p)
 {
    val io = new RenameMapTableElementIo(pipeline_width)
 
@@ -109,7 +108,7 @@ class RenameMapTableElement(pipeline_width: Int) extends Module with BOOMCorePar
       element := PriorityMux(io.wens.reverse, io.ren_pdsts.reverse)
    }
 
-   if (params(EnableCommitMapTable))
+   if (ENABLE_COMMIT_MAP_TABLE)
    {
       val committed_element = Reg(init=UInt(0,PREG_SZ))
       when (io.commit_wen)
@@ -130,7 +129,7 @@ class RenameMapTableElement(pipeline_width: Int) extends Module with BOOMCorePar
 //-------------------------------------------------------------
 //-------------------------------------------------------------
 
-class FreeListIo(num_phys_registers: Int, pl_width: Int) extends BOOMCoreBundle
+class FreeListIo(num_phys_registers: Int, pl_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
    val req_preg_vals = Vec.fill(pl_width) { Bool(INPUT) }
    val req_pregs     = Vec.fill(pl_width) { UInt(OUTPUT, log2Up(num_phys_registers)) }
@@ -176,7 +175,7 @@ class FreeListIo(num_phys_registers: Int, pl_width: Int) extends BOOMCoreBundle
 // register exists
 class RenameFreeList(num_phys_registers: Int // number of physical registers
                     , pl_width: Int          // pipeline width ("dispatch group size")
-                     ) extends Module with BOOMCoreParameters
+                     )(implicit p: Parameters) extends BoomModule()(p)
 {
    val io = new FreeListIo(num_phys_registers, pl_width)
 
@@ -311,7 +310,7 @@ class RenameFreeList(num_phys_registers: Int // number of physical registers
    // OPTIONALLY: handle single-cycle resets
    // Committed Free List tracks what the free list is at the commit point,
    // allowing for a single-cycle reset of the rename state on a pipeline flush.
-   if (params(EnableCommitMapTable))
+   if (ENABLE_COMMIT_MAP_TABLE)
    {
       val committed_free_list = Reg(init=(~Bits(1,num_phys_registers)))
 
@@ -353,7 +352,7 @@ class RenameFreeList(num_phys_registers: Int // number of physical registers
 
 // internally bypasses newly busy registers (.write) to the read ports (.read)
 // num_operands is the maximum number of operands per instruction (.e.g., 2 normally, but 3 if FMAs are supported)
-class BusyTableIo(pipeline_width:Int, num_read_ports:Int, num_wb_ports:Int) extends BOOMCoreBundle
+class BusyTableIo(pipeline_width:Int, num_read_ports:Int, num_wb_ports:Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
    // reading out the busy bits
    val p_rs           = Vec.fill(num_read_ports) {UInt(INPUT, width=PREG_SZ)}
@@ -368,14 +367,14 @@ class BusyTableIo(pipeline_width:Int, num_read_ports:Int, num_wb_ports:Int) exte
    // marking registers being written back as unbusy
    val unbusy_pdst    = Vec.fill(num_wb_ports) {(new ValidIO(UInt(width = PREG_SZ))).flip}
 
-   val debug = new BOOMCoreBundle{val bsy_table= Bits(OUTPUT, width=PHYS_REG_COUNT)}
+   val debug = new Bundle { val bsy_table= Bits(OUTPUT, width=PHYS_REG_COUNT) }
 }
 
 // Register P0 is always NOT_BUSY, and cannot be set to BUSY
 // Note: I do NOT bypass from newly busied registers to the read ports.
 // That bypass check should be done elsewhere (this is to get it off the
 // critical path).
-class BusyTable(pipeline_width:Int, num_read_ports:Int, num_wb_ports:Int) extends Module with BOOMCoreParameters
+class BusyTable(pipeline_width:Int, num_read_ports:Int, num_wb_ports:Int)(implicit p: Parameters) extends BoomModule()(p)
 {
    val io = new BusyTableIo(pipeline_width, num_read_ports, num_wb_ports)
 
@@ -394,7 +393,7 @@ class BusyTable(pipeline_width:Int, num_read_ports:Int, num_wb_ports:Int) extend
 
    for (w <- 0 until pipeline_width)
    {
-      when (io.allocated_pdst(w).valid && io.allocated_pdst(w).bits != UInt(0))
+      when (io.allocated_pdst(w).valid && io.allocated_pdst(w).bits =/= UInt(0))
       {
          table_bsy(io.allocated_pdst(w).bits) := BUSY
       }
@@ -416,7 +415,7 @@ class BusyTable(pipeline_width:Int, num_read_ports:Int, num_wb_ports:Int) extend
 //-------------------------------------------------------------
 //-------------------------------------------------------------
 
-class RenameStageIO(pl_width: Int, num_wb_ports: Int) extends BOOMCoreBundle
+class RenameStageIO(pl_width: Int, num_wb_ports: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
    val ren_mask  = Vec.fill(pl_width) {Bool().asOutput} // mask of valid instructions
    val inst_can_proceed = Vec.fill(pl_width) {Bool(OUTPUT)}
@@ -455,14 +454,14 @@ class RenameStageIO(pl_width: Int, num_wb_ports: Int) extends BOOMCoreBundle
 }
 
 
-class RenameStage(pl_width: Int, num_wb_ports: Int) extends Module with BOOMCoreParameters
+class RenameStage(pl_width: Int, num_wb_ports: Int)(implicit p: Parameters) extends BoomModule()(p)
 {
    val io = new RenameStageIO(pl_width, num_wb_ports)
 
    val ren_br_vals = Wire(Vec(pl_width, Bool()))
    val freelist_can_allocate = Wire(Vec(pl_width, Bool()))
 
-   val max_operands = if(params(BuildFPU).isEmpty) 2 else 3
+   val max_operands = if(usingFPU) 3 else 2
 
    //-------------------------------------------------------------
    // Set outputs up... we'll write in the pop*/pdst info below
@@ -522,7 +521,7 @@ class RenameStage(pl_width: Int, num_wb_ports: Int) extends Module with BOOMCore
       }
    }
 
-   if (params(EnableCommitMapTable))
+   if (ENABLE_COMMIT_MAP_TABLE)
    {
       for (w <- 0 until pl_width)
       {
@@ -588,9 +587,12 @@ class RenameStage(pl_width: Int, num_wb_ports: Int) extends Module with BOOMCore
       }
 
       // add default case where we can just read the map table for our information
-      rs1_cases   ++= Array(((io.ren_uops(w).lrs1_rtype === RT_FIX || io.ren_uops(w).lrs1_rtype === RT_FLT) && (io.ren_uops(w).lrs1 != UInt(0)), map_table_prs1(w)))
-      rs2_cases   ++= Array(((io.ren_uops(w).lrs2_rtype === RT_FIX || io.ren_uops(w).lrs2_rtype === RT_FLT) && (io.ren_uops(w).lrs2 != UInt(0)), map_table_prs2(w)))
-      rs3_cases   ++= Array((io.ren_uops(w).frs3_en  && (io.ren_uops(w).lrs3 != UInt(0)), map_table_prs3(w)))
+      rs1_cases ++= Array(((io.ren_uops(w).lrs1_rtype === RT_FIX || io.ren_uops(w).lrs1_rtype === RT_FLT) &&
+                           (io.ren_uops(w).lrs1 =/= UInt(0)), map_table_prs1(w)))
+      rs2_cases ++= Array(((io.ren_uops(w).lrs2_rtype === RT_FIX || io.ren_uops(w).lrs2_rtype === RT_FLT) &&
+                           (io.ren_uops(w).lrs2 =/= UInt(0)), map_table_prs2(w)))
+      rs3_cases ++= Array((io.ren_uops(w).frs3_en  && 
+                           (io.ren_uops(w).lrs3 =/= UInt(0)), map_table_prs3(w)))
 
       io.ren_uops(w).pop1                       := MuxCase(io.ren_uops(w).lrs1, rs1_cases)
       io.ren_uops(w).pop2                       := MuxCase(io.ren_uops(w).lrs2, rs2_cases)
@@ -670,7 +672,7 @@ class RenameStage(pl_width: Int, num_wb_ports: Int) extends Module with BOOMCore
       {
          freelist.io.enq_vals(w)    := io.com_valids(w) &&
                                        (io.com_uops(w).dst_rtype === RT_FIX || io.com_uops(w).dst_rtype === RT_FLT) &&
-                                       (io.com_uops(w).stale_pdst != UInt(0))
+                                       (io.com_uops(w).stale_pdst =/= UInt(0))
          freelist.io.enq_pregs(w)   := io.com_uops(w).stale_pdst
 
          freelist.io.ren_br_vals(w) := ren_br_vals(w)
@@ -679,12 +681,12 @@ class RenameStage(pl_width: Int, num_wb_ports: Int) extends Module with BOOMCore
          freelist_can_allocate(w)   := freelist.io.can_allocate(w)
 
          freelist.io.rollback_wens(w)  := io.com_rbk_valids(w) &&
-                                        (io.com_uops(w).pdst != UInt(0)) &&
+                                        (io.com_uops(w).pdst =/= UInt(0)) &&
                                         (io.com_uops(w).dst_rtype === RT_FIX || io.com_uops(w).dst_rtype === RT_FLT)
          freelist.io.rollback_pdsts(w) := io.com_uops(w).pdst
 
          freelist.io.com_wens(w)    := io.com_valids(w) &&
-                                       (io.com_uops(w).pdst != UInt(0)) &&
+                                       (io.com_uops(w).pdst =/= UInt(0)) &&
                                        (io.com_uops(w).dst_rtype === RT_FIX || io.com_uops(w).dst_rtype === RT_FLT)
          freelist.io.com_uops(w)    := io.com_uops(w)
       }
@@ -728,7 +730,7 @@ class RenameStage(pl_width: Int, num_wb_ports: Int) extends Module with BOOMCore
    {
       // TODO REFACTOR, make == rt_x?
       io.inst_can_proceed(w) := (freelist.io.can_allocate(w) ||
-                                 (io.ren_uops(w).dst_rtype != RT_FIX && io.ren_uops(w).dst_rtype != RT_FLT)) &&
+                                 (io.ren_uops(w).dst_rtype =/= RT_FIX && io.ren_uops(w).dst_rtype =/= RT_FLT)) &&
                                 io.dis_inst_can_proceed(w)
    }
 

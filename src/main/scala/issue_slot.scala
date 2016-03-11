@@ -14,8 +14,9 @@ package boom
 import Chisel._
 import Node._
 import FUCode._
+import cde.Parameters
 
-class IssueSlotIo(num_wakeup_ports: Int) extends BOOMCoreBundle
+class IssueSlotIo(num_wakeup_ports: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
    val valid          = Bool(OUTPUT)
    val will_be_valid  = Bool(OUTPUT) // TODO code review, do we need this signal so explicitely?
@@ -39,7 +40,7 @@ class IssueSlotIo(num_wakeup_ports: Int) extends BOOMCoreBundle
    }.asOutput
 }
 
-class IssueSlot(num_slow_wakeup_ports: Int) extends Module with BOOMCoreParameters
+class IssueSlot(num_slow_wakeup_ports: Int)(implicit p: Parameters) extends BoomModule()(p)
 {
    val io = new IssueSlotIo(num_slow_wakeup_ports)
 
@@ -47,7 +48,7 @@ class IssueSlot(num_slow_wakeup_ports: Int) extends Module with BOOMCoreParamete
    // slot is valid, holding 1 uop
    // slot is valid, holds 2 uops (like a store)
    def isInvalid = slot_state === s_invalid
-   def isValid = slot_state != s_invalid
+   def isValid = slot_state =/= s_invalid
 
    val updated_state = Wire(UInt()) // the next state of this slot (which might then get moved to a new slot)
    val next_p1  = Wire(Bool())

@@ -5,17 +5,17 @@
 
 package boom
 import Chisel._
+import cde.{Parameters, Config, Knob}
 import rocket._
 
-class DefaultBOOMConfig extends ChiselConfig (
+class DefaultBOOMConfig extends Config (
    topDefinitions = {
       (pname,site,here) => pname match {
 
          // Top-Level
          case CoreName => "BOOM"
          case XLen => 64
-         case FDivSqrt => false
-         case NPTWPorts => 2
+         case FDivSqrt => true
          case CoreInstBits => 32
 
          // Superscalar Widths
@@ -34,13 +34,12 @@ class DefaultBOOMConfig extends ChiselConfig (
 
          // Front-end
          case EnableBTB => true // for now, only gates off updates to BTB
-         case EnableBTBContainsBranches => false // don't send branches to BTB
-         case NBTBEntries => if(site(CoreName) == "BOOM") 64 else 62
-         case NRAS => 8
+         case EnableBTBContainsBranches => true // don't send branches to BTB (but let jumps be predicted)
+         case BtbKey => BtbParameters(enabled = true, nEntries = 64, nRAS = 8, updatesOutOfOrder = true)
          case FetchBufferSz => 4
 
          // Branch Predictor
-         case EnableBranchPredictor => false
+         case EnableBranchPredictor => true
          case BranchPredictorSizeInKB => Knob("BPD_SIZE_IN_KB")
 
          // Pipelining
@@ -74,13 +73,13 @@ class DefaultBOOMConfig extends ChiselConfig (
   }
 )
 
-class WithNoBoomCounters extends ChiselConfig (
+class WithNoBoomCounters extends Config (
   (pname,site,here) => pname match {
     case EnableUarchCounters => false
   }
 )
 
-class WithSmallBOOMs extends ChiselConfig(
+class WithSmallBOOMs extends Config(
    knobValues = {
       case "FETCH_WIDTH" => 1
       case "ISSUE_WIDTH" => 1
@@ -93,7 +92,7 @@ class WithSmallBOOMs extends ChiselConfig(
 )
 
 // try to match the Cortex-A9
-class WithMediumBOOMs extends ChiselConfig(
+class WithMediumBOOMs extends Config(
    knobValues = {
       case "FETCH_WIDTH" => 2
       case "ISSUE_WIDTH" => 3
@@ -112,7 +111,7 @@ class WithMediumBOOMs extends ChiselConfig(
 )
 
 // try to match the Cortex-A15
-class WithMegaBOOMs extends ChiselConfig(
+class WithMegaBOOMs extends Config(
    knobValues = {
       case "FETCH_WIDTH" => 4
       case "ISSUE_WIDTH" => 4

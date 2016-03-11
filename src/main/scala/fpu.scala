@@ -10,6 +10,7 @@ package boom
 
 import Chisel._
 import Node._
+import cde.Parameters
 
 import rocket.FPConstants._
 import rocket.FPUCtrlSigs
@@ -28,6 +29,7 @@ class UOPCodeFPUDecoder extends Module
     val sigs = new FPUCtrlSigs().asOutput
   }
 
+   // TODO change N,Y,X to BitPat("b1"), BitPat("b0"), and BitPat("b?")
    val N = Bool(false)
    val Y = Bool(true)
    val X = Bool(false)
@@ -37,15 +39,15 @@ class UOPCodeFPUDecoder extends Module
    val table: Array[(BitPat, List[BitPat])] =
       // Note: not all of these signals are used or necessary, but we're
       // constrained by the need to fit the rocket.FPU units' ctrl signals.
-      //                                          swap12         div
-      //                                          | swap32       | sqrt
-      //                  cmd                     | | single     | | round
-      //                  |            ldst       | | | fromint  | | | wflags
-      //                  |            | wen      | | | | toint  | | | |
-      //                  |            | | ren1   | | | | | fastpipe | |
-      //                  |            | | | ren2 | | | | | | fma| | | |
-      //                  |            | | | | ren3 | | | | | |  | | | |
-      //                  |            | | | | |  | | | | | | |  | | | |
+      //                                                  swap12         div
+      //                                                  | swap32       | sqrt
+      //                          cmd                     | | single     | | round
+      //                          |            ldst       | | | fromint  | | | wflags
+      //                          |            | wen      | | | | toint  | | | |
+      //                          |            | | ren1   | | | | | fastpipe | |
+      //                          |            | | | ren2 | | | | | | fma| | | |
+      //                          |            | | | | ren3 | | | | | |  | | | |
+      //                          |            | | | | |  | | | | | | |  | | | |
       Array(
       BitPat(uopFCLASS_S) -> List(FCMD_MV_XF,  X,X,Y,N,N, N,X,Y,N,Y,N,N, N,N,Y,N),
       BitPat(uopFCLASS_D) -> List(FCMD_MV_XF,  X,X,Y,N,N, N,X,N,N,Y,N,N, N,N,Y,N),
@@ -104,13 +106,7 @@ class UOPCodeFPUDecoder extends Module
       BitPat(uopFMSUB_D)  -> List(FCMD_MSUB,   X,X,Y,Y,Y, N,N,N,N,N,N,Y, N,N,Y,Y),
       BitPat(uopFNMADD_D) -> List(FCMD_NMADD,  X,X,Y,Y,Y, N,N,N,N,N,N,Y, N,N,Y,Y),
       BitPat(uopFNMSUB_D) -> List(FCMD_NMSUB,  X,X,Y,Y,Y, N,N,N,N,N,N,Y, N,N,Y,Y)
-
-// currently unsupported (requires variable latency)
-//      uopFDIV_S   -> List(FCMD_DIV,    X,X,Y,Y,N, N,N,Y,N,N,N,N, Y,N,Y,Y),
-//      uopFDIV_D   -> List(FCMD_DIV,    X,X,Y,Y,N, N,N,N,N,N,N,N, Y,N,Y,Y),
-//      uopFSQRT_S  -> List(FCMD_SQRT,   X,X,Y,N,N, Y,X,Y,N,N,N,N, N,Y,Y,Y),
-//      uopFSQRT_D  -> List(FCMD_SQRT,   X,X,Y,N,N, Y,X,N,N,N,N,N, N,Y,Y,Y)
-          )
+      )
 
    val decoder = rocket.DecodeLogic(io.uopc, default, table)
 
@@ -122,24 +118,25 @@ class UOPCodeFPUDecoder extends Module
 }
 
 
-class FPU extends Module with BOOMCoreParameters
+class FpuReq()(implicit p: Parameters) extends BoomBundle()(p)
+{
+   val uop      = new MicroOp()
+   val rs1_data = Bits(width = 65)
+   val rs2_data = Bits(width = 65)
+   val rs3_data = Bits(width = 65)
+   val fcsr_rm  = Bits(width = rocket.FPConstants.RM_SZ)
+}
+
+class FPU(implicit p: Parameters) extends BoomModule()(p)
 {
    val io = new Bundle
    {
-      val req = new ValidIO(new Bundle
-         {
-            val uop      = new MicroOp()
-            val rs1_data = Bits(width = 65)
-            val rs2_data = Bits(width = 65)
-            val rs3_data = Bits(width = 65)
-            val fcsr_rm  = Bits(width = rocket.FPConstants.RM_SZ)
-         }).flip
+      val req = new ValidIO(new FpuReq).flip
       val resp = new ValidIO(new ExeUnitResp(65))
    }
 
-   // all FP units are padded out to the same latency for easy scheduling of
-   // the write port
-//   val test = params(DFMALatency) TODO BUG why is this returning "Nothing"?
+   // all FP units are padded out to the same latency for easy scheduling of the write port
+//   val test = p(rocket.DFMALatency) // TODO BUG why is this returning "Nothing"?
    val fpu_latency = 3
    val io_req = io.req.bits
 
@@ -159,12 +156,12 @@ class FPU extends Module with BOOMCoreParameters
    req.typ := ImmGenTyp(io_req.uop.imm_packed)
 
 
-   val dfma = Module(new rocket.FPUFMAPipe(fpu_latency, 52, 12))
+   val dfma = Module(new rocket.FPUFMAPipe(latency = fpu_latency, expWidth = 11, sigWidth = 53))
    dfma.io.in.valid := io.req.valid && fp_ctrl.fma && !fp_ctrl.single
    dfma.io.in.bits := req
 
 
-   val sfma = Module(new rocket.FPUFMAPipe(fpu_latency, 23, 9))
+   val sfma = Module(new rocket.FPUFMAPipe(latency = fpu_latency, expWidth = 8, sigWidth = 24))
    sfma.io.in.valid := io.req.valid && fp_ctrl.fma && fp_ctrl.single
    sfma.io.in.bits := req
 
@@ -181,6 +178,7 @@ class FPU extends Module with BOOMCoreParameters
    fpiu.io.in.bits := req
    val fpiu_out = Pipe(Reg(next=fpiu.io.in.valid && !fp_ctrl.fastpipe),
                        fpiu.io.out.bits, fpu_latency-1)
+
 
    val fpiu_result  = Wire(new rocket.FPResult)
    fpiu_result.data := fpiu_out.bits.toint

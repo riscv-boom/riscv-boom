@@ -43,7 +43,7 @@ object GetNewBrMask
 //do two masks have at least 1 bit match?
 object maskMatch
 {
-   def apply(msk1: Bits, msk2: Bits): Bool = (msk1 & msk2) != Bits(0)
+   def apply(msk1: Bits, msk2: Bits): Bool = (msk1 & msk2) =/= Bits(0)
 }
 
 //clear one-bit in the Mask as specified by the idx
@@ -136,7 +136,7 @@ object ImmGen
    }
 }
 
-// store the rounding-mode, and fun. type for FP in the packed immediate as well
+// store the rounding-mode and func type for FP in the packed immediate as well
 object ImmGenRm { def apply(ip: Bits): UInt = { return ip(2,0) }}
 object ImmGenTyp { def apply(ip: Bits): UInt = { return ip(9,8) }} // only works if !(IS_B or IS_S)
 

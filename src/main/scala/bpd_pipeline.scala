@@ -24,24 +24,25 @@ package boom
 
 import Chisel._
 import Node._
+import cde.Parameters
 
 import rocket.Str
 
-class RedirectRequest (fetch_width: Int) extends BOOMCoreBundle
+class RedirectRequest(fetch_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
    val target  = UInt(width = vaddrBits+1)
    val br_pc   = UInt(width = vaddrBits+1) // PC of the instruction changing control flow (to update the BTB with jumps)
    val idx     = UInt(width = log2Up(fetch_width)) // idx of br in fetch bundle (to mask out the appropriate fetch
                                                    // instructions)
    val is_jump = Bool() // (only valid if redirect request is valid)
-   override def cloneType: this.type = new RedirectRequest(fetch_width).asInstanceOf[this.type]
+  override def cloneType = new RedirectRequest(fetch_width)(p).asInstanceOf[this.type]
 }
 
 // this information is shared across the entire fetch packet, and stored in the
 // branch snapshots. Since it's not unique to an instruction, it could be
 // compressed further. It can be de-allocated once the branch is resolved in
 // Execute.
-class BranchPredictionResp extends BOOMCoreBundle // TODO rename BranchPredictionResolutionInfo?
+class BranchPredictionResp(implicit p: Parameters) extends BoomBundle()(p) // TODO rename BranchPredictionResolutionInfo?
 {
    val btb_resp_valid = Bool()
    val btb_resp       = new rocket.BTBResp
@@ -54,7 +55,7 @@ class BranchPredictionResp extends BOOMCoreBundle // TODO rename BranchPredictio
 }
 
 // give this to each instruction/uop and pass this down the pipeline to the branch-unit
-class BranchPrediction extends BOOMCoreBundle
+class BranchPrediction(implicit p: Parameters) extends BoomBundle()(p)
 {
    val bpd_predict_taken= Bool() // did the bpd predict taken for this instruction?
    val btb_hit          = Bool() // this instruction was the br/jmp predicted by the BTB
@@ -66,11 +67,11 @@ class BranchPrediction extends BOOMCoreBundle
    def wasBTB = btb_predicted
 }
 
-class BranchPredictionStage (fetch_width: Int) extends Module with BOOMCoreParameters
+class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p)
 {
-   val io = new BOOMCoreBundle
+   val io = new BoomBundle()(p)
    {
-      val imem       = new rocket.CPUFrontendIO
+      val imem       = new rocket.FrontendIO
       val req        = Decoupled(new RedirectRequest(fetch_width))
       val pred_resp  = new BranchPredictionResp().asOutput
       val predictions= Vec.fill(fetch_width) {new BranchPrediction().asOutput}
@@ -88,29 +89,40 @@ class BranchPredictionStage (fetch_width: Int) extends Module with BOOMCoreParam
                                    // (and not overridden by an earlier jal)
    val bp2_br_taken = Wire(Bool()) // was there a taken branch in the bp2 stage
                                    // we use this to update the bpd's history register speculatively
-   val (bpd_valid, bpd_bits) =
-      if (ENABLE_BRANCH_PREDICTOR)
-      {
-         val br_predictor = Module(new GshareBrPredictor(fetch_width = fetch_width
-                                                   , num_entries = BPD_NUM_ENTRIES
-                                                   , history_length = GHIST_LENGTH))
-         br_predictor.io.req_pc := io.imem.npc
-         br_predictor.io.br_resolution <> io.br_unit.bpd_update
-         // TODO BUG XXX i suspect this is completely and utterly broken. what about <bne,jr,bne> or  <bne,j,bne>. What
-         // about <csr, bne>/<b,csr,b>? does unique/pipeline replaysincrement ghistory when they shouldn't?
-         br_predictor.io.hist_update_spec.valid := bp2_br_seen && io.req.ready
-         br_predictor.io.hist_update_spec.bits.taken := bp2_br_taken
-         br_predictor.io.resp.ready := io.req.ready
 
-         br_predictor.io.brob <> io.brob
-         br_predictor.io.flush := io.kill
+   var br_predictor: BrPredictor = null
+   if (ENABLE_BRANCH_PREDICTOR)
+   {
+      //br_predictor = Module(new TageBrPredictor(fetch_width = fetch_width
+      //                                          , num_tables = 4
+      //                                          , table_sizes = Seq(4096, 4096, 2048, 2048)
+      //                                          , history_lengths = Seq(5, 15, 44, 130)
+      //                                          , tag_sizes = Seq(10, 10, 10, 12)
+      //                                          ))
+      br_predictor = Module(new GShareBrPredictor(fetch_width = fetch_width
+                                                , num_entries = BPD_NUM_ENTRIES
+                                                , history_length = GHIST_LENGTH))
+   }
+   else
+   {
+      br_predictor = Module(new NullBrPredictor(fetch_width = fetch_width
+                                                , history_length = GHIST_LENGTH))
+   }
 
-         (br_predictor.io.resp.valid, br_predictor.io.resp.bits)
-      }
-      else
-      {
-         (Bool(false), new BpdResp().fromBits(Bits(0)))
-      }
+   br_predictor.io.req_pc := io.imem.npc
+   br_predictor.io.br_resolution <> io.br_unit.bpd_update
+   // TODO BUG XXX i suspect this is completely and utterly broken. what about <bne,jr,bne> or  <bne,j,bne>. What
+   // about <csr, bne>/<b,csr,b>? does unique/pipeline replaysincrement ghistory when they shouldn't?
+   br_predictor.io.hist_update_spec.valid := bp2_br_seen && io.req.ready
+   br_predictor.io.hist_update_spec.bits.taken := bp2_br_taken
+   br_predictor.io.resp.ready := io.req.ready
+
+   br_predictor.io.brob <> io.brob
+   br_predictor.io.flush := io.kill
+
+   val bpd_valid = br_predictor.io.resp.valid
+   val bpd_bits = br_predictor.io.resp.bits
+
 
    //-------------------------------------------------------------
    // Branch Decode (BP2 Stage)
@@ -165,7 +177,7 @@ class BranchPredictionStage (fetch_width: Int) extends Module with BOOMCoreParam
 //                       io.imem.btb_resp.bits.taken &&
 //                       (io.imem.btb_resp.bits.bridx <= io.req.bits.idx)
 
-   io.req.valid        := io.imem.resp.valid && (br_val || jal_val) && !btb_overrides
+   io.req.valid        := io.imem.resp.valid && (br_val || jal_val) && !btb_overrides && !io.imem.resp.bits.xcpt_if
    io.req.bits.target  := Mux(br_wins, br_targs(br_idx), jal_targs(jal_idx))
    io.req.bits.idx     := Mux(br_wins, br_idx, jal_idx)
    io.req.bits.br_pc   := aligned_pc + (io.req.bits.idx << UInt(2))
@@ -189,9 +201,8 @@ class BranchPredictionStage (fetch_width: Int) extends Module with BOOMCoreParam
                                           io.imem.btb_resp.valid, Bool(false))
    }
 
-   bp2_br_seen := io.imem.resp.valid &&
-                  is_br.reduce(_|_) &&
-                  (!jal_val || (PriorityEncoder(is_br.toBits) < PriorityEncoder(is_jal.toBits)))
+   bp2_br_seen := io.imem.resp.valid && !io.imem.resp.bits.xcpt_if &&
+                  is_br.reduce(_|_) && (!jal_val || (PriorityEncoder(is_br.toBits) < PriorityEncoder(is_jal.toBits)))
    bp2_br_taken := (br_val && br_wins) || (io.imem.btb_resp.valid && io.imem.btb_resp.bits.taken)
 
    //-------------------------------------------------------------
@@ -205,6 +216,7 @@ class BranchPredictionStage (fetch_width: Int) extends Module with BOOMCoreParam
    val is_call  = IsCall(jmp_inst)
    val is_ret   = IsReturn(jmp_inst)
    io.imem.ras_update.valid           := io.imem.resp.valid &&
+                                         !io.imem.resp.bits.xcpt_if &&
                                          jumps.orR &&
                                          !br_wins &&
                                          io.req.ready &&
@@ -227,7 +239,7 @@ class BranchPredictionStage (fetch_width: Int) extends Module with BOOMCoreParam
 
    //-------------------------------------------------------------
 
-   when (io.imem.resp.valid && io.imem.btb_resp.valid && io.imem.btb_resp.bits.taken)
+   when (io.imem.resp.valid && io.imem.btb_resp.valid && io.imem.btb_resp.bits.taken && !io.imem.resp.bits.xcpt_if)
    {
       val msk = io.imem.btb_resp.bits.mask
       val idx = io.imem.btb_resp.bits.bridx

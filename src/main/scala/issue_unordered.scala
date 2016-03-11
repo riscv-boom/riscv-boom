@@ -12,14 +12,14 @@ package boom
 
 import Chisel._
 import Node._
+import cde.Parameters
 
 import FUCode._
 import rocket.Str
-
 import scala.collection.mutable.ArrayBuffer
 
-class IssueUnitStatic(num_issue_slots: Int, issue_width: Int, num_wakeup_ports: Int) extends
-      IssueUnit(num_issue_slots, issue_width, num_wakeup_ports)
+class IssueUnitStatic(num_issue_slots: Int, issue_width: Int, num_wakeup_ports: Int)(implicit p: Parameters)
+   extends IssueUnit(num_issue_slots, issue_width, num_wakeup_ports)
 {
    //-------------------------------------------------------------
    // Issue Table
@@ -119,7 +119,7 @@ class IssueUnitStatic(num_issue_slots: Int, issue_width: Int, num_wakeup_ports: 
       // first look for high priority requests
       for (i <- 0 until num_requestors)
       {
-         val can_allocate = (issue_slots(i).uop.fu_code & io.fu_types(w)) != Bits(0)
+         val can_allocate = (issue_slots(i).uop.fu_code & io.fu_types(w)) =/= Bits(0)
 
          when (hi_request_not_satisfied(i) && can_allocate && !port_issued)
          {
@@ -139,7 +139,7 @@ class IssueUnitStatic(num_issue_slots: Int, issue_width: Int, num_wakeup_ports: 
       // now look for low priority requests
       for (i <- 0 until num_requestors)
       {
-         val can_allocate = (issue_slots(i).uop.fu_code & io.fu_types(w)) != Bits(0)
+         val can_allocate = (issue_slots(i).uop.fu_code & io.fu_types(w)) =/= Bits(0)
 
          when (lo_request_not_satisfied(i) && can_allocate && !port_issued)
          {

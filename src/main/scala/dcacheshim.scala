@@ -26,13 +26,13 @@ package boom
 
 import Chisel._
 import Node._
+import cde.Parameters
 
 import uncore._
-import rocket.BuildFPU
 
 
 // Track Inflight Memory Requests
-class LoadReqSlotIo extends Bundle
+class LoadReqSlotIo(implicit p: Parameters) extends BoomBundle()(p)
 {
    val valid      = Bool(OUTPUT) // slot has an entry
 
@@ -50,7 +50,7 @@ class LoadReqSlotIo extends Bundle
 
 // Note: Anything incoming that gets killed by br or exception is still marked
 // as "valid", since it also got sent to the datacache.
-class LoadReqSlot extends Module
+class LoadReqSlot(implicit p: Parameters) extends BoomModule()(p)
 {
    val io = new LoadReqSlotIo()
 
@@ -117,7 +117,7 @@ class LoadReqSlot extends Module
    io.out_uop    := uop
 }
 
-class DCacheReq extends Bundle with BOOMCoreParameters
+class DCacheReq(implicit p: Parameters) extends BoomBundle()(p)
 {
    val addr    = UInt(width = coreMaxAddrBits)
    val uop     = new MicroOp()
@@ -125,7 +125,7 @@ class DCacheReq extends Bundle with BOOMCoreParameters
    val kill    = Bool()    // e.g., LSU detects load misspeculation
 }
 
-class NackInfo extends BOOMCoreBundle
+class NackInfo(implicit p: Parameters) extends BoomBundle()(p)
 {
    val valid      = Bool()
    val lsu_idx    = UInt(width = MEM_ADDR_SZ)
@@ -135,18 +135,17 @@ class NackInfo extends BOOMCoreBundle
                            // LSU nacks for address conflicts/forwarding
 }
 
-class DCacheResp extends BOOMCoreBundle
+class DCacheResp(implicit p: Parameters) extends BoomBundle()(p)
 {
    val data         = Bits(width = coreDataBits)
    val data_subword = Bits(width = coreDataBits)
    val uop          = new MicroOp
    val typ          = Bits(width = MT_SZ)
-   // TODO should nack go in here?
 }
 
 
 // from pov of datapath
-class DCMemPortIo extends BOOMCoreBundle
+class DCMemPortIO(implicit p: Parameters) extends BoomBundle()(p)
 {
    val req     = (new DecoupledIO(new DCacheReq))
    val resp    = (new ValidIO(new DCacheResp)).flip
@@ -157,7 +156,7 @@ class DCMemPortIo extends BOOMCoreBundle
    val invalidate_lr = Bool(OUTPUT) // should the dcache clear ld/sc reservations?
    val ordered = Bool(INPUT)        // is the dcache ordered? (fence is done)
 
-   val debug = new BOOMCoreBundle
+   val debug = new BoomBundle()(p)
    {
       val memreq_val = Bool()
       val memreq_lidx = UInt(width=MEM_ADDR_SZ)
@@ -176,14 +175,14 @@ class DCMemPortIo extends BOOMCoreBundle
    }.asInput
 }
 
-class DCacheShim extends Module with BOOMCoreParameters
+class DCacheShim(implicit p: Parameters) extends BoomModule()(p)
 {
    val max_num_inflight = MAX_LD_COUNT
    isPow2(max_num_inflight)
 
    val io = new Bundle
    {
-      val core = (new DCMemPortIo()).flip
+      val core = (new DCMemPortIO()).flip
       val dmem = new rocket.HellaCacheIO
    }
 
@@ -317,19 +316,19 @@ class DCacheShim extends Module with BOOMCoreParameters
    // TODO add entry valid bit?
    val resp_tag = io.dmem.resp.bits.tag
 
-   // Note: stores succeed quietly, and so are valid if no nack is received.
-   io.core.resp.valid := Mux(cache_load_ack,                    !inflight_load_buffer(resp_tag).was_killed,
+   io.core.resp.valid := Mux(cache_load_ack,                    !inflight_load_buffer(resp_tag).was_killed, // hide loads that were killed due to branches, etc.
                          Mux(was_store_and_not_amo &&
                               !io.dmem.resp.bits.nack &&
-                              !Reg(next=io.core.req.bits.kill), Bool(true),
-                                                                Bool(false)))
+                              !Reg(next=io.core.req.bits.kill), Bool(true),    // stores succeed quietly, so valid if no nack
+                                                                Bool(false)))  // filter out nacked responses
 
    io.core.resp.bits.uop := Mux(cache_load_ack, inflight_load_buffer(resp_tag).out_uop, m2_req_uop)
 
    // comes out the same cycle as the resp.valid signal
    // but is a few gates slower than resp.bits.data
-   io.core.resp.bits.data_subword := io.dmem.resp.bits.data_subword
-   io.core.resp.bits.data         := io.dmem.resp.bits.data
+   // TODO change resp bundle to match the new hellacache resp bundle
+   io.core.resp.bits.data_subword := io.dmem.resp.bits.data
+   io.core.resp.bits.data         := io.dmem.resp.bits.data_word_bypass
    io.core.resp.bits.typ          := io.dmem.resp.bits.typ
 
    //------------------------------------------------------------

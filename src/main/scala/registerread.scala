@@ -21,6 +21,7 @@ package boom
 import Chisel._
 import Node._
 import scala.collection.mutable.ArrayBuffer
+import cde.Parameters
 
 import rocket.ALU._
 
@@ -37,9 +38,9 @@ class RegisterRead(issue_width: Int
                                              // num_total_read_ports)
                   , num_total_bypass_ports: Int
                   , register_width: Int
-                  ) extends Module with BOOMCoreParameters
+                  )(implicit p: Parameters) extends BoomModule()(p)
 {
-   val io = new BOOMCoreBundle
+   val io = new BoomBundle()(p)
    {
       // issued micro-ops
       val iss_valids = Vec.fill(issue_width) { Bool(INPUT) }
@@ -155,8 +156,10 @@ class RegisterRead(issue_width: Int
          for (b <- 0 until io.bypass.getNumPorts)
          {
             // can't use "io.bypass.valid(b) since it would create a combinational loop on branch kills"
-            rs1_cases ++= Array((io.bypass.valid(b) && (pop1 === io.bypass.uop(b).pdst) && io.bypass.uop(b).ctrl.rf_wen && (lrs1_rtype === RT_FIX || lrs1_rtype === RT_FLT) && (pop1 != UInt(0)), io.bypass.data(b)))
-            rs2_cases ++= Array((io.bypass.valid(b) && (pop2 === io.bypass.uop(b).pdst) && io.bypass.uop(b).ctrl.rf_wen && (lrs2_rtype === RT_FIX || lrs2_rtype === RT_FLT) && (pop2 != UInt(0)), io.bypass.data(b)))
+            rs1_cases ++= Array((io.bypass.valid(b) && (pop1 === io.bypass.uop(b).pdst) && io.bypass.uop(b).ctrl.rf_wen
+               && (lrs1_rtype === RT_FIX || lrs1_rtype === RT_FLT) && (pop1 =/= UInt(0)), io.bypass.data(b)))
+            rs2_cases ++= Array((io.bypass.valid(b) && (pop2 === io.bypass.uop(b).pdst) && io.bypass.uop(b).ctrl.rf_wen
+               && (lrs2_rtype === RT_FIX || lrs2_rtype === RT_FLT) && (pop2 =/= UInt(0)), io.bypass.data(b)))
          }
 
          if (num_read_ports > 0) bypassed_rs1_data(w) := MuxCase(rrd_rs1_data(w), rs1_cases)
@@ -201,7 +204,7 @@ class RegisterRead(issue_width: Int
 //-------------------------------------------------------------
 //-------------------------------------------------------------
 
-class RRdCtrlSigs extends Bundle
+class RRdCtrlSigs(implicit p: Parameters) extends BoomBundle()(p)
 {
    val br_type          = UInt(width = BR_N.getWidth)
    val use_alupipe      = Bool()
@@ -225,9 +228,10 @@ class RRdCtrlSigs extends Bundle
    }
 }
 
-class RegisterReadDecode extends Module
+// TODO break up the rrd decode table based on the supported ISA extensions (int, fp, fdiv/sqrt)
+class RegisterReadDecode(implicit p: Parameters) extends BoomModule()(p)
 {
-   val io = new BOOMCoreBundle
+   val io = new BoomBundle()(p)
    {
       val iss_valid = Bool(INPUT)
       val iss_uop   = new MicroOp().asInput()
@@ -384,7 +388,12 @@ class RegisterReadDecode extends Module
          BitPat(uopFMADD_D) ->List(BR_N, Y, N, N, FN_X   , DW_X  , OP1_X   , OP2_X   , IS_X, REN_1, rocket.CSR.N),
          BitPat(uopFMSUB_D) ->List(BR_N, Y, N, N, FN_X   , DW_X  , OP1_X   , OP2_X   , IS_X, REN_1, rocket.CSR.N),
          BitPat(uopFNMADD_D)->List(BR_N, Y, N, N, FN_X   , DW_X  , OP1_X   , OP2_X   , IS_X, REN_1, rocket.CSR.N),
-         BitPat(uopFNMSUB_D)->List(BR_N, Y, N, N, FN_X   , DW_X  , OP1_X   , OP2_X   , IS_X, REN_1, rocket.CSR.N)
+         BitPat(uopFNMSUB_D)->List(BR_N, Y, N, N, FN_X   , DW_X  , OP1_X   , OP2_X   , IS_X, REN_1, rocket.CSR.N),
+
+         BitPat(uopFDIV_S)  ->List(BR_N, N, Y, N, FN_X   , DW_X  , OP1_X   , OP2_X   , IS_X, REN_1, rocket.CSR.N),
+         BitPat(uopFDIV_D)  ->List(BR_N, N, Y, N, FN_X   , DW_X  , OP1_X   , OP2_X   , IS_X, REN_1, rocket.CSR.N),
+         BitPat(uopFSQRT_S) ->List(BR_N, N, Y, N, FN_X   , DW_X  , OP1_X   , OP2_X   , IS_X, REN_1, rocket.CSR.N),
+         BitPat(uopFSQRT_D) ->List(BR_N, N, Y, N, FN_X   , DW_X  , OP1_X   , OP2_X   , IS_X, REN_1, rocket.CSR.N)
          )
 
    val rrd_cs = Wire(new RRdCtrlSigs()).decode(io.rrd_uop.uopc, default, table)
@@ -400,7 +409,7 @@ class RegisterReadDecode extends Module
    io.rrd_uop.ctrl.fcn_dw  := rrd_cs.fcn_dw.toBool
    io.rrd_uop.ctrl.is_load := io.rrd_uop.uopc === uopLD
    io.rrd_uop.ctrl.is_sta  := io.rrd_uop.uopc === uopSTA || io.rrd_uop.uopc === uopAMO_AG
-   io.rrd_uop.ctrl.is_std  := io.rrd_uop.uopc === uopSTD || (io.rrd_uop.ctrl.is_sta && io.rrd_uop.lrs2_rtype != RT_X)
+   io.rrd_uop.ctrl.is_std  := io.rrd_uop.uopc === uopSTD || (io.rrd_uop.ctrl.is_sta && io.rrd_uop.lrs2_rtype =/= RT_X)
 
    when (io.rrd_uop.uopc === uopAMO_AG)
    {

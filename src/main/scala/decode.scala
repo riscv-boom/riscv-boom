@@ -8,6 +8,7 @@ package boom
 
 import Chisel._
 import Node._
+import cde.Parameters
 
 import rocket.Instructions._
 import rocket._
@@ -309,8 +310,30 @@ object FDecode extends DecodeConstants
 // scalastyle:on
 }
 
+object FDivSqrtDecode extends DecodeConstants
+{
+// scalastyle:off
+  val table: Array[(BitPat, List[BitPat])] = Array(
+             //                                                          frs3_en                                wakeup_delay
+             //                                                          |  imm sel                             |        bypassable (aka, known/fixed latency)
+             //                                                          |  |     is_load                       |        |  br/jmp
+             //     is val inst?                         rs1 regtype     |  |     |  is_store                   |        |  |  is jal
+             //     |  is fp inst?                       |       rs2 type|  |     |  |  is_amo                  |        |  |  |  allocate_brtag
+             //     |  |  is dst single-prec?            |       |       |  |     |  |  |  is_fence             |        |  |  |  |
+             //     |  |  |  micro-opcode                |       |       |  |     |  |  |  |  is_fencei         |        |  |  |  |
+             //     |  |  |  |           func    dst     |       |       |  |     |  |  |  |  |  mem    mem     |        |  |  |  |  is unique? (clear pipeline for it)
+             //     |  |  |  |           unit    regtype |       |       |  |     |  |  |  |  |  cmd    msk     |        |  |  |  |  |  flush on commit
+             //     |  |  |  |           |       |       |       |       |  |     |  |  |  |  |  |      |       |        |  |  |  |  |  |  csr cmd
+   FDIV_S    ->List(Y, Y, Y, uopFDIV_S , FU_FDV, RT_FLT, RT_FLT, RT_FLT, N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, CSR.N),
+   FDIV_D    ->List(Y, Y, N, uopFDIV_D , FU_FDV, RT_FLT, RT_FLT, RT_FLT, N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, CSR.N),
+   FSQRT_S   ->List(Y, Y, Y, uopFSQRT_S, FU_FDV, RT_FLT, RT_FLT, RT_X  , N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, CSR.N),
+   FSQRT_D   ->List(Y, Y, N, uopFSQRT_D, FU_FDV, RT_FLT, RT_FLT, RT_X  , N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, CSR.N)
+   )
+// scalastyle:on
+}
 
-class DecodeUnitIo extends BOOMCoreBundle
+
+class DecodeUnitIo(implicit p: Parameters) extends BoomBundle()(p)
 {
    val enq = new Bundle
    {
@@ -330,7 +353,7 @@ class DecodeUnitIo extends BOOMCoreBundle
 }
 
 // Takes in a single instruction, generates a MicroOp (or multiply micro-ops over x cycles)
-class DecodeUnit() extends Module
+class DecodeUnit(implicit p: Parameters) extends BoomModule()(p)
 {
    val io = new DecodeUnitIo
 
@@ -338,7 +361,8 @@ class DecodeUnit() extends Module
    uop := io.enq.uop
 
    var decode_table = XDecode.table
-   if (!params(BuildFPU).isEmpty) decode_table ++= FDecode.table
+   if (usingFPU) decode_table ++= FDecode.table
+   if (usingFPU && usingFDivSqrt) decode_table ++= FDivSqrtDecode.table
 
    val cs = Wire(new CtrlSigs()).decode(uop.inst, decode_table)
 
@@ -374,8 +398,7 @@ class DecodeUnit() extends Module
    uop.lrs3       := Cat(Bool(true),             uop.inst(RS3_MSB,RS3_LSB))
    // TODO do I need to remove (uop.lrs3) for integer-only? Or do synthesis tools properly remove it?
 
-
-   uop.ldst_val   := (cs.dst_type != RT_X && (uop.ldst != UInt(0)))
+   uop.ldst_val   := (cs.dst_type =/= RT_X && uop.ldst =/= UInt(0))
    uop.dst_rtype  := cs.dst_type
    uop.lrs1_rtype := cs.rs1_type
    uop.lrs2_rtype := cs.rs2_type
@@ -461,12 +484,12 @@ class BranchDecode extends Module
 }
 
 
-class FetchSerializerResp extends BOOMCoreBundle
+class FetchSerializerResp(implicit p: Parameters) extends BoomBundle()(p)
 {
    val uops = Vec.fill(DECODE_WIDTH){new MicroOp()}
    val pred_resp = new BranchPredictionResp()
 }
-class FetchSerializerIO extends BOOMCoreBundle
+class FetchSerializerIO(implicit p: Parameters) extends BoomBundle()(p)
 {
    val enq = new DecoupledIO(new FetchBundle()).flip
    val deq = new DecoupledIO(new FetchSerializerResp)
@@ -478,7 +501,7 @@ class FetchSerializerIO extends BOOMCoreBundle
 // connect a N-word wide Fetch Buffer with a M-word decode
 // currently only works for 2 wide fetch to 1 wide decode, OR N:N fetch/decode
 // TODO instead of counter, clear mask bits as instructions are finished?
-class FetchSerializerNtoM extends Module with BOOMCoreParameters
+class FetchSerializerNtoM(implicit p: Parameters) extends BoomModule()(p)
 {
    val io = new FetchSerializerIO
 
@@ -500,7 +523,7 @@ class FetchSerializerNtoM extends Module with BOOMCoreParameters
    //-------------------------------------------------------------
    // Compute Enqueue Ready (get the next bundle)
    io.enq.ready := io.deq.ready &&
-                     (io.enq.bits.mask != Bits(3) || (counter === UInt(1)))
+                     (io.enq.bits.mask =/= Bits(3) || (counter === UInt(1)))
 
 
    //-------------------------------------------------------------
@@ -562,7 +585,7 @@ class FetchSerializerNtoM extends Module with BOOMCoreParameters
 // track the current "branch mask", and give out the branch mask to each micro-op in Decode
 // (each micro-op in the machine has a branch mask which says which branches it
 // is being speculated under).
-class BranchMaskGenerationLogic(val pl_width: Int) extends Module with BOOMCoreParameters
+class BranchMaskGenerationLogic(val pl_width: Int)(implicit p: Parameters) extends BoomModule()(p)
 {
    val io = new Bundle
    {

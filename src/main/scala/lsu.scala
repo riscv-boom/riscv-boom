@@ -49,12 +49,13 @@ package boom
 
 import Chisel._
 import Node._
+import cde.Parameters
 
 import rocket.Str
 import uncore.constants.MemoryOpConstants._
 import junctions.PgIdxBits
 
-class LoadStoreUnitIo(pl_width: Int) extends BOOMCoreBundle
+class LoadStoreUnitIO(pl_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
    // Decode Stage
    // Track which stores are "alive" in the pipeline
@@ -108,7 +109,7 @@ class LoadStoreUnitIo(pl_width: Int) extends BOOMCoreBundle
    val nack               = new NackInfo().asInput()
 
 // causing stuff to dissapear
-//   val dmem = new DCMemPortIo().flip()
+//   val dmem = new DCMemPortIO().flip()
    val dmem_is_ordered = Bool(INPUT)
    val dmem_req_ready = Bool(INPUT)    // arbiter can back-pressure us (or MSHRs can fill up).
                                        // although this is also turned into a
@@ -130,9 +131,9 @@ class LoadStoreUnitIo(pl_width: Int) extends BOOMCoreBundle
 }
 
 
-class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
+class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(p)
 {
-   val io = new LoadStoreUnitIo(pl_width)
+   val io = new LoadStoreUnitIO(pl_width)
 
    val num_ld_entries = NUM_LSU_ENTRIES
    val num_st_entries = NUM_LSU_ENTRIES
@@ -357,7 +358,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
                      Mux(will_fire_load_retry, laq_addr(laq_retry_idx),
                                                io.exe_resp.bits.addr.toUInt))
 
-   val dtlb = Module(new rocket.TLB, {case uncore.CacheName => "L1D"})
+   val dtlb = Module(new rocket.TLB()(p.alterPartial({case uncore.CacheName => "L1D"})))
    dtlb.io.ptw <> io.ptw
    dtlb.io.req.valid := will_fire_load_incoming ||
                         will_fire_sta_incoming ||
@@ -365,7 +366,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
                         will_fire_load_retry
    dtlb.io.req.bits.passthrough := Bool(false) // lets status.vm decide
    dtlb.io.req.bits.asid := UInt(0)
-   dtlb.io.req.bits.vpn := exe_vaddr >> UInt(params(PgIdxBits))
+   dtlb.io.req.bits.vpn := exe_vaddr >> UInt(corePgIdxBits)
    dtlb.io.req.bits.instruction := Bool(false)
    dtlb.io.req.bits.store := will_fire_sta_incoming || will_fire_sta_retry
 
@@ -393,7 +394,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
 
 
    // output
-   val exe_tlb_paddr = Cat(dtlb.io.resp.ppn, exe_vaddr(params(PgIdxBits)-1,0))
+   val exe_tlb_paddr = Cat(dtlb.io.resp.ppn, exe_vaddr(corePgIdxBits-1,0))
 
 
 
@@ -656,7 +657,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
       val write_mask = GenByteMask(s_addr, stq_uop(i).mem_typ)
 
       // if overlap on bytes and dword matches, the address conflicts!
-      when (((read_mask & write_mask) != Bits(0)) && dword_addr_matches(i))
+      when (((read_mask & write_mask) =/= Bits(0)) && dword_addr_matches(i))
       {
          addr_conflicts(i) := Bool(true)
       }
@@ -684,9 +685,9 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
                st_dep_mask(i) &&
                (stq_uop(i).is_fence || stq_uop(i).is_amo)) ||
             (dword_addr_matches(i) &&
-//               (mem_ld_uop.mem_typ != stq_uop(i).mem_typ) &&
+//               (mem_ld_uop.mem_typ =/= stq_uop(i).mem_typ) &&
                (!MemTypesMatch(mem_ld_uop.mem_typ, stq_uop(i).mem_typ)) &&
-               ((read_mask & write_mask) != Bits(0))))
+               ((read_mask & write_mask) =/= Bits(0))))
       {
          force_ld_to_sleep := Bool(true)
       }
@@ -717,7 +718,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
 
    // kill load request to mem if address matches (we will either sleep load, or forward data) or TLB miss
    io.memreq_kill     := (mem_ld_used_tlb && (mem_tlb_miss || Reg(next=pf_ld || ma_ld))) ||
-                         (mem_fired_ld && addr_conflicts.toBits != Bits(0)) ||
+                         (mem_fired_ld && addr_conflicts.toBits =/= Bits(0)) ||
                          mem_ld_killed ||
                          (mem_fired_st && io.nack.valid && !io.nack.isload)
    wb_forward_std_idx := forwarding_age_logic.io.forwarding_idx
@@ -808,7 +809,7 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
       {
          // does the load depend on this store?
          // TODO CODE REVIEW what's the best way to perform this bit extract?
-         when ((laq_st_dep_mask(i) & (UInt(1) << stq_idx)) != Bits(0))
+         when ((laq_st_dep_mask(i) & (UInt(1) << stq_idx)) =/= Bits(0))
          {
             when (st_is_fence &&
                   laq_allocated(i) &&
@@ -837,9 +838,9 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
                // and if not, then fail OR
                // if it was forwarded but not us, was the forwarded store older than me
                // head < forwarded < youngest?
-               when (((st_mask & l_mask) != Bits(0)) &&
+               when (((st_mask & l_mask) =/= Bits(0)) &&
                     (!laq_forwarded_std_val(i) ||
-                      ((fid != stq_idx) && (Cat(stq_idx < yid, stq_idx) > Cat(fid < yid, fid)))))
+                      ((fid =/= stq_idx) && (Cat(stq_idx < yid, stq_idx) > Cat(fid < yid, fid)))))
                {
                   laq_executed(i)   := Bool(false)
                   laq_failure(i)    := Bool(true)
@@ -1109,8 +1110,8 @@ class LoadStoreUnit(pl_width: Int) extends Module with BOOMCoreParameters
 
    //-------------------------------------------------------------
 
-   val laq_maybe_full = (laq_allocated.toBits != Bits(0))
-   val stq_maybe_full = (stq_entry_val.toBits != Bits(0))
+   val laq_maybe_full = (laq_allocated.toBits =/= Bits(0))
+   val stq_maybe_full = (stq_entry_val.toBits =/= Bits(0))
 
    var laq_is_full = Bool(false)
    var stq_is_full = Bool(false)
@@ -1225,7 +1226,7 @@ object LoadDataGenerator
    }
 }
 
-class ForwardingAgeLogic(num_entries: Int) extends Module with BOOMCoreParameters
+class ForwardingAgeLogic(num_entries: Int)(implicit p: Parameters) extends BoomModule()(p)
 {
    val io = new Bundle
    {

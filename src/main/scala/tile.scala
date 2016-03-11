@@ -17,22 +17,19 @@ package boom
 
 import Chisel._
 import Node._
-import uncore._
-import rocket.CoreName
+import cde.Parameters
 
-class BOOMTile(resetSignal: Bool = null) extends rocket.Tile(resetSignal)
+class BOOMTile(resetSignal: Bool = null)(implicit p: Parameters) extends rocket.Tile(resetSignal)(p)
 {
-   val dcachePortId = 0
-   val icachePortId = 1
+   val core = Module(new BOOMCore()(p.alterPartial({case rocket.CoreName => "BOOM"})))
+   val icache = Module(new rocket.Frontend()(p.alterPartial({
+      case uncore.CacheName => "L1I"
+      case rocket.CoreName => "BOOM"})))
+   val dcache = Module(new rocket.HellaCache()(dcacheParams))
+   val dc_shim = Module(new DCacheShim()(dcacheParams))
+   val ptw = Module(new rocket.PTW(nPTWPorts)(dcacheParams))
 
-   val core = Module(new Core, {case CoreName => "BOOM"})
-   val icache = Module(new rocket.Frontend(btb_updates_out_of_order=true), {case CacheName => "L1I";
-                                                                            case CoreName => "BOOM"})
-   val dcache = Module(new rocket.HellaCache, {case CacheName => "L1D"})
-   val dc_shim = Module(new DCacheShim)
-   val ptw = Module(new rocket.PTW(params(rocket.NPTWPorts)))
-
-   val dcArb = Module(new rocket.HellaCacheArbiter(params(rocket.NDCachePorts)))
+   val dcArb = Module(new rocket.HellaCacheArbiter(nDCachePorts)(dcacheParams))
    dcArb.io.requestor(0) <> ptw.io.mem
    dcArb.io.requestor(1) <> dc_shim.io.dmem
    dcArb.io.mem <> dcache.io.cpu
@@ -52,31 +49,30 @@ class BOOMTile(resetSignal: Bool = null) extends rocket.Tile(resetSignal)
    core.io.dmem <> dc_shim.io.core
    core.io.ptw_dat <> ptw.io.dpath
 
-
    // Connect the caches and ROCC to the outer memory system
-   io.cached <> dcache.io.mem
+   io.cached.head <> dcache.io.mem
    // If so specified, build an RoCC module and wire it in
    // otherwise, just hookup the icache
-   io.uncached <> params(rocket.BuildRoCC).map { buildItHere =>
-      val rocc = buildItHere()
-      val memArb = Module(new uncore.ClientTileLinkIOArbiter(3))
-      val dcIF = Module(new rocket.SimpleHellaCacheIF)
-      core.io.rocc <> rocc.io
-      dcIF.io.requestor <> rocc.io.mem
-      dcArb.io.requestor(2) <> dcIF.io.cache
-      memArb.io.in(0) <> icache.io.mem
-      memArb.io.in(1) <> rocc.io.imem
-      memArb.io.in(2) <> rocc.io.dmem
-      ptw.io.requestor(2) <> rocc.io.iptw
-      ptw.io.requestor(3) <> rocc.io.dptw
-      ptw.io.requestor(4) <> rocc.io.pptw
-      memArb.io.out
-     }.getOrElse(icache.io.mem)
+//   io.uncached <> p(TileKey).buildRoCC.map { buildItHere =>
+//     val rocc = buildItHere(p)
+//     val iMemArb = Module(new ClientTileLinkIOArbiter(2))
+//     val dcIF = Module(new SimpleHellaCacheIF()(dcacheParams))
+//     core.io.rocc <> rocc.io
+//     dcIF.io.requestor <> rocc.io.mem
+//     dcArb.io.requestor(2) <> dcIF.io.cache
+//     iMemArb.io.in(0) <> icache.io.mem
+//     iMemArb.io.in(1) <> rocc.io.imem
+//     ptw.io.requestor(2) <> rocc.io.iptw
+//     ptw.io.requestor(3) <> rocc.io.dptw
+//     ptw.io.requestor(4) <> rocc.io.pptw
+//     rocc.io.dmem :+ iMemArb.io.out
+//   }.getOrElse(List(icache.io.mem))
+   // TODO add ROCC tile-level connections
+   io.uncached <> Seq(icache.io.mem)
 
    // Cache Counters
-   core.io.counters.dc_miss := dcache.io.mem.acquire.fire().toBool
+   core.io.counters.dc_miss := dcache.io.mem.acquire.fire()
    core.io.counters.ic_miss := icache.io.mem.acquire.fire()
 }
 
 }
-

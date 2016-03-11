@@ -16,15 +16,15 @@ package boom
 
 import Chisel._
 import Node._
+import cde.Parameters
 
-
-class RegisterFileReadPortIO(addr_width: Int, data_width: Int) extends BOOMCoreBundle
+class RegisterFileReadPortIO(addr_width: Int, data_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
    val addr = UInt(INPUT, addr_width)
    val data = Bits(OUTPUT, data_width)
 }
 
-class RegisterFileWritePortIO(addr_width: Int, data_width: Int) extends BOOMCoreBundle
+class RegisterFileWritePortIO(addr_width: Int, data_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
    val wen  = Bool(INPUT)
    val addr = UInt(INPUT, addr_width)
@@ -36,9 +36,10 @@ class RegisterFile( num_registers: Int
                   , num_read_ports: Int
                   , num_write_ports: Int
                   , register_width: Int
-                  , enable_bypassing: Boolean) extends Module with BOOMCoreParameters
+                  , enable_bypassing: Boolean)
+                  (implicit p: Parameters) extends BoomModule()(p)
 {
-   val io = new BOOMCoreBundle
+   val io = new BoomBundle()(p)
    {
       val read_ports = Vec.fill(num_read_ports) { (new RegisterFileReadPortIO(PREG_SZ, register_width)) }
       val write_ports = Vec.fill(num_write_ports) { (new RegisterFileWritePortIO(PREG_SZ, register_width)) }
@@ -66,7 +67,7 @@ class RegisterFile( num_registers: Int
       for (i <- 0 until num_read_ports)
       {
          val bypass_ens = io.write_ports.map(x => x.wen &&
-                                                  x.addr != UInt(0) &&
+                                                  x.addr =/= UInt(0) &&
                                                   x.addr === io.read_ports(i).addr)
 
          val bypass_data = Mux1H(Vec(bypass_ens), Vec(io.write_ports.map(_.data)))
@@ -86,7 +87,7 @@ class RegisterFile( num_registers: Int
 
    for (i <- 0 until num_write_ports)
    {
-      when (io.write_ports(i).wen && (io.write_ports(i).addr != UInt(0)))
+      when (io.write_ports(i).wen && (io.write_ports(i).addr =/= UInt(0)))
       {
          regfile(io.write_ports(i).addr) := io.write_ports(i).data
       }

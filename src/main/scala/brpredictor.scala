@@ -19,10 +19,11 @@ package boom
 
 import Chisel._
 import Node._
+import cde.Parameters
 
 import rocket.Str
 
-class BrPredictorIo(fetch_width: Int) extends BOOMCoreBundle
+class BrPredictorIo(fetch_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
    val req_pc = UInt(INPUT, width = vaddrBits)
    val resp = Decoupled(new BpdResp)
@@ -31,23 +32,34 @@ class BrPredictorIo(fetch_width: Int) extends BOOMCoreBundle
    val br_resolution = Valid(new BpdUpdate).flip // from branch-unit
    val brob = new BrobBackendIo(fetch_width)
    val flush = Bool(INPUT) // pipeline flush
+
+   override def cloneType = new BrPredictorIo(fetch_width)(p).asInstanceOf[this.type]
 }
 
-class BpdResp extends BOOMCoreBundle
+// This is the response packet from the branch predictor. The predictor is
+// expecting to receive it back when it needs to perform an update.
+class BpdResp(implicit p: Parameters) extends BoomBundle()(p)
 {
    val takens = Bits(width = FETCH_WIDTH)
 
    // TODO customize this based on the sub-class predictor
    // probable solution is to turn it into a Bits() of a parameterized width,
    // which is set by querying the subclass.
+//   val info = new GShareResp
    val info = new GShareResp
+//   val info = new TageResp(history_length = 130, index_length = 12)
+   // Step 1. add a println to see how to query TagePredictor class?
+   //          - can we add an override function to brpredictor?
+   // Step 2. pass in to BpdResp the number of bits we want.
+   // Step 3. add def. functions to get what we want from each piece.
+   // Step 4. alternate solution
 }
 
 
 // BP2 stage needs to speculatively update the history register with what the
 // processor decided to do (takes BTB's effect into account).
 // Also used for updating the commit-copy during commit.
-class GHistUpdate extends BOOMCoreBundle
+class GHistUpdate(implicit p: Parameters) extends BoomBundle()(p)
 {
    val taken = Bool()
 }
@@ -57,7 +69,7 @@ class GHistUpdate extends BOOMCoreBundle
 //    - 1) correct the history if the processor mispredicted
 //    - 2) correct the p-table if it mispredicted (the processor may have been correct though)
 //    - 3) strengthen the h-table (on all branch resolutions)
-class BpdUpdate extends BOOMCoreBundle
+class BpdUpdate(implicit p: Parameters) extends BoomBundle()(p)
 {
    // the fetch pc (points to start of the fetch packet)
    // which word in the fetch packet does the update correspond to?
@@ -80,7 +92,7 @@ class BpdUpdate extends BOOMCoreBundle
 //--------------------------------------------------------------------------
 //--------------------------------------------------------------------------
 
-abstract class BrPredictor(fetch_width: Int, val history_length: Int) extends Module with BOOMCoreParameters
+abstract class BrPredictor(fetch_width: Int, val history_length: Int)(implicit p: Parameters) extends BoomModule()(p)
 {
    val io = new BrPredictorIo(fetch_width)
 
@@ -88,8 +100,7 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int) extends Mo
    val ghistory = Wire(Bits(width = history_length))
 
    // the commit update bundle (we update predictors).
-//   val commit = Wire(new BpdUpdate)
-   val commit = Wire(Valid(new BrobEntry(fetch_width))) // TODO move to BpdCommitUpdate, instead?
+   val commit = Wire(Valid(new BrobEntry(fetch_width)))
 
    // the (speculative) global history register. Needs to be massaged before usably by the bpd.
    private val r_ghistory = Reg(init = Bits(0, width = history_length))
@@ -132,6 +143,10 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int) extends Mo
    brob.io.backend <> io.brob
    commit := brob.io.commit_entry
 
+   // TODO XXX add this back in (perhaps just need to initialize mispredicted array?)
+//   assert ((~commit.bits.executed.toBits & commit.bits.mispredicted.toBits) === Bits(0),
+//      "[BrPredictor] the BROB is marking a misprediction for something that didn't execute.")
+
    when (commit.valid)
    {
       r_ghistory_commit_copy := Cat(r_ghistory_commit_copy, commit.bits.taken.reduce(_|_))
@@ -146,6 +161,24 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int) extends Mo
          )
    }
 }
+
+
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
+
+// act as a "null" branch predictor (it makes no predictions).
+// However, we need to instantiate a branch predictor, as it contains the Branch
+// ROB which tracks all of the inflight prediction state and performs the
+// updates at commit as necessary.
+class NullBrPredictor(
+   fetch_width: Int,
+   history_length: Int = 12
+   )(implicit p: Parameters) extends BrPredictor(fetch_width, history_length)(p)
+{
+   io.resp.valid := Bool(false)
+   io.resp.bits := new BpdResp().fromBits(Bits(0))
+}
+
 
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
@@ -165,7 +198,7 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int) extends Mo
 // already been committed?). Yuck. But it does waste BROB entries to include
 // JALRs.
 
-class BrobBackendIo(fetch_width: Int) extends BOOMCoreBundle
+class BrobBackendIo(fetch_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
    val allocate = Decoupled(new BrobEntry(fetch_width)).flip // Decode/Dispatch stage, allocate new brob entry
    val allocate_brob_tail = UInt(OUTPUT, width = BROB_ADDR_SZ) // tell Decode which entry gets allocated
@@ -176,31 +209,31 @@ class BrobBackendIo(fetch_width: Int) extends BOOMCoreBundle
    val flush = Bool(INPUT) // wipe the ROB
 }
 
-class BrobDeallocateIdx extends BOOMCoreBundle
+class BrobDeallocateIdx(implicit p: Parameters) extends BoomBundle()(p)
 {
    val brob_idx = UInt(width = BROB_ADDR_SZ)
 }
 
 // Each "entry" corresponds to a single fetch packet.
 // Each fetch packet may contain up to W branches, where W is the fetch_width.
-class BrobEntry(fetch_width: Int) extends BOOMCoreBundle
+class BrobEntry(fetch_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
-   val executed   = Vec.fill(fetch_width) {Bool()} // mark that a branch executed (and should update the predictor).
-   val taken      = Vec.fill(fetch_width) {Bool()}
-   val mispredict = Vec.fill(fetch_width) {Bool()} // did bpd mispredict this br? (aka, should we update the predictor).
-   val brob_idx   = UInt(width = BROB_ADDR_SZ)
+   val executed     = Vec.fill(fetch_width) {Bool()} // mark that a branch executed (and should update the predictor).
+   val taken        = Vec.fill(fetch_width) {Bool()}
+   val mispredicted = Vec.fill(fetch_width) {Bool()} // did bpd mispredict the br? (aka should we update predictor in Ex). Only set for branches, not jumps.
+   val brob_idx     = UInt(width = BROB_ADDR_SZ)
 
    val debug_executed = Bool() // did a br or jalr get executed? verify we're not deallocating an empty entry.
    val debug_rob_idx = UInt(width = ROB_ADDR_SZ)
 
    val info = new BpdResp
 
-  override def cloneType: this.type = new BrobEntry(fetch_width).asInstanceOf[this.type]
+   override def cloneType: this.type = new BrobEntry(fetch_width).asInstanceOf[this.type]
 }
 
-class BranchReorderBuffer(fetch_width: Int, num_entries: Int) extends Module with BOOMCoreParameters
+class BranchReorderBuffer(fetch_width: Int, num_entries: Int)(implicit p: Parameters) extends BoomModule()(p)
 {
-   val io = new BOOMCoreBundle
+   val io = new BoomBundle()(p)
    {
       // connection to BOOM's ROB/backend/etc.
       val backend = new BrobBackendIo(fetch_width)
@@ -260,8 +293,9 @@ class BranchReorderBuffer(fetch_width: Int, num_entries: Int) extends Module wit
 
       when (br_unit.brinfo.mispredict)
       {
-         entries(br_unit.brinfo.brob_idx).mispredict(idx) :=
-            Reg(next=br_unit.bpd_update.bits.bpd_mispredict)
+         entries(br_unit.brinfo.brob_idx).mispredicted(idx) :=
+            Reg(next=br_unit.bpd_update.bits.bpd_mispredict) &&
+            br_unit.brinfo.is_br
 
          // clear the executed bits behind this instruction
          // (as they are on the misspeculated path)
@@ -270,6 +304,7 @@ class BranchReorderBuffer(fetch_width: Int, num_entries: Int) extends Module wit
             when (UInt(w) > idx)
             {
                entries(br_unit.brinfo.brob_idx).executed(w) := Bool(false)
+               entries(br_unit.brinfo.brob_idx).mispredicted(w) := Bool(false)
             }
          }
 
@@ -299,11 +334,11 @@ class BranchReorderBuffer(fetch_width: Int, num_entries: Int) extends Module wit
 //   when (io.backend.flush ||
 //         ((io.backend.br_unit.brinfo.valid &&
 //         io.backend.br_unit.brinfo.mispredict) &&
-//         io.backend.br_unit.brinfo.brob_idx != tail_ptr)) <<--- broken
+//         io.backend.br_unit.brinfo.brob_idx =/= tail_ptr)) <<--- broken
 //   {
 //      maybe_full := Bool(false)
 //   }
-//   .elsewhen (do_alloc != do_dealloc)
+//   .elsewhen (do_alloc =/= do_dealloc)
 //   {
 //      maybe_full := do_alloc
 //   }
@@ -325,7 +360,7 @@ class BranchReorderBuffer(fetch_width: Int, num_entries: Int) extends Module wit
             , UInt(i, log2Up(num_entries))
             , entries(i).executed.toBits
             , entries(i).taken.toBits
-            , entries(i).mispredict.toBits
+            , entries(i).mispredicted.toBits
             , entries(i).debug_rob_idx
             , entries(i).info.info.history
             , entries(i).info.info.index
