@@ -167,6 +167,7 @@ class MicroOp(implicit p: Parameters) extends BoomBundle()(p)
    val debug_wdata      = Bits(width=xLen)
    val debug_ei_enabled = Bool()
    val debug_events_tsc = new StageEvents    // stage event timestamps
+   val debug_fseq       = UInt(width = 64)
 
    def fu_code_is(_fu: Bits) = fu_code === _fu
 }
@@ -182,6 +183,7 @@ class FetchBundle(implicit p: Parameters) extends BoomBundle()(p)
    val predictions = Vec.fill(FETCH_WIDTH) {new BranchPrediction}
 
    val debug_events_tsc = new StageEvents       // stage event timestamps
+   val debug_fseq       = UInt(width = 64)
   override def cloneType: this.type = new FetchBundle().asInstanceOf[this.type]
 }
 
@@ -410,10 +412,11 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
 
    // Time Stamp Counter & Retired Instruction Counter
    // (only used for printf and vcd dumps - the actual counters are in the CSRFile)
-   val tsc_reg = Reg(init = UInt(0, xLen))
-   val irt_reg = Reg(init = UInt(0, xLen))
-   tsc_reg := tsc_reg + Mux(Bool(O3PIPEVIEW_PRINTF), O3_CYCLE_TIME, UInt(1))
-   irt_reg := irt_reg + PopCount(com_valids.toBits)
+   val tsc_reg  = Reg(init = UInt(0, xLen))
+   val irt_reg  = Reg(init = UInt(0, xLen))
+   val fseq_reg = Reg(init = UInt(0, xLen))
+   tsc_reg  := tsc_reg + Mux(Bool(O3PIPEVIEW_PRINTF), O3_CYCLE_TIME, UInt(1))
+   irt_reg  := irt_reg + PopCount(com_valids.toBits)
    debug(tsc_reg)
    debug(irt_reg)
 
@@ -433,6 +436,8 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
                                 pipe=false,
                                 flow=p(EnableFetchBufferFlowThrough),
                                 _reset=(fetchbuffer_kill || reset.toBool)))
+
+   fseq_reg := fseq_reg + Mux(FetchBuffer.io.enq.valid, UInt(FETCH_WIDTH), UInt(0))
 
    val if_stalled = Wire(Bool()) // if FetchBuffer backs up, we have to stall the front-end
    if_stalled := !(FetchBuffer.io.enq.ready)
@@ -461,6 +466,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    fetch_bundle.pc := io.imem.resp.bits.pc
    fetch_bundle.xcpt_if := io.imem.resp.bits.xcpt_if
    fetch_bundle.debug_events_tsc.fetch_tsc := tsc_reg
+   fetch_bundle.debug_fseq := fseq_reg
 
    // Zero out issue, wb, and sotre timestamps for fence instructions
    fetch_bundle.debug_events_tsc.issue_tsc := UInt(0, 64)
@@ -1499,7 +1505,8 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
       {
          when (com_valids(i))
          {
-            printf("O3PipeView:fetch:%d:0x%x:0:%d:DASM(%x)\n", com_uops(i).debug_events_tsc.fetch_tsc, com_uops(i).inst, irt_reg + PopCount(com_valids.slice(0, i)), com_uops(i).inst)
+            //printf("O3PipeView:fetch:%d:0x%x:0:%d:DASM(%x)\n", com_uops(i).debug_events_tsc.fetch_tsc, com_uops(i).inst, irt_reg + PopCount(com_valids.slice(0, i)), com_uops(i).inst)
+            printf("O3PipeView:fetch:%d:0x%x:0:%d:DASM(%x)\n", com_uops(i).debug_events_tsc.fetch_tsc, com_uops(i).inst, com_uops(i).debug_fseq, com_uops(i).inst)
             printf("O3PipeView:decode:%d\n", com_uops(i).debug_events_tsc.decode_tsc)
             printf("O3PipeView:rename:%d\n", com_uops(i).debug_events_tsc.rename_tsc)
             printf("O3PipeView:dispatch:%d\n", com_uops(i).debug_events_tsc.dispatch_tsc)
