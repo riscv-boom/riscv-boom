@@ -359,7 +359,7 @@ class BranchReorderBuffer(fetch_width: Int, num_entries: Int)(implicit p: Parame
             , entries(i).mispredicted.toBits
             , entries(i).debug_rob_idx
             , entries(i).info.info.history
-            , entries(i).info.info.index
+            , entries(i).info.info.indexes(0)
             , entries(i).info.info.br_pc
             , idx
             )
