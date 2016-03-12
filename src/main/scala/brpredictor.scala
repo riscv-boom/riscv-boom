@@ -34,7 +34,8 @@ class BpdResp(implicit p: Parameters) extends BoomBundle()(p)
    // probable solution is to turn it into a Bits() of a parameterized width,
    // which is set by querying the subclass.
 //   val info = new GShareResp
-   val info = new TageResp(history_length = 64, index_length = 4, num_tables = 3, max_tag_sz = 12)
+//   val info = new TageResp(fetch_width = FETCH_WIDTH, history_length = 64, index_length = 4, num_tables = 3, max_tag_sz = 12)
+   val info = new TageResp(fetch_width = FETCH_WIDTH, history_length = 64, index_length = 10, num_tables = 4, max_tag_sz = 12)
    // Step 1. add a println to see how to query TagePredictor class?
    //          - can we add an override function to brpredictor?
    // Step 2. pass in to BpdResp the number of bits we want.

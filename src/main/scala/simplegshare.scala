@@ -18,10 +18,10 @@
 //    - be implemented using single-ported synchronous memory.
 //    - separate each bit of the two-bit counters into separate memory banks.
 //    - banked to allow simultaneous updates and predictions.
-//   
+//
 // NOTE: global history is already handled automatically in the BrPredictor
 // super-class.
-             
+
 package boom
 
 import Chisel._
@@ -41,9 +41,9 @@ class SimpleGShareBrPredictor(
    history_length: Int = 12
    )(implicit p: Parameters) extends BrPredictor(fetch_width, history_length)(p)
 {
-   println ("\tBuilding Simple GShare Predictor, with " 
-      + history_length + " bits of history for (" 
-      + fetch_width + "-wide fetch) and " 
+   println ("\tBuilding Simple GShare Predictor, with "
+      + history_length + " bits of history for ("
+      + fetch_width + "-wide fetch) and "
       + num_entries + " entries.")
 
    //------------------------------------------------------------
@@ -59,13 +59,17 @@ class SimpleGShareBrPredictor(
       (addr >> UInt(log2Up(fetch_width*coreInstBytes))) ^ hist
    }
 
-   private def GetPrediction(cntr: UInt): Bool = 
+   private def GetPrediction(cntr: UInt): Bool =
    {
       // return highest-order bit
       (cntr >> UInt(CNTR_SZ-1)).toBool
    }
 
-   private def UpdateCounters(valid: Bool, counter_row: Vec[UInt], enables: Vec[Bool], takens: Vec[Bool]): Vec[UInt] =
+   private def UpdateCounters(
+      valid: Bool,
+      counter_row: Vec[UInt],
+      enables: Vec[Bool],
+      takens: Vec[Bool]): Vec[UInt] =
    {
       val updated_row = Wire(Vec(fetch_width, UInt(width=CNTR_SZ)))
       for (i <- 0 until fetch_width)

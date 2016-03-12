@@ -27,7 +27,7 @@ trait BOOMDebugConstants
    // turn off stuff to dramatically reduce Chisel node count
    val DEBUG_PRINTF_LSU    = true && DEBUG_PRINTF
    val DEBUG_PRINTF_ROB    = true && DEBUG_PRINTF
-   val DEBUG_PRINTF_TAGE   = true
+   val DEBUG_PRINTF_TAGE   = true && DEBUG_PRINTF
 
    // color codes for output files
    // if you use VIM to view, you'll need the AnsiEsc plugin.

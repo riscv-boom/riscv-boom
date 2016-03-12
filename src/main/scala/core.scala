@@ -1239,8 +1239,10 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    {
       println("\n Chisel Printout Enabled\n")
 
-      var whitespace = 59 - 12 - NUM_LSU_ENTRIES- p(NumIssueSlotEntries) - (NUM_ROB_ENTRIES/COMMIT_WIDTH) //-
-         io.dmem.debug.ld_req_slot.size - NUM_BROB_ENTRIES
+      var whitespace = 104 - 12 - NUM_LSU_ENTRIES- p(NumIssueSlotEntries) - (NUM_ROB_ENTRIES/COMMIT_WIDTH) -
+         NUM_BROB_ENTRIES -
+         16 - 3 - 7
+//         io.dmem.debug.ld_req_slot.size -
 
       def InstsStr(insts: Bits, width: Int) =
       {
@@ -1398,17 +1400,17 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
             //, Mux(lsu_io.debug.tlb_ready, Str("TLB-RDY"), Str("-"))
       )
 
-      for (i <- 0 until io.dmem.debug.ld_req_slot.size)
-      {
-         printf("     ld_req_slot[%d]=(%s%s) - laq_idx:%d pdst: %d bm:%x\n"
-            , UInt(i)
-            , Mux(io.dmem.debug.ld_req_slot(i).valid, Str("V"), Str("-"))
-            , Mux(io.dmem.debug.ld_req_slot(i).killed, Str("K"), Str("-"))
-            , io.dmem.debug.ld_req_slot(i).uop.ldq_idx
-            , io.dmem.debug.ld_req_slot(i).uop.pdst
-            , io.dmem.debug.ld_req_slot(i).uop.br_mask
-         )
-      }
+      //for (i <- 0 until io.dmem.debug.ld_req_slot.size)
+      //{
+      //   printf("     ld_req_slot[%d]=(%s%s) - laq_idx:%d pdst: %d bm:%x\n"
+      //      , UInt(i)
+      //      , Mux(io.dmem.debug.ld_req_slot(i).valid, Str("V"), Str("-"))
+      //      , Mux(io.dmem.debug.ld_req_slot(i).killed, Str("K"), Str("-"))
+      //      , io.dmem.debug.ld_req_slot(i).uop.ldq_idx
+      //      , io.dmem.debug.ld_req_slot(i).uop.pdst
+      //      , io.dmem.debug.ld_req_slot(i).uop.br_mask
+      //   )
+      //}
 
       // Rename Map Tables / ISA Register File
       val xpr_to_string =
