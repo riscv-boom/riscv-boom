@@ -162,6 +162,7 @@ class TageTable(
    history_length: Int,
    tag_sz: Int,
    counter_sz: Int,
+   ubit_sz: Int,
    id: Int = 0
    )(implicit p: Parameters) extends BoomModule()(p)
 {
@@ -172,8 +173,7 @@ class TageTable(
    private val CNTR_MAX = (1 << counter_sz) - 1
    private val CNTR_WEAK_TAKEN = 1 << (counter_sz-1)
    private val CNTR_WEAK_NOTTAKEN = CNTR_WEAK_TAKEN - 1
-   private val UBIT_SZ = 2
-   private val UBIT_MAX = (1 << UBIT_SZ) - 1
+   private val UBIT_MAX = (1 << ubit_sz) - 1
    private val UBIT_INIT_VALUE = 1
 
    println("\t    TageTable - "
@@ -186,7 +186,7 @@ class TageTable(
    // State
    val counter_table = Mem(num_entries, Vec(fetch_width, UInt(width = counter_sz)))
    val tag_table     = Mem(num_entries, Bits(width = tag_sz))
-   val ubit_table    = Mem(num_entries, Bits(width = UBIT_SZ))
+   val ubit_table    = Mem(num_entries, Bits(width = ubit_sz))
    val debug_pc_table= Mem(num_entries, UInt(width = 32))
    val debug_hist_table=Mem(num_entries,Bits(width = history_length))
 

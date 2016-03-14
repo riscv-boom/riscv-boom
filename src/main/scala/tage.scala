@@ -98,7 +98,16 @@ class TageBrPredictor(
       fetch_width    = fetch_width,
       history_length = history_lengths.max)(p)
 {
-   println ("\tBuilding TAGE Predictor (max history length: " + history_lengths.max + " bits)")
+   val counter_sz = 2
+   val ubit_sz = 2
+   val size_in_bits = (for (i <- 0 until num_tables) yield
+   {
+      val entry_sz_in_bits = tag_sizes(i) + ubit_sz + (counter_sz*fetch_width)
+      table_sizes(i) * entry_sz_in_bits
+   }).reduce(_+_)
+
+   println ("\tBuilding " + (size_in_bits/8/1024.0) + " kB TAGE Predictor ("
+      + (size_in_bits/1024) + " Kbits) (max history length: " + history_lengths.max + " bits)")
    require (num_tables == table_sizes.size)
    require (num_tables == history_lengths.size)
    require (num_tables == tag_sizes.size)
@@ -152,7 +161,8 @@ class TageBrPredictor(
          num_entries    = table_sizes(i),
          history_length = history_lengths(i),
          tag_sz         = tag_sizes(i),
-         counter_sz     = 2))
+         counter_sz     = counter_sz,
+         ubit_sz        = ubit_sz))
       table.io.InitializeIo()
 
       // send prediction request
