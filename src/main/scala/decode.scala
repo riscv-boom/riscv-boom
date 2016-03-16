@@ -552,7 +552,7 @@ class FetchSerializerNtoM(implicit p: Parameters) extends BoomModule()(p)
    io.deq.bits.uops(0).inst           := io.enq.bits.insts(inst_idx)
    io.deq.bits.uops(0).br_prediction  := io.enq.bits.predictions(inst_idx)
    io.deq.bits.uops(0).valid          := io.enq.bits.mask(0)
-   io.deq.bits.uops(0).xcpt_if        := io.enq.bits.xcpt_if(inst_idx)
+   io.deq.bits.uops(0).xcpt_if        := io.enq.bits.xcpt_if
 
    //-------------------------------------------------------------
    // override all the above logic for DW>1
