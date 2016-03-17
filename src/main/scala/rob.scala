@@ -54,6 +54,7 @@ class RobPCRequest(implicit p: Parameters) extends BoomBundle()(p)
 
 
 class RobIo(machine_width: Int
+            , issue_width: Int
             , num_wakeup_ports: Int
             , num_fpu_ports: Int
             )(implicit p: Parameters)  extends BoomBundle()(p)
@@ -68,6 +69,10 @@ class RobIo(machine_width: Int
    val dis_new_packet   = Bool(INPUT) // we're dispatching the first (and perhaps only) part of a dispatch packet.
 
    val curr_rob_tail    = UInt(OUTPUT, ROB_ADDR_SZ)
+
+   // Issue Stage
+   val iss_valids = Vec.fill(issue_width) { Bool(INPUT) }
+   val iss_uops   = Vec.fill(issue_width) { new MicroOp().asInput() }
 
    // Write-back Stage
    // (Update of ROB)
@@ -145,6 +150,8 @@ class RobIo(machine_width: Int
       val xcpt_uop = new MicroOp()
       val xcpt_badvaddr = UInt(width = xLen)
    }.asOutput
+
+   val tsc = UInt(INPUT, xLen)
 }
 
 
@@ -153,11 +160,12 @@ class RobIo(machine_width: Int
 // num_fpu_ports = number of FPU units that will write back fflags
 class Rob(width: Int
          , num_rob_entries: Int
+         , issue_width: Int
          , num_wakeup_ports: Int
          , num_fpu_ports: Int
          )(implicit p: Parameters) extends BoomModule()(p)
 {
-   val io = new RobIo(width, num_wakeup_ports, num_fpu_ports)
+   val io = new RobIo(width, issue_width, num_wakeup_ports, num_fpu_ports)
 
    val num_rob_rows = num_rob_entries / width
    require (num_rob_rows % 2 == 0) // this is due to how rob PCs are stored in two banks
@@ -345,6 +353,26 @@ class Rob(width: Int
          rob_uop(rob_tail).inst := BUBBLE // just for debug purposes
       }
 
+      //-----------------------------------------------
+      // Issue: Update event timestamps for logging
+
+      if (O3PIPEVIEW_PRINTF)
+      {
+         for (i <- 0 until issue_width)
+         {
+            val row_idx = GetRowIdx(io.iss_uops(i).rob_idx)
+            when (io.iss_valids(i) && MatchBank(GetBankIdx(io.iss_uops(i).rob_idx)))
+            {
+               rob_uop(row_idx).debug_events match
+               {
+                  case Some(events: DebugStageEvents) =>
+                     events.issue_tsc := io.tsc
+                  case _ => require (!O3PIPEVIEW_PRINTF)
+               }
+            }
+         }
+      }
+
 
       //-----------------------------------------------
       // Writeback
@@ -357,6 +385,13 @@ class Rob(width: Int
          when (wb_resp.valid && MatchBank(GetBankIdx(wb_uop.rob_idx)))
          {
             rob_bsy(row_idx) := Bool(false)
+
+            rob_uop(row_idx).debug_events match
+            {
+               case Some(events: DebugStageEvents) =>
+                  events.write_tsc := io.tsc
+               case _ => require (!O3PIPEVIEW_PRINTF)
+            }
          }
          // TODO check that fflags aren't overwritten
          // TODO check that the wb is to a valid ROB entry, give it a time stamp
@@ -370,6 +405,13 @@ class Rob(width: Int
       when (io.lsu_clr_bsy_valid && MatchBank(GetBankIdx(io.lsu_clr_bsy_rob_idx)))
       {
          rob_bsy(GetRowIdx(io.lsu_clr_bsy_rob_idx)) := Bool(false)
+
+         rob_uop(GetRowIdx(io.lsu_clr_bsy_rob_idx)).debug_events match
+         {
+            case Some(events: DebugStageEvents) =>
+               events.get.write_tsc := io.tsc
+            case _ => require (!O3PIPEVIEW_PRINTF)
+         }
       }
 
       when (io.br_unit.brinfo.valid && MatchBank(GetBankIdx(io.br_unit.brinfo.rob_idx)))

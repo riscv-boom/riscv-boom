@@ -69,8 +69,19 @@ class CtrlSignals extends Bundle()
    val is_std      = Bool()
 }
 
+class DebugStageEvents extends Bundle()
+{
+   // Track the sequence number of each instruction fetched.
+   val fetch_seq        = UInt(width = 32)
 
-// TODO Chisel ability to union this Bundle for different types of Uops?
+   // Track the time the uop enters a particular stage.
+   val fetch_tsc        = UInt(width = 32)
+   val decode_tsc       = UInt(width = 32)
+   val issue_tsc        = UInt(width = 32)
+   val write_tsc        = UInt(width = 32)
+   val commit_tsc       = UInt(width = 32)
+}
+
 class MicroOp(implicit p: Parameters) extends BoomBundle()(p)
 {
    val valid            = Bool()                      // is this uop valid? or has it been masked out,
@@ -153,7 +164,7 @@ class MicroOp(implicit p: Parameters) extends BoomBundle()(p)
    // purely debug information
    val debug_wdata      = Bits(width=xLen)
    val debug_ei_enabled = Bool()
-
+   val debug_events     = if (O3PIPEVIEW_PRINTF) Some(new DebugStageEvents) else None
 
    def fu_code_is(_fu: Bits) = fu_code === _fu
 }
@@ -167,6 +178,9 @@ class FetchBundle(implicit p: Parameters) extends BoomBundle()(p)
 
    val pred_resp   = new BranchPredictionResp
    val predictions = Vec.fill(FETCH_WIDTH) {new BranchPrediction}
+
+   val debug_events = if (O3PIPEVIEW_PRINTF) Some(new DebugStageEvents) else None
+
   override def cloneType: this.type = new FetchBundle().asInstanceOf[this.type]
 }
 
@@ -393,6 +407,15 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    println("   Num Bypass Ports     : " + num_total_bypass_ports)
    println("")
 
+   // Time Stamp Counter & Retired Instruction Counter
+   // (only used for printf and vcd dumps - the actual counters are in the CSRFile)
+   val tsc_reg  = Reg(init = UInt(0, xLen))
+   val irt_reg  = Reg(init = UInt(0, xLen))
+   val fseq_reg = Reg(init = UInt(0, xLen))
+   tsc_reg  := tsc_reg + Mux(Bool(O3PIPEVIEW_PRINTF), UInt(O3_CYCLE_TIME), UInt(1))
+   irt_reg  := irt_reg + PopCount(com_valids.toBits)
+   debug(tsc_reg)
+   debug(irt_reg)
 
    //-------------------------------------------------------------
    //-------------------------------------------------------------
@@ -410,6 +433,11 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
                                 pipe=false,
                                 flow=p(EnableFetchBufferFlowThrough),
                                 _reset=(fetchbuffer_kill || reset.toBool)))
+
+   fseq_reg := fseq_reg +
+      Mux(FetchBuffer.io.enq.valid && FetchBuffer.io.enq.ready,
+         PopCount(FetchBuffer.io.enq.bits.mask),
+         UInt(0))
 
    val if_stalled = Wire(Bool()) // if FetchBuffer backs up, we have to stall the front-end
    if_stalled := !(FetchBuffer.io.enq.ready)
@@ -437,6 +465,19 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
 
    fetch_bundle.pc := io.imem.resp.bits.pc
    fetch_bundle.xcpt_if := io.imem.resp.bits.xcpt_if
+
+   // TODO for now, manually set the fetch_tsc to point to when the fetch
+   // started. This doesn't properly account for i-cache and i-tlb misses. :(
+   fetch_bundle.debug_events match
+   {
+      case Some(events: DebugStageEvents) =>
+         events.fetch_tsc := tsc_reg - UInt(2*O3_CYCLE_TIME)
+         events.fetch_seq := fseq_reg
+         events.issue_tsc := UInt(0, 64)
+         events.write_tsc := UInt(0, 64)
+      case _ => require (!O3PIPEVIEW_PRINTF)
+   }
+
    for (i <- 0 until FETCH_WIDTH)
    {
       fetch_bundle.insts(i) := io.imem.resp.bits.data(i)
@@ -578,6 +619,13 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
 
       dec_will_fire(w) := dec_valids(w) && !stall_me && !kill_frontend
       dec_uops(w)      := decode_unit.io.deq.uop
+
+      dec_uops(w).debug_events match
+      {
+         case Some(events: DebugStageEvents) =>
+            events.decode_tsc := tsc_reg
+         case _ => require (!O3PIPEVIEW_PRINTF)
+      }
    }
 
    // all decoders are empty and ready for new instructions
@@ -1010,7 +1058,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
 
    // TODO bug, this can return too many fflag ports,e.g., the FPU is shared with the mem unit and thus has two wb ports
    val num_fpu_ports = exe_units.withFilter(_.hasFFlags).map(_.num_rf_write_ports).foldLeft(0)(_+_)
-   val rob  = Module(new Rob(DECODE_WIDTH, NUM_ROB_ENTRIES, num_slow_wakeup_ports, num_fpu_ports)) // TODO the ROB writeback is off the regfile, which is a different set
+   val rob  = Module(new Rob(DECODE_WIDTH, NUM_ROB_ENTRIES, ISSUE_WIDTH, num_slow_wakeup_ports, num_fpu_ports)) // TODO the ROB writeback is off the regfile, which is a different set
 
       // Dispatch
       rob_rdy := rob.io.ready
@@ -1020,6 +1068,9 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
       rob.io.dis_has_br_or_jalr_in_packet := dec_has_br_or_jalr_in_packet
       rob.io.dis_partial_stall := !dec_rdy && !dis_mask(DECODE_WIDTH-1)
       rob.io.dis_new_packet := dec_finished_mask === Bits(0)
+      rob.io.tsc := tsc_reg
+      rob.io.iss_valids := iss_valids
+      rob.io.iss_uops := iss_uops
 
       dis_curr_rob_row_idx  := rob.io.curr_rob_tail
 
@@ -1172,17 +1223,6 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    val lsu_misspec_count = Reg(init = UInt(0, xLen))
    when (lsu_misspec) { lsu_misspec_count := lsu_misspec_count + UInt(1) }
    debug(lsu_misspec_count)
-
-
-
-   // Time Stamp Counter & Retired Instruction Counter
-   // (only used for printf and vcd dumps - the actual counters are in the CSRFile)
-   val tsc_reg = Reg(init = UInt(0, xLen))
-   val irt_reg = Reg(init = UInt(0, xLen))
-   tsc_reg := tsc_reg + UInt(1)
-   irt_reg := irt_reg + PopCount(com_valids.toBits)
-   debug(tsc_reg)
-   debug(irt_reg)
 
    // UARCH Counters
    // these take up a significant amount of area, so don't enable them lightly
@@ -1464,7 +1504,47 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
       }
    }
 
+   //-------------------------------------------------------------
+   //-------------------------------------------------------------
+   // Pipeview Visualization
 
+   // When O3PipeView enabled, dump instruction timestamps on commit.
+   // TODO O3PipeView: provide support for dumping misspeculated instructions too.
+   // TODO O3PipeView: provide support for store-completion
+   // TODO O3PipeView: provide support for icache misses.
+   if (O3PIPEVIEW_PRINTF)
+   {
+      println("   O3Pipeview Visualization Enabled\n")
+      for (i <- 0 until COMMIT_WIDTH)
+      {
+         when (com_valids(i))
+         {
+            // Note: some stages are wired to "0", which
+            // denotes that either the stage is not tracked, or
+            // the stage occurs in the same cycle as another stage.
+            com_uops(i).debug_events match
+            {
+               case Some(events: DebugStageEvents) =>
+                  printf("O3PipeView:fetch:%d:0x%x:0:%d:DASM(%x)\n",
+                     events.fetch_tsc,
+                     com_uops(i).inst,
+                     events.fetch_seq,
+                     com_uops(i).inst)
+                  printf("O3PipeView:decode:%d\n",
+                     events.decode_tsc)
+                  printf("O3PipeView:rename: 0\n")
+                  printf("O3PipeView:dispatch: 0\n")
+                  printf("O3PipeView:issue:%d\n",
+                     events.issue_tsc)
+                  printf("O3PipeView:complete:%d\n",
+                     events.write_tsc)
+                  printf("O3PipeView:retire:%d:store: 0\n",
+                     tsc_reg)
+               case _ => require (!O3PIPEVIEW_PRINTF)
+            }
+         }
+      }
+   }
 
    //-------------------------------------------------------------
    //-------------------------------------------------------------
