@@ -24,7 +24,7 @@ trait BOOMDebugConstants
    val DEBUG_ENABLE_COLOR  = false // provide color to print outs. Requires a VIM plugin to work properly :(
    val COMMIT_LOG_PRINTF   = false // dump commit state, for comparision against ISA sim
    val O3PIPEVIEW_PRINTF   = false // dump trace for O3PipeView from gem5
-   val O3_CYCLE_TIME       = UInt(500) // cycle time for O3PipeView
+   val O3_CYCLE_TIME       = (500) // cycle time for O3PipeView
 
    // turn off stuff to dramatically reduce Chisel node count
    val DEBUG_PRINTF_LSU    = true && DEBUG_PRINTF

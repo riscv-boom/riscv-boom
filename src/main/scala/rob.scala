@@ -104,7 +104,6 @@ class RobIo(machine_width: Int
 
    val lsu_clr_bsy_valid = Bool(INPUT)
    val lsu_clr_bsy_rob_idx = UInt(INPUT, ROB_ADDR_SZ)
-   val lsu_clr_bsy_uop = new MicroOp().asInput()
 
    // Handle Exceptions/ROB Rollback
    val com_exception    = Bool(OUTPUT)
@@ -345,7 +344,6 @@ class Rob(width: Int
          rob_bsy(rob_tail)       := !io.dis_uops(w).is_fence &&
                                     !(io.dis_uops(w).is_fencei)
          rob_uop(rob_tail)       := io.dis_uops(w)
-         rob_uop(rob_tail).debug_events_tsc.dispatch_tsc := io.tsc
          rob_exception(rob_tail) := io.dis_uops(w).exception
          rob_fflags(rob_tail)    := Bits(0)
          rob_uop(rob_tail).br_was_mispredicted := Bool(false)
@@ -357,12 +355,21 @@ class Rob(width: Int
 
       //-----------------------------------------------
       // Issue: Update event timestamps for logging
-      for (i <- 0 until issue_width)
+
+      if (O3PIPEVIEW_PRINTF)
       {
-         val row_idx = GetRowIdx(io.iss_uops(i).rob_idx)
-         when (io.iss_valids(i) && MatchBank(GetBankIdx(io.iss_uops(i).rob_idx)))
+         for (i <- 0 until issue_width)
          {
-            rob_uop(row_idx).debug_events_tsc.issue_tsc := io.tsc
+            val row_idx = GetRowIdx(io.iss_uops(i).rob_idx)
+            when (io.iss_valids(i) && MatchBank(GetBankIdx(io.iss_uops(i).rob_idx)))
+            {
+               rob_uop(row_idx).debug_events match
+               {
+                  case Some(events: DebugStageEvents) =>
+                     events.issue_tsc := io.tsc
+                  case _ => require (!O3PIPEVIEW_PRINTF)
+               }
+            }
          }
       }
 
@@ -378,8 +385,13 @@ class Rob(width: Int
          when (wb_resp.valid && MatchBank(GetBankIdx(wb_uop.rob_idx)))
          {
             rob_bsy(row_idx) := Bool(false)
-            rob_uop(row_idx).debug_events_tsc.write_tsc := io.tsc // Record wb timestamp
-            rob_uop(row_idx).debug_events_tsc.memory_tsc := UInt(0, 64) // Non-store ops don't have a store timestamp
+
+            rob_uop(row_idx).debug_events match
+            {
+               case Some(events: DebugStageEvents) =>
+                  events.write_tsc := io.tsc
+               case _ => require (!O3PIPEVIEW_PRINTF)
+            }
          }
          // TODO check that fflags aren't overwritten
          // TODO check that the wb is to a valid ROB entry, give it a time stamp
@@ -393,8 +405,13 @@ class Rob(width: Int
       when (io.lsu_clr_bsy_valid && MatchBank(GetBankIdx(io.lsu_clr_bsy_rob_idx)))
       {
          rob_bsy(GetRowIdx(io.lsu_clr_bsy_rob_idx)) := Bool(false)
-         rob_uop(GetRowIdx(io.lsu_clr_bsy_rob_idx)).debug_events_tsc.memory_tsc := io.tsc   // Record store and complete timestamps
-         rob_uop(GetRowIdx(io.lsu_clr_bsy_rob_idx)).debug_events_tsc.write_tsc := io.tsc
+
+         rob_uop(GetRowIdx(io.lsu_clr_bsy_rob_idx)).debug_events match
+         {
+            case Some(events: DebugStageEvents) =>
+               events.get.write_tsc := io.tsc
+            case _ => require (!O3PIPEVIEW_PRINTF)
+         }
       }
 
       when (io.br_unit.brinfo.valid && MatchBank(GetBankIdx(io.br_unit.brinfo.rob_idx)))

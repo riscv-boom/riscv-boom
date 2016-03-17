@@ -69,21 +69,19 @@ class CtrlSignals extends Bundle()
    val is_std      = Bool()
 }
 
-class StageEvents extends Bundle()
+class DebugStageEvents extends Bundle()
 {
-   val fetch_tsc           = UInt(width = 64)
-   val decode_tsc          = UInt(width = 64)
-   val rename_tsc          = UInt(width = 64)
-   val dispatch_tsc        = UInt(width = 64)
-   val issue_tsc           = UInt(width = 64)
-   val register_read_tsc   = UInt(width = 64)
-   val execute_tsc         = UInt(width = 64)
-   val memory_tsc          = UInt(width = 64)
-   val write_tsc           = UInt(width = 64)
-   val commit_tsc          = UInt(width = 64)
+   // Track the sequence number of each instruction fetched.
+   val fetch_seq        = UInt(width = 32)
+
+   // Track the time the uop enters a particular stage.
+   val fetch_tsc        = UInt(width = 32)
+   val decode_tsc       = UInt(width = 32)
+   val issue_tsc        = UInt(width = 32)
+   val write_tsc        = UInt(width = 32)
+   val commit_tsc       = UInt(width = 32)
 }
 
-// TODO Chisel ability to union this Bundle for different types of Uops?
 class MicroOp(implicit p: Parameters) extends BoomBundle()(p)
 {
    val valid            = Bool()                      // is this uop valid? or has it been masked out,
@@ -166,8 +164,7 @@ class MicroOp(implicit p: Parameters) extends BoomBundle()(p)
    // purely debug information
    val debug_wdata      = Bits(width=xLen)
    val debug_ei_enabled = Bool()
-   val debug_events_tsc = new StageEvents    // stage event timestamps
-   val debug_fseq       = UInt(width = 64)
+   val debug_events     = if (O3PIPEVIEW_PRINTF) Some(new DebugStageEvents) else None
 
    def fu_code_is(_fu: Bits) = fu_code === _fu
 }
@@ -182,8 +179,8 @@ class FetchBundle(implicit p: Parameters) extends BoomBundle()(p)
    val pred_resp   = new BranchPredictionResp
    val predictions = Vec.fill(FETCH_WIDTH) {new BranchPrediction}
 
-   val debug_events_tsc = new StageEvents       // stage event timestamps
-   val debug_fseq       = UInt(width = 64)
+   val debug_events = if (O3PIPEVIEW_PRINTF) Some(new DebugStageEvents) else None
+
   override def cloneType: this.type = new FetchBundle().asInstanceOf[this.type]
 }
 
@@ -415,7 +412,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    val tsc_reg  = Reg(init = UInt(0, xLen))
    val irt_reg  = Reg(init = UInt(0, xLen))
    val fseq_reg = Reg(init = UInt(0, xLen))
-   tsc_reg  := tsc_reg + Mux(Bool(O3PIPEVIEW_PRINTF), O3_CYCLE_TIME, UInt(1))
+   tsc_reg  := tsc_reg + Mux(Bool(O3PIPEVIEW_PRINTF), UInt(O3_CYCLE_TIME), UInt(1))
    irt_reg  := irt_reg + PopCount(com_valids.toBits)
    debug(tsc_reg)
    debug(irt_reg)
@@ -437,7 +434,10 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
                                 flow=p(EnableFetchBufferFlowThrough),
                                 _reset=(fetchbuffer_kill || reset.toBool)))
 
-   fseq_reg := fseq_reg + Mux(FetchBuffer.io.enq.valid, UInt(FETCH_WIDTH), UInt(0))
+   fseq_reg := fseq_reg +
+      Mux(FetchBuffer.io.enq.valid && FetchBuffer.io.enq.ready,
+         PopCount(FetchBuffer.io.enq.bits.mask),
+         UInt(0))
 
    val if_stalled = Wire(Bool()) // if FetchBuffer backs up, we have to stall the front-end
    if_stalled := !(FetchBuffer.io.enq.ready)
@@ -465,13 +465,18 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
 
    fetch_bundle.pc := io.imem.resp.bits.pc
    fetch_bundle.xcpt_if := io.imem.resp.bits.xcpt_if
-   fetch_bundle.debug_events_tsc.fetch_tsc := tsc_reg
-   fetch_bundle.debug_fseq := fseq_reg
 
-   // Zero out issue, wb, and sotre timestamps for fence instructions
-   fetch_bundle.debug_events_tsc.issue_tsc := UInt(0, 64)
-   fetch_bundle.debug_events_tsc.write_tsc := UInt(0, 64)
-   fetch_bundle.debug_events_tsc.memory_tsc := UInt(0, 64)
+   // TODO for now, manually set the fetch_tsc to point to when the fetch
+   // started. This doesn't properly account for i-cache and i-tlb misses. :(
+   fetch_bundle.debug_events match
+   {
+      case Some(events: DebugStageEvents) =>
+         events.fetch_tsc := tsc_reg - UInt(2*O3_CYCLE_TIME)
+         events.fetch_seq := fseq_reg
+         events.issue_tsc := UInt(0, 64)
+         events.write_tsc := UInt(0, 64)
+      case _ => require (!O3PIPEVIEW_PRINTF)
+   }
 
    for (i <- 0 until FETCH_WIDTH)
    {
@@ -614,7 +619,13 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
 
       dec_will_fire(w) := dec_valids(w) && !stall_me && !kill_frontend
       dec_uops(w)      := decode_unit.io.deq.uop
-      dec_uops(w).debug_events_tsc.decode_tsc := tsc_reg
+
+      dec_uops(w).debug_events match
+      {
+         case Some(events: DebugStageEvents) =>
+            events.decode_tsc := tsc_reg
+         case _ => require (!O3PIPEVIEW_PRINTF)
+      }
    }
 
    // all decoders are empty and ready for new instructions
@@ -743,7 +754,6 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    {
       dis_mask(w)         := rename_stage.io.ren_mask(w)
       dis_uops(w)         := rename_stage.io.ren_uops(w)
-      dis_uops(w).debug_events_tsc.rename_tsc := tsc_reg
       // TODO probably don't need to do this, since we're going ot do it in the issue window?
       dis_uops(w).br_mask := GetNewBrMask(br_unit.brinfo, rename_stage.io.ren_uops(w))
 
@@ -792,10 +802,6 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    // Input (Dispatch)
    issue_unit.io.dis_mask  := dis_mask
    issue_unit.io.dis_uops  := dis_uops
-   for (i <- 0 until DISPATCH_WIDTH)
-   {
-      issue_unit.io.dis_uops(i).debug_events_tsc.dispatch_tsc  := tsc_reg
-   }
 
    // Output (Issue)
 
@@ -1498,24 +1504,46 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
       }
    }
 
+   //-------------------------------------------------------------
+   //-------------------------------------------------------------
+   // Pipeview Visualization
+
    // When O3PipeView enabled, dump instruction timestamps on commit.
+   // TODO O3PipeView: provide support for dumping misspeculated instructions too.
+   // TODO O3PipeView: provide support for store-completion
+   // TODO O3PipeView: provide support for icache misses.
    if (O3PIPEVIEW_PRINTF)
    {
+      println("   O3Pipeview Visualization Enabled\n")
       for (i <- 0 until COMMIT_WIDTH)
       {
          when (com_valids(i))
          {
-            //printf("O3PipeView:fetch:%d:0x%x:0:%d:DASM(%x)\n", com_uops(i).debug_events_tsc.fetch_tsc, com_uops(i).inst, irt_reg + PopCount(com_valids.slice(0, i)), com_uops(i).inst)
-            printf("O3PipeView:fetch:%d:0x%x:0:%d:DASM(%x)\n", com_uops(i).debug_events_tsc.fetch_tsc, com_uops(i).inst, com_uops(i).debug_fseq, com_uops(i).inst)
-            printf("O3PipeView:decode:%d\n", com_uops(i).debug_events_tsc.decode_tsc)
-            printf("O3PipeView:rename:%d\n", com_uops(i).debug_events_tsc.rename_tsc)
-            printf("O3PipeView:dispatch:%d\n", com_uops(i).debug_events_tsc.dispatch_tsc)
-            printf("O3PipeView:issue:%d\n", com_uops(i).debug_events_tsc.issue_tsc)
-            printf("O3PipeView:complete:%d\n", com_uops(i).debug_events_tsc.write_tsc)
-            printf("O3PipeView:retire:%d:store:%d\n", tsc_reg, com_uops(i).debug_events_tsc.memory_tsc)
+            // Note: some stages are wired to "0", which
+            // denotes that either the stage is not tracked, or
+            // the stage occurs in the same cycle as another stage.
+            com_uops(i).debug_events match
+            {
+               case Some(events: DebugStageEvents) =>
+                  printf("O3PipeView:fetch:%d:0x%x:0:%d:DASM(%x)\n",
+                     events.fetch_tsc,
+                     com_uops(i).inst,
+                     events.fetch_seq,
+                     com_uops(i).inst)
+                  printf("O3PipeView:decode:%d\n",
+                     events.decode_tsc)
+                  printf("O3PipeView:rename: 0\n")
+                  printf("O3PipeView:dispatch: 0\n")
+                  printf("O3PipeView:issue:%d\n",
+                     events.issue_tsc)
+                  printf("O3PipeView:complete:%d\n",
+                     events.write_tsc)
+                  printf("O3PipeView:retire:%d:store: 0\n",
+                     tsc_reg)
+               case _ => require (!O3PIPEVIEW_PRINTF)
+            }
          }
       }
-
    }
 
    //-------------------------------------------------------------
