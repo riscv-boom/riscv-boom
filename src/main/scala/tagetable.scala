@@ -90,7 +90,7 @@ class TageTableIo(
    val bp2_update_history = (new ValidIO(new GHistUpdate)).flip
 
    // execute - perform updates on misprediction (reset the histories)
-   val exe_update_history = new ValidIO(new BpdResp())
+//   val exe_update_history = new ValidIO(new BpdResp())
 
    // commit - update predictor tables (allocate entry)
    val allocate = (new ValidIO(new TageAllocateEntryInfo(fetch_width, index_sz, tag_sz, history_length))).flip
@@ -217,7 +217,6 @@ class TageTable(
          for (i <- 0 to hlen-1 by clen)
          {
             val len = if (i + clen > hlen ) (hlen - i) else clen
-            //println("Fold - hlen: " + hlen + ",clen: " + clen + " i: " + i + ", len: " + len)
             require(len > 0)
             res = res(clen-1,0) ^ remaining(len-1,0)
             remaining = remaining >> UInt(len)

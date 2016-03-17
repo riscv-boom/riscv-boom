@@ -17,25 +17,44 @@ package boom
 
 import Chisel._
 import Node._
-import cde.Parameters
+import cde.{Parameters, Field}
 
-class GShareResp(implicit p: Parameters) extends BoomBundle()(p)
+case object GShareKey extends Field[GShareParameters]
+
+case class GShareParameters(
+   enabled: Boolean = false,
+   history_length: Int = 10)
+
+class GShareResp(index_sz: Int) extends Bundle
 {
-   val history = Bits(width = GHIST_LENGTH) // stored in snapshots (dealloc after Execute)
-   val index = Bits(width = GHIST_LENGTH) // needed to update predictor at Commit
+   val index = Bits(width = index_sz) // needed to update predictor at Commit
+   override def cloneType: this.type = new GShareResp(index_sz).asInstanceOf[this.type]
 }
 
-class GShareBrPredictor(fetch_width: Int
-                        , num_entries: Int = 4096
-                        , history_length: Int = 12
+object GShareBrPredictor
+{
+   def GetRespInfoSize(p: Parameters): Int =
+   {
+      val dummy = new GShareResp(p(GShareKey).history_length)
+      dummy.getWidth
+   }
+}
+
+class GShareBrPredictor(fetch_width: Int,
+                        history_length: Int = 12
    )(implicit p: Parameters) extends BrPredictor(fetch_width, history_length)(p)
 {
+   val num_entries = 1 << history_length
    println ("\tBuilding (" + (num_entries * fetch_width * 2/8/1024) +
       " kB) GShare Predictor, with " + history_length + " bits of history for (" +
       fetch_width + "-wide fetch) and " + num_entries + " entries.")
 
    private def Hash (addr: UInt, hist: Bits) =
       (addr >> UInt(log2Up(fetch_width*coreInstBytes))) ^ hist
+
+   //------------------------------------------------------------
+   // prediction response information
+   val commit_info = new GShareResp(log2Up(num_entries)).fromBits(commit.bits.info.info)
 
    //------------------------------------------------------------
    // prediction bits
@@ -48,7 +67,7 @@ class GShareBrPredictor(fetch_width: Int
    val hwq = Module(new Queue(new BrobEntry(fetch_width), entries=4))
    hwq.io.enq <> commit
 
-   val u_addr = commit.bits.info.info.index
+   val u_addr = commit_info.index
 
 
    //------------------------------------------------------------
@@ -97,9 +116,11 @@ class GShareBrPredictor(fetch_width: Int
       p_out := p_table.read(p_addr).toBits
 //   }
 
+   val resp_info = Wire(new GShareResp(log2Up(num_entries)))
    io.resp.bits.takens := p_out
-   io.resp.bits.info.history := RegNext(RegNext(this.ghistory))
-   io.resp.bits.info.index := RegNext(RegNext(p_addr))
+   io.resp.bits.history := RegNext(RegNext(this.ghistory))
+   resp_info.index := RegNext(RegNext(p_addr))
+   io.resp.bits.info := resp_info.toBits
 
    require (coreInstBytes == 4)
 
@@ -111,7 +132,8 @@ class GShareBrPredictor(fetch_width: Int
    when (!h_ren && hwq.io.deq.valid)
    {
       // TODO post ChiselIssue. Chisel needs to be able to have SeqMem take a Vec of Bools
-      val waddr = hwq.io.deq.bits.info.info.index
+      val u_info = new GShareResp(log2Up(num_entries)).fromBits(hwq.io.deq.bits.info.info)
+      val waddr = u_info.index
       val wmask = hwq.io.deq.bits.executed
       val wdata = Vec(hwq.io.deq.bits.taken.map(_.toUInt))
       h_table.write(waddr, wdata, wmask)

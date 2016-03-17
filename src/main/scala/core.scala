@@ -1191,8 +1191,6 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
       println("\n   UArch Counters Enabled\n")
       csr.io.uarch_counters(0)  := PopCount((Range(0,COMMIT_WIDTH)).map{w => com_valids(w) && com_uops(w).is_br_or_jmp && !com_uops(w).is_jal})
       csr.io.uarch_counters(1)  := PopCount((Range(0,COMMIT_WIDTH)).map{w => com_valids(w) && com_uops(w).is_br_or_jmp && !com_uops(w).is_jal && com_uops(w).br_was_mispredicted})
-//      csr.io.uarch_counters(0)  := br_unit.brinfo.valid
-//      csr.io.uarch_counters(1)  := br_unit.brinfo.mispredict
       csr.io.uarch_counters(2)  := !rob_rdy
       csr.io.uarch_counters(3)  := laq_full
 //      csr.io.uarch_counters(4)  := stq_full

@@ -29,18 +29,15 @@ import rocket.Str
 class BpdResp(implicit p: Parameters) extends BoomBundle()(p)
 {
    val takens = Bits(width = FETCH_WIDTH)
+   val history = Bits(width = GLOBAL_HISTORY_LENGTH)
 
-   // TODO customize this based on the sub-class predictor
-   // probable solution is to turn it into a Bits() of a parameterized width,
-   // which is set by querying the subclass.
-//   val info = new GShareResp
-//   val info = new TageResp(fetch_width = FETCH_WIDTH, history_length = 64, index_length = 4, num_tables = 3, max_tag_sz = 12)
-   val info = new TageResp(fetch_width = FETCH_WIDTH, history_length = 64, index_length = 10, num_tables = 4, max_tag_sz = 12)
-   // Step 1. add a println to see how to query TagePredictor class?
-   //          - can we add an override function to brpredictor?
-   // Step 2. pass in to BpdResp the number of bits we want.
-   // Step 3. add def. functions to get what we want from each piece.
-   // Step 4. alternate solution
+   // The info field stores the response information from the branch predictor.
+   // The response is stored (conceptually) in the ROB and is returned to the
+   // predictor during the Commit stage to aid in updating the predictor. Each
+   // predictor (and its configuration) changes the amount of information it
+   // needs to store, and so we need to ask the predictor (in parameters.scala)
+   // how many bits of info it requires
+   val info = Bits(width = BPD_INFO_SIZE)
 }
 
 
@@ -71,7 +68,7 @@ class BpdUpdate(implicit p: Parameters) extends BoomBundle()(p)
    val pc = UInt(width = vaddrBits)
    val br_pc = UInt(width = log2Up(FETCH_WIDTH)+log2Ceil(coreInstBytes))
    val mispredict = Bool()
-   val history = Bits(width = GHIST_LENGTH)
+   val history = Bits(width = GLOBAL_HISTORY_LENGTH)
    val bpd_mispredict = Bool()
    val taken = Bool()
    val new_pc_same_packet = Bool()
@@ -353,15 +350,16 @@ class BranchReorderBuffer(fetch_width: Int, num_entries: Int)(implicit p: Parame
    {
       for (i <- 0 until num_entries)
       {
-         printf (" brob[%d] (%x) T=%x m=%x r=%d, hist=%x, 0x%x, brPC= 0x%x br_upd_idx=%d "
+//         printf (" brob[%d] (%x) T=%x m=%x r=%d, hist=%x, 0x%x, brPC= 0x%x br_upd_idx=%d "
+         printf (" brob[%d] (%x) T=%x m=%x r=%d, br_upd_idx=%d "
             , UInt(i, log2Up(num_entries))
             , entries(i).executed.toBits
             , entries(i).taken.toBits
             , entries(i).mispredicted.toBits
             , entries(i).debug_rob_idx
-            , entries(i).info.info.history
-            , entries(i).info.info.indexes(0)
-            , entries(i).info.info.br_pc
+//            , entries(i).info.info.history
+//            , entries(i).info.info.indexes(0)
+//            , entries(i).info.info.br_pc
             , idx
             )
 

@@ -23,7 +23,6 @@ case object EnableFetchBufferFlowThrough extends Field[Boolean]
 case object EnableBTB extends Field[Boolean]
 case object EnableBTBContainsBranches extends Field[Boolean]
 case object EnableBranchPredictor extends Field[Boolean]
-case object BranchPredictorSizeInKB extends Field[Int]
 case object EnableAgePriorityIssue extends Field[Boolean]
 case object EnableUarchCounters extends Field[Boolean]
 case object EnablePrefetching extends Field[Boolean]
@@ -63,22 +62,25 @@ trait HasBoomCoreParameters extends rocket.HasCoreParameters
 
    //************************************
    // Branch Prediction
-   val BPD_SIZE_IN_KB = p(BranchPredictorSizeInKB)
-   val BPD_NUM_ENTRIES = BPD_SIZE_IN_KB*1024*8/FETCH_WIDTH/2 // computation for GShare
    val ENABLE_BRANCH_PREDICTOR = p(EnableBranchPredictor)
-   val WHICH_BPD = "TAGE"
-//   val GHIST_LENGTH = log2Up(BPD_NUM_ENTRIES)
+   var GLOBAL_HISTORY_LENGTH = 0
+   var BPD_INFO_SIZE = 0
 
-   // Tage Parameters
-//   val TAGE_TABLE_COUNT  = 3
-//   val TAGE_TABLE_SIZES  = Seq(16, 16, 16)
-//   val TAGE_HIST_LENGTHS = Seq(5, 15, 63)
-//   val TAGE_TAG_SIZES    = Seq(12, 12, 12)
-   val TAGE_TABLE_COUNT = 4
-   val TAGE_TABLE_SIZES = Seq(1024,1024,1024,1024)
-   val TAGE_HIST_LENGTHS = Seq(4, 8, 16, 64)
-   val TAGE_TAG_SIZES = Seq(10, 10, 10, 12)
-   val GHIST_LENGTH =  TAGE_HIST_LENGTHS.max // TODO XXX get rid of this method of setting ghistory size, requires answer in functional unit
+   if (p(TageKey).enabled)
+   {
+      GLOBAL_HISTORY_LENGTH = p(TageKey).history_lengths.max
+      BPD_INFO_SIZE = TageBrPredictor.GetRespInfoSize(p)
+   }
+   else if (p(GShareKey).enabled)
+   {
+      GLOBAL_HISTORY_LENGTH = p(GShareKey).history_length
+      BPD_INFO_SIZE = GShareBrPredictor.GetRespInfoSize(p)
+   }
+   else
+   {
+      // TODO add support for SimpleGShare
+      require(!ENABLE_BRANCH_PREDICTOR) // set branch predictor in configs.scala
+   }
 
 
    //************************************

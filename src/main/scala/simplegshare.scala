@@ -26,13 +26,13 @@ package boom
 
 import Chisel._
 import Node._
-import cde.Parameters
+import cde.{Parameters, Field}
 
-// TODO: need to change BpdResp() bundle in brpredictor.scala to use this, and not the regular GShareResp()
+// TODO provide the parameter hooks to support instantiating SimpleGShare
+
 class SimpleGShareResp(implicit p: Parameters) extends BoomBundle()(p)
 {
-   val history = Bits(width = GHIST_LENGTH) // stored in snapshots (dealloc after Execute)
-   val index = Bits(width = GHIST_LENGTH) // needed to update predictor at Commit
+   val index = Bits(width = GLOBAL_HISTORY_LENGTH) // needed to update predictor at Commit
 }
 
 class SimpleGShareBrPredictor(
@@ -99,16 +99,21 @@ class SimpleGShareBrPredictor(
    //------------------------------------------------------------
    // get prediction (delay response 2 cycles to match fetch pipeline)
 
+   val resp_info = Wire(new SimpleGShareResp())
+
    val p_idx = Hash(io.req_pc, this.ghistory)
-   io.resp.valid             := Bool(true)
-   io.resp.bits.info.history := RegNext(RegNext(this.ghistory))
-   io.resp.bits.info.index   := RegNext(RegNext(p_idx))
-   io.resp.bits.takens       := RegNext(RegNext(Vec(counters(p_idx).map(GetPrediction(_))).toBits))
+   io.resp.valid        := Bool(true)
+   io.resp.bits.history := RegNext(RegNext(this.ghistory))
+   resp_info.index      := RegNext(RegNext(p_idx))
+   io.resp.bits.takens  := RegNext(RegNext(Vec(counters(p_idx).map(GetPrediction(_))).toBits))
+
+   io.resp.bits.info    := resp_info.toBits
 
    //------------------------------------------------------------
    // update predictor
 
-   val u_idx = commit.bits.info.info.index
+   val commit_info = new SimpleGShareResp().fromBits(commit.bits.info.info)
+   val u_idx = commit_info.index
    counters(u_idx) := UpdateCounters(commit.valid, counters(u_idx), commit.bits.executed, commit.bits.taken)
 
 
