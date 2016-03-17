@@ -1527,7 +1527,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
                case Some(events: DebugStageEvents) =>
                   printf("O3PipeView:fetch:%d:0x%x:0:%d:DASM(%x)\n",
                      events.fetch_tsc,
-                     com_uops(i).inst,
+                     com_uops(i).pc,
                      events.fetch_seq,
                      com_uops(i).inst)
                   printf("O3PipeView:decode:%d\n",
