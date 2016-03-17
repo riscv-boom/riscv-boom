@@ -296,7 +296,7 @@ object FDecode extends DecodeConstants
    FADD_D   ->List(Y, Y, N, uopFADD_D , FU_FPU, RT_FLT, RT_FLT, RT_FLT, N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, CSR.N),
    FSUB_D   ->List(Y, Y, N, uopFSUB_D , FU_FPU, RT_FLT, RT_FLT, RT_FLT, N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, CSR.N),
    FMUL_D   ->List(Y, Y, N, uopFMUL_D , FU_FPU, RT_FLT, RT_FLT, RT_FLT, N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, CSR.N),
-   
+
    FMADD_S  ->List(Y, Y, Y, uopFMADD_S, FU_FPU, RT_FLT, RT_FLT, RT_FLT, Y, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, CSR.N),
    FMSUB_S  ->List(Y, Y, Y, uopFMSUB_S, FU_FPU, RT_FLT, RT_FLT, RT_FLT, Y, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, CSR.N),
    FNMADD_S ->List(Y, Y, Y, uopFNMADD_S,FU_FPU, RT_FLT, RT_FLT, RT_FLT, Y, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, CSR.N),
@@ -553,6 +553,8 @@ class FetchSerializerNtoM(implicit p: Parameters) extends BoomModule()(p)
    io.deq.bits.uops(0).br_prediction  := io.enq.bits.predictions(inst_idx)
    io.deq.bits.uops(0).valid          := io.enq.bits.mask(inst_idx)
    io.deq.bits.uops(0).xcpt_if        := io.enq.bits.xcpt_if
+   io.deq.bits.uops(0).debug_events_tsc := io.enq.bits.debug_events_tsc
+   io.deq.bits.uops(0).debug_fseq     := io.enq.bits.debug_fseq
 
    //-------------------------------------------------------------
    // override all the above logic for DW>1
@@ -568,6 +570,8 @@ class FetchSerializerNtoM(implicit p: Parameters) extends BoomModule()(p)
          io.deq.bits.uops(i).inst           := io.enq.bits.insts(i)
          io.deq.bits.uops(i).xcpt_if        := io.enq.bits.xcpt_if
          io.deq.bits.uops(i).br_prediction  := io.enq.bits.predictions(i)
+         io.deq.bits.uops(i).debug_events_tsc := io.enq.bits.debug_events_tsc
+         io.deq.bits.uops(i).debug_fseq     := io.enq.bits.debug_fseq + UInt(i)
       }
       io.enq.ready := io.deq.ready
    }
@@ -672,4 +676,3 @@ class BranchMaskGenerationLogic(val pl_width: Int)(implicit p: Parameters) exten
 }
 
 }
-

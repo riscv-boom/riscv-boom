@@ -54,6 +54,7 @@ class RobPCRequest(implicit p: Parameters) extends BoomBundle()(p)
 
 
 class RobIo(machine_width: Int
+            , issue_width: Int
             , num_wakeup_ports: Int
             , num_fpu_ports: Int
             )(implicit p: Parameters)  extends BoomBundle()(p)
@@ -68,6 +69,10 @@ class RobIo(machine_width: Int
    val dis_new_packet   = Bool(INPUT) // we're dispatching the first (and perhaps only) part of a dispatch packet.
 
    val curr_rob_tail    = UInt(OUTPUT, ROB_ADDR_SZ)
+
+   // Issue Stage
+   val iss_valids = Vec.fill(issue_width) { Bool(INPUT) }
+   val iss_uops   = Vec.fill(issue_width) { new MicroOp().asInput() }
 
    // Write-back Stage
    // (Update of ROB)
@@ -99,6 +104,7 @@ class RobIo(machine_width: Int
 
    val lsu_clr_bsy_valid = Bool(INPUT)
    val lsu_clr_bsy_rob_idx = UInt(INPUT, ROB_ADDR_SZ)
+   val lsu_clr_bsy_uop = new MicroOp().asInput()
 
    // Handle Exceptions/ROB Rollback
    val com_exception    = Bool(OUTPUT)
@@ -145,6 +151,8 @@ class RobIo(machine_width: Int
       val xcpt_uop = new MicroOp()
       val xcpt_badvaddr = UInt(width = xLen)
    }.asOutput
+
+   val tsc = UInt(INPUT, xLen)
 }
 
 
@@ -153,11 +161,12 @@ class RobIo(machine_width: Int
 // num_fpu_ports = number of FPU units that will write back fflags
 class Rob(width: Int
          , num_rob_entries: Int
+         , issue_width: Int
          , num_wakeup_ports: Int
          , num_fpu_ports: Int
          )(implicit p: Parameters) extends BoomModule()(p)
 {
-   val io = new RobIo(width, num_wakeup_ports, num_fpu_ports)
+   val io = new RobIo(width, issue_width, num_wakeup_ports, num_fpu_ports)
 
    val num_rob_rows = num_rob_entries / width
    require (num_rob_rows % 2 == 0) // this is due to how rob PCs are stored in two banks
@@ -336,6 +345,7 @@ class Rob(width: Int
          rob_bsy(rob_tail)       := !io.dis_uops(w).is_fence &&
                                     !(io.dis_uops(w).is_fencei)
          rob_uop(rob_tail)       := io.dis_uops(w)
+         rob_uop(rob_tail).debug_events_tsc.dispatch_tsc := io.tsc
          rob_exception(rob_tail) := io.dis_uops(w).exception
          rob_fflags(rob_tail)    := Bits(0)
          rob_uop(rob_tail).br_was_mispredicted := Bool(false)
@@ -343,6 +353,17 @@ class Rob(width: Int
       .elsewhen (io.dis_mask.reduce(_|_) && !rob_val(rob_tail))
       {
          rob_uop(rob_tail).inst := BUBBLE // just for debug purposes
+      }
+
+      //-----------------------------------------------
+      // Issue: Update event timestamps for logging
+      for (i <- 0 until issue_width)
+      {
+         val row_idx = GetRowIdx(io.iss_uops(i).rob_idx)
+         when (io.iss_valids(i) && MatchBank(GetBankIdx(io.iss_uops(i).rob_idx)))
+         {
+            rob_uop(row_idx).debug_events_tsc.issue_tsc := io.tsc
+         }
       }
 
 
@@ -357,6 +378,8 @@ class Rob(width: Int
          when (wb_resp.valid && MatchBank(GetBankIdx(wb_uop.rob_idx)))
          {
             rob_bsy(row_idx) := Bool(false)
+            rob_uop(row_idx).debug_events_tsc.write_tsc := io.tsc // Record wb timestamp
+            rob_uop(row_idx).debug_events_tsc.memory_tsc := UInt(0, 64) // Non-store ops don't have a store timestamp
          }
          // TODO check that fflags aren't overwritten
          // TODO check that the wb is to a valid ROB entry, give it a time stamp
@@ -370,6 +393,8 @@ class Rob(width: Int
       when (io.lsu_clr_bsy_valid && MatchBank(GetBankIdx(io.lsu_clr_bsy_rob_idx)))
       {
          rob_bsy(GetRowIdx(io.lsu_clr_bsy_rob_idx)) := Bool(false)
+         rob_uop(GetRowIdx(io.lsu_clr_bsy_rob_idx)).debug_events_tsc.memory_tsc := io.tsc   // Record store and complete timestamps
+         rob_uop(GetRowIdx(io.lsu_clr_bsy_rob_idx)).debug_events_tsc.write_tsc := io.tsc
       }
 
       when (io.br_unit.brinfo.valid && MatchBank(GetBankIdx(io.br_unit.brinfo.rob_idx)))
