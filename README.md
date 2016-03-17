@@ -77,6 +77,40 @@ $RISCV/bin to your $PATH.
 For more detailed information on the toolchain, visit 
 [the riscv-tools repository](https://github.com/riscv/riscv-tools).
 
+**Using the gem5 O3 Pipeline Viewer with BOOM**
+
+The O3 Pipeline Viewer is an out-of-order pipeline viewer included in the
+gem5 suite. BOOM is capable of generating traces compatible with the
+pipeline viewer, which is useful for understanding what causes
+pipeline stalls and flushes.
+
+To generate gem5 compatible traces, first set O3PIPEVIEW_PRINTF in
+boom/src/main/scala/consts.scala to true:
+````
+   val O3PIPEVIEW_PRINTF   = true  // dump trace for O3PipeView from gem5
+````
+It is important that all other logging functionality is turned off in
+src/main/scala/consts.scala:
+````
+   val DEBUG_PRINTF        = false // use the Chisel printf functionality
+   val DEBUG_ENABLE_COLOR  = false // provide color to print outs. Requires a VIM plugin to work properly :(
+   val COMMIT_LOG_PRINTF   = false // dump commit state, for comparision against ISA sim
+   val O3PIPEVIEW_PRINTF   = true  // dump trace for O3PipeView from gem5
+   val O3_CYCLE_TIME       = UInt(500) // cycle time for O3PipeView
+````
+Rebuild and rerun BOOM. You should find the traces (*.out) in 
+emulator/output/. Next, go to your gem5 directory. To generate the
+visualization run:
+````
+   ./util/o3-pipeview.py -c 500 -o pipeview.out --color <TRACE_FILE>
+````
+You can view the visualization by running:
+````
+   less -r pipeview.out
+````
+For more details, visit the [gem5 wiki](http://www.m5sim.org/Visualization).
+
+
 
 **More Info**
 
