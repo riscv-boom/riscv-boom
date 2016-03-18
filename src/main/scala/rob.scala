@@ -70,10 +70,6 @@ class RobIo(machine_width: Int
 
    val curr_rob_tail    = UInt(OUTPUT, ROB_ADDR_SZ)
 
-   // Issue Stage
-   val iss_valids = Vec.fill(issue_width) { Bool(INPUT) }
-   val iss_uops   = Vec.fill(issue_width) { new MicroOp().asInput() }
-
    // Write-back Stage
    // (Update of ROB)
    // Instruction is no longer busy and can be committed
@@ -354,27 +350,6 @@ class Rob(width: Int
       }
 
       //-----------------------------------------------
-      // Issue: Update event timestamps for logging
-
-      if (O3PIPEVIEW_PRINTF)
-      {
-         for (i <- 0 until issue_width)
-         {
-            val row_idx = GetRowIdx(io.iss_uops(i).rob_idx)
-            when (io.iss_valids(i) && MatchBank(GetBankIdx(io.iss_uops(i).rob_idx)))
-            {
-               rob_uop(row_idx).debug_events match
-               {
-                  case Some(events: DebugStageEvents) =>
-                     events.issue_tsc := io.tsc
-                  case _ => require (!O3PIPEVIEW_PRINTF)
-               }
-            }
-         }
-      }
-
-
-      //-----------------------------------------------
       // Writeback
 
       for (i <- 0 until num_wakeup_ports)
@@ -386,11 +361,11 @@ class Rob(width: Int
          {
             rob_bsy(row_idx) := Bool(false)
 
-            rob_uop(row_idx).debug_events match
+            if (O3PIPEVIEW_PRINTF)
             {
-               case Some(events: DebugStageEvents) =>
-                  events.write_tsc := io.tsc
-               case _ => require (!O3PIPEVIEW_PRINTF)
+               printf("%d; O3PipeView:complete:%d\n",
+                  rob_uop(row_idx).debug_events.fetch_seq,
+                  io.tsc)
             }
          }
          // TODO check that fflags aren't overwritten
@@ -406,11 +381,11 @@ class Rob(width: Int
       {
          rob_bsy(GetRowIdx(io.lsu_clr_bsy_rob_idx)) := Bool(false)
 
-         rob_uop(GetRowIdx(io.lsu_clr_bsy_rob_idx)).debug_events match
+         if (O3PIPEVIEW_PRINTF)
          {
-            case Some(events: DebugStageEvents) =>
-               events.get.write_tsc := io.tsc
-            case _ => require (!O3PIPEVIEW_PRINTF)
+            printf("%d; O3PipeView:complete:%d\n",
+               rob_uop(GetRowIdx(io.lsu_clr_bsy_rob_idx)).debug_events.fetch_seq,
+               io.tsc)
          }
       }
 
