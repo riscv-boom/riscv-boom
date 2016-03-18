@@ -63,7 +63,6 @@ $RISCV/bin to your $PATH.
 ````
    $ export RISCV=/path/to/install/riscv/toolchain
    $ export PATH="${PATH}:$RISCV/bin"
-   $ export ROCKETCHIP_ADDONS="boom"
    $ git clone https://github.com/ucb-bar/rocket-chip.git
    $ cd rocket-chip
    $ git checkout boom
@@ -89,20 +88,12 @@ boom/src/main/scala/consts.scala to true:
 ````
    val O3PIPEVIEW_PRINTF   = true  // dump trace for O3PipeView from gem5
 ````
-It is important that all other logging functionality is turned off in
-src/main/scala/consts.scala:
-````
-   val DEBUG_PRINTF        = false // use the Chisel printf functionality
-   val DEBUG_ENABLE_COLOR  = false // provide color to print outs. Requires a VIM plugin to work properly :(
-   val COMMIT_LOG_PRINTF   = false // dump commit state, for comparision against ISA sim
-   val O3PIPEVIEW_PRINTF   = true  // dump trace for O3PipeView from gem5
-   val O3_CYCLE_TIME       = UInt(500) // cycle time for O3PipeView
-````
+
 Rebuild and rerun BOOM. You should find the traces (*.out) in 
 emulator/output/. Next, go to your gem5 directory. To generate the
 visualization run:
 ````
-   ./util/o3-pipeview.py -c 500 -o pipeview.out --color <TRACE_FILE>
+   ./util/o3-pipeview.py -o pipeview.out --color <TRACE_FILE>
 ````
 You can view the visualization by running:
 ````
