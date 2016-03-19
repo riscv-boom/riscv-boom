@@ -99,7 +99,7 @@ emulator/output/. To generate the visualization run:
 
 You can view the visualization by running:
 ````
-   less -r pipeview.out
+   $ less -r pipeview.out
 ````
 For more details (and to download o3-pipeview.py), visit the [gem5 wiki](http://www.m5sim.org/Visualization).
 
