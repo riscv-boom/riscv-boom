@@ -863,7 +863,8 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    {
       for (i <- 0 until ISSUE_WIDTH)
       {
-         when (iss_valids(i))
+         // only print stores once!
+         when (iss_valids(i) && iss_uops(i).uopc =/= uopSTD)
          {
             printf("%d; O3PipeView:issue: %d\n",
                iss_uops(i).debug_events.fetch_seq,
