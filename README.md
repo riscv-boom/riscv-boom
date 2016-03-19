@@ -87,7 +87,7 @@ To generate gem5 compatible traces, first set O3PIPEVIEW_PRINTF in
 `boom/src/main/scala/consts.scala` to true:
 
 ````
-   $ val O3PIPEVIEW_PRINTF   = true  // dump trace for O3PipeView from gem5
+val O3PIPEVIEW_PRINTF = true  // dump trace for O3PipeView from gem5
 ````
 
 Rebuild and rerun BOOM. You should find the traces (*.out) in 
