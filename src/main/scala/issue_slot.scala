@@ -51,6 +51,7 @@ class IssueSlot(num_slow_wakeup_ports: Int)(implicit p: Parameters) extends Boom
    def isValid = slot_state =/= s_invalid
 
    val updated_state = Wire(UInt()) // the next state of this slot (which might then get moved to a new slot)
+   val updated_uopc  = Wire(Bits()) // the next uopc of this slot (which might then get moved to a new slot)
    val next_p1  = Wire(Bool())
    val next_p2  = Wire(Bool())
    val next_p3  = Wire(Bool())
@@ -94,6 +95,7 @@ class IssueSlot(num_slow_wakeup_ports: Int)(implicit p: Parameters) extends Boom
 
    // defaults
    updated_state := slot_state
+   updated_uopc := slotUop.uopc
 
    when (io.kill ||
          (io.grant && (slot_state === s_valid_1)) ||
@@ -107,6 +109,7 @@ class IssueSlot(num_slow_wakeup_ports: Int)(implicit p: Parameters) extends Boom
       when (slot_p1)
       {
          slotUop.uopc := uopSTD
+         updated_uopc := uopSTD
          slotUop.lrs1_rtype := RT_X
       }
       .otherwise
@@ -207,6 +210,7 @@ class IssueSlot(num_slow_wakeup_ports: Int)(implicit p: Parameters) extends Boom
 
    io.updated_uop           := slotUop
    io.updated_uop.iw_state  := updated_state
+   io.updated_uop.uopc      := updated_uopc
    io.updated_uop.br_mask   := out_br_mask
    io.updated_uop.prs1_busy := !out_p1
    io.updated_uop.prs2_busy := !out_p2
