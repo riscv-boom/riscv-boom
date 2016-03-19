@@ -147,7 +147,7 @@ class RobIo(machine_width: Int
       val xcpt_badvaddr = UInt(width = xLen)
    }.asOutput
 
-   val tsc = UInt(INPUT, xLen)
+   val debug_tsc = UInt(INPUT, xLen)
 }
 
 
@@ -365,7 +365,7 @@ class Rob(width: Int
             {
                printf("%d; O3PipeView:complete:%d\n",
                   rob_uop(row_idx).debug_events.fetch_seq,
-                  io.tsc)
+                  io.debug_tsc)
             }
          }
          // TODO check that fflags aren't overwritten
@@ -385,7 +385,7 @@ class Rob(width: Int
          {
             printf("%d; O3PipeView:complete:%d\n",
                rob_uop(GetRowIdx(io.lsu_clr_bsy_rob_idx)).debug_events.fetch_seq,
-               io.tsc)
+               io.debug_tsc)
          }
       }
 

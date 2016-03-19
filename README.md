@@ -90,16 +90,15 @@ boom/src/main/scala/consts.scala to true:
 ````
 
 Rebuild and rerun BOOM. You should find the traces (*.out) in 
-emulator/output/. Next, go to your gem5 directory. To generate the
-visualization run:
+emulator/output/. To generate the visualization run:
 ````
-   ./util/o3-pipeview.py -o pipeview.out --color <TRACE_FILE>
+   path_to_gem5/util/o3-pipeview.py --color --store_completions -o pipeview.out <TRACE_FILE>
 ````
 You can view the visualization by running:
 ````
    less -r pipeview.out
 ````
-For more details, visit the [gem5 wiki](http://www.m5sim.org/Visualization).
+For more details (and to download o3-pipeview.py), visit the [gem5 wiki](http://www.m5sim.org/Visualization).
 
 
 

@@ -997,10 +997,8 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    val com_st_mask = Wire(Vec(DECODE_WIDTH, Bool()))
    val com_ld_mask = Wire(Vec(DECODE_WIDTH, Bool()))
 
-
    // enqueue basic store info in Decode
    lsu_io.dec_uops := dec_uops
-
 
    for (w <- 0 until DECODE_WIDTH)
    {
@@ -1024,6 +1022,8 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    stq_full    := lsu_io.stq_full
    new_ldq_idx := lsu_io.new_ldq_idx
    new_stq_idx := lsu_io.new_stq_idx
+
+   lsu_io.debug_tsc := tsc_reg
 
    io.dmem.flush_pipe := flush_pipeline
 
@@ -1091,7 +1091,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
       rob.io.dis_has_br_or_jalr_in_packet := dec_has_br_or_jalr_in_packet
       rob.io.dis_partial_stall := !dec_rdy && !dis_mask(DECODE_WIDTH-1)
       rob.io.dis_new_packet := dec_finished_mask === Bits(0)
-      rob.io.tsc := tsc_reg
+      rob.io.debug_tsc := tsc_reg
 
       dis_curr_rob_row_idx  := rob.io.curr_rob_tail
 

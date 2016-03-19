@@ -349,6 +349,7 @@ class MemExeUnit(implicit p: Parameters) extends ExecutionUnit(num_rf_read_ports
    lsu.io.exception         := io.lsu_io.exception
    lsu.io.nack              <> io.dmem.nack
    lsu.io.counters          <> io.lsu_io.counters
+   lsu.io.debug_tsc         <> io.lsu_io.debug_tsc
 
    io.lsu_io.new_ldq_idx := lsu.io.new_ldq_idx
    io.lsu_io.new_stq_idx := lsu.io.new_stq_idx
@@ -639,6 +640,7 @@ class ALUMemExeUnit(is_branch_unit    : Boolean = false
    lsu.io.exception         := io.lsu_io.exception
    lsu.io.nack              <> io.dmem.nack
    lsu.io.counters          <> io.lsu_io.counters
+   lsu.io.debug_tsc         <> io.lsu_io.debug_tsc
 
    io.lsu_io.new_ldq_idx := lsu.io.new_ldq_idx
    io.lsu_io.new_stq_idx := lsu.io.new_stq_idx

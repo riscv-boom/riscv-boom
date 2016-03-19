@@ -128,6 +128,8 @@ class LoadStoreUnitIO(pl_width: Int)(implicit p: Parameters) extends BoomBundle(
       val ld_killed = Bool()
       val ld_order_fail = Bool()
    }.asOutput
+
+   val debug_tsc = UInt(INPUT, xLen)     // time stamp counter
 }
 
 
@@ -766,6 +768,11 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
       .otherwise
       {
          stq_succeeded(io.memresp.bits.stq_idx) := Bool(true)
+
+         if (O3PIPEVIEW_PRINTF)
+         {
+            printf("%d; store-comp: %d\n", io.memresp.bits.debug_events.fetch_seq, io.debug_tsc)
+         }
       }
    }
 
