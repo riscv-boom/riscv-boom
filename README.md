@@ -94,7 +94,8 @@ Rebuild and rerun BOOM. You should find the traces (*.out) in
 emulator/output/. To generate the visualization run:
 
 ````
-   $ path_to_gem5/util/o3-pipeview.py --color --store_completions -o pipeview.out <TRACE_FILE>
+   $ boom/util/pipeview-helper.py -f <TRACE_FILE> > cleaned_trace.out
+   $ path_to_gem5/util/o3-pipeview.py --color --store_completions -o pipeview.out cleaned_trace.out
 ````
 
 You can view the visualization by running:
