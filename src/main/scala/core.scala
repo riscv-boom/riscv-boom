@@ -1252,8 +1252,6 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
       println("\n   UArch Counters Enabled\n")
       csr.io.uarch_counters(0)  := PopCount((Range(0,COMMIT_WIDTH)).map{w => com_valids(w) && com_uops(w).is_br_or_jmp && !com_uops(w).is_jal})
       csr.io.uarch_counters(1)  := PopCount((Range(0,COMMIT_WIDTH)).map{w => com_valids(w) && com_uops(w).is_br_or_jmp && !com_uops(w).is_jal && com_uops(w).br_was_mispredicted})
-//      csr.io.uarch_counters(0)  := br_unit.brinfo.valid
-//      csr.io.uarch_counters(1)  := br_unit.brinfo.mispredict
       csr.io.uarch_counters(2)  := !rob_rdy
       csr.io.uarch_counters(3)  := laq_full
 //      csr.io.uarch_counters(4)  := stq_full
@@ -1459,17 +1457,17 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
             //, Mux(lsu_io.debug.tlb_ready, Str("TLB-RDY"), Str("-"))
       )
 
-      for (i <- 0 until io.dmem.debug.ld_req_slot.size)
-      {
-         printf("     ld_req_slot[%d]=(%s%s) - laq_idx:%d pdst: %d bm:%x\n"
-            , UInt(i)
-            , Mux(io.dmem.debug.ld_req_slot(i).valid, Str("V"), Str("-"))
-            , Mux(io.dmem.debug.ld_req_slot(i).killed, Str("K"), Str("-"))
-            , io.dmem.debug.ld_req_slot(i).uop.ldq_idx
-            , io.dmem.debug.ld_req_slot(i).uop.pdst
-            , io.dmem.debug.ld_req_slot(i).uop.br_mask
-         )
-      }
+      //for (i <- 0 until io.dmem.debug.ld_req_slot.size)
+      //{
+      //   printf("     ld_req_slot[%d]=(%s%s) - laq_idx:%d pdst: %d bm:%x\n"
+      //      , UInt(i)
+      //      , Mux(io.dmem.debug.ld_req_slot(i).valid, Str("V"), Str("-"))
+      //      , Mux(io.dmem.debug.ld_req_slot(i).killed, Str("K"), Str("-"))
+      //      , io.dmem.debug.ld_req_slot(i).uop.ldq_idx
+      //      , io.dmem.debug.ld_req_slot(i).uop.pdst
+      //      , io.dmem.debug.ld_req_slot(i).uop.br_mask
+      //   )
+      //}
 
       // Rename Map Tables / ISA Register File
       val xpr_to_string =

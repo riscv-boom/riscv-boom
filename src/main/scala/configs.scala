@@ -40,7 +40,15 @@ class DefaultBOOMConfig extends Config (
 
          // Branch Predictor
          case EnableBranchPredictor => true
-         case BranchPredictorSizeInKB => Knob("BPD_SIZE_IN_KB")
+         case TageKey => TageParameters(
+            enabled = true,
+            num_tables = 4,
+            table_sizes = Seq(1024,1024,1024,1024),
+            history_lengths = Seq(4,8,16,64),
+            tag_sizes = Seq(10,10,10,12))
+         case GShareKey => GShareParameters(
+            enabled = false,
+            history_length = 14)
 
          // Pipelining
          case EnableFetchBufferFlowThrough => true
@@ -64,7 +72,6 @@ class DefaultBOOMConfig extends Config (
       case "PHYS_REGISTERS" => 110
       case "MAX_BR_COUNT" => 8
       case "AGE_PRIORITY_ISSUE" => true
-      case "BPD_SIZE_IN_KB" => 4
       case "L1D_MSHRS" => 4
       case "L1D_WAYS" => 8
       case "L1D_SETS" => 64
@@ -101,7 +108,6 @@ class WithMediumBOOMs extends Config(
       case "LSU_ENTRIES" => 16
       case "PHYS_REGISTERS" => 110
       case "MAX_BR_COUNT" => 8
-      case "BPD_SIZE_IN_KB" => 4
       case "L1D_MSHRS" => 4
       case "L1D_WAYS" => 8
       case "L1D_SETS" => 64

@@ -435,7 +435,7 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
       io.br_unit.bpd_update.bits.bpd_mispredict   := bpd_mispredict
       io.br_unit.bpd_update.bits.pc               := fetch_pc
       io.br_unit.bpd_update.bits.br_pc            := uop_pc_
-      io.br_unit.bpd_update.bits.history          := io.get_pred.info.bpd_resp.info.history
+      io.br_unit.bpd_update.bits.history          := io.get_pred.info.bpd_resp.history
 
       // is the br_pc the last instruction in the fetch bundle?
       val is_last_inst = if (FETCH_WIDTH == 1) { Bool(true) }

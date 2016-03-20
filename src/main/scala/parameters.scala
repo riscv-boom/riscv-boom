@@ -23,7 +23,6 @@ case object EnableFetchBufferFlowThrough extends Field[Boolean]
 case object EnableBTB extends Field[Boolean]
 case object EnableBTBContainsBranches extends Field[Boolean]
 case object EnableBranchPredictor extends Field[Boolean]
-case object BranchPredictorSizeInKB extends Field[Int]
 case object EnableAgePriorityIssue extends Field[Boolean]
 case object EnableUarchCounters extends Field[Boolean]
 case object EnablePrefetching extends Field[Boolean]
@@ -63,10 +62,26 @@ trait HasBoomCoreParameters extends rocket.HasCoreParameters
 
    //************************************
    // Branch Prediction
-   val BPD_SIZE_IN_KB = p(BranchPredictorSizeInKB)
-   val BPD_NUM_ENTRIES = BPD_SIZE_IN_KB*1024*8/FETCH_WIDTH/2 // computation for GShare
    val ENABLE_BRANCH_PREDICTOR = p(EnableBranchPredictor)
-   val GHIST_LENGTH = log2Up(BPD_NUM_ENTRIES)
+   var GLOBAL_HISTORY_LENGTH = 0
+   var BPD_INFO_SIZE = 0
+
+   if (p(TageKey).enabled)
+   {
+      GLOBAL_HISTORY_LENGTH = p(TageKey).history_lengths.max
+      BPD_INFO_SIZE = TageBrPredictor.GetRespInfoSize(p)
+   }
+   else if (p(GShareKey).enabled)
+   {
+      GLOBAL_HISTORY_LENGTH = p(GShareKey).history_length
+      BPD_INFO_SIZE = GShareBrPredictor.GetRespInfoSize(p)
+   }
+   else
+   {
+      // TODO add support for SimpleGShare
+      require(!ENABLE_BRANCH_PREDICTOR) // set branch predictor in configs.scala
+   }
+
 
    //************************************
    // Extra Knobs and Features
