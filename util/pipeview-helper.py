@@ -69,7 +69,7 @@ def findAndPrintEvent(target_id, lst, stage_str, idx):
         if temp_id == target_id:
             writeOutput(lst.pop(i), idx)
             return True
-    print "O3PipeView:", stage_str,": 0"
+    print "O3PipeView:%s"": 0" % (stage_str)
     return False
 
 def isStore(line):
