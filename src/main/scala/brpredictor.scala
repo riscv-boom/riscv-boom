@@ -81,13 +81,21 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int)(implicit p
 {
    val io = new BoomBundle()(p)
    {
+      // the PC to predict
       val req_pc = UInt(INPUT, width = vaddrBits)
+      // our prediction. Assert "valid==true" if we want our prediction to be honored.
+      // For a tagged predictor, valid==true means we had a tag hit and trust our prediction.
+      // For an un-tagged predictor, valid==true should probably only be if a branch is predicted taken.
+      // This has an effect on whether to override the BTB's prediction.
       val resp = Decoupled(new BpdResp)
-      val hist_update_spec = Valid(new GHistUpdate).flip // speculative update to ghist
-   // TODO brinfo, or br_unit instead? do I actually need br_unit?
-      val br_resolution = Valid(new BpdUpdate).flip // from branch-unit
+      // speculatively update the global history (once we know we're predicting a branch)
+      val hist_update_spec = Valid(new GHistUpdate).flip
+      // branch resolution comes from the branch-unit, during the Execute stage.
+      // TODO brinfo, or br_unit instead? do I actually need br_unit?
+      val br_resolution = Valid(new BpdUpdate).flip
       val brob = new BrobBackendIo(fetch_width)
-      val flush = Bool(INPUT) // pipeline flush
+      // pipeline flush - reset history as appropriate
+      val flush = Bool(INPUT)
    }
 
    // the (speculative) global history wire (used for accessing the branch predictor state).

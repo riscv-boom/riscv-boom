@@ -35,6 +35,8 @@ class RedirectRequest(fetch_width: Int)(implicit p: Parameters) extends BoomBund
    val idx     = UInt(width = log2Up(fetch_width)) // idx of br in fetch bundle (to mask out the appropriate fetch
                                                    // instructions)
    val is_jump = Bool() // (only valid if redirect request is valid)
+   val is_taken= Bool() // (true if redirect is to "take" a branch,
+                        //  false if it's to request PC+4 for a mispred
   override def cloneType = new RedirectRequest(fetch_width)(p).asInstanceOf[this.type]
 }
 
@@ -42,7 +44,7 @@ class RedirectRequest(fetch_width: Int)(implicit p: Parameters) extends BoomBund
 // branch snapshots. Since it's not unique to an instruction, it could be
 // compressed further. It can be de-allocated once the branch is resolved in
 // Execute.
-class BranchPredictionResp(implicit p: Parameters) extends BoomBundle()(p) // TODO rename BranchPredictionResolutionInfo?
+class BranchPredictionResp(implicit p: Parameters) extends BoomBundle()(p)
 {
    val btb_resp_valid = Bool()
    val btb_resp       = new rocket.BTBResp
@@ -50,6 +52,7 @@ class BranchPredictionResp(implicit p: Parameters) extends BoomBundle()(p) // TO
    val bpd_resp       = new BpdResp
 
    // used to tell front-end how to mask off instructions
+   // TODO - move the fetch_bundle.mask computation to the bpd_pipeline
    val has_jr         = Bool()
    val jr_idx         = UInt(width = log2Up(FETCH_WIDTH))
 }
@@ -59,7 +62,7 @@ class BranchPrediction(implicit p: Parameters) extends BoomBundle()(p)
 {
    val bpd_predict_taken= Bool() // did the bpd predict taken for this instruction?
    val btb_hit          = Bool() // this instruction was the br/jmp predicted by the BTB
-   val btb_predicted    = Bool() // BTB gets credit for the prediction otherwise check the BPD
+   val btb_predicted    = Bool() // Does the BTB get credit for the prediction? (FU checks)
 
    val is_br_or_jalr    = Bool() // is this instruction a branch or jalr?
                                  // (need to allocate brob entry).
@@ -107,8 +110,8 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    }
    else
    {
-      br_predictor = Module(new NullBrPredictor(fetch_width = fetch_width
-                                                , history_length = GLOBAL_HISTORY_LENGTH))
+      br_predictor = Module(new NullBrPredictor(fetch_width = fetch_width,
+                                                history_length = GLOBAL_HISTORY_LENGTH))
    }
 
    br_predictor.io.req_pc := io.imem.npc
@@ -161,33 +164,129 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
 
 
    //-------------------------------------------------------------
-   // Output
+   // Output (make an actual prediction/redirect request)
 
-   val predictions = is_br.toBits & bpd_bits.takens
-   val br_val  = predictions.orR && bpd_valid
-   val br_idx  = PriorityEncoder(predictions)
-   val jal_val = is_jal.reduce(_|_)
-   val jal_idx = PriorityEncoder(is_jal.toBits)
-   val br_wins = br_val && (!jal_val || (br_idx < jal_idx))
-   // TODO make this dynamic (use a meta predictor) explore different options here...
-   // if bpd can decide "not-taken", then we need to change the btb_update logic in dpath
+   // There are many predictions vying for priority.
+   // The following are equal priority - whosever has
+   // the instruction earliest in program-order wins:
+   //    - JALs
+   //    - BTB (JALs/JRs)
+   //    - BPD (branches)
+   //
+   // At a lower priority is the BTB predicting branches:
+   //    - BTB (branches)
+   //
+   // If the BPD defers (bpd_valid == false), then the BTB's
+   // branch prediction stand.
 
-   // TODO can we assert that a jump is taken
-   val jal_overrides = jal_val && (jal_idx < io.imem.btb_resp.bits.bridx || !io.imem.btb_resp.bits.taken)
-   val btb_overrides = io.imem.btb_resp.valid && !jal_overrides //&& // btb predicted on this fetch packet
-   // TODO debug the below stuff
-//                       io.imem.btb_resp.bits.taken &&
-//                       (io.imem.btb_resp.bits.bridx <= io.req.bits.idx)
+   val bpd_predictions  = is_br.toBits & bpd_bits.takens
+   val bpd_br_taken     = bpd_predictions.orR && bpd_valid
+   val bpd_br_idx       = PriorityEncoder(bpd_predictions)
+   val bpd_jal_val      = is_jal.reduce(_|_)
+   val bpd_jal_idx      = PriorityEncoder(is_jal.toBits)
+   val bpd_br_beats_jal = bpd_br_taken && (!bpd_jal_val || (bpd_br_idx < bpd_jal_idx))
+   val bpd_req_idx      = Mux(bpd_br_beats_jal, bpd_br_idx, bpd_jal_idx)
+   val bpd_req_target   = Mux(bpd_br_beats_jal, br_targs(bpd_br_idx), jal_targs(bpd_jal_idx))
 
-   io.req.valid        := io.imem.resp.valid && (br_val || jal_val) && !btb_overrides && !io.imem.resp.bits.xcpt_if
-   io.req.bits.target  := Mux(br_wins, br_targs(br_idx), jal_targs(jal_idx))
-   io.req.bits.idx     := Mux(br_wins, br_idx, jal_idx)
+   //val bpd_br_overrides_jal = bpd_br_val && (bpd_br_idx < bpd_jal_idx || !bpd_jal_val)
+   //
+   //val btb_br_val        = io.imem.btb_resp.valid && (is_br & UIntToOH(io.imem.btb_resp.bits.bridx)).orR
+   //val bpd_overrides_btb = (bpd_br_val || bpd_jal_val) && btb_br_val
+
+   // bpd will make a redirection request (either for a br or jal)
+   // for "taking" a branch or JAL.
+   val bpd_br_fire = Wire(init = Bool(false))
+   val bpd_jal_fire = Wire(init = Bool(false))
+   // The BTB made a prediction we disagree with - undo it's effects!
+   // If the BTB predicted taken and the BPD says "not taken", we need
+   // to refetch PC+4!
+   // (NOTE: this is requesting a "not taken" branch).
+   val undo_btb = Wire(init = Bool(false))
+
+   def IsIdxAMatch(idx: UInt, mask: Bits) : Bool =
+   {
+      //printf("Match: mask=%x, OH(idx)=%x, idx=%d\n", mask, UIntToOH(idx), idx)
+      ((mask & UIntToOH(idx)).orR).toBool
+   }
+   val btb_predicted_br          = IsIdxAMatch(io.imem.btb_resp.bits.bridx, is_br.toBits)
+   val btb_predicted_br_taken    = btb_predicted_br && io.imem.btb_resp.bits.taken
+   val btb_predicted_br_nottaken = btb_predicted_br && !io.imem.btb_resp.bits.taken
+   val btb_predicted_jump        = IsIdxAMatch(io.imem.btb_resp.bits.bridx, is_jal.toBits | is_jr.toBits)
+
+   when (io.imem.btb_resp.valid)
+   {
+      // BTB made a prediction -
+      // make a redirect request if:
+      //    - if the BPD (br) or JAL comes earlier than the BTB's redirection
+      //    - if both the BTB and the BPD predicted a branch, the BPD wins
+      //       * involves refetching the latter half of the packet if we "undo"
+      //          the BTB's taken branch.
+
+      when (btb_predicted_jump)
+      {
+         bpd_br_fire  := bpd_br_beats_jal && bpd_br_taken && (bpd_br_idx < io.imem.btb_resp.bits.bridx)
+         bpd_jal_fire := !bpd_br_beats_jal && bpd_jal_val && (bpd_jal_idx < io.imem.btb_resp.bits.bridx)
+         undo_btb := Bool(false)
+
+         when (io.imem.resp.valid)
+         {
+            assert (io.imem.btb_resp.bits.taken, "[bpd_pipeline] BTB predicted a jump, but didn't take it?")
+         }
+      }
+      .elsewhen (btb_predicted_br_taken)
+      {
+         // overrule the BTB if
+         //    1. either a jump or branch  occurs earlier
+         //    2. OR the BPD predicts the branch as not taken!
+
+         bpd_jal_fire := !bpd_br_beats_jal && bpd_jal_val && (bpd_jal_idx < io.imem.btb_resp.bits.bridx)
+         bpd_br_fire  := bpd_br_beats_jal && bpd_br_taken && (bpd_br_idx < io.imem.btb_resp.bits.bridx)
+         undo_btb := (bpd_br_idx === io.imem.btb_resp.bits.bridx) &&
+                     bpd_valid &&
+                     !bpd_predictions(bpd_br_idx)
+      }
+      .elsewhen (btb_predicted_br_nottaken)
+      {
+         // completely overrule the BTB if it predicted not-taken, but the BPD is predicted taken
+         bpd_br_fire  := bpd_br_beats_jal && bpd_br_taken
+         bpd_jal_fire := !bpd_br_beats_jal && bpd_jal_val
+         undo_btb := Bool(false)
+      }
+      .otherwise
+      {
+         when (io.imem.resp.valid)
+         {
+            assert (Bool(false), "[bpd_pipeline] BTB resp is valid, but didn't detect what it predicted.")
+         }
+      }
+   }
+   .otherwise
+   {
+      // BTB made no prediction - let the BPD do what it wants
+      bpd_br_fire  := bpd_br_beats_jal
+      bpd_jal_fire := bpd_jal_val && !bpd_br_fire
+      undo_btb     := Bool(false)
+   }
+
+   assert (PopCount(Vec(bpd_br_fire, bpd_jal_fire, undo_btb)) <= UInt(1),
+      "[bpd_pipeline] mutually-exclusive signals firing")
+
+   // If we undo a taken prediction from the BTB, we need to refetch PC+4 from that branch
+   val undo_target = aligned_pc + Cat(io.imem.btb_resp.bits.bridx, UInt(0,2)) + UInt(4)
+   require (coreInstBits == 32)
+
+   io.req.valid        := io.imem.resp.valid &&
+                          (bpd_br_fire || bpd_jal_fire || undo_btb) &&
+                          !io.imem.resp.bits.xcpt_if
+   io.req.bits.target  := Mux(undo_btb, undo_target, bpd_req_target)
+   io.req.bits.idx     := Mux(undo_btb, io.imem.btb_resp.bits.bridx, bpd_req_idx)
    io.req.bits.br_pc   := aligned_pc + (io.req.bits.idx << UInt(2))
-   io.req.bits.is_jump := !br_wins
+   io.req.bits.is_jump := !bpd_br_beats_jal
+   io.req.bits.is_taken:= bpd_br_fire || bpd_jal_fire
 
-   io.pred_resp.bpd_resp.info    := bpd_bits.info
    io.pred_resp.btb_resp_valid   := io.imem.btb_resp.valid
    io.pred_resp.btb_resp         := io.imem.btb_resp.bits
+   io.pred_resp.bpd_resp         := bpd_bits
 
    val jr_idx = PriorityEncoder(is_jr.toBits)
    io.pred_resp.has_jr         := is_jr.reduce(_|_)
@@ -197,15 +296,17 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    for (w <- 0 until FETCH_WIDTH)
    {
       io.predictions(w).is_br_or_jalr := is_br(w) || is_jr(w)
-      io.predictions(w).bpd_predict_taken := predictions(w) && bpd_valid
-      io.predictions(w).btb_predicted := btb_overrides
+      io.predictions(w).bpd_predict_taken := bpd_predictions(w) && bpd_valid
+      io.predictions(w).btb_predicted := io.imem.btb_resp.valid && !(undo_btb || bpd_br_fire || bpd_jal_fire)
       io.predictions(w).btb_hit := Mux(io.imem.btb_resp.bits.bridx === UInt(w),
                                           io.imem.btb_resp.valid, Bool(false))
    }
 
-   bp2_br_seen := io.imem.resp.valid && !io.imem.resp.bits.xcpt_if &&
-                  is_br.reduce(_|_) && (!jal_val || (PriorityEncoder(is_br.toBits) < PriorityEncoder(is_jal.toBits)))
-   bp2_br_taken := (br_val && br_wins) || (io.imem.btb_resp.valid && io.imem.btb_resp.bits.taken)
+   bp2_br_seen := io.imem.resp.valid &&
+                  !io.imem.resp.bits.xcpt_if &&
+                  is_br.reduce(_|_) &&
+                  (!bpd_jal_val || (PriorityEncoder(is_br.toBits) < PriorityEncoder(is_jal.toBits)))
+   bp2_br_taken := bpd_br_fire || (io.imem.btb_resp.valid && btb_predicted_br_taken && !undo_btb)
 
    //-------------------------------------------------------------
    // Look for CALL and RETURN for RAS shenanigans.
@@ -220,7 +321,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    io.imem.ras_update.valid           := io.imem.resp.valid &&
                                          !io.imem.resp.bits.xcpt_if &&
                                          jumps.orR &&
-                                         !br_wins &&
+                                         !bpd_br_beats_jal &&
                                          io.req.ready &&
                                          !io.kill
    io.imem.ras_update.bits.isCall     := is_call
@@ -229,27 +330,34 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    io.imem.ras_update.bits.prediction := io.imem.btb_resp
 
    //-------------------------------------------------------------
+   // printfs
 
    if (DEBUG_PRINTF)
    {
       printf("bp2_aligned_pc: 0x%x BHT:(%s 0x%x, %d) p:%x (%d) b:%x j:%x (%d) %s %s\n"
          , aligned_pc, Mux(io.req.valid, Str("TAKE"), Str(" -- ")), io.req.bits.target, io.req.bits.idx
-         , predictions.toBits, br_idx, is_br.toBits, is_jal.toBits, jal_idx
-         , Mux(br_wins, Str("BR"), Str("JA")), Mux(btb_overrides, Str("BO"), Str("--"))
+         , bpd_predictions.toBits, bpd_br_idx, is_br.toBits, is_jal.toBits, bpd_jal_idx
+         , Mux(bpd_br_beats_jal, Str("BR"), Str("JA")), Mux(undo_btb, Str("UB"), Str("--"))
          )
    }
 
    //-------------------------------------------------------------
+   // asserts
 
    when (io.imem.resp.valid && io.imem.btb_resp.valid && io.imem.btb_resp.bits.taken && !io.imem.resp.bits.xcpt_if)
    {
-      val msk = io.imem.btb_resp.bits.mask
       val idx = io.imem.btb_resp.bits.bridx
       val targ = Mux(is_br(idx), br_targs(idx), jal_targs(idx))
       when (!is_jr(idx))
       {
-         assert (io.imem.btb_resp.bits.target === targ(vaddrBits-1,0), "BTB is jumping to an invalid target.")
+         assert (io.imem.btb_resp.bits.target === targ(vaddrBits-1,0),
+            "[bpd_pipeline] BTB is jumping to an invalid target.")
       }
    }
-}
 
+   if (!p(EnableBTB))
+   {
+      assert (!(io.imem.btb_resp.valid), "[bpd_pipeline] BTB predicted, but it's been disabled.")
+   }
+
+}

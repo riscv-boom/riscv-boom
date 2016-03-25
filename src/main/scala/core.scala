@@ -307,6 +307,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    val bp2_pred_target   = Wire(UInt(width=vaddrBits+1))
    val bp2_pc_of_br_inst = Wire(UInt(width=vaddrBits+1))
    val bp2_is_jump       = Wire(Bool())
+   val bp2_is_taken      = Wire(Bool())
 
    // Instruction Decode State
    val dec_valids     = Wire(Vec(DECODE_WIDTH, Bool()))  // is the incoming, decoded instruction valid? It may be held up though.
@@ -487,11 +488,10 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
             PopCount(fetch_bundle.mask.toBits()(i-1,0))
    }
 
-   // TODO only update in BP2 for JALs?
    if (p(EnableBTB))
    {
       io.imem.btb_update.valid := (br_unit.btb_update_valid ||
-                                    (bp2_take_pc && bp2_is_jump && !if_stalled && !br_unit.take_pc)) &&
+                                    (bp2_take_pc && bp2_is_taken && !if_stalled && !br_unit.take_pc)) &&
                                   !flush_take_pc &&
                                   !csr_take_pc
    }
@@ -500,16 +500,19 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
       io.imem.btb_update.valid := Bool(false)
    }
 
-   // if branch unit mispredicts, jump in decode is no longer valid
+   // update the BTB
+   // if branch unit mispredicts, instructions in decode are no longer valid
    io.imem.btb_update.bits.pc         := Mux(br_unit.btb_update_valid, br_unit.btb_update.pc, io.imem.resp.bits.pc)
    io.imem.btb_update.bits.br_pc      := Mux(br_unit.btb_update_valid, br_unit.btb_update.br_pc, bp2_pc_of_br_inst)
-   io.imem.btb_update.bits.target     := Mux(br_unit.btb_update_valid, br_unit.btb_update.target, bp2_pred_target & SInt(-coreInstBytes))
-
+   io.imem.btb_update.bits.target     := Mux(br_unit.btb_update_valid, br_unit.btb_update.target,
+                                                                       bp2_pred_target & SInt(-coreInstBytes))
    io.imem.btb_update.bits.prediction := Mux(br_unit.btb_update_valid, br_unit.btb_update.prediction, io.imem.btb_resp)
-   io.imem.btb_update.bits.taken      := Mux(br_unit.btb_update_valid, br_unit.btb_update.taken, bp2_take_pc && !if_stalled)
+   io.imem.btb_update.bits.taken      := Mux(br_unit.btb_update_valid, br_unit.btb_update.taken,
+                                                                       bp2_take_pc && bp2_is_taken && !if_stalled)
    io.imem.btb_update.bits.isJump     := Mux(br_unit.btb_update_valid, br_unit.btb_update.isJump, bp2_is_jump)
    io.imem.btb_update.bits.isReturn   := Mux(br_unit.btb_update_valid, br_unit.btb_update.isReturn, Bool(false))
 
+   // TODO need to also update bht_update during bp2 takens, to keep history correct
    io.imem.bht_update := br_unit.bht_update
 
    io.imem.invalidate := Range(0,DECODE_WIDTH).map{i => com_valids(i) && com_uops(i).is_fencei}.reduce(_|_)
@@ -532,11 +535,12 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    bpd_stage.io.req.ready := !if_stalled
 
    bp2_take_pc := bpd_stage.io.req.valid
+   bp2_is_taken := bpd_stage.io.req.bits.is_taken
    bp2_pred_target := bpd_stage.io.req.bits.target
    bp2_pc_of_br_inst := bpd_stage.io.req.bits.br_pc
    bp2_is_jump := bpd_stage.io.req.bits.is_jump
 
-   def KillMask(m_enable: Bool, m_idx: UInt, m_width: Int) =
+   private def KillMask(m_enable: Bool, m_idx: UInt, m_width: Int) =
    {
       val mask = Wire(Bits(width = m_width))
       mask := Fill(m_enable, m_width) & (SInt(-1, m_width) << UInt(1) << m_idx)
@@ -1250,25 +1254,27 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    if (p(EnableUarchCounters))
    {
       println("\n   UArch Counters Enabled\n")
-      csr.io.uarch_counters(0)  := PopCount((Range(0,COMMIT_WIDTH)).map{w => com_valids(w) && com_uops(w).is_br_or_jmp && !com_uops(w).is_jal})
-      csr.io.uarch_counters(1)  := PopCount((Range(0,COMMIT_WIDTH)).map{w => com_valids(w) && com_uops(w).is_br_or_jmp && !com_uops(w).is_jal && com_uops(w).br_was_mispredicted})
+      csr.io.uarch_counters(0)  := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+         com_valids(w) && com_uops(w).is_br_or_jmp && !com_uops(w).is_jal})
+      csr.io.uarch_counters(1)  := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+         com_valids(w) && com_uops(w).is_br_or_jmp && !com_uops(w).is_jal && com_uops(w).br_was_mispredicted})
       csr.io.uarch_counters(2)  := !rob_rdy
       csr.io.uarch_counters(3)  := laq_full
 //      csr.io.uarch_counters(4)  := stq_full
-      csr.io.uarch_counters(4)  := PopCount((Range(0,COMMIT_WIDTH)).map{w => com_valids(w) && (com_uops(w).is_store || com_uops(w).is_load)})
+      csr.io.uarch_counters(4)  := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+         com_valids(w) && (com_uops(w).is_store || com_uops(w).is_load)})
       csr.io.uarch_counters(5)  := io.counters.dc_miss
 //      csr.io.uarch_counters(5)  := !issue_unit.io.dis_readys.reduce(_|_)
 //      csr.io.uarch_counters(6)  := branch_mask_full.reduce(_|_)
 //      csr.io.uarch_counters(6)  := io.counters.ic_miss
+//      csr.io.uarch_counters(7)  := io.counters.dc_miss
       csr.io.uarch_counters(6)  := br_unit.brinfo.valid
       csr.io.uarch_counters(7)  := br_unit.brinfo.mispredict
-//      csr.io.uarch_counters(7)  := io.counters.dc_miss
       csr.io.uarch_counters(8)  := lsu_io.counters.ld_valid
       csr.io.uarch_counters(9)  := lsu_io.counters.ld_forwarded
 //      csr.io.uarch_counters(10) := lsu_io.counters.ld_sleep
 //      csr.io.uarch_counters(10) := lsu_io.counters.ld_killed
       csr.io.uarch_counters(10) := lsu_io.counters.ld_order_fail
-//      csr.io.uarch_counters(10) := br_unit.bpd_update.valid && br_unit.brinfo.mispredict
       csr.io.uarch_counters(11) := br_unit.bpd_update.valid // provide base-line on the number of updates, vs mispredicts
       csr.io.uarch_counters(12) := br_unit.bpd_update.valid && !br_unit.bht_update.bits.mispredict && br_unit.bpd_update.bits.bpd_mispredict // BTB correct, BPD wrong
       csr.io.uarch_counters(13) := br_unit.bpd_update.valid && br_unit.bht_update.bits.mispredict && !br_unit.bpd_update.bits.bpd_mispredict // BPD correct, BTB wrong
@@ -1298,7 +1304,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    {
       println("\n Chisel Printout Enabled\n")
 
-      var whitespace = (104 - 3 - 12 - NUM_LSU_ENTRIES- p(NumIssueSlotEntries) - (NUM_ROB_ENTRIES/COMMIT_WIDTH)
+      var whitespace = (63 - 3 - 12 - NUM_LSU_ENTRIES- p(NumIssueSlotEntries) - (NUM_ROB_ENTRIES/COMMIT_WIDTH)
          - io.dmem.debug.ld_req_slot.size - NUM_BROB_ENTRIES)
 
       def InstsStr(insts: Bits, width: Int) =
@@ -1310,7 +1316,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
       }
 
       // Front-end
-      printf("--- Cyc=%d , ----------------- Ret: %d ----------------------------------\n  BrPred1:        (IF1_PC= n/a - Predict:n/a) ------ PC: [%s%s%s-%s for br_id: %d, %s %s next: 0x%x ifst:%d]\nI$ Response: (%s) IF2_PC= 0x%x (mask:0x%x) \u001b[1;35m%s\u001b[0m  ----BrPred2:(%s,%s) [btbtarg: 0x%x] jkilmsk:0x%x ->(0x%x)\n"
+      printf("--- Cyc=%d , ----------------- Ret: %d ----------------------------------\n  BrPred1:        (IF1_PC= n/a- Predict:n/a) ------ PC: [%s%s%s-%s for br_id: %d, %s %s next: 0x%x ifst:%d]\nI$ Response: (%s) IF2_PC= 0x%x (mask:0x%x) \u001b[1;35m%s\u001b[0m  ----BrPred2:(%s,%s,%d) [btbtarg: 0x%x] jkilmsk:0x%x ->(0x%x)\n"
          , tsc_reg
          , irt_reg & UInt(0xffffff)
       // Fetch Stage 1
@@ -1334,6 +1340,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
          , InstsStr(io.imem.resp.bits.data.toBits, FETCH_WIDTH)
          , Mux(io.imem.btb_resp.valid, Str("H"), Str("-"))
          , Mux(io.imem.btb_resp.bits.taken, Str("T"), Str("-"))
+         , io.imem.btb_resp.bits.bridx
          , io.imem.btb_resp.bits.target(19,0)
          , bpd_kill_mask
          , fetch_bundle.mask
