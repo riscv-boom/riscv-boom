@@ -512,7 +512,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    io.imem.btb_update.bits.isJump     := Mux(br_unit.btb_update_valid, br_unit.btb_update.isJump, bp2_is_jump)
    io.imem.btb_update.bits.isReturn   := Mux(br_unit.btb_update_valid, br_unit.btb_update.isReturn, Bool(false))
 
-   // TODO need to also update bht_update during bp2 takens, to keep history correct
+   // TODO XXX need to also update bht_update during bp2 takens, to keep history correct
    io.imem.bht_update := br_unit.bht_update
 
    io.imem.invalidate := Range(0,DECODE_WIDTH).map{i => com_valids(i) && com_uops(i).is_fencei}.reduce(_|_)
@@ -540,19 +540,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    bp2_pc_of_br_inst := bpd_stage.io.req.bits.br_pc
    bp2_is_jump := bpd_stage.io.req.bits.is_jump
 
-   private def KillMask(m_enable: Bool, m_idx: UInt, m_width: Int) =
-   {
-      val mask = Wire(Bits(width = m_width))
-      mask := Fill(m_enable, m_width) & (SInt(-1, m_width) << UInt(1) << m_idx)
-      mask
-   }
-   // mask out instructions after predicted branch
-   val bpd_kill_mask = KillMask(bp2_take_pc, bpd_stage.io.req.bits.idx, FETCH_WIDTH)
-   // mask out instructions after first jr (doesn't matter if predicted correctly or not!)
-   val jr_kill_mask = KillMask(bpd_stage.io.pred_resp.has_jr,
-                               bpd_stage.io.pred_resp.jr_idx,
-                              FETCH_WIDTH)
-   fetch_bundle.mask := (io.imem.resp.bits.mask & ~bpd_kill_mask & ~jr_kill_mask)
+   fetch_bundle.mask := io.imem.resp.bits.mask & bpd_stage.io.pred_resp.mask
    fetch_bundle.pred_resp := bpd_stage.io.pred_resp
    fetch_bundle.predictions := bpd_stage.io.predictions
 
@@ -1324,7 +1312,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
          , Mux(br_unit.brinfo.taken, Str("T"), Str("-"))
          , Mux(br_unit.debug_btb_pred, Str("B"), Str("_"))
          , Mux(br_unit.brinfo.mispredict, Str(b_mgt + "MISPREDICT" + end), Str(grn + "          " + end))
-         , br_unit.brinfo.tag
+         , bpd_stage.io.req.bits.idx
          , Mux(take_pc, Str("TAKE_PC"), Str(" "))
          , Mux(flush_take_pc, Str("FLSH"),
            Mux(br_unit.take_pc, Str("BRU "),
@@ -1342,7 +1330,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
          , Mux(io.imem.btb_resp.bits.taken, Str("T"), Str("-"))
          , io.imem.btb_resp.bits.bridx
          , io.imem.btb_resp.bits.target(19,0)
-         , bpd_kill_mask
+         , bpd_stage.io.pred_resp.mask
          , fetch_bundle.mask
          )
 
