@@ -44,7 +44,7 @@ class DefaultBOOMConfig extends Config (
             enabled = true,
             num_tables = 4,
             table_sizes = Seq(1024,1024,1024,1024),
-            history_lengths = Seq(4,8,16,64),
+            history_lengths = Seq(3,7,19,63),
             tag_sizes = Seq(10,10,10,12))
          case GShareKey => GShareParameters(
             enabled = false,

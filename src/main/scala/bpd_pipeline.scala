@@ -243,7 +243,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
          //       a. and no other branch taken (bpd_nextline_fire)
          //       b. a later branch as taken (bpd_br_fire)
 
-         // does the bpd predict the branch is taken too?
+         // does the bpd predict the branch is taken too? (assuming bpd_valid)
          val bpd_agrees_with_btb = bpd_predictions(io.imem.btb_resp.bits.bridx)
 
          bpd_jal_fire := !bpd_br_beats_jal && bpd_jal_val && (bpd_jal_idx < io.imem.btb_resp.bits.bridx)
@@ -251,8 +251,13 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
                            (bpd_br_idx < io.imem.btb_resp.bits.bridx ||  // earlier than BTB's branch
                            !bpd_agrees_with_btb)                         // taken later than BTB's branch
 
-         bpd_nextline_fire := !bpd_br_taken && !bpd_jal_val
-         override_btb := !bpd_agrees_with_btb
+         bpd_nextline_fire := bpd_valid && !bpd_predictions.orR && !bpd_jal_val
+         override_btb := bpd_valid && !bpd_agrees_with_btb
+
+         when (bpd_nextline_fire)
+         {
+            assert (override_btb, "[bpd_pipeline] redirecting PC without overriding the BTB")
+         }
       }
       .elsewhen (btb_predicted_br_nottaken)
       {
