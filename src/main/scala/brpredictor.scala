@@ -222,7 +222,8 @@ class BrobEntry(fetch_width: Int)(implicit p: Parameters) extends BoomBundle()(p
 {
    val executed     = Vec.fill(fetch_width) {Bool()} // mark that a branch executed (and should update the predictor).
    val taken        = Vec.fill(fetch_width) {Bool()}
-   val mispredicted = Vec.fill(fetch_width) {Bool()} // did bpd mispredict the br? (aka should we update predictor in Ex). Only set for branches, not jumps.
+   val mispredicted = Vec.fill(fetch_width) {Bool()} // did bpd mispredict the br? (aka should we update predictor).
+                                                     // Only set for branches, not jumps.
    val brob_idx     = UInt(width = BROB_ADDR_SZ)
 
    val debug_executed = Bool() // did a br or jalr get executed? verify we're not deallocating an empty entry.

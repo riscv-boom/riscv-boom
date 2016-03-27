@@ -41,35 +41,35 @@ class ExecutionUnits(implicit val p: Parameters) extends HasBoomCoreParameters
 
    def apply(n: Int) = exe_units(n)
 
-   def map[T](f: ExecutionUnit => T) = 
+   def map[T](f: ExecutionUnit => T) =
    {
       exe_units.map(f)
    }
 
-   def withFilter(f: ExecutionUnit => Boolean) = 
+   def withFilter(f: ExecutionUnit => Boolean) =
    {
       exe_units.withFilter(f)
    }
 
-   lazy val memory_unit = 
+   lazy val memory_unit =
    {
       require (exe_units.count(_.is_mem_unit) == 1) // only one mem_unit supported
       exe_units.find(_.is_mem_unit).get
    }
 
-   lazy val br_unit = 
+   lazy val br_unit =
    {
       require (exe_units.count(_.hasBranchUnit) == 1)
       exe_units.find(_.hasBranchUnit).get
    }
 
-   lazy val br_unit_io = 
+   lazy val br_unit_io =
    {
       require (exe_units.count(_.hasBranchUnit) == 1)
       (exe_units.find(_.hasBranchUnit).get).io.br_unit
    }
 
-   lazy val br_unit_idx = 
+   lazy val br_unit_idx =
    {
       exe_units.indexWhere(_.hasBranchUnit)
    }
