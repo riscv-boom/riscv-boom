@@ -201,95 +201,14 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
       val counters = new CacheCounters().asInput
    }
 
-   if (DECODE_WIDTH == 1)      println("\n   ~*** One-wide Machine ***~\n")
-   else if (DECODE_WIDTH == 2) println("\n   ~*** Two-wide Machine ***~\n")
-   else if (DECODE_WIDTH == 4) println("\n   ~*** Four-wide Machine ***~\n")
-   else                        println("\n ~*** Unknown Machine Width ***~\n")
+   //**********************************
+   // construct the execution units
 
-   require (ISSUE_WIDTH <= 4)
-   if (ISSUE_WIDTH == 1) println("    -== Single Issue ==- \n")
-   if (ISSUE_WIDTH == 2) println("    -== Dual Issue ==- \n")
-   if (ISSUE_WIDTH == 3) println("    -== Triple Issue ==- \n")
-   if (ISSUE_WIDTH == 4) println("    -== Quad Issue ==- \n")
-
-
-   //*******************************
-   // Instantiate the ExecutionUnits
-
-   val exe_units = ArrayBuffer[ExecutionUnit]()
-
-   if (ISSUE_WIDTH == 1)
-   {
-      exe_units += Module(new ALUMemExeUnit(is_branch_unit   = true
-                                          , shares_csr_wport = true
-                                          , fp_mem_support   = usingFPU
-                                          , has_fpu          = usingFPU
-                                          , has_mul          = true
-                                          , has_div          = true
-                                          , use_slow_mul     = false
-                                          , has_fdiv         = usingFPU && usingFDivSqrt
-                                          ))
-   }
-   else if (ISSUE_WIDTH == 2)
-   {
-      exe_units += Module(new ALUExeUnit(is_branch_unit      = true
-                                          , shares_csr_wport = true
-                                          , has_fpu          = usingFPU
-                                          , has_mul          = true
-                                          ))
-      exe_units += Module(new ALUMemExeUnit(fp_mem_support   = usingFPU
-                                          , has_div          = true
-                                          , has_fdiv         = usingFPU && usingFDivSqrt
-                                          ))
-   }
-   else if (ISSUE_WIDTH == 3)
-   {
-      exe_units += Module(new ALUExeUnit(is_branch_unit      = true
-                                          , shares_csr_wport = true
-                                          , has_fpu          = usingFPU
-                                          , has_mul          = true
-                                          ))
-      exe_units += Module(new ALUExeUnit(has_div             = true
-                                          , has_fdiv         = usingFPU && usingFDivSqrt
-                                          ))
-      exe_units += Module(new MemExeUnit())
-   }
-   else
-   {
-      require (ISSUE_WIDTH == 4)
-      exe_units += Module(new ALUExeUnit(is_branch_unit      = false
-                                          , shares_csr_wport = true
-                                          , has_fpu          = usingFPU
-                                          , has_mul          = true
-                                          ))
-      exe_units += Module(new ALUExeUnit(is_branch_unit      = true))
-      exe_units += Module(new ALUExeUnit(has_div             = true
-                                          , has_fdiv         = usingFPU && usingFDivSqrt
-                                          ))
-      exe_units += Module(new MemExeUnit())
-   }
-
-   require (exe_units.length != 0)
-   require (exe_units.map(_.is_mem_unit).reduce(_|_), "Datapath is missing a memory unit.")
-   require (exe_units.map(_.has_mul).reduce(_|_), "Datapath is missing a multiplier.")
-   require (exe_units.map(_.has_div).reduce(_|_), "Datapath is missing a divider.")
-   require (exe_units.map(_.has_fpu).reduce(_|_) == usingFPU, "Datapath is missing a fpu (or has an fpu and shouldnt).")
-
-   val num_rf_read_ports = exe_units.map(_.num_rf_read_ports).reduce[Int](_+_)
-   val num_rf_write_ports = exe_units.map(_.num_rf_write_ports).reduce[Int](_+_)
-   val num_total_bypass_ports = exe_units.withFilter(_.isBypassable).map(_.numBypassPorts).reduce[Int](_+_)
-   val num_fast_wakeup_ports = exe_units.count(_.isBypassable)
-   // TODO reduce the number of slow wakeup ports - currently have every write-port also be a slow-wakeup-port.
-   val num_slow_wakeup_ports = num_rf_write_ports
-   // The slow write ports to the regfile are variable latency, and thus can't be bypassed.
-   // val num_slow_wakeup_ports = exe_units.map(_.num_variable_write_ports).reduce[Int](_+_)
-
-   val num_wakeup_ports = num_slow_wakeup_ports + num_fast_wakeup_ports
-   val rf_cost = (num_rf_read_ports+num_rf_write_ports)*(num_rf_read_ports+2*num_rf_write_ports)
+   val exe_units = new boom.ExecutionUnits()
 
 
    //**********************************
-   // Pipeline State Registers
+   // Pipeline State Registers &
    // Forward Declared Wires
 
    val flush_take_pc  = Wire(Bool())  // redirect PC due to a flush
@@ -310,11 +229,11 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    val bp2_is_taken      = Wire(Bool())
 
    // Instruction Decode State
-   val dec_valids     = Wire(Vec(DECODE_WIDTH, Bool()))  // is the incoming, decoded instruction valid? It may be held up though.
+   val dec_valids     = Wire(Vec(DECODE_WIDTH, Bool()))  // are the decoded instruction valid? It may be held up though.
    val dec_uops       = Wire(Vec(DECODE_WIDTH, new MicroOp()))
-   val dec_will_fire  = Wire(Vec(DECODE_WIDTH, Bool()))  // can the instruction fire beyond decode? (can still be stopped in ren or dis)
+   val dec_will_fire  = Wire(Vec(DECODE_WIDTH, Bool()))  // can the instruction fire beyond decode? 
+                                                         // (can still be stopped in ren or dis)
    val dec_rdy        = Wire(Bool())
-
    val rob_rdy        = Wire(Bool())
    val rob_empty      = Wire(Bool())
    val laq_full       = Wire(Bool())
@@ -336,23 +255,22 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    val iss_valids            = Wire(Vec(issue_width, Bool()))
    val iss_uops              = Wire(Vec(issue_width, new MicroOp()))
    val register_width        = if (!usingFPU) xLen else 65
-   val bypasses              = Wire(new BypassData(num_total_bypass_ports, register_width))
+   val bypasses              = Wire(new BypassData(exe_units.num_total_bypass_ports, register_width))
 
    val br_unit = Wire(new BranchUnitResp())
-   require (exe_units.count(_.hasBranchUnit) == 1)
-   val brunit_idx = exe_units.indexWhere(_.hasBranchUnit)
-   br_unit <> exe_units(brunit_idx).io.br_unit
+   val brunit_idx = exe_units.br_unit_idx
+   br_unit <> exe_units.br_unit_io
 
 
    // Memory State
    var lsu_io:LoadStoreUnitIO = null
-   lsu_io = (exe_units.find(_.is_mem_unit).get).io.lsu_io
-   require (exe_units.count(_.is_mem_unit) == 1) // only one mem_unit supported
-   (exe_units.find(_.is_mem_unit).get).io.dmem <> io.dmem
+   lsu_io = exe_units.memory_unit.io.lsu_io
+   exe_units.memory_unit.io.dmem <> io.dmem
 
 
    // Writeback State
 
+   
    // Commit Stage
    val com_valids            = Wire(Vec(DECODE_WIDTH, Bool()))
    val com_uops              = Wire(Vec(DECODE_WIDTH, new MicroOp()))
@@ -369,7 +287,19 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    val csr_interrupt         = Wire(Bool())
    val csr_interrupt_cause   = Wire(UInt())
    val watchdog_trigger      = Wire(Bool())
-
+ 
+   
+   //****************************************
+   // Time Stamp Counter & Retired Instruction Counter
+   // (only used for printf and vcd dumps - the actual counters are in the CSRFile)
+   val tsc_reg  = Reg(init = UInt(0, xLen))
+   val irt_reg  = Reg(init = UInt(0, xLen))
+   val fseq_reg = Reg(init = UInt(0, xLen))
+   tsc_reg  := tsc_reg + Mux(Bool(O3PIPEVIEW_PRINTF), UInt(O3_CYCLE_TIME), UInt(1))
+   irt_reg  := irt_reg + PopCount(com_valids.toBits)
+   debug(tsc_reg)
+   debug(irt_reg)
+    
 
    //****************************************
    // Print-out information about the machine
@@ -393,23 +323,13 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    println("   BTB Size             : " + p(rocket.BtbKey).nEntries)
    println("   RAS Size             : " + p(rocket.BtbKey).nRAS)
 
-   println("\n   Num RF Read Ports    : " + num_rf_read_ports)
-   println("   Num RF Write Ports   : " + num_rf_write_ports + "\n")
-   println("   RF Cost (R+W)*(R+2W) : " + rf_cost + "\n")
-   println("   Num Slow Wakeup Ports: " + num_slow_wakeup_ports)
-   println("   Num Fast Wakeup Ports: " + num_fast_wakeup_ports)
-   println("   Num Bypass Ports     : " + num_total_bypass_ports)
+   println("\n   Num RF Read Ports    : " + exe_units.num_rf_read_ports)
+   println("   Num RF Write Ports   : " + exe_units.num_rf_write_ports + "\n")
+   println("   RF Cost (R+W)*(R+2W) : " + exe_units.rf_cost + "\n")
+   println("   Num Slow Wakeup Ports: " + exe_units.num_slow_wakeup_ports)
+   println("   Num Fast Wakeup Ports: " + exe_units.num_fast_wakeup_ports)
+   println("   Num Bypass Ports     : " + exe_units.num_total_bypass_ports)
    println("")
-
-   // Time Stamp Counter & Retired Instruction Counter
-   // (only used for printf and vcd dumps - the actual counters are in the CSRFile)
-   val tsc_reg  = Reg(init = UInt(0, xLen))
-   val irt_reg  = Reg(init = UInt(0, xLen))
-   val fseq_reg = Reg(init = UInt(0, xLen))
-   tsc_reg  := tsc_reg + Mux(Bool(O3PIPEVIEW_PRINTF), UInt(O3_CYCLE_TIME), UInt(1))
-   irt_reg  := irt_reg + PopCount(com_valids.toBits)
-   debug(tsc_reg)
-   debug(irt_reg)
 
    //-------------------------------------------------------------
    //-------------------------------------------------------------
@@ -687,7 +607,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    //-------------------------------------------------------------
    //-------------------------------------------------------------
 
-   val rename_stage = Module(new RenameStage(DECODE_WIDTH, num_wakeup_ports))
+   val rename_stage = Module(new RenameStage(DECODE_WIDTH, exe_units.num_wakeup_ports))
 
    rename_stage.io.dis_inst_can_proceed := dis_insts_can_proceed
    rename_stage.io.ren_pred_info := dec_fbundle.pred_resp
@@ -736,7 +656,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
       }
 
    }
-   require (wu_idx == num_wakeup_ports)
+   require (wu_idx == exe_units.num_wakeup_ports)
 
 
    rename_stage.io.com_valids := com_valids
@@ -797,9 +717,9 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    //-------------------------------------------------------------
 
    val issue_unit = if (p(EnableAgePriorityIssue))
-                        Module(new IssueUnitCollasping(p(NumIssueSlotEntries), issue_width, num_wakeup_ports))
+                        Module(new IssueUnitCollasping(p(NumIssueSlotEntries), issue_width, exe_units.num_wakeup_ports))
                     else
-                        Module(new IssueUnitStatic(p(NumIssueSlotEntries), issue_width, num_wakeup_ports))
+                        Module(new IssueUnitStatic(p(NumIssueSlotEntries), issue_width, exe_units.num_wakeup_ports))
 
    // Input (Dispatch)
    issue_unit.io.dis_mask  := dis_mask
@@ -849,7 +769,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
          wu_idx += 1
       }
    }
-   require (wu_idx == num_wakeup_ports)
+   require (wu_idx == exe_units.num_wakeup_ports)
 
    if (O3PIPEVIEW_PRINTF)
    {
@@ -874,9 +794,9 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    // Register Read <- Issue (rrd <- iss)
 
    val register_read = Module(new RegisterRead(issue_width
-                                               , num_rf_read_ports
+                                               , exe_units.num_rf_read_ports
                                                , exe_units.map(_.num_rf_read_ports)
-                                               , num_total_bypass_ports
+                                               , exe_units.num_total_bypass_ports
                                                , register_width))
 
    for (w <- 0 until issue_width)
@@ -940,8 +860,8 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    // Register File
 
    val regfile = Module(new RegisterFile(PHYS_REG_COUNT
-                                        , num_rf_read_ports
-                                        , num_rf_write_ports
+                                        , exe_units.num_rf_read_ports
+                                        , exe_units.num_rf_write_ports
                                         , register_width
                                         , ENABLE_REGFILE_BYPASSING))
 
@@ -977,7 +897,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
          }
       }
    }
-   require (idx == num_total_bypass_ports)
+   require (idx == exe_units.num_total_bypass_ports)
 
 
    //-------------------------------------------------------------
@@ -1073,7 +993,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
 
    // TODO bug, this can return too many fflag ports,e.g., the FPU is shared with the mem unit and thus has two wb ports
    val num_fpu_ports = exe_units.withFilter(_.hasFFlags).map(_.num_rf_write_ports).foldLeft(0)(_+_)
-   val rob  = Module(new Rob(DECODE_WIDTH, NUM_ROB_ENTRIES, ISSUE_WIDTH, num_slow_wakeup_ports, num_fpu_ports)) // TODO the ROB writeback is off the regfile, which is a different set
+   val rob  = Module(new Rob(DECODE_WIDTH, NUM_ROB_ENTRIES, ISSUE_WIDTH, exe_units.num_slow_wakeup_ports, num_fpu_ports)) // TODO the ROB writeback is off the regfile, which is a different set
 
       // Dispatch
       rob_rdy := rob.io.ready
