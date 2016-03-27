@@ -65,6 +65,8 @@ class BranchPrediction(implicit p: Parameters) extends BoomBundle()(p)
    val is_br_or_jalr    = Bool() // is this instruction a branch or jalr?
                                  // (need to allocate brob entry).
 
+   val bpd_predict_val  = Bool() // (stat tracking) did the bpd predict this instruction? (ie, tag hit in the BPD)
+
    def wasBTB = btb_predicted
 }
 
@@ -331,6 +333,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
                                           !(bpd_nextline_fire || bpd_br_fire || bpd_jal_fire)
       io.predictions(w).btb_hit := Mux(io.imem.btb_resp.bits.bridx === UInt(w),
                                           io.imem.btb_resp.valid, Bool(false))
+      io.predictions(w).bpd_predict_val   := bpd_valid
    }
 
    bp2_br_seen := io.imem.resp.valid &&

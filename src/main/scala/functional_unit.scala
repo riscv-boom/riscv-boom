@@ -127,6 +127,12 @@ class BrResolutionInfo(implicit p: Parameters) extends BoomBundle()(p)
    val taken      = Bool()                     // which direction did the branch go?
    val is_br      = Bool()
    val is_jr      = Bool()
+
+   // for stats
+   val btb_made_pred  = Bool()
+   val btb_mispredict = Bool()
+   val bpd_made_pred  = Bool()
+   val bpd_mispredict = Bool()
 }
 
 class BranchUnitResp(implicit p: Parameters) extends BoomBundle()(p)
@@ -393,6 +399,10 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
       io.br_unit.brinfo.is_br      := Reg(next = is_br)
       io.br_unit.brinfo.is_jr      := Reg(next = pc_sel === PC_JALR)
       io.br_unit.brinfo.taken      := Reg(next = is_taken)
+      io.br_unit.brinfo.btb_mispredict := Reg(next = btb_mispredict)
+      io.br_unit.brinfo.bpd_mispredict := Reg(next = bpd_mispredict)
+      io.br_unit.brinfo.btb_made_pred  := Reg(next = uop.br_prediction.wasBTB)
+      io.br_unit.brinfo.bpd_made_pred  := Reg(next = uop.br_prediction.bpd_predict_val)
 
       // updates the BTB same cycle as PC redirect
       val lsb = log2Ceil(FETCH_WIDTH*coreInstBytes)

@@ -342,7 +342,7 @@ class Rob(width: Int
          rob_uop(rob_tail)       := io.dis_uops(w)
          rob_exception(rob_tail) := io.dis_uops(w).exception
          rob_fflags(rob_tail)    := Bits(0)
-         rob_uop(rob_tail).br_was_mispredicted := Bool(false)
+         rob_uop(rob_tail).stat_brjmp_mispredicted := Bool(false)
       }
       .elsewhen (io.dis_mask.reduce(_|_) && !rob_val(rob_tail))
       {
@@ -391,7 +391,11 @@ class Rob(width: Int
 
       when (io.brinfo.valid && MatchBank(GetBankIdx(io.brinfo.rob_idx)))
       {
-         rob_uop(GetRowIdx(io.brinfo.rob_idx)).br_was_mispredicted := io.brinfo.mispredict
+         rob_uop(GetRowIdx(io.brinfo.rob_idx)).stat_brjmp_mispredicted := io.brinfo.mispredict
+         rob_uop(GetRowIdx(io.brinfo.rob_idx)).stat_btb_mispredicted   := io.brinfo.btb_mispredict
+         rob_uop(GetRowIdx(io.brinfo.rob_idx)).stat_btb_made_pred      := io.brinfo.btb_made_pred
+         rob_uop(GetRowIdx(io.brinfo.rob_idx)).stat_bpd_mispredicted   := io.brinfo.bpd_mispredict
+         rob_uop(GetRowIdx(io.brinfo.rob_idx)).stat_bpd_made_pred      := io.brinfo.bpd_made_pred
       }
 
 

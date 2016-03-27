@@ -1045,35 +1045,35 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
       csr.io.uarch_counters(0)  := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
          com_valids(w) && com_uops(w).is_br_or_jmp && !com_uops(w).is_jal})
       csr.io.uarch_counters(1)  := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
-         com_valids(w) && com_uops(w).is_br_or_jmp && !com_uops(w).is_jal && com_uops(w).br_was_mispredicted})
+         com_valids(w) && com_uops(w).is_br_or_jmp && !com_uops(w).is_jal && com_uops(w).stat_brjmp_mispredicted})
       csr.io.uarch_counters(2)  := !rob_rdy
       csr.io.uarch_counters(3)  := laq_full
-//      csr.io.uarch_counters(4)  := stq_full
-      csr.io.uarch_counters(4)  := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
-         com_valids(w) && (com_uops(w).is_store || com_uops(w).is_load)})
-//      csr.io.uarch_counters(5)  := io.counters.dc_miss
-//      csr.io.uarch_counters(5)  := !issue_unit.io.dis_readys.reduce(_|_)
+      csr.io.uarch_counters(4)  := !issue_unit.io.dis_readys.reduce(_|_)
+      csr.io.uarch_counters(5)  := io.counters.dc_miss
       csr.io.uarch_counters(6)  := branch_mask_full.reduce(_|_)
-//      csr.io.uarch_counters(6)  := io.counters.ic_miss
-//      csr.io.uarch_counters(7)  := io.counters.dc_miss
-      csr.io.uarch_counters(6)  := br_unit.brinfo.valid
-      csr.io.uarch_counters(7)  := br_unit.brinfo.mispredict
+      csr.io.uarch_counters(7)  := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+         com_valids(w) && (com_uops(w).is_store || com_uops(w).is_load)})
       csr.io.uarch_counters(8)  := lsu_io.counters.ld_valid
-      csr.io.uarch_counters(9)  := lsu_io.counters.ld_forwarded
-//      csr.io.uarch_counters(10) := lsu_io.counters.ld_sleep
-//      csr.io.uarch_counters(10) := lsu_io.counters.ld_killed
-      csr.io.uarch_counters(10) := lsu_io.counters.ld_order_fail
+      csr.io.uarch_counters(9)  := lsu_io.counters.ld_order_fail
 
-//      csr.io.uarch_counters(11) :=
+      csr.io.uarch_counters(10) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+         com_valids(w) && com_uops(w).is_br_or_jmp && !com_uops(w).is_jal && com_uops(w).stat_btb_made_pred})
+      csr.io.uarch_counters(11) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+         com_valids(w) && com_uops(w).is_br_or_jmp && !com_uops(w).is_jal && com_uops(w).stat_btb_mispredicted})
+      csr.io.uarch_counters(12) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+         com_valids(w) && com_uops(w).is_br_or_jmp && !com_uops(w).is_jal && com_uops(w).stat_bpd_made_pred})
+      csr.io.uarch_counters(13) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+         com_valids(w) && com_uops(w).is_br_or_jmp && !com_uops(w).is_jal && com_uops(w).stat_bpd_mispredicted})
 
-
-      csr.io.uarch_counters(11) := br_unit.bpd_update.valid // provide base-line on the number of updates, vs mispredicts
-      csr.io.uarch_counters(12) := br_unit.bpd_update.valid && !br_unit.bht_update.bits.mispredict && br_unit.bpd_update.bits.bpd_mispredict // BTB correct, BPD wrong
-      csr.io.uarch_counters(13) := br_unit.bpd_update.valid && br_unit.bht_update.bits.mispredict && !br_unit.bpd_update.bits.bpd_mispredict // BPD correct, BTB wrong
-      csr.io.uarch_counters(14) := br_unit.bpd_update.valid && br_unit.bpd_update.bits.bpd_mispredict // BPD mispredicts
-      csr.io.uarch_counters(15) := br_unit.bht_update.valid && br_unit.bht_update.bits.mispredict // BTB mispredicts
-//      csr.io.uarch_counters(14) := PopCount((Range(0,COMMIT_WIDTH)).map{w => com_valids(w) && com_uops(w).is_store})
-//      csr.io.uarch_counters(15) := PopCount((Range(0,COMMIT_WIDTH)).map{w => com_valids(w) && com_uops(w).is_load})
+      // 14, no prediction made
+      csr.io.uarch_counters(14) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+         com_valids(w) && com_uops(w).is_br_or_jmp && !com_uops(w).is_jal &&
+         !com_uops(w).stat_btb_made_pred && !com_uops(w).stat_bpd_made_pred})
+      // 15, no predition made - and a mispredict occurred
+      csr.io.uarch_counters(15) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+         com_valids(w) && com_uops(w).is_br_or_jmp && !com_uops(w).is_jal &&
+         !com_uops(w).stat_btb_made_pred && !com_uops(w).stat_bpd_made_pred &&
+         com_uops(w).stat_brjmp_mispredicted})
    }
    else
    {
@@ -1083,7 +1083,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
 
    assert (!(Range(0,COMMIT_WIDTH).map{w =>
       com_valids(w) && com_uops(w).is_br_or_jmp && com_uops(w).is_jal &&
-      com_uops(w).br_was_mispredicted}.reduce(_|_)),
+      com_uops(w).stat_brjmp_mispredicted}.reduce(_|_)),
       "[dpath] A committed JAL was marked as having been mispredicted.")
 
    //-------------------------------------------------------------
