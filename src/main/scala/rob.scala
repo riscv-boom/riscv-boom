@@ -109,7 +109,7 @@ class RobIo(machine_width: Int
    val com_badvaddr     = UInt(OUTPUT, xLen)
 
    // Handle Branch Misspeculations
-   val br_unit          = new BranchUnitResp().asInput
+   val brinfo           = new BrResolutionInfo().asInput
 
    // Let the Branch Unit read out an instruction's PC
    val get_pc = new RobPCRequest()
@@ -389,10 +389,9 @@ class Rob(width: Int
          }
       }
 
-      when (io.br_unit.brinfo.valid && MatchBank(GetBankIdx(io.br_unit.brinfo.rob_idx)))
+      when (io.brinfo.valid && MatchBank(GetBankIdx(io.brinfo.rob_idx)))
       {
-         // these signals need to be delayed a cycle to match the brinfo signals
-         rob_uop(GetRowIdx(io.br_unit.brinfo.rob_idx)).br_was_mispredicted := io.br_unit.brinfo.mispredict
+         rob_uop(GetRowIdx(io.brinfo.rob_idx)).br_was_mispredicted := io.brinfo.mispredict
       }
 
 
@@ -467,18 +466,18 @@ class Rob(width: Int
       for (i <- 0 until num_rob_rows)
       {
          val br_mask = rob_uop(i).br_mask
-         val entry_match = rob_val(i) && maskMatch(io.br_unit.brinfo.mask, br_mask)
+         val entry_match = rob_val(i) && maskMatch(io.brinfo.mask, br_mask)
 
          //kill instruction if mispredict & br mask match
-         when (io.br_unit.brinfo.valid && io.br_unit.brinfo.mispredict && entry_match)
+         when (io.brinfo.valid && io.brinfo.mispredict && entry_match)
          {
             rob_val(i) := Bool(false)
             rob_uop(UInt(i)).inst := BUBBLE
          }
-         .elsewhen (io.br_unit.brinfo.valid && !io.br_unit.brinfo.mispredict && entry_match)
+         .elsewhen (io.brinfo.valid && !io.brinfo.mispredict && entry_match)
          {
             // clear speculation bit even on correct speculation
-            rob_uop(i).br_mask := (br_mask & ~io.br_unit.brinfo.mask)
+            rob_uop(i).br_mask := (br_mask & ~io.brinfo.mask)
          }
       }
 
@@ -672,8 +671,8 @@ class Rob(width: Int
    }
 
    r_xcpt_uop         := next_xcpt_uop
-   r_xcpt_uop.br_mask := GetNewBrMask(io.br_unit.brinfo, next_xcpt_uop)
-   when (io.flush_pipeline || IsKilledByBranch(io.br_unit.brinfo, next_xcpt_uop))
+   r_xcpt_uop.br_mask := GetNewBrMask(io.brinfo, next_xcpt_uop)
+   when (io.flush_pipeline || IsKilledByBranch(io.brinfo, next_xcpt_uop))
    {
       r_xcpt_val := Bool(false)
    }
@@ -715,9 +714,9 @@ class Rob(width: Int
    {
       rob_tail := WrapDec(rob_tail, num_rob_rows)
    }
-   .elsewhen (io.br_unit.brinfo.valid && io.br_unit.brinfo.mispredict)
+   .elsewhen (io.brinfo.valid && io.brinfo.mispredict)
    {
-      rob_tail := WrapInc(GetRowIdx(io.br_unit.brinfo.rob_idx), num_rob_rows)
+      rob_tail := WrapInc(GetRowIdx(io.brinfo.rob_idx), num_rob_rows)
    }
    .elsewhen (io.dis_mask.toBits =/= Bits(0) && !io.dis_partial_stall)
    {

@@ -1063,7 +1063,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
       }
 
       // branch resolution
-      rob.io.br_unit <> br_unit.asInput()
+      rob.io.brinfo <> br_unit.brinfo.asInput()
 
       // branch unit requests PCs and predictions from ROB during register read
       // (fetch PC from ROB cycle earlier than needed for critical path reasons)
@@ -1139,7 +1139,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
 
 
    //-------------------------------------------------------------
-   // Counters
+   // UARCH Counters
 
    val laq_full_count = Reg(init = UInt(0, xLen))
    when (laq_full) { laq_full_count := laq_full_count + UInt(1) }
@@ -1157,7 +1157,6 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    when (lsu_misspec) { lsu_misspec_count := lsu_misspec_count + UInt(1) }
    debug(lsu_misspec_count)
 
-   // UARCH Counters
    // these take up a significant amount of area, so don't enable them lightly
    if (p(EnableUarchCounters))
    {
@@ -1171,9 +1170,9 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
 //      csr.io.uarch_counters(4)  := stq_full
       csr.io.uarch_counters(4)  := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
          com_valids(w) && (com_uops(w).is_store || com_uops(w).is_load)})
-      csr.io.uarch_counters(5)  := io.counters.dc_miss
+//      csr.io.uarch_counters(5)  := io.counters.dc_miss
 //      csr.io.uarch_counters(5)  := !issue_unit.io.dis_readys.reduce(_|_)
-//      csr.io.uarch_counters(6)  := branch_mask_full.reduce(_|_)
+      csr.io.uarch_counters(6)  := branch_mask_full.reduce(_|_)
 //      csr.io.uarch_counters(6)  := io.counters.ic_miss
 //      csr.io.uarch_counters(7)  := io.counters.dc_miss
       csr.io.uarch_counters(6)  := br_unit.brinfo.valid
@@ -1183,6 +1182,10 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
 //      csr.io.uarch_counters(10) := lsu_io.counters.ld_sleep
 //      csr.io.uarch_counters(10) := lsu_io.counters.ld_killed
       csr.io.uarch_counters(10) := lsu_io.counters.ld_order_fail
+
+//      csr.io.uarch_counters(11) := 
+
+
       csr.io.uarch_counters(11) := br_unit.bpd_update.valid // provide base-line on the number of updates, vs mispredicts
       csr.io.uarch_counters(12) := br_unit.bpd_update.valid && !br_unit.bht_update.bits.mispredict && br_unit.bpd_update.bits.bpd_mispredict // BTB correct, BPD wrong
       csr.io.uarch_counters(13) := br_unit.bpd_update.valid && br_unit.bht_update.bits.mispredict && !br_unit.bpd_update.bits.bpd_mispredict // BPD correct, BTB wrong
