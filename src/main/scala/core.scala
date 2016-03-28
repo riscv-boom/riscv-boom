@@ -108,6 +108,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    val bp2_pc_of_br_inst = Wire(UInt(width=vaddrBits+1))
    val bp2_is_jump       = Wire(Bool())
    val bp2_is_taken      = Wire(Bool())
+   val bp2_br_seen       = Wire(Bool())
 
    // Instruction Decode State
    val dec_valids     = Wire(Vec(DECODE_WIDTH, Bool()))  // are the decoded instruction valid? It may be held up though.
@@ -302,7 +303,8 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    }
 
    // update the BTB
-   // if branch unit mispredicts, instructions in decode are no longer valid
+   // If a branch is mispredicted and taken, update the BTB.
+   // (if branch unit mispredicts, instructions in decode are no longer valid)
    io.imem.btb_update.bits.pc         := Mux(br_unit.btb_update_valid, br_unit.btb_update.pc, io.imem.resp.bits.pc)
    io.imem.btb_update.bits.br_pc      := Mux(br_unit.btb_update_valid, br_unit.btb_update.br_pc, bp2_pc_of_br_inst)
    io.imem.btb_update.bits.target     := Mux(br_unit.btb_update_valid, br_unit.btb_update.target,
@@ -313,8 +315,20 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    io.imem.btb_update.bits.isJump     := Mux(br_unit.btb_update_valid, br_unit.btb_update.isJump, bp2_is_jump)
    io.imem.btb_update.bits.isReturn   := Mux(br_unit.btb_update_valid, br_unit.btb_update.isReturn, Bool(false))
 
-   // TODO XXX need to also update bht_update during bp2 takens, to keep history correct
-   io.imem.bht_update := br_unit.bht_update
+   // Update the BHT in the BP2 stage.
+   // Also update the BHT in the Exe stage IF and only if the branch is a misprediction.
+   val bp2_bht_update = Wire(Valid(new rocket.BHTUpdate()).asOutput)
+   bp2_bht_update.valid           := io.imem.resp.valid && bp2_br_seen && !if_stalled && !br_unit.take_pc
+   bp2_bht_update.bits.prediction := io.imem.btb_resp
+   bp2_bht_update.bits.pc         := io.imem.resp.bits.pc
+   bp2_bht_update.bits.taken      := bp2_is_taken
+   bp2_bht_update.bits.mispredict := bp2_take_pc
+
+   io.imem.bht_update := Mux(br_unit.brinfo.valid &&
+                             br_unit.brinfo.mispredict &&
+                             RegNext(br_unit.bht_update.valid),
+                           RegNext(br_unit.bht_update),
+                           bp2_bht_update)
 
    io.imem.invalidate := Range(0,DECODE_WIDTH).map{i => com_valids(i) && com_uops(i).is_fencei}.reduce(_|_)
 
@@ -340,6 +354,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    bp2_pred_target := bpd_stage.io.req.bits.target
    bp2_pc_of_br_inst := bpd_stage.io.req.bits.br_pc
    bp2_is_jump := bpd_stage.io.req.bits.is_jump
+   bp2_br_seen := bpd_stage.io.pred_resp.br_seen
 
    fetch_bundle.mask := io.imem.resp.bits.mask & bpd_stage.io.pred_resp.mask
    fetch_bundle.pred_resp := bpd_stage.io.pred_resp

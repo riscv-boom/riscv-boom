@@ -414,7 +414,7 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
       {
          io.br_unit.btb_update_valid := is_br_or_jalr && mispredict && is_taken
          // update on all branches (but not jal/jalr)
-         io.br_unit.bht_update.valid := is_br
+         io.br_unit.bht_update.valid := is_br && mispredict
       }
       else
       {

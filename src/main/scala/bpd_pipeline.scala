@@ -53,6 +53,7 @@ class BranchPredictionResp(implicit p: Parameters) extends BoomBundle()(p)
 
    // used to tell front-end how to mask off instructions
    val mask           = Bits(width = fetchWidth)
+   val br_seen        = Bool() // was a branch seen in this fetch packet?
 }
 
 // give this to each instruction/uop and pass this down the pipeline to the branch-unit
@@ -298,6 +299,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    io.pred_resp.btb_resp_valid   := io.imem.btb_resp.valid
    io.pred_resp.btb_resp         := io.imem.btb_resp.bits
    io.pred_resp.bpd_resp         := bpd_bits
+   io.pred_resp.br_seen          := bp2_br_seen
 
    private def KillMask(m_enable: Bool, m_idx: UInt, m_width: Int): Bits =
    {
