@@ -317,11 +317,14 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
 
    // Update the BHT in the BP2 stage.
    // Also update the BHT in the Exe stage IF and only if the branch is a misprediction.
+   // TODO move this into the bpd_pipeline
    val bp2_bht_update = Wire(Valid(new rocket.BHTUpdate()).asOutput)
    bp2_bht_update.valid           := io.imem.resp.valid && bp2_br_seen && !if_stalled && !br_unit.take_pc
    bp2_bht_update.bits.prediction := io.imem.btb_resp
    bp2_bht_update.bits.pc         := io.imem.resp.bits.pc
-   bp2_bht_update.bits.taken      := bp2_is_taken
+   bp2_bht_update.bits.taken      := Mux(bp2_take_pc,
+                                       bp2_is_taken,
+                                       io.imem.btb_resp.valid && io.imem.btb_resp.bits.taken)
    bp2_bht_update.bits.mispredict := bp2_take_pc
 
    io.imem.bht_update := Mux(br_unit.brinfo.valid &&
