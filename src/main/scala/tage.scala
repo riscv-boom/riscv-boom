@@ -23,7 +23,6 @@
 
 // TODO:
 //    - add very-long histories (VLH)
-//    - handling stalls correctly?
 //    - make predictor sequential (first show it works, then make it sequential)
 //    - alt-pred tracking (choosing between +2 tables, sometimes using alt pred if u is low)
 //    - u-bit handling, clearing (count failed allocations?)
@@ -180,6 +179,10 @@ class TageBrPredictor(
       (found_second, alt_id)
    }
 
+   //------------------------------------------------------------
+   //------------------------------------------------------------
+
+   val stall = !io.resp.ready
 
    //------------------------------------------------------------
    //------------------------------------------------------------
@@ -212,6 +215,7 @@ class TageBrPredictor(
    // get prediction (priority to last table)
    val valids = tables.map{ _.io.bp2_resp.valid }
    val predictions = tables.map{ _.io.bp2_resp.bits }
+   tables.map{ _.io.bp2_resp.ready := io.resp.ready }
    val best_prediction_valid = valids.reduce(_|_)
    val best_prediction_bits = PriorityMux(valids.reverse, predictions.reverse)
 
@@ -224,7 +228,7 @@ class TageBrPredictor(
 
    io.resp.valid             := best_prediction_valid
    io.resp.bits.takens       := best_prediction_bits.takens
-   io.resp.bits.history := RegNext(RegNext(this.ghistory))
+   io.resp.bits.history := RegEnable(RegEnable(this.ghistory, !stall), !stall)
    resp_info.indexes := Vec(predictions.map(_.index))
    resp_info.provider_hit := io.resp.valid
    resp_info.provider_id := GetProviderTableId(valids)
@@ -234,7 +238,7 @@ class TageBrPredictor(
    resp_info.alt_hit := p_alt_hit
    resp_info.alt_id  := p_alt_id
    resp_info.alt_predicted_takens := Vec(predictions.map(_.takens))(p_alt_id)
-   resp_info.br_pc := RegNext(RegNext(io.req_pc))
+   resp_info.br_pc := RegEnable(RegEnable(io.req_pc, !stall), !stall)
 
    println("tags len: " + resp_info.tags.length + ", predictions len: " + predictions.map(_.tag).length)
    resp_info.tags := Vec(predictions.map(_.tag))
@@ -252,7 +256,7 @@ class TageBrPredictor(
       if (DEBUG_PRINTF_TAGE)
       {
          printf(red + "prediction made hit: PC 0x%x, ghistory=0x%x" + end + "\n"
-            , RegNext(RegNext(io.req_pc))
+            , RegEnable(RegEnable(io.req_pc, !stall), !stall)
             , io.resp.bits.history
          )
       }

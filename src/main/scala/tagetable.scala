@@ -84,7 +84,7 @@ class TageTableIo(
    val if_req_history = Bits(INPUT, width = history_length)
 
    // bp2 - send prediction to bpd pipeline
-   val bp2_resp = new ValidIO(new TageTableResp(fetch_width, history_length, log2Up(num_entries), tag_sz))
+   val bp2_resp = new DecoupledIO(new TageTableResp(fetch_width, history_length, log2Up(num_entries), tag_sz))
 
    // bp2 - update histories speculatively
    val bp2_update_history = (new ValidIO(new GHistUpdate)).flip
@@ -287,16 +287,18 @@ class TageTable(
    //------------------------------------------------------------
    // Get Prediction
 
+   val stall = !io.bp2_resp.ready
+
    val p_idx       = IdxHash(io.if_req_pc, io.if_req_history)
    val p_tag       = TagHash(io.if_req_pc, io.if_req_history)
    val counters    = counter_table(p_idx)
    val tag         = tag_table(p_idx)
-   val bp2_tag_hit = RegNext(RegNext(tag)) === RegNext(RegNext(p_tag))
+   val bp2_tag_hit = RegEnable(RegEnable(tag, !stall), !stall) === RegEnable(RegEnable(p_tag, !stall), !stall)
 
    io.bp2_resp.valid       := bp2_tag_hit
-   io.bp2_resp.bits.takens := RegNext(RegNext(Vec(counters.map(GetPrediction(_))).toBits))
-   io.bp2_resp.bits.index  := RegNext(RegNext(p_idx))
-   io.bp2_resp.bits.tag    := RegNext(RegNext(p_tag))
+   io.bp2_resp.bits.takens := RegEnable(RegEnable(Vec(counters.map(GetPrediction(_))).toBits, !stall), !stall)
+   io.bp2_resp.bits.index  := RegEnable(RegEnable(p_idx, !stall), !stall)
+   io.bp2_resp.bits.tag    := RegEnable(RegEnable(p_tag, !stall), !stall)
 
    //------------------------------------------------------------
    // Update (Branch Resolution)
