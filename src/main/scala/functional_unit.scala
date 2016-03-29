@@ -123,9 +123,7 @@ class BrResolutionInfo(implicit p: Parameters) extends BoomBundle()(p)
    val rob_idx    = UInt(width = ROB_ADDR_SZ)
    val ldq_idx    = UInt(width = MEM_ADDR_SZ)  // track the "tail" of loads and stores, so we can
    val stq_idx    = UInt(width = MEM_ADDR_SZ)  // quickly reset the LSU on a mispredict
-   val brob_idx   = UInt(width = BROB_ADDR_SZ) // quickly reset the Branch-ROB on a mispredict
    val taken      = Bool()                     // which direction did the branch go?
-   val is_br      = Bool()
    val is_jr      = Bool()
 
    // for stats
@@ -181,7 +179,6 @@ abstract class PipelinedFunctionalUnit(val num_stages: Int,
    io.req.ready := Bool(true)
 
    val r_valids = Reg(init = Vec.fill(num_stages) { Bool(false) })
-//   val r_uops   = Vec.fill(num_stages) { Reg(outType =  new MicroOp()) }
    val r_uops   = Reg(Vec(num_stages, new MicroOp()))
 
 
@@ -395,8 +392,7 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
       io.br_unit.brinfo.rob_idx    := Reg(next = uop.rob_idx)
       io.br_unit.brinfo.ldq_idx    := Reg(next = uop.ldq_idx)
       io.br_unit.brinfo.stq_idx    := Reg(next = uop.stq_idx)
-      io.br_unit.brinfo.brob_idx   := Reg(next = io.get_rob_pc.curr_brob_idx)
-      io.br_unit.brinfo.is_br      := Reg(next = is_br)
+//      io.br_unit.brinfo.is_br      := Reg(next = is_br)
       io.br_unit.brinfo.is_jr      := Reg(next = pc_sel === PC_JALR)
       io.br_unit.brinfo.taken      := Reg(next = is_taken)
       io.br_unit.brinfo.btb_mispredict := Reg(next = btb_mispredict)
@@ -439,13 +435,18 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
       io.br_unit.bht_update.bits.prediction.bits  := io.get_pred.info.btb_resp
       io.br_unit.bht_update.bits.pc               := fetch_pc // what pc should the tag check be on?
 
-      io.br_unit.bpd_update.valid                 := is_br
+      io.br_unit.bpd_update.valid                 := io.req.valid && uop.is_br_or_jmp &&
+                                                     !uop.is_jal && !killed
+      io.br_unit.bpd_update.bits.is_br            := is_br
+      io.br_unit.bpd_update.bits.brob_idx         := io.get_rob_pc.curr_brob_idx
       io.br_unit.bpd_update.bits.taken            := is_taken
       io.br_unit.bpd_update.bits.mispredict       := mispredict
+      io.br_unit.bpd_update.bits.bpd_predict_val  := uop.br_prediction.bpd_predict_val
       io.br_unit.bpd_update.bits.bpd_mispredict   := bpd_mispredict
       io.br_unit.bpd_update.bits.pc               := fetch_pc
       io.br_unit.bpd_update.bits.br_pc            := uop_pc_
       io.br_unit.bpd_update.bits.history          := io.get_pred.info.bpd_resp.history
+
 
       // is the br_pc the last instruction in the fetch bundle?
       val is_last_inst = if (FETCH_WIDTH == 1) { Bool(true) }

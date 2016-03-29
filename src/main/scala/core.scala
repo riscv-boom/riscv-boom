@@ -999,7 +999,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
       com_rbk_valids   := rob.io.com_rbk_valids
 
       bpd_stage.io.brob.deallocate <> rob.io.brob_deallocate
-      bpd_stage.io.brob.br_unit <> br_unit.asInput()
+      bpd_stage.io.brob.bpd_update <> br_unit.bpd_update
       bpd_stage.io.brob.flush := flush_pipeline || rob.io.flush_brob
 
    //-------------------------------------------------------------

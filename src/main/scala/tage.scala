@@ -30,6 +30,7 @@
 //    - banking
 //    - lower required parameters, arguments to bundles and objects
 //    - able to allocate >1 tables
+//    - allow bypassing out of the BROB
 //    - useful-ness port count (updating when provided prediction, separate from decrementing if no alloc
 //    - brpredictor seems to couple fetch-width and commit-width :(
 //    - do ALL the tags need to be tracked? can we compute alloc_id during prediction?

@@ -59,6 +59,7 @@ class BranchPredictionResp(implicit p: Parameters) extends BoomBundle()(p)
 // give this to each instruction/uop and pass this down the pipeline to the branch-unit
 class BranchPrediction(implicit p: Parameters) extends BoomBundle()(p)
 {
+   val bpd_predict_val  = Bool() // did the bpd predict this instruction? (ie, tag hit in the BPD)
    val bpd_predict_taken= Bool() // did the bpd predict taken for this instruction?
    val btb_hit          = Bool() // this instruction was the br/jmp predicted by the BTB
    val btb_predicted    = Bool() // Does the BTB get credit for the prediction? (FU checks)
@@ -66,7 +67,6 @@ class BranchPrediction(implicit p: Parameters) extends BoomBundle()(p)
    val is_br_or_jalr    = Bool() // is this instruction a branch or jalr?
                                  // (need to allocate brob entry).
 
-   val bpd_predict_val  = Bool() // (stat tracking) did the bpd predict this instruction? (ie, tag hit in the BPD)
 
    def wasBTB = btb_predicted
 }
