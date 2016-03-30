@@ -242,24 +242,33 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
       {
          // overrule the BTB if
          //    1. either a jump or branch occurs earlier
+         //          (bpd_jal_fire, bpd_br_fire)
          //    2. OR the BPD predicts the BTB's branch as not taken...
          //       a. and no other branch taken (bpd_nextline_fire)
          //       b. a later branch as taken (bpd_br_fire)
+         //       c. a later jump is present (bpd_jal_fire)
 
          // does the bpd predict the branch is taken too? (assuming bpd_valid)
          val bpd_agrees_with_btb = bpd_predictions(io.imem.btb_resp.bits.bridx)
 
-         bpd_jal_fire := !bpd_br_beats_jal && bpd_jal_val && (bpd_jal_idx < io.imem.btb_resp.bits.bridx)
+         bpd_jal_fire := !bpd_br_beats_jal && bpd_jal_val &&
+                           ((bpd_jal_idx < io.imem.btb_resp.bits.bridx) ||
+                           (bpd_valid && !bpd_agrees_with_btb))
          bpd_br_fire  := bpd_br_beats_jal && bpd_br_taken &&
                            (bpd_br_idx < io.imem.btb_resp.bits.bridx ||  // earlier than BTB's branch
-                           !bpd_agrees_with_btb)                         // taken later than BTB's branch
+                           (bpd_valid && !bpd_agrees_with_btb))          // taken later than BTB's branch
 
          bpd_nextline_fire := bpd_valid && !bpd_predictions.orR && !bpd_jal_val
          override_btb := bpd_valid && !bpd_agrees_with_btb
 
          when (bpd_nextline_fire)
          {
-            assert (override_btb, "[bpd_pipeline] redirecting PC without overriding the BTB")
+            assert (override_btb, "[bpd_pipeline] redirecting the PC without overriding the BTB.")
+         }
+         when (override_btb)
+         {
+            assert (bpd_nextline_fire || bpd_jal_fire || bpd_br_fire,
+               "[bpd_pipeline] overriding the BTB without redirecting the PC.")
          }
       }
       .elsewhen (btb_predicted_br_nottaken)
