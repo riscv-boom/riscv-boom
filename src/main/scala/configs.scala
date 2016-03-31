@@ -38,7 +38,7 @@ class DefaultBOOMConfig extends Config (
          case BtbKey => BtbParameters(enabled = true, nEntries = 64, nRAS = 8, updatesOutOfOrder = true)
          case FetchBufferSz => 4
 
-         // Branch Predictor
+         // Branch Predictor (enable one of the following:)
          case EnableBranchPredictor => true
          case TageKey => TageParameters(
             enabled = true,
@@ -49,6 +49,8 @@ class DefaultBOOMConfig extends Config (
          case GShareKey => GShareParameters(
             enabled = false,
             history_length = 14)
+         case RandomBpdKey => RandomBpdParameters(
+            enabled = false)
 
          // Pipelining
          case EnableFetchBufferFlowThrough => true

@@ -109,6 +109,10 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
       br_predictor = Module(new GShareBrPredictor(fetch_width = fetch_width,
                                                   history_length = p(GShareKey).history_length))
    }
+   else if (ENABLE_BRANCH_PREDICTOR && p(RandomBpdKey).enabled)
+   {
+      br_predictor = Module(new RandomBrPredictor(fetch_width = fetch_width))
+   }
    else
    {
       br_predictor = Module(new NullBrPredictor(fetch_width = fetch_width,

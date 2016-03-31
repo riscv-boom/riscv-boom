@@ -76,6 +76,11 @@ trait HasBoomCoreParameters extends rocket.HasCoreParameters
       GLOBAL_HISTORY_LENGTH = p(GShareKey).history_length
       BPD_INFO_SIZE = GShareBrPredictor.GetRespInfoSize(p)
    }
+   else if (p(RandomBpdKey).enabled)
+   {
+      GLOBAL_HISTORY_LENGTH = 1
+      BPD_INFO_SIZE = RandomBrPredictor.GetRespInfoSize(p)
+   }
    else
    {
       // TODO add support for SimpleGShare

@@ -19,7 +19,7 @@ package boom
 
 import Chisel._
 import Node._
-import cde.Parameters
+import cde.{Parameters, Field}
 
 import rocket.Str
 
@@ -176,7 +176,7 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int)(implicit p
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
 
-// act as a "null" branch predictor (it makes no predictions).
+// Act as a "null" branch predictor (it makes no predictions).
 // However, we need to instantiate a branch predictor, as it contains the Branch
 // ROB which tracks all of the inflight prediction state and performs the
 // updates at commit as necessary.
@@ -187,6 +187,42 @@ class NullBrPredictor(
 {
    io.resp.valid := Bool(false)
    io.resp.bits := new BpdResp().fromBits(Bits(0))
+}
+
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
+
+// Provide a branch predictor that generates random predictions. Good for testing!
+
+case object RandomBpdKey extends Field[RandomBpdParameters]
+case class RandomBpdParameters(enabled: Boolean = false)
+
+object RandomBrPredictor
+{
+   def GetRespInfoSize(p: Parameters): Int =
+   {
+      // Should be zero (no RespInfo needed for Random predictor), but avoid 0-width wires.
+      1
+   }
+}
+
+class RandomBrPredictor(
+   fetch_width: Int
+   )(implicit p: Parameters) extends BrPredictor(fetch_width, history_length = 1)(p)
+{
+   println ("\tBuilding Random Branch Predictor.")
+   private val rand_val = Reg(init = Bool(false))
+   rand_val := ~rand_val
+   private var lfsr= LFSR16(Bool(true))
+   def rand(width: Int) = {
+        lfsr = lfsr(lfsr.getWidth-1,1)
+        val mod = (1 << width) - 1
+          rocket.Random(mod, lfsr)
+   }
+
+   io.resp.valid := rand_val
+   io.resp.bits := new BpdResp().fromBits(Bits(0))
+   io.resp.bits.takens := rand(fetch_width)
 }
 
 
@@ -226,6 +262,8 @@ class BrobDeallocateIdx(implicit p: Parameters) extends BoomBundle()(p)
 
 // Each "entry" corresponds to a single fetch packet.
 // Each fetch packet may contain up to W branches, where W is the fetch_width.
+// this only holds the MetaData, which requires combinational/highly-ported access.
+// The meat of the BrobEntry is the BpdResp information, and is stored elsewhere.
 class BrobEntry(fetch_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
    val executed     = Vec.fill(fetch_width) {Bool()} // mark that a branch executed (and should update the predictor).
@@ -263,6 +301,7 @@ class BranchReorderBuffer(fetch_width: Int, num_entries: Int)(implicit p: Parame
    // each entry corresponds to a fetch-packet
    // ROB shouldn't send "deallocate signal" until the entire packet has finished committing.
    val entries  = Reg(Vec(num_entries, new BrobEntry(fetch_width)))
+//   val entries_info = Mem(num_entries,
    val head_ptr = Reg(init = UInt(0, log2Up(num_entries)))
    val tail_ptr = Reg(init = UInt(0, log2Up(num_entries)))
 
