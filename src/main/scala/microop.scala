@@ -24,7 +24,7 @@ class MicroOp(implicit p: Parameters) extends BoomBundle()(p)
    val uopc             = Bits(width = UOPC_SZ)       // micro-op code
    val inst             = Bits(width = 32)
    val pc               = UInt(width = coreMaxAddrBits)
-   val fu_code          = Bits(width = FUCode.FUC_SZ) // which functional unit do we use?
+   val fu_code          = Bits(width = FUConstants.FUC_SZ) // which functional unit do we use?
    val ctrl             = new CtrlSignals
 
    val wakeup_delay     = UInt(width = log2Up(MAX_WAKEUP_DELAY)) // unused

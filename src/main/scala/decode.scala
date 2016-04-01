@@ -11,8 +11,8 @@ import Node._
 import cde.Parameters
 
 import rocket.Instructions._
-import rocket._
-import FUCode._
+import rocket.{CSR,Causes}
+import FUConstants._
 import uncore.constants.MemoryOpConstants._
 
 

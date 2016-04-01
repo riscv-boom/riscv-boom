@@ -692,11 +692,12 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
 
    // Register Read <- Issue (rrd <- iss)
 
-   val register_read = Module(new RegisterRead(issue_width
-                                               , exe_units.num_rf_read_ports
-                                               , exe_units.map(_.num_rf_read_ports)
-                                               , exe_units.num_total_bypass_ports
-                                               , register_width))
+   val register_read = Module(new RegisterRead(issue_width,
+                                               exe_units.map(_.supportedFuncUnits),
+                                               exe_units.num_rf_read_ports,
+                                               exe_units.map(_.num_rf_read_ports),
+                                               exe_units.num_total_bypass_ports,
+                                               register_width))
 
    for (w <- 0 until issue_width)
    {

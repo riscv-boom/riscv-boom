@@ -22,7 +22,7 @@ import Node._
 import cde.Parameters
 import scala.collection.mutable.ArrayBuffer
 
-import FUCode._
+import FUConstants._
 import rocket.{UseFPU, XLen}
 import uncore.constants.MemoryOpConstants._
 
@@ -77,6 +77,7 @@ abstract class ExecutionUnit(val num_rf_read_ports: Int
                             , val is_mem_unit: Boolean          = false
                             , var uses_csr_wport: Boolean       = false
                             ,     is_branch_unit: Boolean       = false
+                            , val has_alu       : Boolean       = false
                             , val has_fpu       : Boolean       = false
                             , val has_mul       : Boolean       = false
                             , val has_div       : Boolean       = false
@@ -88,11 +89,23 @@ abstract class ExecutionUnit(val num_rf_read_ports: Int
 
    io.resp.map(_.bits.fflags.valid := Bool(false))
 
+   // TODO add "number of fflag ports", so we can properly account for FPU+Mem combinations
    def numBypassPorts: Int = num_bypass_stages
    def hasBranchUnit : Boolean = is_branch_unit
    def isBypassable  : Boolean = bypassable
    def hasFFlags     : Boolean = has_fpu || has_fdiv
-   // TODO add "number of fflag ports", so we can properly account for FPU+Mem combinations
+
+   def supportedFuncUnits =
+   {
+      new SupportedFuncUnits(
+         alu = has_alu,
+         bru = is_branch_unit,
+         mem = is_mem_unit,
+         muld = has_mul || has_div,
+         fpu = has_fpu,
+         csr = uses_csr_wport,
+         fdiv = has_fdiv)
+   }
 }
 
 class ALUExeUnit(is_branch_unit   : Boolean = false
@@ -110,6 +123,7 @@ class ALUExeUnit(is_branch_unit   : Boolean = false
                                       , is_mem_unit = false
                                       , uses_csr_wport = shares_csr_wport
                                       , is_branch_unit = is_branch_unit
+                                      , has_alu  = true
                                       , has_fpu  = has_fpu
                                       , has_mul  = has_mul
                                       , has_div  = has_div
@@ -445,6 +459,7 @@ class ALUMemExeUnit(is_branch_unit    : Boolean = false
                                           , is_mem_unit = true
                                           , uses_csr_wport = shares_csr_wport
                                           , is_branch_unit = is_branch_unit
+                                          , has_alu = true
                                           , has_fpu = has_fpu
                                           , has_mul = has_mul
                                           , has_div = has_div

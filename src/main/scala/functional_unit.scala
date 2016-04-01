@@ -27,7 +27,7 @@ import rocket.Util._
 import uncore.constants.MemoryOpConstants._
 
 
-object FUCode
+object FUConstants
 {
    // bit mask, since a given execution pipeline may support multiple functional units
    val FUC_SZ = 8
@@ -41,7 +41,20 @@ object FUCode
    val FU_CSR = Bits( 64, FUC_SZ)
    val FU_FDV = Bits(128, FUC_SZ)
 }
-import FUCode._
+import FUConstants._
+
+// tell the FUDecoders what units it needs to support
+class SupportedFuncUnits(
+   val alu: Boolean  = false,
+   val bru: Boolean  = false,
+   val mem: Boolean  = false,
+   val muld: Boolean = false,
+   val fpu: Boolean  = false,
+   val csr: Boolean  = false,
+   val fdiv: Boolean = false)
+{
+}
+
 
 class FunctionalUnitIo(num_stages: Int
                       , num_bypass_stages: Int

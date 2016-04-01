@@ -13,10 +13,9 @@ import Chisel._
 import Node._
 import cde.Parameters
 
-import FUCode._
+import FUConstants._
 import rocket.Str
 
-import scala.collection.mutable.ArrayBuffer
 
 //-------------------------------------------------------------
 //-------------------------------------------------------------
