@@ -159,7 +159,7 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int)(implicit p
 
    when (commit.valid)
    {
-      r_ghistory_commit_copy := Cat(r_ghistory_commit_copy, commit.bits.taken.reduce(_|_))
+      r_ghistory_commit_copy := Cat(r_ghistory_commit_copy, commit.bits.ctrl.taken.reduce(_|_))
    }
 
    if (DEBUG_PRINTF)
@@ -246,7 +246,7 @@ class RandomBrPredictor(
 
 class BrobBackendIo(fetch_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
-   val allocate = Decoupled(new BrobEntry(fetch_width)).flip // Decode/Dispatch stage, allocate new brob entry
+   val allocate = Decoupled(new BrobEntry(fetch_width)).flip // Decode/Dispatch stage, allocate new entry
    val allocate_brob_tail = UInt(OUTPUT, width = BROB_ADDR_SZ) // tell Decode which entry gets allocated
 
    val deallocate = Valid(new BrobDeallocateIdx).flip // Commmit stage, from the ROB
@@ -264,7 +264,7 @@ class BrobDeallocateIdx(implicit p: Parameters) extends BoomBundle()(p)
 // Each fetch packet may contain up to W branches, where W is the fetch_width.
 // this only holds the MetaData, which requires combinational/highly-ported access.
 // The meat of the BrobEntry is the BpdResp information, and is stored elsewhere.
-class BrobEntry(fetch_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
+class BrobEntryMetaData(fetch_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
    val executed     = Vec.fill(fetch_width) {Bool()} // mark that a branch executed (and should update the predictor).
    val taken        = Vec.fill(fetch_width) {Bool()}
@@ -275,8 +275,13 @@ class BrobEntry(fetch_width: Int)(implicit p: Parameters) extends BoomBundle()(p
    val debug_executed = Bool() // did a br or jalr get executed? verify we're not deallocating an empty entry.
    val debug_rob_idx = UInt(width = ROB_ADDR_SZ)
 
-   val info = new BpdResp // during Commit, give this back to the predictor so it can update properly
+   override def cloneType: this.type = new BrobEntryMetaData(fetch_width).asInstanceOf[this.type]
+}
 
+class BrobEntry(fetch_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
+{
+   val ctrl = new BrobEntryMetaData(fetch_width)
+   val info = new BpdResp
    override def cloneType: this.type = new BrobEntry(fetch_width).asInstanceOf[this.type]
 }
 
@@ -300,8 +305,10 @@ class BranchReorderBuffer(fetch_width: Int, num_entries: Int)(implicit p: Parame
 
    // each entry corresponds to a fetch-packet
    // ROB shouldn't send "deallocate signal" until the entire packet has finished committing.
-   val entries  = Reg(Vec(num_entries, new BrobEntry(fetch_width)))
-//   val entries_info = Mem(num_entries,
+   // for synthesis quality, break apart ctrl (highly ported) from info, which is stored until commit.
+   val entries_ctrl = Reg(Vec(num_entries, new BrobEntryMetaData(fetch_width)))
+   val entries_info = Mem(num_entries, new BpdResp)
+
    val head_ptr = Reg(init = UInt(0, log2Up(num_entries)))
    val tail_ptr = Reg(init = UInt(0, log2Up(num_entries)))
 
@@ -314,17 +321,18 @@ class BranchReorderBuffer(fetch_width: Int, num_entries: Int)(implicit p: Parame
    // -----------------------------------------------
    when (io.backend.allocate.valid)
    {
-      entries(tail_ptr) := io.backend.allocate.bits
+      entries_ctrl(tail_ptr) := io.backend.allocate.bits.ctrl
+      entries_info(tail_ptr) := io.backend.allocate.bits.info
       tail_ptr := WrapInc(tail_ptr, num_entries)
 
-      assert (tail_ptr === io.backend.allocate.bits.brob_idx,
+      assert (tail_ptr === io.backend.allocate.bits.ctrl.brob_idx,
          "[BROB] allocating the wrong entry.")
    }
    when (io.backend.deallocate.valid)
    {
       head_ptr := WrapInc(head_ptr, num_entries)
 
-      assert (entries(head_ptr).debug_executed === Bool(true),
+      assert (entries_ctrl(head_ptr).debug_executed === Bool(true),
          "[BROB] Committing an entry with no executed branches or jalrs.")
       assert (head_ptr === io.backend.deallocate.bits.brob_idx ,
          "[BROB] Committing wrong entry.")
@@ -333,11 +341,11 @@ class BranchReorderBuffer(fetch_width: Int, num_entries: Int)(implicit p: Parame
    when (r_bpd_update.valid)
    {
       val idx = GetIdx(r_bpd_update.bits.br_pc)
-      entries(r_bpd_update.bits.brob_idx).executed(idx) := r_bpd_update.bits.is_br
-      entries(r_bpd_update.bits.brob_idx).taken(idx) := r_bpd_update.bits.taken
-      entries(r_bpd_update.bits.brob_idx).debug_executed := Bool(true)
+      entries_ctrl(r_bpd_update.bits.brob_idx).executed(idx) := r_bpd_update.bits.is_br
+      entries_ctrl(r_bpd_update.bits.brob_idx).taken(idx) := r_bpd_update.bits.taken
+      entries_ctrl(r_bpd_update.bits.brob_idx).debug_executed := Bool(true)
       // update the predictor on either mispredicts or tag misses
-      entries(r_bpd_update.bits.brob_idx).mispredicted(idx) :=
+      entries_ctrl(r_bpd_update.bits.brob_idx).mispredicted(idx) :=
          r_bpd_update.bits.is_br &&
          (r_bpd_update.bits.bpd_mispredict || !r_bpd_update.bits.bpd_predict_val)
 
@@ -349,8 +357,8 @@ class BranchReorderBuffer(fetch_width: Int, num_entries: Int)(implicit p: Parame
          {
             when (UInt(w) > idx)
             {
-               entries(r_bpd_update.bits.brob_idx).executed(w) := Bool(false)
-               entries(r_bpd_update.bits.brob_idx).mispredicted(w) := Bool(false)
+               entries_ctrl(r_bpd_update.bits.brob_idx).executed(w) := Bool(false)
+               entries_ctrl(r_bpd_update.bits.brob_idx).mispredicted(w) := Bool(false)
             }
          }
 
@@ -368,7 +376,8 @@ class BranchReorderBuffer(fetch_width: Int, num_entries: Int)(implicit p: Parame
    // -----------------------------------------------
    // outputs
    io.commit_entry.valid := io.backend.deallocate.valid
-   io.commit_entry.bits := entries(head_ptr)
+   io.commit_entry.bits.ctrl := entries_ctrl(head_ptr)
+   io.commit_entry.bits.info := entries_info(head_ptr)
 
    // TODO allow filling the entire BROB ROB, instead of wasting an entry
    val full = (head_ptr === WrapInc(tail_ptr, num_entries))
@@ -386,10 +395,10 @@ class BranchReorderBuffer(fetch_width: Int, num_entries: Int)(implicit p: Parame
       {
          printf (" brob[%d] (%x) T=%x m=%x r=%d "
             , UInt(i, log2Up(num_entries))
-            , entries(i).executed.toBits
-            , entries(i).taken.toBits
-            , entries(i).mispredicted.toBits
-            , entries(i).debug_rob_idx
+            , entries_ctrl(i).executed.toBits
+            , entries_ctrl(i).taken.toBits
+            , entries_ctrl(i).mispredicted.toBits
+            , entries_ctrl(i).debug_rob_idx
             )
          printf("%s\n"
             ,  Mux(head_ptr === UInt(i) && tail_ptr === UInt(i), Str("<-HEAD TL"),

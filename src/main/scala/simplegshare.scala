@@ -114,7 +114,7 @@ class SimpleGShareBrPredictor(
 
    val commit_info = new SimpleGShareResp().fromBits(commit.bits.info.info)
    val u_idx = commit_info.index
-   counters(u_idx) := UpdateCounters(commit.valid, counters(u_idx), commit.bits.executed, commit.bits.taken)
+   counters(u_idx) := UpdateCounters(commit.valid, counters(u_idx), commit.bits.ctrl.executed, commit.bits.ctrl.taken)
 
 
    //------------------------------------------------------------

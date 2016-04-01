@@ -127,20 +127,20 @@ class GShareBrPredictor(fetch_width: Int,
    //------------------------------------------------------------
    // h-table
    // read table to update the p-table (only if a mispredict occurred)
-   val h_ren = commit.valid && commit.bits.mispredicted.reduce(_|_)
+   val h_ren = commit.valid && commit.bits.ctrl.mispredicted.reduce(_|_)
    hwq.io.deq.ready := !h_ren
    when (!h_ren && hwq.io.deq.valid)
    {
       // TODO post ChiselIssue. Chisel needs to be able to have SeqMem take a Vec of Bools
       val u_info = new GShareResp(log2Up(num_entries)).fromBits(hwq.io.deq.bits.info.info)
       val waddr = u_info.index
-      val wmask = hwq.io.deq.bits.executed
-      val wdata = Vec(hwq.io.deq.bits.taken.map(_.toUInt))
+      val wmask = hwq.io.deq.bits.ctrl.executed
+      val wdata = Vec(hwq.io.deq.bits.ctrl.taken.map(_.toUInt))
       h_table.write(waddr, wdata, wmask)
    }
    pwq.io.enq.valid          := RegNext(h_ren)
    pwq.io.enq.bits.idx       := RegNext(u_addr)
-   pwq.io.enq.bits.executed  := RegNext(commit.bits.executed.toBits)
+   pwq.io.enq.bits.executed  := RegNext(commit.bits.ctrl.executed.toBits)
    pwq.io.enq.bits.new_value := h_table.read(u_addr, h_ren).toBits
 
    //------------------------------------------------------------

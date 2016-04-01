@@ -12,14 +12,14 @@
 
 // Terminology:
 //    - provider
-//       The table that provides the prediction.
+//       The table that provides the prediction (typically the "best" prediction).
 //    - alternate
 //       The table that would have provided the prediction if the provider had
 //       missed.
 //    - CSR
 //       Circular Shift Register. Useful for folding very long histories in on
-//       itself.  Please ignore the fact that CSR refers to "Control/Status
-//       Register" elsewhere in BOOM.
+//       itself.  (Please ignore the fact that CSR refers to "Control/Status
+//       Register" elsewhere in BOOM).
 
 // TODO:
 //    - add very-long histories (VLH)
@@ -38,7 +38,7 @@
 //    stats we want to track:
 //       - how often no BTB hit and no table hit
 //       - how often entries are used
-//       - how often allocation fails
+//       - how often allocation fails (%)
 //       - how often we reset the useful-ness bits
 // SCHEMES
 //    - u-bit incremented only if alt-pred available?
@@ -46,9 +46,6 @@
 //    - frequency of clearing u-bits
 //    - 1 or 2-bit u-bits? (almost certainly 2-bits)
 //    - 2 or 3 bit counters
-//
-// DEBUGGING:
-//    - is the BROB giving us correct information? Are jumps polluting ghist_commit, etc.?
 
 package boom
 
@@ -281,9 +278,9 @@ class TageBrPredictor(
    val rand = Reg(init=UInt(0,2))
    rand := rand + UInt(1)
 
-   when (commit.valid && commit.bits.executed.reduce(_|_))
+   when (commit.valid && commit.bits.ctrl.executed.reduce(_|_))
    {
-      val correct = !commit.bits.mispredicted.reduce(_|_)
+      val correct = !commit.bits.ctrl.mispredicted.reduce(_|_)
       val info = new TageResp(
          fetch_width = fetch_width,
          num_tables = num_tables,
@@ -291,8 +288,8 @@ class TageBrPredictor(
          max_index_sz = log2Up(table_sizes.max),
          max_tag_sz = tag_sizes.max
       ).fromBits(commit.bits.info.info)
-      val takens = commit.bits.taken.toBits
-      val executed = commit.bits.executed.toBits
+      val takens = commit.bits.ctrl.taken.toBits
+      val executed = commit.bits.ctrl.executed.toBits
 
       val provider_id = info.provider_id
       val alt_id      = info.alt_id

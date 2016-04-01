@@ -600,12 +600,12 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    bpd_stage.io.brob.allocate.valid := dis_mask.reduce(_|_) &&
                                        dec_finished_mask === Bits(0) &&
                                        dec_has_br_or_jalr_in_packet
-   bpd_stage.io.brob.allocate.bits.executed.map{_ := Bool(false)}
-   bpd_stage.io.brob.allocate.bits.taken.map{_ := Bool(false)}
-   bpd_stage.io.brob.allocate.bits.mispredicted.map{_ := Bool(false)}
-   bpd_stage.io.brob.allocate.bits.debug_executed := Bool(false)
-   bpd_stage.io.brob.allocate.bits.debug_rob_idx := dis_uops(0).rob_idx
-   bpd_stage.io.brob.allocate.bits.brob_idx := dis_uops(0).brob_idx
+   bpd_stage.io.brob.allocate.bits.ctrl.executed.map{_ := Bool(false)}
+   bpd_stage.io.brob.allocate.bits.ctrl.taken.map{_ := Bool(false)}
+   bpd_stage.io.brob.allocate.bits.ctrl.mispredicted.map{_ := Bool(false)}
+   bpd_stage.io.brob.allocate.bits.ctrl.debug_executed := Bool(false)
+   bpd_stage.io.brob.allocate.bits.ctrl.debug_rob_idx := dis_uops(0).rob_idx
+   bpd_stage.io.brob.allocate.bits.ctrl.brob_idx := dis_uops(0).brob_idx
    bpd_stage.io.brob.allocate.bits.info := dec_fbundle.pred_resp.bpd_resp
 
 
