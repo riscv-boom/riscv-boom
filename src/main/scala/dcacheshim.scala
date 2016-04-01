@@ -347,13 +347,17 @@ class DCacheShim(implicit p: Parameters) extends BoomModule()(p)
    io.core.ordered := io.dmem.ordered
 
    // we handle all of the memory exceptions (unaligned and faulting) in the LSU
-   assert (!(io.core.resp.valid && RegNext(io.dmem.xcpt.ma.ld)),
+   assert (!(io.core.resp.valid && RegNext(io.dmem.xcpt.ma.ld) &&
+      io.dmem.resp.bits.tag === RegNext(RegNext(io.dmem.req.bits.tag))),
       "Data cache returned an misaligned load exception, which BOOM handles elsewhere.")
-   assert (!(io.core.resp.valid && RegNext(io.dmem.xcpt.ma.st)),
+   assert (!(io.core.resp.valid && RegNext(io.dmem.xcpt.ma.st) &&
+      io.dmem.resp.bits.tag === RegNext(RegNext(io.dmem.req.bits.tag))),
       "Data cache returned an misaligned store exception, which BOOM handles elsewhere.")
-   assert (!(io.core.resp.valid && RegNext(io.dmem.xcpt.pf.ld)),
+   assert (!(io.core.resp.valid && RegNext(io.dmem.xcpt.pf.ld) &&
+      io.dmem.resp.bits.tag === RegNext(RegNext(io.dmem.req.bits.tag))),
       "Data cache returned an faulting load exception, which BOOM handles elsewhere.")
-   assert (!(io.core.resp.valid && RegNext(io.dmem.xcpt.pf.st)),
+   assert (!(io.core.resp.valid && RegNext(io.dmem.xcpt.pf.st) &&
+      io.dmem.resp.bits.tag === RegNext(RegNext(io.dmem.req.bits.tag))),
       "Data cache returned an faulting store exception, which BOOM handles elsewhere.")
 
    //------------------------------------------------------------
