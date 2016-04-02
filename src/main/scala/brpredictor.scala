@@ -307,7 +307,7 @@ class BranchReorderBuffer(fetch_width: Int, num_entries: Int)(implicit p: Parame
    // ROB shouldn't send "deallocate signal" until the entire packet has finished committing.
    // for synthesis quality, break apart ctrl (highly ported) from info, which is stored until commit.
    val entries_ctrl = Reg(Vec(num_entries, new BrobEntryMetaData(fetch_width)))
-   val entries_info = Mem(num_entries, new BpdResp)
+   val entries_info = SeqMem(num_entries, new BpdResp)
 
    val head_ptr = Reg(init = UInt(0, log2Up(num_entries)))
    val tail_ptr = Reg(init = UInt(0, log2Up(num_entries)))
@@ -322,7 +322,7 @@ class BranchReorderBuffer(fetch_width: Int, num_entries: Int)(implicit p: Parame
    when (io.backend.allocate.valid)
    {
       entries_ctrl(tail_ptr) := io.backend.allocate.bits.ctrl
-      entries_info(tail_ptr) := io.backend.allocate.bits.info
+      entries_info.write(tail_ptr, io.backend.allocate.bits.info)
       tail_ptr := WrapInc(tail_ptr, num_entries)
 
       assert (tail_ptr === io.backend.allocate.bits.ctrl.brob_idx,
@@ -375,9 +375,11 @@ class BranchReorderBuffer(fetch_width: Int, num_entries: Int)(implicit p: Parame
 
    // -----------------------------------------------
    // outputs
-   io.commit_entry.valid := io.backend.deallocate.valid
-   io.commit_entry.bits.ctrl := entries_ctrl(head_ptr)
-   io.commit_entry.bits.info := entries_info(head_ptr)
+
+   // entries_info is a sequential memory, so buffer the rest of the bundle to match
+   io.commit_entry.valid     := RegNext(io.backend.deallocate.valid)
+   io.commit_entry.bits.ctrl := RegNext(entries_ctrl(head_ptr))
+   io.commit_entry.bits.info := entries_info.read(head_ptr, io.backend.deallocate.valid)
 
    // TODO allow filling the entire BROB ROB, instead of wasting an entry
    val full = (head_ptr === WrapInc(tail_ptr, num_entries))
