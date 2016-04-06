@@ -108,27 +108,29 @@ abstract class ExecutionUnit(val num_rf_read_ports: Int
    }
 }
 
-class ALUExeUnit(is_branch_unit   : Boolean = false
-                , shares_csr_wport: Boolean = false
-                , has_fpu         : Boolean = false
-                , has_mul         : Boolean = false
-                , has_div         : Boolean = false
-                , has_fdiv        : Boolean = false
-                , use_slow_mul    : Boolean = false
-                )(implicit p: Parameters) extends ExecutionUnit(num_rf_read_ports = if (has_fpu) 3 else 2
-                                      , num_rf_write_ports = 1
-                                      , num_bypass_stages = if (has_fpu || (has_mul && !use_slow_mul)) 3 else 1 // TODO FPU LATENCY
-                                      , data_width = if (has_fpu || has_fdiv) 65 else 64
-                                      , bypassable = true
-                                      , is_mem_unit = false
-                                      , uses_csr_wport = shares_csr_wport
-                                      , is_branch_unit = is_branch_unit
-                                      , has_alu  = true
-                                      , has_fpu  = has_fpu
-                                      , has_mul  = has_mul
-                                      , has_div  = has_div
-                                      , has_fdiv = has_fdiv
-                                      )(p)
+class ALUExeUnit(
+   is_branch_unit  : Boolean = false,
+   shares_csr_wport: Boolean = false,
+   has_fpu         : Boolean = false,
+   has_mul         : Boolean = false,
+   has_div         : Boolean = false,
+   has_fdiv        : Boolean = false,
+   use_slow_mul    : Boolean = false)
+   (implicit p: Parameters)
+   extends ExecutionUnit(
+      num_rf_read_ports = if (has_fpu) 3 else 2,
+      num_rf_write_ports = 1,
+      num_bypass_stages = if (has_fpu || (has_mul && !use_slow_mul)) p(rocket.DFMALatency) else 1,
+      data_width = if (has_fpu || has_fdiv) 65 else 64,
+      bypassable = true,
+      is_mem_unit = false,
+      uses_csr_wport = shares_csr_wport,
+      is_branch_unit = is_branch_unit,
+      has_alu  = true,
+      has_fpu  = has_fpu,
+      has_mul  = has_mul,
+      has_div  = has_div,
+      has_fdiv = has_fdiv)(p)
 {
    val has_muldiv = has_div || (has_mul && use_slow_mul)
 
@@ -136,7 +138,7 @@ class ALUExeUnit(is_branch_unit   : Boolean = false
 
    println ("     ExeUnit--")
    println ("       - ALU")
-   if (has_fpu) println ("       - FPU")
+   if (has_fpu) println ("       - FPU (Latency: " + p(rocket.DFMALatency) + ")")
    if (has_mul && !use_slow_mul) println ("       - Mul (pipelined)")
    if (has_div && has_mul && use_slow_mul) println ("       - Mul/Div (unpipelined)")
    else if (has_mul && use_slow_mul) println ("       - Mul (unpipelined)")
@@ -196,6 +198,7 @@ class ALUExeUnit(is_branch_unit   : Boolean = false
       imul.io.req.bits.kill     := io.req.bits.kill
       imul.io.brinfo <> io.brinfo
       fu_units += imul
+      if (has_fpu) require (IMUL_STAGES == p(rocket.DFMALatency))
    }
 
    // FPU Unit -----------------------
@@ -442,29 +445,31 @@ class MemExeUnit(implicit p: Parameters) extends ExecutionUnit(num_rf_read_ports
 }
 
 
-class ALUMemExeUnit(is_branch_unit    : Boolean = false
-                    , shares_csr_wport: Boolean = false
-                    , fp_mem_support  : Boolean = true // does memory need to support FP loads/stores?
-                    , has_fpu         : Boolean = false
-                    , has_mul         : Boolean = false
-                    , has_div         : Boolean = false
-                    , has_fdiv        : Boolean = false
-                    , use_slow_mul    : Boolean = false
-                    )(implicit p: Parameters) extends ExecutionUnit(num_rf_read_ports = if (has_fpu) 3 else 2
-                                          , num_rf_write_ports = 2
-                                          , num_bypass_stages = if (has_fpu || (has_mul && !use_slow_mul)) 3 else 1// TODO FPU_LATENCY
-                                          , data_width = if (fp_mem_support) 65 else 64
-                                          , num_variable_write_ports = 1
-                                          , bypassable = true
-                                          , is_mem_unit = true
-                                          , uses_csr_wport = shares_csr_wport
-                                          , is_branch_unit = is_branch_unit
-                                          , has_alu = true
-                                          , has_fpu = has_fpu
-                                          , has_mul = has_mul
-                                          , has_div = has_div
-                                          , has_fdiv = has_fdiv
-                                          )
+class ALUMemExeUnit(
+   is_branch_unit    : Boolean = false,
+   shares_csr_wport: Boolean = false,
+   fp_mem_support  : Boolean = true, // does memory need to support FP loads/stores?
+   has_fpu         : Boolean = false,
+   has_mul         : Boolean = false,
+   has_div         : Boolean = false,
+   has_fdiv        : Boolean = false,
+   use_slow_mul    : Boolean = false)
+   (implicit p: Parameters)
+   extends ExecutionUnit(
+      num_rf_read_ports = if (has_fpu) 3 else 2,
+      num_rf_write_ports = 2,
+      num_bypass_stages = if (has_fpu || (has_mul && !use_slow_mul)) p(rocket.DFMALatency) else 1,
+      data_width = if (fp_mem_support) 65 else 64,
+      num_variable_write_ports = 1,
+      bypassable = true,
+      is_mem_unit = true,
+      uses_csr_wport = shares_csr_wport,
+      is_branch_unit = is_branch_unit,
+      has_alu = true,
+      has_fpu = has_fpu,
+      has_mul = has_mul,
+      has_div = has_div,
+      has_fdiv = has_fdiv)(p)
 {
    println ("     ExeUnit--")
    println ("       - ALU")
@@ -529,6 +534,7 @@ class ALUMemExeUnit(is_branch_unit    : Boolean = false
       imul.io.req.bits.rs2_data := io.req.bits.rs2_data
       imul.io.req.bits.kill     := io.req.bits.kill
       imul.io.brinfo <> io.brinfo
+      if (has_fpu) require (IMUL_STAGES == p(rocket.DFMALatency))
    }
 
    // FPU Unit -----------------------

@@ -55,7 +55,7 @@ trait HasBoomCoreParameters extends rocket.HasCoreParameters
    //************************************
    // Pipelining
 
-   val IMUL_STAGES = 3 // TODO move this to the parameter configuration file
+   val IMUL_STAGES = p(DFMALatency)
 
    //************************************
    // Load/Store Unit

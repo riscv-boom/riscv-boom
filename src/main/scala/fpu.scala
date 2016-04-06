@@ -136,8 +136,7 @@ class FPU(implicit p: Parameters) extends BoomModule()(p)
    }
 
    // all FP units are padded out to the same latency for easy scheduling of the write port
-//   val test = p(rocket.DFMALatency) // TODO BUG why is this returning "Nothing"?
-   val fpu_latency = 3
+   val fpu_latency = p(DFMALatency)
    val io_req = io.req.bits
 
    val fp_decoder = Module(new UOPCodeFPUDecoder)
