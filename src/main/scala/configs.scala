@@ -41,13 +41,13 @@ class DefaultBOOMConfig extends Config (
          // Branch Predictor (enable one of the following:)
          case EnableBranchPredictor => true
          case TageKey => TageParameters(
-            enabled = true,
+            enabled = false,
             num_tables = 4,
             table_sizes = Seq(1024,1024,1024,1024),
             history_lengths = Seq(3,7,19,63),
             tag_sizes = Seq(10,10,10,12))
          case GShareKey => GShareParameters(
-            enabled = false,
+            enabled = true,
             history_length = 14)
          case RandomBpdKey => RandomBpdParameters(
             enabled = false)
