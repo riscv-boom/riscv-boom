@@ -404,7 +404,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    {
       val decode_unit = Module(new DecodeUnit)
       dec_valids(w)                  := fetched_inst_valid && dec_fbundle.uops(w).valid && !dec_finished_mask(w)
-      decode_unit.io.enq.uop         := dec_fbundle.uops(w)
+      decode_unit.io.enq.uop         <> dec_fbundle.uops(w)
       decode_unit.io.status          := csr_status
       decode_unit.io.interrupt       := csr_interrupt
       decode_unit.io.interrupt_cause := csr_interrupt_cause
