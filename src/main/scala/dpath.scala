@@ -557,7 +557,7 @@ class DatPath() extends Module with BOOMCoreParameters
    {
       val decode_unit = Module(new DecodeUnit)
       dec_valids(w)                  := fetched_inst_valid && dec_fbundle.uops(w).valid && !dec_finished_mask(w)
-      decode_unit.io.enq.uop         := dec_fbundle.uops(w)
+      decode_unit.io.enq.uop         <> dec_fbundle.uops(w)
       decode_unit.io.status          := csr.io.status
       decode_unit.io.interrupt       := csr.io.interrupt
       decode_unit.io.interrupt_cause := csr.io.interrupt_cause
@@ -583,7 +583,7 @@ class DatPath() extends Module with BOOMCoreParameters
                              (dec_valids(w) && dec_uops(w).is_unique)
 
       dec_will_fire(w) := dec_valids(w) && !stall_me && !kill_frontend
-      dec_uops(w)      := decode_unit.io.deq.uop
+      dec_uops(w)      <> decode_unit.io.deq.uop
    }
 
    // all decoders are empty and ready for new instructions
