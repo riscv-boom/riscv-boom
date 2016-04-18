@@ -141,6 +141,9 @@ class ExecutionUnits(implicit val p: Parameters) extends HasBoomCoreParameters
    // The slow write ports to the regfile are variable latency, and thus can't be bypassed.
    // val num_slow_wakeup_ports = exe_units.map(_.num_variable_write_ports).reduce[Int](_+_)
 
+   // TODO bug, this can return too many fflag ports,e.g., the FPU is shared with the mem unit and thus has two wb ports
+   val num_fpu_ports = exe_units.withFilter(_.hasFFlags).map(_.num_rf_write_ports).foldLeft(0)(_+_)
+
    val num_wakeup_ports = num_slow_wakeup_ports + num_fast_wakeup_ports
    val rf_cost = (num_rf_read_ports+num_rf_write_ports)*(num_rf_read_ports+2*num_rf_write_ports)
  }

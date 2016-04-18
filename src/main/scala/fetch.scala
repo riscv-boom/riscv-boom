@@ -13,6 +13,8 @@ import Chisel._
 import Node._
 import cde.Parameters
 
+import rocket.Str
+
 class FetchBundle(implicit p: Parameters) extends BoomBundle()(p)
 {
    val pc          = UInt(width = vaddrBits+1)
@@ -37,6 +39,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
       val br_unit           = new BranchUnitResp().asInput()
 
       val tsc_reg           = UInt(INPUT, xLen)
+      val irt_reg           = UInt(INPUT, xLen)
 
       val bp2_take_pc       = Bool(INPUT)
       val bp2_is_taken      = Bool(INPUT)
@@ -106,10 +109,10 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    io.imem.req.bits.pc := if_pc_next
    io.imem.resp.ready  := !(if_stalled) // TODO perf BUG || take_pc?
 
-   if_pc_next :=  Mux(io.com_exception || io.csr_take_pc, io.csr_evec,
-                  Mux(io.flush_take_pc                  , io.flush_pc,
-                  Mux(br_unit.take_pc                   , br_unit.target(vaddrBits,0),
-                                                          io.bp2_pred_target))) // bp2_take_pc
+   if_pc_next := Mux(io.com_exception || io.csr_take_pc, io.csr_evec,
+                 Mux(io.flush_take_pc                  , io.flush_pc,
+                 Mux(br_unit.take_pc                   , br_unit.target(vaddrBits,0),
+                                                         io.bp2_pred_target))) // bp2_take_pc
 
    // Fetch Buffer
    FetchBuffer.io.enq.valid := io.imem.resp.valid && !io.fetchbuffer_kill
@@ -182,4 +185,44 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    // output
    io.stalled := if_stalled
    io.resp <> FetchBuffer.io.deq
+
+
+   //-------------------------------------------------------------
+   if (DEBUG_PRINTF)
+   {
+      // Front-end
+      printf("--- Cyc=%d , ----------------- Ret: %d ----------------------------------\n  "
+         , io.tsc_reg
+         , io.irt_reg & UInt(0xffffff))
+
+      // Fetch Stage 1
+      printf("BrPred1:    (IF1_PC= n/a- Predict:n/a) ------ PC: [%s%s%s-%s for br_id:(n/a), %s %s next: 0x%x ifst:%d]\n"
+         , Mux(br_unit.brinfo.valid, Str("V"), Str("-"))
+         , Mux(br_unit.brinfo.taken, Str("T"), Str("-"))
+         , Mux(br_unit.debug_btb_pred, Str("B"), Str("_"))
+         , Mux(br_unit.brinfo.mispredict, Str(b_mgt + "MISPREDICT" + end), Str(grn + "          " + end))
+         //, bpd_stage.io.req.bits.idx
+         , Mux(take_pc, Str("TAKE_PC"), Str(" "))
+         , Mux(io.flush_take_pc, Str("FLSH"),
+           Mux(br_unit.take_pc, Str("BRU "),
+           Mux(io.bp2_take_pc && !if_stalled, Str("BP2"),
+           Mux(io.bp2_take_pc, Str("J-s"),
+                              Str(" ")))))
+         , if_pc_next
+         , if_stalled)
+
+      // Fetch Stage 2
+      printf("I$ Response: (%s) IF2_PC= 0x%x (mask:0x%x) \u001b[1;35m%s\u001b[0m  ----BrPred2:(%s,%s,%d) [btbtarg: 0x%x] jkilmsk:0x%x ->(0x%x)\n"
+         , Mux(io.imem.resp.valid && !io.kill, Str(mgt + "v" + end), Str(grn + "-" + end))
+         , io.imem.resp.bits.pc
+         , io.imem.resp.bits.mask
+         , InstsStr(io.imem.resp.bits.data.toBits, FETCH_WIDTH)
+         , Mux(io.imem.btb_resp.valid, Str("H"), Str("-"))
+         , Mux(io.imem.btb_resp.bits.taken, Str("T"), Str("-"))
+         , io.imem.btb_resp.bits.bridx
+         , io.imem.btb_resp.bits.target(19,0)
+         , io.bp2_pred_resp.mask
+         , fetch_bundle.mask
+         )
+   }
 }
