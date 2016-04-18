@@ -43,21 +43,6 @@ class BoomBundle(implicit val p: Parameters) extends junctions.ParameterizedBund
   with HasBoomCoreParameters
 
 
-class FetchBundle(implicit p: Parameters) extends BoomBundle()(p)
-{
-   val pc          = UInt(width = vaddrBits+1)
-   val insts       = Vec.fill(FETCH_WIDTH) {Bits(width = 32)}
-   val mask        = Bits(width = FETCH_WIDTH) // mark which words are valid instructions
-   val xcpt_if     = Bool()
-
-   val pred_resp   = new BranchPredictionResp
-   val predictions = Vec.fill(FETCH_WIDTH) {new BranchPrediction}
-
-   val debug_events = Vec.fill(FETCH_WIDTH) {new DebugStageEvents}
-
-  override def cloneType: this.type = new FetchBundle().asInstanceOf[this.type]
-}
-
 class CacheCounters() extends Bundle
 {
    val dc_miss = Bool()
@@ -97,7 +82,6 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    val flush_pipeline = Wire(Bool())  // kill entire pipeline (i.e., exception, load misspeculations)
 
    // Instruction Fetch State
-   val if_pc_next     = Wire(UInt(width = vaddrBits+1))
    val csr_take_pc    = Wire(Bool())
    val csr_evec       = Wire(UInt())
 
@@ -176,7 +160,6 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    // (only used for printf and vcd dumps - the actual counters are in the CSRFile)
    val tsc_reg  = Reg(init = UInt(0, xLen))
    val irt_reg  = Reg(init = UInt(0, xLen))
-   val fseq_reg = Reg(init = UInt(0, xLen))
    tsc_reg  := tsc_reg + Mux(Bool(O3PIPEVIEW_PRINTF), UInt(O3_CYCLE_TIME), UInt(1))
    irt_reg  := irt_reg + PopCount(com_valids.toBits)
    debug(tsc_reg)
@@ -219,119 +202,25 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    //-------------------------------------------------------------
    //-------------------------------------------------------------
 
-   val kill_frontend = br_unit.brinfo.mispredict || flush_pipeline
+   val fetch_unit = Module(new FetchUnit(FETCH_WIDTH))
 
-   val fetchbuffer_kill = Wire(Bool())
-   val fetch_bundle = Wire(new FetchBundle())
+   fetch_unit.io.imem <> io.imem
+   fetch_unit.io.br_unit <> br_unit
+   fetch_unit.io.tsc_reg           := tsc_reg
 
-   val FetchBuffer = Module(new Queue(gen=new FetchBundle,
-                                entries=FETCH_BUFFER_SZ,
-                                pipe=false,
-                                flow=p(EnableFetchBufferFlowThrough),
-                                _reset=(fetchbuffer_kill || reset.toBool)))
+   fetch_unit.io.bp2_take_pc       := bp2_take_pc
+   fetch_unit.io.bp2_pc_of_br_inst := bp2_pc_of_br_inst
+   fetch_unit.io.bp2_is_jump       := bp2_is_jump
+   fetch_unit.io.bp2_is_taken      := bp2_is_taken
+   fetch_unit.io.bp2_br_seen       := bp2_br_seen
+   fetch_unit.io.bp2_pred_target   := bp2_pred_target
 
-   if (O3PIPEVIEW_PRINTF)
-   {
-      when (FetchBuffer.io.enq.fire())
-      {
-         fseq_reg := fseq_reg + PopCount(FetchBuffer.io.enq.bits.mask)
-         for (i <- 0 until FETCH_WIDTH)
-         {
-            when (fetch_bundle.mask(i))
-            {
-               // TODO for now, manually set the fetch_tsc to point to when the fetch
-               // started. This doesn't properly account for i-cache and i-tlb misses. :(
-               printf("%d; O3PipeView:fetch:%d:0x%x:0:%d:DASM(%x)\n",
-                  fetch_bundle.debug_events(i).fetch_seq,
-                  tsc_reg - UInt(2*O3_CYCLE_TIME),
-                  (fetch_bundle.pc & SInt(-(FETCH_WIDTH*coreInstBytes))) + UInt(i << 2),
-                  fetch_bundle.debug_events(i).fetch_seq,
-                  fetch_bundle.insts(i))
-            }
-         }
-      }
-   }
-
-   val if_stalled = Wire(Bool()) // if FetchBuffer backs up, we have to stall the front-end
-   if_stalled := !(FetchBuffer.io.enq.ready)
-
-   val take_pc = br_unit.take_pc ||
-                 flush_take_pc ||
-                 csr_take_pc ||
-                 (bp2_take_pc && !if_stalled) // TODO this seems way too low-level, to get this backpressure signal correct
-
-   assert (!(Reg(next=com_exception) && !flush_pipeline), "exception occurred, but pipeline flush signal not set!")
-
-   io.imem.req.valid   := take_pc // tell front-end we had an unexpected change in the stream
-   io.imem.req.bits.pc := if_pc_next
-   io.imem.resp.ready  := !(if_stalled) // TODO perf BUG || take_pc?
-
-   if_pc_next :=  Mux(com_exception || csr_take_pc, csr_evec,
-                  Mux(flush_take_pc               , flush_pc,
-                  Mux(br_unit.take_pc             , br_unit.target(vaddrBits,0),
-                                                    bp2_pred_target))) // bp2_take_pc
-
-   // Fetch Buffer
-   FetchBuffer.io.enq.valid := io.imem.resp.valid && !fetchbuffer_kill
-   FetchBuffer.io.enq.bits  := fetch_bundle
-   fetchbuffer_kill         := br_unit.brinfo.mispredict || com_exception || flush_pipeline || csr_take_pc
-
-   fetch_bundle.pc := io.imem.resp.bits.pc
-   fetch_bundle.xcpt_if := io.imem.resp.bits.xcpt_if
-
-   for (i <- 0 until FETCH_WIDTH)
-   {
-      fetch_bundle.insts(i) := io.imem.resp.bits.data(i)
-
-      if (i == 0)
-         fetch_bundle.debug_events(i).fetch_seq := fseq_reg
-      else
-         fetch_bundle.debug_events(i).fetch_seq := fseq_reg +
-            PopCount(fetch_bundle.mask.toBits()(i-1,0))
-   }
-
-   if (p(EnableBTB))
-   {
-      io.imem.btb_update.valid := (br_unit.btb_update_valid ||
-                                    (bp2_take_pc && bp2_is_taken && !if_stalled && !br_unit.take_pc)) &&
-                                  !flush_take_pc &&
-                                  !csr_take_pc
-   }
-   else
-   {
-      io.imem.btb_update.valid := Bool(false)
-   }
-
-   // update the BTB
-   // If a branch is mispredicted and taken, update the BTB.
-   // (if branch unit mispredicts, instructions in decode are no longer valid)
-   io.imem.btb_update.bits.pc         := Mux(br_unit.btb_update_valid, br_unit.btb_update.pc, io.imem.resp.bits.pc)
-   io.imem.btb_update.bits.br_pc      := Mux(br_unit.btb_update_valid, br_unit.btb_update.br_pc, bp2_pc_of_br_inst)
-   io.imem.btb_update.bits.target     := Mux(br_unit.btb_update_valid, br_unit.btb_update.target,
-                                                                       bp2_pred_target & SInt(-coreInstBytes))
-   io.imem.btb_update.bits.prediction := Mux(br_unit.btb_update_valid, br_unit.btb_update.prediction, io.imem.btb_resp)
-   io.imem.btb_update.bits.taken      := Mux(br_unit.btb_update_valid, br_unit.btb_update.taken,
-                                                                       bp2_take_pc && bp2_is_taken && !if_stalled)
-   io.imem.btb_update.bits.isJump     := Mux(br_unit.btb_update_valid, br_unit.btb_update.isJump, bp2_is_jump)
-   io.imem.btb_update.bits.isReturn   := Mux(br_unit.btb_update_valid, br_unit.btb_update.isReturn, Bool(false))
-
-   // Update the BHT in the BP2 stage.
-   // Also update the BHT in the Exe stage IF and only if the branch is a misprediction.
-   // TODO move this into the bpd_pipeline
-   val bp2_bht_update = Wire(Valid(new rocket.BHTUpdate()).asOutput)
-   bp2_bht_update.valid           := io.imem.resp.valid && bp2_br_seen && !if_stalled && !br_unit.take_pc
-   bp2_bht_update.bits.prediction := io.imem.btb_resp
-   bp2_bht_update.bits.pc         := io.imem.resp.bits.pc
-   bp2_bht_update.bits.taken      := Mux(bp2_take_pc,
-                                       bp2_is_taken,
-                                       io.imem.btb_resp.valid && io.imem.btb_resp.bits.taken)
-   bp2_bht_update.bits.mispredict := bp2_take_pc
-
-   io.imem.bht_update := Mux(br_unit.brinfo.valid &&
-                             br_unit.brinfo.mispredict &&
-                             RegNext(br_unit.bht_update.valid),
-                           RegNext(br_unit.bht_update),
-                           bp2_bht_update)
+   fetch_unit.io.kill              := br_unit.brinfo.mispredict || flush_pipeline
+   fetch_unit.io.com_exception     := com_exception
+   fetch_unit.io.flush_take_pc     := flush_take_pc
+   fetch_unit.io.flush_pc          := flush_pc
+   fetch_unit.io.csr_take_pc       := csr_take_pc
+   fetch_unit.io.csr_evec          := csr_evec
 
    io.imem.invalidate := Range(0,DECODE_WIDTH).map{i => com_valids(i) && com_uops(i).is_fencei}.reduce(_|_)
 
@@ -350,18 +239,17 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    bpd_stage.io.ras_update <> io.imem.ras_update
    bpd_stage.io.br_unit := br_unit
    bpd_stage.io.kill := flush_take_pc
-   bpd_stage.io.req.ready := !if_stalled
+   bpd_stage.io.req.ready := !fetch_unit.io.stalled
 
-   bp2_take_pc := bpd_stage.io.req.valid
+   bp2_take_pc  := bpd_stage.io.req.valid
    bp2_is_taken := bpd_stage.io.req.bits.is_taken
    bp2_pred_target := bpd_stage.io.req.bits.target
    bp2_pc_of_br_inst := bpd_stage.io.req.bits.br_pc
    bp2_is_jump := bpd_stage.io.req.bits.is_jump
    bp2_br_seen := bpd_stage.io.pred_resp.br_seen
 
-   fetch_bundle.mask := io.imem.resp.bits.mask & bpd_stage.io.pred_resp.mask
-   fetch_bundle.pred_resp := bpd_stage.io.pred_resp
-   fetch_bundle.predictions := bpd_stage.io.predictions
+   fetch_unit.io.bp2_pred_resp <> bpd_stage.io.pred_resp
+   fetch_unit.io.bp2_predictions <> bpd_stage.io.predictions
 
    //-------------------------------------------------------------
    //-------------------------------------------------------------
@@ -382,9 +270,9 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    // Pull out instructions and send to the Decoders
 
    val dec_serializer = Module(new FetchSerializerNtoM)
-   dec_serializer.io.enq <> FetchBuffer.io.deq
+   dec_serializer.io.enq <> fetch_unit.io.resp
 
-   dec_serializer.io.kill := fetchbuffer_kill
+   dec_serializer.io.kill := fetch_unit.io.fetchbuffer_kill
    dec_serializer.io.deq.ready := dec_rdy
 
    val fetched_inst_valid = dec_serializer.io.deq.valid
@@ -432,7 +320,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
       dec_last_inst_was_stalled = stall_me
       dec_stall_next_inst  = stall_me || (dec_valids(w) && dec_uops(w).is_unique)
 
-      dec_will_fire(w) := dec_valids(w) && !stall_me && !kill_frontend
+      dec_will_fire(w) := dec_valids(w) && !stall_me && !fetch_unit.io.kill
       dec_uops(w)      := decode_unit.io.deq.uop
 
 
@@ -452,7 +340,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    // all decoders are empty and ready for new instructions
    dec_rdy := !(dec_stall_next_inst)
 
-   when (dec_rdy || fetchbuffer_kill)
+   when (dec_rdy || fetch_unit.io.fetchbuffer_kill)
    {
       dec_finished_mask := Bits(0)
    }
@@ -511,7 +399,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    rename_stage.io.dis_inst_can_proceed := dis_insts_can_proceed
    rename_stage.io.ren_pred_info := dec_fbundle.pred_resp
 
-   rename_stage.io.kill     := kill_frontend // mispredict or flush
+   rename_stage.io.kill     := fetch_unit.io.kill // mispredict or flush
    rename_stage.io.brinfo   := br_unit.brinfo
    rename_stage.io.get_pred.br_tag        := iss_uops(brunit_idx).br_tag
    exe_units(brunit_idx).io.get_pred.info := Reg(next=rename_stage.io.get_pred.info)
@@ -729,7 +617,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    val wb_wdata = exe_units(0).io.resp(0).bits.data
 
    csr.io.host <> io.host
-//   this isnt going to work, doesn't match up with getting data from csr file
+   // this isnt going to work, doesn't match up with getting data from csr file
    csr.io.rw.addr  := Mux(watchdog_trigger, UInt(rocket.CSRs.mtohost), exe_units(0).io.resp(0).bits.uop.csr_addr)
    csr.io.rw.cmd   := Mux(watchdog_trigger, rocket.CSR.W, csr_rw_cmd)
    csr.io.rw.wdata := Mux(watchdog_trigger, Bits(WATCHDOG_ERR_NO << 1 | 1),
@@ -823,12 +711,12 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    lsu_io.commit_store_mask := com_st_mask
    lsu_io.commit_load_mask  := com_ld_mask
 
-   lsu_io.exception         := flush_pipeline || lsu_misspec //com_exception comes too early, will fight against a branch that resolves same cycle as an exception
+   //com_exception comes too early, will fight against a branch that resolves same cycle as an exception
+   lsu_io.exception := flush_pipeline || lsu_misspec
 
    // Handle Branch Mispeculations
-   lsu_io.brinfo      := br_unit.brinfo
-   io.dmem.brinfo     := br_unit.brinfo
-
+   lsu_io.brinfo := br_unit.brinfo
+   io.dmem.brinfo := br_unit.brinfo
 
    laq_full    := lsu_io.laq_full
    stq_full    := lsu_io.stq_full
@@ -1017,6 +905,9 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
       exe_units(w).io.req.bits.kill := flush_pipeline
    }
 
+   assert (!(Reg(next=com_exception) && !flush_pipeline),
+      "[core] exception occurred, but pipeline flush signal not set!")
+
    //-------------------------------------------------------------
    //-------------------------------------------------------------
    // **** Outputs to the External World ****
@@ -1127,35 +1018,35 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
       }
 
       // Front-end
-      printf("--- Cyc=%d , ----------------- Ret: %d ----------------------------------\n  BrPred1:        (IF1_PC= n/a- Predict:n/a) ------ PC: [%s%s%s-%s for br_id: %d, %s %s next: 0x%x ifst:%d]\nI$ Response: (%s) IF2_PC= 0x%x (mask:0x%x) \u001b[1;35m%s\u001b[0m  ----BrPred2:(%s,%s,%d) [btbtarg: 0x%x] jkilmsk:0x%x ->(0x%x)\n"
-         , tsc_reg
-         , irt_reg & UInt(0xffffff)
-      // Fetch Stage 1
-         , Mux(br_unit.brinfo.valid, Str("V"), Str("-"))
-         , Mux(br_unit.brinfo.taken, Str("T"), Str("-"))
-         , Mux(br_unit.debug_btb_pred, Str("B"), Str("_"))
-         , Mux(br_unit.brinfo.mispredict, Str(b_mgt + "MISPREDICT" + end), Str(grn + "          " + end))
-         , bpd_stage.io.req.bits.idx
-         , Mux(take_pc, Str("TAKE_PC"), Str(" "))
-         , Mux(flush_take_pc, Str("FLSH"),
-           Mux(br_unit.take_pc, Str("BRU "),
-           Mux(bp2_take_pc && !if_stalled, Str("BP2"),
-           Mux(bp2_take_pc, Str("J-s"),
-                              Str(" ")))))
-         , if_pc_next
-         , if_stalled
-      // Fetch Stage 2
-         , Mux(io.imem.resp.valid && !fetchbuffer_kill, Str(mgt + "v" + end), Str(grn + "-" + end))
-         , io.imem.resp.bits.pc
-         , io.imem.resp.bits.mask
-         , InstsStr(io.imem.resp.bits.data.toBits, FETCH_WIDTH)
-         , Mux(io.imem.btb_resp.valid, Str("H"), Str("-"))
-         , Mux(io.imem.btb_resp.bits.taken, Str("T"), Str("-"))
-         , io.imem.btb_resp.bits.bridx
-         , io.imem.btb_resp.bits.target(19,0)
-         , bpd_stage.io.pred_resp.mask
-         , fetch_bundle.mask
-         )
+      //printf("--- Cyc=%d , ----------------- Ret: %d ----------------------------------\n  BrPred1:        (IF1_PC= n/a- Predict:n/a) ------ PC: [%s%s%s-%s for br_id: %d, %s %s next: 0x%x ifst:%d]\nI$ Response: (%s) IF2_PC= 0x%x (mask:0x%x) \u001b[1;35m%s\u001b[0m  ----BrPred2:(%s,%s,%d) [btbtarg: 0x%x] jkilmsk:0x%x ->(0x%x)\n"
+      //   , tsc_reg
+      //   , irt_reg & UInt(0xffffff)
+      //// Fetch Stage 1
+      //   , Mux(br_unit.brinfo.valid, Str("V"), Str("-"))
+      //   , Mux(br_unit.brinfo.taken, Str("T"), Str("-"))
+      //   , Mux(br_unit.debug_btb_pred, Str("B"), Str("_"))
+      //   , Mux(br_unit.brinfo.mispredict, Str(b_mgt + "MISPREDICT" + end), Str(grn + "          " + end))
+      //   , bpd_stage.io.req.bits.idx
+      //   , Mux(take_pc, Str("TAKE_PC"), Str(" "))
+      //   , Mux(flush_take_pc, Str("FLSH"),
+      //     Mux(br_unit.take_pc, Str("BRU "),
+      //     Mux(bp2_take_pc && !fetch_unit.if_stalled, Str("BP2"),
+      //     Mux(bp2_take_pc, Str("J-s"),
+      //                        Str(" ")))))
+      //   , if_pc_next
+      //   , fetch_unit.if_stalled
+      //// Fetch Stage 2
+      //   , Mux(io.imem.resp.valid && !fetchbuffer_kill, Str(mgt + "v" + end), Str(grn + "-" + end))
+      //   , io.imem.resp.bits.pc
+      //   , io.imem.resp.bits.mask
+      //   , InstsStr(io.imem.resp.bits.data.toBits, FETCH_WIDTH)
+      //   , Mux(io.imem.btb_resp.valid, Str("H"), Str("-"))
+      //   , Mux(io.imem.btb_resp.bits.taken, Str("T"), Str("-"))
+      //   , io.imem.btb_resp.bits.bridx
+      //   , io.imem.btb_resp.bits.target(19,0)
+      //   , bpd_stage.io.pred_resp.mask
+      //   , fetch_bundle.mask
+      //   )
 
       // Back-end
       for (w <- 0 until DECODE_WIDTH)
