@@ -69,7 +69,7 @@ class IssueUnitStatic(num_issue_slots: Int, issue_width: Int, num_wakeup_ports: 
       for (w <- 0 until DISPATCH_WIDTH)
       {
          // TODO add ctrl bit for "allocates iss_slot"
-         temp_uop_val (w) := io.dis_mask(w) &&
+         temp_uop_val (w) := io.dis_valids(w) &&
                              !dis_uops(w).exception &&
                              !dis_uops(w).is_fence &&
                              !dis_uops(w).is_fencei &&

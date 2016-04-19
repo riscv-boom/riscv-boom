@@ -22,7 +22,7 @@ import rocket.Str
 
 class IssueUnitIO(issue_width: Int, num_wakeup_ports: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
-   val dis_mask       = Vec.fill(DISPATCH_WIDTH) { Bool(INPUT) }
+   val dis_valids     = Vec.fill(DISPATCH_WIDTH) { Bool(INPUT) }
    val dis_uops       = Vec.fill(DISPATCH_WIDTH) { new MicroOp().asInput() }
    val dis_readys     = Vec.fill(DISPATCH_WIDTH) { Bool(OUTPUT) }
 
@@ -36,6 +36,7 @@ class IssueUnitIO(issue_width: Int, num_wakeup_ports: Int)(implicit p: Parameter
    val brinfo         = new BrResolutionInfo().asInput
    val flush_pipeline = Bool(INPUT)
 
+   val tsc_reg        = UInt(INPUT, xLen)
 }
 
 abstract class IssueUnit(num_issue_slots: Int, issue_width: Int, num_wakeup_ports: Int)(implicit p: Parameters)
@@ -68,6 +69,20 @@ abstract class IssueUnit(num_issue_slots: Int, issue_width: Int, num_wakeup_port
    assert (PopCount(issue_slots.map(s => s.grant)) <= UInt(issue_width), "Issue window giving out too many grants.")
 
    //-------------------------------------------------------------
+
+   if (O3PIPEVIEW_PRINTF)
+   {
+      for (i <- 0 until ISSUE_WIDTH)
+      {
+         // only print stores once!
+         when (io.iss_valids(i) && io.iss_uops(i).uopc =/= uopSTD)
+         {
+            printf("%d; O3PipeView:issue: %d\n",
+               io.iss_uops(i).debug_events.fetch_seq,
+               io.tsc_reg)
+         }
+      }
+   }
 
    if (DEBUG_PRINTF)
    {

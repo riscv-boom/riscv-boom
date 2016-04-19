@@ -33,7 +33,7 @@ class IssueUnitCollasping(num_issue_slots: Int, issue_width: Int, num_wakeup_por
    val shamt = Array.fill(num_issue_slots){Bits(width=log2Up(issue_width+1))}
 
 
-   val vacants = issue_slots.map(s => !(s.valid)) ++ io.dis_mask.map(!_.toBool)
+   val vacants = issue_slots.map(s => !(s.valid)) ++ io.dis_valids.map(!_.toBool)
    val shamts_oh = Array.fill(num_issue_slots+DISPATCH_WIDTH) {Wire(Bits(width=MAX_SHIFT))}
    // track how many to shift up this entry by by counting previous vacant spots
    def SaturatingCounterOH(count_oh:Bits, inc: Bool, max: Int): Bits =
@@ -60,7 +60,7 @@ class IssueUnitCollasping(num_issue_slots: Int, issue_width: Int, num_wakeup_por
 
    // which entries' uops will still be next cycle? (not being issued and vacated)
    val will_be_valid = (0 until num_issue_slots).map(i => issue_slots(i).will_be_valid) ++
-                       (0 until DISPATCH_WIDTH).map(i => io.dis_mask(i) &&
+                       (0 until DISPATCH_WIDTH).map(i => io.dis_valids(i) &&
                                                          !io.dis_uops(i).exception &&
                                                          !io.dis_uops(i).is_fence &&
                                                          !io.dis_uops(i).is_fencei)
