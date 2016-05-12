@@ -35,7 +35,7 @@ class DefaultBOOMConfig extends Config (
          // Front-end
          case EnableBTB => true // for now, only gates off updates to BTB
          case EnableBTBContainsBranches => true // don't send branches to BTB (but let jumps be predicted)
-         case BtbKey => BtbParameters(enabled = true, nEntries = 64, nRAS = 8, updatesOutOfOrder = true)
+         case BtbKey => BtbParameters(nEntries = 64, nRAS = 8, updatesOutOfOrder = true)
          case FetchBufferSz => 4
 
          // Branch Predictor (enable one of the following:)

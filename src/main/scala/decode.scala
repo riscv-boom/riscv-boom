@@ -180,9 +180,9 @@ object XDecode extends DecodeConstants
    SCALL   -> List(Y, N, X, uopSYSTEM,FU_CSR , RT_X  , RT_X  , RT_X  , N, IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, Y, N, CSR.I),
    SBREAK  -> List(Y, N, X, uopSYSTEM,FU_CSR , RT_X  , RT_X  , RT_X  , N, IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, Y, N, CSR.I),
    SRET    -> List(Y, N, X, uopSYSTEM,FU_CSR , RT_X  , RT_X  , RT_X  , N, IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, Y, N, CSR.I),
-   MRTS    -> List(Y, N, X, uopSYSTEM,FU_CSR , RT_X  , RT_X  , RT_X  , N, IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, Y, N, CSR.I),
+   MRET    -> List(Y, N, X, uopSYSTEM,FU_CSR , RT_X  , RT_X  , RT_X  , N, IS_I, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, Y, N, CSR.I),
 
-   WFI     -> List(Y, N, X, uopNOP   ,FU_X   , RT_X  , RT_X  , RT_X  , N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, Y, Y, CSR.N), // implemented as a NOP
+   WFI     -> List(Y, N, X, uopNOP   ,FU_X   , RT_X  , RT_X  , RT_X  , N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, Y, Y, CSR.N), // implemented as a NOP; TODO
 
    FENCE_I -> List(Y, N, X, uopNOP  , FU_X   , RT_X  , RT_X  , RT_X  , N, IS_X, N, N, N, N, Y, M_X  , MSK_X , UInt(0), N, N, N, N, Y, Y, CSR.N),
    FENCE   -> List(Y, N, X, uopFENCE, FU_MEM , RT_X  , RT_X  , RT_X  , N, IS_X, N, Y, N, Y, N, M_X  , MSK_X , UInt(0), N, N, N, N, Y, Y, CSR.N), // TODO PERF make fence higher performance
@@ -381,8 +381,6 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule()(p)
 
    uop.exception := xcpt_valid
    uop.exc_cause := xcpt_cause
-
-   uop.debug_ei_enabled := io.status.ie
 
    //-------------------------------------------------------------
 

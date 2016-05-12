@@ -203,7 +203,7 @@ class DCacheShim(implicit p: Parameters) extends BoomModule()(p)
    {
       // don't clr random entry, make sure m1_tag is correct
       inflight_load_buffer(i).clear       := (cache_load_ack && io.dmem.resp.bits.tag === UInt(i)) ||
-                                             (io.dmem.resp.bits.nack &&
+                                             (io.dmem.s2_nack &&
                                                 (m2_req_uop.is_load || m2_req_uop.is_amo) &&
                                                 m2_inflight_tag === UInt(i) &&
                                                 Reg(next=Reg(next=(enq_val && enq_rdy)))) ||
@@ -294,12 +294,12 @@ class DCacheShim(implicit p: Parameters) extends BoomModule()(p)
 
    io.core.req.ready      := enq_rdy && io.dmem.req.ready
    io.dmem.req.valid      := (io.core.req.valid || prefetch_req_val)
-   io.dmem.req.bits.kill  := io.core.req.bits.kill || iflb_kill // kills request sent out last cycle
    io.dmem.req.bits.typ   := io.core.req.bits.uop.mem_typ
    io.dmem.req.bits.addr  := io.core.req.bits.addr
    io.dmem.req.bits.tag   := new_inflight_tag
    io.dmem.req.bits.cmd   := Mux(io.core.req.valid, io.core.req.bits.uop.mem_cmd, M_PFW)
-   io.dmem.req.bits.data  := Reg(next=io.core.req.bits.data) //notice this is delayed a cycle!
+   io.dmem.s1_data        := Reg(next=io.core.req.bits.data) //notice this is delayed a cycle!
+   io.dmem.s1_kill        := io.core.req.bits.kill || iflb_kill // kills request sent out last cycle
    io.dmem.req.bits.phys  := Bool(true) // we always use physical addresses here,
                                         // as we've already done our own translations.
 
@@ -318,7 +318,7 @@ class DCacheShim(implicit p: Parameters) extends BoomModule()(p)
 
    io.core.resp.valid := Mux(cache_load_ack,
                            !inflight_load_buffer(resp_tag).was_killed, // hide loads that were killed
-                         Mux(was_store_and_not_amo && !io.dmem.resp.bits.nack && !Reg(next=io.core.req.bits.kill),
+                         Mux(was_store_and_not_amo && !io.dmem.s2_nack && !Reg(next=io.core.req.bits.kill),
                            Bool(true),    // stores succeed quietly, so valid if no nack
                            Bool(false)))  // filter out nacked responses
 
@@ -334,11 +334,11 @@ class DCacheShim(implicit p: Parameters) extends BoomModule()(p)
    //------------------------------------------------------------
    // handle nacks from the cache (or from the IFLB or the LSU)
 
-   io.core.nack.valid     := (io.dmem.resp.bits.nack) || Reg(next=io.core.req.bits.kill) || Reg(next=iflb_kill) ||
+   io.core.nack.valid     := (io.dmem.s2_nack) || Reg(next=io.core.req.bits.kill) || Reg(next=iflb_kill) ||
                               Reg(next=Reg(next=(io.core.req.valid && !(io.dmem.req.ready))))
    io.core.nack.lsu_idx   := Mux(m2_req_uop.is_load, m2_req_uop.ldq_idx, m2_req_uop.stq_idx)
    io.core.nack.isload    := m2_req_uop.is_load
-   io.core.nack.cache_nack:= io.dmem.resp.bits.nack ||
+   io.core.nack.cache_nack:= io.dmem.s2_nack ||
                               Reg(next=iflb_kill) ||
                               Reg(next=Reg(next= (!(io.dmem.req.ready))))
 

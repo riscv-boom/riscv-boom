@@ -13,11 +13,10 @@
 // Describes a RISC-V Out-of-Order processor tile
 
 package boom
-{
 
 import Chisel._
 import Node._
-import cde.Parameters
+import cde.{Parameters, Field}
 
 class BOOMTile(resetSignal: Bool = null)(implicit p: Parameters) extends rocket.Tile(resetSignal)(p)
 {
@@ -27,52 +26,49 @@ class BOOMTile(resetSignal: Bool = null)(implicit p: Parameters) extends rocket.
       case rocket.CoreName => "BOOM"})))
    val dcache = Module(new rocket.HellaCache()(dcacheParams))
    val dc_shim = Module(new DCacheShim()(dcacheParams))
-   val ptw = Module(new rocket.PTW(nPTWPorts)(dcacheParams))
 
-   val dcArb = Module(new rocket.HellaCacheArbiter(nDCachePorts)(dcacheParams))
-   dcArb.io.requestor(0) <> ptw.io.mem
-   dcArb.io.requestor(1) <> dc_shim.io.dmem
-   dcArb.io.mem <> dcache.io.cpu
-
-   ptw.io.requestor(0) <> icache.io.ptw
-   ptw.io.requestor(1) <> core.io.ptw_tlb
-
-   // the dcache's built-in TLB will be unused, but it still needs some of the
-   // status/sret signals for things such as lr/sc
-   //ptw.io.requestor(1) <> dcache.io.cpu.ptw
-   dcache.io.cpu.invalidate_lr := core.io.dmem.invalidate_lr
-   dcache.io.ptw.status <> ptw.io.requestor(1).status
-   dcache.io.ptw.invalidate := ptw.io.requestor(1).invalidate
-
-   core.io.host <> io.host
-   core.io.imem <> icache.io.cpu
+   val ptwPorts = collection.mutable.ArrayBuffer(icache.io.ptw, core.io.ptw_tlb)
+   val dcPorts = collection.mutable.ArrayBuffer(dc_shim.io.dmem)
+   val uncachedArbPorts = collection.mutable.ArrayBuffer(icache.io.mem)
+   val uncachedPorts = collection.mutable.ArrayBuffer[uncore.ClientUncachedTileLinkIO]()
+   val cachedPorts = collection.mutable.ArrayBuffer(dcache.io.mem)
+   core.io.prci <> io.prci
    core.io.dmem <> dc_shim.io.core
-   core.io.ptw_dat <> ptw.io.dpath
+   icache.io.cpu <> core.io.imem
 
-   // Connect the caches and ROCC to the outer memory system
-   io.cached.head <> dcache.io.mem
-   // If so specified, build an RoCC module and wire it in
-   // otherwise, just hookup the icache
-//   io.uncached <> p(TileKey).buildRoCC.map { buildItHere =>
-//     val rocc = buildItHere(p)
-//     val iMemArb = Module(new ClientTileLinkIOArbiter(2))
-//     val dcIF = Module(new SimpleHellaCacheIF()(dcacheParams))
-//     core.io.rocc <> rocc.io
-//     dcIF.io.requestor <> rocc.io.mem
-//     dcArb.io.requestor(2) <> dcIF.io.cache
-//     iMemArb.io.in(0) <> icache.io.mem
-//     iMemArb.io.in(1) <> rocc.io.imem
-//     ptw.io.requestor(2) <> rocc.io.iptw
-//     ptw.io.requestor(3) <> rocc.io.dptw
-//     ptw.io.requestor(4) <> rocc.io.pptw
-//     rocc.io.dmem :+ iMemArb.io.out
-//   }.getOrElse(List(icache.io.mem))
-   // TODO add ROCC tile-level connections
-   io.uncached <> Seq(icache.io.mem)
+
+   val uncachedArb = Module(new uncore.ClientUncachedTileLinkIOArbiter(uncachedArbPorts.size))
+   uncachedArb.io.in <> uncachedArbPorts
+   uncachedArb.io.out +=: uncachedPorts
+
+   // Connect the caches and RoCC to the outer memory system
+   io.uncached <> uncachedPorts
+   io.cached <> cachedPorts
+   // TODO remove nCached/nUncachedTileLinkPorts parameters and these assertions
+   require(uncachedPorts.size == nUncachedTileLinkPorts)
+   require(cachedPorts.size == nCachedTileLinkPorts)
+
+   if (p(rocket.UseVM))
+   {
+      val ptw = Module(new rocket.PTW(ptwPorts.size)(dcacheParams))
+      ptw.io.requestor <> ptwPorts
+      ptw.io.mem +=: dcPorts
+      core.io.ptw_dat <> ptw.io.dpath
+
+      // the dcache's built-in TLB will be unused, but it still needs some of the
+      // status/sret signals for things such as lr/sc
+      dcache.io.ptw.status <> ptw.io.requestor(1).status
+      dcache.io.ptw.invalidate := ptw.io.requestor(1).invalidate
+   }
+
+   val dcArb = Module(new rocket.HellaCacheArbiter(dcPorts.size)(dcacheParams))
+   dcArb.io.requestor <> dcPorts
+   dcache.io.cpu <> dcArb.io.mem
+   dcache.io.cpu.invalidate_lr := core.io.dmem.invalidate_lr
+
 
    // Cache Counters
    core.io.counters.dc_miss := dcache.io.mem.acquire.fire()
    core.io.counters.ic_miss := icache.io.mem.acquire.fire()
 }
 
-}

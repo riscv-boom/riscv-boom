@@ -101,7 +101,6 @@ class MicroOp(implicit p: Parameters) extends BoomBundle()(p)
 
    // purely debug information
    val debug_wdata      = Bits(width=xLen)
-   val debug_ei_enabled = Bool()
    val debug_events     = new DebugStageEvents
 
    def fu_code_is(_fu: Bits) = fu_code === _fu

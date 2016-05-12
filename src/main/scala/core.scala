@@ -57,9 +57,9 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
 {
    val io = new BoomBundle()(p)
    {
-      val host     = new HtifIO
-      val dmem     = new DCMemPortIO
+      val prci     = new uncore.PRCITileIO().flip
       val imem     = new rocket.FrontendIO
+      val dmem     = new DCMemPortIO
       val ptw_dat  = new rocket.DatapathPTWIO().flip
       val ptw_tlb  = new rocket.TLBPTWIO()
       val rocc     = new rocket.RoCCInterface().flip
@@ -211,7 +211,8 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    fetch_unit.io.csr_take_pc       := csr.io.csr_xcpt || csr.io.eret
    fetch_unit.io.csr_evec          := csr.io.evec
 
-   io.imem.invalidate := Range(0,DECODE_WIDTH).map{i => com_valids(i) && com_uops(i).is_fencei}.reduce(_|_)
+   io.imem.flush_icache := Range(0,DECODE_WIDTH).map{i => com_valids(i) && com_uops(i).is_fencei}.reduce(_|_)
+   io.imem.flush_tlb := csr.io.fatc
 
    //-------------------------------------------------------------
    //-------------------------------------------------------------
@@ -552,24 +553,17 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    // committing, so to get this to work I stall the entire pipeline for
    // CSR instructions so I never speculate these instructions.
 
-   // if we catch a pipeline hang, let us puke out to the tohost register so we
-   // can catch this in the hardware
-
    require (exe_units(0).uses_csr_wport)
 
    // for critical path reasons, we aren't zero'ing this out if resp is not valid
    val csr_rw_cmd = exe_units(0).io.resp(0).bits.uop.ctrl.csr_cmd
    val wb_wdata = exe_units(0).io.resp(0).bits.data
 
-   csr.io.host <> io.host
-   // this isnt going to work, doesn't match up with getting data from csr file
-   csr.io.rw.addr  := Mux(watchdog_trigger, UInt(rocket.CSRs.mtohost), exe_units(0).io.resp(0).bits.uop.csr_addr)
-   csr.io.rw.cmd   := Mux(watchdog_trigger, rocket.CSR.W, csr_rw_cmd)
-   csr.io.rw.wdata := Mux(watchdog_trigger, Bits(WATCHDOG_ERR_NO << 1 | 1),
-                      Mux(com_exception,    rob.io.com_badvaddr,
-                                            wb_wdata))
-
-   assert (!(csr_rw_cmd =/= rocket.CSR.N && !exe_units(0).io.resp(0).valid), "CSRFile is being written to spuriously.")
+   csr.io.rw.addr  := exe_units(0).io.resp(0).bits.uop.csr_addr
+   csr.io.rw.cmd   := csr_rw_cmd
+   csr.io.rw.wdata := Mux(com_exception,
+                        rob.io.com_badvaddr,
+                        wb_wdata)
 
    // Extra I/O
    csr.io.pc        := rob.io.flush_pc
@@ -583,6 +577,10 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    csr.io.fcsr_flags.bits :=  rob.io.com_fflags
 
    exe_units.map(_.io.fcsr_rm := csr.io.fcsr_rm)
+
+   csr.io.prci <> io.prci
+
+   assert (!(csr_rw_cmd =/= rocket.CSR.N && !exe_units(0).io.resp(0).valid), "CSRFile is being written to spuriously.")
 
 
    //-------------------------------------------------------------
@@ -904,7 +902,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
 
       if (DEBUG_PRINTF_ROB)
       {
-         printf(") State: (%s: %s %s %s \u001b[1;31m%s\u001b[0m %s %s) BMsk:%x Mode:%s %s\n"
+         printf(") State: (%s: %s %s %s \u001b[1;31m%s\u001b[0m %s %s) BMsk:%x Mode:%s\n"
          , Mux(rob.io.debug.state === UInt(0), Str("RESET"),
            Mux(rob.io.debug.state === UInt(1), Str("NORMAL"),
            Mux(rob.io.debug.state === UInt(2), Str("ROLLBK"),
@@ -921,7 +919,6 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
            Mux(csr.io.status.prv === Bits(0x0), Str("U"),
            Mux(csr.io.status.prv === Bits(0x1), Str("S"),  //2 is H
                                                  Str("?"))))
-         , Mux(csr.io.status.ie, Str("EI"), Str("-"))
          )
       }
 
