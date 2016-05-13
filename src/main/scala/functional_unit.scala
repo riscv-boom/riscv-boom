@@ -191,12 +191,12 @@ abstract class PipelinedFunctionalUnit(val num_stages: Int,
    // pipelined functional unit is always ready
    io.req.ready := Bool(true)
 
-   val r_valids = Reg(init = Vec.fill(num_stages) { Bool(false) })
-   val r_uops   = Reg(Vec(num_stages, new MicroOp()))
 
-
-   if (num_stages >= 1)
+   if (num_stages > 0)
    {
+      val r_valids = Reg(init = Vec.fill(num_stages) { Bool(false) })
+      val r_uops   = Reg(Vec(num_stages, new MicroOp()))
+
       // handle incoming request
       r_valids(0) := io.req.valid && !IsKilledByBranch(io.brinfo, io.req.bits.uop) && !io.req.bits.kill
       r_uops(0)   := io.req.bits.uop
@@ -220,6 +220,17 @@ abstract class PipelinedFunctionalUnit(val num_stages: Int,
       io.resp.valid    := r_valids(num_stages-1) && !IsKilledByBranch(io.brinfo, r_uops(num_stages-1))
       io.resp.bits.uop := r_uops(num_stages-1)
       io.resp.bits.uop.br_mask := GetNewBrMask(io.brinfo, r_uops(num_stages-1))
+
+      // bypassing (TODO allow bypass vector to have a different size from num_stages)
+      if (num_bypass_stages > 0 && earliest_bypass_stage == 0)
+      {
+         io.bypass.uop(0) := io.req.bits.uop
+
+         for (i <- 1 until num_bypass_stages)
+         {
+            io.bypass.uop(i) := r_uops(i-1)
+         }
+      }
    }
    else
    {
@@ -232,19 +243,6 @@ abstract class PipelinedFunctionalUnit(val num_stages: Int,
       io.resp.bits.uop := io.req.bits.uop
       io.resp.bits.uop.br_mask := GetNewBrMask(io.brinfo, io.req.bits.uop)
    }
-
-   // bypassing (TODO allow bypass vector to have a different size from num_stages)
-   if (num_bypass_stages > 0 && earliest_bypass_stage == 0)
-   {
-      io.bypass.uop(0) := io.req.bits.uop
-
-      for (i <- 1 until num_bypass_stages)
-      {
-         io.bypass.uop(i) := r_uops(i-1)
-
-      }
-   }
-
 
 }
 
