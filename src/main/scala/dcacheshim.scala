@@ -167,11 +167,12 @@ class DCMemPortIO(implicit p: Parameters) extends BoomBundle()(p)
       val cache_resp_tag = UInt(width=log2Up(MAX_LD_COUNT))
       val cache_not_ready = Bool()
 
-      val ld_req_slot = Vec.fill(MAX_LD_COUNT) { new Bundle {
-         val valid = Bool()
-         val killed = Bool()
-         val uop = new MicroOp()
-      }}
+//      val ld_req_slot = Vec.fill(MAX_LD_COUNT) { new Bundle {
+//      val ld_req_slot = Vec(MAX_LD_COUNT, new Bundle {
+//         val valid = Bool()
+//         val killed = Bool()
+//         val uop = new MicroOp()
+//      })
    }.asInput
 }
 
@@ -374,12 +375,12 @@ class DCacheShim(implicit p: Parameters) extends BoomModule()(p)
    io.core.debug.cache_resp_tag := resp_tag
    io.core.debug.cache_not_ready := !io.core.req.ready
 
-   for (i <- 0 until max_num_inflight)
-   {
-      io.core.debug.ld_req_slot(i).valid := inflight_load_buffer(i).valid
-      io.core.debug.ld_req_slot(i).killed := inflight_load_buffer(i).was_killed
-      io.core.debug.ld_req_slot(i).uop := inflight_load_buffer(i).out_uop
-   }
+//   for (i <- 0 until max_num_inflight)
+//   {
+//      io.core.debug.ld_req_slot(i).valid := inflight_load_buffer(i).valid
+//      io.core.debug.ld_req_slot(i).killed := inflight_load_buffer(i).was_killed
+//      io.core.debug.ld_req_slot(i).uop := inflight_load_buffer(i).out_uop
+//   }
 
    //------------------------------------------------------------
 

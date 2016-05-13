@@ -885,7 +885,8 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
       println("\n Chisel Printout Enabled\n")
 
       var whitespace = (63 - 3 - 12 - NUM_LSU_ENTRIES- p(NumIssueSlotEntries) - (NUM_ROB_ENTRIES/COMMIT_WIDTH)
-         - io.dmem.debug.ld_req_slot.size - NUM_BROB_ENTRIES)
+         - NUM_BROB_ENTRIES)
+//         - io.dmem.debug.ld_req_slot.size - NUM_BROB_ENTRIES)
 
       // Back-end
       for (w <- 0 until DECODE_WIDTH)
