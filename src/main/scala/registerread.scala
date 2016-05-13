@@ -20,36 +20,47 @@ import Chisel._
 import Node._
 import cde.Parameters
 
-
-class RegisterRead(issue_width: Int,
-                   supported_units_array: Seq[SupportedFuncUnits],
-                   num_total_read_ports: Int,
-                   num_read_ports_array: Seq[Int],
-                                             // each exe_unit must tell us how many max
-                                             // operands it can accept (the sum should equal
-                                             // num_total_read_ports)
-                  num_total_bypass_ports: Int,
-                  register_width: Int
-                  )(implicit p: Parameters) extends BoomModule()(p)
+class RegisterReadIO(
+   issue_width: Int,
+   num_total_read_ports: Int,
+   num_total_bypass_ports: Int,
+   register_width: Int
+)(implicit p: Parameters) extends  BoomBundle()(p)
 {
-   val io = new BoomBundle()(p)
-   {
-      // issued micro-ops
-      val iss_valids = Vec.fill(issue_width) { Bool(INPUT) }
-      val iss_uops   = Vec.fill(issue_width) { new MicroOp().asInput() }
+   // issued micro-ops
+   val iss_valids = Vec(issue_width, Bool(INPUT))
+   val iss_uops   = Vec(issue_width, new MicroOp().asInput())
 
-      // interface with register file's read ports
-      val rf_read_ports = Vec.fill(num_total_read_ports) { new RegisterFileReadPortIO(PREG_SZ, register_width) }.flip
+   // interface with register file's read ports
+   val rf_read_ports = Vec(num_total_read_ports, new RegisterFileReadPortIO(PREG_SZ, register_width).flip)
 
-      val bypass = new BypassData(num_total_bypass_ports, register_width).asInput()
+   val bypass = new BypassData(num_total_bypass_ports, register_width).asInput()
 
-      // send micro-ops to the execution pipelines
-      val exe_reqs = Vec.fill(issue_width) { (new DecoupledIO(new FuncUnitReq(register_width))) }
+   // send micro-ops to the execution pipelines
+   val exe_reqs = Vec(issue_width, (new DecoupledIO(new FuncUnitReq(register_width))))
 
-      val kill   = Bool(INPUT)
-      val brinfo = new BrResolutionInfo().asInput
-   }
+   val kill   = Bool(INPUT)
+   val brinfo = new BrResolutionInfo().asInput
 
+   override def cloneType =
+      new RegisterReadIO(issue_width, num_total_read_ports, num_total_bypass_ports, register_width
+   )(p).asInstanceOf[this.type]
+}
+
+
+class RegisterRead(
+   issue_width: Int,
+   supported_units_array: Seq[SupportedFuncUnits],
+   num_total_read_ports: Int,
+   num_read_ports_array: Seq[Int],
+                         // each exe_unit must tell us how many max
+                         // operands it can accept (the sum should equal
+                         // num_total_read_ports)
+   num_total_bypass_ports: Int,
+   register_width: Int
+)(implicit p: Parameters) extends BoomModule()(p)
+{
+   val io = new RegisterReadIO(issue_width, num_total_read_ports, num_total_bypass_ports, register_width)
 
    val rrd_valids       = Wire(Vec(issue_width, Bool()))
    val rrd_uops         = Wire(Vec(issue_width, new MicroOp()))

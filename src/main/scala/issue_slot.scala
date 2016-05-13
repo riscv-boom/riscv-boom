@@ -16,7 +16,7 @@ import Node._
 import FUConstants._
 import cde.Parameters
 
-class IssueSlotIo(num_wakeup_ports: Int)(implicit p: Parameters) extends BoomBundle()(p)
+class IssueSlotIO(num_wakeup_ports: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
    val valid          = Bool(OUTPUT)
    val will_be_valid  = Bool(OUTPUT) // TODO code review, do we need this signal so explicitely?
@@ -28,7 +28,7 @@ class IssueSlotIo(num_wakeup_ports: Int)(implicit p: Parameters) extends BoomBun
    val kill           = Bool(INPUT) // pipeline flush
    val clear          = Bool(INPUT) // entry being moved elsewhere (not mutually exclusive with grant)
 
-   val wakeup_dsts    = Vec.fill(num_wakeup_ports) {Valid(UInt(width = PREG_SZ)).flip}
+   val wakeup_dsts    = Vec(num_wakeup_ports, Valid(UInt(width = PREG_SZ)).flip)
    val in_uop         = Valid(new MicroOp()).flip // if valid, this WILL overwrite an entry!
    val updated_uop    = new MicroOp().asOutput() // the updated slot uop; will be shifted upwards in a collasping queue.
    val uop            = new MicroOp().asOutput() // the current Slot's uop. Sent down the pipeline when issued.
@@ -38,11 +38,13 @@ class IssueSlotIo(num_wakeup_ports: Int)(implicit p: Parameters) extends BoomBun
       val p2 = Bool()
       val p3 = Bool()
    }.asOutput
+
+   override def cloneType = new IssueSlotIO(num_wakeup_ports)(p).asInstanceOf[this.type]
 }
 
 class IssueSlot(num_slow_wakeup_ports: Int)(implicit p: Parameters) extends BoomModule()(p)
 {
-   val io = new IssueSlotIo(num_slow_wakeup_ports)
+   val io = new IssueSlotIO(num_slow_wakeup_ports)
 
    // slot invalid?
    // slot is valid, holding 1 uop

@@ -22,16 +22,16 @@ import rocket.Str
 
 class IssueUnitIO(issue_width: Int, num_wakeup_ports: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
-   val dis_valids     = Vec.fill(DISPATCH_WIDTH) { Bool(INPUT) }
-   val dis_uops       = Vec.fill(DISPATCH_WIDTH) { new MicroOp().asInput() }
-   val dis_readys     = Vec.fill(DISPATCH_WIDTH) { Bool(OUTPUT) }
+   val dis_valids     = Vec(DISPATCH_WIDTH, Bool(INPUT))
+   val dis_uops       = Vec(DISPATCH_WIDTH, new MicroOp().asInput())
+   val dis_readys     = Vec(DISPATCH_WIDTH, Bool(OUTPUT))
 
-   val iss_valids     = Vec.fill(issue_width) { Bool(OUTPUT) }
-   val iss_uops       = Vec.fill(issue_width) { new MicroOp().asOutput() }
-   val wakeup_pdsts   = Vec.fill(num_wakeup_ports) { Valid(UInt(width=PREG_SZ)).flip }
+   val iss_valids     = Vec(issue_width, Bool(OUTPUT))
+   val iss_uops       = Vec(issue_width, new MicroOp().asOutput())
+   val wakeup_pdsts   = Vec(num_wakeup_ports, Valid(UInt(width=PREG_SZ)).flip)
 
    // tell the issue unit what each execution pipeline has in terms of functional units
-   val fu_types       = Vec.fill(issue_width) { Bits(INPUT, FUC_SZ) }
+   val fu_types       = Vec(issue_width, Bits(INPUT, FUC_SZ))
 
    val brinfo         = new BrResolutionInfo().asInput
    val flush_pipeline = Bool(INPUT)
