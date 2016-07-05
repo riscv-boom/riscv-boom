@@ -560,7 +560,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    val wb_wdata = exe_units(0).io.resp(0).bits.data
 
    csr.io.rw.addr  := exe_units(0).io.resp(0).bits.uop.csr_addr
-   csr.io.rw.cmd   := csr_rw_cmd
+   csr.io.rw.cmd   := Mux(exe_units(0).io.resp(0).valid, csr_rw_cmd, rocket.CSR.N)
    csr.io.rw.wdata := Mux(com_exception,
                         rob.io.com_badvaddr,
                         wb_wdata)
@@ -580,7 +580,8 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
 
    csr.io.prci <> io.prci
 
-   assert (!(csr_rw_cmd =/= rocket.CSR.N && !exe_units(0).io.resp(0).valid), "CSRFile is being written to spuriously.")
+// TODO can we add this back in, but handle reset properly and save us the mux above on csr.io.rw.cmd?
+//   assert (!(csr_rw_cmd =/= rocket.CSR.N && !exe_units(0).io.resp(0).valid), "CSRFile is being written to spuriously.")
 
 
    //-------------------------------------------------------------
@@ -631,6 +632,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
 
    lsu_io.commit_store_mask := rob.io.com_st_mask
    lsu_io.commit_load_mask  := rob.io.com_ld_mask
+   lsu_io.commit_load_at_rob_head := rob.io.com_load_is_at_rob_head
 
    //com_exception comes too early, will fight against a branch that resolves same cycle as an exception
    lsu_io.exception := rob.io.flush_pipeline || rob.io.lsu_misspec
@@ -884,9 +886,10 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    {
       println("\n Chisel Printout Enabled\n")
 
-      var whitespace = (63 - 3 - 12 - NUM_LSU_ENTRIES- p(NumIssueSlotEntries) - (NUM_ROB_ENTRIES/COMMIT_WIDTH)
-         - NUM_BROB_ENTRIES)
-//         - io.dmem.debug.ld_req_slot.size - NUM_BROB_ENTRIES)
+      var whitespace = (104 - 3 - 12  - NUM_LSU_ENTRIES- p(NumIssueSlotEntries) - (NUM_ROB_ENTRIES/COMMIT_WIDTH)
+         - NUM_BROB_ENTRIES
+//         - io.dmem.debug.ld_req_slot.size
+      )
 
       // Back-end
       for (w <- 0 until DECODE_WIDTH)

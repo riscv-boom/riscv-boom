@@ -101,6 +101,10 @@ class RobIo(machine_width: Int
    val lsu_clr_bsy_valid = Bool(INPUT)
    val lsu_clr_bsy_rob_idx = UInt(INPUT, ROB_ADDR_SZ)
 
+   // tell the LSU that the head of the ROB is a load
+   // (some loads can only execute once they are at the head of the ROB).
+   val com_load_is_at_rob_head = Bool(OUTPUT)
+
    // Handle Exceptions/ROB Rollback
    val com_exception    = Bool(OUTPUT)
    val com_exc_cause    = UInt(OUTPUT, xLen)
@@ -863,6 +867,8 @@ class Rob(width: Int
       io.com_st_mask(w) := io.com_valids(w) && rob_head_is_store(w)
       io.com_ld_mask(w) := io.com_valids(w) && rob_head_is_load(w)
    }
+
+   io.com_load_is_at_rob_head := rob_head_is_load(PriorityEncoder(rob_head_vals.toBits))
 
    //--------------------------------------------------
    // Handle passing out signals to printf in dpath

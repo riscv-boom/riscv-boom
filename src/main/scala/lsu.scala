@@ -37,7 +37,6 @@
 // Story style.
 
 // TODO:
-//    - wake up sleeping loads that aren't at the head of the LAQ
 //    - Add predicting structure for ordering failures
 //    - currently won't STD forward if DMEM is busy
 //    - ability to turn off things if VM is disabled
@@ -73,6 +72,7 @@ class LoadStoreUnitIO(pl_width: Int)(implicit p: Parameters) extends BoomBundle(
    // Commit Stage
    val commit_store_mask  = Vec.fill(pl_width) {Bool(INPUT)}
    val commit_load_mask   = Vec.fill(pl_width) {Bool(INPUT)}
+   val commit_load_at_rob_head = Bool(INPUT)
 
    // Send out Memory Request
    val memreq_val         = Bool(OUTPUT)
@@ -142,16 +142,16 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
 
 
    // Load-Address Queue
-//   val laq_addr_val  = Reg(init=UInt(0,width=num_ld_entries))  //TODO buggy due to chisel - try again soon
-   val laq_addr_val  = Reg(Vec(num_ld_entries, Bool()))
-   val laq_addr      = Mem(num_ld_entries, UInt(width=coreMaxAddrBits))
+   val laq_addr_val       = Reg(Vec(num_ld_entries, Bool()))
+   val laq_addr           = Mem(num_ld_entries, UInt(width=coreMaxAddrBits))
 
-   val laq_allocated = Reg(Vec(num_ld_entries, Bool())) // entry has been allocated
-   val laq_is_virtual= Reg(Vec(num_ld_entries, Bool())) // address in LAQ is a virtual address. There was a tlb_miss and a retry is required.
-   val laq_executed  = Reg(Vec(num_ld_entries, Bool())) // load has been issued to memory (immediately set this bit)
-   val laq_succeeded = Reg(Vec(num_ld_entries, Bool())) // load has returned from memory, but may still have an ordering failure
-   val laq_failure   = Reg(init = Vec.fill(num_ld_entries) { Bool(false) })  // ordering fail, must retry (at commit time, which requires a rollback)
-   val laq_uop       = Reg(Vec(num_ld_entries, new MicroOp()))
+   val laq_allocated      = Reg(Vec(num_ld_entries, Bool())) // entry has been allocated
+   val laq_is_virtual     = Reg(Vec(num_ld_entries, Bool())) // address in LAQ is a virtual address. There was a tlb_miss and a retry is required.
+   val laq_is_uncacheable = Reg(Vec(num_ld_entries, Bool())) // address in LAQ is an uncacheable address. Can only execute once it's the head of the ROB
+   val laq_executed       = Reg(Vec(num_ld_entries, Bool())) // load has been issued to memory (immediately set this bit)
+   val laq_succeeded      = Reg(Vec(num_ld_entries, Bool())) // load has returned from memory, but may still have an ordering failure
+   val laq_failure        = Reg(init = Vec.fill(num_ld_entries) { Bool(false) })  // ordering fail, must retry (at commit time, which requires a rollback)
+   val laq_uop            = Reg(Vec(num_ld_entries, new MicroOp()))
    //laq_uop.stq_idx between oldest and youngest (dep_mask can't establish age :( ), "aka store coloring" if you're Intel
 //   val laq_request   = Vec.fill(num_ld_entries) { Reg(resetVal = Bool(false)) } // TODO sleeper load requesting issue to memory (perhaps stores broadcast, sees its store-set finished up)
 
@@ -179,7 +179,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
    // TODO not convinced I actually need stq_entry_val; I think other ctrl signals gate this off
    val stq_entry_val = Reg(Vec(num_st_entries, Bool())) // this may be valid, but not TRUE (on exceptions, this doesn't get cleared but STQ_TAIL gets moved)
    val stq_executed  = Reg(Vec(num_st_entries, Bool())) // sent to mem
-   val stq_succeeded = Reg(Vec(num_st_entries, Bool())) // returned  TODO is this needed, or can we just advance the stq_head?
+   val stq_succeeded = Reg(Vec(num_st_entries, Bool())) // returned TODO is this needed, or can we just advance the stq_head?
    val stq_committed = Reg(Vec(num_st_entries, Bool())) // the ROB has committed us, so we can now send our store to memory
 
 
@@ -395,10 +395,13 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
    val tlb_miss = dtlb.io.req.valid && (dtlb.io.resp.miss || !dtlb.io.req.ready)
 
 
+
    // output
    val exe_tlb_paddr = Cat(dtlb.io.resp.ppn, exe_vaddr(corePgIdxBits-1,0))
 
-
+   // check if a load is uncacheable - must stop it from executing speculatively,
+   // as it might have side-effects!
+   val tlb_addr_uncacheable = !(addrMap.isCacheable(exe_tlb_paddr))
 
    //-------------------------------------
    // Can-fire Logic & Wakeup/Retry Select
@@ -406,16 +409,18 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
    // *** Wakeup Load from LAQ ***
    can_fire_load_wakeup := Bool(false)
 
-   // TODO for now, only execute the sleeping load at the head of the LAQ (wasteful if the laq_head has hady been executed)
    // TODO make option to only wakeup load at the head (to compare to old behavior)
-   val exe_ld_idx_wakeup = AgePriorityEncoder((0 until num_ld_entries).map(i => laq_addr_val(i) & ~laq_executed(i)), laq_head)
+   val exe_ld_idx_wakeup =
+      AgePriorityEncoder((0 until num_ld_entries).map(i => laq_addr_val(i) & ~laq_executed(i)), laq_head)
 
 
-   when (laq_addr_val   (exe_ld_idx_wakeup) &&
-         !laq_is_virtual(exe_ld_idx_wakeup) &&
-         laq_allocated  (exe_ld_idx_wakeup) &&
-         !laq_executed  (exe_ld_idx_wakeup) &&
-         !laq_failure   (exe_ld_idx_wakeup))
+   when (laq_addr_val       (exe_ld_idx_wakeup) &&
+         !laq_is_virtual    (exe_ld_idx_wakeup) &&
+         laq_allocated      (exe_ld_idx_wakeup) &&
+         !laq_executed      (exe_ld_idx_wakeup) &&
+         !laq_failure       (exe_ld_idx_wakeup) &&
+         (!laq_is_uncacheable(exe_ld_idx_wakeup) || (io.commit_load_at_rob_head && laq_head === exe_ld_idx_wakeup))
+         )
    {
       can_fire_load_wakeup := Bool(true)
    }
@@ -471,12 +476,6 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
    assert (stq_entry_val(stq_execute_head) ||
             stq_head === stq_execute_head || stq_tail === stq_execute_head,
             "stq_execute_head got off track.")
-//   when (!(stq_entry_val(stq_execute_head) ||
-//            stq_head === stq_execute_head || stq_tail === stq_execute_head))
-//   {
-//      printf("stq_execute_head got off track.: %d, %d, %d", stq_head, stq_execute_head, stq_tail)
-//   }
-
 
    //-------------------------
    // Issue Someting to Memory
@@ -533,10 +532,11 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
 
    when (will_fire_load_incoming || will_fire_load_retry)
    {
-      laq_addr_val  (exe_tlb_uop.ldq_idx)      := Bool(true)
-      laq_addr      (exe_tlb_uop.ldq_idx)      := Mux(tlb_miss, exe_vaddr, exe_tlb_paddr)
-      laq_uop       (exe_tlb_uop.ldq_idx).pdst := exe_tlb_uop.pdst
-      laq_is_virtual(exe_tlb_uop.ldq_idx)      := tlb_miss
+      laq_addr_val      (exe_tlb_uop.ldq_idx)      := Bool(true)
+      laq_addr          (exe_tlb_uop.ldq_idx)      := Mux(tlb_miss, exe_vaddr, exe_tlb_paddr)
+      laq_uop           (exe_tlb_uop.ldq_idx).pdst := exe_tlb_uop.pdst
+      laq_is_virtual    (exe_tlb_uop.ldq_idx)      := tlb_miss
+      laq_is_uncacheable(exe_tlb_uop.ldq_idx)      := tlb_addr_uncacheable && !tlb_miss
    }
 
    when (will_fire_sta_incoming || will_fire_sta_retry)
@@ -566,6 +566,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
    val mem_tlb_uop      = Reg(next=exe_tlb_uop) // not valid for std_incoming!
    mem_tlb_uop.br_mask := GetNewBrMask(io.brinfo, exe_tlb_uop)
    val mem_tlb_miss     = Reg(next=tlb_miss, init=Bool(false))
+   val mem_tlb_uncacheable = Reg(next=tlb_addr_uncacheable, init=Bool(false))
    val mem_ld_used_tlb  = RegNext(will_fire_load_incoming || will_fire_load_retry)
 
    // the load address that will search the SAQ (either a fast load or a retry load)
@@ -581,7 +582,11 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
    val mem_fired_std = Reg(next=will_fire_std_incoming, init=Bool(false))
 
    mem_ld_killed := Bool(false)
-   when (Reg(next=(IsKilledByBranch(io.brinfo, exe_ld_uop) || io.exception)) || io.exception)
+   when (Reg(next=
+         (IsKilledByBranch(io.brinfo, exe_ld_uop) ||
+         io.exception ||
+         (tlb_addr_uncacheable && dtlb.io.req.valid))) ||
+      io.exception)
    {
       mem_ld_killed := Bool(true) && mem_fired_ld
    }
@@ -976,6 +981,10 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
       val idx = temp_laq_head
       when (io.commit_load_mask(w))
       {
+         assert (laq_allocated(idx), "[lsu] trying to commit an un-allocated load entry.")
+         assert (laq_executed(idx), "[lsu] trying to commit an un-executed load entry.")
+         assert (laq_succeeded(idx), "[lsu] trying to commit an un-succeeded load entry.")
+
          laq_allocated(idx)         := Bool(false)
          laq_addr_val (idx)         := Bool(false)
          laq_executed (idx)         := Bool(false)
@@ -1152,18 +1161,19 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
 
    if (DEBUG_PRINTF_LSU)
    {
-      printf("wakeup_idx: %d\n", exe_ld_idx_wakeup)
+      printf("wakeup_idx: %d, ld is head of ROB:%d\n", exe_ld_idx_wakeup, io.commit_load_at_rob_head)
       for (i <- 0 until NUM_LSU_ENTRIES)
       {
          val t_laddr = laq_addr(i)
          val t_saddr = saq_addr(i)
-         printf("         ldq[%d]=(%s%s%s%s%s%s%d) st_dep(%d,m=%x) 0x%x %s %s   saq[%d]=(%s%s%s%s%s%s%s) b:%x 0x%x -> 0x%x %s %s %s %s\n"
+         printf("         ldq[%d]=(%s%s%s%s%s%s%s%d) st_dep(%d,m=%x) 0x%x %s %s   saq[%d]=(%s%s%s%s%s%s%s) b:%x 0x%x -> 0x%x %s %s %s %s\n"
             , UInt(i, MEM_ADDR_SZ)
             , Mux(laq_allocated(i), Str("V"), Str("-"))
             , Mux(laq_addr_val(i), Str("A"), Str("-"))
             , Mux(laq_executed(i), Str("E"), Str("-"))
             , Mux(laq_succeeded(i), Str("S"), Str("-"))
             , Mux(laq_failure(i), Str("F"), Str("_"))
+            , Mux(laq_is_uncacheable(i), Str("U"), Str("_"))
             , Mux(laq_forwarded_std_val(i), Str("X"), Str("_"))
             , laq_forwarded_stq_idx(i)
             , laq_uop(i).stq_idx // youngest dep-store

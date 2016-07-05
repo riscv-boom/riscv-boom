@@ -361,6 +361,7 @@ class MemExeUnit(implicit p: Parameters) extends ExecutionUnit(num_rf_read_ports
 
    lsu.io.commit_store_mask := io.lsu_io.commit_store_mask
    lsu.io.commit_load_mask  := io.lsu_io.commit_load_mask
+   lsu.io.commit_load_at_rob_head := io.lsu_io.commit_load_at_rob_head
 
    lsu.io.brinfo            := io.brinfo
    lsu.io.exception         := io.lsu_io.exception
@@ -656,6 +657,7 @@ class ALUMemExeUnit(
 
    lsu.io.commit_store_mask := io.lsu_io.commit_store_mask
    lsu.io.commit_load_mask  := io.lsu_io.commit_load_mask
+   lsu.io.commit_load_at_rob_head := io.lsu_io.commit_load_at_rob_head
 
    lsu.io.brinfo            := io.brinfo
    lsu.io.exception         := io.lsu_io.exception
