@@ -15,7 +15,6 @@ package constants
 {
 
 import Chisel._
-import Node._
 import cde.Parameters
 
 trait BOOMDebugConstants

@@ -12,7 +12,6 @@
 package boom
 
 import Chisel._
-import Node._
 import cde.Parameters
 
 import rocket.ALU._

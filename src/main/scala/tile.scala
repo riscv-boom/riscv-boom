@@ -15,7 +15,6 @@
 package boom
 
 import Chisel._
-import Node._
 import cde.{Parameters, Field}
 
 class BOOMTile(resetSignal: Bool = null)(implicit p: Parameters) extends rocket.Tile(resetSignal)(p)

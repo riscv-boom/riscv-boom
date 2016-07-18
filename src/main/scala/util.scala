@@ -11,7 +11,6 @@ package boom
 {
 
 import Chisel._
-import Node._
 
 import rocket.Instructions._
 import rocket._

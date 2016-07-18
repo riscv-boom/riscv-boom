@@ -28,7 +28,6 @@
 package boom
 
 import Chisel._
-import Node._
 import scala.math.ceil
 import cde.Parameters
 import rocket.Str

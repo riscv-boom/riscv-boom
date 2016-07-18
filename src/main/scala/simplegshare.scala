@@ -25,7 +25,6 @@
 package boom
 
 import Chisel._
-import Node._
 import cde.{Parameters, Field}
 
 // TODO provide the parameter hooks to support instantiating SimpleGShare

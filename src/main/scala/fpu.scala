@@ -9,7 +9,6 @@ package boom
    // Note: (this FPU currently only supports fixed latency ops)
 
 import Chisel._
-import Node._
 import cde.Parameters
 
 import rocket.FPConstants._

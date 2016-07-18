@@ -50,7 +50,6 @@
 package boom
 
 import Chisel._
-import Node._
 import cde.{Parameters, Field}
 
 import rocket.Str
