@@ -245,7 +245,7 @@ class DCacheShim(implicit p: Parameters) extends BoomModule()(p)
    val enq_can_occur = enq_val && enq_rdy
 
    val enq_idx_1h = (Bits(1) << enq_idx) &
-                    Fill(enq_can_occur, max_num_inflight)
+                    Fill(max_num_inflight, enq_can_occur)
 
 
    for (i <- 0 until max_num_inflight)

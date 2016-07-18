@@ -211,11 +211,11 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
          , if_stalled)
 
       // Fetch Stage 2
-      printf("I$ Response: (%s) IF2_PC= 0x%x (mask:0x%x) \u001b[1;35m%s\u001b[0m  ----BrPred2:(%s,%s,%d) [btbtarg: 0x%x] jkilmsk:0x%x ->(0x%x)\n"
+      printf("I$ Response: (%s) IF2_PC= 0x%x (mask:0x%x) \u001b[1;35m TODO need Str in Chisel3\u001b[0m  ----BrPred2:(%s,%s,%d) [btbtarg: 0x%x] jkilmsk:0x%x ->(0x%x)\n"
          , Mux(io.imem.resp.valid && !io.kill, Str(mgt + "v" + end), Str(grn + "-" + end))
          , io.imem.resp.bits.pc
          , io.imem.resp.bits.mask
-         , InstsStr(io.imem.resp.bits.data.toBits, FETCH_WIDTH)
+         //, InstsStr(io.imem.resp.bits.data.toBits, FETCH_WIDTH)
          , Mux(io.imem.btb_resp.valid, Str("H"), Str("-"))
          , Mux(io.imem.btb_resp.bits.taken, Str("T"), Str("-"))
          , io.imem.btb_resp.bits.bridx

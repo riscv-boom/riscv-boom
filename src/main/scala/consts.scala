@@ -375,24 +375,24 @@ trait RISCVConstants
 
    def ComputeBranchTarget(pc: UInt, inst: Bits, xlen: Int, coreInstBytes: Int): UInt =
    {
-      val b_imm32 = Cat(Fill(inst(31),20), inst(7), inst(30,25), inst(11,8), Bits(0,1))
+      val b_imm32 = Cat(Fill(20,inst(31)), inst(7), inst(30,25), inst(11,8), Bits(0,1))
       (pc + Sext(b_imm32, xlen)).toBits & SInt(-coreInstBytes)
    }
    def ComputeJALTarget(pc: UInt, inst: Bits, xlen: Int, coreInstBytes: Int): UInt =
    {
-      val j_imm32 = Cat(Fill(inst(31),12), inst(19,12), inst(20), inst(30,25), inst(24,21), Bits(0,1))
+      val j_imm32 = Cat(Fill(12,inst(31)), inst(19,12), inst(20), inst(30,25), inst(24,21), Bits(0,1))
       (pc + Sext(j_imm32, xlen)).toBits & SInt(-coreInstBytes)
    }
 
 
    def InstsStr(insts: Bits, width: Int) =
    {
-      var string = sprintf("")
-      for (w <- 0 until width)
-      {
-         string = sprintf("%s(DASM(%x))", string, insts(((w+1)*32)-1,w*32))
-      }
-      string
+      //var string = Str("") //sprintf("") XXX TODO sprintf is missing in chisel3
+      //for (w <- 0 until width)
+      //{
+      //   string = sprintf("%s(DASM(%x))", string, insts(((w+1)*32)-1,w*32))
+      //}
+      //string
    }
 
 

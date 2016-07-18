@@ -111,7 +111,7 @@ object Sext
 {
    def apply(x: Bits, length: Int): Bits =
    {
-      return Cat(Fill(x(x.getWidth-1), (length-x.getWidth)), x)
+      return Cat(Fill(length-x.getWidth, x(x.getWidth-1)), x)
    }
 }
 
@@ -174,8 +174,8 @@ object DebugGetBJImm
 
    val is_br = (inst(6,0) === UInt("b1100011"))
 
-   val br_targ = Cat(Fill(inst(31),12), Fill(inst(31),8), inst(7), inst(30,25), inst(11,8), Bits(0,1))
-   val jal_targ= Cat(Fill(inst(31),12), inst(19,12), inst(20), inst(30,25), inst(24,21), Bits(0,1))
+   val br_targ = Cat(Fill(12, inst(31)), Fill(8,inst(31)), inst(7), inst(30,25), inst(11,8), Bits(0,1))
+   val jal_targ= Cat(Fill(12, inst(31)), inst(19,12), inst(20), inst(30,25), inst(24,21), Bits(0,1))
 
    Mux(is_br, br_targ, jal_targ)
   }
