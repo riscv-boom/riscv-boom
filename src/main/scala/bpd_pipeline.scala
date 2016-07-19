@@ -316,7 +316,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    private def KillMask(m_enable: Bool, m_idx: UInt, m_width: Int): UInt =
    {
       val mask = Wire(Bits(width = m_width))
-      mask := Fill(m_width, m_enable) & (SInt(-1, m_width) << UInt(1) << m_idx)
+      mask := Fill(m_width, m_enable) & (Fill(m_width, UInt(1)) << UInt(1) << m_idx)
       mask
    }
    // mask out instructions after predicted branch

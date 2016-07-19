@@ -378,12 +378,13 @@ trait RISCVConstants
    def ComputeBranchTarget(pc: UInt, inst: UInt, xlen: Int, coreInstBytes: Int): UInt =
    {
       val b_imm32 = Cat(Fill(20,inst(31)), inst(7), inst(30,25), inst(11,8), UInt(0,1))
-      (pc + Sext(b_imm32, xlen)) & SInt(-coreInstBytes)
+//      (pc + Sext(b_imm32, xlen)) & SInt(-coreInstBytes)
+      ((pc + Sext(b_imm32, xlen)).toSInt & SInt(-coreInstBytes)).toUInt
    }
    def ComputeJALTarget(pc: UInt, inst: UInt, xlen: Int, coreInstBytes: Int): UInt =
    {
       val j_imm32 = Cat(Fill(12,inst(31)), inst(19,12), inst(20), inst(30,25), inst(24,21), UInt(0,1))
-      (pc + Sext(j_imm32, xlen)) & SInt(-coreInstBytes)
+      ((pc + Sext(j_imm32, xlen)).toSInt & SInt(-coreInstBytes)).toUInt
    }
 
 

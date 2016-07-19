@@ -315,7 +315,8 @@ class BranchReorderBuffer(fetch_width: Int, num_entries: Int)(implicit p: Parame
 
    private def GetIdx(addr: UInt) =
       if (fetch_width == 1) UInt(0)
-      else (addr >> UInt(log2Ceil(coreInstBytes))) & SInt(-1, log2Ceil(fetch_width))
+      else (addr >> UInt(log2Ceil(coreInstBytes))) & Fill(log2Ceil(fetch_width), UInt(1))
+//      else (addr >> UInt(log2Ceil(coreInstBytes))) & SInt(-1, log2Ceil(fetch_width))
 
    // -----------------------------------------------
    when (io.backend.allocate.valid)

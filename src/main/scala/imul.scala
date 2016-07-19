@@ -14,14 +14,14 @@ class IMul(imul_stages: Int) extends Module
 {
    val io = new Bundle {
       val valid = Bool(INPUT)
-      val fn  = Bits(INPUT, SZ_ALU_FN)
-      val dw  = Bits(INPUT, SZ_DW)
-      val in0 = Bits(INPUT,  64)
-      val in1 = Bits(INPUT,  64)
-      val out = Bits(OUTPUT, 64)
+      val fn  = UInt(INPUT, SZ_ALU_FN)
+      val dw  = UInt(INPUT, SZ_DW)
+      val in0 = UInt(INPUT,  64)
+      val in1 = UInt(INPUT,  64)
+      val out = UInt(OUTPUT, 64)
    }
 
-   def FN(dw: Bits, fn: Bits) = io.dw === dw && io.fn === fn
+   def FN(dw: UInt, fn: UInt) = io.dw === dw && io.fn === fn
    val sxl64 = FN(DW_64, FN_MULH) | FN(DW_64, FN_MULHSU)
    val sxr64 = FN(DW_64, FN_MULH)
    val zxl32 = FN(DW_32, FN_MULHU)
@@ -41,7 +41,7 @@ class IMul(imul_stages: Int) extends Module
    val mul_result = lhs.toSInt * rhs.toSInt //TODO:130 bits
 
    val mul_output_mux = MuxCase(
-      Bits(0, 64), Array(
+      UInt(0, 64), Array(
          FN(DW_64, FN_MUL)    -> mul_result(63,0),
          FN(DW_64, FN_MULH)   -> mul_result(127,64),
          FN(DW_64, FN_MULHU)  -> mul_result(127,64),

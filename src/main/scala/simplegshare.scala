@@ -31,7 +31,7 @@ import cde.{Parameters, Field}
 
 class SimpleGShareResp(implicit p: Parameters) extends BoomBundle()(p)
 {
-   val index = Bits(width = GLOBAL_HISTORY_LENGTH) // needed to update predictor at Commit
+   val index = UInt(width = GLOBAL_HISTORY_LENGTH) // needed to update predictor at Commit
 }
 
 class SimpleGShareBrPredictor(
@@ -53,7 +53,7 @@ class SimpleGShareBrPredictor(
    //------------------------------------------------------------
    // helper functions
 
-   private def Hash (addr: UInt, hist: Bits): UInt =
+   private def Hash (addr: UInt, hist: UInt): UInt =
    {
       (addr >> UInt(log2Up(fetch_width*coreInstBytes))) ^ hist
    }

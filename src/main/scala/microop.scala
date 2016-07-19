@@ -20,10 +20,10 @@ class MicroOp(implicit p: Parameters) extends BoomBundle()(p)
                                                       // for the compacting queue? TODO or is this not really belong
                                                       // here?
 
-   val uopc             = Bits(width = UOPC_SZ)       // micro-op code
-   val inst             = Bits(width = 32)
+   val uopc             = UInt(width = UOPC_SZ)       // micro-op code
+   val inst             = UInt(width = 32)
    val pc               = UInt(width = coreMaxAddrBits)
-   val fu_code          = Bits(width = FUConstants.FUC_SZ) // which functional unit do we use?
+   val fu_code          = UInt(width = FUConstants.FUC_SZ) // which functional unit do we use?
    val ctrl             = new CtrlSignals
 
    val wakeup_delay     = UInt(width = log2Up(MAX_WAKEUP_DELAY)) // unused
@@ -33,7 +33,7 @@ class MicroOp(implicit p: Parameters) extends BoomBundle()(p)
    val is_jal           = Bool()                      // is this a JAL (doesn't include JR)? used for branch unit
    val is_ret           = Bool()                      // is jalr with rd=x0, rs1=x1? (i.e., a return)
    val is_call          = Bool()                      //
-   val br_mask          = Bits(width = MAX_BR_COUNT)  // which branches are we being speculated under?
+   val br_mask          = UInt(width = MAX_BR_COUNT)  // which branches are we being speculated under?
    val br_tag           = UInt(width = BR_TAG_SZ)
 
    val br_prediction    = new BranchPrediction
@@ -49,7 +49,7 @@ class MicroOp(implicit p: Parameters) extends BoomBundle()(p)
                                                                           // instruction
 
 
-   val imm_packed       = Bits(width = LONGEST_IMM_SZ) // densely pack the imm in decode...
+   val imm_packed       = UInt(width = LONGEST_IMM_SZ) // densely pack the imm in decode...
                                                        // then translate and sign-extend in execute
    val csr_addr         = UInt(width = CSR_ADDR_SZ)    // only used for critical path reasons in Exe
    val rob_idx          = UInt(width = ROB_ADDR_SZ)
@@ -99,10 +99,10 @@ class MicroOp(implicit p: Parameters) extends BoomBundle()(p)
    val xcpt_if          = Bool()
 
    // purely debug information
-   val debug_wdata      = Bits(width=xLen)
+   val debug_wdata      = UInt(width=xLen)
    val debug_events     = new DebugStageEvents
 
-   def fu_code_is(_fu: Bits) = fu_code === _fu
+   def fu_code_is(_fu: UInt) = fu_code === _fu
 }
 
 // NOTE: I can't promise these signals get killed/cleared on a mispredict,
@@ -117,10 +117,10 @@ class CtrlSignals extends Bundle()
    val op1_sel     = UInt(width = OP1_X.getWidth)
    val op2_sel     = UInt(width = OP2_X.getWidth)
    val imm_sel     = UInt(width = IS_X.getWidth)
-   val op_fcn      = Bits(width = rocket.ALU.SZ_ALU_FN)
+   val op_fcn      = UInt(width = rocket.ALU.SZ_ALU_FN)
    val fcn_dw      = Bool()
    val rf_wen      = Bool()
-   val csr_cmd     = Bits(width = rocket.CSR.SZ)
+   val csr_cmd     = UInt(width = rocket.CSR.SZ)
    val is_load     = Bool()   // will invoke TLB address lookup
    val is_sta      = Bool()   // will invoke TLB address lookup
    val is_std      = Bool()

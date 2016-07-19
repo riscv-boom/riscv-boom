@@ -31,14 +31,14 @@ object FUConstants
    // bit mask, since a given execution pipeline may support multiple functional units
    val FUC_SZ = 8
    val FU_X   = BitPat.DC(FUC_SZ)
-   val FU_ALU = Bits(  1, FUC_SZ)
-   val FU_BRU = Bits(  2, FUC_SZ)
-   val FU_MEM = Bits(  4, FUC_SZ)
-   val FU_MUL = Bits(  8, FUC_SZ)
-   val FU_DIV = Bits( 16, FUC_SZ)
-   val FU_FPU = Bits( 32, FUC_SZ)
-   val FU_CSR = Bits( 64, FUC_SZ)
-   val FU_FDV = Bits(128, FUC_SZ)
+   val FU_ALU = UInt(  1, FUC_SZ)
+   val FU_BRU = UInt(  2, FUC_SZ)
+   val FU_MEM = UInt(  4, FUC_SZ)
+   val FU_MUL = UInt(  8, FUC_SZ)
+   val FU_DIV = UInt( 16, FUC_SZ)
+   val FU_FPU = UInt( 32, FUC_SZ)
+   val FU_CSR = UInt( 64, FUC_SZ)
+   val FU_FDV = UInt(128, FUC_SZ)
 }
 import FUConstants._
 
@@ -70,7 +70,7 @@ class FunctionalUnitIo(num_stages: Int
    val br_unit = new BranchUnitResp().asOutput
 
    // only used by the fpu unit
-   val fcsr_rm = Bits(INPUT, rocket.FPConstants.RM_SZ)
+   val fcsr_rm = UInt(INPUT, rocket.FPConstants.RM_SZ)
 
    // only used by branch unit
    // TODO name this, so ROB can also instantiate it
@@ -90,10 +90,10 @@ class FuncUnitReq(data_width: Int)(implicit p: Parameters) extends BoomBundle()(
 
    val num_operands = 3
 
-   val rs1_data = Bits(width = data_width)
-   val rs2_data = Bits(width = data_width)
-   val rs3_data = Bits(width = data_width) // only used for FMA units
-//   val rs_data = Vec.fill(num_operands) {Bits(width=data_width)}
+   val rs1_data = UInt(width = data_width)
+   val rs2_data = UInt(width = data_width)
+   val rs3_data = UInt(width = data_width) // only used for FMA units
+//   val rs_data = Vec.fill(num_operands) {UInt(width=data_width)}
 //   def rs1_data = rs_data(0)
 //   def rs2_data = rs_data(1)
 //   def rs3_data = rs_data(2)
@@ -106,10 +106,10 @@ class FuncUnitReq(data_width: Int)(implicit p: Parameters) extends BoomBundle()(
 class FuncUnitResp(data_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
    val uop = new MicroOp()
-   val data = Bits(width = data_width)
+   val data = UInt(width = data_width)
    val fflags = new ValidIO(new FFlagsResp)
    val addr = UInt(width = vaddrBits+1) // only for maddr -> LSU
-   val mxcpt = new ValidIO(Bits(width=rocket.Causes.all.max)) //only for maddr->LSU
+   val mxcpt = new ValidIO(UInt(width=rocket.Causes.all.max)) //only for maddr->LSU
 
    override def cloneType = new FuncUnitResp(data_width)(p).asInstanceOf[this.type]
 }
@@ -118,7 +118,7 @@ class BypassData(num_bypass_ports: Int, data_width: Int)(implicit p: Parameters)
 {
    val valid = Vec.fill(num_bypass_ports){ Bool() }
    val uop   = Vec.fill(num_bypass_ports){ new MicroOp() }
-   val data  = Vec.fill(num_bypass_ports){ Bits(width = data_width) }
+   val data  = Vec.fill(num_bypass_ports){ UInt(width = data_width) }
 
    def getNumPorts: Int = num_bypass_ports
    override def cloneType: this.type = new BypassData(num_bypass_ports, data_width).asInstanceOf[this.type]
@@ -128,9 +128,9 @@ class BrResolutionInfo(implicit p: Parameters) extends BoomBundle()(p)
 {
    val valid      = Bool()
    val mispredict = Bool()
-   val mask       = Bits(width = MAX_BR_COUNT) // the resolve mask
+   val mask       = UInt(width = MAX_BR_COUNT) // the resolve mask
    val tag        = UInt(width = BR_TAG_SZ)    // the branch tag that was resolved
-   val exe_mask   = Bits(width = MAX_BR_COUNT) // the br_mask of the actual branch uop
+   val exe_mask   = UInt(width = MAX_BR_COUNT) // the br_mask of the actual branch uop
                                                // used to reset the dec_br_mask
    val rob_idx    = UInt(width = ROB_ADDR_SZ)
    val ldq_idx    = UInt(width = MEM_ADDR_SZ)  // track the "tail" of loads and stores, so we can
@@ -258,7 +258,7 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
    val imm_xprlen = ImmGen(uop.imm_packed, uop.ctrl.imm_sel)
 
    // operand 1 select
-   var op1_data: Bits = null
+   var op1_data: UInt = null
    if (is_branch_unit)
    {
       op1_data = Mux(io.req.bits.uop.ctrl.op1_sel.toUInt === OP1_RS1 , io.req.bits.rs1_data,
@@ -430,7 +430,7 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
 
       io.br_unit.btb_update.pc               := fetch_pc // tell the BTB which pc to tag check against
       io.br_unit.btb_update.br_pc            := uop_pc_
-      io.br_unit.btb_update.target           := io.br_unit.target & SInt(-coreInstBytes)
+      io.br_unit.btb_update.target           := (io.br_unit.target.toSInt & SInt(-coreInstBytes)).toUInt
       io.br_unit.btb_update.prediction.valid := io.get_pred.info.btb_resp_valid // did this branch's fetch packet have
                                                                                 // a BTB hit in fetch?
       io.br_unit.btb_update.prediction.bits  := io.get_pred.info.btb_resp       // give the BTB back its BTBResp
@@ -461,7 +461,7 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
       // is the br_pc the last instruction in the fetch bundle?
       val is_last_inst = if (FETCH_WIDTH == 1) { Bool(true) }
                          else { ((uop_pc_ >> UInt(log2Up(coreInstBytes))) &
-                                 Fill(log2Up(FETCH_WIDTH), Bits(1))) === UInt(FETCH_WIDTH-1) }
+                                 Fill(log2Up(FETCH_WIDTH), UInt(1))) === UInt(FETCH_WIDTH-1) }
       io.br_unit.bpd_update.bits.new_pc_same_packet := !(is_taken) && !is_last_inst
 
       require (coreInstBytes == 4)
@@ -470,21 +470,21 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
       // Branch/Jump Target Calculation
       // we can't push this through the ALU though, b/c jalr needs both PC+4 and rs1+offset
 
-      def vaSign(a0: UInt, ea: Bits):Bool = {
+      def vaSign(a0: UInt, ea: UInt):Bool = {
          // efficient means to compress 64-bit VA into rc.as.vaddrBits+1 bits
          // (VA is bad if VA(rc.as.vaddrBits) =/= VA(rc.as.vaddrBits-1))
          val a = a0 >> vaddrBits-1
          val e = ea(vaddrBits,vaddrBits-1)
          Mux(a === UInt(0) || a === UInt(1), e =/= UInt(0),
-         Mux(a === SInt(-1) || a === SInt(-2), e === SInt(-1),
+         Mux(a.toSInt === SInt(-1) || a.toSInt === SInt(-2), e.toSInt === SInt(-1),
             e(0)))
       }
 
       val bj_base = Mux(uop.uopc === uopJALR, io.req.bits.rs1_data, uop_pc_)
       val bj_offset = imm_xprlen(20,0).toSInt
-      val bj64 = bj_base + bj_offset
-      val bj_msb = Mux(uop.uopc === uopJALR, vaSign(io.req.bits.rs1_data, bj64), vaSign(uop_pc_, bj64))
-      bj_addr := (Cat(bj_msb, bj64(vaddrBits-1,0)) & SInt(-2)).toUInt
+      val bj64 = (bj_base.toSInt + bj_offset).toUInt
+      val bj_msb = Mux(uop.uopc === uopJALR, vaSign(io.req.bits.rs1_data, bj64.toUInt), vaSign(uop_pc_, bj64.toUInt))
+      bj_addr := (Cat(bj_msb, bj64(vaddrBits-1,0)).toSInt & SInt(-2)).toUInt
 
       io.br_unit.pc             := uop_pc_
       io.br_unit.debug_btb_pred := io.get_pred.info.btb_resp_valid && io.get_pred.info.btb_resp.taken
@@ -505,7 +505,7 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
 //   io.resp.bits.data := reg_data
 
    val r_val  = Reg(init = Vec.fill(num_stages) { Bool(false) })
-   val r_data = Reg(Vec(num_stages, Bits(xLen)))
+   val r_data = Reg(Vec(num_stages, UInt(xLen)))
    r_val (0) := io.req.valid
    r_data(0) := alu.io.out
    for (i <- 1 until num_stages)
@@ -541,7 +541,7 @@ class MemAddrCalcUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(nu
                                                      , is_branch_unit = false)(p)
 {
    // perform address calculation
-   val sum = io.req.bits.rs1_data.toUInt + io.req.bits.uop.imm_packed(19,8).toSInt
+   val sum = (io.req.bits.rs1_data.toSInt + io.req.bits.uop.imm_packed(19,8).toSInt).toUInt
    val ea_sign = Mux(sum(vaddrBits-1), ~sum(63,vaddrBits) === UInt(0),
                                         sum(63,vaddrBits) =/= UInt(0))
    val effective_address = Cat(ea_sign, sum(vaddrBits-1,0)).toUInt
@@ -552,7 +552,7 @@ class MemAddrCalcUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(nu
    val unrec_d = hardfloat.fNFromRecFN(11, 53, io.req.bits.rs2_data)
    val unrec_out = Mux(io.req.bits.uop.fp_single, Cat(Fill(32, unrec_s(31)), unrec_s), unrec_d)
 
-   var store_data:Bits = null
+   var store_data:UInt = null
    if (!usingFPU) store_data = io.req.bits.rs2_data
    else store_data = Mux(io.req.bits.uop.fp_val, unrec_out, io.req.bits.rs2_data)
 
@@ -568,9 +568,9 @@ class MemAddrCalcUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(nu
    // Handle misaligned exceptions
    val typ = io.req.bits.uop.mem_typ
    val misaligned =
-      (((typ === MT_H) || (typ === MT_HU)) && (effective_address(0) =/= Bits(0))) ||
-      (((typ === MT_W) || (typ === MT_WU)) && (effective_address(1,0) =/= Bits(0))) ||
-      ((typ === MT_D) && (effective_address(2,0) =/= Bits(0)))
+      (((typ === MT_H) || (typ === MT_HU)) && (effective_address(0) =/= UInt(0))) ||
+      (((typ === MT_W) || (typ === MT_WU)) && (effective_address(1,0) =/= UInt(0))) ||
+      ((typ === MT_D) && (effective_address(2,0) =/= UInt(0)))
 
    val ma_ld = io.req.valid && io.req.bits.uop.uopc === uopLD && misaligned
    val ma_st = io.req.valid && (io.req.bits.uop.uopc === uopSTA || io.req.bits.uop.uopc === uopAMO_AG) && misaligned

@@ -89,7 +89,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
                printf("%d; O3PipeView:fetch:%d:0x%x:0:%d:DASM(%x)\n",
                   fetch_bundle.debug_events(i).fetch_seq,
                   io.tsc_reg - UInt(2*O3_CYCLE_TIME),
-                  (fetch_bundle.pc & SInt(-(fetch_width*coreInstBytes))) + UInt(i << 2),
+                  (fetch_bundle.pc.toSInt & SInt(-(fetch_width*coreInstBytes))).toUInt + UInt(i << 2),
                   fetch_bundle.debug_events(i).fetch_seq,
                   fetch_bundle.insts(i))
             }
@@ -150,7 +150,8 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    io.imem.btb_update.bits.pc         := Mux(br_unit.btb_update_valid, br_unit.btb_update.pc, io.imem.resp.bits.pc)
    io.imem.btb_update.bits.br_pc      := Mux(br_unit.btb_update_valid, br_unit.btb_update.br_pc, io.bp2_pc_of_br_inst)
    io.imem.btb_update.bits.target     := Mux(br_unit.btb_update_valid, br_unit.btb_update.target,
-                                                                       io.bp2_pred_target & SInt(-coreInstBytes))
+                                                                       (io.bp2_pred_target.toSInt & 
+                                                                        SInt(-coreInstBytes)).toUInt)
    io.imem.btb_update.bits.prediction := Mux(br_unit.btb_update_valid, br_unit.btb_update.prediction, io.imem.btb_resp)
    io.imem.btb_update.bits.taken      := Mux(br_unit.btb_update_valid, br_unit.btb_update.taken,
                                                                        io.bp2_take_pc && io.bp2_is_taken && !if_stalled)

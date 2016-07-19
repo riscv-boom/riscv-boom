@@ -332,7 +332,7 @@ class TageTable(
 
    val u_idx = io.update_counters.bits.index
    val u_counter_row = counter_table(u_idx)
-   val updated_row = Wire(u_counter_row.clone)
+   val updated_row = Wire(u_counter_row.cloneType)
    updated_row.map(_ := UInt(0))
    when (io.update_counters.valid)
    {

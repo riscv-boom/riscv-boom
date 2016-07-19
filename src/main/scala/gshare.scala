@@ -26,7 +26,7 @@ case class GShareParameters(
 
 class GShareResp(index_sz: Int) extends Bundle
 {
-   val index = Bits(width = index_sz) // needed to update predictor at Commit
+   val index = UInt(width = index_sz) // needed to update predictor at Commit
    override def cloneType: this.type = new GShareResp(index_sz).asInstanceOf[this.type]
 }
 
@@ -48,7 +48,7 @@ class GShareBrPredictor(fetch_width: Int,
       " kB) GShare Predictor, with " + history_length + " bits of history for (" +
       fetch_width + "-wide fetch) and " + num_entries + " entries.")
 
-   private def Hash (addr: UInt, hist: Bits) =
+   private def Hash (addr: UInt, hist: UInt) =
       (addr >> UInt(log2Up(fetch_width*coreInstBytes))) ^ hist
 
    //------------------------------------------------------------
@@ -58,8 +58,8 @@ class GShareBrPredictor(fetch_width: Int,
    //------------------------------------------------------------
    // prediction bits
    // hysteresis bits
-   val p_table = SeqMem(num_entries, Vec(fetch_width, Bits(width=1)))
-   val h_table = SeqMem(num_entries, Vec(fetch_width, Bits(width=1)))
+   val p_table = SeqMem(num_entries, Vec(fetch_width, UInt(width=1)))
+   val h_table = SeqMem(num_entries, Vec(fetch_width, UInt(width=1)))
 
 
    // buffer writes to the h-table as required
@@ -73,7 +73,7 @@ class GShareBrPredictor(fetch_width: Int,
    // p-table
    val p_addr = Wire(UInt())
    val last_p_addr = RegNext(p_addr)
-   val p_out = Reg(Bits())
+   val p_out = Reg(UInt())
 
    val stall = !io.resp.ready // TODO FIXME this feels too low-level
 
@@ -81,8 +81,8 @@ class GShareBrPredictor(fetch_width: Int,
    class BrTableUpdate extends Bundle
    {
       val idx        = UInt(width = log2Up(num_entries))
-      val executed   = Bits(width = FETCH_WIDTH) // which words in the fetch packet does the update correspond to?
-      val new_value  = Bits(width=FETCH_WIDTH)
+      val executed   = UInt(width = FETCH_WIDTH) // which words in the fetch packet does the update correspond to?
+      val new_value  = UInt(width=FETCH_WIDTH)
 
       override def cloneType: this.type = new BrTableUpdate().asInstanceOf[this.type]
    }

@@ -27,21 +27,21 @@ class IssueUnitCollasping(num_issue_slots: Int, issue_width: Int, num_wakeup_por
    // Figure out how much to shift entries by
 
    val MAX_SHIFT = DISPATCH_WIDTH
-   val shamt_oh = Array.fill(num_issue_slots){Bits(width=issue_width)}
+   val shamt_oh = Array.fill(num_issue_slots){UInt(width=issue_width)}
    // count total grants before this entry, and tus how many to shift upwards by
-   val shamt = Array.fill(num_issue_slots){Bits(width=log2Up(issue_width+1))}
+   val shamt = Array.fill(num_issue_slots){UInt(width=log2Up(issue_width+1))}
 
 
    val vacants = issue_slots.map(s => !(s.valid)) ++ io.dis_valids.map(!_.toBool)
-   val shamts_oh = Array.fill(num_issue_slots+DISPATCH_WIDTH) {Wire(Bits(width=MAX_SHIFT))}
+   val shamts_oh = Array.fill(num_issue_slots+DISPATCH_WIDTH) {Wire(UInt(width=MAX_SHIFT))}
    // track how many to shift up this entry by by counting previous vacant spots
-   def SaturatingCounterOH(count_oh:Bits, inc: Bool, max: Int): Bits =
+   def SaturatingCounterOH(count_oh:UInt, inc: Bool, max: Int): UInt =
    {
-      val next = Wire(Bits(width=max))
+      val next = Wire(UInt(width=max))
       next := count_oh
-      when (count_oh === Bits(0) && inc)
+      when (count_oh === UInt(0) && inc)
       {
-         next := Bits(1)
+         next := UInt(1)
       }
       .elsewhen (!count_oh(max-1) && inc)
       {
@@ -49,7 +49,7 @@ class IssueUnitCollasping(num_issue_slots: Int, issue_width: Int, num_wakeup_por
       }
       next
    }
-   shamts_oh(0) := Bits(0)
+   shamts_oh(0) := UInt(0)
    for (i <- 1 until num_issue_slots + DISPATCH_WIDTH)
    {
       shamts_oh(i) := SaturatingCounterOH(shamts_oh(i-1), vacants(i-1), MAX_SHIFT)
@@ -71,7 +71,7 @@ class IssueUnitCollasping(num_issue_slots: Int, issue_width: Int, num_wakeup_por
       issue_slots(i).in_uop.bits  := uops(i+1)
       for (j <- 1 to MAX_SHIFT by 1)
       {
-         when (shamts_oh(i+j) === Bits(1 << (j-1)))
+         when (shamts_oh(i+j) === UInt(1 << (j-1)))
          {
             issue_slots(i).in_uop.valid := will_be_valid(i+j)
             issue_slots(i).in_uop.bits  := uops(i+j)
@@ -80,7 +80,7 @@ class IssueUnitCollasping(num_issue_slots: Int, issue_width: Int, num_wakeup_por
       issue_slots(i).wakeup_dsts  := io.wakeup_pdsts
       issue_slots(i).brinfo       := io.brinfo
       issue_slots(i).kill         := io.flush_pipeline
-      issue_slots(i).clear        := shamts_oh(i) =/= Bits(0)
+      issue_slots(i).clear        := shamts_oh(i) =/= UInt(0)
    }
 
    //-------------------------------------------------------------
@@ -125,7 +125,7 @@ class IssueUnitCollasping(num_issue_slots: Int, issue_width: Int, num_wakeup_por
 
       for (w <- 0 until issue_width)
       {
-         val can_allocate = (issue_slots(i).uop.fu_code & io.fu_types(w)) =/= Bits(0)
+         val can_allocate = (issue_slots(i).uop.fu_code & io.fu_types(w)) =/= UInt(0)
 
          when (requests(i) && !uop_issued && can_allocate && !port_issued(w))
          {
