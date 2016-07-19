@@ -699,7 +699,7 @@ class ALUMemExeUnit(
    val memresp_uop    = Mux(lsu.io.forward_val, lsu.io.forward_uop,
                                                 io.dmem.resp.bits.uop)
 
-   var memresp_data:Bits = null
+   var memresp_data:UInt= null
    if (!fp_mem_support)
    {
       memresp_data = Mux(lsu.io.forward_val, lsu.io.forward_data

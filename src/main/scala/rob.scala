@@ -271,7 +271,7 @@ class Rob(width: Int
    val rob_pc_hob_next_val = rob_brt_vals.reduce(_|_)
 
    val bypass_next_bank_idx = if (width == 1) UInt(0) else PriorityEncoder(io.dis_valids.toBits)
-   val bypass_next_pc = (io.dis_uops(0).pc & SInt(-(DECODE_WIDTH*coreInstBytes))) +
+   val bypass_next_pc = (io.dis_uops(0).pc.toSInt & SInt(-(DECODE_WIDTH*coreInstBytes))).toUInt +
                         Cat(bypass_next_bank_idx, Bits(0,2))
 
    io.get_pc.next_val := rob_pc_hob_next_val || io.dis_valids.reduce(_|_)

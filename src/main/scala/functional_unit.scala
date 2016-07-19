@@ -314,8 +314,8 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
 
       val pc_plus4 = (uop_pc_ + UInt(4))(vaddrBits,0)
 
-      val pc_sel = Lookup(io.req.bits.uop.ctrl.br_type, PC_PLUS4,
-               Array(   BR_N  -> PC_PLUS4,
+      val pc_sel = MuxLookup(io.req.bits.uop.ctrl.br_type, PC_PLUS4,
+               Seq  (   BR_N  -> PC_PLUS4,
                         BR_NE -> Mux(!br_eq,  PC_BRJMP, PC_PLUS4),
                         BR_EQ -> Mux( br_eq,  PC_BRJMP, PC_PLUS4),
                         BR_GE -> Mux(!br_lt,  PC_BRJMP, PC_PLUS4),
