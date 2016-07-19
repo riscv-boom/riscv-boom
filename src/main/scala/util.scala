@@ -27,12 +27,12 @@ object IsKilledByBranch
 
 object GetNewBrMask
 {
-   def apply(brinfo: BrResolutionInfo, uop: MicroOp): Bits =
+   def apply(brinfo: BrResolutionInfo, uop: MicroOp): UInt =
    {
       return Mux(brinfo.valid, (uop.br_mask & ~brinfo.mask),
                                uop.br_mask)
    }
-   def apply(brinfo: BrResolutionInfo, br_mask: Bits): Bits =
+   def apply(brinfo: BrResolutionInfo, br_mask: UInt): UInt =
    {
       return Mux(brinfo.valid, (br_mask & ~brinfo.mask),
                                br_mask)
@@ -42,21 +42,21 @@ object GetNewBrMask
 //do two masks have at least 1 bit match?
 object maskMatch
 {
-   def apply(msk1: Bits, msk2: Bits): Bool = (msk1 & msk2) =/= Bits(0)
+   def apply(msk1: UInt, msk2: UInt): Bool = (msk1 & msk2) =/= UInt(0)
 }
 
 //clear one-bit in the Mask as specified by the idx
 object clearMaskBit
 {
-   def apply(msk: Bits, idx: UInt): Bits = (msk & ~(Bits(1) << idx))(msk.getWidth-1, 0)
+   def apply(msk: UInt, idx: UInt): UInt = (msk & ~(UInt(1) << idx))(msk.getWidth-1, 0)
 }
 
 //shift a register over by one bit
 object PerformShiftRegister
 {
-   def apply(reg_val: Bits, new_bit: Bool): Bits =
+   def apply(reg_val: UInt, new_bit: Bool): UInt =
    {
-      reg_val := Cat(reg_val(reg_val.getWidth-1, 0).toBits, new_bit.toBits).toBits
+      reg_val := Cat(reg_val(reg_val.getWidth-1, 0).toUInt, new_bit.toUInt).toUInt
       reg_val
    }
 }
@@ -97,7 +97,7 @@ object WrapDec
 
 object RotateL1
 {
-   def apply(signal: Bits): Bits =
+   def apply(signal: UInt): UInt =
    {
       val w = signal.getWidth
       val out = Cat(signal(w-2,0), signal(w-1))
@@ -109,7 +109,7 @@ object RotateL1
 
 object Sext
 {
-   def apply(x: Bits, length: Int): Bits =
+   def apply(x: UInt, length: Int): UInt =
    {
       return Cat(Fill(length-x.getWidth, x(x.getWidth-1)), x)
    }
@@ -120,7 +120,7 @@ object Sext
 // Asking for U-type gives it shifted up 12 bits.
 object ImmGen
 {
-   def apply(ip: Bits, isel: Bits): SInt =
+   def apply(ip: UInt, isel: UInt): SInt =
    {
       val sign = ip(LONGEST_IMM_SZ-1).toSInt
       val i30_20 = Mux(isel === IS_U, ip(18,8).toSInt, sign)
@@ -136,12 +136,12 @@ object ImmGen
 }
 
 // store the rounding-mode and func type for FP in the packed immediate as well
-object ImmGenRm { def apply(ip: Bits): UInt = { return ip(2,0) }}
-object ImmGenTyp { def apply(ip: Bits): UInt = { return ip(9,8) }} // only works if !(IS_B or IS_S)
+object ImmGenRm { def apply(ip: UInt): UInt = { return ip(2,0) }}
+object ImmGenTyp { def apply(ip: UInt): UInt = { return ip(9,8) }} // only works if !(IS_B or IS_S)
 
 object DebugIsJALR
 {
-   def apply(inst: Bits): Bool =
+   def apply(inst: UInt): Bool =
    {
       // TODO Chisel not sure why this won't compile
 //      val is_jalr = rocket.DecodeLogic(inst, List(Bool(false)),
@@ -156,7 +156,7 @@ object DebugIsJALR
 // a target).
 object DebugGetBJImm
 {
-   def apply(inst: Bits): UInt =
+   def apply(inst: UInt): UInt =
    {
       // TODO Chisel not sure why this won't compile
       //val csignals =
@@ -174,8 +174,8 @@ object DebugGetBJImm
 
    val is_br = (inst(6,0) === UInt("b1100011"))
 
-   val br_targ = Cat(Fill(12, inst(31)), Fill(8,inst(31)), inst(7), inst(30,25), inst(11,8), Bits(0,1))
-   val jal_targ= Cat(Fill(12, inst(31)), inst(19,12), inst(20), inst(30,25), inst(24,21), Bits(0,1))
+   val br_targ = Cat(Fill(12, inst(31)), Fill(8,inst(31)), inst(7), inst(30,25), inst(11,8), UInt(0,1))
+   val jal_targ= Cat(Fill(12, inst(31)), inst(19,12), inst(20), inst(30,25), inst(24,21), UInt(0,1))
 
    Mux(is_br, br_targ, jal_targ)
   }

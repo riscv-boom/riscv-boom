@@ -143,7 +143,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    // 4) Update RAS
 
    // round off to nearest fetch boundary
-   val aligned_pc = io.imem.resp.bits.pc & SInt(-(fetch_width*coreInstBytes))
+   val aligned_pc = ~(~io.imem.resp.bits.pc | (UInt(fetch_width*coreInstBytes-1)))
 
    val is_br     = Wire(Vec(fetch_width, Bool()))
    val is_jal    = Wire(Vec(fetch_width, Bool()))
@@ -313,7 +313,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    io.pred_resp.bpd_resp         := bpd_bits
    io.pred_resp.br_seen          := bp2_br_seen
 
-   private def KillMask(m_enable: Bool, m_idx: UInt, m_width: Int): Bits =
+   private def KillMask(m_enable: Bool, m_idx: UInt, m_width: Int): UInt =
    {
       val mask = Wire(Bits(width = m_width))
       mask := Fill(m_width, m_enable) & (SInt(-1, m_width) << UInt(1) << m_idx)

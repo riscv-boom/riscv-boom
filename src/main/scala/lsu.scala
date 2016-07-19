@@ -76,7 +76,7 @@ class LoadStoreUnitIO(pl_width: Int)(implicit p: Parameters) extends BoomBundle(
    // Send out Memory Request
    val memreq_val         = Bool(OUTPUT)
    val memreq_addr        = UInt(OUTPUT, corePAddrBits)
-   val memreq_wdata       = Bits(OUTPUT, xLen)
+   val memreq_wdata       = UInt(OUTPUT, xLen)
    val memreq_uop         = new MicroOp().asOutput()
 
    val memreq_kill        = Bool(OUTPUT) // kill request sent out last cycle
@@ -84,7 +84,7 @@ class LoadStoreUnitIO(pl_width: Int)(implicit p: Parameters) extends BoomBundle(
    // Forward Store Data to Register File
    // TODO turn into forward bundle
    val forward_val        = Bool(OUTPUT)
-   val forward_data       = Bits(OUTPUT, xLen)
+   val forward_data       = UInt(OUTPUT, xLen)
    val forward_uop        = new MicroOp().asOutput() // the load microop (for its pdst)
 
    // Receive Memory Response
@@ -156,7 +156,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
 
 
    // track window of stores we depend on
-   val laq_st_dep_mask        = Reg(Vec(num_ld_entries, Bits(width = num_st_entries))) // list of stores we might depend (cleared when a store commits)
+   val laq_st_dep_mask        = Reg(Vec(num_ld_entries, UInt(width = num_st_entries))) // list of stores we might depend (cleared when a store commits)
    val laq_forwarded_std_val  = Reg(Vec(num_ld_entries, Bool()))
    val laq_forwarded_stq_idx  = Reg(Vec(num_ld_entries, UInt(width = MEM_ADDR_SZ)))    // which store did get store-load forwarded data from? compare later to see I got things correct
    val debug_laq_put_to_sleep = Reg(Vec(num_ld_entries, Bool()))                       // did a load get put to sleep at least once?
@@ -171,7 +171,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
 
    // Store-Data Queue
    val sdq_val       = Reg(Vec(num_st_entries, Bool()))
-   val sdq_data      = Reg(Vec(num_st_entries, Bits(width = xLen)))
+   val sdq_data      = Reg(Vec(num_st_entries, UInt(width = xLen)))
 
    // Shared Store Queue Information
    val stq_uop       = Reg(Vec(num_st_entries, new MicroOp()))
@@ -192,8 +192,8 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
    val clear_store = Wire(Bool())
    clear_store := Bool(false)
 
-   val live_store_mask = Reg(init = Bits(0, num_st_entries))
-   var next_live_store_mask = Mux(clear_store, live_store_mask & ~(Bits(1) << stq_head),
+   val live_store_mask = Reg(init = UInt(0, num_st_entries))
+   var next_live_store_mask = Mux(clear_store, live_store_mask & ~(UInt(1) << stq_head),
                                                 live_store_mask)
 
    //-------------------------------------------------------------
@@ -207,7 +207,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
    {
       when (clear_store)
       {
-         laq_st_dep_mask(i) := laq_st_dep_mask(i) & ~(Bits(1) << stq_head)
+         laq_st_dep_mask(i) := laq_st_dep_mask(i) & ~(UInt(1) << stq_head)
       }
    }
 
@@ -247,7 +247,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
          stq_succeeded(st_enq_idx) := Bool(false)
          stq_committed(st_enq_idx) := Bool(false)
       }
-      next_live_store_mask = Mux(io.dec_st_vals(w), next_live_store_mask | (Bits(1) << st_enq_idx),
+      next_live_store_mask = Mux(io.dec_st_vals(w), next_live_store_mask | (UInt(1) << st_enq_idx),
                                                     next_live_store_mask)
 
       st_enq_idx = Mux(io.dec_st_vals(w), WrapInc(st_enq_idx, num_st_entries),
@@ -357,7 +357,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
 
    val exe_vaddr   = Mux(will_fire_sta_retry,  saq_addr(stq_retry_idx),
                      Mux(will_fire_load_retry, laq_addr(laq_retry_idx),
-                                               io.exe_resp.bits.addr.toUInt))
+                                               io.exe_resp.bits.addr.toBits))
 
    val dtlb = Module(new rocket.TLB()(p.alterPartial({case uncore.CacheName => "L1D"})))
    dtlb.io.ptw <> io.ptw
@@ -549,7 +549,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
    when (will_fire_std_incoming)
    {
       sdq_val (io.exe_resp.bits.uop.stq_idx) := Bool(true)
-      sdq_data(io.exe_resp.bits.uop.stq_idx) := io.exe_resp.bits.data.toUInt
+      sdq_data(io.exe_resp.bits.uop.stq_idx) := io.exe_resp.bits.data.toBits
    }
 
 
@@ -663,7 +663,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
       val write_mask = GenByteMask(s_addr, stq_uop(i).mem_typ)
 
       // if overlap on bytes and dword matches, the address conflicts!
-      when (((read_mask & write_mask) =/= Bits(0)) && dword_addr_matches(i))
+      when (((read_mask & write_mask) =/= UInt(0)) && dword_addr_matches(i))
       {
          addr_conflicts(i) := Bool(true)
       }
@@ -693,7 +693,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
             (dword_addr_matches(i) &&
 //               (mem_ld_uop.mem_typ =/= stq_uop(i).mem_typ) &&
                (!MemTypesMatch(mem_ld_uop.mem_typ, stq_uop(i).mem_typ)) &&
-               ((read_mask & write_mask) =/= Bits(0))))
+               ((read_mask & write_mask) =/= UInt(0))))
       {
          force_ld_to_sleep := Bool(true)
       }
@@ -724,7 +724,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
 
    // kill load request to mem if address matches (we will either sleep load, or forward data) or TLB miss
    io.memreq_kill     := (mem_ld_used_tlb && (mem_tlb_miss || Reg(next=pf_ld || ma_ld))) ||
-                         (mem_fired_ld && addr_conflicts.toBits =/= Bits(0)) ||
+                         (mem_fired_ld && addr_conflicts.toBits =/= UInt(0)) ||
                          mem_ld_killed ||
                          (mem_fired_st && io.nack.valid && !io.nack.isload)
    wb_forward_std_idx := forwarding_age_logic.io.forwarding_idx
@@ -755,7 +755,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
                         sdq_val(wb_forward_std_idx) &&
                         !(io.nack.valid && io.nack.cache_nack)
    }
-   io.forward_data := LoadDataGenerator(sdq_data(wb_forward_std_idx).toUInt, wb_uop.mem_typ)
+   io.forward_data := LoadDataGenerator(sdq_data(wb_forward_std_idx).toBits, wb_uop.mem_typ)
    io.forward_uop  := wb_uop
 
 
@@ -820,7 +820,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
       {
          // does the load depend on this store?
          // TODO CODE REVIEW what's the best way to perform this bit extract?
-         when ((laq_st_dep_mask(i) & (UInt(1) << stq_idx)) =/= Bits(0))
+         when ((laq_st_dep_mask(i) & (UInt(1) << stq_idx)) =/= UInt(0))
          {
             when (st_is_fence &&
                   laq_allocated(i) &&
@@ -849,7 +849,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
                // and if not, then fail OR
                // if it was forwarded but not us, was the forwarded store older than me
                // head < forwarded < youngest?
-               when (((st_mask & l_mask) =/= Bits(0)) &&
+               when (((st_mask & l_mask) =/= UInt(0)) &&
                     (!laq_forwarded_std_val(i) ||
                       ((fid =/= stq_idx) && (Cat(stq_idx < yid, stq_idx) > Cat(fid < yid, fid)))))
                {
@@ -866,7 +866,8 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
    // detect which loads get marked as failures, but broadcast to the ROB the oldest failing load
    // TODO encapsulate this in an age-based  priority-encoder
 //   val l_idx = AgePriorityEncoder((Vec(Vec.tabulate(num_ld_entries)(i => failed_loads(i) && UInt(i) >= laq_head) ++ failed_loads)).toBits)
-   val temp_bits = (Vec(Vec.tabulate(num_ld_entries)(i => failed_loads(i) && UInt(i) >= laq_head) ++ failed_loads)).toBits
+   val temp_bits = (Vec(Vec.tabulate(num_ld_entries)(i => 
+      failed_loads(i) && UInt(i) >= laq_head) ++ failed_loads)).toBits
    val l_idx = PriorityEncoder(temp_bits)
 
    // TODO always pad out the input to PECircular() to pow2
@@ -899,7 +900,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
             stq_entry_val(i)   := Bool(false)
             saq_val(i)         := Bool(false)
             sdq_val(i)         := Bool(false)
-            stq_uop(i).br_mask := Bits(0)
+            stq_uop(i).br_mask := UInt(0)
             st_brkilled_mask(i):= Bool(true)
          }
       }
@@ -1125,8 +1126,8 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
 
    //-------------------------------------------------------------
 
-   val laq_maybe_full = (laq_allocated.toBits =/= Bits(0))
-   val stq_maybe_full = (stq_entry_val.toBits =/= Bits(0))
+   val laq_maybe_full = (laq_allocated.toBits =/= UInt(0))
+   val stq_maybe_full = (stq_entry_val.toBits =/= UInt(0))
 
    var laq_is_full = Bool(false)
    var stq_is_full = Bool(false)
@@ -1206,14 +1207,14 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
 // take an address and generate an 8-bit mask of which bytes within a double-word are touched
 object GenByteMask
 {
-   def apply(addr: UInt, typ: UInt): Bits =
+   def apply(addr: UInt, typ: UInt): UInt =
    {
-      val mask = Wire(Bits(width = 8))
-      mask := MuxCase(Bits(255,8), Array(
-                   (typ === MT_B || typ === MT_BU) -> (Bits(1, 8) << addr(2,0)),
-                   (typ === MT_H || typ === MT_HU) -> (Bits(3, 8) << (addr(2,1) << UInt(1))),
-                   (typ === MT_W || typ === MT_WU) -> Mux(addr(2), Bits(240, 8), Bits(15, 8)),
-                   (typ === MT_D)                  -> Bits(255, 8)))
+      val mask = Wire(UInt(width = 8))
+      mask := MuxCase(UInt(255,8), Array(
+                   (typ === MT_B || typ === MT_BU) -> (UInt(1, 8) << addr(2,0)),
+                   (typ === MT_H || typ === MT_HU) -> (UInt(3, 8) << (addr(2,1) << UInt(1))),
+                   (typ === MT_W || typ === MT_WU) -> Mux(addr(2), UInt(240, 8), UInt(15, 8)),
+                   (typ === MT_D)                  -> UInt(255, 8)))
       mask
    }
 }
@@ -1224,7 +1225,7 @@ object GenByteMask
 // but the load data may need to be re-aligned...
 object LoadDataGenerator
 {
-   def apply(data: Bits, mem_type: Bits): Bits =
+   def apply(data: UInt, mem_type: UInt): UInt =
    {
      val sext  = (mem_type === MT_B) || (mem_type === MT_H) ||
                  (mem_type === MT_W) || (mem_type === MT_D)
@@ -1246,7 +1247,7 @@ class ForwardingAgeLogic(num_entries: Int)(implicit p: Parameters) extends BoomM
 {
    val io = new Bundle
    {
-      val addr_matches    = Bits(INPUT, num_entries) // bit vector of addresses that match between the load and the SAQ
+      val addr_matches    = UInt(INPUT, num_entries) // bit vector of addresses that match between the load and the SAQ
       val youngest_st_idx = UInt(INPUT, MEM_ADDR_SZ) // needed to get "age"
 
       val forwarding_val  = Bool(OUTPUT)
@@ -1265,7 +1266,7 @@ class ForwardingAgeLogic(num_entries: Int)(implicit p: Parameters) extends BoomM
    }
 
    // Priority encoder with moving tail: double length
-   val matches = Wire(Bits(width = 2*num_entries))
+   val matches = Wire(UInt(width = 2*num_entries))
    matches := Cat(io.addr_matches & age_mask.toBits,
                   io.addr_matches)
 

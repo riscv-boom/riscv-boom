@@ -23,14 +23,14 @@ import rocket.Str
 class TageTableResp(fetch_width: Int, history_length: Int, index_length: Int, tag_sz: Int)(implicit p: Parameters)
    extends BoomBundle()(p)
 {
-   val takens  = Bits(width = fetch_width)  // the actual prediction
-   val index   = Bits(width = index_length) // the index of the prediction
-   val tag     = Bits(width = tag_sz)       // the tag we computed for the prediction
+   val takens  = UInt(width = fetch_width)  // the actual prediction
+   val index   = UInt(width = index_length) // the index of the prediction
+   val tag     = UInt(width = tag_sz)       // the tag we computed for the prediction
 
    // TODO instead of passing huge histories around, just pass around a CSR
-//   val tag_csr1 = Bits(width = history_length) // TODO BUG XXX a total NOP
-//   val tag_csr2 = Bits(width = history_length) // TODO BUG XXX a total NOP
-//   val idx_csr = Bits(width = history_length) // TODO BUG XXX a total NOP
+//   val tag_csr1 = UInt(width = history_length) // TODO BUG XXX a total NOP
+//   val tag_csr2 = UInt(width = history_length) // TODO BUG XXX a total NOP
+//   val idx_csr = UInt(width = history_length) // TODO BUG XXX a total NOP
 
 
    override def cloneType: this.type = new TageTableResp(fetch_width, history_length, index_length, tag_sz).asInstanceOf[this.type]
@@ -52,9 +52,9 @@ class TageUpdateUsefulInfo(index_sz: Int) extends Bundle
 class TageAllocateEntryInfo(fetch_width: Int, index_sz: Int, tag_sz: Int, hist_sz: Int) extends Bundle //TageIndex(index_sz)
 {
    val index = UInt(width = index_sz)
-   val tag = Bits(width = tag_sz)
-   val executed = Bits(width = fetch_width)
-   val taken = Bits(width = fetch_width)
+   val tag = UInt(width = tag_sz)
+   val executed = UInt(width = fetch_width)
+   val taken = UInt(width = fetch_width)
    val debug_pc = UInt(width = 32)
    val debug_hist = UInt(width = hist_sz)
    override def cloneType: this.type = new TageAllocateEntryInfo(fetch_width, index_sz, tag_sz, hist_sz).asInstanceOf[this.type]
@@ -63,8 +63,8 @@ class TageAllocateEntryInfo(fetch_width: Int, index_sz: Int, tag_sz: Int, hist_s
 class TageUpdateCountersInfo(fetch_width: Int, index_sz: Int) extends Bundle //extends TageIndex(index_sz)
 {
    val index = UInt(width = index_sz)
-   val executed = Bits(width = fetch_width)
-   val taken = Bits(width = fetch_width)
+   val executed = UInt(width = fetch_width)
+   val taken = UInt(width = fetch_width)
    override def cloneType: this.type = new TageUpdateCountersInfo(fetch_width, index_sz).asInstanceOf[this.type]
 }
 
@@ -80,7 +80,7 @@ class TageTableIo(
 
    // instruction fetch - request prediction
    val if_req_pc = UInt(INPUT, width = 64)
-   val if_req_history = Bits(INPUT, width = history_length)
+   val if_req_history = UInt(INPUT, width = history_length)
 
    // bp2 - send prediction to bpd pipeline
    val bp2_resp = new DecoupledIO(new TageTableResp(fetch_width, history_length, log2Up(num_entries), tag_sz))
@@ -93,7 +93,7 @@ class TageTableIo(
 
    // commit - update predictor tables (allocate entry)
    val allocate = (new ValidIO(new TageAllocateEntryInfo(fetch_width, index_sz, tag_sz, history_length))).flip
-   def AllocateNewEntry(idx: UInt, tag: UInt, executed: Bits, taken: Bits, pc: UInt, hist: Bits) =
+   def AllocateNewEntry(idx: UInt, tag: UInt, executed: UInt, taken: UInt, pc: UInt, hist: UInt) =
    {
       this.allocate.valid := Bool(true)
       this.allocate.bits.index := idx
@@ -106,7 +106,7 @@ class TageTableIo(
 
    // commit - update predictor tables (update counters)
    val update_counters = (new ValidIO(new TageUpdateCountersInfo(fetch_width, index_sz))).flip
-   def UpdateCounters(idx: UInt, executed: Bits, taken: Bits) =
+   def UpdateCounters(idx: UInt, executed: UInt, taken: UInt) =
    {
       this.update_counters.valid := Bool(true)
       this.update_counters.bits.index := idx
@@ -123,7 +123,7 @@ class TageTableIo(
       this.update_usefulness.bits.inc := inc
    }
 
-   val usefulness_req_idx = Bits(INPUT, index_sz)
+   val usefulness_req_idx = UInt(INPUT, index_sz)
    val usefulness_resp = UInt(OUTPUT, 2) // TODO u-bit_sz
    def GetUsefulness(idx: UInt) =
    {
@@ -139,13 +139,13 @@ class TageTableIo(
       // TODO better way to provide initial values?
       this.allocate.bits.index := UInt(0)
       this.allocate.bits.tag := UInt(0)
-      this.allocate.bits.executed := Bits(0)
-      this.allocate.bits.taken := Bits(0)
+      this.allocate.bits.executed := UInt(0)
+      this.allocate.bits.taken := UInt(0)
       this.allocate.bits.debug_pc := UInt(0)
       this.allocate.bits.debug_hist := UInt(0)
       this.update_counters.bits.index := UInt(0)
-      this.update_counters.bits.executed := Bits(0)
-      this.update_counters.bits.taken := Bits(0)
+      this.update_counters.bits.executed := UInt(0)
+      this.update_counters.bits.taken := UInt(0)
       this.update_usefulness.bits.index := UInt(0)
       this.update_usefulness.bits.inc := Bool(false)
       this.usefulness_req_idx := UInt(0)
@@ -184,10 +184,10 @@ class TageTable(
    //------------------------------------------------------------
    // State
    val counter_table = Mem(num_entries, Vec(fetch_width, UInt(width = counter_sz)))
-   val tag_table     = Mem(num_entries, Bits(width = tag_sz))
-   val ubit_table    = Mem(num_entries, Bits(width = ubit_sz))
+   val tag_table     = Mem(num_entries, UInt(width = tag_sz))
+   val ubit_table    = Mem(num_entries, UInt(width = ubit_sz))
    val debug_pc_table= Mem(num_entries, UInt(width = 32))
-   val debug_hist_table=Mem(num_entries,Bits(width = history_length))
+   val debug_hist_table=Mem(num_entries,UInt(width = history_length))
 
    //history ghistory
    //csr idx_csr
@@ -201,7 +201,7 @@ class TageTable(
    //clearUBit() TODO XXX
 
 
-   private def Fold (input: Bits, compressed_length: Int) =
+   private def Fold (input: UInt, compressed_length: Int) =
    {
       val clen = compressed_length
       val hlen = history_length
@@ -211,7 +211,7 @@ class TageTable(
       }
       else
       {
-         var res = Bits(0,clen)
+         var res = UInt(0,clen)
          var remaining = input.toUInt
          for (i <- 0 to hlen-1 by clen)
          {
@@ -224,12 +224,12 @@ class TageTable(
       }
    }
 
-   private def IdxHash (addr: UInt, hist: Bits) =
+   private def IdxHash (addr: UInt, hist: UInt) =
    {
       ((addr >> UInt(log2Up(fetch_width*coreInstBytes))) ^ Fold(hist, index_sz))(index_sz-1,0)
    }
 
-   private def TagHash (addr: UInt, hist: Bits) =
+   private def TagHash (addr: UInt, hist: UInt) =
    {
       // the tag is computed by pc[n:0] ^ CSR1[n:0] ^ (CSR2[n-1:0]<<1).
       val tag_hash =
@@ -262,7 +262,7 @@ class TageTable(
       (cntr >> UInt(counter_sz-1)).toBool
    }
 
-   private def BuildAllocCounterRow(enables: Bits, takens: Bits): Vec[UInt] =
+   private def BuildAllocCounterRow(enables: UInt, takens: UInt): Vec[UInt] =
    {
       val counters = for (i <- 0 until fetch_width) yield
       {
@@ -327,7 +327,7 @@ class TageTable(
       debug_hist_table(a_idx) := io.allocate.bits.debug_hist
 
       assert (a_idx < UInt(num_entries), "[TageTable] out of bounds index on allocation")
-      assert (ubit_table(a_idx) === Bits(0), "[TageTable] Tried to allocate a useful entry")
+      assert (ubit_table(a_idx) === UInt(0), "[TageTable] Tried to allocate a useful entry")
    }
 
    val u_idx = io.update_counters.bits.index

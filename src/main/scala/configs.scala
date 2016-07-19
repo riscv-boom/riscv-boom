@@ -67,12 +67,12 @@ class DefaultBOOMConfig extends Config (
    knobValues = {
       case "NTiles" => 1
       case "FETCH_WIDTH" => 2
-      case "ISSUE_WIDTH" => 3
-      case "ROB_ENTRIES" => 48
-      case "ISSUE_ENTRIES" => 20
-      case "LSU_ENTRIES" => 16
+      case "ISSUE_WIDTH" => 2//3
+      case "ROB_ENTRIES" => 20//48
+      case "ISSUE_ENTRIES" => 10//20
+      case "LSU_ENTRIES" => 4//16
       case "PHYS_REGISTERS" => 110
-      case "MAX_BR_COUNT" => 8
+      case "MAX_BR_COUNT" => 4//8
       case "AGE_PRIORITY_ISSUE" => true
       case "L1D_MSHRS" => 4
       case "L1D_WAYS" => 8

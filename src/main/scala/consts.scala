@@ -17,6 +17,8 @@ package constants
 import Chisel._
 import cde.Parameters
 
+import rocket.Str
+
 trait BOOMDebugConstants
 {
    val DEBUG_PRINTF        = false // use the Chisel printf functionality
@@ -87,9 +89,9 @@ trait ScalarOpConstants
    val s_invalid :: s_valid_1 :: s_valid_2 :: Nil = Enum(UInt(),3)
 
    // PC Select Signal
-   val PC_PLUS4 = Bits(0, 2)  // PC + 4
-   val PC_BRJMP = Bits(1, 2)  // brjmp_target
-   val PC_JALR  = Bits(2, 2)  // jump_reg_target
+   val PC_PLUS4 = UInt(0, 2)  // PC + 4
+   val PC_BRJMP = UInt(1, 2)  // brjmp_target
+   val PC_JALR  = UInt(2, 2)  // jump_reg_target
 
    // Branch Type
    val BR_N   = UInt(0, 4)  // Next
@@ -152,149 +154,149 @@ trait ScalarOpConstants
    // TODO change micro-op opcodes into using enum
    val UOPC_SZ = 9
    val uopX    = BitPat.DC(UOPC_SZ)
-   val uopNOP  = Bits( 0, UOPC_SZ)
-   val uopLD   = Bits( 1, UOPC_SZ)
-   val uopSTA  = Bits( 2, UOPC_SZ)  // store address generation
-   val uopSTD  = Bits( 3, UOPC_SZ)  // store data generation
-   val uopLUI  = Bits( 4, UOPC_SZ)
+   val uopNOP  = UInt( 0, UOPC_SZ)
+   val uopLD   = UInt( 1, UOPC_SZ)
+   val uopSTA  = UInt( 2, UOPC_SZ)  // store address generation
+   val uopSTD  = UInt( 3, UOPC_SZ)  // store data generation
+   val uopLUI  = UInt( 4, UOPC_SZ)
 
-   val uopADDI = Bits( 5, UOPC_SZ)
-   val uopANDI = Bits( 6, UOPC_SZ)
-   val uopORI  = Bits( 7, UOPC_SZ)
-   val uopXORI = Bits( 8, UOPC_SZ)
-   val uopSLTI = Bits( 9, UOPC_SZ)
-   val uopSLTIU= Bits(10, UOPC_SZ)
-   val uopSLLI = Bits(11, UOPC_SZ)
-   val uopSRAI = Bits(12, UOPC_SZ)
-   val uopSRLI = Bits(13, UOPC_SZ)
+   val uopADDI = UInt( 5, UOPC_SZ)
+   val uopANDI = UInt( 6, UOPC_SZ)
+   val uopORI  = UInt( 7, UOPC_SZ)
+   val uopXORI = UInt( 8, UOPC_SZ)
+   val uopSLTI = UInt( 9, UOPC_SZ)
+   val uopSLTIU= UInt(10, UOPC_SZ)
+   val uopSLLI = UInt(11, UOPC_SZ)
+   val uopSRAI = UInt(12, UOPC_SZ)
+   val uopSRLI = UInt(13, UOPC_SZ)
 
-   val uopSLL  = Bits(14, UOPC_SZ)
-   val uopADD  = Bits(15, UOPC_SZ)
-   val uopSUB  = Bits(16, UOPC_SZ)
-   val uopSLT  = Bits(17, UOPC_SZ)
-   val uopSLTU = Bits(18, UOPC_SZ)
-   val uopAND  = Bits(19, UOPC_SZ)
-   val uopOR   = Bits(20, UOPC_SZ)
-   val uopXOR  = Bits(21, UOPC_SZ)
-   val uopSRA  = Bits(22, UOPC_SZ)
-   val uopSRL  = Bits(23, UOPC_SZ)
+   val uopSLL  = UInt(14, UOPC_SZ)
+   val uopADD  = UInt(15, UOPC_SZ)
+   val uopSUB  = UInt(16, UOPC_SZ)
+   val uopSLT  = UInt(17, UOPC_SZ)
+   val uopSLTU = UInt(18, UOPC_SZ)
+   val uopAND  = UInt(19, UOPC_SZ)
+   val uopOR   = UInt(20, UOPC_SZ)
+   val uopXOR  = UInt(21, UOPC_SZ)
+   val uopSRA  = UInt(22, UOPC_SZ)
+   val uopSRL  = UInt(23, UOPC_SZ)
 
-   val uopBEQ  = Bits(24, UOPC_SZ)
-   val uopBNE  = Bits(25, UOPC_SZ)
-   val uopBGE  = Bits(26, UOPC_SZ)
-   val uopBGEU = Bits(27, UOPC_SZ)
-   val uopBLT  = Bits(28, UOPC_SZ)
-   val uopBLTU = Bits(29, UOPC_SZ)
-   val uopCSRRW= Bits(30, UOPC_SZ)
-   val uopCSRRS= Bits(31, UOPC_SZ)
-   val uopCSRRC= Bits(32, UOPC_SZ)
-   val uopCSRRWI=Bits(33, UOPC_SZ)
-   val uopCSRRSI=Bits(34, UOPC_SZ)
-   val uopCSRRCI=Bits(35, UOPC_SZ)
+   val uopBEQ  = UInt(24, UOPC_SZ)
+   val uopBNE  = UInt(25, UOPC_SZ)
+   val uopBGE  = UInt(26, UOPC_SZ)
+   val uopBGEU = UInt(27, UOPC_SZ)
+   val uopBLT  = UInt(28, UOPC_SZ)
+   val uopBLTU = UInt(29, UOPC_SZ)
+   val uopCSRRW= UInt(30, UOPC_SZ)
+   val uopCSRRS= UInt(31, UOPC_SZ)
+   val uopCSRRC= UInt(32, UOPC_SZ)
+   val uopCSRRWI=UInt(33, UOPC_SZ)
+   val uopCSRRSI=UInt(34, UOPC_SZ)
+   val uopCSRRCI=UInt(35, UOPC_SZ)
 
-   val uopJ    = Bits(36, UOPC_SZ)
-   val uopJAL  = Bits(37, UOPC_SZ)
-   val uopJALR = Bits(38, UOPC_SZ)
-   val uopAUIPC= Bits(39, UOPC_SZ)
+   val uopJ    = UInt(36, UOPC_SZ)
+   val uopJAL  = UInt(37, UOPC_SZ)
+   val uopJALR = UInt(38, UOPC_SZ)
+   val uopAUIPC= UInt(39, UOPC_SZ)
 
-//   val uopSRET = Bits(40, UOPC_SZ)
-   val uopCFLSH= Bits(41, UOPC_SZ)
-   val uopFENCE= Bits(42, UOPC_SZ)
+//   val uopSRET = UInt(40, UOPC_SZ)
+   val uopCFLSH= UInt(41, UOPC_SZ)
+   val uopFENCE= UInt(42, UOPC_SZ)
 
-   val uopADDIW= Bits(43, UOPC_SZ)
-   val uopADDW = Bits(44, UOPC_SZ)
-   val uopSUBW = Bits(45, UOPC_SZ)
-   val uopSLLIW= Bits(46, UOPC_SZ)
-   val uopSLLW = Bits(47, UOPC_SZ)
-   val uopSRAIW= Bits(48, UOPC_SZ)
-   val uopSRAW = Bits(49, UOPC_SZ)
-   val uopSRLIW= Bits(50, UOPC_SZ)
-   val uopSRLW = Bits(51, UOPC_SZ)
-   val uopMUL  = Bits(52, UOPC_SZ)
-   val uopMULH = Bits(53, UOPC_SZ)
-   val uopMULHU= Bits(54, UOPC_SZ)
-   val uopMULHSU=Bits(55, UOPC_SZ)
-   val uopMULW = Bits(56, UOPC_SZ)
-   val uopDIV  = Bits(57, UOPC_SZ)
-   val uopDIVU = Bits(58, UOPC_SZ)
-   val uopREM  = Bits(59, UOPC_SZ)
-   val uopREMU = Bits(60, UOPC_SZ)
-   val uopDIVW = Bits(61, UOPC_SZ)
-   val uopDIVUW= Bits(62, UOPC_SZ)
-   val uopREMW = Bits(63, UOPC_SZ)
-   val uopREMUW= Bits(64, UOPC_SZ)
+   val uopADDIW= UInt(43, UOPC_SZ)
+   val uopADDW = UInt(44, UOPC_SZ)
+   val uopSUBW = UInt(45, UOPC_SZ)
+   val uopSLLIW= UInt(46, UOPC_SZ)
+   val uopSLLW = UInt(47, UOPC_SZ)
+   val uopSRAIW= UInt(48, UOPC_SZ)
+   val uopSRAW = UInt(49, UOPC_SZ)
+   val uopSRLIW= UInt(50, UOPC_SZ)
+   val uopSRLW = UInt(51, UOPC_SZ)
+   val uopMUL  = UInt(52, UOPC_SZ)
+   val uopMULH = UInt(53, UOPC_SZ)
+   val uopMULHU= UInt(54, UOPC_SZ)
+   val uopMULHSU=UInt(55, UOPC_SZ)
+   val uopMULW = UInt(56, UOPC_SZ)
+   val uopDIV  = UInt(57, UOPC_SZ)
+   val uopDIVU = UInt(58, UOPC_SZ)
+   val uopREM  = UInt(59, UOPC_SZ)
+   val uopREMU = UInt(60, UOPC_SZ)
+   val uopDIVW = UInt(61, UOPC_SZ)
+   val uopDIVUW= UInt(62, UOPC_SZ)
+   val uopREMW = UInt(63, UOPC_SZ)
+   val uopREMUW= UInt(64, UOPC_SZ)
 
-   val uopFENCEI    = Bits(65, UOPC_SZ)
-   //               = Bits(66, UOPC_SZ)
-   val uopAMO_AG    = Bits(67, UOPC_SZ) // AMO-address gen (use normal STD for datagen)
+   val uopFENCEI    = UInt(65, UOPC_SZ)
+   //               = UInt(66, UOPC_SZ)
+   val uopAMO_AG    = UInt(67, UOPC_SZ) // AMO-address gen (use normal STD for datagen)
 
-   val uopFMV_S_X   = Bits(68, UOPC_SZ)
-   val uopFMV_D_X   = Bits(69, UOPC_SZ)
-   val uopFMV_X_S   = Bits(70, UOPC_SZ)
-   val uopFMV_X_D   = Bits(71, UOPC_SZ)
+   val uopFMV_S_X   = UInt(68, UOPC_SZ)
+   val uopFMV_D_X   = UInt(69, UOPC_SZ)
+   val uopFMV_X_S   = UInt(70, UOPC_SZ)
+   val uopFMV_X_D   = UInt(71, UOPC_SZ)
 
-   val uopFSGNJ_S   = Bits(72, UOPC_SZ)
-   val uopFSGNJ_D   = Bits(73, UOPC_SZ)
+   val uopFSGNJ_S   = UInt(72, UOPC_SZ)
+   val uopFSGNJ_D   = UInt(73, UOPC_SZ)
 
-   val uopFCVT_S_D  = Bits(74, UOPC_SZ)
-   val uopFCVT_D_S  = Bits(75, UOPC_SZ)
+   val uopFCVT_S_D  = UInt(74, UOPC_SZ)
+   val uopFCVT_D_S  = UInt(75, UOPC_SZ)
 
-   val uopFCVT_S_W  = Bits(76, UOPC_SZ)
-   val uopFCVT_S_WU = Bits(77, UOPC_SZ)
-   val uopFCVT_S_L  = Bits(78, UOPC_SZ)
-   val uopFCVT_S_LU = Bits(79, UOPC_SZ)
-   val uopFCVT_D_W  = Bits(80, UOPC_SZ)
-   val uopFCVT_D_WU = Bits(81, UOPC_SZ)
-   val uopFCVT_D_L  = Bits(82, UOPC_SZ)
-   val uopFCVT_D_LU = Bits(83, UOPC_SZ)
+   val uopFCVT_S_W  = UInt(76, UOPC_SZ)
+   val uopFCVT_S_WU = UInt(77, UOPC_SZ)
+   val uopFCVT_S_L  = UInt(78, UOPC_SZ)
+   val uopFCVT_S_LU = UInt(79, UOPC_SZ)
+   val uopFCVT_D_W  = UInt(80, UOPC_SZ)
+   val uopFCVT_D_WU = UInt(81, UOPC_SZ)
+   val uopFCVT_D_L  = UInt(82, UOPC_SZ)
+   val uopFCVT_D_LU = UInt(83, UOPC_SZ)
 
 
-   val uopFCVT_W_S  = Bits(84, UOPC_SZ)
-   val uopFCVT_WU_S = Bits(85, UOPC_SZ)
-   val uopFCVT_L_S  = Bits(86, UOPC_SZ)
-   val uopFCVT_LU_S = Bits(87, UOPC_SZ)
-   val uopFCVT_W_D  = Bits(88, UOPC_SZ)
-   val uopFCVT_WU_D = Bits(89, UOPC_SZ)
-   val uopFCVT_L_D  = Bits(90, UOPC_SZ)
-   val uopFCVT_LU_D = Bits(91, UOPC_SZ)
+   val uopFCVT_W_S  = UInt(84, UOPC_SZ)
+   val uopFCVT_WU_S = UInt(85, UOPC_SZ)
+   val uopFCVT_L_S  = UInt(86, UOPC_SZ)
+   val uopFCVT_LU_S = UInt(87, UOPC_SZ)
+   val uopFCVT_W_D  = UInt(88, UOPC_SZ)
+   val uopFCVT_WU_D = UInt(89, UOPC_SZ)
+   val uopFCVT_L_D  = UInt(90, UOPC_SZ)
+   val uopFCVT_LU_D = UInt(91, UOPC_SZ)
 
-   val uopFEQ_S     = Bits(92, UOPC_SZ)
-   val uopFLT_S     = Bits(93, UOPC_SZ)
-   val uopFLE_S     = Bits(94, UOPC_SZ)
-   val uopFEQ_D     = Bits(95, UOPC_SZ)
-   val uopFLT_D     = Bits(96, UOPC_SZ)
-   val uopFLE_D     = Bits(97, UOPC_SZ)
+   val uopFEQ_S     = UInt(92, UOPC_SZ)
+   val uopFLT_S     = UInt(93, UOPC_SZ)
+   val uopFLE_S     = UInt(94, UOPC_SZ)
+   val uopFEQ_D     = UInt(95, UOPC_SZ)
+   val uopFLT_D     = UInt(96, UOPC_SZ)
+   val uopFLE_D     = UInt(97, UOPC_SZ)
 
-   val uopFCLASS_S  = Bits(98, UOPC_SZ)
-   val uopFCLASS_D  = Bits(99, UOPC_SZ)
+   val uopFCLASS_S  = UInt(98, UOPC_SZ)
+   val uopFCLASS_D  = UInt(99, UOPC_SZ)
 
-   val uopFMIN_S    = Bits(100,UOPC_SZ)
-   val uopFMAX_S    = Bits(101,UOPC_SZ)
-   val uopFMIN_D    = Bits(102,UOPC_SZ)
-   val uopFMAX_D    = Bits(103,UOPC_SZ)
+   val uopFMIN_S    = UInt(100,UOPC_SZ)
+   val uopFMAX_S    = UInt(101,UOPC_SZ)
+   val uopFMIN_D    = UInt(102,UOPC_SZ)
+   val uopFMAX_D    = UInt(103,UOPC_SZ)
 
-   val uopFADD_S    = Bits(104,UOPC_SZ)
-   val uopFSUB_S    = Bits(105,UOPC_SZ)
-   val uopFMUL_S    = Bits(106,UOPC_SZ)
-   val uopFADD_D    = Bits(107,UOPC_SZ)
-   val uopFSUB_D    = Bits(108,UOPC_SZ)
-   val uopFMUL_D    = Bits(109,UOPC_SZ)
+   val uopFADD_S    = UInt(104,UOPC_SZ)
+   val uopFSUB_S    = UInt(105,UOPC_SZ)
+   val uopFMUL_S    = UInt(106,UOPC_SZ)
+   val uopFADD_D    = UInt(107,UOPC_SZ)
+   val uopFSUB_D    = UInt(108,UOPC_SZ)
+   val uopFMUL_D    = UInt(109,UOPC_SZ)
 
-   val uopFMADD_S   = Bits(110,UOPC_SZ)
-   val uopFMSUB_S   = Bits(111,UOPC_SZ)
-   val uopFNMADD_S  = Bits(112,UOPC_SZ)
-   val uopFNMSUB_S  = Bits(113,UOPC_SZ)
-   val uopFMADD_D   = Bits(114,UOPC_SZ)
-   val uopFMSUB_D   = Bits(115,UOPC_SZ)
-   val uopFNMADD_D  = Bits(116,UOPC_SZ)
-   val uopFNMSUB_D  = Bits(117,UOPC_SZ)
+   val uopFMADD_S   = UInt(110,UOPC_SZ)
+   val uopFMSUB_S   = UInt(111,UOPC_SZ)
+   val uopFNMADD_S  = UInt(112,UOPC_SZ)
+   val uopFNMSUB_S  = UInt(113,UOPC_SZ)
+   val uopFMADD_D   = UInt(114,UOPC_SZ)
+   val uopFMSUB_D   = UInt(115,UOPC_SZ)
+   val uopFNMADD_D  = UInt(116,UOPC_SZ)
+   val uopFNMSUB_D  = UInt(117,UOPC_SZ)
 
-   val uopFDIV_S    = Bits(118,UOPC_SZ)
-   val uopFDIV_D    = Bits(119,UOPC_SZ)
-   val uopFSQRT_S   = Bits(120,UOPC_SZ)
-   val uopFSQRT_D   = Bits(121,UOPC_SZ)
+   val uopFDIV_S    = UInt(118,UOPC_SZ)
+   val uopFDIV_D    = UInt(119,UOPC_SZ)
+   val uopFSQRT_S   = UInt(120,UOPC_SZ)
+   val uopFSQRT_D   = UInt(121,UOPC_SZ)
 
-   val uopSYSTEM    = Bits(122, UOPC_SZ) // pass uop down the CSR pipeline and let it handle it
+   val uopSYSTEM    = UInt(122, UOPC_SZ) // pass uop down the CSR pipeline and let it handle it
 
    // Memory Mask Type Signal
    val MSK_X   = BitPat("b???")
@@ -311,7 +313,7 @@ trait ScalarOpConstants
    // generated NOPs which are (ADDI x0, x0, 0).
    // Reasoning for this is to let visualizers and stat-trackers differentiate
    // between software NOPs and machine-generated Bubbles in the pipeline.
-   val BUBBLE  = Bits(0x4033, 32)
+   val BUBBLE  = UInt(0x4033, 32)
 
 
    def NullMicroOp()(implicit p: Parameters): MicroOp =
@@ -366,26 +368,26 @@ trait RISCVConstants
 
    val jal_opc = UInt(0x6f)
    val jalr_opc = UInt(0x67)
-   def GetUop(inst: Bits): Bits = inst(6,0)
-   def GetRd (inst: Bits): UInt = inst(RD_MSB,RD_LSB)
-   def GetRs1(inst: Bits): UInt = inst(RS1_MSB,RS1_LSB)
-   def IsCall(inst: Bits): Bool = (inst === rocket.Instructions.JAL ||
+   def GetUop(inst: UInt): UInt = inst(6,0)
+   def GetRd (inst: UInt): UInt = inst(RD_MSB,RD_LSB)
+   def GetRs1(inst: UInt): UInt = inst(RS1_MSB,RS1_LSB)
+   def IsCall(inst: UInt): Bool = (inst === rocket.Instructions.JAL ||
                                   inst === rocket.Instructions.JALR) && GetRd(inst) === RA
-   def IsReturn(inst: Bits): Bool = GetUop(inst) === jalr_opc && GetRd(inst) === X0 && GetRs1(inst) === RA
+   def IsReturn(inst: UInt): Bool = GetUop(inst) === jalr_opc && GetRd(inst) === X0 && GetRs1(inst) === RA
 
-   def ComputeBranchTarget(pc: UInt, inst: Bits, xlen: Int, coreInstBytes: Int): UInt =
+   def ComputeBranchTarget(pc: UInt, inst: UInt, xlen: Int, coreInstBytes: Int): UInt =
    {
-      val b_imm32 = Cat(Fill(20,inst(31)), inst(7), inst(30,25), inst(11,8), Bits(0,1))
-      (pc + Sext(b_imm32, xlen)).toBits & SInt(-coreInstBytes)
+      val b_imm32 = Cat(Fill(20,inst(31)), inst(7), inst(30,25), inst(11,8), UInt(0,1))
+      (pc + Sext(b_imm32, xlen)) & SInt(-coreInstBytes)
    }
-   def ComputeJALTarget(pc: UInt, inst: Bits, xlen: Int, coreInstBytes: Int): UInt =
+   def ComputeJALTarget(pc: UInt, inst: UInt, xlen: Int, coreInstBytes: Int): UInt =
    {
-      val j_imm32 = Cat(Fill(12,inst(31)), inst(19,12), inst(20), inst(30,25), inst(24,21), Bits(0,1))
-      (pc + Sext(j_imm32, xlen)).toBits & SInt(-coreInstBytes)
+      val j_imm32 = Cat(Fill(12,inst(31)), inst(19,12), inst(20), inst(30,25), inst(24,21), UInt(0,1))
+      (pc + Sext(j_imm32, xlen)) & SInt(-coreInstBytes)
    }
 
 
-   def InstsStr(insts: Bits, width: Int) =
+   def InstsStr(insts: UInt, width: Int) =
    {
       //var string = Str("") //sprintf("") XXX TODO sprintf is missing in chisel3
       //for (w <- 0 until width)
