@@ -77,7 +77,7 @@ class LoadStoreUnitIO(pl_width: Int)(implicit p: Parameters) extends BoomBundle(
    val memreq_val         = Bool(OUTPUT)
    val memreq_addr        = UInt(OUTPUT, corePAddrBits)
    val memreq_wdata       = UInt(OUTPUT, xLen)
-   val memreq_uop         = new MicroOp().asOutput()
+   val memreq_uop         = new MicroOp().asOutput
 
    val memreq_kill        = Bool(OUTPUT) // kill request sent out last cycle
 
@@ -85,13 +85,13 @@ class LoadStoreUnitIO(pl_width: Int)(implicit p: Parameters) extends BoomBundle(
    // TODO turn into forward bundle
    val forward_val        = Bool(OUTPUT)
    val forward_data       = UInt(OUTPUT, xLen)
-   val forward_uop        = new MicroOp().asOutput() // the load microop (for its pdst)
+   val forward_uop        = new MicroOp().asOutput // the load microop (for its pdst)
 
    // Receive Memory Response
    val memresp            = new ValidIO(new MicroOp()).flip
 
    // Handle Branch Misspeculations
-   val brinfo             = new BrResolutionInfo().asInput()
+   val brinfo             = new BrResolutionInfo().asInput
 
    // Stall Decode as appropriate
    val laq_full           = Bool(OUTPUT)
@@ -105,7 +105,7 @@ class LoadStoreUnitIO(pl_width: Int)(implicit p: Parameters) extends BoomBundle(
    val xcpt = new ValidIO(new Exception)
 
    // cache nacks
-   val nack               = new NackInfo().asInput()
+   val nack               = new NackInfo().asInput
 
 // causing stuff to dissapear
 //   val dmem = new DCMemPortIO().flip()

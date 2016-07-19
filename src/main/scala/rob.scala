@@ -61,7 +61,7 @@ class RobIo(machine_width: Int
    // Dispatch Stage
    // (Write Instruction to ROB from Dispatch Stage)
    val dis_valids       = Vec.fill(machine_width) { Bool(INPUT) }
-   val dis_uops         = Vec.fill(machine_width) { new MicroOp().asInput() }
+   val dis_uops         = Vec.fill(machine_width) { new MicroOp().asInput }
    val dis_has_br_or_jalr_in_packet = Bool(INPUT)
    val dis_partial_stall= Bool(INPUT) // we're dispatching only a partial packet, and stalling on the rest of it (don't
                                       // advance the tail ptr)
@@ -89,7 +89,7 @@ class RobIo(machine_width: Int
    // (Free no-longer used physical register).
    // Also used for rollback.
    val com_valids       = Vec.fill(machine_width) {Bool(OUTPUT)}
-   val com_uops         = Vec.fill(machine_width) {new MicroOp().asOutput()}
+   val com_uops         = Vec.fill(machine_width) {new MicroOp().asOutput}
    val com_fflags_val   = Bool(OUTPUT)
    val com_fflags       = Bits(OUTPUT, 5)
 

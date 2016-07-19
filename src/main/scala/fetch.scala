@@ -35,7 +35,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    val io = new BoomBundle()(p)
    {
       val imem              = new rocket.FrontendIO
-      val br_unit           = new BranchUnitResp().asInput()
+      val br_unit           = new BranchUnitResp().asInput
 
       val tsc_reg           = UInt(INPUT, xLen)
       val irt_reg           = UInt(INPUT, xLen)

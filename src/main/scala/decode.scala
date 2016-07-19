@@ -606,7 +606,7 @@ class BranchMaskGenerationLogic(val pl_width: Int)(implicit p: Parameters) exten
 
       val debug = new Bundle {
          val branch_mask = Bits(width = MAX_BR_COUNT)
-      }.asOutput()
+      }.asOutput
    }
 
    val branch_mask = Reg(init = Bits(0, MAX_BR_COUNT))

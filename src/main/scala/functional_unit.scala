@@ -63,9 +63,9 @@ class FunctionalUnitIo(num_stages: Int
    val req     = (new DecoupledIO(new FuncUnitReq(data_width))).flip
    val resp    = (new DecoupledIO(new FuncUnitResp(data_width)))
 
-   val brinfo  = new BrResolutionInfo().asInput()
+   val brinfo  = new BrResolutionInfo().asInput
 
-   val bypass  = new BypassData(num_bypass_stages, data_width).asOutput()
+   val bypass  = new BypassData(num_bypass_stages, data_width).asOutput
 
    val br_unit = new BranchUnitResp().asOutput
 

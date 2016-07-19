@@ -159,7 +159,7 @@ class FreeListIo(num_phys_registers: Int, pl_width: Int)(implicit p: Parameters)
    // TODO combine with rollback, whatever?
    val flush_pipeline = Bool(INPUT)
    val com_wens       = Vec.fill(pl_width) {Bool(INPUT)}
-   val com_uops       = Vec.fill(pl_width) {new MicroOp().asInput()}
+   val com_uops       = Vec.fill(pl_width) {new MicroOp().asInput}
 
    val debug = new Bundle {
       val freelist = Bits(width=num_phys_registers)

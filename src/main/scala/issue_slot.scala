@@ -23,14 +23,14 @@ class IssueSlotIO(num_wakeup_ports: Int)(implicit p: Parameters) extends BoomBun
    val request_hp     = Bool(OUTPUT)
    val grant          = Bool(INPUT)
 
-   val brinfo         = new BrResolutionInfo().asInput()
+   val brinfo         = new BrResolutionInfo().asInput
    val kill           = Bool(INPUT) // pipeline flush
    val clear          = Bool(INPUT) // entry being moved elsewhere (not mutually exclusive with grant)
 
    val wakeup_dsts    = Vec(num_wakeup_ports, Valid(UInt(width = PREG_SZ)).flip)
    val in_uop         = Valid(new MicroOp()).flip // if valid, this WILL overwrite an entry!
-   val updated_uop    = new MicroOp().asOutput() // the updated slot uop; will be shifted upwards in a collasping queue.
-   val uop            = new MicroOp().asOutput() // the current Slot's uop. Sent down the pipeline when issued.
+   val updated_uop    = new MicroOp().asOutput // the updated slot uop; will be shifted upwards in a collasping queue.
+   val uop            = new MicroOp().asOutput // the current Slot's uop. Sent down the pipeline when issued.
 
    val debug = new Bundle {
       val p1 = Bool()

@@ -50,8 +50,8 @@ class ExecutionUnitIO(num_rf_read_ports: Int
 
    val req     = (new DecoupledIO(new FuncUnitReq(data_width))).flip
    val resp    = Vec.fill(num_rf_write_ports) { (new DecoupledIO(new ExeUnitResp(data_width))) }
-   val bypass  = new BypassData(num_bypass_ports, data_width).asOutput()
-   val brinfo  = new BrResolutionInfo().asInput()
+   val bypass  = new BypassData(num_bypass_ports, data_width).asOutput
+   val brinfo  = new BrResolutionInfo().asInput
 
    // only used by the branch unit
    val br_unit = new BranchUnitResp().asOutput
