@@ -436,26 +436,28 @@ class RenameStageIO(pl_width: Int, num_wb_ports: Int)(implicit p: Parameters) ex
    val brinfo    = new BrResolutionInfo().asInput
    val get_pred  = new GetPredictionInfo().flip
 
-   val dis_inst_can_proceed = Vec.fill(DISPATCH_WIDTH) {Bool(INPUT)}
+   val dis_inst_can_proceed = Vec(DISPATCH_WIDTH, Bool(INPUT))
 
    // issue stage (fast wakeup)
-   val wb_valids = Vec.fill(num_wb_ports) {Bool(INPUT)}
-   val wb_pdsts  = Vec.fill(num_wb_ports) {UInt(INPUT, PREG_SZ)}
+   val wb_valids = Vec(num_wb_ports, Bool(INPUT))
+   val wb_pdsts  = Vec(num_wb_ports, UInt(INPUT, PREG_SZ))
 
    // commit stage
-   val com_valids = Vec.fill(pl_width) {Bool(INPUT)}
-   val com_uops   = Vec.fill(pl_width) {new MicroOp().asInput}
-   val com_rbk_valids = Vec.fill(pl_width) {Bool(INPUT)}
+   val com_valids = Vec(pl_width, Bool(INPUT))
+   val com_uops   = Vec(pl_width, new MicroOp().asInput)
+   val com_rbk_valids = Vec(pl_width, Bool(INPUT))
 
    val flush_pipeline = Bool(INPUT) // TODO only used for SCR (single-cycle reset)
 
-   val debug = new Bundle {
-      val freelist = Bits(width=PHYS_REG_COUNT)
-      val isprlist = Bits(width=PHYS_REG_COUNT)
-      val bsy_table = UInt(width=PHYS_REG_COUNT)
-   }.asOutput
+   val debug = new DebugRenameStageIO().asOutput
 }
 
+class DebugRenameStageIO(implicit p: Parameters) extends BoomBundle()(p)
+{
+   val freelist = Bits(width=PHYS_REG_COUNT)
+   val isprlist = Bits(width=PHYS_REG_COUNT)
+   val bsy_table = UInt(width=PHYS_REG_COUNT)
+}
 
 class RenameStage(pl_width: Int, num_wb_ports: Int)(implicit p: Parameters) extends BoomModule()(p)
 {

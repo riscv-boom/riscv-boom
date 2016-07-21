@@ -639,8 +639,8 @@ abstract class UnPipelinedFunctionalUnit(implicit p: Parameters)
 class MulDivUnit(implicit p: Parameters) extends UnPipelinedFunctionalUnit()(p)
 {
    val muldiv = Module(new rocket.MulDiv(width = xLen,
-                                  unroll = if(usingFastMulDiv) 8 else 1,
-                                  earlyOut = usingFastMulDiv))
+                                  unroll = p(rocket.MulUnroll),
+                                  earlyOut = p(rocket.DivEarlyOut)))
 
    // request
    muldiv.io.req.valid    := io.req.valid && !this.do_kill

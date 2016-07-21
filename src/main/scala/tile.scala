@@ -21,7 +21,7 @@ class BOOMTile(resetSignal: Bool = null)(implicit p: Parameters) extends rocket.
 {
    val core = Module(new BOOMCore()(p.alterPartial({case rocket.CoreName => "BOOM"})))
    val icache = Module(new rocket.Frontend()(p.alterPartial({
-      case uncore.CacheName => "L1I"
+      case uncore.agents.CacheName => "L1I"
       case rocket.CoreName => "BOOM"})))
    val dcache = Module(new rocket.HellaCache()(dcacheParams))
    val dc_shim = Module(new DCacheShim()(dcacheParams))
@@ -29,14 +29,14 @@ class BOOMTile(resetSignal: Bool = null)(implicit p: Parameters) extends rocket.
    val ptwPorts = collection.mutable.ArrayBuffer(icache.io.ptw, core.io.ptw_tlb)
    val dcPorts = collection.mutable.ArrayBuffer(dc_shim.io.dmem)
    val uncachedArbPorts = collection.mutable.ArrayBuffer(icache.io.mem)
-   val uncachedPorts = collection.mutable.ArrayBuffer[uncore.ClientUncachedTileLinkIO]()
+   val uncachedPorts = collection.mutable.ArrayBuffer[uncore.tilelink.ClientUncachedTileLinkIO]()
    val cachedPorts = collection.mutable.ArrayBuffer(dcache.io.mem)
    core.io.prci <> io.prci
    core.io.dmem <> dc_shim.io.core
    icache.io.cpu <> core.io.imem
 
 
-   val uncachedArb = Module(new uncore.ClientUncachedTileLinkIOArbiter(uncachedArbPorts.size))
+   val uncachedArb = Module(new uncore.tilelink.ClientUncachedTileLinkIOArbiter(uncachedArbPorts.size))
    uncachedArb.io.in <> uncachedArbPorts
    uncachedArb.io.out +=: uncachedPorts
 

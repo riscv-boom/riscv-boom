@@ -359,14 +359,13 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
                      Mux(will_fire_load_retry, laq_addr(laq_retry_idx),
                                                io.exe_resp.bits.addr.toBits))
 
-   val dtlb = Module(new rocket.TLB()(p.alterPartial({case uncore.CacheName => "L1D"})))
+   val dtlb = Module(new rocket.TLB()(p.alterPartial({case uncore.agents.CacheName => "L1D"})))
    dtlb.io.ptw <> io.ptw
    dtlb.io.req.valid := will_fire_load_incoming ||
                         will_fire_sta_incoming ||
                         will_fire_sta_retry ||
                         will_fire_load_retry
    dtlb.io.req.bits.passthrough := Bool(false) // lets status.vm decide
-   dtlb.io.req.bits.asid := UInt(0)
    dtlb.io.req.bits.vpn := exe_vaddr >> UInt(corePgIdxBits)
    dtlb.io.req.bits.instruction := Bool(false)
    dtlb.io.req.bits.store := will_fire_sta_incoming || will_fire_sta_retry

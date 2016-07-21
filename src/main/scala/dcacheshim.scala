@@ -27,7 +27,7 @@ package boom
 import Chisel._
 import cde.Parameters
 
-import uncore._
+import uncore.constants.MemoryOpConstants._
 
 
 // Track Inflight Memory Requests

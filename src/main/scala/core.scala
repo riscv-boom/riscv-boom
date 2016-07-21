@@ -31,7 +31,6 @@ import cde.Parameters
 
 import rocket.Instructions._
 import rocket.Str
-import uncore.HtifIO
 
 
 abstract class BoomModule(implicit val p: Parameters) extends Module
@@ -56,7 +55,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
 {
    val io = new BoomBundle()(p)
    {
-      val prci     = new uncore.PRCITileIO().flip
+      val prci     = new uncore.devices.PRCITileIO().flip
       val imem     = new rocket.FrontendIO
       val dmem     = new DCMemPortIO
       val ptw_dat  = new rocket.DatapathPTWIO().flip
@@ -827,48 +826,49 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    //-------------------------------------------------------------
    // UARCH Counters
 
+   // TODO support for "uarch_counters" has been removed in rocket.CSRFile; must upgrade to new mechanisms
    // these take up a significant amount of area, so don't enable them lightly
-   if (p(EnableUarchCounters))
-   {
-      println("\n   UArch Counters Enabled\n")
-      csr.io.uarch_counters(0)  := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
-         com_valids(w) && com_uops(w).is_br_or_jmp && !com_uops(w).is_jal})
-      csr.io.uarch_counters(1)  := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
-         com_valids(w) && com_uops(w).is_br_or_jmp && !com_uops(w).is_jal && com_uops(w).stat_brjmp_mispredicted})
-      csr.io.uarch_counters(2)  := !rob.io.ready
-      csr.io.uarch_counters(3)  := lsu_io.laq_full
-      csr.io.uarch_counters(4)  := !issue_unit.io.dis_readys.reduce(_|_)
-      csr.io.uarch_counters(5)  := io.counters.dc_miss
-      csr.io.uarch_counters(6)  := branch_mask_full.reduce(_|_)
-      csr.io.uarch_counters(7)  := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
-         com_valids(w) && (com_uops(w).is_store || com_uops(w).is_load)})
-      csr.io.uarch_counters(8)  := lsu_io.counters.ld_valid
-      csr.io.uarch_counters(9)  := lsu_io.counters.ld_order_fail
+   //if (p(EnableUarchCounters))
+   //{
+   //   println("\n   UArch Counters Enabled\n")
+   //   csr.io.uarch_counters(0)  := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+   //      com_valids(w) && com_uops(w).is_br_or_jmp && !com_uops(w).is_jal})
+   //   csr.io.uarch_counters(1)  := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+   //      com_valids(w) && com_uops(w).is_br_or_jmp && !com_uops(w).is_jal && com_uops(w).stat_brjmp_mispredicted})
+   //   csr.io.uarch_counters(2)  := !rob.io.ready
+   //   csr.io.uarch_counters(3)  := lsu_io.laq_full
+   //   csr.io.uarch_counters(4)  := !issue_unit.io.dis_readys.reduce(_|_)
+   //   csr.io.uarch_counters(5)  := io.counters.dc_miss
+   //   csr.io.uarch_counters(6)  := branch_mask_full.reduce(_|_)
+   //   csr.io.uarch_counters(7)  := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+   //      com_valids(w) && (com_uops(w).is_store || com_uops(w).is_load)})
+   //   csr.io.uarch_counters(8)  := lsu_io.counters.ld_valid
+   //   csr.io.uarch_counters(9)  := lsu_io.counters.ld_order_fail
 
-      csr.io.uarch_counters(10) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
-         com_valids(w) && com_uops(w).is_br_or_jmp && !com_uops(w).is_jal && com_uops(w).stat_btb_made_pred})
-      csr.io.uarch_counters(11) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
-         com_valids(w) && com_uops(w).is_br_or_jmp && !com_uops(w).is_jal && com_uops(w).stat_btb_mispredicted})
-      csr.io.uarch_counters(12) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
-         com_valids(w) && com_uops(w).is_br_or_jmp && !com_uops(w).is_jal && com_uops(w).stat_bpd_made_pred})
-      csr.io.uarch_counters(13) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
-         com_valids(w) && com_uops(w).is_br_or_jmp && !com_uops(w).is_jal && com_uops(w).stat_bpd_mispredicted})
+   //   csr.io.uarch_counters(10) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+   //      com_valids(w) && com_uops(w).is_br_or_jmp && !com_uops(w).is_jal && com_uops(w).stat_btb_made_pred})
+   //   csr.io.uarch_counters(11) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+   //      com_valids(w) && com_uops(w).is_br_or_jmp && !com_uops(w).is_jal && com_uops(w).stat_btb_mispredicted})
+   //   csr.io.uarch_counters(12) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+   //      com_valids(w) && com_uops(w).is_br_or_jmp && !com_uops(w).is_jal && com_uops(w).stat_bpd_made_pred})
+   //   csr.io.uarch_counters(13) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+   //      com_valids(w) && com_uops(w).is_br_or_jmp && !com_uops(w).is_jal && com_uops(w).stat_bpd_mispredicted})
 
-      // 14, no prediction made
-      csr.io.uarch_counters(14) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
-         com_valids(w) && com_uops(w).is_br_or_jmp && !com_uops(w).is_jal &&
-         !com_uops(w).stat_btb_made_pred && !com_uops(w).stat_bpd_made_pred})
-      // 15, no predition made - and a mispredict occurred
-      csr.io.uarch_counters(15) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
-         com_valids(w) && com_uops(w).is_br_or_jmp && !com_uops(w).is_jal &&
-         !com_uops(w).stat_btb_made_pred && !com_uops(w).stat_bpd_made_pred &&
-         com_uops(w).stat_brjmp_mispredicted})
-   }
-   else
-   {
+   //   // 14, no prediction made
+   //   csr.io.uarch_counters(14) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+   //      com_valids(w) && com_uops(w).is_br_or_jmp && !com_uops(w).is_jal &&
+   //      !com_uops(w).stat_btb_made_pred && !com_uops(w).stat_bpd_made_pred})
+   //   // 15, no predition made - and a mispredict occurred
+   //   csr.io.uarch_counters(15) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+   //      com_valids(w) && com_uops(w).is_br_or_jmp && !com_uops(w).is_jal &&
+   //      !com_uops(w).stat_btb_made_pred && !com_uops(w).stat_bpd_made_pred &&
+   //      com_uops(w).stat_brjmp_mispredicted})
+   //}
+   //else
+   //{
       println("\n   UArch Counters Disabled\n")
-      csr.io.uarch_counters.foreach(_ := Bool(false))
-   }
+   //   csr.io.uarch_counters.foreach(_ := Bool(false))
+   //}
 
    assert (!(Range(0,COMMIT_WIDTH).map{w =>
       com_valids(w) && com_uops(w).is_br_or_jmp && com_uops(w).is_jal &&
