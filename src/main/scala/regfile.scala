@@ -42,8 +42,8 @@ class RegisterFile( num_registers: Int
 {
    val io = new BoomBundle()(p)
    {
-      val read_ports = Vec.fill(num_read_ports) { (new RegisterFileReadPortIO(PREG_SZ, register_width)) }
-      val write_ports = Vec.fill(num_write_ports) { (new RegisterFileWritePortIO(PREG_SZ, register_width)) }
+      val read_ports = Vec(num_read_ports, new RegisterFileReadPortIO(PREG_SZ, register_width))
+      val write_ports = Vec(num_write_ports, new RegisterFileWritePortIO(PREG_SZ, register_width))
    }
 
    // --------------------------------------------------------------

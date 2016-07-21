@@ -49,7 +49,7 @@ class ExecutionUnitIO(num_rf_read_ports: Int
    val fu_types = Bits(OUTPUT, FUC_SZ)
 
    val req     = (new DecoupledIO(new FuncUnitReq(data_width))).flip
-   val resp    = Vec.fill(num_rf_write_ports) { (new DecoupledIO(new ExeUnitResp(data_width))) }
+   val resp    = Vec(num_rf_write_ports, new DecoupledIO(new ExeUnitResp(data_width)))
    val bypass  = new BypassData(num_bypass_ports, data_width).asOutput
    val brinfo  = new BrResolutionInfo().asInput
 

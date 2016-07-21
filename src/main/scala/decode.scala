@@ -484,7 +484,7 @@ class BranchDecode extends Module
 
 class FetchSerializerResp(implicit p: Parameters) extends BoomBundle()(p)
 {
-   val uops = Vec.fill(DECODE_WIDTH){new MicroOp()}
+   val uops = Vec(DECODE_WIDTH, new MicroOp())
    val pred_resp = new BranchPredictionResp()
 }
 class FetchSerializerIO(implicit p: Parameters) extends BoomBundle()(p)
@@ -594,19 +594,19 @@ class BranchMaskGenerationLogic(val pl_width: Int)(implicit p: Parameters) exten
    val io = new Bundle
    {
       // guess if the uop is a branch (we'll catch this later)
-      val is_branch = Vec.fill(pl_width) { Bool(INPUT) }
+      val is_branch = Vec(pl_width, Bool(INPUT))
       // lock in that it's actually a branch and will fire, so we update
       // the branch_masks.
-      val will_fire = Vec.fill(pl_width) { Bool(INPUT) }
+      val will_fire = Vec(pl_width, Bool(INPUT))
 
       // give out tag immediately (needed in rename)
       // mask can come later in the cycle
-      val br_tag    = Vec.fill(pl_width) { UInt(OUTPUT, BR_TAG_SZ) }
-      val br_mask   = Vec.fill(pl_width) { UInt(OUTPUT, MAX_BR_COUNT) }
+      val br_tag    = Vec(pl_width, UInt(OUTPUT, BR_TAG_SZ))
+      val br_mask   = Vec(pl_width, UInt(OUTPUT, MAX_BR_COUNT))
 
        // tell decoders the branch mask has filled up, but on the granularity
        // of an individual micro-op (so some micro-ops can go through)
-      val is_full   = Vec.fill(pl_width) { Bool(OUTPUT) }
+      val is_full   = Vec(pl_width, Bool(OUTPUT))
 
       val brinfo         = new BrResolutionInfo().asInput
       val flush_pipeline = Bool(INPUT)

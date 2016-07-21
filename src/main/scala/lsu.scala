@@ -58,9 +58,9 @@ class LoadStoreUnitIO(pl_width: Int)(implicit p: Parameters) extends BoomBundle(
    // Decode Stage
    // Track which stores are "alive" in the pipeline
    // allows us to know which stores get killed by branch mispeculation
-   val dec_st_vals        = Vec.fill(pl_width) { Bool(INPUT) }
-   val dec_ld_vals        = Vec.fill(pl_width) { Bool(INPUT) }
-   val dec_uops           = Vec.fill(pl_width) {new MicroOp()}.asInput
+   val dec_st_vals        = Vec(pl_width,  Bool(INPUT))
+   val dec_ld_vals        = Vec(pl_width,  Bool(INPUT))
+   val dec_uops           = Vec(pl_width, new MicroOp().asInput)
 
    val new_ldq_idx        = UInt(OUTPUT, MEM_ADDR_SZ)
    val new_stq_idx        = UInt(OUTPUT, MEM_ADDR_SZ)
@@ -69,8 +69,8 @@ class LoadStoreUnitIO(pl_width: Int)(implicit p: Parameters) extends BoomBundle(
    val exe_resp           = (new ValidIO(new FuncUnitResp(xLen))).flip
 
    // Commit Stage
-   val commit_store_mask  = Vec.fill(pl_width) {Bool(INPUT)}
-   val commit_load_mask   = Vec.fill(pl_width) {Bool(INPUT)}
+   val commit_store_mask  = Vec(pl_width, Bool(INPUT))
+   val commit_load_mask   = Vec(pl_width, Bool(INPUT))
    val commit_load_at_rob_head = Bool(INPUT)
 
    // Send out Memory Request

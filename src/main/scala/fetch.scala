@@ -17,14 +17,14 @@ import rocket.Str
 class FetchBundle(implicit p: Parameters) extends BoomBundle()(p)
 {
    val pc          = UInt(width = vaddrBits+1)
-   val insts       = Vec.fill(FETCH_WIDTH) {Bits(width = 32)}
+   val insts       = Vec(FETCH_WIDTH, Bits(width = 32))
    val mask        = Bits(width = FETCH_WIDTH) // mark which words are valid instructions
    val xcpt_if     = Bool()
 
    val pred_resp   = new BranchPredictionResp
-   val predictions = Vec.fill(FETCH_WIDTH) {new BranchPrediction}
+   val predictions = Vec(FETCH_WIDTH, new BranchPrediction)
 
-   val debug_events = Vec.fill(FETCH_WIDTH) {new DebugStageEvents}
+   val debug_events = Vec(FETCH_WIDTH, new DebugStageEvents)
 
   override def cloneType: this.type = new FetchBundle().asInstanceOf[this.type]
 }
@@ -45,7 +45,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
       val bp2_br_seen       = Bool(INPUT)
       val bp2_is_jump       = Bool(INPUT)
       val bp2_pred_resp     = new BranchPredictionResp().asInput
-      val bp2_predictions   = Vec.fill(fetch_width) {new BranchPrediction().asInput}
+      val bp2_predictions   = Vec(fetch_width, new BranchPrediction().asInput)
       val bp2_pc_of_br_inst = UInt(INPUT, vaddrBits+1)
       val bp2_pred_target   = UInt(INPUT, vaddrBits+1)
 

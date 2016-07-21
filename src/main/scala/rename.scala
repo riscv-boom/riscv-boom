@@ -24,11 +24,11 @@ class RenameMapTableElementIo(pl_width: Int)(implicit p: Parameters) extends Boo
 {
    val element            = UInt(OUTPUT, PREG_SZ)
 
-   val wens               = Vec.fill(pl_width) { Bool(INPUT) }
-   val ren_pdsts          = Vec.fill(pl_width) { UInt(INPUT, PREG_SZ) }
+   val wens               = Vec(pl_width, Bool(INPUT))
+   val ren_pdsts          = Vec(pl_width, UInt(INPUT, PREG_SZ))
 
-   val ren_br_vals        = Vec.fill(pl_width) { Bool(INPUT) }
-   val ren_br_tags        = Vec.fill(pl_width) { UInt(INPUT, BR_TAG_SZ) }
+   val ren_br_vals        = Vec(pl_width, Bool(INPUT))
+   val ren_br_tags        = Vec(pl_width, UInt(INPUT, BR_TAG_SZ))
 
    val br_mispredict      = Bool(INPUT)
    val br_mispredict_tag  = UInt(INPUT, BR_TAG_SZ)
@@ -130,27 +130,27 @@ class RenameMapTableElement(pipeline_width: Int)(implicit p: Parameters) extends
 
 class FreeListIo(num_phys_registers: Int, pl_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
-   val req_preg_vals = Vec.fill(pl_width) { Bool(INPUT) }
-   val req_pregs     = Vec.fill(pl_width) { UInt(OUTPUT, log2Up(num_phys_registers)) }
+   val req_preg_vals = Vec(pl_width, Bool(INPUT))
+   val req_pregs     = Vec(pl_width, UInt(OUTPUT, log2Up(num_phys_registers)))
 
    // committed and newly freed register
-   val enq_vals      = Vec.fill(pl_width) {Bool(INPUT)}
-   val enq_pregs     = Vec.fill(pl_width) {UInt(INPUT, log2Up(num_phys_registers))}
+   val enq_vals      = Vec(pl_width, Bool(INPUT))
+   val enq_pregs     = Vec(pl_width, UInt(INPUT, log2Up(num_phys_registers)))
 
    // do we have space to service incoming requests? (per inst granularity)
-   val can_allocate  = Vec.fill(pl_width) {Bool(OUTPUT)}
+   val can_allocate  = Vec(pl_width, Bool(OUTPUT))
 
    // handle branches (save copy of freelist on branch, merge on mispredict)
-   val ren_br_vals   = Vec.fill(pl_width) {Bool(INPUT)}
-   val ren_br_tags   = Vec.fill(pl_width) {UInt(INPUT, BR_TAG_SZ)}
+   val ren_br_vals   = Vec(pl_width, Bool(INPUT))
+   val ren_br_tags   = Vec(pl_width, UInt(INPUT, BR_TAG_SZ))
 
    // handle mispredicts
    val br_mispredict_val = Bool(INPUT)
    val br_mispredict_tag = UInt(INPUT, BR_TAG_SZ)
 
    // rollback (on exceptions)
-   val rollback_wens  = Vec.fill(pl_width) {Bool(INPUT)}
-   val rollback_pdsts = Vec.fill(pl_width) {UInt(INPUT, log2Up(num_phys_registers))}
+   val rollback_wens  = Vec(pl_width, Bool(INPUT))
+   val rollback_pdsts = Vec(pl_width, UInt(INPUT, log2Up(num_phys_registers)))
 
    // or...
    // TODO there are TWO free-list IOs now, based on constants. What is the best way to handle these two designs?
@@ -358,17 +358,17 @@ class RenameFreeList(num_phys_registers: Int // number of physical registers
 class BusyTableIo(pipeline_width:Int, num_read_ports:Int, num_wb_ports:Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
    // reading out the busy bits
-   val p_rs           = Vec.fill(num_read_ports) {UInt(INPUT, width=PREG_SZ)}
-   val p_rs_busy      = Vec.fill(num_read_ports) {Bool(OUTPUT)}
+   val p_rs           = Vec(num_read_ports, UInt(INPUT, width=PREG_SZ))
+   val p_rs_busy      = Vec(num_read_ports, Bool(OUTPUT))
 
    def prs(i:Int, w:Int):UInt      = p_rs     (w+i*pipeline_width)
    def prs_busy(i:Int, w:Int):Bool = p_rs_busy(w+i*pipeline_width)
 
    // marking new registers as busy
-   val allocated_pdst = Vec.fill(pipeline_width) {(new ValidIO(UInt(width=PREG_SZ))).flip}
+   val allocated_pdst = Vec(pipeline_width, (new ValidIO(UInt(width=PREG_SZ))).flip)
 
    // marking registers being written back as unbusy
-   val unbusy_pdst    = Vec.fill(num_wb_ports) {(new ValidIO(UInt(width = PREG_SZ))).flip}
+   val unbusy_pdst    = Vec(num_wb_ports, (new ValidIO(UInt(width = PREG_SZ))).flip)
 
    val debug = new Bundle { val bsy_table= Bits(OUTPUT, width=PHYS_REG_COUNT) }
 }
@@ -420,15 +420,15 @@ class BusyTable(pipeline_width:Int, num_read_ports:Int, num_wb_ports:Int)(implic
 
 class RenameStageIO(pl_width: Int, num_wb_ports: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
-   val ren_mask  = Vec.fill(pl_width) {Bool().asOutput} // mask of valid instructions
-   val inst_can_proceed = Vec.fill(pl_width) {Bool(OUTPUT)}
+   val ren_mask  = Vec(pl_width, Bool().asOutput) // mask of valid instructions
+   val inst_can_proceed = Vec(pl_width, Bool(OUTPUT))
 
    val kill      = Bool(INPUT)
 
-   val dec_mask  = Vec.fill(pl_width){ Bool().asInput }
+   val dec_mask  = Vec(pl_width, Bool().asInput )
 
-   val dec_uops  = Vec.fill(pl_width) {new MicroOp().asInput}
-   val ren_uops  = Vec.fill(pl_width) {new MicroOp().asOutput}
+   val dec_uops  = Vec(pl_width, new MicroOp().asInput)
+   val ren_uops  = Vec(pl_width, new MicroOp().asOutput)
 
    val ren_pred_info = new BranchPredictionResp().asInput
 

@@ -265,9 +265,9 @@ class BrobDeallocateIdx(implicit p: Parameters) extends BoomBundle()(p)
 // The meat of the BrobEntry is the BpdResp information, and is stored elsewhere.
 class BrobEntryMetaData(fetch_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
-   val executed     = Vec.fill(fetch_width) {Bool()} // mark that a branch executed (and should update the predictor).
-   val taken        = Vec.fill(fetch_width) {Bool()}
-   val mispredicted = Vec.fill(fetch_width) {Bool()} // did bpd mispredict the br? (aka should we update predictor).
+   val executed     = Vec(fetch_width, Bool()) // mark that a branch executed (and should update the predictor).
+   val taken        = Vec(fetch_width, Bool())
+   val mispredicted = Vec(fetch_width, Bool()) // did bpd mispredict the br? (aka should we update predictor).
                                                      // Only set for branches, not jumps.
    val brob_idx     = UInt(width = BROB_ADDR_SZ)
 
