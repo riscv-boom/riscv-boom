@@ -17,6 +17,8 @@ import rocket.FPUCtrlSigs
 import rocket.SFMALatency
 import rocket.DFMALatency
 
+import rocket.Util.uintToBitPat
+
 
 // TODO get rid of this decoder and move into the Decode stage? Or the RRd stage?
 // most of these signals are already created, just need to be translated

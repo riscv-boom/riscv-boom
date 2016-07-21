@@ -158,13 +158,17 @@ class FreeListIo(num_phys_registers: Int, pl_width: Int)(implicit p: Parameters)
    // TODO naming is inconsistent
    // TODO combine with rollback, whatever?
    val flush_pipeline = Bool(INPUT)
-   val com_wens       = Vec.fill(pl_width) {Bool(INPUT)}
-   val com_uops       = Vec.fill(pl_width) {new MicroOp().asInput}
+   val com_wens       = Vec(pl_width, Bool(INPUT))
+   val com_uops       = Vec(pl_width, new MicroOp().asInput)
 
-   val debug = new Bundle {
-      val freelist = Bits(width=num_phys_registers)
-      val isprlist = Bits(width=num_phys_registers)
-   }.asOutput
+   val debug = new DebugFreeListIO(num_phys_registers).asOutput
+}
+
+class DebugFreeListIO(num_phys_registers: Int) extends Bundle
+{
+   val freelist = Bits(width=num_phys_registers)
+   val isprlist = Bits(width=num_phys_registers)
+   override def cloneType: this.type = new DebugFreeListIO(num_phys_registers).asInstanceOf[this.type]
 }
 
 // provide a fixed set of renamed destination registers

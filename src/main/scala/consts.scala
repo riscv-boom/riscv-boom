@@ -75,8 +75,8 @@ trait BrPredConstants
 trait ScalarOpConstants
 {
    val X = BitPat("b?")
-   val Y = Bool(true)
-   val N = Bool(false)
+   val Y = BitPat("b1")
+   val N = BitPat("b0")
 
    //************************************
    // Extra Constants

@@ -141,18 +141,20 @@ class RobIo(machine_width: Int
    val brob_deallocate  = Valid(new BrobDeallocateIdx)
 
    // pass out debug information to high-level printf
-   val debug = new Bundle
-   {
-      val state = UInt()
-      val rob_head = UInt(width = ROB_ADDR_SZ)
-      val xcpt_val = Bool()
-      val xcpt_uop = new MicroOp()
-      val xcpt_badvaddr = UInt(width = xLen)
-   }.asOutput
-
+   val debug = new DebugRobIO().asOutput
+   
    val debug_tsc = UInt(INPUT, xLen)
 }
 
+class DebugRobIO(implicit p: Parameters) extends BoomBundle()(p)
+{
+   val state = UInt()
+   val rob_head = UInt(width = ROB_ADDR_SZ)
+   val xcpt_val = Bool()
+   val xcpt_uop = new MicroOp()
+   val xcpt_badvaddr = UInt(width = xLen)
+}
+    
 
 // width = the dispatch and commit width of the processor
 // num_wakeup_ports = self-explanatory

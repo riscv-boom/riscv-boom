@@ -11,6 +11,7 @@ import cde.Parameters
 
 import rocket.Instructions._
 import rocket.{CSR,Causes}
+import rocket.Util.uintToBitPat
 import FUConstants._
 import uncore.constants.MemoryOpConstants._
 
@@ -20,7 +21,7 @@ abstract trait DecodeConstants
 // scalastyle:off
   val xpr64 = Y // TODO inform this from xLen
 
-  val decode_default: List[BitPat] =
+  def decode_default: List[BitPat] =
             //                                                         frs3_en                                wakeup_delay
             //     is val inst?                                        |  imm sel                             |                    bypassable (aka, known/fixed latency)
             //     |  is fp inst?                                      |  |     is_load                       |                    |  br/jmp
@@ -42,8 +43,8 @@ class CtrlSigs extends Bundle
    val legal           = Bool()
    val fp_val          = Bool()
    val fp_single       = Bool()
-   val uopc            = Bits(width = UOPC_SZ)
-   val fu_code         = Bits(width = FUC_SZ)
+   val uopc            = UInt(width = UOPC_SZ)
+   val fu_code         = UInt(width = FUC_SZ)
    val dst_type        = UInt(width=2)
    val rs1_type        = UInt(width=2)
    val rs2_type        = UInt(width=2)
@@ -54,8 +55,8 @@ class CtrlSigs extends Bundle
    val is_amo          = Bool()
    val is_fence        = Bool()
    val is_fencei       = Bool()
-   val mem_cmd         = Bits(width = M_SZ)
-   val mem_typ         = Bits(width = MT_SZ)
+   val mem_cmd         = UInt(width = M_SZ)
+   val mem_typ         = UInt(width = MT_SZ)
    val wakeup_delay    = UInt(width = 2)
    val bypassable      = Bool()
    val br_or_jmp       = Bool()
@@ -63,7 +64,7 @@ class CtrlSigs extends Bundle
    val allocate_brtag  = Bool()
    val inst_unique     = Bool()
    val flush_on_commit = Bool()
-   val csr_cmd         = Bits(width = rocket.CSR.SZ)
+   val csr_cmd         = UInt(width = rocket.CSR.SZ)
    val rocc            = Bool()
 
    def decode(inst: UInt, table: Iterable[(BitPat, List[BitPat])]) = {
@@ -334,21 +335,21 @@ object FDivSqrtDecode extends DecodeConstants
 
 class DecodeUnitIo(implicit p: Parameters) extends BoomBundle()(p)
 {
-   val enq = new Bundle
-   {
-      val uop = new MicroOp
-   }.asInput
+   val enq = new Bundle {
+      val uop = new MicroOp().asInput
+   }
 
-   val deq = new Bundle
-   {
-      val uop = new MicroOp
-   }.asOutput
+   val deq = new Bundle {
+      val uop = new MicroOp().asOutput
+   }
 
    // from CSRFile
    val status = new rocket.MStatus().asInput
    val csr_xcpt = Bool(INPUT)
    val interrupt = Bool(INPUT)
    val interrupt_cause = UInt(INPUT, xLen)
+   
+   override def cloneType: this.type = new DecodeUnitIo()(p).asInstanceOf[this.type]
 }
 
 // Takes in a single instruction, generates a MicroOp (or multiply micro-ops over x cycles)
@@ -448,7 +449,7 @@ class BranchDecode extends Module
 {
    val io = new Bundle
    {
-      val inst    = Bits(INPUT, 32)
+      val inst    = UInt(INPUT, 32)
       val is_br   = Bool(OUTPUT)
       val is_jal  = Bool(OUTPUT)
       val is_jalr = Bool(OUTPUT)
@@ -514,13 +515,13 @@ class FetchSerializerNtoM(implicit p: Parameters) extends BoomModule()(p)
    }
    .otherwise
    {
-      inst_idx := Mux(io.enq.bits.mask === Bits(2), UInt(1), UInt(0))
+      inst_idx := Mux(io.enq.bits.mask === UInt(2), UInt(1), UInt(0))
    }
 
    //-------------------------------------------------------------
    // Compute Enqueue Ready (get the next bundle)
    io.enq.ready := io.deq.ready &&
-                     (io.enq.bits.mask =/= Bits(3) || (counter === UInt(1)))
+                     (io.enq.bits.mask =/= UInt(3) || (counter === UInt(1)))
 
 
    //-------------------------------------------------------------
@@ -582,6 +583,12 @@ class FetchSerializerNtoM(implicit p: Parameters) extends BoomModule()(p)
 // track the current "branch mask", and give out the branch mask to each micro-op in Decode
 // (each micro-op in the machine has a branch mask which says which branches it
 // is being speculated under).
+
+class DebugBranchMaskGenerationLogicIO(implicit p: Parameters) extends BoomBundle()(p)
+{
+   val branch_mask = UInt(width = MAX_BR_COUNT)
+}
+
 class BranchMaskGenerationLogic(val pl_width: Int)(implicit p: Parameters) extends BoomModule()(p)
 {
    val io = new Bundle
@@ -595,7 +602,7 @@ class BranchMaskGenerationLogic(val pl_width: Int)(implicit p: Parameters) exten
       // give out tag immediately (needed in rename)
       // mask can come later in the cycle
       val br_tag    = Vec.fill(pl_width) { UInt(OUTPUT, BR_TAG_SZ) }
-      val br_mask   = Vec.fill(pl_width) { Bits(OUTPUT, MAX_BR_COUNT) }
+      val br_mask   = Vec.fill(pl_width) { UInt(OUTPUT, MAX_BR_COUNT) }
 
        // tell decoders the branch mask has filled up, but on the granularity
        // of an individual micro-op (so some micro-ops can go through)
@@ -604,28 +611,26 @@ class BranchMaskGenerationLogic(val pl_width: Int)(implicit p: Parameters) exten
       val brinfo         = new BrResolutionInfo().asInput
       val flush_pipeline = Bool(INPUT)
 
-      val debug = new Bundle {
-         val branch_mask = Bits(width = MAX_BR_COUNT)
-      }.asOutput
+      val debug = new DebugBranchMaskGenerationLogicIO().asOutput
    }
 
-   val branch_mask = Reg(init = Bits(0, MAX_BR_COUNT))
+   val branch_mask = Reg(init = UInt(0, MAX_BR_COUNT))
 
    //-------------------------------------------------------------
    // Give out the branch tag to each branch micro-op
 
    var allocate_mask = branch_mask
-   val tag_masks = Wire(Vec(pl_width, Bits(width=MAX_BR_COUNT)))
+   val tag_masks = Wire(Vec(pl_width, UInt(width=MAX_BR_COUNT)))
 
    for (w <- 0 until pl_width)
    {
       // TODO this is a loss of performance as we're blocking branches based on potentially fake branches
-      io.is_full(w) := (allocate_mask === ~(Bits(0,MAX_BR_COUNT))) && io.is_branch(w)
+      io.is_full(w) := (allocate_mask === ~(UInt(0,MAX_BR_COUNT))) && io.is_branch(w)
 
       // find br_tag and compute next br_mask
       val new_br_tag = Wire(UInt(width = BR_TAG_SZ))
       new_br_tag := UInt(0)
-      tag_masks(w) := Bits(0)
+      tag_masks(w) := UInt(0)
 
       for (i <- MAX_BR_COUNT-1 to 0 by -1)
       {
@@ -656,7 +661,7 @@ class BranchMaskGenerationLogic(val pl_width: Int)(implicit p: Parameters) exten
 
    when (io.flush_pipeline)
    {
-      branch_mask := Bits(0)
+      branch_mask := UInt(0)
    }
    .elsewhen (io.brinfo.valid && io.brinfo.mispredict)
    {

@@ -992,19 +992,19 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
          , br_unit.btb_update.isReturn
       )
 
-      printf("  Mem[%s l%d](%s:%d),%s,%s %s %s %s]\n"
-            , Mux(io.dmem.debug.memreq_val, Str("MREQ"), Str(" "))
-            , io.dmem.debug.memreq_lidx
-            , Mux(io.dmem.debug.memresp_val, Str("MRESP"), Str(" "))
-            , io.dmem.debug.cache_resp_tag
-            , Mux(io.dmem.debug.req_kill, Str("RKILL"), Str(" "))
-            , Mux(io.dmem.debug.cache_not_ready, Str("CBUSY"), Str(" "))
-            , Mux(io.dmem.debug.nack, Str("NACK"), Str(" "))
-            , Mux(io.dmem.debug.cache_nack, Str("CN"), Str(" "))
-            , Mux(lsu_io.forward_val, Str("FWD"), Str(" "))
-            //, Mux(lsu_io.debug.tlb_miss, Str("TLB-MISS"), Str("-"))
-            //, Mux(lsu_io.debug.tlb_ready, Str("TLB-RDY"), Str("-"))
-      )
+//      printf("  Mem[%s l%d](%s:%d),%s,%s %s %s %s]\n"
+//            , Mux(io.dmem.debug.memreq_val, Str("MREQ"), Str(" "))
+//            , io.dmem.debug.memreq_lidx
+//            , Mux(io.dmem.debug.memresp_val, Str("MRESP"), Str(" "))
+//            , io.dmem.debug.cache_resp_tag
+//            , Mux(io.dmem.debug.req_kill, Str("RKILL"), Str(" "))
+//            , Mux(io.dmem.debug.cache_not_ready, Str("CBUSY"), Str(" "))
+//            , Mux(io.dmem.debug.nack, Str("NACK"), Str(" "))
+//            , Mux(io.dmem.debug.cache_nack, Str("CN"), Str(" "))
+//            , Mux(lsu_io.forward_val, Str("FWD"), Str(" "))
+//            //, Mux(lsu_io.debug.tlb_miss, Str("TLB-MISS"), Str("-"))
+//            //, Mux(lsu_io.debug.tlb_ready, Str("TLB-RDY"), Str("-"))
+//      )
 
       //for (i <- 0 until io.dmem.debug.ld_req_slot.size)
       //{

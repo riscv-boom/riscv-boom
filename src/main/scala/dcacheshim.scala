@@ -155,24 +155,27 @@ class DCMemPortIO(implicit p: Parameters) extends BoomBundle()(p)
    val invalidate_lr = Bool(OUTPUT) // should the dcache clear ld/sc reservations?
    val ordered = Bool(INPUT)        // is the dcache ordered? (fence is done)
 
-   val debug = new BoomBundle()(p)
-   {
-      val memreq_val = Bool()
-      val memreq_lidx = UInt(width=MEM_ADDR_SZ)
-      val memresp_val = Bool()
-      val req_kill = Bool()
-      val nack = Bool()
-      val cache_nack = Bool()
-      val cache_resp_tag = UInt(width=log2Up(MAX_LD_COUNT))
-      val cache_not_ready = Bool()
-
-//      val ld_req_slot = Vec.fill(MAX_LD_COUNT) { new Bundle {
-//      val ld_req_slot = Vec(MAX_LD_COUNT, new Bundle {
-//         val valid = Bool()
-//         val killed = Bool()
-//         val uop = new MicroOp()
-//      })
-   }.asInput
+// TODO chisel3 broke this
+//   val debug = new BoomBundle()(p)
+//   {
+//      val memreq_val = Bool()
+//      val memreq_lidx = UInt(width=MEM_ADDR_SZ)
+//      val memresp_val = Bool()
+//      val req_kill = Bool()
+//      val nack = Bool()
+//      val cache_nack = Bool()
+//      val cache_resp_tag = UInt(width=log2Up(MAX_LD_COUNT))
+//      val cache_not_ready = Bool()
+//
+////      val ld_req_slot = Vec.fill(MAX_LD_COUNT) { new Bundle {
+////      val ld_req_slot = Vec(MAX_LD_COUNT, new Bundle {
+////         val valid = Bool()
+////         val killed = Bool()
+////         val uop = new MicroOp()
+////      })
+//   }.asInput
+   
+//   override def cloneType: this.type = new DCMemPortIO()(p).asInstanceOf[this.type]
 }
 
 class DCacheShim(implicit p: Parameters) extends BoomModule()(p)
@@ -363,16 +366,16 @@ class DCacheShim(implicit p: Parameters) extends BoomModule()(p)
    //------------------------------------------------------------
    // debug
 
-   io.core.debug.memreq_val := io.core.req.valid
-   io.core.debug.memreq_lidx := Mux(io.core.req.bits.uop.is_load, io.core.req.bits.uop.ldq_idx,
-                                                                  io.core.req.bits.uop.stq_idx)
-   io.core.debug.memresp_val := io.core.resp.valid
-   io.core.debug.memresp_val := io.core.resp.valid
-   io.core.debug.req_kill := io.core.req.bits.kill
-   io.core.debug.nack := io.core.nack.valid
-   io.core.debug.cache_nack := io.core.nack.cache_nack
-   io.core.debug.cache_resp_tag := resp_tag
-   io.core.debug.cache_not_ready := !io.core.req.ready
+//   io.core.debug.memreq_val := io.core.req.valid
+//   io.core.debug.memreq_lidx := Mux(io.core.req.bits.uop.is_load, io.core.req.bits.uop.ldq_idx,
+//                                                                  io.core.req.bits.uop.stq_idx)
+//   io.core.debug.memresp_val := io.core.resp.valid
+//   io.core.debug.memresp_val := io.core.resp.valid
+//   io.core.debug.req_kill := io.core.req.bits.kill
+//   io.core.debug.nack := io.core.nack.valid
+//   io.core.debug.cache_nack := io.core.nack.cache_nack
+//   io.core.debug.cache_resp_tag := resp_tag
+//   io.core.debug.cache_not_ready := !io.core.req.ready
 
 //   for (i <- 0 until max_num_inflight)
 //   {
