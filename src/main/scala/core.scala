@@ -761,7 +761,8 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    }
 
    // branch resolution
-   rob.io.brinfo <> br_unit.brinfo.asInput
+   rob.io.brinfo <> br_unit.brinfo  // TODO XXX chisel3 question
+//   rob.io.brinfo <> br_unit.brinfo.asInput
 
    // branch unit requests PCs and predictions from ROB during register read
    // (fetch PC from ROB cycle earlier than needed for critical path reasons)
@@ -778,7 +779,8 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
 
    rob.io.cxcpt.valid := csr.io.csr_xcpt
 
-   rob.io.bxcpt <> br_unit.xcpt.asInput
+   rob.io.bxcpt <> br_unit.xcpt  // TODO XXX chisel3 question
+//   rob.io.bxcpt <> br_unit.xcpt.asInput
 
 
    // Commit (ROB outputs)
