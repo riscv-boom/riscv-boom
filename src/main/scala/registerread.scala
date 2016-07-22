@@ -28,10 +28,11 @@ class RegisterReadIO(
 {
    // issued micro-ops
    val iss_valids = Vec(issue_width, Bool(INPUT))
-   val iss_uops   = Vec(issue_width, new MicroOp().asInput)
+   val iss_uops   = Vec(issue_width, new MicroOp()).asInput
 
    // interface with register file's read ports
-   val rf_read_ports = Vec(num_total_read_ports, new RegisterFileReadPortIO(PREG_SZ, register_width).flip)
+   val rf_read_ports = Vec(num_total_read_ports, new RegisterFileReadPortIO(PREG_SZ, register_width)).flip
+//   val rf_read_ports = Vec(num_total_read_ports, new RegisterFileReadPortIO(PREG_SZ, register_width).flip)
 
    val bypass = new BypassData(num_total_bypass_ports, register_width).asInput
 

@@ -133,7 +133,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    // Load/Store Unit
    var lsu_io:LoadStoreUnitIO = null
    lsu_io = exe_units.memory_unit.io.lsu_io
-   exe_units.memory_unit.io.dmem <> io.dmem
+   io.dmem <> exe_units.memory_unit.io.dmem
 
    // Commit Stage
    val com_valids            = Wire(Vec(DECODE_WIDTH, Bool()))
@@ -190,7 +190,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    //-------------------------------------------------------------
    //-------------------------------------------------------------
 
-   fetch_unit.io.imem <> io.imem
+   io.imem <> fetch_unit.io.imem
    fetch_unit.io.br_unit <> br_unit
    fetch_unit.io.tsc_reg           := tsc_reg
    fetch_unit.io.irt_reg           := irt_reg
@@ -222,8 +222,8 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    // decode.  BHT look-up is in parallel with I$ access, and Branch Decode
    // occurs before fetch buffer insertion.
 
-   bpd_stage.io.imem <> io.imem
-   bpd_stage.io.ras_update <> io.imem.ras_update
+   io.imem <> bpd_stage.io.imem
+   io.imem.ras_update <> bpd_stage.io.ras_update
    bpd_stage.io.br_unit := br_unit
    bpd_stage.io.kill := rob.io.flush_take_pc
    bpd_stage.io.req.ready := !fetch_unit.io.stalled
@@ -532,7 +532,8 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    //-------------------------------------------------------------
 
    // Register Read <- Issue (rrd <- iss)
-   regfile.io.read_ports <> register_read.io.rf_read_ports
+//   regfile.io.read_ports <> register_read.io.rf_read_ports
+   register_read.io.rf_read_ports <> regfile.io.read_ports
 
    for (w <- 0 until issue_width)
    {

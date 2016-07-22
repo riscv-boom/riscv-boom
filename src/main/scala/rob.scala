@@ -61,7 +61,7 @@ class RobIo(machine_width: Int
    // Dispatch Stage
    // (Write Instruction to ROB from Dispatch Stage)
    val dis_valids       = Vec(machine_width, Bool(INPUT))
-   val dis_uops         = Vec(machine_width, new MicroOp().asInput)
+   val dis_uops         = Vec(machine_width, new MicroOp()).asInput
    val dis_has_br_or_jalr_in_packet = Bool(INPUT)
    val dis_partial_stall= Bool(INPUT) // we're dispatching only a partial packet, and stalling on the rest of it (don't
                                       // advance the tail ptr)
@@ -73,14 +73,14 @@ class RobIo(machine_width: Int
    // (Update of ROB)
    // Instruction is no longer busy and can be committed
    // currently all supported exceptions are detected in Decode (except load-ordering failures)
-   val wb_resps = Vec(num_wakeup_ports, Valid(new ExeUnitResp(65)).flip)
+   val wb_resps = Vec(num_wakeup_ports, Valid(new ExeUnitResp(65))).flip
 
    // track side-effects for debug purposes.
    // Also need to know when loads write back, whereas we don't need loads to unbusy.
    val debug_wb_valids  = Vec(num_wakeup_ports, Bool(INPUT))
    val debug_wb_wdata   = Vec(num_wakeup_ports, Bits(INPUT, xLen))
 
-   val fflags = Vec(num_fpu_ports, new ValidIO(new FFlagsResp()).flip)
+   val fflags = Vec(num_fpu_ports, new ValidIO(new FFlagsResp())).flip
    val lxcpt = new ValidIO(new Exception()).flip // LSU
    val bxcpt = new ValidIO(new Exception()).flip // BRU
    val cxcpt = new ValidIO(new Exception()).flip // CSR

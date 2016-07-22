@@ -60,7 +60,7 @@ class LoadStoreUnitIO(pl_width: Int)(implicit p: Parameters) extends BoomBundle(
    // allows us to know which stores get killed by branch mispeculation
    val dec_st_vals        = Vec(pl_width,  Bool(INPUT))
    val dec_ld_vals        = Vec(pl_width,  Bool(INPUT))
-   val dec_uops           = Vec(pl_width, new MicroOp().asInput)
+   val dec_uops           = Vec(pl_width, new MicroOp()).asInput
 
    val new_ldq_idx        = UInt(OUTPUT, MEM_ADDR_SZ)
    val new_stq_idx        = UInt(OUTPUT, MEM_ADDR_SZ)
@@ -117,16 +117,16 @@ class LoadStoreUnitIO(pl_width: Int)(implicit p: Parameters) extends BoomBundle(
                                        // retries as well as some load ordering
                                        // failures.
 
-   val ptw = new rocket.TLBPTWIO()
+   val ptw = new rocket.TLBPTWIO
 
    val counters = new Bundle
    {
-      val ld_valid = Bool() // a load address micro-op has entered the LSU
-      val ld_forwarded = Bool()
-      val ld_sleep = Bool()
-      val ld_killed = Bool()
-      val ld_order_fail = Bool()
-   }.asOutput
+      val ld_valid      = Bool(OUTPUT) // a load address micro-op has entered the LSU
+      val ld_forwarded  = Bool(OUTPUT)
+      val ld_sleep      = Bool(OUTPUT)
+      val ld_killed     = Bool(OUTPUT)
+      val ld_order_fail = Bool(OUTPUT)
+   }
 
    val debug_tsc = UInt(INPUT, xLen)     // time stamp counter
 }
@@ -360,7 +360,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
                                                io.exe_resp.bits.addr.toBits))
 
    val dtlb = Module(new rocket.TLB()(p.alterPartial({case uncore.agents.CacheName => "L1D"})))
-   dtlb.io.ptw <> io.ptw
+   io.ptw <> dtlb.io.ptw
    dtlb.io.req.valid := will_fire_load_incoming ||
                         will_fire_sta_incoming ||
                         will_fire_sta_retry ||

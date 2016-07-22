@@ -159,7 +159,7 @@ class FreeListIo(num_phys_registers: Int, pl_width: Int)(implicit p: Parameters)
    // TODO combine with rollback, whatever?
    val flush_pipeline = Bool(INPUT)
    val com_wens       = Vec(pl_width, Bool(INPUT))
-   val com_uops       = Vec(pl_width, new MicroOp().asInput)
+   val com_uops       = Vec(pl_width, new MicroOp()).asInput
 
    val debug = new DebugFreeListIO(num_phys_registers).asOutput
 }
@@ -365,10 +365,10 @@ class BusyTableIo(pipeline_width:Int, num_read_ports:Int, num_wb_ports:Int)(impl
    def prs_busy(i:Int, w:Int):Bool = p_rs_busy(w+i*pipeline_width)
 
    // marking new registers as busy
-   val allocated_pdst = Vec(pipeline_width, (new ValidIO(UInt(width=PREG_SZ))).flip)
+   val allocated_pdst = Vec(pipeline_width, new ValidIO(UInt(width=PREG_SZ))).flip
 
    // marking registers being written back as unbusy
-   val unbusy_pdst    = Vec(num_wb_ports, (new ValidIO(UInt(width = PREG_SZ))).flip)
+   val unbusy_pdst    = Vec(num_wb_ports, new ValidIO(UInt(width = PREG_SZ))).flip
 
    val debug = new Bundle { val bsy_table= Bits(OUTPUT, width=PHYS_REG_COUNT) }
 }
@@ -384,7 +384,9 @@ class BusyTable(pipeline_width:Int, num_read_ports:Int, num_wb_ports:Int)(implic
    def BUSY     = Bool(true)
    def NOT_BUSY = Bool(false)
 
-   val table_bsy = Reg(init=Bits(0,PHYS_REG_COUNT))
+   //TODO BUG chisel3
+   //val table_bsy = Reg(init=Bits(0,PHYS_REG_COUNT))
+   val table_bsy = Reg(init=Vec.fill(PHYS_REG_COUNT){Bool(false)})
 
    for (wb_idx <- 0 until num_wb_ports)
    {
@@ -410,7 +412,7 @@ class BusyTable(pipeline_width:Int, num_read_ports:Int, num_wb_ports:Int)(implic
       io.p_rs_busy(ridx) := (table_bsy(io.p_rs(ridx)) && !just_cleared)
    }
 
-   io.debug.bsy_table := table_bsy
+   io.debug.bsy_table := table_bsy.toBits
 }
 
 //-------------------------------------------------------------
@@ -425,9 +427,9 @@ class RenameStageIO(pl_width: Int, num_wb_ports: Int)(implicit p: Parameters) ex
 
    val kill      = Bool(INPUT)
 
-   val dec_mask  = Vec(pl_width, Bool().asInput )
+   val dec_mask  = Vec(pl_width, Bool()).asInput
 
-   val dec_uops  = Vec(pl_width, new MicroOp().asInput)
+   val dec_uops  = Vec(pl_width, new MicroOp()).asInput
    val ren_uops  = Vec(pl_width, new MicroOp().asOutput)
 
    val ren_pred_info = new BranchPredictionResp().asInput
@@ -444,7 +446,7 @@ class RenameStageIO(pl_width: Int, num_wb_ports: Int)(implicit p: Parameters) ex
 
    // commit stage
    val com_valids = Vec(pl_width, Bool(INPUT))
-   val com_uops   = Vec(pl_width, new MicroOp().asInput)
+   val com_uops   = Vec(pl_width, new MicroOp()).asInput
    val com_rbk_valids = Vec(pl_width, Bool(INPUT))
 
    val flush_pipeline = Bool(INPUT) // TODO only used for SCR (single-cycle reset)

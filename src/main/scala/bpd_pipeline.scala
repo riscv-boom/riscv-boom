@@ -126,7 +126,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    br_predictor.io.hist_update_spec.bits.taken := bp2_br_taken
    br_predictor.io.resp.ready := io.req.ready
 
-   br_predictor.io.brob <> io.brob
+   io.brob <> br_predictor.io.brob
    br_predictor.io.flush := io.kill
 
    val bpd_valid = br_predictor.io.resp.valid

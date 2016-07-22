@@ -32,7 +32,7 @@ class BOOMTile(resetSignal: Bool = null)(implicit p: Parameters) extends rocket.
    val uncachedPorts = collection.mutable.ArrayBuffer[uncore.tilelink.ClientUncachedTileLinkIO]()
    val cachedPorts = collection.mutable.ArrayBuffer(dcache.io.mem)
    core.io.prci <> io.prci
-   core.io.dmem <> dc_shim.io.core
+   dc_shim.io.core <> core.io.dmem
    icache.io.cpu <> core.io.imem
 
 

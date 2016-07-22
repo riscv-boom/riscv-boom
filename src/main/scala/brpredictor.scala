@@ -149,7 +149,7 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int)(implicit p
    // -----------------------------------------------
 
    val brob = Module(new BranchReorderBuffer(fetch_width, NUM_BROB_ENTRIES))
-   brob.io.backend <> io.brob
+   io.brob <> brob.io.backend
    commit := brob.io.commit_entry
 
    // TODO XXX add this back in (perhaps just need to initialize mispredicted array?)

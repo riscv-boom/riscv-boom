@@ -177,7 +177,7 @@ class ALUExeUnit(
    {
       io.br_unit <> alu.io.br_unit
       alu.io.get_rob_pc <> io.get_rob_pc
-      alu.io.get_pred <> io.get_pred
+      io.get_pred <> alu.io.get_pred
    }
    else
    {
@@ -661,7 +661,7 @@ class ALUMemExeUnit(
    lsu.io.brinfo            := io.brinfo
    lsu.io.exception         := io.lsu_io.exception
    lsu.io.nack              <> io.dmem.nack
-   lsu.io.counters          <> io.lsu_io.counters
+   io.lsu_io.counters <> lsu.io.counters
    lsu.io.debug_tsc         <> io.lsu_io.debug_tsc
 
    io.lsu_io.new_ldq_idx := lsu.io.new_ldq_idx
@@ -675,8 +675,8 @@ class ALUMemExeUnit(
    // enqueue addresses,st-data at the end of Execute
    lsu.io.exe_resp <> maddrcalc.io.resp
 
-   lsu.io.ptw <> io.lsu_io.ptw
-   lsu.io.xcpt <> io.lsu_io.xcpt
+   io.lsu_io.ptw <> lsu.io.ptw
+   io.lsu_io.xcpt <> lsu.io.xcpt
 
    // HellaCache Req
    lsu.io.dmem_req_ready := io.dmem.req.ready
