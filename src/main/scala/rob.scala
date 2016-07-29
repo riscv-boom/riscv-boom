@@ -941,7 +941,7 @@ class Rob(width: Int
 
    if (DEBUG_PRINTF_ROB)
    {
-      printf("  RobXcpt[%s%x r:%d b:%x bva:0x%x]\n"
+      printf("  RobXcpt[%c%x r:%d b:%x bva:0x%x]\n"
             , Mux(r_xcpt_val, Str("E"),Str("-"))
             , io.debug.xcpt_uop.exc_cause
             , io.debug.xcpt_uop.rob_idx
@@ -963,17 +963,22 @@ class Rob(width: Int
          val r_head = rob_head
          val r_tail = rob_tail
 
-         printf("    rob[%d] %s ("
+         printf("    rob[%d] %c ("
             , UInt(row, ROB_ADDR_SZ)
-            , Mux(r_head === UInt(row) && r_tail === UInt(row), Str("HEAD,TL->"),
-              Mux(r_head === UInt(row), Str("HEAD --->"),
-              Mux(r_tail === UInt(row), Str("     TL->"),
+            // chisel3 lacks %s support
+            , Mux(r_head === UInt(row) && r_tail === UInt(row), Str("B"),
+              Mux(r_head === UInt(row), Str("H"),
+              Mux(r_tail === UInt(row), Str("T"),
                                         Str(" "))))
+//            , Mux(r_head === UInt(row) && r_tail === UInt(row), Str("HEAD,TL->"),
+//              Mux(r_head === UInt(row), Str("HEAD --->"),
+//              Mux(r_tail === UInt(row), Str("     TL->"),
+//                                        Str(" "))))
             )
 
          if (COMMIT_WIDTH == 1)
          {
-            printf("(%s)(%s) 0x%x [DASM(%x)] %s "
+            printf("(%c)(%c) 0x%x [DASM(%x)] %c "
                , Mux(debug_entry(r_idx+0).valid, Str(b_cyn + "V" + end), Str(grn + " " + end))
                , Mux(debug_entry(r_idx+0).busy, Str(b_ylw + "B" + end),  Str(grn + " " + end))
                , debug_entry(r_idx+0).uop.pc(31,0)
@@ -984,7 +989,7 @@ class Rob(width: Int
          else if (COMMIT_WIDTH == 2)
          {
             val row_is_val = debug_entry(r_idx+0).valid || debug_entry(r_idx+1).valid
-            printf("%d %x (%s%s)(%s%s) 0x%x %x [%sDASM(%x)][DASM(%x)" + end + "] %s,%s "
+            printf("%d %x (%c%c)(%c%c) 0x%x %x [%cDASM(%x)][DASM(%x)" + end + "] %c,%c "
                , row_metadata_brob_idx(row)
                , row_metadata_has_brorjalr(row)
                , Mux(debug_entry(r_idx+0).valid, Str(b_cyn + "V" + end), Str(grn + " " + end))
@@ -1005,7 +1010,7 @@ class Rob(width: Int
          else if (COMMIT_WIDTH == 4)
          {
             val row_is_val = debug_entry(r_idx+0).valid || debug_entry(r_idx+1).valid || debug_entry(r_idx+2).valid || debug_entry(r_idx+3).valid
-            printf("(%s%s%s%s)(%s%s%s%s) 0x%x %x %x %x [%sDASM(%x)][DASM(%x)][DASM(%x)][DASM(%x)" + end + "]%s%s%s%s"
+            printf("(%c%c%c%c)(%c%c%c%c) 0x%x %x %x %x [%cDASM(%x)][DASM(%x)][DASM(%x)][DASM(%x)" + end + "]%c%c%c%c"
                , Mux(debug_entry(r_idx+0).valid, Str(b_cyn + "V" + end), Str(grn + " " + end))
                , Mux(debug_entry(r_idx+1).valid, Str(b_cyn + "V" + end), Str(grn + " " + end))
                , Mux(debug_entry(r_idx+2).valid, Str(b_cyn + "V" + end), Str(grn + " " + end))
@@ -1038,7 +1043,7 @@ class Rob(width: Int
          var temp_idx = r_idx
          for (w <- 0 until COMMIT_WIDTH)
          {
-            printf("(d:%s p%d, bm:%x sdt:%d) "
+            printf("(d:%c p%d, bm:%x sdt:%d) "
                , Mux(debug_entry(temp_idx).uop.dst_rtype === RT_FIX, Str("X"),
                  Mux(debug_entry(temp_idx).uop.dst_rtype === RT_PAS, Str("C"),
                  Mux(debug_entry(temp_idx).uop.dst_rtype === RT_FLT, Str("f"),

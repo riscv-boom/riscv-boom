@@ -100,12 +100,6 @@ class RegisterFile( num_registers: Int
 //            )
 //      }
    }
-
-   // Debug
-//   for (i <- 0 until num_registers)
-//   {
-//      io.debug.registers(i) := regfile(UInt(i))
-//   }
 }
 
 

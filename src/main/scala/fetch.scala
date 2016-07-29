@@ -38,7 +38,6 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
       val br_unit           = new BranchUnitResp().asInput
 
       val tsc_reg           = UInt(INPUT, xLen)
-      val irt_reg           = UInt(INPUT, xLen)
 
       val bp2_take_pc       = Bool(INPUT)
       val bp2_is_taken      = Bool(INPUT)
@@ -190,29 +189,34 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    //-------------------------------------------------------------
    if (DEBUG_PRINTF)
    {
-      // Front-end
-      printf("--- Cyc=%d , ----------------- Ret: %d ----------------------------------\n  "
-         , io.tsc_reg
-         , io.irt_reg & UInt(0xffffff))
-
       // Fetch Stage 1
-      printf("BrPred1:    (IF1_PC= n/a- Predict:n/a) ------ PC: [%s%s%s-%s for br_id:(n/a), %s %s next: 0x%x ifst:%d]\n"
+      printf("BrPred1:    (IF1_PC= n/a- Predict:n/a) ------ PC: [%c%c%c-%c for br_id:(n/a), %c %c next: 0x%x ifst:%d]\n"
          , Mux(br_unit.brinfo.valid, Str("V"), Str("-"))
          , Mux(br_unit.brinfo.taken, Str("T"), Str("-"))
          , Mux(br_unit.debug_btb_pred, Str("B"), Str("_"))
-         , Mux(br_unit.brinfo.mispredict, Str(b_mgt + "MISPREDICT" + end), Str(grn + "          " + end))
+         , Mux(br_unit.brinfo.mispredict, Str("M"), Str(" "))
+         // chisel3 lacks %s support
+         //, Mux(br_unit.brinfo.mispredict, Str(b_mgt + "MISPREDICT" + end), Str(grn + "          " + end))
          //, bpd_stage.io.req.bits.idx
-         , Mux(take_pc, Str("TAKE_PC"), Str(" "))
-         , Mux(io.flush_take_pc, Str("FLSH"),
-           Mux(br_unit.take_pc, Str("BRU "),
-           Mux(io.bp2_take_pc && !if_stalled, Str("BP2"),
-           Mux(io.bp2_take_pc, Str("J-s"),
+         , Mux(take_pc, Str("T"), Str(" "))
+         //, Mux(take_pc, Str("TAKE_PC"), Str(" "))
+         , Mux(io.flush_take_pc, Str("F"),
+           Mux(br_unit.take_pc, Str("B"),
+           Mux(io.bp2_take_pc && !if_stalled, Str("P"),
+           Mux(io.bp2_take_pc, Str("J"),
                               Str(" ")))))
+//         , Mux(io.flush_take_pc, Str("FLSH"),
+//           Mux(br_unit.take_pc, Str("BRU "),
+//           Mux(io.bp2_take_pc && !if_stalled, Str("BP2"),
+//           Mux(io.bp2_take_pc, Str("J-s"),
+//                              Str(" ")))))
          , if_pc_next
          , if_stalled)
 
       // Fetch Stage 2
-      printf("I$ Response: (%s) IF2_PC= 0x%x (mask:0x%x) \u001b[1;35m TODO need Str in Chisel3\u001b[0m  ----BrPred2:(%s,%s,%d) [btbtarg: 0x%x] jkilmsk:0x%x ->(0x%x)\n"
+//      printf("I$ Response: (%s) IF2_PC= 0x%x (mask:0x%x) \u001b[1;35m TODO need Str in Chisel3\u001b[0m  ----BrPred2:(%s,%s,%d) [btbtarg: 0x%x] jkilmsk:0x%x ->(0x%x)\n"
+//      printf("I$ Response: (%s) IF2_PC= 0x%x (mask:0x%x) [1;35m TODO need Str in Chisel3[0m  ----BrPred2:(%s,%s,%d) [btbtarg: 0x%x] jkilmsk:0x%x ->(0x%x)\n"
+      printf("I$ Response: (%c) IF2_PC= 0x%x (mask:0x%x) TODO need Str in Chisel3 ----BrPred2:(%c,%c,%d) [btbtarg: 0x%x] jkilmsk:0x%x ->(0x%x)\n"
          , Mux(io.imem.resp.valid && !io.kill, Str(mgt + "v" + end), Str(grn + "-" + end))
          , io.imem.resp.bits.pc
          , io.imem.resp.bits.mask

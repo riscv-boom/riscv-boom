@@ -516,7 +516,7 @@ class ALUMemExeUnit(
    {
       io.br_unit <> alu.io.br_unit
       alu.io.get_rob_pc <> io.get_rob_pc
-      alu.io.get_pred <> io.get_pred
+      io.get_pred <> alu.io.get_pred
    }
    else
    {

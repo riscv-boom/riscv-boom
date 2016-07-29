@@ -1165,7 +1165,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
       {
          val t_laddr = laq_addr(i)
          val t_saddr = saq_addr(i)
-         printf("         ldq[%d]=(%s%s%s%s%s%s%s%d) st_dep(%d,m=%x) 0x%x %s %s   saq[%d]=(%s%s%s%s%s%s%s) b:%x 0x%x -> 0x%x %s %s %s %s\n"
+         printf("         ldq[%d]=(%c%c%c%c%c%c%c%d) st_dep(%d,m=%x) 0x%x %c %c   saq[%d]=(%c%c%c%c%c%c%c) b:%x 0x%x -> 0x%x %c %c %c %c\n"
             , UInt(i, MEM_ADDR_SZ)
             , Mux(laq_allocated(i), Str("V"), Str("-"))
             , Mux(laq_addr_val(i), Str("A"), Str("-"))
@@ -1194,10 +1194,10 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
             , t_saddr(19,0)
             , sdq_data(i)
 
-            , Mux(stq_head === UInt(i), Str("<- H "), Str(" "))
-            , Mux(stq_execute_head === UInt(i), Str("E "), Str(" "))
-            , Mux(stq_commit_head === UInt(i), Str("C "), Str(" "))
-            , Mux(stq_tail=== UInt(i), Str("T "), Str(" "))
+            , Mux(stq_head === UInt(i), Str("H"), Str(" "))
+            , Mux(stq_execute_head === UInt(i), Str("E"), Str(" "))
+            , Mux(stq_commit_head === UInt(i), Str("C"), Str(" "))
+            , Mux(stq_tail=== UInt(i), Str("T"), Str(" "))
          )
       }}
 }

@@ -402,11 +402,16 @@ class BranchReorderBuffer(fetch_width: Int, num_entries: Int)(implicit p: Parame
             , entries_ctrl(i).mispredicted.toBits
             , entries_ctrl(i).debug_rob_idx
             )
-         printf("%s\n"
-            ,  Mux(head_ptr === UInt(i) && tail_ptr === UInt(i), Str("<-HEAD TL"),
-               Mux(head_ptr === UInt(i),                         Str("<-HEAD   "),
-               Mux(tail_ptr === UInt(i),                         Str("<-     TL"),
+         printf("%c\n"
+         // chisel3 lacks %s support
+            ,  Mux(head_ptr === UInt(i) && tail_ptr === UInt(i), Str("B"),
+               Mux(head_ptr === UInt(i),                         Str("H"),
+               Mux(tail_ptr === UInt(i),                         Str("T"),
                                                                  Str(" "))))
+//            ,  Mux(head_ptr === UInt(i) && tail_ptr === UInt(i), Str("<-HEAD TL"),
+//               Mux(head_ptr === UInt(i),                         Str("<-HEAD   "),
+//               Mux(tail_ptr === UInt(i),                         Str("<-     TL"),
+//                                                                 Str(" "))))
             )
       }
    }

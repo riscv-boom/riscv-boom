@@ -382,10 +382,10 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
 
    if (DEBUG_PRINTF)
    {
-      printf("bp2_aligned_pc: 0x%x BHT:(%s 0x%x, %d) p:%x (%d) b:%x j:%x (%d) %s %s\n"
-         , aligned_pc, Mux(io.req.valid, Str("TAKE"), Str(" -- ")), io.req.bits.target, io.req.bits.idx
+      printf("bp2_aligned_pc: 0x%x BHT:(%c 0x%x, %d) p:%x (%d) b:%x j:%x (%d) %c %c\n"
+         , aligned_pc, Mux(io.req.valid, Str("T"), Str("-")), io.req.bits.target, io.req.bits.idx
          , bpd_predictions.toBits, bpd_br_idx, is_br.toBits, is_jal.toBits, bpd_jal_idx
-         , Mux(bpd_br_beats_jal, Str("BR"), Str("JA")), Mux(bpd_nextline_fire, Str("NL"), Str("--"))
+         , Mux(bpd_br_beats_jal, Str("B"), Str("J")), Mux(bpd_nextline_fire, Str("N"), Str("-"))
          )
    }
 

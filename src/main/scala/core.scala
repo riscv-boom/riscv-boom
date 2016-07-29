@@ -193,7 +193,6 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    io.imem <> fetch_unit.io.imem
    fetch_unit.io.br_unit <> br_unit
    fetch_unit.io.tsc_reg           := tsc_reg
-   fetch_unit.io.irt_reg           := irt_reg
 
    fetch_unit.io.bp2_take_pc       := bpd_stage.io.req.valid
    fetch_unit.io.bp2_pc_of_br_inst := bpd_stage.io.req.bits.br_pc
@@ -888,12 +887,15 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    {
       println("\n Chisel Printout Enabled\n")
 
-      var whitespace = (104 - 3 - 12  - NUM_LSU_ENTRIES- p(NumIssueSlotEntries) - (NUM_ROB_ENTRIES/COMMIT_WIDTH)
+      var whitespace = (63 + 1 - 3 - 12  - NUM_LSU_ENTRIES- p(NumIssueSlotEntries) - (NUM_ROB_ENTRIES/COMMIT_WIDTH)
          - NUM_BROB_ENTRIES
 //         - io.dmem.debug.ld_req_slot.size
       )
 
-      // Back-end
+      printf("--- Cyc=%d , ----------------- Ret: %d ----------------------------------\n  "
+         , tsc_reg
+         , irt_reg & UInt(0xffffff))
+
       for (w <- 0 until DECODE_WIDTH)
       {
          if (w == 0)
@@ -908,18 +910,30 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
 
       if (DEBUG_PRINTF_ROB)
       {
-         printf(") State: (%s: %s %s %s \u001b[1;31m%s\u001b[0m %s %s) BMsk:%x Mode:%s\n"
-         , Mux(rob.io.debug.state === UInt(0), Str("RESET"),
-           Mux(rob.io.debug.state === UInt(1), Str("NORMAL"),
-           Mux(rob.io.debug.state === UInt(2), Str("ROLLBK"),
-           Mux(rob.io.debug.state === UInt(3), Str("WAIT_E"),
+//         printf(") State: (%s: %s %s %s \u001b[1;31m%s\u001b[0m %s %s) BMsk:%x Mode:%s\n"
+         printf(") ctate: (%c: %c %c %c %c %c %c) BMsk:%x Mode:%c\n"
+         // chisel3 lacks %s support
+//         , Mux(rob.io.debug.state === UInt(0), Str("RESET"),
+//           Mux(rob.io.debug.state === UInt(1), Str("NORMAL"),
+//           Mux(rob.io.debug.state === UInt(2), Str("ROLLBK"),
+//           Mux(rob.io.debug.state === UInt(3), Str("WAIT_E"),
+         , Mux(rob.io.debug.state === UInt(0), Str("R"),
+           Mux(rob.io.debug.state === UInt(1), Str("N"),
+           Mux(rob.io.debug.state === UInt(2), Str("B"),
+           Mux(rob.io.debug.state === UInt(3), Str("W"),
                                                Str(" ")))))
-         , Mux(rob.io.ready,Str("_"), Str("!ROB_RDY"))
-         , Mux(lsu_io.laq_full, Str("LAQ_FULL"), Str("_"))
-         , Mux(lsu_io.stq_full, Str("STQ_FULL"), Str("_"))
-         , Mux(rob.io.flush_pipeline, Str("FLUSH_PIPELINE"), Str(" "))
-         , Mux(branch_mask_full.reduce(_|_), Str("BR_MSK_FULL"), Str(" "))
-         , Mux(io.dmem.req.ready, Str("D$_Rdy"), Str("D$_BSY"))
+//         , Mux(rob.io.ready,Str("_"), Str("!ROB_RDY"))
+         , Mux(rob.io.ready,Str("_"), Str("!"))
+//         , Mux(lsu_io.laq_full, Str("LAQ_FULL"), Str("_"))
+//         , Mux(lsu_io.stq_full, Str("STQ_FULL"), Str("_"))
+         , Mux(lsu_io.laq_full, Str("L"), Str("_"))
+         , Mux(lsu_io.stq_full, Str("S"), Str("_"))
+//         , Mux(rob.io.flush_pipeline, Str("FLUSH_PIPELINE"), Str(" "))
+         , Mux(rob.io.flush_pipeline, Str("F"), Str(" "))
+//         , Mux(branch_mask_full.reduce(_|_), Str("BR_MSK_FULL"), Str(" "))
+         , Mux(branch_mask_full.reduce(_|_), Str("B"), Str(" "))
+//         , Mux(io.dmem.req.ready, Str("D$_Rdy"), Str("D$_BSY"))
+         , Mux(io.dmem.req.ready, Str("R"), Str("B"))
          , dec_brmask_logic.io.debug.branch_mask
          , Mux(csr.io.status.prv === Bits(0x3), Str("M"),
            Mux(csr.io.status.prv === Bits(0x0), Str("U"),
@@ -931,7 +945,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
 
       for (w <- 0 until DECODE_WIDTH)
       {
-         printf("(%s%s) " + red + "DASM(%x)" + end + " |  "
+         printf("(%c%c) " + red + "DASM(%x)" + end + " |  "
             , Mux(fetched_inst_valid && dec_fbundle.uops(w).valid && !dec_finished_mask(w), Str("v"), Str("-"))
             , Mux(dec_will_fire(w), Str("V"), Str("-"))
             , dec_fbundle.uops(w).inst
@@ -942,7 +956,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
 
       for (w <- 0 until DECODE_WIDTH)
       {
-         printf("  [ISA:%d,%d,%d,%d] [Phs:%d(%s)%d[%s](%s)%d[%s](%s)%d[%s](%s)] "
+         printf("  [ISA:%d,%d,%d,%d] [Phs:%d(%c)%d[%c](%c)%d[%c](%c)%d[%c](%c)] "
             , dec_uops(w).ldst
             , dec_uops(w).lrs1
             , dec_uops(w).lrs2
@@ -971,7 +985,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
       }
 
 
-      printf("Exct(%s%d) Commit(%x) fl: 0x%x (%d) is: 0x%x (%d)\n"
+      printf("Exct(%c%d) Commit(%x) fl: 0x%x (%d) is: 0x%x (%d)\n"
          , Mux(com_exception, Str("E"), Str("-"))
          , rob.io.com_exc_cause
          , com_valids.toBits
@@ -982,7 +996,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
          )
 
       // branch unit
-      printf("                          Branch Unit: %s,%s,%d PC=0x%x, %d Targ=0x%x NPC=%d,0x%x %d%d\n"
+      printf("                          Branch Unit: %c,%c,%d PC=0x%x, %d Targ=0x%x NPC=%d,0x%x %d%d\n"
          , Mux(br_unit.brinfo.valid,Str("V"), Str(" "))
          , Mux(br_unit.brinfo.mispredict, Str("M"), Str(" "))
          , br_unit.brinfo.taken

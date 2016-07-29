@@ -87,8 +87,8 @@ abstract class IssueUnit(num_issue_slots: Int, issue_width: Int, num_wakeup_port
    {
       for (i <- 0 until num_issue_slots)
       {
-         printf("  integer_issue_slot[%d](%s)(Req:%s):wen=%s P:(%s,%s,%s) OP:(%d,%d,%d) PDST:%d %s [%s[DASM(%x)]"+
-               end+" 0x%x: %d] ri:%d bm=%d imm=0x%x\n"
+         printf("  integer_issue_slot[%d](%c)(Req:%c):wen=%c P:(%c,%c,%c) OP:(%d,%d,%d) PDST:%d %c [%c[DASM(%x)]" +
+               end + " 0x%x: %d] ri:%d bm=%d imm=0x%x\n"
             , UInt(i, log2Up(num_issue_slots))
             , Mux(issue_slots(i).valid, Str("V"), Str("-"))
             , Mux(issue_slots(i).request, Str(u_red + "R" + end), Str(grn + "-" + end))
