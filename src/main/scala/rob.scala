@@ -591,7 +591,8 @@ class Rob(width: Int
    // exception must be in the commit bundle
    // Note: exception must be the first valid instruction in the commit bundle
    exception_thrown    := will_throw_exception || io.cxcpt.valid
-   val is_mini_exception = io.com_exc_cause === MINI_EXCEPTION_MEM_ORDERING
+   val is_mini_exception = io.com_exc_cause === MINI_EXCEPTION_MEM_ORDERING ||
+                           io.com_exc_cause === MINI_EXCEPTION_REPLAY
    io.com_exception    := exception_thrown && !is_mini_exception
    io.com_exc_cause    := r_xcpt_uop.exc_cause
    // TODO get rid of com_handling_exc? used to handle loads coming back from the $ probbaly unnecessary

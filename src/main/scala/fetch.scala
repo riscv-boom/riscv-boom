@@ -20,6 +20,7 @@ class FetchBundle(implicit p: Parameters) extends BoomBundle()(p)
    val insts       = Vec(FETCH_WIDTH, Bits(width = 32))
    val mask        = Bits(width = FETCH_WIDTH) // mark which words are valid instructions
    val xcpt_if     = Bool()
+   val replay_if   = Bool()
 
    val pred_resp   = new BranchPredictionResp
    val predictions = Vec(FETCH_WIDTH, new BranchPrediction)
@@ -105,6 +106,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
 
    io.imem.req.valid   := take_pc // tell front-end we had an unexpected change in the stream
    io.imem.req.bits.pc := if_pc_next
+   io.imem.req.bits.speculative := !(io.csr_take_pc || io.flush_take_pc)
    io.imem.resp.ready  := !(if_stalled) // TODO perf BUG || take_pc?
 
    if_pc_next := Mux(io.com_exception || io.csr_take_pc, io.csr_evec,
@@ -119,6 +121,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
 
    fetch_bundle.pc := io.imem.resp.bits.pc
    fetch_bundle.xcpt_if := io.imem.resp.bits.xcpt_if
+   fetch_bundle.replay_if := io.imem.resp.bits.replay
 
    for (i <- 0 until fetch_width)
    {

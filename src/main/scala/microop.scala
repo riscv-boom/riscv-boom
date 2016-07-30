@@ -97,6 +97,7 @@ class MicroOp(implicit p: Parameters) extends BoomBundle()(p)
 
    // exception information
    val xcpt_if          = Bool()
+   val replay_if        = Bool()             // I$ wants us to replay our ifetch request
 
    // purely debug information
    val debug_wdata      = UInt(width=xLen)

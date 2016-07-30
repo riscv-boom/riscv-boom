@@ -21,7 +21,7 @@ import rocket.Str
 
 trait BOOMDebugConstants
 {
-   val DEBUG_PRINTF        = false // use the Chisel printf functionality
+   val DEBUG_PRINTF        = true  // use the Chisel printf functionality
    val DEBUG_ENABLE_COLOR  = false // provide color to print outs. Requires a VIM plugin to work properly :(
    val COMMIT_LOG_PRINTF   = false // dump commit state, for comparision against ISA sim
    val O3PIPEVIEW_PRINTF   = false // dump trace for O3PipeView from gem5
@@ -403,8 +403,12 @@ trait RISCVConstants
 
 trait ExcCauseConstants
 {
+   // a memory disambigious misspeculation occurred
    val MINI_EXCEPTION_MEM_ORDERING = UInt(13)
+   // an instruction needs to be replayed (e.g., I$ asks for a replay)
+   val MINI_EXCEPTION_REPLAY = UInt(14)
    require (!rocket.Causes.all.contains(13))
+   require (!rocket.Causes.all.contains(14))
 }
 
 }
