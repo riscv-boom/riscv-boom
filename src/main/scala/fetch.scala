@@ -177,7 +177,13 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
 
 
    // bp2 stage
-   fetch_bundle.mask := io.imem.resp.bits.mask & io.bp2_pred_resp.mask
+   // TODO: work-around rocket-chip issue #183, broken imem.mask for fetchWidth=1
+   val imem_mask = Wire(init=io.imem.resp.bits.mask)
+   if (FETCH_WIDTH == 1)
+   {
+      imem_mask := UInt(1)
+   }
+   fetch_bundle.mask := imem_mask & io.bp2_pred_resp.mask
    fetch_bundle.pred_resp := io.bp2_pred_resp
    fetch_bundle.predictions := io.bp2_predictions
 
