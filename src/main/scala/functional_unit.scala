@@ -76,6 +76,7 @@ class FunctionalUnitIo(num_stages: Int
    // TODO name this, so ROB can also instantiate it
    val get_rob_pc = new RobPCRequest().flip
    val get_pred = new GetPredictionInfo
+   val status = new rocket.MStatus().asInput
 }
 
 class GetPredictionInfo(implicit p: Parameters) extends BoomBundle()(p)
@@ -351,8 +352,11 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
          when (pc_sel === PC_JALR)
          {
             // only the BTB can predict JALRs (must also check it predicted taken)
-            btb_mispredict := !io.get_rob_pc.next_val || (io.get_rob_pc.next_pc =/= bj_addr) ||
-                              !io.get_pred.info.btb_resp.taken || !uop.br_prediction.btb_hit
+            btb_mispredict := !io.get_rob_pc.next_val ||
+                              (io.get_rob_pc.next_pc =/= bj_addr) ||
+                              !io.get_pred.info.btb_resp.taken ||
+                              !uop.br_prediction.btb_hit ||
+                              io.status.debug // fun hack to perform fence.i on JALRs in debug mode
             bpd_mispredict := Bool(false)
          }
          when (pc_sel === PC_PLUS4)

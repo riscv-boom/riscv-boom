@@ -208,7 +208,10 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    fetch_unit.io.csr_take_pc       := csr.io.csr_xcpt || csr.io.eret
    fetch_unit.io.csr_evec          := csr.io.evec
 
-   io.imem.flush_icache := Range(0,DECODE_WIDTH).map{i => com_valids(i) && com_uops(i).is_fencei}.reduce(_|_)
+   io.imem.flush_icache :=
+      Range(0,DECODE_WIDTH).map{i => com_valids(i) && com_uops(i).is_fencei}.reduce(_|_) ||
+      (br_unit.brinfo.mispredict && br_unit.brinfo.is_jr &&  csr.io.status.debug)
+
    io.imem.flush_tlb := csr.io.fatc
 
    //-------------------------------------------------------------
@@ -771,6 +774,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    exe_units(brunit_idx).io.get_rob_pc.curr_brob_idx  := Reg(next=rob.io.get_pc.curr_brob_idx)
    exe_units(brunit_idx).io.get_rob_pc.next_val := Reg(next=rob.io.get_pc.next_val)
    exe_units(brunit_idx).io.get_rob_pc.next_pc  := Reg(next=rob.io.get_pc.next_pc)
+   exe_units(brunit_idx).io.status := csr.io.status
 
    // LSU <> ROB
    rob.io.lsu_clr_bsy_valid   := lsu_io.lsu_clr_bsy_valid
