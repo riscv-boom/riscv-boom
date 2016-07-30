@@ -1179,8 +1179,8 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
             , laq_st_dep_mask(i)
             , t_laddr(19,0)
 
-            , Mux(laq_head === UInt(i), Str("<- H "), Str(" "))
-            , Mux(laq_tail=== UInt(i), Str("T "), Str(" "))
+            , Mux(laq_head === UInt(i), Str("H"), Str(" "))
+            , Mux(laq_tail=== UInt(i), Str("T"), Str(" "))
 
             , UInt(i, MEM_ADDR_SZ)
             , Mux(stq_entry_val(i), Str("V"), Str("-"))

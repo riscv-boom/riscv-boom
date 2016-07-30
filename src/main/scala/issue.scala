@@ -91,8 +91,10 @@ abstract class IssueUnit(num_issue_slots: Int, issue_width: Int, num_wakeup_port
                end + " 0x%x: %d] ri:%d bm=%d imm=0x%x\n"
             , UInt(i, log2Up(num_issue_slots))
             , Mux(issue_slots(i).valid, Str("V"), Str("-"))
-            , Mux(issue_slots(i).request, Str(u_red + "R" + end), Str(grn + "-" + end))
-            , Mux(issue_slots(i).in_uop.valid, Str(u_wht + "W" + end),  Str(grn + " " + end))
+//            , Mux(issue_slots(i).request, Str(u_red + "R" + end), Str(grn + "-" + end))
+//            , Mux(issue_slots(i).in_uop.valid, Str(u_wht + "W" + end),  Str(grn + " " + end))
+            , Mux(issue_slots(i).request, Str("R"), Str("-"))
+            , Mux(issue_slots(i).in_uop.valid, Str("W"),  Str(" "))
             , Mux(issue_slots(i).debug.p1, Str("!"), Str(" "))
             , Mux(issue_slots(i).debug.p2, Str("!"), Str(" "))
             , Mux(issue_slots(i).debug.p3, Str("!"), Str(" "))

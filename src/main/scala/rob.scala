@@ -980,8 +980,8 @@ class Rob(width: Int
          if (COMMIT_WIDTH == 1)
          {
             printf("(%c)(%c) 0x%x [DASM(%x)] %c "
-               , Mux(debug_entry(r_idx+0).valid, Str(b_cyn + "V" + end), Str(grn + " " + end))
-               , Mux(debug_entry(r_idx+0).busy, Str(b_ylw + "B" + end),  Str(grn + " " + end))
+               , Mux(debug_entry(r_idx+0).valid, Str("V"), Str(" "))
+               , Mux(debug_entry(r_idx+0).busy, Str("B"),  Str(" "))
                , debug_entry(r_idx+0).uop.pc(31,0)
                , debug_entry(r_idx+0).uop.inst
                , Mux(debug_entry(r_idx+0).exception, Str("E"), Str("-"))
@@ -993,10 +993,10 @@ class Rob(width: Int
             printf("%d %x (%c%c)(%c%c) 0x%x %x [%cDASM(%x)][DASM(%x)" + end + "] %c,%c "
                , row_metadata_brob_idx(row)
                , row_metadata_has_brorjalr(row)
-               , Mux(debug_entry(r_idx+0).valid, Str(b_cyn + "V" + end), Str(grn + " " + end))
-               , Mux(debug_entry(r_idx+1).valid, Str(b_cyn + "V" + end), Str(grn + " " + end))
-               , Mux(debug_entry(r_idx+0).busy,  Str(b_ylw + "B" + end), Str(grn + " " + end))
-               , Mux(debug_entry(r_idx+1).busy,  Str(b_ylw + "B" + end), Str(grn + " " + end))
+               , Mux(debug_entry(r_idx+0).valid, Str("V"), Str(" "))
+               , Mux(debug_entry(r_idx+1).valid, Str("V"), Str(" "))
+               , Mux(debug_entry(r_idx+0).busy,  Str("B"), Str(" "))
+               , Mux(debug_entry(r_idx+1).busy,  Str("B"), Str(" "))
                , debug_entry(r_idx+0).uop.pc(31,0)
                , debug_entry(r_idx+1).uop.pc(15,0)
                , Mux(r_head === UInt(row) && row_is_val, Str(b_red),
@@ -1012,14 +1012,14 @@ class Rob(width: Int
          {
             val row_is_val = debug_entry(r_idx+0).valid || debug_entry(r_idx+1).valid || debug_entry(r_idx+2).valid || debug_entry(r_idx+3).valid
             printf("(%c%c%c%c)(%c%c%c%c) 0x%x %x %x %x [%cDASM(%x)][DASM(%x)][DASM(%x)][DASM(%x)" + end + "]%c%c%c%c"
-               , Mux(debug_entry(r_idx+0).valid, Str(b_cyn + "V" + end), Str(grn + " " + end))
-               , Mux(debug_entry(r_idx+1).valid, Str(b_cyn + "V" + end), Str(grn + " " + end))
-               , Mux(debug_entry(r_idx+2).valid, Str(b_cyn + "V" + end), Str(grn + " " + end))
-               , Mux(debug_entry(r_idx+3).valid, Str(b_cyn + "V" + end), Str(grn + " " + end))
-               , Mux(debug_entry(r_idx+0).busy,  Str(b_ylw + "B" + end), Str(grn + " " + end))
-               , Mux(debug_entry(r_idx+1).busy,  Str(b_ylw + "B" + end), Str(grn + " " + end))
-               , Mux(debug_entry(r_idx+2).busy,  Str(b_ylw + "B" + end), Str(grn + " " + end))
-               , Mux(debug_entry(r_idx+3).busy,  Str(b_ylw + "B" + end), Str(grn + " " + end))
+               , Mux(debug_entry(r_idx+0).valid, Str("V"), Str(" "))
+               , Mux(debug_entry(r_idx+1).valid, Str("V"), Str(" "))
+               , Mux(debug_entry(r_idx+2).valid, Str("V"), Str(" "))
+               , Mux(debug_entry(r_idx+3).valid, Str("V"), Str(" "))
+               , Mux(debug_entry(r_idx+0).busy,  Str("B"), Str(" "))
+               , Mux(debug_entry(r_idx+1).busy,  Str("B"), Str(" "))
+               , Mux(debug_entry(r_idx+2).busy,  Str("B"), Str(" "))
+               , Mux(debug_entry(r_idx+3).busy,  Str("B"), Str(" "))
                , debug_entry(r_idx+0).uop.pc(23,0)
                , debug_entry(r_idx+1).uop.pc(15,0)
                , debug_entry(r_idx+2).uop.pc(15,0)
