@@ -518,7 +518,7 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
 //   io.resp.bits.data := reg_data
 
    val r_val  = Reg(init = Vec.fill(num_stages) { Bool(false) })
-   val r_data = Reg(Vec(num_stages, UInt(xLen)))
+   val r_data = Reg(Vec(num_stages, UInt(width=xLen)))
    r_val (0) := io.req.valid
    r_data(0) := alu.io.out
    for (i <- 1 until num_stages)
