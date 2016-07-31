@@ -191,6 +191,13 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    //-------------------------------------------------------------
 
    io.imem <> fetch_unit.io.imem
+   // TODO: work-around rocket-chip issue #183, broken imem.mask for fetchWidth=1
+   // TODO: work-around rocket-chip issue #184, broken imem.mask for fetchWidth=1
+   if (FETCH_WIDTH == 1)
+   {
+      fetch_unit.io.imem.resp.bits.mask := UInt(1)
+      fetch_unit.io.imem.btb_resp.bits.bridx := UInt(0)
+   }
    fetch_unit.io.br_unit <> br_unit
    fetch_unit.io.tsc_reg           := tsc_reg
 
@@ -224,7 +231,22 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    // decode.  BHT look-up is in parallel with I$ access, and Branch Decode
    // occurs before fetch buffer insertion.
 
-   io.imem <> bpd_stage.io.imem
+   //io.imem <> bpd_stage.io.imem
+   bpd_stage.io.imem_resp <> io.imem.resp
+   bpd_stage.io.btb_resp <> io.imem.btb_resp
+   // TODO: work-around rocket-chip issue #183, broken imem.mask for fetchWidth=1
+   // TODO: work-around rocket-chip issue #184, broken imem.mask for fetchWidth=1
+   if (FETCH_WIDTH == 1)
+   {
+      bpd_stage.io.imem_resp.bits.mask := UInt(1)
+      bpd_stage.io.btb_resp.bits.bridx := UInt(0)
+   }
+   io.imem.resp.ready <> fetch_unit.io.imem.resp.ready
+
+   io.imem.ras_update <> bpd_stage.io.ras_update
+   bpd_stage.io.npc <> io.imem.npc
+
+
    io.imem.ras_update <> bpd_stage.io.ras_update
    bpd_stage.io.br_unit := br_unit
    bpd_stage.io.kill := rob.io.flush_take_pc
