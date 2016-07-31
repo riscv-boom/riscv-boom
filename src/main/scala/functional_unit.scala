@@ -347,13 +347,15 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
       // did the bpd predict incorrectly (aka, should we correct its prediction?)
       val bpd_mispredict = Wire(Bool()); bpd_mispredict := Bool(false)
 
+      // if b/j is taken, does it go to the wrong target?
+      val wrong_taken_target = !io.get_rob_pc.next_val || (io.get_rob_pc.next_pc =/= bj_addr)
+
       when (is_br_or_jalr)
       {
          when (pc_sel === PC_JALR)
          {
             // only the BTB can predict JALRs (must also check it predicted taken)
-            btb_mispredict := !io.get_rob_pc.next_val ||
-                              (io.get_rob_pc.next_pc =/= bj_addr) ||
+            btb_mispredict := wrong_taken_target ||
                               !io.get_pred.info.btb_resp.taken ||
                               !uop.br_prediction.btb_hit ||
                               io.status.debug // fun hack to perform fence.i on JALRs in debug mode
@@ -366,7 +368,8 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
          }
          when (pc_sel === PC_BRJMP)
          {
-            btb_mispredict := !uop.br_prediction.btb_hit ||
+            btb_mispredict := wrong_taken_target ||
+                              !uop.br_prediction.btb_hit ||
                               (uop.br_prediction.btb_hit && !io.get_pred.info.btb_resp.taken)
             bpd_mispredict := !uop.br_prediction.bpd_predict_taken
          }
@@ -374,6 +377,11 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
 
       when (is_br_or_jalr && pc_sel === PC_BRJMP && !mispredict && io.get_rob_pc.next_val)
       {
+         when (io.get_rob_pc.next_pc =/= bj_addr)
+         {
+            printf ("[FuncUnit] Branch jumped to 0x%x, should have jumped to 0x%x.\n",
+               io.get_rob_pc.next_pc, bj_addr)
+         }
          assert (io.get_rob_pc.next_pc === bj_addr, "[FuncUnit] branch is taken to the wrong target.")
       }
 
@@ -494,6 +502,7 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
       io.br_unit.debug_btb_pred := io.get_pred.info.btb_resp_valid && io.get_pred.info.btb_resp.taken
 
       // handle misaligned branch/jmp targets
+      // TODO BUG only trip xcpt if taken to bj_addr
       io.br_unit.xcpt.valid     := bj_addr(1) && io.req.valid && mispredict && !killed
       io.br_unit.xcpt.bits.uop  := uop
       io.br_unit.xcpt.bits.cause:= rocket.Causes.misaligned_fetch
