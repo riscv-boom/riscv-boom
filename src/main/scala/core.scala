@@ -584,15 +584,14 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
 
    csr.io.rw.addr  := exe_units(0).io.resp(0).bits.uop.csr_addr
    csr.io.rw.cmd   := Mux(exe_units(0).io.resp(0).valid, csr_rw_cmd, rocket.CSR.N)
-   csr.io.rw.wdata := Mux(com_exception,
-                        rob.io.com_badvaddr,
-                        wb_wdata)
+   csr.io.rw.wdata :=wb_wdata
 
    // Extra I/O
    csr.io.pc        := rob.io.flush_pc
    csr.io.exception := com_exception && !csr.io.csr_xcpt
    csr.io.retire    := PopCount(com_valids.toBits)
    csr.io.cause     := rob.io.com_exc_cause
+   csr.io.badaddr   := rob.io.com_badvaddr
 
 
    // reading requires serializing the entire pipeline
