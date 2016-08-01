@@ -21,7 +21,7 @@ import rocket.Str
 
 trait BOOMDebugConstants
 {
-   val DEBUG_PRINTF        = true  // use the Chisel printf functionality
+   val DEBUG_PRINTF        = false // use the Chisel printf functionality
    val DEBUG_ENABLE_COLOR  = false // provide color to print outs. Requires a VIM plugin to work properly :(
    val COMMIT_LOG_PRINTF   = false // dump commit state, for comparision against ISA sim
    val O3PIPEVIEW_PRINTF   = false // dump trace for O3PipeView from gem5
@@ -153,7 +153,7 @@ trait ScalarOpConstants
    // Micro-op opcodes
    // TODO change micro-op opcodes into using enum
    val UOPC_SZ = 9
-   val uopX    = BitPat.DC(UOPC_SZ)
+   val uopX    = BitPat.dontCare(UOPC_SZ)
    val uopNOP  = UInt( 0, UOPC_SZ)
    val uopLD   = UInt( 1, UOPC_SZ)
    val uopSTA  = UInt( 2, UOPC_SZ)  // store address generation
@@ -379,12 +379,12 @@ trait RISCVConstants
    {
       val b_imm32 = Cat(Fill(20,inst(31)), inst(7), inst(30,25), inst(11,8), UInt(0,1))
 //      (pc + Sext(b_imm32, xlen)) & SInt(-coreInstBytes)
-      ((pc + Sext(b_imm32, xlen)).toSInt & SInt(-coreInstBytes)).toUInt
+      ((pc + Sext(b_imm32, xlen)).asSInt & SInt(-coreInstBytes)).asUInt
    }
    def ComputeJALTarget(pc: UInt, inst: UInt, xlen: Int, coreInstBytes: Int): UInt =
    {
       val j_imm32 = Cat(Fill(12,inst(31)), inst(19,12), inst(20), inst(30,25), inst(24,21), UInt(0,1))
-      ((pc + Sext(j_imm32, xlen)).toSInt & SInt(-coreInstBytes)).toUInt
+      ((pc + Sext(j_imm32, xlen)).asSInt & SInt(-coreInstBytes)).asUInt
    }
 
 
