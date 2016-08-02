@@ -125,7 +125,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
 
    for (i <- 0 until fetch_width)
    {
-      fetch_bundle.insts(i) := io.imem.resp.bits.data(i)
+      fetch_bundle.insts(i) := io.imem.resp.bits.data(i*coreInstBits+coreInstBits-1,i*coreInstBits)
 
       if (i == 0)
          fetch_bundle.debug_events(i).fetch_seq := fseq_reg
@@ -154,7 +154,8 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    io.imem.btb_update.bits.target     := Mux(br_unit.btb_update_valid, br_unit.btb_update.target,
                                                                        (io.bp2_pred_target.toSInt &
                                                                         SInt(-coreInstBytes)).toUInt)
-   io.imem.btb_update.bits.prediction := Mux(br_unit.btb_update_valid, br_unit.btb_update.prediction, io.imem.btb_resp)
+   io.imem.btb_update.bits.prediction := Mux(br_unit.btb_update_valid, br_unit.btb_update.prediction, 
+                                                                       io.imem.resp.bits.btb)
    io.imem.btb_update.bits.taken      := Mux(br_unit.btb_update_valid, br_unit.btb_update.taken,
                                                                        io.bp2_take_pc && io.bp2_is_taken && !if_stalled)
    io.imem.btb_update.bits.isJump     := Mux(br_unit.btb_update_valid, br_unit.btb_update.isJump, io.bp2_is_jump)
@@ -165,11 +166,11 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    // TODO move this into the bpd_pipeline
    val bp2_bht_update = Wire(Valid(new rocket.BHTUpdate()).asOutput)
    bp2_bht_update.valid           := io.imem.resp.valid && io.bp2_br_seen && !if_stalled && !br_unit.take_pc
-   bp2_bht_update.bits.prediction := io.imem.btb_resp
+   bp2_bht_update.bits.prediction := io.imem.resp.bits.btb
    bp2_bht_update.bits.pc         := io.imem.resp.bits.pc
    bp2_bht_update.bits.taken      := Mux(io.bp2_take_pc,
                                        io.bp2_is_taken,
-                                       io.imem.btb_resp.valid && io.imem.btb_resp.bits.taken)
+                                       io.imem.resp.bits.btb.valid && io.imem.resp.bits.btb.bits.taken)
    bp2_bht_update.bits.mispredict := io.bp2_take_pc
 
    io.imem.bht_update := Mux(br_unit.brinfo.valid &&
@@ -231,22 +232,22 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
       {
          printf("DASM(%x) "
             //, InstsStr(io.imem.resp.bits.data.toBits, FETCH_WIDTH)
-            , io.imem.resp.bits.data(0)
+            , io.imem.resp.bits.data(coreInstBits-1,0)
             )
       }
       else if (fetch_width >= 2)
       {
          printf("DASM(%x)DASM(%x) "
-            , io.imem.resp.bits.data(0)
-            , io.imem.resp.bits.data(1)
+            , io.imem.resp.bits.data(coreInstBits-1,0)
+            , io.imem.resp.bits.data(2*coreInstBits-1, coreInstBits)
             )
       }
 
       printf("----BrPred2:(%c,%c,%d) [btbtarg: 0x%x] jkilmsk:0x%x ->(0x%x)\n"
-         , Mux(io.imem.btb_resp.valid, Str("H"), Str("-"))
-         , Mux(io.imem.btb_resp.bits.taken, Str("T"), Str("-"))
-         , io.imem.btb_resp.bits.bridx
-         , io.imem.btb_resp.bits.target(19,0)
+         , Mux(io.imem.resp.bits.btb.valid, Str("H"), Str("-"))
+         , Mux(io.imem.resp.bits.btb.bits.taken, Str("T"), Str("-"))
+         , io.imem.resp.bits.btb.bits.bridx
+         , io.imem.resp.bits.btb.bits.target(19,0)
          , io.bp2_pred_resp.mask
          , fetch_bundle.mask
          )

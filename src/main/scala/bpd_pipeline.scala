@@ -155,7 +155,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
 
    for (i <- 0 until fetch_width)
    {
-      val inst = io.imem_resp.bits.data(i)
+      val inst = io.imem_resp.bits.data(i*coreInstBits+coreInstBits-1,i*coreInstBits)
       val bpd_decoder = Module(new BranchDecode)
       bpd_decoder.io.inst := inst
 
@@ -384,7 +384,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
 
    val jumps    = is_jal.toBits | is_jr.toBits
    val jmp_idx  = PriorityEncoder(jumps)
-   val jmp_inst = io.imem_resp.bits.data(jmp_idx)
+   val jmp_inst = (io.imem_resp.bits.data >> (jmp_idx*UInt(coreInstBits)))(coreInstBits-1,0)
    val is_call  = IsCall(jmp_inst)
    val is_ret   = IsReturn(jmp_inst)
    io.ras_update.valid           := io.imem_resp.valid &&

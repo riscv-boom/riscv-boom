@@ -17,6 +17,7 @@ class DefaultBOOMConfig extends Config (
          case XLen => 64
          case FDivSqrt => true
          case CoreInstBits => 32
+         case UseCompressed => false
 
          // Superscalar Widths
          case FetchWidth => Knob("FETCH_WIDTH")

@@ -17,7 +17,8 @@ package boom
 import Chisel._
 import cde.{Parameters, Field}
 
-class BOOMTile(resetSignal: Bool = null)(implicit p: Parameters) extends rocket.Tile(resetSignal)(p)
+class BOOMTile(clockSignal: Clock = null, resetSignal: Bool = null)
+   (implicit p: Parameters) extends rocket.Tile(clockSignal, resetSignal)(p)
 {
    val core = Module(new BOOMCore()(p.alterPartial({case rocket.CoreName => "BOOM"})))
    val icache = Module(new rocket.Frontend()(p.alterPartial({

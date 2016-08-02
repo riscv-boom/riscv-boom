@@ -196,7 +196,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    if (FETCH_WIDTH == 1)
    {
       fetch_unit.io.imem.resp.bits.mask := UInt(1)
-      fetch_unit.io.imem.btb_resp.bits.bridx := UInt(0)
+      fetch_unit.io.imem.resp.bits.btb.bits.bridx := UInt(0)
    }
    fetch_unit.io.br_unit <> br_unit
    fetch_unit.io.tsc_reg           := tsc_reg
@@ -233,7 +233,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
 
    //io.imem <> bpd_stage.io.imem
    bpd_stage.io.imem_resp <> io.imem.resp
-   bpd_stage.io.btb_resp <> io.imem.btb_resp
+   bpd_stage.io.btb_resp <> io.imem.resp.bits.btb
    // TODO: work-around rocket-chip issue #183, broken imem.mask for fetchWidth=1
    // TODO: work-around rocket-chip issue #184, broken imem.mask for fetchWidth=1
    if (FETCH_WIDTH == 1)
