@@ -152,7 +152,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    io.imem.btb_update.bits.pc         := Mux(br_unit.btb_update_valid, br_unit.btb_update.pc, io.imem.resp.bits.pc)
    io.imem.btb_update.bits.br_pc      := Mux(br_unit.btb_update_valid, br_unit.btb_update.br_pc, io.bp2_pc_of_br_inst)
    io.imem.btb_update.bits.target     := Mux(br_unit.btb_update_valid, br_unit.btb_update.target,
-                                                                       (io.bp2_pred_target.toSInt & 
+                                                                       (io.bp2_pred_target.toSInt &
                                                                         SInt(-coreInstBytes)).toUInt)
    io.imem.btb_update.bits.prediction := Mux(br_unit.btb_update_valid, br_unit.btb_update.prediction, io.imem.btb_resp)
    io.imem.btb_update.bits.taken      := Mux(br_unit.btb_update_valid, br_unit.btb_update.taken,
@@ -219,13 +219,30 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
       // Fetch Stage 2
 //      printf("I$ Response: (%s) IF2_PC= 0x%x (mask:0x%x) \u001b[1;35m TODO need Str in Chisel3\u001b[0m  ----BrPred2:(%s,%s,%d) [btbtarg: 0x%x] jkilmsk:0x%x ->(0x%x)\n"
 //      printf("I$ Response: (%s) IF2_PC= 0x%x (mask:0x%x) [1;35m TODO need Str in Chisel3[0m  ----BrPred2:(%s,%s,%d) [btbtarg: 0x%x] jkilmsk:0x%x ->(0x%x)\n"
-      printf("I$ Response: (%c) IF2_PC= 0x%x (mask:0x%x) DASM(%x) ----BrPred2:(%c,%c,%d) [btbtarg: 0x%x] jkilmsk:0x%x ->(0x%x)\n"
+
+      printf("I$ Response: (%c) IF2_PC= 0x%x (mask:0x%x) "
 //         , Mux(io.imem.resp.valid && !io.kill, Str(mgt + "v" + end), Str(grn + "-" + end))
          , Mux(io.imem.resp.valid && !io.kill, Str("v"), Str("-"))
          , io.imem.resp.bits.pc
          , io.imem.resp.bits.mask
-         //, InstsStr(io.imem.resp.bits.data.toBits, FETCH_WIDTH)
-         , io.imem.resp.bits.data(0)
+         )
+
+      if (fetch_width == 1)
+      {
+         printf("DASM(%x) "
+            //, InstsStr(io.imem.resp.bits.data.toBits, FETCH_WIDTH)
+            , io.imem.resp.bits.data(0)
+            )
+      }
+      else if (fetch_width >= 2)
+      {
+         printf("DASM(%x)DASM(%x) "
+            , io.imem.resp.bits.data(0)
+            , io.imem.resp.bits.data(1)
+            )
+      }
+
+      printf("----BrPred2:(%c,%c,%d) [btbtarg: 0x%x] jkilmsk:0x%x ->(0x%x)\n"
          , Mux(io.imem.btb_resp.valid, Str("H"), Str("-"))
          , Mux(io.imem.btb_resp.bits.taken, Str("T"), Str("-"))
          , io.imem.btb_resp.bits.bridx

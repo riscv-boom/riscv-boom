@@ -66,7 +66,6 @@ class BranchPrediction(implicit p: Parameters) extends BoomBundle()(p)
    val is_br_or_jalr    = Bool() // is this instruction a branch or jalr?
                                  // (need to allocate brob entry).
 
-
    def wasBTB = btb_predicted
 }
 
@@ -241,7 +240,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
       {
          val btb_nt = !io.btb_resp.bits.taken
          bpd_br_fire  := bpd_br_beats_jal && bpd_br_taken && (bpd_br_idx < io.btb_resp.bits.bridx)
-         bpd_jal_fire := !bpd_br_beats_jal && bpd_jal_val && 
+         bpd_jal_fire := !bpd_br_beats_jal && bpd_jal_val &&
                            ((bpd_jal_idx < io.btb_resp.bits.bridx) || btb_nt || btb_predicted_wrong_jal_target)
 
          when (io.imem_resp.valid)
@@ -297,15 +296,16 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
       {
          when (io.imem_resp.valid)
          {
-            // Thanks to uncacheable regions (also, the BTB is never invalidated), 
-            // We may actually BTB predict things that aren't branches!
+            // Thanks to uncacheable regions (also, the BTB is never invalidated),
+            // The BTB may actually predict things that aren't branches!
             // But we must undo these "mispredictions"!
             //printf ("[bpd_pipeline] BTB resp is valid, but didn't detect what it predicted.")
-
-            bpd_nextline_fire := Bool(true)
             override_btb := Bool(true)
 
-            //assert (Bool(false), "[bpd_pipeline] BTB resp is valid, but didn't detect what it predicted.")
+            // but is there a branch or jump we need to handle? Or just fetch the nextline?
+            bpd_br_fire  := bpd_br_beats_jal && bpd_br_taken
+            bpd_jal_fire := !bpd_br_beats_jal && bpd_jal_val
+            bpd_nextline_fire := !bpd_br_fire && !bpd_jal_fire
          }
       }
    }
@@ -363,7 +363,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    for (w <- 0 until FETCH_WIDTH)
    {
       io.predictions(w).is_br_or_jalr := is_br(w) || is_jr(w)
-      io.predictions(w).bpd_predict_taken := bpd_predictions(w) && bpd_valid
+      io.predictions(w).bpd_predict_taken := bpd_predictions(w) && bpd_valid && !bpd_nextline_fire
       io.predictions(w).btb_predicted := io.btb_resp.valid &&
                                           !(bpd_nextline_fire || bpd_br_fire || bpd_jal_fire)
       io.predictions(w).btb_hit := Mux(io.btb_resp.bits.bridx === UInt(w),
@@ -421,7 +421,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
       {
 //         assert (io.btb_resp.bits.target === targ(vaddrBits-1,0),
 //            "[bpd_pipeline] BTB is jumping to an invalid target.")
-         when (io.btb_resp.bits.target =/= targ(vaddrBits-1,0)) 
+         when (io.btb_resp.bits.target =/= targ(vaddrBits-1,0))
          {
             // TODO remove this... BTBs can now just predict total garbage
             //printf("[bpd_pipeline] BTB is jumping to an invalid target.\n")
