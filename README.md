@@ -18,6 +18,8 @@ Atomic Memory Op Support |√
 Caches |√
 Viritual Memory |√
 Boots Linux |√
+Privileged Arch v1.9 |√
+External Debug |√
 
 **Google group:** (https://groups.google.com/forum/#!forum/riscv-boom)
 
@@ -29,8 +31,6 @@ The [wiki](https://github.com/ucb-bar/riscv-boom/wiki) may also have more inform
 
 This repository is **NOT A SELF-RUNNING** repository. To instantiate a BOOM core, please use the Rocket chip generator found in the rocket-chip git repository (https://github.com/ucb-bar/rocket-chip).
 
-BOOM depends on the Chisel project. It also depends on [Rocket](https://github.com/ucb-bar/rocket), [uncore](https://github.com/ucb-bar/uncore), and [junction](https://github.com/ucb-bar/junctions) source codes.
-
 
 **Requirements**
 
@@ -41,16 +41,14 @@ If you have not, follow additional instructions below.
 
 **Directions**
 
-To build a BOOM C++ emulator and run BOOM through a couple of simple tests:
+To build a BOOM Verilator emulator and run BOOM through a couple of simple tests:
 
 ````
    $ git clone https://github.com/ucb-bar/rocket-chip.git
    $ cd rocket-chip
    $ git checkout boom
    $ git submodule update --init
-   $ cd riscv-tools
-   $ git submodule update --init --recursive riscv-tests
-   $ cd ../emulator; make run CONFIG=BOOMCPPConfig
+   $ cd emulator; make run CONFIG=BOOMConfig
 ````
  
 **Installing the RISC-V Toolchain**
@@ -70,7 +68,7 @@ $RISCV/bin to your $PATH.
    $ cd riscv-tools
    $ git submodule update --init --recursive
    $ ./build.sh
-   $ cd ../emulator; make run CONFIG=BOOMCPPConfig
+   $ cd ../emulator; make run CONFIG=BOOMConfig
 ````
 
 For more detailed information on the toolchain, visit 
@@ -120,7 +118,7 @@ For more details (and to download o3-pipeview.py), visit the [gem5 wiki](http://
 
 **Disclaimer!**
 
-The RISC-V privileged ISA and platform specs are still in flux. BOOM will do its best to stay up-to-date with it!
+The RISC-V privileged ISA,  platform, and Debug specs are still in flux. BOOM will do its best to stay up-to-date with it!
 
 BOOM is a work-in-progress and remains in active development.
 
