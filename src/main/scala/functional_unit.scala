@@ -350,6 +350,9 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
       // if b/j is taken, does it go to the wrong target?
       val wrong_taken_target = !io.get_rob_pc.next_val || (io.get_rob_pc.next_pc =/= bj_addr)
 
+      assert (!(io.req.valid && uop.is_jal && io.get_rob_pc.next_val && io.get_rob_pc.next_pc =/= bj_addr),
+         "[func] JAL went to the wrong target.")
+
       when (is_br_or_jalr)
       {
          when (pc_sel === PC_JALR)

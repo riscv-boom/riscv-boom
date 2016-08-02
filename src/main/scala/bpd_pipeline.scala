@@ -224,6 +224,9 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    val btb_predicted_br_taken    = btb_predicted_br && io.btb_resp.bits.taken
    val btb_predicted_br_nottaken = btb_predicted_br && !io.btb_resp.bits.taken
    val btb_predicted_jump        = IsIdxAMatch(io.btb_resp.bits.bridx, is_jal.toBits | is_jr.toBits)
+   val btb_predicted_jal         = IsIdxAMatch(io.btb_resp.bits.bridx, is_jal.toBits)
+
+   val btb_predicted_wrong_jal_target = btb_predicted_jal && io.btb_resp.bits.target =/= jal_targs(bpd_jal_idx)
 
    when (io.btb_resp.valid)
    {
@@ -234,14 +237,21 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
       //       * involves refetching the latter half of the packet if we "undo"
       //          the BTB's taken branch.
 
-      when (btb_predicted_jump)
+      when (btb_predicted_jump) // both JAL and JRs
       {
+         val btb_nt = !io.btb_resp.bits.taken
          bpd_br_fire  := bpd_br_beats_jal && bpd_br_taken && (bpd_br_idx < io.btb_resp.bits.bridx)
-         bpd_jal_fire := !bpd_br_beats_jal && bpd_jal_val && (bpd_jal_idx < io.btb_resp.bits.bridx)
+         bpd_jal_fire := !bpd_br_beats_jal && bpd_jal_val && 
+                           ((bpd_jal_idx < io.btb_resp.bits.bridx) || btb_nt || btb_predicted_wrong_jal_target)
 
          when (io.imem_resp.valid)
          {
-            assert (io.btb_resp.bits.taken, "[bpd_pipeline] BTB predicted a jump, but didn't take it?")
+            when (!io.btb_resp.bits.taken)
+            {
+               assert (bpd_br_fire || (bpd_jal_fire && bpd_jal_idx <= io.btb_resp.bits.bridx),
+                  "[bpd_pipeline] BTB predicted a jump but didn't take it, and we are failing to correct it.")
+               //printf("[bpd_pipeline] BTB predicted a jump, but didn't take it.\n")
+            }
          }
       }
       .elsewhen (btb_predicted_br_taken)
@@ -414,7 +424,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
          when (io.btb_resp.bits.target =/= targ(vaddrBits-1,0)) 
          {
             // TODO remove this... BTBs can now just predict total garbage
-            printf("[bpd_pipeline] BTB is jumping to an invalid target.\n")
+            //printf("[bpd_pipeline] BTB is jumping to an invalid target.\n")
          }
       }
    }
