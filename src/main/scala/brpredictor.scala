@@ -27,8 +27,8 @@ import rocket.Str
 // expecting to receive it back when it needs to perform an update.
 class BpdResp(implicit p: Parameters) extends BoomBundle()(p)
 {
-   val takens = Bits(width = FETCH_WIDTH)
-   val history = Bits(width = GLOBAL_HISTORY_LENGTH)
+   val takens = UInt(width = FETCH_WIDTH)
+   val history = UInt(width = GLOBAL_HISTORY_LENGTH)
 
    // The info field stores the response information from the branch predictor.
    // The response is stored (conceptually) in the ROB and is returned to the
@@ -36,7 +36,7 @@ class BpdResp(implicit p: Parameters) extends BoomBundle()(p)
    // predictor (and its configuration) changes the amount of information it
    // needs to store, and so we need to ask the predictor (in parameters.scala)
    // how many bits of info it requires
-   val info = Bits(width = BPD_INFO_SIZE)
+   val info = UInt(width = BPD_INFO_SIZE)
 }
 
 

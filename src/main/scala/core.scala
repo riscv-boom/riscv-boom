@@ -204,6 +204,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    fetch_unit.io.bp2_take_pc       := bpd_stage.io.req.valid
    fetch_unit.io.bp2_pc_of_br_inst := bpd_stage.io.req.bits.br_pc
    fetch_unit.io.bp2_is_jump       := bpd_stage.io.req.bits.is_jump
+   fetch_unit.io.bp2_is_cfi        := bpd_stage.io.req.bits.is_cfi
    fetch_unit.io.bp2_is_taken      := bpd_stage.io.req.bits.is_taken
    fetch_unit.io.bp2_br_seen       := bpd_stage.io.pred_resp.br_seen
    fetch_unit.io.bp2_pred_target   := bpd_stage.io.req.bits.target
@@ -243,7 +244,6 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    }
    io.imem.resp.ready <> fetch_unit.io.imem.resp.ready
 
-   io.imem.ras_update <> bpd_stage.io.ras_update
    bpd_stage.io.npc <> io.imem.npc
 
 

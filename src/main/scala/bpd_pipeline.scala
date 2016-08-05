@@ -34,6 +34,7 @@ class RedirectRequest(fetch_width: Int)(implicit p: Parameters) extends BoomBund
    val idx     = UInt(width = log2Up(fetch_width)) // idx of br in fetch bundle (to mask out the appropriate fetch
                                                    // instructions)
    val is_jump = Bool() // (only valid if redirect request is valid)
+   val is_cfi  = Bool() // Is redirect due to a control-flow instruction?
    val is_taken= Bool() // (true if redirect is to "take" a branch,
                         //  false if it's to request PC+4 for a mispred
   override def cloneType = new RedirectRequest(fetch_width)(p).asInstanceOf[this.type]
@@ -214,6 +215,11 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    // Should we override its mask?
    val override_btb = Wire(init = Bool(false))
 
+   // Is the predicted instruction a control-flow instruction?
+   // Used to invalidate BTB entries due to it predicting on
+   // a non-branch/non-jump instruction.
+   val is_cfi = Wire(init = Bool(true))
+
    // does the index match on a true bit in the mask?
    def IsIdxAMatch(idx: UInt, mask: UInt) : Bool =
    {
@@ -271,7 +277,9 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
                            (bpd_valid && !bpd_agrees_with_btb))
          bpd_br_fire  := bpd_br_beats_jal && bpd_br_taken &&
                            (bpd_br_idx < io.btb_resp.bits.bridx ||  // earlier than BTB's branch
-                           (bpd_valid && !bpd_agrees_with_btb))          // taken later than BTB's branch
+                           (bpd_valid && !bpd_agrees_with_btb))     // taken later
+//                         (bpd_valid && !bpd_agrees_with_btb && io.btb_resp.bits.bridx =/= bpd_br_idx)) // taken later
+                                                                                                    // than BTB's branch
 
          bpd_nextline_fire := bpd_valid && !bpd_predictions.orR && !bpd_jal_val
          override_btb := bpd_valid && !bpd_agrees_with_btb
@@ -301,6 +309,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
             // But we must undo these "mispredictions"!
             //printf ("[bpd_pipeline] BTB resp is valid, but didn't detect what it predicted.")
             override_btb := Bool(true)
+            is_cfi := Bool(false)
 
             // but is there a branch or jump we need to handle? Or just fetch the nextline?
             bpd_br_fire  := bpd_br_beats_jal && bpd_br_taken
@@ -327,6 +336,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    io.req.bits.idx     := Mux(bpd_nextline_fire, UInt(fetch_width-1), bpd_req_idx)
    io.req.bits.br_pc   := aligned_pc + (io.req.bits.idx << UInt(2))
    io.req.bits.is_jump := !bpd_br_beats_jal
+   io.req.bits.is_cfi  := is_cfi
    io.req.bits.is_taken:= bpd_br_fire || bpd_jal_fire
 
    io.pred_resp.btb_resp_valid   := io.btb_resp.valid
