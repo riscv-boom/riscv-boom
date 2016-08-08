@@ -46,7 +46,7 @@ To build a BOOM Verilator emulator and run BOOM through a couple of simple tests
 ````
    $ git clone https://github.com/ucb-bar/rocket-chip.git
    $ cd rocket-chip
-   $ git checkout boom2
+   $ git checkout boom
    $ git submodule update --init
    $ cd emulator; make run CONFIG=BOOMConfig
 ````
@@ -63,7 +63,7 @@ $RISCV/bin to your $PATH.
    $ export PATH="${PATH}:$RISCV/bin"
    $ git clone https://github.com/ucb-bar/rocket-chip.git
    $ cd rocket-chip
-   $ git checkout boom2
+   $ git checkout boom
    $ git submodule update --init
    $ cd riscv-tools
    $ git submodule update --init --recursive
