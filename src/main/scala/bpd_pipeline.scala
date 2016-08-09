@@ -253,9 +253,12 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
          {
             when (!io.btb_resp.bits.taken)
             {
-               assert (bpd_br_fire || (bpd_jal_fire && bpd_jal_idx <= io.btb_resp.bits.bridx),
+               val btb_predicted_jr = IsIdxAMatch(io.btb_resp.bits.bridx, is_jr.toBits)
+               // if JR but predicted not TAKEN, do nothing and let BrUnit fix mispredicton.
+               assert (bpd_br_fire ||
+                  (bpd_jal_fire && (bpd_jal_idx <= io.btb_resp.bits.bridx)) ||
+                  btb_predicted_jr,
                   "[bpd_pipeline] BTB predicted a jump but didn't take it, and we are failing to correct it.")
-               //printf("[bpd_pipeline] BTB predicted a jump, but didn't take it.\n")
             }
          }
       }
