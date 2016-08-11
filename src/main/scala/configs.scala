@@ -18,6 +18,7 @@ class DefaultBOOMConfig extends Config (
          case FDivSqrt => true
          case CoreInstBits => 32
          case UseCompressed => false
+         case NCustomMRWCSRs => 16 // use (for now) for micro-arch counters
 
          // Superscalar Widths
          case FetchWidth => Knob("FETCH_WIDTH")
@@ -75,7 +76,7 @@ class DefaultBOOMConfig extends Config (
       case "PHYS_REGISTERS" => 110
       case "MAX_BR_COUNT" => 8
       case "AGE_PRIORITY_ISSUE" => true
-      case "L1D_MSHRS" => 4
+      case "L1D_MSHRS" => 2
       case "L1D_WAYS" => 8
       case "L1D_SETS" => 64
       case "L1I_WAYS" => 8

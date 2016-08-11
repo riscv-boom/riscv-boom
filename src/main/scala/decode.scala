@@ -341,7 +341,6 @@ class DecodeUnitIo(implicit p: Parameters) extends BoomBundle()(p)
 
    // from CSRFile
    val status = new rocket.MStatus().asInput
-   val csr_xcpt = Bool(INPUT)
    val interrupt = Bool(INPUT)
    val interrupt_cause = UInt(INPUT, xLen)
    
