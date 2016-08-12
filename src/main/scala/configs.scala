@@ -19,6 +19,10 @@ class DefaultBOOMConfig extends Config (
          case CoreInstBits => 32
          case UseCompressed => false
          case NCustomMRWCSRs => 16 // use (for now) for micro-arch counters
+         
+         // Vector Extension
+         case UseVector => true
+         case MaxVlen => 4
 
          // Superscalar Widths
          case FetchWidth => Knob("FETCH_WIDTH")
@@ -69,17 +73,17 @@ class DefaultBOOMConfig extends Config (
    knobValues = {
       case "NTiles" => 1
       case "FETCH_WIDTH" => 2
-      case "ISSUE_WIDTH" => 3
-      case "ROB_ENTRIES" => 48
-      case "ISSUE_ENTRIES" => 20
-      case "LSU_ENTRIES" => 16
+      case "ISSUE_WIDTH" => 2
+      case "ROB_ENTRIES" => 20
+      case "ISSUE_ENTRIES" => 10
+      case "LSU_ENTRIES" => 4
       case "PHYS_REGISTERS" => 110
-      case "MAX_BR_COUNT" => 8
+      case "MAX_BR_COUNT" => 4
       case "AGE_PRIORITY_ISSUE" => true
       case "L1D_MSHRS" => 2
-      case "L1D_WAYS" => 8
+      case "L1D_WAYS" => 2
       case "L1D_SETS" => 64
-      case "L1I_WAYS" => 8
+      case "L1I_WAYS" => 4
       case "L1I_SETS" => 64
   }
 )

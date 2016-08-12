@@ -26,6 +26,8 @@ case object EnableAgePriorityIssue extends Field[Boolean]
 case object EnableUarchCounters extends Field[Boolean]
 case object EnablePrefetching extends Field[Boolean]
 case object EnableCommitMapTable extends Field[Boolean]
+case object UseVector extends Field[Boolean]
+case object MaxVlen extends Field[Int]
 
 trait HasBoomCoreParameters extends rocket.HasCoreParameters
 {
@@ -114,7 +116,11 @@ trait HasBoomCoreParameters extends rocket.HasCoreParameters
    require (NUM_ROB_ENTRIES % DECODE_WIDTH == 0)
    require (isPow2(NUM_LSU_ENTRIES))
    require ((NUM_LSU_ENTRIES-1) > DECODE_WIDTH)
-
+ 
+   //************************************
+   // RVV parameters
+   val maxVlen = p(MaxVlen)
+ 
    //************************************
    // Non-BOOM parameters
 

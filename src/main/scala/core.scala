@@ -106,6 +106,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
                            // TODO the ROB writeback is off the regfile, which is a different set
 
    val uacounters       = Module(new UarchCounters)
+   val rvvfile          = Module(new RVVCfgFile) // TODO XXX gate off if useVector is disabled.
 
 
    //***********************************
@@ -606,7 +607,14 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
 
 // TODO can we add this back in, but handle reset properly and save us the mux above on csr.io.rw.cmd?
 //   assert (!(csr_rw_cmd =/= rocket.CSR.N && !exe_units(0).io.resp(0).valid), "CSRFile is being written to spuriously.")
+    
+   //-------------------------------------------------------------
+   // Vector State Register File
+   // very early prototype - don't mind me.
 
+   val setvl = exe_units(0).io.resp(0).bits.uop.uopc === uopSetVl
+   rvvfile.io.vlen.en    := exe_units(0).io.resp(0).valid && setvl
+   rvvfile.io.vlen.wdata := wb_wdata
 
    //-------------------------------------------------------------
    //-------------------------------------------------------------
@@ -707,7 +715,9 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
             regfile.io.write_ports(w_cnt).data :=
                Mux(exe_units(i).io.resp(j).bits.uop.ctrl.csr_cmd =/= rocket.CSR.N,
                   csr.io.rw.rdata,
-                  exe_units(i).io.resp(j).bits.data)
+               Mux(setvl,
+                  rvvfile.io.vlen.rdata,
+                  exe_units(i).io.resp(j).bits.data))
          }
          else
          {

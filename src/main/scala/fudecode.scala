@@ -176,7 +176,11 @@ object CsrRRdDecode extends RRdDecodeConstants
          BitPat(uopCSRRSI)-> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP1_ZERO, OP2_IMMC, IS_I, REN_1, rocket.CSR.S),
          BitPat(uopCSRRCI)-> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP1_ZERO, OP2_IMMC, IS_I, REN_1, rocket.CSR.C),
 
-         BitPat(uopSYSTEM)-> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP1_ZERO, OP2_IMMC, IS_I, REN_0, rocket.CSR.I))
+         BitPat(uopSYSTEM)-> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP1_ZERO, OP2_IMMC, IS_I, REN_0, rocket.CSR.I),
+         
+         // TODO move elsewhere...
+         BitPat(uopSetVl) -> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP1_RS1 , OP2_ZERO, IS_I, REN_1, rocket.CSR.N)
+     )
 }
 
 object FpuRRdDecode extends RRdDecodeConstants

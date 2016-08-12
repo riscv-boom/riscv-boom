@@ -14,6 +14,7 @@ import rocket.{CSR,Causes}
 import rocket.Util.uintToBitPat
 import FUConstants._
 import uncore.constants.MemoryOpConstants._
+import boom.constants.RVVInstructions._
 
 
 abstract trait DecodeConstants
@@ -311,6 +312,7 @@ object FDecode extends DecodeConstants
 // scalastyle:on
 }
 
+
 object FDivSqrtDecode extends DecodeConstants
 {
 // scalastyle:off
@@ -329,6 +331,37 @@ object FDivSqrtDecode extends DecodeConstants
    FDIV_D    ->List(Y, Y, N, uopFDIV_D , FU_FDV, RT_FLT, RT_FLT, RT_FLT, N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, CSR.N),
    FSQRT_S   ->List(Y, Y, Y, uopFSQRT_S, FU_FDV, RT_FLT, RT_FLT, RT_X  , N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, CSR.N),
    FSQRT_D   ->List(Y, Y, N, uopFSQRT_D, FU_FDV, RT_FLT, RT_FLT, RT_X  , N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, N, N, CSR.N)
+   )
+// scalastyle:on
+}
+
+
+object RVVDecode extends DecodeConstants
+{
+// scalastyle:off
+  val table: Array[(BitPat, List[BitPat])] = Array(
+             //                                                          frs3_en                                wakeup_delay
+             //                                                          |  imm sel                             |        bypassable (aka, known/fixed latency)
+             //                                                          |  |     is_load                       |        |  br/jmp
+             //     is val inst?                         rs1 regtype     |  |     |  is_store                   |        |  |  is jal
+             //     |  is fp inst?                       |       rs2 type|  |     |  |  is_amo                  |        |  |  |  allocate_brtag
+             //     |  |  is dst single-prec?            |       |       |  |     |  |  |  is_fence             |        |  |  |  |
+             //     |  |  |  micro-opcode                |       |       |  |     |  |  |  |  is_fencei         |        |  |  |  |
+             //     |  |  |  |           func    dst     |       |       |  |     |  |  |  |  |  mem    mem     |        |  |  |  |  is unique? (clear pipeline for it)
+             //     |  |  |  |           unit    regtype |       |       |  |     |  |  |  |  |  cmd    msk     |        |  |  |  |  |  flush on commit
+             //     |  |  |  |           |       |       |       |       |  |     |  |  |  |  |  |      |       |        |  |  |  |  |  |  csr cmd
+   VSETCFG  -> List(Y, N, X, uopNOP    ,FU_X   , RT_X  , RT_X  , RT_X  , N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, Y, Y, CSR.N),
+   VSETVL   -> List(Y, N, X, uopSetVl  ,FU_CSR , RT_X  , RT_X  , RT_X  , N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, Y, Y, CSR.N)
+   // VIDX
+   // VADD
+   // VSLL
+   // VFADD
+   // VL
+   // VS
+   // VLST
+   // VSST
+   // VLX
+   // VSX
    )
 // scalastyle:on
 }
@@ -358,6 +391,7 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule()(p)
    var decode_table = XDecode.table
    if (usingFPU) decode_table ++= FDecode.table
    if (usingFPU && usingFDivSqrt) decode_table ++= FDivSqrtDecode.table
+   if (p(UseVector)) decode_table ++= RVVDecode.table
 
    val cs = Wire(new CtrlSigs()).decode(uop.inst, decode_table)
 
