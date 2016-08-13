@@ -351,7 +351,7 @@ object RVVDecode extends DecodeConstants
              //     |  |  |  |           unit    regtype |       |       |  |     |  |  |  |  |  cmd    msk     |        |  |  |  |  |  flush on commit
              //     |  |  |  |           |       |       |       |       |  |     |  |  |  |  |  |      |       |        |  |  |  |  |  |  csr cmd
    VSETCFG  -> List(Y, N, X, uopNOP    ,FU_X   , RT_X  , RT_X  , RT_X  , N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, Y, Y, CSR.N),
-   VSETVL   -> List(Y, N, X, uopSetVl  ,FU_CSR , RT_X  , RT_X  , RT_X  , N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, Y, Y, CSR.N)
+   VSETVL   -> List(Y, N, X, uopSetVl  ,FU_CSR , RT_FIX, RT_FIX, RT_X  , N, IS_X, N, N, N, N, N, M_X  , MSK_X , UInt(0), N, N, N, N, Y, Y, CSR.N)
    // VIDX
    // VADD
    // VSLL
