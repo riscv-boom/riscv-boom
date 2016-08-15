@@ -21,7 +21,7 @@ import rocket.Str
 
 trait BOOMDebugConstants
 {
-   val DEBUG_PRINTF        = true  // use the Chisel printf functionality
+   val DEBUG_PRINTF        = false // use the Chisel printf functionality
    val DEBUG_ENABLE_COLOR  = false // provide color to print outs. Requires a VIM plugin to work properly :(
    val COMMIT_LOG_PRINTF   = false // dump commit state, for comparision against ISA sim
    val O3PIPEVIEW_PRINTF   = false // dump trace for O3PipeView from gem5
@@ -144,15 +144,17 @@ trait ScalarOpConstants
 
 
    // Decode Stage Control Signals
-   val RT_FIX   = UInt(0, 2)
-   val RT_FLT   = UInt(1, 2)
-   val RT_PAS   = UInt(3, 2) // pass-through (pop1 := lrs1, etc)
-   val RT_X     = UInt(2, 2) // not-a-register (but shouldn't get a busy-bit, etc.)
+   // XXX size depends on usingVec
+   val RT_FIX   = UInt(0, 3)
+   val RT_FLT   = UInt(1, 3)
+   val RT_PAS   = UInt(3, 3) // pass-through (pop1 := lrs1, etc)
+   val RT_VEC   = UInt(4, 3)
+   val RT_X     = UInt(2, 3) // not-a-register (but shouldn't get a busy-bit, etc.)
                              // TODO rename RT_NAR
 
    // Micro-op opcodes
    // TODO change micro-op opcodes into using enum
-   val UOPC_SZ = 9
+   val UOPC_SZ = 10 // XXX make this 9 if not usingVector
    val uopX    = BitPat.dontCare(UOPC_SZ)
    val uopNOP  = UInt( 0, UOPC_SZ)
    val uopLD   = UInt( 1, UOPC_SZ)
@@ -298,6 +300,8 @@ trait ScalarOpConstants
 
    val uopSYSTEM    = UInt(122, UOPC_SZ) // pass uop down the CSR pipeline and let it handle it
    val uopSetVl     = UInt(123, UOPC_SZ) // TODO
+//   val uopVLD       = UInt(124, UOPC_SZ) // TODO
+//   val uopVLD       = UInt(124, UOPC_SZ) // TODO
 
    // Memory Mask Type Signal
    val MSK_X   = BitPat("b???")
