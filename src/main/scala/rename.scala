@@ -12,7 +12,6 @@
 
 
 package boom
-{
 
 import Chisel._
 import cde.Parameters
@@ -440,7 +439,7 @@ class RenameStageIO(pl_width: Int, num_wb_ports: Int)(implicit p: Parameters) ex
 
    val dis_inst_can_proceed = Vec(DISPATCH_WIDTH, Bool(INPUT))
 
-   // issue stage (fast wakeup)
+   // wakeup
    val wb_valids = Vec(num_wb_ports, Bool(INPUT))
    val wb_pdsts  = Vec(num_wb_ports, UInt(INPUT, PREG_SZ))
 
@@ -584,6 +583,7 @@ class RenameStage(pl_width: Int, num_wb_ports: Int)(implicit p: Parameters) exte
                                                                  && io.ren_mask(xx) && io.ren_uops(xx).ldst_val && (io.ren_uops(w).lrs2 === io.ren_uops(xx).ldst), (io.ren_uops(xx).pdst)))
          rs3_cases  ++= Array((io.ren_uops(w).frs3_en            && io.ren_mask(xx) && io.ren_uops(xx).ldst_val && (io.ren_uops(w).lrs3 === io.ren_uops(xx).ldst), (io.ren_uops(xx).pdst)))
          stale_cases++= Array(( io.ren_uops(w).ldst_val          && io.ren_mask(xx) && io.ren_uops(xx).ldst_val && (io.ren_uops(w).ldst === io.ren_uops(xx).ldst), (io.ren_uops(xx).pdst)))
+         // TODO XXX is ldst_val bypassing on NAR situations?
 
          when ((io.ren_uops(w).lrs1_rtype === RT_FIX || io.ren_uops(w).lrs1_rtype === RT_FLT) && io.ren_mask(xx) && io.ren_uops(xx).ldst_val && (io.ren_uops(w).lrs1 === io.ren_uops(xx).ldst))
             { prs1_was_bypassed(w) := Bool(true) }
@@ -608,6 +608,7 @@ class RenameStage(pl_width: Int, num_wb_ports: Int)(implicit p: Parameters) exte
 
    }
 
+   // scalastyle:on
 
    //-------------------------------------------------------------
    // Busy Table
@@ -658,7 +659,6 @@ class RenameStage(pl_width: Int, num_wb_ports: Int)(implicit p: Parameters) exte
          bsy_table.io.unbusy_pdst(i).bits  := io.wb_pdsts(i)
       }
 
-   // scalastyle:on
 
    //-------------------------------------------------------------
    // Free List
@@ -748,9 +748,178 @@ class RenameStage(pl_width: Int, num_wb_ports: Int)(implicit p: Parameters) exte
    io.debug.freelist  := freelist.io.debug.freelist
    io.debug.isprlist  := freelist.io.debug.isprlist
    io.debug.bsy_table := bsy_table.io.debug.bsy_table
-}
+
+    
+   //-------------------------------------------------------------
+   //-------------------------------------------------------------
+   // Vector Renaming...
+
+   // Vector Register Rename Table
+   
+   val vec_freelist_req_pregs = Wire(Vec(pl_width, UInt(width=PREG_SZ)))
+   val vec_freelist_can_allocate = Wire(Vec(pl_width, Bool()))
+   
+   val vec_map_table = for (i <- 0 until numLogicalVecRegisters) yield
+   {
+      val element = Module(new RenameMapTableElement(pl_width))
+      element.io.rollback_wen := Bool(false)
+      element.io.rollback_stale_pdst := io.com_uops(0).vec.stale_pvdst
+
+      for (w <- 0 until pl_width)
+      {
+         element.io.wens(w)      := io.ren_uops(w).ldst === UInt(i) &&
+                                      io.ren_mask(w) &&
+                                      io.ren_uops(w).ldst_val &&
+                                      io.ren_uops(w).dst_rtype === RT_VEC &&
+                                      !io.kill &
+                                      io.inst_can_proceed(w) &&
+                                      vec_freelist_can_allocate(w)
+         element.io.ren_pdsts(w) := io.ren_uops(w).vec.pvdst
+
+         element.io.ren_br_vals(w) := ren_br_vals(w)
+         element.io.ren_br_tags(w) := io.ren_uops(w).br_tag
+      }
+      
+      element.io.br_mispredict     := io.brinfo.mispredict
+      element.io.br_mispredict_tag := io.brinfo.tag
+      element.io.flush_pipeline    := io.flush_pipeline
+
+      element
+   }
+
+   val vec_map_table_io = Vec(vec_map_table.map(_.io))
+   for (w <- pl_width-1 to 0 by -1)
+   {
+      val lvdst = io.com_uops(w).ldst
+      when (io.com_rbk_valids(w))
+      {
+         vec_map_table_io(lvdst).rollback_wen        := Bool(true)
+         vec_map_table_io(lvdst).rollback_stale_pdst := io.com_uops(w).vec.stale_pvdst
+      }
+   }
+
+   if (ENABLE_COMMIT_MAP_TABLE)
+   {
+      require(false) // not implemented yet for RVV
+   }
+
+   private val vec_table_output = Wire(Vec(pl_width*2, UInt(width=log2Up(numPhysVecRegisters))))
+   def vec_map_table_prs1(w: Int) = vec_table_output(w+0*pl_width)
+   def vec_map_table_prs2(w: Int) = vec_table_output(w+1*pl_width)
+
+   for (w <- 0 until pl_width)
+   {
+      vec_map_table_prs1(w) := vec_map_table_io(io.ren_uops(w).lrs1).element
+      vec_map_table_prs2(w) := vec_map_table_io(io.ren_uops(w).lrs2).element
+
+   }
+
+   val pvrs1_was_bypassed = Wire(Vec(pl_width, Bool()))
+   val pvrs2_was_bypassed = Wire(Vec(pl_width, Bool()))
+
+   for (w <- 0 until pl_width)
+   {
+      var vrs1_cases = Array((Bool(false), UInt(0, log2Up(numPhysVecRegisters))))
+      var vrs2_cases = Array((Bool(false), UInt(0, log2Up(numPhysVecRegisters))))
+      var vstale_cases = Array((Bool(false), UInt(0, log2Up(numPhysVecRegisters))))
+
+      pvrs1_was_bypassed(w) := Bool(false)
+      pvrs2_was_bypassed(w) := Bool(false)
+
+      // Handle bypassing new physical destinations to operands (and stale destination).
+      for (xx <- w-1 to 0 by -1)
+      {
+         vrs1_cases   ++= Array((io.ren_uops(w).lrs1_rtype === RT_VEC && io.ren_mask(xx) && io.ren_uops(xx).ldst_val && io.ren_uops(w).lrs1 === io.ren_uops(xx).ldst, (io.ren_uops(xx).vec.pvdst)))
+         vrs2_cases   ++= Array((io.ren_uops(w).lrs2_rtype === RT_VEC && io.ren_mask(xx) && io.ren_uops(xx).ldst_val && io.ren_uops(w).lrs2 === io.ren_uops(xx).ldst, (io.ren_uops(xx).vec.pvdst)))
+         vstale_cases ++= Array((io.ren_uops(w).vec.pvdst_val         && io.ren_mask(xx) && io.ren_uops(xx).ldst_val && io.ren_uops(w).ldst === io.ren_uops(xx).ldst, (io.ren_uops(xx).vec.pvdst)))
+
+         when (io.ren_uops(w).lrs1_rtype === RT_VEC && io.ren_mask(xx) && io.ren_uops(xx).ldst_val && io.ren_uops(w).lrs1 === io.ren_uops(xx).ldst)
+            { pvrs1_was_bypassed(w) := Bool(true) }
+         when (io.ren_uops(w).lrs2_rtype === RT_VEC && io.ren_mask(xx) && io.ren_uops(xx).ldst_val && io.ren_uops(w).lrs2 === io.ren_uops(xx).ldst)
+            { pvrs2_was_bypassed(w) := Bool(true) }
+      }
+
+      vrs1_cases ++= Array((io.ren_uops(w).lrs1_rtype === RT_VEC, vec_map_table_prs1(w)))
+      vrs2_cases ++= Array((io.ren_uops(w).lrs2_rtype === RT_VEC, vec_map_table_prs2(w)))
+
+      io.ren_uops(w).vec.pvrs1       := MuxCase(io.ren_uops(w).lrs1, vrs1_cases)
+      io.ren_uops(w).vec.pvrs2       := MuxCase(io.ren_uops(w).lrs2, vrs2_cases)
+      io.ren_uops(w).vec.stale_pvdst := MuxCase(vec_map_table_io(io.ren_uops(w).ldst).element, vstale_cases)
+   }
 
 
+   
+   //-------------------------------------------------------------
+   // Vector Register Free List
+
+   val vec_freelist = Module(new RenameFreeList(p(NumPhysVecRegisters), pl_width))
+
+   for (w <- 0 until pl_width)
+   {
+      vec_freelist.io.enq_vals(w)      := io.com_valids(w) && 
+                                          io.com_uops(w).dst_rtype === RT_VEC &&
+                                          io.com_uops(w).vec.stale_pvdst =/= UInt(0)
+      vec_freelist.io.enq_pregs(w)     := io.com_uops(w).vec.stale_pvdst
+      vec_freelist.io.ren_br_vals(w)   := ren_br_vals(w)
+      vec_freelist.io.ren_br_tags(w)   := io.ren_uops(w).br_tag
+      vec_freelist_can_allocate(w)     := vec_freelist.io.can_allocate(w) 
+      vec_freelist.io.rollback_wens(w) := io.com_rbk_valids(w) &&
+                                          io.com_uops(w).vec.pvdst =/= UInt(0) &&
+                                          io.com_uops(w).dst_rtype === RT_VEC
+      vec_freelist.io.rollback_pdsts(w):= io.com_uops(w).vec.pvdst
+      vec_freelist.io.com_wens(w)      := io.com_valids(w) &&
+                                          io.com_uops(w).vec.pvdst =/= UInt(0) &&
+                                          io.com_uops(w).dst_rtype === RT_VEC
+      vec_freelist.io.com_uops(w)      := io.com_uops(w)
+
+      // give out registers
+      vec_freelist.io.req_preg_vals(w) := io.inst_can_proceed(w) &&
+                                          !io.kill &&
+                                          io.ren_mask(w) &&
+                                          io.ren_uops(w).vec.pvdst_val &&
+                                          io.ren_uops(w).dst_rtype === RT_VEC
+
+      io.ren_uops(w).vec.pvdst := vec_freelist.io.req_pregs(w)
+   }
+
+   vec_freelist.io.br_mispredict_val := io.brinfo.mispredict
+   vec_freelist.io.br_mispredict_tag := io.brinfo.tag
+   vec_freelist.io.flush_pipeline    := io.flush_pipeline
+
+   // TODO BUG XXX hook up vec_freelist to "inst_can_proceed"
+  
+   //-------------------------------------------------------------
+   // Vector Register Busy Table
+
+   // TODO we don't need this many wb ports for the Vec unit
+   val vec_bsy_table = Module(new BusyTable(pipeline_width = pl_width,
+                                             num_read_ports = pl_width*max_operands,
+                                             num_wb_ports = num_wb_ports))
+
+   for (w <- 0 until pl_width)
+   {
+      vec_bsy_table.io.prs(0,w) := vec_map_table_prs1(w)
+      vec_bsy_table.io.prs(1,w) := vec_map_table_prs2(w)
+
+      io.ren_uops(w).vec.pvrs1_busy := io.ren_uops(w).lrs1_rtype === RT_VEC && (vec_bsy_table.io.prs_busy(0,w) || pvrs1_was_bypassed(w))
+      io.ren_uops(w).vec.pvrs2_busy := io.ren_uops(w).lrs2_rtype === RT_VEC && (vec_bsy_table.io.prs_busy(1,w) || pvrs2_was_bypassed(w))
+      // TODO handle 3 operand vector operations
+
+
+      vec_bsy_table.io.allocated_pdst(w).valid := vec_freelist_can_allocate(w) &&
+                                                   io.ren_mask(w) &&
+                                                   io.ren_uops(w).vec.pvdst_val &&
+                                                   io.ren_uops(w).dst_rtype === RT_VEC
+      vec_bsy_table.io.allocated_pdst(w).bits  := vec_freelist.io.req_pregs(w)
+   }
+
+   // clear busy-bit
+   for (i <- 0 until num_wb_ports)
+   {
+      // TODO XXX what are the VEC write-back ports?
+      vec_bsy_table.io.unbusy_pdst(i).valid := io.wb_valids(i)
+      vec_bsy_table.io.unbusy_pdst(i).bits  := io.wb_pdsts(i)
+   }
 
 }
 
