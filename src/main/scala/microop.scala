@@ -25,6 +25,7 @@ class MicroOp(implicit p: Parameters) extends BoomBundle()(p)
    val pc               = UInt(width = coreMaxAddrBits)
    val fu_code          = UInt(width = FUConstants.FUC_SZ) // which functional unit do we use?
    val ctrl             = new CtrlSignals
+   val vec              = new VectorSignals           // only valid if V extension is enabled.
 
    val wakeup_delay     = UInt(width = log2Up(MAX_WAKEUP_DELAY)) // unused
    val allocate_brtag   = Bool()                      // does this allocate a branch tag? (is branch or JR but not JAL)
@@ -85,9 +86,9 @@ class MicroOp(implicit p: Parameters) extends BoomBundle()(p)
    val lrs2             = UInt(width=LREG_SZ)
    val lrs3             = UInt(width=LREG_SZ)
    val ldst_val         = Bool()              // is there a destination? invalid for stores, rd==x0, etc.
-   val dst_rtype        = UInt(width=2)
-   val lrs1_rtype       = UInt(width=2)
-   val lrs2_rtype       = UInt(width=2)
+   val dst_rtype        = UInt(width=RT_X.getWidth)
+   val lrs1_rtype       = UInt(width=RT_X.getWidth)
+   val lrs2_rtype       = UInt(width=RT_X.getWidth)
    val frs3_en          = Bool()
 
    // floating point information
@@ -125,6 +126,26 @@ class CtrlSignals extends Bundle()
    val is_load     = Bool()   // will invoke TLB address lookup
    val is_sta      = Bool()   // will invoke TLB address lookup
    val is_std      = Bool()
+}
+
+class VectorSignals(implicit p: Parameters) extends BoomBundle()
+{
+   val valid      = Bool()                         // is this a vector instruction (that depends on vlen)?
+   val vlen       = UInt(width = log2Up(maxVlen))  // HACK: what is the value of vlen? TODO: rename vlen.
+   // val pvlen   = UInt(width = PVlenSz)          // Which physical vlen register do we depend on?
+   // pvlen_bsy   = Bool()                         // is vlen busy? 
+
+   val pvdst_val  = Bool()                         // does this instruction write a vector register?
+   val pvrs1_val  = Bool()                         // does this instruction read a vector register rs1?
+   val pvrs2_val  = Bool()                         // does this instruction read a vector register rs2?
+   val pvdst      = UInt(width = log2Up(numPhysVecRegisters))
+   val pvrs1      = UInt(width = log2Up(numPhysVecRegisters))
+   val pvrs2      = UInt(width = log2Up(numPhysVecRegisters))
+   val stale_pvdst= UInt(width = log2Up(numPhysVecRegisters))
+   val pvrs1_busy = Bool()
+   val pvrs2_busy = Bool()
+
+   // register types via cfg?
 }
 
 class DebugStageEvents extends Bundle()

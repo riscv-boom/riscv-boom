@@ -28,6 +28,7 @@ case object EnablePrefetching extends Field[Boolean]
 case object EnableCommitMapTable extends Field[Boolean]
 case object UseVector extends Field[Boolean]
 case object MaxVlen extends Field[Int]
+case object NumPhysVecRegisters extends Field[Int]
 
 trait HasBoomCoreParameters extends rocket.HasCoreParameters
 {
@@ -120,6 +121,8 @@ trait HasBoomCoreParameters extends rocket.HasCoreParameters
    //************************************
    // RVV parameters
    val maxVlen = p(MaxVlen)
+   val numPhysVecRegisters = p(NumPhysVecRegisters)
+   val numLogicalVecRegisters = 32
  
    //************************************
    // Non-BOOM parameters
