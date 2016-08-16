@@ -17,8 +17,8 @@ import FUConstants._
 import rocket.Str
 import scala.collection.mutable.ArrayBuffer
 
-class IssueUnitStatic(num_issue_slots: Int, issue_width: Int, num_wakeup_ports: Int)(implicit p: Parameters)
-   extends IssueUnit(num_issue_slots, issue_width, num_wakeup_ports)
+class IssueUnitStatic(num_issue_slots: Int, issue_width: Int, num_wakeup_ports: Int, num_vec_wakeup_ports: Int)(implicit p: Parameters)
+   extends IssueUnit(num_issue_slots, issue_width, num_wakeup_ports, num_vec_wakeup_ports)
 {
    //-------------------------------------------------------------
    // Issue Table
@@ -29,6 +29,7 @@ class IssueUnitStatic(num_issue_slots: Int, issue_width: Int, num_wakeup_ports: 
       issue_slots(i).in_uop.valid := entry_wen_oh(i).orR
       issue_slots(i).in_uop.bits  := Mux1H(entry_wen_oh(i), dis_uops)
       issue_slots(i).wakeup_dsts  := io.wakeup_pdsts
+      issue_slots(i).wakeup_vec_dsts  := io.wakeup_vec_pdsts
       issue_slots(i).brinfo       := io.brinfo
       issue_slots(i).kill         := io.flush_pipeline
       issue_slots(i).clear        := Bool(false)

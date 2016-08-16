@@ -145,4 +145,5 @@ class ExecutionUnits(implicit val p: Parameters) extends HasBoomCoreParameters
 
    val num_wakeup_ports = num_slow_wakeup_ports + num_fast_wakeup_ports
    val rf_cost = (num_rf_read_ports+num_rf_write_ports)*(num_rf_read_ports+2*num_rf_write_ports)
+   val num_vec_wakeup_ports = 2 // support one Vec ALU op, one Vec Mem op
  }

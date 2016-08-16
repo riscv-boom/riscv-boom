@@ -19,7 +19,7 @@ import rocket.Str
 //-------------------------------------------------------------
 //-------------------------------------------------------------
 
-class IssueUnitIO(issue_width: Int, num_wakeup_ports: Int)(implicit p: Parameters) extends BoomBundle()(p)
+class IssueUnitIO(issue_width: Int, num_wakeup_ports: Int, num_vec_wakeup_ports: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
    val dis_valids     = Vec(DISPATCH_WIDTH, Bool(INPUT))
    val dis_uops       = Vec(DISPATCH_WIDTH, new MicroOp()).asInput
@@ -28,6 +28,7 @@ class IssueUnitIO(issue_width: Int, num_wakeup_ports: Int)(implicit p: Parameter
    val iss_valids     = Vec(issue_width, Bool(OUTPUT))
    val iss_uops       = Vec(issue_width, new MicroOp().asOutput)
    val wakeup_pdsts   = Vec(num_wakeup_ports, Valid(UInt(width=PREG_SZ))).flip
+   val wakeup_vec_pdsts= Vec(num_vec_wakeup_ports, Valid(UInt(width = log2Up(numPhysVecRegisters)))).flip
 
    // tell the issue unit what each execution pipeline has in terms of functional units
    val fu_types       = Vec(issue_width, Bits(INPUT, FUC_SZ))
@@ -38,10 +39,10 @@ class IssueUnitIO(issue_width: Int, num_wakeup_ports: Int)(implicit p: Parameter
    val tsc_reg        = UInt(INPUT, xLen)
 }
 
-abstract class IssueUnit(num_issue_slots: Int, issue_width: Int, num_wakeup_ports: Int)(implicit p: Parameters)
+abstract class IssueUnit(num_issue_slots: Int, issue_width: Int, num_wakeup_ports: Int, num_vec_wakeup_ports: Int)(implicit p: Parameters)
    extends BoomModule()(p)
 {
-   val io = new IssueUnitIO(issue_width, num_wakeup_ports)
+   val io = new IssueUnitIO(issue_width, num_wakeup_ports, num_vec_wakeup_ports)
 
    //-------------------------------------------------------------
    // Set up the dispatch uops
@@ -61,7 +62,7 @@ abstract class IssueUnit(num_issue_slots: Int, issue_width: Int, num_wakeup_port
    //-------------------------------------------------------------
    // Issue Table
 
-   val issue_slots = Vec.fill(num_issue_slots) {Module(new IssueSlot(num_wakeup_ports)).io}
+   val issue_slots = Vec.fill(num_issue_slots) {Module(new IssueSlot(num_wakeup_ports, num_vec_wakeup_ports)).io}
 
    //-------------------------------------------------------------
 
@@ -87,7 +88,7 @@ abstract class IssueUnit(num_issue_slots: Int, issue_width: Int, num_wakeup_port
    {
       for (i <- 0 until num_issue_slots)
       {
-         printf("  integer_issue_slot[%d](%c)(Req:%c):wen=%c P:(%c,%c,%c) OP:(%d,%d,%d) PDST:%d %c [%c[DASM(%x)]" +
+         printf("  integer_issue_slot[%d](%c)(Req:%c):wen=%c P:(%c,%c,%c) OP:(%d,%d,%d// %d,%d) PDST:%d,%d %c [%c[DASM(%x)]" +
                end + " 0x%x: %d] ri:%d bm=%d imm=0x%x\n"
             , UInt(i, log2Up(num_issue_slots))
             , Mux(issue_slots(i).valid, Str("V"), Str("-"))
@@ -101,11 +102,15 @@ abstract class IssueUnit(num_issue_slots: Int, issue_width: Int, num_wakeup_port
             , issue_slots(i).uop.pop1
             , issue_slots(i).uop.pop2
             , issue_slots(i).uop.pop3
+            , issue_slots(i).uop.vec.pvrs1
+            , issue_slots(i).uop.vec.pvrs2
             , issue_slots(i).uop.pdst
+            , issue_slots(i).uop.vec.pvdst
             , Mux(issue_slots(i).uop.dst_rtype === RT_FIX, Str("X"),
               Mux(issue_slots(i).uop.dst_rtype === RT_X, Str("-"),
               Mux(issue_slots(i).uop.dst_rtype === RT_FLT, Str("f"),
-              Mux(issue_slots(i).uop.dst_rtype === RT_PAS, Str("C"), Str("?")))))
+              Mux(issue_slots(i).uop.dst_rtype === RT_PAS, Str("C"),
+              Mux(issue_slots(i).uop.dst_rtype === RT_VEC, Str("V"), Str("?"))))))
             , Mux(issue_slots(i).valid, Str(b_wht), Str(grn))
             , issue_slots(i).uop.inst
             , issue_slots(i).uop.pc(31,0)

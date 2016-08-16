@@ -79,10 +79,14 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    val rename_stage     = Module(new RenameStage(DECODE_WIDTH, exe_units.num_wakeup_ports))
    val issue_unit       = if (p(EnableAgePriorityIssue))
                               Module(new IssueUnitCollasping(
-                                 p(NumIssueSlotEntries), issue_width, exe_units.num_wakeup_ports))
+                                 p(NumIssueSlotEntries), 
+                                 issue_width, 
+                                 exe_units.num_wakeup_ports,
+                                 exe_units.num_vec_wakeup_ports))
                           else
                               Module(new IssueUnitStatic(
-                                 p(NumIssueSlotEntries), issue_width, exe_units.num_wakeup_ports))
+                                 p(NumIssueSlotEntries), issue_width, exe_units.num_wakeup_ports,
+                                 exe_units.num_vec_wakeup_ports))
    val regfile          = Module(new RegisterFile(PHYS_REG_COUNT,
                                  exe_units.num_rf_read_ports,
                                  exe_units.num_rf_write_ports,
