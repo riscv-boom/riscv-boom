@@ -1210,10 +1210,10 @@ object GenByteMask
    {
       val mask = Wire(UInt(width = 8))
       mask := MuxCase(UInt(255,8), Array(
-                   (typ === MT_B || typ === MT_BU) -> (UInt(1, 8) << addr(2,0)),
-                   (typ === MT_H || typ === MT_HU) -> (UInt(3, 8) << (addr(2,1) << UInt(1))),
-                   (typ === MT_W || typ === MT_WU) -> Mux(addr(2), UInt(240, 8), UInt(15, 8)),
-                   (typ === MT_D)                  -> UInt(255, 8)))
+                   (typ === rocket.MT_B || typ === rocket.MT_BU) -> (UInt(1, 8) << addr(2,0)),
+                   (typ === rocket.MT_H || typ === rocket.MT_HU) -> (UInt(3, 8) << (addr(2,1) << UInt(1))),
+                   (typ === rocket.MT_W || typ === rocket.MT_WU) -> Mux(addr(2), UInt(240, 8), UInt(15, 8)),
+                   (typ === rocket.MT_D)                  -> UInt(255, 8)))
       mask
    }
 }
@@ -1226,12 +1226,12 @@ object LoadDataGenerator
 {
    def apply(data: UInt, mem_type: UInt): UInt =
    {
-     val sext  = (mem_type === MT_B) || (mem_type === MT_H) ||
-                 (mem_type === MT_W) || (mem_type === MT_D)
-     val word  = (mem_type === MT_W) || (mem_type === MT_WU)
-     val half  = (mem_type === MT_H) || (mem_type === MT_HU)
-     val byte_ = (mem_type === MT_B) || (mem_type === MT_BU)
-     val dword = (mem_type === MT_D)
+     val sext  = (mem_type === rocket.MT_B) || (mem_type === rocket.MT_H) ||
+                 (mem_type === rocket.MT_W) || (mem_type === rocket.MT_D)
+     val word  = (mem_type === rocket.MT_W) || (mem_type === rocket.MT_WU)
+     val half  = (mem_type === rocket.MT_H) || (mem_type === rocket.MT_HU)
+     val byte_ = (mem_type === rocket.MT_B) || (mem_type === rocket.MT_BU)
+     val dword = (mem_type === rocket.MT_D)
 
       val out = Mux (dword, data,
                 Mux (word , Cat(Fill(32, sext & data(31)), data(31, 0)),

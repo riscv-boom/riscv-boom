@@ -416,13 +416,13 @@ class MemExeUnit(implicit p: Parameters) extends ExecutionUnit(num_rf_read_ports
    {
       //recode FP values
       val typ = io.dmem.resp.bits.typ
-      val load_single = typ === MT_W || typ === MT_WU
+      val load_single = typ === rocket.MT_W || typ === rocket.MT_WU
       val rec_s = hardfloat.recFNFromFN(8, 24, io.dmem.resp.bits.data)
       val rec_d = hardfloat.recFNFromFN(11, 53, io.dmem.resp.bits.data)
       val fp_load_data_recoded = Mux(load_single, Cat(SInt(-1, 32), rec_s), rec_d)
 
       val typ_f = lsu.io.forward_uop.mem_typ
-      val load_single_f = typ_f === MT_W || typ_f === MT_WU
+      val load_single_f = typ_f === rocket.MT_W || typ_f === rocket.MT_WU
       val rec_s_f = hardfloat.recFNFromFN(8, 24, lsu.io.forward_data)
       val rec_d_f = hardfloat.recFNFromFN(11, 53, lsu.io.forward_data)
       val fp_load_data_recoded_forwarded = Mux(load_single_f, Cat(SInt(-1,32), rec_s_f), rec_d_f)
@@ -715,13 +715,13 @@ class ALUMemExeUnit(
       // I'm doing this twice for two different paths (cache path and forwarding path)!
       // Also, this code is duplicated elsewhere - can we refactor this out?
       val typ = io.dmem.resp.bits.typ
-      val load_single = typ === MT_W || typ === MT_WU
+      val load_single = typ === rocket.MT_W || typ === rocket.MT_WU
       val rec_s = hardfloat.recFNFromFN(8, 24, io.dmem.resp.bits.data)
       val rec_d = hardfloat.recFNFromFN(11, 53, io.dmem.resp.bits.data)
       val fp_load_data_recoded = Mux(load_single, Cat(SInt(-1, 32), rec_s), rec_d)
 
       val typ_f = lsu.io.forward_uop.mem_typ
-      val load_single_f = typ_f === MT_W || typ_f === MT_WU
+      val load_single_f = typ_f === rocket.MT_W || typ_f === rocket.MT_WU
       val rec_s_f = hardfloat.recFNFromFN(8, 24, lsu.io.forward_data)
       val rec_d_f = hardfloat.recFNFromFN(11, 53, lsu.io.forward_data)
       val fp_load_data_recoded_forwarded = Mux(load_single_f, Cat(SInt(-1,32), rec_s_f), rec_d_f)

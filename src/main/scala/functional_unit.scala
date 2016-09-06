@@ -584,9 +584,9 @@ class MemAddrCalcUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(nu
    // Handle misaligned exceptions
    val typ = io.req.bits.uop.mem_typ
    val misaligned =
-      (((typ === MT_H) || (typ === MT_HU)) && (effective_address(0) =/= UInt(0))) ||
-      (((typ === MT_W) || (typ === MT_WU)) && (effective_address(1,0) =/= UInt(0))) ||
-      ((typ === MT_D) && (effective_address(2,0) =/= UInt(0)))
+      (((typ === rocket.MT_H) || (typ === rocket.MT_HU)) && (effective_address(0) =/= UInt(0))) ||
+      (((typ === rocket.MT_W) || (typ === rocket.MT_WU)) && (effective_address(1,0) =/= UInt(0))) ||
+      ((typ ===  rocket.MT_D) && (effective_address(2,0) =/= UInt(0)))
 
    val ma_ld = io.req.valid && io.req.bits.uop.uopc === uopLD && misaligned
    val ma_st = io.req.valid && (io.req.bits.uop.uopc === uopSTA || io.req.bits.uop.uopc === uopAMO_AG) && misaligned

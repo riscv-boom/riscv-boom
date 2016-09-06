@@ -95,7 +95,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
                                  exe_units.map(_.num_rf_read_ports),
                                  exe_units.num_total_bypass_ports,
                                  register_width))
-   val csr              = Module(new rocket.CSRFile()(p.alterPartial({case rocket.CoreName => "BOOM"})))
+   val csr              = Module(new rocket.CSRFile())
 
    val rob              = Module(new Rob(
                                  DECODE_WIDTH,

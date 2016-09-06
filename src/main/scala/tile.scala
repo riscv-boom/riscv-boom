@@ -20,10 +20,10 @@ import cde.{Parameters, Field}
 class BOOMTile(clockSignal: Clock = null, resetSignal: Bool = null)
    (implicit p: Parameters) extends rocket.Tile(clockSignal, resetSignal)(p)
 {
-   val core = Module(new BOOMCore()(p.alterPartial({case rocket.CoreName => "BOOM"})))
+   val core = Module(new BOOMCore())
    val icache = Module(new rocket.Frontend()(p.alterPartial({
       case uncore.agents.CacheName => "L1I"
-      case rocket.CoreName => "BOOM"})))
+      })))
    val dcache = Module(new rocket.HellaCache()(dcacheParams))
    val dc_shim = Module(new DCacheShim()(dcacheParams))
 

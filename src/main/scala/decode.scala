@@ -56,7 +56,7 @@ class CtrlSigs extends Bundle
    val is_fence        = Bool()
    val is_fencei       = Bool()
    val mem_cmd         = UInt(width = M_SZ)
-   val mem_typ         = UInt(width = MT_SZ)
+   val mem_typ         = UInt(width = rocket.MT_SZ)
    val wakeup_delay    = UInt(width = 2)
    val bypassable      = Bool()
    val br_or_jmp       = Bool()

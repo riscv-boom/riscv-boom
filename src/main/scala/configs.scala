@@ -13,7 +13,6 @@ class DefaultBOOMConfig extends Config (
       (pname,site,here) => pname match {
 
          // Top-Level
-         case CoreName => "BOOM"
          case XLen => 64
          case FDivSqrt => true
          case CoreInstBits => 32

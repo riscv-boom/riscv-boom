@@ -139,7 +139,7 @@ class DCacheResp(implicit p: Parameters) extends BoomBundle()(p)
    val data         = Bits(width = coreDataBits)
    val data_subword = Bits(width = coreDataBits)
    val uop          = new MicroOp
-   val typ          = Bits(width = MT_SZ)
+   val typ          = Bits(width = rocket.MT_SZ)
 }
 
 
