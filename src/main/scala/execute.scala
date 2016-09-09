@@ -22,7 +22,7 @@ import cde.Parameters
 import scala.collection.mutable.ArrayBuffer
 
 import FUConstants._
-import rocket.{UseFPU, XLen}
+import rocket.{FPUKey, XLen}
 import uncore.constants.MemoryOpConstants._
 
 class ExeUnitResp(data_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
@@ -120,7 +120,7 @@ class ALUExeUnit(
    extends ExecutionUnit(
       num_rf_read_ports = if (has_fpu) 3 else 2,
       num_rf_write_ports = 1,
-      num_bypass_stages = if (has_fpu || (has_mul && !use_slow_mul)) p(rocket.DFMALatency) else 1,
+      num_bypass_stages = if (has_fpu || (has_mul && !use_slow_mul)) p(FPUKey).get.dfmaLatency else 1,
       data_width = if (has_fpu || has_fdiv) 65 else 64,
       bypassable = true,
       is_mem_unit = false,
@@ -134,11 +134,11 @@ class ALUExeUnit(
 {
    val has_muldiv = has_div || (has_mul && use_slow_mul)
 
-   require(p(rocket.DFMALatency) == 3) // fix the above num_bypass_stages==3 hack before removing this line
+   require(p(FPUKey).get.dfmaLatency == 3) // fix the above num_bypass_stages==3 hack before removing this line
 
    println ("     ExeUnit--")
    println ("       - ALU")
-   if (has_fpu) println ("       - FPU (Latency: " + p(rocket.DFMALatency) + ")")
+   if (has_fpu) println ("       - FPU (Latency: " + p(FPUKey).get.dfmaLatency + ")")
    if (has_mul && !use_slow_mul) println ("       - Mul (pipelined)")
    if (has_div && has_mul && use_slow_mul) println ("       - Mul/Div (unpipelined)")
    else if (has_mul && use_slow_mul) println ("       - Mul (unpipelined)")
@@ -199,7 +199,7 @@ class ALUExeUnit(
       imul.io.req.bits.kill     := io.req.bits.kill
       imul.io.brinfo <> io.brinfo
       fu_units += imul
-      if (has_fpu) require (IMUL_STAGES == p(rocket.DFMALatency))
+      if (has_fpu) require (IMUL_STAGES == p(FPUKey).get.dfmaLatency)
    }
 
    // FPU Unit -----------------------
@@ -334,7 +334,7 @@ class FDivSqrtExeUnit(implicit p: Parameters)
 class MemExeUnit(implicit p: Parameters) extends ExecutionUnit(num_rf_read_ports = 2 // TODO make this 1, requires MemAddrCalcUnit to accept store data on rs1_data port
                                       , num_rf_write_ports = 1
                                       , num_bypass_stages = 0
-                                      , data_width = if(!p(UseFPU)) p(XLen) else 65
+                                      , data_width = if(!p(FPUKey).nonEmpty) p(XLen) else 65
                                       , num_variable_write_ports = 1
                                       , bypassable = false
                                       , is_mem_unit = true)(p)
@@ -460,7 +460,7 @@ class ALUMemExeUnit(
    extends ExecutionUnit(
       num_rf_read_ports = if (has_fpu) 3 else 2,
       num_rf_write_ports = 2,
-      num_bypass_stages = if (has_fpu || (has_mul && !use_slow_mul)) p(rocket.DFMALatency) else 1,
+      num_bypass_stages = if (has_fpu || (has_mul && !use_slow_mul)) p(FPUKey).get.dfmaLatency else 1,
       data_width = if (fp_mem_support) 65 else 64,
       num_variable_write_ports = 1,
       bypassable = true,
@@ -537,7 +537,7 @@ class ALUMemExeUnit(
       imul.io.req.bits.rs2_data := io.req.bits.rs2_data
       imul.io.req.bits.kill     := io.req.bits.kill
       imul.io.brinfo <> io.brinfo
-      if (has_fpu) require (IMUL_STAGES == p(rocket.DFMALatency))
+      if (has_fpu) require (IMUL_STAGES == p(FPUKey).get.dfmaLatency)
    }
 
    // FPU Unit -----------------------

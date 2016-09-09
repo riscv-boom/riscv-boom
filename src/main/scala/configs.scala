@@ -14,7 +14,10 @@ class DefaultBOOMConfig extends Config (
 
          // Top-Level
          case XLen => 64
-         case FDivSqrt => true
+         case FPUKey => Some(FPUConfig(
+            divSqrt = true,
+            sfmaLatency = 3,
+            dfmaLatency = 3))
          case CoreInstBits => 32
          case UseCompressed => false
          case NCustomMRWCSRs => 16 // use (for now) for micro-arch counters

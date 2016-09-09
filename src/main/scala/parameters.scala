@@ -52,9 +52,13 @@ trait HasBoomCoreParameters extends rocket.HasCoreParameters
    val FETCH_BUFFER_SZ  = p(FetchBufferSz)     // number of instructions that stored between fetch&decode
 
    //************************************
+   // Functional Units
+   val usingFDivSqrt = p(FPUKey).get.divSqrt
+
+   //************************************
    // Pipelining
 
-   val IMUL_STAGES = p(DFMALatency)
+   val IMUL_STAGES = p(FPUKey).get.dfmaLatency
 
    //************************************
    // Load/Store Unit
@@ -118,9 +122,8 @@ trait HasBoomCoreParameters extends rocket.HasCoreParameters
    //************************************
    // Non-BOOM parameters
 
-//   val fastMulDiv = p(FastMulDiv)
-   val corePAddrBits = p(junctions.PAddrBits)
-   val corePgIdxBits = p(junctions.PgIdxBits)
+   val corePAddrBits = paddrBits
+   val corePgIdxBits = pgIdxBits
 }
 
 

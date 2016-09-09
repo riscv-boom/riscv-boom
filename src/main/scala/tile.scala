@@ -24,14 +24,15 @@ class BOOMTile(clockSignal: Clock = null, resetSignal: Bool = null)
    val icache = Module(new rocket.Frontend()(p.alterPartial({
       case uncore.agents.CacheName => "L1I"
       })))
-   val dcache = Module(new rocket.HellaCache()(dcacheParams))
+   val dcache = rocket.HellaCache(p(rocket.DCacheKey))(dcacheParams)
+
    val dc_shim = Module(new DCacheShim()(dcacheParams))
 
    val ptwPorts = collection.mutable.ArrayBuffer(icache.io.ptw, core.io.ptw_tlb)
    val dcPorts = collection.mutable.ArrayBuffer(dc_shim.io.dmem)
    val uncachedArbPorts = collection.mutable.ArrayBuffer(icache.io.mem)
    val uncachedPorts = collection.mutable.ArrayBuffer[uncore.tilelink.ClientUncachedTileLinkIO]()
-   val cachedPorts = collection.mutable.ArrayBuffer(dcache.io.mem)
+   val cachedPorts = collection.mutable.ArrayBuffer(dcache.mem)
    core.io.prci <> io.prci
    dc_shim.io.core <> core.io.dmem
    icache.io.cpu <> core.io.imem
@@ -57,20 +58,20 @@ class BOOMTile(clockSignal: Clock = null, resetSignal: Bool = null)
 
       // the dcache's built-in TLB will be unused, but it still needs some of the
       // status/sret signals for things such as lr/sc
-      dcache.io.ptw.status <> ptw.io.requestor(1).status
-      dcache.io.ptw.invalidate := ptw.io.requestor(1).invalidate
-      dcache.io.ptw.req.ready := Bool(false)
-      dcache.io.ptw.resp.valid := Bool(false)
+      dcache.ptw.status <> ptw.io.requestor(1).status
+      dcache.ptw.invalidate := ptw.io.requestor(1).invalidate
+      dcache.ptw.req.ready := Bool(false)
+      dcache.ptw.resp.valid := Bool(false)
    }
 
    val dcArb = Module(new rocket.HellaCacheArbiter(dcPorts.size)(dcacheParams))
    dcArb.io.requestor <> dcPorts
-   dcache.io.cpu <> dcArb.io.mem
-   dcache.io.cpu.invalidate_lr := core.io.dmem.invalidate_lr
+   dcache.cpu <> dcArb.io.mem
+   dcache.cpu.invalidate_lr := core.io.dmem.invalidate_lr
 
 
    // Cache Counters
-   core.io.counters.dc_miss := dcache.io.mem.acquire.fire()
+   core.io.counters.dc_miss := dcache.mem.acquire.fire()
    core.io.counters.ic_miss := icache.io.mem.acquire.fire()
 }
 

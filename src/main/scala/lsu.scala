@@ -51,7 +51,6 @@ import cde.Parameters
 
 import rocket.Str
 import uncore.constants.MemoryOpConstants._
-import junctions.PgIdxBits
 
 class LoadStoreUnitIO(pl_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {

@@ -13,9 +13,7 @@ import cde.Parameters
 
 import rocket.FPConstants._
 import rocket.FPUCtrlSigs
-
-import rocket.SFMALatency
-import rocket.DFMALatency
+import rocket.FPUKey
 
 import rocket.Util.uintToBitPat
 
@@ -137,7 +135,7 @@ class FPU(implicit p: Parameters) extends BoomModule()(p)
    }
 
    // all FP units are padded out to the same latency for easy scheduling of the write port
-   val fpu_latency = p(DFMALatency)
+   val fpu_latency = p(FPUKey).get.dfmaLatency
    val io_req = io.req.bits
 
    val fp_decoder = Module(new UOPCodeFPUDecoder)
