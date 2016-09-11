@@ -5,7 +5,7 @@
 
 package boom
 import Chisel._
-import cde.{Parameters, Config, Knob}
+import cde.{Parameters, Config, Knob, CDEMatchError}
 import rocket._
 
 class DefaultBOOMConfig extends Config (
@@ -20,7 +20,10 @@ class DefaultBOOMConfig extends Config (
             dfmaLatency = 3))
          case CoreInstBits => 32
          case UseCompressed => false
-         case NCustomMRWCSRs => 16 // use (for now) for micro-arch counters
+
+         // Uarch Performance Counters
+         case NPerfEvents => 29
+         case NPerfCounters => Knob("PERF_COUNTERS")
 
          // Superscalar Widths
          case FetchWidth => Knob("FETCH_WIDTH")
@@ -63,7 +66,6 @@ class DefaultBOOMConfig extends Config (
 
          // Extra Knobs and Features
          case EnableAgePriorityIssue => Knob("AGE_PRIORITY_ISSUE")
-         case EnableUarchCounters => true
          case EnablePrefetching => false
 
       }
@@ -83,14 +85,12 @@ class DefaultBOOMConfig extends Config (
       case "L1D_SETS" => 64
       case "L1I_WAYS" => 8
       case "L1I_SETS" => 64
+      case "PERF_COUNTERS" => 29
   }
 )
 
-class WithNoBoomCounters extends Config (
-  (pname,site,here) => pname match {
-    case EnableUarchCounters => false
-  }
-)
+class WithNPerfCounters(n: Int) extends Config(
+  knobValues = {case "PERF_COUNTERS" => n; case _ => throw new CDEMatchError })
 
 class WithSmallBOOMs extends Config(
    knobValues = {
@@ -101,6 +101,7 @@ class WithSmallBOOMs extends Config(
       case "LSU_ENTRIES" => 8
       case "PHYS_REGISTERS" => 100
       case "MAX_BR_COUNT" => 4
+      case "PERF_COUNTERS" => 4
    }
 )
 

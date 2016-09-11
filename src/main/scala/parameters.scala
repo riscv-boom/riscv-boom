@@ -23,7 +23,6 @@ case object EnableBTB extends Field[Boolean]
 case object EnableBTBContainsBranches extends Field[Boolean]
 case object EnableBranchPredictor extends Field[Boolean]
 case object EnableAgePriorityIssue extends Field[Boolean]
-case object EnableUarchCounters extends Field[Boolean]
 case object EnablePrefetching extends Field[Boolean]
 case object EnableCommitMapTable extends Field[Boolean]
 

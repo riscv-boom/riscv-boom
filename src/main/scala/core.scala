@@ -105,8 +105,6 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
                                  exe_units.num_fpu_ports))
                            // TODO the ROB writeback is off the regfile, which is a different set
 
-   val uacounters       = Module(new UarchCounters)
-
 
    //***********************************
    // Pipeline State Registers and Wires
@@ -862,42 +860,76 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
 
 
    //-------------------------------------------------------------
-   // UARCH Counters
+   // Uarch Hardware Performance Events (HPEs)
 
-   uacounters.io.inc(0)  := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+   csr.io.events.map(_ := UInt(0))
+
+   require (nPerfEvents > 26)
+   println ("   " + nPerfCounters + " HPM counters enabled (with " + nPerfEvents + " events).")
+
+   // Execution-time branch prediction accuracy.
+   csr.io.events(0) := br_unit.brinfo.valid
+   csr.io.events(1) := br_unit.brinfo.mispredict
+
+   // User-level instruction count.
+   csr.io.events(2) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+      com_valids(w) && (csr.io.status.prv === UInt(rocket.PRV.U))})
+
+   // L1 cache stats.
+   csr.io.events(3) := io.counters.dc_miss
+   csr.io.events(4) := io.counters.ic_miss
+
+   csr.io.events(5)  := csr.io.status.prv === UInt(rocket.PRV.U)
+
+   // Instruction mixes.
+   csr.io.events(6)  := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
       com_valids(w) && com_uops(w).is_br_or_jmp && !com_uops(w).is_jal})
-   uacounters.io.inc(1)  := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
-      com_valids(w) && com_uops(w).is_br_or_jmp && !com_uops(w).is_jal && com_uops(w).stat_brjmp_mispredicted})
-   uacounters.io.inc(2)  := !rob.io.ready
-   uacounters.io.inc(3)  := lsu_io.laq_full
-   uacounters.io.inc(4)  := !issue_unit.io.dis_readys.reduce(_|_)
-   uacounters.io.inc(5)  := io.counters.dc_miss
-   uacounters.io.inc(6)  := branch_mask_full.reduce(_|_)
-   uacounters.io.inc(7)  := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
-      com_valids(w) && (com_uops(w).is_store || com_uops(w).is_load)})
-   uacounters.io.inc(8)  := lsu_io.counters.ld_valid
-   uacounters.io.inc(9)  := lsu_io.counters.ld_order_fail
+   csr.io.events(7)  := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+      com_valids(w) && com_uops(w).is_jal})
+   csr.io.events(8)  := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+      com_valids(w) && com_uops(w).is_jump && !com_uops(w).is_jal})
+   csr.io.events(9)  := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+      com_valids(w) && com_uops(w).is_load})
+   csr.io.events(10) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+      com_valids(w) && com_uops(w).is_store})
+   csr.io.events(11) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+      com_valids(w) && com_uops(w).fp_val})
 
-   uacounters.io.inc(10) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+   // Decode stall causes.
+   csr.io.events(12) := !rob.io.ready
+   csr.io.events(13) := lsu_io.laq_full
+   csr.io.events(14) := lsu_io.stq_full
+   csr.io.events(15) := !issue_unit.io.dis_readys.reduce(_|_)
+   csr.io.events(16) := branch_mask_full.reduce(_|_)
+   csr.io.events(17) := rob.io.flush_pipeline
+
+   // LSU Speculation stats.
+   csr.io.events(18) := lsu_io.counters.ld_valid
+   csr.io.events(19) := lsu_io.counters.ld_order_fail
+
+   // Branch prediction stats.
+   csr.io.events(20)  := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+      com_valids(w) && com_uops(w).is_br_or_jmp && !com_uops(w).is_jal && com_uops(w).stat_brjmp_mispredicted})
+   csr.io.events(21) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
       com_valids(w) && com_uops(w).is_br_or_jmp && !com_uops(w).is_jal && com_uops(w).stat_btb_made_pred})
-   uacounters.io.inc(11) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+   csr.io.events(22) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
       com_valids(w) && com_uops(w).is_br_or_jmp && !com_uops(w).is_jal && com_uops(w).stat_btb_mispredicted})
-   uacounters.io.inc(12) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+   csr.io.events(23) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
       com_valids(w) && com_uops(w).is_br_or_jmp && !com_uops(w).is_jal && com_uops(w).stat_bpd_made_pred})
-   uacounters.io.inc(13) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+   csr.io.events(24) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
       com_valids(w) && com_uops(w).is_br_or_jmp && !com_uops(w).is_jal && com_uops(w).stat_bpd_mispredicted})
 
-   // 14, no prediction made
-   uacounters.io.inc(14) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+   // Branch prediction - no prediction made.
+   csr.io.events(25) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
       com_valids(w) && com_uops(w).is_br_or_jmp && !com_uops(w).is_jal &&
       !com_uops(w).stat_btb_made_pred && !com_uops(w).stat_bpd_made_pred})
-   // 15, no predition made - and a mispredict occurred
-   uacounters.io.inc(15) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+
+   // Branch prediction - no predition made & a mispredict occurred.
+   csr.io.events(26) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
       com_valids(w) && com_uops(w).is_br_or_jmp && !com_uops(w).is_jal &&
       !com_uops(w).stat_btb_made_pred && !com_uops(w).stat_bpd_made_pred &&
       com_uops(w).stat_brjmp_mispredicted})
 
-   csr.io.custom_mrw_csrs <> uacounters.io.csrs
 
    assert (!(Range(0,COMMIT_WIDTH).map{w =>
       com_valids(w) && com_uops(w).is_br_or_jmp && com_uops(w).is_jal &&
