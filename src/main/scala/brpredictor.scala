@@ -137,7 +137,7 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int)(implicit p
    {
       r_ghistory := r_ghistory_commit_copy
    }
-   when (io.br_resolution.valid && io.br_resolution.bits.mispredict)
+   .elsewhen (io.br_resolution.valid && io.br_resolution.bits.mispredict)
    {
       r_ghistory := fixed_history
    }
