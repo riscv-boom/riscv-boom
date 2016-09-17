@@ -94,7 +94,9 @@ class GShareBrPredictor(fetch_width: Int,
    pwq.io.deq.ready := Bool(true)
    val p_wmask = pwq.io.deq.bits.executed.toBools
 
-   io.resp.valid := p_out.orR // only assert valid if we're predicting a taken branch
+   // always true (always overrule the BTB, which will almost certainly have less history)
+   io.resp.valid := Bool(true)
+
    when (pwq.io.deq.valid)
    {
 //      io.resp.valid := RegNext(RegNext(Bool(false)))
