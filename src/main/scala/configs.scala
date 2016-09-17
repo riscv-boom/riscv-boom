@@ -56,6 +56,9 @@ class DefaultBOOMConfig extends Config (
          case GShareKey => GShareParameters(
             enabled = true,
             history_length = 14)
+         case SimpleGShareKey => SimpleGShareParameters(
+            enabled = false,
+            history_length = 12)
          case RandomBpdKey => RandomBpdParameters(
             enabled = false)
 

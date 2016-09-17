@@ -12,7 +12,7 @@
 
 // This version of gshare demonstrates how to create a prototype branch
 // predictor that interfaces properly with the rest of BOOM. It is
-// combinational.
+// combinational. It would also not have great synthesis QoR.
 //
 // A more realistic version would:
 //    - be implemented using single-ported synchronous memory.
@@ -27,11 +27,25 @@ package boom
 import Chisel._
 import cde.{Parameters, Field}
 
-// TODO provide the parameter hooks to support instantiating SimpleGShare
+case object SimpleGShareKey extends Field[SimpleGShareParameters]
 
-class SimpleGShareResp(implicit p: Parameters) extends BoomBundle()(p)
+case class SimpleGShareParameters(
+   enabled: Boolean = false,
+   history_length: Int = 10)
+
+class SimpleGShareResp(index_sz: Int) extends Bundle
 {
-   val index = UInt(width = GLOBAL_HISTORY_LENGTH) // needed to update predictor at Commit
+   val index = UInt(width = index_sz) // needed to update predictor at Commit
+   override def cloneType: this.type = new SimpleGShareResp(index_sz).asInstanceOf[this.type]
+}
+
+object SimpleGShareBrPredictor
+{
+   def GetRespInfoSize(p: Parameters): Int =
+   {
+      val dummy = new SimpleGShareResp(p(SimpleGShareKey).history_length)
+      dummy.getWidth
+   }
 }
 
 class SimpleGShareBrPredictor(
@@ -61,7 +75,7 @@ class SimpleGShareBrPredictor(
    private def GetPrediction(cntr: UInt): Bool =
    {
       // return highest-order bit
-      (cntr >> UInt(CNTR_SZ-1)).toBool
+      (cntr >> UInt(CNTR_SZ-1))(0).toBool
    }
 
    private def UpdateCounters(
@@ -98,7 +112,7 @@ class SimpleGShareBrPredictor(
    //------------------------------------------------------------
    // get prediction (delay response 2 cycles to match fetch pipeline)
 
-   val resp_info = Wire(new SimpleGShareResp())
+   val resp_info = Wire(new SimpleGShareResp(log2Up(num_entries)))
 
    val p_idx = Hash(io.req_pc, this.ghistory)
    io.resp.valid        := Bool(true)
@@ -111,7 +125,7 @@ class SimpleGShareBrPredictor(
    //------------------------------------------------------------
    // update predictor
 
-   val commit_info = new SimpleGShareResp().fromBits(commit.bits.info.info)
+   val commit_info = new SimpleGShareResp(log2Up(num_entries)).fromBits(commit.bits.info.info)
    val u_idx = commit_info.index
    counters(u_idx) := UpdateCounters(commit.valid, counters(u_idx), commit.bits.ctrl.executed, commit.bits.ctrl.taken)
 
