@@ -196,7 +196,8 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    if (DEBUG_PRINTF)
    {
       // Fetch Stage 1
-      printf("BrPred1:    (IF1_PC= n/a- Predict:n/a) ------ PC: [%c%c%c-%c for br_id:(n/a), %c %c next: 0x%x ifst:%d]\n"
+      printf("BrPred1:    (IF1_PC= 0x%x Predict:n/a) ------ PC: [%c%c%c-%c for br_id:(n/a), %c %c next: 0x%x ifst:%d]\n"
+         , io.imem.npc
          , Mux(br_unit.brinfo.valid, Str("V"), Str("-"))
          , Mux(br_unit.brinfo.taken, Str("T"), Str("-"))
          , Mux(br_unit.debug_btb_pred, Str("B"), Str("_"))

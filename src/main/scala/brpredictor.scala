@@ -29,6 +29,7 @@ class BpdResp(implicit p: Parameters) extends BoomBundle()(p)
 {
    val takens = UInt(width = FETCH_WIDTH)
    val history = UInt(width = GLOBAL_HISTORY_LENGTH)
+   val shadow_info = new ShadowHistInfo().asOutput
 
    // The info field stores the response information from the branch predictor.
    // The response is stored (conceptually) in the ROB and is returned to the
@@ -39,13 +40,30 @@ class BpdResp(implicit p: Parameters) extends BoomBundle()(p)
    val info = UInt(width = BPD_INFO_SIZE)
 }
 
-
 // BP2 stage needs to speculatively update the history register with what the
 // processor decided to do (takes BTB's effect into account).
 // Also used for updating the commit-copy during commit.
 class GHistUpdate extends Bundle
 {
    val taken = Bool()
+}
+
+// Global history is used to make predictions and must be speculatively updated
+// with the latest predictions.  However, there is a lag between looking up a
+// prediction and taking a prediction. Thus, there is a "shadow" in which a
+// branch will make a prediction but not know about the branches that came
+// before it that haven't yet updated the global history register.
+// This information must still be tracked however; if a misprediction occurs,
+// the global history must be reset. However, snapshotting the global history
+// used to make the mispredicted prediction is incomplete, as it lacks
+// information about the branches that came before it, but were in the "shadow".
+// Thus, each branch snapshot must also track the "shadow" history so that the
+// correct global history can be reassembled during a misprediction.
+class ShadowHistInfo extends Bundle
+{
+   // the shadow is two cycles
+   val valids = UInt(width=2)
+   val takens = UInt(width=2)
 }
 
 // update comes from the branch-unit with the actual outcome
@@ -72,6 +90,7 @@ class BpdUpdate(implicit p: Parameters) extends BoomBundle()(p)
    val brob_idx   = UInt(width = BROB_ADDR_SZ)
    val mispredict = Bool()
    val history = Bits(width = GLOBAL_HISTORY_LENGTH)
+   val shadow_info = new ShadowHistInfo()
    val bpd_predict_val = Bool()
    val bpd_mispredict = Bool()
    val taken = Bool()
@@ -139,12 +158,31 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int)(implicit p
    }
    .elsewhen (io.br_resolution.valid && io.br_resolution.bits.mispredict)
    {
-      r_ghistory := fixed_history
+      // if we need to reset the ghistory on a misspeculation, we need to account for
+      // any branches that came before the misspeculated branch that were in the "shadow"
+      // and thus would not be captured by the ghistory snapshot.
+      val shadow = io.br_resolution.bits.shadow_info
+      require (shadow.valids.getWidth == 2)
+
+      // shift over by PopCount(valids), and OR in the taken signals (where valids(*) is true).
+      r_ghistory :=
+         Mux(shadow.valids === UInt(1), fixed_history << UInt(1) | shadow.takens(0),
+         Mux(shadow.valids === UInt(2), fixed_history << UInt(1) | shadow.takens(1),
+         Mux(shadow.valids === UInt(3), fixed_history << UInt(2) | shadow.takens,
+                                        fixed_history)))
    }
    .elsewhen (io.hist_update_spec.valid)
    {
       r_ghistory := Cat(r_ghistory, io.hist_update_spec.bits.taken)
    }
+
+   // -----------------------------------------------
+   // Track shadow updates.
+
+   val shadow_info = Reg(new ShadowHistInfo)
+   shadow_info.valids := Cat(shadow_info.valids, io.hist_update_spec.valid && io.resp.ready)
+   shadow_info.takens := Cat(shadow_info.takens, io.hist_update_spec.bits.taken)
+   io.resp.bits.shadow_info := shadow_info
 
    // -----------------------------------------------
 
