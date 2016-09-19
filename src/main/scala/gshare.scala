@@ -58,8 +58,8 @@ class GShareBrPredictor(fetch_width: Int,
    //------------------------------------------------------------
    // prediction bits
    // hysteresis bits
-   val p_table = SeqMem(num_entries, Vec(fetch_width, UInt(width=1)))
-   val h_table = SeqMem(num_entries, Vec(fetch_width, UInt(width=1)))
+   val p_table = SeqMem(num_entries, Vec(fetch_width, Bool()))
+   val h_table = SeqMem(num_entries, Vec(fetch_width, Bool()))
 
 
    // buffer writes to the h-table as required
@@ -101,7 +101,7 @@ class GShareBrPredictor(fetch_width: Int,
    {
 //      io.resp.valid := RegNext(RegNext(Bool(false)))
       val waddr = pwq.io.deq.bits.idx
-      val wdata = Vec.fill(fetch_width)(pwq.io.deq.bits.new_value)
+      val wdata = Vec(pwq.io.deq.bits.new_value.toBools)
       p_table.write(waddr, wdata, p_wmask)
    }
    .otherwise // must always read this or SRAM gives garbage
@@ -136,7 +136,7 @@ class GShareBrPredictor(fetch_width: Int,
       val u_info = new GShareResp(log2Up(num_entries)).fromBits(hwq.io.deq.bits.info.info)
       val waddr = u_info.index
       val wmask = hwq.io.deq.bits.ctrl.executed
-      val wdata = Vec(hwq.io.deq.bits.ctrl.taken.map(_.toUInt))
+      val wdata = Vec(hwq.io.deq.bits.ctrl.taken.map(_.toBool))
       h_table.write(waddr, wdata, wmask)
    }
    pwq.io.enq.valid          := RegNext(h_ren)
