@@ -20,8 +20,7 @@ import cde.Parameters
 import rocket.Str
 
 
-class TageTableResp(fetch_width: Int, history_length: Int, index_length: Int, tag_sz: Int)(implicit p: Parameters)
-   extends BoomBundle()(p)
+class TageTableResp(fetch_width: Int, history_length: Int, index_length: Int, tag_sz: Int) extends Bundle
 {
    val takens  = UInt(width = fetch_width)  // the actual prediction
    val index   = UInt(width = index_length) // the index of the prediction
@@ -31,7 +30,6 @@ class TageTableResp(fetch_width: Int, history_length: Int, index_length: Int, ta
 //   val tag_csr1 = UInt(width = history_length) // TODO BUG XXX a total NOP
 //   val tag_csr2 = UInt(width = history_length) // TODO BUG XXX a total NOP
 //   val idx_csr = UInt(width = history_length) // TODO BUG XXX a total NOP
-
 
    override def cloneType: this.type = new TageTableResp(fetch_width, history_length, index_length, tag_sz).asInstanceOf[this.type]
 }
@@ -73,7 +71,8 @@ class TageTableIo(
    num_entries: Int,
    history_length: Int,
    tag_sz: Int,
-   counter_sz: Int
+   counter_sz: Int,
+   this_index_sz: Int
    )(implicit p: Parameters) extends BoomBundle()(p)
 {
    private val index_sz = log2Up(num_entries)
@@ -125,9 +124,10 @@ class TageTableIo(
 
    val usefulness_req_idx = UInt(INPUT, index_sz)
    val usefulness_resp = UInt(OUTPUT, 2) // TODO u-bit_sz
-   def GetUsefulness(idx: UInt) =
+   def GetUsefulness(idx: UInt, idx_sz: Int) =
    {
-      this.usefulness_req_idx := idx
+//      this.usefulness_req_idx := idx(this_index_sz-1,0) // TODO CODEREVIEW 
+      this.usefulness_req_idx := idx(idx_sz-1,0) // TODO CODEREVIEW 
       this.usefulness_resp
    }
 
@@ -152,14 +152,22 @@ class TageTableIo(
    }
 
    override def cloneType: this.type = new TageTableIo(
-      fetch_width, num_entries, history_length, tag_sz, counter_sz).asInstanceOf[this.type]
+      fetch_width, num_entries, history_length, tag_sz, counter_sz, this_index_sz).asInstanceOf[this.type]
 }
 
+// In Chisel3, all Bundle elements in a Vec() must be homogenous (i.e., when
+// using a Vec() of TageTableIOs, the sub-fields within the TageTableIOs must
+// have the exact same widths (no heterogenous types/widths). Therefore, we must
+// track the max_* size of the parameters, and then within the TageTable we must
+// mask off extra bits as needed.
 class TageTable(
    fetch_width: Int,
    num_entries: Int,
    history_length: Int,
    tag_sz: Int,
+   max_num_entries: Int,
+   max_history_length: Int,
+   max_tag_sz: Int,
    counter_sz: Int,
    ubit_sz: Int,
    id: Int = 0
@@ -167,7 +175,7 @@ class TageTable(
 {
    val index_sz = log2Up(num_entries)
 
-   val io = new TageTableIo(fetch_width, num_entries, history_length, tag_sz, counter_sz)
+   val io = new TageTableIo(fetch_width, max_num_entries, max_history_length, max_tag_sz, counter_sz, this_index_sz = index_sz)
 
    private val CNTR_MAX = (1 << counter_sz) - 1
    private val CNTR_WEAK_TAKEN = 1 << (counter_sz-1)
@@ -226,7 +234,7 @@ class TageTable(
 
    private def IdxHash (addr: UInt, hist: UInt) =
    {
-      ((addr >> UInt(log2Up(fetch_width*coreInstBytes))) ^ Fold(hist, index_sz))(index_sz-1,0)
+      ((addr >> UInt(log2Up(fetch_width*coreInstBytes))) ^ Fold(hist(history_length-1,0), index_sz))(index_sz-1,0)
    }
 
    private def TagHash (addr: UInt, hist: UInt) =
@@ -259,7 +267,7 @@ class TageTable(
    private def GetPrediction(cntr: UInt): Bool =
    {
       // return highest-order bit
-      (cntr >> UInt(counter_sz-1)).toBool
+      (cntr >> UInt(counter_sz-1))(0).toBool
    }
 
    private def BuildAllocCounterRow(enables: UInt, takens: UInt): Vec[UInt] =
@@ -296,8 +304,8 @@ class TageTable(
 
    io.bp2_resp.valid       := bp2_tag_hit
    io.bp2_resp.bits.takens := RegEnable(RegEnable(Vec(counters.map(GetPrediction(_))).toBits, !stall), !stall)
-   io.bp2_resp.bits.index  := RegEnable(RegEnable(p_idx, !stall), !stall)
-   io.bp2_resp.bits.tag    := RegEnable(RegEnable(p_tag, !stall), !stall)
+   io.bp2_resp.bits.index  := RegEnable(RegEnable(p_idx, !stall), !stall)(index_sz-1,0)
+   io.bp2_resp.bits.tag    := RegEnable(RegEnable(p_tag, !stall), !stall)(tag_sz-1,0)
 
    //------------------------------------------------------------
    // Update (Branch Resolution)
@@ -318,19 +326,23 @@ class TageTable(
    val init_counter_row = BuildAllocCounterRow(io.allocate.bits.executed, io.allocate.bits.taken)
    when (io.allocate.valid)
    {
-      val a_idx = io.allocate.bits.index
+      val a_idx = io.allocate.bits.index(index_sz-1,0)
       ubit_table(a_idx)    := UInt(UBIT_INIT_VALUE)
-      tag_table(a_idx)     := io.allocate.bits.tag
+      tag_table(a_idx)     := io.allocate.bits.tag(tag_sz-1,0)
       counter_table(a_idx) := init_counter_row
 
       debug_pc_table(a_idx) := io.allocate.bits.debug_pc
-      debug_hist_table(a_idx) := io.allocate.bits.debug_hist
+      debug_hist_table(a_idx) := io.allocate.bits.debug_hist(history_length-1,0)
 
+      when (!(a_idx < UInt(num_entries)))
+      {
+         printf("[TageTable] out of bounds index on allocation, a_idx: %d, num_en: %d", a_idx, UInt(num_entries))
+      }
       assert (a_idx < UInt(num_entries), "[TageTable] out of bounds index on allocation")
       assert (ubit_table(a_idx) === UInt(0), "[TageTable] Tried to allocate a useful entry")
    }
 
-   val u_idx = io.update_counters.bits.index
+   val u_idx = io.update_counters.bits.index(index_sz-1,0)
    val u_counter_row = counter_table(u_idx)
    val updated_row = Wire(u_counter_row.cloneType)
    updated_row.map(_ := UInt(0))
@@ -354,7 +366,7 @@ class TageTable(
    when (io.update_usefulness.valid)
    {
       val inc = io.update_usefulness.bits.inc
-      val ub_idx = io.update_usefulness.bits.index
+      val ub_idx = io.update_usefulness.bits.index(index_sz-1,0)
       val u = ubit_table(ub_idx)
       ubit_table(ub_idx) :=
          Mux(inc && u < UInt(UBIT_MAX),
@@ -364,7 +376,7 @@ class TageTable(
             u))
    }
 
-   io.usefulness_resp := ubit_table(io.usefulness_req_idx)
+   io.usefulness_resp := ubit_table(io.usefulness_req_idx(index_sz-1,0))
 
    //------------------------------------------------------------
    // Debug/Visualize
@@ -374,7 +386,7 @@ class TageTable(
       require (num_entries < 64) // for sanity sake, don't allow larger.
       printf("TAGETable: PC: 0x%x history: 0x%x, tag[%d]=0x%x, p_tag=0x%x " + mgt + "%s\n" + end,
          io.if_req_pc,
-         io.if_req_history + UInt(0,64),
+         io.if_req_history(history_length-1,0) + UInt(0,64),
          p_idx,
          tag + UInt(0,64),
          TagHash(io.if_req_pc, io.if_req_history),

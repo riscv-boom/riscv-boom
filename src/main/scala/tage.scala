@@ -187,13 +187,16 @@ class TageBrPredictor(
    val tables = for (i <- 0 until num_tables) yield
    {
       val table = Module(new TageTable(
-         fetch_width    = fetch_width,
-         id             = i,
-         num_entries    = table_sizes(i),
-         history_length = history_lengths(i),
-         tag_sz         = tag_sizes(i),
-         counter_sz     = counter_sz,
-         ubit_sz        = ubit_sz))
+         fetch_width        = fetch_width,
+         id                 = i,
+         num_entries        = table_sizes(i),
+         history_length     = history_lengths(i),
+         tag_sz             = tag_sizes(i),
+         max_num_entries    = table_sizes.max,
+         max_history_length = history_lengths.max,
+         max_tag_sz         = tag_sizes.max,
+         counter_sz         = counter_sz,
+         ubit_sz            = ubit_sz))
       table.io.InitializeIo()
 
       // send prediction request
@@ -208,6 +211,7 @@ class TageBrPredictor(
 
       table
    }
+
 
    // get prediction (priority to last table)
    val valids = tables.map{ _.io.bp2_resp.valid }
@@ -270,8 +274,8 @@ class TageBrPredictor(
    //------------------------------------------------------------
    // update predictor during commit
 
-
    val tables_io = Vec(tables.map(_.io))
+
 
    // provide some randomization to the allocation process
    val rand = Reg(init=UInt(0,2))
@@ -319,6 +323,7 @@ class TageBrPredictor(
          printf("]\n")
       }
 
+
       when (!correct && (provider_id < UInt(MAX_TABLE_ID) || !info.provider_hit))
       {
          // try to allocate a new entry
@@ -353,7 +358,7 @@ class TageBrPredictor(
 
          // find lowest alloc_idx where u_bits === 0
          val can_allocates = Range(0, num_tables).map{ i =>
-            tables(i).io.GetUsefulness(info.indexes(i)) === Bits(0) &&
+            tables(i).io.GetUsefulness(info.indexes(i), log2Up(table_sizes(i))) === Bits(0) &&
             ((UInt(i) > (Cat(UInt(0),provider_id) + r)) || !info.provider_hit)
          }
 
