@@ -197,14 +197,6 @@ class TageBrPredictor(
          max_tag_sz         = tag_sizes.max,
          counter_sz         = counter_sz,
          ubit_sz            = ubit_sz))
-      table.io.InitializeIo()
-
-      // send prediction request
-      table.io.if_req_pc := io.req_pc
-      table.io.if_req_history := this.ghistory
-
-      // update during mispredict
-      table.io.bp2_update_history <> io.hist_update_spec
 
       // check that the user ordered his TAGE tables properly
       if (i > 0) require(history_lengths(i) > history_lengths(i-1))
@@ -212,11 +204,25 @@ class TageBrPredictor(
       table
    }
 
+   val tables_io = Vec(tables.map(_.io))
+
+   tables_io.map{ table =>
+      table.InitializeIo()
+
+      // Send prediction request.
+      table.if_req_pc := io.req_pc
+      table.if_req_history := this.ghistory
+
+      // Update ghistory speculatively once a prediction is made.
+      table.bp2_update_history <> io.hist_update_spec
+   }
+
+
 
    // get prediction (priority to last table)
-   val valids = tables.map{ _.io.bp2_resp.valid }
-   val predictions = tables.map{ _.io.bp2_resp.bits }
-   tables.map{ _.io.bp2_resp.ready := io.resp.ready }
+   val valids = tables_io.map{ _.bp2_resp.valid }
+   val predictions = tables_io.map{ _.bp2_resp.bits }
+   tables_io.map{ _.bp2_resp.ready := io.resp.ready }
    val best_prediction_valid = valids.reduce(_|_)
    val best_prediction_bits = PriorityMux(valids.reverse, predictions.reverse)
 
@@ -273,9 +279,6 @@ class TageBrPredictor(
    //------------------------------------------------------------
    //------------------------------------------------------------
    // update predictor during commit
-
-   val tables_io = Vec(tables.map(_.io))
-
 
    // provide some randomization to the allocation process
    val rand = Reg(init=UInt(0,2))
@@ -358,7 +361,7 @@ class TageBrPredictor(
 
          // find lowest alloc_idx where u_bits === 0
          val can_allocates = Range(0, num_tables).map{ i =>
-            tables(i).io.GetUsefulness(info.indexes(i), log2Up(table_sizes(i))) === Bits(0) &&
+            tables_io(i).GetUsefulness(info.indexes(i), log2Up(table_sizes(i))) === Bits(0) &&
             ((UInt(i) > (Cat(UInt(0),provider_id) + r)) || !info.provider_hit)
          }
 
@@ -387,7 +390,7 @@ class TageBrPredictor(
             {
                when ((UInt(i) > provider_id) || !info.provider_hit)
                {
-                  tables(i).io.UpdateUsefulness(info.indexes(i), inc = Bool(false))
+                  tables_io(i).UpdateUsefulness(info.indexes(i), inc = Bool(false))
                   if (DEBUG_PRINTF_TAGE)
                   {
                      printf("   Decrementing useful bit for Table_%d[%d] --", UInt(i), info.indexes(i))
