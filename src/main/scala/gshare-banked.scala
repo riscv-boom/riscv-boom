@@ -10,11 +10,9 @@
 // Christopher Celio
 // 2015 Apr 28
 //
-// TODO:
-//    - The prediction table requires two ports (1 read, 1 write). Future work
-//       would be to add the option to bank the p-table instead.
-//    - Don't read the p-table SRAM if stalled (need extra state to store data
-//       while stalled)..
+// The prediction table requires two ports (1 read, 1 write). This version of 
+// gshare banks the prediction table and uses a queue to buffer the writes in 
+// case of structural hazards.
 
 
 package boom
@@ -22,39 +20,26 @@ package boom
 import Chisel._
 import cde.{Parameters, Field}
 
-case object GShareKey extends Field[GShareParameters]
 
-case class GShareParameters(
-   enabled: Boolean = false,
-   history_length: Int = 10
-   )
-
-class GShareResp(index_sz: Int) extends Bundle
-{
-   val index = UInt(width = index_sz) // needed to update predictor at Commit
-   override def cloneType: this.type = new GShareResp(index_sz).asInstanceOf[this.type]
-}
-
-object GShareBrPredictor
-{
-   def GetRespInfoSize(p: Parameters): Int =
-   {
-      val dummy = new GShareResp(p(GShareKey).history_length)
-      dummy.getWidth
-   }
-}
-
-class GShareBrPredictor(fetch_width: Int,
+class GShareBankedBrPredictor(fetch_width: Int,
                         history_length: Int = 12
    )(implicit p: Parameters) extends BrPredictor(fetch_width, history_length)(p)
 {
    val num_entries = 1 << history_length
    println ("\tBuilding (" + (num_entries * fetch_width * 2/8/1024) +
-      " kB) GShare Predictor, with " + history_length + " bits of history for (" +
+      " kB) Banked GShare Predictor, with " + history_length + " bits of history for (" +
       fetch_width + "-wide fetch) and " + num_entries + " entries.")
 
    private def Hash (addr: UInt, hist: UInt) =
       (addr >> UInt(log2Up(fetch_width*coreInstBytes))) ^ hist
+
+   // which p-table bank does the hash addr map to?
+   private def getBank (addr: UInt): UInt =
+      addr(0)
+   
+   // which p-table index does the hash addr map to?
+   private def getIdx (addr: UInt): UInt =
+      addr >> UInt(1)
 
    //------------------------------------------------------------
    // prediction response information
@@ -63,8 +48,11 @@ class GShareBrPredictor(fetch_width: Int,
    //------------------------------------------------------------
    // prediction bits
    // hysteresis bits
-   val p_table = SeqMem(num_entries, Vec(fetch_width, Bool()))
-   val h_table = SeqMem(num_entries, Vec(fetch_width, Bool()))
+
+   // use tow banks for the p-table to manage the structural hazard on the single port.
+   val p_table_0 = SeqMem(num_entries/2, Vec(fetch_width, Bool()))
+   val p_table_1 = SeqMem(num_entries/2, Vec(fetch_width, Bool()))
+   val h_table   = SeqMem(num_entries,   Vec(fetch_width, Bool()))
 
 
    // buffer writes to the h-table as required
@@ -76,9 +64,10 @@ class GShareBrPredictor(fetch_width: Int,
 
    //------------------------------------------------------------
    // p-table
-   val p_addr = Wire(UInt())
-   val last_p_addr = RegNext(p_addr)
-   val p_out = Reg(UInt())
+   val p_raddr = Wire(UInt())
+   val last_p_raddr = RegNext(p_raddr)
+   val p_out_0 = Reg(UInt())
+   val p_out_1 = Reg(UInt())
 
    val stall = !io.resp.ready // TODO FIXME this feels too low-level
 
@@ -94,26 +83,35 @@ class GShareBrPredictor(fetch_width: Int,
 
 
    val pwq = Module(new Queue(new BrTableUpdate, entries=2))
-   pwq.io.deq.ready := Bool(true)
    val p_wmask = pwq.io.deq.bits.executed.toBools
 
    // Always overrule the BTB, which will almost certainly have less history.
    io.resp.valid := Bool(true)
+ 
+   p_raddr := Mux(stall, last_p_raddr, Hash(io.req_pc, this.ghistory))
+   val p_waddr = pwq.io.deq.bits.idx
+   val rbank = getBank(p_raddr)
+   val wbank = getBank(p_waddr)
+   val wdata = Vec(pwq.io.deq.bits.new_value.toBools)
+   pwq.io.deq.ready := rbank =/= wbank
 
-   when (pwq.io.deq.valid)
+   val p_ren_0 = rbank === UInt(0)
+   val p_ren_1 = rbank === UInt(1)
+   p_out_0 := p_table_0.read(getIdx(p_raddr), p_ren_0).toBits
+   p_out_1 := p_table_1.read(getIdx(p_raddr), p_ren_1).toBits
+   when (!p_ren_0 && wbank === UInt(0) && pwq.io.deq.valid)
    {
-      val waddr = pwq.io.deq.bits.idx
-      val wdata = Vec(pwq.io.deq.bits.new_value.toBools)
-      p_table.write(waddr, wdata, p_wmask)
+      p_table_0.write(getIdx(p_waddr), wdata, p_wmask)
    }
-
-   p_addr := Mux(stall, last_p_addr, Hash(io.req_pc, this.ghistory))
-   p_out := p_table.read(p_addr).toBits
-
+   when (!p_ren_1 && wbank === UInt(1) && pwq.io.deq.valid)
+   {
+      p_table_1.write(getIdx(p_waddr), wdata, p_wmask)
+   }
+    
    val resp_info = Wire(new GShareResp(log2Up(num_entries)))
-   io.resp.bits.takens := p_out
+   io.resp.bits.takens := Mux(RegNext(RegNext(p_ren_0)), p_out_0, p_out_1)
    io.resp.bits.history := RegNext(RegNext(this.ghistory))
-   resp_info.index := RegNext(RegNext(p_addr))
+   resp_info.index := RegNext(RegNext(p_raddr))
    io.resp.bits.info := resp_info.toBits
 
    require (coreInstBytes == 4)
