@@ -11,8 +11,8 @@
 // 2015 Apr 28
 //
 // TODO:
-//    - The prediction table requires two ports (1 read, 1 write). Future work
-//       would be to add the option to bank the p-table instead.
+//    - Combine the DualPorted and Banked GShare implementations into a single,
+//       parameterized Module.
 //    - Don't read the p-table SRAM if stalled (need extra state to store data
 //       while stalled)..
 
@@ -26,7 +26,11 @@ case object GShareKey extends Field[GShareParameters]
 
 case class GShareParameters(
    enabled: Boolean = false,
-   history_length: Int = 10
+   history_length: Int = 10,
+   // The prediction table requires 1 read and 1 write port.
+   // Should we use two ports or should we bank the p-table?
+   // If "false", build the GShareBankedBrPredictor.
+   dualported: Boolean = false
    )
 
 class GShareResp(index_sz: Int) extends Bundle
@@ -44,7 +48,7 @@ object GShareBrPredictor
    }
 }
 
-class GShareBrPredictor(fetch_width: Int,
+class GShareDualPortedBrPredictor(fetch_width: Int,
                         history_length: Int = 12
    )(implicit p: Parameters) extends BrPredictor(fetch_width, history_length)(p)
 {

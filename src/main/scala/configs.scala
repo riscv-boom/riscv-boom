@@ -55,7 +55,8 @@ class DefaultBOOMConfig extends Config (
             tag_sizes = Seq(10,10,10,12))
          case GShareKey => GShareParameters(
             enabled = true,
-            history_length = 14)
+            history_length = 14,
+            dualported = false)
          case SimpleGShareKey => SimpleGShareParameters(
             enabled = false,
             history_length = 12)

@@ -8,11 +8,13 @@
 //------------------------------------------------------------------------------
 //
 // Christopher Celio
-// 2015 Apr 28
+// 2016 Sep 21
 //
 // The prediction table requires two ports (1 read, 1 write). This version of 
 // gshare banks the prediction table and uses a queue to buffer the writes in 
 // case of structural hazards.
+//
+// You can enable this by setting the (GShareKey.dualbanked = false).
 
 
 package boom

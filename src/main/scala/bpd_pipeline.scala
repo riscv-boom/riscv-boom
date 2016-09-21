@@ -106,9 +106,14 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
                                                 tag_sizes = p(TageKey).tag_sizes
                                                 ))
    }
-   else if (ENABLE_BRANCH_PREDICTOR && p(GShareKey).enabled)
+   else if (ENABLE_BRANCH_PREDICTOR && p(GShareKey).enabled && p(GShareKey).dualported)
    {
-      br_predictor = Module(new GShareBrPredictor(fetch_width = fetch_width,
+      br_predictor = Module(new GShareDualPortedBrPredictor(fetch_width = fetch_width,
+                                                  history_length = p(GShareKey).history_length))
+   }
+   else if (ENABLE_BRANCH_PREDICTOR && p(GShareKey).enabled && !p(GShareKey).dualported)
+   {
+      br_predictor = Module(new GShareBankedBrPredictor(fetch_width = fetch_width,
                                                   history_length = p(GShareKey).history_length))
    }
    else if (ENABLE_BRANCH_PREDICTOR && p(SimpleGShareKey).enabled)
