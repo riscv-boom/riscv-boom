@@ -11,8 +11,6 @@
 // 2015 Apr 28
 //
 // TODO:
-//    - Combine the DualPorted and Banked GShare implementations into a single,
-//       parameterized Module.
 //    - Don't read the p-table SRAM if stalled (need extra state to store data
 //       while stalled)..
 
@@ -29,7 +27,6 @@ case class GShareParameters(
    history_length: Int = 10,
    // The prediction table requires 1 read and 1 write port.
    // Should we use two ports or should we bank the p-table?
-   // If "false", build the GShareBankedBrPredictor.
    dualported: Boolean = false
    )
 
@@ -49,7 +46,8 @@ object GShareBrPredictor
 }
 
 class GShareDualPortedBrPredictor(fetch_width: Int,
-                        history_length: Int = 12
+                        history_length: Int = 12,
+                        dualported: Boolean = false
    )(implicit p: Parameters) extends BrPredictor(fetch_width, history_length)(p)
 {
    val num_entries = 1 << history_length
@@ -57,91 +55,53 @@ class GShareDualPortedBrPredictor(fetch_width: Int,
       " kB) GShare Predictor, with " + history_length + " bits of history for (" +
       fetch_width + "-wide fetch) and " + num_entries + " entries.")
 
+   require (coreInstBytes == 4)
+
+   //------------------------------------------------------------
+
    private def Hash (addr: UInt, hist: UInt) =
       (addr >> UInt(log2Up(fetch_width*coreInstBytes))) ^ hist
 
-   //------------------------------------------------------------
-   // prediction response information
-   val commit_info = new GShareResp(log2Up(num_entries)).fromBits(commit.bits.info.info)
 
    //------------------------------------------------------------
-   // prediction bits
-   // hysteresis bits
-   val p_table = SeqMem(num_entries, Vec(fetch_width, Bool()))
-   val h_table = SeqMem(num_entries, Vec(fetch_width, Bool()))
+   // Predictor state.
 
-
-   // buffer writes to the h-table as required
-   val hwq = Module(new Queue(new BrobEntry(fetch_width), entries=4))
-   hwq.io.enq <> commit
-
-   val u_addr = commit_info.index
+   val counters = Module(new TwobcCounterTable(fetch_width, num_entries, dualported))
 
 
    //------------------------------------------------------------
-   // p-table
+   // Get prediction.
+
    val p_addr = Wire(UInt())
    val last_p_addr = RegNext(p_addr)
-   val p_out = Reg(UInt())
 
    val stall = !io.resp.ready // TODO FIXME this feels too low-level
 
+   p_addr := Mux(stall, last_p_addr, Hash(io.req_pc, this.ghistory))
+   counters.io.s0_r_idx := p_addr
 
-   class BrTableUpdate extends Bundle
-   {
-      val idx        = UInt(width = log2Up(num_entries))
-      val executed   = UInt(width = FETCH_WIDTH) // which words in the fetch packet does the update correspond to?
-      val new_value  = UInt(width=FETCH_WIDTH)
-
-      override def cloneType: this.type = new BrTableUpdate().asInstanceOf[this.type]
-   }
-
-
-   val pwq = Module(new Queue(new BrTableUpdate, entries=2))
-   pwq.io.deq.ready := Bool(true)
-   val p_wmask = pwq.io.deq.bits.executed.toBools
+   val resp_info = Wire(new GShareResp(log2Up(num_entries)))
+   resp_info.index      := RegNext(RegNext(p_addr))
+   io.resp.bits.history := RegNext(RegNext(this.ghistory))
+   io.resp.bits.takens  := counters.io.s2_r_out
+   io.resp.bits.info    := resp_info.toBits
 
    // Always overrule the BTB, which will almost certainly have less history.
    io.resp.valid := Bool(true)
 
-   when (pwq.io.deq.valid)
-   {
-      val waddr = pwq.io.deq.bits.idx
-      val wdata = Vec(pwq.io.deq.bits.new_value.toBools)
-      p_table.write(waddr, wdata, p_wmask)
-   }
-
-   p_addr := Mux(stall, last_p_addr, Hash(io.req_pc, this.ghistory))
-   p_out := p_table.read(p_addr).toBits
-
-   val resp_info = Wire(new GShareResp(log2Up(num_entries)))
-   io.resp.bits.takens := p_out
-   io.resp.bits.history := RegNext(RegNext(this.ghistory))
-   resp_info.index := RegNext(RegNext(p_addr))
-   io.resp.bits.info := resp_info.toBits
-
-   require (coreInstBytes == 4)
 
    //------------------------------------------------------------
-   // h-table
-   // read table to update the p-table (only if a mispredict occurred)
-   val h_ren = commit.valid && commit.bits.ctrl.mispredicted.reduce(_|_)
-   hwq.io.deq.ready := !h_ren
-   when (!h_ren && hwq.io.deq.valid)
-   {
-      // TODO post ChiselIssue. Chisel needs to be able to have SeqMem take a Vec of Bools
-      val u_info = new GShareResp(log2Up(num_entries)).fromBits(hwq.io.deq.bits.info.info)
-      val waddr = u_info.index
-      val wmask = hwq.io.deq.bits.ctrl.executed
-      val wdata = Vec(hwq.io.deq.bits.ctrl.taken.map(_.toBool))
-      h_table.write(waddr, wdata, wmask)
-   }
-   pwq.io.enq.valid          := RegNext(h_ren)
-   pwq.io.enq.bits.idx       := RegNext(u_addr)
-   pwq.io.enq.bits.executed  := RegNext(commit.bits.ctrl.executed.toBits)
-   pwq.io.enq.bits.new_value := h_table.read(u_addr, h_ren).toBits
+   // Update counter table.
+
+   val commit_info = new GShareResp(log2Up(num_entries)).fromBits(commit.bits.info.info)
+
+   counters.io.update.valid                 := commit.valid
+   counters.io.update.bits.index            := commit_info.index
+   counters.io.update.bits.executed         := commit.bits.ctrl.executed
+   counters.io.update.bits.was_mispredicted := commit.bits.ctrl.mispredicted.reduce(_|_)
+   counters.io.update.bits.takens           := commit.bits.ctrl.taken
+
 
    //------------------------------------------------------------
-
 }
 
