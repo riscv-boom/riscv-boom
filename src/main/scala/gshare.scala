@@ -45,7 +45,7 @@ object GShareBrPredictor
    }
 }
 
-class GShareDualPortedBrPredictor(fetch_width: Int,
+class GShareBrPredictor(fetch_width: Int,
                         history_length: Int = 12,
                         dualported: Boolean = false
    )(implicit p: Parameters) extends BrPredictor(fetch_width, history_length)(p)
@@ -72,16 +72,16 @@ class GShareDualPortedBrPredictor(fetch_width: Int,
    //------------------------------------------------------------
    // Get prediction.
 
-   val p_addr = Wire(UInt())
-   val last_p_addr = RegNext(p_addr)
+   val idx = Wire(UInt())
+   val last_idx = RegNext(idx)
 
-   val stall = !io.resp.ready // TODO FIXME this feels too low-level
+   val stall = !io.resp.ready
 
-   p_addr := Mux(stall, last_p_addr, Hash(io.req_pc, this.ghistory))
-   counters.io.s0_r_idx := p_addr
+   idx := Mux(stall, last_idx, Hash(io.req_pc, this.ghistory))
+   counters.io.s0_r_idx := idx
 
    val resp_info = Wire(new GShareResp(log2Up(num_entries)))
-   resp_info.index      := RegNext(RegNext(p_addr))
+   resp_info.index      := RegNext(RegNext(idx))
    io.resp.bits.history := RegNext(RegNext(this.ghistory))
    io.resp.bits.takens  := counters.io.s2_r_out
    io.resp.bits.info    := resp_info.toBits
@@ -93,7 +93,7 @@ class GShareDualPortedBrPredictor(fetch_width: Int,
    //------------------------------------------------------------
    // Update counter table.
 
-   val commit_info = new GShareResp(log2Up(num_entries)).fromBits(commit.bits.info.info)
+   val commit_info = new GShareResp(log2Up(num_entries)).fromBits(this.commit.bits.info.info)
 
    counters.io.update.valid                 := commit.valid
    counters.io.update.bits.index            := commit_info.index
