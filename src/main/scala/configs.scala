@@ -53,13 +53,15 @@ class DefaultBOOMConfig extends Config (
             table_sizes = Seq(1024,1024,1024,1024),
             history_lengths = Seq(3,7,19,63),
             tag_sizes = Seq(10,10,10,12))
+         case GSkewKey => GSkewParameters(
+            enabled = true)
          case GShareKey => GShareParameters(
-            enabled = true,
+            enabled = false,
             history_length = 14,
             dualported = false)
          case SimpleGShareKey => SimpleGShareParameters(
             enabled = false,
-            history_length = 12)
+            history_length = 14)
          case RandomBpdKey => RandomBpdParameters(
             enabled = false)
 
