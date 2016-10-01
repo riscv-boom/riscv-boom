@@ -30,10 +30,12 @@ case object GSkewKey extends Field[GSkewParameters]
 case class GSkewParameters(
    enabled: Boolean = false,
    history_length: Int = 21,
-   bimo_num_entries: Int = 4*1024,
-   gsh0_num_entries: Int = 4*1024,
-   gsh1_num_entries: Int = 4*1024,
-   meta_num_entries: Int = 4*1024
+   bimo_num_entries: Int = 16*1024,
+   gsh0_num_entries: Int = 64*1024,
+   gsh1_num_entries: Int = 64*1024,
+   meta_num_entries: Int = 64*1024,
+   dualported: Boolean = true,
+   use_meta: Boolean = true
    )
 
 class GSkewResp(fetch_width: Int, bi_idx_sz: Int, g0_idx_sz: Int, g1_idx_sz: Int, me_idx_sz: Int) extends Bundle
@@ -69,7 +71,8 @@ object GSkewBrPredictor
 
 class GSkewBrPredictor(fetch_width: Int,
                         history_length: Int = 12,
-                        dualported: Boolean = false
+                        dualported: Boolean = false,
+                        use_meta: Boolean = false
    )(implicit p: Parameters) extends BrPredictor(fetch_width, history_length)(p)
 {
    val bimo_num_entries = p(GSkewKey).bimo_num_entries
@@ -89,7 +92,7 @@ class GSkewBrPredictor(fetch_width: Int,
       "\t\t" + bimo_num_entries + " BIM  entries\n" +
       "\t\t" + gsh0_num_entries + " G0   entries\n" +
       "\t\t" + gsh1_num_entries + " G1   entries\n" +
-      "\t\t" + meta_num_entries + " META entries")
+      (if (use_meta) ("\t\t" + meta_num_entries + " META entries") else ("\t\tNo meta.")))
 
    //------------------------------------------------------------
    private val shamt = log2Up(fetch_width*coreInstBytes)
@@ -117,19 +120,68 @@ class GSkewBrPredictor(fetch_width: Int,
       }
    }
 
-   private def BimoIdxHash (addr: UInt, hist: UInt) =
-      (addr >> UInt(shamt)) ^ Cat(hist(3,0), UInt(0,2))
-
-   private def Gsh0IdxHash (addr: UInt, hist: UInt) =
-      (addr >> UInt(shamt)) ^ Cat(hist, UInt(0,1))
-
-   private def Gsh1IdxHash (addr: UInt, hist: UInt) =
-      (addr(10+shamt,0) >> UInt(shamt)) ^ Fold(hist, gsh1_idx_sz)
-
-   private def MetaIdxHash (addr: UInt, hist: UInt) =
+   private def BimoIdxHash (addr: UInt, h: UInt, w: Int) =
    {
-      val hlen = Seq(history_length, 15).max
-      (addr >> UInt(shamt)) ^ Fold(hist(hlen-1,0), meta_idx_sz)
+      //(addr >> UInt(shamt)) ^ Cat(hist(3,0), UInt(0,2))
+      val a = addr >> UInt(shamt)
+      val z      = UInt(0,32) // unused - a from two cycles ago.
+      
+      val i10_5  = Cat(h(3,0), a(8,7)) // word-line address
+      val i13_11 = Cat(a(11), a(9)^a(5), a(10)^a(6))
+      val i4_2   = Cat(a(4) , a(3)^z(6), a( 2)^z(5))
+      val i1_0   = a(1,0) // bank selector; should actually be using y,z.
+      val ret    = Cat(i13_11, i10_5, i4_2, i1_0)
+      require (ret.getWidth >= w) // make sure hash idx can cover entire table
+      ret
+   }
+
+   private def Gsh0IdxHash (addr: UInt, h: UInt, w: Int) =
+   {
+      val a = addr >> UInt(shamt)
+      val z      = UInt(0,32) // unused - a from two cycles ago.
+//      (addr >> UInt(shamt)) ^ Cat(hist, UInt(0,1))
+      val i15_11 = Cat(h(7)^h(11), h(8)^h(12), h(4)^h(5), a(9)^h(9), h(10)^h(6))
+      val i10_5  = Cat(h(3,0), a(8,7)) // word-line address
+      val i4_2   = Cat(a(4)^a(9)^a(13)^a(12)^h(5)^h(11)^h(8)^z(5),
+                       a(3)^a(11)^h(9)^h(10)^h(12)^z(6)^z(5),
+                       a(2)^a(14)^a(10)^h(6)^h(4)^h(7)^a(6))
+      val i1_0   = a(1,0) // bank selector; should actually be using y,z.
+      val ret    = Cat(i15_11, i10_5, i4_2, i1_0)
+      require (ret.getWidth >= w) // make sure hash idx can cover entire table
+      ret
+   }
+
+   private def Gsh1IdxHash (addr: UInt, h: UInt, w: Int) =
+   {
+      val a = addr >> UInt(shamt)
+      val z      = UInt(0,32) // unused - a from two cycles ago.
+//      (addr >> UInt(shamt)) ^ Fold(hist, gsh1_idx_sz)
+      val i15_11 = Cat(h(19)^h(12), h(18)^h(11), h(17)^h(10), h(16)^h(4), h(15)^h(20))
+      val i10_5  = Cat(h(3,0), a(8,7)) // word-line address
+      val i4_2   = Cat(a(4)^a(11)^a(14)^a(6)^h(4)^h(6)^h(9)^h(14)^h(15)^h(16)^z(6),
+                       a(3)^a(10)^a(13)^h(5)^h(11)^h(13)^h(18)^h(19)^h(20)^z(5),
+                       a(2)^a(5)^a(9)^h(4)^h(8)^h(7)^h(10)^h(12)^h(13)^h(14)^h(17))
+      val i1_0   = a(1,0) // bank selector; should actually be using y,z.
+      val ret    = Cat(i15_11, i10_5, i4_2, i1_0)
+      require (ret.getWidth >= w) // make sure hash idx can cover entire table
+      ret
+   }
+
+   private def MetaIdxHash (addr: UInt, h: UInt, w: Int) =
+   {
+      //val hlen = Seq(history_length, 15).max
+      //(addr >> UInt(shamt)) ^ Fold(hist(hlen-1,0), meta_idx_sz)
+      val a = addr >> UInt(shamt)
+      val z      = UInt(0,32) // unused - a from two cycles ago.
+      val i15_11 = Cat(h(7)^h(11), h(8)^h(12), h(5)^h(13), h(4)^h(9), a(9)^h(6))
+      val i10_5  = Cat(h(3,0), a(8,7)) // word-line address
+      val i4_2   = Cat(a(4)^a(10)^a(5)^h(7)^h(10)^h(14)^h(13)^z(5),
+                       a(3)^a(12)^a(14)^a(6)^h(4)^h(6)^h(8)^h(14),
+                       a(2)^a(9)^a(11)^a(13)^h(5)^h(9)^h(11)^h(12)^z(6))
+      val i1_0   = a(1,0) // bank selector; should actually be using y,z.
+      val ret    = Cat(i15_11, i10_5, i4_2, i1_0)
+      require (ret.getWidth >= w) // make sure hash idx can cover entire table
+      ret
    }
 
 
@@ -160,10 +212,10 @@ class GSkewBrPredictor(fetch_width: Int,
 
    val stall = !io.resp.ready // TODO FIXME this feels too low-level
 
-   bimo_idx := Mux(stall, last_bimo_idx, BimoIdxHash(io.req_pc, this.ghistory))
-   gsh0_idx := Mux(stall, last_gsh0_idx, Gsh0IdxHash(io.req_pc, this.ghistory))
-   gsh1_idx := Mux(stall, last_gsh1_idx, Gsh1IdxHash(io.req_pc, this.ghistory))
-   meta_idx := Mux(stall, last_meta_idx, MetaIdxHash(io.req_pc, this.ghistory))
+   bimo_idx := Mux(stall, last_bimo_idx, BimoIdxHash(io.req_pc, this.ghistory, bimo_idx_sz))
+   gsh0_idx := Mux(stall, last_gsh0_idx, Gsh0IdxHash(io.req_pc, this.ghistory, gsh0_idx_sz))
+   gsh1_idx := Mux(stall, last_gsh1_idx, Gsh1IdxHash(io.req_pc, this.ghistory, gsh1_idx_sz))
+   meta_idx := Mux(stall, last_meta_idx, MetaIdxHash(io.req_pc, this.ghistory, meta_idx_sz))
    bimo_table.io.s0_r_idx := bimo_idx
    gsh0_table.io.s0_r_idx := gsh0_idx
    gsh1_table.io.s0_r_idx := gsh1_idx
@@ -185,7 +237,10 @@ class GSkewBrPredictor(fetch_width: Int,
       val meta= meta_out(i)
 
       val vote = PopCount(bim :: g0 :: g1 :: Nil)
-      takens(i) := Mux(meta, vote > UInt(1), bim)
+      if (use_meta)
+         takens(i) := Mux(meta, vote > UInt(1), bim)
+      else
+         takens(i) := vote > UInt(1)
    }
 
    io.resp.bits.takens := takens.asUInt
@@ -252,62 +307,83 @@ class GSkewBrPredictor(fetch_width: Int,
    {
       for (i <- 0 until fetch_width)
       {
-         when (correct && both_agree(i))
+         if (use_meta)
          {
-            // do nothing;
-         }
-         .elsewhen (correct && !both_agree(i))
-         {
-            // strengthen meta
-            meta_update_valids(i) := Bool(true)
-            meta_update_dir(i) := com_info.meta(i)
-
-            // strengthen only those that gave correct predictions.
-            when (!bim_mispredicted(i)) { bimo_update_valids(i) := Bool(true) }
-            when (!g0_mispredicted(i))  { gsh0_update_valids(i) := Bool(true) }
-            when (!g1_mispredicted(i))  { gsh1_update_valids(i) := Bool(true) }
-         }
-         .elsewhen (!correct && !both_agree(i))
-         {
-            // 1. update meta to choose differently
-            meta_update_valids(i) := Bool(true)
-            meta_update_dir(i) := !com_info.meta(i)
-            meta_mispredicted := Bool(true)
-
-            // 2. check new prediction...
-            //    - strengthen participating if correct
-            //    - update all if incorrect.
-
-            // Note: ideally, we'd know the new meta, but that requires reading the hystersis bit.
-            // So instead we'll just invert the meta prediction (aka, assume the meta was weak).
-            //bool new_meta = (meta[me_idx] >> 1) & 0x1;
-            //bool new_pred = new_meta ? last_bim : ((last_bim + last_g0 + last_g1) > 1);
-            val new_meta = !com_info.meta(i)
-            val new_pred = Mux(new_meta, com_vote, com_info.bimo(i))
-
-            when (new_pred === commit.bits.ctrl.taken(i))
+            when (correct && both_agree(i))
             {
-               when (new_meta)
-               {
-                  bimo_update_valids(i) := Bool(true)
-                  gsh0_update_valids(i) := Bool(true)
-                  gsh1_update_valids(i) := Bool(true)
-               }
-               .otherwise
-               {
-                  bimo_update_valids(i) := Bool(true)
-               }
+               // do nothing;
+            }
+            .elsewhen (correct && !both_agree(i))
+            {
+               // strengthen meta
+               meta_update_valids(i) := Bool(true)
+               meta_update_dir(i) := com_info.meta(i)
 
+               // strengthen only those that gave correct predictions.
+               when (!bim_mispredicted(i)) { bimo_update_valids(i) := Bool(true) }
+               when (!g0_mispredicted(i))  { gsh0_update_valids(i) := Bool(true) }
+               when (!g1_mispredicted(i))  { gsh1_update_valids(i) := Bool(true) }
+            }
+            .elsewhen (!correct && !both_agree(i))
+            {
+               // 1. update meta to choose differently
+               meta_update_valids(i) := Bool(true)
+               meta_update_dir(i) := !com_info.meta(i)
+               meta_mispredicted := Bool(true)
+
+               // 2. check new prediction...
+               //    - strengthen participating if correct
+               //    - update all if incorrect.
+
+               // Note: ideally, we'd know the new meta, but that requires reading the hystersis bit.
+               // So instead we'll just invert the meta prediction (aka, assume the meta was weak).
+               //bool new_meta = (meta[me_idx] >> 1) & 0x1;
+               //bool new_pred = new_meta ? last_bim : ((last_bim + last_g0 + last_g1) > 1);
+               val new_meta = !com_info.meta(i)
+               val new_pred = Mux(new_meta, com_vote, com_info.bimo(i))
+
+               when (new_pred === commit.bits.ctrl.taken(i))
+               {
+                  when (new_meta)
+                  {
+                     bimo_update_valids(i) := Bool(true)
+                     gsh0_update_valids(i) := Bool(true)
+                     gsh1_update_valids(i) := Bool(true)
+                  }
+                  .otherwise
+                  {
+                     bimo_update_valids(i) := Bool(true)
+                  }
+
+               }
+            }
+            .otherwise
+            {
+               // !correct && both agree
+
+               // update all of the things
+               bimo_update_valids(i) := Bool(true)
+               gsh0_update_valids(i) := Bool(true)
+               gsh1_update_valids(i) := Bool(true)
             }
          }
-         .otherwise
+         else
          {
-            // !correct && both agree
-
-            // update all of the things
-            bimo_update_valids(i) := Bool(true)
-            gsh0_update_valids(i) := Bool(true)
-            gsh1_update_valids(i) := Bool(true)
+            // no meta, just pure gskew
+            when (correct)
+            {
+               // strengthen only those that gave correct predictions.
+               when (!bim_mispredicted(i)) { bimo_update_valids(i) := Bool(true) }
+               when (!g0_mispredicted(i))  { gsh0_update_valids(i) := Bool(true) }
+               when (!g1_mispredicted(i))  { gsh1_update_valids(i) := Bool(true) }
+            }
+            .otherwise
+            {
+               // update all of the things
+               bimo_update_valids(i) := Bool(true)
+               gsh0_update_valids(i) := Bool(true)
+               gsh1_update_valids(i) := Bool(true)
+            }
          }
       }
    }
@@ -320,7 +396,11 @@ class GSkewBrPredictor(fetch_width: Int,
    bimo_table.io.update.valid          := bimo_update_valids.reduce(_|_)
    gsh0_table.io.update.valid          := gsh0_update_valids.reduce(_|_)
    gsh1_table.io.update.valid          := gsh1_update_valids.reduce(_|_)
-   meta_table.io.update.valid          := meta_update_valids.reduce(_|_)
+
+   if (use_meta)
+      meta_table.io.update.valid          := meta_update_valids.reduce(_|_)
+   else
+      meta_table.io.update.valid          := Bool(false)
 
    bimo_table.io.update.bits.was_mispredicted := bim_mispredicted.orR
    gsh0_table.io.update.bits.was_mispredicted := g0_mispredicted.orR
