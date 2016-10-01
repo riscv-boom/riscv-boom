@@ -109,7 +109,9 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    else if (ENABLE_BRANCH_PREDICTOR && p(GSkewKey).enabled)
    {
       br_predictor = Module(new GSkewBrPredictor(fetch_width = fetch_width,
-                                                  history_length = p(GSkewKey).history_length))
+                                                  history_length = p(GSkewKey).history_length,
+                                                  dualported = p(GSkewKey).dualported,
+                                                  enable_meta = p(GSkewKey).enable_meta))
    }
    else if (ENABLE_BRANCH_PREDICTOR && p(GShareKey).enabled)
    {

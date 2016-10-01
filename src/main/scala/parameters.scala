@@ -97,6 +97,8 @@ trait HasBoomCoreParameters extends rocket.HasCoreParameters
    {
       // TODO add support for SimpleGShare
       require(!ENABLE_BRANCH_PREDICTOR) // set branch predictor in configs.scala
+      BPD_INFO_SIZE = 1
+      GLOBAL_HISTORY_LENGTH = 1
    }
 
 

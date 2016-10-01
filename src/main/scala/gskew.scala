@@ -34,8 +34,9 @@ case class GSkewParameters(
    gsh0_num_entries: Int = 64*1024,
    gsh1_num_entries: Int = 64*1024,
    meta_num_entries: Int = 64*1024,
-   dualported: Boolean = true,
-   use_meta: Boolean = true
+   dualported: Boolean = false,
+   // Enable meta predictor to choose between bimodal and gskew majority vote.
+   enable_meta: Boolean = true
    )
 
 class GSkewResp(fetch_width: Int, bi_idx_sz: Int, g0_idx_sz: Int, g1_idx_sz: Int, me_idx_sz: Int) extends Bundle
@@ -72,7 +73,7 @@ object GSkewBrPredictor
 class GSkewBrPredictor(fetch_width: Int,
                         history_length: Int = 12,
                         dualported: Boolean = false,
-                        use_meta: Boolean = false
+                        enable_meta: Boolean = false
    )(implicit p: Parameters) extends BrPredictor(fetch_width, history_length)(p)
 {
    val bimo_num_entries = p(GSkewKey).bimo_num_entries
@@ -92,7 +93,7 @@ class GSkewBrPredictor(fetch_width: Int,
       "\t\t" + bimo_num_entries + " BIM  entries\n" +
       "\t\t" + gsh0_num_entries + " G0   entries\n" +
       "\t\t" + gsh1_num_entries + " G1   entries\n" +
-      (if (use_meta) ("\t\t" + meta_num_entries + " META entries") else ("\t\tNo meta.")))
+      (if (enable_meta) ("\t\t" + meta_num_entries + " META entries") else ("\t\tNo meta.")))
 
    //------------------------------------------------------------
    private val shamt = log2Up(fetch_width*coreInstBytes)
@@ -237,7 +238,7 @@ class GSkewBrPredictor(fetch_width: Int,
       val meta= meta_out(i)
 
       val vote = PopCount(bim :: g0 :: g1 :: Nil)
-      if (use_meta)
+      if (enable_meta)
          takens(i) := Mux(meta, vote > UInt(1), bim)
       else
          takens(i) := vote > UInt(1)
@@ -307,7 +308,7 @@ class GSkewBrPredictor(fetch_width: Int,
    {
       for (i <- 0 until fetch_width)
       {
-         if (use_meta)
+         if (enable_meta)
          {
             when (correct && both_agree(i))
             {
@@ -397,7 +398,7 @@ class GSkewBrPredictor(fetch_width: Int,
    gsh0_table.io.update.valid          := gsh0_update_valids.reduce(_|_)
    gsh1_table.io.update.valid          := gsh1_update_valids.reduce(_|_)
 
-   if (use_meta)
+   if (enable_meta)
       meta_table.io.update.valid          := meta_update_valids.reduce(_|_)
    else
       meta_table.io.update.valid          := Bool(false)
