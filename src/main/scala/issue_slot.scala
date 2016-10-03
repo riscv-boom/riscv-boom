@@ -32,11 +32,14 @@ class IssueSlotIO(num_wakeup_ports: Int)(implicit p: Parameters) extends BoomBun
    val updated_uop    = new MicroOp().asOutput // the updated slot uop; will be shifted upwards in a collasping queue.
    val uop            = new MicroOp().asOutput // the current Slot's uop. Sent down the pipeline when issued.
 
-   val debug = new Bundle {
-      val p1 = Bool()
-      val p2 = Bool()
-      val p3 = Bool()
-   }.asOutput
+   val debug = {
+     val result = new Bundle {
+       val p1 = Bool()
+       val p2 = Bool()
+       val p3 = Bool()
+    }
+    result.asOutput
+  }
 
    override def cloneType = new IssueSlotIO(num_wakeup_ports)(p).asInstanceOf[this.type]
 }
