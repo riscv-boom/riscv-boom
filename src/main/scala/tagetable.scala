@@ -26,10 +26,15 @@ class TageTableResp(fetch_width: Int, history_length: Int, index_length: Int, ta
    val index   = UInt(width = index_length) // the index of the prediction
    val tag     = UInt(width = tag_sz)       // the tag we computed for the prediction
 
-   // TODO instead of passing huge histories around, just pass around a CSR
-//   val tag_csr1 = UInt(width = history_length) // TODO BUG XXX a total NOP
-//   val tag_csr2 = UInt(width = history_length) // TODO BUG XXX a total NOP
-//   val idx_csr = UInt(width = history_length) // TODO BUG XXX a total NOP
+   // Instead of passing huge histories around, just pass around a CSR of the
+   // folded history (circular shift register).
+   // This are snapshotted and reset on a misprediction.
+   // Two CSRs are used for the tags to manage the scenario of repeating history
+   // with the frequency equal to the history_length (it would fold down to
+   // 0x0).
+   val idx_csr  = UInt(width = index_length)
+   val tag_csr1 = UInt(width = tag_sz)
+   val tag_csr2 = UInt(width = tag_sz-1)
 
    override def cloneType: this.type = new TageTableResp(fetch_width, history_length, index_length, tag_sz).asInstanceOf[this.type]
 }
@@ -126,10 +131,23 @@ class TageTableIo(
    val usefulness_resp = UInt(OUTPUT, 2) // TODO u-bit_sz
    def GetUsefulness(idx: UInt, idx_sz: Int) =
    {
-//      this.usefulness_req_idx := idx(this_index_sz-1,0) // TODO CODEREVIEW 
-      this.usefulness_req_idx := idx(idx_sz-1,0) // TODO CODEREVIEW 
+//      this.usefulness_req_idx := idx(this_index_sz-1,0) // TODO CODEREVIEW
+      this.usefulness_req_idx := idx(idx_sz-1,0) // TODO CODEREVIEW
       this.usefulness_resp
    }
+
+
+   // commit - update the commit copy of the CSRs (branch history registers)
+   // TODO rename to specify it's only used by the CSRs?
+   val commit_valid = Bool(INPUT)
+   val commit_taken = Bool(INPUT)
+   val commit_evict = Bool(INPUT)
+   val debug_ghistory_commit_copy= UInt(INPUT, history_length) // TODO REMOVE for debug
+
+   // branch resolution comes from the branch-unit, during the Execute stage.
+   val br_resolution = Valid(new BpdUpdate).flip
+   // reset CSRs to commit copies during pipeline flush
+   val flush = Bool(INPUT)
 
    def InitializeIo(dummy: Int=0) =
    {
@@ -170,7 +188,8 @@ class TageTable(
    max_tag_sz: Int,
    counter_sz: Int,
    ubit_sz: Int,
-   id: Int = 0
+   id: Int,
+   num_tables: Int
    )(implicit p: Parameters) extends BoomModule()(p)
 {
    val index_sz = log2Up(num_entries)
@@ -198,15 +217,29 @@ class TageTable(
    val debug_hist_table=Mem(num_entries,UInt(width = history_length))
 
    //history ghistory
-   //csr idx_csr
-   //csr tag_csr1
-   //csr tag_csr2
+   val idx_csr         = Module(new CircularShiftRegister(index_sz, history_length))
+   val tag_csr1        = Module(new CircularShiftRegister(tag_sz  , history_length))
+   val tag_csr2        = Module(new CircularShiftRegister(tag_sz-1, history_length))
+   val commit_idx_csr  = Module(new CircularShiftRegister(index_sz, history_length))
+   val commit_tag_csr1 = Module(new CircularShiftRegister(tag_sz  , history_length))
+   val commit_tag_csr2 = Module(new CircularShiftRegister(tag_sz-1, history_length))
+
+   idx_csr.io.InitializeIo()
+   tag_csr1.io.InitializeIo()
+   tag_csr2.io.InitializeIo()
+   commit_idx_csr.io.InitializeIo()
+   commit_tag_csr1.io.InitializeIo()
+   commit_tag_csr2.io.InitializeIo()
+
+
+   // TODO XXX assert that the folded history matches the value of our CSRs
 
    //------------------------------------------------------------
    // functions
 
    //updateHistory()
    //clearUBit() TODO XXX
+
 
 
    private def Fold (input: UInt, compressed_length: Int) =
@@ -312,12 +345,61 @@ class TageTable(
 
    // only update history (CSRs)
 
-   when (io.bp2_update_history.valid)
+   when (io.flush)
+   {
+      idx_csr.io.rollback (commit_idx_csr.io.value)
+      tag_csr1.io.rollback(commit_tag_csr1.io.value)
+      tag_csr2.io.rollback(commit_tag_csr2.io.value)
+   }
+   .elsewhen (io.br_resolution.valid && io.br_resolution.bits.mispredict)
+   {
+      val resp_info = new TageResp(
+            fetch_width = fetch_width,
+            num_tables = num_tables,
+            max_history_length = max_history_length,
+            max_index_sz = log2Up(max_num_entries),
+            max_tag_sz = max_tag_sz).fromBits(
+         io.br_resolution.bits.info)
+
+      idx_csr.io.rollback (resp_info.idx_csr)
+      tag_csr1.io.rollback(resp_info.tag_csr1)
+      tag_csr2.io.rollback(resp_info.tag_csr2)
+   }
+   .elsewhen (io.bp2_update_history.valid)
    {
       // TODO XXX once CSRs have been implemented, support updating them
       // shift all of the histories, CSRs over by one bit.
       // io.bp2_update_history.bits.taken
+      val bp2_taken = io.bp2_update_history.bits.taken
+      val bp2_evict = Bool(false) // TODO XXX BUG
+      idx_csr.io.shift (bp2_taken, bp2_evict)
+      tag_csr1.io.shift(bp2_taken, bp2_evict)
+      tag_csr2.io.shift(bp2_taken, bp2_evict)
    }
+
+   //------------------------------------------------------------
+   // Update Commit-CSRs (Commit)
+
+   val folded_com_hist = Fold(io.debug_ghistory_commit_copy(history_length-1,0), index_sz)
+   when (io.commit_valid)
+   {
+      commit_idx_csr.io.shift (io.commit_taken, io.commit_evict)
+      commit_tag_csr1.io.shift(io.commit_taken, io.commit_evict)
+      commit_tag_csr2.io.shift(io.commit_taken, io.commit_evict)
+   }
+
+      printf("%d: Folded: [0x%x,0x%x] <-IDX CSR (h_len:%d, idx_sz:%d)\n",
+         UInt(id), folded_com_hist, commit_idx_csr.io.value, UInt(history_length), UInt(index_sz))
+
+//   assert (idx_csr.io.value === Fold(io.if_req_history, index_sz), "[TageTable] idx_csr not matching Fold() value.")
+
+
+
+   //when (!(commit_idx_csr.io.value === folded_com_hist))
+   //{
+   //   printf("[TageTable] idx_csr not matching Fold() value.")
+   //}
+   assert (commit_idx_csr.io.value === folded_com_hist, "[TageTable] idx_csr not matching Fold() value.")
 
 
    //------------------------------------------------------------

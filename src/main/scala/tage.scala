@@ -22,6 +22,7 @@
 //       Register" elsewhere in BOOM).
 
 // TODO:
+//    - add CSRs.
 //    - add very-long histories (VLH)
 //    - make predictor sequential (first show it works, then make it sequential)
 //    - alt-pred tracking (choosing between +2 tables, sometimes using alt pred if u is low)
@@ -74,14 +75,20 @@ class TageResp(
 {
    val provider_hit = Bool() // did tage make a prediction?
    val provider_id = UInt(width = 5) // which table is providing the prediction?
-   val provider_predicted_takens = Bits(width = fetch_width)
+   val provider_predicted_takens = UInt(width = fetch_width)
    val alt_hit = Bool()  // an alternate table made a prediction too
    val alt_id = UInt(width = 5)  // which table is the alternative?
-   val alt_predicted_takens = Bits(width = fetch_width)
-   val tags = Vec(num_tables, Bits(width = max_tag_sz))
+   val alt_predicted_takens = UInt(width = fetch_width)
+   val tags = Vec(num_tables, UInt(width = max_tag_sz))
 
-   val history = Bits(width = max_history_length) // stored in snapshots (dealloc after Execute)
-   val indexes = Vec(num_tables, Bits(width = max_index_sz)) // needed to update predictor at Commit
+   val indexes = Vec(num_tables, UInt(width = max_index_sz)) // needed to update predictor at Commit
+
+   // TODO XXX remove HISTORY and replace with HISTORY_TAIL_PTR
+   val history = UInt(width = max_history_length) // stored in snapshots (dealloc after Execute)
+   val idx_csr = UInt(width = max_index_sz)
+   val tag_csr1 = UInt(width = max_tag_sz)
+   val tag_csr2 = UInt(width = max_tag_sz-1)
+
 
    val br_pc = UInt(width=64)
 
@@ -189,6 +196,7 @@ class TageBrPredictor(
       val table = Module(new TageTable(
          fetch_width        = fetch_width,
          id                 = i,
+         num_tables         = num_tables,
          num_entries        = table_sizes(i),
          history_length     = history_lengths(i),
          tag_sz             = tag_sizes(i),
@@ -206,7 +214,7 @@ class TageBrPredictor(
 
    val tables_io = Vec(tables.map(_.io))
 
-   tables_io.map{ table =>
+   tables_io.zipWithIndex.map{ case (table, i) =>
       table.InitializeIo()
 
       // Send prediction request.
@@ -215,8 +223,22 @@ class TageBrPredictor(
 
       // Update ghistory speculatively once a prediction is made.
       table.bp2_update_history <> io.hist_update_spec
-   }
 
+      // update CSRs
+      table.br_resolution <> io.br_resolution
+      table.flush := io.flush
+      table.commit_valid := commit.valid
+      table.commit_taken := commit.bits.ctrl.taken.reduce(_|_)
+      println ("\tpicking bit " + (history_lengths(i)-1) + " for evicting.")
+      table.commit_evict := r_ghistory_commit_copy(history_lengths(i)-1)
+      table.debug_ghistory_commit_copy := r_ghistory_commit_copy
+      
+      when (commit.valid)
+      {
+         printf("commit! com_hist 0x%x (taken=%d), (evict=%d)\n",
+            r_ghistory_commit_copy, commit.bits.ctrl.taken.reduce(_|_), table.commit_evict)
+      }
+   }
 
 
    // get prediction (priority to last table)
