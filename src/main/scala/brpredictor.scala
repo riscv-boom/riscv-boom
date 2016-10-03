@@ -96,6 +96,10 @@ class BpdUpdate(implicit p: Parameters) extends BoomBundle()(p)
    val taken = Bool()
    val is_br = Bool()
    val new_pc_same_packet = Bool()
+
+   // give the bpd back the information it sent out when it made a prediction.
+   // this information may include things like CSR snapshots.
+   val info = UInt(width = BPD_INFO_SIZE)
 }
 
 //--------------------------------------------------------------------------
@@ -132,7 +136,8 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int)(implicit p
 
    // we need to maintain a copy of the commit history, in-case we need to
    // reset it on a pipeline flush/replay.
-   private val r_ghistory_commit_copy = Reg(init = Bits(0, width = history_length))
+   // TODO make this private again
+   val r_ghistory_commit_copy = Reg(init = Bits(0, width = history_length))
 
 
    // Bypass some history modifications before it can be used by the predictor
@@ -222,6 +227,7 @@ class NullBrPredictor(
    history_length: Int = 12
    )(implicit p: Parameters) extends BrPredictor(fetch_width, history_length)(p)
 {
+   println ("\tBuilding (0 kB) Null Predictor (never predict).")
    io.resp.valid := Bool(false)
    io.resp.bits := new BpdResp().fromBits(Bits(0))
 }

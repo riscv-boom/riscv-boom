@@ -35,8 +35,6 @@
 //
 //
 // TODO:
-//    - Combine the DualPorted and Banked GShare implementations into a single,
-//       parameterized Module.
 //    - Support having a smaller h-table (map 1 h-bit entry to multiple p-bit entries).
 //    - Don't read the p-table SRAM if stalled (need extra state to store data
 //       while stalled)..

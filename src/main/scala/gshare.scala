@@ -9,10 +9,6 @@
 //
 // Christopher Celio
 // 2015 Apr 28
-//
-// TODO:
-//    - Don't read the p-table SRAM if stalled (need extra state to store data
-//       while stalled)..
 
 
 package boom
@@ -45,12 +41,15 @@ object GShareBrPredictor
    }
 }
 
-class GShareBrPredictor(fetch_width: Int,
-                        history_length: Int = 12,
-                        dualported: Boolean = false
-   )(implicit p: Parameters) extends BrPredictor(fetch_width, history_length)(p)
+class GShareBrPredictor(
+   fetch_width: Int,
+   history_length: Int = 12,
+   dualported: Boolean = false
+   )(implicit p: Parameters)
+   extends BrPredictor(fetch_width, history_length)(p)
 {
    val num_entries = 1 << history_length
+
    println ("\tBuilding (" + (num_entries * fetch_width * 2/8/1024) +
       " kB) GShare Predictor, with " + history_length + " bits of history for (" +
       fetch_width + "-wide fetch) and " + num_entries + " entries.")
@@ -62,12 +61,10 @@ class GShareBrPredictor(fetch_width: Int,
    private def Hash (addr: UInt, hist: UInt) =
       (addr >> UInt(log2Up(fetch_width*coreInstBytes))) ^ hist
 
-
    //------------------------------------------------------------
    // Predictor state.
 
    val counters = Module(new TwobcCounterTable(fetch_width, num_entries, dualported))
-
 
    //------------------------------------------------------------
    // Get prediction.
@@ -89,18 +86,16 @@ class GShareBrPredictor(fetch_width: Int,
    // Always overrule the BTB, which will almost certainly have less history.
    io.resp.valid := Bool(true)
 
-
    //------------------------------------------------------------
    // Update counter table.
 
    val commit_info = new GShareResp(log2Up(num_entries)).fromBits(this.commit.bits.info.info)
 
-   counters.io.update.valid                 := commit.valid
+   counters.io.update.valid                 := this.commit.valid
    counters.io.update.bits.index            := commit_info.index
-   counters.io.update.bits.executed         := commit.bits.ctrl.executed
-   counters.io.update.bits.was_mispredicted := commit.bits.ctrl.mispredicted.reduce(_|_)
-   counters.io.update.bits.takens           := commit.bits.ctrl.taken
-
+   counters.io.update.bits.executed         := this.commit.bits.ctrl.executed
+   counters.io.update.bits.was_mispredicted := this.commit.bits.ctrl.mispredicted.reduce(_|_)
+   counters.io.update.bits.takens           := this.commit.bits.ctrl.taken
 
    //------------------------------------------------------------
 }

@@ -472,6 +472,7 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
       io.br_unit.bpd_update.bits.br_pc            := uop_pc_
       io.br_unit.bpd_update.bits.history          := io.get_pred.info.bpd_resp.history
       io.br_unit.bpd_update.bits.shadow_info      := io.get_pred.info.bpd_resp.shadow_info
+      io.br_unit.bpd_update.bits.info             := io.get_pred.info.bpd_resp.info
 
 
       // is the br_pc the last instruction in the fetch bundle?
