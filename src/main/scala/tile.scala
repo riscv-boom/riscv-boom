@@ -33,7 +33,8 @@ class BOOMTile(clockSignal: Clock = null, resetSignal: Bool = null)
    val uncachedArbPorts = collection.mutable.ArrayBuffer(icache.io.mem)
    val uncachedPorts = collection.mutable.ArrayBuffer[uncore.tilelink.ClientUncachedTileLinkIO]()
    val cachedPorts = collection.mutable.ArrayBuffer(dcache.mem)
-   core.io.prci <> io.prci
+   core.io.interrupts := io.interrupts
+   core.io.hartid := io.hartid
    dc_shim.io.core <> core.io.dmem
    icache.io.cpu <> core.io.imem
 

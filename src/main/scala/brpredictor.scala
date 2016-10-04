@@ -20,7 +20,7 @@ package boom
 import Chisel._
 import cde.{Parameters, Field}
 
-import rocket.Str
+import util.Str
 
 
 // This is the response packet from the branch predictor. The predictor is
@@ -260,7 +260,7 @@ class RandomBrPredictor(
    def rand(width: Int) = {
         lfsr = lfsr(lfsr.getWidth-1,1)
         val mod = (1 << width) - 1
-          rocket.Random(mod, lfsr)
+          util.Random(mod, lfsr)
    }
 
    io.resp.valid := rand_val

@@ -12,7 +12,7 @@ package boom
 import Chisel._
 import cde.Parameters
 
-import rocket.Str
+import util.Str
 
 class FetchBundle(implicit p: Parameters) extends BoomBundle()(p)
 {

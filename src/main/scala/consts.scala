@@ -17,7 +17,7 @@ package constants
 import Chisel._
 import cde.Parameters
 
-import rocket.Str
+import util.Str
 
 trait BOOMDebugConstants
 {

@@ -30,13 +30,13 @@ import Chisel._
 import cde.Parameters
 
 import rocket.Instructions._
-import rocket.Str
+import util.Str
 
 
 abstract class BoomModule(implicit val p: Parameters) extends Module
   with HasBoomCoreParameters
 
-class BoomBundle(implicit val p: Parameters) extends junctions.ParameterizedBundle()(p)
+class BoomBundle(implicit val p: Parameters) extends util.ParameterizedBundle()(p)
   with HasBoomCoreParameters
 
 
@@ -55,13 +55,14 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
 {
    val io = new BoomBundle()(p)
    {
-      val prci     = new uncore.devices.PRCITileIO().flip
-      val imem     = new rocket.FrontendIO
-      val dmem     = new DCMemPortIO
-      val ptw_dat  = new rocket.DatapathPTWIO().flip
-      val ptw_tlb  = new rocket.TLBPTWIO()
-      val rocc     = new rocket.RoCCInterface().flip
-      val counters = new CacheCounters().asInput
+      val interrupts = new rocket.TileInterrupts().asInput
+      val hartid     = UInt(INPUT, xLen)
+      val imem       = new rocket.FrontendIO
+      val dmem       = new DCMemPortIO
+      val ptw_dat    = new rocket.DatapathPTWIO().flip
+      val ptw_tlb    = new rocket.TLBPTWIO()
+      val rocc       = new rocket.RoCCInterface().flip
+      val counters   = new CacheCounters().asInput
    }
 
    //**********************************
@@ -600,7 +601,8 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
 
    exe_units.map(_.io.fcsr_rm := csr.io.fcsr_rm)
 
-   csr.io.prci <> io.prci
+   csr.io.hartid := io.hartid
+   csr.io.interrupts := io.interrupts
 
 // TODO can we add this back in, but handle reset properly and save us the mux above on csr.io.rw.cmd?
 //   assert (!(csr_rw_cmd =/= rocket.CSR.N && !exe_units(0).io.resp(0).valid), "CSRFile is being written to spuriously.")
@@ -853,7 +855,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    }
 
    // detect pipeline freezes and throw error
-   val idle_cycles = rocket.WideCounter(32)
+   val idle_cycles = util.WideCounter(32)
    when (com_valids.toBits.orR || reset.toBool) { idle_cycles := UInt(0) }
    watchdog_trigger := Reg(next=idle_cycles.value(30))
    assert (!(idle_cycles.value(13)), "Pipeline has hung.")

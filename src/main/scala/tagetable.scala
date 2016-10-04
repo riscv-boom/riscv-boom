@@ -17,7 +17,7 @@ package boom
 import Chisel._
 import cde.Parameters
 
-import rocket.Str
+import util.Str
 
 
 class TageTableResp(fetch_width: Int, history_length: Int, index_length: Int, tag_sz: Int) extends Bundle

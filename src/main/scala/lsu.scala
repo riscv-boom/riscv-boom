@@ -49,7 +49,7 @@ package boom
 import Chisel._
 import cde.Parameters
 
-import rocket.Str
+import util.Str
 import uncore.constants.MemoryOpConstants._
 
 class LoadStoreUnitIO(pl_width: Int)(implicit p: Parameters) extends BoomBundle()(p)

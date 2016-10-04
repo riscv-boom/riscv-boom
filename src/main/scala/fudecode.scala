@@ -15,7 +15,7 @@ import Chisel._
 import cde.Parameters
 
 import rocket.ALU._
-import rocket.Util.uintToBitPat
+import util.uintToBitPat
 
 class RRdCtrlSigs(implicit p: Parameters) extends BoomBundle()(p)
 {

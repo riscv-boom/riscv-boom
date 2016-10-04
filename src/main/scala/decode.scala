@@ -11,7 +11,7 @@ import cde.Parameters
 
 import rocket.Instructions._
 import rocket.{CSR,Causes}
-import rocket.Util.uintToBitPat
+import util.uintToBitPat
 import FUConstants._
 import uncore.constants.MemoryOpConstants._
 

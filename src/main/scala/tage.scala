@@ -53,7 +53,7 @@ package boom
 import Chisel._
 import cde.{Parameters, Field}
 
-import rocket.Str
+import util.Str
 
 case object TageKey extends Field[TageParameters]
 

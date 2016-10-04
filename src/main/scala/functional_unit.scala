@@ -22,7 +22,7 @@ import Chisel._
 import cde.Parameters
 
 import rocket.ALU._
-import rocket.Util._
+import util._
 import uncore.constants.MemoryOpConstants._
 
 
@@ -510,7 +510,7 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
       // TODO BUG only trip xcpt if taken to bj_addr
       io.br_unit.xcpt.valid     := bj_addr(1) && io.req.valid && mispredict && !killed
       io.br_unit.xcpt.bits.uop  := uop
-      io.br_unit.xcpt.bits.cause:= rocket.Causes.misaligned_fetch
+      io.br_unit.xcpt.bits.cause:= UInt(rocket.Causes.misaligned_fetch)
       // TODO is there a better way to get this information to the CSR file? maybe use brinfo.target?
       io.br_unit.xcpt.bits.badvaddr:= bj_addr
    }
@@ -594,8 +594,8 @@ class MemAddrCalcUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(nu
    val ma_st = io.req.valid && (io.req.bits.uop.uopc === uopSTA || io.req.bits.uop.uopc === uopAMO_AG) && misaligned
 
    io.resp.bits.mxcpt.valid := ma_ld || ma_st
-   io.resp.bits.mxcpt.bits  := Mux(ma_ld, rocket.Causes.misaligned_load,
-                                          rocket.Causes.misaligned_store)
+   io.resp.bits.mxcpt.bits  := Mux(ma_ld, UInt(rocket.Causes.misaligned_load),
+                                          UInt(rocket.Causes.misaligned_store))
    assert (!(ma_ld && ma_st), "Mutually-exclusive exceptions are firing.")
 }
 

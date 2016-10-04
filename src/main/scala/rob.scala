@@ -30,7 +30,7 @@ package boom
 import Chisel._
 import scala.math.ceil
 import cde.Parameters
-import rocket.Str
+import util.Str
 
 class Exception(implicit p: Parameters) extends BoomBundle()(p)
 {
