@@ -907,27 +907,28 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
 
    // LSU Speculation stats.
    csr.io.events(18) := lsu_io.counters.ld_valid
-   csr.io.events(19) := lsu_io.counters.ld_order_fail
+   csr.io.events(19) := lsu_io.counters.stld_order_fail
+   csr.io.events(20) := lsu_io.counters.ldld_order_fail
 
    // Branch prediction stats.
-   csr.io.events(20)  := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+   csr.io.events(21)  := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
       com_valids(w) && com_uops(w).is_br_or_jmp && !com_uops(w).is_jal && com_uops(w).stat_brjmp_mispredicted})
-   csr.io.events(21) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
-      com_valids(w) && com_uops(w).is_br_or_jmp && !com_uops(w).is_jal && com_uops(w).stat_btb_made_pred})
    csr.io.events(22) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
-      com_valids(w) && com_uops(w).is_br_or_jmp && !com_uops(w).is_jal && com_uops(w).stat_btb_mispredicted})
+      com_valids(w) && com_uops(w).is_br_or_jmp && !com_uops(w).is_jal && com_uops(w).stat_btb_made_pred})
    csr.io.events(23) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
-      com_valids(w) && com_uops(w).is_br_or_jmp && !com_uops(w).is_jal && com_uops(w).stat_bpd_made_pred})
+      com_valids(w) && com_uops(w).is_br_or_jmp && !com_uops(w).is_jal && com_uops(w).stat_btb_mispredicted})
    csr.io.events(24) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+      com_valids(w) && com_uops(w).is_br_or_jmp && !com_uops(w).is_jal && com_uops(w).stat_bpd_made_pred})
+   csr.io.events(25) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
       com_valids(w) && com_uops(w).is_br_or_jmp && !com_uops(w).is_jal && com_uops(w).stat_bpd_mispredicted})
 
    // Branch prediction - no prediction made.
-   csr.io.events(25) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+   csr.io.events(26) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
       com_valids(w) && com_uops(w).is_br_or_jmp && !com_uops(w).is_jal &&
       !com_uops(w).stat_btb_made_pred && !com_uops(w).stat_bpd_made_pred})
 
    // Branch prediction - no predition made & a mispredict occurred.
-   csr.io.events(26) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+   csr.io.events(27) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
       com_valids(w) && com_uops(w).is_br_or_jmp && !com_uops(w).is_jal &&
       !com_uops(w).stat_btb_made_pred && !com_uops(w).stat_bpd_made_pred &&
       com_uops(w).stat_brjmp_mispredicted})

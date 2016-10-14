@@ -120,11 +120,12 @@ class LoadStoreUnitIO(pl_width: Int)(implicit p: Parameters) extends BoomBundle(
 
    val counters = new Bundle
    {
-      val ld_valid      = Bool(OUTPUT) // a load address micro-op has entered the LSU
-      val ld_forwarded  = Bool(OUTPUT)
-      val ld_sleep      = Bool(OUTPUT)
-      val ld_killed     = Bool(OUTPUT)
-      val ld_order_fail = Bool(OUTPUT)
+      val ld_valid        = Bool(OUTPUT) // a load address micro-op has entered the LSU
+      val ld_forwarded    = Bool(OUTPUT)
+      val ld_sleep        = Bool(OUTPUT)
+      val ld_killed       = Bool(OUTPUT)
+      val stld_order_fail = Bool(OUTPUT)
+      val ldld_order_fail = Bool(OUTPUT)
    }
 
    val debug_tsc = UInt(INPUT, xLen)     // time stamp counter
@@ -182,7 +183,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
 
 
    val laq_head = Reg(UInt())
-   val laq_tail = Reg(UInt())
+   val laq_tail = Reg(UInt()) // point to next available (or if full, the laq_head entry).
    val stq_head = Reg(UInt()) // point to next store to clear from STQ (i.e., send to memory)
    val stq_tail = Reg(UInt()) // point to next available, open entry
    val stq_commit_head = Reg(UInt()) // point to next store to commit
@@ -231,6 +232,8 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
          laq_failure  (ld_enq_idx)    := Bool(false)
          laq_forwarded_std_val(ld_enq_idx)  := Bool(false)
          debug_laq_put_to_sleep(ld_enq_idx) := Bool(false)
+
+         assert (ld_enq_idx === io.dec_uops(w).ldq_idx, "[lsu] mismatch enq load tag.")
       }
       ld_enq_idx = Mux(io.dec_ld_vals(w), WrapInc(ld_enq_idx, num_ld_entries),
                                           ld_enq_idx)
@@ -273,31 +276,22 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
    // SAQ     -> TLB -> ROB
    // And uopSTAs and uopSTDs fight over the ROB unbusy port.
 
-   val will_fire_load_incoming = Wire(Bool()) // uses TLB, D$, SAQ-search
-   val will_fire_sta_incoming  = Wire(Bool()) // uses TLB,     LAQ-search, ROB
-   val will_fire_std_incoming  = Wire(Bool()) // uses                      ROB
-   val will_fire_sta_retry     = Wire(Bool()) // uses TLB,                 ROB
-   val will_fire_load_retry    = Wire(Bool()) // uses TLB, D$, SAQ-search
-   val will_fire_store_commit  = Wire(Bool()) // uses      D$
-   val will_fire_load_wakeup   = Wire(Bool()) // uses      D$, SAQ-search
+   val will_fire_load_incoming = Wire(init = Bool(false)) // uses TLB, D$, SAQ-search, LAQ-search
+   val will_fire_sta_incoming  = Wire(init = Bool(false)) // uses TLB,                 LAQ-search, ROB
+   val will_fire_std_incoming  = Wire(init = Bool(false)) // uses                                  ROB
+   val will_fire_sta_retry     = Wire(init = Bool(false)) // uses TLB,                             ROB
+   val will_fire_load_retry    = Wire(init = Bool(false)) // uses TLB, D$, SAQ-search, LAQ-search
+   val will_fire_store_commit  = Wire(init = Bool(false)) // uses      D$
+   val will_fire_load_wakeup   = Wire(init = Bool(false)) // uses      D$, SAQ-search
 
-   val can_fire_sta_retry      = Wire(Bool())
-   val can_fire_load_retry     = Wire(Bool())
-   val can_fire_store_commit   = Wire(Bool())
-   val can_fire_load_wakeup    = Wire(Bool())
+   val can_fire_sta_retry      = Wire(init = Bool(false))
+   val can_fire_load_retry     = Wire(init = Bool(false))
+   val can_fire_store_commit   = Wire(init = Bool(false))
+   val can_fire_load_wakeup    = Wire(init = Bool(false))
 
-   // defaults
-   will_fire_load_incoming := Bool(false)
-   will_fire_sta_incoming  := Bool(false)
-   will_fire_std_incoming  := Bool(false)
-   will_fire_sta_retry     := Bool(false)
-   will_fire_load_retry    := Bool(false)
-   will_fire_store_commit  := Bool(false)
-   will_fire_load_wakeup   := Bool(false)
-
-   val dc_avail = Wire(Bool()); dc_avail := Bool(true)
-   val tlb_avail= Wire(Bool()); tlb_avail:= Bool(true)
-   val rob_avail= Wire(Bool()); rob_avail:= Bool(true)
+   val dc_avail = Wire(init = Bool(true))
+   val tlb_avail= Wire(init = Bool(true))
+   val rob_avail= Wire(init = Bool(true))
 
    // give first priority to incoming uops
    when (io.exe_resp.valid)
@@ -404,7 +398,6 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
    // Can-fire Logic & Wakeup/Retry Select
 
    // *** Wakeup Load from LAQ ***
-   can_fire_load_wakeup := Bool(false)
 
    // TODO make option to only wakeup load at the head (to compare to old behavior)
    val exe_ld_idx_wakeup =
@@ -424,7 +417,6 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
 
    // *** Retry Load TLB-lookup from LAQ ***
 
-   can_fire_load_retry := Bool(false)
    laq_retry_idx := exe_ld_idx_wakeup
 
    when (laq_allocated (laq_retry_idx) &&
@@ -440,8 +432,6 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
 
    // *** STORES ***
 
-   can_fire_store_commit := Bool(false)
-
    when (stq_entry_val(stq_execute_head) &&
          (stq_committed(stq_execute_head) ||
             (stq_uop(stq_execute_head).is_amo &&
@@ -455,7 +445,6 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
       can_fire_store_commit := Bool(true)
    }
 
-   can_fire_sta_retry := Bool(false)
    stq_retry_idx := stq_commit_head
 
    when (stq_entry_val (stq_retry_idx) &&
@@ -629,7 +618,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
    val dword_addr_matches = Wire(Vec(num_st_entries, Bool()))
    // if there is some overlap on the bytes, you may need to put to sleep the load
    // (either data not ready, or not a perfect match between addr and type)
-   val addr_conflicts     = Wire(Vec(num_st_entries, Bool()))
+   val ldst_addr_conflicts   = Wire(Vec(num_st_entries, Bool()))
    // a full address match
    val forwarding_matches  = Wire(Vec(num_st_entries, Bool()))
 
@@ -657,20 +646,20 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
       }
 
       // check the lower-order bits for overlap/conflicts and matches
-      addr_conflicts(i) := Bool(false)
+      ldst_addr_conflicts(i) := Bool(false)
       val write_mask = GenByteMask(s_addr, stq_uop(i).mem_typ)
 
       // if overlap on bytes and dword matches, the address conflicts!
       when (((read_mask & write_mask) =/= UInt(0)) && dword_addr_matches(i))
       {
-         addr_conflicts(i) := Bool(true)
+         ldst_addr_conflicts(i) := Bool(true)
       }
       // fences/flushes are treated as stores that touch all addresses
       .elsewhen (stq_entry_val(i) &&
                   st_dep_mask(i) &&
                   stq_uop(i).is_fence)
       {
-         addr_conflicts(i) := Bool(true)
+         ldst_addr_conflicts(i) := Bool(true)
       }
 
       // exact match on masks? we can forward the data, if data is also present!
@@ -722,7 +711,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
 
    // kill load request to mem if address matches (we will either sleep load, or forward data) or TLB miss
    io.memreq_kill     := (mem_ld_used_tlb && (mem_tlb_miss || Reg(next=pf_ld || ma_ld))) ||
-                         (mem_fired_ld && addr_conflicts.toBits =/= UInt(0)) ||
+                         (mem_fired_ld && ldst_addr_conflicts.toBits =/= UInt(0)) ||
                          mem_ld_killed ||
                          (mem_fired_st && io.nack.valid && !io.nack.isload)
    wb_forward_std_idx := forwarding_age_logic.io.forwarding_idx
@@ -780,64 +769,68 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
 
    //-------------------------------------------------------------
    //-------------------------------------------------------------
-   // Search LAQ for misspeculated loads (when a store is executed)
+   // Search LAQ for misspeculated load orderings
    //-------------------------------------------------------------
    //-------------------------------------------------------------
 
-   // When to check for memory ordering failure?
-   // 1) Could check at Commit: any loads here are by definition younger
-   //    (except not really true once going superscalar). Other problem is the
-   //    search bandwidth must match the commit bandwidth, which is way over
-   //    provisioned and very expensive..
-   // 2) Check at Execute: need to ignore loads with which we don't match their
-   //    dependence matrix, but only need to search for as many stores as we let
-   //    perform address generation. Other big factor is we can figure out loads
-   //    failed before commit time, solving the issue of trying to commit a bundle
-   //    of stores and loads (where the loads could be marked failures by the
-   //    stores).
-
-   // TODO check Chisel performance on pushing invariants inside of for loops
-
-   // At Store Execute (address generation)...
-   //    Check the incoming store address against younger loads that have
+   // At Store (or Load) Execute (address generation)...
+   //    Check the incoming store/load address against younger loads that have
    //    executed, looking for memory ordering failures. This check occurs the
    //    cycle after address generation and TLB lookup.
-   val st_addr     = mem_tlb_paddr
-   val st_mask     = GenByteMask(st_addr, mem_tlb_uop.mem_typ)
-   val st_is_fence = mem_tlb_uop.is_fence
+
+   // load queue CAM search
+   val lcam_addr     = mem_tlb_paddr
+   val lcam_mask     = GenByteMask(lcam_addr, mem_tlb_uop.mem_typ)
+   val lcam_is_fence = mem_tlb_uop.is_fence
+   val lcam_ldq_idx  = mem_tlb_uop.ldq_idx
    val stq_idx     = mem_tlb_uop.stq_idx
    val failed_loads = Wire(Vec(num_ld_entries, Bool()))
+   val stld_order_fail = Wire(init = Bool(false))
+   val ldld_order_fail = Wire(init = Bool(false))
+
+   val do_stld_search = Reg(next = (will_fire_sta_incoming ||
+                                    will_fire_sta_retry),
+                            init = Bool(false))
+   val do_ldld_search = Reg(next = (will_fire_load_incoming ||
+                                   will_fire_load_retry),
+                            init = Bool(false)) && Bool(MCM_ORDER_DEPENDENT_LOADS)
+   assert (!(do_stld_search && do_ldld_search), "[lsu]: contention on LAQ CAM search.")
 
    for (i <- 0 until num_ld_entries)
    {
-      val l_addr = laq_addr(i)
-      val l_mask = GenByteMask(l_addr, laq_uop(i).mem_typ)
+      val l_addr      = laq_addr(i)
+      val l_mask      = GenByteMask(l_addr, laq_uop(i).mem_typ)
+      val l_allocated = laq_allocated(i)
+      val l_addr_val  = laq_addr_val(i)
+      val l_is_virtual= laq_is_virtual(i)
+      val l_executed  = laq_executed(i)
       failed_loads(i) := Bool(false)
 
-      when (Reg(next=(will_fire_sta_incoming || will_fire_sta_retry),init=Bool(false)))
+      when (do_stld_search)
       {
          // does the load depend on this store?
          // TODO CODE REVIEW what's the best way to perform this bit extract?
          when ((laq_st_dep_mask(i) & (UInt(1) << stq_idx)) =/= UInt(0))
          {
-            when (st_is_fence &&
-                  laq_allocated(i) &&
-                  laq_addr_val(i) &&
-                  !laq_is_virtual(i) &&
-                  laq_executed(i))
+            when (lcam_is_fence &&
+                  l_allocated &&
+                  l_addr_val &&
+                  !l_is_virtual &&
+                  l_executed)
             {
                // fences, flushes are like stores that hit all addresses
                laq_executed(i)   := Bool(false)
                laq_failure(i)    := Bool(true)
                laq_succeeded(i)  := Bool(false)
                failed_loads(i)   := Bool(true)
+               stld_order_fail   := Bool(true)
             }
             // NOTE: this address check doesn't necessarily have to be across all address bits
-            .elsewhen ((st_addr(corePAddrBits-1,3) === l_addr(corePAddrBits-1,3)) &&
-                  laq_allocated(i) &&
-                  laq_addr_val(i) &&
-                  !laq_is_virtual(i) &&
-                  laq_executed(i)
+            .elsewhen ((lcam_addr(corePAddrBits-1,3) === l_addr(corePAddrBits-1,3)) &&
+                  l_allocated &&
+                  l_addr_val &&
+                  !l_is_virtual &&
+                  l_executed
                   )
             {
                val yid = laq_uop(i).stq_idx
@@ -847,7 +840,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
                // and if not, then fail OR
                // if it was forwarded but not us, was the forwarded store older than me
                // head < forwarded < youngest?
-               when (((st_mask & l_mask) =/= UInt(0)) &&
+               when (((lcam_mask & l_mask) =/= UInt(0)) &&
                     (!laq_forwarded_std_val(i) ||
                       ((fid =/= stq_idx) && (Cat(stq_idx < yid, stq_idx) > Cat(fid < yid, fid)))))
                {
@@ -855,7 +848,33 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
                   laq_failure(i)    := Bool(true)
                   laq_succeeded(i)  := Bool(false)
                   failed_loads(i)   := Bool(true)
+                  stld_order_fail   := Bool(true)
                }
+            }
+         }
+      }
+      .elsewhen (do_ldld_search)
+      {
+         def IsSearcherOlder(i0: UInt, i1: UInt, tail: UInt) = (Cat(i0 < tail, i0) < Cat(i1 < tail, i1))
+         val searcher_is_older = IsSearcherOlder(lcam_ldq_idx, laq_uop(i).ldq_idx, laq_tail)
+
+         // Does the load entry depend on the searching load?
+         // Aka, is the searching load older than the load entry?
+         // If yes, search for ordering failures.
+         when (searcher_is_older)
+         {
+            when ((lcam_addr(corePAddrBits-1,3) === l_addr(corePAddrBits-1,3)) &&
+               l_allocated &&
+               l_addr_val &&
+               !l_is_virtual &&
+               l_executed &&
+               ((lcam_mask & l_mask) =/= UInt(0)))
+            {
+               laq_executed(i)  := Bool(false)
+               laq_failure(i)   := Bool(true)
+               laq_succeeded(i) := Bool(false)
+               failed_loads(i)  := Bool(true)
+               ldld_order_fail  := Bool(true)
             }
          }
       }
@@ -863,8 +882,9 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
 
    // detect which loads get marked as failures, but broadcast to the ROB the oldest failing load
    // TODO encapsulate this in an age-based  priority-encoder
-//   val l_idx = AgePriorityEncoder((Vec(Vec.tabulate(num_ld_entries)(i => failed_loads(i) && UInt(i) >= laq_head) ++ failed_loads)).toBits)
-   val temp_bits = (Vec(Vec.tabulate(num_ld_entries)(i => 
+//   val l_idx = AgePriorityEncoder((Vec(Vec.tabulate(num_ld_entries)(i => failed_loads(i) && UInt(i) >= laq_head)
+//   ++ failed_loads)).toBits)
+   val temp_bits = (Vec(Vec.tabulate(num_ld_entries)(i =>
       failed_loads(i) && UInt(i) >= laq_head) ++ failed_loads)).toBits
    val l_idx = PriorityEncoder(temp_bits)
 
@@ -875,7 +895,9 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
    // - 1) the incoming store-address finds a faulting load (it is by definition younger)
    // - 2) the incoming load or store address is excepting. It must be older and thus takes precedent.
    io.xcpt.valid := failed_loads.reduce(_|_) || mem_xcpt_valid
-   io.xcpt.bits.uop := Mux(mem_xcpt_valid, mem_tlb_uop, laq_uop(Mux(l_idx >= UInt(num_ld_entries), l_idx - UInt(num_ld_entries), l_idx)))
+   io.xcpt.bits.uop := Mux(mem_xcpt_valid,
+                        mem_tlb_uop,
+                        laq_uop(Mux(l_idx >= UInt(num_ld_entries), l_idx - UInt(num_ld_entries), l_idx)))
    io.xcpt.bits.cause := Mux(mem_xcpt_valid, mem_xcpt_cause, MINI_EXCEPTION_MEM_ORDERING)
 
 
@@ -1151,11 +1173,12 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
    //-------------------------------------------------------------
    // Debug & Counter outputs
 
-   io.counters.ld_valid      := io.exe_resp.valid && io.exe_resp.bits.uop.is_load
-   io.counters.ld_forwarded  := io.forward_val
-   io.counters.ld_sleep      := ld_was_put_to_sleep
-   io.counters.ld_killed     := ld_was_killed
-   io.counters.ld_order_fail := failed_loads.reduce(_|_)
+   io.counters.ld_valid        := io.exe_resp.valid && io.exe_resp.bits.uop.is_load
+   io.counters.ld_forwarded    := io.forward_val
+   io.counters.ld_sleep        := ld_was_put_to_sleep
+   io.counters.ld_killed       := ld_was_killed
+   io.counters.stld_order_fail := stld_order_fail
+   io.counters.ldld_order_fail := ldld_order_fail
 
    if (DEBUG_PRINTF_LSU)
    {
