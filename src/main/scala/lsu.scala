@@ -274,7 +274,8 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
    // AddrGen -> TLB -> LAQ/D$ (for loads) or SAQ/ROB (for stores)
    // LAQ     -> optionally TLB -> D$
    // SAQ     -> TLB -> ROB
-   // And uopSTAs and uopSTDs fight over the ROB unbusy port.
+   // uopSTAs and uopSTDs fight over the ROB unbusy port.
+   // And loads and store-addresses must search the LAQ (lcam) for ordering failures (or to prevent ordering failures).
 
    val will_fire_load_incoming = Wire(init = Bool(false)) // uses TLB, D$, SAQ-search, LAQ-search
    val will_fire_sta_incoming  = Wire(init = Bool(false)) // uses TLB,                 LAQ-search, ROB
@@ -282,16 +283,17 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
    val will_fire_sta_retry     = Wire(init = Bool(false)) // uses TLB,                             ROB
    val will_fire_load_retry    = Wire(init = Bool(false)) // uses TLB, D$, SAQ-search, LAQ-search
    val will_fire_store_commit  = Wire(init = Bool(false)) // uses      D$
-   val will_fire_load_wakeup   = Wire(init = Bool(false)) // uses      D$, SAQ-search
+   val will_fire_load_wakeup   = Wire(init = Bool(false)) // uses      D$, SAQ-search, LAQ-search
 
    val can_fire_sta_retry      = Wire(init = Bool(false))
    val can_fire_load_retry     = Wire(init = Bool(false))
    val can_fire_store_commit   = Wire(init = Bool(false))
    val can_fire_load_wakeup    = Wire(init = Bool(false))
 
-   val dc_avail = Wire(init = Bool(true))
-   val tlb_avail= Wire(init = Bool(true))
-   val rob_avail= Wire(init = Bool(true))
+   val dc_avail  = Wire(init = Bool(true))
+   val tlb_avail = Wire(init = Bool(true))
+   val rob_avail = Wire(init = Bool(true))
+   val lcam_avail= Wire(init = Bool(true))
 
    // give first priority to incoming uops
    when (io.exe_resp.valid)
@@ -299,14 +301,16 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
       when (io.exe_resp.bits.uop.ctrl.is_load)
       {
          will_fire_load_incoming := Bool(true)
-         dc_avail  := Bool(false)
-         tlb_avail := Bool(false)
+         dc_avail   := Bool(false)
+         tlb_avail  := Bool(false)
+         lcam_avail := Bool(false)
       }
       when (io.exe_resp.bits.uop.ctrl.is_sta)
       {
          will_fire_sta_incoming := Bool(true)
-         tlb_avail := Bool(false)
-         rob_avail := Bool(false)
+         tlb_avail  := Bool(false)
+         rob_avail  := Bool(false)
+         lcam_avail := Bool(false)
       }
       when (io.exe_resp.bits.uop.ctrl.is_std)
       {
@@ -320,11 +324,13 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
       when (can_fire_sta_retry && rob_avail)
       {
          will_fire_sta_retry := Bool(true)
+         lcam_avail := Bool(false)
       }
       .elsewhen (can_fire_load_retry)
       {
          will_fire_load_retry := Bool(true)
          dc_avail := Bool(false)
+         lcam_avail := Bool(false)
       }
    }
 
@@ -332,7 +338,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
    {
       // TODO allow dyanmic priority here
       will_fire_store_commit := can_fire_store_commit
-      will_fire_load_wakeup  := !can_fire_store_commit && can_fire_load_wakeup
+      will_fire_load_wakeup  := !can_fire_store_commit && can_fire_load_wakeup && lcam_avail
    }
 
    //--------------------------------------------
@@ -529,7 +535,8 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
    {
       saq_val       (exe_tlb_uop.stq_idx)      := !pf_st // prevent AMOs from executing!
       saq_addr      (exe_tlb_uop.stq_idx)      := Mux(tlb_miss, exe_vaddr, exe_tlb_paddr)
-      stq_uop       (exe_tlb_uop.stq_idx).pdst := exe_tlb_uop.pdst // needed for amo's TODO this is expensive, can we get around this?
+      stq_uop       (exe_tlb_uop.stq_idx).pdst := exe_tlb_uop.pdst // needed for amo's TODO this is expensive,
+                                                                   // can we get around this?
       saq_is_virtual(exe_tlb_uop.stq_idx)      := tlb_miss
    }
 
@@ -546,7 +553,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
    //-------------------------------------------------------------
    //-------------------------------------------------------------
 
-   // search SAQ/LAQ for matches
+   // search SAQ for matches
 
    val mem_tlb_paddr    = Reg(next=exe_tlb_paddr)
    val mem_tlb_uop      = Reg(next=exe_tlb_uop) // not valid for std_incoming!
@@ -708,10 +715,13 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
    val wb_uop             = Reg(next=mem_ld_uop)
    wb_uop.br_mask        := GetNewBrMask(io.brinfo, mem_ld_uop)
 
+   val ldld_addr_conflict= Wire(init = Bool(false))
 
-   // kill load request to mem if address matches (we will either sleep load, or forward data) or TLB miss
+   // Kill load request to mem if address matches (we will either sleep load, or forward data) or TLB miss.
+   // Also kill load request if load address matches an older, unexecuted load.
    io.memreq_kill     := (mem_ld_used_tlb && (mem_tlb_miss || Reg(next=pf_ld || ma_ld))) ||
                          (mem_fired_ld && ldst_addr_conflicts.toBits =/= UInt(0)) ||
+                         (mem_fired_ld && ldld_addr_conflict) ||
                          mem_ld_killed ||
                          (mem_fired_st && io.nack.valid && !io.nack.isload)
    wb_forward_std_idx := forwarding_age_logic.io.forwarding_idx
@@ -779,7 +789,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
    //    cycle after address generation and TLB lookup.
 
    // load queue CAM search
-   val lcam_addr     = mem_tlb_paddr
+   val lcam_addr     = Mux(RegNext(will_fire_load_wakeup), mem_ld_addr, mem_tlb_paddr)
    val lcam_mask     = GenByteMask(lcam_addr, mem_tlb_uop.mem_typ)
    val lcam_is_fence = mem_tlb_uop.is_fence
    val lcam_ldq_idx  = mem_tlb_uop.ldq_idx
@@ -792,7 +802,8 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
                                     will_fire_sta_retry),
                             init = Bool(false))
    val do_ldld_search = Reg(next = (will_fire_load_incoming ||
-                                   will_fire_load_retry),
+                                   will_fire_load_retry ||
+                                   will_fire_load_wakeup),
                             init = Bool(false)) && Bool(MCM_ORDER_DEPENDENT_LOADS)
    assert (!(do_stld_search && do_ldld_search), "[lsu]: contention on LAQ CAM search.")
 
@@ -875,6 +886,21 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
                laq_succeeded(i) := Bool(false)
                failed_loads(i)  := Bool(true)
                ldld_order_fail  := Bool(true)
+            }
+         }
+         .elsewhen (lcam_ldq_idx =/= UInt(i))
+         {
+            // Searcher is newer and not itself, should the searching load be
+            // put to sleep because of a potential ordering failure?
+            when ((lcam_addr(corePAddrBits-1,3) === l_addr(corePAddrBits-1,3)) &&
+               l_allocated &&
+               l_addr_val &&
+               !l_is_virtual &&
+               !l_executed &&
+               ((lcam_mask & l_mask) =/= UInt(0)))
+            {
+               // Put younger load to sleep -- otherwise an order failure will occur.
+               ldld_addr_conflict := Bool(true)
             }
          }
       }
@@ -966,7 +992,9 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
          stq_committed(temp_stq_commit_head) := Bool(true)
       }
 
-      temp_stq_commit_head = Mux(io.commit_store_mask(w), WrapInc(temp_stq_commit_head, num_st_entries), temp_stq_commit_head)
+      temp_stq_commit_head = Mux(io.commit_store_mask(w),
+                                 WrapInc(temp_stq_commit_head, num_st_entries),
+                                 temp_stq_commit_head)
    }
 
    stq_commit_head := temp_stq_commit_head
