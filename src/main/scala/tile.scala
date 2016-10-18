@@ -37,6 +37,7 @@ class BOOMTile(clockSignal: Clock = null, resetSignal: Bool = null)
    core.io.hartid := io.hartid
    dc_shim.io.core <> core.io.dmem
    icache.io.cpu <> core.io.imem
+   icache.io.resetVector := io.resetVector
 
 
    val uncachedArb = Module(new uncore.tilelink.ClientUncachedTileLinkIOArbiter(uncachedArbPorts.size))
