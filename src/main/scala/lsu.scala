@@ -789,12 +789,13 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
    //    cycle after address generation and TLB lookup.
 
    // load queue CAM search
-   val lcam_addr     = Mux(RegNext(will_fire_load_wakeup), mem_ld_addr, mem_tlb_paddr)
-   val lcam_mask     = GenByteMask(lcam_addr, mem_tlb_uop.mem_typ)
-   val lcam_is_fence = mem_tlb_uop.is_fence
-   val lcam_ldq_idx  = mem_tlb_uop.ldq_idx
-   val stq_idx     = mem_tlb_uop.stq_idx
-   val failed_loads = Wire(Vec(num_ld_entries, Bool()))
+   val lcam_addr       = Mux(RegNext(will_fire_load_wakeup), mem_ld_addr, mem_tlb_paddr)
+   val lcam_uop        = Mux(RegNext(will_fire_load_wakeup), RegNext(laq_uop(exe_ld_idx_wakeup)), mem_tlb_uop)
+   val lcam_mask       = GenByteMask(lcam_addr, lcam_uop.mem_typ)
+   val lcam_is_fence   = lcam_uop.is_fence
+   val lcam_ldq_idx    = lcam_uop.ldq_idx
+   val stq_idx         = lcam_uop.stq_idx
+   val failed_loads    = Wire(Vec(num_ld_entries, Bool()))
    val stld_order_fail = Wire(init = Bool(false))
    val ldld_order_fail = Wire(init = Bool(false))
 
