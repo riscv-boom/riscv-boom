@@ -934,6 +934,10 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
       com_uops(w).stat_brjmp_mispredicted})
 
 
+   // Count user-level branches (subtract from total to get privilege branch accuracy)
+   csr.io.events(28) := br_unit.brinfo.valid && (csr.io.status.prv === UInt(rocket.PRV.U))
+   csr.io.events(29) := br_unit.brinfo.mispredict && (csr.io.status.prv === UInt(rocket.PRV.U))
+
    assert (!(Range(0,COMMIT_WIDTH).map{w =>
       com_valids(w) && com_uops(w).is_br_or_jmp && com_uops(w).is_jal &&
       com_uops(w).stat_brjmp_mispredicted}.reduce(_|_)),
