@@ -134,62 +134,29 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int)(implicit p
    val commit = Wire(Valid(new BrobEntry(fetch_width)))
 
    // the (speculative) global history register. Needs to be massaged before usably by the bpd.
-   private val r_ghistory = Reg(init = Bits(0, width = history_length))
-
-   // we need to maintain a copy of the commit history, in-case we need to
-   // reset it on a pipeline flush/replay.
-   // TODO make this private again
-   val r_ghistory_commit_copy = Reg(init = Bits(0, width = history_length))
-
+   private val r_ghistory = new HistoryRegister(history_length)
+   // TODO temporary, provides evict bits to TAGE
+   val r_ghistory_commit_copy = r_ghistory.commit_copy
 
    // provide hook for future chicken bits
    val disable_bpd = Bool(ENABLE_BPD_UMODE_ONLY) && io.status_prv =/= UInt(rocket.PRV.U)
 
-
-   // Bypass some history modifications before it can be used by the predictor
-   // hash functions. For example, "massage" the history for the scenario where
-   // the mispredicted branch is not taken AND we're having to refetch the rest
-   // of the fetch_packet.
-   private val fixed_history = Cat(io.br_resolution.bits.history, io.br_resolution.bits.taken)
    ghistory :=
-      Mux(io.flush,
-         r_ghistory_commit_copy,
-      Mux(io.br_resolution.valid &&
-            io.br_resolution.bits.bpd_mispredict &&
-            io.br_resolution.bits.new_pc_same_packet,
-         io.br_resolution.bits.history,
-      Mux(io.br_resolution.valid &&
-            io.br_resolution.bits.bpd_mispredict,
-         fixed_history,
-         r_ghistory)))
+      r_ghistory.value(
+         io.hist_update_spec.valid,
+         io.hist_update_spec.bits,
+         io.br_resolution.valid,
+         io.br_resolution.bits,
+         io.flush)
 
-   when (disable_bpd)
-   {
-      r_ghistory := r_ghistory
-   }
-   .elsewhen (io.flush)
-   {
-      r_ghistory := r_ghistory_commit_copy
-   }
-   .elsewhen (io.br_resolution.valid && io.br_resolution.bits.mispredict)
-   {
-      // if we need to reset the ghistory on a misspeculation, we need to account for
-      // any branches that came before the misspeculated branch that were in the "shadow"
-      // and thus would not be captured by the ghistory snapshot.
-      val shadow = io.br_resolution.bits.shadow_info
-      require (shadow.valids.getWidth == 2)
+   r_ghistory.update(
+      io.hist_update_spec.valid,
+      io.hist_update_spec.bits,
+      io.br_resolution.valid,
+      io.br_resolution.bits,
+      io.flush,
+      disable_bpd)
 
-      // shift over by PopCount(valids), and OR in the taken signals (where valids(*) is true).
-      r_ghistory :=
-         Mux(shadow.valids === UInt(1), fixed_history << UInt(1) | shadow.takens(0),
-         Mux(shadow.valids === UInt(2), fixed_history << UInt(1) | shadow.takens(1),
-         Mux(shadow.valids === UInt(3), fixed_history << UInt(2) | shadow.takens,
-                                        fixed_history)))
-   }
-   .elsewhen (io.hist_update_spec.valid)
-   {
-      r_ghistory := Cat(r_ghistory, io.hist_update_spec.bits.taken)
-   }
 
    // -----------------------------------------------
    // Track shadow updates.
@@ -211,19 +178,100 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int)(implicit p
 
    when (commit.valid && !disable_bpd)
    {
-      r_ghistory_commit_copy := Cat(r_ghistory_commit_copy, commit.bits.ctrl.taken.reduce(_|_))
-   }
-
-   if (DEBUG_PRINTF)
-   {
-      printf(" predictor: ghist: 0x%x, r_ghist: 0x%x commit: 0x%x\n"
-         , ghistory
-         , r_ghistory
-         , r_ghistory_commit_copy
-         )
+      r_ghistory.commit(commit.bits.ctrl.taken.reduce(_|_))
    }
 }
 
+
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
+
+class HistoryRegister(length: Int)
+{
+   // the (speculative) global history wire (used for accessing the branch predictor state).
+//   private val hist = Wire(Bits(width = length))
+   // the (speculative) global history register. Needs to be massaged before usably by the bpd.
+   private val r_history = Reg(init = Bits(0, width = length))
+   // we need to maintain a copy of the commit history, in-case we need to
+   // reset it on a pipeline flush/replay.
+   // TODO make this private again
+   private val r_commit_history = Reg(init = Bits(0, width = length))
+
+   def commit_copy(): UInt = r_commit_history
+
+   def value(
+      hist_update_spec_valid: Bool,
+      hist_update_spec_bits: GHistUpdate,
+      br_resolution_valid: Bool,
+      br_resolution_bits: BpdUpdate,
+      flush: Bool
+      ): UInt =
+   {
+      // Bypass some history modifications before it can be used by the predictor
+      // hash functions. For example, "massage" the history for the scenario where
+      // the mispredicted branch is not taken AND we're having to refetch the rest
+      // of the fetch_packet.
+      val fixed_history = Cat(br_resolution_bits.history, br_resolution_bits.taken)
+      val ret_value =
+         Mux(flush,
+            r_commit_history,
+         Mux(br_resolution_valid &&
+               br_resolution_bits.bpd_mispredict &&
+               br_resolution_bits.new_pc_same_packet,
+            br_resolution_bits.history,
+         Mux(br_resolution_valid &&
+               br_resolution_bits.bpd_mispredict,
+            fixed_history,
+            r_history)))
+
+      ret_value
+   }
+
+   def update(
+      hist_update_spec_valid: Bool,
+      hist_update_spec_bits: GHistUpdate,
+      br_resolution_valid: Bool,
+      br_resolution_bits: BpdUpdate,
+      flush: Bool,
+      disable: Bool
+      ): Unit =
+   {
+      val fixed_history = Cat(br_resolution_bits.history, br_resolution_bits.taken)
+      when (disable)
+      {
+         r_history := r_history
+      }
+      .elsewhen (flush)
+      {
+         r_history := r_commit_history
+      }
+      .elsewhen (br_resolution_valid && br_resolution_bits.mispredict)
+      {
+         // if we need to reset the ghistory on a misspeculation, we need to account for
+         // any branches that came before the misspeculated branch that were in the "shadow"
+         // and thus would not be captured by the ghistory snapshot.
+         val shadow = br_resolution_bits.shadow_info
+         require (shadow.valids.getWidth == 2)
+
+         // shift over by PopCount(valids), and OR in the taken signals (where valids(*) is true).
+         r_history :=
+            Mux(shadow.valids === UInt(1), fixed_history << UInt(1) | shadow.takens(0),
+            Mux(shadow.valids === UInt(2), fixed_history << UInt(1) | shadow.takens(1),
+            Mux(shadow.valids === UInt(3), fixed_history << UInt(2) | shadow.takens,
+                                           fixed_history)))
+      }
+      .elsewhen (hist_update_spec_valid)
+      {
+         r_history := Cat(r_history, hist_update_spec_bits.taken)
+      }
+   }
+
+   def commit(taken: Bool): Unit =
+   {
+      r_commit_history := Cat(r_commit_history, taken)
+   }
+
+}
 
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
