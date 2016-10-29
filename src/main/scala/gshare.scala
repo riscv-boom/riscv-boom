@@ -84,14 +84,14 @@ class GShareBrPredictor(
    io.resp.bits.info    := resp_info.toBits
 
    // Always overrule the BTB, which will almost certainly have less history.
-   io.resp.valid := Bool(true)
+   io.resp.valid := Bool(true) && !this.disable_bpd
 
    //------------------------------------------------------------
    // Update counter table.
 
    val commit_info = new GShareResp(log2Up(num_entries)).fromBits(this.commit.bits.info.info)
 
-   counters.io.update.valid                 := this.commit.valid
+   counters.io.update.valid                 := this.commit.valid && !this.disable_bpd
    counters.io.update.bits.index            := commit_info.index
    counters.io.update.bits.executed         := this.commit.bits.ctrl.executed
    counters.io.update.bits.was_mispredicted := this.commit.bits.ctrl.mispredicted.reduce(_|_)

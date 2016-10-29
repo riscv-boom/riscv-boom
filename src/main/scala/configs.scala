@@ -65,6 +65,10 @@ class DefaultBOOMConfig extends Config (
             history_length = 14)
          case RandomBpdKey => RandomBpdParameters(
             enabled = false)
+         // Only predict (and update) when in user-mode.
+         case EnableBpdUModeOnly => false
+         // Add a user+privileged global history register, separate from a user-only history regiser.
+         case EnableBpdUSModeHistory => false
 
          // Pipelining
          case EnableFetchBufferFlowThrough => true

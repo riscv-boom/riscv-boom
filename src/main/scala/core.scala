@@ -251,6 +251,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    io.imem.ras_update <> bpd_stage.io.ras_update
    bpd_stage.io.br_unit := br_unit
    bpd_stage.io.kill := rob.io.flush_take_pc
+   bpd_stage.io.status_prv := csr.io.status.prv
    bpd_stage.io.req.ready := !fetch_unit.io.stalled
 
    fetch_unit.io.bp2_pred_resp <> bpd_stage.io.pred_resp

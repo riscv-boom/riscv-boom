@@ -22,6 +22,8 @@ case object EnableFetchBufferFlowThrough extends Field[Boolean]
 case object EnableBTB extends Field[Boolean]
 case object EnableBTBContainsBranches extends Field[Boolean]
 case object EnableBranchPredictor extends Field[Boolean]
+case object EnableBpdUModeOnly extends Field[Boolean]
+case object EnableBpdUSModeHistory extends Field[Boolean]
 case object EnableAgePriorityIssue extends Field[Boolean]
 case object EnablePrefetching extends Field[Boolean]
 case object EnableCommitMapTable extends Field[Boolean]
@@ -65,6 +67,8 @@ trait HasBoomCoreParameters extends rocket.HasCoreParameters
    //************************************
    // Branch Prediction
    val ENABLE_BRANCH_PREDICTOR = p(EnableBranchPredictor)
+   val ENABLE_BPD_UMODE_ONLY = p(EnableBpdUModeOnly)
+   val ENABLE_BPD_USHISTORY = p(EnableBpdUSModeHistory)
    var GLOBAL_HISTORY_LENGTH = 0
    var BPD_INFO_SIZE = 0
 

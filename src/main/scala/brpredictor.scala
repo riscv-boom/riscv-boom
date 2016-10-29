@@ -123,6 +123,8 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int)(implicit p
       val brob = new BrobBackendIo(fetch_width)
       // pipeline flush - reset history as appropriate
       val flush = Bool(INPUT)
+      // privilege-level (allow predictor to change behavior in different privilege modes).
+      val status_prv = UInt(INPUT, width = rocket.PRV.SZ)
    }
 
    // the (speculative) global history wire (used for accessing the branch predictor state).
@@ -138,6 +140,10 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int)(implicit p
    // reset it on a pipeline flush/replay.
    // TODO make this private again
    val r_ghistory_commit_copy = Reg(init = Bits(0, width = history_length))
+
+
+   // provide hook for future chicken bits
+   val disable_bpd = Bool(ENABLE_BPD_UMODE_ONLY) && io.status_prv =/= UInt(rocket.PRV.U)
 
 
    // Bypass some history modifications before it can be used by the predictor
@@ -157,7 +163,11 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int)(implicit p
          fixed_history,
          r_ghistory)))
 
-   when (io.flush)
+   when (disable_bpd)
+   {
+      r_ghistory := r_ghistory
+   }
+   .elsewhen (io.flush)
    {
       r_ghistory := r_ghistory_commit_copy
    }
@@ -199,7 +209,7 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int)(implicit p
 //   assert ((~commit.bits.executed.toBits & commit.bits.mispredicted.toBits) === Bits(0),
 //      "[BrPredictor] the BROB is marking a misprediction for something that didn't execute.")
 
-   when (commit.valid)
+   when (commit.valid && !disable_bpd)
    {
       r_ghistory_commit_copy := Cat(r_ghistory_commit_copy, commit.bits.ctrl.taken.reduce(_|_))
    }

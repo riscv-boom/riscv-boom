@@ -86,6 +86,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
 
       val brob       = new BrobBackendIo(fetch_width)
       val kill       = Bool(INPUT) // e.g., pipeline flush
+      val status_prv = UInt(INPUT, width = rocket.PRV.SZ)
    }
 
    //-------------------------------------------------------------
@@ -144,7 +145,9 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
 
    io.brob <> br_predictor.io.brob
    br_predictor.io.flush := io.kill
+   br_predictor.io.status_prv := io.status_prv
 
+//   val bpd_valid = br_predictor.io.resp.valid && (io.status_prv === UInt(rocket.PRV.U) || !Bool(ENABLE_BPD_UMODE_ONLY))
    val bpd_valid = br_predictor.io.resp.valid
    val bpd_bits = br_predictor.io.resp.bits
 
