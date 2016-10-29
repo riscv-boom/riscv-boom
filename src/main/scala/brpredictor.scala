@@ -29,6 +29,7 @@ class BpdResp(implicit p: Parameters) extends BoomBundle()(p)
 {
    val takens = UInt(width = FETCH_WIDTH)
    val history = UInt(width = GLOBAL_HISTORY_LENGTH)
+   val history_u = UInt(width = GLOBAL_HISTORY_LENGTH)
    val shadow_info = new ShadowHistInfo().asOutput
 
    // The info field stores the response information from the branch predictor.
@@ -90,6 +91,7 @@ class BpdUpdate(implicit p: Parameters) extends BoomBundle()(p)
    val brob_idx   = UInt(width = BROB_ADDR_SZ)
    val mispredict = Bool()
    val history = Bits(width = GLOBAL_HISTORY_LENGTH)
+   val history_u = Bits(width = GLOBAL_HISTORY_LENGTH)
    val shadow_info = new ShadowHistInfo()
    val bpd_predict_val = Bool()
    val bpd_mispredict = Bool()
@@ -133,21 +135,49 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int)(implicit p
    // the commit update bundle (we update predictors).
    val commit = Wire(Valid(new BrobEntry(fetch_width)))
 
-   // the (speculative) global history register. Needs to be massaged before usably by the bpd.
+   // The (speculative) global history register. Needs to be massaged before usably by the bpd.
+   // Tracks history through all privilege levels.
    private val r_ghistory = new HistoryRegister(history_length)
+   // Tracks history only when in user-mode.
+   private val r_ghistory_u = new HistoryRegister(history_length)
    // TODO temporary, provides evict bits to TAGE
    val r_ghistory_commit_copy = r_ghistory.commit_copy
 
-   // provide hook for future chicken bits
-   val disable_bpd = Bool(ENABLE_BPD_UMODE_ONLY) && io.status_prv =/= UInt(rocket.PRV.U)
+   val in_usermode = io.status_prv === UInt(rocket.PRV.U)
+   val disable_bpd = in_usermode && Bool(ENABLE_BPD_UMODE_ONLY)
 
-   ghistory :=
-      r_ghistory.value(
-         io.hist_update_spec.valid,
-         io.hist_update_spec.bits,
-         io.br_resolution.valid,
-         io.br_resolution.bits,
-         io.flush)
+   val ghistory_all =
+         r_ghistory.value(
+            io.hist_update_spec.valid,
+            io.hist_update_spec.bits,
+            io.br_resolution.valid,
+            io.br_resolution.bits,
+            io.flush,
+            umode_only = false)
+
+   val ghistory_uonly =
+         r_ghistory_u.value(
+            io.hist_update_spec.valid,
+            io.hist_update_spec.bits,
+            io.br_resolution.valid,
+            io.br_resolution.bits,
+            io.flush,
+            umode_only = true)
+
+
+   if (ENABLE_BPD_USHISTORY && !ENABLE_BPD_UMODE_ONLY)
+   {
+      ghistory := Mux(in_usermode, ghistory_uonly, ghistory_all)
+   }
+   else if (ENABLE_BPD_UMODE_ONLY)
+   {
+      ghistory := ghistory_uonly
+   }
+   else
+   {
+      ghistory := ghistory_all
+   }
+
 
    r_ghistory.update(
       io.hist_update_spec.valid,
@@ -155,8 +185,21 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int)(implicit p
       io.br_resolution.valid,
       io.br_resolution.bits,
       io.flush,
-      disable_bpd)
+      disable = Bool(false),
+      umode_only = false)
 
+   r_ghistory_u.update(
+      io.hist_update_spec.valid,
+      io.hist_update_spec.bits,
+      io.br_resolution.valid,
+      io.br_resolution.bits,
+      io.flush,
+      disable = !in_usermode,
+      umode_only = true)
+
+
+   io.resp.bits.history := RegNext(RegNext(ghistory))
+   io.resp.bits.history_u := RegNext(RegNext(ghistory))
 
    // -----------------------------------------------
    // Track shadow updates.
@@ -176,9 +219,13 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int)(implicit p
 //   assert ((~commit.bits.executed.toBits & commit.bits.mispredicted.toBits) === Bits(0),
 //      "[BrPredictor] the BROB is marking a misprediction for something that didn't execute.")
 
-   when (commit.valid && !disable_bpd)
+   when (commit.valid)
    {
       r_ghistory.commit(commit.bits.ctrl.taken.reduce(_|_))
+   }
+   when (commit.valid && in_usermode)
+   {
+      r_ghistory_u.commit(commit.bits.ctrl.taken.reduce(_|_))
    }
 }
 
@@ -188,13 +235,10 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int)(implicit p
 
 class HistoryRegister(length: Int)
 {
-   // the (speculative) global history wire (used for accessing the branch predictor state).
-//   private val hist = Wire(Bits(width = length))
    // the (speculative) global history register. Needs to be massaged before usably by the bpd.
    private val r_history = Reg(init = Bits(0, width = length))
    // we need to maintain a copy of the commit history, in-case we need to
    // reset it on a pipeline flush/replay.
-   // TODO make this private again
    private val r_commit_history = Reg(init = Bits(0, width = length))
 
    def commit_copy(): UInt = r_commit_history
@@ -204,21 +248,23 @@ class HistoryRegister(length: Int)
       hist_update_spec_bits: GHistUpdate,
       br_resolution_valid: Bool,
       br_resolution_bits: BpdUpdate,
-      flush: Bool
+      flush: Bool,
+      umode_only: Boolean
       ): UInt =
    {
       // Bypass some history modifications before it can be used by the predictor
       // hash functions. For example, "massage" the history for the scenario where
       // the mispredicted branch is not taken AND we're having to refetch the rest
       // of the fetch_packet.
-      val fixed_history = Cat(br_resolution_bits.history, br_resolution_bits.taken)
+      val res_history = if (umode_only) br_resolution_bits.history_u else br_resolution_bits.history
+      val fixed_history = Cat(res_history, br_resolution_bits.taken)
       val ret_value =
          Mux(flush,
             r_commit_history,
          Mux(br_resolution_valid &&
                br_resolution_bits.bpd_mispredict &&
                br_resolution_bits.new_pc_same_packet,
-            br_resolution_bits.history,
+            res_history,
          Mux(br_resolution_valid &&
                br_resolution_bits.bpd_mispredict,
             fixed_history,
@@ -233,10 +279,12 @@ class HistoryRegister(length: Int)
       br_resolution_valid: Bool,
       br_resolution_bits: BpdUpdate,
       flush: Bool,
-      disable: Bool
+      disable: Bool,
+      umode_only: Boolean
       ): Unit =
    {
-      val fixed_history = Cat(br_resolution_bits.history, br_resolution_bits.taken)
+      val res_history = if (umode_only) br_resolution_bits.history_u else br_resolution_bits.history
+      val fixed_history = Cat(res_history, br_resolution_bits.taken)
       when (disable)
       {
          r_history := r_history

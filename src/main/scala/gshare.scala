@@ -79,7 +79,6 @@ class GShareBrPredictor(
 
    val resp_info = Wire(new GShareResp(log2Up(num_entries)))
    resp_info.index      := RegNext(RegNext(idx))
-   io.resp.bits.history := RegNext(RegNext(this.ghistory))
    io.resp.bits.takens  := counters.io.s2_r_out
    io.resp.bits.info    := resp_info.toBits
 

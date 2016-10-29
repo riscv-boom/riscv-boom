@@ -250,7 +250,6 @@ class GSkewBrPredictor(fetch_width: Int,
 
    io.resp.bits.takens := takens.asUInt
 
-   io.resp.bits.history := RegNext(RegNext(this.ghistory))
    resp_info.bimo_index := RegNext(RegNext(bimo_idx))
    resp_info.gsh0_index := RegNext(RegNext(gsh0_idx))
    resp_info.gsh1_index := RegNext(RegNext(gsh1_idx))
