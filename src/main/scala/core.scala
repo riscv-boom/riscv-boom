@@ -938,6 +938,9 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    csr.io.events(28) := br_unit.brinfo.valid && (csr.io.status.prv === UInt(rocket.PRV.U))
    csr.io.events(29) := br_unit.brinfo.mispredict && (csr.io.status.prv === UInt(rocket.PRV.U))
 
+   // count change of privilege modes
+   csr.io.events(30) := csr.io.status.prv =/= RegNext(csr.io.status.prv)
+
    assert (!(Range(0,COMMIT_WIDTH).map{w =>
       com_valids(w) && com_uops(w).is_br_or_jmp && com_uops(w).is_jal &&
       com_uops(w).stat_brjmp_mispredicted}.reduce(_|_)),
@@ -955,7 +958,6 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
 
       var whitespace = (63 + 1 - 3 - 12  - NUM_LSU_ENTRIES- p(NumIssueSlotEntries) - (NUM_ROB_ENTRIES/COMMIT_WIDTH)
          - NUM_BROB_ENTRIES
-//         - io.dmem.debug.ld_req_slot.size
       )
 
       printf("--- Cyc=%d , ----------------- Ret: %d ----------------------------------\n  "

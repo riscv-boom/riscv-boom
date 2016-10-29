@@ -22,7 +22,7 @@ class DefaultBOOMConfig extends Config (
          case UseCompressed => false
 
          // Uarch Performance Counters
-         case NPerfEvents => 30
+         case NPerfEvents => 31
          case NPerfCounters => Knob("PERF_COUNTERS")
 
          // Superscalar Widths
