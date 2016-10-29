@@ -155,7 +155,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    io.imem.btb_update.bits.target     := Mux(br_unit.btb_update_valid, br_unit.btb_update.target,
                                                                        (io.bp2_pred_target.toSInt &
                                                                         SInt(-coreInstBytes)).toUInt)
-   io.imem.btb_update.bits.prediction := Mux(br_unit.btb_update_valid, br_unit.btb_update.prediction, 
+   io.imem.btb_update.bits.prediction := Mux(br_unit.btb_update_valid, br_unit.btb_update.prediction,
                                                                        io.imem.resp.bits.btb)
    io.imem.btb_update.bits.taken      := Mux(br_unit.btb_update_valid, br_unit.btb_update.taken,
                                                                        io.bp2_take_pc && io.bp2_is_taken && !if_stalled)

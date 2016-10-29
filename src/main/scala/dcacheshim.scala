@@ -174,7 +174,7 @@ class DCMemPortIO(implicit p: Parameters) extends BoomBundle()(p)
 ////         val uop = new MicroOp()
 ////      })
 //   }.asInput
-   
+
 //   override def cloneType: this.type = new DCMemPortIO()(p).asInstanceOf[this.type]
 }
 

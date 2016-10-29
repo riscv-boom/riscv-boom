@@ -232,7 +232,7 @@ class TageBrPredictor(
       println ("\tpicking bit " + (history_lengths(i)-1) + " for evicting.")
       table.commit_evict := r_ghistory_commit_copy(history_lengths(i)-1)
       table.debug_ghistory_commit_copy := r_ghistory_commit_copy
-      
+
       when (commit.valid)
       {
          printf("commit! com_hist 0x%x (taken=%d), (evict=%d)\n",

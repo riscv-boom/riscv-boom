@@ -142,7 +142,7 @@ class RobIo(machine_width: Int
 
    // pass out debug information to high-level printf
    val debug = new DebugRobIO().asOutput
-   
+
    val debug_tsc = UInt(INPUT, xLen)
 }
 
@@ -154,7 +154,7 @@ class DebugRobIO(implicit p: Parameters) extends BoomBundle()(p)
    val xcpt_uop = new MicroOp()
    val xcpt_badvaddr = UInt(width = xLen)
 }
-    
+
 
 // width = the dispatch and commit width of the processor
 // num_wakeup_ports = self-explanatory

@@ -64,10 +64,10 @@ class BrTableUpdate(fetch_width: Int, index_sz: Int) extends Bundle
    override def cloneType: this.type = new BrTableUpdate(fetch_width, index_sz).asInstanceOf[this.type]
 }
 
- 
+
 // Read p-table every cycle for a prediction.
 // Write p-table only if a misprediction occurs.
-// The p-table requires 1read/1write port. 
+// The p-table requires 1read/1write port.
 class PTableDualPorted(
    fetch_width: Int,
    num_entries: Int
@@ -82,7 +82,7 @@ class PTableDualPorted(
    }
 
    val p_table = SeqMem(num_entries, Vec(fetch_width, Bool()))
- 
+
    io.update.ready := Bool(true)
 
    when (io.update.valid)
@@ -95,7 +95,7 @@ class PTableDualPorted(
 
    io.s2_r_out := RegNext(p_table.read(io.s0_r_idx).toBits)
 }
- 
+
 // Read p-table every cycle for a prediction.
 // Write p-table only if a misprediction occurs.
 // The p-table requires 1read/1write port.
@@ -115,10 +115,10 @@ class PTableBanked(
 
    val p_table_0 = SeqMem(num_entries/2, Vec(fetch_width, Bool()))
    val p_table_1 = SeqMem(num_entries/2, Vec(fetch_width, Bool()))
-             
+
    private def getBank (idx: UInt): UInt = idx(0)
    private def getRowIdx (idx: UInt): UInt = idx >> UInt(1)
-    
+
    val ridx = io.s0_r_idx
    val widx = io.update.bits.index
    val rbank = getBank(ridx)
@@ -131,7 +131,7 @@ class PTableBanked(
    val rout_1  = RegNext(p_table_1.read(getRowIdx(ridx), ren_1).toBits)
    val wdata   = Vec(io.update.bits.new_value.toBools)
    val wmask = io.update.bits.executed.toBools
-   
+
    when (!ren_0 && wbank === UInt(0) && io.update.valid)
    {
       p_table_0.write(getRowIdx(widx), wdata, wmask)
@@ -163,9 +163,9 @@ class HTable(
 
    val h_table = SeqMem(num_entries, Vec(fetch_width, Bool()))
    val hwq = Module(new Queue(new UpdateEntry(fetch_width, index_sz), entries=4))
-   
+
    hwq.io.enq <> io.update
-    
+
    val h_ren = io.update.valid && io.update.bits.was_mispredicted
    hwq.io.deq.ready := !h_ren
    when (!h_ren && hwq.io.deq.valid)
@@ -200,9 +200,9 @@ class TwobcCounterTable(
       val update   = Valid(new UpdateEntry(fetch_width, index_sz)).flip
    }
 
-   println ("\t\tBuilding (" + 
+   println ("\t\tBuilding (" +
       (num_entries * fetch_width * 2/8/1024) + " kB) 2-bit counter table for (" +
-      fetch_width + "-wide fetch) and " + 
+      fetch_width + "-wide fetch) and " +
       num_entries + " entries " +
       (if (dualported) "[1read/1write]." else "[1rw]."))
 

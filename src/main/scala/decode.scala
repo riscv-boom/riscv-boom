@@ -343,7 +343,7 @@ class DecodeUnitIo(implicit p: Parameters) extends BoomBundle()(p)
    val status = new rocket.MStatus().asInput
    val interrupt = Bool(INPUT)
    val interrupt_cause = UInt(INPUT, xLen)
-   
+
    override def cloneType: this.type = new DecodeUnitIo()(p).asInstanceOf[this.type]
 }
 

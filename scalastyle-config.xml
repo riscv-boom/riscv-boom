@@ -16,7 +16,7 @@
  </check>
  <check enabled="false" level="warning" class="org.scalastyle.scalariform.SpaceAfterCommentStartChecker"/>
  <check enabled="false" level="warning" class="org.scalastyle.scalariform.SpacesAfterPlusChecker"></check>
- <check enabled="true"  level="warning" class="org.scalastyle.file.WhitespaceEndOfLineChecker"></check>
+ <check enabled="true"  level="error" class="org.scalastyle.file.WhitespaceEndOfLineChecker"></check>
  <check enabled="false" level="warning" class="org.scalastyle.scalariform.SpacesBeforePlusChecker"></check>
  <check enabled="true"  level="warning" class="org.scalastyle.file.FileLineLengthChecker">
   <parameters>

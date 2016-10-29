@@ -97,7 +97,7 @@ class GSkewBrPredictor(fetch_width: Int,
 
    //------------------------------------------------------------
    private val shamt = log2Up(fetch_width*coreInstBytes)
-    
+
    private def Fold (input: UInt, compressed_length: Int) =
    {
       val clen = compressed_length
@@ -126,7 +126,7 @@ class GSkewBrPredictor(fetch_width: Int,
       //(addr >> UInt(shamt)) ^ Cat(hist(3,0), UInt(0,2))
       val a = addr >> UInt(shamt)
       val z      = UInt(0,32) // unused - a from two cycles ago.
-      
+
       val i10_5  = Cat(h(3,0), a(8,7)) // word-line address
       val i13_11 = Cat(a(11), a(9)^a(5), a(10)^a(6))
       val i4_2   = Cat(a(4) , a(3)^z(6), a( 2)^z(5))
@@ -239,9 +239,13 @@ class GSkewBrPredictor(fetch_width: Int,
 
       val vote = PopCount(bim :: g0 :: g1 :: Nil)
       if (enable_meta)
+      {
          takens(i) := Mux(meta, vote > UInt(1), bim)
+      }
       else
+      {
          takens(i) := vote > UInt(1)
+      }
    }
 
    io.resp.bits.takens := takens.asUInt
@@ -312,7 +316,7 @@ class GSkewBrPredictor(fetch_width: Int,
          {
             when (correct && both_agree(i))
             {
-               // do nothing;
+               // do nothing
             }
             .elsewhen (correct && !both_agree(i))
             {
@@ -338,8 +342,8 @@ class GSkewBrPredictor(fetch_width: Int,
 
                // Note: ideally, we'd know the new meta, but that requires reading the hystersis bit.
                // So instead we'll just invert the meta prediction (aka, assume the meta was weak).
-               //bool new_meta = (meta[me_idx] >> 1) & 0x1;
-               //bool new_pred = new_meta ? last_bim : ((last_bim + last_g0 + last_g1) > 1);
+               //bool new_meta = (meta[me_idx] >> 1) & 0x1
+               //bool new_pred = new_meta ? last_bim : ((last_bim + last_g0 + last_g1) > 1)
                val new_meta = !com_info.meta(i)
                val new_pred = Mux(new_meta, com_vote, com_info.bimo(i))
 
@@ -399,9 +403,13 @@ class GSkewBrPredictor(fetch_width: Int,
    gsh1_table.io.update.valid          := gsh1_update_valids.reduce(_|_)
 
    if (enable_meta)
+   {
       meta_table.io.update.valid          := meta_update_valids.reduce(_|_)
+   }
    else
+   {
       meta_table.io.update.valid          := Bool(false)
+   }
 
    bimo_table.io.update.bits.was_mispredicted := bim_mispredicted.orR
    gsh0_table.io.update.bits.was_mispredicted := g0_mispredicted.orR
