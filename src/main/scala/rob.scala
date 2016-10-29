@@ -990,7 +990,7 @@ class Rob(width: Int
          else if (COMMIT_WIDTH == 2)
          {
             val row_is_val = debug_entry(r_idx+0).valid || debug_entry(r_idx+1).valid
-            printf("%d %x (%c%c)(%c%c) 0x%x %x [%cDASM(%x)][DASM(%x)" + end + "] %c,%c "
+            printf("%d %x (%c%c)(%c%c) 0x%x %x [DASM(%x)][DASM(%x)" + "] %c,%c "
                , row_metadata_brob_idx(row)
                , row_metadata_has_brorjalr(row)
                , Mux(debug_entry(r_idx+0).valid, Str("V"), Str(" "))
@@ -999,9 +999,6 @@ class Rob(width: Int
                , Mux(debug_entry(r_idx+1).busy,  Str("B"), Str(" "))
                , debug_entry(r_idx+0).uop.pc(31,0)
                , debug_entry(r_idx+1).uop.pc(15,0)
-               , Mux(r_head === UInt(row) && row_is_val, Str(b_red),
-                 Mux(row_is_val                        , Str(b_cyn),
-                                                         Str(grn)))
                , debug_entry(r_idx+0).uop.inst
                , debug_entry(r_idx+1).uop.inst
                , Mux(debug_entry(r_idx+0).exception, Str("E"), Str("-"))
@@ -1011,7 +1008,7 @@ class Rob(width: Int
          else if (COMMIT_WIDTH == 4)
          {
             val row_is_val = debug_entry(r_idx+0).valid || debug_entry(r_idx+1).valid || debug_entry(r_idx+2).valid || debug_entry(r_idx+3).valid
-            printf("(%c%c%c%c)(%c%c%c%c) 0x%x %x %x %x [%cDASM(%x)][DASM(%x)][DASM(%x)][DASM(%x)" + end + "]%c%c%c%c"
+            printf("(%c%c%c%c)(%c%c%c%c) 0x%x %x %x %x [DASM(%x)][DASM(%x)][DASM(%x)][DASM(%x)" + "]%c%c%c%c"
                , Mux(debug_entry(r_idx+0).valid, Str("V"), Str(" "))
                , Mux(debug_entry(r_idx+1).valid, Str("V"), Str(" "))
                , Mux(debug_entry(r_idx+2).valid, Str("V"), Str(" "))
@@ -1024,8 +1021,6 @@ class Rob(width: Int
                , debug_entry(r_idx+1).uop.pc(15,0)
                , debug_entry(r_idx+2).uop.pc(15,0)
                , debug_entry(r_idx+3).uop.pc(15,0)
-               , Mux(r_head === UInt(row) && row_is_val, Str(b_red),
-                 Mux(row_is_val                        , Str(b_cyn), Str(grn)))
                , debug_entry(r_idx+0).uop.inst
                , debug_entry(r_idx+1).uop.inst
                , debug_entry(r_idx+2).uop.inst

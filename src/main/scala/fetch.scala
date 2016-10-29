@@ -234,7 +234,6 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
       if (fetch_width == 1)
       {
          printf("DASM(%x) "
-            //, InstsStr(io.imem.resp.bits.data.toBits, FETCH_WIDTH)
             , io.imem.resp.bits.data(coreInstBits-1,0)
             )
       }

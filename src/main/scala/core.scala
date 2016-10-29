@@ -1013,7 +1013,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
 
       for (w <- 0 until DECODE_WIDTH)
       {
-         printf("(%c%c) " + red + "DASM(%x)" + end + " |  "
+         printf("(%c%c) " + "DASM(%x)" + " |  "
             , Mux(fetched_inst_valid && dec_fbundle.uops(w).valid && !dec_finished_mask(w), Str("v"), Str("-"))
             , Mux(dec_will_fire(w), Str("V"), Str("-"))
             , dec_fbundle.uops(w).inst

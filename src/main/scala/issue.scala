@@ -87,8 +87,8 @@ abstract class IssueUnit(num_issue_slots: Int, issue_width: Int, num_wakeup_port
    {
       for (i <- 0 until num_issue_slots)
       {
-         printf("  integer_issue_slot[%d](%c)(Req:%c):wen=%c P:(%c,%c,%c) OP:(%d,%d,%d) PDST:%d %c [%c[DASM(%x)]" +
-               end + " 0x%x: %d] ri:%d bm=%d imm=0x%x\n"
+         printf("  integer_issue_slot[%d](%c)(Req:%c):wen=%c P:(%c,%c,%c) OP:(%d,%d,%d) PDST:%d %c [[DASM(%x)]" +
+               " 0x%x: %d] ri:%d bm=%d imm=0x%x\n"
             , UInt(i, log2Up(num_issue_slots))
             , Mux(issue_slots(i).valid, Str("V"), Str("-"))
 //            , Mux(issue_slots(i).request, Str(u_red + "R" + end), Str(grn + "-" + end))
@@ -106,7 +106,6 @@ abstract class IssueUnit(num_issue_slots: Int, issue_width: Int, num_wakeup_port
               Mux(issue_slots(i).uop.dst_rtype === RT_X, Str("-"),
               Mux(issue_slots(i).uop.dst_rtype === RT_FLT, Str("f"),
               Mux(issue_slots(i).uop.dst_rtype === RT_PAS, Str("C"), Str("?")))))
-            , Mux(issue_slots(i).valid, Str(b_wht), Str(grn))
             , issue_slots(i).uop.inst
             , issue_slots(i).uop.pc(31,0)
             , issue_slots(i).uop.uopc

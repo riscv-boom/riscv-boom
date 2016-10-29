@@ -284,7 +284,7 @@ class TageBrPredictor(
    {
       if (DEBUG_PRINTF_TAGE)
       {
-         printf(red + "prediction made hit: PC 0x%x, ghistory=0x%x" + end + "\n"
+         printf("prediction made hit: PC 0x%x, ghistory=0x%x\n"
             , RegEnable(RegEnable(io.req_pc, !stall), !stall)
             , io.resp.bits.history
          )

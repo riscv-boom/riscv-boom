@@ -22,7 +22,6 @@ import util.Str
 trait BOOMDebugConstants
 {
    val DEBUG_PRINTF        = false // use the Chisel printf functionality
-   val DEBUG_ENABLE_COLOR  = false // provide color to print outs. Requires a VIM plugin to work properly :(
    val COMMIT_LOG_PRINTF   = false // dump commit state, for comparision against ISA sim
    val O3PIPEVIEW_PRINTF   = false // dump trace for O3PipeView from gem5
    val O3_CYCLE_TIME       = (1000)// "cycle" time expected by o3pipeview.py
@@ -33,37 +32,6 @@ trait BOOMDebugConstants
    val DEBUG_PRINTF_TAGE   = true && DEBUG_PRINTF
 
    if (O3PIPEVIEW_PRINTF) require (!DEBUG_PRINTF && !COMMIT_LOG_PRINTF)
-
-   // color codes for output files
-   // if you use VIM to view, you'll need the AnsiEsc plugin.
-   // 1 is bold, 2 is background, 4 is underlined
-   val blk   = if (DEBUG_ENABLE_COLOR) "\u001b[1;30m" else " "
-   val red   = if (DEBUG_ENABLE_COLOR) "\u001b[1;31m" else " "
-   val grn   = if (DEBUG_ENABLE_COLOR) "\u001b[1;32m" else " "
-   val ylw   = if (DEBUG_ENABLE_COLOR) "\u001b[1;33m" else " "
-   val blu   = if (DEBUG_ENABLE_COLOR) "\u001b[1;34m" else " "
-   val mgt   = if (DEBUG_ENABLE_COLOR) "\u001b[1;35m" else " "
-   val cyn   = if (DEBUG_ENABLE_COLOR) "\u001b[1;36m" else " "
-   val wht   = if (DEBUG_ENABLE_COLOR) "\u001b[1;37m" else " "
-   val end   = if (DEBUG_ENABLE_COLOR) "\u001b[0m"    else " "
-
-   val b_blk = if (DEBUG_ENABLE_COLOR) "\u001b[2;30m" else " "
-   val b_red = if (DEBUG_ENABLE_COLOR) "\u001b[2;31m" else " "
-   val b_grn = if (DEBUG_ENABLE_COLOR) "\u001b[2;32m" else " "
-   val b_ylw = if (DEBUG_ENABLE_COLOR) "\u001b[2;33m" else " "
-   val b_blu = if (DEBUG_ENABLE_COLOR) "\u001b[2;34m" else " "
-   val b_mgt = if (DEBUG_ENABLE_COLOR) "\u001b[2;35m" else " "
-   val b_cyn = if (DEBUG_ENABLE_COLOR) "\u001b[2;36m" else " "
-   val b_wht = if (DEBUG_ENABLE_COLOR) "\u001b[2;37m" else " "
-
-   val u_blk = if (DEBUG_ENABLE_COLOR) "\u001b[4;30m" else " "
-   val u_red = if (DEBUG_ENABLE_COLOR) "\u001b[4;31m" else " "
-   val u_grn = if (DEBUG_ENABLE_COLOR) "\u001b[4;32m" else " "
-   val u_ylw = if (DEBUG_ENABLE_COLOR) "\u001b[4;33m" else " "
-   val u_blu = if (DEBUG_ENABLE_COLOR) "\u001b[4;34m" else " "
-   val u_mgt = if (DEBUG_ENABLE_COLOR) "\u001b[4;35m" else " "
-   val u_cyn = if (DEBUG_ENABLE_COLOR) "\u001b[4;36m" else " "
-   val u_wht = if (DEBUG_ENABLE_COLOR) "\u001b[4;37m" else " "
 }
 
 trait BrPredConstants
@@ -80,7 +48,6 @@ trait ScalarOpConstants
 
    //************************************
    // Extra Constants
-   val WATCHDOG_ERR_NO = 0xffff // tohost error number
 
 
    //************************************
@@ -383,7 +350,6 @@ trait RISCVConstants
    def ComputeBranchTarget(pc: UInt, inst: UInt, xlen: Int, coreInstBytes: Int): UInt =
    {
       val b_imm32 = Cat(Fill(20,inst(31)), inst(7), inst(30,25), inst(11,8), UInt(0,1))
-//      (pc + Sext(b_imm32, xlen)) & SInt(-coreInstBytes)
       ((pc + Sext(b_imm32, xlen)).asSInt & SInt(-coreInstBytes)).asUInt
    }
    def ComputeJALTarget(pc: UInt, inst: UInt, xlen: Int, coreInstBytes: Int): UInt =
@@ -391,19 +357,6 @@ trait RISCVConstants
       val j_imm32 = Cat(Fill(12,inst(31)), inst(19,12), inst(20), inst(30,25), inst(24,21), UInt(0,1))
       ((pc + Sext(j_imm32, xlen)).asSInt & SInt(-coreInstBytes)).asUInt
    }
-
-
-   def InstsStr(insts: UInt, width: Int) =
-   {
-      //var string = Str("") //sprintf("") XXX TODO sprintf is missing in chisel3
-      //for (w <- 0 until width)
-      //{
-      //   string = sprintf("%s(DASM(%x))", string, insts(((w+1)*32)-1,w*32))
-      //}
-      //string
-   }
-
-
 }
 
 trait ExcCauseConstants

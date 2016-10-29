@@ -466,7 +466,7 @@ class TageTable(
    if (DEBUG_PRINTF_TAGE)
    {
       require (num_entries < 64) // for sanity sake, don't allow larger.
-      printf("TAGETable: PC: 0x%x history: 0x%x, tag[%d]=0x%x, p_tag=0x%x " + mgt + "%s\n" + end,
+      printf("TAGETable: PC: 0x%x history: 0x%x, tag[%d]=0x%x, p_tag=0x%x " + "%s\n",
          io.if_req_pc,
          io.if_req_history(history_length-1,0) + UInt(0,64),
          p_idx,
@@ -485,7 +485,7 @@ class TageTable(
             {
                printf(" [c=%d]", counter_table(UInt(i+j))(k))
             }
-            printf(" [u=%d] " + red + "PC=0x%x hist=0x%x " + end,
+            printf(" [u=%d] " + "PC=0x%x hist=0x%x ",
                ubit_table(UInt(i+j)),
                (debug_pc_table(UInt(i+j)) & UInt(0xff))(11,0),
                (debug_hist_table(UInt(i+j)) & UInt(0xffff))(15,0)
