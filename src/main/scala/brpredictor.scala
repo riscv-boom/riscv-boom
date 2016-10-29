@@ -199,7 +199,7 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int)(implicit p
 
 
    io.resp.bits.history := RegNext(RegNext(ghistory))
-   io.resp.bits.history_u := RegNext(RegNext(ghistory))
+   io.resp.bits.history_u := RegNext(RegNext(ghistory_uonly))
 
    // -----------------------------------------------
    // Track shadow updates.
