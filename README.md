@@ -50,6 +50,19 @@ To build a BOOM Verilator emulator and run BOOM through a couple of simple tests
    $ git submodule update --init
    $ cd emulator; make run CONFIG=BOOMConfig
 ````
+
+There are many BOOM configurations to choose from (and modify!). If you would
+like to run the Rocket processor, you will need to supply the Rocket
+configuration and project configuration:
+
+````
+   $ cd emulator; make run CONFIG=DefaultConfig CFG_PROJECT=rocketchip
+````
+
+In the boom branch, the `CONFIG` variable defaults to `BOOMConfig` and the
+`CFG_PROJECT` variable defaults to `boom`.
+
+
  
 **Installing the RISC-V Toolchain**
 
