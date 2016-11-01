@@ -28,9 +28,13 @@ import util.Str
 class BpdResp(implicit p: Parameters) extends BoomBundle()(p)
 {
    val takens = UInt(width = FETCH_WIDTH)
-   val history = UInt(width = GLOBAL_HISTORY_LENGTH)
-   val history_u = UInt(width = GLOBAL_HISTORY_LENGTH)
    val shadow_info = new ShadowHistInfo().asOutput
+   // Roughly speaking, track the outcome of the last N branches.
+   val history = UInt(width = GLOBAL_HISTORY_LENGTH)
+   // Only track user-mode history.
+   val history_u = UInt(width = GLOBAL_HISTORY_LENGTH)
+   // For very long histories, implement as a circular buffer and only snapshot the tail pointer.
+   val history_ptr = UInt(width = log2Up(GLOBAL_HISTORY_LENGTH+2*NUM_ROB_ENTRIES)) // TODO XXX what length to use?
 
    // The info field stores the response information from the branch predictor.
    // The response is stored (conceptually) in the ROB and is returned to the
@@ -90,8 +94,9 @@ class BpdUpdate(implicit p: Parameters) extends BoomBundle()(p)
    val br_pc = UInt(width = log2Up(FETCH_WIDTH)+log2Ceil(coreInstBytes))
    val brob_idx   = UInt(width = BROB_ADDR_SZ)
    val mispredict = Bool()
-   val history = Bits(width = GLOBAL_HISTORY_LENGTH)
-   val history_u = Bits(width = GLOBAL_HISTORY_LENGTH)
+   val history = UInt(width = GLOBAL_HISTORY_LENGTH)
+   val history_u = UInt(width = GLOBAL_HISTORY_LENGTH)
+   val history_ptr = UInt(width = log2Up(GLOBAL_HISTORY_LENGTH+1*NUM_ROB_ENTRIES)) // TODO XXX what length to use?
    val shadow_info = new ShadowHistInfo()
    val bpd_predict_val = Bool()
    val bpd_mispredict = Bool()
@@ -123,7 +128,8 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int)(implicit p
       // branch resolution comes from the branch-unit, during the Execute stage.
       val br_resolution = Valid(new BpdUpdate).flip
       val brob = new BrobBackendIo(fetch_width)
-      // pipeline flush - reset history as appropriate
+      // Pipeline flush - reset history as appropriate.
+      // Arrives same cycle as redirecting the front-end -- otherwise, the ghistory would be wrong if it came later!
       val flush = Bool(INPUT)
       // privilege-level (allow predictor to change behavior in different privilege modes).
       val status_prv = UInt(INPUT, width = rocket.PRV.SZ)
@@ -143,27 +149,52 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int)(implicit p
    // TODO temporary, provides evict bits to TAGE
    val r_ghistory_commit_copy = r_ghistory.commit_copy
 
+   // Track VERY long histories with a specialized history implementation.
+   // TODO abstract this away so nobody knows which they are using.
+   private val r_vlh = new VeryLongHistoryRegister(history_length, NUM_ROB_ENTRIES)
+
    val in_usermode = io.status_prv === UInt(rocket.PRV.U)
    val disable_bpd = in_usermode && Bool(ENABLE_BPD_UMODE_ONLY)
 
+   // TODO XXX need to remove this commit->flush bypass and instead delay the flush signals coming from the CSR and ROB.
+   // The problem here is the commit.valid sigal is delayed but the io.flush signal is not, causing an un-intended
+   // contention.
+   val commit_taken = commit.bits.ctrl.taken.reduce(_|_)
+
    val ghistory_all =
-         r_ghistory.value(
-            io.hist_update_spec.valid,
-            io.hist_update_spec.bits,
-            io.br_resolution.valid,
-            io.br_resolution.bits,
-            io.flush,
-            umode_only = false)
+      r_ghistory.value(
+         io.hist_update_spec.valid,
+         io.hist_update_spec.bits,
+         io.br_resolution.valid,
+         io.br_resolution.bits,
+         io.flush,
+         commit.valid,
+         commit_taken,
+         umode_only = false)
 
    val ghistory_uonly =
-         r_ghistory_u.value(
-            io.hist_update_spec.valid,
-            io.hist_update_spec.bits,
-            io.br_resolution.valid,
-            io.br_resolution.bits,
-            io.flush,
-            umode_only = true)
+      r_ghistory_u.value(
+         io.hist_update_spec.valid,
+         io.hist_update_spec.bits,
+         io.br_resolution.valid,
+         io.br_resolution.bits,
+         io.flush,
+         commit.valid,
+         commit_taken,
+         umode_only = true)
 
+
+   val r_vlh_commit_copy = r_vlh.commit_copy
+   val vlh_commit = Reverse(r_vlh_commit_copy)
+   val vlh_commit_head = r_vlh.commit_ptr
+   val vlh_raw = r_vlh.raw_value
+   val vlh_head = r_vlh.getSnapshot(io.flush, commit.valid)
+
+   printf("vlh: 0x%x - 0x%x ----- raw[HEAD: %d COM: %d]: 0x%x\n", vlh_commit, r_ghistory_commit_copy,
+      vlh_head, vlh_commit_head, vlh_raw)
+
+   assert (r_ghistory_commit_copy === vlh_commit,
+      "[brpredictor] mistmatch between short history and very long history implementations.")
 
    if (ENABLE_BPD_USHISTORY && !ENABLE_BPD_UMODE_ONLY)
    {
@@ -185,6 +216,8 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int)(implicit p
       io.br_resolution.valid,
       io.br_resolution.bits,
       io.flush,
+      commit.valid,
+      commit_taken,
       disable = Bool(false),
       umode_only = false)
 
@@ -194,12 +227,26 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int)(implicit p
       io.br_resolution.valid,
       io.br_resolution.bits,
       io.flush,
+      commit.valid,
+      commit_taken,
       disable = !in_usermode,
       umode_only = true)
+
+   r_vlh.update(
+      io.hist_update_spec.valid,
+      io.hist_update_spec.bits,
+      io.br_resolution.valid,
+      io.br_resolution.bits,
+      io.flush,
+      commit.valid,
+      commit_taken,
+      disable = Bool(false))
 
 
    io.resp.bits.history := RegNext(RegNext(ghistory))
    io.resp.bits.history_u := RegNext(RegNext(ghistory_uonly))
+   io.resp.bits.history_ptr := RegNext(vlh_head)
+
 
    // -----------------------------------------------
    // Track shadow updates.
@@ -222,11 +269,16 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int)(implicit p
    when (commit.valid)
    {
       r_ghistory.commit(commit.bits.ctrl.taken.reduce(_|_))
+      r_vlh.commit(commit.bits.ctrl.taken.reduce(_|_))
    }
    when (commit.valid && in_usermode)
    {
       r_ghistory_u.commit(commit.bits.ctrl.taken.reduce(_|_))
    }
+
+   // TODO XXX turn this on after insuring this won't happen. Then we can also remove the commit.valid bypass
+   // occuring in the HistoryRegisters.
+//   assert (!(io.flush && commit.valid), "[brpredictor] flush and commit trying to occur simultaneously.")
 }
 
 
@@ -249,6 +301,8 @@ class HistoryRegister(length: Int)
       br_resolution_valid: Bool,
       br_resolution_bits: BpdUpdate,
       flush: Bool,
+      commit: Bool,
+      commit_taken: Bool,
       umode_only: Boolean
       ): UInt =
    {
@@ -259,6 +313,8 @@ class HistoryRegister(length: Int)
       val res_history = if (umode_only) br_resolution_bits.history_u else br_resolution_bits.history
       val fixed_history = Cat(res_history, br_resolution_bits.taken)
       val ret_value =
+         Mux(flush && commit,
+            Cat(r_commit_history, commit_taken),
          Mux(flush,
             r_commit_history,
          Mux(br_resolution_valid &&
@@ -268,7 +324,7 @@ class HistoryRegister(length: Int)
          Mux(br_resolution_valid &&
                br_resolution_bits.bpd_mispredict,
             fixed_history,
-            r_history)))
+            r_history))))
 
       ret_value
    }
@@ -279,6 +335,8 @@ class HistoryRegister(length: Int)
       br_resolution_valid: Bool,
       br_resolution_bits: BpdUpdate,
       flush: Bool,
+      commit: Bool,
+      commit_taken: Bool,
       disable: Bool,
       umode_only: Boolean
       ): Unit =
@@ -288,6 +346,10 @@ class HistoryRegister(length: Int)
       when (disable)
       {
          r_history := r_history
+      }
+      .elsewhen (flush && commit)
+      {
+         r_history := Cat(r_commit_history, commit_taken)
       }
       .elsewhen (flush)
       {
@@ -319,6 +381,109 @@ class HistoryRegister(length: Int)
       r_commit_history := Cat(r_commit_history, taken)
    }
 
+}
+
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
+
+// for very long histories, it is more efficient to implement as a circular buffer,
+// and to snapshot the tail pointer.
+class VeryLongHistoryRegister(hlen: Int, num_rob_entries: Int)
+{
+   // TODO XXX distinguish between hlen and buffer-length
+   // we need to provide extra bits for speculating past the commit-head of the buffer.
+   private val plen = hlen + 1*num_rob_entries
+   private val hist_buffer = Reg(init = UInt(0, plen))
+   // the speculative head point to the next empty spot (head-1 is the newest bit).
+   // TODO XXX set to 0 for initialization
+   private val spec_head = Reg(init = UInt(hlen, width = log2Up(plen)))
+   private val com_head = Reg(init = UInt(hlen, width = log2Up(plen)))
+
+   // the tail points to the last (oldest) bit in the history.
+//   private val spec_tail =
+//      Mux(spec_head >= hlen,
+//         spec_head - hlen,
+//         plen - (hlen - spec_head))
+//
+   private val com_tail =
+      Mux(com_head >= UInt(hlen),
+         com_head - UInt(hlen),
+         UInt(plen) - (UInt(hlen) - com_head))
+
+
+   // idx is relative to the logical history, not the physical buffer.
+//   def evictBit(idx: UInt): Bool =
+//   {
+//      val shamt = tail + idx
+      // TODO XXX how do we know what idx is?
+//      getBit(idx)
+//   }
+   // TODO XXX are TAGE csrs really seeing the proper history on a misspeculation?
+   def raw_value(): UInt = hist_buffer
+
+   def getSnapshot(
+      flush: Bool,
+      commit: Bool
+      ): UInt =
+   {
+      Mux(flush && commit,
+         WrapInc(com_head, plen),
+      Mux(flush,
+         com_head,
+         spec_head))
+   }
+
+   def commit_copy(): UInt =
+   {
+      (Cat(hist_buffer, hist_buffer) >> com_tail)(hlen-1,0)
+   }
+
+   def commit_ptr(): UInt = com_head
+
+   def update(
+      hist_update_spec_valid: Bool,
+      hist_update_spec_bits: GHistUpdate,
+      br_resolution_valid: Bool,
+      br_resolution_bits: BpdUpdate,
+      flush: Bool,
+      commit: Bool,
+      commit_taken: Bool,
+      disable: Bool
+      ): Unit =
+   {
+      when (disable)
+      {
+         ; // nop
+      }
+      .elsewhen (flush && commit)
+      {
+         spec_head := WrapInc(com_head, plen)
+      }
+      .elsewhen (flush)
+      {
+         spec_head := com_head
+      }
+      .elsewhen (br_resolution_valid && br_resolution_bits.mispredict)
+      {
+         val snapshot_ptr = br_resolution_bits.history_ptr
+         val shadow = br_resolution_bits.shadow_info
+         val update_ptr = WrapAdd(snapshot_ptr, PopCount(shadow.valids), plen-1)
+         hist_buffer := hist_buffer.bitSet(update_ptr, br_resolution_bits.taken)
+         spec_head := WrapAdd(snapshot_ptr, PopCount(shadow.valids) + UInt(1), plen-1)
+      }
+      .elsewhen (hist_update_spec_valid)
+      {
+         hist_buffer := hist_buffer.bitSet(spec_head, hist_update_spec_bits.taken)
+         spec_head := WrapInc(spec_head, plen)
+      }
+   }
+
+   def commit(taken: Bool): Unit =
+   {
+      val debug_com_bit = (hist_buffer >> com_head) & UInt(1,1)
+      assert (debug_com_bit  === taken, "[brpredictor] VLHR: commit bit doesn't match speculative bit.")
+      com_head := WrapInc(com_head, plen)
+   }
 }
 
 //------------------------------------------------------------------------------
