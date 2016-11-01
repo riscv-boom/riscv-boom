@@ -62,6 +62,25 @@ object PerformShiftRegister
 }
 
 // Increment the input "value", wrapping it if necessary.
+object WrapAdd
+{
+   def apply(value: UInt, amt: UInt, max: Int): UInt =
+   {
+      if (isPow2(max))
+      {
+         (value + amt)(log2Up(max)-1,0)
+      }
+      else
+      {
+         val sum = Cat(UInt(0,1), value) + amt
+         Mux(sum > UInt(max),
+            sum - UInt(max+1),
+            sum)
+      }
+   }
+}
+
+// Increment the input "value", wrapping it if necessary.
 object WrapInc
 {
    def apply(value: UInt, max: Int): UInt =

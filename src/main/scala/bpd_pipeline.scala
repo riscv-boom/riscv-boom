@@ -85,7 +85,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
       val br_unit    = new BranchUnitResp().asInput
 
       val brob       = new BrobBackendIo(fetch_width)
-      val kill       = Bool(INPUT) // e.g., pipeline flush
+      val flush      = Bool(INPUT)
       val status_prv = UInt(INPUT, width = rocket.PRV.SZ)
    }
 
@@ -144,7 +144,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    br_predictor.io.resp.ready := io.req.ready
 
    io.brob <> br_predictor.io.brob
-   br_predictor.io.flush := io.kill
+   br_predictor.io.flush := io.flush
    br_predictor.io.status_prv := io.status_prv
 
 //   val bpd_valid = br_predictor.io.resp.valid && (io.status_prv === UInt(rocket.PRV.U) || !Bool(ENABLE_BPD_UMODE_ONLY))
@@ -421,7 +421,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
                                          jumps.orR &&
                                          !bpd_br_beats_jal &&
                                          io.req.ready &&
-                                         !io.kill
+                                         !io.flush
    io.ras_update.bits.isCall     := is_call
    io.ras_update.bits.isReturn   := is_ret
    io.ras_update.bits.returnAddr := aligned_pc + (jmp_idx << UInt(2)) + UInt(4)
