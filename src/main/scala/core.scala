@@ -21,6 +21,8 @@
 //   mem - Memory
 //   wb  - Writeback
 //   com - Commit
+//
+//
 
 
 package boom
@@ -139,7 +141,6 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    // Commit Stage
    val com_valids            = Wire(Vec(DECODE_WIDTH, Bool()))
    val com_uops              = Wire(Vec(DECODE_WIDTH, new MicroOp()))
-   val com_exception         = Wire(Bool()) // ROB or CSRFile is asserting an exception
 
    val watchdog_trigger      = Wire(Bool())
 
@@ -211,7 +212,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    fetch_unit.io.bp2_pred_target   := bpd_stage.io.req.bits.target
 
    fetch_unit.io.kill              := br_unit.brinfo.mispredict || rob.io.flush_pipeline
-   fetch_unit.io.com_exception     := com_exception
+   fetch_unit.io.com_exception     := rob.io.com_exception
    fetch_unit.io.flush_take_pc     := rob.io.flush_take_pc
    fetch_unit.io.flush_pc          := rob.io.flush_pc
    fetch_unit.io.csr_take_pc       := csr.io.csr_xcpt || csr.io.eret
@@ -590,7 +591,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
 
    // Extra I/O
    csr.io.pc        := rob.io.flush_pc
-   csr.io.exception := com_exception && !csr.io.csr_xcpt
+   csr.io.exception := rob.io.com_exception && !csr.io.csr_xcpt
    csr.io.retire    := PopCount(com_valids.toBits)
    csr.io.cause     := rob.io.com_exc_cause
    csr.io.badaddr   := rob.io.com_badvaddr
@@ -620,7 +621,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    {
       exe_units(w).io.req <> register_read.io.exe_reqs(w)
       exe_units(w).io.brinfo := br_unit.brinfo
-      exe_units(w).io.com_handling_exc := rob.io.com_handling_exc // TODO get rid of this?
+      exe_units(w).io.com_exception := rob.io.com_exception
 
       if (exe_units(w).isBypassable)
       {
@@ -647,9 +648,9 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
 
    for (w <- 0 until DECODE_WIDTH)
    {
-      lsu_io.dec_st_vals(w) := dec_will_fire(w) && rename_stage.io.inst_can_proceed(w) && !com_exception &&
+      lsu_io.dec_st_vals(w) := dec_will_fire(w) && rename_stage.io.inst_can_proceed(w) && !rob.io.com_exception &&
                                dec_uops(w).is_store
-      lsu_io.dec_ld_vals(w) := dec_will_fire(w) && rename_stage.io.inst_can_proceed(w) && !com_exception &&
+      lsu_io.dec_ld_vals(w) := dec_will_fire(w) && rename_stage.io.inst_can_proceed(w) && !rob.io.com_exception &&
                                dec_uops(w).is_load
 
       lsu_io.dec_uops(w).rob_idx := dis_uops(w).rob_idx // for debug purposes (comit logging)
@@ -824,8 +825,6 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    com_valids       := rob.io.com_valids
    com_uops         := rob.io.com_uops
 
-   com_exception    := rob.io.com_exception // on for only a single cycle (to CSRFile)
-
    bpd_stage.io.brob.deallocate <> rob.io.brob_deallocate
    bpd_stage.io.brob.bpd_update <> br_unit.bpd_update
    bpd_stage.io.brob.flush := rob.io.flush_pipeline || rob.io.flush_brob
@@ -840,7 +839,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
       exe_units(w).io.req.bits.kill := rob.io.flush_pipeline
    }
 
-   assert (!(Reg(next=com_exception) && !rob.io.flush_pipeline),
+   assert (!(RegNext(rob.io.com_exception) && !rob.io.flush_pipeline),
       "[core] exception occurred, but pipeline flush signal not set!")
 
    //-------------------------------------------------------------
@@ -1055,7 +1054,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
 
 
       printf("Exct(%c%d) Commit(%x) fl: 0x%x (%d) is: 0x%x (%d)\n"
-         , Mux(com_exception, Str("E"), Str("-"))
+         , Mux(rob.io.com_exception, Str("E"), Str("-"))
          , rob.io.com_exc_cause
          , com_valids.toBits
          , rename_stage.io.debug.freelist
@@ -1185,7 +1184,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    io.ptw_dat.ptbr       := csr.io.ptbr
    io.ptw_dat.invalidate := csr.io.fatc
    io.ptw_dat.status     := csr.io.status
-   io.dmem.invalidate_lr := com_exception
+   io.dmem.invalidate_lr := rob.io.com_exception
 
    //-------------------------------------------------------------
    //-------------------------------------------------------------

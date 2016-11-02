@@ -107,7 +107,6 @@ class RobIo(machine_width: Int
    // Handle Exceptions/ROB Rollback
    val com_exception    = Bool(OUTPUT)
    val com_exc_cause    = UInt(OUTPUT, xLen)
-   val com_handling_exc = Bool(OUTPUT)
    val com_rbk_valids   = Vec(machine_width, Bool(OUTPUT))
    val com_badvaddr     = UInt(OUTPUT, xLen)
 
@@ -595,8 +594,6 @@ class Rob(width: Int
                            io.com_exc_cause === MINI_EXCEPTION_REPLAY
    io.com_exception    := exception_thrown && !is_mini_exception
    io.com_exc_cause    := r_xcpt_uop.exc_cause
-   // TODO get rid of com_handling_exc? used to handle loads coming back from the $ probbaly unnecessary
-   io.com_handling_exc := exception_thrown
 
    io.lsu_misspec := Reg(next=exception_thrown && io.com_exc_cause === MINI_EXCEPTION_MEM_ORDERING)
    io.com_badvaddr := Sext(r_xcpt_badvaddr,xLen)

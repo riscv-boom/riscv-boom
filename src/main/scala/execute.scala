@@ -65,7 +65,7 @@ class ExecutionUnitIO(num_rf_read_ports: Int
    // only used by the mem unit
    val lsu_io = new LoadStoreUnitIO(DECODE_WIDTH)
    val dmem   = new DCMemPortIO()
-   val com_handling_exc = Bool(INPUT)
+   val com_exception = Bool(INPUT)
 }
 
 abstract class ExecutionUnit(val num_rf_read_ports: Int
@@ -389,9 +389,12 @@ class MemExeUnit(implicit p: Parameters) extends ExecutionUnit(num_rf_read_ports
    lsu.io.dmem_is_ordered:= io.dmem.ordered
 
 
-   // TODO get rid of com_handling and guard with an assert?
-   io.dmem.req.valid     := Mux(io.com_handling_exc && lsu.io.memreq_uop.is_load, Bool(false),
-                                                                              lsu.io.memreq_val)
+   // TODO get rid of com_exception and guard with an assert? Need to surpress within dc-shim.
+//   assert (!(io.com_exception && lsu.io.memreq_uop.is_load && lsu.io.memreq_val),
+//      "[execute] a valid load is returning while an exception is being thrown.")
+   io.dmem.req.valid     := Mux(io.com_exception && lsu.io.memreq_uop.is_load, 
+                              Bool(false),
+                              lsu.io.memreq_val)
    io.dmem.req.bits.addr  := lsu.io.memreq_addr
    io.dmem.req.bits.data  := lsu.io.memreq_wdata
    io.dmem.req.bits.uop   := lsu.io.memreq_uop
@@ -399,7 +402,7 @@ class MemExeUnit(implicit p: Parameters) extends ExecutionUnit(num_rf_read_ports
 
    // I should be timing forwarding to coincide with dmem resps, so I'm not clobbering
    //anything....
-   val memresp_val    = Mux(io.com_handling_exc && io.dmem.resp.bits.uop.is_load, Bool(false),
+   val memresp_val    = Mux(io.com_exception && io.dmem.resp.bits.uop.is_load, Bool(false),
                                                 lsu.io.forward_val || io.dmem.resp.valid)
    val memresp_rf_wen = (io.dmem.resp.valid && (io.dmem.resp.bits.uop.mem_cmd === M_XRD || io.dmem.resp.bits.uop.is_amo)) ||  // TODO should I refactor this to use is_load?
                            lsu.io.forward_val
@@ -685,7 +688,7 @@ class ALUMemExeUnit(
    lsu.io.dmem_req_ready := io.dmem.req.ready
    lsu.io.dmem_is_ordered:= io.dmem.ordered
 
-   io.dmem.req.valid     := Mux(io.com_handling_exc && lsu.io.memreq_uop.is_load, Bool(false),
+   io.dmem.req.valid     := Mux(io.com_exception && lsu.io.memreq_uop.is_load, Bool(false),
                                                                               lsu.io.memreq_val)
    io.dmem.req.bits.addr  := lsu.io.memreq_addr
    io.dmem.req.bits.data  := lsu.io.memreq_wdata
@@ -693,7 +696,7 @@ class ALUMemExeUnit(
    io.dmem.req.bits.kill  := lsu.io.memreq_kill // load kill request sent to memory
 
    // I'm timing forwarding to coincide with dmem resps, so I'm not clobbering anything...
-   memresp_val := Mux(io.com_handling_exc && io.dmem.resp.bits.uop.is_load, Bool(false),
+   memresp_val := Mux(io.com_exception && io.dmem.resp.bits.uop.is_load, Bool(false),
                                                lsu.io.forward_val || io.dmem.resp.valid)
 
 
