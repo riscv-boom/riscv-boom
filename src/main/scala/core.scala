@@ -26,7 +26,6 @@
 
 
 package boom
-{
 
 import Chisel._
 import cde.Parameters
@@ -211,12 +210,15 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    fetch_unit.io.bp2_br_seen       := bpd_stage.io.pred_resp.br_seen
    fetch_unit.io.bp2_pred_target   := bpd_stage.io.req.bits.target
 
-   fetch_unit.io.kill              := br_unit.brinfo.mispredict || rob.io.flush_pipeline
-   fetch_unit.io.com_exception     := rob.io.com_exception
+   fetch_unit.io.clear_fetchbuffer := br_unit.brinfo.mispredict || 
+                                       rob.io.flush_pipeline ||
+                                       rob.io.com_exception ||
+                                       csr.io.csr_xcpt ||
+                                       csr.io.eret
    fetch_unit.io.flush_take_pc     := rob.io.flush_take_pc
    fetch_unit.io.flush_pc          := rob.io.flush_pc
-   fetch_unit.io.csr_take_pc       := csr.io.csr_xcpt || csr.io.eret
-   fetch_unit.io.csr_evec          := csr.io.evec
+   fetch_unit.io.com_take_pc       := rob.io.com_exception || csr.io.csr_xcpt || csr.io.eret
+   fetch_unit.io.com_pc            := csr.io.evec
 
    io.imem.flush_icache :=
       Range(0,DECODE_WIDTH).map{i => com_valids(i) && com_uops(i).is_fencei}.reduce(_|_) ||
@@ -278,7 +280,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
 
    dec_serializer.io.enq <> fetch_unit.io.resp
 
-   dec_serializer.io.kill := fetch_unit.io.fetchbuffer_kill
+   dec_serializer.io.kill := fetch_unit.io.clear_fetchbuffer
    dec_serializer.io.deq.ready := dec_rdy
 
    val fetched_inst_valid = dec_serializer.io.deq.valid
@@ -326,7 +328,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
       dec_last_inst_was_stalled = stall_me
       dec_stall_next_inst  = stall_me || (dec_valids(w) && dec_uops(w).is_unique)
 
-      dec_will_fire(w) := dec_valids(w) && !stall_me && !fetch_unit.io.kill
+      dec_will_fire(w) := dec_valids(w) && !stall_me && !fetch_unit.io.clear_fetchbuffer
       dec_uops(w)      := decode_units(w).io.deq.uop
 
 
@@ -346,7 +348,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    // all decoders are empty and ready for new instructions
    dec_rdy := !(dec_stall_next_inst)
 
-   when (dec_rdy || fetch_unit.io.fetchbuffer_kill)
+   when (dec_rdy || fetch_unit.io.clear_fetchbuffer)
    {
       dec_finished_mask := Bits(0)
    }
@@ -402,7 +404,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    rename_stage.io.dis_inst_can_proceed := issue_unit.io.dis_readys
    rename_stage.io.ren_pred_info := dec_fbundle.pred_resp
 
-   rename_stage.io.kill     := fetch_unit.io.kill // mispredict or flush
+   rename_stage.io.kill     := fetch_unit.io.clear_fetchbuffer // mispredict or flush
    rename_stage.io.brinfo   := br_unit.brinfo
    rename_stage.io.get_pred.br_tag        := iss_uops(brunit_idx).br_tag
    exe_units(brunit_idx).io.get_pred.info := Reg(next=rename_stage.io.get_pred.info)
@@ -1189,7 +1191,5 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    //-------------------------------------------------------------
    //-------------------------------------------------------------
 
-
 }
 
-}
