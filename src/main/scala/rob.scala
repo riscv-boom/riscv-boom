@@ -21,8 +21,8 @@
 // NOTES:
 //    - Currently we do not compress out bubbles in the ROB.
 //    - commit_width is tied directly to the dispatch_width.
-//    - Exceptions are only taken when at the head of the commit bundle.
-//      This helps deal with loads, stores, and refetch instructions.
+//    - Exceptions are only taken when at the head of the commit bundle --
+//      this helps deal with loads, stores, and refetch instructions.
 //
 
 package boom
@@ -31,26 +31,6 @@ import Chisel._
 import scala.math.ceil
 import cde.Parameters
 import util.Str
-
-class Exception(implicit p: Parameters) extends BoomBundle()(p)
-{
-   val uop = new MicroOp()
-   val cause = Bits(width=log2Up(rocket.Causes.all.max))
-   val badvaddr = UInt(width=coreMaxAddrBits)
-}
-
-// provide a port for a FU to get the PC of an instruction from the ROB
-// and the BROB index too.
-class RobPCRequest(implicit p: Parameters) extends BoomBundle()(p)
-{
-   val rob_idx  = UInt(INPUT, ROB_ADDR_SZ)
-   val curr_pc  = UInt(OUTPUT, vaddrBits+1)
-   val curr_brob_idx = UInt(OUTPUT, BROB_ADDR_SZ)
-   // the next_pc may not be valid (stalled or still being fetched)
-   val next_val = Bool(OUTPUT)
-   val next_pc  = UInt(OUTPUT, vaddrBits+1)
-}
-
 
 class RobIo(machine_width: Int
             , issue_width: Int
@@ -69,13 +49,21 @@ class RobIo(machine_width: Int
 
    val curr_rob_tail    = UInt(OUTPUT, ROB_ADDR_SZ)
 
+   // Handle Branch Misspeculations
+   val brinfo = new BrResolutionInfo().asInput
+
+   // Let the Branch Unit read out an instruction's PC
+   val get_pc = new RobPCRequest()
+
    // Write-back Stage
    // (Update of ROB)
    // Instruction is no longer busy and can be committed
-   // currently all supported exceptions are detected in Decode (except load-ordering failures)
    val wb_resps = Vec(num_wakeup_ports, Valid(new ExeUnitResp(65))).flip
 
-   // track side-effects for debug purposes.
+   val lsu_clr_bsy_valid = Bool(INPUT)
+   val lsu_clr_bsy_rob_idx = UInt(INPUT, ROB_ADDR_SZ)
+
+   // Track side-effects for debug purposes.
    // Also need to know when loads write back, whereas we don't need loads to unbusy.
    val debug_wb_valids  = Vec(num_wakeup_ports, Bool(INPUT))
    val debug_wb_wdata   = Vec(num_wakeup_ports, Bits(INPUT, xLen))
@@ -85,9 +73,6 @@ class RobIo(machine_width: Int
    val bxcpt = new ValidIO(new Exception()).flip // BRU
    val cxcpt = new ValidIO(new Exception()).flip // CSR
 
-   val lsu_clr_bsy_valid = Bool(INPUT)
-   val lsu_clr_bsy_rob_idx = UInt(INPUT, ROB_ADDR_SZ)
-
    // Commit stage (free resources; also used for rollback).
    val commit = new CommitSignals(machine_width).asOutput
 
@@ -95,24 +80,13 @@ class RobIo(machine_width: Int
    // (some loads can only execute once they are at the head of the ROB).
    val com_load_is_at_rob_head = Bool(OUTPUT)
 
-   // Handle Exceptions/ROB Rollback
+   // Communicate exceptions to the CSRFile
    val com_xcpt = Valid(new CommitExceptionSignals(machine_width))
+   val csr_eret = Bool(INPUT)
+   val csr_evec = UInt(INPUT, vaddrBitsExtended)
 
-   // Handle Branch Misspeculations
-   val brinfo = new BrResolutionInfo().asInput
-
-   // Let the Branch Unit read out an instruction's PC
-   val get_pc = new RobPCRequest()
-
-   // When flushing pipeline, need to reset to PC+4 relative to the head of the ROB
-   // but because we're doing superscalar commit, the actual flush pc may not
-   // be the rob_head pc+4, but rather the last committed instruction in the
-   // commit group.
-   // Finally, we redirect the PC ASAP, but flush the pipeline a cycle later
-   // (to get it off the critical path).
-   val flush_take_pc    = Bool(OUTPUT)       // redirect PC due to a flush
-   val flush_pc         = UInt(OUTPUT, vaddrBits+1)
-   val flush_pipeline   = Bool(OUTPUT)       // kill entire pipeline (i.e., exception, load misspeculations)
+   // Flush signals (including exceptions, pipeline replays, and memory ordering failures).
+   val flush = Valid(new FlushSignals)
 
    val clear_brob       = Bool(OUTPUT)
 
@@ -129,36 +103,63 @@ class RobIo(machine_width: Int
    val debug_tsc = UInt(INPUT, xLen)
 }
 
+
 class CommitSignals(machine_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
-   val valids       = Vec(machine_width, Bool())
-   val uops         = Vec(machine_width, new MicroOp())
-   val fflags       = Valid(UInt(width = 5))
+   val valids     = Vec(machine_width, Bool())
+   val uops       = Vec(machine_width, new MicroOp())
+   val fflags     = Valid(UInt(width = 5))
+
+   // Perform rollback of rename state (in conjuction with commit.uops).
+   val rbk_valids = Vec(machine_width, Bool())
 
    // tell the LSU how many stores and loads are being committed
-   val st_mask      = Vec(machine_width, Bool())
-   val ld_mask      = Vec(machine_width, Bool())
- 
+   val st_mask    = Vec(machine_width, Bool())
+   val ld_mask    = Vec(machine_width, Bool())
+
    override def cloneType: this.type = new CommitSignals(machine_width)(p).asInstanceOf[this.type]
 }
 
+
 class CommitExceptionSignals(machine_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
+   val pc         = UInt(width = xLen)
    val cause      = UInt(width = xLen)
-   val rbk_valids = Vec(machine_width, Bool())
    val badvaddr   = UInt(width = xLen)
    override def cloneType: this.type = new CommitExceptionSignals(machine_width)(p).asInstanceOf[this.type]
 }
- 
-class FlushSignals(machine_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
+
+
+class FlushSignals(implicit p: Parameters) extends BoomBundle()(p)
 {
-   val s0_take_pc = UInt(width = xLen)
-   val s0_pc_target = Vec(machine_width, Bool())
-   val s1_flush_pipeline = Vec(machine_width, Bool())
-   override def cloneType: this.type = new FlushSignals(machine_width)(p).asInstanceOf[this.type]
+   // which PC should we redirect the front-end towards?
+   // When flushing pipeline, need to reset to PC+4 relative to the head of the ROB
+   // but because we're doing superscalar commit, the actual flush pc may not
+   // be the rob_head pc+4, but rather the last committed instruction in the
+   // commit group.
+   val pc = UInt(width = xLen)
 }
 
- 
+
+class Exception(implicit p: Parameters) extends BoomBundle()(p)
+{
+   val uop = new MicroOp()
+   val cause = Bits(width=log2Up(rocket.Causes.all.max))
+   val badvaddr = UInt(width=coreMaxAddrBits)
+}
+
+
+// provide a port for a FU to get the PC of an instruction from the ROB
+// and the BROB index too.
+class RobPCRequest(implicit p: Parameters) extends BoomBundle()(p)
+{
+   val rob_idx  = UInt(INPUT, ROB_ADDR_SZ)
+   val curr_pc  = UInt(OUTPUT, vaddrBits+1)
+   val curr_brob_idx = UInt(OUTPUT, BROB_ADDR_SZ)
+   // the next_pc may not be valid (stalled or still being fetched)
+   val next_val = Bool(OUTPUT)
+   val next_pc  = UInt(OUTPUT, vaddrBits+1)
+}
 
 
 class DebugRobSignals(implicit p: Parameters) extends BoomBundle()(p)
@@ -464,8 +465,8 @@ class Rob(width: Int
       // Perform Commit
       io.commit.valids(w)     := will_commit(w)
       io.commit.uops(w)       := rob_uop(com_idx)
-      
-      io.com_xcpt.bits.rbk_valids(w) := 
+
+      io.commit.rbk_valids(w) :=
                               (rob_state === s_rollback) &&
                               rob_val(com_idx) &&
                               (rob_uop(com_idx).dst_rtype === RT_FIX || rob_uop(com_idx).dst_rtype === RT_FLT) &&
@@ -616,17 +617,23 @@ class Rob(width: Int
    io.com_xcpt.bits.badvaddr := Sext(r_xcpt_badvaddr,xLen)
 
    val refetch_inst = exception_thrown
-   io.flush_pc  := rob_pc_hob.read(rob_head) +
+   val flush_pc  = rob_pc_hob.read(rob_head) +
                    PriorityMux(rob_head_vals, Range(0,width).map(w => UInt(w << 2))) +
                    Mux(refetch_inst, UInt(0), UInt(4))
+   io.com_xcpt.bits.pc := flush_pc
+
    val flush_val = exception_thrown ||
+                     io.csr_eret ||
                      (Range(0,width).map{i => io.commit.valids(i) && io.commit.uops(i).flush_on_commit}).reduce(_|_)
 
-   io.flush_take_pc  := flush_val
-   io.flush_pipeline := Reg(next=flush_val)
+   // delay a cycle for critical path considerations
+   io.flush.valid := RegNext(flush_val)
+   io.flush.bits.pc := RegNext(Mux(io.com_xcpt.valid || io.cxcpt.valid || io.csr_eret,
+                        io.csr_evec,
+                        flush_pc))
 
    val com_lsu_misspec = RegNext(exception_thrown && io.com_xcpt.bits.cause === MINI_EXCEPTION_MEM_ORDERING)
-   assert (!(com_lsu_misspec && !io.flush_pipeline), "[rob] pipeline flush not be excercised during a LSU misspeculation")
+   assert (!(com_lsu_misspec && !io.flush.valid), "[rob] pipeline flush not be excercised during a LSU misspeculation")
 
    // -----------------------------------------------
    // FP Exceptions
@@ -673,7 +680,7 @@ class Rob(width: Int
       dis_xcpts(i) := io.dis_valids(i) && io.dis_uops(i).exception
    }
 
-   when (!(io.flush_pipeline || exception_thrown) && rob_state =/= s_rollback)
+   when (!(io.flush.valid || exception_thrown) && rob_state =/= s_rollback)
    {
       when (io.lxcpt.valid || io.bxcpt.valid)
       {
@@ -702,7 +709,7 @@ class Rob(width: Int
 
    r_xcpt_uop         := next_xcpt_uop
    r_xcpt_uop.br_mask := GetNewBrMask(io.brinfo, next_xcpt_uop)
-   when (io.flush_pipeline || IsKilledByBranch(io.brinfo, next_xcpt_uop))
+   when (io.flush.valid || IsKilledByBranch(io.brinfo, next_xcpt_uop))
    {
       r_xcpt_val := Bool(false)
    }

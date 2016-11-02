@@ -54,8 +54,6 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
 
       val flush_take_pc     = Bool(INPUT)
       val flush_pc          = UInt(INPUT, vaddrBits+1)
-      val com_take_pc       = Bool(INPUT) // commit time: e.g., exception or CSR request
-      val com_pc            = UInt(INPUT, vaddrBits+1)
 
       val stalled           = Bool(OUTPUT)
       val resp              = new DecoupledIO(new FetchBundle)
@@ -101,18 +99,16 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
 
    val take_pc = br_unit.take_pc ||
                  io.flush_take_pc ||
-                 io.com_take_pc ||
                  (io.bp2_take_pc && !if_stalled) // TODO this seems way too low-level to get backpressure signal correct
 
    io.imem.req.valid   := take_pc // tell front-end we had an unexpected change in the stream
    io.imem.req.bits.pc := if_pc_next
-   io.imem.req.bits.speculative := !(io.com_take_pc || io.flush_take_pc)
+   io.imem.req.bits.speculative := !(io.flush_take_pc)
    io.imem.resp.ready  := !(if_stalled) // TODO perf BUG || take_pc?
 
-   if_pc_next := Mux(io.com_take_pc,   io.com_pc,
-                 Mux(io.flush_take_pc, io.flush_pc,
+   if_pc_next := Mux(io.flush_take_pc, io.flush_pc,
                  Mux(br_unit.take_pc,  br_unit.target(vaddrBits,0),
-                                       io.bp2_pred_target))) // bp2_take_pc
+                                       io.bp2_pred_target)) // bp2_take_pc
 
    // Fetch Buffer
    FetchBuffer.io.enq.valid := io.imem.resp.valid && !io.clear_fetchbuffer
@@ -137,8 +133,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    {
       io.imem.btb_update.valid := (br_unit.btb_update_valid ||
                                     (io.bp2_take_pc && io.bp2_is_taken && !if_stalled && !br_unit.take_pc)) &&
-                                  !io.flush_take_pc &&
-                                  !io.com_take_pc
+                                  !io.flush_take_pc
    }
    else
    {

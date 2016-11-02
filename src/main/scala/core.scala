@@ -205,14 +205,9 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    fetch_unit.io.bp2_pred_target   := bpd_stage.io.req.bits.target
 
    fetch_unit.io.clear_fetchbuffer := br_unit.brinfo.mispredict ||
-                                       rob.io.flush_pipeline ||
-                                       rob.io.com_xcpt.valid ||
-                                       csr.io.csr_xcpt ||
-                                       csr.io.eret
-   fetch_unit.io.flush_take_pc     := rob.io.flush_take_pc
-   fetch_unit.io.flush_pc          := rob.io.flush_pc
-   fetch_unit.io.com_take_pc       := rob.io.com_xcpt.valid || csr.io.csr_xcpt || csr.io.eret
-   fetch_unit.io.com_pc            := csr.io.evec
+                                       rob.io.flush.valid
+   fetch_unit.io.flush_take_pc     := rob.io.flush.valid
+   fetch_unit.io.flush_pc          := rob.io.flush.bits.pc
 
    io.imem.flush_icache :=
       Range(0,DECODE_WIDTH).map{i => rob.io.commit.valids(i) && rob.io.commit.uops(i).is_fencei}.reduce(_|_) ||
@@ -247,7 +242,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
 
    io.imem.ras_update <> bpd_stage.io.ras_update
    bpd_stage.io.br_unit := br_unit
-   bpd_stage.io.kill := rob.io.flush_take_pc
+   bpd_stage.io.kill := rob.io.flush.valid
    bpd_stage.io.status_prv := csr.io.status.prv
    bpd_stage.io.req.ready := !fetch_unit.io.stalled
 
@@ -311,7 +306,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
                         || lsu_io.stq_full
                         || branch_mask_full(w)
                         || br_unit.brinfo.mispredict
-                        || rob.io.flush_pipeline
+                        || rob.io.flush.valid
                         || dec_stall_next_inst
                         || !bpd_stage.io.brob.allocate.ready
                         || (dec_valids(w) && dec_uops(w).is_fencei && !lsu_io.lsu_fencei_rdy)
@@ -356,7 +351,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
 
 
    dec_brmask_logic.io.brinfo := br_unit.brinfo
-   dec_brmask_logic.io.flush_pipeline := rob.io.flush_pipeline
+   dec_brmask_logic.io.flush_pipeline := rob.io.flush.valid
 
    for (w <- 0 until DECODE_WIDTH)
    {
@@ -403,7 +398,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    rename_stage.io.get_pred.br_tag        := iss_uops(brunit_idx).br_tag
    exe_units(brunit_idx).io.get_pred.info := Reg(next=rename_stage.io.get_pred.info)
 
-   rename_stage.io.flush_pipeline := rob.io.flush_pipeline
+   rename_stage.io.flush_pipeline := rob.io.flush.valid
 
    for (w <- 0 until DECODE_WIDTH)
    {
@@ -445,7 +440,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
 
    rename_stage.io.com_valids := rob.io.commit.valids
    rename_stage.io.com_uops := rob.io.commit.uops
-   rename_stage.io.com_rbk_valids := rob.io.com_xcpt.bits.rbk_valids
+   rename_stage.io.com_rbk_valids := rob.io.commit.rbk_valids
 
    //-------------------------------------------------------------
    //-------------------------------------------------------------
@@ -517,7 +512,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
 
 
    issue_unit.io.brinfo := br_unit.brinfo
-   issue_unit.io.flush_pipeline := rob.io.flush_pipeline
+   issue_unit.io.flush_pipeline := rob.io.flush.valid
 
    wu_idx = 0
    for (i <- 0 until exe_units.length)
@@ -565,7 +560,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    }
 
    register_read.io.brinfo := br_unit.brinfo
-   register_read.io.kill   := rob.io.flush_pipeline
+   register_read.io.kill   := rob.io.flush.valid
 
    register_read.io.bypass := bypasses
 
@@ -586,9 +581,9 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    csr.io.rw.wdata :=wb_wdata
 
    // Extra I/O
-   csr.io.pc        := rob.io.flush_pc
-   csr.io.exception := rob.io.com_xcpt.valid && !csr.io.csr_xcpt
    csr.io.retire    := PopCount(rob.io.commit.valids.toBits)
+   csr.io.exception := rob.io.com_xcpt.valid && !csr.io.csr_xcpt
+   csr.io.pc        := rob.io.com_xcpt.bits.pc
    csr.io.cause     := rob.io.com_xcpt.bits.cause
    csr.io.badaddr   := rob.io.com_xcpt.bits.badvaddr
 
@@ -617,7 +612,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    {
       exe_units(w).io.req <> register_read.io.exe_reqs(w)
       exe_units(w).io.brinfo := br_unit.brinfo
-      exe_units(w).io.com_exception := rob.io.com_xcpt.valid
+      exe_units(w).io.com_exception := rob.io.flush.valid
 
       if (exe_units(w).isBypassable)
       {
@@ -644,9 +639,9 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
 
    for (w <- 0 until DECODE_WIDTH)
    {
-      lsu_io.dec_st_vals(w) := dec_will_fire(w) && rename_stage.io.inst_can_proceed(w) && !rob.io.com_xcpt.valid &&
+      lsu_io.dec_st_vals(w) := dec_will_fire(w) && rename_stage.io.inst_can_proceed(w) && !rob.io.flush.valid &&
                                dec_uops(w).is_store
-      lsu_io.dec_ld_vals(w) := dec_will_fire(w) && rename_stage.io.inst_can_proceed(w) && !rob.io.com_xcpt.valid &&
+      lsu_io.dec_ld_vals(w) := dec_will_fire(w) && rename_stage.io.inst_can_proceed(w) && !rob.io.flush.valid &&
                                dec_uops(w).is_load
 
       lsu_io.dec_uops(w).rob_idx := dis_uops(w).rob_idx // for debug purposes (comit logging)
@@ -657,7 +652,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    lsu_io.commit_load_at_rob_head := rob.io.com_load_is_at_rob_head
 
    //com_xcpt.valid comes too early, will fight against a branch that resolves same cycle as an exception
-   lsu_io.exception := rob.io.flush_pipeline
+   lsu_io.exception := rob.io.flush.valid
 
    // Handle Branch Mispeculations
    lsu_io.brinfo := br_unit.brinfo
@@ -668,7 +663,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
 
    lsu_io.debug_tsc := tsc_reg
 
-   io.dmem.flush_pipe := rob.io.flush_pipeline
+   io.dmem.flush_pipe := rob.io.flush.valid
 
 
    //-------------------------------------------------------------
@@ -812,6 +807,8 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    rob.io.lxcpt <> lsu_io.xcpt
 
    rob.io.cxcpt.valid := csr.io.csr_xcpt
+   rob.io.csr_eret := csr.io.eret
+   rob.io.csr_evec := csr.io.evec
 
    rob.io.bxcpt <> br_unit.xcpt  // TODO XXX chisel3 question
 //   rob.io.bxcpt <> br_unit.xcpt.asInput
@@ -819,7 +816,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
 
    bpd_stage.io.brob.deallocate <> rob.io.brob_deallocate
    bpd_stage.io.brob.bpd_update <> br_unit.bpd_update
-   bpd_stage.io.brob.flush := rob.io.flush_pipeline || rob.io.clear_brob
+   bpd_stage.io.brob.flush := rob.io.flush.valid|| rob.io.clear_brob
 
    //-------------------------------------------------------------
    // **** Flush Pipeline ****
@@ -828,10 +825,10 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
 
    for (w <- 0 until exe_units.length)
    {
-      exe_units(w).io.req.bits.kill := rob.io.flush_pipeline
+      exe_units(w).io.req.bits.kill := rob.io.flush.valid
    }
 
-   assert (!(RegNext(rob.io.com_xcpt.valid) && !rob.io.flush_pipeline),
+   assert (!(RegNext(rob.io.com_xcpt.valid) && !rob.io.flush.valid),
       "[core] exception occurred, but pipeline flush signal not set!")
 
    //-------------------------------------------------------------
@@ -851,7 +848,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
 
    csr.io.events.map(_ := UInt(0))
 
-   require (nPerfEvents > 26)
+   require (nPerfEvents > 29)
    println ("   " + nPerfCounters + " HPM counters enabled (with " + nPerfEvents + " events).")
 
    // Execution-time branch prediction accuracy.
@@ -888,7 +885,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    csr.io.events(14) := lsu_io.stq_full
    csr.io.events(15) := !issue_unit.io.dis_readys.reduce(_|_)
    csr.io.events(16) := branch_mask_full.reduce(_|_)
-   csr.io.events(17) := rob.io.flush_pipeline
+   csr.io.events(17) := rob.io.flush.valid
 
    // LSU Speculation stats.
    csr.io.events(18) := lsu_io.counters.ld_valid
@@ -986,8 +983,8 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
 //         , Mux(lsu_io.stq_full, Str("STQ_FULL"), Str("_"))
          , Mux(lsu_io.laq_full, Str("L"), Str("_"))
          , Mux(lsu_io.stq_full, Str("S"), Str("_"))
-//         , Mux(rob.io.flush_pipeline, Str("FLUSH_PIPELINE"), Str(" "))
-         , Mux(rob.io.flush_pipeline, Str("F"), Str(" "))
+//         , Mux(rob.io.flush.valid, Str("FLUSH_PIPELINE"), Str(" "))
+         , Mux(rob.io.flush.valid, Str("F"), Str(" "))
 //         , Mux(branch_mask_full.reduce(_|_), Str("BR_MSK_FULL"), Str(" "))
          , Mux(branch_mask_full.reduce(_|_), Str("B"), Str(" "))
 //         , Mux(io.dmem.req.ready, Str("D$_Rdy"), Str("D$_BSY"))
