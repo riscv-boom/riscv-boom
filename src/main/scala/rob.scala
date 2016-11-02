@@ -85,33 +85,21 @@ class RobIo(machine_width: Int
    val bxcpt = new ValidIO(new Exception()).flip // BRU
    val cxcpt = new ValidIO(new Exception()).flip // CSR
 
-   // Commit Stage
-   // (Free no-longer used physical register).
-   // Also used for rollback.
-   val com_valids       = Vec(machine_width, Bool(OUTPUT))
-   val com_uops         = Vec(machine_width, new MicroOp().asOutput)
-   val com_fflags_val   = Bool(OUTPUT)
-   val com_fflags       = Bits(OUTPUT, 5)
-
-   // tell the LSU how many stores and loads are being committed
-   val com_st_mask      = Vec(machine_width, Bool(OUTPUT))
-   val com_ld_mask      = Vec(machine_width, Bool(OUTPUT))
-
    val lsu_clr_bsy_valid = Bool(INPUT)
    val lsu_clr_bsy_rob_idx = UInt(INPUT, ROB_ADDR_SZ)
+
+   // Commit stage (free resources; also used for rollback).
+   val commit = new CommitSignals(machine_width).asOutput
 
    // tell the LSU that the head of the ROB is a load
    // (some loads can only execute once they are at the head of the ROB).
    val com_load_is_at_rob_head = Bool(OUTPUT)
 
    // Handle Exceptions/ROB Rollback
-   val com_exception    = Bool(OUTPUT)
-   val com_exc_cause    = UInt(OUTPUT, xLen)
-   val com_rbk_valids   = Vec(machine_width, Bool(OUTPUT))
-   val com_badvaddr     = UInt(OUTPUT, xLen)
+   val com_xcpt = Valid(new CommitExceptionSignals(machine_width))
 
    // Handle Branch Misspeculations
-   val brinfo           = new BrResolutionInfo().asInput
+   val brinfo = new BrResolutionInfo().asInput
 
    // Let the Branch Unit read out an instruction's PC
    val get_pc = new RobPCRequest()
@@ -126,7 +114,7 @@ class RobIo(machine_width: Int
    val flush_pc         = UInt(OUTPUT, vaddrBits+1)
    val flush_pipeline   = Bool(OUTPUT)       // kill entire pipeline (i.e., exception, load misspeculations)
 
-   val flush_brob       = Bool(OUTPUT)
+   val clear_brob       = Bool(OUTPUT)
 
    // Stall Decode as appropriate
    val empty            = Bool(OUTPUT)
@@ -136,12 +124,44 @@ class RobIo(machine_width: Int
    val brob_deallocate  = Valid(new BrobDeallocateIdx)
 
    // pass out debug information to high-level printf
-   val debug = new DebugRobIO().asOutput
+   val debug = new DebugRobSignals().asOutput
 
    val debug_tsc = UInt(INPUT, xLen)
 }
 
-class DebugRobIO(implicit p: Parameters) extends BoomBundle()(p)
+class CommitSignals(machine_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
+{
+   val valids       = Vec(machine_width, Bool())
+   val uops         = Vec(machine_width, new MicroOp())
+   val fflags       = Valid(UInt(width = 5))
+
+   // tell the LSU how many stores and loads are being committed
+   val st_mask      = Vec(machine_width, Bool())
+   val ld_mask      = Vec(machine_width, Bool())
+ 
+   override def cloneType: this.type = new CommitSignals(machine_width)(p).asInstanceOf[this.type]
+}
+
+class CommitExceptionSignals(machine_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
+{
+   val cause      = UInt(width = xLen)
+   val rbk_valids = Vec(machine_width, Bool())
+   val badvaddr   = UInt(width = xLen)
+   override def cloneType: this.type = new CommitExceptionSignals(machine_width)(p).asInstanceOf[this.type]
+}
+ 
+class FlushSignals(machine_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
+{
+   val s0_take_pc = UInt(width = xLen)
+   val s0_pc_target = Vec(machine_width, Bool())
+   val s1_flush_pipeline = Vec(machine_width, Bool())
+   override def cloneType: this.type = new FlushSignals(machine_width)(p).asInstanceOf[this.type]
+}
+
+ 
+
+
+class DebugRobSignals(implicit p: Parameters) extends BoomBundle()(p)
 {
    val state = UInt()
    val rob_head = UInt(width = ROB_ADDR_SZ)
@@ -300,7 +320,7 @@ class Rob(width: Int
       r_partial_row := io.dis_partial_stall
    }
 
-   when (io.flush_brob)
+   when (io.clear_brob)
    {
       row_metadata_has_brorjalr(rob_tail) := Bool(false)
    }
@@ -313,7 +333,7 @@ class Rob(width: Int
    io.get_pc.curr_brob_idx := row_metadata_brob_idx(GetRowIdx(io.get_pc.rob_idx))
 
    // HACK to deal with SRET changing PC, but not setting flush_pipeline.
-   io.flush_brob := Range(0, width).map(i =>
+   io.clear_brob := Range(0, width).map(i =>
       io.dis_valids(i) && io.dis_uops(i).is_unique).reduce(_|_)
 
    // **************************************************************************
@@ -442,12 +462,14 @@ class Rob(width: Int
 
       // use the same "com_uop" for both rollback AND commit
       // Perform Commit
-      io.com_valids(w)     := will_commit(w)
-      io.com_rbk_valids(w) := (rob_state === s_rollback) &&
+      io.commit.valids(w)     := will_commit(w)
+      io.commit.uops(w)       := rob_uop(com_idx)
+      
+      io.com_xcpt.bits.rbk_valids(w) := 
+                              (rob_state === s_rollback) &&
                               rob_val(com_idx) &&
                               (rob_uop(com_idx).dst_rtype === RT_FIX || rob_uop(com_idx).dst_rtype === RT_FLT) &&
                               Bool(!ENABLE_COMMIT_MAP_TABLE)
-      io.com_uops(w)       := rob_uop(com_idx)
 
       when (rob_state === s_rollback)
       {
@@ -534,7 +556,7 @@ class Rob(width: Int
                   temp_uop.ldst_val && temp_uop.pdst =/= io.wb_resps(i).bits.uop.pdst),
                   "[ROB] writeback occurred to the wrong pdst.")
       }
-      io.com_uops(w).debug_wdata := rob_uop(rob_head).debug_wdata
+      io.commit.uops(w).debug_wdata := rob_uop(rob_head).debug_wdata
 
       //--------------------------------------------------
       // Debug: handle passing out signals to printf in dpath
@@ -586,24 +608,24 @@ class Rob(width: Int
    // exception must be in the commit bundle
    // Note: exception must be the first valid instruction in the commit bundle
    exception_thrown    := will_throw_exception || io.cxcpt.valid
-   val is_mini_exception = io.com_exc_cause === MINI_EXCEPTION_MEM_ORDERING ||
-                           io.com_exc_cause === MINI_EXCEPTION_REPLAY
-   io.com_exception    := exception_thrown && !is_mini_exception
-   io.com_exc_cause    := r_xcpt_uop.exc_cause
+   val is_mini_exception = io.com_xcpt.bits.cause === MINI_EXCEPTION_MEM_ORDERING ||
+                           io.com_xcpt.bits.cause === MINI_EXCEPTION_REPLAY
+   io.com_xcpt.valid := exception_thrown && !is_mini_exception
+   io.com_xcpt.bits.cause := r_xcpt_uop.exc_cause
 
-   io.com_badvaddr := Sext(r_xcpt_badvaddr,xLen)
+   io.com_xcpt.bits.badvaddr := Sext(r_xcpt_badvaddr,xLen)
 
    val refetch_inst = exception_thrown
    io.flush_pc  := rob_pc_hob.read(rob_head) +
                    PriorityMux(rob_head_vals, Range(0,width).map(w => UInt(w << 2))) +
                    Mux(refetch_inst, UInt(0), UInt(4))
    val flush_val = exception_thrown ||
-                     (Range(0,width).map{i => io.com_valids(i) && io.com_uops(i).flush_on_commit}).reduce(_|_)
+                     (Range(0,width).map{i => io.commit.valids(i) && io.commit.uops(i).flush_on_commit}).reduce(_|_)
 
    io.flush_take_pc  := flush_val
    io.flush_pipeline := Reg(next=flush_val)
 
-   val com_lsu_misspec = RegNext(exception_thrown && io.com_exc_cause === MINI_EXCEPTION_MEM_ORDERING)
+   val com_lsu_misspec = RegNext(exception_thrown && io.com_xcpt.bits.cause === MINI_EXCEPTION_MEM_ORDERING)
    assert (!(com_lsu_misspec && !io.flush_pipeline), "[rob] pipeline flush not be excercised during a LSU misspeculation")
 
    // -----------------------------------------------
@@ -616,24 +638,24 @@ class Rob(width: Int
    for (w <- 0 until width)
    {
       // TODO can I relax the ld/st constraint?
-      fflags_val(w) := io.com_valids(w) &&
-                       io.com_uops(w).fp_val &&
-                      !(io.com_uops(w).is_load || io.com_uops(w).is_store)
+      fflags_val(w) := io.commit.valids(w) &&
+                       io.commit.uops(w).fp_val &&
+                      !(io.commit.uops(w).is_load || io.commit.uops(w).is_store)
 
       fflags(w) := Mux(fflags_val(w), rob_head_fflags(w), Bits(0))
 
-      assert (!(io.com_valids(w) &&
-               !io.com_uops(w).fp_val &&
+      assert (!(io.commit.valids(w) &&
+               !io.commit.uops(w).fp_val &&
                rob_head_fflags(w) =/= Bits(0)),
                "Committed non-FP instruction has non-zero fflag bits.")
-      assert (!(io.com_valids(w) &&
-               io.com_uops(w).fp_val &&
-               (io.com_uops(w).is_load || io.com_uops(w).is_store) &&
+      assert (!(io.commit.valids(w) &&
+               io.commit.uops(w).fp_val &&
+               (io.commit.uops(w).is_load || io.commit.uops(w).is_store) &&
                rob_head_fflags(w) =/= Bits(0)),
                "Committed FP load or store has non-zero fflag bits.")
    }
-   io.com_fflags_val := fflags_val.reduce(_|_)
-   io.com_fflags     := fflags.reduce(_|_)
+   io.commit.fflags.valid := fflags_val.reduce(_|_)
+   io.commit.fflags.bits  := fflags.reduce(_|_)
 
    // -----------------------------------------------
    // Exception Tracking Logic
@@ -707,7 +729,7 @@ class Rob(width: Int
    // dispatch the rest of it.
    // update when committed ALL valid instructions in commit_bundle
 
-   finished_committing_row := (io.com_valids.toBits =/= Bits(0)) &&
+   finished_committing_row := (io.commit.valids.toBits =/= Bits(0)) &&
                               ((will_commit.toBits ^ rob_head_vals.toBits) === Bits(0)) &&
                               !(r_partial_row && rob_head === rob_tail)
    when (finished_committing_row)
@@ -861,8 +883,8 @@ class Rob(width: Int
    for (w <- 0 until width)
    {
       // tell LSU it is ready to its stores and loads
-      io.com_st_mask(w) := io.com_valids(w) && rob_head_is_store(w)
-      io.com_ld_mask(w) := io.com_valids(w) && rob_head_is_load(w)
+      io.commit.st_mask(w) := io.commit.valids(w) && rob_head_is_store(w)
+      io.commit.ld_mask(w) := io.commit.valids(w) && rob_head_is_load(w)
    }
 
    io.com_load_is_at_rob_head := rob_head_is_load(PriorityEncoder(rob_head_vals.toBits))

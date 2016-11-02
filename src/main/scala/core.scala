@@ -137,12 +137,6 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    lsu_io = exe_units.memory_unit.io.lsu_io
    io.dmem <> exe_units.memory_unit.io.dmem
 
-   // Commit Stage
-   val com_valids            = Wire(Vec(DECODE_WIDTH, Bool()))
-   val com_uops              = Wire(Vec(DECODE_WIDTH, new MicroOp()))
-
-   val watchdog_trigger      = Wire(Bool())
-
 
    //****************************************
    // Time Stamp Counter & Retired Instruction Counter
@@ -150,7 +144,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    val tsc_reg  = Reg(init = UInt(0, xLen))
    val irt_reg  = Reg(init = UInt(0, xLen))
    tsc_reg  := tsc_reg + Mux(Bool(O3PIPEVIEW_PRINTF), UInt(O3_CYCLE_TIME), UInt(1))
-   irt_reg  := irt_reg + PopCount(com_valids.toBits)
+   irt_reg  := irt_reg + PopCount(rob.io.commit.valids.toBits)
    debug(tsc_reg)
    debug(irt_reg)
 
@@ -210,18 +204,18 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    fetch_unit.io.bp2_br_seen       := bpd_stage.io.pred_resp.br_seen
    fetch_unit.io.bp2_pred_target   := bpd_stage.io.req.bits.target
 
-   fetch_unit.io.clear_fetchbuffer := br_unit.brinfo.mispredict || 
+   fetch_unit.io.clear_fetchbuffer := br_unit.brinfo.mispredict ||
                                        rob.io.flush_pipeline ||
-                                       rob.io.com_exception ||
+                                       rob.io.com_xcpt.valid ||
                                        csr.io.csr_xcpt ||
                                        csr.io.eret
    fetch_unit.io.flush_take_pc     := rob.io.flush_take_pc
    fetch_unit.io.flush_pc          := rob.io.flush_pc
-   fetch_unit.io.com_take_pc       := rob.io.com_exception || csr.io.csr_xcpt || csr.io.eret
+   fetch_unit.io.com_take_pc       := rob.io.com_xcpt.valid || csr.io.csr_xcpt || csr.io.eret
    fetch_unit.io.com_pc            := csr.io.evec
 
    io.imem.flush_icache :=
-      Range(0,DECODE_WIDTH).map{i => com_valids(i) && com_uops(i).is_fencei}.reduce(_|_) ||
+      Range(0,DECODE_WIDTH).map{i => rob.io.commit.valids(i) && rob.io.commit.uops(i).is_fencei}.reduce(_|_) ||
       (br_unit.brinfo.mispredict && br_unit.brinfo.is_jr &&  csr.io.status.debug)
 
    io.imem.flush_tlb := csr.io.fatc
@@ -449,9 +443,9 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    }
    require (wu_idx == exe_units.num_wakeup_ports)
 
-   rename_stage.io.com_valids := com_valids
-   rename_stage.io.com_uops := com_uops
-   rename_stage.io.com_rbk_valids := rob.io.com_rbk_valids
+   rename_stage.io.com_valids := rob.io.commit.valids
+   rename_stage.io.com_uops := rob.io.commit.uops
+   rename_stage.io.com_rbk_valids := rob.io.com_xcpt.bits.rbk_valids
 
    //-------------------------------------------------------------
    //-------------------------------------------------------------
@@ -593,15 +587,15 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
 
    // Extra I/O
    csr.io.pc        := rob.io.flush_pc
-   csr.io.exception := rob.io.com_exception && !csr.io.csr_xcpt
-   csr.io.retire    := PopCount(com_valids.toBits)
-   csr.io.cause     := rob.io.com_exc_cause
-   csr.io.badaddr   := rob.io.com_badvaddr
+   csr.io.exception := rob.io.com_xcpt.valid && !csr.io.csr_xcpt
+   csr.io.retire    := PopCount(rob.io.commit.valids.toBits)
+   csr.io.cause     := rob.io.com_xcpt.bits.cause
+   csr.io.badaddr   := rob.io.com_xcpt.bits.badvaddr
 
 
    // reading requires serializing the entire pipeline
-   csr.io.fcsr_flags.valid := rob.io.com_fflags_val
-   csr.io.fcsr_flags.bits :=  rob.io.com_fflags
+   csr.io.fcsr_flags.valid := rob.io.commit.fflags.valid
+   csr.io.fcsr_flags.bits  := rob.io.commit.fflags.bits
 
    exe_units.map(_.io.fcsr_rm := csr.io.fcsr_rm)
 
@@ -623,7 +617,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    {
       exe_units(w).io.req <> register_read.io.exe_reqs(w)
       exe_units(w).io.brinfo := br_unit.brinfo
-      exe_units(w).io.com_exception := rob.io.com_exception
+      exe_units(w).io.com_exception := rob.io.com_xcpt.valid
 
       if (exe_units(w).isBypassable)
       {
@@ -650,19 +644,19 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
 
    for (w <- 0 until DECODE_WIDTH)
    {
-      lsu_io.dec_st_vals(w) := dec_will_fire(w) && rename_stage.io.inst_can_proceed(w) && !rob.io.com_exception &&
+      lsu_io.dec_st_vals(w) := dec_will_fire(w) && rename_stage.io.inst_can_proceed(w) && !rob.io.com_xcpt.valid &&
                                dec_uops(w).is_store
-      lsu_io.dec_ld_vals(w) := dec_will_fire(w) && rename_stage.io.inst_can_proceed(w) && !rob.io.com_exception &&
+      lsu_io.dec_ld_vals(w) := dec_will_fire(w) && rename_stage.io.inst_can_proceed(w) && !rob.io.com_xcpt.valid &&
                                dec_uops(w).is_load
 
       lsu_io.dec_uops(w).rob_idx := dis_uops(w).rob_idx // for debug purposes (comit logging)
    }
 
-   lsu_io.commit_store_mask := rob.io.com_st_mask
-   lsu_io.commit_load_mask  := rob.io.com_ld_mask
+   lsu_io.commit_store_mask := rob.io.commit.st_mask
+   lsu_io.commit_load_mask  := rob.io.commit.ld_mask
    lsu_io.commit_load_at_rob_head := rob.io.com_load_is_at_rob_head
 
-   //com_exception comes too early, will fight against a branch that resolves same cycle as an exception
+   //com_xcpt.valid comes too early, will fight against a branch that resolves same cycle as an exception
    lsu_io.exception := rob.io.flush_pipeline
 
    // Handle Branch Mispeculations
@@ -823,13 +817,9 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
 //   rob.io.bxcpt <> br_unit.xcpt.asInput
 
 
-   // Commit (ROB outputs)
-   com_valids       := rob.io.com_valids
-   com_uops         := rob.io.com_uops
-
    bpd_stage.io.brob.deallocate <> rob.io.brob_deallocate
    bpd_stage.io.brob.bpd_update <> br_unit.bpd_update
-   bpd_stage.io.brob.flush := rob.io.flush_pipeline || rob.io.flush_brob
+   bpd_stage.io.brob.flush := rob.io.flush_pipeline || rob.io.clear_brob
 
    //-------------------------------------------------------------
    // **** Flush Pipeline ****
@@ -841,7 +831,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
       exe_units(w).io.req.bits.kill := rob.io.flush_pipeline
    }
 
-   assert (!(RegNext(rob.io.com_exception) && !rob.io.flush_pipeline),
+   assert (!(RegNext(rob.io.com_xcpt.valid) && !rob.io.flush_pipeline),
       "[core] exception occurred, but pipeline flush signal not set!")
 
    //-------------------------------------------------------------
@@ -850,16 +840,9 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    //-------------------------------------------------------------
    //-------------------------------------------------------------
 
-   for (w <- 0 until DECODE_WIDTH)
-   {
-      debug(com_valids(w))
-      debug(com_uops(w).inst)
-   }
-
    // detect pipeline freezes and throw error
    val idle_cycles = util.WideCounter(32)
-   when (com_valids.toBits.orR || reset.toBool) { idle_cycles := UInt(0) }
-   watchdog_trigger := Reg(next=idle_cycles.value(30))
+   when (rob.io.commit.valids.toBits.orR || reset.toBool) { idle_cycles := UInt(0) }
    assert (!(idle_cycles.value(13)), "Pipeline has hung.")
 
 
@@ -877,7 +860,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
 
    // User-level instruction count.
    csr.io.events(2) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
-      com_valids(w) && (csr.io.status.prv === UInt(rocket.PRV.U))})
+      rob.io.commit.valids(w) && (csr.io.status.prv === UInt(rocket.PRV.U))})
 
    // L1 cache stats.
    csr.io.events(3) := io.counters.dc_miss
@@ -887,17 +870,17 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
 
    // Instruction mixes.
    csr.io.events(6)  := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
-      com_valids(w) && com_uops(w).is_br_or_jmp && !com_uops(w).is_jal})
+      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && !rob.io.commit.uops(w).is_jal})
    csr.io.events(7)  := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
-      com_valids(w) && com_uops(w).is_jal})
+      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_jal})
    csr.io.events(8)  := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
-      com_valids(w) && com_uops(w).is_jump && !com_uops(w).is_jal})
+      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_jump && !rob.io.commit.uops(w).is_jal})
    csr.io.events(9)  := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
-      com_valids(w) && com_uops(w).is_load})
+      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_load})
    csr.io.events(10) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
-      com_valids(w) && com_uops(w).is_store})
+      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_store})
    csr.io.events(11) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
-      com_valids(w) && com_uops(w).fp_val})
+      rob.io.commit.valids(w) && rob.io.commit.uops(w).fp_val})
 
    // Decode stall causes.
    csr.io.events(12) := !rob.io.ready
@@ -914,26 +897,31 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
 
    // Branch prediction stats.
    csr.io.events(21)  := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
-      com_valids(w) && com_uops(w).is_br_or_jmp && !com_uops(w).is_jal && com_uops(w).stat_brjmp_mispredicted})
+      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && !rob.io.commit.uops(w).is_jal &&
+      rob.io.commit.uops(w).stat_brjmp_mispredicted})
    csr.io.events(22) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
-      com_valids(w) && com_uops(w).is_br_or_jmp && !com_uops(w).is_jal && com_uops(w).stat_btb_made_pred})
+      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && !rob.io.commit.uops(w).is_jal &&
+      rob.io.commit.uops(w).stat_btb_made_pred})
    csr.io.events(23) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
-      com_valids(w) && com_uops(w).is_br_or_jmp && !com_uops(w).is_jal && com_uops(w).stat_btb_mispredicted})
+      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && !rob.io.commit.uops(w).is_jal &&
+      rob.io.commit.uops(w).stat_btb_mispredicted})
    csr.io.events(24) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
-      com_valids(w) && com_uops(w).is_br_or_jmp && !com_uops(w).is_jal && com_uops(w).stat_bpd_made_pred})
+      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && !rob.io.commit.uops(w).is_jal &&
+      rob.io.commit.uops(w).stat_bpd_made_pred})
    csr.io.events(25) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
-      com_valids(w) && com_uops(w).is_br_or_jmp && !com_uops(w).is_jal && com_uops(w).stat_bpd_mispredicted})
+      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && !rob.io.commit.uops(w).is_jal &&
+      rob.io.commit.uops(w).stat_bpd_mispredicted})
 
    // Branch prediction - no prediction made.
    csr.io.events(26) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
-      com_valids(w) && com_uops(w).is_br_or_jmp && !com_uops(w).is_jal &&
-      !com_uops(w).stat_btb_made_pred && !com_uops(w).stat_bpd_made_pred})
+      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && !rob.io.commit.uops(w).is_jal &&
+      !rob.io.commit.uops(w).stat_btb_made_pred && !rob.io.commit.uops(w).stat_bpd_made_pred})
 
    // Branch prediction - no predition made & a mispredict occurred.
    csr.io.events(27) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
-      com_valids(w) && com_uops(w).is_br_or_jmp && !com_uops(w).is_jal &&
-      !com_uops(w).stat_btb_made_pred && !com_uops(w).stat_bpd_made_pred &&
-      com_uops(w).stat_brjmp_mispredicted})
+      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && !rob.io.commit.uops(w).is_jal &&
+      !rob.io.commit.uops(w).stat_btb_made_pred && !rob.io.commit.uops(w).stat_bpd_made_pred &&
+      rob.io.commit.uops(w).stat_brjmp_mispredicted})
 
 
    // Count user-level branches (subtract from total to get privilege branch accuracy)
@@ -944,8 +932,8 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    csr.io.events(30) := csr.io.status.prv =/= RegNext(csr.io.status.prv)
 
    assert (!(Range(0,COMMIT_WIDTH).map{w =>
-      com_valids(w) && com_uops(w).is_br_or_jmp && com_uops(w).is_jal &&
-      com_uops(w).stat_brjmp_mispredicted}.reduce(_|_)),
+      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && rob.io.commit.uops(w).is_jal &&
+      rob.io.commit.uops(w).stat_brjmp_mispredicted}.reduce(_|_)),
       "[dpath] A committed JAL was marked as having been mispredicted.")
 
    //-------------------------------------------------------------
@@ -1056,9 +1044,9 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
 
 
       printf("Exct(%c%d) Commit(%x) fl: 0x%x (%d) is: 0x%x (%d)\n"
-         , Mux(rob.io.com_exception, Str("E"), Str("-"))
-         , rob.io.com_exc_cause
-         , com_valids.toBits
+         , Mux(rob.io.com_xcpt.valid, Str("E"), Str("-"))
+         , rob.io.com_xcpt.bits.cause
+         , rob.io.commit.valids.toBits
          , rename_stage.io.debug.freelist
          , PopCount(rename_stage.io.debug.freelist)
          , rename_stage.io.debug.isprlist
@@ -1141,19 +1129,24 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
       {
          val priv = csr.io.status.prv
 
-         when (com_valids(w))
+         when (rob.io.commit.valids(w))
          {
-            when (com_uops(w).dst_rtype === RT_FIX && com_uops(w).ldst =/= UInt(0))
+            when (rob.io.commit.uops(w).dst_rtype === RT_FIX && rob.io.commit.uops(w).ldst =/= UInt(0))
             {
-               printf("%d 0x%x (0x%x) x%d 0x%x\n", priv, Sext(com_uops(w).pc(vaddrBits,0), xLen), com_uops(w).inst, com_uops(w).inst(RD_MSB,RD_LSB), com_uops(w).debug_wdata)
+               printf("%d 0x%x (0x%x) x%d 0x%x\n",
+                  priv, Sext(rob.io.commit.uops(w).pc(vaddrBits,0), xLen), rob.io.commit.uops(w).inst,
+                  rob.io.commit.uops(w).inst(RD_MSB,RD_LSB), rob.io.commit.uops(w).debug_wdata)
             }
-            .elsewhen (com_uops(w).dst_rtype === RT_FLT)
+            .elsewhen (rob.io.commit.uops(w).dst_rtype === RT_FLT)
             {
-               printf("%d 0x%x (0x%x) f%d 0x%x\n", priv, Sext(com_uops(w).pc(vaddrBits,0), xLen), com_uops(w).inst, com_uops(w).inst(RD_MSB,RD_LSB), com_uops(w).debug_wdata)
+               printf("%d 0x%x (0x%x) f%d 0x%x\n",
+                  priv, Sext(rob.io.commit.uops(w).pc(vaddrBits,0), xLen), rob.io.commit.uops(w).inst,
+                  rob.io.commit.uops(w).inst(RD_MSB,RD_LSB), rob.io.commit.uops(w).debug_wdata)
             }
             .otherwise
             {
-               printf("%d 0x%x (0x%x)\n", priv, Sext(com_uops(w).pc(vaddrBits,0), xLen), com_uops(w).inst)
+               printf("%d 0x%x (0x%x)\n",
+                  priv, Sext(rob.io.commit.uops(w).pc(vaddrBits,0), xLen), rob.io.commit.uops(w).inst)
             }
          }
       }
@@ -1168,10 +1161,10 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
       println("   O3Pipeview Visualization Enabled\n")
       for (i <- 0 until COMMIT_WIDTH)
       {
-         when (com_valids(i))
+         when (rob.io.commit.valids(i))
          {
             printf("%d; O3PipeView:retire:%d:store: 0\n",
-               com_uops(i).debug_events.fetch_seq,
+               rob.io.commit.uops(i).debug_events.fetch_seq,
                tsc_reg)
          }
       }
@@ -1186,7 +1179,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    io.ptw_dat.ptbr       := csr.io.ptbr
    io.ptw_dat.invalidate := csr.io.fatc
    io.ptw_dat.status     := csr.io.status
-   io.dmem.invalidate_lr := rob.io.com_exception
+   io.dmem.invalidate_lr := rob.io.com_xcpt.valid
 
    //-------------------------------------------------------------
    //-------------------------------------------------------------
