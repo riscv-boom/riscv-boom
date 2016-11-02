@@ -663,7 +663,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    lsu_io.commit_load_at_rob_head := rob.io.com_load_is_at_rob_head
 
    //com_exception comes too early, will fight against a branch that resolves same cycle as an exception
-   lsu_io.exception := rob.io.flush_pipeline || rob.io.lsu_misspec
+   lsu_io.exception := rob.io.flush_pipeline
 
    // Handle Branch Mispeculations
    lsu_io.brinfo := br_unit.brinfo

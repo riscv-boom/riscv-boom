@@ -116,10 +116,6 @@ class RobIo(machine_width: Int
    // Let the Branch Unit read out an instruction's PC
    val get_pc = new RobPCRequest()
 
-   // Handle Additional Misspeculations (LSU)
-   // tell the LSU a misspec occurred
-   val lsu_misspec      = Bool(OUTPUT)
-
    // When flushing pipeline, need to reset to PC+4 relative to the head of the ROB
    // but because we're doing superscalar commit, the actual flush pc may not
    // be the rob_head pc+4, but rather the last committed instruction in the
@@ -595,7 +591,6 @@ class Rob(width: Int
    io.com_exception    := exception_thrown && !is_mini_exception
    io.com_exc_cause    := r_xcpt_uop.exc_cause
 
-   io.lsu_misspec := Reg(next=exception_thrown && io.com_exc_cause === MINI_EXCEPTION_MEM_ORDERING)
    io.com_badvaddr := Sext(r_xcpt_badvaddr,xLen)
 
    val refetch_inst = exception_thrown
@@ -607,6 +602,9 @@ class Rob(width: Int
 
    io.flush_take_pc  := flush_val
    io.flush_pipeline := Reg(next=flush_val)
+
+   val com_lsu_misspec = RegNext(exception_thrown && io.com_exc_cause === MINI_EXCEPTION_MEM_ORDERING)
+   assert (!(com_lsu_misspec && !io.flush_pipeline), "[rob] pipeline flush not be excercised during a LSU misspeculation")
 
    // -----------------------------------------------
    // FP Exceptions
