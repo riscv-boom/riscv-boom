@@ -816,7 +816,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
 
    bpd_stage.io.brob.deallocate <> rob.io.brob_deallocate
    bpd_stage.io.brob.bpd_update <> br_unit.bpd_update
-   bpd_stage.io.brob.flush := rob.io.flush.valid|| rob.io.clear_brob
+   bpd_stage.io.brob.flush := rob.io.flush.valid || rob.io.clear_brob
 
    //-------------------------------------------------------------
    // **** Flush Pipeline ****

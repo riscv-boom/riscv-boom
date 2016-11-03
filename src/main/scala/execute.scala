@@ -392,7 +392,7 @@ class MemExeUnit(implicit p: Parameters) extends ExecutionUnit(num_rf_read_ports
    // TODO get rid of com_exception and guard with an assert? Need to surpress within dc-shim.
 //   assert (!(io.com_exception && lsu.io.memreq_uop.is_load && lsu.io.memreq_val),
 //      "[execute] a valid load is returning while an exception is being thrown.")
-   io.dmem.req.valid     := Mux(io.com_exception && lsu.io.memreq_uop.is_load, 
+   io.dmem.req.valid     := Mux(io.com_exception && lsu.io.memreq_uop.is_load,
                               Bool(false),
                               lsu.io.memreq_val)
    io.dmem.req.bits.addr  := lsu.io.memreq_addr

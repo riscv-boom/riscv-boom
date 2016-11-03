@@ -123,10 +123,14 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
       fetch_bundle.insts(i) := io.imem.resp.bits.data(i*coreInstBits+coreInstBits-1,i*coreInstBits)
 
       if (i == 0)
+      {
          fetch_bundle.debug_events(i).fetch_seq := fseq_reg
+      }
       else
+      {
          fetch_bundle.debug_events(i).fetch_seq := fseq_reg +
             PopCount(fetch_bundle.mask.toBits()(i-1,0))
+      }
    }
 
    if (p(EnableBTB))

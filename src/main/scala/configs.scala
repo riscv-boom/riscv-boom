@@ -108,11 +108,11 @@ class WithSmallBOOMs extends Config(
       case "FETCH_WIDTH" => 1
       case "ISSUE_WIDTH" => 1
       case "ROB_ENTRIES" => 24
-      case "ISSUE_ENTRIES" => 12
-      case "LSU_ENTRIES" => 8
+      case "ISSUE_ENTRIES" => 10
+      case "LSU_ENTRIES" => 4
       case "PHYS_REGISTERS" => 100
       case "MAX_BR_COUNT" => 4
-      case "PERF_COUNTERS" => 4
+      case "PERF_COUNTERS" => 1
    }
 )
 

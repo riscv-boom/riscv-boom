@@ -1,3 +1,8 @@
+//******************************************************************************
+// Copyright (c) 2015, The Regents of the University of California (Regents).
+// All Rights Reserved. See LICENSE for license details.
+//------------------------------------------------------------------------------
+
 package boom
 
 import Chisel._
@@ -48,6 +53,8 @@ class WithAllBooms extends Config(
   }}
 )
 
+// scalastyle:off
+
 class SmallBOOMConfig  extends Config(new WithSmallBOOMs  ++ new WithAllBooms ++ new DefaultBOOMConfig ++ new BaseConfig)
 class MediumBOOMConfig extends Config(new WithMediumBOOMs ++ new WithAllBooms ++ new DefaultBOOMConfig ++ new DefaultL2Config)
 class MegaBOOMConfig   extends Config(new WithMegaBOOMs   ++ new WithAllBooms ++ new DefaultBOOMConfig ++ new DefaultL2Config)
@@ -57,3 +64,4 @@ class BOOML1Config extends  Config(new WithNPerfCounters(4) ++ new WithAllBooms 
 class BOOMFPGAConfig   extends Config(new WithNPerfCounters(29) ++ new WithAllBooms ++ new DefaultBOOMConfig ++ new DefaultFPGAConfig)
 class BOOML2FPGAConfig extends Config(new WithNPerfCounters(29) ++ new WithAllBooms ++ new DefaultBOOMConfig ++ new WithL2Capacity(1024) ++ new WithL2Cache ++ new DefaultFPGAConfig)
 
+// scalastyle:on
