@@ -219,6 +219,10 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int)(implicit p
 //   assert ((~commit.bits.executed.toBits & commit.bits.mispredicted.toBits) === Bits(0),
 //      "[BrPredictor] the BROB is marking a misprediction for something that didn't execute.")
 
+   // This shouldn't happen, unless a branch instruction was also marked to flush after it commits.
+   // But we don't want to bypass the ghistory to make this "just work", so let's outlaw it.
+   assert (!(commit.valid && io.flush), "[brpredictor] commit and flush are colliding.")
+
    when (commit.valid)
    {
       r_ghistory.commit(commit.bits.ctrl.taken.reduce(_|_))
