@@ -96,7 +96,7 @@ class BpdUpdate(implicit p: Parameters) extends BoomBundle()(p)
    val mispredict = Bool()
    val history = UInt(width = GLOBAL_HISTORY_LENGTH)
    val history_u = UInt(width = GLOBAL_HISTORY_LENGTH)
-   val history_ptr = UInt(width = log2Up(GLOBAL_HISTORY_LENGTH+1*NUM_ROB_ENTRIES)) // TODO XXX what length to use?
+   val history_ptr = UInt(width = log2Up(GLOBAL_HISTORY_LENGTH+2*NUM_ROB_ENTRIES)) // TODO XXX what length to use?
    val shadow_info = new ShadowHistInfo()
    val bpd_predict_val = Bool()
    val bpd_mispredict = Bool()
@@ -245,7 +245,7 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int)(implicit p
 
    io.resp.bits.history := RegNext(RegNext(ghistory))
    io.resp.bits.history_u := RegNext(RegNext(ghistory_uonly))
-   io.resp.bits.history_ptr := RegNext(vlh_head)
+   io.resp.bits.history_ptr := RegNext(RegNext(vlh_head))
 
 
    // -----------------------------------------------
@@ -396,7 +396,7 @@ class VeryLongHistoryRegister(hlen: Int, num_rob_entries: Int)
 {
    // TODO XXX distinguish between hlen and buffer-length
    // we need to provide extra bits for speculating past the commit-head of the buffer.
-   private val plen = hlen + 1*num_rob_entries
+   private val plen = hlen + 2*num_rob_entries
    private val hist_buffer = Reg(init = UInt(0, plen))
    // the speculative head point to the next empty spot (head-1 is the newest bit).
    // TODO XXX set to 0 for initialization
@@ -582,15 +582,16 @@ class BrobDeallocateIdx(implicit p: Parameters) extends BoomBundle()(p)
 // Each fetch packet may contain up to W branches, where W is the fetch_width.
 // this only holds the MetaData, which requires combinational/highly-ported access.
 // The meat of the BrobEntry is the BpdResp information, and is stored elsewhere.
+// We must also allocate entries for JALRs in here since they can single-cycle roll-back the BROB state.
 class BrobEntryMetaData(fetch_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
-   val executed     = Vec(fetch_width, Bool()) // mark that a branch executed (and should update the predictor).
+   val executed     = Vec(fetch_width, Bool()) // Mark that a branch (but not JALR) executed (and should update predictor).
    val taken        = Vec(fetch_width, Bool())
-   val mispredicted = Vec(fetch_width, Bool()) // did bpd mispredict the br? (aka should we update predictor).
-                                                     // Only set for branches, not jumps.
+   val mispredicted = Vec(fetch_width, Bool()) // Did bpd mispredict the br? (aka should we update predictor).
+                                               // Only set for branches, not jumps.
    val brob_idx     = UInt(width = BROB_ADDR_SZ)
 
-   val debug_executed = Bool() // did a br or jalr get executed? verify we're not deallocating an empty entry.
+   val debug_executed = Bool() // Did a BR or JALR get executed? Verify we're not deallocating an empty entry.
    val debug_rob_idx = UInt(width = ROB_ADDR_SZ)
 
    override def cloneType: this.type = new BrobEntryMetaData(fetch_width).asInstanceOf[this.type]
@@ -635,7 +636,6 @@ class BranchReorderBuffer(fetch_width: Int, num_entries: Int)(implicit p: Parame
    private def GetIdx(addr: UInt) =
       if (fetch_width == 1) UInt(0)
       else (addr >> UInt(log2Ceil(coreInstBytes))) & Fill(log2Ceil(fetch_width), UInt(1))
-//      else (addr >> UInt(log2Ceil(coreInstBytes))) & SInt(-1, log2Ceil(fetch_width))
 
    // -----------------------------------------------
    when (io.backend.allocate.valid)
@@ -696,7 +696,7 @@ class BranchReorderBuffer(fetch_width: Int, num_entries: Int)(implicit p: Parame
    // outputs
 
    // entries_info is a sequential memory, so buffer the rest of the bundle to match
-   io.commit_entry.valid     := RegNext(io.backend.deallocate.valid)
+   io.commit_entry.valid     := RegNext(io.backend.deallocate.valid) && io.commit_entry.bits.ctrl.executed.reduce(_|_)
    io.commit_entry.bits.ctrl := RegNext(entries_ctrl(head_ptr))
    io.commit_entry.bits.info := entries_info.read(head_ptr, io.backend.deallocate.valid)
 
