@@ -404,7 +404,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
                   !io.imem_resp.bits.xcpt_if &&
                   is_br.reduce(_|_) &&
                   (!bpd_jal_val || (PriorityEncoder(is_br.toBits) < PriorityEncoder(is_jal.toBits)))
-   bp2_br_taken := bpd_br_fire || (io.btb_resp.valid && btb_predicted_br_taken && !bpd_nextline_fire)
+   bp2_br_taken := bpd_br_fire || (io.btb_resp.valid && btb_predicted_br_taken && !bpd_nextline_fire && !override_btb)
 
    //-------------------------------------------------------------
    // Look for CALL and RETURN for RAS shenanigans.
