@@ -64,17 +64,18 @@ object PerformShiftRegister
 // Increment the input "value", wrapping it if necessary.
 object WrapAdd
 {
-   def apply(value: UInt, amt: UInt, max: Int): UInt =
+   // "n" is the number of increments, so we wrap at n-1.
+   def apply(value: UInt, amt: UInt, n: Int): UInt =
    {
-      if (isPow2(max))
+      if (isPow2(n))
       {
-         (value + amt)(log2Up(max)-1,0)
+         (value + amt)(log2Up(n)-1,0)
       }
       else
       {
-         val sum = Cat(UInt(0,1), value) + amt
-         Mux(sum > UInt(max),
-            sum - UInt(max+1),
+         val sum = Cat(UInt(0,1), value) + Cat(UInt(0,1), amt)
+         Mux(sum >= UInt(n),
+            sum - UInt(n),
             sum)
       }
    }
@@ -83,15 +84,16 @@ object WrapAdd
 // Increment the input "value", wrapping it if necessary.
 object WrapInc
 {
-   def apply(value: UInt, max: Int): UInt =
+   // "n" is the number of increments, so we wrap at n-1.
+   def apply(value: UInt, n: Int): UInt =
    {
-      if (isPow2(max))
+      if (isPow2(n))
       {
-         (value + UInt(1))(log2Up(max)-1,0)
+         (value + UInt(1))(log2Up(n)-1,0)
       }
       else
       {
-         val wrap = (value === UInt(max-1))
+         val wrap = (value === UInt(n-1))
          Mux(wrap, UInt(0), value + UInt(1))
       }
    }
@@ -99,16 +101,17 @@ object WrapInc
 // Decrement the input "value", wrapping it if necessary.
 object WrapDec
 {
-   def apply(value: UInt, max: Int): UInt =
+   // "n" is the number of increments, so we wrap at n-1.
+   def apply(value: UInt, n: Int): UInt =
    {
-      if (isPow2(max))
+      if (isPow2(n))
       {
-         (value - UInt(1))(log2Up(max)-1,0)
+         (value - UInt(1))(log2Up(n)-1,0)
       }
       else
       {
          val wrap = (value === UInt(0))
-         Mux(wrap, UInt(max-1), value - UInt(1))
+         Mux(wrap, UInt(n-1), value - UInt(1))
       }
    }
 }
