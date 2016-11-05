@@ -347,6 +347,7 @@ class HistoryRegister(length: Int)
       ): Unit =
    {
       val res_history = if (umode_only) br_resolution_bits.history_u else br_resolution_bits.history
+      // TODO BUG XXX don't fix history on a JALR mispredict -- we just need to reset history to the snapshot.
       val fixed_history = Cat(res_history, br_resolution_bits.taken)
       when (disable)
       {
@@ -468,9 +469,21 @@ class VeryLongHistoryRegister(hlen: Int, num_rob_entries: Int)
       {
          spec_head := com_head
       }
+      .elsewhen (br_resolution_valid && br_resolution_bits.mispredict && !br_resolution_bits.is_br)
+      {
+         // jalr -- reset speculative history, but since jalr isn't added to ghistory, don't fix itup
+         val snapshot_ptr = br_resolution_bits.history_ptr
+         assert (snapshot_ptr <= UInt(plen), "[brpredictor] VLHR: snapshot is out-of-bounds.")
+         val shadow = br_resolution_bits.shadow_info
+         val update_ptr = WrapAdd(snapshot_ptr, PopCount(shadow.valids), plen)
+         assert (update_ptr <= UInt(plen), "[brpredictor] VLHR: update-ptr is out-of-bounds.")
+//         hist_buffer := hist_buffer.bitSet(update_ptr, br_resolution_bits.taken)
+         spec_head := update_ptr
+      }
       .elsewhen (br_resolution_valid && br_resolution_bits.mispredict)
       {
          val snapshot_ptr = br_resolution_bits.history_ptr
+         assert (snapshot_ptr <= UInt(plen), "[brpredictor] VLHR: snapshot is out-of-bounds.")
          val shadow = br_resolution_bits.shadow_info
          val update_ptr = WrapAdd(snapshot_ptr, PopCount(shadow.valids), plen-1)
          hist_buffer := hist_buffer.bitSet(update_ptr, br_resolution_bits.taken)
@@ -485,8 +498,10 @@ class VeryLongHistoryRegister(hlen: Int, num_rob_entries: Int)
 
    def commit(taken: Bool): Unit =
    {
+      assert(com_head =/= spec_head, "[brpredictor] VLHR: commit head is moving ahead of the spec head.")
       val debug_com_bit = (hist_buffer >> com_head) & UInt(1,1)
       assert (debug_com_bit  === taken, "[brpredictor] VLHR: commit bit doesn't match speculative bit.")
+
       com_head := WrapInc(com_head, plen)
    }
 }
@@ -715,12 +730,14 @@ class BranchReorderBuffer(fetch_width: Int, num_entries: Int)(implicit p: Parame
    {
       for (i <- 0 until num_entries)
       {
-         printf (" brob[%d] (%x) T=%x m=%x r=%d "
+         printf (" brob[%d] (%x) T=%x m=%x r=%d snapshot=%d +%d "
             , UInt(i, log2Up(num_entries))
             , entries_ctrl(i).executed.toBits
             , entries_ctrl(i).taken.toBits
             , entries_ctrl(i).mispredicted.toBits
             , entries_ctrl(i).debug_rob_idx
+            , entries_info(i).history_ptr
+            , PopCount(entries_info(i).shadow_info.valids)
             )
          printf("%c\n"
          // chisel3 lacks %s support
