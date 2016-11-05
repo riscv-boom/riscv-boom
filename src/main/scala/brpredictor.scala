@@ -252,10 +252,15 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int)(implicit p
    // Track shadow updates.
 
    val shadow_info = Reg(new ShadowHistInfo)
-   shadow_info.valids := Mux(io.flush, UInt(0),
-                                       Cat(shadow_info.valids, io.hist_update_spec.valid && io.resp.ready))
+   val kill_shadow_info = io.flush || (io.br_resolution.valid && io.br_resolution.bits.mispredict)
+   shadow_info.valids :=
+      Mux(kill_shadow_info,
+         UInt(0),
+         Cat(shadow_info.valids, io.hist_update_spec.valid && io.resp.ready))
    shadow_info.takens := Cat(shadow_info.takens, io.hist_update_spec.bits.taken)
-   io.resp.bits.shadow_info := shadow_info
+
+   io.resp.bits.shadow_info.takens := shadow_info.takens
+   io.resp.bits.shadow_info.valids := Mux(kill_shadow_info, UInt(0), shadow_info.valids)
 
    // -----------------------------------------------
 
