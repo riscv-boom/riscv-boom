@@ -469,9 +469,7 @@ class VeryLongHistoryRegister(hlen: Int, num_rob_entries: Int)
       {
          val snapshot_ptr = br_resolution_bits.history_ptr
          val shadow = br_resolution_bits.shadow_info
-         // handle JALR resetting pointer -- JALR does NOT fix the history, since it is not a part of it.
-         val offset = Mux(br_resolution_bits.is_br, UInt(1,2), UInt(0,2))
-         retval := WrapAdd(snapshot_ptr, PopCount(shadow.valids) + offset, plen)
+         retval := WrapAdd(snapshot_ptr, PopCount(shadow.valids) + UInt(1), plen)
       }
       .otherwise
       {
@@ -504,9 +502,6 @@ class VeryLongHistoryRegister(hlen: Int, num_rob_entries: Int)
 //      val was_mispredicted_same_block =
 //         RegNext(RegNext(br_resolution_valid && br_resolution_bits.mispredict && br_resolution_bits.new_pc_same_block))
 
-      TODO XXX BUG the each BR/JR needs a bit to say if "is_br or br in front of inst in fetch group". (did this fetch
-      group advance the history? how about "does fetchgroup contain a branch?", BROB probably doesn't know? or needs to
-      use "mispredicted" to squash executes after it in packet.
       when (disable)
       {
          ; // nop
@@ -527,16 +522,8 @@ class VeryLongHistoryRegister(hlen: Int, num_rob_entries: Int)
          val update_ptr = WrapAdd(snapshot_ptr, PopCount(shadow.valids), plen)
          assert (update_ptr <= UInt(plen), "[brpredictor] VLHR: update-ptr is out-of-bounds.")
 
-         when (br_resolution_bits.is_br)
-         {
-            hist_buffer := hist_buffer.bitSet(update_ptr, br_resolution_bits.taken)
-            spec_head := WrapAdd(snapshot_ptr, PopCount(shadow.valids) + UInt(1), plen)
-         }
-         .otherwise
-         {
-            // jalr -- reset speculative history, but since jalr isn't added to ghistory, don't fix it up.
-            spec_head := update_ptr
-         }
+         hist_buffer := hist_buffer.bitSet(update_ptr, br_resolution_bits.taken)
+         spec_head := WrapAdd(snapshot_ptr, PopCount(shadow.valids) + UInt(1), plen)
       }
       .elsewhen (hist_update_spec_valid)
       {
@@ -765,7 +752,7 @@ class BranchReorderBuffer(fetch_width: Int, num_entries: Int)(implicit p: Parame
    // outputs
 
    // entries_info is a sequential memory, so buffer the rest of the bundle to match
-   io.commit_entry.valid     := RegNext(io.backend.deallocate.valid) && io.commit_entry.bits.ctrl.executed.reduce(_|_)
+   io.commit_entry.valid     := RegNext(io.backend.deallocate.valid)
    io.commit_entry.bits.ctrl := RegNext(entries_ctrl(head_ptr))
    io.commit_entry.bits.info := entries_info.read(head_ptr, io.backend.deallocate.valid)
 

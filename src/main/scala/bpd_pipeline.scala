@@ -93,7 +93,8 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    // Branch Prediction (BP1 Stage)
 
    val bp2_br_seen = Wire(Bool())  // did we see a branch to make a prediction?
-                                   // (and not overridden by an earlier jal)
+                                   // (and not overridden by an earlier jal or jr)
+   val bp2_jr_seen = Wire(Bool())  // did we see a JALR (not overriden by earlier jal but a taken br could)?
    val bp2_br_taken = Wire(Bool()) // was there a taken branch in the bp2 stage
                                    // we use this to update the bpd's history register speculatively
 
@@ -137,10 +138,8 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
 
    br_predictor.io.req_pc := io.npc
    br_predictor.io.br_resolution <> io.br_unit.bpd_update
-   // TODO BUG XXX i suspect this is completely and utterly broken. what about <bne,jr,bne> or  <bne,j,bne>. What
-   // about <csr, bne>/<b,csr,b>? does unique/pipeline replaysincrement ghistory when they shouldn't?
-   br_predictor.io.hist_update_spec.valid := bp2_br_seen && io.req.ready
-   br_predictor.io.hist_update_spec.bits.taken := bp2_br_taken
+   br_predictor.io.hist_update_spec.valid := (bp2_br_seen || bp2_jr_seen) && io.req.ready
+   br_predictor.io.hist_update_spec.bits.taken := bp2_br_taken || bp2_jr_seen
    br_predictor.io.resp.ready := io.req.ready
 
    io.brob <> br_predictor.io.brob
@@ -206,6 +205,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    val bpd_br_taken     = bpd_predictions.orR && bpd_valid
    val bpd_br_idx       = PriorityEncoder(bpd_predictions)
    val bpd_jal_val      = is_jal.reduce(_|_)
+   val bpd_jr_val       = is_jr.reduce(_|_)
    val bpd_jal_idx      = PriorityEncoder(is_jal.toBits)
    val bpd_br_beats_jal = bpd_br_taken && (!bpd_jal_val || (bpd_br_idx < bpd_jal_idx))
    val bpd_req_idx      = Mux(bpd_br_beats_jal, bpd_br_idx, bpd_jal_idx)
@@ -403,7 +403,12 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    bp2_br_seen := io.imem_resp.valid &&
                   !io.imem_resp.bits.xcpt_if &&
                   is_br.reduce(_|_) &&
-                  (!bpd_jal_val || (PriorityEncoder(is_br.toBits) < PriorityEncoder(is_jal.toBits)))
+                  (!bpd_jal_val || (PriorityEncoder(is_br.toBits) < PriorityEncoder(is_jal.toBits))) &&
+                  (!bpd_jr_val || (PriorityEncoder(is_br.toBits) < PriorityEncoder(is_jr.toBits)))
+   bp2_jr_seen := io.imem_resp.valid &&
+                  !io.imem_resp.bits.xcpt_if &&
+                  is_jr.reduce(_|_) &&
+                  (!bpd_jal_val || (PriorityEncoder(is_jr.toBits) < PriorityEncoder(is_jal.toBits)))
    bp2_br_taken := bpd_br_fire || (io.btb_resp.valid && btb_predicted_br_taken && !bpd_nextline_fire && !override_btb)
 
    //-------------------------------------------------------------
