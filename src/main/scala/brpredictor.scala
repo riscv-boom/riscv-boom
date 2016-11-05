@@ -14,6 +14,15 @@
 // maintaining the global history. However, sub-classes may want to implement
 // their own, optimized implementation of global history (e.g. if history is
 // very long!).
+//
+// Notes:
+//    - JALR snapshots ghistory since JALRs can mispredict and must be able to
+//    reset ghistory.
+//    - JALR is added to ghistory (always taken) since it simplifies the logic
+//    regarding resetting ghistory.
+//
+// TODO: add asserts to compare commit and speculative histories.
+// TODO: review the HistoryRegister, re: same-packet refetches getting out of sync with the commit copy.
 
 package boom
 
@@ -183,18 +192,24 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int)(implicit p
          commit_taken,
          umode_only = true)
 
+   val vlh_head =
+      r_vlh.getSnapshot(
+         io.br_resolution.valid,
+         io.br_resolution.bits,
+         io.flush)
 
    val r_vlh_commit_copy = r_vlh.commit_copy
    val vlh_commit = Reverse(r_vlh_commit_copy)
    val vlh_commit_head = r_vlh.commit_ptr
    val vlh_raw = r_vlh.raw_value
-   val vlh_head = r_vlh.getSnapshot(io.flush, commit.valid)
+   val vlh_raw_spec_head = r_vlh.raw_spec_head
 
-   printf("vlh: 0x%x - 0x%x ----- raw[HEAD: %d COM: %d]: 0x%x\n", vlh_commit, r_ghistory_commit_copy,
-      vlh_head, vlh_commit_head, vlh_raw)
+//   printf("vlh: 0x%x - 0x%x ----- raw[HEAD: %d COM: %d]: 0x%x\n", vlh_commit, r_ghistory_commit_copy,
+//      vlh_head, vlh_commit_head, vlh_raw)
 
    assert (r_ghistory_commit_copy === vlh_commit,
       "[brpredictor] mistmatch between short history and very long history implementations.")
+
 
    if (ENABLE_BPD_USHISTORY && !ENABLE_BPD_UMODE_ONLY)
    {
@@ -322,6 +337,8 @@ class HistoryRegister(length: Int)
       // of the fetch_packet.
       val res_history = if (umode_only) br_resolution_bits.history_u else br_resolution_bits.history
       val fixed_history = Cat(res_history, br_resolution_bits.taken)
+      // TODO XXX I think we're losing the shadow history ... what is the impact of that here?
+      // TODO XXX "bpd_mispredict" is almost certainly wrong, should just be "mispredict".
       val ret_value =
          Mux(flush && commit,
             Cat(r_commit_history, commit_taken),
@@ -336,7 +353,7 @@ class HistoryRegister(length: Int)
             fixed_history,
             r_history))))
 
-      ret_value
+      ret_value(length-1,0)
    }
 
    def update(
@@ -366,6 +383,9 @@ class HistoryRegister(length: Int)
       {
          r_history := r_commit_history
       }
+      // TODO XXX do we need to handle same_packet mispredictions?
+      // add in shadow, but notthe fixed history bit? the problem is if another branch
+      // is in the packet and updates spec_histor, now we got two shifts out of the same packet.
       .elsewhen (br_resolution_valid && br_resolution_bits.mispredict)
       {
          // if we need to reset the ghistory on a misspeculation, we need to account for
@@ -401,7 +421,6 @@ class HistoryRegister(length: Int)
 // and to snapshot the tail pointer.
 class VeryLongHistoryRegister(hlen: Int, num_rob_entries: Int)
 {
-   // TODO XXX distinguish between hlen and buffer-length
    // we need to provide extra bits for speculating past the commit-head of the buffer.
    private val plen = hlen + 2*num_rob_entries
    private val hist_buffer = Reg(init = UInt(0, plen))
@@ -411,11 +430,6 @@ class VeryLongHistoryRegister(hlen: Int, num_rob_entries: Int)
    private val com_head = Reg(init = UInt(hlen, width = log2Up(plen)))
 
    // the tail points to the last (oldest) bit in the history.
-//   private val spec_tail =
-//      Mux(spec_head >= hlen,
-//         spec_head - hlen,
-//         plen - (hlen - spec_head))
-//
    private val com_tail =
       Mux(com_head >= UInt(hlen),
          com_head - UInt(hlen),
@@ -431,17 +445,40 @@ class VeryLongHistoryRegister(hlen: Int, num_rob_entries: Int)
 //   }
    // TODO XXX are TAGE csrs really seeing the proper history on a misspeculation?
    def raw_value(): UInt = hist_buffer
+   def raw_spec_head(): UInt = spec_head
 
    def getSnapshot(
-      flush: Bool,
-      commit: Bool
+      br_resolution_valid: Bool,
+      br_resolution_bits: BpdUpdate,
+      flush: Bool
       ): UInt =
    {
-      Mux(flush && commit,
-         WrapInc(com_head, plen),
-      Mux(flush,
-         com_head,
-         spec_head))
+      val retval = Wire(init=spec_head)
+      when (flush)
+      {
+         retval := com_head
+      }
+      // TODO XXX use this once we change not moving commit pointers on same_packets.
+      //.elsewhen (br_resolution_valid && br_resolution_bits.mispredict && br_resolution_bits.new_pc_same_packet)
+      //{
+      //   val snapshot_ptr = br_resolution_bits.history_ptr
+      //   val shadow = br_resolution_bits.shadow_info
+      //   retval := WrapAdd(snapshot_ptr, PopCount(shadow.valids), plen)
+      //}
+      .elsewhen (br_resolution_valid && br_resolution_bits.mispredict)
+      {
+         val snapshot_ptr = br_resolution_bits.history_ptr
+         val shadow = br_resolution_bits.shadow_info
+         // handle JALR resetting pointer -- JALR does NOT fix the history, since it is not a part of it.
+         val offset = Mux(br_resolution_bits.is_br, UInt(1,2), UInt(0,2))
+         retval := WrapAdd(snapshot_ptr, PopCount(shadow.valids) + offset, plen)
+      }
+      .otherwise
+      {
+         retval := spec_head
+      }
+
+      retval
    }
 
    def commit_copy(): UInt =
@@ -462,6 +499,14 @@ class VeryLongHistoryRegister(hlen: Int, num_rob_entries: Int)
       disable: Bool
       ): Unit =
    {
+      // when a BR mispredicts and we must refetch its fetch block to get the rest of the fetch packet,
+      // we have to make sure we don't
+//      val was_mispredicted_same_block =
+//         RegNext(RegNext(br_resolution_valid && br_resolution_bits.mispredict && br_resolution_bits.new_pc_same_block))
+
+      TODO XXX BUG the each BR/JR needs a bit to say if "is_br or br in front of inst in fetch group". (did this fetch
+      group advance the history? how about "does fetchgroup contain a branch?", BROB probably doesn't know? or needs to
+      use "mispredicted" to squash executes after it in packet.
       when (disable)
       {
          ; // nop
@@ -474,30 +519,33 @@ class VeryLongHistoryRegister(hlen: Int, num_rob_entries: Int)
       {
          spec_head := com_head
       }
-      .elsewhen (br_resolution_valid && br_resolution_bits.mispredict && !br_resolution_bits.is_br)
-      {
-         // jalr -- reset speculative history, but since jalr isn't added to ghistory, don't fix itup
-         val snapshot_ptr = br_resolution_bits.history_ptr
-         assert (snapshot_ptr <= UInt(plen), "[brpredictor] VLHR: snapshot is out-of-bounds.")
-         val shadow = br_resolution_bits.shadow_info
-         val update_ptr = WrapAdd(snapshot_ptr, PopCount(shadow.valids), plen)
-         assert (update_ptr <= UInt(plen), "[brpredictor] VLHR: update-ptr is out-of-bounds.")
-//         hist_buffer := hist_buffer.bitSet(update_ptr, br_resolution_bits.taken)
-         spec_head := update_ptr
-      }
       .elsewhen (br_resolution_valid && br_resolution_bits.mispredict)
       {
          val snapshot_ptr = br_resolution_bits.history_ptr
          assert (snapshot_ptr <= UInt(plen), "[brpredictor] VLHR: snapshot is out-of-bounds.")
          val shadow = br_resolution_bits.shadow_info
-         val update_ptr = WrapAdd(snapshot_ptr, PopCount(shadow.valids), plen-1)
-         hist_buffer := hist_buffer.bitSet(update_ptr, br_resolution_bits.taken)
-         spec_head := WrapAdd(snapshot_ptr, PopCount(shadow.valids) + UInt(1), plen-1)
+         val update_ptr = WrapAdd(snapshot_ptr, PopCount(shadow.valids), plen)
+         assert (update_ptr <= UInt(plen), "[brpredictor] VLHR: update-ptr is out-of-bounds.")
+
+         when (br_resolution_bits.is_br)
+         {
+            hist_buffer := hist_buffer.bitSet(update_ptr, br_resolution_bits.taken)
+            spec_head := WrapAdd(snapshot_ptr, PopCount(shadow.valids) + UInt(1), plen)
+         }
+         .otherwise
+         {
+            // jalr -- reset speculative history, but since jalr isn't added to ghistory, don't fix it up.
+            spec_head := update_ptr
+         }
       }
       .elsewhen (hist_update_spec_valid)
       {
          hist_buffer := hist_buffer.bitSet(spec_head, hist_update_spec_bits.taken)
-         spec_head := WrapInc(spec_head, plen)
+         // TODO XXX enable this if we choose to let commit get set to snapshot
+//         when (!was_mispredicted_same_block)
+//         {
+            spec_head := WrapInc(spec_head, plen)
+//         }
       }
    }
 

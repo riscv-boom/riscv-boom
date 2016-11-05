@@ -1182,11 +1182,13 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
    var stq_is_full = Bool(false)
 
    // TODO refactor this logic
+   require (isPow2(num_ld_entries))
+   require (isPow2(num_st_entries))
    for (w <- 0 until DECODE_WIDTH)
    {
       val l_temp = laq_tail + UInt(w)
       laq_is_full = ((l_temp === laq_head || l_temp === (laq_head + UInt(num_ld_entries))) && laq_maybe_full) | laq_is_full
-      val s_temp = stq_tail + UInt(w+1)
+      val s_temp = stq_tail + UInt(w+1) // TODO XXX this +1 is almost certainly wrong - look at this again
       stq_is_full = (s_temp === stq_head || s_temp === (stq_head + UInt(num_st_entries))) | stq_is_full
    }
 
