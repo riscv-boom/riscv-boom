@@ -21,6 +21,14 @@
 //    - JALR is added to ghistory (always taken) since it simplifies the logic
 //    regarding resetting ghistory.
 //
+// Issues:
+//    - double counting in ghistory with fetch packets that contain multiple
+//    branches and the earlier branch mispredicts, causing a re-fetch of the
+//    later part of the fetch packet. Subsequent executions of that code, when
+//    predicted correctly, won't double count ghistory, potentially increasing
+//    mispredictions.
+//
+//
 // TODO: add asserts to compare commit and speculative histories.
 // TODO: review the HistoryRegister, re: same-packet refetches getting out of sync with the commit copy.
 
@@ -165,11 +173,6 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int)(implicit p
    val in_usermode = io.status_prv === UInt(rocket.PRV.U)
    val disable_bpd = in_usermode && Bool(ENABLE_BPD_UMODE_ONLY)
 
-   // TODO XXX need to remove this commit->flush bypass and instead delay the flush signals coming from the CSR and ROB.
-   // The problem here is the commit.valid sigal is delayed but the io.flush signal is not, causing an un-intended
-   // contention.
-   val commit_taken = commit.bits.ctrl.taken.reduce(_|_)
-
    val ghistory_all =
       r_ghistory.value(
          io.hist_update_spec.valid,
@@ -177,8 +180,6 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int)(implicit p
          io.br_resolution.valid,
          io.br_resolution.bits,
          io.flush,
-         commit.valid,
-         commit_taken,
          umode_only = false)
 
    val ghistory_uonly =
@@ -188,8 +189,6 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int)(implicit p
          io.br_resolution.valid,
          io.br_resolution.bits,
          io.flush,
-         commit.valid,
-         commit_taken,
          umode_only = true)
 
    val vlh_head =
@@ -231,8 +230,6 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int)(implicit p
       io.br_resolution.valid,
       io.br_resolution.bits,
       io.flush,
-      commit.valid,
-      commit_taken,
       disable = Bool(false),
       umode_only = false)
 
@@ -242,8 +239,6 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int)(implicit p
       io.br_resolution.valid,
       io.br_resolution.bits,
       io.flush,
-      commit.valid,
-      commit_taken,
       disable = !in_usermode,
       umode_only = true)
 
@@ -253,8 +248,6 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int)(implicit p
       io.br_resolution.valid,
       io.br_resolution.bits,
       io.flush,
-      commit.valid,
-      commit_taken,
       disable = Bool(false))
 
 
@@ -326,8 +319,6 @@ class HistoryRegister(length: Int)
       br_resolution_valid: Bool,
       br_resolution_bits: BpdUpdate,
       flush: Bool,
-      commit: Bool,
-      commit_taken: Bool,
       umode_only: Boolean
       ): UInt =
    {
@@ -340,8 +331,6 @@ class HistoryRegister(length: Int)
       // TODO XXX I think we're losing the shadow history ... what is the impact of that here?
       // TODO XXX "bpd_mispredict" is almost certainly wrong, should just be "mispredict".
       val ret_value =
-         Mux(flush && commit,
-            Cat(r_commit_history, commit_taken),
          Mux(flush,
             r_commit_history,
          Mux(br_resolution_valid &&
@@ -351,7 +340,7 @@ class HistoryRegister(length: Int)
          Mux(br_resolution_valid &&
                br_resolution_bits.bpd_mispredict,
             fixed_history,
-            r_history))))
+            r_history)))
 
       ret_value(length-1,0)
    }
@@ -362,8 +351,6 @@ class HistoryRegister(length: Int)
       br_resolution_valid: Bool,
       br_resolution_bits: BpdUpdate,
       flush: Bool,
-      commit: Bool,
-      commit_taken: Bool,
       disable: Bool,
       umode_only: Boolean
       ): Unit =
@@ -374,10 +361,6 @@ class HistoryRegister(length: Int)
       when (disable)
       {
          r_history := r_history
-      }
-      .elsewhen (flush && commit)
-      {
-         r_history := Cat(r_commit_history, commit_taken)
       }
       .elsewhen (flush)
       {
@@ -492,8 +475,6 @@ class VeryLongHistoryRegister(hlen: Int, num_rob_entries: Int)
       br_resolution_valid: Bool,
       br_resolution_bits: BpdUpdate,
       flush: Bool,
-      commit: Bool,
-      commit_taken: Bool,
       disable: Bool
       ): Unit =
    {
@@ -505,10 +486,6 @@ class VeryLongHistoryRegister(hlen: Int, num_rob_entries: Int)
       when (disable)
       {
          ; // nop
-      }
-      .elsewhen (flush && commit)
-      {
-         spec_head := WrapInc(com_head, plen)
       }
       .elsewhen (flush)
       {
