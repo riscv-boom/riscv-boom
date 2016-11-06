@@ -20,6 +20,109 @@ import cde.Parameters
 import util.Str
 
 
+class TageTableIo(
+   fetch_width: Int,
+   num_entries: Int,
+   history_length: Int,
+   tag_sz: Int,
+   counter_sz: Int,
+   this_index_sz: Int
+   )(implicit p: Parameters) extends BoomBundle()(p)
+{
+   private val index_sz = log2Up(num_entries)
+
+   // instruction fetch - request prediction
+   val if_req_pc = UInt(INPUT, width = 64)
+   val if_req_history = UInt(INPUT, width = history_length)
+
+   // bp2 - send prediction to bpd pipeline
+   val bp2_resp = new DecoupledIO(new TageTableResp(fetch_width, history_length, log2Up(num_entries), tag_sz))
+
+   // bp2 - update histories speculatively
+   val bp2_update_history = (new ValidIO(new GHistUpdate)).flip
+   // TODO: this is painfully special-cased -- move this into an update_csr bundle?
+   val bp2_update_csr_evict_bit = Bool(INPUT)
+
+   // execute - perform updates on misprediction (reset the histories)
+//   val exe_update_history = new ValidIO(new BpdResp())
+
+   // commit - update predictor tables (allocate entry)
+   val allocate = (new ValidIO(new TageAllocateEntryInfo(fetch_width, index_sz, tag_sz, history_length))).flip
+   def AllocateNewEntry(idx: UInt, tag: UInt, executed: UInt, taken: UInt, pc: UInt, hist: UInt) =
+   {
+      this.allocate.valid := Bool(true)
+      this.allocate.bits.index := idx
+      this.allocate.bits.tag :=tag
+      this.allocate.bits.executed :=executed
+      this.allocate.bits.taken :=taken
+      this.allocate.bits.debug_pc := pc
+      this.allocate.bits.debug_hist :=hist
+   }
+
+   // commit - update predictor tables (update counters)
+   val update_counters = (new ValidIO(new TageUpdateCountersInfo(fetch_width, index_sz))).flip
+   def UpdateCounters(idx: UInt, executed: UInt, taken: UInt) =
+   {
+      this.update_counters.valid := Bool(true)
+      this.update_counters.bits.index := idx
+      this.update_counters.bits.executed := executed
+      this.update_counters.bits.taken := taken
+   }
+
+   // commit - update predictor tables (update u-bits)
+   val update_usefulness = (new ValidIO(new TageUpdateUsefulInfo(index_sz))).flip
+   def UpdateUsefulness(idx: UInt, inc: Bool) =
+   {
+      this.update_usefulness.valid := Bool(true)
+      this.update_usefulness.bits.index := idx
+      this.update_usefulness.bits.inc := inc
+   }
+
+   val usefulness_req_idx = UInt(INPUT, index_sz)
+   val usefulness_resp = UInt(OUTPUT, 2) // TODO u-bit_sz
+   def GetUsefulness(idx: UInt, idx_sz: Int) =
+   {
+//      this.usefulness_req_idx := idx(this_index_sz-1,0) // TODO CODEREVIEW
+      this.usefulness_req_idx := idx(idx_sz-1,0) // TODO CODEREVIEW
+      this.usefulness_resp
+   }
+
+
+   // BP2 - speculatively update the spec copy of the CSRs (branch history registers)
+//   val spec_csr_update = Valid(new CircularShiftRegisterUpdate).flip
+   // Commit - update the commit copy of the CSRs (branch history registers)
+   val commit_csr_update = Valid(new CircularShiftRegisterUpdate).flip
+   val debug_ghistory_commit_copy= UInt(INPUT, history_length) // TODO REMOVE for debug
+
+   // branch resolution comes from the branch-unit, during the Execute stage.
+   val br_resolution = Valid(new BpdUpdate).flip
+   // reset CSRs to commit copies during pipeline flush
+   val flush = Bool(INPUT)
+
+   def InitializeIo(dummy: Int=0) =
+   {
+      this.allocate.valid := Bool(false)
+      this.update_counters.valid := Bool(false)
+      this.update_usefulness.valid := Bool(false)
+      // TODO better way to provide initial values?
+      this.allocate.bits.index := UInt(0)
+      this.allocate.bits.tag := UInt(0)
+      this.allocate.bits.executed := UInt(0)
+      this.allocate.bits.taken := UInt(0)
+      this.allocate.bits.debug_pc := UInt(0)
+      this.allocate.bits.debug_hist := UInt(0)
+      this.update_counters.bits.index := UInt(0)
+      this.update_counters.bits.executed := UInt(0)
+      this.update_counters.bits.taken := UInt(0)
+      this.update_usefulness.bits.index := UInt(0)
+      this.update_usefulness.bits.inc := Bool(false)
+      this.usefulness_req_idx := UInt(0)
+   }
+
+   override def cloneType: this.type = new TageTableIo(
+      fetch_width, num_entries, history_length, tag_sz, counter_sz, this_index_sz).asInstanceOf[this.type]
+}
+
 class TageTableResp(fetch_width: Int, history_length: Int, index_length: Int, tag_sz: Int) extends Bundle
 {
    val takens  = UInt(width = fetch_width)  // the actual prediction
@@ -71,107 +174,14 @@ class TageUpdateCountersInfo(fetch_width: Int, index_sz: Int) extends Bundle //e
    override def cloneType: this.type = new TageUpdateCountersInfo(fetch_width, index_sz).asInstanceOf[this.type]
 }
 
-class TageTableIo(
-   fetch_width: Int,
-   num_entries: Int,
-   history_length: Int,
-   tag_sz: Int,
-   counter_sz: Int,
-   this_index_sz: Int
-   )(implicit p: Parameters) extends BoomBundle()(p)
+// The CSRs contain the "folded" history. For them to work, we need to pass them
+// the latest new bit to add in and the oldest bit to evict out.
+class CircularShiftRegisterUpdate extends Bundle
 {
-   private val index_sz = log2Up(num_entries)
-
-   // instruction fetch - request prediction
-   val if_req_pc = UInt(INPUT, width = 64)
-   val if_req_history = UInt(INPUT, width = history_length)
-
-   // bp2 - send prediction to bpd pipeline
-   val bp2_resp = new DecoupledIO(new TageTableResp(fetch_width, history_length, log2Up(num_entries), tag_sz))
-
-   // bp2 - update histories speculatively
-   val bp2_update_history = (new ValidIO(new GHistUpdate)).flip
-
-   // execute - perform updates on misprediction (reset the histories)
-//   val exe_update_history = new ValidIO(new BpdResp())
-
-   // commit - update predictor tables (allocate entry)
-   val allocate = (new ValidIO(new TageAllocateEntryInfo(fetch_width, index_sz, tag_sz, history_length))).flip
-   def AllocateNewEntry(idx: UInt, tag: UInt, executed: UInt, taken: UInt, pc: UInt, hist: UInt) =
-   {
-      this.allocate.valid := Bool(true)
-      this.allocate.bits.index := idx
-      this.allocate.bits.tag :=tag
-      this.allocate.bits.executed :=executed
-      this.allocate.bits.taken :=taken
-      this.allocate.bits.debug_pc := pc
-      this.allocate.bits.debug_hist :=hist
-   }
-
-   // commit - update predictor tables (update counters)
-   val update_counters = (new ValidIO(new TageUpdateCountersInfo(fetch_width, index_sz))).flip
-   def UpdateCounters(idx: UInt, executed: UInt, taken: UInt) =
-   {
-      this.update_counters.valid := Bool(true)
-      this.update_counters.bits.index := idx
-      this.update_counters.bits.executed := executed
-      this.update_counters.bits.taken := taken
-   }
-
-   // commit - update predictor tables (update u-bits)
-   val update_usefulness = (new ValidIO(new TageUpdateUsefulInfo(index_sz))).flip
-   def UpdateUsefulness(idx: UInt, inc: Bool) =
-   {
-      this.update_usefulness.valid := Bool(true)
-      this.update_usefulness.bits.index := idx
-      this.update_usefulness.bits.inc := inc
-   }
-
-   val usefulness_req_idx = UInt(INPUT, index_sz)
-   val usefulness_resp = UInt(OUTPUT, 2) // TODO u-bit_sz
-   def GetUsefulness(idx: UInt, idx_sz: Int) =
-   {
-//      this.usefulness_req_idx := idx(this_index_sz-1,0) // TODO CODEREVIEW
-      this.usefulness_req_idx := idx(idx_sz-1,0) // TODO CODEREVIEW
-      this.usefulness_resp
-   }
-
-
-   // commit - update the commit copy of the CSRs (branch history registers)
-   // TODO rename to specify it's only used by the CSRs?
-   val commit_valid = Bool(INPUT)
-   val commit_taken = Bool(INPUT)
-   val commit_evict = Bool(INPUT)
-   val debug_ghistory_commit_copy= UInt(INPUT, history_length) // TODO REMOVE for debug
-
-   // branch resolution comes from the branch-unit, during the Execute stage.
-   val br_resolution = Valid(new BpdUpdate).flip
-   // reset CSRs to commit copies during pipeline flush
-   val flush = Bool(INPUT)
-
-   def InitializeIo(dummy: Int=0) =
-   {
-      this.allocate.valid := Bool(false)
-      this.update_counters.valid := Bool(false)
-      this.update_usefulness.valid := Bool(false)
-      // TODO better way to provide initial values?
-      this.allocate.bits.index := UInt(0)
-      this.allocate.bits.tag := UInt(0)
-      this.allocate.bits.executed := UInt(0)
-      this.allocate.bits.taken := UInt(0)
-      this.allocate.bits.debug_pc := UInt(0)
-      this.allocate.bits.debug_hist := UInt(0)
-      this.update_counters.bits.index := UInt(0)
-      this.update_counters.bits.executed := UInt(0)
-      this.update_counters.bits.taken := UInt(0)
-      this.update_usefulness.bits.index := UInt(0)
-      this.update_usefulness.bits.inc := Bool(false)
-      this.usefulness_req_idx := UInt(0)
-   }
-
-   override def cloneType: this.type = new TageTableIo(
-      fetch_width, num_entries, history_length, tag_sz, counter_sz, this_index_sz).asInstanceOf[this.type]
+   val new_bit = Bool()
+   val evict_bit = Bool()
 }
+
 
 // In Chisel3, all Bundle elements in a Vec() must be homogenous (i.e., when
 // using a Vec() of TageTableIOs, the sub-fields within the TageTableIOs must
@@ -280,23 +290,6 @@ class TageTable(
       tag_hash(tag_sz-1,0)
    }
 
-   // saturating increment or decrement
-   // TODO throws an uninitialized wire error :(
-   //def SatUpdate(value: UInt, inc: Bool, max: Int): UInt =
-   //{
-   //   val ret = Wire(UInt())
-   //   ret := value
-   //   when (inc && value =/= UInt(max))
-   //   {
-   //      ret := (value + UInt(1))
-   //   }
-   //   .elsewhen (!inc && value =/= UInt(0))
-   //   {
-   //      ret := (value - UInt(1))
-   //   }
-   //   ret
-   //}
-
    private def GetPrediction(cntr: UInt): Bool =
    {
       // return highest-order bit
@@ -314,16 +307,7 @@ class TageTable(
       Vec(counters)
    }
 
-   //private def UpdateCounters(
-   //   valid: Bool,
-   //   counter_row: Vec[UInt],
-   //   enables: Vec[Bool],
-   //   takens: Vec[Bool]) : Vec[UInt] =
-   //{
 
-
-   //   updated_row
-   //}
    //------------------------------------------------------------
    // Get Prediction
 
@@ -367,11 +351,8 @@ class TageTable(
    }
    .elsewhen (io.bp2_update_history.valid)
    {
-      // TODO XXX once CSRs have been implemented, support updating them
-      // shift all of the histories, CSRs over by one bit.
-      // io.bp2_update_history.bits.taken
       val bp2_taken = io.bp2_update_history.bits.taken
-      val bp2_evict = Bool(false) // TODO XXX BUG
+      val bp2_evict = io.bp2_update_csr_evict_bit
       idx_csr.io.shift (bp2_taken, bp2_evict)
       tag_csr1.io.shift(bp2_taken, bp2_evict)
       tag_csr2.io.shift(bp2_taken, bp2_evict)
@@ -381,24 +362,21 @@ class TageTable(
    // Update Commit-CSRs (Commit)
 
    val folded_com_hist = Fold(io.debug_ghistory_commit_copy(history_length-1,0), index_sz)
-   when (io.commit_valid)
+   when (io.commit_csr_update.valid)
    {
-      commit_idx_csr.io.shift (io.commit_taken, io.commit_evict)
-      commit_tag_csr1.io.shift(io.commit_taken, io.commit_evict)
-      commit_tag_csr2.io.shift(io.commit_taken, io.commit_evict)
+      val com_taken = io.commit_csr_update.bits.new_bit
+      val com_evict = io.commit_csr_update.bits.evict_bit
+      commit_idx_csr.io.shift (com_taken, com_evict)
+      commit_tag_csr1.io.shift(com_taken, com_evict)
+      commit_tag_csr2.io.shift(com_taken, com_evict)
    }
 
       printf("%d: Folded: [0x%x,0x%x] <-IDX CSR (h_len:%d, idx_sz:%d)\n",
          UInt(id), folded_com_hist, commit_idx_csr.io.value, UInt(history_length), UInt(index_sz))
 
+// TODO XXX unlease this comparision
 //   assert (idx_csr.io.value === Fold(io.if_req_history, index_sz), "[TageTable] idx_csr not matching Fold() value.")
 
-
-
-   //when (!(commit_idx_csr.io.value === folded_com_hist))
-   //{
-   //   printf("[TageTable] idx_csr not matching Fold() value.")
-   //}
    assert (commit_idx_csr.io.value === folded_com_hist, "[TageTable] idx_csr not matching Fold() value.")
 
 
@@ -466,13 +444,13 @@ class TageTable(
    if (DEBUG_PRINTF_TAGE)
    {
       require (num_entries < 64) // for sanity sake, don't allow larger.
-      printf("TAGETable: PC: 0x%x history: 0x%x, tag[%d]=0x%x, p_tag=0x%x " + "%s\n",
+      printf("TAGETable: PC: 0x%x history: 0x%x, tag[%d]=0x%x, p_tag=0x%x " + "%c\n",
          io.if_req_pc,
          io.if_req_history(history_length-1,0) + UInt(0,64),
          p_idx,
          tag + UInt(0,64),
          TagHash(io.if_req_pc, io.if_req_history),
-         Mux(tag === p_tag, Str("HIT!"), Str(" "))
+         Mux(tag === p_tag, Str("H"), Str(" "))
       )
 
       for (i <- 0 to num_entries-1 by 4)

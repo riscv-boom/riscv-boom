@@ -223,21 +223,19 @@ class TageBrPredictor(
 
       // Update ghistory speculatively once a prediction is made.
       table.bp2_update_history <> io.hist_update_spec
+      table.bp2_update_csr_evict_bit := r_vlh.getSpecBit(history_lengths(i)-1)
 
       // update CSRs
       table.br_resolution <> io.br_resolution
       table.flush := io.flush
-      table.commit_valid := commit.valid
-      table.commit_taken := commit.bits.ctrl.taken.reduce(_|_)
-      println ("\tpicking bit " + (history_lengths(i)-1) + " for evicting.")
-      table.commit_evict := r_ghistory_commit_copy(history_lengths(i)-1)
-      table.debug_ghistory_commit_copy := r_ghistory_commit_copy
+      table.commit_csr_update.valid := commit.valid
+      table.commit_csr_update.bits.new_bit := commit.bits.ctrl.taken.reduce(_|_)
+      table.commit_csr_update.bits.evict_bit := r_vlh.getCommitBit(history_lengths(i)-1)
 
-      when (commit.valid)
-      {
-         printf("commit! com_hist 0x%x (taken=%d), (evict=%d)\n",
-            r_ghistory_commit_copy, commit.bits.ctrl.taken.reduce(_|_), table.commit_evict)
-      }
+      assert(r_ghistory_commit_copy(history_lengths(i)-1) === r_vlh.getCommitBit(history_lengths(i)-1),
+         "[tage] commit bits of short and vlh do not match.")
+
+      table.debug_ghistory_commit_copy := r_ghistory_commit_copy
    }
 
 

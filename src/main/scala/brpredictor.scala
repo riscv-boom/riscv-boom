@@ -168,7 +168,7 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int)(implicit p
 
    // Track VERY long histories with a specialized history implementation.
    // TODO abstract this away so nobody knows which they are using.
-   private val r_vlh = new VeryLongHistoryRegister(history_length, NUM_ROB_ENTRIES)
+   val r_vlh = new VeryLongHistoryRegister(history_length, NUM_ROB_ENTRIES)
 
    val in_usermode = io.status_prv === UInt(rocket.PRV.U)
    val disable_bpd = in_usermode && Bool(ENABLE_BPD_UMODE_ONLY)
@@ -203,8 +203,6 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int)(implicit p
    val vlh_raw = r_vlh.raw_value
    val vlh_raw_spec_head = r_vlh.raw_spec_head
 
-//   printf("vlh: 0x%x - 0x%x ----- raw[HEAD: %d COM: %d]: 0x%x\n", vlh_commit, r_ghistory_commit_copy,
-//      vlh_head, vlh_commit_head, vlh_raw)
 
    assert (r_ghistory_commit_copy === vlh_commit,
       "[brpredictor] mistmatch between short history and very long history implementations.")
@@ -414,13 +412,22 @@ class VeryLongHistoryRegister(hlen: Int, num_rob_entries: Int)
          UInt(plen) - (UInt(hlen) - com_head))
 
 
-   // idx is relative to the logical history, not the physical buffer.
-//   def evictBit(idx: UInt): Bool =
-//   {
-//      val shamt = tail + idx
-      // TODO XXX how do we know what idx is?
-//      getBit(idx)
-//   }
+   // logical_idx is relative to the logical history, not the physical buffer.
+   def getSpecBit(logical_idx: Int): Bool =
+   {
+      // the "+1" is because the com_head is pointing beyond the valid hist_buffer to the next, open entry.
+      val idx = WrapSub(spec_head, logical_idx+1, plen)
+      hist_buffer(idx)
+   }
+
+   // logical_idx is relative to the logical history, not the physical buffer.
+   def getCommitBit(logical_idx: Int): Bool =
+   {
+      // the "+1" is because the com_head is pointing beyond the valid hist_buffer to the next, open entry.
+      val idx = WrapSub(com_head, logical_idx+1, plen)
+      hist_buffer(idx)
+   }
+
    def raw_value(): UInt = hist_buffer
    def raw_spec_head(): UInt = spec_head
 

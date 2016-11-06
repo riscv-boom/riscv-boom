@@ -81,6 +81,27 @@ object WrapAdd
    }
 }
 
+// Decrement the input "value", wrapping it if necessary.
+object WrapSub
+{
+   // "n" is the number of increments, so we wrap to n-1.
+   def apply(value: UInt, amt: Int, n: Int): UInt =
+   {
+      if (isPow2(n))
+      {
+         (value - UInt(amt))(log2Up(n)-1,0)
+      }
+      else
+      {
+         val v = Cat(UInt(0,1), value)
+         val b = Cat(UInt(0,1), UInt(amt))
+         Mux(value >= UInt(amt),
+            value - UInt(amt),
+            UInt(n) - (UInt(amt) - value))
+      }
+   }
+}
+
 // Increment the input "value", wrapping it if necessary.
 object WrapInc
 {
