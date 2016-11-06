@@ -294,7 +294,6 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int)(implicit p
       r_ghistory_u.commit(commit.bits.ctrl.taken.reduce(_|_))
    }
 
-   assert (!(io.flush && commit.valid), "[brpredictor] flush and commit trying to occur simultaneously.")
 }
 
 
@@ -354,7 +353,6 @@ class HistoryRegister(length: Int)
       ): Unit =
    {
       val res_history = if (umode_only) br_resolution_bits.history_u else br_resolution_bits.history
-      // TODO BUG XXX don't fix history on a JALR mispredict -- we just need to reset history to the snapshot.
       val fixed_history = Cat(res_history, br_resolution_bits.taken)
       when (disable)
       {
@@ -406,9 +404,8 @@ class VeryLongHistoryRegister(hlen: Int, num_rob_entries: Int)
    private val plen = hlen + 2*num_rob_entries
    private val hist_buffer = Reg(init = UInt(0, plen))
    // the speculative head point to the next empty spot (head-1 is the newest bit).
-   // TODO XXX set to 0 for initialization
-   private val spec_head = Reg(init = UInt(hlen, width = log2Up(plen)))
-   private val com_head = Reg(init = UInt(hlen, width = log2Up(plen)))
+   private val spec_head = Reg(init = UInt(0, width = log2Up(plen)))
+   private val com_head = Reg(init = UInt(0, width = log2Up(plen)))
 
    // the tail points to the last (oldest) bit in the history.
    private val com_tail =
@@ -424,7 +421,6 @@ class VeryLongHistoryRegister(hlen: Int, num_rob_entries: Int)
       // TODO XXX how do we know what idx is?
 //      getBit(idx)
 //   }
-   // TODO XXX are TAGE csrs really seeing the proper history on a misspeculation?
    def raw_value(): UInt = hist_buffer
    def raw_spec_head(): UInt = spec_head
 
@@ -439,13 +435,6 @@ class VeryLongHistoryRegister(hlen: Int, num_rob_entries: Int)
       {
          retval := com_head
       }
-      // TODO XXX use this once we change not moving commit pointers on same_packets.
-      //.elsewhen (br_resolution_valid && br_resolution_bits.mispredict && br_resolution_bits.new_pc_same_packet)
-      //{
-      //   val snapshot_ptr = br_resolution_bits.history_ptr
-      //   val shadow = br_resolution_bits.shadow_info
-      //   retval := WrapAdd(snapshot_ptr, PopCount(shadow.valids), plen)
-      //}
       .elsewhen (br_resolution_valid && br_resolution_bits.mispredict)
       {
          val snapshot_ptr = br_resolution_bits.history_ptr
@@ -476,11 +465,6 @@ class VeryLongHistoryRegister(hlen: Int, num_rob_entries: Int)
       disable: Bool
       ): Unit =
    {
-      // when a BR mispredicts and we must refetch its fetch block to get the rest of the fetch packet,
-      // we have to make sure we don't
-//      val was_mispredicted_same_block =
-//         RegNext(RegNext(br_resolution_valid && br_resolution_bits.mispredict && br_resolution_bits.new_pc_same_block))
-
       when (disable)
       {
          ; // nop
@@ -503,11 +487,7 @@ class VeryLongHistoryRegister(hlen: Int, num_rob_entries: Int)
       .elsewhen (hist_update_spec_valid)
       {
          hist_buffer := hist_buffer.bitSet(spec_head, hist_update_spec_bits.taken)
-         // TODO XXX enable this if we choose to let commit get set to snapshot
-//         when (!was_mispredicted_same_block)
-//         {
-            spec_head := WrapInc(spec_head, plen)
-//         }
+         spec_head := WrapInc(spec_head, plen)
       }
    }
 
@@ -516,7 +496,6 @@ class VeryLongHistoryRegister(hlen: Int, num_rob_entries: Int)
       assert(com_head =/= spec_head, "[brpredictor] VLHR: commit head is moving ahead of the spec head.")
       val debug_com_bit = (hist_buffer >> com_head) & UInt(1,1)
       assert (debug_com_bit  === taken, "[brpredictor] VLHR: commit bit doesn't match speculative bit.")
-
       com_head := WrapInc(com_head, plen)
    }
 }
