@@ -32,7 +32,7 @@ class TageTableIo(
    private val index_sz = log2Up(num_entries)
 
    // instruction fetch - request prediction
-   val if_req_pc = UInt(INPUT, width = 64)
+   val if_req_pc = UInt(INPUT, width = xLen)
    val if_req_history = UInt(INPUT, width = history_length)
 
    // bp2 - send prediction to bpd pipeline
@@ -242,8 +242,6 @@ class TageTable(
    commit_tag_csr2.io.InitializeIo()
 
 
-   // TODO XXX assert that the folded history matches the value of our CSRs
-
    //------------------------------------------------------------
    // functions
 
@@ -275,12 +273,31 @@ class TageTable(
       }
    }
 
-   private def IdxHash (addr: UInt, hist: UInt) =
+   private def IdxHash (addr: UInt) =
+   {
+      val idx =
+         ((addr >> UInt(log2Up(fetch_width*coreInstBytes))) ^
+         idx_csr.io.next)
+
+      idx(index_sz-1,0)
+   }
+
+   private def TagHash (addr: UInt) =
+   {
+      // the tag is computed by pc[n:0] ^ CSR1[n:0] ^ (CSR2[n-1:0]<<1).
+      val tag_hash =
+         (addr >> UInt(log2Up(fetch_width*coreInstBytes))) ^
+         tag_csr1.io.next ^
+         (tag_csr2.io.next << UInt(1))
+      tag_hash(tag_sz-1,0)
+   }
+
+   private def IdxHashSimple (addr: UInt, hist: UInt) =
    {
       ((addr >> UInt(log2Up(fetch_width*coreInstBytes))) ^ Fold(hist(history_length-1,0), index_sz))(index_sz-1,0)
    }
 
-   private def TagHash (addr: UInt, hist: UInt) =
+   private def TagHashSimple (addr: UInt, hist: UInt) =
    {
       // the tag is computed by pc[n:0] ^ CSR1[n:0] ^ (CSR2[n-1:0]<<1).
       val tag_hash =
@@ -313,8 +330,10 @@ class TageTable(
 
    val stall = !io.bp2_resp.ready
 
-   val p_idx       = IdxHash(io.if_req_pc, io.if_req_history)
-   val p_tag       = TagHash(io.if_req_pc, io.if_req_history)
+//   val p_idx       = IdxHashSimple(io.if_req_pc, io.if_req_history)
+//   val p_tag       = TagHashSimple(io.if_req_pc, io.if_req_history)
+   val p_idx       = IdxHash(io.if_req_pc)
+   val p_tag       = TagHash(io.if_req_pc)
    val counters    = counter_table(p_idx)
    val tag         = tag_table(p_idx)
    val bp2_tag_hit = RegEnable(RegEnable(tag, !stall), !stall) === RegEnable(RegEnable(p_tag, !stall), !stall)
@@ -371,12 +390,8 @@ class TageTable(
       commit_tag_csr2.io.shift(com_taken, com_evict)
    }
 
-      printf("%d: Folded: [0x%x,0x%x] <-IDX CSR (h_len:%d, idx_sz:%d)\n",
-         UInt(id), folded_com_hist, commit_idx_csr.io.value, UInt(history_length), UInt(index_sz))
-
 // TODO XXX unlease this comparision
 //   assert (idx_csr.io.value === Fold(io.if_req_history, index_sz), "[TageTable] idx_csr not matching Fold() value.")
-
    assert (commit_idx_csr.io.value === folded_com_hist, "[TageTable] idx_csr not matching Fold() value.")
 
 
@@ -449,7 +464,7 @@ class TageTable(
          io.if_req_history(history_length-1,0) + UInt(0,64),
          p_idx,
          tag + UInt(0,64),
-         TagHash(io.if_req_pc, io.if_req_history),
+         TagHashSimple(io.if_req_pc, io.if_req_history),
          Mux(tag === p_tag, Str("H"), Str(" "))
       )
 

@@ -36,7 +36,10 @@ import cde.Parameters
 
 class CircularShiftRegisterIO(compressed_length: Int, history_length: Int) extends Bundle
 {
+   // current value of the register
    val value = UInt(OUTPUT, compressed_length)
+   // the next value that will be written into the register
+   val next  = UInt(OUTPUT, compressed_length)
 
    val do_shift = Bool(INPUT)
    val taken = Bool(INPUT)
@@ -73,19 +76,23 @@ class CircularShiftRegister(
 {
    val io = new CircularShiftRegisterIO(compressed_length, history_length)
 
-//   val csr = Reg(UInt(width=compressed_length))
    // TODO XXX remove init once fully debugged
-   // TODO handle case when clen > hlen
+   // TODO XXX handle case when clen > hlen
    val csr = Reg(init = UInt(0, width=compressed_length))
-   io.value := csr
+   val next = Wire(init = csr)
 
    when (io.do_rollback)
    {
-      csr := io.rollback_value
+      next := io.rollback_value
    }
    .elsewhen (io.do_shift)
    {
       val carry = csr(compressed_length-1)
-      csr := Cat(csr, io.taken ^ carry) ^ (io.evict << UInt(history_length % compressed_length))
+      next := Cat(csr, io.taken ^ carry) ^ (io.evict << UInt(history_length % compressed_length))
    }
+
+   csr := next
+
+   io.value := csr
+   io.next := next
 }
