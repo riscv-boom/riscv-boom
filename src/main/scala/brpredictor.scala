@@ -294,9 +294,7 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int)(implicit p
       r_ghistory_u.commit(commit.bits.ctrl.taken.reduce(_|_))
    }
 
-   // TODO XXX turn this on after insuring this won't happen. Then we can also remove the commit.valid bypass
-   // occuring in the HistoryRegisters.
-//   assert (!(io.flush && commit.valid), "[brpredictor] flush and commit trying to occur simultaneously.")
+   assert (!(io.flush && commit.valid), "[brpredictor] flush and commit trying to occur simultaneously.")
 }
 
 
