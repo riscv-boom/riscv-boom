@@ -48,7 +48,7 @@ class TageTableIo(
 
    // commit - update predictor tables (allocate entry)
    val allocate = (new ValidIO(new TageAllocateEntryInfo(fetch_width, index_sz, tag_sz, history_length))).flip
-   def AllocateNewEntry(idx: UInt, tag: UInt, executed: UInt, taken: UInt, pc: UInt, hist: UInt) =
+   def AllocateNewEntry(idx: UInt, tag: UInt, executed: UInt, taken: UInt, pc: UInt, debug_hist_ptr: UInt) =
    {
       this.allocate.valid := Bool(true)
       this.allocate.bits.index := idx
@@ -56,7 +56,7 @@ class TageTableIo(
       this.allocate.bits.executed :=executed
       this.allocate.bits.taken :=taken
       this.allocate.bits.debug_pc := pc
-      this.allocate.bits.debug_hist :=hist
+      this.allocate.bits.debug_hist_ptr :=debug_hist_ptr
    }
 
    // commit - update predictor tables (update counters)
@@ -110,7 +110,7 @@ class TageTableIo(
       this.allocate.bits.executed := UInt(0)
       this.allocate.bits.taken := UInt(0)
       this.allocate.bits.debug_pc := UInt(0)
-      this.allocate.bits.debug_hist := UInt(0)
+      this.allocate.bits.debug_hist_ptr := UInt(0)
       this.update_counters.bits.index := UInt(0)
       this.update_counters.bits.executed := UInt(0)
       this.update_counters.bits.taken := UInt(0)
@@ -162,7 +162,7 @@ class TageAllocateEntryInfo(fetch_width: Int, index_sz: Int, tag_sz: Int, hist_s
    val executed = UInt(width = fetch_width)
    val taken = UInt(width = fetch_width)
    val debug_pc = UInt(width = 32)
-   val debug_hist = UInt(width = hist_sz)
+   val debug_hist_ptr = UInt(width = hist_sz)
    override def cloneType: this.type = new TageAllocateEntryInfo(fetch_width, index_sz, tag_sz, hist_sz).asInstanceOf[this.type]
 }
 
@@ -224,7 +224,7 @@ class TageTable(
    val tag_table     = Mem(num_entries, UInt(width = tag_sz))
    val ubit_table    = Mem(num_entries, UInt(width = ubit_sz))
    val debug_pc_table= Mem(num_entries, UInt(width = 32))
-   val debug_hist_table=Mem(num_entries,UInt(width = history_length))
+   val debug_hist_ptr_table=Mem(num_entries,UInt(width = log2Up(VLHR_LENGTH)))
 
    //history ghistory
    val idx_csr         = Module(new CircularShiftRegister(index_sz, history_length))
@@ -407,7 +407,7 @@ class TageTable(
       counter_table(a_idx) := init_counter_row
 
       debug_pc_table(a_idx) := io.allocate.bits.debug_pc
-      debug_hist_table(a_idx) := io.allocate.bits.debug_hist(history_length-1,0)
+      debug_hist_ptr_table(a_idx) := io.allocate.bits.debug_hist_ptr(history_length-1,0)
 
       when (!(a_idx < UInt(num_entries)))
       {
@@ -481,7 +481,7 @@ class TageTable(
             printf(" [u=%d] " + "PC=0x%x hist=0x%x ",
                ubit_table(UInt(i+j)),
                (debug_pc_table(UInt(i+j)) & UInt(0xff))(11,0),
-               (debug_hist_table(UInt(i+j)) & UInt(0xffff))(15,0)
+               debug_hist_ptr_table(UInt(i+j))
                )
          }
          printf("\n")

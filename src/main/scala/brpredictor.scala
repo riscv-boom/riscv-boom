@@ -51,7 +51,7 @@ class BpdResp(implicit p: Parameters) extends BoomBundle()(p)
    // Only track user-mode history.
    val history_u = UInt(width = GLOBAL_HISTORY_LENGTH)
    // For very long histories, implement as a circular buffer and only snapshot the tail pointer.
-   val history_ptr = UInt(width = log2Up(GLOBAL_HISTORY_LENGTH+2*NUM_ROB_ENTRIES)) // TODO XXX what length to use?
+   val history_ptr = UInt(width = log2Up(VLHR_LENGTH))
 
    // The info field stores the response information from the branch predictor.
    // The response is stored (conceptually) in the ROB and is returned to the
@@ -113,7 +113,7 @@ class BpdUpdate(implicit p: Parameters) extends BoomBundle()(p)
    val mispredict = Bool()
    val history = UInt(width = GLOBAL_HISTORY_LENGTH)
    val history_u = UInt(width = GLOBAL_HISTORY_LENGTH)
-   val history_ptr = UInt(width = log2Up(GLOBAL_HISTORY_LENGTH+2*NUM_ROB_ENTRIES)) // TODO XXX what length to use?
+   val history_ptr = UInt(width = log2Up(VLHR_LENGTH))
    val shadow_info = new ShadowHistInfo()
    val bpd_predict_val = Bool()
    val bpd_mispredict = Bool()
@@ -168,7 +168,7 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int)(implicit p
 
    // Track VERY long histories with a specialized history implementation.
    // TODO abstract this away so nobody knows which they are using.
-   val r_vlh = new VeryLongHistoryRegister(history_length, NUM_ROB_ENTRIES)
+   val r_vlh = new VeryLongHistoryRegister(history_length, VLHR_LENGTH)
 
    val in_usermode = io.status_prv === UInt(rocket.PRV.U)
    val disable_bpd = in_usermode && Bool(ENABLE_BPD_UMODE_ONLY)
@@ -396,10 +396,10 @@ class HistoryRegister(length: Int)
 
 // for very long histories, it is more efficient to implement as a circular buffer,
 // and to snapshot the tail pointer.
-class VeryLongHistoryRegister(hlen: Int, num_rob_entries: Int)
+class VeryLongHistoryRegister(hlen: Int, vlhr_len: Int)
 {
    // we need to provide extra bits for speculating past the commit-head of the buffer.
-   private val plen = hlen + 2*num_rob_entries
+   private val plen = vlhr_len
    private val hist_buffer = Reg(init = UInt(0, plen))
    // the speculative head point to the next empty spot (head-1 is the newest bit).
    private val spec_head = Reg(init = UInt(0, width = log2Up(plen)))

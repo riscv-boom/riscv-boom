@@ -69,12 +69,18 @@ trait HasBoomCoreParameters extends rocket.HasCoreParameters
    val ENABLE_BRANCH_PREDICTOR = p(EnableBranchPredictor)
    val ENABLE_BPD_UMODE_ONLY = p(EnableBpdUModeOnly)
    val ENABLE_BPD_USHISTORY = p(EnableBpdUSModeHistory)
+   // What is the maximum length of global history tracked?
    var GLOBAL_HISTORY_LENGTH = 0
+   // What is the physical length of the VeryLongHistoryRegister? This must be
+   // able to handle the GHIST_LENGTH as well as being able hold all speculative
+   // updates well beyond the GHIST_LENGTH (i.e., +ROB_SZ and other buffering).
+   var VLHR_LENGTH = 1 // 1 until we have zero-width wires
    var BPD_INFO_SIZE = 0
 
    if (p(TageKey).enabled)
    {
       GLOBAL_HISTORY_LENGTH = p(TageKey).history_lengths.max
+      VLHR_LENGTH = GLOBAL_HISTORY_LENGTH+2*NUM_ROB_ENTRIES
       BPD_INFO_SIZE = TageBrPredictor.GetRespInfoSize(p)
    }
    else if (p(GSkewKey).enabled)
@@ -99,7 +105,6 @@ trait HasBoomCoreParameters extends rocket.HasCoreParameters
    }
    else
    {
-      // TODO add support for SimpleGShare
       require(!ENABLE_BRANCH_PREDICTOR) // set branch predictor in configs.scala
       BPD_INFO_SIZE = 1
       GLOBAL_HISTORY_LENGTH = 1

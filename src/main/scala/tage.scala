@@ -22,12 +22,10 @@
 //       Register" elsewhere in BOOM).
 
 // TODO:
-//    - add CSRs.
-//    - add very-long histories (VLH)
 //    - make predictor sequential (first show it works, then make it sequential)
+//    - SRAM handling
 //    - alt-pred tracking (choosing between +2 tables, sometimes using alt pred if u is low)
 //    - u-bit handling, clearing (count failed allocations?)
-//    - SRAM handling
 //    - banking
 //    - lower required parameters, arguments to bundles and objects
 //    - able to allocate >1 tables
@@ -83,8 +81,7 @@ class TageResp(
 
    val indexes = Vec(num_tables, UInt(width = max_index_sz)) // needed to update predictor at Commit
 
-   // TODO XXX remove HISTORY and replace with HISTORY_TAIL_PTR
-   val history = UInt(width = max_history_length) // stored in snapshots (dealloc after Execute)
+   val debug_history_ptr = UInt(width = max_history_length) // stored in snapshots (dealloc after Execute)
    val idx_csr = UInt(width = max_index_sz)
    val tag_csr1 = UInt(width = max_tag_sz)
    val tag_csr2 = UInt(width = max_tag_sz-1)
@@ -340,7 +337,7 @@ class TageBrPredictor(
       if (DEBUG_PRINTF_TAGE)
       {
          printf("Committing and updating predictor: PC: 0x%x HIST: 0x%x correct=%d predhit: %d, exe=%d takens=%d agree=%d althit: %d prov_id: %d -[",
-            info.br_pc, info.history, correct, info.provider_hit,
+            info.br_pc, info.debug_history_ptr, correct, info.provider_hit,
             executed, takens, alt_agrees, info.alt_hit, provider_id)
          info.indexes.map{printf("%d ", _)}
          printf("]\n")
@@ -394,7 +391,7 @@ class TageBrPredictor(
                executed,
                takens,
                info.br_pc,
-               info.history)
+               info.debug_history_ptr)
 
             if (DEBUG_PRINTF_TAGE)
             {
