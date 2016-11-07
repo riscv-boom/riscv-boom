@@ -74,13 +74,12 @@ trait HasBoomCoreParameters extends rocket.HasCoreParameters
    // What is the physical length of the VeryLongHistoryRegister? This must be
    // able to handle the GHIST_LENGTH as well as being able hold all speculative
    // updates well beyond the GHIST_LENGTH (i.e., +ROB_SZ and other buffering).
-   var VLHR_LENGTH = 1 // 1 until we have zero-width wires
+   var VLHR_LENGTH = 0
    var BPD_INFO_SIZE = 0
 
    if (p(TageKey).enabled)
    {
       GLOBAL_HISTORY_LENGTH = p(TageKey).history_lengths.max
-      VLHR_LENGTH = GLOBAL_HISTORY_LENGTH+2*NUM_ROB_ENTRIES
       BPD_INFO_SIZE = TageBrPredictor.GetRespInfoSize(p)
    }
    else if (p(GSkewKey).enabled)
@@ -109,6 +108,7 @@ trait HasBoomCoreParameters extends rocket.HasCoreParameters
       BPD_INFO_SIZE = 1
       GLOBAL_HISTORY_LENGTH = 1
    }
+   VLHR_LENGTH = GLOBAL_HISTORY_LENGTH+2*NUM_ROB_ENTRIES
 
 
    //************************************

@@ -29,7 +29,6 @@
 //    mispredictions.
 //
 //
-// TODO: add asserts to compare commit and speculative histories.
 // TODO: review the HistoryRegister, re: same-packet refetches getting out of sync with the commit copy.
 
 package boom
@@ -45,8 +44,13 @@ import util.Str
 class BpdResp(implicit p: Parameters) extends BoomBundle()(p)
 {
    val takens = UInt(width = FETCH_WIDTH)
-   val shadow_info = new ShadowHistInfo().asOutput
+
    // Roughly speaking, track the outcome of the last N branches.
+   // The purpose of these is for resetting the global history on a branch
+   // mispredict -- they are NOT the history used to index the branch predictor,
+   // as speculative updates to the global history will have occurred between
+   // the branch predictor is indexed and when the branch makes its own
+   // prediction and update to the history.
    val history = UInt(width = GLOBAL_HISTORY_LENGTH)
    // Only track user-mode history.
    val history_u = UInt(width = GLOBAL_HISTORY_LENGTH)
@@ -68,24 +72,6 @@ class BpdResp(implicit p: Parameters) extends BoomBundle()(p)
 class GHistUpdate extends Bundle
 {
    val taken = Bool()
-}
-
-// Global history is used to make predictions and must be speculatively updated
-// with the latest predictions.  However, there is a lag between looking up a
-// prediction and taking a prediction. Thus, there is a "shadow" in which a
-// branch will make a prediction but not know about the branches that came
-// before it that haven't yet updated the global history register.
-// This information must still be tracked however; if a misprediction occurs,
-// the global history must be reset. However, snapshotting the global history
-// used to make the mispredicted prediction is incomplete, as it lacks
-// information about the branches that came before it, but were in the "shadow".
-// Thus, each branch snapshot must also track the "shadow" history so that the
-// correct global history can be reassembled during a misprediction.
-class ShadowHistInfo extends Bundle
-{
-   // the shadow is two cycles
-   val valids = UInt(width=2)
-   val takens = UInt(width=2)
 }
 
 // update comes from the branch-unit with the actual outcome
@@ -114,7 +100,6 @@ class BpdUpdate(implicit p: Parameters) extends BoomBundle()(p)
    val history = UInt(width = GLOBAL_HISTORY_LENGTH)
    val history_u = UInt(width = GLOBAL_HISTORY_LENGTH)
    val history_ptr = UInt(width = log2Up(VLHR_LENGTH))
-   val shadow_info = new ShadowHistInfo()
    val bpd_predict_val = Bool()
    val bpd_mispredict = Bool()
    val taken = Bool()
@@ -163,7 +148,7 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int)(implicit p
    private val r_ghistory = new HistoryRegister(history_length)
    // Tracks history only when in user-mode.
    private val r_ghistory_u = new HistoryRegister(history_length)
-   // TODO temporary, provides evict bits to TAGE
+   // TODO temporary assertion coverage to TAGE
    val r_ghistory_commit_copy = r_ghistory.commit_copy
 
    // Track VERY long histories with a specialized history implementation.
@@ -249,24 +234,10 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int)(implicit p
       disable = Bool(false))
 
 
-   io.resp.bits.history := RegNext(RegNext(ghistory))
-   io.resp.bits.history_u := RegNext(RegNext(ghistory_uonly))
-   io.resp.bits.history_ptr := RegNext(RegNext(vlh_head))
+   io.resp.bits.history     := ghistory
+   io.resp.bits.history_u   := ghistory_uonly
+   io.resp.bits.history_ptr := vlh_head
 
-
-   // -----------------------------------------------
-   // Track shadow updates.
-
-   val shadow_info = Reg(new ShadowHistInfo)
-   val kill_shadow_info = io.flush || (io.br_resolution.valid && io.br_resolution.bits.mispredict)
-   shadow_info.valids :=
-      Mux(kill_shadow_info,
-         UInt(0),
-         Cat(shadow_info.valids, io.hist_update_spec.valid && io.resp.ready))
-   shadow_info.takens := Cat(shadow_info.takens, io.hist_update_spec.bits.taken)
-
-   io.resp.bits.shadow_info.takens := shadow_info.takens
-   io.resp.bits.shadow_info.valids := Mux(kill_shadow_info, UInt(0), shadow_info.valids)
 
    // -----------------------------------------------
 
@@ -274,7 +245,7 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int)(implicit p
    io.brob <> brob.io.backend
    commit := brob.io.commit_entry
 
-   // TODO XXX add this back in (perhaps just need to initialize mispredicted array?)
+   // TODO add this back in (perhaps just need to initialize mispredicted array?)
 //   assert ((~commit.bits.executed.toBits & commit.bits.mispredicted.toBits) === Bits(0),
 //      "[BrPredictor] the BROB is marking a misprediction for something that didn't execute.")
 
@@ -323,13 +294,11 @@ class HistoryRegister(length: Int)
       // of the fetch_packet.
       val res_history = if (umode_only) br_resolution_bits.history_u else br_resolution_bits.history
       val fixed_history = Cat(res_history, br_resolution_bits.taken)
-      // TODO XXX I think we're losing the shadow history ... what is the impact of that here?
-      // TODO XXX "bpd_mispredict" is almost certainly wrong, should just be "mispredict".
       val ret_value =
          Mux(flush,
             r_commit_history,
          Mux(br_resolution_valid &&
-               br_resolution_bits.bpd_mispredict &&
+               br_resolution_bits.mispredict &&
                br_resolution_bits.new_pc_same_packet,
             res_history,
          Mux(br_resolution_valid &&
@@ -360,23 +329,10 @@ class HistoryRegister(length: Int)
       {
          r_history := r_commit_history
       }
-      // TODO XXX do we need to handle same_packet mispredictions?
-      // add in shadow, but notthe fixed history bit? the problem is if another branch
-      // is in the packet and updates spec_histor, now we got two shifts out of the same packet.
+      // TODO do we need to handle same_packet mispredictions?
       .elsewhen (br_resolution_valid && br_resolution_bits.mispredict)
       {
-         // if we need to reset the ghistory on a misspeculation, we need to account for
-         // any branches that came before the misspeculated branch that were in the "shadow"
-         // and thus would not be captured by the ghistory snapshot.
-         val shadow = br_resolution_bits.shadow_info
-         require (shadow.valids.getWidth == 2)
-
-         // shift over by PopCount(valids), and OR in the taken signals (where valids(*) is true).
-         r_history :=
-            Mux(shadow.valids === UInt(1), fixed_history << UInt(1) | shadow.takens(0),
-            Mux(shadow.valids === UInt(2), fixed_history << UInt(1) | shadow.takens(1),
-            Mux(shadow.valids === UInt(3), fixed_history << UInt(2) | shadow.takens,
-                                           fixed_history)))
+         r_history := fixed_history
       }
       .elsewhen (hist_update_spec_valid)
       {
@@ -395,7 +351,7 @@ class HistoryRegister(length: Int)
 //------------------------------------------------------------------------------
 
 // for very long histories, it is more efficient to implement as a circular buffer,
-// and to snapshot the tail pointer.
+// and to snapshot the head pointer.
 class VeryLongHistoryRegister(hlen: Int, vlhr_len: Int)
 {
    // we need to provide extra bits for speculating past the commit-head of the buffer.
@@ -444,9 +400,7 @@ class VeryLongHistoryRegister(hlen: Int, vlhr_len: Int)
       }
       .elsewhen (br_resolution_valid && br_resolution_bits.mispredict)
       {
-         val snapshot_ptr = br_resolution_bits.history_ptr
-         val shadow = br_resolution_bits.shadow_info
-         retval := WrapAdd(snapshot_ptr, PopCount(shadow.valids) + UInt(1), plen)
+         retval := WrapInc(br_resolution_bits.history_ptr, plen)
       }
       .otherwise
       {
@@ -484,12 +438,8 @@ class VeryLongHistoryRegister(hlen: Int, vlhr_len: Int)
       {
          val snapshot_ptr = br_resolution_bits.history_ptr
          assert (snapshot_ptr <= UInt(plen), "[brpredictor] VLHR: snapshot is out-of-bounds.")
-         val shadow = br_resolution_bits.shadow_info
-         val update_ptr = WrapAdd(snapshot_ptr, PopCount(shadow.valids), plen)
-         assert (update_ptr <= UInt(plen), "[brpredictor] VLHR: update-ptr is out-of-bounds.")
-
-         hist_buffer := hist_buffer.bitSet(update_ptr, br_resolution_bits.taken)
-         spec_head := WrapAdd(snapshot_ptr, PopCount(shadow.valids) + UInt(1), plen)
+         hist_buffer := hist_buffer.bitSet(snapshot_ptr, br_resolution_bits.taken)
+         spec_head := WrapInc(snapshot_ptr, plen)
       }
       .elsewhen (hist_update_spec_valid)
       {
@@ -731,14 +681,13 @@ class BranchReorderBuffer(fetch_width: Int, num_entries: Int)(implicit p: Parame
    {
       for (i <- 0 until num_entries)
       {
-         printf (" brob[%d] (%x) T=%x m=%x r=%d snapshot=%d +%d "
+         printf (" brob[%d] (%x) T=%x m=%x r=%d snapshot=%d "
             , UInt(i, log2Up(num_entries))
             , entries_ctrl(i).executed.toBits
             , entries_ctrl(i).taken.toBits
             , entries_ctrl(i).mispredicted.toBits
             , entries_ctrl(i).debug_rob_idx
             , entries_info(i).history_ptr
-            , PopCount(entries_info(i).shadow_info.valids)
             )
          printf("%c\n"
          // chisel3 lacks %s support
