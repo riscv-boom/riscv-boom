@@ -53,10 +53,18 @@ class CircularShiftRegisterIO(compressed_length: Int, history_length: Int) exten
 
    val do_rollback= Bool(INPUT)
    val rollback_value = UInt(INPUT, compressed_length)
-   def rollback(v: UInt) =
+   val do_rbk_shift = Bool(INPUT)
+   val rs_new_bit = Bool(INPUT)
+   val rs_evict_bit = Bool(INPUT)
+   // we either perform a rollback or a rollback and shift
+   // to handle flushes and branch mispredictions respectively.
+   def rollback(v: UInt, and_shift: Bool, shift_bit: Bool=Bool(false), evict_bit: Bool=Bool(false)) =
    {
       do_rollback := Bool(true)
       rollback_value := v
+      do_rbk_shift := and_shift
+      rs_new_bit := shift_bit
+      rs_evict_bit := evict_bit
    }
 
    def InitializeIo(dummy: Int=0) =
@@ -66,6 +74,8 @@ class CircularShiftRegisterIO(compressed_length: Int, history_length: Int) exten
       this.evict := Bool(false)
       this.do_rollback := Bool(false)
       this.rollback_value := UInt(0)
+      this.rs_new_bit := Bool(false)
+      this.rs_evict_bit := Bool(false)
    }
 }
 
@@ -81,14 +91,29 @@ class CircularShiftRegister(
    val csr = Reg(init = UInt(0, width=compressed_length))
    val next = Wire(init = csr)
 
-   when (io.do_rollback)
+   when (io.do_rollback && io.do_rbk_shift)
+   {
+      next :=
+         PerformCircularShiftRegister(
+            io.rollback_value,
+            io.rs_new_bit,
+            io.rs_evict_bit,
+            history_length,
+            compressed_length)
+   }
+   .elsewhen (io.do_rollback)
    {
       next := io.rollback_value
    }
    .elsewhen (io.do_shift)
    {
-      val carry = csr(compressed_length-1)
-      next := Cat(csr, io.taken ^ carry) ^ (io.evict << UInt(history_length % compressed_length))
+      next :=
+         PerformCircularShiftRegister(
+            csr,
+            io.taken,
+            io.evict,
+            history_length,
+            compressed_length)
    }
 
    csr := next

@@ -340,9 +340,9 @@ class TageTable(
    io.bp2_resp.bits.index  := RegEnable(RegEnable(p_idx, !stall), !stall)(index_sz-1,0)
    io.bp2_resp.bits.tag    := RegEnable(RegEnable(p_tag, !stall), !stall)(tag_sz-1,0)
 
-   io.bp2_resp.bits.idx_csr  := RegEnable(RegEnable(idx_csr.io.next, !stall), !stall)
-   io.bp2_resp.bits.tag_csr1 := RegEnable(RegEnable(tag_csr1.io.next, !stall), !stall)
-   io.bp2_resp.bits.tag_csr2 := RegEnable(RegEnable(tag_csr2.io.next, !stall), !stall)
+   io.bp2_resp.bits.idx_csr  := idx_csr.io.value
+   io.bp2_resp.bits.tag_csr1 := tag_csr1.io.value
+   io.bp2_resp.bits.tag_csr2 := tag_csr2.io.value
 
    //------------------------------------------------------------
    // Update (Branch Resolution)
@@ -351,9 +351,9 @@ class TageTable(
 
    when (io.flush)
    {
-      idx_csr.io.rollback (commit_idx_csr.io.value)
-      tag_csr1.io.rollback(commit_tag_csr1.io.value)
-      tag_csr2.io.rollback(commit_tag_csr2.io.value)
+      idx_csr.io.rollback (commit_idx_csr.io.value , and_shift=Bool(false))
+      tag_csr1.io.rollback(commit_tag_csr1.io.value, and_shift=Bool(false))
+      tag_csr2.io.rollback(commit_tag_csr2.io.value, and_shift=Bool(false))
    }
    .elsewhen (io.br_resolution.valid && io.br_resolution.bits.mispredict)
    {
@@ -365,10 +365,12 @@ class TageTable(
             max_tag_sz = max_tag_sz).fromBits(
          io.br_resolution.bits.info)
 
-      // TODO XXX need to perform rollacbk+shift
-      idx_csr.io.rollback (resp_info.idx_csr (id))
-      tag_csr1.io.rollback(resp_info.tag_csr1(id))
-      tag_csr2.io.rollback(resp_info.tag_csr2(id))
+      val new_bit = io.br_resolution.bits.taken
+      val evict_bit = resp_info.evict_bits(id)
+
+      idx_csr.io.rollback (resp_info.idx_csr (id), and_shift=Bool(true), new_bit, evict_bit)
+      tag_csr1.io.rollback(resp_info.tag_csr1(id), and_shift=Bool(true), new_bit, evict_bit)
+      tag_csr2.io.rollback(resp_info.tag_csr2(id), and_shift=Bool(true), new_bit, evict_bit)
    }
    .elsewhen (io.bp2_update_history.valid)
    {

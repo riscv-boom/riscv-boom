@@ -80,6 +80,7 @@ class TageResp(
 
    val indexes  = Vec(num_tables, UInt(width = max_index_sz)) // needed to update predictor at Commit
    val tags     = Vec(num_tables, UInt(width = max_tag_sz))   // needed to update predictor at Commit
+   val evict_bits = Vec(num_tables, Bool())                   // needed to update predictor on branch misprediction
 
    val idx_csr  = Vec(num_tables, UInt(width = max_index_sz)) // needed to perform rollback
    val tag_csr1 = Vec(num_tables, UInt(width = max_tag_sz))   // needed to perform rollback
@@ -259,6 +260,7 @@ class TageBrPredictor(
    resp_info.idx_csr   := Vec(predictions.map(_.idx_csr))
    resp_info.tag_csr1  := Vec(predictions.map(_.tag_csr1))
    resp_info.tag_csr2  := Vec(predictions.map(_.tag_csr2))
+   resp_info.evict_bits:= Vec(tables_io.map(_.bp2_update_csr_evict_bit))
 
    resp_info.provider_hit := io.resp.valid
    resp_info.provider_id := GetProviderTableId(valids)

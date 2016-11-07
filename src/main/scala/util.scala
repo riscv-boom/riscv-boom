@@ -61,6 +61,20 @@ object PerformShiftRegister
    }
 }
 
+// Shift a register over by one bit, wrapping the top bit around to the bottom
+// (XOR'ed with a new-bit), and evicting a bit at index HLEN.
+// This is used to simulate a longer HLEN-width shift register that is folded
+// down to a compressed CLEN.
+object PerformCircularShiftRegister
+{
+   def apply(csr: UInt, new_bit: Bool, evict_bit: Bool, hlen: Int, clen: Int): UInt =
+   {
+      val carry = csr(clen-1)
+      val newval = Cat(csr, new_bit ^ carry) ^ (evict_bit << UInt(hlen % clen))
+      newval
+   }
+}
+
 // Increment the input "value", wrapping it if necessary.
 object WrapAdd
 {
