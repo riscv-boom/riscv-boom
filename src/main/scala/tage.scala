@@ -77,17 +77,17 @@ class TageResp(
    val alt_hit = Bool()  // an alternate table made a prediction too
    val alt_id = UInt(width = 5)  // which table is the alternative?
    val alt_predicted_takens = UInt(width = fetch_width)
-   val tags = Vec(num_tables, UInt(width = max_tag_sz))
 
-   val indexes = Vec(num_tables, UInt(width = max_index_sz)) // needed to update predictor at Commit
+   val indexes  = Vec(num_tables, UInt(width = max_index_sz)) // needed to update predictor at Commit
+   val tags     = Vec(num_tables, UInt(width = max_tag_sz))   // needed to update predictor at Commit
+
+   val idx_csr  = Vec(num_tables, UInt(width = max_index_sz)) // needed to perform rollback
+   val tag_csr1 = Vec(num_tables, UInt(width = max_tag_sz))   // needed to perform rollback
+   val tag_csr2 = Vec(num_tables, UInt(width = max_tag_sz-1)) // needed to perform rollback
+
 
    val debug_history_ptr = UInt(width = max_history_length) // stored in snapshots (dealloc after Execute)
-   val idx_csr = UInt(width = max_index_sz)
-   val tag_csr1 = UInt(width = max_tag_sz)
-   val tag_csr2 = UInt(width = max_tag_sz-1)
-
-
-   val br_pc = UInt(width=64)
+   val debug_br_pc = UInt(width=64)
 
    override def cloneType: this.type =
       new TageResp(
@@ -214,17 +214,19 @@ class TageBrPredictor(
    tables_io.zipWithIndex.map{ case (table, i) =>
       table.InitializeIo()
 
-      // Send prediction request.
+      // Send prediction request. ---
       table.if_req_pc := io.req_pc
       table.if_req_history := this.ghistory
+
+      // update CSRs. ---
+      table.br_resolution <> io.br_resolution
+      table.flush := io.flush
 
       // Update ghistory speculatively once a prediction is made.
       table.bp2_update_history <> io.hist_update_spec
       table.bp2_update_csr_evict_bit := r_vlh.getSpecBit(history_lengths(i)-1)
 
-      // update CSRs
-      table.br_resolution <> io.br_resolution
-      table.flush := io.flush
+      // Update commit copies.
       table.commit_csr_update.valid := commit.valid
       table.commit_csr_update.bits.new_bit := commit.bits.ctrl.taken.reduce(_|_)
       table.commit_csr_update.bits.evict_bit := r_vlh.getCommitBit(history_lengths(i)-1)
@@ -250,10 +252,14 @@ class TageBrPredictor(
       max_index_sz = log2Up(table_sizes.max),
       max_tag_sz = tag_sizes.max))
 
-   io.resp.valid             := best_prediction_valid
-   io.resp.bits.takens       := best_prediction_bits.takens
-   io.resp.bits.history := RegEnable(RegEnable(this.ghistory, !stall), !stall)
-   resp_info.indexes := Vec(predictions.map(_.index))
+   io.resp.valid       := best_prediction_valid
+   io.resp.bits.takens := best_prediction_bits.takens
+   resp_info.indexes   := Vec(predictions.map(_.index))
+   resp_info.tags      := Vec(predictions.map(_.tag))
+   resp_info.idx_csr   := Vec(predictions.map(_.idx_csr))
+   resp_info.tag_csr1  := Vec(predictions.map(_.tag_csr1))
+   resp_info.tag_csr2  := Vec(predictions.map(_.tag_csr2))
+
    resp_info.provider_hit := io.resp.valid
    resp_info.provider_id := GetProviderTableId(valids)
    resp_info.provider_predicted_takens := best_prediction_bits.takens
@@ -262,11 +268,7 @@ class TageBrPredictor(
    resp_info.alt_hit := p_alt_hit
    resp_info.alt_id  := p_alt_id
    resp_info.alt_predicted_takens := Vec(predictions.map(_.takens))(p_alt_id)
-   resp_info.br_pc := RegEnable(RegEnable(io.req_pc, !stall), !stall)
-
-   println("tags len: " + resp_info.tags.length + ", predictions len: " + predictions.map(_.tag).length)
-   resp_info.tags := Vec(predictions.map(_.tag))
-
+   resp_info.debug_br_pc := RegEnable(RegEnable(io.req_pc, !stall), !stall)
 
    io.resp.bits.info := resp_info.toBits
 
@@ -337,7 +339,7 @@ class TageBrPredictor(
       if (DEBUG_PRINTF_TAGE)
       {
          printf("Committing and updating predictor: PC: 0x%x HIST: 0x%x correct=%d predhit: %d, exe=%d takens=%d agree=%d althit: %d prov_id: %d -[",
-            info.br_pc, info.debug_history_ptr, correct, info.provider_hit,
+            info.debug_br_pc, info.debug_history_ptr, correct, info.provider_hit,
             executed, takens, alt_agrees, info.alt_hit, provider_id)
          info.indexes.map{printf("%d ", _)}
          printf("]\n")
@@ -390,7 +392,7 @@ class TageBrPredictor(
                info.tags(alloc_id),
                executed,
                takens,
-               info.br_pc,
+               info.debug_br_pc,
                info.debug_history_ptr)
 
             if (DEBUG_PRINTF_TAGE)

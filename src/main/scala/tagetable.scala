@@ -33,6 +33,7 @@ class TageTableIo(
 
    // instruction fetch - request prediction
    val if_req_pc = UInt(INPUT, width = xLen)
+   // TODO XXX remove this, as it is unused
    val if_req_history = UInt(INPUT, width = history_length)
 
    // bp2 - send prediction to bpd pipeline
@@ -43,19 +44,16 @@ class TageTableIo(
    // TODO: this is painfully special-cased -- move this into an update_csr bundle?
    val bp2_update_csr_evict_bit = Bool(INPUT)
 
-   // execute - perform updates on misprediction (reset the histories)
-//   val exe_update_history = new ValidIO(new BpdResp())
-
    // commit - update predictor tables (allocate entry)
    val allocate = (new ValidIO(new TageAllocateEntryInfo(fetch_width, index_sz, tag_sz, history_length))).flip
-   def AllocateNewEntry(idx: UInt, tag: UInt, executed: UInt, taken: UInt, pc: UInt, debug_hist_ptr: UInt) =
+   def AllocateNewEntry(idx: UInt, tag: UInt, executed: UInt, taken: UInt, debug_pc: UInt, debug_hist_ptr: UInt) =
    {
       this.allocate.valid := Bool(true)
       this.allocate.bits.index := idx
       this.allocate.bits.tag :=tag
       this.allocate.bits.executed :=executed
       this.allocate.bits.taken :=taken
-      this.allocate.bits.debug_pc := pc
+      this.allocate.bits.debug_pc := debug_pc
       this.allocate.bits.debug_hist_ptr :=debug_hist_ptr
    }
 
@@ -104,7 +102,6 @@ class TageTableIo(
       this.allocate.valid := Bool(false)
       this.update_counters.valid := Bool(false)
       this.update_usefulness.valid := Bool(false)
-      // TODO better way to provide initial values?
       this.allocate.bits.index := UInt(0)
       this.allocate.bits.tag := UInt(0)
       this.allocate.bits.executed := UInt(0)
@@ -343,6 +340,10 @@ class TageTable(
    io.bp2_resp.bits.index  := RegEnable(RegEnable(p_idx, !stall), !stall)(index_sz-1,0)
    io.bp2_resp.bits.tag    := RegEnable(RegEnable(p_tag, !stall), !stall)(tag_sz-1,0)
 
+   io.bp2_resp.bits.idx_csr  := RegEnable(RegEnable(idx_csr.io.next, !stall), !stall)
+   io.bp2_resp.bits.tag_csr1 := RegEnable(RegEnable(tag_csr1.io.next, !stall), !stall)
+   io.bp2_resp.bits.tag_csr2 := RegEnable(RegEnable(tag_csr2.io.next, !stall), !stall)
+
    //------------------------------------------------------------
    // Update (Branch Resolution)
 
@@ -364,9 +365,10 @@ class TageTable(
             max_tag_sz = max_tag_sz).fromBits(
          io.br_resolution.bits.info)
 
-      idx_csr.io.rollback (resp_info.idx_csr)
-      tag_csr1.io.rollback(resp_info.tag_csr1)
-      tag_csr2.io.rollback(resp_info.tag_csr2)
+      // TODO XXX need to perform rollacbk+shift
+      idx_csr.io.rollback (resp_info.idx_csr (id))
+      tag_csr1.io.rollback(resp_info.tag_csr1(id))
+      tag_csr2.io.rollback(resp_info.tag_csr2(id))
    }
    .elsewhen (io.bp2_update_history.valid)
    {
