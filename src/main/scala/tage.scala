@@ -217,7 +217,6 @@ class TageBrPredictor(
 
       // Send prediction request. ---
       table.if_req_pc := io.req_pc
-      table.if_req_history := this.ghistory
 
       // update CSRs. ---
       table.br_resolution <> io.br_resolution
@@ -331,7 +330,7 @@ class TageBrPredictor(
       // no matter what happens, update table that made a prediction
       when (info.provider_hit)
       {
-         tables_io(provider_id).UpdateCounters(info.indexes(provider_id), executed, takens)
+         tables_io(provider_id).UpdateCounters(info.indexes(provider_id), executed, takens, !correct)
          when (!alt_agrees)
          {
             tables_io(provider_id).UpdateUsefulness(info.indexes(provider_id), correct)

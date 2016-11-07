@@ -33,8 +33,6 @@ class TageTableIo(
 
    // instruction fetch - request prediction
    val if_req_pc = UInt(INPUT, width = xLen)
-   // TODO XXX remove this, as it is unused
-   val if_req_history = UInt(INPUT, width = history_length)
 
    // bp2 - send prediction to bpd pipeline
    val bp2_resp = new DecoupledIO(new TageTableResp(fetch_width, history_length, log2Up(num_entries), tag_sz))
@@ -59,12 +57,13 @@ class TageTableIo(
 
    // commit - update predictor tables (update counters)
    val update_counters = (new ValidIO(new TageUpdateCountersInfo(fetch_width, index_sz))).flip
-   def UpdateCounters(idx: UInt, executed: UInt, taken: UInt) =
+   def UpdateCounters(idx: UInt, executed: UInt, taken: UInt, mispredicted: Bool) =
    {
       this.update_counters.valid := Bool(true)
       this.update_counters.bits.index := idx
       this.update_counters.bits.executed := executed
       this.update_counters.bits.taken := taken
+      this.update_counters.bits.mispredicted := mispredicted
    }
 
    // commit - update predictor tables (update u-bits)
@@ -111,6 +110,7 @@ class TageTableIo(
       this.update_counters.bits.index := UInt(0)
       this.update_counters.bits.executed := UInt(0)
       this.update_counters.bits.taken := UInt(0)
+      this.update_counters.bits.mispredicted := Bool(false)
       this.update_usefulness.bits.index := UInt(0)
       this.update_usefulness.bits.inc := Bool(false)
       this.usefulness_req_idx := UInt(0)
@@ -168,6 +168,7 @@ class TageUpdateCountersInfo(fetch_width: Int, index_sz: Int) extends Bundle //e
    val index = UInt(width = index_sz)
    val executed = UInt(width = fetch_width)
    val taken = UInt(width = fetch_width)
+   val mispredicted = Bool()
    override def cloneType: this.type = new TageUpdateCountersInfo(fetch_width, index_sz).asInstanceOf[this.type]
 }
 
@@ -215,9 +216,13 @@ class TageTable(
       + tag_sz + "-bit tags, "
       + counter_sz + "-bit counters (max value=" + CNTR_MAX + ")")
 
+   assert (counter_sz == 2)
+
    //------------------------------------------------------------
    // State
-   val counter_table = Mem(num_entries, Vec(fetch_width, UInt(width = counter_sz)))
+//   val counter_table = Mem(num_entries, Vec(fetch_width, UInt(width = counter_sz)))
+   val counters = Module(new TwobcCounterTable(fetch_width, num_entries, dualported=false))
+
    val tag_table     = Mem(num_entries, UInt(width = tag_sz))
    val ubit_table    = Mem(num_entries, UInt(width = ubit_sz))
    val debug_pc_table= Mem(num_entries, UInt(width = 32))
@@ -244,7 +249,6 @@ class TageTable(
 
    //updateHistory()
    //clearUBit() TODO XXX
-
 
 
    private def Fold (input: UInt, compressed_length: Int) =
@@ -289,56 +293,22 @@ class TageTable(
       tag_hash(tag_sz-1,0)
    }
 
-   private def IdxHashSimple (addr: UInt, hist: UInt) =
-   {
-      ((addr >> UInt(log2Up(fetch_width*coreInstBytes))) ^ Fold(hist(history_length-1,0), index_sz))(index_sz-1,0)
-   }
-
-   private def TagHashSimple (addr: UInt, hist: UInt) =
-   {
-      // the tag is computed by pc[n:0] ^ CSR1[n:0] ^ (CSR2[n-1:0]<<1).
-      val tag_hash =
-         (addr >> UInt(log2Up(fetch_width*coreInstBytes))) ^
-         Fold(hist,  index_sz) ^
-         (Fold(hist, index_sz-1) << UInt(1))
-      tag_hash(tag_sz-1,0)
-   }
-
-   private def GetPrediction(cntr: UInt): Bool =
-   {
-      // return highest-order bit
-      (cntr >> UInt(counter_sz-1))(0).toBool
-   }
-
-   private def BuildAllocCounterRow(enables: UInt, takens: UInt): Vec[UInt] =
-   {
-      val counters = for (i <- 0 until fetch_width) yield
-      {
-         Mux(!enables(i) || !takens(i),
-            UInt(CNTR_WEAK_NOTTAKEN),
-            UInt(CNTR_WEAK_TAKEN))
-      }
-      Vec(counters)
-   }
-
 
    //------------------------------------------------------------
    // Get Prediction
 
    val stall = !io.bp2_resp.ready
 
-//   val p_idx       = IdxHashSimple(io.if_req_pc, io.if_req_history)
-//   val p_tag       = TagHashSimple(io.if_req_pc, io.if_req_history)
    val p_idx       = IdxHash(io.if_req_pc)
    val p_tag       = TagHash(io.if_req_pc)
-   val counters    = counter_table(p_idx)
    val tag         = tag_table(p_idx)
    val bp2_tag_hit = RegEnable(RegEnable(tag, !stall), !stall) === RegEnable(RegEnable(p_tag, !stall), !stall)
+   counters.io.s0_r_idx := p_idx
 
    io.bp2_resp.valid       := bp2_tag_hit
-   io.bp2_resp.bits.takens := RegEnable(RegEnable(Vec(counters.map(GetPrediction(_))).toBits, !stall), !stall)
    io.bp2_resp.bits.index  := RegEnable(RegEnable(p_idx, !stall), !stall)(index_sz-1,0)
    io.bp2_resp.bits.tag    := RegEnable(RegEnable(p_tag, !stall), !stall)(tag_sz-1,0)
+   io.bp2_resp.bits.takens := counters.io.s2_r_out
 
    io.bp2_resp.bits.idx_csr  := idx_csr.io.value
    io.bp2_resp.bits.tag_csr1 := tag_csr1.io.value
@@ -394,21 +364,26 @@ class TageTable(
       commit_tag_csr2.io.shift(com_taken, com_evict)
    }
 
-// TODO XXX unlease this comparision
-//   assert (idx_csr.io.value === Fold(io.if_req_history, index_sz), "[TageTable] idx_csr not matching Fold() value.")
    assert (commit_idx_csr.io.value === folded_com_hist, "[TageTable] idx_csr not matching Fold() value.")
 
 
    //------------------------------------------------------------
    // Update (Commit)
 
-   val init_counter_row = BuildAllocCounterRow(io.allocate.bits.executed, io.allocate.bits.taken)
    when (io.allocate.valid)
    {
       val a_idx = io.allocate.bits.index(index_sz-1,0)
       ubit_table(a_idx)    := UInt(UBIT_INIT_VALUE)
       tag_table(a_idx)     := io.allocate.bits.tag(tag_sz-1,0)
-      counter_table(a_idx) := init_counter_row
+
+
+      // TODO XXX we need to add the ability to directly write in WEAK-TAKEN/WEAK-NOTTAKEN to counters.
+      // Add our own allocate port.
+     counters.io.update.valid                 := Bool(true)
+     counters.io.update.bits.index            := a_idx
+     counters.io.update.bits.executed         := Vec(io.allocate.bits.executed)
+     counters.io.update.bits.was_mispredicted := Bool(true)
+     counters.io.update.bits.takens           := Vec(io.allocate.bits.taken)
 
       debug_pc_table(a_idx) := io.allocate.bits.debug_pc
       debug_hist_ptr_table(a_idx) := io.allocate.bits.debug_hist_ptr(history_length-1,0)
@@ -421,25 +396,15 @@ class TageTable(
       assert (ubit_table(a_idx) === UInt(0), "[TageTable] Tried to allocate a useful entry")
    }
 
-   val u_idx = io.update_counters.bits.index(index_sz-1,0)
-   val u_counter_row = counter_table(u_idx)
-   val updated_row = Wire(u_counter_row.cloneType)
-   updated_row.map(_ := UInt(0))
-   when (io.update_counters.valid)
+   assert (!(io.allocate.valid && io.update_counters.valid),
+      "[tage-table] trying to allocate and update the counters simultaneously.")
+   when (!io.allocate.valid)
    {
-      for (i <- 0 until fetch_width)
-      {
-         val enable = io.update_counters.bits.executed(i)
-         val inc = io.update_counters.bits.taken(i)
-         val value = u_counter_row(i)
-         updated_row(i) :=
-            Mux(enable && inc && value < UInt(CNTR_MAX),
-               value + UInt(1),
-            Mux(enable && !inc && value > UInt(0),
-               value - UInt(1),
-               value))
-      }
-      counter_table(u_idx) := updated_row
+      counters.io.update.valid                 := io.update_counters.valid
+      counters.io.update.bits.index            := io.update_counters.bits.index
+      counters.io.update.bits.executed         := Vec(io.update_counters.bits.executed)
+      counters.io.update.bits.was_mispredicted := io.update_counters.bits.mispredicted
+      counters.io.update.bits.takens           := Vec(io.update_counters.bits.taken)
    }
 
    when (io.update_usefulness.valid)
@@ -463,12 +428,10 @@ class TageTable(
    if (DEBUG_PRINTF_TAGE)
    {
       require (num_entries < 64) // for sanity sake, don't allow larger.
-      printf("TAGETable: PC: 0x%x history: 0x%x, tag[%d]=0x%x, p_tag=0x%x " + "%c\n",
+      printf("TAGETable: PC: 0x%x history: n/a, tag[%d]=0x%x  %c\n",
          io.if_req_pc,
-         io.if_req_history(history_length-1,0) + UInt(0,64),
          p_idx,
          tag + UInt(0,64),
-         TagHashSimple(io.if_req_pc, io.if_req_history),
          Mux(tag === p_tag, Str("H"), Str(" "))
       )
 
@@ -480,7 +443,7 @@ class TageTable(
             printf("(%d) [tag=0x%x]", UInt(i+j,8), tag_table(UInt(i+j)) & UInt(0xffff))
             for (k <- 0 until fetch_width)
             {
-               printf(" [c=%d]", counter_table(UInt(i+j))(k))
+//               printf(" [c=%d]", counter_table(UInt(i+j))(k))
             }
             printf(" [u=%d] " + "PC=0x%x hist=0x%x ",
                ubit_table(UInt(i+j)),
