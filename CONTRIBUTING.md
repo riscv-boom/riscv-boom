@@ -1,5 +1,7 @@
 Contributions welcome!  If you'd like to help but don't know where to start, 
-check out the TODO file. 
+check out the TODO file or the github issue queue. For more complex
+contributions, we recommend you email or open an issue first to get early
+feedback.
 
 **Bug Reports**
 
