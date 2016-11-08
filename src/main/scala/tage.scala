@@ -22,8 +22,6 @@
 //       Register" elsewhere in BOOM).
 
 // TODO:
-//    - make predictor sequential (first show it works, then make it sequential)
-//    - SRAM handling
 //    - alt-pred tracking (choosing between +2 tables, sometimes using alt pred if u is low)
 //    - u-bit handling, clearing (count failed allocations?)
 //    - banking
@@ -343,6 +341,8 @@ class TageBrPredictor(
             info.debug_br_pc, info.debug_history_ptr, correct, info.provider_hit,
             executed, takens, alt_agrees, info.alt_hit, provider_id)
          info.indexes.map{printf("%d ", _)}
+         printf(", |tags= ")
+         info.tags.map{printf("%d ", _)}
          printf("]\n")
       }
 

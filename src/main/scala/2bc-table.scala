@@ -46,10 +46,14 @@ import Chisel._
 
 class UpdateEntry(fetch_width: Int, index_sz: Int) extends Bundle
 {
-   val was_mispredicted = Bool()
    val index            = UInt(width = index_sz)
    val executed         = Vec(fetch_width, Bool())
    val takens           = Vec(fetch_width, Bool())
+   // Was there a misprediction? If yes, we need to read the h-tables.
+   val was_mispredicted = Bool()
+   // Are we initializing this entry? If yes, we need to write directly to both P and H-tables.
+   // If takens(i), then we initialize entry to Weak-Taken. Otherwise, Weak-NotTaken.
+   val do_initialize    = Bool()
 
    override def cloneType: this.type = new UpdateEntry(fetch_width, index_sz).asInstanceOf[this.type]
 }
@@ -166,21 +170,25 @@ class HTable(
 
    hwq.io.enq <> io.update
 
-   val h_ren = io.update.valid && io.update.bits.was_mispredicted
+   val h_ren = io.update.valid && io.update.bits.was_mispredicted && !io.update.bits.do_initialize
    hwq.io.deq.ready := !h_ren
    when (!h_ren && hwq.io.deq.valid)
    {
       val waddr = hwq.io.deq.bits.index
       val wmask = hwq.io.deq.bits.executed
-      val wdata = hwq.io.deq.bits.takens
+      // if initializing, set to weak state.
+      val wdata = Vec(hwq.io.deq.bits.takens.map(t =>
+                     Mux(hwq.io.deq.bits.do_initialize, !t, t)))
       h_table.write(waddr, wdata, wmask)
    }
 
    val h_raddr = io.update.bits.index
-   io.pwq_enq.valid          := RegNext(h_ren)
+   io.pwq_enq.valid          := RegNext(h_ren || io.update.bits.do_initialize)
    io.pwq_enq.bits.index     := RegNext(h_raddr)
    io.pwq_enq.bits.executed  := RegNext(io.update.bits.executed.toBits)
-   io.pwq_enq.bits.new_value := h_table.read(h_raddr, h_ren).toBits
+   io.pwq_enq.bits.new_value := Mux(RegNext(io.update.bits.do_initialize),
+                                    RegNext(io.update.bits.takens.toBits),
+                                    h_table.read(h_raddr, h_ren).toBits)
 }
 
 
@@ -197,7 +205,7 @@ class TwobcCounterTable(
       val s0_r_idx = UInt(INPUT, width = index_sz)
       val s2_r_out = UInt(OUTPUT, width = fetch_width)
 
-      val update   = Valid(new UpdateEntry(fetch_width, index_sz)).flip
+      val update     = Valid(new UpdateEntry(fetch_width, index_sz)).flip
    }
 
    println ("\t\tBuilding (" +

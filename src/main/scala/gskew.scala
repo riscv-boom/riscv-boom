@@ -430,6 +430,11 @@ class GSkewBrPredictor(fetch_width: Int,
    gsh1_table.io.update.bits.takens    := commit.bits.ctrl.taken
    meta_table.io.update.bits.takens    := meta_update_dir
 
+   bimo_table.io.update.bits.do_initialize := Bool(false)
+   gsh0_table.io.update.bits.do_initialize := Bool(false)
+   gsh1_table.io.update.bits.do_initialize := Bool(false)
+   meta_table.io.update.bits.do_initialize := Bool(false)
+
 
    //------------------------------------------------------------
 }

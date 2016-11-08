@@ -93,8 +93,9 @@ class GShareBrPredictor(
    counters.io.update.valid                 := this.commit.valid && !this.disable_bpd
    counters.io.update.bits.index            := commit_info.index
    counters.io.update.bits.executed         := this.commit.bits.ctrl.executed
-   counters.io.update.bits.was_mispredicted := this.commit.bits.ctrl.mispredicted.reduce(_|_)
    counters.io.update.bits.takens           := this.commit.bits.ctrl.taken
+   counters.io.update.bits.was_mispredicted := this.commit.bits.ctrl.mispredicted.reduce(_|_)
+   counters.io.update.bits.do_initialize    := Bool(false)
 
    //------------------------------------------------------------
 }
