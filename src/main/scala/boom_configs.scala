@@ -43,8 +43,8 @@ class WithAllBooms extends Config(
          TestGeneration.addSuites(rvi.map(_("p")))
          TestGeneration.addSuites((if(site(UseVM)) List("v") else List()).flatMap(env => rvu.map(_(env))))
          TestGeneration.addSuite(benchmarks)
-         List.tabulate(site(NTiles)){ i => (r: Bool, p: Parameters) =>
-            Module(new BOOMTile(resetSignal = r)(p.alterPartial({
+         List.tabulate(site(NTiles)){ i => (p: Parameters) =>
+            diplomacy.LazyModule(new BOOMTile()(p.alterPartial({
                case TileId => i
                case TLId => "L1toL2"
                case NUncachedTileLinkPorts => 1 + site(RoccNMemChannels)
