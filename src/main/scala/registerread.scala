@@ -27,7 +27,7 @@ class RegisterReadIO(
 )(implicit p: Parameters) extends  BoomBundle()(p)
 {
    // issued micro-ops
-   val iss_valids = Vec(issue_width, Bool(INPUT))
+   val iss_valids = Vec(issue_width, Bool()).asInput
    val iss_uops   = Vec(issue_width, new MicroOp()).asInput
 
    // interface with register file's read ports
