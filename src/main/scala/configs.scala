@@ -70,12 +70,19 @@ class DefaultBOOMConfig extends Config (
          // Add a user+privileged global history register, separate from a user-only history regiser.
          case EnableBpdUSModeHistory => false
 
-         // Pipelining
-         case EnableFetchBufferFlowThrough => true
-         case EnableCommitMapTable => false        // track the committed rename state; allows
-                                                   // for single-cycle resets.
+         // **** Pipelining ****
 
-         // Extra Knobs and Features
+         case EnableFetchBufferFlowThrough => false
+
+         // Immediately register the branch resolution information
+         // and wait for the next cycle to redirect the front-end.
+         case EnableBrResolutionRegister => true
+
+         // Track the committed rename state; allows for single-cycle resets.
+         case EnableCommitMapTable => false
+
+
+         // **** Extra Knobs and Features ****
          case EnableAgePriorityIssue => Knob("AGE_PRIORITY_ISSUE")
          case EnablePrefetching => false
 

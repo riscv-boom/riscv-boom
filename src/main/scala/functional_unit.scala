@@ -146,6 +146,7 @@ class BrResolutionInfo(implicit p: Parameters) extends BoomBundle()(p)
    val bpd_mispredict = Bool()
 }
 
+// for critical path reasons, some of the elements in this bundle may be delayed.
 class BranchUnitResp(implicit p: Parameters) extends BoomBundle()(p)
 {
    val take_pc         = Bool()
@@ -153,7 +154,7 @@ class BranchUnitResp(implicit p: Parameters) extends BoomBundle()(p)
 
    val pc              = UInt(width = vaddrBits+1) // TODO this isn't really a branch_unit thing
 
-   val brinfo          = new BrResolutionInfo() // NOTE: delayed a cycle!
+   val brinfo          = new BrResolutionInfo()
    val btb_update_valid= Bool() // TODO turn this into a directed bundle so we can fold this into btb_update?
    val btb_update      = new rocket.BTBUpdate
    val bht_update      = Valid(new rocket.BHTUpdate)
@@ -286,6 +287,7 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
    alu.io.fn  := io.req.bits.uop.ctrl.op_fcn
    alu.io.dw  := io.req.bits.uop.ctrl.fcn_dw
 
+
    if (is_branch_unit)
    {
       val uop_pc_ = io.get_rob_pc.curr_pc
@@ -293,10 +295,9 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
       // The Branch Unit redirects the PC immediately, but delays the mispredict
       // signal a cycle (for critical path reasons)
 
-      // Did I just get killed by the previous cycle's branch?
-      // Or by a flush pipeline?
-      val killed = Wire(Bool())
-      killed := Bool(false)
+      // Did I just get killed by the previous cycle's branch,
+      // or by a flush pipeline?
+      val killed = Wire(init=Bool(false))
       when (io.req.bits.kill ||
             (io.brinfo.valid &&
                io.brinfo.mispredict &&
@@ -404,26 +405,40 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
          }
       }
 
-      io.br_unit.take_pc := mispredict
-      io.br_unit.target := Mux(pc_sel === PC_PLUS4, pc_plus4, bj_addr)
+
+      val br_unit =
+         if (p(EnableBrResolutionRegister)) Reg(new BranchUnitResp)
+         else Wire(new BranchUnitResp)
+
+
+
+      br_unit.take_pc := mispredict
+      br_unit.target := Mux(pc_sel === PC_PLUS4, pc_plus4, bj_addr)
+
+      // Delay branch resolution a cycle for critical path reasons.
+      // If the rest of "br_unit" is being registered too, then we don't need to
+      // register "brinfo" here, since in that case we would be double counting.
+      val brinfo =
+         if (p(EnableBrResolutionRegister)) Wire(new BrResolutionInfo)
+         else Reg(new BrResolutionInfo)
 
       // note: jal doesn't allocate a branch-mask, so don't clear a br-mask bit
-      // branch resolution delayed a cycle for critical path reasons
-      io.br_unit.brinfo.valid      := Reg(next = io.req.valid && uop.is_br_or_jmp && !uop.is_jal && !killed)
-      io.br_unit.brinfo.mispredict := Reg(next = mispredict)
-      io.br_unit.brinfo.mask       := Reg(next = UInt(1) << uop.br_tag)
-      io.br_unit.brinfo.exe_mask   := Reg(next = GetNewBrMask(io.brinfo, uop.br_mask))
-      io.br_unit.brinfo.tag        := Reg(next = uop.br_tag)
-      io.br_unit.brinfo.rob_idx    := Reg(next = uop.rob_idx)
-      io.br_unit.brinfo.ldq_idx    := Reg(next = uop.ldq_idx)
-      io.br_unit.brinfo.stq_idx    := Reg(next = uop.stq_idx)
-//      io.br_unit.brinfo.is_br      := Reg(next = is_br)
-      io.br_unit.brinfo.is_jr      := Reg(next = pc_sel === PC_JALR)
-      io.br_unit.brinfo.taken      := Reg(next = is_taken)
-      io.br_unit.brinfo.btb_mispredict := Reg(next = btb_mispredict)
-      io.br_unit.brinfo.bpd_mispredict := Reg(next = bpd_mispredict)
-      io.br_unit.brinfo.btb_made_pred  := Reg(next = uop.br_prediction.wasBTB)
-      io.br_unit.brinfo.bpd_made_pred  := Reg(next = uop.br_prediction.bpd_predict_val)
+      brinfo.valid          := io.req.valid && uop.is_br_or_jmp && !uop.is_jal && !killed
+      brinfo.mispredict     := mispredict
+      brinfo.mask           := UInt(1) << uop.br_tag
+      brinfo.exe_mask       := GetNewBrMask(io.brinfo, uop.br_mask)
+      brinfo.tag            := uop.br_tag
+      brinfo.rob_idx        := uop.rob_idx
+      brinfo.ldq_idx        := uop.ldq_idx
+      brinfo.stq_idx        := uop.stq_idx
+      brinfo.is_jr          := pc_sel === PC_JALR
+      brinfo.taken          := is_taken
+      brinfo.btb_mispredict := btb_mispredict
+      brinfo.bpd_mispredict := bpd_mispredict
+      brinfo.btb_made_pred  := uop.br_prediction.wasBTB
+      brinfo.bpd_made_pred  := uop.br_prediction.bpd_predict_val
+
+      br_unit.brinfo := brinfo
 
       // updates the BTB same cycle as PC redirect
       val lsb = log2Ceil(FETCH_WIDTH*coreInstBytes)
@@ -433,54 +448,54 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
 
       if (p(EnableBTBContainsBranches))
       {
-         io.br_unit.btb_update_valid := is_br_or_jalr && mispredict && is_taken
+         br_unit.btb_update_valid := is_br_or_jalr && mispredict && is_taken
          // update on all branches (but not jal/jalr)
-         io.br_unit.bht_update.valid := is_br && mispredict
+         br_unit.bht_update.valid := is_br && mispredict
       }
       else
       {
-         io.br_unit.btb_update_valid := is_br_or_jalr && mispredict && uop.is_jump
-         io.br_unit.bht_update.valid := Bool(false)
+         br_unit.btb_update_valid := is_br_or_jalr && mispredict && uop.is_jump
+         br_unit.bht_update.valid := Bool(false)
       }
 
-      io.br_unit.btb_update.pc               := fetch_pc // tell the BTB which pc to tag check against
-      io.br_unit.btb_update.br_pc            := uop_pc_
-      io.br_unit.btb_update.target           := (io.br_unit.target.toSInt & SInt(-coreInstBytes)).toUInt
-      io.br_unit.btb_update.prediction.valid := io.get_pred.info.btb_resp_valid // did this branch's fetch packet have
-                                                                                // a BTB hit in fetch?
-      io.br_unit.btb_update.prediction.bits  := io.get_pred.info.btb_resp       // give the BTB back its BTBResp
-      io.br_unit.btb_update.taken            := is_taken   // was this branch/jal/jalr "taken"
-      io.br_unit.btb_update.isJump           := uop.is_jump
-      io.br_unit.btb_update.isReturn         := uop.is_ret
+      br_unit.btb_update.pc               := fetch_pc // tell the BTB which pc to tag check against
+      br_unit.btb_update.br_pc            := uop_pc_
+      br_unit.btb_update.target           := (br_unit.target.toSInt & SInt(-coreInstBytes)).toUInt
+      br_unit.btb_update.prediction.valid := io.get_pred.info.btb_resp_valid // did this branch's fetch packet have
+                                                                             // a BTB hit in fetch?
+      br_unit.btb_update.prediction.bits  := io.get_pred.info.btb_resp       // give the BTB back its BTBResp
+      br_unit.btb_update.taken            := is_taken   // was this branch/jal/jalr "taken"
+      br_unit.btb_update.isJump           := uop.is_jump
+      br_unit.btb_update.isReturn         := uop.is_ret
 
-      io.br_unit.bht_update.bits.taken            := is_taken   // was this branch "taken"
-      io.br_unit.bht_update.bits.mispredict       := btb_mispredict     // need to reset the history in the BHT
-                                                                        // that is updated only on BTB hits
-      io.br_unit.bht_update.bits.prediction.valid := io.get_pred.info.btb_resp_valid // only update if hit in the BTB
-      io.br_unit.bht_update.bits.prediction.bits  := io.get_pred.info.btb_resp
-      io.br_unit.bht_update.bits.pc               := fetch_pc // what pc should the tag check be on?
+      br_unit.bht_update.bits.taken            := is_taken   // was this branch "taken"
+      br_unit.bht_update.bits.mispredict       := btb_mispredict     // need to reset the history in the BHT
+                                                                     // that is updated only on BTB hits
+      br_unit.bht_update.bits.prediction.valid := io.get_pred.info.btb_resp_valid // only update if hit in the BTB
+      br_unit.bht_update.bits.prediction.bits  := io.get_pred.info.btb_resp
+      br_unit.bht_update.bits.pc               := fetch_pc // what pc should the tag check be on?
 
-      io.br_unit.bpd_update.valid                 := io.req.valid && uop.is_br_or_jmp &&
-                                                     !uop.is_jal && !killed
-      io.br_unit.bpd_update.bits.is_br            := is_br
-      io.br_unit.bpd_update.bits.brob_idx         := io.get_rob_pc.curr_brob_idx
-      io.br_unit.bpd_update.bits.taken            := is_taken
-      io.br_unit.bpd_update.bits.mispredict       := mispredict
-      io.br_unit.bpd_update.bits.bpd_predict_val  := uop.br_prediction.bpd_predict_val
-      io.br_unit.bpd_update.bits.bpd_mispredict   := bpd_mispredict
-      io.br_unit.bpd_update.bits.pc               := fetch_pc
-      io.br_unit.bpd_update.bits.br_pc            := uop_pc_
-      io.br_unit.bpd_update.bits.history          := io.get_pred.info.bpd_resp.history
-      io.br_unit.bpd_update.bits.history_u        := io.get_pred.info.bpd_resp.history_u
-      io.br_unit.bpd_update.bits.history_ptr      := io.get_pred.info.bpd_resp.history_ptr
-      io.br_unit.bpd_update.bits.info             := io.get_pred.info.bpd_resp.info
+      br_unit.bpd_update.valid                 := io.req.valid && uop.is_br_or_jmp &&
+                                                  !uop.is_jal && !killed
+      br_unit.bpd_update.bits.is_br            := is_br
+      br_unit.bpd_update.bits.brob_idx         := io.get_rob_pc.curr_brob_idx
+      br_unit.bpd_update.bits.taken            := is_taken
+      br_unit.bpd_update.bits.mispredict       := mispredict
+      br_unit.bpd_update.bits.bpd_predict_val  := uop.br_prediction.bpd_predict_val
+      br_unit.bpd_update.bits.bpd_mispredict   := bpd_mispredict
+      br_unit.bpd_update.bits.pc               := fetch_pc
+      br_unit.bpd_update.bits.br_pc            := uop_pc_
+      br_unit.bpd_update.bits.history          := io.get_pred.info.bpd_resp.history
+      br_unit.bpd_update.bits.history_u        := io.get_pred.info.bpd_resp.history_u
+      br_unit.bpd_update.bits.history_ptr      := io.get_pred.info.bpd_resp.history_ptr
+      br_unit.bpd_update.bits.info             := io.get_pred.info.bpd_resp.info
 
 
       // is the br_pc the last instruction in the fetch bundle?
       val is_last_inst = if (FETCH_WIDTH == 1) { Bool(true) }
                          else { ((uop_pc_ >> UInt(log2Up(coreInstBytes))) &
                                  Fill(log2Up(FETCH_WIDTH), UInt(1))) === UInt(FETCH_WIDTH-1) }
-      io.br_unit.bpd_update.bits.new_pc_same_packet := !(is_taken) && !is_last_inst
+      br_unit.bpd_update.bits.new_pc_same_packet := !(is_taken) && !is_last_inst
 
       require (coreInstBytes == 4)
 
@@ -504,16 +519,18 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
       val bj_msb = Mux(uop.uopc === uopJALR, vaSign(io.req.bits.rs1_data, bj64.toUInt), vaSign(uop_pc_, bj64.toUInt))
       bj_addr := (Cat(bj_msb, bj64(vaddrBits-1,0)).toSInt & SInt(-2)).toUInt
 
-      io.br_unit.pc             := uop_pc_
-      io.br_unit.debug_btb_pred := io.get_pred.info.btb_resp_valid && io.get_pred.info.btb_resp.taken
+      br_unit.pc             := uop_pc_
+      br_unit.debug_btb_pred := io.get_pred.info.btb_resp_valid && io.get_pred.info.btb_resp.taken
 
       // handle misaligned branch/jmp targets
       // TODO BUG only trip xcpt if taken to bj_addr
-      io.br_unit.xcpt.valid     := bj_addr(1) && io.req.valid && mispredict && !killed
-      io.br_unit.xcpt.bits.uop  := uop
-      io.br_unit.xcpt.bits.cause:= UInt(rocket.Causes.misaligned_fetch)
+      br_unit.xcpt.valid     := bj_addr(1) && io.req.valid && mispredict && !killed
+      br_unit.xcpt.bits.uop  := uop
+      br_unit.xcpt.bits.cause:= UInt(rocket.Causes.misaligned_fetch)
       // TODO is there a better way to get this information to the CSR file? maybe use brinfo.target?
-      io.br_unit.xcpt.bits.badvaddr:= bj_addr
+      br_unit.xcpt.bits.badvaddr:= bj_addr
+
+      io.br_unit := br_unit
    }
 
    // Response
