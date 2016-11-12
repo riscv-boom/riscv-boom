@@ -81,6 +81,8 @@ class BOOMTile(implicit p: Parameters) extends rocket.LazyTile
          dcache.ptw.resp.valid := Bool(false)
       }
 
+      scratch.foreach { lm => lm.module.io.dmem +=: dcPorts }
+
       require(dcPorts.size == core.dcacheArbPorts)
       val dcArb = Module(new rocket.HellaCacheArbiter(dcPorts.size)(dcacheParams))
       dcArb.io.requestor <> dcPorts
