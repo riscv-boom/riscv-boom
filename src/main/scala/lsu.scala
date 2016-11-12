@@ -382,7 +382,6 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
                                       io.exe_resp.bits.mxcpt.valid, io.exe_resp.bits.mxcpt.bits,
                                   Mux(exe_tlb_uop.is_load,         UInt(rocket.Causes.fault_load),
                                                                    UInt(rocket.Causes.fault_store)))))
-   io.xcpt.bits.badvaddr := Reg(next=exe_vaddr) // TODO is there another register we can use instead?
 
    assert (!(dtlb.io.req.valid && exe_tlb_uop.is_fence), "Fence is pretending to talk to the TLB")
    assert (!(io.exe_resp.bits.mxcpt.valid && io.exe_resp.valid &&
@@ -586,28 +585,39 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
 
 
    // tell the ROB to clear the busy bit on the incoming store
+   val clr_bsy_valid = Reg(init=Bool(false))
+   val clr_bsy_robidx = Reg(UInt(width=ROB_ADDR_SZ))
+   val clr_bsy_brmask = Reg(UInt(width=MAX_BR_COUNT))
 
-   io.lsu_clr_bsy_valid := Bool(false)
-   io.lsu_clr_bsy_rob_idx := mem_tlb_uop.rob_idx
+   clr_bsy_valid := Bool(false)
+   clr_bsy_robidx := mem_tlb_uop.rob_idx
+   clr_bsy_brmask := GetNewBrMask(io.brinfo, mem_tlb_uop)
+
    when (mem_fired_sta && !mem_tlb_miss && mem_fired_std)
    {
-      io.lsu_clr_bsy_valid := !mem_tlb_uop.is_amo
-      io.lsu_clr_bsy_rob_idx := mem_tlb_uop.rob_idx
+      clr_bsy_valid := !mem_tlb_uop.is_amo
+      clr_bsy_robidx := mem_tlb_uop.rob_idx
+      clr_bsy_brmask := GetNewBrMask(io.brinfo, mem_tlb_uop)
    }
    .elsewhen (mem_fired_sta && !mem_tlb_miss)
    {
-      io.lsu_clr_bsy_valid := sdq_val(mem_tlb_uop.stq_idx) &&
-                              !mem_tlb_uop.is_amo
-      io.lsu_clr_bsy_rob_idx := mem_tlb_uop.rob_idx
+      clr_bsy_valid := sdq_val(mem_tlb_uop.stq_idx) &&
+                       !mem_tlb_uop.is_amo
+      clr_bsy_robidx := mem_tlb_uop.rob_idx
+      clr_bsy_brmask := GetNewBrMask(io.brinfo, mem_tlb_uop)
    }
    .elsewhen (mem_fired_std)
    {
-      val mem_std_uop = Reg(next=io.exe_resp.bits.uop)
-      io.lsu_clr_bsy_valid := saq_val(mem_std_uop.stq_idx) &&
+      val mem_std_uop = RegNext(io.exe_resp.bits.uop)
+      clr_bsy_valid := saq_val(mem_std_uop.stq_idx) &&
                               !saq_is_virtual(mem_std_uop.stq_idx) &&
                               !mem_std_uop.is_amo
-   io.lsu_clr_bsy_rob_idx := mem_std_uop.rob_idx
+      clr_bsy_robidx := mem_std_uop.rob_idx
+      clr_bsy_brmask := GetNewBrMask(io.brinfo, mem_std_uop)
    }
+
+   io.lsu_clr_bsy_valid := clr_bsy_valid && !io.exception && !IsKilledByBranch(io.brinfo, clr_bsy_brmask)
+   io.lsu_clr_bsy_rob_idx := clr_bsy_robidx
 
    //-------------------------------------------------------------
    // Load Issue Datapath (ALL loads need to use this path,
@@ -921,12 +931,21 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
    // one exception port, but multiple causes!
    // - 1) the incoming store-address finds a faulting load (it is by definition younger)
    // - 2) the incoming load or store address is excepting. It must be older and thus takes precedent.
-   io.xcpt.valid := failed_loads.reduce(_|_) || mem_xcpt_valid
-   io.xcpt.bits.uop := Mux(mem_xcpt_valid,
+   val r_xcpt_valid = Reg(init=Bool(false))
+   val r_xcpt = Reg(new Exception)
+
+   r_xcpt_valid := failed_loads.reduce(_|_) || mem_xcpt_valid
+   val mem_xcpt_uop = Mux(mem_xcpt_valid,
                         mem_tlb_uop,
                         laq_uop(Mux(l_idx >= UInt(num_ld_entries), l_idx - UInt(num_ld_entries), l_idx)))
-   io.xcpt.bits.cause := Mux(mem_xcpt_valid, mem_xcpt_cause, MINI_EXCEPTION_MEM_ORDERING)
+   r_xcpt.uop := mem_xcpt_uop
+   r_xcpt.uop.br_mask := GetNewBrMask(io.brinfo, mem_xcpt_uop)
+   r_xcpt.cause := Mux(mem_xcpt_valid, mem_xcpt_cause, MINI_EXCEPTION_MEM_ORDERING)
+   r_xcpt.badvaddr := RegNext(exe_vaddr) // TODO is there another register we can use instead?
 
+
+   io.xcpt.valid := r_xcpt_valid && !io.exception && !IsKilledByBranch(io.brinfo, r_xcpt.uop)
+   io.xcpt.bits := r_xcpt
 
    //-------------------------------------------------------------
    // Kill speculated entries on branch mispredict

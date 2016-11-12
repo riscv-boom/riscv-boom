@@ -23,6 +23,13 @@ object IsKilledByBranch
               brinfo.mispredict &&
               maskMatch(brinfo.mask, uop.br_mask))
    }
+
+   def apply(brinfo: BrResolutionInfo, uop_mask: UInt): Bool =
+   {
+      return (brinfo.valid &&
+              brinfo.mispredict &&
+              maskMatch(brinfo.mask, uop_mask))
+   }
 }
 
 object GetNewBrMask
