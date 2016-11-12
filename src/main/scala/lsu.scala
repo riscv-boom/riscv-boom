@@ -934,10 +934,12 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
    val r_xcpt_valid = Reg(init=Bool(false))
    val r_xcpt = Reg(new Exception)
 
-   r_xcpt_valid := failed_loads.reduce(_|_) || mem_xcpt_valid
    val mem_xcpt_uop = Mux(mem_xcpt_valid,
                         mem_tlb_uop,
                         laq_uop(Mux(l_idx >= UInt(num_ld_entries), l_idx - UInt(num_ld_entries), l_idx)))
+   r_xcpt_valid := (failed_loads.reduce(_|_) || mem_xcpt_valid) &&
+                   !io.exception &&
+                   !IsKilledByBranch(io.brinfo, mem_xcpt_uop)
    r_xcpt.uop := mem_xcpt_uop
    r_xcpt.uop.br_mask := GetNewBrMask(io.brinfo, mem_xcpt_uop)
    r_xcpt.cause := Mux(mem_xcpt_valid, mem_xcpt_cause, MINI_EXCEPTION_MEM_ORDERING)
