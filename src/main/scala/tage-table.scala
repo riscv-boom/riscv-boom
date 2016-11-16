@@ -223,7 +223,7 @@ class TageTable(
 //   val counter_table = Mem(num_entries, Vec(fetch_width, UInt(width = counter_sz)))
    val counters = Module(new TwobcCounterTable(fetch_width, num_entries, dualported=false))
 
-   val tag_table     = Mem(num_entries, UInt(width = tag_sz))
+   val tag_table     = Module(new TageTagMemory(num_entries, memwidth = tag_sz))
    val ubit_table    = Mem(num_entries, UInt(width = ubit_sz))
    val debug_pc_table= Mem(num_entries, UInt(width = 32))
    val debug_hist_ptr_table=Mem(num_entries,UInt(width = log2Up(VLHR_LENGTH)))
@@ -236,6 +236,7 @@ class TageTable(
    val commit_tag_csr1 = Module(new CircularShiftRegister(tag_sz  , history_length))
    val commit_tag_csr2 = Module(new CircularShiftRegister(tag_sz-1, history_length))
 
+   tag_table.io.InitializeIo()
    idx_csr.io.InitializeIo()
    tag_csr1.io.InitializeIo()
    tag_csr2.io.InitializeIo()
@@ -301,9 +302,14 @@ class TageTable(
 
    val p_idx       = IdxHash(io.if_req_pc)
    val p_tag       = TagHash(io.if_req_pc)
-   val tag         = tag_table(p_idx)
-   val bp2_tag_hit = RegEnable(RegEnable(tag, !stall), !stall) === RegEnable(RegEnable(p_tag, !stall), !stall)
+
    counters.io.s0_r_idx := p_idx
+   tag_table.io.s0_r_idx := p_idx
+   tag_table.io.stall := stall
+   // TODO BUG pass a stall signal to counters? or register last_p_idx?
+
+   val s2_tag      = tag_table.io.s2_r_out
+   val bp2_tag_hit = s2_tag === RegEnable(RegEnable(p_tag, !stall), !stall)
 
    io.bp2_resp.valid       := bp2_tag_hit
    io.bp2_resp.bits.index  := RegEnable(RegEnable(p_idx, !stall), !stall)(index_sz-1,0)
@@ -374,7 +380,7 @@ class TageTable(
    {
       val a_idx = io.allocate.bits.index(index_sz-1,0)
       ubit_table(a_idx)    := UInt(UBIT_INIT_VALUE)
-      tag_table(a_idx)     := io.allocate.bits.tag(tag_sz-1,0)
+      tag_table.io.write(a_idx, io.allocate.bits.tag(tag_sz-1,0))
 
 
       // TODO XXX we need to add the ability to directly write in WEAK-TAKEN/WEAK-NOTTAKEN to counters.
@@ -431,8 +437,8 @@ class TageTable(
       printf("TAGETable: PC: 0x%x history: n/a, tag[%d]=0x%x  %c\n",
          io.if_req_pc,
          p_idx,
-         tag + UInt(0,64),
-         Mux(tag === p_tag, Str("H"), Str(" "))
+         s2_tag + UInt(0,64),
+         Mux(bp2_tag_hit, Str("H"), Str(" "))
       )
 
       for (i <- 0 to num_entries-1 by 4)
@@ -440,7 +446,7 @@ class TageTable(
          val lst = Seq(4,6,8,12,13)
          for (j <- 0 until 4)
          {
-            printf("(%d) [tag=0x%x]", UInt(i+j,8), tag_table(UInt(i+j)) & UInt(0xffff))
+//            printf("(%d) [tag=0x%x]", UInt(i+j,8), tag_table(UInt(i+j)) & UInt(0xffff))
             for (k <- 0 until fetch_width)
             {
 //               printf(" [c=%d]", counter_table(UInt(i+j))(k))
