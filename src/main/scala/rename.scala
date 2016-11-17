@@ -717,7 +717,6 @@ class RenameStage(pl_width: Int, num_wb_ports: Int)(implicit p: Parameters) exte
    // Each branch prediction must snapshot the predictor (history state, etc.).
    // On a mispredict, the snapshot must be used to reset the predictor.
    // TODO use Mem(), but it chokes on the undefines in VCS
-   //val prediction_copies = Mem(MAX_BR_COUNT, new BranchPredictionResp)
    val prediction_copies = Reg(Vec(MAX_BR_COUNT, new BranchPredictionResp))
 
    for (w <- 0 until pl_width)

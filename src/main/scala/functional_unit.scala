@@ -487,18 +487,13 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
       br_unit.bpd_update.bits.br_pc            := uop_pc_
       br_unit.bpd_update.bits.history_ptr      := io.get_pred.info.bpd_resp.history_ptr
       br_unit.bpd_update.bits.info             := io.get_pred.info.bpd_resp.info
-
-      (br_unit.bpd_update.bits.history, io.get_pred.info.bpd_resp.history) match
+      if (!ENABLE_VLHR)
       {
-         case (Some(update: UInt), Some(resp: UInt)) => update := resp
-         case _ => require (ENABLE_VLHR)
+         br_unit.bpd_update.bits.history.get := io.get_pred.info.bpd_resp.history.get
+         br_unit.bpd_update.bits.history_u.get := io.get_pred.info.bpd_resp.history_u.get
       }
-      (br_unit.bpd_update.bits.history_u, io.get_pred.info.bpd_resp.history_u) match
-      {
-         case (Some(update: UInt), Some(resp: UInt)) => update := resp
-         case _ => require (ENABLE_VLHR)
-      }
-
+//      for (u <- br_unit.bpd_update.bits.history; r <- io.get_pred.info.bpd_resp.history) yield
+//      { u := r }
 
       // is the br_pc the last instruction in the fetch bundle?
       val is_last_inst = if (FETCH_WIDTH == 1) { Bool(true) }

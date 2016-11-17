@@ -596,6 +596,9 @@ class BrobEntry(fetch_width: Int)(implicit p: Parameters) extends BoomBundle()(p
    override def cloneType: this.type = new BrobEntry(fetch_width).asInstanceOf[this.type]
 }
 
+// TODO: for large branch snapshots, this maps very poorly to technology (very low-depth, very wide memories).
+// A future solution is to spend multiple cycles reading and writing out the branch snapshots while maintaining
+// a 1 snapshot/cycle throughput.
 class BranchReorderBuffer(fetch_width: Int, num_entries: Int)(implicit p: Parameters) extends BoomModule()(p)
 {
    val io = new BoomBundle()(p)
@@ -612,7 +615,9 @@ class BranchReorderBuffer(fetch_width: Int, num_entries: Int)(implicit p: Parame
       //val pred_resp = Valid(new // from fetch, return a prediction
    }
 
-   println ("\tBROB (w=" + fetch_width + ") Size (" + num_entries + ") entries")
+   println ("\tBROB (w=" + fetch_width + ") Size (" + num_entries + ") entries of " +
+      Wire(new BpdResp).toBits.getWidth + " bits (" +
+      Wire(new BrobEntryMetaData(fetch_width)).toBits.getWidth + " of meta-bits).")
 
    // each entry corresponds to a fetch-packet
    // ROB shouldn't send "deallocate signal" until the entire packet has finished committing.
