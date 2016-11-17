@@ -376,41 +376,40 @@ class TageTable(
    //------------------------------------------------------------
    // Update (Commit)
 
+   assert (!(io.allocate.valid && io.update_counters.valid),
+      "[tage-table] trying to allocate and update the counters simultaneously.")
+
    when (io.allocate.valid)
    {
       val a_idx = io.allocate.bits.index(index_sz-1,0)
       ubit_table(a_idx)    := UInt(UBIT_INIT_VALUE)
       tag_table.io.write(a_idx, io.allocate.bits.tag(tag_sz-1,0))
 
-
-      // TODO XXX we need to add the ability to directly write in WEAK-TAKEN/WEAK-NOTTAKEN to counters.
-      // Add our own allocate port.
-     counters.io.update.valid                 := Bool(true)
-     counters.io.update.bits.index            := a_idx
-     counters.io.update.bits.executed         := Vec(io.allocate.bits.executed)
-     counters.io.update.bits.was_mispredicted := Bool(true)
-     counters.io.update.bits.takens           := Vec(io.allocate.bits.taken)
+      counters.io.update.valid                 := Bool(true)
+      counters.io.update.bits.index            := a_idx
+      counters.io.update.bits.executed         := Vec(io.allocate.bits.executed)
+      counters.io.update.bits.was_mispredicted := Bool(true)
+      counters.io.update.bits.takens           := Vec(io.allocate.bits.taken)
+      counters.io.update.bits.do_initialize    := Bool(true)
 
       debug_pc_table(a_idx) := io.allocate.bits.debug_pc
       debug_hist_ptr_table(a_idx) := io.allocate.bits.debug_hist_ptr(history_length-1,0)
 
-      when (!(a_idx < UInt(num_entries)))
-      {
-         printf("[TageTable] out of bounds index on allocation, a_idx: %d, num_en: %d", a_idx, UInt(num_entries))
-      }
+//      when (!(a_idx < UInt(num_entries)))
+//      {
+//         printf("[TageTable] out of bounds index on allocation, a_idx: %d, num_en: %d", a_idx, UInt(num_entries))
+//      }
       assert (a_idx < UInt(num_entries), "[TageTable] out of bounds index on allocation")
       assert (ubit_table(a_idx) === UInt(0), "[TageTable] Tried to allocate a useful entry")
    }
-
-   assert (!(io.allocate.valid && io.update_counters.valid),
-      "[tage-table] trying to allocate and update the counters simultaneously.")
-   when (!io.allocate.valid)
+   .elsewhen (!io.allocate.valid)
    {
       counters.io.update.valid                 := io.update_counters.valid
       counters.io.update.bits.index            := io.update_counters.bits.index
       counters.io.update.bits.executed         := Vec(io.update_counters.bits.executed)
       counters.io.update.bits.was_mispredicted := io.update_counters.bits.mispredicted
       counters.io.update.bits.takens           := Vec(io.update_counters.bits.taken)
+      counters.io.update.bits.do_initialize    := Bool(false)
    }
 
    when (io.update_usefulness.valid)
