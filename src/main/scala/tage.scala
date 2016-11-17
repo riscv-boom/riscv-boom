@@ -281,13 +281,13 @@ class TageBrPredictor(
    }
    when (io.resp.valid)
    {
-      if (DEBUG_PRINTF_TAGE)
-      {
-         printf("prediction made hit: PC 0x%x, ghistory=0x%x\n"
-            , RegEnable(RegEnable(io.req_pc, !stall), !stall)
-            , io.resp.bits.history
-         )
-      }
+      //if (DEBUG_PRINTF_TAGE)
+      //{
+      //   printf("prediction made hit: PC 0x%x, ghistory=0x%x\n"
+      //      , RegEnable(RegEnable(io.req_pc, !stall), !stall)
+      //      , io.resp.bits.history
+      //   )
+      //}
    }
    .otherwise
    {

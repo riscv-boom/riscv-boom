@@ -51,9 +51,9 @@ class BpdResp(implicit p: Parameters) extends BoomBundle()(p)
    // as speculative updates to the global history will have occurred between
    // the branch predictor is indexed and when the branch makes its own
    // prediction and update to the history.
-   val history = UInt(width = GLOBAL_HISTORY_LENGTH)
+   val history = if (!ENABLE_VLHR) Some(UInt(width = GLOBAL_HISTORY_LENGTH)) else None
    // Only track user-mode history.
-   val history_u = UInt(width = GLOBAL_HISTORY_LENGTH)
+   val history_u = if (!ENABLE_VLHR) Some(UInt(width = GLOBAL_HISTORY_LENGTH)) else None
    // For very long histories, implement as a circular buffer and only snapshot the tail pointer.
    val history_ptr = UInt(width = log2Up(VLHR_LENGTH))
 
@@ -97,8 +97,8 @@ class BpdUpdate(implicit p: Parameters) extends BoomBundle()(p)
    val br_pc = UInt(width = log2Up(FETCH_WIDTH)+log2Ceil(coreInstBytes))
    val brob_idx   = UInt(width = BROB_ADDR_SZ)
    val mispredict = Bool()
-   val history = UInt(width = GLOBAL_HISTORY_LENGTH)
-   val history_u = UInt(width = GLOBAL_HISTORY_LENGTH)
+   val history     = if (!ENABLE_VLHR) Some(UInt(width = GLOBAL_HISTORY_LENGTH)) else None
+   val history_u   = if (!ENABLE_VLHR) Some(UInt(width = GLOBAL_HISTORY_LENGTH)) else None
    val history_ptr = UInt(width = log2Up(VLHR_LENGTH))
    val bpd_predict_val = Bool()
    val bpd_mispredict = Bool()
@@ -234,8 +234,17 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int)(implicit p
       disable = Bool(false))
 
 
-   io.resp.bits.history     := ghistory
-   io.resp.bits.history_u   := ghistory_uonly
+   io.resp.bits.history match
+   {
+      case Some(resp_history: UInt) => resp_history := ghistory
+      case _ => require (ENABLE_VLHR)
+   }
+   io.resp.bits.history_u match
+   {
+      case Some(resp_history_u: UInt) => resp_history_u := ghistory_uonly
+      case _ => require (ENABLE_VLHR)
+   }
+
    io.resp.bits.history_ptr := vlh_head
 
 
@@ -279,6 +288,24 @@ class HistoryRegister(length: Int)
 
    def commit_copy(): UInt = r_commit_history
 
+   def getHistory(resolution: BpdUpdate): UInt =
+   {
+      resolution.history match
+      {
+         case Some(history: UInt) => history
+         case _ => UInt(0) // enable vlhr
+      }
+   }
+
+   def getHistoryU(resolution: BpdUpdate): UInt =
+   {
+      resolution.history_u match
+      {
+         case Some(history_u: UInt) => history_u
+         case _ => UInt(0) // enable vlhr
+      }
+   }
+
    def value(
       hist_update_spec_valid: Bool,
       hist_update_spec_bits: GHistUpdate,
@@ -292,7 +319,7 @@ class HistoryRegister(length: Int)
       // hash functions. For example, "massage" the history for the scenario where
       // the mispredicted branch is not taken AND we're having to refetch the rest
       // of the fetch_packet.
-      val res_history = if (umode_only) br_resolution_bits.history_u else br_resolution_bits.history
+      val res_history = if (umode_only) getHistoryU(br_resolution_bits) else getHistory(br_resolution_bits)
       val fixed_history = Cat(res_history, br_resolution_bits.taken)
       val ret_value =
          Mux(flush,
@@ -319,7 +346,7 @@ class HistoryRegister(length: Int)
       umode_only: Boolean
       ): Unit =
    {
-      val res_history = if (umode_only) br_resolution_bits.history_u else br_resolution_bits.history
+      val res_history = if (umode_only) getHistoryU(br_resolution_bits) else getHistory(br_resolution_bits)
       val fixed_history = Cat(res_history, br_resolution_bits.taken)
       when (disable)
       {
