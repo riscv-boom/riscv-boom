@@ -471,7 +471,6 @@ class NullBrPredictor(
 {
    println ("\tBuilding (0 kB) Null Predictor (never predict).")
    io.resp.valid := Bool(false)
-   io.resp.bits := new BpdResp().fromBits(Bits(0))
 }
 
 //------------------------------------------------------------------------------
@@ -506,7 +505,6 @@ class RandomBrPredictor(
    }
 
    io.resp.valid := rand_val
-   io.resp.bits := new BpdResp().fromBits(Bits(0))
    io.resp.bits.takens := rand(fetch_width)
 }
 
@@ -653,7 +651,10 @@ class BranchReorderBuffer(fetch_width: Int, num_entries: Int)(implicit p: Parame
       require (coreInstBytes == 4)
    }
 
-   when (io.backend.flush)
+   // backend flushes and branch mispredictions can occur on the same cycle,
+   // but because we're registering the misprediction (r_bpd_update), we
+   // need to spend two cycles flushing to catch this scenario.
+   when (io.backend.flush || RegNext(io.backend.flush))
    {
       head_ptr := UInt(0)
       tail_ptr := UInt(0)
