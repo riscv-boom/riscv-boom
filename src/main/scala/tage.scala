@@ -60,7 +60,7 @@ case class TageParameters(
    // 12kB predictor
    num_tables: Int = 4,
    table_sizes: Seq[Int] = Seq(4096,4096,2048,2048),
-   history_lengths: Seq[Int] = Seq(5,16,44,130),
+   history_lengths: Seq[Int] = Seq(5,17,44,130),
    tag_sizes: Seq[Int] = Seq(10,10,10,11))
 
 class TageResp(
