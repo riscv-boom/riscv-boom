@@ -77,11 +77,13 @@ trait HasBoomCoreParameters extends rocket.HasCoreParameters
    // updates well beyond the GHIST_LENGTH (i.e., +ROB_SZ and other buffering).
    var VLHR_LENGTH = 0
    var BPD_INFO_SIZE = 0
+   var ENABLE_VLHR = false
 
    if (p(TageKey).enabled)
    {
       GLOBAL_HISTORY_LENGTH = p(TageKey).history_lengths.max
       BPD_INFO_SIZE = TageBrPredictor.GetRespInfoSize(p)
+      ENABLE_VLHR = true
    }
    else if (p(GSkewKey).enabled)
    {

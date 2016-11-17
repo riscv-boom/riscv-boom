@@ -220,7 +220,6 @@ class TageTable(
 
    //------------------------------------------------------------
    // State
-//   val counter_table = Mem(num_entries, Vec(fetch_width, UInt(width = counter_sz)))
    val counters = Module(new TwobcCounterTable(fetch_width, num_entries, dualported=false))
 
    val tag_table     = Module(new TageTagMemory(num_entries, memwidth = tag_sz))
@@ -300,8 +299,8 @@ class TageTable(
 
    val stall = !io.bp2_resp.ready
 
-   val p_idx       = IdxHash(io.if_req_pc)
-   val p_tag       = TagHash(io.if_req_pc)
+   val p_idx = IdxHash(io.if_req_pc)
+   val p_tag = TagHash(io.if_req_pc)
 
    counters.io.s0_r_idx := p_idx
    tag_table.io.s0_r_idx := p_idx
