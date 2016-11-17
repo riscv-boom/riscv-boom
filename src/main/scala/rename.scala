@@ -730,6 +730,8 @@ class RenameStage(pl_width: Int, num_wb_ports: Int)(implicit p: Parameters) exte
 
    io.get_pred.info := prediction_copies(io.get_pred.br_tag)
 
+   val temp = Wire(new BranchPredictionResp)
+   println("\t\tPrediction Snapshots: " + temp.toBits.getWidth + "-bits, " + MAX_BR_COUNT + " entries")
 
    //-------------------------------------------------------------
    // Outputs
