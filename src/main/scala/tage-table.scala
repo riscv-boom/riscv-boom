@@ -386,9 +386,9 @@ class TageTable(
 
       counters.io.update.valid                 := Bool(true)
       counters.io.update.bits.index            := a_idx
-      counters.io.update.bits.executed         := Vec(io.allocate.bits.executed)
+      counters.io.update.bits.executed         := Vec(io.allocate.bits.executed.toBools)
       counters.io.update.bits.was_mispredicted := Bool(true)
-      counters.io.update.bits.takens           := Vec(io.allocate.bits.taken)
+      counters.io.update.bits.takens           := Vec(io.allocate.bits.taken.toBools)
       counters.io.update.bits.do_initialize    := Bool(true)
 
       debug_pc_table(a_idx) := io.allocate.bits.debug_pc
@@ -405,9 +405,9 @@ class TageTable(
    {
       counters.io.update.valid                 := io.update_counters.valid
       counters.io.update.bits.index            := io.update_counters.bits.index
-      counters.io.update.bits.executed         := Vec(io.update_counters.bits.executed)
+      counters.io.update.bits.executed         := Vec(io.update_counters.bits.executed.toBools)
       counters.io.update.bits.was_mispredicted := io.update_counters.bits.mispredicted
-      counters.io.update.bits.takens           := Vec(io.update_counters.bits.taken)
+      counters.io.update.bits.takens           := Vec(io.update_counters.bits.taken.toBools)
       counters.io.update.bits.do_initialize    := Bool(false)
    }
 
