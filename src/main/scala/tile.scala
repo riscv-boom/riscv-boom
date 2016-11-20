@@ -27,7 +27,7 @@ class BOOMTile(implicit p: Parameters) extends rocket.LazyTile
    // I don't know what this is, but I probably don't support it. - Chris
    require (p(rocket.DataScratchpadSize) == 0)
 
-   lazy val module = new rocket.TileImp(this) 
+   lazy val module = new rocket.TileImp(this)
    {
       val io = new rocket.TileIO(bc, slave)
       val buildRocc = p(rocket.BuildRoCC)

@@ -24,6 +24,14 @@
 // TODO:
 //    - alt-pred tracking (choosing between +2 tables, sometimes using alt pred if u is low)
 //    - u-bit handling, clearing (count failed allocations?)
+//       - two readers (find entry and updating an entry)
+//       - two writers (allocation and updating)
+//       - get u-bit in same cycle
+//       - write a u-bit memory module --
+//          - we can delay writes; bank for reads.
+//          - have fsm that clears entries.
+//          - need to pipeline update to take 2 cycles.
+//          - figure out what state i need to do updates, what i need to re-compute.
 //    - banking
 //    - lower required parameters, arguments to bundles and objects
 //    - able to allocate >1 tables
@@ -70,10 +78,10 @@ class TageResp(
    extends Bundle
 {
    val provider_hit = Bool() // did tage make a prediction?
-   val provider_id = UInt(width = 5) // which table is providing the prediction?
+   val provider_id = UInt(width = log2Up(num_tables)) // which table is providing the prediction?
    val provider_predicted_takens = UInt(width = fetch_width)
    val alt_hit = Bool()  // an alternate table made a prediction too
-   val alt_id = UInt(width = 5)  // which table is the alternative?
+   val alt_id = UInt(width = log2Up(num_tables))  // which table is the alternative?
    val alt_predicted_takens = UInt(width = fetch_width)
 
    val indexes  = Vec(num_tables, UInt(width = max_index_sz)) // needed to update predictor at Commit
@@ -141,7 +149,6 @@ class TageBrPredictor(
    require (num_tables == table_sizes.size)
    require (num_tables == history_lengths.size)
    require (num_tables == tag_sizes.size)
-   // require (log2Up(num_tables) <= TageResp.provider_id.getWidth()) TODO implement this check
    require (coreInstBytes == 4)
 
    //------------------------------------------------------------
@@ -271,83 +278,70 @@ class TageBrPredictor(
 
    io.resp.bits.info := resp_info.toBits
 
-   if (DEBUG_PRINTF_TAGE)
-   {
-      printf("\n0x%x Prediction Hits Array, Provider: %d\n",
-         Vec(valids).toBits, resp_info.provider_id)
-   }
-   when (io.resp.valid)
-   {
-      //if (DEBUG_PRINTF_TAGE)
-      //{
-      //   printf("prediction made hit: PC 0x%x, ghistory=0x%x\n"
-      //      , RegEnable(RegEnable(io.req_pc, !stall), !stall)
-      //      , io.resp.bits.history
-      //   )
-      //}
-   }
-   .otherwise
-   {
-      if (DEBUG_PRINTF_TAGE)
-      {
-         printf("\n")
-      }
-   }
+   require (log2Up(num_tables) <= resp_info.provider_id.getWidth)
 
    //------------------------------------------------------------
    //------------------------------------------------------------
    // update predictor during commit
 
+   // Commit&Update takes 2 cycles.
+   //    - First cycle: read and compute any state necessary,
+   //    - Second cycle: perform updates.
+   // Specifically, the u-bits are "read-do-stuff-write", so spreading
+   // across two-cycles is a requirement.
+
+   //-------------------------------------------
+   // Cycle 0 - get info
+
+   val info = new TageResp(
+      fetch_width = fetch_width,
+      num_tables = num_tables,
+      max_history_length = history_lengths.max,
+      max_index_sz = log2Up(table_sizes.max),
+      max_tag_sz = tag_sizes.max
+   ).fromBits(commit.bits.info.info)
+
+   assert (info.provider_id < UInt(num_tables) || !info.provider_hit, "[Tage] provider_id is out-of-bounds.")
+
+   val executed = commit.bits.ctrl.executed.toBits
+   val r_alt_agrees = RegNext(
+      info.alt_hit &&
+      (info.provider_predicted_takens & executed) === (info.alt_predicted_takens & executed))
+
+   val r_ubits_notuseful = Range(0, num_tables).map{ i =>
+         RegNext(tables_io(i).GetUsefulness(info.indexes(i), log2Up(table_sizes(i))) === Bits(0))
+   }
+
+   val r_commit = RegNext(commit)
+   val r_info = RegNext(info)
+   val r_correct = !r_commit.bits.ctrl.mispredicted.reduce(_|_)
+   val r_provider_id = r_info.provider_id
+   val r_takens = r_commit.bits.ctrl.taken.toBits
+   val r_executed = r_commit.bits.ctrl.executed.toBits
+
+
+   //-------------------------------------------
+   // Cycle 1 - perform state changes
+
    // provide some randomization to the allocation process
    val rand = Reg(init=UInt(0,2))
    rand := rand + UInt(1)
 
-   when (commit.valid && commit.bits.ctrl.executed.reduce(_|_))
+
+   when (r_commit.valid && r_executed.orR)
    {
-      val correct = !commit.bits.ctrl.mispredicted.reduce(_|_)
-      val info = new TageResp(
-         fetch_width = fetch_width,
-         num_tables = num_tables,
-         max_history_length = history_lengths.max,
-         max_index_sz = log2Up(table_sizes.max),
-         max_tag_sz = tag_sizes.max
-      ).fromBits(commit.bits.info.info)
-      val takens = commit.bits.ctrl.taken.toBits
-      val executed = commit.bits.ctrl.executed.toBits
-
-      val provider_id = info.provider_id
-      val alt_id      = info.alt_id
-
-      // TODO verify this behavior/logic is correct (re: toBits/Vec conversion)
-      val alt_agrees = info.alt_hit &&
-         (info.provider_predicted_takens & executed) === (info.alt_predicted_takens & executed)
-
-      assert (provider_id < UInt(num_tables) || !info.provider_hit,
-         "[Tage] provider_id is out-of-bounds.")
 
       // no matter what happens, update table that made a prediction
-      when (info.provider_hit)
+      when (r_info.provider_hit)
       {
-         tables_io(provider_id).UpdateCounters(info.indexes(provider_id), executed, takens, !correct)
-         when (!alt_agrees)
+         tables_io(r_provider_id).UpdateCounters(r_info.indexes(r_provider_id), r_executed, r_takens, !r_correct)
+         when (!r_alt_agrees)
          {
-            tables_io(provider_id).UpdateUsefulness(info.indexes(provider_id), correct)
+            tables_io(r_provider_id).UpdateUsefulness(r_info.indexes(r_provider_id), r_correct)
          }
       }
 
-      if (DEBUG_PRINTF_TAGE)
-      {
-         printf("Committing and updating predictor: PC: 0x%x HIST: 0x%x correct=%d predhit: %d, exe=%d takens=%d agree=%d althit: %d prov_id: %d -[",
-            info.debug_br_pc, info.debug_history_ptr, correct, info.provider_hit,
-            executed, takens, alt_agrees, info.alt_hit, provider_id)
-         info.indexes.map{printf("%d ", _)}
-         printf(", |tags= ")
-         info.tags.map{printf("%d ", _)}
-         printf("]\n")
-      }
-
-
-      when (!correct && (provider_id < UInt(MAX_TABLE_ID) || !info.provider_hit))
+      when (!r_correct && (r_provider_id < UInt(MAX_TABLE_ID) || !r_info.provider_hit))
       {
          // try to allocate a new entry
 
@@ -360,47 +354,29 @@ class TageBrPredictor(
          //       can be strengthened.
 
 
-         val r_temp = Mux(rand === UInt(3), UInt(2),
-                      Mux(rand === UInt(2), UInt(1),
-                                            UInt(0)))
-         val r = Mux((Cat(UInt(0),provider_id) + r_temp) >= UInt(MAX_TABLE_ID),
+         val temp = Mux(rand === UInt(3), UInt(2),
+                    Mux(rand === UInt(2), UInt(1),
+                                          UInt(0)))
+         val r = Mux((Cat(UInt(0), r_provider_id) + temp) >= UInt(MAX_TABLE_ID),
                   UInt(0),
-                  r_temp)
-
-         if (DEBUG_PRINTF_TAGE)
-         {
-            printf("Trying to allocate an entry.... hit=%d, provider=%d base_id=%d",
-               info.provider_hit, provider_id, Cat(UInt(0),provider_id) + r)
-            for (i <- 0 until num_tables)
-            {
-               printf(" - Table_%d[%d],", UInt(i), info.indexes(i))
-            }
-
-            printf("\n")
-         }
+                  temp)
 
          // find lowest alloc_idx where u_bits === 0
          val can_allocates = Range(0, num_tables).map{ i =>
-            tables_io(i).GetUsefulness(info.indexes(i), log2Up(table_sizes(i))) === Bits(0) &&
-            ((UInt(i) > (Cat(UInt(0),provider_id) + r)) || !info.provider_hit)
+            r_ubits_notuseful(i) &&
+            ((UInt(i) > (Cat(UInt(0), r_provider_id) + r)) || !r_info.provider_hit)
          }
 
          val alloc_id = PriorityEncoder(can_allocates)
          when (can_allocates.reduce(_|_))
          {
             tables_io(alloc_id).AllocateNewEntry(
-               info.indexes(alloc_id),
-               info.tags(alloc_id),
-               executed,
-               takens,
-               info.debug_br_pc,
-               info.debug_history_ptr)
-
-            if (DEBUG_PRINTF_TAGE)
-            {
-               printf("Allocating on Table[%d] at index:%d tag=0x%x  exe=%d taken=%d, provider=%d, can_allocates=0x%x\n\n",
-                  alloc_id, info.indexes(alloc_id), info.tags(alloc_id), executed, takens, provider_id, Vec(can_allocates).toBits)
-            }
+               r_info.indexes(alloc_id),
+               r_info.tags(alloc_id),
+               r_executed,
+               r_takens,
+               r_info.debug_br_pc,
+               r_info.debug_history_ptr)
          }
          .otherwise
          {
@@ -408,36 +384,14 @@ class TageBrPredictor(
             // TODO break this out, such that there's only one call to UpdateUseful
             for (i <- 0 until num_tables)
             {
-               when ((UInt(i) > provider_id) || !info.provider_hit)
+               when ((UInt(i) > r_provider_id) || !r_info.provider_hit)
                {
-                  tables_io(i).UpdateUsefulness(info.indexes(i), inc = Bool(false))
-                  if (DEBUG_PRINTF_TAGE)
-                  {
-                     printf("   Decrementing useful bit for Table_%d[%d] --", UInt(i), info.indexes(i))
-                  }
+                  tables_io(i).UpdateUsefulness(r_info.indexes(i), inc = Bool(false))
                }
             }
-            if (DEBUG_PRINTF_TAGE)
-            {
-               printf("Failed allocation  takens=%d, can_allocates=0x%x\n",
-                  takens, Vec(can_allocates).toBits)
-            }
-         }
-      }
-      .otherwise
-      {
-         if (DEBUG_PRINTF_TAGE)
-         {
-            printf("\n")
          }
       }
    }
-   .otherwise
-   {
-      if (DEBUG_PRINTF_TAGE)
-      {
-         printf("\n\n")
-      }
-   }
+
 }
 

@@ -378,9 +378,9 @@ class TageTable(
    assert (!(io.allocate.valid && io.update_counters.valid),
       "[tage-table] trying to allocate and update the counters simultaneously.")
 
+   val a_idx = io.allocate.bits.index(index_sz-1,0)
    when (io.allocate.valid)
    {
-      val a_idx = io.allocate.bits.index(index_sz-1,0)
       ubit_table(a_idx)    := UInt(UBIT_INIT_VALUE)
       tag_table.io.write(a_idx, io.allocate.bits.tag(tag_sz-1,0))
 
@@ -394,10 +394,6 @@ class TageTable(
       debug_pc_table(a_idx) := io.allocate.bits.debug_pc
       debug_hist_ptr_table(a_idx) := io.allocate.bits.debug_hist_ptr(history_length-1,0)
 
-//      when (!(a_idx < UInt(num_entries)))
-//      {
-//         printf("[TageTable] out of bounds index on allocation, a_idx: %d, num_en: %d", a_idx, UInt(num_entries))
-//      }
       assert (a_idx < UInt(num_entries), "[TageTable] out of bounds index on allocation")
       assert (ubit_table(a_idx) === UInt(0), "[TageTable] Tried to allocate a useful entry")
    }
@@ -424,7 +420,9 @@ class TageTable(
             u))
    }
 
-   io.usefulness_resp := ubit_table(io.usefulness_req_idx(index_sz-1,0))
+   val u_idx = io.usefulness_req_idx(index_sz-1,0)
+   io.usefulness_resp := ubit_table(u_idx) |
+                         Mux(io.allocate.valid && a_idx === u_idx, UInt(UBIT_INIT_VALUE), UInt(0))
 
    //------------------------------------------------------------
    // Debug/Visualize

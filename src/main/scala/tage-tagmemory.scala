@@ -38,10 +38,6 @@ class TageTagMemory(
       // send read addr on cycle 0, get data out on cycle 2.
       val s0_r_idx = UInt(INPUT, width = index_sz)
       val s2_r_out = UInt(OUTPUT, width = memwidth)
-      def read(idx: UInt) =
-      {
-         this.s0_r_idx := idx
-      }
 
       val w_en = Bool(INPUT)
       val w_idx = UInt(INPUT, width = index_sz)
@@ -55,7 +51,6 @@ class TageTagMemory(
 
       def InitializeIo(dummy: Int=0) =
       {
-         this.s0_r_idx := UInt(0)
          this.w_en := Bool(false)
          this.w_idx := UInt(0)
          this.w_data := UInt(0)
