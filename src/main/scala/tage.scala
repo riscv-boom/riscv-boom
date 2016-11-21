@@ -381,7 +381,6 @@ class TageBrPredictor(
          .otherwise
          {
             //decrementUBits for tables[provider_id+1: T_max]
-            // TODO break this out, such that there's only one call to UpdateUseful
             for (i <- 0 until num_tables)
             {
                when ((UInt(i) > r_provider_id) || !r_info.provider_hit)

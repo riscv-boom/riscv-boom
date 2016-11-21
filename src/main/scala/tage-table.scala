@@ -223,7 +223,8 @@ class TageTable(
    val counters = Module(new TwobcCounterTable(fetch_width, num_entries, dualported=false))
 
    val tag_table     = Module(new TageTagMemory(num_entries, memwidth = tag_sz))
-   val ubit_table    = Mem(num_entries, UInt(width = ubit_sz))
+   val ubit_table    = Module(new TageUbitMemory(num_entries, ubit_sz))
+//   val ubit_table    = Mem(num_entries, UInt(width = ubit_sz))
    val debug_pc_table= Mem(num_entries, UInt(width = 32))
    val debug_hist_ptr_table=Mem(num_entries,UInt(width = log2Up(VLHR_LENGTH)))
 
@@ -381,7 +382,8 @@ class TageTable(
    val a_idx = io.allocate.bits.index(index_sz-1,0)
    when (io.allocate.valid)
    {
-      ubit_table(a_idx)    := UInt(UBIT_INIT_VALUE)
+//      ubit_table(a_idx)    := UInt(UBIT_INIT_VALUE)
+      ubit_table.io.allocate(a_idx)
       tag_table.io.write(a_idx, io.allocate.bits.tag(tag_sz-1,0))
 
       counters.io.update.valid                 := Bool(true)
@@ -395,7 +397,7 @@ class TageTable(
       debug_hist_ptr_table(a_idx) := io.allocate.bits.debug_hist_ptr(history_length-1,0)
 
       assert (a_idx < UInt(num_entries), "[TageTable] out of bounds index on allocation")
-      assert (ubit_table(a_idx) === UInt(0), "[TageTable] Tried to allocate a useful entry")
+//      assert (ubit_table(a_idx) === UInt(0), "[TageTable] Tried to allocate a useful entry")
    }
    .elsewhen (!io.allocate.valid)
    {
@@ -411,18 +413,23 @@ class TageTable(
    {
       val inc = io.update_usefulness.bits.inc
       val ub_idx = io.update_usefulness.bits.index(index_sz-1,0)
-      val u = ubit_table(ub_idx)
-      ubit_table(ub_idx) :=
-         Mux(inc && u < UInt(UBIT_MAX),
-            u + UInt(1),
-         Mux(!inc && u > UInt(0),
-            u - UInt(1),
-            u))
+      ubit_table.io.update(ub_idx, inc)
+//      ubit_table.io.update(ub_idx)
+//      val u = ubit_table(ub_idx)
+//      ubit_table(ub_idx) :=
+//         Mux(inc && u < UInt(UBIT_MAX),
+//            u + UInt(1),
+//         Mux(!inc && u > UInt(0),
+//            u - UInt(1),
+//            u))
    }
 
    val u_idx = io.usefulness_req_idx(index_sz-1,0)
-   io.usefulness_resp := ubit_table(u_idx) |
+   ubit_table.io.s0_r_idx := u_idx
+//   io.usefulness_resp := ubit_table(u_idx) |
+   io.usefulness_resp := ubit_table.io.s0_r_idx |
                          Mux(io.allocate.valid && a_idx === u_idx, UInt(UBIT_INIT_VALUE), UInt(0))
+                         // TODO XXX regNext this once we make ubit_table a SeqMem
 
    //------------------------------------------------------------
    // Debug/Visualize
@@ -447,8 +454,8 @@ class TageTable(
             {
 //               printf(" [c=%d]", counter_table(UInt(i+j))(k))
             }
-            printf(" [u=%d] " + "PC=0x%x hist=0x%x ",
-               ubit_table(UInt(i+j)),
+            printf(" [u=%n/a] " + "PC=0x%x hist=0x%x ",
+//               ubit_table(UInt(i+j)),
                (debug_pc_table(UInt(i+j)) & UInt(0xff))(11,0),
                debug_hist_ptr_table(UInt(i+j))
                )
