@@ -237,6 +237,7 @@ class TageTable(
    val commit_tag_csr2 = Module(new CircularShiftRegister(tag_sz-1, history_length))
 
    tag_table.io.InitializeIo()
+   ubit_table.io.InitializeIo()
    idx_csr.io.InitializeIo()
    tag_csr1.io.InitializeIo()
    tag_csr2.io.InitializeIo()
@@ -414,7 +415,6 @@ class TageTable(
       val inc = io.update_usefulness.bits.inc
       val ub_idx = io.update_usefulness.bits.index(index_sz-1,0)
       ubit_table.io.update(ub_idx, inc)
-//      ubit_table.io.update(ub_idx)
 //      val u = ubit_table(ub_idx)
 //      ubit_table(ub_idx) :=
 //         Mux(inc && u < UInt(UBIT_MAX),
@@ -427,9 +427,7 @@ class TageTable(
    val u_idx = io.usefulness_req_idx(index_sz-1,0)
    ubit_table.io.s0_r_idx := u_idx
 //   io.usefulness_resp := ubit_table(u_idx) |
-   io.usefulness_resp := ubit_table.io.s0_r_idx |
-                         Mux(io.allocate.valid && a_idx === u_idx, UInt(UBIT_INIT_VALUE), UInt(0))
-                         // TODO XXX regNext this once we make ubit_table a SeqMem
+   io.usefulness_resp := ubit_table.io.s0_r_out
 
    //------------------------------------------------------------
    // Debug/Visualize

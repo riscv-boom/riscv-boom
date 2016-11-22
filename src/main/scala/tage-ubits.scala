@@ -34,16 +34,6 @@ class TageUbitMemory(
       val s0_r_idx = UInt(INPUT, width = index_sz)
       val s0_r_out = UInt(OUTPUT, width = ubit_sz)
 
-//      val w_en = Bool(INPUT)
-//      val w_idx = UInt(INPUT, width = index_sz)
-//      val w_data = UInt(INPUT, width = ubit_sz)
-//      def write(idx: UInt, data: UInt) =
-//      {
-//         this.w_en := Bool(true)
-//         this.w_idx := idx
-//         this.w_data := data
-//      }
-
       val allocate_valid  = Bool(INPUT)
       val allocate_idx = UInt(INPUT, width = index_sz)
       def allocate(idx: UInt) =
@@ -57,6 +47,7 @@ class TageUbitMemory(
       val update_inc = Bool(INPUT)
       def update(idx: UInt, inc: Bool) =
       {
+         this.update_valid  := Bool(true)
          this.update_idx := idx
          this.update_inc := inc
       }
@@ -89,7 +80,10 @@ class TageUbitMemory(
 //   val r_s1_out = smem.read(idx, !io.stall)
 //   val r_s2_out = RegEnable(r_s1_out, !io.stall)
 //   io.s2_r_out := r_s2_out
-   io.s0_r_out := ubit_table(io.s0_r_idx)
+   io.s0_r_out := ubit_table(io.s0_r_idx) |
+                  Mux(io.allocate_valid && io.allocate_idx === io.s0_r_idx, UInt(UBIT_INIT_VALUE), UInt(0)) |
+                  Mux(io.update_valid && io.update_inc && io.update_idx === io.s0_r_idx, UInt(UBIT_INIT_VALUE), UInt(0))
+
 
    when (io.allocate_valid)
    {
