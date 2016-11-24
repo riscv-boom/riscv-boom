@@ -309,7 +309,7 @@ class TageBrPredictor(
       (info.provider_predicted_takens & executed) === (info.alt_predicted_takens & executed))
 
    val r_ubits_notuseful = Range(0, num_tables).map{ i =>
-         RegNext(tables_io(i).GetUsefulness(info.indexes(i), log2Up(table_sizes(i))) === Bits(0))
+         tables_io(i).GetUsefulness(info.indexes(i), log2Up(table_sizes(i))) === Bool(false)
    }
 
    val r_commit = RegNext(commit)

@@ -31,8 +31,9 @@ class TageUbitMemory(
    val io = new Bundle
    {
       // send read addr on cycle 0, get data out on cycle 2.
-      val s0_r_idx = UInt(INPUT, width = index_sz)
-      val s0_r_out = UInt(OUTPUT, width = ubit_sz)
+      val s0_read_idx = UInt(INPUT, width = index_sz)
+      val s0_is_useful = Bool(OUTPUT)
+
 
       val allocate_valid  = Bool(INPUT)
       val allocate_idx = UInt(INPUT, width = index_sz)
@@ -80,9 +81,10 @@ class TageUbitMemory(
 //   val r_s1_out = smem.read(idx, !io.stall)
 //   val r_s2_out = RegEnable(r_s1_out, !io.stall)
 //   io.s2_r_out := r_s2_out
-   io.s0_r_out := ubit_table(io.s0_r_idx) |
-                  Mux(io.allocate_valid && io.allocate_idx === io.s0_r_idx, UInt(UBIT_INIT_VALUE), UInt(0)) |
-                  Mux(io.update_valid && io.update_inc && io.update_idx === io.s0_r_idx, UInt(UBIT_INIT_VALUE), UInt(0))
+   io.s0_is_useful := RegNext(
+                     (ubit_table(io.s0_read_idx) =/= UInt(0)) ||
+                     (io.allocate_valid && io.allocate_idx === io.s0_read_idx) ||
+                     (io.update_valid && io.update_inc && io.update_idx === io.s0_read_idx))
 
 
    when (io.allocate_valid)
@@ -101,7 +103,6 @@ class TageUbitMemory(
          Mux(!inc && u > UInt(0),
             u - UInt(1),
             u))
-
    }
 
    assert(!(io.allocate_valid && io.update_valid), "[ubits] trying to update and allocate simultaneously.")

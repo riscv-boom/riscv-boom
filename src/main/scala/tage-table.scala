@@ -76,7 +76,7 @@ class TageTableIo(
    }
 
    val usefulness_req_idx = UInt(INPUT, index_sz)
-   val usefulness_resp = UInt(OUTPUT, 2) // TODO u-bit_sz
+   val usefulness_resp = Bool(OUTPUT)
    def GetUsefulness(idx: UInt, idx_sz: Int) =
    {
 //      this.usefulness_req_idx := idx(this_index_sz-1,0) // TODO CODEREVIEW
@@ -415,19 +415,11 @@ class TageTable(
       val inc = io.update_usefulness.bits.inc
       val ub_idx = io.update_usefulness.bits.index(index_sz-1,0)
       ubit_table.io.update(ub_idx, inc)
-//      val u = ubit_table(ub_idx)
-//      ubit_table(ub_idx) :=
-//         Mux(inc && u < UInt(UBIT_MAX),
-//            u + UInt(1),
-//         Mux(!inc && u > UInt(0),
-//            u - UInt(1),
-//            u))
    }
 
    val u_idx = io.usefulness_req_idx(index_sz-1,0)
-   ubit_table.io.s0_r_idx := u_idx
-//   io.usefulness_resp := ubit_table(u_idx) |
-   io.usefulness_resp := ubit_table.io.s0_r_out
+   ubit_table.io.s0_read_idx := u_idx
+   io.usefulness_resp := ubit_table.io.s0_is_useful
 
    //------------------------------------------------------------
    // Debug/Visualize
