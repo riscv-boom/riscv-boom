@@ -308,9 +308,11 @@ class TageBrPredictor(
       info.alt_hit &&
       (info.provider_predicted_takens & executed) === (info.alt_predicted_takens & executed))
 
-   val r_ubits_notuseful = Range(0, num_tables).map{ i =>
-         tables_io(i).GetUsefulness(info.indexes(i), log2Up(table_sizes(i))) === Bool(false)
+   // Read u-bits; and give it back for updating.
+   val r_ubits = Range(0, num_tables).map{ i =>
+      tables_io(i).GetUsefulness(info.indexes(i), log2Up(table_sizes(i)))
    }
+   val r_ubits_notuseful = r_ubits.map{i => i === UInt(0)}
 
    val r_commit = RegNext(commit)
    val r_info = RegNext(info)
@@ -328,6 +330,9 @@ class TageBrPredictor(
    rand := rand + UInt(1)
 
 
+   val ubit_update_wens = Wire(init = Vec.fill(num_tables){ Bool(false) })
+   val ubit_update_incs = Wire(init = Vec.fill(num_tables){ Bool(false) })
+
    when (r_commit.valid && r_executed.orR)
    {
 
@@ -337,7 +342,9 @@ class TageBrPredictor(
          tables_io(r_provider_id).UpdateCounters(r_info.indexes(r_provider_id), r_executed, r_takens, !r_correct)
          when (!r_alt_agrees)
          {
-            tables_io(r_provider_id).UpdateUsefulness(r_info.indexes(r_provider_id), r_correct)
+//            tables_io(r_provider_id).UpdateUsefulness(r_info.indexes(r_provider_id), r_ubits(r_provider_id), r_correct)
+            ubit_update_wens(r_provider_id) := Bool(true)
+            ubit_update_incs(r_provider_id) := r_correct
          }
       }
 
@@ -385,10 +392,20 @@ class TageBrPredictor(
             {
                when ((UInt(i) > r_provider_id) || !r_info.provider_hit)
                {
-                  tables_io(i).UpdateUsefulness(r_info.indexes(i), inc = Bool(false))
+                  ubit_update_wens(i) := Bool(true)
+                  ubit_update_incs(i) := Bool(false)
+//                  tables_io(i).UpdateUsefulness(r_info.indexes(i), r_ubits(i), inc = Bool(false))
                }
             }
          }
+      }
+   }
+
+   for (i <- 0 until num_tables)
+   {
+      when (ubit_update_wens(i))
+      {
+         tables_io(i).UpdateUsefulness(r_info.indexes(i), r_ubits(i), inc = ubit_update_incs(i))
       }
    }
 

@@ -68,15 +68,16 @@ class TageTableIo(
 
    // commit - update predictor tables (update u-bits)
    val update_usefulness = (new ValidIO(new TageUpdateUsefulInfo(index_sz))).flip
-   def UpdateUsefulness(idx: UInt, inc: Bool) =
+   def UpdateUsefulness(idx: UInt, old_value: UInt, inc: Bool) =
    {
       this.update_usefulness.valid := Bool(true)
       this.update_usefulness.bits.index := idx
+      this.update_usefulness.bits.old_value := old_value
       this.update_usefulness.bits.inc := inc
    }
 
    val usefulness_req_idx = UInt(INPUT, index_sz)
-   val usefulness_resp = Bool(OUTPUT)
+   val usefulness_resp = UInt(OUTPUT, 2) // TODO u-bit_sz
    def GetUsefulness(idx: UInt, idx_sz: Int) =
    {
 //      this.usefulness_req_idx := idx(this_index_sz-1,0) // TODO CODEREVIEW
@@ -112,6 +113,7 @@ class TageTableIo(
       this.update_counters.bits.taken := UInt(0)
       this.update_counters.bits.mispredicted := Bool(false)
       this.update_usefulness.bits.index := UInt(0)
+      this.update_usefulness.bits.old_value := UInt(0)
       this.update_usefulness.bits.inc := Bool(false)
       this.usefulness_req_idx := UInt(0)
    }
@@ -148,6 +150,7 @@ class TageIndex(index_sz: Int) extends Bundle
 class TageUpdateUsefulInfo(index_sz: Int) extends Bundle
 {
    val index = UInt(width = index_sz)
+   val old_value = UInt(width = 2) // TODO ubits_sz
    val inc = Bool()
    override def cloneType: this.type = new TageUpdateUsefulInfo(index_sz).asInstanceOf[this.type]
 }
@@ -414,12 +417,13 @@ class TageTable(
    {
       val inc = io.update_usefulness.bits.inc
       val ub_idx = io.update_usefulness.bits.index(index_sz-1,0)
-      ubit_table.io.update(ub_idx, inc)
+      val ub_old_value = io.update_usefulness.bits.old_value
+      ubit_table.io.update(ub_idx, ub_old_value, inc)
    }
 
    val u_idx = io.usefulness_req_idx(index_sz-1,0)
    ubit_table.io.s0_read_idx := u_idx
-   io.usefulness_resp := ubit_table.io.s0_is_useful
+   io.usefulness_resp := ubit_table.io.s1_read_out
 
    //------------------------------------------------------------
    // Debug/Visualize
