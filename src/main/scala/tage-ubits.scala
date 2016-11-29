@@ -14,6 +14,7 @@
 //    - U-bits provide a "usefulness" metric for each entry in a TAGE predictor.
 //
 // TODO:
+//    - XXX allow occasional zeroing of u-bits
 //    - Allow 1-bit and 2-bit implementations.
 //    - Allow for changing out zeroing policies.
 
@@ -71,8 +72,11 @@ class TageUbitMemory(
 
    //------------------------------------------------------------
 
-//   val ubit_table = SeqMem(num_entries, UInt(width = ubit_sz))
-   val ubit_table = Mem(num_entries, UInt(width = ubit_sz))
+   val ubit_table = SeqMem(num_entries, UInt(width = ubit_sz))
+
+   // maintain an async copy purely for assertions
+   val debug_ubit_table = Mem(num_entries, UInt(width = ubit_sz))
+   val debug_valids     = Reg(init=Vec.fill(num_entries){Bool(false)})
 
    //------------------------------------------------------------
 
@@ -84,43 +88,43 @@ class TageUbitMemory(
 //   val r_s1_out = smem.read(idx, !io.stall)
 //   val r_s2_out = RegEnable(r_s1_out, !io.stall)
 //   io.s2_r_out := r_s2_out
-   // TODO XXX add a read_enable
-//   val s1_out = ubit_table.read(io.s0_read_idx, Bool(true))
-   val s1_out = RegNext(ubit_table(io.s0_read_idx))
+   // TODO XXX add a read_enable (only reads on commit.valid within TAGE)
+   val s1_out = ubit_table.read(io.s0_read_idx, Bool(true))
    io.s1_read_out :=
-      (s1_out =/= UInt(0)) |
+      s1_out |
       RegNext(
          Mux(io.allocate_valid && io.allocate_idx === io.s0_read_idx, UInt(UBIT_INIT_VALUE), UInt(0)) |
          Mux(io.update_valid && io.update_inc && io.update_idx === io.s0_read_idx, UInt(UBIT_INIT_VALUE), UInt(0)))
 
 
-
    when (io.allocate_valid)
    {
       ubit_table(io.allocate_idx) := UInt(UBIT_INIT_VALUE)
-      // TODO this assertion doesn't work for SMEM memories. Is there still a way to get this gaurantee?
-      assert (ubit_table(io.allocate_idx) === UInt(0), "[ubits] Tried to allocate a useful entry")
+      debug_ubit_table(io.allocate_idx) := UInt(UBIT_INIT_VALUE)
+      debug_valids(io.allocate_idx) := Bool(true)
    }
    .elsewhen (io.update_valid)
    {
       val inc = io.update_inc
       val u = io.update_old_value
-      ubit_table(io.update_idx) :=
+      val next_u =
          Mux(inc && u < UInt(UBIT_MAX),
             u + UInt(1),
          Mux(!inc && u > UInt(0),
             u - UInt(1),
             u))
+
+      ubit_table(io.update_idx) := next_u
+      debug_ubit_table(io.update_idx) := next_u
    }
 
-// TODO this assertion doesn't work for SMEM memories. Is there still a way to get this gaurantee?
-//   val r_debug_allocate_value = ubit_table(io.allocate_idx)
-//   when (RegNext(io.allocate_valid))
-//   {
-//      assert(r_debug_allocate_value === UInt(0), "[ubits] Tried to allocate a useful entry")
-//   }
+
+   val r_debug_allocate_value = RegNext(debug_ubit_table(io.allocate_idx))
+   when (RegNext(io.allocate_valid && debug_valids(io.allocate_idx)))
+   {
+      assert(r_debug_allocate_value === UInt(0), "[ubits] Tried to allocate a useful entry")
+   }
 
    assert(!(io.allocate_valid && io.update_valid), "[ubits] trying to update and allocate simultaneously.")
-
 }
 
