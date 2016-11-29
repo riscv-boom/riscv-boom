@@ -97,27 +97,31 @@ class TageUbitMemory(
          Mux(io.update_valid && io.update_inc && io.update_idx === io.s0_read_idx, UInt(UBIT_INIT_VALUE), UInt(0)))
 
 
+   // Compute update values.
+   val inc = io.update_inc
+   val u = io.update_old_value
+   val next_u =
+      Mux(inc && u < UInt(UBIT_MAX),
+         u + UInt(1),
+      Mux(!inc && u > UInt(0),
+         u - UInt(1),
+         u))
+
+   // Perform write.
+   val w_en   = io.allocate_valid || io.update_valid
+   val w_addr = Mux(io.allocate_valid, io.allocate_idx, io.update_idx)
+   val w_data = Mux(io.allocate_valid, UInt(UBIT_INIT_VALUE), next_u)
+   when (w_en)
+   {
+      ubit_table(w_addr) := w_data
+      debug_ubit_table(w_addr) := w_data
+   }
+
+
    when (io.allocate_valid)
    {
-      ubit_table(io.allocate_idx) := UInt(UBIT_INIT_VALUE)
-      debug_ubit_table(io.allocate_idx) := UInt(UBIT_INIT_VALUE)
       debug_valids(io.allocate_idx) := Bool(true)
    }
-   .elsewhen (io.update_valid)
-   {
-      val inc = io.update_inc
-      val u = io.update_old_value
-      val next_u =
-         Mux(inc && u < UInt(UBIT_MAX),
-            u + UInt(1),
-         Mux(!inc && u > UInt(0),
-            u - UInt(1),
-            u))
-
-      ubit_table(io.update_idx) := next_u
-      debug_ubit_table(io.update_idx) := next_u
-   }
-
 
    val r_debug_allocate_value = RegNext(debug_ubit_table(io.allocate_idx))
    when (RegNext(io.allocate_valid && debug_valids(io.allocate_idx)))
