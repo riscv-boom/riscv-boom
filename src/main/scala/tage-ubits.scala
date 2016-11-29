@@ -12,9 +12,10 @@
 //
 // Goal:
 //    - U-bits provide a "usefulness" metric for each entry in a TAGE predictor.
+//    - Only allocate for entries that are "not useful".
+//    - Occasionally, degrade entries to prevent unused entries from never leaving.
 //
 // TODO:
-//    - XXX allow occasional zeroing of u-bits
 //    - Allow 1-bit and 2-bit implementations.
 //    - Allow for changing out zeroing policies.
 
@@ -79,6 +80,48 @@ class TageUbitMemory(
    val debug_valids     = Reg(init=Vec.fill(num_entries){Bool(false)})
 
    //------------------------------------------------------------
+   // Manage clearing u-bits over time
+   // (to prevent entries from never leaving the predictor).
+
+   val CLEAR_FREQUENCY = (1<<20) // 1M cycles
+   val clear_timer = Reg(init=UInt(0, log2Up(CLEAR_FREQUENCY)))
+   val clear_idx = Reg(init=UInt(0, index_sz))
+
+   val s_reset :: s_sleep :: s_clear :: Nil = Enum(UInt(),3)
+   val state = Reg(init = s_reset)
+   val trigger = (clear_timer === UInt(0))
+   val finished = (clear_idx === UInt((1 << index_sz)-1)) && !(io.allocate_valid || io.update_valid)
+
+   when (state === s_clear && !(io.allocate_valid || io.update_valid))
+   {
+      clear_idx := clear_idx + UInt(1)
+   }
+
+   switch (state)
+   {
+      is (s_reset)
+      {
+         state := s_sleep
+      }
+      is (s_sleep)
+      {
+         when (trigger)
+         {
+            state := s_clear
+         }
+      }
+      is (s_clear)
+      {
+         when (finished)
+         {
+            state := s_sleep
+         }
+      }
+   }
+
+
+
+   //------------------------------------------------------------
 
 //   val idx = Wire(UInt())
 //   val last_idx = RegNext(idx)
@@ -108,9 +151,13 @@ class TageUbitMemory(
          u))
 
    // Perform write.
-   val w_en   = io.allocate_valid || io.update_valid
-   val w_addr = Mux(io.allocate_valid, io.allocate_idx, io.update_idx)
-   val w_data = Mux(io.allocate_valid, UInt(UBIT_INIT_VALUE), next_u)
+   val w_en   = io.allocate_valid || io.update_valid || (state === s_clear)
+   val w_addr = Mux(io.allocate_valid, io.allocate_idx,
+                Mux(io.update_valid,   io.update_idx,
+                                       clear_idx))
+   val w_data = Mux(io.allocate_valid, UInt(UBIT_INIT_VALUE),
+                Mux(io.update_valid,   next_u,
+                                       UInt(0)))
    when (w_en)
    {
       ubit_table(w_addr) := w_data
