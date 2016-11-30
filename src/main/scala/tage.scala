@@ -301,8 +301,6 @@ class TageBrPredictor(
       max_tag_sz = tag_sizes.max
    ).fromBits(commit.bits.info.info)
 
-   assert (info.provider_id < UInt(num_tables) || !info.provider_hit, "[Tage] provider_id is out-of-bounds.")
-
    val executed = commit.bits.ctrl.executed.toBits
    val r_alt_agrees = RegNext(
       info.alt_hit &&
@@ -321,6 +319,10 @@ class TageBrPredictor(
    val r_takens = r_commit.bits.ctrl.taken.toBits
    val r_executed = r_commit.bits.ctrl.executed.toBits
 
+   when (commit.valid && executed.orR)
+   {
+      assert (info.provider_id < UInt(num_tables) || !info.provider_hit, "[Tage] provider_id is out-of-bounds.")
+   }
 
    //-------------------------------------------
    // Cycle 1 - perform state changes
@@ -342,7 +344,6 @@ class TageBrPredictor(
          tables_io(r_provider_id).UpdateCounters(r_info.indexes(r_provider_id), r_executed, r_takens, !r_correct)
          when (!r_alt_agrees)
          {
-//            tables_io(r_provider_id).UpdateUsefulness(r_info.indexes(r_provider_id), r_ubits(r_provider_id), r_correct)
             ubit_update_wens(r_provider_id) := Bool(true)
             ubit_update_incs(r_provider_id) := r_correct
          }
@@ -359,7 +360,6 @@ class TageBrPredictor(
          //    b.i) randomize r, where i<=(i+r)<k<=max, to prevent ping-ponging
          //       where new allocations simply over-write once another before the u-bit
          //       can be strengthened.
-
 
          val temp = Mux(rand === UInt(3), UInt(2),
                     Mux(rand === UInt(2), UInt(1),
@@ -394,7 +394,6 @@ class TageBrPredictor(
                {
                   ubit_update_wens(i) := Bool(true)
                   ubit_update_incs(i) := Bool(false)
-//                  tables_io(i).UpdateUsefulness(r_info.indexes(i), r_ubits(i), inc = Bool(false))
                }
             }
          }
@@ -410,4 +409,5 @@ class TageBrPredictor(
    }
 
 }
+
 
