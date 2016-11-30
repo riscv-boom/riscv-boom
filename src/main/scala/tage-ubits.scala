@@ -84,7 +84,7 @@ class TageUbitMemory(
    // (to prevent entries from never leaving the predictor).
 
    val CLEAR_FREQUENCY = (1<<20) // 1M cycles
-   val clear_timer = Reg(init=UInt(0, log2Up(CLEAR_FREQUENCY)))
+   val clear_timer = util.WideCounter(log2Up(CLEAR_FREQUENCY))
    val clear_idx = Reg(init=UInt(0, index_sz))
 
    val s_reset :: s_sleep :: s_clear :: Nil = Enum(UInt(),3)
