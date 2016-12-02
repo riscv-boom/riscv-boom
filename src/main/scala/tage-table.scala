@@ -85,6 +85,12 @@ class TageTableIo(
       this.usefulness_resp
    }
 
+   val degrade_usefulness_valid = Bool(INPUT)
+   def DegradeUsefulness(dummy: Int=0) =
+   {
+      degrade_usefulness_valid := Bool(true)
+   }
+
 
    // BP2 - speculatively update the spec copy of the CSRs (branch history registers)
 //   val spec_csr_update = Valid(new CircularShiftRegisterUpdate).flip
@@ -116,6 +122,7 @@ class TageTableIo(
       this.update_usefulness.bits.old_value := UInt(0)
       this.update_usefulness.bits.inc := Bool(false)
       this.usefulness_req_idx := UInt(0)
+      this.degrade_usefulness_valid := Bool(false)
    }
 
    override def cloneType: this.type = new TageTableIo(
@@ -226,7 +233,9 @@ class TageTable(
    val counters = Module(new TwobcCounterTable(fetch_width, num_entries, dualported=false))
 
    val tag_table     = Module(new TageTagMemory(num_entries, memwidth = tag_sz))
-   val ubit_table    = Module(new TageUbitMemory(num_entries, ubit_sz))
+
+   val ubit_table    = if (ubit_sz == 1) Module(new TageUbitMemoryFlipFlop(num_entries, ubit_sz))
+                     else                Module(new TageUbitMemorySeqMem(num_entries, ubit_sz))
 //   val ubit_table    = Mem(num_entries, UInt(width = ubit_sz))
    val debug_pc_table= Mem(num_entries, UInt(width = 32))
    val debug_hist_ptr_table=Mem(num_entries,UInt(width = log2Up(VLHR_LENGTH)))
@@ -253,7 +262,6 @@ class TageTable(
    // functions
 
    //updateHistory()
-   //clearUBit() TODO XXX
 
 
    private def Fold (input: UInt, compressed_length: Int) =
@@ -296,6 +304,12 @@ class TageTable(
          tag_csr1.io.next ^
          (tag_csr2.io.next << UInt(1))
       tag_hash(tag_sz-1,0)
+   }
+
+
+   when (io.degrade_usefulness_valid)
+   {
+      ubit_table.io.degrade()
    }
 
 

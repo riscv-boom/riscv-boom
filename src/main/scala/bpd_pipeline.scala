@@ -105,7 +105,8 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
                                                 num_tables = p(TageKey).num_tables,
                                                 table_sizes = p(TageKey).table_sizes,
                                                 history_lengths = p(TageKey).history_lengths,
-                                                tag_sizes = p(TageKey).tag_sizes
+                                                tag_sizes = p(TageKey).tag_sizes,
+                                                ubit_sz = p(TageKey).ubit_sz
                                                 ))
    }
    else if (ENABLE_BRANCH_PREDICTOR && p(GSkewKey).enabled)

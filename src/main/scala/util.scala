@@ -140,6 +140,7 @@ object WrapInc
       }
    }
 }
+
 // Decrement the input "value", wrapping it if necessary.
 object WrapDec
 {
@@ -158,6 +159,15 @@ object WrapDec
    }
 }
 
+// Decrement the input "value", saturating at zero.
+object SatDecrement
+{
+   def apply(value: UInt): UInt =
+   {
+      val is_zero = (value === UInt(0))
+      Mux(is_zero, UInt(0), value - UInt(1))
+   }
+}
 
 object RotateL1
 {
