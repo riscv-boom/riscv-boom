@@ -13,8 +13,8 @@
 // Instead of attempting to dynamically fold a very long history register (1000s
 // of bits) into ~10 bits, we will use a ~10b CSR instead. Faster and cheaper.
 
-// Example: An 12 bit value (0b_0111_1001_1111) folded onto a 5 bit CSR becomes
-// (0b_0_0010), which can be found of as:
+// Example: A 12 bit value (0b_0111_1001_1111) folded onto a 5 bit CSR becomes
+// (0b_0_0010), which can be found by:
 
 
 //                /-- history[12] (evict bit)
@@ -25,8 +25,8 @@
 //   \_______________________/ \---history[0] (newly taken bit)
 //
 //
-// (c[4] ^ h[0] generates the new c[0]).
-// (c[1] ^ h[1] generates the new c[2]).
+// (c[4] ^ h[ 0] generates the new c[0]).
+// (c[1] ^ h[12] generates the new c[2]).
 
 package boom
 

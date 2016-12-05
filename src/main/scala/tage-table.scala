@@ -261,9 +261,6 @@ class TageTable(
    //------------------------------------------------------------
    // functions
 
-   //updateHistory()
-
-
    private def Fold (input: UInt, compressed_length: Int) =
    {
       val clen = compressed_length
@@ -307,12 +304,6 @@ class TageTable(
    }
 
 
-   when (io.degrade_usefulness_valid)
-   {
-      ubit_table.io.degrade()
-   }
-
-
    //------------------------------------------------------------
    // Get Prediction
 
@@ -323,8 +314,8 @@ class TageTable(
 
    counters.io.s0_r_idx := p_idx
    tag_table.io.s0_r_idx := p_idx
+   counters.io.stall := stall
    tag_table.io.stall := stall
-   // TODO BUG pass a stall signal to counters? or register last_p_idx?
 
    val s2_tag      = tag_table.io.s2_r_out
    val bp2_tag_hit = s2_tag === RegEnable(RegEnable(p_tag, !stall), !stall)
@@ -438,6 +429,12 @@ class TageTable(
    val u_idx = io.usefulness_req_idx(index_sz-1,0)
    ubit_table.io.s0_read_idx := u_idx
    io.usefulness_resp := ubit_table.io.s1_read_out
+
+   when (io.degrade_usefulness_valid)
+   {
+      ubit_table.io.degrade()
+   }
+
 
    //------------------------------------------------------------
    // Debug/Visualize

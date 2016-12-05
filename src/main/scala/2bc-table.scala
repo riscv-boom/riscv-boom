@@ -72,19 +72,31 @@ class BrTableUpdate(fetch_width: Int, index_sz: Int) extends Bundle
 // Read p-table every cycle for a prediction.
 // Write p-table only if a misprediction occurs.
 // The p-table requires 1read/1write port.
-class PTableDualPorted(
+abstract class PTable(
    fetch_width: Int,
    num_entries: Int
    ) extends Module
 {
-   private val index_sz = log2Up(num_entries)
+   val index_sz = log2Up(num_entries)
    val io = new Bundle
    {
       val s0_r_idx = UInt(INPUT, width = index_sz)
       val s2_r_out = UInt(OUTPUT, width = fetch_width)
-      val update = Decoupled(new BrTableUpdate(fetch_width, index_sz)).flip
+      val stall    = Bool(INPUT)
+      val update   = Decoupled(new BrTableUpdate(fetch_width, index_sz)).flip
    }
 
+   val ridx = Wire(UInt())
+   val last_idx = RegNext(ridx)
+   ridx := Mux(io.stall, last_idx, io.s0_r_idx)
+}
+
+// This version uses 1 read and 1 write port.
+class PTableDualPorted(
+   fetch_width: Int,
+   num_entries: Int
+   ) extends PTable(fetch_width, num_entries)
+{
    val p_table = SeqMem(num_entries, Vec(fetch_width, Bool()))
 
    io.update.ready := Bool(true)
@@ -97,7 +109,7 @@ class PTableDualPorted(
       p_table.write(waddr, wdata, wmask)
    }
 
-   io.s2_r_out := RegNext(p_table.read(io.s0_r_idx).toBits)
+   io.s2_r_out := RegEnable(p_table.read(this.ridx).toBits, !io.stall)
 }
 
 // Read p-table every cycle for a prediction.
@@ -107,23 +119,14 @@ class PTableDualPorted(
 class PTableBanked(
    fetch_width: Int,
    num_entries: Int
-   ) extends Module
+   ) extends PTable(fetch_width, num_entries)
 {
-   private val index_sz = log2Up(num_entries)
-   val io = new Bundle
-   {
-      val s0_r_idx = UInt(INPUT, width = index_sz)
-      val s2_r_out = UInt(OUTPUT, width = fetch_width)
-      val update = Decoupled(new BrTableUpdate(fetch_width, index_sz)).flip
-   }
-
    val p_table_0 = SeqMem(num_entries/2, Vec(fetch_width, Bool()))
    val p_table_1 = SeqMem(num_entries/2, Vec(fetch_width, Bool()))
 
    private def getBank (idx: UInt): UInt = idx(0)
    private def getRowIdx (idx: UInt): UInt = idx >> UInt(1)
 
-   val ridx = io.s0_r_idx
    val widx = io.update.bits.index
    val rbank = getBank(ridx)
    val wbank = getBank(widx)
@@ -131,8 +134,8 @@ class PTableBanked(
 
    val ren_0   = rbank === UInt(0)
    val ren_1   = rbank === UInt(1)
-   val rout_0  = RegNext(p_table_0.read(getRowIdx(ridx), ren_0).toBits)
-   val rout_1  = RegNext(p_table_1.read(getRowIdx(ridx), ren_1).toBits)
+   val rout_0  = RegEnable(p_table_0.read(getRowIdx(ridx), ren_0).toBits, !io.stall)
+   val rout_1  = RegEnable(p_table_1.read(getRowIdx(ridx), ren_1).toBits, !io.stall)
    val wdata   = Vec(io.update.bits.new_value.toBools)
    val wmask = io.update.bits.executed.toBools
 
@@ -145,7 +148,8 @@ class PTableBanked(
       p_table_1.write(getRowIdx(widx), wdata, wmask)
    }
 
-   io.s2_r_out := Mux(RegNext(RegNext(ren_0)), rout_0, rout_1)
+   val s2_ren = RegEnable(RegEnable(ren_0, !io.stall), !io.stall)
+   io.s2_r_out := Mux(s2_ren, rout_0, rout_1)
 }
 
 
@@ -204,8 +208,9 @@ class TwobcCounterTable(
       // send read addr on cycle 0, get data out on cycle 2.
       val s0_r_idx = UInt(INPUT, width = index_sz)
       val s2_r_out = UInt(OUTPUT, width = fetch_width)
+      val stall    = Bool(INPUT)
 
-      val update     = Valid(new UpdateEntry(fetch_width, index_sz)).flip
+      val update   = Valid(new UpdateEntry(fetch_width, index_sz)).flip
    }
 
    println ("\t\tBuilding (" +
@@ -237,6 +242,7 @@ class TwobcCounterTable(
    p_table.io.s0_r_idx <> io.s0_r_idx
    io.s2_r_out <> p_table.io.s2_r_out
    p_table.io.update <> pwq.io.deq
+   p_table.io.stall := io.stall
 
 
    //------------------------------------------------------------
