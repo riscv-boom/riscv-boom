@@ -236,9 +236,9 @@ class TageTable(
    val m_tag_table     = Mem(num_entries, UInt(width = tag_sz))
 //   val tag_table     = Module(new TageTagMemory(num_entries, memwidth = tag_sz))
 
-   val ubit_table    = if (ubit_sz == 1) Module(new TageUbitMemoryFlipFlop(num_entries, ubit_sz))
-                     else                Module(new TageUbitMemorySeqMem(num_entries, ubit_sz))
-//   val ubit_table    = Mem(num_entries, UInt(width = ubit_sz))
+//   val ubit_table    = if (ubit_sz == 1) Module(new TageUbitMemoryFlipFlop(num_entries, ubit_sz))
+//                     else                Module(new TageUbitMemorySeqMem(num_entries, ubit_sz))
+   val m_ubit_table    = Mem(num_entries, UInt(width = ubit_sz))
    val debug_pc_table= Mem(num_entries, UInt(width = 32))
    val debug_hist_ptr_table=Mem(num_entries,UInt(width = log2Up(VLHR_LENGTH)))
 
@@ -251,7 +251,7 @@ class TageTable(
    val commit_tag_csr2 = Module(new CircularShiftRegister(tag_sz-1, history_length))
 
 //   tag_table.io.InitializeIo()
-   ubit_table.io.InitializeIo()
+//   ubit_table.io.InitializeIo()
    idx_csr.io.InitializeIo()
    tag_csr1.io.InitializeIo()
    tag_csr2.io.InitializeIo()
@@ -411,8 +411,8 @@ class TageTable(
    val init_counter_row = BuildAllocCounterRow(io.allocate.bits.executed, io.allocate.bits.taken)
    when (io.allocate.valid)
    {
-//      ubit_table(a_idx)    := UInt(UBIT_INIT_VALUE)
-      ubit_table.io.allocate(a_idx)
+      m_ubit_table(a_idx)    := UInt(UBIT_INIT_VALUE)
+//      ubit_table.io.allocate(a_idx)
       m_tag_table(a_idx) := io.allocate.bits.tag(tag_sz-1,0)
 //      tag_table.io.write(a_idx, io.allocate.bits.tag(tag_sz-1,0))
 
@@ -428,7 +428,7 @@ class TageTable(
       debug_hist_ptr_table(a_idx) := io.allocate.bits.debug_hist_ptr(history_length-1,0)
 
       assert (a_idx < UInt(num_entries), "[TageTable] out of bounds index on allocation")
-//      assert (ubit_table(a_idx) === UInt(0), "[TageTable] Tried to allocate a useful entry")
+      assert (m_ubit_table(a_idx) === UInt(0), "[TageTable] Tried to allocate a useful entry")
    }
    .elsewhen (!io.allocate.valid)
    {
@@ -460,22 +460,34 @@ class TageTable(
 //      counters.io.update.bits.do_initialize    := Bool(false)
    }
 
+   val inc = io.update_usefulness.bits.inc
+   val ub_idx = io.update_usefulness.bits.index(index_sz-1,0)
    when (io.update_usefulness.valid)
    {
-      val inc = io.update_usefulness.bits.inc
-      val ub_idx = io.update_usefulness.bits.index(index_sz-1,0)
       val ub_old_value = io.update_usefulness.bits.old_value
-      ubit_table.io.update(ub_idx, ub_old_value, inc)
+
+      val u = m_ubit_table(ub_idx)
+      m_ubit_table(ub_idx) :=
+         Mux(inc && u < UInt(UBIT_MAX),
+            u + UInt(1),
+         Mux(!inc && u > UInt(0),
+            u - UInt(1),
+            u))
+//      ubit_table.io.update(ub_idx, ub_old_value, inc)
    }
 
    val u_idx = io.usefulness_req_idx(index_sz-1,0)
-   ubit_table.io.s0_read_idx := u_idx
-   io.usefulness_resp := ubit_table.io.s1_read_out
+//   ubit_table.io.s0_read_idx := u_idx
+//   io.usefulness_resp := ubit_table.io.s1_read_out
+   io.usefulness_resp := RegNext(
+      m_ubit_table(u_idx) | 
+      Mux(io.allocate.valid && a_idx === u_idx, UInt(UBIT_INIT_VALUE), UInt(0)) |
+      Mux(io.update_usefulness.valid && inc && ub_idx === u_idx, UInt(UBIT_INIT_VALUE), UInt(0)))
 
-   when (io.degrade_usefulness_valid)
-   {
-      ubit_table.io.degrade()
-   }
+//   when (io.degrade_usefulness_valid)
+//   {
+//      ubit_table.io.degrade()
+//   }
 
 
    //------------------------------------------------------------
