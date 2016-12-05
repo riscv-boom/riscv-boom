@@ -232,7 +232,8 @@ class TageTable(
    // State
    val counters = Module(new TwobcCounterTable(fetch_width, num_entries, dualported=false))
 
-   val tag_table     = Module(new TageTagMemory(num_entries, memwidth = tag_sz))
+   val m_tag_table     = Mem(num_entries, UInt(width = tag_sz))
+//   val tag_table     = Module(new TageTagMemory(num_entries, memwidth = tag_sz))
 
    val ubit_table    = if (ubit_sz == 1) Module(new TageUbitMemoryFlipFlop(num_entries, ubit_sz))
                      else                Module(new TageUbitMemorySeqMem(num_entries, ubit_sz))
@@ -248,7 +249,7 @@ class TageTable(
    val commit_tag_csr1 = Module(new CircularShiftRegister(tag_sz  , history_length))
    val commit_tag_csr2 = Module(new CircularShiftRegister(tag_sz-1, history_length))
 
-   tag_table.io.InitializeIo()
+//   tag_table.io.InitializeIo()
    ubit_table.io.InitializeIo()
    idx_csr.io.InitializeIo()
    tag_csr1.io.InitializeIo()
@@ -313,11 +314,13 @@ class TageTable(
    val p_tag = TagHash(io.if_req_pc)
 
    counters.io.s0_r_idx := p_idx
-   tag_table.io.s0_r_idx := p_idx
+//   tag_table.io.s0_r_idx := p_idx
    counters.io.stall := stall
-   tag_table.io.stall := stall
+//   tag_table.io.stall := stall
 
-   val s2_tag      = tag_table.io.s2_r_out
+//   val s2_tag      = tag_table.io.s2_r_out
+   val tag = m_tag_table(p_idx)
+   val s2_tag = RegEnable(RegEnable(tag, !stall), !stall)
    val bp2_tag_hit = s2_tag === RegEnable(RegEnable(p_tag, !stall), !stall)
 
    io.bp2_resp.valid       := bp2_tag_hit
@@ -393,7 +396,8 @@ class TageTable(
    {
 //      ubit_table(a_idx)    := UInt(UBIT_INIT_VALUE)
       ubit_table.io.allocate(a_idx)
-      tag_table.io.write(a_idx, io.allocate.bits.tag(tag_sz-1,0))
+      m_tag_table(a_idx) := io.allocate.bits.tag(tag_sz-1,0)
+//      tag_table.io.write(a_idx, io.allocate.bits.tag(tag_sz-1,0))
 
       counters.io.update.valid                 := Bool(true)
       counters.io.update.bits.index            := a_idx
