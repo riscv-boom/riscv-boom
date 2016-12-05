@@ -230,7 +230,8 @@ class TageTable(
 
    //------------------------------------------------------------
    // State
-   val counters = Module(new TwobcCounterTable(fetch_width, num_entries, dualported=false))
+   val m_counter_table = Mem(num_entries, Vec(fetch_width, UInt(width = counter_sz)))
+//   val counters = Module(new TwobcCounterTable(fetch_width, num_entries, dualported=false))
 
    val m_tag_table     = Mem(num_entries, UInt(width = tag_sz))
 //   val tag_table     = Module(new TageTagMemory(num_entries, memwidth = tag_sz))
@@ -304,6 +305,18 @@ class TageTable(
       tag_hash(tag_sz-1,0)
    }
 
+   private def GetPrediction(cntr: UInt): Bool = { (cntr >> UInt(counter_sz-1))(0).toBool }
+
+   private def BuildAllocCounterRow(enables: UInt, takens: UInt): Vec[UInt] =
+   {
+      val counters = for (i <- 0 until fetch_width) yield
+      {
+         Mux(!enables(i) || !takens(i),
+            UInt(CNTR_WEAK_NOTTAKEN),
+            UInt(CNTR_WEAK_TAKEN))
+      }
+      Vec(counters)
+   }
 
    //------------------------------------------------------------
    // Get Prediction
@@ -313,10 +326,12 @@ class TageTable(
    val p_idx = IdxHash(io.if_req_pc)
    val p_tag = TagHash(io.if_req_pc)
 
-   counters.io.s0_r_idx := p_idx
+//   counters.io.s0_r_idx := p_idx
 //   tag_table.io.s0_r_idx := p_idx
-   counters.io.stall := stall
+//   counters.io.stall := stall
 //   tag_table.io.stall := stall
+
+   val counters = m_counter_table(p_idx)
 
 //   val s2_tag      = tag_table.io.s2_r_out
    val tag = m_tag_table(p_idx)
@@ -326,7 +341,8 @@ class TageTable(
    io.bp2_resp.valid       := bp2_tag_hit
    io.bp2_resp.bits.index  := RegEnable(RegEnable(p_idx, !stall), !stall)(index_sz-1,0)
    io.bp2_resp.bits.tag    := RegEnable(RegEnable(p_tag, !stall), !stall)(tag_sz-1,0)
-   io.bp2_resp.bits.takens := counters.io.s2_r_out
+//   io.bp2_resp.bits.takens := counters.io.s2_r_out
+   io.bp2_resp.bits.takens := RegEnable(RegEnable(Vec(counters.map(GetPrediction(_))).toBits, !stall), !stall)
 
    io.bp2_resp.bits.idx_csr  := idx_csr.io.value
    io.bp2_resp.bits.tag_csr1 := tag_csr1.io.value
@@ -392,6 +408,7 @@ class TageTable(
       "[tage-table] trying to allocate and update the counters simultaneously.")
 
    val a_idx = io.allocate.bits.index(index_sz-1,0)
+   val init_counter_row = BuildAllocCounterRow(io.allocate.bits.executed, io.allocate.bits.taken)
    when (io.allocate.valid)
    {
 //      ubit_table(a_idx)    := UInt(UBIT_INIT_VALUE)
@@ -399,12 +416,13 @@ class TageTable(
       m_tag_table(a_idx) := io.allocate.bits.tag(tag_sz-1,0)
 //      tag_table.io.write(a_idx, io.allocate.bits.tag(tag_sz-1,0))
 
-      counters.io.update.valid                 := Bool(true)
-      counters.io.update.bits.index            := a_idx
-      counters.io.update.bits.executed         := Vec(io.allocate.bits.executed.toBools)
-      counters.io.update.bits.was_mispredicted := Bool(true)
-      counters.io.update.bits.takens           := Vec(io.allocate.bits.taken.toBools)
-      counters.io.update.bits.do_initialize    := Bool(true)
+      m_counter_table(a_idx) := init_counter_row
+//      counters.io.update.valid                 := Bool(true)
+//      counters.io.update.bits.index            := a_idx
+//      counters.io.update.bits.executed         := Vec(io.allocate.bits.executed.toBools)
+//      counters.io.update.bits.was_mispredicted := Bool(true)
+//      counters.io.update.bits.takens           := Vec(io.allocate.bits.taken.toBools)
+//      counters.io.update.bits.do_initialize    := Bool(true)
 
       debug_pc_table(a_idx) := io.allocate.bits.debug_pc
       debug_hist_ptr_table(a_idx) := io.allocate.bits.debug_hist_ptr(history_length-1,0)
@@ -414,12 +432,32 @@ class TageTable(
    }
    .elsewhen (!io.allocate.valid)
    {
-      counters.io.update.valid                 := io.update_counters.valid
-      counters.io.update.bits.index            := io.update_counters.bits.index
-      counters.io.update.bits.executed         := Vec(io.update_counters.bits.executed.toBools)
-      counters.io.update.bits.was_mispredicted := io.update_counters.bits.mispredicted
-      counters.io.update.bits.takens           := Vec(io.update_counters.bits.taken.toBools)
-      counters.io.update.bits.do_initialize    := Bool(false)
+
+      val u_idx = io.update_counters.bits.index(index_sz-1,0)
+      val u_counter_row = m_counter_table(u_idx)
+      val updated_row = Wire(u_counter_row.cloneType)
+      updated_row.map(_ := UInt(0))
+      when (io.update_counters.valid)
+      {
+         for (i <- 0 until fetch_width)
+         {
+            val enable = io.update_counters.bits.executed(i)
+            val inc = io.update_counters.bits.taken(i)
+            val value = u_counter_row(i)
+            updated_row(i) :=
+               Mux(enable && inc && value < UInt(CNTR_MAX),
+                  value + UInt(1),
+               Mux(enable && !inc && value > UInt(0),
+                  value - UInt(1),
+                  value))
+         }
+      }
+//      counters.io.update.valid                 := io.update_counters.valid
+//      counters.io.update.bits.index            := io.update_counters.bits.index
+//      counters.io.update.bits.executed         := Vec(io.update_counters.bits.executed.toBools)
+//      counters.io.update.bits.was_mispredicted := io.update_counters.bits.mispredicted
+//      counters.io.update.bits.takens           := Vec(io.update_counters.bits.taken.toBools)
+//      counters.io.update.bits.do_initialize    := Bool(false)
    }
 
    when (io.update_usefulness.valid)
