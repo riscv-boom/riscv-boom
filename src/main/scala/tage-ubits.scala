@@ -98,7 +98,7 @@ class TageUbitMemorySeqMem(
    ubit_sz: Int
    ) extends TageUbitMemory(num_entries, ubit_sz)
 {
-   require(false)
+   // TODO XXX
    // we don't currently support >1 ubit_sz versions until we finish supporting
    // the clearing of the u-bits. As this takes many cycles, we need to add
    // support for the ubit table to tell TAGE to not start counting
@@ -123,8 +123,8 @@ class TageUbitMemorySeqMem(
    val s_reset :: s_sleep :: s_clear :: Nil = Enum(UInt(),3)
    val state = Reg(init = s_reset)
 //   val trigger = (clear_timer === UInt(0))
-   val trigger = io.degrade_valid
-   assert (!(io.degrade_valid && state === s_clear), "[ubits] degrade_valid high while we're already degrading.")
+   val trigger = Bool(false) // TODO XXX io.degrade_valid
+//   assert (!(io.degrade_valid && state === s_clear), "[ubits] degrade_valid high while we're already degrading.")
 
    val finished = (clear_idx === UInt((1 << index_sz)-1)) && !(io.allocate_valid || io.update_valid)
 

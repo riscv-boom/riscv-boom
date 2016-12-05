@@ -36,7 +36,6 @@
 //    - lower required parameters, arguments to bundles and objects
 //    - able to allocate >1 tables
 //    - allow bypassing out of the BROB
-//    - useful-ness port count (updating when provided prediction, separate from decrementing if no alloc
 //    - brpredictor seems to couple fetch-width and commit-width :(
 //    - do ALL the tags need to be tracked? can we compute alloc_id during prediction?
 //       - no, maintain commit-copy of CSRs, pass in committed Fetch_pC to recompute
@@ -68,7 +67,7 @@ case class TageParameters(
    table_sizes: Seq[Int] = Seq(4096,4096,2048,2048),
    history_lengths: Seq[Int] = Seq(5,17,44,130),
    tag_sizes: Seq[Int] = Seq(10,10,10,11),
-   ubit_sz: Int=1)
+   ubit_sz: Int=2)
 
 class TageResp(
    fetch_width: Int,
@@ -427,7 +426,8 @@ class TageBrPredictor(
       failed_alloc_counter := UInt(0)
       for (i <- 0 until num_tables)
       {
-         tables_io(i).DegradeUsefulness()
+         // TODO XXX disable for now.
+//         tables_io(i).DegradeUsefulness()
       }
    }
 
