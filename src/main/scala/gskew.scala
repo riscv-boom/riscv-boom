@@ -221,6 +221,10 @@ class GSkewBrPredictor(fetch_width: Int,
    gsh0_table.io.s0_r_idx := gsh0_idx
    gsh1_table.io.s0_r_idx := gsh1_idx
    meta_table.io.s0_r_idx := meta_idx
+   bimo_table.io.stall := Bool(false)
+   gsh0_table.io.stall := Bool(false)
+   gsh1_table.io.stall := Bool(false)
+   meta_table.io.stall := Bool(false)
    bimo_out  := bimo_table.io.s2_r_out
    gsh0_out  := gsh0_table.io.s2_r_out
    gsh1_out  := gsh1_table.io.s2_r_out

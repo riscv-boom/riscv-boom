@@ -76,6 +76,7 @@ class GShareBrPredictor(
 
    idx := Mux(stall, last_idx, Hash(io.req_pc, this.ghistory))
    counters.io.s0_r_idx := idx
+   counters.io.stall    := Bool(false)
 
    val resp_info = Wire(new GShareResp(log2Up(num_entries)))
    resp_info.index      := RegNext(RegNext(idx))
