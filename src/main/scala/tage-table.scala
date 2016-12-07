@@ -407,9 +407,9 @@ class TageTable(
    // Update (Commit)
 
    val init_counter_row = BuildAllocCounterRow(io.allocate.bits.executed, io.allocate.bits.taken)
+   val a_idx = io.allocate.bits.index(index_sz-1,0)
    when (io.allocate.valid)
    {
-      val a_idx = io.allocate.bits.index(index_sz-1,0)
       ubit_table(a_idx)    := UInt(UBIT_INIT_VALUE)
       counter_table(a_idx) := init_counter_row
       tag_table.io.write(a_idx, io.allocate.bits.tag(tag_sz-1,0))
@@ -446,20 +446,24 @@ class TageTable(
       counter_table(u_idx) := updated_row
    }
 
+   val ub_write_inc = io.update_usefulness.bits.inc
+   val ub_write_idx = io.update_usefulness.bits.index(index_sz-1,0)
    when (io.update_usefulness.valid)
    {
-      val inc = io.update_usefulness.bits.inc
-      val ub_idx = io.update_usefulness.bits.index(index_sz-1,0)
-      val u = ubit_table(ub_idx)
-      ubit_table(ub_idx) :=
-         Mux(inc && u < UInt(UBIT_MAX),
+      val u = ubit_table(ub_write_idx)
+      ubit_table(ub_write_idx) :=
+         Mux(ub_write_inc && u < UInt(UBIT_MAX),
             u + UInt(1),
-         Mux(!inc && u > UInt(0),
+         Mux(!ub_write_inc && u > UInt(0),
             u - UInt(1),
             u))
    }
 
-   io.usefulness_resp := ubit_table(io.usefulness_req_idx(index_sz-1,0))
+   val ub_read_idx = io.usefulness_req_idx(index_sz-1,0)
+   io.usefulness_resp :=
+      ubit_table(ub_read_idx) |
+      Mux(io.allocate.valid && a_idx === ub_read_idx, UInt(UBIT_INIT_VALUE), UInt(0)) |
+      Mux(io.update_usefulness.valid && ub_write_inc && ub_write_idx === ub_read_idx, UInt(UBIT_INIT_VALUE), UInt(0))
 
    //------------------------------------------------------------
    // Debug/Visualize

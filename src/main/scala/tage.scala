@@ -326,6 +326,10 @@ class TageBrPredictor(
       assert (info.provider_id < UInt(num_tables) || !info.provider_hit, "[Tage] provider_id is out-of-bounds.")
    }
 
+   val r_ubits = Range(0, num_tables).map{ i =>
+      RegNext(tables_io(i).GetUsefulness(info.indexes(i), log2Up(table_sizes(i))))
+   }
+   val r_ubits_notuseful = r_ubits.map{_ === UInt(0)}
 
    //-------------------------------------------------------------
    // Cycle 1 - perform state changes
@@ -383,7 +387,7 @@ class TageBrPredictor(
 
          // find lowest alloc_idx where u_bits === 0
          val can_allocates = Range(0, num_tables).map{ i =>
-            tables_io(i).GetUsefulness(r_info.indexes(i), log2Up(table_sizes(i))) === Bits(0) &&
+            r_ubits_notuseful(i) &&
             ((UInt(i) > (Cat(UInt(0), r_provider_id) + ridx)) || !r_info.provider_hit)
          }
 
