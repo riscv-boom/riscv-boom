@@ -48,27 +48,27 @@ class DefaultBOOMConfig extends Config (
          // Branch Predictor (enable one of the following:)
          case EnableBranchPredictor => true
          case TageKey => TageParameters(
-            enabled = false,
+            enabled = true,
             // 25 kB
-            num_tables      = 12,
-            table_sizes     = Seq(1024,1024,1024,1024,1024,1024,1024,1024,1024,1024,1024,512),
-            history_lengths = Seq(5, 11, 17, 27, 43, 67,105,165,258,407,637,1000),
-            tag_sizes       = Seq(8,  9,  9, 10, 10, 11, 11, 12, 12, 13, 13,  14))
+            //num_tables      = 12,
+            //table_sizes     = Seq(1024,1024,1024,1024,1024,1024,1024,1024,1024,1024,1024,512),
+            //history_lengths = Seq(5, 11, 17, 27, 43, 67,105,165,258,407,637,1000),
+            //tag_sizes       = Seq(8,  9,  9, 10, 10, 11, 11, 12, 12, 13, 13,  14))
             // 16 kB
             //num_tables = 4,
             //table_sizes = Seq(2048,2048,2048,2048),
             //history_lengths = Seq(5,15,44,130),
             //tag_sizes = Seq(10,10,10,12))
             // 8 kB
-            //num_tables = 4,
-            //table_sizes = Seq(1024,1024,1024,1024),
-            //history_lengths = Seq(3,7,19,63),
-            //tag_sizes = Seq(10,10,10,12))
+            num_tables = 4,
+            table_sizes = Seq(1024,1024,1024,1024),
+            history_lengths = Seq(3,7,19,63),
+            tag_sizes = Seq(10,10,10,12))
          case GSkewKey => GSkewParameters(
             enabled = false,
             enable_meta = true)
          case GShareKey => GShareParameters(
-            enabled = true,
+            enabled = false,
             history_length = 15,
             dualported = false)
          case SimpleGShareKey => SimpleGShareParameters(
