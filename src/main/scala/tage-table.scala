@@ -218,7 +218,7 @@ class TageTable(
    //------------------------------------------------------------
    // State
    val counter_table = Mem(num_entries, Vec(fetch_width, UInt(width = counter_sz)))
-   val tag_table     = Mem(num_entries, UInt(width = tag_sz))
+   val tag_table     = Module(new TageTagMemory(num_entries, memwidth = tag_sz))
    val ubit_table    = Mem(num_entries, UInt(width = ubit_sz))
    val debug_pc_table= Mem(num_entries, UInt(width = 32))
    val debug_hist_ptr_table=Mem(num_entries,UInt(width = log2Up(VLHR_LENGTH)))
@@ -231,6 +231,7 @@ class TageTable(
    val commit_tag_csr1 = Module(new CircularShiftRegister(tag_sz  , history_length))
    val commit_tag_csr2 = Module(new CircularShiftRegister(tag_sz-1, history_length))
 
+   tag_table.io.InitializeIo()
    idx_csr.io.InitializeIo()
    tag_csr1.io.InitializeIo()
    tag_csr2.io.InitializeIo()
@@ -332,8 +333,11 @@ class TageTable(
    val p_idx       = IdxHash(io.if_req_pc)
    val p_tag       = TagHash(io.if_req_pc)
    val counters    = counter_table(p_idx)
-   val tag         = tag_table(p_idx)
-   val bp2_tag_hit = RegEnable(RegEnable(tag, !stall), !stall) === RegEnable(RegEnable(p_tag, !stall), !stall)
+   tag_table.io.s0_r_idx := p_idx
+   tag_table.io.stall := stall
+
+   val s2_tag      = tag_table.io.s2_r_out
+   val bp2_tag_hit = s2_tag === RegEnable(RegEnable(p_tag, !stall), !stall)
 
    io.bp2_resp.valid       := bp2_tag_hit
    io.bp2_resp.bits.takens := RegEnable(RegEnable(Vec(counters.map(GetPrediction(_))).toBits, !stall), !stall)
@@ -407,8 +411,8 @@ class TageTable(
    {
       val a_idx = io.allocate.bits.index(index_sz-1,0)
       ubit_table(a_idx)    := UInt(UBIT_INIT_VALUE)
-      tag_table(a_idx)     := io.allocate.bits.tag(tag_sz-1,0)
       counter_table(a_idx) := init_counter_row
+      tag_table.io.write(a_idx, io.allocate.bits.tag(tag_sz-1,0))
 
       debug_pc_table(a_idx) := io.allocate.bits.debug_pc
       debug_hist_ptr_table(a_idx) := io.allocate.bits.debug_hist_ptr(history_length-1,0)
@@ -467,9 +471,9 @@ class TageTable(
          io.if_req_pc,
          io.if_req_history(history_length-1,0) + UInt(0,64),
          p_idx,
-         tag + UInt(0,64),
+         s2_tag + UInt(0,64),
          TagHashSimple(io.if_req_pc, io.if_req_history),
-         Mux(tag === p_tag, Str("H"), Str(" "))
+         Mux(s2_tag === RegNext(RegNext(p_tag)), Str("H"), Str(" "))
       )
 
       for (i <- 0 to num_entries-1 by 4)
@@ -477,7 +481,7 @@ class TageTable(
          val lst = Seq(4,6,8,12,13)
          for (j <- 0 until 4)
          {
-            printf("(%d) [tag=0x%x]", UInt(i+j,8), tag_table(UInt(i+j)) & UInt(0xffff))
+            //printf("(%d) [tag=0x%x]", UInt(i+j,8), tag_table(UInt(i+j)) & UInt(0xffff))
             for (k <- 0 until fetch_width)
             {
                printf(" [c=%d]", counter_table(UInt(i+j))(k))
