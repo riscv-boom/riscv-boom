@@ -198,25 +198,21 @@ class GSkewBrPredictor(fetch_width: Int,
    //------------------------------------------------------------
    // Get prediction.
 
-   val bimo_idx      = Wire(UInt())
-   val gsh0_idx      = Wire(UInt())
-   val gsh1_idx      = Wire(UInt())
-   val meta_idx      = Wire(UInt())
-   val last_bimo_idx = RegNext(bimo_idx)
-   val last_gsh0_idx = RegNext(gsh0_idx)
-   val last_gsh1_idx = RegNext(gsh1_idx)
-   val last_meta_idx = RegNext(meta_idx)
    val bimo_out      = Wire(UInt())
    val gsh0_out      = Wire(UInt())
    val gsh1_out      = Wire(UInt())
    val meta_out      = Wire(UInt())
 
-   val stall = !io.resp.ready // TODO FIXME this feels too low-level
+   val stall = !io.resp.ready
+   bimo_table.io.stall := stall
+   gsh0_table.io.stall := stall
+   gsh1_table.io.stall := stall
+   meta_table.io.stall := stall
 
-   bimo_idx := Mux(stall, last_bimo_idx, BimoIdxHash(io.req_pc, this.ghistory, bimo_idx_sz))
-   gsh0_idx := Mux(stall, last_gsh0_idx, Gsh0IdxHash(io.req_pc, this.ghistory, gsh0_idx_sz))
-   gsh1_idx := Mux(stall, last_gsh1_idx, Gsh1IdxHash(io.req_pc, this.ghistory, gsh1_idx_sz))
-   meta_idx := Mux(stall, last_meta_idx, MetaIdxHash(io.req_pc, this.ghistory, meta_idx_sz))
+   val bimo_idx = BimoIdxHash(io.req_pc, this.ghistory, bimo_idx_sz)
+   val gsh0_idx = Gsh0IdxHash(io.req_pc, this.ghistory, gsh0_idx_sz)
+   val gsh1_idx = Gsh1IdxHash(io.req_pc, this.ghistory, gsh1_idx_sz)
+   val meta_idx = MetaIdxHash(io.req_pc, this.ghistory, meta_idx_sz)
    bimo_table.io.s0_r_idx := bimo_idx
    gsh0_table.io.s0_r_idx := gsh0_idx
    gsh1_table.io.s0_r_idx := gsh1_idx
@@ -430,6 +426,10 @@ class GSkewBrPredictor(fetch_width: Int,
    gsh1_table.io.update.bits.takens    := commit.bits.ctrl.taken
    meta_table.io.update.bits.takens    := meta_update_dir
 
+   bimo_table.io.update.bits.do_initialize := Bool(false)
+   gsh0_table.io.update.bits.do_initialize := Bool(false)
+   gsh1_table.io.update.bits.do_initialize := Bool(false)
+   meta_table.io.update.bits.do_initialize := Bool(false)
 
    //------------------------------------------------------------
 }

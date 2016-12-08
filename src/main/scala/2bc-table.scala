@@ -46,10 +46,14 @@ import Chisel._
 
 class UpdateEntry(fetch_width: Int, index_sz: Int) extends Bundle
 {
-   val was_mispredicted = Bool()
    val index            = UInt(width = index_sz)
    val executed         = Vec(fetch_width, Bool())
    val takens           = Vec(fetch_width, Bool())
+   // Was there a misprediction? If yes, we need to read the h-tables.
+   val was_mispredicted = Bool()
+   // Are we initializing this entry? If yes, we need to write directly to both P and H-tables.
+   // If takens(i), then we initialize entry to Weak-Taken. Otherwise, Weak-NotTaken.
+   val do_initialize    = Bool()
 
    override def cloneType: this.type = new UpdateEntry(fetch_width, index_sz).asInstanceOf[this.type]
 }
@@ -68,19 +72,31 @@ class BrTableUpdate(fetch_width: Int, index_sz: Int) extends Bundle
 // Read p-table every cycle for a prediction.
 // Write p-table only if a misprediction occurs.
 // The p-table requires 1read/1write port.
-class PTableDualPorted(
+abstract class PTable(
    fetch_width: Int,
    num_entries: Int
    ) extends Module
 {
-   private val index_sz = log2Up(num_entries)
+   val index_sz = log2Up(num_entries)
    val io = new Bundle
    {
       val s0_r_idx = UInt(INPUT, width = index_sz)
       val s2_r_out = UInt(OUTPUT, width = fetch_width)
-      val update = Decoupled(new BrTableUpdate(fetch_width, index_sz)).flip
+      val stall    = Bool(INPUT)
+      val update   = Decoupled(new BrTableUpdate(fetch_width, index_sz)).flip
    }
 
+   val ridx = Wire(UInt())
+   val last_idx = RegNext(ridx)
+   ridx := Mux(io.stall, last_idx, io.s0_r_idx)
+}
+
+// This version uses 1 read and 1 write port.
+class PTableDualPorted(
+   fetch_width: Int,
+   num_entries: Int
+   ) extends PTable(fetch_width, num_entries)
+{
    val p_table = SeqMem(num_entries, Vec(fetch_width, Bool()))
 
    io.update.ready := Bool(true)
@@ -93,7 +109,7 @@ class PTableDualPorted(
       p_table.write(waddr, wdata, wmask)
    }
 
-   io.s2_r_out := RegNext(p_table.read(io.s0_r_idx).toBits)
+   io.s2_r_out := RegEnable(p_table.read(this.ridx).toBits, !io.stall)
 }
 
 // Read p-table every cycle for a prediction.
@@ -103,23 +119,14 @@ class PTableDualPorted(
 class PTableBanked(
    fetch_width: Int,
    num_entries: Int
-   ) extends Module
+   ) extends PTable(fetch_width, num_entries)
 {
-   private val index_sz = log2Up(num_entries)
-   val io = new Bundle
-   {
-      val s0_r_idx = UInt(INPUT, width = index_sz)
-      val s2_r_out = UInt(OUTPUT, width = fetch_width)
-      val update = Decoupled(new BrTableUpdate(fetch_width, index_sz)).flip
-   }
-
    val p_table_0 = SeqMem(num_entries/2, Vec(fetch_width, Bool()))
    val p_table_1 = SeqMem(num_entries/2, Vec(fetch_width, Bool()))
 
    private def getBank (idx: UInt): UInt = idx(0)
    private def getRowIdx (idx: UInt): UInt = idx >> UInt(1)
 
-   val ridx = io.s0_r_idx
    val widx = io.update.bits.index
    val rbank = getBank(ridx)
    val wbank = getBank(widx)
@@ -127,8 +134,8 @@ class PTableBanked(
 
    val ren_0   = rbank === UInt(0)
    val ren_1   = rbank === UInt(1)
-   val rout_0  = RegNext(p_table_0.read(getRowIdx(ridx), ren_0).toBits)
-   val rout_1  = RegNext(p_table_1.read(getRowIdx(ridx), ren_1).toBits)
+   val rout_0  = RegEnable(p_table_0.read(getRowIdx(ridx), ren_0).toBits, !io.stall)
+   val rout_1  = RegEnable(p_table_1.read(getRowIdx(ridx), ren_1).toBits, !io.stall)
    val wdata   = Vec(io.update.bits.new_value.toBools)
    val wmask = io.update.bits.executed.toBools
 
@@ -141,7 +148,8 @@ class PTableBanked(
       p_table_1.write(getRowIdx(widx), wdata, wmask)
    }
 
-   io.s2_r_out := Mux(RegNext(RegNext(ren_0)), rout_0, rout_1)
+   val s2_ren = RegEnable(RegEnable(ren_0, !io.stall), !io.stall)
+   io.s2_r_out := Mux(s2_ren, rout_0, rout_1)
 }
 
 
@@ -166,21 +174,25 @@ class HTable(
 
    hwq.io.enq <> io.update
 
-   val h_ren = io.update.valid && io.update.bits.was_mispredicted
+   val h_ren = io.update.valid && io.update.bits.was_mispredicted && !io.update.bits.do_initialize
    hwq.io.deq.ready := !h_ren
    when (!h_ren && hwq.io.deq.valid)
    {
       val waddr = hwq.io.deq.bits.index
       val wmask = hwq.io.deq.bits.executed
-      val wdata = hwq.io.deq.bits.takens
+      // if initializing, set to weak state.
+      val wdata = Vec(hwq.io.deq.bits.takens.map(t =>
+                     Mux(hwq.io.deq.bits.do_initialize, !t, t)))
       h_table.write(waddr, wdata, wmask)
    }
 
    val h_raddr = io.update.bits.index
-   io.pwq_enq.valid          := RegNext(h_ren)
+   io.pwq_enq.valid          := RegNext(h_ren || io.update.bits.do_initialize)
    io.pwq_enq.bits.index     := RegNext(h_raddr)
    io.pwq_enq.bits.executed  := RegNext(io.update.bits.executed.toBits)
-   io.pwq_enq.bits.new_value := h_table.read(h_raddr, h_ren).toBits
+   io.pwq_enq.bits.new_value := Mux(RegNext(io.update.bits.do_initialize),
+                                    RegNext(io.update.bits.takens.toBits),
+                                    h_table.read(h_raddr, h_ren).toBits)
 }
 
 
@@ -196,6 +208,7 @@ class TwobcCounterTable(
       // send read addr on cycle 0, get data out on cycle 2.
       val s0_r_idx = UInt(INPUT, width = index_sz)
       val s2_r_out = UInt(OUTPUT, width = fetch_width)
+      val stall    = Bool(INPUT)
 
       val update   = Valid(new UpdateEntry(fetch_width, index_sz)).flip
    }
@@ -229,6 +242,7 @@ class TwobcCounterTable(
    p_table.io.s0_r_idx <> io.s0_r_idx
    io.s2_r_out <> p_table.io.s2_r_out
    p_table.io.update <> pwq.io.deq
+   p_table.io.stall := io.stall
 
 
    //------------------------------------------------------------

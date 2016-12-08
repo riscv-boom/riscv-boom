@@ -69,16 +69,14 @@ class GShareBrPredictor(
    //------------------------------------------------------------
    // Get prediction.
 
-   val idx = Wire(UInt())
-   val last_idx = RegNext(idx)
-
    val stall = !io.resp.ready
 
-   idx := Mux(stall, last_idx, Hash(io.req_pc, this.ghistory))
-   counters.io.s0_r_idx := idx
+   val r_idx = Hash(io.req_pc, this.ghistory)
+   counters.io.s0_r_idx := r_idx
+   counters.io.stall := stall
 
    val resp_info = Wire(new GShareResp(log2Up(num_entries)))
-   resp_info.index      := RegNext(RegNext(idx))
+   resp_info.index      := RegNext(RegNext(r_idx))
    io.resp.bits.takens  := counters.io.s2_r_out
    io.resp.bits.info    := resp_info.toBits
 
@@ -93,8 +91,9 @@ class GShareBrPredictor(
    counters.io.update.valid                 := this.commit.valid && !this.disable_bpd
    counters.io.update.bits.index            := commit_info.index
    counters.io.update.bits.executed         := this.commit.bits.ctrl.executed
-   counters.io.update.bits.was_mispredicted := this.commit.bits.ctrl.mispredicted.reduce(_|_)
    counters.io.update.bits.takens           := this.commit.bits.ctrl.taken
+   counters.io.update.bits.was_mispredicted := this.commit.bits.ctrl.mispredicted.reduce(_|_)
+   counters.io.update.bits.do_initialize    := Bool(false)
 
    //------------------------------------------------------------
 }
