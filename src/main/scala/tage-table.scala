@@ -67,11 +67,10 @@ class TageTableIo(
 
    // commit - update predictor tables (update u-bits)
    val update_usefulness = (new ValidIO(new TageUpdateUsefulInfo(index_sz))).flip
-   def UpdateUsefulness(idx: UInt, old_value: UInt, inc: Bool) =
+   def UpdateUsefulness(idx: UInt, inc: Bool) =
    {
       this.update_usefulness.valid := Bool(true)
       this.update_usefulness.bits.index := idx
-      this.update_usefulness.bits.old_value := old_value
       this.update_usefulness.bits.inc := inc
    }
 
@@ -111,7 +110,6 @@ class TageTableIo(
       this.update_counters.bits.executed := UInt(0)
       this.update_counters.bits.taken := UInt(0)
       this.update_usefulness.bits.index := UInt(0)
-      this.update_usefulness.bits.old_value := UInt(0)
       this.update_usefulness.bits.inc := Bool(false)
       this.usefulness_req_idx := UInt(0)
    }
@@ -148,7 +146,6 @@ class TageIndex(index_sz: Int) extends Bundle
 class TageUpdateUsefulInfo(index_sz: Int) extends Bundle
 {
    val index = UInt(width = index_sz)
-   val old_value = UInt(width = 2) // TODO ubit-sz
    val inc = Bool()
    override def cloneType: this.type = new TageUpdateUsefulInfo(index_sz).asInstanceOf[this.type]
 }
@@ -442,14 +439,13 @@ class TageTable(
 
    val ub_write_inc = io.update_usefulness.bits.inc
    val ub_write_idx = io.update_usefulness.bits.index(index_sz-1,0)
-   val ub_old_value = io.update_usefulness.bits.old_value
    when (io.update_usefulness.valid)
    {
-      ubit_table.io.update(ub_write_idx, ub_old_value, ub_write_inc)
+      ubit_table.io.update(ub_write_idx, ub_write_inc)
    }
 
    val ub_read_idx = io.usefulness_req_idx(index_sz-1,0)
    ubit_table.io.s0_read_idx := ub_read_idx
-   io.usefulness_resp := ubit_table.io.s1_read_out
+   io.usefulness_resp := ubit_table.io.s2_is_useful
 }
 

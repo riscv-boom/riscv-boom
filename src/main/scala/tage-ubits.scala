@@ -34,7 +34,7 @@ abstract class TageUbitMemory(
    {
       // send read addr on cycle 0, get data out on cycle 2.
       val s0_read_idx = UInt(INPUT, width = index_sz)
-      val s1_read_out = UInt(OUTPUT, width = ubit_sz)
+      val s2_is_useful = Bool(OUTPUT)
 
 
       val allocate_valid  = Bool(INPUT)
@@ -47,13 +47,11 @@ abstract class TageUbitMemory(
 
       val update_valid  = Bool(INPUT)
       val update_idx = UInt(INPUT, width = index_sz)
-      val update_old_value  = UInt(INPUT, width = ubit_sz)
       val update_inc = Bool(INPUT)
-      def update(idx: UInt, old_value: UInt, inc: Bool) =
+      def update(idx: UInt, inc: Bool) =
       {
          this.update_valid  := Bool(true)
          this.update_idx := idx
-         this.update_old_value := old_value
          this.update_inc := inc
       }
 
@@ -76,7 +74,6 @@ abstract class TageUbitMemory(
          this.allocate_idx := UInt(0)
          this.update_valid := Bool(false)
          this.update_idx := UInt(0)
-         this.update_old_value := UInt(0)
          this.update_inc := Bool(false)
          this.degrade_valid := Bool(false)
 //         this.is_degrading := Bool(false)
@@ -106,8 +103,7 @@ class TageUbitMemorySeqMem(
 
    //------------------------------------------------------------
 
-//   val ubit_table = SeqMem(num_entries, UInt(width = ubit_sz))
-   val ubit_table       = Mem(num_entries, UInt(width = ubit_sz))
+   val ubit_table       = SeqMem(num_entries, UInt(width = ubit_sz))
 
    // maintain an async copy purely for assertions
    val debug_ubit_table = Mem(num_entries, UInt(width = ubit_sz))
@@ -121,44 +117,47 @@ class TageUbitMemorySeqMem(
 
    //------------------------------------------------------------
 
-   // TODO add a read_enable (only reads on commit.valid within TAGE)
-//   val s1_out = ubit_table.read(io.s0_read_idx, Bool(true))
-   val s1_out = RegNext(ubit_table(io.s0_read_idx))
-   io.s1_read_out :=
-      s1_out |
+   val s1_read_idx = RegNext(io.s0_read_idx)
+   val s2_bypass_useful =
       RegNext(
-         (io.allocate_valid && io.allocate_idx === io.s0_read_idx) |
-         (io.update_valid && io.update_inc && io.update_idx === io.s0_read_idx))
+         (io.allocate_valid && io.allocate_idx === s1_read_idx) ||
+         (io.update_valid && io.update_inc && io.update_idx === s1_read_idx))
 
 
-   when (RegNext(debug_valids(io.s0_read_idx)))
-   {
-      assert (s1_out === RegNext(debug_ubit_table(io.s0_read_idx)),
-         "[ubits] value doesn't match debug copy.")
-   }
+   // TODO add a read_enable (only reads on commit.valid within TAGE).
+   // But must add assert that allocate/update is always following a Reg(read-enable).
+   val s2_out = RegNext(ubit_table.read(io.s0_read_idx, Bool(true)))
+   io.s2_is_useful := s2_out =/= UInt(0) || s2_bypass_useful
+
+   // TODO: missing the bypassing in cycle1.
+//   when (RegNext(RegNext(debug_valids(io.s0_read_idx))))
+//   {
+//      assert (s2_out === RegNext(RegNext(debug_ubit_table(io.s0_read_idx))),
+//         "[ubits] value doesn't match debug copy.")
+//   }
 
    //------------------------------------------------------------
    // Compute update values.
    // We're performing a read-modify-write here. However, b/c SRAM,
-   // the read was performed on Cycle s0, so we need to bypass any
-   // updates that occurred.
+   // the read was performed on Cycle s1, so we need to bypass any
+   // updates that only became visible on Cycle s2.
 
    // bypass updates from the previous cycle.
-   val bypass_alloc = RegNext(io.allocate_valid && io.allocate_idx === io.s0_read_idx)
-   val bypass_upinc = RegNext(io.update_valid && io.update_inc && io.update_idx === io.s0_read_idx)
-   val bypass_updec = RegNext(io.update_valid && !io.update_inc && io.update_idx === io.s0_read_idx)
+   val bypass_alloc = RegNext(io.allocate_valid && io.allocate_idx === s1_read_idx)
+   val bypass_upinc = RegNext(io.update_valid && io.update_inc && io.update_idx === s1_read_idx)
+   val bypass_updec = RegNext(io.update_valid && !io.update_inc && io.update_idx === s1_read_idx)
 
    val u = Wire(UInt(width=ubit_sz+1))
    u :=
       Mux(bypass_alloc,
          UInt(UBIT_INIT),
-      Mux(bypass_upinc && s1_out =/= UInt(UBIT_MAX),
-         s1_out + UInt(1),
-      Mux(bypass_updec && s1_out =/= UInt(0),
-         s1_out - UInt(1),
-         s1_out)))
+      Mux(bypass_upinc && s2_out =/= UInt(UBIT_MAX),
+         s2_out + UInt(1),
+      Mux(bypass_updec && s2_out =/= UInt(0),
+         s2_out - UInt(1),
+         s2_out)))
 
-   assert (!(bypass_alloc && s1_out =/= UInt(0)), "[ubit] allocation occurred but s1_out wasn't zero")
+   assert (!(bypass_alloc && s2_out =/= UInt(0)), "[ubit] allocation occurred but s2_out wasn't zero")
    assert (!(u >> ubit_sz), "[ubit] next value logic wrapped around.")
 
    val inc = io.update_inc
@@ -169,31 +168,32 @@ class TageUbitMemorySeqMem(
          u - UInt(1),
          u))
 
-   when (io.allocate_valid)
-   {
-      val a_idx = io.allocate_idx
-      ubit_table(a_idx) := UInt(UBIT_INIT)
-      debug_ubit_table(a_idx) := UInt(UBIT_INIT)
-   }
-   when (io.update_valid)
-   {
-      val up_idx = RegNext(io.s0_read_idx)
-      ubit_table(up_idx) := next_u
-      debug_ubit_table(up_idx) := next_u
-      assert (!io.allocate_valid, "[ubits] trying to allocate.")
 
-      assert (io.update_old_value === io.s1_read_out, "[ubits] value being returned is not what we sent out.")
-      assert (io.update_idx === RegNext(io.s0_read_idx), "[ubits] update index not matching what was used for reading.")
+   val wen = io.allocate_valid || io.update_valid
+   val wdata = Mux(io.allocate_valid, UInt(UBIT_INIT), next_u)
+   val waddr = Mux(io.allocate_valid, io.allocate_idx, RegNext(RegNext(io.s0_read_idx)))
+
+   when (wen)
+   {
+      ubit_table(waddr) := wdata
+      debug_ubit_table(waddr) := wdata
    }
 
    //------------------------------------------------------------
+
    when (io.allocate_valid)
    {
       debug_valids(io.allocate_idx) := Bool(true)
    }
 
-   val r_debug_allocate_value = RegNext(debug_ubit_table(io.allocate_idx))
-   when (RegNext(io.allocate_valid && debug_valids(io.allocate_idx)))
+   when (io.update_valid)
+   {
+      assert (!io.allocate_valid, "[ubits] trying to allocate.")
+      assert (io.update_idx === RegNext(RegNext(io.s0_read_idx)), "[ubits] update index not matching what was used for reading.")
+   }
+
+   val r_debug_allocate_value = RegNext(RegNext(debug_ubit_table(io.allocate_idx)))
+   when (RegNext(RegNext(io.allocate_valid && debug_valids(io.allocate_idx))))
    {
       assert(r_debug_allocate_value === UInt(0), "[ubits] Tried to allocate a useful entry")
    }

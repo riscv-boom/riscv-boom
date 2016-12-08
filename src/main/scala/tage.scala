@@ -279,14 +279,16 @@ class TageBrPredictor(
    //------------------------------------------------------------
    // update predictor during commit
 
-   // Commit&Update takes 2 cycles.
-   //    - First cycle: read and compute any state necessary,
+   // Commit&Update takes 3 cycles.
+   //    - First cycle: begin read of state (u-bits).
+   //    - Second cycle: compute (some) updates.
    //    - Second cycle: perform updates.
    // Specifically, the u-bits are "read-do-stuff-write", so spreading
-   // across two-cycles is a requirement.
+   // across three-cycles is a requirement:
+   //    (address setup, read, compute/write).
 
    //-------------------------------------------------------------
-   // Cycle 0 - get info
+   // Cycle 0 and 1 - read info
 
    val info = new TageResp(
       fetch_width = fetch_width,
@@ -303,25 +305,23 @@ class TageBrPredictor(
       assert (info.provider_id < UInt(num_tables) || !info.provider_hit, "[Tage] provider_id is out-of-bounds.")
    }
 
-   val r_ubits = Range(0, num_tables).map{ i =>
-      tables_io(i).GetUsefulness(info.indexes(i), log2Up(table_sizes(i)))
+   // TODO verify this behavior/logic is correct (re: toBits/Vec conversion)
+   val s2_alt_agrees = RegNext(RegNext(
+      info.alt_hit && (info.provider_predicted_takens & executed) === (info.alt_predicted_takens & executed)))
+
+   val s2_ubits_notuseful = Range(0, num_tables).map{ i =>
+      !(tables_io(i).GetUsefulness(info.indexes(i), log2Up(table_sizes(i))))
    }
-   val r_ubits_notuseful = r_ubits.map{_ === UInt(0)}
 
    //-------------------------------------------------------------
    // Cycle 1 - perform state changes
 
-   val r_commit = RegNext(commit)
-   val r_info = RegNext(info)
-   val r_provider_id = RegNext(info.provider_id)
-   val r_takens = RegNext(commit.bits.ctrl.taken.toBits)
-   val r_correct = RegNext(!commit.bits.ctrl.mispredicted.reduce(_|_))
-   val r_executed = RegNext(commit.bits.ctrl.executed.toBits)
-
-   // TODO verify this behavior/logic is correct (re: toBits/Vec conversion)
-   val r_alt_agrees = RegNext(
-      info.alt_hit && (info.provider_predicted_takens & executed) === (info.alt_predicted_takens & executed))
-
+   val s2_commit      = RegNext(RegNext(commit))
+   val s2_info        = RegNext(RegNext(info))
+   val s2_provider_id = RegNext(RegNext(info.provider_id))
+   val s2_takens      = RegNext(RegNext(commit.bits.ctrl.taken.toBits))
+   val s2_correct     = RegNext(RegNext(!commit.bits.ctrl.mispredicted.reduce(_|_)))
+   val s2_executed    = RegNext(RegNext(commit.bits.ctrl.executed.toBits))
 
 
    // provide some randomization to the allocation process
@@ -331,21 +331,21 @@ class TageBrPredictor(
    val ubit_update_wens = Wire(init = Vec.fill(num_tables) {Bool(false)})
    val ubit_update_incs = Wire(init = Vec.fill(num_tables) {Bool(false)})
 
-   when (r_commit.valid && r_commit.bits.ctrl.executed.reduce(_|_))
+   when (s2_commit.valid && s2_commit.bits.ctrl.executed.reduce(_|_))
    {
       // no matter what happens, update table that made a prediction
-      when (r_info.provider_hit)
+      when (s2_info.provider_hit)
       {
-         tables_io(r_provider_id).UpdateCounters(r_info.indexes(r_provider_id), r_executed, r_takens)
-         when (!r_alt_agrees)
+         tables_io(s2_provider_id).UpdateCounters(s2_info.indexes(s2_provider_id), s2_executed, s2_takens)
+         when (!s2_alt_agrees)
          {
-            ubit_update_wens(r_provider_id) := Bool(true)
-            ubit_update_incs(r_provider_id) := r_correct
+            ubit_update_wens(s2_provider_id) := Bool(true)
+            ubit_update_incs(s2_provider_id) := s2_correct
          }
       }
 
 
-      when (!r_correct && (r_provider_id < UInt(MAX_TABLE_ID) || !r_info.provider_hit))
+      when (!s2_correct && (s2_provider_id < UInt(MAX_TABLE_ID) || !s2_info.provider_hit))
       {
          // try to allocate a new entry
 
@@ -361,34 +361,34 @@ class TageBrPredictor(
          val temp = Mux(rand === UInt(3), UInt(2),
                       Mux(rand === UInt(2), UInt(1),
                                             UInt(0)))
-         val ridx = Mux((Cat(UInt(0), r_provider_id) + temp) >= UInt(MAX_TABLE_ID),
+         val ridx = Mux((Cat(UInt(0), s2_provider_id) + temp) >= UInt(MAX_TABLE_ID),
                      UInt(0),
                      temp)
 
 
          // find lowest alloc_idx where u_bits === 0
          val can_allocates = Range(0, num_tables).map{ i =>
-            r_ubits_notuseful(i) &&
-            ((UInt(i) > (Cat(UInt(0), r_provider_id) + ridx)) || !r_info.provider_hit)
+            s2_ubits_notuseful(i) &&
+            ((UInt(i) > (Cat(UInt(0), s2_provider_id) + ridx)) || !s2_info.provider_hit)
          }
 
          val alloc_id = PriorityEncoder(can_allocates)
          when (can_allocates.reduce(_|_))
          {
             tables_io(alloc_id).AllocateNewEntry(
-               r_info.indexes(alloc_id),
-               r_info.tags(alloc_id),
-               r_executed,
-               r_takens,
-               r_info.debug_br_pc,
-               r_info.debug_history_ptr)
+               s2_info.indexes(alloc_id),
+               s2_info.tags(alloc_id),
+               s2_executed,
+               s2_takens,
+               s2_info.debug_br_pc,
+               s2_info.debug_history_ptr)
          }
          .otherwise
          {
             //decrementUBits for tables[provider_id+1: T_max]
             for (i <- 0 until num_tables)
             {
-               when ((UInt(i) > r_provider_id) || !r_info.provider_hit)
+               when ((UInt(i) > s2_provider_id) || !s2_info.provider_hit)
                {
                   ubit_update_wens(i) := Bool(true)
                   ubit_update_incs(i) := Bool(false)
@@ -402,8 +402,8 @@ class TageBrPredictor(
    {
       when (ubit_update_wens(i))
       {
-         tables_io(i).UpdateUsefulness(r_info.indexes(i), r_ubits(i), inc=ubit_update_incs(i))
-         assert (r_commit.valid && r_commit.bits.ctrl.executed.reduce(_|_),
+         tables_io(i).UpdateUsefulness(s2_info.indexes(i), inc=ubit_update_incs(i))
+         assert (s2_commit.valid && s2_commit.bits.ctrl.executed.reduce(_|_),
             "[tage] updating ubits when not committing.")
       }
    }
