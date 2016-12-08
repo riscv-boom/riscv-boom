@@ -460,10 +460,10 @@ class TageTable(
    }
 
    val ub_read_idx = io.usefulness_req_idx(index_sz-1,0)
-   io.usefulness_resp :=
+   io.usefulness_resp := RegNext(
       ubit_table(ub_read_idx) |
       Mux(io.allocate.valid && a_idx === ub_read_idx, UInt(UBIT_INIT_VALUE), UInt(0)) |
-      Mux(io.update_usefulness.valid && ub_write_inc && ub_write_idx === ub_read_idx, UInt(UBIT_INIT_VALUE), UInt(0))
+      Mux(io.update_usefulness.valid && ub_write_inc && ub_write_idx === ub_read_idx, UInt(UBIT_INIT_VALUE), UInt(0)))
 
    //------------------------------------------------------------
    // Debug/Visualize

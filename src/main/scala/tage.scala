@@ -274,28 +274,6 @@ class TageBrPredictor(
 
    io.resp.bits.info := resp_info.toBits
 
-   if (DEBUG_PRINTF_TAGE)
-   {
-      printf("\n0x%x Prediction Hits Array, Provider: %d\n",
-         Vec(valids).toBits, resp_info.provider_id)
-   }
-   when (io.resp.valid)
-   {
-      //if (DEBUG_PRINTF_TAGE)
-      //{
-      //   printf("prediction made hit: PC 0x%x, ghistory=0x%x\n"
-      //      , RegEnable(RegEnable(io.req_pc, !stall), !stall)
-      //      , io.resp.bits.history
-      //   )
-      //}
-   }
-   .otherwise
-   {
-      if (DEBUG_PRINTF_TAGE)
-      {
-         printf("\n")
-      }
-   }
    require (log2Up(num_tables) <= resp_info.provider_id.getWidth)
 
    //------------------------------------------------------------
@@ -327,7 +305,7 @@ class TageBrPredictor(
    }
 
    val r_ubits = Range(0, num_tables).map{ i =>
-      RegNext(tables_io(i).GetUsefulness(info.indexes(i), log2Up(table_sizes(i))))
+      tables_io(i).GetUsefulness(info.indexes(i), log2Up(table_sizes(i)))
    }
    val r_ubits_notuseful = r_ubits.map{_ === UInt(0)}
 
@@ -362,7 +340,6 @@ class TageBrPredictor(
          tables_io(r_provider_id).UpdateCounters(r_info.indexes(r_provider_id), r_executed, r_takens)
          when (!r_alt_agrees)
          {
-//            tables_io(r_provider_id).UpdateUsefulness(r_info.indexes(r_provider_id), r_correct)
             ubit_update_wens(r_provider_id) := Bool(true)
             ubit_update_incs(r_provider_id) := r_correct
          }
@@ -410,12 +387,10 @@ class TageBrPredictor(
          .otherwise
          {
             //decrementUBits for tables[provider_id+1: T_max]
-            // TODO break this out, such that there's only one call to UpdateUseful
             for (i <- 0 until num_tables)
             {
                when ((UInt(i) > r_provider_id) || !r_info.provider_hit)
                {
-                  //tables_io(i).UpdateUsefulness(r_info.indexes(i), inc = Bool(false))
                   ubit_update_wens(i) := Bool(true)
                   ubit_update_incs(i) := Bool(false)
                }
