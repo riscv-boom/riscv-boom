@@ -33,8 +33,6 @@ class TageTableIo(
 
    // instruction fetch - request prediction
    val if_req_pc = UInt(INPUT, width = xLen)
-   // TODO XXX remove this, as it is unused
-   val if_req_history = UInt(INPUT, width = history_length)
 
    // bp2 - send prediction to bpd pipeline
    val bp2_resp = new DecoupledIO(new TageTableResp(fetch_width, history_length, log2Up(num_entries), tag_sz))
@@ -69,10 +67,11 @@ class TageTableIo(
 
    // commit - update predictor tables (update u-bits)
    val update_usefulness = (new ValidIO(new TageUpdateUsefulInfo(index_sz))).flip
-   def UpdateUsefulness(idx: UInt, inc: Bool) =
+   def UpdateUsefulness(idx: UInt, old_value: UInt, inc: Bool) =
    {
       this.update_usefulness.valid := Bool(true)
       this.update_usefulness.bits.index := idx
+      this.update_usefulness.bits.old_value := old_value
       this.update_usefulness.bits.inc := inc
    }
 
@@ -112,6 +111,7 @@ class TageTableIo(
       this.update_counters.bits.executed := UInt(0)
       this.update_counters.bits.taken := UInt(0)
       this.update_usefulness.bits.index := UInt(0)
+      this.update_usefulness.bits.old_value := UInt(0)
       this.update_usefulness.bits.inc := Bool(false)
       this.usefulness_req_idx := UInt(0)
    }
@@ -148,6 +148,7 @@ class TageIndex(index_sz: Int) extends Bundle
 class TageUpdateUsefulInfo(index_sz: Int) extends Bundle
 {
    val index = UInt(width = index_sz)
+   val old_value = UInt(width = 2) // TODO ubit-sz
    val inc = Bool()
    override def cloneType: this.type = new TageUpdateUsefulInfo(index_sz).asInstanceOf[this.type]
 }
@@ -244,11 +245,6 @@ class TageTable(
    //------------------------------------------------------------
    // functions
 
-   //updateHistory()
-   //clearUBit() TODO XXX
-
-
-
    private def Fold (input: UInt, compressed_length: Int) =
    {
       val clen = compressed_length
@@ -329,8 +325,6 @@ class TageTable(
 
    val stall = !io.bp2_resp.ready
 
-//   val p_idx       = IdxHashSimple(io.if_req_pc, io.if_req_history)
-//   val p_tag       = TagHashSimple(io.if_req_pc, io.if_req_history)
    val p_idx       = IdxHash(io.if_req_pc)
    val p_tag       = TagHash(io.if_req_pc)
    val counters    = counter_table(p_idx)
@@ -423,7 +417,6 @@ class TageTable(
          printf("[TageTable] out of bounds index on allocation, a_idx: %d, num_en: %d", a_idx, UInt(num_entries))
       }
       assert (a_idx < UInt(num_entries), "[TageTable] out of bounds index on allocation")
-//      assert (ubit_table(a_idx) === UInt(0), "[TageTable] Tried to allocate a useful entry")
    }
 
    val u_idx = io.update_counters.bits.index(index_sz-1,0)
@@ -449,62 +442,14 @@ class TageTable(
 
    val ub_write_inc = io.update_usefulness.bits.inc
    val ub_write_idx = io.update_usefulness.bits.index(index_sz-1,0)
+   val ub_old_value = io.update_usefulness.bits.old_value
    when (io.update_usefulness.valid)
    {
-      ubit_table.io.update(ub_write_idx, UInt(0), ub_write_inc)
-//      val u = ubit_table(ub_write_idx)
-//      ubit_table(ub_write_idx) :=
-//         Mux(ub_write_inc && u < UInt(UBIT_MAX),
-//            u + UInt(1),
-//         Mux(!ub_write_inc && u > UInt(0),
-//            u - UInt(1),
-//            u))
+      ubit_table.io.update(ub_write_idx, ub_old_value, ub_write_inc)
    }
 
    val ub_read_idx = io.usefulness_req_idx(index_sz-1,0)
    ubit_table.io.s0_read_idx := ub_read_idx
    io.usefulness_resp := ubit_table.io.s1_read_out
-//   io.usefulness_resp := RegNext(
-//      ubit_table(ub_read_idx) |
-//      Mux(io.allocate.valid && a_idx === ub_read_idx, UInt(UBIT_INIT_VALUE), UInt(0)) |
-//      Mux(io.update_usefulness.valid && ub_write_inc && ub_write_idx === ub_read_idx, UInt(UBIT_INIT_VALUE), UInt(0)))
-
-   //------------------------------------------------------------
-   // Debug/Visualize
-
-   if (DEBUG_PRINTF_TAGE)
-   {
-      require (num_entries < 64) // for sanity sake, don't allow larger.
-      printf("TAGETable: PC: 0x%x history: 0x%x, tag[%d]=0x%x, p_tag=0x%x " + "%c\n",
-         io.if_req_pc,
-         io.if_req_history(history_length-1,0) + UInt(0,64),
-         p_idx,
-         s2_tag + UInt(0,64),
-         TagHashSimple(io.if_req_pc, io.if_req_history),
-         Mux(s2_tag === RegNext(RegNext(p_tag)), Str("H"), Str(" "))
-      )
-
-      for (i <- 0 to num_entries-1 by 4)
-      {
-         val lst = Seq(4,6,8,12,13)
-         for (j <- 0 until 4)
-         {
-            //printf("(%d) [tag=0x%x]", UInt(i+j,8), tag_table(UInt(i+j)) & UInt(0xffff))
-            for (k <- 0 until fetch_width)
-            {
-               printf(" [c=%d]", counter_table(UInt(i+j))(k))
-            }
-//            printf(" [u=%d] " + "PC=0x%x hist=0x%x ",
-//               ubit_table(UInt(i+j)),
-//               (debug_pc_table(UInt(i+j)) & UInt(0xff))(11,0),
-//               debug_hist_ptr_table(UInt(i+j))
-//               )
-         }
-         printf("\n")
-      }
-      printf("\n")
-
-   }
-
 }
 

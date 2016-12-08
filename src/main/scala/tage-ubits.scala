@@ -84,7 +84,7 @@ abstract class TageUbitMemory(
    }
 
    val UBIT_MAX = (1 << ubit_sz) - 1
-   val UBIT_INIT_VALUE = 1
+   val UBIT_INIT = 1
    require(ubit_sz < 4) // What are you doing? You're wasting bits!
    assert(!(io.allocate_valid && io.update_valid), "[ubits] trying to update and allocate simultaneously.")
 }
@@ -123,24 +123,45 @@ class TageUbitMemorySeqMem(
 
    // TODO add a read_enable (only reads on commit.valid within TAGE)
 //   val s1_out = ubit_table.read(io.s0_read_idx, Bool(true))
-   val s0_out = (ubit_table(io.s0_read_idx))
-   io.s1_read_out := RegNext(
-      s0_out |
-         Mux(io.allocate_valid && io.allocate_idx === io.s0_read_idx, UInt(UBIT_INIT_VALUE), UInt(0)) |
-         Mux(io.update_valid && io.update_inc && io.update_idx === io.s0_read_idx, UInt(UBIT_INIT_VALUE), UInt(0)))
+   val s1_out = RegNext(ubit_table(io.s0_read_idx))
+   io.s1_read_out :=
+      s1_out |
+      RegNext(
+         (io.allocate_valid && io.allocate_idx === io.s0_read_idx) |
+         (io.update_valid && io.update_inc && io.update_idx === io.s0_read_idx))
 
 
    when (RegNext(debug_valids(io.s0_read_idx)))
    {
-      assert (RegNext(s0_out) === RegNext(debug_ubit_table(io.s0_read_idx)),
+      assert (s1_out === RegNext(debug_ubit_table(io.s0_read_idx)),
          "[ubits] value doesn't match debug copy.")
    }
 
    //------------------------------------------------------------
    // Compute update values.
+   // We're performing a read-modify-write here. However, b/c SRAM,
+   // the read was performed on Cycle s0, so we need to bypass any
+   // updates that occurred.
+
+   // bypass updates from the previous cycle.
+   val bypass_alloc = RegNext(io.allocate_valid && io.allocate_idx === io.s0_read_idx)
+   val bypass_upinc = RegNext(io.update_valid && io.update_inc && io.update_idx === io.s0_read_idx)
+   val bypass_updec = RegNext(io.update_valid && !io.update_inc && io.update_idx === io.s0_read_idx)
+
+   val u = Wire(UInt(width=ubit_sz+1))
+   u :=
+      Mux(bypass_alloc,
+         UInt(UBIT_INIT),
+      Mux(bypass_upinc && s1_out =/= UInt(UBIT_MAX),
+         s1_out + UInt(1),
+      Mux(bypass_updec && s1_out =/= UInt(0),
+         s1_out - UInt(1),
+         s1_out)))
+
+   assert (!(bypass_alloc && s1_out =/= UInt(0)), "[ubit] allocation occurred but s1_out wasn't zero")
+   assert (!(u >> ubit_sz), "[ubit] next value logic wrapped around.")
+
    val inc = io.update_inc
-//   val u = io.update_old_value //TODO XXX
-   val u = ubit_table(io.update_idx)
    val next_u =
       Mux(inc && u < UInt(UBIT_MAX),
          u + UInt(1),
@@ -151,16 +172,18 @@ class TageUbitMemorySeqMem(
    when (io.allocate_valid)
    {
       val a_idx = io.allocate_idx
-      ubit_table(a_idx) := UInt(UBIT_INIT_VALUE)
-      debug_ubit_table(a_idx) := UInt(UBIT_INIT_VALUE)
+      ubit_table(a_idx) := UInt(UBIT_INIT)
+      debug_ubit_table(a_idx) := UInt(UBIT_INIT)
    }
    when (io.update_valid)
    {
-      val up_idx = io.update_idx
+      val up_idx = RegNext(io.s0_read_idx)
       ubit_table(up_idx) := next_u
       debug_ubit_table(up_idx) := next_u
       assert (!io.allocate_valid, "[ubits] trying to allocate.")
 
+      assert (io.update_old_value === io.s1_read_out, "[ubits] value being returned is not what we sent out.")
+      assert (io.update_idx === RegNext(io.s0_read_idx), "[ubits] update index not matching what was used for reading.")
    }
 
    //------------------------------------------------------------

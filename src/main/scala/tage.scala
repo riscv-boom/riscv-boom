@@ -217,7 +217,6 @@ class TageBrPredictor(
 
       // Send prediction request. ---
       table.if_req_pc := io.req_pc
-      table.if_req_history := this.ghistory
 
       // update CSRs. ---
       table.br_resolution <> io.br_resolution
@@ -403,7 +402,7 @@ class TageBrPredictor(
    {
       when (ubit_update_wens(i))
       {
-         tables_io(i).UpdateUsefulness(r_info.indexes(i), inc=ubit_update_incs(i))
+         tables_io(i).UpdateUsefulness(r_info.indexes(i), r_ubits(i), inc=ubit_update_incs(i))
          assert (r_commit.valid && r_commit.bits.ctrl.executed.reduce(_|_),
             "[tage] updating ubits when not committing.")
       }
