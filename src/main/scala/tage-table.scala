@@ -400,7 +400,7 @@ class TageTable(
       counter_table.io.update.bits.executed         := io.update_counters.bits.executed.toBools
       counter_table.io.update.bits.was_mispredicted := io.update_counters.bits.mispredicted
       counter_table.io.update.bits.takens           := io.update_counters.bits.taken.toBools
-      counter_table.io.update.bits.do_initialize    := Bool(true)
+      counter_table.io.update.bits.do_initialize    := Bool(false)
    }
 
    when (io.update_usefulness.valid)
