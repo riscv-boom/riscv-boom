@@ -57,12 +57,13 @@ class TageTableIo(
 
    // commit - update predictor tables (update counters)
    val update_counters = (new ValidIO(new TageUpdateCountersInfo(fetch_width, index_sz))).flip
-   def UpdateCounters(idx: UInt, executed: UInt, taken: UInt) =
+   def UpdateCounters(idx: UInt, executed: UInt, taken: UInt, mispredicted: Bool) =
    {
       this.update_counters.valid := Bool(true)
       this.update_counters.bits.index := idx
       this.update_counters.bits.executed := executed
       this.update_counters.bits.taken := taken
+      this.update_counters.bits.mispredicted := mispredicted
    }
 
    // commit - update predictor tables (update u-bits)
@@ -109,6 +110,7 @@ class TageTableIo(
       this.update_counters.bits.index := UInt(0)
       this.update_counters.bits.executed := UInt(0)
       this.update_counters.bits.taken := UInt(0)
+      this.update_counters.bits.mispredicted := Bool(false)
       this.update_usefulness.bits.index := UInt(0)
       this.update_usefulness.bits.inc := Bool(false)
       this.usefulness_req_idx := UInt(0)
@@ -166,6 +168,7 @@ class TageUpdateCountersInfo(fetch_width: Int, index_sz: Int) extends Bundle //e
    val index = UInt(width = index_sz)
    val executed = UInt(width = fetch_width)
    val taken = UInt(width = fetch_width)
+   val mispredicted = Bool()
    override def cloneType: this.type = new TageUpdateCountersInfo(fetch_width, index_sz).asInstanceOf[this.type]
 }
 
@@ -213,9 +216,11 @@ class TageTable(
       + tag_sz + "-bit tags, "
       + counter_sz + "-bit counters (max value=" + CNTR_MAX + ")")
 
+   assert (counter_sz == 2)
+
    //------------------------------------------------------------
    // State
-   val counter_table = Mem(num_entries, Vec(fetch_width, UInt(width = counter_sz)))
+   val counter_table = Module(new TwobcCounterTable(fetch_width, num_entries, dualported=false))
    val tag_table     = Module(new TageTagMemory(num_entries, memwidth = tag_sz))
    val ubit_table    = Module(new TageUbitMemorySeqMem(num_entries, ubit_sz))
    val debug_pc_table= Mem(num_entries, UInt(width = 32))
@@ -284,39 +289,6 @@ class TageTable(
       tag_hash(tag_sz-1,0)
    }
 
-   private def IdxHashSimple (addr: UInt, hist: UInt) =
-   {
-      ((addr >> UInt(log2Up(fetch_width*coreInstBytes))) ^ Fold(hist(history_length-1,0), index_sz))(index_sz-1,0)
-   }
-
-   private def TagHashSimple (addr: UInt, hist: UInt) =
-   {
-      // the tag is computed by pc[n:0] ^ CSR1[n:0] ^ (CSR2[n-1:0]<<1).
-      val tag_hash =
-         (addr >> UInt(log2Up(fetch_width*coreInstBytes))) ^
-         Fold(hist,  index_sz) ^
-         (Fold(hist, index_sz-1) << UInt(1))
-      tag_hash(tag_sz-1,0)
-   }
-
-   private def GetPrediction(cntr: UInt): Bool =
-   {
-      // return highest-order bit
-      (cntr >> UInt(counter_sz-1))(0).toBool
-   }
-
-   private def BuildAllocCounterRow(enables: UInt, takens: UInt): Vec[UInt] =
-   {
-      val counters = for (i <- 0 until fetch_width) yield
-      {
-         Mux(!enables(i) || !takens(i),
-            UInt(CNTR_WEAK_NOTTAKEN),
-            UInt(CNTR_WEAK_TAKEN))
-      }
-      Vec(counters)
-   }
-
-
    //------------------------------------------------------------
    // Get Prediction
 
@@ -324,15 +296,17 @@ class TageTable(
 
    val p_idx       = IdxHash(io.if_req_pc)
    val p_tag       = TagHash(io.if_req_pc)
-   val counters    = counter_table(p_idx)
+
+   counter_table.io.s0_r_idx := p_idx
    tag_table.io.s0_r_idx := p_idx
+   counter_table.io.stall := stall
    tag_table.io.stall := stall
 
    val s2_tag      = tag_table.io.s2_r_out
    val bp2_tag_hit = s2_tag === RegEnable(RegEnable(p_tag, !stall), !stall)
 
    io.bp2_resp.valid       := bp2_tag_hit
-   io.bp2_resp.bits.takens := RegEnable(RegEnable(Vec(counters.map(GetPrediction(_))).toBits, !stall), !stall)
+   io.bp2_resp.bits.takens := counter_table.io.s2_r_out
    io.bp2_resp.bits.index  := RegEnable(RegEnable(p_idx, !stall), !stall)(index_sz-1,0)
    io.bp2_resp.bits.tag    := RegEnable(RegEnable(p_tag, !stall), !stall)(tag_sz-1,0)
 
@@ -380,7 +354,7 @@ class TageTable(
    //------------------------------------------------------------
    // Update Commit-CSRs (Commit)
 
-   val folded_com_hist = Fold(io.debug_ghistory_commit_copy(history_length-1,0), index_sz)
+   val debug_folded_com_hist = Fold(io.debug_ghistory_commit_copy(history_length-1,0), index_sz)
    when (io.commit_csr_update.valid)
    {
       val com_taken = io.commit_csr_update.bits.new_bit
@@ -390,58 +364,48 @@ class TageTable(
       commit_tag_csr2.io.shift(com_taken, com_evict)
    }
 
-// TODO XXX unlease this comparision
-//   assert (idx_csr.io.value === Fold(io.if_req_history, index_sz), "[TageTable] idx_csr not matching Fold() value.")
-   assert (commit_idx_csr.io.value === folded_com_hist, "[TageTable] idx_csr not matching Fold() value.")
+   assert (commit_idx_csr.io.value === debug_folded_com_hist, "[TageTable] idx_csr not matching Fold() value.")
 
 
    //------------------------------------------------------------
    // Update (Commit)
 
-   val init_counter_row = BuildAllocCounterRow(io.allocate.bits.executed, io.allocate.bits.taken)
-   val a_idx = io.allocate.bits.index(index_sz-1,0)
+
+   assert(!(io.allocate.valid && io.update_counters.valid),
+      "[tage-table] trying to allocate and update the counters simultaneously.")
+
    when (io.allocate.valid)
    {
+      val a_idx = io.allocate.bits.index(index_sz-1,0)
+
       ubit_table.io.allocate(a_idx)
-      counter_table(a_idx) := init_counter_row
       tag_table.io.write(a_idx, io.allocate.bits.tag(tag_sz-1,0))
+
+      counter_table.io.update.valid                 := Bool(true)
+      counter_table.io.update.bits.index            := a_idx
+      counter_table.io.update.bits.executed         := io.allocate.bits.executed.toBools
+      counter_table.io.update.bits.was_mispredicted := Bool(true)
+      counter_table.io.update.bits.takens           := io.allocate.bits.taken.toBools
+      counter_table.io.update.bits.do_initialize    := Bool(true)
 
       debug_pc_table(a_idx) := io.allocate.bits.debug_pc
       debug_hist_ptr_table(a_idx) := io.allocate.bits.debug_hist_ptr(history_length-1,0)
 
-      when (!(a_idx < UInt(num_entries)))
-      {
-         printf("[TageTable] out of bounds index on allocation, a_idx: %d, num_en: %d", a_idx, UInt(num_entries))
-      }
       assert (a_idx < UInt(num_entries), "[TageTable] out of bounds index on allocation")
    }
-
-   val u_idx = io.update_counters.bits.index(index_sz-1,0)
-   val u_counter_row = counter_table(u_idx)
-   val updated_row = Wire(u_counter_row.cloneType)
-   updated_row.map(_ := UInt(0))
-   when (io.update_counters.valid)
+   .elsewhen (io.update_counters.valid)
    {
-      for (i <- 0 until fetch_width)
-      {
-         val enable = io.update_counters.bits.executed(i)
-         val inc = io.update_counters.bits.taken(i)
-         val value = u_counter_row(i)
-         updated_row(i) :=
-            Mux(enable && inc && value < UInt(CNTR_MAX),
-               value + UInt(1),
-            Mux(enable && !inc && value > UInt(0),
-               value - UInt(1),
-               value))
-      }
-      counter_table(u_idx) := updated_row
+      counter_table.io.update.valid                 := Bool(true)
+      counter_table.io.update.bits.index            := io.update_counters.bits.index
+      counter_table.io.update.bits.executed         := io.update_counters.bits.executed.toBools
+      counter_table.io.update.bits.was_mispredicted := io.update_counters.bits.mispredicted
+      counter_table.io.update.bits.takens           := io.update_counters.bits.taken.toBools
+      counter_table.io.update.bits.do_initialize    := Bool(true)
    }
 
-   val ub_write_inc = io.update_usefulness.bits.inc
-   val ub_write_idx = io.update_usefulness.bits.index(index_sz-1,0)
    when (io.update_usefulness.valid)
    {
-      ubit_table.io.update(ub_write_idx, ub_write_inc)
+      ubit_table.io.update(io.update_usefulness.bits.index(index_sz-1,0), io.update_usefulness.bits.inc)
    }
 
    val ub_read_idx = io.usefulness_req_idx(index_sz-1,0)

@@ -22,15 +22,11 @@
 //       Register" elsewhere in BOOM).
 
 // TODO:
-//    - make predictor sequential (first show it works, then make it sequential)
-//    - SRAM handling
 //    - alt-pred tracking (choosing between +2 tables, sometimes using alt pred if u is low)
-//    - u-bit handling, clearing (count failed allocations?)
-//    - banking
+//    - u-bit handling, clearing (count failed allocations)
 //    - lower required parameters, arguments to bundles and objects
 //    - able to allocate >1 tables
 //    - allow bypassing out of the BROB
-//    - useful-ness port count (updating when provided prediction, separate from decrementing if no alloc
 //    - brpredictor seems to couple fetch-width and commit-width :(
 //    - do ALL the tags need to be tracked? can we compute alloc_id during prediction?
 //       - no, maintain commit-copy of CSRs, pass in committed Fetch_pC to recompute
@@ -336,7 +332,7 @@ class TageBrPredictor(
       // no matter what happens, update table that made a prediction
       when (s2_info.provider_hit)
       {
-         tables_io(s2_provider_id).UpdateCounters(s2_info.indexes(s2_provider_id), s2_executed, s2_takens)
+         tables_io(s2_provider_id).UpdateCounters(s2_info.indexes(s2_provider_id), s2_executed, s2_takens, !s2_correct)
          when (!s2_alt_agrees)
          {
             ubit_update_wens(s2_provider_id) := Bool(true)
