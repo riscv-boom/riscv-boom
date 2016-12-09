@@ -84,6 +84,13 @@ abstract class TageUbitMemory(
    val UBIT_INIT = 1
    require(ubit_sz < 4) // What are you doing? You're wasting bits!
    assert(!(io.allocate_valid && io.update_valid), "[ubits] trying to update and allocate simultaneously.")
+
+   when (io.update_valid)
+   {
+      assert (io.update_idx === RegNext(RegNext(io.s0_read_idx)),
+         "[ubits] update index not matching what was used for reading.")
+   }
+
 }
 
 //--------------------------------------------------------------------------
@@ -95,12 +102,6 @@ class TageUbitMemorySeqMem(
    ubit_sz: Int
    ) extends TageUbitMemory(num_entries, ubit_sz)
 {
-   // TODO XXX
-   // we don't currently support >1 ubit_sz versions until we finish supporting
-   // the clearing of the u-bits. As this takes many cycles, we need to add
-   // support for the ubit table to tell TAGE to not start counting
-   // failed_allocs until we finish the degrading.
-
    //------------------------------------------------------------
 
    val ubit_table       = SeqMem(num_entries, UInt(width = ubit_sz))
@@ -196,6 +197,65 @@ class TageUbitMemorySeqMem(
    when (RegNext(RegNext(io.allocate_valid && debug_valids(io.allocate_idx))))
    {
       assert(r_debug_allocate_value === UInt(0), "[ubits] Tried to allocate a useful entry")
+   }
+}
+
+//--------------------------------------------------------------------------
+//--------------------------------------------------------------------------
+// This version implements the u-bits in a sinlge register --
+// allows for single-cycle reset.
+class TageUbitMemoryFlipFlop(
+   num_entries: Int,
+   ubit_sz: Int=1
+   ) extends TageUbitMemory(num_entries, ubit_sz)
+{
+
+   //------------------------------------------------------------
+
+   require (ubit_sz == 1)
+   // TODO implement each bit as its own Reg.
+   val ubit_table       = Reg(UInt(width=num_entries))
+
+   //------------------------------------------------------------
+
+   val s1_read_idx = RegNext(io.s0_read_idx)
+   val s2_out = ubit_table(RegNext(s1_read_idx))
+   io.s2_is_useful := s2_out =/= UInt(0)
+
+   //------------------------------------------------------------
+   // Compute update values.
+
+   val u = s2_out
+
+   val inc = io.update_inc
+   val next_u =
+      Mux(inc && u < UInt(UBIT_MAX),
+         u + UInt(1),
+      Mux(!inc && u > UInt(0),
+         u - UInt(1),
+         u))
+
+
+   val wen = io.allocate_valid || io.update_valid
+   val wdata = Mux(io.allocate_valid, UInt(UBIT_INIT), next_u)
+   val waddr = Mux(io.allocate_valid, io.allocate_idx, RegNext(RegNext(io.s0_read_idx)))
+
+   when (io.degrade_valid)
+   {
+      ubit_table := UInt(0)
+   }
+   .elsewhen (wen)
+   {
+      ubit_table := ubit_table.bitSet(waddr, wdata.toBool)
+   }
+   require (ubit_sz == 1)
+   require (wdata.getWidth == 1)
+
+   //------------------------------------------------------------
+
+   when (io.allocate_valid)
+   {
+      assert(ubit_table(io.allocate_idx) === UInt(0), "[ubits] Tried to allocate a useful entry")
    }
 }
 

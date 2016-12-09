@@ -57,7 +57,8 @@ case class TageParameters(
    num_tables: Int = 4,
    table_sizes: Seq[Int] = Seq(4096,4096,2048,2048),
    history_lengths: Seq[Int] = Seq(5,17,44,130),
-   tag_sizes: Seq[Int] = Seq(10,10,10,11))
+   tag_sizes: Seq[Int] = Seq(10,10,10,11),
+   ubit_sz: Int = 1)
 
 class TageResp(
    fetch_width: Int,
@@ -120,14 +121,14 @@ class TageBrPredictor(
    num_tables: Int,
    table_sizes: Seq[Int],
    history_lengths: Seq[Int],
-   tag_sizes: Seq[Int]
+   tag_sizes: Seq[Int],
+   ubit_sz: Int
    )(implicit p: Parameters)
    extends BrPredictor(
       fetch_width    = fetch_width,
       history_length = history_lengths.max)(p)
 {
    val counter_sz = 2
-   val ubit_sz = 2
    val size_in_bits = (for (i <- 0 until num_tables) yield
    {
       val entry_sz_in_bits = tag_sizes(i) + ubit_sz + (counter_sz*fetch_width)
@@ -307,6 +308,20 @@ class TageBrPredictor(
 
    val s2_ubits_notuseful = Range(0, num_tables).map{ i =>
       !(tables_io(i).GetUsefulness(info.indexes(i), log2Up(table_sizes(i))))
+   }
+
+   //-------------------------------------------------------------
+   // Track ubit degrade flush timer.
+
+   val degrade_counter = util.WideCounter(20, commit.valid && commit.bits.ctrl.executed.reduce(_|_))
+   val do_degrade = degrade_counter === UInt(1<<19)
+   when (do_degrade)
+   {
+      degrade_counter := UInt(0)
+      for (i <- 0 until num_tables)
+      {
+         tables_io(i).DegradeUsefulness()
+      }
    }
 
    //-------------------------------------------------------------
