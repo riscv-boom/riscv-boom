@@ -14,10 +14,6 @@
 //    - U-bits provide a "usefulness" metric for each entry in a TAGE predictor.
 //    - Only allocate for entries that are "not useful".
 //    - Occasionally, degrade entries to prevent unused entries from never leaving.
-//
-// TODO:
-//    - Allow 1-bit and 2-bit implementations.
-//    - Allow for changing out zeroing policies.
 
 package boom
 
@@ -61,12 +57,12 @@ abstract class TageUbitMemory(
          this.degrade_valid := Bool(true)
       }
 
-//      // Degrading may take many cycles. Tell the tage-table if we are degrading.
-//      val is_degrading = Bool(OUTPUT)
-//      def areDegrading(dummy: Int=0) =
-//      {
-//         this.is_degrading
-//      }
+      // Degrading may take many cycles. Tell the tage-table if we are degrading.
+      val is_degrading = Bool(OUTPUT)
+      def areDegrading(dummy: Int=0) =
+      {
+         this.is_degrading
+      }
 
       def InitializeIo(dummy: Int=0) =
       {
@@ -76,7 +72,7 @@ abstract class TageUbitMemory(
          this.update_idx := UInt(0)
          this.update_inc := Bool(false)
          this.degrade_valid := Bool(false)
-//         this.is_degrading := Bool(false)
+         this.is_degrading := Bool(false)
       }
    }
 
@@ -216,11 +212,20 @@ class TageUbitMemoryFlipFlop(
    // TODO implement each bit as its own Reg.
    val ubit_table       = Reg(UInt(width=num_entries))
 
+   val debug_ubit_table = Mem(num_entries, UInt(width = ubit_sz))
+   val debug_valids     = Reg(init=Vec.fill(num_entries){Bool(false)})
+
    //------------------------------------------------------------
 
    val s1_read_idx = RegNext(io.s0_read_idx)
-   val s2_out = ubit_table(RegNext(s1_read_idx))
+   val s2_read_idx = RegNext(s1_read_idx)
+   val s2_out = ubit_table(s2_read_idx)
    io.s2_is_useful := s2_out =/= UInt(0)
+
+   when (debug_valids(s2_read_idx))
+   {
+      assert(s2_out === debug_ubit_table(s2_read_idx), "[ubits] mismatch on output.")
+   }
 
    //------------------------------------------------------------
    // Compute update values.
@@ -247,6 +252,8 @@ class TageUbitMemoryFlipFlop(
    .elsewhen (wen)
    {
       ubit_table := ubit_table.bitSet(waddr, wdata.toBool)
+      debug_ubit_table(waddr) := wdata
+      debug_valids(waddr) := Bool(true)
    }
    require (ubit_sz == 1)
    require (wdata.getWidth == 1)
