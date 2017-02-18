@@ -48,7 +48,7 @@ class DefaultBOOMConfig extends Config (
          // Branch Predictor (enable one of the following:)
          case EnableBranchPredictor => true
          case TageKey => TageParameters(
-            enabled = true,
+            enabled = false,
             // 25 kB
             //num_tables      = 12,
             //table_sizes     = Seq(1024,1024,1024,1024,1024,1024,1024,1024,1024,1024,1024,512),
@@ -68,8 +68,8 @@ class DefaultBOOMConfig extends Config (
             enabled = false,
             enable_meta = true)
          case GShareKey => GShareParameters(
-            enabled = false,
-            history_length = 15,
+            enabled = true,
+            history_length = 12,
             dualported = false)
          case SimpleGShareKey => SimpleGShareParameters(
             enabled = false,
