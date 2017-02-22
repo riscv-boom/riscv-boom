@@ -15,6 +15,7 @@ import coreplex._
 import rocketchip._
 import rocket._
 import boom._
+import broom._
 import DefaultTestSuites._
 import cde.{Parameters, Config, Dump, Knob}
 
@@ -55,7 +56,7 @@ class WithAllBooms extends Config(
 
 // scalastyle:off
 
-class SmallBOOMConfig  extends Config(new WithSmallBOOMs  ++ new WithAllBooms ++ new DefaultBOOMConfig ++ new BaseConfig)
+class SmallBOOMConfig  extends Config(new WithBroomTop ++ new WithSmallBOOMs  ++ new WithAllBooms ++ new DefaultBOOMConfig ++ new BaseConfig)
 class MediumBOOMConfig extends Config(new WithMediumBOOMs ++ new WithAllBooms ++ new DefaultBOOMConfig ++ new DefaultL2Config)
 class MegaBOOMConfig   extends Config(new WithMegaBOOMs   ++ new WithAllBooms ++ new DefaultBOOMConfig ++ new DefaultL2Config)
 
