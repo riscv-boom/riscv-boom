@@ -69,7 +69,7 @@ class DefaultBOOMConfig extends Config (
             enable_meta = true)
          case GShareKey => GShareParameters(
             enabled = true,
-            history_length = 12,
+            history_length = 11,
             dualported = false)
          case SimpleGShareKey => SimpleGShareParameters(
             enabled = false,
