@@ -13,7 +13,7 @@ package boom
 
 import Chisel._
 import FUConstants._
-import cde.Parameters
+import config.Parameters
 
 class IssueSlotIO(num_wakeup_ports: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {

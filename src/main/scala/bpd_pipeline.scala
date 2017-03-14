@@ -23,7 +23,7 @@
 package boom
 
 import Chisel._
-import cde.Parameters
+import config.Parameters
 
 import util.Str
 
@@ -71,6 +71,7 @@ class BranchPrediction(implicit p: Parameters) extends BoomBundle()(p)
 }
 
 class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p)
+   with HasBoomCoreParameters
 {
    val io = new BoomBundle()(p)
    {
@@ -464,7 +465,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
       }
    }
 
-   if (!p(EnableBTB))
+   if (!enableBTB)
    {
       assert (!(io.btb_resp.valid), "[bpd_pipeline] BTB predicted, but it's been disabled.")
    }

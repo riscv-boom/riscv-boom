@@ -10,7 +10,7 @@
 package boom
 
 import Chisel._
-import cde.Parameters
+import config.Parameters
 
 import util.Str
 
@@ -32,6 +32,7 @@ class FetchBundle(implicit p: Parameters) extends BoomBundle()(p)
 
 
 class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p)
+   with HasBoomCoreParameters
 {
    val io = new BoomBundle()(p)
    {
@@ -70,7 +71,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    val FetchBuffer = Module(new Queue(gen=new FetchBundle,
                                 entries=FETCH_BUFFER_SZ,
                                 pipe=false,
-                                flow=p(EnableFetchBufferFlowThrough),
+                                flow=enableFetchBufferFlowThrough,
                                 _reset=(io.clear_fetchbuffer || reset.toBool)))
 
    if (O3PIPEVIEW_PRINTF)
@@ -133,7 +134,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
       }
    }
 
-   if (p(EnableBTB))
+   if (enableBTB)
    {
       io.imem.btb_update.valid := (br_unit.btb_update_valid ||
                                     (io.bp2_take_pc && io.bp2_is_taken && !if_stalled && !br_unit.take_pc)) &&

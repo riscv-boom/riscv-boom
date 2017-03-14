@@ -15,7 +15,7 @@ package constants
 {
 
 import Chisel._
-import cde.Parameters
+import config.Parameters
 
 import util.Str
 

@@ -19,7 +19,7 @@ package boom
 {
 
 import Chisel._
-import cde.Parameters
+import config.Parameters
 
 import rocket.ALU._
 import util._
@@ -70,7 +70,7 @@ class FunctionalUnitIo(num_stages: Int
    val br_unit = new BranchUnitResp().asOutput
 
    // only used by the fpu unit
-   val fcsr_rm = UInt(INPUT, rocket.FPConstants.RM_SZ)
+   val fcsr_rm = UInt(INPUT, tile.FPConstants.RM_SZ)
 
    // only used by branch unit
    // TODO name this, so ROB can also instantiate it
@@ -171,6 +171,7 @@ abstract class FunctionalUnit(is_pipelined: Boolean
                               , data_width: Int
                               , has_branch_unit: Boolean = false)
                               (implicit p: Parameters) extends BoomModule()(p)
+   with HasBoomCoreParameters
 {
    val io = new FunctionalUnitIo(num_stages, num_bypass_stages, data_width)
 }
@@ -407,7 +408,7 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
 
 
       val br_unit =
-         if (p(EnableBrResolutionRegister)) Reg(new BranchUnitResp)
+         if (enableBrResolutionRegister) Reg(new BranchUnitResp)
          else Wire(new BranchUnitResp)
 
 
@@ -419,7 +420,7 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
       // If the rest of "br_unit" is being registered too, then we don't need to
       // register "brinfo" here, since in that case we would be double counting.
       val brinfo =
-         if (p(EnableBrResolutionRegister)) Wire(new BrResolutionInfo)
+         if (enableBrResolutionRegister) Wire(new BrResolutionInfo)
          else Reg(new BrResolutionInfo)
 
       // note: jal doesn't allocate a branch-mask, so don't clear a br-mask bit
@@ -446,7 +447,7 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
       // did a branch or jalr occur AND did we mispredict? AND was it taken? (i.e., should we update the BTB)
       val fetch_pc = ((uop_pc_ >> lsb) << lsb) + uop.fetch_pc_lob
 
-      if (p(EnableBTBContainsBranches))
+      if (enableBTBContainsBranches)
       {
          br_unit.btb_update_valid := is_br_or_jalr && mispredict && is_taken
          // update on all branches (but not jal/jalr)
@@ -676,9 +677,7 @@ abstract class UnPipelinedFunctionalUnit(implicit p: Parameters)
 
 class MulDivUnit(implicit p: Parameters) extends UnPipelinedFunctionalUnit()(p)
 {
-   val muldiv = Module(new rocket.MulDiv(
-      p(rocket.MulDivKey).getOrElse(rocket.MulDivConfig()),
-      width = xLen))
+   val muldiv = Module(new rocket.MulDiv(mulDivParams, width = xLen))
 
    // request
    muldiv.io.req.valid    := io.req.valid && !this.do_kill

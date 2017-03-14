@@ -45,14 +45,14 @@
 package boom
 
 import Chisel._
-import cde.{Parameters, Field}
+import config.{Parameters, Field}
 
 import util.Str
 
 case object TageKey extends Field[TageParameters]
 
 case class TageParameters(
-   enabled: Boolean = true,
+   enabled: Boolean = false,
    // 12kB predictor
    num_tables: Int = 4,
    table_sizes: Seq[Int] = Seq(4096,4096,2048,2048),
@@ -99,11 +99,10 @@ class TageResp(
 // provide information to the BpdResp bundle how many bits a TageResp needs
 object TageBrPredictor
 {
-   def GetRespInfoSize(p: Parameters): Int =
+   def GetRespInfoSize(p: Parameters, fetchWidth: Int): Int =
    {
-      import rocket.FetchWidth
       val dummy = new TageResp(
-         fetch_width = p(FetchWidth),
+         fetch_width = fetchWidth,
          num_tables = p(TageKey).num_tables,
          max_history_length = p(TageKey).history_lengths.max,
          max_index_sz = log2Up(p(TageKey).table_sizes.max),

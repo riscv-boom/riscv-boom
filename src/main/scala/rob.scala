@@ -29,7 +29,7 @@ package boom
 
 import Chisel._
 import scala.math.ceil
-import cde.Parameters
+import config.Parameters
 import util.Str
 
 class RobIo(machine_width: Int
@@ -214,7 +214,7 @@ class Rob(width: Int
    val rob_head_is_store   = Wire(Vec(width, Bool()))
    val rob_head_is_load    = Wire(Vec(width, Bool()))
    val rob_head_is_branch  = Wire(Vec(width, Bool()))
-   val rob_head_fflags     = Wire(Vec(width, Bits(width=rocket.FPConstants.FLAGS_SZ)))
+   val rob_head_fflags     = Wire(Vec(width, Bits(width=tile.FPConstants.FLAGS_SZ)))
 
    // valid bits at the branch target
    // the br_unit needs to verify the target PC, but it must read out the valid bits
@@ -353,7 +353,7 @@ class Rob(width: Int
                                                            // fake write ports - clearing on commit,
                                                            // rollback, branch_kill
       val rob_exception = Mem(num_rob_rows, Bool())
-      val rob_fflags    = Mem(num_rob_rows, Bits(width=rocket.FPConstants.FLAGS_SZ))
+      val rob_fflags    = Mem(num_rob_rows, Bits(width=tile.FPConstants.FLAGS_SZ))
 
       //-----------------------------------------------
       // Dispatch: Add Entry to ROB
@@ -640,7 +640,7 @@ class Rob(width: Int
    // send fflags bits to the CSRFile to accrue
 
    val fflags_val = Wire(Vec(width, Bool()))
-   val fflags     = Wire(Vec(width, Bits(width=rocket.FPConstants.FLAGS_SZ)))
+   val fflags     = Wire(Vec(width, Bits(width=tile.FPConstants.FLAGS_SZ)))
 
    for (w <- 0 until width)
    {

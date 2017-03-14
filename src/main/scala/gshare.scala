@@ -14,7 +14,7 @@
 package boom
 
 import Chisel._
-import cde.{Parameters, Field}
+import config.{Parameters, Field}
 
 case object GShareKey extends Field[GShareParameters]
 

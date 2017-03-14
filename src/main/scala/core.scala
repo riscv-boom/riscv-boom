@@ -28,13 +28,13 @@
 package boom
 
 import Chisel._
-import cde.Parameters
+import config.Parameters
 
 import rocket.Instructions._
 import util.Str
 
 
-abstract class BoomModule(implicit val p: Parameters) extends Module
+abstract class BoomModule(implicit p: Parameters) extends tile.CoreModule()(p)
   with HasBoomCoreParameters
 
 class BoomBundle(implicit val p: Parameters) extends util.ParameterizedBundle()(p)
@@ -52,19 +52,22 @@ class CacheCounters() extends Bundle
 //-------------------------------------------------------------
 //-------------------------------------------------------------
 
-class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
+class BoomCore(implicit p: Parameters) extends BoomModule()(p)
+   with tile.HasCoreIO
 {
-   val io = new BoomBundle()(p)
-   {
-      val interrupts = new rocket.TileInterrupts().asInput
-      val hartid     = UInt(INPUT, xLen)
-      val imem       = new rocket.FrontendIO
-      val dmem       = new DCMemPortIO
-      val ptw_dat    = new rocket.DatapathPTWIO().flip
-      val ptw_tlb    = new rocket.TLBPTWIO()
-      val rocc       = new rocket.RoCCInterface().flip
-      val counters   = new CacheCounters().asInput
-   }
+   // TODO XXX BUG
+   // TODO XXX tie off rocc, fpu signals?
+//   val io = new BoomBundle()(p)
+//   {
+//      val interrupts = new rocket.TileInterrupts().asInput
+//      val hartid     = UInt(INPUT, xLen)
+//      val imem       = new rocket.FrontendIO
+//      val dmem       = new DCMemPortIO
+//      val ptw_dat    = new rocket.DatapathPTWIO().flip
+//      val ptw_tlb    = new rocket.TLBPTWIO()
+//      val rocc       = new rocket.RoCCInterface().flip
+//      val counters   = new CacheCounters().asInput
+//   }
 
    //**********************************
    // construct all of the modules
@@ -79,12 +82,12 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    val decode_units     = for (w <- 0 until DECODE_WIDTH) yield { val d = Module(new DecodeUnit); d }
    val dec_brmask_logic = Module(new BranchMaskGenerationLogic(DECODE_WIDTH))
    val rename_stage     = Module(new RenameStage(DECODE_WIDTH, exe_units.num_wakeup_ports))
-   val issue_unit       = if (p(EnableAgePriorityIssue))
+   val issue_unit       = if (enableAgePriorityIssue)
                               Module(new IssueUnitCollasping(
-                                 p(NumIssueSlotEntries), issue_width, exe_units.num_wakeup_ports))
+                                 numIssueSlotEntries, issue_width, exe_units.num_wakeup_ports))
                           else
                               Module(new IssueUnitStatic(
-                                 p(NumIssueSlotEntries), issue_width, exe_units.num_wakeup_ports))
+                                 numIssueSlotEntries, issue_width, exe_units.num_wakeup_ports))
    val regfile          = Module(new RegisterFile(PHYS_REG_COUNT,
                                  exe_units.num_rf_read_ports,
                                  exe_units.num_rf_write_ports,
@@ -98,6 +101,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
                                  exe_units.num_total_bypass_ports,
                                  register_width))
    val csr              = Module(new rocket.CSRFile())
+   val dc_shim          = Module(new DCacheShim())
 
    val rob              = Module(new Rob(
                                  DECODE_WIDTH,
@@ -135,7 +139,10 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    // Load/Store Unit
    var lsu_io:LoadStoreUnitIO = null
    lsu_io = exe_units.memory_unit.io.lsu_io
-   io.dmem <> exe_units.memory_unit.io.dmem
+//   io.dmem <> exe_units.memory_unit.io.dmem
+
+   dc_shim.io.core <> exe_units.memory_unit.io.dmem
+   io.dmem <> dc_shim.io.dmem
 
 
    //****************************************
@@ -159,17 +166,17 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    if (usingFDivSqrt)    println ("    FDivSqrt Enabled\n")
    else                  println ("    FDivSqrt Disabled\n")
 
-   val iss_str = if (p(EnableAgePriorityIssue)) " (Age-based Priority)"
+   val iss_str = if (enableAgePriorityIssue) " (Age-based Priority)"
                  else " (Unordered Priority)"
    println("\n   Fetch Width          : " + FETCH_WIDTH)
    println("   Issue Width          : " + ISSUE_WIDTH)
    println("   ROB Size             : " + NUM_ROB_ENTRIES)
-   println("   Issue Window Size    : " + p(NumIssueSlotEntries) + iss_str)
-   println("   Load/Store Unit Size : " + p(NumLsuEntries) + "/" + p(NumLsuEntries))
-   println("   Num Phys. Registers  : " + p(NumPhysRegisters))
-   println("   Max Branch Count     : " + p(MaxBrCount))
-   println("   BTB Size             : " + p(rocket.BtbKey).nEntries)
-   println("   RAS Size             : " + p(rocket.BtbKey).nRAS)
+   println("   Issue Window Size    : " + numIssueSlotEntries + iss_str)
+   println("   Load/Store Unit Size : " + NUM_LSU_ENTRIES + "/" + NUM_LSU_ENTRIES)
+   println("   Num Phys. Registers  : " + PHYS_REG_COUNT)
+   println("   Max Branch Count     : " + MAX_BR_COUNT)
+   println("   BTB Size             : " + btbParams.nEntries)
+   println("   RAS Size             : " + btbParams.nRAS)
 
    println("\n   Num RF Read Ports    : " + exe_units.num_rf_read_ports)
    println("   Num RF Write Ports   : " + exe_units.num_rf_write_ports + "\n")
@@ -656,14 +663,14 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
 
    // Handle Branch Mispeculations
    lsu_io.brinfo := br_unit.brinfo
-   io.dmem.brinfo := br_unit.brinfo
+   dc_shim.io.core.brinfo := br_unit.brinfo
 
    new_ldq_idx := lsu_io.new_ldq_idx
    new_stq_idx := lsu_io.new_stq_idx
 
    lsu_io.debug_tsc := tsc_reg
 
-   io.dmem.flush_pipe := rob.io.flush.valid
+   dc_shim.io.core.flush_pipe := rob.io.flush.valid
 
 
    //-------------------------------------------------------------
@@ -860,8 +867,9 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
       rob.io.commit.valids(w) && (csr.io.status.prv === UInt(rocket.PRV.U))})
 
    // L1 cache stats.
-   csr.io.events(3) := io.counters.dc_miss
-   csr.io.events(4) := io.counters.ic_miss
+   // TODO XXX add these back in
+//   csr.io.events(3) := io.counters.dc_miss
+//   csr.io.events(4) := io.counters.ic_miss
 
    csr.io.events(5)  := csr.io.status.prv === UInt(rocket.PRV.U)
 
@@ -943,7 +951,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    {
       println("\n Chisel Printout Enabled\n")
 
-      var whitespace = (63 + 1 - 3 - 12  - NUM_LSU_ENTRIES- p(NumIssueSlotEntries) - (NUM_ROB_ENTRIES/COMMIT_WIDTH)
+      var whitespace = (63 + 1 - 3 - 12  - NUM_LSU_ENTRIES- numIssueSlotEntries - (NUM_ROB_ENTRIES/COMMIT_WIDTH)
          - NUM_BROB_ENTRIES
       )
 
@@ -987,8 +995,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
          , Mux(rob.io.flush.valid, Str("F"), Str(" "))
 //         , Mux(branch_mask_full.reduce(_|_), Str("BR_MSK_FULL"), Str(" "))
          , Mux(branch_mask_full.reduce(_|_), Str("B"), Str(" "))
-//         , Mux(io.dmem.req.ready, Str("D$_Rdy"), Str("D$_BSY"))
-         , Mux(io.dmem.req.ready, Str("R"), Str("B"))
+         , Mux(dc_shim.io.core.req.ready, Str("R"), Str("B"))
          , dec_brmask_logic.io.debug.branch_mask
          , Mux(csr.io.status.prv === Bits(0x3), Str("M"),
            Mux(csr.io.status.prv === Bits(0x0), Str("U"),
@@ -1171,12 +1178,13 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    //-------------------------------------------------------------
    // Page Table Walker
 
-   io.ptw_tlb <> lsu_io.ptw
+//   io.ptw_tlb <> lsu_io.ptw TODO BUG XXX XXX XXX
 
-   io.ptw_dat.ptbr       := csr.io.ptbr
-   io.ptw_dat.invalidate := csr.io.fatc
-   io.ptw_dat.status     := csr.io.status
-   io.dmem.invalidate_lr := rob.io.com_xcpt.valid
+   io.ptw.ptbr       := csr.io.ptbr
+   io.ptw.invalidate := csr.io.fatc
+   io.ptw.status     := csr.io.status
+
+   dc_shim.io.core.invalidate_lr := rob.io.com_xcpt.valid
 
    //-------------------------------------------------------------
    //-------------------------------------------------------------

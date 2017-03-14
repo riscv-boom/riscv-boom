@@ -15,7 +15,7 @@ package boom
 {
 
 import Chisel._
-import cde.Parameters
+import config.Parameters
 
 class RegisterFileReadPortIO(addr_width: Int, data_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {

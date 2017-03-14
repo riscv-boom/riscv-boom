@@ -11,7 +11,7 @@
 package boom
 
 import Chisel._
-import cde.Parameters
+import config.Parameters
 
 import FUConstants._
 import util.Str

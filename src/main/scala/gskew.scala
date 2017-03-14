@@ -23,7 +23,7 @@
 package boom
 
 import Chisel._
-import cde.{Parameters, Field}
+import config.{Parameters, Field}
 
 case object GSkewKey extends Field[GSkewParameters]
 
@@ -57,10 +57,10 @@ class GSkewResp(fetch_width: Int, bi_idx_sz: Int, g0_idx_sz: Int, g1_idx_sz: Int
 
 object GSkewBrPredictor
 {
-   def GetRespInfoSize(p: Parameters): Int =
+   def GetRespInfoSize(p: Parameters, fetchWidth: Int): Int =
    {
       val dummy = new GSkewResp(
-         p(rocket.FetchWidth),
+         fetchWidth,
          log2Up(p(GSkewKey).bimo_num_entries),
          log2Up(p(GSkewKey).gsh0_num_entries),
          log2Up(p(GSkewKey).gsh1_num_entries),

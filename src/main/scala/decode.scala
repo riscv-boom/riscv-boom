@@ -7,7 +7,7 @@ package boom
 {
 
 import Chisel._
-import cde.Parameters
+import config.Parameters
 
 import rocket.Instructions._
 import rocket.{CSR,Causes}
