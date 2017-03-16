@@ -29,8 +29,7 @@ case class BoomCoreParams(
    fastJAL: Boolean = false,
    mulDiv: Option[MulDivParams] = Some(MulDivParams()),
    fpu: Option[FPUParams] = Some(FPUParams()),
-//   decodeWidth: Int = 1,
-   dispatchWidth: Int = 1,
+//   dispatchWidth: Int = 1,
    issueWidth: Int = 1,
    numRobEntries: Int = 32,
    numIssueSlotEntries: Int = 12,
@@ -52,7 +51,7 @@ case class BoomCoreParams(
 //) extends RocketCoreParams {
    val fetchWidth: Int = 2 // TODO XXX this is hardcoded -- how should I get this parameterized?
    val decodeWidth: Int = fetchWidth
-   val retireWidth: Int = fetchWidth
+   val retireWidth: Int = decodeWidth
    val instBits: Int = if (useCompressed) 16 else 32
 
    require (useCompressed == false)
@@ -72,11 +71,12 @@ trait HasBoomCoreParameters extends tile.HasCoreParameters
    // Superscalar Widths
    val FETCH_WIDTH      = boomParams.fetchWidth       // number of insts we can fetch
    val DECODE_WIDTH     = boomParams.decodeWidth
-   val DISPATCH_WIDTH   = boomParams.dispatchWidth // number of insts put into the IssueWindow
+   val DISPATCH_WIDTH   = DECODE_WIDTH                // number of insts put into the IssueWindow
    val ISSUE_WIDTH      = boomParams.issueWidth
    val COMMIT_WIDTH     = boomParams.retireWidth
 
    require (DECODE_WIDTH == COMMIT_WIDTH)
+   require (DISPATCH_WIDTH == COMMIT_WIDTH)
    require (isPow2(FETCH_WIDTH))
    require (DECODE_WIDTH <= FETCH_WIDTH)
 

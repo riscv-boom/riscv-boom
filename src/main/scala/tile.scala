@@ -1,78 +1,137 @@
 //******************************************************************************
 // Copyright (c) 2015, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE for license details.
+// See LICENSE.SiFive for license details.
+// See LICENSE.Berkeley for license details.
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
 // RISCV Processor Tile
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
-//
-// Christopher Celio
-// 2012 Feb 5
-//
-// Describes a RISC-V Out-of-Order processor tile
 
-//package boom
-//
-//import Chisel._
-//import cde.{Parameters, Field}
-//
-//class BOOMTile(clockSignal: Clock = null, resetSignal: Bool = null)
-//   (implicit p: Parameters) extends rocket.Tile(clockSignal, resetSignal)(p)
-//{
-//   val core = Module(new BOOMCore())
-//   val icache = Module(new rocket.Frontend()(p.alterPartial({
-//      case uncore.agents.CacheName => "L1I"
-//      })))
-//   val dcache = rocket.HellaCache(p(rocket.DCacheKey))(dcacheParams)
-//
-//   val dc_shim = Module(new DCacheShim()(dcacheParams))
-//
-//   val ptwPorts = collection.mutable.ArrayBuffer(icache.io.ptw, core.io.ptw_tlb)
-//   val dcPorts = collection.mutable.ArrayBuffer(dc_shim.io.dmem)
-//   val uncachedArbPorts = collection.mutable.ArrayBuffer(icache.io.mem)
-//   val uncachedPorts = collection.mutable.ArrayBuffer[uncore.tilelink.ClientUncachedTileLinkIO]()
-//   val cachedPorts = collection.mutable.ArrayBuffer(dcache.mem)
-//   core.io.interrupts := io.interrupts
-//   core.io.hartid := io.hartid
-//   dc_shim.io.core <> core.io.dmem
-//   icache.io.cpu <> core.io.imem
-//   icache.io.resetVector := io.resetVector
-//
-//
-//   val uncachedArb = Module(new uncore.tilelink.ClientUncachedTileLinkIOArbiter(uncachedArbPorts.size))
-//   uncachedArb.io.in <> uncachedArbPorts
-//   uncachedArb.io.out +=: uncachedPorts
-//
-//   // Connect the caches and RoCC to the outer memory system
-//   io.uncached <> uncachedPorts
-//   io.cached <> cachedPorts
-//   // TODO remove nCached/nUncachedTileLinkPorts parameters and these assertions
-//   require(uncachedPorts.size == nUncachedTileLinkPorts)
-//   require(cachedPorts.size == nCachedTileLinkPorts)
-//
-//   if (p(rocket.UseVM))
-//   {
-//      val ptw = Module(new rocket.PTW(ptwPorts.size)(dcacheParams))
-//      ptw.io.requestor <> ptwPorts
-//      ptw.io.mem +=: dcPorts
-//      core.io.ptw_dat <> ptw.io.dpath
-//
-//      // the dcache's built-in TLB will be unused, but it still needs some of the
-//      // status/sret signals for things such as lr/sc
-//      dcache.ptw.status <> ptw.io.requestor(1).status
-//      dcache.ptw.invalidate := ptw.io.requestor(1).invalidate
-//      dcache.ptw.req.ready := Bool(false)
-//      dcache.ptw.resp.valid := Bool(false)
-//   }
-//
-//   val dcArb = Module(new rocket.HellaCacheArbiter(dcPorts.size)(dcacheParams))
-//   dcArb.io.requestor <> dcPorts
-//   dcache.cpu <> dcArb.io.mem
-//   dcache.cpu.invalidate_lr := core.io.dmem.invalidate_lr
-//
-//
-//   // Cache Counters
-//   core.io.counters.dc_miss := dcache.mem.acquire.fire()
-//   core.io.counters.ic_miss := icache.io.mem.acquire.fire()
-//}
+package boom
+
+import Chisel._
+import config._
+import coreplex._
+import rocket._
+import diplomacy._
+import tile._
+import uncore.devices._
+import uncore.tilelink2._
+import util._
+
+case class BoomTileParams(
+    core: RocketCoreParams = RocketCoreParams(),
+//    ooo: BoomCoreParams = BoomCoreParams(),
+    icache: Option[ICacheParams] = Some(ICacheParams()),
+    dcache: Option[DCacheParams] = Some(DCacheParams()),
+    rocc: Seq[RoCCParams] = Nil,
+    btb: Option[BTBParams] = Some(BTBParams()),
+    dataScratchpadBytes: Int = 0) extends TileParams {
+  require(icache.isDefined)
+  require(dcache.isDefined)
+}
+  
+class BoomTile(val boomParams: BoomTileParams)(implicit p: Parameters) extends BaseTile(boomParams)(p)
+    with HasLoadStoreUnit
+    with CanHaveLegacyRoccs  // implies CanHaveSharedFPU with CanHavePTW with HasHellaCache
+    with CanHaveScratchpad { // implies CanHavePTW with HasHellaCache with HasICacheFrontend
+
+  nDCachePorts += 1 // core TODO dcachePorts += () => module.core.io.dmem ??
+
+  override lazy val module = new BoomTileModule(this)
+}
+
+class BoomTileBundle(outer: BoomTile) extends BaseTileBundle(outer)
+    with CanHaveScratchpadBundle
+
+class BoomTileModule(outer: BoomTile) extends BaseTileModule(outer, () => new BoomTileBundle(outer))
+    with HasLoadStoreUnitModule
+    with CanHaveLegacyRoccsModule
+    with CanHaveScratchpadModule {
+
+//  val core = Module(p(BuildCore)(outer.p))
+  val core = Module(new BoomCore()(outer.p))
+  core.io.interrupts := io.interrupts
+  core.io.hartid := io.hartid
+  outer.frontend.module.io.cpu <> core.io.imem
+  outer.frontend.module.io.resetVector := io.resetVector
+  outer.lsu.module.io.lsu <> core.io.lsu
+  dcachePorts += core.io.dmem // TODO outer.dcachePorts += () => module.core.io.dmem ??
+  fpuOpt foreach { fpu => core.io.fpu <> fpu.io }
+  ptwOpt foreach { ptw => core.io.ptw <> ptw.io.dpath }
+  outer.legacyRocc foreach { lr =>
+    lr.module.io.core.cmd <> core.io.rocc.cmd
+    lr.module.io.core.exception := core.io.rocc.exception
+    core.io.rocc.resp <> lr.module.io.core.resp
+    core.io.rocc.busy := lr.module.io.core.busy
+    core.io.rocc.interrupt := lr.module.io.core.interrupt
+  }
+
+  // TODO eliminate this redundancy
+  val h = dcachePorts.size
+  val c = core.dcacheArbPorts
+  val o = outer.nDCachePorts
+  require(h == c, s"port list size was $h, core expected $c")
+  require(h == o, s"port list size was $h, outer counted $o")
+  // TODO figure out how to move the below into their respective mix-ins
+  dcacheArb.io.requestor <> dcachePorts
+  ptwOpt foreach { ptw => ptw.io.requestor <> ptwPorts }
+}
+
+class AsyncBoomTile(rtp: BoomTileParams)(implicit p: Parameters) extends LazyModule {
+  val rocket = LazyModule(new BoomTile(rtp))
+
+  val masterNode = TLAsyncOutputNode()
+  val source = LazyModule(new TLAsyncCrossingSource)
+  source.node :=* rocket.masterNode
+  masterNode :=* source.node
+
+  val slaveNode = TLAsyncInputNode()
+  val sink = LazyModule(new TLAsyncCrossingSink)
+  rocket.slaveNode :*= sink.node
+  sink.node :*= slaveNode
+
+  lazy val module = new LazyModuleImp(this) {
+    val io = new Bundle {
+      val master = masterNode.bundleOut
+      val slave = slaveNode.bundleIn
+      val hartid = UInt(INPUT, p(XLen))
+      val interrupts = new TileInterrupts()(p).asInput
+      val resetVector = UInt(INPUT, p(XLen))
+    }
+    rocket.module.io.interrupts := ShiftRegister(io.interrupts, 3)
+    // signals that do not change:
+    rocket.module.io.hartid := io.hartid
+    rocket.module.io.resetVector := io.resetVector
+  }
+}
+
+class RationalBoomTile(rtp: BoomTileParams)(implicit p: Parameters) extends LazyModule {
+  val rocket = LazyModule(new BoomTile(rtp))
+
+  val masterNode = TLRationalOutputNode()
+  val source = LazyModule(new TLRationalCrossingSource)
+  source.node :=* rocket.masterNode
+  masterNode :=* source.node
+
+  val slaveNode = TLRationalInputNode()
+  val sink = LazyModule(new TLRationalCrossingSink)
+  rocket.slaveNode :*= sink.node
+  sink.node :*= slaveNode
+
+  lazy val module = new LazyModuleImp(this) {
+    val io = new Bundle {
+      val master = masterNode.bundleOut
+      val slave = slaveNode.bundleIn
+      val hartid = UInt(INPUT, p(XLen))
+      val interrupts = new TileInterrupts()(p).asInput
+      val resetVector = UInt(INPUT, p(XLen))
+    }
+    rocket.module.io.interrupts := ShiftRegister(io.interrupts, 1)
+    // signals that do not change:
+    rocket.module.io.hartid := io.hartid
+    rocket.module.io.resetVector := io.resetVector
+  }
+}

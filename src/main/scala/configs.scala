@@ -19,13 +19,15 @@ import rocket._
 class DefaultBoomConfig extends Config((site, here, up) => {
 
    // Top-Level
-   case BuildCore => (p: Parameters) => new BoomCore()(p)
+//   case BuildCore => (p: Parameters) => new BoomCore()(p)
    case BoomKey => BoomCoreParams()
    case XLen => 64
 
    case RocketTilesKey => up(RocketTilesKey, site) map { r =>
       r.copy(core = r.core.copy(
-         useCompressed = false
+         useCompressed = false,
+         nPerfCounters = 4,
+         nPerfEvents = 31
       ))}
 
 
@@ -79,6 +81,7 @@ class DefaultBoomConfig extends Config((site, here, up) => {
 //            //table_sizes = Seq(1024,1024,1024,1024),
 //            //history_lengths = Seq(3,7,19,63),
 //            //tag_sizes = Seq(10,10,10,12))
+         case GShareKey => GShareParameters(enabled = true)
          case GSkewKey => GSkewParameters(enabled = false)
 //         // Only predict (and update) when in user-mode.
 //         case EnableBpdUModeOnly => false

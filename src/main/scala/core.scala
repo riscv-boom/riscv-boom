@@ -52,8 +52,9 @@ class CacheCounters() extends Bundle
 //-------------------------------------------------------------
 //-------------------------------------------------------------
 
+
 class BoomCore(implicit p: Parameters) extends BoomModule()(p)
-   with tile.HasCoreIO
+//   with tile.HasCoreIO
 {
    // TODO XXX BUG
    // TODO XXX tie off rocc, fpu signals?
@@ -68,7 +69,17 @@ class BoomCore(implicit p: Parameters) extends BoomModule()(p)
 //      val rocc       = new rocket.RoCCInterface().flip
 //      val counters   = new CacheCounters().asInput
 //   }
-
+   val io = new Bundle {
+      val interrupts = new tile.TileInterrupts().asInput
+      val hartid = UInt(INPUT, p(tile.XLen))
+      val imem  = new rocket.FrontendIO()(p)
+      val dmem = new rocket.HellaCacheIO()(p)
+      val ptw = new rocket.DatapathPTWIO().flip
+      val fpu = new tile.FPUCoreIO().flip
+      val rocc = new tile.RoCCCoreIO().flip
+      val lsu = new LoadStoreUnitIO(DISPATCH_WIDTH)
+   }
+ 
    //**********************************
    // construct all of the modules
 
@@ -137,8 +148,9 @@ class BoomCore(implicit p: Parameters) extends BoomModule()(p)
    br_unit <> exe_units.br_unit_io
 
    // Load/Store Unit
-   var lsu_io:LoadStoreUnitIO = null
-   lsu_io = exe_units.memory_unit.io.lsu_io
+//   var lsu_io:LoadStoreUnitIO = null
+//   lsu_io = exe_units.memory_unit.io.lsu_io
+   val lsu_io:LoadStoreUnitIO = io.lsu
 //   io.dmem <> exe_units.memory_unit.io.dmem
 
    dc_shim.io.core <> exe_units.memory_unit.io.dmem
@@ -637,7 +649,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule()(p)
 
    //-------------------------------------------------------------
    //-------------------------------------------------------------
-   // **** Memory Stage ****
+   // **** Load/Store Unit ****
    //-------------------------------------------------------------
    //-------------------------------------------------------------
 
@@ -671,6 +683,22 @@ class BoomCore(implicit p: Parameters) extends BoomModule()(p)
    lsu_io.debug_tsc := tsc_reg
 
    dc_shim.io.core.flush_pipe := rob.io.flush.valid
+
+   // TODO refactor lsu/mem connection
+   lsu_io.nack <> dc_shim.io.core.nack
+
+   lsu_io.dmem_req_ready := dc_shim.io.core.req.ready
+   lsu_io.dmem_is_ordered:= dc_shim.io.core.ordered
+    
+//   io.lsu_io.new_ldq_idx := lsu.io.new_ldq_idx
+//   io.lsu_io.new_stq_idx := lsu.io.new_stq_idx
+//   io.lsu_io.laq_full := lsu.io.laq_full
+//   io.lsu_io.stq_full := lsu.io.stq_full
+//   io.lsu_io.lsu_clr_bsy_valid := lsu.io.lsu_clr_bsy_valid // TODO is there a better way to clear the busy bits in the ROB
+//   io.lsu_io.lsu_clr_bsy_rob_idx := lsu.io.lsu_clr_bsy_rob_idx
+//   io.lsu_io.lsu_fencei_rdy := lsu.io.lsu_fencei_rdy
+      
+
 
 
    //-------------------------------------------------------------
@@ -857,6 +885,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule()(p)
 
    require (nPerfEvents > 29)
    println ("   " + nPerfCounters + " HPM counters enabled (with " + nPerfEvents + " events).")
+   println ("events.length:" + csr.io.events.length)
 
    // Execution-time branch prediction accuracy.
    csr.io.events(0) := br_unit.brinfo.valid
