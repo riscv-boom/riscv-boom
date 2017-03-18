@@ -53,10 +53,9 @@ class CacheCounters() extends Bundle
 //-------------------------------------------------------------
 
 
-class BoomCore(implicit p: Parameters) extends BoomModule()(p)
-//   with tile.HasCoreIO
+class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends BoomModule()(p)
+   with tile.HasCoreIO
 {
-   // TODO XXX BUG
    // TODO XXX tie off rocc, fpu signals?
 //   val io = new BoomBundle()(p)
 //   {
@@ -69,17 +68,10 @@ class BoomCore(implicit p: Parameters) extends BoomModule()(p)
 //      val rocc       = new rocket.RoCCInterface().flip
 //      val counters   = new CacheCounters().asInput
 //   }
-   val io = new Bundle {
-      val interrupts = new tile.TileInterrupts().asInput
-      val hartid = UInt(INPUT, p(tile.XLen))
-      val imem  = new rocket.FrontendIO()(p)
-      val dmem = new rocket.HellaCacheIO()(p)
-      val ptw = new rocket.DatapathPTWIO().flip
-      val fpu = new tile.FPUCoreIO().flip
-      val rocc = new tile.RoCCCoreIO().flip
-      val lsu = new LoadStoreUnitIO(DISPATCH_WIDTH)
-   }
  
+   // we do not support RoCC (yet)
+   io.rocc.cmd.valid := Bool(false)
+   io.rocc.resp.ready := Bool(false)
    //**********************************
    // construct all of the modules
 
@@ -113,6 +105,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule()(p)
                                  register_width))
    val csr              = Module(new rocket.CSRFile())
    val dc_shim          = Module(new DCacheShim())
+   val lsu              = Module(new LoadStoreUnit(DECODE_WIDTH))
 
    val rob              = Module(new Rob(
                                  DECODE_WIDTH,
@@ -147,14 +140,13 @@ class BoomCore(implicit p: Parameters) extends BoomModule()(p)
    val brunit_idx = exe_units.br_unit_idx
    br_unit <> exe_units.br_unit_io
 
-   // Load/Store Unit
-//   var lsu_io:LoadStoreUnitIO = null
-//   lsu_io = exe_units.memory_unit.io.lsu_io
-   val lsu_io:LoadStoreUnitIO = io.lsu
-//   io.dmem <> exe_units.memory_unit.io.dmem
-
-   dc_shim.io.core <> exe_units.memory_unit.io.dmem
+   // Shim to DCache
    io.dmem <> dc_shim.io.dmem
+   dc_shim.io.core <> exe_units.memory_unit.io.dmem
+
+   // Load/Store Unit & ExeUnits
+   exe_units.memory_unit.io.lsu_io := lsu.io
+//   io.dmem <> exe_units.memory_unit.io.dmem
 
 
    //****************************************
@@ -319,16 +311,16 @@ class BoomCore(implicit p: Parameters) extends BoomModule()(p)
       val stall_me = (dec_valids(w) &&
                         (  !(rename_stage.io.inst_can_proceed(w))
                         || (dec_valids(w) && dec_uops(w).is_unique &&
-                           (!rob.io.empty || !lsu_io.lsu_fencei_rdy || prev_insts_in_bundle_valid))
+                           (!rob.io.empty || !lsu.io.lsu_fencei_rdy || prev_insts_in_bundle_valid))
                         || !rob.io.ready
-                        || lsu_io.laq_full
-                        || lsu_io.stq_full
+                        || lsu.io.laq_full
+                        || lsu.io.stq_full
                         || branch_mask_full(w)
                         || br_unit.brinfo.mispredict
                         || rob.io.flush.valid
                         || dec_stall_next_inst
                         || !bpd_stage.io.brob.allocate.ready
-                        || (dec_valids(w) && dec_uops(w).is_fencei && !lsu_io.lsu_fencei_rdy)
+                        || (dec_valids(w) && dec_uops(w).is_fencei && !lsu.io.lsu_fencei_rdy)
                         )) ||
                      dec_last_inst_was_stalled
 
@@ -654,49 +646,51 @@ class BoomCore(implicit p: Parameters) extends BoomModule()(p)
    //-------------------------------------------------------------
 
    // enqueue basic load/store info in Decode
-   lsu_io.dec_uops := dec_uops
+   lsu.io.dec_uops := dec_uops
 
    for (w <- 0 until DECODE_WIDTH)
    {
-      lsu_io.dec_st_vals(w) := dec_will_fire(w) && rename_stage.io.inst_can_proceed(w) && !rob.io.flush.valid &&
+      lsu.io.dec_st_vals(w) := dec_will_fire(w) && rename_stage.io.inst_can_proceed(w) && !rob.io.flush.valid &&
                                dec_uops(w).is_store
-      lsu_io.dec_ld_vals(w) := dec_will_fire(w) && rename_stage.io.inst_can_proceed(w) && !rob.io.flush.valid &&
+      lsu.io.dec_ld_vals(w) := dec_will_fire(w) && rename_stage.io.inst_can_proceed(w) && !rob.io.flush.valid &&
                                dec_uops(w).is_load
 
-      lsu_io.dec_uops(w).rob_idx := dis_uops(w).rob_idx // for debug purposes (comit logging)
+      lsu.io.dec_uops(w).rob_idx := dis_uops(w).rob_idx // for debug purposes (comit logging)
    }
 
-   lsu_io.commit_store_mask := rob.io.commit.st_mask
-   lsu_io.commit_load_mask  := rob.io.commit.ld_mask
-   lsu_io.commit_load_at_rob_head := rob.io.com_load_is_at_rob_head
+   lsu.io.commit_store_mask := rob.io.commit.st_mask
+   lsu.io.commit_load_mask  := rob.io.commit.ld_mask
+   lsu.io.commit_load_at_rob_head := rob.io.com_load_is_at_rob_head
 
    //com_xcpt.valid comes too early, will fight against a branch that resolves same cycle as an exception
-   lsu_io.exception := rob.io.flush.valid
+   lsu.io.exception := rob.io.flush.valid
 
    // Handle Branch Mispeculations
-   lsu_io.brinfo := br_unit.brinfo
+   lsu.io.brinfo := br_unit.brinfo
    dc_shim.io.core.brinfo := br_unit.brinfo
 
-   new_ldq_idx := lsu_io.new_ldq_idx
-   new_stq_idx := lsu_io.new_stq_idx
+   new_ldq_idx := lsu.io.new_ldq_idx
+   new_stq_idx := lsu.io.new_stq_idx
 
-   lsu_io.debug_tsc := tsc_reg
+   lsu.io.debug_tsc := tsc_reg
 
    dc_shim.io.core.flush_pipe := rob.io.flush.valid
 
    // TODO refactor lsu/mem connection
-   lsu_io.nack <> dc_shim.io.core.nack
+   lsu.io.nack <> dc_shim.io.core.nack
 
-   lsu_io.dmem_req_ready := dc_shim.io.core.req.ready
-   lsu_io.dmem_is_ordered:= dc_shim.io.core.ordered
+   lsu.io.dmem_req_ready := dc_shim.io.core.req.ready
+   lsu.io.dmem_is_ordered:= dc_shim.io.core.ordered
+
+
     
-//   io.lsu_io.new_ldq_idx := lsu.io.new_ldq_idx
-//   io.lsu_io.new_stq_idx := lsu.io.new_stq_idx
-//   io.lsu_io.laq_full := lsu.io.laq_full
-//   io.lsu_io.stq_full := lsu.io.stq_full
-//   io.lsu_io.lsu_clr_bsy_valid := lsu.io.lsu_clr_bsy_valid // TODO is there a better way to clear the busy bits in the ROB
-//   io.lsu_io.lsu_clr_bsy_rob_idx := lsu.io.lsu_clr_bsy_rob_idx
-//   io.lsu_io.lsu_fencei_rdy := lsu.io.lsu_fencei_rdy
+//   io.lsu.io.new_ldq_idx := lsu.io.new_ldq_idx
+//   io.lsu.io.new_stq_idx := lsu.io.new_stq_idx
+//   io.lsu.io.laq_full := lsu.io.laq_full
+//   io.lsu.io.stq_full := lsu.io.stq_full
+//   io.lsu.io.lsu_clr_bsy_valid := lsu.io.lsu_clr_bsy_valid // TODO is there a better way to clear the busy bits in the ROB
+//   io.lsu.io.lsu_clr_bsy_rob_idx := lsu.io.lsu_clr_bsy_rob_idx
+//   io.lsu.io.lsu_fencei_rdy := lsu.io.lsu_fencei_rdy
       
 
 
@@ -837,9 +831,9 @@ class BoomCore(implicit p: Parameters) extends BoomModule()(p)
    exe_units(brunit_idx).io.status := csr.io.status
 
    // LSU <> ROB
-   rob.io.lsu_clr_bsy_valid   := lsu_io.lsu_clr_bsy_valid
-   rob.io.lsu_clr_bsy_rob_idx := lsu_io.lsu_clr_bsy_rob_idx
-   rob.io.lxcpt <> lsu_io.xcpt
+   rob.io.lsu_clr_bsy_valid   := lsu.io.lsu_clr_bsy_valid
+   rob.io.lsu_clr_bsy_rob_idx := lsu.io.lsu_clr_bsy_rob_idx
+   rob.io.lxcpt <> lsu.io.xcpt
 
    rob.io.cxcpt.valid := csr.io.csr_xcpt
    rob.io.csr_eret := csr.io.eret
@@ -918,16 +912,16 @@ class BoomCore(implicit p: Parameters) extends BoomModule()(p)
 
    // Decode stall causes.
    csr.io.events(12) := !rob.io.ready
-   csr.io.events(13) := lsu_io.laq_full
-   csr.io.events(14) := lsu_io.stq_full
+   csr.io.events(13) := lsu.io.laq_full
+   csr.io.events(14) := lsu.io.stq_full
    csr.io.events(15) := !issue_unit.io.dis_readys.reduce(_|_)
    csr.io.events(16) := branch_mask_full.reduce(_|_)
    csr.io.events(17) := rob.io.flush.valid
 
    // LSU Speculation stats.
-   csr.io.events(18) := lsu_io.counters.ld_valid
-   csr.io.events(19) := lsu_io.counters.stld_order_fail
-   csr.io.events(20) := lsu_io.counters.ldld_order_fail
+   csr.io.events(18) := lsu.io.counters.ld_valid
+   csr.io.events(19) := lsu.io.counters.stld_order_fail
+   csr.io.events(20) := lsu.io.counters.ldld_order_fail
 
    // Branch prediction stats.
    csr.io.events(21)  := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
@@ -981,7 +975,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule()(p)
       println("\n Chisel Printout Enabled\n")
 
       var whitespace = (63 + 1 - 3 - 12  - NUM_LSU_ENTRIES- numIssueSlotEntries - (NUM_ROB_ENTRIES/COMMIT_WIDTH)
-         - NUM_BROB_ENTRIES
+//         - NUM_BROB_ENTRIES
       )
 
       printf("--- Cyc=%d , ----------------- Ret: %d ----------------------------------\n  "
@@ -1016,10 +1010,10 @@ class BoomCore(implicit p: Parameters) extends BoomModule()(p)
                                                Str(" ")))))
 //         , Mux(rob.io.ready,Str("_"), Str("!ROB_RDY"))
          , Mux(rob.io.ready,Str("_"), Str("!"))
-//         , Mux(lsu_io.laq_full, Str("LAQ_FULL"), Str("_"))
-//         , Mux(lsu_io.stq_full, Str("STQ_FULL"), Str("_"))
-         , Mux(lsu_io.laq_full, Str("L"), Str("_"))
-         , Mux(lsu_io.stq_full, Str("S"), Str("_"))
+//         , Mux(lsu.io.laq_full, Str("LAQ_FULL"), Str("_"))
+//         , Mux(lsu.io.stq_full, Str("STQ_FULL"), Str("_"))
+         , Mux(lsu.io.laq_full, Str("L"), Str("_"))
+         , Mux(lsu.io.stq_full, Str("S"), Str("_"))
 //         , Mux(rob.io.flush.valid, Str("FLUSH_PIPELINE"), Str(" "))
          , Mux(rob.io.flush.valid, Str("F"), Str(" "))
 //         , Mux(branch_mask_full.reduce(_|_), Str("BR_MSK_FULL"), Str(" "))
@@ -1109,9 +1103,9 @@ class BoomCore(implicit p: Parameters) extends BoomModule()(p)
 //            , Mux(io.dmem.debug.cache_not_ready, Str("CBUSY"), Str(" "))
 //            , Mux(io.dmem.debug.nack, Str("NACK"), Str(" "))
 //            , Mux(io.dmem.debug.cache_nack, Str("CN"), Str(" "))
-//            , Mux(lsu_io.forward_val, Str("FWD"), Str(" "))
-//            //, Mux(lsu_io.debug.tlb_miss, Str("TLB-MISS"), Str("-"))
-//            //, Mux(lsu_io.debug.tlb_ready, Str("TLB-RDY"), Str("-"))
+//            , Mux(lsu.io.forward_val, Str("FWD"), Str(" "))
+//            //, Mux(lsu.io.debug.tlb_miss, Str("TLB-MISS"), Str("-"))
+//            //, Mux(lsu.io.debug.tlb_ready, Str("TLB-RDY"), Str("-"))
 //      )
 
       //for (i <- 0 until io.dmem.debug.ld_req_slot.size)
@@ -1207,7 +1201,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule()(p)
    //-------------------------------------------------------------
    // Page Table Walker
 
-//   io.ptw_tlb <> lsu_io.ptw TODO BUG XXX XXX XXX
+   io.ptw_tlb <> lsu.io.ptw
 
    io.ptw.ptbr       := csr.io.ptbr
    io.ptw.invalidate := csr.io.fatc

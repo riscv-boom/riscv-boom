@@ -51,7 +51,6 @@ import config.Parameters
 
 import util.Str
 import uncore.constants.MemoryOpConstants._
-import diplomacy.{LazyModule, LazyModuleImp}
 
 class LoadStoreUnitIO(pl_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
@@ -134,48 +133,10 @@ class LoadStoreUnitIO(pl_width: Int)(implicit p: Parameters) extends BoomBundle(
    override def cloneType: this.type = new LoadStoreUnitIO(pl_width)(p).asInstanceOf[this.type]
 }
 
-// Base classes for Diplomatic Tilelink2 LSU
 
-class LoadStoreUnit(implicit p: Parameters) extends diplomacy.LazyModule
+class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends BoomModule()(p)
 {
-   lazy val module = new LoadStoreUnitModule(this)
-   val node = uncore.tilelink2.TLClientNode(uncore.tilelink2.TLClientParameters(
-      sourceId = diplomacy.IdRange(0,1),
-      supportsProbe = diplomacy.TransferSizes(1, p(coreplex.CacheBlockBytes))))
-}
- 
-class LoadStoreUnitBundle(outer: LoadStoreUnit, pl_width: Int) extends BoomBundle()(outer.p)
-{
-//   implicit val p = outer.p
-   val lsu = new LoadStoreUnitIO(pl_width)
-}
- 
-// Mix-ins for constructing tiles that have an LoadStoreUnit-based scheme
-trait HasLoadStoreUnit extends rocket.CanHavePTW with tile.HasTileLinkMasterPort
-{
-   val module: HasLoadStoreUnitModule
-   val lsu = LazyModule(new LoadStoreUnit)
-   masterNode := lsu.node
-   nPTWPorts += 1
-}
-
-trait HasLoadStoreUnitBundle extends tile.HasTileLinkMasterPortBundle
-{
-   val outer: HasLoadStoreUnit
-}
-
-trait HasLoadStoreUnitModule extends rocket.CanHavePTWModule with tile.HasTileLinkMasterPortModule
-{
-   val outer: HasLoadStoreUnit
-   ptwPorts += outer.lsu.module.io.lsu.ptw
-}
-
-class LoadStoreUnitModule(outer: LoadStoreUnit) extends LazyModuleImp(outer)
-   with HasBoomCoreParameters
-{
-   val pl_width = DISPATCH_WIDTH
-   val io = new LoadStoreUnitBundle(outer, pl_width)
-   implicit val edge = outer.node.edgesOut(0)
+   val io = new LoadStoreUnitIO(pl_width)
 
    val num_ld_entries = NUM_LSU_ENTRIES
    val num_st_entries = NUM_LSU_ENTRIES
@@ -259,11 +220,11 @@ class LoadStoreUnitModule(outer: LoadStoreUnit) extends LazyModuleImp(outer)
 
    for (w <- 0 until pl_width)
    {
-      when (io.lsu.dec_ld_vals(w))
+      when (io.dec_ld_vals(w))
       {
          // TODO is it better to read out ld_idx?
          // val ld_enq_idx = io.dec_uops(w).ldq_idx
-         laq_uop(ld_enq_idx)          := io.lsu.dec_uops(w)
+         laq_uop(ld_enq_idx)          := io.dec_uops(w)
          laq_st_dep_mask(ld_enq_idx)  := next_live_store_mask
 
          laq_allocated(ld_enq_idx)    := Bool(true)
@@ -274,14 +235,14 @@ class LoadStoreUnitModule(outer: LoadStoreUnit) extends LazyModuleImp(outer)
          laq_forwarded_std_val(ld_enq_idx)  := Bool(false)
          debug_laq_put_to_sleep(ld_enq_idx) := Bool(false)
 
-         assert (ld_enq_idx === io.lsu.dec_uops(w).ldq_idx, "[lsu] mismatch enq load tag.")
+         assert (ld_enq_idx === io.dec_uops(w).ldq_idx, "[lsu] mismatch enq load tag.")
       }
-      ld_enq_idx = Mux(io.lsu.dec_ld_vals(w), WrapInc(ld_enq_idx, num_ld_entries),
+      ld_enq_idx = Mux(io.dec_ld_vals(w), WrapInc(ld_enq_idx, num_ld_entries),
                                           ld_enq_idx)
 
-      when (io.lsu.dec_st_vals(w))
+      when (io.dec_st_vals(w))
       {
-         stq_uop(st_enq_idx)       := io.lsu.dec_uops(w)
+         stq_uop(st_enq_idx)       := io.dec_uops(w)
 
          stq_entry_val(st_enq_idx) := Bool(true)
          saq_val      (st_enq_idx) := Bool(false)
@@ -290,10 +251,10 @@ class LoadStoreUnitModule(outer: LoadStoreUnit) extends LazyModuleImp(outer)
          stq_succeeded(st_enq_idx) := Bool(false)
          stq_committed(st_enq_idx) := Bool(false)
       }
-      next_live_store_mask = Mux(io.lsu.dec_st_vals(w), next_live_store_mask | (UInt(1) << st_enq_idx),
+      next_live_store_mask = Mux(io.dec_st_vals(w), next_live_store_mask | (UInt(1) << st_enq_idx),
                                                     next_live_store_mask)
 
-      st_enq_idx = Mux(io.lsu.dec_st_vals(w), WrapInc(st_enq_idx, num_st_entries),
+      st_enq_idx = Mux(io.dec_st_vals(w), WrapInc(st_enq_idx, num_st_entries),
                                           st_enq_idx)
 
    }
@@ -337,23 +298,23 @@ class LoadStoreUnitModule(outer: LoadStoreUnit) extends LazyModuleImp(outer)
    val lcam_avail= Wire(init = Bool(true))
 
    // give first priority to incoming uops
-   when (io.lsu.exe_resp.valid)
+   when (io.exe_resp.valid)
    {
-      when (io.lsu.exe_resp.bits.uop.ctrl.is_load)
+      when (io.exe_resp.bits.uop.ctrl.is_load)
       {
          will_fire_load_incoming := Bool(true)
          dc_avail   := Bool(false)
          tlb_avail  := Bool(false)
          lcam_avail := Bool(false)
       }
-      when (io.lsu.exe_resp.bits.uop.ctrl.is_sta)
+      when (io.exe_resp.bits.uop.ctrl.is_sta)
       {
          will_fire_sta_incoming := Bool(true)
          tlb_avail  := Bool(false)
          rob_avail  := Bool(false)
          lcam_avail := Bool(false)
       }
-      when (io.lsu.exe_resp.bits.uop.ctrl.is_std)
+      when (io.exe_resp.bits.uop.ctrl.is_std)
       {
          will_fire_std_incoming := Bool(true)
          rob_avail := Bool(false)
@@ -393,15 +354,15 @@ class LoadStoreUnitModule(outer: LoadStoreUnit) extends LazyModuleImp(outer)
    // to the D$ and search the SAQ. uopSTD also uses this uop.
    val exe_tlb_uop = Mux(will_fire_sta_retry,  stq_uop(stq_retry_idx),
                      Mux(will_fire_load_retry, laq_uop(laq_retry_idx),
-                                               io.lsu.exe_resp.bits.uop))
+                                               io.exe_resp.bits.uop))
 
    val exe_vaddr   = Mux(will_fire_sta_retry,  saq_addr(stq_retry_idx),
                      Mux(will_fire_load_retry, laq_addr(laq_retry_idx),
-                                               io.lsu.exe_resp.bits.addr.toBits))
+                                               io.exe_resp.bits.addr.toBits))
 
    val dtlb = Module(new rocket.TLB(nTLBEntries))
 
-   io.lsu.ptw <> dtlb.io.ptw
+   io.ptw <> dtlb.io.ptw
    dtlb.io.req.valid := will_fire_load_incoming ||
                         will_fire_sta_incoming ||
                         will_fire_sta_retry ||
@@ -412,22 +373,22 @@ class LoadStoreUnitModule(outer: LoadStoreUnit) extends LazyModuleImp(outer)
    dtlb.io.req.bits.store := will_fire_sta_incoming || will_fire_sta_retry
 
    // exceptions
-   val ma_ld = io.lsu.exe_resp.valid && io.lsu.exe_resp.bits.mxcpt.valid && exe_tlb_uop.is_load
+   val ma_ld = io.exe_resp.valid && io.exe_resp.bits.mxcpt.valid && exe_tlb_uop.is_load
    val pf_ld = dtlb.io.req.valid && dtlb.io.resp.xcpt_ld && exe_tlb_uop.is_load
    val pf_st = dtlb.io.req.valid && dtlb.io.resp.xcpt_st && exe_tlb_uop.is_store
    val mem_xcpt_valid = Reg(next=((dtlb.io.req.valid && (pf_ld || pf_st)) ||
-                                 (io.lsu.exe_resp.valid && io.lsu.exe_resp.bits.mxcpt.valid)) &&
-                                 !io.lsu.exception &&
-                                 !IsKilledByBranch(io.lsu.brinfo, exe_tlb_uop),
+                                 (io.exe_resp.valid && io.exe_resp.bits.mxcpt.valid)) &&
+                                 !io.exception &&
+                                 !IsKilledByBranch(io.brinfo, exe_tlb_uop),
                             init=Bool(false))
-   val mem_xcpt_cause = Reg(next=(Mux(io.lsu.exe_resp.valid &&
-                                      io.lsu.exe_resp.bits.mxcpt.valid, io.lsu.exe_resp.bits.mxcpt.bits,
+   val mem_xcpt_cause = Reg(next=(Mux(io.exe_resp.valid &&
+                                      io.exe_resp.bits.mxcpt.valid, io.exe_resp.bits.mxcpt.bits,
                                   Mux(exe_tlb_uop.is_load,         UInt(rocket.Causes.fault_load),
                                                                    UInt(rocket.Causes.fault_store)))))
 
    assert (!(dtlb.io.req.valid && exe_tlb_uop.is_fence), "Fence is pretending to talk to the TLB")
-   assert (!(io.lsu.exe_resp.bits.mxcpt.valid && io.lsu.exe_resp.valid &&
-            !(io.lsu.exe_resp.bits.uop.ctrl.is_load || io.lsu.exe_resp.bits.uop.ctrl.is_sta))
+   assert (!(io.exe_resp.bits.mxcpt.valid && io.exe_resp.valid &&
+            !(io.exe_resp.bits.uop.ctrl.is_load || io.exe_resp.bits.uop.ctrl.is_sta))
             , "A uop that's not a load or store-address is throwing a memory exception.")
 
    val tlb_miss = dtlb.io.req.valid && (dtlb.io.resp.miss || !dtlb.io.req.ready)
@@ -457,7 +418,7 @@ class LoadStoreUnitModule(outer: LoadStoreUnit) extends LazyModuleImp(outer)
          laq_allocated      (exe_ld_idx_wakeup) &&
          !laq_executed      (exe_ld_idx_wakeup) &&
          !laq_failure       (exe_ld_idx_wakeup) &&
-         (!laq_is_uncacheable(exe_ld_idx_wakeup) || (io.lsu.commit_load_at_rob_head && laq_head === exe_ld_idx_wakeup))
+         (!laq_is_uncacheable(exe_ld_idx_wakeup) || (io.commit_load_at_rob_head && laq_head === exe_ld_idx_wakeup))
          )
    {
       can_fire_load_wakeup := Bool(true)
@@ -523,22 +484,22 @@ class LoadStoreUnitModule(outer: LoadStoreUnit) extends LazyModuleImp(outer)
    val exe_ld_uop  = Mux(will_fire_load_incoming || will_fire_load_retry, exe_tlb_uop,   laq_uop(exe_ld_idx_wakeup))
 
    // defaults
-   io.lsu.memreq_val     := Bool(false)
-   io.lsu.memreq_addr    := exe_ld_addr
-   io.lsu.memreq_wdata   := sdq_data(stq_execute_head)
-   io.lsu.memreq_uop     := exe_ld_uop
+   io.memreq_val     := Bool(false)
+   io.memreq_addr    := exe_ld_addr
+   io.memreq_wdata   := sdq_data(stq_execute_head)
+   io.memreq_uop     := exe_ld_uop
 
    val mem_fired_st = Reg(init = Bool(false))
    mem_fired_st := Bool(false)
    when (will_fire_store_commit)
    {
-      io.lsu.memreq_addr  := saq_addr(stq_execute_head)
-      io.lsu.memreq_uop   := stq_uop (stq_execute_head)
+      io.memreq_addr  := saq_addr(stq_execute_head)
+      io.memreq_uop   := stq_uop (stq_execute_head)
 
       // prevent this store going out if an earlier store just got nacked!
-      when (!(io.lsu.nack.valid && !io.lsu.nack.isload))
+      when (!(io.nack.valid && !io.nack.isload))
       {
-         io.lsu.memreq_val   := Bool(true)
+         io.memreq_val   := Bool(true)
          stq_executed(stq_execute_head) := Bool(true)
          stq_execute_head := WrapInc(stq_execute_head, num_st_entries)
          mem_fired_st := Bool(true)
@@ -546,9 +507,9 @@ class LoadStoreUnitModule(outer: LoadStoreUnit) extends LazyModuleImp(outer)
    }
    .elsewhen (will_fire_load_incoming || will_fire_load_retry || will_fire_load_wakeup)
    {
-      io.lsu.memreq_val   := Bool(true)
-      io.lsu.memreq_addr  := exe_ld_addr
-      io.lsu.memreq_uop   := exe_ld_uop
+      io.memreq_val   := Bool(true)
+      io.memreq_addr  := exe_ld_addr
+      io.memreq_uop   := exe_ld_uop
 
       laq_executed(exe_ld_uop.ldq_idx) := Bool(true)
       laq_failure (exe_ld_uop.ldq_idx) := (will_fire_load_incoming && (ma_ld || pf_ld)) ||
@@ -584,8 +545,8 @@ class LoadStoreUnitModule(outer: LoadStoreUnit) extends LazyModuleImp(outer)
 
    when (will_fire_std_incoming)
    {
-      sdq_val (io.lsu.exe_resp.bits.uop.stq_idx) := Bool(true)
-      sdq_data(io.lsu.exe_resp.bits.uop.stq_idx) := io.lsu.exe_resp.bits.data.toBits
+      sdq_val (io.exe_resp.bits.uop.stq_idx) := Bool(true)
+      sdq_data(io.exe_resp.bits.uop.stq_idx) := io.exe_resp.bits.data.toBits
    }
 
 
@@ -599,7 +560,7 @@ class LoadStoreUnitModule(outer: LoadStoreUnit) extends LazyModuleImp(outer)
 
    val mem_tlb_paddr    = Reg(next=exe_tlb_paddr)
    val mem_tlb_uop      = Reg(next=exe_tlb_uop) // not valid for std_incoming!
-   mem_tlb_uop.br_mask := GetNewBrMask(io.lsu.brinfo, exe_tlb_uop)
+   mem_tlb_uop.br_mask := GetNewBrMask(io.brinfo, exe_tlb_uop)
    val mem_tlb_miss     = Reg(next=tlb_miss, init=Bool(false))
    val mem_tlb_uncacheable = Reg(next=tlb_addr_uncacheable, init=Bool(false))
    val mem_ld_used_tlb  = RegNext(will_fire_load_incoming || will_fire_load_retry)
@@ -607,7 +568,7 @@ class LoadStoreUnitModule(outer: LoadStoreUnit) extends LazyModuleImp(outer)
    // the load address that will search the SAQ (either a fast load or a retry load)
    val mem_ld_addr = Mux(Reg(next=will_fire_load_wakeup), Reg(next=laq_addr(exe_ld_idx_wakeup)), mem_tlb_paddr)
    val mem_ld_uop  = Reg(next=exe_ld_uop)
-   mem_ld_uop.br_mask := GetNewBrMask(io.lsu.brinfo, exe_ld_uop)
+   mem_ld_uop.br_mask := GetNewBrMask(io.brinfo, exe_ld_uop)
    val mem_ld_killed = Wire(Bool()) // was a load killed in execute
 
    val mem_fired_ld = Reg(next=(will_fire_load_incoming ||
@@ -618,10 +579,10 @@ class LoadStoreUnitModule(outer: LoadStoreUnit) extends LazyModuleImp(outer)
 
    mem_ld_killed := Bool(false)
    when (Reg(next=
-         (IsKilledByBranch(io.lsu.brinfo, exe_ld_uop) ||
-         io.lsu.exception ||
+         (IsKilledByBranch(io.brinfo, exe_ld_uop) ||
+         io.exception ||
          (tlb_addr_uncacheable && dtlb.io.req.valid))) ||
-      io.lsu.exception)
+      io.exception)
    {
       mem_ld_killed := Bool(true) && mem_fired_ld
    }
@@ -634,33 +595,33 @@ class LoadStoreUnitModule(outer: LoadStoreUnit) extends LazyModuleImp(outer)
 
    clr_bsy_valid := Bool(false)
    clr_bsy_robidx := mem_tlb_uop.rob_idx
-   clr_bsy_brmask := GetNewBrMask(io.lsu.brinfo, mem_tlb_uop)
+   clr_bsy_brmask := GetNewBrMask(io.brinfo, mem_tlb_uop)
 
    when (mem_fired_sta && !mem_tlb_miss && mem_fired_std)
    {
       clr_bsy_valid := !mem_tlb_uop.is_amo
       clr_bsy_robidx := mem_tlb_uop.rob_idx
-      clr_bsy_brmask := GetNewBrMask(io.lsu.brinfo, mem_tlb_uop)
+      clr_bsy_brmask := GetNewBrMask(io.brinfo, mem_tlb_uop)
    }
    .elsewhen (mem_fired_sta && !mem_tlb_miss)
    {
       clr_bsy_valid := sdq_val(mem_tlb_uop.stq_idx) &&
                        !mem_tlb_uop.is_amo
       clr_bsy_robidx := mem_tlb_uop.rob_idx
-      clr_bsy_brmask := GetNewBrMask(io.lsu.brinfo, mem_tlb_uop)
+      clr_bsy_brmask := GetNewBrMask(io.brinfo, mem_tlb_uop)
    }
    .elsewhen (mem_fired_std)
    {
-      val mem_std_uop = RegNext(io.lsu.exe_resp.bits.uop)
+      val mem_std_uop = RegNext(io.exe_resp.bits.uop)
       clr_bsy_valid := saq_val(mem_std_uop.stq_idx) &&
                               !saq_is_virtual(mem_std_uop.stq_idx) &&
                               !mem_std_uop.is_amo
       clr_bsy_robidx := mem_std_uop.rob_idx
-      clr_bsy_brmask := GetNewBrMask(io.lsu.brinfo, mem_std_uop)
+      clr_bsy_brmask := GetNewBrMask(io.brinfo, mem_std_uop)
    }
 
-   io.lsu.lsu_clr_bsy_valid := clr_bsy_valid && !io.lsu.exception && !IsKilledByBranch(io.lsu.brinfo, clr_bsy_brmask)
-   io.lsu.lsu_clr_bsy_rob_idx := clr_bsy_robidx
+   io.lsu_clr_bsy_valid := clr_bsy_valid && !io.exception && !IsKilledByBranch(io.brinfo, clr_bsy_brmask)
+   io.lsu_clr_bsy_rob_idx := clr_bsy_robidx
 
    //-------------------------------------------------------------
    // Load Issue Datapath (ALL loads need to use this path,
@@ -766,67 +727,66 @@ class LoadStoreUnitModule(outer: LoadStoreUnit) extends LazyModuleImp(outer)
    val wb_forward_std_val = Reg(init = Bool(false))
    val wb_forward_std_idx = Reg(UInt())
    val wb_uop             = Reg(next=mem_ld_uop)
-   wb_uop.br_mask        := GetNewBrMask(io.lsu.brinfo, mem_ld_uop)
+   wb_uop.br_mask        := GetNewBrMask(io.brinfo, mem_ld_uop)
 
    val ldld_addr_conflict= Wire(init = Bool(false))
 
    // Kill load request to mem if address matches (we will either sleep load, or forward data) or TLB miss.
    // Also kill load request if load address matches an older, unexecuted load.
-   io.lsu.memreq_kill :=
-      (mem_ld_used_tlb && (mem_tlb_miss || Reg(next=pf_ld || ma_ld))) ||
-      (mem_fired_ld && ldst_addr_conflicts.toBits =/= UInt(0)) ||
-      (mem_fired_ld && ldld_addr_conflict) ||
-      mem_ld_killed ||
-      (mem_fired_st && io.lsu.nack.valid && !io.lsu.nack.isload)
+   io.memreq_kill     := (mem_ld_used_tlb && (mem_tlb_miss || Reg(next=pf_ld || ma_ld))) ||
+                         (mem_fired_ld && ldst_addr_conflicts.toBits =/= UInt(0)) ||
+                         (mem_fired_ld && ldld_addr_conflict) ||
+                         mem_ld_killed ||
+                         (mem_fired_st && io.nack.valid && !io.nack.isload)
    wb_forward_std_idx := forwarding_age_logic.io.forwarding_idx
 
    // kill forwarding if branch mispredict
-   when (IsKilledByBranch(io.lsu.brinfo, mem_ld_uop))
+   when (IsKilledByBranch(io.brinfo, mem_ld_uop))
    {
       wb_forward_std_val := Bool(false)
    }
    .otherwise
    {
       wb_forward_std_val := mem_fired_ld && forwarding_age_logic.io.forwarding_val &&
-                           !force_ld_to_sleep && !(mem_tlb_miss && mem_ld_used_tlb) && !mem_ld_killed && !io.lsu.exception
+                           !force_ld_to_sleep && !(mem_tlb_miss && mem_ld_used_tlb) && !mem_ld_killed && !io.exception
    }
 
    // Notes:
    //    - Time the forwarding of the data to coincide with what would be a HIT
    //       from the cache (to only use one port).
 
-   io.lsu.forward_val := Bool(false)
-   when (IsKilledByBranch(io.lsu.brinfo, wb_uop))
+   io.forward_val := Bool(false)
+   when (IsKilledByBranch(io.brinfo, wb_uop))
    {
-      io.lsu.forward_val := Bool(false)
+      io.forward_val := Bool(false)
    }
    .otherwise
    {
-      io.lsu.forward_val := wb_forward_std_val &&
+      io.forward_val := wb_forward_std_val &&
                         sdq_val(wb_forward_std_idx) &&
-                        !(io.lsu.nack.valid && io.lsu.nack.cache_nack)
+                        !(io.nack.valid && io.nack.cache_nack)
    }
-   io.lsu.forward_data := LoadDataGenerator(sdq_data(wb_forward_std_idx).toBits, wb_uop.mem_typ)
-   io.lsu.forward_uop  := wb_uop
+   io.forward_data := LoadDataGenerator(sdq_data(wb_forward_std_idx).toBits, wb_uop.mem_typ)
+   io.forward_uop  := wb_uop
 
 
    //------------------------
    // Handle Memory Responses
    //------------------------
 
-   when (io.lsu.memresp.valid)
+   when (io.memresp.valid)
    {
-      when (io.lsu.memresp.bits.is_load)
+      when (io.memresp.bits.is_load)
       {
-         laq_succeeded(io.lsu.memresp.bits.ldq_idx) := Bool(true)
+         laq_succeeded(io.memresp.bits.ldq_idx) := Bool(true)
       }
       .otherwise
       {
-         stq_succeeded(io.lsu.memresp.bits.stq_idx) := Bool(true)
+         stq_succeeded(io.memresp.bits.stq_idx) := Bool(true)
 
          if (O3PIPEVIEW_PRINTF)
          {
-            printf("%d; store-comp: %d\n", io.lsu.memresp.bits.debug_events.fetch_seq, io.lsu.debug_tsc)
+            printf("%d; store-comp: %d\n", io.memresp.bits.debug_events.fetch_seq, io.debug_tsc)
          }
       }
    }
@@ -982,16 +942,16 @@ class LoadStoreUnitModule(outer: LoadStoreUnit) extends LazyModuleImp(outer)
                         mem_tlb_uop,
                         laq_uop(Mux(l_idx >= UInt(num_ld_entries), l_idx - UInt(num_ld_entries), l_idx)))
    r_xcpt_valid := (failed_loads.reduce(_|_) || mem_xcpt_valid) &&
-                   !io.lsu.exception &&
-                   !IsKilledByBranch(io.lsu.brinfo, mem_xcpt_uop)
+                   !io.exception &&
+                   !IsKilledByBranch(io.brinfo, mem_xcpt_uop)
    r_xcpt.uop := mem_xcpt_uop
-   r_xcpt.uop.br_mask := GetNewBrMask(io.lsu.brinfo, mem_xcpt_uop)
+   r_xcpt.uop.br_mask := GetNewBrMask(io.brinfo, mem_xcpt_uop)
    r_xcpt.cause := Mux(mem_xcpt_valid, mem_xcpt_cause, MINI_EXCEPTION_MEM_ORDERING)
    r_xcpt.badvaddr := RegNext(exe_vaddr) // TODO is there another register we can use instead?
 
 
-   io.lsu.xcpt.valid := r_xcpt_valid && !io.lsu.exception && !IsKilledByBranch(io.lsu.brinfo, r_xcpt.uop)
-   io.lsu.xcpt.bits := r_xcpt
+   io.xcpt.valid := r_xcpt_valid && !io.exception && !IsKilledByBranch(io.brinfo, r_xcpt.uop)
+   io.xcpt.bits := r_xcpt
 
    //-------------------------------------------------------------
    // Kill speculated entries on branch mispredict
@@ -1005,9 +965,9 @@ class LoadStoreUnitModule(outer: LoadStoreUnit) extends LazyModuleImp(outer)
 
       when (stq_entry_val(i))
       {
-         stq_uop(i).br_mask := GetNewBrMask(io.lsu.brinfo, stq_uop(i))
+         stq_uop(i).br_mask := GetNewBrMask(io.brinfo, stq_uop(i))
 
-         when (IsKilledByBranch(io.lsu.brinfo, stq_uop(i)))
+         when (IsKilledByBranch(io.brinfo, stq_uop(i)))
          {
             stq_entry_val(i)   := Bool(false)
             saq_val(i)         := Bool(false)
@@ -1017,7 +977,7 @@ class LoadStoreUnitModule(outer: LoadStoreUnit) extends LazyModuleImp(outer)
          }
       }
 
-      assert (!(IsKilledByBranch(io.lsu.brinfo, stq_uop(i)) && stq_entry_val(i) && stq_committed(i)),
+      assert (!(IsKilledByBranch(io.brinfo, stq_uop(i)) && stq_entry_val(i) && stq_committed(i)),
          "Branch is trying to clear a committed store.")
    }
 
@@ -1027,8 +987,8 @@ class LoadStoreUnitModule(outer: LoadStoreUnit) extends LazyModuleImp(outer)
    {
       when(laq_allocated(i))
       {
-         laq_uop(i).br_mask := GetNewBrMask(io.lsu.brinfo, laq_uop(i))
-         when (IsKilledByBranch(io.lsu.brinfo, laq_uop(i)))
+         laq_uop(i).br_mask := GetNewBrMask(io.brinfo, laq_uop(i))
+         when (IsKilledByBranch(io.brinfo, laq_uop(i)))
          {
             laq_allocated(i)   := Bool(false)
             laq_addr_val(i)    := Bool(false)
@@ -1037,10 +997,10 @@ class LoadStoreUnitModule(outer: LoadStoreUnit) extends LazyModuleImp(outer)
    }
 
    //-------------------------------------------------------------
-   when (io.lsu.brinfo.valid && io.lsu.brinfo.mispredict && !io.lsu.exception)
+   when (io.brinfo.valid && io.brinfo.mispredict && !io.exception)
    {
-      stq_tail := io.lsu.brinfo.stq_idx
-      laq_tail := io.lsu.brinfo.ldq_idx
+      stq_tail := io.brinfo.stq_idx
+      laq_tail := io.brinfo.ldq_idx
    }
 
 
@@ -1053,12 +1013,12 @@ class LoadStoreUnitModule(outer: LoadStoreUnit) extends LazyModuleImp(outer)
    var temp_stq_commit_head = stq_commit_head
    for (w <- 0 until pl_width)
    {
-      when (io.lsu.commit_store_mask(w))
+      when (io.commit_store_mask(w))
       {
          stq_committed(temp_stq_commit_head) := Bool(true)
       }
 
-      temp_stq_commit_head = Mux(io.lsu.commit_store_mask(w),
+      temp_stq_commit_head = Mux(io.commit_store_mask(w),
                                  WrapInc(temp_stq_commit_head, num_st_entries),
                                  temp_stq_commit_head)
    }
@@ -1068,7 +1028,7 @@ class LoadStoreUnitModule(outer: LoadStoreUnit) extends LazyModuleImp(outer)
    // store has been committed AND successfully sent data to memory
    when (stq_entry_val(stq_head) && stq_committed(stq_head))
    {
-      clear_store := Mux(stq_uop(stq_head).is_fence, io.lsu.dmem_is_ordered,
+      clear_store := Mux(stq_uop(stq_head).is_fence, io.dmem_is_ordered,
                                                      stq_succeeded(stq_head))
    }
 
@@ -1093,7 +1053,7 @@ class LoadStoreUnitModule(outer: LoadStoreUnit) extends LazyModuleImp(outer)
    for (w <- 0 until pl_width)
    {
       val idx = temp_laq_head
-      when (io.lsu.commit_load_mask(w))
+      when (io.commit_load_mask(w))
       {
          assert (laq_allocated(idx), "[lsu] trying to commit an un-allocated load entry.")
          assert (laq_executed(idx), "[lsu] trying to commit an un-executed load entry.")
@@ -1107,7 +1067,7 @@ class LoadStoreUnitModule(outer: LoadStoreUnit) extends LazyModuleImp(outer)
          laq_forwarded_std_val(idx) := Bool(false)
       }
 
-      temp_laq_head = Mux(io.lsu.commit_load_mask(w), WrapInc(temp_laq_head, num_ld_entries), temp_laq_head)
+      temp_laq_head = Mux(io.commit_load_mask(w), WrapInc(temp_laq_head, num_ld_entries), temp_laq_head)
    }
    laq_head := temp_laq_head
 
@@ -1130,15 +1090,15 @@ class LoadStoreUnitModule(outer: LoadStoreUnit) extends LazyModuleImp(outer)
    ld_was_put_to_sleep     := Bool(false)
 
    def IsOlder(i0: UInt, i1: UInt, tail: UInt) = (Cat(i0 <= tail, i0) < Cat(i1 <= tail, i1))
-   when (io.lsu.nack.valid)
+   when (io.nack.valid)
    {
       // the cache nacked our store
-      when (!io.lsu.nack.isload)
+      when (!io.nack.isload)
       {
-         stq_executed(io.lsu.nack.lsu_idx) := Bool(false)
-         when (IsOlder(io.lsu.nack.lsu_idx, stq_execute_head, stq_tail))
+         stq_executed(io.nack.lsu_idx) := Bool(false)
+         when (IsOlder(io.nack.lsu_idx, stq_execute_head, stq_tail))
          {
-            stq_execute_head := io.lsu.nack.lsu_idx
+            stq_execute_head := io.nack.lsu_idx
          }
       }
       // the nackee is a load
@@ -1149,7 +1109,7 @@ class LoadStoreUnitModule(outer: LoadStoreUnit) extends LazyModuleImp(outer)
          {
             // handle case where sdq_val is no longer true (store was
             // committed) or was never valid
-            when (!(sdq_val(wb_forward_std_idx)) || (io.lsu.nack.valid && io.lsu.nack.cache_nack))
+            when (!(sdq_val(wb_forward_std_idx)) || (io.nack.valid && io.nack.cache_nack))
             {
                clr_ld := Bool(true)
             }
@@ -1161,11 +1121,11 @@ class LoadStoreUnitModule(outer: LoadStoreUnit) extends LazyModuleImp(outer)
 
          when (clr_ld)
          {
-            laq_executed(io.lsu.nack.lsu_idx) := Bool(false)
-            debug_laq_put_to_sleep(io.lsu.nack.lsu_idx) := Bool(true)
+            laq_executed(io.nack.lsu_idx) := Bool(false)
+            debug_laq_put_to_sleep(io.nack.lsu_idx) := Bool(true)
             ld_was_killed := Bool(true)
-            ld_was_put_to_sleep := !debug_laq_put_to_sleep(io.lsu.nack.lsu_idx)
-            laq_forwarded_std_val(io.lsu.nack.lsu_idx) := Bool(false)
+            ld_was_put_to_sleep := !debug_laq_put_to_sleep(io.nack.lsu_idx)
+            laq_forwarded_std_val(io.nack.lsu_idx) := Bool(false)
          }
       }
    }
@@ -1180,7 +1140,7 @@ class LoadStoreUnitModule(outer: LoadStoreUnit) extends LazyModuleImp(outer)
 
    val null_uop = NullMicroOp
 
-   when (reset.toBool || io.lsu.exception)
+   when (reset.toBool || io.exception)
    {
       laq_head := UInt(0, MEM_ADDR_SZ)
       laq_tail := UInt(0, MEM_ADDR_SZ)
@@ -1257,28 +1217,28 @@ class LoadStoreUnitModule(outer: LoadStoreUnit) extends LazyModuleImp(outer)
       stq_is_full = (s_temp === stq_head || s_temp === (stq_head + UInt(num_st_entries))) | stq_is_full
    }
 
-   io.lsu.laq_full  := laq_is_full
-   io.lsu.stq_full  := stq_is_full
+   io.laq_full  := laq_is_full
+   io.stq_full  := stq_is_full
    val stq_empty = stq_tail === stq_head //&& !stq_maybe_full
 
-   io.lsu.new_ldq_idx := laq_tail
-   io.lsu.new_stq_idx := stq_tail
+   io.new_ldq_idx := laq_tail
+   io.new_stq_idx := stq_tail
 
-   io.lsu.lsu_fencei_rdy := stq_empty && io.lsu.dmem_is_ordered
+   io.lsu_fencei_rdy := stq_empty && io.dmem_is_ordered
 
    //-------------------------------------------------------------
    // Debug & Counter outputs
 
-   io.lsu.counters.ld_valid        := io.lsu.exe_resp.valid && io.lsu.exe_resp.bits.uop.is_load
-   io.lsu.counters.ld_forwarded    := io.lsu.forward_val
-   io.lsu.counters.ld_sleep        := ld_was_put_to_sleep
-   io.lsu.counters.ld_killed       := ld_was_killed
-   io.lsu.counters.stld_order_fail := stld_order_fail
-   io.lsu.counters.ldld_order_fail := ldld_order_fail
+   io.counters.ld_valid        := io.exe_resp.valid && io.exe_resp.bits.uop.is_load
+   io.counters.ld_forwarded    := io.forward_val
+   io.counters.ld_sleep        := ld_was_put_to_sleep
+   io.counters.ld_killed       := ld_was_killed
+   io.counters.stld_order_fail := stld_order_fail
+   io.counters.ldld_order_fail := ldld_order_fail
 
    if (DEBUG_PRINTF_LSU)
    {
-      printf("wakeup_idx: %d, ld is head of ROB:%d\n", exe_ld_idx_wakeup, io.lsu.commit_load_at_rob_head)
+      printf("wakeup_idx: %d, ld is head of ROB:%d\n", exe_ld_idx_wakeup, io.commit_load_at_rob_head)
       for (i <- 0 until NUM_LSU_ENTRIES)
       {
          val t_laddr = laq_addr(i)

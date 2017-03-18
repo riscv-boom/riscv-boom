@@ -19,7 +19,7 @@ import rocket._
 class DefaultBoomConfig extends Config((site, here, up) => {
 
    // Top-Level
-//   case BuildCore => (p: Parameters) => new BoomCore()(p)
+   case BuildCore => (p: Parameters, e: uncore.tilelink2.TLEdgeOut) => new BoomCore()(p, e)
    case BoomKey => BoomCoreParams()
    case XLen => 64
 
@@ -27,7 +27,9 @@ class DefaultBoomConfig extends Config((site, here, up) => {
       r.copy(core = r.core.copy(
          useCompressed = false,
          nPerfCounters = 4,
-         nPerfEvents = 31
+         nPerfEvents = 31,
+         fpu = Some(tile.FPUParams(sfmaLatency=3, dfmaLatency=3))
+//         fpu = r.core.fpu.map(_.copy(divSqrt = false))))
       ))}
 
 

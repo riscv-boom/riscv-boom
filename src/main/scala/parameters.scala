@@ -27,11 +27,11 @@ case class BoomCoreParams(
    fastLoadWord: Boolean = true,
    fastLoadByte: Boolean = false,
    fastJAL: Boolean = false,
-   mulDiv: Option[MulDivParams] = Some(MulDivParams()),
-   fpu: Option[FPUParams] = Some(FPUParams()),
+   mulDiv: Option[MulDivParams] = None,//Some(MulDivParams()),
+   fpu: Option[FPUParams] = None, //Some(FPUParams()),
 //   dispatchWidth: Int = 1,
    issueWidth: Int = 1,
-   numRobEntries: Int = 32,
+   numRobEntries: Int = 16,
    numIssueSlotEntries: Int = 12,
    numLsuEntries: Int = 8,
    numPhysRegisters: Int = 110,
@@ -49,9 +49,10 @@ case class BoomCoreParams(
    enableCommitMapTable: Boolean = false
 ) extends CoreParams {
 //) extends RocketCoreParams {
-   val fetchWidth: Int = 2 // TODO XXX this is hardcoded -- how should I get this parameterized?
-   val decodeWidth: Int = fetchWidth
-   val retireWidth: Int = decodeWidth
+   // HACK this code isn't read
+   val fetchWidth: Int = 0 // TODO XXX this is hardcoded -- how should I get this parameterized?
+   val decodeWidth: Int = 0 // fetchWidth
+   val retireWidth: Int = 0 // decodeWidth
    val instBits: Int = if (useCompressed) 16 else 32
 
    require (useCompressed == false)
@@ -61,19 +62,20 @@ case class BoomCoreParams(
 
 trait HasBoomCoreParameters extends tile.HasCoreParameters
 {
-//   val boomParams: BoomCoreParams = tileParams.core.asInstanceOf[BoomCoreParams]
+   // HACK this is a bit hacky since BoomParams can't extend RocketParams.
+   val rocketParams: RocketCoreParams = tileParams.core.asInstanceOf[RocketCoreParams]
    val boomParams: BoomCoreParams = p(BoomKey)
    require(xLen == 64)
 
-   val nPerfCounters = boomParams.nPerfCounters
-   val nPerfEvents = boomParams.nPerfEvents
+   val nPerfCounters    = rocketParams.nPerfCounters
+   val nPerfEvents      = rocketParams.nPerfEvents
    //************************************
    // Superscalar Widths
-   val FETCH_WIDTH      = boomParams.fetchWidth       // number of insts we can fetch
-   val DECODE_WIDTH     = boomParams.decodeWidth
+   val FETCH_WIDTH      = rocketParams.fetchWidth       // number of insts we can fetch
+   val DECODE_WIDTH     = rocketParams.decodeWidth
    val DISPATCH_WIDTH   = DECODE_WIDTH                // number of insts put into the IssueWindow
    val ISSUE_WIDTH      = boomParams.issueWidth
-   val COMMIT_WIDTH     = boomParams.retireWidth
+   val COMMIT_WIDTH     = rocketParams.retireWidth
 
    require (DECODE_WIDTH == COMMIT_WIDTH)
    require (DISPATCH_WIDTH == COMMIT_WIDTH)
@@ -93,15 +95,18 @@ trait HasBoomCoreParameters extends tile.HasCoreParameters
 
    //************************************
    // Functional Units
-   val usingFDivSqrt = boomParams.fpu.get.divSqrt
+   val usingFDivSqrt = rocketParams.fpu.get.divSqrt
 
-   val mulDivParams = boomParams.mulDiv.getOrElse(MulDivParams())
+   val mulDivParams = rocketParams.mulDiv.getOrElse(MulDivParams())
 
    //************************************
    // Pipelining
 
-   val IMUL_STAGES = boomParams.fpu.get.dfmaLatency
-   val dfmaLatency = boomParams.fpu.get.dfmaLatency
+   val IMUL_STAGES = rocketParams.fpu.get.dfmaLatency
+   val dfmaLatency = rocketParams.fpu.get.dfmaLatency
+   val sfmaLatency = rocketParams.fpu.get.sfmaLatency
+   // All FPU ops padded out to same delay for writeport scheduling.
+   require (sfmaLatency == dfmaLatency) 
    
    val enableBrResolutionRegister = boomParams.enableBrResolutionRegister
     

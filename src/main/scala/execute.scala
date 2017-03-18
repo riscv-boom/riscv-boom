@@ -476,8 +476,8 @@ class ALUMemExeUnit(
 {
    println ("     ExeUnit--")
    println ("       - ALU")
-   if (has_fpu) println ("       - FPU")
-   if (has_mul && !use_slow_mul) println ("       - Mul (pipelined)")
+   if (has_fpu) println ("       - FPU (Latency: " + dfmaLatency + " cycles)")
+   if (has_mul && !use_slow_mul) println ("       - Mul (pipelined: " + IMUL_STAGES + " cycles)")
    if (has_div && has_mul && use_slow_mul) println ("       - Mul/Div (unpipelined)")
    else if (has_mul && use_slow_mul) println ("       - Mul (unpipelined)")
    else if (has_div) println ("       - Div")
