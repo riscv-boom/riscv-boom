@@ -20,7 +20,7 @@ case object GShareKey extends Field[GShareParameters]
 
 case class GShareParameters(
    enabled: Boolean = false,
-   history_length: Int = 10,
+   history_length: Int = 12,
    // The prediction table requires 1 read and 1 write port.
    // Should we use two ports or should we bank the p-table?
    dualported: Boolean = false

@@ -13,23 +13,6 @@ import config.{Parameters, Field}
 case object BoomKey extends Field[BoomCoreParams]
 
 case class BoomCoreParams(
-   useVM: Boolean = true,
-   useUser: Boolean = true,
-   useDebug: Boolean = true,
-   useAtomics: Boolean = true,
-   useCompressed: Boolean = false,
-   nBreakpoints: Int = 1,
-   nPerfCounters: Int = 4,
-   nPerfEvents: Int = 31,
-   nCustomMRWCSRs: Int = 0,
-   mtvecInit: Option[BigInt] = Some(BigInt(0)),
-   mtvecWritable: Boolean = true,
-   fastLoadWord: Boolean = true,
-   fastLoadByte: Boolean = false,
-   fastJAL: Boolean = false,
-   mulDiv: Option[MulDivParams] = None,//Some(MulDivParams()),
-   fpu: Option[FPUParams] = None, //Some(FPUParams()),
-//   dispatchWidth: Int = 1,
    issueWidth: Int = 1,
    numRobEntries: Int = 16,
    numIssueSlotEntries: Int = 12,
@@ -37,7 +20,6 @@ case class BoomCoreParams(
    numPhysRegisters: Int = 110,
    maxBrCount: Int = 4,
    fetchBufferSz: Int = 4,
-//   enableBTB: Boolean = true,
    enableBTBContainsBranches: Boolean = true,
    enableBranchPredictor: Boolean = true,
    enableBpdUModeOnly: Boolean = false,
@@ -47,18 +29,7 @@ case class BoomCoreParams(
    enableFetchBufferFlowThrough: Boolean = false,
    enableBrResolutionRegister: Boolean = true,
    enableCommitMapTable: Boolean = false
-) extends CoreParams {
-//) extends RocketCoreParams {
-   // HACK this code isn't read
-   val fetchWidth: Int = 0 // TODO XXX this is hardcoded -- how should I get this parameterized?
-   val decodeWidth: Int = 0 // fetchWidth
-   val retireWidth: Int = 0 // decodeWidth
-   val instBits: Int = if (useCompressed) 16 else 32
-
-   require (useCompressed == false)
-   require (instBits == 32) 
-}
-
+)
 
 trait HasBoomCoreParameters extends tile.HasCoreParameters
 {

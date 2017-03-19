@@ -58,11 +58,11 @@ abstract class TageUbitMemory(
       }
 
       // Degrading may take many cycles. Tell the tage-table if we are degrading.
-      val is_degrading = Bool(OUTPUT)
-      def areDegrading(dummy: Int=0) =
-      {
-         this.is_degrading
-      }
+//      val is_degrading = Bool(OUTPUT)
+//      def areDegrading(dummy: Int=0) =
+//      {
+//         this.is_degrading
+//      }
 
       def InitializeIo(dummy: Int=0) =
       {
@@ -72,7 +72,7 @@ abstract class TageUbitMemory(
          this.update_idx := UInt(0)
          this.update_inc := Bool(false)
          this.degrade_valid := Bool(false)
-         this.is_degrading := Bool(false)
+//         this.is_degrading := Bool(false)
       }
    }
 
