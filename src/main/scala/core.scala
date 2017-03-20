@@ -838,7 +838,7 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
 
    csr.io.events.map(_ := UInt(0))
 
-   require (nPerfEvents > 29)
+   require (nPerfEvents >= 35)
    println ("   " + nPerfCounters + " HPM counters enabled (with " + nPerfEvents + " events).")
 
    // Execution-time branch prediction accuracy.
@@ -853,6 +853,12 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    // TODO add back in cache-miss counters.
 //   csr.io.events(3) := io.dmem.acquire // D$ miss
 //   csr.io.events(4) := io.imem.acquire // I$ miss
+   csr.io.events(3)  := io.dmem.dc_miss
+   csr.io.events(4)  := io.imem.ic_miss
+   csr.io.events(31) := io.dmem.req.fire()  // d$ accesses
+   csr.io.events(32) := io.imem.resp.fire() // i$ accesses
+   csr.io.events(33) := io.dmem.tlb_miss // DTLB miss
+   csr.io.events(34) := io.imem.tlb_miss // ITLB miss
 
    csr.io.events(5)  := csr.io.status.prv === UInt(rocket.PRV.U)
 
