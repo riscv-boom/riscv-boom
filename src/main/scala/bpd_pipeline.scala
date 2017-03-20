@@ -100,28 +100,28 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
                                    // we use this to update the bpd's history register speculatively
 
    var br_predictor: BrPredictor = null
-   if (ENABLE_BRANCH_PREDICTOR && p(TageKey).enabled)
+   if (ENABLE_BRANCH_PREDICTOR && tageParams.isDefined && tageParams.get.enabled)
    {
       br_predictor = Module(new TageBrPredictor(fetch_width = fetch_width,
-                                                num_tables = p(TageKey).num_tables,
-                                                table_sizes = p(TageKey).table_sizes,
-                                                history_lengths = p(TageKey).history_lengths,
-                                                tag_sizes = p(TageKey).tag_sizes,
-                                                ubit_sz = p(TageKey).ubit_sz
+                                                num_tables = tageParams.get.num_tables,
+                                                table_sizes = tageParams.get.table_sizes,
+                                                history_lengths = tageParams.get.history_lengths,
+                                                tag_sizes = tageParams.get.tag_sizes,
+                                                ubit_sz = tageParams.get.ubit_sz
                                                 ))
    }
-   else if (ENABLE_BRANCH_PREDICTOR && p(GSkewKey).enabled)
+   else if (ENABLE_BRANCH_PREDICTOR && gskewParams.isDefined && gskewParams.get.enabled)
    {
       br_predictor = Module(new GSkewBrPredictor(fetch_width = fetch_width,
-                                                  history_length = p(GSkewKey).history_length,
-                                                  dualported = p(GSkewKey).dualported,
-                                                  enable_meta = p(GSkewKey).enable_meta))
+                                                  history_length = gskewParams.get.history_length,
+                                                  dualported = gskewParams.get.dualported,
+                                                  enable_meta = gskewParams.get.enable_meta))
    }
-   else if (ENABLE_BRANCH_PREDICTOR && p(GShareKey).enabled)
+   else if (ENABLE_BRANCH_PREDICTOR && gshareParams.isDefined && gshareParams.get.enabled)
    {
       br_predictor = Module(new GShareBrPredictor(fetch_width = fetch_width,
-                                                  history_length = p(GShareKey).history_length,
-                                                  dualported = p(GShareKey).dualported))
+                                                  history_length = gshareParams.get.history_length,
+                                                  dualported = gshareParams.get.dualported))
    }
    else if (ENABLE_BRANCH_PREDICTOR && p(SimpleGShareKey).enabled)
    {

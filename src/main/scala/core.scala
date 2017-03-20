@@ -879,7 +879,6 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
 
    require (nPerfEvents > 29)
    println ("   " + nPerfCounters + " HPM counters enabled (with " + nPerfEvents + " events).")
-   println ("events.length:" + csr.io.events.length)
 
    // Execution-time branch prediction accuracy.
    csr.io.events(0) := br_unit.brinfo.valid

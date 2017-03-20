@@ -16,10 +16,9 @@ package boom
 import Chisel._
 import config.{Parameters, Field}
 
-case object GShareKey extends Field[GShareParameters]
 
 case class GShareParameters(
-   enabled: Boolean = false,
+   enabled: Boolean = true,
    history_length: Int = 12,
    // The prediction table requires 1 read and 1 write port.
    // Should we use two ports or should we bank the p-table?
@@ -34,9 +33,9 @@ class GShareResp(index_sz: Int) extends Bundle
 
 object GShareBrPredictor
 {
-   def GetRespInfoSize(p: Parameters): Int =
+   def GetRespInfoSize(p: Parameters, hlen: Int): Int =
    {
-      val dummy = new GShareResp(p(GShareKey).history_length)
+      val dummy = new GShareResp(hlen)
       dummy.getWidth
    }
 }

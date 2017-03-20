@@ -49,10 +49,8 @@ import config.{Parameters, Field}
 
 import util.Str
 
-case object TageKey extends Field[TageParameters]
-
 case class TageParameters(
-   enabled: Boolean = false,
+   enabled: Boolean = true,
    num_tables: Int = 4,
    table_sizes: Seq[Int] = Seq(4096,4096,2048,2048),
    history_lengths: Seq[Int] = Seq(5,17,44,130),
@@ -100,12 +98,13 @@ object TageBrPredictor
 {
    def GetRespInfoSize(p: Parameters, fetchWidth: Int): Int =
    {
+      val params = p(BoomKey).tage.get
       val dummy = new TageResp(
          fetch_width = fetchWidth,
-         num_tables = p(TageKey).num_tables,
-         max_history_length = p(TageKey).history_lengths.max,
-         max_index_sz = log2Up(p(TageKey).table_sizes.max),
-         max_tag_sz = p(TageKey).tag_sizes.max
+         num_tables = params.num_tables,
+         max_history_length = params.history_lengths.max,
+         max_index_sz = log2Up(params.table_sizes.max),
+         max_tag_sz = params.tag_sizes.max
          )
       dummy.getWidth
    }

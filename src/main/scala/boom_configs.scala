@@ -16,80 +16,13 @@ import rocketchip._
 import tile._
 import rocket._
 import boom._
-import DefaultTestSuites._
 import config.{Parameters, Config}
-
-//class BOOMConfig extends Config(new WithBlockingL1 ++ new WithNBigCores(1) ++ new BaseConfig)
-//class BOOMConfig extends Config(new WithBoomCore ++ new BaseConfig)
-class BOOMConfig extends Config(new DefaultBoomConfig ++ new WithNBigCores(1) ++ new BaseConfig)
-
- 
-////class WithBoomCores(n_cores: Int=1) extends Config((site, here, up) => {
-//class WithBoomCore extends Config((site, here, up) => {
-//   case BuildCore => (p: Parameters) => new BoomCore()(p)
-////   case BoomKey => BoomCoreParams()
-//  
-//   case RocketTilesKey => up(RocketTilesKey, site) map { r =>
-//      r.copy(core = r.core.copy(
-//         useCompressed = false
-//      ))}
-//         
-////  case RocketTilesKey => {
-////    val big = RocketTileParams(
-////      core   = BoomCoreParams(mulDiv = Some(MulDivParams(mulUnroll = 8, mulEarlyOut = true, divEarlyOut = true))),
-////      dcache = Some(DCacheParams(rowBits = site(L1toL2Config).beatBytes*8, nMSHRs  = 4)),
-////      icache = Some(ICacheParams(rowBits = site(L1toL2Config).beatBytes*8)))
-////   val n_cores = 1
-////    List.fill(n_cores)(big) ++ up(RocketTilesKey, site)
-////  }
-//})
-        
-
-
-//class WithAllBooms extends Config(
-//   (pname,site,here) => pname match {
-//      case BuildTiles => {
-//         val env = if(site(UseVM)) List("p","v") else List("p")
-//         site(FPUKey) foreach { case cfg =>
-//            if (site(XLen) == 32) {
-//               TestGeneration.addSuites(env.map(rv32ufNoDiv))
-//            } else {
-//               TestGeneration.addSuite(rv32udBenchmarks)
-//               TestGeneration.addSuites(env.map(rv64ufNoDiv))
-//               TestGeneration.addSuites(env.map(rv64udNoDiv))
-//               if (cfg.divSqrt) {
-//                  TestGeneration.addSuites(env.map(rv64uf))
-//                  TestGeneration.addSuites(env.map(rv64ud))
-//               }
-//            }
-//         }
-//         if (site(UseAtomics)) TestGeneration.addSuites(env.map(if (site(XLen) == 64) rv64ua else rv32ua))
-//         if (site(UseCompressed)) TestGeneration.addSuites(env.map(if (site(XLen) == 64) rv64uc else rv32uc))
-//         val (rvi, rvu) =
-//            if (site(XLen) == 64) ((if (site(UseVM)) rv64i else rv64pi), rv64u)
-//            else ((if (site(UseVM)) rv32i else rv32pi), rv32u)
-//         TestGeneration.addSuites(rvi.map(_("p")))
-//         TestGeneration.addSuites((if(site(UseVM)) List("v") else List()).flatMap(env => rvu.map(_(env))))
-//         TestGeneration.addSuite(benchmarks)
-//         List.tabulate(site(NTiles)){ i => (p: Parameters) =>
-//            diplomacy.LazyModule(new BOOMTile()(p.alterPartial({
-//               case TileId => i
-//               case TLId => "L1toL2"
-//               case NUncachedTileLinkPorts => 1 + site(RoccNMemChannels)
-//            })))
-//         }
-//  }}
-//)
 
 // scalastyle:off
 
-//class SmallBOOMConfig  extends Config(new WithSmallBOOMs  ++ new WithAllBooms ++ new DefaultBOOMConfig ++ new BaseConfig)
-//class MediumBOOMConfig extends Config(new WithMediumBOOMs ++ new WithAllBooms ++ new DefaultBOOMConfig ++ new DefaultL2Config)
-//class MegaBOOMConfig   extends Config(new WithMegaBOOMs   ++ new WithAllBooms ++ new DefaultBOOMConfig ++ new DefaultL2Config)
-//
-//class BOOMConfig extends Config(new WithNPerfCounters(6) ++ new WithMediumBOOMs ++ new WithAllBooms ++ new DefaultBOOMConfig ++ new WithL2Capacity(1024) ++ new DefaultL2Config)
-//class BOOML1Config extends  Config(new WithNPerfCounters(4) ++ new WithAllBooms ++ new DefaultBOOMConfig ++ new BaseConfig)
-//class BOOMFPGAConfig   extends Config(new WithNPerfCounters(29) ++ new WithAllBooms ++ new DefaultBOOMConfig ++ new DefaultFPGAConfig)
-//class BOOML2FPGAConfig extends Config(new WithNPerfCounters(29) ++ new WithAllBooms ++ new DefaultBOOMConfig ++ new WithL2Capacity(1024) ++ new WithL2Cache ++ new DefaultFPGAConfig)
+class BOOMConfig extends Config(new DefaultBoomConfig ++ new WithNBigCores(1) ++ new BaseConfig)
+class SmallBoomConfig extends Config(new WithSmallBooms ++ new DefaultBoomConfig ++ new WithNBigCores(1) ++ new BaseConfig)
+class MediumBoomConfig extends Config(new WithMediumBooms ++ new DefaultBoomConfig ++ new WithNBigCores(1) ++ new BaseConfig)
+class MegaBoomConfig extends Config(new WithMegaBooms ++ new DefaultBoomConfig ++ new WithNBigCores(1) ++ new BaseConfig)
 
 // scalastyle:on

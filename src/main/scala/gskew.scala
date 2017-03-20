@@ -25,10 +25,8 @@ package boom
 import Chisel._
 import config.{Parameters, Field}
 
-case object GSkewKey extends Field[GSkewParameters]
-
 case class GSkewParameters(
-   enabled: Boolean = false,
+   enabled: Boolean = true,
    history_length: Int = 21,
    bimo_num_entries: Int = 16*1024,
    gsh0_num_entries: Int = 64*1024,
@@ -59,12 +57,13 @@ object GSkewBrPredictor
 {
    def GetRespInfoSize(p: Parameters, fetchWidth: Int): Int =
    {
+      val params = p(BoomKey).gskew.get
       val dummy = new GSkewResp(
          fetchWidth,
-         log2Up(p(GSkewKey).bimo_num_entries),
-         log2Up(p(GSkewKey).gsh0_num_entries),
-         log2Up(p(GSkewKey).gsh1_num_entries),
-         log2Up(p(GSkewKey).meta_num_entries)
+         log2Up(params.bimo_num_entries),
+         log2Up(params.gsh0_num_entries),
+         log2Up(params.gsh1_num_entries),
+         log2Up(params.meta_num_entries)
          )
       dummy.getWidth
    }
@@ -76,10 +75,11 @@ class GSkewBrPredictor(fetch_width: Int,
                         enable_meta: Boolean = false
    )(implicit p: Parameters) extends BrPredictor(fetch_width, history_length)(p)
 {
-   val bimo_num_entries = p(GSkewKey).bimo_num_entries
-   val gsh0_num_entries = p(GSkewKey).gsh0_num_entries
-   val gsh1_num_entries = p(GSkewKey).gsh1_num_entries
-   val meta_num_entries = p(GSkewKey).meta_num_entries
+   val params = p(BoomKey).gskew.get
+   val bimo_num_entries = params.bimo_num_entries
+   val gsh0_num_entries = params.gsh0_num_entries
+   val gsh1_num_entries = params.gsh1_num_entries
+   val meta_num_entries = params.meta_num_entries
    val bimo_idx_sz      = log2Up(bimo_num_entries)
    val gsh0_idx_sz      = log2Up(gsh0_num_entries)
    val gsh1_idx_sz      = log2Up(gsh1_num_entries)

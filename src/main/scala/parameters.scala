@@ -20,15 +20,18 @@ case class BoomCoreParams(
    numPhysRegisters: Int = 110,
    maxBrCount: Int = 4,
    fetchBufferSz: Int = 4,
-   enableBTBContainsBranches: Boolean = true,
-   enableBranchPredictor: Boolean = true,
-   enableBpdUModeOnly: Boolean = false,
-   enableBpdUSModeHistory: Boolean = false,
    enableAgePriorityIssue: Boolean = true,
    enablePrefetching: Boolean = false,
    enableFetchBufferFlowThrough: Boolean = false,
    enableBrResolutionRegister: Boolean = true,
-   enableCommitMapTable: Boolean = false
+   enableCommitMapTable: Boolean = false,
+   enableBTBContainsBranches: Boolean = true,
+   enableBranchPredictor: Boolean = true,
+   enableBpdUModeOnly: Boolean = false,
+   enableBpdUSModeHistory: Boolean = false,
+   tage: Option[TageParameters] = None,
+   gshare: Option[GShareParameters] = None,
+   gskew: Option[GSkewParameters] = None
 )
 
 trait HasBoomCoreParameters extends tile.HasCoreParameters
@@ -112,21 +115,24 @@ trait HasBoomCoreParameters extends tile.HasCoreParameters
    var BPD_INFO_SIZE = 0
    var ENABLE_VLHR = false
 
-   if (p(TageKey).enabled)
+   val tageParams = boomParams.tage
+   val gshareParams = boomParams.gshare
+   val gskewParams = boomParams.gskew
+   if (tageParams.isDefined && tageParams.get.enabled)
    {
-      GLOBAL_HISTORY_LENGTH = p(TageKey).history_lengths.max
+      GLOBAL_HISTORY_LENGTH = tageParams.get.history_lengths.max
       BPD_INFO_SIZE = TageBrPredictor.GetRespInfoSize(p, fetchWidth)
       ENABLE_VLHR = true
    }
-   else if (p(GSkewKey).enabled)
+   else if (gskewParams.isDefined && gskewParams.get.enabled)
    {
-      GLOBAL_HISTORY_LENGTH = p(GSkewKey).history_length
+      GLOBAL_HISTORY_LENGTH = gskewParams.get.history_length
       BPD_INFO_SIZE = GSkewBrPredictor.GetRespInfoSize(p, fetchWidth)
    }
-   else if (p(GShareKey).enabled)
+   else if (gshareParams.isDefined && gshareParams.get.enabled)
    {
-      GLOBAL_HISTORY_LENGTH = p(GShareKey).history_length
-      BPD_INFO_SIZE = GShareBrPredictor.GetRespInfoSize(p)
+      GLOBAL_HISTORY_LENGTH = gshareParams.get.history_length
+      BPD_INFO_SIZE = GShareBrPredictor.GetRespInfoSize(p, GLOBAL_HISTORY_LENGTH)
    }
    else if (p(SimpleGShareKey).enabled)
    {
