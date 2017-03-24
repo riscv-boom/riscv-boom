@@ -40,14 +40,6 @@ abstract class BoomModule(implicit p: Parameters) extends tile.CoreModule()(p)
 class BoomBundle(implicit val p: Parameters) extends util.ParameterizedBundle()(p)
   with HasBoomCoreParameters
 
-
-class CacheCounters() extends Bundle
-{
-   val dc_miss = Bool()
-   val ic_miss = Bool()
-}
-
-
 //-------------------------------------------------------------
 //-------------------------------------------------------------
 //-------------------------------------------------------------
@@ -56,22 +48,6 @@ class CacheCounters() extends Bundle
 class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends BoomModule()(p)
    with tile.HasCoreIO
 {
-   // TODO XXX tie off rocc, fpu signals?
-//   val io = new BoomBundle()(p)
-//   {
-//      val interrupts = new rocket.TileInterrupts().asInput
-//      val hartid     = UInt(INPUT, xLen)
-//      val imem       = new rocket.FrontendIO
-//      val dmem       = new DCMemPortIO
-//      val ptw_dat    = new rocket.DatapathPTWIO().flip
-//      val ptw_tlb    = new rocket.TLBPTWIO()
-//      val rocc       = new rocket.RoCCInterface().flip
-//      val counters   = new CacheCounters().asInput
-//   }
- 
-   // we do not support RoCC (yet)
-   io.rocc.cmd.valid := Bool(false)
-   io.rocc.resp.ready := Bool(false)
    //**********************************
    // construct all of the modules
 
@@ -106,7 +82,6 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    val csr              = Module(new rocket.CSRFile())
    val dc_shim          = Module(new DCacheShim())
    val lsu              = Module(new LoadStoreUnit(DECODE_WIDTH))
-
    val rob              = Module(new Rob(
                                  DECODE_WIDTH,
                                  NUM_ROB_ENTRIES,
@@ -127,13 +102,13 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    val dec_rdy        = Wire(Bool())
 
    // Dispatch Stage
-   val dis_valids            = Wire(Vec(DISPATCH_WIDTH, Bool())) // true if uop WILL enter IW/ROB
-   val dis_uops              = Wire(Vec(DISPATCH_WIDTH, new MicroOp()))
+   val dis_valids     = Wire(Vec(DISPATCH_WIDTH, Bool())) // true if uop WILL enter IW/ROB
+   val dis_uops       = Wire(Vec(DISPATCH_WIDTH, new MicroOp()))
 
    // Issue Stage/Register Read
-   val iss_valids            = Wire(Vec(issue_width, Bool()))
-   val iss_uops              = Wire(Vec(issue_width, new MicroOp()))
-   val bypasses              = Wire(new BypassData(exe_units.num_total_bypass_ports, register_width))
+   val iss_valids     = Wire(Vec(issue_width, Bool()))
+   val iss_uops       = Wire(Vec(issue_width, new MicroOp()))
+   val bypasses       = Wire(new BypassData(exe_units.num_total_bypass_ports, register_width))
 
    // Branch Unit
    val br_unit = Wire(new BranchUnitResp())
@@ -143,10 +118,10 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    // Shim to DCache
    io.dmem <> dc_shim.io.dmem
    dc_shim.io.core <> exe_units.memory_unit.io.dmem
+   dc_shim.io.core.invalidate_lr := rob.io.com_xcpt.valid
 
    // Load/Store Unit & ExeUnits
    exe_units.memory_unit.io.lsu_io := lsu.io
-//   io.dmem <> exe_units.memory_unit.io.dmem
 
 
    //****************************************
@@ -532,7 +507,8 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
       for (j <- 0 until exe_units(i).num_rf_write_ports)
       {
          issue_unit.io.wakeup_pdsts(wu_idx).valid := exe_units(i).io.resp(j).valid &&
-                                                     exe_units(i).io.resp(j).bits.uop.ctrl.rf_wen && // TODO get rid of other rtype checks
+                                                     // TODO get rid of other rtype checks
+                                                     exe_units(i).io.resp(j).bits.uop.ctrl.rf_wen && 
                                                      !exe_units(i).io.resp(j).bits.uop.bypassable &&
                                                      (exe_units(i).io.resp(j).bits.uop.dst_rtype === RT_FIX ||
                                                       exe_units(i).io.resp(j).bits.uop.dst_rtype === RT_FLT)
@@ -561,7 +537,6 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    //-------------------------------------------------------------
 
    // Register Read <- Issue (rrd <- iss)
-//   regfile.io.read_ports <> register_read.io.rf_read_ports
    register_read.io.rf_read_ports <> regfile.io.read_ports
 
    for (w <- 0 until issue_width)
@@ -681,18 +656,6 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
 
    lsu.io.dmem_req_ready := dc_shim.io.core.req.ready
    lsu.io.dmem_is_ordered:= dc_shim.io.core.ordered
-
-
-    
-//   io.lsu.io.new_ldq_idx := lsu.io.new_ldq_idx
-//   io.lsu.io.new_stq_idx := lsu.io.new_stq_idx
-//   io.lsu.io.laq_full := lsu.io.laq_full
-//   io.lsu.io.stq_full := lsu.io.stq_full
-//   io.lsu.io.lsu_clr_bsy_valid := lsu.io.lsu_clr_bsy_valid // TODO is there a better way to clear the busy bits in the ROB
-//   io.lsu.io.lsu_clr_bsy_rob_idx := lsu.io.lsu_clr_bsy_rob_idx
-//   io.lsu.io.lsu_fencei_rdy := lsu.io.lsu_fencei_rdy
-      
-
 
 
    //-------------------------------------------------------------
@@ -818,8 +781,7 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    }
 
    // branch resolution
-   rob.io.brinfo <> br_unit.brinfo  // TODO XXX chisel3 question
-//   rob.io.brinfo <> br_unit.brinfo.asInput
+   rob.io.brinfo <> br_unit.brinfo
 
    // branch unit requests PCs and predictions from ROB during register read
    // (fetch PC from ROB cycle earlier than needed for critical path reasons)
@@ -839,8 +801,7 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    rob.io.csr_eret := csr.io.eret
    rob.io.csr_evec := csr.io.evec
 
-   rob.io.bxcpt <> br_unit.xcpt  // TODO XXX chisel3 question
-//   rob.io.bxcpt <> br_unit.xcpt.asInput
+   rob.io.bxcpt <> br_unit.xcpt
 
 
    bpd_stage.io.brob.deallocate <> rob.io.brob_deallocate
@@ -889,9 +850,9 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
       rob.io.commit.valids(w) && (csr.io.status.prv === UInt(rocket.PRV.U))})
 
    // L1 cache stats.
-   // TODO XXX add these back in
-//   csr.io.events(3) := io.counters.dc_miss
-//   csr.io.events(4) := io.counters.ic_miss
+   // TODO add back in cache-miss counters.
+//   csr.io.events(3) := io.dmem.acquire // D$ miss
+//   csr.io.events(4) := io.imem.acquire // I$ miss
 
    csr.io.events(5)  := csr.io.status.prv === UInt(rocket.PRV.U)
 
@@ -995,27 +956,16 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
 
       if (DEBUG_PRINTF_ROB)
       {
-//         printf(") State: (%s: %s %s %s \u001b[1;31m%s\u001b[0m %s %s) BMsk:%x Mode:%s\n"
          printf(") ctate: (%c: %c %c %c %c %c %c) BMsk:%x Mode:%c\n"
-         // chisel3 lacks %s support
-//         , Mux(rob.io.debug.state === UInt(0), Str("RESET"),
-//           Mux(rob.io.debug.state === UInt(1), Str("NORMAL"),
-//           Mux(rob.io.debug.state === UInt(2), Str("ROLLBK"),
-//           Mux(rob.io.debug.state === UInt(3), Str("WAIT_E"),
          , Mux(rob.io.debug.state === UInt(0), Str("R"),
            Mux(rob.io.debug.state === UInt(1), Str("N"),
            Mux(rob.io.debug.state === UInt(2), Str("B"),
            Mux(rob.io.debug.state === UInt(3), Str("W"),
                                                Str(" ")))))
-//         , Mux(rob.io.ready,Str("_"), Str("!ROB_RDY"))
          , Mux(rob.io.ready,Str("_"), Str("!"))
-//         , Mux(lsu.io.laq_full, Str("LAQ_FULL"), Str("_"))
-//         , Mux(lsu.io.stq_full, Str("STQ_FULL"), Str("_"))
          , Mux(lsu.io.laq_full, Str("L"), Str("_"))
          , Mux(lsu.io.stq_full, Str("S"), Str("_"))
-//         , Mux(rob.io.flush.valid, Str("FLUSH_PIPELINE"), Str(" "))
          , Mux(rob.io.flush.valid, Str("F"), Str(" "))
-//         , Mux(branch_mask_full.reduce(_|_), Str("BR_MSK_FULL"), Str(" "))
          , Mux(branch_mask_full.reduce(_|_), Str("B"), Str(" "))
          , Mux(dc_shim.io.core.req.ready, Str("R"), Str("B"))
          , dec_brmask_logic.io.debug.branch_mask
@@ -1092,32 +1042,6 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
          , br_unit.btb_update.isJump
          , br_unit.btb_update.isReturn
       )
-
-//      printf("  Mem[%s l%d](%s:%d),%s,%s %s %s %s]\n"
-//            , Mux(io.dmem.debug.memreq_val, Str("MREQ"), Str(" "))
-//            , io.dmem.debug.memreq_lidx
-//            , Mux(io.dmem.debug.memresp_val, Str("MRESP"), Str(" "))
-//            , io.dmem.debug.cache_resp_tag
-//            , Mux(io.dmem.debug.req_kill, Str("RKILL"), Str(" "))
-//            , Mux(io.dmem.debug.cache_not_ready, Str("CBUSY"), Str(" "))
-//            , Mux(io.dmem.debug.nack, Str("NACK"), Str(" "))
-//            , Mux(io.dmem.debug.cache_nack, Str("CN"), Str(" "))
-//            , Mux(lsu.io.forward_val, Str("FWD"), Str(" "))
-//            //, Mux(lsu.io.debug.tlb_miss, Str("TLB-MISS"), Str("-"))
-//            //, Mux(lsu.io.debug.tlb_ready, Str("TLB-RDY"), Str("-"))
-//      )
-
-      //for (i <- 0 until io.dmem.debug.ld_req_slot.size)
-      //{
-      //   printf("     ld_req_slot[%d]=(%s%s) - laq_idx:%d pdst: %d bm:%x\n"
-      //      , UInt(i)
-      //      , Mux(io.dmem.debug.ld_req_slot(i).valid, Str("V"), Str("-"))
-      //      , Mux(io.dmem.debug.ld_req_slot(i).killed, Str("K"), Str("-"))
-      //      , io.dmem.debug.ld_req_slot(i).uop.ldq_idx
-      //      , io.dmem.debug.ld_req_slot(i).uop.pdst
-      //      , io.dmem.debug.ld_req_slot(i).uop.br_mask
-      //   )
-      //}
 
       // Rename Map Tables / ISA Register File
       val xpr_to_string =
@@ -1201,15 +1125,15 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    // Page Table Walker
 
    io.ptw_tlb <> lsu.io.ptw
-
    io.ptw.ptbr       := csr.io.ptbr
    io.ptw.invalidate := csr.io.fatc
    io.ptw.status     := csr.io.status
 
-   dc_shim.io.core.invalidate_lr := rob.io.com_xcpt.valid
-
    //-------------------------------------------------------------
    //-------------------------------------------------------------
 
+   // we do not support RoCC (yet)
+   io.rocc.cmd.valid := Bool(false)
+   io.rocc.resp.ready := Bool(false)
 }
 

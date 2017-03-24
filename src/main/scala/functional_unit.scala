@@ -651,7 +651,7 @@ abstract class UnPipelinedFunctionalUnit(implicit p: Parameters)
                                                             , data_width = 64
                                                             , has_branch_unit = false)(p)
 {
-   val r_uop = Reg(outType = new MicroOp())
+   val r_uop = Reg(new MicroOp())
 
    val do_kill = Wire(Bool())
    do_kill := io.req.bits.kill // irrelevant default

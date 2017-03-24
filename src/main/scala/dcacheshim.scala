@@ -55,7 +55,7 @@ class LoadReqSlot(implicit p: Parameters) extends BoomModule()(p)
 
    val valid      = Reg(init=Bool(false))
    val was_killed = Reg(init=Bool(false))
-   val uop        = Reg(outType=(new MicroOp()))
+   val uop        = Reg((new MicroOp()))
 
    // did the existing uop get killed by a branch?
    val br_killed = Wire(Bool())
