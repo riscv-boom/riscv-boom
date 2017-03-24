@@ -306,6 +306,8 @@ class DCacheShim(implicit p: Parameters) extends BoomModule()(p)
    io.dmem.req.bits.phys  := Bool(true) // we always use physical addresses here,
                                         // as we've already done our own translations.
 
+   io.dmem.invalidate_lr  := io.core.invalidate_lr
+
    //------------------------------------------------------------
    // handle responses and nacks
 
