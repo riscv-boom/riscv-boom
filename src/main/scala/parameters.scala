@@ -118,7 +118,13 @@ trait HasBoomCoreParameters extends tile.HasCoreParameters
    val tageParams = boomParams.tage
    val gshareParams = boomParams.gshare
    val gskewParams = boomParams.gskew
-   if (tageParams.isDefined && tageParams.get.enabled)
+
+   if (!ENABLE_BRANCH_PREDICTOR)
+   {
+      BPD_INFO_SIZE = 1
+      GLOBAL_HISTORY_LENGTH = 1
+   }
+   else if (tageParams.isDefined && tageParams.get.enabled)
    {
       GLOBAL_HISTORY_LENGTH = tageParams.get.history_lengths.max
       BPD_INFO_SIZE = TageBrPredictor.GetRespInfoSize(p, fetchWidth)
