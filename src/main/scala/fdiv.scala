@@ -181,6 +181,8 @@ class FDivSqrtUnit(implicit p: Parameters) extends FunctionalUnit(is_pipelined =
       r_out_uop.br_mask := GetNewBrMask(io.brinfo, r_divsqrt_uop)
       r_out_wdata_double := divsqrt.io.out
       r_out_flags_double := divsqrt.io.exceptionFlags
+
+      assert (r_divsqrt_val, "[fdiv] a response is being generated for no request.")
    }
 
    assert (!(r_out_val && (divsqrt.io.outValid_div || divsqrt.io.outValid_sqrt)),
