@@ -129,10 +129,17 @@ class FDivSqrtUnit(implicit p: Parameters) extends FunctionalUnit(is_pipelined =
    val r_divsqrt_fin = Reg(new tile.FPInput)
    val r_divsqrt_uop = Reg(new MicroOp)
 
+   // Need to buffer output until RF writeport is available.
    val output_buffer_available = Wire(Bool())
 
+   val may_fire_input =
+      r_buffer_val &&
+      (r_buffer_fin.div || r_buffer_fin.sqrt) &&
+      !r_divsqrt_val &&
+      output_buffer_available
+
    val divsqrt_ready = Mux(divsqrt.io.sqrtOp, divsqrt.io.inReady_sqrt, divsqrt.io.inReady_div)
-   divsqrt.io.inValid := r_buffer_val && (r_buffer_fin.div || r_buffer_fin.sqrt) && !r_divsqrt_val
+   divsqrt.io.inValid := may_fire_input // must be setup early
    divsqrt.io.sqrtOp := r_buffer_fin.sqrt
    divsqrt.io.a := r_buffer_fin.in1
    divsqrt.io.b := Mux(divsqrt.io.sqrtOp, r_buffer_fin.in1, r_buffer_fin.in2)
@@ -141,18 +148,15 @@ class FDivSqrtUnit(implicit p: Parameters) extends FunctionalUnit(is_pipelined =
    r_divsqrt_killed := r_divsqrt_killed || IsKilledByBranch(io.brinfo, r_divsqrt_uop) || io.req.bits.kill
    r_divsqrt_uop.br_mask := GetNewBrMask(io.brinfo, r_divsqrt_uop)
 
-   when (divsqrt.io.inValid &&
-         divsqrt_ready &&
-         !IsKilledByBranch(io.brinfo, r_buffer_req.uop) &&
-         !io.req.bits.kill &&
-         output_buffer_available
-         )
+   when (may_fire_input && divsqrt_ready)
    {
-      r_buffer_val := Bool(false) // remove the entry from the buffer
+      // Remove entry from the input buffer.
+      // We don't have time to kill divsqrt request so must track if killed on entry.
+      r_buffer_val := Bool(false)
       r_divsqrt_val := Bool(true)
-      r_divsqrt_killed := Bool(false)
       r_divsqrt_fin := r_buffer_fin
       r_divsqrt_uop := r_buffer_req.uop
+      r_divsqrt_killed := IsKilledByBranch(io.brinfo, r_buffer_req.uop) || io.req.bits.kill
       r_divsqrt_uop.br_mask := GetNewBrMask(io.brinfo, r_buffer_req.uop)
    }
 
