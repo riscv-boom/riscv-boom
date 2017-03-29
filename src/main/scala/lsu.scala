@@ -126,6 +126,7 @@ class LoadStoreUnitIO(pl_width: Int)(implicit p: Parameters) extends BoomBundle(
       val ld_killed       = Bool(OUTPUT)
       val stld_order_fail = Bool(OUTPUT)
       val ldld_order_fail = Bool(OUTPUT)
+      val tlb_miss        = Bool(OUTPUT)
    }
 
    val debug_tsc = UInt(INPUT, xLen)     // time stamp counter
@@ -361,7 +362,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: uncore.tilelink
                                                io.exe_resp.bits.addr.toBits))
 
    val dtlb = Module(new rocket.TLB(nTLBEntries))
-
+   io.counters.tlb_miss := dtlb.io.miss 
    io.ptw <> dtlb.io.ptw
    dtlb.io.req.valid := will_fire_load_incoming ||
                         will_fire_sta_incoming ||

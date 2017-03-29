@@ -838,7 +838,7 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
 
    csr.io.events.map(_ := UInt(0))
 
-   require (nPerfEvents >= 35)
+   require (nPerfEvents >= 45)
    println ("   " + nPerfCounters + " HPM counters enabled (with " + nPerfEvents + " events).")
 
    // Execution-time branch prediction accuracy.
@@ -857,7 +857,7 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    csr.io.events(4)  := io.imem.ic_miss
    csr.io.events(31) := io.dmem.req.fire()  // d$ accesses
    csr.io.events(32) := io.imem.resp.fire() // i$ accesses
-   csr.io.events(33) := io.dmem.tlb_miss // DTLB miss
+   csr.io.events(33) := lsu.io.counters.tlb_miss // DTLB miss
    csr.io.events(34) := io.imem.tlb_miss // ITLB miss
 
    csr.io.events(5)  := csr.io.status.prv === UInt(rocket.PRV.U)
@@ -929,6 +929,51 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
       rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && rob.io.commit.uops(w).is_jal &&
       rob.io.commit.uops(w).stat_brjmp_mispredicted}.reduce(_|_)),
       "[dpath] A committed JAL was marked as having been mispredicted.")
+
+   val _uops = rob.io.commit.uops.toSeq
+   val _valids = rob.io.commit.valids.toSeq
+   /*** HTIF Counters ***/
+   val _enterHTIF = (_uops zip _valids) map { case (uop, valid) => uop.inst === UInt(0x02010013, 32) && valid }
+   val _exitHTIF  = (_uops zip _valids) map { case (uop, valid) => uop.inst === UInt(0x02110013, 32) && valid }
+   val enterHTIF  = _enterHTIF reduce (_ || _)
+   val exitHTIF   = _exitHTIF reduce (_ || _)
+   val inHTIF = RegInit(Bool(false))
+   when(!inHTIF && enterHTIF && !exitHTIF) {
+     inHTIF := Bool(true)
+   }.elsewhen(inHTIF && exitHTIF && !enterHTIF) {
+     inHTIF := Bool(false)
+   }
+   csr.io.events(35) := inHTIF // cycles in HTIF
+   // insts in HTIF // TODO: this is not accurate...
+   csr.io.events(36) := Mux(inHTIF, PopCount(_valids), UInt(0))
+
+   /*** Java Counters ***/ 
+   val _enterGC  = (_uops zip _valids) map { case (uop, valid) => uop.inst === UInt(0x01710013, 32) && valid }
+   val _exitGC   = (_uops zip _valids) map { case (uop, valid) => uop.inst === UInt(0x01910013, 32) && valid }
+   val _enterJIT = (_uops zip _valids) map { case (uop, valid) => uop.inst === UInt(0x01b10013, 32) && valid }
+   val _exitJIT  = (_uops zip _valids) map { case (uop, valid) => uop.inst === UInt(0x01d10013, 32) && valid }
+   csr.io.events(37) := _enterGC reduce (_ || _)
+   csr.io.events(38) := _exitGC reduce (_ || _)
+   csr.io.events(39) := _enterJIT reduce (_ || _)
+   csr.io.events(40) := _exitJIT reduce (_ || _) 
+   val inGC = RegInit(Bool(false))
+   when(!inGC && csr.io.events(37).orR && !csr.io.events(38).orR) {
+     inGC := Bool(true)
+   }.elsewhen(inGC && csr.io.events(38).orR && !csr.io.events(37).orR) {
+     inGC := Bool(false)
+   }
+   val inJIT = RegInit(Bool(false))
+   when(!inJIT && csr.io.events(39).orR && !csr.io.events(40).orR) {
+     inJIT := Bool(true)
+   }.elsewhen(inJIT && csr.io.events(40).orR && !csr.io.events(39).orR) {
+     inJIT := Bool(false)
+   }
+   csr.io.events(41) := inGC  // cycles in GC
+   csr.io.events(42) := inJIT // cycles in JIT
+   // insts in GC // TODO: this is not accurate...
+   csr.io.events(43) := Mux(inGC, PopCount(_valids), UInt(0))
+   // insts in JIT // TODO: this is not accurate...
+   csr.io.events(44) := Mux(inJIT, PopCount(_valids), UInt(0))
 
    //-------------------------------------------------------------
    //-------------------------------------------------------------
