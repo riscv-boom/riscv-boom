@@ -52,6 +52,7 @@ class IMul(imul_stages: Int) extends Module
          FN(DW_32, FN_MULHSU) -> Cat(Fill(32, mul_result(63)), mul_result(63,32))
    ))
 
-   io.out := ShiftRegister(mul_output_mux, imul_stages, io.valid)
+  // io.out := ShiftRegister(mul_output_mux, imul_stages, io.valid)
+   io.out := Pipe(io.valid, mul_output_mux, imul_stages).bits
 }
 
