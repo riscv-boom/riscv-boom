@@ -16,6 +16,7 @@ package boom
 
 import Chisel._
 import cde.{Parameters, Field}
+import bist._
 
 class BOOMTile(clockSignal: Clock = null, resetSignal: Bool = null)
    (implicit p: Parameters) extends rocket.Tile(clockSignal, resetSignal)(p)
@@ -78,5 +79,11 @@ class BOOMTile(clockSignal: Clock = null, resetSignal: Bool = null)
    // Cache Counters
    core.io.counters.dc_miss := dcache.mem.acquire.fire()
    core.io.counters.ic_miss := icache.io.mem.acquire.fire()
+
+   //[pfchiu] core bist
+   val core_bist = Module(new bist.BistTop)
+   io.bist <> core_bist.io.bist	
+   icache.io.bist_dut <> core_bist.io.sram_ut
+   dcache.bist_dut <> core_bist.io.sram_ut
 }
 
