@@ -975,6 +975,19 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    // insts in JIT // TODO: this is not accurate...
    csr.io.events(44) := Mux(inJIT, PopCount(_valids), UInt(0))
 
+   val GC_cycles = RegInit(UInt(0, 64))
+   val GC_insts = RegInit(UInt(0, 64))
+   val JIT_cycles = RegInit(UInt(0, 64))
+   val JIT_insts = RegInit(UInt(0, 64))
+   when(inGC) {
+     GC_cycles := GC_cycles + UInt(1)
+     GC_insts := GC_insts + PopCount(_valids)
+   }
+   when(inJIT) {
+     JIT_cycles := JIT_cycles + UInt(1)
+     JIT_insts := JIT_insts + PopCount(_valids)
+   }
+
    //-------------------------------------------------------------
    //-------------------------------------------------------------
    // **** Handle Cycle-by-Cycle Printouts ****
