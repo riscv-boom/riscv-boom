@@ -85,5 +85,8 @@ class BOOMTile(clockSignal: Clock = null, resetSignal: Bool = null)
    io.bist <> core_bist.io.bist	
    icache.io.bist_dut <> core_bist.io.sram_ut
    dcache.bist_dut <> core_bist.io.sram_ut
+   for (i <- 0 until 10) {
+     core_bist.io.sram_ut.dout(i) <> icache.io.bist_dut.dout(i) 
+   }
 }
 
