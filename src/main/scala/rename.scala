@@ -541,17 +541,25 @@ class RenameStage(pl_width: Int, num_wb_ports: Int)(implicit p: Parameters) exte
       }
    }
 
-   // read out the map-table entries ASAP, then deal with bypassing busy-bits later
-   private val map_table_output = Wire(Vec(pl_width*3, UInt(width=PREG_SZ)))
-   def map_table_prs1(w:Int) = map_table_output(w+0*pl_width)
-   def map_table_prs2(w:Int) = map_table_output(w+1*pl_width)
-   def map_table_prs3(w:Int) = map_table_output(w+2*pl_width)
+   // Read out the map-table entries ASAP, then deal with bypassing busy-bits later.
+   // Also speculatively read out both integer and fp specifiers to get decode off critical path.
+   private val map_table_output = Seq.fill(pl_width*5)(Wire(UInt(width=PREG_SZ)))
+   def map_table_prs1_int(w:Int) = map_table_output(w+0*pl_width)
+   def map_table_prs2_int(w:Int) = map_table_output(w+1*pl_width)
+   def map_table_prs1_flt(w:Int) = map_table_output(w+2*pl_width)
+   def map_table_prs2_flt(w:Int) = map_table_output(w+3*pl_width)
+
+   def map_table_prs1(w:Int) = Mux(io.ren_uops(w).lrs1_rtype === RT_FLT, map_table_prs1_flt(w), map_table_prs1_int(w))
+   def map_table_prs2(w:Int) = Mux(io.ren_uops(w).lrs2_rtype === RT_FLT, map_table_prs2_flt(w), map_table_prs2_int(w))
+   def map_table_prs3(w:Int) = map_table_output(w+4*pl_width)
 
 
    for (w <- 0 until pl_width)
    {
-      map_table_prs1(w) := map_table_io(io.ren_uops(w).lrs1).element
-      map_table_prs2(w) := map_table_io(io.ren_uops(w).lrs2).element
+      map_table_prs1_int(w) := map_table_io(Cat(Bool(false), io.ren_uops(w).inst(RS1_MSB, RS1_LSB))).element
+      map_table_prs2_int(w) := map_table_io(Cat(Bool(false), io.ren_uops(w).inst(RS2_MSB, RS2_LSB))).element
+      map_table_prs1_flt(w) := map_table_io(Cat(Bool(true),  io.ren_uops(w).inst(RS1_MSB, RS1_LSB))).element
+      map_table_prs2_flt(w) := map_table_io(Cat(Bool(true),  io.ren_uops(w).inst(RS2_MSB, RS2_LSB))).element
       if (max_operands > 2)
          map_table_prs3(w) := map_table_io(io.ren_uops(w).lrs3).element
       else
