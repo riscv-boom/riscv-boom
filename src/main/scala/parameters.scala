@@ -69,16 +69,16 @@ trait HasBoomCoreParameters extends tile.HasCoreParameters
 
    //************************************
    // Functional Units
-   val usingFDivSqrt = rocketParams.fpu.get.divSqrt
+   val usingFDivSqrt = rocketParams.fpu.isDefined && rocketParams.fpu.get.divSqrt
 
    val mulDivParams = rocketParams.mulDiv.getOrElse(MulDivParams())
 
    //************************************
    // Pipelining
 
-   val IMUL_STAGES = rocketParams.fpu.get.dfmaLatency
-   val dfmaLatency = rocketParams.fpu.get.dfmaLatency
-   val sfmaLatency = rocketParams.fpu.get.sfmaLatency
+   val IMUL_STAGES = if (rocketParams.fpu.isDefined) rocketParams.fpu.get.dfmaLatency else 3
+   val dfmaLatency = if (rocketParams.fpu.isDefined) rocketParams.fpu.get.dfmaLatency else 3
+   val sfmaLatency = if (rocketParams.fpu.isDefined) rocketParams.fpu.get.sfmaLatency else 3
    // All FPU ops padded out to same delay for writeport scheduling.
    require (sfmaLatency == dfmaLatency) 
    
