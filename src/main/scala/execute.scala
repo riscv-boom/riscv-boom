@@ -461,7 +461,7 @@ class ALUMemExeUnit(
    extends ExecutionUnit(
       num_rf_read_ports = if (has_fpu) 3 else 2,
       num_rf_write_ports = 2,
-      num_bypass_stages = if (has_fpu || (has_mul && !use_slow_mul)) p(tile.TileKey).core.fpu.get.dfmaLatency else 1,
+      num_bypass_stages = if (has_fpu) p(tile.TileKey).core.fpu.get.dfmaLatency else if (has_mul && !use_slow_mul) 3 else 1,
       data_width = if (fp_mem_support) 65 else 64,
       num_variable_write_ports = 1,
       bypassable = true,
