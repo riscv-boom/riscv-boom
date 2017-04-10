@@ -120,7 +120,7 @@ class ALUExeUnit(
    extends ExecutionUnit(
       num_rf_read_ports = if (has_fpu) 3 else 2,
       num_rf_write_ports = 1,
-      num_bypass_stages = if (has_fpu || (has_mul && !use_slow_mul)) 3 else 1, // TODO XXX dfmaLatency else 1,
+      num_bypass_stages = if (has_fpu) p(tile.TileKey).core.fpu.get.dfmaLatency else if (has_mul && !use_slow_mul) 3 else 1,
       data_width = if (has_fpu || has_fdiv) 65 else 64,
       bypassable = true,
       is_mem_unit = false,
@@ -133,8 +133,6 @@ class ALUExeUnit(
       has_fdiv = has_fdiv)(p)
 {
    val has_muldiv = has_div || (has_mul && use_slow_mul)
-
-   require(dfmaLatency == 3) // fix the above num_bypass_stages==3 hack before removing this line
 
    println ("     ExeUnit--")
    println ("       - ALU")

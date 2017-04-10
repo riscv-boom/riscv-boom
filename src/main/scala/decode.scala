@@ -410,7 +410,6 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule()(p)
    uop.is_unique  := cs.inst_unique
    uop.flush_on_commit := cs.flush_on_commit
 
-   uop.wakeup_delay := cs.wakeup_delay
    uop.bypassable   := cs.bypassable
 
    //-------------------------------------------------------------

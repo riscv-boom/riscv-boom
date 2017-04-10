@@ -26,7 +26,6 @@ class MicroOp(implicit p: Parameters) extends BoomBundle()(p)
    val fu_code          = UInt(width = FUConstants.FUC_SZ) // which functional unit do we use?
    val ctrl             = new CtrlSignals
 
-   val wakeup_delay     = UInt(width = log2Up(MAX_WAKEUP_DELAY)) // unused
    val allocate_brtag   = Bool()                      // does this allocate a branch tag? (is branch or JR but not JAL)
    val is_br_or_jmp     = Bool()                      // is this micro-op a (branch or jump) vs a regular PC+4 inst?
    val is_jump          = Bool()                      // is this a jump? (jal or jalr)

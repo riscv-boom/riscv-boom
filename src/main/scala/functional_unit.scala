@@ -94,10 +94,6 @@ class FuncUnitReq(data_width: Int)(implicit p: Parameters) extends BoomBundle()(
    val rs1_data = UInt(width = data_width)
    val rs2_data = UInt(width = data_width)
    val rs3_data = UInt(width = data_width) // only used for FMA units
-//   val rs_data = Vec.fill(num_operands) {UInt(width=data_width)}
-//   def rs1_data = rs_data(0)
-//   def rs2_data = rs_data(1)
-//   def rs3_data = rs_data(2)
 
    val kill = Bool() // kill everything
 
@@ -625,10 +621,11 @@ class MemAddrCalcUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(nu
 // currently, bypassing is unsupported!
 // All FP instructions are padded out to the max latency unit for easy
 // write-port scheduling.
-class FPUUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(num_stages = 3
-                                            , num_bypass_stages = 0
-                                            , earliest_bypass_stage = 0
-                                            , data_width = 65)(p)
+class FPUUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(
+   num_stages = p(tile.TileKey).core.fpu.get.dfmaLatency,
+   num_bypass_stages = 0,
+   earliest_bypass_stage = 0,
+   data_width = 65)(p)
 {
    val fpu = Module(new FPU())
    fpu.io.req <> io.req
