@@ -38,6 +38,7 @@
 #   verify there's no key collision once using hash tables
 
 import optparse
+import sys
 
 from collections import deque
 
@@ -87,8 +88,15 @@ def generate_pipeview_file(log):
     lines = log.readlines()
 
     # find fetch sequence number separator, and cache result
-    idx = lines[0].find(';')
-    assert (idx != -1), "Couldn't find fseq number. Has the file been properly generated?"
+    idx = -1
+    while True:
+        if not lines:
+            sys.exit("Error: file contains no pipetrace info.")
+        idx = lines[0].find(';')
+        if idx != -1:
+            break
+        else:
+            lines.pop(0)
 
     # in-order stages get to use queues
     q_if  = deque()
@@ -102,8 +110,8 @@ def generate_pipeview_file(log):
     # as they occur after the store retires and thus don't fit neatly
     # into our for loop below
     l_stc = [line for line in lines if "store-comp" in line]
-    # cache the s_idx value
-    s_idx = l_stc[0].find(':')
+    # cache the s_idx value (if there are any stores in program)
+    if l_stc: s_idx = l_stc[0].find(':')
 
     for line in lines:
         if "fetch" in line:
