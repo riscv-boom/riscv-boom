@@ -33,7 +33,6 @@ import config.Parameters
 import util.Str
 
 class RobIo(machine_width: Int
-            , issue_width: Int
             , num_wakeup_ports: Int
             , num_fpu_ports: Int
             )(implicit p: Parameters)  extends BoomBundle()(p)
@@ -177,12 +176,11 @@ class DebugRobSignals(implicit p: Parameters) extends BoomBundle()(p)
 // num_fpu_ports = number of FPU units that will write back fflags
 class Rob(width: Int
          , num_rob_entries: Int
-         , issue_width: Int
          , num_wakeup_ports: Int
          , num_fpu_ports: Int
          )(implicit p: Parameters) extends BoomModule()(p)
 {
-   val io = new RobIo(width, issue_width, num_wakeup_ports, num_fpu_ports)
+   val io = new RobIo(width, num_wakeup_ports, num_fpu_ports)
 
    val num_rob_rows = num_rob_entries / width
    require (num_rob_rows % 2 == 0) // this is due to how rob PCs are stored in two banks

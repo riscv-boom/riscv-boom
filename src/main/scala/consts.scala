@@ -40,6 +40,14 @@ trait BrPredConstants
    val TAKEN = Bool(true)
 }
 
+trait IQType
+{
+   val IQT_SZ  = 2
+   val IQT_INT = UInt(0, IQT_SZ)
+   val IQT_MEM = UInt(1, IQT_SZ)
+   val IQT_FP  = UInt(2, IQT_SZ)
+}
+
 trait ScalarOpConstants
 {
    val X = BitPat("b?")

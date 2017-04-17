@@ -16,16 +16,11 @@ import scala.collection.mutable.ArrayBuffer
 
 class ExecutionUnits(implicit val p: Parameters) extends HasBoomCoreParameters
 {
-   if (DECODE_WIDTH == 1)      println("\n   ~*** One-wide Machine ***~\n")
-   else if (DECODE_WIDTH == 2) println("\n   ~*** Two-wide Machine ***~\n")
-   else if (DECODE_WIDTH == 4) println("\n   ~*** Four-wide Machine ***~\n")
-   else                        println("\n ~*** Unknown Machine Width ***~\n")
+   val totalIssueWidth = issueWidths.reduce(_+_)
+   require (totalIssueWidth >= 2)
 
-   require (ISSUE_WIDTH <= 4)
-   if (ISSUE_WIDTH == 1) println("    -== Single Issue ==- \n")
-   if (ISSUE_WIDTH == 2) println("    -== Dual Issue ==- \n")
-   if (ISSUE_WIDTH == 3) println("    -== Triple Issue ==- \n")
-   if (ISSUE_WIDTH == 4) println("    -== Quad Issue ==- \n")
+   println("\n   ~*** " + Seq("One","Two","Three","Four")(DECODE_WIDTH-1) + "-wide Machine ***~\n")
+   println("    -== " + Seq("Single","Dual","Triple","Quad","Five","Six")(totalIssueWidth-1) + " Issue ==- \n")
 
 
    //*******************************
@@ -50,6 +45,11 @@ class ExecutionUnits(implicit val p: Parameters) extends HasBoomCoreParameters
       exe_units.withFilter(f)
    }
 
+   def zipWithIndex =
+   {
+      exe_units.zipWithIndex
+   }
+
    lazy val memory_unit =
    {
       require (exe_units.count(_.is_mem_unit) == 1) // only one mem_unit supported
@@ -60,6 +60,12 @@ class ExecutionUnits(implicit val p: Parameters) extends HasBoomCoreParameters
    {
       require (exe_units.count(_.hasBranchUnit) == 1)
       exe_units.find(_.hasBranchUnit).get
+   }
+
+   lazy val csr_unit =
+   {
+      require (exe_units.count(_.uses_csr_wport) == 1)
+      exe_units.find(_.uses_csr_wport).get
    }
 
    lazy val br_unit_io =
@@ -74,56 +80,17 @@ class ExecutionUnits(implicit val p: Parameters) extends HasBoomCoreParameters
    }
 
 
-   if (ISSUE_WIDTH == 1)
-   {
-      exe_units += Module(new ALUMemExeUnit(is_branch_unit   = true
-                                          , shares_csr_wport = true
-                                          , fp_mem_support   = usingFPU
-                                          , has_fpu          = usingFPU
-                                          , has_mul          = true
-                                          , has_div          = true
-                                          , use_slow_mul     = false
-                                          , has_fdiv         = usingFPU && usingFDivSqrt
-                                          ))
-   }
-   else if (ISSUE_WIDTH == 2)
-   {
-      exe_units += Module(new ALUExeUnit(is_branch_unit      = true
-                                          , shares_csr_wport = true
-                                          , has_fpu          = usingFPU
-                                          , has_mul          = true
-                                          ))
-      exe_units += Module(new ALUMemExeUnit(fp_mem_support   = usingFPU
-                                          , has_div          = true
-                                          , has_fdiv         = usingFPU && usingFDivSqrt
-                                          ))
-   }
-   else if (ISSUE_WIDTH == 3)
-   {
-      exe_units += Module(new ALUExeUnit(is_branch_unit      = true
-                                          , shares_csr_wport = true
-                                          , has_fpu          = usingFPU
-                                          , has_mul          = true
-                                          ))
-      exe_units += Module(new ALUExeUnit(has_div             = true
-                                          , has_fdiv         = usingFPU && usingFDivSqrt
-                                          ))
-      exe_units += Module(new MemExeUnit())
-   }
-   else
-   {
-      require (ISSUE_WIDTH == 4)
-      exe_units += Module(new ALUExeUnit(is_branch_unit      = false
-                                          , shares_csr_wport = true
-                                          , has_fpu          = usingFPU
-                                          , has_mul          = true
-                                          ))
-      exe_units += Module(new ALUExeUnit(is_branch_unit      = true))
-      exe_units += Module(new ALUExeUnit(has_div             = true
-                                          , has_fdiv         = usingFPU && usingFDivSqrt
-                                          ))
-      exe_units += Module(new MemExeUnit())
-   }
+
+   exe_units += Module(new MemExeUnit())
+   exe_units += Module(new ALUExeUnit(is_branch_unit      = true
+                                       , shares_csr_wport = true
+                                       , has_mul          = true
+                                       , use_slow_mul     = true // TODO
+                                       , has_div          = true
+                                       ))
+   for (w <- 0 until issueWidths(1)-1) exe_units += Module(new ALUExeUnit())
+   require (!usingFPU) // TODO BUG add back support for FP
+
 
    require (exe_units.length != 0)
    require (exe_units.map(_.is_mem_unit).reduce(_|_), "Datapath is missing a memory unit.")
@@ -145,4 +112,4 @@ class ExecutionUnits(implicit val p: Parameters) extends HasBoomCoreParameters
 
    val num_wakeup_ports = num_slow_wakeup_ports + num_fast_wakeup_ports
    val rf_cost = (num_rf_read_ports+num_rf_write_ports)*(num_rf_read_ports+2*num_rf_write_ports)
- }
+}

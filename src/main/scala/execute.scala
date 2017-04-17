@@ -94,6 +94,12 @@ abstract class ExecutionUnit(val num_rf_read_ports: Int
    def hasBranchUnit : Boolean = is_branch_unit
    def isBypassable  : Boolean = bypassable
    def hasFFlags     : Boolean = has_fpu || has_fdiv
+   def usesFRF       : Boolean = (has_fpu || has_fdiv) && !(has_alu || has_mul)
+   def usesIRF       : Boolean = !(has_fpu || has_fdiv) && (has_alu || has_mul || is_mem_unit)
+
+   require ((has_fpu || has_fdiv) ^ (has_alu || has_mul || is_mem_unit),
+      "[execute] we no longer support mixing FP and Integer functional units in the same exe unit.")
+
 
    def supportedFuncUnits =
    {

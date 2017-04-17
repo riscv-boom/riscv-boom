@@ -355,7 +355,7 @@ class RenameFreeList(num_phys_registers: Int // number of physical registers
 
 // internally bypasses newly busy registers (.write) to the read ports (.read)
 // num_operands is the maximum number of operands per instruction (.e.g., 2 normally, but 3 if FMAs are supported)
-class BusyTableIo(pipeline_width:Int, num_read_ports:Int, num_wb_ports:Int)(implicit p: Parameters) extends BoomBundle()(p)
+class BusyTableIo(pipeline_width:Int, num_regs: Int, num_read_ports:Int, num_wb_ports:Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
    // reading out the busy bits
    val p_rs           = Vec(num_read_ports, UInt(width=PREG_SZ)).asInput
@@ -370,23 +370,22 @@ class BusyTableIo(pipeline_width:Int, num_read_ports:Int, num_wb_ports:Int)(impl
    // marking registers being written back as unbusy
    val unbusy_pdst    = Vec(num_wb_ports, new ValidIO(UInt(width = PREG_SZ))).flip
 
-   val debug = new Bundle { val bsy_table= Bits(width=PHYS_REG_COUNT).asOutput }
+   val debug = new Bundle { val bsy_table= Bits(width=num_regs).asOutput }
 }
 
 // Register P0 is always NOT_BUSY, and cannot be set to BUSY
 // Note: I do NOT bypass from newly busied registers to the read ports.
 // That bypass check should be done elsewhere (this is to get it off the
 // critical path).
-class BusyTable(pipeline_width:Int, num_read_ports:Int, num_wb_ports:Int)(implicit p: Parameters) extends BoomModule()(p)
+class BusyTable(pipeline_width:Int, num_regs: Int, num_read_ports:Int, num_wb_ports:Int)(implicit p: Parameters) extends BoomModule()(p)
 {
-   val io = new BusyTableIo(pipeline_width, num_read_ports, num_wb_ports)
+   val io = new BusyTableIo(pipeline_width, num_regs, num_read_ports, num_wb_ports)
 
    def BUSY     = Bool(true)
    def NOT_BUSY = Bool(false)
 
    //TODO BUG chisel3
-   //val table_bsy = Reg(init=Bits(0,PHYS_REG_COUNT))
-   val table_bsy = Reg(init=Vec.fill(PHYS_REG_COUNT){Bool(false)})
+   val table_bsy = Reg(init=Vec.fill(num_regs){Bool(false)})
 
    for (wb_idx <- 0 until num_wb_ports)
    {
@@ -451,14 +450,15 @@ class RenameStageIO(pl_width: Int, num_wb_ports: Int)(implicit p: Parameters) ex
 
    val flush_pipeline = Bool(INPUT) // TODO only used for SCR (single-cycle reset)
 
-   val debug = new DebugRenameStageIO().asOutput
+   val debug = new DebugRenameStageIO(numIntPhysRegs).asOutput
 }
 
-class DebugRenameStageIO(implicit p: Parameters) extends BoomBundle()(p)
+class DebugRenameStageIO(num_pregs: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
-   val freelist = Bits(width=PHYS_REG_COUNT)
-   val isprlist = Bits(width=PHYS_REG_COUNT)
-   val bsy_table = UInt(width=PHYS_REG_COUNT)
+   val freelist = Bits(width=num_pregs)
+   val isprlist = Bits(width=num_pregs)
+   val bsy_table = UInt(width=num_pregs)
+   override def cloneType: this.type = new DebugRenameStageIO(num_pregs).asInstanceOf[this.type]
 }
 
 class RenameStage(pl_width: Int, num_wb_ports: Int)(implicit p: Parameters) extends BoomModule()(p)
@@ -606,7 +606,7 @@ class RenameStage(pl_width: Int, num_wb_ports: Int)(implicit p: Parameters) exte
                            (io.ren_uops(w).lrs1 =/= UInt(0)), map_table_prs1(w)))
       rs2_cases ++= Array(((io.ren_uops(w).lrs2_rtype === RT_FIX || io.ren_uops(w).lrs2_rtype === RT_FLT) &&
                            (io.ren_uops(w).lrs2 =/= UInt(0)), map_table_prs2(w)))
-      rs3_cases ++= Array((io.ren_uops(w).frs3_en  && 
+      rs3_cases ++= Array((io.ren_uops(w).frs3_en  &&
                            (io.ren_uops(w).lrs3 =/= UInt(0)), map_table_prs3(w)))
 
       io.ren_uops(w).pop1                       := MuxCase(io.ren_uops(w).lrs1, rs1_cases)
@@ -627,7 +627,11 @@ class RenameStage(pl_width: Int, num_wb_ports: Int)(implicit p: Parameters) exte
    // 2nd is memory/muldiv
    // TODO 3rd is ALU ops that aren't bypassable... can maybe remove this? or set TTL countdown on 1st port?
    // TODO optimize - too many write ports, but how to deal with that? (slow + fast...)
-   val bsy_table = Module(new BusyTable(pipeline_width=pl_width, num_read_ports = pl_width*max_operands, num_wb_ports=num_wb_ports))
+   val bsy_table = Module(new BusyTable(
+      pipeline_width=pl_width,
+      num_regs = numIntPhysRegs,
+      num_read_ports = pl_width*max_operands,
+      num_wb_ports=num_wb_ports))
 
       for (w <- 0 until pl_width)
       {
@@ -671,7 +675,7 @@ class RenameStage(pl_width: Int, num_wb_ports: Int)(implicit p: Parameters) exte
    //-------------------------------------------------------------
    // Free List
 
-   val freelist = Module(new RenameFreeList(PHYS_REG_COUNT, pl_width))
+   val freelist = Module(new RenameFreeList(numIntPhysRegs, pl_width))
 
       for (w <- 0 until pl_width)
       {
