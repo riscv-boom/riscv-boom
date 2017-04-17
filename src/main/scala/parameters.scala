@@ -13,11 +13,12 @@ import config.{Parameters, Field}
 case object BoomKey extends Field[BoomCoreParams]
 
 case class BoomCoreParams(
-   issueWidth: Int = 1,
    numRobEntries: Int = 16,
-   numIssueSlotEntries: Int = 12,
+   issueWidths: Seq[Int] = Seq(1,2,0), // Mem, Int, FP
+   numIssueSlotEntries: Seq[Int] = Seq(8,8,8), // Mem, Int, FP
    numLsuEntries: Int = 8,
-   numPhysRegisters: Int = 110,
+   numIntPhysRegisters: Int = 96,
+   numFpPhysRegisters: Int = 64,
    maxBrCount: Int = 4,
    fetchBufferSz: Int = 4,
    enableAgePriorityIssue: Boolean = true,
@@ -48,7 +49,6 @@ trait HasBoomCoreParameters extends tile.HasCoreParameters
    val FETCH_WIDTH      = rocketParams.fetchWidth       // number of insts we can fetch
    val DECODE_WIDTH     = rocketParams.decodeWidth
    val DISPATCH_WIDTH   = DECODE_WIDTH                // number of insts put into the IssueWindow
-   val ISSUE_WIDTH      = boomParams.issueWidth
    val COMMIT_WIDTH     = rocketParams.retireWidth
 
    require (DECODE_WIDTH == COMMIT_WIDTH)
@@ -61,11 +61,13 @@ trait HasBoomCoreParameters extends tile.HasCoreParameters
    val NUM_ROB_ENTRIES  = boomParams.numRobEntries     // number of ROB entries (e.g., 32 entries for R10k)
    val NUM_LSU_ENTRIES  = boomParams.numLsuEntries     // number of LD/ST entries
    val MAX_BR_COUNT     = boomParams.maxBrCount        // number of branches we can speculate simultaneously
-   val PHYS_REG_COUNT   = boomParams.numPhysRegisters  // size of the unified, physical register file
    val FETCH_BUFFER_SZ  = boomParams.fetchBufferSz     // number of instructions that stored between fetch&decode
 
+   val numIntPhysRegs   = boomParams.numIntPhysRegisters // size of the integer physical register file
+   val numFpPhysRegs    = boomParams.numFpPhysRegisters  // size of the floating point physical register file
 
-   val enableFetchBufferFlowThrough = boomParams.enableFetchBufferFlowThrough 
+
+   val enableFetchBufferFlowThrough = boomParams.enableFetchBufferFlowThrough
 
    //************************************
    // Functional Units
@@ -80,16 +82,17 @@ trait HasBoomCoreParameters extends tile.HasCoreParameters
    val dfmaLatency = if (rocketParams.fpu.isDefined) rocketParams.fpu.get.dfmaLatency else 3
    val sfmaLatency = if (rocketParams.fpu.isDefined) rocketParams.fpu.get.sfmaLatency else 3
    // All FPU ops padded out to same delay for writeport scheduling.
-   require (sfmaLatency == dfmaLatency) 
-   
+   require (sfmaLatency == dfmaLatency)
+
    val enableBrResolutionRegister = boomParams.enableBrResolutionRegister
-    
+
    //************************************
-   // Issue Window
-   
+   // Issue Units
+
+   val issueWidths: Seq[Int] = boomParams.issueWidths // (Mem, Int, FP)
    val numIssueSlotEntries = boomParams.numIssueSlotEntries
-   val enableAgePriorityIssue = boomParams.enableAgePriorityIssue 
-    
+   val enableAgePriorityIssue = boomParams.enableAgePriorityIssue
+
    //************************************
    // Load/Store Unit
    val dcacheParams: DCacheParams = tileParams.dcache.get
@@ -101,7 +104,7 @@ trait HasBoomCoreParameters extends tile.HasCoreParameters
    val enableBTB = tileParams.btb.isDefined
    val btbParams: rocket.BTBParams = tileParams.btb.get
 
-   val enableBTBContainsBranches = boomParams.enableBTBContainsBranches 
+   val enableBTBContainsBranches = boomParams.enableBTBContainsBranches
 
    val ENABLE_BRANCH_PREDICTOR = boomParams.enableBranchPredictor
    val ENABLE_BPD_UMODE_ONLY = boomParams.enableBpdUModeOnly
@@ -171,7 +174,9 @@ trait HasBoomCoreParameters extends tile.HasCoreParameters
    // the f-registers are mapped into the space above the x-registers
    val LOGICAL_REG_COUNT = if (usingFPU) 64 else 32
    val LREG_SZ           = log2Up(LOGICAL_REG_COUNT)
-   val PREG_SZ           = log2Up(PHYS_REG_COUNT)
+   val IPREG_SZ          = log2Up(numIntPhysRegs)
+   val FPREG_SZ          = log2Up(numFpPhysRegs)
+   val PREG_SZ          = IPREG_SZ max FPREG_SZ
    val MEM_ADDR_SZ       = log2Up(NUM_LSU_ENTRIES)
    val MAX_ST_COUNT      = (1 << MEM_ADDR_SZ)
    val MAX_LD_COUNT      = (1 << MEM_ADDR_SZ)
@@ -179,14 +184,15 @@ trait HasBoomCoreParameters extends tile.HasCoreParameters
    val NUM_BROB_ENTRIES  = NUM_ROB_ROWS //TODO explore smaller BROBs
    val BROB_ADDR_SZ      = log2Up(NUM_BROB_ENTRIES)
 
-   require (PHYS_REG_COUNT >= (LOGICAL_REG_COUNT + DECODE_WIDTH))
+   require (numIntPhysRegs >= (32 + DECODE_WIDTH))
+   require (numFpPhysRegs >= (32 + DECODE_WIDTH))
    require (MAX_BR_COUNT >=2)
    require (NUM_ROB_ROWS % 2 == 0)
    require (NUM_ROB_ENTRIES % DECODE_WIDTH == 0)
    require (isPow2(NUM_LSU_ENTRIES))
    require ((NUM_LSU_ENTRIES-1) > DECODE_WIDTH)
- 
- 
+
+
    //************************************
    // Non-BOOM parameters
 

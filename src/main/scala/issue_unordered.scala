@@ -17,8 +17,8 @@ import FUConstants._
 import util.Str
 import scala.collection.mutable.ArrayBuffer
 
-class IssueUnitStatic(num_issue_slots: Int, issue_width: Int, num_wakeup_ports: Int)(implicit p: Parameters)
-   extends IssueUnit(num_issue_slots, issue_width, num_wakeup_ports)
+class IssueUnitStatic(num_issue_slots: Int, issue_width: Int, num_wakeup_ports: Int, iqtype: Int)(implicit p: Parameters)
+   extends IssueUnit(num_issue_slots, issue_width, num_wakeup_ports, iqtype)
 {
    //-------------------------------------------------------------
    // Issue Table

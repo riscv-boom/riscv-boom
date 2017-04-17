@@ -8,7 +8,8 @@ package object boom extends
    boom.constants.BrPredConstants with
    boom.constants.ScalarOpConstants with
    boom.constants.ExcCauseConstants with
-   boom.constants.RISCVConstants
+   boom.constants.RISCVConstants with
+   boom.constants.IQType
 {
    val START_ADDR = 0x100
 }

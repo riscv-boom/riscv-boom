@@ -8,13 +8,14 @@
 //------------------------------------------------------------------------------
 
 package boom
-{
+
 import Chisel._
 import config.Parameters
 
 import FUConstants._
 import util.Str
 
+import scala.collection.mutable.ArrayBuffer
 
 //-------------------------------------------------------------
 //-------------------------------------------------------------
@@ -38,7 +39,12 @@ class IssueUnitIO(issue_width: Int, num_wakeup_ports: Int)(implicit p: Parameter
    val tsc_reg        = UInt(INPUT, xLen)
 }
 
-abstract class IssueUnit(num_issue_slots: Int, issue_width: Int, num_wakeup_ports: Int)(implicit p: Parameters)
+abstract class IssueUnit(
+   num_issue_slots: Int,
+   val issue_width: Int,
+   num_wakeup_ports: Int,
+   val iqType: Int)
+   (implicit p: Parameters)
    extends BoomModule()(p)
 {
    val io = new IssueUnitIO(issue_width, num_wakeup_ports)
@@ -71,7 +77,7 @@ abstract class IssueUnit(num_issue_slots: Int, issue_width: Int, num_wakeup_port
 
    if (O3PIPEVIEW_PRINTF)
    {
-      for (i <- 0 until ISSUE_WIDTH)
+      for (i <- 0 until issue_width)
       {
          // only print stores once!
          when (io.iss_valids(i) && io.iss_uops(i).uopc =/= uopSTD)
@@ -117,5 +123,46 @@ abstract class IssueUnit(num_issue_slots: Int, issue_width: Int, num_wakeup_port
    }
 }
 
+//class IssueUnits(num_wakeup_ports: Int)(implicit val p: Parameters) extends Traversable[IssueUnit] with HasBoomCoreParameters
+class IssueUnits(num_wakeup_ports: Int)(implicit val p: Parameters) extends HasBoomCoreParameters
+{
+   //*******************************
+   // Instantiate the IssueUnits
+
+   private val iss_units = ArrayBuffer[IssueUnit]()
+
+   //*******************************
+   // Act like a collection
+
+   def length = iss_units.length
+
+   def apply(n: Int) = iss_units(n)
+
+   def map[T](f: IssueUnit => T) =
+   {
+      iss_units.map(f)
+   }
+
+   def withFilter(f: IssueUnit => Boolean) =
+   {
+      iss_units.withFilter(f)
+   }
+
+   def foreach[U](f: IssueUnit => U) =
+   {
+      iss_units.foreach(f)
+   }
+
+   //*******************************
+   // Construct.
+
+   require (enableAgePriorityIssue) // unordered is currently unsupported.
+
+   iss_units += Module(new IssueUnitCollasping(numIssueSlotEntries(0), issueWidths(0), num_wakeup_ports, IQT_MEM.litValue.intValue))
+   iss_units += Module(new IssueUnitCollasping(numIssueSlotEntries(1), issueWidths(1), num_wakeup_ports, IQT_INT.litValue.intValue))
+
+
+
 
 }
+

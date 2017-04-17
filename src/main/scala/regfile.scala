@@ -38,7 +38,7 @@ class RegisterFile( num_registers: Int
                   , num_write_ports: Int
                   , register_width: Int
                   , enable_bypassing: Boolean)
-                  (implicit p: Parameters) extends BoomModule()(p)
+       (implicit p: Parameters) extends BoomModule()(p)
 {
    val io = new BoomBundle()(p)
    {

@@ -23,6 +23,7 @@ class MicroOp(implicit p: Parameters) extends BoomBundle()(p)
    val uopc             = UInt(width = UOPC_SZ)       // micro-op code
    val inst             = UInt(width = 32)
    val pc               = UInt(width = coreMaxAddrBits)
+   val iqtype           = UInt(width = IQT_SZ) // which issue unit do we use?
    val fu_code          = UInt(width = FUConstants.FUC_SZ) // which functional unit do we use?
    val ctrl             = new CtrlSignals
 

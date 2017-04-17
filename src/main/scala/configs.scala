@@ -23,15 +23,16 @@ class DefaultBoomConfig extends Config((site, here, up) => {
       useCompressed = false,
       nPerfCounters = 4,
       nPerfEvents = 31,
-      fpu = Some(tile.FPUParams(sfmaLatency=3, dfmaLatency=3))
+      fpu = None //Some(tile.FPUParams(sfmaLatency=3, dfmaLatency=3))
    ))}
 
    // BOOM-specific uarch Parameters
    case BoomKey => BoomCoreParams(
-      issueWidth = 3,
       numRobEntries = 48,
-      numIssueSlotEntries = 20,
-      numPhysRegisters = 110,
+      issueWidths = Seq(1, 2, 0), // Mem, Int, FP
+      numIssueSlotEntries = Seq(16, 16, 16), // Mem, Int, FP
+      numIntPhysRegisters = 80,
+      numFpPhysRegisters = 56,
       numLsuEntries = 16,
       maxBrCount = 8,
       enableBranchPredictor = true,
@@ -54,11 +55,12 @@ class WithSmallBooms extends Config((site, here, up) => {
       nPerfCounters = 1
       ))}
    case BoomKey => up(BoomKey, site).copy(
-      issueWidth = 1,
       numRobEntries = 24,
-      numIssueSlotEntries = 10,
+      issueWidths = Seq(1, 1, 0), // Mem, Int, FP
+      numIssueSlotEntries = Seq(4, 4, 4), // Mem, Int, FP
+      numIntPhysRegisters = 56,
+      numFpPhysRegisters = 48,
       numLsuEntries = 4,
-      numPhysRegisters = 100,
       maxBrCount = 4,
       gshare = Some(GShareParameters(enabled = true, history_length=11))
       )
@@ -70,11 +72,12 @@ class WithMediumBooms extends Config((site, here, up) => {
    case RocketTilesKey => up(RocketTilesKey, site) map { r =>r.copy(core = r.core.copy(
       fWidth = 2))}
    case BoomKey => up(BoomKey, site).copy(
-      issueWidth = 3,
       numRobEntries = 48,
-      numIssueSlotEntries = 20,
+      issueWidths = Seq(1, 2, 0), // Mem, Int, FP
+      numIssueSlotEntries = Seq(16, 16, 16), // Mem, Int, FP
+      numIntPhysRegisters = 80,
+      numFpPhysRegisters = 56,
       numLsuEntries = 16,
-      numPhysRegisters = 110,
       gshare = Some(GShareParameters(enabled = true, history_length=11))
       )
 })
@@ -85,11 +88,12 @@ class WithMegaBooms extends Config((site, here, up) => {
    case RocketTilesKey => up(RocketTilesKey, site) map { r => r.copy(core = r.core.copy(
       fWidth = 4))}
    case BoomKey => up(BoomKey, site).copy(
-      issueWidth = 4,
       numRobEntries = 128,
-      numIssueSlotEntries = 28,
+      issueWidths = Seq(1, 2, 0), // Mem, Int, FP
+      numIssueSlotEntries = Seq(20, 16, 20), // Mem, Int, FP
+      numIntPhysRegisters = 128,
+      numFpPhysRegisters = 64,
       numLsuEntries = 32,
-      numPhysRegisters = 128,
       gshare = Some(GShareParameters(enabled = true, history_length=11))
       )
    // Widen L1toL2 bandwidth so we can increase icache rowBytes size for 4-wide fetch.
