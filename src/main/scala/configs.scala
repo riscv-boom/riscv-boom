@@ -75,7 +75,7 @@ class WithMediumBooms extends Config((site, here, up) => {
       numIssueSlotEntries = 20,
       numLsuEntries = 16,
       numPhysRegisters = 110,
-      gshare = Some(GShareParameters(enabled = true, history_length=11))
+      gshare = Some(GShareParameters(enabled = true, history_length=15))
       )
 })
 
