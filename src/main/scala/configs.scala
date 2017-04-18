@@ -122,6 +122,14 @@ class WithNPerfCounters(n: Int) extends Config(
   knobValues = {case "PERF_COUNTERS" => n; case _ => throw new CDEMatchError })
 
 class WithSmallBOOMs extends Config(
+   topDefinitions = {
+      (pname,site,here) => pname match {
+     case GShareKey => GShareParameters(
+        enabled = true,
+        history_length = 11,
+        dualported = false)
+      }
+   },
    knobValues = {
       case "FETCH_WIDTH" => 1
       case "ISSUE_WIDTH" => 1
@@ -138,9 +146,9 @@ class WithSmallBOOMs extends Config(
 class WithMediumBOOMs extends Config(
    knobValues = {
       case "FETCH_WIDTH" => 2
-      case "ISSUE_WIDTH" => 3
+      case "ISSUE_WIDTH" => 2
       case "ROB_ENTRIES" => 48
-      case "ISSUE_ENTRIES" => 20
+      case "ISSUE_ENTRIES" => 16
       case "LSU_ENTRIES" => 16
       case "PHYS_REGISTERS" => 110
       case "MAX_BR_COUNT" => 8

@@ -79,6 +79,7 @@ class BOOMTile(clockSignal: Clock = null, resetSignal: Bool = null)
 
    // [pfchiu] reset redundancy
    icache.io.reset_redundancy <> io.reset_redundancy 
+   dcache.resiliency.reset_redundancy <> io.reset_redundancy
    //[pfchiu] core bist
    val core_bist = Module(new bist.BistTop(20))
    io.bist <> core_bist.io.bist	
