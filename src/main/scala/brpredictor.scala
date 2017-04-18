@@ -27,9 +27,6 @@
 //    later part of the fetch packet. Subsequent executions of that code, when
 //    predicted correctly, won't double count ghistory, potentially increasing
 //    mispredictions.
-//
-//
-// TODO: review the HistoryRegister, re: same-packet refetches getting out of sync with the commit copy.
 
 package boom
 
@@ -143,6 +140,9 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int)(implicit p
    // the commit update bundle (we update predictors).
    val commit = Wire(Valid(new BrobEntry(fetch_width)))
 
+   // we must delay flush signal by 1 cycle to match the delay of the commit signal from the BROB.
+   val r_flush = RegNext(io.flush)
+
    // The (speculative) global history register. Needs to be massaged before usably by the bpd.
    // Tracks history through all privilege levels.
    private val r_ghistory = new HistoryRegister(history_length)
@@ -164,7 +164,7 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int)(implicit p
          io.hist_update_spec.bits,
          io.br_resolution.valid,
          io.br_resolution.bits,
-         io.flush,
+         r_flush,
          umode_only = false)
 
    val ghistory_uonly =
@@ -173,14 +173,14 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int)(implicit p
          io.hist_update_spec.bits,
          io.br_resolution.valid,
          io.br_resolution.bits,
-         io.flush,
+         r_flush,
          umode_only = true)
 
    val vlh_head =
       r_vlh.getSnapshot(
          io.br_resolution.valid,
          io.br_resolution.bits,
-         io.flush)
+         r_flush)
 
    val r_vlh_commit_copy = r_vlh.commit_copy
    val vlh_commit = Reverse(r_vlh_commit_copy)
@@ -212,7 +212,7 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int)(implicit p
       io.hist_update_spec.bits,
       io.br_resolution.valid,
       io.br_resolution.bits,
-      io.flush,
+      r_flush,
       disable = Bool(false),
       umode_only = false)
 
@@ -221,7 +221,7 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int)(implicit p
       io.hist_update_spec.bits,
       io.br_resolution.valid,
       io.br_resolution.bits,
-      io.flush,
+      r_flush,
       disable = !in_usermode,
       umode_only = true)
 
@@ -230,7 +230,7 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int)(implicit p
       io.hist_update_spec.bits,
       io.br_resolution.valid,
       io.br_resolution.bits,
-      io.flush,
+      r_flush,
       disable = Bool(false))
 
 
@@ -260,7 +260,7 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int)(implicit p
 
    // This shouldn't happen, unless a branch instruction was also marked to flush after it commits.
    // But we don't want to bypass the ghistory to make this "just work", so let's outlaw it.
-   assert (!(commit.valid && io.flush), "[brpredictor] commit and flush are colliding.")
+   assert (!(commit.valid && r_flush), "[brpredictor] commit and flush are colliding.")
 
    when (commit.valid)
    {
@@ -629,6 +629,7 @@ class BranchReorderBuffer(fetch_width: Int, num_entries: Int)(implicit p: Parame
    val tail_ptr = Reg(init = UInt(0, log2Up(num_entries)))
 
    val r_bpd_update = RegNext(io.backend.bpd_update)
+   val r_deallocate = RegNext(io.backend.deallocate)
 
    private def GetIdx(addr: UInt) =
       if (fetch_width == 1) UInt(0)
@@ -644,13 +645,13 @@ class BranchReorderBuffer(fetch_width: Int, num_entries: Int)(implicit p: Parame
       assert (tail_ptr === io.backend.allocate.bits.ctrl.brob_idx,
          "[BROB] allocating the wrong entry.")
    }
-   when (io.backend.deallocate.valid)
+   when (r_deallocate.valid)
    {
       head_ptr := WrapInc(head_ptr, num_entries)
 
       assert (entries_ctrl(head_ptr).debug_executed === Bool(true),
          "[BROB] Committing an entry with no executed branches or jalrs.")
-      assert (head_ptr === io.backend.deallocate.bits.brob_idx ,
+      assert (head_ptr === r_deallocate.bits.brob_idx ,
          "[BROB] Committing wrong entry.")
    }
 
@@ -685,19 +686,23 @@ class BranchReorderBuffer(fetch_width: Int, num_entries: Int)(implicit p: Parame
 
    // backend flushes and branch mispredictions can occur on the same cycle,
    // but because we're registering the misprediction (r_bpd_update), we
-   // need to spend two cycles flushing to catch this scenario.
-   when (io.backend.flush || RegNext(io.backend.flush))
+   // need to spend one cycle flushing to catch this scenario.
+   // We must also delay the flush by one cycle to handle the delayed commit
+   // signals being sent to the branch predictor (delayed so we can read out the
+   // memories).
+   when (RegNext(io.backend.flush))
    {
       head_ptr := UInt(0)
       tail_ptr := UInt(0)
+      assert (!io.backend.bpd_update.valid, "[BROB] Collision of flush and BPD update.")
    }
 
    // -----------------------------------------------
    // outputs
 
    // entries_info is a sequential memory, so buffer the rest of the bundle to match
-   io.commit_entry.valid     := RegNext(io.backend.deallocate.valid)
-   io.commit_entry.bits.ctrl := RegNext(entries_ctrl(head_ptr))
+   io.commit_entry.valid     := r_deallocate.valid
+   io.commit_entry.bits.ctrl := entries_ctrl(head_ptr)
    io.commit_entry.bits.info := entries_info.read(head_ptr, io.backend.deallocate.valid)
 
    // TODO allow filling the entire BROB ROB, instead of wasting an entry
@@ -722,16 +727,11 @@ class BranchReorderBuffer(fetch_width: Int, num_entries: Int)(implicit p: Parame
             , entries_ctrl(i).debug_rob_idx
             , entries_info(i).history_ptr
             )
-         printf("%c\n"
-         // chisel3 lacks %s support
-            ,  Mux(head_ptr === UInt(i) && tail_ptr === UInt(i), Str("B"),
-               Mux(head_ptr === UInt(i),                         Str("H"),
-               Mux(tail_ptr === UInt(i),                         Str("T"),
-                                                                 Str(" "))))
-//            ,  Mux(head_ptr === UInt(i) && tail_ptr === UInt(i), Str("<-HEAD TL"),
-//               Mux(head_ptr === UInt(i),                         Str("<-HEAD   "),
-//               Mux(tail_ptr === UInt(i),                         Str("<-     TL"),
-//                                                                 Str(" "))))
+         printf("%c\n",
+            Mux(head_ptr === UInt(i) && tail_ptr === UInt(i), Str("B"),
+            Mux(head_ptr === UInt(i),                         Str("H"),
+            Mux(tail_ptr === UInt(i),                         Str("T"),
+                                                              Str(" "))))
             )
       }
    }

@@ -35,7 +35,7 @@ class DefaultBoomConfig extends Config((site, here, up) => {
       numLsuEntries = 16,
       maxBrCount = 8,
       enableBranchPredictor = true,
-      gshare = Some(GShareParameters(enabled = true))
+      gshare = Some(GShareParameters(enabled = true, history_length=11))
    )
   }
 )
@@ -60,7 +60,7 @@ class WithSmallBooms extends Config((site, here, up) => {
       numLsuEntries = 4,
       numPhysRegisters = 100,
       maxBrCount = 4,
-      gshare = Some(GShareParameters(enabled = true))
+      gshare = Some(GShareParameters(enabled = true, history_length=11))
       )
 })
 
@@ -75,7 +75,7 @@ class WithMediumBooms extends Config((site, here, up) => {
       numIssueSlotEntries = 20,
       numLsuEntries = 16,
       numPhysRegisters = 110,
-      tage = Some(TageParameters(enabled = true))
+      gshare = Some(GShareParameters(enabled = true, history_length=11))
       )
 })
 
@@ -90,7 +90,7 @@ class WithMegaBooms extends Config((site, here, up) => {
       numIssueSlotEntries = 28,
       numLsuEntries = 32,
       numPhysRegisters = 128,
-      tage = Some(TageParameters(enabled = true))
+      gshare = Some(GShareParameters(enabled = true, history_length=11))
       )
    // Widen L1toL2 bandwidth so we can increase icache rowBytes size for 4-wide fetch.
    case L1toL2Config => up(L1toL2Config, site).copy(
