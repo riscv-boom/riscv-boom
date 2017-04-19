@@ -50,7 +50,7 @@ class RenameStageIO(
    val int_wb_valids = Vec(num_int_wb_ports, Bool()).asInput
    val int_wb_pdsts  = Vec(num_int_wb_ports, UInt(width=int_preg_sz)).asInput
    val fp_wb_valids = Vec(num_fp_wb_ports, Bool()).asInput
-   val fp_wb_pdsts  = Vec(num_fp_wb_ports, UInt(width=num_fp_pregs)).asInput
+   val fp_wb_pdsts  = Vec(num_fp_wb_ports, UInt(width=fp_reg_sz)).asInput
 
    // commit stage
    val com_valids = Vec(pl_width, Bool()).asInput
