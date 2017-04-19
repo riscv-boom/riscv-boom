@@ -58,7 +58,8 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    val dec_serializer   = Module(new FetchSerializerNtoM)
    val decode_units     = for (w <- 0 until DECODE_WIDTH) yield { val d = Module(new DecodeUnit); d }
    val dec_brmask_logic = Module(new BranchMaskGenerationLogic(DECODE_WIDTH))
-   val rename_stage     = Module(new RenameStage(DECODE_WIDTH, exe_units.num_wakeup_ports))
+   // TODO BUG need to set number of fp wakeup ports
+   val rename_stage     = Module(new RenameStage(DECODE_WIDTH, exe_units.num_wakeup_ports, 1))
 //   val fp_pipeline  // FP issue window, FP regfile, and FP arithmetic units are all handled here.
    val issue_units      = new boom.IssueUnits(exe_units.num_wakeup_ports)
 
@@ -384,6 +385,7 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    exe_units(brunit_idx).io.get_pred.info := Reg(next=rename_stage.io.get_pred.info)
 
    rename_stage.io.flush_pipeline := rob.io.flush.valid
+   rename_stage.io.debug_rob_empty := rob.io.empty
 
    for (w <- 0 until DECODE_WIDTH)
    {
@@ -399,10 +401,10 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
       // Fast Wakeup (uses just-issued uops) that have known latencies
       if (exe_units(i).isBypassable)
       {
-         rename_stage.io.wb_valids(wu_idx) := iss_valids(i) &&
-                                              (iss_uops(i).dst_rtype === RT_FIX || iss_uops(i).dst_rtype === RT_FLT) &&
-                                              (iss_uops(i).bypassable)
-         rename_stage.io.wb_pdsts(wu_idx)  := iss_uops(i).pdst
+         rename_stage.io.int_wb_valids(wu_idx) := iss_valids(i) &&
+                                                 (iss_uops(i).dst_rtype === RT_FIX || iss_uops(i).dst_rtype === RT_FLT) &&
+                                                 (iss_uops(i).bypassable)
+         rename_stage.io.int_wb_pdsts(wu_idx)  := iss_uops(i).pdst
          wu_idx += 1
          assert (!(iss_uops(i).dst_rtype === RT_FLT && iss_uops(i).bypassable), "Bypassing FP is not supported.")
       }
@@ -411,14 +413,16 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
       // Slow Wakeup (uses write-port to register file)
       for (j <- 0 until exe_units(i).num_rf_write_ports)
       {
-         rename_stage.io.wb_valids(wu_idx) := exe_units(i).io.resp(j).valid &&
-                                              exe_units(i).io.resp(j).bits.uop.ctrl.rf_wen && // TODO is rfwen redudant?
-                                              !exe_units(i).io.resp(j).bits.uop.bypassable &&
-                                              (exe_units(i).io.resp(j).bits.uop.dst_rtype === RT_FIX ||
-                                                 exe_units(i).io.resp(j).bits.uop.dst_rtype === RT_FLT)
-         rename_stage.io.wb_pdsts(wu_idx)  := exe_units(i).io.resp(j).bits.uop.pdst
+         rename_stage.io.int_wb_valids(wu_idx) := exe_units(i).io.resp(j).valid &&
+                                                 exe_units(i).io.resp(j).bits.uop.ctrl.rf_wen && // TODO is rfwen redudant?
+                                                 !exe_units(i).io.resp(j).bits.uop.bypassable &&
+                                                 (exe_units(i).io.resp(j).bits.uop.dst_rtype === RT_FIX ||
+                                                    exe_units(i).io.resp(j).bits.uop.dst_rtype === RT_FLT)
+         rename_stage.io.int_wb_pdsts(wu_idx)  := exe_units(i).io.resp(j).bits.uop.pdst
          wu_idx += 1
+
       }
+      require (exe_units(i).usesIRF)
    }
    require (wu_idx == exe_units.num_wakeup_ports)
 
@@ -521,7 +525,6 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    // Wakeup (Issue & Writeback)
 
    for (iu <- issue_units)
-//   issue_units.foreach(iu =>
    {
       wu_idx = 0
       for ((ex, idx) <- exe_units.zipWithIndex.withFilter(_._1.usesIRF))
@@ -550,7 +553,6 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
       }
       require (wu_idx == exe_units.num_wakeup_ports)
    }
-//   )
 
    //-------------------------------------------------------------
    //-------------------------------------------------------------
@@ -954,7 +956,8 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    {
       println("\n Chisel Printout Enabled\n")
 
-      var whitespace = (63 - 10 + 5 - NUM_LSU_ENTRIES- numIssueSlotEntries.sum - (NUM_ROB_ENTRIES/COMMIT_WIDTH) - NUM_BROB_ENTRIES
+//      var whitespace = (63 - 10 + 5 - NUM_LSU_ENTRIES- numIssueSlotEntries.sum - (NUM_ROB_ENTRIES/COMMIT_WIDTH) - NUM_BROB_ENTRIES
+      var whitespace = (78-2 - 10 + 5 - NUM_LSU_ENTRIES- numIssueSlotEntries.sum - numIssueSlotEntries.length+1 - (NUM_ROB_ENTRIES/COMMIT_WIDTH) - NUM_BROB_ENTRIES
       )
 
       println("Whitespace padded: " + whitespace)
@@ -1044,10 +1047,10 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
          , Mux(rob.io.com_xcpt.valid, Str("E"), Str("-"))
          , rob.io.com_xcpt.bits.cause
          , rob.io.commit.valids.toBits
-         , rename_stage.io.debug.freelist
-         , PopCount(rename_stage.io.debug.freelist)
-         , rename_stage.io.debug.isprlist
-         , PopCount(rename_stage.io.debug.isprlist)
+         , rename_stage.io.debug.ifreelist
+         , PopCount(rename_stage.io.debug.ifreelist)
+         , rename_stage.io.debug.iisprlist
+         , PopCount(rename_stage.io.debug.iisprlist)
          )
 
       // branch unit
