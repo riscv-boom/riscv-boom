@@ -66,6 +66,7 @@ class LoadStoreUnitIO(pl_width: Int)(implicit p: Parameters) extends BoomBundle(
 
    // Execute Stage
    val exe_resp           = (new ValidIO(new FuncUnitResp(xLen))).flip
+   val fp_stdata          = Valid(new MicroOpWithData(fLen)).flip
 
    // Commit Stage
    val commit_store_mask  = Vec(pl_width, Bool()).asInput
@@ -97,8 +98,11 @@ class LoadStoreUnitIO(pl_width: Int)(implicit p: Parameters) extends BoomBundle(
    val stq_full           = Bool(OUTPUT)
 
    val exception          = Bool(INPUT)
-   val lsu_clr_bsy_valid  = Bool(OUTPUT) // HACK: let the stores clear out the busy bit in the ROB
-   val lsu_clr_bsy_rob_idx= UInt(OUTPUT, width=ROB_ADDR_SZ)
+   // Let the stores clear out the busy bit in the ROB.
+   // Two ports, one for integer and the other for FP.
+   // Otherwise, we must back-pressure incoming FP store-data micro-ops.
+   val lsu_clr_bsy_valid  = Vec(2, Bool()).asOutput 
+   val lsu_clr_bsy_rob_idx= Vec(2, UInt(width=ROB_ADDR_SZ)).asOutput
    val lsu_fencei_rdy     = Bool(OUTPUT)
 
    val xcpt = new ValidIO(new Exception)
@@ -296,6 +300,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: uncore.tilelink
    val tlb_avail = Wire(init = Bool(true))
    val rob_avail = Wire(init = Bool(true))
    val lcam_avail= Wire(init = Bool(true))
+//   val std_avail = Wire(init = Bool(true)) // can the FP std come in?
 
    // give first priority to incoming uops
    when (io.exe_resp.valid)
@@ -313,11 +318,13 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: uncore.tilelink
          tlb_avail  := Bool(false)
          rob_avail  := Bool(false)
          lcam_avail := Bool(false)
+//         std_avail := Bool(false)
       }
       when (io.exe_resp.bits.uop.ctrl.is_std)
       {
          will_fire_std_incoming := Bool(true)
          rob_avail := Bool(false)
+//         std_avail := Bool(false)
       }
    }
 
@@ -327,6 +334,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: uncore.tilelink
       {
          will_fire_sta_retry := Bool(true)
          lcam_avail := Bool(false)
+//         std_avail := Bool(false)
       }
       .elsewhen (can_fire_load_retry)
       {
@@ -543,13 +551,31 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: uncore.tilelink
       saq_is_virtual(exe_tlb_uop.stq_idx)      := tlb_miss
    }
 
+   // use two ports on STD to handle Integer and FP store data.
    when (will_fire_std_incoming)
    {
-      sdq_val (io.exe_resp.bits.uop.stq_idx) := Bool(true)
-      sdq_data(io.exe_resp.bits.uop.stq_idx) := io.exe_resp.bits.data.toBits
+      val sidx = io.exe_resp.bits.uop.stq_idx
+      sdq_val (sidx) := Bool(true)
+      sdq_data(sidx) := io.exe_resp.bits.data.toBits
    }
+   
+   //--------------------------------------------
+   // FP Data
+   // Store Data Generation MicroOps come in directly from the FP registerfile,
+   // and not through the exe_resp datapath.
 
-
+   when (io.fp_stdata.valid)
+   {
+      val sidx = io.fp_stdata.bits.uop.stq_idx
+      sdq_val (sidx) := Bool(true)
+      sdq_data(sidx) := io.fp_stdata.bits.data.toBits
+   }
+   assert(!(io.fp_stdata.valid && io.exe_resp.valid && io.exe_resp.bits.uop.ctrl.is_std && 
+      io.fp_stdata.bits.uop.stq_idx === io.exe_resp.bits.uop.stq_idx), 
+      "[lsu] FP and INT data is fighting over the same sdq entry.")
+       
+   require (xLen >= fLen) // otherwise the SDQ is missized.
+ 
    //-------------------------------------------------------------
    //-------------------------------------------------------------
    // Cache Access Cycle (Mem)
@@ -575,7 +601,8 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: uncore.tilelink
                                     will_fire_load_retry ||
                                     will_fire_load_wakeup))
    val mem_fired_sta = Reg(next=(will_fire_sta_incoming || will_fire_sta_retry), init=Bool(false))
-   val mem_fired_std = Reg(next=will_fire_std_incoming, init=Bool(false))
+   val mem_fired_stdi = Reg(next=will_fire_std_incoming, init=Bool(false))
+   val mem_fired_stdf = Reg(next=io.fp_stdata.valid, init=Bool(false))
 
    mem_ld_killed := Bool(false)
    when (Reg(next=
@@ -592,12 +619,11 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: uncore.tilelink
    val clr_bsy_valid = Reg(init=Bool(false))
    val clr_bsy_robidx = Reg(UInt(width=ROB_ADDR_SZ))
    val clr_bsy_brmask = Reg(UInt(width=MAX_BR_COUNT))
-
-   clr_bsy_valid := Bool(false)
+   clr_bsy_valid  := Bool(false)
    clr_bsy_robidx := mem_tlb_uop.rob_idx
    clr_bsy_brmask := GetNewBrMask(io.brinfo, mem_tlb_uop)
-
-   when (mem_fired_sta && !mem_tlb_miss && mem_fired_std)
+   
+   when (mem_fired_sta && !mem_tlb_miss && mem_fired_stdi)
    {
       clr_bsy_valid := !mem_tlb_uop.is_amo
       clr_bsy_robidx := mem_tlb_uop.rob_idx
@@ -610,7 +636,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: uncore.tilelink
       clr_bsy_robidx := mem_tlb_uop.rob_idx
       clr_bsy_brmask := GetNewBrMask(io.brinfo, mem_tlb_uop)
    }
-   .elsewhen (mem_fired_std)
+   .elsewhen (mem_fired_stdi)
    {
       val mem_std_uop = RegNext(io.exe_resp.bits.uop)
       clr_bsy_valid := saq_val(mem_std_uop.stq_idx) &&
@@ -619,9 +645,20 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: uncore.tilelink
       clr_bsy_robidx := mem_std_uop.rob_idx
       clr_bsy_brmask := GetNewBrMask(io.brinfo, mem_std_uop)
    }
+   
+   
+   val mem_uop_stdf = RegNext(io.fp_stdata.bits.uop)
+   val stdf_clr_bsy_valid = RegNext(mem_fired_stdf &&
+                           saq_val(mem_uop_stdf.stq_idx) &&
+                           !saq_is_virtual(mem_uop_stdf.stq_idx) &&
+                           !mem_uop_stdf.is_amo)
+   val stdf_clr_bsy_robidx = RegEnable(mem_uop_stdf.rob_idx, mem_fired_stdf)
+   val stdf_clr_bsy_brmask = RegEnable(GetNewBrMask(io.brinfo, mem_uop_stdf), mem_fired_stdf)
 
-   io.lsu_clr_bsy_valid := clr_bsy_valid && !io.exception && !IsKilledByBranch(io.brinfo, clr_bsy_brmask)
-   io.lsu_clr_bsy_rob_idx := clr_bsy_robidx
+   io.lsu_clr_bsy_valid(0)   := clr_bsy_valid && !io.exception && !IsKilledByBranch(io.brinfo, clr_bsy_brmask)
+   io.lsu_clr_bsy_rob_idx(0) := clr_bsy_robidx
+   io.lsu_clr_bsy_valid(1)   := stdf_clr_bsy_valid && !io.exception && !IsKilledByBranch(io.brinfo, stdf_clr_bsy_brmask)
+   io.lsu_clr_bsy_rob_idx(1) := stdf_clr_bsy_robidx
 
    //-------------------------------------------------------------
    // Load Issue Datapath (ALL loads need to use this path,

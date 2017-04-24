@@ -29,7 +29,7 @@ import uncore.constants.MemoryOpConstants._
 object FUConstants
 {
    // bit mask, since a given execution pipeline may support multiple functional units
-   val FUC_SZ = 8
+   val FUC_SZ = 9
    val FU_X   = BitPat.DC(FUC_SZ)
    val FU_ALU = UInt(  1, FUC_SZ)
    val FU_BRU = UInt(  2, FUC_SZ)
@@ -39,6 +39,7 @@ object FUConstants
    val FU_FPU = UInt( 32, FUC_SZ)
    val FU_CSR = UInt( 64, FUC_SZ)
    val FU_FDV = UInt(128, FUC_SZ)
+   val FU_I2F = UInt(256, FUC_SZ)
 }
 import FUConstants._
 
@@ -50,7 +51,8 @@ class SupportedFuncUnits(
    val muld: Boolean = false,
    val fpu: Boolean  = false,
    val csr: Boolean  = false,
-   val fdiv: Boolean = false)
+   val fdiv: Boolean = false,
+   val ifpu: Boolean = false)
 {
 }
 
@@ -583,6 +585,7 @@ class MemAddrCalcUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(nu
 
    // compute store data
    // requires decoding 65-bit FP data
+   // TODO remove this recoding -- since this will only handle Int micro-ops with split regfiles.
    val unrec_s = hardfloat.fNFromRecFN(8, 24, io.req.bits.rs2_data)
    val unrec_d = hardfloat.fNFromRecFN(11, 53, io.req.bits.rs2_data)
    val unrec_out = Mux(io.req.bits.uop.fp_single, Cat(Fill(32, unrec_s(31)), unrec_s), unrec_d)
@@ -598,6 +601,9 @@ class MemAddrCalcUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(nu
    {
       assert (!(io.req.valid && io.req.bits.uop.ctrl.is_std &&
          io.resp.bits.data(64).toBool === Bool(true)), "65th bit set in MemAddrCalcUnit.")
+      
+      assert (!(io.req.valid && io.req.bits.uop.ctrl.is_std && io.req.bits.uop.fp_val),
+         "FP store-data should now be going through a different unit.")
    }
 
    // Handle misaligned exceptions
@@ -637,6 +643,42 @@ class FPUUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(
    io.resp.bits.fflags.bits.flags := fpu.io.resp.bits.fflags.bits.flags // kill me now
 }
 
+
+class IntToFPUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(
+   num_stages = p(BoomKey).intToFpLatency,
+   num_bypass_stages = 0,
+   earliest_bypass_stage = 0,
+   data_width = 65)(p)
+{
+   val fp_decoder = Module(new UOPCodeFPUDecoder) // TODO use a simpler decoder
+   val io_req = io.req.bits
+   fp_decoder.io.uopc := io_req.uop.uopc
+   val fp_ctrl = fp_decoder.io.sigs
+   val fp_rm = Mux(ImmGenRm(io_req.uop.imm_packed) === Bits(7), io.fcsr_rm, ImmGenRm(io_req.uop.imm_packed))
+   val req = Wire(new tile.FPInput)
+   req := fp_ctrl
+   req.rm := fp_rm
+   req.in1 := io_req.rs1_data
+   req.in2 := io_req.rs2_data
+   req.typ := ImmGenTyp(io_req.uop.imm_packed)
+
+   assert (!(io.req.valid && fp_ctrl.fromint && req.in1(64).toBool),
+      "[func] IntToFP integer input has 65th high-order bit set!")
+
+   assert (!(io.req.valid && !fp_ctrl.fromint),
+      "[func] Only support fromInt micro-ops.")
+
+   val ifpu = Module(new tile.IntToFP(intToFpLatency))
+   ifpu.io.in.valid := io.req.valid //&& fp_ctrl.fromint
+   ifpu.io.in.bits := req
+
+   io.resp.valid                  := ifpu.io.out.valid // TODO XXX why is this not present in FPUUnit?
+   io.resp.bits.data              := ifpu.io.out.bits.data
+   io.resp.bits.fflags.valid      := ifpu.io.out.valid
+   io.resp.bits.fflags.bits.uop   := io.resp.bits.uop
+   io.resp.bits.fflags.bits.flags := ifpu.io.out.bits.exc
+}
+ 
 
 
 // unpipelined, can only hold a single MicroOp at a time

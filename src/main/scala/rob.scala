@@ -32,9 +32,9 @@ import scala.math.ceil
 import config.Parameters
 import util.Str
 
-class RobIo(machine_width: Int
-            , num_wakeup_ports: Int
-            , num_fpu_ports: Int
+class RobIo(machine_width: Int,
+            num_wakeup_ports: Int,
+            num_fpu_ports: Int
             )(implicit p: Parameters)  extends BoomBundle()(p)
 {
    // Dispatch Stage
@@ -57,10 +57,10 @@ class RobIo(machine_width: Int
    // Write-back Stage
    // (Update of ROB)
    // Instruction is no longer busy and can be committed
-   val wb_resps = Vec(num_wakeup_ports, Valid(new ExeUnitResp(65))).flip
+   val wb_resps = Vec(num_wakeup_ports, Valid(new ExeUnitResp(xLen max fLen+1))).flip
 
-   val lsu_clr_bsy_valid = Bool(INPUT)
-   val lsu_clr_bsy_rob_idx = UInt(INPUT, ROB_ADDR_SZ)
+   val lsu_clr_bsy_valid = Vec(2, Bool()).asInput
+   val lsu_clr_bsy_rob_idx = Vec(2, UInt(width=ROB_ADDR_SZ)).asInput
 
    // Track side-effects for debug purposes.
    // Also need to know when loads write back, whereas we don't need loads to unbusy.
@@ -174,10 +174,10 @@ class DebugRobSignals(implicit p: Parameters) extends BoomBundle()(p)
 // width = the dispatch and commit width of the processor
 // num_wakeup_ports = self-explanatory
 // num_fpu_ports = number of FPU units that will write back fflags
-class Rob(width: Int
-         , num_rob_entries: Int
-         , num_wakeup_ports: Int
-         , num_fpu_ports: Int
+class Rob(width: Int,
+         num_rob_entries: Int,
+         val num_wakeup_ports: Int,
+         num_fpu_ports: Int
          )(implicit p: Parameters) extends BoomModule()(p)
 {
    val io = new RobIo(width, num_wakeup_ports, num_fpu_ports)
@@ -399,15 +399,17 @@ class Rob(width: Int
       }
 
       // Stores have a separate method to clear busy bits
-      when (io.lsu_clr_bsy_valid && MatchBank(GetBankIdx(io.lsu_clr_bsy_rob_idx)))
+      for ((clr_valid, clr_rob_idx) <- io.lsu_clr_bsy_valid zip io.lsu_clr_bsy_rob_idx)
       {
-         rob_bsy(GetRowIdx(io.lsu_clr_bsy_rob_idx)) := Bool(false)
-
-         if (O3PIPEVIEW_PRINTF)
+         when (clr_valid && MatchBank(GetBankIdx(clr_rob_idx)))
          {
-            printf("%d; O3PipeView:complete:%d\n",
-               rob_uop(GetRowIdx(io.lsu_clr_bsy_rob_idx)).debug_events.fetch_seq,
-               io.debug_tsc)
+            rob_bsy(GetRowIdx(clr_rob_idx)) := Bool(false)
+
+            if (O3PIPEVIEW_PRINTF)
+            {
+               printf("%d; O3PipeView:complete:%d\n",
+                  rob_uop(GetRowIdx(clr_rob_idx)).debug_events.fetch_seq, io.debug_tsc)
+            }
          }
       }
 

@@ -14,13 +14,15 @@ import config.Parameters
 
 import scala.collection.mutable.ArrayBuffer
 
-class ExecutionUnits(implicit val p: Parameters) extends HasBoomCoreParameters
+class ExecutionUnits(fpu: Boolean = false)(implicit val p: Parameters) extends HasBoomCoreParameters
 {
    val totalIssueWidth = issueWidths.reduce(_+_)
    require (totalIssueWidth >= 2)
 
-   println("\n   ~*** " + Seq("One","Two","Three","Four")(DECODE_WIDTH-1) + "-wide Machine ***~\n")
-   println("    -== " + Seq("Single","Dual","Triple","Quad","Five","Six")(totalIssueWidth-1) + " Issue ==- \n")
+   if (!fpu) {
+      println("\n   ~*** " + Seq("One","Two","Three","Four")(DECODE_WIDTH-1) + "-wide Machine ***~\n")
+      println("    -== " + Seq("Single","Dual","Triple","Quad","Five","Six")(totalIssueWidth-1) + " Issue ==- \n")
+   }
 
 
    //*******************************
@@ -43,6 +45,11 @@ class ExecutionUnits(implicit val p: Parameters) extends HasBoomCoreParameters
    def withFilter(f: ExecutionUnit => Boolean) =
    {
       exe_units.withFilter(f)
+   }
+
+   def foreach[U](f: ExecutionUnit => U) =
+   {
+      exe_units.foreach(f)
    }
 
    def zipWithIndex =
@@ -68,6 +75,12 @@ class ExecutionUnits(implicit val p: Parameters) extends HasBoomCoreParameters
       exe_units.find(_.uses_csr_wport).get
    }
 
+   lazy val ifpu_unit =
+   {
+      require (exe_units.count(_.has_ifpu) == 1)
+      exe_units.find(_.has_ifpu).get
+   }
+
    lazy val br_unit_io =
    {
       require (exe_units.count(_.hasBranchUnit) == 1)
@@ -81,29 +94,42 @@ class ExecutionUnits(implicit val p: Parameters) extends HasBoomCoreParameters
 
 
 
-   exe_units += Module(new MemExeUnit())
-   exe_units += Module(new ALUExeUnit(is_branch_unit      = true
-                                       , shares_csr_wport = true
-                                       , has_mul          = true
-                                       , use_slow_mul     = true // TODO
-                                       , has_div          = true
-                                       ))
-   for (w <- 0 until issueWidths(1)-1) exe_units += Module(new ALUExeUnit())
-   require (!usingFPU) // TODO BUG add back support for FP
+   if (!fpu) {
+      exe_units += Module(new MemExeUnit())
+      exe_units += Module(new ALUExeUnit(is_branch_unit      = true
+                                          , shares_csr_wport = true
+                                          , has_mul          = true
+                                          , use_slow_mul     = true // TODO
+                                          , has_div          = true
+                                          , has_ifpu         = true
+                                          ))
+      for (w <- 0 until issueWidths(1)-1) exe_units += Module(new ALUExeUnit())
+   } else {                                     
+      require (usingFPU)
+      require (issueWidths(2) <= 1) // TODO, hacks to fix include uopSTD_fp needing a proper func unit.
+      for (w <- 0 until issueWidths(2)) { 
+         exe_units += Module(new ALUExeUnit(has_alu = false, 
+                                            has_fpu = true,
+                                            has_fdiv = usingFDivSqrt && (w==0))) 
+      }
+      exe_units += Module(new IntToFPExeUnit())
+   }
 
 
    require (exe_units.length != 0)
-   require (exe_units.map(_.is_mem_unit).reduce(_|_), "Datapath is missing a memory unit.")
-   require (exe_units.map(_.has_mul).reduce(_|_), "Datapath is missing a multiplier.")
-   require (exe_units.map(_.has_div).reduce(_|_), "Datapath is missing a divider.")
-   require (exe_units.map(_.has_fpu).reduce(_|_) == usingFPU, "Datapath is missing a fpu (or has an fpu and shouldnt).")
+   // if this is for FPU units, we don't need a memory unit (or other integer units)..
+   require (exe_units.map(_.is_mem_unit).reduce(_|_) || fpu, "Datapath is missing a memory unit.")
+   require (exe_units.map(_.has_mul).reduce(_|_) || fpu, "Datapath is missing a multiplier.")
+   require (exe_units.map(_.has_div).reduce(_|_) || fpu, "Datapath is missing a divider.")
+   require (exe_units.map(_.has_fpu).reduce(_|_) == usingFPU || !fpu, "Datapath is missing a fpu (or has an fpu and shouldnt).")
 
    val num_rf_read_ports = exe_units.map(_.num_rf_read_ports).reduce[Int](_+_)
    val num_rf_write_ports = exe_units.map(_.num_rf_write_ports).reduce[Int](_+_)
-   val num_total_bypass_ports = exe_units.withFilter(_.isBypassable).map(_.numBypassPorts).reduce[Int](_+_)
+   val num_total_bypass_ports = exe_units.withFilter(_.isBypassable).map(_.numBypassPorts).foldLeft(0)(_+_)
    val num_fast_wakeup_ports = exe_units.count(_.isBypassable)
    // TODO reduce the number of slow wakeup ports - currently have every write-port also be a slow-wakeup-port.
-   val num_slow_wakeup_ports = num_rf_write_ports
+   // +1 is for FP->Int moves. TODO HACK move toint to share the mem port.
+   val num_slow_wakeup_ports = num_rf_write_ports + 1
    // The slow write ports to the regfile are variable latency, and thus can't be bypassed.
    // val num_slow_wakeup_ports = exe_units.map(_.num_variable_write_ports).reduce[Int](_+_)
 

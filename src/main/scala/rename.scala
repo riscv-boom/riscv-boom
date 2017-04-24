@@ -49,27 +49,29 @@ class RenameStageIO(
    // issue stage (fast wakeup)
    val int_wb_valids = Vec(num_int_wb_ports, Bool()).asInput
    val int_wb_pdsts  = Vec(num_int_wb_ports, UInt(width=int_preg_sz)).asInput
-   val fp_wb_valids = Vec(num_fp_wb_ports, Bool()).asInput
-   val fp_wb_pdsts  = Vec(num_fp_wb_ports, UInt(width=fp_reg_sz)).asInput
+   val fp_wakeups = Vec(num_fp_wb_ports, Valid(new ExeUnitResp(fLen+1))).flip
 
    // commit stage
    val com_valids = Vec(pl_width, Bool()).asInput
    val com_uops   = Vec(pl_width, new MicroOp()).asInput
    val com_rbk_valids = Vec(pl_width, Bool()).asInput
 
-   val flush_pipeline = Bool(INPUT) // TODO only used for SCR (single-cycle reset)
+   val flush_pipeline = Bool(INPUT) // only used for SCR (single-cycle reset)
 
    val debug_rob_empty = Bool(INPUT)
-   val debug = new DebugRenameStageIO(num_int_pregs).asOutput
+   val debug = new DebugRenameStageIO(num_int_pregs, num_fp_pregs).asOutput
 }
 
 
-class DebugRenameStageIO(num_pregs: Int)(implicit p: Parameters) extends BoomBundle()(p)
+class DebugRenameStageIO(int_num_pregs: Int, fp_num_pregs: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
-   val ifreelist = Bits(width=num_pregs)
-   val iisprlist = Bits(width=num_pregs)
-   val ibusytable = UInt(width=num_pregs)
-   override def cloneType: this.type = new DebugRenameStageIO(num_pregs).asInstanceOf[this.type]
+   val ifreelist = Bits(width=int_num_pregs)
+   val iisprlist = Bits(width=int_num_pregs)
+   val ibusytable = UInt(width=int_num_pregs)
+   val ffreelist = Bits(width=fp_num_pregs)
+   val fisprlist = Bits(width=fp_num_pregs)
+   val fbusytable = UInt(width=fp_num_pregs)
+   override def cloneType: this.type = new DebugRenameStageIO(int_num_pregs, fp_num_pregs).asInstanceOf[this.type]
 }
 
 
@@ -122,53 +124,68 @@ class RenameStage(
    {
       io.ren_mask(w)         := io.dec_mask(w) && io.inst_can_proceed(w) && !io.kill
       io.ren_uops(w)         := io.dec_uops(w)
-      io.ren_uops(w).br_mask := GetNewBrMask(io.brinfo, io.dec_uops(w))
+      io.ren_uops(w).br_mask := GetNewBrMask(io.brinfo, io.dec_uops(w)) // TODO consolidate into getNewBranchMask
       ren_br_vals(w)         := io.dec_mask(w) && io.dec_uops(w).allocate_brtag
    }
+ 
+   //-------------------------------------------------------------
+   // Free List
+ 
+   for (list <- Seq(ifreelist, ffreelist))
+   {
+      list.io.brinfo := io.brinfo
+      list.io.kill := io.kill
+      list.io.ren_mask := io.ren_mask
+      list.io.ren_uops := io.ren_uops
+      list.io.ren_br_vals := ren_br_vals
+      list.io.inst_can_proceed := io.inst_can_proceed
+      list.io.com_valids := io.com_valids
+      list.io.com_uops := io.com_uops
+      list.io.com_rbk_valids := io.com_rbk_valids
+      list.io.flush_pipeline := io.flush_pipeline
+      list.io.debug_rob_empty := io.debug_rob_empty
+   }
 
+   for ((uop, w) <- io.ren_uops.zipWithIndex)
+   {
+      val i_preg = ifreelist.io.req_pregs(w)
+      val f_preg = ffreelist.io.req_pregs(w)
+      uop.pdst := Mux(uop.dst_rtype === RT_FLT, f_preg, i_preg)
+   }
+ 
    //-------------------------------------------------------------
    // Rename Table
 
-   imaptable.io.brinfo := io.brinfo
-   imaptable.io.kill := io.kill
-   imaptable.io.ren_mask := io.ren_mask
-   imaptable.io.ren_uops := io.ren_uops
-   imaptable.io.ren_br_vals := ren_br_vals
-   imaptable.io.com_valids := io.com_valids
-   imaptable.io.com_uops := io.com_uops
-   imaptable.io.com_rbk_valids := io.com_rbk_valids
-   imaptable.io.flush_pipeline := io.flush_pipeline
-   imaptable.io.inst_can_proceed := io.inst_can_proceed
-   imaptable.io.freelist_can_allocate := ifreelist.io.can_allocate
-
-   for (w <- 0 until pl_width)
+   for (table <- Seq(imaptable, fmaptable))
    {
-      // TODO XXX choose between FP, INT
-      io.ren_uops(w).pop1 := imaptable.io.values(w).prs1
-      io.ren_uops(w).pop2 := imaptable.io.values(w).prs2
-      io.ren_uops(w).pop3 := imaptable.io.values(w).prs3
-      io.ren_uops(w).stale_pdst := imaptable.io.values(w).stale_pdst
+      table.io.brinfo := io.brinfo
+      table.io.kill := io.kill
+      table.io.ren_mask := io.ren_mask
+      table.io.ren_uops := io.ren_uops // expects pdst to be set up
+      table.io.ren_br_vals := ren_br_vals
+      table.io.com_valids := io.com_valids
+      table.io.com_uops := io.com_uops
+      table.io.com_rbk_valids := io.com_rbk_valids
+      table.io.flush_pipeline := io.flush_pipeline
+      table.io.inst_can_proceed := io.inst_can_proceed
+   }
+   imaptable.io.freelist_can_allocate := ifreelist.io.can_allocate
+   fmaptable.io.freelist_can_allocate := ffreelist.io.can_allocate
+
+   for ((uop, w) <- io.ren_uops.zipWithIndex)
+   {
+      val imap = imaptable.io.values(w)
+      val fmap = fmaptable.io.values(w)
+
+      uop.pop1       := Mux(uop.lrs1_rtype === RT_FLT, fmap.prs1, imap.prs1)
+      uop.pop2       := Mux(uop.lrs2_rtype === RT_FLT, fmap.prs2, imap.prs2)
+      uop.pop3       := fmaptable.io.values(w).prs3 // only FP has 3rd operand
+      uop.stale_pdst := Mux(uop.dst_rtype === RT_FLT,  fmap.stale_pdst, imap.stale_pdst)
    }
 
    //-------------------------------------------------------------
-   // Free List
-
-   ifreelist.io.brinfo := io.brinfo
-   ifreelist.io.kill := io.kill
-   ifreelist.io.ren_mask := io.ren_mask
-   ifreelist.io.ren_uops := io.ren_uops
-   ifreelist.io.ren_br_vals := ren_br_vals
-   ifreelist.io.inst_can_proceed := io.inst_can_proceed
-   ifreelist.io.com_valids := io.com_valids
-   ifreelist.io.com_uops := io.com_uops
-   ifreelist.io.com_rbk_valids := io.com_rbk_valids
-   ifreelist.io.flush_pipeline := io.flush_pipeline
-   ifreelist.io.debug_rob_empty := io.debug_rob_empty
-
-   for (w <- 0 until pl_width)
-   {
-      io.ren_uops(w).pdst := ifreelist.io.req_pregs(w) // TODO BUG XXX choose between FP, Int
-   }
+   // pipeline registers
+   // TODO add def function for RegOrWire
 
    //-------------------------------------------------------------
    // Busy Table
@@ -180,13 +197,23 @@ class RenameStage(
    ibusytable.io.wb_valids := io.int_wb_valids
    ibusytable.io.wb_pdsts := io.int_wb_pdsts
 
+   fbusytable.io.ren_mask := io.ren_mask
+   fbusytable.io.ren_uops := io.ren_uops  // expects pdst to be set up.
+   fbusytable.io.freelist_can_allocate := ffreelist.io.can_allocate
+   fbusytable.io.map_table := fmaptable.io.values
+   fbusytable.io.wb_valids := io.fp_wakeups.map(_.valid)
+   fbusytable.io.wb_pdsts := io.fp_wakeups.map(_.bits.uop.pdst)
+   
+   assert (!(io.fp_wakeups.map(x => x.valid && x.bits.uop.dst_rtype =/= RT_FLT).reduce(_|_)),
+      "[rename] fp wakeup is not waking up a FP register.")
 
-   for (w <- 0 until pl_width)
+   for ((uop, w) <- io.ren_uops.zipWithIndex)
    {
-      // TODO XXX choose between FP, INT
-      io.ren_uops(w).prs1_busy := ibusytable.io.values(w).prs1_busy
-      io.ren_uops(w).prs2_busy := ibusytable.io.values(w).prs2_busy
-      io.ren_uops(w).prs3_busy := ibusytable.io.values(w).prs3_busy
+      val ibusy = ibusytable.io.values(w)
+      val fbusy = fbusytable.io.values(w)
+      uop.prs1_busy := Mux(uop.lrs1_rtype === RT_FLT, fbusy.prs1_busy, ibusy.prs1_busy)
+      uop.prs2_busy := Mux(uop.lrs2_rtype === RT_FLT, fbusy.prs2_busy, ibusy.prs2_busy)
+      uop.prs3_busy := fbusy.prs3_busy
    }
 
    //-------------------------------------------------------------
@@ -213,11 +240,11 @@ class RenameStage(
    // Outputs
    for (w <- 0 until pl_width)
    {
-      // TODO REFACTOR, make == rt_x?
-      // TODO BUG XXX canallocate int vs fp
       io.inst_can_proceed(w) :=
-         (ifreelist.io.can_allocate(w) || (io.ren_uops(w).dst_rtype =/= RT_FIX && io.ren_uops(w).dst_rtype =/= RT_FLT)) &&
-         io.dis_inst_can_proceed(w)
+         io.dis_inst_can_proceed(w) &&
+         ((io.ren_uops(w).dst_rtype =/= RT_FIX && io.ren_uops(w).dst_rtype =/= RT_FLT) ||
+         (ifreelist.io.can_allocate(w) && io.ren_uops(w).dst_rtype === RT_FIX) ||
+         (ffreelist.io.can_allocate(w) && io.ren_uops(w).dst_rtype === RT_FLT))
    }
 
    //-------------------------------------------------------------
@@ -226,5 +253,8 @@ class RenameStage(
    io.debug.ifreelist  := ifreelist.io.debug.freelist
    io.debug.iisprlist  := ifreelist.io.debug.isprlist
    io.debug.ibusytable := ibusytable.io.debug.busytable
+   io.debug.ffreelist  := ffreelist.io.debug.freelist
+   io.debug.fisprlist  := ffreelist.io.debug.isprlist
+   io.debug.fbusytable := fbusytable.io.debug.busytable
 }
 

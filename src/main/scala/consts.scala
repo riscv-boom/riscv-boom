@@ -61,6 +61,7 @@ trait ScalarOpConstants
    //************************************
    // Control Signals
 
+   // Issue slot.
    val s_invalid :: s_valid_1 :: s_valid_2 :: Nil = Enum(UInt(),3)
 
    // PC Select Signal

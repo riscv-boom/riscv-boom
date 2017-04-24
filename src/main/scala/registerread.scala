@@ -76,7 +76,9 @@ class RegisterRead(
 
    for (w <- 0 until issue_width)
    {
+      println("Building Decoder(" + w + ")")
       val rrd_decode_unit = Module(new RegisterReadDecode(supported_units_array(w)))
+      println("Finished Decoder")
       rrd_decode_unit.io.iss_valid := io.iss_valids(w)
       rrd_decode_unit.io.iss_uop   := io.iss_uops(w)
 
@@ -134,8 +136,9 @@ class RegisterRead(
 
    // NOTES: this code is fairly hard-coded. Sorry.
    // ASSUMPTIONS:
-   //    -rs3 is used for FPU ops which are NOT bypassed (so don't check
+   //    - rs3 is used for FPU ops which are NOT bypassed (so don't check
    //       them!).
+   //    - only bypass integer registers.
 
    val bypassed_rs1_data = Wire(Vec(issue_width, Bits(width = register_width)))
    val bypassed_rs2_data = Wire(Vec(issue_width, Bits(width = register_width)))
@@ -155,9 +158,9 @@ class RegisterRead(
       {
          // can't use "io.bypass.valid(b) since it would create a combinational loop on branch kills"
          rs1_cases ++= Array((io.bypass.valid(b) && (pop1 === io.bypass.uop(b).pdst) && io.bypass.uop(b).ctrl.rf_wen
-            && (lrs1_rtype === RT_FIX || lrs1_rtype === RT_FLT) && (pop1 =/= UInt(0)), io.bypass.data(b)))
+            && io.bypass.uop(b).dst_rtype === RT_FIX && lrs1_rtype === RT_FIX && (pop1 =/= UInt(0)), io.bypass.data(b)))
          rs2_cases ++= Array((io.bypass.valid(b) && (pop2 === io.bypass.uop(b).pdst) && io.bypass.uop(b).ctrl.rf_wen
-            && (lrs2_rtype === RT_FIX || lrs2_rtype === RT_FLT) && (pop2 =/= UInt(0)), io.bypass.data(b)))
+            && io.bypass.uop(b).dst_rtype === RT_FIX && lrs2_rtype === RT_FIX && (pop2 =/= UInt(0)), io.bypass.data(b)))
       }
 
       if (num_read_ports > 0) bypassed_rs1_data(w) := MuxCase(rrd_rs1_data(w), rs1_cases)

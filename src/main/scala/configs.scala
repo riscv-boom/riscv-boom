@@ -23,13 +23,18 @@ class DefaultBoomConfig extends Config((site, here, up) => {
       useCompressed = false,
       nPerfCounters = 4,
       nPerfEvents = 31,
-      fpu = None //Some(tile.FPUParams(sfmaLatency=3, dfmaLatency=3))
+      fpu = Some(tile.FPUParams(sfmaLatency=3, dfmaLatency=3, divSqrt=true))
    ))}
 
    // BOOM-specific uarch Parameters
    case BoomKey => BoomCoreParams(
       numRobEntries = 48,
-      issueWidths = Seq(1, 2, 0), // Mem, Int, FP
+//      issueParams = Seq(
+//         IssueParams(issueWidth=1, numEntries=16, iqType=IQT_MEM.litValue),
+//         IssueParams(issueWidth=2, numEntries=16, iqType=IQT_INT.litValue),
+//         IssueParams(issueWidth=1, numEntries=16, iqType=IQT_FP.litValue))
+      // TODO update issueWindows to use case classes.
+      issueWidths = Seq(1, 2, 1), // Mem, Int, FP
       numIssueSlotEntries = Seq(16, 16, 16), // Mem, Int, FP
       numIntPhysRegisters = 80,
       numFpPhysRegisters = 56,
@@ -56,7 +61,7 @@ class WithSmallBooms extends Config((site, here, up) => {
       ))}
    case BoomKey => up(BoomKey, site).copy(
       numRobEntries = 24,
-      issueWidths = Seq(1, 1, 0), // Mem, Int, FP
+      issueWidths = Seq(1, 1, 1), // Mem, Int, FP
       numIssueSlotEntries = Seq(4, 4, 4), // Mem, Int, FP
       numIntPhysRegisters = 56,
       numFpPhysRegisters = 48,
@@ -73,7 +78,7 @@ class WithMediumBooms extends Config((site, here, up) => {
       fWidth = 2))}
    case BoomKey => up(BoomKey, site).copy(
       numRobEntries = 48,
-      issueWidths = Seq(1, 2, 0), // Mem, Int, FP
+      issueWidths = Seq(1, 2, 1), // Mem, Int, FP
       numIssueSlotEntries = Seq(16, 16, 16), // Mem, Int, FP
       numIntPhysRegisters = 80,
       numFpPhysRegisters = 56,
@@ -89,7 +94,7 @@ class WithMegaBooms extends Config((site, here, up) => {
       fWidth = 4))}
    case BoomKey => up(BoomKey, site).copy(
       numRobEntries = 128,
-      issueWidths = Seq(1, 2, 0), // Mem, Int, FP
+      issueWidths = Seq(1, 2, 2), // Mem, Int, FP
       numIssueSlotEntries = Seq(20, 16, 20), // Mem, Int, FP
       numIntPhysRegisters = 128,
       numFpPhysRegisters = 64,

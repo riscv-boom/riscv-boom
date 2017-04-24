@@ -51,25 +51,30 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    //**********************************
    // construct all of the modules
 
-   val exe_units        = new boom.ExecutionUnits()
+   // Only holds integer-registerfile execution units.
+   val exe_units        = new boom.ExecutionUnits(fpu=false)
+   // Meanwhile, the FP pipeline holds the FP issue window, FP regfile, and FP arithmetic units.
+   println("building fp")
+   var fp_pipeline: FpPipeline = null
+   if (usingFPU) {
+      fp_pipeline       = Module(new FpPipeline()) 
+   }
 
+   println("building fetch")
    val fetch_unit       = Module(new FetchUnit(FETCH_WIDTH))
    val bpd_stage        = Module(new BranchPredictionStage(FETCH_WIDTH))
    val dec_serializer   = Module(new FetchSerializerNtoM)
    val decode_units     = for (w <- 0 until DECODE_WIDTH) yield { val d = Module(new DecodeUnit); d }
    val dec_brmask_logic = Module(new BranchMaskGenerationLogic(DECODE_WIDTH))
-   // TODO BUG need to set number of fp wakeup ports
-   val rename_stage     = Module(new RenameStage(DECODE_WIDTH, exe_units.num_wakeup_ports, 1))
-//   val fp_pipeline  // FP issue window, FP regfile, and FP arithmetic units are all handled here.
+   val rename_stage     = Module(new RenameStage(DECODE_WIDTH, exe_units.num_wakeup_ports, fp_pipeline.io.wakeups.length))
    val issue_units      = new boom.IssueUnits(exe_units.num_wakeup_ports)
-
-   require (exe_units.length == issue_units.map(_.issue_width).sum)
-
+   // + 1 for toint
    val iregfile         = Module(new RegisterFile(numIntPhysRegs,
                                  exe_units.withFilter(_.usesIRF).map(e => e.num_rf_read_ports).sum,
-                                 exe_units.withFilter(_.usesIRF).map(e => e.num_rf_write_ports).sum,
+                                 exe_units.withFilter(_.usesIRF).map(e => e.num_rf_write_ports).sum + 1,
                                  xLen,
                                  ENABLE_REGFILE_BYPASSING))
+   println("building rrd")
    val iregister_read   = Module(new RegisterRead(
                                  issue_units.map(_.issue_width).sum,
                                  exe_units.withFilter(_.usesIRF).map(_.supportedFuncUnits),
@@ -77,16 +82,18 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
                                  exe_units.withFilter(_.usesIRF).map(_.num_rf_read_ports),
                                  exe_units.num_total_bypass_ports,
                                  xLen))
+   println("building csr")
    val csr              = Module(new rocket.CSRFile())
    val dc_shim          = Module(new DCacheShim())
    val lsu              = Module(new LoadStoreUnit(DECODE_WIDTH))
    val rob              = Module(new Rob(
                                  DECODE_WIDTH,
                                  NUM_ROB_ENTRIES,
-                                 exe_units.num_slow_wakeup_ports,
-                                 exe_units.num_fpu_ports))
+                                 exe_units.num_slow_wakeup_ports + fp_pipeline.io.wakeups.length,
+                                 exe_units.num_fpu_ports + fp_pipeline.io.wakeups.length))
                            // TODO the ROB writeback is off the regfile, which is a different set
 
+   require (exe_units.length == issue_units.map(_.issue_width).sum)
 
    //***********************************
    // Pipeline State Registers and Wires
@@ -124,12 +131,12 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    //****************************************
    // Time Stamp Counter & Retired Instruction Counter
    // (only used for printf and vcd dumps - the actual counters are in the CSRFile)
-   val tsc_reg  = Reg(init = UInt(0, xLen))
-   val irt_reg  = Reg(init = UInt(0, xLen))
-   tsc_reg  := tsc_reg + Mux(Bool(O3PIPEVIEW_PRINTF), UInt(O3_CYCLE_TIME), UInt(1))
-   irt_reg  := irt_reg + PopCount(rob.io.commit.valids.toBits)
-   debug(tsc_reg)
-   debug(irt_reg)
+   val debug_tsc_reg  = Reg(init = UInt(0, xLen))
+   val debug_irt_reg  = Reg(init = UInt(0, xLen))
+   debug_tsc_reg  := debug_tsc_reg + Mux(Bool(O3PIPEVIEW_PRINTF), UInt(O3_CYCLE_TIME), UInt(1))
+   debug_irt_reg  := debug_irt_reg + PopCount(rob.io.commit.valids.toBits)
+   debug(debug_tsc_reg)
+   debug(debug_irt_reg)
 
 
    //****************************************
@@ -157,12 +164,14 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
 
    println("\n   Integer Regfile       : ")
    println("   Num RF Read Ports     : " + exe_units.num_rf_read_ports)
-   println("   Num RF Write Ports    : " + exe_units.num_rf_write_ports + "\n")
-   println("   RF Cost (R+W)*(R+2W)  : " + exe_units.rf_cost + "\n")
+   println("   Num RF Write Ports    : " + exe_units.num_rf_write_ports)
+   println("   RF Cost (R+W)*(R+2W)  : " + exe_units.rf_cost)
    println("   Num Slow Wakeup Ports : " + exe_units.num_slow_wakeup_ports)
    println("   Num Fast Wakeup Ports : " + exe_units.num_fast_wakeup_ports)
    println("   Num Bypass Ports      : " + exe_units.num_total_bypass_ports)
    println("")
+
+   print(fp_pipeline)
 
    //-------------------------------------------------------------
    //-------------------------------------------------------------
@@ -179,7 +188,7 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
       fetch_unit.io.imem.resp.bits.btb.bits.bridx := UInt(0)
    }
    fetch_unit.io.br_unit <> br_unit
-   fetch_unit.io.tsc_reg           := tsc_reg
+   fetch_unit.io.tsc_reg           := debug_tsc_reg
 
    fetch_unit.io.bp2_take_pc       := bpd_stage.io.req.valid
    fetch_unit.io.bp2_pc_of_br_inst := bpd_stage.io.req.bits.br_pc
@@ -312,7 +321,7 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
          {
             // TODO handle spitting out decode for when a uop gets stalled at the front of the fetch-buffer
             val fetch_seq = dec_uops(w).debug_events.fetch_seq
-            printf("%d; O3PipeView:decode:%d\n", fetch_seq, tsc_reg)
+            printf("%d; O3PipeView:decode:%d\n", fetch_seq, debug_tsc_reg)
             printf("%d; O3PipeView:rename: 0\n", fetch_seq)
             printf("%d; O3PipeView:dispatch: 0\n", fetch_seq)
          }
@@ -376,7 +385,8 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    //-------------------------------------------------------------
 
    // TODO for now, assume worst-case all instructions will dispatch towards one issue unit.
-   rename_stage.io.dis_inst_can_proceed := issue_units.map(_.io.dis_readys.toBits).reduce(_&_).toBools
+   val dis_readys = issue_units.map(_.io.dis_readys.toBits).reduce(_&_) & fp_pipeline.io.dis_readys.toBits
+   rename_stage.io.dis_inst_can_proceed := dis_readys.toBools
    rename_stage.io.ren_pred_info := dec_fbundle.pred_resp
 
    rename_stage.io.kill     := fetch_unit.io.clear_fetchbuffer // mispredict or flush
@@ -402,8 +412,8 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
       if (exe_units(i).isBypassable)
       {
          rename_stage.io.int_wb_valids(wu_idx) := iss_valids(i) &&
-                                                 (iss_uops(i).dst_rtype === RT_FIX || iss_uops(i).dst_rtype === RT_FLT) &&
-                                                 (iss_uops(i).bypassable)
+                                                 iss_uops(i).dst_rtype === RT_FIX &&
+                                                 iss_uops(i).bypassable
          rename_stage.io.int_wb_pdsts(wu_idx)  := iss_uops(i).pdst
          wu_idx += 1
          assert (!(iss_uops(i).dst_rtype === RT_FLT && iss_uops(i).bypassable), "Bypassing FP is not supported.")
@@ -416,19 +426,26 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
          rename_stage.io.int_wb_valids(wu_idx) := exe_units(i).io.resp(j).valid &&
                                                  exe_units(i).io.resp(j).bits.uop.ctrl.rf_wen && // TODO is rfwen redudant?
                                                  !exe_units(i).io.resp(j).bits.uop.bypassable &&
-                                                 (exe_units(i).io.resp(j).bits.uop.dst_rtype === RT_FIX ||
-                                                    exe_units(i).io.resp(j).bits.uop.dst_rtype === RT_FLT)
+                                                 exe_units(i).io.resp(j).bits.uop.dst_rtype === RT_FIX
          rename_stage.io.int_wb_pdsts(wu_idx)  := exe_units(i).io.resp(j).bits.uop.pdst
          wu_idx += 1
 
       }
       require (exe_units(i).usesIRF)
    }
+   rename_stage.io.int_wb_valids(wu_idx) := fp_pipeline.io.toint.wen
+   rename_stage.io.int_wb_pdsts(wu_idx)  := fp_pipeline.io.toint.addr
+   wu_idx += 1
    require (wu_idx == exe_units.num_wakeup_ports)
 
    rename_stage.io.com_valids := rob.io.commit.valids
    rename_stage.io.com_uops := rob.io.commit.uops
    rename_stage.io.com_rbk_valids := rob.io.commit.rbk_valids
+
+   for ((renport, fpport) <- rename_stage.io.fp_wakeups zip fp_pipeline.io.wakeups)
+   {
+      renport <> fpport
+   }
 
    //-------------------------------------------------------------
    //-------------------------------------------------------------
@@ -441,9 +458,9 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
 
    for (w <- 0 until DECODE_WIDTH)
    {
-      dis_valids(w)         := rename_stage.io.ren_mask(w)
+      dis_valids(w)       := rename_stage.io.ren_mask(w)
       dis_uops(w)         := rename_stage.io.ren_uops(w)
-      // TODO probably don't need to do this, since we're going ot do it in the issue window?
+      // TODO probably don't need to do this, since we're going to do it in the issue window?
       dis_uops(w).br_mask := GetNewBrMask(br_unit.brinfo, rename_stage.io.ren_uops(w))
 
       // note: this assumes uops haven't been shifted - there's a 1:1 match between PC's LSBs and "w" here
@@ -454,7 +471,6 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
          dis_uops(w).rob_idx := Cat(dis_curr_rob_row_idx, UInt(w, log2Up(DECODE_WIDTH)))
 
       dis_uops(w).brob_idx := bpd_stage.io.brob.allocate_brob_tail
-
    }
 
    val dis_has_unique = Range(0,DISPATCH_WIDTH).map{w =>
@@ -492,20 +508,33 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    }{
       iu.io.dis_valids(w) := dis_valids(w) && dis_uops(w).iqtype === UInt(iu.iqType)
       iu.io.dis_uops(w) := dis_uops(w)
+
+      when (dis_uops(w).uopc === uopSTA && dis_uops(w).lrs2_rtype === RT_FLT) {
+         iu.io.dis_uops(w).lrs2_rtype := RT_X
+         iu.io.dis_uops(w).prs2_busy := Bool(false)
+      }
    }
+
+   fp_pipeline.io.dis_valids <> dis_valids
+   fp_pipeline.io.dis_uops <> dis_uops
 
    // Output (Issue)
 
+   val ifpu_idx = exe_units.length-1 // TODO hack; need more disciplined manner to hook up ifpu
+   
    var iss_idx = 0
    var iss_cnt = 0
    for (w <- 0 until exe_units.length)
    {
-      println("\tIss: " + w + " IQ: " + iss_idx + " (" + iss_cnt + ") " +
-         issue_units(iss_idx).iqType + ", mem?: " + exe_units(w).is_mem_unit + ", iss-width: " +
-         issue_units(iss_idx).issue_width)
       iss_valids(w) := issue_units(iss_idx).io.iss_valids(iss_cnt)
       iss_uops(w)   := issue_units(iss_idx).io.iss_uops(iss_cnt)
       issue_units(iss_idx).io.fu_types(iss_cnt) := exe_units(w).io.fu_types
+
+      if (w == ifpu_idx) {
+         // TODO hack, need a more disciplined way to connect to an issue port
+         // TODO XXX need to also apply back-pressure.
+         issue_units(iss_idx).io.fu_types(iss_cnt) := exe_units(w).io.fu_types | FUConstants.FU_I2F
+      }
 
       // TODO this is super fragile -- check the issue-units match the exe-units on instruction types.
       require ((issue_units(iss_idx).iqType == IQT_MEM.litValue.intValue) ^ !exe_units(w).is_mem_unit)
@@ -518,7 +547,7 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    }
 
 
-   issue_units.map(_.io.tsc_reg := tsc_reg)
+   issue_units.map(_.io.tsc_reg := debug_tsc_reg)
    issue_units.map(_.io.brinfo := br_unit.brinfo)
    issue_units.map(_.io.flush_pipeline := rob.io.flush.valid)
 
@@ -551,8 +580,12 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
             wu_idx += 1
          }
       }
+      iu.io.wakeup_pdsts(wu_idx).valid := fp_pipeline.io.toint.wen
+      iu.io.wakeup_pdsts(wu_idx).bits  := fp_pipeline.io.toint.addr
+      wu_idx += 1
       require (wu_idx == exe_units.num_wakeup_ports)
    }
+
 
    //-------------------------------------------------------------
    //-------------------------------------------------------------
@@ -600,6 +633,7 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    csr.io.fcsr_flags.bits  := rob.io.commit.fflags.bits
 
    exe_units.map(_.io.fcsr_rm := csr.io.fcsr_rm)
+   fp_pipeline.io.fcsr_rm := csr.io.fcsr_rm
 
    csr.io.hartid := io.hartid
    csr.io.interrupts := io.interrupts
@@ -631,8 +665,19 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
             idx = idx + 1
          }
       }
+
    }
    require (idx == exe_units.num_total_bypass_ports)
+
+
+   // don't send IntToFP moves to integer execution units.
+   when (iregister_read.io.exe_reqs(ifpu_idx).bits.uop.fu_code === FUConstants.FU_I2F) {
+      exe_units(ifpu_idx).io.req.valid := Bool(false)
+   }
+   fp_pipeline.io.fromint := iregister_read.io.exe_reqs(ifpu_idx)
+   fp_pipeline.io.fromint.valid := iregister_read.io.exe_reqs(ifpu_idx).bits.uop.fu_code === FUConstants.FU_I2F
+
+   fp_pipeline.io.brinfo := br_unit.brinfo
 
 
    //-------------------------------------------------------------
@@ -668,7 +713,7 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    new_ldq_idx := lsu.io.new_ldq_idx
    new_stq_idx := lsu.io.new_stq_idx
 
-   lsu.io.debug_tsc := tsc_reg
+   lsu.io.debug_tsc := debug_tsc_reg
 
    dc_shim.io.core.flush_pipe := rob.io.flush.valid
 
@@ -678,6 +723,8 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    lsu.io.dmem_req_ready := dc_shim.io.core.req.ready
    lsu.io.dmem_is_ordered:= dc_shim.io.core.ordered
 
+   lsu.io.fp_stdata <> fp_pipeline.io.tosdq
+
 
    //-------------------------------------------------------------
    //-------------------------------------------------------------
@@ -685,53 +732,74 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    //-------------------------------------------------------------
    //-------------------------------------------------------------
 
-   // TODO XXX simplify for integer only
    var w_cnt = 0
    for (i <- 0 until exe_units.length)
    {
       for (j <- 0 until exe_units(i).num_rf_write_ports)
       {
+         val wbresp = exe_units(i).io.resp(j)
+         val wbpdst = wbresp.bits.uop.pdst
+         val wbdata = wbresp.bits.data
+
+         def wbIsValid(rtype: UInt) = 
+            wbresp.valid && wbresp.bits.uop.ctrl.rf_wen && wbresp.bits.uop.dst_rtype === rtype
+         val wbReadsCSR = wbresp.bits.uop.ctrl.csr_cmd =/= rocket.CSR.N
+      
          if (exe_units(i).data_width > 64)
          {
-            assert (!(exe_units(i).io.resp(j).valid &&
-                      exe_units(i).io.resp(j).bits.uop.ctrl.rf_wen &&
-                      exe_units(i).io.resp(j).bits.uop.dst_rtype === RT_FIX &&
-                      exe_units(i).io.resp(j).bits.data(64).toBool),
-                      "the 65th bit was set on a fixed point write-back to the regfile.")
+				require (exe_units(i).is_mem_unit)
+            assert (!(wbIsValid(RT_FIX) && exe_units(i).io.resp(j).bits.data(64).toBool),
+               "the 65th bit was set on a fixed point write-back to the regfile.")
          }
-
-
 
          if (exe_units(i).uses_csr_wport && (j == 0))
          {
-            iregfile.io.write_ports(w_cnt).wen :=
-               exe_units(i).io.resp(j).valid &&
-               exe_units(i).io.resp(j).bits.uop.ctrl.rf_wen && // TODO get rid of other checks
-               (exe_units(i).io.resp(j).bits.uop.dst_rtype === RT_FIX ||
-                  exe_units(i).io.resp(j).bits.uop.dst_rtype === RT_FLT)
-            iregfile.io.write_ports(w_cnt).addr :=
-               exe_units(i).io.resp(j).bits.uop.pdst
-            iregfile.io.write_ports(w_cnt).data :=
-               Mux(exe_units(i).io.resp(j).bits.uop.ctrl.csr_cmd =/= rocket.CSR.N,
-                  csr.io.rw.rdata,
-                  exe_units(i).io.resp(j).bits.data)
+            iregfile.io.write_ports(w_cnt).wen := wbIsValid(RT_FIX)
+            iregfile.io.write_ports(w_cnt).addr := wbpdst
+            iregfile.io.write_ports(w_cnt).data := Mux(wbReadsCSR, csr.io.rw.rdata, wbdata)
          }
          else
          {
-            iregfile.io.write_ports(w_cnt).wen :=
-               exe_units(i).io.resp(j).valid &&
-               exe_units(i).io.resp(j).bits.uop.ctrl.rf_wen && // TODO get rid of other checks
-               (exe_units(i).io.resp(j).bits.uop.dst_rtype === RT_FIX ||
-                  exe_units(i).io.resp(j).bits.uop.dst_rtype === RT_FLT)
-            iregfile.io.write_ports(w_cnt).addr :=
-               exe_units(i).io.resp(j).bits.uop.pdst
-            iregfile.io.write_ports(w_cnt).data :=
-               exe_units(i).io.resp(j).bits.data
+            iregfile.io.write_ports(w_cnt).wen := wbIsValid(RT_FIX)
+            iregfile.io.write_ports(w_cnt).addr := wbpdst
+            iregfile.io.write_ports(w_cnt).data := wbdata
          }
+
+         // connect to FP pipeline's long latency writeport.
+         if (exe_units(i).is_mem_unit) {
+            fp_pipeline.io.ll_wport.wen := wbIsValid(RT_FLT)
+            fp_pipeline.io.ll_wport.addr := wbpdst
+            fp_pipeline.io.ll_wport.data := wbdata
+            fp_pipeline.io.ll_wport_uop  := wbresp.bits.uop
+         }
+
+         if (!exe_units(i).is_mem_unit) {
+            assert (!wbIsValid(RT_FLT), "[fppipeline] An FP writeback is being attempted to the Int Regfile.")
+         }
+         
+         assert (!(exe_units(i).io.resp(j).valid &&
+            !exe_units(i).io.resp(j).bits.uop.ctrl.rf_wen &&
+            exe_units(i).io.resp(j).bits.uop.dst_rtype === RT_FIX),
+            "[fppipeline] An Int writeback is being attempted with rf_wen disabled.")
+
+         if (!exe_units(i).is_mem_unit) {
+            assert (!(exe_units(i).io.resp(j).valid &&
+               exe_units(i).io.resp(j).bits.uop.ctrl.rf_wen &&
+               exe_units(i).io.resp(j).bits.uop.dst_rtype =/= RT_FIX),
+               "[fppipeline] writeback being attempted to Int RF with dst != Int type exe_units("+i+").resp("+j+")")
+         }
+
          w_cnt += 1
       }
    }
 
+   
+   fp_pipeline.io.toint <> iregfile.io.write_ports(w_cnt)
+//   iregfile.io.write_ports(w_cnt).wen := fp_pipeline.io.toint.wen
+//   iregfile.io.write_ports(w_cnt).addr := fp_pipeline.io.toint.addr
+//   iregfile.io.write_ports(w_cnt).data := fp_pipeline.io.toint.data
+
+   
 
    //-------------------------------------------------------------
    //-------------------------------------------------------------
@@ -745,7 +813,7 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    rob.io.dis_has_br_or_jalr_in_packet := dec_has_br_or_jalr_in_packet
    rob.io.dis_partial_stall := !dec_rdy && !dis_valids(DECODE_WIDTH-1)
    rob.io.dis_new_packet := dec_finished_mask === Bits(0)
-   rob.io.debug_tsc := tsc_reg
+   rob.io.debug_tsc := debug_tsc_reg
 
    dis_curr_rob_row_idx  := rob.io.curr_rob_tail
 
@@ -802,6 +870,20 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
       }
    }
 
+   for (wakeup <- fp_pipeline.io.wakeups)
+   {
+      rob.io.wb_resps(cnt) <> wakeup
+      rob.io.fflags(f_cnt) <> wakeup.bits.fflags
+      cnt += 1
+      f_cnt += 1
+   }
+   rob.io.wb_resps(cnt).valid    := fp_pipeline.io.toint.wen
+   rob.io.wb_resps(cnt).bits.uop := fp_pipeline.io.toint_uop
+   rob.io.wb_resps(cnt).bits.data := fp_pipeline.io.toint.data
+   cnt += 1
+   assert (cnt == rob.num_wakeup_ports)
+
+
    // branch resolution
    rob.io.brinfo <> br_unit.brinfo
 
@@ -825,7 +907,6 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
 
    rob.io.bxcpt <> br_unit.xcpt
 
-
    bpd_stage.io.brob.deallocate <> rob.io.brob_deallocate
    bpd_stage.io.brob.bpd_update <> br_unit.bpd_update
    bpd_stage.io.brob.flush := rob.io.flush.valid || rob.io.clear_brob
@@ -835,6 +916,7 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    //-------------------------------------------------------------
    // flush on exceptions, miniexeptions, and after some special instructions
 
+   fp_pipeline.io.flush_pipeline := rob.io.flush.valid
    for (w <- 0 until exe_units.length)
    {
       exe_units(w).io.req.bits.kill := rob.io.flush.valid
@@ -854,6 +936,7 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    when (rob.io.commit.valids.toBits.orR || reset.toBool) { idle_cycles := UInt(0) }
    assert (!(idle_cycles.value(13)), "Pipeline has hung.")
 
+   fp_pipeline.io.debug_tsc_reg := debug_tsc_reg
 
    //-------------------------------------------------------------
    // Uarch Hardware Performance Events (HPEs)
@@ -956,15 +1039,16 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    {
       println("\n Chisel Printout Enabled\n")
 
-//      var whitespace = (63 - 10 + 5 - NUM_LSU_ENTRIES- numIssueSlotEntries.sum - (NUM_ROB_ENTRIES/COMMIT_WIDTH) - NUM_BROB_ENTRIES
-      var whitespace = (78-2 - 10 + 5 - NUM_LSU_ENTRIES- numIssueSlotEntries.sum - numIssueSlotEntries.length+1 - (NUM_ROB_ENTRIES/COMMIT_WIDTH) - NUM_BROB_ENTRIES
+//      var whitespace = (63 - 18 + 4 - NUM_LSU_ENTRIES- numIssueSlotEntries.sum - numIssueSlotEntries.length - (NUM_ROB_ENTRIES/COMMIT_WIDTH)// - NUM_BROB_ENTRIES
+      var whitespace = (78-6 - 10 + 4 - NUM_LSU_ENTRIES- numIssueSlotEntries.sum - numIssueSlotEntries.length - (NUM_ROB_ENTRIES/COMMIT_WIDTH)// - NUM_BROB_ENTRIES
+//      var whitespace = (104-8 - 10 + 4 - NUM_LSU_ENTRIES- numIssueSlotEntries.sum - numIssueSlotEntries.length - (NUM_ROB_ENTRIES/COMMIT_WIDTH)// - NUM_BROB_ENTRIES
       )
 
       println("Whitespace padded: " + whitespace)
 
       printf("--- Cyc=%d , ----------------- Ret: %d ----------------------------------\n  "
-         , tsc_reg
-         , irt_reg & UInt(0xffffff))
+         , debug_tsc_reg
+         , debug_irt_reg & UInt(0xffffff))
 
       for (w <- 0 until DECODE_WIDTH)
       {
@@ -1042,7 +1126,7 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
             )
       }
 
-
+                                   
       printf("Exct(%c%d) Commit(%x) fl: 0x%x (%d) is: 0x%x (%d)\n"
          , Mux(rob.io.com_xcpt.valid, Str("E"), Str("-"))
          , rob.io.com_xcpt.bits.cause
@@ -1051,6 +1135,13 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
          , PopCount(rename_stage.io.debug.ifreelist)
          , rename_stage.io.debug.iisprlist
          , PopCount(rename_stage.io.debug.iisprlist)
+         )
+                                   
+      printf("                                    fl: 0x%x (%d) is: 0x%x (%d)\n"
+         , rename_stage.io.debug.ffreelist
+         , PopCount(rename_stage.io.debug.ffreelist)
+         , rename_stage.io.debug.fisprlist
+         , PopCount(rename_stage.io.debug.fisprlist)
          )
 
       // branch unit
@@ -1090,7 +1181,7 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
 
       for (x <- 0 until whitespace)
       {
-         printf("\n")
+         printf("|\n")
       }
    } // End DEBUG_PRINTF
 
@@ -1139,7 +1230,7 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
          {
             printf("%d; O3PipeView:retire:%d:store: 0\n",
                rob.io.commit.uops(i).debug_events.fetch_seq,
-               tsc_reg)
+               debug_tsc_reg)
          }
       }
    }
