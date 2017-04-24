@@ -208,7 +208,7 @@ class RenameMapTable(
    for (w <- pl_width-1 to 0 by -1)
    {
       val ldst = io.com_uops(w).ldst
-      when (io.com_rbk_valids(w))
+      when (io.com_rbk_valids(w) && io.com_uops(w).dst_rtype === UInt(rtype))
       {
          map_table_io(ldst).rollback_wen        := Bool(true)
          map_table_io(ldst).rollback_stale_pdst := io.com_uops(w).stale_pdst
@@ -282,9 +282,14 @@ class RenameMapTable(
       }
 
       // add default case where we can just read the map table for our information
-      rs1_cases ++= Array((io.ren_uops(w).lrs1_rtype === UInt(rtype) && (io.ren_uops(w).lrs1 =/= UInt(0)), map_table_prs1(w)))
-      rs2_cases ++= Array((io.ren_uops(w).lrs2_rtype === UInt(rtype) && (io.ren_uops(w).lrs2 =/= UInt(0)), map_table_prs2(w)))
-      rs3_cases ++= Array((io.ren_uops(w).frs3_en  && io.ren_uops(w).lrs3 =/= UInt(0), map_table_prs3(w)))
+      if (rtype == RT_FIX.litValue) {
+         rs1_cases ++= Array((io.ren_uops(w).lrs1_rtype === UInt(rtype) && (io.ren_uops(w).lrs1 =/= UInt(0)), map_table_prs1(w)))
+         rs2_cases ++= Array((io.ren_uops(w).lrs2_rtype === UInt(rtype) && (io.ren_uops(w).lrs2 =/= UInt(0)), map_table_prs2(w)))
+      } else {
+         rs1_cases ++= Array((io.ren_uops(w).lrs1_rtype === UInt(rtype), map_table_prs1(w)))
+         rs2_cases ++= Array((io.ren_uops(w).lrs2_rtype === UInt(rtype), map_table_prs2(w)))
+      }
+      rs3_cases ++= Array((io.ren_uops(w).frs3_en, map_table_prs3(w)))
 
       // Set outputs.
       io.values(w).prs1       := MuxCase(io.ren_uops(w).lrs1, rs1_cases)

@@ -132,3 +132,10 @@ class DebugStageEvents extends Bundle()
    // Track the sequence number of each instruction fetched.
    val fetch_seq        = UInt(width = 32)
 }
+
+class MicroOpWithData(data_sz: Int)(implicit p: Parameters) extends BoomBundle()(p)
+{
+   val uop = new MicroOp()
+   val data = UInt(width = data_sz)
+   override def cloneType = new MicroOpWithData(data_sz)(p).asInstanceOf[this.type]
+}

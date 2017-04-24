@@ -15,7 +15,6 @@
 // read ports, and one or more writeports.
 
 package boom
-{
 
 import Chisel._
 import config.Parameters
@@ -76,12 +75,14 @@ abstract class ExecutionUnit(val num_rf_read_ports: Int
                             , var bypassable: Boolean           = false
                             , val is_mem_unit: Boolean          = false
                             , var uses_csr_wport: Boolean       = false
+                            , var uses_iss_unit : Boolean       = true
                             ,     is_branch_unit: Boolean       = false
                             , val has_alu       : Boolean       = false
                             , val has_fpu       : Boolean       = false
                             , val has_mul       : Boolean       = false
                             , val has_div       : Boolean       = false
                             , val has_fdiv      : Boolean       = false
+                            , val has_ifpu      : Boolean       = false
                             )(implicit p: Parameters) extends BoomModule()(p)
 {
    val io = new ExecutionUnitIO(num_rf_read_ports, num_rf_write_ports
@@ -95,9 +96,9 @@ abstract class ExecutionUnit(val num_rf_read_ports: Int
    def isBypassable  : Boolean = bypassable
    def hasFFlags     : Boolean = has_fpu || has_fdiv
    def usesFRF       : Boolean = (has_fpu || has_fdiv) && !(has_alu || has_mul)
-   def usesIRF       : Boolean = !(has_fpu || has_fdiv) && (has_alu || has_mul || is_mem_unit)
+   def usesIRF       : Boolean = !(has_fpu || has_fdiv) && (has_alu || has_mul || is_mem_unit || has_ifpu)
 
-   require ((has_fpu || has_fdiv) ^ (has_alu || has_mul || is_mem_unit),
+   require ((has_fpu || has_fdiv) ^ (has_alu || has_mul || is_mem_unit || has_ifpu),
       "[execute] we no longer support mixing FP and Integer functional units in the same exe unit.")
 
 
@@ -110,38 +111,42 @@ abstract class ExecutionUnit(val num_rf_read_ports: Int
          muld = has_mul || has_div,
          fpu = has_fpu,
          csr = uses_csr_wport,
-         fdiv = has_fdiv)
+         fdiv = has_fdiv,
+         ifpu = has_ifpu)
    }
 }
 
 class ALUExeUnit(
    is_branch_unit  : Boolean = false,
    shares_csr_wport: Boolean = false,
+   has_alu         : Boolean = true,
    has_fpu         : Boolean = false,
    has_mul         : Boolean = false,
    has_div         : Boolean = false,
    has_fdiv        : Boolean = false,
+   has_ifpu        : Boolean = false,
    use_slow_mul    : Boolean = false)
    (implicit p: Parameters)
    extends ExecutionUnit(
       num_rf_read_ports = if (has_fpu) 3 else 2,
       num_rf_write_ports = 1,
-      num_bypass_stages = if (has_fpu) p(tile.TileKey).core.fpu.get.dfmaLatency else if (has_mul && !use_slow_mul) 3 else 1,
+      num_bypass_stages = if (has_fpu && has_alu) p(tile.TileKey).core.fpu.get.dfmaLatency else if (has_alu && has_mul && !use_slow_mul) 3 else if (has_alu) 1 else 0,
       data_width = if (has_fpu || has_fdiv) 65 else 64,
-      bypassable = true,
+      bypassable = has_alu,
       is_mem_unit = false,
       uses_csr_wport = shares_csr_wport,
       is_branch_unit = is_branch_unit,
-      has_alu  = true,
+      has_alu  = has_alu,
       has_fpu  = has_fpu,
       has_mul  = has_mul,
       has_div  = has_div,
-      has_fdiv = has_fdiv)(p)
+      has_fdiv = has_fdiv,
+      has_ifpu = has_ifpu)(p)
 {
    val has_muldiv = has_div || (has_mul && use_slow_mul)
 
    println ("     ExeUnit--")
-   println ("       - ALU")
+   if (has_alu) println ("       - ALU")
    if (has_fpu) println ("       - FPU (Latency: " + dfmaLatency + ")")
    if (has_mul && !use_slow_mul) println ("       - Mul (pipelined)")
    if (has_div && has_mul && use_slow_mul) println ("       - Mul/Div (unpipelined)")
@@ -166,16 +171,20 @@ class ALUExeUnit(
 
 
    // ALU Unit -------------------------------
-   val alu = Module(new ALUUnit(is_branch_unit = is_branch_unit, num_stages = num_bypass_stages))
-   alu.io.req.valid         := io.req.valid &&
-                                   (io.req.bits.uop.fu_code === FU_ALU ||
-                                    io.req.bits.uop.fu_code === FU_BRU ||
-                                    io.req.bits.uop.fu_code === FU_CSR)
-   alu.io.req.bits.uop      := io.req.bits.uop
-   alu.io.req.bits.kill     := io.req.bits.kill
-   alu.io.req.bits.rs1_data := io.req.bits.rs1_data
-   alu.io.req.bits.rs2_data := io.req.bits.rs2_data
-   alu.io.brinfo <> io.brinfo
+   var alu: ALUUnit = null
+   if (has_alu)
+   {
+      alu = Module(new ALUUnit(is_branch_unit = is_branch_unit, num_stages = num_bypass_stages))
+      alu.io.req.valid         := io.req.valid &&
+                                      (io.req.bits.uop.fu_code === FU_ALU ||
+                                       io.req.bits.uop.fu_code === FU_BRU ||
+                                       io.req.bits.uop.fu_code === FU_CSR)
+      alu.io.req.bits.uop      := io.req.bits.uop
+      alu.io.req.bits.kill     := io.req.bits.kill
+      alu.io.req.bits.rs1_data := io.req.bits.rs1_data
+      alu.io.req.bits.rs2_data := io.req.bits.rs2_data
+      alu.io.brinfo <> io.brinfo
+   }
 
    // branch unit is embedded inside the ALU
    if (is_branch_unit)
@@ -189,7 +198,8 @@ class ALUExeUnit(
    {
       io.br_unit.brinfo.valid := Bool(false)
    }
-   fu_units += alu
+   
+   if (has_alu) fu_units += alu
 
    // Pipelined, IMul Unit ------------------
    var imul: PipelinedMulUnit = null
@@ -230,7 +240,7 @@ class ALUExeUnit(
    // Bypassing ------------------------------
    // (only the ALU is bypassable)
 
-   io.bypass <> alu.io.bypass
+   if (has_alu) io.bypass <> alu.io.bypass
 
    // FDiv/FSqrt Unit -----------------------
    var fdivsqrt: FDivSqrtUnit = null
@@ -296,8 +306,10 @@ class ALUExeUnit(
                            PriorityMux(fu_units.map(f => (f.io.resp.valid, f.io.resp.bits.uop.toBits))))
    io.resp(0).bits.data:= PriorityMux(fu_units.map(f => (f.io.resp.valid, f.io.resp.bits.data.toBits))).toBits
    // pulled out for critical path reasons
-   io.resp(0).bits.uop.csr_addr := ImmGen(alu.io.resp.bits.uop.imm_packed, IS_I).toUInt
-   io.resp(0).bits.uop.ctrl.csr_cmd := alu.io.resp.bits.uop.ctrl.csr_cmd
+   if (has_alu) {
+      io.resp(0).bits.uop.csr_addr := ImmGen(alu.io.resp.bits.uop.imm_packed, IS_I).toUInt
+      io.resp(0).bits.uop.ctrl.csr_cmd := alu.io.resp.bits.uop.ctrl.csr_cmd
+   }
 
    io.resp(0).bits.fflags := Mux(fpu_resp_val, fpu_resp_fflags, fdiv_resp_fflags)
 
@@ -335,6 +347,33 @@ class FDivSqrtExeUnit(implicit p: Parameters)
 }
 
 
+class IntToFPExeUnit(implicit p: Parameters) extends ExecutionUnit(
+   has_ifpu = true,
+   num_rf_read_ports = 2,
+   num_rf_write_ports = 1,
+   num_bypass_stages = 0,
+   data_width = 65,
+   // don't schedule uops from issue-window -- we're hard-hacking the datapath,
+   // since the operand data comes from the IRF but writes back to the FRF.
+   uses_iss_unit = false) 
+{
+   println ("     ExeUnit--")
+   println ("       - IntToFP")
+   val busy = Wire(init=Bool(false))
+   io.fu_types := Mux(!busy, FU_I2F, Bits(0))
+
+   val ifpu = Module(new IntToFPUnit())
+   ifpu.io.req <> io.req
+   ifpu.io.fcsr_rm        := io.fcsr_rm
+   io.resp(0).valid       := ifpu.io.resp.valid
+   io.resp(0).bits.uop    := ifpu.io.resp.bits.uop
+   io.resp(0).bits.data   := ifpu.io.resp.bits.data
+   io.resp(0).bits.fflags := ifpu.io.resp.bits.fflags
+   ifpu.io.brinfo <> io.brinfo
+   io.bypass <> ifpu.io.bypass
+}
+
+
 class MemExeUnit(implicit p: Parameters) extends ExecutionUnit(num_rf_read_ports = 2,
    num_rf_write_ports = 1,
    num_bypass_stages = 0,
@@ -355,48 +394,16 @@ class MemExeUnit(implicit p: Parameters) extends ExecutionUnit(num_rf_read_ports
    maddrcalc.io.brinfo <> io.brinfo
    io.bypass <> maddrcalc.io.bypass  // TODO this is not where the bypassing should occur from, is there any bypassing happening?!
 
-//   val lsu = Module(new LoadStoreUnit(DECODE_WIDTH))
-//   lsu.io.dec_st_vals       := io.lsu_io.dec_st_vals
-//   lsu.io.dec_ld_vals       := io.lsu_io.dec_ld_vals
-//   lsu.io.dec_uops          := io.lsu_io.dec_uops
-
-
-//   lsu.io.commit_store_mask := io.lsu_io.commit_store_mask
-//   lsu.io.commit_load_mask  := io.lsu_io.commit_load_mask
-//   lsu.io.commit_load_at_rob_head := io.lsu_io.commit_load_at_rob_head
-
-//   lsu.io.brinfo            := io.brinfo
-//   lsu.io.exception         := io.lsu_io.exception
-//   lsu.io.nack              <> io.dmem.nack
-//   io.lsu_io.counters       <> lsu.io.counters
-//   lsu.io.debug_tsc         <> io.lsu_io.debug_tsc
-
-//   io.lsu_io.new_ldq_idx := lsu.io.new_ldq_idx
-//   io.lsu_io.new_stq_idx := lsu.io.new_stq_idx
-//   io.lsu_io.laq_full := lsu.io.laq_full
-//   io.lsu_io.stq_full := lsu.io.stq_full
-//   io.lsu_io.lsu_clr_bsy_valid := lsu.io.lsu_clr_bsy_valid // TODO is there a better way to clear the busy bits in the ROB
-//   io.lsu_io.lsu_clr_bsy_rob_idx := lsu.io.lsu_clr_bsy_rob_idx
-//   io.lsu_io.lsu_fencei_rdy := lsu.io.lsu_fencei_rdy
-
    // enqueue addresses,st-data at the end of Execute
-//   lsu.io.exe_resp <> maddrcalc.io.resp
    io.lsu_io.exe_resp <> maddrcalc.io.resp
-
-//   io.lsu_io.ptw <> lsu.io.ptw
-//   io.lsu_io.xcpt <> lsu.io.xcpt
-
-   // HellaCache Req
-//   lsu.io.dmem_req_ready := io.dmem.req.ready
-//   lsu.io.dmem_is_ordered:= io.dmem.ordered
 
 
    // TODO get rid of com_exception and guard with an assert? Need to surpress within dc-shim.
 //   assert (!(io.com_exception && lsu.io.memreq_uop.is_load && lsu.io.memreq_val),
 //      "[execute] a valid load is returning while an exception is being thrown.")
-   io.dmem.req.valid     := Mux(io.com_exception && io.lsu_io.memreq_uop.is_load,
+   io.dmem.req.valid      := Mux(io.com_exception && io.lsu_io.memreq_uop.is_load,
                               Bool(false),
-                             io.lsu_io.memreq_val)
+                              io.lsu_io.memreq_val)
    io.dmem.req.bits.addr  := io.lsu_io.memreq_addr
    io.dmem.req.bits.data  := io.lsu_io.memreq_wdata
    io.dmem.req.bits.uop   := io.lsu_io.memreq_uop
@@ -414,8 +421,8 @@ class MemExeUnit(implicit p: Parameters) extends ExecutionUnit(num_rf_read_ports
    var memresp_data:Bits = null
    if (!usingFPU)
    {
-      memresp_data = Mux(io.lsu_io.forward_val, io.lsu_io.forward_data
-                                           , io.dmem.resp.bits.data_subword)
+      memresp_data = Mux(io.lsu_io.forward_val, io.lsu_io.forward_data,
+                                           	 	io.dmem.resp.bits.data_subword)
    }
    else
    {
@@ -437,8 +444,6 @@ class MemExeUnit(implicit p: Parameters) extends ExecutionUnit(num_rf_read_ports
                      Mux(memresp_uop.fp_val                              , fp_load_data_recoded,
                                                                            io.dmem.resp.bits.data_subword)))
    }
-
-
 
    io.lsu_io.memresp.valid := memresp_val
    io.lsu_io.memresp.bits  := memresp_uop
@@ -656,40 +661,8 @@ class ALUMemExeUnit(
    maddrcalc.io.req <> io.req
    maddrcalc.io.brinfo <> io.brinfo
 
-//   val lsu = Module(new LoadStoreUnit(DECODE_WIDTH))
-
-//   lsu.io.dec_st_vals       := io.lsu_io.dec_st_vals
-//   lsu.io.dec_ld_vals       := io.lsu_io.dec_ld_vals
-//   lsu.io.dec_uops          := io.lsu_io.dec_uops
-
-//   lsu.io.commit_store_mask := io.lsu_io.commit_store_mask
-//   lsu.io.commit_load_mask  := io.lsu_io.commit_load_mask
-//   lsu.io.commit_load_at_rob_head := io.lsu_io.commit_load_at_rob_head
-
-//   lsu.io.brinfo            := io.brinfo
-//   lsu.io.exception         := io.lsu_io.exception
-//   lsu.io.nack              <> io.dmem.nack
-//   io.lsu_io.counters       <> lsu.io.counters
-//   lsu.io.debug_tsc         <> io.lsu_io.debug_tsc
-
-//   io.lsu_io.new_ldq_idx := lsu.io.new_ldq_idx
-//   io.lsu_io.new_stq_idx := lsu.io.new_stq_idx
-//   io.lsu_io.laq_full := lsu.io.laq_full
-//   io.lsu_io.stq_full := lsu.io.stq_full
-//   io.lsu_io.lsu_clr_bsy_valid := lsu.io.lsu_clr_bsy_valid
-//   io.lsu_io.lsu_clr_bsy_rob_idx := lsu.io.lsu_clr_bsy_rob_idx
-//   io.lsu_io.lsu_fencei_rdy := lsu.io.lsu_fencei_rdy
-
    // enqueue addresses,st-data at the end of Execute
-//   lsu.io.exe_resp <> maddrcalc.io.resp
    io.lsu_io.exe_resp <> maddrcalc.io.resp
-
-//   io.lsu_io.ptw <> lsu.io.ptw
-//   io.lsu_io.xcpt <> lsu.io.xcpt
-
-   // HellaCache Req
-//   lsu.io.dmem_req_ready := io.dmem.req.ready
-//   lsu.io.dmem_is_ordered:= io.dmem.ordered
 
    io.dmem.req.valid     := Mux(io.com_exception && io.lsu_io.memreq_uop.is_load, Bool(false),
                                                                               io.lsu_io.memreq_val)
@@ -754,5 +727,3 @@ class ALUMemExeUnit(
    io.resp(1).bits.fflags          := fdiv_resp_fflags
 }
 
-
-}

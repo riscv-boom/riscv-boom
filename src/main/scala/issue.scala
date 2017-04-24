@@ -20,6 +20,12 @@ import scala.collection.mutable.ArrayBuffer
 //-------------------------------------------------------------
 //-------------------------------------------------------------
 
+case class IssueParams(
+   issueWidth: Int = 1,
+   numEntries: Int = 8,
+   iqType: BigInt
+)
+
 class IssueUnitIO(issue_width: Int, num_wakeup_ports: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
    val dis_valids     = Vec(DISPATCH_WIDTH, Bool()).asInput
@@ -58,7 +64,7 @@ abstract class IssueUnit(
    {
       dis_uops(w) := io.dis_uops(w)
       dis_uops(w).iw_state := s_valid_1
-      when (dis_uops(w).uopc === uopSTA || dis_uops(w).uopc === uopAMO_AG)
+      when ((dis_uops(w).uopc === uopSTA && dis_uops(w).lrs2_rtype === RT_FIX) || dis_uops(w).uopc === uopAMO_AG)
       {
          dis_uops(w).iw_state := s_valid_2
       }
@@ -156,11 +162,10 @@ class IssueUnits(num_wakeup_ports: Int)(implicit val p: Parameters) extends HasB
 
    require (enableAgePriorityIssue) // unordered is currently unsupported.
 
+//      issue_Units =issueConfigs colect {if iqType=....)
+//   iss_units += Module(new IssueUnitCollasping(boomParams.issueParams(0))
    iss_units += Module(new IssueUnitCollasping(numIssueSlotEntries(0), issueWidths(0), num_wakeup_ports, IQT_MEM.litValue.intValue))
    iss_units += Module(new IssueUnitCollasping(numIssueSlotEntries(1), issueWidths(1), num_wakeup_ports, IQT_INT.litValue.intValue))
-
-
-
 
 }
 

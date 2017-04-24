@@ -8,6 +8,7 @@
 //------------------------------------------------------------------------------
 //
 // Note: stores (and AMOs) are "broken down" into 2 uops, but stored within a single issue-slot.
+// TODO XXX make a separate issueSlot for MemoryIssueSlots, and only they break apart stores.
 
 package boom
 

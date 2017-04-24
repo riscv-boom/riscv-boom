@@ -32,7 +32,8 @@ case class BoomCoreParams(
    enableBpdUSModeHistory: Boolean = false,
    tage: Option[TageParameters] = None,
    gshare: Option[GShareParameters] = None,
-   gskew: Option[GSkewParameters] = None
+   gskew: Option[GSkewParameters] = None,
+   intToFpLatency: Int = 2
 )
 
 trait HasBoomCoreParameters extends tile.HasCoreParameters
@@ -83,6 +84,8 @@ trait HasBoomCoreParameters extends tile.HasCoreParameters
    val sfmaLatency = if (rocketParams.fpu.isDefined) rocketParams.fpu.get.sfmaLatency else 3
    // All FPU ops padded out to same delay for writeport scheduling.
    require (sfmaLatency == dfmaLatency)
+
+   val intToFpLatency = boomParams.intToFpLatency
 
    val enableBrResolutionRegister = boomParams.enableBrResolutionRegister
 

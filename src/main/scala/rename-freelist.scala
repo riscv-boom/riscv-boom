@@ -62,7 +62,9 @@ class DebugFreeListIO(num_phys_registers: Int) extends Bundle
 // i.e., it doesn't matter if a previous UOP needs a pdst or not
 // this prevents a dependency chain from existing between UOPs when trying to
 // compute a pdst to give away (as well as computing if an available free
-// register exists
+// register exists.
+// NOTE: we never give out p0 -- that is the "unitialized" state of the map-table,
+// and the pipeline will give any reader of p0 0x0 as read data.
 class RenameFreeListHelper(
    num_phys_registers: Int, // number of physical registers
    pl_width: Int)           // pipeline width ("dispatch group size")
@@ -95,7 +97,8 @@ class RenameFreeListHelper(
    }
 
 
-   for (i <- 1 until num_phys_registers) // note: p0 stays zero BUG XXX
+   // don't give out p0
+   for (i <- 1 until num_phys_registers)
    {
       val next_allocated = Wire(Vec(pl_width, Bool()))
       var can_allocate = free_list(i)
@@ -277,7 +280,6 @@ class RenameFreeList(
    val freelist = Module(new RenameFreeListHelper(
       num_phys_registers,
       pl_width))
-
 
    freelist.io.br_mispredict_val := io.brinfo.mispredict
    freelist.io.br_mispredict_tag := io.brinfo.tag
