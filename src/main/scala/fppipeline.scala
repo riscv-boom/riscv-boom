@@ -64,7 +64,6 @@ class FpPipeline(
                                  exe_units.withFilter(_.uses_iss_unit).map(e => e.num_rf_write_ports).sum + 2,
                                  fLen+1,
                                  ENABLE_REGFILE_BYPASSING))// TODO disable for FP
-   println("fp: rrd")
    val fregister_read   = Module(new RegisterRead(
                                  issue_unit.issue_width,
                                  exe_units.withFilter(_.uses_iss_unit).map(_.supportedFuncUnits),
@@ -73,7 +72,6 @@ class FpPipeline(
                                  exe_units.num_total_bypass_ports,
                                  fLen+1))
 
-   println("fp: done building")
    require (exe_units.withFilter(_.uses_iss_unit).map(x=>x).length == issue_unit.issue_width)
 
    // we're playing fast and loose on the number of wakeup and write ports.
@@ -81,10 +79,7 @@ class FpPipeline(
    require (exe_units.withFilter(_.uses_iss_unit).map(e => e.num_rf_write_ports).sum + 2 == num_wakeup_ports)
 
    override def toString: String =
-      "\n   Floating Point Regfile: " +
-      "\n   Num RF Read Ports     : " + exe_units.num_rf_read_ports +
-      "\n   Num RF Write Ports    : " + exe_units.num_rf_write_ports + 
-      "\n   RF Cost (R+W)*(R+2W)  : " + exe_units.rf_cost + 
+      print(fregfile) +
       "\n   Num Slow Wakeup Ports : " + exe_units.num_slow_wakeup_ports +
       "\n   Num Fast Wakeup Ports : " + exe_units.num_fast_wakeup_ports +
       "\n   Num Bypass Ports      : " + exe_units.num_total_bypass_ports + "\n"

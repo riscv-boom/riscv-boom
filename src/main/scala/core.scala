@@ -54,13 +54,11 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    // Only holds integer-registerfile execution units.
    val exe_units        = new boom.ExecutionUnits(fpu=false)
    // Meanwhile, the FP pipeline holds the FP issue window, FP regfile, and FP arithmetic units.
-   println("building fp")
    var fp_pipeline: FpPipeline = null
    if (usingFPU) {
       fp_pipeline       = Module(new FpPipeline()) 
    }
 
-   println("building fetch")
    val fetch_unit       = Module(new FetchUnit(FETCH_WIDTH))
    val bpd_stage        = Module(new BranchPredictionStage(FETCH_WIDTH))
    val dec_serializer   = Module(new FetchSerializerNtoM)
@@ -74,7 +72,6 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
                                  exe_units.withFilter(_.usesIRF).map(e => e.num_rf_write_ports).sum + 1,
                                  xLen,
                                  ENABLE_REGFILE_BYPASSING))
-   println("building rrd")
    val iregister_read   = Module(new RegisterRead(
                                  issue_units.map(_.issue_width).sum,
                                  exe_units.withFilter(_.usesIRF).map(_.supportedFuncUnits),
@@ -82,7 +79,6 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
                                  exe_units.withFilter(_.usesIRF).map(_.num_rf_read_ports),
                                  exe_units.num_total_bypass_ports,
                                  xLen))
-   println("building csr")
    val csr              = Module(new rocket.CSRFile())
    val dc_shim          = Module(new DCacheShim())
    val lsu              = Module(new LoadStoreUnit(DECODE_WIDTH))
@@ -162,14 +158,10 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    println("   BTB Size              : " + btbParams.nEntries)
    println("   RAS Size              : " + btbParams.nRAS)
 
-   println("\n   Integer Regfile       : ")
-   println("   Num RF Read Ports     : " + exe_units.num_rf_read_ports)
-   println("   Num RF Write Ports    : " + exe_units.num_rf_write_ports)
-   println("   RF Cost (R+W)*(R+2W)  : " + exe_units.rf_cost)
+   print(iregfile)
    println("   Num Slow Wakeup Ports : " + exe_units.num_slow_wakeup_ports)
    println("   Num Fast Wakeup Ports : " + exe_units.num_fast_wakeup_ports)
    println("   Num Bypass Ports      : " + exe_units.num_total_bypass_ports)
-   println("")
 
    print(fp_pipeline)
 
@@ -521,6 +513,7 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    // Output (Issue)
 
    val ifpu_idx = exe_units.length-1 // TODO hack; need more disciplined manner to hook up ifpu
+   require (exe_units(ifpu_idx).supportedFuncUnits.ifpu)
    
    var iss_idx = 0
    var iss_cnt = 0
@@ -675,7 +668,9 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
       exe_units(ifpu_idx).io.req.valid := Bool(false)
    }
    fp_pipeline.io.fromint := iregister_read.io.exe_reqs(ifpu_idx)
-   fp_pipeline.io.fromint.valid := iregister_read.io.exe_reqs(ifpu_idx).bits.uop.fu_code === FUConstants.FU_I2F
+   fp_pipeline.io.fromint.valid := 
+      iregister_read.io.exe_reqs(ifpu_idx).valid &&
+      iregister_read.io.exe_reqs(ifpu_idx).bits.uop.fu_code === FUConstants.FU_I2F
 
    fp_pipeline.io.brinfo := br_unit.brinfo
 
@@ -793,7 +788,7 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
       }
    }
 
-   
+   // TODO XXX roll toint write-port into long-latency/memory write port.
    fp_pipeline.io.toint <> iregfile.io.write_ports(w_cnt)
 //   iregfile.io.write_ports(w_cnt).wen := fp_pipeline.io.toint.wen
 //   iregfile.io.write_ports(w_cnt).addr := fp_pipeline.io.toint.addr
@@ -1039,10 +1034,13 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    {
       println("\n Chisel Printout Enabled\n")
 
-//      var whitespace = (63 - 18 + 4 - NUM_LSU_ENTRIES- numIssueSlotEntries.sum - numIssueSlotEntries.length - (NUM_ROB_ENTRIES/COMMIT_WIDTH)// - NUM_BROB_ENTRIES
-      var whitespace = (78-6 - 10 + 4 - NUM_LSU_ENTRIES- numIssueSlotEntries.sum - numIssueSlotEntries.length - (NUM_ROB_ENTRIES/COMMIT_WIDTH)// - NUM_BROB_ENTRIES
-//      var whitespace = (104-8 - 10 + 4 - NUM_LSU_ENTRIES- numIssueSlotEntries.sum - numIssueSlotEntries.length - (NUM_ROB_ENTRIES/COMMIT_WIDTH)// - NUM_BROB_ENTRIES
-      )
+      val numBrobWhitespace = if (DEBUG_PRINTF_BROB) NUM_BROB_ENTRIES else 0
+////      var whitespace = (63 - 18 + 4 - NUM_LSU_ENTRIES- numIssueSlotEntries.sum - numIssueSlotEntries.length - (NUM_ROB_ENTRIES/COMMIT_WIDTH)
+//      var whitespace = (78-6 - 10 + 4 - NUM_LSU_ENTRIES- numIssueSlotEntries.sum - numIssueSlotEntries.length - (NUM_ROB_ENTRIES/COMMIT_WIDTH)
+//      var whitespace = (104-8 - 10 + 4 - NUM_LSU_ENTRIES- numIssueSlotEntries.sum - numIssueSlotEntries.length - (NUM_ROB_ENTRIES/COMMIT_WIDTH) - numBrobWhitespace
+//      var whitespace = (111-8 - 10 + 4 - NUM_LSU_ENTRIES- numIssueSlotEntries.sum - numIssueSlotEntries.length - (NUM_ROB_ENTRIES/COMMIT_WIDTH) - numBrobWhitespace
+      var whitespace = (85-6 - 10 + 4 - NUM_LSU_ENTRIES- numIssueSlotEntries.sum - numIssueSlotEntries.length - (NUM_ROB_ENTRIES/COMMIT_WIDTH)
+     )
 
       println("Whitespace padded: " + whitespace)
 
