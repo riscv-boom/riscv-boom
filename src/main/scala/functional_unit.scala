@@ -669,10 +669,9 @@ class IntToFPUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(
       "[func] Only support fromInt micro-ops.")
 
    val ifpu = Module(new tile.IntToFP(intToFpLatency))
-   ifpu.io.in.valid := io.req.valid //&& fp_ctrl.fromint
+   ifpu.io.in.valid := io.req.valid
    ifpu.io.in.bits := req
 
-   io.resp.valid                  := ifpu.io.out.valid // TODO XXX why is this not present in FPUUnit?
    io.resp.bits.data              := ifpu.io.out.bits.data
    io.resp.bits.fflags.valid      := ifpu.io.out.valid
    io.resp.bits.fflags.bits.uop   := io.resp.bits.uop
@@ -730,7 +729,7 @@ class MulDivUnit(implicit p: Parameters) extends UnPipelinedFunctionalUnit()(p)
    muldiv.io.kill         := this.do_kill
 
    // response
-   io.resp.valid          := muldiv.io.resp.valid
+   io.resp.valid          := muldiv.io.resp.valid && !this.do_kill
    muldiv.io.resp.ready   := io.resp.ready
    io.resp.bits.data      := muldiv.io.resp.bits.data
 }
