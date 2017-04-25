@@ -228,7 +228,7 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
 
    io.imem.ras_update <> bpd_stage.io.ras_update
    bpd_stage.io.br_unit := br_unit
-   bpd_stage.io.flush := rob.io.flush.valid
+   bpd_stage.io.flush := rob.io.flush.valid //|| rob.io.clear_brob
    bpd_stage.io.status_prv := csr.io.status.prv
    bpd_stage.io.req.ready := !fetch_unit.io.stalled
 
@@ -1037,9 +1037,8 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
       val numBrobWhitespace = if (DEBUG_PRINTF_BROB) NUM_BROB_ENTRIES else 0
 ////      var whitespace = (63 - 18 + 4 - NUM_LSU_ENTRIES- numIssueSlotEntries.sum - numIssueSlotEntries.length - (NUM_ROB_ENTRIES/COMMIT_WIDTH)
 //      var whitespace = (78-6 - 10 + 4 - NUM_LSU_ENTRIES- numIssueSlotEntries.sum - numIssueSlotEntries.length - (NUM_ROB_ENTRIES/COMMIT_WIDTH)
-//      var whitespace = (104-8 - 10 + 4 - NUM_LSU_ENTRIES- numIssueSlotEntries.sum - numIssueSlotEntries.length - (NUM_ROB_ENTRIES/COMMIT_WIDTH) - numBrobWhitespace
-//      var whitespace = (111-8 - 10 + 4 - NUM_LSU_ENTRIES- numIssueSlotEntries.sum - numIssueSlotEntries.length - (NUM_ROB_ENTRIES/COMMIT_WIDTH) - numBrobWhitespace
-      var whitespace = (85-7 - 10 + 4 - NUM_LSU_ENTRIES- numIssueSlotEntries.sum - numIssueSlotEntries.length - (NUM_ROB_ENTRIES/COMMIT_WIDTH)
+      var whitespace = (104-8 - 10 + 4 - NUM_LSU_ENTRIES- numIssueSlotEntries.sum - numIssueSlotEntries.length - (NUM_ROB_ENTRIES/COMMIT_WIDTH) - numBrobWhitespace
+//      var whitespace = (85-7 - 10 + 4 - NUM_LSU_ENTRIES- numIssueSlotEntries.sum - numIssueSlotEntries.length - (NUM_ROB_ENTRIES/COMMIT_WIDTH) - numBrobWhitespace
      )
 
       println("Whitespace padded: " + whitespace)

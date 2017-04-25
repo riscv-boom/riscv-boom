@@ -189,8 +189,10 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int)(implicit p
    val vlh_raw_spec_head = r_vlh.raw_spec_head
 
 
-   assert (r_ghistory_commit_copy === vlh_commit,
-      "[brpredictor] mistmatch between short history and very long history implementations.")
+   if (ENABLE_BPD_ASSERTS) {
+      assert (r_ghistory_commit_copy === vlh_commit,
+         "[brpredictor] mistmatch between short history and very long history implementations.")
+   }
 
 
    if (ENABLE_BPD_USHISTORY && !ENABLE_BPD_UMODE_ONLY)
@@ -477,9 +479,11 @@ class VeryLongHistoryRegister(hlen: Int, vlhr_len: Int)
 
    def commit(taken: Bool): Unit =
    {
-      assert(com_head =/= spec_head, "[brpredictor] VLHR: commit head is moving ahead of the spec head.")
       val debug_com_bit = (hist_buffer >> com_head) & UInt(1,1)
-      assert (debug_com_bit  === taken, "[brpredictor] VLHR: commit bit doesn't match speculative bit.")
+      if (ENABLE_BPD_ASSERTS) {
+         assert(com_head =/= spec_head, "[brpredictor] VLHR: commit head is moving ahead of the spec head.")
+         assert (debug_com_bit  === taken, "[brpredictor] VLHR: commit bit doesn't match speculative bit.")
+      }
       com_head := WrapInc(com_head, plen)
    }
 }
