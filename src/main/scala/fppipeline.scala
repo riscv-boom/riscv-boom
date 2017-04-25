@@ -162,11 +162,12 @@ class FpPipeline(
    //-------------------------------------------------------------
    //-------------------------------------------------------------
 
+   exe_units.map(_.io.brinfo := io.brinfo)
+   exe_units.map(_.io.com_exception := io.flush_pipeline)
+
    for ((ex,w) <- exe_units.withFilter(_.uses_iss_unit).map(x=>x).zipWithIndex)
    {
       ex.io.req <> fregister_read.io.exe_reqs(w)
-      ex.io.brinfo := io.brinfo
-      ex.io.com_exception := io.flush_pipeline
       require (!ex.isBypassable)
 
       // TODO HACK only let one FPU issue port issue these.

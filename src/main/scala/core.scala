@@ -1039,7 +1039,7 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
 //      var whitespace = (78-6 - 10 + 4 - NUM_LSU_ENTRIES- numIssueSlotEntries.sum - numIssueSlotEntries.length - (NUM_ROB_ENTRIES/COMMIT_WIDTH)
 //      var whitespace = (104-8 - 10 + 4 - NUM_LSU_ENTRIES- numIssueSlotEntries.sum - numIssueSlotEntries.length - (NUM_ROB_ENTRIES/COMMIT_WIDTH) - numBrobWhitespace
 //      var whitespace = (111-8 - 10 + 4 - NUM_LSU_ENTRIES- numIssueSlotEntries.sum - numIssueSlotEntries.length - (NUM_ROB_ENTRIES/COMMIT_WIDTH) - numBrobWhitespace
-      var whitespace = (85-6 - 10 + 4 - NUM_LSU_ENTRIES- numIssueSlotEntries.sum - numIssueSlotEntries.length - (NUM_ROB_ENTRIES/COMMIT_WIDTH)
+      var whitespace = (85-7 - 10 + 4 - NUM_LSU_ENTRIES- numIssueSlotEntries.sum - numIssueSlotEntries.length - (NUM_ROB_ENTRIES/COMMIT_WIDTH)
      )
 
       println("Whitespace padded: " + whitespace)
