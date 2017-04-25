@@ -153,6 +153,7 @@ class ALUExeUnit(
    else if (has_mul && use_slow_mul) println ("       - Mul (unpipelined)")
    else if (has_div) println ("       - Div")
    if (has_fdiv) println ("       - FDiv/FSqrt")
+   if (has_ifpu) println ("       - IFPU (for read port access)")
 
    val muldiv_busy = Wire(init=Bool(false))
    val fdiv_busy = Wire(init=Bool(false))

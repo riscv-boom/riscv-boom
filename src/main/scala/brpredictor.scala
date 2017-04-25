@@ -715,7 +715,7 @@ class BranchReorderBuffer(fetch_width: Int, num_entries: Int)(implicit p: Parame
 
    // -----------------------------------------------
 
-   if (DEBUG_PRINTF)
+   if (DEBUG_PRINTF_BROB)
    {
       for (i <- 0 until num_entries)
       {

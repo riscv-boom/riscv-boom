@@ -12,7 +12,6 @@
 
 
 package boom
-{
 
 import Chisel._
 import config.Parameters
@@ -51,6 +50,7 @@ class RegisterFile( num_registers: Int
    val regfile = Mem(num_registers, Bits(width=register_width))
 
    // --------------------------------------------------------------
+   // Read ports.
 
    val read_data = Wire(Vec(num_read_ports, Bits(width = register_width)))
 
@@ -60,8 +60,9 @@ class RegisterFile( num_registers: Int
                                                             regfile(io.read_ports(i).addr))
    }
 
+
    // --------------------------------------------------------------
-   // bypass out of the ALU's write ports
+   // Bypass out of the ALU's write ports.
 
    if (enable_bypassing)
    {
@@ -84,7 +85,9 @@ class RegisterFile( num_registers: Int
       }
    }
 
+
    // --------------------------------------------------------------
+   // Write ports.
 
    for (i <- 0 until num_write_ports)
    {
@@ -92,15 +95,19 @@ class RegisterFile( num_registers: Int
       {
          regfile(io.write_ports(i).addr) := io.write_ports(i).data
       }
-//      if (DEBUG_PRINTF)
-//      {
-//         printf("writeport[%d], %s -> p%d = 0x%x\n", UInt(i), Mux(io.write_ports(i).wen, Str("WEN"), Str(" "))
-//            , io.write_ports(i).addr
-//            , io.write_ports(i).data
-//            )
-//      }
    }
-}
 
 
+   // --------------------------------------------------------------
+
+   private val rf_cost = (num_read_ports+num_write_ports)*(num_read_ports+2*num_write_ports)
+   private val type_str = if (register_width == fLen+1) "Floating Point" else "Integer"
+   override def toString: String = 
+      "\n\n   ==" + type_str + " Regfile==" +
+      "\n   Num RF Read Ports     : " + num_read_ports +
+      "\n   Num RF Write Ports    : " + num_write_ports +
+      "\n   RF Cost (R+W)*(R+2W)  : " + rf_cost + 
+      "\n"
+
 }
+

@@ -30,6 +30,7 @@ trait BOOMDebugConstants
    val DEBUG_PRINTF_LSU    = true && DEBUG_PRINTF
    val DEBUG_PRINTF_ROB    = true && DEBUG_PRINTF
    val DEBUG_PRINTF_TAGE   = true && DEBUG_PRINTF
+   val DEBUG_PRINTF_BROB   = false && DEBUG_PRINTF
 
    if (O3PIPEVIEW_PRINTF) require (!DEBUG_PRINTF && !COMMIT_LOG_PRINTF)
 }

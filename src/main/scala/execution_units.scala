@@ -101,9 +101,12 @@ class ExecutionUnits(fpu: Boolean = false)(implicit val p: Parameters) extends H
                                           , has_mul          = true
                                           , use_slow_mul     = true // TODO
                                           , has_div          = true
-                                          , has_ifpu         = true
+                                          , has_ifpu         = issueWidths(1)==1
                                           ))
-      for (w <- 0 until issueWidths(1)-1) exe_units += Module(new ALUExeUnit())
+      for (w <- 0 until issueWidths(1)-1) {
+         val is_last = w == (issueWidths(1)-2)
+         exe_units += Module(new ALUExeUnit(has_ifpu = is_last))
+      }
    } else {                                     
       require (usingFPU)
       require (issueWidths(2) <= 1) // TODO, hacks to fix include uopSTD_fp needing a proper func unit.
@@ -137,5 +140,4 @@ class ExecutionUnits(fpu: Boolean = false)(implicit val p: Parameters) extends H
    val num_fpu_ports = exe_units.withFilter(_.hasFFlags).map(_.num_rf_write_ports).foldLeft(0)(_+_)
 
    val num_wakeup_ports = num_slow_wakeup_ports + num_fast_wakeup_ports
-   val rf_cost = (num_rf_read_ports+num_rf_write_ports)*(num_rf_read_ports+2*num_rf_write_ports)
 }

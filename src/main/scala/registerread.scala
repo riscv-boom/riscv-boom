@@ -76,9 +76,7 @@ class RegisterRead(
 
    for (w <- 0 until issue_width)
    {
-      println("Building Decoder(" + w + ")")
       val rrd_decode_unit = Module(new RegisterReadDecode(supported_units_array(w)))
-      println("Finished Decoder")
       rrd_decode_unit.io.iss_valid := io.iss_valids(w)
       rrd_decode_unit.io.iss_uop   := io.iss_uops(w)
 
