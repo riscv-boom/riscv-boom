@@ -23,12 +23,11 @@ class RegisterFileReadPortIO(addr_width: Int, data_width: Int)(implicit p: Param
    override def cloneType = new RegisterFileReadPortIO(addr_width, data_width)(p).asInstanceOf[this.type]
 }
 
-class RegisterFileWritePortIO(addr_width: Int, data_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
+class RegisterFileWritePort(addr_width: Int, data_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
-   val wen  = Bool(INPUT)
-   val addr = UInt(INPUT, addr_width)
-   val data = Bits(INPUT, data_width)
-   override def cloneType = new RegisterFileWritePortIO(addr_width, data_width)(p).asInstanceOf[this.type]
+   val addr = UInt(width = addr_width)
+   val data = Bits(width = data_width)
+   override def cloneType = new RegisterFileWritePort(addr_width, data_width)(p).asInstanceOf[this.type]
 }
 
 
@@ -42,7 +41,7 @@ class RegisterFile( num_registers: Int
    val io = new BoomBundle()(p)
    {
       val read_ports = Vec(num_read_ports, new RegisterFileReadPortIO(PREG_SZ, register_width))
-      val write_ports = Vec(num_write_ports, new RegisterFileWritePortIO(PREG_SZ, register_width))
+      val write_ports = Vec(num_write_ports, Valid(new RegisterFileWritePort(PREG_SZ, register_width))).flip
    }
 
    // --------------------------------------------------------------
@@ -68,11 +67,11 @@ class RegisterFile( num_registers: Int
    {
       for (i <- 0 until num_read_ports)
       {
-         val bypass_ens = io.write_ports.map(x => x.wen &&
-                                                  x.addr =/= UInt(0) &&
-                                                  x.addr === io.read_ports(i).addr)
+         val bypass_ens = io.write_ports.map(x => x.valid &&
+                                                  x.bits.addr =/= UInt(0) &&
+                                                  x.bits.addr === io.read_ports(i).addr)
 
-         val bypass_data = Mux1H(Vec(bypass_ens), Vec(io.write_ports.map(_.data)))
+         val bypass_data = Mux1H(Vec(bypass_ens), Vec(io.write_ports.map(_.bits.data)))
 
          io.read_ports(i).data := Mux(bypass_ens.reduce(_|_), bypass_data, read_data(i))
       }
@@ -89,11 +88,11 @@ class RegisterFile( num_registers: Int
    // --------------------------------------------------------------
    // Write ports.
 
-   for (i <- 0 until num_write_ports)
+   for (wport <- io.write_ports)
    {
-      when (io.write_ports(i).wen && (io.write_ports(i).addr =/= UInt(0)))
+      when (wport.valid && (wport.bits.addr =/= UInt(0)))
       {
-         regfile(io.write_ports(i).addr) := io.write_ports(i).data
+         regfile(wport.bits.addr) := wport.bits.data
       }
    }
 
@@ -106,8 +105,7 @@ class RegisterFile( num_registers: Int
       "\n   ==" + type_str + " Regfile==" +
       "\n   Num RF Read Ports     : " + num_read_ports +
       "\n   Num RF Write Ports    : " + num_write_ports +
-      "\n   RF Cost (R+W)*(R+2W)  : " + rf_cost + 
-      "\n"
+      "\n   RF Cost (R+W)*(R+2W)  : " + rf_cost
 
 }
 

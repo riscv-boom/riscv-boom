@@ -11,6 +11,7 @@ import tile._
 import rocket._
 
 
+// Try to be a reasonable BOOM design point.
 class DefaultBoomConfig extends Config((site, here, up) => {
 
    // Top-Level
@@ -50,7 +51,7 @@ class WithNPerfCounters(n: Int) extends Config((site, here, up) => {
    ))}
 })
 
-// Small BOOM!
+// Small BOOM! Try to be fast to compile, easier to debug.
 class WithSmallBooms extends Config((site, here, up) => {
    case RocketTilesKey => up(RocketTilesKey, site) map { r =>r.copy(core = r.core.copy(
       fWidth = 1,
