@@ -98,7 +98,7 @@ class ExecutionUnits(fpu: Boolean = false)(implicit val p: Parameters) extends H
       exe_units += Module(new ALUExeUnit(is_branch_unit      = true
                                           , shares_csr_wport = true
                                           , has_mul          = true
-                                          , use_slow_mul     = true // TODO
+                                          , use_slow_mul     = false
                                           , has_div          = true
                                           , has_ifpu         = int_width==1
                                           ))
