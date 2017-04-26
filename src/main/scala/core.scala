@@ -66,7 +66,7 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    val dec_brmask_logic = Module(new BranchMaskGenerationLogic(DECODE_WIDTH))
    val rename_stage     = Module(new RenameStage(DECODE_WIDTH, exe_units.num_wakeup_ports, fp_pipeline.io.wakeups.length))
    val issue_units      = new boom.IssueUnits(exe_units.num_wakeup_ports)
-   // + 1 for toint
+   // + 1 for toint TODO XXX move to sharing long-latency memory port
    val iregfile         = Module(new RegisterFile(numIntPhysRegs,
                                  exe_units.withFilter(_.usesIRF).map(e => e.num_rf_read_ports).sum,
                                  exe_units.withFilter(_.usesIRF).map(e => e.num_rf_write_ports).sum + 1,
@@ -425,8 +425,8 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
       }
       require (exe_units(i).usesIRF)
    }
-   rename_stage.io.int_wb_valids(wu_idx) := fp_pipeline.io.toint.wen
-   rename_stage.io.int_wb_pdsts(wu_idx)  := fp_pipeline.io.toint.addr
+   rename_stage.io.int_wb_valids(wu_idx) := fp_pipeline.io.toint.valid
+   rename_stage.io.int_wb_pdsts(wu_idx)  := fp_pipeline.io.toint.bits.addr
    wu_idx += 1
    require (wu_idx == exe_units.num_wakeup_ports)
 
@@ -575,8 +575,8 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
             wu_idx += 1
          }
       }
-      iu.io.wakeup_pdsts(wu_idx).valid := fp_pipeline.io.toint.wen
-      iu.io.wakeup_pdsts(wu_idx).bits  := fp_pipeline.io.toint.addr
+      iu.io.wakeup_pdsts(wu_idx).valid := fp_pipeline.io.toint.valid
+      iu.io.wakeup_pdsts(wu_idx).bits  := fp_pipeline.io.toint.bits.addr
       wu_idx += 1
       require (wu_idx == exe_units.num_wakeup_ports)
    }
@@ -729,6 +729,17 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    //-------------------------------------------------------------
    //-------------------------------------------------------------
 
+//   val ll_wport = Wire(new RegisterFileWritePortIO(IPREG_SZ, xLen))
+//
+//   fp_pipeline.io.toint := ll_wport
+
+//   val ll_wbArb= new Arbiter(new RegisterFileWritePortIO(IPREG_SZ, xLen), 2)
+//
+//   ll_wbArb.io.out.ready := Bool(true)
+//   iregfile.io.write_ports(w_cnt) <> ll_wbArb.io.out
+//   assert (memory.io.ready := Bool(true))
+
+
    var w_cnt = 0
    for (i <- 0 until exe_units.length)
    {
@@ -751,24 +762,33 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
 
          if (exe_units(i).uses_csr_wport && (j == 0))
          {
-            iregfile.io.write_ports(w_cnt).wen := wbIsValid(RT_FIX)
-            iregfile.io.write_ports(w_cnt).addr := wbpdst
-            iregfile.io.write_ports(w_cnt).data := Mux(wbReadsCSR, csr.io.rw.rdata, wbdata)
+            iregfile.io.write_ports(w_cnt).valid     := wbIsValid(RT_FIX)
+            iregfile.io.write_ports(w_cnt).bits.addr := wbpdst
+            iregfile.io.write_ports(w_cnt).bits.data := Mux(wbReadsCSR, csr.io.rw.rdata, wbdata)
+         }
+         else if (exe_units(i).is_mem_unit) 
+         {
+            require (j == 0) // only support one port on memory unit for now.
+
+//            jump out // hook this up elsewhere
+
+            iregfile.io.write_ports(w_cnt).valid     := wbIsValid(RT_FIX)
+            iregfile.io.write_ports(w_cnt).bits.addr := wbpdst
+            iregfile.io.write_ports(w_cnt).bits.data := wbdata
+
+            // connect to FP pipeline's long latency writeport.
+            fp_pipeline.io.ll_wport.valid     := wbIsValid(RT_FLT)
+            fp_pipeline.io.ll_wport.bits.addr := wbpdst
+            fp_pipeline.io.ll_wport.bits.data := wbdata
+            fp_pipeline.io.ll_wport_uop       := wbresp.bits.uop
          }
          else
          {
-            iregfile.io.write_ports(w_cnt).wen := wbIsValid(RT_FIX)
-            iregfile.io.write_ports(w_cnt).addr := wbpdst
-            iregfile.io.write_ports(w_cnt).data := wbdata
+            iregfile.io.write_ports(w_cnt).valid     := wbIsValid(RT_FIX)
+            iregfile.io.write_ports(w_cnt).bits.addr := wbpdst
+            iregfile.io.write_ports(w_cnt).bits.data := wbdata
          }
 
-         // connect to FP pipeline's long latency writeport.
-         if (exe_units(i).is_mem_unit) {
-            fp_pipeline.io.ll_wport.wen := wbIsValid(RT_FLT)
-            fp_pipeline.io.ll_wport.addr := wbpdst
-            fp_pipeline.io.ll_wport.data := wbdata
-            fp_pipeline.io.ll_wport_uop  := wbresp.bits.uop
-         }
 
          if (!exe_units(i).is_mem_unit) {
             assert (!wbIsValid(RT_FLT), "[fppipeline] An FP writeback is being attempted to the Int Regfile.")
@@ -791,7 +811,10 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    }
 
    // TODO XXX roll toint write-port into long-latency/memory write port.
-   fp_pipeline.io.toint <> iregfile.io.write_ports(w_cnt)
+   iregfile.io.write_ports(w_cnt) <> fp_pipeline.io.toint
+//   iregfile.io.write_ports(w_cnt) <> ll_wport
+
+
 //   iregfile.io.write_ports(w_cnt).wen := fp_pipeline.io.toint.wen
 //   iregfile.io.write_ports(w_cnt).addr := fp_pipeline.io.toint.addr
 //   iregfile.io.write_ports(w_cnt).data := fp_pipeline.io.toint.data
@@ -874,9 +897,9 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
       cnt += 1
       f_cnt += 1
    }
-   rob.io.wb_resps(cnt).valid    := fp_pipeline.io.toint.wen
+   rob.io.wb_resps(cnt).valid    := fp_pipeline.io.toint.valid
    rob.io.wb_resps(cnt).bits.uop := fp_pipeline.io.toint_uop
-   rob.io.wb_resps(cnt).bits.data := fp_pipeline.io.toint.data
+   rob.io.wb_resps(cnt).bits.data := fp_pipeline.io.toint.bits.data
    cnt += 1
    assert (cnt == rob.num_wakeup_ports)
 

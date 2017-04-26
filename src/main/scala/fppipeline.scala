@@ -39,11 +39,16 @@ class FpPipeline(
       val dis_readys       = Vec(DISPATCH_WIDTH, Bool()).asOutput
 
       // +1 for recoding.
-      val ll_wport         = new RegisterFileWritePortIO(fp_preg_sz, fLen+1)
+      val ll_wport         = Valid(new RegisterFileWritePort(fp_preg_sz, fLen+1)).flip
       val ll_wport_uop     = (new MicroOp()).asInput // TODO consolidate this with ll_wport
       val fromint          = Valid(new FuncUnitReq(fLen+1)).flip
       val tosdq            = Valid(new MicroOpWithData(fLen))
-      val toint            = new RegisterFileWritePortIO(log2Up(numIntPhysRegs), xLen).flip
+      val toint            = Decoupled(new RegisterFileWritePort(log2Up(numIntPhysRegs), xLen))
+//      val toint            = Decoupled(new Bundle {
+//                              val port = new RegisterFileWritePortIO(log2Up(numIntPhysRegs), xLen).flip
+//                              val uop = new MicroOp()
+//                              )}
+//      need to turn this into a decoupled
       val toint_uop        = (new MicroOp()).asOutput
 
       val wakeups          = Vec(num_wakeup_ports, Valid(new ExeUnitResp(fLen+1)))
@@ -198,7 +203,7 @@ class FpPipeline(
 
    // TODO add fdivsqrt to this port
    // TODO XXX add ifpu to ll_wport, instead of giving all exe_units a dedicated port.
-   io.ll_wport <> fregfile.io.write_ports(0)
+   fregfile.io.write_ports(0) <> io.ll_wport
 
    var w_cnt = 1
    for (i <- 0 until exe_units.length)
@@ -209,23 +214,21 @@ class FpPipeline(
 
          val toint = wbresp.bits.uop.dst_rtype === RT_FIX
 
-         fregfile.io.write_ports(w_cnt).wen :=
+         fregfile.io.write_ports(w_cnt).valid :=
             wbresp.valid &&
             wbresp.bits.uop.ctrl.rf_wen &&
             !toint
-         fregfile.io.write_ports(w_cnt).addr :=
+         fregfile.io.write_ports(w_cnt).bits.addr :=
             wbresp.bits.uop.pdst
-         fregfile.io.write_ports(w_cnt).data :=
+         fregfile.io.write_ports(w_cnt).bits.data :=
             wbresp.bits.data
 
 
-//         io.toint.valid := wbresp.valid && toint
-//         io.toint.bits  := wbresp.bits
          if (i==0 && j==0) {
-            io.toint.wen  := wbresp.valid && toint
-            io.toint.addr := wbresp.bits.uop.pdst
-            io.toint.data := wbresp.bits.data
-            io.toint_uop  := wbresp.bits.uop
+            io.toint.valid     := wbresp.valid && toint
+            io.toint.bits.addr := wbresp.bits.uop.pdst
+            io.toint.bits.data := wbresp.bits.data
+            io.toint_uop       := wbresp.bits.uop
          }
          // need to make sure toint uops only ever come out of this wbresp port.
          // TODO add check on write port to check if it supports toint moves.
@@ -255,9 +258,9 @@ class FpPipeline(
    //-------------------------------------------------------------
 
    // TODO the wakeup is being handled in core.scala for memory, but not other ll stuff.
-   io.wakeups(0).valid := io.ll_wport.wen
+   io.wakeups(0).valid := io.ll_wport.valid
    io.wakeups(0).bits.uop := io.ll_wport_uop
-   io.wakeups(0).bits.data := io.ll_wport.data
+   io.wakeups(0).bits.data := io.ll_wport.bits.data
    io.wakeups(0).bits.fflags.valid := Bool(false)
 
    w_cnt = 1
