@@ -46,10 +46,10 @@ class IssueUnitIO(issue_width: Int, num_wakeup_ports: Int)(implicit p: Parameter
 }
 
 abstract class IssueUnit(
-   num_issue_slots: Int,
+   val num_issue_slots: Int,
    val issue_width: Int,
    num_wakeup_ports: Int,
-   val iqType: Int)
+   val iqType: BigInt)
    (implicit p: Parameters)
    extends BoomModule()(p)
 {
@@ -163,9 +163,8 @@ class IssueUnits(num_wakeup_ports: Int)(implicit val p: Parameters) extends HasB
    require (enableAgePriorityIssue) // unordered is currently unsupported.
 
 //      issue_Units =issueConfigs colect {if iqType=....)
-//   iss_units += Module(new IssueUnitCollasping(boomParams.issueParams(0))
-   iss_units += Module(new IssueUnitCollasping(numIssueSlotEntries(0), issueWidths(0), num_wakeup_ports, IQT_MEM.litValue.intValue))
-   iss_units += Module(new IssueUnitCollasping(numIssueSlotEntries(1), issueWidths(1), num_wakeup_ports, IQT_INT.litValue.intValue))
+   iss_units += Module(new IssueUnitCollasping(issueParams.find(_.iqType == IQT_MEM.litValue).get, num_wakeup_ports))
+   iss_units += Module(new IssueUnitCollasping(issueParams.find(_.iqType == IQT_INT.litValue).get, num_wakeup_ports))
 
 }
 

@@ -21,12 +21,10 @@ import scala.collection.mutable.ArrayBuffer
 //-------------------------------------------------------------
 
 class IssueUnitCollasping(
-   num_issue_slots: Int,
-   issue_width: Int,
-   num_wakeup_ports: Int,
-   iqType: Int)
+   params: IssueParams,
+   num_wakeup_ports: Int)
    (implicit p: Parameters)
-   extends IssueUnit(num_issue_slots, issue_width, num_wakeup_ports, iqType)
+   extends IssueUnit(params.numEntries, params.issueWidth, num_wakeup_ports, params.iqType)
 {
    //-------------------------------------------------------------
    // Figure out how much to shift entries by

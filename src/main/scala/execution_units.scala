@@ -16,9 +16,7 @@ import scala.collection.mutable.ArrayBuffer
 
 class ExecutionUnits(fpu: Boolean = false)(implicit val p: Parameters) extends HasBoomCoreParameters
 {
-   val totalIssueWidth = issueWidths.reduce(_+_)
-   require (totalIssueWidth >= 2)
-
+   val totalIssueWidth = issueParams.map(_.issueWidth).sum
    if (!fpu) {
       println("\n   ~*** " + Seq("One","Two","Three","Four")(DECODE_WIDTH-1) + "-wide Machine ***~\n")
       println("    -== " + Seq("Single","Dual","Triple","Quad","Five","Six")(totalIssueWidth-1) + " Issue ==- \n")
@@ -95,22 +93,24 @@ class ExecutionUnits(fpu: Boolean = false)(implicit val p: Parameters) extends H
 
 
    if (!fpu) {
+      val int_width = issueParams.find(_.iqType == IQT_INT.litValue).get.issueWidth
       exe_units += Module(new MemExeUnit())
       exe_units += Module(new ALUExeUnit(is_branch_unit      = true
                                           , shares_csr_wport = true
                                           , has_mul          = true
                                           , use_slow_mul     = true // TODO
                                           , has_div          = true
-                                          , has_ifpu         = issueWidths(1)==1
+                                          , has_ifpu         = int_width==1
                                           ))
-      for (w <- 0 until issueWidths(1)-1) {
-         val is_last = w == (issueWidths(1)-2)
+      for (w <- 0 until int_width-1) {
+         val is_last = w == (int_width-2)
          exe_units += Module(new ALUExeUnit(has_ifpu = is_last))
       }
    } else {                                     
       require (usingFPU)
-      require (issueWidths(2) <= 1) // TODO, hacks to fix include uopSTD_fp needing a proper func unit.
-      for (w <- 0 until issueWidths(2)) { 
+      val fp_width = issueParams.find(_.iqType == IQT_FP.litValue).get.issueWidth
+      require (fp_width <= 1) // TODO hacks to fix include uopSTD_fp needing a proper func unit.
+      for (w <- 0 until fp_width) { 
          exe_units += Module(new ALUExeUnit(has_alu = false, 
                                             has_fpu = true,
                                             has_fdiv = usingFDivSqrt && (w==0))) 
