@@ -21,7 +21,11 @@ import config.Parameters
 class FpPipeline(
 )(implicit p: Parameters) extends BoomModule()(p)
 {
-   val num_wakeup_ports = issueWidths(2)+2
+   val fpIssueParams = issueParams.find(_.iqType == IQT_FP.litValue).get
+   // TODO roll i2f into mem port.
+   val num_i2f_ports = 1 // hard-wired
+   val num_mem_ports = 1 // hard-wired
+   val num_wakeup_ports = fpIssueParams.issueWidth+ + num_mem_ports + num_i2f_ports
    val fp_preg_sz = log2Up(numFpPhysRegs)
 
    val io = new Bundle
@@ -48,16 +52,12 @@ class FpPipeline(
 
       //TODO -- hook up commit log stuff.
       val debug_tsc_reg    = UInt(INPUT, xLen)
-
-//      val events
    }
 
    val exe_units        = new boom.ExecutionUnits(fpu=true)
    val issue_unit       = Module(new IssueUnitCollasping(
-                           numIssueSlotEntries(2), 
-                           issueWidths(2), 
-                           num_wakeup_ports, 
-                           IQT_FP.litValue.intValue))
+                           issueParams.find(_.iqType == IQT_FP.litValue).get,
+                           num_wakeup_ports))
    // Add a write-port for long latency operations (HACK XXX two - one for mem, the other for ifpu).
    val fregfile         = Module(new RegisterFile(numFpPhysRegs,
                                  exe_units.withFilter(_.uses_iss_unit).map(e => e.num_rf_read_ports).sum,
@@ -79,8 +79,8 @@ class FpPipeline(
    require (exe_units.withFilter(_.uses_iss_unit).map(e => e.num_rf_write_ports).sum + 2 == num_wakeup_ports)
 
    override def toString: String =
-      print(fregfile) +
-      "\n   Num Slow Wakeup Ports : " + exe_units.num_slow_wakeup_ports +
+      fregfile.toString +
+      "   Num Slow Wakeup Ports : " + exe_units.num_slow_wakeup_ports +
       "\n   Num Fast Wakeup Ports : " + exe_units.num_fast_wakeup_ports +
       "\n   Num Bypass Ports      : " + exe_units.num_total_bypass_ports + "\n"
  

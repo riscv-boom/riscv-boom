@@ -148,9 +148,9 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    val iss_str = if (enableAgePriorityIssue) " (Age-based Priority)"
                  else " (Unordered Priority)"
    println("\n   Fetch Width           : " + FETCH_WIDTH)
-   println("   Issue Width           : " + issueWidths.reduce(_+_))
+   println("   Issue Width           : " + issueParams.map(_.issueWidth).sum)
    println("   ROB Size              : " + NUM_ROB_ENTRIES)
-   println("   Issue Window Size     : " + numIssueSlotEntries + iss_str)
+   println("   Issue Window Size     : " + issueParams.map(_.numEntries) + iss_str)
    println("   Load/Store Unit Size  : " + NUM_LSU_ENTRIES + "/" + NUM_LSU_ENTRIES)
    println("   Num Int Phys Registers: " + numIntPhysRegs)
    println("   Num FP  Phys Registers: " + numFpPhysRegs)
@@ -530,10 +530,12 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
       }
 
       // TODO this is super fragile -- check the issue-units match the exe-units on instruction types.
-      require ((issue_units(iss_idx).iqType == IQT_MEM.litValue.intValue) ^ !exe_units(w).is_mem_unit)
+      require ((issue_units(iss_idx).iqType == IQT_MEM.litValue) ^ !exe_units(w).is_mem_unit)
+      require (issueParams(iss_idx).iqType != IQT_FP.litValue)
 
       iss_cnt += 1
-      if (iss_cnt >= issueWidths(iss_idx)) {
+      val iwidths = issueParams.map(_.issueWidth)
+      if (iss_cnt >= iwidths(iss_idx)) {
          iss_idx += 1
          iss_cnt = 0
       }
@@ -1035,10 +1037,9 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
       println("\n Chisel Printout Enabled\n")
 
       val numBrobWhitespace = if (DEBUG_PRINTF_BROB) NUM_BROB_ENTRIES else 0
-////      var whitespace = (63 - 18 + 4 - NUM_LSU_ENTRIES- numIssueSlotEntries.sum - numIssueSlotEntries.length - (NUM_ROB_ENTRIES/COMMIT_WIDTH)
-//      var whitespace = (78-6 - 10 + 4 - NUM_LSU_ENTRIES- numIssueSlotEntries.sum - numIssueSlotEntries.length - (NUM_ROB_ENTRIES/COMMIT_WIDTH)
-      var whitespace = (104-8 - 10 + 4 - NUM_LSU_ENTRIES- numIssueSlotEntries.sum - numIssueSlotEntries.length - (NUM_ROB_ENTRIES/COMMIT_WIDTH) - numBrobWhitespace
-//      var whitespace = (85-7 - 10 + 4 - NUM_LSU_ENTRIES- numIssueSlotEntries.sum - numIssueSlotEntries.length - (NUM_ROB_ENTRIES/COMMIT_WIDTH) - numBrobWhitespace
+      val screenheight = 104-8
+       var whitespace = (screenheight - 10 + 4 - NUM_LSU_ENTRIES - 
+         issueParams.map(_.numEntries).sum - issueParams.length - (NUM_ROB_ENTRIES/COMMIT_WIDTH) - numBrobWhitespace
      )
 
       println("Whitespace padded: " + whitespace)

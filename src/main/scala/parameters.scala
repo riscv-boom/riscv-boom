@@ -14,8 +14,10 @@ case object BoomKey extends Field[BoomCoreParams]
 
 case class BoomCoreParams(
    numRobEntries: Int = 16,
-   issueWidths: Seq[Int] = Seq(1,2,0), // Mem, Int, FP
-   numIssueSlotEntries: Seq[Int] = Seq(8,8,8), // Mem, Int, FP
+   issueParams: Seq[IssueParams] = Seq(
+         IssueParams(issueWidth=1, numEntries=16, iqType=IQT_MEM.litValue),
+         IssueParams(issueWidth=2, numEntries=16, iqType=IQT_INT.litValue),
+         IssueParams(issueWidth=1, numEntries=16, iqType=IQT_FP.litValue)),
    numLsuEntries: Int = 8,
    numIntPhysRegisters: Int = 96,
    numFpPhysRegisters: Int = 64,
@@ -92,9 +94,13 @@ trait HasBoomCoreParameters extends tile.HasCoreParameters
    //************************************
    // Issue Units
 
-   val issueWidths: Seq[Int] = boomParams.issueWidths // (Mem, Int, FP)
-   val numIssueSlotEntries = boomParams.numIssueSlotEntries
+   val issueParams: Seq[IssueParams] = boomParams.issueParams
    val enableAgePriorityIssue = boomParams.enableAgePriorityIssue
+   
+   // currently, only support one of each.
+   require (issueParams.count(_.iqType == IQT_FP.litValue) == 1)
+   require (issueParams.count(_.iqType == IQT_MEM.litValue) == 1)
+   require (issueParams.count(_.iqType == IQT_INT.litValue) == 1)
 
    //************************************
    // Load/Store Unit
