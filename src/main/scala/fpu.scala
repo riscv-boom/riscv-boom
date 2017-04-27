@@ -163,22 +163,11 @@ class FPU(implicit p: Parameters) extends BoomModule()(p)
    sfma.io.in.bits := req
 
 
-   // ifpu no longer supported here due to splitting of FP and Integer registers.
-   // Instead, ifpu is handled in a separate unit.
-   //val ifpu = Module(new tile.IntToFP(fpu_latency)) // 3 for rocket
-   //ifpu.io.in.valid := io.req.valid && fp_ctrl.fromint
-   //ifpu.io.in.bits := req
-   //assert (!(io.req.valid && fp_ctrl.fromint && req.in1(64).toBool),
-   //         "IntToFP integer input has 65th high-order bit set!")
-
-
    val fpiu = Module(new tile.FPToInt)
    fpiu.io.in.valid := io.req.valid && (fp_ctrl.toint || fp_ctrl.cmd === FCMD_MINMAX)
    fpiu.io.in.bits := req
    val fpiu_out = Pipe(Reg(next=fpiu.io.in.valid && !fp_ctrl.fastpipe),
                        fpiu.io.out.bits, fpu_latency-1)
-
-
    val fpiu_result  = Wire(new tile.FPResult)
    fpiu_result.data := fpiu_out.bits.toint
    fpiu_result.exc  := fpiu_out.bits.exc
@@ -190,14 +179,12 @@ class FPU(implicit p: Parameters) extends BoomModule()(p)
    fpmu.io.lt := fpiu.io.out.bits.lt
 
    // Response (all FP units have been padded out to the same latency)
-   io.resp.valid := //ifpu.io.out.valid ||
-                    fpiu_out.valid ||
+   io.resp.valid := fpiu_out.valid ||
                     fpmu.io.out.valid ||
                     sfma.io.out.valid ||
                     dfma.io.out.valid
    val fpu_out   = Mux(dfma.io.out.valid, dfma.io.out.bits,
                    Mux(sfma.io.out.valid, sfma.io.out.bits,
-//                   Mux(ifpu.io.out.valid, ifpu.io.out.bits,
                    Mux(fpiu_out.valid,    fpiu_result,
                                           fpmu.io.out.bits)))
 

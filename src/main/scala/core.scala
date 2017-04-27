@@ -56,22 +56,26 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    // Meanwhile, the FP pipeline holds the FP issue window, FP regfile, and FP arithmetic units.
    var fp_pipeline: FpPipeline = null
    if (usingFPU) {
-      fp_pipeline       = Module(new FpPipeline()) 
+      fp_pipeline       = Module(new FpPipeline())
    }
 
+   val num_irf_write_ports = exe_units.map(_.num_rf_write_ports).sum
+   val num_fast_wakeup_ports = exe_units.count(_.isBypassable)
+   val num_wakeup_ports = num_irf_write_ports + num_fast_wakeup_ports
    val fetch_unit       = Module(new FetchUnit(FETCH_WIDTH))
    val bpd_stage        = Module(new BranchPredictionStage(FETCH_WIDTH))
    val dec_serializer   = Module(new FetchSerializerNtoM)
    val decode_units     = for (w <- 0 until DECODE_WIDTH) yield { val d = Module(new DecodeUnit); d }
    val dec_brmask_logic = Module(new BranchMaskGenerationLogic(DECODE_WIDTH))
-   val rename_stage     = Module(new RenameStage(DECODE_WIDTH, exe_units.num_wakeup_ports, fp_pipeline.io.wakeups.length))
-   val issue_units      = new boom.IssueUnits(exe_units.num_wakeup_ports)
-   // + 1 for toint TODO XXX move to sharing long-latency memory port
+   val rename_stage     = Module(new RenameStage(DECODE_WIDTH, num_wakeup_ports, fp_pipeline.io.wakeups.length))
+   val issue_units      = new boom.IssueUnits(num_wakeup_ports)
    val iregfile         = Module(new RegisterFile(numIntPhysRegs,
                                  exe_units.withFilter(_.usesIRF).map(e => e.num_rf_read_ports).sum,
-                                 exe_units.withFilter(_.usesIRF).map(e => e.num_rf_write_ports).sum + 1,
+                                 exe_units.withFilter(_.usesIRF).map(e => e.num_rf_write_ports).sum,
                                  xLen,
                                  ENABLE_REGFILE_BYPASSING))
+//   val ll_wbarb         = Module(new Arbiter(new RegisterFileWritePort(IPREG_SZ, xLen), 2))
+   val ll_wbarb         = Module(new Arbiter(new ExeUnitResp(xLen), 2))
    val iregister_read   = Module(new RegisterRead(
                                  issue_units.map(_.issue_width).sum,
                                  exe_units.withFilter(_.usesIRF).map(_.supportedFuncUnits),
@@ -85,9 +89,10 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    val rob              = Module(new Rob(
                                  DECODE_WIDTH,
                                  NUM_ROB_ENTRIES,
-                                 exe_units.num_slow_wakeup_ports + fp_pipeline.io.wakeups.length,
+                                 num_irf_write_ports + fp_pipeline.io.wakeups.length,
                                  exe_units.num_fpu_ports + fp_pipeline.io.wakeups.length))
-                           // TODO the ROB writeback is off the regfile, which is a different set
+   // Used to wakeup registers in rename and issue. ROB needs to listen to something else.
+   val int_wakeups      = Wire(Vec(num_wakeup_ports, Valid(new ExeUnitResp(xLen))))
 
    require (exe_units.length == issue_units.map(_.issue_width).sum)
 
@@ -159,8 +164,8 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    println("   RAS Size              : " + btbParams.nRAS)
 
    print(iregfile)
-   println("   Num Slow Wakeup Ports : " + exe_units.num_slow_wakeup_ports)
-   println("   Num Fast Wakeup Ports : " + exe_units.num_fast_wakeup_ports)
+   println("\n   Num Slow Wakeup Ports : " + num_irf_write_ports)
+   println("   Num Fast Wakeup Ports : " + exe_units.count(_.isBypassable))
    println("   Num Bypass Ports      : " + exe_units.num_total_bypass_ports)
 
    print(fp_pipeline)
@@ -396,48 +401,64 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
 
    rename_stage.io.dec_uops := dec_uops
 
+
+
+
+
    var wu_idx = 0
    // loop through each issue-port (exe_units are statically connected to an issue-port)
    for (i <- 0 until exe_units.length)
    {
-      // Fast Wakeup (uses just-issued uops) that have known latencies
-      if (exe_units(i).isBypassable)
+      if (exe_units(i).is_mem_unit)
       {
-         rename_stage.io.int_wb_valids(wu_idx) := iss_valids(i) &&
-                                                 iss_uops(i).dst_rtype === RT_FIX &&
-                                                 iss_uops(i).bypassable
-         rename_stage.io.int_wb_pdsts(wu_idx)  := iss_uops(i).pdst
+         // If Memory, it's the shared long-latency port.
+         int_wakeups(wu_idx).valid := ll_wbarb.io.out.fire()
+         int_wakeups(wu_idx).bits  := ll_wbarb.io.out.bits
          wu_idx += 1
-         assert (!(iss_uops(i).dst_rtype === RT_FLT && iss_uops(i).bypassable), "Bypassing FP is not supported.")
       }
-
-
-      // Slow Wakeup (uses write-port to register file)
-      for (j <- 0 until exe_units(i).num_rf_write_ports)
+      else
       {
-         rename_stage.io.int_wb_valids(wu_idx) := exe_units(i).io.resp(j).valid &&
-                                                 exe_units(i).io.resp(j).bits.uop.ctrl.rf_wen && // TODO is rfwen redudant?
-                                                 !exe_units(i).io.resp(j).bits.uop.bypassable &&
-                                                 exe_units(i).io.resp(j).bits.uop.dst_rtype === RT_FIX
-         rename_stage.io.int_wb_pdsts(wu_idx)  := exe_units(i).io.resp(j).bits.uop.pdst
-         wu_idx += 1
+         // Fast Wakeup (uses just-issued uops) that have known latencies
+         if (exe_units(i).isBypassable)
+         {
+            int_wakeups(wu_idx).valid := iss_valids(i) && 
+                                         iss_uops(i).bypassable &&
+                                         iss_uops(i).dst_rtype === RT_FIX && 
+                                         iss_uops(i).ldst_val
+            int_wakeups(wu_idx).bits.uop := iss_uops(i)
+            wu_idx += 1
+            assert (!(iss_uops(i).dst_rtype === RT_FLT && iss_uops(i).bypassable), "Bypassing FP is not supported.")
+         }
 
+         // Slow Wakeup (uses write-port to register file)
+         for (j <- 0 until exe_units(i).num_rf_write_ports)
+         {
+            val resp = exe_units(i).io.resp(j)
+            int_wakeups(wu_idx).valid := resp.valid &&
+                                         resp.bits.uop.ctrl.rf_wen &&
+                                        !resp.bits.uop.bypassable &&
+                                         resp.bits.uop.dst_rtype === RT_FIX
+            int_wakeups(wu_idx).bits := exe_units(i).io.resp(j).bits
+            wu_idx += 1
+
+         }
       }
       require (exe_units(i).usesIRF)
    }
-   rename_stage.io.int_wb_valids(wu_idx) := fp_pipeline.io.toint.valid
-   rename_stage.io.int_wb_pdsts(wu_idx)  := fp_pipeline.io.toint.bits.addr
-   wu_idx += 1
-   require (wu_idx == exe_units.num_wakeup_ports)
+   require (wu_idx == num_wakeup_ports)
 
-   rename_stage.io.com_valids := rob.io.commit.valids
-   rename_stage.io.com_uops := rob.io.commit.uops
-   rename_stage.io.com_rbk_valids := rob.io.commit.rbk_valids
-
+   for ((renport, intport) <- rename_stage.io.int_wakeups zip int_wakeups)
+   {
+      renport <> intport
+   }
    for ((renport, fpport) <- rename_stage.io.fp_wakeups zip fp_pipeline.io.wakeups)
    {
       renport <> fpport
    }
+
+   rename_stage.io.com_valids := rob.io.commit.valids
+   rename_stage.io.com_uops := rob.io.commit.uops
+   rename_stage.io.com_rbk_valids := rob.io.commit.rbk_valids
 
    //-------------------------------------------------------------
    //-------------------------------------------------------------
@@ -514,7 +535,7 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
 
    val ifpu_idx = exe_units.length-1 // TODO hack; need more disciplined manner to hook up ifpu
    require (exe_units(ifpu_idx).supportedFuncUnits.ifpu)
-   
+
    var iss_idx = 0
    var iss_cnt = 0
    for (w <- 0 until exe_units.length)
@@ -550,35 +571,12 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
 
    for (iu <- issue_units)
    {
-      wu_idx = 0
-      for ((ex, idx) <- exe_units.zipWithIndex.withFilter(_._1.usesIRF))
+      for ((issport, wakeup) <- iu.io.wakeup_pdsts zip int_wakeups)
       {
-         // Slow wakeup (uops that can't be bypassed).
-         for (j <- 0 until ex.num_rf_write_ports)
-         {
-            val wport = ex.io.resp(j)
-            iu.io.wakeup_pdsts(wu_idx).valid := wport.valid &&
-                                                wport.bits.uop.ctrl.rf_wen &&
-                                                !wport.bits.uop.bypassable &&
-                                                wport.bits.uop.dst_rtype === RT_FIX // TODO remove, unneeded
-            iu.io.wakeup_pdsts(wu_idx).bits  := wport.bits.uop.pdst
-            wu_idx += 1
-         }
-         // Fast wakeup (just-issued uops that can be bypassed).
-         if (ex.isBypassable)
-         {
-            iu.io.wakeup_pdsts(wu_idx).valid := iss_valids(idx) &&
-                                                iss_uops(idx).dst_rtype === RT_FIX && // TODO remove, unneeded
-                                                iss_uops(idx).ldst_val &&
-                                                iss_uops(idx).bypassable
-            iu.io.wakeup_pdsts(wu_idx).bits  := iss_uops(idx).pdst
-            wu_idx += 1
-         }
+         issport.valid := wakeup.valid
+         issport.bits  := wakeup.bits.uop.pdst
       }
-      iu.io.wakeup_pdsts(wu_idx).valid := fp_pipeline.io.toint.valid
-      iu.io.wakeup_pdsts(wu_idx).bits  := fp_pipeline.io.toint.bits.addr
-      wu_idx += 1
-      require (wu_idx == exe_units.num_wakeup_ports)
+      require (iu.io.wakeup_pdsts.length == int_wakeups.length)
    }
 
 
@@ -670,7 +668,7 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
       exe_units(ifpu_idx).io.req.valid := Bool(false)
    }
    fp_pipeline.io.fromint := iregister_read.io.exe_reqs(ifpu_idx)
-   fp_pipeline.io.fromint.valid := 
+   fp_pipeline.io.fromint.valid :=
       iregister_read.io.exe_reqs(ifpu_idx).valid &&
       iregister_read.io.exe_reqs(ifpu_idx).bits.uop.fu_code === FUConstants.FU_I2F
 
@@ -729,18 +727,9 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    //-------------------------------------------------------------
    //-------------------------------------------------------------
 
-//   val ll_wport = Wire(new RegisterFileWritePortIO(IPREG_SZ, xLen))
-//
-//   fp_pipeline.io.toint := ll_wport
-
-//   val ll_wbArb= new Arbiter(new RegisterFileWritePortIO(IPREG_SZ, xLen), 2)
-//
-//   ll_wbArb.io.out.ready := Bool(true)
-//   iregfile.io.write_ports(w_cnt) <> ll_wbArb.io.out
-//   assert (memory.io.ready := Bool(true))
-
 
    var w_cnt = 0
+   var llidx = -1 // find which rf port corresponds to the long latency memory port.
    for (i <- 0 until exe_units.length)
    {
       for (j <- 0 until exe_units(i).num_rf_write_ports)
@@ -749,10 +738,10 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
          val wbpdst = wbresp.bits.uop.pdst
          val wbdata = wbresp.bits.data
 
-         def wbIsValid(rtype: UInt) = 
+         def wbIsValid(rtype: UInt) =
             wbresp.valid && wbresp.bits.uop.ctrl.rf_wen && wbresp.bits.uop.dst_rtype === rtype
          val wbReadsCSR = wbresp.bits.uop.ctrl.csr_cmd =/= rocket.CSR.N
-      
+
          if (exe_units(i).data_width > 64)
          {
 				require (exe_units(i).is_mem_unit)
@@ -765,35 +754,33 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
             iregfile.io.write_ports(w_cnt).valid     := wbIsValid(RT_FIX)
             iregfile.io.write_ports(w_cnt).bits.addr := wbpdst
             iregfile.io.write_ports(w_cnt).bits.data := Mux(wbReadsCSR, csr.io.rw.rdata, wbdata)
+            wbresp.ready := iregfile.io.write_ports(w_cnt).ready
          }
-         else if (exe_units(i).is_mem_unit) 
+         else if (exe_units(i).is_mem_unit)
          {
+            assert (llidx == -1) // should only hit this once
             require (j == 0) // only support one port on memory unit for now.
-
-//            jump out // hook this up elsewhere
-
-            iregfile.io.write_ports(w_cnt).valid     := wbIsValid(RT_FIX)
-            iregfile.io.write_ports(w_cnt).bits.addr := wbpdst
-            iregfile.io.write_ports(w_cnt).bits.data := wbdata
+            llidx = w_cnt
 
             // connect to FP pipeline's long latency writeport.
             fp_pipeline.io.ll_wport.valid     := wbIsValid(RT_FLT)
-            fp_pipeline.io.ll_wport.bits.addr := wbpdst
+            fp_pipeline.io.ll_wport.bits.uop  := wbresp.bits.uop
             fp_pipeline.io.ll_wport.bits.data := wbdata
-            fp_pipeline.io.ll_wport_uop       := wbresp.bits.uop
+            fp_pipeline.io.ll_wport.bits.fflags.valid := Bool(false)
          }
          else
          {
             iregfile.io.write_ports(w_cnt).valid     := wbIsValid(RT_FIX)
             iregfile.io.write_ports(w_cnt).bits.addr := wbpdst
             iregfile.io.write_ports(w_cnt).bits.data := wbdata
+            wbresp.ready := iregfile.io.write_ports(w_cnt).ready
          }
 
 
          if (!exe_units(i).is_mem_unit) {
             assert (!wbIsValid(RT_FLT), "[fppipeline] An FP writeback is being attempted to the Int Regfile.")
          }
-         
+
          assert (!(exe_units(i).io.resp(j).valid &&
             !exe_units(i).io.resp(j).bits.uop.ctrl.rf_wen &&
             exe_units(i).io.resp(j).bits.uop.dst_rtype === RT_FIX),
@@ -810,16 +797,19 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
       }
    }
 
-   // TODO XXX roll toint write-port into long-latency/memory write port.
-   iregfile.io.write_ports(w_cnt) <> fp_pipeline.io.toint
-//   iregfile.io.write_ports(w_cnt) <> ll_wport
+   // Share the memory port with other long latency operations.
+   val mem_unit = exe_units.memory_unit
+   require (mem_unit.num_rf_write_ports == 1)
+   val mem_resp = mem_unit.io.resp(0)
+
+   ll_wbarb.io.in(0).valid := mem_resp.valid && mem_resp.bits.uop.ctrl.rf_wen && mem_resp.bits.uop.dst_rtype === RT_FIX
+   ll_wbarb.io.in(0).bits  := mem_resp.bits
+
+   assert (ll_wbarb.io.in(0).ready) // never backpressure the memory unit.
+   ll_wbarb.io.in(1) <> fp_pipeline.io.toint
+   iregfile.io.write_ports(llidx) <> WritePort(ll_wbarb.io.out, IPREG_SZ, xLen)
 
 
-//   iregfile.io.write_ports(w_cnt).wen := fp_pipeline.io.toint.wen
-//   iregfile.io.write_ports(w_cnt).addr := fp_pipeline.io.toint.addr
-//   iregfile.io.write_ports(w_cnt).data := fp_pipeline.io.toint.data
-
-   
 
    //-------------------------------------------------------------
    //-------------------------------------------------------------
@@ -840,31 +830,41 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    // Writeback
    var cnt = 0
    var f_cnt = 0 // rob fflags port index
-   for (w <- 0 until exe_units.length)
+   for (eu <- exe_units)
    {
-      for (j <- 0 until exe_units(w).num_rf_write_ports)
+      for ((resp, j) <- eu.io.resp.zipWithIndex)
       {
-         val wb_uop = exe_units(w).io.resp(j).bits.uop
-         rob.io.wb_resps(cnt).valid := exe_units(w).io.resp(j).valid && !(wb_uop.is_store && !wb_uop.is_amo)
-         rob.io.wb_resps(cnt).bits <> exe_units(w).io.resp(j).bits
+         val wb_uop = resp.bits.uop
+
+         if (eu.is_mem_unit)
+         {
+            val ll_uop = ll_wbarb.io.out.bits.uop
+            rob.io.wb_resps(cnt).valid := ll_wbarb.io.out.valid && !(ll_uop.is_store && !ll_uop.is_amo)
+            rob.io.wb_resps(cnt).bits <> ll_wbarb.io.out.bits
+         }
+         else
+         {
+            rob.io.wb_resps(cnt).valid := resp.valid && !(wb_uop.is_store && !wb_uop.is_amo)
+            rob.io.wb_resps(cnt).bits <> resp.bits
+         }
 
          // for commit logging...
-         rob.io.debug_wb_valids(cnt) := exe_units(w).io.resp(j).valid &&
+         rob.io.debug_wb_valids(cnt) := resp.valid &&
                                         wb_uop.ctrl.rf_wen &&
                                         (wb_uop.dst_rtype === RT_FIX || wb_uop.dst_rtype === RT_FLT)
 
-         val data = exe_units(w).io.resp(j).bits.data
-         if (exe_units(w).hasFFlags || (exe_units(w).is_mem_unit && usingFPU))
+         val data = resp.bits.data
+         if (eu.hasFFlags || (eu.is_mem_unit && usingFPU))
          {
-            if (exe_units(w).hasFFlags)
+            if (eu.hasFFlags)
             {
-               rob.io.fflags(f_cnt) <> exe_units(w).io.resp(j).bits.fflags
+               rob.io.fflags(f_cnt) <> resp.bits.fflags
                f_cnt += 1
             }
             val unrec_s = hardfloat.fNFromRecFN(8, 24, data)
             val unrec_d = hardfloat.fNFromRecFN(11, 53, data)
             val unrec_out     = Mux(wb_uop.fp_single, Cat(UInt(0,32), unrec_s), unrec_d)
-            if (exe_units(w).uses_csr_wport && (j == 0))
+            if (eu.uses_csr_wport && (j == 0))
             {
                rob.io.debug_wb_wdata(cnt) := Mux(wb_uop.ctrl.csr_cmd =/= rocket.CSR.N, csr.io.rw.rdata,
                                              Mux(wb_uop.fp_val && wb_uop.dst_rtype === RT_FLT, unrec_out,
@@ -872,12 +872,12 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
             }
             else
             {
-               rob.io.debug_wb_wdata(cnt) := Mux(exe_units(w).io.resp(j).bits.uop.fp_val, unrec_out, data)
+               rob.io.debug_wb_wdata(cnt) := Mux(resp.bits.uop.fp_val, unrec_out, data)
             }
          }
          else
          {
-            if (exe_units(w).uses_csr_wport && (j == 0))
+            if (eu.uses_csr_wport && (j == 0))
             {
                rob.io.debug_wb_wdata(cnt) := Mux(wb_uop.ctrl.csr_cmd =/= rocket.CSR.N, csr.io.rw.rdata, data)
             }
@@ -897,10 +897,9 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
       cnt += 1
       f_cnt += 1
    }
-   rob.io.wb_resps(cnt).valid    := fp_pipeline.io.toint.valid
-   rob.io.wb_resps(cnt).bits.uop := fp_pipeline.io.toint_uop
-   rob.io.wb_resps(cnt).bits.data := fp_pipeline.io.toint.bits.data
-   cnt += 1
+//   rob.io.wb_resps(cnt).valid := ll_wbarb.io.out.fire()
+//   rob.io.wb_resps(cnt).bits  := ll_wbarb.io.out.bits
+//   cnt += 1
    assert (cnt == rob.num_wakeup_ports)
 
 
@@ -1060,8 +1059,9 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
       println("\n Chisel Printout Enabled\n")
 
       val numBrobWhitespace = if (DEBUG_PRINTF_BROB) NUM_BROB_ENTRIES else 0
-      val screenheight = 104-8
-       var whitespace = (screenheight - 10 + 4 - NUM_LSU_ENTRIES - 
+//      val screenheight = 104-8
+      val screenheight = 84 -7
+       var whitespace = (screenheight - 10 + 4 - NUM_LSU_ENTRIES -
          issueParams.map(_.numEntries).sum - issueParams.length - (NUM_ROB_ENTRIES/COMMIT_WIDTH) - numBrobWhitespace
      )
 
@@ -1147,7 +1147,7 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
             )
       }
 
-                                   
+
       printf("Exct(%c%d) Commit(%x) fl: 0x%x (%d) is: 0x%x (%d)\n"
          , Mux(rob.io.com_xcpt.valid, Str("E"), Str("-"))
          , rob.io.com_xcpt.bits.cause
@@ -1157,7 +1157,7 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
          , rename_stage.io.debug.iisprlist
          , PopCount(rename_stage.io.debug.iisprlist)
          )
-                                   
+
       printf("                                    fl: 0x%x (%d) is: 0x%x (%d)\n"
          , rename_stage.io.debug.ffreelist
          , PopCount(rename_stage.io.debug.ffreelist)
