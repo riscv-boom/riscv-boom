@@ -35,7 +35,8 @@ case class BoomCoreParams(
    tage: Option[TageParameters] = None,
    gshare: Option[GShareParameters] = None,
    gskew: Option[GSkewParameters] = None,
-   intToFpLatency: Int = 2
+   intToFpLatency: Int = 2,
+   imulLatency: Int = 3
 )
 
 trait HasBoomCoreParameters extends tile.HasCoreParameters
@@ -81,7 +82,7 @@ trait HasBoomCoreParameters extends tile.HasCoreParameters
    //************************************
    // Pipelining
 
-   val IMUL_STAGES = if (rocketParams.fpu.isDefined) rocketParams.fpu.get.dfmaLatency else 3
+   val imulLatency = boomParams.imulLatency
    val dfmaLatency = if (rocketParams.fpu.isDefined) rocketParams.fpu.get.dfmaLatency else 3
    val sfmaLatency = if (rocketParams.fpu.isDefined) rocketParams.fpu.get.sfmaLatency else 3
    // All FPU ops padded out to same delay for writeport scheduling.

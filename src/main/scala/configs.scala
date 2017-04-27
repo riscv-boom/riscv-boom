@@ -24,7 +24,7 @@ class DefaultBoomConfig extends Config((site, here, up) => {
       useCompressed = false,
       nPerfCounters = 4,
       nPerfEvents = 31,
-      fpu = Some(tile.FPUParams(sfmaLatency=3, dfmaLatency=3, divSqrt=true))
+      fpu = Some(tile.FPUParams(sfmaLatency=4, dfmaLatency=4, divSqrt=true))
    ))}
 
    // BOOM-specific uarch Parameters
@@ -33,13 +33,13 @@ class DefaultBoomConfig extends Config((site, here, up) => {
       issueParams = Seq(
          IssueParams(issueWidth=1, numEntries=16, iqType=IQT_MEM.litValue),
          IssueParams(issueWidth=2, numEntries=16, iqType=IQT_INT.litValue),
-         IssueParams(issueWidth=1, numEntries=16, iqType=IQT_FP.litValue)),
-      numIntPhysRegisters = 80,
+         IssueParams(issueWidth=1, numEntries=20, iqType=IQT_FP.litValue)),
+      numIntPhysRegisters = 90,
       numFpPhysRegisters = 56,
       numLsuEntries = 16,
       maxBrCount = 8,
       enableBranchPredictor = true,
-      gshare = Some(GShareParameters(enabled = true, history_length=11))
+      gshare = Some(GShareParameters(enabled = true, history_length=14))
    )
   }
 )
@@ -67,7 +67,7 @@ class WithSmallBooms extends Config((site, here, up) => {
       numFpPhysRegisters = 48,
       numLsuEntries = 4,
       maxBrCount = 4,
-      gshare = Some(GShareParameters(enabled = true, history_length=11))
+      gshare = Some(GShareParameters(enabled = true, history_length=12))
       )
 })
 
@@ -85,7 +85,7 @@ class WithMediumBooms extends Config((site, here, up) => {
       numIntPhysRegisters = 80,
       numFpPhysRegisters = 56,
       numLsuEntries = 16,
-      gshare = Some(GShareParameters(enabled = true, history_length=11))
+      gshare = Some(GShareParameters(enabled = true, history_length=14))
       )
 })
 
@@ -99,11 +99,11 @@ class WithMegaBooms extends Config((site, here, up) => {
       issueParams = Seq(
          IssueParams(issueWidth=1, numEntries=20, iqType=IQT_MEM.litValue),
          IssueParams(issueWidth=2, numEntries=20, iqType=IQT_INT.litValue),
-         IssueParams(issueWidth=1, numEntries=20, iqType=IQT_FP.litValue)),
+         IssueParams(issueWidth=1, numEntries=20, iqType=IQT_FP.litValue)), // TODO make this 2-wide issue
       numIntPhysRegisters = 128,
-      numFpPhysRegisters = 64,
+      numFpPhysRegisters = 80,
       numLsuEntries = 32,
-      gshare = Some(GShareParameters(enabled = true, history_length=11))
+      tage = Some(TageParameters())
       )
    // Widen L1toL2 bandwidth so we can increase icache rowBytes size for 4-wide fetch.
    case L1toL2Config => up(L1toL2Config, site).copy(
