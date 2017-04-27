@@ -35,7 +35,7 @@ class DefaultBoomConfig extends Config((site, here, up) => {
       numLsuEntries = 16,
       maxBrCount = 8,
       enableBranchPredictor = true,
-      gshare = Some(GShareParameters(enabled = true, history_length=10))
+      gshare = Some(GShareParameters(enabled = true))
    )
   }
 )
@@ -60,7 +60,7 @@ class WithSmallBooms extends Config((site, here, up) => {
       numLsuEntries = 4,
       numPhysRegisters = 100,
       maxBrCount = 4,
-      gshare = Some(GShareParameters(enabled = true, history_length=10))
+      gshare = Some(GShareParameters(enabled = true))
       )
 })
 
