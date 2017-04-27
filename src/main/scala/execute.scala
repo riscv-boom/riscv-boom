@@ -133,7 +133,10 @@ class ALUExeUnit(
    extends ExecutionUnit(
       num_rf_read_ports = if (has_fpu) 3 else 2,
       num_rf_write_ports = 1,
-      num_bypass_stages = if (has_fpu && has_alu) p(tile.TileKey).core.fpu.get.dfmaLatency else if (has_alu && has_mul && !use_slow_mul) 3 else if (has_alu) 1 else 0,
+      num_bypass_stages =
+         (if (has_fpu && has_alu) p(tile.TileKey).core.fpu.get.dfmaLatency
+         else if (has_alu && has_mul && !use_slow_mul) p(BoomKey).imulLatency
+         else if (has_alu) 1 else 0),
       data_width = if (has_fpu || has_fdiv) 65 else 64,
       bypassable = has_alu,
       is_mem_unit = false,
@@ -209,7 +212,7 @@ class ALUExeUnit(
    var imul: PipelinedMulUnit = null
    if (has_mul && !use_slow_mul)
    {
-      imul = Module(new PipelinedMulUnit(IMUL_STAGES))
+      imul = Module(new PipelinedMulUnit(imulLatency))
       imul.io.req.valid         := io.req.valid && io.req.bits.uop.fu_code_is(FU_MUL)
       imul.io.req.bits.uop      := io.req.bits.uop
       imul.io.req.bits.rs1_data := io.req.bits.rs1_data
@@ -217,7 +220,7 @@ class ALUExeUnit(
       imul.io.req.bits.kill     := io.req.bits.kill
       imul.io.brinfo <> io.brinfo
       fu_units += imul
-      if (has_fpu) require (IMUL_STAGES == dfmaLatency)
+      if (has_fpu) require (imulLatency == dfmaLatency)
    }
 
    // FPU Unit -----------------------
@@ -279,8 +282,7 @@ class ALUExeUnit(
 
    // Mul/Div/Rem Unit -----------------------
    var muldiv: MulDivUnit = null
-   val muldiv_resp_val = Wire(Bool())
-   muldiv_resp_val := Bool(false)
+   val muldiv_resp_val = Wire(init = Bool(false))
    if (has_muldiv)
    {
       muldiv = Module(new MulDivUnit())
@@ -627,7 +629,7 @@ class ALUMemExeUnit(
    println ("     ExeUnit--")
    println ("       - ALU")
    if (has_fpu) println ("       - FPU (Latency: " + dfmaLatency + " cycles)")
-   if (has_mul && !use_slow_mul) println ("       - Mul (pipelined: " + IMUL_STAGES + " cycles)")
+   if (has_mul && !use_slow_mul) println ("       - Mul (pipelined: " + imulLatency + " cycles)")
    if (has_div && has_mul && use_slow_mul) println ("       - Mul/Div (unpipelined)")
    else if (has_mul && use_slow_mul) println ("       - Mul (unpipelined)")
    else if (has_div) println ("       - Div")
@@ -681,14 +683,14 @@ class ALUMemExeUnit(
    var imul: PipelinedMulUnit = null
    if (!use_slow_mul)
    {
-      imul = Module(new PipelinedMulUnit(IMUL_STAGES))
+      imul = Module(new PipelinedMulUnit(imulLatency))
       imul.io.req.valid := io.req.valid && (io.req.bits.uop.fu_code_is(FU_MUL) && Bool(!use_slow_mul))
       imul.io.req.bits.uop      := io.req.bits.uop
       imul.io.req.bits.rs1_data := io.req.bits.rs1_data
       imul.io.req.bits.rs2_data := io.req.bits.rs2_data
       imul.io.req.bits.kill     := io.req.bits.kill
       imul.io.brinfo <> io.brinfo
-      if (has_fpu) require (IMUL_STAGES == dfmaLatency)
+      if (has_fpu) require (imulLatency == dfmaLatency)
    }
 
    // FPU Unit -----------------------
