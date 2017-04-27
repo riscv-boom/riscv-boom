@@ -17,22 +17,17 @@ package boom
 
 import Chisel._
 
-
-// Provide the "logical" sizes and we will map
-// the logical SeqMem into a physical, realizable SeqMem
-// that is in a square aspect ratio (rounded to a pow2 for the depth).
+// Provide the "logical" sizes and the "physical" sizes, and we will map
+// the logical SeqMem into a physical, realizable SeqMem.
 // Only supports a single read/write port.
 class SeqMem1rwTransformable (
    l_depth: Int,
-   l_width: Int
+   l_width: Int,
+   p_depth: Int,
+   p_width: Int
    ) extends Module
 {
-   val p_depth = 1 << log2Up(scala.math.sqrt(l_depth*l_width).toInt)
-   val p_width = l_depth*l_width/p_depth
-
    require (l_depth*l_width == p_depth*p_width)
-   require (p_depth > 0)
-   require (p_width > 0)
    require (p_width % l_width == 0)
 
    val l_idx_sz = log2Up(l_depth)

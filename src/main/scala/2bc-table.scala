@@ -123,8 +123,8 @@ class PTableBanked(
 {
 //   val p_table_0 = SeqMem(num_entries/2, Vec(fetch_width, Bool()))
 //   val p_table_1 = SeqMem(num_entries/2, Vec(fetch_width, Bool()))
-   val p_table_0 = Module(new SeqMem1rwTransformable(num_entries/2, fetch_width))
-   val p_table_1 = Module(new SeqMem1rwTransformable(num_entries/2, fetch_width))
+   val p_table_0 = Module(new SeqMem1rwTransformable(num_entries/2, fetch_width, p_depth=64, p_width=16))
+   val p_table_1 = Module(new SeqMem1rwTransformable(num_entries/2, fetch_width, p_depth=64, p_width=16))
 
    private def getBank (idx: UInt): UInt = idx(0)
    private def getRowIdx (idx: UInt): UInt = idx >> UInt(1)
@@ -189,7 +189,7 @@ class HTable(
    }
 
 //   val h_table = SeqMem(num_entries, Vec(fetch_width, Bool()))
-   val h_table = Module(new SeqMem1rwTransformable(num_entries, fetch_width))
+   val h_table = Module(new SeqMem1rwTransformable(num_entries, fetch_width, p_depth=64, p_width=32))
    val hwq = Module(new Queue(new UpdateEntry(fetch_width, index_sz), entries=4))
 
    hwq.io.enq <> io.update
