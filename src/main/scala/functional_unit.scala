@@ -16,7 +16,6 @@
 // TODO: explore possibility of conditional IO fields? if a branch unit... how to add extra to IO in subclass?
 
 package boom
-{
 
 import Chisel._
 import config.Parameters
@@ -29,17 +28,18 @@ import uncore.constants.MemoryOpConstants._
 object FUConstants
 {
    // bit mask, since a given execution pipeline may support multiple functional units
-   val FUC_SZ = 9
+   val FUC_SZ = 10
    val FU_X   = BitPat.DC(FUC_SZ)
    val FU_ALU = UInt(  1, FUC_SZ)
    val FU_BRU = UInt(  2, FUC_SZ)
    val FU_MEM = UInt(  4, FUC_SZ)
    val FU_MUL = UInt(  8, FUC_SZ)
    val FU_DIV = UInt( 16, FUC_SZ)
-   val FU_FPU = UInt( 32, FUC_SZ)
-   val FU_CSR = UInt( 64, FUC_SZ)
+   val FU_CSR = UInt( 32, FUC_SZ)
+   val FU_FPU = UInt( 64, FUC_SZ)
    val FU_FDV = UInt(128, FUC_SZ)
    val FU_I2F = UInt(256, FUC_SZ)
+   val FU_F2I = UInt(512, FUC_SZ)
 }
 import FUConstants._
 
@@ -188,7 +188,7 @@ abstract class PipelinedFunctionalUnit(val num_stages: Int,
                                                               , data_width = data_width
                                                               , has_branch_unit = is_branch_unit)(p)
 {
-   // pipelined functional unit is always ready
+   // Pipelined functional unit is always ready.
    io.req.ready := Bool(true)
 
 
@@ -680,9 +680,9 @@ class IntToFPUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(
  
 
 
-// unpipelined, can only hold a single MicroOp at a time
+// Iterative/unpipelined, can only hold a single MicroOp at a time TODO allow up to N micro-ops simultaneously.
 // assumes at least one register between request and response
-abstract class UnPipelinedFunctionalUnit(implicit p: Parameters)
+abstract class IterativeFunctionalUnit(implicit p: Parameters)
                                        extends FunctionalUnit(is_pipelined = false
                                                             , num_stages = 1
                                                             , num_bypass_stages = 0
@@ -713,7 +713,7 @@ abstract class UnPipelinedFunctionalUnit(implicit p: Parameters)
 }
 
 
-class MulDivUnit(implicit p: Parameters) extends UnPipelinedFunctionalUnit()(p)
+class MulDivUnit(implicit p: Parameters) extends IterativeFunctionalUnit()(p)
 {
    val muldiv = Module(new rocket.MulDiv(mulDivParams, width = xLen))
 
@@ -750,7 +750,5 @@ class PipelinedMulUnit(num_stages: Int)(implicit p: Parameters)
 
    // response
    io.resp.bits.data      := imul.io.out
-}
-
 }
 

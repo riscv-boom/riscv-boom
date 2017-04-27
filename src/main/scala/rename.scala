@@ -47,8 +47,7 @@ class RenameStageIO(
    val dis_inst_can_proceed = Vec(DISPATCH_WIDTH, Bool()).asInput
 
    // issue stage (fast wakeup)
-   val int_wb_valids = Vec(num_int_wb_ports, Bool()).asInput
-   val int_wb_pdsts  = Vec(num_int_wb_ports, UInt(width=int_preg_sz)).asInput
+   val int_wakeups = Vec(num_int_wb_ports, Valid(new ExeUnitResp(xLen))).flip
    val fp_wakeups = Vec(num_fp_wb_ports, Valid(new ExeUnitResp(fLen+1))).flip
 
    // commit stage
@@ -194,8 +193,11 @@ class RenameStage(
    ibusytable.io.ren_uops := io.ren_uops  // expects pdst to be set up.
    ibusytable.io.freelist_can_allocate := ifreelist.io.can_allocate
    ibusytable.io.map_table := imaptable.io.values
-   ibusytable.io.wb_valids := io.int_wb_valids
-   ibusytable.io.wb_pdsts := io.int_wb_pdsts
+   ibusytable.io.wb_valids := io.int_wakeups.map(_.valid)
+   ibusytable.io.wb_pdsts := io.int_wakeups.map(_.bits.uop.pdst)
+
+   assert (!(io.int_wakeups.map(x => x.valid && x.bits.uop.dst_rtype =/= RT_FIX).reduce(_|_)),
+      "[rename] int wakeup is not waking up a Int register.")
 
    fbusytable.io.ren_mask := io.ren_mask
    fbusytable.io.ren_uops := io.ren_uops  // expects pdst to be set up.
