@@ -18,14 +18,10 @@ import Chisel._
 import config.Parameters
 
 
-class FpPipeline(
-)(implicit p: Parameters) extends BoomModule()(p)
+class FpPipeline(implicit p: Parameters) extends BoomModule()(p)
 {
    val fpIssueParams = issueParams.find(_.iqType == IQT_FP.litValue).get
-   // TODO roll i2f into mem port.
    val num_ll_ports = 1 // hard-wired; used by mem port and i2f port.
-//   val num_i2f_ports = 1 // hard-wired
-//   val num_mem_ports = 1 // hard-wired
    val num_wakeup_ports = fpIssueParams.issueWidth + num_ll_ports
    val fp_preg_sz = log2Up(numFpPhysRegs)
 
@@ -35,15 +31,16 @@ class FpPipeline(
       val flush_pipeline   = Bool(INPUT)
       val fcsr_rm          = UInt(INPUT, tile.FPConstants.RM_SZ)
 
-      val dis_valids       = Vec(DISPATCH_WIDTH, Bool()).asInput
+      val dis_valids       = Vec(DISPATCH_WIDTH, Bool()).asInput // REFACTOR into single Decoupled()
       val dis_uops         = Vec(DISPATCH_WIDTH, new MicroOp()).asInput
       val dis_readys       = Vec(DISPATCH_WIDTH, Bool()).asOutput
 
       // +1 for recoding.
-      val ll_wport         = Valid(new ExeUnitResp(fLen+1)).flip
-      val fromint          = Valid(new FuncUnitReq(fLen+1)).flip
-      val tosdq            = Valid(new MicroOpWithData(fLen))
-      val toint            = Decoupled(new ExeUnitResp(xLen))
+      val ll_wport         = Valid(new ExeUnitResp(fLen+1)).flip // from memory unit
+      val fromint          = Valid(new FuncUnitReq(fLen+1)).flip // from integer RF
+      val tosdq            = Valid(new MicroOpWithData(fLen))    // to Load/Store Unit
+      val toint            = Decoupled(new ExeUnitResp(xLen))    // to integer RF
+      
       val wakeups          = Vec(num_wakeup_ports, Valid(new ExeUnitResp(fLen+1)))
       val wb_valids        = Vec(num_wakeup_ports, Bool()).asInput
       val wb_pdsts         = Vec(num_wakeup_ports, UInt(width=fp_preg_sz)).asInput
@@ -52,33 +49,36 @@ class FpPipeline(
       val debug_tsc_reg    = UInt(INPUT, xLen)
    }
 
+   //**********************************
+   // construct all of the modules
+
    val exe_units        = new boom.ExecutionUnits(fpu=true)
    val issue_unit       = Module(new IssueUnitCollasping(
                            issueParams.find(_.iqType == IQT_FP.litValue).get,
                            num_wakeup_ports))
-   // Add a write-port for long latency operations (HACK XXX two - one for mem, the other for ifpu).
    val fregfile         = Module(new RegisterFile(numFpPhysRegs,
-                                 exe_units.withFilter(_.uses_iss_unit).map(e => e.num_rf_read_ports).sum,
-                                 // TODO get rid of -1, as that's a write-port going to IRF
-                                 exe_units.withFilter(_.uses_iss_unit).map(e => e.num_rf_write_ports).sum - 1 +
-                                    num_ll_ports, //num_mem_ports + num_i2f_ports,
-                                 fLen+1,
-                                 ENABLE_REGFILE_BYPASSING))// TODO disable for FP
+                           exe_units.withFilter(_.uses_iss_unit).map(e => e.num_rf_read_ports).sum,
+                           // TODO get rid of -1, as that's a write-port going to IRF
+                           exe_units.withFilter(_.uses_iss_unit).map(e => e.num_rf_write_ports).sum - 1 +
+                              num_ll_ports,
+                           fLen+1,
+                           ENABLE_REGFILE_BYPASSING))// TODO disable for FP
    val fregister_read   = Module(new RegisterRead(
-                                 issue_unit.issue_width,
-                                 exe_units.withFilter(_.uses_iss_unit).map(_.supportedFuncUnits),
-                                 exe_units.withFilter(_.uses_iss_unit).map(_.num_rf_read_ports).sum,
-                                 exe_units.withFilter(_.uses_iss_unit).map(_.num_rf_read_ports),
-                                 exe_units.num_total_bypass_ports,
-                                 fLen+1))
+                           issue_unit.issue_width,
+                           exe_units.withFilter(_.uses_iss_unit).map(_.supportedFuncUnits),
+                           exe_units.withFilter(_.uses_iss_unit).map(_.num_rf_read_ports).sum,
+                           exe_units.withFilter(_.uses_iss_unit).map(_.num_rf_read_ports),
+                           exe_units.num_total_bypass_ports,
+                           fLen+1))
 
    require (exe_units.withFilter(_.uses_iss_unit).map(x=>x).length == issue_unit.issue_width)
 
-   // we're playing fast and loose on the number of wakeup and write ports.
-   // TODO XXX and the -1 is for the F2I port; -1 for I2F port.
+   // We're playing fast and loose on the number of wakeup and write ports.
+   // The -1 is for the F2I port; -1 for I2F port.
    println (exe_units.map(_.num_rf_write_ports).sum)
-   require (exe_units.map(_.num_rf_write_ports).sum -1-1  + num_ll_ports == num_wakeup_ports)
-   require (exe_units.withFilter(_.uses_iss_unit).map(e => e.num_rf_write_ports).sum -1 + num_ll_ports == num_wakeup_ports)
+   require (exe_units.map(_.num_rf_write_ports).sum-1-1 + num_ll_ports == num_wakeup_ports)
+   require (exe_units.withFilter(_.uses_iss_unit).map(e => 
+      e.num_rf_write_ports).sum -1 + num_ll_ports == num_wakeup_ports)
 
    override def toString: String =
       fregfile.toString +
@@ -86,19 +86,20 @@ class FpPipeline(
       "\n   Num Bypass Ports      : " + exe_units.num_total_bypass_ports + "\n"
 
 
-   //***********************************
-   // Pipeline State Registers and Wires
+   //*************************************************************
+   // Issue window logic
 
-   // Issue Stage/Register Read
    val iss_valids     = Wire(Vec(exe_units.withFilter(_.uses_iss_unit).map(x=>x).length, Bool()))
    val iss_uops       = Wire(Vec(exe_units.withFilter(_.uses_iss_unit).map(x=>x).length, new MicroOp()))
+
+   issue_unit.io.tsc_reg := io.debug_tsc_reg
+   issue_unit.io.brinfo := io.brinfo
+   issue_unit.io.flush_pipeline := io.flush_pipeline
 
    require (exe_units.num_total_bypass_ports == 0)
 
    //-------------------------------------------------------------
-   //-------------------------------------------------------------
    // **** Dispatch Stage ****
-   //-------------------------------------------------------------
    //-------------------------------------------------------------
 
    // Input (Dispatch)
@@ -118,9 +119,9 @@ class FpPipeline(
    }
    io.dis_readys := issue_unit.io.dis_readys
 
-   issue_unit.io.tsc_reg := io.debug_tsc_reg
-   issue_unit.io.brinfo := io.brinfo
-   issue_unit.io.flush_pipeline := io.flush_pipeline
+   //-------------------------------------------------------------
+   // **** Issue Stage ****
+   //-------------------------------------------------------------
 
    // Output (Issue)
    for (i <- 0 until issue_unit.issue_width)
@@ -132,7 +133,6 @@ class FpPipeline(
       require (exe_units(i).uses_iss_unit)
    }
 
-
    // Wakeup
    for ((writeback, issue_wakeup) <- io.wakeups zip issue_unit.io.wakeup_pdsts)
    {
@@ -141,9 +141,7 @@ class FpPipeline(
    }
 
    //-------------------------------------------------------------
-   //-------------------------------------------------------------
    // **** Register Read Stage ****
-   //-------------------------------------------------------------
    //-------------------------------------------------------------
 
    // Register Read <- Issue (rrd <- iss)
@@ -153,13 +151,11 @@ class FpPipeline(
    fregister_read.io.iss_uops := iss_uops
 
    fregister_read.io.brinfo := io.brinfo
-   fregister_read.io.kill   := io.flush_pipeline
+   fregister_read.io.kill := io.flush_pipeline
 
 
-   //-------------------------------------------------------------
    //-------------------------------------------------------------
    // **** Execute Stage ****
-   //-------------------------------------------------------------
    //-------------------------------------------------------------
 
    exe_units.map(_.io.brinfo := io.brinfo)
@@ -191,17 +187,13 @@ class FpPipeline(
    exe_units.ifpu_unit.io.req <> io.fromint
 
    //-------------------------------------------------------------
-   //-------------------------------------------------------------
    // **** Writeback Stage ****
    //-------------------------------------------------------------
-   //-------------------------------------------------------------
 
-   // TODO add fdivsqrt to this port
-   val ifpu_resp = exe_units.ifpu_unit.io.resp(0)
    val ll_wbarb = Module(new Arbiter(new ExeUnitResp(fLen+1), 2))
+   val ifpu_resp = exe_units.ifpu_unit.io.resp(0)
    ll_wbarb.io.in(0) <> io.ll_wport
    ll_wbarb.io.in(1) <> ifpu_resp
-
    fregfile.io.write_ports(0) <> WritePort(ll_wbarb.io.out, FPREG_SZ, fLen+1)
 
    assert (ll_wbarb.io.in(0).ready) // never backpressure the memory unit.
@@ -209,21 +201,19 @@ class FpPipeline(
 
 
    var w_cnt = 1
-   for (i <- 0 until exe_units.length)
+   var toint_found = false
+   for (eu <- exe_units)
    {
-      for (j <- 0 until exe_units(i).num_rf_write_ports)
+      for (wbresp <- eu.io.resp)
       {
-         val wbresp = exe_units(i).io.resp(j)
-         println("ExeUnit(" + i + "), Resp Port: " + j + " writes FRF: " + !wbresp.bits.writesToIRF + ", fromInt:" +
-            exe_units(i).has_ifpu)
-
          val toint = wbresp.bits.uop.dst_rtype === RT_FIX
 
          if (wbresp.bits.writesToIRF) {
-            require(i==0 && j==1) // TODO super hacky... delete me once everything works
-            assert(!(wbresp.valid && !toint))
             io.toint <> wbresp
-         } else if (exe_units(i).has_ifpu) {
+            assert(!(wbresp.valid && !toint))
+            assert(!toint_found) // only support one toint connector
+            toint_found = true
+         } else if (eu.has_ifpu) {
             // share with ll unit
          } else {
             assert (!(wbresp.valid && toint))
@@ -234,10 +224,6 @@ class FpPipeline(
             fregfile.io.write_ports(w_cnt).bits.data := wbresp.bits.data
             wbresp.ready := fregfile.io.write_ports(w_cnt).ready
          }
-
-         // need to make sure toint uops only ever come out of this wbresp port.
-         // TODO add check on write port to check if it supports toint moves.
-         require ((i==0 && (j==0 || j==1)) || !(exe_units(i).uses_iss_unit))
 
          assert (!(wbresp.valid &&
             !wbresp.bits.uop.ctrl.rf_wen &&
@@ -250,7 +236,7 @@ class FpPipeline(
             !toint),
             "[fppipeline] A writeback is being attempted to the FP RF with dst != FP type.")
 
-         if (!wbresp.bits.writesToIRF && !exe_units(i).has_ifpu) w_cnt += 1
+         if (!wbresp.bits.writesToIRF && !eu.has_ifpu) w_cnt += 1
       }
    }
    require (w_cnt == fregfile.io.write_ports.length)
@@ -270,11 +256,9 @@ class FpPipeline(
    {
       for (exe_resp <- eu.io.resp)
       {
-         println("FP exe-resp, w=" + w_cnt)
          val wb_uop = exe_resp.bits.uop
 
          if (!exe_resp.bits.writesToIRF && !eu.has_ifpu) {
-            println("Hooking up to FRF, not a ll")
             val wport = io.wakeups(w_cnt)
             wport <> exe_resp
             wport.valid := exe_resp.valid && wb_uop.dst_rtype === RT_FLT
