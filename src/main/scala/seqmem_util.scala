@@ -35,10 +35,10 @@ class SeqMem1rwTransformable (
    require (p_width > 0)
    require (p_width % l_width == 0)
 
-   val l_idx_sz = log2Up(l_depth)
-   val p_idx_sz = log2Up(p_depth)
-   val l_off_sz = log2Up(l_width)
-   val p_off_sz = log2Up(p_width/l_width)
+   val l_idx_sz = log2Ceil(l_depth)
+   val p_idx_sz = log2Ceil(p_depth)
+   val l_off_sz = log2Ceil(l_width)
+   val p_off_sz = log2Ceil(p_width/l_width)
 
    val io = new Bundle
    {
@@ -68,13 +68,13 @@ class SeqMem1rwTransformable (
       val waddr = getIdx(io.waddr)
       val wdata = (io.wdata << getOffset(io.waddr))(p_width-1, 0)
       val wmask = (io.wmask << getOffset(io.waddr))(p_width-1, 0)
-      smem.write(waddr, Vec(wdata.toBools), wmask.toBools)
+      smem.write(waddr, Vec(wdata.toBools.reverse), wmask.toBools.reverse)
    }
 
    // read
    val p_raddr = getIdx(io.raddr)
    val r_p_raddr = RegEnable(p_raddr, io.ren)
-   // returned cycle s2
+   // returned cycle s1
    val s1_rrow = smem.read(p_raddr, io.ren).toBits
    io.rout := (s1_rrow >> (getOffset(r_p_raddr)))(l_width-1, 0)
 }
