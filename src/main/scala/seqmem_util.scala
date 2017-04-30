@@ -39,6 +39,9 @@ class SeqMem1rwTransformable (
    val p_idx_sz = log2Ceil(p_depth)
    val l_off_sz = log2Ceil(l_width)
    val p_off_sz = log2Ceil(p_width/l_width)
+   require (p_off_sz > 0)
+
+   println("\tSeqMem transformed from ("+ l_depth +" x "+l_width+") to ("+ p_depth +" x "+p_width+")")
 
    val io = new Bundle
    {
@@ -61,21 +64,23 @@ class SeqMem1rwTransformable (
    // must compute offset from address but then factor in the l_width.
    private def getOffset(addr:UInt) = 
       addr(p_off_sz-1,0) << l_off_sz
-      
+
+
    assert (!(io.wen && io.ren), "[SMUtil] writer and reader fighting over the single port.")
    when (io.wen && !io.ren)
    {
       val waddr = getIdx(io.waddr)
       val wdata = (io.wdata << getOffset(io.waddr))(p_width-1, 0)
       val wmask = (io.wmask << getOffset(io.waddr))(p_width-1, 0)
-      smem.write(waddr, Vec(wdata.toBools.reverse), wmask.toBools.reverse)
+      smem.write(waddr, Vec(wdata.toBools), wmask.toBools)
    }
 
    // read
-   val p_raddr = getIdx(io.raddr)
-   val r_p_raddr = RegEnable(p_raddr, io.ren)
+   val ridx = getIdx(io.raddr)
+   val roff = getOffset(io.raddr)
+   val r_offset = RegEnable(roff, io.ren)
    // returned cycle s1
-   val s1_rrow = smem.read(p_raddr, io.ren).toBits
-   io.rout := (s1_rrow >> (getOffset(r_p_raddr)))(l_width-1, 0)
+   val s1_rrow = smem.read(ridx, io.ren).toBits
+   io.rout := (s1_rrow >> r_offset)(l_width-1, 0)
 }
 
