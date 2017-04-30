@@ -19,13 +19,15 @@ class DefaultBoomConfig extends Config((site, here, up) => {
    case XLen => 64
 
    // Rocket/Core Parameters
-   case RocketTilesKey => up(RocketTilesKey, site) map { r => r.copy(core = r.core.copy(
-      fWidth = 2,
-      useCompressed = false,
-      nPerfCounters = 4,
-      nPerfEvents = 31,
-      fpu = Some(tile.FPUParams(sfmaLatency=4, dfmaLatency=4, divSqrt=true))
-   ))}
+   case RocketTilesKey => up(RocketTilesKey, site) map { r => r.copy(
+      core = r.core.copy(
+         fWidth = 2,
+         useCompressed = false,
+         nPerfCounters = 4,
+         nPerfEvents = 31,
+         fpu = Some(tile.FPUParams(sfmaLatency=4, dfmaLatency=4, divSqrt=true))),
+      btb = Some(BTBParams(nEntries = 40, nRAS = 8, updatesOutOfOrder = true))
+   )}
 
    // BOOM-specific uarch Parameters
    case BoomKey => BoomCoreParams(
