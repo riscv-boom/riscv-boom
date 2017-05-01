@@ -117,16 +117,42 @@ class RenameStage(
       num_wb_ports = num_fp_wb_ports))
 
    //-------------------------------------------------------------
+   // Pipeline State & Wires
 
-   val ren_br_vals = Wire(Vec(pl_width, Bool()))
+   val ren1_br_vals   = Wire(Vec(pl_width, Bool()))
+   val ren1_will_fire = Wire(Vec(pl_width, Bool()))
+   val ren1_uops      = Wire(Vec(pl_width, new MicroOp()))
+
+   val ren2_valids    = Wire(Vec(pl_width, Bool()))
+   val ren2_uops      = Wire(Vec(pl_width, new MicroOp()))
+
    for (w <- 0 until pl_width)
    {
       // TODO silly, we've already verified this beforehand on the inst_can_proceed
-      io.ren_mask(w)         := io.dec_will_fire(w) && io.inst_can_proceed(w) && !io.kill
-      io.ren_uops(w)         := GetNewUopAndBrMask(io.dec_uops(w), io.brinfo)
-      // TODO do we need will_fire for ren_br_vals or can that arrive later?
-      ren_br_vals(w)         := io.dec_will_fire(w) && io.dec_uops(w).allocate_brtag
+      ren1_will_fire(w) := io.dec_will_fire(w) && io.inst_can_proceed(w) && !io.kill
+      ren1_uops(w)      := GetNewUopAndBrMask(io.dec_uops(w), io.brinfo)
+      ren1_br_vals(w)   := io.dec_will_fire(w) && io.dec_uops(w).allocate_brtag
    }
+    
+   //-------------------------------------------------------------
+   // Branch Predictor Snapshots
+
+   // Each branch prediction must snapshot the predictor (history state, etc.).
+   // On a mispredict, the snapshot must be used to reset the predictor.
+   // TODO use Mem(), but it chokes on the undefines in VCS
+   val prediction_copies = Reg(Vec(MAX_BR_COUNT, new BranchPredictionResp))
+
+   for (w <- 0 until pl_width)
+   {
+      when(ren1_br_vals(w)) {
+         prediction_copies(ren1_uops(w).br_tag) := io.ren_pred_info
+      }
+   }
+
+   io.get_pred.info := prediction_copies(io.get_pred.br_tag)
+
+   val temp = Wire(new BranchPredictionResp)
+   println("\t\tPrediction Snapshots: " + temp.toBits.getWidth + "-bits, " + MAX_BR_COUNT + " entries")
  
    //-------------------------------------------------------------
    // Free List
@@ -135,9 +161,9 @@ class RenameStage(
    {
       list.io.brinfo := io.brinfo
       list.io.kill := io.kill
-      list.io.ren_will_fire := io.ren_mask
-      list.io.ren_uops := io.ren_uops
-      list.io.ren_br_vals := ren_br_vals
+      list.io.ren_will_fire := ren1_will_fire
+      list.io.ren_uops := ren1_uops
+      list.io.ren_br_vals := ren1_br_vals
       list.io.com_valids := io.com_valids
       list.io.com_uops := io.com_uops
       list.io.com_rbk_valids := io.com_rbk_valids
@@ -145,7 +171,7 @@ class RenameStage(
       list.io.debug_rob_empty := io.debug_rob_empty
    }
 
-   for ((uop, w) <- io.ren_uops.zipWithIndex)
+   for ((uop, w) <- ren1_uops.zipWithIndex)
    {
       val i_preg = ifreelist.io.req_pregs(w)
       val f_preg = ffreelist.io.req_pregs(w)
@@ -159,9 +185,9 @@ class RenameStage(
    {
       table.io.brinfo := io.brinfo
       table.io.kill := io.kill
-      table.io.ren_will_fire := io.ren_mask
-      table.io.ren_uops := io.ren_uops // expects pdst to be set up
-      table.io.ren_br_vals := ren_br_vals
+      table.io.ren_will_fire := ren1_will_fire
+      table.io.ren_uops := ren1_uops // expects pdst to be set up
+      table.io.ren_br_vals := ren1_br_vals
       table.io.com_valids := io.com_valids
       table.io.com_uops := io.com_uops
       table.io.com_rbk_valids := io.com_rbk_valids
@@ -171,7 +197,7 @@ class RenameStage(
    imaptable.io.debug_freelist_can_allocate := ifreelist.io.can_allocate
    fmaptable.io.debug_freelist_can_allocate := ffreelist.io.can_allocate
 
-   for ((uop, w) <- io.ren_uops.zipWithIndex)
+   for ((uop, w) <- ren1_uops.zipWithIndex)
    {
       val imap = imaptable.io.values(w)
       val fmap = fmaptable.io.values(w)
@@ -186,11 +212,19 @@ class RenameStage(
    // pipeline registers
    // TODO add def function for RegOrWire
 
+   for (w <- 0 until pl_width)
+   {
+      ren2_valids(w) := ren1_will_fire(w)
+      ren2_uops(w)   := GetNewUopAndBrMask(ren1_uops(w), io.brinfo)
+   }
+
+   val ren2_will_fire = ren2_valids zip io.inst_can_proceed map {case (v,c) => v && c&& !io.kill}
+
    //-------------------------------------------------------------
    // Busy Table
 
-   ibusytable.io.ren_mask := io.ren_mask
-   ibusytable.io.ren_uops := io.ren_uops  // expects pdst to be set up.
+   ibusytable.io.ren_mask := ren2_will_fire
+   ibusytable.io.ren_uops := ren2_uops  // expects pdst to be set up.
    ibusytable.io.freelist_can_allocate := ifreelist.io.can_allocate
    ibusytable.io.map_table := imaptable.io.values
    ibusytable.io.wb_valids := io.int_wakeups.map(_.valid)
@@ -199,8 +233,8 @@ class RenameStage(
    assert (!(io.int_wakeups.map(x => x.valid && x.bits.uop.dst_rtype =/= RT_FIX).reduce(_|_)),
       "[rename] int wakeup is not waking up a Int register.")
 
-   fbusytable.io.ren_mask := io.ren_mask
-   fbusytable.io.ren_uops := io.ren_uops  // expects pdst to be set up.
+   fbusytable.io.ren_mask := ren2_will_fire
+   fbusytable.io.ren_uops := ren2_uops  // expects pdst to be set up.
    fbusytable.io.freelist_can_allocate := ffreelist.io.can_allocate
    fbusytable.io.map_table := fmaptable.io.values
    fbusytable.io.wb_valids := io.fp_wakeups.map(_.valid)
@@ -209,7 +243,7 @@ class RenameStage(
    assert (!(io.fp_wakeups.map(x => x.valid && x.bits.uop.dst_rtype =/= RT_FLT).reduce(_|_)),
       "[rename] fp wakeup is not waking up a FP register.")
 
-   for ((uop, w) <- io.ren_uops.zipWithIndex)
+   for ((uop, w) <- ren2_uops.zipWithIndex)
    {
       val ibusy = ibusytable.io.values(w)
       val fbusy = fbusytable.io.values(w)
@@ -219,35 +253,21 @@ class RenameStage(
    }
 
    //-------------------------------------------------------------
-   // Branch Predictor Snapshots
-
-   // Each branch prediction must snapshot the predictor (history state, etc.).
-   // On a mispredict, the snapshot must be used to reset the predictor.
-   // TODO use Mem(), but it chokes on the undefines in VCS
-   val prediction_copies = Reg(Vec(MAX_BR_COUNT, new BranchPredictionResp))
-
-   for (w <- 0 until pl_width)
-   {
-      when(ren_br_vals(w)) {
-         prediction_copies(io.ren_uops(w).br_tag) := io.ren_pred_info
-      }
-   }
-
-   io.get_pred.info := prediction_copies(io.get_pred.br_tag)
-
-   val temp = Wire(new BranchPredictionResp)
-   println("\t\tPrediction Snapshots: " + temp.toBits.getWidth + "-bits, " + MAX_BR_COUNT + " entries")
-
-   //-------------------------------------------------------------
    // Outputs
+
    for (w <- 0 until pl_width)
    {
+      // Push back against Decode stage if Rename1 can't proceed (and Rename2/Dispatch can't receive).
       io.inst_can_proceed(w) :=
          io.dis_inst_can_proceed(w) &&
-         ((io.ren_uops(w).dst_rtype =/= RT_FIX && io.ren_uops(w).dst_rtype =/= RT_FLT) ||
-         (ifreelist.io.can_allocate(w) && io.ren_uops(w).dst_rtype === RT_FIX) ||
-         (ffreelist.io.can_allocate(w) && io.ren_uops(w).dst_rtype === RT_FLT))
+         ((ren1_uops(w).dst_rtype =/= RT_FIX && ren1_uops(w).dst_rtype =/= RT_FLT) ||
+         (ifreelist.io.can_allocate(w) && ren1_uops(w).dst_rtype === RT_FIX) ||
+         (ffreelist.io.can_allocate(w) && ren1_uops(w).dst_rtype === RT_FLT))
+
+      io.ren_mask(w) := ren2_will_fire(w)
+      io.ren_uops(w) := GetNewUopAndBrMask(ren2_uops(w), io.brinfo)
    }
+       
 
    //-------------------------------------------------------------
    // Debug signals
