@@ -28,14 +28,14 @@ class RenameStageIO(
    private val int_preg_sz = log2Up(num_int_pregs)
    private val fp_preg_sz = log2Up(num_fp_pregs)
 
-   val ren_mask  = Vec(pl_width, Bool().asOutput) // mask of valid instructions
    val inst_can_proceed = Vec(pl_width, Bool()).asOutput
 
    val kill      = Bool(INPUT)
 
-   val dec_mask  = Vec(pl_width, Bool()).asInput
-
+   val dec_will_fire = Vec(pl_width, Bool()).asInput // will commit state updates
    val dec_uops  = Vec(pl_width, new MicroOp()).asInput
+   
+   val ren_mask  = Vec(pl_width, Bool().asOutput) // mask of valid instructions
    val ren_uops  = Vec(pl_width, new MicroOp().asOutput)
 
    val ren_pred_info = new BranchPredictionResp().asInput
@@ -121,10 +121,11 @@ class RenameStage(
    val ren_br_vals = Wire(Vec(pl_width, Bool()))
    for (w <- 0 until pl_width)
    {
-      io.ren_mask(w)         := io.dec_mask(w) && io.inst_can_proceed(w) && !io.kill
-      io.ren_uops(w)         := io.dec_uops(w)
-      io.ren_uops(w).br_mask := GetNewBrMask(io.brinfo, io.dec_uops(w)) // TODO consolidate into getNewBranchMask
-      ren_br_vals(w)         := io.dec_mask(w) && io.dec_uops(w).allocate_brtag
+      // TODO silly, we've already verified this beforehand on the inst_can_proceed
+      io.ren_mask(w)         := io.dec_will_fire(w) && io.inst_can_proceed(w) && !io.kill
+      io.ren_uops(w)         := GetNewUopAndBrMask(io.dec_uops(w), io.brinfo)
+      // TODO do we need will_fire for ren_br_vals or can that arrive later?
+      ren_br_vals(w)         := io.dec_will_fire(w) && io.dec_uops(w).allocate_brtag
    }
  
    //-------------------------------------------------------------
@@ -134,10 +135,9 @@ class RenameStage(
    {
       list.io.brinfo := io.brinfo
       list.io.kill := io.kill
-      list.io.ren_mask := io.ren_mask
+      list.io.ren_will_fire := io.ren_mask
       list.io.ren_uops := io.ren_uops
       list.io.ren_br_vals := ren_br_vals
-      list.io.inst_can_proceed := io.inst_can_proceed
       list.io.com_valids := io.com_valids
       list.io.com_uops := io.com_uops
       list.io.com_rbk_valids := io.com_rbk_valids
@@ -159,17 +159,17 @@ class RenameStage(
    {
       table.io.brinfo := io.brinfo
       table.io.kill := io.kill
-      table.io.ren_mask := io.ren_mask
+      table.io.ren_will_fire := io.ren_mask
       table.io.ren_uops := io.ren_uops // expects pdst to be set up
       table.io.ren_br_vals := ren_br_vals
       table.io.com_valids := io.com_valids
       table.io.com_uops := io.com_uops
       table.io.com_rbk_valids := io.com_rbk_valids
       table.io.flush_pipeline := io.flush_pipeline
-      table.io.inst_can_proceed := io.inst_can_proceed
+      table.io.debug_inst_can_proceed := io.inst_can_proceed
    }
-   imaptable.io.freelist_can_allocate := ifreelist.io.can_allocate
-   fmaptable.io.freelist_can_allocate := ffreelist.io.can_allocate
+   imaptable.io.debug_freelist_can_allocate := ifreelist.io.can_allocate
+   fmaptable.io.debug_freelist_can_allocate := ffreelist.io.can_allocate
 
    for ((uop, w) <- io.ren_uops.zipWithIndex)
    {

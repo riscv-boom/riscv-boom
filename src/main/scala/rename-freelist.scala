@@ -255,11 +255,9 @@ class RenameFreeList(
       val brinfo           = new BrResolutionInfo().asInput
       val kill             = Bool(INPUT)
 
-      val ren_mask         = Vec(pl_width, Bool()).asInput
+      val ren_will_fire    = Vec(pl_width, Bool()).asInput
       val ren_uops         = Vec(pl_width, new MicroOp()).asInput
       val ren_br_vals      = Vec(pl_width, Bool()).asInput
-
-      val inst_can_proceed = Vec(pl_width, Bool()).asInput
 
 
       val com_valids       = Vec(pl_width, Bool()).asInput
@@ -287,9 +285,8 @@ class RenameFreeList(
 
    for (w <- 0 until pl_width)
    {
-      freelist.io.req_preg_vals(w)  := io.inst_can_proceed(w) &&
-                                       !io.kill &&
-                                       io.ren_mask(w) &&
+      freelist.io.req_preg_vals(w)  := !io.kill &&
+                                       io.ren_will_fire(w) &&
                                        io.ren_uops(w).ldst_val &&
                                        io.ren_uops(w).dst_rtype === UInt(rtype)
 
