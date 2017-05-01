@@ -152,7 +152,7 @@ class RenameMapTable(
       val brinfo           = new BrResolutionInfo().asInput
       val kill             = Bool(INPUT)
 
-      val ren_mask         = Vec(pl_width, Bool()).asInput
+      val ren_will_fire    = Vec(pl_width, Bool()).asInput
       val ren_uops         = Vec(pl_width, new MicroOp()).asInput
       val ren_br_vals      = Vec(pl_width, Bool()).asInput
 
@@ -161,8 +161,8 @@ class RenameMapTable(
       val com_rbk_valids   = Vec(pl_width, Bool()).asInput
       val flush_pipeline   = Bool(INPUT) // only used for SCR (single-cycle reset)
 
-      val inst_can_proceed = Vec(pl_width, Bool()).asInput
-      val freelist_can_allocate = Vec(pl_width, Bool()).asInput
+      val debug_inst_can_proceed = Vec(pl_width, Bool()).asInput
+      val debug_freelist_can_allocate = Vec(pl_width, Bool()).asInput
 
       // Outputs
       val values           = Vec(pl_width, new MapTableOutput(preg_sz)).asOutput
@@ -187,12 +187,14 @@ class RenameMapTable(
       for (w <- 0 until pl_width)
       {
          entry.wens(w)        := io.ren_uops(w).ldst === UInt(i) &&
-                                           io.ren_mask(w) &&
+                                           io.ren_will_fire(w) &&
                                            io.ren_uops(w).ldst_val &&
                                            io.ren_uops(w).dst_rtype === UInt(rtype) &&
-                                           !io.kill &&
-                                           io.inst_can_proceed(w) &&
-                                           io.freelist_can_allocate(w)
+                                           !io.kill
+
+         assert (!(entry.wens(w) && !io.debug_inst_can_proceed(w)), "[maptable] wen shouldn't be high.")
+         assert (!(entry.wens(w) && !io.debug_freelist_can_allocate(w)), "[maptable] wen shouldn't be high.")
+
          entry.ren_pdsts(w)   := io.ren_uops(w).pdst
          entry.ren_br_tags(w) := io.ren_uops(w).br_tag
       }
@@ -262,21 +264,21 @@ class RenameMapTable(
       // scalastyle:off
       for (xx <- w-1 to 0 by -1)
       {
-         rs1_cases  ++= Array((io.ren_uops(w).lrs1_rtype === UInt(rtype) && io.ren_mask(xx) && io.ren_uops(xx).ldst_val && io.ren_uops(xx).dst_rtype === UInt(rtype) && (io.ren_uops(w).lrs1 === io.ren_uops(xx).ldst), (io.ren_uops(xx).pdst)))
-         rs2_cases  ++= Array((io.ren_uops(w).lrs2_rtype === UInt(rtype) && io.ren_mask(xx) && io.ren_uops(xx).ldst_val && io.ren_uops(xx).dst_rtype === UInt(rtype) && (io.ren_uops(w).lrs2 === io.ren_uops(xx).ldst), (io.ren_uops(xx).pdst)))
-         stale_cases++= Array((io.ren_uops(w).dst_rtype === UInt(rtype)  && io.ren_mask(xx) && io.ren_uops(xx).ldst_val && io.ren_uops(xx).dst_rtype === UInt(rtype) && (io.ren_uops(w).ldst === io.ren_uops(xx).ldst), (io.ren_uops(xx).pdst)))
+         rs1_cases  ++= Array((io.ren_uops(w).lrs1_rtype === UInt(rtype) && io.ren_will_fire(xx) && io.ren_uops(xx).ldst_val && io.ren_uops(xx).dst_rtype === UInt(rtype) && (io.ren_uops(w).lrs1 === io.ren_uops(xx).ldst), (io.ren_uops(xx).pdst)))
+         rs2_cases  ++= Array((io.ren_uops(w).lrs2_rtype === UInt(rtype) && io.ren_will_fire(xx) && io.ren_uops(xx).ldst_val && io.ren_uops(xx).dst_rtype === UInt(rtype) && (io.ren_uops(w).lrs2 === io.ren_uops(xx).ldst), (io.ren_uops(xx).pdst)))
+         stale_cases++= Array((io.ren_uops(w).dst_rtype === UInt(rtype)  && io.ren_will_fire(xx) && io.ren_uops(xx).ldst_val && io.ren_uops(xx).dst_rtype === UInt(rtype) && (io.ren_uops(w).ldst === io.ren_uops(xx).ldst), (io.ren_uops(xx).pdst)))
 
-         when (io.ren_uops(w).lrs1_rtype === UInt(rtype) && io.ren_mask(xx) && io.ren_uops(xx).ldst_val && io.ren_uops(xx).dst_rtype === UInt(rtype) && (io.ren_uops(w).lrs1 === io.ren_uops(xx).ldst))
+         when (io.ren_uops(w).lrs1_rtype === UInt(rtype) && io.ren_will_fire(xx) && io.ren_uops(xx).ldst_val && io.ren_uops(xx).dst_rtype === UInt(rtype) && (io.ren_uops(w).lrs1 === io.ren_uops(xx).ldst))
             { io.values(w).prs1_was_bypassed := Bool(true) }
-         when (io.ren_uops(w).lrs2_rtype === UInt(rtype) && io.ren_mask(xx) && io.ren_uops(xx).ldst_val && io.ren_uops(xx).dst_rtype === UInt(rtype) && (io.ren_uops(w).lrs2 === io.ren_uops(xx).ldst))
+         when (io.ren_uops(w).lrs2_rtype === UInt(rtype) && io.ren_will_fire(xx) && io.ren_uops(xx).ldst_val && io.ren_uops(xx).dst_rtype === UInt(rtype) && (io.ren_uops(w).lrs2 === io.ren_uops(xx).ldst))
             { io.values(w).prs2_was_bypassed := Bool(true) }
 
 
          if (rtype == RT_FLT.litValue) {
             rs3_cases  ++= Array((
-                  io.ren_uops(w).frs3_en && io.ren_mask(xx) && io.ren_uops(xx).ldst_val && io.ren_uops(xx).dst_rtype === UInt(rtype) && (io.ren_uops(w).lrs3 === io.ren_uops(xx).ldst),
+                  io.ren_uops(w).frs3_en && io.ren_will_fire(xx) && io.ren_uops(xx).ldst_val && io.ren_uops(xx).dst_rtype === UInt(rtype) && (io.ren_uops(w).lrs3 === io.ren_uops(xx).ldst),
                   (io.ren_uops(xx).pdst)))
-            when (io.ren_uops(w).frs3_en && io.ren_mask(xx) && io.ren_uops(xx).ldst_val && io.ren_uops(xx).dst_rtype === UInt(rtype) && (io.ren_uops(w).lrs3 === io.ren_uops(xx).ldst))
+            when (io.ren_uops(w).frs3_en && io.ren_will_fire(xx) && io.ren_uops(xx).ldst_val && io.ren_uops(xx).dst_rtype === UInt(rtype) && (io.ren_uops(w).lrs3 === io.ren_uops(xx).ldst))
                { io.values(w).prs3_was_bypassed := Bool(true) }
          }
       }

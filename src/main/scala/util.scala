@@ -31,6 +31,19 @@ object IsKilledByBranch
    }
 }
 
+object GetNewUopAndBrMask
+{
+   def apply(uop: MicroOp, brinfo: BrResolutionInfo)(implicit p: config.Parameters): MicroOp =
+   {
+      val newuop = Wire(init = uop)
+      newuop.br_mask := 
+         Mux(brinfo.valid,
+            (uop.br_mask & ~brinfo.mask),
+            uop.br_mask)
+      newuop
+   }
+}
+
 object GetNewBrMask
 {
    def apply(brinfo: BrResolutionInfo, uop: MicroOp): UInt =

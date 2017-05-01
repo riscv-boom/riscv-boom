@@ -394,15 +394,8 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    rename_stage.io.flush_pipeline := rob.io.flush.valid
    rename_stage.io.debug_rob_empty := rob.io.empty
 
-   for (w <- 0 until DECODE_WIDTH)
-   {
-      rename_stage.io.dec_mask(w) := dec_will_fire(w)
-   }
-
+   rename_stage.io.dec_will_fire := dec_will_fire
    rename_stage.io.dec_uops := dec_uops
-
-
-
 
 
    var wu_idx = 0
