@@ -112,7 +112,6 @@ class BusyTable(
       val ren_mask              = Vec(pl_width, Bool()).asInput
       val ren_uops              = Vec(pl_width, new MicroOp()).asInput
 
-      val freelist_can_allocate = Vec(pl_width, Bool()).asInput
       val map_table             = Vec(pl_width, new MapTableOutput(preg_sz)).asInput
 
       val wb_valids             = Vec(num_wb_ports, Bool()).asInput
@@ -154,8 +153,7 @@ class BusyTable(
 
 
        // Updating the Table (new busy register)
-      busy_table.io.allocated_pdst(w).valid := io.freelist_can_allocate(w) &&
-                                               io.ren_mask(w) &&
+      busy_table.io.allocated_pdst(w).valid := io.ren_mask(w) &&
                                                io.ren_uops(w).ldst_val &&
                                                io.ren_uops(w).dst_rtype === UInt(rtype)
       busy_table.io.allocated_pdst(w).bits  := io.ren_uops(w).pdst

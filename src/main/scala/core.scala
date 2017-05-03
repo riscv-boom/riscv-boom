@@ -107,7 +107,7 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    val dec_rdy        = Wire(Bool())
 
    // Dispatch Stage
-   val dis_valids     = Wire(Vec(DISPATCH_WIDTH, Bool())) // true if uop WILL enter IW/ROB
+   val dis_valids     = Wire(Vec(DISPATCH_WIDTH, Bool())) // true if uop WILL enter IW
    val dis_uops       = Wire(Vec(DISPATCH_WIDTH, new MicroOp()))
 
    // Issue Stage/Register Read
@@ -162,6 +162,7 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    println("   Max Branch Count      : " + MAX_BR_COUNT)
    println("   BTB Size              : " + btbParams.nEntries)
    println("   RAS Size              : " + btbParams.nRAS)
+   println("   Rename Stage Latency  : " + renameLatency)
 
    print(iregfile)
    println("\n   Num Slow Wakeup Ports : " + num_irf_write_ports)
@@ -291,7 +292,7 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
       val stall_me = (dec_valids(w) &&
                         (  !(rename_stage.io.inst_can_proceed(w))
                         || (dec_valids(w) && dec_uops(w).is_unique &&
-                           (!rob.io.empty || !lsu.io.lsu_fencei_rdy || prev_insts_in_bundle_valid))
+                           (!(rob.io.empty) || !lsu.io.lsu_fencei_rdy || prev_insts_in_bundle_valid))
                         || !rob.io.ready
                         || lsu.io.laq_full
                         || lsu.io.stq_full
@@ -347,7 +348,7 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    for (w <- 0 until DECODE_WIDTH)
    {
       dec_brmask_logic.io.is_branch(w) := !dec_finished_mask(w) && dec_uops(w).allocate_brtag
-      dec_brmask_logic.io.will_fire(w) :=  dis_valids(w) && dec_uops(w).allocate_brtag // ren, dis can back pressure us
+      dec_brmask_logic.io.will_fire(w) :=  dec_will_fire(w) && dec_uops(w).allocate_brtag // ren, dis can back pressure us
 
       dec_uops(w).br_tag  := dec_brmask_logic.io.br_tag(w)
       dec_uops(w).br_mask := dec_brmask_logic.io.br_mask(w)
@@ -373,6 +374,36 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
       new_lidx = Mux(dec_will_fire(w) && dec_uops(w).is_load,  WrapInc(new_lidx, NUM_LSU_ENTRIES), new_lidx)
       new_sidx = Mux(dec_will_fire(w) && dec_uops(w).is_store, WrapInc(new_sidx, NUM_LSU_ENTRIES), new_sidx)
    }
+
+   //-------------------------------------------------------------
+   // Rob Allocation Logic
+
+   for (w <- 0 until DECODE_WIDTH)
+   {
+      // note: this assumes uops haven't been shifted - there's a 1:1 match between PC's LSBs and "w" here
+      // (thus the LSB of the rob_idx gives part of the PC)
+      if (DECODE_WIDTH == 1)
+         dec_uops(w).rob_idx := rob.io.curr_rob_tail
+      else
+         dec_uops(w).rob_idx := Cat(rob.io.curr_rob_tail, UInt(w, log2Up(DECODE_WIDTH)))
+
+      dec_uops(w).brob_idx := bpd_stage.io.brob.allocate_brob_tail
+   }
+
+   val dec_has_br_or_jalr_in_packet =
+      (dec_valids zip dec_uops map {case(v,u) => v && u.br_prediction.is_br_or_jalr}).reduce(_|_)
+
+   bpd_stage.io.brob.allocate.valid := dec_will_fire.reduce(_|_) &&
+                                       dec_finished_mask === Bits(0) &&
+                                       dec_has_br_or_jalr_in_packet
+   bpd_stage.io.brob.allocate.bits.ctrl.executed.map{_ := Bool(false)}
+   bpd_stage.io.brob.allocate.bits.ctrl.taken.map{_ := Bool(false)}
+   bpd_stage.io.brob.allocate.bits.ctrl.mispredicted.map{_ := Bool(false)}
+   bpd_stage.io.brob.allocate.bits.ctrl.debug_executed := Bool(false)
+   bpd_stage.io.brob.allocate.bits.ctrl.debug_rob_idx := dec_uops(0).rob_idx
+   bpd_stage.io.brob.allocate.bits.ctrl.brob_idx := dec_uops(0).brob_idx
+   bpd_stage.io.brob.allocate.bits.info := dec_fbundle.pred_resp.bpd_resp
+
 
 
    //-------------------------------------------------------------
@@ -414,9 +445,9 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
          // Fast Wakeup (uses just-issued uops) that have known latencies
          if (exe_units(i).isBypassable)
          {
-            int_wakeups(wu_idx).valid := iss_valids(i) && 
+            int_wakeups(wu_idx).valid := iss_valids(i) &&
                                          iss_uops(i).bypassable &&
-                                         iss_uops(i).dst_rtype === RT_FIX && 
+                                         iss_uops(i).dst_rtype === RT_FIX &&
                                          iss_uops(i).ldst_val
             int_wakeups(wu_idx).bits.uop := iss_uops(i)
             wu_idx += 1
@@ -459,45 +490,11 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    //-------------------------------------------------------------
    //-------------------------------------------------------------
 
-   // TODO get rid of, let the ROB handle this...?
-   val dis_curr_rob_row_idx = Wire(UInt(width = ROB_ADDR_SZ))
-
    for (w <- 0 until DECODE_WIDTH)
    {
-      dis_valids(w)       := rename_stage.io.ren_mask(w)
-      dis_uops(w)         := rename_stage.io.ren_uops(w)
-      // TODO probably don't need to do this, since we're going to do it in the issue window?
-      dis_uops(w).br_mask := GetNewBrMask(br_unit.brinfo, rename_stage.io.ren_uops(w))
-
-      // note: this assumes uops haven't been shifted - there's a 1:1 match between PC's LSBs and "w" here
-      // (thus the LSB of the rob_idx gives part of the PC)
-      if (DECODE_WIDTH == 1)
-         dis_uops(w).rob_idx := dis_curr_rob_row_idx
-      else
-         dis_uops(w).rob_idx := Cat(dis_curr_rob_row_idx, UInt(w, log2Up(DECODE_WIDTH)))
-
-      dis_uops(w).brob_idx := bpd_stage.io.brob.allocate_brob_tail
+      dis_valids(w)       := rename_stage.io.ren2_mask(w)
+      dis_uops(w)         := GetNewUopAndBrMask(rename_stage.io.ren2_uops(w), br_unit.brinfo)
    }
-
-   val dis_has_unique = Range(0,DISPATCH_WIDTH).map{w =>
-      dis_valids(w) && dis_uops(w).is_unique}.reduce(_|_)
-   val dec_has_br_or_jalr_in_packet =
-      Range(0,DECODE_WIDTH).map{w =>
-         dec_valids(w) && dec_uops(w).br_prediction.is_br_or_jalr}.reduce(_|_) &&
-      !dis_has_unique
-
-
-   bpd_stage.io.brob.allocate.valid := dis_valids.reduce(_|_) &&
-                                       dec_finished_mask === Bits(0) &&
-                                       dec_has_br_or_jalr_in_packet
-   bpd_stage.io.brob.allocate.bits.ctrl.executed.map{_ := Bool(false)}
-   bpd_stage.io.brob.allocate.bits.ctrl.taken.map{_ := Bool(false)}
-   bpd_stage.io.brob.allocate.bits.ctrl.mispredicted.map{_ := Bool(false)}
-   bpd_stage.io.brob.allocate.bits.ctrl.debug_executed := Bool(false)
-   bpd_stage.io.brob.allocate.bits.ctrl.debug_rob_idx := dis_uops(0).rob_idx
-   bpd_stage.io.brob.allocate.bits.ctrl.brob_idx := dis_uops(0).brob_idx
-   bpd_stage.io.brob.allocate.bits.info := dec_fbundle.pred_resp.bpd_resp
-
 
    //-------------------------------------------------------------
    //-------------------------------------------------------------
@@ -684,7 +681,7 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
       lsu.io.dec_ld_vals(w) := dec_will_fire(w) && rename_stage.io.inst_can_proceed(w) && !rob.io.flush.valid &&
                                dec_uops(w).is_load
 
-      lsu.io.dec_uops(w).rob_idx := dis_uops(w).rob_idx // for debug purposes (comit logging)
+      lsu.io.dec_uops(w).rob_idx := dec_uops(w).rob_idx // for debug purposes (comit logging)
    }
 
    lsu.io.commit_store_mask := rob.io.commit.st_mask
@@ -705,7 +702,6 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
 
    dc_shim.io.core.flush_pipe := rob.io.flush.valid
 
-   // TODO refactor lsu/mem connection
    lsu.io.nack <> dc_shim.io.core.nack
 
    lsu.io.dmem_req_ready := dc_shim.io.core.req.ready
@@ -811,14 +807,15 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    //-------------------------------------------------------------
 
    // Dispatch
-   rob.io.dis_uops := dis_uops
-   rob.io.dis_valids := dis_valids
-   rob.io.dis_has_br_or_jalr_in_packet := dec_has_br_or_jalr_in_packet
-   rob.io.dis_partial_stall := !dec_rdy && !dis_valids(DECODE_WIDTH-1)
-   rob.io.dis_new_packet := dec_finished_mask === Bits(0)
+   rob.io.enq_valids := rename_stage.io.ren1_mask
+   rob.io.enq_uops   := rename_stage.io.ren1_uops
+   rob.io.enq_has_br_or_jalr_in_packet := dec_has_br_or_jalr_in_packet
+   rob.io.enq_partial_stall := !dec_rdy && !dec_will_fire(DECODE_WIDTH-1)
+   rob.io.enq_new_packet := dec_finished_mask === Bits(0)
    rob.io.debug_tsc := debug_tsc_reg
 
-   dis_curr_rob_row_idx  := rob.io.curr_rob_tail
+   assert ((dec_will_fire zip rename_stage.io.ren1_mask map {case(d,r) => d === r}).reduce(_|_),
+      "[core] Assumption that dec_will_fire and ren1_mask are equal is being violated.")
 
    // Writeback
    var cnt = 0
@@ -1052,33 +1049,88 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
       println("\n Chisel Printout Enabled\n")
 
       val numBrobWhitespace = if (DEBUG_PRINTF_BROB) NUM_BROB_ENTRIES else 0
-//      val screenheight = 104-8
-      val screenheight = 84 -7
-       var whitespace = (screenheight - 10 + 4 - NUM_LSU_ENTRIES -
+//      val screenheight = 103-8
+      val screenheight = 85 -8
+//      val screenheight = 62-8
+       var whitespace = (screenheight - 10 + 3 - NUM_LSU_ENTRIES -
          issueParams.map(_.numEntries).sum - issueParams.length - (NUM_ROB_ENTRIES/COMMIT_WIDTH) - numBrobWhitespace
      )
 
       println("Whitespace padded: " + whitespace)
 
-      printf("--- Cyc=%d , ----------------- Ret: %d ----------------------------------\n  "
+      printf("--- Cyc=%d , ----------------- Ret: %d ----------------------------------"
          , debug_tsc_reg
          , debug_irt_reg & UInt(0xffffff))
 
       for (w <- 0 until DECODE_WIDTH)
       {
-         if (w == 0)
-         {
-            printf("Dec:  ([0x%x]                        ", rename_stage.io.ren_uops(w).pc(19,0))
+         if (w == 0) {
+            printf("\n  Dec:  ([0x%x]                        ", dec_uops(w).pc(19,0))
+         } else {
+            printf("[0x%x]                        ", dec_uops(w).pc(19,0))
          }
-         else
-         {
-            printf("[0x%x]                        ", rename_stage.io.ren_uops(w).pc(19,0))
+      }
+
+      for (w <- 0 until DECODE_WIDTH)
+      {
+         printf("(%c%c) " + "DASM(%x)" + " |  "
+            , Mux(fetched_inst_valid && dec_fbundle.uops(w).valid && !dec_finished_mask(w), Str("v"), Str("-"))
+            , Mux(dec_will_fire(w), Str("V"), Str("-"))
+            , dec_fbundle.uops(w).inst
+            )
+      }
+
+      for (w <- 0 until DECODE_WIDTH)
+      {
+         if (w == 0) {
+            printf("\n  Ren:  ([0x%x]                        ", rename_stage.io.ren2_uops(w).pc(19,0))
+         } else {
+            printf("[0x%x]                        ", rename_stage.io.ren2_uops(w).pc(19,0))
          }
+      }
+
+      for (w <- 0 until DECODE_WIDTH)
+      {
+         printf(" (%c) " + "DASM(%x)" + " |  "
+            , Mux(rename_stage.io.ren2_mask(w), Str("V"), Str("-"))
+            , rename_stage.io.ren2_uops(w).inst
+            )
+      }
+
+      printf(") fin(%x)\n", dec_finished_mask)
+      for (w <- 0 until DECODE_WIDTH)
+      {
+         printf("        [ISA:%d,%d,%d,%d] [Phs:%d(%c)%d[%c](%c)%d[%c](%c)%d[%c](%c)] "
+            , dis_uops(w).ldst
+            , dis_uops(w).lrs1
+            , dis_uops(w).lrs2
+            , dis_uops(w).lrs3
+            , dis_uops(w).pdst
+            , Mux(dis_uops(w).dst_rtype   === RT_FIX, Str("X")
+              , Mux(dis_uops(w).dst_rtype === RT_X  , Str("-")
+              , Mux(dis_uops(w).dst_rtype === RT_FLT, Str("f")
+              , Mux(dis_uops(w).dst_rtype === RT_PAS, Str("C"), Str("?")))))
+            , dis_uops(w).pop1
+            , Mux(rename_stage.io.ren2_uops(w).prs1_busy, Str("B"), Str("R"))
+            , Mux(dis_uops(w).lrs1_rtype    === RT_FIX, Str("X")
+               , Mux(dis_uops(w).lrs1_rtype === RT_X  , Str("-")
+               , Mux(dis_uops(w).lrs1_rtype === RT_FLT, Str("f")
+               , Mux(dis_uops(w).lrs1_rtype === RT_PAS, Str("C"), Str("?")))))
+            , dis_uops(w).pop2
+            , Mux(rename_stage.io.ren2_uops(w).prs2_busy, Str("B"), Str("R"))
+            , Mux(dis_uops(w).lrs2_rtype    === RT_FIX, Str("X")
+               , Mux(dis_uops(w).lrs2_rtype === RT_X  , Str("-")
+               , Mux(dis_uops(w).lrs2_rtype === RT_FLT, Str("f")
+               , Mux(dis_uops(w).lrs2_rtype === RT_PAS, Str("C"), Str("?")))))
+            , dis_uops(w).pop3
+            , Mux(rename_stage.io.ren2_uops(w).prs3_busy, Str("B"), Str("R"))
+            , Mux(dis_uops(w).frs3_en, Str("f"), Str("-"))
+            )
       }
 
       if (DEBUG_PRINTF_ROB)
       {
-         printf(") ctate: (%c: %c %c %c %c %c %c) BMsk:%x Mode:%c\n"
+         printf("\n) ctate: (%c: %c %c %c %c %c %c) BMsk:%x Mode:%c\n"
          , Mux(rob.io.debug.state === UInt(0), Str("R"),
            Mux(rob.io.debug.state === UInt(1), Str("N"),
            Mux(rob.io.debug.state === UInt(2), Str("B"),
@@ -1098,49 +1150,6 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
          )
       }
 
-
-      for (w <- 0 until DECODE_WIDTH)
-      {
-         printf("(%c%c) " + "DASM(%x)" + " |  "
-            , Mux(fetched_inst_valid && dec_fbundle.uops(w).valid && !dec_finished_mask(w), Str("v"), Str("-"))
-            , Mux(dec_will_fire(w), Str("V"), Str("-"))
-            , dec_fbundle.uops(w).inst
-            )
-      }
-
-      printf(")\n   fin(%x)", dec_finished_mask)
-
-      for (w <- 0 until DECODE_WIDTH)
-      {
-         printf("  [ISA:%d,%d,%d,%d] [Phs:%d(%c)%d[%c](%c)%d[%c](%c)%d[%c](%c)] "
-            , dec_uops(w).ldst
-            , dec_uops(w).lrs1
-            , dec_uops(w).lrs2
-            , dec_uops(w).lrs3
-            , dis_uops(w).pdst
-            , Mux(dec_uops(w).dst_rtype   === RT_FIX, Str("X")
-              , Mux(dec_uops(w).dst_rtype === RT_X  , Str("-")
-              , Mux(dec_uops(w).dst_rtype === RT_FLT, Str("f")
-              , Mux(dec_uops(w).dst_rtype === RT_PAS, Str("C"), Str("?")))))
-            , dis_uops(w).pop1
-            , Mux(rename_stage.io.ren_uops(w).prs1_busy, Str("B"), Str("R"))
-            , Mux(dec_uops(w).lrs1_rtype    === RT_FIX, Str("X")
-               , Mux(dec_uops(w).lrs1_rtype === RT_X  , Str("-")
-               , Mux(dec_uops(w).lrs1_rtype === RT_FLT, Str("f")
-               , Mux(dec_uops(w).lrs1_rtype === RT_PAS, Str("C"), Str("?")))))
-            , dis_uops(w).pop2
-            , Mux(rename_stage.io.ren_uops(w).prs2_busy, Str("B"), Str("R"))
-            , Mux(dec_uops(w).lrs2_rtype    === RT_FIX, Str("X")
-               , Mux(dec_uops(w).lrs2_rtype === RT_X  , Str("-")
-               , Mux(dec_uops(w).lrs2_rtype === RT_FLT, Str("f")
-               , Mux(dec_uops(w).lrs2_rtype === RT_PAS, Str("C"), Str("?")))))
-            , dis_uops(w).pop3
-            , Mux(rename_stage.io.ren_uops(w).prs3_busy, Str("B"), Str("R"))
-            , Mux(dec_uops(w).frs3_en, Str("f"), Str("-"))
-            )
-      }
-
-
       printf("Exct(%c%d) Commit(%x) fl: 0x%x (%d) is: 0x%x (%d)\n"
          , Mux(rob.io.com_xcpt.valid, Str("E"), Str("-"))
          , rob.io.com_xcpt.bits.cause
@@ -1151,7 +1160,7 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
          , PopCount(rename_stage.io.debug.iisprlist)
          )
 
-      printf("                                    fl: 0x%x (%d) is: 0x%x (%d)\n"
+      printf("                                      fl: 0x%x (%d) is: 0x%x (%d)\n"
          , rename_stage.io.debug.ffreelist
          , PopCount(rename_stage.io.debug.ffreelist)
          , rename_stage.io.debug.fisprlist
