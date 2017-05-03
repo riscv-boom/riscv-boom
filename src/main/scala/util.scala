@@ -14,6 +14,14 @@ import Chisel._
 import rocket.Instructions._
 import rocket._
 
+object assertNever
+{
+   def apply(cond: Bool, message: String): Unit =
+   {
+      assert(!cond, message)
+   }
+}
+
 object IsKilledByBranch
 {
    def apply(brinfo: BrResolutionInfo, uop: MicroOp): Bool =
