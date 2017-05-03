@@ -101,7 +101,7 @@ class LoadStoreUnitIO(pl_width: Int)(implicit p: Parameters) extends BoomBundle(
    // Let the stores clear out the busy bit in the ROB.
    // Two ports, one for integer and the other for FP.
    // Otherwise, we must back-pressure incoming FP store-data micro-ops.
-   val lsu_clr_bsy_valid  = Vec(2, Bool()).asOutput 
+   val lsu_clr_bsy_valid  = Vec(2, Bool()).asOutput
    val lsu_clr_bsy_rob_idx= Vec(2, UInt(width=ROB_ADDR_SZ)).asOutput
    val lsu_fencei_rdy     = Bool(OUTPUT)
 
@@ -133,7 +133,7 @@ class LoadStoreUnitIO(pl_width: Int)(implicit p: Parameters) extends BoomBundle(
    }
 
    val debug_tsc = UInt(INPUT, xLen)     // time stamp counter
-   
+
    override def cloneType: this.type = new LoadStoreUnitIO(pl_width)(p).asInstanceOf[this.type]
 }
 
@@ -300,7 +300,6 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: uncore.tilelink
    val tlb_avail = Wire(init = Bool(true))
    val rob_avail = Wire(init = Bool(true))
    val lcam_avail= Wire(init = Bool(true))
-//   val std_avail = Wire(init = Bool(true)) // can the FP std come in?
 
    // give first priority to incoming uops
    when (io.exe_resp.valid)
@@ -318,13 +317,11 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: uncore.tilelink
          tlb_avail  := Bool(false)
          rob_avail  := Bool(false)
          lcam_avail := Bool(false)
-//         std_avail := Bool(false)
       }
       when (io.exe_resp.bits.uop.ctrl.is_std)
       {
          will_fire_std_incoming := Bool(true)
          rob_avail := Bool(false)
-//         std_avail := Bool(false)
       }
    }
 
@@ -334,7 +331,6 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: uncore.tilelink
       {
          will_fire_sta_retry := Bool(true)
          lcam_avail := Bool(false)
-//         std_avail := Bool(false)
       }
       .elsewhen (can_fire_load_retry)
       {
@@ -540,6 +536,9 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: uncore.tilelink
       laq_uop           (exe_tlb_uop.ldq_idx).pdst := exe_tlb_uop.pdst
       laq_is_virtual    (exe_tlb_uop.ldq_idx)      := tlb_miss
       laq_is_uncacheable(exe_tlb_uop.ldq_idx)      := tlb_addr_uncacheable && !tlb_miss
+
+      assertNever(will_fire_load_incoming && laq_addr_val(exe_tlb_uop.ldq_idx),
+         "[lsu] incoming load is overwriting a valid address.")
    }
 
    when (will_fire_sta_incoming || will_fire_sta_retry)
@@ -549,6 +548,9 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: uncore.tilelink
       stq_uop       (exe_tlb_uop.stq_idx).pdst := exe_tlb_uop.pdst // needed for amo's TODO this is expensive,
                                                                    // can we get around this?
       saq_is_virtual(exe_tlb_uop.stq_idx)      := tlb_miss
+
+      assertNever(will_fire_sta_incoming && saq_val(exe_tlb_uop.stq_idx),
+         "[lsu] incoming store is overwriting a valid address.")
    }
 
    // use two ports on STD to handle Integer and FP store data.
@@ -557,8 +559,11 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: uncore.tilelink
       val sidx = io.exe_resp.bits.uop.stq_idx
       sdq_val (sidx) := Bool(true)
       sdq_data(sidx) := io.exe_resp.bits.data.toBits
+
+      assertNever(will_fire_std_incoming && sdq_val(sidx),
+         "[lsu] incoming store is overwriting a valid data entry.")
    }
-   
+
    //--------------------------------------------
    // FP Data
    // Store Data Generation MicroOps come in directly from the FP registerfile,
@@ -570,12 +575,12 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: uncore.tilelink
       sdq_val (sidx) := Bool(true)
       sdq_data(sidx) := io.fp_stdata.bits.data.toBits
    }
-   assert(!(io.fp_stdata.valid && io.exe_resp.valid && io.exe_resp.bits.uop.ctrl.is_std && 
-      io.fp_stdata.bits.uop.stq_idx === io.exe_resp.bits.uop.stq_idx), 
+   assert(!(io.fp_stdata.valid && io.exe_resp.valid && io.exe_resp.bits.uop.ctrl.is_std &&
+      io.fp_stdata.bits.uop.stq_idx === io.exe_resp.bits.uop.stq_idx),
       "[lsu] FP and INT data is fighting over the same sdq entry.")
-       
+
    require (xLen >= fLen) // otherwise the SDQ is missized.
- 
+
    //-------------------------------------------------------------
    //-------------------------------------------------------------
    // Cache Access Cycle (Mem)
@@ -622,7 +627,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: uncore.tilelink
    clr_bsy_valid  := Bool(false)
    clr_bsy_robidx := mem_tlb_uop.rob_idx
    clr_bsy_brmask := GetNewBrMask(io.brinfo, mem_tlb_uop)
-   
+
    when (mem_fired_sta && !mem_tlb_miss && mem_fired_stdi)
    {
       clr_bsy_valid := !mem_tlb_uop.is_amo
@@ -645,8 +650,8 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: uncore.tilelink
       clr_bsy_robidx := mem_std_uop.rob_idx
       clr_bsy_brmask := GetNewBrMask(io.brinfo, mem_std_uop)
    }
-   
-   
+
+
    val mem_uop_stdf = RegNext(io.fp_stdata.bits.uop)
    val stdf_clr_bsy_valid = RegNext(mem_fired_stdf &&
                            saq_val(mem_uop_stdf.stq_idx) &&
