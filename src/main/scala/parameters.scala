@@ -36,7 +36,8 @@ case class BoomCoreParams(
    gshare: Option[GShareParameters] = None,
    gskew: Option[GSkewParameters] = None,
    intToFpLatency: Int = 2,
-   imulLatency: Int = 3
+   imulLatency: Int = 3,
+   renameLatency: Int = 2
 )
 
 trait HasBoomCoreParameters extends tile.HasCoreParameters
@@ -89,6 +90,8 @@ trait HasBoomCoreParameters extends tile.HasCoreParameters
    require (sfmaLatency == dfmaLatency)
 
    val intToFpLatency = boomParams.intToFpLatency
+
+   val renameLatency = boomParams.renameLatency
 
    val enableBrResolutionRegister = boomParams.enableBrResolutionRegister
 
