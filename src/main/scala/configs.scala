@@ -24,7 +24,7 @@ class DefaultBoomConfig extends Config((site, here, up) => {
          fWidth = 2,
          useCompressed = false,
          nPerfCounters = 4,
-         nPerfEvents = 31,
+         nPerfEvents = 34,
          fpu = Some(tile.FPUParams(sfmaLatency=4, dfmaLatency=4, divSqrt=true))),
       btb = Some(BTBParams(nEntries = 40, nRAS = 4, updatesOutOfOrder = true))
    )}

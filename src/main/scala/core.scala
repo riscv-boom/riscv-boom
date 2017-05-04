@@ -988,7 +988,7 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    csr.io.events(12) := !rob.io.ready
    csr.io.events(13) := lsu.io.laq_full
    csr.io.events(14) := lsu.io.stq_full
-//   csr.io.events(15) := !issue_unit.io.dis_readys.reduce(_|_) TODO
+   csr.io.events(15) := !dis_readys.toBools.reduce(_&_) // issue queues
    csr.io.events(16) := branch_mask_full.reduce(_|_)
    csr.io.events(17) := rob.io.flush.valid
 
@@ -1032,6 +1032,10 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
 
    // count change of privilege modes
    csr.io.events(30) := csr.io.status.prv =/= RegNext(csr.io.status.prv)
+
+   csr.io.events(31) := !issue_units(0).io.dis_readys.reduce(_&_)
+   csr.io.events(32) := !issue_units(1).io.dis_readys.reduce(_&_)
+   csr.io.events(33) := !fp_pipeline.io.dis_readys.reduce(_&_)
 
    assert (!(Range(0,COMMIT_WIDTH).map{w =>
       rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && rob.io.commit.uops(w).is_jal &&
