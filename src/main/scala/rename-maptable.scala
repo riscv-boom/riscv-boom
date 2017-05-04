@@ -122,17 +122,12 @@ class RenameMapTableElement(pipeline_width: Int, always_zero: Boolean)(implicit 
 
 
 // Pass out the new physical register specifiers.
-// Also tell the BusyTable if a bypass occurred from a new instruction,
-// so that the BusyTable can set the busy-bit to True.
 class MapTableOutput(preg_sz: Int) extends Bundle
 {
    val prs1              = UInt(width = preg_sz)
    val prs2              = UInt(width = preg_sz)
    val prs3              = UInt(width = preg_sz)
    val stale_pdst        = UInt(width = preg_sz)
-   val prs1_was_bypassed = Bool()
-   val prs2_was_bypassed = Bool()
-   val prs3_was_bypassed = Bool()
    override def cloneType: this.type = new MapTableOutput(preg_sz).asInstanceOf[this.type]
 }
 
@@ -256,10 +251,6 @@ class RenameMapTable(
       var rs3_cases =  Array((Bool(false),  UInt(0,PREG_SZ)))
       var stale_cases= Array((Bool(false),  UInt(0,PREG_SZ)))
 
-      io.values(w).prs1_was_bypassed := Bool(false)
-      io.values(w).prs2_was_bypassed := Bool(false)
-      io.values(w).prs3_was_bypassed := Bool(false)
-
       // Handle bypassing new physical destinations to operands (and stale destination)
       // scalastyle:off
       for (xx <- w-1 to 0 by -1)
@@ -268,18 +259,10 @@ class RenameMapTable(
          rs2_cases  ++= Array((io.ren_uops(w).lrs2_rtype === UInt(rtype) && io.ren_will_fire(xx) && io.ren_uops(xx).ldst_val && io.ren_uops(xx).dst_rtype === UInt(rtype) && (io.ren_uops(w).lrs2 === io.ren_uops(xx).ldst), (io.ren_uops(xx).pdst)))
          stale_cases++= Array((io.ren_uops(w).dst_rtype === UInt(rtype)  && io.ren_will_fire(xx) && io.ren_uops(xx).ldst_val && io.ren_uops(xx).dst_rtype === UInt(rtype) && (io.ren_uops(w).ldst === io.ren_uops(xx).ldst), (io.ren_uops(xx).pdst)))
 
-         when (io.ren_uops(w).lrs1_rtype === UInt(rtype) && io.ren_will_fire(xx) && io.ren_uops(xx).ldst_val && io.ren_uops(xx).dst_rtype === UInt(rtype) && (io.ren_uops(w).lrs1 === io.ren_uops(xx).ldst))
-            { io.values(w).prs1_was_bypassed := Bool(true) }
-         when (io.ren_uops(w).lrs2_rtype === UInt(rtype) && io.ren_will_fire(xx) && io.ren_uops(xx).ldst_val && io.ren_uops(xx).dst_rtype === UInt(rtype) && (io.ren_uops(w).lrs2 === io.ren_uops(xx).ldst))
-            { io.values(w).prs2_was_bypassed := Bool(true) }
-
-
          if (rtype == RT_FLT.litValue) {
             rs3_cases  ++= Array((
                   io.ren_uops(w).frs3_en && io.ren_will_fire(xx) && io.ren_uops(xx).ldst_val && io.ren_uops(xx).dst_rtype === UInt(rtype) && (io.ren_uops(w).lrs3 === io.ren_uops(xx).ldst),
                   (io.ren_uops(xx).pdst)))
-            when (io.ren_uops(w).frs3_en && io.ren_will_fire(xx) && io.ren_uops(xx).ldst_val && io.ren_uops(xx).dst_rtype === UInt(rtype) && (io.ren_uops(w).lrs3 === io.ren_uops(xx).ldst))
-               { io.values(w).prs3_was_bypassed := Bool(true) }
          }
       }
 

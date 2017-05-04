@@ -136,6 +136,8 @@ class RenameStage(
 
    val ren2_valids    = Wire(Vec(pl_width, Bool()))
    val ren2_uops      = Wire(Vec(pl_width, new MicroOp()))
+   // will ALL ren2 uops proceed to dispatch?
+   val ren2_will_proceed = Wire(Bool())
 
    for (w <- 0 until pl_width)
    {
@@ -222,6 +224,9 @@ class RenameStage(
    //-------------------------------------------------------------
    // pipeline registers
 
+   val ren2_will_fire = ren2_valids zip io.dis_inst_can_proceed map {case (v,c) => v && c && !io.kill}
+   ren2_will_proceed := (ren2_valids zip ren2_will_fire map {case (v,f) => (v === f)}).reduce(_&_)
+
    for (w <- 0 until pl_width)
    {
       if (renameLatency == 1)
@@ -235,16 +240,18 @@ class RenameStage(
          val r_valids = Reg(Vec.fill(pl_width) {Bool(false)})
          val r_uops   = Reg(Vec(pl_width, new MicroOp()))
 
-//         ren2_valids(w) := RegEnable(ren1_will_fire(w), io.dis_inst_can_proceed(w))
-
-         when (io.dis_inst_can_proceed(w))
+         when (io.kill)
+         {
+            r_valids(w) := Bool(false)
+         }
+         .elsewhen (ren2_will_proceed)
          {
             r_valids(w) := ren1_will_fire(w)
             r_uops(w) := GetNewUopAndBrMask(ren1_uops(w), io.brinfo)
          }
          .otherwise
          {
-//            r_valids(w) := ren1_will_fire(w)
+            r_valids(w) := r_valids(w) && !ren2_will_fire(w) // clear bit if uop gets dispatched
             r_uops(w) := GetNewUopAndBrMask(r_uops(w), io.brinfo)
          }
 
@@ -253,23 +260,35 @@ class RenameStage(
       }
    }
 
-   val ren2_will_fire = ren2_valids zip io.inst_can_proceed map {case (v,c) => v && c&& !io.kill}
-
    //-------------------------------------------------------------
    // Busy Table
 
-   ibusytable.io.ren_mask := ren2_will_fire
+   ibusytable.io.ren_will_fire := ren2_will_fire
    ibusytable.io.ren_uops := ren2_uops  // expects pdst to be set up.
-   ibusytable.io.map_table := RegNext(imaptable.io.values)
+   ibusytable.io.map_table := RegEnable(imaptable.io.values, ren2_will_proceed)
    ibusytable.io.wb_valids := io.int_wakeups.map(_.valid)
    ibusytable.io.wb_pdsts := io.int_wakeups.map(_.bits.uop.pdst)
 
    assert (!(io.int_wakeups.map(x => x.valid && x.bits.uop.dst_rtype =/= RT_FIX).reduce(_|_)),
       "[rename] int wakeup is not waking up a Int register.")
 
-   fbusytable.io.ren_mask := ren2_will_fire
+   for (w <- 0 until pl_width)
+   {
+      assert (!(
+         ren2_will_fire(w) &&
+         ren2_uops(w).lrs1_rtype === RT_FIX &&
+         ren2_uops(w).pop1 =/= ibusytable.io.map_table(w).prs1),
+         "[rename] ren2 maptable prs1 value don't match uop's values.")
+      assert (!(
+         ren2_will_fire(w) &&
+         ren2_uops(w).lrs2_rtype === RT_FIX &&
+         ren2_uops(w).pop2 =/= ibusytable.io.map_table(w).prs2),
+         "[rename] ren2 maptable prs2 value don't match uop's values.")
+   }
+
+   fbusytable.io.ren_will_fire := ren2_will_fire
    fbusytable.io.ren_uops := ren2_uops  // expects pdst to be set up.
-   fbusytable.io.map_table := RegNext(fmaptable.io.values)
+   fbusytable.io.map_table := RegEnable(fmaptable.io.values, ren2_will_proceed)
    fbusytable.io.wb_valids := io.fp_wakeups.map(_.valid)
    fbusytable.io.wb_pdsts := io.fp_wakeups.map(_.bits.uop.pdst)
 
@@ -284,8 +303,9 @@ class RenameStage(
       uop.prs2_busy := Mux(uop.lrs2_rtype === RT_FLT, fbusy.prs2_busy, ibusy.prs2_busy)
       uop.prs3_busy := fbusy.prs3_busy
 
-      assert (!(ibusy.prs1_busy && uop.lrs1_rtype === RT_FIX && uop.lrs1 === UInt(0)), "[rename] x0 is busy??")
-      assert (!(ibusy.prs2_busy && uop.lrs2_rtype === RT_FIX && uop.lrs2 === UInt(0)), "[rename] x0 is busy??")
+      val valid = ren2_valids(w)
+      assert (!(valid && ibusy.prs1_busy && uop.lrs1_rtype === RT_FIX && uop.lrs1 === UInt(0)), "[rename] x0 is busy??")
+      assert (!(valid && ibusy.prs2_busy && uop.lrs2_rtype === RT_FIX && uop.lrs2 === UInt(0)), "[rename] x0 is busy??")
    }
 
    //-------------------------------------------------------------
@@ -301,7 +321,7 @@ class RenameStage(
    {
       // Push back against Decode stage if Rename1 can't proceed (and Rename2/Dispatch can't receive).
       io.inst_can_proceed(w) :=
-         io.dis_inst_can_proceed(w) &&
+         ren2_will_proceed &&
          ((ren1_uops(w).dst_rtype =/= RT_FIX && ren1_uops(w).dst_rtype =/= RT_FLT) ||
          (ifreelist.io.can_allocate(w) && ren1_uops(w).dst_rtype === RT_FIX) ||
          (ffreelist.io.can_allocate(w) && ren1_uops(w).dst_rtype === RT_FLT))
