@@ -97,9 +97,13 @@ abstract class IssueUnit(
 
    if (DEBUG_PRINTF)
    {
+      val typ_str = if (iqType == IQT_INT.litValue) "int"
+                    else if (iqType == IQT_MEM.litValue) "mem"
+                    else if (iqType == IQT_FP.litValue) " fp"
+                    else "unknown"
       for (i <- 0 until num_issue_slots)
       {
-         printf("  integer_issue_slot[%d](%c)(Req:%c):wen=%c P:(%c,%c,%c) OP:(%d,%d,%d) PDST:%d %c [[DASM(%x)]" +
+         printf("  " + typ_str + "_issue_slot[%d](%c)(Req:%c):wen=%c P:(%c,%c,%c) OP:(%d,%d,%d) PDST:%d %c [[DASM(%x)]" +
                " 0x%x: %d] ri:%d bm=%d imm=0x%x\n"
             , UInt(i, log2Up(num_issue_slots))
             , Mux(issue_slots(i).valid, Str("V"), Str("-"))

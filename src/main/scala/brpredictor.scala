@@ -707,7 +707,13 @@ class BranchReorderBuffer(fetch_width: Int, num_entries: Int)(implicit p: Parame
    // entries_info is a sequential memory, so buffer the rest of the bundle to match
    io.commit_entry.valid     := r_deallocate.valid
    io.commit_entry.bits.ctrl := entries_ctrl(head_ptr)
-   io.commit_entry.bits.info := entries_info.read(head_ptr, io.backend.deallocate.valid)
+   // Since this is SeqRead, we need to set up the address on the previous cycle before
+   // it has been incrementd, if it is going to be incremented.
+   val next_head_ptr =
+      Mux(r_deallocate.valid,
+         WrapInc(head_ptr, num_entries),
+         head_ptr)
+   io.commit_entry.bits.info := entries_info.read(next_head_ptr, io.backend.deallocate.valid)
 
    // TODO allow filling the entire BROB ROB, instead of wasting an entry
    val full = (head_ptr === WrapInc(tail_ptr, num_entries))
@@ -723,13 +729,14 @@ class BranchReorderBuffer(fetch_width: Int, num_entries: Int)(implicit p: Parame
    {
       for (i <- 0 until num_entries)
       {
-         printf (" brob[%d] (%x) T=%x m=%x r=%d snapshot=%d "
+         printf (" brob[%d] (%x) T=%x m=%x r=%d "
             , UInt(i, log2Up(num_entries))
             , entries_ctrl(i).executed.toBits
             , entries_ctrl(i).taken.toBits
             , entries_ctrl(i).mispredicted.toBits
             , entries_ctrl(i).debug_rob_idx
-            , entries_info(i).history_ptr
+//            , entries_info(i).history_ptr
+//            , entries_info(i).info
             )
          printf("%c\n",
             Mux(head_ptr === UInt(i) && tail_ptr === UInt(i), Str("B"),

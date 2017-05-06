@@ -57,7 +57,7 @@ class WithNPerfCounters(n: Int) extends Config((site, here, up) => {
 class WithSmallBooms extends Config((site, here, up) => {
    case RocketTilesKey => up(RocketTilesKey, site) map { r =>r.copy(core = r.core.copy(
       fWidth = 1,
-      nPerfCounters = 1
+      nPerfCounters = 2
       ))}
    case BoomKey => up(BoomKey, site).copy(
       numRobEntries = 24,
