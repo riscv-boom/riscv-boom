@@ -136,8 +136,6 @@ class RenameStage(
 
    val ren2_valids    = Wire(Vec(pl_width, Bool()))
    val ren2_uops      = Wire(Vec(pl_width, new MicroOp()))
-   // will ALL ren2 uops proceed to dispatch?
-   val ren2_will_proceed = Wire(Bool())
 
    for (w <- 0 until pl_width)
    {
@@ -225,7 +223,18 @@ class RenameStage(
    // pipeline registers
 
    val ren2_will_fire = ren2_valids zip io.dis_inst_can_proceed map {case (v,c) => v && c && !io.kill}
-   ren2_will_proceed := (ren2_valids zip ren2_will_fire map {case (v,f) => (v === f)}).reduce(_&_)
+
+   // will ALL ren2 uops proceed to dispatch?
+   val ren2_will_proceed = 
+      if (renameLatency == 2) (ren2_valids zip ren2_will_fire map {case (v,f) => (v === f)}).reduce(_&_)
+      else io.dis_inst_can_proceed.reduce(_&_)
+
+
+
+   val ren2_imapvalues = if (renameLatency == 2) RegEnable(imaptable.io.values, ren2_will_proceed)
+                         else imaptable.io.values
+   val ren2_fmapvalues = if (renameLatency == 2) RegEnable(fmaptable.io.values, ren2_will_proceed)
+                         else fmaptable.io.values
 
    for (w <- 0 until pl_width)
    {
@@ -265,7 +274,7 @@ class RenameStage(
 
    ibusytable.io.ren_will_fire := ren2_will_fire
    ibusytable.io.ren_uops := ren2_uops  // expects pdst to be set up.
-   ibusytable.io.map_table := RegEnable(imaptable.io.values, ren2_will_proceed)
+   ibusytable.io.map_table := ren2_imapvalues
    ibusytable.io.wb_valids := io.int_wakeups.map(_.valid)
    ibusytable.io.wb_pdsts := io.int_wakeups.map(_.bits.uop.pdst)
 
@@ -288,7 +297,7 @@ class RenameStage(
 
    fbusytable.io.ren_will_fire := ren2_will_fire
    fbusytable.io.ren_uops := ren2_uops  // expects pdst to be set up.
-   fbusytable.io.map_table := RegEnable(fmaptable.io.values, ren2_will_proceed)
+   fbusytable.io.map_table := ren2_fmapvalues
    fbusytable.io.wb_valids := io.fp_wakeups.map(_.valid)
    fbusytable.io.wb_pdsts := io.fp_wakeups.map(_.bits.uop.pdst)
 
