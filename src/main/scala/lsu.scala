@@ -630,7 +630,8 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: uncore.tilelink
 
    when (mem_fired_sta && !mem_tlb_miss && mem_fired_stdi)
    {
-      clr_bsy_valid := !mem_tlb_uop.is_amo && !IsKilledByBranch(io.brinfo, mem_tlb_uop) && !io.exception
+      clr_bsy_valid := !mem_tlb_uop.is_amo && !IsKilledByBranch(io.brinfo, mem_tlb_uop) &&
+                       !io.exception && !RegNext(io.exception)
       clr_bsy_robidx := mem_tlb_uop.rob_idx
       clr_bsy_brmask := GetNewBrMask(io.brinfo, mem_tlb_uop)
    }
@@ -639,7 +640,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: uncore.tilelink
       clr_bsy_valid := sdq_val(mem_tlb_uop.stq_idx) &&
                        !mem_tlb_uop.is_amo &&
                        !IsKilledByBranch(io.brinfo, mem_tlb_uop) &&
-                       !io.exception
+                       !io.exception && !RegNext(io.exception)
       clr_bsy_robidx := mem_tlb_uop.rob_idx
       clr_bsy_brmask := GetNewBrMask(io.brinfo, mem_tlb_uop)
    }
@@ -650,7 +651,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: uncore.tilelink
                               !saq_is_virtual(mem_std_uop.stq_idx) &&
                               !mem_std_uop.is_amo &&
                               !IsKilledByBranch(io.brinfo, mem_std_uop) &&
-                              !io.exception
+                              !io.exception && !RegNext(io.exception)
       clr_bsy_robidx := mem_std_uop.rob_idx
       clr_bsy_brmask := GetNewBrMask(io.brinfo, mem_std_uop)
    }
@@ -662,7 +663,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: uncore.tilelink
                            !saq_is_virtual(mem_uop_stdf.stq_idx) &&
                            !mem_uop_stdf.is_amo &&
                            !IsKilledByBranch(io.brinfo, mem_uop_stdf)) &&
-                           !io.exception
+                           !io.exception && !RegNext(io.exception)
    val stdf_clr_bsy_robidx = RegEnable(mem_uop_stdf.rob_idx, mem_fired_stdf)
    val stdf_clr_bsy_brmask = RegEnable(GetNewBrMask(io.brinfo, mem_uop_stdf), mem_fired_stdf)
 
