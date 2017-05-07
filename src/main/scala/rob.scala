@@ -405,7 +405,11 @@ class Rob(width: Int,
       {
          when (clr_valid && MatchBank(GetBankIdx(clr_rob_idx)))
          {
-            rob_bsy(GetRowIdx(clr_rob_idx)) := Bool(false)
+            val cidx = GetRowIdx(clr_rob_idx)
+            rob_bsy(cidx) := Bool(false)
+
+            assert (rob_val(cidx) === Bool(true), "[rob] store writing back to invalid entry.")
+            assert (rob_bsy(cidx) === Bool(true), "[rob] store writing back to a not-busy entry.")
 
             if (O3PIPEVIEW_PRINTF)
             {
