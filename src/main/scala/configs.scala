@@ -24,6 +24,7 @@ class DefaultBoomConfig extends Config((site, here, up) => {
          useCompressed = false,
          nPerfCounters = 4,
          nPerfEvents = 48,
+         perfIncWidth = 4, // driven by issue ports, as set in BoomCoreParams.issueParams
          fpu = Some(tile.FPUParams(sfmaLatency=3, dfmaLatency=3, divSqrt=true))),
       btb = Some(BTBParams(nEntries = 40, nRAS = 4, updatesOutOfOrder = true))
    )}
@@ -53,7 +54,8 @@ class WithNPerfCounters(n: Int) extends Config((site, here, up) => {
 class WithSmallBooms extends Config((site, here, up) => {
    case RocketTilesKey => up(RocketTilesKey, site) map { r =>r.copy(core = r.core.copy(
       fWidth = 1,
-      nPerfCounters = 2
+      nPerfCounters = 2,
+      perfIncWidth = 3 // driven by issue ports, as set in BoomCoreParams.issueParams
       ))}
    case BoomKey => up(BoomKey, site).copy(
       issueWidth = 1,
@@ -70,7 +72,9 @@ class WithSmallBooms extends Config((site, here, up) => {
 // try to match the Cortex-A9
 class WithMediumBooms extends Config((site, here, up) => {
    case RocketTilesKey => up(RocketTilesKey, site) map { r =>r.copy(core = r.core.copy(
-      fWidth = 2))}
+      fWidth = 2,
+      perfIncWidth = 4 // driven by issue ports, as set in BoomCoreParams.issueParams
+      ))}
    case BoomKey => up(BoomKey, site).copy(
       issueWidth = 3,
       numRobEntries = 48,
@@ -85,7 +89,9 @@ class WithMediumBooms extends Config((site, here, up) => {
 //// try to match the Cortex-A15
 class WithMegaBooms extends Config((site, here, up) => {
    case RocketTilesKey => up(RocketTilesKey, site) map { r => r.copy(core = r.core.copy(
-      fWidth = 4))}
+      fWidth = 4,
+      perfIncWidth = 4 // driven by issue ports, as set in BoomCoreParams.issueParams
+      ))}
    case BoomKey => up(BoomKey, site).copy(
       issueWidth = 4,
       numRobEntries = 128,
