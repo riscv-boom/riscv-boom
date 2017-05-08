@@ -547,13 +547,13 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
 
    // Wakeup (Issue & Writeback)
 
-   for (iu <- issue_units)
-   {
-      for ((issport, wakeup) <- iu.io.wakeup_pdsts zip int_wakeups)
-      {
-         issport.valid := wakeup.valid
-         issport.bits  := wakeup.bits.uop.pdst
-      }
+   for {
+      iu <- issue_units
+      (issport, wakeup) <- iu.io.wakeup_pdsts zip int_wakeups
+   }{
+      issport.valid := wakeup.valid
+      issport.bits  := wakeup.bits.uop.pdst
+
       require (iu.io.wakeup_pdsts.length == int_wakeups.length)
    }
 
@@ -1029,6 +1029,21 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
       rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && rob.io.commit.uops(w).is_jal &&
       rob.io.commit.uops(w).stat_brjmp_mispredicted}.reduce(_|_)),
       "[dpath] A committed JAL was marked as having been mispredicted.")
+
+   // Count issued instructions (only integer currently).
+   require (iss_valids.length >= COMMIT_WIDTH) // CSR.scala sets increment width based on retireWidth
+   csr.io.events(34) := PopCount(iss_valids)
+
+   // Count not-issued slots due to empty issue windows (only integer currently).
+   val not_issued_and_empty = for {iu <- issue_units; iss_valid <- iu.io.iss_valids} yield {
+         !iss_valid && iu.io.event_empty }
+   csr.io.events(35) := PopCount(not_issued_and_empty)
+
+   // Count not-issued slots due to backend hazards/unsatisified dependencies (only integer currently).
+   val not_issued_and_not_empty = for {iu <- issue_units; iss_valid <- iu.io.iss_valids} yield {
+         !iss_valid && !iu.io.event_empty}
+   csr.io.events(36) := PopCount(not_issued_and_not_empty)
+
 
    //-------------------------------------------------------------
    //-------------------------------------------------------------
