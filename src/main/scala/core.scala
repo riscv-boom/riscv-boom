@@ -311,19 +311,6 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
 
       dec_will_fire(w) := dec_valids(w) && !stall_me && !fetch_unit.io.clear_fetchbuffer
       dec_uops(w)      := decode_units(w).io.deq.uop
-
-
-      if (O3PIPEVIEW_PRINTF)
-      {
-         when (dec_will_fire(w))
-         {
-            // TODO handle spitting out decode for when a uop gets stalled at the front of the fetch-buffer
-            val fetch_seq = dec_uops(w).debug_events.fetch_seq
-            printf("%d; O3PipeView:decode:%d\n", fetch_seq, debug_tsc_reg)
-            printf("%d; O3PipeView:rename: 0\n", fetch_seq)
-            printf("%d; O3PipeView:dispatch: 0\n", fetch_seq)
-         }
-      }
    }
 
    // all decoders are empty and ready for new instructions
@@ -495,6 +482,7 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
       dis_valids(w)       := rename_stage.io.ren2_mask(w)
       dis_uops(w)         := GetNewUopAndBrMask(rename_stage.io.ren2_uops(w), br_unit.brinfo)
    }
+
 
    //-------------------------------------------------------------
    //-------------------------------------------------------------
@@ -1054,8 +1042,8 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
 
       val numBrobWhitespace = if (DEBUG_PRINTF_BROB) NUM_BROB_ENTRIES else 0
 //      val screenheight = 103-8
-      val screenheight = 85 -8
-//      val screenheight = 62-8
+//      val screenheight = 85 -8
+      val screenheight = 62-8
        var whitespace = (screenheight - 10 + 3 - NUM_LSU_ENTRIES -
          issueParams.map(_.numEntries).sum - issueParams.length - (NUM_ROB_ENTRIES/COMMIT_WIDTH) - numBrobWhitespace
      )
@@ -1251,6 +1239,33 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    if (O3PIPEVIEW_PRINTF)
    {
       println("   O3Pipeview Visualization Enabled\n")
+
+      // did we already print out the instruction sitting at the front of the fetchbuffer/decode stage?
+      val dec_printed_mask = Reg(init = Bits(0, DECODE_WIDTH))
+
+      for (w <- 0 until DECODE_WIDTH)
+      {
+         when (dec_valids(w) && !dec_printed_mask(w)) {
+            printf("%d; O3PipeView:decode:%d\n", dec_uops(w).debug_events.fetch_seq, debug_tsc_reg)
+         }
+         // Rename begins when uop leaves fetch buffer (Dec+Ren1 are in same stage).
+         when (dec_will_fire(w)) {
+            printf("%d; O3PipeView:rename: %d\n", dec_uops(w).debug_events.fetch_seq, debug_tsc_reg)
+         }
+         when (dis_valids(w)) {
+            printf("%d; O3PipeView:dispatch: %d\n", dis_uops(w).debug_events.fetch_seq, debug_tsc_reg)
+         }
+
+         when (dec_rdy || fetch_unit.io.clear_fetchbuffer)
+         {
+            dec_printed_mask := UInt(0)
+         }
+         .otherwise
+         {
+            dec_printed_mask := dec_valids.toBits | dec_printed_mask
+         }
+      }
+
       for (i <- 0 until COMMIT_WIDTH)
       {
          when (rob.io.commit.valids(i))
