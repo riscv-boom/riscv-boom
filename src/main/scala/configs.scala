@@ -24,7 +24,7 @@ class DefaultBoomConfig extends Config((site, here, up) => {
          useCompressed = false,
          nPerfCounters = 4,
          nPerfEvents = 48,
-         perfIncWidth = 4, // driven by issue ports, as set in BoomCoreParams.issueParams
+         perfIncWidth = 3, // driven by issue ports, as set in BoomCoreParams.issueParams
          fpu = Some(tile.FPUParams(sfmaLatency=3, dfmaLatency=3, divSqrt=true))),
       btb = Some(BTBParams(nEntries = 40, nRAS = 4, updatesOutOfOrder = true))
    )}
@@ -55,7 +55,7 @@ class WithSmallBooms extends Config((site, here, up) => {
    case RocketTilesKey => up(RocketTilesKey, site) map { r =>r.copy(core = r.core.copy(
       fWidth = 1,
       nPerfCounters = 2,
-      perfIncWidth = 3 // driven by issue ports, as set in BoomCoreParams.issueParams
+      perfIncWidth = 2 // driven by issue ports, as set in BoomCoreParams.issueParams
       ))}
    case BoomKey => up(BoomKey, site).copy(
       issueWidth = 1,
@@ -73,7 +73,7 @@ class WithSmallBooms extends Config((site, here, up) => {
 class WithMediumBooms extends Config((site, here, up) => {
    case RocketTilesKey => up(RocketTilesKey, site) map { r =>r.copy(core = r.core.copy(
       fWidth = 2,
-      perfIncWidth = 4 // driven by issue ports, as set in BoomCoreParams.issueParams
+      perfIncWidth = 3 // driven by issue ports, as set in BoomCoreParams.issueParams
       ))}
    case BoomKey => up(BoomKey, site).copy(
       issueWidth = 3,
@@ -90,7 +90,7 @@ class WithMediumBooms extends Config((site, here, up) => {
 class WithMegaBooms extends Config((site, here, up) => {
    case RocketTilesKey => up(RocketTilesKey, site) map { r => r.copy(core = r.core.copy(
       fWidth = 4,
-      perfIncWidth = 4 // driven by issue ports, as set in BoomCoreParams.issueParams
+      perfIncWidth = 3 // driven by issue ports, as set in BoomCoreParams.issueParams
       ))}
    case BoomKey => up(BoomKey, site).copy(
       issueWidth = 4,
