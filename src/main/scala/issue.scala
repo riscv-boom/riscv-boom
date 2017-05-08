@@ -35,6 +35,8 @@ class IssueUnitIO(issue_width: Int, num_wakeup_ports: Int)(implicit p: Parameter
    val brinfo         = new BrResolutionInfo().asInput
    val flush_pipeline = Bool(INPUT)
 
+   val event_empty    = Bool(OUTPUT) // used by HPM events; is the issue unit empty?
+
    val tsc_reg        = UInt(INPUT, xLen)
 }
 
@@ -62,6 +64,8 @@ abstract class IssueUnit(num_issue_slots: Int, issue_width: Int, num_wakeup_port
    // Issue Table
 
    val issue_slots = Vec.fill(num_issue_slots) {Module(new IssueSlot(num_wakeup_ports)).io}
+
+   io.event_empty := PopCount(issue_slots.map(s => !s.valid)) === UInt(0)
 
    //-------------------------------------------------------------
 

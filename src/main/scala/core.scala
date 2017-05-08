@@ -838,7 +838,7 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
 
    csr.io.events.map(_ := UInt(0))
 
-   require (nPerfEvents >= 45)
+   require (nPerfEvents >= 48)
    println ("   " + nPerfCounters + " HPM counters enabled (with " + nPerfEvents + " events).")
 
    // Execution-time branch prediction accuracy.
@@ -929,6 +929,19 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
       rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && rob.io.commit.uops(w).is_jal &&
       rob.io.commit.uops(w).stat_brjmp_mispredicted}.reduce(_|_)),
       "[dpath] A committed JAL was marked as having been mispredicted.")
+
+   // Count issued instructions (only integer currently).
+   csr.io.events(45) := PopCount(iss_valids)
+
+   // Count not-issued slots due to empty issue windows (only integer currently).
+   val not_issued_and_empty = for { iss_valid <- iss_valids } yield {
+         !iss_valid && issue_unit.io.event_empty }
+   csr.io.events(46) := PopCount(not_issued_and_empty)
+
+   // Count not-issued slots due to backend hazards/unsatisified dependencies (only integer currently).
+   val not_issued_and_not_empty = for { iss_valid <- iss_valids } yield {
+         !iss_valid && !issue_unit.io.event_empty}
+   csr.io.events(47) := PopCount(not_issued_and_not_empty)
 
    val _uops = rob.io.commit.uops.toSeq
    val _valids = rob.io.commit.valids.toSeq
