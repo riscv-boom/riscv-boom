@@ -65,7 +65,7 @@ abstract class IssueUnit(num_issue_slots: Int, issue_width: Int, num_wakeup_port
 
    val issue_slots = Vec.fill(num_issue_slots) {Module(new IssueSlot(num_wakeup_ports)).io}
 
-   io.event_empty := PopCount(issue_slots.map(s => !s.valid)) === UInt(0)
+   io.event_empty := !(issue_slots.map(s => s.valid).reduce(_|_))
 
    //-------------------------------------------------------------
 
