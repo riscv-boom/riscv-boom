@@ -22,7 +22,7 @@ class DefaultBoomConfig extends Config((site, here, up) => {
       core = r.core.copy(
          fWidth = 2,
          useCompressed = false,
-         nPerfCounters = 4,
+         nPerfCounters = 29,
          nPerfEvents = 48,
          perfIncWidth = 3, // driven by issue ports, as set in BoomCoreParams.issueParams
          fpu = Some(tile.FPUParams(sfmaLatency=3, dfmaLatency=3, divSqrt=true))),
@@ -32,13 +32,13 @@ class DefaultBoomConfig extends Config((site, here, up) => {
    // BOOM-specific uarch Parameters
    case BoomKey => BoomCoreParams(
       issueWidth = 3,
-      numRobEntries = 48,
+      numRobEntries = 80,
       numIssueSlotEntries = 20,
-      numPhysRegisters = 110,
+      numPhysRegisters = 136,
       numLsuEntries = 16,
       maxBrCount = 8,
       enableBranchPredictor = true,
-      gshare = Some(GShareParameters(enabled = true, history_length=11))
+      gshare = Some(GShareParameters(enabled = true, history_length=15))
    )
   }
 )
