@@ -37,6 +37,7 @@ case class BoomCoreParams(
    gskew: Option[GSkewParameters] = None,
    intToFpLatency: Int = 2,
    imulLatency: Int = 3,
+   fetchLatency: Int = 2,
    renameLatency: Int = 2,
    regreadLatency: Int = 1
 )
@@ -67,7 +68,7 @@ trait HasBoomCoreParameters extends tile.HasCoreParameters
    val NUM_ROB_ENTRIES  = boomParams.numRobEntries     // number of ROB entries (e.g., 32 entries for R10k)
    val NUM_LSU_ENTRIES  = boomParams.numLsuEntries     // number of LD/ST entries
    val MAX_BR_COUNT     = boomParams.maxBrCount        // number of branches we can speculate simultaneously
-   val FETCH_BUFFER_SZ  = boomParams.fetchBufferSz     // number of instructions that stored between fetch&decode
+   val fetchBufferSz    = boomParams.fetchBufferSz     // number of instructions that stored between fetch&decode
 
    val numIntPhysRegs   = boomParams.numIntPhysRegisters // size of the integer physical register file
    val numFpPhysRegs    = boomParams.numFpPhysRegisters  // size of the floating point physical register file
@@ -92,8 +93,9 @@ trait HasBoomCoreParameters extends tile.HasCoreParameters
 
    val intToFpLatency = boomParams.intToFpLatency
 
-   val renameLatency = boomParams.renameLatency
-   val regreadLatency = boomParams.regreadLatency
+   val fetchLatency = boomParams.fetchLatency // how many cycles does fetch occupy?
+   val renameLatency = boomParams.renameLatency // how many cycles does rename occupy?
+   val regreadLatency = boomParams.regreadLatency // how many cycles does rrd occupy?
    require (regreadLatency == 0 || regreadLatency == 1)
 
    val enableBrResolutionRegister = boomParams.enableBrResolutionRegister

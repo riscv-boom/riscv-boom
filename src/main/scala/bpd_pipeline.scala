@@ -75,16 +75,21 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
 {
    val io = new BoomBundle()(p)
    {
-      val req        = Decoupled(new RedirectRequest(fetch_width))
+      // Fetch0
+      val npc        = UInt(INPUT, width = vaddrBitsExtended)
+
+      // Fetch2
       val imem_resp  = Decoupled(new rocket.FrontendResp).flip
       val btb_resp   = Valid(new rocket.BTBResp).flip
-      val npc        = UInt(INPUT, width = vaddrBitsExtended)
-      val ras_update = Valid(new rocket.RASUpdate)
 
+      // Fetch3
+      val req        = Decoupled(new RedirectRequest(fetch_width))
+      val ras_update = Valid(new rocket.RASUpdate)
       val pred_resp  = new BranchPredictionResp().asOutput
       val predictions= Vec(fetch_width, new BranchPrediction().asOutput)
-      val br_unit    = new BranchUnitResp().asInput
 
+      // Other
+      val br_unit    = new BranchUnitResp().asInput
       val brob       = new BrobBackendIo(fetch_width)
       val flush      = Bool(INPUT)
       val status_prv = UInt(INPUT, width = rocket.PRV.SZ)
@@ -154,7 +159,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
 
 
    //-------------------------------------------------------------
-   // Branch Decode (BP2 Stage)
+   // Branch Decode (BP2 Stage/Fetch2 Stage)
    //
    // 1) Which branch to take?
    // 2) Is there a jal earlier to take?
@@ -299,8 +304,6 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
          bpd_br_fire  := bpd_br_beats_jal && bpd_br_taken &&
                            (bpd_br_idx < io.btb_resp.bits.bridx ||  // earlier than BTB's branch
                            (bpd_valid && !bpd_agrees_with_btb))     // taken later
-//                         (bpd_valid && !bpd_agrees_with_btb && io.btb_resp.bits.bridx =/= bpd_br_idx)) // taken later
-                                                                                                    // than BTB's branch
 
          bpd_nextline_fire := bpd_valid && !bpd_predictions.orR && !bpd_jal_val
          override_btb := bpd_valid && !bpd_agrees_with_btb
@@ -349,21 +352,29 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    assert (PopCount(Vec(bpd_br_fire, bpd_jal_fire, bpd_nextline_fire)) <= UInt(1),
       "[bpd_pipeline] mutually-exclusive signals firing")
 
+   //-------------------------------------------------------------
+   // Fetch3 Stage
+   // Redirect the front-end based decoded instructions.
 
-   io.req.valid        := io.imem_resp.valid &&
-                          (bpd_br_fire || bpd_jal_fire || bpd_nextline_fire) &&
-                          !io.imem_resp.bits.xcpt_if
-   io.req.bits.target  := Mux(bpd_nextline_fire, nextline_pc, bpd_req_target)
-   io.req.bits.idx     := Mux(bpd_nextline_fire, UInt(fetch_width-1), bpd_req_idx)
-   io.req.bits.br_pc   := aligned_pc + (io.req.bits.idx << UInt(2))
-   io.req.bits.is_jump := !bpd_br_beats_jal
-   io.req.bits.is_cfi  := is_cfi
-   io.req.bits.is_taken:= bpd_br_fire || bpd_jal_fire
+   val imemreq = Wire(new RedirectRequest(fetch_width))
+   val imemreq_valid =
+         io.imem_resp.valid &&
+         (bpd_br_fire || bpd_jal_fire || bpd_nextline_fire) &&
+         !io.imem_resp.bits.xcpt_if
 
-   io.pred_resp.btb_resp_valid   := io.btb_resp.valid
-   io.pred_resp.btb_resp         := io.btb_resp.bits
-   io.pred_resp.bpd_resp         := bpd_bits
-   io.pred_resp.br_seen          := bp2_br_seen
+
+   imemreq.target  := Mux(bpd_nextline_fire, nextline_pc, bpd_req_target)
+   imemreq.idx     := Mux(bpd_nextline_fire, UInt(fetch_width-1), bpd_req_idx)
+   imemreq.br_pc   := aligned_pc + (imemreq.idx << UInt(2))
+   imemreq.is_jump := !bpd_br_beats_jal
+   imemreq.is_cfi  := is_cfi
+   imemreq.is_taken:= bpd_br_fire || bpd_jal_fire
+
+   val pred_resp = Wire(new BranchPredictionResp)
+   pred_resp.btb_resp_valid   := io.btb_resp.valid
+   pred_resp.btb_resp         := io.btb_resp.bits
+   pred_resp.bpd_resp         := bpd_bits
+   pred_resp.br_seen          := bp2_br_seen
 
    private def KillMask(m_enable: Bool, m_idx: UInt, m_width: Int): UInt =
    {
@@ -372,8 +383,8 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
       mask
    }
    // mask out instructions after predicted branch
-   val bpd_kill_mask = KillMask(io.req.valid,
-                               io.req.bits.idx,
+   val bpd_kill_mask = KillMask(imemreq_valid,
+                               imemreq.idx,
                                fetchWidth)
    // mask out instructions after first jr (doesn't matter if predicted correctly or not!)
    val jr_kill_mask = KillMask(is_jr.reduce(_|_),
@@ -388,18 +399,19 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    val btb_mask = Mux(override_btb || !io.btb_resp.valid,
                      Fill(fetchWidth, UInt(1,1)),
                      io.btb_resp.bits.mask)
-   io.pred_resp.mask := ~bpd_kill_mask & ~jr_kill_mask & btb_mask
+   pred_resp.mask := ~bpd_kill_mask & ~jr_kill_mask & btb_mask
 
 
+   val predictions = Wire(Vec(fetch_width, new BranchPrediction()))
    for (w <- 0 until FETCH_WIDTH)
    {
-      io.predictions(w).is_br_or_jalr := is_br(w) || is_jr(w)
-      io.predictions(w).bpd_predict_taken := bpd_predictions(w) && bpd_valid && !bpd_nextline_fire
-      io.predictions(w).btb_predicted := io.btb_resp.valid &&
-                                          !(bpd_nextline_fire || bpd_br_fire || bpd_jal_fire)
-      io.predictions(w).btb_hit := Mux(io.btb_resp.bits.bridx === UInt(w),
-                                          io.btb_resp.valid, Bool(false))
-      io.predictions(w).bpd_predict_val   := bpd_valid
+      predictions(w).is_br_or_jalr := is_br(w) || is_jr(w)
+      predictions(w).bpd_predict_taken := bpd_predictions(w) && bpd_valid && !bpd_nextline_fire
+      predictions(w).btb_predicted := io.btb_resp.valid &&
+                                       !(bpd_nextline_fire || bpd_br_fire || bpd_jal_fire)
+      predictions(w).btb_hit := Mux(io.btb_resp.bits.bridx === UInt(w),
+                                       io.btb_resp.valid, Bool(false))
+      predictions(w).bpd_predict_val   := bpd_valid
    }
 
    bp2_br_seen := io.imem_resp.valid &&
@@ -418,21 +430,48 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    // TODO flush_take_pc should probably be given to the branch unit, instead of resetting it here?
    // NOTE: what about branch taken earlier?
 
+   val ras_update = Wire(Valid(new rocket.RASUpdate))
+
    val jumps    = is_jal.toBits | is_jr.toBits
    val jmp_idx  = PriorityEncoder(jumps)
    val jmp_inst = (io.imem_resp.bits.data >> (jmp_idx*UInt(coreInstBits)))(coreInstBits-1,0)
    val is_call  = IsCall(jmp_inst)
    val is_ret   = IsReturn(jmp_inst)
-   io.ras_update.valid           := io.imem_resp.valid &&
-                                         !io.imem_resp.bits.xcpt_if &&
-                                         jumps.orR &&
-                                         !bpd_br_beats_jal &&
-                                         io.req.ready &&
-                                         !io.flush
-   io.ras_update.bits.isCall     := is_call
-   io.ras_update.bits.isReturn   := is_ret
-   io.ras_update.bits.returnAddr := aligned_pc + (jmp_idx << UInt(2)) + UInt(4)
-   io.ras_update.bits.prediction := io.btb_resp
+   ras_update.valid           := io.imem_resp.valid &&
+                                      !io.imem_resp.bits.xcpt_if &&
+                                      jumps.orR &&
+                                      !bpd_br_beats_jal &&
+                                      !io.flush
+                                      io.req.ready
+   ras_update.bits.isCall     := is_call
+   ras_update.bits.isReturn   := is_ret
+   ras_update.bits.returnAddr := aligned_pc + (jmp_idx << UInt(2)) + UInt(4)
+   ras_update.bits.prediction := io.btb_resp
+
+   //-------------------------------------------------------------
+   // Fetch3 Stage (Optional Pipelining)
+
+   if (fetchLatency == 2)
+   {
+      io.req.valid   := imemreq_valid
+      io.req.bits    := imemreq
+      io.ras_update  := ras_update
+      io.predictions := predictions
+      io.pred_resp   := pred_resp
+   }
+   else
+   {
+      io.req.valid   := RegNext(imemreq_valid)// && !io.flush && !(io.br_unit.brinfo.mispredict))
+      io.req.bits    := RegNext(imemreq)
+      io.ras_update  := RegNext(ras_update)
+      io.predictions := RegNext(predictions)
+      io.pred_resp   := RegNext(pred_resp)
+
+      io.ras_update.valid := RegNext(ras_update.valid) && !io.flush && io.req.ready
+
+      require (fetchLatency == 3)
+   }
+
 
    //-------------------------------------------------------------
    // printfs
@@ -440,7 +479,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    if (DEBUG_PRINTF)
    {
       printf("bp2_aligned_pc: 0x%x BHT:(%c 0x%x, %d) p:%x (%d) b:%x j:%x (%d) %c %c\n"
-         , aligned_pc, Mux(io.req.valid, Str("T"), Str("-")), io.req.bits.target, io.req.bits.idx
+         , aligned_pc, Mux(imemreq_valid, Str("T"), Str("-")), imemreq.target, imemreq.idx
          , bpd_predictions.toBits, bpd_br_idx, is_br.toBits, is_jal.toBits, bpd_jal_idx
          , Mux(bpd_br_beats_jal, Str("B"), Str("J")), Mux(bpd_nextline_fire, Str("N"), Str("-"))
          )

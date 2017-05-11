@@ -69,7 +69,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    val fetch_bundle = Wire(new FetchBundle())
 
    val FetchBuffer = Module(new Queue(gen=new FetchBundle,
-                                entries=FETCH_BUFFER_SZ,
+                                entries=fetchBufferSz,
                                 pipe=false,
                                 flow=enableFetchBufferFlowThrough,
                                 _reset=(io.clear_fetchbuffer || reset.toBool)))
@@ -85,9 +85,10 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
             {
                // TODO for now, manually set the fetch_tsc to point to when the fetch
                // started. This doesn't properly account for i-cache and i-tlb misses. :(
+               // Also not factoring in NPC.
                printf("%d; O3PipeView:fetch:%d:0x%x:0:%d:DASM(%x)\n",
                   fetch_bundle.debug_events(i).fetch_seq,
-                  io.tsc_reg - UInt(2*O3_CYCLE_TIME),
+                  io.tsc_reg - UInt(1*O3_CYCLE_TIME),
                   (fetch_bundle.pc.toSInt & SInt(-(fetch_width*coreInstBytes))).toUInt + UInt(i << 2),
                   fetch_bundle.debug_events(i).fetch_seq,
                   fetch_bundle.insts(i))
@@ -96,7 +97,12 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
       }
    }
 
-   val if_stalled = !(FetchBuffer.io.enq.ready) // if FetchBuffer backs up, we have to stall the front-end
+
+   require (fetchLatency == 2 || fetchLatency == 3)
+   val if_stalled =
+      if (fetchLatency == 2) !(FetchBuffer.io.enq.ready) // if FetchBuffer backs up, we have to stall the front-end
+      else FetchBuffer.io.count >= UInt(fetchBufferSz-(fetchLatency-2))
+
 
    val take_pc = br_unit.take_pc ||
                  io.flush_take_pc ||
@@ -112,8 +118,16 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
                                        io.bp2_pred_target)) // bp2_take_pc
 
    // Fetch Buffer
-   FetchBuffer.io.enq.valid := io.imem.resp.valid && !io.clear_fetchbuffer
-   FetchBuffer.io.enq.bits  := fetch_bundle
+   if (fetchLatency == 2) {
+      FetchBuffer.io.enq.valid := io.imem.resp.valid && !io.clear_fetchbuffer
+      FetchBuffer.io.enq.bits  := fetch_bundle
+   } else {
+      require (fetchLatency == 3)
+      FetchBuffer.io.enq.valid := RegNext(io.imem.resp.valid && !io.clear_fetchbuffer) &&
+                                 !io.clear_fetchbuffer &&
+                                 !io.bp2_take_pc
+      FetchBuffer.io.enq.bits  := RegNext(fetch_bundle)
+   }
 
    fetch_bundle.pc := io.imem.resp.bits.pc
    fetch_bundle.xcpt_if := io.imem.resp.bits.xcpt_if
@@ -200,29 +214,17 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
          , Mux(br_unit.brinfo.taken, Str("T"), Str("-"))
          , Mux(br_unit.debug_btb_pred, Str("B"), Str("_"))
          , Mux(br_unit.brinfo.mispredict, Str("M"), Str(" "))
-         // chisel3 lacks %s support
-         //, Mux(br_unit.brinfo.mispredict, Str(b_mgt + "MISPREDICT" + end), Str(grn + "          " + end))
-         //, bpd_stage.io.req.bits.idx
          , Mux(take_pc, Str("T"), Str(" "))
-         //, Mux(take_pc, Str("TAKE_PC"), Str(" "))
          , Mux(io.flush_take_pc, Str("F"),
            Mux(br_unit.take_pc, Str("B"),
            Mux(io.bp2_take_pc && !if_stalled, Str("P"),
            Mux(io.bp2_take_pc, Str("J"),
                               Str(" ")))))
-//         , Mux(io.flush_take_pc, Str("FLSH"),
-//           Mux(br_unit.take_pc, Str("BRU "),
-//           Mux(io.bp2_take_pc && !if_stalled, Str("BP2"),
-//           Mux(io.bp2_take_pc, Str("J-s"),
-//                              Str(" ")))))
          , if_pc_next
          , if_stalled)
 
       // Fetch Stage 2
-//      printf("I$ Response: (%s) IF2_PC= 0x%x (mask:0x%x) \u001b[1;35m TODO need Str in Chisel3\u001b[0m  ----BrPred2:(%s,%s,%d) [btbtarg: 0x%x] jkilmsk:0x%x ->(0x%x)\n"
-//      printf("I$ Response: (%s) IF2_PC= 0x%x (mask:0x%x) [1;35m TODO need Str in Chisel3[0m  ----BrPred2:(%s,%s,%d) [btbtarg: 0x%x] jkilmsk:0x%x ->(0x%x)\n"
-
-      printf("I$ Response: (%c) IF2_PC= 0x%x (mask:0x%x) "
+      printf(" Fetch2 : (%c) 0x%x I$ Response <<-- IF2_PC (mask:0x%x) "
          , Mux(io.imem.resp.valid, Str("v"), Str("-"))
          , io.imem.resp.bits.pc
          , io.imem.resp.bits.mask
@@ -242,13 +244,20 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
             )
       }
 
-      printf("----BrPred2:(%c,%c,%d) [btbtarg: 0x%x] jkilmsk:0x%x ->(0x%x)\n"
+      printf("----BrPred2:(%c,%c,%d) [btbtarg: 0x%x]\n"
          , Mux(io.imem.resp.bits.btb.valid, Str("H"), Str("-"))
          , Mux(io.imem.resp.bits.btb.bits.taken, Str("T"), Str("-"))
          , io.imem.resp.bits.btb.bits.bridx
          , io.imem.resp.bits.btb.bits.target(19,0)
-         , io.bp2_pred_resp.mask
-         , fetch_bundle.mask
          )
+
+      // Fetch Stage 3
+      printf(" Fetch3 : (%c) 0x%x jkilmsk:0x%x ->(0x%x)\n"
+         , Mux(FetchBuffer.io.enq.valid, Str("V"), Str("-"))
+         , FetchBuffer.io.enq.bits.pc
+         , io.bp2_pred_resp.mask
+         , FetchBuffer.io.enq.bits.mask
+         )
+
    }
 }
