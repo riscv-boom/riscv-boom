@@ -1057,9 +1057,9 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
 
       val numBrobWhitespace = if (DEBUG_PRINTF_BROB) NUM_BROB_ENTRIES else 0
 //      val screenheight = 103-8
-//      val screenheight = 85 -8
-      val screenheight = 62-8
-       var whitespace = (screenheight - 10 + 3 - NUM_LSU_ENTRIES -
+      val screenheight = 85 -8
+//      val screenheight = 62-8
+       var whitespace = (screenheight - 11 + 3 - NUM_LSU_ENTRIES -
          issueParams.map(_.numEntries).sum - issueParams.length - (NUM_ROB_ENTRIES/COMMIT_WIDTH) - numBrobWhitespace
      )
 
