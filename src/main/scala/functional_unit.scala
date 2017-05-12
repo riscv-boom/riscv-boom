@@ -18,7 +18,7 @@
 package boom
 
 import Chisel._
-import config.Parameters
+import cde.Parameters
 
 import rocket.ALU._
 import util._
@@ -72,7 +72,7 @@ class FunctionalUnitIo(num_stages: Int
    val br_unit = new BranchUnitResp().asOutput
 
    // only used by the fpu unit
-   val fcsr_rm = UInt(INPUT, tile.FPConstants.RM_SZ)
+   val fcsr_rm = UInt(INPUT, rocket.FPConstants.RM_SZ)
 
    // only used by branch unit
    // TODO name this, so ROB can also instantiate it
@@ -628,7 +628,7 @@ class MemAddrCalcUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(nu
 // All FP instructions are padded out to the max latency unit for easy
 // write-port scheduling.
 class FPUUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(
-   num_stages = p(tile.TileKey).core.fpu.get.dfmaLatency,
+   num_stages = p(rocket.FPUKey).get.dfmaLatency,
    num_bypass_stages = 0,
    earliest_bypass_stage = 0,
    data_width = 65)(p)
@@ -655,7 +655,7 @@ class IntToFPUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(
    fp_decoder.io.uopc := io_req.uop.uopc
    val fp_ctrl = fp_decoder.io.sigs
    val fp_rm = Mux(ImmGenRm(io_req.uop.imm_packed) === Bits(7), io.fcsr_rm, ImmGenRm(io_req.uop.imm_packed))
-   val req = Wire(new tile.FPInput)
+   val req = Wire(new rocket.FPInput)
    req := fp_ctrl
    req.rm := fp_rm
    req.in1 := io_req.rs1_data
@@ -668,7 +668,7 @@ class IntToFPUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(
    assert (!(io.req.valid && !fp_ctrl.fromint),
       "[func] Only support fromInt micro-ops.")
 
-   val ifpu = Module(new tile.IntToFP(intToFpLatency))
+   val ifpu = Module(new rocket.IntToFP(intToFpLatency))
    ifpu.io.in.valid := io.req.valid
    ifpu.io.in.bits := req
 
@@ -715,7 +715,9 @@ abstract class IterativeFunctionalUnit(implicit p: Parameters)
 
 class MulDivUnit(implicit p: Parameters) extends IterativeFunctionalUnit()(p)
 {
-   val muldiv = Module(new rocket.MulDiv(mulDivParams, width = xLen))
+   val muldiv = Module(new rocket.MulDiv(
+      p(rocket.MulDivKey).getOrElse(rocket.MulDivConfig()),
+      width = xLen))
 
    // request
    muldiv.io.req.valid    := io.req.valid && !this.do_kill

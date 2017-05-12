@@ -7,10 +7,12 @@ package boom
 
 import Chisel._
 import rocket._
-import tile._
-import config.{Parameters, Field}
+//import tile._
+import cde.{Parameters, Field}
 
 case object BoomKey extends Field[BoomCoreParams]
+case object EnableBTB extends Field[Boolean]
+case object EnableBTBContainsBranches extends Field[Boolean]
 
 case class BoomCoreParams(
    numRobEntries: Int = 16,
@@ -41,21 +43,21 @@ case class BoomCoreParams(
    fetchLatency: Int = 2
 )
 
-trait HasBoomCoreParameters extends tile.HasCoreParameters
+trait HasBoomCoreParameters extends rocket.HasCoreParameters
 {
    // HACK this is a bit hacky since BoomParams can't extend RocketParams.
-   val rocketParams: RocketCoreParams = tileParams.core.asInstanceOf[RocketCoreParams]
+//   val rocketParams: RocketCoreParams = tileParams.core.asInstanceOf[RocketCoreParams]
    val boomParams: BoomCoreParams = p(BoomKey)
    require(xLen == 64)
 
-   val nPerfCounters    = rocketParams.nPerfCounters
-   val nPerfEvents      = rocketParams.nPerfEvents
+//   val nPerfCounters    = rocketParams.nPerfCounters
+//   val nPerfEvents      = rocketParams.nPerfEvents
    //************************************
    // Superscalar Widths
-   val FETCH_WIDTH      = rocketParams.fetchWidth       // number of insts we can fetch
-   val DECODE_WIDTH     = rocketParams.decodeWidth
+   val FETCH_WIDTH      = p(FetchWidth)       // number of insts we can fetch
+   val DECODE_WIDTH     = FETCH_WIDTH
    val DISPATCH_WIDTH   = DECODE_WIDTH                // number of insts put into the IssueWindow
-   val COMMIT_WIDTH     = rocketParams.retireWidth
+   val COMMIT_WIDTH     = p(RetireWidth)
 
    require (DECODE_WIDTH == COMMIT_WIDTH)
    require (DISPATCH_WIDTH == COMMIT_WIDTH)
@@ -77,16 +79,16 @@ trait HasBoomCoreParameters extends tile.HasCoreParameters
 
    //************************************
    // Functional Units
-   val usingFDivSqrt = rocketParams.fpu.isDefined && rocketParams.fpu.get.divSqrt
+   val usingFDivSqrt = p(FPUKey).get.divSqrt //rocketParams.fpu.isDefined && rocketParams.fpu.get.divSqrt
 
-   val mulDivParams = rocketParams.mulDiv.getOrElse(MulDivParams())
+//   val mulDivParams = rocketParams.mulDiv.getOrElse(MulDivParams())
 
    //************************************
    // Pipelining
 
    val imulLatency = boomParams.imulLatency
-   val dfmaLatency = if (rocketParams.fpu.isDefined) rocketParams.fpu.get.dfmaLatency else 3
-   val sfmaLatency = if (rocketParams.fpu.isDefined) rocketParams.fpu.get.sfmaLatency else 3
+   val dfmaLatency = if (p(FPUKey).isDefined) p(FPUKey).get.dfmaLatency else imulLatency
+   val sfmaLatency = if (p(FPUKey).isDefined) p(FPUKey).get.sfmaLatency else imulLatency
    // All FPU ops padded out to same delay for writeport scheduling.
    require (sfmaLatency == dfmaLatency)
 
@@ -110,16 +112,16 @@ trait HasBoomCoreParameters extends tile.HasCoreParameters
 
    //************************************
    // Load/Store Unit
-   val dcacheParams: DCacheParams = tileParams.dcache.get
-   val nTLBEntries = dcacheParams.nTLBEntries
+//   val dcacheParams: DCacheParams = tileParams.dcache.get
+//   val nTLBEntries = dcacheParams.nTLBEntries
 
    //************************************
    // Branch Prediction
 
-   val enableBTB = tileParams.btb.isDefined
-   val btbParams: rocket.BTBParams = tileParams.btb.get
+   val enableBTB = p(EnableBTB)
+   val btbParams = p(BtbKey)
 
-   val enableBTBContainsBranches = boomParams.enableBTBContainsBranches
+   val enableBTBContainsBranches = p(EnableBTBContainsBranches)
 
    val ENABLE_BRANCH_PREDICTOR = boomParams.enableBranchPredictor
    val ENABLE_BPD_UMODE_ONLY = boomParams.enableBpdUModeOnly

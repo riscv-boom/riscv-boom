@@ -23,7 +23,7 @@
 package boom
 
 import Chisel._
-import config.Parameters
+import cde.Parameters
 
 import util.Str
 
@@ -70,7 +70,7 @@ class BranchPrediction(implicit p: Parameters) extends BoomBundle()(p)
    def wasBTB = btb_predicted
 }
 
-class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p)
+class BranchPredictionStage(fetch_width: Int)(implicit p: cde.Parameters) extends BoomModule()(p)
    with HasBoomCoreParameters
 {
    val io = new BoomBundle()(p)
@@ -441,7 +441,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
                                       !io.imem_resp.bits.xcpt_if &&
                                       jumps.orR &&
                                       !bpd_br_beats_jal &&
-                                      !io.flush
+                                      !io.flush &&
                                       io.req.ready
    ras_update.bits.isCall     := is_call
    ras_update.bits.isReturn   := is_ret

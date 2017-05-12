@@ -41,7 +41,7 @@ object IsKilledByBranch
 
 object GetNewUopAndBrMask
 {
-   def apply(uop: MicroOp, brinfo: BrResolutionInfo)(implicit p: config.Parameters): MicroOp =
+   def apply(uop: MicroOp, brinfo: BrResolutionInfo)(implicit p: cde.Parameters): MicroOp =
    {
       val newuop = Wire(init = uop)
       newuop.br_mask := 
@@ -278,7 +278,7 @@ object AgePriorityEncoder
 }
 
 
-class QueueForMicroOpWithData(entries: Int, data_width: Int)(implicit p: config.Parameters) extends BoomModule()(p)
+class QueueForMicroOpWithData(entries: Int, data_width: Int)(implicit p: cde.Parameters) extends BoomModule()(p)
 {
    val io = new Bundle
    {

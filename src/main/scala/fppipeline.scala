@@ -15,7 +15,7 @@
 package boom
 
 import Chisel._
-import config.Parameters
+import cde.Parameters
 
 
 class FpPipeline(implicit p: Parameters) extends BoomModule()(p)
@@ -29,7 +29,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p)
    {
       val brinfo           = new BrResolutionInfo().asInput
       val flush_pipeline   = Bool(INPUT)
-      val fcsr_rm          = UInt(INPUT, tile.FPConstants.RM_SZ)
+      val fcsr_rm          = UInt(INPUT, rocket.FPConstants.RM_SZ)
 
       val dis_valids       = Vec(DISPATCH_WIDTH, Bool()).asInput // REFACTOR into single Decoupled()
       val dis_uops         = Vec(DISPATCH_WIDTH, new MicroOp()).asInput

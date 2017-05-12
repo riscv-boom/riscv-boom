@@ -12,7 +12,7 @@
 package boom
 
 import Chisel._
-import config.Parameters
+import cde.Parameters
 
 // internally bypasses newly busy registers (.write) to the read ports (.read)
 // num_operands is the maximum number of operands per instruction (.e.g., 2 normally, but 3 if FMAs are supported)

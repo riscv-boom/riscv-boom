@@ -14,16 +14,16 @@
 package boom
 
 import Chisel._
-import config.Parameters
+import cde.Parameters
 
-import tile.FPConstants._
+import rocket.FPConstants._
 
 
 class UOPCodeFDivDecoder extends Module
 {
   val io = new Bundle {
     val uopc = Bits(INPUT, UOPC_SZ)
-    val sigs = new tile.FPUCtrlSigs().asOutput
+    val sigs = new rocket.FPUCtrlSigs().asOutput
   }
 
    val N = BitPat("b0")
@@ -78,7 +78,7 @@ class FDivSqrtUnit(implicit p: Parameters) extends FunctionalUnit(is_pipelined =
    // provide a one-entry queue to store incoming uops while waiting for the fdiv/fsqrt unit to become available.
    val r_buffer_val = Reg(init = Bool(false))
    val r_buffer_req = Reg(new FuncUnitReq(data_width=65))
-   val r_buffer_fin = Reg(new tile.FPInput)
+   val r_buffer_fin = Reg(new rocket.FPInput)
 
    val fdiv_decoder = Module(new UOPCodeFDivDecoder)
    fdiv_decoder.io.uopc := io.req.bits.uop.uopc
@@ -126,7 +126,7 @@ class FDivSqrtUnit(implicit p: Parameters) extends FunctionalUnit(is_pipelined =
 
    val r_divsqrt_val = Reg(init = Bool(false))  // inflight uop?
    val r_divsqrt_killed = Reg(Bool())           // has inflight uop been killed?
-   val r_divsqrt_fin = Reg(new tile.FPInput)
+   val r_divsqrt_fin = Reg(new rocket.FPInput)
    val r_divsqrt_uop = Reg(new MicroOp)
 
    // Need to buffer output until RF writeport is available.

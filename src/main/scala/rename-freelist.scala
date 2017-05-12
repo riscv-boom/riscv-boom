@@ -10,7 +10,7 @@
 package boom
 
 import Chisel._
-import config.Parameters
+import cde.Parameters
 
 
 class FreeListIo(num_phys_registers: Int, pl_width: Int)(implicit p: Parameters) extends BoomBundle()(p)

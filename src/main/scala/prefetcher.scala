@@ -18,7 +18,7 @@ package boom
 {
 
 import Chisel._
-import config.Parameters
+import cde.Parameters
 
 //*************************************************************
 // IOs

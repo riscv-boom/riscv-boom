@@ -45,7 +45,7 @@
 package boom
 
 import Chisel._
-import config.{Parameters, Field}
+import cde.{Parameters, Field}
 
 import util.Str
 

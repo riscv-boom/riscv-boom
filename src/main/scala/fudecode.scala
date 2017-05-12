@@ -12,7 +12,7 @@
 package boom
 
 import Chisel._
-import config.Parameters
+import cde.Parameters
 
 import rocket.ALU._
 import util.uintToBitPat

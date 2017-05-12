@@ -31,7 +31,7 @@
 package boom
 
 import Chisel._
-import config.Parameters
+import cde.Parameters
 
 
 class CircularShiftRegisterIO(compressed_length: Int, history_length: Int) extends Bundle

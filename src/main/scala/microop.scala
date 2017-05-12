@@ -10,7 +10,7 @@
 package boom
 
 import Chisel._
-import config.Parameters
+import cde.Parameters
 
 class MicroOp(implicit p: Parameters) extends BoomBundle()(p)
 {

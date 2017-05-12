@@ -47,7 +47,7 @@ package boom
 {
 
 import Chisel._
-import config.Parameters
+import cde.Parameters
 
 import util.Str
 import uncore.constants.MemoryOpConstants._
@@ -138,7 +138,7 @@ class LoadStoreUnitIO(pl_width: Int)(implicit p: Parameters) extends BoomBundle(
 }
 
 
-class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends BoomModule()(p)
+class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(p)
 {
    val io = new LoadStoreUnitIO(pl_width)
 
@@ -364,7 +364,8 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: uncore.tilelink
                      Mux(will_fire_load_retry, laq_addr(laq_retry_idx),
                                                io.exe_resp.bits.addr.toBits))
 
-   val dtlb = Module(new rocket.TLB(nTLBEntries))
+//   val dtlb = Module(new rocket.TLB(nTLBEntries))
+   val dtlb = Module(new rocket.TLB()(p.alterPartial({case uncore.agents.CacheName => "L1D"})))
 
    io.ptw <> dtlb.io.ptw
    dtlb.io.req.valid := will_fire_load_incoming ||
@@ -404,8 +405,8 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: uncore.tilelink
 
    // check if a load is uncacheable - must stop it from executing speculatively,
    // as it might have side-effects!
-//   val tlb_addr_uncacheable = !(addrMap.isCacheable(exe_tlb_paddr))
-   val tlb_addr_uncacheable = !(dtlb.io.resp.cacheable)
+   val tlb_addr_uncacheable = !(addrMap.isCacheable(exe_tlb_paddr))
+//   val tlb_addr_uncacheable = !(dtlb.io.resp.cacheable)
 
    //-------------------------------------
    // Can-fire Logic & Wakeup/Retry Select

@@ -28,26 +28,42 @@
 package boom
 
 import Chisel._
-import config.Parameters
+import cde.Parameters
 
 import rocket.Instructions._
 import util.Str
 
 
-abstract class BoomModule(implicit p: Parameters) extends tile.CoreModule()(p)
+abstract class BoomModule(implicit val p: Parameters) extends Module
   with HasBoomCoreParameters
 
 class BoomBundle(implicit val p: Parameters) extends util.ParameterizedBundle()(p)
   with HasBoomCoreParameters
 
-//-------------------------------------------------------------
-//-------------------------------------------------------------
-//-------------------------------------------------------------
-
-
-class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends BoomModule()(p)
-   with tile.HasCoreIO
+class CacheCounters() extends Bundle
 {
+   val dc_miss = Bool()
+   val ic_miss = Bool()
+}
+
+//-------------------------------------------------------------
+//-------------------------------------------------------------
+//-------------------------------------------------------------
+
+class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
+{
+   val io = new BoomBundle()(p)
+   {
+      val hartid     = UInt(INPUT, xLen)
+      val interrupts = new rocket.TileInterrupts().asInput
+      val imem       = new rocket.FrontendIO
+      val dmem       = new rocket.HellaCacheIO()(p.alterPartial({ case uncore.agents.CacheName => "L1D" }))
+      val ptw        = new rocket.DatapathPTWIO().flip
+      val ptw_tlb    = new rocket.TLBPTWIO()
+      val rocc       = new rocket.RoCCInterface().flip
+      val counters   = new CacheCounters().asInput
+   }
+
    //**********************************
    // construct all of the modules
 
@@ -64,11 +80,15 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    val num_wakeup_ports = num_irf_write_ports + num_fast_wakeup_ports
    val fetch_unit       = Module(new FetchUnit(FETCH_WIDTH))
    val bpd_stage        = Module(new BranchPredictionStage(FETCH_WIDTH))
+   println("\tBuilding dec")
    val dec_serializer   = Module(new FetchSerializerNtoM)
+   println("\tBuilding dec2")
    val decode_units     = for (w <- 0 until DECODE_WIDTH) yield { val d = Module(new DecodeUnit); d }
    val dec_brmask_logic = Module(new BranchMaskGenerationLogic(DECODE_WIDTH))
+   println("\tBuilding ren")
    val rename_stage     = Module(new RenameStage(DECODE_WIDTH, num_wakeup_ports, fp_pipeline.io.wakeups.length))
    val issue_units      = new boom.IssueUnits(num_wakeup_ports)
+   println("\tBuilding ren")
    val iregfile         = Module(new RegisterFile(numIntPhysRegs,
                                  exe_units.withFilter(_.usesIRF).map(e => e.num_rf_read_ports).sum,
                                  exe_units.withFilter(_.usesIRF).map(e => e.num_rf_write_ports).sum,
@@ -83,9 +103,13 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
                                  exe_units.withFilter(_.usesIRF).map(_.num_rf_read_ports),
                                  exe_units.num_total_bypass_ports,
                                  xLen))
+   println("\tBuilding csr")
    val csr              = Module(new rocket.CSRFile())
-   val dc_shim          = Module(new DCacheShim())
+   println("\tBuilding shim")
+   val dc_shim          = Module(new DCacheShim()(p.alterPartial({ case uncore.agents.CacheName => "L1D" })))
+   println("\tBuilding LSU")
    val lsu              = Module(new LoadStoreUnit(DECODE_WIDTH))
+   println("\tBuilding ROB")
    val rob              = Module(new Rob(
                                  DECODE_WIDTH,
                                  NUM_ROB_ENTRIES,
@@ -1031,7 +1055,9 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
       "[dpath] A committed JAL was marked as having been mispredicted.")
 
    // Count issued instructions (only integer currently).
-   require (log2Ceil(1+iss_valids.length) <= log2Ceil(1+csr.io.events(0).getWidth)) // CSR.scala sets increment width.
+//   println ("iss_val width  : " + log2Up(iss_valids.length))
+//   println ("csr even width : " + csr.io.events(0).getWidth) // CSR.scala sets increment width.
+   require (log2Ceil(iss_valids.length) <= csr.io.events(0).getWidth) // CSR.scala sets increment width.
    csr.io.events(34) := PopCount(iss_valids)
 
    // Count not-issued slots due to empty issue windows (only integer currently).

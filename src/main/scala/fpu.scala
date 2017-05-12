@@ -9,10 +9,10 @@ package boom
    // Note: (this FPU currently only supports fixed latency ops)
 
 import Chisel._
-import config.Parameters
+import cde.Parameters
 
-import tile.FPConstants._
-import tile.FPUCtrlSigs
+import rocket.FPConstants._
+import rocket.FPUCtrlSigs
 
 import util.uintToBitPat
 
@@ -122,7 +122,7 @@ class FpuReq()(implicit p: Parameters) extends BoomBundle()(p)
    val rs1_data = Bits(width = 65)
    val rs2_data = Bits(width = 65)
    val rs3_data = Bits(width = 65)
-   val fcsr_rm  = Bits(width = tile.FPConstants.RM_SZ)
+   val fcsr_rm  = Bits(width = rocket.FPConstants.RM_SZ)
 }
 
 class FPU(implicit p: Parameters) extends BoomModule()(p)
@@ -142,7 +142,7 @@ class FPU(implicit p: Parameters) extends BoomModule()(p)
    val fp_ctrl = fp_decoder.io.sigs
    val fp_rm = Mux(ImmGenRm(io_req.uop.imm_packed) === Bits(7), io_req.fcsr_rm, ImmGenRm(io_req.uop.imm_packed))
 
-   val req = Wire(new tile.FPInput)
+   val req = Wire(new rocket.FPInput)
    req := fp_ctrl
    req.rm := fp_rm
    req.in1 := io_req.rs1_data
@@ -153,27 +153,27 @@ class FPU(implicit p: Parameters) extends BoomModule()(p)
    req.typ := ImmGenTyp(io_req.uop.imm_packed)
 
 
-   val dfma = Module(new tile.FPUFMAPipe(latency = fpu_latency, expWidth = 11, sigWidth = 53))
+   val dfma = Module(new rocket.FPUFMAPipe(latency = fpu_latency, expWidth = 11, sigWidth = 53))
    dfma.io.in.valid := io.req.valid && fp_ctrl.fma && !fp_ctrl.single
    dfma.io.in.bits := req
 
 
-   val sfma = Module(new tile.FPUFMAPipe(latency = fpu_latency, expWidth = 8, sigWidth = 24))
+   val sfma = Module(new rocket.FPUFMAPipe(latency = fpu_latency, expWidth = 8, sigWidth = 24))
    sfma.io.in.valid := io.req.valid && fp_ctrl.fma && fp_ctrl.single
    sfma.io.in.bits := req
 
 
-   val fpiu = Module(new tile.FPToInt)
+   val fpiu = Module(new rocket.FPToInt)
    fpiu.io.in.valid := io.req.valid && (fp_ctrl.toint || fp_ctrl.cmd === FCMD_MINMAX)
    fpiu.io.in.bits := req
    val fpiu_out = Pipe(Reg(next=fpiu.io.in.valid && !fp_ctrl.fastpipe),
                        fpiu.io.out.bits, fpu_latency-1)
-   val fpiu_result  = Wire(new tile.FPResult)
+   val fpiu_result  = Wire(new rocket.FPResult)
    fpiu_result.data := fpiu_out.bits.toint
    fpiu_result.exc  := fpiu_out.bits.exc
 
 
-   val fpmu = Module(new tile.FPToFP(fpu_latency)) // latency 2 for rocket
+   val fpmu = Module(new rocket.FPToFP(fpu_latency)) // latency 2 for rocket
    fpmu.io.in.valid := io.req.valid && fp_ctrl.fastpipe
    fpmu.io.in.bits := req
    fpmu.io.lt := fpiu.io.out.bits.lt

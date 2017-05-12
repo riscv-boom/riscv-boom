@@ -17,11 +17,11 @@
 package boom
 
 import Chisel._
-import config.Parameters
+import cde.Parameters
 import scala.collection.mutable.ArrayBuffer
 
 import FUConstants._
-import tile.XLen
+import rocket.XLen
 import uncore.constants.MemoryOpConstants._
 
 // TODO rename to something like MicroOpWithData
@@ -38,7 +38,7 @@ class ExeUnitResp(data_width: Int)(implicit p: Parameters) extends BoomBundle()(
 class FFlagsResp(implicit p: Parameters) extends BoomBundle()(p)
 {
    val uop = new MicroOp()
-   val flags = Bits(width=tile.FPConstants.FLAGS_SZ)
+   val flags = Bits(width=rocket.FPConstants.FLAGS_SZ)
 }
 
 class ExecutionUnitIO(num_rf_read_ports: Int
@@ -62,7 +62,7 @@ class ExecutionUnitIO(num_rf_read_ports: Int
    val status = new rocket.MStatus().asInput
 
    // only used by the fpu unit
-   val fcsr_rm = Bits(INPUT, tile.FPConstants.RM_SZ)
+   val fcsr_rm = Bits(INPUT, rocket.FPConstants.RM_SZ)
 
    // only used by the mem unit
    val lsu_io = new LoadStoreUnitIO(DECODE_WIDTH).flip
@@ -134,7 +134,7 @@ class ALUExeUnit(
       num_rf_read_ports = if (has_fpu) 3 else 2,
       num_rf_write_ports = 1,
       num_bypass_stages =
-         (if (has_fpu && has_alu) p(tile.TileKey).core.fpu.get.dfmaLatency
+         (if (has_fpu && has_alu) p(rocket.FPUKey).get.dfmaLatency
          else if (has_alu && has_mul && !use_slow_mul) p(BoomKey).imulLatency
          else if (has_alu) 1 else 0),
       data_width = if (has_fpu || has_fdiv) 65 else 64,
@@ -520,7 +520,7 @@ class IntToFPExeUnit(implicit p: Parameters) extends ExecutionUnit(
 class MemExeUnit(implicit p: Parameters) extends ExecutionUnit(num_rf_read_ports = 2,
    num_rf_write_ports = 1,
    num_bypass_stages = 0,
-   data_width = if(p(tile.TileKey).core.fpu.nonEmpty) 65 else p(tile.XLen),
+   data_width = 65,
    num_variable_write_ports = 1,
    bypassable = false,
    is_mem_unit = true)(p)
@@ -613,7 +613,7 @@ class ALUMemExeUnit(
    extends ExecutionUnit(
       num_rf_read_ports = if (has_fpu) 3 else 2,
       num_rf_write_ports = 2,
-      num_bypass_stages = if (has_fpu) p(tile.TileKey).core.fpu.get.dfmaLatency else if (has_mul && !use_slow_mul) 3 else 1,
+      num_bypass_stages = if (has_fpu) p(rocket.FPUKey).get.dfmaLatency else if (has_mul && !use_slow_mul) p(BoomKey).imulLatency else 1,
       data_width = if (fp_mem_support) 65 else 64,
       num_variable_write_ports = 1,
       bypassable = true,
