@@ -23,7 +23,7 @@ class DefaultBoomConfig extends Config((site, here, up) => {
          fWidth = 2,
          useCompressed = false,
          nPerfCounters = 29,
-         nPerfEvents = 48,
+         nPerfEvents = 50,
          perfIncWidth = 3, // driven by issue ports, as set in BoomCoreParams.issueParams
          fpu = Some(tile.FPUParams(sfmaLatency=3, dfmaLatency=3, divSqrt=true))),
       btb = Some(BTBParams(nEntries = 40, nRAS = 4, updatesOutOfOrder = true))
@@ -34,7 +34,7 @@ class DefaultBoomConfig extends Config((site, here, up) => {
       issueWidth = 3,
       numRobEntries = 80,
       numIssueSlotEntries = 20,
-      numPhysRegisters = 136,
+      numPhysRegisters = 110,
       numLsuEntries = 16,
       maxBrCount = 8,
       enableBranchPredictor = true,
