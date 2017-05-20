@@ -19,14 +19,14 @@ import config.Parameters
 class RegisterFileReadPortIO(addr_width: Int, data_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
    val addr = UInt(INPUT, addr_width)
-   val data = Bits(OUTPUT, data_width)
+   val data = UInt(OUTPUT, data_width)
    override def cloneType = new RegisterFileReadPortIO(addr_width, data_width)(p).asInstanceOf[this.type]
 }
 
 class RegisterFileWritePort(addr_width: Int, data_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
    val addr = UInt(width = addr_width)
-   val data = Bits(width = data_width)
+   val data = UInt(width = data_width)
    override def cloneType = new RegisterFileWritePort(addr_width, data_width)(p).asInstanceOf[this.type]
 }
 
@@ -48,12 +48,13 @@ object WritePort
 }
 
 
-class RegisterFile( num_registers: Int
-                  , num_read_ports: Int
-                  , num_write_ports: Int
-                  , register_width: Int
-                  , enable_bypassing: Boolean)
-       (implicit p: Parameters) extends BoomModule()(p)
+abstract class RegisterFile(
+   num_registers: Int,
+   num_read_ports: Int,
+   num_write_ports: Int,
+   register_width: Int,
+   enable_bypassing: Boolean)
+   (implicit p: Parameters) extends BoomModule()(p)
 {
    val io = new BoomBundle()(p)
    {
@@ -61,19 +62,39 @@ class RegisterFile( num_registers: Int
       val write_ports = Vec(num_write_ports, Decoupled(new RegisterFileWritePort(PREG_SZ, register_width))).flip
    }
 
+   private val rf_cost = (num_read_ports+num_write_ports)*(num_read_ports+2*num_write_ports)
+   private val type_str = if (register_width == fLen+1) "Floating Point" else "Integer"
+   override def toString: String =
+      "\n   ==" + type_str + " Regfile==" +
+      "\n   Num RF Read Ports     : " + num_read_ports +
+      "\n   Num RF Write Ports    : " + num_write_ports +
+      "\n   RF Cost (R+W)*(R+2W)  : " + rf_cost
+}
+
+// Combinational Register File. Provide read address and get data back on the same cycle.
+class RegisterFileComb(
+   num_registers: Int,
+   num_read_ports: Int,
+   num_write_ports: Int,
+   register_width: Int,
+   enable_bypassing: Boolean)
+   (implicit p: Parameters)
+   extends RegisterFile(num_registers, num_read_ports, num_write_ports, register_width, enable_bypassing)
+{
    // --------------------------------------------------------------
 
-   val regfile = Mem(num_registers, Bits(width=register_width))
+   val regfile = Mem(num_registers, UInt(width=register_width))
+
 
    // --------------------------------------------------------------
    // Read ports.
 
-   val read_data = Wire(Vec(num_read_ports, Bits(width = register_width)))
+   val read_data = Wire(Vec(num_read_ports, UInt(width = register_width)))
 
    for (i <- 0 until num_read_ports)
    {
-      read_data(i) := Mux(io.read_ports(i).addr === UInt(0), Bits(0),
-                                                            regfile(io.read_ports(i).addr))
+      read_data(i) := Mux(io.read_ports(i).addr === UInt(0), UInt(0),
+                                                             regfile(io.read_ports(i).addr))
    }
 
 
@@ -113,17 +134,74 @@ class RegisterFile( num_registers: Int
          regfile(wport.bits.addr) := wport.bits.data
       }
    }
+}
 
+
+// Sequential Read Register File. Provide read address by end of cycle #0 and get data back on the next cycle #1.
+class RegisterFileSeq(
+   num_registers: Int,
+   num_read_ports: Int,
+   num_write_ports: Int,
+   register_width: Int,
+   enable_bypassing: Boolean)
+   (implicit p: Parameters)
+   extends RegisterFile(num_registers, num_read_ports, num_write_ports, register_width, enable_bypassing)
+{
 
    // --------------------------------------------------------------
 
-   private val rf_cost = (num_read_ports+num_write_ports)*(num_read_ports+2*num_write_ports)
-   private val type_str = if (register_width == fLen+1) "Floating Point" else "Integer"
-   override def toString: String =
-      "\n   ==" + type_str + " Regfile==" +
-      "\n   Num RF Read Ports     : " + num_read_ports +
-      "\n   Num RF Write Ports    : " + num_write_ports +
-      "\n   RF Cost (R+W)*(R+2W)  : " + rf_cost
+   val regfile = SeqMem(num_registers, UInt(width=register_width))
 
+
+   // --------------------------------------------------------------
+   // Read ports.
+
+   val read_data = Wire(Vec(num_read_ports, UInt(width = register_width)))
+
+   for (i <- 0 until num_read_ports)
+   {
+      read_data(i) :=
+         Mux(RegNext(io.read_ports(i).addr === UInt(0)),
+            UInt(0),
+            regfile.read(io.read_ports(i).addr))
+   }
+
+
+   // --------------------------------------------------------------
+   // Bypass out of the ALU's write ports.
+
+   if (enable_bypassing)
+   {
+      for (i <- 0 until num_read_ports)
+      {
+         val bypass_ens = io.write_ports.map(x => x.valid &&
+                                                  x.bits.addr =/= UInt(0) &&
+                                                  x.bits.addr === RegNext(io.read_ports(i).addr))
+
+         val bypass_data = Mux1H(Vec(bypass_ens), Vec(io.write_ports.map(_.bits.data)))
+
+         io.read_ports(i).data := Mux(bypass_ens.reduce(_|_), bypass_data, read_data(i))
+      }
+   }
+   else
+   {
+      for (i <- 0 until num_read_ports)
+      {
+         io.read_ports(i).data := read_data(i)
+      }
+   }
+
+
+   // --------------------------------------------------------------
+   // Write ports.
+
+   for (wport <- io.write_ports)
+   {
+      wport.ready := Bool(true)
+      when (wport.valid && (wport.bits.addr =/= UInt(0)))
+      {
+         regfile.write(wport.bits.addr, wport.bits.data)
+      }
+   }
 }
 

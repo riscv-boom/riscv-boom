@@ -106,9 +106,14 @@ class RegisterRead(
    {
       val num_read_ports = num_read_ports_array(w)
 
-      val rs1_addr = rrd_uops(w).pop1
-      val rs2_addr = rrd_uops(w).pop2
-      val rs3_addr = rrd_uops(w).pop3
+      // NOTE:
+      // If rrdLatency==0, ISS and RRD are in same cycle so this "just works".
+      // If rrdLatency==1, we need to send read address at end of ISS stage,
+      //    in order to get read data back at end of RRD stage.
+      require (regreadLatency == 0 || regreadLatency == 1)
+      val rs1_addr = io.iss_uops(w).pop1
+      val rs2_addr = io.iss_uops(w).pop2
+      val rs3_addr = io.iss_uops(w).pop3
 
       if (num_read_ports > 0) io.rf_read_ports(idx+0).addr := rs1_addr
       if (num_read_ports > 1) io.rf_read_ports(idx+1).addr := rs2_addr

@@ -70,12 +70,18 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    val dec_brmask_logic = Module(new BranchMaskGenerationLogic(DECODE_WIDTH))
    val rename_stage     = Module(new RenameStage(DECODE_WIDTH, num_wakeup_ports, fp_pipeline.io.wakeups.length))
    val issue_units      = new boom.IssueUnits(num_wakeup_ports)
-   val iregfile         = Module(new RegisterFile(numIntPhysRegs,
+   val iregfile         = if (regreadLatency == 0)
+                              Module(new RegisterFileComb(numIntPhysRegs,
                                  exe_units.withFilter(_.usesIRF).map(e => e.num_rf_read_ports).sum,
                                  exe_units.withFilter(_.usesIRF).map(e => e.num_rf_write_ports).sum,
                                  xLen,
                                  ENABLE_REGFILE_BYPASSING))
-//   val ll_wbarb         = Module(new Arbiter(new RegisterFileWritePort(IPREG_SZ, xLen), 2))
+                          else
+                              Module(new RegisterFileSeq(numIntPhysRegs,
+                                 exe_units.withFilter(_.usesIRF).map(e => e.num_rf_read_ports).sum,
+                                 exe_units.withFilter(_.usesIRF).map(e => e.num_rf_write_ports).sum,
+                                 xLen,
+                                 ENABLE_REGFILE_BYPASSING))
    val ll_wbarb         = Module(new Arbiter(new ExeUnitResp(xLen), 2))
    val iregister_read   = Module(new RegisterRead(
                                  issue_units.map(_.issue_width).sum,
