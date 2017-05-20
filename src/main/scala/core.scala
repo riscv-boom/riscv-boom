@@ -31,6 +31,7 @@ import Chisel._
 import cde.Parameters
 
 import rocket.Instructions._
+import boom.FUConstants._
 import util.Str
 
 
@@ -186,7 +187,8 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    println("   Max Branch Count      : " + MAX_BR_COUNT)
    println("   BTB Size              : " + btbParams.nEntries)
    println("   RAS Size              : " + btbParams.nRAS)
-   println("   Rename Stage Latency  : " + renameLatency)
+   println("   Rename  Stage Latency : " + renameLatency)
+   println("   RegRead Stage Latency : " + regreadLatency)
 
    print(iregfile)
    println("\n   Num Slow Wakeup Ports : " + num_irf_write_ports)
@@ -430,8 +432,9 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
 
    rename_stage.io.kill     := fetch_unit.io.clear_fetchbuffer // mispredict or flush
    rename_stage.io.brinfo   := br_unit.brinfo
-   rename_stage.io.get_pred.br_tag        := iss_uops(brunit_idx).br_tag
-   exe_units(brunit_idx).io.get_pred.info := Reg(next=rename_stage.io.get_pred.info)
+   rename_stage.io.get_pred.br_tag        := (if (regreadLatency == 1) RegNext(iss_uops(brunit_idx).br_tag)
+                                             else iss_uops(brunit_idx).br_tag)
+   exe_units(brunit_idx).io.get_pred.info := RegNext(rename_stage.io.get_pred.info)
 
    rename_stage.io.flush_pipeline := rob.io.flush.valid
    rename_stage.io.debug_rob_empty := rob.io.empty
@@ -544,13 +547,25 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    {
       iss_valids(w) := issue_units(iss_idx).io.iss_valids(iss_cnt)
       iss_uops(w)   := issue_units(iss_idx).io.iss_uops(iss_cnt)
-      issue_units(iss_idx).io.fu_types(iss_cnt) := exe_units(w).io.fu_types
+
+      var fu_types = exe_units(w).io.fu_types
 
       if (w == ifpu_idx) {
          // TODO hack, need a more disciplined way to connect to an issue port
          // TODO XXX need to also apply back-pressure.
-         issue_units(iss_idx).io.fu_types(iss_cnt) := exe_units(w).io.fu_types | FUConstants.FU_I2F
+         fu_types = fu_types | FUConstants.FU_I2F
       }
+
+      if (exe_units(w).supportedFuncUnits.muld && regreadLatency > 0)
+      {
+         // Supress just-issued divides from issuing back-to-back, since it's an iterative divider.
+         // But it takes a cycle to get to the Exe stage, so it can't tell us it is busy yet.
+         val idiv_issued = iss_valids(w) && iss_uops(w).fu_code_is(FU_DIV)
+         fu_types = fu_types & RegNext(~Mux(idiv_issued, FU_DIV, Bits(0)))
+      }
+      require (!exe_units(w).supportedFuncUnits.fdiv)
+
+      issue_units(iss_idx).io.fu_types(iss_cnt) := fu_types
 
       // TODO this is super fragile -- check the issue-units match the exe-units on instruction types.
       require ((issue_units(iss_idx).iqType == IQT_MEM.litValue) ^ !exe_units(w).is_mem_unit)
@@ -899,9 +914,6 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
       cnt += 1
       f_cnt += 1
    }
-//   rob.io.wb_resps(cnt).valid := ll_wbarb.io.out.fire()
-//   rob.io.wb_resps(cnt).bits  := ll_wbarb.io.out.bits
-//   cnt += 1
    assert (cnt == rob.num_wakeup_ports)
 
 
@@ -910,11 +922,12 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
 
    // branch unit requests PCs and predictions from ROB during register read
    // (fetch PC from ROB cycle earlier than needed for critical path reasons)
-   rob.io.get_pc.rob_idx := iss_uops(brunit_idx).rob_idx
-   exe_units(brunit_idx).io.get_rob_pc.curr_pc  := Reg(next=rob.io.get_pc.curr_pc)
-   exe_units(brunit_idx).io.get_rob_pc.curr_brob_idx  := Reg(next=rob.io.get_pc.curr_brob_idx)
-   exe_units(brunit_idx).io.get_rob_pc.next_val := Reg(next=rob.io.get_pc.next_val)
-   exe_units(brunit_idx).io.get_rob_pc.next_pc  := Reg(next=rob.io.get_pc.next_pc)
+   rob.io.get_pc.rob_idx := (if (regreadLatency == 1) RegNext(iss_uops(brunit_idx).rob_idx)
+                            else iss_uops(brunit_idx).rob_idx)
+   exe_units(brunit_idx).io.get_rob_pc.curr_pc        := RegNext(rob.io.get_pc.curr_pc)
+   exe_units(brunit_idx).io.get_rob_pc.curr_brob_idx  := RegNext(rob.io.get_pc.curr_brob_idx)
+   exe_units(brunit_idx).io.get_rob_pc.next_val       := RegNext(rob.io.get_pc.next_val)
+   exe_units(brunit_idx).io.get_rob_pc.next_pc        := RegNext(rob.io.get_pc.next_pc)
    exe_units(brunit_idx).io.status := csr.io.status
 
    // LSU <> ROB

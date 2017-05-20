@@ -222,7 +222,7 @@ class TageTable(
       + tag_sz + "-bit tags, "
       + counter_sz + "-bit counters (max value=" + CNTR_MAX + ")")
 
-   assert (counter_sz == 2)
+   require (counter_sz == 2)
 
    //------------------------------------------------------------
    // State

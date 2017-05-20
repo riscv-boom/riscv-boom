@@ -40,7 +40,7 @@ case class BoomCoreParams(
    intToFpLatency: Int = 2,
    imulLatency: Int = 3,
    renameLatency: Int = 2,
-   fetchLatency: Int = 3
+   regreadLatency: Int = 1
 )
 
 trait HasBoomCoreParameters extends rocket.HasCoreParameters
@@ -94,8 +94,9 @@ trait HasBoomCoreParameters extends rocket.HasCoreParameters
 
    val intToFpLatency = boomParams.intToFpLatency
 
-   val fetchLatency = boomParams.fetchLatency // how many cycles does fetch occupy?
-   val renameLatency = boomParams.renameLatency // how many cycles does rename occupy?
+   val renameLatency = boomParams.renameLatency
+   val regreadLatency = boomParams.regreadLatency
+   require (regreadLatency == 0 || regreadLatency == 1)
 
    val enableBrResolutionRegister = boomParams.enableBrResolutionRegister
 
