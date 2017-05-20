@@ -1050,7 +1050,7 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
       "[dpath] A committed JAL was marked as having been mispredicted.")
 
    // Count issued instructions (only integer currently).
-   require (log2Ceil(1+iss_valids.length) <= log2Ceil(1+csr.io.events(0).getWidth)) // CSR.scala sets increment width.
+   require (log2Ceil(1+iss_valids.length) <= csr.io.events(0).getWidth) // CSR.scala sets increment width.
    csr.io.events(34) := PopCount(iss_valids)
 
    // Count not-issued slots due to empty issue windows (only integer currently).
