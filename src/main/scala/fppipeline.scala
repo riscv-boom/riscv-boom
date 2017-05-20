@@ -17,6 +17,8 @@ package boom
 import Chisel._
 import config.Parameters
 
+import boom.FUConstants._
+
 
 class FpPipeline(implicit p: Parameters) extends BoomModule()(p)
 {
@@ -128,7 +130,14 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p)
    {
       iss_valids(i) := issue_unit.io.iss_valids(i)
       iss_uops(i) := issue_unit.io.iss_uops(i)
-      issue_unit.io.fu_types(i) := exe_units(i).io.fu_types
+
+      var fu_types = exe_units(i).io.fu_types
+      if (exe_units(i).supportedFuncUnits.fdiv && regreadLatency > 0)
+      {
+         val fdiv_issued = iss_valids(i) && iss_uops(i).fu_code_is(FU_FDV)
+         fu_types = fu_types & RegNext(~Mux(fdiv_issued, FU_FDV, Bits(0)))
+      }
+      issue_unit.io.fu_types(i) := fu_types
 
       require (exe_units(i).uses_iss_unit)
    }

@@ -37,7 +37,8 @@ case class BoomCoreParams(
    gskew: Option[GSkewParameters] = None,
    intToFpLatency: Int = 2,
    imulLatency: Int = 3,
-   renameLatency: Int = 2
+   renameLatency: Int = 2,
+   regreadLatency: Int = 1
 )
 
 trait HasBoomCoreParameters extends tile.HasCoreParameters
@@ -92,6 +93,8 @@ trait HasBoomCoreParameters extends tile.HasCoreParameters
    val intToFpLatency = boomParams.intToFpLatency
 
    val renameLatency = boomParams.renameLatency
+   val regreadLatency = boomParams.regreadLatency
+   require (regreadLatency == 0 || regreadLatency == 1)
 
    val enableBrResolutionRegister = boomParams.enableBrResolutionRegister
 
