@@ -58,13 +58,22 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p)
    val issue_unit       = Module(new IssueUnitCollasping(
                            issueParams.find(_.iqType == IQT_FP.litValue).get,
                            num_wakeup_ports))
-   val fregfile         = Module(new RegisterFile(numFpPhysRegs,
-                           exe_units.withFilter(_.uses_iss_unit).map(e => e.num_rf_read_ports).sum,
-                           // TODO get rid of -1, as that's a write-port going to IRF
-                           exe_units.withFilter(_.uses_iss_unit).map(e => e.num_rf_write_ports).sum - 1 +
-                              num_ll_ports,
-                           fLen+1,
-                           ENABLE_REGFILE_BYPASSING))// TODO disable for FP
+   val fregfile         = if (regreadLatency == 0)
+                              Module(new RegisterFileComb(numFpPhysRegs,
+                                 exe_units.withFilter(_.uses_iss_unit).map(e => e.num_rf_read_ports).sum,
+                                 // TODO get rid of -1, as that's a write-port going to IRF
+                                 exe_units.withFilter(_.uses_iss_unit).map(e => e.num_rf_write_ports).sum - 1 +
+                                    num_ll_ports,
+                                 fLen+1,
+                                 ENABLE_REGFILE_BYPASSING))// TODO disable for FP
+                          else
+                              Module(new RegisterFileSeq(numFpPhysRegs,
+                                 exe_units.withFilter(_.uses_iss_unit).map(e => e.num_rf_read_ports).sum,
+                                 // TODO get rid of -1, as that's a write-port going to IRF
+                                 exe_units.withFilter(_.uses_iss_unit).map(e => e.num_rf_write_ports).sum - 1 +
+                                    num_ll_ports,
+                                 fLen+1,
+                                 ENABLE_REGFILE_BYPASSING))
    val fregister_read   = Module(new RegisterRead(
                            issue_unit.issue_width,
                            exe_units.withFilter(_.uses_iss_unit).map(_.supportedFuncUnits),
