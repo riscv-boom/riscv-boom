@@ -40,7 +40,7 @@ case class BoomCoreParams(
    intToFpLatency: Int = 2,
    imulLatency: Int = 3,
    renameLatency: Int = 2,
-   fetchLatency: Int = 2
+   fetchLatency: Int = 3
 )
 
 trait HasBoomCoreParameters extends rocket.HasCoreParameters
