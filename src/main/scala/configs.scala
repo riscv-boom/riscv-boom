@@ -47,7 +47,7 @@ class DefaultBOOMConfig extends Config (
             numRobEntries = 48,
             issueParams = Seq(
                IssueParams(issueWidth=1, numEntries=20, iqType=IQT_MEM.litValue),
-               IssueParams(issueWidth=1, numEntries=16, iqType=IQT_INT.litValue),
+               IssueParams(issueWidth=2, numEntries=16, iqType=IQT_INT.litValue),
                IssueParams(issueWidth=1, numEntries=10, iqType=IQT_FP.litValue)),
             numIntPhysRegisters = 100,
             numFpPhysRegisters = 64,

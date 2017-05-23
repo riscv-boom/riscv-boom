@@ -39,6 +39,7 @@ case class BoomCoreParams(
    gskew: Option[GSkewParameters] = None,
    intToFpLatency: Int = 2,
    imulLatency: Int = 3,
+   fetchLatency: Int = 2,
    renameLatency: Int = 2,
    regreadLatency: Int = 1
 )
@@ -94,8 +95,9 @@ trait HasBoomCoreParameters extends rocket.HasCoreParameters
 
    val intToFpLatency = boomParams.intToFpLatency
 
-   val renameLatency = boomParams.renameLatency
-   val regreadLatency = boomParams.regreadLatency
+   val fetchLatency = boomParams.fetchLatency // how many cycles does fetch occupy?
+   val renameLatency = boomParams.renameLatency // how many cycles does rename occupy?
+   val regreadLatency = boomParams.regreadLatency // how many cycles does rrd occupy?
    require (regreadLatency == 0 || regreadLatency == 1)
 
    val enableBrResolutionRegister = boomParams.enableBrResolutionRegister
