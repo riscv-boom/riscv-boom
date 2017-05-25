@@ -60,7 +60,7 @@ class SmallBOOMConfig  extends Config(new WithJtagDTM ++ new WithBroomTop ++ new
 class MediumBOOMConfig extends Config(new WithMediumBOOMs ++ new WithAllBooms ++ new DefaultBOOMConfig ++ new DefaultL2Config)
 class MegaBOOMConfig   extends Config(new WithMegaBOOMs   ++ new WithAllBooms ++ new DefaultBOOMConfig ++ new DefaultL2Config)
 
-class BOOMConfig extends Config(new WithJtagDTM ++ new WithBroomTop ++ new WithNPerfCounters(8) ++ new WithMediumBOOMs ++ new WithAllBooms ++ new DefaultBOOMConfig ++ new WithL2Capacity(1024) ++ new DefaultL2Config)
+class BOOMConfig extends Config(new WithCounters ++ new WithJtagDTM ++ new WithBroomTop ++ new WithNPerfCounters(8) ++ new WithMediumBOOMs ++ new WithAllBooms ++ new DefaultBOOMConfig ++ new WithL2Capacity(1024) ++ new DefaultL2Config)
 class BOOML1Config extends  Config(new WithNPerfCounters(4) ++ new WithAllBooms ++ new DefaultBOOMConfig ++ new BaseConfig)
 class BOOMFPGAConfig   extends Config(new WithNPerfCounters(29) ++ new WithAllBooms ++ new DefaultBOOMConfig ++ new DefaultFPGAConfig)
 class BOOML2FPGAConfig extends Config(new WithNPerfCounters(29) ++ new WithAllBooms ++ new DefaultBOOMConfig ++ new WithL2Capacity(1024) ++ new WithL2Cache ++ new DefaultFPGAConfig)
