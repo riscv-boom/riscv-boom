@@ -838,7 +838,7 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
 
    csr.io.events.map(_ := UInt(0))
 
-   require (nPerfEvents >= 50)
+   require (nPerfEvents >= 52)
    println ("   " + nPerfCounters + " HPM counters enabled (with " + nPerfEvents + " events).")
 
    // Execution-time branch prediction accuracy.
@@ -848,6 +848,9 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    // User-level instruction count.
    csr.io.events(2) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
       rob.io.commit.valids(w) && (csr.io.status.prv === UInt(rocket.PRV.U))})
+
+   csr.io.events(50) := br_unit.brinfo.valid && br_unit.brinfo.is_jr
+   csr.io.events(51) := br_unit.brinfo.mispredict && br_unit.brinfo.is_jr
 
    // L1 cache stats.
    // TODO add back in cache-miss counters.
