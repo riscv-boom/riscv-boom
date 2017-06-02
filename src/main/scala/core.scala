@@ -849,6 +849,8 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    csr.io.events(2) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
       rob.io.commit.valids(w) && (csr.io.status.prv === UInt(rocket.PRV.U))})
 
+   // csr.io.events(48) := ...
+   // csr.io.events(49) := ...
    csr.io.events(50) := br_unit.brinfo.valid && br_unit.brinfo.is_jr
    csr.io.events(51) := br_unit.brinfo.mispredict && br_unit.brinfo.is_jr
 
@@ -862,8 +864,6 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    csr.io.events(32) := io.imem.resp.fire() // i$ accesses
    csr.io.events(33) := lsu.io.counters.tlb_miss // DTLB miss
    csr.io.events(34) := io.imem.tlb_miss // ITLB miss
-   csr.io.events(48) := io.l2Stat.miss
-   csr.io.events(49) := io.l2Stat.hit
 
    csr.io.events(5)  := csr.io.status.prv === UInt(rocket.PRV.U)
 
