@@ -72,8 +72,11 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    val fetch_bundle = Wire(new FetchBundle())
 
 //   val kill_f2 = Wire(init = Bool(false)) // TODO XXX redirects from F3 need to kill f2
-   val f2_req = Wire(Valid(new RequestPCRedirect()))
-   val f3_req = Wire(Valid(new RequestPCRedirect()))
+   val f2_req = Wire(Valid(new PCReq()))
+   
+   val f3_valid = Reg(init=Bool(false))
+   val f3_fetch_bundle = Reg(new FetchBundle())
+   val f3_req = Reg(Valid(new PCReq()))
  
    //-------------------------------------------------------------
    // **** Helper Functions ****
@@ -97,8 +100,8 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    val redirect_val  = 
       br_unit.take_pc || 
       io.flush_take_pc || 
-      (f2_req.valid && !if_stalled) || // TODO this seems way too low-level to get backpressure signal correct
       (f3_req.valid && !if_stalled)
+//      (f2_req.valid && !if_stalled) || // TODO this seems way too low-level to get backpressure signal correct
 
    io.imem.req.valid   := redirect_val // tell front-end we had an unexpected change in the stream
    io.imem.req.bits.pc := if_pc_next
@@ -107,8 +110,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
 
    if_pc_next := Mux(io.flush_take_pc, io.flush_pc,
                  Mux(br_unit.take_pc,  br_unit.target(vaddrBits,0),
-                 Mux(f3_req.valid,     f3_req.bits.addr,
-                                       f2_req.bits.addr)))
+                                       f3_req.bits.addr))
 
 //   io.imem.ext_btb.resp := io.f0_btb
    io.imem.ext_btb.resp.valid := io.f0_btb.valid
@@ -179,7 +181,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    }
 
    val jal_idx = PriorityEncoder(is_jal.toBits)
-   f2_req.valid  := is_jal.reduce(_|_)
+   f2_req.valid  := is_jal.reduce(_|_) && !redirect_val
   f2_req.bits.addr := jal_targs(jal_idx)
        
    // mask out instructions after predicted branch
@@ -202,10 +204,29 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    // **** ??? ****
    //-------------------------------------------------------------
 
-   val f3_fetch_bundle = Pipe(f2_valid, f2_fetch_bundle, 1)
+  
+   when (io.clear_fetchbuffer)
+   {
+      f3_valid := Bool(false)
+      f3_req.valid := Bool(false)
+   }
+   .elsewhen (!if_stalled)
+   {
+      f3_valid := f2_valid
+      f3_fetch_bundle := f2_fetch_bundle
+      f3_req := f2_req
+   }
 
-   // TODO XXX make this occur on cycle f3
-   f3_req := bchecker.io.req
+//   val f3_fetch_bundle = Pipe(f2_valid, f2_fetch_bundle, 1)
+//   val f3_valid = Reg(Bool(), next=f2_valid, init=Bool(false))
+//   val f3_fetch_bundle = RegEnable(f2_fetch_bundle, !if_stalled)
+
+//   val f3_fetch_bundle = Queue(entries=1, pipe=true)
+
+//   f3_req := RegEnable(f2_req, !if_stalled)
+   // TODO XXX make this occur on cycle f3; 
+   // TODO XXX figure out how to have f2, f3 fight for redirect.
+//   f3_req := bchecker.io.req
 //   f3_req := Pipe(f2_valid, bchecker.io.req, 1)
 
    //-------------------------------------------------------------
@@ -214,10 +235,10 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
                    
    // Fetch Buffer
 //   FetchBuffer.io.enq <> f3_fetch_bundle
-   FetchBuffer.io.enq.valid := f2_valid
-   FetchBuffer.io.enq.bits  := f2_fetch_bundle
 //   FetchBuffer.io.enq.valid := f2_valid
 //   FetchBuffer.io.enq.bits  := f2_fetch_bundle
+   FetchBuffer.io.enq.valid := f3_valid
+   FetchBuffer.io.enq.bits  := f3_fetch_bundle
 //   FetchBuffer.io.enq.bits.pred_resp.btb_resp_valid  := Bool(false)
 //   FetchBuffer.io.enq.bits.predictions := 
 
@@ -293,7 +314,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
 
       // Fetch Stage 2
       printf(" Fetch2 : (%c) 0x%x I$ Response <<-- IF2_PC (mask:0x%x) "
-         , Mux(io.imem.resp.valid, Str("v"), Str("-"))
+         , Mux(io.imem.resp.valid, Str("V"), Str("-"))
          , io.imem.resp.bits.pc
          , io.imem.resp.bits.mask
          )
@@ -337,7 +358,7 @@ class BranchChecker(fetch_width: Int)(implicit p: Parameters) extends BoomModule
 {
    val io = new Bundle
    {
-      val req        = Valid(new RequestPCRedirect)
+      val req        = Valid(new PCReq)
 
       val is_br      = Vec(fetch_width, Bool()).asInput
       val is_jal     = Vec(fetch_width, Bool()).asInput
