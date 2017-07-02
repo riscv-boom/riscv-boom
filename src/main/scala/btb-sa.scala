@@ -6,14 +6,21 @@
 // Set-associative Branch Target Buffer (BTB-sa)
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
+//
+// TODO:
+//    - compress high-order tag bits, target bits?
+//    - only store offsets, not full targets? (requires adder)
+//    - support RAS
 
 package boom
 
 import Chisel._
 import config.Parameters
 
+import util.Str
+
 case class BTBsaParameters(
-  nSets: Int = 16,
+  nSets: Int = 1024,
   nWays: Int = 2
 )
 
@@ -23,7 +30,7 @@ trait HasBTBsaParameters extends HasBoomCoreParameters
    val nSets = btbParams.nSets
    val nWays = btbParams.nWays
    val setidx_sz = log2Ceil(nSets)
-   val tag_sz = 16
+   val tag_sz = 38
    val idx_sz = log2Up(nSets)
 }
 
@@ -67,9 +74,10 @@ class BTBsaResp(implicit p: Parameters) extends BTBsaBundle()(p)
 //   val entry_idx   = UInt(width = setidx_sz) // what entry in the set is the prediction coming from?
 }
 
-class BTBsaReq(implicit p: Parameters) extends BTBsaBundle()(p) 
+
+class PCReq(implicit p: Parameters) extends BTBsaBundle()(p) 
 {
-   val addr = UInt(width = vaddrBits)
+   val addr = UInt(width = vaddrBitsExtended)
 }
 
 // set-associative branch target buffer
@@ -77,7 +85,7 @@ class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParamet
 {
    val io = new Bundle 
    {
-      val req = Valid(new BTBsaReq).flip
+      val req = Valid(new PCReq).flip
       val resp = Valid(new BTBsaResp)
       val btb_update = Valid(new BTBsaUpdate).flip
    }
@@ -126,7 +134,7 @@ class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParamet
       val tags       = SeqMem(nSets, UInt(width = tag_sz))
       val metadata   = SeqMem(nSets, new BTBSetMetaData())
 
-      val is_valid    = RegNext((valids >> s0_idx)(0)) && !wen
+      val is_valid    = RegNext((valids >> s0_idx)(0)) && !wen && ren
       val rout        = metadata.read(s0_idx, ren && !wen)
       val rtag        = tags.read(s0_idx, ren && !wen)
       hits(w)         := is_valid && (rtag === s1_req_tag)
@@ -145,26 +153,45 @@ class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParamet
          
          tags(widx)     := wtag
          metadata(widx) := newmeta
-//         printf("BTB write: %d 0x%x (PC= 0x%x, TARG= 0x%x) way=%d\n", widx, wtag, r_btb_update.bits.pc, r_btb_update.bits.target, UInt(w))
       }
+//      printf("BTB write (%c): %d 0x%x (PC= 0x%x, TARG= 0x%x) way=%d\n", Mux(wen, Str("w"), Str("-")), widx, wtag, r_btb_update.bits.pc, r_btb_update.bits.target, UInt(w))
+
+//      for (i <- 0 until nSets)
+//      {
+//         printf("    [%d] %d tag=0x%x targ=0x%x\n", UInt(i), (valids >> UInt(i))(0), tags.read(UInt(i)),
+//         metadata.read(UInt(i)).target)
+//      }
    }
 
    //TODO zap entries if multiple hits
 //   assert (PopCount(hits_out) <= UInt(1) && ren, "[btbsa] more than 1 valid hit.")
+//    when (PopCountAtLeast(hits, 2)) { 
+//         isValid := isValid & ~hits      
+//    }                                 
    
    // mux out the winning hit
    val s1_valid = PopCount(hits) === UInt(1)
 	val s1_metadata = Mux1H(hits, metadata_out)
-   val s1_target = s1_metadata.target
+   val s1_target = Cat(s1_metadata.target, UInt(0, log2Up(coreInstBytes)))
    val s1_cfi_idx = s1_metadata.cfi_idx
    val s1_cfi_type = s1_metadata.cfi_type
 
+//   when (s1_valid)
+//   {
+//      printf("BTB predi: hits:%x %d (PC= 0x%x, TARG= 0x%x %d)\n", 
+//         hits.asUInt, Bool(true), RegNext(io.req.bits.addr), s1_target, s1_cfi_type)
+//   }
+
 //   val update_target = io.req.bits.addr
 
-   io.resp.valid := s1_valid
-   io.resp.bits.taken := Bool(true) // TODO XXX add bimodal predictor
-  io.resp.bits.target := s1_target
-//  io.resp.bits.entry := 
+   io.resp.valid := Bool(false) // s1_valid XXX, does this respect taken?
+   io.resp.bits.taken := Bool(true) // TODO XXX add bimodal predictor; always take if JUMP
+   io.resp.bits.target := s1_target
    io.resp.bits.cfi_idx := (if (fetchWidth > 1) s1_cfi_idx else UInt(0))
+   io.resp.bits.cfi_type := s1_cfi_type
    io.resp.bits.mask := Cat((UInt(1) << ~Mux(io.resp.bits.taken, ~io.resp.bits.cfi_idx, UInt(0)))-UInt(1), UInt(1))
+//  io.resp.bits.entry := 
+
+
+
 }
