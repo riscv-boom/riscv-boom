@@ -40,6 +40,9 @@ class DefaultBoomConfig extends Config((site, here, up) => {
       enableBranchPredictor = true,
       gshare = Some(GShareParameters(enabled = true, history_length=15))
    )
+
+   // Widen L1toL2 bandwidth.
+   case L1toL2Config => up(L1toL2Config, site).copy(beatBytes = site(XLen)/4)
   }
 )
 
