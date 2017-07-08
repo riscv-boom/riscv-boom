@@ -1262,7 +1262,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: uncore.tilelink
    {
       val l_temp = laq_tail + UInt(w)
       laq_is_full = ((l_temp === laq_head || l_temp === (laq_head + UInt(num_ld_entries))) && laq_maybe_full) | laq_is_full
-      val s_temp = stq_tail + UInt(w+1) // TODO XXX this +1 is almost certainly wrong - look at this again
+      val s_temp = stq_tail + UInt(w+1) // +1 since we don't do let SAQ completely fill up.
       stq_is_full = (s_temp === stq_head || s_temp === (stq_head + UInt(num_st_entries))) | stq_is_full
    }
 
@@ -1274,6 +1274,8 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: uncore.tilelink
    io.new_stq_idx := stq_tail
 
    io.lsu_fencei_rdy := stq_empty && io.dmem_is_ordered
+
+   assert (!(stq_empty ^ stq_entry_val.asUInt === 0.U), "[lsu] mismatch in SAQ empty logic.")
 
    //-------------------------------------------------------------
    // Debug & Counter outputs
