@@ -36,7 +36,7 @@ class MicroOp(implicit p: Parameters) extends BoomBundle()(p)
    val br_mask          = UInt(width = MAX_BR_COUNT)  // which branches are we being speculated under?
    val br_tag           = UInt(width = BR_TAG_SZ)
 
-   val br_prediction    = new BranchPrediction
+   val br_prediction    = new BranchPredInfo
 
    // stat tracking of committed instructions
    val stat_brjmp_mispredicted = Bool()                 // number of mispredicted branches/jmps
@@ -131,6 +131,17 @@ class DebugStageEvents extends Bundle()
 {
    // Track the sequence number of each instruction fetched.
    val fetch_seq        = UInt(width = 32)
+}
+
+// What type of Control-Flow Instruction is it?
+object CFIType
+{
+   def SZ = 3
+   def apply() = UInt(width = SZ)
+   def none = 0.U
+   def branch = 1.U
+   def jal = 2.U
+   def jalr = 3.U
 }
 
 class MicroOpWithData(data_sz: Int)(implicit p: Parameters) extends BoomBundle()(p)
