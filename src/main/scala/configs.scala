@@ -27,7 +27,7 @@ class DefaultBoomConfig extends Config((site, here, up) => {
          nPerfEvents = 37,
          perfIncWidth = 3, // driven by issue ports, as set in BoomCoreParams.issueParams
          fpu = Some(tile.FPUParams(sfmaLatency=4, dfmaLatency=4, divSqrt=true))),
-      btb = Some(BTBParams(nEntries = 40, nRAS = 4, updatesOutOfOrder = true))
+         btb = Some(BTBParams(nEntries = 0, updatesOutOfOrder = true))
    )}
 
    // BOOM-specific uarch Parameters
@@ -44,6 +44,9 @@ class DefaultBoomConfig extends Config((site, here, up) => {
       enableBranchPredictor = true,
       gshare = Some(GShareParameters(enabled = true, history_length=15))
    )
+   // Widen L1toL2 bandwidth.
+   case L1toL2Config => up(L1toL2Config, site).copy(
+      beatBytes = site(XLen)/4)
   }
 )
 
@@ -115,6 +118,6 @@ class WithMegaBooms extends Config((site, here, up) => {
       )
    // Widen L1toL2 bandwidth so we can increase icache rowBytes size for 4-wide fetch.
    case L1toL2Config => up(L1toL2Config, site).copy(
-      beatBytes = site(XLen)/4)
+      beatBytes = site(XLen)/2)
 
 })

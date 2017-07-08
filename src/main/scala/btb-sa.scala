@@ -8,9 +8,10 @@
 //------------------------------------------------------------------------------
 //
 // TODO:
+//    - Support RAS.
+//    - Add bimodal predictor.
 //    - compress high-order tag bits, target bits?
-//    - only store offsets, not full targets? (requires adder)
-//    - support RAS
+//    - only store offsets, not full targets? (requires adder).
 
 package boom
 
@@ -20,8 +21,9 @@ import config.Parameters
 import util.Str
 
 case class BTBsaParameters(
-  nSets: Int = 1024,
-  nWays: Int = 2
+  nSets: Int = 4,
+  nWays: Int = 2,
+  tagSz: Int = 10
 )
 
 trait HasBTBsaParameters extends HasBoomCoreParameters
@@ -29,17 +31,24 @@ trait HasBTBsaParameters extends HasBoomCoreParameters
    val btbParams = boomParams.btb
    val nSets = btbParams.nSets
    val nWays = btbParams.nWays
-   val setidx_sz = log2Ceil(nSets)
-   val tag_sz = 38
-   val idx_sz = log2Up(nSets)
+   val tag_sz = btbParams.tagSz
+   val idx_sz = log2Ceil(nSets)
+//  val nRAS = btbParams.nRAS
+//  val nBIM = btbParams.nBIM
 }
 
-//trait HasBTBParameters extends HasCoreParameters {
-//  val btbParams = tileParams.btb.getOrElse(BTBParams(nEntries = 0))
-//  val matchBits = pgIdxBits max log2Ceil(p(coreplex.CacheBlockBytes) * tileParams.icache.get.nSets)
-//  val entries = btbParams.nEntries
-//  val nRAS = btbParams.nRAS
-//}
+
+// Which predictor should we listen to?
+object BpredType
+{
+   def SZ = 2
+   def apply() = UInt(width = SZ)
+   def branch = 0.U
+   def jump = 1.U
+   def call = 2.U
+   def ret = 3.U
+}
+
 
 abstract class BTBsaBundle(implicit val p: Parameters) extends util.ParameterizedBundle()(p)
   with HasBTBsaParameters
@@ -47,16 +56,15 @@ abstract class BTBsaBundle(implicit val p: Parameters) extends util.Parameterize
 // BTB update occurs during branch resolution (and only on a mispredict that's taken).
 //  - "pc" is what future fetch PCs will tag match against.
 //  - "cfi_pc" is the PC of the branch instruction.
-class BTBsaUpdate(implicit p: Parameters) extends BTBsaBundle()(p) {
+class BTBsaUpdate(implicit p: Parameters) extends BTBsaBundle()(p)
+{
 //  val prediction = Valid(new BTBResp)
    val pc = UInt(width = vaddrBits)
    val target = UInt(width = vaddrBits)
    val taken = Bool()
 //  val isValid = Bool()
-//  val isReturn = Bool()
-//   val is_jump = Bool() // jal or jr; don't listen to bimodal
-//   val is_ret  = Bool() // is return; 
    val cfi_pc = UInt(width = vaddrBits)
+	val bpd_type = BpredType()
 	val cfi_type = CFIType()
 }
 
@@ -64,18 +72,19 @@ class BTBsaUpdate(implicit p: Parameters) extends BTBsaBundle()(p) {
 //     shifting off the lowest log(inst_bytes) bits off).
 //  - "mask" provides a mask of valid instructions (instructions are
 //     masked off by the predicted taken branch from the BTB).
-class BTBsaResp(implicit p: Parameters) extends BTBsaBundle()(p) 
+class BTBsaResp(implicit p: Parameters) extends BTBsaBundle()(p)
 {
-   val taken       = Bool()   // is BTB predicting a taken cfi?
-   val target      = UInt(width = vaddrBits) // what target are we predicting?
-   val mask        = Bits(width = fetchWidth) // mask of valid instructions.
-   val cfi_idx     = Bits(width = log2Up(fetchWidth)) // where is cfi we are predicting?
-   val cfi_type    = CFIType()
-//   val entry_idx   = UInt(width = setidx_sz) // what entry in the set is the prediction coming from?
+   val taken     = Bool()   // is BTB predicting a taken cfi?
+   val target    = UInt(width = vaddrBits) // what target are we predicting?
+   val mask      = UInt(width = fetchWidth) // mask of valid instructions.
+   val cfi_idx   = UInt(width = log2Up(fetchWidth)) // where is cfi we are predicting?
+   val bpd_type  = BpredType()
+   val cfi_type  = CFIType()
+   val entry_idx = UInt(width = idx_sz) // what entry in the set is the prediction coming from?
 }
 
 
-class PCReq(implicit p: Parameters) extends BTBsaBundle()(p) 
+class PCReq(implicit p: Parameters) extends BTBsaBundle()(p)
 {
    val addr = UInt(width = vaddrBitsExtended)
 }
@@ -83,115 +92,143 @@ class PCReq(implicit p: Parameters) extends BTBsaBundle()(p)
 // set-associative branch target buffer
 class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParameters
 {
-   val io = new Bundle 
+   val io = new Bundle
    {
+      // req.valid is false if stalling (aka, we won't read and use BTB results, on cycle S1).
+      // req.bits.addr is available on cycle S0. 
+      // Resp is expected on cycle S1.
+      // TODO when adding BHT, don't enact state-change until req.valid
       val req = Valid(new PCReq).flip
       val resp = Valid(new BTBsaResp)
+      // Update comes in during branch resolution (Execute Stage). Yes, that's out-of-order.
       val btb_update = Valid(new BTBsaUpdate).flip
+      
+      // HACK: prevent BTB predicting during program load.
+      // Easier to diff against spike which doesn't run debug mode.
+      val status_debug = Bool(INPUT)
    }
-
-//   val isValid = Reg(init = UInt(0, entries))
-//   val isReturn = Reg(UInt(width = entries))
-//   val isJump = Reg(UInt(width = entries))
-//   val brIdx = Reg(Vec(entries, UInt(width=log2Up(fetchWidth))))
-
-//   private def tagMatch(addr: UInt, pgMatch: UInt) = {
-//      val idxMatch = idxs.map(_ === addr(matchBits-1, log2Up(coreInstBytes))).asUInt
-//      val idxPageMatch = idxPagesOH.map(_ & pgMatch).map(_.orR).asUInt
-//      idxMatch & idxPageMatch & isValid
-//   }
 
    private def getTag (addr: UInt): UInt = (addr >> UInt(idx_sz + log2Up(fetchWidth*coreInstBytes)))(tag_sz-1,0)
    private def getIdx (addr: UInt): UInt = (addr >> UInt(log2Up(fetchWidth*coreInstBytes)))(idx_sz-1,0)
- 
-   class BTBSetMetaData extends Bundle
+
+   class BTBSetData extends Bundle
    {
       val target = UInt(width = vaddrBits - log2Up(coreInstBytes))
       val cfi_idx = UInt(width = log2Up(fetchWidth))
+      val bpd_type = BpredType()
       val cfi_type = CFIType()
    }
+
+
+   val stall = !io.req.valid
+   val s0_idx = Wire(UInt(width=idx_sz))
+   val last_idx = RegNext(s0_idx)
+   val new_idx = getIdx(io.req.bits.addr)
+   s0_idx := Mux(stall, last_idx, new_idx)
  
-   val hits         = Wire(Vec(nWays, Bool()))
-   val metadata_out = Wire(Vec(nWays, new BTBSetMetaData()))
+   // prediction
+   val hits_oh = Wire(Vec(nWays, Bool()))
+   val data_out = Wire(Vec(nWays, new BTBSetData()))
+   val s1_req_tag = RegEnable(getTag(io.req.bits.addr), !stall)
 
-   val ren = RegNext(io.req.valid)
-   val s0_idx = getIdx(io.req.bits.addr)
-   val s1_req_tag = RegEnable(getTag(io.req.bits.addr), io.req.valid)
-
+   // updates
    val r_btb_update = Pipe(io.btb_update)
-   val update_valid = r_btb_update.valid 
+   val update_valid = r_btb_update.valid && !io.status_debug
    val widx = getIdx(r_btb_update.bits.pc)
-
-   // a not-very-clever way to replace a way
+   // TODO: currently a not-very-clever way to choose a replacement way.
    val next_replace = Counter(r_btb_update.valid, nWays)._1
    val way_wen = UIntToOH(next_replace)
+
+   // clear entries (e.g., multiple tag hits, which is an invalid variant)
+   val clear_valid = Wire(init=false.B)
+   val clear_idx = RegNext(s0_idx)
 
    for (w <- 0 until nWays)
    {
       val wen = update_valid && way_wen(w)
 
-      val valids     = Reg(init = UInt(0, nSets))
-      val tags       = SeqMem(nSets, UInt(width = tag_sz))
-      val metadata   = SeqMem(nSets, new BTBSetMetaData())
+      val valids   = Reg(init = UInt(0, nSets))
+      val tags     = SeqMem(nSets, UInt(width = tag_sz))
+      val data     = SeqMem(nSets, new BTBSetData())
 
-      val is_valid    = RegNext((valids >> s0_idx)(0)) && !wen && ren
-      val rout        = metadata.read(s0_idx, ren && !wen)
-      val rtag        = tags.read(s0_idx, ren && !wen)
-      hits(w)         := is_valid && (rtag === s1_req_tag)
-		metadata_out(w) := rout
+      val is_valid = RegNext((valids >> s0_idx)(0) && !wen)
+      val rout     = data.read(s0_idx, !wen)
+      val rtag     = tags.read(s0_idx, !wen)
+      hits_oh(w)   := is_valid && (rtag === s1_req_tag)
+		data_out(w)  := rout
 
+      val wtag = getTag(r_btb_update.bits.pc)
+      val widx = getIdx(r_btb_update.bits.pc)
       when (wen)
       {
-         val wtag = getTag(r_btb_update.bits.pc) 
-         val widx = getIdx(r_btb_update.bits.pc) 
-         valids := valids.bitSet(widx, Bool(true))
+         valids := valids.bitSet(widx, true.B)
 
-         val newmeta = Wire(new BTBSetMetaData())
-         newmeta.target  := r_btb_update.bits.target(vaddrBits-1, log2Up(coreInstBytes))
-         newmeta.cfi_idx := r_btb_update.bits.cfi_pc >> log2Up(coreInstBytes)
-         newmeta.cfi_type := r_btb_update.bits.cfi_type
-         
-         tags(widx)     := wtag
-         metadata(widx) := newmeta
+         val newdata = Wire(new BTBSetData())
+         newdata.target  := r_btb_update.bits.target(vaddrBits-1, log2Up(coreInstBytes))
+         newdata.cfi_idx := r_btb_update.bits.cfi_pc >> log2Up(coreInstBytes)
+         newdata.bpd_type := r_btb_update.bits.bpd_type
+         newdata.cfi_type := r_btb_update.bits.cfi_type
+
+         tags(widx) := wtag
+         data(widx) := newdata
       }
-//      printf("BTB write (%c): %d 0x%x (PC= 0x%x, TARG= 0x%x) way=%d\n", Mux(wen, Str("w"), Str("-")), widx, wtag, r_btb_update.bits.pc, r_btb_update.bits.target, UInt(w))
 
-//      for (i <- 0 until nSets)
-//      {
-//         printf("    [%d] %d tag=0x%x targ=0x%x\n", UInt(i), (valids >> UInt(i))(0), tags.read(UInt(i)),
-//         metadata.read(UInt(i)).target)
-//      }
+      when (clear_valid)
+      {
+         valids := valids.bitSet(clear_idx, false.B)
+      }
+
+      if (DEBUG_PRINTF)
+      {
+         printf("BTB write (%c): %d 0x%x (PC= 0x%x, TARG= 0x%x) way=%d C=%d\n", Mux(wen, Str("w"), Str("-")), widx,
+         wtag, r_btb_update.bits.pc, r_btb_update.bits.target, UInt(w), clear_valid)
+
+         for (i <- 0 until nSets)
+         {
+            printf("    [%d] %d tag=0x%x targ=0x%x [0x%x 0x%x]\n", UInt(i), (valids >> UInt(i))(0),
+            tags.read(UInt(i)),
+            data.read(UInt(i)).target,
+            tags.read(UInt(i)) << UInt(idx_sz + log2Up(fetchWidth*coreInstBytes)),
+            data.read(UInt(i)).target << log2Up(coreInstBytes)
+            )
+         }
+      }
    }
 
-   //TODO zap entries if multiple hits
-//   assert (PopCount(hits_out) <= UInt(1) && ren, "[btbsa] more than 1 valid hit.")
-//    when (PopCountAtLeast(hits, 2)) { 
-//         isValid := isValid & ~hits      
-//    }                                 
-   
-   // mux out the winning hit
-   val s1_valid = PopCount(hits) === UInt(1)
-	val s1_metadata = Mux1H(hits, metadata_out)
-   val s1_target = Cat(s1_metadata.target, UInt(0, log2Up(coreInstBytes)))
-   val s1_cfi_idx = s1_metadata.cfi_idx
-   val s1_cfi_type = s1_metadata.cfi_type
+   // Zap entries if multiple hits.
+   when (util.PopCountAtLeast(hits_oh.asUInt, 2))
+   {
+      clear_valid := true.B
+   }
 
-//   when (s1_valid)
-//   {
-//      printf("BTB predi: hits:%x %d (PC= 0x%x, TARG= 0x%x %d)\n", 
-//         hits.asUInt, Bool(true), RegNext(io.req.bits.addr), s1_target, s1_cfi_type)
-//   }
+   // Mux out the winning hit.
+   val s1_valid = PopCount(hits_oh) === UInt(1)
+	val s1_data = Mux1H(hits_oh, data_out)
+   val s1_target = Cat(s1_data.target, UInt(0, log2Up(coreInstBytes)))
+   val s1_cfi_idx = s1_data.cfi_idx
+   val s1_bpd_type = s1_data.bpd_type
+   val s1_cfi_type = s1_data.cfi_type
 
-//   val update_target = io.req.bits.addr
+   if (DEBUG_PRINTF)
+   {
+      printf("BTB predi (%c): hits:%x %d (PC= 0x%x, TARG= 0x%x %d)\n",
+         Mux(s1_valid, Str("V"), Str("-")), hits_oh.asUInt, true.B, RegNext(io.req.bits.addr), s1_target, s1_cfi_type)
+   }
 
-   io.resp.valid := Bool(false) // s1_valid XXX, does this respect taken?
-   io.resp.bits.taken := Bool(true) // TODO XXX add bimodal predictor; always take if JUMP
+   io.resp.valid := s1_valid && !io.status_debug
    io.resp.bits.target := s1_target
+   io.resp.bits.taken := true.B || (s1_bpd_type === BpredType.jump) // TODO XXX add bimodal predictor
    io.resp.bits.cfi_idx := (if (fetchWidth > 1) s1_cfi_idx else UInt(0))
+   io.resp.bits.bpd_type := s1_bpd_type
    io.resp.bits.cfi_type := s1_cfi_type
    io.resp.bits.mask := Cat((UInt(1) << ~Mux(io.resp.bits.taken, ~io.resp.bits.cfi_idx, UInt(0)))-UInt(1), UInt(1))
-//  io.resp.bits.entry := 
 
-
+   // Debugging Signals
+   //val s0_addr = Wire(UInt())
+   //val last_addr = RegNext(s0_addr)
+   //s0_addr := Mux(stall, last_addr, io.req.bits.addr)
+   //val s1_addr = RegNext(s0_addr)
+   //assert (s1_req_tag === getTag(s0_addr)
 
 }
+
