@@ -480,8 +480,8 @@ class BranchDecode extends Module
 
 class FetchSerializerResp(implicit p: Parameters) extends BoomBundle()(p)
 {
-   val uops = Vec(DECODE_WIDTH, new MicroOp())
-   val pred_resp = new BranchPredictionResp()
+   val uops     = Vec(DECODE_WIDTH, new MicroOp())
+//   val pred_resp = new BranchPredictionResp() XXX // per packet info?
 }
 class FetchSerializerIO(implicit p: Parameters) extends BoomBundle()(p)
 {
@@ -544,7 +544,8 @@ class FetchSerializerNtoM(implicit p: Parameters) extends BoomModule()(p)
    io.deq.bits.uops(0).pc             := io.enq.bits.pc
    io.deq.bits.uops(0).fetch_pc_lob   := io.enq.bits.pc
    io.deq.bits.uops(0).inst           := io.enq.bits.insts(inst_idx)
-   io.deq.bits.uops(0).br_prediction  := io.enq.bits.predictions(inst_idx)
+//   io.deq.bits.uops(0).br_prediction  := io.enq.bits.predictions(inst_idx) XXX
+   io.deq.bits.uops(0).br_prediction  := io.enq.bits.bpu_info(inst_idx)
    io.deq.bits.uops(0).valid          := io.enq.bits.mask(inst_idx)
    io.deq.bits.uops(0).xcpt_if        := io.enq.bits.xcpt_if
    io.deq.bits.uops(0).replay_if        := io.enq.bits.replay_if
@@ -564,7 +565,8 @@ class FetchSerializerNtoM(implicit p: Parameters) extends BoomModule()(p)
          io.deq.bits.uops(i).inst           := io.enq.bits.insts(i)
          io.deq.bits.uops(i).xcpt_if        := io.enq.bits.xcpt_if
          io.deq.bits.uops(i).replay_if        := io.enq.bits.replay_if
-         io.deq.bits.uops(i).br_prediction  := io.enq.bits.predictions(i)
+//         io.deq.bits.uops(i).br_prediction  := io.enq.bits.predictions(i) XXX
+         io.deq.bits.uops(i).br_prediction  := io.enq.bits.bpu_info(i)
          io.deq.bits.uops(i).debug_events   := io.enq.bits.debug_events(i)
       }
       io.enq.ready := io.deq.ready
@@ -573,7 +575,7 @@ class FetchSerializerNtoM(implicit p: Parameters) extends BoomModule()(p)
    // Pipe valid straight through, since conceptually,
    // we are just an extension of the Fetch Buffer
    io.deq.valid := io.enq.valid
-   io.deq.bits.pred_resp := io.enq.bits.pred_resp
+//   io.deq.bits.pred_resp := io.enq.bits.pred_resp // XXX
 
 }
 
