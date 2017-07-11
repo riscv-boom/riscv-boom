@@ -84,7 +84,8 @@ class FunctionalUnitIo(num_stages: Int
 class GetPredictionInfo(implicit p: Parameters) extends BoomBundle()(p)
 {
    val br_tag = UInt(OUTPUT, BR_TAG_SZ)
-   val info = new BranchPredictionResp().asInput
+//   val info = new BranchPredictionResp().asInput
+   val info = new BranchPredInfo().asInput
 }
 
 class FuncUnitReq(data_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
@@ -153,14 +154,11 @@ class BranchUnitResp(implicit p: Parameters) extends BoomBundle()(p)
    val pc              = UInt(width = vaddrBits+1) // TODO this isn't really a branch_unit thing
 
    val brinfo          = new BrResolutionInfo()
-   val btb_update_valid= Bool() // TODO turn this into a directed bundle so we can fold this into btb_update?
-   val btb_update      = new rocket.BTBUpdate
-   val bht_update      = Valid(new rocket.BHTUpdate)
-   val bpd_update      = Valid(new BpdUpdate)
+   val btb_update      = Valid(new BTBsaUpdate)
+   val bim_update      = Valid(new BimUpdate)
+//   val bpd_update      = Valid(new BpdUpdate)
 
    val xcpt            = Valid(new Exception)
-
-   val debug_btb_pred  = Bool() // just for debug, did the BTB and BHT predict taken?
 }
 
 abstract class FunctionalUnit(is_pipelined: Boolean
@@ -286,7 +284,6 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
    alu.io.fn  := io.req.bits.uop.ctrl.op_fcn
    alu.io.dw  := io.req.bits.uop.ctrl.fcn_dw
 
-
    if (is_branch_unit)
    {
       val uop_pc_ = io.get_rob_pc.curr_pc
@@ -335,21 +332,27 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
                      (pc_sel =/= PC_PLUS4)
 
       // "mispredict" means that a branch has been resolved and it must be killed
-      val mispredict = Wire(Bool()); mispredict := Bool(false)
+      val mispredict = Wire(init = Bool(false))
 
       val is_br          = io.req.valid && !killed && uop.is_br_or_jmp && !uop.is_jump
       val is_br_or_jalr  = io.req.valid && !killed && uop.is_br_or_jmp && !uop.is_jal
 
       // did the BTB predict a br or jmp incorrectly?
       // (do we need to reset its history and teach it a new target?)
-      val btb_mispredict = Wire(Bool()); btb_mispredict := Bool(false)
+      val btb_mispredict = Wire(init = Bool(false))
 
       // did the bpd predict incorrectly (aka, should we correct its prediction?)
-      val bpd_mispredict = Wire(Bool()); bpd_mispredict := Bool(false)
+      val bpd_mispredict = Wire(init = Bool(false))
 
       // if b/j is taken, does it go to the wrong target?
       val wrong_taken_target = !io.get_rob_pc.next_val || (io.get_rob_pc.next_pc =/= bj_addr)
 
+
+      if (DEBUG_PRINTF)
+      {
+         printf("  BR-UNIT: PC: 0x%x, Next: %d, 0x%x ,bj_addr: 0x%x\n",
+            io.get_rob_pc.curr_pc, io.get_rob_pc.next_val, io.get_rob_pc.next_pc, bj_addr)
+      }
       assert (!(io.req.valid && uop.is_jal && io.get_rob_pc.next_val && io.get_rob_pc.next_pc =/= bj_addr),
          "[func] JAL went to the wrong target.")
 
@@ -359,22 +362,23 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
          {
             // only the BTB can predict JALRs (must also check it predicted taken)
             btb_mispredict := wrong_taken_target ||
-                              !io.get_pred.info.btb_resp.taken ||
                               !uop.br_prediction.btb_hit ||
-                              io.status.debug // fun hack to perform fence.i on JALRs in debug mode
+                              !uop.br_prediction.btb_taken ||
+                              io.status.debug // fun HACK to perform fence.i on JALRs in debug mode
+//                              !io.get_pred.info.btb_resp.taken || XXX
             bpd_mispredict := Bool(false)
          }
          when (pc_sel === PC_PLUS4)
          {
-            btb_mispredict := uop.br_prediction.btb_hit && io.get_pred.info.btb_resp.taken
-            bpd_mispredict := uop.br_prediction.bpd_predict_taken
+            btb_mispredict := uop.br_prediction.btb_hit && uop.br_prediction.btb_taken //io.get_pred.info.btb_resp.taken
+            bpd_mispredict := Bool(false) // XXX uop.br_prediction.bpd_predict_taken
          }
          when (pc_sel === PC_BRJMP)
          {
             btb_mispredict := wrong_taken_target ||
                               !uop.br_prediction.btb_hit ||
-                              (uop.br_prediction.btb_hit && !io.get_pred.info.btb_resp.taken)
-            bpd_mispredict := !uop.br_prediction.bpd_predict_taken
+                              (uop.br_prediction.btb_hit && !uop.br_prediction.btb_taken) //!io.get_pred.info.btb_resp.taken)
+            bpd_mispredict := Bool(true) // XXX !uop.br_prediction.bpd_predict_taken
          }
       }
 
@@ -396,11 +400,14 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
          }
          when (pc_sel === PC_PLUS4)
          {
-            mispredict := Mux(uop.br_prediction.wasBTB, btb_mispredict, bpd_mispredict)
+//            mispredict := Mux(uop.br_prediction.wasBTB, btb_mispredict, bpd_mispredict) XXX
+            mispredict := btb_mispredict
          }
          when (pc_sel === PC_BRJMP)
          {
-            mispredict := Mux(uop.br_prediction.wasBTB, btb_mispredict, bpd_mispredict)
+//            mispredict := Mux(uop.br_prediction.wasBTB, btb_mispredict, bpd_mispredict) XXX
+//            mispredict := Mux(Bool(false), btb_mispredict, bpd_mispredict)
+            mispredict := btb_mispredict
          }
       }
 
@@ -412,7 +419,8 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
 
 
       br_unit.take_pc := mispredict
-      br_unit.target := Mux(pc_sel === PC_PLUS4, pc_plus4, bj_addr)
+      val target = Mux(pc_sel === PC_PLUS4, pc_plus4, bj_addr)
+      br_unit.target := target
 
       // Delay branch resolution a cycle for critical path reasons.
       // If the rest of "br_unit" is being registered too, then we don't need to
@@ -434,8 +442,8 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
       brinfo.taken          := is_taken
       brinfo.btb_mispredict := btb_mispredict
       brinfo.bpd_mispredict := bpd_mispredict
-      brinfo.btb_made_pred  := uop.br_prediction.wasBTB
-      brinfo.bpd_made_pred  := uop.br_prediction.bpd_predict_val
+      brinfo.btb_made_pred  := Bool(false) // uop.br_prediction.wasBTB XXX
+//      brinfo.bpd_made_pred  := uop.br_prediction.bpd_predict_val
 
       br_unit.brinfo := brinfo
 
@@ -447,56 +455,65 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
 
       if (enableBTBContainsBranches)
       {
-         br_unit.btb_update_valid := is_br_or_jalr && mispredict && is_taken
+         br_unit.btb_update.valid := is_br_or_jalr && mispredict && is_taken && !uop.br_prediction.btb_hit
          // update on all branches (but not jal/jalr)
-         br_unit.bht_update.valid := is_br && mispredict
+         br_unit.bim_update.valid := is_br && mispredict && uop.br_prediction.btb_hit
       }
       else
       {
-         br_unit.btb_update_valid := is_br_or_jalr && mispredict && uop.is_jump
-         br_unit.bht_update.valid := Bool(false)
+         br_unit.btb_update.valid := is_br_or_jalr && mispredict && uop.is_jump
+         br_unit.bim_update.valid := Bool(false)
       }
 
-      br_unit.btb_update.pc               := fetch_pc // tell the BTB which pc to tag check against
-      br_unit.btb_update.br_pc            := uop_pc_
-      br_unit.btb_update.target           := (br_unit.target.toSInt & SInt(-coreInstBytes)).toUInt
-      br_unit.btb_update.prediction.valid := io.get_pred.info.btb_resp_valid // did this branch's fetch packet have
-                                                                             // a BTB hit in fetch?
-      br_unit.btb_update.prediction.bits  := io.get_pred.info.btb_resp       // give the BTB back its BTBResp
-      br_unit.btb_update.taken            := is_taken   // was this branch/jal/jalr "taken"
-      br_unit.btb_update.isJump           := uop.is_jump
-      br_unit.btb_update.isReturn         := uop.is_ret
+      br_unit.btb_update.bits.pc               := fetch_pc // tell the BTB which pc to tag check against
+      br_unit.btb_update.bits.cfi_pc           := uop_pc_
+      br_unit.btb_update.bits.target           := (target.toSInt & SInt(-coreInstBytes)).toUInt
+//      br_unit.btb_update.prediction.valid := io.get_pred.info.btb_resp_valid // did this branch's fetch packet have
+//                                                                             // a BTB hit in fetch?
+//      br_unit.btb_update.prediction.bits  := io.get_pred.info.btb_resp       // give the BTB back its BTBResp
+      br_unit.btb_update.bits.taken            := is_taken   // was this branch/jal/jalr "taken"
+//      br_unit.btb_update.bits.is_jump          := uop.is_jump
+//      br_unit.btb_update.bits.is_ret           := uop.is_ret
+      br_unit.btb_update.bits.cfi_type         :=
+			Mux(uop.is_jal, CFIType.jal,
+			Mux(uop.is_jump && !uop.is_jal, CFIType.jalr,
+				CFIType.branch))
+      br_unit.btb_update.bits.bpd_type			  :=
+			Mux(uop.is_ret, BpredType.ret,
+			Mux(uop.is_call, BpredType.call,
+			Mux(uop.is_jump, BpredType.jump,
+				BpredType.branch)))
 
-      br_unit.bht_update.bits.taken            := is_taken   // was this branch "taken"
-      br_unit.bht_update.bits.mispredict       := btb_mispredict     // need to reset the history in the BHT
-                                                                     // that is updated only on BTB hits
-      br_unit.bht_update.bits.prediction.valid := io.get_pred.info.btb_resp_valid // only update if hit in the BTB
-      br_unit.bht_update.bits.prediction.bits  := io.get_pred.info.btb_resp
-      br_unit.bht_update.bits.pc               := fetch_pc // what pc should the tag check be on?
-
-      br_unit.bpd_update.valid                 := io.req.valid && uop.is_br_or_jmp &&
-                                                  !uop.is_jal && !killed
-      br_unit.bpd_update.bits.is_br            := is_br
-      br_unit.bpd_update.bits.brob_idx         := io.get_rob_pc.curr_brob_idx
-      br_unit.bpd_update.bits.taken            := is_taken
-      br_unit.bpd_update.bits.mispredict       := mispredict
-      br_unit.bpd_update.bits.bpd_predict_val  := uop.br_prediction.bpd_predict_val
-      br_unit.bpd_update.bits.bpd_mispredict   := bpd_mispredict
-      br_unit.bpd_update.bits.pc               := fetch_pc
-      br_unit.bpd_update.bits.br_pc            := uop_pc_
-      br_unit.bpd_update.bits.history_ptr      := io.get_pred.info.bpd_resp.history_ptr
-      br_unit.bpd_update.bits.info             := io.get_pred.info.bpd_resp.info
-      if (!ENABLE_VLHR)
-      {
-         br_unit.bpd_update.bits.history.get := io.get_pred.info.bpd_resp.history.get
-         br_unit.bpd_update.bits.history_u.get := io.get_pred.info.bpd_resp.history_u.get
-      }
+      br_unit.bim_update.bits.taken            := is_taken   // was this branch "taken"
+      br_unit.bim_update.bits.mispredict       := btb_mispredict // updated only for BTB hits
+      br_unit.bim_update.bits.bim_resp         := io.get_pred.info.bim_resp
+//      br_unit.bht_update.bits.prediction.valid := io.get_pred.info.btb_resp_valid // only update if hit in the BTB
+//      br_unit.bht_update.bits.prediction.bits  := io.get_pred.info.btb_resp
+//      br_unit.bht_update.bits.pc               := fetch_pc // what pc should the tag check be on?
+//
+//      br_unit.bpd_update.valid                 := io.req.valid && uop.is_br_or_jmp &&
+//                                                  !uop.is_jal && !killed
+//      br_unit.bpd_update.bits.is_br            := is_br
+//      br_unit.bpd_update.bits.brob_idx         := io.get_rob_pc.curr_brob_idx
+//      br_unit.bpd_update.bits.taken            := is_taken
+//      br_unit.bpd_update.bits.mispredict       := mispredict
+//      br_unit.bpd_update.bits.bpd_predict_val  := uop.br_prediction.bpd_predict_val
+//      br_unit.bpd_update.bits.bpd_mispredict   := bpd_mispredict
+//      br_unit.bpd_update.bits.pc               := fetch_pc
+//      br_unit.bpd_update.bits.br_pc            := uop_pc_
+//      br_unit.bpd_update.bits.history_ptr      := io.get_pred.info.bpd_resp.history_ptr
+//      br_unit.bpd_update.bits.info             := io.get_pred.info.bpd_resp.info
+//      if (!ENABLE_VLHR)
+//      {
+//         br_unit.bpd_update.bits.history.get := io.get_pred.info.bpd_resp.history.get
+//         br_unit.bpd_update.bits.history_u.get := io.get_pred.info.bpd_resp.history_u.get
+//      }
 
       // is the br_pc the last instruction in the fetch bundle?
       val is_last_inst = if (FETCH_WIDTH == 1) { Bool(true) }
                          else { ((uop_pc_ >> UInt(log2Up(coreInstBytes))) &
                                  Fill(log2Up(FETCH_WIDTH), UInt(1))) === UInt(FETCH_WIDTH-1) }
-      br_unit.bpd_update.bits.new_pc_same_packet := !(is_taken) && !is_last_inst
+//      br_unit.bpd_update.bits.new_pc_same_packet := !(is_taken) && !is_last_inst
 
       require (coreInstBytes == 4)
 
@@ -521,7 +538,6 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
       bj_addr := (Cat(bj_msb, bj64(vaddrBits-1,0)).toSInt & SInt(-2)).toUInt
 
       br_unit.pc             := uop_pc_
-      br_unit.debug_btb_pred := io.get_pred.info.btb_resp_valid && io.get_pred.info.btb_resp.taken
 
       // handle misaligned branch/jmp targets
       // TODO BUG only trip xcpt if taken to bj_addr
@@ -601,7 +617,7 @@ class MemAddrCalcUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(nu
    {
       assert (!(io.req.valid && io.req.bits.uop.ctrl.is_std &&
          io.resp.bits.data(64).toBool === Bool(true)), "65th bit set in MemAddrCalcUnit.")
-      
+
       assert (!(io.req.valid && io.req.bits.uop.ctrl.is_std && io.req.bits.uop.fp_val),
          "FP store-data should now be going through a different unit.")
    }
@@ -677,7 +693,7 @@ class IntToFPUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(
    io.resp.bits.fflags.bits.uop   := io.resp.bits.uop
    io.resp.bits.fflags.bits.flags := ifpu.io.out.bits.exc
 }
- 
+
 
 
 // Iterative/unpipelined, can only hold a single MicroOp at a time TODO allow up to N micro-ops simultaneously.

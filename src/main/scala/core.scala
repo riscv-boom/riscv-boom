@@ -65,6 +65,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
       val counters   = new CacheCounters().asInput
    }
 
+  println("PaddrBits: " + p(rocket.PAddrBits))
    //**********************************
    // construct all of the modules
 
@@ -79,9 +80,8 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    val num_irf_write_ports = exe_units.map(_.num_rf_write_ports).sum
    val num_fast_wakeup_ports = exe_units.count(_.isBypassable)
    val num_wakeup_ports = num_irf_write_ports + num_fast_wakeup_ports
-   val fetch_unit       = Module(new FetchUnit(FETCH_WIDTH))
-   val bpd_stage        = Module(new BranchPredictionStage(FETCH_WIDTH))
-   println("\tBuilding dec")
+   val fetch_unit       = Module(new FetchUnit(fetchWidth))
+   val bpd_stage        = Module(new BranchPredictionStage(fetchWidth))
    val dec_serializer   = Module(new FetchSerializerNtoM)
    println("\tBuilding dec2")
    val decode_units     = for (w <- 0 until DECODE_WIDTH) yield { val d = Module(new DecodeUnit); d }
@@ -182,7 +182,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
 
    val iss_str = if (enableAgePriorityIssue) " (Age-based Priority)"
                  else " (Unordered Priority)"
-   println("\n   Fetch Width           : " + FETCH_WIDTH)
+   println("\n   Fetch Width           : " + fetchWidth)
    println("   Issue Width           : " + issueParams.map(_.issueWidth).sum)
    println("   ROB Size              : " + NUM_ROB_ENTRIES)
    println("   Issue Window Size     : " + issueParams.map(_.numEntries) + iss_str)
@@ -190,8 +190,10 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    println("   Num Int Phys Registers: " + numIntPhysRegs)
    println("   Num FP  Phys Registers: " + numFpPhysRegs)
    println("   Max Branch Count      : " + MAX_BR_COUNT)
-   println("   BTB Size              : " + btbParams.nEntries)
-   println("   RAS Size              : " + btbParams.nRAS)
+   println("   BTB Size              : " + 
+      (if (enableBTB) ("" + boomParams.btb.nSets * boomParams.btb.nWays + " entries (" + 
+         boomParams.btb.nSets + " x " + boomParams.btb.nWays + " ways)") else 0))
+   println("   RAS Size              : n/a") // + (if (enableBTB) boomParams.btb.get.nRAS     else 0))
    println("   Rename  Stage Latency : " + renameLatency)
    println("   RegRead Stage Latency : " + regreadLatency)
 
@@ -202,6 +204,11 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
 
    print(fp_pipeline)
 
+   println("\n   DCache Ways           : " + dcacheParams.nWays)
+   println("   DCache Sets           : " + dcacheParams.nSets)
+   println("   ICache Ways           : " + icacheParams.nWays)
+   println("   ICache Sets           : " + icacheParams.nSets)
+
    //-------------------------------------------------------------
    //-------------------------------------------------------------
    // **** Fetch Stage/Frontend ****
@@ -211,7 +218,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    io.imem <> fetch_unit.io.imem
    // TODO: work-around rocket-chip issue #183, broken imem.mask for fetchWidth=1
    // TODO: work-around rocket-chip issue #184, broken imem.mask for fetchWidth=1
-   if (FETCH_WIDTH == 1)
+   if (fetchWidth == 1)
    {
       fetch_unit.io.imem.resp.bits.mask := UInt(1)
       fetch_unit.io.imem.resp.bits.btb.bits.bridx := UInt(0)
@@ -219,13 +226,15 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    fetch_unit.io.br_unit <> br_unit
    fetch_unit.io.tsc_reg           := debug_tsc_reg
 
-   fetch_unit.io.bp2_take_pc       := bpd_stage.io.req.valid
-   fetch_unit.io.bp2_pc_of_br_inst := bpd_stage.io.req.bits.br_pc
-   fetch_unit.io.bp2_is_jump       := bpd_stage.io.req.bits.is_jump
-   fetch_unit.io.bp2_is_cfi        := bpd_stage.io.req.bits.is_cfi
-   fetch_unit.io.bp2_is_taken      := bpd_stage.io.req.bits.is_taken
-   fetch_unit.io.bp2_br_seen       := bpd_stage.io.pred_resp.br_seen
-   fetch_unit.io.bp2_pred_target   := bpd_stage.io.req.bits.target
+   fetch_unit.io.f0_btb            := bpd_stage.io.f0_btb
+   fetch_unit.io.f2_bpu_info       := bpd_stage.io.f2_bpu_info
+//   fetch_unit.io.bp2_take_pc       := bpd_stage.io.req.valid
+//   fetch_unit.io.bp2_pc_of_br_inst := bpd_stage.io.req.bits.br_pc
+//   fetch_unit.io.bp2_is_jump       := bpd_stage.io.req.bits.is_jump
+//   fetch_unit.io.bp2_is_cfi        := bpd_stage.io.req.bits.is_cfi
+//   fetch_unit.io.bp2_is_taken      := bpd_stage.io.req.bits.is_taken
+//   fetch_unit.io.bp2_br_seen       := bpd_stage.io.pred_resp.br_seen
+//   fetch_unit.io.bp2_pred_target   := bpd_stage.io.req.bits.target
 
    fetch_unit.io.clear_fetchbuffer := br_unit.brinfo.mispredict ||
                                        rob.io.flush.valid
@@ -248,29 +257,32 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    // decode.  BHT look-up is in parallel with I$ access, and Branch Decode
    // occurs before fetch buffer insertion.
 
-   //io.imem <> bpd_stage.io.imem
-   bpd_stage.io.imem_resp <> io.imem.resp
-   bpd_stage.io.btb_resp <> io.imem.resp.bits.btb
-   // TODO: work-around rocket-chip issue #183, broken imem.mask for fetchWidth=1
-   // TODO: work-around rocket-chip issue #184, broken imem.mask for fetchWidth=1
-   if (FETCH_WIDTH == 1)
-   {
-      bpd_stage.io.imem_resp.bits.mask := UInt(1)
-      bpd_stage.io.btb_resp.bits.bridx := UInt(0)
-   }
-   io.imem.resp.ready <> fetch_unit.io.imem.resp.ready
+//   bpd_stage.io.imem_resp <> io.imem.resp
+//   bpd_stage.io.btb_resp <> io.imem.resp.bits.btb
+//   // TODO: work-around rocket-chip issue #183, broken imem.mask for fetchWidth=1
+//   // TODO: work-around rocket-chip issue #184, broken imem.mask for fetchWidth=1
+//   if (fetchWidth == 1)
+//   {
+//      bpd_stage.io.imem_resp.bits.mask := UInt(1)
+//      bpd_stage.io.btb_resp.bits.bridx := UInt(0)
+//   }
+//   io.imem.resp.ready <> fetch_unit.io.imem.resp.ready
+//
+   bpd_stage.io.npc := io.imem.npc
+   bpd_stage.io.ext_btb_req := io.imem.ext_btb.req
 
-   bpd_stage.io.npc <> io.imem.npc
 
-
-   io.imem.ras_update <> bpd_stage.io.ras_update
+//   io.imem.ras_update <> bpd_stage.io.ras_update
    bpd_stage.io.br_unit := br_unit
    bpd_stage.io.flush := rob.io.flush.valid //|| rob.io.clear_brob
-   bpd_stage.io.status_prv := csr.io.status.prv
-   bpd_stage.io.req.ready := !fetch_unit.io.stalled
+   bpd_stage.io.redirect := io.imem.req.valid
 
-   fetch_unit.io.bp2_pred_resp <> bpd_stage.io.pred_resp
-   fetch_unit.io.bp2_predictions <> bpd_stage.io.predictions
+//   bpd_stage.io.status_prv := csr.io.status.prv
+   bpd_stage.io.fetch_stalled := fetch_unit.io.stalled
+   bpd_stage.io.status_debug := csr.io.status.debug
+
+//   fetch_unit.io.bp2_pred_resp <> bpd_stage.io.pred_resp
+//   fetch_unit.io.bp2_predictions <> bpd_stage.io.predictions
 
    //-------------------------------------------------------------
    //-------------------------------------------------------------
@@ -285,7 +297,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    val dec_finished_mask = Reg(init = Bits(0, DECODE_WIDTH))
 
    // TODO need to generalize this logic to other width disparities
-   require (DECODE_WIDTH == FETCH_WIDTH)
+   require (DECODE_WIDTH == fetchWidth)
 
    //-------------------------------------------------------------
    // Pull out instructions and send to the Decoders
@@ -331,10 +343,10 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
                         || br_unit.brinfo.mispredict
                         || rob.io.flush.valid
                         || dec_stall_next_inst
-                        || !bpd_stage.io.brob.allocate.ready
                         || (dec_valids(w) && dec_uops(w).is_fencei && !lsu.io.lsu_fencei_rdy)
                         )) ||
                      dec_last_inst_was_stalled
+//                        || !bpd_stage.io.brob.allocate.ready
 
       // stall the next instruction following me in the decode bundle?
       dec_last_inst_was_stalled = stall_me
@@ -405,22 +417,24 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
       else
          dec_uops(w).rob_idx := Cat(rob.io.curr_rob_tail, UInt(w, log2Up(DECODE_WIDTH)))
 
-      dec_uops(w).brob_idx := bpd_stage.io.brob.allocate_brob_tail
+//      dec_uops(w).brob_idx := bpd_stage.io.brob.allocate_brob_tail
    }
 
+   // TODO XXX
    val dec_has_br_or_jalr_in_packet =
-      (dec_valids zip dec_uops map {case(v,u) => v && u.br_prediction.is_br_or_jalr}).reduce(_|_)
+      (dec_valids zip dec_uops map {case(v,u) => v && u.is_br_or_jmp && !u.is_jal}).reduce(_|_)
+//      (dec_valids zip dec_uops map {case(v,u) => v && u.br_prediction.is_br_or_jalr}).reduce(_|_)
 
-   bpd_stage.io.brob.allocate.valid := dec_will_fire.reduce(_|_) &&
-                                       dec_finished_mask === Bits(0) &&
-                                       dec_has_br_or_jalr_in_packet
-   bpd_stage.io.brob.allocate.bits.ctrl.executed.map{_ := Bool(false)}
-   bpd_stage.io.brob.allocate.bits.ctrl.taken.map{_ := Bool(false)}
-   bpd_stage.io.brob.allocate.bits.ctrl.mispredicted.map{_ := Bool(false)}
-   bpd_stage.io.brob.allocate.bits.ctrl.debug_executed := Bool(false)
-   bpd_stage.io.brob.allocate.bits.ctrl.debug_rob_idx := dec_uops(0).rob_idx
-   bpd_stage.io.brob.allocate.bits.ctrl.brob_idx := dec_uops(0).brob_idx
-   bpd_stage.io.brob.allocate.bits.info := dec_fbundle.pred_resp.bpd_resp
+//   bpd_stage.io.brob.allocate.valid := dec_will_fire.reduce(_|_) &&
+//                                       dec_finished_mask === Bits(0) &&
+//                                       dec_has_br_or_jalr_in_packet
+//   bpd_stage.io.brob.allocate.bits.ctrl.executed.map{_ := Bool(false)}
+//   bpd_stage.io.brob.allocate.bits.ctrl.taken.map{_ := Bool(false)}
+//   bpd_stage.io.brob.allocate.bits.ctrl.mispredicted.map{_ := Bool(false)}
+//   bpd_stage.io.brob.allocate.bits.ctrl.debug_executed := Bool(false)
+//   bpd_stage.io.brob.allocate.bits.ctrl.debug_rob_idx := dec_uops(0).rob_idx
+//   bpd_stage.io.brob.allocate.bits.ctrl.brob_idx := dec_uops(0).brob_idx
+//   bpd_stage.io.brob.allocate.bits.info := dec_fbundle.pred_resp.bpd_resp
 
 
 
@@ -433,7 +447,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    // TODO for now, assume worst-case all instructions will dispatch towards one issue unit.
    val dis_readys = issue_units.map(_.io.dis_readys.toBits).reduce(_&_) & fp_pipeline.io.dis_readys.toBits
    rename_stage.io.dis_inst_can_proceed := dis_readys.toBools
-   rename_stage.io.ren_pred_info := dec_fbundle.pred_resp
+   rename_stage.io.ren_pred_info := Vec(dec_fbundle.uops.map(_.br_prediction))
 
    rename_stage.io.kill     := fetch_unit.io.clear_fetchbuffer // mispredict or flush
    rename_stage.io.brinfo   := br_unit.brinfo
@@ -916,6 +930,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    {
       rob.io.wb_resps(cnt) <> wakeup
       rob.io.fflags(f_cnt) <> wakeup.bits.fflags
+      rob.io.debug_wb_valids(cnt) := Bool(false) // TODO XXX add back commit logging for FP instructions.
       cnt += 1
       f_cnt += 1
    }
@@ -946,9 +961,9 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
 
    rob.io.bxcpt <> br_unit.xcpt
 
-   bpd_stage.io.brob.deallocate <> rob.io.brob_deallocate
-   bpd_stage.io.brob.bpd_update <> br_unit.bpd_update
-   bpd_stage.io.brob.flush := rob.io.flush.valid || rob.io.clear_brob
+//   bpd_stage.io.brob.deallocate <> rob.io.brob_deallocate
+//   bpd_stage.io.brob.bpd_update <> br_unit.bpd_update
+//   bpd_stage.io.brob.flush := rob.io.flush.valid || rob.io.clear_brob
 
    //-------------------------------------------------------------
    // **** Flush Pipeline ****
@@ -1098,8 +1113,8 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
       println("\n Chisel Printout Enabled\n")
 
       val numBrobWhitespace = if (DEBUG_PRINTF_BROB) NUM_BROB_ENTRIES else 0
-//      val screenheight = 103-8
-      val screenheight = 85 -8
+//      val screenheight = 103 - 12 //- 10
+      val screenheight = 85 - 10 - 10
 //      val screenheight = 62-8
        var whitespace = (screenheight - 11 + 3 - NUM_LSU_ENTRIES -
          issueParams.map(_.numEntries).sum - issueParams.length - (NUM_ROB_ENTRIES/COMMIT_WIDTH) - numBrobWhitespace
@@ -1217,17 +1232,18 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
          )
 
       // branch unit
-      printf("                          Branch Unit: %c,%c,%d PC=0x%x, %d Targ=0x%x NPC=%d,0x%x %d%d\n"
+//      printf("                          Branch Unit: %c,%c,%d PC=0x%x, %d Targ=0x%x NPC=%d,0x%x %d%d\n"
+      printf("                          Branch Unit: %c,%c,%d  NPC=%d,0x%x\n"
          , Mux(br_unit.brinfo.valid,Str("V"), Str(" "))
          , Mux(br_unit.brinfo.mispredict, Str("M"), Str(" "))
          , br_unit.brinfo.taken
-         , br_unit.btb_update.br_pc(19,0)
-         , br_unit.btb_update_valid
-         , br_unit.btb_update.target(19,0)
+//         , br_unit.btb_update.bits.br_pc(19,0)
+//         , br_unit.btb_update.valid
+//         , br_unit.btb_update.bits.target(19,0)
          , exe_units(brunit_idx).io.get_rob_pc.next_val
          , exe_units(brunit_idx).io.get_rob_pc.next_pc(19,0)
-         , br_unit.btb_update.isJump
-         , br_unit.btb_update.isReturn
+//         , br_unit.btb_update.isJump
+//         , br_unit.btb_update.isReturn
       )
 
       // Rename Map Tables / ISA Register File

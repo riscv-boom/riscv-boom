@@ -49,7 +49,7 @@ class RenameStageIO(
    val ren2_mask  = Vec(pl_width, Bool().asOutput) // mask of valid instructions
    val ren2_uops  = Vec(pl_width, new MicroOp().asOutput)
 
-   val ren_pred_info = new BranchPredictionResp().asInput
+   val ren_pred_info = Vec(pl_width, new BranchPredInfo()).asInput
 
    // branch resolution (execute)
    val brinfo    = new BrResolutionInfo().asInput
@@ -151,18 +151,20 @@ class RenameStage(
    // Each branch prediction must snapshot the predictor (history state, etc.).
    // On a mispredict, the snapshot must be used to reset the predictor.
    // TODO use Mem(), but it chokes on the undefines in VCS
-   val prediction_copies = Reg(Vec(MAX_BR_COUNT, new BranchPredictionResp))
+//   val prediction_copies = Reg(Vec(MAX_BR_COUNT, new BranchPredictionResp))
+   // This info is sent to the BRU and deallocated after Execute.
+   val prediction_copies = Reg(Vec(MAX_BR_COUNT, new BranchPredInfo))
 
    for (w <- 0 until pl_width)
    {
       when(ren1_br_vals(w)) {
-         prediction_copies(ren1_uops(w).br_tag) := io.ren_pred_info
+         prediction_copies(ren1_uops(w).br_tag) := io.ren_pred_info(w)
       }
    }
 
    io.get_pred.info := prediction_copies(io.get_pred.br_tag)
 
-   val temp = Wire(new BranchPredictionResp)
+   val temp = Wire(new BranchPredInfo)
    println("\t\tPrediction Snapshots: " + temp.toBits.getWidth + "-bits, " + MAX_BR_COUNT + " entries")
 
    //-------------------------------------------------------------

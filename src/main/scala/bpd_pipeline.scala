@@ -10,15 +10,12 @@
 // Christopher Celio
 // 2014 Apr 23
 //
-// Access branch predictor and redirect the pipeline as necessary. Also in
-// charge of JALs (direction and target are known).
+// Access BTB and BPD to feed predictions to the Fetch Unit.
 //
-// These stages are effectively in parallel with instruction fetch and decode.
-// BHT look-up (bp1) is in parallel with I$ access, and Branch Decode (bp2)
-// occurs before fetch buffer insertion.
-//
-// Currently, I ignore JALRs (either the BTB took care of it or it'll get
-// mispredicted and kill everything behind it anyways).
+// These stages are in parallel with instruction fetch.
+//    * F0 - Select next PC.
+//    * F1 - Access I$ and BTB RAMs. Perform BPD hashing.
+//    * F2 - Access BPD RAMs. Begin decoding instruction bits and computing targets from I$.
 
 package boom
 
@@ -26,19 +23,6 @@ import Chisel._
 import cde.Parameters
 
 import util.Str
-
-//class RedirectRequest(fetch_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
-//{
-//   val target  = UInt(width = vaddrBits+1)
-//   val br_pc   = UInt(width = vaddrBits+1) // PC of the instruction changing control flow (to update the BTB with jumps)
-//   val idx     = UInt(width = log2Up(fetch_width)) // idx of br in fetch bundle (to mask out the appropriate fetch
-//                                                   // instructions)
-//   val is_jump = Bool() // (only valid if redirect request is valid)
-//   val is_cfi  = Bool() // Is redirect due to a control-flow instruction?
-//   val is_taken= Bool() // (true if redirect is to "take" a branch,
-//                        //  false if it's to request PC+4 for a mispred
-//  override def cloneType = new RedirectRequest(fetch_width)(p).asInstanceOf[this.type]
-//}
 
 // this information is shared across the entire fetch packet, and stored in the
 // branch snapshots. Since it's not unique to an instruction, it could be
@@ -59,6 +43,7 @@ import util.Str
 //class BranchPrediction(implicit p: Parameters) extends BoomBundle()(p)
 // Give this to each instruction/uop and pass this down the pipeline to the branch-unit
 // This covers the per-instruction info on all cfi-related predictions.
+// TODO rename to make clear this is "BPD->RenameSnapshot->BRU". Should NOT go into Issue Windows.
 class BranchPredInfo(implicit p: Parameters) extends BoomBundle()(p)
 {
 //   val bpd_predict_val  = Bool() // did the bpd predict this instruction? (ie, tag hit in the BPD)
@@ -68,8 +53,10 @@ class BranchPredInfo(implicit p: Parameters) extends BoomBundle()(p)
 //   val btb_predicted    = Bool() // Does the BTB get credit for the prediction? (FU checks)
 //
 //   val is_br_or_jalr    = Bool() // is this instruction a branch or jalr?
-//                                 // (need to allocate brob entry).
-//
+                                   // (need to allocate brob entry).
+
+   val bim_resp         = new BimResp
+
 //   def wasBTB = btb_predicted
 }
 
@@ -134,36 +121,13 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: cde.Parameters) extend
    io.f2_bpu_info := f2_btb
 
    //************************************************
-   // Update the BTB
+   // Update the BTB/BIM
 
    btb.io.btb_update := io.br_unit.btb_update
+   btb.io.bim_update := io.br_unit.bim_update
 
-   if (enableBTB)
-   {
-      btb.io.btb_update.valid :=
-         (io.br_unit.btb_update.valid || false.B) && !io.flush
-//       (io.bp2_take_pc && io.bp2_is_taken && !if_stalled && !br_unit.take_pc)) &&
-   }
-   else
-   {
-      btb.io.btb_update.valid := false.B
-   }
-
-   // update the BTB
-   // If a branch is mispredicted and taken, update the BTB.
-   // (if branch unit mispredicts, instructions in decode are no longer valid)
-   //io.imem.btb_update.bits.pc         := Mux(br_unit.btb_update_valid, br_unit.btb_update.pc, io.imem.resp.bits.pc)
-   //io.imem.btb_update.bits.br_pc      := Mux(br_unit.btb_update_valid, br_unit.btb_update.br_pc, io.bp2_pc_of_br_inst)
-   //io.imem.btb_update.bits.target     := Mux(br_unit.btb_update_valid, br_unit.btb_update.target,
-   //                                                                    (io.bp2_pred_target.toSInt &
-   //                                                                     SInt(-coreInstBytes)).toUInt)
-   //io.imem.btb_update.bits.prediction := Mux(br_unit.btb_update_valid, br_unit.btb_update.prediction,
-   //                                                                    io.imem.resp.bits.btb)
-   //io.imem.btb_update.bits.taken      := Mux(br_unit.btb_update_valid, br_unit.btb_update.taken,
-   //                                                                    io.bp2_take_pc && io.bp2_is_taken && !if_stalled)
-   //io.imem.btb_update.bits.isJump     := Mux(br_unit.btb_update_valid, br_unit.btb_update.isJump, io.bp2_is_jump)
-   //io.imem.btb_update.bits.isReturn   := Mux(br_unit.btb_update_valid, br_unit.btb_update.isReturn, Bool(false))
-   //io.imem.btb_update.bits.isValid    := Mux(br_unit.btb_update_valid, Bool(true), io.bp2_is_cfi)
+   // TODO do we also update the BTB during the F3/branch-checker stage if BPD says we should take it?
+   // TODO when do we update the bim?
 
 
    //************************************************
@@ -193,11 +157,6 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: cde.Parameters) extend
          , Mux(btb.io.resp.valid, Str("V"), Str("-"))
          , btb.io.resp.bits.target
          )
-//      printf("bp2_aligned_pc: 0x%x BHT:(%c 0x%x, %d) p:%x (%d) b:%x j:%x (%d) %c %c\n"
-//         , aligned_pc, Mux(imemreq_valid, Str("T"), Str("-")), imemreq.target, imemreq.idx
-//         , bpd_predictions.toBits, bpd_br_idx, is_br.toBits, is_jal.toBits, bpd_jal_idx
-//         , Mux(bpd_br_beats_jal, Str("B"), Str("J")), Mux(bpd_nextline_fire, Str("N"), Str("-"))
-//         )
    }
 
    //************************************************
