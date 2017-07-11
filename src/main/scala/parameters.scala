@@ -22,22 +22,24 @@ case class BoomCoreParams(
    numIntPhysRegisters: Int = 96,
    numFpPhysRegisters: Int = 64,
    maxBrCount: Int = 4,
-   fetchBufferSz: Int = 4,
+   fetchBufferSz: Int = 8,
    enableAgePriorityIssue: Boolean = true,
    enablePrefetching: Boolean = false,
-   enableFetchBufferFlowThrough: Boolean = false,
+   enableFetchBufferFlowThrough: Boolean = true,
    enableBrResolutionRegister: Boolean = true,
    enableCommitMapTable: Boolean = false,
    enableBTBContainsBranches: Boolean = true,
-   enableBranchPredictor: Boolean = true,
+   enableBIM: Boolean = true,
+   enableBranchPredictor: Boolean = false,
    enableBpdUModeOnly: Boolean = false,
    enableBpdUSModeHistory: Boolean = false,
+   btb: BTBsaParameters = BTBsaParameters(),
    tage: Option[TageParameters] = None,
    gshare: Option[GShareParameters] = None,
    gskew: Option[GSkewParameters] = None,
    intToFpLatency: Int = 2,
    imulLatency: Int = 3,
-   fetchLatency: Int = 2,
+   fetchLatency: Int = 3,
    renameLatency: Int = 2,
    regreadLatency: Int = 1
 )
@@ -94,6 +96,7 @@ trait HasBoomCoreParameters extends tile.HasCoreParameters
    val intToFpLatency = boomParams.intToFpLatency
 
    val fetchLatency = boomParams.fetchLatency // how many cycles does fetch occupy?
+   require (fetchLatency == 3) // do not currently support changing this
    val renameLatency = boomParams.renameLatency // how many cycles does rename occupy?
    val regreadLatency = boomParams.regreadLatency // how many cycles does rrd occupy?
    require (regreadLatency == 0 || regreadLatency == 1)
@@ -105,7 +108,7 @@ trait HasBoomCoreParameters extends tile.HasCoreParameters
 
    val issueParams: Seq[IssueParams] = boomParams.issueParams
    val enableAgePriorityIssue = boomParams.enableAgePriorityIssue
-   
+
    // currently, only support one of each.
    require (issueParams.count(_.iqType == IQT_FP.litValue) == 1)
    require (issueParams.count(_.iqType == IQT_MEM.litValue) == 1)
@@ -116,13 +119,14 @@ trait HasBoomCoreParameters extends tile.HasCoreParameters
    val dcacheParams: DCacheParams = tileParams.dcache.get
    val nTLBEntries = dcacheParams.nTLBEntries
 
+   val icacheParams: ICacheParams = tileParams.icache.get
+
    //************************************
    // Branch Prediction
 
-   val enableBTB = tileParams.btb.isDefined
-   val btbParams: rocket.BTBParams = tileParams.btb.get
-
+   val enableBTB = true
    val enableBTBContainsBranches = boomParams.enableBTBContainsBranches
+   val enableBIM = boomParams.enableBIM
 
    val ENABLE_BRANCH_PREDICTOR = boomParams.enableBranchPredictor
    val ENABLE_BPD_UMODE_ONLY = boomParams.enableBpdUModeOnly

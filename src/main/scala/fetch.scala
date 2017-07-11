@@ -135,6 +135,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    {
       f2_fetch_bundle.bpu_info(w).btb_hit   := Bool(false)
       f2_fetch_bundle.bpu_info(w).btb_taken := Bool(false)
+      f2_fetch_bundle.bpu_info(w).bim_resp  := io.f2_bpu_info.bits.bim_resp
 
       when (UInt(w) === io.f2_bpu_info.bits.cfi_idx && io.f2_bpu_info.valid)
       {
