@@ -395,6 +395,11 @@ class BranchChecker(fetch_width: Int)(implicit p: Parameters) extends BoomModule
       {
          wrong_cfi := !io.is_jr(btb_idx)
       }
+      .otherwise
+      {
+         wrong_cfi := io.bpu_info.bits.cfi_type === CFIType.none && io.bpu_info.bits.taken
+         assert (!io.bpu_info.bits.cfi_type === CFIType.none, "[btb] predicted on a non-cfi type.")
+      }
    }
 
    val btb_was_wrong = io.bpu_info.valid && (wrong_cfi || wrong_target)
@@ -410,7 +415,7 @@ class BranchChecker(fetch_width: Int)(implicit p: Parameters) extends BoomModule
 
    val jal_idx = PriorityEncoder(io.is_jal.toBits)
    val btb_hit  = io.bpu_info.valid
-   val jal_wins = io.is_jal.reduce(_|_) && (!btb_hit || btb_was_wrong || (jal_idx < btb_idx))
+   val jal_wins = io.is_jal.reduce(_|_) && (!btb_hit || btb_was_wrong || !io.bpu_info.bits.taken || (jal_idx < btb_idx))
    val nextline_pc = io.aligned_pc + UInt(fetch_width*coreInstBytes)
 
    io.req.valid := jal_wins || btb_was_wrong
