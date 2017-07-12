@@ -66,14 +66,10 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    val io = new BoomBundle()(p)
    {
       // Fetch0
-      // TODO restructure as req/valid bundle?
-      val npc        = UInt(INPUT, width = vaddrBitsExtended)
-//      val imem              = new rocket.FrontendIO
       val ext_btb_req = Valid(new PCReq).flip
       val fetch_stalled = Bool(INPUT)
       val f0_btb     = Valid(new BTBsaResp)
       val f2_bpu_info = Valid(new BTBsaResp)
-//      val f2_bpu_info = Valid(new BranchPredInfo)
 
       // Other
       val br_unit    = new BranchUnitResp().asInput
@@ -94,31 +90,42 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    //************************************************
    // Branch Prediction (BP0 Stage)
 
-//   btb.io.req.valid := Bool(true) && !io.fetch_stalled // XXX && !stall
-//   btb.io.req.valid := io.ext_btb_req.valid //(this is (!icmiss and !stall)
-//   btb.io.req.bits.addr := io.npc
    btb.io.req := io.ext_btb_req
 
-//   when (io.ext_btb_req.valid) // this breaks when un-stalling and getting redirected on same cycle
-//   {
-//      assert (RegNext(io.npc) === io.ext_btb_req.bits.addr, "[btb stuff]")
-//   }
+   val s0_pc = Wire(UInt())
+   val last_pc = RegNext(s0_pc)
+   s0_pc := Mux(io.fetch_stalled, last_pc, io.ext_btb_req.bits.addr)
+
 
    //************************************************
    // Branch Prediction (BP1 Stage)
 
    io.f0_btb <> btb.io.resp
 
+   val f1_pc = RegNext(s0_pc)
+
+
    //************************************************
    // Branch Prediction (BP2 Stage)
 
    val f2_btb = Reg(Valid(new BTBsaResp))
+   val f2_pc  = Reg(UInt())
 
    when (!io.fetch_stalled)
    {
       f2_btb := btb.io.resp
+      f2_pc := f1_pc
    }
    io.f2_bpu_info := f2_btb
+
+   // update RAS based on BTB's prediction information.
+   val f2_aligned_pc = ~(~f2_pc | (UInt(fetch_width*coreInstBytes-1)))
+   val jmp_idx = f2_btb.bits.cfi_idx
+   btb.io.ras_update.valid := f2_btb.valid && !io.fetch_stalled
+   btb.io.ras_update.bits.is_call := f2_btb.bits.bpd_type === BpredType.call
+   btb.io.ras_update.bits.is_ret  := f2_btb.bits.bpd_type === BpredType.ret
+   btb.io.ras_update.bits.return_addr := f2_aligned_pc + (jmp_idx << 2.U) + 4.U
+
 
    //************************************************
    // Update the BTB/BIM
@@ -150,9 +157,8 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
 
    if (DEBUG_PRINTF)
    {
-      printf("btb, f0_npc=%c 0x%x, req_pc 0x%x, f1=%c targ=0x%x\n"
+      printf("btb, f0_npc=%c req_pc 0x%x, f1=%c targ=0x%x\n"
          , Mux(btb.io.req.valid, Str("V"), Str("-"))
-         , io.npc
          , io.ext_btb_req.bits.addr
          , Mux(btb.io.resp.valid, Str("V"), Str("-"))
          , btb.io.resp.bits.target
