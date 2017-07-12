@@ -171,7 +171,7 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    println("   BTB Size              : " + 
       (if (enableBTB) ("" + boomParams.btb.nSets * boomParams.btb.nWays + " entries (" + 
          boomParams.btb.nSets + " x " + boomParams.btb.nWays + " ways)") else 0))
-   println("   RAS Size              : n/a") // + (if (enableBTB) boomParams.btb.get.nRAS     else 0))
+   println("   RAS Size              : " + (if (enableBTB) boomParams.btb.nRAS else 0))
    println("   Rename  Stage Latency : " + renameLatency)
    println("   RegRead Stage Latency : " + regreadLatency)
 
@@ -246,7 +246,6 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
 //   }
 //   io.imem.resp.ready <> fetch_unit.io.imem.resp.ready
 //
-   bpd_stage.io.npc := io.imem.npc
    bpd_stage.io.ext_btb_req := io.imem.ext_btb.req
 
 

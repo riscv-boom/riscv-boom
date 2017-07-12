@@ -7,10 +7,11 @@
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
 //
-// TODO:
-//    - Add RAS.
-//    - compress high-order tag bits, target bits?
-//    - only store offsets, not full targets? (requires adder).
+// NOTES:
+//    - No compression of high-order tag bits or target bits.
+//    - We store the full targets, instead of just the branch/jump offsets (requires adder).
+//    - Only performs partial tag matches -- must verify elsewhere that target was valid.
+//    - BTB is allowed to be stale (Debug Program Buffer and other self-modifying code may end up here).
 
 package boom
 
@@ -22,7 +23,8 @@ import util.Str
 case class BTBsaParameters(
   nSets: Int = 64,
   nWays: Int = 4,
-  tagSz: Int = 20
+  tagSz: Int = 20,
+  nRAS : Int = 8
 )
 
 trait HasBTBsaParameters extends HasBoomCoreParameters
@@ -32,9 +34,8 @@ trait HasBTBsaParameters extends HasBoomCoreParameters
    val nWays = btbParams.nWays
    val tag_sz = btbParams.tagSz
    val idx_sz = log2Ceil(nSets)
-//  val nRAS = btbParams.nRAS
+   val nRAS = btbParams.nRAS
 }
-
 
 // Which predictor should we listen to?
 object BpredType
@@ -47,22 +48,8 @@ object BpredType
    def ret = 3.U
 }
 
-
 abstract class BTBsaBundle(implicit val p: Parameters) extends util.ParameterizedBundle()(p)
   with HasBTBsaParameters
-
-// BTB update occurs during branch resolution (and only on a mispredict that's taken).
-//  - "pc" is what future fetch PCs will tag match against.
-//  - "cfi_pc" is the PC of the branch instruction.
-class BTBsaUpdate(implicit p: Parameters) extends BTBsaBundle()(p)
-{
-   val pc = UInt(width = vaddrBits)
-   val target = UInt(width = vaddrBits)
-   val taken = Bool()
-   val cfi_pc = UInt(width = vaddrBits)
-	val bpd_type = BpredType()
-	val cfi_type = CFIType()
-}
 
 
 //  - "bridx" is the low-order PC bits of the predicted branch (after
@@ -80,10 +67,9 @@ class BTBsaResp(implicit p: Parameters) extends BTBsaBundle()(p)
    val bim_resp  = new BimResp
 }
 
-
 class BimResp(implicit p: Parameters) extends BTBsaBundle()(p)
 {
-  val value = UInt(width = 2) // save the old value; so we can do read-modify-writes.
+  val value = UInt(width = 2) // save the old value -- needed for updating entry.
   val entry_idx = UInt(width = idx_sz) // what entry in the set is the prediction coming from?
   val way_idx = UInt(width = log2Up(nWays)) // which way did we come from?
 
@@ -91,11 +77,31 @@ class BimResp(implicit p: Parameters) extends BTBsaBundle()(p)
 }
 
 
+// BTB update occurs during branch resolution (and only on a mispredict that's taken).
+//  - "pc" is what future fetch PCs will tag match against.
+//  - "cfi_pc" is the PC of the branch instruction.
+class BTBsaUpdate(implicit p: Parameters) extends BTBsaBundle()(p)
+{
+   val pc = UInt(width = vaddrBits)
+   val target = UInt(width = vaddrBits)
+   val taken = Bool()
+   val cfi_pc = UInt(width = vaddrBits)
+	val bpd_type = BpredType()
+	val cfi_type = CFIType()
+}
+
 class BimUpdate(implicit p: Parameters) extends BTBsaBundle()(p)
 {
   val mispredict = Bool()
   val taken = Bool()
   val bim_resp = new BimResp
+}
+
+class RasUpdate(implicit p: Parameters) extends BTBsaBundle()(p)
+{
+   val is_call = Bool()
+   val is_ret = Bool()
+   val return_addr = UInt(width = vaddrBits)
 }
 
 
@@ -121,7 +127,6 @@ class BIM(bim_entries: Int, way_idx: Int)(implicit val p: Parameters) extends Ha
    def update(index: UInt, value: UInt, taken: Bool): Unit =
    {
       // LSB gives the taken/not-taken prediction (p-bit).
-//      printf("bim update (%d), value=%d, new_value=%d,\n", index(idx_sz-1,0), value, new_value)
       table(index(idx_sz-1, 0)) := Cat(taken, (value(1) & value(0)) | ((value(1) | value(0)) & taken))
    }
 
@@ -129,10 +134,35 @@ class BIM(bim_entries: Int, way_idx: Int)(implicit val p: Parameters) extends Ha
 }
 
 
+class RAS(nras: Int)
+{
+   def push(addr: UInt): Unit =
+   {
+      when (count < nras.U) { count := count + 1.U }
+      val nextPos = Mux(Bool(isPow2(nras)) || pos < UInt(nras-1), pos+1.U, 0.U)
+      stack(nextPos) := addr
+      pos := nextPos
+   }
+   def peek: UInt = stack(pos)
+   def pop(): Unit = when (!isEmpty)
+   {
+      count := count - 1.U
+      pos := Mux(Bool(isPow2(nras)) || pos > 0.U, pos-1.U, UInt(nras-1))
+   }
+   def clear(): Unit = count := UInt(0)
+   def isEmpty: Bool = count === UInt(0)
+
+   private val count = Reg(UInt(width = log2Up(nras+1)))
+   private val pos = Reg(UInt(width = log2Up(nras)))
+   private val stack = Reg(Vec(nras, UInt()))
+}
+
+
 class PCReq(implicit p: Parameters) extends BTBsaBundle()(p)
 {
    val addr = UInt(width = vaddrBitsExtended)
 }
+
 
 // set-associative branch target buffer
 class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParameters
@@ -144,26 +174,23 @@ class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParamet
       // Resp is expected on cycle S1.
       val req = Valid(new PCReq).flip
       val resp = Valid(new BTBsaResp)
-      // Update comes in during branch resolution (Execute Stage). Yes, that's out-of-order.
-      val btb_update = Valid(new BTBsaUpdate).flip
 
+      // BTB update comes in during branch resolution (Execute Stage). Yes, that's out-of-order.
+      val btb_update = Valid(new BTBsaUpdate).flip
+      // BIM is updated speculatively in Frontend (and during Execute if mispredicted).
       val bim_update = Valid(new BimUpdate).flip
+      // RAS is updated in Frontend, in-order.
+      val ras_update = Valid(new RasUpdate).flip
 
       // HACK: prevent BTB predicting during program load.
       // Easier to diff against spike which doesn't run debug mode.
       val status_debug = Bool(INPUT)
    }
 
-   private def getTag (addr: UInt): UInt = (addr >> UInt(idx_sz + log2Up(coreInstBytes)))(tag_sz-1,0)
-   private def getIdx (addr: UInt): UInt = (addr >> UInt(log2Up(coreInstBytes)))(idx_sz-1,0)
-   // TODO refactor as static indexing
-//   private def getTag (addr: UInt): UInt = addr(idx_sz + log2Up(coreInstBytes)))(tag_sz-1,0)
-//   private def getIdx (addr: UInt): UInt = addr(log2Up(fetchWidth*coreInstBytes)))(idx_sz+1?, log2Up(coreInstBytes))
+   private val lsb_sz = log2Up(coreInstBytes)
+   private def getTag (addr: UInt): UInt = addr(tag_sz+idx_sz+lsb_sz-1, idx_sz+lsb_sz)
+   private def getIdx (addr: UInt): UInt = addr(idx_sz+lsb_sz-1, lsb_sz)
 
-   override def toString: String =
-   {
-      nSets*nWays + " entries (" + nSets + " x " + nWays + " ways)"
-   }
 
    class BTBSetData extends Bundle
    {
@@ -282,6 +309,7 @@ class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParamet
       clear_valid := true.B
    }
 
+
    // Mux out the winning hit.
    val s1_valid = PopCount(hits_oh) === UInt(1)
 	val s1_data = Mux1H(hits_oh, data_out)
@@ -291,11 +319,6 @@ class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParamet
    val s1_bpd_type = s1_data.bpd_type
    val s1_cfi_type = s1_data.cfi_type
 
-   if (DEBUG_PRINTF)
-   {
-      printf("BTB predi (%c): hits:%x %d (PC= 0x%x, TARG= 0x%x %d)\n",
-         Mux(s1_valid, Str("V"), Str("-")), hits_oh.asUInt, true.B, RegNext(io.req.bits.addr), s1_target, s1_cfi_type)
-   }
 
    io.resp.valid := s1_valid && !io.status_debug
    io.resp.bits.target := s1_target
@@ -307,16 +330,38 @@ class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParamet
    io.resp.bits.bim_resp := s1_bim_resp
    io.resp.bits.bim_resp.entry_idx  := s1_idx
 
-   // Debugging Signals
-   //val s0_addr = Wire(UInt())
-   //val last_addr = RegNext(s0_addr)
-   //s0_addr := Mux(stall, last_addr, io.req.bits.addr)
-   //val s1_addr = RegNext(s0_addr)
-   //assert (s1_req_tag === getTag(s0_addr)
 
-//   printf("pc= 0x%x, ridx=%d, value=%d, taken=%d, req.valid =%d way-idx=%d REQUEST\n",
-//      s1_addr, io.resp.bits.bim_resp.entry_idx, io.resp.bits.bim_resp.value, io.resp.bits.taken, io.resp.valid,
-//      io.resp.bits.bim_resp.way_idx)
+   if (nRAS > 0)
+   {
+      val ras = new RAS(nRAS)
+      val doPeek = (hits_oh zip data_out map {case(hit, d) => hit && d.bpd_type === BpredType.ret}).reduce(_||_)
+      when (!ras.isEmpty && doPeek)
+      {
+         io.resp.bits.target := ras.peek
+      }
 
+      when (io.ras_update.valid)
+      {
+         when (io.ras_update.bits.is_call)
+         {
+            ras.push(io.ras_update.bits.return_addr)
+            when (doPeek)
+            {
+               io.resp.bits.target := io.ras_update.bits.return_addr
+            }
+         }
+         .elsewhen (io.ras_update.bits.is_ret) // only pop if BTB hit!
+         {
+            ras.pop()
+         }
+      }
+   }
+
+
+   if (DEBUG_PRINTF)
+   {
+      printf("BTB predi (%c): hits:%x %d (PC= 0x%x, TARG= 0x%x %d)\n",
+         Mux(s1_valid, Str("V"), Str("-")), hits_oh.asUInt, true.B, RegNext(io.req.bits.addr), s1_target, s1_cfi_type)
+   }
 }
 
