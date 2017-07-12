@@ -121,6 +121,7 @@ class BIM(bim_entries: Int, way_idx: Int)(implicit val p: Parameters) extends Ha
       // read-data valid on the next cycle
       res.value := table.read(index(idx_sz-1, 0))
       res.way_idx := UInt(way_idx)
+      res.entry_idx := 0.U // unused -- set externally to save on a register
       res
    }
 
@@ -291,15 +292,15 @@ class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParamet
          printf("BTB write (%c): %d 0x%x (PC= 0x%x, TARG= 0x%x) way=%d C=%d\n", Mux(wen, Str("w"), Str("-")), widx,
          wtag, r_btb_update.bits.pc, r_btb_update.bits.target, UInt(w), clear_valid)
 
-         for (i <- 0 until nSets)
-         {
-            printf("    [%d] %d tag=0x%x targ=0x%x [0x%x 0x%x]\n", UInt(i), (valids >> UInt(i))(0),
-            tags.read(UInt(i)),
-            data.read(UInt(i)).target,
-            tags.read(UInt(i)) << UInt(idx_sz + log2Up(fetchWidth*coreInstBytes)),
-            data.read(UInt(i)).target << log2Up(coreInstBytes)
-            )
-         }
+         //for (i <- 0 until nSets)
+         //{
+         //   printf("    [%d] %d tag=0x%x targ=0x%x [0x%x 0x%x]\n", UInt(i), (valids >> UInt(i))(0),
+         //   tags.read(UInt(i)),
+         //   data.read(UInt(i)).target,
+         //   tags.read(UInt(i)) << UInt(idx_sz + log2Up(fetchWidth*coreInstBytes)),
+         //   data.read(UInt(i)).target << log2Up(coreInstBytes)
+         //   )
+         //}
       }
    }
 
@@ -360,8 +361,9 @@ class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParamet
 
    if (DEBUG_PRINTF)
    {
-      printf("BTB predi (%c): hits:%x %d (PC= 0x%x, TARG= 0x%x %d)\n",
-         Mux(s1_valid, Str("V"), Str("-")), hits_oh.asUInt, true.B, RegNext(io.req.bits.addr), s1_target, s1_cfi_type)
+      printf("BTB predi (%c): hits:%x %d (PC= 0x%x, TARG= 0x%x %d) BIM [%d, %d]\n",
+         Mux(s1_valid, Str("V"), Str("-")), hits_oh.asUInt, true.B, RegNext(io.req.bits.addr), s1_target, s1_cfi_type,
+         io.resp.bits.bim_resp.way_idx, io.resp.bits.bim_resp.entry_idx)
    }
 }
 

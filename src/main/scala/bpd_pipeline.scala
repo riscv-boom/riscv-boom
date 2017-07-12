@@ -66,18 +66,20 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: cde.Parameters) extend
    val io = new BoomBundle()(p)
    {
       // Fetch0
-      val ext_btb_req = Valid(new PCReq).flip
+      val ext_btb_req   = Valid(new PCReq).flip
       val fetch_stalled = Bool(INPUT)
-      val f0_btb     = Valid(new BTBsaResp)
-      val f2_bpu_info = Valid(new BTBsaResp)
+      val f0_btb        = Valid(new BTBsaResp)
+      val f2_bpu_info   = Valid(new BTBsaResp)
+      val f2_btb_update = Valid(new BTBsaUpdate).flip
+      val f2_ras_update = Valid(new RasUpdate).flip
 
       // Other
-      val br_unit    = new BranchUnitResp().asInput
+      val br_unit       = new BranchUnitResp().asInput
 //      val brob       = new BrobBackendIo(fetch_width)
-      val flush      = Bool(INPUT) // pipeline flush
-      val redirect   = Bool(INPUT)
+      val flush         = Bool(INPUT) // pipeline flush
+      val redirect      = Bool(INPUT)
 //      val status_prv = UInt(INPUT, width = rocket.PRV.SZ)
-      val status_debug = Bool(INPUT)
+      val status_debug  = Bool(INPUT)
    }
 
    //************************************************
@@ -118,23 +120,37 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: cde.Parameters) extend
    }
    io.f2_bpu_info := f2_btb
 
-   // update RAS based on BTB's prediction information.
+
+   //************************************************
+   // Update the RAS
+
+   // update RAS based on BTB's prediction information (or the branch-check correction).
    val f2_aligned_pc = ~(~f2_pc | (UInt(fetch_width*coreInstBytes-1)))
    val jmp_idx = f2_btb.bits.cfi_idx
-   btb.io.ras_update.valid := f2_btb.valid && !io.fetch_stalled
-   btb.io.ras_update.bits.is_call := f2_btb.bits.bpd_type === BpredType.call
-   btb.io.ras_update.bits.is_ret  := f2_btb.bits.bpd_type === BpredType.ret
-   btb.io.ras_update.bits.return_addr := f2_aligned_pc + (jmp_idx << 2.U) + 4.U
+
+   btb.io.ras_update := io.f2_ras_update
+   btb.io.ras_update.valid := (f2_btb.valid || io.f2_ras_update.valid) && !io.fetch_stalled
+   when (f2_btb.valid)
+   {
+      btb.io.ras_update.bits.is_call      := f2_btb.bits.bpd_type === BpredType.call
+      btb.io.ras_update.bits.is_ret       := f2_btb.bits.bpd_type === BpredType.ret
+      btb.io.ras_update.bits.return_addr  := f2_aligned_pc + (jmp_idx << 2.U) + 4.U
+   }
 
 
    //************************************************
    // Update the BTB/BIM
 
-   btb.io.btb_update := io.br_unit.btb_update
+   // TODO XXX: allow branch-checker to kill bad entries.
+   // TODO XXX update the BTB during the F3/branch-checker stage if BPD says we should take it.
+   btb.io.btb_update :=
+      Mux(io.br_unit.btb_update.valid,
+         io.br_unit.btb_update,
+         io.f2_btb_update)
+
+   // TODO XXX allow F2/BPD redirects to correct the BIM.
    btb.io.bim_update := io.br_unit.bim_update
 
-   // TODO do we also update the BTB during the F3/branch-checker stage if BPD says we should take it?
-   // TODO when do we update the bim?
 
 
    //************************************************
