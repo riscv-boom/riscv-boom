@@ -258,6 +258,8 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    bpd_stage.io.fetch_stalled := fetch_unit.io.stalled
    bpd_stage.io.status_debug := csr.io.status.debug
 
+   bpd_stage.io.f2_btb_update := fetch_unit.io.f2_btb_update
+   bpd_stage.io.f2_ras_update := fetch_unit.io.f2_ras_update
 //   fetch_unit.io.bp2_pred_resp <> bpd_stage.io.pred_resp
 //   fetch_unit.io.bp2_predictions <> bpd_stage.io.predictions
 
@@ -1091,7 +1093,7 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
 
       val numBrobWhitespace = if (DEBUG_PRINTF_BROB) NUM_BROB_ENTRIES else 0
 //      val screenheight = 103 - 12 //- 10
-      val screenheight = 85 - 10 - 10
+      val screenheight = 85 - 4 - 10
 //      val screenheight = 62-8
        var whitespace = (screenheight - 11 + 3 - NUM_LSU_ENTRIES -
          issueParams.map(_.numEntries).sum - issueParams.length - (NUM_ROB_ENTRIES/COMMIT_WIDTH) - numBrobWhitespace
