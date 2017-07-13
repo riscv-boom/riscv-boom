@@ -113,11 +113,13 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    val f2_btb = Reg(Valid(new BTBsaResp))
    val f2_pc  = Reg(UInt())
 
-   when (!io.fetch_stalled)
+   // request in BTB can advance
+   when (io.ext_btb_req.valid)
    {
       f2_btb := btb.io.resp
       f2_pc := f1_pc
    }
+
    io.f2_bpu_info := f2_btb
 
 
