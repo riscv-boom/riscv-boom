@@ -139,7 +139,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
       f2_fetch_bundle.bpu_info(w).btb_taken := Bool(false)
       f2_fetch_bundle.bpu_info(w).bim_resp  := io.f2_bpu_info.bits.bim_resp
 
-      when (UInt(w) === io.f2_bpu_info.bits.cfi_idx && io.f2_bpu_info.valid)
+      when (UInt(w) === io.f2_bpu_info.bits.cfi_idx && io.f2_bpu_info.valid && !f2_req.valid)
       {
          f2_fetch_bundle.bpu_info(w).btb_hit   := Bool(true)
          f2_fetch_bundle.bpu_info(w).btb_taken := io.f2_bpu_info.bits.taken
@@ -203,6 +203,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    // mask out instructions after predicted branch
    val btb_kill_mask = KillMask(f2_req.valid, bchecker.io.cfi_idx, fetchWidth)
    val f2_kill_mask = KillMask(f2_req.valid, bchecker.io.cfi_idx, fetchWidth)
+   //val jr_kill_mask = KillMask(is_jr.reduce(_||_), PriorityEncoder(is_jr.asUInt), fetchWidth)
 
    val btb_mask = Mux(f2_req.valid || !io.f2_bpu_info.valid,
                   Fill(fetchWidth, UInt(1,1)),
@@ -424,7 +425,7 @@ class BranchChecker(fetch_width: Int)(implicit p: Parameters) extends BoomModule
    io.cfi_idx := Mux(jal_wins, jal_idx, UInt(fetchWidth-1))
 
    // update the BTB for jumps it missed.
-   // TODO XXX also allow us to clear bad BTB entries.
+   // TODO XXX also allow us to clear bad BTB entries when btb is wrong.
    io.btb_update.valid := jal_wins
    io.btb_update.bits.pc := io.fetch_pc
    io.btb_update.bits.target := io.jal_targs(jal_idx)
