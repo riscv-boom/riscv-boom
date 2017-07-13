@@ -216,7 +216,10 @@ class Rob(width: Int,
    // valid bits at the branch target
    // the br_unit needs to verify the target PC, but it must read out the valid bits
    // for that row
-   val rob_brt_vals        = Wire(Vec(width, Bool()))
+   val rob_getpc_next_vals        = Wire(Vec(width, Bool()))
+   // valids bits at the branch itself.
+   // useful to help see if any valid instructions are in the branch's shadow on the same row.
+   val rob_getpc_curr_vals        = Wire(Vec(width, Bool()))
 
    val exception_thrown = Wire(Bool())
 
@@ -267,6 +270,8 @@ class Rob(width: Int,
    //       - commit for flush PC at rob_head.
    //       - execute by the Br Unit for target calculation at idx X.
    //       - execute by the Br Unit to get actual target at idx X+1.
+   //       - NOTE:
+   //          * This returns the "next-pc", even from within the same ROB row.
 
    val rob_pc_hob = new RobPCs(width, num_rob_rows)
 
@@ -280,19 +285,28 @@ class Rob(width: Int,
 
    io.get_pc.curr_pc := curr_row_pc + Cat(GetBankIdx(io.get_pc.rob_idx), Bits(0,2))
 
-   val next_bank_idx = if (width == 1) UInt(0) else PriorityEncoder(rob_brt_vals.toBits)
+   // What if the next-pc is in the current row? I.e., a JR that wasn't handled in the front-end.
+   val curr_idx = GetBankIdx(io.get_pc.rob_idx) + 1.U
+   val curr_row_next_pc_val = rob_getpc_curr_vals(curr_idx) && curr_idx =/= 0.U
+   val curr_row_next_pc = curr_row_pc + Cat(curr_idx, UInt(0,2))
+
+
+   val next_bank_idx = if (width == 1) UInt(0) else PriorityEncoder(rob_getpc_next_vals.toBits)
 
    // TODO is this logic broken if the ROB can fill up completely?
-   val rob_pc_hob_next_val = rob_brt_vals.reduce(_|_)
+   val rob_pc_hob_next_val = rob_getpc_next_vals.reduce(_|_)
 
    val bypass_next_bank_idx = if (width == 1) UInt(0) else PriorityEncoder(io.enq_valids.toBits)
    val bypass_next_pc = (io.enq_uops(0).pc.toSInt & SInt(-(DECODE_WIDTH*coreInstBytes))).toUInt +
                         Cat(bypass_next_bank_idx, Bits(0,2))
 
-   io.get_pc.next_val := rob_pc_hob_next_val || io.enq_valids.reduce(_|_)
-   io.get_pc.next_pc := Mux(rob_pc_hob_next_val,
-                           next_row_pc + Cat(next_bank_idx, Bits(0,2)),
-                           bypass_next_pc)
+   io.get_pc.next_val := rob_pc_hob_next_val || io.enq_valids.reduce(_|_) || curr_row_next_pc_val
+   io.get_pc.next_pc :=
+      Mux(curr_row_next_pc_val,
+         curr_row_next_pc,
+      Mux(rob_pc_hob_next_val,
+         next_row_pc + Cat(next_bank_idx, Bits(0,2)),
+         bypass_next_pc))
 
    // **************************************************************************
    // --------------------------------------------------------------------------
@@ -530,7 +544,8 @@ class Rob(width: Int,
       rob_head_fflags(w)   := rob_fflags(rob_head)
       rob_head_is_store(w) := rob_uop(rob_head).is_store
       rob_head_is_load(w)  := rob_uop(rob_head).is_load
-      rob_brt_vals(w)      := rob_val(WrapInc(GetRowIdx(io.get_pc.rob_idx), num_rob_rows))
+      rob_getpc_curr_vals(w) := rob_val(GetRowIdx(io.get_pc.rob_idx))
+      rob_getpc_next_vals(w) := rob_val(WrapInc(GetRowIdx(io.get_pc.rob_idx), num_rob_rows))
 
       // -----------------------------------------------
       // debugging write ports that should not be synthesized
