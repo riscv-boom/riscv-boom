@@ -18,10 +18,11 @@ import Chisel._
 import cde.Parameters
 
 import util.Str
+import util.UIntToAugmentedUInt
 
 class FetchBundle(implicit p: Parameters) extends BoomBundle()(p)
 {
-   val pc          = UInt(width = vaddrBits+1)
+   val pc          = UInt(width = vaddrBitsExtended)
    val insts       = Vec(FETCH_WIDTH, Bits(width = 32))
    val mask        = Bits(width = FETCH_WIDTH) // mark which words are valid instructions
    val xcpt_if     = Bool()
@@ -44,7 +45,10 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    {
       val imem              = new rocket.FrontendIO
       val f0_btb            = Valid(new BTBsaResp).flip
-      val f2_bpu_info       = Valid(new BTBsaResp).flip
+      val f2_bpu_request    = Valid(new BpuRequest).flip
+
+      val f2_btb_resp       = Valid(new BTBsaResp).flip
+      val f2_bpd_resp       = Valid(new BpdResp).flip
       val f2_btb_update     = Valid(new BTBsaUpdate)
       val f2_ras_update     = Valid(new RasUpdate)
 
@@ -70,7 +74,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
 
    val br_unit = io.br_unit
    val fseq_reg = Reg(init = UInt(0, xLen))
-   val f0_redirect_pc = Wire(UInt(width = vaddrBits+1))
+   val f0_redirect_pc = Wire(UInt(width = vaddrBitsExtended))
 
    val f2_valid = Wire(Bool())
    val f2_req = Wire(Valid(new PCReq()))
@@ -102,6 +106,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    val f0_redirect_val =
       br_unit.take_pc ||
       io.flush_take_pc ||
+      (io.f2_bpu_request.valid && !if_stalled && io.imem.resp.valid) ||
       (f3_req.valid && !if_stalled) // TODO this seems way too low-level to get backpressure signal correct
 
    io.imem.req.valid   := f0_redirect_val // tell front-end we had an unexpected change in the stream
@@ -110,9 +115,13 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    io.imem.resp.ready  := !(if_stalled)
 
    f0_redirect_pc :=
-      Mux(io.flush_take_pc, io.flush_pc,
-      Mux(br_unit.take_pc,  br_unit.target(vaddrBits,0),
-         f3_req.bits.addr))
+      Mux(io.flush_take_pc,
+         io.flush_pc,
+      Mux(br_unit.take_pc,
+         br_unit.target(vaddrBits,0),
+      Mux(f3_req.valid,
+         f3_req.bits.addr,
+         io.f2_bpu_request.bits.target)))
 
    io.imem.ext_btb.resp := io.f0_btb
 
@@ -135,15 +144,31 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
 
    for (w <- 0 until fetch_width)
    {
-      f2_fetch_bundle.bpu_info(w).btb_hit   := Bool(false)
-      f2_fetch_bundle.bpu_info(w).btb_taken := Bool(false)
-      f2_fetch_bundle.bpu_info(w).bim_resp  := io.f2_bpu_info.bits.bim_resp
+      f2_fetch_bundle.bpu_info(w).btb_predicted := false.B
+      f2_fetch_bundle.bpu_info(w).btb_hit       := false.B
+      f2_fetch_bundle.bpu_info(w).btb_taken     := false.B
+      f2_fetch_bundle.bpu_info(w).bpd_predicted := false.B
+      f2_fetch_bundle.bpu_info(w).bpd_taken     := false.B
+      f2_fetch_bundle.bpu_info(w).bim_resp      := io.f2_btb_resp.bits.bim_resp
+      f2_fetch_bundle.bpu_info(w).bpd_resp      := io.f2_bpd_resp.bits
 
-      when (UInt(w) === io.f2_bpu_info.bits.cfi_idx && io.f2_bpu_info.valid && !f2_req.valid)
+      when (UInt(w) === io.f2_btb_resp.bits.cfi_idx && io.f2_bpu_request.valid && !f2_req.valid)
       {
-         f2_fetch_bundle.bpu_info(w).btb_hit   := Bool(true)
-         f2_fetch_bundle.bpu_info(w).btb_taken := io.f2_bpu_info.bits.taken
+         f2_fetch_bundle.bpu_info(w).bpd_predicted := true.B
+         f2_fetch_bundle.bpu_info(w).bpd_taken     := io.f2_bpd_resp.bits.takens(w.U)
       }
+      .elsewhen (UInt(w) === io.f2_btb_resp.bits.cfi_idx && io.f2_btb_resp.valid && !f2_req.valid)
+      {
+         f2_fetch_bundle.bpu_info(w).btb_predicted := true.B
+         f2_fetch_bundle.bpu_info(w).btb_taken := io.f2_btb_resp.bits.taken
+      }
+
+      when (UInt(w) === io.f2_btb_resp.bits.cfi_idx && io.f2_btb_resp.valid)
+      {
+         f2_fetch_bundle.bpu_info(w).btb_hit := true.B
+      }
+
+      assert (!(f2_fetch_bundle.bpu_info(w).btb_predicted && f2_fetch_bundle.bpu_info(w).bpd_predicted))
    }
 
 
@@ -182,6 +207,8 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
 
 
    // catch any BTB mispredictions (and fix-up missed JALs)
+   bchecker.io.is_valid  := Vec(io.imem.resp.bits.mask.toBools)
+   bchecker.io.imem_resp_valid := io.imem.resp.valid
    bchecker.io.is_br  := is_br
    bchecker.io.is_jal := is_jal
    bchecker.io.is_jr  := is_jr
@@ -190,25 +217,28 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    bchecker.io.jal_targs := jal_targs
    bchecker.io.fetch_pc := io.imem.resp.bits.pc
    bchecker.io.aligned_pc := aligned_pc
-   bchecker.io.bpu_info := io.f2_bpu_info
-   // TODO, fix up f2_bpu_info
+   bchecker.io.btb_resp := io.f2_btb_resp
+   bchecker.io.bpd_resp := io.f2_bpd_resp
+   bchecker.io.f2_bpu_request  := io.f2_bpu_request
 
-
-   f2_req.valid := bchecker.io.req.valid && !f0_redirect_val && f2_valid
+   f2_req.valid := bchecker.io.req.valid && f2_valid && !(f0_redirect_val && !io.f2_bpu_request.valid)
    f2_req.bits  := bchecker.io.req.bits
 
    io.f2_btb_update := bchecker.io.btb_update
    io.f2_ras_update := bchecker.io.ras_update
 
    // mask out instructions after predicted branch
-   val btb_kill_mask = KillMask(f2_req.valid, bchecker.io.cfi_idx, fetchWidth)
+//   val btb_kill_mask = KillMask(f2_req.valid, bchecker.io.cfi_idx, fetchWidth)
    val f2_kill_mask = KillMask(f2_req.valid, bchecker.io.cfi_idx, fetchWidth)
    //val jr_kill_mask = KillMask(is_jr.reduce(_||_), PriorityEncoder(is_jr.asUInt), fetchWidth)
 
-   val btb_mask = Mux(f2_req.valid || !io.f2_bpu_info.valid,
-                  Fill(fetchWidth, UInt(1,1)),
-                  io.f2_bpu_info.bits.mask)
-   f2_fetch_bundle.mask := io.imem.resp.bits.mask & ~f2_kill_mask & btb_mask
+   val btb_mask = Mux(io.f2_btb_resp.valid && !io.f2_bpu_request.valid && !f2_req.valid,
+                  io.f2_btb_resp.bits.mask,
+                  Fill(fetchWidth, UInt(1,1)))
+   val bpd_mask = Mux(io.f2_bpu_request.valid && !f2_req.valid,
+                  io.f2_bpu_request.bits.mask,
+                  Fill(fetchWidth, UInt(1,1)))
+   f2_fetch_bundle.mask := io.imem.resp.bits.mask & ~f2_kill_mask & btb_mask & bpd_mask
 
    //-------------------------------------------------------------
    // **** F3 ****
@@ -287,6 +317,63 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
 
    assert (!(io.imem.resp.bits.btb.valid), "[bpd_pipeline] BTB predicted, but it's been disabled.")
 
+   // check if enqueue'd PC is a target of the previous valid enqueue'd PC.
+
+   // clear checking if misprediction/flush/etc.
+   val last_valid = Reg(init=false.B)
+   val last_pc = Reg(UInt(width=vaddrBitsExtended))
+   val last_target = Reg(UInt(width=vaddrBitsExtended))
+   val last_nextlinepc = Reg(UInt(width=vaddrBitsExtended))
+   val last_cfi_type = Reg(UInt(width=CfiType.SZ))
+
+   val cfi_idx = (fetch_width-1).U - PriorityEncoder(Reverse(f3_fetch_bundle.mask))
+   val fetch_pc = f3_fetch_bundle.pc
+   val curr_aligned_pc = ~(~fetch_pc | (UInt(fetch_width*coreInstBytes-1)))
+   val cfi_pc = curr_aligned_pc  + (cfi_idx << 2.U)
+
+   when (FetchBuffer.io.enq.fire() && !f3_fetch_bundle.replay_if && !f3_fetch_bundle.xcpt_if)
+   {
+      assert (f3_fetch_bundle.mask =/= 0.U)
+      val curr_inst = if (fetchWidth == 0) f3_fetch_bundle.insts(0) else f3_fetch_bundle.insts(cfi_idx)
+      last_valid := true.B
+      last_pc := cfi_pc
+      last_nextlinepc := curr_aligned_pc + UInt(fetch_width*coreInstBytes)
+
+      val cfi_type = GetCfiType(curr_inst)
+      last_cfi_type := cfi_type
+      last_target := Mux(cfi_type === CfiType.jal,
+         ComputeJALTarget(cfi_pc, curr_inst, xLen, coreInstBytes),
+         ComputeBranchTarget(cfi_pc, curr_inst, xLen, coreInstBytes))
+
+      when (last_valid)
+      {
+         // check for error
+         when (last_cfi_type === CfiType.none)
+         {
+            assert (fetch_pc ===  last_nextlinepc, "[fetch] A non-cfi instruction is followed by the wrong instruction.")
+         }
+         .elsewhen (last_cfi_type === CfiType.jal)
+         {
+            assert (fetch_pc === last_target, "[fetch] JAL is followed by the wrong instruction.")
+         }
+         .elsewhen (last_cfi_type === CfiType.branch)
+         {
+            assert (fetch_pc === last_nextlinepc || fetch_pc === last_target, "[fetch] branch is followed by the wrong instruction.")
+         }
+         .otherwise
+         {
+            // we can't verify JALR instruction stream integrity --  /throws hands up.
+            assert (last_cfi_type === CfiType.jalr, "[fetch] Should be a JALR if none of the others were valid.")
+         }
+      }
+   }
+
+   when (io.clear_fetchbuffer || (FetchBuffer.io.enq.fire() && (f3_fetch_bundle.replay_if || f3_fetch_bundle.xcpt_if)))
+   {
+      last_valid := false.B
+   }
+
+
    //-------------------------------------------------------------
    // **** Printfs ****
    //-------------------------------------------------------------
@@ -355,17 +442,22 @@ class BranchChecker(fetch_width: Int)(implicit p: Parameters) extends BoomModule
    {
       val req           = Valid(new PCReq)
 
+      val is_valid      = Vec(fetch_width, Bool()).asInput // valid instruction mask from I$
       val is_br         = Vec(fetch_width, Bool()).asInput
       val is_jal        = Vec(fetch_width, Bool()).asInput
       val is_jr         = Vec(fetch_width, Bool()).asInput
       val is_call       = Vec(fetch_width, Bool()).asInput
+      val imem_resp_valid= Bool(INPUT)
 
       val br_targs      = Vec(fetch_width, UInt(width=vaddrBitsExtended)).asInput
       val jal_targs     = Vec(fetch_width, UInt(width=vaddrBitsExtended)).asInput
       val fetch_pc      = UInt(INPUT, width=vaddrBitsExtended)
       val aligned_pc    = UInt(INPUT, width=vaddrBitsExtended)
 
-      val bpu_info      = Valid(new BTBsaResp).flip
+      val btb_resp      = Valid(new BTBsaResp).flip
+      val bpd_resp      = Valid(new BpdResp).flip //TODO XXX hook up TODO let bpd_resp guide new taken branches if disagreement?
+      val f2_bpu_request= Valid(new BpuRequest).flip
+
       val btb_update    = Valid(new BTBsaUpdate)
       val ras_update    = Valid(new RasUpdate)
 
@@ -373,37 +465,57 @@ class BranchChecker(fetch_width: Int)(implicit p: Parameters) extends BoomModule
 
    }
 
-   // Step #1: did the BTB mispredict the cfi type?
-   // Step #2: did the BTB mispredict the cfi target?
+   // Did the BTB mispredict the cfi type?
+   // Did the BTB mispredict the cfi target?
+   // Did the BTB predict a masked-off instruction?
    val wrong_cfi = Wire(init = false.B)
    val wrong_target = Wire(init = false.B)
 
-   val btb_idx = io.bpu_info.bits.cfi_idx
-   val btb_target = io.bpu_info.bits.target
-   when (io.bpu_info.valid)
+   val btb_idx = io.btb_resp.bits.cfi_idx
+   val btb_target = io.btb_resp.bits.target.sextTo(vaddrBitsExtended)
+   val bpd_predicted_taken = io.bpd_resp.valid && io.bpd_resp.bits.takens(io.btb_resp.bits.cfi_idx)
+
+   when (io.btb_resp.valid)
    {
-      when (io.bpu_info.bits.cfi_type === CFIType.branch && io.bpu_info.bits.taken)
+      when (io.btb_resp.bits.cfi_type === CfiType.branch && (io.btb_resp.bits.taken || bpd_predicted_taken))
       {
          wrong_cfi := !io.is_br(btb_idx)
          wrong_target := io.br_targs(btb_idx) =/= btb_target
       }
-      .elsewhen (io.bpu_info.bits.cfi_type === CFIType.jal)
+      .elsewhen (io.btb_resp.bits.cfi_type === CfiType.jal)
       {
          wrong_cfi := !io.is_jal(btb_idx)
          wrong_target := io.jal_targs(btb_idx) =/= btb_target
       }
-      .elsewhen (io.bpu_info.bits.cfi_type === CFIType.jalr)
+      .elsewhen (io.btb_resp.bits.cfi_type === CfiType.jalr)
       {
          wrong_cfi := !io.is_jr(btb_idx)
       }
       .otherwise
       {
-         wrong_cfi := io.bpu_info.bits.cfi_type === CFIType.none && io.bpu_info.bits.taken
-         assert (!io.bpu_info.bits.cfi_type === CFIType.none, "[btb] predicted on a non-cfi type.")
+         wrong_cfi := io.btb_resp.bits.cfi_type === CfiType.none && io.btb_resp.bits.taken
+         assert (!io.btb_resp.bits.cfi_type === CfiType.none, "[fetch] predicted on a non-cfi type.")
       }
    }
+   .otherwise
+   {
+      assert (!io.f2_bpu_request.valid, "[fetch] F2 redirect despite no BTB hit.")
+   }
 
-   val btb_was_wrong = io.bpu_info.valid && (wrong_cfi || wrong_target)
+   val nextline_pc = io.aligned_pc + UInt(fetch_width*coreInstBytes)
+
+   when (io.f2_bpu_request.valid && io.imem_resp_valid)
+   {
+      // f2 stage (BPD) decided to disagree with the BTB.
+      assert (io.btb_resp.valid, "[fetch] f2 redirect but no btb hit.")
+      assert (io.btb_resp.bits.taken || bpd_predicted_taken, "[fetch] redirecting means one of these should be true.")
+      assert (!bpd_predicted_taken || btb_target === io.f2_bpu_request.bits.target,
+         "[fetch] redirecting target disagrees with BTB -- and it should have come from the BTB.")
+      assert (bpd_predicted_taken || nextline_pc === io.f2_bpu_request.bits.target,
+         "[fetch] BPD is redirecting PC to not-taken, but seems confused on what PC we're actually on!")
+   }
+
+   val btb_was_wrong = io.btb_resp.valid && (wrong_cfi || wrong_target || !io.is_valid(btb_idx))
 
    // Redirect if:
    //    - JAL comes before BT's cfi_idx
@@ -415,9 +527,13 @@ class BranchChecker(fetch_width: Int)(implicit p: Parameters) extends BoomModule
    //       * do nothing
 
    val jal_idx = PriorityEncoder(io.is_jal.toBits)
-   val btb_hit  = io.bpu_info.valid
-   val jal_wins = io.is_jal.reduce(_|_) && (!btb_hit || btb_was_wrong || !io.bpu_info.bits.taken || (jal_idx < btb_idx))
-   val nextline_pc = io.aligned_pc + UInt(fetch_width*coreInstBytes)
+   val btb_hit  = io.btb_resp.valid
+   val jal_wins = io.is_jal.reduce(_|_) &&
+      (!btb_hit ||
+      btb_was_wrong ||
+      (jal_idx < btb_idx) ||
+      (!io.f2_bpu_request.valid && !io.btb_resp.bits.taken) ||
+      (io.f2_bpu_request.valid && !bpd_predicted_taken))
 
    io.req.valid := jal_wins || btb_was_wrong
    io.req.bits.addr := Mux(jal_wins, io.jal_targs(jal_idx), nextline_pc)
@@ -432,7 +548,7 @@ class BranchChecker(fetch_width: Int)(implicit p: Parameters) extends BoomModule
    io.btb_update.bits.taken := true.B
    io.btb_update.bits.cfi_pc := jal_idx
    io.btb_update.bits.bpd_type := Mux(io.is_call(jal_idx), BpredType.call, BpredType.jump)
-   io.btb_update.bits.cfi_type := CFIType.jal
+   io.btb_update.bits.cfi_type := CfiType.jal
 
    io.ras_update.valid := jal_wins && io.is_call(jal_idx)
    io.ras_update.bits.is_call := true.B

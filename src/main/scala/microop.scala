@@ -134,7 +134,7 @@ class DebugStageEvents extends Bundle()
 }
 
 // What type of Control-Flow Instruction is it?
-object CFIType
+object CfiType
 {
    def SZ = 3
    def apply() = UInt(width = SZ)

@@ -35,8 +35,8 @@ class TageTagMemory(
       // the reader is not ready; stall the read pipeline.
       val stall = Bool(INPUT)
 
-      // send read addr on cycle 0, get data out on cycle 2.
-      val s0_r_idx = UInt(INPUT, width = index_sz)
+      // send read addr on cycle 1, get data out on cycle 2.
+      val s1_r_idx = UInt(INPUT, width = index_sz)
       val s2_r_out = UInt(OUTPUT, width = memwidth)
 
       val w_en = Bool(INPUT)
@@ -66,12 +66,10 @@ class TageTagMemory(
    val idx = Wire(UInt())
    val last_idx = RegNext(idx)
 
-   idx := Mux(io.stall, last_idx, io.s0_r_idx)
+   idx := Mux(io.stall, last_idx, io.s1_r_idx)
 
-   val r_s1_out = smem.read(idx, !io.stall)
-   val r_s2_out = RegEnable(r_s1_out, !io.stall)
+   val r_s2_out = smem.read(idx, !io.stall)
    io.s2_r_out := r_s2_out
-
 
    when (io.w_en)
    {

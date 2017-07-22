@@ -227,7 +227,9 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    fetch_unit.io.tsc_reg           := debug_tsc_reg
 
    fetch_unit.io.f0_btb            := bpd_stage.io.f0_btb
-   fetch_unit.io.f2_bpu_info       := bpd_stage.io.f2_bpu_info
+   fetch_unit.io.f2_btb_resp       := bpd_stage.io.f2_btb_resp
+   fetch_unit.io.f2_bpd_resp       := bpd_stage.io.f2_bpd_resp
+   fetch_unit.io.f2_bpu_request    := bpd_stage.io.f2_bpu_request
 //   fetch_unit.io.bp2_take_pc       := bpd_stage.io.req.valid
 //   fetch_unit.io.bp2_pc_of_br_inst := bpd_stage.io.req.bits.br_pc
 //   fetch_unit.io.bp2_is_jump       := bpd_stage.io.req.bits.is_jump
@@ -257,33 +259,20 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    // decode.  BHT look-up is in parallel with I$ access, and Branch Decode
    // occurs before fetch buffer insertion.
 
-//   bpd_stage.io.imem_resp <> io.imem.resp
-//   bpd_stage.io.btb_resp <> io.imem.resp.bits.btb
-//   // TODO: work-around rocket-chip issue #183, broken imem.mask for fetchWidth=1
-//   // TODO: work-around rocket-chip issue #184, broken imem.mask for fetchWidth=1
-//   if (fetchWidth == 1)
-//   {
-//      bpd_stage.io.imem_resp.bits.mask := UInt(1)
-//      bpd_stage.io.btb_resp.bits.bridx := UInt(0)
-//   }
-//   io.imem.resp.ready <> fetch_unit.io.imem.resp.ready
-//
    bpd_stage.io.ext_btb_req := io.imem.ext_btb.req
+   bpd_stage.io.icmiss := io.imem.ext_btb.icmiss
+   bpd_stage.io.ext_btb_req.valid := io.imem.ext_btb.req.valid || io.imem.req.valid
 
-
-//   io.imem.ras_update <> bpd_stage.io.ras_update
    bpd_stage.io.br_unit := br_unit
-   bpd_stage.io.flush := rob.io.flush.valid //|| rob.io.clear_brob
    bpd_stage.io.redirect := io.imem.req.valid
+   bpd_stage.io.flush := rob.io.flush.valid
 
-//   bpd_stage.io.status_prv := csr.io.status.prv
    bpd_stage.io.fetch_stalled := fetch_unit.io.stalled
-   bpd_stage.io.status_debug := csr.io.status.debug
 
    bpd_stage.io.f2_btb_update := fetch_unit.io.f2_btb_update
    bpd_stage.io.f2_ras_update := fetch_unit.io.f2_ras_update
-//   fetch_unit.io.bp2_pred_resp <> bpd_stage.io.pred_resp
-//   fetch_unit.io.bp2_predictions <> bpd_stage.io.predictions
+   bpd_stage.io.status_prv   := csr.io.status.prv
+   bpd_stage.io.status_debug := csr.io.status.debug
 
    //-------------------------------------------------------------
    //-------------------------------------------------------------
@@ -344,10 +333,10 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
                         || br_unit.brinfo.mispredict
                         || rob.io.flush.valid
                         || dec_stall_next_inst
+                        || !bpd_stage.io.brob.allocate.ready
                         || (dec_valids(w) && dec_uops(w).is_fencei && !lsu.io.lsu_fencei_rdy)
                         )) ||
                      dec_last_inst_was_stalled
-//                        || !bpd_stage.io.brob.allocate.ready
 
       // stall the next instruction following me in the decode bundle?
       dec_last_inst_was_stalled = stall_me
@@ -418,24 +407,22 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
       else
          dec_uops(w).rob_idx := Cat(rob.io.curr_rob_tail, UInt(w, log2Up(DECODE_WIDTH)))
 
-//      dec_uops(w).brob_idx := bpd_stage.io.brob.allocate_brob_tail
+      dec_uops(w).brob_idx := bpd_stage.io.brob.allocate_brob_tail
    }
 
-   // TODO XXX
    val dec_has_br_or_jalr_in_packet =
       (dec_valids zip dec_uops map {case(v,u) => v && u.is_br_or_jmp && !u.is_jal}).reduce(_|_)
-//      (dec_valids zip dec_uops map {case(v,u) => v && u.br_prediction.is_br_or_jalr}).reduce(_|_)
 
-//   bpd_stage.io.brob.allocate.valid := dec_will_fire.reduce(_|_) &&
-//                                       dec_finished_mask === Bits(0) &&
-//                                       dec_has_br_or_jalr_in_packet
-//   bpd_stage.io.brob.allocate.bits.ctrl.executed.map{_ := Bool(false)}
-//   bpd_stage.io.brob.allocate.bits.ctrl.taken.map{_ := Bool(false)}
-//   bpd_stage.io.brob.allocate.bits.ctrl.mispredicted.map{_ := Bool(false)}
-//   bpd_stage.io.brob.allocate.bits.ctrl.debug_executed := Bool(false)
-//   bpd_stage.io.brob.allocate.bits.ctrl.debug_rob_idx := dec_uops(0).rob_idx
-//   bpd_stage.io.brob.allocate.bits.ctrl.brob_idx := dec_uops(0).brob_idx
-//   bpd_stage.io.brob.allocate.bits.info := dec_fbundle.pred_resp.bpd_resp
+   bpd_stage.io.brob.allocate.valid := dec_will_fire.reduce(_|_) &&
+                                       dec_finished_mask === Bits(0) &&
+                                       dec_has_br_or_jalr_in_packet
+   bpd_stage.io.brob.allocate.bits.ctrl.executed.map{_ := Bool(false)}
+   bpd_stage.io.brob.allocate.bits.ctrl.taken.map{_ := Bool(false)}
+   bpd_stage.io.brob.allocate.bits.ctrl.mispredicted.map{_ := Bool(false)}
+   bpd_stage.io.brob.allocate.bits.ctrl.debug_executed := Bool(false)
+   bpd_stage.io.brob.allocate.bits.ctrl.debug_rob_idx := dec_uops(0).rob_idx
+   bpd_stage.io.brob.allocate.bits.ctrl.brob_idx := dec_uops(0).brob_idx
+   bpd_stage.io.brob.allocate.bits.info := dec_fbundle.bpd_resp
 
 
 
@@ -962,9 +949,9 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
 
    rob.io.bxcpt <> br_unit.xcpt
 
-//   bpd_stage.io.brob.deallocate <> rob.io.brob_deallocate
-//   bpd_stage.io.brob.bpd_update <> br_unit.bpd_update
-//   bpd_stage.io.brob.flush := rob.io.flush.valid || rob.io.clear_brob
+   bpd_stage.io.brob.deallocate <> rob.io.brob_deallocate
+   bpd_stage.io.brob.bpd_update <> br_unit.bpd_update
+   bpd_stage.io.brob.flush := rob.io.flush.valid || rob.io.clear_brob
 
    //-------------------------------------------------------------
    // **** Flush Pipeline ****
@@ -1114,7 +1101,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
       println("\n Chisel Printout Enabled\n")
 
       val numBrobWhitespace = if (DEBUG_PRINTF_BROB) NUM_BROB_ENTRIES else 0
-//      val screenheight = 103 - 12 //- 10
+//      val screenheight = 103 - 4 - 10
       val screenheight = 85 - 4 - 10
 //      val screenheight = 62-8
        var whitespace = (screenheight - 11 + 3 - NUM_LSU_ENTRIES -

@@ -111,6 +111,65 @@ class BpdUpdate(implicit p: Parameters) extends BoomBundle()(p)
 //--------------------------------------------------------------------------
 //--------------------------------------------------------------------------
 
+// Return the desired branch predictor based on the provided parameters.
+object BrPredictor
+{
+   def apply(tileParams: tile.TileParams, boomParams: BoomCoreParams)(implicit p: Parameters): BrPredictor =
+   {
+      val rocketParams: rocket.RocketCoreParams = tileParams.core.asInstanceOf[rocket.RocketCoreParams]
+      val fetch_width = rocketParams.fetchWidth
+      val enableCondBrPredictor = boomParams.enableBranchPredictor
+
+      var br_predictor: BrPredictor = null
+
+      if (enableCondBrPredictor && boomParams.tage.isDefined && boomParams.tage.get.enabled)
+      {
+         br_predictor = Module(new TageBrPredictor(
+            fetch_width = fetch_width,
+            num_tables = boomParams.tage.get.num_tables,
+            table_sizes = boomParams.tage.get.table_sizes,
+            history_lengths = boomParams.tage.get.history_lengths,
+            tag_sizes = boomParams.tage.get.tag_sizes,
+            ubit_sz = boomParams.tage.get.ubit_sz))
+      }
+      else if (enableCondBrPredictor && boomParams.gskew.isDefined && boomParams.gskew.get.enabled)
+      {
+         br_predictor = Module(new GSkewBrPredictor(
+            fetch_width = fetch_width,
+            history_length = boomParams.gskew.get.history_length,
+            dualported = boomParams.gskew.get.dualported,
+            enable_meta = boomParams.gskew.get.enable_meta))
+      }
+      else if (enableCondBrPredictor && boomParams.gshare.isDefined && boomParams.gshare.get.enabled)
+      {
+         br_predictor = Module(new GShareBrPredictor(
+            fetch_width = fetch_width,
+            history_length = boomParams.gshare.get.history_length,
+            dualported = boomParams.gshare.get.dualported))
+      }
+      else if (enableCondBrPredictor && p(SimpleGShareKey).enabled)
+      {
+         br_predictor = Module(new SimpleGShareBrPredictor(
+            fetch_width = fetch_width,
+            history_length = p(SimpleGShareKey).history_length))
+      }
+      else if (enableCondBrPredictor && p(RandomBpdKey).enabled)
+      {
+         br_predictor = Module(new RandomBrPredictor(
+            fetch_width = fetch_width))
+      }
+      else
+      {
+         br_predictor = Module(new NullBrPredictor(
+            fetch_width = fetch_width,
+            history_length = 1))
+      }
+
+      br_predictor
+   }
+}
+
+
 abstract class BrPredictor(fetch_width: Int, val history_length: Int)(implicit p: Parameters) extends BoomModule()(p)
 {
    val io = new BoomBundle()(p)
@@ -125,7 +184,7 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int)(implicit p
       // speculatively update the global history (once we know we're predicting a branch)
       val hist_update_spec = Valid(new GHistUpdate).flip
       // branch resolution comes from the branch-unit, during the Execute stage.
-      val br_resolution = Valid(new BpdUpdate).flip
+      val br_resolution = Valid(new BpdUpdate).flip // TODO XXX rename to exe_bpd_update?
       val brob = new BrobBackendIo(fetch_width)
       // Pipeline flush - reset history as appropriate.
       // Arrives same cycle as redirecting the front-end -- otherwise, the ghistory would be wrong if it came later!
