@@ -149,14 +149,14 @@ class BrResolutionInfo(implicit p: Parameters) extends BoomBundle()(p)
 class BranchUnitResp(implicit p: Parameters) extends BoomBundle()(p)
 {
    val take_pc         = Bool()
-   val target          = UInt(width = vaddrBits+1)
+   val target          = UInt(width = vaddrBitsExtended)
 
-   val pc              = UInt(width = vaddrBits+1) // TODO this isn't really a branch_unit thing
+   val pc              = UInt(width = vaddrBitsExtended) // TODO this isn't really a branch_unit thing
 
    val brinfo          = new BrResolutionInfo()
    val btb_update      = Valid(new BTBsaUpdate)
    val bim_update      = Valid(new BimUpdate)
-//   val bpd_update      = Valid(new BpdUpdate)
+   val bpd_update      = Valid(new BpdUpdate)
 
    val xcpt            = Valid(new Exception)
 }
@@ -365,20 +365,20 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
                               !uop.br_prediction.btb_hit ||
                               !uop.br_prediction.btb_taken ||
                               io.status.debug // fun HACK to perform fence.i on JALRs in debug mode
-//                              !io.get_pred.info.btb_resp.taken || XXX
+//                              !io.get_pred.info.btb_resp.taken || XXX get info from get_Pred, not uop.br_pred
             bpd_mispredict := Bool(false)
          }
          when (pc_sel === PC_PLUS4)
          {
-            btb_mispredict := uop.br_prediction.btb_hit && uop.br_prediction.btb_taken //io.get_pred.info.btb_resp.taken
-            bpd_mispredict := Bool(false) // XXX uop.br_prediction.bpd_predict_taken
+            btb_mispredict := uop.br_prediction.btb_hit && uop.br_prediction.btb_taken // TODO XXX io.get_pred.info.btb_resp.taken
+            bpd_mispredict := uop.br_prediction.bpd_taken
          }
          when (pc_sel === PC_BRJMP)
          {
             btb_mispredict := wrong_taken_target ||
                               !uop.br_prediction.btb_hit ||
-                              (uop.br_prediction.btb_hit && !uop.br_prediction.btb_taken) //!io.get_pred.info.btb_resp.taken)
-            bpd_mispredict := Bool(true) // XXX !uop.br_prediction.bpd_predict_taken
+                              (uop.br_prediction.btb_hit && !uop.br_prediction.btb_taken) // TODO XXX !io.get_pred.info.btb_resp.taken)
+            bpd_mispredict := !uop.br_prediction.bpd_taken
          }
       }
 
@@ -400,14 +400,11 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
          }
          when (pc_sel === PC_PLUS4)
          {
-//            mispredict := Mux(uop.br_prediction.wasBTB, btb_mispredict, bpd_mispredict) XXX
-            mispredict := btb_mispredict
+            mispredict := Mux(uop.br_prediction.wasBTB, btb_mispredict, bpd_mispredict)
          }
          when (pc_sel === PC_BRJMP)
          {
-//            mispredict := Mux(uop.br_prediction.wasBTB, btb_mispredict, bpd_mispredict) XXX
-//            mispredict := Mux(Bool(false), btb_mispredict, bpd_mispredict)
-            mispredict := btb_mispredict
+            mispredict := Mux(uop.br_prediction.wasBTB, btb_mispredict, bpd_mispredict)
          }
       }
 
@@ -442,8 +439,8 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
       brinfo.taken          := is_taken
       brinfo.btb_mispredict := btb_mispredict
       brinfo.bpd_mispredict := bpd_mispredict
-      brinfo.btb_made_pred  := Bool(false) // uop.br_prediction.wasBTB XXX
-//      brinfo.bpd_made_pred  := uop.br_prediction.bpd_predict_val
+      brinfo.btb_made_pred  := uop.br_prediction.wasBTB
+      brinfo.bpd_made_pred  := uop.br_prediction.bpd_predicted
 
       br_unit.brinfo := brinfo
 
@@ -475,9 +472,9 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
 //      br_unit.btb_update.bits.is_jump          := uop.is_jump
 //      br_unit.btb_update.bits.is_ret           := uop.is_ret
       br_unit.btb_update.bits.cfi_type         :=
-			Mux(uop.is_jal, CFIType.jal,
-			Mux(uop.is_jump && !uop.is_jal, CFIType.jalr,
-				CFIType.branch))
+			Mux(uop.is_jal, CfiType.jal,
+			Mux(uop.is_jump && !uop.is_jal, CfiType.jalr,
+				CfiType.branch))
       br_unit.btb_update.bits.bpd_type			  :=
 			Mux(uop.is_ret, BpredType.ret,
 			Mux(uop.is_call, BpredType.call,
@@ -487,33 +484,30 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
       br_unit.bim_update.bits.taken            := is_taken   // was this branch "taken"
       br_unit.bim_update.bits.mispredict       := btb_mispredict // updated only for BTB hits
       br_unit.bim_update.bits.bim_resp         := io.get_pred.info.bim_resp
-//      br_unit.bht_update.bits.prediction.valid := io.get_pred.info.btb_resp_valid // only update if hit in the BTB
-//      br_unit.bht_update.bits.prediction.bits  := io.get_pred.info.btb_resp
-//      br_unit.bht_update.bits.pc               := fetch_pc // what pc should the tag check be on?
-//
-//      br_unit.bpd_update.valid                 := io.req.valid && uop.is_br_or_jmp &&
-//                                                  !uop.is_jal && !killed
-//      br_unit.bpd_update.bits.is_br            := is_br
-//      br_unit.bpd_update.bits.brob_idx         := io.get_rob_pc.curr_brob_idx
-//      br_unit.bpd_update.bits.taken            := is_taken
-//      br_unit.bpd_update.bits.mispredict       := mispredict
-//      br_unit.bpd_update.bits.bpd_predict_val  := uop.br_prediction.bpd_predict_val
-//      br_unit.bpd_update.bits.bpd_mispredict   := bpd_mispredict
-//      br_unit.bpd_update.bits.pc               := fetch_pc
-//      br_unit.bpd_update.bits.br_pc            := uop_pc_
-//      br_unit.bpd_update.bits.history_ptr      := io.get_pred.info.bpd_resp.history_ptr
-//      br_unit.bpd_update.bits.info             := io.get_pred.info.bpd_resp.info
-//      if (!ENABLE_VLHR)
-//      {
-//         br_unit.bpd_update.bits.history.get := io.get_pred.info.bpd_resp.history.get
-//         br_unit.bpd_update.bits.history_u.get := io.get_pred.info.bpd_resp.history_u.get
-//      }
+
+      br_unit.bpd_update.valid                 := io.req.valid && uop.is_br_or_jmp &&
+                                                  !uop.is_jal && !killed
+      br_unit.bpd_update.bits.is_br            := is_br
+      br_unit.bpd_update.bits.brob_idx         := io.get_rob_pc.curr_brob_idx
+      br_unit.bpd_update.bits.taken            := is_taken
+      br_unit.bpd_update.bits.mispredict       := mispredict
+      br_unit.bpd_update.bits.bpd_predict_val  := uop.br_prediction.bpd_predicted
+      br_unit.bpd_update.bits.bpd_mispredict   := bpd_mispredict
+      br_unit.bpd_update.bits.pc               := fetch_pc
+      br_unit.bpd_update.bits.br_pc            := uop_pc_
+      br_unit.bpd_update.bits.history_ptr      := io.get_pred.info.bpd_resp.history_ptr
+      br_unit.bpd_update.bits.info             := io.get_pred.info.bpd_resp.info
+      if (!ENABLE_VLHR)
+      {
+         br_unit.bpd_update.bits.history.get := io.get_pred.info.bpd_resp.history.get
+         br_unit.bpd_update.bits.history_u.get := io.get_pred.info.bpd_resp.history_u.get
+      }
 
       // is the br_pc the last instruction in the fetch bundle?
       val is_last_inst = if (FETCH_WIDTH == 1) { Bool(true) }
                          else { ((uop_pc_ >> UInt(log2Up(coreInstBytes))) &
                                  Fill(log2Up(FETCH_WIDTH), UInt(1))) === UInt(FETCH_WIDTH-1) }
-//      br_unit.bpd_update.bits.new_pc_same_packet := !(is_taken) && !is_last_inst
+      br_unit.bpd_update.bits.new_pc_same_packet := !(is_taken) && !is_last_inst
 
       require (coreInstBytes == 4)
 

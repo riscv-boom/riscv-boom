@@ -80,7 +80,7 @@ class SeqMem1rwTransformable (
    val roff = getOffset(io.raddr)
    val r_offset = RegEnable(roff, io.ren)
    // returned cycle s1
-   val s1_rrow = smem.read(ridx, io.ren).toBits
+   val s1_rrow = smem.read(ridx, io.ren).asUInt
    io.rout := (s1_rrow >> r_offset)(l_width-1, 0)
 }
 

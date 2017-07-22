@@ -209,14 +209,16 @@ class GSkewBrPredictor(fetch_width: Int,
    gsh1_table.io.stall := stall
    meta_table.io.stall := stall
 
-   val bimo_idx = BimoIdxHash(io.req_pc, this.ghistory, bimo_idx_sz)
-   val gsh0_idx = Gsh0IdxHash(io.req_pc, this.ghistory, gsh0_idx_sz)
-   val gsh1_idx = Gsh1IdxHash(io.req_pc, this.ghistory, gsh1_idx_sz)
-   val meta_idx = MetaIdxHash(io.req_pc, this.ghistory, meta_idx_sz)
-   bimo_table.io.s0_r_idx := bimo_idx
-   gsh0_table.io.s0_r_idx := gsh0_idx
-   gsh1_table.io.s0_r_idx := gsh1_idx
-   meta_table.io.s0_r_idx := meta_idx
+   val s0_pc = io.req_pc
+   val s1_pc = RegEnable(s0_pc, !stall)
+   val bimo_idx = BimoIdxHash(s1_pc, this.ghistory, bimo_idx_sz)
+   val gsh0_idx = Gsh0IdxHash(s1_pc, this.ghistory, gsh0_idx_sz)
+   val gsh1_idx = Gsh1IdxHash(s1_pc, this.ghistory, gsh1_idx_sz)
+   val meta_idx = MetaIdxHash(s1_pc, this.ghistory, meta_idx_sz)
+   bimo_table.io.s1_r_idx := bimo_idx
+   gsh0_table.io.s1_r_idx := gsh0_idx
+   gsh1_table.io.s1_r_idx := gsh1_idx
+   meta_table.io.s1_r_idx := meta_idx
    bimo_out  := bimo_table.io.s2_r_out
    gsh0_out  := gsh0_table.io.s2_r_out
    gsh1_out  := gsh1_table.io.s2_r_out
@@ -246,10 +248,10 @@ class GSkewBrPredictor(fetch_width: Int,
 
    io.resp.bits.takens := takens.asUInt
 
-   resp_info.bimo_index := RegNext(RegNext(bimo_idx))
-   resp_info.gsh0_index := RegNext(RegNext(gsh0_idx))
-   resp_info.gsh1_index := RegNext(RegNext(gsh1_idx))
-   resp_info.meta_index := RegNext(RegNext(meta_idx))
+   resp_info.bimo_index := RegNext(bimo_idx)
+   resp_info.gsh0_index := RegNext(gsh0_idx)
+   resp_info.gsh1_index := RegNext(gsh1_idx)
+   resp_info.meta_index := RegNext(meta_idx)
    resp_info.bimo       := bimo_out
    resp_info.gsh0       := gsh0_out
    resp_info.gsh1       := gsh1_out
