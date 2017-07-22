@@ -239,7 +239,7 @@ class Rob(width: Int,
    }
    def GetBankIdx(rob_idx: UInt): UInt =
    {
-      if(width == 1) { return UInt(0) }
+      if(width == 1) { return 0.U }
       else           { return rob_idx(log2Up(width)-1, 0).toUInt }
    }
 
@@ -287,7 +287,9 @@ class Rob(width: Int,
 
    // What if the next-pc is in the current row? I.e., a JR that wasn't handled in the front-end.
    val curr_idx = GetBankIdx(io.get_pc.rob_idx) + 1.U
-   val curr_row_next_pc_val = rob_getpc_curr_vals(curr_idx) && curr_idx =/= 0.U
+   val curr_row_next_pc_val = Wire(Bool())
+   if (fetchWidth == 1) { curr_row_next_pc_val := false.B }
+   else { curr_row_next_pc_val := rob_getpc_curr_vals(curr_idx) && curr_idx =/= 0.U }
    val curr_row_next_pc = curr_row_pc + Cat(curr_idx, UInt(0,2))
 
 
