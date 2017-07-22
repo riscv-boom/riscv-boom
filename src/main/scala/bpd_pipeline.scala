@@ -23,6 +23,7 @@ import Chisel._
 import config.Parameters
 
 import util.Str
+import util.UIntToAugmentedUInt
 
 // this information is shared across the entire fetch packet, and stored in the
 // branch snapshots. Since it's not unique to an instruction, it could be
@@ -40,24 +41,40 @@ import util.Str
 //   val br_seen        = Bool() // was a branch seen in this fetch packet?
 //}
 
+// Sent to the Fetch Unit to redirect the pipeline as needed.
+// The Fetch Unit must also sanity check the request.
+class BpuRequest(implicit p: Parameters) extends BoomBundle()(p)
+{
+//   btb_hit
+//   taken
+//   cfi_type
+   val target  = UInt(width = vaddrBitsExtended)
+   val cfi_idx = UInt(width = log2Up(fetchWidth)) // where is cfi we are predicting?
+   val mask    = UInt(width = fetchWidth) // mask of valid instructions.
+
+   // Push this info down the pipeline for save keeping.
+//   val predinfo = new BranchPredInfo
+}
+
 //class BranchPrediction(implicit p: Parameters) extends BoomBundle()(p)
 // Give this to each instruction/uop and pass this down the pipeline to the branch-unit
 // This covers the per-instruction info on all cfi-related predictions.
 // TODO rename to make clear this is "BPD->RenameSnapshot->BRU". Should NOT go into Issue Windows.
 class BranchPredInfo(implicit p: Parameters) extends BoomBundle()(p)
 {
-//   val bpd_predict_val  = Bool() // did the bpd predict this instruction? (ie, tag hit in the BPD)
-//   val bpd_predict_taken= Bool() // did the bpd predict taken for this instruction?
-   val btb_hit          = Bool() // this instruction was the br/jmp predicted by the BTB
-   val btb_taken        = Bool() // this instruction was the br/jmp predicted by the BTB and was taken
-//   val btb_predicted    = Bool() // Does the BTB get credit for the prediction? (FU checks)
+   val bpd_predicted     = Bool() // did the bpd predict this instruction? (ie, tag hit in the BPD)
+   val bpd_taken         = Bool() // did the bpd predict taken for this instruction?
+   val btb_hit           = Bool() // this instruction was the br/jmp predicted by the BTB
+   val btb_taken         = Bool() // this instruction was the br/jmp predicted by the BTB and was taken
+   val btb_predicted     = Bool() // Does the BTB get credit for the prediction? (FU checks)
 //
 //   val is_br_or_jalr    = Bool() // is this instruction a branch or jalr?
                                    // (need to allocate brob entry).
-
    val bim_resp         = new BimResp
 
-//   def wasBTB = btb_predicted
+   val bpd_resp         = new BpdResp // TODO XXX this can be very expensive -- don't give to every instruction? And break into separate toBRU/Exe and toCom versions.
+
+   def wasBTB = btb_predicted
 }
 
 class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p)
@@ -67,18 +84,22 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    {
       // Fetch0
       val ext_btb_req   = Valid(new PCReq).flip
+      val icmiss        = Bool(INPUT)
       val fetch_stalled = Bool(INPUT)
       val f0_btb        = Valid(new BTBsaResp)
-      val f2_bpu_info   = Valid(new BTBsaResp)
+      val f2_bpu_request= Valid(new BpuRequest)
+
+      val f2_btb_resp   = Valid(new BTBsaResp)
+      val f2_bpd_resp   = Valid(new BpdResp)
       val f2_btb_update = Valid(new BTBsaUpdate).flip
       val f2_ras_update = Valid(new RasUpdate).flip
 
       // Other
       val br_unit       = new BranchUnitResp().asInput
-//      val brob       = new BrobBackendIo(fetch_width)
+      val brob       = new BrobBackendIo(fetch_width)
       val flush         = Bool(INPUT) // pipeline flush
       val redirect      = Bool(INPUT)
-//      val status_prv = UInt(INPUT, width = rocket.PRV.SZ)
+      val status_prv    = UInt(INPUT, width = rocket.PRV.SZ)
       val status_debug  = Bool(INPUT)
    }
 
@@ -86,17 +107,18 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    // construct all of the modules
 
    val btb = Module(new BTBsa())
+   val bpd = BrPredictor(tileParams, boomParams)
+
    btb.io.status_debug := io.status_debug
+   bpd.io.status_prv := io.status_prv
 
 
    //************************************************
    // Branch Prediction (BP0 Stage)
 
    btb.io.req := io.ext_btb_req
-
-   val s0_pc = Wire(UInt())
-   val last_pc = RegNext(s0_pc)
-   s0_pc := Mux(io.fetch_stalled, last_pc, io.ext_btb_req.bits.addr)
+   btb.io.icmiss := io.icmiss
+   bpd.io.req_pc := io.ext_btb_req.bits.addr
 
 
    //************************************************
@@ -104,30 +126,54 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
 
    io.f0_btb <> btb.io.resp
 
-   val f1_pc = RegNext(s0_pc)
-
 
    //************************************************
    // Branch Prediction (BP2 Stage)
 
    val f2_btb = Reg(Valid(new BTBsaResp))
    val f2_pc  = Reg(UInt())
+   val f2_aligned_pc = ~(~f2_pc | (UInt(fetch_width*coreInstBytes-1)))
+   val f2_nextline_pc = Wire(UInt(width=vaddrBits))
+   f2_nextline_pc := f2_aligned_pc + UInt(fetch_width*coreInstBytes)
 
    // request in BTB can advance
    when (io.ext_btb_req.valid)
    {
       f2_btb := btb.io.resp
-      f2_pc := f1_pc
+      f2_pc := btb.io.resp.bits.fetch_pc
    }
 
-   io.f2_bpu_info := f2_btb
+   io.f2_btb_resp := f2_btb
+   io.f2_bpd_resp := bpd.io.resp
 
+   // does the BPD predict a taken branch?
+   private def bitRead(bits: UInt, offset: UInt): Bool = (bits >> offset)(0)
+
+   val bpd_valid = bpd.io.resp.valid
+   val bpd_bits = bpd.io.resp.bits
+
+   val bpd_predict_taken = bitRead(bpd_bits.takens, f2_btb.bits.cfi_idx)
+   val bpd_disagrees_with_btb =
+      f2_btb.valid && bpd_valid && (bpd_predict_taken ^ f2_btb.bits.taken) && f2_btb.bits.cfi_type === CfiType.branch
+
+   io.f2_bpu_request.valid := bpd_disagrees_with_btb
+   io.f2_bpu_request.bits.target :=
+      Mux(bpd_predict_taken,
+         f2_btb.bits.target.sextTo(vaddrBitsExtended),
+         f2_nextline_pc.sextTo(vaddrBitsExtended))
+   io.f2_bpu_request.bits.mask := Cat((UInt(1) << ~Mux(bpd_predict_taken, ~f2_btb.bits.cfi_idx, UInt(0)))-UInt(1), UInt(1))
+
+
+   val f2_br_seen = f2_btb.valid && f2_btb.bits.cfi_type === CfiType.branch
+   val f2_jr_seen = f2_btb.valid && f2_btb.bits.cfi_type === CfiType.jalr
+   bpd.io.hist_update_spec.valid := (f2_br_seen || f2_jr_seen) && !io.fetch_stalled
+   bpd.io.hist_update_spec.bits.taken := f2_jr_seen || Mux(bpd_valid, bpd_predict_taken, f2_btb.bits.taken)
+   bpd.io.resp.ready := !io.fetch_stalled
 
    //************************************************
    // Update the RAS
 
    // update RAS based on BTB's prediction information (or the branch-check correction).
-   val f2_aligned_pc = ~(~f2_pc | (UInt(fetch_width*coreInstBytes-1)))
    val jmp_idx = f2_btb.bits.cfi_idx
 
    btb.io.ras_update := io.f2_ras_update
@@ -153,6 +199,14 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    // TODO XXX allow F2/BPD redirects to correct the BIM.
    btb.io.bim_update := io.br_unit.bim_update
 
+
+   //************************************************
+   // Update the BPD
+
+   bpd.io.br_resolution := io.br_unit.bpd_update
+
+   bpd.io.flush := io.flush
+   io.brob <> bpd.io.brob
 
 
    //************************************************

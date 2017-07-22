@@ -63,8 +63,9 @@ class BTBsaResp(implicit p: Parameters) extends BTBsaBundle()(p)
    val mask      = UInt(width = fetchWidth) // mask of valid instructions.
    val cfi_idx   = UInt(width = log2Up(fetchWidth)) // where is cfi we are predicting?
    val bpd_type  = BpredType()
-   val cfi_type  = CFIType()
+   val cfi_type  = CfiType()
    val bim_resp  = new BimResp
+   val fetch_pc  = UInt(width = vaddrBits) // the PC we're predicting on (start of the fetch packet).
 }
 
 class BimResp(implicit p: Parameters) extends BTBsaBundle()(p)
@@ -87,7 +88,7 @@ class BTBsaUpdate(implicit p: Parameters) extends BTBsaBundle()(p)
    val taken = Bool()
    val cfi_pc = UInt(width = vaddrBits)
 	val bpd_type = BpredType()
-	val cfi_type = CFIType()
+	val cfi_type = CfiType()
 }
 
 class BimUpdate(implicit p: Parameters) extends BTBsaBundle()(p)
@@ -175,6 +176,7 @@ class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParamet
       // Resp is expected on cycle S1.
       val req = Valid(new PCReq).flip
       val resp = Valid(new BTBsaResp)
+      val icmiss = Bool(INPUT) // If there's an icmiss, the Frontend replays the s2_pc (but req.valid is low).
 
       // BTB update comes in during branch resolution (Execute Stage). Yes, that's out-of-order.
       val btb_update = Valid(new BTBsaUpdate).flip
@@ -198,11 +200,11 @@ class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParamet
       val target = UInt(width = vaddrBits - log2Up(coreInstBytes))
       val cfi_idx = UInt(width = log2Up(fetchWidth))
       val bpd_type = BpredType()
-      val cfi_type = CFIType()
+      val cfi_type = CfiType()
    }
 
 
-   val stall = !io.req.valid
+   val stall = !io.req.valid && !io.icmiss
    val s0_idx = Wire(UInt(width=idx_sz))
    val last_idx = RegNext(s0_idx)
    val new_idx = getIdx(io.req.bits.addr)
@@ -227,7 +229,7 @@ class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParamet
 
    // clear entries (e.g., multiple tag hits, which is an invalid variant)
    val clear_valid = Wire(init=false.B)
-   val clear_idx = RegNext(s0_idx)
+   val clear_idx = s1_idx
 
    for (w <- 0 until nWays)
    {
@@ -330,6 +332,13 @@ class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParamet
    io.resp.bits.mask := Cat((UInt(1) << ~Mux(io.resp.bits.taken, ~io.resp.bits.cfi_idx, UInt(0)))-UInt(1), UInt(1))
    io.resp.bits.bim_resp := s1_bim_resp
    io.resp.bits.bim_resp.entry_idx  := s1_idx
+
+   // for debug purposes only! Shouldn't be synthesized.
+   val s0_pc = Wire(UInt(width=vaddrBits))
+   val last_pc = RegNext(s0_pc)
+   s0_pc := Mux(stall, last_pc, io.req.bits.addr)
+   val s1_pc = RegNext(s0_pc)
+   io.resp.bits.fetch_pc := s1_pc
 
 
    if (nRAS > 0)
