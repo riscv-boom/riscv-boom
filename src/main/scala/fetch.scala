@@ -51,6 +51,8 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
       val f2_bpd_resp       = Valid(new BpdResp).flip
       val f2_btb_update     = Valid(new BTBsaUpdate)
       val f2_ras_update     = Valid(new RasUpdate)
+      val f3_bpd_resp       = Valid(new BpdResp).flip
+      val f3_hist_update    = Valid(new GHistUpdate)
 
       val br_unit           = new BranchUnitResp().asInput
 
@@ -80,9 +82,12 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    val f2_req = Wire(Valid(new PCReq()))
    val f2_fetch_bundle = Wire(new FetchBundle)
 
-   val f3_valid = Reg(init=Bool(false))
+   val f3_valid = Reg(init=false.B)
    val f3_req = Reg(Valid(new PCReq()))
    val f3_fetch_bundle = Reg(new FetchBundle())
+   val f3_taken = Reg(Bool())
+   val f3_br_seen = Reg(init=false.B)
+   val f3_jr_seen = Reg(init=false.B)
 
    //-------------------------------------------------------------
    // **** Helper Functions ****
@@ -141,7 +146,6 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    f2_fetch_bundle.xcpt_if := io.imem.resp.bits.xcpt_if
    f2_fetch_bundle.replay_if := io.imem.resp.bits.replay
 
-
    for (w <- 0 until fetch_width)
    {
       f2_fetch_bundle.bpu_info(w).btb_predicted := false.B
@@ -169,6 +173,21 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
       }
 
       assert (!(f2_fetch_bundle.bpu_info(w).btb_predicted && f2_fetch_bundle.bpu_info(w).bpd_predicted))
+   }
+
+
+   val f2_taken = Wire(init=false.B) // was a branch taken in the F2 stage.
+   when (f2_req.valid)
+   {
+      f2_taken := false.B // f2_req only ever requests nextline_pc or jump targets (which we don't track in ghistory).
+   }
+   .elsewhen (io.f2_bpu_request.valid)
+   {
+      f2_taken := io.f2_bpd_resp.bits.takens(io.f2_btb_resp.bits.cfi_idx)
+   }
+   .elsewhen (io.f2_btb_resp.valid)
+   {
+      f2_taken := io.f2_btb_resp.bits.taken
    }
 
 
@@ -205,6 +224,16 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
       }
    }
 
+   val f2_br_seen = io.imem.resp.valid &&
+                  !io.imem.resp.bits.xcpt_if &&
+                  is_br.reduce(_|_) &&
+                  (!is_jal.reduce(_|_) || (PriorityEncoder(is_br.toBits) < PriorityEncoder(is_jal.toBits))) &&
+                  (!is_jr.reduce(_|_) || (PriorityEncoder(is_br.toBits) < PriorityEncoder(is_jr.toBits)))
+   val f2_jr_seen = io.imem.resp.valid &&
+                  !io.imem.resp.bits.xcpt_if &&
+                  is_jr.reduce(_|_) &&
+                  (!is_jal.reduce(_|_) || (PriorityEncoder(is_jr.toBits) < PriorityEncoder(is_jal.toBits)))
+
 
    // catch any BTB mispredictions (and fix-up missed JALs)
    bchecker.io.is_valid  := Vec(io.imem.resp.bits.mask.toBools)
@@ -229,7 +258,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
 
    // mask out instructions after predicted branch
 //   val btb_kill_mask = KillMask(f2_req.valid, bchecker.io.cfi_idx, fetchWidth)
-   val f2_kill_mask = KillMask(f2_req.valid, bchecker.io.cfi_idx, fetchWidth)
+   val f2_kill_mask = KillMask(f2_req.valid, bchecker.io.req_cfi_idx, fetchWidth)
    //val jr_kill_mask = KillMask(is_jr.reduce(_||_), PriorityEncoder(is_jr.asUInt), fetchWidth)
 
    val btb_mask = Mux(io.f2_btb_resp.valid && !io.f2_bpu_request.valid && !f2_req.valid,
@@ -246,16 +275,33 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
 
    when (io.clear_fetchbuffer)
    {
-      f3_valid := Bool(false)
-      f3_req.valid := Bool(false)
+      f3_valid := false.B
+      f3_req.valid := false.B
+      f3_br_seen := false.B
+      f3_jr_seen := false.B
    }
    .elsewhen (!if_stalled)
    {
       f3_valid := f2_valid
       f3_fetch_bundle := f2_fetch_bundle
       f3_req := f2_req
-//      f3_req := Mux(bchecker.io.req.valid, bchecker.io.req, f2_req)
+      f3_taken := f2_taken
+      f3_br_seen := f2_br_seen
+      f3_jr_seen := f2_jr_seen
+
+      for (w <- 0 until fetch_width)
+      {
+         if (!ENABLE_VLHR) {
+            f3_fetch_bundle.bpu_info(w).bpd_resp.history.get := io.f3_bpd_resp.bits.history.get
+         }
+         f3_fetch_bundle.bpu_info(w).bpd_resp.history_ptr := io.f3_bpd_resp.bits.history_ptr
+      }
    }
+
+
+   io.f3_hist_update.valid := f3_valid && (f3_br_seen || f3_jr_seen) && !if_stalled
+   io.f3_hist_update.bits.taken := f3_jr_seen || f3_taken
+//   io.f3_hist_update.bits.taken := f3_jr_seen || Mux(io.bpd_resp.valid, bpd_predict_taken, f2_btb.bits.taken) ...
 
 
    //-------------------------------------------------------------
@@ -461,8 +507,7 @@ class BranchChecker(fetch_width: Int)(implicit p: Parameters) extends BoomModule
       val btb_update    = Valid(new BTBsaUpdate)
       val ras_update    = Valid(new RasUpdate)
 
-      val cfi_idx       = UInt(OUTPUT, width = log2Up(fetchWidth)) // where is cfi we are predicting?
-
+      val req_cfi_idx   = UInt(OUTPUT, width = log2Up(fetchWidth)) // where is cfi we are predicting?
    }
 
    // Did the BTB mispredict the cfi type?
@@ -538,7 +583,7 @@ class BranchChecker(fetch_width: Int)(implicit p: Parameters) extends BoomModule
    io.req.valid := jal_wins || btb_was_wrong
    io.req.bits.addr := Mux(jal_wins, io.jal_targs(jal_idx), nextline_pc)
    // Help mask out instructions after predicted cfi.
-   io.cfi_idx := Mux(jal_wins, jal_idx, UInt(fetchWidth-1))
+   io.req_cfi_idx := Mux(jal_wins, jal_idx, UInt(fetchWidth-1))
 
    // update the BTB for jumps it missed.
    // TODO XXX also allow us to clear bad BTB entries when btb is wrong.

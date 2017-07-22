@@ -213,7 +213,7 @@ class TageBrPredictor(
       table.if_req_pc := io.req_pc
 
       // update CSRs. ---
-      table.br_resolution <> io.br_resolution
+      table.br_resolution <> io.exe_bpd_update
       table.flush := io.flush
 
       // Update ghistory speculatively once a prediction is made.

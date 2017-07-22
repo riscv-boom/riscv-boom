@@ -190,8 +190,8 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    println("   Num Int Phys Registers: " + numIntPhysRegs)
    println("   Num FP  Phys Registers: " + numFpPhysRegs)
    println("   Max Branch Count      : " + MAX_BR_COUNT)
-   println("   BTB Size              : " + 
-      (if (enableBTB) ("" + boomParams.btb.nSets * boomParams.btb.nWays + " entries (" + 
+   println("   BTB Size              : " +
+      (if (enableBTB) ("" + boomParams.btb.nSets * boomParams.btb.nWays + " entries (" +
          boomParams.btb.nSets + " x " + boomParams.btb.nWays + " ways)") else 0))
    println("   RAS Size              : " + (if (enableBTB) boomParams.btb.nRAS else 0))
    println("   Rename  Stage Latency : " + renameLatency)
@@ -230,6 +230,8 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    fetch_unit.io.f2_btb_resp       := bpd_stage.io.f2_btb_resp
    fetch_unit.io.f2_bpd_resp       := bpd_stage.io.f2_bpd_resp
    fetch_unit.io.f2_bpu_request    := bpd_stage.io.f2_bpu_request
+
+   fetch_unit.io.f3_bpd_resp       := bpd_stage.io.f3_bpd_resp
 //   fetch_unit.io.bp2_take_pc       := bpd_stage.io.req.valid
 //   fetch_unit.io.bp2_pc_of_br_inst := bpd_stage.io.req.bits.br_pc
 //   fetch_unit.io.bp2_is_jump       := bpd_stage.io.req.bits.is_jump
@@ -271,6 +273,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
 
    bpd_stage.io.f2_btb_update := fetch_unit.io.f2_btb_update
    bpd_stage.io.f2_ras_update := fetch_unit.io.f2_ras_update
+   bpd_stage.io.f3_hist_update:= fetch_unit.io.f3_hist_update
    bpd_stage.io.status_prv   := csr.io.status.prv
    bpd_stage.io.status_debug := csr.io.status.debug
 
