@@ -94,6 +94,9 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
       val f2_btb_update = Valid(new BTBsaUpdate).flip
       val f2_ras_update = Valid(new RasUpdate).flip
 
+      val f3_bpd_resp   = Valid(new BpdResp)
+      val f3_hist_update= Valid(new GHistUpdate).flip
+
       // Other
       val br_unit       = new BranchUnitResp().asInput
       val brob       = new BrobBackendIo(fetch_width)
@@ -145,6 +148,12 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
 
    io.f2_btb_resp := f2_btb
    io.f2_bpd_resp := bpd.io.resp
+   io.f3_bpd_resp := RegNext(bpd.io.resp)
+
+   if (!ENABLE_VLHR) {
+      io.f3_bpd_resp.bits.history.get := bpd.io.f3_resp_history.get
+   }
+   io.f3_bpd_resp.bits.history_ptr := bpd.io.f3_resp_history_ptr
 
    // does the BPD predict a taken branch?
    private def bitRead(bits: UInt, offset: UInt): Bool = (bits >> offset)(0)
@@ -164,10 +173,6 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    io.f2_bpu_request.bits.mask := Cat((UInt(1) << ~Mux(bpd_predict_taken, ~f2_btb.bits.cfi_idx, UInt(0)))-UInt(1), UInt(1))
 
 
-   val f2_br_seen = f2_btb.valid && f2_btb.bits.cfi_type === CfiType.branch
-   val f2_jr_seen = f2_btb.valid && f2_btb.bits.cfi_type === CfiType.jalr
-   bpd.io.hist_update_spec.valid := (f2_br_seen || f2_jr_seen) && !io.fetch_stalled
-   bpd.io.hist_update_spec.bits.taken := f2_jr_seen || Mux(bpd_valid, bpd_predict_taken, f2_btb.bits.taken)
    bpd.io.resp.ready := !io.fetch_stalled
 
    //************************************************
@@ -203,7 +208,9 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    //************************************************
    // Update the BPD
 
-   bpd.io.br_resolution := io.br_unit.bpd_update
+   bpd.io.hist_update_spec := io.f3_hist_update
+
+   bpd.io.exe_bpd_update := io.br_unit.bpd_update
 
    bpd.io.flush := io.flush
    io.brob <> bpd.io.brob
