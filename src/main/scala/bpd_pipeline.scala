@@ -121,12 +121,13 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
 
    btb.io.req := io.ext_btb_req
    btb.io.icmiss := io.icmiss
-   bpd.io.req_pc := io.ext_btb_req.bits.addr
+//   bpd.io.req_pc := io.ext_btb_req.bits.addr
 
 
    //************************************************
    // Branch Prediction (BP1 Stage)
 
+   bpd.io.req_pc := btb.io.resp.bits.fetch_pc
    io.f0_btb <> btb.io.resp
 
 

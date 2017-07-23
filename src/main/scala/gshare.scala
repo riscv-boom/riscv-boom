@@ -68,10 +68,9 @@ class GShareBrPredictor(
    //------------------------------------------------------------
    // Get prediction.
 
-   val stall = !io.resp.ready //TODO XXX? Do we need to know if a redirect is happening which kills stalled instructions? Correct answer is probably to change io.req_pc to s1_pc.
+   val stall = !io.resp.ready
 
-   val s0_pc = io.req_pc
-   val s1_pc = RegEnable(s0_pc, !stall) // CODE REVIEW
+   val s1_pc = io.req_pc
    val s1_ridx = Hash(s1_pc, this.ghistory)
 
    counters.io.s1_r_idx := s1_ridx
