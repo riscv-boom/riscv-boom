@@ -172,6 +172,11 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
          f2_fetch_bundle.bpu_info(w).btb_hit := true.B
       }
 
+      when (UInt(w) === io.f2_btb_resp.bits.cfi_idx && io.f2_bpd_resp.valid && !f2_req.valid)
+      {
+         f2_fetch_bundle.bpu_info(w).bpd_taken := io.f2_bpd_resp.bits.takens(w.U)
+      }
+
       assert (!(f2_fetch_bundle.bpu_info(w).btb_predicted && f2_fetch_bundle.bpu_info(w).bpd_predicted))
    }
 
