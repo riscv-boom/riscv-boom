@@ -301,8 +301,7 @@ class TageTable(
 
    val stall = !io.bp2_resp.ready
 
-   val s0_pc = io.if_req_pc
-   val s1_pc = RegEnable(s0_pc, !stall) // CODE REVIEW
+   val s1_pc = io.if_req_pc
    val p_idx = IdxHash(s1_pc)
    val p_tag = TagHash(s1_pc)
 
