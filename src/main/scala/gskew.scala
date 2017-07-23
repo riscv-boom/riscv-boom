@@ -209,8 +209,7 @@ class GSkewBrPredictor(fetch_width: Int,
    gsh1_table.io.stall := stall
    meta_table.io.stall := stall
 
-   val s0_pc = io.req_pc
-   val s1_pc = RegEnable(s0_pc, !stall)
+   val s1_pc = io.req_pc
    val bimo_idx = BimoIdxHash(s1_pc, this.ghistory, bimo_idx_sz)
    val gsh0_idx = Gsh0IdxHash(s1_pc, this.ghistory, gsh0_idx_sz)
    val gsh1_idx = Gsh1IdxHash(s1_pc, this.ghistory, gsh1_idx_sz)

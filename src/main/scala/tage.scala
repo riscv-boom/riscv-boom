@@ -263,7 +263,7 @@ class TageBrPredictor(
    resp_info.alt_hit := p_alt_hit
    resp_info.alt_id  := p_alt_id
    resp_info.alt_predicted_takens := Vec(predictions.map(_.takens))(p_alt_id)
-   resp_info.debug_br_pc := RegEnable(RegEnable(io.req_pc, !stall), !stall)
+   resp_info.debug_br_pc := RegEnable(io.req_pc, !stall)
 
    io.resp.bits.info := resp_info.toBits
 
