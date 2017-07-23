@@ -358,7 +358,7 @@ trait RISCVConstants
    def GetRs1(inst: UInt): UInt = inst(RS1_MSB,RS1_LSB)
    def IsCall(inst: UInt): Bool = (inst === rocket.Instructions.JAL ||
                                   inst === rocket.Instructions.JALR) && GetRd(inst) === RA
-   def IsReturn(inst: UInt): Bool = GetUop(inst) === jalr_opc && GetRd(inst) === X0 && GetRs1(inst) === RA
+   def IsReturn(inst: UInt): Bool = GetUop(inst) === jalr_opc && GetRs1(inst) === BitPat("b00?01")
 
    def ComputeBranchTarget(pc: UInt, inst: UInt, xlen: Int, coreInstBytes: Int): UInt =
    {
