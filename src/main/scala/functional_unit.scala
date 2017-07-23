@@ -400,11 +400,22 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
          }
          when (pc_sel === PC_PLUS4)
          {
-            mispredict := Mux(uop.br_prediction.wasBTB, btb_mispredict, bpd_mispredict)
+            mispredict :=
+               Mux(uop.br_prediction.wasBTB,
+                  btb_mispredict,
+               Mux(uop.br_prediction.bpd_predicted,
+                  bpd_mispredict,
+                  false.B)) // if neither BTB nor BPD predicted and it's not-taken, then no misprediction occurred.
          }
          when (pc_sel === PC_BRJMP)
          {
-            mispredict := Mux(uop.br_prediction.wasBTB, btb_mispredict, bpd_mispredict)
+            mispredict :=
+               Mux(uop.br_prediction.wasBTB,
+                  btb_mispredict,
+               Mux(uop.br_prediction.bpd_predicted,
+                  bpd_mispredict,
+                  true.B)) // if neither BTB nor BPD predicted and it's taken, then a misprediction occurred.
+
          }
       }
 
