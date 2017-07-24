@@ -62,19 +62,16 @@ class BpuRequest(implicit p: Parameters) extends BoomBundle()(p)
 // TODO rename to make clear this is "BPD->RenameSnapshot->BRU". Should NOT go into Issue Windows.
 class BranchPredInfo(implicit p: Parameters) extends BoomBundle()(p)
 {
-   val bpd_predicted     = Bool() // did the bpd predict this instruction? (ie, tag hit in the BPD)
-   val bpd_taken         = Bool() // did the bpd predict taken for this instruction?
+   val btb_blame         = Bool() // Does the BTB get credit for the prediction? (during BRU check).
    val btb_hit           = Bool() // this instruction was the br/jmp predicted by the BTB
    val btb_taken         = Bool() // this instruction was the br/jmp predicted by the BTB and was taken
-   val btb_predicted     = Bool() // Does the BTB get credit for the prediction? (FU checks)
-//
-//   val is_br_or_jalr    = Bool() // is this instruction a branch or jalr?
-                                   // (need to allocate brob entry).
+
+   val bpd_blame         = Bool() // Does the BPD get credit for this prediction? (during BRU check).
+   val bpd_hit           = Bool() // did the bpd predict this instruction? (ie, tag hit in the BPD)
+   val bpd_taken         = Bool() // did the bpd predict taken for this instruction?
+
    val bim_resp         = new BimResp
-
    val bpd_resp         = new BpdResp // TODO XXX this can be very expensive -- don't give to every instruction? And break into separate toBRU/Exe and toCom versions.
-
-   def wasBTB = btb_predicted
 }
 
 class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p)
