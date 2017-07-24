@@ -121,7 +121,7 @@ trait HasBoomCoreParameters extends rocket.HasCoreParameters
 //   val dcacheParams: DCacheParams = tileParams.dcache.get
 //   val nTLBEntries = dcacheParams.nTLBEntries
 
-   val icacheParams: ICacheParams = tileParams.icache.get
+//   val icacheParams: ICacheParams = tileParams.icache.get
 
    //************************************
    // Branch Prediction

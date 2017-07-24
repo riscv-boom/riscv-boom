@@ -65,7 +65,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
       val counters   = new CacheCounters().asInput
    }
 
-  println("PaddrBits: " + p(rocket.PAddrBits))
+  //println("PaddrBits: " + p(rocket.PAddrBits))
    //**********************************
    // construct all of the modules
 
@@ -204,10 +204,10 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
 
    print(fp_pipeline)
 
-   println("\n   DCache Ways           : " + dcacheParams.nWays)
-   println("   DCache Sets           : " + dcacheParams.nSets)
-   println("   ICache Ways           : " + icacheParams.nWays)
-   println("   ICache Sets           : " + icacheParams.nSets)
+//   println("\n   DCache Ways           : " + dcacheParams.nWays)
+//   println("   DCache Sets           : " + dcacheParams.nSets)
+//   println("   ICache Ways           : " + icacheParams.nWays)
+//   println("   ICache Sets           : " + icacheParams.nSets)
 
    //-------------------------------------------------------------
    //-------------------------------------------------------------
