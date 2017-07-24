@@ -7,10 +7,15 @@
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
 //
-// f0 = next PC select
-// f1 = icache SRAM access
-// f2 = icache response/pre-decode
-// f3 = redirect
+// Stages:
+//    * F0 -- next PC select
+//    * F1 -- icache SRAM access
+//    * F2 -- icache response/pre-decode/branch-checking/verification
+//    * F3 -- redirect
+//
+// NOTES:
+//    Things like the branch-check rely on register retiming (since the
+//    branch-check happens in F2, but doesn't redirect the pipeline until F3.
 
 package boom
 
@@ -26,10 +31,8 @@ class FetchBundle(implicit p: Parameters) extends BoomBundle()(p)
    val insts       = Vec(FETCH_WIDTH, Bits(width = 32))
    val mask        = Bits(width = FETCH_WIDTH) // mark which words are valid instructions
    val xcpt_if     = Bool()
-   val replay_if   = Bool()
+   val replay_if   = Bool() // the I$ demands we replay the instruction fetch.
 
-//   val pred_resp   = new BranchPredictionResp
-//   val predictions = Vec(FETCH_WIDTH, new BranchPrediction)
    val bpu_info    = Vec(FETCH_WIDTH, new BranchPredInfo)
 
    val debug_events = Vec(FETCH_WIDTH, new DebugStageEvents)
@@ -44,7 +47,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    val io = new BoomBundle()(p)
    {
       val imem              = new rocket.FrontendIO
-      val f0_btb            = Valid(new BTBsaResp).flip
+      val f1_btb            = Valid(new BTBsaResp).flip
       val f2_bpu_request    = Valid(new BpuRequest).flip
 
       val f2_btb_resp       = Valid(new BTBsaResp).flip
@@ -128,7 +131,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
          f3_req.bits.addr,
          io.f2_bpu_request.bits.target)))
 
-   io.imem.ext_btb.resp := io.f0_btb
+   io.imem.ext_btb.resp := io.f1_btb
 
    //-------------------------------------------------------------
    // **** ICache Access (F1) ****
@@ -174,7 +177,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    }
 
 
-   val f2_taken = Wire(init=false.B) // was a branch taken in the F2 stage.
+   val f2_taken = Wire(init=false.B) // was a branch taken in the F2 stage?
    when (f2_req.valid)
    {
       f2_taken := false.B // f2_req only ever requests nextline_pc or jump targets (which we don't track in ghistory).
@@ -255,9 +258,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    io.f2_ras_update := bchecker.io.ras_update
 
    // mask out instructions after predicted branch
-//   val btb_kill_mask = KillMask(f2_req.valid, bchecker.io.cfi_idx, fetchWidth)
    val f2_kill_mask = KillMask(f2_req.valid, bchecker.io.req_cfi_idx, fetchWidth)
-   //val jr_kill_mask = KillMask(is_jr.reduce(_||_), PriorityEncoder(is_jr.asUInt), fetchWidth)
 
    val btb_mask = Mux(io.f2_btb_resp.valid && !io.f2_bpu_request.valid && !f2_req.valid,
                   io.f2_btb_resp.bits.mask,
@@ -299,8 +300,6 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
 
    io.f3_hist_update.valid := f3_valid && (f3_br_seen || f3_jr_seen) && !if_stalled
    io.f3_hist_update.bits.taken := f3_jr_seen || f3_taken
-//   io.f3_hist_update.bits.taken := f3_jr_seen || Mux(io.bpd_resp.valid, bpd_predict_taken, f2_btb.bits.taken) ...
-
 
    //-------------------------------------------------------------
    // **** FetchBuffer Enqueue ****
@@ -309,11 +308,6 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    // Fetch Buffer
    FetchBuffer.io.enq.valid := f3_valid
    FetchBuffer.io.enq.bits  := f3_fetch_bundle
-
-
-//   fetch_bundle.mask := io.imem.resp.bits.mask //& io.bp2_pred_resp.mask
-//   fetch_bundle.pred_resp := io.bp2_pred_resp
-//   fetch_bundle.predictions := io.bp2_predictions
 
    // We do not use the imem's BTB.
    io.imem.btb_update.valid := Bool(false)
@@ -344,7 +338,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
                // Also not factoring in NPC.
                printf("%d; O3PipeView:fetch:%d:0x%x:0:%d:DASM(%x)\n",
                   bundle.debug_events(i).fetch_seq,
-                  io.tsc_reg - UInt(1*O3_CYCLE_TIME),
+                  io.tsc_reg - UInt(2*O3_CYCLE_TIME),
                   (bundle.pc.toSInt & SInt(-(fetch_width*coreInstBytes))).toUInt + UInt(i << 2),
                   bundle.debug_events(i).fetch_seq,
                   bundle.insts(i))

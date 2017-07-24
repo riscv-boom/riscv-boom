@@ -204,19 +204,12 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    fetch_unit.io.br_unit <> br_unit
    fetch_unit.io.tsc_reg           := debug_tsc_reg
 
-   fetch_unit.io.f0_btb            := bpd_stage.io.f0_btb
+   fetch_unit.io.f1_btb            := bpd_stage.io.f1_btb
+   fetch_unit.io.f2_bpu_request    := bpd_stage.io.f2_bpu_request
    fetch_unit.io.f2_btb_resp       := bpd_stage.io.f2_btb_resp
    fetch_unit.io.f2_bpd_resp       := bpd_stage.io.f2_bpd_resp
-   fetch_unit.io.f2_bpu_request    := bpd_stage.io.f2_bpu_request
 
    fetch_unit.io.f3_bpd_resp       := bpd_stage.io.f3_bpd_resp
-//   fetch_unit.io.bp2_take_pc       := bpd_stage.io.req.valid
-//   fetch_unit.io.bp2_pc_of_br_inst := bpd_stage.io.req.bits.br_pc
-//   fetch_unit.io.bp2_is_jump       := bpd_stage.io.req.bits.is_jump
-//   fetch_unit.io.bp2_is_cfi        := bpd_stage.io.req.bits.is_cfi
-//   fetch_unit.io.bp2_is_taken      := bpd_stage.io.req.bits.is_taken
-//   fetch_unit.io.bp2_br_seen       := bpd_stage.io.pred_resp.br_seen
-//   fetch_unit.io.bp2_pred_target   := bpd_stage.io.req.bits.target
 
    fetch_unit.io.clear_fetchbuffer := br_unit.brinfo.mispredict ||
                                        rob.io.flush.valid
