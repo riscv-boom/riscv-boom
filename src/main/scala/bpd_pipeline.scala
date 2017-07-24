@@ -8,11 +8,11 @@
 //------------------------------------------------------------------------------
 //
 // Christopher Celio
-// 2014 Apr 23
+// 2017
 //
 // Access BTB and BPD to feed predictions to the Fetch Unit.
 //
-// These stages are in parallel with instruction fetch.
+// Stages (these are in parallel with instruction fetch):
 //    * F0 - Select next PC.
 //    * F1 - Access I$ and BTB RAMs. Perform BPD hashing.
 //    * F2 - Access BPD RAMs. Begin decoding instruction bits and computing targets from I$.
@@ -45,15 +45,9 @@ import util.UIntToAugmentedUInt
 // The Fetch Unit must also sanity check the request.
 class BpuRequest(implicit p: Parameters) extends BoomBundle()(p)
 {
-//   btb_hit
-//   taken
-//   cfi_type
    val target  = UInt(width = vaddrBitsExtended)
    val cfi_idx = UInt(width = log2Up(fetchWidth)) // where is cfi we are predicting?
    val mask    = UInt(width = fetchWidth) // mask of valid instructions.
-
-   // Push this info down the pipeline for save keeping.
-//   val predinfo = new BranchPredInfo
 }
 
 //class BranchPrediction(implicit p: Parameters) extends BoomBundle()(p)
@@ -83,20 +77,24 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
       val ext_btb_req   = Valid(new PCReq).flip
       val icmiss        = Bool(INPUT)
       val fetch_stalled = Bool(INPUT)
-      val f0_btb        = Valid(new BTBsaResp)
-      val f2_bpu_request= Valid(new BpuRequest)
 
+      // Fetch1
+      val f1_btb        = Valid(new BTBsaResp)
+
+      // Fetch2
+      val f2_bpu_request= Valid(new BpuRequest)
       val f2_btb_resp   = Valid(new BTBsaResp)
       val f2_bpd_resp   = Valid(new BpdResp)
       val f2_btb_update = Valid(new BTBsaUpdate).flip
       val f2_ras_update = Valid(new RasUpdate).flip
 
+      // Fetch3
       val f3_bpd_resp   = Valid(new BpdResp)
       val f3_hist_update= Valid(new GHistUpdate).flip
 
       // Other
       val br_unit       = new BranchUnitResp().asInput
-      val brob       = new BrobBackendIo(fetch_width)
+      val brob          = new BrobBackendIo(fetch_width)
       val flush         = Bool(INPUT) // pipeline flush
       val redirect      = Bool(INPUT)
       val status_prv    = UInt(INPUT, width = rocket.PRV.SZ)
@@ -118,14 +116,13 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
 
    btb.io.req := io.ext_btb_req
    btb.io.icmiss := io.icmiss
-//   bpd.io.req_pc := io.ext_btb_req.bits.addr
 
 
    //************************************************
    // Branch Prediction (BP1 Stage)
 
    bpd.io.req_pc := btb.io.resp.bits.fetch_pc
-   io.f0_btb <> btb.io.resp
+   io.f1_btb <> btb.io.resp
 
 
    //************************************************
@@ -137,7 +134,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    val f2_nextline_pc = Wire(UInt(width=vaddrBits))
    f2_nextline_pc := f2_aligned_pc + UInt(fetch_width*coreInstBytes)
 
-   // request in BTB can advance
+   // request/prediction in BTB's F1 stage can advance
    when (io.ext_btb_req.valid)
    {
       f2_btb := btb.io.resp
@@ -152,6 +149,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
       io.f3_bpd_resp.bits.history.get := bpd.io.f3_resp_history.get
    }
    io.f3_bpd_resp.bits.history_ptr := bpd.io.f3_resp_history_ptr
+
 
    // does the BPD predict a taken branch?
    private def bitRead(bits: UInt, offset: UInt): Bool = (bits >> offset)(0)
@@ -170,8 +168,8 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
          f2_nextline_pc.sextTo(vaddrBitsExtended))
    io.f2_bpu_request.bits.mask := Cat((UInt(1) << ~Mux(bpd_predict_taken, ~f2_btb.bits.cfi_idx, UInt(0)))-UInt(1), UInt(1))
 
-
    bpd.io.resp.ready := !io.fetch_stalled
+
 
    //************************************************
    // Update the RAS
@@ -247,7 +245,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
 
    if (!enableBTB)
    {
-      assert (!(io.f0_btb.valid), "[bpd_pipeline] BTB predicted, but it's been disabled.")
+      assert (!(io.f1_btb.valid), "[bpd_pipeline] BTB predicted, but it's been disabled.")
    }
 
 }
