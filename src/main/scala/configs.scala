@@ -11,6 +11,7 @@ import tile._
 import rocket._
 
 
+// Try to be a reasonable BOOM design point.
 class DefaultBoomConfig extends Config((site, here, up) => {
 
    // Top-Level
@@ -25,24 +26,27 @@ class DefaultBoomConfig extends Config((site, here, up) => {
          nPerfCounters = 29,
          nPerfEvents = 50,
          perfIncWidth = 3, // driven by issue ports, as set in BoomCoreParams.issueParams
-         fpu = Some(tile.FPUParams(sfmaLatency=3, dfmaLatency=3, divSqrt=true))),
-      btb = Some(BTBParams(nEntries = 40, nRAS = 4, updatesOutOfOrder = true))
+         fpu = Some(tile.FPUParams(sfmaLatency=4, dfmaLatency=4, divSqrt=true))),
+         btb = Some(BTBParams(nEntries = 0, updatesOutOfOrder = true))
    )}
 
    // BOOM-specific uarch Parameters
    case BoomKey => BoomCoreParams(
-      issueWidth = 3,
       numRobEntries = 80,
-      numIssueSlotEntries = 20,
-      numPhysRegisters = 110,
+      issueParams = Seq(
+         IssueParams(issueWidth=1, numEntries=20, iqType=IQT_MEM.litValue),
+         IssueParams(issueWidth=2, numEntries=20, iqType=IQT_INT.litValue),
+         IssueParams(issueWidth=1, numEntries=20, iqType=IQT_FP.litValue)),
+      numIntPhysRegisters = 100,
+      numFpPhysRegisters = 64,
       numLsuEntries = 16,
       maxBrCount = 8,
       enableBranchPredictor = true,
       gshare = Some(GShareParameters(enabled = true, history_length=15))
    )
-
    // Widen L1toL2 bandwidth.
-   case L1toL2Config => up(L1toL2Config, site).copy(beatBytes = site(XLen)/4)
+   case L1toL2Config => up(L1toL2Config, site).copy(
+      beatBytes = site(XLen)/4)
   }
 )
 
@@ -53,7 +57,7 @@ class WithNPerfCounters(n: Int) extends Config((site, here, up) => {
    ))}
 })
 
-// Small BOOM!
+// Small BOOM! Try to be fast to compile, easier to debug.
 class WithSmallBooms extends Config((site, here, up) => {
    case RocketTilesKey => up(RocketTilesKey, site) map { r =>r.copy(core = r.core.copy(
       fWidth = 1,
@@ -61,13 +65,16 @@ class WithSmallBooms extends Config((site, here, up) => {
       perfIncWidth = 2 // driven by issue ports, as set in BoomCoreParams.issueParams
       ))}
    case BoomKey => up(BoomKey, site).copy(
-      issueWidth = 1,
       numRobEntries = 24,
-      numIssueSlotEntries = 10,
+      issueParams = Seq(
+         IssueParams(issueWidth=1, numEntries=4, iqType=IQT_MEM.litValue),
+         IssueParams(issueWidth=1, numEntries=4, iqType=IQT_INT.litValue),
+         IssueParams(issueWidth=1, numEntries=4, iqType=IQT_FP.litValue)),
+      numIntPhysRegisters = 56,
+      numFpPhysRegisters = 48,
       numLsuEntries = 4,
-      numPhysRegisters = 100,
       maxBrCount = 4,
-      gshare = Some(GShareParameters(enabled = true, history_length=11))
+      gshare = Some(GShareParameters(enabled = true, history_length=12))
       )
 })
 
@@ -79,11 +86,14 @@ class WithMediumBooms extends Config((site, here, up) => {
       perfIncWidth = 3 // driven by issue ports, as set in BoomCoreParams.issueParams
       ))}
    case BoomKey => up(BoomKey, site).copy(
-      issueWidth = 3,
       numRobEntries = 48,
-      numIssueSlotEntries = 20,
+      issueParams = Seq(
+         IssueParams(issueWidth=1, numEntries=16, iqType=IQT_MEM.litValue),
+         IssueParams(issueWidth=2, numEntries=16, iqType=IQT_INT.litValue),
+         IssueParams(issueWidth=1, numEntries=16, iqType=IQT_FP.litValue)),
+      numIntPhysRegisters = 80,
+      numFpPhysRegisters = 56,
       numLsuEntries = 16,
-      numPhysRegisters = 110,
       gshare = Some(GShareParameters(enabled = true, history_length=14))
       )
 })
@@ -96,15 +106,18 @@ class WithMegaBooms extends Config((site, here, up) => {
       perfIncWidth = 3 // driven by issue ports, as set in BoomCoreParams.issueParams
       ))}
    case BoomKey => up(BoomKey, site).copy(
-      issueWidth = 4,
       numRobEntries = 128,
-      numIssueSlotEntries = 28,
+      issueParams = Seq(
+         IssueParams(issueWidth=1, numEntries=20, iqType=IQT_MEM.litValue),
+         IssueParams(issueWidth=2, numEntries=20, iqType=IQT_INT.litValue),
+         IssueParams(issueWidth=1, numEntries=20, iqType=IQT_FP.litValue)), // TODO make this 2-wide issue
+      numIntPhysRegisters = 128,
+      numFpPhysRegisters = 80,
       numLsuEntries = 32,
-      numPhysRegisters = 128,
-      gshare = Some(GShareParameters(enabled = true, history_length=11))
+      tage = Some(TageParameters())
       )
    // Widen L1toL2 bandwidth so we can increase icache rowBytes size for 4-wide fetch.
    case L1toL2Config => up(L1toL2Config, site).copy(
-      beatBytes = site(XLen)/4)
+      beatBytes = site(XLen)/2)
 
 })

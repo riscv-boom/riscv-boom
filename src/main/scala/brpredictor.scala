@@ -111,6 +111,65 @@ class BpdUpdate(implicit p: Parameters) extends BoomBundle()(p)
 //--------------------------------------------------------------------------
 //--------------------------------------------------------------------------
 
+// Return the desired branch predictor based on the provided parameters.
+object BrPredictor
+{
+   def apply(tileParams: tile.TileParams, boomParams: BoomCoreParams)(implicit p: Parameters): BrPredictor =
+   {
+      val rocketParams: rocket.RocketCoreParams = tileParams.core.asInstanceOf[rocket.RocketCoreParams]
+      val fetch_width = rocketParams.fetchWidth
+      val enableCondBrPredictor = boomParams.enableBranchPredictor
+
+      var br_predictor: BrPredictor = null
+
+      if (enableCondBrPredictor && boomParams.tage.isDefined && boomParams.tage.get.enabled)
+      {
+         br_predictor = Module(new TageBrPredictor(
+            fetch_width = fetch_width,
+            num_tables = boomParams.tage.get.num_tables,
+            table_sizes = boomParams.tage.get.table_sizes,
+            history_lengths = boomParams.tage.get.history_lengths,
+            tag_sizes = boomParams.tage.get.tag_sizes,
+            ubit_sz = boomParams.tage.get.ubit_sz))
+      }
+      else if (enableCondBrPredictor && boomParams.gskew.isDefined && boomParams.gskew.get.enabled)
+      {
+         br_predictor = Module(new GSkewBrPredictor(
+            fetch_width = fetch_width,
+            history_length = boomParams.gskew.get.history_length,
+            dualported = boomParams.gskew.get.dualported,
+            enable_meta = boomParams.gskew.get.enable_meta))
+      }
+      else if (enableCondBrPredictor && boomParams.gshare.isDefined && boomParams.gshare.get.enabled)
+      {
+         br_predictor = Module(new GShareBrPredictor(
+            fetch_width = fetch_width,
+            history_length = boomParams.gshare.get.history_length,
+            dualported = boomParams.gshare.get.dualported))
+      }
+      else if (enableCondBrPredictor && p(SimpleGShareKey).enabled)
+      {
+         br_predictor = Module(new SimpleGShareBrPredictor(
+            fetch_width = fetch_width,
+            history_length = p(SimpleGShareKey).history_length))
+      }
+      else if (enableCondBrPredictor && p(RandomBpdKey).enabled)
+      {
+         br_predictor = Module(new RandomBrPredictor(
+            fetch_width = fetch_width))
+      }
+      else
+      {
+         br_predictor = Module(new NullBrPredictor(
+            fetch_width = fetch_width,
+            history_length = 1))
+      }
+
+      br_predictor
+   }
+}
+
+
 abstract class BrPredictor(fetch_width: Int, val history_length: Int)(implicit p: Parameters) extends BoomModule()(p)
 {
    val io = new BoomBundle()(p)
@@ -122,10 +181,16 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int)(implicit p
       // For an un-tagged predictor, valid==true should probably only be if a branch is predicted taken.
       // This has an effect on whether to override the BTB's prediction.
       val resp = Decoupled(new BpdResp)
+      // bpd resp comes in F2, but speculative history update isn't until F3, so to avoid missing older branches in our
+      // snapshots, we need to wait and pull the history from F3 for snapshotting.
+      val f3_resp_history = if (!ENABLE_VLHR) Some(UInt(width = GLOBAL_HISTORY_LENGTH)) else None
+      val f3_resp_history_ptr = UInt(width = log2Up(VLHR_LENGTH))
+
+
       // speculatively update the global history (once we know we're predicting a branch)
       val hist_update_spec = Valid(new GHistUpdate).flip
       // branch resolution comes from the branch-unit, during the Execute stage.
-      val br_resolution = Valid(new BpdUpdate).flip
+      val exe_bpd_update = Valid(new BpdUpdate).flip // Update/correct the BPD during Branch Resolution (Exe).
       val brob = new BrobBackendIo(fetch_width)
       // Pipeline flush - reset history as appropriate.
       // Arrives same cycle as redirecting the front-end -- otherwise, the ghistory would be wrong if it came later!
@@ -162,8 +227,8 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int)(implicit p
       r_ghistory.value(
          io.hist_update_spec.valid,
          io.hist_update_spec.bits,
-         io.br_resolution.valid,
-         io.br_resolution.bits,
+         io.exe_bpd_update.valid,
+         io.exe_bpd_update.bits,
          r_flush,
          umode_only = false)
 
@@ -171,15 +236,15 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int)(implicit p
       r_ghistory_u.value(
          io.hist_update_spec.valid,
          io.hist_update_spec.bits,
-         io.br_resolution.valid,
-         io.br_resolution.bits,
+         io.exe_bpd_update.valid,
+         io.exe_bpd_update.bits,
          r_flush,
          umode_only = true)
 
    val vlh_head =
       r_vlh.getSnapshot(
-         io.br_resolution.valid,
-         io.br_resolution.bits,
+         io.exe_bpd_update.valid,
+         io.exe_bpd_update.bits,
          r_flush)
 
    val r_vlh_commit_copy = r_vlh.commit_copy
@@ -189,8 +254,10 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int)(implicit p
    val vlh_raw_spec_head = r_vlh.raw_spec_head
 
 
-   assert (r_ghistory_commit_copy === vlh_commit,
-      "[brpredictor] mistmatch between short history and very long history implementations.")
+   if (ENABLE_BPD_ASSERTS) {
+      assert (r_ghistory_commit_copy === vlh_commit,
+         "[brpredictor] mistmatch between short history and very long history implementations.")
+   }
 
 
    if (ENABLE_BPD_USHISTORY && !ENABLE_BPD_UMODE_ONLY)
@@ -206,12 +273,14 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int)(implicit p
       ghistory := ghistory_all
    }
 
+   val r_ghistory_raw = r_ghistory.raw_value
+
 
    r_ghistory.update(
       io.hist_update_spec.valid,
       io.hist_update_spec.bits,
-      io.br_resolution.valid,
-      io.br_resolution.bits,
+      io.exe_bpd_update.valid,
+      io.exe_bpd_update.bits,
       r_flush,
       disable = Bool(false),
       umode_only = false)
@@ -219,8 +288,8 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int)(implicit p
    r_ghistory_u.update(
       io.hist_update_spec.valid,
       io.hist_update_spec.bits,
-      io.br_resolution.valid,
-      io.br_resolution.bits,
+      io.exe_bpd_update.valid,
+      io.exe_bpd_update.bits,
       r_flush,
       disable = !in_usermode,
       umode_only = true)
@@ -228,24 +297,38 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int)(implicit p
    r_vlh.update(
       io.hist_update_spec.valid,
       io.hist_update_spec.bits,
-      io.br_resolution.valid,
-      io.br_resolution.bits,
+      io.exe_bpd_update.valid,
+      io.exe_bpd_update.bits,
       r_flush,
       disable = Bool(false))
 
 
-   io.resp.bits.history match
+//   io.resp.bits.history match
+//   {
+//      case Some(resp_history: UInt) => resp_history := ghistory
+//      case _ => require (ENABLE_VLHR)
+//   }
+//   io.resp.bits.history_u match
+//   {
+//      case Some(resp_history_u: UInt) => resp_history_u := ghistory_uonly
+//      case _ => require (ENABLE_VLHR)
+//   }
+//
+//   io.resp.bits.history_ptr := vlh_head
+
+
+   io.f3_resp_history match
    {
       case Some(resp_history: UInt) => resp_history := ghistory
       case _ => require (ENABLE_VLHR)
    }
-   io.resp.bits.history_u match
-   {
-      case Some(resp_history_u: UInt) => resp_history_u := ghistory_uonly
-      case _ => require (ENABLE_VLHR)
-   }
+//   io.f3_resp_history_u match
+//   {
+//      case Some(resp_history_u: UInt) => resp_history_u := ghistory_uonly
+//      case _ => require (ENABLE_VLHR)
+//   }
 
-   io.resp.bits.history_ptr := vlh_head
+   io.f3_resp_history_ptr := vlh_head
 
 
    // -----------------------------------------------
@@ -305,6 +388,8 @@ class HistoryRegister(length: Int)
          case _ => UInt(0) // enable vlhr
       }
    }
+
+   def raw_value(): UInt = r_history
 
    def value(
       hist_update_spec_valid: Bool,
@@ -477,9 +562,11 @@ class VeryLongHistoryRegister(hlen: Int, vlhr_len: Int)
 
    def commit(taken: Bool): Unit =
    {
-      assert(com_head =/= spec_head, "[brpredictor] VLHR: commit head is moving ahead of the spec head.")
       val debug_com_bit = (hist_buffer >> com_head) & UInt(1,1)
-      assert (debug_com_bit  === taken, "[brpredictor] VLHR: commit bit doesn't match speculative bit.")
+      if (ENABLE_BPD_ASSERTS) {
+         assert(com_head =/= spec_head, "[brpredictor] VLHR: commit head is moving ahead of the spec head.")
+         assert (debug_com_bit  === taken, "[brpredictor] VLHR: commit bit doesn't match speculative bit.")
+      }
       com_head := WrapInc(com_head, plen)
    }
 }
@@ -721,7 +808,7 @@ class BranchReorderBuffer(fetch_width: Int, num_entries: Int)(implicit p: Parame
 
    // -----------------------------------------------
 
-   if (DEBUG_PRINTF)
+   if (DEBUG_PRINTF_BROB)
    {
       for (i <- 0 until num_entries)
       {

@@ -30,6 +30,10 @@ trait BOOMDebugConstants
    val DEBUG_PRINTF_LSU    = true && DEBUG_PRINTF
    val DEBUG_PRINTF_ROB    = true && DEBUG_PRINTF
    val DEBUG_PRINTF_TAGE   = true && DEBUG_PRINTF
+   val DEBUG_PRINTF_BROB   = false && DEBUG_PRINTF
+
+   // BPD asserts can be too heavy-handed for something that we're okay giving incorrect answers.
+   val ENABLE_BPD_ASSERTS  = false
 
    if (O3PIPEVIEW_PRINTF) require (!DEBUG_PRINTF && !COMMIT_LOG_PRINTF)
 }
@@ -38,6 +42,14 @@ trait BrPredConstants
 {
    val NOT_TAKEN = Bool(false)
    val TAKEN = Bool(true)
+}
+
+trait IQType
+{
+   val IQT_SZ  = 2
+   val IQT_INT = UInt(0, IQT_SZ)
+   val IQT_MEM = UInt(1, IQT_SZ)
+   val IQT_FP  = UInt(2, IQT_SZ)
 }
 
 trait ScalarOpConstants
@@ -53,6 +65,7 @@ trait ScalarOpConstants
    //************************************
    // Control Signals
 
+   // Issue slot.
    val s_invalid :: s_valid_1 :: s_valid_2 :: Nil = Enum(UInt(),3)
 
    // PC Select Signal
@@ -345,7 +358,7 @@ trait RISCVConstants
    def GetRs1(inst: UInt): UInt = inst(RS1_MSB,RS1_LSB)
    def IsCall(inst: UInt): Bool = (inst === rocket.Instructions.JAL ||
                                   inst === rocket.Instructions.JALR) && GetRd(inst) === RA
-   def IsReturn(inst: UInt): Bool = GetUop(inst) === jalr_opc && GetRd(inst) === X0 && GetRs1(inst) === RA
+   def IsReturn(inst: UInt): Bool = GetUop(inst) === jalr_opc && GetRs1(inst) === BitPat("b00?01")
 
    def ComputeBranchTarget(pc: UInt, inst: UInt, xlen: Int, coreInstBytes: Int): UInt =
    {
@@ -357,6 +370,43 @@ trait RISCVConstants
       val j_imm32 = Cat(Fill(12,inst(31)), inst(19,12), inst(20), inst(30,25), inst(24,21), UInt(0,1))
       ((pc + Sext(j_imm32, xlen)).asSInt & SInt(-coreInstBytes)).asUInt
    }
+
+   def GetCfiType(inst: UInt): UInt =
+   {
+      import util.uintToBitPat
+      val bpd_csignals =
+         rocket.DecodeLogic(inst,
+                     List[BitPat](N, N, N, IS_X),
+                                                 //   is br?
+                                                 //   |  is jal?
+                                                 //   |  |  is jalr?
+                                                 //   |  |  |  br type
+                                                 //   |  |  |  |
+                  Array[(BitPat, List[BitPat])](
+                  rocket.Instructions.JAL     -> List(N, Y, N, IS_J),
+                  rocket.Instructions.JALR    -> List(N, N, Y, IS_I),
+                  rocket.Instructions.BEQ     -> List(Y, N, N, IS_B),
+                  rocket.Instructions.BNE     -> List(Y, N, N, IS_B),
+                  rocket.Instructions.BGE     -> List(Y, N, N, IS_B),
+                  rocket.Instructions.BGEU    -> List(Y, N, N, IS_B),
+                  rocket.Instructions.BLT     -> List(Y, N, N, IS_B),
+                  rocket.Instructions.BLTU    -> List(Y, N, N, IS_B)
+               ))
+
+      val (cs_is_br: Bool) :: (cs_is_jal: Bool) :: (cs_is_jalr:Bool) :: imm_sel_ :: Nil = bpd_csignals
+
+      val ret =
+         Mux(cs_is_jalr,
+            CfiType.jalr,
+         Mux(cs_is_jal,
+            CfiType.jal,
+         Mux(cs_is_br,
+            CfiType.branch,
+            CfiType.none)))
+      ret
+   }
+
+
 }
 
 trait ExcCauseConstants

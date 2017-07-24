@@ -222,7 +222,7 @@ class TageTable(
       + tag_sz + "-bit tags, "
       + counter_sz + "-bit counters (max value=" + CNTR_MAX + ")")
 
-   assert (counter_sz == 2)
+   require (counter_sz == 2)
 
    //------------------------------------------------------------
    // State
@@ -301,21 +301,22 @@ class TageTable(
 
    val stall = !io.bp2_resp.ready
 
-   val p_idx       = IdxHash(io.if_req_pc)
-   val p_tag       = TagHash(io.if_req_pc)
+   val s1_pc = io.if_req_pc
+   val p_idx = IdxHash(s1_pc)
+   val p_tag = TagHash(s1_pc)
 
-   counter_table.io.s0_r_idx := p_idx
-   tag_table.io.s0_r_idx := p_idx
+   counter_table.io.s1_r_idx := p_idx
+   tag_table.io.s1_r_idx := p_idx
    counter_table.io.stall := stall
    tag_table.io.stall := stall
 
    val s2_tag      = tag_table.io.s2_r_out
-   val bp2_tag_hit = s2_tag === RegEnable(RegEnable(p_tag, !stall), !stall)
+   val bp2_tag_hit = s2_tag === RegEnable(p_tag, !stall)
 
    io.bp2_resp.valid       := bp2_tag_hit
    io.bp2_resp.bits.takens := counter_table.io.s2_r_out
-   io.bp2_resp.bits.index  := RegEnable(RegEnable(p_idx, !stall), !stall)(index_sz-1,0)
-   io.bp2_resp.bits.tag    := RegEnable(RegEnable(p_tag, !stall), !stall)(tag_sz-1,0)
+   io.bp2_resp.bits.index  := RegEnable(p_idx, !stall)(index_sz-1,0)
+   io.bp2_resp.bits.tag    := RegEnable(p_tag, !stall)(tag_sz-1,0)
 
    io.bp2_resp.bits.idx_csr  := idx_csr.io.value
    io.bp2_resp.bits.tag_csr1 := tag_csr1.io.value

@@ -213,7 +213,7 @@ class TageBrPredictor(
       table.if_req_pc := io.req_pc
 
       // update CSRs. ---
-      table.br_resolution <> io.br_resolution
+      table.br_resolution <> io.exe_bpd_update
       table.flush := io.flush
 
       // Update ghistory speculatively once a prediction is made.
@@ -263,7 +263,7 @@ class TageBrPredictor(
    resp_info.alt_hit := p_alt_hit
    resp_info.alt_id  := p_alt_id
    resp_info.alt_predicted_takens := Vec(predictions.map(_.takens))(p_alt_id)
-   resp_info.debug_br_pc := RegEnable(RegEnable(io.req_pc, !stall), !stall)
+   resp_info.debug_br_pc := RegEnable(io.req_pc, !stall)
 
    io.resp.bits.info := resp_info.toBits
 

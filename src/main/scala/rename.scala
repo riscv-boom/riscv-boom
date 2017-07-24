@@ -9,430 +9,47 @@
 //
 // Christopher Celio
 // 2012 Feb 14
+//
+// Supports 1-cycle and 2-cycle latencies. (aka, passthrough versus registers between ren1 and ren2).
+//    - ren1: read the map tables and allocate a new physical register from the freelist.
+//    - ren2: read the busy table for the physical operands.
+//
+// Ren1 data is provided as an output to be fed directly into the ROB.
 
 
 package boom
-{
 
 import Chisel._
 import config.Parameters
 
-//-------------------------------------------------------------
-//-------------------------------------------------------------
 
-class RenameMapTableElementIo(pl_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
+class RenameStageIO(
+   pl_width: Int,
+   num_int_pregs: Int,
+   num_fp_pregs: Int,
+   num_int_wb_ports: Int,
+   num_fp_wb_ports: Int)
+   (implicit p: Parameters) extends BoomBundle()(p)
 {
-   val element            = UInt(OUTPUT, PREG_SZ)
+   private val int_preg_sz = log2Up(num_int_pregs)
+   private val fp_preg_sz = log2Up(num_fp_pregs)
 
-   val wens               = Vec(pl_width, Bool()).asInput
-   val ren_pdsts          = Vec(pl_width, UInt(width=PREG_SZ)).asInput
-
-   val ren_br_vals        = Vec(pl_width, Bool()).asInput
-   val ren_br_tags        = Vec(pl_width, UInt(width=BR_TAG_SZ)).asInput
-
-   val br_mispredict      = Bool(INPUT)
-   val br_mispredict_tag  = UInt(INPUT, BR_TAG_SZ)
-
-   // rollback (on exceptions)
-   // TODO REMOVE THIS ROLLBACK PORT, since wens is mutually exclusive with rollback_wens
-   val rollback_wen        = Bool(INPUT)
-   val rollback_stale_pdst = UInt(INPUT, PREG_SZ)
-
-   // TODO scr option
-   val flush_pipeline      = Bool(INPUT)
-   val commit_wen          = Bool(INPUT)
-   val commit_pdst         = UInt(INPUT, PREG_SZ)
-   val committed_element   = UInt(OUTPUT, PREG_SZ)
-
-   override def cloneType: this.type = new RenameMapTableElementIo(pl_width).asInstanceOf[this.type]
-}
-
-class RenameMapTableElement(pipeline_width: Int)(implicit p: Parameters) extends BoomModule()(p)
-{
-   val io = new RenameMapTableElementIo(pipeline_width)
-
-   // Note: I don't use a "valid" signal, since it's annoying to deal with and
-   // only necessary until the map tables are filled. So instead I reset the
-   // map table to all point to P0. I'm not sure which is less expensive.  The
-   // corner-case to deal with is the "stale" register needs to be correct and
-   // valid, so that freeing it won't free an actual register that was handed
-   // out in the meantime. A software solution is also possible, but I'm
-   // unwilling to trust that.
-
-   val element = Reg(init = UInt(0, PREG_SZ))
-
-   // handle branch speculation
-   val element_br_copies = Mem(MAX_BR_COUNT, UInt(width = PREG_SZ))
-
-
-   // this is possibly the hardest piece of code I have ever had to reason about in my LIFE.
-   // Or maybe that's the 5am talking.
-   // on every branch, make a copy of the rename map table state
-   // if jal/jalr, we want to capture our own setting of this register
-   // We need to know the AGE of the branch!
-   // 1st, is "wen" (incoming)
-   // 2nd, is older instructions in same bundle
-   // 3rd, current element
-
-   for (w <- 0 until pipeline_width)
-   {
-      var elm_cases = Array((Bool(false),  UInt(0,PREG_SZ)))
-
-      for (xx <- w to 0 by -1)
-      {
-         elm_cases ++= Array((io.wens(xx),  io.ren_pdsts(xx)))
-      }
-
-      when (io.ren_br_vals(w))
-      {
-         element_br_copies(io.ren_br_tags(w)) := MuxCase(element, elm_cases)
-      }
-   }
-
-
-   // reset table on mispredict
-   when(io.br_mispredict)
-   {
-      element := element_br_copies(io.br_mispredict_tag)
-   }
-   // rollback to the previous mapping
-   .elsewhen (io.rollback_wen)
-   {
-      element := io.rollback_stale_pdst
-   }
-   // free list is giving us a new pdst
-   .elsewhen (io.wens.reduce(_|_))
-   {
-      // give write priority to the last instruction in the bundle
-      element := PriorityMux(io.wens.reverse, io.ren_pdsts.reverse)
-   }
-
-   if (ENABLE_COMMIT_MAP_TABLE)
-   {
-      val committed_element = Reg(init=UInt(0,PREG_SZ))
-      when (io.commit_wen)
-      {
-         committed_element := io.commit_pdst
-      }
-      when (io.flush_pipeline)
-      {
-         element := committed_element
-      }
-      io.committed_element := committed_element
-   }
-
-   // outputs
-   io.element  := element
-}
-
-//-------------------------------------------------------------
-//-------------------------------------------------------------
-
-class FreeListIo(num_phys_registers: Int, pl_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
-{
-   val req_preg_vals = Vec(pl_width, Bool()).asInput
-   val req_pregs     = Vec(pl_width, UInt(width=log2Up(num_phys_registers))).asOutput
-
-   // committed and newly freed register
-   val enq_vals      = Vec(pl_width, Bool()).asInput
-   val enq_pregs     = Vec(pl_width, UInt(width=log2Up(num_phys_registers))).asInput
-
-   // do we have space to service incoming requests? (per inst granularity)
-   val can_allocate  = Vec(pl_width, Bool()).asOutput
-
-   // handle branches (save copy of freelist on branch, merge on mispredict)
-   val ren_br_vals   = Vec(pl_width, Bool()).asInput
-   val ren_br_tags   = Vec(pl_width, UInt(width=BR_TAG_SZ)).asInput
-
-   // handle mispredicts
-   val br_mispredict_val = Bool(INPUT)
-   val br_mispredict_tag = UInt(INPUT, BR_TAG_SZ)
-
-   // rollback (on exceptions)
-   val rollback_wens  = Vec(pl_width, Bool()).asInput
-   val rollback_pdsts = Vec(pl_width, UInt(width=log2Up(num_phys_registers))).asInput
-
-   // or...
-   // TODO there are TWO free-list IOs now, based on constants. What is the best way to handle these two designs?
-   // perhaps freelist.scala, and instantiate which-ever one I want?
-   // TODO naming is inconsistent
-   // TODO combine with rollback, whatever?
-   val flush_pipeline = Bool(INPUT)
-   val com_wens       = Vec(pl_width, Bool()).asInput
-   val com_uops       = Vec(pl_width, new MicroOp()).asInput
-
-   val debug = new DebugFreeListIO(num_phys_registers).asOutput
-}
-
-class DebugFreeListIO(num_phys_registers: Int) extends Bundle
-{
-   val freelist = Bits(width=num_phys_registers)
-   val isprlist = Bits(width=num_phys_registers)
-   override def cloneType: this.type = new DebugFreeListIO(num_phys_registers).asInstanceOf[this.type]
-}
-
-// provide a fixed set of renamed destination registers
-// i.e., it doesn't matter if a previous UOP needs a pdst or not
-// this prevents a dependency chain from existing between UOPs when trying to
-// compute a pdst to give away (as well as computing if an available free
-// register exists
-class RenameFreeList(num_phys_registers: Int // number of physical registers
-                    , pl_width: Int          // pipeline width ("dispatch group size")
-                     )(implicit p: Parameters) extends BoomModule()(p)
-{
-   val io = new FreeListIo(num_phys_registers, pl_width)
-
-   // ** FREE LIST TABLE ** //
-   val free_list = Reg(init=(~Bits(1,num_phys_registers)))
-
-   // track all allocations that have occurred since branch passed by
-   // can quickly reset pipeline on branch mispredict
-   val allocation_lists = Reg(Vec(MAX_BR_COUNT, Bits(width = num_phys_registers)))
-
-   // TODO why is this a Vec? can I do this all on one bit-vector?
-   val enq_mask = Wire(Vec(pl_width, Bits(width = num_phys_registers)))
-
-   // ------------------------------------------
-   // find new,free physical registers
-
-   val requested_pregs_oh_array = Array.fill(pl_width,num_phys_registers){Bool(false)}
-   val requested_pregs_oh       = Wire(Vec(pl_width, Bits(width=num_phys_registers)))
-   val requested_pregs          = Wire(Vec(pl_width, UInt(width=log2Up(num_phys_registers))))
-   var allocated                = Wire(Vec(pl_width, Bool())) // did each inst get allocated a register?
-
-   // init
-   for (w <- 0 until pl_width)
-   {
-      allocated(w) := Bool(false)
-   }
-
-
-   for (i <- 1 until num_phys_registers) // note: p0 stays zero
-   {
-      val next_allocated = Wire(Vec(pl_width, Bool()))
-      var can_allocate = free_list(i)
-
-      for (w <- 0 until pl_width)
-      {
-         requested_pregs_oh_array(w)(i) = can_allocate && !allocated(w)
-
-         next_allocated(w) := can_allocate | allocated(w)
-         can_allocate = can_allocate && allocated(w)
-      }
-
-      allocated = next_allocated
-   }
-
-   for (w <- 0 until pl_width)
-   {
-      requested_pregs_oh(w) := Vec(requested_pregs_oh_array(w)).toBits
-      requested_pregs(w) := PriorityEncoder(requested_pregs_oh(w))
-   }
-
-
-   // ------------------------------------------
-   // Calculate next Free List
-   val req_free_list = Wire(Bits(width = num_phys_registers))
-   val enq_free_list = Wire(Bits(width = num_phys_registers))
-   req_free_list := free_list
-   enq_free_list := free_list
-
-   // ** Set requested PREG to "Not Free" ** //
-
-   // bit vector of newly allocated physical registers
-   var just_allocated_mask = Bits(0, num_phys_registers)
-
-   // track which allocation_lists just got cleared out by a branch,
-   // to enforce a write priority to allocation_lists()
-   val br_cleared = Wire(Vec(MAX_BR_COUNT, Bool()))
-   for (i <- 0 until MAX_BR_COUNT) { br_cleared(i) := Bool(false) }
-
-   for (w <- pl_width-1 to 0 by -1)
-   {
-      // When branching, start a fresh copy of the allocation_list
-      // but don't forget to bypass in the allocations within our bundle
-      when (io.ren_br_vals(w))
-      {
-         allocation_lists(io.ren_br_tags(w)) := just_allocated_mask
-         br_cleared(io.ren_br_tags(w)) := Bool(true)
-      }
-
-      // check that we both request a register and was able to allocate a register
-      just_allocated_mask = Mux(io.req_preg_vals(w) && allocated(w), requested_pregs_oh(w) | just_allocated_mask,
-                                                                     just_allocated_mask)
-   }
-
-   for (i <- 0 until MAX_BR_COUNT)
-   {
-      when (!br_cleared(i))
-      {
-         allocation_lists(i) := allocation_lists(i) | just_allocated_mask
-      }
-   }
-
-
-   // ** Set enqueued PREG to "Free" ** //
-   for (w <- 0 until pl_width)
-   {
-      enq_mask(w) := Bits(0,num_phys_registers)
-      when (io.enq_vals(w))
-      {
-         enq_mask(w) := UInt(1) << io.enq_pregs(w)
-      }
-      .elsewhen (io.rollback_wens(w))
-      {
-         enq_mask(w) := UInt(1) << io.rollback_pdsts(w)
-      }
-   }
-
-
-   // Update the Free List
-   when (!io.br_mispredict_val)
-   {
-      free_list := (free_list & ~(just_allocated_mask)) | (enq_mask.reduce(_|_))
-   }
-
-   // Handle Misprediction
-   //merge misspeculated allocation_list with free_list
-   val allocation_list = Wire(Bits(width = num_phys_registers))
-   allocation_list := allocation_lists(io.br_mispredict_tag)
-
-   when (io.br_mispredict_val)
-   {
-      // include newly freed register as well!
-      free_list := allocation_list | free_list | (enq_mask.reduce(_|_))
-
-      // set other branch allocation_lists to zero where allocation_list(j) == 1...
-      for (i <- 0 until MAX_BR_COUNT)
-      {
-         allocation_lists(i) := allocation_lists(i) & ~allocation_list
-      }
-   }
-
-
-   // OPTIONALLY: handle single-cycle resets
-   // Committed Free List tracks what the free list is at the commit point,
-   // allowing for a single-cycle reset of the rename state on a pipeline flush.
-   if (ENABLE_COMMIT_MAP_TABLE)
-   {
-      val committed_free_list = Reg(init=(~Bits(1,num_phys_registers)))
-
-      val com_mask = Wire(Vec(pl_width, Bits(width=num_phys_registers)))
-      val stale_mask = Wire(Vec(pl_width, Bits(width=num_phys_registers)))
-      for (w <- 0 until pl_width)
-      {
-         com_mask(w) := Bits(0,width=num_phys_registers)
-         stale_mask(w) := Bits(0,width=num_phys_registers)
-         when (io.com_wens(w))
-         {
-            com_mask(w) := UInt(1) << io.com_uops(w).pdst
-            stale_mask(w) := UInt(1) << io.com_uops(w).stale_pdst
-         }
-      }
-
-      committed_free_list := (committed_free_list & ~(com_mask.reduce(_|_))) | stale_mask.reduce(_|_)
-
-      when (io.flush_pipeline)
-      {
-         free_list := committed_free_list
-      }
-      io.debug.isprlist := committed_free_list
-   }
-
-
-
-   // ** SET OUTPUTS ** //
-   io.req_pregs := requested_pregs
-
-   io.can_allocate := allocated
-
-   io.debug.freelist := free_list
-}
-
-
-//-------------------------------------------------------------
-//-------------------------------------------------------------
-
-// internally bypasses newly busy registers (.write) to the read ports (.read)
-// num_operands is the maximum number of operands per instruction (.e.g., 2 normally, but 3 if FMAs are supported)
-class BusyTableIo(pipeline_width:Int, num_read_ports:Int, num_wb_ports:Int)(implicit p: Parameters) extends BoomBundle()(p)
-{
-   // reading out the busy bits
-   val p_rs           = Vec(num_read_ports, UInt(width=PREG_SZ)).asInput
-   val p_rs_busy      = Vec(num_read_ports, Bool()).asOutput
-
-   def prs(i:Int, w:Int):UInt      = p_rs     (w+i*pipeline_width)
-   def prs_busy(i:Int, w:Int):Bool = p_rs_busy(w+i*pipeline_width)
-
-   // marking new registers as busy
-   val allocated_pdst = Vec(pipeline_width, new ValidIO(UInt(width=PREG_SZ))).flip
-
-   // marking registers being written back as unbusy
-   val unbusy_pdst    = Vec(num_wb_ports, new ValidIO(UInt(width = PREG_SZ))).flip
-
-   val debug = new Bundle { val bsy_table= Bits(width=PHYS_REG_COUNT).asOutput }
-}
-
-// Register P0 is always NOT_BUSY, and cannot be set to BUSY
-// Note: I do NOT bypass from newly busied registers to the read ports.
-// That bypass check should be done elsewhere (this is to get it off the
-// critical path).
-class BusyTable(pipeline_width:Int, num_read_ports:Int, num_wb_ports:Int)(implicit p: Parameters) extends BoomModule()(p)
-{
-   val io = new BusyTableIo(pipeline_width, num_read_ports, num_wb_ports)
-
-   def BUSY     = Bool(true)
-   def NOT_BUSY = Bool(false)
-
-   //TODO BUG chisel3
-   //val table_bsy = Reg(init=Bits(0,PHYS_REG_COUNT))
-   val table_bsy = Reg(init=Vec.fill(PHYS_REG_COUNT){Bool(false)})
-
-   for (wb_idx <- 0 until num_wb_ports)
-   {
-      when (io.unbusy_pdst(wb_idx).valid)
-      {
-         table_bsy(io.unbusy_pdst(wb_idx).bits) := NOT_BUSY
-      }
-   }
-
-   for (w <- 0 until pipeline_width)
-   {
-      when (io.allocated_pdst(w).valid && io.allocated_pdst(w).bits =/= UInt(0))
-      {
-         table_bsy(io.allocated_pdst(w).bits) := BUSY
-      }
-   }
-
-   // handle bypassing a clearing of the busy-bit
-   for (ridx <- 0 until num_read_ports)
-   {
-      val just_cleared = io.unbusy_pdst.map(p => p.valid && (p.bits === io.p_rs(ridx))).reduce(_|_)
-      // note: no bypassing of the newly busied (that is done outside this module)
-      io.p_rs_busy(ridx) := (table_bsy(io.p_rs(ridx)) && !just_cleared)
-   }
-
-   io.debug.bsy_table := table_bsy.toBits
-}
-
-//-------------------------------------------------------------
-//-------------------------------------------------------------
-//-------------------------------------------------------------
-//-------------------------------------------------------------
-
-class RenameStageIO(pl_width: Int, num_wb_ports: Int)(implicit p: Parameters) extends BoomBundle()(p)
-{
-   val ren_mask  = Vec(pl_width, Bool().asOutput) // mask of valid instructions
    val inst_can_proceed = Vec(pl_width, Bool()).asOutput
 
    val kill      = Bool(INPUT)
 
-   val dec_mask  = Vec(pl_width, Bool()).asInput
-
+   val dec_will_fire = Vec(pl_width, Bool()).asInput // will commit state updates
    val dec_uops  = Vec(pl_width, new MicroOp()).asInput
-   val ren_uops  = Vec(pl_width, new MicroOp().asOutput)
 
-   val ren_pred_info = new BranchPredictionResp().asInput
+   // physical specifiers now available (but not the busy/ready status of the operands).
+   val ren1_mask = Vec(pl_width, Bool().asOutput) // mask of valid instructions
+   val ren1_uops = Vec(pl_width, new MicroOp().asOutput)
+
+   // physical specifiers available AND busy/ready status available.
+   val ren2_mask  = Vec(pl_width, Bool().asOutput) // mask of valid instructions
+   val ren2_uops  = Vec(pl_width, new MicroOp().asOutput)
+
+   val ren_pred_info = Vec(pl_width, new BranchPredInfo()).asInput
 
    // branch resolution (execute)
    val brinfo    = new BrResolutionInfo().asInput
@@ -441,275 +58,92 @@ class RenameStageIO(pl_width: Int, num_wb_ports: Int)(implicit p: Parameters) ex
    val dis_inst_can_proceed = Vec(DISPATCH_WIDTH, Bool()).asInput
 
    // issue stage (fast wakeup)
-   val wb_valids = Vec(num_wb_ports, Bool()).asInput
-   val wb_pdsts  = Vec(num_wb_ports, UInt(width=PREG_SZ)).asInput
+   val int_wakeups = Vec(num_int_wb_ports, Valid(new ExeUnitResp(xLen))).flip
+   val fp_wakeups = Vec(num_fp_wb_ports, Valid(new ExeUnitResp(fLen+1))).flip
 
    // commit stage
    val com_valids = Vec(pl_width, Bool()).asInput
    val com_uops   = Vec(pl_width, new MicroOp()).asInput
    val com_rbk_valids = Vec(pl_width, Bool()).asInput
 
-   val flush_pipeline = Bool(INPUT) // TODO only used for SCR (single-cycle reset)
+   val flush_pipeline = Bool(INPUT) // only used for SCR (single-cycle reset)
 
-   val debug = new DebugRenameStageIO().asOutput
+   val debug_rob_empty = Bool(INPUT)
+   val debug = new DebugRenameStageIO(num_int_pregs, num_fp_pregs).asOutput
 }
 
-class DebugRenameStageIO(implicit p: Parameters) extends BoomBundle()(p)
+
+class DebugRenameStageIO(int_num_pregs: Int, fp_num_pregs: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
-   val freelist = Bits(width=PHYS_REG_COUNT)
-   val isprlist = Bits(width=PHYS_REG_COUNT)
-   val bsy_table = UInt(width=PHYS_REG_COUNT)
+   val ifreelist = Bits(width=int_num_pregs)
+   val iisprlist = Bits(width=int_num_pregs)
+   val ibusytable = UInt(width=int_num_pregs)
+   val ffreelist = Bits(width=fp_num_pregs)
+   val fisprlist = Bits(width=fp_num_pregs)
+   val fbusytable = UInt(width=fp_num_pregs)
+   override def cloneType: this.type = new DebugRenameStageIO(int_num_pregs, fp_num_pregs).asInstanceOf[this.type]
 }
 
-class RenameStage(pl_width: Int, num_wb_ports: Int)(implicit p: Parameters) extends BoomModule()(p)
+
+class RenameStage(
+   pl_width: Int,
+   num_int_wb_ports: Int,
+   num_fp_wb_ports: Int)
+(implicit p: Parameters) extends BoomModule()(p)
 {
-   val io = new RenameStageIO(pl_width, num_wb_ports)
+   val io = new RenameStageIO(pl_width, numIntPhysRegs, numFpPhysRegs, num_int_wb_ports, num_fp_wb_ports)
 
-   val ren_br_vals = Wire(Vec(pl_width, Bool()))
-   val freelist_can_allocate = Wire(Vec(pl_width, Bool()))
+   // integer registers
+   val imaptable = Module(new RenameMapTable(
+      pl_width,
+      RT_FIX.litValue,
+      32,
+      numIntPhysRegs))
+   val ifreelist = Module(new RenameFreeList(
+      pl_width,
+      RT_FIX.litValue,
+      numIntPhysRegs))
+   val ibusytable = Module(new BusyTable(
+      pl_width,
+      RT_FIX.litValue,
+      num_pregs = numIntPhysRegs,
+      num_read_ports = pl_width*2,
+      num_wb_ports = num_int_wb_ports))
 
-   val max_operands = if(usingFPU) 3 else 2
+   // floating point registers
+   val fmaptable = Module(new RenameMapTable(
+      pl_width,
+      RT_FLT.litValue,
+      32,
+      numFpPhysRegs))
+   val ffreelist = Module(new RenameFreeList(
+      pl_width,
+      RT_FLT.litValue,
+      numFpPhysRegs))
+   val fbusytable = Module(new BusyTable(
+      pl_width,
+      RT_FLT.litValue,
+      num_pregs = numFpPhysRegs,
+      num_read_ports = pl_width*3,
+      num_wb_ports = num_fp_wb_ports))
 
    //-------------------------------------------------------------
-   // Set outputs up... we'll write in the pop*/pdst info below
-   for (w <- 0 until pl_width)
-   {
-      io.ren_mask(w)         := io.dec_mask(w) && io.inst_can_proceed(w) && !io.kill
-      io.ren_uops(w)         := io.dec_uops(w)
-      io.ren_uops(w).br_mask := GetNewBrMask(io.brinfo, io.dec_uops(w))
-      ren_br_vals(w)         := Mux(io.dec_mask(w), io.dec_uops(w).allocate_brtag, Bool(false))
-   }
+   // Pipeline State & Wires
 
+   val ren1_br_vals   = Wire(Vec(pl_width, Bool()))
+   val ren1_will_fire = Wire(Vec(pl_width, Bool()))
+   val ren1_uops      = Wire(Vec(pl_width, new MicroOp()))
 
-   //-------------------------------------------------------------
-   // Rename Table
-
-   val map_table_io = Vec.fill(LOGICAL_REG_COUNT) { Module(new RenameMapTableElement(DECODE_WIDTH)).io }
-
-   for (i <- 0 until LOGICAL_REG_COUNT)
-   {
-      map_table_io(i).rollback_wen := Bool(false)
-      map_table_io(i).rollback_stale_pdst := io.com_uops(0).stale_pdst
-
-      map_table_io(i).commit_wen := Bool(false)
-      map_table_io(i).commit_pdst := io.com_uops(0).pdst
-
-      for (w <- 0 until pl_width)
-      {
-         map_table_io(i).wens(w)        := io.ren_uops(w).ldst === UInt(i) &&
-                                           io.ren_mask(w) &&
-                                           io.ren_uops(w).ldst_val &&
-                                           (io.ren_uops(w).dst_rtype === RT_FIX ||
-                                             io.ren_uops(w).dst_rtype === RT_FLT) &&
-                                           !io.kill &&
-                                           io.inst_can_proceed(w) &&
-                                           freelist_can_allocate(w)
-         map_table_io(i).ren_pdsts(w)   := io.ren_uops(w).pdst
-
-         map_table_io(i).ren_br_vals(w) := ren_br_vals(w)
-         map_table_io(i).ren_br_tags(w) := io.ren_uops(w).br_tag
-      }
-
-      map_table_io(i).br_mispredict     := io.brinfo.mispredict
-      map_table_io(i).br_mispredict_tag := io.brinfo.tag
-
-      map_table_io(i).flush_pipeline    := io.flush_pipeline
-   }
-
-   // backwards, because rollback must give highest priority to 0 (the oldest instruction)
-   for (w <- pl_width-1 to 0 by -1)
-   {
-      val ldst = io.com_uops(w).ldst
-
-      when (io.com_rbk_valids(w))
-      {
-         map_table_io(ldst).rollback_wen        := Bool(true)
-         map_table_io(ldst).rollback_stale_pdst := io.com_uops(w).stale_pdst
-      }
-   }
-
-   if (ENABLE_COMMIT_MAP_TABLE)
-   {
-      for (w <- 0 until pl_width)
-      {
-         val ldst = io.com_uops(w).ldst
-         when (io.com_valids(w) && (io.com_uops(w).dst_rtype === RT_FIX || io.com_uops(w).dst_rtype === RT_FLT))
-         {
-            map_table_io(ldst).commit_wen := Bool(true)
-            map_table_io(ldst).commit_pdst := io.com_uops(w).pdst
-         }
-      }
-   }
-
-   // read out the map-table entries ASAP, then deal with bypassing busy-bits later
-   private val map_table_output = Wire(Vec(pl_width*3, UInt(width=PREG_SZ)))
-   def map_table_prs1(w:Int) = map_table_output(w+0*pl_width)
-   def map_table_prs2(w:Int) = map_table_output(w+1*pl_width)
-   def map_table_prs3(w:Int) = map_table_output(w+2*pl_width)
-
+   val ren2_valids    = Wire(Vec(pl_width, Bool()))
+   val ren2_uops      = Wire(Vec(pl_width, new MicroOp()))
 
    for (w <- 0 until pl_width)
    {
-      map_table_prs1(w) := map_table_io(io.ren_uops(w).lrs1).element
-      map_table_prs2(w) := map_table_io(io.ren_uops(w).lrs2).element
-      if (max_operands > 2)
-         map_table_prs3(w) := map_table_io(io.ren_uops(w).lrs3).element
-      else
-         map_table_prs3(w) := UInt(0)
+      // TODO silly, we've already verified this beforehand on the inst_can_proceed
+      ren1_will_fire(w) := io.dec_will_fire(w) && io.inst_can_proceed(w) && !io.kill
+      ren1_uops(w)      := GetNewUopAndBrMask(io.dec_uops(w), io.brinfo)
+      ren1_br_vals(w)   := io.dec_will_fire(w) && io.dec_uops(w).allocate_brtag
    }
-
-   // Bypass the physical register mappings
-   val prs1_was_bypassed = Wire(Vec(pl_width, Bool()))
-   val prs2_was_bypassed = Wire(Vec(pl_width, Bool()))
-   val prs3_was_bypassed = Wire(Vec(pl_width, Bool()))
-
-   for (w <- 0 until pl_width)
-   {
-      var rs1_cases =  Array((Bool(false),  UInt(0,PREG_SZ)))
-      var rs2_cases =  Array((Bool(false),  UInt(0,PREG_SZ)))
-      var rs3_cases =  Array((Bool(false),  UInt(0,PREG_SZ)))
-      var stale_cases= Array((Bool(false),  UInt(0,PREG_SZ)))
-
-      prs1_was_bypassed(w) := Bool(false)
-      prs2_was_bypassed(w) := Bool(false)
-      prs3_was_bypassed(w) := Bool(false)
-
-      // Handle bypassing new physical destinations to operands (and stale destination)
-      // scalastyle:off
-      for (xx <- w-1 to 0 by -1)
-      {
-         rs1_cases  ++= Array(((io.ren_uops(w).lrs1_rtype === RT_FIX || io.ren_uops(w).lrs1_rtype === RT_FLT)
-                                                                 && io.ren_mask(xx) && io.ren_uops(xx).ldst_val && (io.ren_uops(w).lrs1 === io.ren_uops(xx).ldst), (io.ren_uops(xx).pdst)))
-         rs2_cases  ++= Array(((io.ren_uops(w).lrs2_rtype === RT_FIX || io.ren_uops(w).lrs2_rtype === RT_FLT)
-                                                                 && io.ren_mask(xx) && io.ren_uops(xx).ldst_val && (io.ren_uops(w).lrs2 === io.ren_uops(xx).ldst), (io.ren_uops(xx).pdst)))
-         rs3_cases  ++= Array((io.ren_uops(w).frs3_en            && io.ren_mask(xx) && io.ren_uops(xx).ldst_val && (io.ren_uops(w).lrs3 === io.ren_uops(xx).ldst), (io.ren_uops(xx).pdst)))
-         stale_cases++= Array(( io.ren_uops(w).ldst_val          && io.ren_mask(xx) && io.ren_uops(xx).ldst_val && (io.ren_uops(w).ldst === io.ren_uops(xx).ldst), (io.ren_uops(xx).pdst)))
-
-         when ((io.ren_uops(w).lrs1_rtype === RT_FIX || io.ren_uops(w).lrs1_rtype === RT_FLT) && io.ren_mask(xx) && io.ren_uops(xx).ldst_val && (io.ren_uops(w).lrs1 === io.ren_uops(xx).ldst))
-            { prs1_was_bypassed(w) := Bool(true) }
-         when ((io.ren_uops(w).lrs2_rtype === RT_FIX || io.ren_uops(w).lrs2_rtype === RT_FLT) && io.ren_mask(xx) && io.ren_uops(xx).ldst_val && (io.ren_uops(w).lrs2 === io.ren_uops(xx).ldst))
-            { prs2_was_bypassed(w) := Bool(true) }
-         when (io.ren_uops(w).frs3_en                                                         && io.ren_mask(xx) && io.ren_uops(xx).ldst_val && (io.ren_uops(w).lrs3 === io.ren_uops(xx).ldst))
-            { prs3_was_bypassed(w) := Bool(true) }
-      }
-
-      // add default case where we can just read the map table for our information
-      rs1_cases ++= Array(((io.ren_uops(w).lrs1_rtype === RT_FIX || io.ren_uops(w).lrs1_rtype === RT_FLT) &&
-                           (io.ren_uops(w).lrs1 =/= UInt(0)), map_table_prs1(w)))
-      rs2_cases ++= Array(((io.ren_uops(w).lrs2_rtype === RT_FIX || io.ren_uops(w).lrs2_rtype === RT_FLT) &&
-                           (io.ren_uops(w).lrs2 =/= UInt(0)), map_table_prs2(w)))
-      rs3_cases ++= Array((io.ren_uops(w).frs3_en  && 
-                           (io.ren_uops(w).lrs3 =/= UInt(0)), map_table_prs3(w)))
-
-      io.ren_uops(w).pop1                       := MuxCase(io.ren_uops(w).lrs1, rs1_cases)
-      io.ren_uops(w).pop2                       := MuxCase(io.ren_uops(w).lrs2, rs2_cases)
-      if (max_operands > 2){io.ren_uops(w).pop3 := MuxCase(io.ren_uops(w).lrs3, rs3_cases)}
-      io.ren_uops(w).stale_pdst                 := MuxCase(map_table_io(io.ren_uops(w).ldst).element, stale_cases)
-
-   }
-
-
-   //-------------------------------------------------------------
-   // Busy Table
-
-   val freelist_req_pregs = Wire(Vec(pl_width, UInt(width=PREG_SZ)))
-
-   // 3 WB ports for now
-   // 1st is back-to-back bypassable ALU ops
-   // 2nd is memory/muldiv
-   // TODO 3rd is ALU ops that aren't bypassable... can maybe remove this? or set TTL countdown on 1st port?
-   // TODO optimize - too many write ports, but how to deal with that? (slow + fast...)
-   val bsy_table = Module(new BusyTable(pipeline_width=pl_width, num_read_ports = pl_width*max_operands, num_wb_ports=num_wb_ports))
-
-      for (w <- 0 until pl_width)
-      {
-         // Reading the Busy Bits
-         // for critical path reasons, we speculatively read out the busy-bits assuming no dependencies between uops
-         // then verify if the uop actually uses a register and if it depends on a newly unfreed register
-         bsy_table.io.prs(0,w) := map_table_prs1(w)
-         bsy_table.io.prs(1,w) := map_table_prs2(w)
-
-         io.ren_uops(w).prs1_busy := (io.ren_uops(w).lrs1_rtype === RT_FIX || io.ren_uops(w).lrs1_rtype === RT_FLT) && (bsy_table.io.prs_busy(0,w) || prs1_was_bypassed(w))
-         io.ren_uops(w).prs2_busy := (io.ren_uops(w).lrs2_rtype === RT_FIX || io.ren_uops(w).lrs2_rtype === RT_FLT) && (bsy_table.io.prs_busy(1,w) || prs2_was_bypassed(w))
-
-         if (max_operands > 2)
-         {
-            bsy_table.io.prs(2,w) := map_table_prs3(w)
-            io.ren_uops(w).prs3_busy := (io.ren_uops(w).frs3_en) && (bsy_table.io.prs_busy(2,w) || prs3_was_bypassed(w))
-         }
-         else
-         {
-            io.ren_uops(w).prs3_busy := Bool(false)
-         }
-
-
-          // Updating the Table (new busy register)
-         bsy_table.io.allocated_pdst(w).valid := freelist_can_allocate(w) &&
-                                                  io.ren_mask(w) &&
-                                                  io.ren_uops(w).ldst_val &&
-                                                  (io.ren_uops(w).dst_rtype === RT_FIX || io.ren_uops(w).dst_rtype === RT_FLT)
-         bsy_table.io.allocated_pdst(w).bits  := freelist_req_pregs(w)
-      }
-
-      // Clear Busy-bit
-      for (i <- 0 until num_wb_ports)
-      {
-         bsy_table.io.unbusy_pdst(i).valid := io.wb_valids(i)
-         bsy_table.io.unbusy_pdst(i).bits  := io.wb_pdsts(i)
-      }
-
-   // scalastyle:on
-
-   //-------------------------------------------------------------
-   // Free List
-
-   val freelist = Module(new RenameFreeList(PHYS_REG_COUNT, pl_width))
-
-      for (w <- 0 until pl_width)
-      {
-         freelist.io.req_preg_vals(w) := (io.inst_can_proceed(w) &&
-                                         !io.kill &&
-                                         io.ren_mask(w) &&
-                                         io.ren_uops(w).ldst_val &&
-                                         (io.ren_uops(w).dst_rtype === RT_FIX || io.ren_uops(w).dst_rtype === RT_FLT))
-      }
-      freelist_req_pregs := freelist.io.req_pregs
-
-      for (w <- 0 until pl_width)
-      {
-         freelist.io.enq_vals(w)    := io.com_valids(w) &&
-                                       (io.com_uops(w).dst_rtype === RT_FIX || io.com_uops(w).dst_rtype === RT_FLT) &&
-                                       (io.com_uops(w).stale_pdst =/= UInt(0))
-         freelist.io.enq_pregs(w)   := io.com_uops(w).stale_pdst
-
-         freelist.io.ren_br_vals(w) := ren_br_vals(w)
-         freelist.io.ren_br_tags(w) := io.ren_uops(w).br_tag
-
-         freelist_can_allocate(w)   := freelist.io.can_allocate(w)
-
-         freelist.io.rollback_wens(w)  := io.com_rbk_valids(w) &&
-                                        (io.com_uops(w).pdst =/= UInt(0)) &&
-                                        (io.com_uops(w).dst_rtype === RT_FIX || io.com_uops(w).dst_rtype === RT_FLT)
-         freelist.io.rollback_pdsts(w) := io.com_uops(w).pdst
-
-         freelist.io.com_wens(w)    := io.com_valids(w) &&
-                                       (io.com_uops(w).pdst =/= UInt(0)) &&
-                                       (io.com_uops(w).dst_rtype === RT_FIX || io.com_uops(w).dst_rtype === RT_FLT)
-         freelist.io.com_uops(w)    := io.com_uops(w)
-      }
-
-      freelist.io.br_mispredict_val := io.brinfo.mispredict
-      freelist.io.br_mispredict_tag := io.brinfo.tag
-
-      freelist.io.flush_pipeline := io.flush_pipeline
-
-
-   // x0 is a special-case and should not be renamed
-   for (w <- 0 until pl_width)
-   {
-      io.ren_uops(w).pdst := Mux(io.ren_uops(w).ldst === UInt(0), UInt(0), freelist_req_pregs(w))
-   }
-
 
    //-------------------------------------------------------------
    // Branch Predictor Snapshots
@@ -717,41 +151,202 @@ class RenameStage(pl_width: Int, num_wb_ports: Int)(implicit p: Parameters) exte
    // Each branch prediction must snapshot the predictor (history state, etc.).
    // On a mispredict, the snapshot must be used to reset the predictor.
    // TODO use Mem(), but it chokes on the undefines in VCS
-   val prediction_copies = Reg(Vec(MAX_BR_COUNT, new BranchPredictionResp))
+//   val prediction_copies = Reg(Vec(MAX_BR_COUNT, new BranchPredictionResp))
+   // This info is sent to the BRU and deallocated after Execute.
+   val prediction_copies = Reg(Vec(MAX_BR_COUNT, new BranchPredInfo))
 
    for (w <- 0 until pl_width)
    {
-      when(ren_br_vals(w))
-      {
-         prediction_copies(io.ren_uops(w).br_tag) := io.ren_pred_info
+      when(ren1_br_vals(w)) {
+         prediction_copies(ren1_uops(w).br_tag) := io.ren_pred_info(w)
       }
    }
 
    io.get_pred.info := prediction_copies(io.get_pred.br_tag)
 
-   val temp = Wire(new BranchPredictionResp)
+   val temp = Wire(new BranchPredInfo)
    println("\t\tPrediction Snapshots: " + temp.toBits.getWidth + "-bits, " + MAX_BR_COUNT + " entries")
 
    //-------------------------------------------------------------
-   // Outputs
+   // Free List
+
+   for (list <- Seq(ifreelist, ffreelist))
+   {
+      list.io.brinfo := io.brinfo
+      list.io.kill := io.kill
+      list.io.ren_will_fire := ren1_will_fire
+      list.io.ren_uops := ren1_uops
+      list.io.ren_br_vals := ren1_br_vals
+      list.io.com_valids := io.com_valids
+      list.io.com_uops := io.com_uops
+      list.io.com_rbk_valids := io.com_rbk_valids
+      list.io.flush_pipeline := io.flush_pipeline
+      list.io.debug_rob_empty := io.debug_rob_empty
+   }
+
+   for ((uop, w) <- ren1_uops.zipWithIndex)
+   {
+      val i_preg = ifreelist.io.req_pregs(w)
+      val f_preg = ffreelist.io.req_pregs(w)
+      uop.pdst := Mux(uop.dst_rtype === RT_FLT, f_preg, i_preg)
+   }
+
+   //-------------------------------------------------------------
+   // Rename Table
+
+   for (table <- Seq(imaptable, fmaptable))
+   {
+      table.io.brinfo := io.brinfo
+      table.io.kill := io.kill
+      table.io.ren_will_fire := ren1_will_fire
+      table.io.ren_uops := ren1_uops // expects pdst to be set up
+      table.io.ren_br_vals := ren1_br_vals
+      table.io.com_valids := io.com_valids
+      table.io.com_uops := io.com_uops
+      table.io.com_rbk_valids := io.com_rbk_valids
+      table.io.flush_pipeline := io.flush_pipeline
+      table.io.debug_inst_can_proceed := io.inst_can_proceed
+   }
+   imaptable.io.debug_freelist_can_allocate := ifreelist.io.can_allocate
+   fmaptable.io.debug_freelist_can_allocate := ffreelist.io.can_allocate
+
+   for ((uop, w) <- ren1_uops.zipWithIndex)
+   {
+      val imap = imaptable.io.values(w)
+      val fmap = fmaptable.io.values(w)
+
+      uop.pop1       := Mux(uop.lrs1_rtype === RT_FLT, fmap.prs1, imap.prs1)
+      uop.pop2       := Mux(uop.lrs2_rtype === RT_FLT, fmap.prs2, imap.prs2)
+      uop.pop3       := fmaptable.io.values(w).prs3 // only FP has 3rd operand
+      uop.stale_pdst := Mux(uop.dst_rtype === RT_FLT,  fmap.stale_pdst, imap.stale_pdst)
+   }
+
+   //-------------------------------------------------------------
+   // pipeline registers
+
+   val ren2_will_fire = ren2_valids zip io.dis_inst_can_proceed map {case (v,c) => v && c && !io.kill}
+
+   // will ALL ren2 uops proceed to dispatch?
+   val ren2_will_proceed = 
+      if (renameLatency == 2) (ren2_valids zip ren2_will_fire map {case (v,f) => (v === f)}).reduce(_&_)
+      else io.dis_inst_can_proceed.reduce(_&_)
+
+
+
+   val ren2_imapvalues = if (renameLatency == 2) RegEnable(imaptable.io.values, ren2_will_proceed)
+                         else imaptable.io.values
+   val ren2_fmapvalues = if (renameLatency == 2) RegEnable(fmaptable.io.values, ren2_will_proceed)
+                         else fmaptable.io.values
+
    for (w <- 0 until pl_width)
    {
-      // TODO REFACTOR, make == rt_x?
-      io.inst_can_proceed(w) := (freelist.io.can_allocate(w) ||
-                                 (io.ren_uops(w).dst_rtype =/= RT_FIX && io.ren_uops(w).dst_rtype =/= RT_FLT)) &&
-                                io.dis_inst_can_proceed(w)
+      if (renameLatency == 1)
+      {
+         ren2_valids(w) := ren1_will_fire(w)
+         ren2_uops(w)   := GetNewUopAndBrMask(ren1_uops(w), io.brinfo)
+      }
+      else
+      {
+         require (renameLatency == 2)
+         val r_valids = Reg(Vec.fill(pl_width) {Bool(false)})
+         val r_uops   = Reg(Vec(pl_width, new MicroOp()))
+
+         when (io.kill)
+         {
+            r_valids(w) := Bool(false)
+         }
+         .elsewhen (ren2_will_proceed)
+         {
+            r_valids(w) := ren1_will_fire(w)
+            r_uops(w) := GetNewUopAndBrMask(ren1_uops(w), io.brinfo)
+         }
+         .otherwise
+         {
+            r_valids(w) := r_valids(w) && !ren2_will_fire(w) // clear bit if uop gets dispatched
+            r_uops(w) := GetNewUopAndBrMask(r_uops(w), io.brinfo)
+         }
+
+         ren2_valids(w) := r_valids(w)
+         ren2_uops  (w) := r_uops(w)
+      }
+   }
+
+   //-------------------------------------------------------------
+   // Busy Table
+
+   ibusytable.io.ren_will_fire := ren2_will_fire
+   ibusytable.io.ren_uops := ren2_uops  // expects pdst to be set up.
+   ibusytable.io.map_table := ren2_imapvalues
+   ibusytable.io.wb_valids := io.int_wakeups.map(_.valid)
+   ibusytable.io.wb_pdsts := io.int_wakeups.map(_.bits.uop.pdst)
+
+   assert (!(io.int_wakeups.map(x => x.valid && x.bits.uop.dst_rtype =/= RT_FIX).reduce(_|_)),
+      "[rename] int wakeup is not waking up a Int register.")
+
+   for (w <- 0 until pl_width)
+   {
+      assert (!(
+         ren2_will_fire(w) &&
+         ren2_uops(w).lrs1_rtype === RT_FIX &&
+         ren2_uops(w).pop1 =/= ibusytable.io.map_table(w).prs1),
+         "[rename] ren2 maptable prs1 value don't match uop's values.")
+      assert (!(
+         ren2_will_fire(w) &&
+         ren2_uops(w).lrs2_rtype === RT_FIX &&
+         ren2_uops(w).pop2 =/= ibusytable.io.map_table(w).prs2),
+         "[rename] ren2 maptable prs2 value don't match uop's values.")
+   }
+
+   fbusytable.io.ren_will_fire := ren2_will_fire
+   fbusytable.io.ren_uops := ren2_uops  // expects pdst to be set up.
+   fbusytable.io.map_table := ren2_fmapvalues
+   fbusytable.io.wb_valids := io.fp_wakeups.map(_.valid)
+   fbusytable.io.wb_pdsts := io.fp_wakeups.map(_.bits.uop.pdst)
+
+   assert (!(io.fp_wakeups.map(x => x.valid && x.bits.uop.dst_rtype =/= RT_FLT).reduce(_|_)),
+      "[rename] fp wakeup is not waking up a FP register.")
+
+   for ((uop, w) <- ren2_uops.zipWithIndex)
+   {
+      val ibusy = ibusytable.io.values(w)
+      val fbusy = fbusytable.io.values(w)
+      uop.prs1_busy := Mux(uop.lrs1_rtype === RT_FLT, fbusy.prs1_busy, ibusy.prs1_busy)
+      uop.prs2_busy := Mux(uop.lrs2_rtype === RT_FLT, fbusy.prs2_busy, ibusy.prs2_busy)
+      uop.prs3_busy := fbusy.prs3_busy
+
+      val valid = ren2_valids(w)
+      assert (!(valid && ibusy.prs1_busy && uop.lrs1_rtype === RT_FIX && uop.lrs1 === UInt(0)), "[rename] x0 is busy??")
+      assert (!(valid && ibusy.prs2_busy && uop.lrs2_rtype === RT_FIX && uop.lrs2 === UInt(0)), "[rename] x0 is busy??")
+   }
+
+   //-------------------------------------------------------------
+   // Outputs
+
+   io.ren1_mask := ren1_will_fire
+   io.ren1_uops := ren1_uops
+
+   io.ren2_mask := ren2_will_fire
+   io.ren2_uops := ren2_uops map {u => GetNewUopAndBrMask(u, io.brinfo)}
+
+   for (w <- 0 until pl_width)
+   {
+      // Push back against Decode stage if Rename1 can't proceed (and Rename2/Dispatch can't receive).
+      io.inst_can_proceed(w) :=
+         ren2_will_proceed &&
+         ((ren1_uops(w).dst_rtype =/= RT_FIX && ren1_uops(w).dst_rtype =/= RT_FLT) ||
+         (ifreelist.io.can_allocate(w) && ren1_uops(w).dst_rtype === RT_FIX) ||
+         (ffreelist.io.can_allocate(w) && ren1_uops(w).dst_rtype === RT_FLT))
    }
 
 
    //-------------------------------------------------------------
    // Debug signals
 
-   io.debug.freelist  := freelist.io.debug.freelist
-   io.debug.isprlist  := freelist.io.debug.isprlist
-   io.debug.bsy_table := bsy_table.io.debug.bsy_table
-}
-
-
-
+   io.debug.ifreelist  := ifreelist.io.debug.freelist
+   io.debug.iisprlist  := ifreelist.io.debug.isprlist
+   io.debug.ibusytable := ibusytable.io.debug.busytable
+   io.debug.ffreelist  := ffreelist.io.debug.freelist
+   io.debug.fisprlist  := ffreelist.io.debug.isprlist
+   io.debug.fbusytable := fbusytable.io.debug.busytable
 }
 

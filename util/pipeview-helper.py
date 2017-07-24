@@ -32,21 +32,64 @@
 
 # The o3-pipeview.py tool expects to see each instruction's time stamps printed
 # contigiously.
+#
+# NOTE: the o3-pipeview.py tool will print out different stages contigiously
+# even if they occurred simultaneously. Example: if decode, rename, and dispatch
+# occur on the same cycle, they will be printed as if they appeared on 3
+# contigiously, separate cycles. This pipeview-helper tool will SQUASH the later
+# stages if they occurred on the same cycle as previous "stages".
+
 
 # TODO:
 #   implement lists as hash tables
 #   verify there's no key collision once using hash tables
 
 import optparse
+import sys
 
 from collections import deque
 
 def getFSeqNum(line, idx):
     return int(line[0:idx])
 
-# remove the fseq number and print the line
+# remove the fseq number and print the line.
 def writeOutput(line, idx):
     print line[idx+2:],
+
+# remove the fseq number and print the line.
+# Also finds and returns which cycle this event occurred.
+# If its cycle matches the previous event, we supress the print.
+def writeOutputDecode(line, idx):
+    cycle = int(line[idx+2+19:])
+#    debug_cycle = int(line[idx+2:].split(':')[2])
+#    assert cycle==debug_cycle
+    print line[idx+2:],
+    return cycle
+
+# remove the fseq number and print the line.
+# Also finds and returns which cycle this event occurred.
+# If its cycle matches the previous event, we supress the print.
+def writeOutputRename(line, idx, prev_cycle):
+    cycle = int(line[idx+2+19:])
+#    debug_cycle = int(line[idx+2:].split(':')[2])
+#    assert cycle==debug_cycle
+    if cycle == prev_cycle:
+        print "O3PipeView:rename: 0"
+    else:
+        print line[idx+2:],
+    return cycle
+
+# remove the fseq number and print the line.
+# Also finds and returns which cycle this event occurred.
+# If its cycle matches the previous event, we supress the print.
+def writeOutputDispatch(line, idx, prev_cycle):
+    cycle = int(line[idx+2+21:])
+#    debug_cycle = int(line[idx+2:].split(':')[2])
+#    assert cycle==debug_cycle
+    if cycle == prev_cycle:
+        print "O3PipeView:dispatch: 0"
+    else:
+        print line[idx+2:],
 
 # re-create the proper output from the retire message and
 # the store-comp message
@@ -87,12 +130,21 @@ def generate_pipeview_file(log):
     lines = log.readlines()
 
     # find fetch sequence number separator, and cache result
-    idx = lines[0].find(';')
-    assert (idx != -1), "Couldn't find fseq number. Has the file been properly generated?"
+    idx = -1
+    while True:
+        if not lines:
+            sys.exit("Error: file contains no pipetrace info.")
+        idx = lines[0].find(';')
+        if idx != -1:
+            break
+        else:
+            lines.pop(0)
 
     # in-order stages get to use queues
     q_if  = deque()
     q_dec = deque()
+    q_ren = deque()
+    q_dis = deque()
     # out-of-order stages must use lists
     l_iss = []
     l_wb  = []
@@ -102,14 +154,18 @@ def generate_pipeview_file(log):
     # as they occur after the store retires and thus don't fit neatly
     # into our for loop below
     l_stc = [line for line in lines if "store-comp" in line]
-    # cache the s_idx value
-    s_idx = l_stc[0].find(':')
+    # cache the s_idx value (if there are any stores in program)
+    if l_stc: s_idx = l_stc[0].find(':')
 
     for line in lines:
         if "fetch" in line:
             q_if.append(line)
         elif "decode" in line:
             q_dec.append(line)
+        elif "rename" in line:
+            q_ren.append(line)
+        elif "dispatch" in line:
+            q_dis.append(line)
         elif "issue" in line:
             l_iss.append(line)
         elif "complete" in line:
@@ -125,9 +181,9 @@ def generate_pipeview_file(log):
                     # (they'll be the head of all of the in-order queues)
                     fetch = q_if.popleft()
                     writeOutput(fetch, idx)
-                    writeOutput(q_dec.popleft(), idx)
-                    print "O3PipeView:rename: 0"
-                    print "O3PipeView:dispatch: 0"
+                    c = writeOutputDecode(q_dec.popleft(), idx)
+                    c = writeOutputRename(q_ren.popleft(), idx, c)
+                    writeOutputDispatch(q_dis.popleft(), idx, c)
                     findAndPrintEvent(fetch_id, l_iss, "issue", idx)
                     findAndPrintEvent(fetch_id, l_wb, "complete", idx)
                     if isStore(fetch):
@@ -138,15 +194,20 @@ def generate_pipeview_file(log):
                 else:
                     # print out misspeculated instruction
                     writeOutput(q_if.popleft(), idx)
+                    c = 0
                     if q_dec and fetch_id == getFSeqNum(q_dec[0], idx):
-                        writeOutput(q_dec.popleft(), idx)
+                        c = writeOutputDecode(q_dec.popleft(), idx)
+                    else:
+                        print "O3PipeView:decode: 0"
+                    if q_ren and fetch_id == getFSeqNum(q_ren[0], idx):
+                        c = writeOutputRename(q_ren.popleft(), idx, c)
+                    else:
                         print "O3PipeView:rename: 0"
-                        print "O3PipeView:dispatch: 0"
+                    if q_dis and fetch_id == getFSeqNum(q_dis[0], idx):
+                        writeOutputDispatch(q_dis.popleft(), idx, c)
                         findAndPrintEvent(fetch_id, l_iss, "issue", idx)
                         findAndPrintEvent(fetch_id, l_wb, "complete", idx)
                     else:
-                        print "O3PipeView:decode: 0"
-                        print "O3PipeView:rename: 0"
                         print "O3PipeView:dispatch: 0"
                         assert not findAndPrintEvent(fetch_id, l_iss, "issue", idx), \
                             "Found issue time stamp with no corresponding decode"

@@ -32,7 +32,6 @@ class RegisterReadIO(
 
    // interface with register file's read ports
    val rf_read_ports = Vec(num_total_read_ports, new RegisterFileReadPortIO(PREG_SZ, register_width)).flip
-//   val rf_read_ports = Vec(num_total_read_ports, new RegisterFileReadPortIO(PREG_SZ, register_width).flip)
 
    val bypass = new BypassData(num_total_bypass_ports, register_width).asInput
 
@@ -81,8 +80,14 @@ class RegisterRead(
       rrd_decode_unit.io.iss_valid := io.iss_valids(w)
       rrd_decode_unit.io.iss_uop   := io.iss_uops(w)
 
-      rrd_valids(w) := rrd_decode_unit.io.rrd_valid
-      rrd_uops(w)   := rrd_decode_unit.io.rrd_uop
+      if (regreadLatency == 1) {
+         rrd_valids(w) := RegNext(rrd_decode_unit.io.rrd_valid &&
+                           !IsKilledByBranch(io.brinfo, rrd_decode_unit.io.rrd_uop))
+         rrd_uops(w)   := RegNext(GetNewUopAndBrMask(rrd_decode_unit.io.rrd_uop, io.brinfo))
+      } else {
+         rrd_valids(w) := rrd_decode_unit.io.rrd_valid
+         rrd_uops(w)   := rrd_decode_unit.io.rrd_uop
+      }
    }
 
 
@@ -101,9 +106,14 @@ class RegisterRead(
    {
       val num_read_ports = num_read_ports_array(w)
 
-      val rs1_addr = rrd_uops(w).pop1
-      val rs2_addr = rrd_uops(w).pop2
-      val rs3_addr = rrd_uops(w).pop3
+      // NOTE:
+      // If rrdLatency==0, ISS and RRD are in same cycle so this "just works".
+      // If rrdLatency==1, we need to send read address at end of ISS stage,
+      //    in order to get read data back at end of RRD stage.
+      require (regreadLatency == 0 || regreadLatency == 1)
+      val rs1_addr = io.iss_uops(w).pop1
+      val rs2_addr = io.iss_uops(w).pop2
+      val rs3_addr = io.iss_uops(w).pop3
 
       if (num_read_ports > 0) io.rf_read_ports(idx+0).addr := rs1_addr
       if (num_read_ports > 1) io.rf_read_ports(idx+1).addr := rs2_addr
@@ -135,8 +145,9 @@ class RegisterRead(
 
    // NOTES: this code is fairly hard-coded. Sorry.
    // ASSUMPTIONS:
-   //    -rs3 is used for FPU ops which are NOT bypassed (so don't check
+   //    - rs3 is used for FPU ops which are NOT bypassed (so don't check
    //       them!).
+   //    - only bypass integer registers.
 
    val bypassed_rs1_data = Wire(Vec(issue_width, Bits(width = register_width)))
    val bypassed_rs2_data = Wire(Vec(issue_width, Bits(width = register_width)))
@@ -156,9 +167,9 @@ class RegisterRead(
       {
          // can't use "io.bypass.valid(b) since it would create a combinational loop on branch kills"
          rs1_cases ++= Array((io.bypass.valid(b) && (pop1 === io.bypass.uop(b).pdst) && io.bypass.uop(b).ctrl.rf_wen
-            && (lrs1_rtype === RT_FIX || lrs1_rtype === RT_FLT) && (pop1 =/= UInt(0)), io.bypass.data(b)))
+            && io.bypass.uop(b).dst_rtype === RT_FIX && lrs1_rtype === RT_FIX && (pop1 =/= UInt(0)), io.bypass.data(b)))
          rs2_cases ++= Array((io.bypass.valid(b) && (pop2 === io.bypass.uop(b).pdst) && io.bypass.uop(b).ctrl.rf_wen
-            && (lrs2_rtype === RT_FIX || lrs2_rtype === RT_FLT) && (pop2 =/= UInt(0)), io.bypass.data(b)))
+            && io.bypass.uop(b).dst_rtype === RT_FIX && lrs2_rtype === RT_FIX && (pop2 =/= UInt(0)), io.bypass.data(b)))
       }
 
       if (num_read_ports > 0) bypassed_rs1_data(w) := MuxCase(rrd_rs1_data(w), rs1_cases)
