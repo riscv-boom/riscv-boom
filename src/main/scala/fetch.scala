@@ -148,36 +148,29 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
 
    for (w <- 0 until fetch_width)
    {
-      f2_fetch_bundle.bpu_info(w).btb_predicted := false.B
-      f2_fetch_bundle.bpu_info(w).btb_hit       := false.B
+      f2_fetch_bundle.bpu_info(w).btb_blame     := false.B
+      f2_fetch_bundle.bpu_info(w).btb_hit       := io.f2_btb_resp.valid
       f2_fetch_bundle.bpu_info(w).btb_taken     := false.B
-      f2_fetch_bundle.bpu_info(w).bpd_predicted := false.B
-      f2_fetch_bundle.bpu_info(w).bpd_taken     := false.B
+
+      f2_fetch_bundle.bpu_info(w).bpd_blame     := false.B
+      f2_fetch_bundle.bpu_info(w).bpd_hit       := io.f2_bpd_resp.valid
+      f2_fetch_bundle.bpu_info(w).bpd_taken     := io.f2_bpd_resp.bits.takens(w.U)
       f2_fetch_bundle.bpu_info(w).bim_resp      := io.f2_btb_resp.bits.bim_resp
       f2_fetch_bundle.bpu_info(w).bpd_resp      := io.f2_bpd_resp.bits
 
       when (UInt(w) === io.f2_btb_resp.bits.cfi_idx && io.f2_bpu_request.valid && !f2_req.valid)
       {
-         f2_fetch_bundle.bpu_info(w).bpd_predicted := true.B
-         f2_fetch_bundle.bpu_info(w).bpd_taken     := io.f2_bpd_resp.bits.takens(w.U)
+         f2_fetch_bundle.bpu_info(w).bpd_blame := true.B
       }
       .elsewhen (UInt(w) === io.f2_btb_resp.bits.cfi_idx && io.f2_btb_resp.valid && !f2_req.valid)
       {
-         f2_fetch_bundle.bpu_info(w).btb_predicted := true.B
-         f2_fetch_bundle.bpu_info(w).btb_taken := io.f2_btb_resp.bits.taken
+         f2_fetch_bundle.bpu_info(w).btb_blame := true.B
       }
 
       when (UInt(w) === io.f2_btb_resp.bits.cfi_idx && io.f2_btb_resp.valid)
       {
-         f2_fetch_bundle.bpu_info(w).btb_hit := true.B
+         f2_fetch_bundle.bpu_info(w).btb_taken := io.f2_btb_resp.bits.taken
       }
-
-      when (UInt(w) === io.f2_btb_resp.bits.cfi_idx && io.f2_bpd_resp.valid && !f2_req.valid)
-      {
-         f2_fetch_bundle.bpu_info(w).bpd_taken := io.f2_bpd_resp.bits.takens(w.U)
-      }
-
-      assert (!(f2_fetch_bundle.bpu_info(w).btb_predicted && f2_fetch_bundle.bpu_info(w).bpd_predicted))
    }
 
 
@@ -596,7 +589,7 @@ class BranchChecker(fetch_width: Int)(implicit p: Parameters) extends BoomModule
    io.btb_update.bits.pc := io.fetch_pc
    io.btb_update.bits.target := io.jal_targs(jal_idx)
    io.btb_update.bits.taken := true.B
-   io.btb_update.bits.cfi_pc := jal_idx
+   io.btb_update.bits.cfi_pc := jal_idx << log2Up(coreInstBytes)
    io.btb_update.bits.bpd_type := Mux(io.is_call(jal_idx), BpredType.call, BpredType.jump)
    io.btb_update.bits.cfi_type := CfiType.jal
 

@@ -401,18 +401,18 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
          when (pc_sel === PC_PLUS4)
          {
             mispredict :=
-               Mux(uop.br_prediction.wasBTB,
+               Mux(uop.br_prediction.btb_blame,
                   btb_mispredict,
-               Mux(uop.br_prediction.bpd_predicted,
+               Mux(uop.br_prediction.bpd_blame,
                   bpd_mispredict,
                   false.B)) // if neither BTB nor BPD predicted and it's not-taken, then no misprediction occurred.
          }
          when (pc_sel === PC_BRJMP)
          {
             mispredict :=
-               Mux(uop.br_prediction.wasBTB,
+               Mux(uop.br_prediction.btb_blame,
                   btb_mispredict,
-               Mux(uop.br_prediction.bpd_predicted,
+               Mux(uop.br_prediction.bpd_blame,
                   bpd_mispredict,
                   true.B)) // if neither BTB nor BPD predicted and it's taken, then a misprediction occurred.
 
@@ -450,8 +450,8 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
       brinfo.taken          := is_taken
       brinfo.btb_mispredict := btb_mispredict
       brinfo.bpd_mispredict := bpd_mispredict
-      brinfo.btb_made_pred  := uop.br_prediction.wasBTB
-      brinfo.bpd_made_pred  := uop.br_prediction.bpd_predicted
+      brinfo.btb_made_pred  := uop.br_prediction.btb_blame
+      brinfo.bpd_made_pred  := uop.br_prediction.bpd_blame
 
       br_unit.brinfo := brinfo
 
@@ -502,7 +502,7 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
       br_unit.bpd_update.bits.brob_idx         := io.get_rob_pc.curr_brob_idx
       br_unit.bpd_update.bits.taken            := is_taken
       br_unit.bpd_update.bits.mispredict       := mispredict
-      br_unit.bpd_update.bits.bpd_predict_val  := uop.br_prediction.bpd_predicted
+      br_unit.bpd_update.bits.bpd_predict_val  := uop.br_prediction.bpd_hit
       br_unit.bpd_update.bits.bpd_mispredict   := bpd_mispredict
       br_unit.bpd_update.bits.pc               := fetch_pc
       br_unit.bpd_update.bits.br_pc            := uop_pc_
