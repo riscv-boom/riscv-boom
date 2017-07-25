@@ -81,22 +81,31 @@ class BOOMTile(clockSignal: Clock = null, resetSignal: Bool = null)
    icache.io.reset_redundancy <> io.reset_redundancy 
    dcache.resiliency.reset_redundancy <> io.reset_redundancy
    //[pfchiu] core bist
-   val core_bist = Module(new bist.BistTop(20))
+   val core_bist = Module(new bist.BistTop(core_sram_num))
    io.bist <> core_bist.io.bist	
    icache.io.bist_dut <> core_bist.io.sram_ut
    dcache.bist_dut <> core_bist.io.sram_ut
-   for (i <- 0 until 10) {
+   for (i <- 0 until core_sram_num/2) {
      core_bist.io.sram_ut.dout(i) <> icache.io.bist_dut.dout(i) 
      icache.io.bist_dut.en(i) <> core_bist.io.sram_ut.en(i) 
    }
-   for (i <- 0 until 10) {
-     core_bist.io.sram_ut.dout(10+i) <> dcache.bist_dut.dout(i)
-     dcache.bist_dut.en(i) <> core_bist.io.sram_ut.en(10+i) 
+   for (i <- 0 until core_sram_num/2) {
+     core_bist.io.sram_ut.dout(core_sram_num/2+i) <> dcache.bist_dut.dout(i)
+     dcache.bist_dut.en(i) <> core_bist.io.sram_ut.en(core_sram_num/2+i) 
    }
   //[pfchiu] program disable
   io.program_disable <> icache.io.program_disable 
   io.program_disable <> dcache.resiliency.program_disable
   icache.io.program_disable.valid := io.program_disable.valid && io.program_disable.dest === UInt(0)
   dcache.resiliency.program_disable.valid := io.program_disable.valid && io.program_disable.dest === UInt(1)
+
+  //[pfchiu] program bbypass
+ io.program_bbypass <> icache.io.program_bbypass
+
+  //[pfchiu] program dcr
+  io.program_dcr <> icache.io.program_dcr
+  icache.io.program_dcr.valid := io.program_dcr.valid && io.program_dcr.dest === UInt(0)
+  io.program_dcr <> dcache.resiliency.program_dcr
+  dcache.resiliency.program_dcr.valid := io.program_dcr.valid && io.program_dcr.dest === UInt(1)
 }
 
