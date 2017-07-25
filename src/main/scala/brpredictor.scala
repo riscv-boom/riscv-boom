@@ -114,10 +114,10 @@ class BpdUpdate(implicit p: Parameters) extends BoomBundle()(p)
 // Return the desired branch predictor based on the provided parameters.
 object BrPredictor
 {
-   def apply(tileParams: tile.TileParams, boomParams: BoomCoreParams)(implicit p: Parameters): BrPredictor =
+   def apply(boomParams: BoomCoreParams)(implicit p: Parameters): BrPredictor =
    {
-      val rocketParams: rocket.RocketCoreParams = tileParams.core.asInstanceOf[rocket.RocketCoreParams]
-      val fetch_width = rocketParams.fetchWidth
+//      val rocketParams: rocket.RocketCoreParams = tileParams.core.asInstanceOf[rocket.RocketCoreParams]
+      val fetch_width = 2
       val enableCondBrPredictor = boomParams.enableBranchPredictor
 
       var br_predictor: BrPredictor = null

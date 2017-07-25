@@ -107,7 +107,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: cde.Parameters) extend
    // construct all of the modules
 
    val btb = Module(new BTBsa())
-   val bpd = BrPredictor(tileParams, boomParams)
+   val bpd = BrPredictor(boomParams)
 
    btb.io.status_debug := io.status_debug
    bpd.io.status_prv := io.status_prv
