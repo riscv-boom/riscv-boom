@@ -28,7 +28,9 @@ case class BTBsaParameters(
   nSets: Int = 64,
   nWays: Int = 4,
   tagSz: Int = 20,
-  nRAS : Int = 8
+  nRAS : Int = 8,
+  // Extra knobs.
+  bypassCalls: Boolean = true
 )
 
 trait HasBTBsaParameters extends HasBoomCoreParameters
@@ -39,6 +41,7 @@ trait HasBTBsaParameters extends HasBoomCoreParameters
    val tag_sz = btbParams.tagSz
    val idx_sz = log2Ceil(nSets)
    val nRAS = btbParams.nRAS
+   val bypassCalls = btbParams.bypassCalls
 }
 
 // Which predictor should we listen to?
@@ -91,8 +94,8 @@ class BTBsaUpdate(implicit p: Parameters) extends BTBsaBundle()(p)
    val target = UInt(width = vaddrBits)
    val taken = Bool()
    val cfi_pc = UInt(width = vaddrBits)
-	val bpd_type = BpredType()
-	val cfi_type = CfiType()
+   val bpd_type = BpredType()
+   val cfi_type = CfiType()
 }
 
 class BimUpdate(implicit p: Parameters) extends BTBsaBundle()(p)
@@ -253,7 +256,7 @@ class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParamet
       val rout     = data.read(s0_idx, !wen)
       val rtag     = tags.read(s0_idx, !wen)
       hits_oh(w)   := is_valid && (rtag === s1_req_tag)
-		data_out(w)  := rout
+      data_out(w)  := rout
       bim_out(w)   := bim.read(s0_idx)
 
       when (wen)
@@ -318,7 +321,7 @@ class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParamet
 
    // Mux out the winning hit.
    val s1_valid = PopCount(hits_oh) === UInt(1)
-	val s1_data = Mux1H(hits_oh, data_out)
+   val s1_data = Mux1H(hits_oh, data_out)
    val s1_bim_resp = Mux1H(hits_oh, bim_out)
    val s1_target = Cat(s1_data.target, UInt(0, log2Up(coreInstBytes)))
    val s1_cfi_idx = s1_data.cfi_idx
@@ -357,9 +360,13 @@ class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParamet
          when (io.ras_update.bits.is_call)
          {
             ras.push(io.ras_update.bits.return_addr)
-            when (doPeek)
+            if (bypassCalls)
             {
-               io.resp.bits.target := io.ras_update.bits.return_addr
+               // bypassing couples ras_update.valid to the critical path.
+               when (doPeek)
+               {
+                  io.resp.bits.target := io.ras_update.bits.return_addr
+               }
             }
          }
          .elsewhen (io.ras_update.bits.is_ret) // only pop if BTB hit!
