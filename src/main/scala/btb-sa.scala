@@ -26,7 +26,7 @@ case class BTBsaParameters(
   tagSz: Int = 20,
   nRAS : Int = 8,
   // Extra knobs.
-  bypassCalls: Boolean = true
+  bypassCalls: Boolean = false
 )
 
 trait HasBTBsaParameters extends HasBoomCoreParameters
