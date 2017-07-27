@@ -65,7 +65,8 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p)
                                  exe_units.withFilter(_.uses_iss_unit).map(e => e.num_rf_write_ports).sum - 1 +
                                     num_ll_ports,
                                  fLen+1,
-                                 ENABLE_REGFILE_BYPASSING))// TODO disable for FP
+                                 exe_units.bypassable_write_port_mask
+                                 ))
                           else
                               Module(new RegisterFileSeq(numFpPhysRegs,
                                  exe_units.withFilter(_.uses_iss_unit).map(e => e.num_rf_read_ports).sum,
@@ -73,7 +74,8 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p)
                                  exe_units.withFilter(_.uses_iss_unit).map(e => e.num_rf_write_ports).sum - 1 +
                                     num_ll_ports,
                                  fLen+1,
-                                 ENABLE_REGFILE_BYPASSING))
+                                 exe_units.bypassable_write_port_mask
+                                 ))
    val fregister_read   = Module(new RegisterRead(
                            issue_unit.issue_width,
                            exe_units.withFilter(_.uses_iss_unit).map(_.supportedFuncUnits),
