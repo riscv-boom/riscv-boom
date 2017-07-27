@@ -186,7 +186,6 @@ trait HasBoomCoreParameters extends tile.HasCoreParameters
 
    //************************************
    // Extra Knobs and Features
-   val ENABLE_REGFILE_BYPASSING  = true  // bypass regfile write ports to read ports
    val ENABLE_COMMIT_MAP_TABLE = boomParams.enableCommitMapTable
 
    //************************************
