@@ -26,7 +26,7 @@ case class BTBsaParameters(
   tagSz: Int = 20,
   nRAS : Int = 8,
   // Extra knobs.
-  bypassCalls: Boolean = true
+  bypassCalls: Boolean = false
 )
 
 trait HasBTBsaParameters extends HasBoomCoreParameters
@@ -242,6 +242,9 @@ class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParamet
       val tags     = SeqMem(nSets, UInt(width = tag_sz))
       val data     = SeqMem(nSets, new BTBSetData())
       val bim      = new BIM(nSets, way_idx = w)
+
+      tags.suggestName("btb_tag_array")
+      data.suggestName("btb_data_array")
 
       val is_valid = RegNext((valids >> s0_idx)(0) && !wen)
       val rout     = data.read(s0_idx, !wen)

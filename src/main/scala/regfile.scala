@@ -16,6 +16,8 @@ package boom
 import Chisel._
 import cde.Parameters
 
+import scala.collection.mutable.ArrayBuffer
+
 class RegisterFileReadPortIO(addr_width: Int, data_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
    val addr = UInt(INPUT, addr_width)
@@ -53,7 +55,7 @@ abstract class RegisterFile(
    num_read_ports: Int,
    num_write_ports: Int,
    register_width: Int,
-   enable_bypassing: Boolean)
+   bypassable_array: Seq[Boolean]) // which write ports can be bypassed to the read ports?
    (implicit p: Parameters) extends BoomModule()(p)
 {
    val io = new BoomBundle()(p)
@@ -77,9 +79,9 @@ class RegisterFileComb(
    num_read_ports: Int,
    num_write_ports: Int,
    register_width: Int,
-   enable_bypassing: Boolean)
+   bypassable_array: Seq[Boolean])
    (implicit p: Parameters)
-   extends RegisterFile(num_registers, num_read_ports, num_write_ports, register_width, enable_bypassing)
+   extends RegisterFile(num_registers, num_read_ports, num_write_ports, register_width, bypassable_array)
 {
    // --------------------------------------------------------------
 
@@ -101,15 +103,20 @@ class RegisterFileComb(
    // --------------------------------------------------------------
    // Bypass out of the ALU's write ports.
 
-   if (enable_bypassing)
+   require (bypassable_array.length == io.write_ports.length)
+
+   if (bypassable_array.reduce(_||_))
    {
+      val bypassable_wports = ArrayBuffer[DecoupledIO[RegisterFileWritePort]]()
+      io.write_ports zip bypassable_array map { case (wport, b) => if (b) { bypassable_wports += wport} }
+
       for (i <- 0 until num_read_ports)
       {
-         val bypass_ens = io.write_ports.map(x => x.valid &&
+         val bypass_ens = bypassable_wports.map(x => x.valid &&
                                                   x.bits.addr =/= UInt(0) &&
                                                   x.bits.addr === io.read_ports(i).addr)
 
-         val bypass_data = Mux1H(Vec(bypass_ens), Vec(io.write_ports.map(_.bits.data)))
+         val bypass_data = Mux1H(Vec(bypass_ens), Vec(bypassable_wports.map(_.bits.data)))
 
          io.read_ports(i).data := Mux(bypass_ens.reduce(_|_), bypass_data, read_data(i))
       }
@@ -143,9 +150,9 @@ class RegisterFileSeq(
    num_read_ports: Int,
    num_write_ports: Int,
    register_width: Int,
-   enable_bypassing: Boolean)
+   bypassable_array: Seq[Boolean])
    (implicit p: Parameters)
-   extends RegisterFile(num_registers, num_read_ports, num_write_ports, register_width, enable_bypassing)
+   extends RegisterFile(num_registers, num_read_ports, num_write_ports, register_width, bypassable_array)
 {
 
    // --------------------------------------------------------------
@@ -170,15 +177,20 @@ class RegisterFileSeq(
    // --------------------------------------------------------------
    // Bypass out of the ALU's write ports.
 
-   if (enable_bypassing)
+   require (bypassable_array.length == io.write_ports.length)
+
+   if (bypassable_array.reduce(_||_))
    {
+      val bypassable_wports = ArrayBuffer[DecoupledIO[RegisterFileWritePort]]()
+      io.write_ports zip bypassable_array map { case (wport, b) => if (b) { bypassable_wports += wport} }
+
       for (i <- 0 until num_read_ports)
       {
-         val bypass_ens = io.write_ports.map(x => x.valid &&
+         val bypass_ens = bypassable_wports.map(x => x.valid &&
                                                   x.bits.addr =/= UInt(0) &&
                                                   x.bits.addr === RegNext(io.read_ports(i).addr))
 
-         val bypass_data = Mux1H(Vec(bypass_ens), Vec(io.write_ports.map(_.bits.data)))
+         val bypass_data = Mux1H(Vec(bypass_ens), Vec(bypassable_wports.map(_.bits.data)))
 
          io.read_ports(i).data := Mux(bypass_ens.reduce(_|_), bypass_data, read_data(i))
       }
@@ -190,7 +202,6 @@ class RegisterFileSeq(
          io.read_ports(i).data := read_data(i)
       }
    }
-
 
    // --------------------------------------------------------------
    // Write ports.
