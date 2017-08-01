@@ -212,7 +212,16 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p)
 
    val ll_wbarb = Module(new Arbiter(new ExeUnitResp(fLen+1), 2))
    val ifpu_resp = exe_units.ifpu_unit.io.resp(0)
+
+   // Hookup load writeback -- and recode FP values.
    ll_wbarb.io.in(0) <> io.ll_wport
+   val typ = io.ll_wport.bits.uop.mem_typ
+   val load_single = typ === rocket.MT_W || typ === rocket.MT_WU
+   val rec_s = hardfloat.recFNFromFN( 8, 24, io.ll_wport.bits.data)
+   val rec_d = hardfloat.recFNFromFN(11, 53, io.ll_wport.bits.data)
+   val fp_load_data_recoded = Mux(load_single, Cat(SInt(-1, 32), rec_s), rec_d)
+   ll_wbarb.io.in(0).bits.data := fp_load_data_recoded
+
    ll_wbarb.io.in(1) <> ifpu_resp
    fregfile.io.write_ports(0) <> WritePort(ll_wbarb.io.out, FPREG_SZ, fLen+1)
 
