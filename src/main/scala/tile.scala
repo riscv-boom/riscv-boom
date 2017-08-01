@@ -104,6 +104,8 @@ class BOOMTile(clockSignal: Clock = null, resetSignal: Bool = null)
 
   //[pfchiu] program bbypass
  io.program_bbypass <> icache.io.program_bbypass
+  icache.io.program_bbypass.valid := io.program_bbypass.valid && io.program_bbypass.dest === UInt(0)
+  dcache.resiliency.program_bbypass.valid := io.program_bbypass.valid && io.program_bbypass.dest === UInt(1)
 
   //[pfchiu] program dcr
   io.program_dcr <> icache.io.program_dcr
