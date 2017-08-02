@@ -96,7 +96,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
                                  xLen,
                                  exe_units.bypassable_write_port_mask))
                           else
-                              Module(new RegisterFileSeq(numIntPhysRegs,
+                              Module(new RegisterFileSeq_i(numIntPhysRegs,
                                  exe_units.withFilter(_.usesIRF).map(e => e.num_rf_read_ports).sum,
                                  exe_units.withFilter(_.usesIRF).map(e => e.num_rf_write_ports).sum,
                                  xLen,
