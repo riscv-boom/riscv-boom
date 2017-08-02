@@ -216,3 +216,55 @@ class RegisterFileSeq(
    }
 }
 
+class RegisterFileSeq_i(
+   num_registers: Int,
+   num_read_ports: Int,
+   num_write_ports: Int,
+   register_width: Int,
+   bypassable_array: Seq[Boolean])
+   (implicit p: Parameters)
+   extends RegisterFile(num_registers, num_read_ports, num_write_ports, register_width, bypassable_array)
+{
+
+   // --------------------------------------------------------------
+
+   val regfile = Module(new RegisterFileArray(num_registers, num_read_ports, num_write_ports, register_width))
+
+  // Decode addr
+   val waddr_OH = Wire(Vec(num_write_ports, UInt(width = num_registers))) 
+   val raddr_OH = Wire(Vec(num_read_ports, UInt(width = num_registers))) 
+   val write_select_OH = Wire(Vec(num_registers, UInt(width = num_write_ports)))
+
+   for (i <-0 until num_write_ports) {
+      regfile.io.WD(i) := io.write_ports(i).bits.data
+      waddr_OH(i) := UIntToOH(io.write_ports(i).bits.addr)
+   }
+   for (i <-0 until num_read_ports) {
+      io.read_ports(i).data := regfile.io.RD(i)
+      raddr_OH(i) := UIntToOH(io.read_ports(i).addr)
+   }
+      
+   for (i <- 0 until num_registers) {
+      regfile.io.OE(i) := Cat(raddr_OH(5)(i), raddr_OH(4)(i), raddr_OH(3)(i), raddr_OH(2)(i), raddr_OH(1)(i), raddr_OH(0)(i))
+      write_select_OH(i) := Cat(waddr_OH(2)(i)&&io.write_ports(2).valid, waddr_OH(1)(i)&&io.write_ports(1).valid, waddr_OH(0)(i)&&io.write_ports(0).valid)
+      regfile.io.WE(i) := write_select_OH(i).orR 
+      regfile.io.WS(i) := OHToUInt(write_select_OH(i))
+   }
+
+  //Need to handle bypass and read address = 0 
+}
+
+class RegisterFileArray( 
+   num_registers: Int,
+   num_read_ports: Int,
+   num_write_ports: Int,
+   register_width: Int) extends BlackBox {
+  val io = new Bundle {
+    val clock = Clock(INPUT)
+    val WE = UInt(INPUT, width = num_registers)
+    val WD = Vec(num_write_ports, UInt(INPUT, register_width))
+    val RD = Vec(num_read_ports, UInt(OUTPUT, register_width))
+    val WS = Vec(num_registers, UInt(INPUT, register_width))
+    val OE = Vec(num_registers, UInt(INPUT, num_read_ports))  
+  }
+}
