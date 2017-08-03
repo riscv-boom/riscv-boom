@@ -183,8 +183,8 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: cde.Parameters) extend
    btb.io.ras_update.valid := (f2_btb.valid || io.f2_ras_update.valid) && !io.fetch_stalled
    when (f2_btb.valid)
    {
-      btb.io.ras_update.bits.is_call      := f2_btb.bits.bpd_type === BpredType.call
-      btb.io.ras_update.bits.is_ret       := f2_btb.bits.bpd_type === BpredType.ret
+      btb.io.ras_update.bits.is_call      := BpredType.isCall(f2_btb.bits.bpd_type)
+      btb.io.ras_update.bits.is_ret       := BpredType.isReturn(f2_btb.bits.bpd_type)
       btb.io.ras_update.bits.return_addr  := f2_aligned_pc + (jmp_idx << 2.U) + 4.U
    }
 
