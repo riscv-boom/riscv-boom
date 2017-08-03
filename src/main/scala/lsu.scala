@@ -380,6 +380,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: uncore.tilelink
    val ma_ld = io.exe_resp.valid && io.exe_resp.bits.mxcpt.valid && exe_tlb_uop.is_load
    val pf_ld = dtlb.io.req.valid && dtlb.io.resp.xcpt_ld && exe_tlb_uop.is_load
    val pf_st = dtlb.io.req.valid && dtlb.io.resp.xcpt_st && exe_tlb_uop.is_store
+   // TODO check for xcpt_if and verify that never happens on non-speculative instructions.
    val mem_xcpt_valid = Reg(next=((dtlb.io.req.valid && (pf_ld || pf_st)) ||
                                  (io.exe_resp.valid && io.exe_resp.bits.mxcpt.valid)) &&
                                  !io.exception &&
