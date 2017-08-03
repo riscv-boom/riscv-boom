@@ -47,12 +47,18 @@ trait HasBTBsaParameters extends HasBoomCoreParameters
 // Which predictor should we listen to?
 object BpredType
 {
-   def SZ = 2
+   def SZ = 3
    def apply() = UInt(width = SZ)
    def branch = 0.U
    def jump = 1.U
-   def call = 2.U
-   def ret = 3.U
+   def ret =  (2+1).U
+   def call = (4+1).U
+
+   def isAlwaysTaken(typ: UInt): Bool = typ(0)
+   def isReturn(typ: UInt): Bool = typ(1)
+   def isCall(typ: UInt): Bool = typ(2)
+   def isJump(typ: UInt): Bool = typ === jump
+   def isBranch(typ: UInt): Bool = typ === branch
 }
 
 abstract class BTBsaBundle(implicit val p: Parameters) extends util.ParameterizedBundle()(p)
@@ -184,6 +190,8 @@ class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParamet
       // resp is expected on cycle S1.
       val req = Valid(new PCReq).flip
       val resp = Valid(new BTBsaResp)
+      // RAS prediction gets pipelined and handled in next stage (optionally)
+      val ras_resp = Valid(new BTBsaResp)
       // If there's an icmiss, the Frontend replays the s2_pc as s0_pc (even though req.valid is low),
       // so don't stall and begin predicting s0_pc.
       val icmiss = Bool(INPUT)
@@ -285,7 +293,7 @@ class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParamet
       }
       .elsewhen (RegNext(io.resp.valid &&
          io.resp.bits.bim_resp.way_idx === w.U &&
-         io.resp.bits.bpd_type === BpredType.branch))
+         BpredType.isBranch(io.resp.bits.bpd_type)))
       {
          // speculatively update bim
          bim.update(
@@ -334,7 +342,7 @@ class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParamet
 
    io.resp.valid := s1_valid
    io.resp.bits.target := s1_target
-   io.resp.bits.taken := (if (enableBIM) s1_bim_resp.isTaken else true.B) || (s1_bpd_type === BpredType.jump)
+   io.resp.bits.taken := (if (enableBIM) s1_bim_resp.isTaken else true.B) || (BpredType.isAlwaysTaken(s1_bpd_type))
    io.resp.bits.cfi_idx := (if (fetchWidth > 1) s1_cfi_idx else UInt(0))
    io.resp.bits.bpd_type := s1_bpd_type
    io.resp.bits.cfi_type := s1_cfi_type
@@ -352,7 +360,7 @@ class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParamet
    if (nRAS > 0)
    {
       val ras = new RAS(nRAS)
-      val doPeek = (hits_oh zip data_out map {case(hit, d) => hit && d.bpd_type === BpredType.ret}).reduce(_||_)
+      val doPeek = (hits_oh zip data_out map {case(hit, d) => hit && BpredType.isReturn(d.bpd_type)}).reduce(_||_)
       when (!ras.isEmpty && doPeek)
       {
          io.resp.bits.target := ras.peek
