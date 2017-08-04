@@ -229,10 +229,11 @@ class RegisterFileSeq_i(
    // --------------------------------------------------------------
 
    val regfile = Module(new RegisterFileArray(num_registers, num_read_ports, num_write_ports, register_width))
+   regfile.io.clock := clock 
 
   // Decode addr
    val waddr_OH = Wire(Vec(num_write_ports, UInt(width = num_registers))) 
-   val raddr_OH = Wire(Vec(num_read_ports, UInt(width = num_registers))) 
+   val raddr_OH = Vec(Reg(num_read_ports, UInt(width = num_registers))) 
    val write_select_OH = Wire(Vec(num_registers, UInt(width = num_write_ports)))
 
    for (i <-0 until num_write_ports) {
@@ -261,10 +262,10 @@ class RegisterFileArray(
    register_width: Int) extends BlackBox {
   val io = new Bundle {
     val clock = Clock(INPUT)
-    val WE = UInt(INPUT, width = num_registers)
-    val WD = Vec(num_write_ports, UInt(INPUT, register_width))
-    val RD = Vec(num_read_ports, UInt(OUTPUT, register_width))
-    val WS = Vec(num_registers, UInt(INPUT, register_width))
-    val OE = Vec(num_registers, UInt(INPUT, num_read_ports))  
+    val WE = Vec(num_registers, Bool()).asInput
+    val WD = Vec(num_write_ports, UInt(width = register_width)).asInput
+    val RD = Vec(num_read_ports, UInt(width = register_width)).asOutput
+    val WS = Vec(num_registers, UInt(width = 2)).asInput
+    val OE = Vec(num_registers, UInt(width = num_read_ports)).asInput 
   }
 }
