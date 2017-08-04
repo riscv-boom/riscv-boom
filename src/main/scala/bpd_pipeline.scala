@@ -163,7 +163,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: cde.Parameters) extend
    val bpd_disagrees_with_btb =
       f2_btb.valid && bpd_valid && (bpd_predict_taken ^ f2_btb.bits.taken) && f2_btb.bits.cfi_type === CfiType.branch
 
-   io.f2_bpu_request.valid := bpd_disagrees_with_btb
+   io.f2_bpu_request.valid := bpd_disagrees_with_btb && enableBpdF2Redirect.B
    io.f2_bpu_request.bits.target :=
       Mux(bpd_predict_taken,
          f2_btb.bits.target.sextTo(vaddrBitsExtended),
