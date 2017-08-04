@@ -95,12 +95,20 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
                                  exe_units.withFilter(_.usesIRF).map(e => e.num_rf_write_ports).sum,
                                  xLen,
                                  exe_units.bypassable_write_port_mask))
-                          else
-                              Module(new RegisterFileSeq_i(numIntPhysRegs,
+                          else if (regreadLatency == 1 && enableCustomRf)
+                              Module(new RegisterFileSeqCustomArray(numIntPhysRegs,
                                  exe_units.withFilter(_.usesIRF).map(e => e.num_rf_read_ports).sum,
                                  exe_units.withFilter(_.usesIRF).map(e => e.num_rf_write_ports).sum,
                                  xLen,
                                  exe_units.bypassable_write_port_mask))
+                          else {
+                              require (regreadLatency == 1)
+                              Module(new RegisterFileSeq(numIntPhysRegs,
+                                 exe_units.withFilter(_.usesIRF).map(e => e.num_rf_read_ports).sum,
+                                 exe_units.withFilter(_.usesIRF).map(e => e.num_rf_write_ports).sum,
+                                 xLen,
+                                 exe_units.bypassable_write_port_mask))
+                          }
    val ll_wbarb         = Module(new Arbiter(new ExeUnitResp(xLen), 2))
    val iregister_read   = Module(new RegisterRead(
                                  issue_units.map(_.issue_width).sum,
