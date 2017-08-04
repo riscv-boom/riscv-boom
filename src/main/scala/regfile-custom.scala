@@ -52,13 +52,20 @@ class RegisterFileSeqCustomArray(
    }
 
    for (i <- 0 until num_registers) {
-      regfile.io.OE(i) := Cat(raddr_OH(5)(i), raddr_OH(4)(i), raddr_OH(3)(i), raddr_OH(2)(i), raddr_OH(1)(i), raddr_OH(0)(i))
-      write_select_OH(i) := Cat(
-         waddr_OH(2)(i) && io.write_ports(2).valid,
-         waddr_OH(1)(i) && io.write_ports(1).valid,
-         waddr_OH(0)(i) && io.write_ports(0).valid)
-      regfile.io.WE(i) := write_select_OH(i).orR
-      regfile.io.WS(i) := OHToUInt(write_select_OH(i))
+      if (i == 0) {
+         // P0 is always zero.
+         regfile.io.OE(0) := 0.U
+         regfile.io.WE(0) := false.B
+         regfile.io.WS(0) := 0.U
+      } else {
+         regfile.io.OE(i) := Cat(raddr_OH(5)(i), raddr_OH(4)(i), raddr_OH(3)(i), raddr_OH(2)(i), raddr_OH(1)(i), raddr_OH(0)(i))
+         write_select_OH(i) := Cat(
+            waddr_OH(2)(i) && io.write_ports(2).valid,
+            waddr_OH(1)(i) && io.write_ports(1).valid,
+            waddr_OH(0)(i) && io.write_ports(0).valid)
+         regfile.io.WE(i) := write_select_OH(i).orR
+         regfile.io.WS(i) := OHToUInt(write_select_OH(i))
+      }
 
       //printf("regfile.WS(%d)=%d, ws_OH=0x%x\n", i.U, regfile.io.WS(i), write_select_OH(i))
       assert(PopCount(write_select_OH(i).toBools) <= 1.U,
