@@ -67,8 +67,10 @@ class RegisterFileSeqCustomArray(
       }
 
       //printf("regfile.WS(%d)=%d, ws_OH=0x%x\n", i.U, regfile.io.WS(i), write_select_OH(i))
-      assert(PopCount(write_select_OH(i).toBools) <= 1.U,
-         "[regfile] write-select has too many writers to this register p[" + i + "]")
+      if (i > 0) {
+         assert(PopCount(write_select_OH(i).toBools) <= 1.U,
+            "[regfile] write-select has too many writers to this register p[" + i + "]")
+      }
    }
 
 
