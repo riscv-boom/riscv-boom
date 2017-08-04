@@ -233,12 +233,13 @@ class RegisterFileSeq_i(
 
   // Decode addr
    val waddr_OH = Wire(Vec(num_write_ports, UInt(width = num_registers))) 
-   val raddr_OH = Vec(Reg(num_read_ports, UInt(width = num_registers))) 
+   val raddr_OH = Reg(Vec(num_read_ports, UInt(width = num_registers))) 
    val write_select_OH = Wire(Vec(num_registers, UInt(width = num_write_ports)))
 
    for (i <-0 until num_write_ports) {
       regfile.io.WD(i) := io.write_ports(i).bits.data
       waddr_OH(i) := UIntToOH(io.write_ports(i).bits.addr)
+      io.write_ports(i).ready := Bool(true)
    }
    for (i <-0 until num_read_ports) {
       io.read_ports(i).data := regfile.io.RD(i)
