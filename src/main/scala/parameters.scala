@@ -21,6 +21,8 @@ case class BoomCoreParams(
    numLsuEntries: Int = 8,
    numIntPhysRegisters: Int = 96,
    numFpPhysRegisters: Int = 64,
+   enableCustomRf: Boolean = false,
+   enableCustomRfModel: Boolean = true,
    maxBrCount: Int = 4,
    fetchBufferSz: Int = 8,
    enableAgePriorityIssue: Boolean = true,
@@ -218,6 +220,12 @@ trait HasBoomCoreParameters extends tile.HasCoreParameters
    require (isPow2(NUM_LSU_ENTRIES))
    require ((NUM_LSU_ENTRIES-1) > DECODE_WIDTH)
 
+
+   //************************************
+   // Custom Logic
+
+   val enableCustomRf      = boomParams.enableCustomRf
+   val enableCustomRfModel = boomParams.enableCustomRfModel
 
    //************************************
    // Non-BOOM parameters
