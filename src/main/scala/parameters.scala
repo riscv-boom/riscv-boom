@@ -33,6 +33,7 @@ case class BoomCoreParams(
    enableBranchPredictor: Boolean = false,
    enableBpdUModeOnly: Boolean = false,
    enableBpdUSModeHistory: Boolean = false,
+   enableBpdF2Redirect: Boolean = true,
    btb: BTBsaParameters = BTBsaParameters(),
    tage: Option[TageParameters] = None,
    gshare: Option[GShareParameters] = None,
@@ -129,6 +130,10 @@ trait HasBoomCoreParameters extends tile.HasCoreParameters
    val enableBIM = boomParams.enableBIM
 
    val ENABLE_BRANCH_PREDICTOR = boomParams.enableBranchPredictor
+
+   // allow the BPD to redirect the PC in the F2 stage (hurts critical path).
+   val enableBpdF2Redirect = boomParams.enableBpdF2Redirect
+
    val ENABLE_BPD_UMODE_ONLY = boomParams.enableBpdUModeOnly
    val ENABLE_BPD_USHISTORY = boomParams.enableBpdUSModeHistory
    // What is the maximum length of global history tracked?
