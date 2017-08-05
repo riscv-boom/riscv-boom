@@ -198,6 +198,7 @@ abstract class PipelinedFunctionalUnit(val num_stages: Int,
    {
       val r_valids = Reg(init = Vec.fill(num_stages) { Bool(false) })
       val r_uops   = Reg(Vec(num_stages, new MicroOp()))
+      r_uops suggestName "r_uops"
 
       // handle incoming request
       r_valids(0) := io.req.valid && !IsKilledByBranch(io.brinfo, io.req.bits.uop) && !io.req.bits.kill
