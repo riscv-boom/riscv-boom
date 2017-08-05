@@ -91,10 +91,10 @@ class WithMediumBooms extends Config((site, here, up) => {
          IssueParams(issueWidth=1, numEntries=16, iqType=IQT_MEM.litValue),
          IssueParams(issueWidth=2, numEntries=16, iqType=IQT_INT.litValue),
          IssueParams(issueWidth=1, numEntries=16, iqType=IQT_FP.litValue)),
-      numIntPhysRegisters = 80,
-      numFpPhysRegisters = 56,
+      numIntPhysRegisters = 70,
+      numFpPhysRegisters = 64,
       numLsuEntries = 16,
-      gshare = Some(GShareParameters(enabled = true, history_length=14))
+      gshare = Some(GShareParameters(enabled=true, history_length=14))
       )
 })
 

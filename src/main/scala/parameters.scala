@@ -35,7 +35,8 @@ case class BoomCoreParams(
    enableBranchPredictor: Boolean = false,
    enableBpdUModeOnly: Boolean = false,
    enableBpdUSModeHistory: Boolean = false,
-   enableBpdF2Redirect: Boolean = true,
+   enableBpdF2Redirect: Boolean = false,
+   enableBpdF3Redirect: Boolean = true,
    btb: BTBsaParameters = BTBsaParameters(),
    tage: Option[TageParameters] = None,
    gshare: Option[GShareParameters] = None,
@@ -135,6 +136,7 @@ trait HasBoomCoreParameters extends tile.HasCoreParameters
 
    // allow the BPD to redirect the PC in the F2 stage (hurts critical path).
    val enableBpdF2Redirect = boomParams.enableBpdF2Redirect
+   val enableBpdF3Redirect = boomParams.enableBpdF3Redirect
 
    val ENABLE_BPD_UMODE_ONLY = boomParams.enableBpdUModeOnly
    val ENABLE_BPD_USHISTORY = boomParams.enableBpdUSModeHistory
