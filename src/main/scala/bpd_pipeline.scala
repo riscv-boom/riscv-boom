@@ -161,14 +161,23 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    val bpd_disagrees_with_btb =
       f2_btb.valid && bpd_valid && (bpd_predict_taken ^ f2_btb.bits.taken) && f2_btb.bits.cfi_type === CfiType.branch
 
-   io.f2_bpu_request.valid := bpd_disagrees_with_btb && enableBpdF2Redirect.B
+   io.f2_bpu_request.valid := bpd_disagrees_with_btb
    io.f2_bpu_request.bits.target :=
       Mux(bpd_predict_taken,
          f2_btb.bits.target.sextTo(vaddrBitsExtended),
          f2_nextline_pc.sextTo(vaddrBitsExtended))
+
    io.f2_bpu_request.bits.mask := Cat((UInt(1) << ~Mux(bpd_predict_taken, ~f2_btb.bits.cfi_idx, UInt(0)))-UInt(1), UInt(1))
 
    bpd.io.resp.ready := !io.fetch_stalled
+
+   if (!enableBpdF2Redirect)
+   {
+      io.f2_bpu_request.valid := false.B
+      io.f2_bpu_request.bits.target := 0.U
+      io.f2_bpu_request.bits.cfi_idx:= 0.U
+      io.f2_bpu_request.bits.mask := 0.U
+   }
 
 
    //************************************************
