@@ -124,7 +124,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
          io.flush_pc,
       Mux(br_unit.take_pc,
          br_unit.target(vaddrBits,0),
-      Mux(f3_req.valid,
+      Mux(f3_req.valid || !enableBpdF2Redirect.B,
          f3_req.bits.addr,
          io.f2_bpu_request.bits.target)))
 
@@ -637,14 +637,16 @@ class BranchChecker(fetch_width: Int)(implicit p: Parameters) extends BoomModule
 
    val btb_was_wrong = io.btb_resp.valid && (wrong_cfi || wrong_target || !io.is_valid(btb_idx))
 
+   val f2_bpu_req_valid = io.f2_bpu_request.valid && enableBpdF2Redirect.B
+
    val jal_idx = PriorityEncoder(io.is_jal.toBits)
    val btb_hit  = io.btb_resp.valid
    val jal_wins = io.is_jal.reduce(_|_) &&
       (!btb_hit ||
       btb_was_wrong ||
       (jal_idx < btb_idx) ||
-      (!io.f2_bpu_request.valid && !io.btb_resp.bits.taken) ||
-      (io.f2_bpu_request.valid && !bpd_predicted_taken))
+      (!f2_bpu_req_valid && !io.btb_resp.bits.taken) ||
+      (f2_bpu_req_valid && !bpd_predicted_taken))
 
    //-------------------------------------------------------------
    // Perform redirection & updates
