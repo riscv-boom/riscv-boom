@@ -10,7 +10,7 @@
 package boom
 
 import Chisel._
-import config.Parameters
+import cde.Parameters
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -48,6 +48,7 @@ class RegisterFileSeqCustomArray(
    for (r <-0 until num_read_ports) {
       read_data(r) := Mux(RegNext(io.read_ports(r).addr === 0.U), 0.U, regfile.io.RD(r))
       raddr_OH(r) := UIntToOH(io.read_ports(r).addr)
+      regfile.io.RDSEL(r) := Reg(next=io.read_ports(r).addr(6,3))
    }
 
    for (i <- 0 until num_registers) {
@@ -109,6 +110,7 @@ class RegisterFileArray(
       val RD = Vec(num_read_ports, UInt(width = register_width)).asOutput
       val WS = Vec(num_registers, UInt(width = 2)).asInput
       val OE = Vec(num_registers, UInt(width = num_read_ports)).asInput
+      val RDSEL = Vec(num_read_ports, UInt(width = 4)).asInput
    }
 }
 
@@ -128,6 +130,7 @@ class RegisterFileArrayModel(
       val WD = Vec(num_write_ports, UInt(width = register_width)).asInput
       val OE = Vec(num_registers, UInt(width = num_read_ports)).asInput
       val RD = Vec(num_read_ports, UInt(width = register_width)).asOutput
+      val RDSEL = Vec(num_read_ports, UInt(width = 4)).asInput
    }
 
    // Where we're going, we don't need roads. Or parameterization.
