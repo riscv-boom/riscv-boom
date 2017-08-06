@@ -190,14 +190,25 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    val f2_bpd_br_taken = f2_bpd_predictions.orR
    val f2_bpd_br_idx = PriorityEncoder(f2_bpd_predictions)
    val f2_bpd_target = br_targs(f2_bpd_br_idx)
+   // check for jumps -- if we decide to override a taken BTB and choose "nextline" we don't want to miss the JAL.
+   val f2_has_jal = is_jal.reduce(_|_)
+   val f2_jal_idx = PriorityEncoder(is_jal.toBits)
+   val f2_jal_target = jal_targs(f2_jal_idx)
    val f2_bpd_may_redirect_taken = Wire(init=false.B) // request towards a taken branch target
-   val f2_bpd_may_redirect_next = Wire(init=false.B) // override a taken prediction and fetch the next line
+   val f2_bpd_may_redirect_next = Wire(init=false.B) // override taken prediction and fetch the next line (or take JAL)
    val f2_bpd_may_redirect = f2_bpd_may_redirect_taken || f2_bpd_may_redirect_next
-   val f2_bpd_redirect_cfiidx = Mux(f2_bpd_may_redirect_taken, f2_bpd_br_idx, (fetch_width-1).U)
+   val f2_bpd_redirect_cfiidx =
+      Mux(f2_bpd_may_redirect_taken,
+         f2_bpd_br_idx,
+      Mux(f2_has_jal,
+         f2_jal_idx,
+         (fetch_width-1).U))
    val f2_bpd_redirect_target =
-         Mux(f2_bpd_may_redirect_taken,
-            f2_bpd_target,
-            f2_aligned_pc + (fetch_width*coreInstBytes).U)
+      Mux(f2_bpd_may_redirect_taken,
+         f2_bpd_target,
+      Mux(f2_has_jal,
+         f2_jal_target,
+         f2_aligned_pc + (fetch_width*coreInstBytes).U))
 
    if (enableBpdF2Redirect)
    {
@@ -249,7 +260,6 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
          "[bpd_pipeline] mutually-exclusive signals firing")
    }
 
-
    // catch any BTB mispredictions (and fix-up missed JALs)
    bchecker.io.is_valid  := Vec(io.imem.resp.bits.mask.toBools)
    bchecker.io.imem_resp_valid := io.imem.resp.valid
@@ -267,11 +277,8 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
 
    // who wins? bchecker or bpd?
    val f2_bpd_overrides_bcheck = f2_bpd_may_redirect && (!bchecker.io.req.valid || (f2_bpd_redirect_cfiidx < bchecker.io.req_cfi_idx))
-
-
    f2_req.valid := (bchecker.io.req.valid || f2_bpd_may_redirect) && f2_valid && !(f0_redirect_val && !io.f2_bpu_request.valid)
    f2_req.bits.addr := Mux(f2_bpd_overrides_bcheck, f2_bpd_redirect_target, bchecker.io.req.bits.addr)
-
 
    io.f2_btb_update := bchecker.io.btb_update // XXX let f3_bpd_redirect update the BTB too? or let BRU handle it?
    io.f2_ras_update := bchecker.io.ras_update
@@ -281,6 +288,8 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
       f2_req.valid,
       Mux(f2_bpd_overrides_bcheck, f2_bpd_redirect_cfiidx, bchecker.io.req_cfi_idx),
       fetchWidth)
+
+
 
    val btb_mask = Mux(io.f2_btb_resp.valid && !io.f2_bpu_request.valid && !f2_req.valid,
                   io.f2_btb_resp.bits.mask,
@@ -347,6 +356,8 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    //-------------------------------------------------------------
    // **** F3 ****
    //-------------------------------------------------------------
+
+   // Rely on register-retiming to move a lot of the work in the F2 stage to here.
 
    when (io.clear_fetchbuffer)
    {
@@ -474,6 +485,11 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
          }
          .elsewhen (last_cfi_type === CfiType.jal)
          {
+            when (fetch_pc =/= last_target) {
+               printf("about to abort: [fetch] JAL is followed by the wrong instruction.")
+               printf("fetch_pc: 0x%x, last_target: 0x%x, last_nextlinepc: 0x%x\n",
+                  fetch_pc, last_target, last_nextlinepc)
+            }
             assert (fetch_pc === last_target, "[fetch] JAL is followed by the wrong instruction.")
          }
          .elsewhen (last_cfi_type === CfiType.branch)
