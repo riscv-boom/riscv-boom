@@ -94,12 +94,12 @@ class WithMediumBooms extends Config((site, here, up) => {
       numIntPhysRegisters = 70,
       numFpPhysRegisters = 64,
       numLsuEntries = 16,
-      gshare = Some(GShareParameters(enabled=true, history_length=14))
+      gshare = Some(GShareParameters(enabled=true, history_length=13))
       )
 })
 
 
-//// try to match the Cortex-A15
+// try to match the Cortex-A15
 class WithMegaBooms extends Config((site, here, up) => {
    case RocketTilesKey => up(RocketTilesKey, site) map { r => r.copy(core = r.core.copy(
       fWidth = 4,
