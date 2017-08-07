@@ -601,7 +601,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: uncore.tilelink
    val mem_ld_addr = Mux(Reg(next=will_fire_load_wakeup), Reg(next=laq_addr(exe_ld_idx_wakeup)), mem_tlb_paddr)
    val mem_ld_uop  = Reg(next=exe_ld_uop)
    mem_ld_uop.br_mask := GetNewBrMask(io.brinfo, exe_ld_uop)
-   val mem_ld_killed = Wire(Bool()) // was a load killed in execute
+   val mem_ld_killed = Wire(init=false.B) // was a load killed in execute
 
    val mem_fired_ld = Reg(next=(will_fire_load_incoming ||
                                     will_fire_load_retry ||
@@ -610,7 +610,6 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: uncore.tilelink
    val mem_fired_stdi = Reg(next=will_fire_std_incoming, init=Bool(false))
    val mem_fired_stdf = Reg(next=io.fp_stdata.valid, init=Bool(false))
 
-   mem_ld_killed := Bool(false)
    when (Reg(next=
          (IsKilledByBranch(io.brinfo, exe_ld_uop) ||
          io.exception ||
@@ -692,6 +691,8 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: uncore.tilelink
    val ldst_addr_conflicts   = Wire(Vec(num_st_entries, Bool()))
    // a full address match
    val forwarding_matches  = Wire(Vec(num_st_entries, Bool()))
+   // Are there stores we might depend on with unknown addresses?
+   val unknown_matches  = Wire(Vec(num_st_entries, Bool()))
 
    val force_ld_to_sleep = Wire(Bool())
    force_ld_to_sleep := Bool(false)
@@ -704,6 +705,14 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: uncore.tilelink
    for (i <- 0 until num_st_entries)
    {
       val s_addr = saq_addr(i)
+
+      unknown_matches(i) := false.B
+      when (stq_entry_val(i) &&
+            st_dep_mask(i) &&
+            (!saq_val(i) || saq_is_virtual(i)))
+      {
+         unknown_matches(i) := Bool(true)
+      }
 
       dword_addr_matches(i) := Bool(false)
 
@@ -786,6 +795,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: uncore.tilelink
    io.memreq_kill     := (mem_ld_used_tlb && (mem_tlb_miss || Reg(next=pf_ld || ma_ld))) ||
                          (mem_fired_ld && ldst_addr_conflicts.toBits =/= UInt(0)) ||
                          (mem_fired_ld && ldld_addr_conflict) ||
+                         (mem_fired_ld && mem_ld_uop.ld_store_wait && unknown_matches.reduce(_||_)) ||
                          mem_ld_killed ||
                          (mem_fired_st && io.nack.valid && !io.nack.isload)
    wb_forward_std_idx := forwarding_age_logic.io.forwarding_idx

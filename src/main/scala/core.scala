@@ -102,6 +102,8 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    val csr              = Module(new rocket.CSRFile())
    val dc_shim          = Module(new DCacheShim())
    val lsu              = Module(new LoadStoreUnit(DECODE_WIDTH))
+   val lsu_disamb_pred  = Module(new MemoryDisambiguatorPredictor(
+                                 DECODE_WIDTH, boomParams.disamb.nEntries, boomParams.disamb.resetTime, coreInstBytes))
    val rob              = Module(new Rob(
                                  DECODE_WIDTH,
                                  NUM_ROB_ENTRIES,
@@ -375,6 +377,21 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
 
       new_lidx = Mux(dec_will_fire(w) && dec_uops(w).is_load,  WrapInc(new_lidx, NUM_LSU_ENTRIES), new_lidx)
       new_sidx = Mux(dec_will_fire(w) && dec_uops(w).is_store, WrapInc(new_sidx, NUM_LSU_ENTRIES), new_sidx)
+   }
+
+   // predict if load may cause a disambiguation failure so we can slow the load down.
+   lsu_disamb_pred.io.dec_pcs := Vec(dec_uops.map(_.pc))
+   lsu_disamb_pred.io.update_pc.bits := rob.io.flush.bits.pc
+   if (boomParams.disamb.enable)
+   {
+      dec_uops zip lsu_disamb_pred.io.dec_wait map {case(u,s) => u.ld_store_wait := s}
+      lsu_disamb_pred.io.update_pc.valid :=  rob.io.flush.valid &&
+         RegNext(rob.io.com_xcpt.bits.cause === MINI_EXCEPTION_MEM_ORDERING)
+   }
+   else
+   {
+      dec_uops.map{_.ld_store_wait := false.B}
+      lsu_disamb_pred.io.update_pc.valid := false.B
    }
 
    //-------------------------------------------------------------

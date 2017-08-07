@@ -95,6 +95,9 @@ class MicroOp(implicit p: Parameters) extends BoomBundle()(p)
                                              // If it's non-ld/st it will write back exception bits to the fcsr.
    val fp_single        = Bool()             // single-precision floating point instruction (F-extension)
 
+   // extra information
+   val ld_store_wait    = Bool()             // load must wait for previous store addresses to be computd.
+
    // exception information
    val xcpt_if          = Bool()
    val replay_if        = Bool()             // I$ wants us to replay our ifetch request

@@ -41,6 +41,7 @@ case class BoomCoreParams(
    tage: Option[TageParameters] = None,
    gshare: Option[GShareParameters] = None,
    gskew: Option[GSkewParameters] = None,
+   disamb: DisambParameters = DisambParameters(),
    intToFpLatency: Int = 2,
    imulLatency: Int = 3,
    fetchLatency: Int = 3,

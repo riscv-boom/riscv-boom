@@ -411,6 +411,7 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule()(p)
    uop.is_fencei  := cs.is_fencei
    uop.is_unique  := cs.inst_unique
    uop.flush_on_commit := cs.flush_on_commit
+   uop.ld_store_wait := false.B
 
    uop.bypassable   := cs.bypassable
 
