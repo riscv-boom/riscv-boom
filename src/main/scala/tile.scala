@@ -112,5 +112,40 @@ class BOOMTile(clockSignal: Clock = null, resetSignal: Bool = null)
   icache.io.program_dcr.valid := io.program_dcr.valid && io.program_dcr.dest === UInt(0)
   io.program_dcr <> dcache.resiliency.program_dcr
   dcache.resiliency.program_dcr.valid := io.program_dcr.valid && io.program_dcr.dest === UInt(1)
+
+  //[pfchiu] ecc_log
+  // icache tag has 4 ways, 
+  val numErrorLogSources = 10
+  val error_log_arb = Module(new Arbiter(UInt(width = 32), numErrorLogSources))
+  //feed the vector of error_log to the arbiter
+  val error_log_queue =  (0 until numErrorLogSources).map(x => Module(new Queue(UInt(width=32), 2))).toList
+  //for icache tag
+  for (i <- 0 until 4) {
+    error_log_queue(i).io.enq.valid := icache.io.error_log.tag(i).log_we
+    error_log_queue(i).io.enq.bits := icache.io.error_log.tag(i).log_entry
+    error_log_arb.io.in(i) <> error_log_queue(i).io.deq
+  }
+  //for icache data
+  error_log_queue(4).io.enq.valid := icache.io.error_log.data.log_we
+  error_log_queue(4).io.enq.bits := icache.io.error_log.data.log_entry
+  error_log_arb.io.in(4) <> error_log_queue(4).io.deq
+
+  //for dcache tag
+  for (i <- 5 until 9) {
+    error_log_queue(i).io.enq.valid := dcache.error_log.tag(i-5).log_we
+    error_log_queue(i).io.enq.bits := dcache.error_log.tag(i-5).log_entry
+    error_log_arb.io.in(i) <> error_log_queue(i).io.deq
+  }
+    
+  //for icache data
+  error_log_queue(9).io.enq.valid := dcache.error_log.data.log_we
+  error_log_queue(9).io.enq.bits := dcache.error_log.data.log_entry
+  error_log_arb.io.in(9) <> error_log_queue(9).io.deq
+
+  error_log_arb.io.out.ready := io.error_log.log_entry(31)
+  when (error_log_arb.io.out.valid && error_log_arb.io.out.ready) {
+    io.error_log.log_entry := error_log_arb.io.out.bits
+  }
+
 }
 
