@@ -54,7 +54,7 @@ class DefaultBOOMConfig extends Config (
             numLsuEntries = 16,
             maxBrCount = 8,
             enableBranchPredictor = true,
-            gshare = Some(GShareParameters(enabled = true, history_length=11))
+            gshare = Some(GShareParameters(enabled = true, history_length=13))
          )
       }
    },

@@ -22,7 +22,7 @@ import util.Str
 
 case class BTBsaParameters(
   nSets: Int = 64,
-  nWays: Int = 4,
+  nWays: Int = 2,
   tagSz: Int = 20,
   nRAS : Int = 8,
   // Extra knobs.
