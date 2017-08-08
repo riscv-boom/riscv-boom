@@ -73,8 +73,8 @@ abstract class RegisterFile(
       "\n   RF Cost (R+W)*(R+2W)  : " + rf_cost
 }
 
-// Combinational Register File. Provide read address and get data back on the same cycle.
-class RegisterFileComb(
+// A behavorial model of a Register File. You will likely want to blackbox this for more than modest port counts.
+class RegisterFileBehavorial(
    num_registers: Int,
    num_read_ports: Int,
    num_write_ports: Int,
@@ -93,15 +93,30 @@ class RegisterFileComb(
 
    val read_data = Wire(Vec(num_read_ports, UInt(width = register_width)))
 
+   // Register the read port addresses to give a full cycle to the RegisterRead Stage (if desired).
+   val read_addrs =
+      if (regreadLatency == 0) {
+         io.read_ports map {_.addr}
+      } else {
+         require (regreadLatency == 1)
+         io.read_ports.map(p => RegNext(p.addr))
+      }
+
    for (i <- 0 until num_read_ports)
    {
-      read_data(i) := Mux(io.read_ports(i).addr === UInt(0), UInt(0),
-                                                             regfile(io.read_ports(i).addr))
+      read_data(i) :=
+         Mux(read_addrs(i) === UInt(0),
+            UInt(0),
+            regfile(read_addrs(i)))
    }
 
 
    // --------------------------------------------------------------
    // Bypass out of the ALU's write ports.
+   // We are assuming we cannot bypass a writer to a reader within the regfile memory
+   // for a write that occurs at the end of cycle S1 and a read that returns data on cycle S1.
+   // But since these bypasses are expensive, and not all write ports need to bypass their data,
+   // only perform the w->r bypass on a select number of write ports.
 
    require (bypassable_array.length == io.write_ports.length)
 
@@ -114,7 +129,7 @@ class RegisterFileComb(
       {
          val bypass_ens = bypassable_wports.map(x => x.valid &&
                                                   x.bits.addr =/= UInt(0) &&
-                                                  x.bits.addr === io.read_ports(i).addr)
+                                                  x.bits.addr === read_addrs(i))
 
          val bypass_data = Mux1H(Vec(bypass_ens), Vec(bypassable_wports.map(_.bits.data)))
 
@@ -139,79 +154,6 @@ class RegisterFileComb(
       when (wport.valid && (wport.bits.addr =/= UInt(0)))
       {
          regfile(wport.bits.addr) := wport.bits.data
-      }
-   }
-}
-
-
-// Sequential Read Register File. Provide read address by end of cycle #0 and get data back on the next cycle #1.
-class RegisterFileSeq(
-   num_registers: Int,
-   num_read_ports: Int,
-   num_write_ports: Int,
-   register_width: Int,
-   bypassable_array: Seq[Boolean])
-   (implicit p: Parameters)
-   extends RegisterFile(num_registers, num_read_ports, num_write_ports, register_width, bypassable_array)
-{
-
-   // --------------------------------------------------------------
-
-   val regfile = SeqMem(num_registers, UInt(width=register_width))
-
-
-   // --------------------------------------------------------------
-   // Read ports.
-
-   val read_data = Wire(Vec(num_read_ports, UInt(width = register_width)))
-
-   for (i <- 0 until num_read_ports)
-   {
-      read_data(i) :=
-         Mux(RegNext(io.read_ports(i).addr === UInt(0)),
-            UInt(0),
-            regfile.read(io.read_ports(i).addr))
-   }
-
-
-   // --------------------------------------------------------------
-   // Bypass out of the ALU's write ports.
-
-   require (bypassable_array.length == io.write_ports.length)
-
-   if (bypassable_array.reduce(_||_))
-   {
-      val bypassable_wports = ArrayBuffer[DecoupledIO[RegisterFileWritePort]]()
-      io.write_ports zip bypassable_array map { case (wport, b) => if (b) { bypassable_wports += wport} }
-
-      for (i <- 0 until num_read_ports)
-      {
-         val bypass_ens = bypassable_wports.map(x => x.valid &&
-                                                  x.bits.addr =/= UInt(0) &&
-                                                  x.bits.addr === RegNext(io.read_ports(i).addr))
-
-         val bypass_data = Mux1H(Vec(bypass_ens), Vec(bypassable_wports.map(_.bits.data)))
-
-         io.read_ports(i).data := Mux(bypass_ens.reduce(_|_), bypass_data, read_data(i))
-      }
-   }
-   else
-   {
-      for (i <- 0 until num_read_ports)
-      {
-         io.read_ports(i).data := read_data(i)
-      }
-   }
-
-   // --------------------------------------------------------------
-   // Write ports.
-
-   for (wport <- io.write_ports)
-   {
-      wport.ready := Bool(true)
-      when (wport.valid && (wport.bits.addr =/= UInt(0)))
-      {
-         regfile.write(wport.bits.addr, wport.bits.data)
       }
    }
 }

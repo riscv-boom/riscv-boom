@@ -58,17 +58,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p)
    val issue_unit       = Module(new IssueUnitCollasping(
                            issueParams.find(_.iqType == IQT_FP.litValue).get,
                            num_wakeup_ports))
-   val fregfile         = if (regreadLatency == 0)
-                              Module(new RegisterFileComb(numFpPhysRegs,
-                                 exe_units.withFilter(_.uses_iss_unit).map(e => e.num_rf_read_ports).sum,
-                                 // TODO get rid of -1, as that's a write-port going to IRF
-                                 exe_units.withFilter(_.uses_iss_unit).map(e => e.num_rf_write_ports).sum - 1 +
-                                    num_ll_ports,
-                                 fLen+1,
-                                 exe_units.bypassable_write_port_mask
-                                 ))
-                          else
-                              Module(new RegisterFileSeq(numFpPhysRegs,
+   val fregfile         = Module(new RegisterFileBehavorial(numFpPhysRegs,
                                  exe_units.withFilter(_.uses_iss_unit).map(e => e.num_rf_read_ports).sum,
                                  // TODO get rid of -1, as that's a write-port going to IRF
                                  exe_units.withFilter(_.uses_iss_unit).map(e => e.num_rf_write_ports).sum - 1 +

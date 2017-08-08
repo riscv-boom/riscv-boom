@@ -89,21 +89,14 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    println("\tBuilding ren")
    val rename_stage     = Module(new RenameStage(DECODE_WIDTH, num_wakeup_ports, fp_pipeline.io.wakeups.length))
    val issue_units      = new boom.IssueUnits(num_wakeup_ports)
-   val iregfile         = if (regreadLatency == 0)
-                              Module(new RegisterFileComb(numIntPhysRegs,
-                                 exe_units.withFilter(_.usesIRF).map(e => e.num_rf_read_ports).sum,
-                                 exe_units.withFilter(_.usesIRF).map(e => e.num_rf_write_ports).sum,
-                                 xLen,
-                                 exe_units.bypassable_write_port_mask))
-                          else if (regreadLatency == 1 && enableCustomRf)
+   val iregfile         = if (regreadLatency == 1 && enableCustomRf) {
                               Module(new RegisterFileSeqCustomArray(numIntPhysRegs,
                                  exe_units.withFilter(_.usesIRF).map(e => e.num_rf_read_ports).sum,
                                  exe_units.withFilter(_.usesIRF).map(e => e.num_rf_write_ports).sum,
                                  xLen,
                                  exe_units.bypassable_write_port_mask))
-                          else {
-                              require (regreadLatency == 1)
-                              Module(new RegisterFileSeq(numIntPhysRegs,
+                          } else {
+                              Module(new RegisterFileBehavorial(numIntPhysRegs,
                                  exe_units.withFilter(_.usesIRF).map(e => e.num_rf_read_ports).sum,
                                  exe_units.withFilter(_.usesIRF).map(e => e.num_rf_write_ports).sum,
                                  xLen,
