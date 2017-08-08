@@ -22,11 +22,12 @@ import util.Str
 
 case class BTBsaParameters(
   nSets: Int = 64,
-  nWays: Int = 4,
+  nWays: Int = 2,
   tagSz: Int = 20,
   nRAS : Int = 8,
   // Extra knobs.
-  bypassCalls: Boolean = false
+  bypassCalls: Boolean = false,
+  rasCheckForEmpty: Boolean = false
 )
 
 trait HasBTBsaParameters extends HasBoomCoreParameters
@@ -38,6 +39,7 @@ trait HasBTBsaParameters extends HasBoomCoreParameters
    val idx_sz = log2Ceil(nSets)
    val nRAS = btbParams.nRAS
    val bypassCalls = btbParams.bypassCalls
+   val rasCheckForEmpty = btbParams.rasCheckForEmpty
 }
 
 // Which predictor should we listen to?
@@ -145,16 +147,16 @@ class BIM(bim_entries: Int, way_idx: Int)(implicit val p: Parameters) extends Ha
 }
 
 
-class RAS(nras: Int)
+class RAS(nras: Int, coreInstBytes: Int)
 {
    def push(addr: UInt): Unit =
    {
       when (count < nras.U) { count := count + 1.U }
       val nextPos = Mux(Bool(isPow2(nras)) || pos < UInt(nras-1), pos+1.U, 0.U)
-      stack(nextPos) := addr
+      stack(nextPos) := addr >> log2Up(coreInstBytes)
       pos := nextPos
    }
-   def peek: UInt = stack(pos)
+   def peek: UInt = Cat(stack(pos), UInt(0, log2Up(coreInstBytes)))
    def pop(): Unit = when (!isEmpty)
    {
       count := count - 1.U
@@ -359,9 +361,10 @@ class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParamet
 
    if (nRAS > 0)
    {
-      val ras = new RAS(nRAS)
+      val ras = new RAS(nRAS, coreInstBytes)
       val doPeek = (hits_oh zip data_out map {case(hit, d) => hit && BpredType.isReturn(d.bpd_type)}).reduce(_||_)
-      when (!ras.isEmpty && doPeek)
+      val isEmpty = if (rasCheckForEmpty) ras.isEmpty else false.B
+      when (!isEmpty && doPeek)
       {
          io.resp.bits.target := ras.peek
       }
