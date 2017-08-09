@@ -35,7 +35,6 @@
 //
 //
 // TODO:
-//    - Support having a smaller h-table (map 1 h-bit entry to multiple p-bit entries).
 //    - Don't read the p-table SRAM if stalled (need extra state to store data
 //       while stalled)..
 
@@ -161,22 +160,26 @@ class PTableBanked(
 
 // Write h-table for every branch resolution (we can buffer these up).
 // Read h-table immediately to update the p-table (only if a mispredict occurred).
+// Track the number of entries in the P-table (needed to couple our I/Os).
+// We may (or may not) share one h-bit across two p-bits.
 class HTable(
    fetch_width: Int,
-   num_entries: Int
+   num_p_entries: Int,
+   share_hbit: Boolean
    ) extends Module
 {
-   private val index_sz = log2Up(num_entries)
+   private val ptable_idx_sz = log2Up(num_p_entries)
+   private val num_h_entries = if (share_hbit) num_p_entries/2 else num_p_entries
    val io = new Bundle
    {
       // Update the h-table.
-      val update   = Valid(new UpdateEntry(fetch_width, index_sz)).flip
+      val update   = Valid(new UpdateEntry(fetch_width, ptable_idx_sz)).flip
       // Enqueue an update to the p-table.
-      val pwq_enq  = Decoupled(new BrTableUpdate(fetch_width, index_sz))
+      val pwq_enq  = Decoupled(new BrTableUpdate(fetch_width, ptable_idx_sz))
    }
 
-   val h_table = Module(new SeqMem1rwTransformable(num_entries, fetch_width))
-   val hwq = Module(new Queue(new UpdateEntry(fetch_width, index_sz), entries=4))
+   val h_table = Module(new SeqMem1rwTransformable(num_h_entries, fetch_width))
+   val hwq = Module(new Queue(new UpdateEntry(fetch_width, ptable_idx_sz), entries=4))
 
    hwq.io.enq <> io.update
 
@@ -206,10 +209,13 @@ class HTable(
 class TwobcCounterTable(
    fetch_width: Int,
    num_entries: Int,
-   dualported: Boolean = false
+   dualported: Boolean = false,
+   share_hbit: Boolean = true // share 1 h-bit across 2 p-bits.
    ) extends Module
 {
    private val index_sz = log2Up(num_entries)
+   private val num_h_entries = if (share_hbit) num_entries/2 else num_entries
+
    val io = new Bundle
    {
       // send read addr on cycle 0, get data out on cycle 2.
@@ -223,8 +229,9 @@ class TwobcCounterTable(
    println ("\t\tBuilding (" +
       (num_entries * fetch_width * 2/8/1024) + " kB) 2-bit counter table for (" +
       fetch_width + "-wide fetch) and " +
-      num_entries + " entries " +
-      (if (dualported) "[1read/1write]." else "[1rw]."))
+      num_entries + " p-table entries " +
+      (if (dualported) "[1read/1write]" else "[1rw]" +
+      ", " + num_h_entries + " h-table entries."))
 
    //------------------------------------------------------------
    // prediction bits
@@ -232,7 +239,7 @@ class TwobcCounterTable(
 
    val p_table = if (dualported) Module(new PTableDualPorted(fetch_width, num_entries))
                  else            Module(new PTableBanked(fetch_width, num_entries))
-   val h_table = Module(new HTable(fetch_width, num_entries))
+   val h_table = Module(new HTable(fetch_width, num_p_entries = num_entries, share_hbit = share_hbit))
 
 
    //------------------------------------------------------------

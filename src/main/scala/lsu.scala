@@ -591,6 +591,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: uncore.tilelink
    // search SAQ for matches
 
    val mem_tlb_paddr    = Reg(next=exe_tlb_paddr)
+   // TODO can we/should we use mem_tlb_uop from the LAQ/SAQ and avoid the exe_resp.uop (move need for mem_typ, etc.).
    val mem_tlb_uop      = Reg(next=exe_tlb_uop) // not valid for std_incoming!
    mem_tlb_uop.br_mask := GetNewBrMask(io.brinfo, exe_tlb_uop)
    val mem_tlb_miss     = Reg(next=tlb_miss, init=Bool(false))
