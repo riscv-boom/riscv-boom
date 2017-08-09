@@ -122,30 +122,27 @@ class BOOMTile(clockSignal: Clock = null, resetSignal: Bool = null)
   //for icache tag
   for (i <- 0 until 4) {
     error_log_queue(i).io.enq.valid := icache.io.error_log.tag(i).log_we
-    error_log_queue(i).io.enq.bits := icache.io.error_log.tag(i).log_entry
+    error_log_queue(i).io.enq.bits := Cat(icache.io.error_log.tag(i).log_entry(31,4), UInt(1,width=4))
     error_log_arb.io.in(i) <> error_log_queue(i).io.deq
   }
   //for icache data
   error_log_queue(4).io.enq.valid := icache.io.error_log.data.log_we
-  error_log_queue(4).io.enq.bits := icache.io.error_log.data.log_entry
+  error_log_queue(4).io.enq.bits := Cat(icache.io.error_log.data.log_entry(31,4), UInt(2,width=4))
   error_log_arb.io.in(4) <> error_log_queue(4).io.deq
 
   //for dcache tag
   for (i <- 5 until 9) {
     error_log_queue(i).io.enq.valid := dcache.error_log.tag(i-5).log_we
-    error_log_queue(i).io.enq.bits := dcache.error_log.tag(i-5).log_entry
+    error_log_queue(i).io.enq.bits := Cat(dcache.error_log.tag(i-5).log_entry(31,4), UInt(3,width=4))
     error_log_arb.io.in(i) <> error_log_queue(i).io.deq
   }
     
   //for icache data
   error_log_queue(9).io.enq.valid := dcache.error_log.data.log_we
-  error_log_queue(9).io.enq.bits := dcache.error_log.data.log_entry
+  error_log_queue(9).io.enq.bits := Cat(dcache.error_log.data.log_entry(31,4), UInt(4, width=4))
   error_log_arb.io.in(9) <> error_log_queue(9).io.deq
 
   error_log_arb.io.out.ready := io.error_log.log_entry(31)
-  when (error_log_arb.io.out.valid && error_log_arb.io.out.ready) {
-    io.error_log.log_entry := error_log_arb.io.out.bits
-  }
-
+  io.error_log.log_entry := RegEnable(error_log_arb.io.out.bits, error_log_arb.io.out.valid && error_log_arb.io.out.ready) 
 }
 
