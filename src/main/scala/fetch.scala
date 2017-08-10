@@ -384,20 +384,6 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    io.f3_hist_update.bits.taken := f3_jr_seen || f3_taken
 
 
-   for (i <- 0 until fetch_width)
-   {
-      if (i == 0)
-      {
-         f3_fetch_bundle.debug_events(i).fetch_seq := fseq_reg
-      }
-      else
-      {
-         f3_fetch_bundle.debug_events(i).fetch_seq := fseq_reg +
-            PopCount(f3_fetch_bundle.mask.toBits()(i-1,0))
-      }
-   }
-
-
    //-------------------------------------------------------------
    // **** FetchBuffer Enqueue ****
    //-------------------------------------------------------------
@@ -405,6 +391,17 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    // Fetch Buffer
    FetchBuffer.io.enq.valid := f3_valid
    FetchBuffer.io.enq.bits  := f3_fetch_bundle
+
+
+   for (i <- 0 until fetch_width)
+   {
+      if (i == 0) {
+         FetchBuffer.io.enq.bits.debug_events(i).fetch_seq := fseq_reg
+      } else {
+         FetchBuffer.io.enq.bits.debug_events(i).fetch_seq := fseq_reg +
+            PopCount(f3_fetch_bundle.mask.toBits()(i-1,0))
+      }
+   }
 
    // We do not use the imem's BTB.
    io.imem.btb_update.valid := Bool(false)
