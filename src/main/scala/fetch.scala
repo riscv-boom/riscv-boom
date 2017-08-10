@@ -167,13 +167,6 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
       is_call(i) := io.imem.resp.valid && IsCall(inst) && io.imem.resp.bits.mask(i)
       br_targs(i) := ComputeBranchTarget(pc, inst, xLen, coreInstBytes)
       jal_targs(i) := ComputeJALTarget(pc, inst, xLen, coreInstBytes)
-
-      if (i == 0) {
-         f2_fetch_bundle.debug_events(i).fetch_seq := fseq_reg
-      } else {
-         f2_fetch_bundle.debug_events(i).fetch_seq := fseq_reg +
-            PopCount(f2_fetch_bundle.mask.toBits()(i-1,0))
-      }
    }
 
    val f2_br_seen = io.imem.resp.valid &&
@@ -390,6 +383,21 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    io.f3_hist_update.valid := f3_valid && (f3_br_seen || f3_jr_seen) && !if_stalled
    io.f3_hist_update.bits.taken := f3_jr_seen || f3_taken
 
+
+   for (i <- 0 until fetch_width)
+   {
+      if (i == 0)
+      {
+         f3_fetch_bundle.debug_events(i).fetch_seq := fseq_reg
+      }
+      else
+      {
+         f3_fetch_bundle.debug_events(i).fetch_seq := fseq_reg +
+            PopCount(f3_fetch_bundle.mask.toBits()(i-1,0))
+      }
+   }
+
+
    //-------------------------------------------------------------
    // **** FetchBuffer Enqueue ****
    //-------------------------------------------------------------
@@ -434,6 +442,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
             }
          }
       }
+
 
    }
 
