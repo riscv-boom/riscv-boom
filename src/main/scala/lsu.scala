@@ -414,8 +414,9 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: uncore.tilelink
    // *** Wakeup Load from LAQ ***
 
    // TODO make option to only wakeup load at the head (to compare to old behavior)
-   val exe_ld_idx_wakeup =
-      AgePriorityEncoder((0 until num_ld_entries).map(i => laq_addr_val(i) & ~laq_executed(i)), laq_head)
+   // Compute this for the next cycle to remove can_fire, ld_idx_wakeup off critical path.
+   val exe_ld_idx_wakeup = RegNext(
+      AgePriorityEncoder((0 until num_ld_entries).map(i => laq_addr_val(i) & ~laq_executed(i)), laq_head))
 
 
    when (laq_addr_val       (exe_ld_idx_wakeup) &&
