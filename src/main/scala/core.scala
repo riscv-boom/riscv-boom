@@ -275,6 +275,7 @@ class BOOMCore(implicit p: Parameters) extends BoomModule()(p)
    bpd_stage.io.f2_btb_update := fetch_unit.io.f2_btb_update
    bpd_stage.io.f2_ras_update := fetch_unit.io.f2_ras_update
    bpd_stage.io.f3_hist_update:= fetch_unit.io.f3_hist_update
+   bpd_stage.io.f3_bim_update := fetch_unit.io.f3_bim_update
    bpd_stage.io.status_prv   := csr.io.status.prv
    bpd_stage.io.status_debug := csr.io.status.debug
 

@@ -493,7 +493,6 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
 				BpredType.branch)))
 
       br_unit.bim_update.bits.taken            := is_taken   // was this branch "taken"
-      br_unit.bim_update.bits.mispredict       := btb_mispredict // updated only for BTB hits
       br_unit.bim_update.bits.bim_resp         := io.get_pred.info.bim_resp
 
       br_unit.bpd_update.valid                 := io.req.valid && uop.is_br_or_jmp &&
