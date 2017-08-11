@@ -108,7 +108,6 @@ class BTBsaUpdate(implicit p: Parameters) extends BTBsaBundle()(p)
 
 class BimUpdate(implicit p: Parameters) extends BTBsaBundle()(p)
 {
-  val mispredict = Bool()
   val taken = Bool()
   val bim_resp = new BimResp
 }

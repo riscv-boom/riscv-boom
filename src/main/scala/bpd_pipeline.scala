@@ -91,6 +91,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
       // Fetch3
       val f3_bpd_resp   = Valid(new BpdResp)
       val f3_hist_update= Valid(new GHistUpdate).flip
+      val f3_bim_update = Valid(new BimUpdate).flip
 
       // Other
       val br_unit       = new BranchUnitResp().asInput
@@ -206,8 +207,8 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
          io.br_unit.btb_update,
          io.f2_btb_update)
 
-   // TODO XXX allow F2/BPD redirects to correct the BIM.
-   btb.io.bim_update := io.br_unit.bim_update
+   btb.io.bim_update.valid := io.br_unit.bim_update.valid || io.f3_bim_update.valid
+   btb.io.bim_update.bits := Mux(io.br_unit.bim_update.valid, io.br_unit.bim_update.bits, io.f3_bim_update.bits)
 
 
    //************************************************

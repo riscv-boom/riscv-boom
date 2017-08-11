@@ -56,6 +56,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
       val f2_ras_update     = Valid(new RasUpdate)
       val f3_bpd_resp       = Valid(new BpdResp).flip
       val f3_hist_update    = Valid(new GHistUpdate)
+      val f3_bim_update     = Valid(new BimUpdate)
 
       val br_unit           = new BranchUnitResp().asInput
 
@@ -382,6 +383,11 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
 
    io.f3_hist_update.valid := f3_valid && (f3_br_seen || f3_jr_seen) && !if_stalled
    io.f3_hist_update.bits.taken := f3_jr_seen || f3_taken
+
+   io.f3_bim_update.valid := f3_req.valid
+   io.f3_bim_update.bits.taken :=  f3_taken
+   // HACK: all instructions in the bundle get the same bim_resp, so just read the first.
+   io.f3_bim_update.bits.bim_resp := f3_fetch_bundle.bpu_info(0).bim_resp
 
 
    //-------------------------------------------------------------
