@@ -258,7 +258,7 @@ class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParamet
       tags.suggestName("btb_tag_array")
       data.suggestName("btb_data_array")
 
-      val is_valid = RegNext((valids >> s0_idx)(0) && !wen)
+      val is_valid = (valids >> s1_idx)(0) && RegNext(!wen)
       val rout     = data.read(s0_idx, !wen)
       val rtag     = tags.read(s0_idx, !wen)
       hits_oh(w)   := is_valid && (rtag === s1_req_tag)
