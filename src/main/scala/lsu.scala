@@ -838,6 +838,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: uncore.tilelink
 
          if (O3PIPEVIEW_PRINTF)
          {
+            // TODO supress printing out a store-comp for lr instructions.
             printf("%d; store-comp: %d\n", io.memresp.bits.debug_events.fetch_seq, io.debug_tsc)
          }
       }

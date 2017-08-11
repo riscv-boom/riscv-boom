@@ -120,7 +120,9 @@ def isStore(line):
        "sd " in line or \
        "sh " in line or \
        "sb " in line or \
-       "amo" in line:
+       "amo" in line or \
+       "sc." in line or \
+       "lr." in line:  # TODO remove lr from using store-completions.
         return True
     else:
         return False
