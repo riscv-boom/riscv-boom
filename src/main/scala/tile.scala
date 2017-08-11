@@ -118,31 +118,43 @@ class BOOMTile(clockSignal: Clock = null, resetSignal: Bool = null)
   val numErrorLogSources = 10
   val error_log_arb = Module(new Arbiter(UInt(width = 32), numErrorLogSources))
   //feed the vector of error_log to the arbiter
-  val error_log_queue =  (0 until numErrorLogSources).map(x => Module(new Queue(UInt(width=32), 2))).toList
+  val error_log_queue =  (0 until numErrorLogSources).map(x => Reg(init = UInt(0, width=32))).toList
   //for icache tag
   for (i <- 0 until 4) {
-    error_log_queue(i).io.enq.valid := icache.io.error_log.tag(i).log_we
-    error_log_queue(i).io.enq.bits := Cat(icache.io.error_log.tag(i).log_entry(31,4), UInt(1,width=4))
-    error_log_arb.io.in(i) <> error_log_queue(i).io.deq
+    error_log_arb.io.in(i).valid <> icache.io.error_log.tag(i).log_we
+    when (icache.io.error_log.tag(i).log_we) {
+      error_log_queue(i) := Cat(icache.io.error_log.tag(i).log_entry(31,4), UInt(1,width=4))
+      error_log_arb.io.in(i).bits <> error_log_queue(i)
+    }
   }
   //for icache data
-  error_log_queue(4).io.enq.valid := icache.io.error_log.data.log_we
-  error_log_queue(4).io.enq.bits := Cat(icache.io.error_log.data.log_entry(31,4), UInt(2,width=4))
-  error_log_arb.io.in(4) <> error_log_queue(4).io.deq
+  error_log_arb.io.in(4).valid <> icache.io.error_log.data.log_we
+  when( icache.io.error_log.data.log_we) {
+    error_log_queue(4) := Cat(icache.io.error_log.data.log_entry(31,4), UInt(2,width=4))
+    error_log_arb.io.in(4).bits <> error_log_queue(4)
+  }
 
   //for dcache tag
   for (i <- 5 until 9) {
-    error_log_queue(i).io.enq.valid := dcache.error_log.tag(i-5).log_we
-    error_log_queue(i).io.enq.bits := Cat(dcache.error_log.tag(i-5).log_entry(31,4), UInt(3,width=4))
-    error_log_arb.io.in(i) <> error_log_queue(i).io.deq
+    error_log_arb.io.in(i).valid <> dcache.error_log.tag(i-5).log_we
+    when (dcache.error_log.tag(i-5).log_we) {
+      error_log_queue(i) := Cat(dcache.error_log.tag(i-5).log_entry(31,4), UInt(3,width=4))
+      error_log_arb.io.in(i).bits <> error_log_queue(i)
+    }
   }
     
   //for icache data
-  error_log_queue(9).io.enq.valid := dcache.error_log.data.log_we
-  error_log_queue(9).io.enq.bits := Cat(dcache.error_log.data.log_entry(31,4), UInt(4, width=4))
-  error_log_arb.io.in(9) <> error_log_queue(9).io.deq
+  error_log_arb.io.in(9).valid <> dcache.error_log.data.log_we
+  when (dcache.error_log.data.log_we) {
+    error_log_queue(9) := Cat(dcache.error_log.data.log_entry(31,4), UInt(4, width=4))
+    error_log_arb.io.in(9).bits <> error_log_queue(9)
+  }
 
-  error_log_arb.io.out.ready := io.error_log.log_entry(31)
-  io.error_log.log_entry := RegEnable(error_log_arb.io.out.bits, error_log_arb.io.out.valid && error_log_arb.io.out.ready) 
+  val error_log_out_reg = Reg(init= UInt(0, width=32))
+  error_log_arb.io.out.ready := error_log_arb.io.out.bits(31) && error_log_arb.io.out.valid
+  when (error_log_arb.io.out.valid && error_log_arb.io.out.ready) {
+    error_log_out_reg := error_log_arb.io.out.bits
+  }
+  io.error_log.log_entry := error_log_out_reg
 }
 
