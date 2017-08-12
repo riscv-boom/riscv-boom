@@ -243,8 +243,8 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
 
    bpd_stage.io.fetch_stalled := fetch_unit.io.stalled
 
-   bpd_stage.io.f2_btb_update := fetch_unit.io.f2_btb_update
    bpd_stage.io.f2_ras_update := fetch_unit.io.f2_ras_update
+   bpd_stage.io.f3_btb_update := fetch_unit.io.f3_btb_update
    bpd_stage.io.f3_hist_update:= fetch_unit.io.f3_hist_update
    bpd_stage.io.f3_bim_update := fetch_unit.io.f3_bim_update
    bpd_stage.io.status_prv   := csr.io.status.prv

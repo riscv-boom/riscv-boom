@@ -85,11 +85,11 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
       val f2_bpu_request= Valid(new BpuRequest)
       val f2_btb_resp   = Valid(new BTBsaResp)
       val f2_bpd_resp   = Valid(new BpdResp)
-      val f2_btb_update = Valid(new BTBsaUpdate).flip
       val f2_ras_update = Valid(new RasUpdate).flip
 
       // Fetch3
       val f3_bpd_resp   = Valid(new BpdResp)
+      val f3_btb_update = Valid(new BTBsaUpdate).flip
       val f3_hist_update= Valid(new GHistUpdate).flip
       val f3_bim_update = Valid(new BimUpdate).flip
 
@@ -200,12 +200,10 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    //************************************************
    // Update the BTB/BIM
 
-   // TODO XXX: allow branch-checker to kill bad entries.
-   // TODO XXX update the BTB during the F3/branch-checker stage if BPD says we should take it.
    btb.io.btb_update :=
       Mux(io.br_unit.btb_update.valid,
          io.br_unit.btb_update,
-         io.f2_btb_update)
+         io.f3_btb_update)
 
    btb.io.bim_update.valid := io.br_unit.bim_update.valid || io.f3_bim_update.valid
    btb.io.bim_update.bits := Mux(io.br_unit.bim_update.valid, io.br_unit.bim_update.bits, io.f3_bim_update.bits)
