@@ -87,6 +87,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    val f3_req = Reg(Valid(new PCReq()))
    val f3_fetch_bundle = Reg(new FetchBundle())
    val f3_taken = Reg(Bool())
+   val f3_btb_hit = Reg(Bool())
    val f3_br_seen = Reg(init=false.B)
    val f3_jr_seen = Reg(init=false.B)
 
@@ -373,6 +374,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
       f3_fetch_bundle := f2_fetch_bundle
       f3_req := f2_req
       f3_taken := f2_taken
+      f3_btb_hit := io.f2_btb_resp.valid
       f3_br_seen := f2_br_seen
       f3_jr_seen := f2_jr_seen
 
@@ -389,7 +391,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    io.f3_hist_update.bits.taken := f3_jr_seen || f3_taken
 //   io.f3_hist_update.bits.taken := f3_jr_seen || Mux(io.bpd_resp.valid, bpd_predict_taken, f2_btb.bits.taken) ...
 
-   io.f3_bim_update.valid := f3_req.valid
+   io.f3_bim_update.valid := f3_valid && f3_req.valid && f3_btb_hit
    io.f3_bim_update.bits.taken :=  f3_taken
    // HACK: all instructions in the bundle get the same bim_resp, so just read the first.
    io.f3_bim_update.bits.bim_resp := f3_fetch_bundle.bpu_info(0).bim_resp
