@@ -1284,12 +1284,12 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters) extends BoomModule()(
    //-------------------------------------------------------------
    // Debug & Counter outputs
 
-   io.counters.ld_valid        := io.exe_resp.valid && io.exe_resp.bits.uop.is_load
-   io.counters.ld_forwarded    := io.forward_val
-   io.counters.ld_sleep        := ld_was_put_to_sleep
-   io.counters.ld_killed       := ld_was_killed
-   io.counters.stld_order_fail := stld_order_fail
-   io.counters.ldld_order_fail := ldld_order_fail
+   io.counters.ld_valid        := RegNext(io.exe_resp.valid && io.exe_resp.bits.uop.is_load)
+   io.counters.ld_forwarded    := RegNext(io.forward_val)
+   io.counters.ld_sleep        := RegNext(ld_was_put_to_sleep)
+   io.counters.ld_killed       := RegNext(ld_was_killed)
+   io.counters.stld_order_fail := RegNext(stld_order_fail)
+   io.counters.ldld_order_fail := RegNext(ldld_order_fail)
 
    if (DEBUG_PRINTF_LSU)
    {
