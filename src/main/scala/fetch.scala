@@ -49,9 +49,9 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
 
       val f2_btb_resp       = Valid(new BTBsaResp).flip
       val f2_bpd_resp       = Valid(new BpdResp).flip
-      val f2_btb_update     = Valid(new BTBsaUpdate)
       val f2_ras_update     = Valid(new RasUpdate)
       val f3_bpd_resp       = Valid(new BpdResp).flip
+      val f3_btb_update     = Valid(new BTBsaUpdate)
       val f3_hist_update    = Valid(new GHistUpdate)
       val f3_bim_update     = Valid(new BimUpdate)
 
@@ -196,6 +196,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    val f2_has_jal = is_jal.reduce(_|_)
    val f2_jal_idx = PriorityEncoder(is_jal.toBits)
    val f2_jal_target = jal_targs(f2_jal_idx)
+   val f2_bpd_btb_update_valid = Wire(init=false.B) // does the BPD's choice cause a BTB update?
    val f2_bpd_may_redirect_taken = Wire(init=false.B) // request towards a taken branch target
    val f2_bpd_may_redirect_next = Wire(init=false.B) // override taken prediction and fetch the next line (or take JAL)
    val f2_bpd_may_redirect = f2_bpd_may_redirect_taken || f2_bpd_may_redirect_next
@@ -256,6 +257,8 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
       {
          // BTB made no prediction - let the BPD do what it wants
          f2_bpd_may_redirect_taken := io.f2_bpd_resp.valid && f2_bpd_br_taken
+         // add branch to the BTB if we think it will be taken
+         f2_bpd_btb_update_valid := f2_bpd_may_redirect_taken
       }
 
       assert (PopCount(Vec(f2_bpd_may_redirect_taken, f2_bpd_may_redirect_next)) <= UInt(1),
@@ -282,7 +285,19 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    f2_req.valid := (bchecker.io.req.valid || f2_bpd_may_redirect) && f2_valid && !(f0_redirect_val && !io.f2_bpu_request.valid)
    f2_req.bits.addr := Mux(f2_bpd_overrides_bcheck, f2_bpd_redirect_target, bchecker.io.req.bits.addr)
 
-   io.f2_btb_update := bchecker.io.btb_update // XXX let f3_bpd_redirect update the BTB too? or let BRU handle it?
+   val f2_btb_update_bits = Wire(new BTBsaUpdate)
+   io.f3_btb_update.valid := RegNext(bchecker.io.btb_update.valid || f2_bpd_btb_update_valid)
+   io.f3_btb_update.bits := RegNext(f2_btb_update_bits)
+   f2_btb_update_bits := bchecker.io.btb_update.bits
+   when (f2_bpd_overrides_bcheck)
+   {
+      f2_btb_update_bits.target := f2_bpd_target
+      f2_btb_update_bits.cfi_pc := f2_bpd_br_idx << log2Up(coreInstBytes)
+      f2_btb_update_bits.bpd_type := BpredType.branch
+      f2_btb_update_bits.cfi_type := CfiType.branch
+   }
+
+
    io.f2_ras_update := bchecker.io.ras_update
 
    // mask out instructions after predicted branch
