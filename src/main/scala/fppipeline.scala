@@ -42,7 +42,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p)
       val fromint          = Valid(new FuncUnitReq(fLen+1)).flip // from integer RF
       val tosdq            = Valid(new MicroOpWithData(fLen))    // to Load/Store Unit
       val toint            = Decoupled(new ExeUnitResp(xLen))    // to integer RF
-      
+
       val wakeups          = Vec(num_wakeup_ports, Valid(new ExeUnitResp(fLen+1)))
       val wb_valids        = Vec(num_wakeup_ports, Bool()).asInput
       val wb_pdsts         = Vec(num_wakeup_ports, UInt(width=fp_preg_sz)).asInput
@@ -80,7 +80,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p)
    // The -1 is for the F2I port; -1 for I2F port.
    println (exe_units.map(_.num_rf_write_ports).sum)
    require (exe_units.map(_.num_rf_write_ports).sum-1-1 + num_ll_ports == num_wakeup_ports)
-   require (exe_units.withFilter(_.uses_iss_unit).map(e => 
+   require (exe_units.withFilter(_.uses_iss_unit).map(e =>
       e.num_rf_write_ports).sum -1 + num_ll_ports == num_wakeup_ports)
 
    override def toString: String =
@@ -213,7 +213,15 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p)
    ll_wbarb.io.in(0).bits.data := fp_load_data_recoded
 
    ll_wbarb.io.in(1) <> ifpu_resp
-   fregfile.io.write_ports(0) <> WritePort(ll_wbarb.io.out, FPREG_SZ, fLen+1)
+   if (regreadLatency > 0) {
+      // Cut up critical path by delaying the write by a cycle.
+      // Wakeup signal is sent on cycle S0, write is now delayed until end of S1,
+      // but Issue happens on S1 and RegRead doesn't happen until S2 so we're safe.
+      // (for regreadlatency >0).
+      fregfile.io.write_ports(0) <> WritePort(RegNext(ll_wbarb.io.out), FPREG_SZ, fLen+1)
+   } else {
+      fregfile.io.write_ports(0) <> WritePort(ll_wbarb.io.out, FPREG_SZ, fLen+1)
+   }
 
    assert (ll_wbarb.io.in(0).ready) // never backpressure the memory unit.
    when (ifpu_resp.valid) { assert (ifpu_resp.bits.uop.ctrl.rf_wen && ifpu_resp.bits.uop.dst_rtype === RT_FLT) }
