@@ -16,7 +16,6 @@
 // TODO: explore possibility of conditional IO fields? if a branch unit... how to add extra to IO in subclass?
 
 package boom
-{
 
 import Chisel._
 import config.Parameters
@@ -29,16 +28,18 @@ import uncore.constants.MemoryOpConstants._
 object FUConstants
 {
    // bit mask, since a given execution pipeline may support multiple functional units
-   val FUC_SZ = 8
+   val FUC_SZ = 10
    val FU_X   = BitPat.DC(FUC_SZ)
    val FU_ALU = UInt(  1, FUC_SZ)
    val FU_BRU = UInt(  2, FUC_SZ)
    val FU_MEM = UInt(  4, FUC_SZ)
    val FU_MUL = UInt(  8, FUC_SZ)
    val FU_DIV = UInt( 16, FUC_SZ)
-   val FU_FPU = UInt( 32, FUC_SZ)
-   val FU_CSR = UInt( 64, FUC_SZ)
+   val FU_CSR = UInt( 32, FUC_SZ)
+   val FU_FPU = UInt( 64, FUC_SZ)
    val FU_FDV = UInt(128, FUC_SZ)
+   val FU_I2F = UInt(256, FUC_SZ)
+   val FU_F2I = UInt(512, FUC_SZ)
 }
 import FUConstants._
 
@@ -50,7 +51,8 @@ class SupportedFuncUnits(
    val muld: Boolean = false,
    val fpu: Boolean  = false,
    val csr: Boolean  = false,
-   val fdiv: Boolean = false)
+   val fdiv: Boolean = false,
+   val ifpu: Boolean = false)
 {
 }
 
@@ -82,7 +84,8 @@ class FunctionalUnitIo(num_stages: Int
 class GetPredictionInfo(implicit p: Parameters) extends BoomBundle()(p)
 {
    val br_tag = UInt(OUTPUT, BR_TAG_SZ)
-   val info = new BranchPredictionResp().asInput
+//   val info = new BranchPredictionResp().asInput
+   val info = new BranchPredInfo().asInput
 }
 
 class FuncUnitReq(data_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
@@ -94,10 +97,6 @@ class FuncUnitReq(data_width: Int)(implicit p: Parameters) extends BoomBundle()(
    val rs1_data = UInt(width = data_width)
    val rs2_data = UInt(width = data_width)
    val rs3_data = UInt(width = data_width) // only used for FMA units
-//   val rs_data = Vec.fill(num_operands) {UInt(width=data_width)}
-//   def rs1_data = rs_data(0)
-//   def rs2_data = rs_data(1)
-//   def rs3_data = rs_data(2)
 
    val kill = Bool() // kill everything
 
@@ -150,19 +149,16 @@ class BrResolutionInfo(implicit p: Parameters) extends BoomBundle()(p)
 class BranchUnitResp(implicit p: Parameters) extends BoomBundle()(p)
 {
    val take_pc         = Bool()
-   val target          = UInt(width = vaddrBits+1)
+   val target          = UInt(width = vaddrBitsExtended)
 
-   val pc              = UInt(width = vaddrBits+1) // TODO this isn't really a branch_unit thing
+   val pc              = UInt(width = vaddrBitsExtended) // TODO this isn't really a branch_unit thing
 
    val brinfo          = new BrResolutionInfo()
-   val btb_update_valid= Bool() // TODO turn this into a directed bundle so we can fold this into btb_update?
-   val btb_update      = new rocket.BTBUpdate
-   val bht_update      = Valid(new rocket.BHTUpdate)
+   val btb_update      = Valid(new BTBsaUpdate)
+   val bim_update      = Valid(new BimUpdate)
    val bpd_update      = Valid(new BpdUpdate)
 
    val xcpt            = Valid(new Exception)
-
-   val debug_btb_pred  = Bool() // just for debug, did the BTB and BHT predict taken?
 }
 
 abstract class FunctionalUnit(is_pipelined: Boolean
@@ -190,7 +186,7 @@ abstract class PipelinedFunctionalUnit(val num_stages: Int,
                                                               , data_width = data_width
                                                               , has_branch_unit = is_branch_unit)(p)
 {
-   // pipelined functional unit is always ready
+   // Pipelined functional unit is always ready.
    io.req.ready := Bool(true)
 
 
@@ -288,7 +284,6 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
    alu.io.fn  := io.req.bits.uop.ctrl.op_fcn
    alu.io.dw  := io.req.bits.uop.ctrl.fcn_dw
 
-
    if (is_branch_unit)
    {
       val uop_pc_ = io.get_rob_pc.curr_pc
@@ -337,21 +332,27 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
                      (pc_sel =/= PC_PLUS4)
 
       // "mispredict" means that a branch has been resolved and it must be killed
-      val mispredict = Wire(Bool()); mispredict := Bool(false)
+      val mispredict = Wire(init = Bool(false))
 
       val is_br          = io.req.valid && !killed && uop.is_br_or_jmp && !uop.is_jump
       val is_br_or_jalr  = io.req.valid && !killed && uop.is_br_or_jmp && !uop.is_jal
 
       // did the BTB predict a br or jmp incorrectly?
       // (do we need to reset its history and teach it a new target?)
-      val btb_mispredict = Wire(Bool()); btb_mispredict := Bool(false)
+      val btb_mispredict = Wire(init = Bool(false))
 
       // did the bpd predict incorrectly (aka, should we correct its prediction?)
-      val bpd_mispredict = Wire(Bool()); bpd_mispredict := Bool(false)
+      val bpd_mispredict = Wire(init = Bool(false))
 
       // if b/j is taken, does it go to the wrong target?
       val wrong_taken_target = !io.get_rob_pc.next_val || (io.get_rob_pc.next_pc =/= bj_addr)
 
+
+      if (DEBUG_PRINTF)
+      {
+         printf("  BR-UNIT: PC: 0x%x, Next: %d, 0x%x ,bj_addr: 0x%x\n",
+            io.get_rob_pc.curr_pc, io.get_rob_pc.next_val, io.get_rob_pc.next_pc, bj_addr)
+      }
       assert (!(io.req.valid && uop.is_jal && io.get_rob_pc.next_val && io.get_rob_pc.next_pc =/= bj_addr),
          "[func] JAL went to the wrong target.")
 
@@ -361,22 +362,23 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
          {
             // only the BTB can predict JALRs (must also check it predicted taken)
             btb_mispredict := wrong_taken_target ||
-                              !io.get_pred.info.btb_resp.taken ||
                               !uop.br_prediction.btb_hit ||
-                              io.status.debug // fun hack to perform fence.i on JALRs in debug mode
+                              !uop.br_prediction.btb_taken ||
+                              io.status.debug // fun HACK to perform fence.i on JALRs in debug mode
+//                              !io.get_pred.info.btb_resp.taken || XXX get info from get_Pred, not uop.br_pred
             bpd_mispredict := Bool(false)
          }
          when (pc_sel === PC_PLUS4)
          {
-            btb_mispredict := uop.br_prediction.btb_hit && io.get_pred.info.btb_resp.taken
-            bpd_mispredict := uop.br_prediction.bpd_predict_taken
+            btb_mispredict := uop.br_prediction.btb_hit && uop.br_prediction.btb_taken // TODO XXX io.get_pred.info.btb_resp.taken
+            bpd_mispredict := uop.br_prediction.bpd_taken
          }
          when (pc_sel === PC_BRJMP)
          {
             btb_mispredict := wrong_taken_target ||
                               !uop.br_prediction.btb_hit ||
-                              (uop.br_prediction.btb_hit && !io.get_pred.info.btb_resp.taken)
-            bpd_mispredict := !uop.br_prediction.bpd_predict_taken
+                              (uop.br_prediction.btb_hit && !uop.br_prediction.btb_taken) // TODO XXX !io.get_pred.info.btb_resp.taken)
+            bpd_mispredict := !uop.br_prediction.bpd_taken
          }
       }
 
@@ -398,11 +400,22 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
          }
          when (pc_sel === PC_PLUS4)
          {
-            mispredict := Mux(uop.br_prediction.wasBTB, btb_mispredict, bpd_mispredict)
+            mispredict :=
+               Mux(uop.br_prediction.btb_blame,
+                  btb_mispredict,
+               Mux(uop.br_prediction.bpd_blame,
+                  bpd_mispredict,
+                  false.B)) // if neither BTB nor BPD predicted and it's not-taken, then no misprediction occurred.
          }
          when (pc_sel === PC_BRJMP)
          {
-            mispredict := Mux(uop.br_prediction.wasBTB, btb_mispredict, bpd_mispredict)
+            mispredict :=
+               Mux(uop.br_prediction.btb_blame,
+                  btb_mispredict,
+               Mux(uop.br_prediction.bpd_blame,
+                  bpd_mispredict,
+                  true.B)) // if neither BTB nor BPD predicted and it's taken, then a misprediction occurred.
+
          }
       }
 
@@ -414,7 +427,8 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
 
 
       br_unit.take_pc := mispredict
-      br_unit.target := Mux(pc_sel === PC_PLUS4, pc_plus4, bj_addr)
+      val target = Mux(pc_sel === PC_PLUS4, pc_plus4, bj_addr)
+      br_unit.target := target
 
       // Delay branch resolution a cycle for critical path reasons.
       // If the rest of "br_unit" is being registered too, then we don't need to
@@ -436,8 +450,8 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
       brinfo.taken          := is_taken
       brinfo.btb_mispredict := btb_mispredict
       brinfo.bpd_mispredict := bpd_mispredict
-      brinfo.btb_made_pred  := uop.br_prediction.wasBTB
-      brinfo.bpd_made_pred  := uop.br_prediction.bpd_predict_val
+      brinfo.btb_made_pred  := uop.br_prediction.btb_blame
+      brinfo.bpd_made_pred  := uop.br_prediction.bpd_blame
 
       br_unit.brinfo := brinfo
 
@@ -449,32 +463,37 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
 
       if (enableBTBContainsBranches)
       {
-         br_unit.btb_update_valid := is_br_or_jalr && mispredict && is_taken
+         br_unit.btb_update.valid := is_br_or_jalr && mispredict && is_taken && !uop.br_prediction.btb_hit
          // update on all branches (but not jal/jalr)
-         br_unit.bht_update.valid := is_br && mispredict
+         br_unit.bim_update.valid := is_br && mispredict && uop.br_prediction.btb_hit
       }
       else
       {
-         br_unit.btb_update_valid := is_br_or_jalr && mispredict && uop.is_jump
-         br_unit.bht_update.valid := Bool(false)
+         br_unit.btb_update.valid := is_br_or_jalr && mispredict && uop.is_jump
+         br_unit.bim_update.valid := Bool(false)
       }
 
-      br_unit.btb_update.pc               := fetch_pc // tell the BTB which pc to tag check against
-      br_unit.btb_update.br_pc            := uop_pc_
-      br_unit.btb_update.target           := (br_unit.target.toSInt & SInt(-coreInstBytes)).toUInt
-      br_unit.btb_update.prediction.valid := io.get_pred.info.btb_resp_valid // did this branch's fetch packet have
-                                                                             // a BTB hit in fetch?
-      br_unit.btb_update.prediction.bits  := io.get_pred.info.btb_resp       // give the BTB back its BTBResp
-      br_unit.btb_update.taken            := is_taken   // was this branch/jal/jalr "taken"
-      br_unit.btb_update.isJump           := uop.is_jump
-      br_unit.btb_update.isReturn         := uop.is_ret
+      br_unit.btb_update.bits.pc               := fetch_pc // tell the BTB which pc to tag check against
+      br_unit.btb_update.bits.cfi_pc           := uop_pc_
+      br_unit.btb_update.bits.target           := (target.toSInt & SInt(-coreInstBytes)).toUInt
+//      br_unit.btb_update.prediction.valid := io.get_pred.info.btb_resp_valid // did this branch's fetch packet have
+//                                                                             // a BTB hit in fetch?
+//      br_unit.btb_update.prediction.bits  := io.get_pred.info.btb_resp       // give the BTB back its BTBResp
+      br_unit.btb_update.bits.taken            := is_taken   // was this branch/jal/jalr "taken"
+//      br_unit.btb_update.bits.is_jump          := uop.is_jump
+//      br_unit.btb_update.bits.is_ret           := uop.is_ret
+      br_unit.btb_update.bits.cfi_type         :=
+			Mux(uop.is_jal, CfiType.jal,
+			Mux(uop.is_jump && !uop.is_jal, CfiType.jalr,
+				CfiType.branch))
+      br_unit.btb_update.bits.bpd_type			  :=
+			Mux(uop.is_ret, BpredType.ret,
+			Mux(uop.is_call, BpredType.call,
+			Mux(uop.is_jump, BpredType.jump,
+				BpredType.branch)))
 
-      br_unit.bht_update.bits.taken            := is_taken   // was this branch "taken"
-      br_unit.bht_update.bits.mispredict       := btb_mispredict     // need to reset the history in the BHT
-                                                                     // that is updated only on BTB hits
-      br_unit.bht_update.bits.prediction.valid := io.get_pred.info.btb_resp_valid // only update if hit in the BTB
-      br_unit.bht_update.bits.prediction.bits  := io.get_pred.info.btb_resp
-      br_unit.bht_update.bits.pc               := fetch_pc // what pc should the tag check be on?
+      br_unit.bim_update.bits.taken            := is_taken   // was this branch "taken"
+      br_unit.bim_update.bits.bim_resp         := io.get_pred.info.bim_resp
 
       br_unit.bpd_update.valid                 := io.req.valid && uop.is_br_or_jmp &&
                                                   !uop.is_jal && !killed
@@ -482,7 +501,7 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
       br_unit.bpd_update.bits.brob_idx         := io.get_rob_pc.curr_brob_idx
       br_unit.bpd_update.bits.taken            := is_taken
       br_unit.bpd_update.bits.mispredict       := mispredict
-      br_unit.bpd_update.bits.bpd_predict_val  := uop.br_prediction.bpd_predict_val
+      br_unit.bpd_update.bits.bpd_predict_val  := uop.br_prediction.bpd_hit
       br_unit.bpd_update.bits.bpd_mispredict   := bpd_mispredict
       br_unit.bpd_update.bits.pc               := fetch_pc
       br_unit.bpd_update.bits.br_pc            := uop_pc_
@@ -523,7 +542,6 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
       bj_addr := (Cat(bj_msb, bj64(vaddrBits-1,0)).toSInt & SInt(-2)).toUInt
 
       br_unit.pc             := uop_pc_
-      br_unit.debug_btb_pred := io.get_pred.info.btb_resp_valid && io.get_pred.info.btb_resp.taken
 
       // handle misaligned branch/jmp targets
       // TODO BUG only trip xcpt if taken to bj_addr
@@ -587,6 +605,7 @@ class MemAddrCalcUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(nu
 
    // compute store data
    // requires decoding 65-bit FP data
+   // TODO remove this recoding -- since this will only handle Int micro-ops with split regfiles.
    val unrec_s = hardfloat.fNFromRecFN(8, 24, io.req.bits.rs2_data)
    val unrec_d = hardfloat.fNFromRecFN(11, 53, io.req.bits.rs2_data)
    val unrec_out = Mux(io.req.bits.uop.fp_single, Cat(Fill(32, unrec_s(31)), unrec_s), unrec_d)
@@ -602,6 +621,9 @@ class MemAddrCalcUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(nu
    {
       assert (!(io.req.valid && io.req.bits.uop.ctrl.is_std &&
          io.resp.bits.data(64).toBool === Bool(true)), "65th bit set in MemAddrCalcUnit.")
+
+      assert (!(io.req.valid && io.req.bits.uop.ctrl.is_std && io.req.bits.uop.fp_val),
+         "FP store-data should now be going through a different unit.")
    }
 
    // Handle misaligned exceptions
@@ -625,10 +647,11 @@ class MemAddrCalcUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(nu
 // currently, bypassing is unsupported!
 // All FP instructions are padded out to the max latency unit for easy
 // write-port scheduling.
-class FPUUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(num_stages = 3
-                                            , num_bypass_stages = 0
-                                            , earliest_bypass_stage = 0
-                                            , data_width = 65)(p)
+class FPUUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(
+   num_stages = p(tile.TileKey).core.fpu.get.dfmaLatency,
+   num_bypass_stages = 0,
+   earliest_bypass_stage = 0,
+   data_width = 65)(p)
 {
    val fpu = Module(new FPU())
    fpu.io.req <> io.req
@@ -641,10 +664,45 @@ class FPUUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(num_stages
 }
 
 
+class IntToFPUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(
+   num_stages = p(BoomKey).intToFpLatency,
+   num_bypass_stages = 0,
+   earliest_bypass_stage = 0,
+   data_width = 65)(p)
+{
+   val fp_decoder = Module(new UOPCodeFPUDecoder) // TODO use a simpler decoder
+   val io_req = io.req.bits
+   fp_decoder.io.uopc := io_req.uop.uopc
+   val fp_ctrl = fp_decoder.io.sigs
+   val fp_rm = Mux(ImmGenRm(io_req.uop.imm_packed) === Bits(7), io.fcsr_rm, ImmGenRm(io_req.uop.imm_packed))
+   val req = Wire(new tile.FPInput)
+   req := fp_ctrl
+   req.rm := fp_rm
+   req.in1 := io_req.rs1_data
+   req.in2 := io_req.rs2_data
+   req.typ := ImmGenTyp(io_req.uop.imm_packed)
 
-// unpipelined, can only hold a single MicroOp at a time
+   assert (!(io.req.valid && fp_ctrl.fromint && req.in1(64).toBool),
+      "[func] IntToFP integer input has 65th high-order bit set!")
+
+   assert (!(io.req.valid && !fp_ctrl.fromint),
+      "[func] Only support fromInt micro-ops.")
+
+   val ifpu = Module(new tile.IntToFP(intToFpLatency))
+   ifpu.io.in.valid := io.req.valid
+   ifpu.io.in.bits := req
+
+   io.resp.bits.data              := ifpu.io.out.bits.data
+   io.resp.bits.fflags.valid      := ifpu.io.out.valid
+   io.resp.bits.fflags.bits.uop   := io.resp.bits.uop
+   io.resp.bits.fflags.bits.flags := ifpu.io.out.bits.exc
+}
+
+
+
+// Iterative/unpipelined, can only hold a single MicroOp at a time TODO allow up to N micro-ops simultaneously.
 // assumes at least one register between request and response
-abstract class UnPipelinedFunctionalUnit(implicit p: Parameters)
+abstract class IterativeFunctionalUnit(implicit p: Parameters)
                                        extends FunctionalUnit(is_pipelined = false
                                                             , num_stages = 1
                                                             , num_bypass_stages = 0
@@ -675,7 +733,7 @@ abstract class UnPipelinedFunctionalUnit(implicit p: Parameters)
 }
 
 
-class MulDivUnit(implicit p: Parameters) extends UnPipelinedFunctionalUnit()(p)
+class MulDivUnit(implicit p: Parameters) extends IterativeFunctionalUnit()(p)
 {
    val muldiv = Module(new rocket.MulDiv(mulDivParams, width = xLen))
 
@@ -691,7 +749,7 @@ class MulDivUnit(implicit p: Parameters) extends UnPipelinedFunctionalUnit()(p)
    muldiv.io.kill         := this.do_kill
 
    // response
-   io.resp.valid          := muldiv.io.resp.valid
+   io.resp.valid          := muldiv.io.resp.valid && !this.do_kill
    muldiv.io.resp.ready   := io.resp.ready
    io.resp.bits.data      := muldiv.io.resp.bits.data
 }
@@ -712,7 +770,5 @@ class PipelinedMulUnit(num_stages: Int)(implicit p: Parameters)
 
    // response
    io.resp.bits.data      := imul.io.out
-}
-
 }
 

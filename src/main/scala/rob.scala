@@ -32,21 +32,19 @@ import scala.math.ceil
 import config.Parameters
 import util.Str
 
-class RobIo(machine_width: Int
-            , issue_width: Int
-            , num_wakeup_ports: Int
-            , num_fpu_ports: Int
+class RobIo(machine_width: Int,
+            num_wakeup_ports: Int,
+            num_fpu_ports: Int
             )(implicit p: Parameters)  extends BoomBundle()(p)
 {
-   // Dispatch Stage
-   // (Write Instruction to ROB from Dispatch Stage)
-   val dis_valids       = Vec(machine_width, Bool()).asInput
-   val dis_uops         = Vec(machine_width, new MicroOp()).asInput
-   val dis_has_br_or_jalr_in_packet = Bool(INPUT)
-   val dis_partial_stall= Bool(INPUT) // we're dispatching only a partial packet, and stalling on the rest of it (don't
+   // Decode Stage
+   // (Allocate, write instruction to ROB).
+   val enq_valids       = Vec(machine_width, Bool()).asInput
+   val enq_uops         = Vec(machine_width, new MicroOp()).asInput
+   val enq_has_br_or_jalr_in_packet = Bool(INPUT)
+   val enq_partial_stall= Bool(INPUT) // we're dispatching only a partial packet, and stalling on the rest of it (don't
                                       // advance the tail ptr)
-   val dis_new_packet   = Bool(INPUT) // we're dispatching the first (and perhaps only) part of a dispatch packet.
-
+   val enq_new_packet   = Bool(INPUT) // we're dispatching the first (and perhaps only) part of a dispatch packet.
    val curr_rob_tail    = UInt(OUTPUT, ROB_ADDR_SZ)
 
    // Handle Branch Misspeculations
@@ -58,10 +56,10 @@ class RobIo(machine_width: Int
    // Write-back Stage
    // (Update of ROB)
    // Instruction is no longer busy and can be committed
-   val wb_resps = Vec(num_wakeup_ports, Valid(new ExeUnitResp(65))).flip
+   val wb_resps = Vec(num_wakeup_ports, Valid(new ExeUnitResp(xLen max fLen+1))).flip
 
-   val lsu_clr_bsy_valid = Bool(INPUT)
-   val lsu_clr_bsy_rob_idx = UInt(INPUT, ROB_ADDR_SZ)
+   val lsu_clr_bsy_valid = Vec(2, Bool()).asInput
+   val lsu_clr_bsy_rob_idx = Vec(2, UInt(width=ROB_ADDR_SZ)).asInput
 
    // Track side-effects for debug purposes.
    // Also need to know when loads write back, whereas we don't need loads to unbusy.
@@ -175,14 +173,13 @@ class DebugRobSignals(implicit p: Parameters) extends BoomBundle()(p)
 // width = the dispatch and commit width of the processor
 // num_wakeup_ports = self-explanatory
 // num_fpu_ports = number of FPU units that will write back fflags
-class Rob(width: Int
-         , num_rob_entries: Int
-         , issue_width: Int
-         , num_wakeup_ports: Int
-         , num_fpu_ports: Int
+class Rob(width: Int,
+         num_rob_entries: Int,
+         val num_wakeup_ports: Int,
+         num_fpu_ports: Int
          )(implicit p: Parameters) extends BoomModule()(p)
 {
-   val io = new RobIo(width, issue_width, num_wakeup_ports, num_fpu_ports)
+   val io = new RobIo(width, num_wakeup_ports, num_fpu_ports)
 
    val num_rob_rows = num_rob_entries / width
    require (num_rob_rows % 2 == 0) // this is due to how rob PCs are stored in two banks
@@ -219,7 +216,10 @@ class Rob(width: Int
    // valid bits at the branch target
    // the br_unit needs to verify the target PC, but it must read out the valid bits
    // for that row
-   val rob_brt_vals        = Wire(Vec(width, Bool()))
+   val rob_getpc_next_vals        = Wire(Vec(width, Bool()))
+   // valids bits at the branch itself.
+   // useful to help see if any valid instructions are in the branch's shadow on the same row.
+   val rob_getpc_curr_vals        = Wire(Vec(width, Bool()))
 
    val exception_thrown = Wire(Bool())
 
@@ -239,7 +239,7 @@ class Rob(width: Int
    }
    def GetBankIdx(rob_idx: UInt): UInt =
    {
-      if(width == 1) { return UInt(0) }
+      if(width == 1) { return 0.U }
       else           { return rob_idx(log2Up(width)-1, 0).toUInt }
    }
 
@@ -270,12 +270,14 @@ class Rob(width: Int
    //       - commit for flush PC at rob_head.
    //       - execute by the Br Unit for target calculation at idx X.
    //       - execute by the Br Unit to get actual target at idx X+1.
+   //       - NOTE:
+   //          * This returns the "next-pc", even from within the same ROB row.
 
    val rob_pc_hob = new RobPCs(width, num_rob_rows)
 
-   when (io.dis_valids.reduce(_|_))
+   when (io.enq_valids.reduce(_|_))
    {
-      rob_pc_hob.write(rob_tail, io.dis_uops(0).pc) // internally, the RobPCs zero out low-order bits
+      rob_pc_hob.write(rob_tail, io.enq_uops(0).pc) // internally, the RobPCs zero out low-order bits
    }
 
    // the br unit needs to read out two consecutive ROBs
@@ -283,19 +285,30 @@ class Rob(width: Int
 
    io.get_pc.curr_pc := curr_row_pc + Cat(GetBankIdx(io.get_pc.rob_idx), Bits(0,2))
 
-   val next_bank_idx = if (width == 1) UInt(0) else PriorityEncoder(rob_brt_vals.toBits)
+   // What if the next-pc is in the current row? I.e., a JR that wasn't handled in the front-end.
+   val curr_idx = GetBankIdx(io.get_pc.rob_idx) + 1.U
+   val curr_row_next_pc_val = Wire(Bool())
+   if (fetchWidth == 1) { curr_row_next_pc_val := false.B }
+   else { curr_row_next_pc_val := rob_getpc_curr_vals(curr_idx) && curr_idx =/= 0.U }
+   val curr_row_next_pc = curr_row_pc + Cat(curr_idx, UInt(0,2))
+
+
+   val next_bank_idx = if (width == 1) UInt(0) else PriorityEncoder(rob_getpc_next_vals.toBits)
 
    // TODO is this logic broken if the ROB can fill up completely?
-   val rob_pc_hob_next_val = rob_brt_vals.reduce(_|_)
+   val rob_pc_hob_next_val = rob_getpc_next_vals.reduce(_|_)
 
-   val bypass_next_bank_idx = if (width == 1) UInt(0) else PriorityEncoder(io.dis_valids.toBits)
-   val bypass_next_pc = (io.dis_uops(0).pc.toSInt & SInt(-(DECODE_WIDTH*coreInstBytes))).toUInt +
+   val bypass_next_bank_idx = if (width == 1) UInt(0) else PriorityEncoder(io.enq_valids.toBits)
+   val bypass_next_pc = (io.enq_uops(0).pc.toSInt & SInt(-(DECODE_WIDTH*coreInstBytes))).toUInt +
                         Cat(bypass_next_bank_idx, Bits(0,2))
 
-   io.get_pc.next_val := rob_pc_hob_next_val || io.dis_valids.reduce(_|_)
-   io.get_pc.next_pc := Mux(rob_pc_hob_next_val,
-                           next_row_pc + Cat(next_bank_idx, Bits(0,2)),
-                           bypass_next_pc)
+   io.get_pc.next_val := rob_pc_hob_next_val || io.enq_valids.reduce(_|_) || curr_row_next_pc_val
+   io.get_pc.next_pc :=
+      Mux(curr_row_next_pc_val,
+         curr_row_next_pc,
+      Mux(rob_pc_hob_next_val,
+         next_row_pc + Cat(next_bank_idx, Bits(0,2)),
+         bypass_next_pc))
 
    // **************************************************************************
    // --------------------------------------------------------------------------
@@ -310,15 +323,15 @@ class Rob(width: Int
    // TODO abstract out the "RobRowMetaData"
    val row_metadata_brob_idx = Mem(num_rob_rows, UInt(width = BROB_ADDR_SZ))
    val row_metadata_has_brorjalr= Mem(num_rob_rows, Bool())
-   when (io.dis_valids.reduce(_|_) && io.dis_new_packet)
+   when (io.enq_valids.reduce(_|_) && io.enq_new_packet)
    {
-      row_metadata_brob_idx(rob_tail) := io.dis_uops(0).brob_idx
-      row_metadata_has_brorjalr(rob_tail) := io.dis_has_br_or_jalr_in_packet
-      r_partial_row := io.dis_partial_stall
+      row_metadata_brob_idx(rob_tail) := io.enq_uops(0).brob_idx
+      row_metadata_has_brorjalr(rob_tail) := io.enq_has_br_or_jalr_in_packet
+      r_partial_row := io.enq_partial_stall
    }
-   .elsewhen (io.dis_valids.reduce(_|_) && !io.dis_new_packet)
+   .elsewhen (io.enq_valids.reduce(_|_) && !io.enq_new_packet)
    {
-      r_partial_row := io.dis_partial_stall
+      r_partial_row := io.enq_partial_stall
    }
 
    when (io.clear_brob)
@@ -335,7 +348,7 @@ class Rob(width: Int
 
    // HACK to deal with SRET changing PC, but not setting flush_pipeline.
    io.clear_brob := Range(0, width).map(i =>
-      io.dis_valids(i) && io.dis_uops(i).is_unique).reduce(_|_)
+      io.enq_valids(i) && io.enq_uops(i).is_unique).reduce(_|_)
 
    // **************************************************************************
    // --------------------------------------------------------------------------
@@ -358,17 +371,20 @@ class Rob(width: Int
       //-----------------------------------------------
       // Dispatch: Add Entry to ROB
 
-      when (io.dis_valids(w))
+      when (io.enq_valids(w))
       {
          rob_val(rob_tail)       := Bool(true)
-         rob_bsy(rob_tail)       := !io.dis_uops(w).is_fence &&
-                                    !(io.dis_uops(w).is_fencei)
-         rob_uop(rob_tail)       := io.dis_uops(w)
-         rob_exception(rob_tail) := io.dis_uops(w).exception
+         rob_bsy(rob_tail)       := !io.enq_uops(w).is_fence &&
+                                    !(io.enq_uops(w).is_fencei)
+         rob_uop(rob_tail)       := io.enq_uops(w)
+         rob_exception(rob_tail) := io.enq_uops(w).exception
          rob_fflags(rob_tail)    := Bits(0)
          rob_uop(rob_tail).stat_brjmp_mispredicted := Bool(false)
+
+         assert (rob_val(rob_tail) === Bool(false),"[rob] overwriting a valid entry.")
+         assert ((io.enq_uops(w).rob_idx >> log2Ceil(width)) === rob_tail)
       }
-      .elsewhen (io.dis_valids.reduce(_|_) && !rob_val(rob_tail))
+      .elsewhen (io.enq_valids.reduce(_|_) && !rob_val(rob_tail))
       {
          rob_uop(rob_tail).inst := BUBBLE // just for debug purposes
       }
@@ -401,15 +417,21 @@ class Rob(width: Int
       }
 
       // Stores have a separate method to clear busy bits
-      when (io.lsu_clr_bsy_valid && MatchBank(GetBankIdx(io.lsu_clr_bsy_rob_idx)))
+      for ((clr_valid, clr_rob_idx) <- io.lsu_clr_bsy_valid zip io.lsu_clr_bsy_rob_idx)
       {
-         rob_bsy(GetRowIdx(io.lsu_clr_bsy_rob_idx)) := Bool(false)
-
-         if (O3PIPEVIEW_PRINTF)
+         when (clr_valid && MatchBank(GetBankIdx(clr_rob_idx)))
          {
-            printf("%d; O3PipeView:complete:%d\n",
-               rob_uop(GetRowIdx(io.lsu_clr_bsy_rob_idx)).debug_events.fetch_seq,
-               io.debug_tsc)
+            val cidx = GetRowIdx(clr_rob_idx)
+            rob_bsy(cidx) := Bool(false)
+
+            assert (rob_val(cidx) === Bool(true), "[rob] store writing back to invalid entry.")
+            assert (rob_bsy(cidx) === Bool(true), "[rob] store writing back to a not-busy entry.")
+
+            if (O3PIPEVIEW_PRINTF)
+            {
+               printf("%d; O3PipeView:complete:%d\n",
+                  rob_uop(GetRowIdx(clr_rob_idx)).debug_events.fetch_seq, io.debug_tsc)
+            }
          }
       }
 
@@ -524,7 +546,8 @@ class Rob(width: Int
       rob_head_fflags(w)   := rob_fflags(rob_head)
       rob_head_is_store(w) := rob_uop(rob_head).is_store
       rob_head_is_load(w)  := rob_uop(rob_head).is_load
-      rob_brt_vals(w)      := rob_val(WrapInc(GetRowIdx(io.get_pc.rob_idx), num_rob_rows))
+      rob_getpc_curr_vals(w) := rob_val(GetRowIdx(io.get_pc.rob_idx))
+      rob_getpc_next_vals(w) := rob_val(WrapInc(GetRowIdx(io.get_pc.rob_idx), num_rob_rows))
 
       // -----------------------------------------------
       // debugging write ports that should not be synthesized
@@ -552,10 +575,10 @@ class Rob(width: Int
 
          assert (!(io.wb_resps(i).valid && MatchBank(GetBankIdx(rob_idx)) &&
                      !rob_val(GetRowIdx(rob_idx))),
-                  "[ROB] writeback occurred to an invalid ROB entry.")
+                  "[ROB] writeback (" + i + ") occurred to an invalid ROB entry.")
          assert (!(io.wb_resps(i).valid && MatchBank(GetBankIdx(rob_idx)) &&
                   temp_uop.ldst_val && temp_uop.pdst =/= io.wb_resps(i).bits.uop.pdst),
-                  "[ROB] writeback occurred to the wrong pdst.")
+                  "[ROB] writeback (" + i + ") occurred to the wrong pdst.")
       }
       io.commit.uops(w).debug_wdata := rob_uop(rob_head).debug_wdata
 
@@ -674,10 +697,10 @@ class Rob(width: Int
    def IsOlder(i0: UInt, i1: UInt, tail: UInt) = (Cat(i0 <= tail, i0) < Cat(i1 <= tail, i1))
    val next_xcpt_uop = Wire(new MicroOp())
    next_xcpt_uop := r_xcpt_uop
-   val dis_xcpts = Wire(Vec(width, Bool()))
+   val enq_xcpts = Wire(Vec(width, Bool()))
    for (i <- 0 until width)
    {
-      dis_xcpts(i) := io.dis_valids(i) && io.dis_uops(i).exception
+      enq_xcpts(i) := io.enq_valids(i) && io.enq_uops(i).exception
    }
 
    when (!(io.flush.valid || exception_thrown) && rob_state =/= s_rollback)
@@ -696,14 +719,14 @@ class Rob(width: Int
             r_xcpt_badvaddr         := Mux(io.lxcpt.valid, io.lxcpt.bits.badvaddr, io.bxcpt.bits.badvaddr)
          }
       }
-      .elsewhen (!r_xcpt_val && dis_xcpts.reduce(_|_))
+      .elsewhen (!r_xcpt_val && enq_xcpts.reduce(_|_))
       {
-         val idx = dis_xcpts.indexWhere{i: Bool => i}
+         val idx = enq_xcpts.indexWhere{i: Bool => i}
 
          // if no exception yet, dispatch exception wins
          r_xcpt_val      := Bool(true)
-         next_xcpt_uop   := io.dis_uops(idx)
-         r_xcpt_badvaddr := io.dis_uops(0).pc + (idx << UInt(2))
+         next_xcpt_uop   := io.enq_uops(idx)
+         r_xcpt_badvaddr := io.enq_uops(0).pc + (idx << UInt(2))
       }
    }
 
@@ -755,7 +778,7 @@ class Rob(width: Int
    {
       rob_tail := WrapInc(GetRowIdx(io.brinfo.rob_idx), num_rob_rows)
    }
-   .elsewhen (io.dis_valids.toBits =/= Bits(0) && !io.dis_partial_stall)
+   .elsewhen (io.enq_valids.toBits =/= Bits(0) && !io.enq_partial_stall)
    {
       rob_tail := WrapInc(rob_tail, num_rob_rows)
    }
@@ -810,7 +833,7 @@ class Rob(width: Int
             {
                for (w <- 0 until width)
                {
-                  when (io.dis_valids(w) && io.dis_uops(w).is_unique)
+                  when (io.enq_valids(w) && io.enq_uops(w).is_unique)
                   {
                      rob_state := s_wait_till_empty
                   }
@@ -855,7 +878,7 @@ class Rob(width: Int
             {
                for (w <- 0 until width)
                {
-                  when (io.dis_valids(w) && io.dis_uops(w).is_unique)
+                  when (io.enq_valids(w) && io.enq_uops(w).is_unique)
                   {
                      rob_state := s_wait_till_empty
                   }

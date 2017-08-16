@@ -66,6 +66,7 @@ class LoadStoreUnitIO(pl_width: Int)(implicit p: Parameters) extends BoomBundle(
 
    // Execute Stage
    val exe_resp           = (new ValidIO(new FuncUnitResp(xLen))).flip
+   val fp_stdata          = Valid(new MicroOpWithData(fLen)).flip
 
    // Commit Stage
    val commit_store_mask  = Vec(pl_width, Bool()).asInput
@@ -97,8 +98,11 @@ class LoadStoreUnitIO(pl_width: Int)(implicit p: Parameters) extends BoomBundle(
    val stq_full           = Bool(OUTPUT)
 
    val exception          = Bool(INPUT)
-   val lsu_clr_bsy_valid  = Bool(OUTPUT) // HACK: let the stores clear out the busy bit in the ROB
-   val lsu_clr_bsy_rob_idx= UInt(OUTPUT, width=ROB_ADDR_SZ)
+   // Let the stores clear out the busy bit in the ROB.
+   // Two ports, one for integer and the other for FP.
+   // Otherwise, we must back-pressure incoming FP store-data micro-ops.
+   val lsu_clr_bsy_valid  = Vec(2, Bool()).asOutput
+   val lsu_clr_bsy_rob_idx= Vec(2, UInt(width=ROB_ADDR_SZ)).asOutput
    val lsu_fencei_rdy     = Bool(OUTPUT)
 
    val xcpt = new ValidIO(new Exception)
@@ -129,7 +133,7 @@ class LoadStoreUnitIO(pl_width: Int)(implicit p: Parameters) extends BoomBundle(
    }
 
    val debug_tsc = UInt(INPUT, xLen)     // time stamp counter
-   
+
    override def cloneType: this.type = new LoadStoreUnitIO(pl_width)(p).asInstanceOf[this.type]
 }
 
@@ -376,6 +380,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: uncore.tilelink
    val ma_ld = io.exe_resp.valid && io.exe_resp.bits.mxcpt.valid && exe_tlb_uop.is_load
    val pf_ld = dtlb.io.req.valid && dtlb.io.resp.xcpt_ld && exe_tlb_uop.is_load
    val pf_st = dtlb.io.req.valid && dtlb.io.resp.xcpt_st && exe_tlb_uop.is_store
+   // TODO check for xcpt_if and verify that never happens on non-speculative instructions.
    val mem_xcpt_valid = Reg(next=((dtlb.io.req.valid && (pf_ld || pf_st)) ||
                                  (io.exe_resp.valid && io.exe_resp.bits.mxcpt.valid)) &&
                                  !io.exception &&
@@ -409,8 +414,9 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: uncore.tilelink
    // *** Wakeup Load from LAQ ***
 
    // TODO make option to only wakeup load at the head (to compare to old behavior)
-   val exe_ld_idx_wakeup =
-      AgePriorityEncoder((0 until num_ld_entries).map(i => laq_addr_val(i) & ~laq_executed(i)), laq_head)
+   // Compute this for the next cycle to remove can_fire, ld_idx_wakeup off critical path.
+   val exe_ld_idx_wakeup = RegNext(
+      AgePriorityEncoder((0 until num_ld_entries).map(i => laq_addr_val(i) & ~laq_executed(i)), laq_head))
 
 
    when (laq_addr_val       (exe_ld_idx_wakeup) &&
@@ -532,6 +538,9 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: uncore.tilelink
       laq_uop           (exe_tlb_uop.ldq_idx).pdst := exe_tlb_uop.pdst
       laq_is_virtual    (exe_tlb_uop.ldq_idx)      := tlb_miss
       laq_is_uncacheable(exe_tlb_uop.ldq_idx)      := tlb_addr_uncacheable && !tlb_miss
+
+      assertNever(will_fire_load_incoming && laq_addr_val(exe_tlb_uop.ldq_idx),
+         "[lsu] incoming load is overwriting a valid address.")
    }
 
    when (will_fire_sta_incoming || will_fire_sta_retry)
@@ -541,14 +550,38 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: uncore.tilelink
       stq_uop       (exe_tlb_uop.stq_idx).pdst := exe_tlb_uop.pdst // needed for amo's TODO this is expensive,
                                                                    // can we get around this?
       saq_is_virtual(exe_tlb_uop.stq_idx)      := tlb_miss
+
+      assertNever(will_fire_sta_incoming && saq_val(exe_tlb_uop.stq_idx),
+         "[lsu] incoming store is overwriting a valid address.")
    }
 
+   // use two ports on STD to handle Integer and FP store data.
    when (will_fire_std_incoming)
    {
-      sdq_val (io.exe_resp.bits.uop.stq_idx) := Bool(true)
-      sdq_data(io.exe_resp.bits.uop.stq_idx) := io.exe_resp.bits.data.toBits
+      val sidx = io.exe_resp.bits.uop.stq_idx
+      sdq_val (sidx) := Bool(true)
+      sdq_data(sidx) := io.exe_resp.bits.data.toBits
+
+      assertNever(will_fire_std_incoming && sdq_val(sidx),
+         "[lsu] incoming store is overwriting a valid data entry.")
    }
 
+   //--------------------------------------------
+   // FP Data
+   // Store Data Generation MicroOps come in directly from the FP registerfile,
+   // and not through the exe_resp datapath.
+
+   when (io.fp_stdata.valid)
+   {
+      val sidx = io.fp_stdata.bits.uop.stq_idx
+      sdq_val (sidx) := Bool(true)
+      sdq_data(sidx) := io.fp_stdata.bits.data.toBits
+   }
+   assert(!(io.fp_stdata.valid && io.exe_resp.valid && io.exe_resp.bits.uop.ctrl.is_std &&
+      io.fp_stdata.bits.uop.stq_idx === io.exe_resp.bits.uop.stq_idx),
+      "[lsu] FP and INT data is fighting over the same sdq entry.")
+
+   require (xLen >= fLen) // otherwise the SDQ is missized.
 
    //-------------------------------------------------------------
    //-------------------------------------------------------------
@@ -559,6 +592,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: uncore.tilelink
    // search SAQ for matches
 
    val mem_tlb_paddr    = Reg(next=exe_tlb_paddr)
+   // TODO can we/should we use mem_tlb_uop from the LAQ/SAQ and avoid the exe_resp.uop (move need for mem_typ, etc.).
    val mem_tlb_uop      = Reg(next=exe_tlb_uop) // not valid for std_incoming!
    mem_tlb_uop.br_mask := GetNewBrMask(io.brinfo, exe_tlb_uop)
    val mem_tlb_miss     = Reg(next=tlb_miss, init=Bool(false))
@@ -575,7 +609,8 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: uncore.tilelink
                                     will_fire_load_retry ||
                                     will_fire_load_wakeup))
    val mem_fired_sta = Reg(next=(will_fire_sta_incoming || will_fire_sta_retry), init=Bool(false))
-   val mem_fired_std = Reg(next=will_fire_std_incoming, init=Bool(false))
+   val mem_fired_stdi = Reg(next=will_fire_std_incoming, init=Bool(false))
+   val mem_fired_stdf = Reg(next=io.fp_stdata.valid, init=Bool(false))
 
    mem_ld_killed := Bool(false)
    when (Reg(next=
@@ -592,36 +627,53 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: uncore.tilelink
    val clr_bsy_valid = Reg(init=Bool(false))
    val clr_bsy_robidx = Reg(UInt(width=ROB_ADDR_SZ))
    val clr_bsy_brmask = Reg(UInt(width=MAX_BR_COUNT))
-
-   clr_bsy_valid := Bool(false)
+   clr_bsy_valid  := Bool(false)
    clr_bsy_robidx := mem_tlb_uop.rob_idx
    clr_bsy_brmask := GetNewBrMask(io.brinfo, mem_tlb_uop)
 
-   when (mem_fired_sta && !mem_tlb_miss && mem_fired_std)
+   when (mem_fired_sta && !mem_tlb_miss && mem_fired_stdi)
    {
-      clr_bsy_valid := !mem_tlb_uop.is_amo
+      clr_bsy_valid := !mem_tlb_uop.is_amo && !IsKilledByBranch(io.brinfo, mem_tlb_uop) &&
+                       !io.exception && !RegNext(io.exception)
       clr_bsy_robidx := mem_tlb_uop.rob_idx
       clr_bsy_brmask := GetNewBrMask(io.brinfo, mem_tlb_uop)
    }
    .elsewhen (mem_fired_sta && !mem_tlb_miss)
    {
       clr_bsy_valid := sdq_val(mem_tlb_uop.stq_idx) &&
-                       !mem_tlb_uop.is_amo
+                       !mem_tlb_uop.is_amo &&
+                       !IsKilledByBranch(io.brinfo, mem_tlb_uop) &&
+                       !io.exception && !RegNext(io.exception)
       clr_bsy_robidx := mem_tlb_uop.rob_idx
       clr_bsy_brmask := GetNewBrMask(io.brinfo, mem_tlb_uop)
    }
-   .elsewhen (mem_fired_std)
+   .elsewhen (mem_fired_stdi)
    {
       val mem_std_uop = RegNext(io.exe_resp.bits.uop)
       clr_bsy_valid := saq_val(mem_std_uop.stq_idx) &&
                               !saq_is_virtual(mem_std_uop.stq_idx) &&
-                              !mem_std_uop.is_amo
+                              !mem_std_uop.is_amo &&
+                              !IsKilledByBranch(io.brinfo, mem_std_uop) &&
+                              !io.exception && !RegNext(io.exception)
       clr_bsy_robidx := mem_std_uop.rob_idx
       clr_bsy_brmask := GetNewBrMask(io.brinfo, mem_std_uop)
    }
 
-   io.lsu_clr_bsy_valid := clr_bsy_valid && !io.exception && !IsKilledByBranch(io.brinfo, clr_bsy_brmask)
-   io.lsu_clr_bsy_rob_idx := clr_bsy_robidx
+
+   val mem_uop_stdf = RegNext(io.fp_stdata.bits.uop)
+   val stdf_clr_bsy_valid = RegNext(mem_fired_stdf &&
+                           saq_val(mem_uop_stdf.stq_idx) &&
+                           !saq_is_virtual(mem_uop_stdf.stq_idx) &&
+                           !mem_uop_stdf.is_amo &&
+                           !IsKilledByBranch(io.brinfo, mem_uop_stdf)) &&
+                           !io.exception && !RegNext(io.exception)
+   val stdf_clr_bsy_robidx = RegEnable(mem_uop_stdf.rob_idx, mem_fired_stdf)
+   val stdf_clr_bsy_brmask = RegEnable(GetNewBrMask(io.brinfo, mem_uop_stdf), mem_fired_stdf)
+
+   io.lsu_clr_bsy_valid(0)   := clr_bsy_valid && !io.exception && !IsKilledByBranch(io.brinfo, clr_bsy_brmask)
+   io.lsu_clr_bsy_rob_idx(0) := clr_bsy_robidx
+   io.lsu_clr_bsy_valid(1)   := stdf_clr_bsy_valid && !io.exception && !IsKilledByBranch(io.brinfo, stdf_clr_bsy_brmask)
+   io.lsu_clr_bsy_rob_idx(1) := stdf_clr_bsy_robidx
 
    //-------------------------------------------------------------
    // Load Issue Datapath (ALL loads need to use this path,
@@ -786,6 +838,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: uncore.tilelink
 
          if (O3PIPEVIEW_PRINTF)
          {
+            // TODO supress printing out a store-comp for lr instructions.
             printf("%d; store-comp: %d\n", io.memresp.bits.debug_events.fetch_seq, io.debug_tsc)
          }
       }
@@ -1213,7 +1266,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: uncore.tilelink
    {
       val l_temp = laq_tail + UInt(w)
       laq_is_full = ((l_temp === laq_head || l_temp === (laq_head + UInt(num_ld_entries))) && laq_maybe_full) | laq_is_full
-      val s_temp = stq_tail + UInt(w+1) // TODO XXX this +1 is almost certainly wrong - look at this again
+      val s_temp = stq_tail + UInt(w+1) // +1 since we don't do let SAQ completely fill up.
       stq_is_full = (s_temp === stq_head || s_temp === (stq_head + UInt(num_st_entries))) | stq_is_full
    }
 
@@ -1226,15 +1279,17 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: uncore.tilelink
 
    io.lsu_fencei_rdy := stq_empty && io.dmem_is_ordered
 
+   assert (!(stq_empty ^ stq_entry_val.asUInt === 0.U), "[lsu] mismatch in SAQ empty logic.")
+
    //-------------------------------------------------------------
    // Debug & Counter outputs
 
-   io.counters.ld_valid        := io.exe_resp.valid && io.exe_resp.bits.uop.is_load
-   io.counters.ld_forwarded    := io.forward_val
-   io.counters.ld_sleep        := ld_was_put_to_sleep
-   io.counters.ld_killed       := ld_was_killed
-   io.counters.stld_order_fail := stld_order_fail
-   io.counters.ldld_order_fail := ldld_order_fail
+   io.counters.ld_valid        := RegNext(io.exe_resp.valid && io.exe_resp.bits.uop.is_load)
+   io.counters.ld_forwarded    := RegNext(io.forward_val)
+   io.counters.ld_sleep        := RegNext(ld_was_put_to_sleep)
+   io.counters.ld_killed       := RegNext(ld_was_killed)
+   io.counters.stld_order_fail := RegNext(stld_order_fail)
+   io.counters.ldld_order_fail := RegNext(ldld_order_fail)
 
    if (DEBUG_PRINTF_LSU)
    {

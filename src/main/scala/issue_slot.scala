@@ -8,6 +8,7 @@
 //------------------------------------------------------------------------------
 //
 // Note: stores (and AMOs) are "broken down" into 2 uops, but stored within a single issue-slot.
+// TODO XXX make a separate issueSlot for MemoryIssueSlots, and only they break apart stores.
 
 package boom
 
@@ -56,6 +57,8 @@ class IssueSlot(num_slow_wakeup_ports: Int)(implicit p: Parameters) extends Boom
 
    val updated_state = Wire(UInt()) // the next state of this slot (which might then get moved to a new slot)
    val updated_uopc  = Wire(Bits()) // the next uopc of this slot (which might then get moved to a new slot)
+   val updated_lrs1_rtype = Wire(Bits()) // the next reg type of this slot (which might then get moved to a new slot)
+   val updated_lrs2_rtype = Wire(Bits()) // the next reg type of this slot (which might then get moved to a new slot)
    val next_p1  = Wire(Bool())
    val next_p2  = Wire(Bool())
    val next_p3  = Wire(Bool())
@@ -100,6 +103,8 @@ class IssueSlot(num_slow_wakeup_ports: Int)(implicit p: Parameters) extends Boom
    // defaults
    updated_state := slot_state
    updated_uopc := slotUop.uopc
+   updated_lrs1_rtype := slotUop.lrs1_rtype
+   updated_lrs2_rtype := slotUop.lrs2_rtype
 
    when (io.kill ||
          (io.grant && (slot_state === s_valid_1)) ||
@@ -115,10 +120,13 @@ class IssueSlot(num_slow_wakeup_ports: Int)(implicit p: Parameters) extends Boom
          slotUop.uopc := uopSTD
          updated_uopc := uopSTD
          slotUop.lrs1_rtype := RT_X
+         updated_lrs1_rtype := RT_X
+
       }
       .otherwise
       {
          slotUop.lrs2_rtype := RT_X
+         updated_lrs2_rtype := RT_X
       }
    }
 
@@ -189,8 +197,8 @@ class IssueSlot(num_slow_wakeup_ports: Int)(implicit p: Parameters) extends Boom
    // Request Logic
    io.request := isValid && slot_p1 && slot_p2 && slot_p3 && !io.kill
    val high_priority = slotUop.is_br_or_jmp
-   io.request_hp := io.request && high_priority
-//   io.request_hp := Bool(false)
+//   io.request_hp := io.request && high_priority
+   io.request_hp := Bool(false)
 
    when (slot_state === s_valid_1)
    {
@@ -215,6 +223,8 @@ class IssueSlot(num_slow_wakeup_ports: Int)(implicit p: Parameters) extends Boom
    io.updated_uop           := slotUop
    io.updated_uop.iw_state  := updated_state
    io.updated_uop.uopc      := updated_uopc
+   io.updated_uop.lrs1_rtype:= updated_lrs1_rtype
+   io.updated_uop.lrs2_rtype:= updated_lrs2_rtype
    io.updated_uop.br_mask   := out_br_mask
    io.updated_uop.prs1_busy := !out_p1
    io.updated_uop.prs2_busy := !out_p2

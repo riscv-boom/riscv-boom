@@ -8,16 +8,23 @@
 //------------------------------------------------------------------------------
 
 package boom
-{
+
 import Chisel._
 import config.Parameters
 
 import FUConstants._
 import util.Str
 
+import scala.collection.mutable.ArrayBuffer
 
 //-------------------------------------------------------------
 //-------------------------------------------------------------
+
+case class IssueParams(
+   issueWidth: Int = 1,
+   numEntries: Int = 8,
+   iqType: BigInt
+)
 
 class IssueUnitIO(issue_width: Int, num_wakeup_ports: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
@@ -35,10 +42,17 @@ class IssueUnitIO(issue_width: Int, num_wakeup_ports: Int)(implicit p: Parameter
    val brinfo         = new BrResolutionInfo().asInput
    val flush_pipeline = Bool(INPUT)
 
+   val event_empty    = Bool(OUTPUT) // used by HPM events; is the issue unit empty?
+
    val tsc_reg        = UInt(INPUT, xLen)
 }
 
-abstract class IssueUnit(num_issue_slots: Int, issue_width: Int, num_wakeup_ports: Int)(implicit p: Parameters)
+abstract class IssueUnit(
+   val num_issue_slots: Int,
+   val issue_width: Int,
+   num_wakeup_ports: Int,
+   val iqType: BigInt)
+   (implicit p: Parameters)
    extends BoomModule()(p)
 {
    val io = new IssueUnitIO(issue_width, num_wakeup_ports)
@@ -52,7 +66,7 @@ abstract class IssueUnit(num_issue_slots: Int, issue_width: Int, num_wakeup_port
    {
       dis_uops(w) := io.dis_uops(w)
       dis_uops(w).iw_state := s_valid_1
-      when (dis_uops(w).uopc === uopSTA || dis_uops(w).uopc === uopAMO_AG)
+      when ((dis_uops(w).uopc === uopSTA && dis_uops(w).lrs2_rtype === RT_FIX) || dis_uops(w).uopc === uopAMO_AG)
       {
          dis_uops(w).iw_state := s_valid_2
       }
@@ -63,6 +77,8 @@ abstract class IssueUnit(num_issue_slots: Int, issue_width: Int, num_wakeup_port
 
    val issue_slots = Vec.fill(num_issue_slots) {Module(new IssueSlot(num_wakeup_ports)).io}
 
+   io.event_empty := !(issue_slots.map(s => s.valid).reduce(_|_))
+
    //-------------------------------------------------------------
 
    assert (PopCount(issue_slots.map(s => s.grant)) <= UInt(issue_width), "Issue window giving out too many grants.")
@@ -71,7 +87,7 @@ abstract class IssueUnit(num_issue_slots: Int, issue_width: Int, num_wakeup_port
 
    if (O3PIPEVIEW_PRINTF)
    {
-      for (i <- 0 until ISSUE_WIDTH)
+      for (i <- 0 until issue_width)
       {
          // only print stores once!
          when (io.iss_valids(i) && io.iss_uops(i).uopc =/= uopSTD)
@@ -85,14 +101,16 @@ abstract class IssueUnit(num_issue_slots: Int, issue_width: Int, num_wakeup_port
 
    if (DEBUG_PRINTF)
    {
+      val typ_str = if (iqType == IQT_INT.litValue) "int"
+                    else if (iqType == IQT_MEM.litValue) "mem"
+                    else if (iqType == IQT_FP.litValue) " fp"
+                    else "unknown"
       for (i <- 0 until num_issue_slots)
       {
-         printf("  integer_issue_slot[%d](%c)(Req:%c):wen=%c P:(%c,%c,%c) OP:(%d,%d,%d) PDST:%d %c [[DASM(%x)]" +
+         printf("  " + typ_str + "_issue_slot[%d](%c)(Req:%c):wen=%c P:(%c,%c,%c) OP:(%d,%d,%d) PDST:%d %c [[DASM(%x)]" +
                " 0x%x: %d] ri:%d bm=%d imm=0x%x\n"
             , UInt(i, log2Up(num_issue_slots))
             , Mux(issue_slots(i).valid, Str("V"), Str("-"))
-//            , Mux(issue_slots(i).request, Str(u_red + "R" + end), Str(grn + "-" + end))
-//            , Mux(issue_slots(i).in_uop.valid, Str(u_wht + "W" + end),  Str(grn + " " + end))
             , Mux(issue_slots(i).request, Str("R"), Str("-"))
             , Mux(issue_slots(i).in_uop.valid, Str("W"),  Str(" "))
             , Mux(issue_slots(i).debug.p1, Str("!"), Str(" "))
@@ -114,8 +132,34 @@ abstract class IssueUnit(num_issue_slots: Int, issue_width: Int, num_wakeup_port
             , issue_slots(i).uop.imm_packed
             )
       }
+      printf("-----------------------------------------------------------------------------------------\n")
    }
 }
 
+class IssueUnits(num_wakeup_ports: Int)(implicit val p: Parameters)
+   extends HasBoomCoreParameters
+   with IndexedSeq[IssueUnit]
+{
+   //*******************************
+   // Instantiate the IssueUnits
+
+   private val iss_units = ArrayBuffer[IssueUnit]()
+
+   //*******************************
+   // Act like a collection
+
+   def length = iss_units.length
+
+   def apply(n: Int): IssueUnit = iss_units(n)
+
+   //*******************************
+   // Construct.
+
+   require (enableAgePriorityIssue) // unordered is currently unsupported.
+
+//      issue_Units =issueConfigs colect {if iqType=....)
+   iss_units += Module(new IssueUnitCollasping(issueParams.find(_.iqType == IQT_MEM.litValue).get, num_wakeup_ports))
+   iss_units += Module(new IssueUnitCollasping(issueParams.find(_.iqType == IQT_INT.litValue).get, num_wakeup_ports))
 
 }
+
