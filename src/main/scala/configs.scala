@@ -27,8 +27,10 @@ class DefaultBoomConfig extends Config((site, here, up) => {
          nPerfEvents = 37,
          perfIncWidth = 3, // driven by issue ports, as set in BoomCoreParams.issueParams
          fpu = Some(tile.FPUParams(sfmaLatency=4, dfmaLatency=4, divSqrt=true))),
-         btb = Some(BTBParams(nEntries = 0, updatesOutOfOrder = true))
-   )}
+      btb = Some(BTBParams(nEntries = 0, updatesOutOfOrder = true)),
+      dcache = Some(DCacheParams(rowBits = site(L1toL2Config).beatBytes*8, nSets=64, nWays=8, nMSHRs=4, nTLBEntries=8)),
+      icache = Some(ICacheParams(rowBits = site(L1toL2Config).beatBytes*8, nSets=64, nWays=8))
+      )}
 
    // BOOM-specific uarch Parameters
    case BoomKey => BoomCoreParams(
@@ -41,6 +43,7 @@ class DefaultBoomConfig extends Config((site, here, up) => {
       numFpPhysRegisters = 64,
       numLsuEntries = 16,
       maxBrCount = 8,
+      btb = BTBsaParameters(nSets=64, nWays=4, nRAS=8, tagSz=20),
       enableBranchPredictor = true,
       gshare = Some(GShareParameters(enabled = true, history_length=15))
    )
@@ -81,19 +84,26 @@ class WithSmallBooms extends Config((site, here, up) => {
 
 // try to match the Cortex-A9
 class WithMediumBooms extends Config((site, here, up) => {
-   case RocketTilesKey => up(RocketTilesKey, site) map { r =>r.copy(core = r.core.copy(
-      fWidth = 2,
-      perfIncWidth = 3 // driven by issue ports, as set in BoomCoreParams.issueParams
-      ))}
+   case RocketTilesKey => up(RocketTilesKey, site) map { r =>r.copy(
+      core = r.core.copy(
+         fWidth = 2,
+         //nPerfCounters = 6,
+         perfIncWidth = 3, // driven by issue ports, as set in BoomCoreParams.issueParams
+         fpu = Some(tile.FPUParams(sfmaLatency=4, dfmaLatency=4, divSqrt=true))),
+      dcache = Some(DCacheParams(rowBits = site(L1toL2Config).beatBytes*8, nSets=64, nWays=4, nMSHRs=2, nTLBEntries=8)),
+      icache = Some(ICacheParams(rowBits = site(L1toL2Config).beatBytes*8, nSets=64, nWays=4))
+      )}
    case BoomKey => up(BoomKey, site).copy(
       numRobEntries = 48,
       issueParams = Seq(
-         IssueParams(issueWidth=1, numEntries=16, iqType=IQT_MEM.litValue),
+         IssueParams(issueWidth=1, numEntries=20, iqType=IQT_MEM.litValue),
          IssueParams(issueWidth=2, numEntries=16, iqType=IQT_INT.litValue),
-         IssueParams(issueWidth=1, numEntries=16, iqType=IQT_FP.litValue)),
+         IssueParams(issueWidth=1, numEntries=10, iqType=IQT_FP.litValue)),
       numIntPhysRegisters = 70,
       numFpPhysRegisters = 64,
       numLsuEntries = 16,
+      maxBrCount = 8,
+      btb = BTBsaParameters(nSets=64, nWays=2, nRAS=8, tagSz=20, bypassCalls=false, rasCheckForEmpty=false),
       gshare = Some(GShareParameters(enabled=true, history_length=13))
       )
 })
