@@ -353,6 +353,10 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
          printf("  BR-UNIT: PC: 0x%x, Next: %d, 0x%x ,bj_addr: 0x%x\n",
             io.get_rob_pc.curr_pc, io.get_rob_pc.next_val, io.get_rob_pc.next_pc, bj_addr)
       }
+      when (io.req.valid && uop.is_jal && io.get_rob_pc.next_val && io.get_rob_pc.next_pc =/= bj_addr) {
+         printf("[func] JAL went to the wrong target [curr: 0x%x next: 0x%x, target: 0x%x]",
+            io.get_rob_pc.curr_pc, io.get_rob_pc.next_pc, bj_addr)
+      }
       assert (!(io.req.valid && uop.is_jal && io.get_rob_pc.next_val && io.get_rob_pc.next_pc =/= bj_addr),
          "[func] JAL went to the wrong target.")
 

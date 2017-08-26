@@ -276,9 +276,13 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    bchecker.io.bpd_resp := io.f2_bpd_resp
    bchecker.io.f2_bpu_request := io.f2_bpu_request
 
-   // who wins? bchecker or bpd?
-   val f2_bpd_overrides_bcheck = f2_bpd_may_redirect && (!bchecker.io.req.valid || (f2_bpd_redirect_cfiidx < bchecker.io.req_cfi_idx))
-   f2_req.valid := (bchecker.io.req.valid || f2_bpd_may_redirect) && f2_valid && !(f0_redirect_val && !io.f2_bpu_request.valid)
+   // who wins? bchecker or bpd? or jal?
+   val jal_overrides_bpd = f2_has_jal && f2_jal_idx < f2_bpd_redirect_cfiidx && f2_bpd_may_redirect_taken
+   val f2_bpd_overrides_bcheck =
+      f2_bpd_may_redirect &&
+      !jal_overrides_bpd &&
+      (!bchecker.io.req.valid || (f2_bpd_redirect_cfiidx < bchecker.io.req_cfi_idx))
+   f2_req.valid := (bchecker.io.req.valid || (f2_bpd_may_redirect && !jal_overrides_bpd)) && f2_valid && !(f0_redirect_val && !io.f2_bpu_request.valid)
    f2_req.bits.addr := Mux(f2_bpd_overrides_bcheck, f2_bpd_redirect_target, bchecker.io.req.bits.addr)
 
    val f2_btb_update_bits = Wire(new BTBsaUpdate)
@@ -318,7 +322,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    {
       // f2_bpd only requests taken redirections on btb misses.
       // f2_req via bchecker only ever requests nextline_pc or jump targets (which we don't track in ghistory).
-      f2_taken := Mux(f2_bpd_overrides_bcheck, f2_bpd_may_redirect_taken, false.B)
+      f2_taken := Mux(f2_bpd_overrides_bcheck, (f2_bpd_may_redirect_taken && !jal_overrides_bpd), false.B)
    }
    .elsewhen (io.f2_bpu_request.valid)
    {
@@ -532,6 +536,18 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    when (io.clear_fetchbuffer || (FetchBuffer.io.enq.fire() && (f3_fetch_bundle.replay_if || f3_fetch_bundle.xcpt_if)))
    {
       last_valid := false.B
+   }
+
+   when (FetchBuffer.io.enq.fire() && !f3_fetch_bundle.replay_if && !f3_fetch_bundle.xcpt_if)
+   {
+      // check that, if there is a jal, the last valid instruction is not after him.
+      // <beq, jal, bne, ...>, either the beq or jal may be the last instruction, but because
+      // the jal dominates everything after it, nothing valid can be after it.
+      val f3_is_jal = Vec(f3_fetch_bundle.insts map (GetCfiType(_) === CfiType.jal)).toBits & f3_fetch_bundle.mask
+      val f3_jal_idx = PriorityEncoder(f3_is_jal)
+      val has_jal = f3_is_jal.orR
+
+      assert (!(has_jal && f3_jal_idx < cfi_idx), "[fetch] JAL was not taken.")
    }
 
 
