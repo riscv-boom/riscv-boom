@@ -103,6 +103,9 @@ class WithMediumBooms extends Config((site, here, up) => {
       numFpPhysRegisters = 64,
       numLsuEntries = 16,
       maxBrCount = 8,
+      regreadLatency = 1,
+      renameLatency = 2,
+      enableBpdF2Redirect = false,
       btb = BTBsaParameters(nSets=64, nWays=2, nRAS=8, tagSz=20, bypassCalls=false, rasCheckForEmpty=false),
       gshare = Some(GShareParameters(enabled=true, history_length=13))
       )
@@ -124,10 +127,13 @@ class WithMegaBooms extends Config((site, here, up) => {
       numIntPhysRegisters = 128,
       numFpPhysRegisters = 80,
       numLsuEntries = 32,
-      tage = Some(TageParameters())
+      gshare = Some(GShareParameters(enabled=true, history_length=15))
+      // tage is unsupported in boomv2 for now.
+      //tage = Some(TageParameters())
       )
    // Widen L1toL2 bandwidth so we can increase icache rowBytes size for 4-wide fetch.
-   case L1toL2Config => up(L1toL2Config, site).copy(
-      beatBytes = site(XLen)/2)
+   // a beatsize of 32 bytes causes issues (see https://github.com/ucb-bar/riscv-boom/issues/30)).
+   //case L1toL2Config => up(L1toL2Config, site).copy(
+   //   beatBytes = site(XLen)/2)
 
 })
