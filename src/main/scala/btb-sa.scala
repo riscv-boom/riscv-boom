@@ -28,7 +28,10 @@ case class BTBsaParameters(
   nSets: Int = 64,
   nWays: Int = 4,
   tagSz: Int = 20,
-  nRAS : Int = 8
+  nRAS : Int = 8,
+  // Extra knobs.
+  bypassCalls: Boolean = false,
+  rasCheckForEmpty: Boolean = false
 )
 
 trait HasBTBsaParameters extends HasBoomCoreParameters
@@ -39,17 +42,25 @@ trait HasBTBsaParameters extends HasBoomCoreParameters
    val tag_sz = btbParams.tagSz
    val idx_sz = log2Ceil(nSets)
    val nRAS = btbParams.nRAS
+   val bypassCalls = btbParams.bypassCalls
+   val rasCheckForEmpty = btbParams.rasCheckForEmpty
 }
 
 // Which predictor should we listen to?
 object BpredType
 {
-   def SZ = 2
+   def SZ = 3
    def apply() = UInt(width = SZ)
    def branch = 0.U
    def jump = 1.U
-   def call = 2.U
-   def ret = 3.U
+   def ret =  (2+1).U
+   def call = (4+1).U
+
+   def isAlwaysTaken(typ: UInt): Bool = typ(0)
+   def isReturn(typ: UInt): Bool = typ(1)
+   def isCall(typ: UInt): Bool = typ(2)
+   def isJump(typ: UInt): Bool = typ === jump
+   def isBranch(typ: UInt): Bool = typ === branch
 }
 
 abstract class BTBsaBundle(implicit val p: Parameters) extends util.ParameterizedBundle()(p)
@@ -91,13 +102,12 @@ class BTBsaUpdate(implicit p: Parameters) extends BTBsaBundle()(p)
    val target = UInt(width = vaddrBits)
    val taken = Bool()
    val cfi_pc = UInt(width = vaddrBits)
-	val bpd_type = BpredType()
-	val cfi_type = CfiType()
+   val bpd_type = BpredType()
+   val cfi_type = CfiType()
 }
 
 class BimUpdate(implicit p: Parameters) extends BTBsaBundle()(p)
 {
-  val mispredict = Bool()
   val taken = Bool()
   val bim_resp = new BimResp
 }
@@ -141,16 +151,16 @@ class BIM(bim_entries: Int, way_idx: Int)(implicit val p: Parameters) extends Ha
 }
 
 
-class RAS(nras: Int)
+class RAS(nras: Int, coreInstBytes: Int)
 {
    def push(addr: UInt): Unit =
    {
       when (count < nras.U) { count := count + 1.U }
       val nextPos = Mux(Bool(isPow2(nras)) || pos < UInt(nras-1), pos+1.U, 0.U)
-      stack(nextPos) := addr
+      stack(nextPos) := addr >> log2Up(coreInstBytes)
       pos := nextPos
    }
-   def peek: UInt = stack(pos)
+   def peek: UInt = Cat(stack(pos), UInt(0, log2Up(coreInstBytes)))
    def pop(): Unit = when (!isEmpty)
    {
       count := count - 1.U
@@ -181,6 +191,8 @@ class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParamet
       // resp is expected on cycle S1.
       val req = Valid(new PCReq).flip
       val resp = Valid(new BTBsaResp)
+      // RAS prediction gets pipelined and handled in next stage (optionally)
+      val ras_resp = Valid(new BTBsaResp)
       // If there's an icmiss, the Frontend replays the s2_pc as s0_pc (even though req.valid is low),
       // so don't stall and begin predicting s0_pc.
       val icmiss = Bool(INPUT)
@@ -249,11 +261,14 @@ class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParamet
       val data     = SeqMem(nSets, new BTBSetData())
       val bim      = new BIM(nSets, way_idx = w)
 
-      val is_valid = RegNext((valids >> s0_idx)(0) && !wen)
+      tags.suggestName("btb_tag_array")
+      data.suggestName("btb_data_array")
+
+      val is_valid = (valids >> s1_idx)(0) && RegNext(!wen)
       val rout     = data.read(s0_idx, !wen)
       val rtag     = tags.read(s0_idx, !wen)
       hits_oh(w)   := is_valid && (rtag === s1_req_tag)
-		data_out(w)  := rout
+      data_out(w)  := rout
       bim_out(w)   := bim.read(s0_idx)
 
       when (wen)
@@ -279,7 +294,7 @@ class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParamet
       }
       .elsewhen (RegNext(io.resp.valid &&
          io.resp.bits.bim_resp.way_idx === w.U &&
-         io.resp.bits.bpd_type === BpredType.branch))
+         BpredType.isBranch(io.resp.bits.bpd_type)))
       {
          // speculatively update bim
          bim.update(
@@ -318,7 +333,7 @@ class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParamet
 
    // Mux out the winning hit.
    val s1_valid = PopCount(hits_oh) === UInt(1)
-	val s1_data = Mux1H(hits_oh, data_out)
+   val s1_data = Mux1H(hits_oh, data_out)
    val s1_bim_resp = Mux1H(hits_oh, bim_out)
    val s1_target = Cat(s1_data.target, UInt(0, log2Up(coreInstBytes)))
    val s1_cfi_idx = s1_data.cfi_idx
@@ -328,7 +343,7 @@ class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParamet
 
    io.resp.valid := s1_valid
    io.resp.bits.target := s1_target
-   io.resp.bits.taken := (if (enableBIM) s1_bim_resp.isTaken else true.B) || (s1_bpd_type === BpredType.jump)
+   io.resp.bits.taken := (if (enableBIM) s1_bim_resp.isTaken else true.B) || (BpredType.isAlwaysTaken(s1_bpd_type))
    io.resp.bits.cfi_idx := (if (fetchWidth > 1) s1_cfi_idx else UInt(0))
    io.resp.bits.bpd_type := s1_bpd_type
    io.resp.bits.cfi_type := s1_cfi_type
@@ -345,9 +360,10 @@ class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParamet
 
    if (nRAS > 0)
    {
-      val ras = new RAS(nRAS)
-      val doPeek = (hits_oh zip data_out map {case(hit, d) => hit && d.bpd_type === BpredType.ret}).reduce(_||_)
-      when (!ras.isEmpty && doPeek)
+      val ras = new RAS(nRAS, coreInstBytes)
+      val doPeek = (hits_oh zip data_out map {case(hit, d) => hit && BpredType.isReturn(d.bpd_type)}).reduce(_||_)
+      val isEmpty = if (rasCheckForEmpty) ras.isEmpty else false.B
+      when (!isEmpty && doPeek)
       {
          io.resp.bits.target := ras.peek
       }
@@ -357,9 +373,13 @@ class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParamet
          when (io.ras_update.bits.is_call)
          {
             ras.push(io.ras_update.bits.return_addr)
-            when (doPeek)
+            if (bypassCalls)
             {
-               io.resp.bits.target := io.ras_update.bits.return_addr
+               // bypassing couples ras_update.valid to the critical path.
+               when (doPeek)
+               {
+                  io.resp.bits.target := io.ras_update.bits.return_addr
+               }
             }
          }
          .elsewhen (io.ras_update.bits.is_ret) // only pop if BTB hit!

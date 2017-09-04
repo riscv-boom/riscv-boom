@@ -381,6 +381,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: uncore.tilelink
    val ma_ld = io.exe_resp.valid && io.exe_resp.bits.mxcpt.valid && exe_tlb_uop.is_load
    val pf_ld = dtlb.io.req.valid && dtlb.io.resp.xcpt_ld && exe_tlb_uop.is_load
    val pf_st = dtlb.io.req.valid && dtlb.io.resp.xcpt_st && exe_tlb_uop.is_store
+   // TODO check for xcpt_if and verify that never happens on non-speculative instructions.
    val mem_xcpt_valid = Reg(next=((dtlb.io.req.valid && (pf_ld || pf_st)) ||
                                  (io.exe_resp.valid && io.exe_resp.bits.mxcpt.valid)) &&
                                  !io.exception &&
@@ -414,8 +415,9 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: uncore.tilelink
    // *** Wakeup Load from LAQ ***
 
    // TODO make option to only wakeup load at the head (to compare to old behavior)
-   val exe_ld_idx_wakeup =
-      AgePriorityEncoder((0 until num_ld_entries).map(i => laq_addr_val(i) & ~laq_executed(i)), laq_head)
+   // Compute this for the next cycle to remove can_fire, ld_idx_wakeup off critical path.
+   val exe_ld_idx_wakeup = RegNext(
+      AgePriorityEncoder((0 until num_ld_entries).map(i => laq_addr_val(i) & ~laq_executed(i)), laq_head))
 
 
    when (laq_addr_val       (exe_ld_idx_wakeup) &&
@@ -591,6 +593,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: uncore.tilelink
    // search SAQ for matches
 
    val mem_tlb_paddr    = Reg(next=exe_tlb_paddr)
+   // TODO can we/should we use mem_tlb_uop from the LAQ/SAQ and avoid the exe_resp.uop (move need for mem_typ, etc.).
    val mem_tlb_uop      = Reg(next=exe_tlb_uop) // not valid for std_incoming!
    mem_tlb_uop.br_mask := GetNewBrMask(io.brinfo, exe_tlb_uop)
    val mem_tlb_miss     = Reg(next=tlb_miss, init=Bool(false))
@@ -836,6 +839,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: uncore.tilelink
 
          if (O3PIPEVIEW_PRINTF)
          {
+            // TODO supress printing out a store-comp for lr instructions.
             printf("%d; store-comp: %d\n", io.memresp.bits.debug_events.fetch_seq, io.debug_tsc)
          }
       }
@@ -1281,12 +1285,12 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: uncore.tilelink
    //-------------------------------------------------------------
    // Debug & Counter outputs
 
-   io.counters.ld_valid        := io.exe_resp.valid && io.exe_resp.bits.uop.is_load
-   io.counters.ld_forwarded    := io.forward_val
-   io.counters.ld_sleep        := ld_was_put_to_sleep
-   io.counters.ld_killed       := ld_was_killed
-   io.counters.stld_order_fail := stld_order_fail
-   io.counters.ldld_order_fail := ldld_order_fail
+   io.counters.ld_valid        := RegNext(io.exe_resp.valid && io.exe_resp.bits.uop.is_load)
+   io.counters.ld_forwarded    := RegNext(io.forward_val)
+   io.counters.ld_sleep        := RegNext(ld_was_put_to_sleep)
+   io.counters.ld_killed       := RegNext(ld_was_killed)
+   io.counters.stld_order_fail := RegNext(stld_order_fail)
+   io.counters.ldld_order_fail := RegNext(ldld_order_fail)
 
    if (DEBUG_PRINTF_LSU)
    {

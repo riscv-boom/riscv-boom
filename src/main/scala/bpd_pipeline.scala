@@ -85,12 +85,13 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
       val f2_bpu_request= Valid(new BpuRequest)
       val f2_btb_resp   = Valid(new BTBsaResp)
       val f2_bpd_resp   = Valid(new BpdResp)
-      val f2_btb_update = Valid(new BTBsaUpdate).flip
       val f2_ras_update = Valid(new RasUpdate).flip
 
       // Fetch3
       val f3_bpd_resp   = Valid(new BpdResp)
+      val f3_btb_update = Valid(new BTBsaUpdate).flip
       val f3_hist_update= Valid(new GHistUpdate).flip
+      val f3_bim_update = Valid(new BimUpdate).flip
 
       // Other
       val br_unit       = new BranchUnitResp().asInput
@@ -166,9 +167,18 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
       Mux(bpd_predict_taken,
          f2_btb.bits.target.sextTo(vaddrBitsExtended),
          f2_nextline_pc.sextTo(vaddrBitsExtended))
+
    io.f2_bpu_request.bits.mask := Cat((UInt(1) << ~Mux(bpd_predict_taken, ~f2_btb.bits.cfi_idx, UInt(0)))-UInt(1), UInt(1))
 
    bpd.io.resp.ready := !io.fetch_stalled
+
+   if (!enableBpdF2Redirect)
+   {
+      io.f2_bpu_request.valid := false.B
+      io.f2_bpu_request.bits.target := 0.U
+      io.f2_bpu_request.bits.cfi_idx:= 0.U
+      io.f2_bpu_request.bits.mask := 0.U
+   }
 
 
    //************************************************
@@ -181,8 +191,8 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    btb.io.ras_update.valid := (f2_btb.valid || io.f2_ras_update.valid) && !io.fetch_stalled
    when (f2_btb.valid)
    {
-      btb.io.ras_update.bits.is_call      := f2_btb.bits.bpd_type === BpredType.call
-      btb.io.ras_update.bits.is_ret       := f2_btb.bits.bpd_type === BpredType.ret
+      btb.io.ras_update.bits.is_call      := BpredType.isCall(f2_btb.bits.bpd_type)
+      btb.io.ras_update.bits.is_ret       := BpredType.isReturn(f2_btb.bits.bpd_type)
       btb.io.ras_update.bits.return_addr  := f2_aligned_pc + (jmp_idx << 2.U) + 4.U
    }
 
@@ -190,15 +200,13 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    //************************************************
    // Update the BTB/BIM
 
-   // TODO XXX: allow branch-checker to kill bad entries.
-   // TODO XXX update the BTB during the F3/branch-checker stage if BPD says we should take it.
    btb.io.btb_update :=
       Mux(io.br_unit.btb_update.valid,
          io.br_unit.btb_update,
-         io.f2_btb_update)
+         io.f3_btb_update)
 
-   // TODO XXX allow F2/BPD redirects to correct the BIM.
-   btb.io.bim_update := io.br_unit.bim_update
+   btb.io.bim_update.valid := io.br_unit.bim_update.valid || io.f3_bim_update.valid
+   btb.io.bim_update.bits := Mux(io.br_unit.bim_update.valid, io.br_unit.bim_update.bits, io.f3_bim_update.bits)
 
 
    //************************************************

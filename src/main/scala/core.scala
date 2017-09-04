@@ -71,18 +71,19 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    val dec_brmask_logic = Module(new BranchMaskGenerationLogic(DECODE_WIDTH))
    val rename_stage     = Module(new RenameStage(DECODE_WIDTH, num_wakeup_ports, fp_pipeline.io.wakeups.length))
    val issue_units      = new boom.IssueUnits(num_wakeup_ports)
-   val iregfile         = if (regreadLatency == 0)
-                              Module(new RegisterFileComb(numIntPhysRegs,
+   val iregfile         = if (regreadLatency == 1 && enableCustomRf) {
+                              Module(new RegisterFileSeqCustomArray(numIntPhysRegs,
                                  exe_units.withFilter(_.usesIRF).map(e => e.num_rf_read_ports).sum,
                                  exe_units.withFilter(_.usesIRF).map(e => e.num_rf_write_ports).sum,
                                  xLen,
-                                 ENABLE_REGFILE_BYPASSING))
-                          else
-                              Module(new RegisterFileSeq(numIntPhysRegs,
+                                 exe_units.bypassable_write_port_mask))
+                          } else {
+                              Module(new RegisterFileBehavorial(numIntPhysRegs,
                                  exe_units.withFilter(_.usesIRF).map(e => e.num_rf_read_ports).sum,
                                  exe_units.withFilter(_.usesIRF).map(e => e.num_rf_write_ports).sum,
                                  xLen,
-                                 ENABLE_REGFILE_BYPASSING))
+                                 exe_units.bypassable_write_port_mask))
+                          }
    val ll_wbarb         = Module(new Arbiter(new ExeUnitResp(xLen), 2))
    val iregister_read   = Module(new RegisterRead(
                                  issue_units.map(_.issue_width).sum,
@@ -242,9 +243,10 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
 
    bpd_stage.io.fetch_stalled := fetch_unit.io.stalled
 
-   bpd_stage.io.f2_btb_update := fetch_unit.io.f2_btb_update
    bpd_stage.io.f2_ras_update := fetch_unit.io.f2_ras_update
+   bpd_stage.io.f3_btb_update := fetch_unit.io.f3_btb_update
    bpd_stage.io.f3_hist_update:= fetch_unit.io.f3_hist_update
+   bpd_stage.io.f3_bim_update := fetch_unit.io.f3_bim_update
    bpd_stage.io.status_prv   := csr.io.status.prv
    bpd_stage.io.status_debug := csr.io.status.debug
 

@@ -21,6 +21,8 @@ case class BoomCoreParams(
    numLsuEntries: Int = 8,
    numIntPhysRegisters: Int = 96,
    numFpPhysRegisters: Int = 64,
+   enableCustomRf: Boolean = false,
+   enableCustomRfModel: Boolean = true,
    maxBrCount: Int = 4,
    fetchBufferSz: Int = 8,
    enableAgePriorityIssue: Boolean = true,
@@ -33,6 +35,8 @@ case class BoomCoreParams(
    enableBranchPredictor: Boolean = false,
    enableBpdUModeOnly: Boolean = false,
    enableBpdUSModeHistory: Boolean = false,
+   enableBpdF2Redirect: Boolean = false,
+   enableBpdF3Redirect: Boolean = true,
    btb: BTBsaParameters = BTBsaParameters(),
    tage: Option[TageParameters] = None,
    gshare: Option[GShareParameters] = None,
@@ -129,6 +133,11 @@ trait HasBoomCoreParameters extends tile.HasCoreParameters
    val enableBIM = boomParams.enableBIM
 
    val ENABLE_BRANCH_PREDICTOR = boomParams.enableBranchPredictor
+
+   // allow the BPD to redirect the PC in the F2 stage (hurts critical path).
+   val enableBpdF2Redirect = boomParams.enableBpdF2Redirect
+   val enableBpdF3Redirect = boomParams.enableBpdF3Redirect
+
    val ENABLE_BPD_UMODE_ONLY = boomParams.enableBpdUModeOnly
    val ENABLE_BPD_USHISTORY = boomParams.enableBpdUSModeHistory
    // What is the maximum length of global history tracked?
@@ -186,7 +195,6 @@ trait HasBoomCoreParameters extends tile.HasCoreParameters
 
    //************************************
    // Extra Knobs and Features
-   val ENABLE_REGFILE_BYPASSING  = true  // bypass regfile write ports to read ports
    val ENABLE_COMMIT_MAP_TABLE = boomParams.enableCommitMapTable
 
    //************************************
@@ -214,6 +222,12 @@ trait HasBoomCoreParameters extends tile.HasCoreParameters
    require (isPow2(NUM_LSU_ENTRIES))
    require ((NUM_LSU_ENTRIES-1) > DECODE_WIDTH)
 
+
+   //************************************
+   // Custom Logic
+
+   val enableCustomRf      = boomParams.enableCustomRf
+   val enableCustomRfModel = boomParams.enableCustomRfModel
 
    //************************************
    // Non-BOOM parameters

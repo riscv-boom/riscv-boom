@@ -75,7 +75,7 @@ abstract class ExecutionUnit(val num_rf_read_ports: Int
                             , val num_bypass_stages: Int
                             , val data_width: Int
                             , val num_variable_write_ports: Int = 0
-                            , var bypassable: Boolean           = false
+                            , var bypassable: Boolean           = false // TODO make override def for code clarity
                             , val is_mem_unit: Boolean          = false
                             , var uses_csr_wport: Boolean       = false
                             , var uses_iss_unit : Boolean       = true
@@ -561,32 +561,7 @@ class MemExeUnit(implicit p: Parameters) extends ExecutionUnit(num_rf_read_ports
    val memresp_uop    = Mux(io.lsu_io.forward_val, io.lsu_io.forward_uop,
                                                 io.dmem.resp.bits.uop)
 
-   var memresp_data:Bits = null
-   if (!usingFPU)
-   {
-      memresp_data = Mux(io.lsu_io.forward_val, io.lsu_io.forward_data,
-                                           	 	io.dmem.resp.bits.data_subword)
-   }
-   else
-   {
-      //recode FP values
-      val typ = io.dmem.resp.bits.typ
-      val load_single = typ === rocket.MT_W || typ === rocket.MT_WU
-      val rec_s = hardfloat.recFNFromFN(8, 24, io.dmem.resp.bits.data)
-      val rec_d = hardfloat.recFNFromFN(11, 53, io.dmem.resp.bits.data)
-      val fp_load_data_recoded = Mux(load_single, Cat(SInt(-1, 32), rec_s), rec_d)
-
-      val typ_f = io.lsu_io.forward_uop.mem_typ
-      val load_single_f = typ_f === rocket.MT_W || typ_f === rocket.MT_WU
-      val rec_s_f = hardfloat.recFNFromFN(8, 24, io.lsu_io.forward_data)
-      val rec_d_f = hardfloat.recFNFromFN(11, 53, io.lsu_io.forward_data)
-      val fp_load_data_recoded_forwarded = Mux(load_single_f, Cat(SInt(-1,32), rec_s_f), rec_d_f)
-
-      memresp_data = Mux(io.lsu_io.forward_val && !io.lsu_io.forward_uop.fp_val, io.lsu_io.forward_data,
-                     Mux(io.lsu_io.forward_val && io.lsu_io.forward_uop.fp_val , fp_load_data_recoded_forwarded,
-                     Mux(memresp_uop.fp_val                              , fp_load_data_recoded,
-                                                                           io.dmem.resp.bits.data_subword)))
-   }
+   val memresp_data = Mux(io.lsu_io.forward_val, io.lsu_io.forward_data, io.dmem.resp.bits.data_subword)
 
    io.lsu_io.memresp.valid := memresp_val
    io.lsu_io.memresp.bits  := memresp_uop
@@ -824,35 +799,7 @@ class ALUMemExeUnit(
    val memresp_uop    = Mux(io.lsu_io.forward_val, io.lsu_io.forward_uop,
                                                 io.dmem.resp.bits.uop)
 
-   var memresp_data:UInt= null
-   if (!fp_mem_support)
-   {
-      memresp_data = Mux(io.lsu_io.forward_val, io.lsu_io.forward_data
-                                           , io.dmem.resp.bits.data_subword)
-   }
-   else
-   {
-      // TODO CODE REVIEW throwing resources to try and salvage critical path...
-      //recode FP values
-      // I'm doing this twice for two different paths (cache path and forwarding path)!
-      // Also, this code is duplicated elsewhere - can we refactor this out?
-      val typ = io.dmem.resp.bits.typ
-      val load_single = typ === rocket.MT_W || typ === rocket.MT_WU
-      val rec_s = hardfloat.recFNFromFN(8, 24, io.dmem.resp.bits.data)
-      val rec_d = hardfloat.recFNFromFN(11, 53, io.dmem.resp.bits.data)
-      val fp_load_data_recoded = Mux(load_single, Cat(SInt(-1, 32), rec_s), rec_d)
-
-      val typ_f = io.lsu_io.forward_uop.mem_typ
-      val load_single_f = typ_f === rocket.MT_W || typ_f === rocket.MT_WU
-      val rec_s_f = hardfloat.recFNFromFN(8, 24, io.lsu_io.forward_data)
-      val rec_d_f = hardfloat.recFNFromFN(11, 53, io.lsu_io.forward_data)
-      val fp_load_data_recoded_forwarded = Mux(load_single_f, Cat(SInt(-1,32), rec_s_f), rec_d_f)
-
-      memresp_data = Mux(io.lsu_io.forward_val && !io.lsu_io.forward_uop.fp_val, io.lsu_io.forward_data,
-                     Mux(io.lsu_io.forward_val && io.lsu_io.forward_uop.fp_val,  fp_load_data_recoded_forwarded,
-                     Mux(io.dmem.resp.bits.uop.fp_val,                     fp_load_data_recoded,
-                                                                           io.dmem.resp.bits.data_subword)))
-   }
+   val memresp_data = Mux(io.lsu_io.forward_val, io.lsu_io.forward_data, io.dmem.resp.bits.data_subword)
 
    io.lsu_io.memresp.valid := memresp_val
    io.lsu_io.memresp.bits  := memresp_uop

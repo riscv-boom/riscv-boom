@@ -149,5 +149,18 @@ class ExecutionUnits(fpu: Boolean = false)(implicit val p: Parameters) extends H
    // TODO bug, this can return too many fflag ports,e.g., the FPU is shared with the mem unit and thus has two wb ports
    val num_fpu_ports = exe_units.withFilter(_.hasFFlags).map(_.num_rf_write_ports).foldLeft(0)(_+_)
 
-//   val num_wakeup_ports = num_slow_wakeup_ports + num_fast_wakeup_ports
+   val bypassable_write_port_mask = {
+      if (fpu)
+      {
+         // NOTE: hack for the long latency load pipe which is write_port(0) and doesn't support bypassing.
+         val mask = Seq(false) ++ exe_units.withFilter(_.uses_iss_unit).map(_.isBypassable)
+         require (!mask.reduce(_||_)) // don't support any bypassing in FP
+         mask
+      }
+      else
+      {
+         exe_units.withFilter(_.usesIRF).map(_.isBypassable)
+      }
+   }
+
 }

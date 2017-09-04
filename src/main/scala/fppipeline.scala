@@ -42,7 +42,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p)
       val fromint          = Valid(new FuncUnitReq(fLen+1)).flip // from integer RF
       val tosdq            = Valid(new MicroOpWithData(fLen))    // to Load/Store Unit
       val toint            = Decoupled(new ExeUnitResp(xLen))    // to integer RF
-      
+
       val wakeups          = Vec(num_wakeup_ports, Valid(new ExeUnitResp(fLen+1)))
       val wb_valids        = Vec(num_wakeup_ports, Bool()).asInput
       val wb_pdsts         = Vec(num_wakeup_ports, UInt(width=fp_preg_sz)).asInput
@@ -58,22 +58,14 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p)
    val issue_unit       = Module(new IssueUnitCollasping(
                            issueParams.find(_.iqType == IQT_FP.litValue).get,
                            num_wakeup_ports))
-   val fregfile         = if (regreadLatency == 0)
-                              Module(new RegisterFileComb(numFpPhysRegs,
+   val fregfile         = Module(new RegisterFileBehavorial(numFpPhysRegs,
                                  exe_units.withFilter(_.uses_iss_unit).map(e => e.num_rf_read_ports).sum,
                                  // TODO get rid of -1, as that's a write-port going to IRF
                                  exe_units.withFilter(_.uses_iss_unit).map(e => e.num_rf_write_ports).sum - 1 +
                                     num_ll_ports,
                                  fLen+1,
-                                 ENABLE_REGFILE_BYPASSING))// TODO disable for FP
-                          else
-                              Module(new RegisterFileSeq(numFpPhysRegs,
-                                 exe_units.withFilter(_.uses_iss_unit).map(e => e.num_rf_read_ports).sum,
-                                 // TODO get rid of -1, as that's a write-port going to IRF
-                                 exe_units.withFilter(_.uses_iss_unit).map(e => e.num_rf_write_ports).sum - 1 +
-                                    num_ll_ports,
-                                 fLen+1,
-                                 ENABLE_REGFILE_BYPASSING))
+                                 exe_units.bypassable_write_port_mask
+                                 ))
    val fregister_read   = Module(new RegisterRead(
                            issue_unit.issue_width,
                            exe_units.withFilter(_.uses_iss_unit).map(_.supportedFuncUnits),
@@ -88,7 +80,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p)
    // The -1 is for the F2I port; -1 for I2F port.
    println (exe_units.map(_.num_rf_write_ports).sum)
    require (exe_units.map(_.num_rf_write_ports).sum-1-1 + num_ll_ports == num_wakeup_ports)
-   require (exe_units.withFilter(_.uses_iss_unit).map(e => 
+   require (exe_units.withFilter(_.uses_iss_unit).map(e =>
       e.num_rf_write_ports).sum -1 + num_ll_ports == num_wakeup_ports)
 
    override def toString: String =
@@ -210,9 +202,26 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p)
 
    val ll_wbarb = Module(new Arbiter(new ExeUnitResp(fLen+1), 2))
    val ifpu_resp = exe_units.ifpu_unit.io.resp(0)
+
+   // Hookup load writeback -- and recode FP values.
    ll_wbarb.io.in(0) <> io.ll_wport
+   val typ = io.ll_wport.bits.uop.mem_typ
+   val load_single = typ === rocket.MT_W || typ === rocket.MT_WU
+   val rec_s = hardfloat.recFNFromFN( 8, 24, io.ll_wport.bits.data)
+   val rec_d = hardfloat.recFNFromFN(11, 53, io.ll_wport.bits.data)
+   val fp_load_data_recoded = Mux(load_single, Cat(SInt(-1, 32), rec_s), rec_d)
+   ll_wbarb.io.in(0).bits.data := fp_load_data_recoded
+
    ll_wbarb.io.in(1) <> ifpu_resp
-   fregfile.io.write_ports(0) <> WritePort(ll_wbarb.io.out, FPREG_SZ, fLen+1)
+   if (regreadLatency > 0) {
+      // Cut up critical path by delaying the write by a cycle.
+      // Wakeup signal is sent on cycle S0, write is now delayed until end of S1,
+      // but Issue happens on S1 and RegRead doesn't happen until S2 so we're safe.
+      // (for regreadlatency >0).
+      fregfile.io.write_ports(0) <> WritePort(RegNext(ll_wbarb.io.out), FPREG_SZ, fLen+1)
+   } else {
+      fregfile.io.write_ports(0) <> WritePort(ll_wbarb.io.out, FPREG_SZ, fLen+1)
+   }
 
    assert (ll_wbarb.io.in(0).ready) // never backpressure the memory unit.
    when (ifpu_resp.valid) { assert (ifpu_resp.bits.uop.ctrl.rf_wen && ifpu_resp.bits.uop.dst_rtype === RT_FLT) }

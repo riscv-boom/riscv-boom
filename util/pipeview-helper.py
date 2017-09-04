@@ -120,7 +120,9 @@ def isStore(line):
        "sd " in line or \
        "sh " in line or \
        "sb " in line or \
-       "amo" in line:
+       "amo" in line or \
+       "sc." in line or \
+       "lr." in line:  # TODO remove lr from using store-completions.
         return True
     else:
         return False
@@ -157,6 +159,8 @@ def generate_pipeview_file(log):
     # cache the s_idx value (if there are any stores in program)
     if l_stc: s_idx = l_stc[0].find(':')
 
+    last_fseq = -1
+
     for line in lines:
         if "fetch" in line:
             q_if.append(line)
@@ -181,6 +185,8 @@ def generate_pipeview_file(log):
                     # (they'll be the head of all of the in-order queues)
                     fetch = q_if.popleft()
                     writeOutput(fetch, idx)
+                    assert fetch_id != last_fseq, "Found duplicate fseq number."
+                    last_fseq = fetch_id
                     c = writeOutputDecode(q_dec.popleft(), idx)
                     c = writeOutputRename(q_ren.popleft(), idx, c)
                     writeOutputDispatch(q_dis.popleft(), idx, c)
