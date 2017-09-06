@@ -388,12 +388,14 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
 
       when (is_br_or_jalr && pc_sel === PC_BRJMP && !mispredict && io.get_rob_pc.next_val)
       {
-         when (io.get_rob_pc.next_pc =/= bj_addr)
+         // ignore misaligned issues -- we'll catch that elsewhere as an exception.
+         when (io.get_rob_pc.next_pc(vaddrBits, log2Up(coreInstBytes)) =/= bj_addr(vaddrBits, log2Up(coreInstBytes)))
          {
             printf ("[FuncUnit] Branch jumped to 0x%x, should have jumped to 0x%x.\n",
                io.get_rob_pc.next_pc, bj_addr)
          }
-         assert (io.get_rob_pc.next_pc === bj_addr, "[FuncUnit] branch is taken to the wrong target.")
+         assert (io.get_rob_pc.next_pc(vaddrBits, log2Up(coreInstBytes)) === bj_addr(vaddrBits, log2Up(coreInstBytes)),
+            "[FuncUnit] branch is taken to the wrong target.")
       }
 
       when (is_br_or_jalr)
@@ -548,10 +550,10 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
       br_unit.pc             := uop_pc_
 
       // handle misaligned branch/jmp targets
-      // TODO BUG only trip xcpt if taken to bj_addr
-      br_unit.xcpt.valid     := bj_addr(1) && io.req.valid && mispredict && !killed
+      require (coreInstBytes == 4) // no RVC support
+      br_unit.xcpt.valid     := bj_addr(1) && io.req.valid && is_taken && !killed
       br_unit.xcpt.bits.uop  := uop
-      br_unit.xcpt.bits.cause:= UInt(rocket.Causes.misaligned_fetch)
+      br_unit.xcpt.bits.cause:= rocket.Causes.misaligned_fetch.U
       // TODO is there a better way to get this information to the CSR file? maybe use brinfo.target?
       br_unit.xcpt.bits.badvaddr:= bj_addr
 

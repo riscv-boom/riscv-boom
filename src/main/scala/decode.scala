@@ -373,7 +373,8 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule()(p)
    val (xcpt_valid, xcpt_cause) = checkExceptions(List(
       (io.interrupt,     io.interrupt_cause),
       (uop.replay_if,    MINI_EXCEPTION_REPLAY),
-      (uop.xcpt_if,      UInt(Causes.fault_fetch)),
+      (uop.xcpt_pf_if,   UInt(Causes.fault_fetch)),
+      (uop.xcpt_ma_if,   UInt(Causes.misaligned_fetch)),
       (id_illegal_insn,  UInt(Causes.illegal_instruction))))
 
    uop.exception := xcpt_valid
@@ -546,8 +547,9 @@ class FetchSerializerNtoM(implicit p: Parameters) extends BoomModule()(p)
    io.deq.bits.uops(0).inst           := io.enq.bits.insts(inst_idx)
    io.deq.bits.uops(0).br_prediction  := io.enq.bits.bpu_info(inst_idx)
    io.deq.bits.uops(0).valid          := io.enq.bits.mask(inst_idx)
-   io.deq.bits.uops(0).xcpt_if        := io.enq.bits.xcpt_if
-   io.deq.bits.uops(0).replay_if        := io.enq.bits.replay_if
+   io.deq.bits.uops(0).xcpt_pf_if     := io.enq.bits.xcpt_pf_if
+   io.deq.bits.uops(0).replay_if      := io.enq.bits.replay_if
+   io.deq.bits.uops(0).xcpt_ma_if     := io.enq.bits.xcpt_ma_if_oh(inst_idx)
    io.deq.bits.uops(0).debug_events   := io.enq.bits.debug_events(inst_idx)
 
    //-------------------------------------------------------------
@@ -562,8 +564,9 @@ class FetchSerializerNtoM(implicit p: Parameters) extends BoomModule()(p)
          io.deq.bits.uops(i).pc             := (io.enq.bits.pc.toSInt & SInt(-(FETCH_WIDTH*coreInstBytes))).toUInt + UInt(i << 2)
          io.deq.bits.uops(i).fetch_pc_lob   := io.enq.bits.pc
          io.deq.bits.uops(i).inst           := io.enq.bits.insts(i)
-         io.deq.bits.uops(i).xcpt_if        := io.enq.bits.xcpt_if
-         io.deq.bits.uops(i).replay_if        := io.enq.bits.replay_if
+         io.deq.bits.uops(i).xcpt_pf_if     := io.enq.bits.xcpt_pf_if
+         io.deq.bits.uops(i).replay_if      := io.enq.bits.replay_if
+         io.deq.bits.uops(i).xcpt_ma_if     := io.enq.bits.xcpt_ma_if_oh(i)
          io.deq.bits.uops(i).br_prediction  := io.enq.bits.bpu_info(i)
          io.deq.bits.uops(i).debug_events   := io.enq.bits.debug_events(i)
       }
