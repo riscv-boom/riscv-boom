@@ -360,15 +360,15 @@ trait RISCVConstants
                                   inst === rocket.Instructions.JALR) && GetRd(inst) === RA
    def IsReturn(inst: UInt): Bool = GetUop(inst) === jalr_opc && GetRs1(inst) === BitPat("b00?01")
 
-   def ComputeBranchTarget(pc: UInt, inst: UInt, xlen: Int, coreInstBytes: Int): UInt =
+   def ComputeBranchTarget(pc: UInt, inst: UInt, xlen: Int): UInt =
    {
       val b_imm32 = Cat(Fill(20,inst(31)), inst(7), inst(30,25), inst(11,8), UInt(0,1))
-      ((pc + Sext(b_imm32, xlen)).asSInt & SInt(-coreInstBytes)).asUInt
+      ((pc + Sext(b_imm32, xlen)).asSInt & SInt(-2)).asUInt
    }
-   def ComputeJALTarget(pc: UInt, inst: UInt, xlen: Int, coreInstBytes: Int): UInt =
+   def ComputeJALTarget(pc: UInt, inst: UInt, xlen: Int): UInt =
    {
       val j_imm32 = Cat(Fill(12,inst(31)), inst(19,12), inst(20), inst(30,25), inst(24,21), UInt(0,1))
-      ((pc + Sext(j_imm32, xlen)).asSInt & SInt(-coreInstBytes)).asUInt
+      ((pc + Sext(j_imm32, xlen)).asSInt & SInt(-2)).asUInt
    }
 
    def GetCfiType(inst: UInt): UInt =
