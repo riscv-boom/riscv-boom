@@ -44,7 +44,7 @@ object GetNewUopAndBrMask
    def apply(uop: MicroOp, brinfo: BrResolutionInfo)(implicit p: config.Parameters): MicroOp =
    {
       val newuop = Wire(init = uop)
-      newuop.br_mask := 
+      newuop.br_mask :=
          Mux(brinfo.valid,
             (uop.br_mask & ~brinfo.mask),
             uop.br_mask)
@@ -278,6 +278,7 @@ object AgePriorityEncoder
 }
 
 
+// Assumption: enq.valid only high if not killed by branch (so don't check IsKilled on io.enq).
 class QueueForMicroOpWithData(entries: Int, data_width: Int)(implicit p: config.Parameters) extends BoomModule()(p)
 {
    val io = new Bundle
@@ -320,7 +321,7 @@ class QueueForMicroOpWithData(entries: Int, data_width: Int)(implicit p: config.
 
    when (do_enq) {
       ram(enq_ptr.value) := io.enq.bits
-      valids(enq_ptr.value) := true.B
+      valids(enq_ptr.value) := true.B //!IsKilledByBranch(io.brinfo, io.enq.bits.uop)
       brmasks(enq_ptr.value) := GetNewBrMask(io.brinfo, io.enq.bits.uop)
       enq_ptr.inc()
    }
@@ -334,14 +335,15 @@ class QueueForMicroOpWithData(entries: Int, data_width: Int)(implicit p: config.
    io.enq.ready := !full
 
    private val out = ram(deq_ptr.value)
-   io.deq.valid := deq_ram_valid && valids(deq_ptr.value) && !IsKilledByBranch(io.brinfo, out.uop) //!empty
+   io.deq.valid := deq_ram_valid && valids(deq_ptr.value) && !IsKilledByBranch(io.brinfo, out.uop)
    io.deq.bits := out
    io.deq.bits.uop.br_mask := GetNewBrMask(io.brinfo, brmasks(deq_ptr.value))
 
 
    // For flow queue behavior.
-   when (io.enq.valid) { io.deq.valid := true.B }
-   when (io.empty) {
+   when (io.empty)
+   {
+      io.deq.valid := io.enq.valid //&& !IsKilledByBranch(io.brinfo, io.enq.bits.uop)
       io.deq.bits := io.enq.bits
       io.deq.bits.uop.br_mask := GetNewBrMask(io.brinfo, io.enq.bits.uop)
 
