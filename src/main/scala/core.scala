@@ -49,7 +49,6 @@ class BoomBundle(implicit val p: Parameters) extends util.ParameterizedBundle()(
 class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends BoomModule()(p)
    with tile.HasCoreIO
 {
-  println("PaddrBits: " + p(rocket.PAddrBits))
    //**********************************
    // construct all of the modules
 
