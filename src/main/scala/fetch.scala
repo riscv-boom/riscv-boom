@@ -182,12 +182,12 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    val f2_br_seen = io.imem.resp.valid &&
                   !io.imem.resp.bits.xcpt_if &&
                   is_br.reduce(_|_) &&
-                  (!is_jal.reduce(_|_) || (PriorityEncoder(is_br.toBits) < PriorityEncoder(is_jal.toBits))) &&
-                  (!is_jr.reduce(_|_) || (PriorityEncoder(is_br.toBits) < PriorityEncoder(is_jr.toBits)))
+                  (!is_jal.reduce(_|_) || (PriorityEncoder(is_br.asUInt) < PriorityEncoder(is_jal.asUInt))) &&
+                  (!is_jr.reduce(_|_) || (PriorityEncoder(is_br.asUInt) < PriorityEncoder(is_jr.asUInt)))
    val f2_jr_seen = io.imem.resp.valid &&
                   !io.imem.resp.bits.xcpt_if &&
                   is_jr.reduce(_|_) &&
-                  (!is_jal.reduce(_|_) || (PriorityEncoder(is_jr.toBits) < PriorityEncoder(is_jal.toBits)))
+                  (!is_jal.reduce(_|_) || (PriorityEncoder(is_jr.asUInt) < PriorityEncoder(is_jal.asUInt)))
 
 
    // Does the BPD have a prediction to make (in the case of a BTB miss?)
@@ -198,7 +198,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    val f2_bpd_target = br_targs(f2_bpd_br_idx)
    // check for jumps -- if we decide to override a taken BTB and choose "nextline" we don't want to miss the JAL.
    val f2_has_jal = is_jal.reduce(_|_)
-   val f2_jal_idx = PriorityEncoder(is_jal.toBits)
+   val f2_jal_idx = PriorityEncoder(is_jal.asUInt)
    val f2_jal_target = jal_targs(f2_jal_idx)
    val f2_bpd_btb_update_valid = Wire(init=false.B) // does the BPD's choice cause a BTB update?
    val f2_bpd_may_redirect_taken = Wire(init=false.B) // request towards a taken branch target
@@ -345,7 +345,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    f2_fetch_bundle.pc := io.imem.resp.bits.pc
    f2_fetch_bundle.xcpt_pf_if := io.imem.resp.bits.xcpt_if
    f2_fetch_bundle.replay_if := io.imem.resp.bits.replay
-   f2_fetch_bundle.xcpt_ma_if_oh := jal_targs_ma.toBits
+   f2_fetch_bundle.xcpt_ma_if_oh := jal_targs_ma.asUInt
 
    for (w <- 0 until fetch_width)
    {
@@ -435,7 +435,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
          FetchBuffer.io.enq.bits.debug_events(i).fetch_seq := fseq_reg
       } else {
          FetchBuffer.io.enq.bits.debug_events(i).fetch_seq := fseq_reg +
-            PopCount(f3_fetch_bundle.mask.toBits()(i-1,0))
+            PopCount(f3_fetch_bundle.mask.asUInt()(i-1,0))
       }
    }
 
@@ -469,7 +469,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
                printf("%d; O3PipeView:fetch:%d:0x%x:0:%d:DASM(%x)\n",
                   bundle.debug_events(i).fetch_seq,
                   io.tsc_reg - UInt(2*O3_CYCLE_TIME),
-                  (bundle.pc.toSInt & SInt(-(fetch_width*coreInstBytes))).toUInt + UInt(i << 2),
+                  (bundle.pc.asSInt & SInt(-(fetch_width*coreInstBytes))).asUInt + UInt(i << 2),
                   bundle.debug_events(i).fetch_seq,
                   bundle.insts(i))
             }
@@ -561,7 +561,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
       // check that, if there is a jal, the last valid instruction is not after him.
       // <beq, jal, bne, ...>, either the beq or jal may be the last instruction, but because
       // the jal dominates everything after it, nothing valid can be after it.
-      val f3_is_jal = Vec(f3_fetch_bundle.insts map (GetCfiType(_) === CfiType.jal)).toBits & f3_fetch_bundle.mask
+      val f3_is_jal = Vec(f3_fetch_bundle.insts map (GetCfiType(_) === CfiType.jal)).asUInt & f3_fetch_bundle.mask
       val f3_jal_idx = PriorityEncoder(f3_is_jal)
       val has_jal = f3_is_jal.orR
 
@@ -714,7 +714,7 @@ class BranchChecker(fetch_width: Int)(implicit p: Parameters) extends BoomModule
 
    val f2_bpu_req_valid = io.f2_bpu_request.valid && enableBpdF2Redirect.B
 
-   val jal_idx = PriorityEncoder(io.is_jal.toBits)
+   val jal_idx = PriorityEncoder(io.is_jal.asUInt)
    val btb_hit  = io.btb_resp.valid
    val jal_wins = io.is_jal.reduce(_|_) &&
       (!btb_hit ||

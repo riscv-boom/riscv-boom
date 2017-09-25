@@ -143,7 +143,7 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    val debug_tsc_reg  = Reg(init = UInt(0, xLen))
    val debug_irt_reg  = Reg(init = UInt(0, xLen))
    debug_tsc_reg  := debug_tsc_reg + Mux(Bool(O3PIPEVIEW_PRINTF), UInt(O3_CYCLE_TIME), UInt(1))
-   debug_irt_reg  := debug_irt_reg + PopCount(rob.io.commit.valids.toBits)
+   debug_irt_reg  := debug_irt_reg + PopCount(rob.io.commit.valids.asUInt)
    debug(debug_tsc_reg)
    debug(debug_irt_reg)
 
@@ -330,7 +330,7 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    }
    .otherwise
    {
-      dec_finished_mask := dec_will_fire.toBits | dec_finished_mask
+      dec_finished_mask := dec_will_fire.asUInt | dec_finished_mask
    }
 
    //-------------------------------------------------------------
@@ -408,7 +408,7 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    //-------------------------------------------------------------
 
    // TODO for now, assume worst-case all instructions will dispatch towards one issue unit.
-   val dis_readys = issue_units.map(_.io.dis_readys.toBits).reduce(_&_) & fp_pipeline.io.dis_readys.toBits
+   val dis_readys = issue_units.map(_.io.dis_readys.asUInt).reduce(_&_) & fp_pipeline.io.dis_readys.asUInt
    rename_stage.io.dis_inst_can_proceed := dis_readys.toBools
    rename_stage.io.ren_pred_info := Vec(dec_fbundle.uops.map(_.br_prediction))
 
@@ -613,7 +613,7 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    csr.io.rw.wdata :=wb_wdata
 
    // Extra I/O
-   csr.io.retire    := PopCount(rob.io.commit.valids.toBits)
+   csr.io.retire    := PopCount(rob.io.commit.valids.asUInt)
    csr.io.exception := rob.io.com_xcpt.valid && !csr.io.csr_xcpt
    csr.io.pc        := rob.io.com_xcpt.bits.pc
    csr.io.cause     := rob.io.com_xcpt.bits.cause
@@ -950,7 +950,7 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
 
    // detect pipeline freezes and throw error
    val idle_cycles = util.WideCounter(32)
-   when (rob.io.commit.valids.toBits.orR || reset.toBool) { idle_cycles := UInt(0) }
+   when (rob.io.commit.valids.asUInt.orR || reset.toBool) { idle_cycles := 0.U }
    assert (!(idle_cycles.value(13)), "Pipeline has hung.")
 
    fp_pipeline.io.debug_tsc_reg := debug_tsc_reg
@@ -958,7 +958,7 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    //-------------------------------------------------------------
    // Uarch Hardware Performance Events (HPEs)
 
-   csr.io.events.map(_ := UInt(0))
+   csr.io.events.map(_ := 0.U)
 
    require (nPerfEvents > 29)
    println ("   " + nPerfCounters + " HPM counters enabled (with " + nPerfEvents + " events).")
@@ -1180,7 +1180,7 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
       printf("Exct(%c%d) Commit(%x) fl: 0x%x (%d) is: 0x%x (%d)\n"
          , Mux(rob.io.com_xcpt.valid, Str("E"), Str("-"))
          , rob.io.com_xcpt.bits.cause
-         , rob.io.commit.valids.toBits
+         , rob.io.commit.valids.asUInt
          , rename_stage.io.debug.ifreelist
          , PopCount(rename_stage.io.debug.ifreelist)
          , rename_stage.io.debug.iisprlist
@@ -1298,7 +1298,7 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
          }
          .otherwise
          {
-            dec_printed_mask := dec_valids.toBits | dec_printed_mask
+            dec_printed_mask := dec_valids.asUInt | dec_printed_mask
          }
       }
 

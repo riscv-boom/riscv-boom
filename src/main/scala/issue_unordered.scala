@@ -77,7 +77,7 @@ class IssueUnitStatic(
                              !dis_uops(w).is_fencei &&
                              entry_wen_oh_array(i)(w)
       }
-      entry_wen_oh(i) := temp_uop_val.toBits
+      entry_wen_oh(i) := temp_uop_val.asUInt
    }
 
    for (w <- 0 until DISPATCH_WIDTH)

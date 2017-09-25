@@ -165,7 +165,7 @@ class RenameStage(
    io.get_pred.info := prediction_copies(io.get_pred.br_tag)
 
    val temp = Wire(new BranchPredInfo)
-   println("\t\tPrediction Snapshots: " + temp.toBits.getWidth + "-bits, " + MAX_BR_COUNT + " entries")
+   println("\t\tPrediction Snapshots: " + temp.asUInt.getWidth + "-bits, " + MAX_BR_COUNT + " entries")
 
    //-------------------------------------------------------------
    // Free List

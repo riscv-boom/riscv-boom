@@ -22,17 +22,17 @@ abstract trait DecodeConstants
   val xpr64 = Y // TODO inform this from xLen
 
   def decode_default: List[BitPat] =
-            //                                                                 frs3_en                                wakeup_delay
-            //     is val inst?                                                |  imm sel                             |                    bypassable (aka, known/fixed latency)
-            //     |  is fp inst?                                              |  |     is_load                       |                    |  br/jmp
-            //     |  |  is single-prec?                      rs1 regtype      |  |     |  is_store                   |                    |  |  is jal
-            //     |  |  |  micro-code                         |       rs2 type|  |     |  |  is_amo                  |                    |  |  |  allocate_brtag
-            //     |  |  |  |                 func unit        |       |       |  |     |  |  |  is_fence             |                    |  |  |  |
-            //     |  |  |  |                 |                |       |       |  |     |  |  |  |  is_fencei         |                    |  |  |  |
-            //     |  |  |  |                 |        dst     |       |       |  |     |  |  |  |  |  mem    mem     |                    |  |  |  |  is unique? (clear pipeline for it)
-            //     |  |  |  |                 |        regtype |       |       |  |     |  |  |  |  |  cmd    msk     |                    |  |  |  |  |  flush on commit
-            //     |  |  |  |                 |        |       |       |       |  |     |  |  |  |  |  |      |       |                    |  |  |  |  |  |  csr cmd
-              List(N, N, X, uopX   , IQT_INT, FU_X   ,RT_X,BitPat.DC(2),BitPat.DC(2),X,IS_X,X,X,X,X,N, M_X,   MSK_X,  BitPat.DC(2),        X, X, X, X, N, X, CSR.X)
+            //                                                                                   frs3_en                          wakeup_delay
+            //     is val inst?                                                                  |  imm sel                       |                   bypassable (aka, known/fixed latency)
+            //     |  is fp inst?                                                                |  |   is_load                   |                   |  br/jmp
+            //     |  |  is single-prec?                      rs1 regtype                        |  |   | is_store                |                   |  |  is jal
+            //     |  |  |  micro-code                         |              rs2 type           |  |   | | is_amo                |                   |  |  |  allocate_brtag
+            //     |  |  |  |                 func unit        |              |                  |  |   | | | is_fence            |                   |  |  |  |
+            //     |  |  |  |                 |                |              |                  |  |   | | | | is_fencei         |                   |  |  |  |
+            //     |  |  |  |                 |        dst     |              |                  |  |   | | | | |  mem    mem     |                   |  |  |  |  is unique? (clear pipeline for it)
+            //     |  |  |  |                 |        regtype |              |                  |  |   | | | | |  cmd    msk     |                   |  |  |  |  |  flush on commit
+            //     |  |  |  |                 |        |       |              |                  |  |   | | | | |  |      |       |                   |  |  |  |  |  |  csr cmd
+              List(N, N, X, uopX   , IQT_INT, FU_X   ,RT_X,BitPat.dontCare(2),BitPat.dontCare(2),X,IS_X,X,X,X,X,N, M_X,   MSK_X,  BitPat.dontCare(2), X, X, X, X, N, X, CSR.X)
 
   val table: Array[(BitPat, List[BitPat])]
 // scalastyle:on
@@ -561,7 +561,7 @@ class FetchSerializerNtoM(implicit p: Parameters) extends BoomModule()(p)
       for (i <- 0 until DECODE_WIDTH)
       {
          io.deq.bits.uops(i).valid          := io.enq.bits.mask(i)
-         io.deq.bits.uops(i).pc             := (io.enq.bits.pc.toSInt & SInt(-(FETCH_WIDTH*coreInstBytes))).toUInt + UInt(i << 2)
+         io.deq.bits.uops(i).pc             := (io.enq.bits.pc.asSInt & SInt(-(FETCH_WIDTH*coreInstBytes))).asUInt + UInt(i << 2)
          io.deq.bits.uops(i).fetch_pc_lob   := io.enq.bits.pc
          io.deq.bits.uops(i).inst           := io.enq.bits.insts(i)
          io.deq.bits.uops(i).xcpt_pf_if     := io.enq.bits.xcpt_pf_if

@@ -240,7 +240,7 @@ class Rob(width: Int,
    def GetBankIdx(rob_idx: UInt): UInt =
    {
       if(width == 1) { return 0.U }
-      else           { return rob_idx(log2Up(width)-1, 0).toUInt }
+      else           { return rob_idx(log2Up(width)-1, 0).asUInt }
    }
 
    // **************************************************************************
@@ -293,13 +293,13 @@ class Rob(width: Int,
    val curr_row_next_pc = curr_row_pc + Cat(curr_idx, UInt(0,2))
 
 
-   val next_bank_idx = if (width == 1) UInt(0) else PriorityEncoder(rob_getpc_next_vals.toBits)
+   val next_bank_idx = if (width == 1) UInt(0) else PriorityEncoder(rob_getpc_next_vals.asUInt)
 
    // TODO is this logic broken if the ROB can fill up completely?
    val rob_pc_hob_next_val = rob_getpc_next_vals.reduce(_|_)
 
-   val bypass_next_bank_idx = if (width == 1) UInt(0) else PriorityEncoder(io.enq_valids.toBits)
-   val bypass_next_pc = (io.enq_uops(0).pc.toSInt & SInt(-(DECODE_WIDTH*coreInstBytes))).toUInt +
+   val bypass_next_bank_idx = if (width == 1) UInt(0) else PriorityEncoder(io.enq_valids.asUInt)
+   val bypass_next_pc = (io.enq_uops(0).pc.asSInt & SInt(-(DECODE_WIDTH*coreInstBytes))).asUInt +
                         Cat(bypass_next_bank_idx, Bits(0,2))
 
    io.get_pc.next_val := rob_pc_hob_next_val || io.enq_valids.reduce(_|_) || curr_row_next_pc_val
@@ -759,8 +759,8 @@ class Rob(width: Int,
    // dispatch the rest of it.
    // update when committed ALL valid instructions in commit_bundle
 
-   finished_committing_row := (io.commit.valids.toBits =/= Bits(0)) &&
-                              ((will_commit.toBits ^ rob_head_vals.toBits) === Bits(0)) &&
+   finished_committing_row := (io.commit.valids.asUInt =/= Bits(0)) &&
+                              ((will_commit.asUInt ^ rob_head_vals.asUInt) === Bits(0)) &&
                               !(r_partial_row && rob_head === rob_tail)
    when (finished_committing_row)
    {
@@ -778,7 +778,7 @@ class Rob(width: Int,
    {
       rob_tail := WrapInc(GetRowIdx(io.brinfo.rob_idx), num_rob_rows)
    }
-   .elsewhen (io.enq_valids.toBits =/= Bits(0) && !io.enq_partial_stall)
+   .elsewhen (io.enq_valids.asUInt =/= Bits(0) && !io.enq_partial_stall)
    {
       rob_tail := WrapInc(rob_tail, num_rob_rows)
    }
@@ -803,7 +803,7 @@ class Rob(width: Int,
    // also must handle rob_pc valid logic.
    val full = WrapInc(rob_tail, num_rob_rows) === rob_head
 
-   io.empty := (rob_head === rob_tail) && (rob_head_vals.toBits === Bits(0))
+   io.empty := (rob_head === rob_tail) && (rob_head_vals.asUInt === Bits(0))
 
    io.curr_rob_tail := rob_tail
 
@@ -917,7 +917,7 @@ class Rob(width: Int,
       io.commit.ld_mask(w) := io.commit.valids(w) && rob_head_is_load(w)
    }
 
-   io.com_load_is_at_rob_head := rob_head_is_load(PriorityEncoder(rob_head_vals.toBits))
+   io.com_load_is_at_rob_head := rob_head_is_load(PriorityEncoder(rob_head_vals.asUInt))
 
    //--------------------------------------------------
    // Handle passing out signals to printf in dpath

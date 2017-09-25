@@ -116,7 +116,7 @@ class RenameFreeListHelper(
 
    for (w <- 0 until pl_width)
    {
-      requested_pregs_oh(w) := Vec(requested_pregs_oh_array(w)).toBits
+      requested_pregs_oh(w) := Vec(requested_pregs_oh_array(w)).asUInt
       requested_pregs(w) := PriorityEncoder(requested_pregs_oh(w))
    }
 

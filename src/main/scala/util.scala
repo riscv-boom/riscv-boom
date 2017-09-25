@@ -83,7 +83,7 @@ object PerformShiftRegister
 {
    def apply(reg_val: UInt, new_bit: Bool): UInt =
    {
-      reg_val := Cat(reg_val(reg_val.getWidth-1, 0).toUInt, new_bit.toUInt).toUInt
+      reg_val := Cat(reg_val(reg_val.getWidth-1, 0).asUInt, new_bit.asUInt).asUInt
       reg_val
    }
 }
@@ -206,16 +206,16 @@ object ImmGen
 {
    def apply(ip: UInt, isel: UInt): SInt =
    {
-      val sign = ip(LONGEST_IMM_SZ-1).toSInt
-      val i30_20 = Mux(isel === IS_U, ip(18,8).toSInt, sign)
-      val i19_12 = Mux(isel === IS_U || isel === IS_J, ip(7,0).toSInt, sign)
+      val sign = ip(LONGEST_IMM_SZ-1).asSInt
+      val i30_20 = Mux(isel === IS_U, ip(18,8).asSInt, sign)
+      val i19_12 = Mux(isel === IS_U || isel === IS_J, ip(7,0).asSInt, sign)
       val i11    = Mux(isel === IS_U, SInt(0),
-                   Mux(isel === IS_J || isel === IS_B, ip(8).toSInt, sign))
-      val i10_5  = Mux(isel === IS_U, SInt(0), ip(18,14).toSInt)
-      val i4_1   = Mux(isel === IS_U, SInt(0), ip(13,9).toSInt)
-      val i0     = Mux(isel === IS_S || isel === IS_I, ip(8).toSInt, SInt(0))
+                   Mux(isel === IS_J || isel === IS_B, ip(8).asSInt, sign))
+      val i10_5  = Mux(isel === IS_U, SInt(0), ip(18,14).asSInt)
+      val i4_1   = Mux(isel === IS_U, SInt(0), ip(13,9).asSInt)
+      val i0     = Mux(isel === IS_S || isel === IS_I, ip(8).asSInt, SInt(0))
 
-      return Cat(sign, i30_20, i19_12, i11, i10_5, i4_1, i0).toSInt
+      return Cat(sign, i30_20, i19_12, i11, i10_5, i4_1, i0).asSInt
    }
 }
 

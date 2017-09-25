@@ -338,7 +338,7 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int)(implicit p
    commit := brob.io.commit_entry
 
    // TODO add this back in (perhaps just need to initialize mispredicted array?)
-//   assert ((~commit.bits.executed.toBits & commit.bits.mispredicted.toBits) === Bits(0),
+//   assert ((~commit.bits.executed.asUInt& commit.bits.mispredicted.asUInt) === Bits(0),
 //      "[BrPredictor] the BROB is marking a misprediction for something that didn't execute.")
 
    // This shouldn't happen, unless a branch instruction was also marked to flush after it commits.
@@ -703,8 +703,8 @@ class BranchReorderBuffer(fetch_width: Int, num_entries: Int)(implicit p: Parame
    }
 
    println ("\tBROB (w=" + fetch_width + ") Size (" + num_entries + ") entries of " +
-      Wire(new BpdResp).toBits.getWidth + " bits (" +
-      Wire(new BrobEntryMetaData(fetch_width)).toBits.getWidth + " of meta-bits).")
+      Wire(new BpdResp).asUInt.getWidth + " bits (" +
+      Wire(new BrobEntryMetaData(fetch_width)).asUInt.getWidth + " of meta-bits).")
 
    // each entry corresponds to a fetch-packet
    // ROB shouldn't send "deallocate signal" until the entire packet has finished committing.
@@ -814,9 +814,9 @@ class BranchReorderBuffer(fetch_width: Int, num_entries: Int)(implicit p: Parame
       {
          printf (" brob[%d] (%x) T=%x m=%x r=%d "
             , UInt(i, log2Up(num_entries))
-            , entries_ctrl(i).executed.toBits
-            , entries_ctrl(i).taken.toBits
-            , entries_ctrl(i).mispredicted.toBits
+            , entries_ctrl(i).executed.asUInt
+            , entries_ctrl(i).taken.asUInt
+            , entries_ctrl(i).mispredicted.asUInt
             , entries_ctrl(i).debug_rob_idx
 //            , entries_info(i).history_ptr
 //            , entries_info(i).info

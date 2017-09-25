@@ -117,9 +117,9 @@ class SimpleGShareBrPredictor(
    val p_idx = Hash(io.req_pc, this.ghistory)
    io.resp.valid        := Bool(true)
    resp_info.index      := RegNext(RegNext(p_idx))
-   io.resp.bits.takens  := RegNext(RegNext(Vec(counters(p_idx).map(GetPrediction(_))).toBits))
+   io.resp.bits.takens  := RegNext(RegNext(Vec(counters(p_idx).map(GetPrediction(_))).asUInt))
 
-   io.resp.bits.info    := resp_info.toBits
+   io.resp.bits.info    := resp_info.asUInt
 
    //------------------------------------------------------------
    // update predictor

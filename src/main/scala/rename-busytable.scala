@@ -84,7 +84,7 @@ class BusyTableHelper(
       io.p_rs_busy(ridx) := (table_bsy(io.p_rs(ridx)) && !just_cleared)
    }
 
-   io.debug.busytable := table_bsy.toBits
+   io.debug.busytable := table_bsy.asUInt
 }
 
 

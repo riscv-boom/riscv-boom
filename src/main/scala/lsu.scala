@@ -362,7 +362,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: uncore.tilelink
 
    val exe_vaddr   = Mux(will_fire_sta_retry,  saq_addr(stq_retry_idx),
                      Mux(will_fire_load_retry, laq_addr(laq_retry_idx),
-                                               io.exe_resp.bits.addr.toBits))
+                                               io.exe_resp.bits.addr.asUInt))
 
    val dtlb = Module(new rocket.TLB(nTLBEntries))
 
@@ -560,7 +560,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: uncore.tilelink
    {
       val sidx = io.exe_resp.bits.uop.stq_idx
       sdq_val (sidx) := Bool(true)
-      sdq_data(sidx) := io.exe_resp.bits.data.toBits
+      sdq_data(sidx) := io.exe_resp.bits.data.asUInt
 
       assertNever(will_fire_std_incoming && sdq_val(sidx),
          "[lsu] incoming store is overwriting a valid data entry.")
@@ -575,7 +575,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: uncore.tilelink
    {
       val sidx = io.fp_stdata.bits.uop.stq_idx
       sdq_val (sidx) := Bool(true)
-      sdq_data(sidx) := io.fp_stdata.bits.data.toBits
+      sdq_data(sidx) := io.fp_stdata.bits.data.asUInt
    }
    assert(!(io.fp_stdata.valid && io.exe_resp.valid && io.exe_resp.bits.uop.ctrl.is_std &&
       io.fp_stdata.bits.uop.stq_idx === io.exe_resp.bits.uop.stq_idx),
@@ -761,7 +761,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: uncore.tilelink
 
 
    val forwarding_age_logic = Module(new ForwardingAgeLogic(num_st_entries))
-   forwarding_age_logic.io.addr_matches    := forwarding_matches.toBits()
+   forwarding_age_logic.io.addr_matches    := forwarding_matches.asUInt()
    forwarding_age_logic.io.youngest_st_idx := laq_uop(Reg(next=exe_ld_uop.ldq_idx)).stq_idx
 
    when (mem_fired_ld && forwarding_age_logic.io.forwarding_val && !tlb_miss)
@@ -786,7 +786,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: uncore.tilelink
    // Kill load request to mem if address matches (we will either sleep load, or forward data) or TLB miss.
    // Also kill load request if load address matches an older, unexecuted load.
    io.memreq_kill     := (mem_ld_used_tlb && (mem_tlb_miss || Reg(next=pf_ld || ma_ld))) ||
-                         (mem_fired_ld && ldst_addr_conflicts.toBits =/= UInt(0)) ||
+                         (mem_fired_ld && ldst_addr_conflicts.asUInt=/= UInt(0)) ||
                          (mem_fired_ld && ldld_addr_conflict) ||
                          mem_ld_killed ||
                          (mem_fired_st && io.nack.valid && !io.nack.isload)
@@ -818,7 +818,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: uncore.tilelink
                         sdq_val(wb_forward_std_idx) &&
                         !(io.nack.valid && io.nack.cache_nack)
    }
-   io.forward_data := LoadDataGenerator(sdq_data(wb_forward_std_idx).toBits, wb_uop.mem_typ)
+   io.forward_data := LoadDataGenerator(sdq_data(wb_forward_std_idx).asUInt, wb_uop.mem_typ)
    io.forward_uop  := wb_uop
 
 
@@ -977,9 +977,9 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: uncore.tilelink
    // detect which loads get marked as failures, but broadcast to the ROB the oldest failing load
    // TODO encapsulate this in an age-based  priority-encoder
 //   val l_idx = AgePriorityEncoder((Vec(Vec.tabulate(num_ld_entries)(i => failed_loads(i) && UInt(i) >= laq_head)
-//   ++ failed_loads)).toBits)
+//   ++ failed_loads)).asUInt)
    val temp_bits = (Vec(Vec.tabulate(num_ld_entries)(i =>
-      failed_loads(i) && UInt(i) >= laq_head) ++ failed_loads)).toBits
+      failed_loads(i) && UInt(i) >= laq_head) ++ failed_loads)).asUInt
    val l_idx = PriorityEncoder(temp_bits)
 
    // TODO always pad out the input to PECircular() to pow2
@@ -1248,13 +1248,13 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: uncore.tilelink
 
    // TODO is this the most efficient way to compute the live store mask?
    live_store_mask := next_live_store_mask &
-                        ~(st_brkilled_mask.toBits) &
-                        ~(st_exc_killed_mask.toBits)
+                        ~(st_brkilled_mask.asUInt) &
+                        ~(st_exc_killed_mask.asUInt)
 
    //-------------------------------------------------------------
 
-   val laq_maybe_full = (laq_allocated.toBits =/= UInt(0))
-   val stq_maybe_full = (stq_entry_val.toBits =/= UInt(0))
+   val laq_maybe_full = (laq_allocated.asUInt =/= 0.U)
+   val stq_maybe_full = (stq_entry_val.asUInt =/= 0.U)
 
    var laq_is_full = Bool(false)
    var stq_is_full = Bool(false)
@@ -1264,7 +1264,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: uncore.tilelink
    require (isPow2(num_st_entries))
    for (w <- 0 until DECODE_WIDTH)
    {
-      val l_temp = laq_tail + UInt(w)
+      val l_temp = laq_tail + w.U
       laq_is_full = ((l_temp === laq_head || l_temp === (laq_head + UInt(num_ld_entries))) && laq_maybe_full) | laq_is_full
       val s_temp = stq_tail + UInt(w+1) // +1 since we don't do let SAQ completely fill up.
       stq_is_full = (s_temp === stq_head || s_temp === (stq_head + UInt(num_st_entries))) | stq_is_full
@@ -1399,13 +1399,13 @@ class ForwardingAgeLogic(num_entries: Int)(implicit p: Parameters) extends BoomM
 
    // Priority encoder with moving tail: double length
    val matches = Wire(UInt(width = 2*num_entries))
-   matches := Cat(io.addr_matches & age_mask.toBits,
+   matches := Cat(io.addr_matches & age_mask.asUInt,
                   io.addr_matches)
 
 
    val found_match = Wire(Bool())
-   found_match       := Bool(false)
-   io.forwarding_idx := UInt(0)
+   found_match       := false.B
+   io.forwarding_idx := 0.U
 
    // look for youngest, approach from the oldest side, let the last one found stick
    for (i <- 0 until (2*num_entries))

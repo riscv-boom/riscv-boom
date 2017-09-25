@@ -265,7 +265,7 @@ class TageBrPredictor(
    resp_info.alt_predicted_takens := Vec(predictions.map(_.takens))(p_alt_id)
    resp_info.debug_br_pc := RegEnable(io.req_pc, !stall)
 
-   io.resp.bits.info := resp_info.toBits
+   io.resp.bits.info := resp_info.asUInt
 
    require (log2Up(num_tables) <= resp_info.provider_id.getWidth)
 
@@ -292,7 +292,7 @@ class TageBrPredictor(
       max_tag_sz = tag_sizes.max
    ).fromBits(commit.bits.info.info)
 
-   val executed = commit.bits.ctrl.executed.toBits
+   val executed = commit.bits.ctrl.executed.asUInt
 
    when (commit.valid && commit.bits.ctrl.executed.reduce(_|_))
    {
@@ -327,9 +327,9 @@ class TageBrPredictor(
    val s2_commit      = RegNext(RegNext(commit))
    val s2_info        = RegNext(RegNext(info))
    val s2_provider_id = RegNext(RegNext(info.provider_id))
-   val s2_takens      = RegNext(RegNext(commit.bits.ctrl.taken.toBits))
+   val s2_takens      = RegNext(RegNext(commit.bits.ctrl.taken.asUInt))
    val s2_correct     = RegNext(RegNext(!commit.bits.ctrl.mispredicted.reduce(_|_)))
-   val s2_executed    = RegNext(RegNext(commit.bits.ctrl.executed.toBits))
+   val s2_executed    = RegNext(RegNext(commit.bits.ctrl.executed.asUInt))
 
 
    // provide some randomization to the allocation process

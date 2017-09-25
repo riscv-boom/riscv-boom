@@ -29,7 +29,7 @@ object FUConstants
 {
    // bit mask, since a given execution pipeline may support multiple functional units
    val FUC_SZ = 10
-   val FU_X   = BitPat.DC(FUC_SZ)
+   val FU_X   = BitPat.dontCare(FUC_SZ)
    val FU_ALU = UInt(  1, FUC_SZ)
    val FU_BRU = UInt(  2, FUC_SZ)
    val FU_MEM = UInt(  4, FUC_SZ)
@@ -260,18 +260,18 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
    var op1_data: UInt = null
    if (is_branch_unit)
    {
-      op1_data = Mux(io.req.bits.uop.ctrl.op1_sel.toUInt === OP1_RS1 , io.req.bits.rs1_data,
-                 Mux(io.req.bits.uop.ctrl.op1_sel.toUInt === OP1_PC  , Sext(io.get_rob_pc.curr_pc, xLen),
+      op1_data = Mux(io.req.bits.uop.ctrl.op1_sel.asUInt === OP1_RS1 , io.req.bits.rs1_data,
+                 Mux(io.req.bits.uop.ctrl.op1_sel.asUInt === OP1_PC  , Sext(io.get_rob_pc.curr_pc, xLen),
                                                                        UInt(0)))
    }
    else
    {
-      op1_data = Mux(io.req.bits.uop.ctrl.op1_sel.toUInt === OP1_RS1 , io.req.bits.rs1_data,
+      op1_data = Mux(io.req.bits.uop.ctrl.op1_sel.asUInt === OP1_RS1 , io.req.bits.rs1_data,
                                                                        UInt(0))
    }
 
    // operand 2 select
-   val op2_data = Mux(io.req.bits.uop.ctrl.op2_sel === OP2_IMM,  Sext(imm_xprlen.toUInt, xLen),
+   val op2_data = Mux(io.req.bits.uop.ctrl.op2_sel === OP2_IMM,  Sext(imm_xprlen.asUInt, xLen),
                   Mux(io.req.bits.uop.ctrl.op2_sel === OP2_IMMC, io.req.bits.uop.pop1(4,0),
                   Mux(io.req.bits.uop.ctrl.op2_sel === OP2_RS2 , io.req.bits.rs2_data,
                   Mux(io.req.bits.uop.ctrl.op2_sel === OP2_FOUR, UInt(4),
@@ -279,8 +279,8 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
 
    val alu = Module(new rocket.ALU())
 
-   alu.io.in1 := op1_data.toUInt
-   alu.io.in2 := op2_data.toUInt
+   alu.io.in1 := op1_data.asUInt
+   alu.io.in2 := op2_data.asUInt
    alu.io.fn  := io.req.bits.uop.ctrl.op_fcn
    alu.io.dw  := io.req.bits.uop.ctrl.fcn_dw
 
@@ -306,7 +306,7 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
       val rs1 = io.req.bits.rs1_data
       val rs2 = io.req.bits.rs2_data
       val br_eq  = (rs1 === rs2)
-      val br_ltu = (rs1.toUInt < rs2.toUInt)
+      val br_ltu = (rs1.asUInt < rs2.asUInt)
       val br_lt  = (~(rs1(xLen-1) ^ rs2(xLen-1)) & br_ltu |
                       rs1(xLen-1) & ~rs2(xLen-1)).toBool
 
@@ -481,7 +481,7 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
 
       br_unit.btb_update.bits.pc               := fetch_pc // tell the BTB which pc to tag check against
       br_unit.btb_update.bits.cfi_pc           := uop_pc_
-      br_unit.btb_update.bits.target           := (target.toSInt & SInt(-coreInstBytes)).toUInt
+      br_unit.btb_update.bits.target           := (target.asSInt & SInt(-coreInstBytes)).asUInt
 //      br_unit.btb_update.prediction.valid := io.get_pred.info.btb_resp_valid // did this branch's fetch packet have
 //                                                                             // a BTB hit in fetch?
 //      br_unit.btb_update.prediction.bits  := io.get_pred.info.btb_resp       // give the BTB back its BTBResp
@@ -537,15 +537,15 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
          val a = a0 >> vaddrBits-1
          val e = ea(vaddrBits,vaddrBits-1)
          Mux(a === UInt(0) || a === UInt(1), e =/= UInt(0),
-         Mux(a.toSInt === SInt(-1) || a.toSInt === SInt(-2), e.toSInt === SInt(-1),
+         Mux(a.asSInt === SInt(-1) || a.asSInt === SInt(-2), e.asSInt === SInt(-1),
             e(0)))
       }
 
       val bj_base = Mux(uop.uopc === uopJALR, io.req.bits.rs1_data, uop_pc_)
-      val bj_offset = imm_xprlen(20,0).toSInt
-      val bj64 = (bj_base.toSInt + bj_offset).toUInt
-      val bj_msb = Mux(uop.uopc === uopJALR, vaSign(io.req.bits.rs1_data, bj64.toUInt), vaSign(uop_pc_, bj64.toUInt))
-      bj_addr := (Cat(bj_msb, bj64(vaddrBits-1,0)).toSInt & SInt(-2)).toUInt
+      val bj_offset = imm_xprlen(20,0).asSInt
+      val bj64 = (bj_base.asSInt + bj_offset).asUInt
+      val bj_msb = Mux(uop.uopc === uopJALR, vaSign(io.req.bits.rs1_data, bj64.asUInt), vaSign(uop_pc_, bj64.asUInt))
+      bj_addr := (Cat(bj_msb, bj64(vaddrBits-1,0)).asSInt & SInt(-2)).asUInt
 
       br_unit.pc             := uop_pc_
 
@@ -604,10 +604,10 @@ class MemAddrCalcUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(nu
                                                      , is_branch_unit = false)(p)
 {
    // perform address calculation
-   val sum = (io.req.bits.rs1_data.toSInt + io.req.bits.uop.imm_packed(19,8).toSInt).toUInt
+   val sum = (io.req.bits.rs1_data.asSInt + io.req.bits.uop.imm_packed(19,8).asSInt).asUInt
    val ea_sign = Mux(sum(vaddrBits-1), ~sum(63,vaddrBits) === UInt(0),
                                         sum(63,vaddrBits) =/= UInt(0))
-   val effective_address = Cat(ea_sign, sum(vaddrBits-1,0)).toUInt
+   val effective_address = Cat(ea_sign, sum(vaddrBits-1,0)).asUInt
 
    // compute store data
    // requires decoding 65-bit FP data
