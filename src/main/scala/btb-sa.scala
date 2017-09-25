@@ -184,7 +184,7 @@ class PCReq(implicit p: Parameters) extends BTBsaBundle()(p)
 // Set-associative branch target buffer.
 class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParameters
 {
-   val io = new Bundle
+   val io = IO(new Bundle
    {
       // req.valid is false if stalling (aka, we won't read and use BTB results, on cycle S1).
       // req.bits.addr is available on cycle S0.
@@ -207,7 +207,7 @@ class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParamet
       // HACK: prevent BTB updating/predicting during program load.
       // Easier to diff against spike which doesn't run debug mode.
       val status_debug = Bool(INPUT)
-   }
+   })
 
    private val lsb_sz = log2Up(coreInstBytes)
    private def getTag (addr: UInt): UInt = addr(tag_sz+idx_sz+lsb_sz-1, idx_sz+lsb_sz)

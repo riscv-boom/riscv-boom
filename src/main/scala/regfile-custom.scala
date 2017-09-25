@@ -111,14 +111,14 @@ class RegisterFileArray(
    register_width: Int)
    extends BlackBox
 {
-   val io = new Bundle {
+   val io = IO(new Bundle {
       val clock = Clock(INPUT)
       val WE = Vec(num_registers, Bool()).asInput
       val WD = Vec(num_write_ports, UInt(width = register_width)).asInput
       val RD = Vec(num_read_ports, UInt(width = register_width)).asOutput
       val WS = Vec(num_registers, UInt(width = 2)).asInput
       val OE = Vec(num_registers, UInt(width = num_read_ports)).asInput
-   }
+   })
 }
 
 
@@ -130,14 +130,14 @@ class RegisterFileArrayModel(
    register_width: Int)
    extends Module
 {
-   val io = new Bundle {
+   val io = IO(new Bundle {
       val clock = Clock(INPUT)
       val WE = Vec(num_registers, Bool()).asInput
       val WS = Vec(num_registers, UInt(width = 2)).asInput
       val WD = Vec(num_write_ports, UInt(width = register_width)).asInput
       val OE = Vec(num_registers, UInt(width = num_read_ports)).asInput
       val RD = Vec(num_read_ports, UInt(width = register_width)).asOutput
-   }
+   })
 
    // Where we're going, we don't need roads. Or parameterization.
    require (num_read_ports == 6)
@@ -176,7 +176,7 @@ class RegisterFileArrayModel(
 // This is a model of a register file row (which covers one register). Don't ship this either.
 class RegisterFile6r3wRegisterModel extends Module
 {
-   val io = new Bundle {
+   val io = IO(new Bundle {
       val we  = Bool(INPUT)
       val ws  = UInt(INPUT, width = 2)
       val wd0 = UInt(INPUT, width = 64)
@@ -189,7 +189,7 @@ class RegisterFile6r3wRegisterModel extends Module
       val rd3 = UInt(OUTPUT, width = 64)
       val rd4 = UInt(OUTPUT, width = 64)
       val rd5 = UInt(OUTPUT, width = 64)
-   }
+   })
 
    val rd0 = Wire(Vec(64, Bool()))
    val rd1 = Wire(Vec(64, Bool()))
@@ -228,7 +228,7 @@ class RegisterFile6r3wRegisterModel extends Module
 // This is only a model of a register file bit. Warranty voided if synthesized.
 class Rf6r3wBitModel extends Module
 {
-   val io = new Bundle {
+   val io = IO(new Bundle {
       val we  = Bool(INPUT)
       val ws  = UInt(INPUT, width = 2)
       val wd0 = Bool(INPUT)
@@ -241,7 +241,7 @@ class Rf6r3wBitModel extends Module
       val rd3 = Bool(OUTPUT)
       val rd4 = Bool(OUTPUT)
       val rd5 = Bool(OUTPUT)
-   }
+   })
 
    val din = Wire(Bool())
    val dout = Wire(Bool())

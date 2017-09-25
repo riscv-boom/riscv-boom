@@ -12,14 +12,14 @@ import rocket.ALU._
 
 class IMul(imul_stages: Int) extends Module
 {
-   val io = new Bundle {
+   val io = IO(new Bundle {
       val valid = Bool(INPUT)
       val fn  = UInt(INPUT, SZ_ALU_FN)
       val dw  = UInt(INPUT, SZ_DW)
       val in0 = UInt(INPUT,  64)
       val in1 = UInt(INPUT,  64)
       val out = UInt(OUTPUT, 64)
-   }
+   })
 
    def FN(dw: UInt, fn: UInt) = io.dw === dw && io.fn === fn
    val sxl64 = FN(DW_64, FN_MULH) | FN(DW_64, FN_MULHSU)

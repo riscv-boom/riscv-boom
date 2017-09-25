@@ -21,10 +21,10 @@ import tile.FPConstants._
 
 class UOPCodeFDivDecoder extends Module
 {
-  val io = new Bundle {
+  val io = IO(new Bundle {
     val uopc = Bits(INPUT, UOPC_SZ)
     val sigs = new tile.FPUCtrlSigs().asOutput
-  }
+  })
 
    val N = BitPat("b0")
    val Y = BitPat("b1")

@@ -47,7 +47,7 @@ class FetchBundle(implicit p: Parameters) extends BoomBundle()(p)
 class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p)
    with HasBoomCoreParameters
 {
-   val io = new BoomBundle()(p)
+   val io = IO(new BoomBundle()(p)
    {
       val imem              = new rocket.FrontendIO
       val f1_btb            = Valid(new BTBsaResp).flip
@@ -72,7 +72,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
 
       val resp              = new DecoupledIO(new FetchBundle)
       val stalled           = Bool(OUTPUT) // CODE REVIEW
-   }
+   })
 
    val bchecker = Module (new BranchChecker(fetchWidth))
    val FetchBuffer = Module(new Queue(gen=new FetchBundle,
@@ -634,7 +634,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
 // Incoming signals may be garbage (if f2_valid not true); consumer will have to handle that scenario.
 class BranchChecker(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p)
 {
-   val io = new Bundle
+   val io = IO(new Bundle
    {
       val req           = Valid(new PCReq)
 
@@ -658,7 +658,7 @@ class BranchChecker(fetch_width: Int)(implicit p: Parameters) extends BoomModule
       val ras_update    = Valid(new RasUpdate)
 
       val req_cfi_idx   = UInt(OUTPUT, width = log2Up(fetchWidth)) // where is cfi we are predicting?
-   }
+   })
 
    // Did the BTB mispredict the cfi type?
    // Did the BTB mispredict the cfi target?

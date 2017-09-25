@@ -51,7 +51,7 @@ class LoadReqSlotIo(implicit p: Parameters) extends BoomBundle()(p)
 // as "valid", since it also got sent to the datacache.
 class LoadReqSlot(implicit p: Parameters) extends BoomModule()(p)
 {
-   val io = new LoadReqSlotIo()
+   val io = IO(new LoadReqSlotIo())
 
    val valid      = Reg(init=Bool(false))
    val was_killed = Reg(init=Bool(false))
@@ -183,11 +183,11 @@ class DCacheShim(implicit p: Parameters) extends BoomModule()(p)
    val max_num_inflight = MAX_LD_COUNT
    isPow2(max_num_inflight)
 
-   val io = new Bundle
+   val io = IO(new Bundle
    {
       val core = (new DCMemPortIO()).flip
       val dmem = new rocket.HellaCacheIO
-   }
+   })
 
    // we are going to ignore store acks (for now at least), so filter them out and only listen to load acks
    // we know the store succeeded if it was not nacked

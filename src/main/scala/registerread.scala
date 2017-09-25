@@ -59,7 +59,7 @@ class RegisterRead(
    register_width: Int
 )(implicit p: Parameters) extends BoomModule()(p)
 {
-   val io = new RegisterReadIO(issue_width, num_total_read_ports, num_total_bypass_ports, register_width)
+   val io = IO(new RegisterReadIO(issue_width, num_total_read_ports, num_total_bypass_ports, register_width))
 
    val rrd_valids       = Wire(Vec(issue_width, Bool()))
    val rrd_uops         = Wire(Vec(issue_width, new MicroOp()))

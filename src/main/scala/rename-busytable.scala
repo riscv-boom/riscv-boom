@@ -52,7 +52,7 @@ class BusyTableHelper(
    num_wb_ports:Int)
    (implicit p: Parameters) extends BoomModule()(p)
 {
-   val io = new BusyTableIo(pipeline_width, num_pregs, num_read_ports, num_wb_ports)
+   val io = IO(new BusyTableIo(pipeline_width, num_pregs, num_read_ports, num_wb_ports))
 
    def BUSY     = Bool(true)
    def NOT_BUSY = Bool(false)
@@ -106,7 +106,7 @@ class BusyTable(
 {
    private val preg_sz = log2Up(num_pregs)
 
-   val io = new Bundle
+   val io = IO(new Bundle
    {
       // Inputs
       val ren_will_fire         = Vec(pl_width, Bool()).asInput
@@ -121,7 +121,7 @@ class BusyTable(
       val values                = Vec(pl_width, new BusyTableOutput()).asOutput
 
       val debug                 = new Bundle { val busytable= Bits(width=num_pregs).asOutput }
-   }
+   })
 
    val busy_table = Module(new BusyTableHelper(
       pipeline_width = pl_width,

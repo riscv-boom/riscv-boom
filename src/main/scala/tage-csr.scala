@@ -84,7 +84,7 @@ class CircularShiftRegister(
    history_length: Int
    ) extends Module
 {
-   val io = new CircularShiftRegisterIO(compressed_length, history_length)
+   val io = IO(new CircularShiftRegisterIO(compressed_length, history_length))
 
    // TODO XXX remove init once fully debugged
    // TODO XXX handle case when clen > hlen

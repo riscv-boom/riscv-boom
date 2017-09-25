@@ -47,7 +47,7 @@ class IssueSlotIO(num_wakeup_ports: Int)(implicit p: Parameters) extends BoomBun
 
 class IssueSlot(num_slow_wakeup_ports: Int)(implicit p: Parameters) extends BoomModule()(p)
 {
-   val io = new IssueSlotIO(num_slow_wakeup_ports)
+   val io = IO(new IssueSlotIO(num_slow_wakeup_ports))
 
    // slot invalid?
    // slot is valid, holding 1 uop

@@ -351,7 +351,7 @@ class DecodeUnitIo(implicit p: Parameters) extends BoomBundle()(p)
 // Takes in a single instruction, generates a MicroOp (or multiply micro-ops over x cycles)
 class DecodeUnit(implicit p: Parameters) extends BoomModule()(p)
 {
-   val io = new DecodeUnitIo
+   val io = IO(new DecodeUnitIo)
 
    val uop = Wire(new MicroOp())
    uop := io.enq.uop
@@ -444,13 +444,13 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule()(p)
 
 class BranchDecode extends Module
 {
-   val io = new Bundle
+   val io = IO(new Bundle
    {
       val inst    = UInt(INPUT, 32)
       val is_br   = Bool(OUTPUT)
       val is_jal  = Bool(OUTPUT)
       val is_jalr = Bool(OUTPUT)
-   }
+   })
 
    val bpd_csignals =
       rocket.DecodeLogic(io.inst,
@@ -498,7 +498,7 @@ class FetchSerializerIO(implicit p: Parameters) extends BoomBundle()(p)
 // TODO instead of counter, clear mask bits as instructions are finished?
 class FetchSerializerNtoM(implicit p: Parameters) extends BoomModule()(p)
 {
-   val io = new FetchSerializerIO
+   val io = IO(new FetchSerializerIO)
 
    val counter = Reg(init = UInt(0, log2Up(FETCH_WIDTH)))
    val inst_idx = Wire(UInt())
@@ -594,7 +594,7 @@ class DebugBranchMaskGenerationLogicIO(implicit p: Parameters) extends BoomBundl
 
 class BranchMaskGenerationLogic(val pl_width: Int)(implicit p: Parameters) extends BoomModule()(p)
 {
-   val io = new Bundle
+   val io = IO(new Bundle
    {
       // guess if the uop is a branch (we'll catch this later)
       val is_branch = Vec(pl_width, Bool()).asInput
@@ -615,7 +615,7 @@ class BranchMaskGenerationLogic(val pl_width: Int)(implicit p: Parameters) exten
       val flush_pipeline = Bool(INPUT)
 
       val debug = new DebugBranchMaskGenerationLogicIO().asOutput
-   }
+   })
 
    val branch_mask = Reg(init = UInt(0, MAX_BR_COUNT))
 

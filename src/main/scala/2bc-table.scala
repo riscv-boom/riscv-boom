@@ -77,13 +77,13 @@ abstract class PTable(
    ) extends Module
 {
    val index_sz = log2Up(num_entries)
-   val io = new Bundle
+   val io = IO(new Bundle
    {
       val s1_r_idx = UInt(INPUT, width = index_sz)
       val s2_r_out = UInt(OUTPUT, width = fetch_width)
       val stall    = Bool(INPUT)
       val update   = Decoupled(new BrTableUpdate(fetch_width, index_sz)).flip
-   }
+   })
 
    val ridx = Wire(UInt())
    val last_idx = RegNext(ridx)
@@ -170,13 +170,13 @@ class HTable(
 {
    private val ptable_idx_sz = log2Up(num_p_entries)
    private val num_h_entries = if (share_hbit) num_p_entries/2 else num_p_entries
-   val io = new Bundle
+   val io = IO(new Bundle
    {
       // Update the h-table.
       val update   = Valid(new UpdateEntry(fetch_width, ptable_idx_sz)).flip
       // Enqueue an update to the p-table.
       val pwq_enq  = Decoupled(new BrTableUpdate(fetch_width, ptable_idx_sz))
-   }
+   })
 
    val h_table = Module(new SeqMem1rwTransformable(num_h_entries, fetch_width))
    val hwq = Module(new Queue(new UpdateEntry(fetch_width, ptable_idx_sz), entries=4))
@@ -216,7 +216,7 @@ class TwobcCounterTable(
    private val index_sz = log2Up(num_entries)
    private val num_h_entries = if (share_hbit) num_entries/2 else num_entries
 
-   val io = new Bundle
+   val io = IO(new Bundle
    {
       // send read addr on cycle 0, get data out on cycle 2.
       val s1_r_idx = UInt(INPUT, width = index_sz)
@@ -224,7 +224,7 @@ class TwobcCounterTable(
       val stall    = Bool(INPUT)
 
       val update   = Valid(new UpdateEntry(fetch_width, index_sz)).flip
-   }
+   })
 
    println ("\t\tBuilding (" +
       (num_entries * fetch_width * 2/8/1024) + " kB) 2-bit counter table for (" +

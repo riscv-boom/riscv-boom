@@ -30,7 +30,7 @@ class TageTagMemory(
    ) extends Module
 {
    private val index_sz = log2Up(num_entries)
-   val io = new Bundle
+   val io = IO(new Bundle
    {
       // the reader is not ready; stall the read pipeline.
       val stall = Bool(INPUT)
@@ -55,7 +55,7 @@ class TageTagMemory(
          this.w_idx := UInt(0)
          this.w_data := UInt(0)
       }
-   }
+   })
 
    //------------------------------------------------------------
 

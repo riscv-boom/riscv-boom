@@ -55,7 +55,7 @@ abstract class IssueUnit(
    (implicit p: Parameters)
    extends BoomModule()(p)
 {
-   val io = new IssueUnitIO(issue_width, num_wakeup_ports)
+   val io = IO(new IssueUnitIO(issue_width, num_wakeup_ports))
 
    //-------------------------------------------------------------
    // Set up the dispatch uops

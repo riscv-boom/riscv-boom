@@ -42,7 +42,7 @@ class RenameMapTableElementIo(pl_width: Int)(implicit p: Parameters) extends Boo
 
 class RenameMapTableElement(pipeline_width: Int, always_zero: Boolean)(implicit p: Parameters) extends BoomModule()(p)
 {
-   val io = new RenameMapTableElementIo(pipeline_width)
+   val io = IO(new RenameMapTableElementIo(pipeline_width))
 
    // Note: I don't use a "valid" signal, since it's annoying to deal with and
    // only necessary until the map tables are filled. So instead I reset the
@@ -141,7 +141,7 @@ class RenameMapTable(
 {
    private val preg_sz = log2Up(num_physical_registers)
 
-   val io = new BoomBundle()(p)
+   val io = IO(new BoomBundle()(p)
    {
       // Inputs
       val brinfo           = new BrResolutionInfo().asInput
@@ -161,7 +161,7 @@ class RenameMapTable(
 
       // Outputs
       val values           = Vec(pl_width, new MapTableOutput(preg_sz)).asOutput
-   }
+   })
 
 
    val entries = for (i <- 0 until num_logical_registers) yield

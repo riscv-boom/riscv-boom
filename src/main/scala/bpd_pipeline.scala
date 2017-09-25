@@ -71,7 +71,7 @@ class BranchPredInfo(implicit p: Parameters) extends BoomBundle()(p)
 class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p)
    with HasBoomCoreParameters
 {
-   val io = new BoomBundle()(p)
+   val io = IO(new BoomBundle()(p)
    {
       // Fetch0
       val ext_btb_req   = Valid(new PCReq).flip
@@ -100,7 +100,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
       val redirect      = Bool(INPUT)
       val status_prv    = UInt(INPUT, width = rocket.PRV.SZ)
       val status_debug  = Bool(INPUT)
-   }
+   })
 
    //************************************************
    // construct all of the modules

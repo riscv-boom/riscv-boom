@@ -281,7 +281,7 @@ object AgePriorityEncoder
 // Assumption: enq.valid only high if not killed by branch (so don't check IsKilled on io.enq).
 class QueueForMicroOpWithData(entries: Int, data_width: Int)(implicit p: config.Parameters) extends BoomModule()(p)
 {
-   val io = new Bundle
+   val io = IO(new Bundle
    {
       val enq     = Decoupled(new ExeUnitResp(data_width)).flip
       val deq     = Decoupled(new ExeUnitResp(data_width))
@@ -291,7 +291,7 @@ class QueueForMicroOpWithData(entries: Int, data_width: Int)(implicit p: config.
 
       val empty   = Bool(OUTPUT)
       val count   = UInt(OUTPUT, log2Up(entries))
-   }
+   })
 
    private val ram     = Mem(entries, new ExeUnitResp(data_width))
    private val valids  = Reg(init = Vec.fill(entries) {Bool(false)})

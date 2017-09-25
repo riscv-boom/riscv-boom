@@ -91,7 +91,7 @@ class RenameStage(
    num_fp_wb_ports: Int)
 (implicit p: Parameters) extends BoomModule()(p)
 {
-   val io = new RenameStageIO(pl_width, numIntPhysRegs, numFpPhysRegs, num_int_wb_ports, num_fp_wb_ports)
+   val io = IO(new RenameStageIO(pl_width, numIntPhysRegs, numFpPhysRegs, num_int_wb_ports, num_fp_wb_ports))
 
    // integer registers
    val imaptable = Module(new RenameMapTable(

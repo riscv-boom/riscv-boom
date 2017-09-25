@@ -70,7 +70,7 @@ class RenameFreeListHelper(
    pl_width: Int)           // pipeline width ("dispatch group size")
    (implicit p: Parameters) extends BoomModule()(p)
 {
-   val io = new FreeListIo(num_phys_registers, pl_width)
+   val io = IO(new FreeListIo(num_phys_registers, pl_width))
 
    // ** FREE LIST TABLE ** //
    val free_list = Reg(init=(~Bits(1,num_phys_registers)))
@@ -249,7 +249,7 @@ class RenameFreeList(
 {
    private val preg_sz = log2Up(num_phys_registers)
 
-   val io = new Bundle
+   val io = IO(new Bundle
    {
       // Inputs
       val brinfo           = new BrResolutionInfo().asInput
@@ -273,7 +273,7 @@ class RenameFreeList(
 
       val debug            = new DebugFreeListIO(num_phys_registers).asOutput
       val debug_rob_empty  = Bool(INPUT)
-   }
+   })
 
    val freelist = Module(new RenameFreeListHelper(
       num_phys_registers,

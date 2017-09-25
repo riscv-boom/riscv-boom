@@ -43,7 +43,7 @@ class SeqMem1rwTransformable (
 
    println("\tSeqMem transformed from ("+ l_depth +" x "+l_width+") to ("+ p_depth +" x "+p_width+")")
 
-   val io = new Bundle
+   val io = IO(new Bundle
    {
       val wen   = Bool(INPUT)
       val waddr = UInt(INPUT, width = l_idx_sz)
@@ -53,7 +53,7 @@ class SeqMem1rwTransformable (
       val ren   = Bool(INPUT)                   // valid cycle s0
       val raddr = UInt(INPUT, width = l_idx_sz) // input cycle s0
       val rout  = UInt(OUTPUT, width = l_width) // returned cycle s1
-   }
+   })
 
    val smem = SeqMem(p_depth, Vec(p_width, Bool()))
 

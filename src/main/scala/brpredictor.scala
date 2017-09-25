@@ -172,7 +172,7 @@ object BrPredictor
 
 abstract class BrPredictor(fetch_width: Int, val history_length: Int)(implicit p: Parameters) extends BoomModule()(p)
 {
-   val io = new BoomBundle()(p)
+   val io = IO(new BoomBundle()(p)
    {
       // the PC to predict
       val req_pc = UInt(INPUT, width = vaddrBits)
@@ -197,7 +197,7 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int)(implicit p
       val flush = Bool(INPUT)
       // privilege-level (allow predictor to change behavior in different privilege modes).
       val status_prv = UInt(INPUT, width = rocket.PRV.SZ)
-   }
+   })
 
    // the (speculative) global history wire (used for accessing the branch predictor state).
    val ghistory = Wire(Bits(width = history_length))
@@ -688,7 +688,7 @@ class BrobEntry(fetch_width: Int)(implicit p: Parameters) extends BoomBundle()(p
 // a 1 snapshot/cycle throughput.
 class BranchReorderBuffer(fetch_width: Int, num_entries: Int)(implicit p: Parameters) extends BoomModule()(p)
 {
-   val io = new BoomBundle()(p)
+   val io = IO(new BoomBundle()(p)
    {
       // connection to BOOM's ROB/backend/etc.
       val backend = new BrobBackendIo(fetch_width)
@@ -700,7 +700,7 @@ class BranchReorderBuffer(fetch_width: Int, num_entries: Int)(implicit p: Parame
       // TODO enable bypassing of information. See if there's a "match", and then forward the outcome.
       //val pred_req = Valid(new // from fetch, requesting if a prediction matches an inflight entry.
       //val pred_resp = Valid(new // from fetch, return a prediction
-   }
+   })
 
    println ("\tBROB (w=" + fetch_width + ") Size (" + num_entries + ") entries of " +
       Wire(new BpdResp).asUInt.getWidth + " bits (" +

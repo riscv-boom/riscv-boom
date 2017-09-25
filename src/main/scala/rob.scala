@@ -179,7 +179,7 @@ class Rob(width: Int,
          num_fpu_ports: Int
          )(implicit p: Parameters) extends BoomModule()(p)
 {
-   val io = new RobIo(width, num_wakeup_ports, num_fpu_ports)
+   val io = IO(new RobIo(width, num_wakeup_ports, num_fpu_ports))
 
    val num_rob_rows = num_rob_entries / width
    require (num_rob_rows % 2 == 0) // this is due to how rob PCs are stored in two banks
