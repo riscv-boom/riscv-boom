@@ -384,8 +384,8 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
       {
          when (io.get_rob_pc.next_pc =/= bj_addr)
          {
-            printf ("[FuncUnit] Branch jumped to 0x%x, should have jumped to 0x%x.\n",
-               io.get_rob_pc.next_pc, bj_addr)
+            // printf ("[FuncUnit] Branch jumped to 0x%x, should have jumped to 0x%x.\n",
+            //   io.get_rob_pc.next_pc, bj_addr)
          }
          assert (io.get_rob_pc.next_pc === bj_addr, "[FuncUnit] branch is taken to the wrong target.")
       }
