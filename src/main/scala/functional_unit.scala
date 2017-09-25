@@ -391,8 +391,8 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
          // ignore misaligned issues -- we'll catch that elsewhere as an exception.
          when (io.get_rob_pc.next_pc(vaddrBits, log2Up(coreInstBytes)) =/= bj_addr(vaddrBits, log2Up(coreInstBytes)))
          {
-            printf ("[FuncUnit] Branch jumped to 0x%x, should have jumped to 0x%x.\n",
-               io.get_rob_pc.next_pc, bj_addr)
+            // printf ("[FuncUnit] Branch jumped to 0x%x, should have jumped to 0x%x.\n",
+            //   io.get_rob_pc.next_pc, bj_addr)
          }
          assert (io.get_rob_pc.next_pc(vaddrBits, log2Up(coreInstBytes)) === bj_addr(vaddrBits, log2Up(coreInstBytes)),
             "[FuncUnit] branch is taken to the wrong target.")

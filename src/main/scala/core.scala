@@ -1251,30 +1251,25 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
 
    if (COMMIT_LOG_PRINTF)
    {
-      var new_commit_cnt = UInt(0)
+      when(rob.io.com_xcpt.valid && csr.io.interrupt) {
+        printf("interrupt cause: %d\n", csr.io.interrupt_cause(xLen-2, 0))
+      }
       for (w <- 0 until COMMIT_WIDTH)
       {
-         val priv = csr.io.status.prv
-
+         val rtype = rob.io.commit.uops(w).dst_rtype
+         val rdst = rob.io.commit.uops(w).inst(RD_MSB,RD_LSB)
+         val addr = PriorityMux(Seq(
+           (rtype === RT_FIX) -> Cat(rdst, UInt(0,1)),
+           (rtype === RT_FLT) -> Cat(rdst, UInt(1,1)),
+           Bool(true) -> UInt(0)))
          when (rob.io.commit.valids(w))
          {
-            when (rob.io.commit.uops(w).dst_rtype === RT_FIX && rob.io.commit.uops(w).ldst =/= UInt(0))
-            {
-               printf("%d 0x%x (0x%x) x%d 0x%x\n",
-                  priv, Sext(rob.io.commit.uops(w).pc(vaddrBits,0), xLen), rob.io.commit.uops(w).inst,
-                  rob.io.commit.uops(w).inst(RD_MSB,RD_LSB), rob.io.commit.uops(w).debug_wdata)
-            }
-            .elsewhen (rob.io.commit.uops(w).dst_rtype === RT_FLT)
-            {
-               printf("%d 0x%x (0x%x) f%d 0x%x\n",
-                  priv, Sext(rob.io.commit.uops(w).pc(vaddrBits,0), xLen), rob.io.commit.uops(w).inst,
-                  rob.io.commit.uops(w).inst(RD_MSB,RD_LSB), rob.io.commit.uops(w).debug_wdata)
-            }
-            .otherwise
-            {
-               printf("%d 0x%x (0x%x)\n",
-                  priv, Sext(rob.io.commit.uops(w).pc(vaddrBits,0), xLen), rob.io.commit.uops(w).inst)
-            }
+            printf("%d 0x%x (0x%x) %d %d 0x%x\n",
+                   csr.io.status.prv,
+                   Sext(rob.io.commit.uops(w).pc(vaddrBits,0), xLen),
+                   rob.io.commit.uops(w).inst,
+                   addr(0), addr >> UInt(1),
+                   rob.io.commit.uops(w).debug_wdata)
          }
       }
    }
