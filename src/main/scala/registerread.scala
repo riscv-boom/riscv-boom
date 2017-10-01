@@ -17,7 +17,7 @@
 package boom
 
 import Chisel._
-import config.Parameters
+import freechips.rocketchip.config.Parameters
 
 class RegisterReadIO(
    issue_width: Int,

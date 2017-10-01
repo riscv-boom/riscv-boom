@@ -28,17 +28,17 @@
 package boom
 
 import Chisel._
-import config.Parameters
+import freechips.rocketchip.config.Parameters
 
-import rocket.Instructions._
+import freechips.rocketchip.rocket.Instructions._
+import freechips.rocketchip.util.Str
 import boom.FUConstants._
-import util.Str
 
 
-abstract class BoomModule(implicit p: Parameters) extends tile.CoreModule()(p)
+abstract class BoomModule(implicit p: Parameters) extends freechips.rocketchip.tile.CoreModule()(p)
   with HasBoomCoreParameters
 
-class BoomBundle(implicit val p: Parameters) extends util.ParameterizedBundle()(p)
+class BoomBundle(implicit val p: Parameters) extends freechips.rocketchip.util.ParameterizedBundle()(p)
   with HasBoomCoreParameters
 
 //-------------------------------------------------------------
@@ -46,8 +46,8 @@ class BoomBundle(implicit val p: Parameters) extends util.ParameterizedBundle()(
 //-------------------------------------------------------------
 
 
-class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends BoomModule()(p)
-   with tile.HasCoreIO
+class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut) extends BoomModule()(p)
+   with freechips.rocketchip.tile.HasCoreIO
 {
    //**********************************
    // construct all of the modules
@@ -91,7 +91,6 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
                                  exe_units.withFilter(_.usesIRF).map(_.num_rf_read_ports),
                                  exe_units.num_total_bypass_ports,
                                  xLen))
-   val csr              = Module(new rocket.CSRFile())
    val dc_shim          = Module(new DCacheShim())
    val lsu              = Module(new LoadStoreUnit(DECODE_WIDTH))
    val rob              = Module(new Rob(
@@ -137,6 +136,68 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    exe_units.memory_unit.io.lsu_io := lsu.io
 
 
+
+
+
+   //-------------------------------------------------------------
+   // Uarch Hardware Performance Events (HPEs)
+
+
+   val perfEvents = new freechips.rocketchip.rocket.EventSets(Seq(
+      //new EventSet((mask, hits) => Mux(mask(0), wb_xcpt, wb_valid && pipelineIDToWB((mask & hits).orR)), Seq(
+      new freechips.rocketchip.rocket.EventSet((mask, hits) => (mask & hits).orR, Seq(
+         ("exception", () => rob.io.com_xcpt.valid),
+         ("nop", () => false.B), // ("load", () => id_ctrl.mem && id_ctrl.mem_cmd === M_XRD && !id_ctrl.fp),
+         ("nop", () => false.B), // ("store", () => id_ctrl.mem && id_ctrl.mem_cmd === M_XWR && !id_ctrl.fp),
+         ("nop", () => false.B))), // ("amo", () => Bool(usingAtomics) && id_ctrl.mem && (isAMO(id_ctrl.mem_cmd) || id_ctrl.mem_cmd.isOneOf(M_XLR, M_XSC))),
+//         ("system", () => =/= CSR.N))),
+//       ("arith", () => id_ctrl.wxd && !(id_ctrl.jal || id_ctrl.jalr || id_ctrl.mem || id_ctrl.fp || id_ctrl.div || id_ctrl.csr =/= CSR.N)),
+//       ("branch", () => id_ctrl.branch),
+//       ("jal", () => id_ctrl.jal),
+//       ("jalr", () => id_ctrl.jalr))
+//       ++ (if (!usingMulDiv) Seq() else Seq(
+//         ("mul", () => id_ctrl.div && (id_ctrl.alu_fn & ALU.FN_DIV) =/= ALU.FN_DIV),
+//         ("div", () => id_ctrl.div && (id_ctrl.alu_fn & ALU.FN_DIV) === ALU.FN_DIV)))
+//       ++ (if (!usingFPU) Seq() else Seq(
+//         ("fp load", () => id_ctrl.fp && io.fpu.dec.ldst && io.fpu.dec.wen),
+//         ("fp store", () => id_ctrl.fp && io.fpu.dec.ldst && !io.fpu.dec.wen),
+//         ("fp add", () => id_ctrl.fp && io.fpu.dec.fma && io.fpu.dec.swap23),
+//         ("fp mul", () => id_ctrl.fp && io.fpu.dec.fma && !io.fpu.dec.swap23 && !io.fpu.dec.ren3),
+//         ("fp mul-add", () => id_ctrl.fp && io.fpu.dec.fma && io.fpu.dec.ren3),
+//         ("fp div/sqrt", () => id_ctrl.fp && (io.fpu.dec.div || io.fpu.dec.sqrt)),
+//         ("fp other", () => id_ctrl.fp && !(io.fpu.dec.ldst || io.fpu.dec.fma || io.fpu.dec.div || io.fpu.dec.sqrt))))),
+      new freechips.rocketchip.rocket.EventSet((mask, hits) => (mask & hits).orR, Seq(
+//       ("load-use interlock", () => id_ex_hazard && ex_ctrl.mem || id_mem_hazard && mem_ctrl.mem || id_wb_hazard && wb_ctrl.mem),
+//       ("long-latency interlock", () => id_sboard_hazard),
+//       ("csr interlock", () => id_ex_hazard && ex_ctrl.csr =/= CSR.N || id_mem_hazard && mem_ctrl.csr =/= CSR.N || id_wb_hazard && wb_ctrl.csr =/= CSR.N),
+         ("I$ blocked", () => icache_blocked),
+         ("nop", () => false.B),  //("D$ blocked", () => id_ctrl.mem && dcache_blocked),
+         ("branch misprediction", () => br_unit.brinfo.mispredict),
+         ("control-flow target misprediction", () =>  br_unit.brinfo.mispredict && br_unit.brinfo.is_jr),
+         ("flush", () => rob.io.flush.valid),
+//       ++ (if (!usingMulDiv) Seq() else Seq(
+//         ("mul/div interlock", () => id_ex_hazard && ex_ctrl.div || id_mem_hazard && mem_ctrl.div || id_wb_hazard && wb_ctrl.div)))
+//       ++ (if (!usingFPU) Seq() else Seq(
+//         ("fp interlock", () => id_ex_hazard && ex_ctrl.fp || id_mem_hazard && mem_ctrl.fp || id_wb_hazard && wb_ctrl.fp || id_ctrl.fp && id_stall_fpu)))),
+       ("branch resolved", () => br_unit.brinfo.valid))),
+     new freechips.rocketchip.rocket.EventSet((mask, hits) => (mask & hits).orR, Seq(
+       ("I$ miss", () => io.imem.perf.acquire),
+       ("D$ miss", () => io.dmem.perf.acquire),
+       ("D$ release", () => io.dmem.perf.release),
+       ("ITLB miss", () => io.imem.perf.tlbMiss),
+       ("DTLB miss", () => io.dmem.perf.tlbMiss),
+       ("L2 TLB miss", () => io.ptw.perf.l2miss)))))
+
+
+   val csr = Module(new freechips.rocketchip.rocket.CSRFile(perfEvents))
+ 
+   // evaluate performance counters 
+   val icache_blocked = !(io.imem.resp.valid || RegNext(io.imem.resp.valid)) 
+   csr.io.counters foreach { c => c.inc := RegNext(perfEvents.evaluate(c.eventSel)) } 
+            
+   
+
+
    //****************************************
    // Time Stamp Counter & Retired Instruction Counter
    // (only used for printf and vcd dumps - the actual counters are in the CSRFile)
@@ -144,8 +205,9 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    val debug_irt_reg  = Reg(init = UInt(0, xLen))
    debug_tsc_reg  := debug_tsc_reg + Mux(Bool(O3PIPEVIEW_PRINTF), UInt(O3_CYCLE_TIME), UInt(1))
    debug_irt_reg  := debug_irt_reg + PopCount(rob.io.commit.valids.asUInt)
-   debug(debug_tsc_reg)
-   debug(debug_irt_reg)
+   // TODO once we update Chisel, add this back in:
+   //dontTouch(debug_tsc_reg)
+   //dontTouch(debug_irt_reg)
 
 
    //****************************************
@@ -212,15 +274,26 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    fetch_unit.io.f3_bpd_resp       := bpd_stage.io.f3_bpd_resp
 
    fetch_unit.io.clear_fetchbuffer := br_unit.brinfo.mispredict ||
-                                       rob.io.flush.valid
-   fetch_unit.io.flush_take_pc     := rob.io.flush.valid
+                                       rob.io.flush.valid ||
+                                       fetch_unit.io.sfence_take_pc
+
+   // SFence needs access to the PC to inject an address into the TLB's CAM port. The ROB
+   // will have to later redirect the PC back to the regularly scheduled program.
+   fetch_unit.io.sfence_take_pc    := lsu.io.exe_resp.bits.sfence.valid
+   fetch_unit.io.sfence_addr       := lsu.io.exe_resp.bits.sfence.bits.addr
+    
+   // We must redirect the PC the cycle after playing the SFENCE game.
+   fetch_unit.io.flush_take_pc     := rob.io.flush.valid || RegNext(lsu.io.exe_resp.bits.sfence.valid)
    fetch_unit.io.flush_pc          := rob.io.flush.bits.pc
+    
+
 
    io.imem.flush_icache :=
       Range(0,DECODE_WIDTH).map{i => rob.io.commit.valids(i) && rob.io.commit.uops(i).is_fencei}.reduce(_|_) ||
       (br_unit.brinfo.mispredict && br_unit.brinfo.is_jr &&  csr.io.status.debug)
 
-   io.imem.flush_tlb := csr.io.fatc
+   // Delay sfence to match pushing the sfence.addr into the TLB's CAM port.
+   io.imem.sfence := RegNext(lsu.io.exe_resp.bits.sfence)
 
    //-------------------------------------------------------------
    //-------------------------------------------------------------
@@ -232,9 +305,9 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    // decode.  BHT look-up is in parallel with I$ access, and Branch Decode
    // occurs before fetch buffer insertion.
 
-   bpd_stage.io.ext_btb_req := io.imem.ext_btb.req
-   bpd_stage.io.icmiss := io.imem.ext_btb.icmiss
-   bpd_stage.io.ext_btb_req.valid := io.imem.ext_btb.req.valid || io.imem.req.valid
+//   bpd_stage.io.ext_btb_req := io.imem.ext_btb.req
+//   bpd_stage.io.icmiss := io.imem.ext_btb.icmiss
+//   bpd_stage.io.ext_btb_req.valid := io.imem.ext_btb.req.valid || io.imem.req.valid
 
    bpd_stage.io.br_unit := br_unit
    bpd_stage.io.redirect := io.imem.req.valid
@@ -290,6 +363,7 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
       dec_valids(w)                      := fetched_inst_valid && dec_fbundle.uops(w).valid && !dec_finished_mask(w)
       decode_units(w).io.enq.uop         := dec_fbundle.uops(w)
       decode_units(w).io.status          := csr.io.status
+      decode_units(w).io.csr_decode      := csr.io.decode
       decode_units(w).io.interrupt       := csr.io.interrupt
       decode_units(w).io.interrupt_cause := csr.io.interrupt_cause
 
@@ -609,12 +683,12 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    val wb_wdata = csr_exe_unit.io.resp(0).bits.data
 
    csr.io.rw.addr  := csr_exe_unit.io.resp(0).bits.uop.csr_addr
-   csr.io.rw.cmd   := Mux(csr_exe_unit.io.resp(0).valid, csr_rw_cmd, rocket.CSR.N)
+   csr.io.rw.cmd   := Mux(csr_exe_unit.io.resp(0).valid, csr_rw_cmd, freechips.rocketchip.rocket.CSR.N)
    csr.io.rw.wdata :=wb_wdata
 
    // Extra I/O
    csr.io.retire    := PopCount(rob.io.commit.valids.asUInt)
-   csr.io.exception := rob.io.com_xcpt.valid && !csr.io.csr_xcpt
+   csr.io.exception := rob.io.com_xcpt.valid
    csr.io.pc        := rob.io.com_xcpt.bits.pc
    csr.io.cause     := rob.io.com_xcpt.bits.cause
    csr.io.badaddr   := rob.io.com_xcpt.bits.badvaddr
@@ -738,7 +812,7 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
 
          def wbIsValid(rtype: UInt) =
             wbresp.valid && wbresp.bits.uop.ctrl.rf_wen && wbresp.bits.uop.dst_rtype === rtype
-         val wbReadsCSR = wbresp.bits.uop.ctrl.csr_cmd =/= rocket.CSR.N
+         val wbReadsCSR = wbresp.bits.uop.ctrl.csr_cmd =/= freechips.rocketchip.rocket.CSR.N
 
          if (exe_units(i).data_width > 64)
          {
@@ -822,6 +896,7 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    rob.io.enq_partial_stall := !dec_rdy && !dec_will_fire(DECODE_WIDTH-1)
    rob.io.enq_new_packet := dec_finished_mask === Bits(0)
    rob.io.debug_tsc := debug_tsc_reg
+   rob.io.csr_stall := csr.io.csr_stall
 
    assert ((dec_will_fire zip rename_stage.io.ren1_mask map {case(d,r) => d === r}).reduce(_|_),
       "[core] Assumption that dec_will_fire and ren1_mask are equal is being violated.")
@@ -860,12 +935,15 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
                rob.io.fflags(f_cnt) <> resp.bits.fflags
                f_cnt += 1
             }
-            val unrec_s = hardfloat.fNFromRecFN(8, 24, data)
-            val unrec_d = hardfloat.fNFromRecFN(11, 53, data)
-            val unrec_out     = Mux(wb_uop.fp_single, Cat(UInt(0,32), unrec_s), unrec_d)
+//            val unrec_s = hardfloat.fNFromRecFN(8, 24, data)
+//            val unrec_d = hardfloat.fNFromRecFN(11, 53, data)
+//            val unrec_out     = Mux(wb_uop.fp_single, Cat(UInt(0,32), unrec_s), unrec_d)
+            val unrec_out = 0.U // TODO delete me
+            // somehow, we're seeing FP show up in here
+//            assert (!(resp.bits.uop.fp_val && wb_uop.dst_rtype === RT_FLT), "[core] I think we never use FP now.")
             if (eu.uses_csr_wport && (j == 0))
             {
-               rob.io.debug_wb_wdata(cnt) := Mux(wb_uop.ctrl.csr_cmd =/= rocket.CSR.N, csr.io.rw.rdata,
+               rob.io.debug_wb_wdata(cnt) := Mux(wb_uop.ctrl.csr_cmd =/= freechips.rocketchip.rocket.CSR.N, csr.io.rw.rdata,
                                              Mux(wb_uop.fp_val && wb_uop.dst_rtype === RT_FLT, unrec_out,
                                                                                                data))
             }
@@ -878,7 +956,7 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
          {
             if (eu.uses_csr_wport && (j == 0))
             {
-               rob.io.debug_wb_wdata(cnt) := Mux(wb_uop.ctrl.csr_cmd =/= rocket.CSR.N, csr.io.rw.rdata, data)
+               rob.io.debug_wb_wdata(cnt) := Mux(wb_uop.ctrl.csr_cmd =/= freechips.rocketchip.rocket.CSR.N, csr.io.rw.rdata, data)
             }
             else
             {
@@ -918,9 +996,11 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    rob.io.lsu_clr_bsy_rob_idx := lsu.io.lsu_clr_bsy_rob_idx
    rob.io.lxcpt <> lsu.io.xcpt
 
-   rob.io.cxcpt.valid := csr.io.csr_xcpt
+   rob.io.cxcpt.valid := false.B // TODO XXX MERGE csr.io.csr_xcpt
    rob.io.csr_eret := csr.io.eret
    rob.io.csr_evec := csr.io.evec
+
+   assert (!(csr.io.singleStep), "[core] single-step is unsupported.")
 
    rob.io.bxcpt <> br_unit.xcpt
 
@@ -949,7 +1029,7 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    //-------------------------------------------------------------
 
    // detect pipeline freezes and throw error
-   val idle_cycles = util.WideCounter(32)
+   val idle_cycles = freechips.rocketchip.util.WideCounter(32)
    when (rob.io.commit.valids.asUInt.orR || reset.toBool) { idle_cycles := 0.U }
    assert (!(idle_cycles.value(13)), "Pipeline has hung.")
 
@@ -958,111 +1038,97 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    //-------------------------------------------------------------
    // Uarch Hardware Performance Events (HPEs)
 
-   csr.io.events.map(_ := 0.U)
-
-   require (nPerfEvents > 29)
-   println ("   " + nPerfCounters + " HPM counters enabled (with " + nPerfEvents + " events).")
-
-   // Execution-time branch prediction accuracy.
-   csr.io.events(0) := br_unit.brinfo.valid
-   csr.io.events(1) := br_unit.brinfo.mispredict
-
-   // User-level instruction count.
-   csr.io.events(2) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
-      rob.io.commit.valids(w) && (csr.io.status.prv === UInt(rocket.PRV.U))})
-
-   // L1 cache stats.
-   // TODO add back in cache-miss counters.
-//   csr.io.events(3) := io.dmem.acquire // D$ miss
-//   csr.io.events(4) := io.imem.acquire // I$ miss
-
-   csr.io.events(5)  := csr.io.status.prv === UInt(rocket.PRV.U)
-
-   // Instruction mixes.
-   csr.io.events(6)  := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
-      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && !rob.io.commit.uops(w).is_jal})
-   csr.io.events(7)  := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
-      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_jal})
-   csr.io.events(8)  := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
-      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_jump && !rob.io.commit.uops(w).is_jal})
-   csr.io.events(9)  := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
-      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_load})
-   csr.io.events(10) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
-      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_store})
-   csr.io.events(11) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
-      rob.io.commit.valids(w) && rob.io.commit.uops(w).fp_val})
-
-   // Decode stall causes.
-   csr.io.events(12) := !rob.io.ready
-   csr.io.events(13) := lsu.io.laq_full
-   csr.io.events(14) := lsu.io.stq_full
-   csr.io.events(15) := !dis_readys.toBools.reduce(_&_) // issue queues
-   csr.io.events(16) := branch_mask_full.reduce(_|_)
-   csr.io.events(17) := rob.io.flush.valid
-
-   // LSU Speculation stats.
-   csr.io.events(18) := lsu.io.counters.ld_valid
-   csr.io.events(19) := lsu.io.counters.stld_order_fail
-   csr.io.events(20) := lsu.io.counters.ldld_order_fail
-
-   // Branch prediction stats.
-   csr.io.events(21)  := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
-      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && !rob.io.commit.uops(w).is_jal &&
-      rob.io.commit.uops(w).stat_brjmp_mispredicted})
-   csr.io.events(22) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
-      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && !rob.io.commit.uops(w).is_jal &&
-      rob.io.commit.uops(w).stat_btb_made_pred})
-   csr.io.events(23) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
-      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && !rob.io.commit.uops(w).is_jal &&
-      rob.io.commit.uops(w).stat_btb_mispredicted})
-   csr.io.events(24) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
-      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && !rob.io.commit.uops(w).is_jal &&
-      rob.io.commit.uops(w).stat_bpd_made_pred})
-   csr.io.events(25) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
-      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && !rob.io.commit.uops(w).is_jal &&
-      rob.io.commit.uops(w).stat_bpd_mispredicted})
-
-   // Branch prediction - no prediction made.
-   csr.io.events(26) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
-      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && !rob.io.commit.uops(w).is_jal &&
-      !rob.io.commit.uops(w).stat_btb_made_pred && !rob.io.commit.uops(w).stat_bpd_made_pred})
-
-   // Branch prediction - no predition made & a mispredict occurred.
-   csr.io.events(27) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
-      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && !rob.io.commit.uops(w).is_jal &&
-      !rob.io.commit.uops(w).stat_btb_made_pred && !rob.io.commit.uops(w).stat_bpd_made_pred &&
-      rob.io.commit.uops(w).stat_brjmp_mispredicted})
-
-
-   // Count user-level branches (subtract from total to get privilege branch accuracy)
-   csr.io.events(28) := br_unit.brinfo.valid && (csr.io.status.prv === UInt(rocket.PRV.U))
-   csr.io.events(29) := br_unit.brinfo.mispredict && (csr.io.status.prv === UInt(rocket.PRV.U))
-
-   // count change of privilege modes
-   csr.io.events(30) := csr.io.status.prv =/= RegNext(csr.io.status.prv)
-
-   csr.io.events(31) := !issue_units(0).io.dis_readys.reduce(_&_)
-   csr.io.events(32) := !issue_units(1).io.dis_readys.reduce(_&_)
-   csr.io.events(33) := !fp_pipeline.io.dis_readys.reduce(_&_)
-
-   assert (!(Range(0,COMMIT_WIDTH).map{w =>
-      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && rob.io.commit.uops(w).is_jal &&
-      rob.io.commit.uops(w).stat_brjmp_mispredicted}.reduce(_|_)),
-      "[dpath] A committed JAL was marked as having been mispredicted.")
-
-   // Count issued instructions (only integer currently).
-   require (log2Ceil(1+iss_valids.length) <= csr.io.events(0).getWidth) // CSR.scala sets increment width.
-   csr.io.events(34) := PopCount(iss_valids)
-
-   // Count not-issued slots due to empty issue windows (only integer currently).
-   val not_issued_and_empty = for {iu <- issue_units; iss_valid <- iu.io.iss_valids} yield {
-         !iss_valid && iu.io.event_empty }
-   csr.io.events(35) := PopCount(not_issued_and_empty)
-
-   // Count not-issued slots due to backend hazards/unsatisified dependencies (only integer currently).
-   val not_issued_and_not_empty = for {iu <- issue_units; iss_valid <- iu.io.iss_valids} yield {
-         !iss_valid && !iu.io.event_empty}
-   csr.io.events(36) := PopCount(not_issued_and_not_empty)
+//   // User-level instruction count.
+//   csr.io.events(2) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+//      rob.io.commit.valids(w) && (csr.io.status.prv === UInt(freechips.rocketchip.rocket.PRV.U))})
+//
+//   csr.io.events(5)  := csr.io.status.prv === UInt(freechips.rocketchip.rocket.PRV.U)
+//
+//   // Instruction mixes.
+//   csr.io.events(6)  := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+//      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && !rob.io.commit.uops(w).is_jal})
+//   csr.io.events(7)  := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+//      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_jal})
+//   csr.io.events(8)  := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+//      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_jump && !rob.io.commit.uops(w).is_jal})
+//   csr.io.events(9)  := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+//      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_load})
+//   csr.io.events(10) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+//      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_store})
+//   csr.io.events(11) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+//      rob.io.commit.valids(w) && rob.io.commit.uops(w).fp_val})
+//
+//   // Decode stall causes.
+//   csr.io.events(12) := !rob.io.ready
+//   csr.io.events(13) := lsu.io.laq_full
+//   csr.io.events(14) := lsu.io.stq_full
+//   csr.io.events(15) := !dis_readys.toBools.reduce(_&_) // issue queues
+//   csr.io.events(16) := branch_mask_full.reduce(_|_)
+//   csr.io.events(17) := rob.io.flush.valid
+//
+//   // LSU Speculation stats.
+//   csr.io.events(18) := lsu.io.counters.ld_valid
+//   csr.io.events(19) := lsu.io.counters.stld_order_fail
+//   csr.io.events(20) := lsu.io.counters.ldld_order_fail
+//
+//   // Branch prediction stats.
+//   csr.io.events(21)  := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+//      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && !rob.io.commit.uops(w).is_jal &&
+//      rob.io.commit.uops(w).stat_brjmp_mispredicted})
+//   csr.io.events(22) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+//      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && !rob.io.commit.uops(w).is_jal &&
+//      rob.io.commit.uops(w).stat_btb_made_pred})
+//   csr.io.events(23) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+//      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && !rob.io.commit.uops(w).is_jal &&
+//      rob.io.commit.uops(w).stat_btb_mispredicted})
+//   csr.io.events(24) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+//      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && !rob.io.commit.uops(w).is_jal &&
+//      rob.io.commit.uops(w).stat_bpd_made_pred})
+//   csr.io.events(25) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+//      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && !rob.io.commit.uops(w).is_jal &&
+//      rob.io.commit.uops(w).stat_bpd_mispredicted})
+//
+//   // Branch prediction - no prediction made.
+//   csr.io.events(26) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+//      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && !rob.io.commit.uops(w).is_jal &&
+//      !rob.io.commit.uops(w).stat_btb_made_pred && !rob.io.commit.uops(w).stat_bpd_made_pred})
+//
+//   // Branch prediction - no predition made & a mispredict occurred.
+//   csr.io.events(27) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+//      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && !rob.io.commit.uops(w).is_jal &&
+//      !rob.io.commit.uops(w).stat_btb_made_pred && !rob.io.commit.uops(w).stat_bpd_made_pred &&
+//      rob.io.commit.uops(w).stat_brjmp_mispredicted})
+//
+//
+//   // Count user-level branches (subtract from total to get privilege branch accuracy)
+//   csr.io.events(28) := br_unit.brinfo.valid && (csr.io.status.prv === UInt(freechips.rocketchip.rocket.PRV.U))
+//freechips.rocketchip.   csr.io.events(29) := br_unit.brinfo.mispredict && (csr.io.status.prv === UInt(rocket.PRV.U))
+//
+//   // count change of privilege modes
+//   csr.io.events(30) := csr.io.status.prv =/= RegNext(csr.io.status.prv)
+//
+//   csr.io.events(31) := !issue_units(0).io.dis_readys.reduce(_&_)
+//   csr.io.events(32) := !issue_units(1).io.dis_readys.reduce(_&_)
+//   csr.io.events(33) := !fp_pipeline.io.dis_readys.reduce(_&_)
+//
+//   assert (!(Range(0,COMMIT_WIDTH).map{w =>
+//      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && rob.io.commit.uops(w).is_jal &&
+//      rob.io.commit.uops(w).stat_brjmp_mispredicted}.reduce(_|_)),
+//      "[dpath] A committed JAL was marked as having been mispredicted.")
+//
+//   // Count issued instructions (only integer currently).
+//   require (log2Ceil(1+iss_valids.length) <= csr.io.events(0).getWidth) // CSR.scala sets increment width.
+//   csr.io.events(34) := PopCount(iss_valids)
+//
+//   // Count not-issued slots due to empty issue windows (only integer currently).
+//   val not_issued_and_empty = for {iu <- issue_units; iss_valid <- iu.io.iss_valids} yield {
+//         !iss_valid && iu.io.event_empty }
+//   csr.io.events(35) := PopCount(not_issued_and_empty)
+//
+//   // Count not-issued slots due to backend hazards/unsatisified dependencies (only integer currently).
+//   val not_issued_and_not_empty = for {iu <- issue_units; iss_valid <- iu.io.iss_valids} yield {
+//         !iss_valid && !iu.io.event_empty}
+//   csr.io.events(36) := PopCount(not_issued_and_not_empty)
 
 
    //-------------------------------------------------------------
@@ -1077,8 +1143,9 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
 
       val numBrobWhitespace = if (DEBUG_PRINTF_BROB) NUM_BROB_ENTRIES else 0
 //      val screenheight = 103 - 4 - 10
-      val screenheight = 85 - 4 - 10
-//      val screenheight = 62-8
+//      val screenheight = 85 - 10
+//      val screenheight = 79 - 10
+      val screenheight = 63-10
        var whitespace = (screenheight - 11 + 3 - NUM_LSU_ENTRIES -
          issueParams.map(_.numEntries).sum - issueParams.length - (NUM_ROB_ENTRIES/COMMIT_WIDTH) - numBrobWhitespace
      )
@@ -1312,15 +1379,16 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
          }
       }
    }
-
+ 
    //-------------------------------------------------------------
    //-------------------------------------------------------------
    // Page Table Walker
 
    io.ptw_tlb <> lsu.io.ptw
    io.ptw.ptbr       := csr.io.ptbr
-   io.ptw.invalidate := csr.io.fatc
    io.ptw.status     := csr.io.status
+   io.ptw.pmp        := csr.io.pmp
+   io.ptw.sfence     := io.imem.sfence
 
    //-------------------------------------------------------------
    //-------------------------------------------------------------

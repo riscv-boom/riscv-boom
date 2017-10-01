@@ -11,8 +11,8 @@ package boom
 
 import Chisel._
 
-import rocket.Instructions._
-import rocket._
+import freechips.rocketchip.rocket.Instructions._
+import freechips.rocketchip.rocket._
 
 object assertNever
 {
@@ -41,7 +41,8 @@ object IsKilledByBranch
 
 object GetNewUopAndBrMask
 {
-   def apply(uop: MicroOp, brinfo: BrResolutionInfo)(implicit p: config.Parameters): MicroOp =
+   def apply(uop: MicroOp, brinfo: BrResolutionInfo)
+      (implicit p: freechips.rocketchip.config.Parameters): MicroOp =
    {
       val newuop = Wire(init = uop)
       newuop.br_mask :=
@@ -279,7 +280,8 @@ object AgePriorityEncoder
 
 
 // Assumption: enq.valid only high if not killed by branch (so don't check IsKilled on io.enq).
-class QueueForMicroOpWithData(entries: Int, data_width: Int)(implicit p: config.Parameters) extends BoomModule()(p)
+class QueueForMicroOpWithData(entries: Int, data_width: Int)
+   (implicit p: freechips.rocketchip.config.Parameters) extends BoomModule()(p)
 {
    val io = IO(new Bundle
    {

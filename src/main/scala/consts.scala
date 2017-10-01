@@ -15,9 +15,9 @@ package constants
 {
 
 import Chisel._
-import config.Parameters
+import freechips.rocketchip.config.Parameters
 
-import util.Str
+import freechips.rocketchip.util.Str
 
 trait BOOMDebugConstants
 {
@@ -277,16 +277,7 @@ trait ScalarOpConstants
    val uopFSQRT_D   = UInt(121,UOPC_SZ)
 
    val uopSYSTEM    = UInt(122, UOPC_SZ) // pass uop down the CSR pipeline and let it handle it
-
-   // Memory Mask Type Signal
-   val MSK_X   = BitPat("b???")
-   val MSK_B   = UInt(0, 3)
-   val MSK_H   = UInt(1, 3)
-   val MSK_W   = UInt(2, 3)
-   val MSK_D   = UInt(3, 3)
-   val MSK_BU  = UInt(4, 3)
-   val MSK_HU  = UInt(5, 3)
-   val MSK_WU  = UInt(6, 3)
+   val uopSFENCE    = UInt(123, UOPC_SZ)
 
    // The Bubble Instruction (Machine generated NOP)
    // Insert (XOR x0,x0,x0) which is different from software compiler
@@ -313,7 +304,7 @@ trait ScalarOpConstants
       val cs = Wire(new CtrlSignals())
       cs.br_type     := BR_N
       cs.rf_wen      := Bool(false)
-      cs.csr_cmd     := rocket.CSR.N
+      cs.csr_cmd     := freechips.rocketchip.rocket.CSR.N
       cs.is_load     := Bool(false)
       cs.is_sta      := Bool(false)
       cs.is_std      := Bool(false)
@@ -356,8 +347,8 @@ trait RISCVConstants
    def GetUop(inst: UInt): UInt = inst(6,0)
    def GetRd (inst: UInt): UInt = inst(RD_MSB,RD_LSB)
    def GetRs1(inst: UInt): UInt = inst(RS1_MSB,RS1_LSB)
-   def IsCall(inst: UInt): Bool = (inst === rocket.Instructions.JAL ||
-                                  inst === rocket.Instructions.JALR) && GetRd(inst) === RA
+   def IsCall(inst: UInt): Bool = (inst === freechips.rocketchip.rocket.Instructions.JAL ||
+                                  inst === freechips.rocketchip.rocket.Instructions.JALR) && GetRd(inst) === RA
    def IsReturn(inst: UInt): Bool = GetUop(inst) === jalr_opc && GetRs1(inst) === BitPat("b00?01")
 
    def ComputeBranchTarget(pc: UInt, inst: UInt, xlen: Int): UInt =
@@ -373,9 +364,9 @@ trait RISCVConstants
 
    def GetCfiType(inst: UInt): UInt =
    {
-      import util.uintToBitPat
+      import freechips.rocketchip.util.uintToBitPat
       val bpd_csignals =
-         rocket.DecodeLogic(inst,
+         freechips.rocketchip.rocket.DecodeLogic(inst,
                      List[BitPat](N, N, N, IS_X),
                                                  //   is br?
                                                  //   |  is jal?
@@ -383,14 +374,14 @@ trait RISCVConstants
                                                  //   |  |  |  br type
                                                  //   |  |  |  |
                   Array[(BitPat, List[BitPat])](
-                  rocket.Instructions.JAL     -> List(N, Y, N, IS_J),
-                  rocket.Instructions.JALR    -> List(N, N, Y, IS_I),
-                  rocket.Instructions.BEQ     -> List(Y, N, N, IS_B),
-                  rocket.Instructions.BNE     -> List(Y, N, N, IS_B),
-                  rocket.Instructions.BGE     -> List(Y, N, N, IS_B),
-                  rocket.Instructions.BGEU    -> List(Y, N, N, IS_B),
-                  rocket.Instructions.BLT     -> List(Y, N, N, IS_B),
-                  rocket.Instructions.BLTU    -> List(Y, N, N, IS_B)
+                  freechips.rocketchip.rocket.Instructions.JAL     -> List(N, Y, N, IS_J),
+                  freechips.rocketchip.rocket.Instructions.JALR    -> List(N, N, Y, IS_I),
+                  freechips.rocketchip.rocket.Instructions.BEQ     -> List(Y, N, N, IS_B),
+                  freechips.rocketchip.rocket.Instructions.BNE     -> List(Y, N, N, IS_B),
+                  freechips.rocketchip.rocket.Instructions.BGE     -> List(Y, N, N, IS_B),
+                  freechips.rocketchip.rocket.Instructions.BGEU    -> List(Y, N, N, IS_B),
+                  freechips.rocketchip.rocket.Instructions.BLT     -> List(Y, N, N, IS_B),
+                  freechips.rocketchip.rocket.Instructions.BLTU    -> List(Y, N, N, IS_B)
                ))
 
       val (cs_is_br: Bool) :: (cs_is_jal: Bool) :: (cs_is_jalr:Bool) :: imm_sel_ :: Nil = bpd_csignals
@@ -412,11 +403,11 @@ trait RISCVConstants
 trait ExcCauseConstants
 {
    // a memory disambigious misspeculation occurred
-   val MINI_EXCEPTION_MEM_ORDERING = UInt(13)
+   val MINI_EXCEPTION_MEM_ORDERING = 16.U
    // an instruction needs to be replayed (e.g., I$ asks for a replay)
-   val MINI_EXCEPTION_REPLAY = UInt(14)
-   require (!rocket.Causes.all.contains(13))
-   require (!rocket.Causes.all.contains(14))
+   val MINI_EXCEPTION_REPLAY = 17.U
+   require (!freechips.rocketchip.rocket.Causes.all.contains(16))
+   require (!freechips.rocketchip.rocket.Causes.all.contains(17))
 }
 
 }

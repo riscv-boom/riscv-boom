@@ -6,9 +6,9 @@ package boom
 {
 
 import Chisel._
-import rocket._
-import tile._
-import config.{Parameters, Field}
+import freechips.rocketchip.rocket._
+import freechips.rocketchip.tile._
+import freechips.rocketchip.config.{Parameters, Field}
 
 case object BoomKey extends Field[BoomCoreParams]
 
@@ -48,7 +48,7 @@ case class BoomCoreParams(
    regreadLatency: Int = 1
 )
 
-trait HasBoomCoreParameters extends tile.HasCoreParameters
+trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
 {
    // HACK this is a bit hacky since BoomParams can't extend RocketParams.
    val rocketParams: RocketCoreParams = tileParams.core.asInstanceOf[RocketCoreParams]
@@ -56,7 +56,7 @@ trait HasBoomCoreParameters extends tile.HasCoreParameters
    require(xLen == 64)
 
    val nPerfCounters    = rocketParams.nPerfCounters
-   val nPerfEvents      = rocketParams.nPerfEvents
+
    //************************************
    // Superscalar Widths
    val FETCH_WIDTH      = rocketParams.fetchWidth       // number of insts we can fetch

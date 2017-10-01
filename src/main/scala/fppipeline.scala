@@ -15,12 +15,14 @@
 package boom
 
 import Chisel._
-import config.Parameters
+import freechips.rocketchip.config.Parameters
+import freechips.rocketchip.rocket
+import freechips.rocketchip.tile
 
 import boom.FUConstants._
 
 
-class FpPipeline(implicit p: Parameters) extends BoomModule()(p)
+class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFPUParameters
 {
    val fpIssueParams = issueParams.find(_.iqType == IQT_FP.litValue).get
    val num_ll_ports = 1 // hard-wired; used by mem port and i2f port.
@@ -31,7 +33,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p)
    {
       val brinfo           = new BrResolutionInfo().asInput
       val flush_pipeline   = Bool(INPUT)
-      val fcsr_rm          = UInt(INPUT, tile.FPConstants.RM_SZ)
+      val fcsr_rm          = UInt(INPUT, freechips.rocketchip.tile.FPConstants.RM_SZ)
 
       val dis_valids       = Vec(DISPATCH_WIDTH, Bool()).asInput // REFACTOR into single Decoupled()
       val dis_uops         = Vec(DISPATCH_WIDTH, new MicroOp()).asInput
@@ -186,11 +188,11 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p)
       io.tosdq.bits.uop := fregister_read.io.exe_reqs(w).bits.uop
       val sdata = fregister_read.io.exe_reqs(w).bits.rs2_data
 
-      val unrec_s = hardfloat.fNFromRecFN(8, 24, sdata)
-      val unrec_d = hardfloat.fNFromRecFN(11, 53, sdata)
-      val unrec_out = Mux(io.tosdq.bits.uop.fp_single, Cat(Fill(32, unrec_s(31)), unrec_s), unrec_d)
+//      val unrec_s = hardfloat.fNFromRecFN(8, 24, sdata)
+//      val unrec_d = hardfloat.fNFromRecFN(11, 53, sdata)
+//      val unrec_out = Mux(io.tosdq.bits.uop.fp_single, Cat(Fill(32, unrec_s(31)), unrec_s), unrec_d)
 
-      io.tosdq.bits.data := unrec_out
+      io.tosdq.bits.data := ieee(sdata)
    }
    require (exe_units.num_total_bypass_ports == 0)
 
@@ -207,10 +209,11 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p)
    ll_wbarb.io.in(0) <> io.ll_wport
    val typ = io.ll_wport.bits.uop.mem_typ
    val load_single = typ === rocket.MT_W || typ === rocket.MT_WU
-   val rec_s = hardfloat.recFNFromFN( 8, 24, io.ll_wport.bits.data)
-   val rec_d = hardfloat.recFNFromFN(11, 53, io.ll_wport.bits.data)
-   val fp_load_data_recoded = Mux(load_single, Cat(SInt(-1, 32), rec_s), rec_d)
-   ll_wbarb.io.in(0).bits.data := fp_load_data_recoded
+//   val rec_s = hardfloat.recFNFromFN( 8, 24, io.ll_wport.bits.data)
+//   val rec_d = hardfloat.recFNFromFN(11, 53, io.ll_wport.bits.data)
+//   val fp_load_data_recoded = Mux(load_single, Cat(SInt(-1, 32), rec_s), rec_d)
+//   ll_wbarb.io.in(0).bits.data := fp_load_data_recoded
+   ll_wbarb.io.in(0).bits.data := recode(io.ll_wport.bits.data, !load_single)
 
    ll_wbarb.io.in(1) <> ifpu_resp
    if (regreadLatency > 0) {

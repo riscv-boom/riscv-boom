@@ -10,7 +10,7 @@
 package boom
 
 import Chisel._
-import config.Parameters
+import freechips.rocketchip.config.Parameters
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -104,41 +104,45 @@ class RegisterFileSeqCustomArray(
    }
 }
 
-class RegisterFileArray(
-   num_registers: Int,
-   num_read_ports: Int,
-   num_write_ports: Int,
-   register_width: Int)
-   extends BlackBox
+// Provide shared I/O trait between BlackBox and Module.
+trait HasRegisterFileIO extends chisel3.experimental.BaseModule
 {
+   // Require these parameters exist.
+   val num_registers: Int
+   val num_read_ports: Int
+   val num_write_ports: Int
+   val register_width: Int
+
    val io = IO(new Bundle {
       val clock = Clock(INPUT)
       val WE = Vec(num_registers, Bool()).asInput
       val WD = Vec(num_write_ports, UInt(width = register_width)).asInput
       val RD = Vec(num_read_ports, UInt(width = register_width)).asOutput
-      val WS = Vec(num_registers, UInt(width = 2)).asInput
+      val WS = Vec(num_registers, UInt(width = log2Up(num_write_ports))).asInput
       val OE = Vec(num_registers, UInt(width = num_read_ports)).asInput
    })
+}
+
+class RegisterFileArray(
+   val num_registers: Int,
+   val num_read_ports: Int,
+   val num_write_ports: Int,
+   val register_width: Int)
+   extends BlackBox
+   with HasRegisterFileIO
+{
 }
 
 
 // This is a model of the above blackbox RegisterFileArray. Don't ship this.
 class RegisterFileArrayModel(
-   num_registers: Int,
-   num_read_ports: Int,
-   num_write_ports: Int,
-   register_width: Int)
+   val num_registers: Int,
+   val num_read_ports: Int,
+   val num_write_ports: Int,
+   val register_width: Int)
    extends Module
+   with HasRegisterFileIO
 {
-   val io = IO(new Bundle {
-      val clock = Clock(INPUT)
-      val WE = Vec(num_registers, Bool()).asInput
-      val WS = Vec(num_registers, UInt(width = 2)).asInput
-      val WD = Vec(num_write_ports, UInt(width = register_width)).asInput
-      val OE = Vec(num_registers, UInt(width = num_read_ports)).asInput
-      val RD = Vec(num_read_ports, UInt(width = register_width)).asOutput
-   })
-
    // Where we're going, we don't need roads. Or parameterization.
    require (num_read_ports == 6)
    require (num_write_ports == 3)

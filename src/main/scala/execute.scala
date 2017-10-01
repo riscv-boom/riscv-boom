@@ -17,12 +17,12 @@
 package boom
 
 import Chisel._
-import config.Parameters
+import freechips.rocketchip.config.Parameters
 import scala.collection.mutable.ArrayBuffer
 
 import FUConstants._
-import tile.XLen
-import uncore.constants.MemoryOpConstants._
+import freechips.rocketchip.tile.XLen
+import freechips.rocketchip.tile
 
 // TODO rename to something like MicroOpWithData
 class ExeUnitResp(data_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
@@ -59,7 +59,7 @@ class ExecutionUnitIO(num_rf_read_ports: Int
    val br_unit = new BranchUnitResp().asOutput
    val get_rob_pc = new RobPCRequest().flip
    val get_pred = new GetPredictionInfo
-   val status = new rocket.MStatus().asInput
+   val status = new freechips.rocketchip.rocket.MStatus().asInput
 
    // only used by the fpu unit
    val fcsr_rm = Bits(INPUT, tile.FPConstants.RM_SZ)
@@ -524,6 +524,7 @@ class MemExeUnit(implicit p: Parameters) extends ExecutionUnit(num_rf_read_ports
    num_variable_write_ports = 1,
    bypassable = false,
    is_mem_unit = true)(p)
+   with freechips.rocketchip.rocket.constants.MemoryOpConstants
 {
    println ("     ExeUnit--")
    println ("       - Mem")
@@ -600,6 +601,7 @@ class ALUMemExeUnit(
       has_mul = has_mul,
       has_div = has_div,
       has_fdiv = has_fdiv)(p)
+   with freechips.rocketchip.rocket.constants.MemoryOpConstants
 {
    println ("     ExeUnit--")
    println ("       - ALU")

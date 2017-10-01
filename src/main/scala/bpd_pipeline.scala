@@ -20,10 +20,9 @@
 package boom
 
 import Chisel._
-import config.Parameters
+import freechips.rocketchip.config.Parameters
 
-import util.Str
-import util.UIntToAugmentedUInt
+import freechips.rocketchip.util.{Str, UIntToAugmentedUInt}
 
 // this information is shared across the entire fetch packet, and stored in the
 // branch snapshots. Since it's not unique to an instruction, it could be
@@ -98,7 +97,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
       val brob          = new BrobBackendIo(fetch_width)
       val flush         = Bool(INPUT) // pipeline flush
       val redirect      = Bool(INPUT)
-      val status_prv    = UInt(INPUT, width = rocket.PRV.SZ)
+      val status_prv    = UInt(INPUT, width = freechips.rocketchip.rocket.PRV.SZ)
       val status_debug  = Bool(INPUT)
    })
 

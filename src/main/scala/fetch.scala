@@ -20,10 +20,10 @@
 package boom
 
 import Chisel._
-import config.Parameters
+import freechips.rocketchip.config.Parameters
 
-import util.Str
-import util.UIntToAugmentedUInt
+import freechips.rocketchip.util.Str
+import freechips.rocketchip.util.UIntToAugmentedUInt
 
 class FetchBundle(implicit p: Parameters) extends BoomBundle()(p)
 {
@@ -49,7 +49,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
 {
    val io = IO(new BoomBundle()(p)
    {
-      val imem              = new rocket.FrontendIO
+      val imem              = new freechips.rocketchip.rocket.FrontendIO
       val f1_btb            = Valid(new BTBsaResp).flip
       val f2_bpu_request    = Valid(new BpuRequest).flip
 
@@ -69,6 +69,10 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
 
       val flush_take_pc     = Bool(INPUT)
       val flush_pc          = UInt(INPUT, vaddrBits+1)
+
+      // sfence needs to steal the TLB CAM part.
+      val sfence_take_pc    = Bool(INPUT) 
+      val sfence_addr       = UInt(INPUT, vaddrBits+1)
 
       val resp              = new DecoupledIO(new FetchBundle)
       val stalled           = Bool(OUTPUT) // CODE REVIEW
@@ -119,6 +123,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    val f0_redirect_val =
       br_unit.take_pc ||
       io.flush_take_pc ||
+      io.sfence_take_pc ||
       (io.f2_bpu_request.valid && !if_stalled && io.imem.resp.valid) ||
       (f3_req.valid && !if_stalled) // TODO this seems way too low-level to get backpressure signal correct
 
@@ -128,15 +133,17 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    io.imem.resp.ready  := !(if_stalled)
 
    f0_redirect_pc :=
+      Mux(io.sfence_take_pc,
+         io.sfence_addr,
       Mux(io.flush_take_pc,
          io.flush_pc,
       Mux(br_unit.take_pc,
          br_unit.target(vaddrBits,0),
       Mux(f3_req.valid || !enableBpdF2Redirect.B,
          f3_req.bits.addr,
-         io.f2_bpu_request.bits.target)))
+         io.f2_bpu_request.bits.target))))
 
-   io.imem.ext_btb.resp := io.f1_btb
+//   io.imem.ext_btb.resp := io.f1_btb TODO MERGE
 
    //-------------------------------------------------------------
    // **** ICache Access (F1) ****
@@ -180,12 +187,12 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    }
 
    val f2_br_seen = io.imem.resp.valid &&
-                  !io.imem.resp.bits.xcpt_if &&
+                  !io.imem.resp.bits.xcpt.pf.inst &&
                   is_br.reduce(_|_) &&
                   (!is_jal.reduce(_|_) || (PriorityEncoder(is_br.asUInt) < PriorityEncoder(is_jal.asUInt))) &&
                   (!is_jr.reduce(_|_) || (PriorityEncoder(is_br.asUInt) < PriorityEncoder(is_jr.asUInt)))
    val f2_jr_seen = io.imem.resp.valid &&
-                  !io.imem.resp.bits.xcpt_if &&
+                  !io.imem.resp.bits.xcpt.pf.inst &&
                   is_jr.reduce(_|_) &&
                   (!is_jal.reduce(_|_) || (PriorityEncoder(is_jr.asUInt) < PriorityEncoder(is_jal.asUInt)))
 
@@ -343,9 +350,11 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
 
    f2_valid := io.imem.resp.valid && !io.clear_fetchbuffer && !f3_req.valid
    f2_fetch_bundle.pc := io.imem.resp.bits.pc
-   f2_fetch_bundle.xcpt_pf_if := io.imem.resp.bits.xcpt_if
+   f2_fetch_bundle.xcpt_pf_if := io.imem.resp.bits.xcpt.pf.inst || io.imem.resp.bits.xcpt.ae.inst // TODO MERGE
    f2_fetch_bundle.replay_if := io.imem.resp.bits.replay
    f2_fetch_bundle.xcpt_ma_if_oh := jal_targs_ma.asUInt
+
+   assert (!(io.imem.resp.valid && io.imem.resp.bits.xcpt.ae.inst)) // TODO what is ae?
 
    for (w <- 0 until fetch_width)
    {

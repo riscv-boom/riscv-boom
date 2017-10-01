@@ -10,9 +10,11 @@
 package boom
 
 import Chisel._
-import config.Parameters
+import freechips.rocketchip.config.Parameters
 
 class MicroOp(implicit p: Parameters) extends BoomBundle()(p)
+   with freechips.rocketchip.rocket.constants.MemoryOpConstants
+   with freechips.rocketchip.rocket.constants.ScalarOpConstants
 {
    val valid            = Bool()                      // is this uop valid? or has it been masked out,
                                                       // used by fetch buffer and Decode stage
@@ -68,8 +70,8 @@ class MicroOp(implicit p: Parameters) extends BoomBundle()(p)
    val exception        = Bool()
    val exc_cause        = UInt(width = xLen)          // TODO compress this down, xlen is insanity
    val bypassable       = Bool()                      // can we bypass ALU results? (doesn't include loads, csr, etc...)
-   val mem_cmd          = UInt(width = 4)             // sync primitives/cache flushes
-   val mem_typ          = UInt(width = 3)             // memory mask type for loads/stores
+   val mem_cmd          = UInt(width = M_SZ)          // sync primitives/cache flushes
+   val mem_typ          = UInt(width = MT_SZ)         // memory mask type for loads/stores
    val is_fence         = Bool()
    val is_fencei        = Bool()
    val is_store         = Bool()                      // anything that goes into the STQ, including fences and AMOs
@@ -119,10 +121,10 @@ class CtrlSignals extends Bundle()
    val op1_sel     = UInt(width = OP1_X.getWidth)
    val op2_sel     = UInt(width = OP2_X.getWidth)
    val imm_sel     = UInt(width = IS_X.getWidth)
-   val op_fcn      = UInt(width = rocket.ALU.SZ_ALU_FN)
+   val op_fcn      = UInt(width = freechips.rocketchip.rocket.ALU.SZ_ALU_FN)
    val fcn_dw      = Bool()
    val rf_wen      = Bool()
-   val csr_cmd     = UInt(width = rocket.CSR.SZ)
+   val csr_cmd     = UInt(width = freechips.rocketchip.rocket.CSR.SZ)
    val is_load     = Bool()   // will invoke TLB address lookup
    val is_sta      = Bool()   // will invoke TLB address lookup
    val is_std      = Bool()

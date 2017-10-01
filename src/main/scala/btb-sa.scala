@@ -20,9 +20,9 @@
 package boom
 
 import Chisel._
-import config.Parameters
+import freechips.rocketchip.config.Parameters
 
-import util.Str
+import freechips.rocketchip.util.Str
 
 case class BTBsaParameters(
   nSets: Int = 64,
@@ -63,7 +63,7 @@ object BpredType
    def isBranch(typ: UInt): Bool = typ === branch
 }
 
-abstract class BTBsaBundle(implicit val p: Parameters) extends util.ParameterizedBundle()(p)
+abstract class BTBsaBundle(implicit val p: Parameters) extends freechips.rocketchip.util.ParameterizedBundle()(p)
   with HasBTBsaParameters
 
 
@@ -310,8 +310,8 @@ class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParamet
 
       if (DEBUG_PRINTF)
       {
-         printf("BTB write (%c): %d 0x%x (PC= 0x%x, TARG= 0x%x) way=%d C=%d\n", Mux(wen, Str("w"), Str("-")), widx,
-         wtag, r_btb_update.bits.pc, r_btb_update.bits.target, UInt(w), clear_valid)
+         //printf("BTB write (%c): %d 0x%x (PC= 0x%x, TARG= 0x%x) way=%d C=%d\n", Mux(wen, Str("w"), Str("-")), widx,
+         //wtag, r_btb_update.bits.pc, r_btb_update.bits.target, UInt(w), clear_valid)
          //for (i <- 0 until nSets)
          //{
          //   printf("    [%d] %d tag=0x%x targ=0x%x [0x%x 0x%x]\n", UInt(i), (valids >> UInt(i))(0),
@@ -325,7 +325,7 @@ class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParamet
    }
 
    // Zap entries if multiple hits.
-   when (util.PopCountAtLeast(hits_oh.asUInt, 2))
+   when (freechips.rocketchip.util.PopCountAtLeast(hits_oh.asUInt, 2))
    {
       clear_valid := true.B
    }
@@ -341,7 +341,7 @@ class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParamet
    val s1_cfi_type = s1_data.cfi_type
 
 
-   io.resp.valid := s1_valid
+   io.resp.valid := false.B //s1_valid TODO XXX MERGE add back in external BTB
    io.resp.bits.target := s1_target
    io.resp.bits.taken := (if (enableBIM) s1_bim_resp.isTaken else true.B) || (BpredType.isAlwaysTaken(s1_bpd_type))
    io.resp.bits.cfi_idx := (if (fetchWidth > 1) s1_cfi_idx else UInt(0))
@@ -390,7 +390,7 @@ class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParamet
    }
 
 
-   if (DEBUG_PRINTF)
+   if (false) //DEBUG_PRINTF)
    {
       printf("BTB predi (%c): hits:%x %d (PC= 0x%x, TARG= 0x%x %d) BIM [%d, %d]\n",
          Mux(s1_valid, Str("V"), Str("-")), hits_oh.asUInt, true.B, RegNext(io.req.bits.addr), s1_target, s1_cfi_type,

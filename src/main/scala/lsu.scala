@@ -44,13 +44,12 @@
 
 
 package boom
-{
 
 import Chisel._
-import config.Parameters
+import freechips.rocketchip.config.Parameters
+import freechips.rocketchip.rocket
 
-import util.Str
-import uncore.constants.MemoryOpConstants._
+import freechips.rocketchip.util.Str
 
 class LoadStoreUnitIO(pl_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
@@ -121,6 +120,7 @@ class LoadStoreUnitIO(pl_width: Int)(implicit p: Parameters) extends BoomBundle(
                                        // failures.
 
    val ptw = new rocket.TLBPTWIO
+   val sfence = new rocket.SFenceReq
 
    val counters = new Bundle
    {
@@ -138,7 +138,8 @@ class LoadStoreUnitIO(pl_width: Int)(implicit p: Parameters) extends BoomBundle(
 }
 
 
-class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends BoomModule()(p)
+class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut) extends BoomModule()(p)
+   with freechips.rocketchip.rocket.constants.MemoryOpConstants
 {
    val io = IO(new LoadStoreUnitIO(pl_width))
 
@@ -290,6 +291,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: uncore.tilelink
    val will_fire_load_retry    = Wire(init = Bool(false)) // uses TLB, D$, SAQ-search, LAQ-search
    val will_fire_store_commit  = Wire(init = Bool(false)) // uses      D$
    val will_fire_load_wakeup   = Wire(init = Bool(false)) // uses      D$, SAQ-search, LAQ-search
+   val will_fire_sfence        = Wire(init = Bool(false)) // uses TLB                            , ROB
 
    val can_fire_sta_retry      = Wire(init = Bool(false))
    val can_fire_load_retry     = Wire(init = Bool(false))
@@ -304,6 +306,13 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: uncore.tilelink
    // give first priority to incoming uops
    when (io.exe_resp.valid)
    {
+      when (io.exe_resp.bits.sfence.valid)
+      {
+         will_fire_sfence := true.B
+         dc_avail   := false.B
+         tlb_avail  := false.B
+         lcam_avail := false.B
+      }
       when (io.exe_resp.bits.uop.ctrl.is_load)
       {
          will_fire_load_incoming := Bool(true)
@@ -364,32 +373,43 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: uncore.tilelink
                      Mux(will_fire_load_retry, laq_addr(laq_retry_idx),
                                                io.exe_resp.bits.addr.asUInt))
 
-   val dtlb = Module(new rocket.TLB(nTLBEntries))
+   val dtlb = Module(new rocket.TLB(instruction = false, lgMaxSize = log2Ceil(coreDataBytes), nEntries = nTLBEntries))
 
    io.ptw <> dtlb.io.ptw
    dtlb.io.req.valid := will_fire_load_incoming ||
                         will_fire_sta_incoming ||
                         will_fire_sta_retry ||
-                        will_fire_load_retry
-   dtlb.io.req.bits.passthrough := Bool(false) // lets status.vm decide
-   dtlb.io.req.bits.vpn := exe_vaddr >> UInt(corePgIdxBits)
-   dtlb.io.req.bits.instruction := Bool(false)
-   dtlb.io.req.bits.store := will_fire_sta_incoming || will_fire_sta_retry
+                        will_fire_load_retry ||
+                        will_fire_sfence
+   dtlb.io.req.bits.vaddr := Mux(io.exe_resp.bits.sfence.valid, io.exe_resp.bits.sfence.bits.addr, exe_vaddr)
+   dtlb.io.req.bits.size := exe_tlb_uop.mem_typ
+   dtlb.io.req.bits.cmd := exe_tlb_uop.mem_cmd
+   dtlb.io.req.bits.sfence := io.exe_resp.bits.sfence
+   dtlb.io.req.bits.passthrough := false.B // let status.vm decide
+   dtlb.io.req.bits.instruction := false.B
 
    // exceptions
    val ma_ld = io.exe_resp.valid && io.exe_resp.bits.mxcpt.valid && exe_tlb_uop.is_load
-   val pf_ld = dtlb.io.req.valid && dtlb.io.resp.xcpt_ld && exe_tlb_uop.is_load
-   val pf_st = dtlb.io.req.valid && dtlb.io.resp.xcpt_st && exe_tlb_uop.is_store
+   val pf_ld = dtlb.io.req.valid && dtlb.io.resp.pf.ld && exe_tlb_uop.is_load
+   val pf_st = dtlb.io.req.valid && dtlb.io.resp.pf.st && exe_tlb_uop.is_store
+   val ae_ld = dtlb.io.req.valid && dtlb.io.resp.ae.ld && exe_tlb_uop.is_load
+   val ae_st = dtlb.io.req.valid && dtlb.io.resp.ae.st && exe_tlb_uop.is_store
    // TODO check for xcpt_if and verify that never happens on non-speculative instructions.
-   val mem_xcpt_valid = Reg(next=((dtlb.io.req.valid && (pf_ld || pf_st)) ||
+   val mem_xcpt_valid = Reg(next=((dtlb.io.req.valid && (pf_ld || pf_st || ae_ld || ae_st)) ||
                                  (io.exe_resp.valid && io.exe_resp.bits.mxcpt.valid)) &&
                                  !io.exception &&
                                  !IsKilledByBranch(io.brinfo, exe_tlb_uop),
                             init=Bool(false))
-   val mem_xcpt_cause = Reg(next=(Mux(io.exe_resp.valid &&
-                                      io.exe_resp.bits.mxcpt.valid, io.exe_resp.bits.mxcpt.bits,
-                                  Mux(exe_tlb_uop.is_load,         UInt(rocket.Causes.fault_load),
-                                                                   UInt(rocket.Causes.fault_store)))))
+   val mem_xcpt_cause = RegNext(
+      Mux1H(Iterable[(Bool, UInt)](
+         (io.exe_resp.valid && io.exe_resp.bits.mxcpt.valid).toBool -> io.exe_resp.bits.mxcpt.bits,
+         pf_ld -> rocket.Causes.load_page_fault.U,
+         pf_st -> rocket.Causes.store_page_fault.U,
+         ae_ld -> rocket.Causes.load_access.U,
+         ae_st -> rocket.Causes.store_access.U
+      )))
+   assert (PopCount(Vec(io.exe_resp.valid && io.exe_resp.bits.mxcpt.valid, pf_ld, pf_st, ae_ld, ae_st)) <= 1.U,
+      "[lsu] exception one-hit violated.")
 
    assert (!(dtlb.io.req.valid && exe_tlb_uop.is_fence), "Fence is pretending to talk to the TLB")
    assert (!(io.exe_resp.bits.mxcpt.valid && io.exe_resp.valid &&
@@ -401,7 +421,8 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: uncore.tilelink
 
 
    // output
-   val exe_tlb_paddr = Cat(dtlb.io.resp.ppn, exe_vaddr(corePgIdxBits-1,0))
+   val exe_tlb_paddr = Cat(dtlb.io.resp.paddr(paddrBits-1,corePgIdxBits), exe_vaddr(corePgIdxBits-1,0))
+   assert (exe_tlb_paddr === dtlb.io.resp.paddr || io.exe_resp.bits.sfence.valid, "[lsu] paddrs should match.")
 
    // check if a load is uncacheable - must stop it from executing speculatively,
    // as it might have side-effects!
@@ -611,6 +632,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: uncore.tilelink
    val mem_fired_sta = Reg(next=(will_fire_sta_incoming || will_fire_sta_retry), init=Bool(false))
    val mem_fired_stdi = Reg(next=will_fire_std_incoming, init=Bool(false))
    val mem_fired_stdf = Reg(next=io.fp_stdata.valid, init=Bool(false))
+   val mem_fired_sfence = Reg(next=will_fire_sfence, init=false.B)
 
    mem_ld_killed := Bool(false)
    when (Reg(next=
@@ -657,6 +679,12 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: uncore.tilelink
                               !io.exception && !RegNext(io.exception)
       clr_bsy_robidx := mem_std_uop.rob_idx
       clr_bsy_brmask := GetNewBrMask(io.brinfo, mem_std_uop)
+   }
+   .elsewhen (mem_fired_sfence)
+   {
+      clr_bsy_valid := true.B
+      clr_bsy_robidx := mem_tlb_uop.rob_idx
+      clr_bsy_brmask := GetNewBrMask(io.brinfo, mem_tlb_uop)
    }
 
 
@@ -1419,7 +1447,5 @@ class ForwardingAgeLogic(num_entries: Int)(implicit p: Parameters) extends BoomM
 
 
    io.forwarding_val := found_match
-}
-
 }
 

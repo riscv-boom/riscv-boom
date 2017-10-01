@@ -25,9 +25,7 @@ package boom
 {
 
 import Chisel._
-import config.Parameters
-
-import uncore.constants.MemoryOpConstants._
+import freechips.rocketchip.config.Parameters
 
 
 // Track Inflight Memory Requests
@@ -139,7 +137,7 @@ class DCacheResp(implicit p: Parameters) extends BoomBundle()(p)
    val data         = Bits(width = coreDataBits)
    val data_subword = Bits(width = coreDataBits)
    val uop          = new MicroOp
-   val typ          = Bits(width = rocket.MT_SZ)
+   val typ          = Bits(width = freechips.rocketchip.rocket.MT_SZ)
 }
 
 
@@ -179,6 +177,7 @@ class DCMemPortIO(implicit p: Parameters) extends BoomBundle()(p)
 }
 
 class DCacheShim(implicit p: Parameters) extends BoomModule()(p)
+   with freechips.rocketchip.rocket.constants.MemoryOpConstants
 {
    val max_num_inflight = MAX_LD_COUNT
    isPow2(max_num_inflight)
@@ -186,7 +185,7 @@ class DCacheShim(implicit p: Parameters) extends BoomModule()(p)
    val io = IO(new Bundle
    {
       val core = (new DCMemPortIO()).flip
-      val dmem = new rocket.HellaCacheIO
+      val dmem = new freechips.rocketchip.rocket.HellaCacheIO
    })
 
    // we are going to ignore store acks (for now at least), so filter them out and only listen to load acks
@@ -270,42 +269,22 @@ class DCacheShim(implicit p: Parameters) extends BoomModule()(p)
 
 
    //------------------------------------------------------------
-   //-- Data Prefetcher
-   //------------------------------------------------------------
-   // listen in on the core<->cache requests/responses, and insert our own
-   // prefetch requests to the data cache
-
-//   val prefetcher = Module(new Prefetcher())
-//
-//      prefetcher.io.core_requests.valid := Reg(next=Reg(next=io.core.req.valid))
-//      prefetcher.io.core_requests.bits.addr := Reg(next=Reg(next=io.core.req.bits.addr))
-//      prefetcher.io.core_requests.bits.miss := Reg(next=Reg(next=io.core.req.valid)) &&
-//                                               nbdcache.io.cpu.resp.bits.miss
-//      prefetcher.io.core_requests.bits.secondary_miss := Bool(false)
-////                                                         Reg(next=Reg(next=io.core.req.valid)) &&
-////                                                         nbdcache.io.cpu.resp.bits.miss &&
-////                                                         nbdcache.io.cpu.resp.bits.secondary_miss
-//
-//      prefetcher.io.cache.req.ready := !io.core.req.valid && nbdcache.io.cpu.req.ready
-
-
-   //------------------------------------------------------------
    // hook up requests
 
-//   val prefetch_req_val = prefetcher.io.cache.req.valid && Bool(ENABLE_PREFETCHING)
-   val prefetch_req_val = Bool(false)
+   // delay store data a cycle (that's what the D$ wants).
+   val s1_stdata = RegNext(new freechips.rocketchip.rocket.StoreGen(
+      io.core.req.bits.uop.mem_typ, 0.U, io.core.req.bits.data, coreDataBytes).data)
 
    io.core.req.ready      := enq_rdy && io.dmem.req.ready
-   io.dmem.req.valid      := (io.core.req.valid || prefetch_req_val)
+   io.dmem.req.valid      := io.core.req.valid
    io.dmem.req.bits.typ   := io.core.req.bits.uop.mem_typ
    io.dmem.req.bits.addr  := io.core.req.bits.addr
    io.dmem.req.bits.tag   := new_inflight_tag
    io.dmem.req.bits.cmd   := Mux(io.core.req.valid, io.core.req.bits.uop.mem_cmd, M_PFW)
-   io.dmem.s1_data        := Reg(next=io.core.req.bits.data) //notice this is delayed a cycle!
+   io.dmem.s1_data.data   := s1_stdata // Notice this is delayed a cycle!
+   io.dmem.s1_data.mask   := 0.U // Only used for partial puts from scratchpads.
    io.dmem.s1_kill        := io.core.req.bits.kill || iflb_kill // kills request sent out last cycle
-   io.dmem.req.bits.phys  := Bool(true) // we always use physical addresses here,
-                                        // as we've already done our own translations.
-
+   io.dmem.req.bits.phys  := Bool(true) // we always use physical addresses (TLB is in LSU).
    io.dmem.invalidate_lr  := io.core.invalidate_lr
 
    //------------------------------------------------------------
@@ -355,16 +334,16 @@ class DCacheShim(implicit p: Parameters) extends BoomModule()(p)
    io.core.ordered := io.dmem.ordered
 
    // we handle all of the memory exceptions (unaligned and faulting) in the LSU
-   assert (!(io.core.resp.valid && RegNext(io.dmem.xcpt.ma.ld) &&
+   assert (!(io.core.resp.valid && RegNext(io.dmem.s2_xcpt.ma.ld) &&
       io.dmem.resp.bits.tag === RegNext(RegNext(io.dmem.req.bits.tag))),
       "Data cache returned an misaligned load exception, which BOOM handles elsewhere.")
-   assert (!(io.core.resp.valid && RegNext(io.dmem.xcpt.ma.st) &&
+   assert (!(io.core.resp.valid && RegNext(io.dmem.s2_xcpt.ma.st) &&
       io.dmem.resp.bits.tag === RegNext(RegNext(io.dmem.req.bits.tag))),
       "Data cache returned an misaligned store exception, which BOOM handles elsewhere.")
-   assert (!(io.core.resp.valid && RegNext(io.dmem.xcpt.pf.ld) &&
+   assert (!(io.core.resp.valid && RegNext(io.dmem.s2_xcpt.pf.ld) &&
       io.dmem.resp.bits.tag === RegNext(RegNext(io.dmem.req.bits.tag))),
       "Data cache returned an faulting load exception, which BOOM handles elsewhere.")
-   assert (!(io.core.resp.valid && RegNext(io.dmem.xcpt.pf.st) &&
+   assert (!(io.core.resp.valid && RegNext(io.dmem.s2_xcpt.pf.st) &&
       io.dmem.resp.bits.tag === RegNext(RegNext(io.dmem.req.bits.tag))),
       "Data cache returned an faulting store exception, which BOOM handles elsewhere.")
 

@@ -14,7 +14,7 @@
 package boom
 
 import Chisel._
-import config.{Parameters, Field}
+import freechips.rocketchip.config.{Parameters, Field}
 
 
 case class GShareParameters(

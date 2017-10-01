@@ -18,11 +18,11 @@
 package boom
 
 import Chisel._
-import config.Parameters
+import freechips.rocketchip.config.Parameters
 
-import rocket.ALU._
-import util._
-import uncore.constants.MemoryOpConstants._
+import freechips.rocketchip.rocket.ALU._
+import freechips.rocketchip.util._
+import freechips.rocketchip.tile
 
 
 object FUConstants
@@ -78,7 +78,7 @@ class FunctionalUnitIo(num_stages: Int
    // TODO name this, so ROB can also instantiate it
    val get_rob_pc = new RobPCRequest().flip
    val get_pred = new GetPredictionInfo
-   val status = new rocket.MStatus().asInput
+   val status = new freechips.rocketchip.rocket.MStatus().asInput
 }
 
 class GetPredictionInfo(implicit p: Parameters) extends BoomBundle()(p)
@@ -109,7 +109,8 @@ class FuncUnitResp(data_width: Int)(implicit p: Parameters) extends BoomBundle()
    val data = UInt(width = data_width)
    val fflags = new ValidIO(new FFlagsResp)
    val addr = UInt(width = vaddrBits+1) // only for maddr -> LSU
-   val mxcpt = new ValidIO(UInt(width=rocket.Causes.all.max)) //only for maddr->LSU
+   val mxcpt = new ValidIO(UInt(width=freechips.rocketchip.rocket.Causes.all.max+2)) //only for maddr->LSU
+   val sfence = Valid(new freechips.rocketchip.rocket.SFenceReq) // only for mcalc
 
    override def cloneType = new FuncUnitResp(data_width)(p).asInstanceOf[this.type]
 }
@@ -277,7 +278,7 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
                   Mux(io.req.bits.uop.ctrl.op2_sel === OP2_FOUR, UInt(4),
                                                                  UInt(0)))))
 
-   val alu = Module(new rocket.ALU())
+   val alu = Module(new freechips.rocketchip.rocket.ALU())
 
    alu.io.in1 := op1_data.asUInt
    alu.io.in2 := op2_data.asUInt
@@ -553,7 +554,7 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
       require (coreInstBytes == 4) // no RVC support
       br_unit.xcpt.valid     := bj_addr(1) && io.req.valid && is_taken && !killed
       br_unit.xcpt.bits.uop  := uop
-      br_unit.xcpt.bits.cause:= rocket.Causes.misaligned_fetch.U
+      br_unit.xcpt.bits.cause:= freechips.rocketchip.rocket.Causes.misaligned_fetch.U
       // TODO is there a better way to get this information to the CSR file? maybe use brinfo.target?
       br_unit.xcpt.bits.badvaddr:= bj_addr
 
@@ -597,11 +598,16 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
 
 // passes in base+imm to calculate addresses, and passes store data, to the LSU
 // for floating point, 65bit FP store-data needs to be decoded into 64bit FP form
-class MemAddrCalcUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(num_stages = 0
-                                                     , num_bypass_stages = 0
-                                                     , earliest_bypass_stage = 0
-                                                     , data_width = 65 // TODO enable this only if FP is enabled?
-                                                     , is_branch_unit = false)(p)
+class MemAddrCalcUnit(implicit p: Parameters)
+   extends PipelinedFunctionalUnit(
+      num_stages = 0,
+      num_bypass_stages = 0,
+      earliest_bypass_stage = 0,
+      data_width = 65, // TODO enable this only if FP is enabled?
+      is_branch_unit = false)(p)
+   with freechips.rocketchip.rocket.constants.MemoryOpConstants
+   with freechips.rocketchip.rocket.constants.ScalarOpConstants
+   with freechips.rocketchip.tile.HasFPUParameters
 {
    // perform address calculation
    val sum = (io.req.bits.rs1_data.asSInt + io.req.bits.uop.imm_packed(19,8).asSInt).asUInt
@@ -612,9 +618,12 @@ class MemAddrCalcUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(nu
    // compute store data
    // requires decoding 65-bit FP data
    // TODO remove this recoding -- since this will only handle Int micro-ops with split regfiles.
-   val unrec_s = hardfloat.fNFromRecFN(8, 24, io.req.bits.rs2_data)
-   val unrec_d = hardfloat.fNFromRecFN(11, 53, io.req.bits.rs2_data)
-   val unrec_out = Mux(io.req.bits.uop.fp_single, Cat(Fill(32, unrec_s(31)), unrec_s), unrec_d)
+   // TODO somehow this assert triggers o.0
+//   assert (!(io.req.bits.uop.fp_val && io.req.valid), "[maddrcalc] assert we never get store data in here.")
+//   val unrec_s = hardfloat.fNFromRecFN(8, 24, io.req.bits.rs2_data)
+//   val unrec_d = hardfloat.fNFromRecFN(11, 53, io.req.bits.rs2_data)
+//   val unrec_out = Mux(io.req.bits.uop.fp_single, Cat(Fill(32, unrec_s(31)), unrec_s), unrec_d)
+   val unrec_out = ieee(io.req.bits.rs2_data)
 
    var store_data:UInt = null
    if (!usingFPU) store_data = io.req.bits.rs2_data
@@ -635,17 +644,24 @@ class MemAddrCalcUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(nu
    // Handle misaligned exceptions
    val typ = io.req.bits.uop.mem_typ
    val misaligned =
-      (((typ === rocket.MT_H) || (typ === rocket.MT_HU)) && (effective_address(0) =/= UInt(0))) ||
-      (((typ === rocket.MT_W) || (typ === rocket.MT_WU)) && (effective_address(1,0) =/= UInt(0))) ||
-      ((typ ===  rocket.MT_D) && (effective_address(2,0) =/= UInt(0)))
+      (((typ === MT_H) || (typ === MT_HU)) && (effective_address(0) =/= UInt(0))) ||
+      (((typ === MT_W) || (typ === MT_WU)) && (effective_address(1,0) =/= UInt(0))) ||
+      ((typ ===  MT_D) && (effective_address(2,0) =/= UInt(0)))
 
    val ma_ld = io.req.valid && io.req.bits.uop.uopc === uopLD && misaligned
    val ma_st = io.req.valid && (io.req.bits.uop.uopc === uopSTA || io.req.bits.uop.uopc === uopAMO_AG) && misaligned
 
    io.resp.bits.mxcpt.valid := ma_ld || ma_st
-   io.resp.bits.mxcpt.bits  := Mux(ma_ld, UInt(rocket.Causes.misaligned_load),
-                                          UInt(rocket.Causes.misaligned_store))
+   io.resp.bits.mxcpt.bits  := Mux(ma_ld, UInt(freechips.rocketchip.rocket.Causes.misaligned_load),
+                                          UInt(freechips.rocketchip.rocket.Causes.misaligned_store))
    assert (!(ma_ld && ma_st), "Mutually-exclusive exceptions are firing.")
+
+   io.resp.bits.sfence.valid := io.req.valid && io.req.bits.uop.mem_cmd === M_SFENCE
+   io.resp.bits.sfence.bits.rs1 := typ(0)
+   io.resp.bits.sfence.bits.rs2 := typ(1)
+   io.resp.bits.sfence.bits.addr := io.req.bits.rs1_data
+   io.resp.bits.sfence.bits.asid := io.req.bits.rs2_data
+
 }
 
 
@@ -675,6 +691,7 @@ class IntToFPUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(
    num_bypass_stages = 0,
    earliest_bypass_stage = 0,
    data_width = 65)(p)
+   with tile.HasFPUParameters
 {
    val fp_decoder = Module(new UOPCodeFPUDecoder) // TODO use a simpler decoder
    val io_req = io.req.bits
@@ -682,10 +699,11 @@ class IntToFPUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(
    val fp_ctrl = fp_decoder.io.sigs
    val fp_rm = Mux(ImmGenRm(io_req.uop.imm_packed) === Bits(7), io.fcsr_rm, ImmGenRm(io_req.uop.imm_packed))
    val req = Wire(new tile.FPInput)
+   val tag = !fp_ctrl.singleIn
    req := fp_ctrl
    req.rm := fp_rm
-   req.in1 := io_req.rs1_data
-   req.in2 := io_req.rs2_data
+   req.in1 := unbox(io_req.rs1_data, tag, None)
+   req.in2 := unbox(io_req.rs2_data, tag, None)
    req.typ := ImmGenTyp(io_req.uop.imm_packed)
 
    assert (!(io.req.valid && fp_ctrl.fromint && req.in1(64).toBool),
@@ -697,8 +715,11 @@ class IntToFPUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(
    val ifpu = Module(new tile.IntToFP(intToFpLatency))
    ifpu.io.in.valid := io.req.valid
    ifpu.io.in.bits := req
+   ifpu.io.in.bits.in1 := io_req.rs1_data
+   val out_double = Pipe(io.req.valid, !fp_ctrl.singleOut, intToFpLatency).bits
 
-   io.resp.bits.data              := ifpu.io.out.bits.data
+//   io.resp.bits.data              := box(ifpu.io.out.bits.data, !io.resp.bits.uop.fp_single)
+   io.resp.bits.data              := box(ifpu.io.out.bits.data, out_double)
    io.resp.bits.fflags.valid      := ifpu.io.out.valid
    io.resp.bits.fflags.bits.uop   := io.resp.bits.uop
    io.resp.bits.fflags.bits.flags := ifpu.io.out.bits.exc
@@ -741,7 +762,7 @@ abstract class IterativeFunctionalUnit(implicit p: Parameters)
 
 class MulDivUnit(implicit p: Parameters) extends IterativeFunctionalUnit()(p)
 {
-   val muldiv = Module(new rocket.MulDiv(mulDivParams, width = xLen))
+   val muldiv = Module(new freechips.rocketchip.rocket.MulDiv(mulDivParams, width = xLen))
 
    // request
    muldiv.io.req.valid    := io.req.valid && !this.do_kill

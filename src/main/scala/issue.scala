@@ -10,10 +10,10 @@
 package boom
 
 import Chisel._
-import config.Parameters
+import freechips.rocketchip.config.Parameters
 
 import FUConstants._
-import util.Str
+import freechips.rocketchip.util.Str
 
 import scala.collection.mutable.ArrayBuffer
 

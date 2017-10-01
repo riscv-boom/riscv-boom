@@ -5,17 +5,17 @@
 
 package boom
 import Chisel._
-import config.{Parameters, Config}
-import coreplex._
-import tile._
-import rocket._
+import freechips.rocketchip.config.{Parameters, Config}
+import freechips.rocketchip.coreplex.{RocketTilesKey, SystemBusKey}
+import freechips.rocketchip.rocket._
+import freechips.rocketchip.tile._
 
 
 // Try to be a reasonable BOOM design point.
 class DefaultBoomConfig extends Config((site, here, up) => {
 
    // Top-Level
-   case BuildCore => (p: Parameters, e: uncore.tilelink2.TLEdgeOut) => new BoomCore()(p, e)
+   case BuildCore => (p: Parameters, e: freechips.rocketchip.tilelink.TLEdgeOut) => new BoomCore()(p, e)
    case XLen => 64
 
    // Rocket/Core Parameters
@@ -24,12 +24,11 @@ class DefaultBoomConfig extends Config((site, here, up) => {
          fWidth = 2,
          useCompressed = false,
          nPerfCounters = 29,
-         nPerfEvents = 37,
-         perfIncWidth = 3, // driven by issue ports, as set in BoomCoreParams.issueParams
-         fpu = Some(tile.FPUParams(sfmaLatency=4, dfmaLatency=4, divSqrt=true))),
+         nPMPs = 0,
+         fpu = Some(freechips.rocketchip.tile.FPUParams(sfmaLatency=4, dfmaLatency=4, divSqrt=true))),
       btb = Some(BTBParams(nEntries = 0, updatesOutOfOrder = true)),
-      dcache = Some(DCacheParams(rowBits = site(L1toL2Config).beatBytes*8, nSets=64, nWays=8, nMSHRs=4, nTLBEntries=8)),
-      icache = Some(ICacheParams(rowBits = site(L1toL2Config).beatBytes*8, nSets=64, nWays=8))
+      dcache = Some(DCacheParams(rowBits = site(SystemBusKey).beatBits, nSets=64, nWays=8, nMSHRs=4, nTLBEntries=8)),
+      icache = Some(ICacheParams(fetchBytes = 2*4, rowBits = site(SystemBusKey).beatBits, nSets=64, nWays=8))
       )}
 
    // BOOM-specific uarch Parameters
@@ -45,13 +44,9 @@ class DefaultBoomConfig extends Config((site, here, up) => {
       maxBrCount = 8,
       btb = BTBsaParameters(nSets=64, nWays=4, nRAS=8, tagSz=20),
       enableBranchPredictor = true,
-      gshare = Some(GShareParameters(enabled = true, history_length=15))
+      gshare = Some(GShareParameters(enabled=true, history_length=15))
    )
-   // Widen L1toL2 bandwidth.
-   case L1toL2Config => up(L1toL2Config, site).copy(
-      beatBytes = site(XLen)/4)
-  }
-)
+})
 
 
 class WithNPerfCounters(n: Int) extends Config((site, here, up) => {
@@ -62,11 +57,13 @@ class WithNPerfCounters(n: Int) extends Config((site, here, up) => {
 
 // Small BOOM! Try to be fast to compile, easier to debug.
 class WithSmallBooms extends Config((site, here, up) => {
-   case RocketTilesKey => up(RocketTilesKey, site) map { r =>r.copy(core = r.core.copy(
-      fWidth = 1,
-      nPerfCounters = 2,
-      perfIncWidth = 2 // driven by issue ports, as set in BoomCoreParams.issueParams
-      ))}
+   case RocketTilesKey => up(RocketTilesKey, site) map { r =>r.copy(
+      core = r.core.copy(
+         fWidth = 1,
+         nPerfCounters = 2),
+      icache = Some(r.icache.get.copy(
+         fetchBytes=1*4))
+      )}
    case BoomKey => up(BoomKey, site).copy(
       numRobEntries = 24,
       issueParams = Seq(
@@ -88,10 +85,9 @@ class WithMediumBooms extends Config((site, here, up) => {
       core = r.core.copy(
          fWidth = 2,
          //nPerfCounters = 6,
-         perfIncWidth = 3, // driven by issue ports, as set in BoomCoreParams.issueParams
-         fpu = Some(tile.FPUParams(sfmaLatency=4, dfmaLatency=4, divSqrt=true))),
-      dcache = Some(DCacheParams(rowBits = site(L1toL2Config).beatBytes*8, nSets=64, nWays=4, nMSHRs=2, nTLBEntries=8)),
-      icache = Some(ICacheParams(rowBits = site(L1toL2Config).beatBytes*8, nSets=64, nWays=4))
+         fpu = Some(freechips.rocketchip.tile.FPUParams(sfmaLatency=4, dfmaLatency=4, divSqrt=true))),
+      dcache = Some(DCacheParams(rowBits = site(SystemBusKey).beatBits, nSets=64, nWays=4, nMSHRs=2, nTLBEntries=8)),
+      icache = Some(ICacheParams(rowBits = site(SystemBusKey).beatBits, nSets=64, nWays=4, fetchBytes=2*4))
       )}
    case BoomKey => up(BoomKey, site).copy(
       numRobEntries = 48,
@@ -114,10 +110,12 @@ class WithMediumBooms extends Config((site, here, up) => {
 
 // try to match the Cortex-A15
 class WithMegaBooms extends Config((site, here, up) => {
-   case RocketTilesKey => up(RocketTilesKey, site) map { r => r.copy(core = r.core.copy(
-      fWidth = 4,
-      perfIncWidth = 3 // driven by issue ports, as set in BoomCoreParams.issueParams
-      ))}
+   case RocketTilesKey => up(RocketTilesKey, site) map { r =>r.copy(
+      core = r.core.copy(
+         fWidth = 4),
+      icache = Some(r.icache.get.copy(
+         fetchBytes=4*4))
+      )}
    case BoomKey => up(BoomKey, site).copy(
       numRobEntries = 128,
       issueParams = Seq(
@@ -131,9 +129,4 @@ class WithMegaBooms extends Config((site, here, up) => {
       // tage is unsupported in boomv2 for now.
       //tage = Some(TageParameters())
       )
-   // Widen L1toL2 bandwidth so we can increase icache rowBytes size for 4-wide fetch.
-   // a beatsize of 32 bytes causes issues (see https://github.com/ucb-bar/riscv-boom/issues/30)).
-   //case L1toL2Config => up(L1toL2Config, site).copy(
-   //   beatBytes = site(XLen)/2)
-
 })

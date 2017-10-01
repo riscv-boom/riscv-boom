@@ -29,8 +29,8 @@ package boom
 
 import Chisel._
 import scala.math.ceil
-import config.Parameters
-import util.Str
+import freechips.rocketchip.config.Parameters
+import freechips.rocketchip.util.Str
 
 class RobIo(machine_width: Int,
             num_wakeup_ports: Int,
@@ -82,6 +82,9 @@ class RobIo(machine_width: Int,
    val com_xcpt = Valid(new CommitExceptionSignals(machine_width))
    val csr_eret = Bool(INPUT)
    val csr_evec = UInt(INPUT, vaddrBitsExtended)
+
+   // Let the CSRFile stall us (e.g., wfi).
+   val csr_stall = Bool(INPUT) 
 
    // Flush signals (including exceptions, pipeline replays, and memory ordering failures).
    val flush = Valid(new FlushSignals)
@@ -142,7 +145,7 @@ class FlushSignals(implicit p: Parameters) extends BoomBundle()(p)
 class Exception(implicit p: Parameters) extends BoomBundle()(p)
 {
    val uop = new MicroOp()
-   val cause = Bits(width=log2Up(rocket.Causes.all.max))
+   val cause = Bits(width=log2Up(freechips.rocketchip.rocket.Causes.all.max+2))
    val badvaddr = UInt(width=coreMaxAddrBits)
 }
 
@@ -211,7 +214,7 @@ class Rob(width: Int,
    val rob_head_is_store   = Wire(Vec(width, Bool()))
    val rob_head_is_load    = Wire(Vec(width, Bool()))
    val rob_head_is_branch  = Wire(Vec(width, Bool()))
-   val rob_head_fflags     = Wire(Vec(width, Bits(width=tile.FPConstants.FLAGS_SZ)))
+   val rob_head_fflags     = Wire(Vec(width, Bits(width=freechips.rocketchip.tile.FPConstants.FLAGS_SZ)))
 
    // valid bits at the branch target
    // the br_unit needs to verify the target PC, but it must read out the valid bits
@@ -366,7 +369,7 @@ class Rob(width: Int,
                                                            // fake write ports - clearing on commit,
                                                            // rollback, branch_kill
       val rob_exception = Mem(num_rob_rows, Bool())
-      val rob_fflags    = Mem(num_rob_rows, Bits(width=tile.FPConstants.FLAGS_SZ))
+      val rob_fflags    = Mem(num_rob_rows, Bits(width=freechips.rocketchip.tile.FPConstants.FLAGS_SZ))
 
       //-----------------------------------------------
       // Dispatch: Add Entry to ROB
@@ -474,7 +477,7 @@ class Rob(width: Int,
       // Commit or Rollback
 
       // can this instruction commit? (the check for exceptions/rob_state happens later)
-      can_commit(w) := rob_val(rob_head) && !(rob_bsy(rob_head))
+      can_commit(w) := rob_val(rob_head) && !(rob_bsy(rob_head)) && !io.csr_stall
 
       val com_idx = Wire(UInt())
       com_idx := rob_head
@@ -663,7 +666,7 @@ class Rob(width: Int,
    // send fflags bits to the CSRFile to accrue
 
    val fflags_val = Wire(Vec(width, Bool()))
-   val fflags     = Wire(Vec(width, Bits(width=tile.FPConstants.FLAGS_SZ)))
+   val fflags     = Wire(Vec(width, Bits(width=freechips.rocketchip.tile.FPConstants.FLAGS_SZ)))
 
    for (w <- 0 until width)
    {
