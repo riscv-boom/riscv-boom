@@ -31,6 +31,7 @@ class FetchBundle(implicit p: Parameters) extends BoomBundle()(p)
    val insts         = Vec(FETCH_WIDTH, Bits(width = 32))
    val mask          = Bits(width = FETCH_WIDTH) // mark which words are valid instructions
    val xcpt_pf_if    = Bool() // I-TLB miss (instruction fetch fault).
+   val xcpt_ae_if    = Bool() // Access exception.
    val replay_if     = Bool() // the I$ demands we replay the instruction fetch.
    val xcpt_ma_if_oh = UInt(width = FETCH_WIDTH)
                             // A cfi branched to a misaligned address --
@@ -50,7 +51,6 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    val io = IO(new BoomBundle()(p)
    {
       val imem              = new freechips.rocketchip.rocket.FrontendIO
-      val f1_btb            = Valid(new BTBsaResp).flip
       val f2_bpu_request    = Valid(new BpuRequest).flip
 
       val f2_btb_resp       = Valid(new BTBsaResp).flip
@@ -71,7 +71,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
       val flush_pc          = UInt(INPUT, vaddrBits+1)
 
       // sfence needs to steal the TLB CAM part.
-      val sfence_take_pc    = Bool(INPUT) 
+      val sfence_take_pc    = Bool(INPUT)
       val sfence_addr       = UInt(INPUT, vaddrBits+1)
 
       val resp              = new DecoupledIO(new FetchBundle)
@@ -124,6 +124,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
       br_unit.take_pc ||
       io.flush_take_pc ||
       io.sfence_take_pc ||
+      (io.f2_btb_resp.valid && io.f2_btb_resp.bits.taken) ||
       (io.f2_bpu_request.valid && !if_stalled && io.imem.resp.valid) ||
       (f3_req.valid && !if_stalled) // TODO this seems way too low-level to get backpressure signal correct
 
@@ -139,11 +140,11 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
          io.flush_pc,
       Mux(br_unit.take_pc,
          br_unit.target(vaddrBits,0),
+      Mux(io.f2_btb_resp.valid && io.f2_btb_resp.bits.taken,
+         io.f2_btb_resp.bits.target,
       Mux(f3_req.valid || !enableBpdF2Redirect.B,
          f3_req.bits.addr,
-         io.f2_bpu_request.bits.target))))
-
-//   io.imem.ext_btb.resp := io.f1_btb TODO MERGE
+         io.f2_bpu_request.bits.target)))))
 
    //-------------------------------------------------------------
    // **** ICache Access (F1) ****
@@ -164,7 +165,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    val is_call   = Wire(Vec(fetch_width, Bool()))
    val br_targs  = Wire(Vec(fetch_width, UInt(width=vaddrBitsExtended)))
    val jal_targs = Wire(Vec(fetch_width, UInt(width=vaddrBitsExtended)))
-   // catch misaligned jumps -- let backend handle misaligned 
+   // catch misaligned jumps -- let backend handle misaligned
    // branches though since only taken branches are exceptions.
    val jal_targs_ma = Wire(Vec(fetch_width, Bool()))
 
@@ -350,7 +351,8 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
 
    f2_valid := io.imem.resp.valid && !io.clear_fetchbuffer && !f3_req.valid
    f2_fetch_bundle.pc := io.imem.resp.bits.pc
-   f2_fetch_bundle.xcpt_pf_if := io.imem.resp.bits.xcpt.pf.inst || io.imem.resp.bits.xcpt.ae.inst // TODO MERGE
+   f2_fetch_bundle.xcpt_pf_if := io.imem.resp.bits.xcpt.pf.inst
+   f2_fetch_bundle.xcpt_ae_if := io.imem.resp.bits.xcpt.ae.inst
    f2_fetch_bundle.replay_if := io.imem.resp.bits.replay
    f2_fetch_bundle.xcpt_ma_if_oh := jal_targs_ma.asUInt
 
@@ -509,7 +511,10 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    val curr_aligned_pc = ~(~fetch_pc | (UInt(fetch_width*coreInstBytes-1)))
    val cfi_pc = curr_aligned_pc  + (cfi_idx << 2.U)
 
-   when (FetchBuffer.io.enq.fire() && !f3_fetch_bundle.replay_if && !f3_fetch_bundle.xcpt_pf_if)
+   when (FetchBuffer.io.enq.fire() &&
+      !f3_fetch_bundle.replay_if &&
+      !f3_fetch_bundle.xcpt_pf_if &&
+      !f3_fetch_bundle.xcpt_ae_if)
    {
       assert (f3_fetch_bundle.mask =/= 0.U)
       val curr_inst = if (fetchWidth == 0) f3_fetch_bundle.insts(0) else f3_fetch_bundle.insts(cfi_idx)
@@ -560,12 +565,17 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
       }
    }
 
-   when (io.clear_fetchbuffer || (FetchBuffer.io.enq.fire() && (f3_fetch_bundle.replay_if || f3_fetch_bundle.xcpt_pf_if)))
+   when (io.clear_fetchbuffer || 
+      (FetchBuffer.io.enq.fire() && 
+         (f3_fetch_bundle.replay_if || f3_fetch_bundle.xcpt_pf_if || f3_fetch_bundle.xcpt_ae_if)))
    {
       last_valid := false.B
    }
 
-   when (FetchBuffer.io.enq.fire() && !f3_fetch_bundle.replay_if && !f3_fetch_bundle.xcpt_pf_if)
+   when (FetchBuffer.io.enq.fire() && 
+      !f3_fetch_bundle.replay_if && 
+      !f3_fetch_bundle.xcpt_pf_if &&
+      !f3_fetch_bundle.xcpt_ae_if)
    {
       // check that, if there is a jal, the last valid instruction is not after him.
       // <beq, jal, bne, ...>, either the beq or jal may be the last instruction, but because

@@ -78,7 +78,6 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
       val fetch_stalled = Bool(INPUT)
 
       // Fetch1
-      val f1_btb        = Valid(new BTBsaResp)
 
       // Fetch2
       val f2_bpu_request= Valid(new BpuRequest)
@@ -121,27 +120,19 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    //************************************************
    // Branch Prediction (BP1 Stage)
 
-   bpd.io.req_pc := btb.io.resp.bits.fetch_pc
-   io.f1_btb <> btb.io.resp
+   bpd.io.req_pc := btb.io.s1_pc
 
 
    //************************************************
    // Branch Prediction (BP2 Stage)
 
-   val f2_btb = Reg(Valid(new BTBsaResp))
-   val f2_pc  = Reg(UInt())
+   val f2_btb = btb.io.resp
+   val f2_pc = btb.io.resp.bits.fetch_pc
    val f2_aligned_pc = ~(~f2_pc | (UInt(fetch_width*coreInstBytes-1)))
    val f2_nextline_pc = Wire(UInt(width=vaddrBits))
    f2_nextline_pc := f2_aligned_pc + UInt(fetch_width*coreInstBytes)
 
-   // request/prediction in BTB's F1 stage can advance
-   when (io.ext_btb_req.valid)
-   {
-      f2_btb := btb.io.resp
-      f2_pc := btb.io.resp.bits.fetch_pc
-   }
-
-   io.f2_btb_resp := f2_btb
+   io.f2_btb_resp := btb.io.resp
    io.f2_bpd_resp := bpd.io.resp
    io.f3_bpd_resp := RegNext(bpd.io.resp)
 
@@ -157,7 +148,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    val bpd_valid = bpd.io.resp.valid
    val bpd_bits = bpd.io.resp.bits
 
-   val bpd_predict_taken = bitRead(bpd_bits.takens, f2_btb.bits.cfi_idx)
+   val bpd_predict_taken = bitRead(bpd_bits.takens, io.f2_btb_resp.bits.cfi_idx)
    val bpd_disagrees_with_btb =
       f2_btb.valid && bpd_valid && (bpd_predict_taken ^ f2_btb.bits.taken) && f2_btb.bits.cfi_type === CfiType.branch
 
@@ -222,15 +213,11 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    //************************************************
    // Handle redirects/flushes
 
+   btb.io.flush := io.flush || reset.toBool || io.redirect
+
    when (io.flush || reset.toBool)
    {
-      f2_btb.valid := false.B
       btb.io.btb_update.valid := false.B
-   }
-
-   when (io.redirect)
-   {
-      f2_btb.valid := false.B
    }
 
 
@@ -252,7 +239,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
 
    if (!enableBTB)
    {
-      assert (!(io.f1_btb.valid), "[bpd_pipeline] BTB predicted, but it's been disabled.")
+      assert (!(io.f2_btb_resp.valid), "[bpd_pipeline] BTB predicted, but it's been disabled.")
    }
 
 }

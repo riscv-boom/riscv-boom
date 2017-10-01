@@ -20,11 +20,9 @@ import boom._
 
 // scalastyle:off
 
-//class BOOMConfig extends Config(new DefaultBoomConfig ++ new WithNBigCores(1) ++ new WithoutTLMonitors ++ new BaseConfig)
-// TODO re-enable WithTLMonitors once rocket-chip #1017 resolved.
-class BOOMConfig extends Config(new DefaultBoomConfig ++ new WithNBigCores(1) ++ new BaseConfig)
-class SmallBoomConfig extends Config(new WithSmallBooms ++ new DefaultBoomConfig ++ new WithNBigCores(1) ++ new BaseConfig)
-class MediumBoomConfig extends Config(new WithMediumBooms ++ new DefaultBoomConfig ++ new WithNBigCores(1) ++ new BaseConfig)
+class BOOMConfig extends Config(new DefaultBoomConfig ++ new WithNBigCores(1) ++ new WithoutTLMonitors ++ new BaseConfig)
+class SmallBoomConfig extends Config(new WithSmallBooms ++ new DefaultBoomConfig ++ new WithNBigCores(1) ++ new WithoutTLMonitors ++ new BaseConfig)
+class MediumBoomConfig extends Config(new WithMediumBooms ++ new DefaultBoomConfig ++ new WithNBigCores(1) ++ new WithoutTLMonitors ++ new BaseConfig)
 class MegaBoomConfig extends Config(new WithMegaBooms ++ new DefaultBoomConfig ++ new WithNBigCores(1) ++ new WithoutTLMonitors ++ new BaseConfig)
 
 // scalastyle:on

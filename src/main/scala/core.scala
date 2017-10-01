@@ -205,9 +205,8 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    val debug_irt_reg  = Reg(init = UInt(0, xLen))
    debug_tsc_reg  := debug_tsc_reg + Mux(Bool(O3PIPEVIEW_PRINTF), UInt(O3_CYCLE_TIME), UInt(1))
    debug_irt_reg  := debug_irt_reg + PopCount(rob.io.commit.valids.asUInt)
-   // TODO once we update Chisel, add this back in:
-   //dontTouch(debug_tsc_reg)
-   //dontTouch(debug_irt_reg)
+//   dontTouch(debug_tsc_reg)
+//   dontTouch(debug_irt_reg)
 
 
    //****************************************
@@ -266,7 +265,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    fetch_unit.io.br_unit <> br_unit
    fetch_unit.io.tsc_reg           := debug_tsc_reg
 
-   fetch_unit.io.f1_btb            := bpd_stage.io.f1_btb
+//   fetch_unit.io.f1_btb            := bpd_stage.io.f1_btb
    fetch_unit.io.f2_bpu_request    := bpd_stage.io.f2_bpu_request
    fetch_unit.io.f2_btb_resp       := bpd_stage.io.f2_btb_resp
    fetch_unit.io.f2_bpd_resp       := bpd_stage.io.f2_bpd_resp

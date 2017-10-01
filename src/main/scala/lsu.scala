@@ -401,15 +401,16 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
                                  !IsKilledByBranch(io.brinfo, exe_tlb_uop),
                             init=Bool(false))
    val mem_xcpt_cause = RegNext(
-      Mux1H(Iterable[(Bool, UInt)](
-         (io.exe_resp.valid && io.exe_resp.bits.mxcpt.valid).toBool -> io.exe_resp.bits.mxcpt.bits,
-         pf_ld -> rocket.Causes.load_page_fault.U,
-         pf_st -> rocket.Causes.store_page_fault.U,
-         ae_ld -> rocket.Causes.load_access.U,
-         ae_st -> rocket.Causes.store_access.U
-      )))
-   assert (PopCount(Vec(io.exe_resp.valid && io.exe_resp.bits.mxcpt.valid, pf_ld, pf_st, ae_ld, ae_st)) <= 1.U,
-      "[lsu] exception one-hit violated.")
+      Mux(io.exe_resp.valid && io.exe_resp.bits.mxcpt.valid,
+         io.exe_resp.bits.mxcpt.bits,
+      Mux(pf_ld,
+         rocket.Causes.load_page_fault.U,
+      Mux(pf_st,
+         rocket.Causes.store_page_fault.U,
+      Mux(ae_ld,
+         rocket.Causes.load_access.U,
+         rocket.Causes.store_access.U
+      )))))
 
    assert (!(dtlb.io.req.valid && exe_tlb_uop.is_fence), "Fence is pretending to talk to the TLB")
    assert (!(io.exe_resp.bits.mxcpt.valid && io.exe_resp.valid &&
