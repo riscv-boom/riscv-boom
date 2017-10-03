@@ -123,9 +123,9 @@ For more details (and to download o3-pipeview.py), visit the [gem5 wiki](http://
 * **Google group:** - https://groups.google.com/forum/#!forum/riscv-boom
 * **The Wiki** - https://github.com/ucb-bar/riscv-boom/wiki
 * **Tech Report** - The Berkeley Out-of-Order Machine (BOOM): An Industry-Competitive, Synthesizable, Parameterized RISC-V Processor (https://www.eecs.berkeley.edu/Pubs/TechRpts/2015/EECS-2015-167.html)
-* **Slides** - RISC_V Workshop #3 (http://riscv.org/workshop-jan2016/Wed1345%20RISCV%20Workshop%203%20BOOM.pdf)
+* **Slides** - RISC_V Workshop #3 (https://riscv.org/wp-content/uploads/2016/01/Wed1345-RISCV-Workshop-3-BOOM.pdf)
 * **Video** - RISC-V Workshop #3 (https://www.youtube.com/watch?v=JuJDPbzWpR0)
-* **Slides** - RISC-V Workshop #2 (http://riscv.org/workshop-jun2015/riscv-boom-workshop-june2015.pdf)
+* **Slides** - RISC-V Workshop #2 (https://riscv.org/wp-content/uploads/2015/06/riscv-boom-workshop-june2015.pdf)
 * **Video** - RISC-V Workshop #2 (https://www.youtube.com/watch?v=z8UInbiQbdA)
 
 
