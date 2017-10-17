@@ -1028,9 +1028,11 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    //-------------------------------------------------------------
 
    // detect pipeline freezes and throw error
-   val idle_cycles = freechips.rocketchip.util.WideCounter(32)
-   when (rob.io.commit.valids.asUInt.orR || reset.toBool) { idle_cycles := 0.U }
-   assert (!(idle_cycles.value(13)), "Pipeline has hung.")
+   if (IDLE_TIMEOUT > 0) {
+      val idle_cycles = freechips.rocketchip.util.WideCounter(32)
+      when (rob.io.commit.valids.asUInt.orR || reset.toBool) { idle_cycles := 0.U }
+      assert (!(idle_cycles.value(IDLE_TIMEOUT)), "Pipeline has hung.")
+   }
 
    fp_pipeline.io.debug_tsc_reg := debug_tsc_reg
 
