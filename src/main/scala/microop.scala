@@ -101,6 +101,7 @@ class MicroOp(implicit p: Parameters) extends BoomBundle()(p)
    val xcpt_pf_if       = Bool()             // I-TLB page fault.
    val replay_if        = Bool()             // I$ wants us to replay our ifetch request
    val xcpt_ma_if       = Bool()             // Misaligned fetch (jal/brjumping to misaligned addr).
+   val xcpt_ae_if       = Bool()             // Access exception
 
    // purely debug information
    val debug_wdata      = UInt(width=xLen)
