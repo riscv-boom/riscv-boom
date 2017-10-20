@@ -109,7 +109,7 @@ class GSkewBrPredictor(fetch_width: Int,
       else
       {
          var res = UInt(0,clen)
-         var remaining = input.toUInt
+         var remaining = input.asUInt
          for (i <- 0 to hlen-1 by clen)
          {
             val len = if (i + clen > hlen ) (hlen - i) else clen
