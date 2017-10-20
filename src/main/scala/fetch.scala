@@ -356,8 +356,6 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    f2_fetch_bundle.replay_if := io.imem.resp.bits.replay
    f2_fetch_bundle.xcpt_ma_if_oh := jal_targs_ma.asUInt
 
-   assert (!(io.imem.resp.valid && io.imem.resp.bits.xcpt.ae.inst)) // TODO what is ae?
-
    for (w <- 0 until fetch_width)
    {
       f2_fetch_bundle.bpu_info(w).btb_blame     := false.B

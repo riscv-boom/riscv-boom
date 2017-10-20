@@ -388,7 +388,6 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule()(p)
 
    val cs_legal = cs.legal
 //   dontTOuch(cs_legal)
-   when (sfence) { printf("cs_legal: %d", cs_legal) }
 
    val id_illegal_insn = !cs_legal ||
       cs.fp_val && io.csr_decode.fp_illegal || // TODO check for illegal rm mode: (io.fpu.illegal_rm)
