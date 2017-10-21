@@ -18,7 +18,7 @@ Atomic Memory Op Support |√
 Caches |√
 Viritual Memory |√
 Boots Linux |√
-Privileged Arch v1.9 |√
+Privileged Arch v1.10 |√
 External Debug |√
 
 **Google group:** (https://groups.google.com/forum/#!forum/riscv-boom)
@@ -56,7 +56,7 @@ like to run the Rocket processor, you will need to supply the Rocket
 configuration and project configuration:
 
 ````
-   $ cd emulator; make run CONFIG=DefaultConfig CFG_PROJECT=rocketchip
+   $ cd emulator; make run CONFIG=DefaultConfig CFG_PROJECT=freechips.rocketchip.system
 ````
 
 In the boom branch, the `CONFIG` variable defaults to `BOOMConfig` and the
@@ -71,6 +71,9 @@ you have not already do so). You will need to set the $RISCV environment
 variable (where the toolchain will be installed) and you will need to add
 $RISCV/bin to your $PATH.
 
+By default, `build.sh` builds a RV64GC compiler. We need to change that as
+BOOM does not support the RVC extension.
+
 ````
    $ export RISCV=/path/to/install/riscv/toolchain
    $ export PATH="${PATH}:$RISCV/bin"
@@ -80,7 +83,20 @@ $RISCV/bin to your $PATH.
    $ git submodule update --init
    $ cd riscv-tools
    $ git submodule update --init --recursive
-   $ ./build.sh
+   $ cp build.sh build-rv64g.sh
+   $ vim build-rv64g.sh
+````
+
+Modify the `riscv-gnu-toolchain` entry to specify rv64imafd as the ISA we want to build:
+
+````
+build_project riscv-isa-sim --prefix=$RISCV --with-fesvr=$RISCV --with-isa=rv64imafd
+````
+
+Now we can build the riscv-tools:
+
+````
+   $ ./build-rv64g.sh
    $ cd ../emulator; make run CONFIG=BOOMConfig
 ````
 
@@ -123,6 +139,7 @@ For more details (and to download o3-pipeview.py), visit the [gem5 wiki](http://
 * **Google group:** - https://groups.google.com/forum/#!forum/riscv-boom
 * **The Wiki** - https://github.com/ucb-bar/riscv-boom/wiki
 * **Tech Report** - The Berkeley Out-of-Order Machine (BOOM): An Industry-Competitive, Synthesizable, Parameterized RISC-V Processor (https://www.eecs.berkeley.edu/Pubs/TechRpts/2015/EECS-2015-167.html)
+* **CARRV Workshop Report** - BOOM v2: an open-source out-of-order RISC-V core (https://www2.eecs.berkeley.edu/Pubs/TechRpts/2017/EECS-2017-157.html)
 * **Slides** - RISC_V Workshop #3 (http://riscv.org/workshop-jan2016/Wed1345%20RISCV%20Workshop%203%20BOOM.pdf)
 * **Video** - RISC-V Workshop #3 (https://www.youtube.com/watch?v=JuJDPbzWpR0)
 * **Slides** - RISC-V Workshop #2 (http://riscv.org/workshop-jun2015/riscv-boom-workshop-june2015.pdf)
@@ -138,4 +155,18 @@ BOOM is a work-in-progress and remains in active development.
 
 **FAQ**
 
-To be filled in as questions are asked...
+*Help! BOOM isn't working.*
+
+First verify the software is not an issue. Run spike first:
+
+````
+# Verify it works on spike.
+spike --isa=rv64imafd my_program
+
+# Then we can run on BOOM.
+./emulator-freechips.rocketchip.system-SmallBoomConfig my_program 
+````
+
+Also verify the riscv-tools you built is the one pointed to within 
+the rocket-chip/riscv-tools repository. Otherwise a version mismatch can easily occur!
+
