@@ -91,6 +91,7 @@ Modify the `riscv-gnu-toolchain` entry to specify rv64imafd as the ISA we want t
 
 ````
 build_project riscv-isa-sim --prefix=$RISCV --with-fesvr=$RISCV --with-isa=rv64imafd
+build_project riscv-gnu-toolchain --prefix=$RISCV --with-arch=rv64imafd
 ````
 
 Now we can build the riscv-tools:
