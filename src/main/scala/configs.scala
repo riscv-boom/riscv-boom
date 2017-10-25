@@ -110,12 +110,17 @@ class WithMediumBooms extends Config((site, here, up) => {
 
 // try to match the Cortex-A15
 class WithMegaBooms extends Config((site, here, up) => {
+
+   // Set TL network to 128bits wide
+   case SystemBusKey => up(SystemBusKey, site).copy(beatBytes = 16)
+
    case RocketTilesKey => up(RocketTilesKey, site) map { r =>r.copy(
       core = r.core.copy(
          fWidth = 4),
       icache = Some(r.icache.get.copy(
          fetchBytes=4*4))
       )}
+
    case BoomKey => up(BoomKey, site).copy(
       numRobEntries = 128,
       issueParams = Seq(
