@@ -336,20 +336,6 @@ object FDivSqrtDecode extends DecodeConstants with freechips.rocketchip.rocket.c
 }
 
 
-// This is a copy from Rocket's CSRFile, but they keep the bundle anonymous. :(
-// TODO just pass in the full CSRFileIO?
-class CSRDecodeInfo extends Bundle
-{
-   val csr = UInt(INPUT, CSR.ADDRSZ)
-   val fp_illegal = Bool(OUTPUT)
-   val rocc_illegal = Bool(OUTPUT)
-   val read_illegal = Bool(OUTPUT)
-   val write_illegal = Bool(OUTPUT)
-   val write_flush = Bool(OUTPUT)
-   val system_illegal = Bool(OUTPUT)
-}
-
-
 class DecodeUnitIo(implicit p: Parameters) extends BoomBundle()(p)
 {
    val enq = new Bundle { val uop = new MicroOp().asInput }
@@ -357,7 +343,7 @@ class DecodeUnitIo(implicit p: Parameters) extends BoomBundle()(p)
 
    // from CSRFile
    val status = new freechips.rocketchip.rocket.MStatus().asInput
-   val csr_decode = Flipped(new CSRDecodeInfo)
+   val csr_decode = Flipped(new freechips.rocketchip.rocket.CSRDecodeInfo)
    val interrupt = Bool(INPUT)
    val interrupt_cause = UInt(INPUT, xLen)
 

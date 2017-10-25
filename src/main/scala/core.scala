@@ -362,7 +362,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       dec_valids(w)                      := fetched_inst_valid && dec_fbundle.uops(w).valid && !dec_finished_mask(w)
       decode_units(w).io.enq.uop         := dec_fbundle.uops(w)
       decode_units(w).io.status          := csr.io.status
-      decode_units(w).io.csr_decode      := csr.io.decode
+      decode_units(w).io.csr_decode      := csr.io.decode(w)
       decode_units(w).io.interrupt       := csr.io.interrupt
       decode_units(w).io.interrupt_cause := csr.io.interrupt_cause
 
