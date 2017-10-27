@@ -1264,12 +1264,11 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
            Bool(true) -> UInt(0)))
          when (rob.io.commit.valids(w))
          {
-            printf("%d 0x%x (0x%x) %d %d 0x%x\n",
-                   csr.io.status.prv,
+            printf("0x%x 0x%x (0x%x) %d %d %d\n",
+                   rob.io.commit.uops(w).debug_wdata,
                    Sext(rob.io.commit.uops(w).pc(vaddrBits,0), xLen),
                    rob.io.commit.uops(w).inst,
-                   addr(0), addr >> UInt(1),
-                   rob.io.commit.uops(w).debug_wdata)
+                   addr(5, 1), addr(0), csr.io.status.prv)
          }
       }
    }
