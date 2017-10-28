@@ -55,8 +55,6 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
    val boomParams: BoomCoreParams = p(BoomKey)
    require(xLen == 64)
 
-   val nPerfCounters    = rocketParams.nPerfCounters
-
    //************************************
    // Superscalar Widths
    val FETCH_WIDTH      = rocketParams.fetchWidth       // number of insts we can fetch
