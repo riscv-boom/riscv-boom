@@ -529,9 +529,9 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
             val f_pc = fetch_pc(vaddrBitsExtended-1, log2Up(coreInstBytes))
             val targ = last_target(vaddrBitsExtended-1, log2Up(coreInstBytes))
             when (f_pc =/= targ) {
-               printf("about to abort: [fetch] JAL is followed by the wrong instruction.")
-               printf("fetch_pc: 0x%x, last_target: 0x%x, last_nextlinepc: 0x%x\n",
-                  fetch_pc, last_target, last_nextlinepc)
+               // printf("about to abort: [fetch] JAL is followed by the wrong instruction.")
+               // printf("fetch_pc: 0x%x, last_target: 0x%x, last_nextlinepc: 0x%x\n",
+               //   fetch_pc, last_target, last_nextlinepc)
             }
             assert (f_pc === targ, "[fetch] JAL is followed by the wrong instruction.")
          }
