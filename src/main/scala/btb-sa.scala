@@ -403,7 +403,7 @@ class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParamet
    //************************************************
    // Output.
 
-   io.resp.valid := RegNext(s1_valid)
+   io.resp.valid := false.B // [TODO XXX renable BTB once we have sorted out request/I$ interaction] RegNext(s1_valid)
    io.resp.bits := RegNext(s1_resp_bits)
 
 

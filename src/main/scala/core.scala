@@ -308,6 +308,10 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 //   bpd_stage.io.icmiss := io.imem.ext_btb.icmiss
 //   bpd_stage.io.ext_btb_req.valid := io.imem.ext_btb.req.valid || io.imem.req.valid
 
+   // [TODO XXX renable BTB once we have sorted out request/I$ interaction]
+   bpd_stage.io.icmiss := false.B
+   bpd_stage.io.ext_btb_req.valid := false.B
+
    bpd_stage.io.br_unit := br_unit
    bpd_stage.io.redirect := io.imem.req.valid
    bpd_stage.io.flush := rob.io.flush.valid
