@@ -867,12 +867,12 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
             if (eu.uses_csr_wport && (j == 0))
             {
                rob.io.debug_wb_wdata(cnt) := Mux(wb_uop.ctrl.csr_cmd =/= rocket.CSR.N, csr.io.rw.rdata,
-                                             Mux(wb_uop.fp_val && wb_uop.dst_rtype === RT_FLT, unrec_out,
-                                                                                               data))
+                                             // Mux(wb_uop.fp_val && wb_uop.dst_rtype === RT_FLT, unrec_out,
+                                                                                               data)//)
             }
             else
             {
-               rob.io.debug_wb_wdata(cnt) := Mux(resp.bits.uop.fp_val, unrec_out, data)
+               rob.io.debug_wb_wdata(cnt) := /*Mux(resp.bits.uop.fp_val, unrec_out,*/ data //)
             }
          }
          else
