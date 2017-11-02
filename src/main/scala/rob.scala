@@ -641,8 +641,9 @@ class Rob(width: Int,
    io.com_xcpt.bits.cause := r_xcpt_uop.exc_cause
 
    io.com_xcpt.bits.badvaddr := Sext(r_xcpt_badvaddr,xLen)
+   val insn_break = rob_head_vals.reduce(_|_) && PriorityMux(rob_head_vals, io.commit.uops.map{u => u.is_break})
 
-   val refetch_inst = exception_thrown
+   val refetch_inst = exception_thrown || insn_break
    val flush_pc  = rob_pc_hob.read(rob_head) +
                    PriorityMux(rob_head_vals, Range(0,width).map(w => UInt(w << 2))) +
                    Mux(refetch_inst, UInt(0), UInt(4))
