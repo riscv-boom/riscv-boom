@@ -10,9 +10,11 @@ import freechips.rocketchip.rocket._
 import freechips.rocketchip.tile._
 import freechips.rocketchip.config.{Parameters, Field}
 
-case object BoomKey extends Field[BoomCoreParams]
+//case object BoomKey extends Field[BoomCoreParams]
 
 case class BoomCoreParams(
+   fetchWidth: Int = 1,
+   decodeWidth: Int = 1,
    numRobEntries: Int = 16,
    issueParams: Seq[IssueParams] = Seq(
          IssueParams(issueWidth=1, numEntries=16, iqType=IQT_MEM.litValue),
@@ -45,22 +47,51 @@ case class BoomCoreParams(
    imulLatency: Int = 3,
    fetchLatency: Int = 3,
    renameLatency: Int = 2,
-   regreadLatency: Int = 1
-)
+   regreadLatency: Int = 1,
+   nPerfCounters: Int = 0,
+	/* more stuff */
+
+   bootFreqHz: BigInt = 0,
+   fpu: Option[FPUParams] = Some(FPUParams()),
+   haveBasicCounters: Boolean = true,
+   misaWritable: Boolean = true,
+   mtvecInit: Option[BigInt] = Some(BigInt(0)),
+   mtvecWritable: Boolean = true,
+   mulDiv: Option[freechips.rocketchip.rocket.MulDivParams] = Some(MulDivParams()),
+   nBreakpoints: Int = 1,
+   nL2TLBEntries: Int = 0,
+   nLocalInterrupts: Int = 0,
+   tileControlAddr: Option[BigInt] = None,
+   useAtomics: Boolean = true,
+   useDebug: Boolean = true,
+   useUser: Boolean = true,
+   useVM: Boolean = true
+) extends freechips.rocketchip.tile.CoreParams
+{
+   val retireWidth: Int = decodeWidth
+   require (fetchWidth == decodeWidth)
+   val useCompressed: Boolean = false
+	require (useCompressed == false)
+   val instBits: Int = if (useCompressed) 16 else 32
+
+	val jumpInFrontend: Boolean = false // unused in boom
+   val nPMPs: Int = 0
+}
 
 trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
 {
-   // HACK this is a bit hacky since BoomParams can't extend RocketParams.
-   val rocketParams: RocketCoreParams = tileParams.core.asInstanceOf[RocketCoreParams]
-   val boomParams: BoomCoreParams = p(BoomKey)
+//   val rocketParams: RocketCoreParams = tileParams.core.asInstanceOf[RocketCoreParams]
+//   val boomParams: BoomCoreParams = p(BoomKey)
+   val boomParams: BoomCoreParams = tileParams.core.asInstanceOf[BoomCoreParams]
    require(xLen == 64)
+
 
    //************************************
    // Superscalar Widths
-   val FETCH_WIDTH      = rocketParams.fetchWidth       // number of insts we can fetch
-   val DECODE_WIDTH     = rocketParams.decodeWidth
+   val FETCH_WIDTH      = boomParams.fetchWidth       // number of insts we can fetch
+   val DECODE_WIDTH     = boomParams.decodeWidth
    val DISPATCH_WIDTH   = DECODE_WIDTH                // number of insts put into the IssueWindow
-   val COMMIT_WIDTH     = rocketParams.retireWidth
+   val COMMIT_WIDTH     = boomParams.retireWidth
 
    require (DECODE_WIDTH == COMMIT_WIDTH)
    require (DISPATCH_WIDTH == COMMIT_WIDTH)
@@ -82,16 +113,16 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
 
    //************************************
    // Functional Units
-   val usingFDivSqrt = rocketParams.fpu.isDefined && rocketParams.fpu.get.divSqrt
+   val usingFDivSqrt = boomParams.fpu.isDefined && boomParams.fpu.get.divSqrt
 
-   val mulDivParams = rocketParams.mulDiv.getOrElse(MulDivParams())
+   val mulDivParams = boomParams.mulDiv.getOrElse(MulDivParams())
 
    //************************************
    // Pipelining
 
    val imulLatency = boomParams.imulLatency
-   val dfmaLatency = if (rocketParams.fpu.isDefined) rocketParams.fpu.get.dfmaLatency else 3
-   val sfmaLatency = if (rocketParams.fpu.isDefined) rocketParams.fpu.get.sfmaLatency else 3
+   val dfmaLatency = if (boomParams.fpu.isDefined) boomParams.fpu.get.dfmaLatency else 3
+   val sfmaLatency = if (boomParams.fpu.isDefined) boomParams.fpu.get.sfmaLatency else 3
    // All FPU ops padded out to same delay for writeport scheduling.
    require (sfmaLatency == dfmaLatency)
 

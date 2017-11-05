@@ -135,7 +135,7 @@ class ALUExeUnit(
       num_rf_write_ports = 1,
       num_bypass_stages =
          (if (has_fpu && has_alu) p(tile.TileKey).core.fpu.get.dfmaLatency
-         else if (has_alu && has_mul && !use_slow_mul) p(BoomKey).imulLatency
+         else if (has_alu && has_mul && !use_slow_mul) 3 //TODO XXX p(tile.TileKey).core.imulLatency
          else if (has_alu) 1 else 0),
       data_width = if (has_fpu || has_fdiv) 65 else 64,
       bypassable = has_alu,
@@ -493,14 +493,14 @@ class IntToFPExeUnit(implicit p: Parameters) extends ExecutionUnit(
    io.fu_types := Mux(!busy, FU_I2F, Bits(0))
    io.resp(0).bits.writesToIRF = false
 
-   val ifpu = Module(new IntToFPUnit())
+   val ifpu = Module(new IntToFPUnit(latency=intToFpLatency))
    ifpu.io.req <> io.req
    ifpu.io.fcsr_rm := io.fcsr_rm
    ifpu.io.brinfo <> io.brinfo
    io.bypass <> ifpu.io.bypass
 
    // buffer up results since we share write-port on integer regfile.
-   val queue = Module(new QueueForMicroOpWithData(entries = p(BoomKey).intToFpLatency + 3, data_width)) // TODO being overly conservative
+   val queue = Module(new QueueForMicroOpWithData(entries = intToFpLatency + 3, data_width)) // TODO being overly conservative
    queue.io.enq.valid       := ifpu.io.resp.valid
    queue.io.enq.bits.uop    := ifpu.io.resp.bits.uop
    queue.io.enq.bits.data   := ifpu.io.resp.bits.data

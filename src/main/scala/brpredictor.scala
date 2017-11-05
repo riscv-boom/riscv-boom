@@ -117,8 +117,8 @@ object BrPredictor
 {
    def apply(tileParams: freechips.rocketchip.tile.TileParams, boomParams: BoomCoreParams)(implicit p: Parameters): BrPredictor =
    {
-      val rocketParams: RocketCoreParams = tileParams.core.asInstanceOf[RocketCoreParams]
-      val fetch_width = rocketParams.fetchWidth
+      val boomParams: BoomCoreParams = p(freechips.rocketchip.tile.TileKey).core.asInstanceOf[BoomCoreParams]
+      val fetch_width = boomParams.fetchWidth
       val enableCondBrPredictor = boomParams.enableBranchPredictor
 
       var br_predictor: BrPredictor = null

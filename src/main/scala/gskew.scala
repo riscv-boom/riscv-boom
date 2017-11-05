@@ -57,7 +57,8 @@ object GSkewBrPredictor
 {
    def GetRespInfoSize(p: Parameters, fetchWidth: Int): Int =
    {
-      val params = p(BoomKey).gskew.get
+      val boomParams: BoomCoreParams = p(freechips.rocketchip.tile.TileKey).core.asInstanceOf[BoomCoreParams]
+      val params = boomParams.gskew.get
       val dummy = new GSkewResp(
          fetchWidth,
          log2Up(params.bimo_num_entries),
@@ -75,7 +76,7 @@ class GSkewBrPredictor(fetch_width: Int,
                         enable_meta: Boolean = false
    )(implicit p: Parameters) extends BrPredictor(fetch_width, history_length)(p)
 {
-   val params = p(BoomKey).gskew.get
+   val params = boomParams.gskew.get
    val bimo_num_entries = params.bimo_num_entries
    val gsh0_num_entries = params.gsh0_num_entries
    val gsh1_num_entries = params.gsh1_num_entries

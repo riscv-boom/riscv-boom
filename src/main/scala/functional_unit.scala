@@ -686,8 +686,8 @@ class FPUUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(
 }
 
 
-class IntToFPUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(
-   num_stages = p(BoomKey).intToFpLatency,
+class IntToFPUnit(latency: Int)(implicit p: Parameters) extends PipelinedFunctionalUnit(
+   num_stages = latency,
    num_bypass_stages = 0,
    earliest_bypass_stage = 0,
    data_width = 65)(p)

@@ -17,12 +17,36 @@ import freechips.rocketchip.tile._
 import freechips.rocketchip.tilelink._
 import freechips.rocketchip.util._
 import boom._
+import boom.system.BoomTilesKey
 
 // scalastyle:off
 
-class BOOMConfig extends Config(new DefaultBoomConfig ++ new WithNBigCores(1) ++ new WithoutTLMonitors ++ new BaseConfig)
-class SmallBoomConfig extends Config(new WithSmallBooms ++ new DefaultBoomConfig ++ new WithNBigCores(1) ++ new WithoutTLMonitors ++ new BaseConfig)
-class MediumBoomConfig extends Config(new WithMediumBooms ++ new DefaultBoomConfig ++ new WithNBigCores(1) ++ new WithoutTLMonitors ++ new BaseConfig)
-class MegaBoomConfig extends Config(new WithMegaBooms ++ new DefaultBoomConfig ++ new WithNBigCores(1) ++ new WithoutTLMonitors ++ new BaseConfig)
+class BoomConfig extends Config(new DefaultBoomConfig ++ new WithNBoomCores(1) ++ new WithoutTLMonitors ++ new freechips.rocketchip.system.BaseConfig)
+//class SmallBoomConfig extends Config(new WithSmallBooms ++ new DefaultBoomConfig ++ new WithNBigCores(1) ++ new WithoutTLMonitors ++ new BaseConfig)
+//class MediumBoomConfig extends Config(new WithMediumBooms ++ new DefaultBoomConfig ++ new WithNBigCores(1) ++ new WithoutTLMonitors ++ new BaseConfig)
+//class MegaBoomConfig extends Config(new WithMegaBooms ++ new DefaultBoomConfig ++ new WithNBigCores(1) ++ new WithoutTLMonitors ++ new BaseConfig)
 
 // scalastyle:on
+
+
+// Allow for some number N BOOM cores.
+class WithNBoomCores(n: Int) extends Config((site, here, up) => {
+  case BoomTilesKey => {
+    // "big" is vestigial -- we could also add a corresponding "little" vector too for hetereogenous setups.
+    val big = BoomTileParams(
+      core   = BoomCoreParams(mulDiv = Some(MulDivParams(
+        mulUnroll = 8,
+        mulEarlyOut = true,
+        divEarlyOut = true))),
+      dcache = Some(DCacheParams(
+        rowBits = site(SystemBusKey).beatBits,
+        nMSHRs = 0,
+        blockBytes = site(CacheBlockBytes))),
+      icache = Some(ICacheParams(
+        rowBits = site(SystemBusKey).beatBits,
+        blockBytes = site(CacheBlockBytes))))
+    List.tabulate(n)(i => big.copy(hartid = i))
+  }
+})
+
+

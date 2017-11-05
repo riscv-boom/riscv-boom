@@ -98,7 +98,8 @@ object TageBrPredictor
 {
    def GetRespInfoSize(p: Parameters, fetchWidth: Int): Int =
    {
-      val params = p(BoomKey).tage.get
+      val boomParams: BoomCoreParams = p(freechips.rocketchip.tile.TileKey).core.asInstanceOf[BoomCoreParams]
+      val params = boomParams.tage.get
       val dummy = new TageResp(
          fetch_width = fetchWidth,
          num_tables = params.num_tables,

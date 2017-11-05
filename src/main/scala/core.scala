@@ -45,9 +45,24 @@ class BoomBundle(implicit val p: Parameters) extends freechips.rocketchip.util.P
 //-------------------------------------------------------------
 //-------------------------------------------------------------
 
+trait HasBoomCoreIO extends freechips.rocketchip.tile.HasTileParameters {
+   implicit val p: Parameters
+   val io = new freechips.rocketchip.tile.CoreBundle()(p)
+      with freechips.rocketchip.tile.HasExternallyDrivenTileConstants {
+         val interrupts = new freechips.rocketchip.tile.TileInterrupts().asInput
+         val imem  = new freechips.rocketchip.rocket.FrontendIO
+         val dmem = new freechips.rocketchip.rocket.HellaCacheIO
+         val ptw = new freechips.rocketchip.rocket.DatapathPTWIO().flip
+         val fpu = new freechips.rocketchip.tile.FPUCoreIO().flip
+         val rocc = new freechips.rocketchip.tile.RoCCCoreIO().flip
+         val ptw_tlb = new freechips.rocketchip.rocket.TLBPTWIO()
+         val trace = Vec(coreParams.retireWidth,
+            new freechips.rocketchip.rocket.TracedInstruction).asOutput
+   }
+}
 
 class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut) extends BoomModule()(p)
-   with freechips.rocketchip.tile.HasCoreIO
+   with HasBoomCoreIO
 {
    //**********************************
    // construct all of the modules
@@ -190,12 +205,12 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
 
    val csr = Module(new freechips.rocketchip.rocket.CSRFile(perfEvents))
- 
-   // evaluate performance counters 
-   val icache_blocked = !(io.imem.resp.valid || RegNext(io.imem.resp.valid)) 
-   csr.io.counters foreach { c => c.inc := RegNext(perfEvents.evaluate(c.eventSel)) } 
-            
-   
+
+   // evaluate performance counters
+   val icache_blocked = !(io.imem.resp.valid || RegNext(io.imem.resp.valid))
+   csr.io.counters foreach { c => c.inc := RegNext(perfEvents.evaluate(c.eventSel)) }
+
+
 
 
    //****************************************
@@ -280,11 +295,11 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    // will have to later redirect the PC back to the regularly scheduled program.
    fetch_unit.io.sfence_take_pc    := lsu.io.exe_resp.bits.sfence.valid
    fetch_unit.io.sfence_addr       := lsu.io.exe_resp.bits.sfence.bits.addr
-    
+
    // We must redirect the PC the cycle after playing the SFENCE game.
    fetch_unit.io.flush_take_pc     := rob.io.flush.valid || RegNext(lsu.io.exe_resp.bits.sfence.valid)
    fetch_unit.io.flush_pc          := rob.io.flush.bits.pc
-    
+
 
 
    io.imem.flush_icache :=
@@ -1382,7 +1397,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
          }
       }
    }
- 
+
    //-------------------------------------------------------------
    //-------------------------------------------------------------
    // Page Table Walker
