@@ -35,7 +35,7 @@ class BoomTile(val boomParams: BoomTileParams)(implicit p: Parameters)
    extends freechips.rocketchip.tile.HartedTile(boomParams, boomParams.hartid)(p)
    with HasExternalInterrupts
    with HasLazyRoCC  // implies CanHaveSharedFPU with CanHavePTW with HasHellaCache
-   with CanHaveScratchpad { // implies CanHavePTW with HasHellaCache with HasICacheFrontend
+   with CanHaveBoomScratchpad { // implies CanHavePTW with HasHellaCache with HasICacheFrontend
 
   nDCachePorts += 1 // core TODO dcachePorts += () => module.core.io.dmem ??
 
@@ -135,7 +135,7 @@ class BoomTile(val boomParams: BoomTileParams)(implicit p: Parameters)
 
 class BoomTileBundle(outer: BoomTile) extends BaseTileBundle(outer)
     with HasExternalInterruptsBundle
-    with CanHaveScratchpadBundle
+    with CanHaveBoomScratchpadBundle
     with CanHaltAndCatchFire {
   val halt_and_catch_fire = outer.boomParams.hcfOnUncorrectable.option(Bool(OUTPUT))
 }
@@ -143,7 +143,7 @@ class BoomTileBundle(outer: BoomTile) extends BaseTileBundle(outer)
 class BoomTileModule(outer: BoomTile) extends BaseTileModule(outer, () => new BoomTileBundle(outer))
     with HasExternalInterruptsModule
     with HasLazyRoCCModule
-    with CanHaveScratchpadModule {
+    with CanHaveBoomScratchpadModule {
 
   val core = Module(new BoomCore()(outer.p, outer.dcache.module.edge))
   val uncorrectable = RegInit(Bool(false))
