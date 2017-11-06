@@ -28,7 +28,7 @@ For documentation on BOOM visit (https://ccelio.github.io/riscv-boom-doc).
 The [wiki](https://github.com/ucb-bar/riscv-boom/wiki) may also have more information. 
 
 
-**Important!**
+### Important!
 
 This repository is **NOT A SELF-RUNNING** repository. To instantiate a BOOM core, please use the
 boom-template SoC generator found in the git repository (https://github.com/ccelio/boom-template).
@@ -38,7 +38,7 @@ riscv-tools you have built yourself previously may be out of date! Likewise, the
 risv-tools may be running ahead and may also not work!
 
 
-**Requirements**
+### Requirements
 
 You must set the $RISCV environment variable to where you would like the RISC-V toolchain to be
 installed. You must also add $RISCV/bin to your $PATH.
@@ -47,8 +47,19 @@ The instructions below will walk you through installing the RISC-V toolchain. If
 problems, go to the README in [riscv-tools](https://github.com/riscv/riscv-tools) for additional
 information.
 
+### Code Organization
 
-**Directions**
+The Chisel source code is found in `src/main/scala`:
+
+ * bpu - branch predictor unit
+ * exu - execute/core unit
+ * ifu - instruction fetch unit
+ * lsu - load/store/memory unit
+ * common - configs, utilities, tile definition
+ * system - Non-core system-level infrastructure
+ 
+
+### Directions
 
 To build a BOOM Verilator emulator and its corresponding RISC-V toolchain, and run BOOM through a
 couple of simple tests:
@@ -71,7 +82,7 @@ There are many BOOM configurations to choose from (and modify!). In fact, the `C
 defaults to `BoomConfig`, so it is not necessary to pass a `CONFIG` option.
 
  
-**Installing the RISC-V Toolchain**
+### Installing the RISC-V Toolchain
 
 First, set the $RISCV environment variable (to where you want the toolchain to be installed). You 
 will also need to add $RISCV/bin to your $PATH.
@@ -117,7 +128,7 @@ For more detailed information on the toolchain, visit
 [the riscv-tools repository](https://github.com/riscv/riscv-tools).
 
 
-**Using the gem5 O3 Pipeline Viewer with BOOM**
+## Using the gem5 O3 Pipeline Viewer with BOOM
 
 The O3 Pipeline Viewer is an out-of-order pipeline viewer included in the
 gem5 suite. BOOM is capable of generating traces compatible with the
@@ -147,7 +158,7 @@ For more details (and to download o3-pipeview.py), visit the [gem5 wiki](http://
 
 
 
-**More Info**
+## More Info
 
 * **The Design Spec** - https://ccelio.github.io/riscv-boom-doc
 * **Google group:** - https://groups.google.com/forum/#!forum/riscv-boom
@@ -161,7 +172,7 @@ For more details (and to download o3-pipeview.py), visit the [gem5 wiki](http://
 * **Video** - RISC-V Workshop #2 (https://www.youtube.com/watch?v=z8UInbiQbdA)
 
 
-**Disclaimer!**
+### Disclaimer!
 
 The RISC-V privileged ISA,  platform, and Debug specs are still in flux. BOOM will do its best to
 stay up-to-date with it!
@@ -169,7 +180,7 @@ stay up-to-date with it!
 BOOM is a work-in-progress and remains in active development.
 
 
-**FAQ**
+## FAQ
 
 *Help! BOOM isn't working.*
 
