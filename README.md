@@ -27,59 +27,71 @@ For documentation on BOOM visit (https://ccelio.github.io/riscv-boom-doc).
 
 The [wiki](https://github.com/ucb-bar/riscv-boom/wiki) may also have more information. 
 
+
 **Important!**
 
-This repository is **NOT A SELF-RUNNING** repository. To instantiate a BOOM core, please use the Rocket chip generator found in the rocket-chip git repository (https://github.com/ucb-bar/rocket-chip).
+This repository is **NOT A SELF-RUNNING** repository. To instantiate a BOOM core, please use the
+boom-template SoC generator found in the git repository (https://github.com/ccelio/boom-template).
+
+Note: you **MUST** build the riscv-tools as described to build the correct version. A copy of
+riscv-tools you have built yourself previously may be out of date! Likewise, the `master` branch of
+risv-tools may be running ahead and may also not work!
 
 
 **Requirements**
 
-These instructions assume you have already installed the [riscv-tools](https://github.com/riscv/riscv-tools) toolchain.
+You must set the $RISCV environment variable to where you would like the RISC-V toolchain to be
+installed. You must also add $RISCV/bin to your $PATH.
 
-If you have not, follow additional instructions below.
+The instructions below will walk you through installing the RISC-V toolchain. If you run into
+problems, go to the README in [riscv-tools](https://github.com/riscv/riscv-tools) for additional
+information.
 
 
 **Directions**
 
-To build a BOOM Verilator emulator and run BOOM through a couple of simple tests:
+To build a BOOM Verilator emulator and its corresponding RISC-V toolchain, and run BOOM through a
+couple of simple tests:
 
 ````
-   $ git clone https://github.com/ucb-bar/rocket-chip.git
-   $ cd rocket-chip
-   $ git checkout boom
-   $ git submodule update --init
-   $ cd emulator; make run CONFIG=BOOMConfig
+   $ git clone https://github.com/ccelio/boom-template.git
+   $ cd boom-template
+   $ ./scripts/init-submodules.sh
+   $ ./scripts/build-tools.sh 
+   $ cd verisim
+   $ make run CONFIG=BoomConfig
 ````
 
-There are many BOOM configurations to choose from (and modify!). If you would
-like to run the Rocket processor, you will need to supply the Rocket
-configuration and project configuration:
+Note: the above `build-tools.sh` script builds a specific commit of the risv-tools that BOOM is
+compatible with. Building your own riscv-tools copy *may* produce an incompatible version (there is
+too much development churn in risv-tools currently!). The `build-tools.sh` will also build a RV64G
+toolchain -- the default riscv-tool build scripts produce an incompatible RV64GC toolchain.
 
-````
-   $ cd emulator; make run CONFIG=DefaultConfig CFG_PROJECT=freechips.rocketchip.system
-````
-
-In the boom branch, the `CONFIG` variable defaults to `BOOMConfig` and the
-`CFG_PROJECT` variable defaults to `boom`.
-
+There are many BOOM configurations to choose from (and modify!). In fact, the `CONFIG` variable
+defaults to `BoomConfig`, so it is not necessary to pass a `CONFIG` option.
 
  
 **Installing the RISC-V Toolchain**
 
-The following (modified) instructions will also build the RISC-V toolchain (if
-you have not already do so). You will need to set the $RISCV environment
-variable (where the toolchain will be installed) and you will need to add
-$RISCV/bin to your $PATH.
+First, set the $RISCV environment variable (to where you want the toolchain to be installed). You 
+will also need to add $RISCV/bin to your $PATH.
 
-By default, `build.sh` builds a RV64GC compiler. We need to change that as
+````
+   $ git clone https://github.com/ccelio/boom-template.git
+   $ cd boom-template
+   $ ./scripts/build-tools.sh 
+````
+
+That's it. But read on for some more information about what's going on behind the scenes.
+
+By default, `riscv-tools/build.sh` builds a RV64GC compiler. Therefore, We need to change that as
 BOOM does not support the RVC extension.
 
 ````
    $ export RISCV=/path/to/install/riscv/toolchain
    $ export PATH="${PATH}:$RISCV/bin"
-   $ git clone https://github.com/ucb-bar/rocket-chip.git
-   $ cd rocket-chip
-   $ git checkout boom
+   $ git clone https://github.com/ccelio/boom-template.git
+   $ cd boom-template/rocket-chip
    $ git submodule update --init
    $ cd riscv-tools
    $ git submodule update --init --recursive
@@ -87,22 +99,23 @@ BOOM does not support the RVC extension.
    $ vim build-rv64g.sh
 ````
 
-Modify the `riscv-gnu-toolchain` entry to specify rv64imafd as the ISA we want to build:
+Modify the `riscv-gnu-toolchain` and `riscv-isa-sim` entries to specify rv64imafd as the ISA we want
+to build:
 
 ````
 build_project riscv-isa-sim --prefix=$RISCV --with-fesvr=$RISCV --with-isa=rv64imafd
 build_project riscv-gnu-toolchain --prefix=$RISCV --with-arch=rv64imafd
 ````
 
-Now we can build the riscv-tools:
+Now we can build the riscv-tools within (boom-template/rocket-chip/riscv-tools):
 
 ````
    $ ./build-rv64g.sh
-   $ cd ../emulator; make run CONFIG=BOOMConfig
 ````
 
 For more detailed information on the toolchain, visit 
 [the riscv-tools repository](https://github.com/riscv/riscv-tools).
+
 
 **Using the gem5 O3 Pipeline Viewer with BOOM**
 
@@ -139,6 +152,7 @@ For more details (and to download o3-pipeview.py), visit the [gem5 wiki](http://
 * **The Design Spec** - https://ccelio.github.io/riscv-boom-doc
 * **Google group:** - https://groups.google.com/forum/#!forum/riscv-boom
 * **The Wiki** - https://github.com/ucb-bar/riscv-boom/wiki
+* **Chisel Learning Journey** - https://github.com/librecores/riscv-sodor/wiki/Chisel-Learning-Journey
 * **Tech Report** - The Berkeley Out-of-Order Machine (BOOM): An Industry-Competitive, Synthesizable, Parameterized RISC-V Processor (https://www.eecs.berkeley.edu/Pubs/TechRpts/2015/EECS-2015-167.html)
 * **CARRV Workshop Report** - BOOM v2: an open-source out-of-order RISC-V core (https://www2.eecs.berkeley.edu/Pubs/TechRpts/2017/EECS-2017-157.html)
 * **Slides** - RISC_V Workshop #3 (http://riscv.org/workshop-jan2016/Wed1345%20RISCV%20Workshop%203%20BOOM.pdf)
@@ -149,7 +163,8 @@ For more details (and to download o3-pipeview.py), visit the [gem5 wiki](http://
 
 **Disclaimer!**
 
-The RISC-V privileged ISA,  platform, and Debug specs are still in flux. BOOM will do its best to stay up-to-date with it!
+The RISC-V privileged ISA,  platform, and Debug specs are still in flux. BOOM will do its best to
+stay up-to-date with it!
 
 BOOM is a work-in-progress and remains in active development.
 
@@ -169,5 +184,5 @@ spike --isa=rv64imafd my_program
 ````
 
 Also verify the riscv-tools you built is the one pointed to within 
-the rocket-chip/riscv-tools repository. Otherwise a version mismatch can easily occur!
+the boom-template/rocket-chip/riscv-tools repository. Otherwise a version mismatch can easily occur!
 
