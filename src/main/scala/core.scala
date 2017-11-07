@@ -1252,7 +1252,7 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
    if (COMMIT_LOG_PRINTF)
    {
       when(rob.io.com_xcpt.valid && csr.io.interrupt) {
-        printf("interrupt cause: %d\n", csr.io.interrupt_cause(xLen-2, 0))
+        printf("interrupt cause: %d\n", csr.io.interrupt_cause(7, 0))
       }
       for (w <- 0 until COMMIT_WIDTH)
       {
