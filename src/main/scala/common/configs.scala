@@ -106,7 +106,7 @@ class WithMediumBooms extends Config((site, here, up) => {
 })
 
 
-// Try to match the Cortex-A15.
+// Try to match the Cortex-A15. Don't expect good QoR (yet).
 class WithMegaBooms extends Config((site, here, up) => {
    case BoomTilesKey => up(BoomTilesKey, site) map { r =>r.copy(
       core = r.core.copy(
@@ -118,14 +118,17 @@ class WithMegaBooms extends Config((site, here, up) => {
             IssueParams(issueWidth=2, numEntries=20, iqType=IQT_INT.litValue),
             IssueParams(issueWidth=1, numEntries=20, iqType=IQT_FP.litValue)), // TODO make this 2-wide issue
          numIntPhysRegisters = 128,
-         numFpPhysRegisters = 80,
+         numFpPhysRegisters = 64,
          numLsuEntries = 32,
+         maxBrCount = 16,
+         btb = BTBsaParameters(nSets=128, nWays=4, nRAS=16, tagSz=20),
          gshare = Some(GShareParameters(enabled=true, history_length=15))),
          // tage is unsupported in boomv2 for now.
          //tage = Some(TageParameters())
-      icache = Some(r.icache.get.copy(
-         fetchBytes=4*4))
+      dcache = Some(DCacheParams(rowBits = site(SystemBusKey).beatBytes*8, nSets=64, nWays=16, nMSHRs=4, nTLBEntries=8)),
+      icache = Some(ICacheParams(fetchBytes = 4*4, rowBits = site(SystemBusKey).beatBytes*8, nSets=64, nWays=8))
       )}
    // Set TL network to 128bits wide
    case SystemBusKey => up(SystemBusKey, site).copy(beatBytes = 16)
 })
+
