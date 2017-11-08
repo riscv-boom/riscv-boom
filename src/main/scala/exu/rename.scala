@@ -248,26 +248,26 @@ class RenameStage(
       else
       {
          require (renameLatency == 2)
-         val r_valids = Reg(Vec.fill(pl_width) {Bool(false)})
-         val r_uops   = Reg(Vec(pl_width, new MicroOp()))
+         val r_valid = Reg(init = false.B)
+         val r_uop   = Reg(new MicroOp())
 
          when (io.kill)
          {
-            r_valids(w) := Bool(false)
+            r_valid := false.B
          }
          .elsewhen (ren2_will_proceed)
          {
-            r_valids(w) := ren1_will_fire(w)
-            r_uops(w) := GetNewUopAndBrMask(ren1_uops(w), io.brinfo)
+            r_valid := ren1_will_fire(w)
+            r_uop := GetNewUopAndBrMask(ren1_uops(w), io.brinfo)
          }
          .otherwise
          {
-            r_valids(w) := r_valids(w) && !ren2_will_fire(w) // clear bit if uop gets dispatched
-            r_uops(w) := GetNewUopAndBrMask(r_uops(w), io.brinfo)
+            r_valid := r_valid && !ren2_will_fire(w) // clear bit if uop gets dispatched
+            r_uop := GetNewUopAndBrMask(r_uop, io.brinfo)
          }
 
-         ren2_valids(w) := r_valids(w)
-         ren2_uops  (w) := r_uops(w)
+         ren2_valids(w) := r_valid
+         ren2_uops  (w) := r_uop
       }
    }
 
