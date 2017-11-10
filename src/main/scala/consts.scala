@@ -21,7 +21,7 @@ import freechips.rocketchip.util.Str
 
 trait BOOMDebugConstants
 {
-   val DEBUG_PRINTF        = false // use the Chisel printf functionality
+   val DEBUG_PRINTF        = true  // use the Chisel printf functionality
    val COMMIT_LOG_PRINTF   = false // dump commit state, for comparision against ISA sim
    val O3PIPEVIEW_PRINTF   = false // dump trace for O3PipeView from gem5
    val O3_CYCLE_TIME       = (1000)// "cycle" time expected by o3pipeview.py
@@ -278,6 +278,7 @@ trait ScalarOpConstants
 
    val uopSYSTEM    = UInt(122, UOPC_SZ) // pass uop down the CSR pipeline and let it handle it
    val uopSFENCE    = UInt(123, UOPC_SZ)
+   val uopLDR       = UInt(124, UOPC_SZ)
 
    // The Bubble Instruction (Machine generated NOP)
    // Insert (XOR x0,x0,x0) which is different from software compiler

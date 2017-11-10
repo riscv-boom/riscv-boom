@@ -648,8 +648,12 @@ class MemAddrCalcUnit(implicit p: Parameters)
       (((typ === MT_W) || (typ === MT_WU)) && (effective_address(1,0) =/= UInt(0))) ||
       ((typ ===  MT_D) && (effective_address(2,0) =/= UInt(0)))
 
-   val ma_ld = io.req.valid && io.req.bits.uop.uopc === uopLD && misaligned
-   val ma_st = io.req.valid && (io.req.bits.uop.uopc === uopSTA || io.req.bits.uop.uopc === uopAMO_AG) && misaligned
+   val ma_ld = io.req.valid &&
+      (io.req.bits.uop.uopc === uopLD || io.req.bits.uop.uopc === uopLDR) &&
+      misaligned
+   val ma_st = io.req.valid &&
+      (io.req.bits.uop.uopc === uopSTA || (io.req.bits.uop.uopc === uopAMO_AG && !io.req.bits.uop.is_load)) &&
+      misaligned
 
    io.resp.bits.mxcpt.valid := ma_ld || ma_st
    io.resp.bits.mxcpt.bits  := Mux(ma_ld, UInt(freechips.rocketchip.rocket.Causes.misaligned_load),

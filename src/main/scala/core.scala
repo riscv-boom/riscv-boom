@@ -853,19 +853,19 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
 
          if (!exe_units(i).is_mem_unit) {
-            assert (!wbIsValid(RT_FLT), "[fppipeline] An FP writeback is being attempted to the Int Regfile.")
+            assert (!wbIsValid(RT_FLT), "[core] An FP writeback is being attempted to the Int Regfile.")
          }
 
          assert (!(exe_units(i).io.resp(j).valid &&
             !exe_units(i).io.resp(j).bits.uop.ctrl.rf_wen &&
             exe_units(i).io.resp(j).bits.uop.dst_rtype === RT_FIX),
-            "[fppipeline] An Int writeback is being attempted with rf_wen disabled.")
+            "[core] An Int writeback is being attempted with rf_wen disabled to exe_units("+i+").resp("+j+")")
 
          if (!exe_units(i).is_mem_unit) {
             assert (!(exe_units(i).io.resp(j).valid &&
                exe_units(i).io.resp(j).bits.uop.ctrl.rf_wen &&
                exe_units(i).io.resp(j).bits.uop.dst_rtype =/= RT_FIX),
-               "[fppipeline] writeback being attempted to Int RF with dst != Int type exe_units("+i+").resp("+j+")")
+               "[core] writeback being attempted to Int RF with dst != Int type exe_units("+i+").resp("+j+")")
          }
 
          w_cnt += 1

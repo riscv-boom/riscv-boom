@@ -212,10 +212,10 @@ object XDecode extends DecodeConstants with freechips.rocketchip.rocket.constant
    AMOMAX_D-> List(Y, N, X, uopAMO_AG, IQT_MEM, FU_MEM, RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, Y, Y, N, N, M_XA_MAX, MT_D,UInt(0),N, N, N, N, N, Y, Y, CSR.N),
    AMOMAXU_D->List(Y, N, X, uopAMO_AG, IQT_MEM, FU_MEM, RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, Y, Y, N, N, M_XA_MAXU,MT_D,UInt(0),N, N, N, N, N, Y, Y, CSR.N),
 
-   LR_W    -> List(Y, N, X, uopAMO_AG, IQT_MEM, FU_MEM, RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, Y, Y, N, N, M_XLR   , MT_W,UInt(0),N, N, N, N, N, Y, Y, CSR.N), // TODO optimize LR, SC
-   LR_D    -> List(Y, N, X, uopAMO_AG, IQT_MEM, FU_MEM, RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, Y, Y, N, N, M_XLR   , MT_D,UInt(0),N, N, N, N, N, Y, Y, CSR.N), // note LR generates 2 micro-ops,
-   SC_W    -> List(Y, N, X, uopAMO_AG, IQT_MEM, FU_MEM, RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, Y, Y, N, N, M_XSC   , MT_W,UInt(0),N, N, N, N, N, Y, Y, CSR.N), // one which isn't needed
-   SC_D    -> List(Y, N, X, uopAMO_AG, IQT_MEM, FU_MEM, RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, Y, Y, N, N, M_XSC   , MT_D,UInt(0),N, N, N, N, N, Y, Y, CSR.N)
+   LR_W    -> List(Y, N, X, uopLDR   ,IQT_MEM, FU_MEM,  RT_FIX, RT_FIX, RT_X  , N, IS_X, Y, N, N, N, N, M_XLR, MT_W , UInt(0), N, N, N, N, N, Y, Y, CSR.N), // TODO optimize LR, SC
+   LR_D    -> List(Y, N, X, uopLDR   ,IQT_MEM, FU_MEM,  RT_FIX, RT_FIX, RT_X  , N, IS_X, Y, N, N, N, N, M_XLR, MT_D , UInt(0), N, N, N, N, N, Y, Y, CSR.N),
+   SC_W    -> List(Y, N, X, uopAMO_AG,IQT_MEM, FU_MEM,  RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, Y, Y, N, N, M_XSC, MT_W , UInt(0), N, N, N, N, N, Y, Y, CSR.N),
+   SC_D    -> List(Y, N, X, uopAMO_AG,IQT_MEM, FU_MEM,  RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, Y, Y, N, N, M_XSC, MT_D , UInt(0), N, N, N, N, N, Y, Y, CSR.N)
    )
 // scalastyle:on
 }
