@@ -493,8 +493,6 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    // **** Assertions ****
    //-------------------------------------------------------------
 
-   assert (!(io.imem.resp.bits.btb.valid), "[bpd_pipeline] BTB predicted, but it's been disabled.")
-
    // check if enqueue'd PC is a target of the previous valid enqueue'd PC.
 
    // clear checking if misprediction/flush/etc.
@@ -625,11 +623,10 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
             )
       }
 
-      printf("----BrPred2:(%c,%c,%d) [btbtarg: 0x%x]\n"
-         , Mux(io.imem.resp.bits.btb.valid, Str("H"), Str("-"))
-         , Mux(io.imem.resp.bits.btb.bits.taken, Str("T"), Str("-"))
-         , io.imem.resp.bits.btb.bits.bridx
-         , io.imem.resp.bits.btb.bits.target(19,0)
+      printf("----BrPred2:(%c,%d) [btbtarg: 0x%x]\n"
+         , Mux(io.imem.resp.bits.btb.taken, Str("T"), Str("-"))
+         , io.imem.resp.bits.btb.bridx
+         , io.imem.resp.bits.btb.target(19,0)
          )
 
       // Fetch Stage 3

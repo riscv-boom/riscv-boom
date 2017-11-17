@@ -275,7 +275,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    if (fetchWidth == 1)
    {
       fetch_unit.io.imem.resp.bits.mask := UInt(1)
-      fetch_unit.io.imem.resp.bits.btb.bits.bridx := UInt(0)
+      fetch_unit.io.imem.resp.bits.btb.bridx := UInt(0)
    }
    fetch_unit.io.br_unit <> br_unit
    fetch_unit.io.tsc_reg           := debug_tsc_reg
