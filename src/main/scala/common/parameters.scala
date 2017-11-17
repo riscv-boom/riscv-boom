@@ -39,6 +39,7 @@ case class BoomCoreParams(
    enableBpdUSModeHistory: Boolean = false,
    enableBpdF2Redirect: Boolean = false,
    enableBpdF3Redirect: Boolean = true,
+   useAtomicsOnlyForIO: Boolean = false,
    btb: BTBsaParameters = BTBsaParameters(),
    tage: Option[TageParameters] = None,
    gshare: Option[GShareParameters] = None,
