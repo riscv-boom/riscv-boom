@@ -31,7 +31,6 @@ import Chisel._
 import scala.math.ceil
 import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.util.Str
-import freechips.rocketchip.rocket.Causes
 
 class RobIo(machine_width: Int,
             num_wakeup_ports: Int,
@@ -731,10 +730,7 @@ class Rob(width: Int,
          // if no exception yet, dispatch exception wins
          r_xcpt_val      := Bool(true)
          next_xcpt_uop   := io.enq_uops(idx)
-         r_xcpt_badvaddr :=
-            Mux(io.enq_uops(idx).exc_cause === Causes.illegal_instruction.U,
-               0.U,
-               io.enq_uops(0).pc + (idx << UInt(2)))
+         r_xcpt_badvaddr := io.enq_uops(0).pc + (idx << UInt(2))
       }
    }
 

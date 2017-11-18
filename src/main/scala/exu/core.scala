@@ -32,6 +32,7 @@ import chisel3.experimental.dontTouch
 import freechips.rocketchip.config.Parameters
 
 import freechips.rocketchip.rocket.Instructions._
+import freechips.rocketchip.rocket.Causes
 import freechips.rocketchip.util.Str
 import boom.FUConstants._
 
@@ -710,7 +711,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    csr.io.exception := rob.io.com_xcpt.valid
    csr.io.pc        := rob.io.com_xcpt.bits.pc
    csr.io.cause     := rob.io.com_xcpt.bits.cause
-   csr.io.badaddr   := rob.io.com_xcpt.bits.badvaddr
+   csr.io.badaddr   := Mux(csr.io.cause === Causes.illegal_instruction.U, 0.U, rob.io.com_xcpt.bits.badvaddr)
 
 
    // reading requires serializing the entire pipeline
