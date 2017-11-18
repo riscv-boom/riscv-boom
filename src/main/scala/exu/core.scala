@@ -28,6 +28,7 @@
 package boom
 
 import Chisel._
+import chisel3.experimental.dontTouch
 import freechips.rocketchip.config.Parameters
 
 import freechips.rocketchip.rocket.Instructions._
@@ -220,8 +221,8 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    val debug_irt_reg  = Reg(init = UInt(0, xLen))
    debug_tsc_reg  := debug_tsc_reg + Mux(Bool(O3PIPEVIEW_PRINTF), UInt(O3_CYCLE_TIME), UInt(1))
    debug_irt_reg  := debug_irt_reg + PopCount(rob.io.commit.valids.asUInt)
-//   dontTouch(debug_tsc_reg)
-//   dontTouch(debug_irt_reg)
+   dontTouch(debug_tsc_reg)
+   dontTouch(debug_irt_reg)
 
 
    //****************************************
