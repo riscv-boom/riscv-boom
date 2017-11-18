@@ -196,7 +196,8 @@ object Sext
 {
    def apply(x: UInt, length: Int): UInt =
    {
-      return Cat(Fill(length-x.getWidth, x(x.getWidth-1)), x)
+      if (x.getWidth == length) return x
+      else return Cat(Fill(length-x.getWidth, x(x.getWidth-1)), x)
    }
 }
 

@@ -31,6 +31,7 @@ import Chisel._
 import scala.math.ceil
 import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.util.Str
+import freechips.rocketchip.rocket.Causes
 
 class RobIo(machine_width: Int,
             num_wakeup_ports: Int,
@@ -84,7 +85,7 @@ class RobIo(machine_width: Int,
    val csr_evec = UInt(INPUT, vaddrBitsExtended)
 
    // Let the CSRFile stall us (e.g., wfi).
-   val csr_stall = Bool(INPUT) 
+   val csr_stall = Bool(INPUT)
 
    // Flush signals (including exceptions, pipeline replays, and memory ordering failures).
    val flush = Valid(new FlushSignals)
@@ -230,7 +231,7 @@ class Rob(width: Int,
    // TODO compress xcpt cause size
    val r_xcpt_val       = Reg(init=Bool(false))
    val r_xcpt_uop       = Reg(new MicroOp())
-   val r_xcpt_badvaddr  = Reg(UInt(width=coreMaxAddrBits))
+   val r_xcpt_badvaddr  = Reg(UInt(width=xLen))
 
    //--------------------------------------------------
    // Utility
@@ -640,7 +641,7 @@ class Rob(width: Int,
    io.com_xcpt.valid := exception_thrown && !is_mini_exception
    io.com_xcpt.bits.cause := r_xcpt_uop.exc_cause
 
-   io.com_xcpt.bits.badvaddr := Sext(r_xcpt_badvaddr,xLen)
+   io.com_xcpt.bits.badvaddr := Sext(r_xcpt_badvaddr, xLen)
    val insn_break = rob_head_vals.reduce(_|_) && PriorityMux(rob_head_vals, io.commit.uops.map{u => u.is_break})
 
    val refetch_inst = exception_thrown || insn_break
@@ -730,7 +731,10 @@ class Rob(width: Int,
          // if no exception yet, dispatch exception wins
          r_xcpt_val      := Bool(true)
          next_xcpt_uop   := io.enq_uops(idx)
-         r_xcpt_badvaddr := io.enq_uops(0).pc + (idx << UInt(2))
+         r_xcpt_badvaddr :=
+            Mux(io.enq_uops(idx).exc_cause === Causes.illegal_instruction.U,
+               0.U,
+               io.enq_uops(0).pc + (idx << UInt(2)))
       }
    }
 
