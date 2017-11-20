@@ -930,25 +930,27 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       for ((resp, j) <- eu.io.resp.zipWithIndex)
       {
          val wb_uop = resp.bits.uop
+         var data: UInt = null
 
          if (eu.is_mem_unit)
          {
             val ll_uop = ll_wbarb.io.out.bits.uop
             rob.io.wb_resps(cnt).valid := ll_wbarb.io.out.valid && !(ll_uop.is_store && !ll_uop.is_amo)
             rob.io.wb_resps(cnt).bits <> ll_wbarb.io.out.bits
+            // for commit logging... (only integer writes come through here)
+            rob.io.debug_wb_valids(cnt) := ll_wbarb.io.out.valid && ll_uop.ctrl.rf_wen && ll_uop.dst_rtype === RT_FIX
+            data = ll_wbarb.io.out.bits.data
          }
          else
          {
             rob.io.wb_resps(cnt).valid := resp.valid && !(wb_uop.is_store && !wb_uop.is_amo)
             rob.io.wb_resps(cnt).bits <> resp.bits
+
+            // for commit logging... (only integer writes come through here)
+            rob.io.debug_wb_valids(cnt) := resp.valid && wb_uop.ctrl.rf_wen && wb_uop.dst_rtype === RT_FIX
+            data = resp.bits.data
          }
 
-         // for commit logging... (only integer writes come through here)
-         rob.io.debug_wb_valids(cnt) := resp.valid &&
-                                        wb_uop.ctrl.rf_wen &&
-                                        wb_uop.dst_rtype === RT_FIX
-
-         val data = resp.bits.data
          if (eu.hasFFlags || (eu.is_mem_unit && usingFPU))
          {
             if (eu.hasFFlags)
@@ -995,12 +997,6 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
       assert (!(wakeup.valid && wakeup.bits.uop.dst_rtype =/= RT_FLT),
          "[core] FP wakeup does not write back to a FP register.")
-
-      when (wakeup.valid)
-      {
-         printf("FP wakeup " + cnt + " fp_val %d, rtype: %d, uopc: %d\n",
-            wakeup.bits.uop.fp_val, wakeup.bits.uop.dst_rtype, wakeup.bits.uop.uopc)
-      }
 
       assert (!(wakeup.valid && !wakeup.bits.uop.fp_val),
          "[core] FP wakeup does not involve an FP instruction.")
