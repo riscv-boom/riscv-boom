@@ -850,7 +850,7 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
          // for commit logging...
          rob.io.debug_wb_valids(cnt) := resp.valid &&
                                         wb_uop.ctrl.rf_wen &&
-                                        (wb_uop.dst_rtype === RT_FIX || wb_uop.dst_rtype === RT_FLT)
+                                        (wb_uop.dst_rtype === RT_FIX)
 
          val data = resp.bits.data
          if (eu.hasFFlags || (eu.is_mem_unit && usingFPU))
