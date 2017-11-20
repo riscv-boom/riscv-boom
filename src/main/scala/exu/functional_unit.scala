@@ -615,19 +615,7 @@ class MemAddrCalcUnit(implicit p: Parameters)
                                         sum(63,vaddrBits) =/= UInt(0))
    val effective_address = Cat(ea_sign, sum(vaddrBits-1,0)).asUInt
 
-   // compute store data
-   // requires decoding 65-bit FP data
-   // TODO remove this recoding -- since this will only handle Int micro-ops with split regfiles.
-   // TODO somehow this assert triggers o.0
-//   assert (!(io.req.bits.uop.fp_val && io.req.valid), "[maddrcalc] assert we never get store data in here.")
-//   val unrec_s = hardfloat.fNFromRecFN(8, 24, io.req.bits.rs2_data)
-//   val unrec_d = hardfloat.fNFromRecFN(11, 53, io.req.bits.rs2_data)
-//   val unrec_out = Mux(io.req.bits.uop.fp_single, Cat(Fill(32, unrec_s(31)), unrec_s), unrec_d)
-   val unrec_out = ieee(io.req.bits.rs2_data)
-
-   var store_data:UInt = null
-   if (!usingFPU) store_data = io.req.bits.rs2_data
-   else store_data = Mux(io.req.bits.uop.fp_val, unrec_out, io.req.bits.rs2_data)
+   val store_data = io.req.bits.rs2_data
 
    io.resp.bits.addr := effective_address
    io.resp.bits.data := store_data
@@ -640,6 +628,10 @@ class MemAddrCalcUnit(implicit p: Parameters)
       assert (!(io.req.valid && io.req.bits.uop.ctrl.is_std && io.req.bits.uop.fp_val),
          "FP store-data should now be going through a different unit.")
    }
+
+   assert (!(io.req.bits.uop.fp_val && io.req.valid && io.req.bits.uop.uopc =/= uopLD && io.req.bits.uop.uopc =/= uopSTA),
+      "[maddrcalc] assert we never get store data in here.")
+
 
    // Handle misaligned exceptions
    val typ = io.req.bits.uop.mem_typ

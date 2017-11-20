@@ -49,7 +49,6 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
       val wb_valids        = Vec(num_wakeup_ports, Bool()).asInput
       val wb_pdsts         = Vec(num_wakeup_ports, UInt(width=fp_preg_sz)).asInput
 
-      //TODO -- hook up commit log stuff.
       val debug_tsc_reg    = UInt(INPUT, xLen)
    }
 
@@ -187,10 +186,6 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
       io.tosdq.valid    := fregister_read.io.exe_reqs(w).bits.uop.uopc === uopSTD
       io.tosdq.bits.uop := fregister_read.io.exe_reqs(w).bits.uop
       val sdata = fregister_read.io.exe_reqs(w).bits.rs2_data
-
-//      val unrec_s = hardfloat.fNFromRecFN(8, 24, sdata)
-//      val unrec_d = hardfloat.fNFromRecFN(11, 53, sdata)
-//      val unrec_out = Mux(io.tosdq.bits.uop.fp_single, Cat(Fill(32, unrec_s(31)), unrec_s), unrec_d)
 
       io.tosdq.bits.data := ieee(sdata)
    }

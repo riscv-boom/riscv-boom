@@ -65,6 +65,7 @@ trait HasBoomCoreIO extends freechips.rocketchip.tile.HasTileParameters {
 
 class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut) extends BoomModule()(p)
    with HasBoomCoreIO
+   with freechips.rocketchip.tile.HasFPUParameters
 {
    //**********************************
    // construct all of the modules
@@ -942,34 +943,30 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
             rob.io.wb_resps(cnt).bits <> resp.bits
          }
 
-         // for commit logging...
+         // for commit logging... (only integer writes come through here)
          rob.io.debug_wb_valids(cnt) := resp.valid &&
                                         wb_uop.ctrl.rf_wen &&
-                                        (wb_uop.dst_rtype === RT_FIX || wb_uop.dst_rtype === RT_FLT)
+                                        wb_uop.dst_rtype === RT_FIX
 
          val data = resp.bits.data
          if (eu.hasFFlags || (eu.is_mem_unit && usingFPU))
          {
             if (eu.hasFFlags)
             {
+               println ("\tConnecting ExeUnit with FFLAGS to ROB fflag port: " + f_cnt)
                rob.io.fflags(f_cnt) <> resp.bits.fflags
                f_cnt += 1
             }
-//            val unrec_s = hardfloat.fNFromRecFN(8, 24, data)
-//            val unrec_d = hardfloat.fNFromRecFN(11, 53, data)
-//            val unrec_out     = Mux(wb_uop.fp_single, Cat(UInt(0,32), unrec_s), unrec_d)
-            val unrec_out = 0.U // TODO delete me
-            // somehow, we're seeing FP show up in here
-//            assert (!(resp.bits.uop.fp_val && wb_uop.dst_rtype === RT_FLT), "[core] I think we never use FP now.")
+
+            assert (!(resp.valid && resp.bits.uop.fp_val && wb_uop.dst_rtype === RT_FLT && wb_uop.uopc =/= uopLD),
+               "[core] I think we never use FP now.")
             if (eu.uses_csr_wport && (j == 0))
             {
-               rob.io.debug_wb_wdata(cnt) := Mux(wb_uop.ctrl.csr_cmd =/= freechips.rocketchip.rocket.CSR.N, csr.io.rw.rdata,
-                                             Mux(wb_uop.fp_val && wb_uop.dst_rtype === RT_FLT, unrec_out,
-                                                                                               data))
+               rob.io.debug_wb_wdata(cnt) := Mux(wb_uop.ctrl.csr_cmd =/= freechips.rocketchip.rocket.CSR.N, csr.io.rw.rdata, data)
             }
             else
             {
-               rob.io.debug_wb_wdata(cnt) := Mux(resp.bits.uop.fp_val, unrec_out, data)
+               rob.io.debug_wb_wdata(cnt) := data
             }
          }
          else
@@ -991,9 +988,22 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    {
       rob.io.wb_resps(cnt) <> wakeup
       rob.io.fflags(f_cnt) <> wakeup.bits.fflags
-      rob.io.debug_wb_valids(cnt) := Bool(false) // TODO XXX add back commit logging for FP instructions.
+      rob.io.debug_wb_valids(cnt) := wakeup.valid
+      rob.io.debug_wb_wdata(cnt) := ieee(wakeup.bits.data)
       cnt += 1
       f_cnt += 1
+
+      assert (!(wakeup.valid && wakeup.bits.uop.dst_rtype =/= RT_FLT),
+         "[core] FP wakeup does not write back to a FP register.")
+
+      when (wakeup.valid)
+      {
+         printf("FP wakeup " + cnt + " fp_val %d, rtype: %d, uopc: %d\n",
+            wakeup.bits.uop.fp_val, wakeup.bits.uop.dst_rtype, wakeup.bits.uop.uopc)
+      }
+
+      assert (!(wakeup.valid && !wakeup.bits.uop.fp_val),
+         "[core] FP wakeup does not involve an FP instruction.")
    }
    assert (cnt == rob.num_wakeup_ports)
 
@@ -1016,7 +1026,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    rob.io.lsu_clr_bsy_rob_idx := lsu.io.lsu_clr_bsy_rob_idx
    rob.io.lxcpt <> lsu.io.xcpt
 
-   rob.io.cxcpt.valid := false.B // TODO XXX MERGE csr.io.csr_xcpt
+   rob.io.cxcpt.valid := false.B // TODO XXX MERGE csr.io.csr_xcpt (csr can no longer throw exceptions dynamically?)
    rob.io.csr_eret := csr.io.eret
    rob.io.csr_evec := csr.io.evec
 
@@ -1164,8 +1174,8 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       val numBrobWhitespace = if (DEBUG_PRINTF_BROB) NUM_BROB_ENTRIES else 0
 //      val screenheight = 103 - 4 - 10
 //      val screenheight = 85 - 10
-//      val screenheight = 79 - 10
-      val screenheight = 63-10
+      val screenheight = 78 - 10
+//      val screenheight = 63-10
        var whitespace = (screenheight - 11 + 3 - NUM_LSU_ENTRIES -
          issueParams.map(_.numEntries).sum - issueParams.length - (NUM_ROB_ENTRIES/COMMIT_WIDTH) - numBrobWhitespace
      )
