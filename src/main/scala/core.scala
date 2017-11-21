@@ -1250,8 +1250,9 @@ class BoomCore(implicit p: Parameters, edge: uncore.tilelink2.TLEdgeOut) extends
 
    if (COMMIT_LOG_PRINTF)
    {
-      when(rob.io.com_xcpt.valid && csr.io.interrupt) {
-        printf("interrupt cause: %d\n", csr.io.interrupt_cause(7, 0))
+      val xcpt = RegNext(Mux(rob.io.commit.valids reduce (_ || _), Bool(false), rob.io.com_xcpt.valid))
+      when(rob.io.com_xcpt.valid && csr.io.interrupt && csr.io.cause(xLen-1)) {
+        printf("interrupt cause: %d, %d\n", csr.io.interrupt_cause(6, 0), xcpt)
       }
       for (w <- 0 until COMMIT_WIDTH)
       {
