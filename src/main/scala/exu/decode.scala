@@ -29,7 +29,7 @@ abstract trait DecodeConstants
             //     |  |  is single-prec?                      rs1 regtype      |  |     |  is_store                 |                    |  |  is jal
             //     |  |  |  micro-code                         |       rs2 type|  |     |  |  is_amo                |                    |  |  |  allocate_brtag
             //     |  |  |  |                 func unit        |       |       |  |     |  |  |  is_fence           |                    |  |  |  |
-            //     |  |  |  |                 |                |       |       |  |     |  |  |  |  is_fencei       |                    |  |  |  |  is breakpoint
+            //     |  |  |  |                 |                |       |       |  |     |  |  |  |  is_fencei       |                    |  |  |  |  is breakpoint or ecall
             //     |  |  |  |                 |        dst     |       |       |  |     |  |  |  |  |  mem    mem   |                    |  |  |  |  |  is unique? (clear pipeline for it)
             //     |  |  |  |                 |        regtype |       |       |  |     |  |  |  |  |  cmd    msk   |                    |  |  |  |  |  |  flush on commit
             //     |  |  |  |                 |        |       |       |       |  |     |  |  |  |  |  |      |     |                    |  |  |  |  |  |  |  csr cmd
@@ -64,7 +64,7 @@ class CtrlSigs extends Bundle
    val br_or_jmp       = Bool()
    val is_jal          = Bool()
    val allocate_brtag  = Bool()
-   val is_break        = Bool()
+   val is_sys_pc2epc   = Bool()
    val inst_unique     = Bool()
    val flush_on_commit = Bool()
    val csr_cmd         = UInt(width = freechips.rocketchip.rocket.CSR.SZ)
@@ -76,7 +76,7 @@ class CtrlSigs extends Bundle
          Seq(legal, fp_val, fp_single, uopc, iqtype, fu_code, dst_type, rs1_type
          , rs2_type, frs3_en, imm_sel, is_load, is_store, is_amo
          , is_fence, is_fencei, mem_cmd, mem_typ, wakeup_delay, bypassable
-         , br_or_jmp, is_jal, allocate_brtag, is_break, inst_unique, flush_on_commit, csr_cmd)
+         , br_or_jmp, is_jal, allocate_brtag, is_sys_pc2epc, inst_unique, flush_on_commit, csr_cmd)
       sigs zip decoder map {case(s,d) => s := d}
       rocc := false.B
       this
@@ -93,7 +93,7 @@ object XDecode extends DecodeConstants with freechips.rocketchip.rocket.constant
             //     |  |  is single-prec?                        rs1 regtype     |  |     |  is_store                  |        |  |  is jal
             //     |  |  |  micro-code                          |       rs2 type|  |     |  |  is_amo                 |        |  |  |  allocate_brtag
             //     |  |  |  |         iq-type  func unit        |       |       |  |     |  |  |  is_fence            |        |  |  |  |
-            //     |  |  |  |         |        |                |       |       |  |     |  |  |  |  is_fencei        |        |  |  |  |  is breakpoint?
+            //     |  |  |  |         |        |                |       |       |  |     |  |  |  |  is_fencei        |        |  |  |  |  is breakpoint or ecall?
             //     |  |  |  |         |        |        dst     |       |       |  |     |  |  |  |  |  mem    mem    |        |  |  |  |  |  is unique? (clear pipeline for it)
             //     |  |  |  |         |        |        regtype |       |       |  |     |  |  |  |  |  cmd    msk    |        |  |  |  |  |  |  flush on commit
             //     |  |  |  |         |        |        |       |       |       |  |     |  |  |  |  |  |      |      |        |  |  |  |  |  |  |  csr cmd
@@ -180,7 +180,7 @@ object XDecode extends DecodeConstants with freechips.rocketchip.rocket.constant
    CSRRCI  -> List(Y, N, X, uopCSRRCI,IQT_INT, FU_CSR , RT_FIX, RT_PAS, RT_X  , N, IS_I, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, N, Y, Y, CSR.C),
 
    SFENCE_VMA->List(Y,N, X, uopSFENCE,IQT_MEM, FU_MEM , RT_X  , RT_FIX, RT_FIX, N, IS_X, N, N, N, N, N, M_SFENCE,MT_X,UInt(0), N, N, N, N, N, Y, Y, CSR.N),
-   SCALL   -> List(Y, N, X, uopSYSTEM,IQT_INT, FU_CSR , RT_X  , RT_X  , RT_X  , N, IS_I, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, N, Y, N, CSR.I),
+   SCALL   -> List(Y, N, X, uopSYSTEM,IQT_INT, FU_CSR , RT_X  , RT_X  , RT_X  , N, IS_I, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, Y, Y, N, CSR.I),
    SBREAK  -> List(Y, N, X, uopSYSTEM,IQT_INT, FU_CSR , RT_X  , RT_X  , RT_X  , N, IS_I, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, Y, Y, N, CSR.I),
    SRET    -> List(Y, N, X, uopSYSTEM,IQT_INT, FU_CSR , RT_X  , RT_X  , RT_X  , N, IS_I, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, N, Y, N, CSR.I),
    MRET    -> List(Y, N, X, uopSYSTEM,IQT_INT, FU_CSR , RT_X  , RT_X  , RT_X  , N, IS_I, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, N, Y, N, CSR.I),
@@ -230,7 +230,7 @@ object FDecode extends DecodeConstants with freechips.rocketchip.rocket.constant
              //    is val inst?                                  rs1 regtype     |  |     |  is_store                  |        |  |  is jal
              //    |  is fp inst?                                |       rs2 type|  |     |  |  is_amo                 |        |  |  |  allocate_brtag
              //    |  |  is dst single-prec?                     |       |       |  |     |  |  |  is_fence            |        |  |  |  |
-             //    |  |  |  micro-opcode                         |       |       |  |     |  |  |  |  is_fencei        |        |  |  |  |  is breakpoint
+             //    |  |  |  micro-opcode                         |       |       |  |     |  |  |  |  is_fencei        |        |  |  |  |  is breakpoint or ecall
              //    |  |  |  |           iq_type  func    dst     |       |       |  |     |  |  |  |  |  mem    mem    |        |  |  |  |  |  is unique? (clear pipeline for it)
              //    |  |  |  |           |        unit    regtype |       |       |  |     |  |  |  |  |  cmd    msk    |        |  |  |  |  |  |  flush on commit
              //    |  |  |  |           |        |       |       |       |       |  |     |  |  |  |  |  |      |      |        |  |  |  |  |  |  |  csr cmd
@@ -324,7 +324,7 @@ object FDivSqrtDecode extends DecodeConstants with freechips.rocketchip.rocket.c
              //     is val inst?                                 rs1 regtype     |  |     |  is_store                  |        |  |  is jal
              //     |  is fp inst?                               |       rs2 type|  |     |  |  is_amo                 |        |  |  |  allocate_brtag
              //     |  |  is dst single-prec?                    |       |       |  |     |  |  |  is_fence            |        |  |  |  |
-             //     |  |  |  micro-opcode                        |       |       |  |     |  |  |  |  is_fencei        |        |  |  |  |  is breakpoint
+             //     |  |  |  micro-opcode                        |       |       |  |     |  |  |  |  is_fencei        |        |  |  |  |  is breakpoint or ecall
              //     |  |  |  |           iq-type func    dst     |       |       |  |     |  |  |  |  |  mem    mem    |        |  |  |  |  |  is unique? (clear pipeline for it)
              //     |  |  |  |           |       unit    regtype |       |       |  |     |  |  |  |  |  cmd    msk    |        |  |  |  |  |  |  flush on commit
              //     |  |  |  |           |       |       |       |       |       |  |     |  |  |  |  |  |      |      |        |  |  |  |  |  |  |  csr cmd
@@ -431,7 +431,7 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule()(p)
    uop.is_amo     := cs.is_amo
    uop.is_fence   := cs.is_fence
    uop.is_fencei  := cs.is_fencei
-   uop.is_break   := cs.is_break
+   uop.is_sys_pc2epc   := cs.is_sys_pc2epc
    uop.is_unique  := cs.inst_unique
    uop.flush_on_commit := cs.flush_on_commit || (csr_en && !csr_ren && io.csr_decode.write_flush)
 
