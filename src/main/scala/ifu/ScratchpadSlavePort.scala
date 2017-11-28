@@ -6,10 +6,11 @@ import Chisel._
 import Chisel.ImplicitConversions._
 
 import freechips.rocketchip.config.Parameters
-import freechips.rocketchip.coreplex.CacheBlockBytes
+import freechips.rocketchip.coreplex.{CacheBlockBytes, SystemBusKey}
 import freechips.rocketchip.diplomacy._
 import freechips.rocketchip.tile._
 import freechips.rocketchip.tilelink._
+import freechips.rocketchip.devices.tilelink.{BasicBusBlockerParams, BasicBusBlocker}
 import freechips.rocketchip.interrupts._
 import freechips.rocketchip.util._
 import freechips.rocketchip.rocket._
@@ -99,9 +100,10 @@ class ScratchpadSlavePort(address: AddressSet, coreDataBytes: Int, usingAtomics:
 trait CanHaveBoomScratchpad extends HasHellaCache with HasBoomICacheFrontend {
   val module: CanHaveBoomScratchpadModule
   val cacheBlockBytes = p(CacheBlockBytes)
+  val masterPortBeatBytes = p(SystemBusKey).beatBytes
 
   val scratch = tileParams.dcache.flatMap { d => d.scratch.map(s =>
-    LazyModule(new ScratchpadSlavePort(AddressSet(s, d.dataScratchpadBytes-1), xBytes, tileParams.core.useAtomics)))
+    LazyModule(new ScratchpadSlavePort(AddressSet(s, d.dataScratchpadBytes-1), xBytes, tileParams.core.useAtomics && !tileParams.core.useAtomicsOnlyForIO)))
   }
 
   val intOutputNode = tileParams.core.tileControlAddr.map(dummy => IntIdentityNode())
@@ -111,13 +113,22 @@ trait CanHaveBoomScratchpad extends HasHellaCache with HasBoomICacheFrontend {
     beu
   }
 
+  val tile_master_blocker =
+    tileParams.blockerCtrlAddr
+      .map(BasicBusBlockerParams(_, xBytes, masterPortBeatBytes, deadlock = true))
+      .map(bp => LazyModule(new BasicBusBlocker(bp)))
+
+  masterNode := tile_master_blocker.map { _.node := tileBus.node } getOrElse { tileBus.node }
+
+
   // connect any combination of ITIM, DTIM, and BusErrorUnit
   val slaveNode = TLIdentityNode()
   DisableMonitors { implicit p =>
     val xbarPorts =
       scratch.map(lm => (lm.node, xBytes)) ++
       busErrorUnit.map(lm => (lm.node, xBytes)) ++
-      tileParams.icache.flatMap(icache => icache.itimAddr.map(a => (frontend.slaveNode, tileParams.core.fetchBytes)))
+      tileParams.icache.flatMap(icache => icache.itimAddr.map(a => (frontend.slaveNode, tileParams.core.fetchBytes))) ++
+        tile_master_blocker.map( lm => (lm.controlNode, xBytes))
 
     if (xbarPorts.nonEmpty) {
       val xbar = LazyModule(new TLXbar)

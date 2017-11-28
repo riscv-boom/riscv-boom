@@ -24,6 +24,7 @@ case class BoomTileParams(
     hcfOnUncorrectable: Boolean = false,
     name: Option[String] = Some("tile"),
     hartid: Int = 0,
+    blockerCtrlAddr: Option[BigInt] = None,
     boundaryBuffers: Boolean = false // if synthesized with hierarchical PnR, cut feed-throughs?
     ) extends TileParams {
   require(icache.isDefined)
