@@ -69,7 +69,7 @@ trait HasBoomTiles extends HasTiles
     wrapper.intXbar.intnode := wrapper { IntSyncCrossingSink(3) } := debug.intnode // 1. always async crossign
 
     // 2. clint+plic conditionak crossing
-    val periphIntNode = SourceCardinality { implicit p => wrapper.intXbar.intnode :=? wrapper.crossIntIn }
+    val periphIntNode = wrapper.intXbar.intnode :=* wrapper.crossIntIn
     periphIntNode := clint.intnode                   // msip+mtip
     periphIntNode := plic.intnode                    // meip
     if (tp.core.useVM) periphIntNode := plic.intnode // seip
@@ -78,9 +78,9 @@ trait HasBoomTiles extends HasTiles
 
     // From core to PLIC
     wrapper.boom.intOutputNode.foreach { i =>              // 4. conditional crossing
-      FlipRendering { implicit p => SourceCardinality { implicit p =>
-        plic.intnode :=? wrapper.crossIntOut :=? i
-      } }
+      FlipRendering { implicit p =>
+        plic.intnode :=* wrapper.crossIntOut :=* i
+      }
     }
 
     wrapper
