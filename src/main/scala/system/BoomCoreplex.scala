@@ -24,37 +24,65 @@ trait HasBoomTiles extends HasTiles
     with HasPeripheryDebug {
   val module: HasBoomTilesModuleImp
 
-  protected val tileParams = p(BoomTilesKey)
-  private val NumBoomTiles = tileParams.size
+  protected val boomTileParams = p(BoomTilesKey)
+  private val NumBoomTiles = boomTileParams.size
   private val crossingParams = p(RocketCrossingKey)
   private val crossings = crossingParams.size match {
     case 1 => List.fill(NumBoomTiles) { crossingParams.head }
     case NumBoomTiles => crossingParams
     case _ => throw new Exception("RocketCrossingKey.size must == 1 or == BoomTilesKey.size")
   }
-  private val crossingTuples = localIntNodes.zip(tileParams).zip(crossings)
+  private val crossingTuples = boomTileParams.zip(crossings)
 
-  // Make a wrapper for each tile that will wire it to coreplex devices and crossbars,
+  // Make a tile and wire its nodes into the system,
   // according to the specified type of clock crossing.
-  val tiles: Seq[BaseTile] = crossingTuples.map { case ((lip, tp), crossing) =>
+  // Note that we also inject new nodes into the tile itself,
+  // also based on the crossing type.
+  val boomTiles = crossingTuples.map { case (tp, crossing) =>
     // For legacy reasons, it is convenient to store some state
     // in the global Parameters about the specific tile being built now
-    val wrapper = LazyModule(new boom.BoomTileWrapper(
-      params = tp,
-      crossing = crossing.crossingType
-      )(p.alterPartial {
+    val boomCore = LazyModule(new boom.BoomTile(tp, crossing.crossingType)(p.alterPartial {
         case TileKey => tp
         case BuildRoCC => tp.rocc
         case SharedMemoryTLEdge => sharedMemoryTLEdge
-        case RocketCrossingKey => List(crossing)
       })
     ).suggestName(tp.name)
 
     // Connect the master ports of the tile to the system bus
-    sbus.fromTile(tp.name) { implicit p => crossing.master.adapt(this)(wrapper.crossTLOut :=* wrapper.masterNode) }
+
+    def tileMasterBuffering: TLOutwardNode = boomCore {
+      // The buffers needed to cut feed-through paths are microarchitecture specific, so belong here
+      val masterBuffer = LazyModule(new TLBuffer(BufferParams.none, BufferParams.flow, BufferParams.none, BufferParams.flow, BufferParams(1)))
+      crossing.crossingType match {
+        case _: AsynchronousCrossing => boomCore.masterNode
+        case SynchronousCrossing(b) =>
+          require (!tp.boundaryBuffers || (b.depth >= 1 && !b.flow && !b.pipe), "Buffer misconfiguration creates feed-through paths")
+          boomCore.masterNode
+        case RationalCrossing(dir) =>
+          require (dir != SlowToFast, "Misconfiguration? Core slower than fabric")
+          if (tp.boundaryBuffers) {
+            masterBuffer.node :=* boomCore.masterNode
+          } else {
+            boomCore.masterNode
+          }
+      }
+    }
+
+    sbus.fromTile(tp.name) { implicit p => crossing.master.adapt(this)(boomCore.crossTLOut :=* tileMasterBuffering) }
 
     // Connect the slave ports of the tile to the periphery bus
-    pbus.toTile(tp.name) { implicit p => crossing.slave.adapt(this)(wrapper.slaveNode :*= wrapper.crossTLIn) }
+
+    def tileSlaveBuffering: TLInwardNode = boomCore {
+      val slaveBuffer  = LazyModule(new TLBuffer(BufferParams.flow, BufferParams.none, BufferParams.none, BufferParams.none, BufferParams.none))
+      crossing.crossingType match {
+        case RationalCrossing(_) if (tp.boundaryBuffers) => boomCore.slaveNode :*= slaveBuffer.node
+        case _ => boomCore.slaveNode
+      }
+    }
+
+    pbus.toTile(tp.name) { implicit p => crossing.slave.adapt(this)( DisableMonitors { implicit p =>
+      tileSlaveBuffering :*= boomCore.crossTLIn
+    })}
 
     // Handle all the different types of interrupts crossing to or from the tile:
     // 1. Debug interrupt is definitely asynchronous in all cases.
@@ -66,24 +94,24 @@ trait HasBoomTiles extends HasTiles
     // NOTE: The order of calls to := matters! They must match how interrupts
     //       are decoded from rocket.intNode inside the tile.
 
-    wrapper.intXbar.intnode := wrapper { IntSyncCrossingSink(3) } := debug.intnode // 1. always async crossign
+    // 1. always async crossing for debug
+    boomCore.intInwardNode := boomCore { IntSyncCrossingSink(3) } := debug.intnode
 
-    // 2. clint+plic conditionak crossing
-    val periphIntNode = wrapper.intXbar.intnode :=* wrapper.crossIntIn
+    // 2. clint+plic conditionally crossing
+    val periphIntNode = boomCore.intInwardNode :=* boomCore.crossIntIn
     periphIntNode := clint.intnode                   // msip+mtip
     periphIntNode := plic.intnode                    // meip
     if (tp.core.useVM) periphIntNode := plic.intnode // seip
 
-    lip.foreach { wrapper.intXbar.intnode := _ } // 3. lip never crosses
+    // 3. local interrupts  never cross 
+    // rocket.intInwardNode is wired up externally     // lip
 
-    // From core to PLIC
-    wrapper.boom.intOutputNode.foreach { i =>              // 4. conditional crossing
-      FlipRendering { implicit p =>
-        plic.intnode :=* wrapper.crossIntOut :=* i
-      }
+    // 4. conditional crossing from core to PLIC
+    FlipRendering { implicit p =>
+      plic.intnode :=* boomCore.crossIntOut :=* boomCore.intOutwardNode
     }
 
-    wrapper
+    boomCore
   }
 }
 
@@ -94,8 +122,16 @@ trait HasBoomTilesModuleImp extends HasTilesModuleImp
 
 class BoomCoreplex(implicit p: Parameters) extends BaseCoreplex
     with HasBoomTiles {
+  val tiles = boomTiles
   override lazy val module = new BoomCoreplexModule(this)
 }
 
 class BoomCoreplexModule[+L <: BoomCoreplex](_outer: L) extends BaseCoreplexModule(_outer)
-    with HasBoomTilesModuleImp
+    with HasBoomTilesModuleImp {
+  tile_inputs.zip(outer.hartIdList).foreach { case(wire, i) =>
+    wire.clock := clock
+    wire.reset := reset
+    wire.hartid := UInt(i)
+    wire.reset_vector := global_reset_vector
+  }
+}

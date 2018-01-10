@@ -49,7 +49,7 @@ class WithNBoomCores(n: Int) extends Config((site, here, up) => {
       icache = Some(ICacheParams(
         rowBits = site(SystemBusKey).beatBits,
         blockBytes = site(CacheBlockBytes))))
-    List.tabulate(n)(i => big.copy(hartid = i))
+    List.tabulate(n)(i => big.copy(hartId = i))
   }
 })
 
