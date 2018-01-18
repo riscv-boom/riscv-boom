@@ -52,7 +52,7 @@ trait HasBoomCoreIO extends freechips.rocketchip.tile.HasTileParameters {
    val io = new freechips.rocketchip.tile.CoreBundle()(p)
       with freechips.rocketchip.tile.HasExternallyDrivenTileConstants {
          val interrupts = new freechips.rocketchip.tile.CoreInterrupts().asInput
-         val imem  = new freechips.rocketchip.rocket.FrontendIO
+         val imem  = new BoomFrontendIO
          val dmem = new freechips.rocketchip.rocket.HellaCacheIO
          val ptw = new freechips.rocketchip.rocket.DatapathPTWIO().flip
          val fpu = new freechips.rocketchip.tile.FPUCoreIO().flip
@@ -322,13 +322,13 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    // decode.  BHT look-up is in parallel with I$ access, and Branch Decode
    // occurs before fetch buffer insertion.
 
-//   bpd_stage.io.ext_btb_req := io.imem.ext_btb.req
 //   bpd_stage.io.icmiss := io.imem.ext_btb.icmiss
-//   bpd_stage.io.ext_btb_req.valid := io.imem.ext_btb.req.valid || io.imem.req.valid
+   bpd_stage.io.btb_req := io.imem.btb_req.req
+//   bpd_stage.io.s2_replay := io.imem.resp.bits.replay
+   bpd_stage.io.fqenq_valid := io.imem.btb_req.fqenq_valid
+   bpd_stage.io.fqenq_pc := io.imem.btb_req.fqenq_pc
+//   bpd_stage.io.ext_btb_req.valid := io.imem.btb_req.valid || io.imem.req.valid
 
-   // [TODO XXX renable BTB once we have sorted out request/I$ interaction]
-   bpd_stage.io.icmiss := false.B
-   bpd_stage.io.ext_btb_req.valid := false.B
 
    bpd_stage.io.br_unit := br_unit
    bpd_stage.io.redirect := io.imem.req.valid
@@ -1170,8 +1170,9 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       val numBrobWhitespace = if (DEBUG_PRINTF_BROB) NUM_BROB_ENTRIES else 0
 //      val screenheight = 103 - 4 - 10
 //      val screenheight = 85 - 10
-      val screenheight = 78 - 10
+//      val screenheight = 78 - 10
 //      val screenheight = 63-10
+      val screenheight = 56-9
        var whitespace = (screenheight - 11 + 3 - NUM_LSU_ENTRIES -
          issueParams.map(_.numEntries).sum - issueParams.length - (NUM_ROB_ENTRIES/COMMIT_WIDTH) - numBrobWhitespace
      )
