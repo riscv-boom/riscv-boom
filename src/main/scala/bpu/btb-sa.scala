@@ -191,7 +191,7 @@ class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParamet
    {
       // req.valid is false if stalling (aka, we won't read and use BTB results, on cycle S1).
       // req.bits.addr is available on cycle S0.
-      // resp is expected on cycle S1.
+      // resp is expected on cycle S2.
       val req = Valid(new PCReq).flip
       val resp = Valid(new BTBsaResp)
       // the PC we're predicting on (start of the fetch packet).
@@ -403,7 +403,7 @@ class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParamet
    //************************************************
    // Output.
 
-   io.resp.valid := false.B // [TODO XXX renable BTB once we have sorted out request/I$ interaction] RegNext(s1_valid)
+   io.resp.valid := RegNext(s1_valid)
    io.resp.bits := RegNext(s1_resp_bits)
 
 
