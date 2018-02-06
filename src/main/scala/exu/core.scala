@@ -283,11 +283,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    fetch_unit.io.br_unit <> br_unit
    fetch_unit.io.tsc_reg           := debug_tsc_reg
 
-//   fetch_unit.io.f1_btb            := bpd_stage.io.f1_btb
-   fetch_unit.io.f2_bpu_request    := bpd_stage.io.f2_bpu_request
    fetch_unit.io.f2_btb_resp       := bpd_stage.io.f2_btb_resp
-   fetch_unit.io.f2_bpd_resp       := bpd_stage.io.f2_bpd_resp
-
    fetch_unit.io.f3_bpd_resp       := bpd_stage.io.f3_bpd_resp
 
    fetch_unit.io.clear_fetchbuffer := br_unit.brinfo.mispredict ||
@@ -336,9 +332,9 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
    bpd_stage.io.fetch_stalled := fetch_unit.io.stalled
 
-   bpd_stage.io.f2_ras_update := fetch_unit.io.f2_ras_update
+   bpd_stage.io.f3_ras_update := fetch_unit.io.f3_ras_update
    bpd_stage.io.f3_btb_update := fetch_unit.io.f3_btb_update
-   bpd_stage.io.f3_hist_update:= fetch_unit.io.f3_hist_update
+//   bpd_stage.io.f3_hist_update:= fetch_unit.io.f3_hist_update
    bpd_stage.io.f3_bim_update := fetch_unit.io.f3_bim_update
    bpd_stage.io.status_prv   := csr.io.status.prv
    bpd_stage.io.status_debug := csr.io.status.debug
@@ -1172,7 +1168,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 //      val screenheight = 85 - 10
 //      val screenheight = 78 - 10
 //      val screenheight = 63-10
-      val screenheight = 56-9
+      val screenheight = 61-9
        var whitespace = (screenheight - 11 + 3 - NUM_LSU_ENTRIES -
          issueParams.map(_.numEntries).sum - issueParams.length - (NUM_ROB_ENTRIES/COMMIT_WIDTH) - numBrobWhitespace
      )
