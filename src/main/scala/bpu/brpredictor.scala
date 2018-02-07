@@ -222,7 +222,7 @@ abstract class BrPredictor(fetch_width: Int, val history_length: Int)(implicit p
    val r_vlh = new VeryLongHistoryRegister(history_length, VLHR_LENGTH)
 
    val in_usermode = io.status_prv === UInt(freechips.rocketchip.rocket.PRV.U)
-   val disable_bpd = in_usermode && Bool(ENABLE_BPD_UMODE_ONLY)
+   val disable_bpd = (!in_usermode) && Bool(ENABLE_BPD_UMODE_ONLY)
 
    val ghistory_all =
       r_ghistory.value(
