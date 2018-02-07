@@ -322,7 +322,7 @@ class DCacheShim(implicit p: Parameters) extends BoomModule()(p)
    // handle nacks from the cache (or from the IFLB or the LSU)
 
    io.core.nack.valid     := (io.dmem.s2_nack) || Reg(next=io.core.req.bits.kill) || Reg(next=iflb_kill) ||
-                              Reg(next=Reg(next=(io.core.req.valid && !(io.dmem.req.ready))))
+                              Reg(next=Reg(next=(io.core.req.valid && !(io.dmem.req.ready)), init = Bool(false)))
    io.core.nack.lsu_idx   := Mux(m2_req_uop.is_load, m2_req_uop.ldq_idx, m2_req_uop.stq_idx)
    io.core.nack.isload    := m2_req_uop.is_load
    io.core.nack.cache_nack:= io.dmem.s2_nack ||
