@@ -95,7 +95,6 @@ class WithMediumBooms extends Config((site, here, up) => {
          maxBrCount = 8,
          regreadLatency = 1,
          renameLatency = 2,
-         enableBpdF2Redirect = false,
          btb = BTBsaParameters(nSets=64, nWays=2, nRAS=8, tagSz=20, bypassCalls=false, rasCheckForEmpty=false),
          gshare = Some(GShareParameters(enabled=true, history_length=14)),
          nPerfCounters = 6,

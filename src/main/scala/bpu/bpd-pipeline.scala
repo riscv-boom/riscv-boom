@@ -77,7 +77,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
       val fqenq_valid   = Bool(INPUT)
       val fqenq_pc      = UInt(INPUT, width = vaddrBitsExtended) // For debug -- make sure I$ and BTB are synchronised.
 
-      val fetch_stalled = Bool(INPUT)
+//      val fetch_stalled = Bool(INPUT)
 
       // Fetch1
 
@@ -88,7 +88,6 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
       val f3_bpd_resp   = Valid(new BpdResp)
       val f3_btb_update = Valid(new BTBsaUpdate).flip
       val f3_ras_update = Valid(new RasUpdate).flip
-//      val f3_hist_update= Valid(new GHistUpdate).flip
       val f3_bim_update = Valid(new BimUpdate).flip
 
       // Other
@@ -186,7 +185,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
 //
 //   io.f2_bpu_request.bits.mask := Cat((UInt(1) << ~Mux(bpd_predict_taken, ~f2_btb.bits.cfi_idx, UInt(0)))-UInt(1), UInt(1))
 
-   bpd.io.resp.ready := !io.fetch_stalled
+   bpd.io.resp.ready := true.B // XXX TODO !io.fetch_stalled
 
 //   if (!enableBpdF2Redirect)
 //   {

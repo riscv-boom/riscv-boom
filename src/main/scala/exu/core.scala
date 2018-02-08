@@ -330,7 +330,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    bpd_stage.io.redirect := io.imem.req.valid
    bpd_stage.io.flush := rob.io.flush.valid
 
-   bpd_stage.io.fetch_stalled := fetch_unit.io.stalled
+//   bpd_stage.io.fetch_stalled := fetch_unit.io.stalled TODO how are we going to handle back-pressure to bpd?
 
    bpd_stage.io.f3_ras_update := fetch_unit.io.f3_ras_update
    bpd_stage.io.f3_btb_update := fetch_unit.io.f3_btb_update

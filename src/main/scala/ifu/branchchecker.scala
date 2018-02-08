@@ -29,7 +29,8 @@ class BranchChecker(fetch_width: Int)(implicit p: Parameters) extends BoomModule
    {
       val req           = Valid(new PCReq)
 
-      val is_valid      = Vec(fetch_width, Bool()).asInput // valid instruction mask from I$
+      val valid         = Bool(INPUT)                      // are the inputs valid?
+      val inst_mask     = Vec(fetch_width, Bool()).asInput // valid instruction mask from I$
       val is_br         = Vec(fetch_width, Bool()).asInput
       val is_jal        = Vec(fetch_width, Bool()).asInput
       val is_jr         = Vec(fetch_width, Bool()).asInput
@@ -79,13 +80,16 @@ class BranchChecker(fetch_width: Int)(implicit p: Parameters) extends BoomModule
       .otherwise
       {
          wrong_cfi := io.btb_resp.bits.cfi_type === CfiType.none && io.btb_resp.bits.taken
-         assert (!io.btb_resp.bits.cfi_type === CfiType.none, "[fetch] predicted on a non-cfi type.")
+         when (io.valid)
+         {
+            assert (!io.btb_resp.bits.cfi_type === CfiType.none, "[fetch] predicted on a non-cfi type.")
+         }
       }
    }
 
    val nextline_pc = io.aligned_pc + UInt(fetch_width*coreInstBytes)
 
-   val btb_was_wrong = io.btb_resp.valid && (wrong_cfi || wrong_target || !io.is_valid(btb_idx))
+   val btb_was_wrong = io.btb_resp.valid && (wrong_cfi || wrong_target || !io.inst_mask(btb_idx))
 
    val jal_idx = PriorityEncoder(io.is_jal.asUInt)
    val btb_hit  = io.btb_resp.valid
