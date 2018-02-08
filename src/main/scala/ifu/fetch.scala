@@ -18,6 +18,8 @@
 package boom
 
 import Chisel._
+import chisel3.core.withReset
+import chisel3.experimental.dontTouch
 import freechips.rocketchip.config.Parameters
 
 import freechips.rocketchip.util.Str
@@ -71,7 +73,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
       val sfence_addr       = UInt(INPUT, vaddrBits+1)
 
       val resp              = new DecoupledIO(new FetchBundle)
-      val stalled           = Bool(OUTPUT) // CODE REVIEW
+//      val stalled           = Bool(OUTPUT) // CODE REVIEW
    })
 
    val bchecker = Module (new BranchChecker(fetchWidth))
@@ -84,21 +86,24 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    val br_unit = io.br_unit
    val fseq_reg = Reg(init = UInt(0, xLen))
    val f0_redirect_pc = Wire(UInt(width = vaddrBitsExtended))
- 
-   val f3_valid = Reg(init=false.B)
-   val f3_imemresp = Reg(t = io.imem.resp.bits)
-   val f3_btb_resp = Reg(t = io.f2_btb_resp)
-   val f3_req = Wire(Valid(new PCReq()))
-   val f3_fetch_bundle = Wire(new FetchBundle)
 
-   val f4_valid = Reg(init=false.B)
-   val f4_req = Reg(Valid(new PCReq()))
- 
+
+   val clear_f3         = Wire(init=false.B)
+   val q_f3_imemresp    = withReset(reset || clear_f3) { Module(new ElasticReg(gen = io.imem.resp.bits)) }
+   val q_f3_btb_resp    = withReset(reset || clear_f3) { Module(new ElasticReg(gen = io.f2_btb_resp)) }
+
+   val f3_req           = Wire(Valid(new PCReq()))
+   val f3_fetch_bundle  = Wire(new FetchBundle)
+
+   val r_f4_valid = Reg(init=false.B)
+   val r_f4_req = Reg(Valid(new PCReq()))
+
+
 //   val f2_valid = Wire(Bool())
 //   val f2_req = Wire(Valid(new PCReq()))
 //   val f2_fetch_bundle = Wire(new FetchBundle)
 
-//   val f3_valid = Reg(init=false.B)
+//   val r_f3_valid = Reg(init=false.B)
 //   val f3_req = Reg(Valid(new PCReq()))
 //   val f3_fetch_bundle = Reg(new FetchBundle())
 //   val f3_taken = Reg(Bool())
@@ -121,22 +126,18 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    // **** NextPC Select (F0) ****
    //-------------------------------------------------------------
 
-   val if_stalled = !(FetchBuffer.io.enq.ready) // if FetchBuffer backs up, we have to stall the front-end
-   io.stalled := if_stalled
-
-
    val f0_redirect_val =
       br_unit.take_pc ||
       io.flush_take_pc ||
       io.sfence_take_pc ||
       (io.f2_btb_resp.valid && io.f2_btb_resp.bits.taken) ||
 //      (io.f2_bpu_request.valid && !if_stalled && io.imem.resp.valid) ||
-      (f4_req.valid && !if_stalled) // TODO this seems way too low-level to get backpressure signal correct
+      (r_f4_valid && r_f4_req.valid)
 
    io.imem.req.valid   := f0_redirect_val // tell front-end we had an unexpected change in the stream
    io.imem.req.bits.pc := f0_redirect_pc
    io.imem.req.bits.speculative := !(io.flush_take_pc)
-   io.imem.resp.ready  := !(if_stalled)
+   io.imem.resp.ready  := q_f3_imemresp.io.enq.ready
 
    f0_redirect_pc :=
       Mux(io.sfence_take_pc,
@@ -147,7 +148,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
          br_unit.target(vaddrBits,0),
       Mux(io.f2_btb_resp.valid && io.f2_btb_resp.bits.taken,
          io.f2_btb_resp.bits.target,
-         f4_req.bits.addr))))
+         r_f4_req.bits.addr))))
 
    //-------------------------------------------------------------
    // **** ICache Access (F1) ****
@@ -159,25 +160,28 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    // **** ICache Response/Pre-decode (F2) ****
    //-------------------------------------------------------------
 
+   q_f3_imemresp.io.enq.valid := io.imem.resp.valid
+   q_f3_btb_resp.io.enq.valid := io.imem.resp.valid
 
-   when (io.clear_fetchbuffer)
-   {
-      f3_valid := false.B
-   }
-   .elsewhen (!if_stalled)
-   {
-      f3_valid := io.imem.resp.valid && !f4_req.valid
-      f3_imemresp := io.imem.resp.bits
-      f3_btb_resp := io.f2_btb_resp
-   }
+   q_f3_imemresp.io.enq.bits := io.imem.resp.bits
+   q_f3_btb_resp.io.enq.bits := io.f2_btb_resp
 
    //-------------------------------------------------------------
    // **** F3 ****
    //-------------------------------------------------------------
- 
+
+   clear_f3 := io.clear_fetchbuffer || (r_f4_valid && r_f4_req.valid)
+
+   val f3_valid = q_f3_imemresp.io.deq.valid
+   val f3_imemresp = q_f3_imemresp.io.deq.bits
+   val f3_btb_resp = q_f3_btb_resp.io.deq.bits
+
+   q_f3_imemresp.io.deq.ready := FetchBuffer.io.enq.ready
+   q_f3_btb_resp.io.deq.ready := FetchBuffer.io.enq.ready
+
    // round off to nearest fetch boundary
    val f3_aligned_pc = ~(~f3_imemresp.pc | (fetch_width*coreInstBytes-1).U)
-                                    
+
    val is_br     = Wire(Vec(fetch_width, Bool()))
    val is_jal    = Wire(Vec(fetch_width, Bool()))
    val is_jr     = Wire(Vec(fetch_width, Bool()))
@@ -244,7 +248,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
          f3_jal_target,
          f3_aligned_pc + (fetch_width*coreInstBytes).U))
 
-   when (f3_btb_resp.valid)
+   when (f3_valid && f3_btb_resp.valid)
    {
       // btb made a prediction
       // Make a redirect request if:
@@ -289,7 +293,8 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
       "[bpd_pipeline] mutually-exclusive signals firing")
 
    // catch any BTB mispredictions (and fix-up missed JALs)
-   bchecker.io.is_valid  := Vec(f3_imemresp.mask.toBools)
+   bchecker.io.valid := f3_valid
+   bchecker.io.inst_mask := Vec(f3_imemresp.mask.toBools)
    bchecker.io.is_br  := is_br
    bchecker.io.is_jal := is_jal
    bchecker.io.is_jr  := is_jr
@@ -308,7 +313,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
       !jal_overrides_bpd &&
       (!bchecker.io.req.valid || (f3_bpd_redirect_cfiidx < bchecker.io.req_cfi_idx))
 //   f3_req.valid := (bchecker.io.req.valid || (f3_bpd_may_redirect && !jal_overrides_bpd)) && f3_valid && !(f0_redirect_val && !io.f3_bpu_request.valid)
-   f3_req.valid := f3_valid && (bchecker.io.req.valid || (f3_bpd_may_redirect && !jal_overrides_bpd)) && !(f0_redirect_val)
+   f3_req.valid := f3_valid && (bchecker.io.req.valid || (f3_bpd_may_redirect && !jal_overrides_bpd)) // && !(f0_redirect_val)
    f3_req.bits.addr := Mux(f3_bpd_overrides_bcheck, f3_bpd_redirect_target, bchecker.io.req.bits.addr)
 
    val f3_btb_update_bits = Wire(new BTBsaUpdate)
@@ -356,7 +361,6 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
       f3_taken := f3_btb_resp.bits.taken
    }
 
-//   f2_valid := io.imem.resp.valid && !io.clear_fetchbuffer && !f3_req.valid XXX how is this used?
    f3_fetch_bundle.pc := f3_imemresp.pc
    f3_fetch_bundle.xcpt_pf_if := f3_imemresp.xcpt.pf.inst
    f3_fetch_bundle.xcpt_ae_if := f3_imemresp.xcpt.ae.inst
@@ -401,36 +405,42 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    //-------------------------------------------------------------
 
 
-   when (io.clear_fetchbuffer)
+   when (io.clear_fetchbuffer || r_f4_req.valid)
    {
-      f4_valid := false.B
-      f4_req.valid := false.B
+      r_f4_valid := false.B
+      r_f4_req.valid := false.B
 //      f3_br_seen := false.B
 //      f3_jr_seen := false.B
    }
-   .elsewhen (!if_stalled)
+   .elsewhen (FetchBuffer.io.enq.ready)
    {
-      f4_valid := f3_valid
+      r_f4_valid := f3_valid && !(r_f4_valid && r_f4_req.valid)
 //      f4_fetch_bundle := f3_fetch_bundle
-      f4_req := f3_req
+      r_f4_req := f3_req
 //      f3_taken := f2_taken
 //      f3_btb_hit := io.f2_btb_resp.valid
 //      f3_br_seen := f2_br_seen
 //      f3_jr_seen := f2_jr_seen
    }
 
-//   io.f3_bim_update.valid := f3_valid && f3_req.valid && f3_btb_hit
+   assert (!(r_f4_req.valid && !r_f4_valid),
+      "[fetch] f4-request is high but f4_valid is not.")
+   assert (!(io.clear_fetchbuffer && !(br_unit.take_pc || io.flush_take_pc || io.sfence_take_pc)),
+      "[fetch] F4 should be cleared if a F0_redirect due to BRU/Flush/Sfence.")
+
+//   io.f3_bim_update.valid := r_f3_valid && f3_req.valid && f3_btb_hit
 //   io.f3_bim_update.bits.taken :=  f3_taken
 //   // HACK: all instructions in the bundle get the same bim_resp, so just read the first.
 //   io.f3_bim_update.bits.bim_resp := f3_fetch_bundle.bpu_info(0).bim_resp
 
+   // TODO enqueue into FetchTargetQueue
 
    //-------------------------------------------------------------
    // **** FetchBuffer Enqueue ****
    //-------------------------------------------------------------
 
    // Fetch Buffer
-   FetchBuffer.io.enq.valid := f3_valid && !f4_req.valid
+   FetchBuffer.io.enq.valid := f3_valid && !r_f4_req.valid
    FetchBuffer.io.enq.bits  := f3_fetch_bundle
 
 
@@ -578,6 +588,13 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    }
 
 
+   // Check that all elastic registers in the same stage show the same control signals.
+   assert(q_f3_imemresp.io.deq.valid === q_f3_btb_resp.io.deq.valid)
+   assert(q_f3_imemresp.io.enq.valid === q_f3_btb_resp.io.enq.valid)
+   assert(q_f3_imemresp.io.deq.ready === q_f3_btb_resp.io.deq.ready)
+   assert(q_f3_imemresp.io.enq.ready === q_f3_btb_resp.io.enq.ready)
+
+
    //-------------------------------------------------------------
    // **** Printfs ****
    //-------------------------------------------------------------
@@ -594,7 +611,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
          , Mux(io.flush_take_pc, Str("F"),
            Mux(br_unit.take_pc, Str("B"), Str(" ")))
          , f0_redirect_pc
-         , if_stalled)
+         , io.imem.resp.ready)
 
       // Fetch Stage 2
       printf(" Fetch2 : (%c) 0x%x I$ Response <<-- IF2_PC (mask:0x%x) "
@@ -631,5 +648,10 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
          , FetchBuffer.io.enq.bits.mask
          )
    }
+
+   dontTouch(f3_has_jal)
+   dontTouch(f3_jal_idx)
+   dontTouch(jal_overrides_bpd)
+
 }
 
