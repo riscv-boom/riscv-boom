@@ -88,7 +88,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
       val f3_bpd_resp   = Valid(new BpdResp)
       val f3_btb_update = Valid(new BTBsaUpdate).flip
       val f3_ras_update = Valid(new RasUpdate).flip
-      val f3_bim_update = Valid(new BimUpdate).flip
+      val f3_bim_update = Valid(new LegacyBimUpdate).flip
 
       // Other
       val br_unit       = new BranchUnitResp().asInput

@@ -39,6 +39,7 @@ case class BoomCoreParams(
    enableBpdUSModeHistory: Boolean = false,
    useAtomicsOnlyForIO: Boolean = false,
    btb: BTBsaParameters = BTBsaParameters(),
+   bim: BimParameters = BimParameters(),
    tage: Option[TageParameters] = None,
    gshare: Option[GShareParameters] = None,
    gskew: Option[GSkewParameters] = None,

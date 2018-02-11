@@ -57,7 +57,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
       val f3_ras_update     = Valid(new RasUpdate)
       val f3_bpd_resp       = Valid(new BpdResp).flip
       val f3_btb_update     = Valid(new BTBsaUpdate)
-      val f3_bim_update     = Valid(new BimUpdate)
+      val f3_bim_update     = Valid(new LegacyBimUpdate)
 
       val br_unit           = new BranchUnitResp().asInput
 
@@ -77,6 +77,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    })
 
    val bchecker = Module (new BranchChecker(fetchWidth))
+   val ftq = Module(new FetchTargetQueue(num_entries = 40))
    val FetchBuffer = Module(new Queue(gen=new FetchBundle,
                                 entries=fetchBufferSz,
                                 pipe=false,
@@ -97,6 +98,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
 
    val r_f4_valid = Reg(init=false.B)
    val r_f4_req = Reg(Valid(new PCReq()))
+   val r_f4_fetchpc = Reg(UInt())
 
 
 //   val f2_valid = Wire(Bool())
@@ -200,6 +202,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
       bpd_decoder.io.inst := inst
       f3_fetch_bundle.insts(i) := inst
 
+      // TODO do not compute a vector of targets
       val pc = f3_aligned_pc + UInt(i << 2)
       is_br(i)    := f3_valid && bpd_decoder.io.is_br && f3_imemresp.mask(i)
       is_jal(i)   := f3_valid && bpd_decoder.io.is_jal  && f3_imemresp.mask(i)
@@ -417,11 +420,15 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
       r_f4_valid := f3_valid && !(r_f4_valid && r_f4_req.valid)
 //      f4_fetch_bundle := f3_fetch_bundle
       r_f4_req := f3_req
+      r_f4_fetchpc := f3_imemresp.pc
 //      f3_taken := f2_taken
 //      f3_btb_hit := io.f2_btb_resp.valid
 //      f3_br_seen := f2_br_seen
 //      f3_jr_seen := f2_jr_seen
    }
+
+   ftq.io.enq.valid := r_f4_valid
+   ftq.io.enq.bits.fetch_pc := r_f4_fetchpc
 
    assert (!(r_f4_req.valid && !r_f4_valid),
       "[fetch] f4-request is high but f4_valid is not.")
@@ -648,10 +655,6 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
          , FetchBuffer.io.enq.bits.mask
          )
    }
-
-   dontTouch(f3_has_jal)
-   dontTouch(f3_jal_idx)
-   dontTouch(jal_overrides_bpd)
 
 }
 

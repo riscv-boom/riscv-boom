@@ -156,7 +156,7 @@ class BranchUnitResp(implicit p: Parameters) extends BoomBundle()(p)
 
    val brinfo          = new BrResolutionInfo()
    val btb_update      = Valid(new BTBsaUpdate)
-   val bim_update      = Valid(new BimUpdate)
+   val bim_update      = Valid(new LegacyBimUpdate)
    val bpd_update      = Valid(new BpdUpdate)
 
    val xcpt            = Valid(new Exception)

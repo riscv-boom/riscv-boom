@@ -14,6 +14,10 @@
 //
 // A predicted-taken will insert 1 bubble into the pipeline.
 //
+// TODO:
+//    - provide way to flush BTB.
+//    - move BIM to SRAM.
+//
 // NOTES:
 //    - No compression of high-order tag bits or target bits.
 //    - We store the full targets, instead of just the branch/jump offsets (requires adder).
@@ -109,7 +113,7 @@ class BTBsaUpdate(implicit p: Parameters) extends BTBsaBundle()(p)
    val cfi_type = CfiType()
 }
 
-class BimUpdate(implicit p: Parameters) extends BTBsaBundle()(p)
+class LegacyBimUpdate(implicit p: Parameters) extends BTBsaBundle()(p)
 {
   val taken = Bool()
   val bim_resp = new BimResp
@@ -193,12 +197,11 @@ class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParamet
       // req.bits.addr is available on cycle S0.
       // resp is expected on cycle S2.
       val req = Valid(new PCReq).flip
+      // resp is valid if there is a BTB hit.
       val resp = Valid(new BTBsaResp)
       // the PC we're predicting on (start of the fetch packet).
       // Pass this to the BPD.
       val s1_pc  = UInt(width = vaddrBits)
-      // RAS prediction gets pipelined and handled in next stage (optionally)
-      val ras_resp = Valid(new BTBsaResp)
       // If there's an icmiss, the Frontend replays the s2_pc as s0_pc (even though req.valid is low),
       // so don't stall and begin predicting s0_pc.
       val icmiss = Bool(INPUT)
@@ -206,11 +209,8 @@ class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParamet
       // supress S1/upcoming S2 valids.
       val flush = Bool(INPUT)
 
-      // BTB update comes in during branch resolution (Execute Stage). Yes, that's out-of-order.
       val btb_update = Valid(new BTBsaUpdate).flip
-      // BIM is updated speculatively in Frontend (and during Execute if mispredicted).
-      val bim_update = Valid(new BimUpdate).flip
-      // RAS is updated in Frontend, in-order.
+      val bim_update = Valid(new LegacyBimUpdate).flip
       val ras_update = Valid(new RasUpdate).flip
 
       // HACK: prevent BTB updating/predicting during program load.
