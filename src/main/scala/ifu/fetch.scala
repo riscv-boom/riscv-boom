@@ -473,6 +473,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    ftq.io.enq.bits.fetch_pc := f3_imemresp.pc
 
    ftq.io.deq := io.commit
+   ftq.io.brinfo := br_unit.brinfo
    ftq.io.flush := io.flush_info
    ftq.io.debug_rob_empty := io.debug_rob_empty
 

@@ -14,13 +14,13 @@
 //   !- pass off ftq_idx to instructions
 //   !- pass off ftq_idx to ROB/branches
 //   !- get commit_ptr from ROB
-//    - update pointer on exception/flush
-//    - update pointer on mispredict
+//   !- update pointer on exception/flush
+//   !- update pointer on mispredict
 //   !- get dequeue ptr to move 1/cycle to match commit_ptr
 //    - start using fetch-pcs to drive ROB redirections
 //    - start using fetch-pcs to drive JALR, branch mispredictions, CSR I/Os
 //    - remove ROB's PCFile
-//    - get miss-info working
+//   !- get miss-info working
 //    - store BIM info;
 //    - get BIM updating properly.
 //    - use BIM to drive BTB.
@@ -113,7 +113,7 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
 
    private def nullCfiInfo(): CfiMissInfo =
    {
-      val b = new CfiMissInfo(fetchWidth)
+      val b = Wire(new CfiMissInfo(fetchWidth))
       b.valid := false.B
       b.taken := false.B
       b.cfi_idx := 0.U
@@ -123,7 +123,7 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
 
    when (do_enq) {
      ram(enq_ptr.value) := io.enq.bits
-//     cfi_info(enq_ptr.value) := nullCfiInfo()
+     cfi_info(enq_ptr.value) := nullCfiInfo()
      enq_ptr.inc()
    }
    when (do_deq) {
@@ -150,6 +150,10 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
    when (io.brinfo.valid && io.brinfo.mispredict)
    {
       enq_ptr.value := io.brinfo.ftq_idx
+
+      cfi_info(io.brinfo.ftq_idx).valid := true.B
+      cfi_info(io.brinfo.ftq_idx).taken := io.brinfo.taken
+      cfi_info(io.brinfo.ftq_idx).cfi_idx := io.brinfo.pc_lob >> log2Ceil(coreInstBytes)
    }
 
 //   io.deq.valid := !empty
@@ -170,8 +174,6 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
    // TODO check against empty rob that commit_ptr == enq_ptr.
 //   assert(!(io.debug_rob_empty)
 
-//   when (io.br_unit
-
    //-------------------------------------------------------------
    // **** Printfs ****
    //-------------------------------------------------------------
@@ -189,18 +191,22 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
          enq_ptr.value, commit_ptr, deq_ptr.value,
          Mux(io.debug_rob_empty, Str("E"), Str("-"))
       )
+      
       val w = 4
       for (
          i <- 0 until (num_entries/w);
          j <- 0 until w
       ){
          val idx = i+j*(num_entries/w)
-         printf(" [%d %c%c%c pc=0x%x]",
+         printf(" [%d %c%c%c pc=0x%x ms:%c%c-%d]",
             idx.asUInt(width=5.W),
             Mux(enq_ptr.value === idx.U, Str("E"), Str(" ")),
             Mux(commit_ptr === idx.U, Str("C"), Str(" ")),
             Mux(deq_ptr.value === idx.U, Str("D"), Str(" ")),
-            0.U
+            0.U,
+            Mux(cfi_info(idx).valid, Str("V"), Str(" ")),
+            Mux(cfi_info(idx).taken, Str("T"), Str(" ")),
+            cfi_info(idx).cfi_idx
          )
          if (j == w-1) printf("\n")
       }

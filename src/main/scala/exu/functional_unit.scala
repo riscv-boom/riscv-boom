@@ -133,6 +133,7 @@ class BrResolutionInfo(implicit p: Parameters) extends BoomBundle()(p)
    val tag        = UInt(width = BR_TAG_SZ)    // the branch tag that was resolved
    val exe_mask   = UInt(width = MAX_BR_COUNT) // the br_mask of the actual branch uop
                                                // used to reset the dec_br_mask
+   val pc_lob     = UInt(width = log2Up(fetchWidth*coreInstBytes))
    val ftq_idx    = UInt(width = ftqSz)
    val rob_idx    = UInt(width = ROB_ADDR_SZ)
    val ldq_idx    = UInt(width = MEM_ADDR_SZ)  // track the "tail" of loads and stores, so we can
@@ -452,6 +453,7 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
       brinfo.exe_mask       := GetNewBrMask(io.brinfo, uop.br_mask)
       brinfo.tag            := uop.br_tag
       brinfo.ftq_idx        := uop.ftq_idx
+      brinfo.pc_lob         := uop.pc_lob
       brinfo.rob_idx        := uop.rob_idx
       brinfo.ldq_idx        := uop.ldq_idx
       brinfo.stq_idx        := uop.stq_idx
