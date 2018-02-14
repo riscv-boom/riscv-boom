@@ -26,7 +26,7 @@ case class BoomCoreParams(
    enableCustomRf: Boolean = false,
    enableCustomRfModel: Boolean = true,
    maxBrCount: Int = 4,
-   fetchBufferSz: Int = 8,
+   fetchBufferSz: Int = 4,
    enableAgePriorityIssue: Boolean = true,
    enablePrefetching: Boolean = false,
    enableFetchBufferFlowThrough: Boolean = true,
@@ -38,6 +38,7 @@ case class BoomCoreParams(
    enableBpdUModeOnly: Boolean = false,
    enableBpdUSModeHistory: Boolean = false,
    useAtomicsOnlyForIO: Boolean = false,
+   ftq: FtqParameters = FtqParameters(),
    btb: BTBsaParameters = BTBsaParameters(),
    bim: BimParameters = BimParameters(),
    tage: Option[TageParameters] = None,
@@ -103,6 +104,7 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
    val NUM_ROB_ENTRIES  = boomParams.numRobEntries     // number of ROB entries (e.g., 32 entries for R10k)
    val NUM_LSU_ENTRIES  = boomParams.numLsuEntries     // number of LD/ST entries
    val MAX_BR_COUNT     = boomParams.maxBrCount        // number of branches we can speculate simultaneously
+   val ftqSz            = boomParams.ftq.nEntries
    val fetchBufferSz    = boomParams.fetchBufferSz     // number of instructions that stored between fetch&decode
 
    val numIntPhysRegs   = boomParams.numIntPhysRegisters // size of the integer physical register file

@@ -130,6 +130,34 @@ class CommitExceptionSignals(machine_width: Int)(implicit p: Parameters) extends
    override def cloneType: this.type = new CommitExceptionSignals(machine_width)(p).asInstanceOf[this.type]
 }
 
+// Tell the frontend the type of flush so it can set up the next PC properly.
+object FlushTypes
+{
+   def SZ = 3
+   def apply() = UInt(width = SZ)
+   def none = 0.U
+   def xcpt = 1.U // An exception occurred.
+   def cxcpt = (2+1).U // The CSRFile wants to redirect the frontend.
+   def eret = (4+1).U // Execute an environment return instruction.
+   def refetch = 2.U // Flush and refetch the head instruction.
+   def next = 4.U // Flush and fetch the next instruction.
+
+   def useCsrEvec(typ: UInt): Bool = typ(0) // typ === xcpt.U || typ === cxcpt.U || typ === eret.U
+   def useSamePC(typ: UInt): Bool = typ === refetch
+   def usePCplus4(typ: UInt): Bool = typ === next
+
+   def getType(valid: Bool, i_xcpt: Bool, i_cxcpt: Bool, i_eret: Bool, i_refetch: Bool): UInt =
+   {
+      val ret =
+         Mux(!valid, none,
+         Mux(i_refetch, refetch,
+         Mux(i_cxcpt, cxcpt,
+         Mux(i_eret, eret,
+         Mux(i_xcpt, xcpt,
+            next)))))
+      ret
+   }
+}
 
 class FlushSignals(implicit p: Parameters) extends BoomBundle()(p)
 {
@@ -138,7 +166,10 @@ class FlushSignals(implicit p: Parameters) extends BoomBundle()(p)
    // but because we're doing superscalar commit, the actual flush pc may not
    // be the rob_head pc+4, but rather the last committed instruction in the
    // commit group.
+   // TODO remove pc. Store elsewhere.
    val pc = UInt(width = xLen)
+   // Access the FTQ and have it reset the FetchUnit to the appropriate PC.
+   val ftq_info = new FtqFlushInfo()
 }
 
 
@@ -658,10 +689,14 @@ class Rob(width: Int,
                      (Range(0,width).map{i => io.commit.valids(i) && io.commit.uops(i).flush_on_commit}).reduce(_|_)
 
    // delay a cycle for critical path considerations
-   io.flush.valid := RegNext(flush_val)
+   io.flush.valid := RegNext(flush_val, init=false.B)
    io.flush.bits.pc := RegNext(Mux(io.com_xcpt.valid || io.cxcpt.valid || io.csr_eret,
                         io.csr_evec,
                         flush_pc))
+   io.flush.bits.ftq_info.ftq_idx :=
+      RegNext(PriorityMux(rob_head_vals, Range(0,width).map(i => io.commit.uops(i).ftq_idx)))
+   io.flush.bits.ftq_info.flush_typ :=
+      RegNext(FlushTypes.getType(flush_val, io.com_xcpt.valid, io.cxcpt.valid, io.csr_eret, refetch_inst))
 
    val com_lsu_misspec = RegNext(exception_thrown && io.com_xcpt.bits.cause === MINI_EXCEPTION_MEM_ORDERING)
    assert (!(com_lsu_misspec && !io.flush.valid), "[rob] pipeline flush not be excercised during a LSU misspeculation")
@@ -1045,7 +1080,7 @@ class Rob(width: Int,
          else if (COMMIT_WIDTH == 2)
          {
             val row_is_val = debug_entry(r_idx+0).valid || debug_entry(r_idx+1).valid
-            printf("%d %x (%c%c)(%c%c) 0x%x %x [DASM(%x)][DASM(%x)" + "] %c,%c "
+            printf("%d %x (%c%c)(%c%c) 0x%x %x [DASM(%x)][DASM(%x)" + "] %c,%c %d,%d"
                , row_metadata_brob_idx(row)
                , row_metadata_has_brorjalr(row)
                , Mux(debug_entry(r_idx+0).valid, Str("V"), Str(" "))
@@ -1058,6 +1093,8 @@ class Rob(width: Int,
                , debug_entry(r_idx+1).uop.inst
                , Mux(debug_entry(r_idx+0).exception, Str("E"), Str("-"))
                , Mux(debug_entry(r_idx+1).exception, Str("E"), Str("-"))
+               , debug_entry(r_idx+0).uop.ftq_idx
+               , debug_entry(r_idx+1).uop.ftq_idx
                )
          }
          else if (COMMIT_WIDTH == 4)

@@ -566,6 +566,8 @@ class FetchSerializerNtoM(implicit p: Parameters) extends BoomModule()(p)
 
    io.deq.bits.uops(0).pc             := io.enq.bits.pc
    io.deq.bits.uops(0).fetch_pc_lob   := io.enq.bits.pc
+   io.deq.bits.uops(0).ftq_idx        := io.enq.bits.ftq_idx
+   io.deq.bits.uops(0).pc_lob         := io.enq.bits.pc
    io.deq.bits.uops(0).inst           := io.enq.bits.insts(inst_idx)
    io.deq.bits.uops(0).br_prediction  := io.enq.bits.bpu_info(inst_idx)
    io.deq.bits.uops(0).valid          := io.enq.bits.mask(inst_idx)
@@ -583,9 +585,12 @@ class FetchSerializerNtoM(implicit p: Parameters) extends BoomModule()(p)
       // 1:1, so pass everything straight through!
       for (i <- 0 until DECODE_WIDTH)
       {
+         require (coreInstBytes==4)
          io.deq.bits.uops(i).valid          := io.enq.bits.mask(i)
          io.deq.bits.uops(i).pc             := (io.enq.bits.pc.asSInt & SInt(-(FETCH_WIDTH*coreInstBytes))).asUInt + UInt(i << 2)
          io.deq.bits.uops(i).fetch_pc_lob   := io.enq.bits.pc
+         io.deq.bits.uops(i).ftq_idx        := io.enq.bits.ftq_idx
+         io.deq.bits.uops(i).pc_lob         := ~(~io.enq.bits.pc | (fetchWidth*coreInstBytes-1).U) + (i << 2).U
          io.deq.bits.uops(i).inst           := io.enq.bits.insts(i)
          io.deq.bits.uops(i).xcpt_pf_if     := io.enq.bits.xcpt_pf_if
          io.deq.bits.uops(i).xcpt_ae_if     := io.enq.bits.xcpt_ae_if
