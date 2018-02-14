@@ -28,6 +28,7 @@ import freechips.rocketchip.util.UIntToAugmentedUInt
 class FetchBundle(implicit p: Parameters) extends BoomBundle()(p)
 {
    val pc            = UInt(width = vaddrBitsExtended)
+   val ftq_idx       = UInt(width = log2Up(ftqSz))
    val insts         = Vec(FETCH_WIDTH, Bits(width = 32))
    val mask          = Bits(width = FETCH_WIDTH) // mark which words are valid instructions
    val xcpt_pf_if    = Bool() // I-TLB miss (instruction fetch fault).
@@ -65,6 +66,8 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
 
       val clear_fetchbuffer = Bool(INPUT)
 
+      val commit            = Valid(UInt(width=ftqSz.W)).flip
+      val flush_info        = Valid(new FtqFlushInfo()).flip
       val flush_take_pc     = Bool(INPUT)
       val flush_pc          = UInt(INPUT, vaddrBits+1)
 
@@ -74,10 +77,11 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
 
       val resp              = new DecoupledIO(new FetchBundle)
 //      val stalled           = Bool(OUTPUT) // CODE REVIEW
+      val debug_rob_empty   = Bool(INPUT)
    })
 
    val bchecker = Module (new BranchChecker(fetchWidth))
-   val ftq = Module(new FetchTargetQueue(num_entries = 40))
+   val ftq = Module(new FetchTargetQueue(num_entries = ftqSz))
    val FetchBuffer = Module(new Queue(gen=new FetchBundle,
                                 entries=fetchBufferSz,
                                 pipe=false,
@@ -99,6 +103,8 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    val r_f4_valid = Reg(init=false.B)
    val r_f4_req = Reg(Valid(new PCReq()))
    val r_f4_fetchpc = Reg(UInt())
+   // Can the F3 stage proceed?
+   val f4_ready = FetchBuffer.io.enq.ready && ftq.io.enq.ready
 
 
 //   val f2_valid = Wire(Bool())
@@ -178,8 +184,8 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    val f3_imemresp = q_f3_imemresp.io.deq.bits
    val f3_btb_resp = q_f3_btb_resp.io.deq.bits
 
-   q_f3_imemresp.io.deq.ready := FetchBuffer.io.enq.ready
-   q_f3_btb_resp.io.deq.ready := FetchBuffer.io.enq.ready
+   q_f3_imemresp.io.deq.ready := f4_ready
+   q_f3_btb_resp.io.deq.ready := f4_ready
 
    // round off to nearest fetch boundary
    val f3_aligned_pc = ~(~f3_imemresp.pc | (fetch_width*coreInstBytes-1).U)
@@ -365,6 +371,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    }
 
    f3_fetch_bundle.pc := f3_imemresp.pc
+   f3_fetch_bundle.ftq_idx := ftq.io.enq_idx
    f3_fetch_bundle.xcpt_pf_if := f3_imemresp.xcpt.pf.inst
    f3_fetch_bundle.xcpt_ae_if := f3_imemresp.xcpt.ae.inst
    f3_fetch_bundle.replay_if :=  f3_imemresp.replay
@@ -415,7 +422,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
 //      f3_br_seen := false.B
 //      f3_jr_seen := false.B
    }
-   .elsewhen (FetchBuffer.io.enq.ready)
+   .elsewhen (f4_ready)
    {
       r_f4_valid := f3_valid && !(r_f4_valid && r_f4_req.valid)
 //      f4_fetch_bundle := f3_fetch_bundle
@@ -426,9 +433,6 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
 //      f3_br_seen := f2_br_seen
 //      f3_jr_seen := f2_jr_seen
    }
-
-   ftq.io.enq.valid := r_f4_valid
-   ftq.io.enq.bits.fetch_pc := r_f4_fetchpc
 
    assert (!(r_f4_req.valid && !r_f4_valid),
       "[fetch] f4-request is high but f4_valid is not.")
@@ -447,7 +451,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    //-------------------------------------------------------------
 
    // Fetch Buffer
-   FetchBuffer.io.enq.valid := f3_valid && !r_f4_req.valid
+   FetchBuffer.io.enq.valid := f3_valid && !r_f4_req.valid && f4_ready
    FetchBuffer.io.enq.bits  := f3_fetch_bundle
 
 
@@ -461,6 +465,16 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
       }
    }
 
+   //-------------------------------------------------------------
+   // **** FetchTargetQueue ****
+   //-------------------------------------------------------------
+
+   ftq.io.enq.valid := FetchBuffer.io.enq.valid
+   ftq.io.enq.bits.fetch_pc := f3_imemresp.pc
+
+   ftq.io.deq := io.commit
+   ftq.io.flush := io.flush_info
+   ftq.io.debug_rob_empty := io.debug_rob_empty
 
    //-------------------------------------------------------------
    // **** Frontend Response ****

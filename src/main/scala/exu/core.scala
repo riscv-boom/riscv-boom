@@ -299,6 +299,15 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    fetch_unit.io.flush_take_pc     := rob.io.flush.valid || RegNext(lsu.io.exe_resp.bits.sfence.valid)
    fetch_unit.io.flush_pc          := rob.io.flush.bits.pc
 
+   fetch_unit.io.flush_info.valid  := rob.io.flush.valid || fetch_unit.io.sfence_take_pc
+   fetch_unit.io.flush_info.bits   := rob.io.flush.bits.ftq_info
+
+   // Tell the FTQ it can deallocate entries by passing youngest ftq_idx.
+   val youngest_com_idx            = (COMMIT_WIDTH-1).U - PriorityEncoder(rob.io.commit.valids.reverse)
+   fetch_unit.io.commit.valid      := rob.io.commit.valids.reduce(_|_)
+   fetch_unit.io.commit.bits       := rob.io.commit.uops(youngest_com_idx).ftq_idx
+   fetch_unit.io.debug_rob_empty   := rob.io.empty
+
 
 
    io.imem.flush_icache :=
@@ -1166,9 +1175,9 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       val numBrobWhitespace = if (DEBUG_PRINTF_BROB) NUM_BROB_ENTRIES else 0
 //      val screenheight = 103 - 4 - 10
 //      val screenheight = 85 - 10
-//      val screenheight = 78 - 10
+      val screenheight = 78 - 13
 //      val screenheight = 63-10
-      val screenheight = 61-9
+//      val screenheight = 61-10
        var whitespace = (screenheight - 11 + 3 - NUM_LSU_ENTRIES -
          issueParams.map(_.numEntries).sum - issueParams.length - (NUM_ROB_ENTRIES/COMMIT_WIDTH) - numBrobWhitespace
      )
