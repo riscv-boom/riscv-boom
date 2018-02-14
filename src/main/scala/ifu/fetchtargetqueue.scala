@@ -83,10 +83,8 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
       val pc_request = Valid(new PCReq()) //TODO XXX
 
       // on any sort misprediction or rob flush, reset the enq_ptr.
-//      val flush = Flipped(Valid(UInt(width=idx_sz.W)))
       val flush = Flipped(Valid(new FtqFlushInfo()))
 
-//      val br_unit = new BranchUnitResp().asInput
       val brinfo = new BrResolutionInfo().asInput
 
       val debug_rob_empty = Input(Bool())
@@ -139,7 +137,6 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
    when (io.deq.valid)
    {
       commit_ptr := io.deq.bits
-      assert (!empty, "[ftq] nothing to deqeue.")
    }
 
    when (io.flush.valid)
@@ -150,6 +147,8 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
    when (io.brinfo.valid && io.brinfo.mispredict)
    {
       enq_ptr.value := io.brinfo.ftq_idx
+      // If ptr is adjusted, we deleted entries and thus can't be full.
+      maybe_full := (enq_ptr.value === io.brinfo.ftq_idx)
 
       cfi_info(io.brinfo.ftq_idx).valid := true.B
       cfi_info(io.brinfo.ftq_idx).taken := io.brinfo.taken
