@@ -730,17 +730,18 @@ class BranchReorderBuffer(fetch_width: Int, num_entries: Int)(implicit p: Parame
       entries_info.write(tail_ptr, io.backend.allocate.bits.info)
       tail_ptr := WrapInc(tail_ptr, num_entries)
 
-      assert (tail_ptr === io.backend.allocate.bits.ctrl.brob_idx,
-         "[BROB] allocating the wrong entry.")
+//      assert (tail_ptr === io.backend.allocate.bits.ctrl.brob_idx,
+//         "[BROB] allocating the wrong entry.")
    }
    when (r_deallocate.valid)
    {
       head_ptr := WrapInc(head_ptr, num_entries)
 
-      assert (entries_ctrl(head_ptr).debug_executed === Bool(true),
-         "[BROB] Committing an entry with no executed branches or jalrs.")
-      assert (head_ptr === r_deallocate.bits.brob_idx ,
-         "[BROB] Committing wrong entry.")
+      // TODO will delete this module.
+//      assert (entries_ctrl(head_ptr).debug_executed === Bool(true),
+//         "[BROB] Committing an entry with no executed branches or jalrs.")
+//      assert (head_ptr === r_deallocate.bits.brob_idx ,
+//         "[BROB] Committing wrong entry.")
    }
 
    when (r_bpd_update.valid)
@@ -782,7 +783,7 @@ class BranchReorderBuffer(fetch_width: Int, num_entries: Int)(implicit p: Parame
    {
       head_ptr := UInt(0)
       tail_ptr := UInt(0)
-      assert (!io.backend.bpd_update.valid, "[BROB] Collision of flush and BPD update.")
+//      assert (!io.backend.bpd_update.valid, "[BROB] Collision of flush and BPD update.")
    }
 
    // -----------------------------------------------
@@ -799,11 +800,10 @@ class BranchReorderBuffer(fetch_width: Int, num_entries: Int)(implicit p: Parame
          head_ptr)
    io.commit_entry.bits.info := entries_info.read(next_head_ptr, io.backend.deallocate.valid)
 
-   // TODO allow filling the entire BROB ROB, instead of wasting an entry
    val full = (head_ptr === WrapInc(tail_ptr, num_entries))
-   io.backend.allocate.ready := !full
+   io.backend.allocate.ready := true.B // TODO HACK GOING TO DELETE THIS MODULE !full
 
-   assert (!(full && io.backend.allocate.valid), "Trying to allocate entry while full.")
+//   assert (!(full && io.backend.allocate.valid), "Trying to allocate entry while full.")
 
    io.backend.allocate_brob_tail := tail_ptr
 
@@ -819,8 +819,6 @@ class BranchReorderBuffer(fetch_width: Int, num_entries: Int)(implicit p: Parame
             , entries_ctrl(i).taken.asUInt
             , entries_ctrl(i).mispredicted.asUInt
             , entries_ctrl(i).debug_rob_idx
-//            , entries_info(i).history_ptr
-//            , entries_info(i).info
             )
          printf("%c\n",
             Mux(head_ptr === UInt(i) && tail_ptr === UInt(i), Str("B"),

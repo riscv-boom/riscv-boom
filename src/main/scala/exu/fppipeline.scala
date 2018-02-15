@@ -79,7 +79,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
 
    // We're playing fast and loose on the number of wakeup and write ports.
    // The -1 is for the F2I port; -1 for I2F port.
-   println (exe_units.map(_.num_rf_write_ports).sum)
+   //println (exe_units.map(_.num_rf_write_ports).sum)
    require (exe_units.map(_.num_rf_write_ports).sum-1-1 + num_ll_ports == num_wakeup_ports)
    require (exe_units.withFilter(_.uses_iss_unit).map(e =>
       e.num_rf_write_ports).sum -1 + num_ll_ports == num_wakeup_ports)

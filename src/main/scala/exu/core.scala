@@ -1014,13 +1014,12 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
    // branch unit requests PCs and predictions from ROB during register read
    // (fetch PC from ROB cycle earlier than needed for critical path reasons)
-   rob.io.get_pc.rob_idx := (if (regreadLatency == 1) RegNext(iss_uops(brunit_idx).rob_idx)
-                            else iss_uops(brunit_idx).rob_idx)
-   exe_units(brunit_idx).io.get_rob_pc.curr_pc        := RegNext(rob.io.get_pc.curr_pc)
-   exe_units(brunit_idx).io.get_rob_pc.curr_brob_idx  := RegNext(rob.io.get_pc.curr_brob_idx)
-   exe_units(brunit_idx).io.get_rob_pc.next_val       := RegNext(rob.io.get_pc.next_val)
-   exe_units(brunit_idx).io.get_rob_pc.next_pc        := RegNext(rob.io.get_pc.next_pc)
+   fetch_unit.io.get_pc.ftq_idx := RegNext(iss_uops(brunit_idx).ftq_idx)
+   exe_units(brunit_idx).io.get_ftq_pc.fetch_pc       := RegNext(fetch_unit.io.get_pc.fetch_pc)
+   exe_units(brunit_idx).io.get_ftq_pc.next_val       := RegNext(fetch_unit.io.get_pc.next_val)
+   exe_units(brunit_idx).io.get_ftq_pc.next_pc        := RegNext(fetch_unit.io.get_pc.next_pc)
    exe_units(brunit_idx).io.status := csr.io.status
+
 
    // LSU <> ROB
    rob.io.lsu_clr_bsy_valid   := lsu.io.lsu_clr_bsy_valid
@@ -1302,8 +1301,8 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 //         , br_unit.btb_update.bits.br_pc(19,0)
 //         , br_unit.btb_update.valid
 //         , br_unit.btb_update.bits.target(19,0)
-         , exe_units(brunit_idx).io.get_rob_pc.next_val
-         , exe_units(brunit_idx).io.get_rob_pc.next_pc(19,0)
+         , exe_units(brunit_idx).io.get_ftq_pc.next_val
+         , exe_units(brunit_idx).io.get_ftq_pc.next_pc(19,0)
 //         , br_unit.btb_update.isJump
 //         , br_unit.btb_update.isReturn
       )

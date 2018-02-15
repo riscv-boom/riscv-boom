@@ -61,6 +61,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
       val f3_bim_update     = Valid(new LegacyBimUpdate)
 
       val br_unit           = new BranchUnitResp().asInput
+      val get_pc            = new GetPCFromFtq()
 
       val tsc_reg           = UInt(INPUT, xLen)
 
@@ -474,6 +475,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
 
    ftq.io.deq := io.commit
    ftq.io.brinfo := br_unit.brinfo
+   io.get_pc <> ftq.io.get_ftq_pc
    ftq.io.flush := io.flush_info
    ftq.io.debug_rob_empty := io.debug_rob_empty
 

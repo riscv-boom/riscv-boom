@@ -75,8 +75,7 @@ class FunctionalUnitIo(num_stages: Int
    val fcsr_rm = UInt(INPUT, tile.FPConstants.RM_SZ)
 
    // only used by branch unit
-   // TODO name this, so ROB can also instantiate it
-   val get_rob_pc = new RobPCRequest().flip
+   val get_ftq_pc = new GetPCFromFtq().flip
    val get_pred = new GetPredictionInfo
    val status = new freechips.rocketchip.rocket.MStatus().asInput
 }
@@ -263,8 +262,9 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
    var op1_data: UInt = null
    if (is_branch_unit)
    {
+      val curr_pc = AlignPC(io.get_ftq_pc.fetch_pc, fetchWidth*coreInstBytes) + io.req.bits.uop.pc_lob
       op1_data = Mux(io.req.bits.uop.ctrl.op1_sel.asUInt === OP1_RS1 , io.req.bits.rs1_data,
-                 Mux(io.req.bits.uop.ctrl.op1_sel.asUInt === OP1_PC  , Sext(io.get_rob_pc.curr_pc, xLen),
+                 Mux(io.req.bits.uop.ctrl.op1_sel.asUInt === OP1_PC  , Sext(curr_pc, xLen),
                                                                        UInt(0)))
    }
    else
@@ -289,7 +289,7 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
 
    if (is_branch_unit)
    {
-      val uop_pc_ = io.get_rob_pc.curr_pc
+      val uop_pc_ = AlignPC(io.get_ftq_pc.fetch_pc, fetchWidth*coreInstBytes) + io.req.bits.uop.pc_lob
 
       // The Branch Unit redirects the PC immediately, but delays the mispredict
       // signal a cycle (for critical path reasons)
@@ -348,19 +348,19 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
       val bpd_mispredict = Wire(init = Bool(false))
 
       // if b/j is taken, does it go to the wrong target?
-      val wrong_taken_target = !io.get_rob_pc.next_val || (io.get_rob_pc.next_pc =/= bj_addr)
+      val wrong_taken_target = !io.get_ftq_pc.next_val || (io.get_ftq_pc.next_pc =/= bj_addr)
 
 
       if (DEBUG_PRINTF)
       {
-         printf("  BR-UNIT: PC: 0x%x, Next: %d, 0x%x ,bj_addr: 0x%x\n",
-            io.get_rob_pc.curr_pc, io.get_rob_pc.next_val, io.get_rob_pc.next_pc, bj_addr)
+         printf("  BR-UNIT: PC: 0x%x+%x, Next: %d, 0x%x ,bj_addr: 0x%x\n",
+            io.get_ftq_pc.fetch_pc, io.req.bits.uop.pc_lob, io.get_ftq_pc.next_val, io.get_ftq_pc.next_pc, bj_addr)
       }
-      when (io.req.valid && uop.is_jal && io.get_rob_pc.next_val && io.get_rob_pc.next_pc =/= bj_addr) {
-         printf("[func] JAL went to the wrong target [curr: 0x%x next: 0x%x, target: 0x%x]",
-            io.get_rob_pc.curr_pc, io.get_rob_pc.next_pc, bj_addr)
+      when (io.req.valid && uop.is_jal && io.get_ftq_pc.next_val && io.get_ftq_pc.next_pc =/= bj_addr) {
+         printf("[func] JAL went to the wrong target [curr: 0x%x+%x next: 0x%x, target: 0x%x]",
+            io.get_ftq_pc.fetch_pc, io.req.bits.uop.pc_lob, io.get_ftq_pc.next_pc, bj_addr)
       }
-      assert (!(io.req.valid && uop.is_jal && io.get_rob_pc.next_val && io.get_rob_pc.next_pc =/= bj_addr),
+      assert (!(io.req.valid && uop.is_jal && io.get_ftq_pc.next_val && io.get_ftq_pc.next_pc =/= bj_addr),
          "[func] JAL went to the wrong target.")
 
       when (is_br_or_jalr)
@@ -389,15 +389,15 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
          }
       }
 
-      when (is_br_or_jalr && pc_sel === PC_BRJMP && !mispredict && io.get_rob_pc.next_val)
+      when (is_br_or_jalr && pc_sel === PC_BRJMP && !mispredict && io.get_ftq_pc.next_val)
       {
          // ignore misaligned issues -- we'll catch that elsewhere as an exception.
-         when (io.get_rob_pc.next_pc(vaddrBits, log2Up(coreInstBytes)) =/= bj_addr(vaddrBits, log2Up(coreInstBytes)))
+         when (io.get_ftq_pc.next_pc(vaddrBits, log2Up(coreInstBytes)) =/= bj_addr(vaddrBits, log2Up(coreInstBytes)))
          {
             printf ("[FuncUnit] Branch jumped to 0x%x, should have jumped to 0x%x.\n",
-               io.get_rob_pc.next_pc, bj_addr)
+               io.get_ftq_pc.next_pc, bj_addr)
          }
-         assert (io.get_rob_pc.next_pc(vaddrBits, log2Up(coreInstBytes)) === bj_addr(vaddrBits, log2Up(coreInstBytes)),
+         assert (io.get_ftq_pc.next_pc(vaddrBits, log2Up(coreInstBytes)) === bj_addr(vaddrBits, log2Up(coreInstBytes)),
             "[FuncUnit] branch is taken to the wrong target.")
       }
 
@@ -509,7 +509,7 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
       br_unit.bpd_update.valid                 := io.req.valid && uop.is_br_or_jmp &&
                                                   !uop.is_jal && !killed
       br_unit.bpd_update.bits.is_br            := is_br
-      br_unit.bpd_update.bits.brob_idx         := io.get_rob_pc.curr_brob_idx
+      br_unit.bpd_update.bits.brob_idx         := 0.U // TODO XXX delete all BROB stuff io.get_rob_pc.curr_brob_idx
       br_unit.bpd_update.bits.taken            := is_taken
       br_unit.bpd_update.bits.mispredict       := mispredict
       br_unit.bpd_update.bits.bpd_predict_val  := uop.br_prediction.bpd_hit

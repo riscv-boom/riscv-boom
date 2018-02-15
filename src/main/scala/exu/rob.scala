@@ -50,9 +50,6 @@ class RobIo(machine_width: Int,
    // Handle Branch Misspeculations
    val brinfo = new BrResolutionInfo().asInput
 
-   // Let the Branch Unit read out an instruction's PC
-   val get_pc = new RobPCRequest()
-
    // Write-back Stage
    // (Update of ROB)
    // Instruction is no longer busy and can be committed
@@ -181,19 +178,6 @@ class Exception(implicit p: Parameters) extends BoomBundle()(p)
 }
 
 
-// provide a port for a FU to get the PC of an instruction from the ROB
-// and the BROB index too.
-class RobPCRequest(implicit p: Parameters) extends BoomBundle()(p)
-{
-   val rob_idx  = UInt(INPUT, ROB_ADDR_SZ)
-   val curr_pc  = UInt(OUTPUT, vaddrBits+1)
-   val curr_brob_idx = UInt(OUTPUT, BROB_ADDR_SZ)
-   // the next_pc may not be valid (stalled or still being fetched)
-   val next_val = Bool(OUTPUT)
-   val next_pc  = UInt(OUTPUT, vaddrBits+1)
-}
-
-
 class DebugRobSignals(implicit p: Parameters) extends BoomBundle()(p)
 {
    val state = UInt()
@@ -247,14 +231,6 @@ class Rob(width: Int,
    val rob_head_is_branch  = Wire(Vec(width, Bool()))
    val rob_head_fflags     = Wire(Vec(width, Bits(width=freechips.rocketchip.tile.FPConstants.FLAGS_SZ)))
 
-   // valid bits at the branch target
-   // the br_unit needs to verify the target PC, but it must read out the valid bits
-   // for that row
-   val rob_getpc_next_vals        = Wire(Vec(width, Bool()))
-   // valids bits at the branch itself.
-   // useful to help see if any valid instructions are in the branch's shadow on the same row.
-   val rob_getpc_curr_vals        = Wire(Vec(width, Bool()))
-
    val exception_thrown = Wire(Bool())
 
    // exception info
@@ -307,42 +283,13 @@ class Rob(width: Int,
    //       - NOTE:
    //          * This returns the "next-pc", even from within the same ROB row.
 
+   // TODO delete/REMOVE the PC storage code.
    val rob_pc_hob = new RobPCs(width, num_rob_rows)
 
    when (io.enq_valids.reduce(_|_))
    {
       rob_pc_hob.write(rob_tail, io.enq_uops(0).pc) // internally, the RobPCs zero out low-order bits
    }
-
-   // the br unit needs to read out two consecutive ROBs
-   val (curr_row_pc, next_row_pc) = rob_pc_hob.read2(GetRowIdx(io.get_pc.rob_idx))
-
-   io.get_pc.curr_pc := curr_row_pc + Cat(GetBankIdx(io.get_pc.rob_idx), Bits(0,2))
-
-   // What if the next-pc is in the current row? I.e., a JR that wasn't handled in the front-end.
-   val curr_idx = GetBankIdx(io.get_pc.rob_idx) + 1.U
-   val curr_row_next_pc_val = Wire(Bool())
-   if (fetchWidth == 1) { curr_row_next_pc_val := false.B }
-   else { curr_row_next_pc_val := rob_getpc_curr_vals(curr_idx) && curr_idx =/= 0.U }
-   val curr_row_next_pc = curr_row_pc + Cat(curr_idx, UInt(0,2))
-
-
-   val next_bank_idx = if (width == 1) UInt(0) else PriorityEncoder(rob_getpc_next_vals.asUInt)
-
-   // TODO is this logic broken if the ROB can fill up completely?
-   val rob_pc_hob_next_val = rob_getpc_next_vals.reduce(_|_)
-
-   val bypass_next_bank_idx = if (width == 1) UInt(0) else PriorityEncoder(io.enq_valids.asUInt)
-   val bypass_next_pc = (io.enq_uops(0).pc.asSInt & SInt(-(DECODE_WIDTH*coreInstBytes))).asUInt +
-                        Cat(bypass_next_bank_idx, Bits(0,2))
-
-   io.get_pc.next_val := rob_pc_hob_next_val || io.enq_valids.reduce(_|_) || curr_row_next_pc_val
-   io.get_pc.next_pc :=
-      Mux(curr_row_next_pc_val,
-         curr_row_next_pc,
-      Mux(rob_pc_hob_next_val,
-         next_row_pc + Cat(next_bank_idx, Bits(0,2)),
-         bypass_next_pc))
 
    // **************************************************************************
    // --------------------------------------------------------------------------
@@ -378,7 +325,6 @@ class Rob(width: Int,
    io.brob_deallocate.valid := finished_committing_row && row_metadata_has_brorjalr(rob_head)
    io.brob_deallocate.bits.brob_idx := row_metadata_brob_idx(rob_head)
 
-   io.get_pc.curr_brob_idx := row_metadata_brob_idx(GetRowIdx(io.get_pc.rob_idx))
 
    // HACK to deal with SRET changing PC, but not setting flush_pipeline.
    io.clear_brob := Range(0, width).map(i =>
@@ -580,8 +526,6 @@ class Rob(width: Int,
       rob_head_fflags(w)   := rob_fflags(rob_head)
       rob_head_is_store(w) := rob_uop(rob_head).is_store
       rob_head_is_load(w)  := rob_uop(rob_head).is_load
-      rob_getpc_curr_vals(w) := rob_val(GetRowIdx(io.get_pc.rob_idx))
-      rob_getpc_next_vals(w) := rob_val(WrapInc(GetRowIdx(io.get_pc.rob_idx), num_rob_rows))
 
       // -----------------------------------------------
       // debugging write ports that should not be synthesized
