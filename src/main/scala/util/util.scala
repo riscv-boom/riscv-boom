@@ -179,6 +179,18 @@ object WrapDec
    }
 }
 
+// Mask off lower bits of a PC to align to a "b" Byte boundary.
+object AlignPC
+{
+   def apply(x: UInt, b: Int): UInt =
+   {
+   // Invert for scenario where x longer than b 
+   // (which would clear all bits above size(b)).
+      ~(~x | (b-1).U)
+   }
+
+}
+
 
 object RotateL1
 {

@@ -57,7 +57,7 @@ class ExecutionUnitIO(num_rf_read_ports: Int
 
    // only used by the branch unit
    val br_unit = new BranchUnitResp().asOutput
-   val get_rob_pc = new RobPCRequest().flip
+   val get_ftq_pc = new GetPCFromFtq().flip
    val get_pred = new GetPredictionInfo
    val status = new freechips.rocketchip.rocket.MStatus().asInput
 
@@ -197,7 +197,7 @@ class ALUExeUnit(
    if (is_branch_unit)
    {
       io.br_unit <> alu.io.br_unit
-      alu.io.get_rob_pc <> io.get_rob_pc
+      alu.io.get_ftq_pc <> io.get_ftq_pc
       io.get_pred <> alu.io.get_pred
       alu.io.status <> io.status
    }
@@ -647,7 +647,7 @@ class ALUMemExeUnit(
    if (is_branch_unit)
    {
       io.br_unit <> alu.io.br_unit
-      alu.io.get_rob_pc <> io.get_rob_pc
+      alu.io.get_ftq_pc <> io.get_ftq_pc
       io.get_pred <> alu.io.get_pred
       alu.io.status <> io.status
    }

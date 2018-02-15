@@ -18,7 +18,8 @@
 //   !- update pointer on mispredict
 //   !- get dequeue ptr to move 1/cycle to match commit_ptr
 //    - start using fetch-pcs to drive ROB redirections
-//    - start using fetch-pcs to drive JALR, branch mispredictions, CSR I/Os
+//    - start using fetch-pcs to drive JALR, branch mispredictions
+//    - start using fetch-pcs to drive CSR I/Os
 //    - remove ROB's PCFile
 //   !- get miss-info working
 //    - store BIM info;
@@ -59,6 +60,17 @@ class CfiMissInfo(fetch_width: Int) extends Bundle
    override def cloneType: this.type = new CfiMissInfo(fetch_width).asInstanceOf[this.type]
 }
 
+// provide a port for a FunctionalUnit to get the PC of an instruction.
+// And for JALRs, the PC of the next instruction.
+class GetPCFromFtq(implicit p: Parameters) extends BoomBundle()(p)
+{
+   val ftq_idx  = Input(UInt(log2Up(ftqSz).W))
+   val fetch_pc = Output(UInt(vaddrBitsExtended.W))
+   // the next_pc may not be valid (stalled or still being fetched)
+   val next_val = Output(Bool())
+   val next_pc  = Output(UInt(vaddrBitsExtended.W))
+}
+
 class FtqFlushInfo(implicit p: Parameters) extends BoomBundle()(p)
 {
    val ftq_idx = UInt(width=log2Up(ftqSz).W)
@@ -79,6 +91,9 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
       // ROB tells us the youngest committed ftq_idx to remove from FTQ.
       val deq = Flipped(Valid(UInt(width=idx_sz.W)))
 
+
+      // Give PC info to BranchUnit
+      val get_ftq_pc = new GetPCFromFtq()
       // Redirect the frontend as we set fit.
       val pc_request = Valid(new PCReq()) //TODO XXX
 
@@ -87,7 +102,7 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
 
       val brinfo = new BrResolutionInfo().asInput
 
-      val debug_rob_empty = Input(Bool())
+      val debug_rob_empty = Input(Bool()) // TODO can we build asserts off of this?
    })
 
    val deq_ptr = Counter(num_entries)
@@ -155,23 +170,19 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
       cfi_info(io.brinfo.ftq_idx).cfi_idx := io.brinfo.pc_lob >> log2Ceil(coreInstBytes)
    }
 
-//   io.deq.valid := !empty
-//   io.deq.bits := ram(deq_ptr.value)
 
-//   private val ptr_diff = enq_ptr.value - deq_ptr.value
-//   if (isPow2(num_entries)) {
-//     io.count := Cat(maybe_full && ptr_match, ptr_diff)
-//   } else {
-//     io.count := Mux(ptr_match,
-//                     Mux(maybe_full,
-//                       num_entries.asUInt, 0.U),
-//                     Mux(deq_ptr.value > enq_ptr.value,
-//                       num_entries.asUInt + ptr_diff, ptr_diff))
-//   }
+   //-------------------------------------------------------------
+   // **** Read out data ****
+   //-------------------------------------------------------------
+
+   // Send current-PC/next-PC info to the BranchResolutionUnit.
+   // TODO only perform the read when a branch instruction requests it.
+   val curr_idx = io.get_ftq_pc.ftq_idx
+   io.get_ftq_pc.fetch_pc := ram(curr_idx).fetch_pc
+   io.get_ftq_pc.next_pc := ram(WrapInc(curr_idx, num_entries)).fetch_pc
+   io.get_ftq_pc.next_val := WrapInc(curr_idx, num_entries) =/= enq_ptr.value
 
 
-   // TODO check against empty rob that commit_ptr == enq_ptr.
-//   assert(!(io.debug_rob_empty)
 
    //-------------------------------------------------------------
    // **** Printfs ****
@@ -190,7 +201,7 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
          enq_ptr.value, commit_ptr, deq_ptr.value,
          Mux(io.debug_rob_empty, Str("E"), Str("-"))
       )
-      
+
       val w = 4
       for (
          i <- 0 until (num_entries/w);
@@ -202,7 +213,7 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
             Mux(enq_ptr.value === idx.U, Str("E"), Str(" ")),
             Mux(commit_ptr === idx.U, Str("C"), Str(" ")),
             Mux(deq_ptr.value === idx.U, Str("D"), Str(" ")),
-            0.U,
+            ram(idx).fetch_pc,
             Mux(cfi_info(idx).valid, Str("V"), Str(" ")),
             Mux(cfi_info(idx).taken, Str("T"), Str(" ")),
             cfi_info(idx).cfi_idx
