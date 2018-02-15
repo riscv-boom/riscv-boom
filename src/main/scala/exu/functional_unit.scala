@@ -75,7 +75,7 @@ class FunctionalUnitIo(num_stages: Int
    val fcsr_rm = UInt(INPUT, tile.FPConstants.RM_SZ)
 
    // only used by branch unit
-   val get_ftq_pc = new GetPCFromFtq().flip
+   val get_ftq_pc = new GetPCFromFtqIO().flip
    val get_pred = new GetPredictionInfo
    val status = new freechips.rocketchip.rocket.MStatus().asInput
 }

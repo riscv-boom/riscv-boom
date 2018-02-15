@@ -61,7 +61,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
       val f3_bim_update     = Valid(new LegacyBimUpdate)
 
       val br_unit           = new BranchUnitResp().asInput
-      val get_pc            = new GetPCFromFtq()
+      val get_pc            = new GetPCFromFtqIO()
 
       val tsc_reg           = UInt(INPUT, xLen)
 

@@ -18,7 +18,7 @@
 //   !- update pointer on mispredict
 //   !- get dequeue ptr to move 1/cycle to match commit_ptr
 //    - start using fetch-pcs to drive ROB redirections
-//    - start using fetch-pcs to drive JALR, branch mispredictions
+//   !- start using fetch-pcs to drive JALR, branch mispredictions
 //    - start using fetch-pcs to drive CSR I/Os
 //    - remove ROB's PCFile
 //   !- get miss-info working
@@ -38,7 +38,7 @@ import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.util.Str
 
 case class FtqParameters(
-   nEntries: Int = 16
+   nEntries: Int = 24
 )
 
 class FTQBundle(implicit p: Parameters) extends BoomBundle()(p)
@@ -51,18 +51,16 @@ class FTQBundle(implicit p: Parameters) extends BoomBundle()(p)
 }
 
 // Track the oldest mispredicted cfi instruction for a given fetch entry.
-class CfiMissInfo(fetch_width: Int) extends Bundle
+class CfiMissInfo(implicit p: Parameters) extends BoomBundle()(p)
 {
    val valid = Bool() // Is there a branch or jr in this fetch that was mispredicted?
    val taken = Bool() // If a branch, was it taken?
-   val cfi_idx = UInt(width=log2Up(fetch_width).W) // which instruction in fetch packet?
-
-   override def cloneType: this.type = new CfiMissInfo(fetch_width).asInstanceOf[this.type]
+   val cfi_idx = UInt(width=log2Up(fetchWidth).W) // which instruction in fetch packet?
 }
 
 // provide a port for a FunctionalUnit to get the PC of an instruction.
 // And for JALRs, the PC of the next instruction.
-class GetPCFromFtq(implicit p: Parameters) extends BoomBundle()(p)
+class GetPCFromFtqIO(implicit p: Parameters) extends BoomBundle()(p)
 {
    val ftq_idx  = Input(UInt(log2Up(ftqSz).W))
    val fetch_pc = Output(UInt(vaddrBitsExtended.W))
@@ -71,11 +69,14 @@ class GetPCFromFtq(implicit p: Parameters) extends BoomBundle()(p)
    val next_pc  = Output(UInt(vaddrBitsExtended.W))
 }
 
+// The ROB needs to tell us if there's a pipeline flush (and what type)
+// so we can drive the frontend with the correct redirected PC.
 class FtqFlushInfo(implicit p: Parameters) extends BoomBundle()(p)
 {
    val ftq_idx = UInt(width=log2Up(ftqSz).W)
    val flush_typ = FlushTypes()
 }
+
 
 class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomModule()(p)
    with HasBoomCoreParameters
@@ -91,15 +92,15 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
       // ROB tells us the youngest committed ftq_idx to remove from FTQ.
       val deq = Flipped(Valid(UInt(width=idx_sz.W)))
 
-
-      // Give PC info to BranchUnit
-      val get_ftq_pc = new GetPCFromFtq()
+      // Give PC info to BranchUnit.
+      val get_ftq_pc = new GetPCFromFtqIO()
       // Redirect the frontend as we set fit.
       val pc_request = Valid(new PCReq()) //TODO XXX
 
       // on any sort misprediction or rob flush, reset the enq_ptr.
       val flush = Flipped(Valid(new FtqFlushInfo()))
 
+      // BranchResolutionUnit tells us the outcome of branches/jumps.
       val brinfo = new BrResolutionInfo().asInput
 
       val debug_rob_empty = Input(Bool()) // TODO can we build asserts off of this?
@@ -112,13 +113,11 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
    val empty = ptr_match && !maybe_full
    val full = ptr_match && maybe_full
 
-   // What is the commit point of the process? Dequeue entries until deq_ptr matches commit_ptr.
+   // What is the current commit point of the processor? Dequeue entries until deq_ptr matches commit_ptr.
    val commit_ptr = RegInit(0.asUInt(log2Up(num_entries).W))
 
    val ram = Mem(num_entries, new FTQBundle())
-
-   // TODO track oldest mispredicted entry in flip-flops
-   val cfi_info = Reg(Vec(num_entries, new CfiMissInfo(fetchWidth)))
+   val cfi_info = Reg(Vec(num_entries, new CfiMissInfo()))
 
 
    private val do_enq = WireInit(io.enq.fire())
@@ -126,7 +125,7 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
 
    private def nullCfiInfo(): CfiMissInfo =
    {
-      val b = Wire(new CfiMissInfo(fetchWidth))
+      val b = Wire(new CfiMissInfo())
       b.valid := false.B
       b.taken := false.B
       b.cfi_idx := 0.U
@@ -161,9 +160,10 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
 
    when (io.brinfo.valid && io.brinfo.mispredict)
    {
-      enq_ptr.value := io.brinfo.ftq_idx
+      val new_ptr = WrapInc(io.brinfo.ftq_idx, num_entries)
+      enq_ptr.value := new_ptr
       // If ptr is adjusted, we deleted entries and thus can't be full.
-      maybe_full := (enq_ptr.value === io.brinfo.ftq_idx)
+      maybe_full := (enq_ptr.value === new_ptr)
 
       cfi_info(io.brinfo.ftq_idx).valid := true.B
       cfi_info(io.brinfo.ftq_idx).taken := io.brinfo.taken

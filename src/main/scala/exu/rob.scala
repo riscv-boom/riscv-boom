@@ -1024,7 +1024,7 @@ class Rob(width: Int,
          else if (COMMIT_WIDTH == 2)
          {
             val row_is_val = debug_entry(r_idx+0).valid || debug_entry(r_idx+1).valid
-            printf("%d %x (%c%c)(%c%c) 0x%x %x [DASM(%x)][DASM(%x)" + "] %c,%c %d,%d"
+            printf("%d %x (%c%c)(%c%c) 0x%x %x [DASM(%x)][DASM(%x)" + "] %c,%c %d,%d "
                , row_metadata_brob_idx(row)
                , row_metadata_has_brorjalr(row)
                , Mux(debug_entry(r_idx+0).valid, Str("V"), Str(" "))
