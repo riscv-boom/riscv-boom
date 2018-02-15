@@ -57,7 +57,7 @@ class ExecutionUnitIO(num_rf_read_ports: Int
 
    // only used by the branch unit
    val br_unit = new BranchUnitResp().asOutput
-   val get_ftq_pc = new GetPCFromFtq().flip
+   val get_ftq_pc = new GetPCFromFtqIO().flip
    val get_pred = new GetPredictionInfo
    val status = new freechips.rocketchip.rocket.MStatus().asInput
 
