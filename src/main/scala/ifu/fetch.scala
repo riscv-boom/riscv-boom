@@ -151,13 +151,15 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    f0_redirect_pc :=
       Mux(io.sfence_take_pc,
          io.sfence_addr,
+      Mux(ftq.io.take_pc.valid,
+         ftq.io.take_pc.bits.addr,
       Mux(io.flush_take_pc,
          io.flush_pc,
       Mux(br_unit.take_pc,
          br_unit.target(vaddrBits,0),
       Mux(io.f2_btb_resp.valid && io.f2_btb_resp.bits.taken,
          io.f2_btb_resp.bits.target,
-         r_f4_req.bits.addr))))
+         r_f4_req.bits.addr)))))
 
    //-------------------------------------------------------------
    // **** ICache Access (F1) ****

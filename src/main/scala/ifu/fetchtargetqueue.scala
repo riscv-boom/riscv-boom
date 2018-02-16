@@ -17,7 +17,7 @@
 //   !- update pointer on exception/flush
 //   !- update pointer on mispredict
 //   !- get dequeue ptr to move 1/cycle to match commit_ptr
-//    - start using fetch-pcs to drive ROB redirections
+//   !- start using fetch-pcs to drive ROB redirections
 //   !- start using fetch-pcs to drive JALR, branch mispredictions
 //    - start using fetch-pcs to drive CSR I/Os
 //    - remove ROB's PCFile
@@ -38,7 +38,7 @@ import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.util.Str
 
 case class FtqParameters(
-   nEntries: Int = 24
+   nEntries: Int = 16
 )
 
 class FTQBundle(implicit p: Parameters) extends BoomBundle()(p)
@@ -74,6 +74,7 @@ class GetPCFromFtqIO(implicit p: Parameters) extends BoomBundle()(p)
 class FtqFlushInfo(implicit p: Parameters) extends BoomBundle()(p)
 {
    val ftq_idx = UInt(width=log2Up(ftqSz).W)
+   val pc_lob = UInt(width=log2Up(fetchWidth*coreInstBytes).W)
    val flush_typ = FlushTypes()
 }
 
@@ -94,11 +95,11 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
 
       // Give PC info to BranchUnit.
       val get_ftq_pc = new GetPCFromFtqIO()
-      // Redirect the frontend as we set fit.
-      val pc_request = Valid(new PCReq()) //TODO XXX
 
-      // on any sort misprediction or rob flush, reset the enq_ptr.
+      // on any sort misprediction or rob flush, reset the enq_ptr, make a PC redirect request.
       val flush = Flipped(Valid(new FtqFlushInfo()))
+      // Redirect the frontend as we see fit (due to ROB/flush interactions).
+      val take_pc = Valid(new PCReq())
 
       // BranchResolutionUnit tells us the outcome of branches/jumps.
       val brinfo = new BrResolutionInfo().asInput
@@ -183,6 +184,18 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
    io.get_ftq_pc.next_val := WrapInc(curr_idx, num_entries) =/= enq_ptr.value
 
 
+   //-------------------------------------------------------------
+   // **** Handle Flush/Pipeline Redirections ****
+   //-------------------------------------------------------------
+
+   val com_pc = Wire(UInt())
+   val com_pc_plus4 = Wire(UInt())
+
+   io.take_pc.valid := io.flush.valid && !FlushTypes.useCsrEvec(io.flush.bits.flush_typ)
+   io.take_pc.bits.addr := Mux(FlushTypes.useSamePC(io.flush.bits.flush_typ), com_pc, com_pc_plus4)
+
+   com_pc := AlignPC(ram(io.flush.bits.ftq_idx).fetch_pc, fetchWidth*coreInstBytes) + io.flush.bits.pc_lob
+   com_pc_plus4 := com_pc + 4.U // TODO RVC
 
    //-------------------------------------------------------------
    // **** Printfs ****

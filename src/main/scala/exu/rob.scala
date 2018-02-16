@@ -134,7 +134,7 @@ object FlushTypes
    def apply() = UInt(width = SZ)
    def none = 0.U
    def xcpt = 1.U // An exception occurred.
-   def cxcpt = (2+1).U // The CSRFile wants to redirect the frontend.
+   def cxcpt = (2+1).U // The CSRFile wants to redirect the frontend. TODO I think this is unused from ROB's POV.
    def eret = (4+1).U // Execute an environment return instruction.
    def refetch = 2.U // Flush and refetch the head instruction.
    def next = 4.U // Flush and fetch the next instruction.
@@ -147,10 +147,10 @@ object FlushTypes
    {
       val ret =
          Mux(!valid, none,
-         Mux(i_refetch, refetch,
          Mux(i_cxcpt, cxcpt,
          Mux(i_eret, eret,
          Mux(i_xcpt, xcpt,
+         Mux(i_refetch, refetch,
             next)))))
       ret
    }
@@ -639,6 +639,8 @@ class Rob(width: Int,
                         flush_pc))
    io.flush.bits.ftq_info.ftq_idx :=
       RegNext(PriorityMux(rob_head_vals, Range(0,width).map(i => io.commit.uops(i).ftq_idx)))
+   io.flush.bits.ftq_info.pc_lob :=
+      RegNext(PriorityMux(rob_head_vals, Range(0,width).map(i => io.commit.uops(i).pc_lob)))
    io.flush.bits.ftq_info.flush_typ :=
       RegNext(FlushTypes.getType(flush_val, io.com_xcpt.valid, io.cxcpt.valid, io.csr_eret, refetch_inst))
 
