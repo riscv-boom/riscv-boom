@@ -70,7 +70,10 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
       val commit            = Valid(UInt(width=ftqSz.W)).flip
       val flush_info        = Valid(new FtqFlushInfo()).flip
       val flush_take_pc     = Bool(INPUT)
-      val flush_pc          = UInt(INPUT, vaddrBits+1)
+      val flush_pc          = UInt(INPUT, vaddrBits+1) // TODO rename; no longer catch-all flush_pc
+
+      val com_ftq_idx       = UInt(INPUT, log2Up(ftqSz)) // ROB tells us the commit pointer so we can read out the PC.
+      val com_fetch_pc      = UInt(OUTPUT, vaddrBitsExtended) // tell CSRFile the fetch-pc at the FTQ head.
 
       // sfence needs to steal the TLB CAM part.
       val sfence_take_pc    = Bool(INPUT)
@@ -479,6 +482,8 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    ftq.io.brinfo := br_unit.brinfo
    io.get_pc <> ftq.io.get_ftq_pc
    ftq.io.flush := io.flush_info
+   ftq.io.com_ftq_idx := io.com_ftq_idx
+   io.com_fetch_pc := ftq.io.com_fetch_pc
    ftq.io.debug_rob_empty := io.debug_rob_empty
 
    //-------------------------------------------------------------

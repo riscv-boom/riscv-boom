@@ -66,7 +66,7 @@ class RobIo(machine_width: Int,
    val fflags = Vec(num_fpu_ports, new ValidIO(new FFlagsResp())).flip
    val lxcpt = new ValidIO(new Exception()).flip // LSU
    val bxcpt = new ValidIO(new Exception()).flip // BRU
-   val cxcpt = new ValidIO(new Exception()).flip // CSR
+   val cxcpt = new ValidIO(new Exception()).flip // CSR TODO XXX REMOVE PORT
 
    // Commit stage (free resources; also used for rollback).
    val commit = new CommitSignals(machine_width).asOutput
@@ -78,7 +78,6 @@ class RobIo(machine_width: Int,
    // Communicate exceptions to the CSRFile
    val com_xcpt = Valid(new CommitExceptionSignals(machine_width))
    val csr_eret = Bool(INPUT)
-   val csr_evec = UInt(INPUT, vaddrBitsExtended)
 
    // Let the CSRFile stall us (e.g., wfi).
    val csr_stall = Bool(INPUT)
@@ -121,7 +120,8 @@ class CommitSignals(machine_width: Int)(implicit p: Parameters) extends BoomBund
 
 class CommitExceptionSignals(machine_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
-   val pc         = UInt(width = xLen)
+   val ftq_idx    = UInt(width = log2Up(ftqSz))
+   val pc_lob     = UInt(width = log2Up(fetchWidth*coreInstBytes))
    val cause      = UInt(width = xLen)
    val badvaddr   = UInt(width = xLen)
    override def cloneType: this.type = new CommitExceptionSignals(machine_width)(p).asInstanceOf[this.type]
@@ -158,13 +158,6 @@ object FlushTypes
 
 class FlushSignals(implicit p: Parameters) extends BoomBundle()(p)
 {
-   // which PC should we redirect the front-end towards?
-   // When flushing pipeline, need to reset to PC+4 relative to the head of the ROB
-   // but because we're doing superscalar commit, the actual flush pc may not
-   // be the rob_head pc+4, but rather the last committed instruction in the
-   // commit group.
-   // TODO remove pc. Store elsewhere.
-   val pc = UInt(width = xLen)
    // Access the FTQ and have it reset the FetchUnit to the appropriate PC.
    val ftq_info = new FtqFlushInfo()
 }
@@ -266,37 +259,9 @@ class Rob(width: Int,
    val debug_entry = Wire(Vec(NUM_ROB_ENTRIES, new DebugRobBundle))
 
    // **************************************************************************
-   // --------------------------------------------------------------------------
-   // **************************************************************************
-   //
-   // PCs
-   // store the high-order-bits of the PC only once per ROB row, allowing us to
-   // compress out most of the expensive PC information.
-   // NOTE: This works since we only write consecutive, aligned instructions
-   // into the ROB row.
-   //
-   // The ROB PC information is written by dispatch at rob_tail.
-   // The ROB PC information is read
-   //       - commit for flush PC at rob_head.
-   //       - execute by the Br Unit for target calculation at idx X.
-   //       - execute by the Br Unit to get actual target at idx X+1.
-   //       - NOTE:
-   //          * This returns the "next-pc", even from within the same ROB row.
-
-   // TODO delete/REMOVE the PC storage code.
-   val rob_pc_hob = new RobPCs(width, num_rob_rows)
-
-   when (io.enq_valids.reduce(_|_))
-   {
-      rob_pc_hob.write(rob_tail, io.enq_uops(0).pc) // internally, the RobPCs zero out low-order bits
-   }
-
-   // **************************************************************************
-   // --------------------------------------------------------------------------
-   // **************************************************************************
-
    //-----------------------------------------------
    // Branch Reorder Buffer
+   // TODO XXX DELETE BROB CODE
 
    val finished_committing_row = Wire(Bool())
    val r_partial_row = Reg(init = Bool(false))
@@ -573,7 +538,7 @@ class Rob(width: Int,
             debug_entry(w + i*width).valid := rob_val(i)
             debug_entry(w + i*width).busy := rob_bsy(UInt(i))
             debug_entry(w + i*width).uop := rob_uop(UInt(i))
-            debug_entry(w + i*width).uop.pc := rob_pc_hob.read(UInt(i,log2Up(num_rob_rows))) + UInt(w << 2)
+            debug_entry(w + i*width).uop.pc := rob_uop(i.U).pc
             debug_entry(w + i*width).exception := rob_exception(UInt(i))
          }
       }
@@ -623,10 +588,8 @@ class Rob(width: Int,
       rob_head_vals.reduce(_|_) && PriorityMux(rob_head_vals, io.commit.uops.map{u => u.is_sys_pc2epc})
 
    val refetch_inst = exception_thrown || insn_sys_pc2epc
-   val flush_pc  = rob_pc_hob.read(rob_head) +
-                   PriorityMux(rob_head_vals, Range(0,width).map(w => UInt(w << 2))) +
-                   Mux(refetch_inst, UInt(0), UInt(4))
-   io.com_xcpt.bits.pc := flush_pc
+   io.com_xcpt.bits.ftq_idx := PriorityMux(rob_head_vals, io.commit.uops.map{u => u.ftq_idx})
+   io.com_xcpt.bits.pc_lob := PriorityMux(rob_head_vals, io.commit.uops.map{u => u.pc_lob})
 
    val flush_val = exception_thrown ||
                      io.csr_eret ||
@@ -634,13 +597,9 @@ class Rob(width: Int,
 
    // delay a cycle for critical path considerations
    io.flush.valid := RegNext(flush_val, init=false.B)
-   io.flush.bits.pc := RegNext(Mux(io.com_xcpt.valid || io.cxcpt.valid || io.csr_eret,
-                        io.csr_evec,
-                        flush_pc))
-   io.flush.bits.ftq_info.ftq_idx :=
-      RegNext(PriorityMux(rob_head_vals, Range(0,width).map(i => io.commit.uops(i).ftq_idx)))
-   io.flush.bits.ftq_info.pc_lob :=
-      RegNext(PriorityMux(rob_head_vals, Range(0,width).map(i => io.commit.uops(i).pc_lob)))
+   // TODO switch PMux to using map instead of Range
+   io.flush.bits.ftq_info.ftq_idx := RegNext(io.com_xcpt.bits.ftq_idx)
+   io.flush.bits.ftq_info.pc_lob := RegNext(io.com_xcpt.bits.pc_lob)
    io.flush.bits.ftq_info.flush_typ :=
       RegNext(FlushTypes.getType(flush_val, io.com_xcpt.valid, io.cxcpt.valid, io.csr_eret, refetch_inst))
 
@@ -917,64 +876,6 @@ class Rob(width: Int,
    io.debug.xcpt_uop := r_xcpt_uop
    io.debug.xcpt_badvaddr := r_xcpt_badvaddr
 
-   // this object holds the high-order bits of the PC of each ROB row
-   // PCs are stored as vaddrBits+1 in size, but extended out to xLen when read
-   class RobPCs(width: Int, num_rob_rows: Int)
-   {
-      val pc_shift = if (width == 1) 2 else (log2Up(width) + 2)
-      val pc_hob_width = (vaddrBits+1) - pc_shift
-
-      // bank this so we only need 1 read port to handle branches, which read
-      // row X and row X+1
-      val bank0 = Mem(ceil(num_rob_rows/2).toInt, UInt(width=pc_hob_width))
-      val bank1 = Mem(ceil(num_rob_rows/2).toInt, UInt(width=pc_hob_width))
-
-      // takes rob_row_idx, returns PC (with low-order bits zeroed out)
-      def  read (row_idx: UInt) =
-      {
-         val rdata = Wire(Bits(width=xLen))
-         rdata := bank0(row_idx >> UInt(1)) << UInt(pc_shift)
-         // damn chisel demands a "default"
-         when (row_idx(0))
-         {
-            rdata := bank1(row_idx >> UInt(1)) << UInt(pc_shift)
-         }
-         Sext(rdata(vaddrBits,0), xLen)
-      }
-
-      // returns the row_idx and row_idx+1 PCs (lob zeroed out)
-      def read2 (row_idx: UInt) =
-      {
-         // addr0, left shifted by 1 (makes wrap around logic easier)
-         val addr0_ls1 = Mux(row_idx(0), WrapInc(row_idx >> UInt(1), num_rob_rows/2),
-                                         row_idx >> UInt(1))
-         val data0 = bank0(addr0_ls1) << UInt(pc_shift)
-         val data1 = bank1(row_idx >> UInt(1)) << UInt(pc_shift)
-
-         val curr_pc = Wire(UInt(width = xLen))
-         val next_pc = Wire(UInt(width = xLen))
-         curr_pc := Mux(row_idx(0), data1, data0)
-         next_pc := Mux(row_idx(0), data0, data1)
-         val curr_pc_ext = Sext(curr_pc(vaddrBits,0), xLen)
-         val next_pc_ext = Sext(next_pc(vaddrBits,0), xLen)
-
-         (curr_pc_ext, next_pc_ext)
-      }
-
-      // takes rob_row_idx, write in PC (with low-order bits zeroed out)
-      def write (waddr_row: UInt, data: UInt) =
-      {
-         val data_in = data(vaddrBits,0) >> UInt(pc_shift)
-         when (waddr_row(0))
-         {
-            bank1(waddr_row >> UInt(1)) := data_in
-         }
-         .otherwise
-         {
-            bank0(waddr_row >> UInt(1)) := data_in
-         }
-      }
-   }
 
    if (DEBUG_PRINTF_ROB)
    {

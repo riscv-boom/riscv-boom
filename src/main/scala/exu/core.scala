@@ -297,7 +297,8 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
    // We must redirect the PC the cycle after playing the SFENCE game.
    fetch_unit.io.flush_take_pc     := rob.io.flush.valid || RegNext(lsu.io.exe_resp.bits.sfence.valid)
-   fetch_unit.io.flush_pc          := rob.io.flush.bits.pc
+   fetch_unit.io.flush_pc          := RegNext(csr.io.evec)
+   fetch_unit.io.com_ftq_idx       := rob.io.com_xcpt.bits.ftq_idx
 
    fetch_unit.io.flush_info.valid  := rob.io.flush.valid || fetch_unit.io.sfence_take_pc
    fetch_unit.io.flush_info.bits   := rob.io.flush.bits.ftq_info
@@ -715,7 +716,8 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    // Extra I/O
    csr.io.retire    := PopCount(rob.io.commit.valids.asUInt)
    csr.io.exception := rob.io.com_xcpt.valid
-   csr.io.pc        := rob.io.com_xcpt.bits.pc
+   // csr.io.pc used for setting EPC during exception or CSR.io.trace.
+   csr.io.pc        := AlignPC(fetch_unit.io.com_fetch_pc, fetchWidth*coreInstBytes) + rob.io.com_xcpt.bits.pc_lob
    csr.io.cause     := rob.io.com_xcpt.bits.cause
    csr.io.badaddr   := Mux(csr.io.cause === Causes.illegal_instruction.U, 0.U, rob.io.com_xcpt.bits.badvaddr)
 
@@ -1028,7 +1030,6 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
    rob.io.cxcpt.valid := false.B // TODO XXX MERGE csr.io.csr_xcpt (csr can no longer throw exceptions dynamically?)
    rob.io.csr_eret := csr.io.eret
-   rob.io.csr_evec := csr.io.evec
 
    assert (!(csr.io.singleStep), "[core] single-step is unsupported.")
 
@@ -1174,9 +1175,9 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       val numBrobWhitespace = if (DEBUG_PRINTF_BROB) NUM_BROB_ENTRIES else 0
 //      val screenheight = 103 - 4 - 10
 //      val screenheight = 85 - 10
-      val screenheight = 78 - 13
 //      val screenheight = 63-10
-//      val screenheight = 61-10
+      val screenheight = 78 - 13
+//      val screenheight = 54-13
        var whitespace = (screenheight - 11 + 3 - NUM_LSU_ENTRIES -
          issueParams.map(_.numEntries).sum - issueParams.length - (NUM_ROB_ENTRIES/COMMIT_WIDTH) - numBrobWhitespace
      )
