@@ -100,6 +100,10 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
       val flush = Flipped(Valid(new FtqFlushInfo()))
       // Redirect the frontend as we see fit (due to ROB/flush interactions).
       val take_pc = Valid(new PCReq())
+      // Tell the CSRFile what the fetch-pc at the FTQ's Commit Head is.
+      // Still need the low-order bits of the PC from the ROB to know the true Commit PC.
+      val com_ftq_idx = Input(UInt(width=log2Up(ftqSz).W))
+      val com_fetch_pc = Output(UInt(width=vaddrBitsExtended.W))
 
       // BranchResolutionUnit tells us the outcome of branches/jumps.
       val brinfo = new BrResolutionInfo().asInput
@@ -194,8 +198,13 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
    io.take_pc.valid := io.flush.valid && !FlushTypes.useCsrEvec(io.flush.bits.flush_typ)
    io.take_pc.bits.addr := Mux(FlushTypes.useSamePC(io.flush.bits.flush_typ), com_pc, com_pc_plus4)
 
-   com_pc := AlignPC(ram(io.flush.bits.ftq_idx).fetch_pc, fetchWidth*coreInstBytes) + io.flush.bits.pc_lob
+   // TODO CLEANUP this is wonky: the exception occurs 1 cycle faster than flushing,
+   io.com_fetch_pc := AlignPC(ram(io.com_ftq_idx).fetch_pc, fetchWidth*coreInstBytes)
+//   val xcpt_pc := AlignPC(ram(io.flush.bits.ftq_idx).fetch_pc, fetchWidth*coreInstBytes)
+   com_pc := RegNext(io.com_fetch_pc) + io.flush.bits.pc_lob
    com_pc_plus4 := com_pc + 4.U // TODO RVC
+
+   assert (RegNext(io.com_ftq_idx) === io.flush.bits.ftq_idx, "[ftq] this code depends on this assumption")
 
    //-------------------------------------------------------------
    // **** Printfs ****
