@@ -57,9 +57,9 @@ class BoomFrontendIO(implicit p: Parameters) extends CoreBundle()(p) {
   val req = Valid(new FrontendReq)
   val sfence = Valid(new SFenceReq)
   val resp = Decoupled(new FrontendResp).flip
-  val btb_update = Valid(new BTBUpdate)
-  val bht_update = Valid(new BHTUpdate)
-  val ras_update = Valid(new RASUpdate)
+//  val btb_update = Valid(new BTBUpdate)
+//  val bht_update = Valid(new BHTUpdate)
+//  val ras_update = Valid(new RASUpdate)
   val flush_icache = Bool(OUTPUT)
   val npc = UInt(INPUT, width = vaddrBitsExtended)
   val btb_req = new BTBReqIO()
