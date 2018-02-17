@@ -68,7 +68,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
       val clear_fetchbuffer = Bool(INPUT)
 
       val commit            = Valid(UInt(width=ftqSz.W)).flip
-      val flush_info        = Valid(new FtqFlushInfo()).flip
+      val flush_info        = Valid(new FlushSignals()).flip
       val flush_take_pc     = Bool(INPUT)
       val flush_pc          = UInt(INPUT, vaddrBits+1) // TODO rename; no longer catch-all flush_pc
 

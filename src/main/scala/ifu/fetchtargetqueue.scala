@@ -69,15 +69,6 @@ class GetPCFromFtqIO(implicit p: Parameters) extends BoomBundle()(p)
    val next_pc  = Output(UInt(vaddrBitsExtended.W))
 }
 
-// The ROB needs to tell us if there's a pipeline flush (and what type)
-// so we can drive the frontend with the correct redirected PC.
-class FtqFlushInfo(implicit p: Parameters) extends BoomBundle()(p)
-{
-   val ftq_idx = UInt(width=log2Up(ftqSz).W)
-   val pc_lob = UInt(width=log2Up(fetchWidth*coreInstBytes).W)
-   val flush_typ = FlushTypes()
-}
-
 
 class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomModule()(p)
    with HasBoomCoreParameters
@@ -97,7 +88,7 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
       val get_ftq_pc = new GetPCFromFtqIO()
 
       // on any sort misprediction or rob flush, reset the enq_ptr, make a PC redirect request.
-      val flush = Flipped(Valid(new FtqFlushInfo()))
+      val flush = Flipped(Valid(new FlushSignals()))
       // Redirect the frontend as we see fit (due to ROB/flush interactions).
       val take_pc = Valid(new PCReq())
       // Tell the CSRFile what the fetch-pc at the FTQ's Commit Head is.

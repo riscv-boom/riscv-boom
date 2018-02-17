@@ -300,8 +300,9 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    fetch_unit.io.flush_pc          := RegNext(csr.io.evec)
    fetch_unit.io.com_ftq_idx       := rob.io.com_xcpt.bits.ftq_idx
 
+   // TODO is sfence_take_pc correct? Can probably remove it.
    fetch_unit.io.flush_info.valid  := rob.io.flush.valid || fetch_unit.io.sfence_take_pc
-   fetch_unit.io.flush_info.bits   := rob.io.flush.bits.ftq_info
+   fetch_unit.io.flush_info.bits   := rob.io.flush.bits
 
    // Tell the FTQ it can deallocate entries by passing youngest ftq_idx.
    val youngest_com_idx            = (COMMIT_WIDTH-1).U - PriorityEncoder(rob.io.commit.valids.reverse)
@@ -409,7 +410,6 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
                         || br_unit.brinfo.mispredict
                         || rob.io.flush.valid
                         || dec_stall_next_inst
-                        || !bpd_stage.io.brob.allocate.ready
                         || (dec_valids(w) && dec_uops(w).is_fencei && !lsu.io.lsu_fencei_rdy)
                         )) ||
                      dec_last_inst_was_stalled
@@ -482,8 +482,6 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
          dec_uops(w).rob_idx := rob.io.curr_rob_tail
       else
          dec_uops(w).rob_idx := Cat(rob.io.curr_rob_tail, UInt(w, log2Up(DECODE_WIDTH)))
-
-      dec_uops(w).brob_idx := bpd_stage.io.brob.allocate_brob_tail
    }
 
    val dec_has_br_or_jalr_in_packet =
@@ -497,7 +495,6 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    bpd_stage.io.brob.allocate.bits.ctrl.mispredicted.map{_ := Bool(false)}
    bpd_stage.io.brob.allocate.bits.ctrl.debug_executed := Bool(false)
    bpd_stage.io.brob.allocate.bits.ctrl.debug_rob_idx := dec_uops(0).rob_idx
-   bpd_stage.io.brob.allocate.bits.ctrl.brob_idx := dec_uops(0).brob_idx
    bpd_stage.io.brob.allocate.bits.info := dec_fbundle.bpd_resp
 
 
@@ -920,9 +917,8 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    // Dispatch
    rob.io.enq_valids := rename_stage.io.ren1_mask
    rob.io.enq_uops   := rename_stage.io.ren1_uops
-   rob.io.enq_has_br_or_jalr_in_packet := dec_has_br_or_jalr_in_packet
+   rob.io.enq_new_packet := dec_finished_mask === 0.U
    rob.io.enq_partial_stall := !dec_rdy && !dec_will_fire(DECODE_WIDTH-1)
-   rob.io.enq_new_packet := dec_finished_mask === Bits(0)
    rob.io.debug_tsc := debug_tsc_reg
    rob.io.csr_stall := csr.io.csr_stall
 
@@ -1028,16 +1024,11 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    rob.io.lsu_clr_bsy_rob_idx := lsu.io.lsu_clr_bsy_rob_idx
    rob.io.lxcpt <> lsu.io.xcpt
 
-   rob.io.cxcpt.valid := false.B // TODO XXX MERGE csr.io.csr_xcpt (csr can no longer throw exceptions dynamically?)
    rob.io.csr_eret := csr.io.eret
 
    assert (!(csr.io.singleStep), "[core] single-step is unsupported.")
 
    rob.io.bxcpt <> br_unit.xcpt
-
-   bpd_stage.io.brob.deallocate <> rob.io.brob_deallocate
-   bpd_stage.io.brob.bpd_update <> br_unit.bpd_update
-   bpd_stage.io.brob.flush := rob.io.flush.valid || rob.io.clear_brob
 
    //-------------------------------------------------------------
    // **** Flush Pipeline ****
@@ -1172,14 +1163,11 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    {
       println("\n Chisel Printout Enabled\n")
 
-      val numBrobWhitespace = if (DEBUG_PRINTF_BROB) NUM_BROB_ENTRIES else 0
-//      val screenheight = 103 - 4 - 10
-//      val screenheight = 85 - 10
-//      val screenheight = 63-10
-      val screenheight = 78 - 13
-//      val screenheight = 54-13
-       var whitespace = (screenheight - 11 + 3 - NUM_LSU_ENTRIES -
-         issueParams.map(_.numEntries).sum - issueParams.length - (NUM_ROB_ENTRIES/COMMIT_WIDTH) - numBrobWhitespace
+      val numFtqWhitespace = if (DEBUG_PRINTF_FTQ) ftqSz+1 else 0
+      val screenheight = 78
+//      val screenheight = 54
+       var whitespace = (screenheight - 21 + 3 - NUM_LSU_ENTRIES -
+         issueParams.map(_.numEntries).sum - issueParams.length - (NUM_ROB_ENTRIES/COMMIT_WIDTH) - numFtqWhitespace
      )
 
       println("Whitespace padded: " + whitespace)
