@@ -160,11 +160,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
 //   f2_bpd_resp.valid := false.B // XXX bpd_queue.io.deq.valid && bpd_queue.io.deq.bits.valid 
 //   io.f3_bpd_resp := RegNext(f2_bpd_resp)
    io.f3_bpd_resp.valid := false.B
-
-   if (!ENABLE_VLHR) {
-      io.f3_bpd_resp.bits.history.get := bpd.io.f3_resp_history.get
-   }
-   io.f3_bpd_resp.bits.history_ptr := bpd.io.f3_resp_history_ptr
+   io.f3_bpd_resp.bits.history := bpd.io.f3_resp_history
 
 
    // does the BPD predict a taken branch?
@@ -233,7 +229,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    bpd.io.exe_bpd_update := io.br_unit.bpd_update
 
    bpd.io.flush := io.flush
-   io.brob <> bpd.io.brob
+//   io.brob <> bpd.io.brob // TODO XXX hook up update
 
 
    //************************************************

@@ -32,8 +32,8 @@ case class BimParameters(
    nSets: Int = 512, // how many sets (conceptually) should we have?
    nBanks: Int = 2, // how many banks should we have? Reduces dropped updates.
    nResetLagCycles: Int = 128, // how many cycles after reset should we start initialization?
-   nUpdateQueueEntries: Int =4,
-   nWriteQueueEntries: Int =4
+   nUpdateQueueEntries: Int = 4,
+   nWriteQueueEntries: Int = 4
 )
 
 trait HasBimParameters extends HasBoomCoreParameters
@@ -281,6 +281,8 @@ class BimodalTable(implicit p: Parameters) extends BoomModule()(p) with HasBimPa
 
    //************************************************
    // Debug.
+
+   // Trust me, I just work.
 
 }
 
