@@ -509,20 +509,14 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
       br_unit.bpd_update.valid                 := io.req.valid && uop.is_br_or_jmp &&
                                                   !uop.is_jal && !killed
       br_unit.bpd_update.bits.is_br            := is_br
-      br_unit.bpd_update.bits.brob_idx         := 0.U // TODO XXX delete all BROB stuff io.get_rob_pc.curr_brob_idx
       br_unit.bpd_update.bits.taken            := is_taken
       br_unit.bpd_update.bits.mispredict       := mispredict
       br_unit.bpd_update.bits.bpd_predict_val  := uop.br_prediction.bpd_hit
       br_unit.bpd_update.bits.bpd_mispredict   := bpd_mispredict
       br_unit.bpd_update.bits.pc               := fetch_pc
       br_unit.bpd_update.bits.br_pc            := uop_pc_
-      br_unit.bpd_update.bits.history_ptr      := io.get_pred.info.bpd_resp.history_ptr
       br_unit.bpd_update.bits.info             := io.get_pred.info.bpd_resp.info
-      if (!ENABLE_VLHR)
-      {
-         br_unit.bpd_update.bits.history.get := io.get_pred.info.bpd_resp.history.get
-         br_unit.bpd_update.bits.history_u.get := io.get_pred.info.bpd_resp.history_u.get
-      }
+      br_unit.bpd_update.bits.history          := io.get_pred.info.bpd_resp.history
 
       // is the br_pc the last instruction in the fetch bundle?
       val is_last_inst = if (FETCH_WIDTH == 1) { Bool(true) }

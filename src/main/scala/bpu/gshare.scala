@@ -82,7 +82,7 @@ class GShareBrPredictor(
    io.resp.bits.info    := resp_info.asUInt
 
    // Always overrule the BTB, which will almost certainly have less history.
-   io.resp.valid := Bool(true) && !this.disable_bpd
+   io.resp.valid := false.B && !this.disable_bpd // TODO XXX BUG set back to true.B
 
    //------------------------------------------------------------
    // Update counter table.
