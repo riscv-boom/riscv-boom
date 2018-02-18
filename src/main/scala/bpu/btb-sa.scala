@@ -3,7 +3,7 @@
 // All Rights Reserved. See LICENSE for license details.
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
-// Set-associative Branch Target Buffer (BTB-sa)
+// Set-associative Branch Target Buffer with RAS and BIM predictor (BTB-sa)
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
 //
@@ -16,7 +16,6 @@
 //
 // TODO:
 //    - provide way to flush BTB.
-//    - move BIM to SRAM.
 //
 // NOTES:
 //    - No compression of high-order tag bits or target bits.
@@ -86,17 +85,9 @@ class BTBsaResp(implicit p: Parameters) extends BTBsaBundle()(p)
    val cfi_idx   = UInt(width = log2Up(fetchWidth)) // where is cfi we are predicting?
    val bpd_type  = BpredType() // which predictor should we use?
    val cfi_type  = CfiType()  // what type of instruction is this?
-   val bim_resp  = new BimResp // response from BIM -- it needs it back later for updating.
    val fetch_pc  = UInt(width = vaddrBits) // the PC we're predicting on (start of the fetch packet).
-}
 
-class BimResp(implicit p: Parameters) extends BTBsaBundle()(p)
-{
-  val value = UInt(width = 2) // save the old value -- needed for updating entry.
-  val entry_idx = UInt(width = idx_sz) // what entry in the set is the prediction coming from?
-  val way_idx = UInt(width = log2Up(nWays)) // which way did we come from?
-
-  def isTaken = value(0)
+   val bim_resp  = new BimResp // Output from the bimodal table.
 }
 
 
@@ -113,48 +104,12 @@ class BTBsaUpdate(implicit p: Parameters) extends BTBsaBundle()(p)
    val cfi_type = CfiType()
 }
 
-class LegacyBimUpdate(implicit p: Parameters) extends BTBsaBundle()(p)
-{
-  val taken = Bool()
-  val bim_resp = new BimResp
-}
 
 class RasUpdate(implicit p: Parameters) extends BTBsaBundle()(p)
 {
    val is_call = Bool()
    val is_ret = Bool()
    val return_addr = UInt(width = vaddrBits)
-}
-
-
-// BIM contains table of 2-bit counters (bimodal predictor).
-// Each way of the BTB will have its own BIM predictor.
-// The BIM only predicts and updates when there is a BTB hit.
-//    - update speculatively when a branch is predicted (and BTB was a hit for that branch).
-//    - updated when a branch is mispredicted in Execute (and BTB was a hit for that branch).
-//    - initialize counter when a branch is mispredicted in Execute and BTB is updated with new entry.
-class BIM(bim_entries: Int, way_idx: Int)(implicit val p: Parameters) extends HasBoomCoreParameters
-{
-   val idx_sz = log2Up(bim_entries)
-
-   def read(index: UInt): BimResp =
-   {
-      val res = Wire(new BimResp)
-      // read-data valid on the next cycle
-      res.value := table.read(index(idx_sz-1, 0))
-      res.way_idx := UInt(way_idx)
-      res.entry_idx := 0.U // unused -- set externally to save a flip-flop.
-      res
-   }
-
-   def update(index: UInt, value: UInt, taken: Bool): Unit =
-   {
-      // LSB gives the taken/not-taken prediction (p-bit).
-      // MSB gives "how strongly" biased the counter is.
-      table(index(idx_sz-1, 0)) := Cat(taken, (value(1) & value(0)) | ((value(1) | value(0)) & taken))
-   }
-
-   private val table = SeqMem(bim_entries, UInt(width = 2))
 }
 
 
@@ -197,11 +152,14 @@ class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParamet
       // req.bits.addr is available on cycle S0.
       // resp is expected on cycle S2.
       val req = Valid(new PCReq).flip
+
       // resp is valid if there is a BTB hit.
       val resp = Valid(new BTBsaResp)
+
       // the PC we're predicting on (start of the fetch packet).
       // Pass this to the BPD.
       val s1_pc  = UInt(width = vaddrBits)
+
       // If there's an icmiss, the Frontend replays the s2_pc as s0_pc (even though req.valid is low),
       // so don't stall and begin predicting s0_pc.
       val icmiss = Bool(INPUT)
@@ -210,7 +168,7 @@ class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParamet
       val flush = Bool(INPUT)
 
       val btb_update = Valid(new BTBsaUpdate).flip
-      val bim_update = Valid(new LegacyBimUpdate).flip
+      val bim_update = Valid(new BimUpdate).flip
       val ras_update = Valid(new RasUpdate).flip
 
       // HACK: prevent BTB updating/predicting during program load.
@@ -218,10 +176,16 @@ class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParamet
       val status_debug = Bool(INPUT)
    })
 
+   val bim = Module(new BimodalTable())
+   bim.io.req := io.req
+   bim.io.do_reset := false.B // TODO
+   bim.io.flush := false.B // TODO
+   bim.io.update := io.bim_update
+
+
    private val lsb_sz = log2Up(coreInstBytes)
    private def getTag (addr: UInt): UInt = addr(tag_sz+idx_sz+lsb_sz-1, idx_sz+lsb_sz)
    private def getIdx (addr: UInt): UInt = addr(idx_sz+lsb_sz-1, lsb_sz)
-
 
    class BTBSetData extends Bundle
    {
@@ -244,12 +208,10 @@ class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParamet
    val s1_resp_bits = Wire(new BTBsaResp)
    val hits_oh = Wire(Vec(nWays, Bool()))
    val data_out = Wire(Vec(nWays, new BTBSetData()))
-   val bim_out = Wire(Vec(nWays, new BimResp()))
    val s1_req_tag = RegEnable(getTag(io.req.bits.addr), !stall)
 
    // updates
    val r_btb_update = Pipe(io.btb_update)
-   val r_bim_update = Pipe(io.bim_update)
    val update_valid = r_btb_update.valid && !io.status_debug
    val widx = getIdx(r_btb_update.bits.pc)
    val wtag = getTag(r_btb_update.bits.pc)
@@ -270,7 +232,6 @@ class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParamet
       val valids   = Reg(init = UInt(0, nSets))
       val tags     = SeqMem(nSets, UInt(width = tag_sz))
       val data     = SeqMem(nSets, new BTBSetData())
-      val bim      = new BIM(nSets, way_idx = w)
 
       tags.suggestName("btb_tag_array")
       data.suggestName("btb_data_array")
@@ -280,7 +241,6 @@ class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParamet
       val rtag     = tags.read(s0_idx, !wen)
       hits_oh(w)   := is_valid && (rtag === s1_req_tag)
       data_out(w)  := rout
-      bim_out(w)   := bim.read(s0_idx)
 
       when (wen)
       {
@@ -294,24 +254,6 @@ class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParamet
 
          tags(widx) := wtag
          data(widx) := newdata
-
-         // Initialize BIM counter to weakly taken.
-         bim.update(widx, value = 3.U, taken = false.B)
-      }
-      .elsewhen (r_bim_update.valid && r_bim_update.bits.bim_resp.way_idx === UInt(w))
-      {
-         // update bim on a misprediction
-         bim.update(r_bim_update.bits.bim_resp.entry_idx, r_bim_update.bits.bim_resp.value, r_bim_update.bits.taken)
-      }
-      .elsewhen (RegNext(s1_valid &&
-         s1_resp_bits.bim_resp.way_idx === w.U &&
-         BpredType.isBranch(s1_resp_bits.bpd_type)))
-      {
-         // speculatively update bim
-         bim.update(
-            RegNext(s1_resp_bits.bim_resp.entry_idx),
-            RegNext(s1_resp_bits.bim_resp.value),
-            RegNext(s1_resp_bits.taken))
       }
 
       when (clear_valid)
@@ -345,7 +287,6 @@ class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParamet
    // Mux out the winning hit.
    s1_valid := PopCount(hits_oh) === UInt(1) && !io.flush
    val s1_data = Mux1H(hits_oh, data_out)
-   val s1_bim_resp = Mux1H(hits_oh, bim_out)
    val s1_target = Cat(s1_data.target, UInt(0, log2Up(coreInstBytes)))
    val s1_cfi_idx = s1_data.cfi_idx
    val s1_bpd_type = s1_data.bpd_type
@@ -353,13 +294,10 @@ class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParamet
 
 
    s1_resp_bits.target := s1_target
-   s1_resp_bits.taken := (if (enableBIM) s1_bim_resp.isTaken else true.B) || (BpredType.isAlwaysTaken(s1_bpd_type))
-   s1_resp_bits.cfi_idx := (if (fetchWidth > 1) s1_cfi_idx else UInt(0))
+   s1_resp_bits.cfi_idx := (if (fetchWidth > 1) s1_cfi_idx else 0.U)
    s1_resp_bits.bpd_type := s1_bpd_type
    s1_resp_bits.cfi_type := s1_cfi_type
-   s1_resp_bits.mask := Cat((UInt(1) << ~Mux(s1_resp_bits.taken, ~s1_resp_bits.cfi_idx, UInt(0)))-UInt(1), UInt(1))
-   s1_resp_bits.bim_resp := s1_bim_resp
-   s1_resp_bits.bim_resp.entry_idx  := s1_idx
+   s1_resp_bits.mask := Cat((1.U << ~Mux(s1_resp_bits.taken, ~s1_resp_bits.cfi_idx, 0.U))-1.U, 1.U)
 
    val s0_pc = Wire(UInt(width=vaddrBits))
    val last_pc = RegNext(s0_pc)
@@ -406,15 +344,22 @@ class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParamet
    io.resp.valid := RegNext(s1_valid)
    io.resp.bits := RegNext(s1_resp_bits)
 
+   io.resp.bits.bim_resp := bim.io.resp
+
+   // Does the BIM think we should take it?
+   io.resp.bits.taken :=
+      (bim.io.resp.valid && bim.io.resp.bits.isTaken(io.resp.bits.cfi_idx)) ||
+      RegNext(BpredType.isAlwaysTaken(s1_bpd_type))
+
 
    //************************************************
    // Debug.
 
-   if (false) //DEBUG_PRINTF)
+   if (DEBUG_PRINTF)
    {
-      printf("BTB predi (%c): hits:%x %d (PC= 0x%x, TARG= 0x%x %d) BIM [%d, %d]\n",
+      printf("BTB predi (%c): hits:%x %d (PC= 0x%x, TARG= 0x%x %d) s2_BIM [%d %d 0x%x]\n",
          Mux(s1_valid, Str("V"), Str("-")), hits_oh.asUInt, true.B, RegNext(io.req.bits.addr), s1_target, s1_cfi_type,
-         s1_resp_bits.bim_resp.way_idx, s1_resp_bits.bim_resp.entry_idx)
+         bim.io.resp.valid, bim.io.resp.bits.entry_idx, bim.io.resp.bits.rowdata)
    }
 }
 

@@ -76,7 +76,7 @@ class FunctionalUnitIo(num_stages: Int
 
    // only used by branch unit
    val get_ftq_pc = new GetPCFromFtqIO().flip
-   val get_pred = new GetPredictionInfo
+   val get_pred = new GetPredictionInfo // TODO XXX REMOVE
    val status = new freechips.rocketchip.rocket.MStatus().asInput
 }
 
@@ -140,6 +140,8 @@ class BrResolutionInfo(implicit p: Parameters) extends BoomBundle()(p)
    val taken      = Bool()                     // which direction did the branch go?
    val is_jr      = Bool()
 
+   def getCfiIdx = pc_lob >> log2Ceil(coreInstBytes)
+
    // for stats
    val btb_made_pred  = Bool()
    val btb_mispredict = Bool()
@@ -157,7 +159,6 @@ class BranchUnitResp(implicit p: Parameters) extends BoomBundle()(p)
 
    val brinfo          = new BrResolutionInfo()
    val btb_update      = Valid(new BTBsaUpdate)
-   val bim_update      = Valid(new LegacyBimUpdate)
    val bpd_update      = Valid(new BpdUpdate)
 
    val xcpt            = Valid(new Exception)
@@ -475,13 +476,10 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
       if (enableBTBContainsBranches)
       {
          br_unit.btb_update.valid := is_br_or_jalr && mispredict && is_taken && !uop.br_prediction.btb_hit
-         // update on all branches (but not jal/jalr)
-         br_unit.bim_update.valid := is_br && mispredict && uop.br_prediction.btb_hit
       }
       else
       {
          br_unit.btb_update.valid := is_br_or_jalr && mispredict && uop.is_jump
-         br_unit.bim_update.valid := Bool(false)
       }
 
       br_unit.btb_update.bits.pc               := fetch_pc // tell the BTB which pc to tag check against
@@ -502,9 +500,6 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
 			Mux(uop.is_call, BpredType.call,
 			Mux(uop.is_jump, BpredType.jump,
 				BpredType.branch)))
-
-      br_unit.bim_update.bits.taken            := is_taken   // was this branch "taken"
-      br_unit.bim_update.bits.bim_resp         := io.get_pred.info.bim_resp
 
       br_unit.bpd_update.valid                 := io.req.valid && uop.is_br_or_jmp &&
                                                   !uop.is_jal && !killed

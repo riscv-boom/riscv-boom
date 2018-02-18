@@ -54,30 +54,57 @@ abstract class BimBundle(implicit val p: Parameters) extends freechips.rocketchi
   with HasBimParameters
 
 
-//class BimResp(implicit p: Parameters) extends BimBundle()(p)
-//{
-//  val value = UInt(width = 2) // save the old value -- needed for updating entry.
-////  val entry_idx = UInt(width = idx_sz) // what entry in the set is the prediction coming from?
-//
-//  def isTaken = value(1)
-//}
+// The output from the BIM table.
+class BimResp(implicit p: Parameters) extends BimBundle()(p)
+{
+   val rowdata = UInt(width = row_sz)
+   val entry_idx = UInt(width = log2Up(nSets)) // what (logical) entry in the set is the prediction coming from?
+
+   def isTaken(cfi_idx: UInt) =
+   {
+      val cntr = getCounterValue(cfi_idx)
+      val taken = cntr(1)
+      taken
+   }
+
+   def getCounterValue(cfi_idx: UInt) =
+   {
+      val cntr = (rowdata >> (cfi_idx << 1.U)) & 0x3.U
+      cntr
+   }
+}
+
+
+// What do we store in the FTQ for updating BIM later?
+// Only store one branch worth of info.
+class BimStorage(implicit p: Parameters) extends BimBundle()(p)
+{
+   val value = UInt(width = 2) // save the old value -- needed for updating entry.
+   val entry_idx = UInt(width = log2Up(nSets)) // what (logical) entry in the set is the prediction coming from?
+
+   // TODO make sure these two signals aren't stored-- push them into CfiMissInfo instead.
+   val br_seen = Bool() // Track that there was a branch in the fetch packet (this storage info is valid).
+   val cfi_idx = UInt(width = log2Up(fetchWidth))
+
+   def isTaken = value(1)
+}
 
 
 class BimUpdate(implicit p: Parameters) extends BimBundle()(p)
 {
-  val entry_idx = UInt(width = log2Up(nSets))
-  val cfi_idx = UInt(width = log2Up(fetchWidth))
-  val cntr_value = UInt(width = 2)
-  val mispredicted = Bool()
-  val taken = Bool()
+   val entry_idx = UInt(width = log2Up(nSets))
+   val cfi_idx = UInt(width = log2Up(fetchWidth))
+   val cntr_value = UInt(width = 2)
+   val mispredicted = Bool()
+   val taken = Bool()
 }
 
 
 class BimWrite(implicit p: Parameters) extends BimBundle()(p)
 {
-  val row = UInt(width = row_idx_sz)
-  val data = UInt(width = row_sz)
-  val mask = UInt(width = row_sz)
+   val row = UInt(width = row_idx_sz)
+   val data = UInt(width = row_sz)
+   val mask = UInt(width = row_sz)
 }
 
 
@@ -88,15 +115,15 @@ class BimodalTable(implicit p: Parameters) extends BoomModule()(p) with HasBimPa
       // req.valid is false if stalling (aka, we won't read and use BTB results, on cycle S1).
       // req.bits.addr is available on cycle S0.
       // resp is expected on cycle S2.
-      val req = Valid(new PCReq).flip
-      val resp = Valid(UInt(width=row_sz))
+      val req = Valid(new PCReq).flip // TODO XXX change away from PC and to a hash-idx
+      val resp = Valid(new BimResp)
       // Reset the table to some initialization state.
       val do_reset = Bool(INPUT)
 
       // supress S1/upcoming S2 valids.
       val flush = Bool(INPUT)
 
-      val bim_update = Valid(new BimUpdate).flip
+      val update = Valid(new BimUpdate).flip
    })
 
    // Which (conceptual) index do we map to?
@@ -153,19 +180,21 @@ class BimodalTable(implicit p: Parameters) extends BoomModule()(p) with HasBimPa
 
 
    val stall = !io.req.valid
-   val s0_idx = Wire(UInt(width=idx_sz))
-   val last_idx = RegNext(s0_idx)
+   // Logical Index gets broken down into RowIdx and BankIdx.
+   val s0_logical_idx = Wire(UInt(width=idx_sz))
+   val last_idx = RegNext(s0_logical_idx)
    val new_idx = getIdx(io.req.bits.addr)
-   s0_idx := Mux(stall, last_idx, new_idx)
-   val s0_bank_idx = getBankFromIdx(s0_idx)
-   val s2_bank_idx = RegNext(RegNext(s0_bank_idx))
+   s0_logical_idx := Mux(stall, last_idx, new_idx)
+   val s0_bank_idx = getBankFromIdx(s0_logical_idx)
+   val s2_logical_idx = RegNext(RegNext(s0_logical_idx))
+   val s2_bank_idx = getBankFromIdx(s2_logical_idx)
 
    // prediction
    val s2_read_out = Reg(Vec(nBanks, UInt(width=row_sz)))
    val s2_conflict = Reg(init = Vec.fill(nBanks){Bool(false)})
 
    // updates
-   val r_bim_update = Pipe(io.bim_update)
+   val r_update = Pipe(io.update)
 
    // reset/initialization
    val s_reset :: s_wait :: s_clear :: s_idle :: Nil = Enum(UInt(), 4)
@@ -187,8 +216,8 @@ class BimodalTable(implicit p: Parameters) extends BoomModule()(p) with HasBimPa
       // Write Queue.
       val wq = Module(new Queue(new BimWrite(), entries=nWriteQueueEntries))
 
-      uq.io.enq.valid := r_bim_update.valid && getBankFromIdx(r_bim_update.bits.entry_idx) === w.U
-      uq.io.enq.bits  := r_bim_update.bits
+      uq.io.enq.valid := r_update.valid && getBankFromIdx(r_update.bits.entry_idx) === w.U
+      uq.io.enq.bits  := r_update.bits
       uq.io.deq.ready := wq.io.enq.ready && !s2_rmw_valid
       val (u_wrow, u_wdata, u_wmask) = generateWriteInfo(uq.io.deq.bits)
 
@@ -223,7 +252,7 @@ class BimodalTable(implicit p: Parameters) extends BoomModule()(p) with HasBimPa
       ren := (s0_bank_idx === w.U && io.req.valid) || s0_rmw_valid
       val rrow = Mux(s0_rmw_valid,
          getRowFromIdx(uq.io.deq.bits.entry_idx),
-         getRowFromIdx(s0_idx))
+         getRowFromIdx(s0_logical_idx))
       val s0_rconflict = s0_rmw_valid && (io.req.valid && s0_bank_idx === w.U)
       s2_conflict(w) := RegNext(s0_rconflict)
       s2_read_out(w) := ram.read(rrow, ren).asUInt
@@ -244,7 +273,8 @@ class BimodalTable(implicit p: Parameters) extends BoomModule()(p) with HasBimPa
    // Output.
 
    io.resp.valid := !Mux1H(UIntToOH(s2_bank_idx), s2_conflict) || fsm_state != s_idle
-   io.resp.bits := Mux1H(UIntToOH(s2_bank_idx), s2_read_out)
+   io.resp.bits.rowdata := Mux1H(UIntToOH(s2_bank_idx), s2_read_out)
+   io.resp.bits.entry_idx := s2_logical_idx
 
    //************************************************
    // Reset FSM.
