@@ -146,7 +146,7 @@ class RenameStage(
    }
 
    //-------------------------------------------------------------
-   // Branch Predictor Snapshots
+   // Branch Predictor Snapshots TODO REMOVE XXX
 
    // Each branch prediction must snapshot the predictor (history state, etc.).
    // On a mispredict, the snapshot must be used to reset the predictor.

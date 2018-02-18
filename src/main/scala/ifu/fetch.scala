@@ -38,7 +38,7 @@ class FetchBundle(implicit p: Parameters) extends BoomBundle()(p)
                             // A cfi branched to a misaligned address --
                             // one-hot encoding (1:1 with insts).
 
-   val bpu_info      = Vec(FETCH_WIDTH, new BranchPredInfo) // TODO remove
+   val bpu_info      = Vec(FETCH_WIDTH, new BranchPredInfo) // TODO XXX remove
 
    val debug_events  = Vec(FETCH_WIDTH, new DebugStageEvents)
 
@@ -58,7 +58,8 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
       val f3_ras_update     = Valid(new RasUpdate)
       val f3_bpd_resp       = Valid(new BpdResp).flip
       val f3_btb_update     = Valid(new BTBsaUpdate)
-      val f3_bim_update     = Valid(new LegacyBimUpdate)
+
+      val bim_update        = Valid(new BimUpdate)
 
       val br_unit           = new BranchUnitResp().asInput
       val get_pc            = new GetPCFromFtqIO()
@@ -132,6 +133,15 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
       val mask = Wire(Bits(width = m_width))
       mask := Fill(m_width, m_enable) & (Fill(m_width, UInt(1)) << UInt(1) << m_idx)
       mask
+   }
+
+   private def GetRandomCfiIdx(br_mask: UInt): UInt =
+   {
+      // TODO lower toggle frequency
+      val c = Counter(fetchWidth)
+      c.inc()
+      val ret = AgePriorityEncoder(br_mask.toBools, c.value)
+      ret
    }
 
    //-------------------------------------------------------------
@@ -274,7 +284,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
 
       val btb_idx = f3_btb_resp.bits.cfi_idx
 
-      when (BpredType.isAlwaysTaken(f3_btb_resp.bits.bpd_type))
+      when (BpredType.isAlwaysTaken(f3_btb_resp.bits.bpd_type)) // TODO XXX BUG look at actual inst, not BTB
       {
          f3_bpd_may_redirect_taken := io.f3_bpd_resp.valid && f3_bpd_br_taken && f3_bpd_br_idx < btb_idx
 
@@ -331,6 +341,8 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    f3_req.valid := f3_valid && (bchecker.io.req.valid || (f3_bpd_may_redirect && !jal_overrides_bpd)) // && !(f0_redirect_val)
    f3_req.bits.addr := Mux(f3_bpd_overrides_bcheck, f3_bpd_redirect_target, bchecker.io.req.bits.addr)
 
+
+   // TODO this logic is broken and vestigial. Do update correctly (remove RegNext)
    val f3_btb_update_bits = Wire(new BTBsaUpdate)
    io.f3_btb_update.valid := RegNext(bchecker.io.btb_update.valid || f3_bpd_btb_update_valid)
    io.f3_btb_update.bits := RegNext(f3_btb_update_bits)
@@ -357,7 +369,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    val btb_mask = Mux(f3_btb_resp.valid && !f3_req.valid,
                   f3_btb_resp.bits.mask,
                   Fill(fetchWidth, UInt(1,1)))
-   val bpd_mask = Fill(fetchWidth, UInt(1,1))  // TODO add back bpd
+   val bpd_mask = Fill(fetchWidth, UInt(1,1))  // TODO XXX add back bpd
 //   val bpd_mask = Mux(io.f3_bpu_request.valid && !f3_req.valid,
 //                  io.f3_bpu_request.bits.mask,
 //                  Fill(fetchWidth, UInt(1,1)))
@@ -374,6 +386,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    .elsewhen (f3_btb_resp.valid)
    {
       f3_taken := f3_btb_resp.bits.taken
+      // TODO XXX f3_taken logic is wrong. it looks to be missing bpd? Or is that f3_req.valid?
    }
 
    f3_fetch_bundle.pc := f3_imemresp.pc
@@ -420,13 +433,10 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    // **** F4 ****
    //-------------------------------------------------------------
 
-
    when (io.clear_fetchbuffer || r_f4_req.valid)
    {
       r_f4_valid := false.B
       r_f4_req.valid := false.B
-//      f3_br_seen := false.B
-//      f3_jr_seen := false.B
    }
    .elsewhen (f4_ready)
    {
@@ -436,8 +446,6 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
       r_f4_fetchpc := f3_imemresp.pc
 //      f3_taken := f2_taken
 //      f3_btb_hit := io.f2_btb_resp.valid
-//      f3_br_seen := f2_br_seen
-//      f3_jr_seen := f2_jr_seen
    }
 
    assert (!(r_f4_req.valid && !r_f4_valid),
@@ -445,12 +453,6 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    assert (!(io.clear_fetchbuffer && !(br_unit.take_pc || io.flush_take_pc || io.sfence_take_pc)),
       "[fetch] F4 should be cleared if a F0_redirect due to BRU/Flush/Sfence.")
 
-//   io.f3_bim_update.valid := r_f3_valid && f3_req.valid && f3_btb_hit
-//   io.f3_bim_update.bits.taken :=  f3_taken
-//   // HACK: all instructions in the bundle get the same bim_resp, so just read the first.
-//   io.f3_bim_update.bits.bim_resp := f3_fetch_bundle.bpu_info(0).bim_resp
-
-   // TODO enqueue into FetchTargetQueue
 
    //-------------------------------------------------------------
    // **** FetchBuffer Enqueue ****
@@ -477,6 +479,11 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
 
    ftq.io.enq.valid := FetchBuffer.io.enq.valid
    ftq.io.enq.bits.fetch_pc := f3_imemresp.pc
+   ftq.io.enq.bits.bim_info.value := f3_btb_resp.bits.bim_resp.getCounterValue(f3_btb_resp.bits.cfi_idx)
+   ftq.io.enq.bits.bim_info.entry_idx := f3_btb_resp.bits.bim_resp.entry_idx
+
+   ftq.io.enq.bits.bim_info.br_seen := (is_br.asUInt & f3_imemresp.mask) =/= 0.U
+   ftq.io.enq.bits.bim_info.cfi_idx := GetRandomCfiIdx(is_br.asUInt & f3_imemresp.mask)
 
    ftq.io.deq := io.commit
    ftq.io.brinfo := br_unit.brinfo
@@ -485,6 +492,8 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    ftq.io.com_ftq_idx := io.com_ftq_idx
    io.com_fetch_pc := ftq.io.com_fetch_pc
    ftq.io.debug_rob_empty := io.debug_rob_empty
+
+   io.bim_update := ftq.io.bim_update
 
    //-------------------------------------------------------------
    // **** Frontend Response ****

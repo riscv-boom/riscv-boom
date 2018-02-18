@@ -89,10 +89,9 @@ class BpdUpdate(implicit p: Parameters) extends BoomBundle()(p)
    // we have to be careful which "history" we show the new PC.
    val pc = UInt(width = vaddrBits)
    val br_pc = UInt(width = log2Up(FETCH_WIDTH)+log2Ceil(coreInstBytes))
-//   val brob_idx   = UInt(width = BROB_ADDR_SZ) switch to ftq_idx?
+//   val brob_idx   = UInt(width = BROB_ADDR_SZ) TODO switch to ftq_idx?
    val mispredict = Bool()
    val history     = UInt(width = GLOBAL_HISTORY_LENGTH)
-   val history_u   = UInt(width = GLOBAL_HISTORY_LENGTH)
    val bpd_predict_val = Bool()
    val bpd_mispredict = Bool()
    val taken = Bool()

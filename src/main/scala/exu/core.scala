@@ -8,10 +8,10 @@
 //------------------------------------------------------------------------------
 
 // BOOM has the following (conceptual) stages:
+//   if0 - Instruction Fetch 0 (next-pc select)
 //   if1 - Instruction Fetch 1 (I$ access)
 //   if2 - Instruction Fetch 2 (instruction return)
-//   bp1 - Branch Predict      (in parallel with IF1)
-//   bp2 - Branch Decode       (in parallel with IF2)
+//   if3 - Instruction Fetch 3 (enqueue to fetch buffer)
 //   dec - Decode
 //   ren - Rename
 //   dis - Dispatch
@@ -21,8 +21,7 @@
 //   mem - Memory
 //   wb  - Writeback
 //   com - Commit
-//
-//
+
 
 
 package boom
@@ -333,7 +332,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    bpd_stage.io.btb_req := io.imem.btb_req.req
 //   bpd_stage.io.s2_replay := io.imem.resp.bits.replay
    bpd_stage.io.fqenq_valid := io.imem.btb_req.fqenq_valid
-   bpd_stage.io.fqenq_pc := io.imem.btb_req.fqenq_pc
+   bpd_stage.io.debug_fqenq_pc := io.imem.btb_req.fqenq_pc
 //   bpd_stage.io.ext_btb_req.valid := io.imem.btb_req.valid || io.imem.req.valid
 
 
@@ -345,10 +344,10 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
    bpd_stage.io.f3_ras_update := fetch_unit.io.f3_ras_update
    bpd_stage.io.f3_btb_update := fetch_unit.io.f3_btb_update
+   bpd_stage.io.bim_update    := fetch_unit.io.bim_update
 //   bpd_stage.io.f3_hist_update:= fetch_unit.io.f3_hist_update
-   bpd_stage.io.f3_bim_update := fetch_unit.io.f3_bim_update
-   bpd_stage.io.status_prv   := csr.io.status.prv
-   bpd_stage.io.status_debug := csr.io.status.debug
+   bpd_stage.io.status_prv    := csr.io.status.prv
+   bpd_stage.io.status_debug  := csr.io.status.debug
 
    //-------------------------------------------------------------
    //-------------------------------------------------------------
@@ -1163,10 +1162,11 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    {
       println("\n Chisel Printout Enabled\n")
 
-      val numFtqWhitespace = if (DEBUG_PRINTF_FTQ) ftqSz+1 else 0
-      val screenheight = 78
+      val numFtqWhitespace = if (DEBUG_PRINTF_FTQ) (ftqSz/4)+1 else 0
+//      val screenheight = 78
+      val screenheight = 63
 //      val screenheight = 54
-       var whitespace = (screenheight - 21 + 3 - NUM_LSU_ENTRIES -
+       var whitespace = (screenheight - 20 + 3 - NUM_LSU_ENTRIES -
          issueParams.map(_.numEntries).sum - issueParams.length - (NUM_ROB_ENTRIES/COMMIT_WIDTH) - numFtqWhitespace
      )
 
@@ -1282,18 +1282,12 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
          )
 
       // branch unit
-//      printf("                          Branch Unit: %c,%c,%d PC=0x%x, %d Targ=0x%x NPC=%d,0x%x %d%d\n"
       printf("                          Branch Unit: %c,%c,%d  NPC=%d,0x%x\n"
          , Mux(br_unit.brinfo.valid,Str("V"), Str(" "))
          , Mux(br_unit.brinfo.mispredict, Str("M"), Str(" "))
          , br_unit.brinfo.taken
-//         , br_unit.btb_update.bits.br_pc(19,0)
-//         , br_unit.btb_update.valid
-//         , br_unit.btb_update.bits.target(19,0)
          , exe_units(brunit_idx).io.get_ftq_pc.next_val
          , exe_units(brunit_idx).io.get_ftq_pc.next_pc(19,0)
-//         , br_unit.btb_update.isJump
-//         , br_unit.btb_update.isReturn
       )
 
       // Rename Map Tables / ISA Register File
@@ -1414,7 +1408,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    //-------------------------------------------------------------
 
    // we do not support RoCC (yet)
-   io.rocc.cmd.valid := Bool(false)
-   io.rocc.resp.ready := Bool(false)
+   io.rocc.cmd.valid := false.B
+   io.rocc.resp.ready := false.B
 }
 

@@ -75,9 +75,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
       // Fetch0
       val btb_req       = Valid(new freechips.rocketchip.rocket.BTBReq).flip
       val fqenq_valid   = Bool(INPUT)
-      val fqenq_pc      = UInt(INPUT, width = vaddrBitsExtended) // For debug -- make sure I$ and BTB are synchronised.
-
-//      val fetch_stalled = Bool(INPUT)
+      val debug_fqenq_pc= UInt(INPUT, width = vaddrBitsExtended) // For debug -- make sure I$ and BTB are synchronised.
 
       // Fetch1
 
@@ -88,7 +86,9 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
       val f3_bpd_resp   = Valid(new BpdResp)
       val f3_btb_update = Valid(new BTBsaUpdate).flip
       val f3_ras_update = Valid(new RasUpdate).flip
-      val f3_bim_update = Valid(new LegacyBimUpdate).flip
+
+      // Commit
+      val bim_update    = Valid(new BimUpdate).flip
 
       // Other
       val br_unit       = new BranchUnitResp().asInput
@@ -143,7 +143,8 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
 
    when (io.fqenq_valid)
    {
-      assert (btb.io.resp.bits.fetch_pc(15,0) === io.fqenq_pc(15,0), "[bpd-pipeline] mismatch between BTB and I$.")
+      assert (btb.io.resp.bits.fetch_pc(15,0) === io.debug_fqenq_pc(15,0),
+         "[bpd-pipeline] mismatch between BTB and I$.")
    }
    
    // TODO CODEREVIEW: this gets wonky --- we need to override payload's valid if queue's valid not true.
@@ -216,8 +217,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
          io.br_unit.btb_update,
          io.f3_btb_update)
 
-   btb.io.bim_update.valid := io.br_unit.bim_update.valid || io.f3_bim_update.valid
-   btb.io.bim_update.bits := Mux(io.br_unit.bim_update.valid, io.br_unit.bim_update.bits, io.f3_bim_update.bits)
+   btb.io.bim_update := io.bim_update
 
 
    //************************************************

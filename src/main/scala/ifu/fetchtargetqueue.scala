@@ -45,17 +45,23 @@ class FTQBundle(implicit p: Parameters) extends BoomBundle()(p)
 {
    val fetch_pc = UInt(width = vaddrBitsExtended.W) // TODO compress out high-order bits
    val history = UInt(width = GLOBAL_HISTORY_LENGTH.W)
-
-//   val bim_info =
-//   val bpd_info =
+   val bim_info = new BimStorage
+//   val bpd_info = new BpdResp?
 }
 
-// Track the oldest mispredicted cfi instruction for a given fetch entry.
+// Initially, store a random branch entry for BIM (set cfi_type==branch).
+// If a branch is resolved that matches the stored BIM entry, set "executed" to high.
+// Otherwise, if a branch is resolved and mispredicted, track the oldest
+// mispredicted cfi instruction for a given fetch entry.
 class CfiMissInfo(implicit p: Parameters) extends BoomBundle()(p)
 {
-   val valid = Bool() // Is there a branch or jr in this fetch that was mispredicted?
-   val taken = Bool() // If a branch, was it taken?
-   val cfi_idx = UInt(width=log2Up(fetchWidth).W) // which instruction in fetch packet?
+   val executed = Bool()      // Was the branch stored here for the BIM executed?
+                              // Check the cfi_idx matches and cfi_type == branch.
+                              // Is DontCare if a misprediction occurred.
+   val mispredicted = Bool()  // Was a branch or jump mispredicted in this fetch group?
+   val taken = Bool()         // If a branch, was it taken?
+   val cfi_idx = UInt(width=log2Up(fetchWidth).W) // which instruction in fetch group?
+   val cfi_type = CfiType()   // What kind of instruction is stored here?
 }
 
 // provide a port for a FunctionalUnit to get the PC of an instruction.
@@ -96,6 +102,8 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
       val com_ftq_idx = Input(UInt(width=log2Up(ftqSz).W))
       val com_fetch_pc = Output(UInt(width=vaddrBitsExtended.W))
 
+      val bim_update = Valid(new BimUpdate)
+
       // BranchResolutionUnit tells us the outcome of branches/jumps.
       val brinfo = new BrResolutionInfo().asInput
 
@@ -115,23 +123,28 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
    val ram = Mem(num_entries, new FTQBundle())
    val cfi_info = Reg(Vec(num_entries, new CfiMissInfo()))
 
-
-   private val do_enq = WireInit(io.enq.fire())
-   private val do_deq = WireInit(deq_ptr.value =/= commit_ptr)
-
-   private def nullCfiInfo(): CfiMissInfo =
+   private def initCfiInfo(br_seen: Bool, cfi_idx: UInt): CfiMissInfo =
    {
       val b = Wire(new CfiMissInfo())
-      b.valid := false.B
+      b.executed := false.B
+      b.mispredicted := false.B
       b.taken := false.B
-      b.cfi_idx := 0.U
+      b.cfi_idx := cfi_idx
+      b.cfi_type := Mux(br_seen, CfiType.branch, CfiType.none)
       b
    }
 
 
+   //-------------------------------------------------------------
+   // **** Pointer Arithmetic and Enqueueing of Data ****
+   //-------------------------------------------------------------
+
+   private val do_enq = WireInit(io.enq.fire())
+   private val do_deq = WireInit(deq_ptr.value =/= commit_ptr)
+
    when (do_enq) {
      ram(enq_ptr.value) := io.enq.bits
-     cfi_info(enq_ptr.value) := nullCfiInfo()
+     cfi_info(enq_ptr.value) := initCfiInfo(io.enq.bits.bim_info.br_seen, io.enq.bits.bim_info.cfi_idx)
      enq_ptr.inc()
    }
    when (do_deq) {
@@ -154,21 +167,69 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
       enq_ptr.value := WrapInc(io.flush.bits.ftq_idx, num_entries)
    }
 
+   //-------------------------------------------------------------
+   // **** Handle Mispredictions ****
+   //-------------------------------------------------------------
+
    when (io.brinfo.valid && io.brinfo.mispredict)
    {
       val new_ptr = WrapInc(io.brinfo.ftq_idx, num_entries)
       enq_ptr.value := new_ptr
       // If ptr is adjusted, we deleted entries and thus can't be full.
       maybe_full := (enq_ptr.value === new_ptr)
+   }
 
-      cfi_info(io.brinfo.ftq_idx).valid := true.B
-      cfi_info(io.brinfo.ftq_idx).taken := io.brinfo.taken
-      cfi_info(io.brinfo.ftq_idx).cfi_idx := io.brinfo.pc_lob >> log2Ceil(coreInstBytes)
+   when (io.brinfo.valid)
+   {
+      val prev_executed       = cfi_info(io.brinfo.ftq_idx).executed
+      val prev_mispredicted   = cfi_info(io.brinfo.ftq_idx).mispredicted
+      val prev_cfi_idx        = cfi_info(io.brinfo.ftq_idx).cfi_idx
+      val new_cfi_idx         = io.brinfo.getCfiIdx
+
+      when (
+         (io.brinfo.mispredict && !prev_mispredicted) ||
+         (io.brinfo.mispredict && (new_cfi_idx < prev_cfi_idx)))
+      {
+         // Overwrite if a misprediction occurs and is older than previous misprediction, if any.
+         cfi_info(io.brinfo.ftq_idx).mispredicted := true.B
+         cfi_info(io.brinfo.ftq_idx).taken := io.brinfo.taken
+         cfi_info(io.brinfo.ftq_idx).cfi_idx := new_cfi_idx
+         cfi_info(io.brinfo.ftq_idx).cfi_type := new_cfi_idx
+      }
+      .elsewhen (!prev_mispredicted && (new_cfi_idx === prev_cfi_idx))
+      {
+         cfi_info(io.brinfo.ftq_idx).executed := true.B
+      }
+   }
+
+
+
+   //-------------------------------------------------------------
+   // **** Commit Data Read ****
+   //-------------------------------------------------------------
+
+   // Dequeue entry (it's been committed) and update predictors.
+   when (do_deq)
+   {
+      val com_data = ram(deq_ptr.value)
+      val miss_data = cfi_info(deq_ptr.value)
+
+      io.bim_update.valid :=
+         (miss_data.mispredicted && miss_data.cfi_type === CfiType.branch) ||
+         (!miss_data.mispredicted && miss_data.executed)
+
+      io.bim_update.bits.entry_idx    := com_data.bim_info.entry_idx
+      io.bim_update.bits.cntr_value   := com_data.bim_info.value
+      io.bim_update.bits.cfi_idx      := miss_data.cfi_idx
+      io.bim_update.bits.taken        := miss_data.taken
+      io.bim_update.bits.mispredicted := miss_data.mispredicted
+
+
    }
 
 
    //-------------------------------------------------------------
-   // **** Read out data ****
+   // **** BranchResolutionUnit Read ****
    //-------------------------------------------------------------
 
    // Send current-PC/next-PC info to the BranchResolutionUnit.
@@ -221,15 +282,17 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
          j <- 0 until w
       ){
          val idx = i+j*(num_entries/w)
-         printf(" [%d %c%c%c pc=0x%x ms:%c%c-%d]",
+         printf(" [%d %c%c%c pc=0x%x ms:%c%c%c-%d bim:0x%x]",
             idx.asUInt(width=5.W),
             Mux(enq_ptr.value === idx.U, Str("E"), Str(" ")),
             Mux(commit_ptr === idx.U, Str("C"), Str(" ")),
             Mux(deq_ptr.value === idx.U, Str("D"), Str(" ")),
             ram(idx).fetch_pc,
-            Mux(cfi_info(idx).valid, Str("V"), Str(" ")),
+            Mux(cfi_info(idx).executed, Str("E"), Str(" ")),
+            Mux(cfi_info(idx).mispredicted, Str("V"), Str(" ")),
             Mux(cfi_info(idx).taken, Str("T"), Str(" ")),
-            cfi_info(idx).cfi_idx
+            cfi_info(idx).cfi_idx,
+            ram(idx).bim_info.value
          )
          if (j == w-1) printf("\n")
       }
