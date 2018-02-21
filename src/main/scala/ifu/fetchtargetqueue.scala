@@ -8,26 +8,9 @@
 //------------------------------------------------------------------------------
 //
 // Each entry in the FTQ holds the fetch address and branch prediction snapshot state.
-
-// TODO Dev steps:
-//   !- get enq_ptr working
-//   !- pass off ftq_idx to instructions
-//   !- pass off ftq_idx to ROB/branches
-//   !- get commit_ptr from ROB
-//   !- update pointer on exception/flush
-//   !- update pointer on mispredict
-//   !- get dequeue ptr to move 1/cycle to match commit_ptr
-//   !- start using fetch-pcs to drive ROB redirections
-//   !- start using fetch-pcs to drive JALR, branch mispredictions
-//    - start using fetch-pcs to drive CSR I/Os
-//    - remove ROB's PCFile
-//   !- get miss-info working
-//    - store BIM info;
-//    - get BIM updating properly.
-//    - use BIM to drive BTB.
-//    - store history in here. reset on misprediction.
-//    - setup gshare predictor?
-
+//
+// TODO:
+// * reduce port counts.
 
 
 package boom
@@ -215,7 +198,8 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
       val miss_data = cfi_info(deq_ptr.value)
 
       io.bim_update.valid :=
-         (miss_data.mispredicted && miss_data.cfi_type === CfiType.branch) ||
+         miss_data.cfi_type === CfiType.branch &&
+         (miss_data.mispredicted) ||
          (!miss_data.mispredicted && miss_data.executed)
 
       io.bim_update.bits.entry_idx    := com_data.bim_info.entry_idx
@@ -282,7 +266,7 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
          j <- 0 until w
       ){
          val idx = i+j*(num_entries/w)
-         printf(" [%d %c%c%c pc=0x%x ms:%c%c%c-%d bim:0x%x]",
+         printf(" [%d %c%c%c pc=0x%x ms:%c%c%c%d-%d bim:0x%x]",
             idx.asUInt(width=5.W),
             Mux(enq_ptr.value === idx.U, Str("E"), Str(" ")),
             Mux(commit_ptr === idx.U, Str("C"), Str(" ")),
@@ -291,6 +275,7 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
             Mux(cfi_info(idx).executed, Str("E"), Str(" ")),
             Mux(cfi_info(idx).mispredicted, Str("V"), Str(" ")),
             Mux(cfi_info(idx).taken, Str("T"), Str(" ")),
+            cfi_info(idx).cfi_type,
             cfi_info(idx).cfi_idx,
             ram(idx).bim_info.value
          )

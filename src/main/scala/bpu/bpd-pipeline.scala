@@ -147,7 +147,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
          "[bpd-pipeline] mismatch between BTB and I$.")
    }
    
-   // TODO CODEREVIEW: this gets wonky --- we need to override payload's valid if queue's valid not true.
+   // CODEREVIEW: this gets wonky --- we need to override payload's valid if queue's valid not true.
    val f2_btb = Wire(init=btb_queue.io.deq.bits); f2_btb.valid := btb_queue.io.deq.valid && btb_queue.io.deq.bits.valid
    val f2_pc = f2_btb.bits.fetch_pc
    val f2_aligned_pc = ~(~f2_pc | (UInt(fetch_width*coreInstBytes-1)))
@@ -170,27 +170,8 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    val bpd_valid = bpd.io.resp.valid
    val bpd_bits = bpd.io.resp.bits
 
-   val bpd_predict_taken = bitRead(bpd_bits.takens, io.f2_btb_resp.bits.cfi_idx)
-   val bpd_disagrees_with_btb =
-      f2_btb.valid && bpd_valid && (bpd_predict_taken ^ f2_btb.bits.taken) && f2_btb.bits.cfi_type === CfiType.branch
-
-//   io.f2_bpu_request.valid := bpd_disagrees_with_btb
-//   io.f2_bpu_request.bits.target :=
-//      Mux(bpd_predict_taken,
-//         f2_btb.bits.target.sextTo(vaddrBitsExtended),
-//         f2_nextline_pc.sextTo(vaddrBitsExtended))
-//
-//   io.f2_bpu_request.bits.mask := Cat((UInt(1) << ~Mux(bpd_predict_taken, ~f2_btb.bits.cfi_idx, UInt(0)))-UInt(1), UInt(1))
-
    bpd.io.resp.ready := true.B // XXX TODO !io.fetch_stalled
 
-//   if (!enableBpdF2Redirect)
-//   {
-//      io.f2_bpu_request.valid := false.B
-//      io.f2_bpu_request.bits.target := 0.U
-//      io.f2_bpu_request.bits.cfi_idx:= 0.U
-//      io.f2_bpu_request.bits.mask := 0.U
-//   }
 
 
    //************************************************
