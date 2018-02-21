@@ -297,7 +297,7 @@ class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParamet
    s1_resp_bits.cfi_idx := (if (fetchWidth > 1) s1_cfi_idx else 0.U)
    s1_resp_bits.bpd_type := s1_bpd_type
    s1_resp_bits.cfi_type := s1_cfi_type
-   s1_resp_bits.mask := Cat((1.U << ~Mux(s1_resp_bits.taken, ~s1_resp_bits.cfi_idx, 0.U))-1.U, 1.U)
+//   s1_resp_bits.mask := Cat((1.U << ~Mux(s1_resp_bits.taken, ~s1_resp_bits.cfi_idx, 0.U))-1.U, 1.U)
 
    val s0_pc = Wire(UInt(width=vaddrBits))
    val last_pc = RegNext(s0_pc)
@@ -350,6 +350,7 @@ class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParamet
    io.resp.bits.taken :=
       (bim.io.resp.valid && bim.io.resp.bits.isTaken(io.resp.bits.cfi_idx)) ||
       RegNext(BpredType.isAlwaysTaken(s1_bpd_type))
+   io.resp.bits.mask := Cat((1.U << ~Mux(io.resp.bits.taken, ~io.resp.bits.cfi_idx, 0.U))-1.U, 1.U)
 
 
    //************************************************
