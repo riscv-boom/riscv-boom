@@ -170,9 +170,10 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
          io.flush_pc,
       Mux(br_unit.take_pc,
          br_unit.target(vaddrBits,0),
-      Mux(io.f2_btb_resp.valid && io.f2_btb_resp.bits.taken,
-         io.f2_btb_resp.bits.target,
-         r_f4_req.bits.addr)))))
+      Mux(r_f4_valid && r_f4_req.valid,
+         r_f4_req.bits.addr,
+         io.f2_btb_resp.bits.target)))))
+
 
    //-------------------------------------------------------------
    // **** ICache Access (F1) ****
@@ -244,6 +245,12 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
                   !f3_imemresp.xcpt.pf.inst &&
                   is_jr.reduce(_|_) &&
                   (!is_jal.reduce(_|_) || (PriorityEncoder(is_jr.asUInt) < PriorityEncoder(is_jal.asUInt)))
+
+   // What does the BIM predict?
+//   val f3_bim_predictions = is_br.asUInt & f3_btb_resp.bits.bim_resp.bits.getTakens()
+//   val f3_bim_br_taken = f3_bim_predictions.orR
+//   val f3_bim_br_idx = PriorityEncoder(f3_bim_predictions)
+//   val f3_bim_target = br_targs(f3_bim_br_idx)
 
 
    // Does the BPD have a prediction to make (in the case of a BTB miss?)
