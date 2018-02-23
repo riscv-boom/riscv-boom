@@ -138,7 +138,8 @@ class BrResolutionInfo(implicit p: Parameters) extends BoomBundle()(p)
    val ldq_idx    = UInt(width = MEM_ADDR_SZ)  // track the "tail" of loads and stores, so we can
    val stq_idx    = UInt(width = MEM_ADDR_SZ)  // quickly reset the LSU on a mispredict
    val taken      = Bool()                     // which direction did the branch go?
-   val is_jr      = Bool()
+   val is_jr      = Bool() // TODO remove use cfi_type instead
+   val cfi_type   = CfiType()
 
    def getCfiIdx = pc_lob >> log2Ceil(coreInstBytes)
 
@@ -459,6 +460,9 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
       brinfo.ldq_idx        := uop.ldq_idx
       brinfo.stq_idx        := uop.stq_idx
       brinfo.is_jr          := pc_sel === PC_JALR
+      brinfo.cfi_type       := Mux(uop.is_jal, CfiType.jal,
+                               Mux(pc_sel === PC_JALR, CfiType.jalr,
+                               Mux(uop.is_br_or_jmp, CfiType.branch, CfiType.none)))
       brinfo.taken          := is_taken
       brinfo.btb_mispredict := btb_mispredict
       brinfo.bpd_mispredict := bpd_mispredict

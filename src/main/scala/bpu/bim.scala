@@ -127,11 +127,13 @@ class BimodalTable(implicit p: Parameters) extends BoomModule()(p) with HasBimPa
    })
 
    // Which (conceptual) index do we map to?
-   private def getIdx (addr: UInt): UInt = addr >> (fetchWidth*coreInstBytes)
+   private def getIdx (addr: UInt): UInt = addr >> log2Up(fetchWidth*coreInstBytes)
    // Which physical row do we map to?
-   private def getRowFromIdx (idx: UInt): UInt = idx >> log2Up(nBanks)
+   private def getRowFromIdx (idx: UInt): UInt = idx >> log2Ceil(nBanks)
    // Which physical bank do we map to?
+   // TODO which bits are the best to get the bank from?
    private def getBankFromIdx (idx: UInt): UInt = idx(log2Up(nBanks)-1, 0)
+
 
    // for initializing the BIM, this is the value to reset the row to.
    private def initRowValue (): Vec[Bool] =
@@ -189,6 +191,14 @@ class BimodalTable(implicit p: Parameters) extends BoomModule()(p) with HasBimPa
    val s2_logical_idx = RegNext(RegNext(s0_logical_idx))
    val s2_bank_idx = getBankFromIdx(s2_logical_idx)
 
+   printf("BIM: fetchpc: 0x%x, idx:[%d,%d,%d] s2_resp_idx: %d\n",
+      io.req.bits.addr,
+      s0_logical_idx,
+      s0_bank_idx,
+      getRowFromIdx(s0_logical_idx),
+      io.resp.bits.entry_idx
+      )
+
    // prediction
    val s2_read_out = Reg(Vec(nBanks, UInt(width=row_sz)))
    val s2_conflict = Reg(init = Vec.fill(nBanks){Bool(false)})
@@ -201,7 +211,8 @@ class BimodalTable(implicit p: Parameters) extends BoomModule()(p) with HasBimPa
    val fsm_state = Reg(init = s_reset)
    val (lag_counter, lag_done) = Counter(fsm_state === s_wait, nResetLagCycles)
    val (clear_row_addr, clear_done) = Counter(fsm_state === s_clear, nSets/nBanks)
-   // TODO check if FSM changes and counter sits at 0.
+
+   printf("lag_counter: %d, clear_addr: %d, fsm: %d\n", lag_counter, clear_row_addr, fsm_state)
 
    for (w <- 0 until nBanks)
    {
@@ -210,6 +221,9 @@ class BimodalTable(implicit p: Parameters) extends BoomModule()(p) with HasBimPa
 
       val ren = Wire(Bool())
       val s2_rmw_valid = Wire(Bool())
+
+      // Does the predictor want read access? Give him his read access then.
+      val p_will_read = s0_bank_idx === w.U && io.req.valid
 
       // Update Queue.
       val uq = Module(new Queue(new BimUpdate(), entries=nUpdateQueueEntries))
@@ -224,7 +238,7 @@ class BimodalTable(implicit p: Parameters) extends BoomModule()(p) with HasBimPa
 
       // Read-Modify-Write update path.
       // If a misprediction occurs, read out the counters and then enqueue update onto wq.
-      val s0_rmw_valid = uq.io.deq.valid && !wq.io.deq.valid
+      val s0_rmw_valid = uq.io.deq.fire()
       s2_rmw_valid    := RegNext(RegNext(s0_rmw_valid))
       val s2_rmw_row   = Wire(UInt(width = row_idx_sz))
       val s2_rmw_data  = Wire(UInt(width = row_sz))
@@ -235,7 +249,10 @@ class BimodalTable(implicit p: Parameters) extends BoomModule()(p) with HasBimPa
       wq.io.enq.bits.data := Mux(s2_rmw_valid, s2_rmw_data, u_wdata)
       wq.io.enq.bits.mask := Mux(s2_rmw_valid, s2_rmw_mask, u_wmask)
 
-      wq.io.deq.ready := !ren
+      wq.io.deq.ready := !p_will_read && !wq.io.deq.valid
+
+      printf("BIM bank[" + w + "] (r:%d ", ren)
+
       when ((wq.io.deq.valid && !ren) || fsm_state === s_clear)
       {
          val waddr = Mux(fsm_state === s_clear, clear_row_addr, wq.io.deq.bits.row)
@@ -243,6 +260,11 @@ class BimodalTable(implicit p: Parameters) extends BoomModule()(p) with HasBimPa
          val wmask = Mux(fsm_state === s_clear, Fill(row_sz, 1.U), wq.io.deq.bits.mask).toBools
 
          ram.write(waddr, wdata, wmask)
+         printf("w:W %d %x %x ", waddr, wdata.asUInt, Vec(wmask).asUInt)
+      }
+      .otherwise
+      {
+         printf("w:----------")
       }
 
       // read (either for prediction or rmw for updates)
@@ -266,6 +288,18 @@ class BimodalTable(implicit p: Parameters) extends BoomModule()(p) with HasBimPa
       s2_rmw_mask := 0x3.U << (s2_rmw_cfi_idx << 1.U)
 
       assert(!(uq.io.deq.valid && getBankFromIdx(uq.io.deq.bits.entry_idx) =/= w.U))
+
+      printf("uq.enq:(%d,%d) uq.deq:(%d,%d), s0_rmw:%d s2_out: %x rmw_data: %x  wq:%d,%d\n",
+         uq.io.enq.valid,
+         uq.io.enq.ready,
+         uq.io.deq.valid,
+         uq.io.deq.ready,
+         s0_rmw_valid,
+         s2_read_out(w),
+         s2_rmw_data.asUInt,
+         wq.io.enq.valid,
+         wq.io.deq.valid)
+
    }
 
 

@@ -332,7 +332,9 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    bpd_stage.io.btb_req := io.imem.btb_req.req
 //   bpd_stage.io.s2_replay := io.imem.resp.bits.replay
    bpd_stage.io.fqenq_valid := io.imem.btb_req.fqenq_valid
-   bpd_stage.io.debug_fqenq_pc := io.imem.btb_req.fqenq_pc
+   bpd_stage.io.f2_stall := !io.imem.resp.ready
+   bpd_stage.io.debug_fqenq_pc := io.imem.btb_req.debug_fqenq_pc
+   bpd_stage.io.debug_fqenq_ready := io.imem.btb_req.debug_fqenq_ready
 //   bpd_stage.io.ext_btb_req.valid := io.imem.btb_req.valid || io.imem.req.valid
 
 
@@ -1163,10 +1165,10 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       println("\n Chisel Printout Enabled\n")
 
       val numFtqWhitespace = if (DEBUG_PRINTF_FTQ) (ftqSz/4)+1 else 0
-//      val screenheight = 78
-      val screenheight = 63
+      val screenheight = 79
+//      val screenheight = 63
 //      val screenheight = 54
-       var whitespace = (screenheight - 20 + 3 - NUM_LSU_ENTRIES -
+       var whitespace = (screenheight - 26 + 3 - NUM_LSU_ENTRIES -
          issueParams.map(_.numEntries).sum - issueParams.length - (NUM_ROB_ENTRIES/COMMIT_WIDTH) - numFtqWhitespace
      )
 

@@ -87,7 +87,7 @@ class BTBsaResp(implicit p: Parameters) extends BTBsaBundle()(p)
    val cfi_type  = CfiType()  // what type of instruction is this?
    val fetch_pc  = UInt(width = vaddrBits) // the PC we're predicting on (start of the fetch packet).
 
-   val bim_resp  = new BimResp // Output from the bimodal table.
+   val bim_resp  = Valid(new BimResp) // Output from the bimodal table. Valid if prediction provided.
 }
 
 

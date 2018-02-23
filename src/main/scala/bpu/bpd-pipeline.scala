@@ -76,11 +76,13 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
       val btb_req       = Valid(new freechips.rocketchip.rocket.BTBReq).flip
       val fqenq_valid   = Bool(INPUT)
       val debug_fqenq_pc= UInt(INPUT, width = vaddrBitsExtended) // For debug -- make sure I$ and BTB are synchronised.
+      val debug_fqenq_ready = Bool(INPUT)
 
       // Fetch1
 
       // Fetch2
       val f2_btb_resp   = Valid(new BTBsaResp)
+      val f2_stall      = Bool(INPUT) // f3 is not ready -- back-pressure the f2 stage.
 
       // Fetch3
       val f3_bpd_resp   = Valid(new BpdResp)
@@ -130,23 +132,22 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
 
    val btb_queue = withReset(reset || io.flush || io.redirect)
       { Module(new ShiftQueue(Valid(new BTBsaResp), 5, flow = true)) }
-   // TODO XXX bpd_queue is in the wrong place
-   val bpd_queue = withReset(reset || io.flush || io.redirect)
-      { Module(new ShiftQueue(Valid(new BpdResp), 5, flow = true)) }
+
+   btb_queue.io.deq.ready := !io.f2_stall
 
    btb_queue.io.enq.valid := io.fqenq_valid
-   bpd_queue.io.enq.valid := io.fqenq_valid
-   btb_queue.io.enq.bits := btb.io.resp 
-   bpd_queue.io.enq.bits := bpd.io.resp
+   btb_queue.io.enq.bits := btb.io.resp
 
-   bpd.io.resp.ready := bpd_queue.io.enq.ready // TODO XXX redo back-pressure/replay on BPD
+   assert (btb_queue.io.enq.ready === io.debug_fqenq_ready, "[bpd-pipeline] mismatch between BTB-Q and I$ readies.")
+
+   bpd.io.resp.ready := true.B // bpd_queue.io.enq.ready // TODO XXX redo back-pressure/replay on BPD
 
    when (io.fqenq_valid)
    {
       assert (btb.io.resp.bits.fetch_pc(15,0) === io.debug_fqenq_pc(15,0),
          "[bpd-pipeline] mismatch between BTB and I$.")
    }
-   
+
    // CODEREVIEW: this gets wonky --- we need to override payload's valid if queue's valid not true.
    val f2_btb = Wire(init=btb_queue.io.deq.bits); f2_btb.valid := btb_queue.io.deq.valid && btb_queue.io.deq.bits.valid
    val f2_pc = f2_btb.bits.fetch_pc
@@ -154,11 +155,11 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    val f2_nextline_pc = Wire(UInt(width=vaddrBits))
    f2_nextline_pc := f2_aligned_pc + UInt(fetch_width*coreInstBytes)
 
-   io.f2_btb_resp := btb_queue.io.deq.bits; io.f2_btb_resp.valid := btb_queue.io.deq.valid && btb_queue.io.deq.bits.valid 
+   io.f2_btb_resp := btb_queue.io.deq.bits; io.f2_btb_resp.valid := btb_queue.io.deq.valid && btb_queue.io.deq.bits.valid
    // TODO XXX bpd_queue in wrong place, need to buffer hashes, not responses.
 //   val f2_bpd_resp = bpd_queue.io.deq.bits
-   
-//   f2_bpd_resp.valid := false.B // XXX bpd_queue.io.deq.valid && bpd_queue.io.deq.bits.valid 
+
+//   f2_bpd_resp.valid := false.B // XXX bpd_queue.io.deq.valid && bpd_queue.io.deq.bits.valid
 //   io.f3_bpd_resp := RegNext(f2_bpd_resp)
    io.f3_bpd_resp.valid := false.B
    io.f3_bpd_resp.bits.history := bpd.io.f3_resp_history

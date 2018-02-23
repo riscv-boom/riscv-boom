@@ -49,7 +49,8 @@ import chisel3.internal.sourceinfo.SourceInfo
 class BTBReqIO(implicit p: Parameters) extends CoreBundle()(p) {
   val req = Valid(new BTBReq).flip
   val fqenq_valid = Bool(INPUT) // is the Frontend enqueuing instructions this cycle?
-  val fqenq_pc = UInt(INPUT, width = vaddrBitsExtended)
+  val debug_fqenq_pc = UInt(INPUT, width = vaddrBitsExtended)
+  val debug_fqenq_ready = Bool(INPUT) // verify this matches our own buffers
 //  val icmiss = Bool(INPUT)  needed?
 }
 
@@ -168,7 +169,8 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
  io.cpu.btb_req.req.valid := s0_valid
  io.cpu.btb_req.req.bits.addr := io.cpu.npc
  io.cpu.btb_req.fqenq_valid := fq.io.enq.valid
- io.cpu.btb_req.fqenq_pc := fq.io.enq.bits.pc
+ io.cpu.btb_req.debug_fqenq_pc := fq.io.enq.bits.pc
+ io.cpu.btb_req.debug_fqenq_ready := fq.io.enq.ready
 // io.cpu.btb_req.s2_replay := s2_replay
 
 //  when (!s2_replay) {

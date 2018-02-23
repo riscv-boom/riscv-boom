@@ -152,7 +152,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
       br_unit.take_pc ||
       io.flush_take_pc ||
       io.sfence_take_pc ||
-      (io.f2_btb_resp.valid && io.f2_btb_resp.bits.taken) ||
+      (io.f2_btb_resp.valid && io.f2_btb_resp.bits.taken && io.imem.resp.ready) ||
 //      (io.f2_bpu_request.valid && !if_stalled && io.imem.resp.valid) ||
       (r_f4_valid && r_f4_req.valid)
 
@@ -405,7 +405,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
       f3_fetch_bundle.bpu_info(w).bpd_blame     := false.B
       f3_fetch_bundle.bpu_info(w).bpd_hit       := io.f3_bpd_resp.valid
       f3_fetch_bundle.bpu_info(w).bpd_taken     := io.f3_bpd_resp.bits.takens(w.U)
-      f3_fetch_bundle.bpu_info(w).bim_resp      := f3_btb_resp.bits.bim_resp
+      f3_fetch_bundle.bpu_info(w).bim_resp      := f3_btb_resp.bits.bim_resp.bits
       f3_fetch_bundle.bpu_info(w).bpd_resp      := io.f3_bpd_resp.bits
 
       when (w.U === f3_bpd_br_idx && f3_bpd_overrides_bcheck)
@@ -479,8 +479,16 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
 
    ftq.io.enq.valid := FetchBuffer.io.enq.valid
    ftq.io.enq.bits.fetch_pc := f3_imemresp.pc
-   ftq.io.enq.bits.bim_info.value := f3_btb_resp.bits.bim_resp.getCounterValue(f3_btb_resp.bits.cfi_idx)
-   ftq.io.enq.bits.bim_info.entry_idx := f3_btb_resp.bits.bim_resp.entry_idx
+   when (f3_btb_resp.bits.bim_resp.valid)
+   {
+      ftq.io.enq.bits.bim_info.value := f3_btb_resp.bits.bim_resp.bits.getCounterValue(f3_btb_resp.bits.cfi_idx)
+      ftq.io.enq.bits.bim_info.entry_idx := f3_btb_resp.bits.bim_resp.bits.entry_idx
+   }
+   .otherwise
+   {
+      ftq.io.enq.bits.bim_info.value := 2.U
+      ftq.io.enq.bits.bim_info.entry_idx := 0.U
+   }
 
    ftq.io.enq.bits.bim_info.br_seen := (is_br.asUInt & f3_imemresp.mask) =/= 0.U
    ftq.io.enq.bits.bim_info.cfi_idx := GetRandomCfiIdx(is_br.asUInt & f3_imemresp.mask)
@@ -642,7 +650,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    if (DEBUG_PRINTF)
    {
       // Fetch Stage 1
-      printf("BrPred1:    (IF1_PC= 0x%x Predict:n/a) ------ PC: [%c%c-%c for br_id:(n/a), %c %c next: 0x%x ifst:%d]\n"
+      printf("BrPred1:    (IF1_PC= 0x%x) ------ PC: [%c%c-%c for br_id:(n/a), %c %c next: 0x%x]\n"
          , io.imem.npc
          , Mux(br_unit.brinfo.valid, Str("V"), Str("-"))
          , Mux(br_unit.brinfo.taken, Str("T"), Str("-"))
@@ -651,11 +659,12 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
          , Mux(io.flush_take_pc, Str("F"),
            Mux(br_unit.take_pc, Str("B"), Str(" ")))
          , f0_redirect_pc
-         , io.imem.resp.ready)
+         )
 
       // Fetch Stage 2
-      printf(" Fetch2 : (%c) 0x%x I$ Response <<-- IF2_PC (mask:0x%x) "
+      printf(" Fetch2 : (%c%c) 0x%x I$ Response <<-- IF2_PC (mask:0x%x) "
          , Mux(io.imem.resp.valid, Str("V"), Str("-"))
+         , Mux(io.imem.resp.ready, Str("R"), Str("-"))
          , io.imem.resp.bits.pc
          , io.imem.resp.bits.mask
          )
