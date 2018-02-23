@@ -17,6 +17,7 @@ package boom
 
 import chisel3._
 import chisel3.util._
+import chisel3.experimental.dontTouch
 import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.util.Str
 
@@ -177,7 +178,7 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
          cfi_info(io.brinfo.ftq_idx).mispredicted := true.B
          cfi_info(io.brinfo.ftq_idx).taken := io.brinfo.taken
          cfi_info(io.brinfo.ftq_idx).cfi_idx := new_cfi_idx
-         cfi_info(io.brinfo.ftq_idx).cfi_type := new_cfi_idx
+         cfi_info(io.brinfo.ftq_idx).cfi_type := io.brinfo.cfi_type
       }
       .elsewhen (!prev_mispredicted && (new_cfi_idx === prev_cfi_idx))
       {
@@ -208,7 +209,25 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
       io.bim_update.bits.taken        := miss_data.taken
       io.bim_update.bits.mispredicted := miss_data.mispredicted
 
+      printf("FTQ: deq[%d]=0x%x bim[%d=%x]:%c %c%c %d-%d %d\n",
+         deq_ptr.value,
+         com_data.fetch_pc,
+         io.bim_update.bits.entry_idx,
+         io.bim_update.bits.entry_idx,
+         Mux(io.bim_update.valid, Str("V"), Str(" ")),
+         Mux(io.bim_update.bits.mispredicted, Str("M"), Str(" ")),
+         Mux(io.bim_update.bits.taken, Str("T"), Str(" ")),
+         io.bim_update.bits.cfi_idx,
+         io.bim_update.bits.cntr_value,
+         miss_data.cfi_type
+         )
 
+
+   }
+   .otherwise
+   {
+      printf("FTQ: no dequeue\n")
+      io.bim_update.valid := false.B
    }
 
 
@@ -266,7 +285,7 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
          j <- 0 until w
       ){
          val idx = i+j*(num_entries/w)
-         printf(" [%d %c%c%c pc=0x%x ms:%c%c%c%d-%d bim:0x%x]",
+         printf(" [%d %c%c%c pc=0x%x ms:%c%c%c%d-%d bim[%d]:0x%x]",
             idx.asUInt(width=5.W),
             Mux(enq_ptr.value === idx.U, Str("E"), Str(" ")),
             Mux(commit_ptr === idx.U, Str("C"), Str(" ")),
@@ -277,14 +296,15 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
             Mux(cfi_info(idx).taken, Str("T"), Str(" ")),
             cfi_info(idx).cfi_type,
             cfi_info(idx).cfi_idx,
+            ram(idx).bim_info.entry_idx,
             ram(idx).bim_info.value
          )
          if (j == w-1) printf("\n")
       }
    }
 
-
-
-
+   // force to show up in the waveform
+   val debug_deq_ptr = deq_ptr.value
+   dontTouch(debug_deq_ptr)
 }
 
