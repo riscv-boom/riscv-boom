@@ -39,7 +39,8 @@ class DefaultBoomConfig extends Config((site, here, up) => {
          maxBrCount = 8,
          btb = BTBsaParameters(nSets=64, nWays=4, nRAS=8, tagSz=20),
          enableBranchPredictor = true,
-         gshare = Some(GShareParameters(enabled=true, history_length=15)),
+         bpd_base_only = Some(BaseOnlyParameters(enabled=true)),
+//         gshare = Some(GShareParameters(enabled=true, history_length=15)),
          nPerfCounters = 29,
          fpu = Some(freechips.rocketchip.tile.FPUParams(sfmaLatency=4, dfmaLatency=4, divSqrt=true))),
       btb = Some(BTBParams(nEntries = 0, updatesOutOfOrder = true)),
@@ -60,9 +61,9 @@ class WithNPerfCounters(n: Int) extends Config((site, here, up) => {
 class WithSmallBooms extends Config((site, here, up) => {
    case BoomTilesKey => up(BoomTilesKey, site) map { r =>r.copy(
       core = r.core.copy(
-         fetchWidth = 1,
-         decodeWidth = 1,
-         numRobEntries = 24,
+         fetchWidth = 2,
+         decodeWidth = 2,
+         numRobEntries = 16,
          issueParams = Seq(
             IssueParams(issueWidth=1, numEntries=4, iqType=IQT_MEM.litValue),
             IssueParams(issueWidth=1, numEntries=4, iqType=IQT_INT.litValue),
@@ -71,9 +72,10 @@ class WithSmallBooms extends Config((site, here, up) => {
          numFpPhysRegisters = 48,
          numLsuEntries = 4,
          maxBrCount = 4,
-         gshare = Some(GShareParameters(enabled = true, history_length=12)),
+//         gshare = Some(GShareParameters(enabled = true, history_length=12)),
+         bpd_base_only = Some(BaseOnlyParameters(enabled=true)),
          nPerfCounters = 2),
-      icache = Some(r.icache.get.copy(fetchBytes=1*4))
+      icache = Some(r.icache.get.copy(fetchBytes=2*4))
       )}
 })
 
@@ -96,7 +98,8 @@ class WithMediumBooms extends Config((site, here, up) => {
          regreadLatency = 1,
          renameLatency = 2,
          btb = BTBsaParameters(nSets=64, nWays=2, nRAS=8, tagSz=20, bypassCalls=false, rasCheckForEmpty=false),
-         gshare = Some(GShareParameters(enabled=true, history_length=14)),
+//         gshare = Some(GShareParameters(enabled=true, history_length=14)),
+         bpd_base_only = Some(BaseOnlyParameters(enabled=true)),
          nPerfCounters = 6,
          fpu = Some(freechips.rocketchip.tile.FPUParams(sfmaLatency=4, dfmaLatency=4, divSqrt=true))),
       dcache = Some(DCacheParams(rowBits = site(SystemBusKey).beatBits, nSets=64, nWays=4, nMSHRs=2, nTLBEntries=8)),
@@ -121,7 +124,8 @@ class WithMegaBooms extends Config((site, here, up) => {
          numLsuEntries = 32,
          maxBrCount = 16,
          btb = BTBsaParameters(nSets=128, nWays=4, nRAS=16, tagSz=20),
-         gshare = Some(GShareParameters(enabled=true, history_length=15))),
+//         gshare = Some(GShareParameters(enabled=true, history_length=15))),
+         bpd_base_only = Some(BaseOnlyParameters(enabled=true))),
          // tage is unsupported in boomv2 for now.
          //tage = Some(TageParameters())
       dcache = Some(DCacheParams(rowBits = site(SystemBusKey).beatBytes*8, nSets=64, nWays=16, nMSHRs=4, nTLBEntries=8)),

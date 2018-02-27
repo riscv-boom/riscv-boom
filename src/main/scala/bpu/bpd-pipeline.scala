@@ -88,6 +88,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
       val f3_bpd_resp   = Valid(new BpdResp)
       val f3_btb_update = Valid(new BTBsaUpdate).flip
       val f3_ras_update = Valid(new RasUpdate).flip
+      val f3_stall      = Bool(INPUT) // f4 is not ready -- back-pressure the f3 stage.
 
       // Commit
       val bim_update    = Valid(new BimUpdate).flip
@@ -140,8 +141,6 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
 
    assert (btb_queue.io.enq.ready === io.debug_fqenq_ready, "[bpd-pipeline] mismatch between BTB-Q and I$ readies.")
 
-   bpd.io.resp.ready := true.B // bpd_queue.io.enq.ready // TODO XXX redo back-pressure/replay on BPD
-
    when (io.fqenq_valid)
    {
       assert (btb.io.resp.bits.fetch_pc(15,0) === io.debug_fqenq_pc(15,0),
@@ -156,14 +155,14 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    f2_nextline_pc := f2_aligned_pc + UInt(fetch_width*coreInstBytes)
 
    io.f2_btb_resp := btb_queue.io.deq.bits; io.f2_btb_resp.valid := btb_queue.io.deq.valid && btb_queue.io.deq.bits.valid
-   // TODO XXX bpd_queue in wrong place, need to buffer hashes, not responses.
-//   val f2_bpd_resp = bpd_queue.io.deq.bits
 
-//   f2_bpd_resp.valid := false.B // XXX bpd_queue.io.deq.valid && bpd_queue.io.deq.bits.valid
-//   io.f3_bpd_resp := RegNext(f2_bpd_resp)
-   io.f3_bpd_resp.valid := false.B
-   io.f3_bpd_resp.bits.history := bpd.io.f3_resp_history
 
+   bpd.io.f2_bim_resp := io.f2_btb_resp.bits.bim_resp
+
+   //************************************************
+   // Branch Prediction (BP3 Stage)
+
+   bpd.io.resp.ready := !io.f3_stall
 
    // does the BPD predict a taken branch?
    private def bitRead(bits: UInt, offset: UInt): Bool = (bits >> offset)(0)
@@ -171,7 +170,11 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    val bpd_valid = bpd.io.resp.valid
    val bpd_bits = bpd.io.resp.bits
 
-   bpd.io.resp.ready := true.B // XXX TODO !io.fetch_stalled
+   io.f3_bpd_resp.valid := bpd.io.resp.valid
+   io.f3_bpd_resp.bits := bpd.io.resp.bits
+
+
+
 
 
 

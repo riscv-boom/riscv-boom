@@ -58,6 +58,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
       val f3_ras_update     = Valid(new RasUpdate)
       val f3_bpd_resp       = Valid(new BpdResp).flip
       val f3_btb_update     = Valid(new BTBsaUpdate)
+      val f3_stall          = Bool(OUTPUT)
 
       val bim_update        = Valid(new BimUpdate)
 
@@ -110,6 +111,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    val r_f4_fetchpc = Reg(UInt())
    // Can the F3 stage proceed?
    val f4_ready = FetchBuffer.io.enq.ready && ftq.io.enq.ready
+   io.f3_stall := !f4_ready
 
 
 //   val f2_valid = Wire(Bool())

@@ -72,6 +72,18 @@ class BimResp(implicit p: Parameters) extends BimBundle()(p)
       val cntr = (rowdata >> (cfi_idx << 1.U)) & 0x3.U
       cntr
    }
+
+   // Get a fetchWidth length bit-vector of taken/not-takens.
+   def getTakens(): UInt =
+   {
+      val takens = Wire(init=Vec.fill(fetchWidth){false.B})
+      for (i <- 0 until fetchWidth)
+      {
+         // assumes 2-bits per branch.
+         takens(i) := rowdata(2*i+1)
+      }
+      takens.asUInt
+   }
 }
 
 
@@ -102,7 +114,7 @@ class BimUpdate(implicit p: Parameters) extends BimBundle()(p)
 
 class BimWrite(implicit p: Parameters) extends BimBundle()(p)
 {
-   val row = UInt(width = row_idx_sz)
+   val addr = UInt(width = row_idx_sz)
    val data = UInt(width = row_sz)
    val mask = UInt(width = row_sz)
 }
@@ -115,7 +127,7 @@ class BimodalTable(implicit p: Parameters) extends BoomModule()(p) with HasBimPa
       // req.valid is false if stalling (aka, we won't read and use BTB results, on cycle S1).
       // req.bits.addr is available on cycle S0.
       // resp is expected on cycle S2.
-      val req = Valid(new PCReq).flip // TODO XXX change away from PC and to a hash-idx
+      val req = Valid(new PCReq).flip
       val resp = Valid(new BimResp)
       // Reset the table to some initialization state.
       val do_reset = Bool(INPUT)
@@ -145,13 +157,13 @@ class BimodalTable(implicit p: Parameters) extends BoomModule()(p) with HasBimPa
 
    private def generateWriteInfo(update: BimUpdate): (UInt, UInt, UInt) =
    {
-      val row = getRowFromIdx(update.entry_idx)
+      val row_addr = getRowFromIdx(update.entry_idx)
       val shamt = update.cfi_idx << 1.U
       val mask = 0x3.U << shamt
       val next = updateCounter(update.cntr_value, update.taken)
       val data = next << shamt
 
-      (row, data, mask)
+      (row_addr, data, mask)
    }
 
    // Given old counter value, provide the new counter value.
@@ -191,13 +203,16 @@ class BimodalTable(implicit p: Parameters) extends BoomModule()(p) with HasBimPa
    val s2_logical_idx = RegNext(RegNext(s0_logical_idx))
    val s2_bank_idx = getBankFromIdx(s2_logical_idx)
 
-   printf("BIM: fetchpc: 0x%x, idx:[%d,%d,%d] s2_resp_idx: %d\n",
-      io.req.bits.addr,
-      s0_logical_idx,
-      s0_bank_idx,
-      getRowFromIdx(s0_logical_idx),
-      io.resp.bits.entry_idx
-      )
+   if (DEBUG_PRINTF)
+   {
+      printf("BIM: fetchpc: 0x%x, idx:[%d,%d,%d] s2_resp_idx: %d\n",
+         io.req.bits.addr,
+         s0_logical_idx,
+         s0_bank_idx,
+         getRowFromIdx(s0_logical_idx),
+         io.resp.bits.entry_idx
+         )
+   }
 
    // prediction
    val s2_read_out = Reg(Vec(nBanks, UInt(width=row_sz)))
@@ -212,7 +227,6 @@ class BimodalTable(implicit p: Parameters) extends BoomModule()(p) with HasBimPa
    val (lag_counter, lag_done) = Counter(fsm_state === s_wait, nResetLagCycles)
    val (clear_row_addr, clear_done) = Counter(fsm_state === s_clear, nSets/nBanks)
 
-   printf("lag_counter: %d, clear_addr: %d, fsm: %d\n", lag_counter, clear_row_addr, fsm_state)
 
    for (w <- 0 until nBanks)
    {
@@ -233,7 +247,7 @@ class BimodalTable(implicit p: Parameters) extends BoomModule()(p) with HasBimPa
       uq.io.enq.valid := r_update.valid && getBankFromIdx(r_update.bits.entry_idx) === w.U
       uq.io.enq.bits  := r_update.bits
       uq.io.deq.ready := wq.io.enq.ready && !s2_rmw_valid
-      val (u_wrow, u_wdata, u_wmask) = generateWriteInfo(uq.io.deq.bits)
+      val (u_waddr, u_wdata, u_wmask) = generateWriteInfo(uq.io.deq.bits)
 
 
       // Read-Modify-Write update path.
@@ -245,26 +259,26 @@ class BimodalTable(implicit p: Parameters) extends BoomModule()(p) with HasBimPa
       val s2_rmw_mask  = Wire(UInt(width = row_sz))
 
       wq.io.enq.valid     := (uq.io.deq.valid && !uq.io.deq.bits.mispredicted) || s2_rmw_valid
-      wq.io.enq.bits.row  := Mux(s2_rmw_valid, s2_rmw_row,  u_wrow)
+      wq.io.enq.bits.addr := Mux(s2_rmw_valid, s2_rmw_row,  u_waddr)
       wq.io.enq.bits.data := Mux(s2_rmw_valid, s2_rmw_data, u_wdata)
       wq.io.enq.bits.mask := Mux(s2_rmw_valid, s2_rmw_mask, u_wmask)
 
-      wq.io.deq.ready := !p_will_read && !wq.io.deq.valid
+      wq.io.deq.ready := !p_will_read
 
-      printf("BIM bank[" + w + "] (r:%d ", ren)
+      if (DEBUG_PRINTF) printf("BIM bank[" + w + "] (r:%d ", ren)
 
       when ((wq.io.deq.valid && !ren) || fsm_state === s_clear)
       {
-         val waddr = Mux(fsm_state === s_clear, clear_row_addr, wq.io.deq.bits.row)
+         val waddr = Mux(fsm_state === s_clear, clear_row_addr, wq.io.deq.bits.addr)
          val wdata = Mux(fsm_state === s_clear, initRowValue(), Vec(wq.io.deq.bits.data.toBools))
          val wmask = Mux(fsm_state === s_clear, Fill(row_sz, 1.U), wq.io.deq.bits.mask).toBools
 
          ram.write(waddr, wdata, wmask)
-         printf("w:W %d %x %x ", waddr, wdata.asUInt, Vec(wmask).asUInt)
+         if (DEBUG_PRINTF) printf("w:W (%d==%x) %x %x ", waddr, waddr, wdata.asUInt, Vec(wmask).asUInt)
       }
       .otherwise
       {
-         printf("w:----------")
+         if (DEBUG_PRINTF) printf("w:----------")
       }
 
       // read (either for prediction or rmw for updates)
@@ -289,16 +303,19 @@ class BimodalTable(implicit p: Parameters) extends BoomModule()(p) with HasBimPa
 
       assert(!(uq.io.deq.valid && getBankFromIdx(uq.io.deq.bits.entry_idx) =/= w.U))
 
-      printf("uq.enq:(%d,%d) uq.deq:(%d,%d), s0_rmw:%d s2_out: %x rmw_data: %x  wq:%d,%d\n",
-         uq.io.enq.valid,
-         uq.io.enq.ready,
-         uq.io.deq.valid,
-         uq.io.deq.ready,
-         s0_rmw_valid,
-         s2_read_out(w),
-         s2_rmw_data.asUInt,
-         wq.io.enq.valid,
-         wq.io.deq.valid)
+      if (DEBUG_PRINTF)
+      {
+         printf("uq.enq:(%d,%d) uq.deq:(%d,%d), s0_rmw:%d s2_out: %x rmw_data: %x  wq:%d,%d\n",
+            uq.io.enq.valid,
+            uq.io.enq.ready,
+            uq.io.deq.valid,
+            uq.io.deq.ready,
+            s0_rmw_valid,
+            s2_read_out(w),
+            s2_rmw_data.asUInt,
+            wq.io.enq.valid,
+            wq.io.deq.valid)
+      }
 
    }
 

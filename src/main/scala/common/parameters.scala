@@ -42,7 +42,7 @@ case class BoomCoreParams(
    bim: BimParameters = BimParameters(),
    tage: Option[TageParameters] = None,
    gshare: Option[GShareParameters] = None,
-   gskew: Option[GSkewParameters] = None,
+   bpd_base_only: Option[BaseOnlyParameters] = None,
    intToFpLatency: Int = 2,
    imulLatency: Int = 3,
    fetchLatency: Int = 3,
@@ -176,7 +176,7 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
 
    val tageParams = boomParams.tage
    val gshareParams = boomParams.gshare
-   val gskewParams = boomParams.gskew
+   val bpdBaseOnlyParams = boomParams.bpd_base_only
 
    if (!ENABLE_BRANCH_PREDICTOR)
    {
@@ -189,10 +189,10 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
       BPD_INFO_SIZE = TageBrPredictor.GetRespInfoSize(p, fetchWidth)
       ENABLE_VLHR = true
    }
-   else if (gskewParams.isDefined && gskewParams.get.enabled)
+   else if (bpdBaseOnlyParams.isDefined && bpdBaseOnlyParams.get.enabled)
    {
-      GLOBAL_HISTORY_LENGTH = gskewParams.get.history_length
-      BPD_INFO_SIZE = GSkewBrPredictor.GetRespInfoSize(p, fetchWidth)
+      GLOBAL_HISTORY_LENGTH = 1
+      BPD_INFO_SIZE = BaseOnlyBrPredictor.GetRespInfoSize(p, GLOBAL_HISTORY_LENGTH)
    }
    else if (gshareParams.isDefined && gshareParams.get.enabled)
    {

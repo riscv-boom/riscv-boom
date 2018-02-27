@@ -82,7 +82,7 @@ class BranchChecker(fetch_width: Int)(implicit p: Parameters) extends BoomModule
          wrong_cfi := io.btb_resp.bits.cfi_type === CfiType.none && io.btb_resp.bits.taken
          when (io.valid)
          {
-            assert (!io.btb_resp.bits.cfi_type === CfiType.none, "[fetch] predicted on a non-cfi type.")
+            assert (io.btb_resp.bits.cfi_type =/= CfiType.none, "[fetch] predicted on a non-cfi type.")
          }
       }
    }

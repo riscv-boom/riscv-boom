@@ -56,7 +56,7 @@ class BpdResp(implicit p: Parameters) extends BoomBundle()(p)
    // predictor during the Commit stage to aid in updating the predictor. Each
    // predictor (and its configuration) changes the amount of information it
    // needs to store, and so we need to ask the predictor (in parameters.scala)
-   // how many bits of info it requires
+   // how many bits of info it requires.
    val info = UInt(width = BPD_INFO_SIZE)
 }
 
@@ -127,13 +127,10 @@ object BrPredictor
             tag_sizes = boomParams.tage.get.tag_sizes,
             ubit_sz = boomParams.tage.get.ubit_sz))
       }
-      else if (enableCondBrPredictor && boomParams.gskew.isDefined && boomParams.gskew.get.enabled)
+      else if (enableCondBrPredictor && boomParams.bpd_base_only.isDefined && boomParams.bpd_base_only.get.enabled)
       {
-         br_predictor = Module(new GSkewBrPredictor(
-            fetch_width = fetch_width,
-            history_length = boomParams.gskew.get.history_length,
-            dualported = boomParams.gskew.get.dualported,
-            enable_meta = boomParams.gskew.get.enable_meta))
+         br_predictor = Module(new BaseOnlyBrPredictor(
+            fetch_width = fetch_width))
       }
       else if (enableCondBrPredictor && boomParams.gshare.isDefined && boomParams.gshare.get.enabled)
       {
@@ -174,15 +171,15 @@ abstract class BrPredictor(
    {
       // the PC to predict
       val req_pc = UInt(INPUT, width = vaddrBits)
+      
       // our prediction. Assert "valid==true" if we want our prediction to be honored.
       // For a tagged predictor, valid==true means we had a tag hit and trust our prediction.
       // For an un-tagged predictor, valid==true should probably only be if a branch is predicted taken.
       // This has an effect on whether to override the BTB's prediction.
       val resp = Decoupled(new BpdResp)
-      // bpd resp comes in F2, but speculative history update isn't until F3, so to avoid missing older branches in our
-      // snapshots, we need to wait and pull the history from F3 for snapshotting.
-      val f3_resp_history = UInt(width = GLOBAL_HISTORY_LENGTH)
 
+      // A BIM table is shared with the BTB and accessed in F1. Let's use this as our base predictor, if desired.
+      val f2_bim_resp = Valid(new BimResp).flip
 
       // speculatively update the global history (once we know we're predicting a branch)
       val hist_update_spec = Valid(new GHistUpdate).flip
@@ -234,7 +231,7 @@ abstract class BrPredictor(
       disable = Bool(false),
       umode_only = false)
 
-   io.f3_resp_history := ghistory
+   io.resp.bits.history := ghistory
 
 
    // -----------------------------------------------
