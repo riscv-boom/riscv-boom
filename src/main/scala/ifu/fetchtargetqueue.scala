@@ -183,6 +183,7 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
       .elsewhen (!prev_mispredicted && (new_cfi_idx === prev_cfi_idx))
       {
          cfi_info(io.brinfo.ftq_idx).executed := true.B
+         cfi_info(io.brinfo.ftq_idx).taken := io.brinfo.taken
       }
    }
 
@@ -197,36 +198,40 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
    {
       val com_data = ram(deq_ptr.value)
       val miss_data = cfi_info(deq_ptr.value)
+      val com_cntr = com_data.bim_info.value
+      val com_taken = miss_data.taken
+      val saturated = (com_cntr === 0.U && !com_taken) || (com_cntr === 3.U && com_taken)
 
       io.bim_update.valid :=
          miss_data.cfi_type === CfiType.branch &&
          (miss_data.mispredicted) ||
-         (!miss_data.mispredicted && miss_data.executed)
+         (!miss_data.mispredicted && miss_data.executed && !saturated)
 
       io.bim_update.bits.entry_idx    := com_data.bim_info.entry_idx
-      io.bim_update.bits.cntr_value   := com_data.bim_info.value
+      io.bim_update.bits.cntr_value   := com_cntr
       io.bim_update.bits.cfi_idx      := miss_data.cfi_idx
       io.bim_update.bits.taken        := miss_data.taken
       io.bim_update.bits.mispredicted := miss_data.mispredicted
 
-      printf("FTQ: deq[%d]=0x%x bim[%d=%x]:%c %c%c %d-%d %d\n",
-         deq_ptr.value,
-         com_data.fetch_pc,
-         io.bim_update.bits.entry_idx,
-         io.bim_update.bits.entry_idx,
-         Mux(io.bim_update.valid, Str("V"), Str(" ")),
-         Mux(io.bim_update.bits.mispredicted, Str("M"), Str(" ")),
-         Mux(io.bim_update.bits.taken, Str("T"), Str(" ")),
-         io.bim_update.bits.cfi_idx,
-         io.bim_update.bits.cntr_value,
-         miss_data.cfi_type
-         )
-
-
+      if (DEBUG_PRINTF)
+      {
+         printf("FTQ: deq[%d]=0x%x bim[%d=%x]:%c %c%c %d-%d %d\n",
+            deq_ptr.value,
+            com_data.fetch_pc,
+            io.bim_update.bits.entry_idx,
+            io.bim_update.bits.entry_idx,
+            Mux(io.bim_update.valid, Str("V"), Str(" ")),
+            Mux(io.bim_update.bits.mispredicted, Str("M"), Str(" ")),
+            Mux(io.bim_update.bits.taken, Str("T"), Str(" ")),
+            io.bim_update.bits.cfi_idx,
+            io.bim_update.bits.cntr_value,
+            miss_data.cfi_type
+            )
+      }
    }
    .otherwise
    {
-      printf("FTQ: no dequeue\n")
+      if (DEBUG_PRINTF) printf("FTQ: no dequeue\n")
       io.bim_update.valid := false.B
    }
 
