@@ -148,6 +148,13 @@ object BrPredictor
             history_length = boomParams.gshare.get.history_length,
             dualported = boomParams.gshare.get.dualported))
       }
+      else if (enableCondBrPredictor && p(BHTKey).enabled)
+      {
+         br_predictor = Module(new BHTBrPredictor(
+            fetch_width = fetch_width,
+            num_entries = p(BHTKey).num_entries,
+            dualported = p(BHTKey).dualported))
+      }
       else if (enableCondBrPredictor && p(SimpleGShareKey).enabled)
       {
          br_predictor = Module(new SimpleGShareBrPredictor(
