@@ -1071,18 +1071,18 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 //   csr.io.events(5)  := csr.io.status.prv === UInt(freechips.rocketchip.rocket.PRV.U)
 //
 //   // Instruction mixes.
-   csr.io.counters(6).inc  := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
-      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && !rob.io.commit.uops(w).is_jal})
-   csr.io.counters(7).inc  := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
-      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_jal})
-   csr.io.counters(8).inc  := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
-      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_jump && !rob.io.commit.uops(w).is_jal})
-   csr.io.counters(9).inc  := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
-      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_load})
-   csr.io.counters(10).inc := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
-      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_store})
-   csr.io.counters(11).inc := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
-      rob.io.commit.valids(w) && rob.io.commit.uops(w).fp_val})
+//   csr.io.events(6)  := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+//      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && !rob.io.commit.uops(w).is_jal})
+//   csr.io.events(7)  := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+//      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_jal})
+//   csr.io.events(8)  := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+//      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_jump && !rob.io.commit.uops(w).is_jal})
+//   csr.io.events(9)  := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+//      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_load})
+//   csr.io.events(10) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+//      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_store})
+//   csr.io.events(11) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+//      rob.io.commit.valids(w) && rob.io.commit.uops(w).fp_val})
 //
 //   // Decode stall causes.
 //   csr.io.events(12) := !rob.io.ready
@@ -1098,22 +1098,22 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 //   csr.io.events(20) := lsu.io.counters.ldld_order_fail
 //
 //   // Branch prediction stats.
-   csr.io.counters(21).inc  := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
-      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && !rob.io.commit.uops(w).is_jal &&
-      rob.io.commit.uops(w).stat_brjmp_mispredicted})
-   csr.io.counters(22).inc := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
-      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && !rob.io.commit.uops(w).is_jal &&
-      rob.io.commit.uops(w).stat_btb_made_pred})
-   csr.io.counters(23).inc := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
-      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && !rob.io.commit.uops(w).is_jal &&
-      rob.io.commit.uops(w).stat_btb_mispredicted})
-   csr.io.counters(24).inc := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
-      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && !rob.io.commit.uops(w).is_jal &&
-      rob.io.commit.uops(w).stat_bpd_made_pred})
-   csr.io.counters(25).inc := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
-      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && !rob.io.commit.uops(w).is_jal &&
-      rob.io.commit.uops(w).stat_bpd_mispredicted})
-
+//   csr.io.events(21)  := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+//      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && !rob.io.commit.uops(w).is_jal &&
+//      rob.io.commit.uops(w).stat_brjmp_mispredicted})
+//   csr.io.events(22) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+//      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && !rob.io.commit.uops(w).is_jal &&
+//      rob.io.commit.uops(w).stat_btb_made_pred})
+//   csr.io.events(23) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+//      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && !rob.io.commit.uops(w).is_jal &&
+//      rob.io.commit.uops(w).stat_btb_mispredicted})
+//   csr.io.events(24) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+//      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && !rob.io.commit.uops(w).is_jal &&
+//      rob.io.commit.uops(w).stat_bpd_made_pred})
+//   csr.io.events(25) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+//      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && !rob.io.commit.uops(w).is_jal &&
+//      rob.io.commit.uops(w).stat_bpd_mispredicted})
+//
 //   // Branch prediction - no prediction made.
 //   csr.io.events(26) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
 //      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && !rob.io.commit.uops(w).is_jal &&
