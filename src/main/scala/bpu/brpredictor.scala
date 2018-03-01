@@ -152,8 +152,7 @@ object BrPredictor
       {
          br_predictor = Module(new BHTBrPredictor(
             fetch_width = fetch_width,
-            num_entries = p(BHTKey).num_entries,
-            dualported = p(BHTKey).dualported))
+            num_entries = p(BHTKey).num_entries))
       }
       else if (enableCondBrPredictor && p(SimpleGShareKey).enabled)
       {
