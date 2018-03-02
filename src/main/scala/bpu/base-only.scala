@@ -43,7 +43,7 @@ object BaseOnlyBrPredictor
 class BaseOnlyBrPredictor(
    fetch_width: Int
    )(implicit p: Parameters)
-   extends BrPredictor(fetch_width, 1)(p)
+   extends BrPredictor(fetch_width, 8)(p)
 {
 
    println ("\tBuilding no predictor (just using BIM as a base predictor).")
@@ -53,7 +53,7 @@ class BaseOnlyBrPredictor(
    // Predictor state.
   
    // We need to buffer up our responses in case of back-pressure.
-   val q_resp_info = withReset(reset || io.flush) { Module(new ElasticReg(Valid(new BpdResp))) }
+//   val q_resp_info = withReset(reset || io.flush) { Module(new ElasticReg(Valid(new BpdResp))) }
   
 
    //------------------------------------------------------------
@@ -61,16 +61,22 @@ class BaseOnlyBrPredictor(
                 
 //   val stall := !q_resp_info.io.enq.ready // unused 
 
-   q_resp_info.io.enq.valid := true.B && !this.disable_bpd
-   q_resp_info.io.enq.bits.valid := io.f2_bim_resp.valid
-   q_resp_info.io.enq.bits.bits.takens := io.f2_bim_resp.bits.getTakens
-   q_resp_info.io.enq.bits.bits.info := 0.U
+   f2_resp.valid := io.f2_bim_resp.valid
+   f2_resp.bits.takens := io.f2_bim_resp.bits.getTakens
+   f2_resp.bits.info := 0.U
 
-   io.resp.valid := q_resp_info.io.deq.valid && q_resp_info.io.deq.bits.valid
+//   q_resp_info.io.enq.valid := io.fqenq_valid
+//   q_resp_info.io.enq.bits.valid := io.f2_bim_resp.valid
+//   q_resp_info.io.enq.bits.bits.takens := io.f2_bim_resp.bits.getTakens
+//   q_resp_info.io.enq.bits.bits.info := 0.U
 
-   io.resp.bits := q_resp_info.io.deq.bits.bits
+//   io.resp.valid := q_resp_info.io.deq.valid && q_resp_info.io.deq.bits.valid
 
-   q_resp_info.io.deq.ready := io.resp.ready
+//   io.resp.bits.takens := q_resp_info.io.deq.bits.bits.takens
+//   io.resp.bits.info := q_resp_info.io.deq.bits.bits.info
+
+//   q_resp_info.io.deq.ready := io.resp.ready
+
 
    //------------------------------------------------------------
    // Update counter table.

@@ -37,11 +37,6 @@ class TageTableIo(
    // bp2 - send prediction to bpd pipeline
    val bp2_resp = new DecoupledIO(new TageTableResp(fetch_width, history_length, log2Up(num_entries), tag_sz))
 
-   // bp2 - update histories speculatively
-   val bp2_update_history = (new ValidIO(new GHistUpdate)).flip
-   // TODO: this is painfully special-cased -- move this into an update_csr bundle?
-   val bp2_update_csr_evict_bit = Bool(INPUT)
-
    // commit - update predictor tables (allocate entry)
    val allocate = (new ValidIO(new TageAllocateEntryInfo(fetch_width, index_sz, tag_sz, history_length))).flip
    def AllocateNewEntry(idx: UInt, tag: UInt, executed: UInt, taken: UInt, debug_pc: UInt, debug_hist_ptr: UInt) =
@@ -90,16 +85,8 @@ class TageTableIo(
       this.degrade_usefulness_valid := Bool(true)
    }
 
-   // BP2 - speculatively update the spec copy of the CSRs (branch history registers)
-//   val spec_csr_update = Valid(new CircularShiftRegisterUpdate).flip
-   // Commit - update the commit copy of the CSRs (branch history registers)
-   val commit_csr_update = Valid(new CircularShiftRegisterUpdate).flip
-   val debug_ghistory_commit_copy= UInt(INPUT, history_length) // TODO REMOVE for debug
-
    // branch resolution comes from the branch-unit, during the Execute stage.
    val br_resolution = Valid(new BpdUpdate).flip
-   // reset CSRs to commit copies during pipeline flush
-   val flush = Bool(INPUT)
 
    def InitializeIo(dummy: Int=0) =
    {
@@ -322,59 +309,6 @@ class TageTable(
    io.bp2_resp.bits.idx_csr  := idx_csr.io.value
    io.bp2_resp.bits.tag_csr1 := tag_csr1.io.value
    io.bp2_resp.bits.tag_csr2 := tag_csr2.io.value
-
-   //------------------------------------------------------------
-   // Update (Branch Resolution)
-
-   // only update history (CSRs)
-
-   when (io.flush)
-   {
-      idx_csr.io.rollback (commit_idx_csr.io.value , and_shift=Bool(false))
-      tag_csr1.io.rollback(commit_tag_csr1.io.value, and_shift=Bool(false))
-      tag_csr2.io.rollback(commit_tag_csr2.io.value, and_shift=Bool(false))
-   }
-   .elsewhen (io.br_resolution.valid && io.br_resolution.bits.mispredict)
-   {
-      val resp_info = new TageResp(
-            fetch_width = fetch_width,
-            num_tables = num_tables,
-            max_history_length = max_history_length,
-            max_index_sz = log2Up(max_num_entries),
-            max_tag_sz = max_tag_sz).fromBits(
-         io.br_resolution.bits.info)
-
-      val new_bit = io.br_resolution.bits.taken
-      val evict_bit = resp_info.evict_bits(id)
-
-      idx_csr.io.rollback (resp_info.idx_csr (id), and_shift=Bool(true), new_bit, evict_bit)
-      tag_csr1.io.rollback(resp_info.tag_csr1(id), and_shift=Bool(true), new_bit, evict_bit)
-      tag_csr2.io.rollback(resp_info.tag_csr2(id), and_shift=Bool(true), new_bit, evict_bit)
-   }
-   .elsewhen (io.bp2_update_history.valid)
-   {
-      val bp2_taken = io.bp2_update_history.bits.taken
-      val bp2_evict = io.bp2_update_csr_evict_bit
-      idx_csr.io.shift (bp2_taken, bp2_evict)
-      tag_csr1.io.shift(bp2_taken, bp2_evict)
-      tag_csr2.io.shift(bp2_taken, bp2_evict)
-   }
-
-   //------------------------------------------------------------
-   // Update Commit-CSRs (Commit)
-
-   val debug_folded_com_hist = Fold(io.debug_ghistory_commit_copy(history_length-1,0), index_sz)
-   when (io.commit_csr_update.valid)
-   {
-      val com_taken = io.commit_csr_update.bits.new_bit
-      val com_evict = io.commit_csr_update.bits.evict_bit
-      commit_idx_csr.io.shift (com_taken, com_evict)
-      commit_tag_csr1.io.shift(com_taken, com_evict)
-      commit_tag_csr2.io.shift(com_taken, com_evict)
-   }
-
-   assert (commit_idx_csr.io.value === debug_folded_com_hist, "[TageTable] idx_csr not matching Fold() value.")
-
 
    //------------------------------------------------------------
    // Update (Commit)

@@ -83,20 +83,28 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
       // Fetch2
       val f2_btb_resp   = Valid(new BTBsaResp)
       val f2_stall      = Bool(INPUT) // f3 is not ready -- back-pressure the f2 stage.
+      val f2_replay     = Bool(INPUT) // I$ is replaying S2 PC into S0 again (S2 backed up or failed).
+      val f2_redirect   = Bool(INPUT) // I$ is being redirected from F2.
 
       // Fetch3
       val f3_bpd_resp   = Valid(new BpdResp)
       val f3_btb_update = Valid(new BTBsaUpdate).flip
       val f3_ras_update = Valid(new RasUpdate).flip
       val f3_stall      = Bool(INPUT) // f4 is not ready -- back-pressure the f3 stage.
+      val f3_enq_valid  = Bool(INPUT) // f2 stage may proceed into the f3 stage.
+
+      // Fetch4
+      val f4_redirect   = Bool(INPUT) // I$ is being redirected from F4.
 
       // Commit
       val bim_update    = Valid(new BimUpdate).flip
 
       // Other
       val br_unit       = new BranchUnitResp().asInput
+      val fe_clear      = Bool(INPUT) // The FrontEnd needs to be cleared (due to redirect or flush).
+      val ftq_restore   = Valid(new RestoreHistory).flip
       val brob          = new BrobBackendIo(fetch_width)
-      val flush         = Bool(INPUT) // pipeline flush
+      val flush         = Bool(INPUT) // pipeline flush from ROB TODO CODEREVIEW (redudant with fe_clear?)
       val redirect      = Bool(INPUT)
       val status_prv    = UInt(INPUT, width = freechips.rocketchip.rocket.PRV.SZ)
       val status_debug  = Bool(INPUT)
@@ -116,13 +124,14 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    // Branch Prediction (BP0 Stage)
 
    btb.io.req := io.btb_req
-   btb.io.icmiss := false.B //XXX TODO
+   //btb.io.icmiss := false.B //XXX TODO switch out to s2_replay?
 
 
    //************************************************
    // Branch Prediction (BP1 Stage)
 
-   bpd.io.req_pc := btb.io.s1_pc
+   bpd.io.req := io.btb_req
+   bpd.io.f2_replay := io.f2_replay
 
 
    //************************************************
@@ -157,6 +166,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    io.f2_btb_resp := btb_queue.io.deq.bits; io.f2_btb_resp.valid := btb_queue.io.deq.valid && btb_queue.io.deq.bits.valid
 
 
+   bpd.io.fqenq_valid:= io.fqenq_valid
    bpd.io.f2_bim_resp := io.f2_btb_resp.bits.bim_resp
 
    //************************************************
@@ -165,7 +175,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    bpd.io.resp.ready := !io.f3_stall
 
    // does the BPD predict a taken branch?
-   private def bitRead(bits: UInt, offset: UInt): Bool = (bits >> offset)(0)
+   //private def bitRead(bits: UInt, offset: UInt): Bool = (bits >> offset)(0)
 
    val bpd_valid = bpd.io.resp.valid
    val bpd_bits = bpd.io.resp.bits
@@ -208,13 +218,17 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    //************************************************
    // Update the BPD
 
-//   bpd.io.hist_update_spec := io.f3_hist_update
-   bpd.io.hist_update_spec.valid := false.B // TODO remove
-
-   bpd.io.exe_bpd_update := io.br_unit.bpd_update
-
-   bpd.io.flush := io.flush
-//   io.brob <> bpd.io.brob // TODO XXX hook up update
+   bpd.io.ftq_restore <> io.ftq_restore
+//   bpd.io.flush := io.flush
+//   bpd.io.redirect := io.redirect
+   bpd.io.f2_redirect := io.f2_redirect
+   bpd.io.f4_redirect := io.f4_redirect
+   bpd.io.fe_clear := io.fe_clear
+//   bpd.io.f3_clear := io.f3_clear
+   bpd.io.f3enq_valid := io.f3_enq_valid
+   bpd.io.f2_stall := io.f2_stall
+   // TODO hook up update logic
+//   bpd.io.commit
 
 
    //************************************************

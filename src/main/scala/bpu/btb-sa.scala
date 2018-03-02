@@ -158,11 +158,7 @@ class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParamet
 
       // the PC we're predicting on (start of the fetch packet).
       // Pass this to the BPD.
-      val s1_pc  = UInt(width = vaddrBits)
-
-      // If there's an icmiss, the Frontend replays the s2_pc as s0_pc (even though req.valid is low),
-      // so don't stall and begin predicting s0_pc.
-      val icmiss = Bool(INPUT)
+      //val s1_pc  = UInt(width = vaddrBits)
 
       // supress S1/upcoming S2 valids.
       val flush = Bool(INPUT)
@@ -196,12 +192,9 @@ class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParamet
    }
 
 
-   val stall = !io.req.valid && !io.icmiss
+   val stall = !io.req.valid
    val s0_idx = Wire(UInt(width=idx_sz))
-   val last_idx = RegNext(s0_idx)
-   val new_idx = getIdx(io.req.bits.addr)
-   s0_idx := Mux(stall, last_idx, new_idx)
-   val s1_idx = RegNext(s0_idx)
+   val s1_idx = RegEnable(getIdx(io.req.bits.addr), !stall)
 
    // prediction
    val s1_valid = Wire(Bool())
@@ -300,11 +293,8 @@ class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParamet
 //   s1_resp_bits.mask := Cat((1.U << ~Mux(s1_resp_bits.taken, ~s1_resp_bits.cfi_idx, 0.U))-1.U, 1.U)
 
    val s0_pc = Wire(UInt(width=vaddrBits))
-   val last_pc = RegNext(s0_pc)
-   s0_pc := Mux(stall, last_pc, io.req.bits.addr)
-   val s1_pc = RegNext(s0_pc)
+   val s1_pc = RegEnable(io.req.bits.addr, !stall)
    s1_resp_bits.fetch_pc := s1_pc
-   io.s1_pc := s1_pc
 
    if (nRAS > 0)
    {
