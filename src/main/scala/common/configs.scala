@@ -6,7 +6,7 @@
 package boom
 import Chisel._
 import freechips.rocketchip.config.{Parameters, Config}
-import freechips.rocketchip.coreplex.{SystemBusKey}
+import freechips.rocketchip.subsystem.{SystemBusKey}
 import freechips.rocketchip.devices.tilelink.{BootROMParams}
 import freechips.rocketchip.rocket._
 import freechips.rocketchip.tile._

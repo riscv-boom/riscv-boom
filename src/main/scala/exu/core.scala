@@ -706,7 +706,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    // csr.io.pc used for setting EPC during exception or CSR.io.trace.
    csr.io.pc        := AlignPC(fetch_unit.io.com_fetch_pc, fetchWidth*coreInstBytes) + rob.io.com_xcpt.bits.pc_lob
    csr.io.cause     := rob.io.com_xcpt.bits.cause
-   csr.io.badaddr   := Mux(csr.io.cause === Causes.illegal_instruction.U, 0.U, rob.io.com_xcpt.bits.badvaddr)
+   csr.io.tval   := Mux(csr.io.cause === Causes.illegal_instruction.U, 0.U, rob.io.com_xcpt.bits.badvaddr)
 
 
    // reading requires serializing the entire pipeline
