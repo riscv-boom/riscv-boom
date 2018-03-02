@@ -58,9 +58,15 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
       val f3_ras_update     = Valid(new RasUpdate)
       val f3_bpd_resp       = Valid(new BpdResp).flip
       val f3_btb_update     = Valid(new BTBsaUpdate)
+
+      val f2_redirect       = Bool(OUTPUT)
       val f3_stall          = Bool(OUTPUT)
+      val f3_clear          = Bool(OUTPUT)
+      val f4_redirect       = Bool(OUTPUT)
 
       val bim_update        = Valid(new BimUpdate)
+
+      val ftq_restore_history= Valid(new RestoreHistory)
 
       val br_unit           = new BranchUnitResp().asInput
       val get_pc            = new GetPCFromFtqIO()
@@ -112,6 +118,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    // Can the F3 stage proceed?
    val f4_ready = FetchBuffer.io.enq.ready && ftq.io.enq.ready
    io.f3_stall := !f4_ready
+   io.f3_clear := clear_f3
 
 
 //   val f2_valid = Wire(Bool())
@@ -488,6 +495,8 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
 
    ftq.io.enq.valid := FetchBuffer.io.enq.valid
    ftq.io.enq.bits.fetch_pc := f3_imemresp.pc
+   ftq.io.enq.bits.history := io.f3_bpd_resp.bits.history
+   ftq.io.enq.bits.bpd_info := io.f3_bpd_resp.bits.info
    when (f3_btb_resp.bits.bim_resp.valid)
    {
       ftq.io.enq.bits.bim_info.value := f3_btb_resp.bits.bim_resp.bits.getCounterValue(f3_btb_resp.bits.cfi_idx)
@@ -509,6 +518,10 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    ftq.io.com_ftq_idx := io.com_ftq_idx
    io.com_fetch_pc := ftq.io.com_fetch_pc
    ftq.io.debug_rob_empty := io.debug_rob_empty
+   io.ftq_restore_history <> ftq.io.restore_history
+
+   io.f2_redirect := io.f2_btb_resp.valid && io.f2_btb_resp.bits.taken && io.imem.resp.ready
+   io.f4_redirect := r_f4_valid && r_f4_req.valid
 
    io.bim_update := ftq.io.bim_update
 
@@ -545,8 +558,6 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
             }
          }
       }
-
-
    }
 
 

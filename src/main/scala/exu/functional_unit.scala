@@ -154,13 +154,12 @@ class BrResolutionInfo(implicit p: Parameters) extends BoomBundle()(p)
 class BranchUnitResp(implicit p: Parameters) extends BoomBundle()(p)
 {
    val take_pc         = Bool()
-   val target          = UInt(width = vaddrBitsExtended)
+   val target          = UInt(width = vaddrBitsExtended) // TODO XXX REMOVE this -- use FTQ to redirect instead
 
    val pc              = UInt(width = vaddrBitsExtended) // TODO this isn't really a branch_unit thing
 
    val brinfo          = new BrResolutionInfo()
    val btb_update      = Valid(new BTBsaUpdate)
-   val bpd_update      = Valid(new BpdUpdate)
 
    val xcpt            = Valid(new Exception)
 }
@@ -504,24 +503,6 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
 			Mux(uop.is_call, BpredType.call,
 			Mux(uop.is_jump, BpredType.jump,
 				BpredType.branch)))
-
-      br_unit.bpd_update.valid                 := io.req.valid && uop.is_br_or_jmp &&
-                                                  !uop.is_jal && !killed
-      br_unit.bpd_update.bits.is_br            := is_br
-      br_unit.bpd_update.bits.taken            := is_taken
-      br_unit.bpd_update.bits.mispredict       := mispredict
-      br_unit.bpd_update.bits.bpd_predict_val  := uop.br_prediction.bpd_hit
-      br_unit.bpd_update.bits.bpd_mispredict   := bpd_mispredict
-      br_unit.bpd_update.bits.pc               := fetch_pc
-      br_unit.bpd_update.bits.br_pc            := uop_pc_
-      br_unit.bpd_update.bits.info             := io.get_pred.info.bpd_resp.info
-      br_unit.bpd_update.bits.history          := io.get_pred.info.bpd_resp.history
-
-      // is the br_pc the last instruction in the fetch bundle?
-      val is_last_inst = if (FETCH_WIDTH == 1) { Bool(true) }
-                         else { ((uop_pc_ >> UInt(log2Up(coreInstBytes))) &
-                                 Fill(log2Up(FETCH_WIDTH), UInt(1))) === UInt(FETCH_WIDTH-1) }
-      br_unit.bpd_update.bits.new_pc_same_packet := !(is_taken) && !is_last_inst
 
       require (coreInstBytes == 4)
 

@@ -16,29 +16,18 @@
 //    - alternate
 //       The table that would have provided the prediction if the provider had
 //       missed.
-//    - CSR
-//       Circular Shift Register. Useful for folding very long histories in on
-//       itself.  (Please ignore the fact that CSR refers to "Control/Status
-//       Register" elsewhere in BOOM).
 
 // TODO:
 //    - alt-pred tracking (choosing between +2 tables, sometimes using alt pred if u is low)
 //    - u-bit handling, clearing (count failed allocations)
 //    - lower required parameters, arguments to bundles and objects
-//    - able to allocate >1 tables
-//    - allow bypassing out of the BROB
-//    - brpredictor seems to couple fetch-width and commit-width :(
-//    - do ALL the tags need to be tracked? can we compute alloc_id during prediction?
-//       - no, maintain commit-copy of CSRs, pass in committed Fetch_pC to recompute
 //    stats we want to track:
-//       - how often no BTB hit and no table hit
 //       - how often entries are used
 //       - how often allocation fails (%)
 //       - how often we reset the useful-ness bits
 // SCHEMES
 //    - u-bit incremented only if alt-pred available?
 //    - change when we use alt-pred instead of first-pred
-//    - frequency of clearing u-bits
 //    - 1 or 2-bit u-bits? (almost certainly 2-bits)
 //    - 2 or 3 bit counters
 
@@ -82,7 +71,6 @@ class TageResp(
 
 
    val debug_history_ptr = UInt(width = max_history_length) // stored in snapshots (dealloc after Execute)
-   val debug_br_pc = UInt(width=64)
 
    override def cloneType: this.type =
       new TageResp(
@@ -211,26 +199,7 @@ class TageBrPredictor(
       table.InitializeIo()
 
       // Send prediction request. ---
-      table.if_req_pc := io.req_pc
-
-      // update CSRs. ---
-      table.br_resolution <> io.exe_bpd_update
-      table.flush := io.flush
-
-      // Update ghistory speculatively once a prediction is made.
-      table.bp2_update_history <> io.hist_update_spec
-//      table.bp2_update_csr_evict_bit := r_vlh.getSpecBit(history_lengths(i)-1) TODO XXX switch history
-
-      // Update commit copies.
-      table.commit_csr_update.valid := commit.valid
-      table.commit_csr_update.bits.new_bit := commit.bits.ctrl.taken.reduce(_|_)
-//      table.commit_csr_update.bits.evict_bit := r_vlh.getCommitBit(history_lengths(i)-1) TODO XXX switch history
-
-// TODO XXX switch history
-//      assert(r_ghistory_commit_copy(history_lengths(i)-1) === r_vlh.getCommitBit(history_lengths(i)-1),
-//         "[tage] commit bits of short and vlh do not match.")
-
-      table.debug_ghistory_commit_copy := r_ghistory_commit_copy
+      table.if_req_pc := 0.U // TODO XXX pass in index, tag // io.req_pc
    }
 
 
@@ -255,7 +224,6 @@ class TageBrPredictor(
    resp_info.idx_csr   := Vec(predictions.map(_.idx_csr))
    resp_info.tag_csr1  := Vec(predictions.map(_.tag_csr1))
    resp_info.tag_csr2  := Vec(predictions.map(_.tag_csr2))
-   resp_info.evict_bits:= Vec(tables_io.map(_.bp2_update_csr_evict_bit))
 
    resp_info.provider_hit := io.resp.valid
    resp_info.provider_id := GetProviderTableId(valids)
@@ -265,7 +233,6 @@ class TageBrPredictor(
    resp_info.alt_hit := p_alt_hit
    resp_info.alt_id  := p_alt_id
    resp_info.alt_predicted_takens := Vec(predictions.map(_.takens))(p_alt_id)
-   resp_info.debug_br_pc := RegEnable(io.req_pc, !stall)
 
    io.resp.bits.info := resp_info.asUInt
 
@@ -292,14 +259,15 @@ class TageBrPredictor(
       max_history_length = history_lengths.max,
       max_index_sz = log2Up(table_sizes.max),
       max_tag_sz = tag_sizes.max
-   ).fromBits(commit.bits.info.info)
+   ).fromBits(0.U) // commit.bits.info.info)
 
-   val executed = commit.bits.ctrl.executed.asUInt
+   val executed = 0.U // TODO XXX commit.bits.ctrl.executed.asUInt
 
-   when (commit.valid && commit.bits.ctrl.executed.reduce(_|_))
-   {
-      assert (info.provider_id < UInt(num_tables) || !info.provider_hit, "[Tage] provider_id is out-of-bounds.")
-   }
+// TODO XXX
+//   when (commit.valid && commit.bits.ctrl.executed.reduce(_|_))
+//   {
+//      assert (info.provider_id < UInt(num_tables) || !info.provider_hit, "[Tage] provider_id is out-of-bounds.")
+//   }
 
    // TODO verify this behavior/logic is correct (re: toBits/Vec conversion)
    val s2_alt_agrees = RegNext(RegNext(
@@ -312,7 +280,7 @@ class TageBrPredictor(
    //-------------------------------------------------------------
    // Track ubit degrade flush timer.
 
-   val degrade_counter = freechips.rocketchip.util.WideCounter(20, commit.valid && commit.bits.ctrl.executed.reduce(_|_))
+   val degrade_counter = freechips.rocketchip.util.WideCounter(20, false.B) // TODO XXX commit.valid && commit.bits.ctrl.executed.reduce(_|_))
    val do_degrade = degrade_counter === UInt(1<<19)
    when (do_degrade)
    {
@@ -390,7 +358,7 @@ class TageBrPredictor(
                s2_info.tags(alloc_id),
                s2_executed,
                s2_takens,
-               s2_info.debug_br_pc,
+               0.U, //s2_info.debug_br_pc,
                s2_info.debug_history_ptr)
          }
          .otherwise

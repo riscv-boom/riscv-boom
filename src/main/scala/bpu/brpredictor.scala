@@ -31,9 +31,10 @@
 package boom
 
 import Chisel._
+import chisel3.core.withReset
 import freechips.rocketchip.config.{Parameters, Field}
 
-import freechips.rocketchip.util.Str
+import freechips.rocketchip.util.{Str, ShiftQueue}
 import freechips.rocketchip.rocket.RocketCoreParams
 
 
@@ -60,19 +61,7 @@ class BpdResp(implicit p: Parameters) extends BoomBundle()(p)
    val info = UInt(width = BPD_INFO_SIZE)
 }
 
-// BP2 stage needs to speculatively update the history register with what the
-// processor decided to do (takes BTB's effect into account).
-// Also used for updating the commit-copy during commit.
-class GHistUpdate extends Bundle
-{
-   val taken = Bool()
-}
-
-// update comes from the branch-unit with the actual outcome
-// it needs to do three things:
-//    - 1) correct the history if the processor mispredicted
-//    - 2) correct the p-table if it mispredicted (the processor may have been correct though)
-//    - 3) strengthen the h-table (on all branch resolutions)
+// Update comes the FTQ after Commit.
 class BpdUpdate(implicit p: Parameters) extends BoomBundle()(p)
 {
    // valid: a branch or jump was resolved in the branch unit
@@ -103,13 +92,194 @@ class BpdUpdate(implicit p: Parameters) extends BoomBundle()(p)
    val info = UInt(width = BPD_INFO_SIZE)
 }
 
+class RestoreHistory(implicit p: Parameters) extends BoomBundle()(p)
+{
+   val history = UInt(width = GLOBAL_HISTORY_LENGTH)
+}
+
 //--------------------------------------------------------------------------
 //--------------------------------------------------------------------------
+
+abstract class BrPredictor(
+   fetch_width: Int,
+   val history_length: Int
+   )(implicit p: Parameters) extends BoomModule()(p)
+{
+   val io = IO(new BoomBundle()(p)
+   {
+      // The PC to predict on.
+      // req.valid is false if stalling (aka, we won't read and use results).
+      // req.bits.addr is available on cycle S0.
+      // resp is expected on cycle S2.
+      val req = Valid(new PCReq).flip
+
+      // Use F2 buffer enqueue signal from the I$ (S2 signals are valid)
+      val fqenq_valid = Bool(INPUT)
+
+      // Not ready to dequeue F2 buffer (I$ did not provide a valid response in F2).
+      val f2_stall = Bool(INPUT)
+
+      // The F3 buffer can accept an entry (I$ resp is valid).
+      val f3enq_valid = Bool(INPUT)
+
+      // our prediction. Assert "valid==true" if we want our prediction to be honored.
+      // For a tagged predictor, valid==true means we had a tag hit and trust our prediction.
+      // For an un-tagged predictor, valid==true should probably only be if a branch is predicted taken.
+      // This has an effect on whether to override the BTB's prediction.
+      // Provided in the beginning of the F3 stage.
+      val resp = Decoupled(new BpdResp)
+
+      // A BIM table is shared with the BTB and accessed in F1. Let's use this as our base predictor, if desired.
+      val f2_bim_resp = Valid(new BimResp).flip
+
+      // Restore history on a F2 redirection (and clear out appropriate state).
+      // Don't provide history since we have it ourselves.
+      val f2_redirect = Bool(INPUT)
+
+      // Restore history on a F4 redirection (and clear out appropriate state).
+      // Don't provide history since we have it ourselves.
+      val f4_redirect = Bool(INPUT)
+
+      // Restore history on a branch mispredict or pipeline flush.
+      val ftq_restore = Valid(new RestoreHistory).flip
+
+      // The I$ failed to succeed in S2 -- replay F2 (place into F0).
+      val f2_replay = Bool(INPUT)
+
+      // The f3 stage must be cleared (i.e., a flush or redirect occurred).
+//      val f3_clear = Bool(INPUT)
+
+      // Clear/flush inflight state in the entire front-end.
+      val fe_clear = Bool(INPUT)
+
+      // TODO provide a way to reset/clear the predictor state.
+      //val do_reset = Bool(INPUT)
+
+      // privilege-level (allow predictor to change behavior in different privilege modes).
+      val status_prv = UInt(INPUT, width = freechips.rocketchip.rocket.PRV.SZ)
+   })
+
+   val r_f1_fetchpc = RegEnable(io.req.bits.addr, io.req.valid)
+
+   // The global history register  that will be hashed with the fetch-pc to compute tags and indices for our branch predictors.
+   val f0_history   = Wire(UInt(width=history_length.W))
+   val next_f1_history = Wire(UInt(width=history_length.W))
+   val r_f1_history = Reg(init=0.asUInt(width=history_length.W))
+   val r_f2_history = Reg(init=0.asUInt(width=history_length.W))
+   val r_f4_history = Reg(init=0.asUInt(width=history_length.W))
+
+   // match the queuing behavior from the icache.
+   val q_f2_history = withReset(reset || io.fe_clear || io.f2_redirect || io.f4_redirect)
+      { Module(new ShiftQueue(UInt(width=history_length), 5, flow=true)) }
+
+   // match the other ERegs in the FrontEnd.
+   val q_f3_resp = withReset(reset || io.fe_clear || io.f4_redirect) { Module(new ElasticReg(Valid(new BpdResp))) }
+
+   // Let base-class predictor set these wires, then we can handle the queuing of the bundle.
+   val f2_resp = Wire(Valid(new BpdResp))
+
+   require (history_length == GLOBAL_HISTORY_LENGTH)
+
+   //************************************************
+   // Branch Prediction (F0 Stage)
+
+   private def UpdateHistoryHash(old: UInt, addr: UInt): UInt =
+   {
+      val ret = Wire(UInt(width=history_length))
+      ret := (old << 1.U) ^ addr(3) // addr(5) ^ addr (7)
+      ret
+   }
+
+
+   // as predictions come in (or pipelines are flushed/replayed), we need to correct the history.
+   f0_history :=
+      Mux(io.ftq_restore.valid,
+         io.ftq_restore.bits.history,
+      Mux(io.f2_redirect,
+         q_f2_history.io.deq.bits,
+      Mux(io.f4_redirect,
+         r_f4_history,
+         r_f1_history)))
+
+    next_f1_history := UpdateHistoryHash(f0_history, io.req.bits.addr)
+
+
+   //************************************************
+   // Branch Prediction (F1 Stage)
+
+   r_f1_history :=
+      Mux(io.f2_replay,
+         r_f2_history,
+      Mux(io.req.valid, // forward progress of pipeline
+         next_f1_history,
+         r_f1_history))
+
+   //************************************************
+   // Branch Prediction (F2 Stage)
+
+   when (!io.f2_replay)
+   {
+      r_f2_history := r_f1_history
+   }
+
+   q_f2_history.io.enq.valid := io.fqenq_valid
+   q_f2_history.io.enq.bits := r_f2_history
+
+
+   f2_resp.bits.history := q_f2_history.io.deq.bits
+   q_f2_history.io.deq.ready := !io.f2_stall
+
+
+   if (DEBUG_PRINTF)
+   {
+      printf("HISTORY: F0: 0x%x, F1: 0x%x F2: 0x%x || Resp: 0x%x\n",
+         f0_history,
+         r_f1_history,
+         r_f2_history,
+         q_f2_history.io.deq.bits
+         )
+   }
+
+
+   q_f3_resp.io.enq.valid := io.f3enq_valid
+   q_f3_resp.io.enq.bits  := f2_resp
+
+
+   //************************************************
+   // Branch Prediction (F3 Stage)
+
+   io.resp.valid := q_f3_resp.io.deq.valid && q_f3_resp.io.deq.bits.valid
+   io.resp.bits := q_f3_resp.io.deq.bits.bits
+   q_f3_resp.io.deq.ready := io.resp.ready
+
+   //************************************************
+   // Branch Prediction (F4 Stage)
+
+   when (io.resp.ready)
+   {
+      r_f4_history := q_f3_resp.io.deq.bits.bits.history
+   }
+
+
+
+   // -----------------------------------------------
+
+// TODO XXX need to update predictor from FTQ
+//   val brob = Module(new BranchReorderBuffer(fetch_width, NUM_BROB_ENTRIES))
+//   io.brob <> brob.io.backend
+//   commit := brob.io.commit_entry
+
+   val commit = Wire(Valid(new BrobEntry(fetchWidth))) // TODO XXX
+}
+
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 
 // Return the desired branch predictor based on the provided parameters.
 object BrPredictor
 {
-   def apply(tileParams: freechips.rocketchip.tile.TileParams, boomParams: BoomCoreParams)(implicit p: Parameters): BrPredictor =
+   def apply(tileParams: freechips.rocketchip.tile.TileParams, boomParams: BoomCoreParams)
+      (implicit p: Parameters): BrPredictor =
    {
       val boomParams: BoomCoreParams = p(freechips.rocketchip.tile.TileKey).core.asInstanceOf[BoomCoreParams]
       val fetch_width = boomParams.fetchWidth
@@ -139,12 +309,6 @@ object BrPredictor
             history_length = boomParams.gshare.get.history_length,
             dualported = boomParams.gshare.get.dualported))
       }
-      else if (enableCondBrPredictor && p(SimpleGShareKey).enabled)
-      {
-         br_predictor = Module(new SimpleGShareBrPredictor(
-            fetch_width = fetch_width,
-            history_length = p(SimpleGShareKey).history_length))
-      }
       else if (enableCondBrPredictor && p(RandomBpdKey).enabled)
       {
          br_predictor = Module(new RandomBrPredictor(
@@ -162,191 +326,10 @@ object BrPredictor
 }
 
 
-abstract class BrPredictor(
-   fetch_width: Int,
-   val history_length: Int
-   )(implicit p: Parameters) extends BoomModule()(p)
-{
-   val io = IO(new BoomBundle()(p)
-   {
-      // the PC to predict
-      val req_pc = UInt(INPUT, width = vaddrBits)
-      
-      // our prediction. Assert "valid==true" if we want our prediction to be honored.
-      // For a tagged predictor, valid==true means we had a tag hit and trust our prediction.
-      // For an un-tagged predictor, valid==true should probably only be if a branch is predicted taken.
-      // This has an effect on whether to override the BTB's prediction.
-      val resp = Decoupled(new BpdResp)
-
-      // A BIM table is shared with the BTB and accessed in F1. Let's use this as our base predictor, if desired.
-      val f2_bim_resp = Valid(new BimResp).flip
-
-      // speculatively update the global history (once we know we're predicting a branch)
-      val hist_update_spec = Valid(new GHistUpdate).flip
-      // branch resolution comes from the branch-unit, during the Execute stage.
-      val exe_bpd_update = Valid(new BpdUpdate).flip // Update/correct the BPD during Branch Resolution (Exe).
-      // Pipeline flush - reset history as appropriate.
-      // Arrives same cycle as redirecting the front-end -- otherwise, the ghistory would be wrong if it came later!
-      val flush = Bool(INPUT)
-      // privilege-level (allow predictor to change behavior in different privilege modes).
-      val status_prv = UInt(INPUT, width = freechips.rocketchip.rocket.PRV.SZ)
-   })
-
-   // the (speculative) global history wire (used for accessing the branch predictor state).
-   val ghistory = Wire(Bits(width = history_length))
-
-   // the commit update bundle (we update predictors).
-   val commit = Wire(Valid(new BrobEntry(fetch_width)))
-
-   // we must delay flush signal by 1 cycle to match the delay of the commit signal from the BROB.
-   val r_flush = RegNext(io.flush)
-
-   // The (speculative) global history register. Needs to be massaged before usably by the bpd.
-   // Tracks history through all privilege levels.
-   private val r_ghistory = new HistoryRegister(history_length)
-   val r_ghistory_commit_copy = r_ghistory.commit_copy
-
-   val in_usermode = io.status_prv === UInt(freechips.rocketchip.rocket.PRV.U)
-   val disable_bpd = !in_usermode && ENABLE_BPD_UMODE_ONLY.B
-
-   val ghistory_all =
-      r_ghistory.value(
-         io.hist_update_spec.valid,
-         io.hist_update_spec.bits,
-         io.exe_bpd_update.valid,
-         io.exe_bpd_update.bits,
-         r_flush,
-         umode_only = false)
-
-   ghistory := ghistory_all
-
-   val r_ghistory_raw = r_ghistory.raw_value
-
-   r_ghistory.update(
-      io.hist_update_spec.valid,
-      io.hist_update_spec.bits,
-      io.exe_bpd_update.valid,
-      io.exe_bpd_update.bits,
-      r_flush,
-      disable = Bool(false),
-      umode_only = false)
-
-   io.resp.bits.history := ghistory
-
-
-   // -----------------------------------------------
-
-// TODO XXX need to update predictor from FTQ
-//   val brob = Module(new BranchReorderBuffer(fetch_width, NUM_BROB_ENTRIES))
-//   io.brob <> brob.io.backend
-//   commit := brob.io.commit_entry
-
-   // This shouldn't happen, unless a branch instruction was also marked to flush after it commits.
-   // But we don't want to bypass the ghistory to make this "just work", so let's outlaw it.
-   assert (!(commit.valid && r_flush), "[brpredictor] commit and flush are colliding.")
-
-   when (commit.valid)
-   {
-      r_ghistory.commit(commit.bits.ctrl.taken.reduce(_|_))
-   }
-}
-
-
-//------------------------------------------------------------------------------
-//------------------------------------------------------------------------------
-
-class HistoryRegister(length: Int)
-{
-   // the (speculative) global history register. Needs to be massaged before usably by the bpd.
-   private val r_history = Reg(init = UInt(0, width = length))
-   // we need to maintain a copy of the commit history, in-case we need to
-   // reset it on a pipeline flush/replay.
-   private val r_commit_history = Reg(init = UInt(0, width = length))
-
-   def commit_copy(): UInt = r_commit_history
-
-   def getHistory(resolution: BpdUpdate): UInt =
-   {
-      resolution.history
-   }
-
-   def raw_value(): UInt = r_history
-
-   def value(
-      hist_update_spec_valid: Bool,
-      hist_update_spec_bits: GHistUpdate,
-      br_resolution_valid: Bool,
-      br_resolution_bits: BpdUpdate,
-      flush: Bool,
-      umode_only: Boolean
-      ): UInt =
-   {
-      // Bypass some history modifications before it can be used by the predictor
-      // hash functions. For example, "massage" the history for the scenario where
-      // the mispredicted branch is not taken AND we're having to refetch the rest
-      // of the fetch_packet.
-      val res_history = getHistory(br_resolution_bits)
-      val fixed_history = Cat(res_history, br_resolution_bits.taken)
-      val ret_value =
-         Mux(flush,
-            r_commit_history,
-         Mux(br_resolution_valid &&
-               br_resolution_bits.mispredict &&
-               br_resolution_bits.new_pc_same_packet,
-            res_history,
-         Mux(br_resolution_valid &&
-               br_resolution_bits.bpd_mispredict,
-            fixed_history,
-            r_history)))
-
-      ret_value(length-1,0)
-   }
-
-   def update(
-      hist_update_spec_valid: Bool,
-      hist_update_spec_bits: GHistUpdate,
-      br_resolution_valid: Bool,
-      br_resolution_bits: BpdUpdate,
-      flush: Bool,
-      disable: Bool,
-      umode_only: Boolean
-      ): Unit =
-   {
-      val res_history = getHistory(br_resolution_bits)
-      val fixed_history = Cat(res_history, br_resolution_bits.taken)
-      when (disable)
-      {
-         r_history := r_history
-      }
-      .elsewhen (flush)
-      {
-         r_history := r_commit_history
-      }
-      // TODO do we need to handle same_packet mispredictions?
-      .elsewhen (br_resolution_valid && br_resolution_bits.mispredict)
-      {
-         r_history := fixed_history
-      }
-      .elsewhen (hist_update_spec_valid)
-      {
-         r_history := Cat(r_history, hist_update_spec_bits.taken)
-      }
-   }
-
-   def commit(taken: Bool): Unit =
-   {
-      r_commit_history := Cat(r_commit_history, taken)
-   }
-
-}
-
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
 
 // Act as a "null" branch predictor (it makes no predictions).
-// However, we need to instantiate a branch predictor, as it contains the Branch
-// ROB which tracks all of the inflight prediction state and performs the
-// updates at commit as necessary.
 class NullBrPredictor(
    fetch_width: Int,
    history_length: Int = 12
@@ -391,9 +374,6 @@ class RandomBrPredictor(
    io.resp.bits.takens := rand(fetch_width)
 }
 
-
-
-
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
@@ -437,5 +417,4 @@ class BrobDeallocateIdx(implicit p: Parameters) extends BoomBundle()(p)
 {
    val brob_idx = UInt(width = BROB_ADDR_SZ)
 }
-
 

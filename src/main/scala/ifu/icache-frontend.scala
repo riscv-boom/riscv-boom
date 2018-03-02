@@ -46,21 +46,19 @@ import chisel3.internal.sourceinfo.SourceInfo
 //}
 //
 
+// TODO CODEREVIEW these signals are generally useful to the FetchUnit, not just BTB predictions.
 class BTBReqIO(implicit p: Parameters) extends CoreBundle()(p) {
   val req = Valid(new BTBReq).flip
-  val fqenq_valid = Bool(INPUT) // is the Frontend enqueuing instructions this cycle?
+  val s2_replay = Bool(INPUT) // is the Frontend replaying s2 into s0?
+  val fqenq_valid = Bool(INPUT) // is the Frontend enqueuing instructions this cycle? TODO rename to "s2_valid?"
   val debug_fqenq_pc = UInt(INPUT, width = vaddrBitsExtended)
   val debug_fqenq_ready = Bool(INPUT) // verify this matches our own buffers
-//  val icmiss = Bool(INPUT)  needed?
 }
 
 class BoomFrontendIO(implicit p: Parameters) extends CoreBundle()(p) {
   val req = Valid(new FrontendReq)
   val sfence = Valid(new SFenceReq)
   val resp = Decoupled(new FrontendResp).flip
-//  val btb_update = Valid(new BTBUpdate)
-//  val bht_update = Valid(new BHTUpdate)
-//  val ras_update = Valid(new RASUpdate)
   val flush_icache = Bool(OUTPUT)
   val npc = UInt(INPUT, width = vaddrBitsExtended)
   val btb_req = new BTBReqIO()
@@ -171,7 +169,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
  io.cpu.btb_req.fqenq_valid := fq.io.enq.valid
  io.cpu.btb_req.debug_fqenq_pc := fq.io.enq.bits.pc
  io.cpu.btb_req.debug_fqenq_ready := fq.io.enq.ready
-// io.cpu.btb_req.s2_replay := s2_replay
+ io.cpu.btb_req.s2_replay := s2_replay
 
 //  when (!s2_replay) {
 //    io.cpu.btb_req.req.valid := true.B //!s2_redirect
