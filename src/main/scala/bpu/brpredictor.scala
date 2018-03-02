@@ -148,6 +148,13 @@ object BrPredictor
             history_length = boomParams.gshare.get.history_length,
             dualported = boomParams.gshare.get.dualported))
       }
+      else if (enableCondBrPredictor && p(Lab3Key).enabled)
+      {
+         br_predictor = Module(new Lab3BrPredictor(
+            fetch_width = fetch_width,
+            history_length = p(Lab3Key).history_length
+         ))
+      }
       else if (enableCondBrPredictor && p(BHTKey).enabled)
       {
          br_predictor = Module(new BHTBrPredictor(
