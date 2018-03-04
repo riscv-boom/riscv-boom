@@ -17,13 +17,13 @@ import freechips.rocketchip.config.Parameters
 // internally bypasses newly busy registers (.write) to the read ports (.read)
 // num_operands is the maximum number of operands per instruction (.e.g., 2 normally, but 3 if FMAs are supported)
 class BusyTableIo(
-   pipeline_width:Int,
-   num_pregs: Int,
-   num_read_ports:Int,
-   num_wb_ports:Int)
+   val pipeline_width:Int,
+   val num_pregs: Int,
+   val num_read_ports:Int,
+   val num_wb_ports:Int)
    (implicit p: Parameters) extends BoomBundle()(p)
 {
-   private val preg_sz = log2Up(num_pregs)
+   private val preg_sz = log2Ceil(num_pregs)
 
    // reading out the busy bits
    val p_rs           = Vec(num_read_ports, UInt(width=preg_sz)).asInput
@@ -104,7 +104,7 @@ class BusyTable(
    num_wb_ports:Int)
    (implicit p: Parameters) extends BoomModule()(p)
 {
-   private val preg_sz = log2Up(num_pregs)
+   private val preg_sz = log2Ceil(num_pregs)
 
    val io = IO(new Bundle
    {

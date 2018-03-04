@@ -57,9 +57,9 @@ class SupportedFuncUnits(
 }
 
 
-class FunctionalUnitIo(num_stages: Int
-                      , num_bypass_stages: Int
-                      , data_width: Int
+class FunctionalUnitIo(val num_stages: Int
+                      ,val num_bypass_stages: Int
+                      ,val data_width: Int
                       )(implicit p: Parameters) extends BoomBundle()(p)
 {
    val req     = (new DecoupledIO(new FuncUnitReq(data_width))).flip
@@ -132,7 +132,7 @@ class BrResolutionInfo(implicit p: Parameters) extends BoomBundle()(p)
    val tag        = UInt(width = BR_TAG_SZ)    // the branch tag that was resolved
    val exe_mask   = UInt(width = MAX_BR_COUNT) // the br_mask of the actual branch uop
                                                // used to reset the dec_br_mask
-   val pc_lob     = UInt(width = log2Up(fetchWidth*coreInstBytes))
+   val pc_lob     = UInt(width = log2Ceil(fetchWidth*coreInstBytes))
    val ftq_idx    = UInt(width = ftqSz)
    val rob_idx    = UInt(width = ROB_ADDR_SZ)
    val ldq_idx    = UInt(width = MEM_ADDR_SZ)  // track the "tail" of loads and stores, so we can
@@ -393,12 +393,12 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
       when (is_br_or_jalr && pc_sel === PC_BRJMP && !mispredict && io.get_ftq_pc.next_val)
       {
          // ignore misaligned issues -- we'll catch that elsewhere as an exception.
-         when (io.get_ftq_pc.next_pc(vaddrBits, log2Up(coreInstBytes)) =/= bj_addr(vaddrBits, log2Up(coreInstBytes)))
+         when (io.get_ftq_pc.next_pc(vaddrBits, log2Ceil(coreInstBytes)) =/= bj_addr(vaddrBits, log2Ceil(coreInstBytes)))
          {
             printf ("[FuncUnit] Branch jumped to 0x%x, should have jumped to 0x%x.\n",
                io.get_ftq_pc.next_pc, bj_addr)
          }
-         assert (io.get_ftq_pc.next_pc(vaddrBits, log2Up(coreInstBytes)) === bj_addr(vaddrBits, log2Up(coreInstBytes)),
+         assert (io.get_ftq_pc.next_pc(vaddrBits, log2Ceil(coreInstBytes)) === bj_addr(vaddrBits, log2Ceil(coreInstBytes)),
             "[FuncUnit] branch is taken to the wrong target.")
       }
 

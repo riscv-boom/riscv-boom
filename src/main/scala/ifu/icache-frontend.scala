@@ -8,7 +8,7 @@ import Chisel._
 import Chisel.ImplicitConversions._
 import chisel3.core.withReset
 import freechips.rocketchip.config._
-import freechips.rocketchip.coreplex._
+import freechips.rocketchip.subsystem._
 import freechips.rocketchip.diplomacy._
 import freechips.rocketchip.rocket._
 import freechips.rocketchip.tilelink._
@@ -72,7 +72,7 @@ class BoomFrontend(val icacheParams: ICacheParams, hartid: Int)(implicit p: Para
   val slaveNode = icache.slaveNode
 }
 
-class BoomFrontendBundle(outer: BoomFrontend) extends CoreBundle()(outer.p)
+class BoomFrontendBundle(val outer: BoomFrontend) extends CoreBundle()(outer.p)
     with HasExternallyDrivenTileConstants {
   val cpu = new BoomFrontendIO().flip
   val ptw = new TLBPTWIO()

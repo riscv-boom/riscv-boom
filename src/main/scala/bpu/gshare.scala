@@ -31,7 +31,7 @@ trait HasGShareParameters extends HasBoomCoreParameters
    val gsParams = boomParams.gshare.get
    val nSets = 1 << gsParams.history_length
 
-   val idx_sz = log2Up(nSets)
+   val idx_sz = log2Ceil(nSets)
    val row_sz = fetchWidth*2
 }
 
@@ -96,7 +96,7 @@ class GShareBrPredictor(
    //------------------------------------------------------------
 
    private def Hash (addr: UInt, hist: UInt) =
-      (addr >> UInt(log2Up(fetch_width*coreInstBytes))) ^ hist
+      (addr >> UInt(log2Ceil(fetch_width*coreInstBytes))) ^ hist
 
    // for initializing the counter table, this is the value to reset the row to.
    private def initRowValue (): UInt =

@@ -1011,7 +1011,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
    val l_idx = PriorityEncoder(temp_bits)
 
    // TODO always pad out the input to PECircular() to pow2
-   // convert it to vec[bool], then in.padTo(1 << log2Up(in.size), Bool(false))
+   // convert it to vec[bool], then in.padTo(1 << log2Ceil(in.size), Bool(false))
 
    // one exception port, but multiple causes!
    // - 1) the incoming store-address finds a faulting load (it is by definition younger)

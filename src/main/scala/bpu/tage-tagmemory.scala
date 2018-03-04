@@ -29,7 +29,7 @@ class TageTagMemory(
    dualported: Boolean = false
    ) extends Module
 {
-   private val index_sz = log2Up(num_entries)
+   private val index_sz = log2Ceil(num_entries)
    val io = IO(new Bundle
    {
       // the reader is not ready; stall the read pipeline.

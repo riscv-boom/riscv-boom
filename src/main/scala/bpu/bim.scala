@@ -45,8 +45,8 @@ trait HasBimParameters extends HasBoomCoreParameters
    val nUpdateQueueEntries = bimParams.nUpdateQueueEntries
    val nWriteQueueEntries = bimParams.nWriteQueueEntries
 
-   val idx_sz = log2Up(nSets)
-   val row_idx_sz = log2Up(nSets)-log2Up(nBanks)
+   val idx_sz = log2Ceil(nSets)
+   val row_idx_sz = log2Ceil(nSets)-log2Ceil(nBanks)
    val row_sz = fetchWidth*2
 }
 
@@ -58,7 +58,7 @@ abstract class BimBundle(implicit val p: Parameters) extends freechips.rocketchi
 class BimResp(implicit p: Parameters) extends BimBundle()(p)
 {
    val rowdata = UInt(width = row_sz)
-   val entry_idx = UInt(width = log2Up(nSets)) // what (logical) entry in the set is the prediction coming from?
+   val entry_idx = UInt(width = log2Ceil(nSets)) // what (logical) entry in the set is the prediction coming from?
 
    def isTaken(cfi_idx: UInt) =
    {
@@ -92,11 +92,11 @@ class BimResp(implicit p: Parameters) extends BimBundle()(p)
 class BimStorage(implicit p: Parameters) extends BimBundle()(p)
 {
    val value = UInt(width = 2) // save the old value -- needed for updating entry.
-   val entry_idx = UInt(width = log2Up(nSets)) // what (logical) entry in the set is the prediction coming from?
+   val entry_idx = UInt(width = log2Ceil(nSets)) // what (logical) entry in the set is the prediction coming from?
 
    // TODO make sure these two signals aren't stored-- push them into CfiMissInfo instead.
    val br_seen = Bool() // Track that there was a branch in the fetch packet (this storage info is valid).
-   val cfi_idx = UInt(width = log2Up(fetchWidth))
+   val cfi_idx = UInt(width = log2Ceil(fetchWidth))
 
    def isTaken = value(1)
 }
@@ -104,8 +104,8 @@ class BimStorage(implicit p: Parameters) extends BimBundle()(p)
 
 class BimUpdate(implicit p: Parameters) extends BimBundle()(p)
 {
-   val entry_idx = UInt(width = log2Up(nSets))
-   val cfi_idx = UInt(width = log2Up(fetchWidth))
+   val entry_idx = UInt(width = log2Ceil(nSets))
+   val cfi_idx = UInt(width = log2Ceil(fetchWidth))
    val cntr_value = UInt(width = 2)
    val mispredicted = Bool()
    val taken = Bool()
@@ -139,12 +139,12 @@ class BimodalTable(implicit p: Parameters) extends BoomModule()(p) with HasBimPa
    })
 
    // Which (conceptual) index do we map to?
-   private def getIdx (addr: UInt): UInt = addr >> log2Up(fetchWidth*coreInstBytes)
+   private def getIdx (addr: UInt): UInt = addr >> log2Ceil(fetchWidth*coreInstBytes)
    // Which physical row do we map to?
    private def getRowFromIdx (idx: UInt): UInt = idx >> log2Ceil(nBanks)
    // Which physical bank do we map to?
    // TODO which bits are the best to get the bank from?
-   private def getBankFromIdx (idx: UInt): UInt = idx(log2Up(nBanks)-1, 0)
+   private def getBankFromIdx (idx: UInt): UInt = idx(log2Ceil(nBanks)-1, 0)
 
 
    // for initializing the BIM, this is the value to reset the row to.
@@ -323,7 +323,7 @@ class BimodalTable(implicit p: Parameters) extends BoomModule()(p) with HasBimPa
    //************************************************
    // Output.
 
-   io.resp.valid := !Mux1H(UIntToOH(s2_bank_idx), s2_conflict) || fsm_state != s_idle
+   io.resp.valid := !Mux1H(UIntToOH(s2_bank_idx), s2_conflict) || fsm_state =/= s_idle
    io.resp.bits.rowdata := Mux1H(UIntToOH(s2_bank_idx), s2_read_out)
    io.resp.bits.entry_idx := s2_logical_idx
 

@@ -33,7 +33,7 @@ abstract trait DecodeConstants
             //     |  |  |  |                 |        dst     |       |       |  |     |  |  |  |  |  mem    mem   |                    |  |  |  |  |  is unique? (clear pipeline for it)
             //     |  |  |  |                 |        regtype |       |       |  |     |  |  |  |  |  cmd    msk   |                    |  |  |  |  |  |  flush on commit
             //     |  |  |  |                 |        |       |       |       |  |     |  |  |  |  |  |      |     |                    |  |  |  |  |  |  |  csr cmd
-              List(N, N, X, uopX   , IQT_INT, FU_X   ,RT_X,BitPat.DC(2),BitPat.DC(2),X,IS_X,X,X,X,X,N, M_X,   MT_X, BitPat.DC(2),        X, X, X, X, N, N, X, CSR.X)
+              List(N, N, X, uopX   , IQT_INT, FU_X   ,RT_X,BitPat.dontCare(2),BitPat.dontCare(2),X,IS_X,X,X,X,X,N, M_X,   MT_X, BitPat.dontCare(2),        X, X, X, X, N, N, X, CSR.X)
 
   val table: Array[(BitPat, List[BitPat])]
 // scalastyle:on
@@ -522,7 +522,7 @@ class FetchSerializerNtoM(implicit p: Parameters) extends BoomModule()(p)
 {
    val io = IO(new FetchSerializerIO)
 
-   val counter = Reg(init = UInt(0, log2Up(FETCH_WIDTH)))
+   val counter = Reg(init = UInt(0, log2Ceil(FETCH_WIDTH)))
    val inst_idx = Wire(UInt())
    inst_idx := UInt(0)
 

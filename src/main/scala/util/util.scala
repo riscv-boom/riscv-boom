@@ -111,7 +111,7 @@ object WrapAdd
    {
       if (isPow2(n))
       {
-         (value + amt)(log2Up(n)-1,0)
+         (value + amt)(log2Ceil(n)-1,0)
       }
       else
       {
@@ -131,7 +131,7 @@ object WrapSub
    {
       if (isPow2(n))
       {
-         (value - UInt(amt))(log2Up(n)-1,0)
+         (value - UInt(amt))(log2Ceil(n)-1,0)
       }
       else
       {
@@ -152,7 +152,7 @@ object WrapInc
    {
       if (isPow2(n))
       {
-         (value + UInt(1))(log2Up(n)-1,0)
+         (value + UInt(1))(log2Ceil(n)-1,0)
       }
       else
       {
@@ -169,7 +169,7 @@ object WrapDec
    {
       if (isPow2(n))
       {
-         (value - UInt(1))(log2Up(n)-1,0)
+         (value - UInt(1))(log2Ceil(n)-1,0)
       }
       else
       {
@@ -287,7 +287,7 @@ object AgePriorityEncoder
       require (isPow2(n))
       val temp_vec = (0 until n).map(i => in(i) && UInt(i) >= head) ++ in
       val idx = PriorityEncoder(temp_vec)
-      idx(log2Up(n)-1, 0) //discard msb
+      idx(log2Ceil(n)-1, 0) //discard msb
    }
 }
 
@@ -305,7 +305,7 @@ class QueueForMicroOpWithData(entries: Int, data_width: Int)
       val flush   = Bool(INPUT)
 
       val empty   = Bool(OUTPUT)
-      val count   = UInt(OUTPUT, log2Up(entries))
+      val count   = UInt(OUTPUT, log2Ceil(entries))
    })
 
    private val ram     = Mem(entries, new ExeUnitResp(data_width))
@@ -343,7 +343,7 @@ class QueueForMicroOpWithData(entries: Int, data_width: Int)
    when (do_deq) {
       deq_ptr.inc()
    }
-   when (do_enq != do_deq) {
+   when (do_enq =/= do_deq) {
       maybe_full := do_enq
    }
 

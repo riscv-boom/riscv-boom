@@ -76,7 +76,7 @@ abstract class PTable(
    num_entries: Int
    ) extends Module
 {
-   val index_sz = log2Up(num_entries)
+   val index_sz = log2Ceil(num_entries)
    val io = IO(new Bundle
    {
       val s1_r_idx = UInt(INPUT, width = index_sz)
@@ -168,7 +168,7 @@ class HTable(
    share_hbit: Boolean
    ) extends Module
 {
-   private val ptable_idx_sz = log2Up(num_p_entries)
+   private val ptable_idx_sz = log2Ceil(num_p_entries)
    private val num_h_entries = if (share_hbit) num_p_entries/2 else num_p_entries
    val io = IO(new Bundle
    {
@@ -213,7 +213,7 @@ class TwobcCounterTable(
    share_hbit: Boolean = true // share 1 h-bit across 2 p-bits.
    ) extends Module
 {
-   private val index_sz = log2Up(num_entries)
+   private val index_sz = log2Ceil(num_entries)
    private val num_h_entries = if (share_hbit) num_entries/2 else num_entries
 
    val io = IO(new Bundle

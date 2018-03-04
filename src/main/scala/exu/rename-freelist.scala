@@ -13,9 +13,9 @@ import Chisel._
 import freechips.rocketchip.config.Parameters
 
 
-class FreeListIo(num_phys_registers: Int, pl_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
+class FreeListIo(val num_phys_registers: Int, val pl_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
-   private val preg_sz = log2Up(num_phys_registers)
+   private val preg_sz = log2Ceil(num_phys_registers)
 
    val req_preg_vals = Vec(pl_width, Bool()).asInput
    val req_pregs     = Vec(pl_width, UInt(width=preg_sz)).asOutput
@@ -87,7 +87,7 @@ class RenameFreeListHelper(
 
    val requested_pregs_oh_array = Array.fill(pl_width,num_phys_registers){Bool(false)}
    val requested_pregs_oh       = Wire(Vec(pl_width, Bits(width=num_phys_registers)))
-   val requested_pregs          = Wire(Vec(pl_width, UInt(width=log2Up(num_phys_registers))))
+   val requested_pregs          = Wire(Vec(pl_width, UInt(width=log2Ceil(num_phys_registers))))
    var allocated                = Wire(Vec(pl_width, Bool())) // did each inst get allocated a register?
 
    // init
@@ -247,7 +247,7 @@ class RenameFreeList(
    num_phys_registers: Int) // Number of physical registers.
    (implicit p: Parameters) extends BoomModule()(p)
 {
-   private val preg_sz = log2Up(num_phys_registers)
+   private val preg_sz = log2Ceil(num_phys_registers)
 
    val io = IO(new Bundle
    {

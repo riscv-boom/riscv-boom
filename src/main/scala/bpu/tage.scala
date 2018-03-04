@@ -92,7 +92,7 @@ object TageBrPredictor
          fetch_width = fetchWidth,
          num_tables = params.num_tables,
          max_history_length = params.history_lengths.max,
-         max_index_sz = log2Up(params.table_sizes.max),
+         max_index_sz = log2Ceil(params.table_sizes.max),
          max_tag_sz = params.tag_sizes.max
          )
       dummy.getWidth
@@ -126,7 +126,7 @@ class TageBrPredictor(
    require (num_tables == table_sizes.size)
    require (num_tables == history_lengths.size)
    require (num_tables == tag_sizes.size)
-   // require (log2Up(num_tables) <= TageResp.provider_id.getWidth()) TODO implement this check
+   // require (log2Ceil(num_tables) <= TageResp.provider_id.getWidth()) TODO implement this check
    require (coreInstBytes == 4)
 
    //------------------------------------------------------------
@@ -214,7 +214,7 @@ class TageBrPredictor(
       fetch_width = fetch_width,
       num_tables = num_tables,
       max_history_length = history_lengths.max,
-      max_index_sz = log2Up(table_sizes.max),
+      max_index_sz = log2Ceil(table_sizes.max),
       max_tag_sz = tag_sizes.max))
 
    io.resp.valid       := best_prediction_valid
@@ -236,7 +236,7 @@ class TageBrPredictor(
 
    io.resp.bits.info := resp_info.asUInt
 
-   require (log2Up(num_tables) <= resp_info.provider_id.getWidth)
+   require (log2Ceil(num_tables) <= resp_info.provider_id.getWidth)
 
    //------------------------------------------------------------
    //------------------------------------------------------------
@@ -257,7 +257,7 @@ class TageBrPredictor(
       fetch_width = fetch_width,
       num_tables = num_tables,
       max_history_length = history_lengths.max,
-      max_index_sz = log2Up(table_sizes.max),
+      max_index_sz = log2Ceil(table_sizes.max),
       max_tag_sz = tag_sizes.max
    ).fromBits(io.commit.bits.info)
 
@@ -274,7 +274,7 @@ class TageBrPredictor(
       info.alt_hit && (info.provider_predicted_takens & executed) === (info.alt_predicted_takens & executed)))
 
    val s2_ubits_notuseful = Range(0, num_tables).map{ i =>
-      !(tables_io(i).GetUsefulness(info.indexes(i), log2Up(table_sizes(i))))
+      !(tables_io(i).GetUsefulness(info.indexes(i), log2Ceil(table_sizes(i))))
    }
 
    //-------------------------------------------------------------

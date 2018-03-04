@@ -45,7 +45,7 @@ import freechips.rocketchip.util.{Str, UIntToAugmentedUInt, ShiftQueue}
 class BpuRequest(implicit p: Parameters) extends BoomBundle()(p)
 {
    val target  = UInt(width = vaddrBitsExtended)
-   val cfi_idx = UInt(width = log2Up(fetchWidth)) // where is cfi we are predicting?
+   val cfi_idx = UInt(width = log2Ceil(fetchWidth)) // where is cfi we are predicting?
    val mask    = UInt(width = fetchWidth) // mask of valid instructions.
 }
 

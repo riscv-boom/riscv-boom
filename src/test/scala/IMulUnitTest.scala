@@ -26,7 +26,7 @@ class IMulUnitTester(c: IMul) extends PeekPokeTester(c) {
 }
 
 // Invoke test with:
-//    $ sbt 'test-only boom.IMulSpec'
+//    $ sbt 'testOnly boom.IMulSpec'
 //
 class IMulSpec extends FlatSpec with Matchers {
    behavior of "IMulSpec"
@@ -36,7 +36,7 @@ class IMulSpec extends FlatSpec with Matchers {
    }
 
    it should "compute imul excellently" in {
-      chisel3.iotesters.Driver(() => new IMul(imul_stages = 3)) { c =>
+      chisel3.iotesters.Driver.execute(() => new IMul(imul_stages = 3),manager) { c =>
          new IMulUnitTester(c)
       } should be(true)
    }
@@ -73,7 +73,7 @@ class IMulHWIOUnitTester extends SteppedHWIOTester {
 }
 
 // Invoke test with:
-//    $ sbt 'test-only boom.IMulTester'
+//    $ sbt 'testOnly boom.IMulTester'
 //
 class IMulTester extends ChiselFlatSpec {
   "IMul" should "compile and run without incident" in {

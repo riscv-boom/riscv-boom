@@ -41,10 +41,10 @@ class FFlagsResp(implicit p: Parameters) extends BoomBundle()(p)
    val flags = Bits(width=tile.FPConstants.FLAGS_SZ)
 }
 
-class ExecutionUnitIO(num_rf_read_ports: Int
-                     , num_rf_write_ports: Int
-                     , num_bypass_ports: Int
-                     , data_width: Int
+class ExecutionUnitIO(val num_rf_read_ports: Int
+                     ,val num_rf_write_ports: Int
+                     ,val num_bypass_ports: Int
+                     ,val data_width: Int
                      )(implicit p: Parameters) extends BoomBundle()(p)
 {
    // describe which functional units we support (used by the issue window)

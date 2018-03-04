@@ -29,13 +29,13 @@ class TageTableIo(
    this_index_sz: Int
    )(implicit p: Parameters) extends BoomBundle()(p)
 {
-   private val index_sz = log2Up(num_entries)
+   private val index_sz = log2Ceil(num_entries)
 
    // instruction fetch - request prediction
    val if_req_pc = UInt(INPUT, width = xLen)
 
    // bp2 - send prediction to bpd pipeline
-   val bp2_resp = new DecoupledIO(new TageTableResp(fetch_width, history_length, log2Up(num_entries), tag_sz))
+   val bp2_resp = new DecoupledIO(new TageTableResp(fetch_width, history_length, log2Ceil(num_entries), tag_sz))
 
    // commit - update predictor tables (allocate entry)
    val allocate = (new ValidIO(new TageAllocateEntryInfo(fetch_width, index_sz, tag_sz, history_length))).flip
@@ -193,7 +193,7 @@ class TageTable(
    num_tables: Int
    )(implicit p: Parameters) extends BoomModule()(p)
 {
-   val index_sz = log2Up(num_entries)
+   val index_sz = log2Ceil(num_entries)
 
    val io = IO(
       new TageTableIo(fetch_width, max_num_entries, max_history_length, max_tag_sz, counter_sz, this_index_sz = index_sz))
@@ -219,7 +219,7 @@ class TageTable(
    val ubit_table    = if (ubit_sz == 1) Module(new TageUbitMemoryFlipFlop(num_entries, ubit_sz))
                        else              Module(new TageUbitMemorySeqMem(num_entries, ubit_sz))
    val debug_pc_table= Mem(num_entries, UInt(width = 32))
-   val debug_hist_ptr_table=Mem(num_entries,UInt(width = log2Up(VLHR_LENGTH)))
+   val debug_hist_ptr_table=Mem(num_entries,UInt(width = log2Ceil(VLHR_LENGTH)))
 
    //history ghistory
    val idx_csr         = Module(new CircularShiftRegister(index_sz, history_length))
@@ -268,7 +268,7 @@ class TageTable(
    private def IdxHash (addr: UInt) =
    {
       val idx =
-         ((addr >> UInt(log2Up(fetch_width*coreInstBytes))) ^
+         ((addr >> UInt(log2Ceil(fetch_width*coreInstBytes))) ^
          idx_csr.io.next)
 
       idx(index_sz-1,0)
@@ -278,7 +278,7 @@ class TageTable(
    {
       // the tag is computed by pc[n:0] ^ CSR1[n:0] ^ (CSR2[n-1:0]<<1).
       val tag_hash =
-         (addr >> UInt(log2Up(fetch_width*coreInstBytes))) ^
+         (addr >> UInt(log2Ceil(fetch_width*coreInstBytes))) ^
          tag_csr1.io.next ^
          (tag_csr2.io.next << UInt(1))
       tag_hash(tag_sz-1,0)

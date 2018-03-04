@@ -25,7 +25,7 @@ abstract class TageUbitMemory(
    ubit_sz: Int
    ) extends Module
 {
-   val index_sz = log2Up(num_entries)
+   val index_sz = log2Ceil(num_entries)
    val io = IO(new Bundle
    {
       // send read addr on cycle 0, get data out on cycle 2.

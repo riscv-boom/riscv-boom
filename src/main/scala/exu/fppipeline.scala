@@ -27,7 +27,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
    val fpIssueParams = issueParams.find(_.iqType == IQT_FP.litValue).get
    val num_ll_ports = 1 // hard-wired; used by mem port and i2f port.
    val num_wakeup_ports = fpIssueParams.issueWidth + num_ll_ports
-   val fp_preg_sz = log2Up(numFpPhysRegs)
+   val fp_preg_sz = log2Ceil(numFpPhysRegs)
 
    val io = new Bundle
    {
