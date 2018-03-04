@@ -197,7 +197,7 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
    else if (gshareParams.isDefined && gshareParams.get.enabled)
    {
       GLOBAL_HISTORY_LENGTH = gshareParams.get.history_length
-      BPD_INFO_SIZE = GShareBrPredictor.GetRespInfoSize(p, GLOBAL_HISTORY_LENGTH)
+      BPD_INFO_SIZE = GShareBrPredictor.GetRespInfoSize(fetchWidth, GLOBAL_HISTORY_LENGTH)
    }
    else if (p(RandomBpdKey).enabled)
    {
