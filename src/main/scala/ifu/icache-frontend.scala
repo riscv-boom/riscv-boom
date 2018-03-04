@@ -72,7 +72,7 @@ class BoomFrontend(val icacheParams: ICacheParams, hartid: Int)(implicit p: Para
   val slaveNode = icache.slaveNode
 }
 
-class BoomFrontendBundle(outer: BoomFrontend) extends CoreBundle()(outer.p)
+class BoomFrontendBundle(val outer: BoomFrontend) extends CoreBundle()(outer.p)
     with HasExternallyDrivenTileConstants {
   val cpu = new BoomFrontendIO().flip
   val ptw = new TLBPTWIO()

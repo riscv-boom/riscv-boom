@@ -13,7 +13,7 @@ import Chisel._
 import freechips.rocketchip.config.Parameters
 
 
-class FreeListIo(num_phys_registers: Int, pl_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
+class FreeListIo(val num_phys_registers: Int, val pl_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
    private val preg_sz = log2Up(num_phys_registers)
 

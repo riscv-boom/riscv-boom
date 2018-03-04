@@ -26,7 +26,7 @@ case class IssueParams(
    iqType: BigInt
 )
 
-class IssueUnitIO(issue_width: Int, num_wakeup_ports: Int)(implicit p: Parameters) extends BoomBundle()(p)
+class IssueUnitIO(val issue_width: Int,val num_wakeup_ports: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
    val dis_valids     = Vec(DISPATCH_WIDTH, Bool()).asInput
    val dis_uops       = Vec(DISPATCH_WIDTH, new MicroOp()).asInput
