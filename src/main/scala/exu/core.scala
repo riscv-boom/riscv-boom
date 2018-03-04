@@ -482,7 +482,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       if (DECODE_WIDTH == 1)
          dec_uops(w).rob_idx := rob.io.curr_rob_tail
       else
-         dec_uops(w).rob_idx := Cat(rob.io.curr_rob_tail, UInt(w, log2Up(DECODE_WIDTH)))
+         dec_uops(w).rob_idx := Cat(rob.io.curr_rob_tail, UInt(w, log2Ceil(DECODE_WIDTH)))
    }
 
    val dec_has_br_or_jalr_in_packet =

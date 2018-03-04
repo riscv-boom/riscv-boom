@@ -162,7 +162,7 @@ class DCMemPortIO(implicit p: Parameters) extends BoomBundle()(p)
 //      val req_kill = Bool()
 //      val nack = Bool()
 //      val cache_nack = Bool()
-//      val cache_resp_tag = UInt(width=log2Up(MAX_LD_COUNT))
+//      val cache_resp_tag = UInt(width=log2Ceil(MAX_LD_COUNT))
 //      val cache_not_ready = Bool()
 //
 ////      val ld_req_slot = Vec.fill(MAX_LD_COUNT) { new Bundle {
@@ -219,7 +219,7 @@ class DCacheShim(implicit p: Parameters) extends BoomModule()(p)
 
 
    // dispatch/entry logic
-   val enq_idx = Wire(UInt(width = log2Up(max_num_inflight)))
+   val enq_idx = Wire(UInt(width = log2Ceil(max_num_inflight)))
    enq_idx := UInt(0)
 
    for (i <- max_num_inflight-1 to 0 by -1)

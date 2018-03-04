@@ -28,7 +28,7 @@ import freechips.rocketchip.util.UIntToAugmentedUInt
 class FetchBundle(implicit p: Parameters) extends BoomBundle()(p)
 {
    val pc            = UInt(width = vaddrBitsExtended)
-   val ftq_idx       = UInt(width = log2Up(ftqSz))
+   val ftq_idx       = UInt(width = log2Ceil(ftqSz))
    val insts         = Vec(FETCH_WIDTH, Bits(width = 32))
    val mask          = Bits(width = FETCH_WIDTH) // mark which words are valid instructions
    val xcpt_pf_if    = Bool() // I-TLB miss (instruction fetch fault).
@@ -81,7 +81,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
       val flush_take_pc     = Bool(INPUT)
       val flush_pc          = UInt(INPUT, vaddrBits+1) // TODO rename; no longer catch-all flush_pc
 
-      val com_ftq_idx       = UInt(INPUT, log2Up(ftqSz)) // ROB tells us the commit pointer so we can read out the PC.
+      val com_ftq_idx       = UInt(INPUT, log2Ceil(ftqSz)) // ROB tells us the commit pointer so we can read out the PC.
       val com_fetch_pc      = UInt(OUTPUT, vaddrBitsExtended) // tell CSRFile the fetch-pc at the FTQ head.
 
       // sfence needs to steal the TLB CAM part.
@@ -367,7 +367,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    when (f3_bpd_overrides_bcheck)
    {
       f3_btb_update_bits.target := f3_bpd_target
-      f3_btb_update_bits.cfi_pc := f3_bpd_br_idx << log2Up(coreInstBytes)
+      f3_btb_update_bits.cfi_pc := f3_bpd_br_idx << log2Ceil(coreInstBytes)
       f3_btb_update_bits.bpd_type := BpredType.branch
       f3_btb_update_bits.cfi_type := CfiType.branch
    }
@@ -610,8 +610,8 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
          {
             // ignore misaligned fetches -- we should have marked the instruction as excepting,
             // but when it makes a misaligned fetch request the I$ gives us back an aligned PC.
-            val f_pc = fetch_pc(vaddrBitsExtended-1, log2Up(coreInstBytes))
-            val targ = last_target(vaddrBitsExtended-1, log2Up(coreInstBytes))
+            val f_pc = fetch_pc(vaddrBitsExtended-1, log2Ceil(coreInstBytes))
+            val targ = last_target(vaddrBitsExtended-1, log2Ceil(coreInstBytes))
             when (f_pc =/= targ) {
                printf("about to abort: [fetch] JAL is followed by the wrong instruction.")
                printf("fetch_pc: 0x%x, last_target: 0x%x, last_nextlinepc: 0x%x\n",
@@ -622,8 +622,8 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
          .elsewhen (last_cfi_type === CfiType.branch)
          {
             // again, ignore misaligned fetches -- an exception should be caught.
-            val f_pc = fetch_pc(vaddrBitsExtended-1, log2Up(coreInstBytes))
-            val targ = last_target(vaddrBitsExtended-1, log2Up(coreInstBytes))
+            val f_pc = fetch_pc(vaddrBitsExtended-1, log2Ceil(coreInstBytes))
+            val targ = last_target(vaddrBitsExtended-1, log2Ceil(coreInstBytes))
             assert (fetch_pc === last_nextlinepc || f_pc === targ,
                "[fetch] branch is followed by the wrong instruction.")
          }

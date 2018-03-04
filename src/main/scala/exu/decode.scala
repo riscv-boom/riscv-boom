@@ -522,7 +522,7 @@ class FetchSerializerNtoM(implicit p: Parameters) extends BoomModule()(p)
 {
    val io = IO(new FetchSerializerIO)
 
-   val counter = Reg(init = UInt(0, log2Up(FETCH_WIDTH)))
+   val counter = Reg(init = UInt(0, log2Ceil(FETCH_WIDTH)))
    val inst_idx = Wire(UInt())
    inst_idx := UInt(0)
 

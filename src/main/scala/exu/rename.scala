@@ -31,8 +31,8 @@ class RenameStageIO(
    val num_fp_wb_ports: Int)
    (implicit p: Parameters) extends BoomBundle()(p)
 {
-   private val int_preg_sz = log2Up(num_int_pregs)
-   private val fp_preg_sz = log2Up(num_fp_pregs)
+   private val int_preg_sz = log2Ceil(num_int_pregs)
+   private val fp_preg_sz = log2Ceil(num_fp_pregs)
 
    val inst_can_proceed = Vec(pl_width, Bool()).asOutput
 

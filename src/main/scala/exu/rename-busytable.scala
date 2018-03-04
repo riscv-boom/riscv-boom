@@ -23,7 +23,7 @@ class BusyTableIo(
    val num_wb_ports:Int)
    (implicit p: Parameters) extends BoomBundle()(p)
 {
-   private val preg_sz = log2Up(num_pregs)
+   private val preg_sz = log2Ceil(num_pregs)
 
    // reading out the busy bits
    val p_rs           = Vec(num_read_ports, UInt(width=preg_sz)).asInput
@@ -104,7 +104,7 @@ class BusyTable(
    num_wb_ports:Int)
    (implicit p: Parameters) extends BoomModule()(p)
 {
-   private val preg_sz = log2Up(num_pregs)
+   private val preg_sz = log2Ceil(num_pregs)
 
    val io = IO(new Bundle
    {

@@ -32,7 +32,7 @@ class IssueUnitCollasping(
    val MAX_SHIFT = DISPATCH_WIDTH
    val shamt_oh = Array.fill(num_issue_slots){UInt(width=issue_width)}
    // count total grants before this entry, and tus how many to shift upwards by
-   val shamt = Array.fill(num_issue_slots){UInt(width=log2Up(issue_width+1))}
+   val shamt = Array.fill(num_issue_slots){UInt(width=log2Ceil(issue_width+1))}
 
 
    val vacants = issue_slots.map(s => !(s.valid)) ++ io.dis_valids.map(!_.toBool)

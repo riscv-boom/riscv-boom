@@ -139,7 +139,7 @@ class RenameMapTable(
    )(implicit p: Parameters) extends BoomModule()(p)
    with HasBoomCoreParameters
 {
-   private val preg_sz = log2Up(num_physical_registers)
+   private val preg_sz = log2Ceil(num_physical_registers)
 
    val io = IO(new BoomBundle()(p)
    {

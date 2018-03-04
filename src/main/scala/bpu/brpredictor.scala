@@ -76,10 +76,10 @@ class BpdUpdate(implicit p: Parameters) extends BoomBundle()(p)
    val fetch_pc = UInt(width = vaddrBits)
    val history     = UInt(width = GLOBAL_HISTORY_LENGTH)
    val mispredict = Bool()
-   val miss_cfi_idx = UInt(width=log2Up(fetchWidth).W) // if mispredict, this is the cfi_idx of miss.
+   val miss_cfi_idx = UInt(width=log2Ceil(fetchWidth).W) // if mispredict, this is the cfi_idx of miss.
    val taken = Bool()
 
-//   val br_pc = UInt(width = log2Up(FETCH_WIDTH)+log2Ceil(coreInstBytes))
+//   val br_pc = UInt(width = log2Ceil(FETCH_WIDTH)+log2Ceil(coreInstBytes))
 //   val is_br = Bool()
 
 

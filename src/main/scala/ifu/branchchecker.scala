@@ -48,7 +48,7 @@ class BranchChecker(fetch_width: Int)(implicit p: Parameters) extends BoomModule
       val btb_update    = Valid(new BTBsaUpdate)
       val ras_update    = Valid(new RasUpdate)
 
-      val req_cfi_idx   = UInt(OUTPUT, width = log2Up(fetchWidth)) // where is cfi we are predicting?
+      val req_cfi_idx   = UInt(OUTPUT, width = log2Ceil(fetchWidth)) // where is cfi we are predicting?
    })
 
    // Did the BTB mispredict the cfi type?
@@ -126,7 +126,7 @@ class BranchChecker(fetch_width: Int)(implicit p: Parameters) extends BoomModule
    io.btb_update.bits.pc := io.fetch_pc
    io.btb_update.bits.target := io.jal_targs(jal_idx)
    io.btb_update.bits.taken := true.B
-   io.btb_update.bits.cfi_pc := jal_idx << log2Up(coreInstBytes)
+   io.btb_update.bits.cfi_pc := jal_idx << log2Ceil(coreInstBytes)
    io.btb_update.bits.bpd_type := Mux(io.is_call(jal_idx), BpredType.call, BpredType.jump)
    io.btb_update.bits.cfi_type := CfiType.jal
 

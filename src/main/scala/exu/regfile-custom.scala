@@ -118,7 +118,7 @@ trait HasRegisterFileIO extends chisel3.experimental.BaseModule
       val WE = Vec(num_registers, Bool()).asInput
       val WD = Vec(num_write_ports, UInt(width = register_width)).asInput
       val RD = Vec(num_read_ports, UInt(width = register_width)).asOutput
-      val WS = Vec(num_registers, UInt(width = log2Up(num_write_ports))).asInput
+      val WS = Vec(num_registers, UInt(width = log2Ceil(num_write_ports))).asInput
       val OE = Vec(num_registers, UInt(width = num_read_ports)).asInput
    })
 }

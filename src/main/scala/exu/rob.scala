@@ -114,8 +114,8 @@ class CommitSignals(implicit p: Parameters) extends BoomBundle()(p)
 // TODO combine FlushSignals and ExceptionSignals (currently timed to different cycles).
 class CommitExceptionSignals(implicit p: Parameters) extends BoomBundle()(p)
 {
-   val ftq_idx    = UInt(width = log2Up(ftqSz))
-   val pc_lob     = UInt(width = log2Up(fetchWidth*coreInstBytes))
+   val ftq_idx    = UInt(width = log2Ceil(ftqSz))
+   val pc_lob     = UInt(width = log2Ceil(fetchWidth*coreInstBytes))
    val cause      = UInt(width = xLen)
    val badvaddr   = UInt(width = xLen)
 }
@@ -124,8 +124,8 @@ class CommitExceptionSignals(implicit p: Parameters) extends BoomBundle()(p)
 // so the FTQ can drive the frontend with the correct redirected PC.
 class FlushSignals(implicit p: Parameters) extends BoomBundle()(p)
 {
-   val ftq_idx = UInt(width=log2Up(ftqSz).W)
-   val pc_lob = UInt(width=log2Up(fetchWidth*coreInstBytes).W)
+   val ftq_idx = UInt(width=log2Ceil(ftqSz).W)
+   val pc_lob = UInt(width=log2Ceil(fetchWidth*coreInstBytes).W)
    val flush_typ = FlushTypes()
 }
 
@@ -160,7 +160,7 @@ object FlushTypes
 class Exception(implicit p: Parameters) extends BoomBundle()(p)
 {
    val uop = new MicroOp()
-   val cause = Bits(width=log2Up(freechips.rocketchip.rocket.Causes.all.max+2))
+   val cause = Bits(width=log2Ceil(freechips.rocketchip.rocket.Causes.all.max+2))
    val badvaddr = UInt(width=coreMaxAddrBits)
 }
 
@@ -195,8 +195,7 @@ class Rob(
    println("    Machine Width  : " + width); require (isPow2(width))
    println("    Rob Entries    : " + num_rob_entries)
    println("    Rob Rows       : " + num_rob_rows)
-   println("    Rob Row size   : " + log2Up(num_rob_rows))
-   println("    log2UP(width)  : " + log2Up(width))
+   println("    Rob Row size   : " + log2Ceil(num_rob_rows))
    println("    log2Ceil(width): " + log2Ceil(width))
    println("    FPU FFlag Ports: " + num_fpu_ports)
 
@@ -206,8 +205,8 @@ class Rob(
 
 
    //commit entries at the head, and unwind exceptions from the tail
-   val rob_head = Reg(init = UInt(0, log2Up(num_rob_rows)))
-   val rob_tail = Reg(init = UInt(0, log2Up(num_rob_rows)))
+   val rob_head = Reg(init = UInt(0, log2Ceil(num_rob_rows)))
+   val rob_tail = Reg(init = UInt(0, log2Ceil(num_rob_rows)))
    val rob_tail_idx = rob_tail << UInt(log2Ceil(width))
 
    val will_commit         = Wire(Vec(width, Bool()))
@@ -238,7 +237,7 @@ class Rob(
    def GetBankIdx(rob_idx: UInt): UInt =
    {
       if(width == 1) { return 0.U }
-      else           { return rob_idx(log2Up(width)-1, 0).asUInt }
+      else           { return rob_idx(log2Ceil(width)-1, 0).asUInt }
    }
 
    // **************************************************************************
@@ -860,7 +859,7 @@ class Rob(
 //            rob[ 3]           (vv)(bb) 0x00002010 [lw      s1, 0(ra)        ][lui     t3, 0xff0        ]    ,   (d:x p 4, bm:0 - sdt: 0) (d:x p 5, bm:0 - sdt: 0)
 //            rob[ 4]      TL-> (v )(b ) 0x00002018 [addiw   t3, t3, 255      ][li      t2, 2            ]    ,   (d:x p 6, bm:0 - sdt: 5) (d:x p 7, bm:0 - sdt: 0)
 
-         val row = if (COMMIT_WIDTH == 1) r_idx else (r_idx >> log2Up(COMMIT_WIDTH))
+         val row = if (COMMIT_WIDTH == 1) r_idx else (r_idx >> log2Ceil(COMMIT_WIDTH))
          val r_head = rob_head
          val r_tail = rob_tail
 

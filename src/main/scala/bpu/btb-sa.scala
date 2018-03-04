@@ -82,7 +82,7 @@ class BTBsaResp(implicit p: Parameters) extends BTBsaBundle()(p)
    val taken     = Bool()   // is BTB predicting a taken cfi?
    val target    = UInt(width = vaddrBits) // what target are we predicting?
    val mask      = UInt(width = fetchWidth) // mask of valid instructions.
-   val cfi_idx   = UInt(width = log2Up(fetchWidth)) // where is cfi we are predicting?
+   val cfi_idx   = UInt(width = log2Ceil(fetchWidth)) // where is cfi we are predicting?
    val bpd_type  = BpredType() // which predictor should we use?
    val cfi_type  = CfiType()  // what type of instruction is this?
    val fetch_pc  = UInt(width = vaddrBits) // the PC we're predicting on (start of the fetch packet).
@@ -119,10 +119,10 @@ class RAS(nras: Int, coreInstBytes: Int)
    {
       when (count < nras.U) { count := count + 1.U }
       val nextPos = Mux(Bool(isPow2(nras)) || pos < UInt(nras-1), pos+1.U, 0.U)
-      stack(nextPos) := addr >> log2Up(coreInstBytes)
+      stack(nextPos) := addr >> log2Ceil(coreInstBytes)
       pos := nextPos
    }
-   def peek: UInt = Cat(stack(pos), UInt(0, log2Up(coreInstBytes)))
+   def peek: UInt = Cat(stack(pos), UInt(0, log2Ceil(coreInstBytes)))
    def pop(): Unit = when (!isEmpty)
    {
       count := count - 1.U
@@ -131,8 +131,8 @@ class RAS(nras: Int, coreInstBytes: Int)
    //def clear(): Unit = count := UInt(0)
    def isEmpty: Bool = count === UInt(0)
 
-   private val count = Reg(UInt(width = log2Up(nras+1)))
-   private val pos = Reg(UInt(width = log2Up(nras)))
+   private val count = Reg(UInt(width = log2Ceil(nras+1)))
+   private val pos = Reg(UInt(width = log2Ceil(nras)))
    private val stack = Reg(Vec(nras, UInt()))
 }
 
@@ -179,14 +179,14 @@ class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParamet
    bim.io.update := io.bim_update
 
 
-   private val lsb_sz = log2Up(coreInstBytes)
+   private val lsb_sz = log2Ceil(coreInstBytes)
    private def getTag (addr: UInt): UInt = addr(tag_sz+idx_sz+lsb_sz-1, idx_sz+lsb_sz)
    private def getIdx (addr: UInt): UInt = addr(idx_sz+lsb_sz-1, lsb_sz)
 
    class BTBSetData extends Bundle
    {
-      val target = UInt(width = vaddrBits - log2Up(coreInstBytes))
-      val cfi_idx = UInt(width = log2Up(fetchWidth))
+      val target = UInt(width = vaddrBits - log2Ceil(coreInstBytes))
+      val cfi_idx = UInt(width = log2Ceil(fetchWidth))
       val bpd_type = BpredType()
       val cfi_type = CfiType()
    }
@@ -240,8 +240,8 @@ class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParamet
          valids := valids.bitSet(widx, true.B)
 
          val newdata = Wire(new BTBSetData())
-         newdata.target  := r_btb_update.bits.target(vaddrBits-1, log2Up(coreInstBytes))
-         newdata.cfi_idx := r_btb_update.bits.cfi_pc >> log2Up(coreInstBytes)
+         newdata.target  := r_btb_update.bits.target(vaddrBits-1, log2Ceil(coreInstBytes))
+         newdata.cfi_idx := r_btb_update.bits.cfi_pc >> log2Ceil(coreInstBytes)
          newdata.bpd_type := r_btb_update.bits.bpd_type
          newdata.cfi_type := r_btb_update.bits.cfi_type
 
@@ -263,8 +263,8 @@ class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParamet
          //   printf("    [%d] %d tag=0x%x targ=0x%x [0x%x 0x%x]\n", UInt(i), (valids >> UInt(i))(0),
          //   tags.read(UInt(i)),
          //   data.read(UInt(i)).target,
-         //   tags.read(UInt(i)) << UInt(idx_sz + log2Up(fetchWidth*coreInstBytes)),
-         //   data.read(UInt(i)).target << log2Up(coreInstBytes)
+         //   tags.read(UInt(i)) << UInt(idx_sz + log2Ceil(fetchWidth*coreInstBytes)),
+         //   data.read(UInt(i)).target << log2Ceil(coreInstBytes)
          //   )
          //}
       }
@@ -280,7 +280,7 @@ class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParamet
    // Mux out the winning hit.
    s1_valid := PopCount(hits_oh) === UInt(1) && !io.flush
    val s1_data = Mux1H(hits_oh, data_out)
-   val s1_target = Cat(s1_data.target, UInt(0, log2Up(coreInstBytes)))
+   val s1_target = Cat(s1_data.target, UInt(0, log2Ceil(coreInstBytes)))
    val s1_cfi_idx = s1_data.cfi_idx
    val s1_bpd_type = s1_data.bpd_type
    val s1_cfi_type = s1_data.cfi_type

@@ -27,7 +27,7 @@ class SeqMem1rwTransformable (
    l_width: Int
    ) extends Module
 {
-   val p_depth = 1 << log2Up(scala.math.sqrt(l_depth*l_width).toInt)
+   val p_depth = 1 << log2Ceil(scala.math.sqrt(l_depth*l_width).toInt)
    val p_width = l_depth*l_width/p_depth
 
    require (l_depth*l_width == p_depth*p_width)

@@ -109,7 +109,7 @@ abstract class IssueUnit(
       {
          printf("  " + typ_str + "_issue_slot[%d](%c)(Req:%c):wen=%c P:(%c,%c,%c) OP:(%d,%d,%d) PDST:%d %c [[DASM(%x)]" +
                " 0x%x: %d] ri:%d bm=%d imm=0x%x\n"
-            , UInt(i, log2Up(num_issue_slots))
+            , UInt(i, log2Ceil(num_issue_slots))
             , Mux(issue_slots(i).valid, Str("V"), Str("-"))
             , Mux(issue_slots(i).request, Str("R"), Str("-"))
             , Mux(issue_slots(i).in_uop.valid, Str("W"),  Str(" "))
