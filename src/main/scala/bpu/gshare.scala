@@ -19,17 +19,17 @@ import freechips.rocketchip.config.{Parameters, Field}
 
 case class GShareParameters(
    enabled: Boolean = true,
-   historyLength: Int = 12
+   history_length: Int = 12
    )
 
 
 trait HasGShareParameters extends HasBoomCoreParameters
 {
-   val gsParams = boomParams.gshare
-   val nSets = 1 << gsParams.historyLength
+   val gsParams = boomParams.gshare.get
+   val nSets = 1 << gsParams.history_length
 
    val idx_sz = log2Up(nSets)
-   val row_idx_sz = log2Up(nSets)-log2Up(nBanks)
+//   val row_idx_sz = log2Up(nSets)-log2Up(nBanks)
    val row_sz = fetchWidth*2
 }
 
@@ -38,10 +38,10 @@ abstract class GShareBundle(implicit val p: Parameters) extends freechips.rocket
   with HasGShareParameters
 
 
-class GShareResp(implicit val p: Parameters) extends GShareBundle()(p)
+class GShareResp(implicit p: Parameters) extends GShareBundle()(p)
 {
-   val index = UInt(width = idx_sz) // needed to update predictor at Commit
-   val rowdata = UInt(width = row_sz)
+   val debug_index = UInt(width = idx_sz) // Can recompute index during update (but let's check for errors).
+   val rowdata = UInt(width = row_sz) // Store to prevent a re-read during an update.
 
    def isTaken(cfi_idx: UInt) =
    {
@@ -49,7 +49,13 @@ class GShareResp(implicit val p: Parameters) extends GShareBundle()(p)
       val taken = cntr(1)
       taken
    }
-
+ 
+   def getCounterValue(cfi_idx: UInt) =
+   {
+      val cntr = (rowdata >> (cfi_idx << 1.U)) & 0x3.U
+      cntr
+   }
+        
    // Get a fetchWidth length bit-vector of taken/not-takens.
    def getTakens(): UInt =
    {
@@ -67,15 +73,14 @@ object GShareBrPredictor
 {
    def GetRespInfoSize(p: Parameters, hlen: Int): Int =
    {
-      val dummy = new GShareResp(hlen)
+      val dummy = new GShareResp()(p)
       dummy.getWidth
    }
 }
 
 class GShareBrPredictor(
    fetch_width: Int,
-   history_length: Int = 12,
-   dualported: Boolean = false
+   history_length: Int = 12
    )(implicit p: Parameters)
    extends BrPredictor(fetch_width, history_length)(p)
    with HasGShareParameters
@@ -94,7 +99,7 @@ class GShareBrPredictor(
    {
       val row = Wire(UInt(width=row_sz))
       row := Fill(fetchWidth, 2.U)
-      Vec(row.toBools)
+      row
    }
 
 
@@ -103,6 +108,8 @@ class GShareBrPredictor(
 
    val s_reset :: s_wait :: s_clear :: s_idle :: Nil = Enum(UInt(), 4)
    val fsm_state = Reg(init = s_reset)
+   val nResetLagCycles = 128
+   val nBanks = 1
    val (lag_counter, lag_done) = Counter(fsm_state === s_wait, nResetLagCycles)
    val (clear_row_addr, clear_done) = Counter(fsm_state === s_clear, nSets/nBanks)
 
@@ -139,7 +146,7 @@ class GShareBrPredictor(
 //   counters.io.stall := stall
 
    val resp_info = Wire(new GShareResp())
-   resp_info.index   := RegNext(s1_ridx)
+   resp_info.debug_index   := RegNext(s1_ridx)
    resp_info.rowdata := s2_out
 
    f2_resp.valid := fsm_state === s_idle
@@ -150,6 +157,7 @@ class GShareBrPredictor(
    //------------------------------------------------------------
    // Update counter table.
 
+   val wen = false.B // TODO XXX
    when (wen)
    {
       val waddr = Mux(fsm_state === s_clear, clear_row_addr, 0.U)

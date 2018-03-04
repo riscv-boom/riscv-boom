@@ -98,12 +98,12 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
 
       // Commit
       val bim_update    = Valid(new BimUpdate).flip
+      val bpd_update    = Valid(new BpdUpdate).flip
 
       // Other
       val br_unit       = new BranchUnitResp().asInput
       val fe_clear      = Bool(INPUT) // The FrontEnd needs to be cleared (due to redirect or flush).
       val ftq_restore   = Valid(new RestoreHistory).flip
-      val brob          = new BrobBackendIo(fetch_width)
       val flush         = Bool(INPUT) // pipeline flush from ROB TODO CODEREVIEW (redudant with fe_clear?)
       val redirect      = Bool(INPUT)
       val status_prv    = UInt(INPUT, width = freechips.rocketchip.rocket.PRV.SZ)
@@ -118,6 +118,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
 
    btb.io.status_debug := io.status_debug
    bpd.io.status_prv := io.status_prv
+   bpd.io.do_reset := false.B // TODO
 
 
    //************************************************
@@ -227,8 +228,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
 //   bpd.io.f3_clear := io.f3_clear
    bpd.io.f3enq_valid := io.f3_enq_valid
    bpd.io.f2_stall := io.f2_stall
-   // TODO hook up update logic
-//   bpd.io.commit
+   bpd.io.commit := io.bpd_update
 
 
    //************************************************
