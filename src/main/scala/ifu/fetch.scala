@@ -65,6 +65,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
       val f4_redirect       = Bool(OUTPUT)
 
       val bim_update        = Valid(new BimUpdate)
+      val bpd_update        = Valid(new BpdUpdate)
 
       val ftq_restore_history= Valid(new RestoreHistory)
 
@@ -524,6 +525,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    io.f4_redirect := r_f4_valid && r_f4_req.valid
 
    io.bim_update := ftq.io.bim_update
+   io.bpd_update := ftq.io.bpd_update
 
    //-------------------------------------------------------------
    // **** Frontend Response ****

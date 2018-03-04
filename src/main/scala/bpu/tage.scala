@@ -259,7 +259,7 @@ class TageBrPredictor(
       max_history_length = history_lengths.max,
       max_index_sz = log2Up(table_sizes.max),
       max_tag_sz = tag_sizes.max
-   ).fromBits(0.U) // commit.bits.info.info)
+   ).fromBits(io.commit.bits.info)
 
    val executed = 0.U // TODO XXX commit.bits.ctrl.executed.asUInt
 
@@ -294,12 +294,12 @@ class TageBrPredictor(
    //-------------------------------------------------------------
    // Cycle 1 - perform state changes
 
-   val s2_commit      = RegNext(RegNext(commit))
+   val s2_commit      = RegNext(RegNext(io.commit))
    val s2_info        = RegNext(RegNext(info))
    val s2_provider_id = RegNext(RegNext(info.provider_id))
-   val s2_takens      = RegNext(RegNext(commit.bits.ctrl.taken.asUInt))
-   val s2_correct     = RegNext(RegNext(!commit.bits.ctrl.mispredicted.reduce(_|_)))
-   val s2_executed    = RegNext(RegNext(commit.bits.ctrl.executed.asUInt))
+   val s2_takens      = 0.U // TODO XXX RegNext(RegNext(commit.bits.ctrl.taken.asUInt))
+   val s2_correct     = true.B // TODO XXX RegNext(RegNext(!commit.bits.ctrl.mispredicted.reduce(_|_)))
+   val s2_executed    = 0.U // TODO XXX RegNext(RegNext(commit.bits.ctrl.executed.asUInt))
 
 
    // provide some randomization to the allocation process
@@ -309,8 +309,10 @@ class TageBrPredictor(
    val ubit_update_wens = Wire(init = Vec.fill(num_tables) {Bool(false)})
    val ubit_update_incs = Wire(init = Vec.fill(num_tables) {Bool(false)})
 
-   when (s2_commit.valid && s2_commit.bits.ctrl.executed.reduce(_|_))
+   when (s2_commit.valid) // TODO XXX && s2_commit.bits.ctrl.executed.reduce(_|_))
    {
+      // TODO XXX what if there's no branch in here?
+
       // no matter what happens, update table that made a prediction
       when (s2_info.provider_hit)
       {
@@ -381,8 +383,8 @@ class TageBrPredictor(
       when (ubit_update_wens(i))
       {
          tables_io(i).UpdateUsefulness(s2_info.indexes(i), inc=ubit_update_incs(i))
-         assert (s2_commit.valid && s2_commit.bits.ctrl.executed.reduce(_|_),
-            "[tage] updating ubits when not committing.")
+//         TODO assert (s2_commit.valid && s2_commit.bits.ctrl.executed.reduce(_|_),
+//            "[tage] updating ubits when not committing.")
       }
    }
 }

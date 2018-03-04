@@ -90,9 +90,10 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
       val com_fetch_pc = Output(UInt(width=vaddrBitsExtended.W))
 
       val bim_update = Valid(new BimUpdate)
+      val bpd_update = Valid(new BpdUpdate)
 
       // BranchResolutionUnit tells us the outcome of branches/jumps.
-      val brinfo = new BrResolutionInfo().asInput
+      val brinfo = Input(new BrResolutionInfo())
 
       val debug_rob_empty = Input(Bool()) // TODO can we build asserts off of this?
    })
@@ -216,6 +217,16 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
       io.bim_update.bits.taken        := miss_data.taken
       io.bim_update.bits.mispredicted := miss_data.mispredicted
 
+
+      io.bpd_update.valid := true.B
+      io.bpd_update.bits.mispredict := miss_data.mispredicted
+      io.bpd_update.bits.taken      := miss_data.taken
+      io.bpd_update.bits.miss_cfi_idx := miss_data.cfi_idx
+      io.bpd_update.bits.fetch_pc   := io.com_fetch_pc
+      io.bpd_update.bits.history    := com_data.history
+      io.bpd_update.bits.info       := com_data.bpd_info
+
+
       if (DEBUG_PRINTF)
       {
          printf("FTQ: deq[%d]=0x%x bim[%d=%x]:%c %c%c %d-%d %d\n",
@@ -236,6 +247,7 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
    {
       if (DEBUG_PRINTF) printf("FTQ: no dequeue\n")
       io.bim_update.valid := false.B
+      io.bpd_update.valid := false.B
    }
 
    //-------------------------------------------------------------

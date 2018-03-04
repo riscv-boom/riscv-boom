@@ -76,16 +76,23 @@ class BpdUpdate(implicit p: Parameters) extends BoomBundle()(p)
    // new_pc_same_packet: is the new target PC after a misprediction found
    // within the same fetch packet as the mispredicting branch? If yes, then
    // we have to be careful which "history" we show the new PC.
-   val pc = UInt(width = vaddrBits)
-   val br_pc = UInt(width = log2Up(FETCH_WIDTH)+log2Ceil(coreInstBytes))
-//   val brob_idx   = UInt(width = BROB_ADDR_SZ) TODO switch to ftq_idx?
-   val mispredict = Bool()
+   val fetch_pc = UInt(width = vaddrBits)
+
    val history     = UInt(width = GLOBAL_HISTORY_LENGTH)
-   val bpd_predict_val = Bool()
-   val bpd_mispredict = Bool()
+
+//   val br_pc = UInt(width = log2Up(FETCH_WIDTH)+log2Ceil(coreInstBytes))
+//   val brob_idx   = UInt(width = BROB_ADDR_SZ) TODO switch to ftq_idx?
+//   val bpd_predict_val = Bool()
+//   val bpd_mispredict = Bool()
+//   val is_br = Bool()
+//   val new_pc_same_packet = Bool()
+   
+   
+   val mispredict = Bool()
+   val miss_cfi_idx = UInt(width=log2Up(fetchWidth).W) // if mispredict, this is the cfi_idx of miss.
    val taken = Bool()
-   val is_br = Bool()
-   val new_pc_same_packet = Bool()
+
+
 
    // give the bpd back the information it sent out when it made a prediction.
    // this information may include things like CSR snapshots.
@@ -112,6 +119,9 @@ abstract class BrPredictor(
       // req.bits.addr is available on cycle S0.
       // resp is expected on cycle S2.
       val req = Valid(new PCReq).flip
+
+      // Update from the FTQ during commit.
+      val commit = Decoupled(new BpdUpdate).flip
 
       // Use F2 buffer enqueue signal from the I$ (S2 signals are valid)
       val fqenq_valid = Bool(INPUT)
@@ -153,7 +163,7 @@ abstract class BrPredictor(
       val fe_clear = Bool(INPUT)
 
       // TODO provide a way to reset/clear the predictor state.
-      //val do_reset = Bool(INPUT)
+      val do_reset = Bool(INPUT)
 
       // privilege-level (allow predictor to change behavior in different privilege modes).
       val status_prv = UInt(INPUT, width = freechips.rocketchip.rocket.PRV.SZ)
@@ -260,16 +270,6 @@ abstract class BrPredictor(
       r_f4_history := q_f3_resp.io.deq.bits.bits.history
    }
 
-
-
-   // -----------------------------------------------
-
-// TODO XXX need to update predictor from FTQ
-//   val brob = Module(new BranchReorderBuffer(fetch_width, NUM_BROB_ENTRIES))
-//   io.brob <> brob.io.backend
-//   commit := brob.io.commit_entry
-
-   val commit = Wire(Valid(new BrobEntry(fetchWidth))) // TODO XXX
 }
 
 //------------------------------------------------------------------------------
@@ -306,8 +306,7 @@ object BrPredictor
       {
          br_predictor = Module(new GShareBrPredictor(
             fetch_width = fetch_width,
-            history_length = boomParams.gshare.get.history_length,
-            dualported = boomParams.gshare.get.dualported))
+            history_length = boomParams.gshare.get.history_length))
       }
       else if (enableCondBrPredictor && p(RandomBpdKey).enabled)
       {
@@ -372,49 +371,5 @@ class RandomBrPredictor(
 
    io.resp.valid := rand_val
    io.resp.bits.takens := rand(fetch_width)
-}
-
-//------------------------------------------------------------------------------
-//------------------------------------------------------------------------------
-//------------------------------------------------------------------------------
-//------------------------------------------------------------------------------
-// TODO DELETE ALL OF THIS LATER
-
-
-class BrobEntryMetaData(fetch_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
-{
-   val executed     = Vec(fetch_width, Bool()) // Mark that a branch (but not JALR) executed (and should update predictor).
-   val taken        = Vec(fetch_width, Bool())
-   val mispredicted = Vec(fetch_width, Bool()) // Did bpd mispredict the br? (aka should we update predictor).
-                                               // Only set for branches, not jumps.
-   val brob_idx     = UInt(width = BROB_ADDR_SZ)
-
-   val debug_executed = Bool() // Did a BR or JALR get executed? Verify we're not deallocating an empty entry.
-   val debug_rob_idx = UInt(width = ROB_ADDR_SZ)
-
-   override def cloneType: this.type = new BrobEntryMetaData(fetch_width).asInstanceOf[this.type]
-}
-
-class BrobEntry(fetch_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
-{
-   val ctrl = new BrobEntryMetaData(fetch_width)
-   val info = new BpdResp
-   override def cloneType: this.type = new BrobEntry(fetch_width).asInstanceOf[this.type]
-}
-
-class BrobBackendIo(fetch_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
-{
-   val allocate = Decoupled(new BrobEntry(fetch_width)).flip // Decode/Dispatch stage, allocate new entry
-   val allocate_brob_tail = UInt(OUTPUT, width = BROB_ADDR_SZ) // tell Decode which entry gets allocated
-
-   val deallocate = Valid(new BrobDeallocateIdx).flip // Commmit stage, from the ROB
-
-   val bpd_update = Valid(new BpdUpdate()).flip // provide br resolution information
-   val flush = Bool(INPUT) // wipe the ROB
-}
-
-class BrobDeallocateIdx(implicit p: Parameters) extends BoomBundle()(p)
-{
-   val brob_idx = UInt(width = BROB_ADDR_SZ)
 }
 

@@ -347,6 +347,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    bpd_stage.io.f3_ras_update := fetch_unit.io.f3_ras_update
    bpd_stage.io.f3_btb_update := fetch_unit.io.f3_btb_update
    bpd_stage.io.bim_update    := fetch_unit.io.bim_update
+   bpd_stage.io.bpd_update    := fetch_unit.io.bpd_update
    bpd_stage.io.status_prv    := csr.io.status.prv
    bpd_stage.io.status_debug  := csr.io.status.debug
 
@@ -486,17 +487,6 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
    val dec_has_br_or_jalr_in_packet =
       (dec_valids zip dec_uops map {case(v,u) => v && u.is_br_or_jmp && !u.is_jal}).reduce(_|_)
-
-   bpd_stage.io.brob.allocate.valid := dec_will_fire.reduce(_|_) &&
-                                       dec_finished_mask === Bits(0) &&
-                                       dec_has_br_or_jalr_in_packet
-   bpd_stage.io.brob.allocate.bits.ctrl.executed.map{_ := Bool(false)}
-   bpd_stage.io.brob.allocate.bits.ctrl.taken.map{_ := Bool(false)}
-   bpd_stage.io.brob.allocate.bits.ctrl.mispredicted.map{_ := Bool(false)}
-   bpd_stage.io.brob.allocate.bits.ctrl.debug_executed := Bool(false)
-   bpd_stage.io.brob.allocate.bits.ctrl.debug_rob_idx := dec_uops(0).rob_idx
-   bpd_stage.io.brob.allocate.bits.info := dec_fbundle.bpd_resp
-
 
 
    //-------------------------------------------------------------
