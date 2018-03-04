@@ -68,30 +68,19 @@ class BpdUpdate(implicit p: Parameters) extends BoomBundle()(p)
    // is_br: a branch was resolved
    // the fetch pc (points to start of the fetch packet)
    // which word in the fetch packet does the update correspond to?
-   // processor mispredicted: must reset history
    // history: what was the history our branch saw?
-   // bpd_pred_val: did the bpd make a prediction? (i.e., a tag hit)
-   // bpd mispredicted:  must correct the bpd predictor
    // taken: was the branch taken?
    // new_pc_same_packet: is the new target PC after a misprediction found
    // within the same fetch packet as the mispredicting branch? If yes, then
    // we have to be careful which "history" we show the new PC.
    val fetch_pc = UInt(width = vaddrBits)
-
    val history     = UInt(width = GLOBAL_HISTORY_LENGTH)
-
-//   val br_pc = UInt(width = log2Up(FETCH_WIDTH)+log2Ceil(coreInstBytes))
-//   val brob_idx   = UInt(width = BROB_ADDR_SZ) TODO switch to ftq_idx?
-//   val bpd_predict_val = Bool()
-//   val bpd_mispredict = Bool()
-//   val is_br = Bool()
-//   val new_pc_same_packet = Bool()
-   
-   
    val mispredict = Bool()
    val miss_cfi_idx = UInt(width=log2Up(fetchWidth).W) // if mispredict, this is the cfi_idx of miss.
    val taken = Bool()
 
+//   val br_pc = UInt(width = log2Up(FETCH_WIDTH)+log2Ceil(coreInstBytes))
+//   val is_br = Bool()
 
 
    // give the bpd back the information it sent out when it made a prediction.

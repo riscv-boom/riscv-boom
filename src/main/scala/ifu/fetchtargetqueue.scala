@@ -218,20 +218,21 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
       io.bim_update.bits.mispredicted := miss_data.mispredicted
 
 
-      io.bpd_update.valid := true.B
-      io.bpd_update.bits.mispredict := miss_data.mispredicted
-      io.bpd_update.bits.taken      := miss_data.taken
-      io.bpd_update.bits.miss_cfi_idx := miss_data.cfi_idx
-      io.bpd_update.bits.fetch_pc   := io.com_fetch_pc
-      io.bpd_update.bits.history    := com_data.history
-      io.bpd_update.bits.info       := com_data.bpd_info
+      io.bpd_update.valid              := true.B
+      io.bpd_update.bits.mispredict    := miss_data.mispredicted
+      io.bpd_update.bits.taken         := miss_data.taken
+      io.bpd_update.bits.miss_cfi_idx  := miss_data.cfi_idx
+      io.bpd_update.bits.fetch_pc      := com_data.fetch_pc
+      io.bpd_update.bits.history       := com_data.history
+      io.bpd_update.bits.info          := com_data.bpd_info
 
 
       if (DEBUG_PRINTF)
       {
-         printf("FTQ: deq[%d]=0x%x bim[%d=%x]:%c %c%c %d-%d %d\n",
+         printf("FTQ: deq[%d]=0x%x hist=0x%x bim[%d=%x]:%c %c%c %d-%d %d\n",
             deq_ptr.value,
             com_data.fetch_pc,
+            com_data.history,
             io.bim_update.bits.entry_idx,
             io.bim_update.bits.entry_idx,
             Mux(io.bim_update.valid, Str("V"), Str(" ")),
