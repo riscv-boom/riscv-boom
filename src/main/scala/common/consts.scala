@@ -32,9 +32,6 @@ trait BOOMDebugConstants
    val DEBUG_PRINTF_TAGE   = true && DEBUG_PRINTF
    val DEBUG_PRINTF_FTQ    = true && DEBUG_PRINTF
 
-   // BPD asserts can be too heavy-handed for something that we're okay giving incorrect answers.
-   val ENABLE_BPD_ASSERTS  = false
-
    if (O3PIPEVIEW_PRINTF) require (!DEBUG_PRINTF && !COMMIT_LOG_PRINTF)
 }
 

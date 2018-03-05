@@ -163,7 +163,6 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
       io.flush_take_pc ||
       io.sfence_take_pc ||
       (io.f2_btb_resp.valid && io.f2_btb_resp.bits.taken && io.imem.resp.ready) ||
-//      (io.f2_bpu_request.valid && !if_stalled && io.imem.resp.valid) ||
       (r_f4_valid && r_f4_req.valid)
 
    io.imem.req.valid   := f0_redirect_val // tell front-end we had an unexpected change in the stream

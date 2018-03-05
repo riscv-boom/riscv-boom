@@ -25,34 +25,10 @@ import freechips.rocketchip.config.Parameters
 
 import freechips.rocketchip.util.{Str, UIntToAugmentedUInt}
 
-// this information is shared across the entire fetch packet, and stored in the
-// branch snapshots. Since it's not unique to an instruction, it could be
-// compressed further.
-//class BranchPredictionResp(implicit p: Parameters) extends BoomBundle()(p)
-//{
-//   val btb_resp_valid = Bool()
-//   val btb_resp       = new rocket.BTBResp
-//
-//   val bpd_resp       = new BpdResp
-//
-//   // used to tell front-end how to mask off instructions
-//   val mask           = Bits(width = fetchWidth)
-//   val br_seen        = Bool() // was a branch seen in this fetch packet?
-//}
-
-// Sent to the Fetch Unit to redirect the pipeline as needed.
-// The Fetch Unit must also sanity check the request.
-class BpuRequest(implicit p: Parameters) extends BoomBundle()(p)
-{
-   val target  = UInt(width = vaddrBitsExtended)
-   val cfi_idx = UInt(width = log2Up(fetchWidth)) // where is cfi we are predicting?
-   val mask    = UInt(width = fetchWidth) // mask of valid instructions.
-}
 
 //class BranchPrediction(implicit p: Parameters) extends BoomBundle()(p)
 // Give this to each instruction/uop and pass this down the pipeline to the branch-unit
 // This covers the per-instruction info on all cfi-related predictions.
-// TODO rename to make clear this is "BPD->RenameSnapshot->BRU". Should NOT go into Issue Windows.
 class BranchPredInfo(implicit p: Parameters) extends BoomBundle()(p)
 {
    val btb_blame         = Bool() // Does the BTB get credit for the prediction? (during BRU check).
@@ -79,6 +55,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
       // Fetch1
 
       // Fetch2
+      val f2_valid      = Bool(INPUT) // f2 stage may proceed into the f3 stage.
       val f2_btb_resp   = Valid(new BTBsaResp)
       val f2_stall      = Bool(INPUT) // f3 is not ready -- back-pressure the f2 stage.
       val f2_replay     = Bool(INPUT) // I$ is replaying S2 PC into S0 again (S2 backed up or failed).
@@ -89,7 +66,6 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
       val f3_btb_update = Valid(new BTBsaUpdate).flip
       val f3_ras_update = Valid(new RasUpdate).flip
       val f3_stall      = Bool(INPUT) // f4 is not ready -- back-pressure the f3 stage.
-      val f3_enq_valid  = Bool(INPUT) // f2 stage may proceed into the f3 stage.
 
       // Fetch4
       val f4_redirect   = Bool(INPUT) // I$ is being redirected from F4.
@@ -135,25 +111,13 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    //************************************************
    // Branch Prediction (BP2 Stage)
 
-   io.f2_btb_resp := btb.io.resp
+   io.f2_btb_resp.bits := btb.io.resp.bits
+   // BTB's resposne isn't valid if there's no instruction from I$ to match against.
+   io.f2_btb_resp.valid := btb.io.resp.valid && io.f2_valid
 
-//   btb_queue.io.deq.ready := !io.f2_stall
- 
+
    bpd.io.f2_bim_resp := io.f2_btb_resp.bits.bim_resp
-  
 
-   when (io.f2_btb_resp.valid)
-   {
-      assert (io.f3_enq_valid, "[bpd-pipeline] BTB has a valid request but imem.resp is invalid.")
-   }
- 
-   // forward progress into F3 will be made.
-   when (io.f3_enq_valid)
-   {
-      assert (btb.io.resp.bits.fetch_pc(15,0) === io.debug_imemresp_pc(15,0),
-         "[bpd-pipeline] mismatch between BTB and I$.")
-   }
- 
 
    //************************************************
    // Branch Prediction (BP3 Stage)
@@ -204,15 +168,12 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    //************************************************
    // Update the BPD
 
-   bpd.io.ftq_restore <> io.ftq_restore
-//   bpd.io.flush := io.flush
-//   bpd.io.redirect := io.redirect
+   bpd.io.f2_valid := io.f2_valid
+   bpd.io.f2_stall := io.f2_stall
    bpd.io.f2_redirect := io.f2_redirect
    bpd.io.f4_redirect := io.f4_redirect
    bpd.io.fe_clear := io.fe_clear
-//   bpd.io.f3_clear := io.f3_clear
-   bpd.io.f3enq_valid := io.f3_enq_valid
-   bpd.io.f2_stall := io.f2_stall
+   bpd.io.ftq_restore := io.ftq_restore
    bpd.io.commit := io.bpd_update
 
 
@@ -242,6 +203,19 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
 
    //************************************************
    // asserts
+
+   when (io.f2_btb_resp.valid)
+   {
+      assert (io.f2_valid, "[bpd-pipeline] BTB has a valid request but imem.resp is invalid.")
+   }
+
+   // forward progress into F3 will be made.
+   when (io.f2_valid)
+   {
+      assert (btb.io.resp.bits.fetch_pc(15,0) === io.debug_imemresp_pc(15,0),
+         "[bpd-pipeline] mismatch between BTB and I$.")
+   }
+
 
    if (!enableBTB)
    {

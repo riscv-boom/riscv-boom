@@ -15,11 +15,11 @@
 // A predicted-taken will insert 1 bubble into the pipeline.
 //
 // TODO:
-//    - provide way to flush BTB.
+//    - provide way to clear/reset BTB.
 //
 // NOTES:
 //    - No compression of high-order tag bits or target bits.
-//    - We store the full targets, instead of just the branch/jump offsets (requires adder).
+//    - We store the full targets, instead of just the branch/jump offsets.
 //    - Only performs partial tag matches -- must verify elsewhere that target was valid.
 //    - BTB is allowed to be stale (Debug Program Buffer and other self-modifying code may end up here).
 
@@ -160,7 +160,7 @@ class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParamet
       // Pass this to the BPD.
       //val s1_pc  = UInt(width = vaddrBits)
 
-      // supress S1/upcoming S2 valids.
+      // supress S1 (so next cycle S2 is not valid).
       val flush = Bool(INPUT)
 
       val btb_update = Valid(new BTBsaUpdate).flip
@@ -209,7 +209,6 @@ class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParamet
    val widx = getIdx(r_btb_update.bits.pc)
    val wtag = getTag(r_btb_update.bits.pc)
    // TODO: currently a not-very-clever way to choose a replacement way.
-   // Also, doesn't search for invalid ways!
    val next_replace = Counter(r_btb_update.valid, nWays)._1
    val way_wen = UIntToOH(next_replace)
 
