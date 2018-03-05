@@ -10,7 +10,7 @@ class ElasticReg[T <: Data](gen: T) extends Module {
    val entries = 2
    val io = IO(new QueueIO(gen, entries) {})
 
-   private val valid = RegInit(Vec.fill(entries) { Bool(false) })
+   private val valid = RegInit(Vec.fill(entries) { false.B })
    private val elts = Reg(Vec(entries, gen))
 
    for (i <- 0 until entries) {

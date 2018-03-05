@@ -170,9 +170,13 @@ class GShareBrPredictor(
    //------------------------------------------------------------
    // Predictor state.
 
-//   val counters = Module(new TwobcCounterTable(fetch_width, nSets, dualported))
+//   val counter_table = SeqMem(nSets, UInt(width = row_sz))
 
-   val counter_table = SeqMem(nSets, UInt(width = row_sz))
+   val counters = Module( new ElasticSeqMem(nSets, UInt(width = row_sz)))
+
+   counters.io.flush := io.fe_clear || io.f2_redirect || io.f4_redirect
+//   counters.read(s1_ridx, true.B)
+//   counters.write(waddr, wdata)
 
    //------------------------------------------------------------
    // Get prediction.
@@ -185,7 +189,14 @@ class GShareBrPredictor(
 
    // Access predictor on F2 and return data to superclass (via f2_resp bundle).
 
-   val s2_out = counter_table.read(s1_ridx, true.B)
+//   val s2_out = counter_table.read(s1_ridx, true.B)
+
+   counters.io.rreq.valid := true.B // TODO XXX
+   counters.io.rreq.bits  := s1_ridx
+   // don't listen to ready --- control logic elsewhere will replay if backed up.
+
+   val s2_out = counters.io.rresp.bits
+   counters.io.rresp.ready := q_f3_resp.io.enq.ready
 
 
    val resp_info = Wire(new GShareResp(fetch_width, idx_sz))
@@ -207,19 +218,18 @@ class GShareBrPredictor(
 
    val wen = io.commit.valid || (fsm_state === s_clear)
 
-   when (wen)
-   {
-      val new_row = updateEntireCounterRow(
-         com_info.rowdata,
-         io.commit.bits.mispredict,
-         io.commit.bits.miss_cfi_idx,
-         io.commit.bits.taken)
+   val new_row = updateEntireCounterRow(
+      com_info.rowdata,
+      io.commit.bits.mispredict,
+      io.commit.bits.miss_cfi_idx,
+      io.commit.bits.taken)
 
-      val waddr = Mux(fsm_state === s_clear, clear_row_addr, com_idx)
-      val wdata = Mux(fsm_state === s_clear, initRowValue(), new_row)
+   val waddr = Mux(fsm_state === s_clear, clear_row_addr, com_idx)
+   val wdata = Mux(fsm_state === s_clear, initRowValue(), new_row)
 
-      counter_table.write(waddr, wdata)
-   }
+   counters.io.write.valid := wen
+   counters.io.write.bits.idx := waddr
+   counters.io.write.bits.data := wdata
 
 
    // First commit will have garbage.
