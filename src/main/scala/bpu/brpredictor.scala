@@ -34,7 +34,7 @@ import Chisel._
 import chisel3.core.withReset
 import freechips.rocketchip.config.{Parameters, Field}
 
-import freechips.rocketchip.util.{Str, ShiftQueue}
+import freechips.rocketchip.util.{Str}
 import freechips.rocketchip.rocket.RocketCoreParams
 
 
@@ -113,7 +113,7 @@ abstract class BrPredictor(
       val commit = Decoupled(new BpdUpdate).flip
 
       // Use F2 buffer enqueue signal from the I$ (S2 signals are valid)
-      val fqenq_valid = Bool(INPUT)
+//      val fqenq_valid = Bool(INPUT)
 
       // Not ready to dequeue F2 buffer (I$ did not provide a valid response in F2).
       val f2_stall = Bool(INPUT)
@@ -168,8 +168,8 @@ abstract class BrPredictor(
    val r_f4_history = Reg(init=0.asUInt(width=history_length.W))
 
    // match the queuing behavior from the icache.
-   val q_f2_history = withReset(reset || io.fe_clear || io.f2_redirect || io.f4_redirect)
-      { Module(new ShiftQueue(UInt(width=history_length), 5, flow=true)) }
+//   val q_f2_history = withReset(reset || io.fe_clear || io.f2_redirect || io.f4_redirect)
+//      { Module(new ShiftQueue(UInt(width=history_length), 5, flow=true)) }
 
    // match the other ERegs in the FrontEnd.
    val q_f3_resp = withReset(reset || io.fe_clear || io.f4_redirect) { Module(new ElasticReg(Valid(new BpdResp))) }
@@ -195,7 +195,7 @@ abstract class BrPredictor(
       Mux(io.ftq_restore.valid,
          io.ftq_restore.bits.history,
       Mux(io.f2_redirect,
-         q_f2_history.io.deq.bits,
+         r_f2_history,
       Mux(io.f4_redirect,
          r_f4_history,
          r_f1_history)))
@@ -221,27 +221,29 @@ abstract class BrPredictor(
       r_f2_history := r_f1_history
    }
 
-   q_f2_history.io.enq.valid := io.fqenq_valid
-   q_f2_history.io.enq.bits := r_f2_history
+//   q_f2_history.io.enq.valid := io.fqenq_valid
+//   q_f2_history.io.enq.bits := r_f2_history
 
 
-   f2_resp.bits.history := q_f2_history.io.deq.bits
-   q_f2_history.io.deq.ready := !io.f2_stall
+   f2_resp.bits.history := r_f2_history
+//   q_f2_history.io.deq.ready := !io.f2_stall
 
 
-   if (DEBUG_PRINTF)
-   {
-      printf("HISTORY: F0: 0x%x, F1: 0x%x F2: 0x%x || Resp: 0x%x\n",
-         f0_history,
-         r_f1_history,
-         r_f2_history,
-         q_f2_history.io.deq.bits
-         )
-   }
+//   if (DEBUG_PRINTF)
+//   {
+//      printf("HISTORY: F0: 0x%x, F1: 0x%x F2: 0x%x || Resp: 0x%x\n",
+//         f0_history,
+//         r_f1_history,
+//         r_f2_history,
+//         q_f2_history.io.deq.bits
+//         )
+//   }
 
 
    q_f3_resp.io.enq.valid := io.f3enq_valid
    q_f3_resp.io.enq.bits  := f2_resp
+
+   assert (q_f3_resp.io.enq.ready === !io.f2_stall)
 
 
    //************************************************

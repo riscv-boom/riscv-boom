@@ -23,7 +23,7 @@ import Chisel._
 import chisel3.core.withReset
 import freechips.rocketchip.config.Parameters
 
-import freechips.rocketchip.util.{Str, UIntToAugmentedUInt, ShiftQueue}
+import freechips.rocketchip.util.{Str, UIntToAugmentedUInt}
 
 // this information is shared across the entire fetch packet, and stored in the
 // branch snapshots. Since it's not unique to an instruction, it could be
@@ -74,9 +74,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    {
       // Fetch0
       val btb_req       = Valid(new freechips.rocketchip.rocket.BTBReq).flip
-      val fqenq_valid   = Bool(INPUT)
-      val debug_fqenq_pc= UInt(INPUT, width = vaddrBitsExtended) // For debug -- make sure I$ and BTB are synchronised.
-      val debug_fqenq_ready = Bool(INPUT)
+      val debug_imemresp_pc= UInt(INPUT, width = vaddrBitsExtended) // For debug -- make sure I$ and BTB are synchronised.
 
       // Fetch1
 
@@ -125,7 +123,6 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    // Branch Prediction (BP0 Stage)
 
    btb.io.req := io.btb_req
-   //btb.io.icmiss := false.B //XXX TODO switch out to s2_replay?
 
 
    //************************************************
@@ -138,37 +135,25 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    //************************************************
    // Branch Prediction (BP2 Stage)
 
-   // Enqueue predictions into a buffer to match timings (and back-pressures) of
-   // the ICache.
+   io.f2_btb_resp := btb.io.resp
 
-   val btb_queue = withReset(reset || io.flush || io.redirect)
-      { Module(new ShiftQueue(Valid(new BTBsaResp), 5, flow = true)) }
+//   btb_queue.io.deq.ready := !io.f2_stall
+ 
+   bpd.io.f2_bim_resp := io.f2_btb_resp.bits.bim_resp
+  
 
-   btb_queue.io.deq.ready := !io.f2_stall
-
-   btb_queue.io.enq.valid := io.fqenq_valid
-   btb_queue.io.enq.bits := btb.io.resp
-
-   assert (btb_queue.io.enq.ready === io.debug_fqenq_ready, "[bpd-pipeline] mismatch between BTB-Q and I$ readies.")
-
-   when (io.fqenq_valid)
+   when (io.f2_btb_resp.valid)
    {
-      assert (btb.io.resp.bits.fetch_pc(15,0) === io.debug_fqenq_pc(15,0),
+      assert (io.f3_enq_valid, "[bpd-pipeline] BTB has a valid request but imem.resp is invalid.")
+   }
+ 
+   // forward progress into F3 will be made.
+   when (io.f3_enq_valid)
+   {
+      assert (btb.io.resp.bits.fetch_pc(15,0) === io.debug_imemresp_pc(15,0),
          "[bpd-pipeline] mismatch between BTB and I$.")
    }
-
-   // CODEREVIEW: this gets wonky --- we need to override payload's valid if queue's valid not true.
-   val f2_btb = Wire(init=btb_queue.io.deq.bits); f2_btb.valid := btb_queue.io.deq.valid && btb_queue.io.deq.bits.valid
-   val f2_pc = f2_btb.bits.fetch_pc
-   val f2_aligned_pc = ~(~f2_pc | (UInt(fetch_width*coreInstBytes-1)))
-   val f2_nextline_pc = Wire(UInt(width=vaddrBits))
-   f2_nextline_pc := f2_aligned_pc + UInt(fetch_width*coreInstBytes)
-
-   io.f2_btb_resp := btb_queue.io.deq.bits; io.f2_btb_resp.valid := btb_queue.io.deq.valid && btb_queue.io.deq.bits.valid
-
-
-   bpd.io.fqenq_valid:= io.fqenq_valid
-   bpd.io.f2_bim_resp := io.f2_btb_resp.bits.bim_resp
+ 
 
    //************************************************
    // Branch Prediction (BP3 Stage)
@@ -190,19 +175,19 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
 
 
    //************************************************
-   // Update the RAS
+   // Update the RAS TODO XXX  reenable RAS
 
    // update RAS based on BTB's prediction information (or the branch-check correction).
-   val jmp_idx = f2_btb.bits.cfi_idx
+//   val jmp_idx = f2_btb.bits.cfi_idx
 
    btb.io.ras_update := io.f3_ras_update
    btb.io.ras_update.valid := false.B // TODO XXX renable RAS (f2_btb.valid || io.f3_ras_update.valid) && !io.fetch_stalled
-   when (f2_btb.valid)
-   {
-      btb.io.ras_update.bits.is_call      := BpredType.isCall(f2_btb.bits.bpd_type)
-      btb.io.ras_update.bits.is_ret       := BpredType.isReturn(f2_btb.bits.bpd_type)
-      btb.io.ras_update.bits.return_addr  := f2_aligned_pc + (jmp_idx << 2.U) + 4.U
-   }
+//   when (f2_btb.valid)
+//   {
+//      btb.io.ras_update.bits.is_call      := BpredType.isCall(f2_btb.bits.bpd_type)
+//      btb.io.ras_update.bits.is_ret       := BpredType.isReturn(f2_btb.bits.bpd_type)
+//      btb.io.ras_update.bits.return_addr  := f2_aligned_pc + (jmp_idx << 2.U) + 4.U
+//   }
 
 
    //************************************************
@@ -234,7 +219,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    //************************************************
    // Handle redirects/flushes
 
-   btb.io.flush := io.flush || reset.toBool || io.redirect
+   btb.io.flush := io.flush || reset.toBool || io.redirect || io.f2_replay
 
    when (io.flush || reset.toBool)
    {
