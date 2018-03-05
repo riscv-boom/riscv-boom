@@ -112,14 +112,11 @@ abstract class BrPredictor(
       // Update from the FTQ during commit.
       val commit = Decoupled(new BpdUpdate).flip
 
-      // Use F2 buffer enqueue signal from the I$ (S2 signals are valid)
-//      val fqenq_valid = Bool(INPUT)
-
       // Not ready to dequeue F2 buffer (I$ did not provide a valid response in F2).
       val f2_stall = Bool(INPUT)
 
-      // The F3 buffer can accept an entry (I$ resp is valid).
-      val f3enq_valid = Bool(INPUT)
+      // F2 stage is valid (the I$ resp is valid so the F3 buffer can accept an entry).
+      val f2_valid = Bool(INPUT)
 
       // our prediction. Assert "valid==true" if we want our prediction to be honored.
       // For a tagged predictor, valid==true means we had a tag hit and trust our prediction.
@@ -240,7 +237,7 @@ abstract class BrPredictor(
 //   }
 
 
-   q_f3_resp.io.enq.valid := io.f3enq_valid
+   q_f3_resp.io.enq.valid := io.f2_valid
    q_f3_resp.io.enq.bits  := f2_resp
 
    assert (q_f3_resp.io.enq.ready === !io.f2_stall)
