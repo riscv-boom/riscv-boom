@@ -50,9 +50,9 @@ import chisel3.internal.sourceinfo.SourceInfo
 class BTBReqIO(implicit p: Parameters) extends CoreBundle()(p) {
   val req = Valid(new BTBReq).flip
   val s2_replay = Bool(INPUT) // is the Frontend replaying s2 into s0?
-  val fqenq_valid = Bool(INPUT) // is the Frontend enqueuing instructions this cycle? TODO rename to "s2_valid?"
-  val debug_fqenq_pc = UInt(INPUT, width = vaddrBitsExtended)
-  val debug_fqenq_ready = Bool(INPUT) // verify this matches our own buffers
+//  val fqenq_valid = Bool(INPUT) // is the Frontend enqueuing instructions this cycle? TODO rename to "s2_valid?"
+//  val debug_fqenq_pc = UInt(INPUT, width = vaddrBitsExtended)
+//  val debug_fqenq_ready = Bool(INPUT) // verify this matches our own buffers
 }
 
 class BoomFrontendIO(implicit p: Parameters) extends CoreBundle()(p) {
@@ -90,9 +90,10 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   println("\tBuilding BOOM Frontend\n")
 
   val tlb = Module(new TLB(true, log2Ceil(fetchBytes), nTLBEntries))
-  val fq = withReset(reset || io.cpu.req.valid) { Module(new ShiftQueue(new FrontendResp, 5, flow = true)) }
+//  val fq = withReset(reset || io.cpu.req.valid) { Module(new ShiftQueue(new FrontendResp, 5, flow = true)) }
 
-  val s0_valid = io.cpu.req.valid || !fq.io.mask(fq.io.mask.getWidth-3)
+//  val s0_valid = io.cpu.req.valid || !fq.io.mask(fq.io.mask.getWidth-3)
+  val s0_valid = io.cpu.req.valid || io.cpu.resp.ready
   val s1_valid = RegNext(s0_valid)
   val s1_pc = Reg(UInt(width=vaddrBitsExtended))
   val s1_speculative = Reg(Bool())
@@ -114,7 +115,8 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   val predicted_taken = Wire(init = Bool(false))
 
   val s2_replay = Wire(Bool())
-  s2_replay := (s2_valid && !fq.io.enq.fire()) || RegNext(s2_replay && !s0_valid, true.B)
+//  s2_replay := (s2_valid && !fq.io.enq.fire()) || RegNext(s2_replay && !s0_valid, true.B)
+  s2_replay := (s2_valid && !io.cpu.resp.fire()) || RegNext(s2_replay && !s0_valid, true.B)
   val npc = Mux(s2_replay, s2_pc, predicted_npc)
 
   s1_pc := io.cpu.npc
@@ -151,24 +153,36 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   icache.io.s2_kill := s2_speculative && !s2_tlb_resp.cacheable || s2_xcpt
   icache.io.s2_prefetch := s2_tlb_resp.prefetchable
 
-  fq.io.enq.valid := RegNext(s1_valid) && s2_valid && (icache.io.resp.valid || !s2_tlb_resp.miss && icache.io.s2_kill)
-  fq.io.enq.bits.pc := s2_pc
   io.cpu.npc := alignPC(Mux(io.cpu.req.valid, io.cpu.req.bits.pc, npc))
+  io.cpu.resp.valid := RegNext(s1_valid) && s2_valid && (icache.io.resp.valid || !s2_tlb_resp.miss && icache.io.s2_kill)
+  io.cpu.resp.bits.pc := s2_pc
 
-  fq.io.enq.bits.data := icache.io.resp.bits.data
-  fq.io.enq.bits.mask := UInt((1 << fetchWidth)-1) << s2_pc.extract(log2Ceil(fetchWidth)+log2Ceil(coreInstBytes)-1, log2Ceil(coreInstBytes))
-  fq.io.enq.bits.replay := icache.io.resp.bits.replay || icache.io.s2_kill && !icache.io.resp.valid && !s2_xcpt
-  fq.io.enq.bits.btb := s2_btb_resp_bits
-  fq.io.enq.bits.btb.taken := s2_btb_taken
-  fq.io.enq.bits.xcpt := s2_tlb_resp
-  when (icache.io.resp.valid && icache.io.resp.bits.ae) { fq.io.enq.bits.xcpt.ae.inst := true }
+  io.cpu.resp.bits.data := icache.io.resp.bits.data
+  io.cpu.resp.bits.mask := UInt((1 << fetchWidth)-1) << s2_pc.extract(log2Ceil(fetchWidth)+log2Ceil(coreInstBytes)-1, log2Ceil(coreInstBytes))
+  io.cpu.resp.bits.replay := icache.io.resp.bits.replay || icache.io.s2_kill && !icache.io.resp.valid && !s2_xcpt
+  io.cpu.resp.bits.btb := s2_btb_resp_bits
+  io.cpu.resp.bits.btb.taken := s2_btb_taken
+  io.cpu.resp.bits.xcpt := s2_tlb_resp
+  when (icache.io.resp.valid && icache.io.resp.bits.ae) { io.cpu.resp.bits.xcpt.ae.inst := true }
 
+//  fq.io.enq.valid := RegNext(s1_valid) && s2_valid && (icache.io.resp.valid || !s2_tlb_resp.miss && icache.io.s2_kill)
+//  fq.io.enq.bits.pc := s2_pc
+//  io.cpu.npc := alignPC(Mux(io.cpu.req.valid, io.cpu.req.bits.pc, npc))
+//
+//  fq.io.enq.bits.data := icache.io.resp.bits.data
+//  fq.io.enq.bits.mask := UInt((1 << fetchWidth)-1) << s2_pc.extract(log2Ceil(fetchWidth)+log2Ceil(coreInstBytes)-1, log2Ceil(coreInstBytes))
+//  fq.io.enq.bits.replay := icache.io.resp.bits.replay || icache.io.s2_kill && !icache.io.resp.valid && !s2_xcpt
+//  fq.io.enq.bits.btb := s2_btb_resp_bits
+//  fq.io.enq.bits.btb.taken := s2_btb_taken
+//  fq.io.enq.bits.xcpt := s2_tlb_resp
+//  when (icache.io.resp.valid && icache.io.resp.bits.ae) { fq.io.enq.bits.xcpt.ae.inst := true }
+//
 //  io.cpu.btb_req.req.valid := false.B
  io.cpu.btb_req.req.valid := s0_valid
  io.cpu.btb_req.req.bits.addr := io.cpu.npc
- io.cpu.btb_req.fqenq_valid := fq.io.enq.valid
- io.cpu.btb_req.debug_fqenq_pc := fq.io.enq.bits.pc
- io.cpu.btb_req.debug_fqenq_ready := fq.io.enq.ready
+// io.cpu.btb_req.fqenq_valid := fq.io.enq.valid
+// io.cpu.btb_req.debug_fqenq_pc := fq.io.enq.bits.pc
+// io.cpu.btb_req.debug_fqenq_ready := fq.io.enq.ready
  io.cpu.btb_req.s2_replay := s2_replay
 
 //  when (!s2_replay) {
@@ -176,7 +190,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 //    s2_btb_resp_valid := btb.io.resp.valid
 //    s2_btb_resp_bits := btb.io.resp.bits
 //  }
-//  printf("I$ %c %c [ %d %d %d ] %x %x %x imemresp: (%c %x)\n", 
+//  printf("I$ %c %c [ %d %d %d ] %x %x %x imemresp: (%c %x)\n",
 //   Mux(io.cpu.req.valid, Str("V"), Str(" ")),
 //   Mux(s2_replay, Str("R"), Str(" ")),
 //   s0_valid, s1_valid, s2_valid,
@@ -186,7 +200,9 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 //   )
 
 
-  io.cpu.resp <> fq.io.deq
+//  io.cpu.resp <> fq.io.deq
+
+
 
   // performance events
   io.cpu.perf := icache.io.perf
