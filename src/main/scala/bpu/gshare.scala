@@ -29,15 +29,13 @@ case class GShareParameters(
 trait HasGShareParameters extends HasBoomCoreParameters
 {
    val gsParams = boomParams.gshare.get
-   val nSets = 1 << gsParams.history_length
+   // prevent us from building something too big (and taking millions of cycles to initialize!)
+   val maxSets = 131072
+   val nSets = (1 << gsParams.history_length) min maxSets
 
    val idx_sz = log2Up(nSets)
    val row_sz = fetchWidth*2
 }
-
-
-//abstract class GShareBundle(implicit val p: Parameters) extends freechips.rocketchip.util.ParameterizedBundle()(p)
-//  with HasGShareParameters
 
 
 class GShareResp(fetch_width: Int, idx_sz: Int) extends Bundle
@@ -56,18 +54,6 @@ class GShareResp(fetch_width: Int, idx_sz: Int) extends Bundle
    {
       val cntr = (rowdata >> (cfi_idx << 1.U)) & 0x3.U
       cntr
-   }
-
-   // Get a fetchWidth length bit-vector of taken/not-takens.
-   def getTakens(): UInt =
-   {
-      val takens = Wire(init=Vec.fill(fetch_width){false.B})
-      for (i <- 0 until fetch_width)
-      {
-         // assumes 2-bits per branch.
-         takens(i) := rowdata(2*i+1)
-      }
-      takens.asUInt
    }
 
    override def cloneType: this.type = new GShareResp(fetch_width, idx_sz).asInstanceOf[this.type]
@@ -89,20 +75,49 @@ class GShareBrPredictor(
    extends BrPredictor(fetch_width, history_length)(p)
    with HasGShareParameters
 {
+   require (log2Ceil(nSets) == idx_sz)
+
    println ("\tBuilding (" + (nSets * fetch_width * 2/8/1024) +
       " kB) GShare Predictor, with " + history_length + " bits of history for (" +
       fetch_width + "-wide fetch) and " + nSets + " entries.")
 
    //------------------------------------------------------------
 
+   private def Fold (input: UInt, compressed_length: Int) =
+   {
+      val clen = compressed_length
+      val hlen = history_length
+      if (hlen <= clen)
+      {
+         input
+      }
+      else
+      {
+         var res = UInt(0,clen)
+         var remaining = input.asUInt
+         for (i <- 0 to hlen-1 by clen)
+         {
+            val len = if (i + clen > hlen ) (hlen - i) else clen
+            require(len > 0)
+            res = res(clen-1,0) ^ remaining(len-1,0)
+            remaining = remaining >> UInt(len)
+         }
+         res
+      }
+   }
+
    private def Hash (addr: UInt, hist: UInt) =
-      (addr >> UInt(log2Up(fetch_width*coreInstBytes))) ^ hist
+   {
+      // fold history if too big for our table
+      val folded_history = Fold (hist, idx_sz)
+      ((addr >> UInt(log2Up(fetch_width*coreInstBytes))) ^ folded_history)(idx_sz-1,0)
+   }
 
    // for initializing the counter table, this is the value to reset the row to.
    private def initRowValue (): UInt =
    {
       val row = Wire(UInt(width=row_sz))
-      row := Fill(fetchWidth, 2.U)
+      row := Fill(fetchWidth, 0.U) // TODO XXX change to 2.U
       row
    }
 
@@ -117,32 +132,50 @@ class GShareBrPredictor(
       next
    }
 
-   // Pick out the old counter value from a full row and increment it.
-   private def updateCounterInRow(row: UInt, cfi_idx: UInt, taken: Bool): UInt =
+
+   // Get a fetchWidth length bit-vector of taken/not-takens.
+   def getTakensFromRow(row: UInt): UInt =
    {
-      val shamt = cfi_idx << 1.U
-      val old_cntr = (row >> (cfi_idx << 1.U)) & 0x3.U
-      val new_cntr = updateCounter(old_cntr, taken)
-      val data = new_cntr << shamt
-      data
+      val takens = Wire(init=Vec.fill(fetch_width){false.B})
+      for (i <- 0 until fetch_width)
+      {
+         // assumes 2-bits per branch.
+         takens(i) := row(2*i+1)
+      }
+      takens.asUInt
    }
 
 
+   // Pick out the old counter value from a full row and increment it.
+   // Return the new row.
+   private def updateCounterInRow(old_row: UInt, cfi_idx: UInt, taken: Bool): UInt =
+   {
+      val row = Wire(UInt(width=row_sz))
+      val shamt = cfi_idx << 1.U
+      val mask = Wire(UInt(width=row_sz))
+      mask := ~(0x3.U << shamt)
+      val old_cntr = (old_row >> shamt) & 0x3.U
+      val new_cntr = updateCounter(old_cntr, taken)
+      row := (old_row & mask) | (new_cntr << shamt)
+      row
+   }
 
 
-   private def updateEntireCounterRow (old: UInt, was_mispredicted: Bool, cfi_idx: UInt, was_taken: Bool): UInt =
+   // Update the counters in a row (only one if mispredicted or all counters to strenthen).
+   // Return the new row.
+   private def updateEntireCounterRow (old_row: UInt, was_mispredicted: Bool, cfi_idx: UInt, was_taken: Bool): UInt =
    {
       val row = Wire(UInt(width=row_sz))
 
       when (was_mispredicted)
       {
-         row := updateCounterInRow(old, cfi_idx, was_taken)
+         row := updateCounterInRow(old_row, cfi_idx, was_taken)
       }
       .otherwise
       {
          // strengthen hysteresis bits on correct
          val h_mask = Fill(fetch_width, 0x1.asUInt(width=2.W))
-         row := old | h_mask
+         row := old_row | h_mask
       }
       row
    }
@@ -170,41 +203,26 @@ class GShareBrPredictor(
    //------------------------------------------------------------
    // Predictor state.
 
-//   val counter_table = SeqMem(nSets, UInt(width = row_sz))
+   val counter_table = SeqMem(nSets, UInt(width = row_sz))
 
-   val counters = Module( new ElasticSeqMem(nSets, UInt(width = row_sz)))
-
-   counters.io.flush := io.fe_clear || io.f2_redirect || io.f4_redirect
-//   counters.read(s1_ridx, true.B)
-//   counters.write(waddr, wdata)
 
    //------------------------------------------------------------
-   // Get prediction.
-
-   // Perform hash on F1
-   // TODO XXX need to work out buffering to match I$/rest of the frontend.
-//   val stall = !io.resp.ready
+   // Perform hash on F1.
 
    val s1_ridx = Hash(this.r_f1_fetchpc, this.r_f1_history)
 
-   // Access predictor on F2 and return data to superclass (via f2_resp bundle).
+   //------------------------------------------------------------
+   // Get prediction on F2.
 
-//   val s2_out = counter_table.read(s1_ridx, true.B)
-
-   counters.io.rreq.valid := true.B // TODO XXX
-   counters.io.rreq.bits  := s1_ridx
-   // don't listen to ready --- control logic elsewhere will replay if backed up.
-
-   val s2_out = counters.io.rresp.bits
-   counters.io.rresp.ready := q_f3_resp.io.enq.ready
-
+   // return data to superclass (via f2_resp bundle).
+   val s2_out = counter_table.read(s1_ridx, this.f1_valid)
 
    val resp_info = Wire(new GShareResp(fetch_width, idx_sz))
    resp_info.debug_index   := RegNext(s1_ridx)
    resp_info.rowdata := s2_out
 
    f2_resp.valid := fsm_state === s_idle
-   f2_resp.bits.takens := s2_out
+   f2_resp.bits.takens := getTakensFromRow(s2_out)
    f2_resp.bits.info := resp_info.asUInt
 
 
@@ -218,27 +236,27 @@ class GShareBrPredictor(
 
    val wen = io.commit.valid || (fsm_state === s_clear)
 
-   val new_row = updateEntireCounterRow(
-      com_info.rowdata,
-      io.commit.bits.mispredict,
-      io.commit.bits.miss_cfi_idx,
-      io.commit.bits.taken)
+   when (wen)
+   {
+      val new_row = updateEntireCounterRow(
+         com_info.rowdata,
+         io.commit.bits.mispredict,
+         io.commit.bits.miss_cfi_idx,
+         io.commit.bits.taken)
 
-   val waddr = Mux(fsm_state === s_clear, clear_row_addr, com_idx)
-   val wdata = Mux(fsm_state === s_clear, initRowValue(), new_row)
+      val waddr = Mux(fsm_state === s_clear, clear_row_addr, com_idx)
+      val wdata = Mux(fsm_state === s_clear, initRowValue(), new_row)
 
-   counters.io.write.valid := wen
-   counters.io.write.bits.idx := waddr
-   counters.io.write.bits.data := wdata
+      counter_table.write(waddr, wdata)
+   }
 
 
-   // First commit will have garbage.
-//   val enable_assert = RegInit(false.B); when (io.commit.valid) { enable_assert := true.B }
-//   when (enable_assert && io.commit.valid)
-//   {
-//      // TODO Re-enable once the timings of bpd-pipeline has been worked out.
-//      assert (com_idx === com_info.debug_index, "[gshare] disagreement on update indices.")
-//   }
+   // First commit will have garbage so ignore it.
+   val enable_assert = RegInit(false.B); when (io.commit.valid) { enable_assert := true.B }
+   when (enable_assert && io.commit.valid)
+   {
+      assert (com_idx === com_info.debug_index, "[gshare] disagreement on update indices.")
+   }
 
 }
 

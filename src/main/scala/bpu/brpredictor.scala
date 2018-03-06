@@ -142,9 +142,6 @@ abstract class BrPredictor(
       // The I$ failed to succeed in S2 -- replay F2 (place into F0).
       val f2_replay = Bool(INPUT)
 
-      // The f3 stage must be cleared (i.e., a flush or redirect occurred).
-//      val f3_clear = Bool(INPUT)
-
       // Clear/flush inflight state in the entire front-end.
       val fe_clear = Bool(INPUT)
 
@@ -164,15 +161,11 @@ abstract class BrPredictor(
    val r_f2_history = Reg(init=0.asUInt(width=history_length.W))
    val r_f4_history = Reg(init=0.asUInt(width=history_length.W))
 
-   // match the queuing behavior from the icache.
-//   val q_f2_history = withReset(reset || io.fe_clear || io.f2_redirect || io.f4_redirect)
-//      { Module(new ShiftQueue(UInt(width=history_length), 5, flow=true)) }
+   // Let base-class predictor set these wires, then we can handle the queuing of the bundle.
+   val f2_resp = Wire(Valid(new BpdResp))
 
    // match the other ERegs in the FrontEnd.
    val q_f3_resp = withReset(reset || io.fe_clear || io.f4_redirect) { Module(new ElasticReg(Valid(new BpdResp))) }
-
-   // Let base-class predictor set these wires, then we can handle the queuing of the bundle.
-   val f2_resp = Wire(Valid(new BpdResp))
 
    require (history_length == GLOBAL_HISTORY_LENGTH)
 
@@ -203,6 +196,8 @@ abstract class BrPredictor(
    //************************************************
    // Branch Prediction (F1 Stage)
 
+   val f1_valid = RegNext(io.req.valid) && !(io.fe_clear || io.f2_redirect || io.f4_redirect)
+
    r_f1_history :=
       Mux(io.f2_replay,
          r_f2_history,
@@ -218,23 +213,8 @@ abstract class BrPredictor(
       r_f2_history := r_f1_history
    }
 
-//   q_f2_history.io.enq.valid := io.fqenq_valid
-//   q_f2_history.io.enq.bits := r_f2_history
-
 
    f2_resp.bits.history := r_f2_history
-//   q_f2_history.io.deq.ready := !io.f2_stall
-
-
-//   if (DEBUG_PRINTF)
-//   {
-//      printf("HISTORY: F0: 0x%x, F1: 0x%x F2: 0x%x || Resp: 0x%x\n",
-//         f0_history,
-//         r_f1_history,
-//         r_f2_history,
-//         q_f2_history.io.deq.bits
-//         )
-//   }
 
 
    q_f3_resp.io.enq.valid := io.f2_valid

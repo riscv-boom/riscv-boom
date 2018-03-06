@@ -11,8 +11,8 @@ class ESramWritePort[T <: Data](idx_sz: Int, gen: T) extends Bundle
    override def cloneType = new ESramWritePort(idx_sz, gen).asInstanceOf[this.type]
 }
 
-/** Implements an SRAM in which the read requests can be buffered
-  * based on back-pressure from the response side.
+/** Implements a decoupled SRAM which can be back-pressured on the read response side,
+  * and thus will in turn back-pressure the read request side.
   *
   * @param num_entries the number of logical entries in our memory
   * @param gen the type of Data to store in our memory

@@ -320,20 +320,20 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
          j <- 0 until w
       ){
          val idx = i+j*(num_entries/w)
-         printf(" [%d %c%c%c pc=0x%x ms:%c%c%c%d-%d bim[%d]:0x%x hist: 0x%x]",
+         printf(" [%d %c%c%c pc=0x%x 0x%x [h] ms:%c%c%c%d-%d bim[%d]:0x%x]",
             idx.asUInt(width=5.W),
             Mux(enq_ptr.value === idx.U, Str("E"), Str(" ")),
             Mux(commit_ptr === idx.U, Str("C"), Str(" ")),
             Mux(deq_ptr.value === idx.U, Str("D"), Str(" ")),
-            ram(idx).fetch_pc,
+            ram(idx).fetch_pc(31,0),
+            ram(idx).history,
             Mux(cfi_info(idx).executed, Str("E"), Str(" ")),
             Mux(cfi_info(idx).mispredicted, Str("V"), Str(" ")),
             Mux(cfi_info(idx).taken, Str("T"), Str(" ")),
             cfi_info(idx).cfi_type,
             cfi_info(idx).cfi_idx,
             ram(idx).bim_info.entry_idx,
-            ram(idx).bim_info.value,
-            ram(idx).history
+            ram(idx).bim_info.value
          )
          if (j == w-1) printf("\n")
       }
