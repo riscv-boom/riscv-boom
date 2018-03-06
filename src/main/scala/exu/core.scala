@@ -1155,7 +1155,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       val screenheight = 79
 //      val screenheight = 61
 //      val screenheight = 54
-       var whitespace = (screenheight - 26 + 3 - NUM_LSU_ENTRIES -
+       var whitespace = (screenheight - 25 + 3 - NUM_LSU_ENTRIES -
          issueParams.map(_.numEntries).sum - issueParams.length - (NUM_ROB_ENTRIES/COMMIT_WIDTH) - numFtqWhitespace
      )
 

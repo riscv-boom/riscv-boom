@@ -177,14 +177,19 @@ class BimodalTable(implicit p: Parameters) extends BoomModule()(p) with HasBimPa
       next
    }
 
+
    // Pick out the old counter value from a full row and increment it.
-   private def updateCounterInRow(row: UInt, cfi_idx: UInt, taken: Bool): UInt =
+   // Return the new row.
+   private def updateCounterInRow(old_row: UInt, cfi_idx: UInt, taken: Bool): UInt =
    {
+      val row = Wire(UInt(width=row_sz))
       val shamt = cfi_idx << 1.U
-      val old_cntr = (row >> (cfi_idx << 1.U)) & 0x3.U
+      val mask = Wire(UInt(width=row_sz))
+      mask := ~(0x3.U << shamt)
+      val old_cntr = (old_row >> shamt) & 0x3.U
       val new_cntr = updateCounter(old_cntr, taken)
-      val data = new_cntr << shamt
-      data
+      row := (old_row & mask) | (new_cntr << shamt)
+      row
    }
 
    require (nBanks >= 2)
