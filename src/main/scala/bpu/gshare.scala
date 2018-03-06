@@ -11,7 +11,9 @@
 // 2015 Apr 28
 
 // Notes:
-//    - Implement gshare in a a 1r1w SRAM (need to bank to get to 1rw).
+//    - Implements gshare in a a 1r1w SRAM (need to bank to get to 1rw).
+//    - Does not rectangularize the memory.
+//    - Folds history if it is too long for the number of sets available.
 
 
 package boom
@@ -22,7 +24,8 @@ import freechips.rocketchip.config.{Parameters, Field}
 
 case class GShareParameters(
    enabled: Boolean = true,
-   history_length: Int = 12
+   history_length: Int = 12,
+   num_sets: Int = 4096 // 12b
    )
 
 
@@ -30,8 +33,7 @@ trait HasGShareParameters extends HasBoomCoreParameters
 {
    val gsParams = boomParams.gshare.get
    // prevent us from building something too big (and taking millions of cycles to initialize!)
-   val maxSets = 131072
-   val nSets = (1 << gsParams.history_length) min maxSets
+   val nSets = gsParams.num_sets
 
    val idx_sz = log2Up(nSets)
    val row_sz = fetchWidth*2
@@ -229,7 +231,7 @@ class GShareBrPredictor(
    //------------------------------------------------------------
    // Update counter table.
 
-   val com_info = new GShareResp(fetch_width, history_length).fromBits(io.commit.bits.info)
+   val com_info = new GShareResp(fetch_width, idx_sz).fromBits(io.commit.bits.info)
 
    val com_idx = Hash(io.commit.bits.fetch_pc, io.commit.bits.history)(idx_sz-1,0)
 
