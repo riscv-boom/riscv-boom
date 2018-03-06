@@ -175,7 +175,7 @@ abstract class BrPredictor(
    private def UpdateHistoryHash(old: UInt, addr: UInt): UInt =
    {
       val ret = Wire(UInt(width=history_length))
-      ret := (old << 1.U) ^ addr(3) // addr(5) ^ addr (7)
+      ret := (old << 1.U) ^ addr(3) ^ addr(5) ^ addr (7)
       ret
    }
 
@@ -265,16 +265,16 @@ object BrPredictor
             tag_sizes = boomParams.tage.get.tag_sizes,
             ubit_sz = boomParams.tage.get.ubit_sz))
       }
-      else if (enableCondBrPredictor && boomParams.bpd_base_only.isDefined && boomParams.bpd_base_only.get.enabled)
-      {
-         br_predictor = Module(new BaseOnlyBrPredictor(
-            fetch_width = fetch_width))
-      }
       else if (enableCondBrPredictor && boomParams.gshare.isDefined && boomParams.gshare.get.enabled)
       {
          br_predictor = Module(new GShareBrPredictor(
             fetch_width = fetch_width,
             history_length = boomParams.gshare.get.history_length))
+      }
+      else if (enableCondBrPredictor && boomParams.bpd_base_only.isDefined && boomParams.bpd_base_only.get.enabled)
+      {
+         br_predictor = Module(new BaseOnlyBrPredictor(
+            fetch_width = fetch_width))
       }
       else if (enableCondBrPredictor && p(RandomBpdKey).enabled)
       {
