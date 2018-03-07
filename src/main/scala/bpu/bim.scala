@@ -29,7 +29,7 @@ import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.util.Str
 
 case class BimParameters(
-   nSets: Int = 512, // how many sets (conceptually) should we have?
+   nSets: Int = 1024, // how many sets (conceptually) should we have?
    nBanks: Int = 2, // how many banks should we have? Reduces dropped updates.
    nResetLagCycles: Int = 128, // how many cycles after reset should we start initialization?
    nUpdateQueueEntries: Int = 4,
@@ -195,7 +195,9 @@ class BimodalTable(implicit p: Parameters) extends BoomModule()(p) with HasBimPa
    require (nBanks >= 2)
    require (isPow2(nBanks))
 
-   println ("\t\tBuilding (" + (nSets * fetchWidth * 2/8/1024) + " kB) Bimodal Table for (" + nSets + " entries)")
+   val size_kbits = nSets * fetchWidth * 2/1024 // assumes 2 bits / fetchWidth
+   println ("\t\tBuilding (" + size_kbits + " Kbits = " + size_kbits/8 + " kB) Bimodal Table for (" +
+      nSets + " entries across " + nBanks + " banks)")
 
 
    val stall = !io.req.valid

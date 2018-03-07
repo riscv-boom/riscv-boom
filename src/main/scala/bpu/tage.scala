@@ -16,6 +16,7 @@
 //    - alternate
 //       The table that would have provided the prediction if the provider had
 //       missed.
+//
 
 // TODO:
 //    - alt-pred tracking (choosing between +2 tables, sometimes using alt pred if u is low)
@@ -28,7 +29,6 @@
 // SCHEMES
 //    - u-bit incremented only if alt-pred available?
 //    - change when we use alt-pred instead of first-pred
-//    - 1 or 2-bit u-bits? (almost certainly 2-bits)
 //    - 2 or 3 bit counters
 
 package boom
@@ -41,9 +41,10 @@ import freechips.rocketchip.util.Str
 case class TageParameters(
    enabled: Boolean = true,
    num_tables: Int = 4,
-   table_sizes: Seq[Int] = Seq(4096,4096,2048,2048),
-   history_lengths: Seq[Int] = Seq(5,17,44,130),
-   tag_sizes: Seq[Int] = Seq(10,10,10,12),
+   table_sizes: Seq[Int] = Seq(1024, 1024, 1024, 1024),
+   history_lengths: Seq[Int] = Seq(5, 13, 34, 89),
+   tag_sizes: Seq[Int] = Seq(11, 11, 11, 11),
+   cntr_sz: Int = 3,
    ubit_sz: Int = 1)
 
 class TageResp(
@@ -51,26 +52,31 @@ class TageResp(
    num_tables: Int,
    max_history_length: Int,
    max_index_sz: Int,
-   max_tag_sz: Int)
+   max_tag_sz: Int,
+   cntr_sz: Int,
+   ubit_sz: Int
+   )
    extends Bundle
 {
-   val provider_hit = Bool() // did tage make a prediction?
-   val provider_id = UInt(width = 5) // which table is providing the prediction?
-   val provider_predicted_takens = UInt(width = fetch_width)
-   val alt_hit = Bool()  // an alternate table made a prediction too
-   val alt_id = UInt(width = 5)  // which table is the alternative?
-   val alt_predicted_takens = UInt(width = fetch_width)
+   // which table is providing the prediction?
+   val provider_hit = Bool()
+   val provider_id = UInt(width = log2Ceil(num_tables))
+   // which table is the alternative?
+   val alt_hit = Bool()
+   val alt_id = UInt(width = log2Ceil(num_tables))
 
-   val indexes  = Vec(num_tables, UInt(width = max_index_sz)) // needed to update predictor at Commit
-   val tags     = Vec(num_tables, UInt(width = max_tag_sz))   // needed to update predictor at Commit
-   val evict_bits = Vec(num_tables, Bool())                   // needed to update predictor on branch misprediction
+   // What were the counter values and the u-bit values for each table?
+   // Store all of these to avoid a RMW during update.
+   val tags  = Vec(num_tables, UInt(width = max_tag_sz))
+   val cntrs = Vec(num_tables, UInt(width = cntr_sz))
+   val cidxs = Vec(num_tables, UInt(width = log2Ceil(fetch_width)))
+   val ubits = Vec(num_tables, UInt(width = ubit_sz))
 
-   val idx_csr  = Vec(num_tables, UInt(width = max_index_sz)) // needed to perform rollback
-   val tag_csr1 = Vec(num_tables, UInt(width = max_tag_sz))   // needed to perform rollback
-   val tag_csr2 = Vec(num_tables, UInt(width = max_tag_sz-1)) // needed to perform rollback
+//   val alt_used = Bool() // did we instead use the alt table?
 
-
-   val debug_history_ptr = UInt(width = max_history_length) // stored in snapshots (dealloc after Execute)
+   // Only used for error checking --- recompute these during commit.
+   val debug_indexes  = Vec(num_tables, UInt(width = max_index_sz))
+   val debug_tags     = Vec(num_tables, UInt(width = max_tag_sz))
 
    override def cloneType: this.type =
       new TageResp(
@@ -78,7 +84,9 @@ class TageResp(
          num_tables,
          max_history_length,
          max_index_sz,
-         max_tag_sz).asInstanceOf[this.type]
+         max_tag_sz,
+         cntr_sz,
+         ubit_sz).asInstanceOf[this.type]
 }
 
 // provide information to the BpdResp bundle how many bits a TageResp needs
@@ -93,8 +101,9 @@ object TageBrPredictor
          num_tables = params.num_tables,
          max_history_length = params.history_lengths.max,
          max_index_sz = log2Up(params.table_sizes.max),
-         max_tag_sz = params.tag_sizes.max
-         )
+         max_tag_sz = params.tag_sizes.max,
+         cntr_sz = params.cntr_sz,
+         ubit_sz = params.ubit_sz)
       dummy.getWidth
    }
 }
@@ -108,26 +117,24 @@ class TageBrPredictor(
    table_sizes: Seq[Int],
    history_lengths: Seq[Int],
    tag_sizes: Seq[Int],
+   cntr_sz: Int,
    ubit_sz: Int
    )(implicit p: Parameters)
    extends BrPredictor(
       fetch_width    = fetch_width,
       history_length = history_lengths.max)(p)
 {
-   val counter_sz = 2
    val size_in_bits = (for (i <- 0 until num_tables) yield
    {
-      val entry_sz_in_bits = tag_sizes(i) + ubit_sz + (counter_sz*fetch_width)
-      table_sizes(i) * entry_sz_in_bits
+      table_sizes(i) * tag_sizes(i) + ubit_sz + cntr_sz
    }).reduce(_+_)
 
    println ("\tBuilding " + (size_in_bits/8/1024.0) + " kB TAGE Predictor ("
       + (size_in_bits/1024) + " Kbits) (max history length: " + history_lengths.max + " bits)")
+
    require (num_tables == table_sizes.size)
    require (num_tables == history_lengths.size)
    require (num_tables == tag_sizes.size)
-   // require (log2Up(num_tables) <= TageResp.provider_id.getWidth()) TODO implement this check
-   require (coreInstBytes == 4)
 
    //------------------------------------------------------------
    //------------------------------------------------------------
@@ -147,19 +154,19 @@ class TageBrPredictor(
    {
       // return the id of the 2nd highest table with a hit
       // also returns whether a 2nd hit was found (PopCount(hits) > 1)
-      val alt_id = Wire(init=UInt(0))
-      var found_first = Bool(false)
-      var found_second = Bool(false)
+      val alt_id = Wire(init=0.U)
+      var found_first = false.B
+      var found_second = false.B
       for (i <- num_tables-1 to 0 by -1)
       {
          when (found_first && !found_second)
          {
-            alt_id := UInt(i)
+            alt_id := i.U
          }
          found_second = (hits(i) && found_first) | found_second
          found_first = hits(i) | found_first
       }
-      assert ((PopCount(hits) > UInt(1)) ^ !found_second,
+      assert ((PopCount(hits) > 1.U) ^ !found_second,
          "[Tage] GetAltId has a disagreement on finding a second hit.")
       (found_second, alt_id)
    }
@@ -167,24 +174,20 @@ class TageBrPredictor(
    //------------------------------------------------------------
    //------------------------------------------------------------
 
-   val stall = !io.resp.ready
-
-   //------------------------------------------------------------
-   //------------------------------------------------------------
+   val idxs = Wire(init=Vec.fill(num_tables){0.U})
+   val tags = Wire(init=Vec.fill(num_tables){0.U})
 
    val tables = for (i <- 0 until num_tables) yield
    {
       val table = Module(new TageTable(
          fetch_width        = fetch_width,
          id                 = i,
-         num_tables         = num_tables,
          num_entries        = table_sizes(i),
          history_length     = history_lengths(i),
          tag_sz             = tag_sizes(i),
          max_num_entries    = table_sizes.max,
          max_history_length = history_lengths.max,
-         max_tag_sz         = tag_sizes.max,
-         counter_sz         = counter_sz,
+         cntr_sz            = cntr_sz,
          ubit_sz            = ubit_sz))
 
       // check that the user ordered his TAGE tables properly
@@ -196,17 +199,17 @@ class TageBrPredictor(
    val tables_io = Vec(tables.map(_.io))
 
    tables_io.zipWithIndex.map{ case (table, i) =>
-      table.InitializeIo()
+      table.InitializeIo
 
       // Send prediction request. ---
-      table.if_req_pc := 0.U // TODO XXX pass in index, tag // io.req_pc
+      table.bp1_req.bits.index := idxs(i)
+      table.bp1_req.bits.tag := tags(i)
    }
 
 
    // get prediction (priority to last table)
    val valids = tables_io.map{ _.bp2_resp.valid }
    val predictions = tables_io.map{ _.bp2_resp.bits }
-   tables_io.map{ _.bp2_resp.ready := io.resp.ready }
    val best_prediction_valid = valids.reduce(_|_)
    val best_prediction_bits = PriorityMux(valids.reverse, predictions.reverse)
 
@@ -215,117 +218,86 @@ class TageBrPredictor(
       num_tables = num_tables,
       max_history_length = history_lengths.max,
       max_index_sz = log2Up(table_sizes.max),
-      max_tag_sz = tag_sizes.max))
+      max_tag_sz = tag_sizes.max,
+      cntr_sz = cntr_sz,
+      ubit_sz = ubit_sz))
 
-   io.resp.valid       := best_prediction_valid
-   io.resp.bits.takens := best_prediction_bits.takens
-   resp_info.indexes   := Vec(predictions.map(_.index))
-   resp_info.tags      := Vec(predictions.map(_.tag))
-   resp_info.idx_csr   := Vec(predictions.map(_.idx_csr))
-   resp_info.tag_csr1  := Vec(predictions.map(_.tag_csr1))
-   resp_info.tag_csr2  := Vec(predictions.map(_.tag_csr2))
+   f2_resp.valid       := best_prediction_valid
+   f2_resp.bits.takens := Mux(best_prediction_valid,
+                              0.U, // generateTakensFromCfiIdx() TODO XXX best_prediction.takens
+                              io.f2_bim_resp.bits.getTakens)
 
-   resp_info.provider_hit := io.resp.valid
-   resp_info.provider_id := GetProviderTableId(valids)
-   resp_info.provider_predicted_takens := best_prediction_bits.takens
+   resp_info.tags    := Vec(predictions.map(_.tag))
+   resp_info.cntrs   := Vec(predictions.map(_.cntr))
+   resp_info.cidxs   := Vec(predictions.map(_.cidx))
+   resp_info.ubits   := Vec(predictions.map(_.ubit))
+
+   resp_info.debug_indexes := idxs
+   resp_info.debug_tags    := tags
+
+   resp_info.provider_hit  := io.resp.valid
+   resp_info.provider_id   := GetProviderTableId(valids)
 
    val (p_alt_hit, p_alt_id) = GetAlternateTableId(valids)
-   resp_info.alt_hit := p_alt_hit
-   resp_info.alt_id  := p_alt_id
-   resp_info.alt_predicted_takens := Vec(predictions.map(_.takens))(p_alt_id)
+   resp_info.alt_hit       := p_alt_hit
+   resp_info.alt_id        := p_alt_id
 
-   io.resp.bits.info := resp_info.asUInt
+   f2_resp.bits.info       := resp_info.asUInt
 
-   require (log2Up(num_tables) <= resp_info.provider_id.getWidth)
+   require (log2Ceil(num_tables) <= resp_info.provider_id.getWidth)
 
    //------------------------------------------------------------
    //------------------------------------------------------------
    // update predictor during commit
 
-   // Commit&Update takes 3 cycles.
-   //    - First cycle: begin read of state (u-bits).
-   //    - Second cycle: compute (some) updates.
-   //    - Second cycle: perform updates.
-   // Specifically, the u-bits are "read-do-stuff-write", so spreading
-   // across three-cycles is a requirement:
-   //    (address setup, read, compute/write).
-
-   //-------------------------------------------------------------
-   // Cycle 0 and 1 - read info
-
-   val info = new TageResp(
+   val r_commit = RegNext(io.commit)
+   val r_info = new TageResp(
       fetch_width = fetch_width,
       num_tables = num_tables,
       max_history_length = history_lengths.max,
       max_index_sz = log2Up(table_sizes.max),
-      max_tag_sz = tag_sizes.max
-   ).fromBits(io.commit.bits.info)
-
-   val executed = 0.U // TODO XXX commit.bits.ctrl.executed.asUInt
-
-// TODO XXX
-//   when (commit.valid && commit.bits.ctrl.executed.reduce(_|_))
-//   {
-//      assert (info.provider_id < UInt(num_tables) || !info.provider_hit, "[Tage] provider_id is out-of-bounds.")
-//   }
-
-   // TODO verify this behavior/logic is correct (re: toBits/Vec conversion)
-   val s2_alt_agrees = RegNext(RegNext(
-      info.alt_hit && (info.provider_predicted_takens & executed) === (info.alt_predicted_takens & executed)))
-
-   val s2_ubits_notuseful = Range(0, num_tables).map{ i =>
-      !(tables_io(i).GetUsefulness(info.indexes(i), log2Up(table_sizes(i))))
-   }
-
-   //-------------------------------------------------------------
-   // Track ubit degrade flush timer.
-
-   val degrade_counter = freechips.rocketchip.util.WideCounter(20, false.B) // TODO XXX commit.valid && commit.bits.ctrl.executed.reduce(_|_))
-   val do_degrade = degrade_counter === UInt(1<<19)
-   when (do_degrade)
-   {
-      degrade_counter := UInt(0)
-      for (i <- 0 until num_tables)
-      {
-         tables_io(i).DegradeUsefulness()
-      }
-   }
-
-   //-------------------------------------------------------------
-   // Cycle 1 - perform state changes
-
-   val s2_commit      = RegNext(RegNext(io.commit))
-   val s2_info        = RegNext(RegNext(info))
-   val s2_provider_id = RegNext(RegNext(info.provider_id))
-   val s2_takens      = 0.U // TODO XXX RegNext(RegNext(commit.bits.ctrl.taken.asUInt))
-   val s2_correct     = true.B // TODO XXX RegNext(RegNext(!commit.bits.ctrl.mispredicted.reduce(_|_)))
-   val s2_executed    = 0.U // TODO XXX RegNext(RegNext(commit.bits.ctrl.executed.asUInt))
+      max_tag_sz = tag_sizes.max,
+      cntr_sz = cntr_sz,
+      ubit_sz = ubit_sz
+   ).fromBits(r_commit.bits.info)
 
 
-   // provide some randomization to the allocation process
-   val rand = Reg(init=UInt(0,2))
-   rand := rand + UInt(1)
+   val com_indexes    = 0.U // TODO XXX recompute indices, tags
+   val com_tags       = 0.U // TODO XXX recompute indices, tags
+
+   val alt_agrees     = false.B // TODO XXX.
+
+
+   // Provide some randomization to the allocation process (count up to 4).
+   val (rand, overflow) = Counter(io.commit.valid, 4)
 
    val ubit_update_wens = Wire(init = Vec.fill(num_tables) {Bool(false)})
    val ubit_update_incs = Wire(init = Vec.fill(num_tables) {Bool(false)})
 
-   when (s2_commit.valid) // TODO XXX && s2_commit.bits.ctrl.executed.reduce(_|_))
+   // Are we going to perform a write to the table?
+   // What action are we going to perform? Allocate? Update? Or Degrade?
+   val table_wens       = Wire(init = Vec.fill(num_tables) {false.B})
+   val table_allocates  = Wire(init = Vec.fill(num_tables) {false.B})
+   val table_updates    = Wire(init = Vec.fill(num_tables) {false.B})
+   val table_degrades   = Wire(init = Vec.fill(num_tables) {false.B})
+
+   // TODO XXX don't just check HIT, also verify cfi-idx matches.
+
+
+   when (r_commit.valid)
    {
       // TODO XXX what if there's no branch in here?
 
       // no matter what happens, update table that made a prediction
-      when (s2_info.provider_hit)
+      when (r_info.provider_hit)
       {
-         tables_io(s2_provider_id).UpdateCounters(s2_info.indexes(s2_provider_id), s2_executed, s2_takens, !s2_correct)
-         when (!s2_alt_agrees)
-         {
-            ubit_update_wens(s2_provider_id) := Bool(true)
-            ubit_update_incs(s2_provider_id) := s2_correct
-         }
+         table_wens(r_info.provider_id) := true.B
+         table_updates(r_info.provider_id) := true.B
+         //when (!alt_agrees) { ubit(provider_id) := !com_mispredict } TODO XXX
       }
 
 
-      when (!s2_correct && (s2_provider_id < UInt(MAX_TABLE_ID) || !s2_info.provider_hit))
+      when (r_commit.bits.mispredict && (r_info.provider_id < MAX_TABLE_ID.U || !r_info.provider_hit))
       {
          // try to allocate a new entry
 
@@ -338,40 +310,35 @@ class TageBrPredictor(
          //       can be strengthened.
 
 
-         val temp = Mux(rand === UInt(3), UInt(2),
-                      Mux(rand === UInt(2), UInt(1),
-                                            UInt(0)))
-         val ridx = Mux((Cat(UInt(0), s2_provider_id) + temp) >= UInt(MAX_TABLE_ID),
-                     UInt(0),
+         val temp = Mux(rand === 3.U,   2.U,
+                      Mux(rand === 2.U, 1.U,
+                                        0.U))
+         val ridx = Mux((Cat(0.U, r_info.provider_id) + temp) >= MAX_TABLE_ID.U,
+                     0.U,
                      temp)
 
 
          // find lowest alloc_idx where u_bits === 0
          val can_allocates = Range(0, num_tables).map{ i =>
-            s2_ubits_notuseful(i) &&
-            ((UInt(i) > (Cat(UInt(0), s2_provider_id) + ridx)) || !s2_info.provider_hit)
+            r_info.ubits(i) === 0.U && // not useful
+            ((i.U > (Cat(0.U, r_info.provider_id) + ridx)) || !r_info.provider_hit)
          }
 
          val alloc_id = PriorityEncoder(can_allocates)
          when (can_allocates.reduce(_|_))
          {
-            tables_io(alloc_id).AllocateNewEntry(
-               s2_info.indexes(alloc_id),
-               s2_info.tags(alloc_id),
-               s2_executed,
-               s2_takens,
-               0.U, //s2_info.debug_br_pc,
-               s2_info.debug_history_ptr)
+            table_wens(alloc_id) := true.B
+            table_allocates(alloc_id) := true.B
          }
          .otherwise
          {
             //decrementUBits for tables[provider_id+1: T_max]
             for (i <- 0 until num_tables)
             {
-               when ((UInt(i) > s2_provider_id) || !s2_info.provider_hit)
+               when ((i.U > r_info.provider_id) || !r_info.provider_hit)
                {
-                  ubit_update_wens(i) := Bool(true)
-                  ubit_update_incs(i) := Bool(false)
+                  table_wens(i) := true.B
+                  table_degrades(i) := true.B
                }
             }
          }
@@ -380,12 +347,33 @@ class TageBrPredictor(
 
    for (i <- 0 until num_tables)
    {
-      when (ubit_update_wens(i))
+      when (table_wens(i))
       {
-         tables_io(i).UpdateUsefulness(s2_info.indexes(i), inc=ubit_update_incs(i))
-//         TODO assert (s2_commit.valid && s2_commit.bits.ctrl.executed.reduce(_|_),
-//            "[tage] updating ubits when not committing.")
+         // construct old entry so we can overwrite parts without having to do a RMW.
+         val com_entry = Wire(new TageTableEntry(fetch_width, tag_sizes.max, cntr_sz, ubit_sz))
+         com_entry.tag  := r_info.tags (i)
+         com_entry.cntr := r_info.cntrs(i)
+         com_entry.cidx := r_info.cidxs(i)
+         com_entry.ubit := r_info.ubits(i)
+
+         tables_io(i).WriteEntry(
+            com_indexes(i),
+            com_entry,
+            table_allocates(i),
+            table_updates(i),
+            table_degrades(i),
+            r_commit.bits.mispredict,
+            r_commit.bits.taken)
+         // TODO XXX if "update", only write to u-bit (!mispredict=>ubit) if !alt_agrees.
       }
    }
+
+
+   when (r_commit.valid)
+   {
+      assert (r_info.provider_id < num_tables.U || !r_info.provider_hit, "[Tage] provider_id is out-of-bounds.")
+   }
+
+
 }
 
