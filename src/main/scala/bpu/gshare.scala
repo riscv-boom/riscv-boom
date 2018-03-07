@@ -119,7 +119,7 @@ class GShareBrPredictor(
    private def initRowValue (): UInt =
    {
       val row = Wire(UInt(width=row_sz))
-      row := Fill(fetchWidth, 0.U) // TODO XXX change to 2.U
+      row := Fill(fetchWidth, 2.U)
       row
    }
 
@@ -136,7 +136,7 @@ class GShareBrPredictor(
 
 
    // Get a fetchWidth length bit-vector of taken/not-takens.
-   def getTakensFromRow(row: UInt): UInt =
+   private def getTakensFromRow(row: UInt): UInt =
    {
       val takens = Wire(init=Vec.fill(fetch_width){false.B})
       for (i <- 0 until fetch_width)

@@ -110,7 +110,7 @@ abstract class BrPredictor(
       val req = Valid(new PCReq).flip
 
       // Update from the FTQ during commit.
-      val commit = Decoupled(new BpdUpdate).flip
+      val commit = Valid(new BpdUpdate).flip
 
       // Not ready to dequeue F2 buffer (I$ did not provide a valid response in F2).
       val f2_stall = Bool(INPUT)
@@ -263,6 +263,7 @@ object BrPredictor
             table_sizes = boomParams.tage.get.table_sizes,
             history_lengths = boomParams.tage.get.history_lengths,
             tag_sizes = boomParams.tage.get.tag_sizes,
+            cntr_sz = boomParams.tage.get.cntr_sz,
             ubit_sz = boomParams.tage.get.ubit_sz))
       }
       else if (enableCondBrPredictor && boomParams.gshare.isDefined && boomParams.gshare.get.enabled)
@@ -271,7 +272,7 @@ object BrPredictor
             fetch_width = fetch_width,
             history_length = boomParams.gshare.get.history_length))
       }
-      else if (enableCondBrPredictor && boomParams.bpd_base_only.isDefined && boomParams.bpd_base_only.get.enabled)
+      else if (enableCondBrPredictor && boomParams.bpdBaseOnly.isDefined && boomParams.bpdBaseOnly.get.enabled)
       {
          br_predictor = Module(new BaseOnlyBrPredictor(
             fetch_width = fetch_width))
