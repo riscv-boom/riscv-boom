@@ -51,7 +51,7 @@ class TageTableIo(
 
    def InitializeIo =
    {
-      this.write.valid := true.B
+      this.write.valid := false.B
       this.write.bits.index := 0.U
       this.write.bits.old := new TageTableEntry(fetch_width, tag_sz, cntr_sz, ubit_sz).fromBits(0.U)
       this.write.bits.allocate := false.B
@@ -60,6 +60,8 @@ class TageTableIo(
       this.write.bits.mispredict := false.B
       this.write.bits.taken := false.B
    }
+
+   val do_reset = Bool(INPUT)
 
    override def cloneType: this.type = new TageTableIo(
       fetch_width, index_sz, tag_sz, cntr_sz, ubit_sz).asInstanceOf[this.type]
@@ -137,11 +139,11 @@ class TageTable(
    private val UBIT_MAX = ((1 << ubit_sz) - 1).U
    private val UBIT_INIT_VALUE = 1.U
 
-   println("\t    TageTable - "
+   println("\t    TageTable[" + id + "] - "
       + num_entries + " entries, "
       + history_length + " bits of history, "
       + tag_sz + "-bit tags, "
-      + cntr_sz + "-bit counters (max value=" + (( 1 << cntr_sz)-1) + ")")
+      + cntr_sz + "-bit counters")
 
 
    //------------------------------------------------------------
@@ -173,15 +175,33 @@ class TageTable(
          Mux(update && !mispredicted, 1.U,
             0.U))
 
-      assert (PopCount(Vec(allocate, update, degrade)) > 0.U, "[TageTable] ubit not told to do something.")
+      assert (PopCount(Vec(allocate, update, degrade)) > 0.U, "[TageTable[" + id + "]] ubit not told to do something.")
 
       next
    }
 
    //------------------------------------------------------------
+   // reset/initialization
+
+   val s_reset :: s_wait :: s_clear :: s_idle :: Nil = Enum(UInt(), 4)
+   val fsm_state = Reg(init = s_reset)
+   val nResetLagCycles = 64
+   val nBanks = 1
+   val (lag_counter, lag_done) = Counter(fsm_state === s_wait, nResetLagCycles)
+   val (clear_row_addr, clear_done) = Counter(fsm_state === s_clear, num_entries/nBanks)
+
+   switch (fsm_state)
+   {
+      is (s_reset) { fsm_state := s_wait }
+      is (s_wait)  { when (lag_done) { fsm_state := s_clear } }
+      is (s_clear) { when (clear_done) { fsm_state := s_idle } }
+      is (s_idle)  { when (io.do_reset) { fsm_state := s_clear } }
+   }
+
+
+   //------------------------------------------------------------
    // State
 
-   // TODO add initialization logic
    // TODO add banking
    val ram = SeqMem(num_entries, new TageTableEntry(fetch_width, tag_sz, cntr_sz, ubit_sz))
 
@@ -207,21 +227,34 @@ class TageTable(
    //------------------------------------------------------------
    // Update (Commit)
 
-   when (io.write.valid)
+   when (io.write.valid || fsm_state === s_clear)
    {
-      val widx = io.write.bits.index
+      val widx = Wire(init=io.write.bits.index)
 
       // Allocate, Update, and Degrade. Effects how we compute next counter, u-bit values.
-      val allocate = io.write.bits.allocate
-      val update   = io.write.bits.update
-      val degrade  = io.write.bits.degrade
-      val taken  = io.write.bits.taken
-      val mispredict  = io.write.bits.mispredict
+      val allocate   = io.write.bits.allocate
+      val update     = io.write.bits.update
+      val degrade    = io.write.bits.degrade
+      val taken      = io.write.bits.taken
+      val mispredict = io.write.bits.mispredict
 
       val wentry = Wire(new TageTableEntry(fetch_width, tag_sz, cntr_sz, ubit_sz))
-      wentry := io.write.bits.old
-      wentry.cntr := generateCounter(io.write.bits.old.cntr, taken, allocate)
-      wentry.ubit := generateUBit(io.write.bits.old.ubit, allocate, update, degrade, mispredict)
+
+      when (fsm_state === s_clear)
+      {
+         widx := clear_row_addr
+         wentry.tag := 0.U
+         wentry.cntr := 0.U
+         wentry.cidx := 0.U
+         wentry.ubit := 0.U
+      }
+      .otherwise
+      {
+         widx := io.write.bits.index
+         wentry := io.write.bits.old
+         wentry.cntr := generateCounter(io.write.bits.old.cntr, taken, allocate)
+         wentry.ubit := generateUBit(io.write.bits.old.ubit, allocate, update, degrade, mispredict)
+      }
 
       ram.write(widx, wentry)
 
