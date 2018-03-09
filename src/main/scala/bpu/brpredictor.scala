@@ -10,23 +10,12 @@
 // Christopher Celio
 // 2015 Oct 12
 
-// provide an abstract class for branch predictors. Also provides support by
-// maintaining the global history. However, sub-classes may want to implement
-// their own, optimized implementation of global history (e.g. if history is
-// very long!).
+// provide an abstract class for branch predictors. Provides support by
+// maintaining the global history.
 //
 // Notes:
-//    - JALR snapshots ghistory since JALRs can mispredict and must be able to
-//    reset ghistory.
-//    - JALR is added to ghistory (always taken) since it simplifies the logic
-//    regarding resetting ghistory.
+//    - TODO discuss timings of the expected sub-class.
 //
-// Issues:
-//    - double counting in ghistory with fetch packets that contain multiple
-//    branches and the earlier branch mispredicts, causing a re-fetch of the
-//    later part of the fetch packet. Subsequent executions of that code, when
-//    predicted correctly, won't double count ghistory, potentially increasing
-//    mispredictions.
 
 package boom
 
@@ -61,30 +50,23 @@ class BpdResp(implicit p: Parameters) extends BoomBundle()(p)
    val info = UInt(width = BPD_INFO_SIZE)
 }
 
-// Update comes the FTQ after Commit.
+// Update comes from the FTQ after Commit.
 class BpdUpdate(implicit p: Parameters) extends BoomBundle()(p)
 {
-   // valid: a branch or jump was resolved in the branch unit
+   // valid: an FTQ entry is being committed/deallocated.
    // is_br: a branch was resolved
    // the fetch pc (points to start of the fetch packet)
    // which word in the fetch packet does the update correspond to?
    // history: what was the history our branch saw?
+   // cfi_idx: what is the index of the control-flow-instruction? (low-order PC bits).
    // taken: was the branch taken?
-   // new_pc_same_packet: is the new target PC after a misprediction found
-   // within the same fetch packet as the mispredicting branch? If yes, then
-   // we have to be careful which "history" we show the new PC.
    val fetch_pc = UInt(width = vaddrBits)
    val history     = UInt(width = GLOBAL_HISTORY_LENGTH)
    val mispredict = Bool()
    val miss_cfi_idx = UInt(width=log2Up(fetchWidth).W) // if mispredict, this is the cfi_idx of miss.
    val taken = Bool()
 
-//   val br_pc = UInt(width = log2Up(FETCH_WIDTH)+log2Ceil(coreInstBytes))
-//   val is_br = Bool()
-
-
-   // give the bpd back the information it sent out when it made a prediction.
-   // this information may include things like CSR snapshots.
+   // Give the bpd back the information it sent out when it made a prediction.
    val info = UInt(width = BPD_INFO_SIZE)
 }
 
@@ -175,7 +157,10 @@ abstract class BrPredictor(
    private def UpdateHistoryHash(old: UInt, addr: UInt): UInt =
    {
       val ret = Wire(UInt(width=history_length))
-      ret := (old << 1.U) ^ addr(3) ^ addr(5) ^ addr (7)
+      val shamt = 2
+      val fold = (addr >> log2Ceil(coreInstBytes) ^ addr >> 5 ^ addr >> 17)(shamt-1,0)
+      val h0 = fold
+      ret := Cat(old(history_length-1, shamt), old(shamt-1,0), fold)
       ret
    }
 

@@ -143,6 +143,7 @@ class TageBrPredictor(
 
    //------------------------------------------------------------
    //------------------------------------------------------------
+   // Utility Functions
 
    def GetProviderTableId(hits:IndexedSeq[Bool]): UInt =
    {
@@ -171,11 +172,38 @@ class TageBrPredictor(
       (found_second, alt_id)
    }
 
+   // Input: Take in a cfi index and prediction counter.
+   // Output: generate a one-hot encoded mask. Place a 1 in the cidx
+   // position if the counter predicts taken, otherwise return a mask
+   // of all zeroes.
+   private def GetPredictionOH(cidx: UInt, cntr: UInt): UInt =
+   {
+      val mask_oh = Wire(UInt(width=fetch_width.W))
+      // Check high-order bit for prediction.
+      val taken = cntr(cntr_sz-1)
+      mask_oh := UIntToOH(cidx) & Fill(fetch_width, taken)
+      mask_oh
+   }
+
+   private def IdxHash(addr: UInt, hist: UInt, hlen: Int): UInt =
+   {
+//      val idx = addr(2) ^ 0xff.U
+      val idx = (addr >> 2.U) ^ hist(hlen-1, 0)
+      idx
+   }
+
+   private def TagHash(addr: UInt, hist: UInt, hlen: Int): UInt =
+   {
+//      val tag = addr(2) ^ 0xaa.U
+      val tag = (addr >>  4.U) ^ hist(hlen-1, 0) ^ (hist(hlen-1,0) >> (hlen/2).U)
+      tag
+   }
+
    //------------------------------------------------------------
    //------------------------------------------------------------
 
-   val idxs = Wire(init=Vec.fill(num_tables){0.U})
-   val tags = Wire(init=Vec.fill(num_tables){0.U})
+   val bp1_idxs = Wire(Vec(num_tables, UInt()))
+   val bp1_tags = Wire(Vec(num_tables, UInt()))
 
    val tables = for (i <- 0 until num_tables) yield
    {
@@ -201,15 +229,25 @@ class TageBrPredictor(
    tables_io.zipWithIndex.map{ case (table, i) =>
       table.InitializeIo
 
+      // perform hash
+      bp1_idxs(i) := IdxHash(r_f1_fetchpc, r_f1_history, history_lengths(i))
+      bp1_tags(i) := TagHash(r_f1_fetchpc, r_f1_history, history_lengths(i))
+
       // Send prediction request. ---
-      table.bp1_req.bits.index := idxs(i)
-      table.bp1_req.bits.tag := tags(i)
+      table.bp1_req.valid := f1_valid
+      table.bp1_req.bits.index := bp1_idxs(i)
+      table.bp1_req.bits.tag := bp1_tags(i)
+
+      table.do_reset := false.B // TODO
    }
 
 
    // get prediction (priority to last table)
-   val valids = tables_io.map{ _.bp2_resp.valid }
+   val tag_hits = tables_io.map{ _.bp2_resp.valid }
    val predictions = tables_io.map{ _.bp2_resp.bits }
+
+   // Was there a tag-hit AND is there a branch at the cfi-idx?
+   val valids =  tag_hits // TODO XXX need access to decode info
    val best_prediction_valid = valids.reduce(_|_)
    val best_prediction_bits = PriorityMux(valids.reverse, predictions.reverse)
 
@@ -222,9 +260,9 @@ class TageBrPredictor(
       cntr_sz = cntr_sz,
       ubit_sz = ubit_sz))
 
-   f2_resp.valid       := best_prediction_valid
+   f2_resp.valid       := best_prediction_valid // || io.f2_bim_resp.valid // TODO  XXX should include bimodal
    f2_resp.bits.takens := Mux(best_prediction_valid,
-                              0.U, // generateTakensFromCfiIdx() TODO XXX best_prediction.takens
+                              GetPredictionOH(best_prediction_bits.cidx, best_prediction_bits.cntr),
                               io.f2_bim_resp.bits.getTakens)
 
    resp_info.tags    := Vec(predictions.map(_.tag))
@@ -232,10 +270,10 @@ class TageBrPredictor(
    resp_info.cidxs   := Vec(predictions.map(_.cidx))
    resp_info.ubits   := Vec(predictions.map(_.ubit))
 
-   resp_info.debug_indexes := idxs
-   resp_info.debug_tags    := tags
+   resp_info.debug_indexes := RegEnable(bp1_idxs, f1_valid)
+   resp_info.debug_tags    := RegEnable(bp1_tags, f1_valid)
 
-   resp_info.provider_hit  := io.resp.valid
+   resp_info.provider_hit  := best_prediction_valid
    resp_info.provider_id   := GetProviderTableId(valids)
 
    val (p_alt_hit, p_alt_id) = GetAlternateTableId(valids)
@@ -262,10 +300,17 @@ class TageBrPredictor(
    ).fromBits(r_commit.bits.info)
 
 
-   val com_indexes    = 0.U // TODO XXX recompute indices, tags
-   val com_tags       = 0.U // TODO XXX recompute indices, tags
+   val com_indexes = history_lengths.map{ hlen =>
+      val idx = IdxHash(r_commit.bits.fetch_pc, r_commit.bits.history, hlen)
+      idx
+   }
 
-   val alt_agrees     = false.B // TODO XXX.
+   val com_tags = history_lengths.map{ hlen =>
+      val tag = TagHash(r_commit.bits.fetch_pc, r_commit.bits.history, hlen)
+      tag
+   }
+
+   val alt_agrees = false.B // TODO XXX.
 
 
    // Provide some randomization to the allocation process (count up to 4).
@@ -351,9 +396,9 @@ class TageBrPredictor(
       {
          // construct old entry so we can overwrite parts without having to do a RMW.
          val com_entry = Wire(new TageTableEntry(fetch_width, tag_sizes.max, cntr_sz, ubit_sz))
-         com_entry.tag  := r_info.tags (i)
+         com_entry.tag  := Mux(table_allocates(i), com_tags(i), r_info.tags (i))
          com_entry.cntr := r_info.cntrs(i)
-         com_entry.cidx := r_info.cidxs(i)
+         com_entry.cidx := Mux(table_allocates(i), r_commit.bits.miss_cfi_idx,  r_info.cidxs(i))
          com_entry.ubit := r_info.ubits(i)
 
          tables_io(i).WriteEntry(
