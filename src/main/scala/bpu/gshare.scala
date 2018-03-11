@@ -89,7 +89,7 @@ class GShareBrPredictor(
    private def Hash (addr: UInt, hist: UInt) =
    {
       // fold history if too big for our table
-      val folded_history = Fold (hist, history_length, idx_sz)
+      val folded_history = Fold (hist, idx_sz, history_length)
       ((addr >> UInt(log2Up(fetch_width*coreInstBytes))) ^ folded_history)(idx_sz-1,0)
    }
 

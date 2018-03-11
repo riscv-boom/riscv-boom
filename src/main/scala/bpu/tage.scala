@@ -21,15 +21,8 @@
 // TODO:
 //    - alt-pred tracking (choosing between +2 tables, sometimes using alt pred if u is low)
 //    - u-bit handling, clearing (count failed allocations)
-//    - lower required parameters, arguments to bundles and objects
-//    stats we want to track:
-//       - how often entries are used
-//       - how often allocation fails (%)
-//       - how often we reset the useful-ness bits
 // SCHEMES
 //    - u-bit incremented only if alt-pred available?
-//    - change when we use alt-pred instead of first-pred
-//    - 2 or 3 bit counters
 
 package boom
 
@@ -186,19 +179,23 @@ class TageBrPredictor(
       mask_oh
    }
 
-   private def IdxHash(addr: UInt, hist: UInt, hlen: Int): UInt =
+   private def IdxHash(addr: UInt, hist: UInt, hlen: Int, idx_sz: Int): UInt =
    {
-//      val idx = addr(2) ^ 0xff.U
-      val idx = Cat(Fold(hist, history_lengths.max, hlen), addr(4))
+      val idx = Cat(Fold(hist, idx_sz, hlen), addr(4))
       idx
    }
 
-   private def TagHash(addr: UInt, hist: UInt, hlen: Int): UInt =
+   private def TagHash(addr: UInt, a: UInt, b: UInt): UInt =
    {
-//      val tag = addr(2) ^ 0xaa.U
-      val tag = Fold(hist, history_lengths.max, hlen) ^ addr
+      a ^ (b >> 2)
+   }
+
+   private def TagHashTerribad(addr: UInt, hist: UInt, hlen: Int, idx_sz: Int): UInt =
+   {
+      val tag = Fold(hist, idx_sz, hlen) ^ addr
       tag
    }
+
 
    //------------------------------------------------------------
    //------------------------------------------------------------
@@ -227,12 +224,18 @@ class TageBrPredictor(
 
    val tables_io = Vec(tables.map(_.io))
 
+
+   // perform index hash
+   tables_io.zipWithIndex.map{ case (table, i) =>
+      bp1_idxs(i) := IdxHash(r_f1_fetchpc, r_f1_history, history_lengths(i), log2Ceil(table_sizes(i)))
+   }
+
    tables_io.zipWithIndex.map{ case (table, i) =>
       table.InitializeIo
 
-      // perform hash
-      bp1_idxs(i) := IdxHash(r_f1_fetchpc, r_f1_history, history_lengths(i))
-      bp1_tags(i) := TagHash(r_f1_fetchpc, r_f1_history, history_lengths(i))
+      // perform tag hash
+      val n = num_tables
+      bp1_tags(i) := TagHash(r_f1_fetchpc, bp1_idxs((i+1) % n), bp1_idxs((i+2) % n))
 
       // Send prediction request. ---
       table.bp1_req.valid := f1_valid
@@ -375,24 +378,24 @@ class TageBrPredictor(
    ).fromBits(r_commit.bits.info)
 
 
-   val com_indexes = history_lengths.map{ hlen =>
-      val idx = IdxHash(r_commit.bits.fetch_pc, r_commit.bits.history, hlen)
+   val com_indexes = history_lengths zip table_sizes map { case (hlen, tsize)  =>
+      val idx = IdxHash(r_commit.bits.fetch_pc, r_commit.bits.history, hlen, log2Ceil(tsize))
       idx
    }
 
-   val com_tags = history_lengths.map{ hlen =>
-      val tag = TagHash(r_commit.bits.fetch_pc, r_commit.bits.history, hlen)
-      tag
+   val com_tags = for (i <- 0 until num_tables) yield
+   {
+      val n = num_tables
+      TagHash(r_commit.bits.fetch_pc, com_indexes((i+1) % n), com_indexes((i+2) % n))
    }
 
-   val alt_agrees = false.B // TODO XXX.
+   val alt_agrees =
+      r_info.alt_hit &&
+      r_info.cntrs(r_info.alt_id)(cntr_sz-1) === r_info.cntrs(r_info.provider_id)(cntr_sz-1)
 
 
    // Provide some randomization to the allocation process (count up to 4).
    val (rand, overflow) = Counter(io.commit.valid, 4)
-
-   val ubit_update_wens = Wire(init = Vec.fill(num_tables) {Bool(false)})
-   val ubit_update_incs = Wire(init = Vec.fill(num_tables) {Bool(false)})
 
    // Are we going to perform a write to the table?
    // What action are we going to perform? Allocate? Update? Or Degrade?
@@ -427,14 +430,12 @@ class TageBrPredictor(
          //       where new allocations simply over-write once another before the u-bit
          //       can be strengthened.
 
-
-         val temp = Mux(rand === 3.U,   2.U,
-                      Mux(rand === 2.U, 1.U,
-                                        0.U))
+         val temp = Mux(rand === 3.U, 2.U,
+                    Mux(rand === 2.U, 1.U,
+                                      0.U))
          val ridx = Mux((Cat(0.U, r_info.provider_id) + temp) >= MAX_TABLE_ID.U,
                      0.U,
                      temp)
-
 
          // find lowest alloc_idx where u_bits === 0
          val can_allocates = Range(0, num_tables).map{ i =>
@@ -469,7 +470,7 @@ class TageBrPredictor(
       {
          // construct old entry so we can overwrite parts without having to do a RMW.
          val com_entry = Wire(new TageTableEntry(fetch_width, tag_sizes.max, cntr_sz, ubit_sz))
-         com_entry.tag  := Mux(table_allocates(i), com_tags(i), r_info.tags (i))
+         com_entry.tag  := Mux(table_allocates(i), com_tags(i), r_info.tags(i))
          com_entry.cntr := r_info.cntrs(i)
          com_entry.cidx := Mux(table_allocates(i), r_commit.bits.miss_cfi_idx,  r_info.cidxs(i))
          com_entry.ubit := r_info.ubits(i)
