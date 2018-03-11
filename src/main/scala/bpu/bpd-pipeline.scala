@@ -62,6 +62,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
       val f2_redirect   = Bool(INPUT) // I$ is being redirected from F2.
 
       // Fetch3
+      val f3_is_br      = Vec(fetch_width, Bool()).asInput // mask of branches from I$
       val f3_bpd_resp   = Valid(new BpdResp)
       val f3_btb_update = Valid(new BTBsaUpdate).flip
       val f3_ras_update = Valid(new RasUpdate).flip
@@ -171,6 +172,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    bpd.io.f2_valid := io.f2_valid
    bpd.io.f2_stall := io.f2_stall
    bpd.io.f2_redirect := io.f2_redirect
+   bpd.io.f3_is_br := io.f3_is_br
    bpd.io.f4_redirect := io.f4_redirect
    bpd.io.fe_clear := io.fe_clear
    bpd.io.ftq_restore := io.ftq_restore

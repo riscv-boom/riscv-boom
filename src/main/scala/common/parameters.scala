@@ -184,21 +184,21 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
       BPD_INFO_SIZE = 1
       GLOBAL_HISTORY_LENGTH = 1
    }
-   else if (tageParams.isDefined && tageParams.get.enabled)
+   else if (bpdBaseOnlyParams.isDefined && bpdBaseOnlyParams.get.enabled)
    {
-      GLOBAL_HISTORY_LENGTH = tageParams.get.history_lengths.max
-      BPD_INFO_SIZE = TageBrPredictor.GetRespInfoSize(p, fetchWidth)
-      ENABLE_VLHR = true
+      GLOBAL_HISTORY_LENGTH = 8
+      BPD_INFO_SIZE = BaseOnlyBrPredictor.GetRespInfoSize(p, GLOBAL_HISTORY_LENGTH)
    }
    else if (gshareParams.isDefined && gshareParams.get.enabled)
    {
       GLOBAL_HISTORY_LENGTH = gshareParams.get.history_length
       BPD_INFO_SIZE = GShareBrPredictor.GetRespInfoSize(fetchWidth, GLOBAL_HISTORY_LENGTH)
    }
-   else if (bpdBaseOnlyParams.isDefined && bpdBaseOnlyParams.get.enabled)
+   else if (tageParams.isDefined && tageParams.get.enabled)
    {
-      GLOBAL_HISTORY_LENGTH = 8
-      BPD_INFO_SIZE = BaseOnlyBrPredictor.GetRespInfoSize(p, GLOBAL_HISTORY_LENGTH)
+      GLOBAL_HISTORY_LENGTH = tageParams.get.history_lengths.max
+      BPD_INFO_SIZE = TageBrPredictor.GetRespInfoSize(p, fetchWidth)
+      ENABLE_VLHR = true
    }
    else if (boomParams.bpdRandom.isDefined && boomParams.bpdRandom.get.enabled)
    {

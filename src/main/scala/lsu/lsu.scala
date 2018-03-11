@@ -560,7 +560,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
       laq_is_virtual    (exe_tlb_uop.ldq_idx)      := tlb_miss
       laq_is_uncacheable(exe_tlb_uop.ldq_idx)      := tlb_addr_uncacheable && !tlb_miss
 
-      assertNever(will_fire_load_incoming && laq_addr_val(exe_tlb_uop.ldq_idx),
+      assert(!(will_fire_load_incoming && laq_addr_val(exe_tlb_uop.ldq_idx)),
          "[lsu] incoming load is overwriting a valid address.")
    }
 
@@ -572,7 +572,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
                                                                    // can we get around this?
       saq_is_virtual(exe_tlb_uop.stq_idx)      := tlb_miss
 
-      assertNever(will_fire_sta_incoming && saq_val(exe_tlb_uop.stq_idx),
+      assert(!(will_fire_sta_incoming && saq_val(exe_tlb_uop.stq_idx)),
          "[lsu] incoming store is overwriting a valid address.")
    }
 
@@ -583,7 +583,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
       sdq_val (sidx) := Bool(true)
       sdq_data(sidx) := io.exe_resp.bits.data.asUInt
 
-      assertNever(will_fire_std_incoming && sdq_val(sidx),
+      assert(!(will_fire_std_incoming && sdq_val(sidx)),
          "[lsu] incoming store is overwriting a valid data entry.")
    }
 

@@ -19,6 +19,7 @@
 package boom
 
 import Chisel._
+import chisel3.core.withReset
 import freechips.rocketchip.config.{Parameters, Field}
 
 
@@ -85,33 +86,10 @@ class GShareBrPredictor(
 
    //------------------------------------------------------------
 
-   private def Fold (input: UInt, compressed_length: Int) =
-   {
-      val clen = compressed_length
-      val hlen = history_length
-      if (hlen <= clen)
-      {
-         input
-      }
-      else
-      {
-         var res = UInt(0,clen)
-         var remaining = input.asUInt
-         for (i <- 0 to hlen-1 by clen)
-         {
-            val len = if (i + clen > hlen ) (hlen - i) else clen
-            require(len > 0)
-            res = res(clen-1,0) ^ remaining(len-1,0)
-            remaining = remaining >> UInt(len)
-         }
-         res
-      }
-   }
-
    private def Hash (addr: UInt, hist: UInt) =
    {
       // fold history if too big for our table
-      val folded_history = Fold (hist, idx_sz)
+      val folded_history = Fold (hist, history_length, idx_sz)
       ((addr >> UInt(log2Up(fetch_width*coreInstBytes))) ^ folded_history)(idx_sz-1,0)
    }
 
@@ -214,18 +192,28 @@ class GShareBrPredictor(
    val s1_ridx = Hash(this.r_f1_fetchpc, this.r_f1_history)
 
    //------------------------------------------------------------
-   // Get prediction on F2.
+   // Get prediction on F2 (and store into an ElasticRegister).
 
    // return data to superclass (via f2_resp bundle).
    val s2_out = counter_table.read(s1_ridx, this.f1_valid)
 
-   val resp_info = Wire(new GShareResp(fetch_width, idx_sz))
-   resp_info.debug_index   := RegNext(s1_ridx)
-   resp_info.rowdata := s2_out
+   val q_s3_resp = withReset(reset || io.fe_clear || io.f4_redirect)
+      {Module(new ElasticReg(new GShareResp(fetch_width, idx_sz)))}
+//      {Module(new ElasticReg(UInt(width=row_sz)))}
 
-   f2_resp.valid := fsm_state === s_idle
-   f2_resp.bits.takens := getTakensFromRow(s2_out)
-   f2_resp.bits.info := resp_info.asUInt
+   q_s3_resp.io.enq.valid := io.f2_valid
+   q_s3_resp.io.enq.bits.rowdata  := s2_out
+   q_s3_resp.io.enq.bits.debug_index := RegNext(s1_ridx)
+   assert (q_s3_resp.io.enq.ready === !io.f2_stall)
+
+   //------------------------------------------------------------
+   // Give out prediction on F3.
+
+   io.resp.valid := fsm_state === s_idle
+   io.resp.bits.takens := getTakensFromRow(q_s3_resp.io.deq.bits.rowdata)
+   io.resp.bits.info := q_s3_resp.io.deq.bits.asUInt
+
+   q_s3_resp.io.deq.ready := io.resp.ready
 
 
    //------------------------------------------------------------

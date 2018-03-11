@@ -331,6 +331,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    bpd_stage.io.f2_replay := io.imem.btb_req.s2_replay
    bpd_stage.io.f2_stall := !io.imem.resp.ready
    bpd_stage.io.f3_stall := fetch_unit.io.f3_stall
+   bpd_stage.io.f3_is_br := fetch_unit.io.f3_is_br
    bpd_stage.io.debug_imemresp_pc := io.imem.resp.bits.pc
 
    bpd_stage.io.br_unit := br_unit
