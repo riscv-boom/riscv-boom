@@ -50,33 +50,20 @@ class BaseOnlyBrPredictor(
 
 
    //------------------------------------------------------------
-   // Predictor state.
-  
-   // We need to buffer up our responses in case of back-pressure.
-//   val q_resp_info = withReset(reset || io.flush) { Module(new ElasticReg(Valid(new BpdResp))) }
-  
+   // Predictor state (none: use BIM).
 
    //------------------------------------------------------------
-   // Get prediction.
-                
-//   val stall := !q_resp_info.io.enq.ready // unused 
+   // Get prediction in F2, buffer, and provide prediction in F3.
 
-   f2_resp.valid := io.f2_bim_resp.valid
-   f2_resp.bits.takens := io.f2_bim_resp.bits.getTakens
-   f2_resp.bits.info := 0.U
+   val q_s3_resp = withReset(reset || io.fe_clear || io.f4_redirect)
+      {Module(new ElasticReg(Valid(new BimResp)))}
 
-//   q_resp_info.io.enq.valid := io.fqenq_valid
-//   q_resp_info.io.enq.bits.valid := io.f2_bim_resp.valid
-//   q_resp_info.io.enq.bits.bits.takens := io.f2_bim_resp.bits.getTakens
-//   q_resp_info.io.enq.bits.bits.info := 0.U
+   q_s3_resp.io.enq.valid := io.f2_valid
+   q_s3_resp.io.enq.bits := io.f2_bim_resp
 
-//   io.resp.valid := q_resp_info.io.deq.valid && q_resp_info.io.deq.bits.valid
-
-//   io.resp.bits.takens := q_resp_info.io.deq.bits.bits.takens
-//   io.resp.bits.info := q_resp_info.io.deq.bits.bits.info
-
-//   q_resp_info.io.deq.ready := io.resp.ready
-
+   io.resp.valid := q_s3_resp.io.deq.valid && q_s3_resp.io.deq.bits.valid
+   io.resp.bits.takens := q_s3_resp.io.deq.bits.bits.getTakens
+   io.resp.bits.info := 0.U
 
    //------------------------------------------------------------
    // Update counter table.

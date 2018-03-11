@@ -14,7 +14,8 @@
 // maintaining the global history.
 //
 // Notes:
-//    - TODO discuss timings of the expected sub-class.
+//    - The sub-class of BrPredictor must flop its own output and set io.resp
+//       itself for F3.
 //
 
 package boom
@@ -110,6 +111,8 @@ abstract class BrPredictor(
       // A BIM table is shared with the BTB and accessed in F1. Let's use this as our base predictor, if desired.
       val f2_bim_resp = Valid(new BimResp).flip
 
+      val f3_is_br = Vec(fetch_width, Bool()).asInput
+
       // Restore history on a F2 redirection (and clear out appropriate state).
       // Don't provide history since we have it ourselves.
       val f2_redirect = Bool(INPUT)
@@ -143,11 +146,10 @@ abstract class BrPredictor(
    val r_f2_history = Reg(init=0.asUInt(width=history_length.W))
    val r_f4_history = Reg(init=0.asUInt(width=history_length.W))
 
-   // Let base-class predictor set these wires, then we can handle the queuing of the bundle.
-   val f2_resp = Wire(Valid(new BpdResp))
 
    // match the other ERegs in the FrontEnd.
-   val q_f3_resp = withReset(reset || io.fe_clear || io.f4_redirect) { Module(new ElasticReg(Valid(new BpdResp))) }
+   val q_f3_history = withReset(reset || io.fe_clear || io.f4_redirect)
+      { Module(new ElasticReg(UInt(width=history_length.W))) }
 
    require (history_length == GLOBAL_HISTORY_LENGTH)
 
@@ -157,10 +159,26 @@ abstract class BrPredictor(
    private def UpdateHistoryHash(old: UInt, addr: UInt): UInt =
    {
       val ret = Wire(UInt(width=history_length))
+
+      val pc = addr >> log2Ceil(coreInstBytes)
+      val foldpc = (pc >> 17) ^ pc
       val shamt = 2
-      val fold = (addr >> log2Ceil(coreInstBytes) ^ addr >> 5 ^ addr >> 17)(shamt-1,0)
-      val h0 = fold
-      ret := Cat(old(history_length-1, shamt), old(shamt-1,0), fold)
+      val sz0 = 6
+      if (history_length < (sz0*2+1))
+      {
+         (old << 1.U) | (foldpc(5) ^ foldpc(6))
+      }
+      else
+      {
+         val o0 = old(sz0-1,0)
+         val o1 = old(2*sz0-1,sz0)
+
+         val h0 = foldpc(sz0-1,0)
+         val h1 = o0
+         val h2 = (o1 ^ (o1 >> (sz0/2).U))(sz0/2-1,0)
+         val min = h0.getWidth + h1.getWidth
+         ret := Cat(old(history_length-1, min), h2, h1, h0)
+      }
       ret
    }
 
@@ -198,32 +216,28 @@ abstract class BrPredictor(
       r_f2_history := r_f1_history
    }
 
+   q_f3_history.io.enq.valid := io.f2_valid
+   q_f3_history.io.enq.bits  := r_f2_history
 
-   f2_resp.bits.history := r_f2_history
-
-
-   q_f3_resp.io.enq.valid := io.f2_valid
-   q_f3_resp.io.enq.bits  := f2_resp
-
-   assert (q_f3_resp.io.enq.ready === !io.f2_stall)
+   assert (q_f3_history.io.enq.ready === !io.f2_stall)
 
 
    //************************************************
    // Branch Prediction (F3 Stage)
 
-   io.resp.valid := q_f3_resp.io.deq.valid && q_f3_resp.io.deq.bits.valid
-   io.resp.bits := q_f3_resp.io.deq.bits.bits
-   q_f3_resp.io.deq.ready := io.resp.ready
+   io.resp.bits.history := q_f3_history.io.deq.bits
+   q_f3_history.io.deq.ready := io.resp.ready
+
 
    //************************************************
    // Branch Prediction (F4 Stage)
 
    when (io.resp.ready)
    {
-      r_f4_history := q_f3_resp.io.deq.bits.bits.history
+      r_f4_history := q_f3_history.io.deq.bits
    }
-
 }
+
 
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
@@ -240,7 +254,18 @@ object BrPredictor
 
       var br_predictor: BrPredictor = null
 
-      if (enableCondBrPredictor && boomParams.tage.isDefined && boomParams.tage.get.enabled)
+      if (enableCondBrPredictor && boomParams.bpdBaseOnly.isDefined && boomParams.bpdBaseOnly.get.enabled)
+      {
+         br_predictor = Module(new BaseOnlyBrPredictor(
+            fetch_width = fetch_width))
+      }
+      else if (enableCondBrPredictor && boomParams.gshare.isDefined && boomParams.gshare.get.enabled)
+      {
+         br_predictor = Module(new GShareBrPredictor(
+            fetch_width = fetch_width,
+            history_length = boomParams.gshare.get.history_length))
+      }
+      else if (enableCondBrPredictor && boomParams.tage.isDefined && boomParams.tage.get.enabled)
       {
          br_predictor = Module(new TageBrPredictor(
             fetch_width = fetch_width,
@@ -250,17 +275,6 @@ object BrPredictor
             tag_sizes = boomParams.tage.get.tag_sizes,
             cntr_sz = boomParams.tage.get.cntr_sz,
             ubit_sz = boomParams.tage.get.ubit_sz))
-      }
-      else if (enableCondBrPredictor && boomParams.gshare.isDefined && boomParams.gshare.get.enabled)
-      {
-         br_predictor = Module(new GShareBrPredictor(
-            fetch_width = fetch_width,
-            history_length = boomParams.gshare.get.history_length))
-      }
-      else if (enableCondBrPredictor && boomParams.bpdBaseOnly.isDefined && boomParams.bpdBaseOnly.get.enabled)
-      {
-         br_predictor = Module(new BaseOnlyBrPredictor(
-            fetch_width = fetch_width))
       }
       else if (enableCondBrPredictor && p(RandomBpdKey).enabled)
       {

@@ -82,6 +82,8 @@ class TageTableResp(fetch_width: Int, tag_sz: Int, cntr_sz: Int, ubit_sz: Int) e
    val cidx = UInt(width = log2Ceil(fetch_width))
    val ubit = UInt(width = ubit_sz)
 
+   def predictsTaken = cntr(cntr_sz-1)
+
    override def cloneType: this.type = new TageTableResp(fetch_width, tag_sz, cntr_sz, ubit_sz).asInstanceOf[this.type]
 }
 
@@ -137,7 +139,7 @@ class TageTable(
    private val CNTR_WEAK_TAKEN = (1 << (cntr_sz-1)).U
    private val CNTR_WEAK_NOTTAKEN = CNTR_WEAK_TAKEN - 1.U
    private val UBIT_MAX = ((1 << ubit_sz) - 1).U
-   private val UBIT_INIT_VALUE = 1.U
+   private val UBIT_INIT_VALUE = 0.U
 
    println("\t    TageTable[" + id + "] - "
       + num_entries + " entries, "

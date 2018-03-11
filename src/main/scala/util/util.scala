@@ -14,11 +14,31 @@ import Chisel._
 import freechips.rocketchip.rocket.Instructions._
 import freechips.rocketchip.rocket._
 
-object assertNever
+
+// XOR fold an input.
+object Fold
 {
-   def apply(cond: Bool, message: String): Unit =
+   def apply(input: UInt, full_length: Int, compressed_length: Int): UInt =
    {
-      assert(!cond, message)
+      val clen = compressed_length
+      val hlen = full_length
+      if (hlen <= clen)
+      {
+         input
+      }
+      else
+      {
+         var res = UInt(0,clen)
+         var remaining = input.asUInt
+         for (i <- 0 to hlen-1 by clen)
+         {
+            val len = if (i + clen > hlen ) (hlen - i) else clen
+            require(len > 0)
+            res = res(clen-1,0) ^ remaining(len-1,0)
+            remaining = remaining >> UInt(len)
+         }
+         res
+      }
    }
 }
 
@@ -184,7 +204,7 @@ object AlignPC
 {
    def apply(x: UInt, b: Int): UInt =
    {
-   // Invert for scenario where x longer than b 
+   // Invert for scenario where x longer than b
    // (which would clear all bits above size(b)).
       ~(~x | (b-1).U)
    }

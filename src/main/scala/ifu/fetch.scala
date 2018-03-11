@@ -58,6 +58,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
       val f3_ras_update     = Valid(new RasUpdate)
       val f3_bpd_resp       = Valid(new BpdResp).flip
       val f3_btb_update     = Valid(new BTBsaUpdate)
+      val f3_is_br          = Vec(fetch_width, Bool()).asOutput
 
       val f2_redirect       = Bool(OUTPUT)
       val f3_stall          = Bool(OUTPUT)
@@ -264,6 +265,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
 
    // Does the BPD have a prediction to make (in the case of a BTB miss?)
    // Calculate in F3 but don't redirect until F4.
+   io.f3_is_br := is_br
    val f3_bpd_predictions = is_br.asUInt & io.f3_bpd_resp.bits.takens
    val f3_bpd_br_taken = f3_bpd_predictions.orR
    val f3_bpd_br_idx = PriorityEncoder(f3_bpd_predictions)

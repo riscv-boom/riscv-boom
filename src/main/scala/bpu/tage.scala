@@ -34,6 +34,7 @@
 package boom
 
 import Chisel._
+import chisel3.core.withReset
 import freechips.rocketchip.config.{Parameters, Field}
 
 import freechips.rocketchip.util.Str
@@ -42,8 +43,8 @@ case class TageParameters(
    enabled: Boolean = true,
    num_tables: Int = 4,
    table_sizes: Seq[Int] = Seq(1024, 1024, 1024, 1024),
-   history_lengths: Seq[Int] = Seq(5, 13, 34, 89),
-   tag_sizes: Seq[Int] = Seq(11, 11, 11, 11),
+   history_lengths: Seq[Int] = Seq(27, 45, 63, 90),
+   tag_sizes: Seq[Int] = Seq(9, 9, 9, 9),
    cntr_sz: Int = 3,
    ubit_sz: Int = 1)
 
@@ -188,14 +189,14 @@ class TageBrPredictor(
    private def IdxHash(addr: UInt, hist: UInt, hlen: Int): UInt =
    {
 //      val idx = addr(2) ^ 0xff.U
-      val idx = (addr >> 2.U) ^ hist(hlen-1, 0)
+      val idx = Cat(Fold(hist, history_lengths.max, hlen), addr(4))
       idx
    }
 
    private def TagHash(addr: UInt, hist: UInt, hlen: Int): UInt =
    {
 //      val tag = addr(2) ^ 0xaa.U
-      val tag = (addr >>  4.U) ^ hist(hlen-1, 0) ^ (hist(hlen-1,0) >> (hlen/2).U)
+      val tag = Fold(hist, history_lengths.max, hlen) ^ addr
       tag
    }
 
@@ -242,14 +243,84 @@ class TageBrPredictor(
    }
 
 
-   // get prediction (priority to last table)
-   val tag_hits = tables_io.map{ _.bp2_resp.valid }
-   val predictions = tables_io.map{ _.bp2_resp.bits }
+   // Buffer all of the table responses into a queue.
+   // Match the other ElasticRegs in the FrontEnd.
+   val q_f3_resps = for (i <- 0 until num_tables) yield
+   {
+      val q_resp = withReset(reset || io.fe_clear || io.f4_redirect)
+       {Module(new ElasticReg(Valid(new TageTableResp(fetch_width, tag_sizes.max, cntr_sz, ubit_sz))))}
 
-   // Was there a tag-hit AND is there a branch at the cfi-idx?
-   val valids =  tag_hits // TODO XXX need access to decode info
-   val best_prediction_valid = valids.reduce(_|_)
-   val best_prediction_bits = PriorityMux(valids.reverse, predictions.reverse)
+      q_resp.io.enq.valid := io.f2_valid
+      q_resp.io.enq.bits := tables_io(i).bp2_resp
+      q_resp.io.deq.ready := io.resp.ready
+
+      assert (q_resp.io.enq.ready === !io.f2_stall)
+      assert (q_resp.io.deq.valid === q_f3_history.io.deq.valid)
+
+      q_resp
+   }
+
+   // get predictions.
+   val f3_tag_hits    = q_f3_resps.map{ q => q.io.deq.valid && q.io.deq.bits.valid }
+   val f3_predictions = q_f3_resps.map{ q => q.io.deq.bits.bits }
+
+//      f3_tag_hits(i) && io.f3_is_br(f3_predictions(i).cidx)
+
+   // Construct a fetchWidth * numTables hit matrix,
+   // where hits(i)(w) describes if table i has a tag and cidx hit
+   // for cidx==w.
+   // Only counts as a hit if there is a tag-hit AND there is a
+   // branch at cidx==w.
+   val f3_hits_matrix = for (i <- 0 until num_tables) yield
+   {
+      // For each table, return a one-hot bit-mask if there's a tag-hit AND cfi-idx hit.
+      io.f3_is_br.asUInt & Mux(f3_tag_hits(i), UIntToOH(f3_predictions(i).cidx), 0.U)
+   }
+
+   // Vector/bit-mask of taken/not-taken predictions.
+   val f3_takens = Wire(init = Vec.fill(fetch_width) { false.B })
+   // Vector of best predictors (one for each cfi index).
+   val f3_best_hits = Wire(init = Vec.fill(fetch_width) { false.B })
+   val f3_best_ids  = Wire(Vec(fetch_width, UInt(width=log2Ceil(num_tables))))
+   // Vector of alt predictors (one for each cfi index).
+   val f3_alt_hits  = Wire(init = Vec.fill(fetch_width) { false.B })
+   val f3_alt_ids   = Wire(Vec(fetch_width, UInt(width=log2Ceil(num_tables))))
+
+   // Build up a bit-mask of taken predictions (1 bit per cfi index).
+   // Build up a best predictor (one per cfi index).
+   // Build up an alt predictor (one per cfi index).
+   for (w <- 0 until fetch_width) yield
+   {
+      val found_first = f3_hits_matrix.map{mask => mask(w)}.reduce(_|_)
+
+      // Grab a slice by only looking at hits-matrix for cidx=w.
+      val hits_slice = for (i <- 0 until num_tables) yield { f3_hits_matrix(i)(w) }
+      f3_best_hits(w) := hits_slice.reduce(_|_)
+      f3_best_ids(w) := GetProviderTableId(hits_slice)
+      val (alt_hit, alt_id) = GetAlternateTableId(hits_slice)
+      f3_alt_hits(w) := alt_hit
+      f3_alt_ids(w) := alt_id
+
+      // TODO allow use_alt
+      f3_takens(w) :=
+         Mux(f3_best_hits(w),
+            Vec(f3_predictions)(f3_best_ids(w)).predictsTaken,
+            false.B)
+   }
+
+   // Vector of OH bitmasks fo
+//   val f3_hit_matrix = for (i <- 0 until num_tables) yield
+//   {
+//      cidx_mask_oh = Mux(f3_tag_hits(i), UIntToOH(f3_predictions(i).cidx) & io.f3_is_br, 0.U)
+//   }
+
+   // Which cidx are we predicting on?
+   // Earliest cidx with a taken prediction
+   // OR earliest cidx with a hit if there is no takens.
+   val predicted_cidx =
+      Mux(f3_takens.reduce(_|_),
+         PriorityEncoder(f3_takens),
+         PriorityEncoder(f3_best_hits)) // TODO allow use_alt
 
    val resp_info = Wire(new TageResp(
       fetch_width = fetch_width,
@@ -260,27 +331,31 @@ class TageBrPredictor(
       cntr_sz = cntr_sz,
       ubit_sz = ubit_sz))
 
-   f2_resp.valid       := best_prediction_valid // || io.f2_bim_resp.valid // TODO  XXX should include bimodal
-   f2_resp.bits.takens := Mux(best_prediction_valid,
-                              GetPredictionOH(best_prediction_bits.cidx, best_prediction_bits.cntr),
+   val f3_has_hit = f3_best_hits.reduce(_|_)
+   val f3_pred = Vec(f3_predictions)(f3_best_ids(predicted_cidx))
+
+   assert (!(f3_has_hit && !f3_best_hits(predicted_cidx)), "[tage] was a hit but our cidx is wrong.")
+
+   io.resp.valid       := f3_has_hit || io.f2_bim_resp.valid
+   io.resp.bits.takens := Mux(f3_has_hit,
+                              GetPredictionOH(f3_pred.cidx, f3_pred.cntr),
                               io.f2_bim_resp.bits.getTakens)
 
-   resp_info.tags    := Vec(predictions.map(_.tag))
-   resp_info.cntrs   := Vec(predictions.map(_.cntr))
-   resp_info.cidxs   := Vec(predictions.map(_.cidx))
-   resp_info.ubits   := Vec(predictions.map(_.ubit))
+   resp_info.tags    := Vec(f3_predictions.map(_.tag))
+   resp_info.cntrs   := Vec(f3_predictions.map(_.cntr))
+   resp_info.cidxs   := Vec(f3_predictions.map(_.cidx))
+   resp_info.ubits   := Vec(f3_predictions.map(_.ubit))
 
    resp_info.debug_indexes := RegEnable(bp1_idxs, f1_valid)
    resp_info.debug_tags    := RegEnable(bp1_tags, f1_valid)
 
-   resp_info.provider_hit  := best_prediction_valid
-   resp_info.provider_id   := GetProviderTableId(valids)
+   resp_info.provider_hit  := f3_best_hits.reduce(_|_)
+   resp_info.provider_id   := f3_best_ids(predicted_cidx)
 
-   val (p_alt_hit, p_alt_id) = GetAlternateTableId(valids)
-   resp_info.alt_hit       := p_alt_hit
-   resp_info.alt_id        := p_alt_id
+   resp_info.alt_hit       := f3_alt_hits(predicted_cidx)
+   resp_info.alt_id        := f3_alt_ids(predicted_cidx)
 
-   f2_resp.bits.info       := resp_info.asUInt
+   io.resp.bits.info       := resp_info.asUInt
 
    require (log2Ceil(num_tables) <= resp_info.provider_id.getWidth)
 
@@ -325,8 +400,6 @@ class TageBrPredictor(
    val table_allocates  = Wire(init = Vec.fill(num_tables) {false.B})
    val table_updates    = Wire(init = Vec.fill(num_tables) {false.B})
    val table_degrades   = Wire(init = Vec.fill(num_tables) {false.B})
-
-   // TODO XXX don't just check HIT, also verify cfi-idx matches.
 
 
    when (r_commit.valid)
