@@ -15,10 +15,10 @@ import freechips.rocketchip.rocket.Instructions._
 import freechips.rocketchip.rocket._
 
 
-// XOR fold an input.
+// XOR fold an input that is full_length sized down to a compressed_length.
 object Fold
 {
-   def apply(input: UInt, full_length: Int, compressed_length: Int): UInt =
+   def apply(input: UInt, compressed_length: Int, full_length: Int): UInt =
    {
       val clen = compressed_length
       val hlen = full_length
