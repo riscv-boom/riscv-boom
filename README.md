@@ -18,7 +18,7 @@ Atomic Memory Op Support |√
 Caches |√
 Viritual Memory |√
 Boots Linux |√
-Privileged Arch v1.10 |√
+Privileged Arch v1.11 |√
 External Debug |√
 
 **Google group:** (https://groups.google.com/forum/#!forum/riscv-boom)
@@ -55,8 +55,9 @@ The Chisel source code is found in `src/main/scala`:
  * exu - execute/core unit
  * ifu - instruction fetch unit
  * lsu - load/store/memory unit
- * common - configs, utilities, tile definition
+ * common - configs, bundle, and tile definitions
  * system - Non-core system-level infrastructure
+ * util - utilities
  
 
 ### Directions
@@ -174,7 +175,7 @@ For more details (and to download o3-pipeview.py), visit the [gem5 wiki](http://
 
 ### Disclaimer!
 
-The RISC-V privileged ISA,  platform, and Debug specs are still in flux. BOOM will do its best to
+The RISC-V privileged ISA, platform, and Debug specs are still in flux. BOOM will do its best to
 stay up-to-date with it!
 
 BOOM is a work-in-progress and remains in active development.
@@ -197,3 +198,11 @@ spike --isa=rv64imafd my_program
 Also verify the riscv-tools you built is the one pointed to within 
 the boom-template/rocket-chip/riscv-tools repository. Otherwise a version mismatch can easily occur!
 
+*Master branch is broken! How do I get a working BOOM?*
+
+The [boom-template](https://github.com/ccelio/boom-template) super-repo should
+always be pointing to a working boom/rocket-chip/riscv-tools combination. The
+`master` branch of riscv-boom may run ahead though. Ideally, `master` should never be
+broken, but it may be somewhat unstable as development continues. For more
+stability, I recommend using one of the tagged
+[releases](https://github.com/ucb-bar/riscv-boom/releases).
