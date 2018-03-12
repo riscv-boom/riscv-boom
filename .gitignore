@@ -1,3 +1,4 @@
 *.dump
 target
 *.out
+lib
