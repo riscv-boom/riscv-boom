@@ -71,6 +71,7 @@ couple of simple tests:
    $ ./scripts/init-submodules.sh
    $ ./scripts/build-tools.sh 
    $ cd verisim
+   $ make CONFIG=BoomConfig
    $ make run CONFIG=BoomConfig
 ````
 
