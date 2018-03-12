@@ -57,10 +57,11 @@ class SupportedFuncUnits(
 }
 
 
-class FunctionalUnitIo(num_stages: Int
-                      , num_bypass_stages: Int
-                      , data_width: Int
-                      )(implicit p: Parameters) extends BoomBundle()(p)
+class FunctionalUnitIo(
+   val num_stages: Int,
+   val num_bypass_stages: Int,
+   val data_width: Int
+   )(implicit p: Parameters) extends BoomBundle()(p)
 {
    val req     = (new DecoupledIO(new FuncUnitReq(data_width))).flip
    val resp    = (new DecoupledIO(new FuncUnitResp(data_width)))

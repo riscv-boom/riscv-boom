@@ -12,16 +12,15 @@ import freechips.rocketchip.tile._
 import freechips.rocketchip.tilelink._
 import freechips.rocketchip.interrupts._
 import freechips.rocketchip.util._
-import freechips.rocketchip.coreplex._
+import freechips.rocketchip.subsystem._
 
 
 case object BoomTilesKey extends Field[Seq[boom.BoomTileParams]](Nil)
 
 trait HasBoomTiles extends HasTiles
-    with HasPeripheryBus
     with HasPeripheryPLIC
-    with HasPeripheryClint
-    with HasPeripheryDebug {
+    with HasPeripheryCLINT
+    with HasPeripheryDebug { this: BaseSubsystem =>
   val module: HasBoomTilesModuleImp
 
   protected val boomTileParams = p(BoomTilesKey)
@@ -68,7 +67,12 @@ trait HasBoomTiles extends HasTiles
       }
     }
 
-    sbus.fromTile(tp.name) { implicit p => crossing.master.adapt(this)(boomCore.crossTLOut :=* tileMasterBuffering) }
+    sbus.fromTile(tp.name, crossing.master.buffers) {
+       crossing.master.cork
+         .map { u => TLCacheCork(unsafe = u) }
+         .map { _ :=* boomCore.crossTLOut }
+         .getOrElse { boomCore.crossTLOut }
+    } :=* tileMasterBuffering
 
     // Connect the slave ports of the tile to the periphery bus
 
@@ -80,9 +84,20 @@ trait HasBoomTiles extends HasTiles
       }
     }
 
-    pbus.toTile(tp.name) { implicit p => crossing.slave.adapt(this)( DisableMonitors { implicit p =>
-      tileSlaveBuffering :*= boomCore.crossTLIn
-    })}
+
+
+    DisableMonitors { implicit p =>
+      tileSlaveBuffering :*= pbus.toTile(tp.name) {
+        crossing.slave.blockerCtrlAddr
+          .map { BasicBusBlockerParams(_, pbus.beatBytes, sbus.beatBytes) }
+          .map { bbbp => LazyModule(new BasicBusBlocker(bbbp)) }
+          .map { bbb =>
+            pbus.toVariableWidthSlave(Some("bus_blocker")) { bbb.controlNode }
+            boomCore.crossTLIn :*= bbb.node
+          } .getOrElse { boomCore.crossTLIn }
+      }
+    }
+
 
     // Handle all the different types of interrupts crossing to or from the tile:
     // 1. Debug interrupt is definitely asynchronous in all cases.
@@ -120,13 +135,13 @@ trait HasBoomTilesModuleImp extends HasTilesModuleImp
   val outer: HasBoomTiles
 }
 
-class BoomCoreplex(implicit p: Parameters) extends BaseCoreplex
+class BoomSubsystem(implicit p: Parameters) extends BaseSubsystem
     with HasBoomTiles {
   val tiles = boomTiles
-  override lazy val module = new BoomCoreplexModule(this)
+  override lazy val module = new BoomSubsystemModule(this)
 }
 
-class BoomCoreplexModule[+L <: BoomCoreplex](_outer: L) extends BaseCoreplexModule(_outer)
+class BoomSubsystemModule[+L <: BoomSubsystem](_outer: L) extends BaseSubsystemModuleImp(_outer)
     with HasBoomTilesModuleImp {
   tile_inputs.zip(outer.hartIdList).foreach { case(wire, i) =>
     wire.clock := clock
