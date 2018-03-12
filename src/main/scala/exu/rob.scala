@@ -631,6 +631,12 @@ class Rob(
          r_xcpt_val      := true.B
          next_xcpt_uop   := io.enq_uops(idx)
          r_xcpt_badvaddr := io.enq_uops(0).pc + (idx << 2.U)
+         // TODO XXX REMOVE THIS. Temporary hack to fix ma-fetch tests. 
+         // The problem is we shouldn't have access to pc and inst in the ROB. 
+         // This should be handled by the front-end.
+         when ((io.enq_uops(idx).uopc === uopJAL) && !io.enq_uops(idx).exc_cause.orR) {
+            r_xcpt_badvaddr := ComputeJALTarget(io.enq_uops(idx).pc, io.enq_uops(idx).inst, xLen)
+         }
       }
    }
 
