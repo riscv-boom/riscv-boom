@@ -33,9 +33,9 @@ import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.util.Str
 
 class RobIo(
-   machine_width: Int,
-   num_wakeup_ports: Int,
-   num_fpu_ports: Int
+   val machine_width: Int,
+   val num_wakeup_ports: Int,
+   val num_fpu_ports: Int
    )(implicit p: Parameters)  extends BoomBundle()(p)
 {
    // Decode Stage

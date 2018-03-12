@@ -5,7 +5,7 @@ package boom
 
 import Chisel._
 import freechips.rocketchip.config._
-import freechips.rocketchip.coreplex._
+import freechips.rocketchip.subsystem._
 import freechips.rocketchip.devices.tilelink._
 import freechips.rocketchip.diplomacy._
 import freechips.rocketchip.rocket._
@@ -34,7 +34,7 @@ case class BoomTileParams(
 
 class BoomTile(
     val boomParams: BoomTileParams,
-    crossing: CoreplexClockCrossing)
+    crossing: SubsystemClockCrossing)
   (implicit p: Parameters) extends BaseTile(boomParams, crossing)(p)
     with HasExternalInterrupts
     with HasLazyRoCC  // implies CanHaveSharedFPU with CanHavePTW with HasHellaCache

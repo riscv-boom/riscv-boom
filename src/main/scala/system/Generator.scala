@@ -2,7 +2,7 @@
 
 package boom.system
 
-import freechips.rocketchip.coreplex.RocketTilesKey
+import freechips.rocketchip.subsystem.RocketTilesKey
 import freechips.rocketchip.tile.XLen
 import freechips.rocketchip.util.GeneratorApp
 import freechips.rocketchip.system.{TestGeneration, RegressionTestSuite}
@@ -20,7 +20,7 @@ object BoomTestSuites {
   val rv64pi = List(rv64ui, rv64mi)
 }
 
-/** A Generator for platforms containing Rocket Coreplexes */
+/** A Generator for platforms containing Rocket Subsystems */
 object Generator extends GeneratorApp {
 
   val rv64RegrTestNames = LinkedHashSet(
@@ -62,7 +62,7 @@ object Generator extends GeneratorApp {
   override def addTestSuites {
     import freechips.rocketchip.system.DefaultTestSuites._
     val xlen = params(XLen)
-    // TODO: for now only generate tests for the first core in the first coreplex
+    // TODO: for now only generate tests for the first core in the first subsystem
     val tileParams = params(BoomTilesKey).head
     val coreParams = tileParams.core
     val vm = coreParams.useVM
