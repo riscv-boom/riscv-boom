@@ -363,7 +363,7 @@ class QueueForMicroOpWithData(entries: Int, data_width: Int)
    when (do_deq) {
       deq_ptr.inc()
    }
-   when (do_enq != do_deq) {
+   when (do_enq =/= do_deq) {
       maybe_full := do_enq
    }
 
