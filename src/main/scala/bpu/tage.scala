@@ -192,7 +192,8 @@ class TageBrPredictor(
 
    private def TagHashTerribad(addr: UInt, hist: UInt, hlen: Int, idx_sz: Int): UInt =
    {
-      val tag = Fold(hist, idx_sz, hlen) ^ addr
+      //val tag = Fold(hist, idx_sz, hlen) ^ addr
+      val tag = ((addr >> 4.U) & 0xf.U) | ((hist & 0xf.U) << 4.U)
       tag
    }
 
@@ -493,6 +494,6 @@ class TageBrPredictor(
       assert (r_info.provider_id < num_tables.U || !r_info.provider_hit, "[Tage] provider_id is out-of-bounds.")
    }
 
-
+   override val compileOptions = chisel3.core.ExplicitCompileOptions.NotStrict.copy(explicitInvalidate = true)
 }
 

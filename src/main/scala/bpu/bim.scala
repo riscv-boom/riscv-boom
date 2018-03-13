@@ -330,7 +330,7 @@ class BimodalTable(implicit p: Parameters) extends BoomModule()(p) with HasBimPa
    //************************************************
    // Output.
 
-   io.resp.valid := !Mux1H(UIntToOH(s2_bank_idx), s2_conflict) || fsm_state != s_idle
+   io.resp.valid := !Mux1H(UIntToOH(s2_bank_idx), s2_conflict) || fsm_state =/= s_idle
    io.resp.bits.rowdata := Mux1H(UIntToOH(s2_bank_idx), s2_read_out)
    io.resp.bits.entry_idx := s2_logical_idx
 
@@ -372,5 +372,6 @@ class BimodalTable(implicit p: Parameters) extends BoomModule()(p) with HasBimPa
 
    // Trust me, I just work.
 
+   override val compileOptions = chisel3.core.ExplicitCompileOptions.NotStrict.copy(explicitInvalidate = true)
 }
 

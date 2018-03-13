@@ -255,6 +255,11 @@ abstract class BrPredictor(
    {
       r_f4_history := q_f3_history.io.deq.bits
    }
+
+
+   //************************************************
+
+   override val compileOptions = chisel3.core.ExplicitCompileOptions.NotStrict.copy(explicitInvalidate = true)
 }
 
 

@@ -46,13 +46,9 @@ import chisel3.internal.sourceinfo.SourceInfo
 //}
 //
 
-// TODO CODEREVIEW these signals are generally useful to the FetchUnit, not just BTB predictions.
 class BTBReqIO(implicit p: Parameters) extends CoreBundle()(p) {
   val req = Valid(new BTBReq).flip
   val s2_replay = Bool(INPUT) // is the Frontend replaying s2 into s0?
-//  val fqenq_valid = Bool(INPUT) // is the Frontend enqueuing instructions this cycle? TODO rename to "s2_valid?"
-//  val debug_fqenq_pc = UInt(INPUT, width = vaddrBitsExtended)
-//  val debug_fqenq_ready = Bool(INPUT) // verify this matches our own buffers
 }
 
 class BoomFrontendIO(implicit p: Parameters) extends CoreBundle()(p) {
@@ -72,7 +68,7 @@ class BoomFrontend(val icacheParams: ICacheParams, hartid: Int)(implicit p: Para
   val slaveNode = icache.slaveNode
 }
 
-class BoomFrontendBundle(outer: BoomFrontend) extends CoreBundle()(outer.p)
+class BoomFrontendBundle(val outer: BoomFrontend) extends CoreBundle()(outer.p)
     with HasExternallyDrivenTileConstants {
   val cpu = new BoomFrontendIO().flip
   val ptw = new TLBPTWIO()
@@ -84,15 +80,11 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
     with HasL1ICacheParameters {
   val io = IO(new BoomFrontendBundle(outer))
   implicit val edge = outer.masterNode.edges.out(0)
-  val icache = outer.icache.module
   require(fetchWidth*coreInstBytes == outer.icacheParams.fetchBytes)
 
-  println("\tBuilding BOOM Frontend\n")
-
+  val icache = outer.icache.module
   val tlb = Module(new TLB(true, log2Ceil(fetchBytes), nTLBEntries))
-//  val fq = withReset(reset || io.cpu.req.valid) { Module(new ShiftQueue(new FrontendResp, 5, flow = true)) }
 
-//  val s0_valid = io.cpu.req.valid || !fq.io.mask(fq.io.mask.getWidth-3)
   val s0_valid = io.cpu.req.valid || io.cpu.resp.ready
   val s1_valid = RegNext(s0_valid)
   val s1_pc = Reg(UInt(width=vaddrBitsExtended))
@@ -115,7 +107,6 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   val predicted_taken = Wire(init = Bool(false))
 
   val s2_replay = Wire(Bool())
-//  s2_replay := (s2_valid && !fq.io.enq.fire()) || RegNext(s2_replay && !s0_valid, true.B)
   s2_replay := (s2_valid && !io.cpu.resp.fire()) || RegNext(s2_replay && !s0_valid, true.B)
   val npc = Mux(s2_replay, s2_pc, predicted_npc)
 
@@ -165,45 +156,14 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   io.cpu.resp.bits.xcpt := s2_tlb_resp
   when (icache.io.resp.valid && icache.io.resp.bits.ae) { io.cpu.resp.bits.xcpt.ae.inst := true }
 
-//  fq.io.enq.valid := RegNext(s1_valid) && s2_valid && (icache.io.resp.valid || !s2_tlb_resp.miss && icache.io.s2_kill)
-//  fq.io.enq.bits.pc := s2_pc
-//  io.cpu.npc := alignPC(Mux(io.cpu.req.valid, io.cpu.req.bits.pc, npc))
-//
-//  fq.io.enq.bits.data := icache.io.resp.bits.data
-//  fq.io.enq.bits.mask := UInt((1 << fetchWidth)-1) << s2_pc.extract(log2Ceil(fetchWidth)+log2Ceil(coreInstBytes)-1, log2Ceil(coreInstBytes))
-//  fq.io.enq.bits.replay := icache.io.resp.bits.replay || icache.io.s2_kill && !icache.io.resp.valid && !s2_xcpt
-//  fq.io.enq.bits.btb := s2_btb_resp_bits
-//  fq.io.enq.bits.btb.taken := s2_btb_taken
-//  fq.io.enq.bits.xcpt := s2_tlb_resp
-//  when (icache.io.resp.valid && icache.io.resp.bits.ae) { fq.io.enq.bits.xcpt.ae.inst := true }
-//
-//  io.cpu.btb_req.req.valid := false.B
- io.cpu.btb_req.req.valid := s0_valid
- io.cpu.btb_req.req.bits.addr := io.cpu.npc
-// io.cpu.btb_req.fqenq_valid := fq.io.enq.valid
-// io.cpu.btb_req.debug_fqenq_pc := fq.io.enq.bits.pc
-// io.cpu.btb_req.debug_fqenq_ready := fq.io.enq.ready
- io.cpu.btb_req.s2_replay := s2_replay
-
-//  when (!s2_replay) {
-//    io.cpu.btb_req.req.valid := true.B //!s2_redirect
-//    s2_btb_resp_valid := btb.io.resp.valid
-//    s2_btb_resp_bits := btb.io.resp.bits
-//  }
-//  printf("I$ %c %c [ %d %d %d ] %x %x %x imemresp: (%c %x)\n",
-//   Mux(io.cpu.req.valid, Str("V"), Str(" ")),
-//   Mux(s2_replay, Str("R"), Str(" ")),
-//   s0_valid, s1_valid, s2_valid,
-//   npc(15,0), s1_pc(15,0), s2_pc(15,0),
-//   Mux(io.cpu.resp.valid, Str("V"), Str(" ")),
-//   io.cpu.resp.bits.pc(15,0)
-//   )
+  io.cpu.btb_req.req.valid := s0_valid
+  io.cpu.btb_req.req.bits.addr := io.cpu.npc
+  io.cpu.btb_req.s2_replay := s2_replay
 
 
-//  io.cpu.resp <> fq.io.deq
+  //-------------------------------------------------------------
 
-
-
+  //-------------------------------------------------------------
   // performance events
   io.cpu.perf := icache.io.perf
   io.cpu.perf.tlbMiss := io.ptw.req.fire()
@@ -213,6 +173,8 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 
   def ccover(cond: Bool, label: String, desc: String)(implicit sourceInfo: SourceInfo) =
     cover(cond, s"FRONTEND_$label", "Rocket;;" + desc)
+
+   override val compileOptions = chisel3.core.ExplicitCompileOptions.NotStrict.copy(explicitInvalidate = true)
 }
 
 /** Mix-ins for constructing tiles that have an ICache-based pipeline frontend */
@@ -230,14 +192,3 @@ trait HasBoomICacheFrontendModule extends CanHavePTWModule {
   ptwPorts += outer.frontend.module.io.ptw
 }
 
-
-
-///** Mix-ins for constructing tiles that have an ICache-based pipeline frontend */
-//trait HasBoomICacheFrontend extends HasICacheFrontend { this: BaseTile =>
-//  val module: HasBoomICacheFrontendModule
-//  nPTWPorts += 1 // boom -- needs an extra PTW port for its LSU.
-//}
-//
-//trait HasBoomICacheFrontendModule extends HasICacheFrontendModule {
-//  val outer: HasBoomICacheFrontend
-//}
