@@ -24,11 +24,11 @@ import freechips.rocketchip.config.Parameters
 
 
 class RenameStageIO(
-   pl_width: Int,
-   num_int_pregs: Int,
-   num_fp_pregs: Int,
-   num_int_wb_ports: Int,
-   num_fp_wb_ports: Int)
+   val pl_width: Int,
+   val num_int_pregs: Int,
+   val num_fp_pregs: Int,
+   val num_int_wb_ports: Int,
+   val num_fp_wb_ports: Int)
    (implicit p: Parameters) extends BoomBundle()(p)
 {
    private val int_preg_sz = log2Up(num_int_pregs)
