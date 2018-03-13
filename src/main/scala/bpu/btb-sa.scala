@@ -193,8 +193,8 @@ class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParamet
 
 
    val stall = !io.req.valid
-   val s0_idx = Wire(UInt(width=idx_sz))
-   val s1_idx = RegEnable(getIdx(io.req.bits.addr), !stall)
+   val s0_idx = getIdx(io.req.bits.addr)(idx_sz-1,0)
+   val s1_idx = RegEnable(s0_idx, !stall)
 
    // prediction
    val s1_valid = Wire(Bool())
