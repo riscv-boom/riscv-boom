@@ -64,6 +64,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
       val f3_stall          = Bool(OUTPUT)
       val f3_clear          = Bool(OUTPUT)
       val f4_redirect       = Bool(OUTPUT)
+      val f4_taken          = Bool(OUTPUT)
 
       val bim_update        = Valid(new BimUpdate)
       val bpd_update        = Valid(new BpdUpdate)
@@ -116,6 +117,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
 
    val r_f4_valid = Reg(init=false.B)
    val r_f4_req = Reg(Valid(new PCReq()))
+   val r_f4_taken = Reg(init=false.B)
    val r_f4_fetchpc = Reg(UInt())
    // Can the F3 stage proceed?
    val f4_ready = FetchBuffer.io.enq.ready && ftq.io.enq.ready
@@ -459,11 +461,9 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    .elsewhen (f4_ready)
    {
       r_f4_valid := f3_valid && !(r_f4_valid && r_f4_req.valid)
-//      f4_fetch_bundle := f3_fetch_bundle
       r_f4_req := f3_req
       r_f4_fetchpc := f3_imemresp.pc
-//      f3_taken := f2_taken
-//      f3_btb_hit := io.f2_btb_resp.valid
+      r_f4_taken := f3_taken
    }
 
    assert (!(r_f4_req.valid && !r_f4_valid),
@@ -524,6 +524,8 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
 
    io.f2_redirect := io.f2_btb_resp.valid && io.f2_btb_resp.bits.taken && io.imem.resp.ready
    io.f4_redirect := r_f4_valid && r_f4_req.valid
+   io.f4_taken    := r_f4_taken
+
 
    io.bim_update := ftq.io.bim_update
    io.bpd_update := ftq.io.bpd_update

@@ -341,6 +341,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    bpd_stage.io.f2_valid := io.imem.resp.valid
    bpd_stage.io.f2_redirect := fetch_unit.io.f2_redirect
    bpd_stage.io.f4_redirect := fetch_unit.io.f4_redirect
+   bpd_stage.io.f4_taken := fetch_unit.io.f4_taken
    bpd_stage.io.fe_clear := fetch_unit.io.clear_fetchbuffer
 
    bpd_stage.io.f3_ras_update := fetch_unit.io.f3_ras_update

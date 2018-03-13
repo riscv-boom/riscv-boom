@@ -181,7 +181,7 @@ class TageBrPredictor(
 
    private def IdxHash(addr: UInt, hist: UInt, hlen: Int, idx_sz: Int): UInt =
    {
-      val idx = Cat(Fold(hist, idx_sz, hlen), addr(4))
+      val idx = Cat(Fold(hist, idx_sz, hlen), addr(4)) ^ (addr >> 5)
       idx
    }
 

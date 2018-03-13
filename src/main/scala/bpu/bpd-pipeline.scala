@@ -70,6 +70,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
 
       // Fetch4
       val f4_redirect   = Bool(INPUT) // I$ is being redirected from F4.
+      val f4_taken      = Bool(INPUT) // I$ is being redirected from F4 (and it is to take a CFI).
 
       // Commit
       val bim_update    = Valid(new BimUpdate).flip
@@ -174,6 +175,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    bpd.io.f2_redirect := io.f2_redirect
    bpd.io.f3_is_br := io.f3_is_br
    bpd.io.f4_redirect := io.f4_redirect
+   bpd.io.f4_taken := io.f4_taken
    bpd.io.fe_clear := io.fe_clear
    bpd.io.ftq_restore := io.ftq_restore
    bpd.io.commit := io.bpd_update

@@ -258,6 +258,7 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
 
    io.restore_history.valid := (io.brinfo.valid && io.brinfo.mispredict) || io.flush.valid
    io.restore_history.bits.history := 0.U
+   io.restore_history.bits.taken := io.brinfo.valid && io.brinfo.taken
 
    when (io.restore_history.valid)
    {
