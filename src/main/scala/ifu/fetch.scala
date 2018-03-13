@@ -18,7 +18,7 @@
 package boom
 
 import Chisel._
-import chisel3.core.withReset
+import chisel3.core.{withReset, DontCare}
 import chisel3.experimental.dontTouch
 import freechips.rocketchip.config.Parameters
 
@@ -51,7 +51,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
 {
    val io = IO(new BoomBundle()(p)
    {
-      val imem              = new freechips.rocketchip.rocket.FrontendIO
+      val imem              = new BoomFrontendIO
 
       val f2_btb_resp       = Valid(new BTBsaResp).flip
       val f2_bpd_resp       = Valid(new BpdResp).flip
@@ -723,5 +723,10 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
          )
    }
 
+   // these signals are driven from other places.
+   io.imem.flush_icache := DontCare
+   io.imem.sfence := DontCare
+
+   override val compileOptions = chisel3.core.ExplicitCompileOptions.NotStrict.copy(explicitInvalidate = true)
 }
 
