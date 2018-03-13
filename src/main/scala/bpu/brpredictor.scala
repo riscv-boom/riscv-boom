@@ -74,6 +74,7 @@ class BpdUpdate(implicit p: Parameters) extends BoomBundle()(p)
 class RestoreHistory(implicit p: Parameters) extends BoomBundle()(p)
 {
    val history = UInt(width = GLOBAL_HISTORY_LENGTH)
+   val taken = Bool()
 }
 
 //--------------------------------------------------------------------------
@@ -119,7 +120,10 @@ abstract class BrPredictor(
 
       // Restore history on a F4 redirection (and clear out appropriate state).
       // Don't provide history since we have it ourselves.
+      // Taken tells us if the redirect is to take a new path or to fix up a
+      // previous prediction and "not take" the branch.
       val f4_redirect = Bool(INPUT)
+      val f4_taken = Bool(INPUT)
 
       // Restore history on a branch mispredict or pipeline flush.
       val ftq_restore = Valid(new RestoreHistory).flip
@@ -141,7 +145,7 @@ abstract class BrPredictor(
 
    // The global history register  that will be hashed with the fetch-pc to compute tags and indices for our branch predictors.
    val f0_history   = Wire(UInt(width=history_length.W))
-   val next_f1_history = Wire(UInt(width=history_length.W))
+   val new_history  = Wire(UInt(width=history_length.W))
    val r_f1_history = Reg(init=0.asUInt(width=history_length.W))
    val r_f2_history = Reg(init=0.asUInt(width=history_length.W))
    val r_f4_history = Reg(init=0.asUInt(width=history_length.W))
@@ -160,6 +164,7 @@ abstract class BrPredictor(
    {
       val ret = Wire(UInt(width=history_length))
 
+      //ret := ((addr >> 4.U) & 0xf.U) | (old << 4.U) -- for debugging
       val pc = addr >> log2Ceil(coreInstBytes)
       val foldpc = (pc >> 17) ^ pc
       val shamt = 2
@@ -183,17 +188,16 @@ abstract class BrPredictor(
    }
 
 
-   // as predictions come in (or pipelines are flushed/replayed), we need to correct the history.
+   // As predictions come in (or pipelines are flushed/replayed), we need to correct the history.
    f0_history :=
       Mux(io.ftq_restore.valid,
          io.ftq_restore.bits.history,
-      Mux(io.f2_redirect,
-         r_f2_history,
       Mux(io.f4_redirect,
          r_f4_history,
-         r_f1_history)))
+         r_f1_history)) // valid for f2_redirect
 
-    next_f1_history := UpdateHistoryHash(f0_history, io.req.bits.addr)
+   // Hash target into history.
+   new_history := UpdateHistoryHash(f0_history, io.req.bits.addr)
 
 
    //************************************************
@@ -201,12 +205,27 @@ abstract class BrPredictor(
 
    val f1_valid = RegNext(io.req.valid) && !(io.fe_clear || io.f2_redirect || io.f4_redirect)
 
+   // Do we hash in a new history?
+   val use_new_hash =
+      (io.ftq_restore.valid && io.ftq_restore.bits.taken) ||
+      (io.f4_redirect && io.f4_taken) ||
+      io.f2_redirect
+
    r_f1_history :=
       Mux(io.f2_replay,
          r_f2_history,
-      Mux(io.req.valid, // forward progress of pipeline
-         next_f1_history,
-         r_f1_history))
+      Mux(io.ftq_restore.valid && !io.ftq_restore.bits.taken,
+         io.ftq_restore.bits.history,
+      Mux(io.f4_redirect && !io.f4_taken,
+         r_f4_history,
+      Mux(use_new_hash,
+         new_history,
+         r_f1_history))))
+
+
+   assert (!io.f2_redirect || r_f2_history === r_f1_history,
+      "[bpd] if a F2 redirect occurs, F2-hist should equal F1-hist.")
+
 
    //************************************************
    // Branch Prediction (F2 Stage)

@@ -37,7 +37,7 @@ class DefaultBoomConfig extends Config((site, here, up) => {
          numFpPhysRegisters = 64,
          numLsuEntries = 16,
          maxBrCount = 8,
-         btb = BTBsaParameters(nSets=64, nWays=4, nRAS=8, tagSz=20),
+         btb = BTBsaParameters(nSets=256, nWays=2, nRAS=8, tagSz=20),
          enableBranchPredictor = true,
          tage = Some(TageParameters()),
          nPerfCounters = 29,
