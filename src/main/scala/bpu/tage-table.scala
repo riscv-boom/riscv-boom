@@ -265,5 +265,6 @@ class TageTable(
       assert (widx < num_entries.U, "[TageTable] out of bounds write index.")
    }
 
+   override val compileOptions = chisel3.core.ExplicitCompileOptions.NotStrict.copy(explicitInvalidate = true)
 }
 
