@@ -94,8 +94,6 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
 
       // BranchResolutionUnit tells us the outcome of branches/jumps.
       val brinfo = Input(new BrResolutionInfo())
-
-      val debug_rob_empty = Input(Bool()) // TODO can we build asserts off of this?
    })
 
    val deq_ptr = Counter(num_entries)
@@ -303,7 +301,7 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
 
    if (DEBUG_PRINTF)
    {
-      printf("FTQ: %c %c: %d; commit: %c:%d brinfo: %c:%d [%d %d %d] rob:%c\n",
+      printf("FTQ: %c %c: %d; commit: %c:%d brinfo: %c:%d [%d %d %d]\n",
          Mux(io.enq.valid, Str("V"), Str("-")),
          Mux(io.enq.ready, Str("R"), Str("-")),
          io.enq_idx,
@@ -311,8 +309,7 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
          io.deq.bits,
          Mux(io.brinfo.valid && io.brinfo.mispredict, Str("M"), Str("-")),
          io.brinfo.ftq_idx,
-         enq_ptr.value, commit_ptr, deq_ptr.value,
-         Mux(io.debug_rob_empty, Str("E"), Str("-"))
+         enq_ptr.value, commit_ptr, deq_ptr.value
       )
 
       val w = 4

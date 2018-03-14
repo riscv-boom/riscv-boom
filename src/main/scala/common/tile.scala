@@ -118,7 +118,7 @@ class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer)
   core.io.hartid := constants.hartid // Pass through the hartid
   trace.foreach { _ := core.io.trace }
   halt_and_catch_fire.foreach { _ := uncorrectable }
-  outer.frontend.module.io.cpu <> core.io.imem
+  outer.frontend.module.io.cpu <> core.io.ifu
   outer.frontend.module.io.reset_vector := constants.reset_vector
   outer.frontend.module.io.hartid := constants.hartid
   outer.dcache.module.io.hartid := constants.hartid

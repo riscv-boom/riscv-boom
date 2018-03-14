@@ -51,7 +51,8 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
 {
    val io = IO(new BoomBundle()(p)
    {
-      val imem              = new BoomFrontendIO
+      val imem_req          = Valid(new freechips.rocketchip.rocket.FrontendReq)
+      val imem_resp         = Decoupled(new freechips.rocketchip.rocket.FrontendResp).flip
 
       val f2_btb_resp       = Valid(new BTBsaResp).flip
       val f2_bpd_resp       = Valid(new BpdResp).flip
@@ -90,9 +91,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
       val sfence_take_pc    = Bool(INPUT)
       val sfence_addr       = UInt(INPUT, vaddrBits+1)
 
-      val resp              = new DecoupledIO(new FetchBundle)
-//      val stalled           = Bool(OUTPUT) // CODE REVIEW
-      val debug_rob_empty   = Bool(INPUT)
+      val fetchpacket       = new DecoupledIO(new FetchBundle)
    })
 
    val bchecker = Module (new BranchChecker(fetchWidth))
@@ -109,7 +108,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
 
 
    val clear_f3         = Wire(init=false.B)
-   val q_f3_imemresp    = withReset(reset || clear_f3) { Module(new ElasticReg(gen = io.imem.resp.bits)) }
+   val q_f3_imemresp    = withReset(reset || clear_f3) { Module(new ElasticReg(gen = io.imem_resp.bits)) }
    val q_f3_btb_resp    = withReset(reset || clear_f3) { Module(new ElasticReg(gen = io.f2_btb_resp)) }
 
    val f3_req           = Wire(Valid(new PCReq()))
@@ -165,13 +164,13 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
       br_unit.take_pc ||
       io.flush_take_pc ||
       io.sfence_take_pc ||
-      (io.f2_btb_resp.valid && io.f2_btb_resp.bits.taken && io.imem.resp.ready) ||
+      (io.f2_btb_resp.valid && io.f2_btb_resp.bits.taken && io.imem_resp.ready) ||
       (r_f4_valid && r_f4_req.valid)
 
-   io.imem.req.valid   := f0_redirect_val // tell front-end we had an unexpected change in the stream
-   io.imem.req.bits.pc := f0_redirect_pc
-   io.imem.req.bits.speculative := !(io.flush_take_pc)
-   io.imem.resp.ready  := q_f3_imemresp.io.enq.ready
+   io.imem_req.valid   := f0_redirect_val // tell front-end we had an unexpected change in the stream
+   io.imem_req.bits.pc := f0_redirect_pc
+   io.imem_req.bits.speculative := !(io.flush_take_pc)
+   io.imem_resp.ready  := q_f3_imemresp.io.enq.ready
 
    f0_redirect_pc :=
       Mux(io.sfence_take_pc,
@@ -197,10 +196,10 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    // **** ICache Response/Pre-decode (F2) ****
    //-------------------------------------------------------------
 
-   q_f3_imemresp.io.enq.valid := io.imem.resp.valid
-   q_f3_btb_resp.io.enq.valid := io.imem.resp.valid
+   q_f3_imemresp.io.enq.valid := io.imem_resp.valid
+   q_f3_btb_resp.io.enq.valid := io.imem_resp.valid
 
-   q_f3_imemresp.io.enq.bits := io.imem.resp.bits
+   q_f3_imemresp.io.enq.bits := io.imem_resp.bits
    q_f3_btb_resp.io.enq.bits := io.f2_btb_resp
 
    //-------------------------------------------------------------
@@ -519,10 +518,9 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    ftq.io.flush := io.flush_info
    ftq.io.com_ftq_idx := io.com_ftq_idx
    io.com_fetch_pc := ftq.io.com_fetch_pc
-   ftq.io.debug_rob_empty := io.debug_rob_empty
    io.ftq_restore_history <> ftq.io.restore_history
 
-   io.f2_redirect := io.f2_btb_resp.valid && io.f2_btb_resp.bits.taken && io.imem.resp.ready
+   io.f2_redirect := io.f2_btb_resp.valid && io.f2_btb_resp.bits.taken && io.imem_resp.ready
    io.f4_redirect := r_f4_valid && r_f4_req.valid
    io.f4_taken    := r_f4_taken
 
@@ -534,7 +532,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    // **** Frontend Response ****
    //-------------------------------------------------------------
 
-   io.resp <> FetchBuffer.io.deq
+   io.fetchpacket <> FetchBuffer.io.deq
 
 
    //-------------------------------------------------------------
@@ -675,8 +673,7 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
    if (DEBUG_PRINTF)
    {
       // Fetch Stage 1
-      printf("BrPred1:    (IF1_PC= 0x%x) ------ PC: [%c%c-%c for br_id:(n/a), %c %c next: 0x%x]\n"
-         , io.imem.npc
+      printf("BrPred1:  ------ PC: [%c%c-%c for br_id:(n/a), %c %c next: 0x%x]\n"
          , Mux(br_unit.brinfo.valid, Str("V"), Str("-"))
          , Mux(br_unit.brinfo.taken, Str("T"), Str("-"))
          , Mux(br_unit.brinfo.mispredict, Str("M"), Str(" "))
@@ -688,30 +685,30 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
 
       // Fetch Stage 2
       printf(" Fetch2 : (%c%c) 0x%x I$ Response <<-- IF2_PC (mask:0x%x) "
-         , Mux(io.imem.resp.valid, Str("V"), Str("-"))
-         , Mux(io.imem.resp.ready, Str("R"), Str("-"))
-         , io.imem.resp.bits.pc
-         , io.imem.resp.bits.mask
+         , Mux(io.imem_resp.valid, Str("V"), Str("-"))
+         , Mux(io.imem_resp.ready, Str("R"), Str("-"))
+         , io.imem_resp.bits.pc
+         , io.imem_resp.bits.mask
          )
 
       if (fetch_width == 1)
       {
          printf("DASM(%x) "
-            , io.imem.resp.bits.data(coreInstBits-1,0)
+            , io.imem_resp.bits.data(coreInstBits-1,0)
             )
       }
       else if (fetch_width >= 2)
       {
          printf("DASM(%x)DASM(%x) "
-            , io.imem.resp.bits.data(coreInstBits-1,0)
-            , io.imem.resp.bits.data(2*coreInstBits-1, coreInstBits)
+            , io.imem_resp.bits.data(coreInstBits-1,0)
+            , io.imem_resp.bits.data(2*coreInstBits-1, coreInstBits)
             )
       }
 
       printf("----BrPred2:(%c,%d) [btbtarg: 0x%x]\n"
-         , Mux(io.imem.resp.bits.btb.taken, Str("T"), Str("-"))
-         , io.imem.resp.bits.btb.bridx
-         , io.imem.resp.bits.btb.target(19,0)
+         , Mux(io.imem_resp.bits.btb.taken, Str("T"), Str("-"))
+         , io.imem_resp.bits.btb.bridx
+         , io.imem_resp.bits.btb.target(19,0)
          )
 
       // Fetch Stage 3
@@ -722,10 +719,6 @@ class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p
          , FetchBuffer.io.enq.bits.mask
          )
    }
-
-   // these signals are driven from other places.
-   io.imem.flush_icache := DontCare
-   io.imem.sfence := DontCare
 
    override val compileOptions = chisel3.core.ExplicitCompileOptions.NotStrict.copy(explicitInvalidate = true)
 }

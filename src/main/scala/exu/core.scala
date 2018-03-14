@@ -51,7 +51,7 @@ trait HasBoomCoreIO extends freechips.rocketchip.tile.HasTileParameters {
    val io = new freechips.rocketchip.tile.CoreBundle()(p)
       with freechips.rocketchip.tile.HasExternallyDrivenTileConstants {
          val interrupts = new freechips.rocketchip.tile.CoreInterrupts().asInput
-         val imem  = new BoomFrontendIO
+         val ifu = new BoomFrontendIO
          val dmem = new freechips.rocketchip.rocket.HellaCacheIO
          val ptw = new freechips.rocketchip.rocket.DatapathPTWIO().flip
          val fpu = new freechips.rocketchip.tile.FPUCoreIO().flip
@@ -80,8 +80,6 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    val num_irf_write_ports = exe_units.map(_.num_rf_write_ports).sum
    val num_fast_wakeup_ports = exe_units.count(_.isBypassable)
    val num_wakeup_ports = num_irf_write_ports + num_fast_wakeup_ports
-   val fetch_unit       = Module(new FetchUnit(fetchWidth))
-   val bpd_stage        = Module(new BranchPredictionStage(fetchWidth))
    val dec_serializer   = Module(new FetchSerializerNtoM)
    val decode_units     = for (w <- 0 until DECODE_WIDTH) yield { val d = Module(new DecodeUnit); d }
    val dec_brmask_logic = Module(new BranchMaskGenerationLogic(DECODE_WIDTH))
@@ -198,10 +196,10 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 //         ("fp interlock", () => id_ex_hazard && ex_ctrl.fp || id_mem_hazard && mem_ctrl.fp || id_wb_hazard && wb_ctrl.fp || id_ctrl.fp && id_stall_fpu)))),
        ("branch resolved", () => br_unit.brinfo.valid))),
      new freechips.rocketchip.rocket.EventSet((mask, hits) => (mask & hits).orR, Seq(
-       ("I$ miss", () => io.imem.perf.acquire),
+       ("I$ miss", () => io.ifu.perf.acquire),
        ("D$ miss", () => io.dmem.perf.acquire),
        ("D$ release", () => io.dmem.perf.release),
-       ("ITLB miss", () => io.imem.perf.tlbMiss),
+       ("ITLB miss", () => io.ifu.perf.tlbMiss),
        ("DTLB miss", () => io.dmem.perf.tlbMiss),
        ("L2 TLB miss", () => io.ptw.perf.l2miss)))))
 
@@ -209,7 +207,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    val csr = Module(new freechips.rocketchip.rocket.CSRFile(perfEvents))
 
    // evaluate performance counters
-   val icache_blocked = !(io.imem.resp.valid || RegNext(io.imem.resp.valid))
+   val icache_blocked = !(io.ifu.fetchpacket.valid || RegNext(io.ifu.fetchpacket.valid))
    csr.io.counters foreach { c => c.inc := RegNext(perfEvents.evaluate(c.eventSel)) }
 
 
@@ -271,52 +269,39 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    //-------------------------------------------------------------
    //-------------------------------------------------------------
 
-   io.imem <> fetch_unit.io.imem
-   // TODO: work-around rocket-chip issue #183, broken imem.mask for fetchWidth=1
-   // TODO: work-around rocket-chip issue #184, broken imem.mask for fetchWidth=1
-   if (fetchWidth == 1)
-   {
-      fetch_unit.io.imem.resp.bits.mask := UInt(1)
-      fetch_unit.io.imem.resp.bits.btb.bridx := UInt(0)
-   }
-   fetch_unit.io.br_unit <> br_unit
-   fetch_unit.io.tsc_reg           := debug_tsc_reg
-
-   fetch_unit.io.f2_btb_resp       := bpd_stage.io.f2_btb_resp
-   fetch_unit.io.f3_bpd_resp       := bpd_stage.io.f3_bpd_resp
-
-   fetch_unit.io.clear_fetchbuffer := br_unit.brinfo.mispredict ||
-                                       rob.io.flush.valid ||
-                                       fetch_unit.io.sfence_take_pc
+   io.ifu.br_unit := br_unit
+   io.ifu.tsc_reg := debug_tsc_reg
 
    // SFence needs access to the PC to inject an address into the TLB's CAM port. The ROB
    // will have to later redirect the PC back to the regularly scheduled program.
-   fetch_unit.io.sfence_take_pc    := lsu.io.exe_resp.bits.sfence.valid
-   fetch_unit.io.sfence_addr       := lsu.io.exe_resp.bits.sfence.bits.addr
+   io.ifu.sfence_take_pc    := lsu.io.exe_resp.bits.sfence.valid
+   io.ifu.sfence_addr       := lsu.io.exe_resp.bits.sfence.bits.addr
 
    // We must redirect the PC the cycle after playing the SFENCE game.
-   fetch_unit.io.flush_take_pc     := rob.io.flush.valid || RegNext(lsu.io.exe_resp.bits.sfence.valid)
-   fetch_unit.io.flush_pc          := RegNext(csr.io.evec)
-   fetch_unit.io.com_ftq_idx       := rob.io.com_xcpt.bits.ftq_idx
+   io.ifu.flush_take_pc     := rob.io.flush.valid || RegNext(lsu.io.exe_resp.bits.sfence.valid)
+   io.ifu.flush_pc          := RegNext(csr.io.evec)
+   io.ifu.com_ftq_idx       := rob.io.com_xcpt.bits.ftq_idx
+
+   io.ifu.clear_fetchbuffer := br_unit.brinfo.mispredict || 
+                               rob.io.flush.valid ||
+                               io.ifu.sfence_take_pc
 
    // TODO is sfence_take_pc correct? Can probably remove it.
-   fetch_unit.io.flush_info.valid  := rob.io.flush.valid || fetch_unit.io.sfence_take_pc
-   fetch_unit.io.flush_info.bits   := rob.io.flush.bits
+   io.ifu.flush_info.valid  := rob.io.flush.valid || io.ifu.sfence_take_pc
+   io.ifu.flush_info.bits   := rob.io.flush.bits
 
    // Tell the FTQ it can deallocate entries by passing youngest ftq_idx.
-   val youngest_com_idx            = (COMMIT_WIDTH-1).U - PriorityEncoder(rob.io.commit.valids.reverse)
-   fetch_unit.io.commit.valid      := rob.io.commit.valids.reduce(_|_)
-   fetch_unit.io.commit.bits       := rob.io.commit.uops(youngest_com_idx).ftq_idx
-   fetch_unit.io.debug_rob_empty   := rob.io.empty
+   val youngest_com_idx     = (COMMIT_WIDTH-1).U - PriorityEncoder(rob.io.commit.valids.reverse)
+   io.ifu.commit.valid      := rob.io.commit.valids.reduce(_|_)
+   io.ifu.commit.bits       := rob.io.commit.uops(youngest_com_idx).ftq_idx
 
 
-
-   io.imem.flush_icache :=
+   io.ifu.flush_icache :=
       Range(0,DECODE_WIDTH).map{i => rob.io.commit.valids(i) && rob.io.commit.uops(i).is_fencei}.reduce(_|_) ||
       (br_unit.brinfo.mispredict && br_unit.brinfo.is_jr &&  csr.io.status.debug)
 
    // Delay sfence to match pushing the sfence.addr into the TLB's CAM port.
-   io.imem.sfence := RegNext(lsu.io.exe_resp.bits.sfence)
+   io.ifu.sfence := RegNext(lsu.io.exe_resp.bits.sfence)
 
    //-------------------------------------------------------------
    //-------------------------------------------------------------
@@ -324,32 +309,10 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    //-------------------------------------------------------------
    //-------------------------------------------------------------
 
-   // These stages are effectively in parallel with instruction fetch and
-   // decode.
+   io.ifu.flush := rob.io.flush.valid
 
-   bpd_stage.io.btb_req := io.imem.btb_req.req
-   bpd_stage.io.f2_replay := io.imem.btb_req.s2_replay
-   bpd_stage.io.f2_stall := !io.imem.resp.ready
-   bpd_stage.io.f3_stall := fetch_unit.io.f3_stall
-   bpd_stage.io.f3_is_br := fetch_unit.io.f3_is_br
-   bpd_stage.io.debug_imemresp_pc := io.imem.resp.bits.pc
-
-   bpd_stage.io.br_unit := br_unit
-   bpd_stage.io.ftq_restore := fetch_unit.io.ftq_restore_history
-   bpd_stage.io.redirect := io.imem.req.valid
-   bpd_stage.io.flush := rob.io.flush.valid
-   bpd_stage.io.f2_valid := io.imem.resp.valid
-   bpd_stage.io.f2_redirect := fetch_unit.io.f2_redirect
-   bpd_stage.io.f4_redirect := fetch_unit.io.f4_redirect
-   bpd_stage.io.f4_taken := fetch_unit.io.f4_taken
-   bpd_stage.io.fe_clear := fetch_unit.io.clear_fetchbuffer
-
-   bpd_stage.io.f3_ras_update := fetch_unit.io.f3_ras_update
-   bpd_stage.io.f3_btb_update := fetch_unit.io.f3_btb_update
-   bpd_stage.io.bim_update    := fetch_unit.io.bim_update
-   bpd_stage.io.bpd_update    := fetch_unit.io.bpd_update
-   bpd_stage.io.status_prv    := csr.io.status.prv
-   bpd_stage.io.status_debug  := csr.io.status.debug
+   io.ifu.status_prv    := csr.io.status.prv
+   io.ifu.status_debug  := csr.io.status.debug
 
    //-------------------------------------------------------------
    //-------------------------------------------------------------
@@ -369,9 +332,10 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    //-------------------------------------------------------------
    // Pull out instructions and send to the Decoders
 
-   dec_serializer.io.enq <> fetch_unit.io.resp
+   dec_serializer.io.enq <> io.ifu.fetchpacket
 
-   dec_serializer.io.kill := fetch_unit.io.clear_fetchbuffer
+   dec_serializer.io.kill := io.ifu.clear_fetchbuffer
+
    dec_serializer.io.deq.ready := dec_rdy
 
    val fetched_inst_valid = dec_serializer.io.deq.valid
@@ -419,14 +383,14 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       dec_last_inst_was_stalled = stall_me
       dec_stall_next_inst  = stall_me || (dec_valids(w) && dec_uops(w).is_unique)
 
-      dec_will_fire(w) := dec_valids(w) && !stall_me && !fetch_unit.io.clear_fetchbuffer
+      dec_will_fire(w) := dec_valids(w) && !stall_me && !io.ifu.clear_fetchbuffer
       dec_uops(w)      := decode_units(w).io.deq.uop
    }
 
    // all decoders are empty and ready for new instructions
    dec_rdy := !(dec_stall_next_inst)
 
-   when (dec_rdy || fetch_unit.io.clear_fetchbuffer)
+   when (dec_rdy || io.ifu.clear_fetchbuffer)
    {
       dec_finished_mask := Bits(0)
    }
@@ -500,7 +464,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    rename_stage.io.dis_inst_can_proceed := dis_readys.toBools
    rename_stage.io.ren_pred_info := Vec(dec_fbundle.uops.map(_.br_prediction))
 
-   rename_stage.io.kill     := fetch_unit.io.clear_fetchbuffer // mispredict or flush
+   rename_stage.io.kill     := io.ifu.clear_fetchbuffer // mispredict or flush
    rename_stage.io.brinfo   := br_unit.brinfo
    rename_stage.io.get_pred.br_tag        := (if (regreadLatency == 1) RegNext(iss_uops(brunit_idx).br_tag)
                                              else iss_uops(brunit_idx).br_tag)
@@ -704,7 +668,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    csr.io.retire    := PopCount(rob.io.commit.valids.asUInt)
    csr.io.exception := rob.io.com_xcpt.valid
    // csr.io.pc used for setting EPC during exception or CSR.io.trace.
-   csr.io.pc        := AlignPC(fetch_unit.io.com_fetch_pc, fetchWidth*coreInstBytes) + rob.io.com_xcpt.bits.pc_lob
+   csr.io.pc        := AlignPC(io.ifu.com_fetch_pc, fetchWidth*coreInstBytes) + rob.io.com_xcpt.bits.pc_lob
    csr.io.cause     := rob.io.com_xcpt.bits.cause
    csr.io.tval      := Mux(csr.io.cause === Causes.illegal_instruction.U, 0.U, rob.io.com_xcpt.bits.badvaddr)
 
@@ -1002,10 +966,10 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
    // branch unit requests PCs and predictions from ROB during register read
    // (fetch PC from ROB cycle earlier than needed for critical path reasons)
-   fetch_unit.io.get_pc.ftq_idx := RegNext(iss_uops(brunit_idx).ftq_idx)
-   exe_units(brunit_idx).io.get_ftq_pc.fetch_pc       := RegNext(fetch_unit.io.get_pc.fetch_pc)
-   exe_units(brunit_idx).io.get_ftq_pc.next_val       := RegNext(fetch_unit.io.get_pc.next_val)
-   exe_units(brunit_idx).io.get_ftq_pc.next_pc        := RegNext(fetch_unit.io.get_pc.next_pc)
+   io.ifu.get_pc.ftq_idx := RegNext(iss_uops(brunit_idx).ftq_idx)
+   exe_units(brunit_idx).io.get_ftq_pc.fetch_pc       := RegNext(io.ifu.get_pc.fetch_pc)
+   exe_units(brunit_idx).io.get_ftq_pc.next_val       := RegNext(io.ifu.get_pc.next_val)
+   exe_units(brunit_idx).io.get_ftq_pc.next_pc        := RegNext(io.ifu.get_pc.next_pc)
    exe_units(brunit_idx).io.status := csr.io.status
 
 
@@ -1364,9 +1328,9 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
             printf("%d; O3PipeView:dispatch: %d\n", dis_uops(w).debug_events.fetch_seq, debug_tsc_reg)
          }
 
-         when (dec_rdy || fetch_unit.io.clear_fetchbuffer)
+         when (dec_rdy || io.ifu.clear_fetchbuffer)
          {
-            dec_printed_mask := UInt(0)
+            dec_printed_mask := 0.U
          }
          .otherwise
          {
@@ -1393,7 +1357,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    io.ptw.ptbr       := csr.io.ptbr
    io.ptw.status     := csr.io.status
    io.ptw.pmp        := csr.io.pmp
-   io.ptw.sfence     := io.imem.sfence
+   io.ptw.sfence     := io.ifu.sfence
 
    //-------------------------------------------------------------
    //-------------------------------------------------------------

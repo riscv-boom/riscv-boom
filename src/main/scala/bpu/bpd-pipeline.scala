@@ -49,7 +49,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    val io = IO(new BoomBundle()(p)
    {
       // Fetch0
-      val btb_req       = Valid(new freechips.rocketchip.rocket.BTBReq).flip
+      val s0_req        = Valid(new freechips.rocketchip.rocket.BTBReq).flip
       val debug_imemresp_pc= UInt(INPUT, width = vaddrBitsExtended) // For debug -- make sure I$ and BTB are synchronised.
 
       // Fetch1
@@ -100,13 +100,13 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    //************************************************
    // Branch Prediction (BP0 Stage)
 
-   btb.io.req := io.btb_req
+   btb.io.req := io.s0_req
 
 
    //************************************************
    // Branch Prediction (BP1 Stage)
 
-   bpd.io.req := io.btb_req
+   bpd.io.req := io.s0_req
    bpd.io.f2_replay := io.f2_replay
 
 
@@ -199,7 +199,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    {
       printf("btb, f0_npc=%c req_pc 0x%x, f1=%c targ=0x%x\n"
          , Mux(btb.io.req.valid, Str("V"), Str("-"))
-         , io.btb_req.bits.addr
+         , io.s0_req.bits.addr
          , Mux(btb.io.resp.valid, Str("V"), Str("-"))
          , btb.io.resp.bits.target
          )
