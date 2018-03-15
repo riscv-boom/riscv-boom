@@ -27,6 +27,7 @@
 package boom
 
 import Chisel._
+import chisel3.core.DontCare
 import chisel3.experimental.dontTouch
 import freechips.rocketchip.config.Parameters
 
@@ -282,7 +283,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    io.ifu.flush_pc          := RegNext(csr.io.evec)
    io.ifu.com_ftq_idx       := rob.io.com_xcpt.bits.ftq_idx
 
-   io.ifu.clear_fetchbuffer := br_unit.brinfo.mispredict || 
+   io.ifu.clear_fetchbuffer := br_unit.brinfo.mispredict ||
                                rob.io.flush.valid ||
                                io.ifu.sfence_take_pc
 
@@ -1358,8 +1359,47 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    //-------------------------------------------------------------
    //-------------------------------------------------------------
 
-   // we do not support RoCC (yet)
+   // We do not support RoCC.
    io.rocc.cmd.valid := false.B
+   io.rocc.cmd.bits <> DontCare
    io.rocc.resp.ready := false.B
+   io.rocc.exception := false.B
+   io.rocc.mem.req.bits := DontCare
+   io.rocc.mem.resp.bits.replay := false.B
+   io.rocc.mem.s2_xcpt.pf.st := false.B
+   io.rocc.mem.s2_xcpt.pf.ld := false.B
+   io.rocc.mem.resp.bits.tag := 0.U
+   io.rocc.mem.resp.valid := false.B
+   io.rocc.mem.replay_next := false.B
+   io.rocc.mem.resp.bits.data_word_bypass := false.B
+   io.rocc.mem.perf.acquire := false.B
+   io.rocc.mem.resp.bits.addr := false.B
+   io.rocc.mem.resp.bits.store_data := false.B
+   io.rocc.mem.resp.bits.typ := false.B
+   io.rocc.mem.req.ready := false.B
+   io.rocc.mem.resp.bits.cmd := false.B
+   io.rocc.mem.perf.tlbMiss := false.B
+   io.rocc.mem.s2_xcpt.ae.st := false.B
+   io.rocc.mem.s2_xcpt.ae.ld := false.B
+   io.rocc.mem.ordered := false.B
+   io.rocc.mem.resp.bits.data := 0.U
+   io.rocc.mem.resp.bits.has_data := false.B
+   io.rocc.mem.resp.bits.data_raw := false.B
+   io.rocc.mem.perf.release := false.B
+   io.rocc.mem.s2_nack := false.B
+   io.rocc.mem.s2_xcpt.ma.st := false.B
+   io.rocc.mem.s2_xcpt.ma.ld := false.B
+
+
+   // Wire off other unused CoreIO signals.
+   io.fpu <> DontCare
+   io.fpu.valid := false.B
+   io.fpu.inst := 0.U
+
+   //io.trace := csr.io.trace unused
+   io.trace <> DontCare
+   io.trace map (t => t.valid := false.B)
+
+   override val compileOptions = chisel3.core.ExplicitCompileOptions.NotStrict.copy(explicitInvalidate = true)
 }
 
