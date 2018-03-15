@@ -49,7 +49,7 @@ import chisel3.internal.sourceinfo.SourceInfo
 class BoomFrontendIO(implicit p: Parameters) extends BoomBundle()(p)
 {
    // Give the backend a packet of instructions.
-   val fetchpacket       = new DecoupledIO(new FetchBundle).flip
+   val fetchpacket       = new DecoupledIO(new FetchBufferResp).flip
 
    val br_unit           = new BranchUnitResp().asOutput
    val get_pc            = new GetPCFromFtqIO().flip
