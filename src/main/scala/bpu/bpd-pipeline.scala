@@ -40,7 +40,7 @@ class BranchPredInfo(implicit p: Parameters) extends BoomBundle()(p)
    val bpd_taken         = Bool() // did the bpd predict taken for this instruction?
 
    val bim_resp         = new BimResp
-   val bpd_resp         = new BpdResp // TODO XXX this can be very expensive -- don't give to every instruction? And break into separate toBRU/Exe and toCom versions.
+   val bpd_resp         = new BpdResp
 }
 
 class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p)

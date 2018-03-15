@@ -77,7 +77,6 @@ class FunctionalUnitIo(
 
    // only used by branch unit
    val get_ftq_pc = new GetPCFromFtqIO().flip
-   val get_pred = new GetPredictionInfo // TODO XXX REMOVE
    val status = new freechips.rocketchip.rocket.MStatus().asInput
 }
 
@@ -374,19 +373,18 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
                               !uop.br_prediction.btb_hit ||
                               !uop.br_prediction.btb_taken ||
                               io.status.debug // fun HACK to perform fence.i on JALRs in debug mode
-//                              !io.get_pred.info.btb_resp.taken || XXX get info from get_Pred, not uop.br_pred
             bpd_mispredict := Bool(false)
          }
          when (pc_sel === PC_PLUS4)
          {
-            btb_mispredict := uop.br_prediction.btb_hit && uop.br_prediction.btb_taken // TODO XXX io.get_pred.info.btb_resp.taken
+            btb_mispredict := uop.br_prediction.btb_hit && uop.br_prediction.btb_taken
             bpd_mispredict := uop.br_prediction.bpd_taken
          }
          when (pc_sel === PC_BRJMP)
          {
             btb_mispredict := wrong_taken_target ||
                               !uop.br_prediction.btb_hit ||
-                              (uop.br_prediction.btb_hit && !uop.br_prediction.btb_taken) // TODO XXX !io.get_pred.info.btb_resp.taken)
+                              (uop.br_prediction.btb_hit && !uop.br_prediction.btb_taken)
             bpd_mispredict := !uop.br_prediction.bpd_taken
          }
       }
@@ -489,12 +487,7 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
       br_unit.btb_update.bits.pc               := fetch_pc // tell the BTB which pc to tag check against
       br_unit.btb_update.bits.cfi_pc           := uop_pc_
       br_unit.btb_update.bits.target           := (target.asSInt & SInt(-coreInstBytes)).asUInt
-//      br_unit.btb_update.prediction.valid := io.get_pred.info.btb_resp_valid // did this branch's fetch packet have
-//                                                                             // a BTB hit in fetch?
-//      br_unit.btb_update.prediction.bits  := io.get_pred.info.btb_resp       // give the BTB back its BTBResp
       br_unit.btb_update.bits.taken            := is_taken   // was this branch/jal/jalr "taken"
-//      br_unit.btb_update.bits.is_jump          := uop.is_jump
-//      br_unit.btb_update.bits.is_ret           := uop.is_ret
       br_unit.btb_update.bits.cfi_type         :=
 			Mux(uop.is_jal, CfiType.jal,
 			Mux(uop.is_jump && !uop.is_jal, CfiType.jalr,
