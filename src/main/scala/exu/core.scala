@@ -81,7 +81,6 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    val num_irf_write_ports = exe_units.map(_.num_rf_write_ports).sum
    val num_fast_wakeup_ports = exe_units.count(_.isBypassable)
    val num_wakeup_ports = num_irf_write_ports + num_fast_wakeup_ports
-   val dec_serializer   = Module(new FetchSerializerNtoM)
    val decode_units     = for (w <- 0 until DECODE_WIDTH) yield { val d = Module(new DecodeUnit); d }
    val dec_brmask_logic = Module(new BranchMaskGenerationLogic(DECODE_WIDTH))
    val rename_stage     = Module(new RenameStage(DECODE_WIDTH, num_wakeup_ports, fp_pipeline.io.wakeups.length))
@@ -333,14 +332,8 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    //-------------------------------------------------------------
    // Pull out instructions and send to the Decoders
 
-   dec_serializer.io.enq <> io.ifu.fetchpacket
-
-   dec_serializer.io.kill := io.ifu.clear_fetchbuffer
-
-   dec_serializer.io.deq.ready := dec_rdy
-
-   val fetched_inst_valid = dec_serializer.io.deq.valid
-   val dec_fbundle        = dec_serializer.io.deq.bits
+   io.ifu.fetchpacket.ready := dec_rdy
+   val dec_fbundle = io.ifu.fetchpacket.bits
 
    //-------------------------------------------------------------
    // Decoders
@@ -354,7 +347,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
    for (w <- 0 until DECODE_WIDTH)
    {
-      dec_valids(w)                      := fetched_inst_valid && dec_fbundle.uops(w).valid && !dec_finished_mask(w)
+      dec_valids(w)                      := io.ifu.fetchpacket.valid && dec_fbundle.uops(w).valid && !dec_finished_mask(w)
       decode_units(w).io.enq.uop         := dec_fbundle.uops(w)
       decode_units(w).io.status          := csr.io.status
       decode_units(w).io.csr_decode      := csr.io.decode(w)
@@ -1140,7 +1133,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       for (w <- 0 until DECODE_WIDTH)
       {
          printf("(%c%c) " + "DASM(%x)" + " |  "
-            , Mux(fetched_inst_valid && dec_fbundle.uops(w).valid && !dec_finished_mask(w), Str("v"), Str("-"))
+            , Mux(io.ifu.fetchpacket.valid && dec_fbundle.uops(w).valid && !dec_finished_mask(w), Str("v"), Str("-"))
             , Mux(dec_will_fire(w), Str("V"), Str("-"))
             , dec_fbundle.uops(w).inst
             )

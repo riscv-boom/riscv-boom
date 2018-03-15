@@ -29,7 +29,6 @@ case class BoomCoreParams(
    fetchBufferSz: Int = 4,
    enableAgePriorityIssue: Boolean = true,
    enablePrefetching: Boolean = false,
-   enableFetchBufferFlowThrough: Boolean = true,
    enableBrResolutionRegister: Boolean = true,
    enableCommitMapTable: Boolean = false,
    enableBTBContainsBranches: Boolean = true,
@@ -110,8 +109,6 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
    val numIntPhysRegs   = boomParams.numIntPhysRegisters // size of the integer physical register file
    val numFpPhysRegs    = boomParams.numFpPhysRegisters  // size of the floating point physical register file
 
-
-   val enableFetchBufferFlowThrough = boomParams.enableFetchBufferFlowThrough
 
    //************************************
    // Functional Units
