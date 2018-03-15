@@ -106,13 +106,12 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 
   val icache = outer.icache.module
   val tlb = Module(new TLB(true, log2Ceil(fetchBytes), nTLBEntries))
-  // TODO rename (it's the controller unit?).
-  val fetch_unit = Module(new FetchUnit(fetchWidth))
-  val bpd_stage = Module(new BranchPredictionStage(fetchWidth))
+  val fetch_controller = Module(new FetchControlUnit(fetchWidth))
+  val bpdpipeline = Module(new BranchPredictionStage(fetchWidth))
 
 
   val s0_pc = Wire(UInt(INPUT, width = vaddrBitsExtended))
-  val s0_valid = fetch_unit.io.imem_req.valid || fetch_unit.io.imem_resp.ready
+  val s0_valid = fetch_controller.io.imem_req.valid || fetch_controller.io.imem_resp.ready
   val s1_valid = RegNext(s0_valid)
   val s1_pc = Reg(UInt(width=vaddrBitsExtended))
   val s1_speculative = Reg(Bool())
@@ -134,7 +133,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   val predicted_taken = Wire(init = Bool(false))
 
   val s2_replay = Wire(Bool())
-  s2_replay := (s2_valid && !fetch_unit.io.imem_resp.fire()) || RegNext(s2_replay && !s0_valid, true.B)
+  s2_replay := (s2_valid && !fetch_controller.io.imem_resp.fire()) || RegNext(s2_replay && !s0_valid, true.B)
   val npc = Mux(s2_replay, s2_pc, predicted_npc)
 
   s1_pc := s0_pc
@@ -143,9 +142,9 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   val s0_speculative =
     if (usingCompressed) s1_speculative || s2_valid && !s2_speculative || predicted_taken
     else Bool(true)
-  s1_speculative := Mux(fetch_unit.io.imem_req.valid, fetch_unit.io.imem_req.bits.speculative, Mux(s2_replay, s2_speculative, s0_speculative))
+  s1_speculative := Mux(fetch_controller.io.imem_req.valid, fetch_controller.io.imem_req.bits.speculative, Mux(s2_replay, s2_speculative, s0_speculative))
 
-  val s2_redirect = Wire(init = fetch_unit.io.imem_req.valid)
+  val s2_redirect = Wire(init = fetch_controller.io.imem_req.valid)
   s2_valid := false
   when (!s2_replay) {
     s2_valid := !s2_redirect
@@ -171,81 +170,81 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   icache.io.s2_kill := s2_speculative && !s2_tlb_resp.cacheable || s2_xcpt
   icache.io.s2_prefetch := s2_tlb_resp.prefetchable
 
-  s0_pc := alignPC(Mux(fetch_unit.io.imem_req.valid, fetch_unit.io.imem_req.bits.pc, npc))
-  fetch_unit.io.imem_resp.valid := RegNext(s1_valid) && s2_valid && (icache.io.resp.valid || !s2_tlb_resp.miss && icache.io.s2_kill)
-  fetch_unit.io.imem_resp.bits.pc := s2_pc
+  s0_pc := alignPC(Mux(fetch_controller.io.imem_req.valid, fetch_controller.io.imem_req.bits.pc, npc))
+  fetch_controller.io.imem_resp.valid := RegNext(s1_valid) && s2_valid && (icache.io.resp.valid || !s2_tlb_resp.miss && icache.io.s2_kill)
+  fetch_controller.io.imem_resp.bits.pc := s2_pc
 
-  fetch_unit.io.imem_resp.bits.data := icache.io.resp.bits.data
-  fetch_unit.io.imem_resp.bits.mask := UInt((1 << fetchWidth)-1) << s2_pc.extract(log2Ceil(fetchWidth)+log2Ceil(coreInstBytes)-1, log2Ceil(coreInstBytes))
-  fetch_unit.io.imem_resp.bits.replay := icache.io.resp.bits.replay || icache.io.s2_kill && !icache.io.resp.valid && !s2_xcpt
-  fetch_unit.io.imem_resp.bits.btb := s2_btb_resp_bits
-  fetch_unit.io.imem_resp.bits.btb.taken := s2_btb_taken
-  fetch_unit.io.imem_resp.bits.xcpt := s2_tlb_resp
-  when (icache.io.resp.valid && icache.io.resp.bits.ae) { fetch_unit.io.imem_resp.bits.xcpt.ae.inst := true }
+  fetch_controller.io.imem_resp.bits.data := icache.io.resp.bits.data
+  fetch_controller.io.imem_resp.bits.mask := UInt((1 << fetchWidth)-1) << s2_pc.extract(log2Ceil(fetchWidth)+log2Ceil(coreInstBytes)-1, log2Ceil(coreInstBytes))
+  fetch_controller.io.imem_resp.bits.replay := icache.io.resp.bits.replay || icache.io.s2_kill && !icache.io.resp.valid && !s2_xcpt
+  fetch_controller.io.imem_resp.bits.btb := s2_btb_resp_bits
+  fetch_controller.io.imem_resp.bits.btb.taken := s2_btb_taken
+  fetch_controller.io.imem_resp.bits.xcpt := s2_tlb_resp
+  when (icache.io.resp.valid && icache.io.resp.bits.ae) { fetch_controller.io.imem_resp.bits.xcpt.ae.inst := true }
 
   //-------------------------------------------------------------
   // **** Fetch Controller ****
   //-------------------------------------------------------------
 
-   fetch_unit.io.br_unit           := io.cpu.br_unit
-   fetch_unit.io.tsc_reg           := io.cpu.tsc_reg
+   fetch_controller.io.br_unit           := io.cpu.br_unit
+   fetch_controller.io.tsc_reg           := io.cpu.tsc_reg
 
-   fetch_unit.io.f2_btb_resp       := bpd_stage.io.f2_btb_resp
-   fetch_unit.io.f3_bpd_resp       := bpd_stage.io.f3_bpd_resp
+   fetch_controller.io.f2_btb_resp       := bpdpipeline.io.f2_btb_resp
+   fetch_controller.io.f3_bpd_resp       := bpdpipeline.io.f3_bpd_resp
 
-   fetch_unit.io.clear_fetchbuffer := io.cpu.clear_fetchbuffer
+   fetch_controller.io.clear_fetchbuffer := io.cpu.clear_fetchbuffer
 
-   fetch_unit.io.sfence_take_pc    := io.cpu.sfence_take_pc
-   fetch_unit.io.sfence_addr       := io.cpu.sfence_addr
+   fetch_controller.io.sfence_take_pc    := io.cpu.sfence_take_pc
+   fetch_controller.io.sfence_addr       := io.cpu.sfence_addr
 
-   fetch_unit.io.flush_take_pc     := io.cpu.flush_take_pc
-   fetch_unit.io.flush_pc          := io.cpu.flush_pc
-   fetch_unit.io.com_ftq_idx       := io.cpu.com_ftq_idx
+   fetch_controller.io.flush_take_pc     := io.cpu.flush_take_pc
+   fetch_controller.io.flush_pc          := io.cpu.flush_pc
+   fetch_controller.io.com_ftq_idx       := io.cpu.com_ftq_idx
 
-   fetch_unit.io.flush_info        := io.cpu.flush_info
-   fetch_unit.io.commit            := io.cpu.commit
+   fetch_controller.io.flush_info        := io.cpu.flush_info
+   fetch_controller.io.commit            := io.cpu.commit
 
-   io.cpu.get_pc <> fetch_unit.io.get_pc
+   io.cpu.get_pc <> fetch_controller.io.get_pc
 
-   io.cpu.com_fetch_pc := fetch_unit.io.com_fetch_pc
+   io.cpu.com_fetch_pc := fetch_controller.io.com_fetch_pc
 
-   io.cpu.fetchpacket <> fetch_unit.io.fetchpacket
+   io.cpu.fetchpacket <> fetch_controller.io.fetchpacket
 
    //-------------------------------------------------------------
    // **** Branch Prediction ****
    //-------------------------------------------------------------
 
-   bpd_stage.io.s0_req.valid := s0_valid
-   bpd_stage.io.s0_req.bits.addr := s0_pc
+   bpdpipeline.io.s0_req.valid := s0_valid
+   bpdpipeline.io.s0_req.bits.addr := s0_pc
 
 
-   bpd_stage.io.f2_replay := s2_replay
-   bpd_stage.io.f2_stall := !fetch_unit.io.imem_resp.ready
-   bpd_stage.io.f3_stall := fetch_unit.io.f3_stall
-   bpd_stage.io.f3_is_br := fetch_unit.io.f3_is_br
-   bpd_stage.io.debug_imemresp_pc := fetch_unit.io.imem_resp.bits.pc
+   bpdpipeline.io.f2_replay := s2_replay
+   bpdpipeline.io.f2_stall := !fetch_controller.io.imem_resp.ready
+   bpdpipeline.io.f3_stall := fetch_controller.io.f3_stall
+   bpdpipeline.io.f3_is_br := fetch_controller.io.f3_is_br
+   bpdpipeline.io.debug_imemresp_pc := fetch_controller.io.imem_resp.bits.pc
 
-   bpd_stage.io.br_unit := io.cpu.br_unit
-   bpd_stage.io.ftq_restore := fetch_unit.io.ftq_restore_history
-   bpd_stage.io.redirect := fetch_unit.io.imem_req.valid
+   bpdpipeline.io.br_unit := io.cpu.br_unit
+   bpdpipeline.io.ftq_restore := fetch_controller.io.ftq_restore_history
+   bpdpipeline.io.redirect := fetch_controller.io.imem_req.valid
 
-   bpd_stage.io.flush := io.cpu.flush
+   bpdpipeline.io.flush := io.cpu.flush
 
-   bpd_stage.io.f2_valid := fetch_unit.io.imem_resp.valid
-   bpd_stage.io.f2_redirect := fetch_unit.io.f2_redirect
-   bpd_stage.io.f4_redirect := fetch_unit.io.f4_redirect
-   bpd_stage.io.f4_taken := fetch_unit.io.f4_taken
-   bpd_stage.io.fe_clear := fetch_unit.io.clear_fetchbuffer
+   bpdpipeline.io.f2_valid := fetch_controller.io.imem_resp.valid
+   bpdpipeline.io.f2_redirect := fetch_controller.io.f2_redirect
+   bpdpipeline.io.f4_redirect := fetch_controller.io.f4_redirect
+   bpdpipeline.io.f4_taken := fetch_controller.io.f4_taken
+   bpdpipeline.io.fe_clear := fetch_controller.io.clear_fetchbuffer
 
-   bpd_stage.io.f3_ras_update := fetch_unit.io.f3_ras_update
-   bpd_stage.io.f3_btb_update := fetch_unit.io.f3_btb_update
-   bpd_stage.io.bim_update    := fetch_unit.io.bim_update
-   bpd_stage.io.bpd_update    := fetch_unit.io.bpd_update
+   bpdpipeline.io.f3_ras_update := fetch_controller.io.f3_ras_update
+   bpdpipeline.io.f3_btb_update := fetch_controller.io.f3_btb_update
+   bpdpipeline.io.bim_update    := fetch_controller.io.bim_update
+   bpdpipeline.io.bpd_update    := fetch_controller.io.bpd_update
 
 
 
-   bpd_stage.io.status_prv    := io.cpu.status_prv
-   bpd_stage.io.status_debug  := io.cpu.status_debug
+   bpdpipeline.io.status_prv    := io.cpu.status_prv
+   bpdpipeline.io.status_debug  := io.cpu.status_debug
 
   //-------------------------------------------------------------
   // performance events

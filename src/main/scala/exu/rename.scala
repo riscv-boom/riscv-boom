@@ -49,11 +49,8 @@ class RenameStageIO(
    val ren2_mask  = Vec(pl_width, Bool().asOutput) // mask of valid instructions
    val ren2_uops  = Vec(pl_width, new MicroOp().asOutput)
 
-   val ren_pred_info = Vec(pl_width, new BranchPredInfo()).asInput
-
    // branch resolution (execute)
    val brinfo    = new BrResolutionInfo().asInput
-   val get_pred  = new GetPredictionInfo().flip
 
    val dis_inst_can_proceed = Vec(DISPATCH_WIDTH, Bool()).asInput
 
@@ -146,28 +143,6 @@ class RenameStage(
    }
 
    //-------------------------------------------------------------
-   // Branch Predictor Snapshots TODO REMOVE XXX
-
-   // Each branch prediction must snapshot the predictor (history state, etc.).
-   // On a mispredict, the snapshot must be used to reset the predictor.
-   // TODO use Mem(), but it chokes on the undefines in VCS
-//   val prediction_copies = Reg(Vec(MAX_BR_COUNT, new BranchPredictionResp))
-   // This info is sent to the BRU and deallocated after Execute.
-   val prediction_copies = Reg(Vec(MAX_BR_COUNT, new BranchPredInfo))
-
-   for (w <- 0 until pl_width)
-   {
-      when(ren1_br_vals(w)) {
-         prediction_copies(ren1_uops(w).br_tag) := io.ren_pred_info(w)
-      }
-   }
-
-   io.get_pred.info := prediction_copies(io.get_pred.br_tag)
-
-   val temp = Wire(new BranchPredInfo)
-   println("\t\tPrediction Snapshots: " + temp.asUInt.getWidth + "-bits, " + MAX_BR_COUNT + " entries")
-
-   //-------------------------------------------------------------
    // Free List
 
    for (list <- Seq(ifreelist, ffreelist))
@@ -227,7 +202,7 @@ class RenameStage(
    val ren2_will_fire = ren2_valids zip io.dis_inst_can_proceed map {case (v,c) => v && c && !io.kill}
 
    // will ALL ren2 uops proceed to dispatch?
-   val ren2_will_proceed = 
+   val ren2_will_proceed =
       if (renameLatency == 2) (ren2_valids zip ren2_will_fire map {case (v,f) => (v === f)}).reduce(_&_)
       else io.dis_inst_can_proceed.reduce(_&_)
 
@@ -348,5 +323,7 @@ class RenameStage(
    io.debug.ffreelist  := ffreelist.io.debug.freelist
    io.debug.fisprlist  := ffreelist.io.debug.isprlist
    io.debug.fbusytable := fbusytable.io.debug.busytable
+
+   override val compileOptions = chisel3.core.ExplicitCompileOptions.NotStrict.copy(explicitInvalidate = true)
 }
 

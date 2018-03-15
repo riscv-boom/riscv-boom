@@ -3,9 +3,12 @@
 // All Rights Reserved. See LICENSE for license details.
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
-// Fetch Unit
+// Fetch Control Unit
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
+//
+// This has lots of the brains behind fetching instructions and managing the
+// branch predictors and deciding which instructions to fetch next.
 //
 // Stages:
 //    * F0 -- next PC select
@@ -46,7 +49,7 @@ class FetchBundle(implicit p: Parameters) extends BoomBundle()(p)
 }
 
 
-class FetchUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p)
+class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p)
    with HasBoomCoreParameters
 {
    val io = IO(new BoomBundle()(p)

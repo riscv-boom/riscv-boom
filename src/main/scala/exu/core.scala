@@ -462,13 +462,9 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    // TODO for now, assume worst-case all instructions will dispatch towards one issue unit.
    val dis_readys = issue_units.map(_.io.dis_readys.asUInt).reduce(_&_) & fp_pipeline.io.dis_readys.asUInt
    rename_stage.io.dis_inst_can_proceed := dis_readys.toBools
-   rename_stage.io.ren_pred_info := Vec(dec_fbundle.uops.map(_.br_prediction))
 
    rename_stage.io.kill     := io.ifu.clear_fetchbuffer // mispredict or flush
    rename_stage.io.brinfo   := br_unit.brinfo
-   rename_stage.io.get_pred.br_tag        := (if (regreadLatency == 1) RegNext(iss_uops(brunit_idx).br_tag)
-                                             else iss_uops(brunit_idx).br_tag)
-   exe_units(brunit_idx).io.get_pred.info := RegNext(rename_stage.io.get_pred.info)
 
    rename_stage.io.flush_pipeline := rob.io.flush.valid
    rename_stage.io.debug_rob_empty := rob.io.empty
