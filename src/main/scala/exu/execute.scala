@@ -59,7 +59,6 @@ class ExecutionUnitIO(
    // only used by the branch unit
    val br_unit = new BranchUnitResp().asOutput
    val get_ftq_pc = new GetPCFromFtqIO().flip
-   val get_pred = new GetPredictionInfo
    val status = new freechips.rocketchip.rocket.MStatus().asInput
 
    // only used by the fpu unit
@@ -199,7 +198,6 @@ class ALUExeUnit(
    {
       io.br_unit <> alu.io.br_unit
       alu.io.get_ftq_pc <> io.get_ftq_pc
-      io.get_pred <> alu.io.get_pred
       alu.io.status <> io.status
    }
    else
@@ -649,7 +647,6 @@ class ALUMemExeUnit(
    {
       io.br_unit <> alu.io.br_unit
       alu.io.get_ftq_pc <> io.get_ftq_pc
-      io.get_pred <> alu.io.get_pred
       alu.io.status <> io.status
    }
    else

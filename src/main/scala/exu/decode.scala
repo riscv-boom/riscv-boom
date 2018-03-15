@@ -605,9 +605,6 @@ class FetchSerializerNtoM(implicit p: Parameters) extends BoomModule()(p)
    // Pipe valid straight through, since conceptually,
    // we are just an extension of the Fetch Buffer
    io.deq.valid := io.enq.valid
-   // TODO XXX HACK bpd_resp is associated with a "fetch packet", so only copy the first one.
-   // Ideally, separate out which parts of bpu_info are "per packet"/"per instruction" and "commit info" and "exe info".
-   io.deq.bits.bpd_resp := io.enq.bits.bpu_info(0).bpd_resp
 
 }
 
