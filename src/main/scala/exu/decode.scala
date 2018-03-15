@@ -4,7 +4,6 @@
 //------------------------------------------------------------------------------
 
 package boom
-{
 
 import Chisel._
 import freechips.rocketchip.config.Parameters
@@ -461,6 +460,8 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule()(p)
    io.deq.uop := uop
 
    //-------------------------------------------------------------
+
+   override val compileOptions = chisel3.core.ExplicitCompileOptions.NotStrict.copy(explicitInvalidate = true)
 }
 
 
@@ -498,114 +499,6 @@ class BranchDecode extends Module
    io.is_br   := cs_is_br
    io.is_jal  := cs_is_jal
    io.is_jalr := cs_is_jalr
-}
-
-
-class FetchSerializerResp(implicit p: Parameters) extends BoomBundle()(p)
-{
-   val uops = Vec(DECODE_WIDTH, new MicroOp())
-   val bpd_resp = new BpdResp()
-}
-class FetchSerializerIO(implicit p: Parameters) extends BoomBundle()(p)
-{
-   val enq = new DecoupledIO(new FetchBundle()).flip
-   val deq = new DecoupledIO(new FetchSerializerResp)
-   val kill = Bool(INPUT)
-}
-
-
-// TODO horrific hodgepodge, needs refactoring
-// connect a N-word wide Fetch Buffer with a M-word decode
-// currently only works for 2 wide fetch to 1 wide decode, OR N:N fetch/decode
-// TODO instead of counter, clear mask bits as instructions are finished?
-class FetchSerializerNtoM(implicit p: Parameters) extends BoomModule()(p)
-{
-   val io = IO(new FetchSerializerIO)
-
-   val counter = Reg(init = UInt(0, log2Up(FETCH_WIDTH)))
-   val inst_idx = Wire(UInt())
-   inst_idx := UInt(0)
-
-   //-------------------------------------------------------------
-   // Compute index for where to get the instruction
-   when (counter === UInt(1))
-   {
-      inst_idx := UInt(1)
-   }
-   .otherwise
-   {
-      inst_idx := Mux(io.enq.bits.mask === UInt(2), UInt(1), UInt(0))
-   }
-
-   //-------------------------------------------------------------
-   // Compute Enqueue Ready (get the next bundle)
-   io.enq.ready := io.deq.ready &&
-                     (io.enq.bits.mask =/= UInt(3) || (counter === UInt(1)))
-
-
-   //-------------------------------------------------------------
-   // Compute Counter
-   when (io.kill || io.enq.ready)
-   {
-      // reset counter on every new bundle
-      counter := UInt(0)
-   }
-   .elsewhen (io.deq.valid && io.deq.ready)
-   {
-      counter := counter + UInt(1)
-   }
-
-
-   //-------------------------------------------------------------
-   // override all the above logic for FW==1
-   if (FETCH_WIDTH == 1)
-   {
-      inst_idx := UInt(0)
-      io.enq.ready := io.deq.ready
-   }
-
-   io.deq.bits.uops(0).pc             := io.enq.bits.pc
-   io.deq.bits.uops(0).fetch_pc_lob   := io.enq.bits.pc
-   io.deq.bits.uops(0).ftq_idx        := io.enq.bits.ftq_idx
-   io.deq.bits.uops(0).pc_lob         := io.enq.bits.pc
-   io.deq.bits.uops(0).inst           := io.enq.bits.insts(inst_idx)
-   io.deq.bits.uops(0).br_prediction  := io.enq.bits.bpu_info(inst_idx)
-   io.deq.bits.uops(0).valid          := io.enq.bits.mask(inst_idx)
-   io.deq.bits.uops(0).xcpt_pf_if     := io.enq.bits.xcpt_pf_if
-   io.deq.bits.uops(0).xcpt_ae_if     := io.enq.bits.xcpt_ae_if
-   io.deq.bits.uops(0).replay_if      := io.enq.bits.replay_if
-   io.deq.bits.uops(0).xcpt_ma_if     := io.enq.bits.xcpt_ma_if_oh(inst_idx)
-   io.deq.bits.uops(0).debug_events   := io.enq.bits.debug_events(inst_idx)
-
-   //-------------------------------------------------------------
-   // override all the above logic for DW>1
-   // assume FW is also DW, and pass everything through
-   if ((DECODE_WIDTH == FETCH_WIDTH) && (FETCH_WIDTH > 1))
-   {
-      // 1:1, so pass everything straight through!
-      for (i <- 0 until DECODE_WIDTH)
-      {
-         require (coreInstBytes==4)
-         io.deq.bits.uops(i).valid          := io.enq.bits.mask(i)
-         io.deq.bits.uops(i).pc             := (io.enq.bits.pc.asSInt & SInt(-(FETCH_WIDTH*coreInstBytes))).asUInt + UInt(i << 2)
-         io.deq.bits.uops(i).fetch_pc_lob   := io.enq.bits.pc
-         io.deq.bits.uops(i).ftq_idx        := io.enq.bits.ftq_idx
-         io.deq.bits.uops(i).pc_lob         := ~(~io.enq.bits.pc | (fetchWidth*coreInstBytes-1).U) + (i << 2).U
-         io.deq.bits.uops(i).inst           := io.enq.bits.insts(i)
-         io.deq.bits.uops(i).xcpt_pf_if     := io.enq.bits.xcpt_pf_if
-         io.deq.bits.uops(i).xcpt_ae_if     := io.enq.bits.xcpt_ae_if
-         io.deq.bits.uops(i).replay_if      := io.enq.bits.replay_if
-         io.deq.bits.uops(i).xcpt_ma_if     := io.enq.bits.xcpt_ma_if_oh(i)
-         io.deq.bits.uops(i).br_prediction  := io.enq.bits.bpu_info(i)
-         io.deq.bits.uops(i).debug_events   := io.enq.bits.debug_events(i)
-      }
-      io.enq.ready := io.deq.ready
-   }
-
-   // Pipe valid straight through, since conceptually,
-   // we are just an extension of the Fetch Buffer
-   io.deq.valid := io.enq.valid
-
 }
 
 
@@ -702,6 +595,7 @@ class BranchMaskGenerationLogic(val pl_width: Int)(implicit p: Parameters) exten
    }
 
    io.debug.branch_mask := branch_mask
+
+   override val compileOptions = chisel3.core.ExplicitCompileOptions.NotStrict.copy(explicitInvalidate = true)
 }
 
-}
