@@ -41,7 +41,7 @@ class FetchBundle(implicit p: Parameters) extends BoomBundle()(p)
                             // A cfi branched to a misaligned address --
                             // one-hot encoding (1:1 with insts).
 
-   val bpu_info      = Vec(FETCH_WIDTH, new BranchPredInfo) // TODO XXX remove
+   val bpu_info      = Vec(FETCH_WIDTH, new BranchPredInfo) // TODO remove
 
    val debug_events  = Vec(FETCH_WIDTH, new DebugStageEvents)
 
@@ -94,16 +94,12 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
       val sfence_take_pc    = Bool(INPUT)
       val sfence_addr       = UInt(INPUT, vaddrBits+1)
 
-      val fetchpacket       = new DecoupledIO(new FetchBundle)
+      val fetchpacket       = new DecoupledIO(new FetchBufferResp)
    })
 
    val bchecker = Module (new BranchChecker(fetchWidth))
    val ftq = Module(new FetchTargetQueue(num_entries = ftqSz))
-   val FetchBuffer = Module(new Queue(gen=new FetchBundle,
-                                entries=fetchBufferSz,
-                                pipe=false,
-                                flow=enableFetchBufferFlowThrough,
-                                _reset=(io.clear_fetchbuffer || reset.toBool)))
+   val fb = Module(new FetchBuffer(num_entries=fetchBufferSz))
 
    val br_unit = io.br_unit
    val fseq_reg = Reg(init = UInt(0, xLen))
@@ -122,7 +118,7 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
    val r_f4_taken = Reg(init=false.B)
    val r_f4_fetchpc = Reg(UInt())
    // Can the F3 stage proceed?
-   val f4_ready = FetchBuffer.io.enq.ready && ftq.io.enq.ready
+   val f4_ready = fb.io.enq.ready && ftq.io.enq.ready
    io.f3_stall := !f4_ready
    io.f3_clear := clear_f3
 
@@ -479,16 +475,17 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
    //-------------------------------------------------------------
 
    // Fetch Buffer
-   FetchBuffer.io.enq.valid := f3_valid && !r_f4_req.valid && f4_ready
-   FetchBuffer.io.enq.bits  := f3_fetch_bundle
+   fb.io.enq.valid := f3_valid && !r_f4_req.valid && f4_ready
+   fb.io.enq.bits  := f3_fetch_bundle
+   fb.io.clear := io.clear_fetchbuffer
 
 
    for (i <- 0 until fetch_width)
    {
       if (i == 0) {
-         FetchBuffer.io.enq.bits.debug_events(i).fetch_seq := fseq_reg
+         fb.io.enq.bits.debug_events(i).fetch_seq := fseq_reg
       } else {
-         FetchBuffer.io.enq.bits.debug_events(i).fetch_seq := fseq_reg +
+         fb.io.enq.bits.debug_events(i).fetch_seq := fseq_reg +
             PopCount(f3_fetch_bundle.mask.asUInt()(i-1,0))
       }
    }
@@ -497,7 +494,7 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
    // **** FetchTargetQueue ****
    //-------------------------------------------------------------
 
-   ftq.io.enq.valid := FetchBuffer.io.enq.valid
+   ftq.io.enq.valid := fb.io.enq.valid
    ftq.io.enq.bits.fetch_pc := f3_imemresp.pc
    ftq.io.enq.bits.history := io.f3_bpd_resp.bits.history
    ftq.io.enq.bits.bpd_info := io.f3_bpd_resp.bits.info
@@ -535,7 +532,8 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
    // **** Frontend Response ****
    //-------------------------------------------------------------
 
-   io.fetchpacket <> FetchBuffer.io.deq
+   io.fetchpacket.bits.uops map {_ := DontCare }
+   io.fetchpacket <> fb.io.deq
 
 
    //-------------------------------------------------------------
@@ -544,10 +542,10 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
 
    if (O3PIPEVIEW_PRINTF)
    {
-      when (FetchBuffer.io.enq.fire())
+      when (fb.io.enq.fire())
       {
-         fseq_reg := fseq_reg + PopCount(FetchBuffer.io.enq.bits.mask)
-         val bundle = FetchBuffer.io.enq.bits
+         fseq_reg := fseq_reg + PopCount(fb.io.enq.bits.mask)
+         val bundle = fb.io.enq.bits
          for (i <- 0 until fetch_width)
          {
             when (bundle.mask(i))
@@ -585,7 +583,7 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
    val curr_aligned_pc = ~(~fetch_pc | (UInt(fetch_width*coreInstBytes-1)))
    val cfi_pc = curr_aligned_pc  + (cfi_idx << 2.U)
 
-   when (FetchBuffer.io.enq.fire() &&
+   when (fb.io.enq.fire() &&
       !f3_fetch_bundle.replay_if &&
       !f3_fetch_bundle.xcpt_pf_if &&
       !f3_fetch_bundle.xcpt_ae_if)
@@ -640,13 +638,13 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
    }
 
    when (io.clear_fetchbuffer ||
-      (FetchBuffer.io.enq.fire() &&
+      (fb.io.enq.fire() &&
          (f3_fetch_bundle.replay_if || f3_fetch_bundle.xcpt_pf_if || f3_fetch_bundle.xcpt_ae_if)))
    {
       last_valid := false.B
    }
 
-   when (FetchBuffer.io.enq.fire() &&
+   when (fb.io.enq.fire() &&
       !f3_fetch_bundle.replay_if &&
       !f3_fetch_bundle.xcpt_pf_if &&
       !f3_fetch_bundle.xcpt_ae_if)
@@ -716,10 +714,10 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
 
       // Fetch Stage 3
       printf(" Fetch3 : (%c) 0x%x jkilmsk:0x%x ->(0x%x)\n"
-         , Mux(FetchBuffer.io.enq.valid, Str("V"), Str("-"))
-         , FetchBuffer.io.enq.bits.pc
+         , Mux(fb.io.enq.valid, Str("V"), Str("-"))
+         , fb.io.enq.bits.pc
          , UInt(0) //io.bp2_pred_resp.mask
-         , FetchBuffer.io.enq.bits.mask
+         , fb.io.enq.bits.mask
          )
    }
 
