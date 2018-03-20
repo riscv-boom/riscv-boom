@@ -26,7 +26,7 @@ class DefaultBoomConfig extends Config((site, here, up) => {
    // Core Parameters
    case BoomTilesKey => up(BoomTilesKey, site) map { r => r.copy(
       core = r.core.copy(
-         fetchWidth = 2,
+         fetchWidth = 4,
          decodeWidth = 2,
          numRobEntries = 80,
          issueParams = Seq(
@@ -44,8 +44,10 @@ class DefaultBoomConfig extends Config((site, here, up) => {
          fpu = Some(freechips.rocketchip.tile.FPUParams(sfmaLatency=4, dfmaLatency=4, divSqrt=true))),
       btb = Some(BTBParams(nEntries = 0, updatesOutOfOrder = true)),
       dcache = Some(DCacheParams(rowBits = site(SystemBusKey).beatBits, nSets=64, nWays=8, nMSHRs=4, nTLBEntries=16)),
-      icache = Some(ICacheParams(fetchBytes = 2*4, rowBits = site(SystemBusKey).beatBits, nSets=64, nWays=8))
+      icache = Some(ICacheParams(fetchBytes = 4*4, rowBits = site(SystemBusKey).beatBits, nSets=64, nWays=8))
       )}
+   // Set TL network to 128bits wide
+   case SystemBusKey => up(SystemBusKey, site).copy(beatBytes = 16)
 })
 
 
@@ -61,7 +63,7 @@ class WithSmallBooms extends Config((site, here, up) => {
    case BoomTilesKey => up(BoomTilesKey, site) map { r =>r.copy(
       core = r.core.copy(
          fetchWidth = 2,
-         decodeWidth = 2,
+         decodeWidth = 1,
          numRobEntries = 16,
          issueParams = Seq(
             IssueParams(issueWidth=1, numEntries=4, iqType=IQT_MEM.litValue),

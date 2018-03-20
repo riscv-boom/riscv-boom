@@ -470,7 +470,7 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
       br_unit.brinfo := brinfo
 
       // updates the BTB same cycle as PC redirect
-      val lsb = log2Ceil(FETCH_WIDTH*coreInstBytes)
+      val lsb = log2Ceil(fetchWidth*coreInstBytes)
 
       // did a branch or jalr occur AND did we mispredict? AND was it taken? (i.e., should we update the BTB)
       val fetch_pc = ((uop_pc_ >> lsb) << lsb) + uop.fetch_pc_lob

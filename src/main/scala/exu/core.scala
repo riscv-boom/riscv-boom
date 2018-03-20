@@ -81,9 +81,9 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    val num_irf_write_ports = exe_units.map(_.num_rf_write_ports).sum
    val num_fast_wakeup_ports = exe_units.count(_.isBypassable)
    val num_wakeup_ports = num_irf_write_ports + num_fast_wakeup_ports
-   val decode_units     = for (w <- 0 until DECODE_WIDTH) yield { val d = Module(new DecodeUnit); d }
-   val dec_brmask_logic = Module(new BranchMaskGenerationLogic(DECODE_WIDTH))
-   val rename_stage     = Module(new RenameStage(DECODE_WIDTH, num_wakeup_ports, fp_pipeline.io.wakeups.length))
+   val decode_units     = for (w <- 0 until decodeWidth) yield { val d = Module(new DecodeUnit); d }
+   val dec_brmask_logic = Module(new BranchMaskGenerationLogic(decodeWidth))
+   val rename_stage     = Module(new RenameStage(decodeWidth, num_wakeup_ports, fp_pipeline.io.wakeups.length))
    val issue_units      = new boom.IssueUnits(num_wakeup_ports)
    val iregfile         = if (regreadLatency == 1 && enableCustomRf) {
                               Module(new RegisterFileSeqCustomArray(numIntPhysRegs,
@@ -107,9 +107,9 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
                                  exe_units.num_total_bypass_ports,
                                  xLen))
    val dc_shim          = Module(new DCacheShim())
-   val lsu              = Module(new LoadStoreUnit(DECODE_WIDTH))
+   val lsu              = Module(new LoadStoreUnit(decodeWidth))
    val rob              = Module(new Rob(
-                                 DECODE_WIDTH,
+                                 decodeWidth,
                                  NUM_ROB_ENTRIES,
                                  num_irf_write_ports + fp_pipeline.io.wakeups.length,
                                  exe_units.num_fpu_ports + fp_pipeline.io.wakeups.length))
@@ -122,9 +122,9 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    // Pipeline State Registers and Wires
 
    // Instruction Decode Stage
-   val dec_valids     = Wire(Vec(DECODE_WIDTH, Bool()))  // are the decoded instruction valid? It may be held up though.
-   val dec_uops       = Wire(Vec(DECODE_WIDTH, new MicroOp()))
-   val dec_will_fire  = Wire(Vec(DECODE_WIDTH, Bool()))  // can the instruction fire beyond decode?
+   val dec_valids     = Wire(Vec(decodeWidth, Bool()))  // are the decoded instruction valid? It may be held up though.
+   val dec_uops       = Wire(Vec(decodeWidth, new MicroOp()))
+   val dec_will_fire  = Wire(Vec(decodeWidth, Bool()))  // can the instruction fire beyond decode?
                                                          // (can still be stopped in ren or dis)
    val dec_rdy        = Wire(Bool())
 
@@ -237,6 +237,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    val iss_str = if (enableAgePriorityIssue) " (Age-based Priority)"
                  else " (Unordered Priority)"
    println("\n   Fetch Width           : " + fetchWidth)
+   println("   Decode Width          : " + decodeWidth)
    println("   Issue Width           : " + issueParams.map(_.issueWidth).sum)
    println("   ROB Size              : " + NUM_ROB_ENTRIES)
    println("   Issue Window Size     : " + issueParams.map(_.numEntries) + iss_str)
@@ -297,7 +298,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
 
    io.ifu.flush_icache :=
-      Range(0,DECODE_WIDTH).map{i => rob.io.commit.valids(i) && rob.io.commit.uops(i).is_fencei}.reduce(_|_) ||
+      Range(0,decodeWidth).map{i => rob.io.commit.valids(i) && rob.io.commit.uops(i).is_fencei}.reduce(_|_) ||
       (br_unit.brinfo.mispredict && br_unit.brinfo.is_jr &&  csr.io.status.debug)
 
    // Delay sfence to match pushing the sfence.addr into the TLB's CAM port.
@@ -324,10 +325,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    // use this to mask out insts coming from FetchBuffer that have been finished
    // for example, back pressure may cause us to only issue some instructions from FetchBuffer
    // but on the next cycle, we only want to retry a subset
-   val dec_finished_mask = Reg(init = Bits(0, DECODE_WIDTH))
-
-   // TODO need to generalize this logic to other width disparities
-   require (DECODE_WIDTH == fetchWidth)
+   val dec_finished_mask = Reg(init = UInt(0, decodeWidth))
 
    //-------------------------------------------------------------
    // Pull out instructions and send to the Decoders
@@ -343,9 +341,9 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    var dec_last_inst_was_stalled = Bool(false)
 
    // stall fetch/dcode because we ran out of branch tags
-   val branch_mask_full = Wire(Vec(DECODE_WIDTH, Bool()))
+   val branch_mask_full = Wire(Vec(decodeWidth, Bool()))
 
-   for (w <- 0 until DECODE_WIDTH)
+   for (w <- 0 until decodeWidth)
    {
       dec_valids(w)                      := io.ifu.fetchpacket.valid && dec_fbundle.uops(w).valid && !dec_finished_mask(w)
       decode_units(w).io.enq.uop         := dec_fbundle.uops(w)
@@ -400,7 +398,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    dec_brmask_logic.io.brinfo := br_unit.brinfo
    dec_brmask_logic.io.flush_pipeline := rob.io.flush.valid
 
-   for (w <- 0 until DECODE_WIDTH)
+   for (w <- 0 until decodeWidth)
    {
       dec_brmask_logic.io.is_branch(w) := !dec_finished_mask(w) && dec_uops(w).allocate_brtag
       dec_brmask_logic.io.will_fire(w) :=  dec_will_fire(w) && dec_uops(w).allocate_brtag // ren, dis can back pressure us
@@ -421,7 +419,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    var new_lidx = new_ldq_idx
    var new_sidx = new_stq_idx
 
-   for (w <- 0 until DECODE_WIDTH)
+   for (w <- 0 until decodeWidth)
    {
       dec_uops(w).ldq_idx := new_lidx
       dec_uops(w).stq_idx := new_sidx
@@ -433,14 +431,14 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    //-------------------------------------------------------------
    // Rob Allocation Logic
 
-   for (w <- 0 until DECODE_WIDTH)
+   for (w <- 0 until decodeWidth)
    {
       // note: this assumes uops haven't been shifted - there's a 1:1 match between PC's LSBs and "w" here
       // (thus the LSB of the rob_idx gives part of the PC)
-      if (DECODE_WIDTH == 1)
+      if (decodeWidth == 1)
          dec_uops(w).rob_idx := rob.io.curr_rob_tail
       else
-         dec_uops(w).rob_idx := Cat(rob.io.curr_rob_tail, UInt(w, log2Up(DECODE_WIDTH)))
+         dec_uops(w).rob_idx := Cat(rob.io.curr_rob_tail, UInt(w, log2Up(decodeWidth)))
    }
 
    val dec_has_br_or_jalr_in_packet =
@@ -528,7 +526,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    //-------------------------------------------------------------
    //-------------------------------------------------------------
 
-   for (w <- 0 until DECODE_WIDTH)
+   for (w <- 0 until decodeWidth)
    {
       dis_valids(w)       := rename_stage.io.ren2_mask(w)
       dis_uops(w)         := GetNewUopAndBrMask(rename_stage.io.ren2_uops(w), br_unit.brinfo)
@@ -726,7 +724,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    // enqueue basic load/store info in Decode
    lsu.io.dec_uops := dec_uops
 
-   for (w <- 0 until DECODE_WIDTH)
+   for (w <- 0 until decodeWidth)
    {
       lsu.io.dec_st_vals(w) := dec_will_fire(w) && rename_stage.io.inst_can_proceed(w) && !rob.io.flush.valid &&
                                dec_uops(w).is_store
@@ -862,7 +860,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    rob.io.enq_valids := rename_stage.io.ren1_mask
    rob.io.enq_uops   := rename_stage.io.ren1_uops
    rob.io.enq_new_packet := dec_finished_mask === 0.U
-   rob.io.enq_partial_stall := !dec_rdy && !dec_will_fire(DECODE_WIDTH-1)
+   rob.io.enq_partial_stall := !dec_rdy && !dec_will_fire(decodeWidth-1)
    rob.io.debug_tsc := debug_tsc_reg
    rob.io.csr_stall := csr.io.csr_stall
 
@@ -1108,10 +1106,10 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       println("\n Chisel Printout Enabled\n")
 
       val numFtqWhitespace = if (DEBUG_PRINTF_FTQ) (ftqSz/4)+1 else 0
-      val screenheight = 79
+//      val screenheight = 79
 //      val screenheight = 61
-//      val screenheight = 54
-       var whitespace = (screenheight - 25 + 3 - NUM_LSU_ENTRIES -
+      val screenheight = 56
+       var whitespace = (screenheight - 25 + 3 -3 - NUM_LSU_ENTRIES -
          issueParams.map(_.numEntries).sum - issueParams.length - (NUM_ROB_ENTRIES/COMMIT_WIDTH) - numFtqWhitespace
      )
 
@@ -1121,7 +1119,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
          , debug_tsc_reg
          , debug_irt_reg & UInt(0xffffff))
 
-      for (w <- 0 until DECODE_WIDTH)
+      for (w <- 0 until decodeWidth)
       {
          if (w == 0) {
             printf("\n  Dec:  ([0x%x]                        ", dec_uops(w).pc(19,0))
@@ -1130,7 +1128,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
          }
       }
 
-      for (w <- 0 until DECODE_WIDTH)
+      for (w <- 0 until decodeWidth)
       {
          printf("(%c%c) " + "DASM(%x)" + " |  "
             , Mux(io.ifu.fetchpacket.valid && dec_fbundle.uops(w).valid && !dec_finished_mask(w), Str("v"), Str("-"))
@@ -1139,7 +1137,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
             )
       }
 
-      for (w <- 0 until DECODE_WIDTH)
+      for (w <- 0 until decodeWidth)
       {
          if (w == 0) {
             printf("\n  Ren:  ([0x%x]                        ", rename_stage.io.ren2_uops(w).pc(19,0))
@@ -1148,7 +1146,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
          }
       }
 
-      for (w <- 0 until DECODE_WIDTH)
+      for (w <- 0 until decodeWidth)
       {
          printf(" (%c) " + "DASM(%x)" + " |  "
             , Mux(rename_stage.io.ren2_mask(w), Str("V"), Str("-"))
@@ -1157,7 +1155,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       }
 
       printf(") fin(%x)\n", dec_finished_mask)
-      for (w <- 0 until DECODE_WIDTH)
+      for (w <- 0 until decodeWidth)
       {
          printf("        [ISA:%d,%d,%d,%d] [Phs:%d(%c)%d[%c](%c)%d[%c](%c)%d[%c](%c)] "
             , dis_uops(w).ldst
@@ -1303,9 +1301,9 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       println("   O3Pipeview Visualization Enabled\n")
 
       // did we already print out the instruction sitting at the front of the fetchbuffer/decode stage?
-      val dec_printed_mask = Reg(init = Bits(0, DECODE_WIDTH))
+      val dec_printed_mask = Reg(init = Bits(0, decodeWidth))
 
-      for (w <- 0 until DECODE_WIDTH)
+      for (w <- 0 until decodeWidth)
       {
          when (dec_valids(w) && !dec_printed_mask(w)) {
             printf("%d; O3PipeView:decode:%d\n", dec_uops(w).debug_events.fetch_seq, debug_tsc_reg)
