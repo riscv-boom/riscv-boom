@@ -28,6 +28,7 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule()
       val enq = Flipped(Decoupled(new FetchBundle()))
       val deq = new DecoupledIO(new FetchBufferResp())
 
+      // Was the pipeline redirected? Clear/reset the fetchbuffer.
       val clear = Input(Bool())
       // The mask comes too late to use, so we might need to mask off
       // instructions that were enqueued on the previous cycle.
@@ -46,37 +47,63 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule()
    // **** Enqueue Uops ****
    //-------------------------------------------------------------
 
-   // shift down based on Priority(valids) TODO
+   // Step 1: convert FetchPacket into a vector of MicroOps.
+   // Step 2: Shift all MicroOps down towards index=0 (compress out any invalid MicroOps).
+   // Step 3: Write ShiftedMicroOps into the RAM.
 
    io.enq.ready := count < (num_elements-fetchWidth).U
 
-   val uops = Wire(Vec(fetchWidth, new MicroOp()))
+   // Input microops.
+   val in_uops = Wire(Vec(fetchWidth, new MicroOp()))
+
+   // Shifted microops (and the shifted valid mask).
+   val shft_mask = Wire(Vec(fetchWidth, Bool()))
+   val shft_uops = Wire(Vec(fetchWidth, new MicroOp()))
+
+   // Step 1. Convert input FetchPacket into an array of MicroOps.
    for (i <- 0 until fetchWidth)
    {
       require (coreInstBytes==4)
-      uops(i)                := DontCare
-      uops(i).valid          := io.enq.valid && io.enq.bits.mask(i)
-      uops(i).pc             := (io.enq.bits.pc.asSInt & (-(fetchWidth*coreInstBytes)).S).asUInt + (i << 2).U
-      uops(i).fetch_pc_lob   := io.enq.bits.pc
-      uops(i).ftq_idx        := io.enq.bits.ftq_idx
-      uops(i).pc_lob         := ~(~io.enq.bits.pc | (fetchWidth*coreInstBytes-1).U) + (i << 2).U
-      uops(i).inst           := io.enq.bits.insts(i)
-      uops(i).xcpt_pf_if     := io.enq.bits.xcpt_pf_if
-      uops(i).xcpt_ae_if     := io.enq.bits.xcpt_ae_if
-      uops(i).replay_if      := io.enq.bits.replay_if
-      uops(i).xcpt_ma_if     := io.enq.bits.xcpt_ma_if_oh(i)
-      uops(i).br_prediction  := io.enq.bits.bpu_info(i)
-      uops(i).debug_events   := io.enq.bits.debug_events(i)
+      in_uops(i)                := DontCare
+      in_uops(i).valid          := io.enq.valid && io.enq.bits.mask(i)
+      in_uops(i).pc             := (io.enq.bits.pc.asSInt & (-(fetchWidth*coreInstBytes)).S).asUInt + (i << 2).U
+      in_uops(i).fetch_pc_lob   := io.enq.bits.pc
+      in_uops(i).ftq_idx        := io.enq.bits.ftq_idx
+      in_uops(i).pc_lob         := ~(~io.enq.bits.pc | (fetchWidth*coreInstBytes-1).U) + (i << 2).U
+      in_uops(i).inst           := io.enq.bits.insts(i)
+      in_uops(i).xcpt_pf_if     := io.enq.bits.xcpt_pf_if
+      in_uops(i).xcpt_ae_if     := io.enq.bits.xcpt_ae_if
+      in_uops(i).replay_if      := io.enq.bits.replay_if
+      in_uops(i).xcpt_ma_if     := io.enq.bits.xcpt_ma_if_oh(i)
+      in_uops(i).br_prediction  := io.enq.bits.bpu_info(i)
+      in_uops(i).debug_events   := io.enq.bits.debug_events(i)
    }
+
+   // Step 2. Shift valids towards 0.
+   val first_index = PriorityEncoder(io.enq.bits.mask)
+   for (i <- 0 until fetchWidth)
+   {
+      val selects_oh = Wire(UInt(width=fetchWidth.W))
+      selects_oh   := UIntToOH(i.U + first_index)
+
+      val invalid = first_index >= (fetchWidth - i).U // out-of-bounds
+      shft_uops(i) := Mux1H(selects_oh, in_uops)
+      shft_mask(i) := Mux1H(selects_oh, io.enq.bits.mask) && !invalid
+
+      //printf(" shift [" + i + "] enq: %x shft: %d, selects_oh: %x, oob: %d\n",
+      //   io.enq.bits.mask, shft_mask(i), selects_oh, invalid)
+   }
+
+
 
    var woffset = WireInit(0.asUInt(width=(log2Ceil(fetchWidth)+1).W))
    for (i <- 0 until fetchWidth)
    {
-      when (io.enq.fire() && io.enq.bits.mask(i))
+      when (io.enq.fire() && shft_mask(i))
       {
-         ram(write_ptr+woffset) := uops(i)
+         ram(write_ptr+woffset) := shft_uops(i)
       }
-      woffset = woffset + Mux(io.enq.fire() && io.enq.bits.mask(i), 1.U, 0.U)
+      woffset = woffset + Mux(io.enq.fire() && shft_mask(i), 1.U, 0.U)
    }
 
    val enq_count = Mux(io.enq.fire(), PopCount(io.enq.bits.mask), 0.U)
@@ -122,9 +149,11 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule()
    if (DEBUG_PRINTF)
    {
       // TODO a problem if we don't check the f3_valid?
-      printf(" Fetch3 : (%d mask: %x) pc=0x%x enq_count (%d) %d\n",
+      printf(" Fetch3 : (%d mask: %x [%d] smask: %x) pc=0x%x enq_count (%d) %d\n",
          io.enq.valid,
          io.enq.bits.mask,
+         first_index,
+         shft_mask.asUInt,
          io.enq.bits.pc,
          enq_count,
          io.clear
