@@ -48,17 +48,17 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule()
    //-------------------------------------------------------------
 
    // Step 1: convert FetchPacket into a vector of MicroOps.
-   // Step 2: Shift all MicroOps down towards index=0 (compress out any invalid MicroOps).
-   // Step 3: Write ShiftedMicroOps into the RAM.
+   // Step 2: Compact/shift all MicroOps down towards index=0 (compress out any invalid MicroOps).
+   // Step 3: Write CompactedMicroOps into the RAM.
 
    io.enq.ready := count < (num_elements-fetchWidth).U
 
    // Input microops.
    val in_uops = Wire(Vec(fetchWidth, new MicroOp()))
 
-   // Shifted microops (and the shifted valid mask).
-   val shft_mask = Wire(Vec(fetchWidth, Bool()))
-   val shft_uops = Wire(Vec(fetchWidth, new MicroOp()))
+   // Compacted/shifted microops (and the shifted valid mask).
+   val compact_mask = Wire(Vec(fetchWidth, Bool()))
+   val compact_uops = Wire(Vec(fetchWidth, new MicroOp()))
 
    // Step 1. Convert input FetchPacket into an array of MicroOps.
    for (i <- 0 until fetchWidth)
@@ -87,26 +87,30 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule()
       selects_oh   := UIntToOH(i.U + first_index)
 
       val invalid = first_index >= (fetchWidth - i).U // out-of-bounds
-      shft_uops(i) := Mux1H(selects_oh, in_uops)
-      shft_mask(i) := Mux1H(selects_oh, io.enq.bits.mask) && !invalid
+      compact_uops(i) := Mux1H(selects_oh, in_uops)
+      compact_mask(i) := Mux1H(selects_oh, io.enq.bits.mask) && !invalid
 
-      //printf(" shift [" + i + "] enq: %x shft: %d, selects_oh: %x, oob: %d\n",
-      //   io.enq.bits.mask, shft_mask(i), selects_oh, invalid)
+      //printf(" shift [" + i + "] enq: %x compact: %d, selects_oh: %x, oob: %d\n",
+      //   io.enq.bits.mask, compact_mask(i), selects_oh, invalid)
    }
 
 
 
-   var woffset = WireInit(0.asUInt(width=(log2Ceil(fetchWidth)+1).W))
+   // all enqueuing uops have been compacted
+   val enq_count = Mux(io.enq.fire(), PopCount(io.enq.bits.mask), 0.U)
    for (i <- 0 until fetchWidth)
    {
-      when (io.enq.fire() && shft_mask(i))
+      when (io.enq.fire() && i.U < enq_count)
       {
-         ram(write_ptr+woffset) := shft_uops(i)
+         ram(write_ptr + i.U) := compact_uops(i)
+         assert (compact_mask(i))
       }
-      woffset = woffset + Mux(io.enq.fire() && shft_mask(i), 1.U, 0.U)
+      .otherwise
+      {
+         assert (!io.enq.fire() || !compact_mask(i))
+      }
    }
 
-   val enq_count = Mux(io.enq.fire(), PopCount(io.enq.bits.mask), 0.U)
    val deq_count =
       Mux(io.deq.ready,
          Mux(count < decodeWidth.U, count, decodeWidth.U),
@@ -114,7 +118,7 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule()
    count := count + enq_count - deq_count
 
    // TODO turn into bit-vector
-   write_ptr := write_ptr + woffset
+   write_ptr := write_ptr + enq_count
    read_ptr := read_ptr + deq_count
 
 
@@ -153,7 +157,7 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule()
          io.enq.valid,
          io.enq.bits.mask,
          first_index,
-         shft_mask.asUInt,
+         compact_mask.asUInt,
          io.enq.bits.pc,
          enq_count,
          io.clear
@@ -175,7 +179,6 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule()
    //-------------------------------------------------------------
 
    assert (count >= deq_count, "[fetchbuffer] Trying to dequeue more uops than are available.")
-   assert (woffset === enq_count, "[fetchbuffer] woffset =/= enqcount")
 
    override val compileOptions = chisel3.core.ExplicitCompileOptions.NotStrict.copy(explicitInvalidate = true)
 }
