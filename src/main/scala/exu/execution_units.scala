@@ -18,7 +18,7 @@ class ExecutionUnits(fpu: Boolean = false)(implicit val p: Parameters) extends H
 {
    val totalIssueWidth = issueParams.map(_.issueWidth).sum
    if (!fpu) {
-      println("\n   ~*** " + Seq("One","Two","Three","Four")(DECODE_WIDTH-1) + "-wide Machine ***~\n")
+      println("\n   ~*** " + Seq("One","Two","Three","Four")(decodeWidth-1) + "-wide Machine ***~\n")
       println("    -== " + Seq("Single","Dual","Triple","Quad","Five","Six")(totalIssueWidth-1) + " Issue ==- \n")
    }
 

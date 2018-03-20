@@ -1290,7 +1290,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
    // TODO refactor this logic
    require (isPow2(num_ld_entries))
    require (isPow2(num_st_entries))
-   for (w <- 0 until DECODE_WIDTH)
+   for (w <- 0 until decodeWidth)
    {
       val l_temp = laq_tail + w.U
       laq_is_full = ((l_temp === laq_head || l_temp === (laq_head + UInt(num_ld_entries))) && laq_maybe_full) | laq_is_full

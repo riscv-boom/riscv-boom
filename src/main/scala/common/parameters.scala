@@ -69,7 +69,6 @@ case class BoomCoreParams(
 ) extends freechips.rocketchip.tile.CoreParams
 {
    val retireWidth: Int = decodeWidth
-   require (fetchWidth == decodeWidth)
    val useCompressed: Boolean = false
 	require (useCompressed == false)
    val instBits: Int = if (useCompressed) 16 else 32
@@ -88,15 +87,18 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
 
    //************************************
    // Superscalar Widths
-   val FETCH_WIDTH      = boomParams.fetchWidth       // number of insts we can fetch
-   val DECODE_WIDTH     = boomParams.decodeWidth
-   val DISPATCH_WIDTH   = DECODE_WIDTH                // number of insts put into the IssueWindow
+
+   // fetchWidth provided by CoreParams class.
+   // decodeWidth provided by CoreParams class.
+   // retireWidth provided by BoomCoreParams class.
+//   val decodeWidth     = boomParams.decodeWidth
+   val DISPATCH_WIDTH   = decodeWidth                // number of insts put into the IssueWindow
    val COMMIT_WIDTH     = boomParams.retireWidth
 
-   require (DECODE_WIDTH == COMMIT_WIDTH)
+   require (decodeWidth == COMMIT_WIDTH)
    require (DISPATCH_WIDTH == COMMIT_WIDTH)
-   require (isPow2(FETCH_WIDTH))
-   require (DECODE_WIDTH <= FETCH_WIDTH)
+   require (isPow2(fetchWidth))
+   require (decodeWidth <= fetchWidth)
 
    //************************************
    // Data Structure Sizes
@@ -217,7 +219,7 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
 
    //************************************
    // Implicitly calculated constants
-   val NUM_ROB_ROWS      = NUM_ROB_ENTRIES/DECODE_WIDTH
+   val NUM_ROB_ROWS      = NUM_ROB_ENTRIES/decodeWidth
    val ROB_ADDR_SZ       = log2Up(NUM_ROB_ENTRIES)
    // the f-registers are mapped into the space above the x-registers
    val LOGICAL_REG_COUNT = if (usingFPU) 64 else 32
@@ -232,13 +234,13 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
    val NUM_BROB_ENTRIES  = NUM_ROB_ROWS //TODO explore smaller BROBs
    val BROB_ADDR_SZ      = log2Up(NUM_BROB_ENTRIES)
 
-   require (numIntPhysRegs >= (32 + DECODE_WIDTH))
-   require (numFpPhysRegs >= (32 + DECODE_WIDTH))
+   require (numIntPhysRegs >= (32 + decodeWidth))
+   require (numFpPhysRegs >= (32 + decodeWidth))
    require (MAX_BR_COUNT >=2)
    require (NUM_ROB_ROWS % 2 == 0)
-   require (NUM_ROB_ENTRIES % DECODE_WIDTH == 0)
+   require (NUM_ROB_ENTRIES % decodeWidth == 0)
    require (isPow2(NUM_LSU_ENTRIES))
-   require ((NUM_LSU_ENTRIES-1) > DECODE_WIDTH)
+   require ((NUM_LSU_ENTRIES-1) > decodeWidth)
 
 
    //************************************
