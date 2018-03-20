@@ -32,18 +32,18 @@ class FetchBundle(implicit p: Parameters) extends BoomBundle()(p)
 {
    val pc            = UInt(width = vaddrBitsExtended)
    val ftq_idx       = UInt(width = log2Up(ftqSz))
-   val insts         = Vec(FETCH_WIDTH, Bits(width = 32))
-   val mask          = Bits(width = FETCH_WIDTH) // mark which words are valid instructions
+   val insts         = Vec(fetchWidth, Bits(width = 32))
+   val mask          = Bits(width = fetchWidth) // mark which words are valid instructions
    val xcpt_pf_if    = Bool() // I-TLB miss (instruction fetch fault).
    val xcpt_ae_if    = Bool() // Access exception.
    val replay_if     = Bool() // the I$ demands we replay the instruction fetch.
-   val xcpt_ma_if_oh = UInt(width = FETCH_WIDTH)
+   val xcpt_ma_if_oh = UInt(width = fetchWidth)
                             // A cfi branched to a misaligned address --
                             // one-hot encoding (1:1 with insts).
 
-   val bpu_info      = Vec(FETCH_WIDTH, new BranchPredInfo) // TODO remove
+   val bpu_info      = Vec(fetchWidth, new BranchPredInfo) // TODO remove
 
-   val debug_events  = Vec(FETCH_WIDTH, new DebugStageEvents)
+   val debug_events  = Vec(fetchWidth, new DebugStageEvents)
 
   override def cloneType: this.type = new FetchBundle().asInstanceOf[this.type]
 }

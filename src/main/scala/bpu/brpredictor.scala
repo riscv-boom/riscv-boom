@@ -32,7 +32,7 @@ import freechips.rocketchip.rocket.RocketCoreParams
 // expecting to receive it back when it needs to perform an update.
 class BpdResp(implicit p: Parameters) extends BoomBundle()(p)
 {
-   val takens = UInt(width = FETCH_WIDTH)
+   val takens = UInt(width = fetchWidth)
 
    // Roughly speaking, track the outcome of the last N branches.
    // The purpose of these is for resetting the global history on a branch

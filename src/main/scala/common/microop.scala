@@ -48,7 +48,7 @@ class MicroOp(implicit p: Parameters) extends BoomBundle()(p)
    val stat_bpd_mispredicted   = Bool()                 // denominator: all committed branches
 
    // TODO remove fetch_pc_lob (no longer needed with FTQ?).
-   val fetch_pc_lob     = UInt(width = log2Up(FETCH_WIDTH*coreInstBytes)) // track which PC was used to fetch this
+   val fetch_pc_lob     = UInt(width = log2Up(fetchWidth*coreInstBytes)) // track which PC was used to fetch this
                                                                           // instruction
 
    // Index into FTQ to figure out our fetch PC.
