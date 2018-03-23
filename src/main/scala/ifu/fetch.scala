@@ -100,6 +100,7 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
    val bchecker = Module (new BranchChecker(fetchWidth))
    val ftq = Module(new FetchTargetQueue(num_entries = ftqSz))
    val fb = Module(new FetchBuffer(num_entries=fetchBufferSz))
+   val monitor = Module(new FetchMonitor)
 
    val br_unit = io.br_unit
    val fseq_reg = Reg(init = UInt(0, xLen))
@@ -534,6 +535,10 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
 
    io.fetchpacket.bits.uops map {_ := DontCare }
    io.fetchpacket <> fb.io.deq
+
+   monitor.io.fire := io.fetchpacket.fire()
+   monitor.io.uops := io.fetchpacket.bits.uops
+   monitor.io.clear := io.clear_fetchbuffer
 
 
    //-------------------------------------------------------------
