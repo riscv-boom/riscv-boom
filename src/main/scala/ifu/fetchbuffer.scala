@@ -80,7 +80,14 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule()
    }
 
    // Step 2. Shift valids towards 0.
-   val first_index = PriorityEncoder(io.enq.bits.mask)
+   // ASSUMPTION: this assumes fetch-packet is aligned to a fetch boundary,
+   // such that index=0 corresponds to AlignedPC(fetch-pc) + (0 << lg(inst_sz)).
+   // The "mask" arrives too late for our purposes, and we only need to know
+   // where the first valid instruction is anyways.
+   val lsb = log2Ceil(coreInstBytes)
+   val first_index =
+      if (fetchWidth==1) 0.U
+      else io.enq.bits.pc(log2Ceil(fetchWidth)+lsb-1, lsb)
    for (i <- 0 until fetchWidth)
    {
       val selects_oh = Wire(UInt(width=fetchWidth.W))
@@ -90,8 +97,11 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule()
       compact_uops(i) := Mux1H(selects_oh, in_uops)
       compact_mask(i) := Mux1H(selects_oh, io.enq.bits.mask) && !invalid
 
-      //printf(" shift [" + i + "] enq: %x compact: %d, selects_oh: %x, oob: %d\n",
-      //   io.enq.bits.mask, compact_mask(i), selects_oh, invalid)
+//      if (DEBUG_PRINTF)
+//      {
+//         printf(" shift [" + i + "] enq: %x compact: %d, selects_oh: %x, oob: %d\n",
+//            io.enq.bits.mask, compact_mask(i), selects_oh, invalid)
+//      }
    }
 
 
@@ -111,6 +121,30 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule()
       }
    }
 
+   //-------------------------------------------------------------
+   // **** Dequeue Uops ****
+   //-------------------------------------------------------------
+
+   val r_valid = RegInit(false.B)
+   val r_uops = Reg(Vec(decodeWidth, new MicroOp()))
+
+   for (w <- 0 until decodeWidth)
+   {
+      when (io.deq.ready)
+      {
+         r_valid := count > 0.U
+         r_uops(w) := ram(read_ptr + w.U)
+         r_uops(w).valid := count > w.U
+      }
+   }
+
+   io.deq.valid := r_valid
+   io.deq.bits.uops := r_uops
+
+   //-------------------------------------------------------------
+   // **** Update State ****
+   //-------------------------------------------------------------
+
    val deq_count =
       Mux(io.deq.ready,
          Mux(count < decodeWidth.U, count, decodeWidth.U),
@@ -122,27 +156,17 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule()
    read_ptr := read_ptr + deq_count
 
 
-   //-------------------------------------------------------------
-   // **** Dequeue Uops ****
-   //-------------------------------------------------------------
-
-   io.deq.valid := count > 0.U
-   for (w <- 0 until decodeWidth)
-   {
-      io.deq.bits.uops(w) := ram(read_ptr + w.U)
-      io.deq.bits.uops(w).valid := count > w.U
-   }
-
-
-   //-------------------------------------------------------------
-   // **** Clear ****
-   //-------------------------------------------------------------
-
    when (io.clear)
    {
       count := 0.U
       write_ptr := 0.U
       read_ptr := 0.U
+      r_valid := false.B
+   }
+
+   when (reset.toBool)
+   {
+      io.deq.bits.uops map { u => u.valid := false.B }
    }
 
 
