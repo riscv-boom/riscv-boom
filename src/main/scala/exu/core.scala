@@ -860,7 +860,8 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    rob.io.enq_valids := rename_stage.io.ren1_mask
    rob.io.enq_uops   := rename_stage.io.ren1_uops
    rob.io.enq_new_packet := dec_finished_mask === 0.U
-   rob.io.enq_partial_stall := !dec_rdy && !dec_will_fire(decodeWidth-1)
+//   rob.io.enq_partial_stall := !dec_rdy && !dec_will_fire(decodeWidth-1)
+   rob.io.enq_partial_stall := !dec_rdy // TODO come up with better ROB compacting scheme.
    rob.io.debug_tsc := debug_tsc_reg
    rob.io.csr_stall := csr.io.csr_stall
 
@@ -1108,8 +1109,8 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       val numFtqWhitespace = if (DEBUG_PRINTF_FTQ) (ftqSz/4)+1 else 0
 //      val screenheight = 79
 //      val screenheight = 61
-      val screenheight = 56
-       var whitespace = (screenheight - 25 + 3 -3 - NUM_LSU_ENTRIES -
+      val screenheight = 57
+       var whitespace = (screenheight - 25 + 3 -3 -1 - NUM_LSU_ENTRIES -
          issueParams.map(_.numEntries).sum - issueParams.length - (NUM_ROB_ENTRIES/COMMIT_WIDTH) - numFtqWhitespace
      )
 
