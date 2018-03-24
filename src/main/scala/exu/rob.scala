@@ -283,7 +283,7 @@ class Rob(
          rob_fflags(rob_tail)    := 0.U
          rob_uop(rob_tail).stat_brjmp_mispredicted := false.B
 
-         assert (rob_val(rob_tail) === false.B,"[rob] overwriting a valid entry.")
+         assert (rob_val(rob_tail) === false.B, "[rob] overwriting a valid entry.")
          assert ((io.enq_uops(w).rob_idx >> log2Ceil(width)) === rob_tail)
       }
       .elsewhen (io.enq_valids.reduce(_|_) && !rob_val(rob_tail))
