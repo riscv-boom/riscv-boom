@@ -204,7 +204,11 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
        ("D$ release", () => io.dmem.perf.release),
        ("ITLB miss", () => io.imem.perf.tlbMiss),
        ("DTLB miss", () => io.dmem.perf.tlbMiss),
-       ("L2 TLB miss", () => io.ptw.perf.l2miss)))))
+       ("L2 TLB miss", () => io.ptw.perf.l2miss))),
+     new freechips.rocketchip.rocket.EventSet((mask, hits) => (mask & hits).orR, Seq(
+       ("LSU forward", () => lsu.io.counters.ld_forwarded),
+       ("ST-LD failure", () => lsu.io.counters.stld_order_fail),
+       ("LD-LD failure", () => lsu.io.counters.ldld_order_fail)))))
 
 
    val csr = Module(new freechips.rocketchip.rocket.CSRFile(perfEvents))
