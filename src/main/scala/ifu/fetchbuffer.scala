@@ -37,10 +37,13 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule()
 
 
    // TODO blackbox with a bitvector for read-addrs, write-addrs.
+   require (num_entries > 1)
    private val num_elements = num_entries*fetchWidth
    private val ram = Mem(num_elements, new MicroOp())
    private val write_ptr = RegInit(0.asUInt(width=log2Ceil(num_elements).W))
    private val read_ptr = RegInit(0.asUInt(width=log2Ceil(num_elements).W))
+
+   // How many uops are stored within the ram? If zero, bypass to the output flops.
    private val count = RegInit(0.asUInt(width=log2Ceil(num_elements).W))
 
    //-------------------------------------------------------------
@@ -105,19 +108,33 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule()
    }
 
 
+   // all enqueuing uops have been compacted.
+   // How many incoming uops are there?
+   val popc_enqmask = PopCount(io.enq.bits.mask)
+   // What is the count of uops being added to the ram. Subtract off the bypassed uops.
+   // But only bypass if ram is empty AND dequeue flops will be consumed.
+   val enq_count =
+      Mux(io.enq.fire() && (!io.deq.ready || count =/= 0.U),
+         popc_enqmask,
+      Mux(io.enq.fire() && count === 0.U && popc_enqmask > decodeWidth.U,
+         popc_enqmask - decodeWidth.U,
+         0.U)) // !enq.fire || (count===0 and popc <= decodeWIdth)
 
-   // all enqueuing uops have been compacted
-   val enq_count = Mux(io.enq.fire(), PopCount(io.enq.bits.mask), 0.U)
+   // If the ram is empty, bypass the first decodeWidth uops to the flops,
+   // and only write the remaining uops into the ram.
+   val start_idx = Wire(UInt(width=(log2Ceil(fetchWidth)+1).W))
+   start_idx := Mux(count === 0.U && io.deq.ready, decodeWidth.U, 0.U)
    for (i <- 0 until fetchWidth)
    {
       when (io.enq.fire() && i.U < enq_count)
       {
-         ram(write_ptr + i.U) := compact_uops(i)
-         assert (compact_mask(i))
+         ram(write_ptr + i.U) := compact_uops(start_idx + i.U)
+         assert (compact_mask(start_idx + i.U))
       }
       .otherwise
       {
-         assert (!io.enq.fire() || !compact_mask(i))
+         assert (!io.enq.fire() || ((start_idx+i.U) >= fetchWidth.U) || !compact_mask(start_idx + i.U),
+            "[fetchbuffer] mask(" + i + ") is valid but isn't being written to the RAM.")
       }
    }
 
@@ -132,9 +149,9 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule()
    {
       when (io.deq.ready)
       {
-         r_valid := count > 0.U
-         r_uops(w) := ram(read_ptr + w.U)
-         r_uops(w).valid := count > w.U
+         r_valid := count > 0.U || io.enq.valid
+         r_uops(w) := Mux(count === 0.U, compact_uops(w), ram(read_ptr + w.U))
+         r_uops(w).valid := Mux(count === 0.U, compact_mask(w), count > w.U)
       }
    }
 
@@ -193,8 +210,10 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule()
          read_ptr
          )
 
-      printf("\n Fetch4 : deq_count (%d)\n",
-         deq_count
+      printf("\n Fetch4 : %d deq_count (%d) pc=0x%x\n",
+         io.deq.valid,
+         deq_count,
+         io.deq.bits.uops(0).pc
          )
    }
 
@@ -203,6 +222,8 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule()
    //-------------------------------------------------------------
 
    assert (count >= deq_count, "[fetchbuffer] Trying to dequeue more uops than are available.")
+
+   assert (!(count === 0.U && write_ptr =/= read_ptr), "[fetchbuffer] pointers should match if count is zero.")
 
    override val compileOptions = chisel3.core.ExplicitCompileOptions.NotStrict.copy(explicitInvalidate = true)
 }
