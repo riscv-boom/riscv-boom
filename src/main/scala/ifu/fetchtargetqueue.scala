@@ -299,7 +299,7 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
    // **** Printfs ****
    //-------------------------------------------------------------
 
-   if (DEBUG_PRINTF)
+   if (DEBUG_PRINTF && DEBUG_PRINTF_FTQ)
    {
       printf("FTQ: %c %c: %d; commit: %c:%d brinfo: %c:%d [%d %d %d]\n",
          Mux(io.enq.valid, Str("V"), Str("-")),
