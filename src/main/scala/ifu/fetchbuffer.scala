@@ -30,13 +30,8 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule()
 
       // Was the pipeline redirected? Clear/reset the fetchbuffer.
       val clear = Input(Bool())
-      // The mask comes too late to use, so we might need to mask off
-      // instructions that were enqueued on the previous cycle.
-//      val s1_mask = UInt(width=fetchWidth.W) // TODO XXX
    })
 
-
-   // TODO blackbox with a bitvector for read-addrs, write-addrs.
    require (num_entries > 1)
    private val num_elements = num_entries*fetchWidth
    private val ram = Mem(num_elements, new MicroOp())
