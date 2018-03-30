@@ -54,29 +54,29 @@ class FetchMonitor(implicit p: Parameters) extends BoomModule()(p)
 
    for (uop <- io.uops)
    {
-      //when (prev_valid && uop.valid)
-      //{
-      //   when (prev_cfitype === CfiType.none)
-      //   {
-      //      assert (uop.pc === prev_npc, "[fetchmonitor] non-cfi went to bad next-pc.")
-      //   }
-      //   .elsewhen (prev_cfitype === CfiType.branch)
-      //   {
-      //      assert (uop.pc === prev_npc || uop.pc === prev_target,
-      //         "[fetchmonitor] branch went to bad next-pc.")
-      //   }
-      //   .elsewhen (prev_cfitype === CfiType.jal)
-      //   {
-      //      assert (uop.pc === prev_target, "[fetchmonitor] JAL went to bad target.")
-      //   }
-      //   .otherwise
-      //   {
-      //      // should only be here if a JALR.
-      //      assert (prev_cfitype === CfiType.jalr, "[fetchmonitor CFI type not JALR.")
-      //   }
-      //}
+      when (prev_valid && uop.valid && io.fire)
+      {
+         when (prev_cfitype === CfiType.none)
+         {
+            assert (uop.pc === prev_npc, "[fetchmonitor] non-cfi went to bad next-pc.")
+         }
+         .elsewhen (prev_cfitype === CfiType.branch)
+         {
+            assert (uop.pc === prev_npc || uop.pc === prev_target,
+               "[fetchmonitor] branch went to bad next-pc.")
+         }
+         .elsewhen (prev_cfitype === CfiType.jal)
+         {
+            assert (uop.pc === prev_target, "[fetchmonitor] JAL went to bad target.")
+         }
+         .otherwise
+         {
+            // should only be here if a JALR.
+            assert (prev_cfitype === CfiType.jalr, "[fetchmonitor CFI type not JALR.")
+         }
+      }
 
-      prev_valid = uop.valid
+      prev_valid = uop.valid && io.fire
       prev_pc = uop.pc
       prev_npc = prev_pc + 4.U
       prev_cfitype = GetCfiType(uop.inst)
