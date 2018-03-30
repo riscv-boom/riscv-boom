@@ -1107,10 +1107,10 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       println("\n Chisel Printout Enabled\n")
 
       val numFtqWhitespace = if (DEBUG_PRINTF_FTQ) (ftqSz/4)+1 else 0
-//      val screenheight = 79
+      val screenheight = 79
 //      val screenheight = 61
-      val screenheight = 57
-       var whitespace = (screenheight - 25 + 3 -3 -1 - NUM_LSU_ENTRIES -
+//      val screenheight = 56
+       var whitespace = (screenheight - 25 + 3 -10 + 3 - decodeWidth - NUM_LSU_ENTRIES -
          issueParams.map(_.numEntries).sum - issueParams.length - (NUM_ROB_ENTRIES/COMMIT_WIDTH) - numFtqWhitespace
      )
 
