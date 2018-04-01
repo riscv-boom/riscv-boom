@@ -28,6 +28,7 @@
 package boom
 
 import Chisel._
+import chisel3.experimental.chiselName
 import scala.math.ceil
 import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.util.Str
@@ -179,6 +180,7 @@ class DebugRobSignals(implicit p: Parameters) extends BoomBundle()(p)
 // width = the dispatch and commit width of the processor
 // num_wakeup_ports = self-explanatory
 // num_fpu_ports = number of FPU units that will write back fflags
+@chiselName
 class Rob(
    width: Int,
    num_rob_entries: Int,
