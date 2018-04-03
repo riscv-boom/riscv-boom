@@ -96,6 +96,7 @@ object Generator extends GeneratorApp {
       else            ((if (vm) rv32i else rv32pi), rv32u)
 
     TestGeneration.addSuites(rvi.map(_("p")))
+    TestGeneration.addSuites(rvu.map(_("p")))
     TestGeneration.addSuites((if (vm) List("v") else List()).flatMap(env => rvu.map(_(env))))
     TestGeneration.addSuite(benchmarks)
     TestGeneration.addSuite(new RegressionTestSuite(if (xlen == 64) rv64RegrTestNames else rv32RegrTestNames))
