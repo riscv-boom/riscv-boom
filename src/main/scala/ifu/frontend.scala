@@ -85,7 +85,7 @@ class BoomFrontendIO(implicit p: Parameters) extends BoomBundle()(p)
 
 class BoomFrontend(val icacheParams: ICacheParams, hartid: Int)(implicit p: Parameters) extends LazyModule {
   lazy val module = new BoomFrontendModule(this)
-  val icache = LazyModule(new freechips.rocketchip.rocket.ICache(icacheParams, hartid))
+  val icache = LazyModule(new boom.ICache(icacheParams, hartid))
   val masterNode = icache.masterNode
   val slaveNode = icache.slaveNode
 }
