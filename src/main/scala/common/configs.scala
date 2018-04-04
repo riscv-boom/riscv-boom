@@ -78,6 +78,7 @@ class WithSmallBooms extends Config((site, here, up) => {
          nPerfCounters = 2),
       icache = Some(r.icache.get.copy(fetchBytes=2*4))
       )}
+   case SystemBusKey => up(SystemBusKey, site).copy(beatBytes = 8)
 })
 
 
