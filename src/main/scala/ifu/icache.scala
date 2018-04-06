@@ -15,6 +15,7 @@ import freechips.rocketchip.util.property._
 import freechips.rocketchip.rocket.{HasL1ICacheParameters, ICacheParams, ICacheErrors, ICacheReq}
 import chisel3.internal.sourceinfo.SourceInfo
 import chisel3.experimental.dontTouch
+import chisel3.experimental.chiselName
 
 //case class ICacheParams(
 //    nSets: Int = 64,
@@ -34,6 +35,7 @@ import chisel3.experimental.dontTouch
 //  def replacement = new RandomReplacement(nWays)
 //}
 
+@chiselName
 class ICache(val icacheParams: ICacheParams, val hartId: Int)(implicit p: Parameters) extends LazyModule {
   lazy val module = new ICacheModule(this)
   val masterNode = TLClientNode(Seq(TLClientPortParameters(Seq(TLClientParameters(
@@ -93,6 +95,7 @@ object GetPropertyByHartId {
   }
 }
 
+@chiselName
 class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
     with HasL1ICacheParameters {
   override val cacheParams = outer.icacheParams // Use the local parameters
@@ -212,35 +215,53 @@ class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
   assert(!(s1_valid || s1_slaveValid) || PopCount(s1_tag_hit zip s1_tag_disparity map { case (h, d) => h && !d }) <= 1)
 
   require(tl_out.d.bits.data.getWidth % wordBits == 0)
-  //println("ICache -- data_arrays")
-  //println("\tNumber of arrays: " + (tl_out.d.bits.data.getWidth/wordBits))
-  //println("\t\tlines   : " + nSets * refillCycles + ", Sets=" + nSets + ", refillCycles=" + refillCycles)
-  //println("\t\tways    : " + nWays)
-  //println("\t\twordBits: " + (wordBits))
-  //println("\t\tD.data.W: " + tl_out.d.bits.data.getWidth)
-  //println("\t\twidth   : " + dECC.width(wordBits))
-
   require (tl_out.d.bits.data.getWidth == wordBits) // Later we can decouple these widths.
   assert (!(s1_slaveValid), "[icache] We do not support the icache slave.")
 
-  val data_arrays = Seq.fill(nWays) { SeqMem(nSets * refillCycles, UInt(width = dECC.width(wordBits))) }
-  
-  for ((data_array, i) <- data_arrays zipWithIndex) {
-    def row(addr: UInt) = addr(untagBits-1, blockOffBits-log2Ceil(refillCycles))
-    val s0_ren = s0_valid || s0_slaveValid
-    
-    val way = Mux(s3_slaveValid, scratchpadWay(s1s3_slaveAddr), repl_way)
-    val wen = ((refill_one_beat && !invalidated) || s3_slaveValid) && way === i.U
+  if (cacheParams.fetchBytes <= 8) {
+    // Use unbanked icache for narrow accesses.
+    val dataArrays = Seq.fill(nWays) { SeqMem(nSets * refillCycles, UInt(width = dECC.width(wordBits))) }
+    for ((dataArray, i) <- dataArrays zipWithIndex) {
+      def row(addr: UInt) = addr(untagBits-1, blockOffBits-log2Ceil(refillCycles))
+      val s0_ren = s0_valid || s0_slaveValid
 
-    val mem_idx = Mux(refill_one_beat, (refill_idx << log2Ceil(refillCycles)) | refill_cnt,
-                  Mux(s3_slaveValid, row(s1s3_slaveAddr),
-                  Mux(s0_slaveValid, row(s0_slaveAddr),
-                  row(s0_vaddr))))
-    when (wen) {
-      val data = Mux(s3_slaveValid, s1s3_slaveData, tl_out.d.bits.data)
-      data_array.write(mem_idx, dECC.encode(data))
+      val way = Mux(s3_slaveValid, scratchpadWay(s1s3_slaveAddr), repl_way)
+      val wen = ((refill_one_beat && !invalidated) || s3_slaveValid) && way === i.U
+
+      val mem_idx = Mux(refill_one_beat, (refill_idx << log2Ceil(refillCycles)) | refill_cnt,
+                    Mux(s3_slaveValid, row(s1s3_slaveAddr),
+                    Mux(s0_slaveValid, row(s0_slaveAddr),
+                    row(s0_vaddr))))
+      when (wen) {
+        val data = Mux(s3_slaveValid, s1s3_slaveData, tl_out.d.bits.data)
+        dataArray.write(mem_idx, dECC.encode(data))
+      }
+      s1_dout(i) := dataArray.read(mem_idx, !wen && s0_ren)
     }
-    s1_dout(i) := data_array.read(mem_idx, !wen && s0_ren)
+  } else {
+    // Use two banks, interleaved.
+    require(cacheParams.fetchBytes == 16)
+    val dataArraysB0 = Seq.fill(nWays) { SeqMem(nSets * refillCycles, UInt(width = dECC.width(wordBits/2))) }
+    val dataArraysB1 = Seq.fill(nWays) { SeqMem(nSets * refillCycles, UInt(width = dECC.width(wordBits/2))) }
+    for (i <- 0 until nWays) {
+      def row(addr: UInt) = addr(untagBits-1, blockOffBits-log2Ceil(refillCycles))
+      def bank(addr: UInt) = addr(blockOffBits-log2Ceil(refillCycles)-1)
+      val s0_ren = s0_valid || s0_slaveValid
+
+      val way = Mux(s3_slaveValid, scratchpadWay(s1s3_slaveAddr), repl_way)
+      val wen = ((refill_one_beat && !invalidated) || s3_slaveValid) && way === i.U
+
+      val mem_idx = Mux(refill_one_beat, (refill_idx << log2Ceil(refillCycles)) | refill_cnt,
+                    Mux(s3_slaveValid, row(s1s3_slaveAddr),
+                    Mux(s0_slaveValid, row(s0_slaveAddr),
+                    row(s0_vaddr))))
+      when (wen) {
+        val data = Mux(s3_slaveValid, s1s3_slaveData, tl_out.d.bits.data)
+        dataArraysB0(i).write(mem_idx, dECC.encode(data(wordBits/2-1, 0)))
+        dataArraysB1(i).write(mem_idx, dECC.encode(data(wordBits-1, wordBits/2)))
+      }
+      s1_dout(i) := Cat(dataArraysB1(i).read(mem_idx, !wen && s0_ren), dataArraysB0(i).read(mem_idx, !wen && s0_ren))
+    }
   }
 
   val s1_clk_en = s1_valid || s1_slaveValid
@@ -439,4 +460,16 @@ class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
     "MemorySystem;;Memory Bit Flip Cross Covers")
 
   cover(error_cross_covers)
+
+
+  val nBanks = if (cacheParams.fetchBytes <= 8) 1 else 2
+  val ramWidth = dECC.width(wordBits/nBanks)
+  override def toString: String =
+    "\n   ==L1-ICache==" +
+    "\n   Fetch bytes   : " + cacheParams.fetchBytes +
+    "\n   Sets          : " + nSets +
+    "\n   Ways          : " + nWays +
+    "\n   Refill cycles : " + refillCycles +
+    "\n   RAMs          : (" +  ramWidth + " x " + nSets*refillCycles + ")"  +
+    "\n   " + (if (nBanks == 2) "Dual-banked" else "Single-banked")
 }
