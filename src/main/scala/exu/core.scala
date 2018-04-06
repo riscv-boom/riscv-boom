@@ -263,6 +263,8 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    println("   DCache Sets           : " + dcacheParams.nSets)
    println("   ICache Ways           : " + icacheParams.nWays)
    println("   ICache Sets           : " + icacheParams.nSets)
+   println("   Paddr Bits            : " + paddrBits)
+   println("   Vaddr Bits            : " + vaddrBits)
 
    //-------------------------------------------------------------
    //-------------------------------------------------------------

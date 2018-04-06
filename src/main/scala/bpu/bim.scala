@@ -196,7 +196,7 @@ class BimodalTable(implicit p: Parameters) extends BoomModule()(p) with HasBimPa
    require (isPow2(nBanks))
 
    val size_kbits = nSets * fetchWidth * 2/1024 // assumes 2 bits / fetchWidth
-   println ("\t\tBuilding (" + size_kbits + " Kbits = " + size_kbits/8 + " kB) Bimodal Table for (" +
+   println ("\tBuilding (" + size_kbits + " Kbits = " + size_kbits/8 + " kB) Bimodal Table for (" +
       nSets + " entries across " + nBanks + " banks)")
 
 
