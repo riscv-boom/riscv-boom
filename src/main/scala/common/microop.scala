@@ -47,14 +47,11 @@ class MicroOp(implicit p: Parameters) extends BoomBundle()(p)
    val stat_bpd_made_pred      = Bool()                 // the BPD made the prediction
    val stat_bpd_mispredicted   = Bool()                 // denominator: all committed branches
 
-   // TODO remove fetch_pc_lob (no longer needed with FTQ?).
-   val fetch_pc_lob     = UInt(width = log2Up(fetchWidth*coreInstBytes)) // track which PC was used to fetch this
-                                                                          // instruction
-
    // Index into FTQ to figure out our fetch PC.
    val ftq_idx          = UInt(width = ftqSz)
    // Low-order bits of our own PC. Combine with ftq[ftq_idx] to get PC.
-   val pc_lob           = UInt(width = log2Up(fetchWidth*coreInstBytes))
+   // Aligned to a cache-line size, as that is the greater fetch granularity.
+   val pc_lob           = UInt(width = log2Ceil(icBlockBytes).W)
 
 
    val imm_packed       = UInt(width = LONGEST_IMM_SZ) // densely pack the imm in decode...

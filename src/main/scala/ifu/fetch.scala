@@ -50,7 +50,8 @@ class FetchBundle(implicit p: Parameters) extends BoomBundle()(p)
 
 
 class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p)
-   with HasBoomCoreParameters
+//class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends freechips.rocketchip.tile.CoreModule()(p)
+   with HasL1ICacheBankedParameters
 {
    val io = IO(new BoomBundle()(p)
    {
@@ -216,7 +217,7 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
    q_f3_btb_resp.io.deq.ready := f4_ready
 
    // round off to nearest fetch boundary
-   val f3_aligned_pc = ~(~f3_imemresp.pc | (fetch_width*coreInstBytes-1).U)
+   val f3_aligned_pc = alignToFetchBoundary(f3_imemresp.pc)
 
    val is_br     = Wire(Vec(fetch_width, Bool()))
    val is_jal    = Wire(Vec(fetch_width, Bool()))
@@ -237,7 +238,7 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
       f3_fetch_bundle.insts(i) := inst
 
       // TODO do not compute a vector of targets
-      val pc = f3_aligned_pc + UInt(i << 2)
+      val pc = f3_aligned_pc + (i << 2).U
       is_br(i)    := f3_valid && bpd_decoder.io.is_br && f3_imemresp.mask(i)
       is_jal(i)   := f3_valid && bpd_decoder.io.is_jal  && f3_imemresp.mask(i)
       is_jr(i)    := f3_valid && bpd_decoder.io.is_jalr  && f3_imemresp.mask(i)
@@ -290,7 +291,7 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
          f3_bpd_target,
       Mux(f3_has_jal,
          f3_jal_target,
-         f3_aligned_pc + (fetch_width*coreInstBytes).U))
+         nextFetchStart(f3_aligned_pc)))
 
    when (f3_valid && f3_btb_resp.valid)
    {
@@ -585,7 +586,7 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
 
    val cfi_idx = (fetch_width-1).U - PriorityEncoder(Reverse(f3_fetch_bundle.mask))
    val fetch_pc = f3_fetch_bundle.pc
-   val curr_aligned_pc = ~(~fetch_pc | (UInt(fetch_width*coreInstBytes-1)))
+   val curr_aligned_pc = alignToFetchBoundary(fetch_pc)
    val cfi_pc = curr_aligned_pc  + (cfi_idx << 2.U)
 
    when (fb.io.enq.fire() &&
@@ -597,7 +598,7 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
       val curr_inst = if (fetchWidth == 1) f3_fetch_bundle.insts(0) else f3_fetch_bundle.insts(cfi_idx)
       last_valid := true.B
       last_pc := cfi_pc
-      last_nextlinepc := curr_aligned_pc + UInt(fetch_width*coreInstBytes)
+      last_nextlinepc := nextFetchStart(curr_aligned_pc)
 
       val cfi_type = GetCfiType(curr_inst)
       last_cfi_type := cfi_type
@@ -703,13 +704,23 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
             , io.imem_resp.bits.data(coreInstBits-1,0)
             )
       }
-      else if (fetch_width >= 2)
+      else if (fetch_width == 2)
       {
          printf("DASM(%x)DASM(%x) "
-            , io.imem_resp.bits.data(coreInstBits-1,0)
             , io.imem_resp.bits.data(2*coreInstBits-1, coreInstBits)
+            , io.imem_resp.bits.data(coreInstBits-1,0)
             )
       }
+      else if (fetch_width >= 4)
+      {
+         printf("DASM(%x)DASM(%x)DASM(%x)DASM(%x) "
+            , io.imem_resp.bits.data(4*coreInstBits-1, 3*coreInstBits)
+            , io.imem_resp.bits.data(3*coreInstBits-1, 2*coreInstBits)
+            , io.imem_resp.bits.data(2*coreInstBits-1, 1*coreInstBits)
+            , io.imem_resp.bits.data(1*coreInstBits-1,0)
+            )
+      }
+
 
       printf("----BrPred2:(%c,%d) [btbtarg: 0x%x]\n"
          , Mux(io.imem_resp.bits.btb.taken, Str("T"), Str("-"))

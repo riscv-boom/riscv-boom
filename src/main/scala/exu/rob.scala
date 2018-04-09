@@ -116,7 +116,7 @@ class CommitSignals(implicit p: Parameters) extends BoomBundle()(p)
 class CommitExceptionSignals(implicit p: Parameters) extends BoomBundle()(p)
 {
    val ftq_idx    = UInt(width = log2Up(ftqSz))
-   val pc_lob     = UInt(width = log2Up(fetchWidth*coreInstBytes))
+   val pc_lob     = UInt(width = log2Ceil(icBlockBytes).W)
    val cause      = UInt(width = xLen)
    val badvaddr   = UInt(width = xLen)
 }
@@ -126,7 +126,7 @@ class CommitExceptionSignals(implicit p: Parameters) extends BoomBundle()(p)
 class FlushSignals(implicit p: Parameters) extends BoomBundle()(p)
 {
    val ftq_idx = UInt(width=log2Up(ftqSz).W)
-   val pc_lob = UInt(width=log2Up(fetchWidth*coreInstBytes).W)
+   val pc_lob = UInt(width=log2Ceil(icBlockBytes).W)
    val flush_typ = FlushTypes()
 }
 

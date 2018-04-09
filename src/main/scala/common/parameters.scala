@@ -151,9 +151,8 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
    //************************************
    // Load/Store Unit
    val dcacheParams: DCacheParams = tileParams.dcache.get
-   val nTLBEntries = dcacheParams.nTLBEntries
-
    val icacheParams: ICacheParams = tileParams.icache.get
+   val icBlockBytes = icacheParams.blockBytes
 
    //************************************
    // Branch Prediction

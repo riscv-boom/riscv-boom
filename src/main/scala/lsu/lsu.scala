@@ -373,7 +373,8 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
                      Mux(will_fire_load_retry, laq_addr(laq_retry_idx),
                                                io.exe_resp.bits.addr.asUInt))
 
-   val dtlb = Module(new rocket.TLB(instruction = false, lgMaxSize = log2Ceil(coreDataBytes), nEntries = nTLBEntries))
+   val dtlb = Module(new rocket.TLB(
+      instruction = false, lgMaxSize = log2Ceil(coreDataBytes), nEntries = dcacheParams.nTLBEntries))
 
    io.ptw <> dtlb.io.ptw
    dtlb.io.req.valid := will_fire_load_incoming ||
