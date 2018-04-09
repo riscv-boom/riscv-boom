@@ -288,9 +288,8 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
    io.take_pc.bits.addr := Mux(FlushTypes.useSamePC(io.flush.bits.flush_typ), com_pc, com_pc_plus4)
 
    // TODO CLEANUP this is wonky: the exception occurs 1 cycle faster than flushing,
-   io.com_fetch_pc := AlignPC(ram(io.com_ftq_idx).fetch_pc, fetchWidth*coreInstBytes)
-//   val xcpt_pc := AlignPC(ram(io.flush.bits.ftq_idx).fetch_pc, fetchWidth*coreInstBytes)
-   com_pc := RegNext(io.com_fetch_pc) + io.flush.bits.pc_lob
+   io.com_fetch_pc := ram(io.com_ftq_idx).fetch_pc
+   com_pc := RegNext(AlignPCToBoundary(io.com_fetch_pc, icBlockBytes)) + io.flush.bits.pc_lob
    com_pc_plus4 := com_pc + 4.U // TODO RVC
 
    assert (RegNext(io.com_ftq_idx) === io.flush.bits.ftq_idx, "[ftq] this code depends on this assumption")

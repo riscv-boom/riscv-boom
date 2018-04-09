@@ -97,7 +97,8 @@ object GetPropertyByHartId {
 
 @chiselName
 class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
-    with HasL1ICacheParameters {
+  with HasL1ICacheParameters
+{
   override val cacheParams = outer.icacheParams // Use the local parameters
 
   val io = IO(new ICacheBundle(outer))
@@ -192,6 +193,7 @@ class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
   val s1_tl_error = Wire(Vec(nWays, Bool()))
   val wordBits = outer.icacheParams.fetchBytes*8
   val s1_dout = Wire(Vec(nWays, UInt(width = dECC.width(wordBits))))
+  val s1_bankId = Wire(Bool())
 
   val s0_slaveAddr = tl_in.map(_.a.bits.address).getOrElse(0.U)
   val s1s3_slaveAddr = Reg(UInt(width = log2Ceil(outer.size)))
@@ -218,9 +220,14 @@ class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
   require (tl_out.d.bits.data.getWidth == wordBits) // Later we can decouple these widths.
   assert (!(s1_slaveValid), "[icache] We do not support the icache slave.")
 
+
+  // declare arrays outside conditional so they show up named in Verilog.
+  val dataArraysB0 = Seq.fill(nWays) { SeqMem(nSets * refillCycles, UInt(width = dECC.width(wordBits/2))) }
+  val dataArraysB1 = Seq.fill(nWays) { SeqMem(nSets * refillCycles, UInt(width = dECC.width(wordBits/2))) }
   if (cacheParams.fetchBytes <= 8) {
     // Use unbanked icache for narrow accesses.
     val dataArrays = Seq.fill(nWays) { SeqMem(nSets * refillCycles, UInt(width = dECC.width(wordBits))) }
+    s1_bankId := 0.U
     for ((dataArray, i) <- dataArrays zipWithIndex) {
       def row(addr: UInt) = addr(untagBits-1, blockOffBits-log2Ceil(refillCycles))
       val s0_ren = s0_valid || s0_slaveValid
@@ -240,27 +247,35 @@ class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
     }
   } else {
     // Use two banks, interleaved.
-    require(cacheParams.fetchBytes == 16)
-    val dataArraysB0 = Seq.fill(nWays) { SeqMem(nSets * refillCycles, UInt(width = dECC.width(wordBits/2))) }
-    val dataArraysB1 = Seq.fill(nWays) { SeqMem(nSets * refillCycles, UInt(width = dECC.width(wordBits/2))) }
-    for (i <- 0 until nWays) {
-      def row(addr: UInt) = addr(untagBits-1, blockOffBits-log2Ceil(refillCycles))
-      def bank(addr: UInt) = addr(blockOffBits-log2Ceil(refillCycles)-1)
-      val s0_ren = s0_valid || s0_slaveValid
+    require(cacheParams.fetchBytes == 16 || cacheParams.fetchBytes == 32)
+    // Which bank has the requesting fetch addr?
+    def bank(addr: UInt) = addr(blockOffBits-log2Ceil(refillCycles)-1)
+    // Bank0 row's id wraps around if Bank1 is the starting bank.
+    def b0Row(addr: UInt) = addr(untagBits-1, blockOffBits-log2Ceil(refillCycles)) + bank(addr)
+    // Bank1 row's id stays the same regardless of which Bank has the fetch address.
+    def b1Row(addr: UInt) = addr(untagBits-1, blockOffBits-log2Ceil(refillCycles))
 
+    s1_bankId := RegNext(bank(s0_vaddr))
+
+    for (i <- 0 until nWays) {
+      val s0_ren = s0_valid || s0_slaveValid
       val way = Mux(s3_slaveValid, scratchpadWay(s1s3_slaveAddr), repl_way)
       val wen = ((refill_one_beat && !invalidated) || s3_slaveValid) && way === i.U
 
-      val mem_idx = Mux(refill_one_beat, (refill_idx << log2Ceil(refillCycles)) | refill_cnt,
-                    Mux(s3_slaveValid, row(s1s3_slaveAddr),
-                    Mux(s0_slaveValid, row(s0_slaveAddr),
-                    row(s0_vaddr))))
+      val mem_idx0 =
+        Mux(refill_one_beat, (refill_idx << log2Ceil(refillCycles)) | refill_cnt,
+        b0Row(s0_vaddr))
+
+      val mem_idx1 =
+        Mux(refill_one_beat, (refill_idx << log2Ceil(refillCycles)) | refill_cnt,
+        b1Row(s0_vaddr))
+
       when (wen) {
         val data = Mux(s3_slaveValid, s1s3_slaveData, tl_out.d.bits.data)
-        dataArraysB0(i).write(mem_idx, dECC.encode(data(wordBits/2-1, 0)))
-        dataArraysB1(i).write(mem_idx, dECC.encode(data(wordBits-1, wordBits/2)))
+        dataArraysB0(i).write(mem_idx0, dECC.encode(data(wordBits/2-1, 0)))
+        dataArraysB1(i).write(mem_idx1, dECC.encode(data(wordBits-1, wordBits/2)))
       }
-      s1_dout(i) := Cat(dataArraysB1(i).read(mem_idx, !wen && s0_ren), dataArraysB0(i).read(mem_idx, !wen && s0_ren))
+      s1_dout(i) := Cat(dataArraysB1(i).read(mem_idx1, !wen && s0_ren), dataArraysB0(i).read(mem_idx0, !wen && s0_ren))
     }
   }
 
@@ -269,17 +284,31 @@ class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
   val s2_hit_way = OHToUInt(s2_tag_hit)
   val s2_scratchpad_word_addr = Cat(s2_hit_way, Mux(s2_slaveValid, s1s3_slaveAddr, io.s2_vaddr)(untagBits-1, log2Ceil(wordBits/8)), UInt(0, log2Ceil(wordBits/8)))
   val s2_dout = RegEnable(s1_dout, s1_clk_en)
+  val s2_bankId = RegEnable(s1_bankId, s1_clk_en)
   val s2_way_mux = Mux1H(s2_tag_hit, s2_dout)
 
   val s2_tag_disparity = RegEnable(s1_tag_disparity, s1_clk_en).asUInt.orR
   val s2_tl_error = RegEnable(s1_tl_error.asUInt.orR, s1_clk_en)
-  val s2_data_decoded = dECC.decode(s2_way_mux)
-  val s2_disparity = s2_tag_disparity || s2_data_decoded.error
+
+  // NOTE: if we run off the cache-line, the Bank0Data is garbage. The pipeline should not use those instructions.
+  require (cacheParams.fetchBytes > 8)
+  val sz = s2_way_mux.getWidth
+  val s2_bank0DataDecoded = dECC.decode(s2_way_mux(sz/2-1,0))
+  val s2_bank1DataDecoded = dECC.decode(s2_way_mux(sz-1, sz/2))
+  val s2_data =
+    Mux(s2_bankId,
+      Cat(s2_bank0DataDecoded.uncorrected, s2_bank1DataDecoded.uncorrected),
+      Cat(s2_bank1DataDecoded.uncorrected, s2_bank0DataDecoded.uncorrected))
+
+  val s2_disparity = s2_tag_disparity || s2_bank0DataDecoded.error || s2_bank1DataDecoded.error
   val s2_full_word_write = Wire(init = false.B)
 
   val s1_scratchpad_hit = Mux(s1_slaveValid, lineInScratchpad(scratchpadLine(s1s3_slaveAddr)), addrInScratchpad(io.s1_paddr))
   val s2_scratchpad_hit = RegEnable(s1_scratchpad_hit, s1_clk_en)
-  val s2_report_uncorrectable_error = s2_scratchpad_hit && s2_data_decoded.uncorrectable && (s2_valid || (s2_slaveValid && !s2_full_word_write))
+  val s2_report_uncorrectable_error =
+    s2_scratchpad_hit &&
+    (s2_bank0DataDecoded.uncorrectable || s2_bank1DataDecoded.uncorrectable) &&
+    (s2_valid || (s2_slaveValid && !s2_full_word_write))
   val s2_error_addr = scratchpadBase.map(base => Mux(s2_scratchpad_hit, base + s2_scratchpad_word_addr, 0.U)).getOrElse(0.U)
 
   // output signals
@@ -296,7 +325,7 @@ class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
       // when some sort of memory bit error have occurred
       when (s2_valid && s2_disparity) { invalidate := true }
 
-      io.resp.bits.data := s2_data_decoded.uncorrected
+      io.resp.bits.data := s2_data
       io.resp.bits.ae := s2_tl_error
       io.resp.bits.replay := s2_disparity
       io.resp.valid := s2_valid && s2_hit
@@ -340,24 +369,33 @@ class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
           }
         }
 
+        val s2_dataCorrected =
+            Mux(s2_bankId,
+              Cat(s2_bank0DataDecoded.corrected, s2_bank1DataDecoded.corrected),
+              Cat(s2_bank1DataDecoded.corrected, s2_bank0DataDecoded.corrected))
+
         assert(!s2_valid || RegNext(RegNext(s0_vaddr)) === io.s2_vaddr)
         when (!(tl.a.valid || s1_slaveValid || s2_slaveValid || respValid)
-              && s2_valid && s2_data_decoded.error && !s2_tag_disparity) {
+              && s2_valid && (s2_bank0DataDecoded.error || s2_bank1DataDecoded.error) && !s2_tag_disparity) {
           // handle correctable errors on CPU accesses to the scratchpad.
           // if there is an in-flight slave-port access to the scratchpad,
           // report the a miss but don't correct the error (as there is
           // a structural hazard on s1s3_slaveData/s1s3_slaveAddress).
           s3_slaveValid := true
-          s1s3_slaveData := s2_data_decoded.corrected
+          // TODO this doesn't make sense if we go off the cache-line.
+          s1s3_slaveData := s2_dataCorrected
           s1s3_slaveAddr := s2_scratchpad_word_addr | s1s3_slaveAddr(log2Ceil(wordBits/8)-1, 0)
         }
 
         respValid := s2_slaveValid || (respValid && !tl.d.ready)
-        val respError = RegEnable(s2_scratchpad_hit && s2_data_decoded.uncorrectable && !s2_full_word_write, s2_slaveValid)
+        val respError = RegEnable(
+          s2_scratchpad_hit &&
+          (s2_bank0DataDecoded.uncorrectable || s2_bank1DataDecoded.uncorrectable) &&
+          !s2_full_word_write, s2_slaveValid)
         when (s2_slaveValid) {
-          when (edge_in.get.hasData(s1_a) || s2_data_decoded.error) { s3_slaveValid := true }
+          when (edge_in.get.hasData(s1_a) || s2_bank0DataDecoded.error || s2_bank1DataDecoded.error) { s3_slaveValid := true }
           def byteEn(i: Int) = !(edge_in.get.hasData(s1_a) && s1_a.mask(i))
-          s1s3_slaveData := (0 until wordBits/8).map(i => Mux(byteEn(i), s2_data_decoded.corrected, s1s3_slaveData)(8*(i+1)-1, 8*i)).asUInt
+          s1s3_slaveData := (0 until wordBits/8).map(i => Mux(byteEn(i), s2_dataCorrected, s1s3_slaveData)(8*(i+1)-1, 8*i)).asUInt
         }
 
         tl.d.valid := respValid
@@ -433,9 +471,10 @@ class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
 
   val mem_active_valid = Seq(CoverBoolean(s2_valid, Seq("mem_active")))
   val data_error = Seq(
-    CoverBoolean(!s2_data_decoded.correctable && !s2_data_decoded.uncorrectable, Seq("no_data_error")),
-    CoverBoolean(s2_data_decoded.correctable, Seq("data_correctable_error")),
-    CoverBoolean(s2_data_decoded.uncorrectable, Seq("data_uncorrectable_error")))
+    // TODO add covers for both banks.
+    CoverBoolean(!s2_bank0DataDecoded.correctable && !s2_bank0DataDecoded.uncorrectable, Seq("no_data_error")),
+    CoverBoolean(s2_bank0DataDecoded.correctable, Seq("data_correctable_error")),
+    CoverBoolean(s2_bank0DataDecoded.uncorrectable, Seq("data_uncorrectable_error")))
   val request_source = Seq(
     CoverBoolean(!s2_slaveValid, Seq("from_CPU")),
     CoverBoolean(s2_slaveValid, Seq("from_TL"))
@@ -467,6 +506,8 @@ class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
   override def toString: String =
     "\n   ==L1-ICache==" +
     "\n   Fetch bytes   : " + cacheParams.fetchBytes +
+    "\n   Block bytes   : " + (1 << blockOffBits) +
+    "\n   Row bytes     : " + rowBytes +
     "\n   Sets          : " + nSets +
     "\n   Ways          : " + nWays +
     "\n   Refill cycles : " + refillCycles +

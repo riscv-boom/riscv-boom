@@ -23,6 +23,7 @@ import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.rocket.ALU._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile
+import chisel3.experimental.chiselName
 
 
 object FUConstants
@@ -247,6 +248,7 @@ abstract class PipelinedFunctionalUnit(val num_stages: Int,
 
 }
 
+@chiselName
 class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: Parameters)
              extends PipelinedFunctionalUnit(num_stages = num_stages
                                             , num_bypass_stages = num_stages
@@ -263,7 +265,7 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
    var op1_data: UInt = null
    if (is_branch_unit)
    {
-      val curr_pc = AlignPC(io.get_ftq_pc.fetch_pc, fetchWidth*coreInstBytes) + io.req.bits.uop.pc_lob
+      val curr_pc = AlignPCToBoundary(io.get_ftq_pc.fetch_pc, icBlockBytes) + io.req.bits.uop.pc_lob
       op1_data = Mux(io.req.bits.uop.ctrl.op1_sel.asUInt === OP1_RS1 , io.req.bits.rs1_data,
                  Mux(io.req.bits.uop.ctrl.op1_sel.asUInt === OP1_PC  , Sext(curr_pc, xLen),
                                                                        UInt(0)))
@@ -290,7 +292,7 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
 
    if (is_branch_unit)
    {
-      val uop_pc_ = AlignPC(io.get_ftq_pc.fetch_pc, fetchWidth*coreInstBytes) + io.req.bits.uop.pc_lob
+      val uop_pc_ = AlignPCToBoundary(io.get_ftq_pc.fetch_pc, icBlockBytes) + io.req.bits.uop.pc_lob
 
       // The Branch Unit redirects the PC immediately, but delays the mispredict
       // signal a cycle (for critical path reasons)
@@ -473,7 +475,6 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
       val lsb = log2Ceil(fetchWidth*coreInstBytes)
 
       // did a branch or jalr occur AND did we mispredict? AND was it taken? (i.e., should we update the BTB)
-      val fetch_pc = ((uop_pc_ >> lsb) << lsb) + uop.fetch_pc_lob
 
       if (enableBTBContainsBranches)
       {
@@ -484,7 +485,7 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
          br_unit.btb_update.valid := is_br_or_jalr && mispredict && uop.is_jump
       }
 
-      br_unit.btb_update.bits.pc               := fetch_pc // tell the BTB which pc to tag check against
+      br_unit.btb_update.bits.pc               := io.get_ftq_pc.fetch_pc// tell the BTB which pc to tag check against
       br_unit.btb_update.bits.cfi_pc           := uop_pc_
       br_unit.btb_update.bits.target           := (target.asSInt & SInt(-coreInstBytes)).asUInt
       br_unit.btb_update.bits.taken            := is_taken   // was this branch/jal/jalr "taken"
