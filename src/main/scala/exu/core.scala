@@ -658,7 +658,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    csr.io.retire    := PopCount(rob.io.commit.valids.asUInt)
    csr.io.exception := rob.io.com_xcpt.valid
    // csr.io.pc used for setting EPC during exception or CSR.io.trace.
-   csr.io.pc        := AlignPC(io.ifu.com_fetch_pc, fetchWidth*coreInstBytes) + rob.io.com_xcpt.bits.pc_lob
+   csr.io.pc        := AlignPCToBoundary(io.ifu.com_fetch_pc, icBlockBytes) + rob.io.com_xcpt.bits.pc_lob
    csr.io.cause     := rob.io.com_xcpt.bits.cause
    csr.io.tval      := Mux(csr.io.cause === Causes.illegal_instruction.U, 0.U, rob.io.com_xcpt.bits.badvaddr)
 
@@ -1109,10 +1109,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       println("\n Chisel Printout Enabled\n")
 
       val numFtqWhitespace = if (DEBUG_PRINTF_FTQ) (ftqSz/4)+1 else 0
-      val screenheight = 79
-//      val screenheight = 61
-//      val screenheight = 56
-       var whitespace = (screenheight - 25 + 3 -10 + 3 - decodeWidth - NUM_LSU_ENTRIES -
+       var whitespace = (debugScreenheight - 25 + 3 -10 + 3 - decodeWidth - NUM_LSU_ENTRIES -
          issueParams.map(_.numEntries).sum - issueParams.length - (NUM_ROB_ENTRIES/COMMIT_WIDTH) - numFtqWhitespace
      )
 

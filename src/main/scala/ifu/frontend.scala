@@ -46,6 +46,57 @@ import chisel3.internal.sourceinfo.SourceInfo
 //}
 //
 
+trait HasL1ICacheBankedParameters extends HasL1ICacheParameters
+{
+  // Use a bank interleaved I$ if our fetch width is wide enough.
+  val icIsBanked = fetchBytes > 8
+  // How many bytes wide is a bank?
+  val bankBytes = if (icIsBanked) fetchBytes/2 else fetchBytes
+  // How many "chunks"/interleavings make up a cache line?
+  val numChunks = cacheParams.blockBytes / bankBytes
+
+  // Which bank is the address pointing to?
+  def bank(addr: UInt) = addr(blockOffBits-log2Ceil(refillCycles)-1)
+  def inLastChunk(addr: UInt) = addr(blockOffBits-1, blockOffBits-log2Ceil(bankBytes)) === (numChunks-1).U
+
+  // Round address down to the nearest fetch boundary.
+  def alignToFetchBoundary(addr: UInt) =
+  {
+    if (icIsBanked) ~(~addr | (bankBytes-1))
+    else ~(~addr | (fetchBytes-1))
+  }
+
+  // Input: an ALIGNED pc.
+  // For the fall-through next PC, where does the next fetch pc start?
+  // This is complicated by cache-line wraparound.
+  def nextFetchStart(addr: UInt) =
+  {
+    if (icIsBanked)
+    {
+      addr + Mux(inLastChunk(addr), bankBytes.U, fetchBytes.U)
+    } else {
+      addr + fetchBytes.U
+    }
+  }
+
+  // For a given fetch address, what is the mask of validly fetched instructions.
+  def fetchMask(addr: UInt) =
+  {
+    if (icIsBanked) {
+      val end_mask = Mux(inLastChunk(addr), Fill(fetchWidth/2, 1.U), Fill(fetchWidth, 1.U))
+      ((1 << fetchWidth)-1).U << addr(log2Ceil(coreInstBytes)) & end_mask
+    } else {
+      ((1 << fetchWidth)-1).U << addr(log2Ceil(coreInstBytes))
+    }
+  }
+
+//  println("isBanked  : " + icIsBanked)
+//  println("blockBytes: " + cacheParams.blockBytes)
+//  println("bankBytes : " + bankBytes)
+//  println("NumChunks : " + numChunks)
+}
+
+
 class BoomFrontendIO(implicit p: Parameters) extends BoomBundle()(p)
 {
    // Give the backend a packet of instructions.
@@ -98,8 +149,10 @@ class BoomFrontendBundle(val outer: BoomFrontend) extends CoreBundle()(outer.p)
 }
 
 class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
-    with HasCoreParameters
-    with HasL1ICacheParameters {
+  with HasCoreParameters
+  with HasL1ICacheParameters
+  with HasL1ICacheBankedParameters
+{
   val io = IO(new BoomFrontendBundle(outer))
   implicit val edge = outer.masterNode.edges.out(0)
   require(fetchWidth*coreInstBytes == outer.icacheParams.fetchBytes)
@@ -128,8 +181,8 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   val s2_partial_insn = Reg(UInt(width = coreInstBits))
   val wrong_path = Reg(Bool())
 
-  val s1_base_pc = ~(~s1_pc | (fetchBytes - 1))
-  val ntpc = s1_base_pc + fetchBytes.U
+  val s1_base_pc = alignToFetchBoundary(s1_pc)
+  val ntpc = nextFetchStart(s1_base_pc)
   val predicted_npc = Wire(init = ntpc)
   val predicted_taken = Wire(init = Bool(false))
 
@@ -176,7 +229,9 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   fetch_controller.io.imem_resp.bits.pc := s2_pc
 
   fetch_controller.io.imem_resp.bits.data := icache.io.resp.bits.data
-  fetch_controller.io.imem_resp.bits.mask := UInt((1 << fetchWidth)-1) << s2_pc.extract(log2Ceil(fetchWidth)+log2Ceil(coreInstBytes)-1, log2Ceil(coreInstBytes))
+  fetch_controller.io.imem_resp.bits.mask := fetchMask(s2_pc)
+
+
   fetch_controller.io.imem_resp.bits.replay := icache.io.resp.bits.replay || icache.io.s2_kill && !icache.io.resp.valid && !s2_xcpt
   fetch_controller.io.imem_resp.bits.btb := s2_btb_resp_bits
   fetch_controller.io.imem_resp.bits.btb.taken := s2_btb_taken

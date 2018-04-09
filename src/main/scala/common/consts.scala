@@ -26,6 +26,12 @@ trait BOOMDebugConstants
    val O3PIPEVIEW_PRINTF   = false // dump trace for O3PipeView from gem5
    val O3_CYCLE_TIME       = (1000)// "cycle" time expected by o3pipeview.py
 
+   // When enabling DEBUG_PRINTF, the vertical whitespace can be padded out
+   // such that viewing the *.out file in vim can line up veritically to
+   // enable ctrl+f/ctrl+b to advance the *.out file one cycle without
+   // moving the structures.
+   val debugScreenheight  = 79
+
    // turn off stuff to dramatically reduce Chisel node count
    val DEBUG_PRINTF_LSU    = true && DEBUG_PRINTF
    val DEBUG_PRINTF_ROB    = true && DEBUG_PRINTF

@@ -22,6 +22,7 @@ class FetchBufferResp(implicit p: Parameters) extends BoomBundle()(p)
 // num_entries: effectively the number of full-sized fetch packets we can hold.
 class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule()(p)
    with HasBoomCoreParameters
+   with HasL1ICacheBankedParameters
 {
    val io = IO(new BoomBundle()(p)
    {
@@ -64,10 +65,9 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule()
       require (coreInstBytes==4)
       in_uops(i)                := DontCare
       in_uops(i).valid          := io.enq.valid && io.enq.bits.mask(i)
-      in_uops(i).pc             := (io.enq.bits.pc.asSInt & (-(fetchWidth*coreInstBytes)).S).asUInt + (i << 2).U
-      in_uops(i).fetch_pc_lob   := io.enq.bits.pc
+      in_uops(i).pc             := alignToFetchBoundary(io.enq.bits.pc) + (i << 2).U // RVC TODO
       in_uops(i).ftq_idx        := io.enq.bits.ftq_idx
-      in_uops(i).pc_lob         := ~(~io.enq.bits.pc | (fetchWidth*coreInstBytes-1).U) + (i << 2).U
+      in_uops(i).pc_lob         := in_uops(i).pc // LHS width will cut off high-order bits.
       in_uops(i).inst           := io.enq.bits.insts(i)
       in_uops(i).xcpt_pf_if     := io.enq.bits.xcpt_pf_if
       in_uops(i).xcpt_ae_if     := io.enq.bits.xcpt_ae_if
@@ -83,13 +83,17 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule()
    // The "mask" arrives too late for our purposes, and we only need to know
    // where the first valid instruction is anyways.
    val lsb = log2Ceil(coreInstBytes)
+   val msb =
+      if (icIsBanked) log2Ceil(fetchWidth)+lsb-1-1
+      else log2Ceil(fetchWidth)+lsb-1
+
    val first_index =
       if (fetchWidth==1) 0.U
-      else io.enq.bits.pc(log2Ceil(fetchWidth)+lsb-1, lsb)
+      else io.enq.bits.pc(msb, lsb)
    for (i <- 0 until fetchWidth)
    {
       val selects_oh = Wire(UInt(width=fetchWidth.W))
-      selects_oh   := UIntToOH(i.U + first_index)
+      selects_oh   := UIntToOH(i.asUInt(width=log2Ceil(fetchWidth).W) + first_index)
 
       val invalid = first_index >= (fetchWidth - i).U // out-of-bounds
       compact_uops(i) := Mux1H(selects_oh, in_uops)
@@ -97,8 +101,8 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule()
 
 //      if (DEBUG_PRINTF)
 //      {
-//         printf(" shift [" + i + "] enq: %x compact: %d, selects_oh: %x, oob: %d\n",
-//            io.enq.bits.mask, compact_mask(i), selects_oh, invalid)
+//         printf(" shift [" + i + "] pc: 0x%x first: %d enq: %x compact: %d, selects_oh: %x, oob: %d\n",
+//            io.enq.bits.pc, first_index, io.enq.bits.mask, compact_mask(i), selects_oh, invalid)
 //      }
    }
 
@@ -124,7 +128,7 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule()
       when (io.enq.fire() && i.U < enq_count)
       {
          ram(write_ptr + i.U) := compact_uops(start_idx + i.U)
-         assert (compact_mask(start_idx + i.U))
+         assert (compact_mask(start_idx + i.U), s"compact_mask[$i] is invalid.")
       }
       .otherwise
       {

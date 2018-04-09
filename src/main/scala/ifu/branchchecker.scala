@@ -24,6 +24,7 @@ import freechips.rocketchip.config.Parameters
 // NOTE: Incoming signals may be garbage (if f2_valid not true); consumer will
 // have to handle that scenario.
 class BranchChecker(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p)
+   with HasL1ICacheBankedParameters
 {
    val io = IO(new Bundle
    {
@@ -87,7 +88,7 @@ class BranchChecker(fetch_width: Int)(implicit p: Parameters) extends BoomModule
       }
    }
 
-   val nextline_pc = io.aligned_pc + UInt(fetch_width*coreInstBytes)
+   val nextline_pc = nextFetchStart(io.aligned_pc)
 
    val btb_was_wrong = io.btb_resp.valid && (wrong_cfi || wrong_target || !io.inst_mask(btb_idx))
 

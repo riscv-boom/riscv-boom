@@ -44,7 +44,7 @@ class DefaultBoomConfig extends Config((site, here, up) => {
          fpu = Some(freechips.rocketchip.tile.FPUParams(sfmaLatency=4, dfmaLatency=4, divSqrt=true))),
       btb = Some(BTBParams(nEntries = 0, updatesOutOfOrder = true)),
       dcache = Some(DCacheParams(rowBits = site(SystemBusKey).beatBits, nSets=64, nWays=8, nMSHRs=4, nTLBEntries=16)),
-      icache = Some(ICacheParams(fetchBytes = 4*4, rowBits = site(SystemBusKey).beatBits, nSets=64, nWays=8))
+      icache = Some(ICacheParams(fetchBytes = 4*4, rowBits = site(SystemBusKey).beatBits, nSets=64, nWays=4))
       )}
    // Set TL network to 128bits wide
    case SystemBusKey => up(SystemBusKey, site).copy(beatBytes = 16)
@@ -62,7 +62,7 @@ class WithNPerfCounters(n: Int) extends Config((site, here, up) => {
 class WithSmallBooms extends Config((site, here, up) => {
    case BoomTilesKey => up(BoomTilesKey, site) map { r =>r.copy(
       core = r.core.copy(
-         fetchWidth = 2,
+         fetchWidth = 4,
          decodeWidth = 1,
          numRobEntries = 16,
          issueParams = Seq(
@@ -71,14 +71,14 @@ class WithSmallBooms extends Config((site, here, up) => {
             IssueParams(issueWidth=1, numEntries=4, iqType=IQT_FP.litValue)),
          numIntPhysRegisters = 56,
          numFpPhysRegisters = 48,
-         numLsuEntries = 4,
+         numLsuEntries = 8,
          maxBrCount = 4,
          tage = Some(TageParameters(enabled=false)),
          bpdBaseOnly = Some(BaseOnlyParameters(enabled=true)),
          nPerfCounters = 2),
-      icache = Some(r.icache.get.copy(fetchBytes=2*4))
+      icache = Some(r.icache.get.copy(fetchBytes=4*4))
       )}
-   case SystemBusKey => up(SystemBusKey, site).copy(beatBytes = 8)
+   case SystemBusKey => up(SystemBusKey, site).copy(beatBytes = 16)
 })
 
 
