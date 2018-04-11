@@ -113,21 +113,21 @@ class WithMediumBooms extends Config((site, here, up) => {
 class WithMegaBooms extends Config((site, here, up) => {
    case BoomTilesKey => up(BoomTilesKey, site) map { r =>r.copy(
       core = r.core.copy(
-         fetchWidth = 4,
+         fetchWidth = 8,
          decodeWidth = 4,
          numRobEntries = 128,
          issueParams = Seq(
             IssueParams(issueWidth=1, numEntries=20, iqType=IQT_MEM.litValue),
             IssueParams(issueWidth=2, numEntries=20, iqType=IQT_INT.litValue),
-            IssueParams(issueWidth=1, numEntries=20, iqType=IQT_FP.litValue)), // TODO make this 2-wide issue
+            IssueParams(issueWidth=1, numEntries=20, iqType=IQT_FP.litValue)),
          numIntPhysRegisters = 128,
-         numFpPhysRegisters = 64,
+         numFpPhysRegisters = 128,
          numLsuEntries = 32,
          maxBrCount = 16,
          btb = BTBsaParameters(nSets=512, nWays=2, nRAS=16, tagSz=20),
          tage = Some(TageParameters())),
       dcache = Some(DCacheParams(rowBits = site(SystemBusKey).beatBytes*8, nSets=64, nWays=16, nMSHRs=4, nTLBEntries=8)),
-      icache = Some(ICacheParams(fetchBytes = 4*4, rowBits = site(SystemBusKey).beatBytes*8, nSets=64, nWays=8))
+      icache = Some(ICacheParams(fetchBytes = 8*4, rowBits = site(SystemBusKey).beatBytes*8, nSets=64, nWays=8))
       )}
    // Set TL network to 128bits wide
    case SystemBusKey => up(SystemBusKey, site).copy(beatBytes = 16)
