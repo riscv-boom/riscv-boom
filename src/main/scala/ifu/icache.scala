@@ -331,24 +331,41 @@ class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
   val s2_tag_disparity = RegEnable(s1_tag_disparity, s1_clk_en).asUInt.orR
   val s2_tl_error = RegEnable(s1_tl_error.asUInt.orR, s1_clk_en)
 
-  // NOTE: if we run off the cache-line, the Bank0Data is garbage. The pipeline should not use those instructions.
-  require (nBanks == 2) // TODO XXX get rid of hacky code that only works for nBanks==2.
+  // Let's rely on dead code elimination to get rid of extra logic here.
+  // If our I$ is unbanked.
+  val s2_unbankedDataDecoded = dECC.decode(s2_way_mux)
+  // If our I$ is banked we need to do some more shuffling.
   val sz = s2_way_mux.getWidth
   val s2_bank0DataDecoded = dECC.decode(s2_way_mux(sz/2-1,0))
   val s2_bank1DataDecoded = dECC.decode(s2_way_mux(sz-1, sz/2))
-  val s2_data =
-    Mux(s2_bankId,
-      Cat(s2_bank0DataDecoded.uncorrected, s2_bank1DataDecoded.uncorrected),
-      Cat(s2_bank1DataDecoded.uncorrected, s2_bank0DataDecoded.uncorrected))
+  // NOTE: if we run off the cache-line, the Bank0Data is garbage. The pipeline should not use those instructions.
 
-  val s2_disparity = s2_tag_disparity || s2_bank0DataDecoded.error || s2_bank1DataDecoded.error
+  val s2_data =
+    if (nBanks == 2) {
+      Mux(s2_bankId,
+        Cat(s2_bank0DataDecoded.uncorrected, s2_bank1DataDecoded.uncorrected),
+        Cat(s2_bank1DataDecoded.uncorrected, s2_bank0DataDecoded.uncorrected))
+    } else {
+      s2_unbankedDataDecoded.uncorrected
+    }
+  val s2_deccError =
+    if (nBanks == 2) (s2_bank0DataDecoded.error || s2_bank1DataDecoded.error)
+    else s2_unbankedDataDecoded.error
+  val s2_deccUncorrectable =
+    if (nBanks == 2) (s2_bank0DataDecoded.uncorrectable || s2_bank1DataDecoded.uncorrectable)
+    else s2_unbankedDataDecoded.uncorrectable
+  val s2_deccCorrectable =
+    if (nBanks == 2) (s2_bank0DataDecoded.correctable || s2_bank1DataDecoded.correctable)
+    else s2_unbankedDataDecoded.correctable
+
+  val s2_disparity = s2_tag_disparity || s2_deccError
   val s2_full_word_write = Wire(init = false.B)
 
   val s1_scratchpad_hit = Mux(s1_slaveValid, lineInScratchpad(scratchpadLine(s1s3_slaveAddr)), addrInScratchpad(io.s1_paddr))
   val s2_scratchpad_hit = RegEnable(s1_scratchpad_hit, s1_clk_en)
   val s2_report_uncorrectable_error =
     s2_scratchpad_hit &&
-    (s2_bank0DataDecoded.uncorrectable || s2_bank1DataDecoded.uncorrectable) &&
+    s2_deccUncorrectable &&
     (s2_valid || (s2_slaveValid && !s2_full_word_write))
   val s2_error_addr = scratchpadBase.map(base => Mux(s2_scratchpad_hit, base + s2_scratchpad_word_addr, 0.U)).getOrElse(0.U)
 
@@ -411,13 +428,17 @@ class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
         }
 
         val s2_dataCorrected =
+          if (nBanks == 2) {
             Mux(s2_bankId,
               Cat(s2_bank0DataDecoded.corrected, s2_bank1DataDecoded.corrected),
               Cat(s2_bank1DataDecoded.corrected, s2_bank0DataDecoded.corrected))
+          } else {
+            s2_unbankedDataDecoded.corrected
+          }
 
         assert(!s2_valid || RegNext(RegNext(s0_vaddr)) === io.s2_vaddr)
         when (!(tl.a.valid || s1_slaveValid || s2_slaveValid || respValid)
-              && s2_valid && (s2_bank0DataDecoded.error || s2_bank1DataDecoded.error) && !s2_tag_disparity) {
+              && s2_valid && s2_deccError  && !s2_tag_disparity) {
           // handle correctable errors on CPU accesses to the scratchpad.
           // if there is an in-flight slave-port access to the scratchpad,
           // report the a miss but don't correct the error (as there is
@@ -431,10 +452,10 @@ class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
         respValid := s2_slaveValid || (respValid && !tl.d.ready)
         val respError = RegEnable(
           s2_scratchpad_hit &&
-          (s2_bank0DataDecoded.uncorrectable || s2_bank1DataDecoded.uncorrectable) &&
+          s2_deccUncorrectable  &&
           !s2_full_word_write, s2_slaveValid)
         when (s2_slaveValid) {
-          when (edge_in.get.hasData(s1_a) || s2_bank0DataDecoded.error || s2_bank1DataDecoded.error) { s3_slaveValid := true }
+          when (edge_in.get.hasData(s1_a) || s2_deccError) { s3_slaveValid := true }
           def byteEn(i: Int) = !(edge_in.get.hasData(s1_a) && s1_a.mask(i))
           s1s3_slaveData := (0 until wordBits/8).map(i => Mux(byteEn(i), s2_dataCorrected, s1s3_slaveData)(8*(i+1)-1, 8*i)).asUInt
         }
@@ -513,9 +534,9 @@ class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
   val mem_active_valid = Seq(CoverBoolean(s2_valid, Seq("mem_active")))
   val data_error = Seq(
     // TODO add covers for both banks.
-    CoverBoolean(!s2_bank0DataDecoded.correctable && !s2_bank0DataDecoded.uncorrectable, Seq("no_data_error")),
-    CoverBoolean(s2_bank0DataDecoded.correctable, Seq("data_correctable_error")),
-    CoverBoolean(s2_bank0DataDecoded.uncorrectable, Seq("data_uncorrectable_error")))
+    CoverBoolean(!s2_deccUncorrectable, Seq("no_data_error")),
+    CoverBoolean(s2_deccCorrectable, Seq("data_correctable_error")),
+    CoverBoolean(s2_deccUncorrectable, Seq("data_uncorrectable_error")))
   val request_source = Seq(
     CoverBoolean(!s2_slaveValid, Seq("from_CPU")),
     CoverBoolean(s2_slaveValid, Seq("from_TL"))

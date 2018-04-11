@@ -62,7 +62,7 @@ class WithNPerfCounters(n: Int) extends Config((site, here, up) => {
 class WithSmallBooms extends Config((site, here, up) => {
    case BoomTilesKey => up(BoomTilesKey, site) map { r =>r.copy(
       core = r.core.copy(
-         fetchWidth = 4,
+         fetchWidth = 2,
          decodeWidth = 1,
          numRobEntries = 16,
          issueParams = Seq(
@@ -76,9 +76,9 @@ class WithSmallBooms extends Config((site, here, up) => {
          tage = Some(TageParameters(enabled=false)),
          bpdBaseOnly = Some(BaseOnlyParameters(enabled=true)),
          nPerfCounters = 2),
-      icache = Some(r.icache.get.copy(fetchBytes=4*4))
+      icache = Some(r.icache.get.copy(fetchBytes=2*4))
       )}
-   case SystemBusKey => up(SystemBusKey, site).copy(beatBytes = 16)
+   case SystemBusKey => up(SystemBusKey, site).copy(beatBytes = 8)
 })
 
 
