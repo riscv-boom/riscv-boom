@@ -711,13 +711,26 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
             , io.imem_resp.bits.data(coreInstBits-1,0)
             )
       }
-      else if (fetch_width >= 4)
+      else if (fetch_width == 4)
       {
          printf("DASM(%x)DASM(%x)DASM(%x)DASM(%x) "
             , io.imem_resp.bits.data(4*coreInstBits-1, 3*coreInstBits)
             , io.imem_resp.bits.data(3*coreInstBits-1, 2*coreInstBits)
             , io.imem_resp.bits.data(2*coreInstBits-1, 1*coreInstBits)
             , io.imem_resp.bits.data(1*coreInstBits-1,0)
+            )
+      }
+      else if (fetch_width == 8)
+      {
+         printf("\n      DASM(%x)DASM(%x)DASM(%x)DASM(%x)\n      DASM(%x)DASM(%x)DASM(%x)DASM(%x) "
+            , io.imem_resp.bits.data(8*coreInstBits-1, 7*coreInstBits)
+            , io.imem_resp.bits.data(7*coreInstBits-1, 6*coreInstBits)
+            , io.imem_resp.bits.data(6*coreInstBits-1, 5*coreInstBits)
+            , io.imem_resp.bits.data(5*coreInstBits-1, 4*coreInstBits)
+            , io.imem_resp.bits.data(4*coreInstBits-1, 3*coreInstBits)
+            , io.imem_resp.bits.data(3*coreInstBits-1, 2*coreInstBits)
+            , io.imem_resp.bits.data(2*coreInstBits-1, 1*coreInstBits)
+            , io.imem_resp.bits.data(1*coreInstBits-1, 0)
             )
       }
 

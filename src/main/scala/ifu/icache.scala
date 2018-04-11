@@ -35,7 +35,6 @@ import chisel3.experimental.chiselName
 //  def replacement = new RandomReplacement(nWays)
 //}
 
-@chiselName
 class ICache(val icacheParams: ICacheParams, val hartId: Int)(implicit p: Parameters) extends LazyModule {
   lazy val module = new ICacheModule(this)
   val masterNode = TLClientNode(Seq(TLClientPortParameters(Seq(TLClientParameters(
@@ -97,7 +96,7 @@ object GetPropertyByHartId {
 
 @chiselName
 class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
-  with HasL1ICacheParameters
+  with HasL1ICacheBankedParameters
 {
   override val cacheParams = outer.icacheParams // Use the local parameters
 
@@ -111,6 +110,18 @@ class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
 
   require(isPow2(nSets) && isPow2(nWays))
   require(!usingVM || pgIdxBits >= untagBits)
+
+  // How many bits do we intend to fetch at most every cycle?
+  val wordBits = outer.icacheParams.fetchBytes*8
+  // How many banks does the ICache use?
+  val nBanks = if (cacheParams.fetchBytes <= 8) 1 else 2
+  // Each of these cases require some special-case handling.
+  require (tl_out.d.bits.data.getWidth == wordBits || (2*tl_out.d.bits.data.getWidth == wordBits && nBanks == 2))
+  // If TL refill is half the wordBits size and we have two banks, then the
+  // refill writes to only one bank per cycle (instead of across two banks every
+  // cycle).
+  val refillsToOneBank = (2*tl_out.d.bits.data.getWidth == wordBits)
+
 
   val scratchpadOn = RegInit(false.B)
   val scratchpadMax = tl_in.map(tl => Reg(UInt(width = log2Ceil(nSets * (nWays - 1)))))
@@ -191,7 +202,6 @@ class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
 
   val s1_tag_disparity = Wire(Vec(nWays, Bool()))
   val s1_tl_error = Wire(Vec(nWays, Bool()))
-  val wordBits = outer.icacheParams.fetchBytes*8
   val s1_dout = Wire(Vec(nWays, UInt(width = dECC.width(wordBits))))
   val s1_bankId = Wire(Bool())
 
@@ -216,14 +226,16 @@ class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
   }
   assert(!(s1_valid || s1_slaveValid) || PopCount(s1_tag_hit zip s1_tag_disparity map { case (h, d) => h && !d }) <= 1)
 
-  require(tl_out.d.bits.data.getWidth % wordBits == 0)
-  require (tl_out.d.bits.data.getWidth == wordBits) // Later we can decouple these widths.
   assert (!(s1_slaveValid), "[icache] We do not support the icache slave.")
 
 
   // declare arrays outside conditional so they show up named in Verilog.
-  val dataArraysB0 = Seq.fill(nWays) { SeqMem(nSets * refillCycles, UInt(width = dECC.width(wordBits/2))) }
-  val dataArraysB1 = Seq.fill(nWays) { SeqMem(nSets * refillCycles, UInt(width = dECC.width(wordBits/2))) }
+  val ramDepth =
+    if (2*tl_out.d.bits.data.getWidth == wordBits) (nSets * refillCycles/2)
+    else (nSets * refillCycles)
+  val dataArraysB0 = Seq.fill(nWays) { SeqMem(ramDepth, UInt(width = dECC.width(wordBits/nBanks))) }
+  val dataArraysB1 = Seq.fill(nWays) { SeqMem(ramDepth, UInt(width = dECC.width(wordBits/nBanks))) }
+
   if (cacheParams.fetchBytes <= 8) {
     // Use unbanked icache for narrow accesses.
     val dataArrays = Seq.fill(nWays) { SeqMem(nSets * refillCycles, UInt(width = dECC.width(wordBits))) }
@@ -247,13 +259,22 @@ class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
     }
   } else {
     // Use two banks, interleaved.
-    require(cacheParams.fetchBytes == 16 || cacheParams.fetchBytes == 32)
-    // Which bank has the requesting fetch addr?
-    def bank(addr: UInt) = addr(blockOffBits-log2Ceil(refillCycles)-1)
+    require (nBanks == 2)
+
     // Bank0 row's id wraps around if Bank1 is the starting bank.
-    def b0Row(addr: UInt) = addr(untagBits-1, blockOffBits-log2Ceil(refillCycles)) + bank(addr)
+    def b0Row(addr: UInt) =
+      if (refillsToOneBank) {
+        addr(untagBits-1, blockOffBits-log2Ceil(refillCycles)+1) + bank(addr)
+      } else {
+        addr(untagBits-1, blockOffBits-log2Ceil(refillCycles)) + bank(addr)
+      }
     // Bank1 row's id stays the same regardless of which Bank has the fetch address.
-    def b1Row(addr: UInt) = addr(untagBits-1, blockOffBits-log2Ceil(refillCycles))
+    def b1Row(addr: UInt) =
+      if (refillsToOneBank) {
+        addr(untagBits-1, blockOffBits-log2Ceil(refillCycles)+1)
+      } else {
+        addr(untagBits-1, blockOffBits-log2Ceil(refillCycles))
+      }
 
     s1_bankId := RegNext(bank(s0_vaddr))
 
@@ -262,18 +283,38 @@ class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
       val way = Mux(s3_slaveValid, scratchpadWay(s1s3_slaveAddr), repl_way)
       val wen = ((refill_one_beat && !invalidated) || s3_slaveValid) && way === i.U
 
-      val mem_idx0 =
-        Mux(refill_one_beat, (refill_idx << log2Ceil(refillCycles)) | refill_cnt,
-        b0Row(s0_vaddr))
+      var mem_idx0: UInt = null
+      var mem_idx1: UInt = null
 
-      val mem_idx1 =
-        Mux(refill_one_beat, (refill_idx << log2Ceil(refillCycles)) | refill_cnt,
-        b1Row(s0_vaddr))
+      if (refillsToOneBank) {
+        // write a refill beat across only one beat.
+        mem_idx0 =
+          Mux(refill_one_beat, (refill_idx << (log2Ceil(refillCycles)-1)) | (refill_cnt >> 1.U),
+          b0Row(s0_vaddr))
+        mem_idx1 =
+          Mux(refill_one_beat, (refill_idx << (log2Ceil(refillCycles)-1)) | (refill_cnt >> 1.U),
+          b1Row(s0_vaddr))
 
-      when (wen) {
         val data = Mux(s3_slaveValid, s1s3_slaveData, tl_out.d.bits.data)
-        dataArraysB0(i).write(mem_idx0, dECC.encode(data(wordBits/2-1, 0)))
-        dataArraysB1(i).write(mem_idx1, dECC.encode(data(wordBits-1, wordBits/2)))
+        when (wen && refill_cnt(0) === 0.U) {
+          dataArraysB0(i).write(mem_idx0, dECC.encode(data))
+        } .elsewhen (wen && refill_cnt(0) === 1.U) {
+          dataArraysB1(i).write(mem_idx1, dECC.encode(data))
+        }
+      } else {
+        // write a refill beat across both banks.
+        mem_idx0 =
+          Mux(refill_one_beat, (refill_idx << log2Ceil(refillCycles)) | refill_cnt,
+          b0Row(s0_vaddr))
+        mem_idx1 =
+          Mux(refill_one_beat, (refill_idx << log2Ceil(refillCycles)) | refill_cnt,
+          b1Row(s0_vaddr))
+
+        when (wen) {
+          val data = Mux(s3_slaveValid, s1s3_slaveData, tl_out.d.bits.data)
+          dataArraysB0(i).write(mem_idx0, dECC.encode(data(wordBits/2-1, 0)))
+          dataArraysB1(i).write(mem_idx1, dECC.encode(data(wordBits-1, wordBits/2)))
+        }
       }
       s1_dout(i) := Cat(dataArraysB1(i).read(mem_idx1, !wen && s0_ren), dataArraysB0(i).read(mem_idx0, !wen && s0_ren))
     }
@@ -291,7 +332,7 @@ class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
   val s2_tl_error = RegEnable(s1_tl_error.asUInt.orR, s1_clk_en)
 
   // NOTE: if we run off the cache-line, the Bank0Data is garbage. The pipeline should not use those instructions.
-  require (cacheParams.fetchBytes > 8)
+  require (nBanks == 2) // TODO XXX get rid of hacky code that only works for nBanks==2.
   val sz = s2_way_mux.getWidth
   val s2_bank0DataDecoded = dECC.decode(s2_way_mux(sz/2-1,0))
   val s2_bank1DataDecoded = dECC.decode(s2_way_mux(sz-1, sz/2))
@@ -500,17 +541,16 @@ class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
 
   cover(error_cross_covers)
 
-
-  val nBanks = if (cacheParams.fetchBytes <= 8) 1 else 2
   val ramWidth = dECC.width(wordBits/nBanks)
   override def toString: String =
     "\n   ==L1-ICache==" +
     "\n   Fetch bytes   : " + cacheParams.fetchBytes +
     "\n   Block bytes   : " + (1 << blockOffBits) +
     "\n   Row bytes     : " + rowBytes +
+    "\n   Word bits     : " + wordBits +
     "\n   Sets          : " + nSets +
     "\n   Ways          : " + nWays +
     "\n   Refill cycles : " + refillCycles +
-    "\n   RAMs          : (" +  ramWidth + " x " + nSets*refillCycles + ")"  +
-    "\n   " + (if (nBanks == 2) "Dual-banked" else "Single-banked")
+    "\n   RAMs          : (" +  ramWidth + " x " + nSets*refillCycles + ") using " + nBanks + " banks"  +
+    "\n   " + (if (nBanks == 2) "Dual-banked\n" else "Single-banked\n")
 }
