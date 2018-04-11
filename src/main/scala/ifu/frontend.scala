@@ -53,11 +53,11 @@ trait HasL1ICacheBankedParameters extends HasL1ICacheParameters
   // How many bytes wide is a bank?
   val bankBytes = if (icIsBanked) fetchBytes/2 else fetchBytes
   // How many "chunks"/interleavings make up a cache line?
-  val numChunks = cacheParams.blockBytes / bankBytes
+  def numChunks = cacheParams.blockBytes / bankBytes
 
   // Which bank is the address pointing to?
-  def bank(addr: UInt) = addr(blockOffBits-log2Ceil(refillCycles)-1)
-  def inLastChunk(addr: UInt) = addr(blockOffBits-1, blockOffBits-log2Ceil(bankBytes)) === (numChunks-1).U
+  def bank(addr: UInt) = addr(log2Ceil(bankBytes))
+  def inLastChunk(addr: UInt) = addr(blockOffBits-1, log2Ceil(bankBytes)) === (numChunks-1).U
 
   // Round address down to the nearest fetch boundary.
   def alignToFetchBoundary(addr: UInt) =
@@ -82,18 +82,17 @@ trait HasL1ICacheBankedParameters extends HasL1ICacheParameters
   // For a given fetch address, what is the mask of validly fetched instructions.
   def fetchMask(addr: UInt) =
   {
+    // where is the first instruction, aligned to a log(fetchWidth) boundary?
+    val idx = addr.extract(log2Ceil(fetchWidth)+log2Ceil(coreInstBytes)-1, log2Ceil(coreInstBytes))
     if (icIsBanked) {
+      // shave off the msb of idx since we are aligned to half-fetchWidth boundaries.
+      val shamt = idx.extract(log2Ceil(fetchWidth)-2, 0)
       val end_mask = Mux(inLastChunk(addr), Fill(fetchWidth/2, 1.U), Fill(fetchWidth, 1.U))
-      ((1 << fetchWidth)-1).U << addr(log2Ceil(coreInstBytes)) & end_mask
+      ((1 << fetchWidth)-1).U << shamt & end_mask
     } else {
-      ((1 << fetchWidth)-1).U << addr(log2Ceil(coreInstBytes))
+      ((1 << fetchWidth)-1).U << idx
     }
   }
-
-//  println("isBanked  : " + icIsBanked)
-//  println("blockBytes: " + cacheParams.blockBytes)
-//  println("bankBytes : " + bankBytes)
-//  println("NumChunks : " + numChunks)
 }
 
 
