@@ -1,8 +1,9 @@
-package boom
+package boom.common
 
 import chisel3._
 import chisel3.iotesters.{ChiselFlatSpec, Driver, PeekPokeTester, TesterOptionsManager, SteppedHWIOTester}
 import org.scalatest.{Matchers, FlatSpec}
+import boom.exu.Imul
 
 
 class IMulUnitTester(c: IMul) extends PeekPokeTester(c) {
