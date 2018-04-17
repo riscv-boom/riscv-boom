@@ -25,13 +25,15 @@
 //      this helps deal with loads, stores, and refetch instructions.
 //
 
-package boom
+package boom.exu
 
 import Chisel._
 import chisel3.experimental.chiselName
 import scala.math.ceil
 import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.util.Str
+import boom.common._
+import boom.util._
 
 class RobIo(
    val machine_width: Int,

@@ -3,14 +3,17 @@
 // All Rights Reserved. See LICENSE for license details.
 //------------------------------------------------------------------------------
 
-package boom
+package boom.common
+
 import Chisel._
 import freechips.rocketchip.config.{Parameters, Config}
 import freechips.rocketchip.subsystem.{SystemBusKey}
 import freechips.rocketchip.devices.tilelink.{BootROMParams}
 import freechips.rocketchip.rocket._
 import freechips.rocketchip.tile._
-
+import boom.bpu._
+import boom.exu._
+import boom.lsu._
 import boom.system.BoomTilesKey
 
 

@@ -16,11 +16,13 @@
 //    - Folds history if it is too long for the number of sets available.
 
 
-package boom
+package boom.bpu
 
 import Chisel._
 import chisel3.core.withReset
 import freechips.rocketchip.config.{Parameters, Field}
+import boom.common._
+import boom.util.{ElasticReg, Fold}
 
 
 case class GShareParameters(

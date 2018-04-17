@@ -15,11 +15,12 @@
 // how to build your own predictor that leverages the BIM as a base predictor.
 
 
-package boom
+package boom.bpu
 
 import Chisel._
 import chisel3.core.withReset
 import freechips.rocketchip.config.{Parameters, Field}
+import boom.util.ElasticReg
 
 
 case class BaseOnlyParameters(

@@ -21,12 +21,13 @@
 // NOTES:
 //    -
 
-package boom
+package boom.bpu
 
 import Chisel._
 import freechips.rocketchip.config.Parameters
-
 import freechips.rocketchip.util.Str
+import boom.common._
+import boom.exu._
 
 case class BimParameters(
    nSets: Int = 1024, // how many sets (conceptually) should we have?

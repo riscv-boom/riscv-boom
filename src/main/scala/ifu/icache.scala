@@ -1,7 +1,7 @@
 // See LICENSE.Berkeley for license details.
 // See LICENSE.SiFive for license details.
 
-package boom
+package boom.ifu
 
 import Chisel._
 import Chisel.ImplicitConversions._
@@ -16,6 +16,7 @@ import freechips.rocketchip.rocket.{HasL1ICacheParameters, ICacheParams, ICacheE
 import chisel3.internal.sourceinfo.SourceInfo
 import chisel3.experimental.dontTouch
 import chisel3.experimental.chiselName
+import boom.common._
 
 //case class ICacheParams(
 //    nSets: Int = 64,

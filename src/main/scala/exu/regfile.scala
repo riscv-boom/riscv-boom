@@ -11,12 +11,12 @@
 // 2013 May 1
 
 
-package boom
+package boom.exu
 
 import Chisel._
 import freechips.rocketchip.config.Parameters
-
 import scala.collection.mutable.ArrayBuffer
+import boom.common._
 
 class RegisterFileReadPortIO(addr_width: Int, data_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {

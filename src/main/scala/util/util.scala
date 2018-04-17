@@ -7,12 +7,14 @@
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
 
-package boom
+package boom.util
 
 import Chisel._
 
 import freechips.rocketchip.rocket.Instructions._
 import freechips.rocketchip.rocket._
+import boom.common.MicroOp
+import boom.exu.{BrResolutionInfo, ExeUnitResp}
 
 
 // XOR fold an input that is full_length sized down to a compressed_length.
@@ -237,6 +239,7 @@ object Sext
 // Asking for U-type gives it shifted up 12 bits.
 object ImmGen
 {
+   import boom.common.{LONGEST_IMM_SZ, IS_B, IS_I, IS_J, IS_S, IS_U}
    def apply(ip: UInt, isel: UInt): SInt =
    {
       val sign = ip(LONGEST_IMM_SZ-1).asSInt
@@ -313,7 +316,9 @@ object AgePriorityEncoder
 
 // Assumption: enq.valid only high if not killed by branch (so don't check IsKilled on io.enq).
 class QueueForMicroOpWithData(entries: Int, data_width: Int)
-   (implicit p: freechips.rocketchip.config.Parameters) extends BoomModule()(p)
+   (implicit p: freechips.rocketchip.config.Parameters)
+   extends boom.common.BoomModule()(p)
+   with boom.common.HasBoomCoreParameters
 {
    val io = IO(new Bundle
    {

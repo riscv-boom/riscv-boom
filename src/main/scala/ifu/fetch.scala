@@ -18,12 +18,16 @@
 //    * F4 -- take redirect
 //
 
-package boom
+package boom.ifu
 
 import Chisel._
 import chisel3.core.{withReset, DontCare}
 import chisel3.experimental.dontTouch
 import freechips.rocketchip.config.Parameters
+import boom.bpu._
+import boom.common._
+import boom.exu._
+import boom.util.{AgePriorityEncoder, ElasticReg}
 
 import freechips.rocketchip.util.Str
 import freechips.rocketchip.util.UIntToAugmentedUInt

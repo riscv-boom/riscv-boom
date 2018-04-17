@@ -7,10 +7,12 @@
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
 
-package boom
+package boom.common
 
 import Chisel._
 import freechips.rocketchip.config.Parameters
+import boom.bpu.BranchPredInfo
+import boom.exu.FUConstants
 
 class MicroOp(implicit p: Parameters) extends BoomBundle()(p)
    with freechips.rocketchip.rocket.constants.MemoryOpConstants

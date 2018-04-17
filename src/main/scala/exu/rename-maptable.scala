@@ -7,10 +7,12 @@
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
 
-package boom
+package boom.exu
 
 import Chisel._
 import freechips.rocketchip.config.Parameters
+import boom.common._
+import boom.util._
 
 
 class RenameMapTableElementIo(pl_width: Int)(implicit p: Parameters) extends BoomBundle()(p)

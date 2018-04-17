@@ -8,10 +8,12 @@
 //------------------------------------------------------------------------------
 
 
-package boom
+package boom.ifu
 
 import Chisel._
 import freechips.rocketchip.config.Parameters
+import boom.bpu._
+import boom.common._
 
 
 // The branch checker performs the following tasks:

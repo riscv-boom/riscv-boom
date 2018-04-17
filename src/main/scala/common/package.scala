@@ -3,13 +3,15 @@
 // All Rights Reserved. See LICENSE for license details.
 //------------------------------------------------------------------------------
 
-package object boom extends
-   boom.constants.BOOMDebugConstants with
-   boom.constants.BrPredConstants with
-   boom.constants.ScalarOpConstants with
-   boom.constants.ExcCauseConstants with
-   boom.constants.RISCVConstants with
-   boom.constants.IQType
+package boom
+
+package object common extends
+   boom.common.constants.BOOMDebugConstants with
+   boom.common.constants.BrPredConstants with
+   boom.common.constants.ScalarOpConstants with
+   boom.common.constants.ExcCauseConstants with
+   boom.common.constants.RISCVConstants with
+   boom.common.constants.IQType
 {
-   val START_ADDR = 0x100
 }
+

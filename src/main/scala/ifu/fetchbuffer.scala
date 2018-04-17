@@ -6,12 +6,13 @@
 //
 // Takes a FetchBundle and converts into a vector of MicroOps.
 
-package boom
+package boom.ifu
 
 import chisel3._
 import chisel3.util._
 import chisel3.core.DontCare
 import freechips.rocketchip.config.Parameters
+import boom.common._
 
 
 class FetchBufferResp(implicit p: Parameters) extends BoomBundle()(p)

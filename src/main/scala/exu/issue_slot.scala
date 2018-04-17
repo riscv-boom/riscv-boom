@@ -10,11 +10,13 @@
 // Note: stores (and AMOs) are "broken down" into 2 uops, but stored within a single issue-slot.
 // TODO XXX make a separate issueSlot for MemoryIssueSlots, and only they break apart stores.
 
-package boom
+package boom.exu
 
 import Chisel._
 import FUConstants._
 import freechips.rocketchip.config.Parameters
+import boom.common._
+import boom.util._
 
 class IssueSlotIO(num_wakeup_ports: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {

@@ -9,10 +9,12 @@
 //
 // Christopher Celio
 
-package boom
+package boom.exu
 
 import Chisel._
 import freechips.rocketchip.config.Parameters
+import boom.common._
+import boom.util._
 
 // internally bypasses newly busy registers (.write) to the read ports (.read)
 // num_operands is the maximum number of operands per instruction (.e.g., 2 normally, but 3 if FMAs are supported)

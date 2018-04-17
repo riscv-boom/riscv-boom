@@ -7,14 +7,13 @@
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
 
-package boom
+package boom.exu
 
 import Chisel._
 import freechips.rocketchip.config.Parameters
-
-import FUConstants._
 import freechips.rocketchip.util.Str
-
+import boom.common._
+import boom.exu.FUConstants._
 import scala.collection.mutable.ArrayBuffer
 
 //-------------------------------------------------------------
