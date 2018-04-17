@@ -18,7 +18,7 @@
 //       itself for F3.
 //
 
-package boom
+package boom.bpu
 
 import Chisel._
 import chisel3.core.withReset
@@ -26,6 +26,10 @@ import freechips.rocketchip.config.{Parameters, Field}
 
 import freechips.rocketchip.util.{Str}
 import freechips.rocketchip.rocket.RocketCoreParams
+import boom.common._
+import boom.exu._
+import boom.exu.BranchUnitResp
+import boom.util.ElasticReg
 
 
 // This is the response packet from the branch predictor. The predictor is

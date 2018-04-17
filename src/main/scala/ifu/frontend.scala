@@ -1,7 +1,7 @@
 // See LICENSE.Berkeley for license details.
 // See LICENSE.SiFive for license details.
 
-package boom
+package boom.ifu
 
 
 import Chisel._
@@ -16,6 +16,9 @@ import freechips.rocketchip.tile._
 import freechips.rocketchip.util._
 import freechips.rocketchip.util.property._
 import chisel3.internal.sourceinfo.SourceInfo
+import boom.bpu._
+import boom.common._
+import boom.exu.{BranchUnitResp, FlushSignals}
 
 //class FrontendReq(implicit p: Parameters) extends CoreBundle()(p) {
 //  val pc = UInt(width = vaddrBitsExtended)
@@ -135,7 +138,7 @@ class BoomFrontendIO(implicit p: Parameters) extends BoomBundle()(p)
 
 class BoomFrontend(val icacheParams: ICacheParams, hartid: Int)(implicit p: Parameters) extends LazyModule {
   lazy val module = new BoomFrontendModule(this)
-  val icache = LazyModule(new boom.ICache(icacheParams, hartid))
+  val icache = LazyModule(new boom.ifu.ICache(icacheParams, hartid))
   val masterNode = icache.masterNode
   val slaveNode = icache.slaveNode
 }

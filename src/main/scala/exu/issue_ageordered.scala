@@ -8,7 +8,7 @@
 //------------------------------------------------------------------------------
 //
 
-package boom
+package boom.exu
 {
 import Chisel._
 import freechips.rocketchip.config.Parameters
@@ -16,6 +16,7 @@ import freechips.rocketchip.config.Parameters
 import FUConstants._
 import freechips.rocketchip.util.Str
 import scala.collection.mutable.ArrayBuffer
+import boom.common._
 
 //-------------------------------------------------------------
 //-------------------------------------------------------------

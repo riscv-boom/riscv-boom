@@ -24,11 +24,13 @@
 // SCHEMES
 //    - u-bit incremented only if alt-pred available?
 
-package boom
+package boom.bpu
 
 import Chisel._
 import chisel3.core.withReset
 import freechips.rocketchip.config.{Parameters, Field}
+import boom.common._
+import boom.util.{ElasticReg, Fold}
 
 import freechips.rocketchip.util.Str
 

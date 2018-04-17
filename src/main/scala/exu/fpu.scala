@@ -3,7 +3,7 @@
 // All Rights Reserved. See LICENSE for license details.
 //------------------------------------------------------------------------------
 
-package boom
+package boom.exu
 
 import Chisel._
 import freechips.rocketchip.config.Parameters
@@ -12,8 +12,9 @@ import freechips.rocketchip.tile.FPConstants._
 import freechips.rocketchip.tile.FPUCtrlSigs
 import freechips.rocketchip.tile
 import freechips.rocketchip.rocket
-
 import freechips.rocketchip.util.uintToBitPat
+import boom.common._
+import boom.util.{ImmGenRm, ImmGenTyp}
 
 
 // TODO get rid of this decoder and move into the Decode stage? Or the RRd stage?

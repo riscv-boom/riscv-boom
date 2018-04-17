@@ -1,4 +1,4 @@
-package boom
+package boom.util
 
 import Chisel._
 

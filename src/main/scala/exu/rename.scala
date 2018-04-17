@@ -17,10 +17,12 @@
 // Ren1 data is provided as an output to be fed directly into the ROB.
 
 
-package boom
+package boom.exu
 
 import Chisel._
 import freechips.rocketchip.config.Parameters
+import boom.common._
+import boom.util._
 
 
 class RenameStageIO(

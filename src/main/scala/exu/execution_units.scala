@@ -7,12 +7,12 @@
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
 
-package boom
+package boom.exu
 
 import Chisel._
 import freechips.rocketchip.config.Parameters
-
 import scala.collection.mutable.ArrayBuffer
+import boom.common._
 
 class ExecutionUnits(fpu: Boolean = false)(implicit val p: Parameters) extends HasBoomCoreParameters
 {

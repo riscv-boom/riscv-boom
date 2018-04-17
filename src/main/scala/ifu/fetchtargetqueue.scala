@@ -13,13 +13,17 @@
 // * reduce port counts.
 
 
-package boom
+package boom.ifu
 
 import chisel3._
 import chisel3.util._
 import chisel3.experimental.dontTouch
 import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.util.Str
+import boom.bpu._
+import boom.common._
+import boom.exu._
+import boom.util._
 
 case class FtqParameters(
    nEntries: Int = 16

@@ -9,7 +9,7 @@
 
 // Generate the functional unit control signals from the micro-op opcodes.
 
-package boom
+package boom.exu
 
 import Chisel._
 import freechips.rocketchip.config.Parameters
@@ -17,6 +17,7 @@ import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.rocket.ALU._
 import freechips.rocketchip.util.uintToBitPat
 import freechips.rocketchip.rocket.CSR
+import boom.common._
 
 class RRdCtrlSigs(implicit p: Parameters) extends BoomBundle()(p)
 {

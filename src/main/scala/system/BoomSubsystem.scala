@@ -15,7 +15,7 @@ import freechips.rocketchip.util._
 import freechips.rocketchip.subsystem._
 
 
-case object BoomTilesKey extends Field[Seq[boom.BoomTileParams]](Nil)
+case object BoomTilesKey extends Field[Seq[boom.common.BoomTileParams]](Nil)
 
 trait HasBoomTiles extends HasTiles
     with HasPeripheryPLIC
@@ -40,7 +40,7 @@ trait HasBoomTiles extends HasTiles
   val boomTiles = crossingTuples.map { case (tp, crossing) =>
     // For legacy reasons, it is convenient to store some state
     // in the global Parameters about the specific tile being built now
-    val boomCore = LazyModule(new boom.BoomTile(tp, crossing.crossingType)(p.alterPartial {
+    val boomCore = LazyModule(new boom.common.BoomTile(tp, crossing.crossingType)(p.alterPartial {
         case TileKey => tp
         case BuildRoCC => tp.rocc
         case SharedMemoryTLEdge => sharedMemoryTLEdge

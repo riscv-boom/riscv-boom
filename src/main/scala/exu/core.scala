@@ -24,7 +24,7 @@
 
 
 
-package boom
+package boom.exu
 
 import Chisel._
 import chisel3.core.DontCare
@@ -34,16 +34,11 @@ import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.rocket.Instructions._
 import freechips.rocketchip.rocket.Causes
 import freechips.rocketchip.util.Str
-import boom.FUConstants._
+import boom.common._
+import boom.exu.FUConstants._
+import boom.util.{GetNewUopAndBrMask, Sext, WrapInc}
 
 
-abstract class BoomModule(implicit p: Parameters) extends freechips.rocketchip.tile.CoreModule()(p)
-  with HasBoomCoreParameters
-
-class BoomBundle(implicit val p: Parameters) extends freechips.rocketchip.util.ParameterizedBundle()(p)
-  with HasBoomCoreParameters
-
-//-------------------------------------------------------------
 //-------------------------------------------------------------
 //-------------------------------------------------------------
 
@@ -52,7 +47,7 @@ trait HasBoomCoreIO extends freechips.rocketchip.tile.HasTileParameters {
    val io = new freechips.rocketchip.tile.CoreBundle()(p)
       with freechips.rocketchip.tile.HasExternallyDrivenTileConstants {
          val interrupts = new freechips.rocketchip.tile.CoreInterrupts().asInput
-         val ifu = new BoomFrontendIO
+         val ifu = new boom.ifu.BoomFrontendIO
          val dmem = new freechips.rocketchip.rocket.HellaCacheIO
          val ptw = new freechips.rocketchip.rocket.DatapathPTWIO().flip
          val fpu = new freechips.rocketchip.tile.FPUCoreIO().flip
@@ -71,7 +66,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    // construct all of the modules
 
    // Only holds integer-registerfile execution units.
-   val exe_units        = new boom.ExecutionUnits(fpu=false)
+   val exe_units        = new boom.exu.ExecutionUnits(fpu=false)
    // Meanwhile, the FP pipeline holds the FP issue window, FP regfile, and FP arithmetic units.
    var fp_pipeline: FpPipeline = null
    if (usingFPU) {
@@ -84,7 +79,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    val decode_units     = for (w <- 0 until decodeWidth) yield { val d = Module(new DecodeUnit); d }
    val dec_brmask_logic = Module(new BranchMaskGenerationLogic(decodeWidth))
    val rename_stage     = Module(new RenameStage(decodeWidth, num_wakeup_ports, fp_pipeline.io.wakeups.length))
-   val issue_units      = new boom.IssueUnits(num_wakeup_ports)
+   val issue_units      = new boom.exu.IssueUnits(num_wakeup_ports)
    val iregfile         = if (regreadLatency == 1 && enableCustomRf) {
                               Module(new RegisterFileSeqCustomArray(numIntPhysRegs,
                                  exe_units.withFilter(_.usesIRF).map(e => e.num_rf_read_ports).sum,
@@ -106,8 +101,8 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
                                  exe_units.withFilter(_.usesIRF).map(_.num_rf_read_ports),
                                  exe_units.num_total_bypass_ports,
                                  xLen))
-   val dc_shim          = Module(new DCacheShim())
-   val lsu              = Module(new LoadStoreUnit(decodeWidth))
+   val dc_shim          = Module(new boom.lsu.DCacheShim())
+   val lsu              = Module(new boom.lsu.LoadStoreUnit(decodeWidth))
    val rob              = Module(new Rob(
                                  decodeWidth,
                                  NUM_ROB_ENTRIES,
@@ -658,7 +653,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    csr.io.retire    := PopCount(rob.io.commit.valids.asUInt)
    csr.io.exception := rob.io.com_xcpt.valid
    // csr.io.pc used for setting EPC during exception or CSR.io.trace.
-   csr.io.pc        := AlignPCToBoundary(io.ifu.com_fetch_pc, icBlockBytes) + rob.io.com_xcpt.bits.pc_lob
+   csr.io.pc        := boom.util.AlignPCToBoundary(io.ifu.com_fetch_pc, icBlockBytes) + rob.io.com_xcpt.bits.pc_lob
    csr.io.cause     := rob.io.com_xcpt.bits.cause
    csr.io.tval      := Mux(csr.io.cause === Causes.illegal_instruction.U, 0.U, rob.io.com_xcpt.bits.badvaddr)
 

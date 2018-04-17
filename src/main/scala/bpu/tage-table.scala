@@ -11,12 +11,12 @@
 // 2016 Feb 26
 
 
-package boom
+package boom.bpu
 
 import Chisel._
 import freechips.rocketchip.config.Parameters
-
 import freechips.rocketchip.util.Str
+import boom.common._
 
 class TageTableIo(
    fetch_width: Int,

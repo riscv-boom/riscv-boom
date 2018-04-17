@@ -12,14 +12,15 @@
 // The floating point issue window, regfile, and arithmetic units are all handled here.
 
 
-package boom
+package boom.exu
 
 import Chisel._
 import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.rocket
 import freechips.rocketchip.tile
 
-import boom.FUConstants._
+import boom.exu.FUConstants._
+import boom.common._
 
 
 class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFPUParameters
@@ -55,7 +56,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
    //**********************************
    // construct all of the modules
 
-   val exe_units        = new boom.ExecutionUnits(fpu=true)
+   val exe_units        = new boom.exu.ExecutionUnits(fpu=true)
    val issue_unit       = Module(new IssueUnitCollasping(
                            issueParams.find(_.iqType == IQT_FP.litValue).get,
                            num_wakeup_ports))

@@ -8,12 +8,13 @@
 //
 // NOTE: I should not be synthesized!
 
-package boom
+package boom.ifu
 
 import chisel3._
 import chisel3.util._
 import chisel3.core.DontCare
 import freechips.rocketchip.config.Parameters
+import boom.common._
 
 class FetchMonitor(implicit p: Parameters) extends BoomModule()(p)
    with HasBoomCoreParameters

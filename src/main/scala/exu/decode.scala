@@ -3,7 +3,7 @@
 // All Rights Reserved. See LICENSE for license details.
 //------------------------------------------------------------------------------
 
-package boom
+package boom.exu
 
 import Chisel._
 import freechips.rocketchip.config.Parameters
@@ -12,11 +12,13 @@ import freechips.rocketchip.rocket.Instructions._
 import freechips.rocketchip.rocket.{CSR,Causes}
 import freechips.rocketchip.util.{uintToBitPat,UIntIsOneOf}
 import FUConstants._
-import freechips.rocketchip.rocket._
+import boom.common._
+import boom.util._
 
 
 abstract trait DecodeConstants
-   extends freechips.rocketchip.rocket.constants.MemoryOpConstants
+   extends freechips.rocketchip.rocket.constants.ScalarOpConstants
+   with freechips.rocketchip.rocket.constants.MemoryOpConstants
 {
 // scalastyle:off
   val xpr64 = Y // TODO inform this from xLen
@@ -56,7 +58,7 @@ class CtrlSigs extends Bundle
    val is_amo          = Bool()
    val is_fence        = Bool()
    val is_fencei       = Bool()
-   val mem_cmd         = UInt(width = M_SZ)
+   val mem_cmd         = UInt(width = freechips.rocketchip.rocket.M_SZ)
    val mem_typ         = UInt(width = freechips.rocketchip.rocket.MT_SZ)
    val wakeup_delay    = UInt(width = 2)
    val bypassable      = Bool()
@@ -83,7 +85,7 @@ class CtrlSigs extends Bundle
 }
 
 
-object XDecode extends DecodeConstants with freechips.rocketchip.rocket.constants.MemoryOpConstants
+object XDecode extends DecodeConstants
 {
 // scalastyle:off
             //                                                                  frs3_en                               wakeup_delay
@@ -219,7 +221,7 @@ object XDecode extends DecodeConstants with freechips.rocketchip.rocket.constant
 // scalastyle:on
 }
 
-object FDecode extends DecodeConstants with freechips.rocketchip.rocket.constants.MemoryOpConstants
+object FDecode extends DecodeConstants 
 {
 // scalastyle:off
   val table: Array[(BitPat, List[BitPat])] = Array(
@@ -313,7 +315,7 @@ object FDecode extends DecodeConstants with freechips.rocketchip.rocket.constant
 // scalastyle:on
 }
 
-object FDivSqrtDecode extends DecodeConstants with freechips.rocketchip.rocket.constants.MemoryOpConstants
+object FDivSqrtDecode extends DecodeConstants
 {
 // scalastyle:off
   val table: Array[(BitPat, List[BitPat])] = Array(
