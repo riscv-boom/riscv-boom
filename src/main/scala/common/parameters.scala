@@ -2,13 +2,16 @@
 // Copyright (c) 2015, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE for license details.
 //------------------------------------------------------------------------------
-package boom
-{
+package boom.common
 
 import Chisel._
 import freechips.rocketchip.rocket._
 import freechips.rocketchip.tile._
 import freechips.rocketchip.config.{Parameters, Field}
+import boom.ifu._
+import boom.bpu._
+import boom.exu._
+import boom.lsu._
 
 //case object BoomKey extends Field[BoomCoreParams]
 
@@ -255,5 +258,3 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
    val corePgIdxBits = pgIdxBits
 }
 
-
-}

@@ -17,16 +17,16 @@
 //    * F1 - Access I$ and BTB RAMs. Perform BPD hashing.
 //    * F2 - Access BPD RAMs. Begin decoding instruction bits and computing targets from I$.
 
-package boom
+package boom.bpu
 
 import Chisel._
 import chisel3.core.withReset
 import freechips.rocketchip.config.Parameters
-
 import freechips.rocketchip.util.{Str, UIntToAugmentedUInt}
+import boom.common._
+import boom.exu.BranchUnitResp
 
 
-//class BranchPrediction(implicit p: Parameters) extends BoomBundle()(p)
 // Give this to each instruction/uop and pass this down the pipeline to the branch-unit
 // This covers the per-instruction info on all cfi-related predictions.
 class BranchPredInfo(implicit p: Parameters) extends BoomBundle()(p)

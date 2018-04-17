@@ -1,7 +1,7 @@
 // See LICENSE.SiFive for license details.
 // See LICENSE.Berkeley for license details.
 
-package boom
+package boom.common
 
 import Chisel._
 import freechips.rocketchip.config._
@@ -13,6 +13,9 @@ import freechips.rocketchip.tilelink._
 import freechips.rocketchip.interrupts._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
+import boom.exu._
+import boom.ifu._
+import boom.lsu._
 
 case class BoomTileParams(
     core: BoomCoreParams = BoomCoreParams(),

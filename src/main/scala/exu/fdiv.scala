@@ -11,13 +11,15 @@
 // 2016 Feb 5
 
 
-package boom
+package boom.exu
 
 import Chisel._
 import freechips.rocketchip.config.Parameters
 
 import freechips.rocketchip.tile.FPConstants._
 import freechips.rocketchip.tile
+import boom.common._
+import boom.util._
 
 
 class UOPCodeFDivDecoder extends Module

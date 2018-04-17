@@ -15,7 +15,7 @@
 
 // TODO: explore possibility of conditional IO fields? if a branch unit... how to add extra to IO in subclass?
 
-package boom
+package boom.exu
 
 import Chisel._
 import freechips.rocketchip.config.Parameters
@@ -24,6 +24,10 @@ import freechips.rocketchip.rocket.ALU._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile
 import chisel3.experimental.chiselName
+import boom.bpu.{BpredType, BranchPredInfo, BTBsaUpdate}
+import boom.common._
+import boom.ifu._
+import boom.util._
 
 
 object FUConstants

@@ -14,7 +14,7 @@
 // A given execution pipeline may contain multiple functional units; one or more
 // read ports, and one or more writeports.
 
-package boom
+package boom.exu
 
 import Chisel._
 import freechips.rocketchip.config.Parameters
@@ -23,6 +23,9 @@ import scala.collection.mutable.ArrayBuffer
 import FUConstants._
 import freechips.rocketchip.tile.XLen
 import freechips.rocketchip.tile
+import boom.common._
+import boom.ifu.GetPCFromFtqIO
+import boom.util.{ImmGen, QueueForMicroOpWithData}
 
 // TODO rename to something like MicroOpWithData
 class ExeUnitResp(data_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
@@ -65,8 +68,8 @@ class ExecutionUnitIO(
    val fcsr_rm = Bits(INPUT, tile.FPConstants.RM_SZ)
 
    // only used by the mem unit
-   val lsu_io = new LoadStoreUnitIO(decodeWidth).flip
-   val dmem   = new DCMemPortIO() // TODO move this out of ExecutionUnit
+   val lsu_io = new boom.lsu.LoadStoreUnitIO(decodeWidth).flip
+   val dmem   = new boom.lsu.DCMemPortIO() // TODO move this out of ExecutionUnit
    val com_exception = Bool(INPUT)
 }
 

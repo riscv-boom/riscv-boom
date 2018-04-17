@@ -39,9 +39,11 @@
 //       while stalled)..
 
 
-package boom
+package boom.bpu
 
 import Chisel._
+import boom.util.SeqMem1rwTransformable
+
 
 class UpdateEntry(fetch_width: Int, index_sz: Int) extends Bundle
 {

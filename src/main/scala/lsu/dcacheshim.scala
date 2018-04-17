@@ -21,11 +21,13 @@
 //    everything put in here will be executed by memory
 //    branch/kill signals will filter resp_val signals, but otherwise continue on
 
-package boom
-{
+package boom.lsu
 
 import Chisel._
 import freechips.rocketchip.config.Parameters
+import boom.common._
+import boom.exu.BrResolutionInfo
+import boom.util.maskMatch
 
 
 // Track Inflight Memory Requests
@@ -372,4 +374,3 @@ class DCacheShim(implicit p: Parameters) extends BoomModule()(p)
 
 }
 
-}

@@ -23,10 +23,12 @@
 //    - Only performs partial tag matches -- must verify elsewhere that target was valid.
 //    - BTB is allowed to be stale (Debug Program Buffer and other self-modifying code may end up here).
 
-package boom
+package boom.bpu
 
 import Chisel._
 import freechips.rocketchip.config.Parameters
+import boom.common._
+import boom.exu._
 
 import freechips.rocketchip.util.Str
 

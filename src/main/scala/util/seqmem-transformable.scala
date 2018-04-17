@@ -13,7 +13,7 @@
 // Provide an abstract sequential-read memory that can be transformed from a
 // tall, skinny aspect ratio to a more rectangular shape.
 
-package boom
+package boom.util
 
 import Chisel._
 

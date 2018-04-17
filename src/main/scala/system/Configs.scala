@@ -16,7 +16,7 @@ import freechips.rocketchip.system._
 import freechips.rocketchip.tile._
 import freechips.rocketchip.tilelink._
 import freechips.rocketchip.util._
-import boom._
+import boom.common._
 
 // scalastyle:off
 

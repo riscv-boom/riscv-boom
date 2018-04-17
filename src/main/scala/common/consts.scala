@@ -10,7 +10,7 @@
 // Christopher Celio
 // 2011 May 28
 
-package boom
+package boom.common
 package constants
 {
 
