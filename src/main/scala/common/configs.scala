@@ -33,9 +33,10 @@ class DefaultBoomConfig extends Config((site, here, up) => {
          decodeWidth = 2,
          numRobEntries = 80,
          issueParams = Seq(
-            IssueParams(issueWidth=1, numEntries=20, iqType=IQT_MEM.litValue),
-            IssueParams(issueWidth=2, numEntries=20, iqType=IQT_INT.litValue),
-            IssueParams(issueWidth=1, numEntries=20, iqType=IQT_FP.litValue)),
+            IssueParams(issueWidth=1, numEntries=12, iqType=IQT_MEM.litValue),
+            IssueParams(issueWidth=2, numEntries=12, iqType=IQT_ALU.litValue),
+            IssueParams(issueWidth=1, numEntries=12, iqType=IQT_CPX.litValue),
+            IssueParams(issueWidth=1, numEntries=12, iqType=IQT_FP.litValue)),
          numIntPhysRegisters = 100,
          numFpPhysRegisters = 64,
          numLsuEntries = 16,
@@ -70,7 +71,8 @@ class WithSmallBooms extends Config((site, here, up) => {
          numRobEntries = 16,
          issueParams = Seq(
             IssueParams(issueWidth=1, numEntries=4, iqType=IQT_MEM.litValue),
-            IssueParams(issueWidth=1, numEntries=4, iqType=IQT_INT.litValue),
+            IssueParams(issueWidth=1, numEntries=4, iqType=IQT_ALU.litValue),
+            IssueParams(issueWidth=1, numEntries=4, iqType=IQT_CPX.litValue),
             IssueParams(issueWidth=1, numEntries=4, iqType=IQT_FP.litValue)),
          numIntPhysRegisters = 56,
          numFpPhysRegisters = 48,
@@ -94,7 +96,9 @@ class WithMediumBooms extends Config((site, here, up) => {
          numRobEntries = 48,
          issueParams = Seq(
             IssueParams(issueWidth=1, numEntries=20, iqType=IQT_MEM.litValue),
-            IssueParams(issueWidth=2, numEntries=16, iqType=IQT_INT.litValue),
+            // TODO allow for putting ALU and CPX into a single queue.
+            IssueParams(issueWidth=1, numEntries=4, iqType=IQT_ALU.litValue),
+            IssueParams(issueWidth=1, numEntries=4, iqType=IQT_CPX.litValue),
             IssueParams(issueWidth=1, numEntries=10, iqType=IQT_FP.litValue)),
          numIntPhysRegisters = 70,
          numFpPhysRegisters = 64,
@@ -120,9 +124,10 @@ class WithMegaBooms extends Config((site, here, up) => {
          decodeWidth = 4,
          numRobEntries = 128,
          issueParams = Seq(
-            IssueParams(issueWidth=1, numEntries=20, iqType=IQT_MEM.litValue),
-            IssueParams(issueWidth=2, numEntries=20, iqType=IQT_INT.litValue),
-            IssueParams(issueWidth=1, numEntries=20, iqType=IQT_FP.litValue)),
+            IssueParams(issueWidth=1, numEntries=16, iqType=IQT_MEM.litValue),
+            IssueParams(issueWidth=2, numEntries=16, iqType=IQT_ALU.litValue),
+            IssueParams(issueWidth=1, numEntries=16, iqType=IQT_CPX.litValue),
+            IssueParams(issueWidth=1, numEntries=16, iqType=IQT_FP.litValue)),
          numIntPhysRegisters = 128,
          numFpPhysRegisters = 128,
          numLsuEntries = 32,

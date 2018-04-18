@@ -20,9 +20,10 @@ case class BoomCoreParams(
    decodeWidth: Int = 1,
    numRobEntries: Int = 16,
    issueParams: Seq[IssueParams] = Seq(
-         IssueParams(issueWidth=1, numEntries=16, iqType=IQT_MEM.litValue),
-         IssueParams(issueWidth=2, numEntries=16, iqType=IQT_INT.litValue),
-         IssueParams(issueWidth=1, numEntries=16, iqType=IQT_FP.litValue)),
+         IssueParams(issueWidth=1, numEntries=8, iqType=IQT_MEM.litValue),
+         IssueParams(issueWidth=1, numEntries=8, iqType=IQT_ALU.litValue),
+         IssueParams(issueWidth=1, numEntries=8, iqType=IQT_CPX.litValue),
+         IssueParams(issueWidth=1, numEntries=8, iqType=IQT_FP.litValue)),
    numLsuEntries: Int = 8,
    numIntPhysRegisters: Int = 96,
    numFpPhysRegisters: Int = 64,
@@ -146,10 +147,11 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
    val issueParams: Seq[IssueParams] = boomParams.issueParams
    val enableAgePriorityIssue = boomParams.enableAgePriorityIssue
 
-   // currently, only support one of each.
+   // Only support one of each type of queue.
    require (issueParams.count(_.iqType == IQT_FP.litValue) == 1)
    require (issueParams.count(_.iqType == IQT_MEM.litValue) == 1)
-   require (issueParams.count(_.iqType == IQT_INT.litValue) == 1)
+   require (issueParams.count(_.iqType == IQT_ALU.litValue) == 1)
+   require (issueParams.count(_.iqType == IQT_CPX.litValue) == 1)
 
    //************************************
    // Load/Store Unit

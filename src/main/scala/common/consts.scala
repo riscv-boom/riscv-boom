@@ -50,9 +50,10 @@ trait BrPredConstants
 trait IQType
 {
    val IQT_SZ  = 2
-   val IQT_INT = UInt(0, IQT_SZ)
-   val IQT_MEM = UInt(1, IQT_SZ)
-   val IQT_FP  = UInt(2, IQT_SZ)
+   val IQT_ALU = UInt(0, IQT_SZ) // simple integer ALU uops.
+   val IQT_CPX = UInt(1, IQT_SZ) // complex integer and branch uops.
+   val IQT_MEM = UInt(2, IQT_SZ) // load and store memory uops.
+   val IQT_FP  = UInt(3, IQT_SZ) // floating point uops.
 }
 
 trait ScalarOpConstants

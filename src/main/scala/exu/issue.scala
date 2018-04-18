@@ -77,7 +77,11 @@ abstract class IssueUnit(
    //-------------------------------------------------------------
    // Issue Table
 
-   val issue_slots = Vec.fill(num_issue_slots) {Module(new IssueSlot(num_wakeup_ports)).io}
+   val issue_slots =
+      if (iqType == IQT_MEM.litValue)
+         Vec.fill(num_issue_slots) {Module(new IssueSlot(num_wakeup_ports)).io}
+      else
+         Vec.fill(num_issue_slots) {Module(new IssueSlot(num_wakeup_ports)).io}
 
    io.event_empty := !(issue_slots.map(s => s.valid).reduce(_|_))
 
@@ -103,10 +107,12 @@ abstract class IssueUnit(
 
    if (DEBUG_PRINTF)
    {
-      val typ_str = if (iqType == IQT_INT.litValue) "int"
-                    else if (iqType == IQT_MEM.litValue) "mem"
-                    else if (iqType == IQT_FP.litValue) " fp"
-                    else "unknown"
+      val typ_str =
+         if (iqType == IQT_ALU.litValue) "alu"
+         else if (iqType == IQT_CPX.litValue) "cpx"
+         else if (iqType == IQT_MEM.litValue) "mem"
+         else if (iqType == IQT_FP.litValue) " fp"
+         else "unknown"
       for (i <- 0 until num_issue_slots)
       {
          printf("  " + typ_str + "_issue_slot[%d](%c)(Req:%c):wen=%c P:(%c,%c,%c) OP:(%d,%d,%d) PDST:%d %c [[DASM(%x)]" +
@@ -161,7 +167,8 @@ class IssueUnits(num_wakeup_ports: Int)(implicit val p: Parameters)
 
 //      issue_Units =issueConfigs colect {if iqType=....)
    iss_units += Module(new IssueUnitCollasping(issueParams.find(_.iqType == IQT_MEM.litValue).get, num_wakeup_ports))
-   iss_units += Module(new IssueUnitCollasping(issueParams.find(_.iqType == IQT_INT.litValue).get, num_wakeup_ports))
+   iss_units += Module(new IssueUnitCollasping(issueParams.find(_.iqType == IQT_ALU.litValue).get, num_wakeup_ports))
+   iss_units += Module(new IssueUnitCollasping(issueParams.find(_.iqType == IQT_CPX.litValue).get, num_wakeup_ports))
 
 }
 

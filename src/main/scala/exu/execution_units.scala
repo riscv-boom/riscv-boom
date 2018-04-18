@@ -102,21 +102,27 @@ class ExecutionUnits(fpu: Boolean = false)(implicit val p: Parameters) extends H
 
 
 
-   if (!fpu) {
-      val int_width = issueParams.find(_.iqType == IQT_INT.litValue).get.issueWidth
+   if (!fpu)
+   {
+      val int_width =
+         issueParams.find(_.iqType == IQT_ALU.litValue).get.issueWidth +
+         issueParams.find(_.iqType == IQT_CPX.litValue).get.issueWidth
+
       exe_units += Module(new MemExeUnit())
-      exe_units += Module(new ALUExeUnit(is_branch_unit      = true
-                                          , shares_csr_wport = true
-                                          , has_mul          = true
-                                          , use_slow_mul     = false
-                                          , has_div          = true
-                                          , has_ifpu         = int_width==1
-                                          ))
-      for (w <- 0 until int_width-1) {
-         val is_last = w == (int_width-2)
-         exe_units += Module(new ALUExeUnit(has_ifpu = is_last))
+      for (w <- 0 until int_width)
+      {
+         val is_last = w == (int_width-1)
+         exe_units += Module(new ALUExeUnit(
+            is_branch_unit   = is_last,
+            shares_csr_wport = is_last,
+            has_mul          = is_last,
+            use_slow_mul     = false,
+            has_div          = is_last,
+            has_ifpu         = is_last))
       }
-   } else {
+   }
+   else
+   {
       require (usingFPU)
       val fp_width = issueParams.find(_.iqType == IQT_FP.litValue).get.issueWidth
       require (fp_width <= 1) // TODO hacks to fix include uopSTD_fp needing a proper func unit.
