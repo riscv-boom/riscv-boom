@@ -111,7 +111,6 @@ class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
   val dECC = cacheParams.dataCode
 
   require(isPow2(nSets) && isPow2(nWays))
-  //require(!usingVM || pgIdxBits >= untagBits)
 
   // How many bits do we intend to fetch at most every cycle?
   val wordBits = outer.icacheParams.fetchBytes*8
@@ -154,9 +153,9 @@ class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
   val refill_fire = tl_out.a.fire() && !send_hint
   val hint_outstanding = RegInit(false.B)
   val s2_miss = s2_valid && !s2_hit && !io.s2_kill && !RegNext(refill_valid)
-  val refill_addr = RegEnable(io.s1_paddr, s1_valid && !(refill_valid || s2_miss))
+  val refill_paddr = RegEnable(io.s1_paddr, s1_valid && !(refill_valid || s2_miss))
   val refill_vaddr = RegEnable(io.s1_vaddr, s1_valid && !(refill_valid || s2_miss))
-  val refill_tag = refill_addr(tagBits+untagBits-1,untagBits)
+  val refill_tag = refill_paddr(tagBits+untagBits-1,untagBits)
   val refill_idx = refill_vaddr(untagBits-1,blockOffBits)
   val refill_one_beat = tl_out.d.fire() && edge_out.hasData(tl_out.d.bits)
 
@@ -485,10 +484,10 @@ class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
   tl_out.a.valid := s2_miss && !refill_valid
   tl_out.a.bits := edge_out.Get(
                     fromSource = UInt(0),
-                    toAddress = (refill_addr >> blockOffBits) << blockOffBits,
+                    toAddress = (refill_paddr >> blockOffBits) << blockOffBits,
                     lgSize = lgCacheBlockBytes)._2
   if (cacheParams.prefetch) {
-    val (crosses_page, next_block) = Split(refill_addr(pgIdxBits-1, blockOffBits) +& 1, pgIdxBits-blockOffBits)
+    val (crosses_page, next_block) = Split(refill_paddr(pgIdxBits-1, blockOffBits) +& 1, pgIdxBits-blockOffBits)
     when (tl_out.a.fire()) {
       send_hint := !hint_outstanding && io.s2_prefetch && !crosses_page
       when (send_hint) {
@@ -507,7 +506,7 @@ class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
       tl_out.a.valid := true
       tl_out.a.bits := edge_out.Hint(
                         fromSource = UInt(1),
-                        toAddress = Cat(refill_addr >> pgIdxBits, next_block) << blockOffBits,
+                        toAddress = Cat(refill_paddr >> pgIdxBits, next_block) << blockOffBits,
                         lgSize = lgCacheBlockBytes,
                         param = TLHints.PREFETCH_READ)._2
     }
