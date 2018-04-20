@@ -220,6 +220,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   icache.io.req.valid := s0_valid
   icache.io.req.bits.addr := s0_pc
   icache.io.invalidate := io.cpu.flush_icache
+  icache.io.s1_vaddr := s1_pc
   icache.io.s1_paddr := tlb.io.resp.paddr
   icache.io.s2_vaddr := s2_pc
   icache.io.s1_kill := s2_redirect || tlb.io.resp.miss || s2_replay
