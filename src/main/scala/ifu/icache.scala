@@ -75,6 +75,7 @@ class ICachePerfEvents extends Bundle {
 class ICacheBundle(val outer: ICache) extends CoreBundle()(outer.p) {
   val hartid = UInt(INPUT, hartIdLen)
   val req = Decoupled(new ICacheReq).flip
+  val s1_vaddr = UInt(INPUT, vaddrBits) // vaddr delayed one cycle w.r.t. req
   val s1_paddr = UInt(INPUT, paddrBits) // delayed one cycle w.r.t. req
   val s2_vaddr = UInt(INPUT, vaddrBits) // delayed two cycles w.r.t. req
   val s1_kill = Bool(INPUT) // delayed one cycle w.r.t. req
@@ -110,7 +111,7 @@ class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
   val dECC = cacheParams.dataCode
 
   require(isPow2(nSets) && isPow2(nWays))
-  require(!usingVM || pgIdxBits >= untagBits)
+  //require(!usingVM || pgIdxBits >= untagBits)
 
   // How many bits do we intend to fetch at most every cycle?
   val wordBits = outer.icacheParams.fetchBytes*8
@@ -154,8 +155,9 @@ class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
   val hint_outstanding = RegInit(false.B)
   val s2_miss = s2_valid && !s2_hit && !io.s2_kill && !RegNext(refill_valid)
   val refill_addr = RegEnable(io.s1_paddr, s1_valid && !(refill_valid || s2_miss))
+  val refill_vaddr = RegEnable(io.s1_vaddr, s1_valid && !(refill_valid || s2_miss))
   val refill_tag = refill_addr(tagBits+untagBits-1,untagBits)
-  val refill_idx = refill_addr(untagBits-1,blockOffBits)
+  val refill_idx = refill_vaddr(untagBits-1,blockOffBits)
   val refill_one_beat = tl_out.d.fire() && edge_out.hasData(tl_out.d.bits)
 
   io.req.ready := !(refill_one_beat || s0_slaveValid || s3_slaveValid)
@@ -211,7 +213,7 @@ class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
   val s1s3_slaveData = Reg(UInt(width = wordBits))
 
   for (i <- 0 until nWays) {
-    val s1_idx = io.s1_paddr(untagBits-1,blockOffBits)
+    val s1_idx = io.s1_vaddr(untagBits-1,blockOffBits)
     val s1_tag = io.s1_paddr(tagBits+untagBits-1,untagBits)
     val scratchpadHit = scratchpadWayValid(i) &&
       Mux(s1_slaveValid,
