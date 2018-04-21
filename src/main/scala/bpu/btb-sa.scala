@@ -175,6 +175,7 @@ class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParamet
    })
 
    val bim = Module(new BimodalTable())
+   override def toString: String = bim.toString
    bim.io.req := io.req
    bim.io.do_reset := false.B // TODO
    bim.io.flush := false.B // TODO

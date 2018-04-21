@@ -141,7 +141,8 @@ class TageTable(
    private val UBIT_MAX = ((1 << ubit_sz) - 1).U
    private val UBIT_INIT_VALUE = 0.U
 
-   println("\t    TageTable[" + id + "] - "
+   override def toString: String =
+      ("    TageTable[" + id + "] - "
       + num_entries + " entries, "
       + history_length + " bits of history, "
       + tag_sz + "-bit tags, "

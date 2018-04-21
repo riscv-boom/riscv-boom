@@ -57,6 +57,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
    // construct all of the modules
 
    val exe_units        = new boom.exu.ExecutionUnits(fpu=true)
+   val fp_string        = exe_units.toString
    val issue_unit       = Module(new IssueUnitCollasping(
                            issueParams.find(_.iqType == IQT_FP.litValue).get,
                            num_wakeup_ports))

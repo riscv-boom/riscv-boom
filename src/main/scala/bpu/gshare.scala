@@ -82,9 +82,10 @@ class GShareBrPredictor(
 {
    require (log2Ceil(nSets) == idx_sz)
 
-   println ("\tBuilding (" + (nSets * fetch_width * 2/8/1024) +
+   override def toString: String =
+      "  Building (" + (nSets * fetch_width * 2/8/1024) +
       " kB) GShare Predictor, with " + history_length + " bits of history for (" +
-      fetch_width + "-wide fetch) and " + nSets + " entries.")
+      fetch_width + "-wide fetch) and " + nSets + " entries."
 
    //------------------------------------------------------------
 

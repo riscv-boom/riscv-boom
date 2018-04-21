@@ -228,7 +228,8 @@ class TwobcCounterTable(
       val update   = Valid(new UpdateEntry(fetch_width, index_sz)).flip
    })
 
-   println ("\t\tBuilding (" +
+   override def toString: String =
+      ("  Building (" +
       (num_entries * fetch_width * 2/8/1024) + " kB) 2-bit counter table for (" +
       fetch_width + "-wide fetch) and " +
       num_entries + " p-table entries " +
