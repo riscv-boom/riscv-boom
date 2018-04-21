@@ -106,12 +106,6 @@ class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer)
 
   val core = Module(new BoomCore()(outer.p, outer.dcache.module.edge))
 
-  val frontend_str = outer.frontend.module.toString
-  ElaborationArtefacts.add(
-    """core.config""",
-    frontend_str + core.toString
-  )
-
   val uncorrectable = RegInit(Bool(false))
   val halt_and_catch_fire = outer.boomParams.hcfOnUncorrectable.option(IO(Bool(OUTPUT)))
 
@@ -157,4 +151,11 @@ class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer)
   dcacheArb.io.requestor <> dcachePorts
   ptwPorts += core.io.ptw_tlb
   ptw.io.requestor <> ptwPorts
+
+  val frontendStr = outer.frontend.module.toString
+  ElaborationArtefacts.add(
+    """core.config""",
+    frontendStr + core.toString
+  )
+  print(outer.frontend.module.toString + core.toString + "\n")
 }

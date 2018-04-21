@@ -197,14 +197,6 @@ class Rob(
    require (num_rob_entries % width == 0)
 
    require (isPow2(width))
-   override def toString: String =
-     ( "\n    Machine Width  : " + width
-     + "\n    Rob Entries    : " + num_rob_entries
-     + "\n    Rob Rows       : " + num_rob_rows
-     + "\n    Rob Row size   : " + log2Up(num_rob_rows)
-     + "\n    log2UP(width)  : " + log2Up(width)
-     + "\n    log2Ceil(width): " + log2Ceil(width)
-     + "\n    FPU FFlag Ports: " + num_fpu_ports)
 
    // ROB Finite State Machine
    val s_reset :: s_normal :: s_rollback :: s_wait_till_empty :: Nil = Enum(UInt(),4)
@@ -961,4 +953,13 @@ class Rob(
       // scalastyle:off
    }
 
+   override def toString: String =
+      "\n   ==ROB==" +
+      "\n   Machine Width  : " + width +
+      "\n   Rob Entries    : " + num_rob_entries +
+      "\n   Rob Rows       : " + num_rob_rows +
+      "\n   Rob Row size   : " + log2Up(num_rob_rows) +
+      "\n   log2UP(width)  : " + log2Up(width) +
+      "\n   log2Ceil(width): " + log2Ceil(width) +
+      "\n   FPU FFlag Ports: " + num_fpu_ports
 }

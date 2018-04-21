@@ -141,13 +141,6 @@ class TageTable(
    private val UBIT_MAX = ((1 << ubit_sz) - 1).U
    private val UBIT_INIT_VALUE = 0.U
 
-   override def toString: String =
-      ("    TageTable[" + id + "] - "
-      + num_entries + " entries, "
-      + history_length + " bits of history, "
-      + tag_sz + "-bit tags, "
-      + cntr_sz + "-bit counters")
-
 
    //------------------------------------------------------------
    // Utility functions
@@ -265,6 +258,13 @@ class TageTable(
       assert (!(allocate && (update || degrade)), "[TageTable] competing updates.")
       assert (widx < num_entries.U, "[TageTable] out of bounds write index.")
    }
+
+   override def toString: String =
+      "   TageTable[" + id + "] - " +
+      num_entries + " entries, " +
+      history_length + " bits of history, " +
+      tag_sz + "-bit tags, " +
+      cntr_sz + "-bit counters"
 
    override val compileOptions = chisel3.core.ExplicitCompileOptions.NotStrict.copy(explicitInvalidate = true)
 }

@@ -82,11 +82,6 @@ class GShareBrPredictor(
 {
    require (log2Ceil(nSets) == idx_sz)
 
-   override def toString: String =
-      "  Building (" + (nSets * fetch_width * 2/8/1024) +
-      " kB) GShare Predictor, with " + history_length + " bits of history for (" +
-      fetch_width + "-wide fetch) and " + nSets + " entries."
-
    //------------------------------------------------------------
 
    private def Hash (addr: UInt, hist: UInt) =
@@ -251,5 +246,11 @@ class GShareBrPredictor(
       assert (com_idx === com_info.debug_index, "[gshare] disagreement on update indices.")
    }
 
+
+   override def toString: String =
+      "\n   ==GShare==" +
+      "\n   (" + (nSets * fetch_width * 2/8/1024) +
+      " kB) GShare Predictor, with " + history_length + " bits of history for (" +
+      fetch_width + "-wide fetch) and " + nSets + " entries."
 }
 

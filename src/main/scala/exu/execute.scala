@@ -357,8 +357,6 @@ class FPUExeUnit(
    if (has_fdiv) out_str.append("\n       - FDiv/FSqrt")
    if (has_fpiu) out_str.append("\n       - FPIU (writes to Integer RF)")
 
-   override def toString: String = out_str.toString
-
    val fdiv_busy = Wire(init=Bool(false))
    val fpiu_busy = Wire(init=Bool(false))
 
@@ -454,6 +452,8 @@ class FPUExeUnit(
    fpiu_busy := !(queue.io.empty)
 
    assert (queue.io.enq.ready) // If this backs up, we've miscalculated the size of the queue.
+
+   override def toString: String = out_str.toString
 }
 
 
@@ -466,10 +466,6 @@ class FDivSqrtExeUnit(implicit p: Parameters)
                                        , has_fdiv = true
                                        )
 {
-   override def toString: String =
-   ( "\n     ExeUnit--"
-   + "\n       - FDiv/FSqrt" )
-
    val fdiv_busy = Wire(Bool())
    io.fu_types := Mux(!fdiv_busy, FU_FDV, Bits(0))
 
@@ -484,6 +480,10 @@ class FDivSqrtExeUnit(implicit p: Parameters)
    io.bypass <> fdivsqrt.io.bypass
 
    fdiv_busy := !fdivsqrt.io.req.ready || io.req.valid
+
+   override def toString: String =
+      "\n     ExeUnit--" +
+      "\n       - FDiv/FSqrt"
 }
 
 
@@ -497,10 +497,6 @@ class IntToFPExeUnit(implicit p: Parameters) extends ExecutionUnit(
    // since the operand data comes from the IRF but writes back to the FRF.
    uses_iss_unit = false)
 {
-   override def toString: String =
-   ( "\n     ExeUnit--"
-   + "\n       - IntToFP")
-
    val busy = Wire(init=Bool(false))
    io.fu_types := Mux(!busy, FU_I2F, Bits(0))
    io.resp(0).bits.writesToIRF = false
@@ -526,6 +522,10 @@ class IntToFPExeUnit(implicit p: Parameters) extends ExecutionUnit(
 
 
    assert (queue.io.enq.ready) // If this backs up, we've miscalculated the size of the queue.
+
+   override def toString: String =
+      "\n     ExeUnit--" +
+      "\n       - IntToFP"
 }
 
 
@@ -538,10 +538,6 @@ class MemExeUnit(implicit p: Parameters) extends ExecutionUnit(num_rf_read_ports
    is_mem_unit = true)(p)
    with freechips.rocketchip.rocket.constants.MemoryOpConstants
 {
-   override def toString: String =
-   ( "\n     ExeUnit--"
-   + "\n       - Mem")
-
    io.fu_types := FU_MEM
 
    // Perform address calculation
@@ -586,6 +582,10 @@ class MemExeUnit(implicit p: Parameters) extends ExecutionUnit(num_rf_read_ports
    io.resp(0).bits.uop := memresp_uop
    io.resp(0).bits.uop.ctrl.rf_wen := memresp_rf_wen
    io.resp(0).bits.data := memresp_data
+
+   override def toString: String =
+      "\n     ExeUnit--" +
+      "\n       - Mem"
 }
 
 

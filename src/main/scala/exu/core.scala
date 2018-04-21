@@ -67,14 +67,9 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
    // Only holds integer-registerfile execution units.
    val exe_units = new boom.exu.ExecutionUnits(fpu=false)
-   val exe_units_str = exe_units.toString
    // Meanwhile, the FP pipeline holds the FP issue window, FP regfile, and FP arithmetic units.
    var fp_pipeline: FpPipeline = null
-   var fp_pipeline_str: String = ""
-   if (usingFPU) {
-      fp_pipeline = Module(new FpPipeline())
-      fp_pipeline_str = fp_pipeline.fp_string
-   }
+   if (usingFPU) fp_pipeline = Module(new FpPipeline())
 
    val num_irf_write_ports = exe_units.map(_.num_rf_write_ports).sum
    val num_fast_wakeup_ports = exe_units.count(_.isBypassable)
@@ -111,7 +106,6 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
                                  NUM_ROB_ENTRIES,
                                  num_irf_write_ports + fp_pipeline.io.wakeups.length,
                                  exe_units.num_fpu_ports + fp_pipeline.io.wakeups.length))
-   val rob_str = rob.toString
    // Used to wakeup registers in rename and issue. ROB needs to listen to something else.
    val int_wakeups      = Wire(Vec(num_wakeup_ports, Valid(new ExeUnitResp(xLen))))
 
@@ -226,8 +220,15 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    //****************************************
    // Print-out information about the machine
 
-   val iss_str = if (enableAgePriorityIssue) " (Age-based Priority)"
-                 else " (Unordered Priority)"
+   val iss_str =
+      if (enableAgePriorityIssue) " (Age-based Priority)"
+      else " (Unordered Priority)"
+
+   val exe_units_str = exe_units.toString
+   val fp_pipeline_str =
+      if (usingFPU) ""
+      else fp_pipeline.fp_string
+   val rob_str = rob.toString
 
    override def toString: String =
    ( exe_units_str + "\n"
@@ -260,6 +261,8 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    + "\n   DCache Sets           : " + dcacheParams.nSets
    + "\n   ICache Ways           : " + icacheParams.nWays
    + "\n   ICache Sets           : " + icacheParams.nSets
+   + "\n   D-TLB Entries         : " + dcacheParams.nTLBEntries
+   + "\n   I-TLB Entries         : " + icacheParams.nTLBEntries
    + "\n   Paddr Bits            : " + paddrBits
    + "\n   Vaddr Bits            : " + vaddrBits)
 

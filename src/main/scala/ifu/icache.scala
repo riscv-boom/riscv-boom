@@ -575,5 +575,6 @@ class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
     "\n   Ways          : " + nWays +
     "\n   Refill cycles : " + refillCycles +
     "\n   RAMs          : (" +  ramWidth + " x " + nSets*refillCycles + ") using " + nBanks + " banks"  +
-    "\n   " + (if (nBanks == 2) "Dual-banked\n" else "Single-banked\n")
+    "\n   " + (if (nBanks == 2) "Dual-banked" else "Single-banked") +
+    "\n   I-TLB entries : " + cacheParams.nTLBEntries + "\n"
 }
