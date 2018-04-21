@@ -196,12 +196,6 @@ class BimodalTable(implicit p: Parameters) extends BoomModule()(p) with HasBimPa
    require (nBanks >= 2)
    require (isPow2(nBanks))
 
-   val size_kbits = nSets * fetchWidth * 2/1024 // assumes 2 bits / fetchWidth
-   override def toString: String =
-      "  Building (" + size_kbits + " Kbits = " + size_kbits/8 + " kB) Bimodal Table for (" +
-      nSets + " entries across " + nBanks + " banks)"
-
-
    val stall = !io.req.valid
    // Logical Index gets broken down into RowIdx and BankIdx.
    val s0_logical_idx = Wire(UInt(width=idx_sz))
@@ -373,6 +367,13 @@ class BimodalTable(implicit p: Parameters) extends BoomModule()(p) with HasBimPa
    // Debug.
 
    // Trust me, I just work.
+
+
+   val size_kbits = nSets * fetchWidth * 2/1024 // assumes 2 bits / fetchWidth
+   override def toString: String =
+      "\n   ==BIM==" +
+      "\n   (" + size_kbits + " Kbits = " + size_kbits/8 + " kB) Bimodal Table (" +
+      nSets + " entries across " + nBanks + " banks)"
 
    override val compileOptions = chisel3.core.ExplicitCompileOptions.NotStrict.copy(explicitInvalidate = true)
 }

@@ -175,7 +175,6 @@ class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParamet
    })
 
    val bim = Module(new BimodalTable())
-   override def toString: String = bim.toString
    bim.io.req := io.req
    bim.io.do_reset := false.B // TODO
    bim.io.flush := false.B // TODO
@@ -354,6 +353,13 @@ class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParamet
          Mux(s1_valid, Str("V"), Str("-")), hits_oh.asUInt, true.B, RegNext(io.req.bits.addr), s1_target, s1_cfi_type,
          bim.io.resp.valid, bim.io.resp.bits.entry_idx, bim.io.resp.bits.rowdata)
    }
+
+   override def toString: String =
+      "\n   ==BTB==" +
+      "\n   Sets          : " + nSets +
+      "\n   Ways          : " + nWays +
+      "\n   Tag Size      : " + tag_sz + "\n" +
+      bim.toString
 
    override val compileOptions = chisel3.core.ExplicitCompileOptions.NotStrict.copy(explicitInvalidate = true)
 }

@@ -203,7 +203,6 @@ class TageBrPredictor(
    val bp1_idxs = Wire(Vec(num_tables, UInt()))
    val bp1_tags = Wire(Vec(num_tables, UInt()))
 
-   val tables_str = new StringBuilder
    val tables = for (i <- 0 until num_tables) yield
    {
       val table = Module(new TageTable(
@@ -220,14 +219,8 @@ class TageBrPredictor(
       // check that the user ordered his TAGE tables properly
       if (i > 0) require(history_lengths(i) > history_lengths(i-1))
 
-      tables_str.append(table.toString + "\n")
       table
    }
-
-   override def toString: String =
-      ("  Building " + (size_in_bits/8/1024.0) + " kB TAGE Predictor (" +
-      + (size_in_bits/1024) + " Kbits) (max history length: " + history_lengths.max + " bits)\n"
-      + tables_str.toString)
 
    val tables_io = Vec(tables.map(_.io))
 
@@ -499,6 +492,12 @@ class TageBrPredictor(
    {
       assert (r_info.provider_id < num_tables.U || !r_info.provider_hit, "[Tage] provider_id is out-of-bounds.")
    }
+
+   override def toString: String =
+      "\n   ==TAGE==" +
+      "\n   " + (size_in_bits/8/1024.0) + " kB TAGE Predictor (" +
+      (size_in_bits/1024) + " Kbits) (max history length: " + history_lengths.max + " bits)\n" +
+      tables.mkString("\n")
 
    override val compileOptions = chisel3.core.ExplicitCompileOptions.NotStrict.copy(explicitInvalidate = true)
 }

@@ -46,9 +46,6 @@ class BaseOnlyBrPredictor(
    )(implicit p: Parameters)
    extends BrPredictor(fetch_width, 8)(p)
 {
-
-   override def toString: String = "  Building no predictor (just using BIM as a base predictor)."
-
    //------------------------------------------------------------
    // Predictor state (none: use BIM).
 
@@ -70,6 +67,8 @@ class BaseOnlyBrPredictor(
 
    // Nothing to update, as the BIM is handled externally.
 
+   override def toString: String = "  Building no predictor (just using BIM as a base predictor)."
 
+   override val compileOptions = chisel3.core.ExplicitCompileOptions.NotStrict.copy(explicitInvalidate = true)
 }
 
