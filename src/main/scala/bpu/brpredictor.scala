@@ -330,7 +330,7 @@ class NullBrPredictor(
    history_length: Int = 12
    )(implicit p: Parameters) extends BrPredictor(fetch_width, history_length)(p)
 {
-   println ("\tBuilding (0 kB) Null Predictor (never predict).")
+   override def toString: String = "  Building (0 kB) Null Predictor (never predict)."
    io.resp.valid := false.B
 }
 
@@ -355,7 +355,7 @@ class RandomBrPredictor(
    fetch_width: Int
    )(implicit p: Parameters) extends BrPredictor(fetch_width, history_length = 1)(p)
 {
-   println ("\tBuilding Random Branch Predictor.")
+   override def toString: String = "  Building Random Branch Predictor."
    private val rand_val = Reg(init = false.B)
    rand_val := ~rand_val
    private var lfsr= LFSR16(true.B)

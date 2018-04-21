@@ -106,6 +106,12 @@ class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer)
 
   val core = Module(new BoomCore()(outer.p, outer.dcache.module.edge))
 
+  val frontend_str = outer.frontend.module.toString
+  ElaborationArtefacts.add(
+    """core.config""",
+    frontend_str + core.toString
+  )
+
   val uncorrectable = RegInit(Bool(false))
   val halt_and_catch_fire = outer.boomParams.hcfOnUncorrectable.option(IO(Bool(OUTPUT)))
 
