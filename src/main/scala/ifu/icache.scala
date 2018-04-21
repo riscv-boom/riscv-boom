@@ -23,9 +23,7 @@ import chisel3.experimental.chiselName
 //    rowBits: Int = 128,
 //    nTLBEntries: Int = 32,
 //    cacheIdBits: Int = 0,
-//    tagECC: Option[String] = None,
-//    dataECC: Option[String] = None,
-//    itimAddr: Option[BigInt] = None,
+//    tagECC: Option[String] = None, //    dataECC: Option[String] = None, //    itimAddr: Option[BigInt] = None,
 //    prefetch: Boolean = false,
 //    blockBytes: Int = 64,
 //    latency: Int = 2,
@@ -35,8 +33,16 @@ import chisel3.experimental.chiselName
 //  def replacement = new RandomReplacement(nWays)
 //}
 
-class ICache(val icacheParams: ICacheParams, val hartId: Int)(implicit p: Parameters) extends LazyModule {
-  lazy val module = new ICacheModule(this)
+class ICache(
+    val icacheParams: ICacheParams,
+    val hartId: Int,
+    val enableBlackBox: Boolean = true)(implicit p: Parameters)
+  extends LazyModule
+{
+  lazy val module: ICacheBaseModule = if (!enableBlackBox)
+    new ICacheModule(this)
+  else
+    new ICacheModuleBlackBox(this)
   val masterNode = TLClientNode(Seq(TLClientPortParameters(Seq(TLClientParameters(
     sourceId = IdRange(0, 1 + icacheParams.prefetch.toInt), // 0=refill, 1=hint
     name = s"Core ${hartId} ICache")))))
@@ -94,13 +100,16 @@ object GetPropertyByHartId {
   }
 }
 
-@chiselName
-class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
+abstract class ICacheBaseModule(outer: ICache) extends LazyModuleImp(outer)
   with HasL1ICacheBankedParameters
 {
   override val cacheParams = outer.icacheParams // Use the local parameters
-
   val io = IO(new ICacheBundle(outer))
+}
+
+@chiselName
+class ICacheModule(outer: ICache) extends ICacheBaseModule(outer)
+{
   val (tl_out, edge_out) = outer.masterNode.out(0)
   // Option.unzip does not exist :-(
   val (tl_in, edge_in) = outer.slaveNode.in.headOption.unzip
@@ -575,3 +584,26 @@ class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
     "\n   RAMs          : (" +  ramWidth + " x " + nSets*refillCycles + ") using " + nBanks + " banks"  +
     "\n   " + (if (nBanks == 2) "Dual-banked\n" else "Single-banked\n")
 }
+
+
+// Provide a BlackBox version of the ICache.
+// NOTE: we can't really BlackBox a LazyModule, so instead we use the
+// LazyModuleImp as a thin shim around the actual BlackBox itself.
+// However, we have to provide another level of indirection through the IOs to
+// avoid an emitter error (which may be related to Option()s).
+class ICacheModuleBlackBox(outer: ICache) extends ICacheBaseModule(outer)
+{
+  val icachebb = Module(new ICacheBlackBox(outer))
+  io <> icachebb.io.signals
+}
+
+class ICacheBlackBox(outer: ICache) extends BlackBox
+{
+  val io = IO(new ICacheBundleShim(outer))
+}
+
+class ICacheBundleShim(val outer: ICache) extends CoreBundle()(outer.p)
+{
+  val signals = new ICacheBundle(outer)
+}
+
