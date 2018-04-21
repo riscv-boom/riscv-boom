@@ -164,7 +164,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   val fetch_controller = Module(new FetchControlUnit(fetchWidth))
   val bpdpipeline = Module(new BranchPredictionStage(fetchWidth))
 
-  print(icache)
+  override def toString: String = bpdpipeline.toString + "\n" + icache.toString
 
   val s0_pc = Wire(UInt(INPUT, width = vaddrBitsExtended))
   val s0_valid = fetch_controller.io.imem_req.valid || fetch_controller.io.imem_resp.ready

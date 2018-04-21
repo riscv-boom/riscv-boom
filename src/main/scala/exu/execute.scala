@@ -154,15 +154,18 @@ class ALUExeUnit(
 {
    val has_muldiv = has_div || (has_mul && use_slow_mul)
 
-   println ("     ExeUnit--")
-   if (has_alu) println ("       - ALU")
-   if (has_fpu) println ("       - FPU (Latency: " + dfmaLatency + ")")
-   if (has_mul && !use_slow_mul) println ("       - Mul (pipelined)")
-   if (has_div && has_mul && use_slow_mul) println ("       - Mul/Div (unpipelined)")
-   else if (has_mul && use_slow_mul) println ("       - Mul (unpipelined)")
-   else if (has_div) println ("       - Div")
-   if (has_fdiv) println ("       - FDiv/FSqrt")
-   if (has_ifpu) println ("       - IFPU (for read port access)")
+   val out_str = new StringBuilder
+   out_str.append("\n     ExeUnit--")
+   if (has_alu) out_str.append("\n       - ALU")
+   if (has_fpu) out_str.append("\n       - FPU (Latency: " + dfmaLatency + ")")
+   if (has_mul && !use_slow_mul) out_str.append("\n       - Mul (pipelined)")
+   if (has_div && has_mul && use_slow_mul) out_str.append("\n       - Mul/Div (unpipelined)")
+   else if (has_mul && use_slow_mul) out_str.append("\n       - Mul (unpipelined)")
+   else if (has_div) out_str.append("\n       - Div")
+   if (has_fdiv) out_str.append("\n       - FDiv/FSqrt")
+   if (has_ifpu) out_str.append("\n       - IFPU (for read port access)")
+
+   override def toString: String = out_str.toString
 
    val muldiv_busy = Wire(init=Bool(false))
    val fdiv_busy = Wire(init=Bool(false))
@@ -348,10 +351,13 @@ class FPUExeUnit(
       has_fdiv = has_fdiv,
       has_fpiu = has_fpiu)(p)
 {
-   println ("     ExeUnit--")
-   if (has_fpu) println ("       - FPU (Latency: " + dfmaLatency + ")")
-   if (has_fdiv) println ("       - FDiv/FSqrt")
-   if (has_fpiu) println ("       - FPIU (writes to Integer RF)")
+   val out_str = new StringBuilder
+   out_str.append("\n     ExeUnit--")
+   if (has_fpu)  out_str.append("\n       - FPU (Latency: " + dfmaLatency + ")")
+   if (has_fdiv) out_str.append("\n       - FDiv/FSqrt")
+   if (has_fpiu) out_str.append("\n       - FPIU (writes to Integer RF)")
+
+   override def toString: String = out_str.toString
 
    val fdiv_busy = Wire(init=Bool(false))
    val fpiu_busy = Wire(init=Bool(false))
@@ -460,8 +466,10 @@ class FDivSqrtExeUnit(implicit p: Parameters)
                                        , has_fdiv = true
                                        )
 {
-   println ("     ExeUnit--")
-   println ("       - FDiv/FSqrt")
+   override def toString: String =
+   ( "\n     ExeUnit--"
+   + "\n       - FDiv/FSqrt" )
+
    val fdiv_busy = Wire(Bool())
    io.fu_types := Mux(!fdiv_busy, FU_FDV, Bits(0))
 
@@ -489,8 +497,10 @@ class IntToFPExeUnit(implicit p: Parameters) extends ExecutionUnit(
    // since the operand data comes from the IRF but writes back to the FRF.
    uses_iss_unit = false)
 {
-   println ("     ExeUnit--")
-   println ("       - IntToFP")
+   override def toString: String =
+   ( "\n     ExeUnit--"
+   + "\n       - IntToFP")
+
    val busy = Wire(init=Bool(false))
    io.fu_types := Mux(!busy, FU_I2F, Bits(0))
    io.resp(0).bits.writesToIRF = false
@@ -528,8 +538,9 @@ class MemExeUnit(implicit p: Parameters) extends ExecutionUnit(num_rf_read_ports
    is_mem_unit = true)(p)
    with freechips.rocketchip.rocket.constants.MemoryOpConstants
 {
-   println ("     ExeUnit--")
-   println ("       - Mem")
+   override def toString: String =
+   ( "\n     ExeUnit--"
+   + "\n       - Mem")
 
    io.fu_types := FU_MEM
 
@@ -605,15 +616,18 @@ class ALUMemExeUnit(
       has_fdiv = has_fdiv)(p)
    with freechips.rocketchip.rocket.constants.MemoryOpConstants
 {
-   println ("     ExeUnit--")
-   println ("       - ALU")
-   if (has_fpu) println ("       - FPU (Latency: " + dfmaLatency + " cycles)")
-   if (has_mul && !use_slow_mul) println ("       - Mul (pipelined: " + imulLatency + " cycles)")
-   if (has_div && has_mul && use_slow_mul) println ("       - Mul/Div (unpipelined)")
-   else if (has_mul && use_slow_mul) println ("       - Mul (unpipelined)")
-   else if (has_div) println ("       - Div")
-   if (has_fdiv) println ("       - FDiv/FSqrt")
-   println ("       - Mem")
+   val out_str = new StringBuilder
+   out_str.append("\n     ExeUnit--")
+   out_str.append("\n       - ALU")
+   if (has_fpu) out_str.append("\n       - FPU (Latency: " + dfmaLatency + " cycles)")
+   if (has_mul && !use_slow_mul) out_str.append("\n       - Mul (pipelined: " + imulLatency + " cycles)")
+   if (has_div && has_mul && use_slow_mul) out_str.append("\n       - Mul/Div (unpipelined)")
+   else if (has_mul && use_slow_mul) out_str.append("\n       - Mul (unpipelined)")
+   else if (has_div) out_str.append("\n       - Div")
+   if (has_fdiv) out_str.append("\n       - FDiv/FSqrt")
+   out_str.append("\n       - Mem")
+
+   override def toString: String = out_str.toString
 
    val muldiv_busy = Wire(Bool())
    val fdiv_busy = Wire(Bool())

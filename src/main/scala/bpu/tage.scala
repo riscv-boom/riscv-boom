@@ -125,9 +125,6 @@ class TageBrPredictor(
       table_sizes(i) * tag_sizes(i) + ubit_sz + cntr_sz
    }).reduce(_+_)
 
-   println ("\tBuilding " + (size_in_bits/8/1024.0) + " kB TAGE Predictor ("
-      + (size_in_bits/1024) + " Kbits) (max history length: " + history_lengths.max + " bits)")
-
    require (num_tables == table_sizes.size)
    require (num_tables == history_lengths.size)
    require (num_tables == tag_sizes.size)
@@ -206,6 +203,7 @@ class TageBrPredictor(
    val bp1_idxs = Wire(Vec(num_tables, UInt()))
    val bp1_tags = Wire(Vec(num_tables, UInt()))
 
+   val tables_str = new StringBuilder
    val tables = for (i <- 0 until num_tables) yield
    {
       val table = Module(new TageTable(
@@ -222,8 +220,14 @@ class TageBrPredictor(
       // check that the user ordered his TAGE tables properly
       if (i > 0) require(history_lengths(i) > history_lengths(i-1))
 
+      tables_str.append(table.toString + "\n")
       table
    }
+
+   override def toString: String =
+      ("  Building " + (size_in_bits/8/1024.0) + " kB TAGE Predictor (" +
+      + (size_in_bits/1024) + " Kbits) (max history length: " + history_lengths.max + " bits)\n"
+      + tables_str.toString)
 
    val tables_io = Vec(tables.map(_.io))
 

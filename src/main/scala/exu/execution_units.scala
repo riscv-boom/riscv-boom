@@ -17,11 +17,6 @@ import boom.common._
 class ExecutionUnits(fpu: Boolean = false)(implicit val p: Parameters) extends HasBoomCoreParameters
 {
    val totalIssueWidth = issueParams.map(_.issueWidth).sum
-   if (!fpu) {
-      println("\n   ~*** " + Seq("One","Two","Three","Four")(decodeWidth-1) + "-wide Machine ***~\n")
-      println("    -== " + Seq("Single","Dual","Triple","Quad","Five","Six")(totalIssueWidth-1) + " Issue ==- \n")
-   }
-
 
    //*******************************
    // Instantiate the ExecutionUnits
@@ -101,7 +96,6 @@ class ExecutionUnits(fpu: Boolean = false)(implicit val p: Parameters) extends H
    }
 
 
-
    if (!fpu) {
       val int_width = issueParams.find(_.iqType == IQT_INT.litValue).get.issueWidth
       exe_units += Module(new MemExeUnit())
@@ -128,6 +122,17 @@ class ExecutionUnits(fpu: Boolean = false)(implicit val p: Parameters) extends H
       exe_units += Module(new IntToFPExeUnit())
    }
 
+   val exe_units_str = new StringBuilder
+   exe_units_str.append(
+      if (!fpu) {
+         ( "\n   ~*** " + Seq("One","Two","Three","Four")(decodeWidth-1) + "-wide Machine ***~\n"
+         + "\n    -== " + Seq("Single","Dual","Triple","Quad","Five","Six")(totalIssueWidth-1) + " Issue ==- \n")
+      }
+   )
+   for (exe_unit <- exe_units) {
+      exe_units_str.append(exe_unit.toString)
+   }
+   override def toString: String =  exe_units_str.toString
 
    require (exe_units.length != 0)
    // if this is for FPU units, we don't need a memory unit (or other integer units)..

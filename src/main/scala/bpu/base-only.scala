@@ -47,8 +47,7 @@ class BaseOnlyBrPredictor(
    extends BrPredictor(fetch_width, 8)(p)
 {
 
-   println ("\tBuilding no predictor (just using BIM as a base predictor).")
-
+   override def toString: String = "  Building no predictor (just using BIM as a base predictor)."
 
    //------------------------------------------------------------
    // Predictor state (none: use BIM).
