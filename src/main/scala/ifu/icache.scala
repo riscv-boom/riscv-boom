@@ -566,7 +566,7 @@ class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
 
   val ramWidth = dECC.width(wordBits/nBanks)
   override def toString: String =
-    "\n   ==L1-ICache==" +
+    "\n  ==L1-ICache==" +
     "\n   Fetch bytes   : " + cacheParams.fetchBytes +
     "\n   Block bytes   : " + (1 << blockOffBits) +
     "\n   Row bytes     : " + rowBytes +

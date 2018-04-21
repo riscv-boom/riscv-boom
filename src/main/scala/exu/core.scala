@@ -66,11 +66,14 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    // construct all of the modules
 
    // Only holds integer-registerfile execution units.
-   val exe_units        = new boom.exu.ExecutionUnits(fpu=false)
+   val exe_units = new boom.exu.ExecutionUnits(fpu=false)
+   val exe_units_str = exe_units.toString
    // Meanwhile, the FP pipeline holds the FP issue window, FP regfile, and FP arithmetic units.
    var fp_pipeline: FpPipeline = null
+   var fp_pipeline_str: String = ""
    if (usingFPU) {
-      fp_pipeline       = Module(new FpPipeline())
+      fp_pipeline = Module(new FpPipeline())
+      fp_pipeline_str = fp_pipeline.fp_string
    }
 
    val num_irf_write_ports = exe_units.map(_.num_rf_write_ports).sum
@@ -108,6 +111,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
                                  NUM_ROB_ENTRIES,
                                  num_irf_write_ports + fp_pipeline.io.wakeups.length,
                                  exe_units.num_fpu_ports + fp_pipeline.io.wakeups.length))
+   val rob_str = rob.toString
    // Used to wakeup registers in rename and issue. ROB needs to listen to something else.
    val int_wakeups      = Wire(Vec(num_wakeup_ports, Valid(new ExeUnitResp(xLen))))
 
@@ -222,44 +226,42 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    //****************************************
    // Print-out information about the machine
 
-   if (usingFPU)         println ("\n    FPU Unit Enabled")
-   else                  println ("\n    FPU Unit Disabled")
-   if (usingVM)          println ("    VM       Enabled")
-   else                  println ("    VM       Disabled")
-   if (usingFDivSqrt)    println ("    FDivSqrt Enabled\n")
-   else                  println ("    FDivSqrt Disabled\n")
-
    val iss_str = if (enableAgePriorityIssue) " (Age-based Priority)"
                  else " (Unordered Priority)"
-   println("\n   Fetch Width           : " + fetchWidth)
-   println("   Decode Width          : " + decodeWidth)
-   println("   Issue Width           : " + issueParams.map(_.issueWidth).sum)
-   println("   ROB Size              : " + NUM_ROB_ENTRIES)
-   println("   Issue Window Size     : " + issueParams.map(_.numEntries) + iss_str)
-   println("   Load/Store Unit Size  : " + NUM_LSU_ENTRIES + "/" + NUM_LSU_ENTRIES)
-   println("   Num Int Phys Registers: " + numIntPhysRegs)
-   println("   Num FP  Phys Registers: " + numFpPhysRegs)
-   println("   Max Branch Count      : " + MAX_BR_COUNT)
-   println("   BTB Size              : " +
+
+   override def toString: String =
+   ( exe_units_str + "\n"
+   + fp_pipeline_str + "\n"
+   + rob_str + "\n"
+   + (if (usingFPU)      ("\n    FPU Unit Enabled") else  ("\n    FPU Unit Disabled"))
+   + (if (usingVM)       ("\n    VM       Enabled") else  ("\n    VM       Disabled"))
+   + (if (usingFDivSqrt) ("\n    FDivSqrt Enabled") else  ("\n    FDivSqrt Disabled"))
+   + "\n\n   Fetch Width           : " + fetchWidth
+   + "\n   Decode Width          : " + decodeWidth
+   + "\n   Issue Width           : " + issueParams.map(_.issueWidth).sum
+   + "\n   ROB Size              : " + NUM_ROB_ENTRIES
+   + "\n   Issue Window Size     : " + issueParams.map(_.numEntries) + iss_str
+   + "\n   Load/Store Unit Size  : " + NUM_LSU_ENTRIES + "/" + NUM_LSU_ENTRIES
+   + "\n   Num Int Phys Registers: " + numIntPhysRegs
+   + "\n   Num FP  Phys Registers: " + numFpPhysRegs
+   + "\n   Max Branch Count      : " + MAX_BR_COUNT
+   + "\n   BTB Size              : " +
       (if (enableBTB) ("" + boomParams.btb.nSets * boomParams.btb.nWays + " entries (" +
-         boomParams.btb.nSets + " x " + boomParams.btb.nWays + " ways)") else 0))
-   println("   RAS Size              : " + (if (enableBTB) boomParams.btb.nRAS else 0))
-   println("   Rename  Stage Latency : " + renameLatency)
-   println("   RegRead Stage Latency : " + regreadLatency)
-
-   print(iregfile)
-   println("\n   Num Slow Wakeup Ports : " + num_irf_write_ports)
-   println("   Num Fast Wakeup Ports : " + exe_units.count(_.isBypassable))
-   println("   Num Bypass Ports      : " + exe_units.num_total_bypass_ports)
-
-   print(fp_pipeline)
-
-   println("\n   DCache Ways           : " + dcacheParams.nWays)
-   println("   DCache Sets           : " + dcacheParams.nSets)
-   println("   ICache Ways           : " + icacheParams.nWays)
-   println("   ICache Sets           : " + icacheParams.nSets)
-   println("   Paddr Bits            : " + paddrBits)
-   println("   Vaddr Bits            : " + vaddrBits)
+         boomParams.btb.nSets + " x " + boomParams.btb.nWays + " ways)") else 0)
+   + "\n   RAS Size              : " + (if (enableBTB) boomParams.btb.nRAS else 0)
+   + "\n   Rename  Stage Latency : " + renameLatency
+   + "\n   RegRead Stage Latency : " + regreadLatency
+   + "\n" + iregfile.toString
+   + "\n   Num Slow Wakeup Ports : " + num_irf_write_ports
+   + "\n   Num Fast Wakeup Ports : " + exe_units.count(_.isBypassable)
+   + "\n   Num Bypass Ports      : " + exe_units.num_total_bypass_ports
+   + "\n" + fp_pipeline.toString
+   + "\n   DCache Ways           : " + dcacheParams.nWays
+   + "\n   DCache Sets           : " + dcacheParams.nSets
+   + "\n   ICache Ways           : " + icacheParams.nWays
+   + "\n   ICache Sets           : " + icacheParams.nSets
+   + "\n   Paddr Bits            : " + paddrBits
+   + "\n   Vaddr Bits            : " + vaddrBits)
 
    //-------------------------------------------------------------
    //-------------------------------------------------------------

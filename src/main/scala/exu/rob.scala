@@ -196,13 +196,15 @@ class Rob(
 
    require (num_rob_entries % width == 0)
 
-   println("    Machine Width  : " + width); require (isPow2(width))
-   println("    Rob Entries    : " + num_rob_entries)
-   println("    Rob Rows       : " + num_rob_rows)
-   println("    Rob Row size   : " + log2Up(num_rob_rows))
-   println("    log2UP(width)  : " + log2Up(width))
-   println("    log2Ceil(width): " + log2Ceil(width))
-   println("    FPU FFlag Ports: " + num_fpu_ports)
+   require (isPow2(width))
+   override def toString: String =
+     ( "\n    Machine Width  : " + width
+     + "\n    Rob Entries    : " + num_rob_entries
+     + "\n    Rob Rows       : " + num_rob_rows
+     + "\n    Rob Row size   : " + log2Up(num_rob_rows)
+     + "\n    log2UP(width)  : " + log2Up(width)
+     + "\n    log2Ceil(width): " + log2Ceil(width)
+     + "\n    FPU FFlag Ports: " + num_fpu_ports)
 
    // ROB Finite State Machine
    val s_reset :: s_normal :: s_rollback :: s_wait_till_empty :: Nil = Enum(UInt(),4)
@@ -635,8 +637,8 @@ class Rob(
          r_xcpt_val      := true.B
          next_xcpt_uop   := io.enq_uops(idx)
          r_xcpt_badvaddr := io.enq_uops(0).pc + (idx << 2.U)
-         // TODO XXX REMOVE THIS. Temporary hack to fix ma-fetch tests. 
-         // The problem is we shouldn't have access to pc and inst in the ROB. 
+         // TODO XXX REMOVE THIS. Temporary hack to fix ma-fetch tests.
+         // The problem is we shouldn't have access to pc and inst in the ROB.
          // This should be handled by the front-end.
          when ((io.enq_uops(idx).uopc === uopJAL) && !io.enq_uops(idx).exc_cause.orR) {
             r_xcpt_badvaddr := ComputeJALTarget(io.enq_uops(idx).pc, io.enq_uops(idx).inst, xLen)

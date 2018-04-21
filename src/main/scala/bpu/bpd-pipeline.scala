@@ -91,6 +91,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
 
    val btb = Module(new BTBsa())
    val bpd = BrPredictor(tileParams, boomParams)
+   override def toString: String = btb.toString + "\n" + bpd.toString
 
    btb.io.status_debug := io.status_debug
    bpd.io.status_prv := io.status_prv
