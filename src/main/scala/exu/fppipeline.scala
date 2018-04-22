@@ -14,11 +14,11 @@
 
 package boom.exu
 
-import Chisel._
+import chisel3._
+import chisel3.util._
 import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.rocket
 import freechips.rocketchip.tile
-
 import boom.exu.FUConstants._
 import boom.common._
 
@@ -32,32 +32,31 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
 
    val io = new Bundle
    {
-      val brinfo           = new BrResolutionInfo().asInput
-      val flush_pipeline   = Bool(INPUT)
-      val fcsr_rm          = UInt(INPUT, freechips.rocketchip.tile.FPConstants.RM_SZ)
+      val brinfo           = Input(new BrResolutionInfo())
+      val flush_pipeline   = Input(Bool())
+      val fcsr_rm          = Input(UInt(width=freechips.rocketchip.tile.FPConstants.RM_SZ.W))
 
-      val dis_valids       = Vec(DISPATCH_WIDTH, Bool()).asInput // REFACTOR into single Decoupled()
-      val dis_uops         = Vec(DISPATCH_WIDTH, new MicroOp()).asInput
-      val dis_readys       = Vec(DISPATCH_WIDTH, Bool()).asOutput
+      val dis_valids       = Input(Vec(DISPATCH_WIDTH, Bool())) // REFACTOR into single Decoupled()
+      val dis_uops         = Input(Vec(DISPATCH_WIDTH, new MicroOp()))
+      val dis_readys       = Output(Vec(DISPATCH_WIDTH, Bool()))
 
       // +1 for recoding.
-      val ll_wport         = Valid(new ExeUnitResp(fLen+1)).flip // from memory unit
-      val fromint          = Valid(new FuncUnitReq(fLen+1)).flip // from integer RF
-      val tosdq            = Valid(new MicroOpWithData(fLen))    // to Load/Store Unit
-      val toint            = Decoupled(new ExeUnitResp(xLen))    // to integer RF
+      val ll_wport         = Flipped(Decoupled(new ExeUnitResp(fLen+1)))// from memory unit
+      val fromint          = Flipped(Decoupled(new FuncUnitReq(fLen+1)))// from integer RF
+      val tosdq            = Valid(new MicroOpWithData(fLen))           // to Load/Store Unit
+      val toint            = Decoupled(new ExeUnitResp(xLen))           // to integer RF
 
       val wakeups          = Vec(num_wakeup_ports, Valid(new ExeUnitResp(fLen+1)))
-      val wb_valids        = Vec(num_wakeup_ports, Bool()).asInput
-      val wb_pdsts         = Vec(num_wakeup_ports, UInt(width=fp_preg_sz)).asInput
+      val wb_valids        = Input(Vec(num_wakeup_ports, Bool()))
+      val wb_pdsts         = Input(Vec(num_wakeup_ports, UInt(width=fp_preg_sz.W)))
 
-      val debug_tsc_reg    = UInt(INPUT, xLen)
+      val debug_tsc_reg    = Input(UInt(width=xLen.W))
    }
 
    //**********************************
    // construct all of the modules
 
    val exe_units        = new boom.exu.ExecutionUnits(fpu=true)
-   val fp_string        = exe_units.toString
    val issue_unit       = Module(new IssueUnitCollasping(
                            issueParams.find(_.iqType == IQT_FP.litValue).get,
                            num_wakeup_ports))
@@ -85,12 +84,6 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
    require (exe_units.map(_.num_rf_write_ports).sum-1-1 + num_ll_ports == num_wakeup_ports)
    require (exe_units.withFilter(_.uses_iss_unit).map(e =>
       e.num_rf_write_ports).sum -1 + num_ll_ports == num_wakeup_ports)
-
-   override def toString: String =
-      fregfile.toString +
-      "\n   Num Wakeup Ports      : " + num_wakeup_ports +
-      "\n   Num Bypass Ports      : " + exe_units.num_total_bypass_ports + "\n"
-
 
    //*************************************************************
    // Issue window logic
@@ -275,8 +268,9 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
    //-------------------------------------------------------------
    //-------------------------------------------------------------
 
-   io.wakeups(0) <> ll_wbarb.io.out
-   ll_wbarb.io.out.ready := Bool(true)
+   io.wakeups(0).valid := ll_wbarb.io.out.valid
+   io.wakeups(0).bits := ll_wbarb.io.out.bits
+   ll_wbarb.io.out.ready := true.B
 
    w_cnt = 1
    for (eu <- exe_units)
@@ -287,8 +281,8 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
 
          if (!exe_resp.bits.writesToIRF && !eu.has_ifpu) {
             val wport = io.wakeups(w_cnt)
-            wport <> exe_resp
             wport.valid := exe_resp.valid && wb_uop.dst_rtype === RT_FLT
+            wport.bits := exe_resp.bits
 
             w_cnt += 1
 
@@ -312,4 +306,11 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
       exe_units(w).io.req.bits.kill := io.flush_pipeline
    }
 
+   val fp_string = exe_units.toString
+   override def toString: String =
+      fregfile.toString +
+      "\n   Num Wakeup Ports      : " + num_wakeup_ports +
+      "\n   Num Bypass Ports      : " + exe_units.num_total_bypass_ports + "\n"
+
+   override val compileOptions = chisel3.core.ExplicitCompileOptions.NotStrict.copy(explicitInvalidate = true)
 }

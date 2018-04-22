@@ -559,6 +559,22 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
    fp_pipeline.io.dis_valids <> dis_valids
    fp_pipeline.io.dis_uops <> dis_uops
+   // Manually specify unused signals so they don't show up in the
+   // FpPipeline's I/O field. This is only necessary if the FpPipeline
+   // is the top module being synthesized (otherwise cross-module
+   // optimization can remove the signals).
+   for (uop <- fp_pipeline.io.dis_uops)
+   {
+      uop.exc_cause := DontCare
+      uop.csr_addr := DontCare
+      uop.debug_wdata := DontCare
+      if (!DEBUG_PRINTF && !COMMIT_LOG_PRINTF) uop.pc := DontCare
+      if (!DEBUG_PRINTF && !COMMIT_LOG_PRINTF) uop.inst := DontCare
+      if (!O3PIPEVIEW_PRINTF) uop.debug_events.fetch_seq := DontCare
+   }
+
+
+
 
    // Output (Issue)
 
@@ -713,6 +729,8 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    fp_pipeline.io.fromint.valid :=
       iregister_read.io.exe_reqs(ifpu_idx).valid &&
       iregister_read.io.exe_reqs(ifpu_idx).bits.uop.fu_code === FUConstants.FU_I2F
+   assert (fp_pipeline.io.fromint.ready,
+      "[core] we don't support back-pressure against IFPU. Redesign if you hit this.")
 
    fp_pipeline.io.brinfo := br_unit.brinfo
 
@@ -808,6 +826,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
             fp_pipeline.io.ll_wport.bits.uop  := wbresp.bits.uop
             fp_pipeline.io.ll_wport.bits.data := wbdata
             fp_pipeline.io.ll_wport.bits.fflags.valid := Bool(false)
+            assert (fp_pipeline.io.ll_wport.ready, "[core] LL port should always be ready.")
          }
          else
          {
