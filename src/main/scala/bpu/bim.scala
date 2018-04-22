@@ -234,7 +234,7 @@ class BimodalTable(implicit p: Parameters) extends BoomModule()(p) with HasBimPa
    for (w <- 0 until nBanks)
    {
       val ram = SeqMem(nSets/nBanks, Vec(row_sz, Bool()))
-      ram.suggestName("bim_data_array")
+      ram.suggestName("bimDataArray")
 
       val ren = Wire(Bool())
       val s2_rmw_valid = Wire(Bool())
@@ -270,7 +270,8 @@ class BimodalTable(implicit p: Parameters) extends BoomModule()(p) with HasBimPa
 
       if (DEBUG_PRINTF) printf("BIM bank[" + w + "] (r:%d ", ren)
 
-      when ((wq.io.deq.valid && !ren) || fsm_state === s_clear)
+      val wen = ((wq.io.deq.valid && !ren) || fsm_state === s_clear)
+      when (wen)
       {
          val waddr = Mux(fsm_state === s_clear, clear_row_addr, wq.io.deq.bits.addr)
          val wdata = Mux(fsm_state === s_clear, initRowValue(), Vec(wq.io.deq.bits.data.toBools))
@@ -294,7 +295,7 @@ class BimodalTable(implicit p: Parameters) extends BoomModule()(p) with HasBimPa
          getRowFromIdx(s0_logical_idx))
       val s0_rconflict = s0_rmw_valid && (io.req.valid && s0_bank_idx === w.U)
       s2_conflict(w) := RegNext(s0_rconflict)
-      s2_read_out(w) := ram.read(rrow, ren).asUInt
+      s2_read_out(w) := ram.read(rrow, ren && !wen).asUInt
 
       val s2_rmw_cfi_idx = RegNext(RegNext(uq.io.deq.bits.cfi_idx))
       s2_rmw_row  := RegNext(RegNext(getRowFromIdx(uq.io.deq.bits.entry_idx)))
