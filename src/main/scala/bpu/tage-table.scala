@@ -200,6 +200,7 @@ class TageTable(
 
    // TODO add banking
    val ram = SeqMem(num_entries, new TageTableEntry(fetch_width, tag_sz, cntr_sz, ubit_sz))
+   ram.suggestName("TageTableDataArray")
 
 
    //------------------------------------------------------------
