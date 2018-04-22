@@ -17,6 +17,7 @@ package boom.ifu
 
 import chisel3._
 import chisel3.util._
+import chisel3.core.DontCare
 import chisel3.experimental.dontTouch
 import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.util.Str
@@ -251,6 +252,8 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
       if (DEBUG_PRINTF) printf("FTQ: no dequeue\n")
       io.bim_update.valid := false.B
       io.bpd_update.valid := false.B
+      io.bim_update.bits := DontCare
+      io.bpd_update.bits := DontCare
    }
 
    //-------------------------------------------------------------
@@ -343,5 +346,7 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
    // force to show up in the waveform
    val debug_deq_ptr = deq_ptr.value
    dontTouch(debug_deq_ptr)
+
+   override val compileOptions = chisel3.core.ExplicitCompileOptions.NotStrict.copy(explicitInvalidate = true)
 }
 
