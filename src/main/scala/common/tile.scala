@@ -155,7 +155,7 @@ class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer)
   val frontendStr = outer.frontend.module.toString
   ElaborationArtefacts.add(
     """core.config""",
-    frontendStr + core.toString
+    frontendStr + core.toString + "\n"
   )
   print(outer.frontend.module.toString + core.toString + "\n")
 }

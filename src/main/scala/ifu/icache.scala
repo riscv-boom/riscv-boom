@@ -39,7 +39,7 @@ import boom.common._
 class ICache(
     val icacheParams: ICacheParams,
     val hartId: Int,
-    val enableBlackBox: Boolean = true)(implicit p: Parameters)
+    val enableBlackBox: Boolean = false)(implicit p: Parameters)
   extends LazyModule
 {
   lazy val module: ICacheBaseModule = if (!enableBlackBox)
@@ -311,7 +311,8 @@ class ICacheModule(outer: ICache) extends ICacheBaseModule(outer)
         val data = Mux(s3_slaveValid, s1s3_slaveData, tl_out.d.bits.data)
         when (wen && refill_cnt(0) === 0.U) {
           dataArraysB0(i).write(mem_idx0, dECC.encode(data))
-        } .elsewhen (wen && refill_cnt(0) === 1.U) {
+        }
+        when (wen && refill_cnt(0) === 1.U) {
           dataArraysB1(i).write(mem_idx1, dECC.encode(data))
         }
       } else {
