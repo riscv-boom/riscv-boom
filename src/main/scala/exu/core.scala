@@ -1400,6 +1400,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    io.rocc.mem.resp.bits.data_raw := false.B
    io.rocc.mem.perf.release := false.B
    io.rocc.mem.s2_nack := false.B
+   io.rocc.mem.s2_nack_cause_raw := false.B
    io.rocc.mem.s2_xcpt.ma.st := false.B
    io.rocc.mem.s2_xcpt.ma.ld := false.B
 
