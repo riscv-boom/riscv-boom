@@ -44,6 +44,7 @@ class IssueUnitIO(
 
    val brinfo         = Input(new BrResolutionInfo())
    val flush_pipeline = Input(Bool())
+   val ldMiss         = Input(Bool())
 
    val event_empty    = Output(Bool()) // used by HPM events; is the issue unit empty?
 
