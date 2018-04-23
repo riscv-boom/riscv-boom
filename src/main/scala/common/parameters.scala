@@ -78,6 +78,7 @@ case class BoomCoreParams(
 
 	val jumpInFrontend: Boolean = false // unused in boom
    val nPMPs: Int = 0
+   val pmpGranularity: Int = 4
 }
 
 trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters

@@ -285,6 +285,7 @@ class DCacheShim(implicit p: Parameters) extends BoomModule()(p)
    io.dmem.req.bits.cmd   := Mux(io.core.req.valid, io.core.req.bits.uop.mem_cmd, M_PFW)
    io.dmem.s1_data.data   := s1_stdata // Notice this is delayed a cycle!
    io.dmem.s1_data.mask   := 0.U // Only used for partial puts from scratchpads.
+   io.dmem.s2_kill        := false.B
    io.dmem.s1_kill        := io.core.req.bits.kill || iflb_kill // kills request sent out last cycle
    io.dmem.req.bits.phys  := Bool(true) // we always use physical addresses (TLB is in LSU).
    io.dmem.invalidate_lr  := io.core.invalidate_lr

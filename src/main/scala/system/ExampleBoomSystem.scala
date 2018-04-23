@@ -11,9 +11,9 @@ import freechips.rocketchip.util.DontTouch
 /** Example Top with periphery devices and ports, and a Boom subsystem */
 class ExampleBoomSystem(implicit p: Parameters) extends BoomSubsystem
     with HasAsyncExtInterrupts
-    with HasMasterAXI4MemPort
-    with HasMasterAXI4MMIOPort
-    with HasSlaveAXI4Port
+    with CanHaveMasterAXI4MemPort
+    with CanHaveMasterAXI4MMIOPort
+    with CanHaveSlaveAXI4Port
     with HasPeripheryBootROM
     with HasSystemErrorSlave {
   override lazy val module = new ExampleBoomSystemModule(this)
@@ -22,8 +22,8 @@ class ExampleBoomSystem(implicit p: Parameters) extends BoomSubsystem
 class ExampleBoomSystemModule[+L <: ExampleBoomSystem](_outer: L) extends BoomSubsystemModule(_outer)
     with HasRTCModuleImp
     with HasExtInterruptsModuleImp
-    with HasMasterAXI4MemPortModuleImp
-    with HasMasterAXI4MMIOPortModuleImp
-    with HasSlaveAXI4PortModuleImp
+    with CanHaveMasterAXI4MemPortModuleImp
+    with CanHaveMasterAXI4MMIOPortModuleImp
+    with CanHaveSlaveAXI4PortModuleImp
     with HasPeripheryBootROMModuleImp
     with DontTouch
