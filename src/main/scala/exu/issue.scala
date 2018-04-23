@@ -9,7 +9,8 @@
 
 package boom.exu
 
-import Chisel._
+import chisel3._
+import chisel3.util._
 import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.util.Str
 import boom.common._
@@ -30,23 +31,23 @@ class IssueUnitIO(
    val num_wakeup_ports: Int)
    (implicit p: Parameters) extends BoomBundle()(p)
 {
-   val dis_valids     = Vec(DISPATCH_WIDTH, Bool()).asInput
-   val dis_uops       = Vec(DISPATCH_WIDTH, new MicroOp()).asInput
-   val dis_readys     = Vec(DISPATCH_WIDTH, Bool()).asOutput
+   val dis_valids     = Input(Vec(DISPATCH_WIDTH, Bool()))
+   val dis_uops       = Input(Vec(DISPATCH_WIDTH, new MicroOp()))
+   val dis_readys     = Output(Vec(DISPATCH_WIDTH, Bool()))
 
-   val iss_valids     = Vec(issue_width, Bool()).asOutput
-   val iss_uops       = Vec(issue_width, new MicroOp().asOutput)
-   val wakeup_pdsts   = Vec(num_wakeup_ports, Valid(UInt(width=PREG_SZ))).flip
+   val iss_valids     = Output(Vec(issue_width, Bool()))
+   val iss_uops       = Output(Vec(issue_width, new MicroOp()))
+   val wakeup_pdsts   = Flipped(Vec(num_wakeup_ports, Valid(UInt(width=PREG_SZ.W))))
 
    // tell the issue unit what each execution pipeline has in terms of functional units
-   val fu_types       = Vec(issue_width, Bits(width=FUC_SZ)).asInput
+   val fu_types       = Input(Vec(issue_width, Bits(width=FUC_SZ.W)))
 
-   val brinfo         = new BrResolutionInfo().asInput
-   val flush_pipeline = Bool(INPUT)
+   val brinfo         = Input(new BrResolutionInfo())
+   val flush_pipeline = Input(Bool())
 
-   val event_empty    = Bool(OUTPUT) // used by HPM events; is the issue unit empty?
+   val event_empty    = Output(Bool()) // used by HPM events; is the issue unit empty?
 
-   val tsc_reg        = UInt(INPUT, xLen)
+   val tsc_reg        = Input(UInt(width=xLen.W))
 }
 
 abstract class IssueUnit(
@@ -77,13 +78,14 @@ abstract class IssueUnit(
    //-------------------------------------------------------------
    // Issue Table
 
-   val issue_slots = Vec.fill(num_issue_slots) {Module(new IssueSlot(num_wakeup_ports)).io}
+   val slots = for (i <- 0 until num_issue_slots) yield { val slot = Module(new IssueSlot(num_wakeup_ports)); slot }
+   val issue_slots = VecInit(slots.map(_.io))
 
    io.event_empty := !(issue_slots.map(s => s.valid).reduce(_|_))
 
    //-------------------------------------------------------------
 
-   assert (PopCount(issue_slots.map(s => s.grant)) <= UInt(issue_width), "Issue window giving out too many grants.")
+   assert (PopCount(issue_slots.map(s => s.grant)) <= issue_width.U, "Issue window giving out too many grants.")
 
    //-------------------------------------------------------------
 
@@ -136,6 +138,8 @@ abstract class IssueUnit(
       }
       printf("-----------------------------------------------------------------------------------------\n")
    }
+
+   override val compileOptions = chisel3.core.ExplicitCompileOptions.NotStrict.copy(explicitInvalidate = true)
 }
 
 class IssueUnits(num_wakeup_ports: Int)(implicit val p: Parameters)
@@ -162,6 +166,5 @@ class IssueUnits(num_wakeup_ports: Int)(implicit val p: Parameters)
 //      issue_Units =issueConfigs colect {if iqType=....)
    iss_units += Module(new IssueUnitCollasping(issueParams.find(_.iqType == IQT_MEM.litValue).get, num_wakeup_ports))
    iss_units += Module(new IssueUnitCollasping(issueParams.find(_.iqType == IQT_INT.litValue).get, num_wakeup_ports))
-
 }
 

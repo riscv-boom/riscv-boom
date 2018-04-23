@@ -9,8 +9,9 @@
 //
 
 package boom.exu
-{
-import Chisel._
+
+import chisel3._
+import chisel3.util.{log2Ceil, PopCount}
 import freechips.rocketchip.config.Parameters
 
 import FUConstants._
@@ -31,29 +32,29 @@ class IssueUnitCollasping(
    // Figure out how much to shift entries by
 
    val MAX_SHIFT = DISPATCH_WIDTH
-   val shamt_oh = Array.fill(num_issue_slots){UInt(width=issue_width)}
+   val shamt_oh = Array.fill(num_issue_slots){UInt(width=issue_width.W)}
    // count total grants before this entry, and tus how many to shift upwards by
-   val shamt = Array.fill(num_issue_slots){UInt(width=log2Up(issue_width+1))}
+   val shamt = Array.fill(num_issue_slots){UInt(width=log2Ceil(issue_width+1).W)}
 
 
    val vacants = issue_slots.map(s => !(s.valid)) ++ io.dis_valids.map(!_.toBool)
-   val shamts_oh = Array.fill(num_issue_slots+DISPATCH_WIDTH) {Wire(UInt(width=MAX_SHIFT))}
+   val shamts_oh = Array.fill(num_issue_slots+DISPATCH_WIDTH) {Wire(UInt(width=MAX_SHIFT.W))}
    // track how many to shift up this entry by by counting previous vacant spots
    def SaturatingCounterOH(count_oh:UInt, inc: Bool, max: Int): UInt =
    {
-      val next = Wire(UInt(width=max))
+      val next = Wire(UInt(width=max.W))
       next := count_oh
-      when (count_oh === UInt(0) && inc)
+      when (count_oh === 0.U && inc)
       {
-         next := UInt(1)
+         next := 1.U
       }
       .elsewhen (!count_oh(max-1) && inc)
       {
-         next := (count_oh << UInt(1))
+         next := (count_oh << 1.U)
       }
       next
    }
-   shamts_oh(0) := UInt(0)
+   shamts_oh(0) := 0.U
    for (i <- 1 until num_issue_slots + DISPATCH_WIDTH)
    {
       shamts_oh(i) := SaturatingCounterOH(shamts_oh(i-1), vacants(i-1), MAX_SHIFT)
@@ -71,11 +72,11 @@ class IssueUnitCollasping(
    val uops = issue_slots.map(s=>s.updated_uop) ++ dis_uops.map(s=>s)
    for (i <- 0 until num_issue_slots)
    {
-      issue_slots(i).in_uop.valid := Bool(false)
+      issue_slots(i).in_uop.valid := false.B
       issue_slots(i).in_uop.bits  := uops(i+1)
       for (j <- 1 to MAX_SHIFT by 1)
       {
-         when (shamts_oh(i+j) === UInt(1 << (j-1)))
+         when (shamts_oh(i+j) === (1 << (j-1)).U)
          {
             issue_slots(i).in_uop.valid := will_be_valid(i+j)
             issue_slots(i).in_uop.bits  := uops(i+j)
@@ -84,7 +85,7 @@ class IssueUnitCollasping(
       issue_slots(i).wakeup_dsts  := io.wakeup_pdsts
       issue_slots(i).brinfo       := io.brinfo
       issue_slots(i).kill         := io.flush_pipeline
-      issue_slots(i).clear        := shamts_oh(i) =/= UInt(0)
+      issue_slots(i).clear        := shamts_oh(i) =/= 0.U
    }
 
    //-------------------------------------------------------------
@@ -96,7 +97,7 @@ class IssueUnitCollasping(
    val num_available = PopCount(will_be_available)
    for (w <- 0 until DISPATCH_WIDTH)
    {
-      io.dis_readys(w) := RegNext(num_available > UInt(w))
+      io.dis_readys(w) := RegNext(num_available > w.U)
    }
 
    //-------------------------------------------------------------
@@ -105,12 +106,12 @@ class IssueUnitCollasping(
    // set default
    for (w <- 0 until issue_width)
    {
-      io.iss_valids(w) := Bool(false)
+      io.iss_valids(w) := false.B
       io.iss_uops(w)   := NullMicroOp
       // unsure if this is overkill
-      io.iss_uops(w).pop1 := UInt(0)
-      io.iss_uops(w).pop2 := UInt(0)
-      io.iss_uops(w).pop3 := UInt(0)
+      io.iss_uops(w).pop1 := 0.U
+      io.iss_uops(w).pop2 := 0.U
+      io.iss_uops(w).pop3 := 0.U
       io.iss_uops(w).lrs1_rtype := RT_X
       io.iss_uops(w).lrs2_rtype := RT_X
    }
@@ -119,22 +120,22 @@ class IssueUnitCollasping(
    val port_issued = Array.fill(issue_width){Bool()}
    for (w <- 0 until issue_width)
    {
-      port_issued(w) = Bool(false)
+      port_issued(w) = false.B
    }
 
    for (i <- 0 until num_issue_slots)
    {
-      issue_slots(i).grant := Bool(false)
-      var uop_issued = Bool(false)
+      issue_slots(i).grant := false.B
+      var uop_issued = false.B
 
       for (w <- 0 until issue_width)
       {
-         val can_allocate = (issue_slots(i).uop.fu_code & io.fu_types(w)) =/= UInt(0)
+         val can_allocate = (issue_slots(i).uop.fu_code & io.fu_types(w)) =/= 0.U
 
          when (requests(i) && !uop_issued && can_allocate && !port_issued(w))
          {
-            issue_slots(i).grant := Bool(true)
-            io.iss_valids(w) := Bool(true)
+            issue_slots(i).grant := true.B
+            io.iss_valids(w) := true.B
             io.iss_uops(w) := issue_slots(i).uop
          }
          val was_port_issued_yet = port_issued(w)
@@ -142,7 +143,5 @@ class IssueUnitCollasping(
          uop_issued = (requests(i) && can_allocate && !was_port_issued_yet) | uop_issued
       }
    }
-
 }
 
-}
