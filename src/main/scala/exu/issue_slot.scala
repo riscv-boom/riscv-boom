@@ -12,7 +12,8 @@
 
 package boom.exu
 
-import Chisel._
+import chisel3._
+import chisel3.util.Valid
 import FUConstants._
 import freechips.rocketchip.config.Parameters
 import boom.common._
@@ -20,20 +21,20 @@ import boom.util._
 
 class IssueSlotIO(num_wakeup_ports: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
-   val valid          = Bool(OUTPUT)
-   val will_be_valid  = Bool(OUTPUT) // TODO code review, do we need this signal so explicitely?
-   val request        = Bool(OUTPUT)
-   val request_hp     = Bool(OUTPUT)
-   val grant          = Bool(INPUT)
+   val valid          = Output(Bool())
+   val will_be_valid  = Output(Bool()) // TODO code review, do we need this signal so explicitely?
+   val request        = Output(Bool())
+   val request_hp     = Output(Bool())
+   val grant          = Input(Bool())
 
-   val brinfo         = new BrResolutionInfo().asInput
-   val kill           = Bool(INPUT) // pipeline flush
-   val clear          = Bool(INPUT) // entry being moved elsewhere (not mutually exclusive with grant)
+   val brinfo         = Input(new BrResolutionInfo())
+   val kill           = Input(Bool()) // pipeline flush
+   val clear          = Input(Bool()) // entry being moved elsewhere (not mutually exclusive with grant)
 
-   val wakeup_dsts    = Vec(num_wakeup_ports, Valid(UInt(width = PREG_SZ))).flip
-   val in_uop         = Valid(new MicroOp()).flip // if valid, this WILL overwrite an entry!
-   val updated_uop    = new MicroOp().asOutput // the updated slot uop; will be shifted upwards in a collasping queue.
-   val uop            = new MicroOp().asOutput // the current Slot's uop. Sent down the pipeline when issued.
+   val wakeup_dsts    = Flipped(Vec(num_wakeup_ports, Valid(UInt(width = PREG_SZ.W))))
+   val in_uop         = Flipped(Valid(new MicroOp())) // if valid, this WILL overwrite an entry!
+   val updated_uop    = Output(new MicroOp()) // the updated slot uop; will be shifted upwards in a collasping queue.
+   val uop            = Output(new MicroOp()) // the current Slot's uop. Sent down the pipeline when issued.
 
    val debug = {
      val result = new Bundle {
@@ -41,7 +42,7 @@ class IssueSlotIO(num_wakeup_ports: Int)(implicit p: Parameters) extends BoomBun
        val p2 = Bool()
        val p3 = Bool()
     }
-    result.asOutput
+    Output(result)
   }
 
    override def cloneType = new IssueSlotIO(num_wakeup_ports)(p).asInstanceOf[this.type]
@@ -58,17 +59,17 @@ class IssueSlot(num_slow_wakeup_ports: Int)(implicit p: Parameters) extends Boom
    def isValid = slot_state =/= s_invalid
 
    val updated_state = Wire(UInt()) // the next state of this slot (which might then get moved to a new slot)
-   val updated_uopc  = Wire(Bits()) // the next uopc of this slot (which might then get moved to a new slot)
-   val updated_lrs1_rtype = Wire(Bits()) // the next reg type of this slot (which might then get moved to a new slot)
-   val updated_lrs2_rtype = Wire(Bits()) // the next reg type of this slot (which might then get moved to a new slot)
+   val updated_uopc  = Wire(UInt()) // the next uopc of this slot (which might then get moved to a new slot)
+   val updated_lrs1_rtype = Wire(UInt()) // the next reg type of this slot (which might then get moved to a new slot)
+   val updated_lrs2_rtype = Wire(UInt()) // the next reg type of this slot (which might then get moved to a new slot)
    val next_p1  = Wire(Bool())
    val next_p2  = Wire(Bool())
    val next_p3  = Wire(Bool())
 
    val slot_state    = Reg(init = s_invalid)
-   val slot_p1       = Reg(init = Bool(false), next = next_p1)
-   val slot_p2       = Reg(init = Bool(false), next = next_p2)
-   val slot_p3       = Reg(init = Bool(false), next = next_p3)
+   val slot_p1       = Reg(init = false.B, next = next_p1)
+   val slot_p2       = Reg(init = false.B, next = next_p2)
+   val slot_p3       = Reg(init = false.B, next = next_p3)
    val slot_is_2uops = Reg(Bool())
 
    val slotUop = Reg(init = NullMicroOp)
@@ -139,9 +140,9 @@ class IssueSlot(num_slow_wakeup_ports: Int)(implicit p: Parameters) extends Boom
    }
 
    // Wakeup Compare Logic
-   next_p1 := Bool(false)
-   next_p2 := Bool(false)
-   next_p3 := Bool(false)
+   next_p1 := false.B
+   next_p2 := false.B
+   next_p3 := false.B
 
    // these signals are the "next_p*" for the current slot's micro-op.
    // they are important for shifting the current slotUop up to an other entry.
@@ -167,15 +168,15 @@ class IssueSlot(num_slow_wakeup_ports: Int)(implicit p: Parameters) extends Boom
    {
       when (io.wakeup_dsts(i).valid && (io.wakeup_dsts(i).bits === slotUop.pop1))
       {
-         out_p1 := Bool(true)
+         out_p1 := true.B
       }
       when (io.wakeup_dsts(i).valid && (io.wakeup_dsts(i).bits === slotUop.pop2))
       {
-         out_p2 := Bool(true)
+         out_p2 := true.B
       }
       when (io.wakeup_dsts(i).valid && (io.wakeup_dsts(i).bits === slotUop.pop3))
       {
-         out_p3 := Bool(true)
+         out_p3 := true.B
       }
    }
 
@@ -200,7 +201,7 @@ class IssueSlot(num_slow_wakeup_ports: Int)(implicit p: Parameters) extends Boom
    io.request := isValid && slot_p1 && slot_p2 && slot_p3 && !io.kill
    val high_priority = slotUop.is_br_or_jmp
 //   io.request_hp := io.request && high_priority
-   io.request_hp := Bool(false)
+   io.request_hp := false.B
 
    when (slot_state === s_valid_1)
    {
@@ -212,7 +213,7 @@ class IssueSlot(num_slow_wakeup_ports: Int)(implicit p: Parameters) extends Boom
    }
    .otherwise
    {
-      io.request := Bool(false)
+      io.request := false.B
    }
 
 
@@ -254,5 +255,7 @@ class IssueSlot(num_slow_wakeup_ports: Int)(implicit p: Parameters) extends Boom
    io.debug.p1 := slot_p1
    io.debug.p2 := slot_p2
    io.debug.p3 := slot_p3
+
+   override val compileOptions = chisel3.core.ExplicitCompileOptions.NotStrict.copy(explicitInvalidate = true)
 }
 

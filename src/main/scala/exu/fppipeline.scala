@@ -104,7 +104,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
    // Input (Dispatch)
    for (w <- 0 until DISPATCH_WIDTH)
    {
-      issue_unit.io.dis_valids(w) := io.dis_valids(w) && io.dis_uops(w).iqtype === UInt(issue_unit.iqType)
+      issue_unit.io.dis_valids(w) := io.dis_valids(w) && io.dis_uops(w).iqtype === issue_unit.iqType.U
       issue_unit.io.dis_uops(w) := io.dis_uops(w)
 
       // Or... add STDataGen micro-op for FP stores.
@@ -113,7 +113,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
          issue_unit.io.dis_uops(w).uopc := uopSTD
          issue_unit.io.dis_uops(w).fu_code := FUConstants.FU_FPU
          issue_unit.io.dis_uops(w).lrs1_rtype := RT_X
-         issue_unit.io.dis_uops(w).prs1_busy := Bool(false)
+         issue_unit.io.dis_uops(w).prs1_busy := false.B
       }
    }
    io.dis_readys := issue_unit.io.dis_readys
@@ -132,7 +132,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
       if (exe_units(i).supportedFuncUnits.fdiv && regreadLatency > 0)
       {
          val fdiv_issued = iss_valids(i) && iss_uops(i).fu_code_is(FU_FDV)
-         fu_types = fu_types & RegNext(~Mux(fdiv_issued, FU_FDV, Bits(0)))
+         fu_types = fu_types & RegNext(~Mux(fdiv_issued, FU_FDV, 0.U))
       }
       issue_unit.io.fu_types(i) := fu_types
 
@@ -175,7 +175,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
       // TODO HACK only let one FPU issue port issue these.
       require (w == 0)
       when (fregister_read.io.exe_reqs(w).bits.uop.uopc === uopSTD) {
-         ex.io.req.valid :=  Bool(false)
+         ex.io.req.valid :=  false.B
       }
 
       io.tosdq.valid    := fregister_read.io.exe_reqs(w).bits.uop.uopc === uopSTD
