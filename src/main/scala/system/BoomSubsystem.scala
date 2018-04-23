@@ -19,7 +19,7 @@ case object BoomTilesKey extends Field[Seq[boom.common.BoomTileParams]](Nil)
 
 trait HasBoomTiles extends HasTiles
     with HasPeripheryPLIC
-    with HasPeripheryCLINT
+    with CanHavePeripheryCLINT
     with HasPeripheryDebug { this: BaseSubsystem =>
   val module: HasBoomTilesModuleImp
 
@@ -114,11 +114,12 @@ trait HasBoomTiles extends HasTiles
 
     // 2. clint+plic conditionally crossing
     val periphIntNode = boomCore.intInwardNode :=* boomCore.crossIntIn
-    periphIntNode := clint.intnode                   // msip+mtip
+    require( p(CLINTKey).isDefined, "CLINT must be present")
+    clintOpt.foreach { periphIntNode := _.intnode }  // msip+mtip
     periphIntNode := plic.intnode                    // meip
     if (tp.core.useVM) periphIntNode := plic.intnode // seip
 
-    // 3. local interrupts  never cross 
+    // 3. local interrupts  never cross
     // rocket.intInwardNode is wired up externally     // lip
 
     // 4. conditional crossing from core to PLIC
