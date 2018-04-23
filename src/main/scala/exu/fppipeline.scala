@@ -94,6 +94,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
    issue_unit.io.tsc_reg := io.debug_tsc_reg
    issue_unit.io.brinfo := io.brinfo
    issue_unit.io.flush_pipeline := io.flush_pipeline
+   issue_unit.io.ldMiss := false.B // Don't support ld-hit speculation to FP window.
 
    require (exe_units.num_total_bypass_ports == 0)
 
