@@ -625,6 +625,15 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    issue_units.map(_.io.brinfo := br_unit.brinfo)
    issue_units.map(_.io.flush_pipeline := rob.io.flush.valid)
 
+   // Load-hit Misspeculations
+   require (issue_units.count(_.iqType == IQT_MEM.litValue) == 1)
+   val mem_iq = issue_units.find(_.iqType == IQT_MEM.litValue).get
+
+   require (mem_iq.issue_width == 1)
+   val iss_loadIssued = mem_iq.io.iss_valids(0) && mem_iq.io.iss_uops(0).is_load
+   issue_units.map(_.io.ldMiss := lsu.io.nack.valid && lsu.io.nack.isload && Pipe(true.B, iss_loadIssued, 4).bits)
+
+
    // Wakeup (Issue & Writeback)
 
    for {
