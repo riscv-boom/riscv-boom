@@ -567,6 +567,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    {
       uop.exc_cause := DontCare
       uop.csr_addr := DontCare
+      uop.br_prediction := DontCare
       uop.debug_wdata := DontCare
       if (!DEBUG_PRINTF && !COMMIT_LOG_PRINTF) uop.pc := DontCare
       if (!DEBUG_PRINTF && !COMMIT_LOG_PRINTF) uop.inst := DontCare
