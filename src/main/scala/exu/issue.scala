@@ -26,6 +26,15 @@ case class IssueParams(
    iqType: BigInt
 )
 
+trait IssueUnitConstants
+{
+   // invalid  : slot holds no valid uop.
+   // s_valid_1: slot holds a valid uop.
+   // s_valid_2: slot holds a store-like uop that may be broken into two micro-ops.
+   // s_issued : slot was issued speculatively but may need to be retried.
+   val s_invalid :: s_valid_1 :: s_valid_2 :: s_issued :: Nil = Enum(UInt(),4)
+}
+
 class IssueUnitIO(
    val issue_width: Int,
    val num_wakeup_ports: Int)
@@ -39,12 +48,14 @@ class IssueUnitIO(
    val iss_uops       = Output(Vec(issue_width, new MicroOp()))
    val wakeup_pdsts   = Flipped(Vec(num_wakeup_ports, Valid(UInt(width=PREG_SZ.W))))
 
+   val mem_ldSpecWakeup= Flipped(Valid(UInt(width=PREG_SZ.W)))
+
    // tell the issue unit what each execution pipeline has in terms of functional units
    val fu_types       = Input(Vec(issue_width, Bits(width=FUC_SZ.W)))
 
    val brinfo         = Input(new BrResolutionInfo())
    val flush_pipeline = Input(Bool())
-   val ldMiss         = Input(Bool())
+   val sxt_ldMiss     = Input(Bool())
 
    val event_empty    = Output(Bool()) // used by HPM events; is the issue unit empty?
 
@@ -58,6 +69,7 @@ abstract class IssueUnit(
    val iqType: BigInt)
    (implicit p: Parameters)
    extends BoomModule()(p)
+   with IssueUnitConstants
 {
    val io = IO(new IssueUnitIO(issue_width, num_wakeup_ports))
 
@@ -86,7 +98,16 @@ abstract class IssueUnit(
 
    //-------------------------------------------------------------
 
-   assert (PopCount(issue_slots.map(s => s.grant)) <= issue_width.U, "Issue window giving out too many grants.")
+   assert (PopCount(issue_slots.map(s => s.grant)) <= issue_width.U, "[issue] window giving out too many grants.")
+
+   // Check that a ldMiss signal was preceded by a ldSpecWakeup.
+   // However, if the load gets killed before it hits SXT stage, we may see
+   // the sxt_ldMiss signal (from some other load) by not the ldSpecWakeup signal.
+   // So track branch kills for the last 4 cycles to remove false negatives.
+   val brKills = RegInit(0.asUInt(width=4.W))
+   brKills := Cat(brKills, (io.brinfo.valid && io.brinfo.mispredict) || io.flush_pipeline)
+   assert (!(io.sxt_ldMiss && !RegNext(io.mem_ldSpecWakeup.valid, init=false.B) && brKills === 0.U),
+      "[issue] IQ-" + iqType + " a ld miss was not preceded by a spec wakeup.")
 
    //-------------------------------------------------------------
 
@@ -106,13 +127,9 @@ abstract class IssueUnit(
 
    if (DEBUG_PRINTF)
    {
-      val typ_str = if (iqType == IQT_INT.litValue) "int"
-                    else if (iqType == IQT_MEM.litValue) "mem"
-                    else if (iqType == IQT_FP.litValue) " fp"
-                    else "unknown"
       for (i <- 0 until num_issue_slots)
       {
-         printf("  " + typ_str + "_issue_slot[%d](%c)(Req:%c):wen=%c P:(%c,%c,%c) OP:(%d,%d,%d) PDST:%d %c [[DASM(%x)]" +
+         printf("  " + this.getType + "_issue_slot[%d](%c)(Req:%c):wen=%c P:(%c,%c,%c) OP:(%d,%d,%d) PDST:%d %c [[DASM(%x)]" +
                " 0x%x: %d] ri:%d bm=%d imm=0x%x\n"
             , UInt(i, log2Up(num_issue_slots))
             , Mux(issue_slots(i).valid, Str("V"), Str("-"))
@@ -139,6 +156,12 @@ abstract class IssueUnit(
       }
       printf("-----------------------------------------------------------------------------------------\n")
    }
+
+   def getType: String =
+      if (iqType == IQT_INT.litValue) "int"
+      else if (iqType == IQT_MEM.litValue) "mem"
+      else if (iqType == IQT_FP.litValue) " fp"
+      else "unknown"
 
    override val compileOptions = chisel3.core.ExplicitCompileOptions.NotStrict.copy(explicitInvalidate = true)
 }
