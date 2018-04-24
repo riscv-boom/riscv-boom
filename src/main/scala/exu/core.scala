@@ -12,6 +12,7 @@
 //   if1 - Instruction Fetch 1 (I$ access)
 //   if2 - Instruction Fetch 2 (instruction return)
 //   if3 - Instruction Fetch 3 (enqueue to fetch buffer)
+//   if4 - Instruction Fetch 4 (redirect from bpd)
 //   dec - Decode
 //   ren - Rename
 //   dis - Dispatch
@@ -19,6 +20,7 @@
 //   rrd - Register Read
 //   exe - Execute
 //   mem - Memory
+//   sxt - Sign-extend
 //   wb  - Writeback
 //   com - Commit
 
@@ -480,7 +482,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       }
       else
       {
-         // Fast Wakeup (uses just-issued uops) that have known latencies
+         // Fast Wakeup (uses just-issued uops) that have known latencies.
          if (exe_units(i).isBypassable)
          {
             int_wakeups(wu_idx).valid := iss_valids(i) &&
@@ -495,6 +497,8 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
          // Slow Wakeup (uses write-port to register file)
          for (j <- 0 until exe_units(i).num_rf_write_ports)
          {
+            // TODO: don't add a slow wake-up port if the instructions
+            // being written back are ALWAYS bypassable.
             val resp = exe_units(i).io.resp(j)
             int_wakeups(wu_idx).valid := resp.valid &&
                                          resp.bits.uop.ctrl.rf_wen &&
@@ -502,12 +506,17 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
                                          resp.bits.uop.dst_rtype === RT_FIX
             int_wakeups(wu_idx).bits := exe_units(i).io.resp(j).bits
             wu_idx += 1
-
          }
       }
       require (exe_units(i).usesIRF)
    }
    require (wu_idx == num_wakeup_ports)
+
+   // Perform load-hit speculative wakeup through a special port (performs a poison wake-up).
+   issue_units map { iu =>
+      iu.io.mem_ldSpecWakeup <> lsu.io.mem_ldSpecWakeup
+   }
+
 
    for ((renport, intport) <- rename_stage.io.int_wakeups zip int_wakeups)
    {
@@ -575,8 +584,6 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    }
 
 
-
-
    // Output (Issue)
 
    val ifpu_idx = exe_units.length-1 // TODO hack; need more disciplined manner to hook up ifpu
@@ -631,7 +638,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
    require (mem_iq.issue_width == 1)
    val iss_loadIssued = mem_iq.io.iss_valids(0) && mem_iq.io.iss_uops(0).is_load
-   issue_units.map(_.io.ldMiss := lsu.io.nack.valid && lsu.io.nack.isload && Pipe(true.B, iss_loadIssued, 4).bits)
+   issue_units.map(_.io.sxt_ldMiss := lsu.io.nack.valid && lsu.io.nack.isload && Pipe(true.B, iss_loadIssued, 4).bits)
 
 
    // Wakeup (Issue & Writeback)
