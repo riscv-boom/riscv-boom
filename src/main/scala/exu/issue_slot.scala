@@ -48,7 +48,9 @@ class IssueSlotIO(num_wakeup_ports: Int)(implicit p: Parameters) extends BoomBun
    override def cloneType = new IssueSlotIO(num_wakeup_ports)(p).asInstanceOf[this.type]
 }
 
-class IssueSlot(num_slow_wakeup_ports: Int)(implicit p: Parameters) extends BoomModule()(p)
+class IssueSlot(num_slow_wakeup_ports: Int)(implicit p: Parameters)
+   extends BoomModule()(p)
+   with IssueUnitConstants
 {
    val io = IO(new IssueSlotIO(num_slow_wakeup_ports))
 
@@ -66,10 +68,10 @@ class IssueSlot(num_slow_wakeup_ports: Int)(implicit p: Parameters) extends Boom
    val next_p2  = Wire(Bool())
    val next_p3  = Wire(Bool())
 
-   val slot_state    = Reg(init = s_invalid)
-   val slot_p1       = Reg(init = false.B, next = next_p1)
-   val slot_p2       = Reg(init = false.B, next = next_p2)
-   val slot_p3       = Reg(init = false.B, next = next_p3)
+   val slot_state    = RegInit(s_invalid)
+   val slot_p1       = RegNext(next_p1, init = false.B)
+   val slot_p2       = RegNext(next_p2, init = false.B)
+   val slot_p3       = RegNext(next_p3, init = false.B)
    val slot_is_2uops = Reg(Bool())
 
    val slotUop = Reg(init = NullMicroOp)

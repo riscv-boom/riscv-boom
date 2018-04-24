@@ -69,18 +69,15 @@ class LoadStoreUnitIO(pl_width: Int)(implicit p: Parameters) extends BoomBundle(
    val exe_resp           = (new ValidIO(new FuncUnitResp(xLen))).flip
    val fp_stdata          = Valid(new MicroOpWithData(fLen)).flip
 
-   // Commit Stage
-   val commit_store_mask  = Vec(pl_width, Bool()).asInput
-   val commit_load_mask   = Vec(pl_width, Bool()).asInput
-   val commit_load_at_rob_head = Bool(INPUT)
-
    // Send out Memory Request
    val memreq_val         = Bool(OUTPUT)
    val memreq_addr        = UInt(OUTPUT, corePAddrBits)
    val memreq_wdata       = UInt(OUTPUT, xLen)
    val memreq_uop         = new MicroOp().asOutput
 
+   // Memory Stage
    val memreq_kill        = Bool(OUTPUT) // kill request sent out last cycle
+   val mem_ldSpecWakeup   = Valid(UInt(width=PREG_SZ.W))
 
    // Forward Store Data to Register File
    // TODO turn into forward bundle
@@ -90,6 +87,11 @@ class LoadStoreUnitIO(pl_width: Int)(implicit p: Parameters) extends BoomBundle(
 
    // Receive Memory Response
    val memresp            = new ValidIO(new MicroOp()).flip
+
+   // Commit Stage
+   val commit_store_mask  = Vec(pl_width, Bool()).asInput
+   val commit_load_mask   = Vec(pl_width, Bool()).asInput
+   val commit_load_at_rob_head = Bool(INPUT)
 
    // Handle Branch Misspeculations
    val brinfo             = new BrResolutionInfo().asInput
@@ -429,7 +431,6 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
 
    // check if a load is uncacheable - must stop it from executing speculatively,
    // as it might have side-effects!
-//   val tlb_addr_uncacheable = !(addrMap.isCacheable(exe_tlb_paddr))
    val tlb_addr_uncacheable = !(dtlb.io.resp.cacheable)
 
    //-------------------------------------
@@ -647,6 +648,8 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
       mem_ld_killed := Bool(true) && mem_fired_ld
    }
 
+   io.mem_ldSpecWakeup.valid := RegNext(will_fire_load_incoming, init=false.B)
+   io.mem_ldSpecWakeup.bits := mem_ld_uop.pdst
 
    // tell the ROB to clear the busy bit on the incoming store
    val clr_bsy_valid = Reg(init=Bool(false))
