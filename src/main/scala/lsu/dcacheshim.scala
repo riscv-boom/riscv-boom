@@ -153,6 +153,7 @@ class DCMemPortIO(implicit p: Parameters) extends BoomBundle()(p)
    val nack    = new NackInfo().asInput
    val flush_pipe  = Bool(OUTPUT)   // exception or other misspec which flushes entire pipeline
    val invalidate_lr = Bool(OUTPUT) // should the dcache clear ld/sc reservations?
+   val load_miss = Bool(INPUT)      // Did a load suffer a cache miss? (not necessarily nacked, but no data).
    val ordered = Bool(INPUT)        // is the dcache ordered? (fence is done)
 
 // TODO chisel3 broke this
@@ -330,6 +331,11 @@ class DCacheShim(implicit p: Parameters) extends BoomModule()(p)
    io.core.nack.cache_nack:= io.dmem.s2_nack ||
                               Reg(next=iflb_kill) ||
                               Reg(next=Reg(next= (!(io.dmem.req.ready))))
+
+   //------------------------------------------------------------
+   // detect load cache misses so we can kill speculative wakeups.
+
+   io.core.load_miss := RegNext(RegNext(io.core.req.valid && io.core.req.bits.uop.is_load)) && !cache_load_ack
 
    //------------------------------------------------------------
    // Handle exceptions and fences
