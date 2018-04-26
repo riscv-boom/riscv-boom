@@ -31,8 +31,15 @@ trait IssueUnitConstants
    // invalid  : slot holds no valid uop.
    // s_valid_1: slot holds a valid uop.
    // s_valid_2: slot holds a store-like uop that may be broken into two micro-ops.
-   // s_issued : slot was issued speculatively but may need to be retried.
-   val s_invalid :: s_valid_1 :: s_valid_2 :: s_issued :: Nil = Enum(UInt(),4)
+   val s_invalid :: s_valid_1 :: s_valid_2 :: Nil = Enum(UInt(), 3)
+}
+
+// What physical register is broadcasting its wakeup?
+// Is the physical register poisoned (aka, was it woken up by a speculative issue)?
+class IqWakeup(val preg_sz: Int) extends Bundle
+{
+   val pdst = UInt(width=preg_sz.W)
+   val poisoned = Bool()
 }
 
 class IssueUnitIO(
@@ -46,7 +53,7 @@ class IssueUnitIO(
 
    val iss_valids     = Output(Vec(issue_width, Bool()))
    val iss_uops       = Output(Vec(issue_width, new MicroOp()))
-   val wakeup_pdsts   = Flipped(Vec(num_wakeup_ports, Valid(UInt(width=PREG_SZ.W))))
+   val wakeup_pdsts   = Flipped(Vec(num_wakeup_ports, Valid(new IqWakeup(PREG_SZ))))
 
    val mem_ldSpecWakeup= Flipped(Valid(UInt(width=PREG_SZ.W)))
 
@@ -81,6 +88,8 @@ abstract class IssueUnit(
    for (w <- 0 until DISPATCH_WIDTH)
    {
       dis_uops(w) := io.dis_uops(w)
+      dis_uops(w).iw_p1_poisoned := false.B
+      dis_uops(w).iw_p2_poisoned := false.B
       dis_uops(w).iw_state := s_valid_1
       when ((dis_uops(w).uopc === uopSTA && dis_uops(w).lrs2_rtype === RT_FIX) || dis_uops(w).uopc === uopAMO_AG)
       {
