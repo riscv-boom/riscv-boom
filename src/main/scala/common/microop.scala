@@ -18,11 +18,9 @@ class MicroOp(implicit p: Parameters) extends BoomBundle()(p)
    with freechips.rocketchip.rocket.constants.MemoryOpConstants
    with freechips.rocketchip.rocket.constants.ScalarOpConstants
 {
-   val valid            = Bool()                      // is this uop valid? or has it been masked out,
-                                                      // used by fetch buffer and Decode stage
-   val iw_state         = UInt(width = 2)             // what is the next state of this uop in the issue window? useful
-                                                      // for the compacting queue? TODO or is this not really belong
-                                                      // here?
+   // Is this uop valid? or has it been masked out,
+   // Used by fetch buffer and Decode stage.
+   val valid            = Bool()
 
    val uopc             = UInt(width = UOPC_SZ)       // micro-op code
    val inst             = UInt(width = 32)
@@ -30,6 +28,15 @@ class MicroOp(implicit p: Parameters) extends BoomBundle()(p)
    val iqtype           = UInt(width = IQT_SZ)        // which issue unit do we use?
    val fu_code          = UInt(width = FUConstants.FUC_SZ) // which functional unit do we use?
    val ctrl             = new CtrlSignals
+
+   // What is the next state of this uop in the issue window? useful
+   // for the compacting queue.
+   val iw_state         = UInt(width = 2)
+   // Has operand 1 or 2 been waken speculatively by a load?
+   // Only integer operands are speculaively woken up,
+   // so we can ignore p3.
+   val iw_p1_poisoned   = Bool()
+   val iw_p2_poisoned   = Bool()
 
    val allocate_brtag   = Bool()                      // does this allocate a branch tag? (is branch or JR but not JAL)
    val is_br_or_jmp     = Bool()                      // is this micro-op a (branch or jump) vs a regular PC+4 inst?

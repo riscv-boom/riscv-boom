@@ -83,6 +83,8 @@ class IssueUnitCollasping(
          }
       }
       issue_slots(i).wakeup_dsts  := io.wakeup_pdsts
+      issue_slots(i).ldspec_dst   := io.mem_ldSpecWakeup
+      issue_slots(i).ldspec_miss  := io.sxt_ldMiss
       issue_slots(i).brinfo       := io.brinfo
       issue_slots(i).kill         := io.flush_pipeline
       issue_slots(i).clear        := shamts_oh(i) =/= 0.U

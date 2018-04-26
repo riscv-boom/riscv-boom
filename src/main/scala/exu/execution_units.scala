@@ -164,7 +164,8 @@ class ExecutionUnits(fpu: Boolean = false)(implicit val p: Parameters) extends H
       }
       else
       {
-         exe_units.withFilter(_.usesIRF).map(_.isBypassable)
+         // The mem-unit will also bypass writes to readers in the RRD stage.
+         exe_units.withFilter(_.usesIRF).map(u => u.isBypassable || u.is_mem_unit)
       }
    }
 
