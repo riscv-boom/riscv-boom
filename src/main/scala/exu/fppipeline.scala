@@ -147,7 +147,8 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
    for ((writeback, issue_wakeup) <- io.wakeups zip issue_unit.io.wakeup_pdsts)
    {
       issue_wakeup.valid := writeback.valid
-      issue_wakeup.bits  := writeback.bits.uop.pdst
+      issue_wakeup.bits.pdst  := writeback.bits.uop.pdst
+      issue_wakeup.bits.poisoned := false.B
    }
 
    //-------------------------------------------------------------
