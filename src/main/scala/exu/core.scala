@@ -637,7 +637,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    val mem_iq = issue_units.find(_.iqType == IQT_MEM.litValue).get
 
    require (mem_iq.issue_width == 1)
-   val iss_loadIssued = mem_iq.io.iss_valids(0) && mem_iq.io.iss_uops(0).is_load
+   val iss_loadIssued = mem_iq.io.iss_valids(0) && mem_iq.io.iss_uops(0).is_load && !mem_iq.io.iss_uops(0).fp_val
    val sxt_ldMiss =
       ((lsu.io.nack.valid && lsu.io.nack.isload) || dc_shim.io.core.load_miss) &&
       Pipe(true.B, iss_loadIssued, 4).bits
