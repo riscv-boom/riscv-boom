@@ -77,7 +77,7 @@ class LoadStoreUnitIO(pl_width: Int)(implicit p: Parameters) extends BoomBundle(
 
    // Memory Stage
    val memreq_kill        = Bool(OUTPUT) // kill request sent out last cycle
-   val mem_ldSpecWakeup   = Valid(UInt(width=PREG_SZ.W))
+   val mem_ldSpecWakeup   = Valid(UInt(width=PREG_SZ.W)) // do NOT send out FP loads.
 
    // Forward Store Data to Register File
    // TODO turn into forward bundle
@@ -648,7 +648,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
       mem_ld_killed := Bool(true) && mem_fired_ld
    }
 
-   io.mem_ldSpecWakeup.valid := RegNext(will_fire_load_incoming, init=false.B)
+   io.mem_ldSpecWakeup.valid := RegNext(will_fire_load_incoming && !io.exe_resp.bits.uop.fp_val, init=false.B)
    io.mem_ldSpecWakeup.bits := mem_ld_uop.pdst
 
    // tell the ROB to clear the busy bit on the incoming store
