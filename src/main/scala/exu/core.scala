@@ -144,6 +144,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
    // Load/Store Unit & ExeUnits
    exe_units.memory_unit.io.lsu_io := lsu.io
+   val sxt_ldMiss = Wire(Bool())
 
 
 
@@ -520,7 +521,11 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
    for ((renport, intport) <- rename_stage.io.int_wakeups zip int_wakeups)
    {
-      renport <> intport
+      // Stop wakeup for bypassable children of spec-loads trying to issue during a ldMiss.
+      renport.valid :=
+         intport.valid &&
+         !(sxt_ldMiss && (intport.bits.uop.iw_p1_poisoned || intport.bits.uop.iw_p2_poisoned))
+      renport.bits := intport.bits
    }
    for ((renport, fpport) <- rename_stage.io.fp_wakeups zip fp_pipeline.io.wakeups)
    {
@@ -636,8 +641,12 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    val mem_iq = issue_units.find(_.iqType == IQT_MEM.litValue).get
 
    require (mem_iq.issue_width == 1)
-   val iss_loadIssued = mem_iq.io.iss_valids(0) && mem_iq.io.iss_uops(0).is_load && !mem_iq.io.iss_uops(0).fp_val
-   val sxt_ldMiss =
+   val iss_loadIssued =
+      mem_iq.io.iss_valids(0) &&
+      mem_iq.io.iss_uops(0).is_load &&
+      !mem_iq.io.iss_uops(0).fp_val &&
+      !(sxt_ldMiss && (mem_iq.io.iss_uops(0).iw_p1_poisoned || mem_iq.io.iss_uops(0).iw_p2_poisoned))
+   sxt_ldMiss :=
       ((lsu.io.nack.valid && lsu.io.nack.isload) || dc_shim.io.core.load_miss) &&
       Pipe(true.B, iss_loadIssued, 4).bits
    issue_units.map(_.io.sxt_ldMiss := sxt_ldMiss)
@@ -650,9 +659,10 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    require (mem_unit.num_rf_write_ports == 1)
    val mem_resp = mem_unit.io.resp(0)
 
+
    when (RegNext(!sxt_ldMiss) && RegNext(RegNext(lsu.io.mem_ldSpecWakeup.valid)) &&
-      !(RegNext(br_unit.brinfo.valid && br_unit.brinfo.mispredict)) &&
-      !(RegNext(RegNext(br_unit.brinfo.valid && br_unit.brinfo.mispredict))))
+      !(RegNext(rob.io.flush.valid || (br_unit.brinfo.valid && br_unit.brinfo.mispredict))) &&
+      !(RegNext(RegNext(rob.io.flush.valid || (br_unit.brinfo.valid && br_unit.brinfo.mispredict)))))
    {
       assert (mem_resp.valid && mem_resp.bits.uop.ctrl.rf_wen && mem_resp.bits.uop.dst_rtype === RT_FIX,
          "[core] We did not see a RF writeback for a speculative load that claimed no load-miss.")
