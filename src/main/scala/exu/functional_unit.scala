@@ -24,7 +24,7 @@ import freechips.rocketchip.rocket.ALU._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile
 import chisel3.experimental.chiselName
-import boom.bpu.{BpredType, BranchPredInfo, BTBsaUpdate}
+import boom.bpu.{BpredType, BranchPredInfo, BoomBTBUpdate}
 import boom.common._
 import boom.ifu._
 import boom.util._
@@ -164,7 +164,7 @@ class BranchUnitResp(implicit p: Parameters) extends BoomBundle()(p)
    val pc              = UInt(width = vaddrBitsExtended) // TODO this isn't really a branch_unit thing
 
    val brinfo          = new BrResolutionInfo()
-   val btb_update      = Valid(new BTBsaUpdate)
+   val btb_update      = Valid(new BoomBTBUpdate)
 
    val xcpt            = Valid(new Exception)
 }
