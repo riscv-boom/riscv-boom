@@ -32,147 +32,9 @@ import boom.exu._
 
 import freechips.rocketchip.util.Str
 
-case class BTBsaParameters(
-  nSets: Int = 128,
-  nWays: Int = 4,
-  tagSz: Int = 20,
-  nRAS : Int = 16,
-  // Extra knobs.
-  bypassCalls: Boolean = true,
-  rasCheckForEmpty: Boolean = true
-)
-
-trait HasBTBsaParameters extends HasBoomCoreParameters
-{
-   val btbParams = boomParams.btb
-   val nSets = btbParams.nSets
-   val nWays = btbParams.nWays
-   val tag_sz = btbParams.tagSz
-   val idx_sz = log2Ceil(nSets)
-   val nRAS = btbParams.nRAS
-   val bypassCalls = btbParams.bypassCalls
-   val rasCheckForEmpty = btbParams.rasCheckForEmpty
-}
-
-// Which predictor should we listen to?
-object BpredType
-{
-   def SZ = 3
-   def apply() = UInt(width = SZ)
-   def branch = 0.U
-   def jump = 1.U
-   def ret =  (2+1).U
-   def call = (4+1).U
-
-   def isAlwaysTaken(typ: UInt): Bool = typ(0)
-   def isReturn(typ: UInt): Bool = typ(1)
-   def isCall(typ: UInt): Bool = typ(2)
-   def isJump(typ: UInt): Bool = typ === jump
-   def isBranch(typ: UInt): Bool = typ === branch
-}
-
-abstract class BTBsaBundle(implicit val p: Parameters) extends freechips.rocketchip.util.ParameterizedBundle()(p)
-  with HasBTBsaParameters
-
-
-//  - "cfi_idx" is the low-order PC bits of the predicted branch (after
-//     shifting off the lowest log(inst_bytes) bits off).
-//  - "mask" provides a mask of valid instructions (instructions are
-//     masked off by the predicted taken branch from the BTB).
-class BTBsaResp(implicit p: Parameters) extends BTBsaBundle()(p)
-{
-   val taken     = Bool()   // is BTB predicting a taken cfi?
-   val target    = UInt(width = vaddrBits) // what target are we predicting?
-   val mask      = UInt(width = fetchWidth) // mask of valid instructions.
-   val cfi_idx   = UInt(width = log2Up(fetchWidth)) // where is cfi we are predicting?
-   val bpd_type  = BpredType() // which predictor should we use?
-   val cfi_type  = CfiType()  // what type of instruction is this?
-   val fetch_pc  = UInt(width = vaddrBits) // the PC we're predicting on (start of the fetch packet).
-
-   val bim_resp  = Valid(new BimResp) // Output from the bimodal table. Valid if prediction provided.
-}
-
-
-// BTB update occurs during branch resolution (and only on a mispredict that's taken).
-//  - "pc" is what future fetch PCs will tag match against.
-//  - "cfi_pc" is the PC of the branch instruction.
-class BTBsaUpdate(implicit p: Parameters) extends BTBsaBundle()(p)
-{
-   val pc = UInt(width = vaddrBits)
-   val target = UInt(width = vaddrBits)
-   val taken = Bool()
-   val cfi_pc = UInt(width = vaddrBits)
-   val bpd_type = BpredType()
-   val cfi_type = CfiType()
-}
-
-
-class RasUpdate(implicit p: Parameters) extends BTBsaBundle()(p)
-{
-   val is_call = Bool()
-   val is_ret = Bool()
-   val return_addr = UInt(width = vaddrBits)
-}
-
-
-class RAS(nras: Int, coreInstBytes: Int)
-{
-   def push(addr: UInt): Unit =
-   {
-      when (count < nras.U) { count := count + 1.U }
-      val nextPos = Mux(Bool(isPow2(nras)) || pos < UInt(nras-1), pos+1.U, 0.U)
-      stack(nextPos) := addr >> log2Up(coreInstBytes)
-      pos := nextPos
-   }
-   def peek: UInt = Cat(stack(pos), UInt(0, log2Up(coreInstBytes)))
-   def pop(): Unit = when (!isEmpty)
-   {
-      count := count - 1.U
-      pos := Mux(Bool(isPow2(nras)) || pos > 0.U, pos-1.U, UInt(nras-1))
-   }
-   //def clear(): Unit = count := UInt(0)
-   def isEmpty: Bool = count === UInt(0)
-
-   private val count = Reg(UInt(width = log2Up(nras+1)))
-   private val pos = Reg(UInt(width = log2Up(nras)))
-   private val stack = Reg(Vec(nras, UInt()))
-}
-
-
-class PCReq(implicit p: Parameters) extends BTBsaBundle()(p)
-{
-   val addr = UInt(width = vaddrBitsExtended)
-}
-
-
 // Set-associative branch target buffer.
-class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParameters
+class BTBsa(implicit p: Parameters) extends BoomBTB
 {
-   val io = IO(new Bundle
-   {
-      // req.valid is false if stalling (aka, we won't read and use BTB results, on cycle S1).
-      // req.bits.addr is available on cycle S0.
-      // resp is expected on cycle S2.
-      val req = Valid(new PCReq).flip
-
-      // resp is valid if there is a BTB hit.
-      val resp = Valid(new BTBsaResp)
-
-      // the PC we're predicting on (start of the fetch packet).
-      // Pass this to the BPD.
-      //val s1_pc  = UInt(width = vaddrBits)
-
-      // supress S1 (so next cycle S2 is not valid).
-      val flush = Bool(INPUT)
-
-      val btb_update = Valid(new BTBsaUpdate).flip
-      val bim_update = Valid(new BimUpdate).flip
-      val ras_update = Valid(new RasUpdate).flip
-
-      // HACK: prevent BTB updating/predicting during program load.
-      // Easier to diff against spike which doesn't run debug mode.
-      val status_debug = Bool(INPUT)
-   })
 
    val bim = Module(new BimodalTable())
    bim.io.req := io.req
@@ -200,7 +62,7 @@ class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParamet
 
    // prediction
    val s1_valid = Wire(Bool())
-   val s1_resp_bits = Wire(new BTBsaResp)
+   val s1_resp_bits = Wire(new BoomBTBResp)
    val hits_oh = Wire(Vec(nWays, Bool()))
    val data_out = Wire(Vec(nWays, new BTBSetData()))
    val s1_req_tag = RegEnable(getTag(io.req.bits.addr), !stall)
@@ -360,7 +222,5 @@ class BTBsa(implicit p: Parameters) extends BoomModule()(p) with HasBTBsaParamet
       "\n   Ways          : " + nWays +
       "\n   Tag Size      : " + tag_sz + "\n" +
       bim.toString
-
-   override val compileOptions = chisel3.core.ExplicitCompileOptions.NotStrict.copy(explicitInvalidate = true)
 }
 

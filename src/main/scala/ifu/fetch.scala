@@ -62,11 +62,11 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
       val imem_req          = Valid(new freechips.rocketchip.rocket.FrontendReq)
       val imem_resp         = Decoupled(new freechips.rocketchip.rocket.FrontendResp).flip
 
-      val f2_btb_resp       = Valid(new BTBsaResp).flip
+      val f2_btb_resp       = Valid(new BoomBTBResp).flip
       val f2_bpd_resp       = Valid(new BpdResp).flip
       val f3_ras_update     = Valid(new RasUpdate)
       val f3_bpd_resp       = Valid(new BpdResp).flip
-      val f3_btb_update     = Valid(new BTBsaUpdate)
+      val f3_btb_update     = Valid(new BoomBTBUpdate)
       val f3_is_br          = Vec(fetch_width, Bool()).asOutput
 
       val f2_redirect       = Bool(OUTPUT)
@@ -367,7 +367,7 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
 
 
    // TODO this logic is broken and vestigial. Do update correctly (remove RegNext)
-   val f3_btb_update_bits = Wire(new BTBsaUpdate)
+   val f3_btb_update_bits = Wire(new BoomBTBUpdate)
    io.f3_btb_update.valid := RegNext(bchecker.io.btb_update.valid || f3_bpd_btb_update_valid)
    io.f3_btb_update.bits := RegNext(f3_btb_update_bits)
    f3_btb_update_bits := bchecker.io.btb_update.bits

@@ -45,10 +45,10 @@ class BranchChecker(fetch_width: Int)(implicit p: Parameters) extends BoomModule
       val fetch_pc      = UInt(INPUT, width=vaddrBitsExtended)
       val aligned_pc    = UInt(INPUT, width=vaddrBitsExtended)
 
-      val btb_resp      = Valid(new BTBsaResp).flip
+      val btb_resp      = Valid(new BoomBTBResp).flip
       val bpd_resp      = Valid(new BpdResp).flip
 
-      val btb_update    = Valid(new BTBsaUpdate)
+      val btb_update    = Valid(new BoomBTBUpdate)
       val ras_update    = Valid(new RasUpdate)
 
       val req_cfi_idx   = UInt(OUTPUT, width = log2Up(fetchWidth)) // where is cfi we are predicting?
