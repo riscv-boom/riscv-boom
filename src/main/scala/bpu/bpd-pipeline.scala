@@ -56,7 +56,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
 
       // Fetch2
       val f2_valid      = Bool(INPUT) // f2 stage may proceed into the f3 stage.
-      val f2_btb_resp   = Valid(new BTBsaResp)
+      val f2_btb_resp   = Valid(new BoomBTBResp)
       val f2_stall      = Bool(INPUT) // f3 is not ready -- back-pressure the f2 stage.
       val f2_replay     = Bool(INPUT) // I$ is replaying S2 PC into S0 again (S2 backed up or failed).
       val f2_redirect   = Bool(INPUT) // I$ is being redirected from F2.
@@ -64,7 +64,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
       // Fetch3
       val f3_is_br      = Vec(fetch_width, Bool()).asInput // mask of branches from I$
       val f3_bpd_resp   = Valid(new BpdResp)
-      val f3_btb_update = Valid(new BTBsaUpdate).flip
+      val f3_btb_update = Valid(new BoomBTBUpdate).flip
       val f3_ras_update = Valid(new RasUpdate).flip
       val f3_stall      = Bool(INPUT) // f4 is not ready -- back-pressure the f3 stage.
 
@@ -89,7 +89,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    //************************************************
    // construct all of the modules
 
-   val btb = Module(new BTBsa())
+   val btb = BoomBTB(boomParams)
    val bpd = BrPredictor(tileParams, boomParams)
 
    btb.io.status_debug := io.status_debug
