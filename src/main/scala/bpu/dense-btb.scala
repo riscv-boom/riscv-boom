@@ -109,25 +109,28 @@ class DenseBTB(implicit p: Parameters) extends BoomBTB
 
    // logic to know if we are to use the short entry or the large entry
    // TODO: currently only assumes a short branch
-   val wmask = (1.U << next_way)
+   val wmask = Wire(UInt(width=nWays))
+   wmask := (1.U << next_way)
 
    btb_update_q.io.deq.ready := false.B
-   hits.fromBits(0.U)
-   data_out.fromBits(0.U)
+   hits := Wire(Vec(nWays, false.B))
+   data_out := Wire(Vec(nWays, (new BTBSetData()).fromBits(0.U)))
    for (b <- 0 until nBanks)
    {
       val valids = RegInit(Vec(Seq.fill(nSets)(0.U(nWays.W))))
-      val data   = SeqMem(nSets, Vec(nWays, new BTBSetData()))
+      val data   = SeqMem(nSets, Vec(nWays, UInt(width=(new BTBSetData).getWidth.W)))
       data.suggestName("btb_data_array")
+      valids.suggestName("valids_array")
 
-      val bank_vals = valids(s0_idx)
+      val bank_vals = valids(s1_idx)
       val ren       = getBank(io.req.bits.addr).toBool === b.U
-      val rout      = data.read(s0_idx, ren)
+      val rout_bits = data.read(s0_idx, ren)
+      val rout      = Vec(rout_bits map { x => new BTBSetData().fromBits(x) })
       val bank_hits = (bank_vals.toBools zip rout map {case(hit, data) => ren && hit && data.tag === s1_req_tag})
-      hits         := bank_hits
 
-      when (ren)
+      when (getBank(s1_pc) === b.U)
       {
+         hits     := bank_hits
          data_out := rout
       }
 
@@ -146,7 +149,7 @@ class DenseBTB(implicit p: Parameters) extends BoomBTB
          wdata.bpd_type := btb_update_q.io.deq.bits.entry.bpd_type
          wdata.cfi_type := btb_update_q.io.deq.bits.entry.cfi_type
 
-         data.write(widx, Vec.fill(nWays)(wdata), wmask.toBools)
+         data.write(widx, Vec.fill(nWays)(wdata.asUInt), wmask.toBools)
       }
    }
 
@@ -232,7 +235,8 @@ class DenseBTB(implicit p: Parameters) extends BoomBTB
       "\n   Banks         : " + nBanks +
       "\n   Ways          : " + nWays +
       "\n   Tag Size      : " + tag_sz +
-      "\n   Offset Size   : " + offset_sz + "\n" +
+      "\n   Offset Size   : " + offset_sz +
+      "\n   Idx high      : (%d,%d)".format(idx_sz+lsb_sz, bank_bit+1) + "\n"
       bim.toString
 
    override val compileOptions = chisel3.core.ExplicitCompileOptions.NotStrict.copy(explicitInvalidate = true)
