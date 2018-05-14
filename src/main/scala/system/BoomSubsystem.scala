@@ -13,6 +13,7 @@ import freechips.rocketchip.tilelink._
 import freechips.rocketchip.interrupts._
 import freechips.rocketchip.util._
 import freechips.rocketchip.subsystem._
+import freechips.rocketchip.amba.axi4._
 
 
 case object BoomTilesKey extends Field[Seq[boom.common.BoomTileParams]](Nil)
@@ -149,5 +150,56 @@ class BoomSubsystemModule[+L <: BoomSubsystem](_outer: L) extends BaseSubsystemM
     wire.reset := reset
     wire.hartid := UInt(i)
     wire.reset_vector := global_reset_vector
+  }
+}
+
+///// Adds a port to the system intended to master an AXI4 DRAM controller that supports a large physical address size
+
+trait CanHaveMisalignedMasterAXI4MemPort { this: BaseSubsystem =>
+  val module: CanHaveMisalignedMasterAXI4MemPortModuleImp
+  val nMemoryChannels: Int
+  private val memPortParamsOpt = p(ExtMem)
+  private val portName = "misaligned-axi4"
+  private val device = new MemoryDevice
+
+  require(nMemoryChannels == 0 || memPortParamsOpt.isDefined,
+    s"Cannot have $nMemoryChannels with no memory port!")
+
+  val memAXI4Node = AXI4SlaveNode(Seq.tabulate(nMemoryChannels) { channel =>
+    val params = memPortParamsOpt.get
+
+    AXI4SlavePortParameters(
+      slaves = Seq(AXI4SlaveParameters(
+        address       = AddressSet.misaligned(params.base, params.size),
+        resources     = device.reg,
+        regionType    = RegionType.UNCACHED, // cacheable
+        executable    = true,
+        supportsWrite = TransferSizes(1, cacheBlockBytes),
+        supportsRead  = TransferSizes(1, cacheBlockBytes),
+        interleavedId = Some(0))), // slave does not interleave read responses
+      beatBytes = params.beatBytes)
+  })
+
+  memPortParamsOpt.foreach { params =>
+    memBuses.map { m =>
+       memAXI4Node := m.toDRAMController(Some(portName)) {
+        (AXI4UserYanker() := AXI4IdIndexer(params.idBits) := TLToAXI4())
+      }
+    }
+  }
+}
+
+/** Actually generates the corresponding IO in the concrete Module */
+trait CanHaveMisalignedMasterAXI4MemPortModuleImp extends LazyModuleImp {
+  val outer: CanHaveMisalignedMasterAXI4MemPort
+
+  val mem_axi4 = IO(HeterogeneousBag.fromNode(outer.memAXI4Node.in))
+  (mem_axi4 zip outer.memAXI4Node.in).foreach { case (io, (bundle, _)) => io <> bundle }
+
+  def connectSimAXIMem() {
+    (mem_axi4 zip outer.memAXI4Node.in).foreach { case (io, (_, edge)) =>
+      val mem = LazyModule(new SimAXIMem(edge, size = p(ExtMem).get.size))
+      Module(mem.module).io.axi4.head <> io
+    }
   }
 }
