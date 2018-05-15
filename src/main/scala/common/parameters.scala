@@ -62,7 +62,7 @@ case class BoomCoreParams(
    mtvecWritable: Boolean = true,
    mulDiv: Option[freechips.rocketchip.rocket.MulDivParams] = Some(MulDivParams()),
    nBreakpoints: Int = 1,
-   nL2TLBEntries: Int = 0,
+   nL2TLBEntries: Int = 512,
    nLocalInterrupts: Int = 0,
    tileControlAddr: Option[BigInt] = None,
    useAtomics: Boolean = true,

@@ -129,7 +129,7 @@ class WithMegaBooms extends Config((site, here, up) => {
          maxBrCount = 16,
          btb = BTBsaParameters(nSets=512, nWays=2, nRAS=16, tagSz=20),
          tage = Some(TageParameters())),
-      dcache = Some(DCacheParams(rowBits = site(SystemBusKey).beatBytes*8, nSets=64, nWays=16, nMSHRs=4, nTLBEntries=8)),
+      dcache = Some(DCacheParams(rowBits = site(SystemBusKey).beatBytes*8, nSets=64, nWays=16, nMSHRs=8, nTLBEntries=32)),
       icache = Some(ICacheParams(fetchBytes = 8*4, rowBits = site(SystemBusKey).beatBytes*8, nSets=128, nWays=4))
       )}
    // Set TL network to 128bits wide
