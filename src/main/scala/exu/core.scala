@@ -229,8 +229,8 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
    val exe_units_str = exe_units.toString
    val fp_pipeline_str =
-      if (usingFPU) ""
-      else fp_pipeline.fp_string
+      if (usingFPU) fp_pipeline.fp_string
+      else ""
    val rob_str = rob.toString
 
    override def toString: String =
