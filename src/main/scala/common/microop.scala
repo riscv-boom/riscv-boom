@@ -18,9 +18,11 @@ class MicroOp(implicit p: Parameters) extends BoomBundle()(p)
    with freechips.rocketchip.rocket.constants.MemoryOpConstants
    with freechips.rocketchip.rocket.constants.ScalarOpConstants
 {
-   // Is this uop valid? or has it been masked out,
-   // Used by fetch buffer and Decode stage.
-   val valid            = Bool()
+   val valid            = Bool()                      // is this uop valid? or has it been masked out,
+                                                      // used by fetch buffer and Decode stage
+   val iw_state         = UInt(width = 2)             // what is the next state of this uop in the issue window? useful
+                                                      // for the compacting queue? TODO or is this not really belong
+                                                      // here?
 
    val uopc             = UInt(width = UOPC_SZ)       // micro-op code
    val inst             = UInt(width = 32)
@@ -28,15 +30,6 @@ class MicroOp(implicit p: Parameters) extends BoomBundle()(p)
    val iqtype           = UInt(width = IQT_SZ)        // which issue unit do we use?
    val fu_code          = UInt(width = FUConstants.FUC_SZ) // which functional unit do we use?
    val ctrl             = new CtrlSignals
-
-   // What is the next state of this uop in the issue window? useful
-   // for the compacting queue.
-   val iw_state         = UInt(width = 2)
-   // Has operand 1 or 2 been waken speculatively by a load?
-   // Only integer operands are speculaively woken up,
-   // so we can ignore p3.
-   val iw_p1_poisoned   = Bool()
-   val iw_p2_poisoned   = Bool()
 
    val allocate_brtag   = Bool()                      // does this allocate a branch tag? (is branch or JR but not JAL)
    val is_br_or_jmp     = Bool()                      // is this micro-op a (branch or jump) vs a regular PC+4 inst?
@@ -99,9 +92,10 @@ class MicroOp(implicit p: Parameters) extends BoomBundle()(p)
    val lrs2             = UInt(width=LREG_SZ)
    val lrs3             = UInt(width=LREG_SZ)
    val ldst_val         = Bool()              // is there a destination? invalid for stores, rd==x0, etc.
-   val dst_rtype        = UInt(width=2)
-   val lrs1_rtype       = UInt(width=2)
-   val lrs2_rtype       = UInt(width=2)
+   val dst_rtype        = UInt(width=RT_SZ)
+   val lrs1_rtype       = UInt(width=RT_SZ)
+   val lrs2_rtype       = UInt(width=RT_SZ)
+   val lrs3_rtype       = UInt(width=RT_SZ)
    val frs3_en          = Bool()
 
    // floating point information

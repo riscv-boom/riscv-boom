@@ -29,13 +29,15 @@ class RenameStageIO(
    val pl_width: Int,
    val num_int_pregs: Int,
    val num_fp_pregs: Int,
+   val num_vec_pregs: Int,
    val num_int_wb_ports: Int,
-   val num_fp_wb_ports: Int)
+   val num_fp_wb_ports: Int,
+   val num_vec_wb_ports: Int)
    (implicit p: Parameters) extends BoomBundle()(p)
 {
    private val int_preg_sz = log2Up(num_int_pregs)
    private val fp_preg_sz = log2Up(num_fp_pregs)
-
+   private val vec_preg_sz = log2Up(num_vec_pregs)
    val inst_can_proceed = Vec(pl_width, Bool()).asOutput
 
    val kill      = Bool(INPUT)
@@ -59,7 +61,7 @@ class RenameStageIO(
    // issue stage (fast wakeup)
    val int_wakeups = Vec(num_int_wb_ports, Valid(new ExeUnitResp(xLen))).flip
    val fp_wakeups = Vec(num_fp_wb_ports, Valid(new ExeUnitResp(fLen+1))).flip
-
+   val vec_wakeups = Vec(num_vec_wb_ports, Valid(new ExeUnitResp(128))).flip
    // commit stage
    val com_valids = Vec(pl_width, Bool()).asInput
    val com_uops   = Vec(pl_width, new MicroOp()).asInput
@@ -68,11 +70,11 @@ class RenameStageIO(
    val flush_pipeline = Bool(INPUT) // only used for SCR (single-cycle reset)
 
    val debug_rob_empty = Bool(INPUT)
-   val debug = new DebugRenameStageIO(num_int_pregs, num_fp_pregs).asOutput
+   val debug = new DebugRenameStageIO(num_int_pregs, num_fp_pregs, num_vec_pregs).asOutput
 }
 
 
-class DebugRenameStageIO(int_num_pregs: Int, fp_num_pregs: Int)(implicit p: Parameters) extends BoomBundle()(p)
+class DebugRenameStageIO(int_num_pregs: Int, fp_num_pregs: Int, vec_num_pregs: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
    val ifreelist = Bits(width=int_num_pregs)
    val iisprlist = Bits(width=int_num_pregs)
@@ -80,17 +82,22 @@ class DebugRenameStageIO(int_num_pregs: Int, fp_num_pregs: Int)(implicit p: Para
    val ffreelist = Bits(width=fp_num_pregs)
    val fisprlist = Bits(width=fp_num_pregs)
    val fbusytable = UInt(width=fp_num_pregs)
-   override def cloneType: this.type = new DebugRenameStageIO(int_num_pregs, fp_num_pregs).asInstanceOf[this.type]
+   val vfreelist = Bits(width=vec_num_pregs)
+   val visprlist = Bits(width=vec_num_pregs)
+   val vbusytable = UInt(width=vec_num_pregs)
+
+   override def cloneType: this.type = new DebugRenameStageIO(int_num_pregs, fp_num_pregs, vec_num_pregs).asInstanceOf[this.type]
 }
 
 
 class RenameStage(
    pl_width: Int,
    num_int_wb_ports: Int,
-   num_fp_wb_ports: Int)
+   num_fp_wb_ports: Int,
+   num_vec_wb_ports: Int)
 (implicit p: Parameters) extends BoomModule()(p)
 {
-   val io = IO(new RenameStageIO(pl_width, numIntPhysRegs, numFpPhysRegs, num_int_wb_ports, num_fp_wb_ports))
+   val io = IO(new RenameStageIO(pl_width, numIntPhysRegs, numFpPhysRegs, numVecPhysRegs, num_int_wb_ports, num_fp_wb_ports, num_vec_wb_ports))
 
    // integer registers
    val imaptable = Module(new RenameMapTable(
@@ -126,6 +133,22 @@ class RenameStage(
       num_read_ports = pl_width*3,
       num_wb_ports = num_fp_wb_ports))
 
+   val vmaptable = Module(new RenameMapTable(
+      pl_width,
+      RT_VEC.litValue,
+      32,
+      numVecPhysRegs)) // Todo change to num vec phys regs
+   val vfreelist = Module(new RenameFreeList(
+      pl_width,
+      RT_VEC.litValue,
+      numVecPhysRegs))
+   val vbusytable = Module(new BusyTable(
+      pl_width,
+      RT_VEC.litValue,
+      num_pregs = numVecPhysRegs,
+      num_read_ports = pl_width*3,
+      num_wb_ports = num_vec_wb_ports)) // TODO: Figure out what this is
+
    //-------------------------------------------------------------
    // Pipeline State & Wires
 
@@ -147,7 +170,7 @@ class RenameStage(
    //-------------------------------------------------------------
    // Free List
 
-   for (list <- Seq(ifreelist, ffreelist))
+   for (list <- Seq(ifreelist, ffreelist, vfreelist))
    {
       list.io.brinfo := io.brinfo
       list.io.kill := io.kill
@@ -165,13 +188,14 @@ class RenameStage(
    {
       val i_preg = ifreelist.io.req_pregs(w)
       val f_preg = ffreelist.io.req_pregs(w)
-      uop.pdst := Mux(uop.dst_rtype === RT_FLT, f_preg, i_preg)
+      val v_preg = vfreelist.io.req_pregs(w)
+      uop.pdst := Mux(uop.dst_rtype === RT_FLT, f_preg, Mux(uop.dst_rtype === RT_FIX, i_preg, v_preg))
    }
 
    //-------------------------------------------------------------
    // Rename Table
 
-   for (table <- Seq(imaptable, fmaptable))
+   for (table <- Seq(imaptable, fmaptable, vmaptable))
    {
       table.io.brinfo := io.brinfo
       table.io.kill := io.kill
@@ -186,16 +210,17 @@ class RenameStage(
    }
    imaptable.io.debug_freelist_can_allocate := ifreelist.io.can_allocate
    fmaptable.io.debug_freelist_can_allocate := ffreelist.io.can_allocate
-
+   vmaptable.io.debug_freelist_can_allocate := vfreelist.io.can_allocate
    for ((uop, w) <- ren1_uops.zipWithIndex)
    {
       val imap = imaptable.io.values(w)
       val fmap = fmaptable.io.values(w)
+      val vmap = vmaptable.io.values(w)
 
-      uop.pop1       := Mux(uop.lrs1_rtype === RT_FLT, fmap.prs1, imap.prs1)
-      uop.pop2       := Mux(uop.lrs2_rtype === RT_FLT, fmap.prs2, imap.prs2)
-      uop.pop3       := fmaptable.io.values(w).prs3 // only FP has 3rd operand
-      uop.stale_pdst := Mux(uop.dst_rtype === RT_FLT,  fmap.stale_pdst, imap.stale_pdst)
+      uop.pop1       := Mux(uop.lrs1_rtype === RT_FLT, fmap.prs1, Mux(uop.lrs1_rtype === RT_FIX, imap.prs1, vmap.prs1))
+      uop.pop2       := Mux(uop.lrs2_rtype === RT_FLT, fmap.prs2, Mux(uop.lrs2_rtype === RT_FIX, imap.prs2, vmap.prs2))
+      uop.pop3       := Mux(uop.lrs3_rtype === RT_FLT, fmap.prs3, vmap.prs3) // only FP has 3rd operand
+      uop.stale_pdst := Mux(uop.dst_rtype === RT_FLT,  fmap.stale_pdst, Mux(uop.lrs3_rtype === RT_FIX, imap.stale_pdst, vmap.stale_pdst))
    }
 
    //-------------------------------------------------------------
@@ -214,7 +239,8 @@ class RenameStage(
                          else imaptable.io.values
    val ren2_fmapvalues = if (renameLatency == 2) RegEnable(fmaptable.io.values, ren2_will_proceed)
                          else fmaptable.io.values
-
+   val ren2_vmapvalues = if (renameLatency == 2) RegEnable(vmaptable.io.values, ren2_will_proceed)
+                         else vmaptable.io.values
    for (w <- 0 until pl_width)
    {
       if (renameLatency == 1)
@@ -283,13 +309,21 @@ class RenameStage(
    assert (!(io.fp_wakeups.map(x => x.valid && x.bits.uop.dst_rtype =/= RT_FLT).reduce(_|_)),
       "[rename] fp wakeup is not waking up a FP register.")
 
+   vbusytable.io.ren_will_fire := ren2_will_fire
+   vbusytable.io.ren_uops := ren2_uops
+   vbusytable.io.map_table := ren2_vmapvalues
+   vbusytable.io.wb_valids := io.vec_wakeups.map(_.valid)
+   vbusytable.io.wb_pdsts := io.vec_wakeups.map(_.bits.uop.pdst)
+   assert (!(io.vec_wakeups.map(x => x.valid && x.bits.uop.dst_rtype =/= RT_VEC).reduce(_|_)),
+      "[rename] vec wakeup is not waking up a VEC register.")
    for ((uop, w) <- ren2_uops.zipWithIndex)
    {
       val ibusy = ibusytable.io.values(w)
       val fbusy = fbusytable.io.values(w)
-      uop.prs1_busy := Mux(uop.lrs1_rtype === RT_FLT, fbusy.prs1_busy, ibusy.prs1_busy)
-      uop.prs2_busy := Mux(uop.lrs2_rtype === RT_FLT, fbusy.prs2_busy, ibusy.prs2_busy)
-      uop.prs3_busy := fbusy.prs3_busy
+      val vbusy = vbusytable.io.values(w)
+      uop.prs1_busy := Mux(uop.lrs1_rtype === RT_FLT, fbusy.prs1_busy, Mux(uop.lrs1_rtype === RT_FIX, ibusy.prs1_busy, vbusy.prs1_busy))
+      uop.prs2_busy := Mux(uop.lrs2_rtype === RT_FLT, fbusy.prs2_busy, Mux(uop.lrs1_rtype === RT_FIX, ibusy.prs2_busy, vbusy.prs2_busy))
+      uop.prs3_busy := Mux(uop.lrs3_rtype === RT_FLT, fbusy.prs3_busy, vbusy.prs3_busy)
 
       val valid = ren2_valids(w)
       assert (!(valid && ibusy.prs1_busy && uop.lrs1_rtype === RT_FIX && uop.lrs1 === UInt(0)), "[rename] x0 is busy??")
@@ -310,9 +344,10 @@ class RenameStage(
       // Push back against Decode stage if Rename1 can't proceed (and Rename2/Dispatch can't receive).
       io.inst_can_proceed(w) :=
          ren2_will_proceed &&
-         ((ren1_uops(w).dst_rtype =/= RT_FIX && ren1_uops(w).dst_rtype =/= RT_FLT) ||
+         ((ren1_uops(w).dst_rtype =/= RT_FIX && ren1_uops(w).dst_rtype =/= RT_FLT && ren1_uops(w).dst_rtype =/= RT_VEC) ||
          (ifreelist.io.can_allocate(w) && ren1_uops(w).dst_rtype === RT_FIX) ||
-         (ffreelist.io.can_allocate(w) && ren1_uops(w).dst_rtype === RT_FLT))
+         (ffreelist.io.can_allocate(w) && ren1_uops(w).dst_rtype === RT_FLT) ||
+         (vfreelist.io.can_allocate(w) && ren1_uops(w).dst_rtype === RT_VEC))
    }
 
 
@@ -325,6 +360,10 @@ class RenameStage(
    io.debug.ffreelist  := ffreelist.io.debug.freelist
    io.debug.fisprlist  := ffreelist.io.debug.isprlist
    io.debug.fbusytable := fbusytable.io.debug.busytable
+   io.debug.vfreelist  := vfreelist.io.debug.freelist
+   io.debug.visprlist  := vfreelist.io.debug.isprlist
+   io.debug.vbusytable := vbusytable.io.debug.busytable
+
 
    override val compileOptions = chisel3.core.ExplicitCompileOptions.NotStrict.copy(explicitInvalidate = true)
 }

@@ -391,7 +391,7 @@ class Rob(
       io.commit.rbk_valids(w) :=
                               (rob_state === s_rollback) &&
                               rob_val(com_idx) &&
-                              (rob_uop(com_idx).dst_rtype === RT_FIX || rob_uop(com_idx).dst_rtype === RT_FLT) &&
+                              (rob_uop(com_idx).dst_rtype === RT_FIX || rob_uop(com_idx).dst_rtype === RT_FLT || rob_uop(com_idx).dst_rtype === RT_VEC) &&
                               Bool(!ENABLE_COMMIT_MAP_TABLE)
 
       when (rob_state === s_rollback)
@@ -938,7 +938,8 @@ class Rob(
                , Mux(debug_entry(temp_idx).uop.dst_rtype === RT_FIX, Str("X"),
                  Mux(debug_entry(temp_idx).uop.dst_rtype === RT_PAS, Str("C"),
                  Mux(debug_entry(temp_idx).uop.dst_rtype === RT_FLT, Str("f"),
-                 Mux(debug_entry(temp_idx).uop.dst_rtype === RT_X, Str("-"), Str("?")))))
+                 Mux(debug_entry(temp_idx).uop.dst_rtype === RT_VEC, Str("V"),
+                 Mux(debug_entry(temp_idx).uop.dst_rtype === RT_X, Str("-"), Str("?"))))))
                , debug_entry    (temp_idx).uop.pdst
                , debug_entry    (temp_idx).uop.br_mask
                , debug_entry    (temp_idx).uop.stale_pdst

@@ -21,8 +21,8 @@ import freechips.rocketchip.util.Str
 
 trait BOOMDebugConstants
 {
-   val DEBUG_PRINTF        = false // use the Chisel printf functionality
-   val COMMIT_LOG_PRINTF   = false // dump commit state, for comparision against ISA sim
+   val DEBUG_PRINTF        = true // use the Chisel printf functionality
+   val COMMIT_LOG_PRINTF   = true // dump commit state, for comparision against ISA sim
    val O3PIPEVIEW_PRINTF   = false // dump trace for O3PipeView from gem5
    val O3_CYCLE_TIME       = (1000)// "cycle" time expected by o3pipeview.py
 
@@ -33,10 +33,10 @@ trait BOOMDebugConstants
    val debugScreenheight  = 79
 
    // turn off stuff to dramatically reduce Chisel node count
-   val DEBUG_PRINTF_LSU    = true && DEBUG_PRINTF
-   val DEBUG_PRINTF_ROB    = true && DEBUG_PRINTF
-   val DEBUG_PRINTF_TAGE   = true && DEBUG_PRINTF
-   val DEBUG_PRINTF_FTQ    = true && DEBUG_PRINTF
+   val DEBUG_PRINTF_LSU    = false && DEBUG_PRINTF
+   val DEBUG_PRINTF_ROB    = true  && DEBUG_PRINTF
+   val DEBUG_PRINTF_TAGE   = false && DEBUG_PRINTF
+   val DEBUG_PRINTF_FTQ    = false && DEBUG_PRINTF
 
    if (O3PIPEVIEW_PRINTF) require (!DEBUG_PRINTF && !COMMIT_LOG_PRINTF)
 }
@@ -53,6 +53,7 @@ trait IQType
    val IQT_INT = UInt(0, IQT_SZ)
    val IQT_MEM = UInt(1, IQT_SZ)
    val IQT_FP  = UInt(2, IQT_SZ)
+   val IQT_VEC = UInt(3, IQT_SZ)
 }
 
 trait ScalarOpConstants
@@ -124,10 +125,12 @@ trait ScalarOpConstants
 
 
    // Decode Stage Control Signals
-   val RT_FIX   = UInt(0, 2)
-   val RT_FLT   = UInt(1, 2)
-   val RT_PAS   = UInt(3, 2) // pass-through (pop1 := lrs1, etc)
-   val RT_X     = UInt(2, 2) // not-a-register (but shouldn't get a busy-bit, etc.)
+   val RT_SZ = 3
+   val RT_FIX   = UInt(0, RT_SZ)
+   val RT_FLT   = UInt(1, RT_SZ)
+   val RT_VEC   = UInt(4, RT_SZ)
+   val RT_PAS   = UInt(3, RT_SZ) // pass-through (pop1 := lrs1, etc)
+   val RT_X     = UInt(2, RT_SZ) // not-a-register (but shouldn't get a busy-bit, etc.)
                              // TODO rename RT_NAR
 
    // Micro-op opcodes
@@ -278,6 +281,8 @@ trait ScalarOpConstants
 
    val uopSYSTEM    = UInt(122, UOPC_SZ) // pass uop down the CSR pipeline and let it handle it
    val uopSFENCE    = UInt(123, UOPC_SZ)
+
+   val uopVADD      = UInt(124, UOPC_SZ)
 
    // The Bubble Instruction (Machine generated NOP)
    // Insert (XOR x0,x0,x0) which is different from software compiler

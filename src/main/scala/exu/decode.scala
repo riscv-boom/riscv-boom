@@ -48,9 +48,9 @@ class CtrlSigs extends Bundle
    val uopc            = UInt(width = UOPC_SZ)
    val iqtype          = UInt(width = IQT_SZ)
    val fu_code         = UInt(width = FUC_SZ)
-   val dst_type        = UInt(width=2)
-   val rs1_type        = UInt(width=2)
-   val rs2_type        = UInt(width=2)
+   val dst_type        = UInt(width=RT_SZ)
+   val rs1_type        = UInt(width=RT_SZ)
+   val rs2_type        = UInt(width=RT_SZ)
    val frs3_en         = Bool()
    val imm_sel         = UInt(width = IS_X.getWidth)
    val is_load         = Bool()
@@ -336,6 +336,24 @@ object FDivSqrtDecode extends DecodeConstants
    )
 // scalastyle:on
 }
+object VecDecode extends DecodeConstants
+{
+// scalastyle:off
+  val table: Array[(BitPat, List[BitPat])] = Array(
+             //                                                                  frs3_en                               wakeup_delay
+             //                                                                  |  imm sel                            |        bypassable (aka, known/fixed latency)
+             //                                                                  |  |     is_load                      |        |  br/jmp
+             //     is val inst?                                 rs1 regtype     |  |     |  is_store                  |        |  |  is jal
+             //     |  is fp inst?                               |       rs2 type|  |     |  |  is_amo                 |        |  |  |  allocate_brtag
+             //     |  |  is dst single-prec?                    |       |       |  |     |  |  |  is_fence            |        |  |  |  |
+             //     |  |  |  micro-opcode                        |       |       |  |     |  |  |  |  is_fencei        |        |  |  |  |  is breakpoint or ecall
+             //     |  |  |  |           iq-type func    dst     |       |       |  |     |  |  |  |  |  mem    mem    |        |  |  |  |  |  is unique? (clear pipeline for it)
+             //     |  |  |  |           |       unit    regtype |       |       |  |     |  |  |  |  |  cmd    msk    |        |  |  |  |  |  |  flush on commit
+             //     |  |  |  |           |       |       |       |       |       |  |     |  |  |  |  |  |      |      |        |  |  |  |  |  |  |  csr cmd
+   VADD      ->List(Y, N, N, uopVADD,    IQT_VEC,FU_VEC, RT_VEC, RT_VEC, RT_VEC, N, IS_X, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, N, N, N, CSR.N)
+   )
+// scalastyle:on
+}
 
 
 class DecodeUnitIo(implicit p: Parameters) extends BoomBundle()(p)
@@ -363,7 +381,7 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule()(p)
    var decode_table = XDecode.table
    if (usingFPU) decode_table ++= FDecode.table
    if (usingFPU && usingFDivSqrt) decode_table ++= FDivSqrtDecode.table
-
+   decode_table ++= VecDecode.table
    val cs = Wire(new CtrlSigs()).decode(uop.inst, decode_table)
 
 

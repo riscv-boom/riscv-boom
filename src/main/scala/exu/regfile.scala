@@ -70,8 +70,7 @@ abstract class RegisterFile(
       "\n   ==" + type_str + " Regfile==" +
       "\n   Num RF Read Ports     : " + num_read_ports +
       "\n   Num RF Write Ports    : " + num_write_ports +
-      "\n   RF Cost (R+W)*(R+2W)  : " + rf_cost +
-      "\n   Bypassable Units      : " + bypassable_array
+      "\n   RF Cost (R+W)*(R+2W)  : " + rf_cost
 }
 
 // A behavorial model of a Register File. You will likely want to blackbox this for more than modest port counts.

@@ -74,12 +74,15 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    var fp_pipeline: FpPipeline = null
    if (usingFPU) fp_pipeline = Module(new FpPipeline())
 
+   //TODO Parametrize this
+   var vec_pipeline: VecPipeline = null
+   vec_pipeline = Module(new VecPipeline())
    val num_irf_write_ports = exe_units.map(_.num_rf_write_ports).sum
    val num_fast_wakeup_ports = exe_units.count(_.isBypassable)
    val num_wakeup_ports = num_irf_write_ports + num_fast_wakeup_ports
    val decode_units     = for (w <- 0 until decodeWidth) yield { val d = Module(new DecodeUnit); d }
    val dec_brmask_logic = Module(new BranchMaskGenerationLogic(decodeWidth))
-   val rename_stage     = Module(new RenameStage(decodeWidth, num_wakeup_ports, fp_pipeline.io.wakeups.length))
+   val rename_stage     = Module(new RenameStage(decodeWidth, num_wakeup_ports, fp_pipeline.io.wakeups.length, vec_pipeline.io.wakeups.length))
    val issue_units      = new boom.exu.IssueUnits(num_wakeup_ports)
    val iregfile         = if (regreadLatency == 1 && enableCustomRf) {
                               Module(new RegisterFileSeqCustomArray(numIntPhysRegs,
@@ -643,32 +646,8 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    val mem_iq = issue_units.find(_.iqType == IQT_MEM.litValue).get
 
    require (mem_iq.issue_width == 1)
-   val iss_loadIssued =
-      mem_iq.io.iss_valids(0) &&
-      mem_iq.io.iss_uops(0).is_load &&
-      !mem_iq.io.iss_uops(0).fp_val &&
-      !(sxt_ldMiss && (mem_iq.io.iss_uops(0).iw_p1_poisoned || mem_iq.io.iss_uops(0).iw_p2_poisoned))
-   sxt_ldMiss :=
-      ((lsu.io.nack.valid && lsu.io.nack.isload) || dc_shim.io.core.load_miss) &&
-      Pipe(true.B, iss_loadIssued, 4).bits
-   issue_units.map(_.io.sxt_ldMiss := sxt_ldMiss)
-
-   // Check that IF we see a speculative load-wakeup and NO load-miss, then we should
-   // see a writeback to the register file!
-
-   // Share the memory port with other long latency operations.
-   val mem_unit = exe_units.memory_unit
-   require (mem_unit.num_rf_write_ports == 1)
-   val mem_resp = mem_unit.io.resp(0)
-
-
-   when (RegNext(!sxt_ldMiss) && RegNext(RegNext(lsu.io.mem_ldSpecWakeup.valid)) &&
-      !(RegNext(rob.io.flush.valid || (br_unit.brinfo.valid && br_unit.brinfo.mispredict))) &&
-      !(RegNext(RegNext(rob.io.flush.valid || (br_unit.brinfo.valid && br_unit.brinfo.mispredict)))))
-   {
-      assert (mem_resp.valid && mem_resp.bits.uop.ctrl.rf_wen && mem_resp.bits.uop.dst_rtype === RT_FIX,
-         "[core] We did not see a RF writeback for a speculative load that claimed no load-miss.")
-   }
+   val iss_loadIssued = mem_iq.io.iss_valids(0) && mem_iq.io.iss_uops(0).is_load && !mem_iq.io.iss_uops(0).fp_val
+   issue_units.map(_.io.sxt_ldMiss := lsu.io.nack.valid && lsu.io.nack.isload && Pipe(true.B, iss_loadIssued, 4).bits)
 
 
    // Wakeup (Issue & Writeback)
@@ -678,8 +657,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       (issport, wakeup) <- iu.io.wakeup_pdsts zip int_wakeups
    }{
       issport.valid := wakeup.valid
-      issport.bits.pdst := wakeup.bits.uop.pdst
-      issport.bits.poisoned := wakeup.bits.uop.iw_p1_poisoned || wakeup.bits.uop.iw_p2_poisoned
+      issport.bits  := wakeup.bits.uop.pdst
 
       require (iu.io.wakeup_pdsts.length == int_wakeups.length)
    }
@@ -694,13 +672,8 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    // Register Read <- Issue (rrd <- iss)
    iregister_read.io.rf_read_ports <> iregfile.io.read_ports
 
-   for (w <- 0 until exe_units.length)
-   {
-      iregister_read.io.iss_valids(w) :=
-         iss_valids(w) && !(sxt_ldMiss && (iss_uops(w).iw_p1_poisoned || iss_uops(w).iw_p2_poisoned))
-   }
+   iregister_read.io.iss_valids <> iss_valids
    iregister_read.io.iss_uops := iss_uops
-   iregister_read.io.iss_uops map { u => u.iw_p1_poisoned := false.B; u.iw_p2_poisoned := false.B }
 
    iregister_read.io.brinfo := br_unit.brinfo
    iregister_read.io.kill   := rob.io.flush.valid
@@ -935,6 +908,11 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
          w_cnt += 1
       }
    }
+
+   // Share the memory port with other long latency operations.
+   val mem_unit = exe_units.memory_unit
+   require (mem_unit.num_rf_write_ports == 1)
+   val mem_resp = mem_unit.io.resp(0)
 
    ll_wbarb.io.in(0).valid := mem_resp.valid && mem_resp.bits.uop.ctrl.rf_wen && mem_resp.bits.uop.dst_rtype === RT_FIX
    ll_wbarb.io.in(0).bits  := mem_resp.bits

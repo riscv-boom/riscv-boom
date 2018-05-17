@@ -22,10 +22,12 @@ case class BoomCoreParams(
    issueParams: Seq[IssueParams] = Seq(
          IssueParams(issueWidth=1, numEntries=16, iqType=IQT_MEM.litValue),
          IssueParams(issueWidth=2, numEntries=16, iqType=IQT_INT.litValue),
+         IssueParams(issueWidth=2, numEntries=8 , iqType=IQT_VEC.litValue),
          IssueParams(issueWidth=1, numEntries=16, iqType=IQT_FP.litValue)),
    numLsuEntries: Int = 8,
    numIntPhysRegisters: Int = 96,
    numFpPhysRegisters: Int = 64,
+   numVecPhysRegisters: Int = 48,
    enableCustomRf: Boolean = false,
    enableCustomRfModel: Boolean = true,
    maxBrCount: Int = 4,
@@ -114,6 +116,7 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
 
    val numIntPhysRegs   = boomParams.numIntPhysRegisters // size of the integer physical register file
    val numFpPhysRegs    = boomParams.numFpPhysRegisters  // size of the floating point physical register file
+   val numVecPhysRegs   = boomParams.numVecPhysRegisters
 
 
    //************************************

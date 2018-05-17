@@ -237,7 +237,7 @@ class RenameMapTable(
    {
       map_table_prs1(w) := map_table_io(io.ren_uops(w).lrs1).element
       map_table_prs2(w) := map_table_io(io.ren_uops(w).lrs2).element
-      if (rtype == RT_FLT.litValue) {
+      if (rtype == RT_FLT.litValue || rtype == RT_VEC.litValue) {
          map_table_prs3(w) := map_table_io(io.ren_uops(w).lrs3).element
       } else {
          map_table_prs3(w) := UInt(0)
@@ -261,7 +261,7 @@ class RenameMapTable(
          rs2_cases  ++= Array((io.ren_uops(w).lrs2_rtype === UInt(rtype) && io.ren_will_fire(xx) && io.ren_uops(xx).ldst_val && io.ren_uops(xx).dst_rtype === UInt(rtype) && (io.ren_uops(w).lrs2 === io.ren_uops(xx).ldst), (io.ren_uops(xx).pdst)))
          stale_cases++= Array((io.ren_uops(w).dst_rtype === UInt(rtype)  && io.ren_will_fire(xx) && io.ren_uops(xx).ldst_val && io.ren_uops(xx).dst_rtype === UInt(rtype) && (io.ren_uops(w).ldst === io.ren_uops(xx).ldst), (io.ren_uops(xx).pdst)))
 
-         if (rtype == RT_FLT.litValue) {
+         if (rtype == RT_FLT.litValue || rtype == RT_VEC.litValue) {
             rs3_cases  ++= Array((
                   io.ren_uops(w).frs3_en && io.ren_will_fire(xx) && io.ren_uops(xx).ldst_val && io.ren_uops(xx).dst_rtype === UInt(rtype) && (io.ren_uops(w).lrs3 === io.ren_uops(xx).ldst),
                   (io.ren_uops(xx).pdst)))
@@ -281,7 +281,7 @@ class RenameMapTable(
       // Set outputs.
       io.values(w).prs1       := MuxCase(io.ren_uops(w).lrs1, rs1_cases)
       io.values(w).prs2       := MuxCase(io.ren_uops(w).lrs2, rs2_cases)
-      if (rtype == RT_FLT.litValue)
+      if (rtype == RT_FLT.litValue || rtype == RT_VEC.litValue)
          {io.values(w).prs3 := MuxCase(io.ren_uops(w).lrs3, rs3_cases)}
       io.values(w).stale_pdst := MuxCase(map_table_io(io.ren_uops(w).ldst).element, stale_cases)
 
