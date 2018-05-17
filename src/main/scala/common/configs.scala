@@ -109,6 +109,7 @@ class WithMediumBooms extends Config((site, here, up) => {
       dcache = Some(DCacheParams(rowBits = site(SystemBusKey).beatBits, nSets=64, nWays=4, nMSHRs=2, nTLBEntries=8)),
       icache = Some(ICacheParams(rowBits = site(SystemBusKey).beatBits, nSets=64, nWays=4, fetchBytes=2*4))
       )}
+   case SystemBusKey => up(SystemBusKey, site).copy(beatBytes = 8)
 })
 
 
