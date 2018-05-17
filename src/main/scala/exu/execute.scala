@@ -90,6 +90,7 @@ abstract class ExecutionUnit(val num_rf_read_ports: Int
                             , val has_fdiv      : Boolean       = false
                             , val has_ifpu      : Boolean       = false
                             , val has_fpiu      : Boolean       = false
+                            , val has_vfpu      : Boolean       = false
                             )(implicit p: Parameters) extends BoomModule()(p)
 {
    val io = IO(new ExecutionUnitIO(num_rf_read_ports, num_rf_write_ports
@@ -105,9 +106,11 @@ abstract class ExecutionUnit(val num_rf_read_ports: Int
    def usesFRF       : Boolean = (has_fpu || has_fdiv) && !(has_alu || has_mul)
    def usesIRF       : Boolean = !(has_fpu || has_fdiv) && (has_alu || has_mul || is_mem_unit || has_ifpu)
 
-   require ((has_fpu || has_fdiv) ^ (has_alu || has_mul || is_mem_unit || has_ifpu),
-      "[execute] we no longer support mixing FP and Integer functional units in the same exe unit.")
-
+   if (!has_vfpu)
+      {
+         require ((has_fpu || has_fdiv) ^ (has_alu || has_mul || is_mem_unit || has_ifpu),
+            "[execute] we no longer support mixing FP and Integer functional units in the same exe unit.")
+      }
    def supportedFuncUnits =
    {
       new SupportedFuncUnits(
@@ -332,6 +335,60 @@ class ALUExeUnit(
       , "Multiple functional units are fighting over the write port.")
 }
 
+class VecFPUExeUnit(
+   has_vfpu : Boolean = true
+   )
+   (implicit p: Parameters)
+   extends ExecutionUnit(
+      num_rf_read_ports = 3,
+      num_rf_write_ports = 1, // TODO: Build mechanism for writes into IRF
+      num_bypass_stages = 0,
+      data_width = 128,
+      bypassable = false,
+      has_alu = false,
+      has_vfpu = has_vfpu)(p)
+{
+   val out_str = new StringBuilder
+   out_str.append("\n     ExeUnit--")
+   if (has_vfpu)  out_str.append("\n       - VECFPU (Latency: " + dfmaLatency + ")")
+
+   // TODO: Add div and toint stuff?
+
+   val fu_units = ArrayBuffer[FunctionalUnit]()
+
+   io.fu_types := Mux(Bool(has_vfpu), FU_VFPU, Bits(0)) // TODO Add stuff for div, ving, etc
+
+   var vfpu: VFPUUnit = null
+   val vfpu_resp_val = Wire(init=Bool(false))
+   val vfpu_resp_fflags = Wire(new ValidIO(new FFlagsResp))
+   vfpu_resp_fflags.valid := Bool(false)
+   if (has_vfpu)
+   {
+      vfpu = Module(new VFPUUnit())
+
+      vfpu.io.req.valid          := io.req.valid &&
+                                    (io.req.bits.uop.fu_code_is(FU_VFPU))
+      vfpu.io.req.bits.uop       := io.req.bits.uop
+      vfpu.io.req.bits.rs1_data  := io.req.bits.rs1_data
+      vfpu.io.req.bits.rs2_data  := io.req.bits.rs2_data
+      vfpu.io.req.bits.rs3_data  := io.req.bits.rs3_data
+      vfpu.io.req.bits.kill      := io.req.bits.kill
+      vfpu.io.brinfo             <> io.brinfo
+
+      vfpu_resp_val              := vfpu.io.resp.valid
+      vfpu_resp_fflags           := vfpu.io.resp.bits.fflags
+      fu_units += vfpu
+   }
+
+   // Outputs
+   io.resp(0).valid       := fu_units.map(_.io.resp.valid).reduce(_|_)
+   io.resp(0).bits.uop    := new MicroOp().fromBits(
+      PriorityMux(fu_units.map(f => (f.io.resp.valid, f.io.resp.bits.uop.asUInt))))
+   io.resp(0).bits.data   := PriorityMux(fu_units.map(f =>(f.io.resp.valid, f.io.resp.bits.data.asUInt))).asUInt
+   io.resp(0).bits.fflags := vfpu_resp_fflags // TODO add div flags here
+
+   override def toString: String = out_str.toString
+}
 
 // FPU-only unit, with optional second write-port for ToInt micro-ops.
 class FPUExeUnit(

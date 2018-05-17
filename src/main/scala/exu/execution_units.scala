@@ -14,7 +14,7 @@ import freechips.rocketchip.config.Parameters
 import scala.collection.mutable.ArrayBuffer
 import boom.common._
 
-class ExecutionUnits(fpu: Boolean = false)(implicit val p: Parameters) extends HasBoomCoreParameters
+class ExecutionUnits(fpu: Boolean = false, vec: Boolean = false)(implicit val p: Parameters) extends HasBoomCoreParameters
 {
    val totalIssueWidth = issueParams.map(_.issueWidth).sum
 
@@ -96,7 +96,7 @@ class ExecutionUnits(fpu: Boolean = false)(implicit val p: Parameters) extends H
    }
 
 
-   if (!fpu) {
+   if (!fpu && !vec) {
       val int_width = issueParams.find(_.iqType == IQT_INT.litValue).get.issueWidth
       exe_units += Module(new MemExeUnit())
       exe_units += Module(new ALUExeUnit(is_branch_unit      = true
@@ -110,7 +110,7 @@ class ExecutionUnits(fpu: Boolean = false)(implicit val p: Parameters) extends H
          val is_last = w == (int_width-2)
          exe_units += Module(new ALUExeUnit(has_ifpu = is_last))
       }
-   } else {
+   } else if (!vec) {
       require (usingFPU)
       val fp_width = issueParams.find(_.iqType == IQT_FP.litValue).get.issueWidth
       require (fp_width <= 1) // TODO hacks to fix include uopSTD_fp needing a proper func unit.
@@ -120,6 +120,13 @@ class ExecutionUnits(fpu: Boolean = false)(implicit val p: Parameters) extends H
                                             has_fpiu = (w==0)))
       }
       exe_units += Module(new IntToFPExeUnit())
+   } else {
+      val vec_width = issueParams.find(_.iqType == IQT_VEC.litValue).get.issueWidth
+      require (vec_width <= 1)
+      for (w <- 0 until vec_width) {
+          exe_units += Module(new VecFPUExeUnit(has_vfpu = true));
+      }
+      // TODO: Add IntToVec
    }
 
    val exe_units_str = new StringBuilder
@@ -136,9 +143,9 @@ class ExecutionUnits(fpu: Boolean = false)(implicit val p: Parameters) extends H
 
    require (exe_units.length != 0)
    // if this is for FPU units, we don't need a memory unit (or other integer units)..
-   require (exe_units.map(_.is_mem_unit).reduce(_|_) || fpu, "Datapath is missing a memory unit.")
-   require (exe_units.map(_.has_mul).reduce(_|_) || fpu, "Datapath is missing a multiplier.")
-   require (exe_units.map(_.has_div).reduce(_|_) || fpu, "Datapath is missing a divider.")
+   require (exe_units.map(_.is_mem_unit).reduce(_|_) || fpu || vec, "Datapath is missing a memory unit.")
+   require (exe_units.map(_.has_mul).reduce(_|_) || fpu || vec, "Datapath is missing a multiplier.")
+   require (exe_units.map(_.has_div).reduce(_|_) || fpu || vec, "Datapath is missing a divider.")
    require (exe_units.map(_.has_fpu).reduce(_|_) == usingFPU || !fpu, "Datapath is missing a fpu (or has an fpu and shouldnt).")
 
    val num_rf_read_ports = exe_units.map(_.num_rf_read_ports).reduce[Int](_+_)

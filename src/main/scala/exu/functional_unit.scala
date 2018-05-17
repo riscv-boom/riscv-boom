@@ -45,7 +45,7 @@ object FUConstants
    val FU_FDV = UInt(128, FUC_SZ)
    val FU_I2F = UInt(256, FUC_SZ)
    val FU_F2I = UInt(512, FUC_SZ)
-   val FU_VEC = UInt(1024,FUC_SZ)
+   val FU_VFPU= UInt(1024,FUC_SZ) // TODO Add stuff for vint
 }
 import FUConstants._
 
@@ -652,6 +652,21 @@ class FPUUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(
    io.resp.bits.fflags.valid      := fpu.io.resp.bits.fflags.valid
    io.resp.bits.fflags.bits.uop   := io.resp.bits.uop
    io.resp.bits.fflags.bits.flags := fpu.io.resp.bits.fflags.bits.flags // kill me now
+}
+
+class VFPUUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(
+   num_stages = p(tile.TileKey).core.fpu.get.dfmaLatency,
+   num_bypass_stages = 0,
+   earliest_bypass_stage = 0,
+   data_width = 128)(p)
+{
+   val vfpu = Module(new VFPU())
+   vfpu.io.req <> io.req
+
+   io.resp.bits.data               := vfpu.io.resp.bits.data
+   io.resp.bits.fflags.valid       := vfpu.io.resp.bits.fflags.valid
+   io.resp.bits.fflags.bits.uop    := io.resp.bits.uop
+   io.resp.bits.fflags.bits.flags  := vfpu.io.resp.bits.fflags.bits.flags
 }
 
 
