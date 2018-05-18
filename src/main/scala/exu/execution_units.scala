@@ -14,6 +14,7 @@ import freechips.rocketchip.config.Parameters
 import scala.collection.mutable.ArrayBuffer
 import boom.common._
 
+// TODO_Vec: Vec unit should include vfpu, vmem, viu, valu
 class ExecutionUnits(fpu: Boolean = false, vec: Boolean = false)(implicit val p: Parameters) extends HasBoomCoreParameters
 {
    val totalIssueWidth = issueParams.map(_.issueWidth).sum
@@ -126,12 +127,12 @@ class ExecutionUnits(fpu: Boolean = false, vec: Boolean = false)(implicit val p:
       for (w <- 0 until vec_width) {
           exe_units += Module(new VecFPUExeUnit(has_vfpu = true));
       }
-      // TODO: Add IntToVec
+      // TODO_vec: Add vmem, viu, valu
    }
 
    val exe_units_str = new StringBuilder
    exe_units_str.append(
-      if (!fpu) {
+      if (!fpu && !vec) {
          ( "\n   ~*** " + Seq("One","Two","Three","Four")(decodeWidth-1) + "-wide Machine ***~\n"
          + "\n    -== " + Seq("Single","Dual","Triple","Quad","Five","Six")(totalIssueWidth-1) + " Issue ==- \n")
       }

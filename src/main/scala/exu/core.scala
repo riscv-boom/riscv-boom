@@ -74,9 +74,11 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    var fp_pipeline: FpPipeline = null
    if (usingFPU) fp_pipeline = Module(new FpPipeline())
 
-   //TODO Parametrize this
+   //TODO_vec Parametrize this, add usingVec
    var vec_pipeline: VecPipeline = null
    vec_pipeline = Module(new VecPipeline())
+
+   //TODO_vec. Integer alu and memory pipelines are detailed here. Connect these to vector pipeline
    val num_irf_write_ports = exe_units.map(_.num_rf_write_ports).sum
    val num_fast_wakeup_ports = exe_units.count(_.isBypassable)
    val num_wakeup_ports = num_irf_write_ports + num_fast_wakeup_ports
@@ -235,11 +237,14 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    val fp_pipeline_str =
       if (usingFPU) fp_pipeline.fp_string
       else ""
+   val vec_pipeline_str =
+      vec_pipeline.vec_string
    val rob_str = rob.toString
 
    override def toString: String =
    ( exe_units_str + "\n"
    + fp_pipeline_str + "\n"
+   + vec_pipeline_str + "\n"
    + rob_str + "\n"
    + (if (usingFPU)      ("\n    FPU Unit Enabled") else  ("\n    FPU Unit Disabled"))
    + (if (usingVM)       ("\n    VM       Enabled") else  ("\n    VM       Disabled"))

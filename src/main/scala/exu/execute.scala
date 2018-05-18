@@ -341,27 +341,29 @@ class VecFPUExeUnit(
    (implicit p: Parameters)
    extends ExecutionUnit(
       num_rf_read_ports = 3,
-      num_rf_write_ports = 1, // TODO: Build mechanism for writes into IRF
+      num_rf_write_ports = 1, // TODO_vec: Build mechanism for writes into IRF, this should get changed to 2 I think
       num_bypass_stages = 0,
       data_width = 128,
       bypassable = false,
       has_alu = false,
-      has_vfpu = has_vfpu)(p)
+      has_vfpu = has_vfpu)(p) // TODO_vec: Add vmem, valu, vdiv, viu units
 {
    val out_str = new StringBuilder
    out_str.append("\n     ExeUnit--")
    if (has_vfpu)  out_str.append("\n       - VECFPU (Latency: " + dfmaLatency + ")")
 
-   // TODO: Add div and toint stuff?
+   // TODO_vec: Add div and toint stuff?
 
    val fu_units = ArrayBuffer[FunctionalUnit]()
 
-   io.fu_types := Mux(Bool(has_vfpu), FU_VFPU, Bits(0)) // TODO Add stuff for div, ving, etc
+   io.fu_types := Mux(Bool(has_vfpu), FU_VFPU, Bits(0)) // TODO_vec Add stuff for div, ving, etc
 
    var vfpu: VFPUUnit = null
    val vfpu_resp_val = Wire(init=Bool(false))
    val vfpu_resp_fflags = Wire(new ValidIO(new FFlagsResp))
    vfpu_resp_fflags.valid := Bool(false)
+
+   assert(has_vfpu, "The VecFPUExeUnit needs a vfpu");
    if (has_vfpu)
    {
       vfpu = Module(new VFPUUnit())
@@ -385,7 +387,7 @@ class VecFPUExeUnit(
    io.resp(0).bits.uop    := new MicroOp().fromBits(
       PriorityMux(fu_units.map(f => (f.io.resp.valid, f.io.resp.bits.uop.asUInt))))
    io.resp(0).bits.data   := PriorityMux(fu_units.map(f =>(f.io.resp.valid, f.io.resp.bits.data.asUInt))).asUInt
-   io.resp(0).bits.fflags := vfpu_resp_fflags // TODO add div flags here
+   io.resp(0).bits.fflags := vfpu_resp_fflags // TODO_vec add div flags here
 
    override def toString: String = out_str.toString
 }

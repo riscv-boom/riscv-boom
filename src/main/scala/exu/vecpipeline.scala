@@ -47,6 +47,7 @@ class VecPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasF
   }
 
    //**********************************
+   // TODO_VEC
    // construct all of the modules
    // TODO: Design and build VectorExecutionUnit
    // TODO: Design and build VectorIssueUnit
@@ -58,6 +59,7 @@ class VecPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasF
    //   - Later - add memory execution unit
    //   - Later - add polymorphism, in decode microops should determine where operands come from
 
-  val exe_units = new boom.exu.ExecutionUnits(vec = true)
+   val exe_units = new boom.exu.ExecutionUnits(vec = true)
+   val vec_string = exe_units.toString
 } 
 

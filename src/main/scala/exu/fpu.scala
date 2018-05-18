@@ -142,6 +142,8 @@ class UOPCodeVFPUDecoder extends Module
 
    val default: List[BitPat] = List(X,X,X,X,X, X,X,X,X,X,X,X, X,X,X,X)
 
+   // TODO_vec: Add half_precision table
+
    val f_table: Array[(BitPat, List[BitPat])] =
       // Note: not all of these signals are used or necessary, but we're
       // constrained by the need to fit the rocket.FPU units' ctrl signals.
@@ -156,7 +158,7 @@ class UOPCodeVFPUDecoder extends Module
       //                          | | | | |  | | | | | | |  | | | |
       Array(
       BitPat(uopVADD)     -> List(X,X,Y,Y,N, N,Y,Y,Y,N,N,N, Y,N,N,Y)
-      )
+      ) // TODO_vec: Add all other uops, make these uops specify precision
 
    val d_table: Array[(BitPat, List[BitPat])] =
       // Note: not all of these signals are used or necessary, but we're
@@ -195,7 +197,7 @@ class FMADecoder extends Module
    val default: List[BitPat] = List(BitPat("b??"))
    val table: Array[(BitPat, List[BitPat])] =
    Array(
-      BitPat(uopFADD_S)   -> List(BitPat("b00")),
+      BitPat(uopFADD_S)   -> List(BitPat("b00")), // TODO : Add bindings for vector uops
       BitPat(uopFSUB_S)   -> List(BitPat("b01")),
       BitPat(uopFMUL_S)   -> List(BitPat("b00")),
       BitPat(uopFMADD_S)  -> List(BitPat("b00")),
@@ -217,11 +219,12 @@ class FMADecoder extends Module
    io.cmd := cmd
 }
 class VFpuReq()(implicit p: Parameters) extends BoomBundle()(p)
-{
+{ // TODO_Vec: Figure out width. 128? 130? 
    val uop      = new MicroOp()
    val rs1_data = Bits(width = 128)
    val rs2_data = Bits(width = 128)
    val rs3_data = Bits(width = 128)
+   val fcsr_rm  = Bits(width = tile.FPConstants.RM_SZ) // TODO_Vec: Is rounding mode still controlled by fp csrs?
 }
 class FpuReq()(implicit p: Parameters) extends BoomBundle()(p)
 {
@@ -244,7 +247,23 @@ class VFPU(implicit p: Parameters) extends BoomModule()(p) with tile.HasFPUParam
    val vfp_decoder = Module(new UOPCodeVFPUDecoder)
    vfp_decoder.io.uopc := io_req.uop.uopc
    val vfp_ctrl = vfp_decoder.io.sigs
+   val vfp_rm = Mux(ImmGenRm(io_req.uop.imm_packed) === Bits(7), io_req.fcsr_rm, ImmGenRm(io_req.uop.imm_packed))
    // TODO: Make this do stuff
+   def vfuInput(minT: Option[tile.FType]): tile.FPInput = {
+      val req = Wire(new tile.FPInput)
+      val tag = !vfp_ctrl.singleIn
+      req := vfp_ctrl
+      req.rm := vfp_rm
+      req.in1 := unbox(io_req.rs1_data(0, 63), tag, minT)
+      req.in2 := unbox(io_req.rs2_data(0, 63), tag, minT)
+      req.in3 := unbox(io_req.rs3_data(0, 63), tag, minT)
+      when (vfp_ctrl.swap23) {req.in3 := req.in2 }
+      req.typ := ImmGenTyp(io_req.uop.imm_packed)
+      val fma_decoder = Module(new FMADecoder)
+      fma_decoder.io.uopc := io_req.uop.uopc
+      req.fmaCmd := fma_decoder.io.cmd
+      req
+   }
 }
 class FPU(implicit p: Parameters) extends BoomModule()(p) with tile.HasFPUParameters
 {

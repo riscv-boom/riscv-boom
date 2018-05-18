@@ -351,7 +351,7 @@ object VecDecode extends DecodeConstants
              //     |  |  |  |           |       unit    regtype |       |       |  |     |  |  |  |  |  cmd    msk    |        |  |  |  |  |  |  flush on commit
              //     |  |  |  |           |       |       |       |       |       |  |     |  |  |  |  |  |      |      |        |  |  |  |  |  |  |  csr cmd
    VADD      ->List(Y, N, N, uopVADD,    IQT_VEC,FU_VFPU,RT_VEC, RT_VEC, RT_VEC, N, IS_X, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, N, N, N, CSR.N)
-   )
+   ) // TODO_VEC Add all other instructions, decide correct uop for polymorphism
 // scalastyle:on
 }
 

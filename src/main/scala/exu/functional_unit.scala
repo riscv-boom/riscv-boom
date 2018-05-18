@@ -45,7 +45,7 @@ object FUConstants
    val FU_FDV = UInt(128, FUC_SZ)
    val FU_I2F = UInt(256, FUC_SZ)
    val FU_F2I = UInt(512, FUC_SZ)
-   val FU_VFPU= UInt(1024,FUC_SZ) // TODO Add stuff for vint
+   val FU_VFPU= UInt(1024,FUC_SZ) // TODO_vec Add stuff for viu, vmem, etc
 }
 import FUConstants._
 
@@ -58,7 +58,8 @@ class SupportedFuncUnits(
    val fpu: Boolean  = false,
    val csr: Boolean  = false,
    val fdiv: Boolean = false,
-   val ifpu: Boolean = false)
+   val ifpu: Boolean = false,
+   val vfpu: Boolean = false) // Todo_vec: Add stuff for viu, vmem, etc
 {
 }
 
@@ -666,7 +667,7 @@ class VFPUUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(
    io.resp.bits.data               := vfpu.io.resp.bits.data
    io.resp.bits.fflags.valid       := vfpu.io.resp.bits.fflags.valid
    io.resp.bits.fflags.bits.uop    := io.resp.bits.uop
-   io.resp.bits.fflags.bits.flags  := vfpu.io.resp.bits.fflags.bits.flags
+   io.resp.bits.fflags.bits.flags  := vfpu.io.resp.bits.fflags.bits.flags // kill me now x2
 }
 
 
