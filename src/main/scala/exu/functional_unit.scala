@@ -294,6 +294,7 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
    alu.io.fn  := io.req.bits.uop.ctrl.op_fcn
    alu.io.dw  := io.req.bits.uop.ctrl.fcn_dw
 
+
    if (is_branch_unit)
    {
       val uop_pc_ = AlignPCToBoundary(io.get_ftq_pc.fetch_pc, icBlockBytes) + io.req.bits.uop.pc_lob
@@ -334,7 +335,7 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
                         BR_JR -> PC_JALR
                         ))
 
-      val bj_addr = Wire(UInt())
+      val bj_addr = Wire(UInt(width=vaddrBitsExtended.W))
 
       val is_taken = io.req.valid &&
                      !killed &&
@@ -509,23 +510,22 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
       // Branch/Jump Target Calculation
       // we can't push this through the ALU though, b/c jalr needs both PC+4 and rs1+offset
 
-      def vaSign(a0: UInt, ea: UInt):Bool = {
-         // efficient means to compress 64-bit VA into rc.as.vaddrBits+1 bits
-         // (VA is bad if VA(rc.as.vaddrBits) =/= VA(rc.as.vaddrBits-1))
-         val a = a0 >> vaddrBits-1
-         val e = ea(vaddrBits,vaddrBits-1)
-         Mux(a === UInt(0) || a === UInt(1), e =/= UInt(0),
-         Mux(a.asSInt === SInt(-1) || a.asSInt === SInt(-2), e.asSInt === SInt(-1),
-            e(0)))
+      def encodeVirtualAddress(a0: UInt, ea: UInt) = if (vaddrBitsExtended == vaddrBits) ea else {
+         // Efficient means to compress 64-bit VA into vaddrBits+1 bits.
+         // (VA is bad if VA(vaddrBits) != VA(vaddrBits-1)).
+         val a = a0.asSInt >> vaddrBits
+         val msb = Mux(a === 0.S || a === -1.S, ea(vaddrBits), !ea(vaddrBits-1))
+         Cat(msb, ea(vaddrBits-1,0))
       }
 
-      val bj_base = Mux(uop.uopc === uopJALR, io.req.bits.rs1_data, uop_pc_)
-      val bj_offset = imm_xprlen(20,0).asSInt
-      val bj64 = (bj_base.asSInt + bj_offset).asUInt
-      val bj_msb = Mux(uop.uopc === uopJALR, vaSign(io.req.bits.rs1_data, bj64.asUInt), vaSign(uop_pc_, bj64.asUInt))
-      bj_addr := (Cat(bj_msb, bj64(vaddrBits-1,0)).asSInt & SInt(-2)).asUInt
+      val target_base = Mux(uop.uopc === uopJALR, io.req.bits.rs1_data.asSInt, uop_pc_.asSInt)
+      val target_offset = imm_xprlen(20,0).asSInt
+      val targetXlen = Wire(UInt(width=xLen))
+      targetXlen  := (target_base + target_offset).asUInt
 
-      br_unit.pc             := uop_pc_
+      bj_addr := (encodeVirtualAddress(targetXlen, targetXlen).asSInt & -2.S).asUInt
+
+      br_unit.pc := uop_pc_
 
       // handle misaligned branch/jmp targets
       require (coreInstBytes == 4) // no RVC support
