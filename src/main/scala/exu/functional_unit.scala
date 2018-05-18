@@ -175,7 +175,6 @@ abstract class FunctionalUnit(is_pipelined: Boolean
                               , data_width: Int
                               , has_branch_unit: Boolean = false)
                               (implicit p: Parameters) extends BoomModule()(p)
-   with HasBoomCoreParameters
 {
    val io = IO(new FunctionalUnitIo(num_stages, num_bypass_stages, data_width))
 }
