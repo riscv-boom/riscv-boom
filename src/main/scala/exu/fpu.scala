@@ -248,15 +248,16 @@ class VFPU(implicit p: Parameters) extends BoomModule()(p) with tile.HasFPUParam
    vfp_decoder.io.uopc := io_req.uop.uopc
    val vfp_ctrl = vfp_decoder.io.sigs
    val vfp_rm = Mux(ImmGenRm(io_req.uop.imm_packed) === Bits(7), io_req.fcsr_rm, ImmGenRm(io_req.uop.imm_packed))
-   // TODO: Make this do stuff
+   // TODO: Make this unpack all elements, add argument specifying which element
    def vfuInput(minT: Option[tile.FType]): tile.FPInput = {
       val req = Wire(new tile.FPInput)
       val tag = !vfp_ctrl.singleIn
       req := vfp_ctrl
       req.rm := vfp_rm
-      req.in1 := unbox(io_req.rs1_data(0, 63), tag, minT)
-      req.in2 := unbox(io_req.rs2_data(0, 63), tag, minT)
-      req.in3 := unbox(io_req.rs3_data(0, 63), tag, minT)
+      // TODO_vec: Ugh why is hardfloat weird
+      req.in1 := unbox(io_req.rs1_data(64, 0), tag, minT)
+      req.in2 := unbox(io_req.rs2_data(64, 0), tag, minT)
+      req.in3 := unbox(io_req.rs3_data(64, 0), tag, minT)
       when (vfp_ctrl.swap23) {req.in3 := req.in2 }
       req.typ := ImmGenTyp(io_req.uop.imm_packed)
       val fma_decoder = Module(new FMADecoder)
@@ -264,6 +265,33 @@ class VFPU(implicit p: Parameters) extends BoomModule()(p) with tile.HasFPUParam
       req.fmaCmd := fma_decoder.io.cmd
       req
    }
+
+   // TODO_Vec: Add more of these to do the packed computation
+   // TODO_Vec: Add half prec
+   // TODO_Vec: Use Hwacha's 128-wide unit instead here
+   val dfma = Module(new tile.FPUFMAPipe(latency=vfpu_latency, t=tile.FType.D))
+   dfma.io.in.valid := io.req.valid && vfp_ctrl.fma && !vfp_ctrl.singleOut
+   dfma.io.in.bits := vfuInput(Some(dfma.t))
+
+   val sfma = Module(new tile.FPUFMAPipe(latency=vfpu_latency, t=tile.FType.S))
+   sfma.io.in.valid := io.req.valid && vfp_ctrl.fma && vfp_ctrl.singleOut
+   sfma.io.in.bits := vfuInput(Some(sfma.t))
+
+   // TODO_Vec: Fptoint?
+
+   // TODO_Vec: fpmu?
+
+   // Response (all vec units have same latency)
+   // TODO_Vec: Do we actually want this?
+
+   io.resp.valid := sfma.io.out.valid || dfma.io.out.valid
+
+   val fpu_out_data = Mux(dfma.io.out.valid, box(dfma.io.out.bits.data, true.B),
+                          box(sfma.io.out.bits.data, false.B))
+   val fpu_out_exc = Mux(dfma.io.out.valid, dfma.io.out.bits.exc, sfma.io.out.bits.exc)
+   io.resp.bits.data := fpu_out_data
+   io.resp.bits.fflags.valid := io.resp.valid
+   io.resp.bits.fflags.bits.flags := fpu_out_exc
 }
 class FPU(implicit p: Parameters) extends BoomModule()(p) with tile.HasFPUParameters
 {

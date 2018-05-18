@@ -234,6 +234,7 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
    val LREG_SZ           = log2Up(LOGICAL_REG_COUNT)
    val IPREG_SZ          = log2Up(numIntPhysRegs)
    val FPREG_SZ          = log2Up(numFpPhysRegs)
+   val VPREG_SZ          = log2Up(numVecPhysRegs)
    val PREG_SZ          = IPREG_SZ max FPREG_SZ
    val MEM_ADDR_SZ       = log2Up(NUM_LSU_ENTRIES)
    val MAX_ST_COUNT      = (1 << MEM_ADDR_SZ)

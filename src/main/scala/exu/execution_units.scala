@@ -170,6 +170,10 @@ class ExecutionUnits(fpu: Boolean = false, vec: Boolean = false)(implicit val p:
          require (!mask.reduce(_||_)) // don't support any bypassing in FP
          mask
       }
+      else if (vec)
+      {
+         exe_units.map(_.isBypassable)
+      }
       else
       {
          exe_units.withFilter(_.usesIRF).map(_.isBypassable)

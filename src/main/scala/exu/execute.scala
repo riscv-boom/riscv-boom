@@ -121,7 +121,9 @@ abstract class ExecutionUnit(val num_rf_read_ports: Int
          fpu = has_fpu,
          csr = uses_csr_wport,
          fdiv = has_fdiv,
-         ifpu = has_ifpu)
+         ifpu = has_ifpu,
+         vfpu = has_vfpu
+      )
    }
 }
 
@@ -352,6 +354,7 @@ class VecFPUExeUnit(
    out_str.append("\n     ExeUnit--")
    if (has_vfpu)  out_str.append("\n       - VECFPU (Latency: " + dfmaLatency + ")")
 
+   require (uses_iss_unit == true)
    // TODO_vec: Add div and toint stuff?
 
    val fu_units = ArrayBuffer[FunctionalUnit]()
