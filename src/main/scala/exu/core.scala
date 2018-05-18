@@ -35,7 +35,7 @@ import freechips.rocketchip.config.Parameters
 
 import freechips.rocketchip.rocket.Instructions._
 import freechips.rocketchip.rocket.Causes
-import freechips.rocketchip.util.Str
+import freechips.rocketchip.util.{Str, UIntIsOneOf}
 import boom.common._
 import boom.exu.FUConstants._
 import boom.util.{GetNewUopAndBrMask, Sext, WrapInc}
@@ -727,8 +727,33 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    csr.io.exception := rob.io.com_xcpt.valid
    // csr.io.pc used for setting EPC during exception or CSR.io.trace.
    csr.io.pc        := boom.util.AlignPCToBoundary(io.ifu.com_fetch_pc, icBlockBytes) + rob.io.com_xcpt.bits.pc_lob
+   // Cause not valid for for CALL or BREAKPOINTs (CSRFile will override it).
    csr.io.cause     := rob.io.com_xcpt.bits.cause
-   csr.io.tval      := Mux(csr.io.cause === Causes.illegal_instruction.U, 0.U, rob.io.com_xcpt.bits.badvaddr)
+
+   val tval_valid = csr.io.exception &&
+      csr.io.cause.isOneOf(
+         Causes.illegal_instruction.U,
+         Causes.breakpoint.U,
+         Causes.misaligned_load.U,
+         Causes.misaligned_store.U,
+         Causes.load_access.U,
+         Causes.store_access.U,
+         Causes.fetch_access.U,
+         Causes.load_page_fault.U,
+         Causes.store_page_fault.U,
+         Causes.fetch_page_fault.U)
+
+   csr.io.tval := Mux(tval_valid,
+      encodeVirtualAddress(rob.io.com_xcpt.bits.badvaddr, rob.io.com_xcpt.bits.badvaddr), 0.U)
+
+   // TODO move this function to some central location (since this is used elsewhere).
+   def encodeVirtualAddress(a0: UInt, ea: UInt) = if (vaddrBitsExtended == vaddrBits) ea else {
+      // Efficient means to compress 64-bit VA into vaddrBits+1 bits.
+      // (VA is bad if VA(vaddrBits) != VA(vaddrBits-1)).
+      val a = a0.asSInt >> vaddrBits
+      val msb = Mux(a === 0.S || a === -1.S, ea(vaddrBits), !ea(vaddrBits-1))
+      Cat(msb, ea(vaddrBits-1,0))
+   }
 
 
    // reading requires serializing the entire pipeline
