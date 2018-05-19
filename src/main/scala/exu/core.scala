@@ -112,8 +112,8 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    val rob              = Module(new Rob(
                                  decodeWidth,
                                  NUM_ROB_ENTRIES,
-                                 num_irf_write_ports + fp_pipeline.io.wakeups.length,
-                                 exe_units.num_fpu_ports + fp_pipeline.io.wakeups.length))
+                                 num_irf_write_ports + fp_pipeline.io.wakeups.length + vec_pipeline.io.wakeups.length,
+                                 exe_units.num_fpu_ports + fp_pipeline.io.wakeups.length + vec_pipeline.io.wakeups.length))
    // Used to wakeup registers in rename and issue. ROB needs to listen to something else.
    val int_wakeups      = Wire(Vec(num_wakeup_ports, Valid(new ExeUnitResp(xLen))))
 
@@ -466,7 +466,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    //-------------------------------------------------------------
 
    // TODO for now, assume worst-case all instructions will dispatch towards one issue unit.
-   val dis_readys = issue_units.map(_.io.dis_readys.asUInt).reduce(_&_) & fp_pipeline.io.dis_readys.asUInt
+   val dis_readys = issue_units.map(_.io.dis_readys.asUInt).reduce(_&_) & fp_pipeline.io.dis_readys.asUInt & vec_pipeline.io.dis_readys.asUInt
    rename_stage.io.dis_inst_can_proceed := dis_readys.toBools
 
    rename_stage.io.kill     := io.ifu.clear_fetchbuffer // mispredict or flush
@@ -502,6 +502,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
             int_wakeups(wu_idx).bits.uop := iss_uops(i)
             wu_idx += 1
             assert (!(iss_uops(i).dst_rtype === RT_FLT && iss_uops(i).bypassable), "Bypassing FP is not supported.")
+            assert (!(iss_uops(i).dst_rtype === RT_VEC && iss_uops(i).bypassable), "Bypassing VEC is not (yet) supported.")
          }
 
          // Slow Wakeup (uses write-port to register file)
@@ -539,6 +540,10 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    for ((renport, fpport) <- rename_stage.io.fp_wakeups zip fp_pipeline.io.wakeups)
    {
       renport <> fpport
+   }
+   for ((renport, vecport) <- rename_stage.io.vec_wakeups zip vec_pipeline.io.wakeups)
+   {
+      renport <> vecport
    }
 
    rename_stage.io.com_valids := rob.io.commit.valids
@@ -582,6 +587,9 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
    fp_pipeline.io.dis_valids <> dis_valids
    fp_pipeline.io.dis_uops <> dis_uops
+
+   vec_pipeline.io.dis_valids <> dis_valids
+   vec_pipeline.io.dis_uops <> dis_uops
    // Manually specify unused signals so they don't show up in the
    // FpPipeline's I/O field. This is only necessary if the FpPipeline
    // is the top module being synthesized (otherwise cross-module
@@ -741,6 +749,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
    exe_units.map(_.io.fcsr_rm := csr.io.fcsr_rm)
    fp_pipeline.io.fcsr_rm := csr.io.fcsr_rm
+   vec_pipeline.io.fcsr_rm := csr.io.fcsr_rm // TODO_Vec: check if vec fp rm should be controlled by same csr
 
    csr.io.hartid := io.hartid
    csr.io.interrupts := io.interrupts
@@ -1023,6 +1032,19 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
       assert (!(wakeup.valid && !wakeup.bits.uop.fp_val),
          "[core] FP wakeup does not involve an FP instruction.")
+   }
+   for (wakeup <- vec_pipeline.io.wakeups)
+   {
+      rob.io.wb_resps(cnt) <> wakeup
+      rob.io.debug_wb_valids(cnt) := wakeup.valid
+      rob.io.debug_wb_wdata(cnt) := ieee(wakeup.bits.data)
+      cnt += 1
+
+      assert (!(wakeup.valid && wakeup.bits.uop.dst_rtype =/= RT_VEC),
+         "[core] VEC wakeup does not write back to a VEC register.")
+
+      assert (!(wakeup.valid && !wakeup.bits.uop.vec_val),
+         "[core] VEC_wakeup does not involve a VEC instruction.");
    }
    assert (cnt == rob.num_wakeup_ports)
 

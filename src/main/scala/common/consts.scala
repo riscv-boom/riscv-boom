@@ -298,6 +298,7 @@ trait ScalarOpConstants
       uop.uopc       := uopNOP // maybe not required, but helps on asserts that try to catch spurious behavior
       uop.bypassable := Bool(false)
       uop.fp_val     := Bool(false)
+      uop.vec_val    := Bool(false)
       uop.is_store   := Bool(false)
       uop.is_load    := Bool(false)
       uop.pdst       := UInt(0)

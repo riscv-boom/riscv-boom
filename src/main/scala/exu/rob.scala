@@ -582,7 +582,9 @@ class Rob(
                io.commit.uops(w).fp_val &&
                (io.commit.uops(w).is_load || io.commit.uops(w).is_store) &&
                rob_head_fflags(w) =/= 0.U),
-               "Committed FP load or store has non-zero fflag bits.")
+         "Committed FP load or store has non-zero fflag bits.")
+
+      // TODO_vec: Check exception flags for vec instructions
    }
    io.commit.fflags.valid := fflags_val.reduce(_|_)
    io.commit.fflags.bits  := fflags.reduce(_|_)

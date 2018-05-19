@@ -103,6 +103,8 @@ class MicroOp(implicit p: Parameters) extends BoomBundle()(p)
                                              // If it's non-ld/st it will write back exception bits to the fcsr.
    val fp_single        = Bool()             // single-precision floating point instruction (F-extension)
 
+   val vec_val          = Bool()
+
    // exception information
    val xcpt_pf_if       = Bool()             // I-TLB page fault.
    val xcpt_ae_if       = Bool()             // I$ access exception.
