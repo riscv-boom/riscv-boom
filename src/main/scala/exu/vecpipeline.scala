@@ -200,12 +200,12 @@ class VecPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasF
          assert (!(wbresp.valid &&
             !wbresp.bits.uop.ctrl.rf_wen &&
             wbresp.bits.uop.dst_rtype === RT_VEC),
-            "[fppipeline] An VEC writeback is being attempted with rf_wen disabled.")
+            "[vecpipeline] An VEC writeback is being attempted with rf_wen disabled.")
 
          assert (!(wbresp.valid &&
             wbresp.bits.uop.ctrl.rf_wen &&
             wbresp.bits.uop.dst_rtype =/= RT_VEC),
-            "[fppipeline] A writeback is being attempted to the VEC RF with dst != VEC type.")
+            "[vecpipeline] A writeback is being attempted to the VEC RF with dst != VEC type.")
 
          w_cnt += 1
       }
