@@ -732,7 +732,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
    val tval_valid = csr.io.exception &&
       csr.io.cause.isOneOf(
-         Causes.illegal_instruction.U,
+         //Causes.illegal_instruction.U, we currently only write 0x0 for illegal instructions
          Causes.breakpoint.U,
          Causes.misaligned_load.U,
          Causes.misaligned_store.U,
