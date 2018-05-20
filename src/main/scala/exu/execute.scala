@@ -71,6 +71,7 @@ class ExecutionUnitIO(
    val lsu_io = new boom.lsu.LoadStoreUnitIO(decodeWidth).flip
    val dmem   = new boom.lsu.DCMemPortIO() // TODO move this out of ExecutionUnit
    val com_exception = Bool(INPUT)
+   val debug_tsc_reg = UInt(width=128.W).asInput
 }
 
 abstract class ExecutionUnit(val num_rf_read_ports: Int
@@ -360,6 +361,8 @@ class VecFPUExeUnit(
    val fu_units = ArrayBuffer[FunctionalUnit]()
 
    io.fu_types := Mux(Bool(has_vfpu), FU_VFPU, Bits(0)) // TODO_vec Add stuff for div, ving, etc
+   io.resp(0).bits.writesToIRF = false
+   //io.resp(1).bits.writesToIRF = true
 
    var vfpu: VFPUUnit = null
    val vfpu_resp_val = Wire(init=Bool(false))
@@ -380,6 +383,14 @@ class VecFPUExeUnit(
       vfpu.io.req.bits.kill      := io.req.bits.kill
       vfpu.io.brinfo             <> io.brinfo
 
+      // when (io.req.valid)
+      // {
+      //    printf("%d Valid VFPU op received\n", io.debug_tsc_reg)
+      // }
+      // when (vfpu.io.resp.valid)
+      // {
+      //    printf("%d VFPU op completed\n", io.debug_tsc_reg)
+      // }
       vfpu_resp_val              := vfpu.io.resp.valid
       vfpu_resp_fflags           := vfpu.io.resp.bits.fflags
       fu_units += vfpu
@@ -391,7 +402,10 @@ class VecFPUExeUnit(
       PriorityMux(fu_units.map(f => (f.io.resp.valid, f.io.resp.bits.uop.asUInt))))
    io.resp(0).bits.data   := PriorityMux(fu_units.map(f =>(f.io.resp.valid, f.io.resp.bits.data.asUInt))).asUInt
    io.resp(0).bits.fflags := vfpu_resp_fflags // TODO_vec add div flags here
-
+   // when (io.resp(0).valid)
+   // {
+   //    printf("%d VFPU full response complete\n", io.debug_tsc_reg)
+   // }
    override def toString: String = out_str.toString
 }
 

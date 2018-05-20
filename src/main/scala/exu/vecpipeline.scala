@@ -126,6 +126,10 @@ class VecPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasF
    // Wakeup
    for ((writeback, issue_wakeup) <- io.wakeups zip issue_unit.io.wakeup_pdsts)
    {
+      when (writeback.valid)
+      {
+         // printf("%d Vec wakeup writeback valid received\n", io.debug_tsc_reg)
+      }
       issue_wakeup.valid := writeback.valid
       issue_wakeup.bits  := writeback.bits.uop.pdst
    }
@@ -186,9 +190,13 @@ class VecPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasF
    var toint_found = false
    for (eu <- exe_units)
    {
+      eu.io.debug_tsc_reg := io.debug_tsc_reg
       for (wbresp <- eu.io.resp)
       {
-
+         when (wbresp.valid)
+         {
+            // printf("%d Writeback received valid resp\n", io.debug_tsc_reg)
+         }
          vregfile.io.write_ports(w_cnt).valid :=
          wbresp.valid &&
          wbresp.bits.uop.ctrl.rf_wen
@@ -223,16 +231,25 @@ class VecPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasF
    // io.wakeups(0).bits := ll_wbarb.io.out.bits
    // ll_wbarb.io.out.ready := true.B
 
-   w_cnt = 1
+   w_cnt = 0
    for (eu <- exe_units)
    {
       for (exe_resp <- eu.io.resp)
       {
          val wb_uop = exe_resp.bits.uop
-
+         when (wb_uop.valid)
+         {
+            // printf("%d wb uop is %d\n", io.debug_tsc_reg, wb_uop.uopc)
+            // printf("%d exe_resp uop is %d %d\n", io.debug_tsc_reg, exe_resp.bits.uop.uopc, exe_resp.valid)
+            // printf("%d %x %x\n", io.debug_tsc_reg, exe_resp.bits.writesToIRF.B, eu.has_ifpu.B)
+         }
          if (!exe_resp.bits.writesToIRF && !eu.has_ifpu) {
             val wport = io.wakeups(w_cnt)
             wport.valid := exe_resp.valid && wb_uop.dst_rtype === RT_VEC
+            // when (exe_resp.valid)
+            // {
+            //    printf("%d Commit wport exe_resp valid\n", io.debug_tsc_reg)
+            // }
             wport.bits := exe_resp.bits
 
             w_cnt += 1

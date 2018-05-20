@@ -1098,6 +1098,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    assert (!(idle_cycles.value(13)), "Pipeline has hung.")
 
    fp_pipeline.io.debug_tsc_reg := debug_tsc_reg
+   vec_pipeline.io.debug_tsc_reg := debug_tsc_reg
 
    //-------------------------------------------------------------
    // Uarch Hardware Performance Events (HPEs)
