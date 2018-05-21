@@ -14,19 +14,18 @@ import freechips.rocketchip.util.uintToBitPat
 import boom.common._
 import boom.util.{ImmGenRm, ImmGenTyp}
 
-
-
 class UOPCodeVFPUDecoder extends Module
 {
   val io = IO(new Bundle {
-    val uopc = Bits(INPUT, UOPC_SZ)
-    val sigs = new FPUCtrlSigs().asOutput
+     val uopc = Bits(INPUT, UOPC_SZ)
+     val sigs = new FPUCtrlSigs().asOutput
+     val fp_type = UInt(width=VFP_SZ).asOutput
   })
    val N = Bool(false)
    val Y = Bool(true)
    val X = Bool(false)
 
-   val default: List[BitPat] = List(X,X,X,X,X, X,X,X,X,X,X,X, X,X,X,X)
+   val default: List[BitPat] = List(X,X,X,X,X, X,X,X,X,X,X,X, X,X,X,X, X)
 
    // TODO_vec: Add half_precision table
 
@@ -37,14 +36,15 @@ class UOPCodeVFPUDecoder extends Module
       //                                     | swap32       | div
       //                                     | | singleIn   | | sqrt
       //                          ldst       | | | singleOut| | | wflags
-      //                          | wen      | | | | fromint| | | |
-      //                          | | ren1   | | | | | toint| | | |
-      //                          | | | ren2 | | | | | | fastpipe |
-      //                          | | | | ren3 | | | | | |  | | | |
-      //                          | | | | |  | | | | | | |  | | | |
+      //                          | wen      | | | | fromint| | | | fp_type
+      //                          | | ren1   | | | | | toint| | | | |
+      //                          | | | ren2 | | | | | | fastpipe | |
+      //                          | | | | ren3 | | | | | |  | | | | |
+      //                          | | | | |  | | | | | | |  | | | | |
       Array(
-      BitPat(uopVADD)     -> List(X,X,Y,Y,N, N,Y,Y,Y,N,N,N, Y,N,N,Y)
+      BitPat(uopVADD_D)   -> List(X,X,Y,Y,N, N,Y,N,N,N,N,N, Y,N,N,Y,VFP_D)
       ) // TODO_vec: Add all other uops, make these uops specify precision
+   // TODO_vec: Multi-precision ops
 
    val d_table: Array[(BitPat, List[BitPat])] =
       // Note: not all of these signals are used or necessary, but we're
@@ -62,18 +62,18 @@ class UOPCodeVFPUDecoder extends Module
       Array(
       )
 
-	val insns = f_table ++ d_table
+   val insns = f_table ++ d_table
    val decoder = rocket.DecodeLogic(io.uopc, default, insns)
 
    val s = io.sigs
    val sigs = Seq(s.ldst, s.wen, s.ren1, s.ren2, s.ren3, s.swap12,
                   s.swap23, s.singleIn, s.singleOut, s.fromint, s.toint, s.fastpipe, s.fma,
-                  s.div, s.sqrt, s.wflags)
+                  s.div, s.sqrt, s.wflags, io.fp_type)
    sigs zip decoder map {case(s,d) => s := d}
 }
 
 class VFpuReq()(implicit p: Parameters) extends BoomBundle()(p)
-{ // TODO_Vec: Figure out width. 128? 130? 
+{ // TODO_Vec: Figure out width. 128? 130?
    val uop      = new MicroOp()
    val rs1_data = Bits(width = 128)
    val rs2_data = Bits(width = 128)
@@ -94,16 +94,24 @@ class VFPU(implicit p: Parameters) extends BoomModule()(p) with tile.HasFPUParam
    vfp_decoder.io.uopc := io_req.uop.uopc
    val vfp_ctrl = vfp_decoder.io.sigs
    val vfp_rm = Mux(ImmGenRm(io_req.uop.imm_packed) === Bits(7), io_req.fcsr_rm, ImmGenRm(io_req.uop.imm_packed))
+
+
+
    // TODO: Make this unpack all elements, add argument specifying which element
-   def vfuInput(minT: Option[tile.FType]): tile.FPInput = {
+   def vfpuInput(minT: Option[tile.FType], width: Int, idx: Int,
+      recode_fn: Bits=>Bits,
+      unpack_fn: (Bits, Int)=>UInt): tile.FPInput = {
       val req = Wire(new tile.FPInput)
-      val tag = !vfp_ctrl.singleIn
+      //val tag = !vfp_ctrl.singleIn
       req := vfp_ctrl
       req.rm := vfp_rm
       // TODO_vec: Ugh why is hardfloat weird
-      req.in1 := unbox(io_req.rs1_data(64, 0), tag, minT)
-      req.in2 := unbox(io_req.rs2_data(64, 0), tag, minT)
-      req.in3 := unbox(io_req.rs3_data(64, 0), tag, minT)
+      req.in1 := recode_fn(unpack_fn(io_req.rs1_data, idx))
+      req.in2 := recode_fn(unpack_fn(io_req.rs2_data, idx))
+      req.in3 := recode_fn(unpack_fn(io_req.rs3_data, idx))
+      // req.in1 := unbox(io_req.rs1_data(width, 0), tag, minT)
+      // req.in2 := unbox(io_req.rs2_data(width, 0), tag, minT)
+      // req.in3 := unbox(io_req.rs3_data(width, 0), tag, minT)
       when (vfp_ctrl.swap23) {req.in3 := req.in2 }
       req.typ := ImmGenTyp(io_req.uop.imm_packed)
       val fma_decoder = Module(new FMADecoder)
@@ -112,30 +120,80 @@ class VFPU(implicit p: Parameters) extends BoomModule()(p) with tile.HasFPUParam
       req
    }
 
-   // TODO_Vec: Add more of these to do the packed computation
-   // TODO_Vec: Add half prec
-   // TODO_Vec: Use Hwacha's 128-wide unit instead here
-   val dfma = Module(new tile.FPUFMAPipe(latency=vfpu_latency, t=tile.FType.D))
-   dfma.io.in.valid := io.req.valid && vfp_ctrl.fma && !vfp_ctrl.singleOut
-   dfma.io.in.bits := vfuInput(Some(dfma.t))
+   // TODO_Vec: Move all this stuff to util
+   def recode_dp(n: Bits) = hardfloat.recFNFromFN(11, 53, n.asUInt)
+   def recode_sp(n: Bits) = hardfloat.recFNFromFN(8, 24, n.asUInt)
+   def recode_hp(n: Bits) = hardfloat.recFNFromFN(5, 11, n.asUInt)
+   def ieee_dp(n: Bits) = hardfloat.fNFromRecFN(11, 53, n.asUInt)
+   def ieee_sp(n: Bits) = hardfloat.fNFromRecFN(8, 24, n.asUInt)
+   def ieee_hp(n: Bits) = hardfloat.fNFromRecFN(5, 11, n.asUInt)
 
-   val sfma = Module(new tile.FPUFMAPipe(latency=vfpu_latency, t=tile.FType.S))
-   sfma.io.in.valid := io.req.valid && vfp_ctrl.fma && vfp_ctrl.singleOut
-   sfma.io.in.bits := vfuInput(Some(sfma.t))
+   def _unpack(n: Bits, idx: Int, extent: Int, period: Int, width: Int): UInt = {
+      require((idx+1)*period <= extent)
+      val base = idx*period
+      n(width+base-1, base)
+   }
+   def _unpack(n: Bits, idx: Int, extent: Int, period: Int): UInt =
+      _unpack(n, idx, extent, period, period)
 
-   // TODO_Vec: Fptoint?
+   def unpack_d(n: Bits, idx: Int) = _unpack(n, idx, SZ_D, SZ_D)
+   def unpack_w(n: Bits, idx: Int) = _unpack(n, idx, SZ_D, SZ_W)
+   def unpack_h(n: Bits, idx: Int) = _unpack(n, idx, SZ_D, SZ_H)
+   def _repack(n: Seq[Bits], len: Int) = {
+      require(n.length == len)
+      Cat(n.reverse)
+   }
 
-   // TODO_Vec: fpmu?
+   def repack_d(n: Seq[Bits]) = _repack(n, SZ_D/SZ_D)
+   def repack_w(n: Seq[Bits]) = _repack(n, SZ_D/SZ_W)
+   def repack_h(n: Seq[Bits]) = _repack(n, SZ_D/SZ_H)
+   def repack_b(n: Seq[Bits]) = _repack(n, SZ_D/SZ_B)
 
-   // Response (all vec units have same latency)
-   // TODO_Vec: Do we actually want this?
+   def _expand(n: Bits, s: Bits, width: Int) = {
+      Cat(Fill(SZ_D - width, s.asUInt), n)
+   }
 
-   io.resp.valid := sfma.io.out.valid || dfma.io.out.valid
+   def expand_d(n: Bits) = n
+   def expand_w(n: Bits) = _expand(n, n(SZ_W-1), SZ_W)
+   def expand_h(n: Bits) = _expand(n, n(SZ_H-1), SZ_H)
+   def expand_b(n: Bits) = _expand(n, n(SZ_B-1), SZ_B)
+   def expand_float_d(n: Bits) = expand_d(n)
+   def expand_float_s(n: Bits) = expand_w(n)
+   def expand_float_h(n: Bits) = expand_h(n)
 
-   val fpu_out_data = Mux(dfma.io.out.valid, box(dfma.io.out.bits.data, true.B),
-                          box(sfma.io.out.bits.data, false.B))
-   val fpu_out_exc = Mux(dfma.io.out.valid, dfma.io.out.bits.exc, sfma.io.out.bits.exc)
-   io.resp.bits.data := fpu_out_data
+
+   val results =
+      List((SZ_D, VFP_D, recode_dp _, unpack_d _, ieee_dp _, repack_d _, expand_float_d _, (11, 53)),
+           (SZ_W, VFP_S, recode_sp _, unpack_w _, ieee_sp _, repack_w _, expand_float_s _, (8, 24)),
+           (SZ_H, VFP_H, recode_hp _, unpack_h _, ieee_hp _, repack_h _, expand_float_h _, (5, 11))) map {
+         case (sz, fp_type, recode, unpack, ieee, repack, expand, (exp, sig)) => {
+            val n = SZ_D / sz
+            val fp_val = io.req.valid && vfp_decoder.io.fp_type === fp_type
+            val results = for (i <- (0 until n)) yield {
+               val fma = Module(new tile.FPUFMAPipe(latency=vfpu_latency, t=tile.FType(exp=exp, sig=sig)))
+               // TODO_vec add predication here
+               val valid = fp_val
+               fma.io.in.valid := valid
+               fma.io.in.bits := vfpuInput(Some(fma.t), sz, i, recode, unpack)
+
+               val out_data = ieee(fma.io.out.bits.data)
+               val out_exc  = fma.io.out.bits.exc
+               val out_val  = fma.io.out.valid
+               (out_val, out_data, out_exc)
+            }
+            val result_val = results.map(_._1).reduce(_||_)
+            assert ( result_val === results.map(_._1).reduce(_&&_),
+               "VFPU slice not all responding valid at the same time!")
+            val result_out = repack(results.map(_._2))
+            val result_exc = results.map(_._3).reduce(_|_)
+            (result_val, result_out, result_exc)
+         }
+      }
+
+   val fpmatch = results.map(_._1)
+   io.resp.valid := fpmatch.reduce(_||_)
+   io.resp.bits.data := Mux1H(fpmatch, results.map(_._2))
    io.resp.bits.fflags.valid := io.resp.valid
-   io.resp.bits.fflags.bits.flags := fpu_out_exc
+   io.resp.bits.fflags.bits.flags := Mux1H(fpmatch, results.map(_._3))
+
 }

@@ -282,7 +282,7 @@ trait ScalarOpConstants
    val uopSYSTEM    = UInt(122, UOPC_SZ) // pass uop down the CSR pipeline and let it handle it
    val uopSFENCE    = UInt(123, UOPC_SZ)
 
-   val uopVADD      = UInt(124, UOPC_SZ)
+   val uopVADD_D    = UInt(124, UOPC_SZ)
 
    // The Bubble Instruction (Machine generated NOP)
    // Insert (XOR x0,x0,x0) which is different from software compiler
@@ -416,4 +416,20 @@ trait ExcCauseConstants
    require (!freechips.rocketchip.rocket.Causes.all.contains(17))
 }
 
+trait VecConstants
+{
+   val VFP_SZ = 2
+   val VFP_X  = UInt(0, VFP_SZ)
+   val VFP_H  = UInt(1, VFP_SZ)
+   val VFP_S  = UInt(2, VFP_SZ)
+   val VFP_D  = UInt(3, VFP_SZ)
+}
+
+trait Sizes
+{
+   val SZ_D = 64
+   val SZ_W = 32
+   val SZ_H = 16
+   val SZ_B = 8
+}
 }
