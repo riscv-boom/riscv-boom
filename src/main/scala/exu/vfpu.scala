@@ -42,7 +42,7 @@ class UOPCodeVFPUDecoder extends Module
       //                          | | | | ren3 | | | | | |  | | | | |
       //                          | | | | |  | | | | | | |  | | | | |
       Array(
-      BitPat(uopVADD_D)   -> List(X,X,Y,Y,N, N,Y,N,N,N,N,N, Y,N,N,Y,VFP_D)
+
       ) // TODO_vec: Add all other uops, make these uops specify precision
    // TODO_vec: Multi-precision ops
 
@@ -53,13 +53,13 @@ class UOPCodeVFPUDecoder extends Module
       //                                     | swap32       | div
       //                                     | | singleIn   | | sqrt
       //                          ldst       | | | singleOut| | | wflags
-      //                          | wen      | | | | fromint| | | |
-      //                          | | ren1   | | | | | toint| | | |
-      //                          | | | ren2 | | | | | | fastpipe |
-      //                          | | | | ren3 | | | | | |  | | | |
-      //                          | | | | |  | | | | | | |  | | | |
-
+      //                          | wen      | | | | fromint| | | | fp_type
+      //                          | | ren1   | | | | | toint| | | | |
+      //                          | | | ren2 | | | | | | fastpipe | |
+      //                          | | | | ren3 | | | | | |  | | | | |
+      //                          | | | | |  | | | | | | |  | | | | |
       Array(
+      BitPat(uopVADD_D)   -> List(X,X,Y,Y,N, N,Y,N,N,N,N,N, Y,N,N,Y,VFP_D)
       )
 
    val insns = f_table ++ d_table
@@ -102,16 +102,13 @@ class VFPU(implicit p: Parameters) extends BoomModule()(p) with tile.HasFPUParam
       recode_fn: Bits=>Bits,
       unpack_fn: (Bits, Int)=>UInt): tile.FPInput = {
       val req = Wire(new tile.FPInput)
-      //val tag = !vfp_ctrl.singleIn
+
       req := vfp_ctrl
       req.rm := vfp_rm
       // TODO_vec: Ugh why is hardfloat weird
       req.in1 := recode_fn(unpack_fn(io_req.rs1_data, idx))
       req.in2 := recode_fn(unpack_fn(io_req.rs2_data, idx))
       req.in3 := recode_fn(unpack_fn(io_req.rs3_data, idx))
-      // req.in1 := unbox(io_req.rs1_data(width, 0), tag, minT)
-      // req.in2 := unbox(io_req.rs2_data(width, 0), tag, minT)
-      // req.in3 := unbox(io_req.rs3_data(width, 0), tag, minT)
       when (vfp_ctrl.swap23) {req.in3 := req.in2 }
       req.typ := ImmGenTyp(io_req.uop.imm_packed)
       val fma_decoder = Module(new FMADecoder)
