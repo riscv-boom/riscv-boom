@@ -343,7 +343,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
    // allow early instructions to stall later instructions
    var dec_stall_next_inst = Bool(false)
-   var dec_last_inst_was_stalled = Bool(false)
+   var dec_last_inst_was_stalled = false.B
 
    // stall fetch/dcode because we ran out of branch tags
    val branch_mask_full = Wire(Vec(decodeWidth, Bool()))
@@ -953,8 +953,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    rob.io.enq_valids := rename_stage.io.ren1_mask
    rob.io.enq_uops   := rename_stage.io.ren1_uops
    rob.io.enq_new_packet := dec_finished_mask === 0.U
-//   rob.io.enq_partial_stall := !dec_rdy && !dec_will_fire(decodeWidth-1)
-   rob.io.enq_partial_stall := !dec_rdy // TODO come up with better ROB compacting scheme.
+   rob.io.enq_partial_stall := dec_last_inst_was_stalled // TODO come up with better ROB compacting scheme.
    rob.io.debug_tsc := debug_tsc_reg
    rob.io.csr_stall := csr.io.csr_stall
 
