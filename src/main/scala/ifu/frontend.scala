@@ -19,6 +19,7 @@ import chisel3.internal.sourceinfo.SourceInfo
 import boom.bpu._
 import boom.common._
 import boom.exu.{BranchUnitResp, FlushSignals}
+import boom.lsu.{CanHaveBoomPTW, CanHaveBoomPTWModule}
 
 //class FrontendReq(implicit p: Parameters) extends CoreBundle()(p) {
 //  val pc = UInt(width = vaddrBitsExtended)
@@ -320,7 +321,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 }
 
 /** Mix-ins for constructing tiles that have an ICache-based pipeline frontend */
-trait HasBoomICacheFrontend extends CanHavePTW { this: BaseTile =>
+trait HasBoomICacheFrontend extends CanHaveBoomPTW { this: BaseTile =>
   val module: HasBoomICacheFrontendModule
   val frontend = LazyModule(new BoomFrontend(tileParams.icache.get, hartId))
   tlMasterXbar.node := frontend.masterNode
@@ -329,7 +330,7 @@ trait HasBoomICacheFrontend extends CanHavePTW { this: BaseTile =>
   nPTWPorts += 1 // boom -- needs an extra PTW port for its LSU.
 }
 
-trait HasBoomICacheFrontendModule extends CanHavePTWModule {
+trait HasBoomICacheFrontendModule extends CanHaveBoomPTWModule {
   val outer: HasBoomICacheFrontend
   ptwPorts += outer.frontend.module.io.ptw
 }
