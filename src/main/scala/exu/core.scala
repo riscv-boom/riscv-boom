@@ -57,6 +57,7 @@ trait HasBoomCoreIO extends freechips.rocketchip.tile.HasTileParameters {
          val ptw_tlb = new freechips.rocketchip.rocket.TLBPTWIO()
          val trace = Vec(coreParams.retireWidth,
             new freechips.rocketchip.rocket.TracedInstruction).asOutput
+         val release = Valid(new boom.lsu.ReleaseInfo).flip
    }
 }
 
@@ -853,6 +854,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
    lsu.io.dmem_req_ready := dc_shim.io.core.req.ready
    lsu.io.dmem_is_ordered:= dc_shim.io.core.ordered
+   lsu.io.release := io.release
 
    lsu.io.fp_stdata <> fp_pipeline.io.tosdq
 

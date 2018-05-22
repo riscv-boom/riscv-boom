@@ -46,6 +46,7 @@
 package boom.lsu
 
 import Chisel._
+import chisel3.experimental.dontTouch
 import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.rocket
 import freechips.rocketchip.util.Str
@@ -92,6 +93,9 @@ class LoadStoreUnitIO(pl_width: Int)(implicit p: Parameters) extends BoomBundle(
    val commit_store_mask  = Vec(pl_width, Bool()).asInput
    val commit_load_mask   = Vec(pl_width, Bool()).asInput
    val commit_load_at_rob_head = Bool(INPUT)
+
+   // Handle Release Probes
+   val release            = Valid(new ReleaseInfo).flip
 
    // Handle Branch Misspeculations
    val brinfo             = new BrResolutionInfo().asInput
@@ -908,6 +912,8 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
                                    will_fire_load_wakeup),
                             init = Bool(false)) && Bool(MCM_ORDER_DEPENDENT_LOADS)
    assert (!(do_stld_search && do_ldld_search), "[lsu]: contention on LAQ CAM search.")
+
+   dontTouch(io.release)
 
    for (i <- 0 until num_ld_entries)
    {

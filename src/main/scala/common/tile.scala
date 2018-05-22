@@ -40,8 +40,9 @@ class BoomTile(
     crossing: SubsystemClockCrossing)
   (implicit p: Parameters) extends BaseTile(boomParams, crossing)(p)
     with HasExternalInterrupts
-    with HasLazyRoCC  // implies CanHaveSharedFPU with CanHavePTW with HasHellaCache
-    with HasHellaCache
+    //with HasLazyRoCC  // implies CanHaveSharedFPU with CanHavePTW with HasHellaCache
+    with CanHaveBoomPTW
+    with HasBoomHellaCache
     with HasBoomICacheFrontend {
 
   val intOutwardNode = IntIdentityNode()
@@ -100,11 +101,17 @@ class BoomTile(
 }
 
 class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer)
-    with HasLazyRoCCModule[BoomTile]
-    with HasHellaCacheModule
+    //with HasLazyRoCCModule[BoomTile]
+    with CanHaveBoomPTWModule
+    with HasBoomHellaCacheModule
     with HasBoomICacheFrontendModule {
 
   val core = Module(new BoomCore()(outer.p, outer.dcache.module.edge))
+
+  // Observe the Tilelink Channel C traffic leaving the L1D (writeback/releases).
+  val tl_c = outer.dCacheTap.out(0)._1.c
+  core.io.release.valid := tl_c.fire()
+  core.io.release.bits.address := tl_c.bits.address
 
   val uncorrectable = RegInit(Bool(false))
   val halt_and_catch_fire = outer.boomParams.hcfOnUncorrectable.option(IO(Bool(OUTPUT)))
@@ -128,11 +135,11 @@ class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer)
   dcachePorts += core.io.dmem // TODO outer.dcachePorts += () => module.core.io.dmem ??
   fpuOpt foreach { fpu => core.io.fpu <> fpu.io }
   core.io.ptw <> ptw.io.dpath
-  roccCore.cmd <> core.io.rocc.cmd
-  roccCore.exception := core.io.rocc.exception
-  core.io.rocc.resp <> roccCore.resp
-  core.io.rocc.busy := roccCore.busy
-  core.io.rocc.interrupt := roccCore.interrupt
+  //roccCore.cmd <> core.io.rocc.cmd
+  //roccCore.exception := core.io.rocc.exception
+  //core.io.rocc.resp <> roccCore.resp
+  //core.io.rocc.busy := roccCore.busy
+  //core.io.rocc.interrupt := roccCore.interrupt
 
   when(!uncorrectable) { uncorrectable :=
     List(outer.frontend.module.io.errors, outer.dcache.module.io.errors)
