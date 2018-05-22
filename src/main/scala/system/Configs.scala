@@ -25,6 +25,8 @@ class SmallBoomConfig extends Config(new WithSmallBooms ++ new DefaultBoomConfig
 class MediumBoomConfig extends Config(new WithMediumBooms ++ new DefaultBoomConfig ++ new WithNBoomCores(1) ++ new WithoutTLMonitors ++ new freechips.rocketchip.system.BaseConfig)
 class MegaBoomConfig extends Config(new WithMegaBooms ++ new DefaultBoomConfig ++ new WithNBoomCores(1) ++ new WithoutTLMonitors ++ new freechips.rocketchip.system.BaseConfig)
 
+class MegaBoomECCConfig extends Config(new WithL1IECC("parity", "parity") ++ new WithL1DECC("identity", "parity") ++ new WithMegaBooms ++ new DefaultBoomConfig ++ new WithNBoomCores(1) ++ new WithoutTLMonitors ++ new freechips.rocketchip.system.BaseConfig)
+
 
 class jtagSmallBoomConfig extends Config(new WithSmallBooms ++ new DefaultBoomConfig ++ new WithNBoomCores(1) ++ new WithoutTLMonitors ++ new freechips.rocketchip.system.BaseConfig ++ new WithJtagDTM)
 class jtagMediumBoomConfig extends Config(new WithMediumBooms ++ new DefaultBoomConfig ++ new WithNBoomCores(1) ++ new WithoutTLMonitors ++ new freechips.rocketchip.system.BaseConfig ++ new WithJtagDTM)
@@ -53,4 +55,15 @@ class WithNBoomCores(n: Int) extends Config((site, here, up) => {
   }
 })
 
+// This sets the ECC for the L1 instruction cache.
+class WithL1IECC(tecc: String, decc: String) extends Config((site, here, up) => {
+  case BoomTilesKey => up(BoomTilesKey, site) map { r =>
+    r.copy(icache = r.icache.map(_.copy(tagECC = Some(tecc), dataECC = Some(decc)))) }
+})
+
+// This sets the ECC for the L1 data cache.
+class WithL1DECC(tecc: String, decc: String) extends Config((site, here, up) => {
+  case BoomTilesKey => up(BoomTilesKey, site) map { r =>
+    r.copy(dcache = r.dcache.map(_.copy(tagECC = Some(tecc), dataECC = Some(decc)))) }
+})
 
