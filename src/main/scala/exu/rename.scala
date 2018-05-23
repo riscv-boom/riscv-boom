@@ -220,7 +220,7 @@ class RenameStage(
       uop.pop1       := Mux(uop.lrs1_rtype === RT_FLT, fmap.prs1, Mux(uop.lrs1_rtype === RT_FIX, imap.prs1, vmap.prs1))
       uop.pop2       := Mux(uop.lrs2_rtype === RT_FLT, fmap.prs2, Mux(uop.lrs2_rtype === RT_FIX, imap.prs2, vmap.prs2))
       uop.pop3       := Mux(uop.lrs3_rtype === RT_FLT, fmap.prs3, vmap.prs3) // only FP has 3rd operand
-      uop.stale_pdst := Mux(uop.dst_rtype === RT_FLT,  fmap.stale_pdst, Mux(uop.lrs3_rtype === RT_FIX, imap.stale_pdst, vmap.stale_pdst))
+      uop.stale_pdst := Mux(uop.dst_rtype === RT_FLT,  fmap.stale_pdst, Mux(uop.dst_rtype === RT_FIX, imap.stale_pdst, vmap.stale_pdst))
    }
 
    //-------------------------------------------------------------

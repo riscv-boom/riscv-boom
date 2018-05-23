@@ -365,7 +365,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       decode_units(w).io.csr_decode      := csr.io.decode(w)
       decode_units(w).io.interrupt       := csr.io.interrupt
       decode_units(w).io.interrupt_cause := csr.io.interrupt_cause
-
+      decode_units(w).io.vecstatus       := csr.io.vecstatus
       val prev_insts_in_bundle_valid = Range(0,w).map{i => dec_valids(i)}.foldLeft(Bool(false))(_|_)
 
       // stall this instruction?

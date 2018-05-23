@@ -129,6 +129,7 @@ trait ScalarOpConstants
    val RT_FIX   = UInt(0, RT_SZ)
    val RT_FLT   = UInt(1, RT_SZ)
    val RT_VEC   = UInt(4, RT_SZ)
+   val RT_POLY  = UInt(5, RT_SZ) // Used only in decode to decode vector polymorphic instructions
    val RT_PAS   = UInt(3, RT_SZ) // pass-through (pop1 := lrs1, etc)
    val RT_X     = UInt(2, RT_SZ) // not-a-register (but shouldn't get a busy-bit, etc.)
                              // TODO rename RT_NAR
@@ -282,8 +283,8 @@ trait ScalarOpConstants
    val uopSYSTEM    = UInt(122, UOPC_SZ) // pass uop down the CSR pipeline and let it handle it
    val uopSFENCE    = UInt(123, UOPC_SZ)
 
-   val uopVADD_D    = UInt(124, UOPC_SZ)
-
+   // TODO_VEC: This is very bad fix this somehow
+   val uopVADD      = UInt(124, UOPC_SZ)
    // The Bubble Instruction (Machine generated NOP)
    // Insert (XOR x0,x0,x0) which is different from software compiler
    // generated NOPs which are (ADDI x0, x0, 0).

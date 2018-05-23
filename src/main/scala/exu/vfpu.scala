@@ -59,7 +59,7 @@ class UOPCodeVFPUDecoder extends Module
       //                          | | | | ren3 | | | | | |  | | | | |
       //                          | | | | |  | | | | | | |  | | | | |
       Array(
-      BitPat(uopVADD_D)   -> List(X,X,Y,Y,N, N,Y,N,N,N,N,N, Y,N,N,Y,VFP_D)
+      BitPat(uopVADD)     -> List(X,X,Y,Y,N, N,Y,N,N,N,N,N, Y,N,N,Y,VFP_D)
       )
 
    val insns = f_table ++ d_table
