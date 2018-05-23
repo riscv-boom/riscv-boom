@@ -159,7 +159,7 @@ trait CanHaveMisalignedMasterAXI4MemPort { this: BaseSubsystem =>
   val module: CanHaveMisalignedMasterAXI4MemPortModuleImp
   val nMemoryChannels: Int
   private val memPortParamsOpt = p(ExtMem)
-  private val portName = "misaligned-axi4"
+  private val portName = "misaligned_axi4"
   private val device = new MemoryDevice
 
   require(nMemoryChannels == 0 || memPortParamsOpt.isDefined,
@@ -198,7 +198,8 @@ trait CanHaveMisalignedMasterAXI4MemPortModuleImp extends LazyModuleImp {
 
   def connectSimAXIMem() {
     (mem_axi4 zip outer.memAXI4Node.in).foreach { case (io, (_, edge)) =>
-      val mem = LazyModule(new SimAXIMem(edge, size = p(ExtMem).get.size))
+      // setting the max size for simulated memory to be 256MB
+      val mem = LazyModule(new SimAXIMem(edge, size = 0x10000000))
       Module(mem.module).io.axi4.head <> io
     }
   }
