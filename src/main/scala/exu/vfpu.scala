@@ -41,7 +41,13 @@ class UOPCodeVFPUDecoder extends Module
       //                          | | | | ren3 | | | | | |  | | | |
       //                          | | | | |  | | | | | | |  | | | |
       Array(
-      BitPat(uopVADD)     -> List(X,X,Y,Y,N, N,Y,N,N,N,N,N, Y,N,N,Y)
+      BitPat(uopVADD)     -> List(X,X,Y,Y,N, N,Y,N,N,N,N,N, Y,N,N,Y),
+      BitPat(uopVSUB)     -> List(X,X,Y,Y,N, N,Y,N,N,N,N,N, Y,N,N,Y),
+      BitPat(uopVMUL)     -> List(X,X,Y,Y,N, N,N,N,N,N,N,N, Y,N,N,Y),
+      BitPat(uopVMADD)    -> List(X,X,Y,Y,Y, N,N,N,N,N,N,N, Y,N,N,Y),
+      BitPat(uopVMSUB)    -> List(X,X,Y,Y,Y, N,N,N,N,N,N,N, Y,N,N,Y),
+      BitPat(uopVNMADD)   -> List(X,X,Y,Y,Y, N,N,N,N,N,N,N, Y,N,N,Y),
+      BitPat(uopVNMSUB)   -> List(X,X,Y,Y,Y, N,N,N,N,N,N,N, Y,N,N,Y)
       )
 
    val insns = table
@@ -53,6 +59,33 @@ class UOPCodeVFPUDecoder extends Module
                   s.div, s.sqrt, s.wflags)
    sigs zip decoder map {case(s,d) => s := d}
 }
+
+class VFMADecoder extends Module
+{
+   val io = IO(new Bundle
+   {
+      val uopc = UInt(INPUT, UOPC_SZ)
+      val cmd = UInt(OUTPUT, 2)
+   })
+
+   val default: List[BitPat] = List(BitPat("b??"))
+   val table: Array[(BitPat, List[BitPat])] =
+   Array(
+      BitPat(uopVADD)     -> List(BitPat("b00")), // TODO : Add bindings for vector uops
+      BitPat(uopVSUB)     -> List(BitPat("b01")),
+      BitPat(uopVMUL)     -> List(BitPat("b00")),
+      BitPat(uopVMADD)    -> List(BitPat("b00")),
+      BitPat(uopVMSUB)    -> List(BitPat("b01")),
+      BitPat(uopVNMADD)   -> List(BitPat("b11")),
+      BitPat(uopVNMSUB)   -> List(BitPat("b10"))
+      )
+
+   val decoder = rocket.DecodeLogic(io.uopc, default, table)
+
+   val (cmd: UInt) :: Nil = decoder
+   io.cmd := cmd
+}
+
 
 class VFpuReq()(implicit p: Parameters) extends BoomBundle()(p)
 { // TODO_Vec: Figure out width. 128? 130?
@@ -93,7 +126,7 @@ class VFPU(implicit p: Parameters) extends BoomModule()(p) with tile.HasFPUParam
       req.in3 := recode_fn(unpack_fn(io_req.rs3_data, idx))
       when (vfp_ctrl.swap23) {req.in3 := req.in2 }
       req.typ := ImmGenTyp(io_req.uop.imm_packed)
-      val fma_decoder = Module(new FMADecoder)
+      val fma_decoder = Module(new VFMADecoder)
       fma_decoder.io.uopc := io_req.uop.uopc
       req.fmaCmd := fma_decoder.io.cmd
       req
@@ -144,21 +177,21 @@ class VFPU(implicit p: Parameters) extends BoomModule()(p) with tile.HasFPUParam
    {
       assert(io.req.bits.uop.dst_rtype === RT_VEC && io.req.bits.uop.rd_vshape === VSHAPE_VECTOR,
          "Desination must be vector reg\n")
-      when (io.req.bits.uop.lrs1_rtype =\= RT_X)
+      when (io.req.bits.uop.lrs1_rtype =/= RT_X)
       {
          assert(io.req.bits.uop.rs1_vew === io.req.bits.uop.rd_vew,
             "Element width of rs1 does not match")
          assert(io.req.bits.uop.rs1_verep === io.req.bits.uop.rd_verep,
             "Element rep of rs1 does not match")
       }
-      when (io.req.bits.uop.lrs2_rtype =\= RT_X)
+      when (io.req.bits.uop.lrs2_rtype =/= RT_X)
       {
          assert(io.req.bits.uop.rs2_vew === io.req.bits.uop.rd_vew,
             "Element width of rs2 does not match")
          assert(io.req.bits.uop.rs2_verep === io.req.bits.uop.rd_verep,
             "Element rep of rs2 does not match")
       }
-      when (io.req.bits.uop.lrs3_rtype =\= RT_X)
+      when (io.req.bits.uop.lrs3_rtype =/= RT_X)
       {
          assert(io.req.bits.uop.rs3_vew === io.req.bits.uop.rd_vew,
             "Element width of rs3 does not match")

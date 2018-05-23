@@ -353,8 +353,14 @@ object VecDecode extends DecodeConstants
              //     |  |  |  |  |                   |       dst     |       |       |       |  |     |  |  |  |  |  mem    mem    |        |  |  |  |  |  is unique? (clear pipeline for it)
              //     |  |  |  |  |                   |       regtype |       |       |       |  |     |  |  |  |  |  cmd    msk    |        |  |  |  |  |  |  flush on commit
              //     |  |  |  |  |                   |       |       |       |       |       |  |     |  |  |  |  |  |      |      |        |  |  |  |  |  |  |  csr cmd
-   VADD      ->List(Y, N, Y, N, uopVADD  ,  IQT_VEC,FU_VFPU,RT_VEC, RT_VEC, RT_VEC, RT_X  , N, IS_X, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, N, N, N, CSR.N)
-   ) // TODO_VEC Add all other instructions, decide correct uop for polymorphism
+   VADD      ->List(Y, N, Y, N, uopVADD  ,  IQT_VEC,FU_VFPU,RT_VEC, RT_VEC, RT_VEC, RT_X  , N, IS_X, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, N, N, N, CSR.N),
+   VSUB      ->List(Y, N, Y, N, uopVSUB  ,  IQT_VEC,FU_VFPU,RT_VEC, RT_VEC, RT_VEC, RT_X  , N, IS_X, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, N, N, N, CSR.N),
+   VMUL      ->List(Y, N, Y, N, uopVMUL  ,  IQT_VEC,FU_VFPU,RT_VEC, RT_VEC, RT_VEC, RT_X  , N, IS_X, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, N, N, N, CSR.N)
+   // VMADD     ->List(Y, N, Y, N, uopVMADD ,  IQT_VEC,FU_VFPU,RT_VEC, RT_VEC, RT_VEC, RT_VEC, N, IS_X, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, N, N, N, CSR.N),
+   // VMSUB     ->List(Y, N, Y, N, uopVMSUB ,  IQT_VEC,FU_VFPU,RT_VEC, RT_VEC, RT_VEC, RT_VEC, N, IS_X, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, N, N, N, CSR.N),
+   // VNMADD    ->List(Y, N, Y, N, uopVNMADD,  IQT_VEC,FU_VFPU,RT_VEC, RT_VEC, RT_VEC, RT_VEC, N, IS_X, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, N, N, N, CSR.N),
+   // VNMSUB    ->List(Y, N, Y, N, uopVNMSUB,  IQT_VEC,FU_VFPU,RT_VEC, RT_VEC, RT_VEC, RT_VEC, N, IS_X, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, N, N, N, CSR.N)
+  ) // TODO_VEC Add all other instructions, decide correct uop for polymorphism
 // scalastyle:on
 }
 
