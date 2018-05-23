@@ -98,6 +98,21 @@ class MicroOp(implicit p: Parameters) extends BoomBundle()(p)
    val lrs3_rtype       = UInt(width=RT_SZ)
    val frs3_en          = Bool()
 
+   val rs1_vew          = UInt(width=VEW_SZ)
+   val rs2_vew          = UInt(width=VEW_SZ)
+   val rs3_vew          = UInt(width=VEW_SZ)
+   val rd_vew           = UInt(width=VEW_SZ)
+
+   val rs1_vshape       = UInt(width=VSHAPE_SZ)
+   val rs2_vshape       = UInt(width=VSHAPE_SZ)
+   val rs3_vshape       = UInt(width=VSHAPE_SZ)
+   val rd_vshape        = UInt(width=VSHAPE_SZ)
+
+   val rs1_verep        = UInt(width=VEREP_SZ)
+   val rs2_verep        = UInt(width=VEREP_SZ)
+   val rs3_verep        = UInt(width=VEREP_SZ)
+   val rd_verep         = UInt(width=VEREP_SZ)
+
    // floating point information
    val fp_val           = Bool()             // is a floating-point instruction (F- or D-extension)?
                                              // If it's non-ld/st it will write back exception bits to the fcsr.

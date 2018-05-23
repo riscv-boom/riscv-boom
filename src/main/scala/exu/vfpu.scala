@@ -19,56 +19,38 @@ class UOPCodeVFPUDecoder extends Module
   val io = IO(new Bundle {
      val uopc = Bits(INPUT, UOPC_SZ)
      val sigs = new FPUCtrlSigs().asOutput
-     val fp_type = UInt(width=VFP_SZ).asOutput
   })
    val N = Bool(false)
    val Y = Bool(true)
    val X = Bool(false)
 
-   val default: List[BitPat] = List(X,X,X,X,X, X,X,X,X,X,X,X, X,X,X,X, X)
+   val default: List[BitPat] = List(X,X,X,X,X, X,X,X,X,X,X,X, X,X,X,X)
 
-   // TODO_vec: Add half_precision table
 
-   val f_table: Array[(BitPat, List[BitPat])] =
+
+   val table: Array[(BitPat, List[BitPat])] =
       // Note: not all of these signals are used or necessary, but we're
       // constrained by the need to fit the rocket.FPU units' ctrl signals.
       //                                     swap12         fma
       //                                     | swap32       | div
       //                                     | | singleIn   | | sqrt
       //                          ldst       | | | singleOut| | | wflags
-      //                          | wen      | | | | fromint| | | | fp_type
-      //                          | | ren1   | | | | | toint| | | | |
-      //                          | | | ren2 | | | | | | fastpipe | |
-      //                          | | | | ren3 | | | | | |  | | | | |
-      //                          | | | | |  | | | | | | |  | | | | |
+      //                          | wen      | | | | fromint| | | |
+      //                          | | ren1   | | | | | toint| | | |
+      //                          | | | ren2 | | | | | | fastpipe |
+      //                          | | | | ren3 | | | | | |  | | | |
+      //                          | | | | |  | | | | | | |  | | | |
       Array(
-
-      ) // TODO_vec: Add all other uops, make these uops specify precision
-   // TODO_vec: Multi-precision ops
-
-   val d_table: Array[(BitPat, List[BitPat])] =
-      // Note: not all of these signals are used or necessary, but we're
-      // constrained by the need to fit the rocket.FPU units' ctrl signals.
-      //                                     swap12         fma
-      //                                     | swap32       | div
-      //                                     | | singleIn   | | sqrt
-      //                          ldst       | | | singleOut| | | wflags
-      //                          | wen      | | | | fromint| | | | fp_type
-      //                          | | ren1   | | | | | toint| | | | |
-      //                          | | | ren2 | | | | | | fastpipe | |
-      //                          | | | | ren3 | | | | | |  | | | | |
-      //                          | | | | |  | | | | | | |  | | | | |
-      Array(
-      BitPat(uopVADD)     -> List(X,X,Y,Y,N, N,Y,N,N,N,N,N, Y,N,N,Y,VFP_D)
+      BitPat(uopVADD)     -> List(X,X,Y,Y,N, N,Y,N,N,N,N,N, Y,N,N,Y)
       )
 
-   val insns = f_table ++ d_table
+   val insns = table
    val decoder = rocket.DecodeLogic(io.uopc, default, insns)
 
    val s = io.sigs
    val sigs = Seq(s.ldst, s.wen, s.ren1, s.ren2, s.ren3, s.swap12,
                   s.swap23, s.singleIn, s.singleOut, s.fromint, s.toint, s.fastpipe, s.fma,
-                  s.div, s.sqrt, s.wflags, io.fp_type)
+                  s.div, s.sqrt, s.wflags)
    sigs zip decoder map {case(s,d) => s := d}
 }
 
@@ -158,14 +140,40 @@ class VFPU(implicit p: Parameters) extends BoomModule()(p) with tile.HasFPUParam
    def expand_float_s(n: Bits) = expand_w(n)
    def expand_float_h(n: Bits) = expand_h(n)
 
+   when (io.req.valid)
+   {
+      assert(io.req.bits.uop.dst_rtype === RT_VEC && io.req.bits.uop.rd_vshape === VSHAPE_VECTOR,
+         "Desination must be vector reg\n")
+      when (io.req.bits.uop.lrs1_rtype =\= RT_X)
+      {
+         assert(io.req.bits.uop.rs1_vew === io.req.bits.uop.rd_vew,
+            "Element width of rs1 does not match")
+         assert(io.req.bits.uop.rs1_verep === io.req.bits.uop.rd_verep,
+            "Element rep of rs1 does not match")
+      }
+      when (io.req.bits.uop.lrs2_rtype =\= RT_X)
+      {
+         assert(io.req.bits.uop.rs2_vew === io.req.bits.uop.rd_vew,
+            "Element width of rs2 does not match")
+         assert(io.req.bits.uop.rs2_verep === io.req.bits.uop.rd_verep,
+            "Element rep of rs2 does not match")
+      }
+      when (io.req.bits.uop.lrs3_rtype =\= RT_X)
+      {
+         assert(io.req.bits.uop.rs3_vew === io.req.bits.uop.rd_vew,
+            "Element width of rs3 does not match")
+         assert(io.req.bits.uop.rs3_verep === io.req.bits.uop.rd_verep,
+            "Element rep of rs3 does not match")
+      }
+   }
 
    val results =
-      List((SZ_D, VFP_D, recode_dp _, unpack_d _, ieee_dp _, repack_d _, expand_float_d _, (11, 53)),
-           (SZ_W, VFP_S, recode_sp _, unpack_w _, ieee_sp _, repack_w _, expand_float_s _, (8, 24)),
-           (SZ_H, VFP_H, recode_hp _, unpack_h _, ieee_hp _, repack_h _, expand_float_h _, (5, 11))) map {
-         case (sz, fp_type, recode, unpack, ieee, repack, expand, (exp, sig)) => {
+      List((SZ_D, VEW_64, recode_dp _, unpack_d _, ieee_dp _, repack_d _, expand_float_d _, (11, 53)),
+           (SZ_W, VEW_32, recode_sp _, unpack_w _, ieee_sp _, repack_w _, expand_float_s _, (8, 24)),
+           (SZ_H, VEW_16, recode_hp _, unpack_h _, ieee_hp _, repack_h _, expand_float_h _, (5, 11))) map {
+         case (sz, ew, recode, unpack, ieee, repack, expand, (exp, sig)) => {
             val n = SZ_D / sz
-            val fp_val = io.req.valid && vfp_decoder.io.fp_type === fp_type
+            val fp_val = io.req.valid && io.req.bits.uop.rd_vew === ew
             val results = for (i <- (0 until n)) yield {
                val fma = Module(new tile.FPUFMAPipe(latency=vfpu_latency, t=tile.FType(exp=exp, sig=sig)))
                // TODO_vec add predication here

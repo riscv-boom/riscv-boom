@@ -13,7 +13,8 @@ package object common extends
    boom.common.constants.RISCVConstants with
    boom.common.constants.IQType with
    boom.common.constants.VecConstants with
-   boom.common.constants.Sizes
+   boom.common.constants.Sizes with
+   freechips.rocketchip.rocket.constants.VecCfgConstants
 {
 }
 

@@ -224,7 +224,7 @@ object XDecode extends DecodeConstants
 // scalastyle:on
 }
 
-object FDecode extends DecodeConstants 
+object FDecode extends DecodeConstants
 {
 // scalastyle:off
   val table: Array[(BitPat, List[BitPat])] = Array(
@@ -445,6 +445,21 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule()(p)
    uop.lrs3_rtype := cs.rs3_type
    uop.frs3_en    := cs.rs3_type === RT_FLT
 
+   uop.rs1_vew    := io.vecstatus.vews(uop.lrs1)
+   uop.rs2_vew    := io.vecstatus.vews(uop.lrs2)
+   uop.rs3_vew    := io.vecstatus.vews(uop.lrs3)
+   uop.rd_vew     := io.vecstatus.vews(uop.ldst)
+
+   uop.rs1_vshape := io.vecstatus.vshapes(uop.lrs1)
+   uop.rs2_vshape := io.vecstatus.vshapes(uop.lrs2)
+   uop.rs3_vshape := io.vecstatus.vshapes(uop.lrs3)
+   uop.rd_vshape  := io.vecstatus.vshapes(uop.ldst)
+
+   uop.rs1_verep  := io.vecstatus.vereps(uop.lrs1)
+   uop.rs2_verep  := io.vecstatus.vereps(uop.lrs2)
+   uop.rs3_verep  := io.vecstatus.vereps(uop.lrs3)
+   uop.rd_verep   := io.vecstatus.vereps(uop.ldst)
+
    uop.fp_val     := cs.fp_val
    uop.vec_val    := cs.vec_val
    uop.fp_single  := cs.fp_single // TODO use this signal instead of the FPU decode's table signal?
@@ -624,4 +639,3 @@ class BranchMaskGenerationLogic(val pl_width: Int)(implicit p: Parameters) exten
 
    override val compileOptions = chisel3.core.ExplicitCompileOptions.NotStrict.copy(explicitInvalidate = true)
 }
-
