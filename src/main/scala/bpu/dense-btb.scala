@@ -250,9 +250,11 @@ class DenseBTB(implicit p: Parameters) extends BoomBTB
    val sel_cfi_idx = PriorityEncoder(cfi_oh)
 
    val data_sel = Wire(init = UInt(0, width = way_idx_sz))
+   val hits_oh  = Wire(init = Vec.fill(nWays){ false.B })
    for (i <- 0 until nWays) {
       when (data_out(i).cfi_idx === sel_cfi_idx && hits(i)) {
-         data_sel := i.U
+         data_sel   := i.U
+         hits_oh(i) := true.B
       }
    }
 
@@ -321,8 +323,6 @@ class DenseBTB(implicit p: Parameters) extends BoomBTB
       }
    }
 
-   // TODO: need to verify this once the RAS is hooked up
-   val hits_oh = PriorityEncoderOH(hits)
    if (nRAS > 0)
    {
       val ras = new RAS(nRAS, coreInstBytes)
