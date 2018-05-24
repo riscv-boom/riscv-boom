@@ -33,7 +33,7 @@ import boom.util._
 object FUConstants
 {
    // bit mask, since a given execution pipeline may support multiple functional units
-   val FUC_SZ = 11
+   val FUC_SZ = 12
    val FU_X   = BitPat.dontCare(FUC_SZ)
    val FU_ALU = UInt(  1, FUC_SZ)
    val FU_BRU = UInt(  2, FUC_SZ)
@@ -46,6 +46,7 @@ object FUConstants
    val FU_I2F = UInt(256, FUC_SZ)
    val FU_F2I = UInt(512, FUC_SZ)
    val FU_VFPU= UInt(1024,FUC_SZ) // TODO_vec Add stuff for viu, vmem, etc
+   val FU_VALU= UInt(2048,FUC_SZ)
 }
 import FUConstants._
 
@@ -59,7 +60,8 @@ class SupportedFuncUnits(
    val csr: Boolean  = false,
    val fdiv: Boolean = false,
    val ifpu: Boolean = false,
-   val vfpu: Boolean = false) // Todo_vec: Add stuff for viu, vmem, etc
+   val vfpu: Boolean = false,
+   val valu: Boolean = false) // Todo_vec: Add stuff for viu, vmem, etc
 {
 }
 

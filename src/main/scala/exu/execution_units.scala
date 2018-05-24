@@ -125,7 +125,7 @@ class ExecutionUnits(fpu: Boolean = false, vec: Boolean = false)(implicit val p:
       val vec_width = issueParams.find(_.iqType == IQT_VEC.litValue).get.issueWidth
       require (vec_width <= 1)
       for (w <- 0 until vec_width) {
-          exe_units += Module(new VecFPUExeUnit(has_vfpu = true));
+         exe_units += Module(new VecFPUExeUnit(has_vfpu = true, has_valu = true));
       }
       // TODO_vec: Add vmem, viu, valu
    }

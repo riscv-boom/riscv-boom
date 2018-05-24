@@ -314,6 +314,20 @@ object VFPURRdDecode extends RRdDecodeConstants
          BitPat(uopVNMSUB) ->List(BR_N, Y, N, N, FN_X   , DW_X  , OP1_X   , OP2_X   , IS_X, REN_1, CSR.N))
 }
 
+object VALURRdDecode extends RRdDecodeConstants
+{
+   val table: Array[(BitPat, List[BitPat])] =
+              Array[(BitPat, List[BitPat])](
+                               // br type
+                               // |      use alu pipe              op1 sel   op2 sel
+                               // |      |  use muldiv pipe        |         |         immsel       csr_cmd
+                               // |      |  |  use mem pipe        |         |         |     rf wen |
+                               // |      |  |  |  alu fcn  wd/word?|         |         |     |      |
+                               // |      |  |  |  |        |       |         |         |     |      |
+
+              )
+}
+
 class RegisterReadDecode(supported_units: SupportedFuncUnits)(implicit p: Parameters) extends BoomModule()(p)
 {
    val io = IO(new BoomBundle()(p)
@@ -338,6 +352,7 @@ class RegisterReadDecode(supported_units: SupportedFuncUnits)(implicit p: Parame
    if (supported_units.fdiv) dec_table ++= FDivRRdDecode.table
    if (supported_units.ifpu) dec_table ++= IfmvRRdDecode.table
    if (supported_units.vfpu) dec_table ++= VFPURRdDecode.table
+   if (supported_units.valu) dec_table ++= VALURRdDecode.table
    val rrd_cs = Wire(new RRdCtrlSigs()).decode(io.rrd_uop.uopc, dec_table)
 
    // rrd_use_alupipe is unused

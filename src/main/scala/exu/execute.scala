@@ -92,7 +92,8 @@ abstract class ExecutionUnit(val num_rf_read_ports: Int
                             , val has_ifpu      : Boolean       = false
                             , val has_fpiu      : Boolean       = false
                             , val has_vfpu      : Boolean       = false
-                            )(implicit p: Parameters) extends BoomModule()(p)
+                            , val has_valu      : Boolean       = false
+)(implicit p: Parameters) extends BoomModule()(p)
 {
    val io = IO(new ExecutionUnitIO(num_rf_read_ports, num_rf_write_ports
                                , num_bypass_stages, data_width))
@@ -107,11 +108,11 @@ abstract class ExecutionUnit(val num_rf_read_ports: Int
    def usesFRF       : Boolean = (has_fpu || has_fdiv) && !(has_alu || has_mul)
    def usesIRF       : Boolean = !(has_fpu || has_fdiv) && (has_alu || has_mul || is_mem_unit || has_ifpu)
 
-   if (!has_vfpu)
-      {
-         require ((has_fpu || has_fdiv) ^ (has_alu || has_mul || is_mem_unit || has_ifpu),
-            "[execute] we no longer support mixing FP and Integer functional units in the same exe unit.")
-      }
+   if (!has_vfpu && !has_valu)
+   {
+      require ((has_fpu || has_fdiv) ^ (has_alu || has_mul || is_mem_unit || has_ifpu),
+         "[execute] we no longer support mixing FP and Integer functional units in the same exe unit.")
+   }
    def supportedFuncUnits =
    {
       new SupportedFuncUnits(
@@ -123,7 +124,8 @@ abstract class ExecutionUnit(val num_rf_read_ports: Int
          csr = uses_csr_wport,
          fdiv = has_fdiv,
          ifpu = has_ifpu,
-         vfpu = has_vfpu
+         vfpu = has_vfpu,
+         valu = has_valu
       )
    }
 }
@@ -339,28 +341,31 @@ class ALUExeUnit(
 }
 
 class VecFPUExeUnit(
-   has_vfpu : Boolean = true
+   has_vfpu : Boolean = true,
+   has_valu : Boolean = true
    )
    (implicit p: Parameters)
    extends ExecutionUnit(
-      num_rf_read_ports = 3,
+      num_rf_read_ports = 3, // TODO_vec: add 4 for predication
       num_rf_write_ports = 1, // TODO_vec: Build mechanism for writes into IRF, this should get changed to 2 I think
       num_bypass_stages = 0,
       data_width = 128,
       bypassable = false,
       has_alu = false,
+      has_valu = has_valu,
       has_vfpu = has_vfpu)(p) // TODO_vec: Add vmem, valu, vdiv, viu units
 {
    val out_str = new StringBuilder
    out_str.append("\n     ExeUnit--")
    if (has_vfpu)  out_str.append("\n       - VECFPU (Latency: " + dfmaLatency + ")")
-
+   if (has_valu)  out_str.append("\n       - VECALU")
    require (uses_iss_unit == true)
    // TODO_vec: Add div and toint stuff?
 
    val fu_units = ArrayBuffer[FunctionalUnit]()
 
-   io.fu_types := Mux(Bool(has_vfpu), FU_VFPU, Bits(0)) // TODO_vec Add stuff for div, ving, etc
+   io.fu_types := Mux(Bool(has_vfpu), FU_VFPU, Bits(0)) |
+                  Mux(Bool(has_valu), FU_VALU, Bits(0))// TODO_vec Add stuff for div, ving, etc
    io.resp(0).bits.writesToIRF = false
    //io.resp(1).bits.writesToIRF = true
 
@@ -383,17 +388,23 @@ class VecFPUExeUnit(
       vfpu.io.req.bits.kill      := io.req.bits.kill
       vfpu.io.brinfo             <> io.brinfo
 
-      // when (io.req.valid)
-      // {
-      //    printf("%d Valid VFPU op received\n", io.debug_tsc_reg)
-      // }
-      // when (vfpu.io.resp.valid)
-      // {
-      //    printf("%d VFPU op completed\n", io.debug_tsc_reg)
-      // }
       vfpu_resp_val              := vfpu.io.resp.valid
       vfpu_resp_fflags           := vfpu.io.resp.bits.fflags
       fu_units += vfpu
+   }
+   var valu: VALUUnit = null
+   val valu_resp_val = Wire(init=Bool(false))
+   if (has_valu)
+   {
+      valu = Module(new VALUUnit(num_stages=num_bypass_stages))
+      valu.io.req.valid          := io.req.valid &&
+                                    (io.req.bits.uop.fu_code_is(FU_VALU))
+      valu.io.req.bits.kill      := io.req.bits.kill
+      valu.io.req.bits.rs1_data  := io.req.bits.rs1_data
+      valu.io.req.bits.rs2_data  := io.req.bits.rs2_data
+      valu.io.req.bits.rs3_data  := io.req.bits.rs3_data
+      valu.io.brinfo             <> io.brinfo
+      fu_units += valu
    }
 
    // Outputs
@@ -402,10 +413,7 @@ class VecFPUExeUnit(
       PriorityMux(fu_units.map(f => (f.io.resp.valid, f.io.resp.bits.uop.asUInt))))
    io.resp(0).bits.data   := PriorityMux(fu_units.map(f =>(f.io.resp.valid, f.io.resp.bits.data.asUInt))).asUInt
    io.resp(0).bits.fflags := vfpu_resp_fflags // TODO_vec add div flags here
-   // when (io.resp(0).valid)
-   // {
-   //    printf("%d VFPU full response complete\n", io.debug_tsc_reg)
-   // }
+   assert(!(valu.io.resp.valid && vfpu.io.resp.valid), "VALU and VFPU contending for write port")
    override def toString: String = out_str.toString
 }
 
