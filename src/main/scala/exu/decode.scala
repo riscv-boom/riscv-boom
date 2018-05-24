@@ -355,11 +355,11 @@ object VecDecode extends DecodeConstants
              //     |  |  |  |  |                   |       |       |       |       |       |  |     |  |  |  |  |  |      |      |        |  |  |  |  |  |  |  csr cmd
    VADD      ->List(Y, N, Y, N, uopVADD  ,  IQT_VEC,FU_VFPU,RT_VEC, RT_VEC, RT_VEC, RT_X  , N, IS_X, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, N, N, N, CSR.N),
    VSUB      ->List(Y, N, Y, N, uopVSUB  ,  IQT_VEC,FU_VFPU,RT_VEC, RT_VEC, RT_VEC, RT_X  , N, IS_X, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, N, N, N, CSR.N),
-   VMUL      ->List(Y, N, Y, N, uopVMUL  ,  IQT_VEC,FU_VFPU,RT_VEC, RT_VEC, RT_VEC, RT_X  , N, IS_X, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, N, N, N, CSR.N)
-   // VMADD     ->List(Y, N, Y, N, uopVMADD ,  IQT_VEC,FU_VFPU,RT_VEC, RT_VEC, RT_VEC, RT_VEC, N, IS_X, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, N, N, N, CSR.N),
-   // VMSUB     ->List(Y, N, Y, N, uopVMSUB ,  IQT_VEC,FU_VFPU,RT_VEC, RT_VEC, RT_VEC, RT_VEC, N, IS_X, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, N, N, N, CSR.N),
-   // VNMADD    ->List(Y, N, Y, N, uopVNMADD,  IQT_VEC,FU_VFPU,RT_VEC, RT_VEC, RT_VEC, RT_VEC, N, IS_X, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, N, N, N, CSR.N),
-   // VNMSUB    ->List(Y, N, Y, N, uopVNMSUB,  IQT_VEC,FU_VFPU,RT_VEC, RT_VEC, RT_VEC, RT_VEC, N, IS_X, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, N, N, N, CSR.N)
+   VMUL      ->List(Y, N, Y, N, uopVMUL  ,  IQT_VEC,FU_VFPU,RT_VEC, RT_VEC, RT_VEC, RT_X  , N, IS_X, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, N, N, N, CSR.N),
+   VMADD     ->List(Y, N, Y, N, uopVMADD ,  IQT_VEC,FU_VFPU,RT_VEC, RT_VEC, RT_VEC, RT_VEC, N, IS_X, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, N, N, N, CSR.N),
+   VMSUB     ->List(Y, N, Y, N, uopVMSUB ,  IQT_VEC,FU_VFPU,RT_VEC, RT_VEC, RT_VEC, RT_VEC, N, IS_X, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, N, N, N, CSR.N),
+   VNMADD    ->List(Y, N, Y, N, uopVNMADD,  IQT_VEC,FU_VFPU,RT_VEC, RT_VEC, RT_VEC, RT_VEC, N, IS_X, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, N, N, N, CSR.N),
+   VNMSUB    ->List(Y, N, Y, N, uopVNMSUB,  IQT_VEC,FU_VFPU,RT_VEC, RT_VEC, RT_VEC, RT_VEC, N, IS_X, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, N, N, N, CSR.N)
   ) // TODO_VEC Add all other instructions, decide correct uop for polymorphism
 // scalastyle:on
 }
@@ -449,7 +449,7 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule()(p)
    uop.lrs1_rtype := cs.rs1_type
    uop.lrs2_rtype := cs.rs2_type
    uop.lrs3_rtype := cs.rs3_type
-   uop.frs3_en    := cs.rs3_type === RT_FLT
+   uop.frs3_en    := cs.rs3_type =/= RT_X
 
    uop.rs1_vew    := io.vecstatus.vews(uop.lrs1)
    uop.rs2_vew    := io.vecstatus.vews(uop.lrs2)
