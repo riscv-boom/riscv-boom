@@ -238,16 +238,30 @@ class DenseBTB(implicit p: Parameters) extends BoomBTB
       }
    }
 
-   s1_valid := hits.asUInt.orR && !io.flush
+   // TODO: need a better circuit for this!
+   // currently, we create a one-hot matrix for all the cfi_idx's that hit that is combined with the response from bim
+   // and use the result to get a cfi_idx based on a priority-encoding. We finally take the result of the selected
+   // cfi_idx to figure out which way has this to select the data!
 
-   // TODO: figure out a circuit for the case of multiple-hits, need to pick the earliest branch
-   // currently going with the PriorityEncoder
-   val data_sel = PriorityEncoder(hits)
-   val blevel   = blevels_vec(data_sel)
+   val cfi_oh = ((0 until nWays).map {
+      i => Mux(hits(i), UIntToOH(data_out(i.U).cfi_idx, fetchWidth), 0.U(fetchWidth.W))
+   }.reduce(_ | _)) & bim.io.resp.bits.getTakens
+
+   val sel_cfi_idx = PriorityEncoder(cfi_oh)
+
+   val data_sel = Wire(init = UInt(0, width = way_idx_sz))
+   for (i <- 0 until nWays) {
+      when (data_out(i).cfi_idx === sel_cfi_idx && hits(i)) {
+         data_sel := i.U
+      }
+   }
+
+   s1_valid := hits(data_sel) && !io.flush
 
    s1_resp_bits.fetch_pc := s1_pc
 
    // TODO: Generalize the logic to read out; Currently, uses the same assumptions as in getBankWriteData
+   val blevel = blevels_vec(data_sel)
    when (blevel === 0.U) {
       s1_resp_bits.target   := Cat(s1_pc(vaddrBits-1,offset_sz+lsb_sz), data_out(data_sel).offset, UInt(0, lsb_sz))
       s1_resp_bits.cfi_idx  := (if (fetchWidth > 1) data_out(data_sel).cfi_idx else 0.U)
@@ -307,12 +321,12 @@ class DenseBTB(implicit p: Parameters) extends BoomBTB
       }
    }
 
-   // TODO: IMPORTANT: fix this based on how the data gets selected above
+   // TODO: need to verify this once the RAS is hooked up
    val hits_oh = PriorityEncoderOH(hits)
    if (nRAS > 0)
    {
       val ras = new RAS(nRAS, coreInstBytes)
-      // Assumes only short branches...
+      // TODO: assumes only short branches...need to verify this
       val doPeek = (hits_oh zip data_out map {case(hit, d) => hit && BpredType.isReturn(d.bpd_type)}).reduce(_||_)
       val isEmpty = if (rasCheckForEmpty) ras.isEmpty else false.B
       when (!isEmpty && doPeek)
