@@ -12,7 +12,7 @@ import freechips.rocketchip.tile
 import freechips.rocketchip.rocket
 import freechips.rocketchip.util.uintToBitPat
 import boom.common._
-import boom.util.{ImmGenRm, ImmGenTyp}
+import boom.util.{ImmGenRm, ImmGenTyp, Packing}
 
 class UOPCodeVFPUDecoder extends Module
 {
@@ -95,7 +95,7 @@ class VFpuReq()(implicit p: Parameters) extends BoomBundle()(p)
    val rs3_data = Bits(width = 128)
    val fcsr_rm  = Bits(width = tile.FPConstants.RM_SZ) // TODO_Vec: Is rounding mode still controlled by fp csrs?
 }
-class VFPU(implicit p: Parameters) extends BoomModule()(p) with tile.HasFPUParameters
+class VFPU(implicit p: Parameters) extends BoomModule()(p) with tile.HasFPUParameters with Packing
 {
    val io = IO(new Bundle
       {
@@ -132,46 +132,7 @@ class VFPU(implicit p: Parameters) extends BoomModule()(p) with tile.HasFPUParam
       req
    }
 
-   // TODO_Vec: Move all this stuff to util
-   def recode_dp(n: Bits) = hardfloat.recFNFromFN(11, 53, n.asUInt)
-   def recode_sp(n: Bits) = hardfloat.recFNFromFN(8, 24, n.asUInt)
-   def recode_hp(n: Bits) = hardfloat.recFNFromFN(5, 11, n.asUInt)
-   def ieee_dp(n: Bits) = hardfloat.fNFromRecFN(11, 53, n.asUInt)
-   def ieee_sp(n: Bits) = hardfloat.fNFromRecFN(8, 24, n.asUInt)
-   def ieee_hp(n: Bits) = hardfloat.fNFromRecFN(5, 11, n.asUInt)
 
-   def _unpack(n: Bits, idx: Int, extent: Int, period: Int, width: Int): UInt = {
-      require((idx+1)*period <= extent)
-      val base = idx*period
-      n(width+base-1, base)
-   }
-   def _unpack(n: Bits, idx: Int, extent: Int, period: Int): UInt =
-      _unpack(n, idx, extent, period, period)
-
-   def unpack_d(n: Bits, idx: Int) = _unpack(n, idx, SZ_D, SZ_D)
-   def unpack_w(n: Bits, idx: Int) = _unpack(n, idx, SZ_D, SZ_W)
-   def unpack_h(n: Bits, idx: Int) = _unpack(n, idx, SZ_D, SZ_H)
-   def _repack(n: Seq[Bits], len: Int) = {
-      require(n.length == len)
-      Cat(n.reverse)
-   }
-
-   def repack_d(n: Seq[Bits]) = _repack(n, SZ_D/SZ_D)
-   def repack_w(n: Seq[Bits]) = _repack(n, SZ_D/SZ_W)
-   def repack_h(n: Seq[Bits]) = _repack(n, SZ_D/SZ_H)
-   def repack_b(n: Seq[Bits]) = _repack(n, SZ_D/SZ_B)
-
-   def _expand(n: Bits, s: Bits, width: Int) = {
-      Cat(Fill(SZ_D - width, s.asUInt), n)
-   }
-
-   def expand_d(n: Bits) = n
-   def expand_w(n: Bits) = _expand(n, n(SZ_W-1), SZ_W)
-   def expand_h(n: Bits) = _expand(n, n(SZ_H-1), SZ_H)
-   def expand_b(n: Bits) = _expand(n, n(SZ_B-1), SZ_B)
-   def expand_float_d(n: Bits) = expand_d(n)
-   def expand_float_s(n: Bits) = expand_w(n)
-   def expand_float_h(n: Bits) = expand_h(n)
 
    when (io.req.valid)
    {
@@ -205,7 +166,7 @@ class VFPU(implicit p: Parameters) extends BoomModule()(p) with tile.HasFPUParam
            (SZ_W, VEW_32, recode_sp _, unpack_w _, ieee_sp _, repack_w _, expand_float_s _, (8, 24)),
            (SZ_H, VEW_16, recode_hp _, unpack_h _, ieee_hp _, repack_h _, expand_float_h _, (5, 11))) map {
          case (sz, ew, recode, unpack, ieee, repack, expand, (exp, sig)) => {
-            val n = SZ_D / sz
+            val n = 128 / sz
             val fp_val = io.req.valid && io.req.bits.uop.rd_vew === ew
             val results = for (i <- (0 until n)) yield {
                val fma = Module(new tile.FPUFMAPipe(latency=vfpu_latency, t=tile.FType(exp=exp, sig=sig)))

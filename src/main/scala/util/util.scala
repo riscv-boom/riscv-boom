@@ -13,7 +13,7 @@ import Chisel._
 
 import freechips.rocketchip.rocket.Instructions._
 import freechips.rocketchip.rocket._
-import boom.common.MicroOp
+import boom.common._
 import boom.exu.{BrResolutionInfo, ExeUnitResp}
 
 
@@ -402,3 +402,44 @@ class QueueForMicroOpWithData(entries: Int, data_width: Int)
    }
 }
 
+abstract trait Packing {
+   def recode_dp(n: Bits) = hardfloat.recFNFromFN(11, 53, n.asUInt)
+   def recode_sp(n: Bits) = hardfloat.recFNFromFN(8, 24, n.asUInt)
+   def recode_hp(n: Bits) = hardfloat.recFNFromFN(5, 11, n.asUInt)
+   def ieee_dp(n: Bits) = hardfloat.fNFromRecFN(11, 53, n.asUInt)
+   def ieee_sp(n: Bits) = hardfloat.fNFromRecFN(8, 24, n.asUInt)
+   def ieee_hp(n: Bits) = hardfloat.fNFromRecFN(5, 11, n.asUInt)
+
+   def _unpack(n: Bits, idx: Int, extent: Int, period: Int, width: Int): UInt = {
+      require((idx+1)*period <= extent)
+      val base = idx*period
+      n(width+base-1, base)
+   }
+   def _unpack(n: Bits, idx: Int, extent: Int, period: Int): UInt =
+      _unpack(n, idx, extent, period, period)
+
+   def unpack_d(n: Bits, idx: Int) = _unpack(n, idx, 128, SZ_D, SZ_D)
+   def unpack_w(n: Bits, idx: Int) = _unpack(n, idx, 128, SZ_W, SZ_W)
+   def unpack_h(n: Bits, idx: Int) = _unpack(n, idx, 128, SZ_H, SZ_H)
+   def _repack(n: Seq[Bits], len: Int) = {
+      require(n.length == len)
+      Cat(n.reverse)
+   }
+
+   def repack_d(n: Seq[Bits]) = _repack(n, 128/SZ_D)
+   def repack_w(n: Seq[Bits]) = _repack(n, 128/SZ_W)
+   def repack_h(n: Seq[Bits]) = _repack(n, 128/SZ_H)
+   def repack_b(n: Seq[Bits]) = _repack(n, 128/SZ_B)
+
+   def _expand(n: Bits, s: Bits, width: Int) = {
+      Cat(Fill(SZ_D - width, s.asUInt), n)
+   }
+
+   def expand_d(n: Bits) = n
+   def expand_w(n: Bits) = _expand(n, n(SZ_W-1), SZ_W)
+   def expand_h(n: Bits) = _expand(n, n(SZ_H-1), SZ_H)
+   def expand_b(n: Bits) = _expand(n, n(SZ_B-1), SZ_B)
+   def expand_float_d(n: Bits) = expand_d(n)
+   def expand_float_s(n: Bits) = expand_w(n)
+   def expand_float_h(n: Bits) = expand_h(n)
+}

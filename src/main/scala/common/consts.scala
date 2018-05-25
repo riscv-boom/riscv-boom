@@ -291,6 +291,19 @@ trait ScalarOpConstants
    val uopVMSUB     = UInt(128, UOPC_SZ)
    val uopVNMADD    = UInt(129, UOPC_SZ)
    val uopVNMSUB    = UInt(130, UOPC_SZ)
+
+   val uopVSLL      = UInt(131, UOPC_SZ)
+   val uopVSRL      = UInt(132, UOPC_SZ)
+   val uopVSRA      = UInt(133, UOPC_SZ)
+   val uopVSLT      = UInt(134, UOPC_SZ)
+   val uopVSLTU     = UInt(135, UOPC_SZ)
+   val uopVAND      = UInt(136, UOPC_SZ)
+   val uopVXOR      = UInt(137, UOPC_SZ)
+   val uopVOR       = UInt(138, UOPC_SZ)
+   val uopVFSJ      = UInt(139, UOPC_SZ)
+   val uopVFSJN     = UInt(140, UOPC_SZ)
+   val uopVFSJX     = UInt(141, UOPC_SZ)
+
    // The Bubble Instruction (Machine generated NOP)
    // Insert (XOR x0,x0,x0) which is different from software compiler
    // generated NOPs which are (ADDI x0, x0, 0).
