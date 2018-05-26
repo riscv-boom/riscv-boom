@@ -136,8 +136,8 @@ class VFPU(implicit p: Parameters) extends BoomModule()(p) with tile.HasFPUParam
 
    when (io.req.valid)
    {
-      assert(io.req.bits.uop.dst_rtype === RT_VEC && io.req.bits.uop.rd_vshape === VSHAPE_VECTOR,
-         "Desination must be vector reg\n")
+      assert(io.req.bits.uop.dst_rtype === RT_VEC && io.req.bits.uop.rd_vshape === VSHAPE_VECTOR && io.req.bits.uop.rd_verep === VEREP_FP,
+         "Desination must be fp vector reg\n")
       when (io.req.bits.uop.lrs1_rtype =/= RT_X)
       {
          assert(io.req.bits.uop.rs1_vew === io.req.bits.uop.rd_vew,

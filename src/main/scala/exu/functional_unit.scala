@@ -47,6 +47,7 @@ object FUConstants
    val FU_F2I = UInt(512, FUC_SZ)
    val FU_VFPU= UInt(1024,FUC_SZ) // TODO_vec Add stuff for viu, vmem, etc
    val FU_VALU= UInt(2048,FUC_SZ)
+   val FU_POLY= UInt(4095,FUC_SZ)
 }
 import FUConstants._
 

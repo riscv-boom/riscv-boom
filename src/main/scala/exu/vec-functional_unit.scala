@@ -56,13 +56,45 @@ class Comparator(w: Int) extends Module {
 
 class VALUUnit(num_stages: Int = 1) (implicit p: Parameters)
       extends PipelinedFunctionalUnit(num_stages = num_stages,
-         num_bypass_stages = num_stages,
+         num_bypass_stages = 0,
          earliest_bypass_stage = 0,
          data_width = 128,
          is_branch_unit = false)(p) with Packing
 {
    val uop = io.req.bits.uop
    val imm_xprlen = ImmGen(uop.imm_packed, uop.ctrl.imm_sel)
+   require(num_stages > 0, "This should be > 0 for now");
+   when (io.req.valid) {
+      printf("VALU received valid input\n");
+      printf("%d %x %x %x\n", uop.uopc, uop.dst_rtype, uop.rd_verep, uop.rd_vshape)
+      assert (io.req.bits.uop.dst_rtype === RT_VEC && io.req.bits.uop.rd_vshape === VSHAPE_VECTOR && (io.req.bits.uop.rd_verep === VEREP_FP || io.req.bits.uop.rd_verep === VEREP_INT || io.req.bits.uop.rd_verep === VEREP_UINT),
+         "Destination must be fp or int vector reg\n");
+      when (uop.uopc === uopVFSJ || uop.uopc === uopVFSJN || uop.uopc === uopVFSJX) {
+         assert (io.req.bits.uop.rd_verep === VEREP_FP,
+            "Sign extension ops only valid on fp regs\n")
+      }
+      when (io.req.bits.uop.lrs1_rtype =/= RT_X)
+      {
+         assert(io.req.bits.uop.rs1_vew === io.req.bits.uop.rd_vew,
+            "Element width of rs1 does not match")
+         assert(io.req.bits.uop.rs1_verep === io.req.bits.uop.rd_verep,
+            "Element rep of rs1 does not match")
+      }
+      when (io.req.bits.uop.lrs2_rtype =/= RT_X)
+      {
+         assert(io.req.bits.uop.rs2_vew === io.req.bits.uop.rd_vew,
+            "Element width of rs2 does not match")
+         assert(io.req.bits.uop.rs2_verep === io.req.bits.uop.rd_verep,
+            "Element rep of rs2 does not match")
+      }
+      when (io.req.bits.uop.lrs3_rtype =/= RT_X)
+      {
+         assert(io.req.bits.uop.rs3_vew === io.req.bits.uop.rd_vew,
+            "Element width of rs3 does not match")
+         assert(io.req.bits.uop.rs3_verep === io.req.bits.uop.rd_verep,
+            "Element rep of rs3 does not match")
+      }
+   }
 
    val results =
       List((SZ_D, VEW_64, unpack_d _, repack_d _),
@@ -121,5 +153,9 @@ class VALUUnit(num_stages: Int = 1) (implicit p: Parameters)
       }
    val alumatch = results.map(_._1)
    io.resp.valid := alumatch.reduce(_||_)
+   when (alumatch.reduce(_||_)) {
+      printf("VALU valid response\n")
+   }
    io.resp.bits.data := Mux1H(alumatch, results.map(_._2))
+
 }

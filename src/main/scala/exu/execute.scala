@@ -396,10 +396,11 @@ class VecFPUExeUnit(
    val valu_resp_val = Wire(init=Bool(false))
    if (has_valu)
    {
-      valu = Module(new VALUUnit(num_stages=num_bypass_stages))
+      valu = Module(new VALUUnit(num_stages=1))
       valu.io.req.valid          := io.req.valid &&
                                     (io.req.bits.uop.fu_code_is(FU_VALU))
       valu.io.req.bits.kill      := io.req.bits.kill
+      valu.io.req.bits.uop       := io.req.bits.uop
       valu.io.req.bits.rs1_data  := io.req.bits.rs1_data
       valu.io.req.bits.rs2_data  := io.req.bits.rs2_data
       valu.io.req.bits.rs3_data  := io.req.bits.rs3_data
@@ -414,6 +415,10 @@ class VecFPUExeUnit(
    io.resp(0).bits.data   := PriorityMux(fu_units.map(f =>(f.io.resp.valid, f.io.resp.bits.data.asUInt))).asUInt
    io.resp(0).bits.fflags := vfpu_resp_fflags // TODO_vec add div flags here
    assert(!(valu.io.resp.valid && vfpu.io.resp.valid), "VALU and VFPU contending for write port")
+   when (io.resp(0).valid) {
+      printf("A functional unit in the vector exe unit has valid response\n");
+      printf("%d %d %x\n", io.resp(0).bits.uop.uopc, io.resp(0).bits.uop.ldst, io.resp(0).bits.uop.inst)
+   }
    override def toString: String = out_str.toString
 }
 
