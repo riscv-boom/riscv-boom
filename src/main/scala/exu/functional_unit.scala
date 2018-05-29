@@ -658,20 +658,6 @@ class FPUUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(
    io.resp.bits.fflags.bits.flags := fpu.io.resp.bits.fflags.bits.flags // kill me now
 }
 
-class VFPUUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(
-   num_stages = p(tile.TileKey).core.fpu.get.dfmaLatency,
-   num_bypass_stages = 0,
-   earliest_bypass_stage = 0,
-   data_width = 128)(p)
-{
-   val vfpu = Module(new VFPU())
-   vfpu.io.req <> io.req
-
-   io.resp.bits.data               := vfpu.io.resp.bits.data
-   io.resp.bits.fflags.valid       := vfpu.io.resp.bits.fflags.valid
-   io.resp.bits.fflags.bits.uop    := io.resp.bits.uop
-   io.resp.bits.fflags.bits.flags  := vfpu.io.resp.bits.fflags.bits.flags // kill me now x2
-}
 
 
 class IntToFPUnit(latency: Int)(implicit p: Parameters) extends PipelinedFunctionalUnit(

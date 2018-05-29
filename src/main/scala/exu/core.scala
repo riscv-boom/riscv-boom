@@ -892,7 +892,12 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
             fp_pipeline.io.ll_wport.bits.uop  := wbresp.bits.uop
             fp_pipeline.io.ll_wport.bits.data := wbdata
             fp_pipeline.io.ll_wport.bits.fflags.valid := Bool(false)
-            assert (fp_pipeline.io.ll_wport.ready, "[core] LL port should always be ready.")
+            assert (fp_pipeline.io.ll_wport.ready, "[core] LL port should always be ready in fp regfile")
+
+            vec_pipeline.io.ll_wport.valid     := wbIsValid(RT_VEC)
+            vec_pipeline.io.ll_wport.bits.uop  := wbresp.bits.uop
+            vec_pipeline.io.ll_wport.bits.data := wbdata
+            assert(vec_pipeline.io.ll_wport.ready, "[core] LL port should always be ready in vec regfile")
          }
          else
          {

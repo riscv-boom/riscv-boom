@@ -326,7 +326,9 @@ object VALURRdDecode extends RRdDecodeConstants
                                // |      |  |  |  |        |       |         |         |     |      |
 
               )
-}
+} 
+
+
 
 class RegisterReadDecode(supported_units: SupportedFuncUnits)(implicit p: Parameters) extends BoomModule()(p)
 {

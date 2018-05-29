@@ -39,9 +39,10 @@ class VecPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasF
      val dis_uops       = Input(Vec(DISPATCH_WIDTH, new MicroOp()))
      val dis_readys     = Output(Vec(DISPATCH_WIDTH, Bool()))
 
-     val fromint        = Flipped(Decoupled(new FuncUnitReq(fLen+1))) // from integer RF
-     val fromfp         = Flipped(Decoupled(new FuncUnitReq(fLen+1))) // from fp RF
-     val toint          = Decoupled(new ExeUnitResp(xLen))
+     val ll_wport       = Flipped(Decoupled(new ExeUnitResp(128))) // from memory unit
+//     val fromint        = Flipped(Decoupled(new FuncUnitReq(fLen+1))) // from integer RF
+//     val fromfp         = Flipped(Decoupled(new FuncUnitReq(fLen+1))) // from fp RF
+//     val toint          = Decoupled(new ExeUnitResp(xLen))
 
      val wakeups        = Vec(num_wakeup_ports, Valid(new ExeUnitResp(128)))
      val wb_valids      = Input(Vec(num_wakeup_ports, Bool()))
@@ -68,7 +69,8 @@ class VecPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasF
       num_wakeup_ports)) // TODO_VEC: Make this a VectorIssueUnit
    val vregfile = Module(new RegisterFileBehavorial(numVecPhysRegs,
       exe_units.withFilter(_.uses_iss_unit).map(e=>e.num_rf_read_ports).sum,
-      exe_units.withFilter(_.uses_iss_unit).map(e=>e.num_rf_write_ports).sum + num_ll_ports, // TODO_VEC: Subtract write ports to IRF, FRF
+      exe_units.withFilter(_.uses_iss_unit).map(e=>e.num_rf_write_ports).sum
+         + num_ll_ports, // TODO_VEC: Subtract write ports to IRF, FRF
       128,
       exe_units.bypassable_write_port_mask
    ))
@@ -81,6 +83,9 @@ class VecPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasF
       128))
 
    require (exe_units.withFilter(_.uses_iss_unit).map(x=>x).length == issue_unit.issue_width)
+   require (exe_units.map(_.num_rf_write_ports).sum + num_ll_ports == num_wakeup_ports)
+   require (exe_units.withFilter(_.uses_iss_unit).map(e=>
+      e.num_rf_write_ports).sum + num_ll_ports == num_wakeup_ports)
 
    // Todo_vec add checking for num write ports and number of functional units which use the issue unit
 
@@ -168,25 +173,10 @@ class VecPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasF
    //-------------------------------------------------------------
 
    //TODO_VEC: add ll_wports?
-
-   //val ll_wbarb = Module(new Arbiter(new ExeUnitResp(128), 2))
-
-   // Hookup load writeback -- and recode FP values.
-
-   //ll_wbarb.io.in(0) <> io.ll_wport
-   //val typ = io.ll_wport.bits.uop.mem_typ
-   //val load_single = typ === rocket.MT_W || typ === rocket.MT_WU
-   //ll_wbarb.io.in(0).bits.data := recode(io.ll_wport.bits.data, !load_single)
-   //ll_wbarb.io.in(1) <> ifpu_resp
-   // if (regreadLatency > 0) {
-   //    vregfile.io.write_ports(0) <> WritePort(RegNext(ll_wbarb.io.out), VPREG_SZ, 128)
-   // } else {
-   //    vregfile.io.write_ports(0) <> WritePort(ll_wbarb.io.out, VPREG_SZ, 128)
-   // }
-
-   // assert (ll_wbarb.io.in(0).ready) // never backpressure the memory unit.
-
-   var w_cnt = 0 // TODO_Vec: check if this should be 1 or 0 for vec?
+   //TODO_VEC: Add ARB for multiple ll_wb
+   io.ll_wport.ready := true.B
+   // when (io.ll_wport.valid) { assert(io.ll_wport.bits.uop.ctrl.rf_wen && io.ll_wport.bits.uop.dst_rtype === RT_VEC) }
+   var w_cnt = num_ll_ports // TODO_Vec: check if this should be 1 or 0 for vec?
    var toint_found = false
    for (eu <- exe_units)
    {
@@ -227,11 +217,12 @@ class VecPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasF
    //-------------------------------------------------------------
 
    // TODO_VEC: Add ll_wb
+
    // io.wakeups(0).valid := ll_wbarb.io.out.valid
-   // io.wakeups(0).bits := ll_wbarb.io.out.bits
+   // io.wakeups(0).bits  := ll_wbarb.io.out.bits
    // ll_wbarb.io.out.ready := true.B
 
-   w_cnt = 0
+   w_cnt = num_ll_ports
    for (eu <- exe_units)
    {
       for (exe_resp <- eu.io.resp)
