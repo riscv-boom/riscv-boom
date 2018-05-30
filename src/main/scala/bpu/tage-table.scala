@@ -214,7 +214,7 @@ class TageTable(
 
    val s2_tag_hit = s2_out.tag === RegEnable(s1_tag, s1_valid)
 
-   io.bp2_resp.valid     := s2_tag_hit
+   io.bp2_resp.valid     := s2_tag_hit && RegNext(fsm_state === s_idle, false.B)
    io.bp2_resp.bits.tag  := s2_out.tag
    io.bp2_resp.bits.cntr := s2_out.cntr
    io.bp2_resp.bits.cidx := s2_out.cidx
