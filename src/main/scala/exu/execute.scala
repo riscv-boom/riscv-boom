@@ -621,7 +621,7 @@ class IntToFPExeUnit(implicit p: Parameters) extends ExecutionUnit(
 class MemExeUnit(implicit p: Parameters) extends ExecutionUnit(num_rf_read_ports = 2,
    num_rf_write_ports = 1,
    num_bypass_stages = 0,
-   data_width = if(p(tile.TileKey).core.fpu.nonEmpty) 65 else p(tile.XLen),
+   data_width = 128,
    num_variable_write_ports = 1,
    bypassable = false,
    is_mem_unit = true)(p)

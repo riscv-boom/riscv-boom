@@ -24,7 +24,7 @@ import boom.common._
 class VecPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFPUParameters
 {
   val vecIssueParams = issueParams.find(_.iqType == IQT_VEC.litValue).get
-  val num_ll_ports = 0 // TODO_VEC: add ll wb ports
+  val num_ll_ports = 1 // TODO_VEC: add ll wb ports
   val num_wakeup_ports = vecIssueParams.issueWidth + num_ll_ports
   val vec_preg_sz = log2Up(numVecPhysRegs)
 
@@ -174,8 +174,15 @@ class VecPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasF
 
    //TODO_VEC: add ll_wports?
    //TODO_VEC: Add ARB for multiple ll_wb
-   io.ll_wport.ready := true.B
-   // when (io.ll_wport.valid) { assert(io.ll_wport.bits.uop.ctrl.rf_wen && io.ll_wport.bits.uop.dst_rtype === RT_VEC) }
+   val ll_wbarb = Module(new Arbiter(new ExeUnitResp(128), 1))
+   ll_wbarb.io.in(0) <> io.ll_wport
+   //ll_wbarb.io.in(1).valid := false.B // TODO_vec: fix this
+
+   vregfile.io.write_ports(0) <> WritePort(ll_wbarb.io.out, VPREG_SZ, 128)
+   assert (ll_wbarb.io.in(0).ready)
+   when (io.ll_wport.valid) { assert(io.ll_wport.bits.uop.ctrl.rf_wen && io.ll_wport.bits.uop.dst_rtype === RT_VEC) }
+   
+
    var w_cnt = num_ll_ports // TODO_Vec: check if this should be 1 or 0 for vec?
    var toint_found = false
    for (eu <- exe_units)
@@ -218,9 +225,9 @@ class VecPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasF
 
    // TODO_VEC: Add ll_wb
 
-   // io.wakeups(0).valid := ll_wbarb.io.out.valid
-   // io.wakeups(0).bits  := ll_wbarb.io.out.bits
-   // ll_wbarb.io.out.ready := true.B
+   io.wakeups(0).valid := ll_wbarb.io.out.valid
+   io.wakeups(0).bits  := ll_wbarb.io.out.bits
+   ll_wbarb.io.out.ready := true.B
 
    w_cnt = num_ll_ports
    for (eu <- exe_units)

@@ -799,7 +799,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
    fp_pipeline.io.brinfo := br_unit.brinfo
 
-
+   vec_pipeline.io.brinfo := br_unit.brinfo
    //-------------------------------------------------------------
    //-------------------------------------------------------------
    // **** Load/Store Unit ****
@@ -897,7 +897,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
             vec_pipeline.io.ll_wport.valid     := wbIsValid(RT_VEC)
             vec_pipeline.io.ll_wport.bits.uop  := wbresp.bits.uop
             vec_pipeline.io.ll_wport.bits.data := wbdata
-            assert(vec_pipeline.io.ll_wport.ready, "[core] LL port should always be ready in vec regfile")
+            assert (vec_pipeline.io.ll_wport.ready, "[core] LL port should always be ready in vec regfile")
          }
          else
          {

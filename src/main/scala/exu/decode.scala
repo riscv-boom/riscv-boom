@@ -359,7 +359,8 @@ object VecDecode extends DecodeConstants
    VMADD     ->List(Y, N, Y, N, uopVMADD ,  IQT_VEC,FU_POLY,RT_VEC, RT_VEC, RT_VEC, RT_VEC, N, IS_X, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, N, N, N, CSR.N),
    VMSUB     ->List(Y, N, Y, N, uopVMSUB ,  IQT_VEC,FU_POLY,RT_VEC, RT_VEC, RT_VEC, RT_VEC, N, IS_X, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, N, N, N, CSR.N),
    VNMADD    ->List(Y, N, Y, N, uopVNMADD,  IQT_VEC,FU_POLY,RT_VEC, RT_VEC, RT_VEC, RT_VEC, N, IS_X, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, N, N, N, CSR.N),
-   VNMSUB    ->List(Y, N, Y, N, uopVNMSUB,  IQT_VEC,FU_POLY,RT_VEC, RT_VEC, RT_VEC, RT_VEC, N, IS_X, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, N, N, N, CSR.N)
+   VNMSUB    ->List(Y, N, Y, N, uopVNMSUB,  IQT_VEC,FU_POLY,RT_VEC, RT_VEC, RT_VEC, RT_VEC, N, IS_X, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, N, N, N, CSR.N),
+   VLD       ->List(Y, N, Y, N, uopVLD   ,  IQT_MEM,FU_MEM, RT_VEC, RT_FIX, RT_X  , RT_X  , N, IS_I, Y, N, N, N, N, M_XRD, MT_D , UInt(0), N, N, N, N, N, N, N, CSR.N)
   ) // TODO_VEC Add all other instructions, decide correct uop for polymorphism
 // scalastyle:on
 }

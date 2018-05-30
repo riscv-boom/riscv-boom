@@ -172,7 +172,10 @@ class ExecutionUnits(fpu: Boolean = false, vec: Boolean = false)(implicit val p:
       }
       else if (vec)
       {
-         exe_units.map(_.isBypassable)
+         // NOTE: hack for the long latency load pipe which is write_port(0) and doesn't support bypassing
+         val mask = Seq(false) ++ exe_units.withFilter(_.uses_iss_unit).map(_.isBypassable)
+         require (!mask.reduce(_||_)) // don't support any bypassing in VEC
+         mask
       }
       else
       {
