@@ -102,7 +102,7 @@ class WithMediumBooms extends Config((site, here, up) => {
          maxBrCount = 8,
          regreadLatency = 1,
          renameLatency = 2,
-         btb = BoomBTBParameters(nSets=64, nWays=2, nRAS=8, tagSz=20, bypassCalls=false, rasCheckForEmpty=false),
+         btb = BoomBTBParameters(btbsa=true, nSets=64, nWays=2, nRAS=8, tagSz=20, bypassCalls=false, rasCheckForEmpty=false),
          gshare = Some(GShareParameters(enabled=true, history_length=23, num_sets=4096)),
          nPerfCounters = 6,
          fpu = Some(freechips.rocketchip.tile.FPUParams(sfmaLatency=4, dfmaLatency=4, divSqrt=true))),
@@ -128,7 +128,7 @@ class WithMegaBooms extends Config((site, here, up) => {
          numFpPhysRegisters = 128,
          numLsuEntries = 32,
          maxBrCount = 16,
-         btb = BoomBTBParameters(nSets=512, nWays=2, nRAS=16, tagSz=20),
+         btb = BoomBTBParameters(nSets=512, nWays=4, nRAS=16, tagSz=20),
          tage = Some(TageParameters())),
       dcache = Some(DCacheParams(rowBits = site(SystemBusKey).beatBytes*8, nSets=64, nWays=16, nMSHRs=8, nTLBEntries=32)),
       icache = Some(ICacheParams(fetchBytes = 8*4, rowBits = site(SystemBusKey).beatBytes*8, nSets=128, nWays=4))
