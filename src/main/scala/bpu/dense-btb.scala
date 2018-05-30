@@ -252,7 +252,7 @@ class DenseBTB(implicit p: Parameters) extends BoomBTB
    val data_sel = Wire(init = UInt(0, width = way_idx_sz))
    val hits_oh  = Wire(init = Vec.fill(nWays){ false.B })
    for (i <- 0 until nWays) {
-      when (data_out(i).cfi_idx === sel_cfi_idx && hits(i)) {
+      when (data_out(i).cfi_idx === sel_cfi_idx && hits(i) && bim.io.resp.valid) {
          data_sel   := i.U
          hits_oh(i) := true.B
       }
