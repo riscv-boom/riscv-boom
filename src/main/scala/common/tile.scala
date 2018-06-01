@@ -21,7 +21,6 @@ case class BoomTileParams(
     core: BoomCoreParams = BoomCoreParams(),
     icache: Option[ICacheParams] = Some(ICacheParams()),
     dcache: Option[DCacheParams] = Some(DCacheParams()),
-    rocc: Seq[RoCCParams] = Nil,
     btb: Option[BTBParams] = Some(BTBParams()),
     dataScratchpadBytes: Int = 0,
     trace: Boolean = false,
@@ -105,6 +104,7 @@ class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer)
     with CanHaveBoomPTWModule
     with HasBoomHellaCacheModule
     with HasBoomICacheFrontendModule {
+  Annotated.params(this, outer.boomParams)
 
   val core = Module(new BoomCore()(outer.p, outer.dcache.module.edge))
 

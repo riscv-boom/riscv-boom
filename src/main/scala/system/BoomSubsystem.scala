@@ -43,7 +43,6 @@ trait HasBoomTiles extends HasTiles
     // in the global Parameters about the specific tile being built now
     val boomCore = LazyModule(new boom.common.BoomTile(tp, crossing.crossingType)(p.alterPartial {
         case TileKey => tp
-        case BuildRoCC => tp.rocc
         case SharedMemoryTLEdge => sharedMemoryTLEdge
       })
     ).suggestName(tp.name)
