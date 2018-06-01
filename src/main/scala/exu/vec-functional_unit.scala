@@ -54,8 +54,8 @@ class Comparator(w: Int) extends Module {
 }
 
 
-class VALUUnit(num_stages: Int = 1) (implicit p: Parameters)
-      extends PipelinedFunctionalUnit(num_stages = num_stages,
+class VALUUnit(num_stages: Int) (implicit p: Parameters)
+      extends PipelinedFunctionalUnit(num_stages = num_stages, // TODO_Vec: Maybe change this when contention for write port is allowed?
          num_bypass_stages = 0,
          earliest_bypass_stage = 0,
          data_width = 128,
@@ -139,7 +139,7 @@ class VALUUnit(num_stages: Int = 1) (implicit p: Parameters)
                   (uop.uopc === uopVFSJN) -> Cat(~op2(sz-1), op1(sz-2, 0)),
                   (uop.uopc === uopVFSJX) -> Cat(op2(sz-1) ^ op1(sz-1), op1(sz-2, 0))))
 
-               val out = Pipe(io.req.valid && alu_val, result, 1) // TODO_vec: this shouldn't be zero right??
+               val out = Pipe(io.req.valid && alu_val, result, num_stages) // TODO_vec: this shouldn't be zero right??
                val out_val = out.valid
                val out_data = out.bits
                (out_val, out_data)

@@ -67,13 +67,14 @@ class LoadStoreUnitIO(pl_width: Int)(implicit p: Parameters) extends BoomBundle(
    val new_stq_idx        = UInt(OUTPUT, MEM_ADDR_SZ)
 
    // Execute Stage
-   val exe_resp           = (new ValidIO(new FuncUnitResp(xLen))).flip
+   val exe_resp           = (new ValidIO(new FuncUnitResp(128))).flip
    val fp_stdata          = Valid(new MicroOpWithData(fLen)).flip
+   val vec_stdata         = Valid(new MicroOpWithData(128)).flip
 
    // Send out Memory Request
    val memreq_val         = Bool(OUTPUT)
    val memreq_addr        = UInt(OUTPUT, corePAddrBits)
-   val memreq_wdata       = UInt(OUTPUT, xLen)
+   val memreq_wdata       = UInt(OUTPUT, 128)
    val memreq_uop         = new MicroOp().asOutput
 
    // Memory Stage
@@ -83,7 +84,7 @@ class LoadStoreUnitIO(pl_width: Int)(implicit p: Parameters) extends BoomBundle(
    // Forward Store Data to Register File
    // TODO turn into forward bundle
    val forward_val        = Bool(OUTPUT)
-   val forward_data       = UInt(OUTPUT, xLen)
+   val forward_data       = UInt(OUTPUT, 128)
    val forward_uop        = new MicroOp().asOutput // the load microop (for its pdst)
 
    // Receive Memory Response
@@ -186,7 +187,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
 
    // Store-Data Queue
    val sdq_val       = Reg(Vec(num_st_entries, Bool()))
-   val sdq_data      = Reg(Vec(num_st_entries, UInt(width = xLen)))
+   val sdq_data      = Reg(Vec(num_st_entries, UInt(width = 128)))
 
    // Shared Store Queue Information
    val stq_uop       = Reg(Vec(num_st_entries, new MicroOp()))

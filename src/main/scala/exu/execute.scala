@@ -396,7 +396,7 @@ class VecFPUExeUnit(
    val valu_resp_val = Wire(init=Bool(false))
    if (has_valu)
    {
-      valu = Module(new VALUUnit(num_stages=1))
+      valu = Module(new VALUUnit(num_stages=p(tile.TileKey).core.fpu.get.dfmaLatency))
       valu.io.req.valid          := io.req.valid &&
                                     (io.req.bits.uop.fu_code_is(FU_VALU))
       valu.io.req.bits.kill      := io.req.bits.kill

@@ -40,6 +40,7 @@ class VecPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasF
      val dis_readys     = Output(Vec(DISPATCH_WIDTH, Bool()))
 
      val ll_wport       = Flipped(Decoupled(new ExeUnitResp(128))) // from memory unit
+     val tosdq          = Valid(new MicroOpWithData(128))
 //     val fromint        = Flipped(Decoupled(new FuncUnitReq(fLen+1))) // from integer RF
 //     val fromfp         = Flipped(Decoupled(new FuncUnitReq(fLen+1))) // from fp RF
 //     val toint          = Decoupled(new ExeUnitResp(xLen))
@@ -164,6 +165,12 @@ class VecPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasF
    {
       ex.io.req <> vregister_read.io.exe_reqs(w)
       require (!ex.isBypassable)
+
+      require (w == 0)
+
+      io.tosdq.valid     := vregister_read.io.exe_reqs(w).bits.uop.uopc === uopVSTD
+      io.tosdq.bits.uop  := vregister_read.io.exe_reqs(w).bits.uop
+      io.tosdq.bits.data := vregister_read.io.exe_reqs(w).bits.rs2_data
    }
    require (exe_units.num_total_bypass_ports == 0)
 

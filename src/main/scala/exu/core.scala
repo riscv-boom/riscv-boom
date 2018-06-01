@@ -844,7 +844,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    lsu.io.release := io.release
 
    lsu.io.fp_stdata <> fp_pipeline.io.tosdq
-
+   lsu.io.vec_stdata <> vec_pipeline.io.tosdq
 
    //-------------------------------------------------------------
    //-------------------------------------------------------------

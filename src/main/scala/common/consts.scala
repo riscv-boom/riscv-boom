@@ -305,6 +305,8 @@ trait ScalarOpConstants
    val uopVFSJX     = UInt(141, UOPC_SZ)
 
    val uopVLD       = UInt(142, UOPC_SZ)
+   val uopVST       = UInt(143, UOPC_SZ)
+   val uopVSTD      = UInt(144, UOPC_SZ)
 
    // The Bubble Instruction (Machine generated NOP)
    // Insert (XOR x0,x0,x0) which is different from software compiler
