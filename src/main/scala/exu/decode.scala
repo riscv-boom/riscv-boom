@@ -360,7 +360,9 @@ object VecDecode extends DecodeConstants
    VMSUB     ->List(Y, N, Y, N, uopVMSUB ,  IQT_VEC,FU_POLY,RT_VEC, RT_VEC, RT_VEC, RT_VEC, N, IS_X, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, N, N, N, CSR.N),
    VNMADD    ->List(Y, N, Y, N, uopVNMADD,  IQT_VEC,FU_POLY,RT_VEC, RT_VEC, RT_VEC, RT_VEC, N, IS_X, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, N, N, N, CSR.N),
    VNMSUB    ->List(Y, N, Y, N, uopVNMSUB,  IQT_VEC,FU_POLY,RT_VEC, RT_VEC, RT_VEC, RT_VEC, N, IS_X, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, N, N, N, CSR.N),
-   VLD       ->List(Y, N, Y, N, uopVLD   ,  IQT_MEM,FU_MEM, RT_VEC, RT_FIX, RT_X  , RT_X  , N, IS_I, Y, N, N, N, N, M_XRD, MT_D , UInt(0), N, N, N, N, N, N, N, CSR.N)
+   VLD       ->List(Y, N, Y, N, uopVLD   ,  IQT_MEM,FU_MEM, RT_VEC, RT_FIX, RT_X  , RT_X  , N, IS_I, Y, N, N, N, N, M_XRD, MT_D , UInt(0), N, N, N, N, N, N, N, CSR.N),
+   VST       ->List(Y, N, Y, N, uopVST   ,  IQT_MEM,FU_MEM, RT_X  , RT_FIX, RT_X  , RT_VEC, N, IS_S, N, Y, N, N, N, M_XWR, MT_D , UInt(0), N, N, N, N, N, N, N, CSR.N)
+      //uopVST will go to both vector iq and mem iq. Also for strided stuff 
   ) // TODO_VEC Add all other instructions, decide correct uop for polymorphism
 // scalastyle:on
 }
@@ -497,7 +499,8 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule()(p)
 
    // repackage the immediate, and then pass the fewest number of bits around
    val di24_20 = Mux(cs.imm_sel === IS_B || cs.imm_sel === IS_S, uop.inst(11,7), uop.inst(24,20))
-   uop.imm_packed := Cat(uop.inst(31,25), di24_20, uop.inst(19,12))
+   val di31_25 = Mux(cs.uopc === uopVST, Bits(0, 6), uop.inst(31,25))
+   uop.imm_packed := Cat(di31_25, di24_20, uop.inst(19,12))
 
    //-------------------------------------------------------------
 

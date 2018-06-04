@@ -322,7 +322,7 @@ class RenameStage(
       val fbusy = fbusytable.io.values(w)
       val vbusy = vbusytable.io.values(w)
       uop.prs1_busy := Mux(uop.lrs1_rtype === RT_FLT, fbusy.prs1_busy, Mux(uop.lrs1_rtype === RT_FIX, ibusy.prs1_busy, vbusy.prs1_busy))
-      uop.prs2_busy := Mux(uop.lrs2_rtype === RT_FLT, fbusy.prs2_busy, Mux(uop.lrs1_rtype === RT_FIX, ibusy.prs2_busy, vbusy.prs2_busy))
+      uop.prs2_busy := Mux(uop.lrs2_rtype === RT_FLT, fbusy.prs2_busy, Mux(uop.lrs2_rtype === RT_FIX, ibusy.prs2_busy, vbusy.prs2_busy))
       uop.prs3_busy := Mux(uop.lrs3_rtype === RT_FLT, fbusy.prs3_busy, vbusy.prs3_busy)
 
       val valid = ren2_valids(w)

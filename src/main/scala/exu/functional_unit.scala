@@ -591,7 +591,8 @@ class MemAddrCalcUnit(implicit p: Parameters)
    with freechips.rocketchip.tile.HasFPUParameters
 {
    // perform address calculation
-   val sum = (io.req.bits.rs1_data.asSInt + io.req.bits.uop.imm_packed(19,8).asSInt).asUInt
+   val imm = Mux(io.req.bits.uop.uopc === uopVLD, io.req.bits.uop.imm_packed(19,15), io.req.bits.uop.imm_packed(19,8))
+   val sum = (io.req.bits.rs1_data.asSInt + imm.asSInt).asUInt
    val ea_sign = Mux(sum(vaddrBits-1), ~sum(63,vaddrBits) === UInt(0),
                                         sum(63,vaddrBits) =/= UInt(0))
    val effective_address = Cat(ea_sign, sum(vaddrBits-1,0)).asUInt
@@ -621,8 +622,8 @@ class MemAddrCalcUnit(implicit p: Parameters)
       (((typ === MT_W) || (typ === MT_WU)) && (effective_address(1,0) =/= UInt(0))) ||
       ((typ ===  MT_D) && (effective_address(2,0) =/= UInt(0)))
 
-   val ma_ld = io.req.valid && io.req.bits.uop.uopc === uopLD && misaligned
-   val ma_st = io.req.valid && (io.req.bits.uop.uopc === uopSTA || io.req.bits.uop.uopc === uopAMO_AG) && misaligned
+   val ma_ld = io.req.valid && (io.req.bits.uop.uopc === uopLD || io.req.bits.uop.uopc === uopVLD) && misaligned
+   val ma_st = io.req.valid && (io.req.bits.uop.uopc === uopSTA || io.req.bits.uop.uopc === uopAMO_AG || io.req.bits.uop.uopc === uopVST) && misaligned
 
    io.resp.bits.mxcpt.valid := ma_ld || ma_st
    io.resp.bits.mxcpt.bits  := Mux(ma_ld, UInt(freechips.rocketchip.rocket.Causes.misaligned_load),

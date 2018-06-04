@@ -107,10 +107,10 @@ class LoadStoreUnitIO(pl_width: Int)(implicit p: Parameters) extends BoomBundle(
 
    val exception          = Bool(INPUT)
    // Let the stores clear out the busy bit in the ROB.
-   // Two ports, one for integer and the other for FP.
+   // Tjree ports, one for integer and the other for FP and the other for vec
    // Otherwise, we must back-pressure incoming FP store-data micro-ops.
-   val lsu_clr_bsy_valid  = Vec(2, Bool()).asOutput
-   val lsu_clr_bsy_rob_idx= Vec(2, UInt(width=ROB_ADDR_SZ)).asOutput
+   val lsu_clr_bsy_valid  = Vec(3, Bool()).asOutput
+   val lsu_clr_bsy_rob_idx= Vec(3, UInt(width=ROB_ADDR_SZ)).asOutput
    val lsu_fencei_rdy     = Bool(OUTPUT)
 
    val xcpt = new ValidIO(new Exception)
@@ -622,11 +622,23 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
       sdq_val (sidx) := Bool(true)
       sdq_data(sidx) := io.fp_stdata.bits.data.asUInt
    }
+   when (io.vec_stdata.valid)
+   {
+      val sidx = io.vec_stdata.bits.uop.stq_idx
+      sdq_val(sidx) := Bool(true)
+      sdq_data(sidx) := io.vec_stdata.bits.data.asUInt
+   }
    assert(!(io.fp_stdata.valid && io.exe_resp.valid && io.exe_resp.bits.uop.ctrl.is_std &&
       io.fp_stdata.bits.uop.stq_idx === io.exe_resp.bits.uop.stq_idx),
       "[lsu] FP and INT data is fighting over the same sdq entry.")
 
+   assert(!(io.vec_stdata.valid && io.exe_resp.valid && io.exe_resp.bits.uop.ctrl.is_std &&
+      io.vec_stdata.bits.uop.stq_idx === io.exe_resp.bits.uop.stq_idx),
+      "[lsu] VEC and INT data is fighting over the same sdq entry.")
+
+
    require (xLen >= fLen) // otherwise the SDQ is missized.
+      //TODO_vec: Fix this
 
    //-------------------------------------------------------------
    //-------------------------------------------------------------
@@ -656,6 +668,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
    val mem_fired_sta = Reg(next=(will_fire_sta_incoming || will_fire_sta_retry), init=Bool(false))
    val mem_fired_stdi = Reg(next=will_fire_std_incoming, init=Bool(false))
    val mem_fired_stdf = Reg(next=io.fp_stdata.valid, init=Bool(false))
+   val mem_fired_stdv = Reg(next=io.vec_stdata.valid, init=Bool(false))
    val mem_fired_sfence = Reg(next=will_fire_sfence, init=false.B)
 
    mem_ld_killed := Bool(false)
@@ -724,11 +737,22 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
    val stdf_clr_bsy_robidx = RegEnable(mem_uop_stdf.rob_idx, mem_fired_stdf)
    val stdf_clr_bsy_brmask = RegEnable(GetNewBrMask(io.brinfo, mem_uop_stdf), mem_fired_stdf)
 
+   val mem_uop_stdv = RegNext(io.vec_stdata.bits.uop)
+   val stdv_clr_bsy_valid = RegNext(mem_fired_stdv &&
+      saq_val(mem_uop_stdv.stq_idx) &&
+      !saq_is_virtual(mem_uop_stdv.stq_idx) &&
+      !mem_uop_stdv.is_amo &&
+      !IsKilledByBranch(io.brinfo, mem_uop_stdv)) &&
+      !io.exception && !RegNext(io.exception)
+   val stdv_clr_bsy_robidx = RegEnable(mem_uop_stdv.rob_idx, mem_fired_stdv)
+   val stdv_clr_bsy_brmask = RegEnable(GetNewBrMask(io.brinfo, mem_uop_stdv), mem_fired_stdv)
+
    io.lsu_clr_bsy_valid(0)   := clr_bsy_valid && !io.exception && !IsKilledByBranch(io.brinfo, clr_bsy_brmask)
    io.lsu_clr_bsy_rob_idx(0) := clr_bsy_robidx
    io.lsu_clr_bsy_valid(1)   := stdf_clr_bsy_valid && !io.exception && !IsKilledByBranch(io.brinfo, stdf_clr_bsy_brmask)
    io.lsu_clr_bsy_rob_idx(1) := stdf_clr_bsy_robidx
-
+   io.lsu_clr_bsy_valid(2)   := stdv_clr_bsy_valid && !io.exception && !IsKilledByBranch(io.brinfo, stdv_clr_bsy_brmask)
+   io.lsu_clr_bsy_rob_idx(2) := stdv_clr_bsy_robidx
    //-------------------------------------------------------------
    // Load Issue Datapath (ALL loads need to use this path,
    //    to handle forwarding from the STORE QUEUE, etc.)

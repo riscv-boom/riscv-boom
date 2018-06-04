@@ -58,8 +58,8 @@ class RobIo(
    // Instruction is no longer busy and can be committed
    val wb_resps = Vec(num_wakeup_ports, Valid(new ExeUnitResp(xLen max fLen+1))).flip
 
-   val lsu_clr_bsy_valid = Vec(2, Bool()).asInput
-   val lsu_clr_bsy_rob_idx = Vec(2, UInt(width=ROB_ADDR_SZ)).asInput
+   val lsu_clr_bsy_valid = Vec(3, Bool()).asInput
+   val lsu_clr_bsy_rob_idx = Vec(3, UInt(width=ROB_ADDR_SZ)).asInput
 
    // Track side-effects for debug purposes.
    // Also need to know when loads write back, whereas we don't need loads to unbusy.

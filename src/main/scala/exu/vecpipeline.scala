@@ -109,6 +109,14 @@ class VecPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasF
    {
       issue_unit.io.dis_valids(w) := io.dis_valids(w) && io.dis_uops(w).iqtype === issue_unit.iqType.U
       issue_unit.io.dis_uops(w) := io.dis_uops(w)
+
+      when (io.dis_uops(w).uopc === uopVST && io.dis_uops(w).lrs3_rtype === RT_VEC) {
+         issue_unit.io.dis_valids(w) := io.dis_valids(w)
+         issue_unit.io.dis_uops(w).uopc := uopVST
+         issue_unit.io.dis_uops(w).fu_code := FUConstants.FU_VALU
+         issue_unit.io.dis_uops(w).lrs1_rtype := RT_X
+         issue_unit.io.dis_uops(w).prs1_busy := false.B
+      }
    }
    io.dis_readys := issue_unit.io.dis_readys
 
@@ -167,10 +175,13 @@ class VecPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasF
       require (!ex.isBypassable)
 
       require (w == 0)
+      when (vregister_read.io.exe_reqs(w).bits.uop.uopc === uopVST) {
+         ex.io.req.valid := false.B
+      }
 
-      io.tosdq.valid     := vregister_read.io.exe_reqs(w).bits.uop.uopc === uopVSTD
+      io.tosdq.valid     := vregister_read.io.exe_reqs(w).bits.uop.uopc === uopVST
       io.tosdq.bits.uop  := vregister_read.io.exe_reqs(w).bits.uop
-      io.tosdq.bits.data := vregister_read.io.exe_reqs(w).bits.rs2_data
+      io.tosdq.bits.data := vregister_read.io.exe_reqs(w).bits.rs3_data
    }
    require (exe_units.num_total_bypass_ports == 0)
 

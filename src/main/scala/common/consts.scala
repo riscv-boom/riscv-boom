@@ -30,10 +30,10 @@ trait BOOMDebugConstants
    // such that viewing the *.out file in vim can line up veritically to
    // enable ctrl+f/ctrl+b to advance the *.out file one cycle without
    // moving the structures.
-   val debugScreenheight  = 79
+   val debugScreenheight  = 81
 
    // turn off stuff to dramatically reduce Chisel node count
-   val DEBUG_PRINTF_LSU    = false && DEBUG_PRINTF
+   val DEBUG_PRINTF_LSU    = true  && DEBUG_PRINTF
    val DEBUG_PRINTF_ROB    = true  && DEBUG_PRINTF
    val DEBUG_PRINTF_TAGE   = false && DEBUG_PRINTF
    val DEBUG_PRINTF_FTQ    = false && DEBUG_PRINTF
@@ -306,7 +306,6 @@ trait ScalarOpConstants
 
    val uopVLD       = UInt(142, UOPC_SZ)
    val uopVST       = UInt(143, UOPC_SZ)
-   val uopVSTD      = UInt(144, UOPC_SZ)
 
    // The Bubble Instruction (Machine generated NOP)
    // Insert (XOR x0,x0,x0) which is different from software compiler
