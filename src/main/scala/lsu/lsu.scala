@@ -393,8 +393,8 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
    dtlb.io.req.bits.vaddr := Mux(io.exe_resp.bits.sfence.valid, io.exe_resp.bits.sfence.bits.addr, exe_vaddr)
    dtlb.io.req.bits.size := exe_tlb_uop.mem_typ
    dtlb.io.req.bits.cmd := exe_tlb_uop.mem_cmd
-   dtlb.io.req.bits.sfence := io.exe_resp.bits.sfence
    dtlb.io.req.bits.passthrough := false.B // let status.vm decide
+   dtlb.io.sfence := io.exe_resp.bits.sfence
 
    // exceptions
    val ma_ld = io.exe_resp.valid && io.exe_resp.bits.mxcpt.valid && exe_tlb_uop.is_load
