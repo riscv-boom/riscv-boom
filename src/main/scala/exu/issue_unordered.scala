@@ -21,7 +21,7 @@ class IssueUnitStatic(
    params: IssueParams,
    num_wakeup_ports: Int)
    (implicit p: Parameters)
-   extends IssueUnit(params.numEntries, params.issueWidth, num_wakeup_ports, params.iqType)
+   extends IssueUnit(params.numEntries, params.issueWidth, false, num_wakeup_ports, params.iqType)
 {
    //-------------------------------------------------------------
    // Issue Table

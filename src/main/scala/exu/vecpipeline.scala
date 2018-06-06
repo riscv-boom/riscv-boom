@@ -42,7 +42,7 @@ class VecPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasF
      val ll_wport       = Flipped(Decoupled(new ExeUnitResp(128))) // from memory unit
      val tosdq          = Valid(new MicroOpWithData(128))
 //     val fromint        = Flipped(Decoupled(new FuncUnitReq(fLen+1))) // from integer RF
-//     val fromfp         = Flipped(Decoupled(new FuncUnitReq(fLen+1))) // from fp RF
+//     val fromfp         = Flipped(Decoupled(new FuncUnitReq(fLen+1))) // from fp RF.
 //     val toint          = Decoupled(new ExeUnitResp(xLen))
 
      val wakeups        = Vec(num_wakeup_ports, Valid(new ExeUnitResp(128)))
@@ -50,6 +50,8 @@ class VecPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasF
      val vb_pdsts       = Input(Vec(num_wakeup_ports, UInt(width=vec_preg_sz.W)))
 
      val debug_tsc_reg  = Input(UInt(width=128.W))
+     val vl             = Input(UInt(width=VL_SZ.W))
+     val lsu_ldq_eidx   = Input(Vec(NUM_LSU_ENTRIES, UInt(width=VL_SZ.W)))
   }
 
    //**********************************
@@ -66,7 +68,7 @@ class VecPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasF
    //   - Later - add polymorphism, in decode microops should determine where operands come from
 
    val exe_units = new boom.exu.ExecutionUnits(vec = true)
-   val issue_unit = Module(new IssueUnitCollasping(issueParams.find(_.iqType == IQT_VEC.litValue).get,
+   val issue_unit = Module(new IssueUnitCollasping(issueParams.find(_.iqType == IQT_VEC.litValue).get, true,
       num_wakeup_ports)) // TODO_VEC: Make this a VectorIssueUnit
    val vregfile = Module(new RegisterFileBehavorial(numVecPhysRegs,
       exe_units.withFilter(_.uses_iss_unit).map(e=>e.num_rf_read_ports).sum,
@@ -96,6 +98,8 @@ class VecPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasF
    issue_unit.io.tsc_reg := io.debug_tsc_reg
    issue_unit.io.brinfo := io.brinfo
    issue_unit.io.flush_pipeline := io.flush_pipeline
+   issue_unit.io.vl := io.vl
+   issue_unit.io.lsu_ldq_eidx := io.lsu_ldq_eidx
 
    require (exe_units.num_total_bypass_ports == 0)
 

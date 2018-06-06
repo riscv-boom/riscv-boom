@@ -92,6 +92,9 @@ class RobIo(
    val empty = Bool(OUTPUT)
    val ready = Bool(OUTPUT) // ROB is busy unrolling rename state...
 
+
+   val vl = UInt(INPUT, VL_SZ.W)
+
    // pass out debug information to high-level printf
    val debug = new DebugRobSignals().asOutput
 
@@ -216,6 +219,7 @@ class Rob(
    val rob_head_is_load    = Wire(Vec(width, Bool()))
    val rob_head_is_branch  = Wire(Vec(width, Bool()))
    val rob_head_fflags     = Wire(Vec(width, UInt(width=freechips.rocketchip.tile.FPConstants.FLAGS_SZ)))
+   val rob_vec_incr        = Reg(Vec(width, Bool()))
 
    val exception_thrown = Wire(Bool())
 
@@ -291,7 +295,7 @@ class Rob(
 
       //-----------------------------------------------
       // Writeback
-
+      rob_vec_incr(w) := false.B
       for (i <- 0 until num_wakeup_ports)
       {
          val wb_resp = io.wb_resps(i)
@@ -300,6 +304,12 @@ class Rob(
          when (wb_resp.valid && MatchBank(GetBankIdx(wb_uop.rob_idx)))
          {
             rob_bsy(row_idx) := false.B
+            val next_eidx = wb_resp.bits.rate + rob_uop(row_idx).eidx
+            when (rob_uop(row_idx).vec_val && next_eidx < io.vl) {
+               rob_bsy(row_idx) := true.B
+               rob_uop(row_idx).eidx := next_eidx
+               rob_vec_incr(w) := true.B
+            }
 
             if (O3PIPEVIEW_PRINTF)
             {
@@ -827,7 +837,7 @@ class Rob(
    {
       // tell LSU it is ready to its stores and loads
       io.commit.st_mask(w) := io.commit.valids(w) && rob_head_is_store(w)
-      io.commit.ld_mask(w) := io.commit.valids(w) && rob_head_is_load(w)
+      io.commit.ld_mask(w) := (io.commit.valids(w) || rob_vec_incr(w)) && rob_head_is_load(w)
    }
 
    io.com_load_is_at_rob_head := rob_head_is_load(PriorityEncoder(rob_head_vals.asUInt))
@@ -936,7 +946,7 @@ class Rob(
          var temp_idx = r_idx
          for (w <- 0 until COMMIT_WIDTH)
          {
-            printf("(d:%c p%d, bm:%x sdt:%d) "
+            printf("(d:%c p%d, bm:%x sdt:%d, eidx:%d) "
                , Mux(debug_entry(temp_idx).uop.dst_rtype === RT_FIX, Str("X"),
                  Mux(debug_entry(temp_idx).uop.dst_rtype === RT_PAS, Str("C"),
                  Mux(debug_entry(temp_idx).uop.dst_rtype === RT_FLT, Str("f"),
@@ -945,6 +955,7 @@ class Rob(
                , debug_entry    (temp_idx).uop.pdst
                , debug_entry    (temp_idx).uop.br_mask
                , debug_entry    (temp_idx).uop.stale_pdst
+               , debug_entry    (temp_idx).uop.eidx
             )
             temp_idx = temp_idx + 1
          }

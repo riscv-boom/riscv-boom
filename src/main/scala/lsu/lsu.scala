@@ -118,6 +118,9 @@ class LoadStoreUnitIO(pl_width: Int)(implicit p: Parameters) extends BoomBundle(
    // cache nacks
    val nack               = new NackInfo().asInput
 
+   // For stalling vector loads elementwise in the issue slots
+   val ldq_eidx           = Vec(NUM_LSU_ENTRIES, UInt(width=VL_SZ.W)).asOutput
+
 // causing stuff to dissapear
 //   val dmem = new DCMemPortIO().flip()
    val dmem_is_ordered = Bool(INPUT)
@@ -125,11 +128,13 @@ class LoadStoreUnitIO(pl_width: Int)(implicit p: Parameters) extends BoomBundle(
                                        // although this is also turned into a
                                        // nack two cycles later in the cache
                                        // wrapper, we can prevent spurious
-                                       // retries as well as some load ordering
+                                       // retries as well as some load orderin
                                        // failures.
 
    val ptw = new rocket.TLBPTWIO
    val sfence = new rocket.SFenceReq
+
+   val vl = UInt(INPUT, width=VL_SZ.W)
 
    val counters = new Bundle
    {
@@ -168,7 +173,8 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
    val laq_failure        = Reg(init = Vec.fill(num_ld_entries) { Bool(false) })  // ordering fail, must retry (at commit time, which requires a rollback)
    val laq_uop            = Reg(Vec(num_ld_entries, new MicroOp()))
    //laq_uop.stq_idx between oldest and youngest (dep_mask can't establish age :( ), "aka store coloring" if you're Intel
-//   val laq_request   = Vec.fill(num_ld_entries) { Reg(resetVal = Bool(false)) } // TODO sleeper load requesting issue to memory (perhaps stores broadcast, sees its store-set finished up)
+   //   val laq_request   = Vec.fill(num_ld_entries) { Reg(resetVal = Bool(false)) } // TODO sleeper load requesting issue to memory (perhaps stores broadcast, sees its store-set finished up)
+   io.ldq_eidx := laq_uop.map(x=>x.eidx)
 
 
    // track window of stores we depend on
@@ -1186,21 +1192,36 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
    for (w <- 0 until pl_width)
    {
       val idx = temp_laq_head
+      val invalidate_head = Wire(Bool())
       when (io.commit_load_mask(w))
       {
          assert (laq_allocated(idx), "[lsu] trying to commit an un-allocated load entry.")
          assert (laq_executed(idx), "[lsu] trying to commit an un-executed load entry.")
          assert (laq_succeeded(idx), "[lsu] trying to commit an un-succeeded load entry.")
 
-         laq_allocated(idx)         := Bool(false)
-         laq_addr_val (idx)         := Bool(false)
-         laq_executed (idx)         := Bool(false)
-         laq_succeeded(idx)         := Bool(false)
-         laq_failure  (idx)         := Bool(false)
-         laq_forwarded_std_val(idx) := Bool(false)
+         val next_eidx = laq_uop(idx).eidx + UInt(1)
+         when (laq_uop(idx).uopc === uopVLD && next_eidx < io.vl) {
+            laq_allocated(idx)         := Bool(true)
+            laq_addr_val (idx)         := Bool(false)
+            laq_executed (idx)         := Bool(false)
+            laq_succeeded(idx)         := Bool(false)
+            laq_failure  (idx)         := Bool(false)
+            laq_forwarded_std_val(idx) := Bool(false)
+            laq_uop(idx).eidx          := next_eidx
+            invalidate_head            := Bool(false)
+         } .otherwise {
+           // temp_laq_head = WrapInc(temp_laq_head, num_ld_entries)
+            laq_allocated(idx)         := Bool(false)
+            laq_addr_val (idx)         := Bool(false)
+            laq_executed (idx)         := Bool(false)
+            laq_succeeded(idx)         := Bool(false)
+            laq_failure  (idx)         := Bool(false)
+            laq_forwarded_std_val(idx) := Bool(false)
+            invalidate_head            := Bool(true)
+         }
       }
 
-      temp_laq_head = Mux(io.commit_load_mask(w), WrapInc(temp_laq_head, num_ld_entries), temp_laq_head)
+      temp_laq_head = Mux(io.commit_load_mask(w) && invalidate_head, WrapInc(temp_laq_head, num_ld_entries), temp_laq_head)
    }
    laq_head := temp_laq_head
 

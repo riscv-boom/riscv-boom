@@ -446,6 +446,9 @@ trait VecConstants
    val VFP_H  = UInt(1, VFP_SZ)
    val VFP_S  = UInt(2, VFP_SZ)
    val VFP_D  = UInt(3, VFP_SZ)
+
+   val VL_SZ = 10
+   val VRATE_SZ = 5
 }
 
 trait Sizes

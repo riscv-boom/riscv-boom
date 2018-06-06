@@ -35,7 +35,12 @@ class IssueSlotIO(num_wakeup_ports: Int)(implicit p: Parameters) extends BoomBun
    val in_uop         = Flipped(Valid(new MicroOp())) // if valid, this WILL overwrite an entry!
    val updated_uop    = Output(new MicroOp()) // the updated slot uop; will be shifted upwards in a collasping queue.
    val uop            = Output(new MicroOp()) // the current Slot's uop. Sent down the pipeline when issued.
-
+      
+   val vl             = Input(UInt(width=VL_SZ.W)) // The global vector length
+   val lsu_ldq_eidx   = Input(Vec(NUM_LSU_ENTRIES, UInt(width=VL_SZ.W)))
+   // TODO_vec: All this logic probably needs to be removed when separate vector memory unit is implemented
+   // For now this tracks element indices of ops in the lsu ldq, we don't issue ops until the LDQ is ready to receive them
+   // This is actually very bad since it is essentially unpipelined vector loads
    val debug = {
      val result = new Bundle {
        val p1 = Bool()
@@ -48,7 +53,8 @@ class IssueSlotIO(num_wakeup_ports: Int)(implicit p: Parameters) extends BoomBun
    override def cloneType = new IssueSlotIO(num_wakeup_ports)(p).asInstanceOf[this.type]
 }
 
-class IssueSlot(num_slow_wakeup_ports: Int)(implicit p: Parameters)
+
+class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean)(implicit p: Parameters)
    extends BoomModule()(p)
    with IssueUnitConstants
 {
@@ -61,6 +67,7 @@ class IssueSlot(num_slow_wakeup_ports: Int)(implicit p: Parameters)
    def isValid = slot_state =/= s_invalid
 
    val updated_state = Wire(UInt()) // the next state of this slot (which might then get moved to a new slot)
+   val updated_eidx  = Wire(UInt())
    val updated_uopc  = Wire(UInt()) // the next uopc of this slot (which might then get moved to a new slot)
    val updated_lrs1_rtype = Wire(UInt()) // the next reg type of this slot (which might then get moved to a new slot)
    val updated_lrs2_rtype = Wire(UInt()) // the next reg type of this slot (which might then get moved to a new slot)
@@ -108,6 +115,7 @@ class IssueSlot(num_slow_wakeup_ports: Int)(implicit p: Parameters)
    // defaults
    updated_state := slot_state
    updated_uopc := slotUop.uopc
+   updated_eidx := slotUop.eidx
    updated_lrs1_rtype := slotUop.lrs1_rtype
    updated_lrs2_rtype := slotUop.lrs2_rtype
 
@@ -116,6 +124,16 @@ class IssueSlot(num_slow_wakeup_ports: Int)(implicit p: Parameters)
          (io.grant && (slot_state === s_valid_2) && slot_p1 && slot_p2))
    {
       updated_state := s_invalid
+      if (containsVec) {
+         when (slotUop.is_load) {
+            updated_eidx := slotUop.eidx + UInt(1)
+         } .otherwise {
+            updated_eidx := slotUop.eidx + slotUop.rate
+         }
+         when (slotUop.vec_val && updated_eidx < io.vl) {
+            updated_state := slot_state
+         }
+      }
    }
    .elsewhen (io.grant && (slot_state === s_valid_2))
    {
@@ -208,6 +226,11 @@ class IssueSlot(num_slow_wakeup_ports: Int)(implicit p: Parameters)
    when (slot_state === s_valid_1)
    {
       io.request := slot_p1 && slot_p2 && slot_p3 && !io.kill
+      if (containsVec){
+         when (slotUop.uopc === uopVLD) {
+            io.request := slot_p1 && slot_p2 && slot_p3 && !io.kill && slotUop.eidx === io.lsu_ldq_eidx(slotUop.ldq_idx)
+         }
+      }
    }
    .elsewhen (slot_state === s_valid_2)
    {
@@ -222,8 +245,16 @@ class IssueSlot(num_slow_wakeup_ports: Int)(implicit p: Parameters)
    //assign outputs
    io.valid         := isValid
    io.uop           := slotUop
-   io.will_be_valid := isValid &&
-                       !(io.grant && ((slot_state === s_valid_1) || (slot_state === s_valid_2) && slot_p1 && slot_p2))
+   if (containsVec) {
+      io.will_be_valid := isValid &&
+                          !(io.grant && (updated_eidx >= io.vl || !slotUop.vec_val)
+                          && ((slot_state === s_valid_1) || (slot_state === s_valid_2) && slot_p1 && slot_p2))
+   } else {
+      io.will_be_valid := isValid &&
+                          !(io.grant
+                          && ((slot_state === s_valid_1) || (slot_state === s_valid_2) && slot_p1 && slot_p2))
+   }
+
 
    io.updated_uop           := slotUop
    io.updated_uop.iw_state  := updated_state
@@ -234,6 +265,7 @@ class IssueSlot(num_slow_wakeup_ports: Int)(implicit p: Parameters)
    io.updated_uop.prs1_busy := !out_p1
    io.updated_uop.prs2_busy := !out_p2
    io.updated_uop.prs3_busy := !out_p3
+   io.updated_uop.eidx      := updated_eidx
 
    when (slot_state === s_valid_2)
    {

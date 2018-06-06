@@ -60,11 +60,14 @@ class IssueUnitIO(
    val event_empty    = Output(Bool()) // used by HPM events; is the issue unit empty?
 
    val tsc_reg        = Input(UInt(width=xLen.W))
+   val vl             = Input(UInt(width=VL_SZ.W))
+   val lsu_ldq_eidx   = Input(Vec(NUM_LSU_ENTRIES, UInt(width=VL_SZ.W)))
 }
 
 abstract class IssueUnit(
    val num_issue_slots: Int,
    val issue_width: Int,
+   containsVec: Boolean,
    num_wakeup_ports: Int,
    val iqType: BigInt)
    (implicit p: Parameters)
@@ -78,6 +81,7 @@ abstract class IssueUnit(
    // special case "storing" 2 uops within one issue slot.
 
    val dis_uops = Array.fill(DISPATCH_WIDTH) {Wire(new MicroOp())}
+//   val vec_uops = Array.fill(issue_width) {Wire(new MicroOp())}
    for (w <- 0 until DISPATCH_WIDTH)
    {
       dis_uops(w) := io.dis_uops(w)
@@ -91,8 +95,12 @@ abstract class IssueUnit(
    //-------------------------------------------------------------
    // Issue Table
 
-   val slots = for (i <- 0 until num_issue_slots) yield { val slot = Module(new IssueSlot(num_wakeup_ports)); slot }
+   val slots = for (i <- 0 until num_issue_slots) yield { val slot = Module(new IssueSlot(num_wakeup_ports, containsVec)); slot; }
    val issue_slots = VecInit(slots.map(_.io))
+   for (i <- 0 until num_issue_slots) yield {
+      issue_slots(i).lsu_ldq_eidx := io.lsu_ldq_eidx;
+      issue_slots(i).vl := io.vl
+   }
 
    io.event_empty := !(issue_slots.map(s => s.valid).reduce(_|_))
 
@@ -194,7 +202,7 @@ class IssueUnits(num_wakeup_ports: Int)(implicit val p: Parameters)
    require (enableAgePriorityIssue) // unordered is currently unsupported.
 
 //      issue_Units =issueConfigs colect {if iqType=....)
-   iss_units += Module(new IssueUnitCollasping(issueParams.find(_.iqType == IQT_MEM.litValue).get, num_wakeup_ports))
-   iss_units += Module(new IssueUnitCollasping(issueParams.find(_.iqType == IQT_INT.litValue).get, num_wakeup_ports))
+   iss_units += Module(new IssueUnitCollasping(issueParams.find(_.iqType == IQT_MEM.litValue).get, true, num_wakeup_ports))
+   iss_units += Module(new IssueUnitCollasping(issueParams.find(_.iqType == IQT_INT.litValue).get, false, num_wakeup_ports))
 }
 

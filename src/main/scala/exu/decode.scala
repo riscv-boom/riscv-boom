@@ -477,6 +477,12 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule()(p)
    uop.rs3_verep  := io.vecstatus.vereps(uop.lrs3)
    uop.rd_verep   := io.vecstatus.vereps(uop.ldst)
 
+   uop.rate       := MuxLookup(io.vecstatus.vews(uop.ldst), VEW_DISABLE, Array(VEW_8  -> UInt(16),
+                                                                               VEW_16 -> UInt(8),// TODO_vec: this needs to lookup when dst is not vec
+                                                                               VEW_32 -> UInt(4),
+                                                                               VEW_64 -> UInt(2)))
+   uop.eidx       := UInt(0)
+
    uop.fp_val     := cs.fp_val
    uop.vec_val    := cs.vec_val
    uop.fp_single  := cs.fp_single // TODO use this signal instead of the FPU decode's table signal?

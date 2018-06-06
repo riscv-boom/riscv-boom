@@ -32,6 +32,7 @@ class ExeUnitResp(data_width: Int)(implicit p: Parameters) extends BoomBundle()(
 {
    val uop = new MicroOp()
    val data = Bits(width = data_width)
+   val rate = UInt(width = VRATE_SZ)
    val fflags = new ValidIO(new FFlagsResp) // write fflags to ROB
 
    var writesToIRF = true // does this response unit plug into the integer regfile?
@@ -671,7 +672,7 @@ class MemExeUnit(implicit p: Parameters) extends ExecutionUnit(num_rf_read_ports
    io.resp(0).bits.uop              := RegNext(memresp_uop)
    io.resp(0).bits.uop.ctrl.rf_wen  := RegNext(memresp_rf_wen)
    io.resp(0).bits.data             := RegNext(memresp_data)
-
+   io.resp(0).bits.rate             := UInt(1)
    override def toString: String =
       "\n     ExeUnit--" +
       "\n       - Mem"
