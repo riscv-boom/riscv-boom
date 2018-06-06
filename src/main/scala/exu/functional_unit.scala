@@ -592,7 +592,13 @@ class MemAddrCalcUnit(implicit p: Parameters)
 {
    // perform address calculation
    val imm = Mux(io.req.bits.uop.uopc === uopVLD, io.req.bits.uop.imm_packed(19,15), io.req.bits.uop.imm_packed(19,8))
-   val sum = (io.req.bits.rs1_data.asSInt + imm.asSInt).asUInt
+   assert(io.req.bits.uop.vec_val || io.req.bits.uop.eidx === UInt(0), "Eidx should be 0 for normal insts")
+   val eidx_off = Cat(UInt(0), io.req.bits.uop.eidx << MuxLookup(io.req.bits.uop.rd_vew, VEW_DISABLE, Array(
+      VEW_8  -> UInt(0),
+      VEW_16 -> UInt(1),
+      VEW_32 -> UInt(2),
+      VEW_64 -> UInt(3)))) // TODO_vec : make this nicer with log2
+   val sum = (io.req.bits.rs1_data.asSInt + imm.asSInt + eidx_off.asSInt).asUInt
    val ea_sign = Mux(sum(vaddrBits-1), ~sum(63,vaddrBits) === UInt(0),
                                         sum(63,vaddrBits) =/= UInt(0))
    val effective_address = Cat(ea_sign, sum(vaddrBits-1,0)).asUInt
