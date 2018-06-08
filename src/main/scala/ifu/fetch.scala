@@ -29,6 +29,9 @@ import boom.common._
 import boom.exu._
 import boom.util.{AgePriorityEncoder, ElasticReg}
 
+import freechips.rocketchip.config._
+import freechips.rocketchip.tile._
+import freechips.rocketchip.rocket._
 import freechips.rocketchip.util.Str
 import freechips.rocketchip.util.UIntToAugmentedUInt
 
@@ -52,6 +55,14 @@ class FetchBundle(implicit p: Parameters) extends BoomBundle()(p)
   override def cloneType: this.type = new FetchBundle().asInstanceOf[this.type]
 }
 
+class FrontendResp2(implicit p: Parameters) extends CoreBundle()(p) {
+  val btb = new BTBResp
+  val pc = UInt(width = vaddrBitsExtended)  // ID stage PC
+  val data = UInt(width = fetchWidth * 32)
+  val mask = Bits(width = fetchWidth)
+  val xcpt = new FrontendExceptions
+  val replay = Bool()
+}
 
 class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p)
 //class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends freechips.rocketchip.tile.CoreModule()(p)
@@ -60,7 +71,8 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
    val io = IO(new BoomBundle()(p)
    {
       val imem_req          = Valid(new freechips.rocketchip.rocket.FrontendReq)
-      val imem_resp         = Decoupled(new freechips.rocketchip.rocket.FrontendResp).flip
+      val imem_resp         = Decoupled(new FrontendResp2).flip
+      val rvc_mask          = UInt(fetchWidth.W).flip
 
       val f2_btb_resp       = Valid(new BoomBTBResp).flip
       val f2_bpd_resp       = Valid(new BpdResp).flip
@@ -237,7 +249,7 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
    {
       val bpd_decoder = Module(new BranchDecode)
 
-      val inst = f3_imemresp.data(i*coreInstBits+coreInstBits-1,i*coreInstBits)
+      val inst = f3_imemresp.data(i*32+31, i*32) // RVC Expanded
       bpd_decoder.io.inst := inst
       f3_fetch_bundle.insts(i) := inst
 

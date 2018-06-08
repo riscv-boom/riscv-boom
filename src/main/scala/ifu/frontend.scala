@@ -84,7 +84,22 @@ trait HasL1ICacheBankedParameters extends HasL1ICacheParameters
   }
 
   // For a given fetch address, what is the mask of validly fetched instructions.
-  def fetchMask(addr: UInt) =
+  def cacheFetchMask(addr: UInt) =
+  {
+    // where is the first instruction, aligned to a log(fetchWidth) boundary?
+    val idx = addr.extract(log2Ceil(fetchWidth*2)+log2Ceil(coreInstBytes) - 1, log2Ceil(coreInstBytes))
+    if (icIsBanked) {
+      // shave off the msb of idx since we are aligned to half-fetchWidth boundaries.
+      val shamt = idx.extract(log2Ceil(fetchWidth*2)-2, 0)
+      val end_mask = Mux(inLastChunk(addr), Fill(fetchWidth, 1.U), Fill(fetchWidth*2, 1.U))
+      ((1 << (fetchWidth*2))-1).U << shamt & end_mask
+    } else {
+      ((1 << (fetchWidth*2))-1).U << idx
+    }
+  }
+
+  // For a given fetch address, what is the mask of validly fetched instructions.
+  def norvcFetchMask(addr: UInt) =
   {
     // where is the first instruction, aligned to a log(fetchWidth) boundary?
     val idx = addr.extract(log2Ceil(fetchWidth)+log2Ceil(coreInstBytes)-1, log2Ceil(coreInstBytes))
@@ -158,7 +173,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 {
   val io = IO(new BoomFrontendBundle(outer))
   implicit val edge = outer.masterNode.edges.out(0)
-  require(fetchWidth*coreInstBytes == outer.icacheParams.fetchBytes)
+  require(2*fetchWidth*coreInstBytes == outer.icacheParams.fetchBytes)
 
   val icache = outer.icache.module
   val tlb = Module(new TLB(true, log2Ceil(fetchBytes), nTLBEntries))
@@ -183,6 +198,10 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   val s2_partial_insn_valid = RegInit(false.B)
   val s2_partial_insn = Reg(UInt(width = coreInstBits))
   val wrong_path = Reg(Bool())
+  val rvcexist = Wire(Bool())
+  val s2_irespvalid = Wire(Bool())
+  val respready = Wire(Bool())
+  respready := fetch_controller.io.imem_resp.ready
 
   val s1_base_pc = alignToFetchBoundary(s1_pc)
   val ntpc = nextFetchStart(s1_base_pc)
@@ -205,17 +224,19 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   s2_valid := false
   when (!s2_replay) {
     s2_valid := !s2_redirect
-    s2_pc := s1_pc
-    s2_speculative := s1_speculative
-    s2_tlb_resp := tlb.io.resp
+    when (!(s2_irespvalid && !respready)) {
+      s2_pc := s1_pc
+      s2_speculative := s1_speculative
+      s2_tlb_resp := tlb.io.resp
+    }
   }
 
   io.ptw <> tlb.io.ptw
   tlb.io.req.valid := !s2_replay
   tlb.io.req.bits.vaddr := s1_pc
   tlb.io.req.bits.passthrough := Bool(false)
-  tlb.io.req.bits.sfence := io.cpu.sfence
-  tlb.io.req.bits.size := log2Ceil(coreInstBytes*fetchWidth)
+  tlb.io.sfence := io.cpu.sfence
+  tlb.io.req.bits.size := log2Ceil(4*fetchWidth)
 
   icache.io.hartid := io.hartid
   icache.io.req.valid := s0_valid
@@ -224,23 +245,228 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   icache.io.s1_vaddr := s1_pc
   icache.io.s1_paddr := tlb.io.resp.paddr
   icache.io.s2_vaddr := s2_pc
-  icache.io.s1_kill := s2_redirect || tlb.io.resp.miss || s2_replay
+  icache.io.s1_kill := s2_redirect || tlb.io.resp.miss || s2_replay || (s2_irespvalid && !respready)
   icache.io.s2_kill := s2_speculative && !s2_tlb_resp.cacheable || s2_xcpt
   icache.io.s2_prefetch := s2_tlb_resp.prefetchable
 
-  s0_pc := alignPC(Mux(fetch_controller.io.imem_req.valid, fetch_controller.io.imem_req.bits.pc, npc))
-  fetch_controller.io.imem_resp.valid := RegNext(s1_valid) && s2_valid && (icache.io.resp.valid || !s2_tlb_resp.miss && icache.io.s2_kill)
+  s0_pc := alignPC(Mux(fetch_controller.io.imem_req.valid, fetch_controller.io.imem_req.bits.pc, 
+                    Mux(s2_irespvalid && !respready, s1_pc, npc)))
+  
+  val s2_respdata = icache.io.resp.bits.data
+  val s2_mask = cacheFetchMask(s2_pc)
+  s2_irespvalid := RegNext(s1_valid) && s2_valid && icache.io.resp.valid
+  val inst32across = RegInit(false.B)
+  var rvcvec = Vec(false.B) 
+  var overridenext = inst32across
+  for (i <- 0 until fetchWidth*2) {
+    val inst16 = !s2_respdata(16*i+1, 16*i).andR && !overridenext && s2_mask(i)
+    overridenext = !inst16 && !overridenext
+    rvcvec = Vec(rvcvec ++ Vec(inst16)) 
+  }
+  val rvc = rvcvec.asUInt >> 1
+  when (s2_irespvalid) {
+    inst32across := overridenext
+  }
+  rvcexist := rvc.orR
+
+  fetch_controller.io.imem_resp.valid := RegNext(s1_valid) && s2_valid && ((icache.io.resp.valid && !rvcexist) || !s2_tlb_resp.miss && icache.io.s2_kill) 
   fetch_controller.io.imem_resp.bits.pc := s2_pc
 
   fetch_controller.io.imem_resp.bits.data := icache.io.resp.bits.data
-  fetch_controller.io.imem_resp.bits.mask := fetchMask(s2_pc)
-
+  fetch_controller.io.imem_resp.bits.mask := norvcFetchMask(s2_pc)
+  fetch_controller.io.rvc_mask := 0.U
 
   fetch_controller.io.imem_resp.bits.replay := icache.io.resp.bits.replay || icache.io.s2_kill && !icache.io.resp.valid && !s2_xcpt
   fetch_controller.io.imem_resp.bits.btb := s2_btb_resp_bits
   fetch_controller.io.imem_resp.bits.btb.taken := s2_btb_taken
   fetch_controller.io.imem_resp.bits.xcpt := s2_tlb_resp
   when (icache.io.resp.valid && icache.io.resp.bits.ae) { fetch_controller.io.imem_resp.bits.xcpt.ae.inst := true }
+
+
+  val s3_respvalid = RegInit(false.B)
+  val s3_mask = Reg(UInt((fetchWidth*2).W))
+  val s3_respdata = Reg(UInt((fetchWidth * 32).W)) 
+  val s3_pc = Reg(UInt(vaddrBitsExtended.W))
+  val s3_prevhalf = Reg(UInt(16.W))
+  val s3_rvc = Reg(UInt((fetchWidth * 2).W))
+  val prev_inst32across = RegInit(false.B)
+  val s3_datawire = Wire(Vec(fetchWidth, UInt(32.W)))
+  val expunit = Seq.fill(fetchWidth)(Module(new freechips.rocketchip.rocket.RVCExpander))
+  val s3_expunitin = Wire(Vec(fetchWidth, UInt(16.W)))
+  val s3_tlb_resp = Reg(tlb.io.resp)
+  val expunitout = Wire(Vec(fetchWidth, UInt(32.W)))
+
+  val s4_valid = Reg(Bool())
+  val s4_mask = Reg(UInt(fetchWidth.W))
+  val s4_respdata = Reg(UInt((fetchWidth * 16).W)) 
+  val s4_pc = Reg(UInt(vaddrBitsExtended.W))
+  val s4_expunitin = Wire(Vec(fetchWidth, UInt(16.W)))
+  val s4_rvc = Reg(UInt(fetchWidth.W))
+  val s4_datawire = Wire(Vec(fetchWidth, UInt(32.W)))
+  val s4_tlb_resp = Reg(tlb.io.resp)
+  val allotedins3 = Reg(UInt(fetchWidth.W))
+
+  when (rvcexist && s2_irespvalid && respready) {
+    s3_respvalid := true.B
+    s3_respdata := icache.io.resp.bits.data
+    s3_mask := s2_mask
+    s3_pc := s2_pc
+    s3_rvc := rvc
+    prev_inst32across := inst32across
+    s3_tlb_resp := RegNext(s2_tlb_resp)
+  }
+
+  /////////////////////
+  // S3
+  ////////////////////
+  var installoted = Vec(false.B)
+  var outalloted = Vec(false.B)
+  var rvcalloted = Vec(false.B)
+  var outfull = false.B
+  var nextoutidx = 1.U(log2Ceil(fetchWidth).W)
+  var nextrvcidx = 0.U(log2Ceil(fetchWidth).W)   
+  var nextalloted = false.B
+  var addnpc = 0.U
+  when (s3_mask(0)) {
+    when (!s3_rvc(0) && prev_inst32across) {
+      s3_datawire(0) := Cat(s3_respdata(15,0), s3_prevhalf)
+      outalloted = Vec(outalloted ++ Vec(true.B))
+      rvcalloted = Vec(rvcalloted ++ Vec(false.B))
+      addnpc = addnpc + 2.U
+    } .elsewhen (s3_rvc(0)) {
+      s3_expunitin(0) := s3_respdata(15,0)
+      s3_datawire(0) := expunitout(0) 
+      nextrvcidx = 1.U(log2Ceil(fetchWidth).W)
+      outalloted = Vec(outalloted ++ Vec(true.B))
+      rvcalloted = Vec(rvcalloted ++ Vec(true.B))
+      addnpc = addnpc + 2.U
+    } .elsewhen (s3_mask(1)) {
+      s3_datawire(0) := s3_respdata(31,0)
+      nextalloted = true.B
+      installoted = Vec(installoted ++ Vec(true.B, true.B))
+      outalloted = Vec(outalloted ++ Vec(true.B))
+      rvcalloted = Vec(rvcalloted ++ Vec(false.B))
+      addnpc = addnpc + 4.U
+    }
+  }
+
+  for (i <- 1 until fetchWidth*2) {
+    when (!outfull && s3_mask(i)) {
+      when (s3_rvc(i)) {
+        s3_expunitin( nextrvcidx ) := s3_respdata(16*i+15, 16*i)
+        s3_datawire( nextoutidx ) := expunitout( nextrvcidx ) 
+        outfull = nextoutidx.andR
+        nextrvcidx = nextrvcidx + 1.U(log2Ceil(fetchWidth).W)
+        nextoutidx = nextoutidx + 1.U(log2Ceil(fetchWidth).W)
+        installoted = Vec(installoted ++ Vec(true.B))
+        outalloted = Vec(outalloted ++ Vec(true.B))
+        rvcalloted = Vec(rvcalloted ++ Vec(true.B))
+        addnpc = addnpc + 2.U
+      } .elsewhen (!nextalloted) {
+        if (i != (fetchWidth*2-1)) {
+          s3_datawire( nextoutidx ) := s3_respdata(16*i+31, 16*i)
+          outfull = nextoutidx.andR
+          nextoutidx = nextoutidx + 1.U(log2Ceil(fetchWidth).W)
+          nextalloted = true.B
+          installoted = Vec(installoted ++ Vec(true.B, true.B))
+          outalloted = Vec(outalloted ++ Vec(true.B))
+          rvcalloted = Vec(rvcalloted ++ Vec(false.B))
+          addnpc = addnpc + 4.U
+        }
+      } .otherwise {
+        nextalloted = false.B
+      }
+    } .otherwise {
+      installoted = Vec(installoted ++ Vec(false.B))
+    }
+  }
+
+  val installotedu = installoted.asUInt >> 1
+  val outallotedu = outalloted.asUInt >> 1
+  val rvcallotedu = rvcalloted.asUInt >> 1
+
+  when (s3_respvalid && respready) {
+    fetch_controller.io.imem_resp.valid := true.B
+    fetch_controller.io.imem_resp.bits.pc := (s3_pc.asSInt + Mux(prev_inst32across, -2.S, 0.S)).asUInt
+    fetch_controller.io.imem_resp.bits.data := s3_datawire.asUInt
+    fetch_controller.io.imem_resp.bits.mask := outallotedu
+    fetch_controller.io.rvc_mask := rvcallotedu
+    fetch_controller.io.imem_resp.bits.xcpt := s3_tlb_resp
+
+    when (inst32across) {
+      s3_prevhalf := Mux(s3_mask(fetchWidth-1) && !s3_mask(fetchWidth), s3_respdata(16*fetchWidth-1, 16*(fetchWidth-1)), s3_respdata(32*fetchWidth-1, 16*(2*fetchWidth-1)))
+    }
+  
+    s4_respdata := s3_respdata 
+    s4_pc := s3_pc + addnpc(log2Ceil(4*fetchWidth-2)-1,0)
+    s4_rvc := s3_rvc >> fetchWidth
+    s4_mask := s3_mask >> fetchWidth
+    allotedins3 := installotedu >> fetchWidth
+    s4_tlb_resp := s3_tlb_resp
+    s3_respvalid := false.B
+  }
+
+  require(fetchWidth >= 2)
+  s4_valid := s3_respvalid && respready && !s2_redirect &&
+              !(inst32across && ((installotedu(fetchWidth*2-2) && !installotedu(fetchWidth*2-1)) || (installotedu(fetchWidth-2) && !installotedu(fetchWidth-1))))
+
+  ////////////////////
+
+  /////////////////////
+  // S4
+  ////////////////////
+  var s4_outalloted = Vec(false.B)
+  var s4_rvcalloted = Vec(false.B)
+  var s4_nextoutidx = 0.U(log2Ceil(fetchWidth).W)
+  var s4_nextrvcidx = 0.U(log2Ceil(fetchWidth).W)   
+  var s4_nextalloted = false.B
+  for (i <- 0 until fetchWidth) {
+    when (s4_mask(i) && !allotedins3(i)) {
+      when (s4_rvc(i)) {
+        s4_expunitin( s4_nextrvcidx ) := s4_respdata(16*i+15, 16*i)
+        s4_datawire( s4_nextoutidx ) := expunitout( s4_nextrvcidx ) 
+        s4_nextrvcidx = s4_nextrvcidx + 1.U(log2Ceil(fetchWidth).W)
+        s4_nextoutidx = s4_nextoutidx + 1.U(log2Ceil(fetchWidth).W)
+        s4_outalloted = Vec(s4_outalloted ++ Vec(true.B))
+        s4_rvcalloted = Vec(s4_rvcalloted ++ Vec(true.B))
+      } .elsewhen (!s4_nextalloted) {
+        if (i != (fetchWidth-1)) {
+          s4_datawire( s4_nextoutidx ) := s4_respdata(16*i+31,16*i)
+          s4_nextoutidx = s4_nextoutidx + 1.U(log2Ceil(fetchWidth).W)
+          s4_nextalloted = true.B
+          s4_outalloted = Vec(s4_outalloted ++ Vec(true.B))
+          s4_rvcalloted = Vec(s4_rvcalloted ++ Vec(false.B))
+        }
+      } .otherwise {
+        s4_nextalloted = false.B
+      }
+    }
+  }
+
+  val s4_outallotedu = s4_outalloted.asUInt >> 1
+  val s4_rvcallotedu = s4_rvcalloted.asUInt >> 1
+
+  when (s4_valid && respready) {
+    fetch_controller.io.imem_resp.valid := true.B
+    fetch_controller.io.imem_resp.bits.pc := s4_pc
+    fetch_controller.io.imem_resp.bits.data := s4_datawire.asUInt
+    fetch_controller.io.imem_resp.bits.mask := s4_outallotedu
+    fetch_controller.io.rvc_mask := s4_rvcallotedu
+    fetch_controller.io.imem_resp.bits.xcpt := s4_tlb_resp
+  }
+
+  ////////////////////
+
+  ////////////////////
+  //  S3/S4
+  ////////////////////
+  for ((exp, i) <- expunit.zipWithIndex) {
+    exp.io.in := Mux(s4_valid, s4_expunitin(i), s3_expunitin(i))
+    expunitout(i) := exp.io.out.bits 
+  }
+  ////////////////////
+
+
 
   //-------------------------------------------------------------
   // **** Fetch Controller ****

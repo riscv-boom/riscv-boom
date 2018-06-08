@@ -21,7 +21,6 @@ case class BoomTileParams(
     core: BoomCoreParams = BoomCoreParams(),
     icache: Option[ICacheParams] = Some(ICacheParams()),
     dcache: Option[DCacheParams] = Some(DCacheParams()),
-    rocc: Seq[RoCCParams] = Nil,
     btb: Option[BTBParams] = Some(BTBParams()),
     dataScratchpadBytes: Int = 0,
     trace: Boolean = false,

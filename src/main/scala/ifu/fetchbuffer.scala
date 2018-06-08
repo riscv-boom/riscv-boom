@@ -63,7 +63,7 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule()
    // Step 1. Convert input FetchPacket into an array of MicroOps.
    for (i <- 0 until fetchWidth)
    {
-      require (coreInstBytes==4)
+      //require (coreInstBytes==4) // TODO RVC
       in_uops(i)                := DontCare
       in_uops(i).valid          := io.enq.valid && io.enq.bits.mask(i)
       in_uops(i).pc             := alignToFetchBoundary(io.enq.bits.pc) + (i << 2).U // RVC TODO

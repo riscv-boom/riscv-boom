@@ -81,7 +81,7 @@ class FetchMonitor(implicit p: Parameters) extends BoomModule()(p)
       prev_pc = uop.pc
       prev_npc = prev_pc + 4.U
       prev_cfitype = GetCfiType(uop.inst)
-      require (coreInstBytes == 4)
+      // TODO RVC // require (coreInstBytes == 4) 
       prev_target =
          Mux(prev_cfitype === CfiType.jal,
             ComputeJALTarget(uop.pc, uop.inst, xLen),
@@ -113,7 +113,7 @@ class FetchMonitor(implicit p: Parameters) extends BoomModule()(p)
       val end_pc = end_uop.pc
 
       last_pc := end_pc
-      last_npc := end_pc + 4.U; require (coreInstBytes == 4)
+      last_npc := end_pc + 4.U;  // TODO RVC require (coreInstBytes == 4)
       last_cfitype := GetCfiType(end_uop.inst)
       last_target :=
          Mux(GetCfiType(end_uop.inst) === CfiType.jal,
