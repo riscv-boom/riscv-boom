@@ -19,11 +19,12 @@ class RegisterFileSeqCustomArray(
    num_read_ports: Int,
    num_write_ports: Int,
    register_width: Int,
+   isVector: Boolean,
    bypassable_array: Seq[Boolean])
    (implicit p: Parameters)
-   extends RegisterFile(num_registers, num_read_ports, num_write_ports, register_width, bypassable_array)
+   extends RegisterFile(num_registers, num_read_ports, num_write_ports, register_width, isVector, bypassable_array)
 {
-
+   assert(!isVector, "This regfile does not support vectors")
    // --------------------------------------------------------------
 
    val regfile =

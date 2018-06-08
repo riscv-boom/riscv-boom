@@ -69,6 +69,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
                                  exe_units.withFilter(_.uses_iss_unit).map(e => e.num_rf_write_ports).sum - 1 +
                                     num_ll_ports,
                                  fLen+1,
+                                 false,
                                  exe_units.bypassable_write_port_mask
                                  ))
    val fregister_read   = Module(new RegisterRead(
@@ -153,7 +154,8 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
    for ((writeback, issue_wakeup) <- io.wakeups zip issue_unit.io.wakeup_pdsts)
    {
       issue_wakeup.valid := writeback.valid
-      issue_wakeup.bits  := writeback.bits.uop.pdst
+      issue_wakeup.bits.pdst := writeback.bits.uop.pdst
+      issue_wakeup.bits.eidx := UInt(0) // TODO_Vec: Figure out how to add conditional wires to a bundle
    }
 
    //-------------------------------------------------------------
@@ -252,6 +254,9 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
                wbresp.bits.uop.ctrl.rf_wen
             fregfile.io.write_ports(w_cnt).bits.addr := wbresp.bits.uop.pdst
             fregfile.io.write_ports(w_cnt).bits.data := wbresp.bits.data
+            fregfile.io.write_ports(w_cnt).bits.mask := UInt(0) // todo_vec: This shouldn't matter
+            fregfile.io.write_ports(w_cnt).bits.eidx := UInt(0) // This definitely doesn't matter
+            fregfile.io.write_ports(w_cnt).bits.rd_vew := UInt(0)
             wbresp.ready := fregfile.io.write_ports(w_cnt).ready
          }
 

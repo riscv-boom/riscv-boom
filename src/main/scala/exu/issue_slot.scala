@@ -31,7 +31,7 @@ class IssueSlotIO(num_wakeup_ports: Int)(implicit p: Parameters) extends BoomBun
    val kill           = Input(Bool()) // pipeline flush
    val clear          = Input(Bool()) // entry being moved elsewhere (not mutually exclusive with grant)
 
-   val wakeup_dsts    = Flipped(Vec(num_wakeup_ports, Valid(UInt(width = PREG_SZ.W))))
+   val wakeup_dsts    = Flipped(Vec(num_wakeup_ports, Valid(new WakeupPdst())))
    val in_uop         = Flipped(Valid(new MicroOp())) // if valid, this WILL overwrite an entry!
    val updated_uop    = Output(new MicroOp()) // the updated slot uop; will be shifted upwards in a collasping queue.
    val uop            = Output(new MicroOp()) // the current Slot's uop. Sent down the pipeline when issued.
@@ -82,7 +82,7 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean)(implicit p: Pa
    val slot_is_2uops = Reg(Bool())
 
    val slotUop = Reg(init = NullMicroOp)
-
+   val next_eidx = slotUop.eidx + slotUop.rate // The next eidx after this gets executed
 
    //-----------------------------------------------------------------------------
    // next slot state computation
@@ -111,7 +111,7 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean)(implicit p: Pa
    // "update" state
    // compute the next state for the micro-op in this slot. This micro-op may
    // be moved elsewhere, so the "updated_state" travels with it.
-
+   
    // defaults
    updated_state := slot_state
    updated_uopc := slotUop.uopc
@@ -125,11 +125,12 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean)(implicit p: Pa
    {
       updated_state := s_invalid
       if (containsVec) {
-         when (slotUop.is_load) {
-            updated_eidx := slotUop.eidx + UInt(1)
-         } .otherwise {
-            updated_eidx := slotUop.eidx + slotUop.rate
-         }
+         updated_eidx := next_eidx
+         // when (slotUop.is_load) {
+         //    updated_eidx := slotUop.eidx + UInt(1)
+         // } .otherwise {
+         //    updated_eidx := slotUop.eidx + slotUop.rate
+         // }
          when (slotUop.vec_val && updated_eidx < io.vl) {
             updated_state := slot_state
          }
@@ -186,17 +187,32 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean)(implicit p: Pa
 
    for (i <- 0 until num_slow_wakeup_ports)
    {
-      when (io.wakeup_dsts(i).valid && (io.wakeup_dsts(i).bits === slotUop.pop1))
+      when (io.wakeup_dsts(i).valid && (io.wakeup_dsts(i).bits.pdst === slotUop.pop1))
       {
          out_p1 := true.B
+         if (containsVec) {
+            when (slotUop.vec_val) {
+               out_p1 := next_eidx <= io.wakeup_dsts(i).bits.eidx
+            }
+         }
       }
-      when (io.wakeup_dsts(i).valid && (io.wakeup_dsts(i).bits === slotUop.pop2))
+      when (io.wakeup_dsts(i).valid && (io.wakeup_dsts(i).bits.pdst === slotUop.pop2))
       {
          out_p2 := true.B
+         if (containsVec) {
+            when (slotUop.vec_val) {
+               out_p2 := next_eidx <= io.wakeup_dsts(i).bits.eidx
+            }
+         }
       }
-      when (io.wakeup_dsts(i).valid && (io.wakeup_dsts(i).bits === slotUop.pop3))
+      when (io.wakeup_dsts(i).valid && (io.wakeup_dsts(i).bits.pdst === slotUop.pop3))
       {
          out_p3 := true.B
+         if (containsVec) {
+            when (slotUop.vec_val) {
+               out_p3 := next_eidx <= io.wakeup_dsts(i).bits.eidx
+            }
+         }
       }
    }
 
@@ -231,6 +247,7 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean)(implicit p: Pa
             io.request := slot_p1 && slot_p2 && slot_p3 && !io.kill && slotUop.eidx === io.lsu_ldq_eidx(slotUop.ldq_idx)
          }
       }
+
    }
    .elsewhen (slot_state === s_valid_2)
    {

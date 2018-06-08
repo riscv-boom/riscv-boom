@@ -477,10 +477,12 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule()(p)
    uop.rs3_verep  := io.vecstatus.vereps(uop.lrs3)
    uop.rd_verep   := io.vecstatus.vereps(uop.ldst)
 
-   uop.rate       := MuxLookup(io.vecstatus.vews(uop.ldst), VEW_DISABLE, Array(VEW_8  -> UInt(16),
-                                                                               VEW_16 -> UInt(8),// TODO_vec: this needs to lookup when dst is not vec
-                                                                               VEW_32 -> UInt(4),
-                                                                               VEW_64 -> UInt(2)))
+   uop.rate       := Mux(uop.uopc === uopVLD || uop.uopc === uopVST,
+      UInt(1), // Todo_vec: For now vector loads and stores proceed elementwise
+      MuxLookup(io.vecstatus.vews(uop.ldst), VEW_DISABLE, Array(VEW_8  -> UInt(16),
+         VEW_16 -> UInt(8),// TODO_vec: this needs to lookup when dst is not vec
+         VEW_32 -> UInt(4),
+         VEW_64 -> UInt(2))))
    uop.eidx       := UInt(0)
 
    uop.fp_val     := cs.fp_val

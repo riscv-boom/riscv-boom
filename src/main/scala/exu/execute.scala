@@ -32,7 +32,7 @@ class ExeUnitResp(data_width: Int)(implicit p: Parameters) extends BoomBundle()(
 {
    val uop = new MicroOp()
    val data = Bits(width = data_width)
-   val rate = UInt(width = VRATE_SZ)
+   val mask = UInt(width = 128 / 8)
    val fflags = new ValidIO(new FFlagsResp) // write fflags to ROB
 
    var writesToIRF = true // does this response unit plug into the integer regfile?
@@ -410,11 +410,13 @@ class VecFPUExeUnit(
    }
 
    // Outputs
-   io.resp(0).valid       := fu_units.map(_.io.resp.valid).reduce(_|_)
-   io.resp(0).bits.uop    := new MicroOp().fromBits(
+   val resp_uop = new MicroOp().fromBits(
       PriorityMux(fu_units.map(f => (f.io.resp.valid, f.io.resp.bits.uop.asUInt))))
+   io.resp(0).valid       := fu_units.map(_.io.resp.valid).reduce(_|_)
+   io.resp(0).bits.uop    := resp_uop
    io.resp(0).bits.data   := PriorityMux(fu_units.map(f =>(f.io.resp.valid, f.io.resp.bits.data.asUInt))).asUInt
    io.resp(0).bits.fflags := vfpu_resp_fflags // TODO_vec add div flags here
+   io.resp(0).bits.mask   := "b1111111111111111".U
    assert(!(valu.io.resp.valid && vfpu.io.resp.valid), "VALU and VFPU contending for write port")
    when (io.resp(0).valid) {
       printf("A functional unit in the vector exe unit has valid response\n");
@@ -633,6 +635,9 @@ class MemExeUnit(implicit p: Parameters) extends ExecutionUnit(num_rf_read_ports
    // Perform address calculation
    val maddrcalc = Module(new MemAddrCalcUnit())
    maddrcalc.io.req <> io.req
+   when (io.req.valid && io.req.bits.uop.vec_val) {
+      assert(io.req.bits.uop.rate === UInt(1), "Loads and stores through this unit proceed at rate 1")
+   }
 
    maddrcalc.io.brinfo <> io.brinfo
    io.bypass <> maddrcalc.io.bypass  // TODO this is not where the bypassing should occur from, is there any bypassing happening?!
@@ -672,7 +677,11 @@ class MemExeUnit(implicit p: Parameters) extends ExecutionUnit(num_rf_read_ports
    io.resp(0).bits.uop              := RegNext(memresp_uop)
    io.resp(0).bits.uop.ctrl.rf_wen  := RegNext(memresp_rf_wen)
    io.resp(0).bits.data             := RegNext(memresp_data)
-   io.resp(0).bits.rate             := UInt(1)
+   io.resp(0).bits.mask             := RegNext(MuxLookup(memresp_uop.rd_vew, VEW_8, Array(
+      VEW_8  -> "b1".U,
+      VEW_16 -> "b11".U,
+      VEW_32 -> "b1111".U,
+      VEW_64 -> "b11111111".U)))
    override def toString: String =
       "\n     ExeUnit--" +
       "\n       - Mem"

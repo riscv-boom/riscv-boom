@@ -75,6 +75,7 @@ class VecPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasF
       exe_units.withFilter(_.uses_iss_unit).map(e=>e.num_rf_write_ports).sum
          + num_ll_ports, // TODO_VEC: Subtract write ports to IRF, FRF
       128,
+      true,
       exe_units.bypassable_write_port_mask
    ))
    val vregister_read = Module(new RegisterRead(
@@ -149,7 +150,8 @@ class VecPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasF
          // printf("%d Vec wakeup writeback valid received\n", io.debug_tsc_reg)
       }
       issue_wakeup.valid := writeback.valid
-      issue_wakeup.bits  := writeback.bits.uop.pdst
+      issue_wakeup.bits.pdst  := writeback.bits.uop.pdst
+      issue_wakeup.bits.eidx  := writeback.bits.uop.eidx + writeback.bits.uop.rate // TODO_vec: This is a lot of adders
    }
 
 
@@ -203,7 +205,7 @@ class VecPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasF
    vregfile.io.write_ports(0) <> WritePort(ll_wbarb.io.out, VPREG_SZ, 128)
    assert (ll_wbarb.io.in(0).ready)
    when (io.ll_wport.valid) { assert(io.ll_wport.bits.uop.ctrl.rf_wen && io.ll_wport.bits.uop.dst_rtype === RT_VEC) }
-   
+
 
    var w_cnt = num_ll_ports // TODO_Vec: check if this should be 1 or 0 for vec?
    var toint_found = false
@@ -221,8 +223,11 @@ class VecPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasF
          wbresp.bits.uop.ctrl.rf_wen
          vregfile.io.write_ports(w_cnt).bits.addr := wbresp.bits.uop.pdst
          vregfile.io.write_ports(w_cnt).bits.data := wbresp.bits.data
+         vregfile.io.write_ports(w_cnt).bits.mask := wbresp.bits.mask
+         vregfile.io.write_ports(w_cnt).bits.eidx := wbresp.bits.uop.eidx
+         vregfile.io.write_ports(w_cnt).bits.rd_vew := wbresp.bits.uop.rd_vew
          wbresp.ready := vregfile.io.write_ports(w_cnt).ready
-      
+
 
          assert (!(wbresp.valid &&
             !wbresp.bits.uop.ctrl.rf_wen &&
@@ -299,5 +304,4 @@ class VecPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasF
       vregfile.toString +
    "\n   Num Wakeup Ports      : " + num_wakeup_ports +
    "\n   Num Bypass Ports      : " + exe_units.num_total_bypass_ports + "\n"
-} 
-
+}

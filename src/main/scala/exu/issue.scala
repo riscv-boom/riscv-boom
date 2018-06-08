@@ -26,6 +26,7 @@ case class IssueParams(
    iqType: BigInt
 )
 
+
 trait IssueUnitConstants
 {
    // invalid  : slot holds no valid uop.
@@ -33,6 +34,11 @@ trait IssueUnitConstants
    // s_valid_2: slot holds a store-like uop that may be broken into two micro-ops.
    // s_issued : slot was issued speculatively but may need to be retried.
    val s_invalid :: s_valid_1 :: s_valid_2 :: s_issued :: Nil = Enum(UInt(),4)
+}
+class WakeupPdst(implicit p: Parameters) extends BoomBundle()(p)
+{
+   val pdst = UInt(width=PREG_SZ.W)
+   val eidx = UInt(width=VL_SZ.W)
 }
 
 class IssueUnitIO(
@@ -46,7 +52,8 @@ class IssueUnitIO(
 
    val iss_valids     = Output(Vec(issue_width, Bool()))
    val iss_uops       = Output(Vec(issue_width, new MicroOp()))
-   val wakeup_pdsts   = Flipped(Vec(num_wakeup_ports, Valid(UInt(width=PREG_SZ.W))))
+   val wakeup_pdsts   = Flipped(Vec(num_wakeup_ports, Valid(new WakeupPdst())))
+
 
    val mem_ldSpecWakeup= Flipped(Valid(UInt(width=PREG_SZ.W)))
 

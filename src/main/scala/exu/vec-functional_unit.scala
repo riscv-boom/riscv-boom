@@ -124,7 +124,8 @@ class VALUUnit(num_stages: Int) (implicit p: Parameters)
                comp.io.sltu := uop.uopc === uopVSLTU
                val set_out = comp.io.set
 
-               val result = Mux1H(Array(
+               val result = Wire(UInt(width=sz))
+               result := Mux1H(Array(
                   (uop.uopc === uopVADD)  -> adder_out,
                   (uop.uopc === uopVSUB)  -> adder_out,
                   (uop.uopc === uopVSLL)  -> sll_out,

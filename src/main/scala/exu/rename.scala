@@ -69,6 +69,8 @@ class RenameStageIO(
 
    val flush_pipeline = Bool(INPUT) // only used for SCR (single-cycle reset)
 
+   val vl = UInt(width=VL_SZ).asInput
+
    val debug_rob_empty = Bool(INPUT)
    val debug = new DebugRenameStageIO(num_int_pregs, num_fp_pregs, num_vec_pregs).asOutput
 }
@@ -114,7 +116,8 @@ class RenameStage(
       RT_FIX.litValue,
       num_pregs = numIntPhysRegs,
       num_read_ports = pl_width*2,
-      num_wb_ports = num_int_wb_ports))
+      num_wb_ports = num_int_wb_ports,
+      isVector = false))
 
    // floating point registers
    val fmaptable = Module(new RenameMapTable(
@@ -131,7 +134,8 @@ class RenameStage(
       RT_FLT.litValue,
       num_pregs = numFpPhysRegs,
       num_read_ports = pl_width*3,
-      num_wb_ports = num_fp_wb_ports))
+      num_wb_ports = num_fp_wb_ports,
+      isVector = false))
 
    val vmaptable = Module(new RenameMapTable(
       pl_width,
@@ -147,7 +151,8 @@ class RenameStage(
       RT_VEC.litValue,
       num_pregs = numVecPhysRegs,
       num_read_ports = pl_width*3,
-      num_wb_ports = num_vec_wb_ports)) // TODO: Figure out what this is
+      num_wb_ports = num_vec_wb_ports,
+      isVector = true)) // TODO: Figure out what this is
 
    //-------------------------------------------------------------
    // Pipeline State & Wires
@@ -314,6 +319,8 @@ class RenameStage(
    vbusytable.io.map_table := ren2_vmapvalues
    vbusytable.io.wb_valids := io.vec_wakeups.map(_.valid)
    vbusytable.io.wb_pdsts := io.vec_wakeups.map(_.bits.uop.pdst)
+   vbusytable.io.wb_eidxs := io.vec_wakeups.map(x=>x.bits.uop.eidx + x.bits.uop.rate) // TODO_Vec: This is probably bad
+   vbusytable.io.vl := io.vl
    assert (!(io.vec_wakeups.map(x => x.valid && x.bits.uop.dst_rtype =/= RT_VEC).reduce(_|_)),
       "[rename] vec wakeup is not waking up a VEC register.")
    for ((uop, w) <- ren2_uops.zipWithIndex)
@@ -363,7 +370,6 @@ class RenameStage(
    io.debug.vfreelist  := vfreelist.io.debug.freelist
    io.debug.visprlist  := vfreelist.io.debug.isprlist
    io.debug.vbusytable := vbusytable.io.debug.busytable
-
 
    override val compileOptions = chisel3.core.ExplicitCompileOptions.NotStrict.copy(explicitInvalidate = true)
 }

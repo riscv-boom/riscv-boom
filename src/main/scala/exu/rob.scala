@@ -304,7 +304,7 @@ class Rob(
          when (wb_resp.valid && MatchBank(GetBankIdx(wb_uop.rob_idx)))
          {
             rob_bsy(row_idx) := false.B
-            val next_eidx = wb_resp.bits.rate + rob_uop(row_idx).eidx
+            val next_eidx = wb_resp.bits.uop.rate + rob_uop(row_idx).eidx
             when (rob_uop(row_idx).vec_val && next_eidx < io.vl) {
                rob_bsy(row_idx) := true.B
                rob_uop(row_idx).eidx := next_eidx

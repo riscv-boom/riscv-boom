@@ -29,6 +29,9 @@ class RegisterFileWritePort(addr_width: Int, data_width: Int)(implicit p: Parame
 {
    val addr = UInt(width = addr_width)
    val data = UInt(width = data_width)
+   val eidx = UInt(width = VL_SZ)
+   val mask = UInt(width = data_width / 8)
+   val rd_vew = UInt(width = VEW_SZ)
    override def cloneType = new RegisterFileWritePort(addr_width, data_width)(p).asInstanceOf[this.type]
 }
 
@@ -43,6 +46,9 @@ object WritePort
       wport.valid := enq.valid
       wport.bits.addr := enq.bits.uop.pdst
       wport.bits.data := enq.bits.data
+      wport.bits.mask := enq.bits.mask
+      wport.bits.eidx := enq.bits.uop.eidx
+      wport.bits.rd_vew := enq.bits.uop.rd_vew
       enq.ready := wport.ready
 
       wport
@@ -55,6 +61,7 @@ abstract class RegisterFile(
    num_read_ports: Int,
    num_write_ports: Int,
    register_width: Int,
+   isVector: Boolean,
    bypassable_array: Seq[Boolean]) // which write ports can be bypassed to the read ports?
    (implicit p: Parameters) extends BoomModule()(p)
 {
@@ -79,9 +86,10 @@ class RegisterFileBehavorial(
    num_read_ports: Int,
    num_write_ports: Int,
    register_width: Int,
+   isVector: Boolean,
    bypassable_array: Seq[Boolean])
    (implicit p: Parameters)
-   extends RegisterFile(num_registers, num_read_ports, num_write_ports, register_width, bypassable_array)
+   extends RegisterFile(num_registers, num_read_ports, num_write_ports, register_width, isVector, bypassable_array)
 {
    // --------------------------------------------------------------
 
@@ -143,17 +151,35 @@ class RegisterFileBehavorial(
          io.read_ports(i).data := read_data(i)
       }
    }
-
+   def toBytes(wdata:UInt, bitmask:UInt, eidx:UInt, rd_vew:UInt): (UInt, UInt) = {
+      val mask = Reverse(Cat((0 until 128) map {i => bitmask(i / 8)}))
+      val eidx_shifted = eidx << MuxLookup(rd_vew, VEW_8, Array(
+         VEW_8  -> UInt(0),
+         VEW_16 -> UInt(1),
+         VEW_32 -> UInt(2),
+         VEW_64 -> UInt(3)))
+      val strip_off = eidx_shifted(3,0)
+      val shifted_mask = mask << (strip_off << 3)
+      val shifted_wdata = wdata << (strip_off << 3)
+      (shifted_mask, shifted_wdata)
+   }
 
    // --------------------------------------------------------------
    // Write ports.
-
    for (wport <- io.write_ports)
    {
       wport.ready := Bool(true)
       when (wport.valid && (wport.bits.addr =/= UInt(0)))
       {
-         regfile(wport.bits.addr) := wport.bits.data
+
+         if (isVector) {
+            val (gen_mask, gen_wdata) = toBytes(wport.bits.data, wport.bits.mask, wport.bits.eidx, wport.bits.rd_vew)
+            val to_keep = regfile(wport.bits.addr) & ~gen_mask
+            val to_write = gen_wdata & gen_mask
+            regfile(wport.bits.addr) := to_keep | to_write
+         } else {
+            regfile(wport.bits.addr) := wport.bits.data
+         }
       }
    }
 }

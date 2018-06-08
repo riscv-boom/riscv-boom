@@ -91,12 +91,14 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
                                  exe_units.withFilter(_.usesIRF).map(e => e.num_rf_read_ports).sum,
                                  exe_units.withFilter(_.usesIRF).map(e => e.num_rf_write_ports).sum,
                                  xLen,
+                                 false,
                                  exe_units.bypassable_write_port_mask))
                           } else {
                               Module(new RegisterFileBehavorial(numIntPhysRegs,
                                  exe_units.withFilter(_.usesIRF).map(e => e.num_rf_read_ports).sum,
                                  exe_units.withFilter(_.usesIRF).map(e => e.num_rf_write_ports).sum,
                                  xLen,
+                                 false,
                                  exe_units.bypassable_write_port_mask))
                           }
    val ll_wbarb         = Module(new Arbiter(new ExeUnitResp(xLen), 2))
@@ -478,6 +480,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    rename_stage.io.dec_will_fire := dec_will_fire
    rename_stage.io.dec_uops := dec_uops
 
+   rename_stage.io.vl := csr.io.vecstatus.vl
 
    var wu_idx = 0
    // loop through each issue-port (exe_units are statically connected to an issue-port)
@@ -679,8 +682,8 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       (issport, wakeup) <- iu.io.wakeup_pdsts zip int_wakeups
    }{
       issport.valid := wakeup.valid
-      issport.bits  := wakeup.bits.uop.pdst
-
+      issport.bits.pdst := wakeup.bits.uop.pdst
+      issport.bits.eidx := wakeup.bits.uop.eidx + wakeup.bits.uop.rate
       require (iu.io.wakeup_pdsts.length == int_wakeups.length)
    }
 
@@ -916,7 +919,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
             vec_pipeline.io.ll_wport.valid     := wbIsValid(RT_VEC)
             vec_pipeline.io.ll_wport.bits.uop  := wbresp.bits.uop
             vec_pipeline.io.ll_wport.bits.data := wbdata
-            vec_pipeline.io.ll_wport.bits.rate := wbresp.bits.rate
+            vec_pipeline.io.ll_wport.bits.mask := wbresp.bits.mask
             assert (vec_pipeline.io.ll_wport.ready, "[core] LL port should always be ready in vec regfile")
          }
          else
