@@ -10,6 +10,7 @@ import freechips.rocketchip.subsystem.RocketTilesKey
 import freechips.rocketchip.diplomacy._
 import freechips.rocketchip.tile._
 import freechips.rocketchip.tilelink._
+import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
 import freechips.rocketchip.util.property._
 import freechips.rocketchip.rocket.{HasL1ICacheParameters, ICacheParams, ICacheErrors, ICacheReq}
@@ -94,7 +95,7 @@ class ICacheBundle(val outer: ICache) extends CoreBundle()(outer.p) {
   val invalidate = Bool(INPUT)
 
   val errors = new ICacheErrors
-  val perf = new ICachePerfEvents().asOutput
+  val perf = new FrontendPerfEvents().asOutput
 }
 
 // get a tile-specific property without breaking deduplication

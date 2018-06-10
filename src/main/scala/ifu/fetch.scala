@@ -56,12 +56,13 @@ class FetchBundle(implicit p: Parameters) extends BoomBundle()(p)
 }
 
 class FrontendResp2(implicit p: Parameters) extends CoreBundle()(p) {
-  val btb = new BTBResp
-  val pc = UInt(width = vaddrBitsExtended)  // ID stage PC
-  val data = UInt(width = fetchWidth * 32)
-  val mask = Bits(width = fetchWidth)
-  val xcpt = new FrontendExceptions
-  val replay = Bool()
+   val btb = new BTBResp
+   val pc = UInt(width = vaddrBitsExtended)  // ID stage PC
+   val data = UInt(width = fetchWidth * 32)
+   val mask = Bits(width = fetchWidth)
+   val xcpt = new FrontendExceptions
+   val replay = Bool()
+   val rvc_mask = UInt(fetchWidth.W)
 }
 
 class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p)
@@ -72,7 +73,6 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
    {
       val imem_req          = Valid(new freechips.rocketchip.rocket.FrontendReq)
       val imem_resp         = Decoupled(new FrontendResp2).flip
-      val rvc_mask          = UInt(fetchWidth.W).flip
 
       val f2_btb_resp       = Valid(new BoomBTBResp).flip
       val f2_bpd_resp       = Valid(new BpdResp).flip

@@ -4,9 +4,8 @@
 package boom.ifu
 
 
-import Chisel._
-import Chisel.ImplicitConversions._
-import chisel3.core.withReset
+import chisel3._
+import chisel3.util.{DecoupledIO, log2Ceil, Cat, Valid, Fill, PriorityMux, PriorityEncoderOH, PopCount}
 import freechips.rocketchip.config._
 import freechips.rocketchip.subsystem._
 import freechips.rocketchip.diplomacy._
@@ -15,7 +14,6 @@ import freechips.rocketchip.tilelink._
 import freechips.rocketchip.tile._
 import freechips.rocketchip.util._
 import freechips.rocketchip.util.property._
-import chisel3.internal.sourceinfo.SourceInfo
 import boom.bpu._
 import boom.common._
 import boom.exu.{BranchUnitResp, FlushSignals}
@@ -66,8 +64,8 @@ trait HasL1ICacheBankedParameters extends HasL1ICacheParameters
   // Round address down to the nearest fetch boundary.
   def alignToFetchBoundary(addr: UInt) =
   {
-    if (icIsBanked) ~(~addr | (bankBytes-1))
-    else ~(~addr | (fetchBytes-1))
+    if (icIsBanked) ~(~addr | (bankBytes-1).U)
+    else ~(~addr | (fetchBytes-1).U)
   }
 
   // Input: an ALIGNED pc.
@@ -87,7 +85,7 @@ trait HasL1ICacheBankedParameters extends HasL1ICacheParameters
   def cacheFetchMask(addr: UInt) =
   {
     // where is the first instruction, aligned to a log(fetchWidth) boundary?
-    val idx = addr.extract(log2Ceil(fetchWidth*2)+log2Ceil(coreInstBytes) - 1, log2Ceil(coreInstBytes))
+    val idx = addr.extract(log2Ceil(fetchWidth*2)+log2Ceil(2) - 1, log2Ceil(2))
     if (icIsBanked) {
       // shave off the msb of idx since we are aligned to half-fetchWidth boundaries.
       val shamt = idx.extract(log2Ceil(fetchWidth*2)-2, 0)
@@ -118,38 +116,38 @@ trait HasL1ICacheBankedParameters extends HasL1ICacheParameters
 class BoomFrontendIO(implicit p: Parameters) extends BoomBundle()(p)
 {
    // Give the backend a packet of instructions.
-   val fetchpacket       = new DecoupledIO(new FetchBufferResp).flip
+   val fetchpacket       = Flipped(new DecoupledIO(new FetchBufferResp))
 
-   val br_unit           = new BranchUnitResp().asOutput
-   val get_pc            = new GetPCFromFtqIO().flip
+   val br_unit           = Output(new BranchUnitResp())
+   val get_pc            = Flipped(new GetPCFromFtqIO())
 
    val sfence            = Valid(new SFenceReq)
 
    // sfence needs to steal the TLB CAM part.
    // TODO redudcant with above sfenceReq
-   val sfence_take_pc    = Bool(OUTPUT)
-   val sfence_addr       = UInt(OUTPUT, vaddrBits+1)
+   val sfence_take_pc    = Output(Bool())
+   val sfence_addr       = Output(UInt((vaddrBits+1).W))
 
 
    val commit            = Valid(UInt(width=ftqSz.W))
    val flush_info        = Valid(new FlushSignals())
-   val flush_take_pc     = Bool(OUTPUT)
-   val flush_pc          = UInt(OUTPUT, vaddrBits+1) // TODO rename; no longer catch-all flush_pc
-   val flush_icache      = Bool(OUTPUT)
+   val flush_take_pc     = Output(Bool())
+   val flush_pc          = Output(UInt((vaddrBits+1).W)) // TODO rename; no longer catch-all flush_pc
+   val flush_icache      = Output(Bool())
 
-   val com_ftq_idx       = UInt(OUTPUT, log2Up(ftqSz)) // ROB tells us the commit pointer so we can read out the PC.
-   val com_fetch_pc      = UInt(INPUT, vaddrBitsExtended) // tell CSRFile the fetch-pc at the FTQ head.
+   val com_ftq_idx       = Output(UInt((log2Ceil(ftqSz)).W)) // ROB tells us the commit pointer so we can read out the PC.
+   val com_fetch_pc      = Input(UInt(vaddrBitsExtended.W)) // tell CSRFile the fetch-pc at the FTQ head.
 
    // bpd pipeline
    // should I take in the entire rob.io.flush?
-   val flush             = Bool(OUTPUT) // pipeline flush from ROB TODO CODEREVIEW (redudant with fe_clear?)
-   val clear_fetchbuffer = Bool(OUTPUT) // pipeline redirect (rob-flush, sfence request, branch mispredict)
+   val flush             = Output(Bool()) // pipeline flush from ROB TODO CODEREVIEW (redudant with fe_clear?)
+   val clear_fetchbuffer = Output(Bool()) // pipeline redirect (rob-flush, sfence request, branch mispredict)
 
-   val status_prv        = UInt(OUTPUT, width = freechips.rocketchip.rocket.PRV.SZ)
-   val status_debug      = Bool(OUTPUT)
+   val status_prv        = Output(UInt(freechips.rocketchip.rocket.PRV.SZ.W))
+   val status_debug      = Output(Bool())
 
-   val perf              = new FrontendPerfEvents().asInput
-   val tsc_reg           = UInt(OUTPUT, xLen)
+   val perf              = Input(new FrontendPerfEvents())
+   val tsc_reg           = Output(UInt(xLen.W))
 }
 
 class BoomFrontend(val icacheParams: ICacheParams, hartid: Int)(implicit p: Parameters) extends LazyModule {
@@ -161,7 +159,7 @@ class BoomFrontend(val icacheParams: ICacheParams, hartid: Int)(implicit p: Para
 
 class BoomFrontendBundle(val outer: BoomFrontend) extends CoreBundle()(outer.p)
     with HasExternallyDrivenTileConstants {
-  val cpu = new BoomFrontendIO().flip
+  val cpu = Flipped(new BoomFrontendIO())
   val ptw = new TLBPTWIO()
   val errors = new ICacheErrors
 }
@@ -170,33 +168,34 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   with HasCoreParameters
   with HasL1ICacheParameters
   with HasL1ICacheBankedParameters
+  with HasBoomCoreParameters
 {
   val io = IO(new BoomFrontendBundle(outer))
   implicit val edge = outer.masterNode.edges.out(0)
-  require(2*fetchWidth*coreInstBytes == outer.icacheParams.fetchBytes)
+  require(fetchWidth*coreInstBytes == outer.icacheParams.fetchBytes)
 
   val icache = outer.icache.module
   val tlb = Module(new TLB(true, log2Ceil(fetchBytes), nTLBEntries))
+  tlb.io := DontCare
   val fetch_controller = Module(new FetchControlUnit(fetchWidth))
+  fetch_controller.io := DontCare
   val bpdpipeline = Module(new BranchPredictionStage(fetchWidth))
 
   override def toString: String = bpdpipeline.toString + "\n" + icache.toString
 
-  val s0_pc = Wire(UInt(INPUT, width = vaddrBitsExtended))
+  val s0_pc = Wire(UInt(vaddrBitsExtended.W))
   val s0_valid = fetch_controller.io.imem_req.valid || fetch_controller.io.imem_resp.ready
   val s1_valid = RegNext(s0_valid)
-  val s1_pc = Reg(UInt(width=vaddrBitsExtended))
+  val s1_pc = Reg(UInt(vaddrBitsExtended.W))
   val s1_speculative = Reg(Bool())
   val s2_valid = RegInit(false.B)
-  val s2_pc = RegInit(t = UInt(width = vaddrBitsExtended), alignPC(io.reset_vector))
+  val s2_pc = RegInit(t = UInt(vaddrBitsExtended.W), alignPC(io.reset_vector))
   val s2_btb_resp_valid = if (usingBTB) Reg(Bool()) else false.B
   val s2_btb_resp_bits = Reg(new BTBResp)
   val s2_btb_taken = s2_btb_resp_valid && s2_btb_resp_bits.taken
-  val s2_tlb_resp = Reg(tlb.io.resp)
+  val s2_tlb_resp = Reg(tlb.io.resp.cloneType)
   val s2_xcpt = s2_tlb_resp.ae.inst || s2_tlb_resp.pf.inst
-  val s2_speculative = Reg(init=Bool(false))
-  val s2_partial_insn_valid = RegInit(false.B)
-  val s2_partial_insn = Reg(UInt(width = coreInstBits))
+  val s2_speculative = RegInit(false.B)
   val wrong_path = Reg(Bool())
   val rvcexist = Wire(Bool())
   val s2_irespvalid = Wire(Bool())
@@ -205,11 +204,11 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 
   val s1_base_pc = alignToFetchBoundary(s1_pc)
   val ntpc = nextFetchStart(s1_base_pc)
-  val predicted_npc = Wire(init = ntpc)
-  val predicted_taken = Wire(init = Bool(false))
+  val predicted_npc = WireInit(ntpc)
+  val predicted_taken = WireInit(false.B)
 
   val s2_replay = Wire(Bool())
-  s2_replay := (s2_valid && !fetch_controller.io.imem_resp.fire()) || RegNext(s2_replay && !s0_valid, true.B)
+  s2_replay := (s2_valid && !fetch_controller.io.imem_resp.fire() && !(rvcexist && s2_irespvalid)) || RegNext(s2_replay && !s0_valid, true.B)
   val npc = Mux(s2_replay, s2_pc, predicted_npc)
 
   s1_pc := s0_pc
@@ -220,8 +219,8 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
     else Bool(true)
   s1_speculative := Mux(fetch_controller.io.imem_req.valid, fetch_controller.io.imem_req.bits.speculative, Mux(s2_replay, s2_speculative, s0_speculative))
 
-  val s2_redirect = Wire(init = fetch_controller.io.imem_req.valid)
-  s2_valid := false
+  val s2_redirect = WireInit(fetch_controller.io.imem_req.valid)
+  s2_valid := false.B
   when (!s2_replay) {
     s2_valid := !s2_redirect
     when (!(s2_irespvalid && !respready)) {
@@ -234,9 +233,9 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   io.ptw <> tlb.io.ptw
   tlb.io.req.valid := !s2_replay
   tlb.io.req.bits.vaddr := s1_pc
-  tlb.io.req.bits.passthrough := Bool(false)
+  tlb.io.req.bits.passthrough := false.B
   tlb.io.sfence := io.cpu.sfence
-  tlb.io.req.bits.size := log2Ceil(4*fetchWidth)
+  tlb.io.req.bits.size := log2Ceil(4*fetchWidth).U
 
   icache.io.hartid := io.hartid
   icache.io.req.valid := s0_valid
@@ -256,12 +255,12 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   val s2_mask = cacheFetchMask(s2_pc)
   s2_irespvalid := RegNext(s1_valid) && s2_valid && icache.io.resp.valid
   val inst32across = RegInit(false.B)
-  var rvcvec = Vec(false.B) 
+  var rvcvec = VecInit(false.B) 
   var overridenext = inst32across
   for (i <- 0 until fetchWidth*2) {
     val inst16 = !s2_respdata(16*i+1, 16*i).andR && !overridenext && s2_mask(i)
-    overridenext = !inst16 && !overridenext
-    rvcvec = Vec(rvcvec ++ Vec(inst16)) 
+    overridenext = !inst16 && !overridenext && s2_mask(i)
+    rvcvec = VecInit(rvcvec ++ VecInit(inst16)) 
   }
   val rvc = rvcvec.asUInt >> 1
   when (s2_irespvalid) {
@@ -269,201 +268,175 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   }
   rvcexist := rvc.orR
 
-  fetch_controller.io.imem_resp.valid := RegNext(s1_valid) && s2_valid && ((icache.io.resp.valid && !rvcexist) || !s2_tlb_resp.miss && icache.io.s2_kill) 
+  fetch_controller.io.imem_resp.valid := RegNext(s1_valid) && s2_valid && !rvcexist && (icache.io.resp.valid || !s2_tlb_resp.miss && icache.io.s2_kill) 
   fetch_controller.io.imem_resp.bits.pc := s2_pc
 
   fetch_controller.io.imem_resp.bits.data := icache.io.resp.bits.data
   fetch_controller.io.imem_resp.bits.mask := norvcFetchMask(s2_pc)
-  fetch_controller.io.rvc_mask := 0.U
+  fetch_controller.io.imem_resp.bits.rvc_mask := 0.U
 
   fetch_controller.io.imem_resp.bits.replay := icache.io.resp.bits.replay || icache.io.s2_kill && !icache.io.resp.valid && !s2_xcpt
   fetch_controller.io.imem_resp.bits.btb := s2_btb_resp_bits
   fetch_controller.io.imem_resp.bits.btb.taken := s2_btb_taken
   fetch_controller.io.imem_resp.bits.xcpt := s2_tlb_resp
-  when (icache.io.resp.valid && icache.io.resp.bits.ae) { fetch_controller.io.imem_resp.bits.xcpt.ae.inst := true }
+  when (icache.io.resp.valid && icache.io.resp.bits.ae) { fetch_controller.io.imem_resp.bits.xcpt.ae.inst := true.B }
 
 
-  val s3_respvalid = RegInit(false.B)
-  val s3_mask = Reg(UInt((fetchWidth*2).W))
-  val s3_respdata = Reg(UInt((fetchWidth * 32).W)) 
-  val s3_pc = Reg(UInt(vaddrBitsExtended.W))
-  val s3_prevhalf = Reg(UInt(16.W))
-  val s3_rvc = Reg(UInt((fetchWidth * 2).W))
-  val prev_inst32across = RegInit(false.B)
-  val s3_datawire = Wire(Vec(fetchWidth, UInt(32.W)))
-  val expunit = Seq.fill(fetchWidth)(Module(new freechips.rocketchip.rocket.RVCExpander))
-  val s3_expunitin = Wire(Vec(fetchWidth, UInt(16.W)))
-  val s3_tlb_resp = Reg(tlb.io.resp)
-  val expunitout = Wire(Vec(fetchWidth, UInt(32.W)))
+   val s3_respvalid = RegInit(false.B)
+   val s3_mask = Reg(UInt((fetchWidth*2).W))
+   val s3_respdata = Reg(UInt((fetchWidth*32).W)) 
+   val s3_pc = Reg(UInt(vaddrBitsExtended.W))
+   val s3_prevhalf = Reg(UInt(16.W))
+   val s3_rvc = Reg(UInt((fetchWidth*2).W))
+   val prev_inst32across = RegInit(false.B)
+   val s3_datawire = VecInit(Seq.fill(fetchWidth)(WireInit(0.U(32.W))))
+   val expunit = Seq.fill(fetchWidth)(Module(new freechips.rocketchip.rocket.RVCExpander))
+   val expunitrvc = VecInit(Seq.fill(fetchWidth)(WireInit(false.B)))
+   val s3_tlb_resp = Reg(tlb.io.resp.cloneType)
+   val expunitout = VecInit.tabulate(fetchWidth)( i => WireInit(0.U(32.W)))
+   val outalloted = Seq.fill(fetchWidth)(WireInit(false.B))
 
-  val s4_valid = Reg(Bool())
-  val s4_mask = Reg(UInt(fetchWidth.W))
-  val s4_respdata = Reg(UInt((fetchWidth * 16).W)) 
-  val s4_pc = Reg(UInt(vaddrBitsExtended.W))
-  val s4_expunitin = Wire(Vec(fetchWidth, UInt(16.W)))
-  val s4_rvc = Reg(UInt(fetchWidth.W))
-  val s4_datawire = Wire(Vec(fetchWidth, UInt(32.W)))
-  val s4_tlb_resp = Reg(tlb.io.resp)
-  val allotedins3 = Reg(UInt(fetchWidth.W))
+   val s4_valid = RegInit(false.B)
+   val s4_mask = Reg(UInt((fetchWidth*2).W))
+   val s4_rvc = Reg(UInt((fetchWidth*2).W))
+   val s4_respdata = Reg(UInt((fetchWidth*16).W)) 
+   val s4_pc = Reg(UInt(vaddrBitsExtended.W))
+   val s4_datawire = VecInit.tabulate(fetchWidth)( i => WireInit(0.U(32.W)))
+   val s4_tlb_resp = Reg(tlb.io.resp.cloneType)
+   val s4_notallotedOH = Reg(UInt((fetchWidth*2).W))
+   val s4_outalloted = Seq.fill(fetchWidth)(WireInit(false.B))
+   val allotedins3 = Wire(UInt((fetchWidth*2).W))
+   val addnpc = WireInit(0.U)
 
-  when (rvcexist && s2_irespvalid && respready) {
-    s3_respvalid := true.B
-    s3_respdata := icache.io.resp.bits.data
-    s3_mask := s2_mask
-    s3_pc := s2_pc
-    s3_rvc := rvc
-    prev_inst32across := inst32across
-    s3_tlb_resp := RegNext(s2_tlb_resp)
-  }
 
-  /////////////////////
-  // S3
-  ////////////////////
-  var installoted = Vec(false.B)
-  var outalloted = Vec(false.B)
-  var rvcalloted = Vec(false.B)
-  var outfull = false.B
-  var nextoutidx = 1.U(log2Ceil(fetchWidth).W)
-  var nextrvcidx = 0.U(log2Ceil(fetchWidth).W)   
-  var nextalloted = false.B
-  var addnpc = 0.U
-  when (s3_mask(0)) {
-    when (!s3_rvc(0) && prev_inst32across) {
-      s3_datawire(0) := Cat(s3_respdata(15,0), s3_prevhalf)
-      outalloted = Vec(outalloted ++ Vec(true.B))
-      rvcalloted = Vec(rvcalloted ++ Vec(false.B))
-      addnpc = addnpc + 2.U
-    } .elsewhen (s3_rvc(0)) {
-      s3_expunitin(0) := s3_respdata(15,0)
-      s3_datawire(0) := expunitout(0) 
-      nextrvcidx = 1.U(log2Ceil(fetchWidth).W)
-      outalloted = Vec(outalloted ++ Vec(true.B))
-      rvcalloted = Vec(rvcalloted ++ Vec(true.B))
-      addnpc = addnpc + 2.U
-    } .elsewhen (s3_mask(1)) {
-      s3_datawire(0) := s3_respdata(31,0)
-      nextalloted = true.B
-      installoted = Vec(installoted ++ Vec(true.B, true.B))
-      outalloted = Vec(outalloted ++ Vec(true.B))
-      rvcalloted = Vec(rvcalloted ++ Vec(false.B))
-      addnpc = addnpc + 4.U
-    }
-  }
+   when (rvcexist && s2_irespvalid && respready) {
+      s3_respvalid := !s2_redirect
+      s3_respdata := icache.io.resp.bits.data
+      s3_mask := s2_mask
+      s3_pc := s2_pc
+      s3_rvc := rvc
+      prev_inst32across := inst32across
+      s3_tlb_resp := RegNext(s2_tlb_resp)
+   }
 
-  for (i <- 1 until fetchWidth*2) {
-    when (!outfull && s3_mask(i)) {
-      when (s3_rvc(i)) {
-        s3_expunitin( nextrvcidx ) := s3_respdata(16*i+15, 16*i)
-        s3_datawire( nextoutidx ) := expunitout( nextrvcidx ) 
-        outfull = nextoutidx.andR
-        nextrvcidx = nextrvcidx + 1.U(log2Ceil(fetchWidth).W)
-        nextoutidx = nextoutidx + 1.U(log2Ceil(fetchWidth).W)
-        installoted = Vec(installoted ++ Vec(true.B))
-        outalloted = Vec(outalloted ++ Vec(true.B))
-        rvcalloted = Vec(rvcalloted ++ Vec(true.B))
-        addnpc = addnpc + 2.U
-      } .elsewhen (!nextalloted) {
-        if (i != (fetchWidth*2-1)) {
-          s3_datawire( nextoutidx ) := s3_respdata(16*i+31, 16*i)
-          outfull = nextoutidx.andR
-          nextoutidx = nextoutidx + 1.U(log2Ceil(fetchWidth).W)
-          nextalloted = true.B
-          installoted = Vec(installoted ++ Vec(true.B, true.B))
-          outalloted = Vec(outalloted ++ Vec(true.B))
-          rvcalloted = Vec(rvcalloted ++ Vec(false.B))
-          addnpc = addnpc + 4.U
-        }
-      } .otherwise {
-        nextalloted = false.B
+   /////////////////////
+   // S3
+   ////////////////////
+   var canallot : Seq[Bool] = Seq(s3_mask(0) && ((!s3_rvc(0) && prev_inst32across) || s3_rvc(0) || s3_mask(1))) 
+   var canallotinst : Seq[UInt] = Seq(Mux(!s3_rvc(0) && prev_inst32across, Cat(s3_respdata(15,0), s3_prevhalf), s3_respdata(31,0)))
+   var nextalloted = s3_mask(1,0).andR && !s3_rvc(1)
+
+   for (i <- 1 until (fetchWidth*2-1)) {
+      canallot ++= Seq(s3_mask(i) && (s3_rvc(i) || (!s3_rvc(i) && !nextalloted && s3_mask(i+1))))
+      canallotinst ++= Seq(s3_respdata(16*i+31,16*i))
+      nextalloted = !nextalloted && !s3_rvc(i) && s3_mask(i)    
+   }
+   canallot ++= Seq(s3_mask(fetchWidth*2-1) && s3_rvc(fetchWidth*2-1))
+   canallotinst ++= Seq(Cat(0.U, s3_respdata(16*(fetchWidth*2-1)+15, 16*(fetchWidth*2-1))))
+   s3_datawire(0) := PriorityMux(canallot, canallotinst)
+   outalloted(0) := canallot.reduce(_ | _)
+
+   var prev_canallot = canallot
+   for (j <- 1 until fetchWidth) {
+      var canallot1 : Seq[Bool] = Seq()
+      var canallotinst1 : Seq[UInt] = Seq()
+      val allotedoh = PriorityEncoderOH(prev_canallot)
+      for (i <- 1 until (fetchWidth*2-j+1)) {
+         canallot1 ++= Seq(prev_canallot(i) && !allotedoh(i))
+         canallotinst1 ++= Seq(canallotinst(i+j-1))
       }
-    } .otherwise {
-      installoted = Vec(installoted ++ Vec(false.B))
-    }
-  }
+      outalloted(j) := canallot1.reduce(_ | _)
+      s3_datawire(j) := PriorityMux(canallot1, canallotinst1)
+      prev_canallot = canallot1
+   }
+    
+   var canallot1 : Seq[Bool] = Seq()
+   val allotedoh = PriorityEncoderOH(prev_canallot)
+   for (i <- 1 until (fetchWidth+1)) {   canallot1 ++= Seq(prev_canallot(i) && !allotedoh(i))   }
+   prev_canallot = Seq.fill(fetchWidth)(false.B) ++ canallot1
 
-  val installotedu = installoted.asUInt >> 1
-  val outallotedu = outalloted.asUInt >> 1
-  val rvcallotedu = rvcalloted.asUInt >> 1
+   require(fetchWidth >= 2) 
+   when (s3_respvalid && respready) {
+      fetch_controller.io.imem_resp.valid := true.B
+      fetch_controller.io.imem_resp.bits.pc := (s3_pc.asSInt + Mux(prev_inst32across, -2.S, 0.S)).asUInt
+      fetch_controller.io.imem_resp.bits.data := expunitout.asUInt
+      fetch_controller.io.imem_resp.bits.mask := VecInit(outalloted).asUInt
+      fetch_controller.io.imem_resp.bits.rvc_mask := expunitrvc.asUInt
+      fetch_controller.io.imem_resp.bits.xcpt := s3_tlb_resp
 
-  when (s3_respvalid && respready) {
-    fetch_controller.io.imem_resp.valid := true.B
-    fetch_controller.io.imem_resp.bits.pc := (s3_pc.asSInt + Mux(prev_inst32across, -2.S, 0.S)).asUInt
-    fetch_controller.io.imem_resp.bits.data := s3_datawire.asUInt
-    fetch_controller.io.imem_resp.bits.mask := outallotedu
-    fetch_controller.io.rvc_mask := rvcallotedu
-    fetch_controller.io.imem_resp.bits.xcpt := s3_tlb_resp
-
-    when (inst32across) {
-      s3_prevhalf := Mux(s3_mask(fetchWidth-1) && !s3_mask(fetchWidth), s3_respdata(16*fetchWidth-1, 16*(fetchWidth-1)), s3_respdata(32*fetchWidth-1, 16*(2*fetchWidth-1)))
-    }
+      when (inst32across) {
+         s3_prevhalf := Mux(s3_mask(fetchWidth-1) && !s3_mask(fetchWidth), s3_respdata(16*fetchWidth-1, 16*(fetchWidth-1)), s3_respdata(32*fetchWidth-1, 16*(2*fetchWidth-1)))
+      }
   
-    s4_respdata := s3_respdata 
-    s4_pc := s3_pc + addnpc(log2Ceil(4*fetchWidth-2)-1,0)
-    s4_rvc := s3_rvc >> fetchWidth
-    s4_mask := s3_mask >> fetchWidth
-    allotedins3 := installotedu >> fetchWidth
-    s4_tlb_resp := s3_tlb_resp
-    s3_respvalid := false.B
-  }
+      s4_rvc := s3_rvc 
+      s4_mask := s3_mask 
+      s4_respdata := s3_respdata >> (16*fetchWidth).U
+      s4_pc := s3_pc
+      s4_notallotedOH := VecInit(prev_canallot).asUInt
+      s4_tlb_resp := s3_tlb_resp
+      s4_valid := !s2_redirect && canallot1.reduce(_ | _)
+      s3_respvalid := rvcexist && s2_irespvalid
+   }
+   ////////////////////
 
-  require(fetchWidth >= 2)
-  s4_valid := s3_respvalid && respready && !s2_redirect &&
-              !(inst32across && ((installotedu(fetchWidth*2-2) && !installotedu(fetchWidth*2-1)) || (installotedu(fetchWidth-2) && !installotedu(fetchWidth-1))))
 
-  ////////////////////
+   /////////////////////
+   // S4
+   ////////////////////
 
-  /////////////////////
-  // S4
-  ////////////////////
-  var s4_outalloted = Vec(false.B)
-  var s4_rvcalloted = Vec(false.B)
-  var s4_nextoutidx = 0.U(log2Ceil(fetchWidth).W)
-  var s4_nextrvcidx = 0.U(log2Ceil(fetchWidth).W)   
-  var s4_nextalloted = false.B
-  for (i <- 0 until fetchWidth) {
-    when (s4_mask(i) && !allotedins3(i)) {
-      when (s4_rvc(i)) {
-        s4_expunitin( s4_nextrvcidx ) := s4_respdata(16*i+15, 16*i)
-        s4_datawire( s4_nextoutidx ) := expunitout( s4_nextrvcidx ) 
-        s4_nextrvcidx = s4_nextrvcidx + 1.U(log2Ceil(fetchWidth).W)
-        s4_nextoutidx = s4_nextoutidx + 1.U(log2Ceil(fetchWidth).W)
-        s4_outalloted = Vec(s4_outalloted ++ Vec(true.B))
-        s4_rvcalloted = Vec(s4_rvcalloted ++ Vec(true.B))
-      } .elsewhen (!s4_nextalloted) {
-        if (i != (fetchWidth-1)) {
-          s4_datawire( s4_nextoutidx ) := s4_respdata(16*i+31,16*i)
-          s4_nextoutidx = s4_nextoutidx + 1.U(log2Ceil(fetchWidth).W)
-          s4_nextalloted = true.B
-          s4_outalloted = Vec(s4_outalloted ++ Vec(true.B))
-          s4_rvcalloted = Vec(s4_rvcalloted ++ Vec(false.B))
-        }
-      } .otherwise {
-        s4_nextalloted = false.B
+   allotedins3 := s4_mask & ~(s4_notallotedOH | (s4_notallotedOH << 1))
+   addnpc := PopCount(allotedins3.toBools) << 1
+
+   val smask = s4_mask >> fetchWidth.U
+   val srvc = s4_rvc >> fetchWidth.U
+   val snotallot = s4_notallotedOH >> fetchWidth.U
+   var s4_canallot : Seq[Bool] = Seq() 
+   var s4_canallotinst : Seq[UInt] = Seq()
+   var s4_nextalloted = false.B
+   for (i <- 0 until (fetchWidth-1)) {
+      s4_canallot ++= Seq(snotallot(i) && (srvc(i) || (!srvc(i) && !s4_nextalloted && smask(i+1))))
+      s4_canallotinst ++= Seq(s4_respdata(16*i+31,16*i))
+      s4_nextalloted = !srvc(i) && snotallot(i)    
+   }
+   s4_canallot ++= Seq(snotallot(fetchWidth-1) && srvc(fetchWidth-1))
+   s4_canallotinst ++= Seq(Cat(0.U, s4_respdata(16*(fetchWidth-1)+15, 16*(fetchWidth-1))))
+   s4_datawire(0) := PriorityMux(s4_canallot, s4_canallotinst)
+   s4_outalloted(0) := s4_canallot.reduce(_ | _)
+
+   var s4_prev_canallot = s4_canallot
+   for (j <- 1 until fetchWidth) {
+      var canallot1 : Seq[Bool] = Seq()
+      var canallotinst1 : Seq[UInt] = Seq()
+      val allotedoh = PriorityEncoderOH(s4_prev_canallot)
+      for (i <- 1 until (fetchWidth-j+1)) {
+         canallot1 ++= Seq(s4_prev_canallot(i) && !allotedoh(i))
+         canallotinst1 ++= Seq(s4_canallotinst(i+j-1))
       }
-    }
-  }
+      s4_outalloted(j) := canallot1.reduce(_ | _)
+      s4_datawire(j) := PriorityMux(canallot1, canallotinst1)
+      s4_prev_canallot = canallot1
+   }
 
-  val s4_outallotedu = s4_outalloted.asUInt >> 1
-  val s4_rvcallotedu = s4_rvcalloted.asUInt >> 1
-
-  when (s4_valid && respready) {
-    fetch_controller.io.imem_resp.valid := true.B
-    fetch_controller.io.imem_resp.bits.pc := s4_pc
-    fetch_controller.io.imem_resp.bits.data := s4_datawire.asUInt
-    fetch_controller.io.imem_resp.bits.mask := s4_outallotedu
-    fetch_controller.io.rvc_mask := s4_rvcallotedu
-    fetch_controller.io.imem_resp.bits.xcpt := s4_tlb_resp
-  }
-
+   when (s4_valid && respready) {
+      fetch_controller.io.imem_resp.valid := true.B
+      fetch_controller.io.imem_resp.bits.pc := s4_pc + addnpc
+      fetch_controller.io.imem_resp.bits.data := expunitout.asUInt
+      fetch_controller.io.imem_resp.bits.mask := VecInit(s4_outalloted).asUInt
+      fetch_controller.io.imem_resp.bits.rvc_mask := expunitrvc.asUInt
+      fetch_controller.io.imem_resp.bits.xcpt := s4_tlb_resp
+      s4_valid := s3_respvalid
+   }
   ////////////////////
 
-  ////////////////////
-  //  S3/S4
-  ////////////////////
-  for ((exp, i) <- expunit.zipWithIndex) {
-    exp.io.in := Mux(s4_valid, s4_expunitin(i), s3_expunitin(i))
-    expunitout(i) := exp.io.out.bits 
-  }
+
+   ////////////////////
+   //  S3/S4
+   ////////////////////
+   for ((exp, i) <- expunit.zipWithIndex) {
+      exp.io.in := Mux(s4_valid, s4_datawire(i), s3_datawire(i))
+      expunitout(i) := exp.io.out.bits 
+      expunitrvc(i) := exp.io.rvc
+   }
   ////////////////////
 
 
@@ -475,7 +448,8 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
    fetch_controller.io.br_unit           := io.cpu.br_unit
    fetch_controller.io.tsc_reg           := io.cpu.tsc_reg
 
-   fetch_controller.io.f2_btb_resp       := bpdpipeline.io.f2_btb_resp
+   fetch_controller.io.f2_btb_resp       := bpdpipeline.io.f2_btb_resp 
+   fetch_controller.io.f2_btb_resp.valid := !(s3_respvalid || s4_valid) && bpdpipeline.io.f2_btb_resp.valid
    fetch_controller.io.f3_bpd_resp       := bpdpipeline.io.f3_bpd_resp
 
    fetch_controller.io.clear_fetchbuffer := io.cpu.clear_fetchbuffer
@@ -505,7 +479,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 
 
    bpdpipeline.io.f2_replay := s2_replay
-   bpdpipeline.io.f2_stall := !fetch_controller.io.imem_resp.ready
+   bpdpipeline.io.f2_stall := !fetch_controller.io.imem_resp.ready || (rvcexist && s2_irespvalid) || s4_valid || s3_respvalid
    bpdpipeline.io.f3_stall := fetch_controller.io.f3_stall
    bpdpipeline.io.f3_is_br := fetch_controller.io.f3_is_br
    bpdpipeline.io.debug_imemresp_pc := fetch_controller.io.imem_resp.bits.pc
@@ -516,7 +490,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 
    bpdpipeline.io.flush := io.cpu.flush
 
-   bpdpipeline.io.f2_valid := fetch_controller.io.imem_resp.valid
+   bpdpipeline.io.f2_valid := fetch_controller.io.imem_resp.fire()
    bpdpipeline.io.f2_redirect := fetch_controller.io.f2_redirect
    bpdpipeline.io.f4_redirect := fetch_controller.io.f4_redirect
    bpdpipeline.io.f4_taken := fetch_controller.io.f4_taken
@@ -538,12 +512,8 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   io.cpu.perf.tlbMiss := io.ptw.req.fire()
   io.errors := icache.io.errors
 
-  def alignPC(pc: UInt) = ~(~pc | (coreInstBytes - 1))
 
-  def ccover(cond: Bool, label: String, desc: String)(implicit sourceInfo: SourceInfo) =
-    cover(cond, s"FRONTEND_$label", "Rocket;;" + desc)
-
-   override val compileOptions = chisel3.core.ExplicitCompileOptions.NotStrict.copy(explicitInvalidate = true)
+  def alignPC(pc: UInt) = ~(~pc | (minCoreInstBytes - 1).U)
 }
 
 /** Mix-ins for constructing tiles that have an ICache-based pipeline frontend */
