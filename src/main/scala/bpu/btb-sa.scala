@@ -50,7 +50,7 @@ class BTBsa(implicit p: Parameters) extends BoomBTB
    class BTBSetData extends Bundle
    {
       val target = UInt(width = vaddrBits - log2Up(coreInstBytes))
-      val cfi_idx = UInt(width = log2Up(fetchWidth))
+      val cfi_idx = UInt(width = log2Up(2*fetchWidth))
       val bpd_type = BpredType()
       val cfi_type = CfiType()
    }

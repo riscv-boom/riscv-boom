@@ -73,11 +73,10 @@ case class BoomCoreParams(
 {
    val haveFSDirty = false
    val retireWidth: Int = decodeWidth
-   val useCompressed: Boolean = false
-	require (useCompressed == false)
-   val instBits: Int = 16 
+   val useCompressed: Boolean = true
+   val instBits: Int = 32
 
-	val jumpInFrontend: Boolean = false // unused in boom
+   val jumpInFrontend: Boolean = false // unused in boom
    val nPMPs: Int = 0
    val pmpGranularity: Int = 4
 }
@@ -90,6 +89,10 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
    require(xLen == 64)
 
 
+   val minInstBits: Int = 16
+   val minCoreInstBits: Int = minInstBits
+   val minCoreInstBytes: Int = minCoreInstBits/8 
+   val rvcFetchWidth: Int = fetchWidth*2
    //************************************
    // Superscalar Widths
 

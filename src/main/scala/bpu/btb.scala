@@ -12,7 +12,8 @@
 
 package boom.bpu
 
-import Chisel._
+import chisel3._
+import chisel3.util.{Cat, Valid, log2Ceil, isPow2}
 import freechips.rocketchip.config.Parameters
 import boom.common._
 import boom.exu._
@@ -58,7 +59,7 @@ trait HasBoomBTBParameters extends HasBoomCoreParameters
 object BpredType
 {
    def SZ = 3
-   def apply() = UInt(width = SZ)
+   def apply() = UInt(SZ.W)
    def branch = 0.U
    def jump = 1.U
    def ret =  (2+1).U
@@ -85,12 +86,12 @@ abstract class BoomBTBBundle(implicit val p: Parameters) extends freechips.rocke
 class BoomBTBResp(implicit p: Parameters) extends BoomBTBBundle()(p)
 {
    val taken     = Bool()   // is BTB predicting a taken cfi?
-   val target    = UInt(width = vaddrBits) // what target are we predicting?
-   val mask      = UInt(width = fetchWidth) // mask of valid instructions.
-   val cfi_idx   = UInt(width = log2Up(fetchWidth)) // where is cfi we are predicting?
+   val target    = UInt(vaddrBits.W) // what target are we predicting?
+   val mask      = UInt(rvcFetchWidth.W) // mask of valid instructions.
+   val cfi_idx   = UInt(log2Ceil(rvcFetchWidth).W) // where is cfi we are predicting?
    val bpd_type  = BpredType() // which predictor should we use?
    val cfi_type  = CfiType()  // what type of instruction is this?
-   val fetch_pc  = UInt(width = vaddrBits) // the PC we're predicting on (start of the fetch packet).
+   val fetch_pc  = UInt(vaddrBits.W) // the PC we're predicting on (start of the fetch packet.W).
 
    val bim_resp  = Valid(new BimResp) // Output from the bimodal table. Valid if prediction provided.
 }
@@ -100,10 +101,10 @@ class BoomBTBResp(implicit p: Parameters) extends BoomBTBBundle()(p)
 //  - "cfi_pc" is the PC of the branch instruction.
 class BoomBTBUpdate(implicit p: Parameters) extends BoomBTBBundle()(p)
 {
-   val pc = UInt(width = vaddrBits)
-   val target = UInt(width = vaddrBits)
+   val pc = UInt(vaddrBits.W)
+   val target = UInt(vaddrBits.W)
    val taken = Bool()
-   val cfi_pc = UInt(width = vaddrBits)
+   val cfi_pc = UInt(vaddrBits.W)
    val bpd_type = BpredType()
    val cfi_type = CfiType()
 }
@@ -112,12 +113,12 @@ class RasUpdate(implicit p: Parameters) extends BoomBTBBundle()(p)
 {
    val is_call = Bool()
    val is_ret = Bool()
-   val return_addr = UInt(width = vaddrBits)
+   val return_addr = UInt(vaddrBits.W)
 }
 
 class PCReq(implicit p: Parameters) extends BoomBTBBundle()(p)
 {
-   val addr = UInt(width = vaddrBitsExtended)
+   val addr = UInt(vaddrBitsExtended.W)
 }
 
 //------------------------------------------------------------------------------
@@ -129,22 +130,22 @@ class RAS(nras: Int, coreInstBytes: Int)
    def push(addr: UInt): Unit =
    {
       when (count < nras.U) { count := count + 1.U }
-      val nextPos = Mux(Bool(isPow2(nras)) || pos < UInt(nras-1), pos+1.U, 0.U)
-      stack(nextPos) := addr >> log2Up(coreInstBytes)
+      val nextPos = Mux(isPow2(nras).B || pos < (nras-1).U, pos+1.U, 0.U)
+      stack(nextPos) := addr >> log2Ceil(coreInstBytes)
       pos := nextPos
    }
-   def peek: UInt = Cat(stack(pos), UInt(0, log2Up(coreInstBytes)))
+   def peek: UInt = Cat(stack(pos), 0.U(log2Ceil(coreInstBytes).W))
    def pop(): Unit = when (!isEmpty)
    {
       count := count - 1.U
-      pos := Mux(Bool(isPow2(nras)) || pos > 0.U, pos-1.U, UInt(nras-1))
+      pos := Mux(isPow2(nras).B || pos > 0.U, pos-1.U, (nras-1).U)
    }
    //def clear(): Unit = count := UInt(0)
-   def isEmpty: Bool = count === UInt(0)
+   def isEmpty: Bool = count === 0.U
 
-   private val count = Reg(UInt(width = log2Up(nras+1)))
-   private val pos = Reg(UInt(width = log2Up(nras)))
-   private val stack = Reg(Vec(nras, UInt()))
+   private val count = RegInit(0.U(log2Ceil(nras+1).W))
+   private val pos = RegInit(0.U(log2Ceil(nras).W))
+   private val stack = VecInit.tabulate(nras)( i => RegInit(0.U))
 }
 
 //------------------------------------------------------------------------------
@@ -158,7 +159,7 @@ abstract class BoomBTB(implicit p: Parameters) extends BoomModule()(p) with HasB
       // req.valid is false if stalling (aka, we won't read and use BTB results, on cycle S1).
       // req.bits.addr is available on cycle S0.
       // resp is expected on cycle S2.
-      val req = Valid(new PCReq).flip
+      val req = Flipped(Valid(new PCReq))
 
       // resp is valid if there is a BTB hit.
       val resp = Valid(new BoomBTBResp)
@@ -168,18 +169,16 @@ abstract class BoomBTB(implicit p: Parameters) extends BoomModule()(p) with HasB
       //val s1_pc  = UInt(width = vaddrBits)
 
       // supress S1 (so next cycle S2 is not valid).
-      val flush = Bool(INPUT)
+      val flush = Input(Bool())
 
-      val btb_update = Valid(new BoomBTBUpdate).flip
-      val bim_update = Valid(new BimUpdate).flip
-      val ras_update = Valid(new RasUpdate).flip
+      val btb_update = Flipped(Valid(new BoomBTBUpdate))
+      val bim_update = Flipped(Valid(new BimUpdate))
+      val ras_update = Flipped(Valid(new RasUpdate))
 
       // HACK: prevent BTB updating/predicting during program load.
       // Easier to diff against spike which doesn't run debug mode.
-      val status_debug = Bool(INPUT)
+      val status_debug = Input(Bool())
    })
-
-   override val compileOptions = chisel3.core.ExplicitCompileOptions.NotStrict.copy(explicitInvalidate = true)
 }
 
 object BoomBTB
