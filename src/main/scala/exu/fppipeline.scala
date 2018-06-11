@@ -53,6 +53,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
       val debug_tsc_reg    = Input(UInt(width=xLen.W))
       val vl               = Input(UInt(width=VL_SZ.W))
       val lsu_ldq_eidx     = Input(Vec(NUM_LSU_ENTRIES, UInt(width=VL_SZ.W)))
+      val lsu_stq_eidx     = Input(Vec(NUM_LSU_ENTRIES, UInt(width=VL_SZ.W)))
    }
 
    //**********************************
@@ -105,6 +106,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
 
    issue_unit.io.vl := io.vl
    issue_unit.io.lsu_ldq_eidx := io.lsu_ldq_eidx
+   issue_unit.io.lsu_stq_eidx := io.lsu_stq_eidx
 
    require (exe_units.num_total_bypass_ports == 0)
 

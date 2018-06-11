@@ -52,6 +52,7 @@ class VecPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasF
      val debug_tsc_reg  = Input(UInt(width=128.W))
      val vl             = Input(UInt(width=VL_SZ.W))
      val lsu_ldq_eidx   = Input(Vec(NUM_LSU_ENTRIES, UInt(width=VL_SZ.W)))
+     val lsu_stq_eidx   = Input(Vec(NUM_LSU_ENTRIES, UInt(width=VL_SZ.W)))
   }
 
    //**********************************
@@ -101,6 +102,7 @@ class VecPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasF
    issue_unit.io.flush_pipeline := io.flush_pipeline
    issue_unit.io.vl := io.vl
    issue_unit.io.lsu_ldq_eidx := io.lsu_ldq_eidx
+   issue_unit.io.lsu_stq_eidx := io.lsu_stq_eidx
 
    require (exe_units.num_total_bypass_ports == 0)
 
@@ -187,7 +189,14 @@ class VecPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasF
 
       io.tosdq.valid     := vregister_read.io.exe_reqs(w).bits.uop.uopc === uopVST
       io.tosdq.bits.uop  := vregister_read.io.exe_reqs(w).bits.uop
-      io.tosdq.bits.data := vregister_read.io.exe_reqs(w).bits.rs3_data
+      val shiftn = Cat(vregister_read.io.exe_reqs(w).bits.uop.eidx <<
+         MuxLookup(vregister_read.io.exe_reqs(w).bits.uop.rs3_vew, VEW_8, Array(
+         VEW_8  -> UInt(0),
+         VEW_16 -> UInt(1),
+         VEW_32 -> UInt(2),
+         VEW_64 -> UInt(3))), UInt(0, width=3))
+
+      io.tosdq.bits.data := vregister_read.io.exe_reqs(w).bits.rs3_data >> shiftn
    }
    require (exe_units.num_total_bypass_ports == 0)
 

@@ -118,8 +118,9 @@ class LoadStoreUnitIO(pl_width: Int)(implicit p: Parameters) extends BoomBundle(
    // cache nacks
    val nack               = new NackInfo().asInput
 
-   // For stalling vector loads elementwise in the issue slots
+   // For stalling vector loads and stores elementwise in the issue slots
    val ldq_eidx           = Vec(NUM_LSU_ENTRIES, UInt(width=VL_SZ.W)).asOutput
+   val stq_eidx           = Vec(NUM_LSU_ENTRIES, UInt(width=VL_SZ.W)).asOutput
 
 // causing stuff to dissapear
 //   val dmem = new DCMemPortIO().flip()
@@ -174,7 +175,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
    val laq_uop            = Reg(Vec(num_ld_entries, new MicroOp()))
    //laq_uop.stq_idx between oldest and youngest (dep_mask can't establish age :( ), "aka store coloring" if you're Intel
    //   val laq_request   = Vec.fill(num_ld_entries) { Reg(resetVal = Bool(false)) } // TODO sleeper load requesting issue to memory (perhaps stores broadcast, sees its store-set finished up)
-   io.ldq_eidx := laq_uop.map(x=>x.eidx)
+
 
 
    // track window of stores we depend on
@@ -217,7 +218,8 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
    val live_store_mask = Reg(init = UInt(0, num_st_entries))
    var next_live_store_mask = Mux(clear_store, live_store_mask & ~(UInt(1) << stq_head),
                                                 live_store_mask)
-
+   io.ldq_eidx := laq_uop.map(x=>x.eidx)
+   io.stq_eidx := stq_uop.map(x=>x.eidx)
    //-------------------------------------------------------------
    //-------------------------------------------------------------
    // Enqueue new entries
@@ -375,7 +377,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
    // TLB Access
 
    val stq_retry_idx = Wire(UInt())
-   val laq_retry_idx = Wire(UInt())
+   val laq_retry_idx = Wire(UInt()) 
 
 
    // micro-op going through the TLB generate paddr's. If this is a load, it will continue
@@ -558,7 +560,9 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
       {
          io.memreq_val   := Bool(true)
          stq_executed(stq_execute_head) := Bool(true)
-         stq_execute_head := WrapInc(stq_execute_head, num_st_entries)
+         val next_eidx = stq_uop(stq_execute_head).eidx + UInt(1)
+         val invalidate_head = !(stq_uop(stq_execute_head).uopc === uopVST && next_eidx < io.vl)
+         stq_execute_head := Mux(invalidate_head, WrapInc(stq_execute_head, num_st_entries), stq_execute_head)
          mem_fired_st := Bool(true)
       }
    }
@@ -1152,12 +1156,15 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
    var temp_stq_commit_head = stq_commit_head
    for (w <- 0 until pl_width)
    {
+      val invalidate_head = Wire(Bool())
       when (io.commit_store_mask(w))
       {
          stq_committed(temp_stq_commit_head) := Bool(true)
+         val next_eidx = stq_uop(temp_stq_commit_head).eidx + UInt(1)
+         invalidate_head := !(stq_uop(temp_stq_commit_head).uopc === uopVST && next_eidx < io.vl)
       }
 
-      temp_stq_commit_head = Mux(io.commit_store_mask(w),
+      temp_stq_commit_head = Mux(io.commit_store_mask(w) && invalidate_head,
                                  WrapInc(temp_stq_commit_head, num_st_entries),
                                  temp_stq_commit_head)
    }
@@ -1173,14 +1180,21 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
 
    when (clear_store)
    {
-      stq_entry_val(stq_head)   := Bool(false)
+      val next_eidx = stq_uop(stq_head).eidx + UInt(1)
+      when (stq_uop(stq_head).uopc === uopVST && next_eidx < io.vl) {
+         stq_entry_val(stq_head) := Bool(true)
+         stq_uop(stq_head).eidx  := next_eidx
+      } .otherwise {
+         stq_entry_val(stq_head) := Bool(false)
+         stq_head := WrapInc(stq_head, num_st_entries)
+      }
       saq_val(stq_head)         := Bool(false)
       sdq_val(stq_head)         := Bool(false)
       stq_executed(stq_head)    := Bool(false)
       stq_succeeded(stq_head)   := Bool(false)
       stq_committed(stq_head)   := Bool(false)
 
-      stq_head := WrapInc(stq_head, num_st_entries)
+
       when (stq_uop(stq_head).is_fence)
       {
          stq_execute_head := WrapInc(stq_execute_head, num_st_entries)
@@ -1199,24 +1213,20 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
          assert (laq_executed(idx), "[lsu] trying to commit an un-executed load entry.")
          assert (laq_succeeded(idx), "[lsu] trying to commit an un-succeeded load entry.")
 
+         laq_addr_val (idx)         := Bool(false)
+         laq_executed (idx)         := Bool(false)
+         laq_succeeded(idx)         := Bool(false)
+         laq_failure  (idx)         := Bool(false)
+         laq_forwarded_std_val(idx) := Bool(false)
+
          val next_eidx = laq_uop(idx).eidx + UInt(1)
          when (laq_uop(idx).uopc === uopVLD && next_eidx < io.vl) {
             laq_allocated(idx)         := Bool(true)
-            laq_addr_val (idx)         := Bool(false)
-            laq_executed (idx)         := Bool(false)
-            laq_succeeded(idx)         := Bool(false)
-            laq_failure  (idx)         := Bool(false)
-            laq_forwarded_std_val(idx) := Bool(false)
             laq_uop(idx).eidx          := next_eidx
             invalidate_head            := Bool(false)
          } .otherwise {
            // temp_laq_head = WrapInc(temp_laq_head, num_ld_entries)
             laq_allocated(idx)         := Bool(false)
-            laq_addr_val (idx)         := Bool(false)
-            laq_executed (idx)         := Bool(false)
-            laq_succeeded(idx)         := Bool(false)
-            laq_failure  (idx)         := Bool(false)
-            laq_forwarded_std_val(idx) := Bool(false)
             invalidate_head            := Bool(true)
          }
       }
@@ -1521,4 +1531,3 @@ class ForwardingAgeLogic(num_entries: Int)(implicit p: Parameters) extends BoomM
 
    io.forwarding_val := found_match
 }
-

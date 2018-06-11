@@ -584,6 +584,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
       iu.io.vl := csr.io.vecstatus.vl
       iu.io.lsu_ldq_eidx := lsu.io.ldq_eidx
+      iu.io.lsu_stq_eidx := lsu.io.stq_eidx
 
       when (dis_uops(w).uopc === uopSTA && dis_uops(w).lrs2_rtype === RT_FLT) {
          iu.io.dis_uops(w).lrs2_rtype := RT_X
@@ -768,6 +769,9 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
    fp_pipeline.io.lsu_ldq_eidx := lsu.io.ldq_eidx
    vec_pipeline.io.lsu_ldq_eidx := lsu.io.ldq_eidx
+
+   fp_pipeline.io.lsu_stq_eidx := lsu.io.stq_eidx
+   vec_pipeline.io.lsu_stq_eidx := lsu.io.stq_eidx
 
 
 

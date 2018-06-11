@@ -38,6 +38,7 @@ class IssueSlotIO(num_wakeup_ports: Int)(implicit p: Parameters) extends BoomBun
       
    val vl             = Input(UInt(width=VL_SZ.W)) // The global vector length
    val lsu_ldq_eidx   = Input(Vec(NUM_LSU_ENTRIES, UInt(width=VL_SZ.W)))
+   val lsu_stq_eidx   = Input(Vec(NUM_LSU_ENTRIES, UInt(width=VL_SZ.W)))
    // TODO_vec: All this logic probably needs to be removed when separate vector memory unit is implemented
    // For now this tracks element indices of ops in the lsu ldq, we don't issue ops until the LDQ is ready to receive them
    // This is actually very bad since it is essentially unpipelined vector loads
@@ -158,7 +159,10 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean)(implicit p: Pa
    {
       slotUop := io.in_uop.bits
       assert (isInvalid || io.clear || io.kill, "trying to overwrite a valid issue slot.")
+   } .otherwise {
+      slotUop.eidx := updated_eidx
    }
+      
 
    // Wakeup Compare Logic
    next_p1 := false.B
@@ -239,12 +243,16 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean)(implicit p: Pa
 //   io.request_hp := io.request && high_priority
    io.request_hp := false.B
 
+
+
    when (slot_state === s_valid_1)
    {
       io.request := slot_p1 && slot_p2 && slot_p3 && !io.kill
       if (containsVec){
          when (slotUop.uopc === uopVLD) {
             io.request := slot_p1 && slot_p2 && slot_p3 && !io.kill && slotUop.eidx === io.lsu_ldq_eidx(slotUop.ldq_idx)
+         } .elsewhen (slotUop.uopc === uopVST) {
+            io.request := slot_p1 && slot_p2 && slot_p3 && !io.kill && slotUop.eidx === io.lsu_stq_eidx(slotUop.stq_idx)
          }
       }
 

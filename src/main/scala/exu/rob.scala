@@ -333,6 +333,12 @@ class Rob(
          {
             val cidx = GetRowIdx(clr_rob_idx)
             rob_bsy(cidx) := false.B
+            val next_eidx = UInt(1) + rob_uop(cidx).eidx // todo_vec For now only rate 1 stores
+            when (rob_uop(cidx).vec_val && next_eidx < io.vl) {
+               rob_bsy(cidx) := true.B
+               rob_uop(cidx).eidx := next_eidx
+               rob_vec_incr(cidx) := true.B
+            }
 
             assert (rob_val(cidx) === true.B, "[rob] store writing back to invalid entry.")
             assert (rob_bsy(cidx) === true.B, "[rob] store writing back to a not-busy entry.")
@@ -836,7 +842,7 @@ class Rob(
    for (w <- 0 until width)
    {
       // tell LSU it is ready to its stores and loads
-      io.commit.st_mask(w) := io.commit.valids(w) && rob_head_is_store(w)
+      io.commit.st_mask(w) := (io.commit.valids(w) || rob_vec_incr(w)) && rob_head_is_store(w)
       io.commit.ld_mask(w) := (io.commit.valids(w) || rob_vec_incr(w)) && rob_head_is_load(w)
    }
 

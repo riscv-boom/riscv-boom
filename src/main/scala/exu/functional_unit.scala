@@ -593,7 +593,7 @@ class MemAddrCalcUnit(implicit p: Parameters)
    // perform address calculation
    val imm = Mux(io.req.bits.uop.uopc === uopVLD, io.req.bits.uop.imm_packed(19,15), io.req.bits.uop.imm_packed(19,8))
    assert(io.req.bits.uop.vec_val || io.req.bits.uop.eidx === UInt(0), "Eidx should be 0 for normal insts")
-   val eidx_off = Cat(UInt(0), io.req.bits.uop.eidx << MuxLookup(io.req.bits.uop.rd_vew, VEW_DISABLE, Array(
+   val eidx_off = Cat(UInt(0), io.req.bits.uop.eidx << MuxLookup(Mux(io.req.bits.uop.uopc === uopVLD, io.req.bits.uop.rd_vew, io.req.bits.uop.rs3_vew), VEW_DISABLE, Array(
       VEW_8  -> UInt(0),
       VEW_16 -> UInt(1),
       VEW_32 -> UInt(2),
