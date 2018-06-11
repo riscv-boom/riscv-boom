@@ -384,7 +384,7 @@ class DecodeUnitIo(implicit p: Parameters) extends BoomBundle()(p)
 }
 
 // Takes in a single instruction, generates a MicroOp.
-class DecodeUnit(implicit p: Parameters) extends BoomModule()(p)
+class DecodeUnit(implicit p: Parameters) extends BoomModule()(p) with freechips.rocketchip.rocket.constants.ScalarOpConstants
 {
    val io = IO(new DecodeUnitIo)
 
@@ -490,7 +490,11 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule()(p)
    uop.fp_single  := cs.fp_single // TODO use this signal instead of the FPU decode's table signal?
 
    uop.mem_cmd    := cs.mem_cmd
-   uop.mem_typ    := Mux(!sfence, cs.mem_typ, Cat(uop.lrs2 =/= 0.U, uop.lrs1 =/= 0.U))
+   uop.mem_typ    := Mux(cs.uopc === uopVLD,
+      MuxLookup(io.vecstatus.vews(uop.ldst), VEW_8, Array(VEW_8 -> MT_B, VEW_16 -> MT_H, VEW_32 -> MT_W, VEW_64 -> MT_D)),
+      Mux(cs.uopc === uopVST,
+         MuxLookup(io.vecstatus.vews(uop.lrs3), VEW_8, Array(VEW_8 -> MT_B, VEW_16 -> MT_H, VEW_32 -> MT_W, VEW_64 -> MT_D)),
+         Mux(!sfence, cs.mem_typ, Cat(uop.lrs2 =/= 0.U, uop.lrs1 =/= 0.U))))
    uop.is_load    := cs.is_load
    uop.is_store   := cs.is_store
    uop.is_amo     := cs.is_amo
