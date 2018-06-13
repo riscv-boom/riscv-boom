@@ -121,9 +121,9 @@ class LoadStoreUnitIO(pl_width: Int)(implicit p: Parameters) extends BoomBundle(
    val nack               = new NackInfo().asInput
 
    // For stalling vector loads and stores elementwise in the issue slots
-   val ldq_eidx           = Vec(NUM_LSU_ENTRIES, UInt(width=VL_SZ.W)).asOutput
+   val ldq_head_eidx      = UInt(width=VL_SZ).asOutput
    val ldq_head           = UInt(OUTPUT, width=log2Ceil(num_ld_entries)) // TODO_Vec: Hack, don't let issue units issue unless load is at head of loa
-   val stq_eidx           = Vec(NUM_LSU_ENTRIES, UInt(width=VL_SZ.W)).asOutput
+   val stq_head_eidx      = UInt(width=VL_SZ).asOutput
    val stq_head           = UInt(OUTPUT, width=log2Ceil(num_st_entries))
 
 // causing stuff to dissapear
@@ -222,10 +222,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
    val live_store_mask = Reg(init = UInt(0, num_st_entries))
    var next_live_store_mask = Mux(clear_store, live_store_mask & ~(UInt(1) << stq_head),
                                                 live_store_mask)
-   io.ldq_eidx := laq_uop.map(x=>x.eidx)
-   io.ldq_head := laq_head
-   io.stq_eidx := stq_uop.map(x=>x.eidx)
-   io.stq_head := stq_head
+
    //-------------------------------------------------------------
    //-------------------------------------------------------------
    // Enqueue new entries
@@ -1403,6 +1400,13 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
 
    assert (!(stq_empty ^ stq_entry_val.asUInt === 0.U), "[lsu] mismatch in SAQ empty logic.")
 
+
+   // Issue helpers for vector instructions
+   io.ldq_head_eidx := laq_uop(laq_head).eidx
+   io.ldq_head      := laq_head
+   io.stq_head_eidx := stq_uop(stq_head).eidx
+   io.stq_head      := stq_head
+
    //-------------------------------------------------------------
    // Debug & Counter outputs
 
@@ -1541,4 +1545,6 @@ class ForwardingAgeLogic(num_entries: Int)(implicit p: Parameters) extends BoomM
 
 
    io.forwarding_val := found_match
+
+
 }

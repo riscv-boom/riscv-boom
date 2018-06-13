@@ -51,10 +51,10 @@ class VecPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasF
 
      val debug_tsc_reg  = Input(UInt(width=128.W))
      val vl             = Input(UInt(width=VL_SZ.W))
-     val lsu_ldq_eidx   = Input(Vec(NUM_LSU_ENTRIES, UInt(width=VL_SZ.W)))
-     val lsu_ldq_head   = Input(UInt())
-     val lsu_stq_eidx   = Input(Vec(NUM_LSU_ENTRIES, UInt(width=VL_SZ.W)))
-     val lsu_stq_head   = Input(UInt())
+     val lsu_ldq_head_eidx = Input(UInt())
+     val lsu_ldq_head      = Input(UInt())
+     val lsu_stq_head_eidx = Input(UInt())
+     val lsu_stq_head      = Input(UInt())
      val commit_load_at_rob_head = Input(Bool())
   }
 
@@ -104,10 +104,10 @@ class VecPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasF
    issue_unit.io.brinfo := io.brinfo
    issue_unit.io.flush_pipeline := io.flush_pipeline
    issue_unit.io.vl := io.vl
-   issue_unit.io.lsu_ldq_eidx := io.lsu_ldq_eidx
-   issue_unit.io.lsu_ldq_head := io.lsu_ldq_head
-   issue_unit.io.lsu_stq_eidx := io.lsu_stq_eidx
-   issue_unit.io.lsu_stq_head := io.lsu_stq_head
+   issue_unit.io.lsu_ldq_head_eidx := io.lsu_ldq_head_eidx
+   issue_unit.io.lsu_ldq_head      := io.lsu_ldq_head
+   issue_unit.io.lsu_stq_head_eidx := io.lsu_stq_head_eidx
+   issue_unit.io.lsu_stq_head      := io.lsu_stq_head
    issue_unit.io.commit_load_at_rob_head := io.commit_load_at_rob_head
    require (exe_units.num_total_bypass_ports == 0)
 
