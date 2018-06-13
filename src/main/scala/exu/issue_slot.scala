@@ -38,7 +38,10 @@ class IssueSlotIO(num_wakeup_ports: Int)(implicit p: Parameters) extends BoomBun
       
    val vl             = Input(UInt(width=VL_SZ.W)) // The global vector length
    val lsu_ldq_eidx   = Input(Vec(NUM_LSU_ENTRIES, UInt(width=VL_SZ.W)))
+   val lsu_ldq_head   = Input(UInt())
    val lsu_stq_eidx   = Input(Vec(NUM_LSU_ENTRIES, UInt(width=VL_SZ.W)))
+   val lsu_stq_head   = Input(UInt())
+   val commit_load_at_rob_head = Input(Bool())
    // TODO_vec: All this logic probably needs to be removed when separate vector memory unit is implemented
    // For now this tracks element indices of ops in the lsu ldq, we don't issue ops until the LDQ is ready to receive them
    // This is actually very bad since it is essentially unpipelined vector loads
@@ -83,7 +86,8 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean)(implicit p: Pa
    val slot_is_2uops = Reg(Bool())
 
    val slotUop = Reg(init = NullMicroOp)
-   val next_eidx = slotUop.eidx + slotUop.rate // The next eidx after this gets executed
+   val incr_eidx = slotUop.eidx + slotUop.rate
+   val next_eidx = Mux(incr_eidx > io.vl, io.vl, incr_eidx) // The next eidx after this gets executed
 
    //-----------------------------------------------------------------------------
    // next slot state computation
@@ -250,9 +254,9 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean)(implicit p: Pa
       io.request := slot_p1 && slot_p2 && slot_p3 && !io.kill
       if (containsVec){
          when (slotUop.uopc === uopVLD) {
-            io.request := slot_p1 && slot_p2 && slot_p3 && !io.kill && slotUop.eidx === io.lsu_ldq_eidx(slotUop.ldq_idx)
+            io.request := slot_p1 && slot_p2 && slot_p3 && !io.kill && slotUop.eidx === io.lsu_ldq_eidx(slotUop.ldq_idx) && slotUop.ldq_idx === io.lsu_ldq_head && io.commit_load_at_rob_head
          } .elsewhen (slotUop.uopc === uopVST) {
-            io.request := slot_p1 && slot_p2 && slot_p3 && !io.kill && slotUop.eidx === io.lsu_stq_eidx(slotUop.stq_idx)
+            io.request := slot_p1 && slot_p2 && slot_p3 && !io.kill && slotUop.eidx === io.lsu_stq_eidx(slotUop.stq_idx) && slotUop.stq_idx === io.lsu_stq_head
          }
       }
 

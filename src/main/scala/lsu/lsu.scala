@@ -56,6 +56,8 @@ import boom.util.{AgePriorityEncoder, IsKilledByBranch, GetNewBrMask, WrapInc}
 
 class LoadStoreUnitIO(pl_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
+   val num_ld_entries = NUM_LSU_ENTRIES
+   val num_st_entries = NUM_LSU_ENTRIES
    // Decode Stage
    // Track which stores are "alive" in the pipeline
    // allows us to know which stores get killed by branch mispeculation
@@ -120,7 +122,9 @@ class LoadStoreUnitIO(pl_width: Int)(implicit p: Parameters) extends BoomBundle(
 
    // For stalling vector loads and stores elementwise in the issue slots
    val ldq_eidx           = Vec(NUM_LSU_ENTRIES, UInt(width=VL_SZ.W)).asOutput
+   val ldq_head           = UInt(OUTPUT, width=log2Ceil(num_ld_entries)) // TODO_Vec: Hack, don't let issue units issue unless load is at head of loa
    val stq_eidx           = Vec(NUM_LSU_ENTRIES, UInt(width=VL_SZ.W)).asOutput
+   val stq_head           = UInt(OUTPUT, width=log2Ceil(num_st_entries))
 
 // causing stuff to dissapear
 //   val dmem = new DCMemPortIO().flip()
@@ -205,7 +209,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
    val stq_committed = Reg(Vec(num_st_entries, Bool())) // the ROB has committed us, so we can now send our store to memory
 
 
-   val laq_head = Reg(UInt())
+   val laq_head = Reg(UInt(width=log2Ceil(num_ld_entries)))
    val laq_tail = Reg(UInt()) // point to next available (or if full, the laq_head entry).
    val stq_head = Reg(UInt()) // point to next store to clear from STQ (i.e., send to memory)
    val stq_tail = Reg(UInt()) // point to next available, open entry
@@ -219,7 +223,9 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
    var next_live_store_mask = Mux(clear_store, live_store_mask & ~(UInt(1) << stq_head),
                                                 live_store_mask)
    io.ldq_eidx := laq_uop.map(x=>x.eidx)
+   io.ldq_head := laq_head
    io.stq_eidx := stq_uop.map(x=>x.eidx)
+   io.stq_head := stq_head
    //-------------------------------------------------------------
    //-------------------------------------------------------------
    // Enqueue new entries
@@ -332,10 +338,15 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
       }
       when (io.exe_resp.bits.uop.ctrl.is_load)
       {
+         //TODO_vec: Only fire vector load if load is at head of ROB
+         when (io.exe_resp.bits.uop.vec_val) {
+            assert(io.commit_load_at_rob_head, "Vector loads can only be fired when load is at head of ROB")
+         }
          will_fire_load_incoming := Bool(true)
          dc_avail   := Bool(false)
          tlb_avail  := Bool(false)
          lcam_avail := Bool(false)
+
       }
       when (io.exe_resp.bits.uop.ctrl.is_sta)
       {

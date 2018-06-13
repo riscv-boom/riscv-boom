@@ -308,7 +308,9 @@ class Rob(
             when (rob_uop(row_idx).vec_val && next_eidx < io.vl) {
                rob_bsy(row_idx) := true.B
                rob_uop(row_idx).eidx := next_eidx
-               rob_vec_incr(w) := true.B
+               when (row_idx === rob_head) {
+                  rob_vec_incr(w) := true.B
+               }
             }
 
             if (O3PIPEVIEW_PRINTF)
@@ -337,7 +339,9 @@ class Rob(
             when (rob_uop(cidx).vec_val && next_eidx < io.vl) {
                rob_bsy(cidx) := true.B
                rob_uop(cidx).eidx := next_eidx
-               rob_vec_incr(cidx) := true.B
+               when (cidx === rob_head) {
+                  rob_vec_incr(cidx) := true.B
+               }
             }
 
             assert (rob_val(cidx) === true.B, "[rob] store writing back to invalid entry.")
@@ -850,7 +854,6 @@ class Rob(
 
    //--------------------------------------------------
    // Handle passing out signals to printf in dpath
-
    io.debug.state    := rob_state
    io.debug.rob_head := rob_head
    io.debug.xcpt_val := r_xcpt_val
