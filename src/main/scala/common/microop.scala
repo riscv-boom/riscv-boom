@@ -70,6 +70,11 @@ class MicroOp(implicit p: Parameters) extends BoomBundle()(p)
    val prs1_busy        = Bool()
    val prs2_busy        = Bool()
    val prs3_busy        = Bool()
+
+   val prs1_eidx        = UInt(width = VL_SZ)
+   val prs2_eidx        = UInt(width = VL_SZ)
+   val prs3_eidx        = UInt(width = VL_SZ)
+
    val stale_pdst       = UInt(width = PREG_SZ)
    val exception        = Bool()
    val exc_cause        = UInt(width = xLen)          // TODO compress this down, xlen is insanity

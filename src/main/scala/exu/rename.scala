@@ -332,6 +332,10 @@ class RenameStage(
       uop.prs2_busy := Mux(uop.lrs2_rtype === RT_FLT, fbusy.prs2_busy, Mux(uop.lrs2_rtype === RT_FIX, ibusy.prs2_busy, vbusy.prs2_busy))
       uop.prs3_busy := Mux(uop.lrs3_rtype === RT_FLT, fbusy.prs3_busy, vbusy.prs3_busy)
 
+      uop.prs1_eidx := Mux(uop.lrs1_rtype === RT_VEC, vbusy.prs1_eidx, UInt(0))
+      uop.prs2_eidx := Mux(uop.lrs2_rtype === RT_VEC, vbusy.prs2_eidx, UInt(0))
+      uop.prs3_eidx := Mux(uop.lrs3_rtype === RT_VEC, vbusy.prs3_eidx, UInt(0))
+
       val valid = ren2_valids(w)
       assert (!(valid && ibusy.prs1_busy && uop.lrs1_rtype === RT_FIX && uop.lrs1 === UInt(0)), "[rename] x0 is busy??")
       assert (!(valid && ibusy.prs2_busy && uop.lrs2_rtype === RT_FIX && uop.lrs2 === UInt(0)), "[rename] x0 is busy??")

@@ -86,6 +86,13 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean)(implicit p: Pa
    val slot_p3       = RegNext(next_p3, init = false.B)
    val slot_is_2uops = Reg(Bool())
 
+   // these signals are the "next_p*" for the current slot's micro-op.
+   // they are important for shifting the current slotUop up to an other entry.
+   // TODO need a better name for these signals
+   val out_p1 = Wire(Bool()); out_p1 := slot_p1
+   val out_p2 = Wire(Bool()); out_p2 := slot_p2
+   val out_p3 = Wire(Bool()); out_p3 := slot_p3
+
    val slotUop = Reg(init = NullMicroOp)
    val incr_eidx = slotUop.eidx + slotUop.rate
    val next_eidx = Mux(incr_eidx > io.vl, io.vl, incr_eidx) // The next eidx after this gets executed
@@ -125,6 +132,7 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean)(implicit p: Pa
    updated_lrs1_rtype := slotUop.lrs1_rtype
    updated_lrs2_rtype := slotUop.lrs2_rtype
 
+   val next_next_eidx = next_eidx + slotUop.rate
    when (io.kill ||
          (io.grant && (slot_state === s_valid_1)) ||
          (io.grant && (slot_state === s_valid_2) && slot_p1 && slot_p2))
@@ -132,13 +140,17 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean)(implicit p: Pa
       updated_state := s_invalid
       if (containsVec) {
          updated_eidx := next_eidx
-         // when (slotUop.is_load) {
-         //    updated_eidx := slotUop.eidx + UInt(1)
-         // } .otherwise {
-         //    updated_eidx := slotUop.eidx + slotUop.rate
-         // }
          when (slotUop.vec_val && updated_eidx < io.vl) {
             updated_state := slot_state
+            when (slotUop.lrs1_rtype === RT_VEC) {
+               out_p1 := next_next_eidx <= slotUop.prs1_eidx
+            }
+            when (slotUop.lrs2_rtype === RT_VEC) {
+               out_p2 := next_next_eidx <= slotUop.prs2_eidx
+            }
+            when (slotUop.lrs3_rtype === RT_VEC) {
+               out_p3 := next_next_eidx <= slotUop.prs3_eidx
+            }
          }
       }
    }
@@ -174,13 +186,6 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean)(implicit p: Pa
    next_p2 := false.B
    next_p3 := false.B
 
-   // these signals are the "next_p*" for the current slot's micro-op.
-   // they are important for shifting the current slotUop up to an other entry.
-   // TODO need a better name for these signals
-   val out_p1 = Wire(Bool()); out_p1 := slot_p1
-   val out_p2 = Wire(Bool()); out_p2 := slot_p2
-   val out_p3 = Wire(Bool()); out_p3 := slot_p3
-
    when (io.in_uop.valid)
    {
       next_p1 := !(io.in_uop.bits.prs1_busy)
@@ -201,9 +206,9 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean)(implicit p: Pa
       {
          out_p1 := true.B
          if (containsVec) {
-            when (slotUop.vec_val) {
-//               out_p1 := next_eidx <= io.wakeup_dsts(i).bits.eidx
-               out_p1 := io.wakeup_dsts(i).bits.eidx >= io.vl
+            when (slotUop.vec_val && slotUop.lrs1_rtype === RT_VEC) {
+               out_p1 := next_eidx <= io.wakeup_dsts(i).bits.eidx
+               slotUop.prs1_eidx := io.wakeup_dsts(i).bits.eidx
             }
          }
       }
@@ -211,9 +216,9 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean)(implicit p: Pa
       {
          out_p2 := true.B
          if (containsVec) {
-            when (slotUop.vec_val) {
-//               out_p2 := next_eidx <= io.wakeup_dsts(i).bits.eidx
-               out_p2 := io.wakeup_dsts(i).bits.eidx >= io.vl
+            when (slotUop.vec_val && slotUop.lrs2_rtype === RT_VEC) {
+               out_p2 := next_eidx <= io.wakeup_dsts(i).bits.eidx
+               slotUop.prs2_eidx := io.wakeup_dsts(i).bits.eidx
             }
          }
       }
@@ -221,9 +226,9 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean)(implicit p: Pa
       {
          out_p3 := true.B
          if (containsVec) {
-            when (slotUop.vec_val) {
-//               out_p3 := next_eidx <= io.wakeup_dsts(i).bits.eidx
-               out_p3 := io.wakeup_dsts(i).bits.eidx >= io.vl
+            when (slotUop.vec_val && slotUop.lrs3_rtype === RT_VEC) {
+               out_p3 := next_eidx <= io.wakeup_dsts(i).bits.eidx
+               slotUop.prs3_eidx := io.wakeup_dsts(i).bits.eidx
             }
          }
       }

@@ -37,9 +37,11 @@ class BusyTableIo(
    // reading out the busy bits
    val p_rs           = Vec(num_read_ports, UInt(width=preg_sz)).asInput
    val p_rs_busy      = Vec(num_read_ports, Bool()).asOutput
+   val p_rs_eidx      = Vec(num_read_ports, UInt(width=VL_SZ)).asOutput
 
    def prs(i:Int, w:Int):UInt      = p_rs     (w+i*pipeline_width)
    def prs_busy(i:Int, w:Int):Bool = p_rs_busy(w+i*pipeline_width)
+   def prs_eidx(i:Int, w:Int):UInt = p_rs_eidx(w+i*pipeline_width)
 
    // marking new registers as busy
    val allocated_pdst = Vec(pipeline_width, new ValidIO(UInt(width=preg_sz))).flip
@@ -101,9 +103,13 @@ class BusyTableHelper(
    // handle bypassing a clearing of the busy-bit
    for (ridx <- 0 until num_read_ports)
    {
-      val just_cleared = io.unbusy_pdst.map(p => p.valid && (p.bits.pdst === io.p_rs(ridx))).reduce(_|_)
+      val bypassed = io.unbusy_pdst.map(p => p.valid && (p.bits.pdst === io.p_rs(ridx)))
+      val just_cleared_eidx = Mux1H(bypassed, io.unbusy_pdst.map(_.bits.eidx))
+      val just_cleared_pdst = Mux1H(bypassed, io.unbusy_pdst.map(_.bits.pdst))
+      val just_cleared = bypassed.reduce(_|_)
       // note: no bypassing of the newly busied (that is done outside this module)
-      io.p_rs_busy(ridx) := (table_bsy(io.p_rs(ridx)) && !just_cleared)
+      io.p_rs_busy(ridx) := (table_bsy(io.p_rs(ridx)) && !(just_cleared && just_cleared_eidx >= io.vl))
+      io.p_rs_eidx(ridx) := Mux(just_cleared, just_cleared_eidx, table_eidx(io.p_rs(ridx))) // todo_vec: need to bypass these or not?
    }
 
    io.debug.busytable := table_bsy.asUInt
@@ -115,6 +121,10 @@ class BusyTableOutput extends Bundle
    val prs1_busy = Bool()
    val prs2_busy = Bool()
    val prs3_busy = Bool()
+
+   val prs1_eidx = UInt(width=VL_SZ)
+   val prs2_eidx = UInt(width=VL_SZ)
+   val prs3_eidx = UInt(width=VL_SZ)
 
 }
 
@@ -162,18 +172,34 @@ class BusyTable(
    val prs1_was_bypassed = Wire(init = Vec.fill(pl_width) {Bool(false)})
    val prs2_was_bypassed = Wire(init = Vec.fill(pl_width) {Bool(false)})
    val prs3_was_bypassed = Wire(init = Vec.fill(pl_width) {Bool(false)})
+
+   val prs1_bypassed_eidx = Wire(init = Vec.fill(pl_width) {UInt(0)}) // TODO_Vec: Not sure if these are necessary
+   val prs2_bypassed_eidx = Wire(init = Vec.fill(pl_width) {UInt(0)})
+   val prs3_bypassed_eidx = Wire(init = Vec.fill(pl_width) {UInt(0)})
    for {
       w <- 0 until pl_width
       xx <- w-1 to 0 by -1
    }{
-      when (io.ren_uops(w).lrs1_rtype === UInt(rtype) && io.ren_will_fire(xx) && io.ren_uops(xx).ldst_val && io.ren_uops(xx).dst_rtype === UInt(rtype) && (io.ren_uops(w).lrs1 === io.ren_uops(xx).ldst))
-         { prs1_was_bypassed(w) := Bool(true) }
-      when (io.ren_uops(w).lrs2_rtype === UInt(rtype) && io.ren_will_fire(xx) && io.ren_uops(xx).ldst_val && io.ren_uops(xx).dst_rtype === UInt(rtype) && (io.ren_uops(w).lrs2 === io.ren_uops(xx).ldst))
-         { prs2_was_bypassed(w) := Bool(true) }
+      when (io.ren_uops(w).lrs1_rtype === UInt(rtype)
+         && io.ren_will_fire(xx) && io.ren_uops(xx).ldst_val
+         && io.ren_uops(xx).dst_rtype === UInt(rtype) && (io.ren_uops(w).lrs1 === io.ren_uops(xx).ldst))
+      {
+         prs1_was_bypassed(w) := Bool(true)
+      }
+      when (io.ren_uops(w).lrs2_rtype === UInt(rtype)
+         && io.ren_will_fire(xx) && io.ren_uops(xx).ldst_val
+         && io.ren_uops(xx).dst_rtype === UInt(rtype) && (io.ren_uops(w).lrs2 === io.ren_uops(xx).ldst))
+      {
+         prs2_was_bypassed(w) := Bool(true)
+      }
 
       if (rtype == RT_FLT.litValue || rtype == RT_VEC.litValue) {
-         when (io.ren_uops(w).frs3_en && io.ren_will_fire(xx) && io.ren_uops(xx).ldst_val && io.ren_uops(xx).dst_rtype === UInt(rtype) && (io.ren_uops(w).lrs3 === io.ren_uops(xx).ldst))
-            { prs3_was_bypassed(w) := Bool(true) }
+         when (io.ren_uops(w).frs3_en && io.ren_uops(w).lrs3_rtype === UInt(rtype)
+            && io.ren_will_fire(xx) && io.ren_uops(xx).ldst_val
+            && io.ren_uops(xx).dst_rtype === UInt(rtype) && (io.ren_uops(w).lrs3 === io.ren_uops(xx).ldst))
+         {
+            prs3_was_bypassed(w) := Bool(true)
+         }
       }
    }
 
@@ -188,6 +214,12 @@ class BusyTable(
 
       io.values(w).prs1_busy := io.ren_uops(w).lrs1_rtype === UInt(rtype) && (busy_table.io.prs_busy(0,w) || prs1_was_bypassed(w))
       io.values(w).prs2_busy := io.ren_uops(w).lrs2_rtype === UInt(rtype) && (busy_table.io.prs_busy(1,w) || prs2_was_bypassed(w))
+
+      if (isVector) {
+         io.values(w).prs1_eidx := Mux(prs1_was_bypassed(w), UInt(0), busy_table.io.prs_eidx(0,w))
+         io.values(w).prs2_eidx := Mux(prs2_was_bypassed(w), UInt(0), busy_table.io.prs_eidx(1,w))
+         io.values(w).prs3_eidx := Mux(prs3_was_bypassed(w), UInt(0), busy_table.io.prs_eidx(2,w))
+      }
 
       if (rtype == RT_FLT.litValue || rtype == RT_VEC.litValue)
       {
