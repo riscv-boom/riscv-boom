@@ -25,7 +25,8 @@ class RegisterReadIO(
    issue_width: Int,
    num_total_read_ports: Int,
    num_total_bypass_ports: Int,
-   register_width: Int
+   register_width: Int,
+   reg_sz: Int
 )(implicit p: Parameters) extends  BoomBundle()(p)
 {
    // issued micro-ops
@@ -33,7 +34,7 @@ class RegisterReadIO(
    val iss_uops   = Vec(issue_width, new MicroOp()).asInput
 
    // interface with register file's read ports
-   val rf_read_ports = Vec(num_total_read_ports, new RegisterFileReadPortIO(PREG_SZ, register_width)).flip
+   val rf_read_ports = Vec(num_total_read_ports, new RegisterFileReadPortIO(reg_sz, register_width)).flip
 
    val bypass = new BypassData(num_total_bypass_ports, register_width).asInput
 
@@ -44,7 +45,7 @@ class RegisterReadIO(
    val brinfo = new BrResolutionInfo().asInput
 
    override def cloneType =
-      new RegisterReadIO(issue_width, num_total_read_ports, num_total_bypass_ports, register_width
+      new RegisterReadIO(issue_width, num_total_read_ports, num_total_bypass_ports, register_width, reg_sz
    )(p).asInstanceOf[this.type]
 }
 
@@ -58,10 +59,13 @@ class RegisterRead(
                          // operands it can accept (the sum should equal
                          // num_total_read_ports)
    num_total_bypass_ports: Int,
+   isVector: Boolean,
    register_width: Int
 )(implicit p: Parameters) extends BoomModule()(p)
+with Packing
 {
-   val io = IO(new RegisterReadIO(issue_width, num_total_read_ports, num_total_bypass_ports, register_width))
+   val reg_sz = if (isVector) log2Ceil(numVecRegFileRows) else PREG_SZ
+   val io = IO(new RegisterReadIO(issue_width, num_total_read_ports, num_total_bypass_ports, register_width, reg_sz))
 
    val rrd_valids       = Wire(Vec(issue_width, Bool()))
    val rrd_uops         = Wire(Vec(issue_width, new MicroOp()))
@@ -102,6 +106,8 @@ class RegisterRead(
    val rrd_rs2_data   = Wire(Vec(issue_width, Bits(width=register_width)))
    val rrd_rs3_data   = Wire(Vec(issue_width, Bits(width=register_width)))
 
+
+
    var idx = 0 // index into flattened read_ports array
    for (w <- 0 until issue_width)
    {
@@ -112,9 +118,32 @@ class RegisterRead(
       // If rrdLatency==1, we need to send read address at end of ISS stage,
       //    in order to get read data back at end of RRD stage.
       require (regreadLatency == 0 || regreadLatency == 1)
-      val rs1_addr = io.iss_uops(w).pop1
-      val rs2_addr = io.iss_uops(w).pop2
-      val rs3_addr = io.iss_uops(w).pop3
+
+      val rs1_addr = Wire(UInt())
+      val rs2_addr = Wire(UInt())
+      val rs3_addr = Wire(UInt())
+      if (isVector) {
+         rs1_addr := CalcVecRegAddr(
+            io.iss_uops(w).rs1_vew,
+            io.iss_uops(w).eidx,
+            io.iss_uops(w).pop1,
+            numVecPhysRegs)
+         rs2_addr := CalcVecRegAddr(
+            io.iss_uops(w).rs2_vew,
+            io.iss_uops(w).eidx,
+            io.iss_uops(w).pop2,
+            numVecPhysRegs)
+         rs3_addr := CalcVecRegAddr(
+            io.iss_uops(w).rs3_vew,
+            io.iss_uops(w).eidx,
+            io.iss_uops(w).pop3,
+            numVecPhysRegs)
+
+      } else {
+         rs1_addr := io.iss_uops(w).pop1
+         rs2_addr := io.iss_uops(w).pop2
+         rs3_addr := io.iss_uops(w).pop3
+      }
 
       if (num_read_ports > 0) io.rf_read_ports(idx+0).addr := rs1_addr
       if (num_read_ports > 1) io.rf_read_ports(idx+1).addr := rs2_addr

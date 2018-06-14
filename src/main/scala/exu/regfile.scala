@@ -17,6 +17,7 @@ import Chisel._
 import freechips.rocketchip.config.Parameters
 import scala.collection.mutable.ArrayBuffer
 import boom.common._
+import boom.util._
 
 class RegisterFileReadPortIO(addr_width: Int, data_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
@@ -39,12 +40,20 @@ class RegisterFileWritePort(addr_width: Int, data_width: Int)(implicit p: Parame
 // utility function to turn ExeUnitResps to match the regfile's WritePort I/Os.
 object WritePort
 {
-   def apply(enq: DecoupledIO[ExeUnitResp], addr_width: Int, data_width: Int)
+   def apply(enq: DecoupledIO[ExeUnitResp], addr_width: Int, data_width: Int, isVector: Boolean, numVecPhysRegs:Int)
    (implicit p: Parameters): DecoupledIO[RegisterFileWritePort] =
    {
       val wport = Wire(Decoupled(new RegisterFileWritePort(addr_width, data_width)))
       wport.valid := enq.valid
-      wport.bits.addr := enq.bits.uop.pdst
+      if (isVector) {
+         wport.bits.addr := CalcVecRegAddr(
+            enq.bits.uop.rd_vew,
+            enq.bits.uop.eidx,
+            enq.bits.uop.pdst,
+            numVecPhysRegs)
+      } else {
+         wport.bits.addr := enq.bits.uop.pdst
+      }
       wport.bits.data := enq.bits.data
       wport.bits.mask := enq.bits.mask
       wport.bits.eidx := enq.bits.uop.eidx
@@ -67,8 +76,8 @@ abstract class RegisterFile(
 {
    val io = IO(new BoomBundle()(p)
    {
-      val read_ports = Vec(num_read_ports, new RegisterFileReadPortIO(PREG_SZ, register_width))
-      val write_ports = Vec(num_write_ports, Decoupled(new RegisterFileWritePort(PREG_SZ, register_width))).flip
+      val read_ports = Vec(num_read_ports, new RegisterFileReadPortIO(log2Ceil(num_registers), register_width))
+      val write_ports = Vec(num_write_ports, Decoupled(new RegisterFileWritePort(log2Ceil(num_registers), register_width))).flip
    })
 
    private val rf_cost = (num_read_ports+num_write_ports)*(num_read_ports+2*num_write_ports)
@@ -89,12 +98,12 @@ class RegisterFileBehavorial(
    isVector: Boolean,
    bypassable_array: Seq[Boolean])
    (implicit p: Parameters)
-   extends RegisterFile(num_registers, num_read_ports, num_write_ports, register_width, isVector, bypassable_array)
+      extends RegisterFile(num_registers, num_read_ports, num_write_ports, register_width, isVector, bypassable_array)
+with freechips.rocketchip.rocket.constants.VecCfgConstants
 {
    // --------------------------------------------------------------
 
    val regfile = Mem(num_registers, UInt(width=register_width))
-
 
    // --------------------------------------------------------------
    // Read ports.

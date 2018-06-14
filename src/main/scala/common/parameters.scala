@@ -27,7 +27,8 @@ case class BoomCoreParams(
    numLsuEntries: Int = 8,
    numIntPhysRegisters: Int = 96,
    numFpPhysRegisters: Int = 64,
-   numVecPhysRegisters: Int = 48,
+   numVecPhysRegisters: Int = 64,
+   numVecRegFileRows: Int = 256,
    enableCustomRf: Boolean = false,
    enableCustomRfModel: Boolean = true,
    maxBrCount: Int = 4,
@@ -117,6 +118,8 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
    val numIntPhysRegs   = boomParams.numIntPhysRegisters // size of the integer physical register file
    val numFpPhysRegs    = boomParams.numFpPhysRegisters  // size of the floating point physical register file
    val numVecPhysRegs   = boomParams.numVecPhysRegisters
+
+   val numVecRegFileRows= boomParams.numVecRegFileRows
 
 
    //************************************

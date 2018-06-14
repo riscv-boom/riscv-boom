@@ -76,6 +76,7 @@ class RobIo(
    // tell the LSU that the head of the ROB is a load
    // (some loads can only execute once they are at the head of the ROB).
    val com_load_is_at_rob_head = Bool(OUTPUT)
+   val com_store_is_at_rob_head = Bool(OUTPUT)
 
    // Communicate exceptions to the CSRFile
    val com_xcpt = Valid(new CommitExceptionSignals())
@@ -335,6 +336,7 @@ class Rob(
          {
             val cidx = GetRowIdx(clr_rob_idx)
             rob_bsy(cidx) := false.B
+            
             val next_eidx = UInt(1) + rob_uop(cidx).eidx // todo_vec For now only rate 1 stores
             when (rob_uop(cidx).vec_val && next_eidx < io.vl) {
                rob_bsy(cidx) := true.B
@@ -850,7 +852,8 @@ class Rob(
       io.commit.ld_mask(w) := (io.commit.valids(w) || rob_vec_incr(w)) && rob_head_is_load(w)
    }
 
-   io.com_load_is_at_rob_head := rob_head_is_load(PriorityEncoder(rob_head_vals.asUInt))
+   io.com_load_is_at_rob_head  := rob_head_is_load(PriorityEncoder(rob_head_vals.asUInt))
+   io.com_store_is_at_rob_head := rob_head_is_store(PriorityEncoder(rob_head_vals.asUInt))
 
    //--------------------------------------------------
    // Handle passing out signals to printf in dpath

@@ -18,10 +18,13 @@ import chisel3.util._
 import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.rocket
 import freechips.rocketchip.tile
+import freechips.rocketchip.util._
 import boom.exu.FUConstants._
 import boom.common._
+import boom.util._
 
 class VecPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFPUParameters
+with freechips.rocketchip.rocket.constants.VecCfgConstants
 {
   val vecIssueParams = issueParams.find(_.iqType == IQT_VEC.litValue).get
   val num_ll_ports = 1 // TODO_VEC: add ll wb ports
@@ -56,6 +59,7 @@ class VecPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasF
      val lsu_stq_head_eidx = Input(UInt())
      val lsu_stq_head      = Input(UInt())
      val commit_load_at_rob_head = Input(Bool())
+     val commit_store_at_rob_head = Input(Bool())
   }
 
    //**********************************
@@ -74,7 +78,7 @@ class VecPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasF
    val exe_units = new boom.exu.ExecutionUnits(vec = true)
    val issue_unit = Module(new IssueUnitCollasping(issueParams.find(_.iqType == IQT_VEC.litValue).get, true,
       num_wakeup_ports)) // TODO_VEC: Make this a VectorIssueUnit
-   val vregfile = Module(new RegisterFileBehavorial(numVecPhysRegs,
+   val vregfile = Module(new RegisterFileBehavorial(numVecRegFileRows,
       exe_units.withFilter(_.uses_iss_unit).map(e=>e.num_rf_read_ports).sum,
       exe_units.withFilter(_.uses_iss_unit).map(e=>e.num_rf_write_ports).sum
          + num_ll_ports, // TODO_VEC: Subtract write ports to IRF, FRF
@@ -82,12 +86,14 @@ class VecPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasF
       true,
       exe_units.bypassable_write_port_mask
    ))
+   assert(exe_units.num_total_bypass_ports == 0, "Vector pipeline does not support bypassing")
    val vregister_read = Module(new RegisterRead(
       issue_unit.issue_width,
       exe_units.withFilter(_.uses_iss_unit).map(_.supportedFuncUnits),
       exe_units.withFilter(_.uses_iss_unit).map(_.num_rf_read_ports).sum,
       exe_units.withFilter(_.uses_iss_unit).map(_.num_rf_read_ports),
       exe_units.num_total_bypass_ports,
+      true,
       128))
 
    require (exe_units.withFilter(_.uses_iss_unit).map(x=>x).length == issue_unit.issue_width)
@@ -109,6 +115,7 @@ class VecPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasF
    issue_unit.io.lsu_stq_head_eidx := io.lsu_stq_head_eidx
    issue_unit.io.lsu_stq_head      := io.lsu_stq_head
    issue_unit.io.commit_load_at_rob_head := io.commit_load_at_rob_head
+   issue_unit.io.commit_store_at_rob_head := io.commit_store_at_rob_head
    require (exe_units.num_total_bypass_ports == 0)
 
 
@@ -194,12 +201,14 @@ class VecPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasF
 
       io.tosdq.valid     := vregister_read.io.exe_reqs(w).bits.uop.uopc === uopVST
       io.tosdq.bits.uop  := vregister_read.io.exe_reqs(w).bits.uop
-      val shiftn = Cat(vregister_read.io.exe_reqs(w).bits.uop.eidx <<
+      val vew = vregister_read.io.exe_reqs(w).bits.uop.rs3_vew
+      val eidx = vregister_read.io.exe_reqs(w).bits.uop.eidx
+      val shiftn = Cat((eidx <<
          MuxLookup(vregister_read.io.exe_reqs(w).bits.uop.rs3_vew, VEW_8, Array(
          VEW_8  -> UInt(0),
          VEW_16 -> UInt(1),
          VEW_32 -> UInt(2),
-         VEW_64 -> UInt(3))), UInt(0, width=3))
+         VEW_64 -> UInt(3)))) & "b1111".U, UInt(0, width=3))
 
       io.tosdq.bits.data := vregister_read.io.exe_reqs(w).bits.rs3_data >> shiftn
    }
@@ -216,7 +225,7 @@ class VecPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasF
    ll_wbarb.io.in(0) <> io.ll_wport
    //ll_wbarb.io.in(1).valid := false.B // TODO_vec: fix this
 
-   vregfile.io.write_ports(0) <> WritePort(ll_wbarb.io.out, VPREG_SZ, 128)
+   vregfile.io.write_ports(0) <> WritePort(ll_wbarb.io.out, log2Ceil(numVecRegFileRows), 128, true, numVecPhysRegs)
    assert (ll_wbarb.io.in(0).ready)
    when (io.ll_wport.valid) { assert(io.ll_wport.bits.uop.ctrl.rf_wen && io.ll_wport.bits.uop.dst_rtype === RT_VEC) }
 
@@ -235,7 +244,11 @@ class VecPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasF
          vregfile.io.write_ports(w_cnt).valid :=
          wbresp.valid &&
          wbresp.bits.uop.ctrl.rf_wen
-         vregfile.io.write_ports(w_cnt).bits.addr := wbresp.bits.uop.pdst
+         vregfile.io.write_ports(w_cnt).bits.addr := CalcVecRegAddr(
+            wbresp.bits.uop.rd_vew,
+            wbresp.bits.uop.eidx,
+            wbresp.bits.uop.pdst,
+            numVecPhysRegs)
          vregfile.io.write_ports(w_cnt).bits.data := wbresp.bits.data
          vregfile.io.write_ports(w_cnt).bits.mask := wbresp.bits.mask
          vregfile.io.write_ports(w_cnt).bits.eidx := wbresp.bits.uop.eidx

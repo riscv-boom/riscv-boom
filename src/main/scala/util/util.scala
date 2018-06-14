@@ -12,8 +12,9 @@ package boom.util
 import Chisel._
 
 import freechips.rocketchip.rocket.Instructions._
-import freechips.rocketchip.rocket._
+import freechips.rocketchip.rocket.constants.{ScalarOpConstants, MemoryOpConstants}
 import boom.common._
+import freechips.rocketchip.util._
 import boom.exu.{BrResolutionInfo, ExeUnitResp}
 
 
@@ -442,4 +443,44 @@ abstract trait Packing {
    def expand_float_d(n: Bits) = expand_d(n)
    def expand_float_s(n: Bits) = expand_w(n)
    def expand_float_h(n: Bits) = expand_h(n)
+}
+
+object CalcVecRegAddr
+{
+   def apply(vew: UInt, eidx: UInt, prs: UInt, numVecPhysRegs: Int) : UInt = {
+      val prs_w = log2Ceil(numVecPhysRegs) // TODO_Vec this belongs somewhere in util
+      val shiftn = MuxLookup(vew, VEW_8, Array(
+         VEW_8 -> UInt(4),
+         VEW_16-> UInt(3),
+         VEW_32-> UInt(2),
+         VEW_64-> UInt(1)))
+      val addr = ((eidx >> shiftn) << prs_w) | prs
+      addr
+   }
+}
+
+object CalcEidxUpper
+{
+   def apply(vew: UInt, eidx: UInt) : UInt = {
+      val shiftn = MuxLookup(vew, VEW_8, Array(
+         VEW_8 -> UInt(4),
+         VEW_16-> UInt(3),
+         VEW_32-> UInt(2),
+         VEW_64-> UInt(1)))
+      val shifted = eidx >> shiftn
+      shifted
+   }
+}
+
+object CalcEidxLower
+{
+   def apply(vew: UInt, eidx: UInt) : UInt = {
+      val shiftn = MuxLookup(vew, VEW_8, Array(
+         VEW_8 -> "b1111".U,
+         VEW_16-> "b111".U,
+         VEW_32-> "b11".U,
+         VEW_64-> "b1".U))
+      val shifted = eidx & shiftn
+      shifted
+   }
 }

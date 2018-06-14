@@ -42,6 +42,7 @@ class IssueSlotIO(num_wakeup_ports: Int)(implicit p: Parameters) extends BoomBun
    val lsu_stq_head_eidx   = Input(UInt())
    val lsu_stq_head        = Input(UInt())
    val commit_load_at_rob_head = Input(Bool())
+   val commit_store_at_rob_head = Input(Bool())
    // TODO_vec: All this logic probably needs to be removed when separate vector memory unit is implemented
    // For now this tracks element indices of ops in the lsu ldq, we don't issue ops until the LDQ is ready to receive them
    // This is actually very bad since it is essentially unpipelined vector loads
@@ -193,6 +194,7 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean)(implicit p: Pa
       next_p3 := out_p3
    }
 
+   // TODO_Vec: Support vector chaining
    for (i <- 0 until num_slow_wakeup_ports)
    {
       when (io.wakeup_dsts(i).valid && (io.wakeup_dsts(i).bits.pdst === slotUop.pop1))
@@ -200,7 +202,8 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean)(implicit p: Pa
          out_p1 := true.B
          if (containsVec) {
             when (slotUop.vec_val) {
-               out_p1 := next_eidx <= io.wakeup_dsts(i).bits.eidx
+//               out_p1 := next_eidx <= io.wakeup_dsts(i).bits.eidx
+               out_p1 := io.wakeup_dsts(i).bits.eidx >= io.vl
             }
          }
       }
@@ -209,7 +212,8 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean)(implicit p: Pa
          out_p2 := true.B
          if (containsVec) {
             when (slotUop.vec_val) {
-               out_p2 := next_eidx <= io.wakeup_dsts(i).bits.eidx
+//               out_p2 := next_eidx <= io.wakeup_dsts(i).bits.eidx
+               out_p2 := io.wakeup_dsts(i).bits.eidx >= io.vl
             }
          }
       }
@@ -218,7 +222,8 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean)(implicit p: Pa
          out_p3 := true.B
          if (containsVec) {
             when (slotUop.vec_val) {
-               out_p3 := next_eidx <= io.wakeup_dsts(i).bits.eidx
+//               out_p3 := next_eidx <= io.wakeup_dsts(i).bits.eidx
+               out_p3 := io.wakeup_dsts(i).bits.eidx >= io.vl
             }
          }
       }
@@ -261,7 +266,8 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean)(implicit p: Pa
          } .elsewhen (slotUop.uopc === uopVST) {
             io.request := (slot_p1 && slot_p2 && slot_p3 && !io.kill
                && slotUop.eidx === io.lsu_stq_head_eidx
-               && slotUop.stq_idx === io.lsu_stq_head)
+               && slotUop.stq_idx === io.lsu_stq_head
+               && io.commit_store_at_rob_head)
          }
       }
 

@@ -108,6 +108,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
                                  exe_units.withFilter(_.usesIRF).map(_.num_rf_read_ports).sum,
                                  exe_units.withFilter(_.usesIRF).map(_.num_rf_read_ports),
                                  exe_units.num_total_bypass_ports,
+                                 false,
                                  xLen))
    val dc_shim          = Module(new boom.lsu.DCacheShim())
    val lsu              = Module(new boom.lsu.LoadStoreUnit(decodeWidth))
@@ -589,6 +590,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       iu.io.lsu_stq_head      := lsu.io.stq_head
 
       iu.io.commit_load_at_rob_head := rob.io.com_load_is_at_rob_head
+      iu.io.commit_store_at_rob_head := rob.io.com_store_is_at_rob_head
 
       when (dis_uops(w).uopc === uopSTA && dis_uops(w).lrs2_rtype === RT_FLT) {
          iu.io.dis_uops(w).lrs2_rtype := RT_X
@@ -786,6 +788,10 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    fp_pipeline.io.commit_load_at_rob_head  := rob.io.com_load_is_at_rob_head
    vec_pipeline.io.commit_load_at_rob_head := rob.io.com_load_is_at_rob_head
 
+   fp_pipeline.io.commit_store_at_rob_head  := rob.io.com_store_is_at_rob_head
+   vec_pipeline.io.commit_store_at_rob_head := rob.io.com_store_is_at_rob_head
+
+
    csr.io.hartid := io.hartid
    csr.io.interrupts := io.interrupts
 
@@ -976,7 +982,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
    assert (ll_wbarb.io.in(0).ready) // never backpressure the memory unit.
    ll_wbarb.io.in(1) <> fp_pipeline.io.toint
-   iregfile.io.write_ports(llidx) <> WritePort(ll_wbarb.io.out, IPREG_SZ, xLen)
+   iregfile.io.write_ports(llidx) <> WritePort(ll_wbarb.io.out, IPREG_SZ, xLen, false, numVecPhysRegs)
 
 
 

@@ -73,6 +73,7 @@ class IssueUnitIO(
    val lsu_stq_head_eidx   = Input(UInt())
    val lsu_stq_head        = Input(UInt())
    val commit_load_at_rob_head = Input(Bool())
+   val commit_store_at_rob_head = Input(Bool())
 }
 
 abstract class IssueUnit(
@@ -114,6 +115,7 @@ abstract class IssueUnit(
       issue_slots(i).lsu_stq_head_eidx := io.lsu_stq_head_eidx
       issue_slots(i).lsu_stq_head      := io.lsu_stq_head
       issue_slots(i).commit_load_at_rob_head := io.commit_load_at_rob_head
+      issue_slots(i).commit_store_at_rob_head := io.commit_store_at_rob_head
       issue_slots(i).vl := io.vl
    }
 
@@ -157,8 +159,9 @@ abstract class IssueUnit(
                     else "unknown"
       for (i <- 0 until num_issue_slots)
       {
+
          printf("  " + this.getType + "_issue_slot[%d](%c)(Req:%c):wen=%c P:(%c,%c,%c) OP:(%d,%d,%d) PDST:%d %c [[DASM(%x)]" +
-               " 0x%x: %d] ri:%d bm=%d imm=0x%x\n"
+               " 0x%x: %d] ri:%d bm=%d imm=0x%x eidx=%d\n"
             , UInt(i, log2Up(num_issue_slots))
             , Mux(issue_slots(i).valid, Str("V"), Str("-"))
             , Mux(issue_slots(i).request, Str("R"), Str("-"))
@@ -181,7 +184,8 @@ abstract class IssueUnit(
             , issue_slots(i).uop.rob_idx
             , issue_slots(i).uop.br_mask
             , issue_slots(i).uop.imm_packed
-            )
+            , issue_slots(i).uop.eidx
+         )
       }
       printf("-----------------------------------------------------------------------------------------\n")
    }

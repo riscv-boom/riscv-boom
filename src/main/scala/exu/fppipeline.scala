@@ -57,6 +57,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
       val lsu_stq_head_eidx     = Input(UInt())
       val lsu_stq_head          = Input(UInt())
       val commit_load_at_rob_head = Input(Bool())
+      val commit_store_at_rob_head = Input(Bool())
    }
 
    //**********************************
@@ -82,6 +83,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
                            exe_units.withFilter(_.uses_iss_unit).map(_.num_rf_read_ports).sum,
                            exe_units.withFilter(_.uses_iss_unit).map(_.num_rf_read_ports),
                            exe_units.num_total_bypass_ports,
+                           false,
                            fLen+1))
 
    require (exe_units.withFilter(_.uses_iss_unit).map(x=>x).length == issue_unit.issue_width)
@@ -113,6 +115,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
    issue_unit.io.lsu_stq_head_eidx := io.lsu_stq_head_eidx
    issue_unit.io.lsu_stq_head      := io.lsu_stq_head
    issue_unit.io.commit_load_at_rob_head := io.commit_load_at_rob_head
+   issue_unit.io.commit_store_at_rob_head := io.commit_store_at_rob_head
 
    require (exe_units.num_total_bypass_ports == 0)
 
@@ -231,9 +234,9 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
       // Wakeup signal is sent on cycle S0, write is now delayed until end of S1,
       // but Issue happens on S1 and RegRead doesn't happen until S2 so we're safe.
       // (for regreadlatency >0).
-      fregfile.io.write_ports(0) <> WritePort(RegNext(ll_wbarb.io.out), FPREG_SZ, fLen+1)
+      fregfile.io.write_ports(0) <> WritePort(RegNext(ll_wbarb.io.out), FPREG_SZ, fLen+1, false, numVecPhysRegs)
    } else {
-      fregfile.io.write_ports(0) <> WritePort(ll_wbarb.io.out, FPREG_SZ, fLen+1)
+      fregfile.io.write_ports(0) <> WritePort(ll_wbarb.io.out, FPREG_SZ, fLen+1, false, numVecPhysRegs)
    }
 
    assert (ll_wbarb.io.in(0).ready) // never backpressure the memory unit.
