@@ -110,7 +110,8 @@ class RenameStage(
    val ifreelist = Module(new RenameFreeList(
       pl_width,
       RT_FIX.litValue,
-      numIntPhysRegs))
+      numIntPhysRegs,
+      32))
    val ibusytable = Module(new BusyTable(
       pl_width,
       RT_FIX.litValue,
@@ -123,12 +124,13 @@ class RenameStage(
    val fmaptable = Module(new RenameMapTable(
       pl_width,
       RT_FLT.litValue,
-      32,
+      64,
       numFpPhysRegs))
    val ffreelist = Module(new RenameFreeList(
       pl_width,
       RT_FLT.litValue,
-      numFpPhysRegs))
+      numFpPhysRegs,
+      32 + 32))
    val fbusytable = Module(new BusyTable(
       pl_width,
       RT_FLT.litValue,
@@ -145,7 +147,8 @@ class RenameStage(
    val vfreelist = Module(new RenameFreeList(
       pl_width,
       RT_VEC.litValue,
-      numVecPhysRegs))
+      numVecPhysRegs,
+      32))
    val vbusytable = Module(new BusyTable(
       pl_width,
       RT_VEC.litValue,

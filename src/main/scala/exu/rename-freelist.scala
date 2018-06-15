@@ -249,7 +249,8 @@ class RenameFreeListHelper(
 class RenameFreeList(
    pl_width: Int,           // Pipeline width ("dispatch group size").
    rtype: BigInt,           // What type of register are we in charge of?
-   num_phys_registers: Int) // Number of physical registers.
+   num_phys_registers: Int,
+   num_logical_registers: Int) // Number of physical registers.
    (implicit p: Parameters) extends BoomModule()(p)
 {
    private val preg_sz = log2Up(num_phys_registers)
@@ -326,7 +327,7 @@ class RenameFreeList(
    io.debug := freelist.io.debug
 
    when (io.debug_rob_empty) {
-      assert (PopCount(freelist.io.debug.freelist) >= UInt(num_phys_registers - 32),
+      assert (PopCount(freelist.io.debug.freelist) >= UInt(num_phys_registers - num_logical_registers),
          "[freelist] We're leaking physical registers")
    }
 }

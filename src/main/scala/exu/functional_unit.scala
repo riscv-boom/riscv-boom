@@ -699,8 +699,10 @@ class IntToFPUnit(latency: Int)(implicit p: Parameters) extends PipelinedFunctio
    ifpu.io.in.bits.in1 := io_req.rs1_data
    val out_double = Pipe(io.req.valid, !fp_ctrl.singleOut, intToFpLatency).bits
 
+   val vec_bp = Pipe(io.req.valid, io.req.bits.rs1_data, intToFpLatency).bits
+
 //   io.resp.bits.data              := box(ifpu.io.out.bits.data, !io.resp.bits.uop.fp_single)
-   io.resp.bits.data              := box(ifpu.io.out.bits.data, out_double)
+   io.resp.bits.data              := Mux(io.resp.bits.uop.ldst(5), vec_bp, box(ifpu.io.out.bits.data, out_double))
    io.resp.bits.fflags.valid      := ifpu.io.out.valid
    io.resp.bits.fflags.bits.uop   := io.resp.bits.uop
    io.resp.bits.fflags.bits.flags := ifpu.io.out.bits.exc

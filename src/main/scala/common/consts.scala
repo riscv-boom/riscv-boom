@@ -1,3 +1,4 @@
+
 //******************************************************************************
 // Copyright (c) 2015, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE for license details.
@@ -306,6 +307,10 @@ trait ScalarOpConstants
 
    val uopVLD       = UInt(142, UOPC_SZ)
    val uopVST       = UInt(143, UOPC_SZ)
+
+   val uopVINSS     = UInt(144, UOPC_SZ)
+   val uopVINSV     = UInt(145, UOPC_SZ) // When vinserting into vector reg
+   // Vinsert into scalar reg aliases to FMV
 
    // The Bubble Instruction (Machine generated NOP)
    // Insert (XOR x0,x0,x0) which is different from software compiler

@@ -360,9 +360,14 @@ object VecDecode extends DecodeConstants
    VMSUB     ->List(Y, N, Y, N, uopVMSUB ,  IQT_VEC,FU_POLY,RT_VEC, RT_VEC, RT_VEC, RT_VEC, N, IS_X, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, N, N, N, CSR.N),
    VNMADD    ->List(Y, N, Y, N, uopVNMADD,  IQT_VEC,FU_POLY,RT_VEC, RT_VEC, RT_VEC, RT_VEC, N, IS_X, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, N, N, N, CSR.N),
    VNMSUB    ->List(Y, N, Y, N, uopVNMSUB,  IQT_VEC,FU_POLY,RT_VEC, RT_VEC, RT_VEC, RT_VEC, N, IS_X, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, N, N, N, CSR.N),
-   VLD       ->List(Y, N, Y, N, uopVLD   ,  IQT_MEM,FU_MEM, RT_VEC, RT_FIX, RT_X  , RT_X  , N, IS_I, Y, N, N, N, N, M_XRD, MT_D , UInt(0), N, N, N, N, N, N, N, CSR.N),
-   VST       ->List(Y, N, Y, N, uopVST   ,  IQT_MEM,FU_MEM, RT_X  , RT_FIX, RT_X  , RT_VEC, N, IS_S, N, Y, N, N, N, M_XWR, MT_D , UInt(0), N, N, N, N, N, N, N, CSR.N)
-      //uopVST will go to both vector iq and mem iq. Also for strided stuff 
+   VLD       ->List(Y, N, Y, N, uopVLD   ,  IQT_MEM,FU_MEM ,RT_VEC, RT_FIX, RT_X  , RT_X  , N, IS_I, Y, N, N, N, N, M_XRD, MT_D , UInt(0), N, N, N, N, N, N, N, CSR.N),
+   VST       ->List(Y, N, Y, N, uopVST   ,  IQT_MEM,FU_MEM ,RT_X  , RT_FIX, RT_X  , RT_VEC, N, IS_S, N, Y, N, N, N, M_XWR, MT_D , UInt(0), N, N, N, N, N, N, N, CSR.N),
+   VINSERT   ->List(Y, N, Y, N, uopVINSV ,  IQT_INT,FU_I2F ,RT_VEC, RT_FIX, RT_FIX, RT_X  , N, IS_X, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, N, N, N, CSR.N)
+// TODO_Vec: VINSV needs to go to both int and v iqs
+
+
+
+      //uopVST will go to both vector iq and mem iq. Also for strided stuff
   ) // TODO_VEC Add all other instructions, decide correct uop for polymorphism
 // scalastyle:on
 }
@@ -438,11 +443,7 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule()(p) with freechips.
    uop.uopc       := cs.uopc
    uop.iqtype     := cs.iqtype
    when (cs.fu_code === FU_POLY) {
-      when (io.vecstatus.vereps(uop.inst(RD_MSB, RD_LSB)) === VEREP_FP) {
-         uop.fu_code := FU_VFPU
-      } .otherwise {
-         uop.fu_code := FU_VALU
-      }
+      uop.fu_code := Mux(io.vecstatus.vereps(uop.inst(RD_MSB, RD_LSB)) === VEREP_FP, FU_VFPU, FU_VALU)
    } .otherwise {
       uop.fu_code    := cs.fu_code
    }
@@ -477,12 +478,11 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule()(p) with freechips.
    uop.rs3_verep  := io.vecstatus.vereps(uop.lrs3)
    uop.rd_verep   := io.vecstatus.vereps(uop.ldst)
 
-   uop.rate       := Mux(uop.uopc === uopVLD || uop.uopc === uopVST,
-      UInt(1), // Todo_vec: For now vector loads and stores proceed elementwise
-      MuxLookup(io.vecstatus.vews(uop.ldst), VEW_DISABLE, Array(VEW_8  -> UInt(16),
-         VEW_16 -> UInt(8),// TODO_vec: this needs to lookup when dst is not vec
-         VEW_32 -> UInt(4),
-         VEW_64 -> UInt(2))))
+   uop.rate       := MuxLookup(io.vecstatus.vews(uop.ldst), VEW_DISABLE, Array(
+      VEW_8  -> UInt(16),
+      VEW_16 -> UInt(8),// TODO_vec: this needs to lookup when dst is not vec
+      VEW_32 -> UInt(4),
+      VEW_64 -> UInt(2)))
    uop.eidx       := UInt(0)
 
    uop.fp_val     := cs.fp_val
@@ -490,11 +490,7 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule()(p) with freechips.
    uop.fp_single  := cs.fp_single // TODO use this signal instead of the FPU decode's table signal?
 
    uop.mem_cmd    := cs.mem_cmd
-   uop.mem_typ    := Mux(cs.uopc === uopVLD,
-      MuxLookup(io.vecstatus.vews(uop.ldst), VEW_8, Array(VEW_8 -> MT_B, VEW_16 -> MT_H, VEW_32 -> MT_W, VEW_64 -> MT_D)),
-      Mux(cs.uopc === uopVST,
-         MuxLookup(io.vecstatus.vews(uop.lrs3), VEW_8, Array(VEW_8 -> MT_B, VEW_16 -> MT_H, VEW_32 -> MT_W, VEW_64 -> MT_D)),
-         Mux(!sfence, cs.mem_typ, Cat(uop.lrs2 =/= 0.U, uop.lrs1 =/= 0.U))))
+   uop.mem_typ    := Mux(!sfence, cs.mem_typ, Cat(uop.lrs2 =/= 0.U, uop.lrs1 =/= 0.U))
    uop.is_load    := cs.is_load
    uop.is_store   := cs.is_store
    uop.is_amo     := cs.is_amo
@@ -505,6 +501,24 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule()(p) with freechips.
    uop.flush_on_commit := cs.flush_on_commit || (csr_en && !csr_ren && io.csr_decode.write_flush)
 
    uop.bypassable   := cs.bypassable
+
+   //-------------------------------------------------------------
+   // Special cases for polymorphic vector instructions
+   when (cs.uopc === uopVLD) {
+      uop.rate       := UInt(1)
+      uop.mem_typ    := MuxLookup(io.vecstatus.vews(uop.ldst), VEW_8, Array(VEW_8 -> MT_B, VEW_16 -> MT_H, VEW_32 -> MT_W, VEW_64 -> MT_D))
+   } .elsewhen (cs.uopc === uopVST) {
+      uop.rate       := UInt(1)
+      uop.mem_typ    := MuxLookup(io.vecstatus.vews(uop.lrs3), VEW_8, Array(VEW_8 -> MT_B, VEW_16 -> MT_H, VEW_32 -> MT_W, VEW_64 -> MT_D))
+   } .elsewhen (cs.uopc === uopVINSV) {
+      assert(io.vecstatus.vshapes(uop.inst(RD_MSB, RD_LSB)) === VSHAPE_SCALAR, "For now vinsert must be into scalar")
+      uop.fp_val     := true.B
+      uop.vec_val    := false.B
+      uop.uopc       := Mux(io.vecstatus.vews(uop.inst(RD_MSB,RD_LSB)) === VEW_32, uopFMV_S_X, uopFMV_D_X)
+      uop.dst_rtype  := RT_FLT
+      uop.lrs2_rtype := RT_X
+      uop.ldst       := "b100000".U | uop.inst(RD_MSB, RD_LSB)
+   }
 
    //-------------------------------------------------------------
    // immediates

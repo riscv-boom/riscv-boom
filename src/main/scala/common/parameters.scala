@@ -119,6 +119,8 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
    val numFpPhysRegs    = boomParams.numFpPhysRegisters  // size of the floating point physical register file
    val numVecPhysRegs   = boomParams.numVecPhysRegisters
 
+   require (numFpPhysRegs > 64)
+
    val numVecRegFileRows= boomParams.numVecRegFileRows
 
 
@@ -233,7 +235,7 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
    val NUM_ROB_ROWS      = NUM_ROB_ENTRIES/decodeWidth
    val ROB_ADDR_SZ       = log2Up(NUM_ROB_ENTRIES)
    // the f-registers are mapped into the space above the x-registers
-   val LOGICAL_REG_COUNT = if (usingFPU) 64 else 32
+   val LOGICAL_REG_COUNT = 64 //Need this to be 64 bc vector scala regs are going to occupy fp regfile
    val LREG_SZ           = log2Up(LOGICAL_REG_COUNT)
    val IPREG_SZ          = log2Up(numIntPhysRegs)
    val FPREG_SZ          = log2Up(numFpPhysRegs)
@@ -247,7 +249,7 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
    val BROB_ADDR_SZ      = log2Up(NUM_BROB_ENTRIES)
 
    require (numIntPhysRegs >= (32 + decodeWidth))
-   require (numFpPhysRegs >= (32 + decodeWidth))
+   require (numFpPhysRegs >= (64 + decodeWidth))
    require (MAX_BR_COUNT >=2)
    require (NUM_ROB_ROWS % 2 == 0)
    require (NUM_ROB_ENTRIES % decodeWidth == 0)
