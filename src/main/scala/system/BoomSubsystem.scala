@@ -36,7 +36,7 @@ trait HasBoomTiles extends HasTiles
       .suggestName(tp.name)
 
     connectMasterPortsToSBus(boomCore, crossing)
-    connectSlavePortsToPBus(boomCore, crossing)
+    connectSlavePortsToCBus(boomCore, crossing)
     connectInterrupts(boomCore, Some(debug), clintOpt, Some(plic))
 
     boomCore
