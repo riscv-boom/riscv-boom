@@ -51,24 +51,15 @@ class UOPCodeFPUDecoder extends Module
       BitPat(uopFMV_S_X)  -> List(X,X,N,N,N, X,X,Y,N,Y,N,N, N,N,N,N),
       BitPat(uopFMV_X_S)  -> List(X,X,Y,N,N, N,X,N,Y,N,Y,N, N,N,N,N),
 
-      BitPat(uopFCVT_S_W) -> List(X,X,N,N,N, X,X,Y,Y,Y,N,N, N,N,N,Y),
-      BitPat(uopFCVT_S_WU)-> List(X,X,N,N,N, X,X,Y,Y,Y,N,N, N,N,N,Y),
-      BitPat(uopFCVT_S_L) -> List(X,X,N,N,N, X,X,Y,Y,Y,N,N, N,N,N,Y),
-      BitPat(uopFCVT_S_LU)-> List(X,X,N,N,N, X,X,Y,Y,Y,N,N, N,N,N,Y),
+      BitPat(uopFCVT_S_X) -> List(X,X,N,N,N, X,X,Y,Y,Y,N,N, N,N,N,Y),
 
-      BitPat(uopFCVT_W_S) -> List(X,X,Y,N,N, N,X,Y,Y,N,Y,N, N,N,N,Y),
-      BitPat(uopFCVT_WU_S)-> List(X,X,Y,N,N, N,X,Y,Y,N,Y,N, N,N,N,Y),
-      BitPat(uopFCVT_L_S) -> List(X,X,Y,N,N, N,X,Y,Y,N,Y,N, N,N,N,Y),
-      BitPat(uopFCVT_LU_S)-> List(X,X,Y,N,N, N,X,Y,Y,N,Y,N, N,N,N,Y),
+      BitPat(uopFCVT_X_S) -> List(X,X,Y,N,N, N,X,Y,Y,N,Y,N, N,N,N,Y),
 
-      BitPat(uopFEQ_S)    -> List(X,X,Y,Y,N, N,N,Y,Y,N,Y,N, N,N,N,Y),
-      BitPat(uopFLT_S)    -> List(X,X,Y,Y,N, N,N,Y,Y,N,Y,N, N,N,N,Y),
-      BitPat(uopFLE_S)    -> List(X,X,Y,Y,N, N,N,Y,Y,N,Y,N, N,N,N,Y),
+      BitPat(uopCMPR_S)   -> List(X,X,Y,Y,N, N,N,Y,Y,N,Y,N, N,N,N,Y),
 
       BitPat(uopFSGNJ_S)  -> List(X,X,Y,Y,N, N,N,Y,Y,N,N,Y, N,N,N,N),
 
-      BitPat(uopFMIN_S)   -> List(X,X,Y,Y,N, N,N,Y,Y,N,N,Y, N,N,N,Y),
-      BitPat(uopFMAX_S)   -> List(X,X,Y,Y,N, N,N,Y,Y,N,N,Y, N,N,N,Y),
+      BitPat(uopFMINMAX_S)-> List(X,X,Y,Y,N, N,N,Y,Y,N,N,Y, N,N,N,Y),
 
       BitPat(uopFADD_S)   -> List(X,X,Y,Y,N, N,Y,Y,Y,N,N,N, Y,N,N,Y),
       BitPat(uopFSUB_S)   -> List(X,X,Y,Y,N, N,Y,Y,Y,N,N,N, Y,N,N,Y),
@@ -87,24 +78,15 @@ class UOPCodeFPUDecoder extends Module
       BitPat(uopFCVT_S_D) -> List(X,X,Y,N,N, N,X,N,Y,N,N,Y, N,N,N,Y),
       BitPat(uopFCVT_D_S) -> List(X,X,Y,N,N, N,X,Y,N,N,N,Y, N,N,N,Y),
 
-      BitPat(uopFCVT_D_W) -> List(X,X,N,N,N, X,X,N,N,Y,N,N, N,N,N,Y),
-      BitPat(uopFCVT_D_WU)-> List(X,X,N,N,N, X,X,N,N,Y,N,N, N,N,N,Y),
-      BitPat(uopFCVT_D_L) -> List(X,X,N,N,N, X,X,N,N,Y,N,N, N,N,N,Y),
-      BitPat(uopFCVT_D_LU)-> List(X,X,N,N,N, X,X,N,N,Y,N,N, N,N,N,Y),
+      BitPat(uopFCVT_D_X) -> List(X,X,N,N,N, X,X,N,N,Y,N,N, N,N,N,Y),
 
-      BitPat(uopFCVT_W_D) -> List(X,X,Y,N,N, N,X,N,N,N,Y,N, N,N,N,Y),
-      BitPat(uopFCVT_WU_D)-> List(X,X,Y,N,N, N,X,N,N,N,Y,N, N,N,N,Y),
-      BitPat(uopFCVT_L_D) -> List(X,X,Y,N,N, N,X,N,N,N,Y,N, N,N,N,Y),
-      BitPat(uopFCVT_LU_D)-> List(X,X,Y,N,N, N,X,N,N,N,Y,N, N,N,N,Y),
+      BitPat(uopFCVT_X_D) -> List(X,X,Y,N,N, N,X,N,N,N,Y,N, N,N,N,Y),
 
-      BitPat(uopFEQ_D)    -> List(X,X,Y,Y,N, N,N,N,N,N,Y,N, N,N,N,Y),
-      BitPat(uopFLT_D)    -> List(X,X,Y,Y,N, N,N,N,N,N,Y,N, N,N,N,Y),
-      BitPat(uopFLE_D)    -> List(X,X,Y,Y,N, N,N,N,N,N,Y,N, N,N,N,Y),
+      BitPat(uopCMPR_D)   -> List(X,X,Y,Y,N, N,N,N,N,N,Y,N, N,N,N,Y),
 
       BitPat(uopFSGNJ_D)  -> List(X,X,Y,Y,N, N,N,N,N,N,N,Y, N,N,N,N),
 
-      BitPat(uopFMIN_D)   -> List(X,X,Y,Y,N, N,N,N,N,N,N,Y, N,N,N,Y),
-      BitPat(uopFMAX_D)   -> List(X,X,Y,Y,N, N,N,N,N,N,N,Y, N,N,N,Y),
+      BitPat(uopFMINMAX_D)-> List(X,X,Y,Y,N, N,N,N,N,N,N,Y, N,N,N,Y),
 
       BitPat(uopFADD_D)   -> List(X,X,Y,Y,N, N,Y,N,N,N,N,N, Y,N,N,Y),
       BitPat(uopFSUB_D)   -> List(X,X,Y,Y,N, N,Y,N,N,N,N,N, Y,N,N,Y),
