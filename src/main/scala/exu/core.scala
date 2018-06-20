@@ -364,7 +364,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       // TODO tailor this to only care if a given instruction uses a resource?
       val stall_me = (dec_valids(w) &&
                         (  !(rename_stage.io.inst_can_proceed(w))
-                        || (dec_valids(w) && dec_uops(w).is_unique &&
+                        || (dec_uops(w).is_unique &&
                            (!(rob.io.empty) || !lsu.io.lsu_fencei_rdy || prev_insts_in_bundle_valid))
                         || !rob.io.ready
                         || lsu.io.laq_full
@@ -373,7 +373,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
                         || br_unit.brinfo.mispredict
                         || rob.io.flush.valid
                         || dec_stall_next_inst
-                        || (dec_valids(w) && dec_uops(w).is_fencei && !lsu.io.lsu_fencei_rdy)
+                        || (dec_uops(w).is_fencei && !lsu.io.lsu_fencei_rdy)
                         )) ||
                      dec_last_inst_was_stalled
 
