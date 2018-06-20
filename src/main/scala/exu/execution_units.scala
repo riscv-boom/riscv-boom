@@ -118,7 +118,9 @@ class ExecutionUnits(fpu: Boolean = false, vec: Boolean = false)(implicit val p:
       for (w <- 0 until fp_width) {
          exe_units += Module(new FPUExeUnit(has_fpu = true,
                                             has_fdiv = usingFDivSqrt && (w==0),
-                                            has_fpiu = (w==0)))
+                                            has_fpiu = (w==0),
+                                            has_fpvu = (w==0)
+         ))
       }
       exe_units += Module(new IntToFPExeUnit())
    } else {

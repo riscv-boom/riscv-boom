@@ -202,8 +202,14 @@ with Packing
             && io.bypass.uop(b).dst_rtype === RT_FIX && lrs2_rtype === RT_FIX && (pop2 =/= UInt(0)), io.bypass.data(b)))
       }
 
-      if (num_read_ports > 0) bypassed_rs1_data(w) := MuxCase(rrd_rs1_data(w), rs1_cases)
-      if (num_read_ports > 1) bypassed_rs2_data(w) := MuxCase(rrd_rs2_data(w), rs2_cases)
+      if (isVector) {
+         bypassed_rs1_data(w) := rrd_rs1_data(w)
+         bypassed_rs2_data(w) := rrd_rs2_data(w) // Vector reads not bypassed
+
+      } else {
+         if (num_read_ports > 0) bypassed_rs1_data(w) := MuxCase(rrd_rs1_data(w), rs1_cases)
+         if (num_read_ports > 1) bypassed_rs2_data(w) := MuxCase(rrd_rs2_data(w), rs2_cases)
+      }
    }
 
 
@@ -232,8 +238,29 @@ with Packing
 
       io.exe_reqs(w).valid    := exe_reg_valids(w)
       io.exe_reqs(w).bits.uop := exe_reg_uops(w)
+
       if (num_read_ports > 0) io.exe_reqs(w).bits.rs1_data := exe_reg_rs1_data(w)
       if (num_read_ports > 1) io.exe_reqs(w).bits.rs2_data := exe_reg_rs2_data(w)
       if (num_read_ports > 2) io.exe_reqs(w).bits.rs3_data := exe_reg_rs3_data(w)
+
+      if (isVector) {
+         def fill_case(n: UInt, s: UInt): UInt = {
+            MuxLookup(s, VEW_8, Array(
+               VEW_8  -> fill_b(n),
+               VEW_16 -> fill_h(n),
+               VEW_32 -> fill_w(n),
+               VEW_64 -> fill_d(n)))
+         }
+         when (exe_reg_uops(w).lrs1_rtype === RT_FLT) {
+            io.exe_reqs(w).bits.rs1_data := fill_case(exe_reg_uops(w).rs1_data, exe_reg_uops(w).rs1_vew)
+         }
+         when (exe_reg_uops(w).lrs2_rtype === RT_FLT) {
+            io.exe_reqs(w).bits.rs2_data := fill_case(exe_reg_uops(w).rs2_data, exe_reg_uops(w).rs3_vew)
+         }
+         when (exe_reg_uops(w).lrs3_rtype === RT_FLT) {
+            io.exe_reqs(w).bits.rs3_data := fill_case(exe_reg_uops(w).rs2_data, exe_reg_uops(w).rs3_vew)
+         }
+
+      }
    }
 }

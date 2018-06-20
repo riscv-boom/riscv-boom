@@ -74,6 +74,10 @@ class IssueUnitIO(
    val lsu_stq_head        = Input(UInt())
    val commit_load_at_rob_head = Input(Bool())
    val commit_store_at_rob_head = Input(Bool())
+
+   val fromfp_valid = Input(Bool())
+   val fromfp_paddr = Input(UInt(width=PREG_SZ.W))
+   val fromfp_data  = Input(UInt(width=xLen.W))
 }
 
 abstract class IssueUnit(
@@ -81,6 +85,7 @@ abstract class IssueUnit(
    val issue_width: Int,
    containsVec: Boolean,
    num_wakeup_ports: Int,
+   isVec:Boolean,
    val iqType: BigInt)
    (implicit p: Parameters)
    extends BoomModule()(p)
@@ -107,7 +112,7 @@ abstract class IssueUnit(
    //-------------------------------------------------------------
    // Issue Table
 
-   val slots = for (i <- 0 until num_issue_slots) yield { val slot = Module(new IssueSlot(num_wakeup_ports, containsVec)); slot; }
+   val slots = for (i <- 0 until num_issue_slots) yield { val slot = Module(new IssueSlot(num_wakeup_ports, containsVec, isVec)); slot; }
    val issue_slots = VecInit(slots.map(_.io))
    for (i <- 0 until num_issue_slots) yield {
       issue_slots(i).lsu_ldq_head_eidx := io.lsu_ldq_head_eidx
@@ -117,6 +122,15 @@ abstract class IssueUnit(
       issue_slots(i).commit_load_at_rob_head := io.commit_load_at_rob_head
       issue_slots(i).commit_store_at_rob_head := io.commit_store_at_rob_head
       issue_slots(i).vl := io.vl
+      if (isVec) {
+         issue_slots(i).fromfp_valid := io.fromfp_valid
+         issue_slots(i).fromfp_paddr := io.fromfp_paddr
+         issue_slots(i).fromfp_data  := io.fromfp_data
+      } else {
+         issue_slots(i).fromfp_valid := Bool(false)
+         issue_slots(i).fromfp_paddr := DontCare
+         issue_slots(i).fromfp_data  := DontCare
+      }
    }
 
    io.event_empty := !(issue_slots.map(s => s.valid).reduce(_|_))
@@ -221,7 +235,7 @@ class IssueUnits(num_wakeup_ports: Int)(implicit val p: Parameters)
    require (enableAgePriorityIssue) // unordered is currently unsupported.
 
 //      issue_Units =issueConfigs colect {if iqType=....)
-   iss_units += Module(new IssueUnitCollasping(issueParams.find(_.iqType == IQT_MEM.litValue).get, true, num_wakeup_ports))
-   iss_units += Module(new IssueUnitCollasping(issueParams.find(_.iqType == IQT_INT.litValue).get, false, num_wakeup_ports))
+   iss_units += Module(new IssueUnitCollasping(issueParams.find(_.iqType == IQT_MEM.litValue).get, true, false, num_wakeup_ports))
+   iss_units += Module(new IssueUnitCollasping(issueParams.find(_.iqType == IQT_INT.litValue).get, false, false, num_wakeup_ports))
 }
 

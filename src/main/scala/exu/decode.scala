@@ -343,27 +343,28 @@ object VecDecode extends DecodeConstants
 {
 // scalastyle:off
   val table: Array[(BitPat, List[BitPat])] = Array(
-             //                                                                             frs3_en                               wakeup_delay
-             //     is val inst?                                                            |  imm sel                            |      bypassable (aka, known/fixed latency)
-             //     |  is fp inst?                                                          |  |     is_load                      |        |  br/jmp
-             //     |  |  is vec inst?                             rs1 regtype              |  |     |  is_store                  |        |  |  is jal
-             //     |  |  |  is single-pr                           |       rs2 type        |  |     |  |  is_amo                 |        |  |  |  allocate_brtag
-             //     |  |  |  |  micro-code          func unit       |       |       rs3 type|  |     |  |  |  is_fence            |        |  |  |  |
-             //     |  |  |  |  |                   |               |       |       |       |  |     |  |  |  |  is_fencei        |        |  |  |  |  is breakpoint or ecall
-             //     |  |  |  |  |                   |       dst     |       |       |       |  |     |  |  |  |  |  mem    mem    |        |  |  |  |  |  is unique? (clear pipeline for it)
-             //     |  |  |  |  |                   |       regtype |       |       |       |  |     |  |  |  |  |  cmd    msk    |        |  |  |  |  |  |  flush on commit
-             //     |  |  |  |  |                   |       |       |       |       |       |  |     |  |  |  |  |  |      |      |        |  |  |  |  |  |  |  csr cmd
-   VADD      ->List(Y, N, Y, N, uopVADD  ,  IQT_VEC,FU_POLY,RT_VEC, RT_VEC, RT_VEC, RT_X  , N, IS_X, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, N, N, N, CSR.N),
-   VSUB      ->List(Y, N, Y, N, uopVSUB  ,  IQT_VEC,FU_POLY,RT_VEC, RT_VEC, RT_VEC, RT_X  , N, IS_X, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, N, N, N, CSR.N),
-   VMUL      ->List(Y, N, Y, N, uopVMUL  ,  IQT_VEC,FU_POLY,RT_VEC, RT_VEC, RT_VEC, RT_X  , N, IS_X, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, N, N, N, CSR.N),
-   VMADD     ->List(Y, N, Y, N, uopVMADD ,  IQT_VEC,FU_POLY,RT_VEC, RT_VEC, RT_VEC, RT_VEC, N, IS_X, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, N, N, N, CSR.N),
-   VMSUB     ->List(Y, N, Y, N, uopVMSUB ,  IQT_VEC,FU_POLY,RT_VEC, RT_VEC, RT_VEC, RT_VEC, N, IS_X, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, N, N, N, CSR.N),
-   VNMADD    ->List(Y, N, Y, N, uopVNMADD,  IQT_VEC,FU_POLY,RT_VEC, RT_VEC, RT_VEC, RT_VEC, N, IS_X, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, N, N, N, CSR.N),
-   VNMSUB    ->List(Y, N, Y, N, uopVNMSUB,  IQT_VEC,FU_POLY,RT_VEC, RT_VEC, RT_VEC, RT_VEC, N, IS_X, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, N, N, N, CSR.N),
-   VLD       ->List(Y, N, Y, N, uopVLD   ,  IQT_MEM,FU_MEM ,RT_VEC, RT_FIX, RT_X  , RT_X  , N, IS_I, Y, N, N, N, N, M_XRD, MT_D , UInt(0), N, N, N, N, N, N, N, CSR.N),
-   VST       ->List(Y, N, Y, N, uopVST   ,  IQT_MEM,FU_MEM ,RT_X  , RT_FIX, RT_X  , RT_VEC, N, IS_S, N, Y, N, N, N, M_XWR, MT_D , UInt(0), N, N, N, N, N, N, N, CSR.N),
-   VINSERT   ->List(Y, N, Y, N, uopVINSV ,  IQT_INT,FU_I2F ,RT_VEC, RT_FIX, RT_FIX, RT_X  , N, IS_X, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, N, N, N, CSR.N)
-// TODO_Vec: VINSV needs to go to both int and v iqs
+             //                                                                                 frs3_en                               wakeup_delay
+             //     is val inst?                                                                |  imm sel                            |      bypassable (aka, known/fixed latency)
+             //     |  is fp inst?                                                              |  |     is_load                      |        |  br/jmp
+             //     |  |  is vec inst?                              rs1 regtype                 |  |     |  is_store                  |        |  |  is jal
+             //     |  |  |  is single-pr                            |        rs2 type          |  |     |  |  is_amo                 |        |  |  |  allocate_brtag
+             //     |  |  |  |  micro-code          func unit        |        |        rs3 type |  |     |  |  |  is_fence            |        |  |  |  |
+             //     |  |  |  |  |                   |                |        |        |        |  |     |  |  |  |  is_fencei        |        |  |  |  |  is breakpoint or ecall
+             //     |  |  |  |  |                   |       dst      |        |        |        |  |     |  |  |  |  |  mem    mem    |        |  |  |  |  |  is unique? (clear pipeline for it)
+             //     |  |  |  |  |                   |       regtype  |        |        |        |  |     |  |  |  |  |  cmd    msk    |        |  |  |  |  |  |  flush on commit
+             //     |  |  |  |  |                   |       |        |        |        |        |  |     |  |  |  |  |  |      |      |        |  |  |  |  |  |  |  csr cmd
+   VADD      ->List(Y, N, Y, N, uopVADD  ,  IQT_VEC,FU_POLY,RT_VEC , RT_POLY, RT_POLY, RT_X   , N, IS_X, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, N, N, N, CSR.N),
+   VSUB      ->List(Y, N, Y, N, uopVSUB  ,  IQT_VEC,FU_POLY,RT_VEC , RT_POLY, RT_POLY, RT_X   , N, IS_X, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, N, N, N, CSR.N),
+   VMUL      ->List(Y, N, Y, N, uopVMUL  ,  IQT_VEC,FU_POLY,RT_VEC , RT_POLY, RT_POLY, RT_X   , N, IS_X, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, N, N, N, CSR.N),
+   VMADD     ->List(Y, N, Y, N, uopVMADD ,  IQT_VEC,FU_POLY,RT_VEC , RT_POLY, RT_POLY, RT_POLY, N, IS_X, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, N, N, N, CSR.N),
+   VMSUB     ->List(Y, N, Y, N, uopVMSUB ,  IQT_VEC,FU_POLY,RT_VEC , RT_POLY, RT_POLY, RT_POLY, N, IS_X, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, N, N, N, CSR.N),
+   VNMADD    ->List(Y, N, Y, N, uopVNMADD,  IQT_VEC,FU_POLY,RT_VEC , RT_POLY, RT_POLY, RT_POLY, N, IS_X, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, N, N, N, CSR.N),
+   VNMSUB    ->List(Y, N, Y, N, uopVNMSUB,  IQT_VEC,FU_POLY,RT_VEC , RT_POLY, RT_POLY, RT_POLY, N, IS_X, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, N, N, N, CSR.N),
+   VLD       ->List(Y, N, Y, N, uopVLD   ,  IQT_MEM,FU_MEM ,RT_VEC , RT_FIX , RT_X   , RT_X   , N, IS_I, Y, N, N, N, N, M_XRD, MT_D , UInt(0), N, N, N, N, N, N, N, CSR.N),
+   VST       ->List(Y, N, Y, N, uopVST   ,  IQT_MEM,FU_MEM ,RT_X   , RT_FIX , RT_X   , RT_VEC , N, IS_S, N, Y, N, N, N, M_XWR, MT_D , UInt(0), N, N, N, N, N, N, N, CSR.N),
+   VINSERT   ->List(Y, N, Y, N, uopVINSV ,  IQT_INT,FU_I2F ,RT_POLY, RT_FIX , RT_FIX , RT_X   , N, IS_X, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, N, N, N, CSR.N)
+      // TODO_Vec: VINSV needs to go to both int and v iqs
+      //           This should default to FU_I2V
 
 
 
@@ -448,37 +449,51 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule()(p) with freechips.
       uop.fu_code    := cs.fu_code
    }
 
-   // x-registers placed in 0-31, f-registers placed in 32-63.
-   // This allows us to straight-up compare register specifiers and not need to
-   // verify the rtypes (e.g., bypassing in rename).
-   uop.ldst       := uop.inst(RD_MSB,RD_LSB)
-   uop.lrs1       := uop.inst(RS1_MSB,RS1_LSB)
-   uop.lrs2       := uop.inst(RS2_MSB,RS2_LSB)
-   uop.lrs3       := uop.inst(RS3_MSB,RS3_LSB)
+   val cs_rd  = uop.inst(RD_MSB , RD_LSB)
+   val cs_rs1 = uop.inst(RS1_MSB, RS1_LSB)
+   val cs_rs2 = uop.inst(RS2_MSB, RS2_LSB)
+   val cs_rs3 = uop.inst(RS3_MSB, RS3_LSB)
 
-   uop.ldst_val   := cs.dst_type =/= RT_X && !(uop.ldst === UInt(0) && uop.dst_rtype === RT_FIX)
-   uop.dst_rtype  := cs.dst_type
-   uop.lrs1_rtype := cs.rs1_type
-   uop.lrs2_rtype := cs.rs2_type
-   uop.lrs3_rtype := cs.rs3_type
+   List(
+      (cs_rd , cs.dst_type, uop.ldst, uop.dst_rtype),
+      (cs_rs1, cs.rs1_type, uop.lrs1, uop.lrs1_rtype),
+      (cs_rs2, cs.rs2_type, uop.lrs2, uop.lrs2_rtype),
+      (cs_rs3, cs.rs3_type, uop.lrs3, uop.lrs3_rtype)) map {
+      case (cs_reg, cs_rtype, uop_reg, uop_regtype) => {
+         uop_regtype := cs_rtype
+         uop_reg := cs_reg
+         when (cs_rtype === RT_POLY) {
+            when (io.vecstatus.vshapes(cs_reg) === VSHAPE_SCALAR) {
+               uop_regtype := RT_FLT
+               uop_reg := "b100000".U | cs_reg
+            } .otherwise {
+               uop_regtype := RT_VEC
+            }
+         }
+      }
+   }
+
    uop.frs3_en    := cs.rs3_type =/= RT_X
 
-   uop.rs1_vew    := io.vecstatus.vews(uop.lrs1)
-   uop.rs2_vew    := io.vecstatus.vews(uop.lrs2)
-   uop.rs3_vew    := io.vecstatus.vews(uop.lrs3)
-   uop.rd_vew     := io.vecstatus.vews(uop.ldst)
+   uop.ldst_val   := cs.dst_type =/= RT_X && !(cs_rd === UInt(0) && uop.dst_rtype === RT_FIX)
 
-   uop.rs1_vshape := io.vecstatus.vshapes(uop.lrs1)
-   uop.rs2_vshape := io.vecstatus.vshapes(uop.lrs2)
-   uop.rs3_vshape := io.vecstatus.vshapes(uop.lrs3)
-   uop.rd_vshape  := io.vecstatus.vshapes(uop.ldst)
 
-   uop.rs1_verep  := io.vecstatus.vereps(uop.lrs1)
-   uop.rs2_verep  := io.vecstatus.vereps(uop.lrs2)
-   uop.rs3_verep  := io.vecstatus.vereps(uop.lrs3)
-   uop.rd_verep   := io.vecstatus.vereps(uop.ldst)
+   uop.rs1_vew    := io.vecstatus.vews(cs_rs1)
+   uop.rs2_vew    := io.vecstatus.vews(cs_rs2)
+   uop.rs3_vew    := io.vecstatus.vews(cs_rs3)
+   uop.rd_vew     := io.vecstatus.vews(cs_rd)
 
-   uop.rate       := MuxLookup(io.vecstatus.vews(uop.ldst), VEW_DISABLE, Array(
+   uop.rs1_vshape := io.vecstatus.vshapes(cs_rs1)
+   uop.rs2_vshape := io.vecstatus.vshapes(cs_rs2)
+   uop.rs3_vshape := io.vecstatus.vshapes(cs_rs3)
+   uop.rd_vshape  := io.vecstatus.vshapes(cs_rd)
+
+   uop.rs1_verep  := io.vecstatus.vereps(cs_rs1)
+   uop.rs2_verep  := io.vecstatus.vereps(cs_rs2)
+   uop.rs3_verep  := io.vecstatus.vereps(cs_rs3)
+   uop.rd_verep   := io.vecstatus.vereps(cs_rd)
+
+   uop.rate       := MuxLookup(io.vecstatus.vews(cs_rd), VEW_DISABLE, Array(
       VEW_8  -> UInt(16),
       VEW_16 -> UInt(8),// TODO_vec: this needs to lookup when dst is not vec
       VEW_32 -> UInt(4),
@@ -490,7 +505,7 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule()(p) with freechips.
    uop.fp_single  := cs.fp_single // TODO use this signal instead of the FPU decode's table signal?
 
    uop.mem_cmd    := cs.mem_cmd
-   uop.mem_typ    := Mux(!sfence, cs.mem_typ, Cat(uop.lrs2 =/= 0.U, uop.lrs1 =/= 0.U))
+   uop.mem_typ    := Mux(!sfence, cs.mem_typ, Cat(cs_rs2 =/= 0.U, cs_rs1 =/= 0.U))
    uop.is_load    := cs.is_load
    uop.is_store   := cs.is_store
    uop.is_amo     := cs.is_amo
@@ -506,18 +521,19 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule()(p) with freechips.
    // Special cases for polymorphic vector instructions
    when (cs.uopc === uopVLD) {
       uop.rate       := UInt(1)
-      uop.mem_typ    := MuxLookup(io.vecstatus.vews(uop.ldst), VEW_8, Array(VEW_8 -> MT_B, VEW_16 -> MT_H, VEW_32 -> MT_W, VEW_64 -> MT_D))
+      uop.mem_typ    := MuxLookup(io.vecstatus.vews(cs_rd), VEW_8, Array(VEW_8 -> MT_B, VEW_16 -> MT_H, VEW_32 -> MT_W, VEW_64 -> MT_D))
    } .elsewhen (cs.uopc === uopVST) {
       uop.rate       := UInt(1)
-      uop.mem_typ    := MuxLookup(io.vecstatus.vews(uop.lrs3), VEW_8, Array(VEW_8 -> MT_B, VEW_16 -> MT_H, VEW_32 -> MT_W, VEW_64 -> MT_D))
-   } .elsewhen (cs.uopc === uopVINSV) {
-      assert(io.vecstatus.vshapes(uop.inst(RD_MSB, RD_LSB)) === VSHAPE_SCALAR, "For now vinsert must be into scalar")
+      uop.mem_typ    := MuxLookup(io.vecstatus.vews(cs_rs3), VEW_8, Array(VEW_8 -> MT_B, VEW_16 -> MT_H, VEW_32 -> MT_W, VEW_64 -> MT_D))
+   } .elsewhen (cs.uopc === uopVINSV && uop.dst_rtype === RT_FLT) {
+      //assert(io.vecstatus.vshapes(cs_rd) === VSHAPE_SCALAR, "For now vinsert must be into scalar")
       uop.fp_val     := true.B
       uop.vec_val    := false.B
-      uop.uopc       := Mux(io.vecstatus.vews(uop.inst(RD_MSB,RD_LSB)) === VEW_32, uopFMV_S_X, uopFMV_D_X)
-      uop.dst_rtype  := RT_FLT
+      uop.uopc       := Mux(io.vecstatus.vews(cs_rd) === VEW_32, uopFMV_S_X, uopFMV_D_X)
+
+//      uop.dst_rtype  := RT_FLT
       uop.lrs2_rtype := RT_X
-      uop.ldst       := "b100000".U | uop.inst(RD_MSB, RD_LSB)
+//      uop.ldst       := "b100000".U | cs_rd
    }
 
    //-------------------------------------------------------------

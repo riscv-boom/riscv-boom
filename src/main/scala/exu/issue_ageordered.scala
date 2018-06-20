@@ -25,9 +25,10 @@ import boom.common._
 class IssueUnitCollasping(
    params: IssueParams,
    containsVec: Boolean,
+   isVec: Boolean,
    num_wakeup_ports: Int)
    (implicit p: Parameters)
-   extends IssueUnit(params.numEntries, params.issueWidth, containsVec, num_wakeup_ports, params.iqType)
+   extends IssueUnit(params.numEntries, params.issueWidth, containsVec, num_wakeup_ports, isVec, params.iqType)
 {
    //-------------------------------------------------------------
    // Figure out how much to shift entries by

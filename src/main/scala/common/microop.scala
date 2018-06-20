@@ -103,6 +103,8 @@ class MicroOp(implicit p: Parameters) extends BoomBundle()(p)
    val lrs3_rtype       = UInt(width=RT_SZ)
    val frs3_en          = Bool()
 
+
+   // TODO vec: These shouldn't be the full vcfg specifiers
    val rs1_vew          = UInt(width=VEW_SZ)
    val rs2_vew          = UInt(width=VEW_SZ)
    val rs3_vew          = UInt(width=VEW_SZ)
@@ -120,6 +122,13 @@ class MicroOp(implicit p: Parameters) extends BoomBundle()(p)
 
    val rate             = UInt(width=VRATE_SZ)
    val eidx             = UInt(width=VL_SZ)
+
+   // TODO_Vec: These are temporarily where scalar vector operands are stored
+   //           In future store these in operand buffer in vector pipeline
+   val rs1_data         = UInt(width=xLen)
+   val rs2_data         = UInt(width=xLen)
+   val rs3_data         = UInt(width=xLen)
+
 
    // floating point information
    val fp_val           = Bool()             // is a floating-point instruction (F- or D-extension)?

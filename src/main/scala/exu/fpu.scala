@@ -227,6 +227,15 @@ class FPU(implicit p: Parameters) extends BoomModule()(p) with tile.HasFPUParame
    fpiu_result.data := fpiu_out.bits.toint
    fpiu_result.exc  := fpiu_out.bits.exc
 
+   val fpvu = Pipe(io.req.valid,
+      Mux(io.req.bits.uop.lrs1_rtype === RT_FLT, io.req.bits.rs1_data,
+      Mux(io.req.bits.uop.lrs2_rtype === RT_FLT, io.req.bits.rs2_data, io.req.bits.rs3_data)), fpu_latency)
+   val fpvu_pdst = Pipe(io.req.valid,
+      Mux(io.req.bits.uop.lrs1_rtype === RT_FLT, io.req.bits.uop.pop1,
+      Mux(io.req.bits.uop.lrs2_rtype === RT_FLT, io.req.bits.uop.pop2, io.req.bits.uop.pop3)), fpu_latency)
+   // TODO_Vec: This requires some extra signals which aren't used anywhere else (pop signals).
+   //           Should probably fix this
+
 
    val fpmu = Module(new tile.FPToFP(fpu_latency)) // latency 2 for rocket
    fpmu.io.in.valid := io.req.valid && fp_ctrl.fastpipe
@@ -239,21 +248,28 @@ class FPU(implicit p: Parameters) extends BoomModule()(p) with tile.HasFPUParame
    io.resp.valid := fpiu_out.valid ||
                     fpmu.io.out.valid ||
                     sfma.io.out.valid ||
-                    dfma.io.out.valid
+                    dfma.io.out.valid ||
+                    fpvu.valid
+
    val fpu_out_data =
       Mux(dfma.io.out.valid, box(dfma.io.out.bits.data, true.B),
       Mux(sfma.io.out.valid, box(sfma.io.out.bits.data, false.B),
       Mux(fpiu_out.valid,    fpiu_result.data,
-         box(fpmu.io.out.bits.data, fpmu_double))))
+      Mux(fpvu.valid,        fpvu.bits,
+         box(fpmu.io.out.bits.data, fpmu_double)))))
 
    val fpu_out_exc =
       Mux(dfma.io.out.valid, dfma.io.out.bits.exc,
       Mux(sfma.io.out.valid, sfma.io.out.bits.exc,
       Mux(fpiu_out.valid,    fpiu_result.exc,
-         fpmu.io.out.bits.exc)))
+      Mux(fpvu.valid, UInt(0),
+         fpmu.io.out.bits.exc))))
 
 
    io.resp.bits.data              := fpu_out_data
+   when (fpvu.valid) {
+      io.resp.bits.uop.pdst       := fpvu_pdst.bits
+   }
    io.resp.bits.fflags.valid      := io.resp.valid
    io.resp.bits.fflags.bits.flags := fpu_out_exc
 }

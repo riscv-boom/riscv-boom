@@ -600,6 +600,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
          iu.io.dis_uops(w).lrs3_rtype := RT_X
          iu.io.dis_uops(w).prs3_busy := Bool(false)
          // Vec stores have operand in rs3 weird
+         // TODO_vec polymorphic stores
       }
 
    }
@@ -672,6 +673,9 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    issue_units.map(_.io.tsc_reg := debug_tsc_reg)
    issue_units.map(_.io.brinfo := br_unit.brinfo)
    issue_units.map(_.io.flush_pipeline := rob.io.flush.valid)
+   issue_units.map(_.io.fromfp_valid := DontCare)
+   issue_units.map(_.io.fromfp_paddr := DontCare)
+   issue_units.map(_.io.fromfp_data  := DontCare)
 
    // Load-hit Misspeculations
    require (issue_units.count(_.iqType == IQT_MEM.litValue) == 1)
@@ -791,6 +795,8 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    fp_pipeline.io.commit_store_at_rob_head  := rob.io.com_store_is_at_rob_head
    vec_pipeline.io.commit_store_at_rob_head := rob.io.com_store_is_at_rob_head
 
+
+   vec_pipeline.io.fromfp <> fp_pipeline.io.tovec
 
    csr.io.hartid := io.hartid
    csr.io.interrupts := io.interrupts
@@ -984,7 +990,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    ll_wbarb.io.in(1) <> fp_pipeline.io.toint
    iregfile.io.write_ports(llidx) <> WritePort(ll_wbarb.io.out, IPREG_SZ, xLen, false, numVecPhysRegs)
 
-
+   vec_pipeline.io.fromfp <> fp_pipeline.io.tovec
 
    //-------------------------------------------------------------
    //-------------------------------------------------------------

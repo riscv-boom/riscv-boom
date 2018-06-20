@@ -33,7 +33,7 @@ import boom.util._
 object FUConstants
 {
    // bit mask, since a given execution pipeline may support multiple functional units
-   val FUC_SZ = 12
+   val FUC_SZ = 13
    val FU_X   = BitPat.dontCare(FUC_SZ)
    val FU_ALU = UInt(  1, FUC_SZ)
    val FU_BRU = UInt(  2, FUC_SZ)
@@ -47,7 +47,8 @@ object FUConstants
    val FU_F2I = UInt(512, FUC_SZ)
    val FU_VFPU= UInt(1024,FUC_SZ) // TODO_vec Add stuff for viu, vmem, etc
    val FU_VALU= UInt(2048,FUC_SZ)
-   val FU_POLY= UInt(4095,FUC_SZ)
+   val FU_F2V = UInt(4096,FUC_SZ)
+   val FU_POLY= UInt(   0,FUC_SZ)
 }
 import FUConstants._
 
@@ -660,6 +661,7 @@ class FPUUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(
    fpu.io.req.bits.fcsr_rm := io.fcsr_rm
 
    io.resp.bits.data              := fpu.io.resp.bits.data
+   io.resp.bits.uop.pdst          := fpu.io.resp.bits.uop.pdst
    io.resp.bits.fflags.valid      := fpu.io.resp.bits.fflags.valid
    io.resp.bits.fflags.bits.uop   := io.resp.bits.uop
    io.resp.bits.fflags.bits.flags := fpu.io.resp.bits.fflags.bits.flags // kill me now

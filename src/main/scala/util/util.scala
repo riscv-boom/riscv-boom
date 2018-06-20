@@ -432,6 +432,11 @@ abstract trait Packing {
    def repack_h(n: Seq[Bits]) = _repack(n, 128/SZ_H)
    def repack_b(n: Seq[Bits]) = _repack(n, 128/SZ_B)
 
+   def fill_d(n: UInt) = Fill(128/SZ_D, n(SZ_D-1, 0))
+   def fill_w(n: UInt) = Fill(128/SZ_W, n(SZ_W-1, 0))
+   def fill_h(n: UInt) = Fill(128/SZ_H, n(SZ_H-1, 0))
+   def fill_b(n: UInt) = Fill(128/SZ_B, n(SZ_B-1, 0))
+
    def _expand(n: Bits, s: Bits, width: Int) = {
       Cat(Fill(SZ_D - width, s.asUInt), n)
    }

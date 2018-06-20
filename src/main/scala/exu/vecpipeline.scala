@@ -45,7 +45,7 @@ with freechips.rocketchip.rocket.constants.VecCfgConstants
      val ll_wport       = Flipped(Decoupled(new ExeUnitResp(128))) // from memory unit
      val tosdq          = Valid(new MicroOpWithData(128))
 //     val fromint        = Flipped(Decoupled(new FuncUnitReq(fLen+1))) // from integer RF
-//     val fromfp         = Flipped(Decoupled(new FuncUnitReq(fLen+1))) // from fp RF.
+     val fromfp         = Flipped(Decoupled(new ExeUnitResp(xLen))) // from fp RF.
 //     val toint          = Decoupled(new ExeUnitResp(xLen))
 
      val wakeups        = Vec(num_wakeup_ports, Valid(new ExeUnitResp(128)))
@@ -77,6 +77,7 @@ with freechips.rocketchip.rocket.constants.VecCfgConstants
 
    val exe_units = new boom.exu.ExecutionUnits(vec = true)
    val issue_unit = Module(new IssueUnitCollasping(issueParams.find(_.iqType == IQT_VEC.litValue).get, true,
+      true,
       num_wakeup_ports)) // TODO_VEC: Make this a VectorIssueUnit
    val vregfile = Module(new RegisterFileBehavorial(numVecRegFileRows,
       exe_units.withFilter(_.uses_iss_unit).map(e=>e.num_rf_read_ports).sum,
@@ -116,6 +117,9 @@ with freechips.rocketchip.rocket.constants.VecCfgConstants
    issue_unit.io.lsu_stq_head      := io.lsu_stq_head
    issue_unit.io.commit_load_at_rob_head := io.commit_load_at_rob_head
    issue_unit.io.commit_store_at_rob_head := io.commit_store_at_rob_head
+   issue_unit.io.fromfp_valid      := io.fromfp.valid
+   issue_unit.io.fromfp_paddr      := io.fromfp.bits.uop.pdst
+   issue_unit.io.fromfp_data       := io.fromfp.bits.data
    require (exe_units.num_total_bypass_ports == 0)
 
 
@@ -136,6 +140,16 @@ with freechips.rocketchip.rocket.constants.VecCfgConstants
          issue_unit.io.dis_uops(w).lrs1_rtype := RT_X
          issue_unit.io.dis_uops(w).prs1_busy := false.B
       }
+      when (io.dis_uops(w).lrs1_rtype === RT_FLT) {
+         issue_unit.io.dis_uops(w).prs1_busy := true.B
+      }
+      when (io.dis_uops(w).lrs2_rtype === RT_FLT) {
+         issue_unit.io.dis_uops(w).prs2_busy := true.B
+      }
+      when (io.dis_uops(w).lrs3_rtype === RT_FLT) {
+         issue_unit.io.dis_uops(w).prs3_busy := true.B
+      }
+
    }
    io.dis_readys := issue_unit.io.dis_readys
 
