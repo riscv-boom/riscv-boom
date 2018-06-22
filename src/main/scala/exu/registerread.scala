@@ -255,10 +255,10 @@ with Packing
             io.exe_reqs(w).bits.rs1_data := fill_case(exe_reg_uops(w).rs1_data, exe_reg_uops(w).rs1_vew)
          }
          when (exe_reg_uops(w).lrs2_rtype === RT_FLT) {
-            io.exe_reqs(w).bits.rs2_data := fill_case(exe_reg_uops(w).rs2_data, exe_reg_uops(w).rs3_vew)
+            io.exe_reqs(w).bits.rs2_data := fill_case(exe_reg_uops(w).rs2_data, exe_reg_uops(w).rs2_vew)
          }
          when (exe_reg_uops(w).lrs3_rtype === RT_FLT) {
-            io.exe_reqs(w).bits.rs3_data := fill_case(exe_reg_uops(w).rs2_data, exe_reg_uops(w).rs3_vew)
+            io.exe_reqs(w).bits.rs3_data := fill_case(exe_reg_uops(w).rs3_data, exe_reg_uops(w).rs3_vew)
          }
 
       }

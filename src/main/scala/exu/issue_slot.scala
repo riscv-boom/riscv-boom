@@ -79,6 +79,14 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean, isVec: Boolean
 {
    val io = IO(new IssueSlotIO(num_slow_wakeup_ports))
 
+   val slotUop = Reg(init = NullMicroOp)
+   //   val slot_state    = Reg(init = s_invalid)
+   val slot_state = slotUop.iw_state
+   val slot_is_2uops = Reg(Bool())
+   val slot_p1 = !slotUop.prs1_busy
+   val slot_p2 = !slotUop.prs2_busy
+   val slot_p3 = !slotUop.prs3_busy
+
    // slot invalid?
    // slot is valid, holding 1 uop
    // slot is valid, holds 2 uops (like a store)
@@ -94,72 +102,68 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean, isVec: Boolean
    val updated_rs1_data   = Wire(UInt(width=xLen.W))
    val updated_rs2_data   = Wire(UInt(width=xLen.W))
    val updated_rs3_data   = Wire(UInt(width=xLen.W))
+   val updated_prs1_eidx  = Wire(UInt(width=VL_SZ.W))
+   val updated_prs2_eidx  = Wire(UInt(width=VL_SZ.W))
+   val updated_prs3_eidx  = Wire(UInt(width=VL_SZ.W))
+   val updated_prs1_busy  = Wire(Bool())
+   val updated_prs2_busy  = Wire(Bool())
+   val updated_prs3_busy  = Wire(Bool())
+   val updated_br_mask    = GetNewBrMask(io.brinfo, slotUop)
 
-   val next_p1            = Wire(Bool())
-   val next_p2            = Wire(Bool())
-   val next_p3            = Wire(Bool())
-
-
-   val slot_state    = RegInit(s_invalid)
-   val slot_p1       = RegNext(next_p1, init = false.B)
-   val slot_p2       = RegNext(next_p2, init = false.B)
-   val slot_p3       = RegNext(next_p3, init = false.B)
-   val slot_is_2uops = Reg(Bool())
-
-   // these signals are the "next_p*" for the current slot's micro-op.
-   // they are important for shifting the current slotUop up to an other entry.
-   // TODO need a better name for these signals
-   val out_p1 = Wire(Bool()); out_p1 := slot_p1
-   val out_p2 = Wire(Bool()); out_p2 := slot_p2
-   val out_p3 = Wire(Bool()); out_p3 := slot_p3
-
-
-
-   val slotUop = Reg(init = NullMicroOp)
    val incr_eidx = slotUop.eidx + slotUop.rate
    val next_eidx = Mux(incr_eidx > io.vl, io.vl, incr_eidx) // The next eidx after this gets executed
+                                                            // Updated_eidx may be set to this
 
-
-   //-----------------------------------------------------------------------------
-   // next slot state computation
-   // compute the next state for THIS entry slot (in a collasping queue, the
-   // current uop may get moved elsewhere, and a new slot can get moved into
-   // here
-
-   when (io.kill)
+   val next_next_eidx = next_eidx + slotUop.rate
+   
+   when (io.in_uop.valid)
    {
-      slot_state := s_invalid
+      slotUop := io.in_uop.bits
+      assert(isInvalid || io.clear || io.kill)
    }
-   .elsewhen (io.in_uop.valid)
+   .elsewhen (io.kill || io.clear)
    {
-      slot_state := io.in_uop.bits.iw_state
-   }
-   .elsewhen (io.clear)
-   {
-      slot_state := s_invalid
+      slotUop.iw_state := s_invalid
    }
    .otherwise
    {
-      slot_state := updated_state
+      slotUop.iw_state := updated_state
+      slotUop.eidx      := updated_eidx
+      slotUop.prs1_busy := updated_prs1_busy
+      slotUop.prs2_busy := updated_prs2_busy
+      slotUop.prs3_busy := updated_prs3_busy
+      slotUop.prs1_eidx := updated_prs1_eidx
+      slotUop.prs2_eidx := updated_prs2_eidx
+      slotUop.prs3_eidx := updated_prs3_eidx
+      slotUop.rs1_data  := updated_rs1_data
+      slotUop.rs2_data  := updated_rs2_data
+      slotUop.rs3_data  := updated_rs3_data
+      slotUop.br_mask   := updated_br_mask
    }
 
    //-----------------------------------------------------------------------------
    // "update" state
    // compute the next state for the micro-op in this slot. This micro-op may
    // be moved elsewhere, so the "updated_state" travels with it.
-   
-   // defaults
-   updated_state := slot_state
-   updated_uopc := slotUop.uopc
-   updated_eidx := slotUop.eidx
-   updated_lrs1_rtype := slotUop.lrs1_rtype
-   updated_lrs2_rtype := slotUop.lrs2_rtype
-   updated_lrs3_rtype := slotUop.lrs3_rtype
-   updated_rs1_data := slotUop.rs1_data
-   updated_rs2_data := slotUop.rs2_data
-   updated_rs3_data := slotUop.rs3_data
 
-   val next_next_eidx = next_eidx + slotUop.rate
+   // defaults
+   updated_state       := slotUop.iw_state
+   updated_uopc        := slotUop.uopc
+   updated_eidx        := slotUop.eidx
+   updated_lrs1_rtype  := slotUop.lrs1_rtype
+   updated_lrs2_rtype  := slotUop.lrs2_rtype
+   updated_lrs3_rtype  := slotUop.lrs3_rtype
+   updated_rs1_data    := slotUop.rs1_data
+   updated_rs2_data    := slotUop.rs2_data
+   updated_rs3_data    := slotUop.rs3_data
+   updated_prs1_busy   := slotUop.prs1_busy
+   updated_prs2_busy   := slotUop.prs2_busy
+   updated_prs3_busy   := slotUop.prs3_busy
+   updated_prs1_eidx   := slotUop.prs1_eidx
+   updated_prs2_eidx   := slotUop.prs2_eidx
+   updated_prs3_eidx   := slotUop.prs3_eidx
+
+
    when (io.kill ||
          (io.grant && (slot_state === s_valid_1)) ||
          (io.grant && (slot_state === s_valid_2) && slot_p1 && slot_p2))
@@ -170,13 +174,13 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean, isVec: Boolean
          when (slotUop.vec_val && updated_eidx < io.vl) {
             updated_state := slot_state
             when (slotUop.lrs1_rtype === RT_VEC) {
-               out_p1 := next_next_eidx <= slotUop.prs1_eidx
+               updated_prs1_busy := next_next_eidx > slotUop.prs1_eidx
             }
             when (slotUop.lrs2_rtype === RT_VEC) {
-               out_p2 := next_next_eidx <= slotUop.prs2_eidx
+               updated_prs2_busy := next_next_eidx > slotUop.prs2_eidx
             }
             when (slotUop.lrs3_rtype === RT_VEC) {
-               out_p3 := next_next_eidx <= slotUop.prs3_eidx
+               updated_prs3_busy := next_next_eidx > slotUop.prs3_eidx
             }
          }
       } else {
@@ -218,26 +222,11 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean, isVec: Boolean
       slotUop := io.in_uop.bits
       assert (isInvalid || io.clear || io.kill, "trying to overwrite a valid issue slot.")
    } .otherwise {
-      slotUop.eidx := updated_eidx
-   }
-      
-
-   // Wakeup Compare Logic
-   next_p1 := false.B
-   next_p2 := false.B
-   next_p3 := false.B
-
-   when (io.in_uop.valid)
-   {
-      next_p1 := !(io.in_uop.bits.prs1_busy)
-      next_p2 := !(io.in_uop.bits.prs2_busy)
-      next_p3 := !(io.in_uop.bits.prs3_busy)
-   }
-   .otherwise
-   {
-      next_p1 := out_p1
-      next_p2 := out_p2
-      next_p3 := out_p3
+      slotUop.eidx      := updated_eidx
+      slotUop.prs1_busy := updated_prs1_busy
+      slotUop.prs2_busy := updated_prs2_busy
+      slotUop.prs3_busy := updated_prs3_busy
+      slotUop.br_mask   := updated_br_mask
    }
 
    // TODO_Vec: Support vector chaining
@@ -245,31 +234,32 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean, isVec: Boolean
    {
       when (io.wakeup_dsts(i).valid && (io.wakeup_dsts(i).bits.pdst === slotUop.pop1))
       {
-         out_p1 := true.B
+         updated_prs1_busy := false.B
          if (containsVec) {
             when (slotUop.vec_val && slotUop.lrs1_rtype === RT_VEC) {
-               out_p1 := next_eidx <= io.wakeup_dsts(i).bits.eidx
-               slotUop.prs1_eidx := io.wakeup_dsts(i).bits.eidx
+               updated_prs1_busy := next_eidx > io.wakeup_dsts(i).bits.eidx
+               updated_prs1_eidx := io.wakeup_dsts(i).bits.eidx // TODO_Vec: I think theres a bug here
+                                                                // This should be updated_eidx
             }
          }
       }
       when (io.wakeup_dsts(i).valid && (io.wakeup_dsts(i).bits.pdst === slotUop.pop2))
       {
-         out_p2 := true.B
+         updated_prs2_busy := false.B
          if (containsVec) {
             when (slotUop.vec_val && slotUop.lrs2_rtype === RT_VEC) {
-               out_p2 := next_eidx <= io.wakeup_dsts(i).bits.eidx
-               slotUop.prs2_eidx := io.wakeup_dsts(i).bits.eidx
+               updated_prs2_busy := next_eidx > io.wakeup_dsts(i).bits.eidx
+               updated_prs2_eidx := io.wakeup_dsts(i).bits.eidx
             }
          }
       }
       when (io.wakeup_dsts(i).valid && (io.wakeup_dsts(i).bits.pdst === slotUop.pop3))
       {
-         out_p3 := true.B
+         updated_prs3_busy := false.B
          if (containsVec) {
             when (slotUop.vec_val && slotUop.lrs3_rtype === RT_VEC) {
-               out_p3 := next_eidx <= io.wakeup_dsts(i).bits.eidx
-               slotUop.prs3_eidx := io.wakeup_dsts(i).bits.eidx
+               updated_prs3_busy := next_eidx > io.wakeup_dsts(i).bits.eidx
+               updated_prs3_eidx := io.wakeup_dsts(i).bits.eidx
             }
          }
       }
@@ -278,25 +268,20 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean, isVec: Boolean
    if (isVec) {
       when (io.fromfp_valid) {
          when (io.fromfp_paddr === slotUop.pop1 && slotUop.lrs1_rtype === RT_FLT) {
-            out_p1 := true.B
+            updated_prs1_busy := false.B
             updated_rs1_data := io.fromfp_data
-            slotUop.rs1_data := io.fromfp_data
          }
          when (io.fromfp_paddr === slotUop.pop2 && slotUop.lrs2_rtype === RT_FLT) {
-            out_p2 := true.B
+            updated_prs2_busy := false.B
             updated_rs2_data := io.fromfp_data
-            slotUop.rs2_data := io.fromfp_data
          }
          when (io.fromfp_paddr === slotUop.pop3 && slotUop.lrs3_rtype === RT_FLT) {
-            out_p3 := true.B
+            updated_prs3_busy := false.B
             updated_rs3_data := io.fromfp_data
-            slotUop.rs3_data := io.fromfp_data
          }
       }
    }
 
-   // Handle branch misspeculations
-   val out_br_mask = GetNewBrMask(io.brinfo, slotUop)
 
    // was this micro-op killed by a branch? if yes, we can't let it be valid if
    // we compact it into an other entry
@@ -305,10 +290,6 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean, isVec: Boolean
       updated_state := s_invalid
    }
 
-   when (!io.in_uop.valid)
-   {
-      slotUop.br_mask := out_br_mask
-   }
 
 
    //-------------------------------------------------------------
@@ -368,12 +349,11 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean, isVec: Boolean
    io.updated_uop.lrs1_rtype:= updated_lrs1_rtype
    io.updated_uop.lrs2_rtype:= updated_lrs2_rtype
    io.updated_uop.lrs3_rtype:= updated_lrs3_rtype
-   io.updated_uop.br_mask   := out_br_mask
-   io.updated_uop.prs1_busy := !out_p1
-   io.updated_uop.prs2_busy := !out_p2
-   io.updated_uop.prs3_busy := !out_p3
+   io.updated_uop.br_mask   := updated_br_mask
+   io.updated_uop.prs1_busy := updated_prs1_busy
+   io.updated_uop.prs2_busy := updated_prs2_busy
+   io.updated_uop.prs3_busy := updated_prs3_busy
    io.updated_uop.eidx      := updated_eidx
-
    io.updated_uop.rs1_data  := updated_rs1_data
    io.updated_uop.rs2_data  := updated_rs2_data
    io.updated_uop.rs3_data  := updated_rs3_data
