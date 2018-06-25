@@ -121,8 +121,7 @@ class LoadStoreUnitIO(pl_width: Int)(implicit p: Parameters) extends BoomBundle(
    val nack               = new NackInfo().asInput
 
    // For stalling vector loads and stores elementwise in the issue slots
-   val ldq_head_eidx      = UInt(width=VL_SZ).asOutput
-   val ldq_head           = UInt(OUTPUT, width=log2Ceil(num_ld_entries)) // TODO_Vec: Hack, don't let issue units issue unless load is at head of loa
+
    val stq_head_eidx      = UInt(width=VL_SZ).asOutput
    val stq_head           = UInt(OUTPUT, width=log2Ceil(num_st_entries))
 
@@ -169,6 +168,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
    // Load-Address Queue
    val laq_addr_val       = Reg(Vec(num_ld_entries, Bool()))
    val laq_addr           = Mem(num_ld_entries, UInt(width=coreMaxAddrBits))
+   val laq_bound          = Mem(num_ld_entries, UInt(width=coreMaxAddrBits))
 
    val laq_allocated      = Reg(Vec(num_ld_entries, Bool())) // entry has been allocated
    val laq_is_virtual     = Reg(Vec(num_ld_entries, Bool())) // address in LAQ is a virtual address. There was a tlb_miss and a retry is required.
@@ -195,6 +195,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
    val saq_val       = Reg(Vec(num_st_entries, Bool()))
    val saq_is_virtual= Reg(Vec(num_st_entries, Bool())) // address in SAQ is a virtual address. There was a tlb_miss and a retry is required.
    val saq_addr      = Mem(num_st_entries, UInt(width=coreMaxAddrBits))
+   val saq_bound     = Mem(num_st_entries, UInt(width=coreMaxAddrBits))
 
    // Store-Data Queue
    val sdq_val       = Reg(Vec(num_st_entries, Bool()))
@@ -335,10 +336,6 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
       }
       when (io.exe_resp.bits.uop.ctrl.is_load)
       {
-         //TODO_vec: Only fire vector load if load is at head of ROB
-         when (io.exe_resp.bits.uop.vec_val) {
-            assert(io.commit_load_at_rob_head, "Vector loads can only be fired when load is at head of ROB")
-         }
          will_fire_load_incoming := Bool(true)
          dc_avail   := Bool(false)
          tlb_avail  := Bool(false)
@@ -398,6 +395,9 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
                      Mux(will_fire_load_retry, laq_addr(laq_retry_idx),
                                                io.exe_resp.bits.addr.asUInt))
 
+   val exe_bound   = Mux(will_fire_sta_retry,  saq_bound(stq_retry_idx),
+                     Mux(will_fire_load_retry, laq_bound(laq_retry_idx),
+                                               io.exe_resp.bits.bound.asUInt))
    val dtlb = Module(new rocket.TLB(
       instruction = false, lgMaxSize = log2Ceil(coreDataBytes), nEntries = dcacheParams.nTLBEntries))
 
@@ -598,6 +598,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
    {
       laq_addr_val      (exe_tlb_uop.ldq_idx)      := Bool(true)
       laq_addr          (exe_tlb_uop.ldq_idx)      := Mux(tlb_miss, exe_vaddr, exe_tlb_paddr)
+      laq_bound         (exe_tlb_uop.ldq_idx)      := Mux(tlb_miss, exe_vaddr + exe_bound, exe_tlb_paddr + exe_bound)
       laq_uop           (exe_tlb_uop.ldq_idx).pdst := exe_tlb_uop.pdst
       laq_is_virtual    (exe_tlb_uop.ldq_idx)      := tlb_miss
       laq_is_uncacheable(exe_tlb_uop.ldq_idx)      := tlb_addr_uncacheable && !tlb_miss
@@ -927,6 +928,21 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
       when (io.memresp.bits.is_load)
       {
          laq_succeeded(io.memresp.bits.ldq_idx) := Bool(true)
+         when (laq_uop(io.memresp.bits.ldq_idx).uopc === uopVLD) {
+            val next_eidx = laq_uop(io.memresp.bits.ldq_idx).eidx + UInt(1)
+            when (next_eidx >= io.vl) {
+               laq_succeeded(io.memresp.bits.ldq_idx) := Bool(true)
+            } .otherwise {
+               laq_succeeded(io.memresp.bits.ldq_idx) := Bool(false)
+               laq_addr     (io.memresp.bits.ldq_idx) := laq_addr(io.memresp.bits.ldq_idx) + MuxLookup(laq_uop(io.memresp.bits.ldq_idx).rs3_vew, VEW_8, Array(
+                  VEW_8  -> UInt(1),
+                  VEW_16 -> UInt(2),
+                  VEW_32 -> UInt(4),
+                  VEW_64 -> UInt(8))) // todo_vec: Ugh this is bad because vector accesses that cross a page boundary break
+               laq_executed (io.memresp.bits.ldq_idx) := Bool(false)
+               laq_uop      (io.memresp.bits.ldq_idx).eidx := next_eidx
+            }
+         }
       }
       .otherwise
       {
@@ -1227,11 +1243,9 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
          laq_failure  (idx)         := Bool(false)
          laq_forwarded_std_val(idx) := Bool(false)
 
-         val next_eidx = laq_uop(idx).eidx + UInt(1)
-         when (laq_uop(idx).uopc === uopVLD && next_eidx < io.vl) {
-            laq_allocated(idx)         := Bool(true)
-            laq_uop(idx).eidx          := next_eidx
-            invalidate_head            := Bool(false)
+         when (laq_uop(idx).uopc === uopVLD) {
+            laq_allocated(idx)         := Bool(false)
+            invalidate_head            := Bool(true)
          } .otherwise {
            // temp_laq_head = WrapInc(temp_laq_head, num_ld_entries)
             laq_allocated(idx)         := Bool(false)
@@ -1402,8 +1416,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
 
 
    // Issue helpers for vector instructions
-   io.ldq_head_eidx := laq_uop(laq_head).eidx
-   io.ldq_head      := laq_head
+
    io.stq_head_eidx := stq_uop(stq_head).eidx
    io.stq_head      := stq_head
 

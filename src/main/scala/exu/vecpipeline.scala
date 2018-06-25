@@ -54,8 +54,7 @@ with freechips.rocketchip.rocket.constants.VecCfgConstants
 
      val debug_tsc_reg  = Input(UInt(width=128.W))
      val vl             = Input(UInt(width=VL_SZ.W))
-     val lsu_ldq_head_eidx = Input(UInt())
-     val lsu_ldq_head      = Input(UInt())
+
      val lsu_stq_head_eidx = Input(UInt())
      val lsu_stq_head      = Input(UInt())
      val commit_load_at_rob_head = Input(Bool())
@@ -111,8 +110,7 @@ with freechips.rocketchip.rocket.constants.VecCfgConstants
    issue_unit.io.brinfo := io.brinfo
    issue_unit.io.flush_pipeline := io.flush_pipeline
    issue_unit.io.vl := io.vl
-   issue_unit.io.lsu_ldq_head_eidx := io.lsu_ldq_head_eidx
-   issue_unit.io.lsu_ldq_head      := io.lsu_ldq_head
+
    issue_unit.io.lsu_stq_head_eidx := io.lsu_stq_head_eidx
    issue_unit.io.lsu_stq_head      := io.lsu_stq_head
    issue_unit.io.commit_load_at_rob_head := io.commit_load_at_rob_head

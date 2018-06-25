@@ -584,8 +584,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       iu.io.dis_uops(w) := dis_uops(w)
 
       iu.io.vl := csr.io.vecstatus.vl
-      iu.io.lsu_ldq_head_eidx := lsu.io.ldq_head_eidx
-      iu.io.lsu_ldq_head      := lsu.io.ldq_head
+
       iu.io.lsu_stq_head_eidx := lsu.io.stq_head_eidx
       iu.io.lsu_stq_head      := lsu.io.stq_head
 
@@ -777,12 +776,6 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    fp_pipeline.io.vl := csr.io.vecstatus.vl
    vec_pipeline.io.vl := csr.io.vecstatus.vl
 
-   fp_pipeline.io.lsu_ldq_head_eidx  := lsu.io.ldq_head_eidx
-   vec_pipeline.io.lsu_ldq_head_eidx := lsu.io.ldq_head_eidx
-
-   fp_pipeline.io.lsu_ldq_head  := lsu.io.ldq_head
-   vec_pipeline.io.lsu_ldq_head := lsu.io.ldq_head
-
    fp_pipeline.io.lsu_stq_head_eidx  := lsu.io.stq_head_eidx
    vec_pipeline.io.lsu_stq_head_eidx := lsu.io.stq_head_eidx
 
@@ -817,6 +810,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       exe_units(w).io.req <> iregister_read.io.exe_reqs(w)
       exe_units(w).io.brinfo := br_unit.brinfo
       exe_units(w).io.com_exception := rob.io.flush.valid
+      exe_units(w).io.vl := csr.io.vecstatus.vl
 
       if (exe_units(w).isBypassable)
       {
@@ -1099,7 +1093,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       assert (!(wakeup.valid && wakeup.bits.uop.dst_rtype =/= RT_VEC),
          "[core] VEC wakeup does not write back to a VEC register.")
 
-      assert (!(wakeup.valid && !wakeup.bits.uop.vec_val),
+      assert (!(wakeup.valid && !wakeup.bits.uop.vec_val && wakeup.bits.uop.uopc =/= uopVLD),
          "[core] VEC_wakeup does not involve a VEC instruction.");
    }
    assert (cnt == rob.num_wakeup_ports)

@@ -37,8 +37,7 @@ class IssueSlotIO(num_wakeup_ports: Int)(implicit p: Parameters) extends BoomBun
    val uop            = Output(new MicroOp()) // the current Slot's uop. Sent down the pipeline when issued.
       
    val vl             = Input(UInt(width=VL_SZ.W)) // The global vector length
-   val lsu_ldq_head_eidx   = Input(UInt())
-   val lsu_ldq_head        = Input(UInt())
+
    val lsu_stq_head_eidx   = Input(UInt())
    val lsu_stq_head        = Input(UInt())
    val commit_load_at_rob_head = Input(Bool())
@@ -171,7 +170,7 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean, isVec: Boolean
       updated_state := s_invalid
       if (containsVec) {
          updated_eidx := next_eidx
-         when (slotUop.vec_val && updated_eidx < io.vl) {
+         when (slotUop.vec_val && updated_eidx < io.vl && slotUop.uopc =/= uopVLD) { // VLD spins in LSU instead
             updated_state := slot_state
             when (slotUop.lrs1_rtype === RT_VEC) {
                updated_prs1_busy := next_next_eidx > slotUop.prs1_eidx
@@ -306,10 +305,7 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean, isVec: Boolean
       io.request := slot_p1 && slot_p2 && slot_p3 && !io.kill
       if (containsVec){
          when (slotUop.uopc === uopVLD) {
-            io.request := (slot_p1 && slot_p2 && slot_p3 && !io.kill
-               && slotUop.eidx === io.lsu_ldq_head_eidx
-               && slotUop.ldq_idx === io.lsu_ldq_head
-               && io.commit_load_at_rob_head)
+            io.request := (slot_p1 && slot_p2 && slot_p3 && !io.kill)
          } .elsewhen (slotUop.uopc === uopVST) {
             io.request := (slot_p1 && slot_p2 && slot_p3 && !io.kill
                && slotUop.eidx === io.lsu_stq_head_eidx

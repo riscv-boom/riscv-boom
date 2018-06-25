@@ -89,6 +89,7 @@ class FunctionalUnitIo(
    // only used by branch unit
    val get_ftq_pc = new GetPCFromFtqIO().flip
    val status = new freechips.rocketchip.rocket.MStatus().asInput
+   val vl     = UInt(INPUT, width=VL_SZ)
 }
 
 class GetPredictionInfo(implicit p: Parameters) extends BoomBundle()(p)
@@ -118,7 +119,8 @@ class FuncUnitResp(data_width: Int)(implicit p: Parameters) extends BoomBundle()
    val uop = new MicroOp()
    val data = UInt(width = data_width)
    val fflags = new ValidIO(new FFlagsResp)
-   val addr = UInt(width = vaddrBits+1) // only for maddr -> LSU
+   val addr  = UInt(width = vaddrBits+1) // only for maddr -> LSU
+   val bound = UInt(width = vaddrBits+1) // only for maddr -> LSU
    val mxcpt = new ValidIO(UInt(width=freechips.rocketchip.rocket.Causes.all.max+2)) //only for maddr->LSU
    val sfence = Valid(new freechips.rocketchip.rocket.SFenceReq) // only for mcalc
 
@@ -594,20 +596,34 @@ class MemAddrCalcUnit(implicit p: Parameters)
    // perform address calculation
    val imm = Mux(io.req.bits.uop.uopc === uopVLD, io.req.bits.uop.imm_packed(19,15), io.req.bits.uop.imm_packed(19,8))
    assert(io.req.bits.uop.vec_val || io.req.bits.uop.eidx === UInt(0), "Eidx should be 0 for normal insts")
-   val eidx_off = Cat(UInt(0), io.req.bits.uop.eidx << MuxLookup(Mux(io.req.bits.uop.uopc === uopVLD, io.req.bits.uop.rd_vew, io.req.bits.uop.rs3_vew), VEW_DISABLE, Array(
+   val eidx_off = Cat(UInt(0), io.req.bits.uop.eidx << MuxLookup(
+      Mux(io.req.bits.uop.uopc === uopVLD, io.req.bits.uop.rd_vew, io.req.bits.uop.rs3_vew), VEW_DISABLE, Array(
       VEW_8  -> UInt(0),
       VEW_16 -> UInt(1),
       VEW_32 -> UInt(2),
       VEW_64 -> UInt(3)))) // TODO_vec : make this nicer with log2
+   val bound_off = Cat(UInt(0), io.vl << MuxLookup(
+      Mux(io.req.bits.uop.uopc === uopVLD, io.req.bits.uop.rd_vew, io.req.bits.uop.rs3_vew), VEW_DISABLE, Array(
+         VEW_8  -> UInt(0),
+         VEW_16 -> UInt(1),
+         VEW_32 -> UInt(2),
+         VEW_64 -> UInt(3)))) | UInt(0, width=vaddrBits)// TODO_Vec: Maybe generate this in multiplier for strided stuff?
+
+   // TODO_Vec: Support non unit-strided stuff
+
    val sum = (io.req.bits.rs1_data.asSInt + imm.asSInt + eidx_off.asSInt).asUInt
+   val bound = (bound_off.asSInt).asUInt
    val ea_sign = Mux(sum(vaddrBits-1), ~sum(63,vaddrBits) === UInt(0),
                                         sum(63,vaddrBits) =/= UInt(0))
+   val eb_sign = Mux(bound(vaddrBits-1), ~sum(63,vaddrBits) === UInt(0),
+                                          sum(63,vaddrBits) =/= UInt(0))
    val effective_address = Cat(ea_sign, sum(vaddrBits-1,0)).asUInt
-
+   val effective_bound   = Cat(eb_sign, bound(vaddrBits-1,0)).asUInt
    val store_data = io.req.bits.rs2_data
 
-   io.resp.bits.addr := effective_address
-   io.resp.bits.data := store_data
+   io.resp.bits.addr  := effective_address
+   io.resp.bits.data  := store_data
+   io.resp.bits.bound := effective_bound
 
    if (data_width > 63)
    {

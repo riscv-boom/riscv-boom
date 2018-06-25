@@ -74,6 +74,8 @@ class ExecutionUnitIO(
    val dmem   = new boom.lsu.DCMemPortIO() // TODO move this out of ExecutionUnit
    val com_exception = Bool(INPUT)
    val debug_tsc_reg = UInt(width=128.W).asInput
+
+   val vl = UInt(width=VL_SZ.W).asInput
 }
 
 abstract class ExecutionUnit(val num_rf_read_ports: Int
@@ -654,6 +656,7 @@ class MemExeUnit(implicit p: Parameters) extends ExecutionUnit(num_rf_read_ports
    // Perform address calculation
    val maddrcalc = Module(new MemAddrCalcUnit())
    maddrcalc.io.req <> io.req
+   maddrcalc.io.vl  := io.vl
    when (io.req.valid && io.req.bits.uop.vec_val) {
       assert(io.req.bits.uop.rate === UInt(1), "Loads and stores through this unit proceed at rate 1")
    }
