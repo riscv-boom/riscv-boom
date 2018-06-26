@@ -848,7 +848,7 @@ class Rob(
    for (w <- 0 until width)
    {
       // tell LSU it is ready to its stores and loads
-      io.commit.st_mask(w) := (io.commit.valids(w) || rob_vec_incr(w)) && rob_head_is_store(w)
+      io.commit.st_mask(w) := (io.commit.valids(w)) && rob_head_is_store(w)
       io.commit.ld_mask(w) := (io.commit.valids(w)) && rob_head_is_load(w)
    }
 

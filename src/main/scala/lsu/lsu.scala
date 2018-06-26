@@ -506,8 +506,9 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
    // *** STORES ***
 
    when (stq_entry_val(stq_execute_head) &&
-         (stq_committed(stq_execute_head) ||
-            (stq_uop(stq_execute_head).is_amo &&
+      (stq_committed(stq_execute_head)
+         || (stq_uop(stq_execute_head).vec_val && saq_val(stq_execute_head) && sdq_val(stq_execute_head)) // TODO_Vec: This greedily executes vector stores. Probably need to check for conflicts with other outgoing stores and loads here as well
+         || (stq_uop(stq_execute_head).is_amo &&
             saq_val(stq_execute_head) &&
             !saq_is_virtual(stq_execute_head) &&
             sdq_val(stq_execute_head)
@@ -948,6 +949,16 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
       {
          stq_succeeded(io.memresp.bits.stq_idx) := Bool(true)
 
+         when (stq_uop(io.memresp.bits.stq_idx).uopc === uopVST) {
+            val next_eidx = stq_uop(io.memresp.bits.stq_idx).eidx + UInt(1)
+            saq_val(io.memresp.bits.stq_idx)        := Bool(false)
+            sdq_val(io.memresp.bits.stq_idx)        := Bool(false)
+            stq_uop(io.memresp.bits.stq_idx).eidx   := next_eidx
+            stq_executed(io.memresp.bits.stq_idx)   := next_eidx === io.vl
+            stq_committed(io.memresp.bits.stq_idx)  := Bool(false)
+            stq_succeeded(io.memresp.bits.stq_idx)  := next_eidx === io.vl
+         }
+
          if (O3PIPEVIEW_PRINTF)
          {
             // TODO supress printing out a store-comp for lr instructions.
@@ -1184,8 +1195,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
       when (io.commit_store_mask(w))
       {
          stq_committed(temp_stq_commit_head) := Bool(true)
-         val next_eidx = stq_uop(temp_stq_commit_head).eidx + UInt(1)
-         invalidate_head := !(stq_uop(temp_stq_commit_head).uopc === uopVST && next_eidx < io.vl)
+         invalidate_head := Bool(true)
       }
 
       temp_stq_commit_head = Mux(io.commit_store_mask(w) && invalidate_head,
@@ -1204,14 +1214,9 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
 
    when (clear_store)
    {
-      val next_eidx = stq_uop(stq_head).eidx + UInt(1)
-      when (stq_uop(stq_head).uopc === uopVST && next_eidx < io.vl) {
-         stq_entry_val(stq_head) := Bool(true)
-         stq_uop(stq_head).eidx  := next_eidx
-      } .otherwise {
-         stq_entry_val(stq_head) := Bool(false)
-         stq_head := WrapInc(stq_head, num_st_entries)
-      }
+      stq_entry_val(stq_head)   := Bool(false)
+      stq_head                  := WrapInc(stq_head, num_st_entries)
+
       saq_val(stq_head)         := Bool(false)
       sdq_val(stq_head)         := Bool(false)
       stq_executed(stq_head)    := Bool(false)
