@@ -222,7 +222,14 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
 
    val live_store_mask = Reg(init = UInt(0, num_st_entries))
    var next_live_store_mask = Mux(clear_store, live_store_mask & ~(UInt(1) << stq_head),
-                                                live_store_mask)
+      live_store_mask)
+
+
+   // Issue helpers for vector instructions
+
+   io.stq_head_eidx := stq_uop(stq_head).eidx
+   io.stq_head      := stq_head
+
 
    //-------------------------------------------------------------
    //-------------------------------------------------------------
@@ -473,8 +480,8 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
 
    // TODO make option to only wakeup load at the head (to compare to old behavior)
    // Compute this for the next cycle to remove can_fire, ld_idx_wakeup off critical path.
-   val exe_ld_idx_wakeup = RegNext(
-      AgePriorityEncoder((0 until num_ld_entries).map(i => laq_addr_val(i) & ~laq_executed(i)), laq_head))
+   // Compute this for the same cycle to improve vector load throughput
+   val exe_ld_idx_wakeup = AgePriorityEncoder((0 until num_ld_entries).map(i => laq_addr_val(i) & ~laq_executed(i)), laq_head)
 
 
    when (laq_addr_val       (exe_ld_idx_wakeup) &&
@@ -955,8 +962,11 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
             sdq_val(io.memresp.bits.stq_idx)        := Bool(false)
             stq_uop(io.memresp.bits.stq_idx).eidx   := next_eidx
             stq_executed(io.memresp.bits.stq_idx)   := next_eidx === io.vl
-            stq_committed(io.memresp.bits.stq_idx)  := Bool(false)
+//            stq_committed(io.memresp.bits.stq_idx)  := Bool(false)
             stq_succeeded(io.memresp.bits.stq_idx)  := next_eidx === io.vl
+
+            // This is so the issue unit can send out the next element's data faster
+            io.stq_head_eidx                        := next_eidx
          }
 
          if (O3PIPEVIEW_PRINTF)
@@ -1419,11 +1429,6 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
 
    assert (!(stq_empty ^ stq_entry_val.asUInt === 0.U), "[lsu] mismatch in SAQ empty logic.")
 
-
-   // Issue helpers for vector instructions
-
-   io.stq_head_eidx := stq_uop(stq_head).eidx
-   io.stq_head      := stq_head
 
    //-------------------------------------------------------------
    // Debug & Counter outputs
