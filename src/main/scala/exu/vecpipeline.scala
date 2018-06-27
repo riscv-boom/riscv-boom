@@ -43,7 +43,7 @@ with freechips.rocketchip.rocket.constants.VecCfgConstants
      val dis_readys     = Output(Vec(DISPATCH_WIDTH, Bool()))
 
      val ll_wport       = Flipped(Decoupled(new ExeUnitResp(128))) // from memory unit
-     val tosdq          = Valid(new MicroOpWithData(128))
+     val tosdq          = new DecoupledIO(new MicroOpWithData(128))
 //     val fromint        = Flipped(Decoupled(new FuncUnitReq(fLen+1))) // from integer RF
      val fromfp         = Flipped(Decoupled(new ExeUnitResp(xLen))) // from fp RF.
 //     val toint          = Decoupled(new ExeUnitResp(xLen))
@@ -55,7 +55,6 @@ with freechips.rocketchip.rocket.constants.VecCfgConstants
      val debug_tsc_reg  = Input(UInt(width=128.W))
      val vl             = Input(UInt(width=VL_SZ.W))
 
-     val lsu_stq_head_eidx = Input(UInt())
      val lsu_stq_head      = Input(UInt())
      val commit_load_at_rob_head = Input(Bool())
      val commit_store_at_rob_head = Input(Bool())
@@ -101,6 +100,9 @@ with freechips.rocketchip.rocket.constants.VecCfgConstants
    require (exe_units.withFilter(_.uses_iss_unit).map(e=>
       e.num_rf_write_ports).sum + num_ll_ports == num_wakeup_ports)
 
+
+   val tosdq = Module(new Queue(new MicroOpWithData(128), 4))
+
    // Todo_vec add checking for num write ports and number of functional units which use the issue unit
 
    val iss_valids = Wire(Vec(exe_units.withFilter(_.uses_iss_unit).map(x=>x).length, Bool()))
@@ -111,7 +113,7 @@ with freechips.rocketchip.rocket.constants.VecCfgConstants
    issue_unit.io.flush_pipeline := io.flush_pipeline
    issue_unit.io.vl := io.vl
 
-   issue_unit.io.lsu_stq_head_eidx := io.lsu_stq_head_eidx
+   issue_unit.io.stdata_ready      := tosdq.io.count < UInt(2)
    issue_unit.io.lsu_stq_head      := io.lsu_stq_head
    issue_unit.io.commit_load_at_rob_head := io.commit_load_at_rob_head
    issue_unit.io.commit_store_at_rob_head := io.commit_store_at_rob_head
@@ -207,22 +209,26 @@ with freechips.rocketchip.rocket.constants.VecCfgConstants
       require (!ex.isBypassable)
 
       require (w == 0)
-      when (vregister_read.io.exe_reqs(w).bits.uop.uopc === uopVST) {
-         ex.io.req.valid := false.B
+      if (w == 0) {
+         when (vregister_read.io.exe_reqs(w).bits.uop.uopc === uopVST) {
+            ex.io.req.valid := false.B
+         }
+
+
+         val vew = vregister_read.io.exe_reqs(w).bits.uop.rs3_vew
+         val eidx = vregister_read.io.exe_reqs(w).bits.uop.eidx
+         val shiftn = Cat((eidx <<
+            MuxLookup(vregister_read.io.exe_reqs(w).bits.uop.rs3_vew, VEW_8, Array(
+               VEW_8  -> UInt(0),
+               VEW_16 -> UInt(1),
+               VEW_32 -> UInt(2),
+               VEW_64 -> UInt(3)))) & "b1111".U, UInt(0, width=3))
+
+         tosdq.io.enq.valid     := vregister_read.io.exe_reqs(w).bits.uop.uopc === uopVST
+         tosdq.io.enq.bits.uop  := vregister_read.io.exe_reqs(w).bits.uop
+         tosdq.io.enq.bits.data := vregister_read.io.exe_reqs(w).bits.rs3_data >> shiftn
+         io.tosdq               <> tosdq.io.deq
       }
-
-      io.tosdq.valid     := vregister_read.io.exe_reqs(w).bits.uop.uopc === uopVST
-      io.tosdq.bits.uop  := vregister_read.io.exe_reqs(w).bits.uop
-      val vew = vregister_read.io.exe_reqs(w).bits.uop.rs3_vew
-      val eidx = vregister_read.io.exe_reqs(w).bits.uop.eidx
-      val shiftn = Cat((eidx <<
-         MuxLookup(vregister_read.io.exe_reqs(w).bits.uop.rs3_vew, VEW_8, Array(
-         VEW_8  -> UInt(0),
-         VEW_16 -> UInt(1),
-         VEW_32 -> UInt(2),
-         VEW_64 -> UInt(3)))) & "b1111".U, UInt(0, width=3))
-
-      io.tosdq.bits.data := vregister_read.io.exe_reqs(w).bits.rs3_data >> shiftn
    }
    require (exe_units.num_total_bypass_ports == 0)
 

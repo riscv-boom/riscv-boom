@@ -664,8 +664,15 @@ class MemExeUnit(implicit p: Parameters) extends ExecutionUnit(num_rf_read_ports
    maddrcalc.io.brinfo <> io.brinfo
    io.bypass <> maddrcalc.io.bypass  // TODO this is not where the bypassing should occur from, is there any bypassing happening?!
 
-   // enqueue addresses,st-data at the end of Execute
-   io.lsu_io.exe_resp <> maddrcalc.io.resp
+   val to_lsu_resp = Module(new Queue(new FuncUnitResp(128), 4))
+   assert(!(maddrcalc.io.resp.valid && !to_lsu_resp.io.enq.ready), "We do not support backpressure on this queue")
+
+   to_lsu_resp.io.enq.valid := maddrcalc.io.resp.valid // TODO_Vec convert these to decoupledio
+   to_lsu_resp.io.enq.bits  := maddrcalc.io.resp.bits
+   io.lsu_io.exe_resp <> to_lsu_resp.io.deq
+
+   io.fu_types := Mux(to_lsu_resp.io.count < UInt(2), FU_MEM, UInt(0))
+   // TODO_Vec: Tune queue suze and limit here
 
 
    // TODO get rid of com_exception and guard with an assert? Need to surpress within dc-shim.

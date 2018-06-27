@@ -585,7 +585,8 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
       iu.io.vl := csr.io.vecstatus.vl
 
-      iu.io.lsu_stq_head_eidx := lsu.io.stq_head_eidx
+      iu.io.stdata_ready      := true.B
+
       iu.io.lsu_stq_head      := lsu.io.stq_head
 
       iu.io.commit_load_at_rob_head := rob.io.com_load_is_at_rob_head
@@ -775,9 +776,6 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
    fp_pipeline.io.vl := csr.io.vecstatus.vl
    vec_pipeline.io.vl := csr.io.vecstatus.vl
-
-   fp_pipeline.io.lsu_stq_head_eidx  := lsu.io.stq_head_eidx
-   vec_pipeline.io.lsu_stq_head_eidx := lsu.io.stq_head_eidx
 
    fp_pipeline.io.lsu_stq_head  := lsu.io.stq_head
    vec_pipeline.io.lsu_stq_head := lsu.io.stq_head

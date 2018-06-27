@@ -38,7 +38,8 @@ class IssueSlotIO(num_wakeup_ports: Int)(implicit p: Parameters) extends BoomBun
       
    val vl             = Input(UInt(width=VL_SZ.W)) // The global vector length
 
-   val lsu_stq_head_eidx   = Input(UInt())
+   val stdata_ready        = Input(Bool()) // Used to control issues to vecstdata queue
+
    val lsu_stq_head        = Input(UInt())
    val commit_load_at_rob_head = Input(Bool())
    val commit_store_at_rob_head = Input(Bool())
@@ -308,7 +309,7 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean, isVec: Boolean
             io.request := (slot_p1 && slot_p2 && slot_p3 && !io.kill)
          } .elsewhen (slotUop.uopc === uopVST) {
             io.request := (slot_p1 && slot_p2 && slot_p3 && !io.kill
-               && slotUop.eidx === io.lsu_stq_head_eidx
+               && io.stdata_ready
                && slotUop.stq_idx === io.lsu_stq_head
                && io.commit_store_at_rob_head)
          }

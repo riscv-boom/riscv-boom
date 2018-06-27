@@ -69,9 +69,9 @@ class LoadStoreUnitIO(pl_width: Int)(implicit p: Parameters) extends BoomBundle(
    val new_stq_idx        = UInt(OUTPUT, MEM_ADDR_SZ)
 
    // Execute Stage
-   val exe_resp           = (new ValidIO(new FuncUnitResp(128))).flip
+   val exe_resp           = (new DecoupledIO(new FuncUnitResp(128))).flip
    val fp_stdata          = Valid(new MicroOpWithData(fLen)).flip
-   val vec_stdata         = Valid(new MicroOpWithData(128)).flip
+   val vec_stdata         = (new DecoupledIO(new MicroOpWithData(128))).flip
 
    // Send out Memory Request
    val memreq_val         = Bool(OUTPUT)
@@ -122,7 +122,6 @@ class LoadStoreUnitIO(pl_width: Int)(implicit p: Parameters) extends BoomBundle(
 
    // For stalling vector loads and stores elementwise in the issue slots
 
-   val stq_head_eidx      = UInt(width=VL_SZ).asOutput
    val stq_head           = UInt(OUTPUT, width=log2Ceil(num_st_entries))
 
 // causing stuff to dissapear
@@ -226,8 +225,6 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
 
 
    // Issue helpers for vector instructions
-
-   io.stq_head_eidx := stq_uop(stq_head).eidx
    io.stq_head      := stq_head
 
 
@@ -332,8 +329,10 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
    val lcam_avail= Wire(init = Bool(true))
 
    // give first priority to incoming uops
+
    when (io.exe_resp.valid)
    {
+      io.exe_resp.ready := true.B
       when (io.exe_resp.bits.sfence.valid)
       {
          will_fire_sfence := true.B
@@ -351,10 +350,14 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
       }
       when (io.exe_resp.bits.uop.ctrl.is_sta)
       {
-         will_fire_sta_incoming := Bool(true)
-         tlb_avail  := Bool(false)
-         rob_avail  := Bool(false)
-         lcam_avail := Bool(false)
+         when (!saq_val(io.exe_resp.bits.uop.stq_idx)) {
+            will_fire_sta_incoming := Bool(true)
+            tlb_avail  := Bool(false)
+            rob_avail  := Bool(false)
+            lcam_avail := Bool(false)
+         } .otherwise {
+            io.exe_resp.ready := false.B
+         }
       }
       when (io.exe_resp.bits.uop.ctrl.is_std)
       {
@@ -421,14 +424,15 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
    dtlb.io.req.bits.passthrough := false.B // let status.vm decide
 
    // exceptions
-   val ma_ld = io.exe_resp.valid && io.exe_resp.bits.mxcpt.valid && exe_tlb_uop.is_load
+   val ma_ld = io.exe_resp.valid && io.exe_resp.bits.mxcpt.valid && exe_tlb_uop.is_load && io.exe_resp.ready
    val pf_ld = dtlb.io.req.valid && dtlb.io.resp.pf.ld && (exe_tlb_uop.is_load || exe_tlb_uop.is_amo)
    val pf_st = dtlb.io.req.valid && dtlb.io.resp.pf.st && exe_tlb_uop.is_store
    val ae_ld = dtlb.io.req.valid && dtlb.io.resp.ae.ld && (exe_tlb_uop.is_load || exe_tlb_uop.is_amo)
    val ae_st = dtlb.io.req.valid && dtlb.io.resp.ae.st && exe_tlb_uop.is_store
    // TODO check for xcpt_if and verify that never happens on non-speculative instructions.
+
    val mem_xcpt_valid = Reg(next=((pf_ld || pf_st || ae_ld || ae_st) ||
-                                 (io.exe_resp.valid && io.exe_resp.bits.mxcpt.valid)) &&
+                                 (io.exe_resp.valid && io.exe_resp.bits.mxcpt.valid && io.exe_resp.ready)) &&
                                  !io.exception &&
                                  !IsKilledByBranch(io.brinfo, exe_tlb_uop),
                             init=Bool(false))
@@ -445,7 +449,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
    }
 
    val mem_xcpt_cause = RegNext(
-      Mux(io.exe_resp.valid && io.exe_resp.bits.mxcpt.valid,
+      Mux(io.exe_resp.valid && io.exe_resp.bits.mxcpt.valid && io.exe_resp.ready,
          io.exe_resp.bits.mxcpt.bits,
       Mux(pf_ld,
          rocket.Causes.load_page_fault.U,
@@ -457,7 +461,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
       )))))
 
    assert (!(dtlb.io.req.valid && exe_tlb_uop.is_fence), "Fence is pretending to talk to the TLB")
-   assert (!(io.exe_resp.bits.mxcpt.valid && io.exe_resp.valid &&
+   assert (!(io.exe_resp.bits.mxcpt.valid && io.exe_resp.valid && io.exe_resp.ready && 
             !(io.exe_resp.bits.uop.ctrl.is_load || io.exe_resp.bits.uop.ctrl.is_sta))
             , "A uop that's not a load or store-address is throwing a memory exception.")
 
@@ -652,14 +656,19 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
    when (io.vec_stdata.valid)
    {
       val sidx = io.vec_stdata.bits.uop.stq_idx
-      sdq_val(sidx) := Bool(true)
-      sdq_data(sidx) := io.vec_stdata.bits.data.asUInt
+      when (!sdq_val(sidx)) {
+         io.vec_stdata.ready := true.B
+         sdq_val(sidx) := Bool(true)
+         sdq_data(sidx) := io.vec_stdata.bits.data.asUInt
+      } .otherwise {
+         io.vec_stdata.ready := false.B
+      }
    }
-   assert(!(io.fp_stdata.valid && io.exe_resp.valid && io.exe_resp.bits.uop.ctrl.is_std &&
+   assert(!(io.fp_stdata.valid && io.exe_resp.valid && io.exe_resp.bits.uop.ctrl.is_std && io.exe_resp.ready && io.vec_stdata.ready &&
       io.fp_stdata.bits.uop.stq_idx === io.exe_resp.bits.uop.stq_idx),
       "[lsu] FP and INT data is fighting over the same sdq entry.")
 
-   assert(!(io.vec_stdata.valid && io.exe_resp.valid && io.exe_resp.bits.uop.ctrl.is_std &&
+   assert(!(io.vec_stdata.valid && io.exe_resp.valid && io.exe_resp.bits.uop.ctrl.is_std && io.exe_resp.ready && io.vec_stdata.ready &&
       io.vec_stdata.bits.uop.stq_idx === io.exe_resp.bits.uop.stq_idx),
       "[lsu] VEC and INT data is fighting over the same sdq entry.")
 
@@ -695,7 +704,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
    val mem_fired_sta = Reg(next=(will_fire_sta_incoming || will_fire_sta_retry), init=Bool(false))
    val mem_fired_stdi = Reg(next=will_fire_std_incoming, init=Bool(false))
    val mem_fired_stdf = Reg(next=io.fp_stdata.valid, init=Bool(false))
-   val mem_fired_stdv = Reg(next=io.vec_stdata.valid, init=Bool(false))
+   val mem_fired_stdv = Reg(next=io.vec_stdata.valid && io.vec_stdata.ready, init=Bool(false))
    val mem_fired_sfence = Reg(next=will_fire_sfence, init=false.B)
 
    mem_ld_killed := Bool(false)
@@ -965,8 +974,6 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
 //            stq_committed(io.memresp.bits.stq_idx)  := Bool(false)
             stq_succeeded(io.memresp.bits.stq_idx)  := next_eidx === io.vl
 
-            // This is so the issue unit can send out the next element's data faster
-            io.stq_head_eidx                        := next_eidx
          }
 
          if (O3PIPEVIEW_PRINTF)
@@ -1433,7 +1440,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
    //-------------------------------------------------------------
    // Debug & Counter outputs
 
-   io.counters.ld_valid        := RegNext(io.exe_resp.valid && io.exe_resp.bits.uop.is_load)
+   io.counters.ld_valid        := RegNext(io.exe_resp.valid && io.exe_resp.bits.uop.is_load && io.exe_resp.ready)
    io.counters.ld_forwarded    := RegNext(io.forward_val)
    io.counters.ld_sleep        := RegNext(ld_was_put_to_sleep)
    io.counters.ld_killed       := RegNext(ld_was_killed)
