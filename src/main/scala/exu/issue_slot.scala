@@ -171,7 +171,7 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean, isVec: Boolean
       updated_state := s_invalid
       if (containsVec) {
          updated_eidx := next_eidx
-         when (slotUop.vec_val && updated_eidx < io.vl && slotUop.uopc =/= uopVLD) { // VLD spins in LSU instead
+         when (slotUop.vec_val && updated_eidx < io.vl) {
             updated_state := slot_state
             when (slotUop.lrs1_rtype === RT_VEC) {
                updated_prs1_busy := next_next_eidx > slotUop.prs1_eidx

@@ -224,6 +224,10 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
       live_store_mask)
 
 
+   // Bypass incremented vector loads
+   val bypassed_ldq_incr_idx = Wire(UInt(width=log2Ceil(num_ld_entries)))
+   val bypassed_ldq_incr     = Wire(init = Bool(false))
+
    // Issue helpers for vector instructions
    io.stq_head      := stq_head
 
@@ -342,10 +346,17 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
       }
       when (io.exe_resp.bits.uop.ctrl.is_load)
       {
-         will_fire_load_incoming := Bool(true)
-         dc_avail   := Bool(false)
-         tlb_avail  := Bool(false)
-         lcam_avail := Bool(false)
+         // when (!laq_addr_val(io.exe_resp.bits.uop.ldq_idx)
+         //    || (io.exe_resp.bits.uop.ldq_idx === bypassed_ldq_incr_idx
+         //       && bypassed_ldq_incr)) {
+         when (!laq_addr_val(io.exe_resp.bits.uop.ldq_idx)) {
+            will_fire_load_incoming := Bool(true)
+            dc_avail   := Bool(false)
+            tlb_avail  := Bool(false)
+            lcam_avail := Bool(false)
+         } .otherwise {
+            io.exe_resp.ready := false.B
+         }
 
       }
       when (io.exe_resp.bits.uop.ctrl.is_sta)
@@ -947,18 +958,12 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
          laq_succeeded(io.memresp.bits.ldq_idx) := Bool(true)
          when (laq_uop(io.memresp.bits.ldq_idx).uopc === uopVLD) {
             val next_eidx = laq_uop(io.memresp.bits.ldq_idx).eidx + UInt(1)
-            when (next_eidx >= io.vl) {
-               laq_succeeded(io.memresp.bits.ldq_idx) := Bool(true)
-            } .otherwise {
-               laq_succeeded(io.memresp.bits.ldq_idx) := Bool(false)
-               laq_addr     (io.memresp.bits.ldq_idx) := laq_addr(io.memresp.bits.ldq_idx) + MuxLookup(laq_uop(io.memresp.bits.ldq_idx).rs3_vew, VEW_8, Array(
-                  VEW_8  -> UInt(1),
-                  VEW_16 -> UInt(2),
-                  VEW_32 -> UInt(4),
-                  VEW_64 -> UInt(8))) // todo_vec: Ugh this is bad because vector accesses that cross a page boundary break
-               laq_executed (io.memresp.bits.ldq_idx) := Bool(false)
-               laq_uop      (io.memresp.bits.ldq_idx).eidx := next_eidx
-            }
+            laq_addr_val(io.memresp.bits.ldq_idx)       := Bool(false)
+            laq_succeeded(io.memresp.bits.ldq_idx)      := next_eidx === io.vl
+            laq_executed (io.memresp.bits.ldq_idx)      := next_eidx === io.vl
+            laq_uop      (io.memresp.bits.ldq_idx).eidx := next_eidx
+            bypassed_ldq_incr_idx                       := io.memresp.bits.ldq_idx
+            bypassed_ldq_incr                           := Bool(true)
          }
       }
       .otherwise
@@ -1264,15 +1269,8 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
          laq_succeeded(idx)         := Bool(false)
          laq_failure  (idx)         := Bool(false)
          laq_forwarded_std_val(idx) := Bool(false)
-
-         when (laq_uop(idx).uopc === uopVLD) {
-            laq_allocated(idx)         := Bool(false)
-            invalidate_head            := Bool(true)
-         } .otherwise {
-           // temp_laq_head = WrapInc(temp_laq_head, num_ld_entries)
-            laq_allocated(idx)         := Bool(false)
-            invalidate_head            := Bool(true)
-         }
+         laq_allocated(idx)         := Bool(false)
+         invalidate_head            := Bool(true)
       }
 
       temp_laq_head = Mux(io.commit_load_mask(w) && invalidate_head, WrapInc(temp_laq_head, num_ld_entries), temp_laq_head)
