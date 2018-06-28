@@ -334,15 +334,17 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
 
    // give first priority to incoming uops
 
+   io.exe_resp.ready := false.B
    when (io.exe_resp.valid)
    {
-      io.exe_resp.ready := true.B
       when (io.exe_resp.bits.sfence.valid)
       {
-         will_fire_sfence := true.B
-         dc_avail   := false.B
-         tlb_avail  := false.B
-         lcam_avail := false.B
+         will_fire_sfence  := true.B
+         dc_avail          := false.B
+         tlb_avail         := false.B
+         lcam_avail        := false.B
+
+         io.exe_resp.ready := true.B
       }
       when (io.exe_resp.bits.uop.ctrl.is_load)
       {
@@ -350,30 +352,31 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
             || (io.exe_resp.bits.uop.ldq_idx === bypassed_ldq_incr_idx
                && bypassed_ldq_incr
                && !(io.nack.valid && io.nack.isload && io.nack.lsu_idx === bypassed_ldq_incr_idx))) {
-            will_fire_load_incoming := Bool(true)
-            dc_avail   := Bool(false)
-            tlb_avail  := Bool(false)
-            lcam_avail := Bool(false)
-         } .otherwise {
-            io.exe_resp.ready := false.B
-         }
+            will_fire_load_incoming := true.B
+            dc_avail                := false.B
+            tlb_avail               := false.B
+            lcam_avail              := false.B
 
+            io.exe_resp.ready       := true.B
+         }
       }
       when (io.exe_resp.bits.uop.ctrl.is_sta)
       {
          when (!saq_val(io.exe_resp.bits.uop.stq_idx)) {
-            will_fire_sta_incoming := Bool(true)
-            tlb_avail  := Bool(false)
-            rob_avail  := Bool(false)
-            lcam_avail := Bool(false)
-         } .otherwise {
-            io.exe_resp.ready := false.B
+            will_fire_sta_incoming  := true.B
+            tlb_avail               := false.B
+            rob_avail               := false.B
+            lcam_avail              := false.B
+
+            io.exe_resp.ready       := true.B
          }
       }
       when (io.exe_resp.bits.uop.ctrl.is_std)
       {
-         will_fire_std_incoming := Bool(true)
-         rob_avail := Bool(false)
+         will_fire_std_incoming     := true.B
+         rob_avail                  := false.B
+
+         io.exe_resp.ready          := true.B
       }
    }
 
