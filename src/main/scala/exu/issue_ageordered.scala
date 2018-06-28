@@ -11,7 +11,7 @@
 package boom.exu
 
 import chisel3._
-import chisel3.util.{log2Ceil, PopCount}
+import chisel3.util.{log2Ceil, PopCount, Fill}
 import freechips.rocketchip.config.Parameters
 
 import FUConstants._
@@ -125,6 +125,12 @@ class IssueUnitCollasping(
    {
       port_issued(w) = false.B
    }
+   val min_eidx = Wire(UInt(width=VL_SZ.W))
+   if (containsVec) {
+      min_eidx := issue_slots.foldLeft(Fill(VL_SZ, UInt(1))) { (x, y) => Mux((x > y.uop.eidx) && y.request && y.uop.vec_val, y.uop.eidx, x) }
+   } else {
+      min_eidx := UInt(0)
+   }
 
    for (i <- 0 until num_issue_slots)
    {
@@ -134,16 +140,17 @@ class IssueUnitCollasping(
       for (w <- 0 until issue_width)
       {
          val can_allocate = (issue_slots(i).uop.fu_code & io.fu_types(w)) =/= 0.U
-
-         when (requests(i) && !uop_issued && can_allocate && !port_issued(w))
+         val vec_eidx_issue = !Bool(containsVec) || issue_slots(i).uop.eidx === min_eidx || !issue_slots(i).uop.vec_val
+         val was_port_issued_yet = port_issued(w)
+         when (requests(i) && !uop_issued && can_allocate && !port_issued(w) && vec_eidx_issue)
          {
             issue_slots(i).grant := true.B
-            io.iss_valids(w) := true.B
-            io.iss_uops(w) := issue_slots(i).uop
+            io.iss_valids(w)     := true.B
+            io.iss_uops(w)       := issue_slots(i).uop
          }
-         val was_port_issued_yet = port_issued(w)
-         port_issued(w) = (requests(i) && !uop_issued && can_allocate) | port_issued(w)
-         uop_issued = (requests(i) && can_allocate && !was_port_issued_yet) | uop_issued
+         port_issued(w) = (requests(i) && !uop_issued          && can_allocate && vec_eidx_issue) | port_issued(w)
+         uop_issued     = (requests(i) && !was_port_issued_yet && can_allocate && vec_eidx_issue) | uop_issued
+         // TODO_Vec: Does this break when issue_width > 1? Probably not? It does rip me
       }
    }
 }

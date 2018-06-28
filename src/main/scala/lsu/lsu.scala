@@ -346,10 +346,10 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
       }
       when (io.exe_resp.bits.uop.ctrl.is_load)
       {
-         // when (!laq_addr_val(io.exe_resp.bits.uop.ldq_idx)
-         //    || (io.exe_resp.bits.uop.ldq_idx === bypassed_ldq_incr_idx
-         //       && bypassed_ldq_incr)) {
-         when (!laq_addr_val(io.exe_resp.bits.uop.ldq_idx)) {
+         when (!laq_addr_val(io.exe_resp.bits.uop.ldq_idx)
+            || (io.exe_resp.bits.uop.ldq_idx === bypassed_ldq_incr_idx
+               && bypassed_ldq_incr
+               && !(io.nack.valid && io.nack.isload && io.nack.lsu_idx === bypassed_ldq_incr_idx))) {
             will_fire_load_incoming := Bool(true)
             dc_avail   := Bool(false)
             tlb_avail  := Bool(false)
@@ -626,7 +626,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
       laq_is_virtual    (exe_tlb_uop.ldq_idx)      := tlb_miss
       laq_is_uncacheable(exe_tlb_uop.ldq_idx)      := tlb_addr_uncacheable && !tlb_miss
 
-      assert(!(will_fire_load_incoming && laq_addr_val(exe_tlb_uop.ldq_idx)),
+      assert(!(will_fire_load_incoming && laq_addr_val(exe_tlb_uop.ldq_idx) && exe_tlb_uop.ldq_idx =/= bypassed_ldq_incr_idx),
          "[lsu] incoming load is overwriting a valid address.")
    }
 
@@ -958,12 +958,15 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
          laq_succeeded(io.memresp.bits.ldq_idx) := Bool(true)
          when (laq_uop(io.memresp.bits.ldq_idx).uopc === uopVLD) {
             val next_eidx = laq_uop(io.memresp.bits.ldq_idx).eidx + UInt(1)
-            laq_addr_val(io.memresp.bits.ldq_idx)       := Bool(false)
+            val bypass_executed                          = io.memreq_val && io.memreq_uop.ldq_idx === io.memresp.bits.ldq_idx && io.memreq_uop.is_load
+            laq_addr_val (io.memresp.bits.ldq_idx)      := bypass_executed
             laq_succeeded(io.memresp.bits.ldq_idx)      := next_eidx === io.vl
-            laq_executed (io.memresp.bits.ldq_idx)      := next_eidx === io.vl
+            laq_executed (io.memresp.bits.ldq_idx)      := next_eidx === io.vl || bypass_executed
+            // TODO_Vec: this is the case in which the response is to the same slot which was just executed due to bypassing
+            //           The logic is pretty circular, since setting bypassed_ldq_incr here sets memreq to be an incoming load
             laq_uop      (io.memresp.bits.ldq_idx).eidx := next_eidx
             bypassed_ldq_incr_idx                       := io.memresp.bits.ldq_idx
-            bypassed_ldq_incr                           := Bool(true)
+            bypassed_ldq_incr                           := next_eidx =/= io.vl
          }
       }
       .otherwise
