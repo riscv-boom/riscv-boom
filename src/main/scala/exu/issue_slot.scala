@@ -350,6 +350,9 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean, isVec: Boolean
    io.updated_uop.prs1_busy := updated_prs1_busy
    io.updated_uop.prs2_busy := updated_prs2_busy
    io.updated_uop.prs3_busy := updated_prs3_busy
+   io.updated_uop.prs1_eidx := updated_prs1_eidx
+   io.updated_uop.prs2_eidx := updated_prs2_eidx
+   io.updated_uop.prs3_eidx := updated_prs3_eidx
    io.updated_uop.eidx      := updated_eidx
    io.updated_uop.rs1_data  := updated_rs1_data
    io.updated_uop.rs2_data  := updated_rs2_data

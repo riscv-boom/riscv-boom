@@ -125,10 +125,17 @@ class IssueUnitCollasping(
    {
       port_issued(w) = false.B
    }
+
+   val all_available_fu = io.fu_types.reduce(_|_)
+
    val min_eidx = Wire(UInt(width=VL_SZ.W))
    if (containsVec) {
-      min_eidx := issue_slots.foldLeft(Fill(VL_SZ, UInt(1))) { (x, y) => Mux((x > y.uop.eidx) && y.request && y.uop.vec_val, y.uop.eidx, x) }
-   } else {
+      min_eidx := issue_slots.foldLeft(Fill(VL_SZ, UInt(1))) {
+         (x, y) => Mux((x > y.uop.eidx) && y.request && y.uop.vec_val && (y.uop.fu_code & all_available_fu) =/= 0.U, y.uop.eidx, x)
+      }
+   }
+   else
+   {
       min_eidx := UInt(0)
    }
 

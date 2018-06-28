@@ -416,11 +416,11 @@ class VecFPUExeUnit(
    // Outputs
    val resp_uop = new MicroOp().fromBits(
       PriorityMux(fu_units.map(f => (f.io.resp.valid, f.io.resp.bits.uop.asUInt))))
-   io.resp(0).valid       := fu_units.map(_.io.resp.valid).reduce(_|_)
-   io.resp(0).bits.uop    := resp_uop
-   io.resp(0).bits.data   := PriorityMux(fu_units.map(f =>(f.io.resp.valid, f.io.resp.bits.data.asUInt))).asUInt
-   io.resp(0).bits.fflags := vfpu_resp_fflags // TODO_vec add div flags here
-   io.resp(0).bits.mask   := "b1111111111111111".U
+   io.resp(0).valid         := fu_units.map(_.io.resp.valid).reduce(_|_)
+   io.resp(0).bits.uop      := resp_uop
+   io.resp(0).bits.data     := PriorityMux(fu_units.map(f =>(f.io.resp.valid, f.io.resp.bits.data.asUInt))).asUInt
+   io.resp(0).bits.fflags   := vfpu_resp_fflags // TODO_vec add div flags here
+   io.resp(0).bits.mask     := "b1111111111111111".U
    assert(!(valu.io.resp.valid && vfpu.io.resp.valid), "VALU and VFPU contending for write port")
    when (io.resp(0).valid) {
       printf("A functional unit in the vector exe unit has valid response\n");
@@ -651,7 +651,6 @@ class MemExeUnit(implicit p: Parameters) extends ExecutionUnit(num_rf_read_ports
    is_mem_unit = true)(p)
    with freechips.rocketchip.rocket.constants.MemoryOpConstants
 {
-   io.fu_types := FU_MEM
 
    // Perform address calculation
    val maddrcalc = Module(new MemAddrCalcUnit())
@@ -665,13 +664,25 @@ class MemExeUnit(implicit p: Parameters) extends ExecutionUnit(num_rf_read_ports
    io.bypass <> maddrcalc.io.bypass  // TODO this is not where the bypassing should occur from, is there any bypassing happening?!
 
    val to_lsu_resp = Module(new Queue(new FuncUnitResp(128), 4))
-   assert(!(maddrcalc.io.resp.valid && !to_lsu_resp.io.enq.ready), "We do not support backpressure on this queue")
+   val to_lsu_vsta = Module(new Queue(new FuncUnitResp(128), 4))
 
-   to_lsu_resp.io.enq.valid := maddrcalc.io.resp.valid // TODO_Vec convert these to decoupledio
+
+   assert(!(maddrcalc.io.resp.valid && maddrcalc.io.resp.bits.uop.uopc =/= uopVST && !to_lsu_resp.io.enq.ready),
+      "We do not support backpressure on this queue")
+
+   to_lsu_resp.io.enq.valid := maddrcalc.io.resp.valid && maddrcalc.io.resp.bits.uop.uopc =/= uopVST
    to_lsu_resp.io.enq.bits  := maddrcalc.io.resp.bits
-   io.lsu_io.exe_resp <> to_lsu_resp.io.deq
+   io.lsu_io.exe_resp       <> to_lsu_resp.io.deq
 
-   io.fu_types := Mux(to_lsu_resp.io.count < UInt(2), FU_MEM, UInt(0))
+   // Vector store addrs need to go through a separate queue to avoid blocking loads
+   assert(!(maddrcalc.io.resp.valid && maddrcalc.io.resp.bits.uop.uopc === uopVST && !to_lsu_vsta.io.enq.ready),
+      "We do not support backpressure on this queue")
+
+   to_lsu_vsta.io.enq.valid := maddrcalc.io.resp.valid && maddrcalc.io.resp.bits.uop.uopc === uopVST
+   to_lsu_vsta.io.enq.bits  := maddrcalc.io.resp.bits
+   io.lsu_io.exe_vsta       <> to_lsu_vsta.io.deq
+
+   io.fu_types := Mux(to_lsu_resp.io.count < UInt(2), FU_MEM, UInt(0)) | Mux(to_lsu_vsta.io.count < UInt(2), FU_VSTA, UInt(0))
    // TODO_Vec: Tune queue suze and limit here
 
 
