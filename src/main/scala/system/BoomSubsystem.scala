@@ -2,8 +2,7 @@
 
 package boom.system
 
-import Chisel._
-import chisel3.internal.sourceinfo.SourceInfo
+import chisel3._
 import freechips.rocketchip.config.{Field, Parameters}
 import freechips.rocketchip.devices.tilelink._
 import freechips.rocketchip.devices.debug.{HasPeripheryDebug, HasPeripheryDebugModuleImp}
@@ -147,7 +146,7 @@ class BoomSubsystemModule[+L <: BoomSubsystem](_outer: L) extends BaseSubsystemM
   tile_inputs.zip(outer.hartIdList).foreach { case(wire, i) =>
     wire.clock := clock
     wire.reset := reset
-    wire.hartid := UInt(i)
+    wire.hartid := i.U
     wire.reset_vector := global_reset_vector
   }
 }
