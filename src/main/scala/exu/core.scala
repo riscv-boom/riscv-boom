@@ -91,14 +91,12 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
                                  exe_units.withFilter(_.usesIRF).map(e => e.num_rf_read_ports).sum,
                                  exe_units.withFilter(_.usesIRF).map(e => e.num_rf_write_ports).sum,
                                  xLen,
-                                 false,
                                  exe_units.bypassable_write_port_mask))
                           } else {
                               Module(new RegisterFileBehavorial(numIntPhysRegs,
                                  exe_units.withFilter(_.usesIRF).map(e => e.num_rf_read_ports).sum,
                                  exe_units.withFilter(_.usesIRF).map(e => e.num_rf_write_ports).sum,
                                  xLen,
-                                 false,
                                  exe_units.bypassable_write_port_mask))
                           }
    val ll_wbarb         = Module(new Arbiter(new ExeUnitResp(xLen), 2))

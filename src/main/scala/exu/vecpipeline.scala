@@ -64,11 +64,10 @@ with freechips.rocketchip.rocket.constants.VecCfgConstants
    val issue_unit = Module(new IssueUnitCollasping(issueParams.find(_.iqType == IQT_VEC.litValue).get, true,
       true,
       num_wakeup_ports)) // TODO_VEC: Make this a VectorIssueUnit
-   val vregfile = Module(new RegisterFileBehavorial(numVecRegFileRows,
+   val vregfile = Module(new VectorRegisterFileBehavorial(numVecRegFileRows,
       exe_units.withFilter(_.uses_iss_unit).map(e=>e.num_rf_read_ports).sum,
       exe_units.withFilter(_.uses_iss_unit).map(e=>e.num_rf_write_ports).sum, // TODO_VEC: Subtract write ports to IRF, FRF
       128,
-      true,
       exe_units.bypassable_write_port_mask
    ))
    assert(exe_units.num_total_bypass_ports == 0, "Vector pipeline does not support bypassing")

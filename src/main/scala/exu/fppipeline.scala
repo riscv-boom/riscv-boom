@@ -76,7 +76,6 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
                                  exe_units.withFilter(_.uses_iss_unit).map(e => e.num_rf_write_ports).sum - 1 - 1 +
                                     num_ll_ports,
                                  fLen+1,
-                                 false,
                                  exe_units.bypassable_write_port_mask
                                  ))
    val fregister_read   = Module(new RegisterRead(
