@@ -1,14 +1,13 @@
 package boom.util
 
-import Chisel._
+import chisel3._
+import chisel3.util.{Valid, Decoupled, log2Ceil}
 
 
-class ESramWritePort[T <: Data](idx_sz: Int, gen: T) extends Bundle
+class ESramWritePort[T <: Data](val idx_sz: Int, val gen: T) extends Bundle
 {
-   val idx = UInt(width = idx_sz)
+   val idx = UInt(idx_sz.W)
    val data = gen
-
-   override def cloneType = new ESramWritePort(idx_sz, gen).asInstanceOf[this.type]
 }
 
 /** Implements a decoupled SRAM which can be back-pressured on the read response side,
@@ -31,14 +30,14 @@ class ElasticSeqMem[T <: Data](
 
    val io = IO(new Bundle {
       // read request on cycle S0 (pass in read address)
-      val rreq = Decoupled(UInt(width=idx_sz)).flip
+      val rreq = Flipped(Decoupled(UInt(idx_sz.W)))
       // read response on cycle S1 (receive read output)
       val rresp = Decoupled(gen)
 
-      val write = Valid(new ESramWritePort(idx_sz, gen)).flip
+      val write = Flipped(Valid(new ESramWritePort(idx_sz, gen)))
 
       // clear out queued inflight requests, but allow current response to be valid.
-      val flush = Bool(INPUT)
+      val flush = Input(Bool())
    })
 
    private val ram = SeqMem(num_entries, gen)
@@ -60,7 +59,7 @@ class ElasticSeqMem[T <: Data](
    val s1_replay = io.rresp.ready
 
    val s0_valid = Wire(Bool())
-   val s0_ridx = Wire(UInt(width=idx_sz))
+   val s0_ridx = Wire(UInt(idx_sz.W))
    val last_val = RegNext(s0_valid)
    val last_idx = RegNext(s0_ridx)
    s0_valid := Mux(s1_replay, last_val, io.rreq.valid)

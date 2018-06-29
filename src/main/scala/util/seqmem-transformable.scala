@@ -15,7 +15,8 @@
 
 package boom.util
 
-import Chisel._
+import chisel3._
+import chisel3.util.{RegEnable, log2Ceil}
 
 
 // Provide the "logical" sizes and we will map
@@ -27,7 +28,7 @@ class SeqMem1rwTransformable (
    l_width: Int
    ) extends Module
 {
-   val p_depth = 1 << log2Up(scala.math.sqrt(l_depth*l_width).toInt)
+   val p_depth = 1 << log2Ceil(scala.math.sqrt(l_depth*l_width).toInt)
    val p_width = l_depth*l_width/p_depth
 
    require (l_depth*l_width == p_depth*p_width)
@@ -45,14 +46,14 @@ class SeqMem1rwTransformable (
 
    val io = IO(new Bundle
    {
-      val wen   = Bool(INPUT)
-      val waddr = UInt(INPUT, width = l_idx_sz)
-      val wmask = UInt(INPUT, width = l_width) 
-      val wdata = UInt(INPUT, width = l_width)
+      val wen   = Input(Bool())
+      val waddr = Input(UInt(l_idx_sz.W))
+      val wmask = Input(UInt(l_width.W)) 
+      val wdata = Input(UInt(l_width.W))
 
-      val ren   = Bool(INPUT)                   // valid cycle s0
-      val raddr = UInt(INPUT, width = l_idx_sz) // input cycle s0
-      val rout  = UInt(OUTPUT, width = l_width) // returned cycle s1
+      val ren   = Input(Bool())                   // valid cycle s0
+      val raddr = Input(UInt(l_idx_sz.W)) // input cycle s0
+      val rout  = Output(UInt(l_width.W)) // returned cycle s1
    })
 
    val smem = SeqMem(p_depth, Vec(p_width, Bool()))
