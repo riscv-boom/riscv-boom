@@ -13,7 +13,8 @@
 
 package boom.exu
 
-import Chisel._
+import chisel3._
+import chisel3.util._
 import freechips.rocketchip.config.Parameters
 import scala.collection.mutable.ArrayBuffer
 import boom.common._
@@ -21,18 +22,18 @@ import boom.util._
 
 class RegisterFileReadPortIO(addr_width: Int, data_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
-   val addr = UInt(INPUT, addr_width)
-   val data = UInt(OUTPUT, data_width)
+   val addr = Input(UInt(addr_width.W))
+   val data = Output(UInt(data_width.W))
    override def cloneType = new RegisterFileReadPortIO(addr_width, data_width)(p).asInstanceOf[this.type]
 }
 
 class RegisterFileWritePort(addr_width: Int, data_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
-   val addr = UInt(width = addr_width)
-   val data = UInt(width = data_width)
-   val eidx = UInt(width = VL_SZ)
-   val mask = UInt(width = data_width / 8)
-   val rd_vew = UInt(width = VEW_SZ)
+   val addr = UInt(width = addr_width.W)
+   val data = UInt(width = data_width.W)
+   val eidx = UInt(width = VL_SZ.W)
+   val mask = UInt(width = (data_width / 8).W)
+   val rd_vew = UInt(width = VEW_SZ.W)
    override def cloneType = new RegisterFileWritePort(addr_width, data_width)(p).asInstanceOf[this.type]
 }
 
@@ -103,12 +104,12 @@ with freechips.rocketchip.rocket.constants.VecCfgConstants
 {
    // --------------------------------------------------------------
 
-   val regfile = Mem(num_registers, UInt(width=register_width))
+   val regfile = Mem(num_registers, UInt(width=register_width.W))
 
    // --------------------------------------------------------------
    // Read ports.
 
-   val read_data = Wire(Vec(num_read_ports, UInt(width = register_width)))
+   val read_data = Wire(Vec(num_read_ports, UInt(width = register_width.W)))
 
    // Register the read port addresses to give a full cycle to the RegisterRead Stage (if desired).
    val read_addrs =
