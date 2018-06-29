@@ -21,36 +21,8 @@ import freechips.rocketchip.config.Parameters
 import boom.common._
 import boom.util._
 
-class RegisterReadIO(
-   issue_width: Int,
-   num_total_read_ports: Int,
-   num_total_bypass_ports: Int,
-   register_width: Int,
-   reg_sz: Int
-)(implicit p: Parameters) extends  BoomBundle()(p)
-{
-   // issued micro-ops
-   val iss_valids = Vec(issue_width, Bool()).asInput
-   val iss_uops   = Vec(issue_width, new MicroOp()).asInput
 
-   // interface with register file's read ports
-   val rf_read_ports = Vec(num_total_read_ports, new RegisterFileReadPortIO(reg_sz, register_width)).flip
-
-   val bypass = new BypassData(num_total_bypass_ports, register_width).asInput
-
-   // send micro-ops to the execution pipelines
-   val exe_reqs = Vec(issue_width, (new DecoupledIO(new FuncUnitReq(register_width))))
-
-   val kill   = Bool(INPUT)
-   val brinfo = new BrResolutionInfo().asInput
-
-   override def cloneType =
-      new RegisterReadIO(issue_width, num_total_read_ports, num_total_bypass_ports, register_width, reg_sz
-   )(p).asInstanceOf[this.type]
-}
-
-
-class RegisterRead(
+class VectorRegisterRead(
    issue_width: Int,
    supported_units_array: Seq[SupportedFuncUnits],
    num_total_read_ports: Int,
@@ -63,7 +35,7 @@ class RegisterRead(
 )(implicit p: Parameters) extends BoomModule()(p)
 with Packing
 {
-   val reg_sz = PREG_SZ
+   val reg_sz = log2Ceil(numVecRegFileRows)
    val io = IO(new RegisterReadIO(issue_width, num_total_read_ports, num_total_bypass_ports, register_width, reg_sz))
 
    val rrd_valids       = Wire(Vec(issue_width, Bool()))
@@ -75,6 +47,7 @@ with Packing
    val exe_reg_rs2_data = Reg(Vec(issue_width, Bits(width = register_width)))
    val exe_reg_rs3_data = Reg(Vec(issue_width, Bits(width = register_width)))
 
+   assert(num_total_bypass_ports == 0, "No bypassing supported")
 
    //-------------------------------------------------------------
    // hook up inputs
@@ -116,18 +89,34 @@ with Packing
       // If rrdLatency==0, ISS and RRD are in same cycle so this "just works".
       // If rrdLatency==1, we need to send read address at end of ISS stage,
       //    in order to get read data back at end of RRD stage.
-      require (regreadLatency == 0 || regreadLatency == 1)
+      require (regreadLatency == 1)
 
       val rs1_addr = Wire(UInt())
       val rs2_addr = Wire(UInt())
       val rs3_addr = Wire(UInt())
-      rs1_addr := io.iss_uops(w).pop1
-      rs2_addr := io.iss_uops(w).pop2
-      rs3_addr := io.iss_uops(w).pop3
+      rs1_addr := CalcVecRegAddr(
+         io.iss_uops(w).rs1_vew,
+         io.iss_uops(w).eidx,
+         io.iss_uops(w).pop1,
+         numVecPhysRegs)
+      rs2_addr := CalcVecRegAddr(
+         io.iss_uops(w).rs2_vew,
+         io.iss_uops(w).eidx,
+         io.iss_uops(w).pop2,
+         numVecPhysRegs)
+      rs3_addr := CalcVecRegAddr(
+         io.iss_uops(w).rs3_vew,
+         io.iss_uops(w).eidx,
+         io.iss_uops(w).pop3,
+         numVecPhysRegs)
 
       if (num_read_ports > 0) io.rf_read_ports(idx+0).addr := rs1_addr
       if (num_read_ports > 1) io.rf_read_ports(idx+1).addr := rs2_addr
       if (num_read_ports > 2) io.rf_read_ports(idx+2).addr := rs3_addr
+
+      io.rf_read_ports(idx+0).enable := io.iss_uops(w).lrs1_rtype === RT_VEC
+      io.rf_read_ports(idx+1).enable := io.iss_uops(w).lrs2_rtype === RT_VEC
+      io.rf_read_ports(idx+2).enable := io.iss_uops(w).lrs3_rtype === RT_VEC
 
       if (num_read_ports > 0) rrd_rs1_data(w) := io.rf_read_ports(idx+0).data
       if (num_read_ports > 1) rrd_rs2_data(w) := io.rf_read_ports(idx+1).data
@@ -148,46 +137,6 @@ with Packing
    }
 
 
-   //-------------------------------------------------------------
-   //-------------------------------------------------------------
-   // BYPASS MUXES -----------------------------------------------
-   // performed at the end of the register read stage
-
-   // NOTES: this code is fairly hard-coded. Sorry.
-   // ASSUMPTIONS:
-   //    - rs3 is used for FPU ops which are NOT bypassed (so don't check
-   //       them!).
-   //    - only bypass integer registers.
-
-   val bypassed_rs1_data = Wire(Vec(issue_width, Bits(width = register_width)))
-   val bypassed_rs2_data = Wire(Vec(issue_width, Bits(width = register_width)))
-
-   for (w <- 0 until issue_width)
-   {
-      val num_read_ports = num_read_ports_array(w)
-      var rs1_cases = Array((Bool(false), Bits(0, register_width)))
-      var rs2_cases = Array((Bool(false), Bits(0, register_width)))
-
-      val pop1       = rrd_uops(w).pop1
-      val lrs1_rtype = rrd_uops(w).lrs1_rtype
-      val pop2       = rrd_uops(w).pop2
-      val lrs2_rtype = rrd_uops(w).lrs2_rtype
-
-      for (b <- 0 until io.bypass.getNumPorts)
-      {
-         // can't use "io.bypass.valid(b) since it would create a combinational loop on branch kills"
-         rs1_cases ++= Array((io.bypass.valid(b) && (pop1 === io.bypass.uop(b).pdst) && io.bypass.uop(b).ctrl.rf_wen
-            && io.bypass.uop(b).dst_rtype === RT_FIX && lrs1_rtype === RT_FIX && (pop1 =/= UInt(0)), io.bypass.data(b)))
-         rs2_cases ++= Array((io.bypass.valid(b) && (pop2 === io.bypass.uop(b).pdst) && io.bypass.uop(b).ctrl.rf_wen
-            && io.bypass.uop(b).dst_rtype === RT_FIX && lrs2_rtype === RT_FIX && (pop2 =/= UInt(0)), io.bypass.data(b)))
-      }
-
-
-      if (num_read_ports > 0) bypassed_rs1_data(w) := MuxCase(rrd_rs1_data(w), rs1_cases)
-      if (num_read_ports > 1) bypassed_rs2_data(w) := MuxCase(rrd_rs2_data(w), rs2_cases)
-
-   }
-
 
    //-------------------------------------------------------------
    //-------------------------------------------------------------
@@ -198,8 +147,8 @@ with Packing
    for (w <- 0 until issue_width)
    {
       val num_read_ports = num_read_ports_array(w)
-      if (num_read_ports > 0) exe_reg_rs1_data(w) := bypassed_rs1_data(w)
-      if (num_read_ports > 1) exe_reg_rs2_data(w) := bypassed_rs2_data(w)
+      if (num_read_ports > 0) exe_reg_rs1_data(w) := rrd_rs1_data(w)
+      if (num_read_ports > 1) exe_reg_rs2_data(w) := rrd_rs2_data(w)
       if (num_read_ports > 2) exe_reg_rs3_data(w) := rrd_rs3_data(w)
       // ASSUMPTION: rs3 is FPU which is NOT bypassed
    }
@@ -218,6 +167,24 @@ with Packing
       if (num_read_ports > 0) io.exe_reqs(w).bits.rs1_data := exe_reg_rs1_data(w)
       if (num_read_ports > 1) io.exe_reqs(w).bits.rs2_data := exe_reg_rs2_data(w)
       if (num_read_ports > 2) io.exe_reqs(w).bits.rs3_data := exe_reg_rs3_data(w)
+
+
+      def fill_case(n: UInt, s: UInt): UInt = {
+         MuxLookup(s, VEW_8, Array(
+            VEW_8  -> fill_b(n),
+            VEW_16 -> fill_h(n),
+            VEW_32 -> fill_w(n),
+            VEW_64 -> fill_d(n)))
+      }
+      when (exe_reg_uops(w).lrs1_rtype === RT_FLT) {
+         io.exe_reqs(w).bits.rs1_data := fill_case(exe_reg_uops(w).rs1_data, exe_reg_uops(w).rs1_vew)
+      }
+      when (exe_reg_uops(w).lrs2_rtype === RT_FLT) {
+         io.exe_reqs(w).bits.rs2_data := fill_case(exe_reg_uops(w).rs2_data, exe_reg_uops(w).rs2_vew)
+      }
+      when (exe_reg_uops(w).lrs3_rtype === RT_FLT) {
+         io.exe_reqs(w).bits.rs3_data := fill_case(exe_reg_uops(w).rs3_data, exe_reg_uops(w).rs3_vew)
+      }
 
    }
 }

@@ -84,7 +84,6 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
                            exe_units.withFilter(_.uses_iss_unit).map(_.num_rf_read_ports).sum,
                            exe_units.withFilter(_.uses_iss_unit).map(_.num_rf_read_ports),
                            exe_units.num_total_bypass_ports,
-                           false,
                            fLen+1))
 
    require (exe_units.withFilter(_.uses_iss_unit).map(x=>x).length == issue_unit.issue_width)

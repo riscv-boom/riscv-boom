@@ -71,13 +71,12 @@ with freechips.rocketchip.rocket.constants.VecCfgConstants
       exe_units.bypassable_write_port_mask
    ))
    assert(exe_units.num_total_bypass_ports == 0, "Vector pipeline does not support bypassing")
-   val vregister_read = Module(new RegisterRead(
+   val vregister_read = Module(new VectorRegisterRead(
       issue_unit.issue_width,
       exe_units.withFilter(_.uses_iss_unit).map(_.supportedFuncUnits),
       exe_units.withFilter(_.uses_iss_unit).map(_.num_rf_read_ports).sum,
       exe_units.withFilter(_.uses_iss_unit).map(_.num_rf_read_ports),
       exe_units.num_total_bypass_ports,
-      true,
       128))
 
    require (exe_units.withFilter(_.uses_iss_unit).map(x=>x).length == issue_unit.issue_width)
