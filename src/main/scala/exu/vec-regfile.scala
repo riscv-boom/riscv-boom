@@ -34,7 +34,7 @@ with freechips.rocketchip.rocket.constants.VecCfgConstants
 {
    // There's no way this is the easiest way to do this
    def toVec (data:UInt, elem_width:Int, elem_count:Int):Vec[UInt] = {
-      Vec((0 until elem_count) map {i =>
+      VecInit((0 until elem_count) map {i =>
          data(elem_width*(i+1)-1, elem_width*i)
       })
    }
@@ -54,8 +54,8 @@ with freechips.rocketchip.rocket.constants.VecCfgConstants
    for (i <- 0 until num_read_ports)
    {
       read_data(i) :=
-         Mux(RegNext(read_addrs(i)) === UInt(0),
-            UInt(0),
+         Mux(RegNext(read_addrs(i)) === 0.U,
+            0.U,
             regfile.read(read_addrs(i), io.read_ports(i).enable).asUInt) // TODO_Vec: Maybe gate this off?
    }
 
@@ -71,10 +71,10 @@ with freechips.rocketchip.rocket.constants.VecCfgConstants
    def toBytes(wdata:UInt, bitmask:UInt, eidx:UInt, rd_vew:UInt): (Seq[Bool], Vec[UInt]) = {
       val mask = Reverse(Cat((0 until register_width/8) map {i => bitmask(i)}))
       val eidx_shifted = eidx << MuxLookup(rd_vew, VEW_8, Array(
-         VEW_8  -> UInt(0),
-         VEW_16 -> UInt(1),
-         VEW_32 -> UInt(2),
-         VEW_64 -> UInt(3)))
+         VEW_8  -> 0.U,
+         VEW_16 -> 2.U,
+         VEW_32 -> 2.U,
+         VEW_64 -> 3.U))
       val strip_off = eidx_shifted(3,0)
       val shifted_mask = mask << (strip_off)
       val shifted_wdata = wdata << (strip_off << 3)
@@ -87,8 +87,8 @@ with freechips.rocketchip.rocket.constants.VecCfgConstants
    // Write ports.
    for (wport <- io.write_ports)
    {
-      wport.ready := Bool(true)
-      when (wport.valid && (wport.bits.addr =/= UInt(0)))
+      wport.ready := true.B
+      when (wport.valid && (wport.bits.addr =/= 0.U))
       {
          val (gen_mask, gen_wdata) = toBytes(wport.bits.data, wport.bits.mask, wport.bits.eidx, wport.bits.rd_vew)
          regfile.write(wport.bits.addr, gen_wdata, gen_mask)

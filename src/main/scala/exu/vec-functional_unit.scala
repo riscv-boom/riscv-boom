@@ -115,7 +115,7 @@ class VALUUnit(num_stages: Int) (implicit p: Parameters)
 
                val shamt = op1(5, 0).asUInt
                val sra_out = (op2.asSInt >> shamt).asUInt
-               val srl_out = op2.asBits >> shamt
+               val srl_out = op2.asUInt >> shamt
                val sll_out = op2 << shamt
                val comp = Module(new Comparator(sz))
                comp.io.in0 := op1

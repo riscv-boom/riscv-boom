@@ -79,7 +79,7 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean, isVec: Boolean
 {
    val io = IO(new IssueSlotIO(num_slow_wakeup_ports))
 
-   val slotUop = Reg(init = NullMicroOp)
+   val slotUop = RegInit(NullMicroOp)
    //   val slot_state    = Reg(init = s_invalid)
    val slot_state = slotUop.iw_state
    val slot_is_2uops = Reg(Bool())

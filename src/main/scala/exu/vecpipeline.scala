@@ -97,7 +97,7 @@ with freechips.rocketchip.rocket.constants.VecCfgConstants
    issue_unit.io.flush_pipeline := io.flush_pipeline
    issue_unit.io.vl := io.vl
 
-   issue_unit.io.stdata_ready      := tosdq.io.count < UInt(2)
+   issue_unit.io.stdata_ready      := tosdq.io.count < 2.U
    issue_unit.io.lsu_stq_head      := io.lsu_stq_head
    issue_unit.io.commit_load_at_rob_head := io.commit_load_at_rob_head
    issue_unit.io.commit_store_at_rob_head := io.commit_store_at_rob_head
@@ -149,7 +149,7 @@ with freechips.rocketchip.rocket.constants.VecCfgConstants
       iss_valids(i) := issue_unit.io.iss_valids(i)
       iss_uops(i) := issue_unit.io.iss_uops(i)
 
-      issue_unit.io.fu_types(i) := exe_units(i).io.fu_types & ~Mux(ll_wb_block_issue, FU_VALU | FU_VFPU, UInt(0)) 
+      issue_unit.io.fu_types(i) := exe_units(i).io.fu_types & ~Mux(ll_wb_block_issue, FU_VALU | FU_VFPU, 0.U) 
 
       require (exe_units(i).uses_iss_unit)
    }
@@ -203,10 +203,10 @@ with freechips.rocketchip.rocket.constants.VecCfgConstants
          val eidx = vregister_read.io.exe_reqs(w).bits.uop.eidx
          val shiftn = Cat((eidx <<
             MuxLookup(vregister_read.io.exe_reqs(w).bits.uop.rs3_vew, VEW_8, Array(
-               VEW_8  -> UInt(0),
-               VEW_16 -> UInt(1),
-               VEW_32 -> UInt(2),
-               VEW_64 -> UInt(3)))) & "b1111".U, UInt(0, width=3))
+               VEW_8  -> 0.U,
+               VEW_16 -> 1.U,
+               VEW_32 -> 2.U,
+               VEW_64 -> 3.U))) & "b1111".U, 0.U(width=3.W))
 
          tosdq.io.enq.valid     := vregister_read.io.exe_reqs(w).bits.uop.uopc === uopVST
          tosdq.io.enq.bits.uop  := vregister_read.io.exe_reqs(w).bits.uop
@@ -226,7 +226,7 @@ with freechips.rocketchip.rocket.constants.VecCfgConstants
    //-------------------------------------------------------------
 
    val ll_wb = Module(new Queue(new ExeUnitResp(128), 8)) // TODO_Vec: Tune these
-   ll_wb_block_issue := ll_wb.io.count >= UInt(4)
+   ll_wb_block_issue := ll_wb.io.count >= 4.U
    ll_wb.io.enq <> io.ll_wport
    assert (ll_wb.io.enq.ready, "We do not support backpressure on this queue")
    when   (io.ll_wport.valid) { assert(io.ll_wport.bits.uop.ctrl.rf_wen && io.ll_wport.bits.uop.dst_rtype === RT_VEC) }

@@ -78,7 +78,7 @@ abstract class RegisterFile(
    val io = IO(new BoomBundle()(p)
    {
       val read_ports = Vec(num_read_ports, new RegisterFileReadPortIO(log2Ceil(num_registers), register_width))
-      val write_ports = Vec(num_write_ports, Decoupled(new RegisterFileWritePort(log2Ceil(num_registers), register_width))).flip
+      val write_ports = Flipped(Vec(num_write_ports, Decoupled(new RegisterFileWritePort(log2Ceil(num_registers), register_width))))
    })
 
    private val rf_cost = (num_read_ports+num_write_ports)*(num_read_ports+2*num_write_ports)
@@ -122,8 +122,8 @@ with freechips.rocketchip.rocket.constants.VecCfgConstants
    for (i <- 0 until num_read_ports)
    {
       read_data(i) :=
-         Mux(read_addrs(i) === UInt(0),
-            UInt(0),
+         Mux(read_addrs(i) === 0.U,
+            0.U,
             regfile(read_addrs(i)))
    }
 
@@ -145,10 +145,10 @@ with freechips.rocketchip.rocket.constants.VecCfgConstants
       for (i <- 0 until num_read_ports)
       {
          val bypass_ens = bypassable_wports.map(x => x.valid &&
-                                                  x.bits.addr =/= UInt(0) &&
+                                                  x.bits.addr =/= 0.U &&
                                                   x.bits.addr === read_addrs(i))
 
-         val bypass_data = Mux1H(Vec(bypass_ens), Vec(bypassable_wports.map(_.bits.data)))
+         val bypass_data = Mux1H(VecInit(bypass_ens), VecInit(bypassable_wports.map(_.bits.data)))
 
          io.read_ports(i).data := Mux(bypass_ens.reduce(_|_), bypass_data, read_data(i))
       }
@@ -165,8 +165,8 @@ with freechips.rocketchip.rocket.constants.VecCfgConstants
    // Write ports.
    for (wport <- io.write_ports)
    {
-      wport.ready := Bool(true)
-      when (wport.valid && (wport.bits.addr =/= UInt(0)))
+      wport.ready := true.B
+      when (wport.valid && (wport.bits.addr =/= 0.U))
       {
          regfile(wport.bits.addr) := wport.bits.data
       }

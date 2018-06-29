@@ -126,7 +126,7 @@ abstract class IssueUnit(
          issue_slots(i).fromfp_paddr := io.fromfp_paddr
          issue_slots(i).fromfp_data  := io.fromfp_data
       } else {
-         issue_slots(i).fromfp_valid := Bool(false)
+         issue_slots(i).fromfp_valid := false.B
          issue_slots(i).fromfp_paddr := DontCare
          issue_slots(i).fromfp_data  := DontCare
       }
@@ -175,7 +175,7 @@ abstract class IssueUnit(
 
          printf("  " + this.getType + "_issue_slot[%d](%c)(Req:%c):wen=%c P:(%c,%c,%c) OP:(%d,%d,%d) PDST:%d %c [[DASM(%x)]" +
                " 0x%x: %d] ri:%d bm=%d imm=0x%x eidx=%d\n"
-            , UInt(i, log2Up(num_issue_slots))
+            , i.U(log2Ceil(num_issue_slots).W)
             , Mux(issue_slots(i).valid, Str("V"), Str("-"))
             , Mux(issue_slots(i).request, Str("R"), Str("-"))
             , Mux(issue_slots(i).in_uop.valid, Str("W"),  Str(" "))

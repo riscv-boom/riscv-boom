@@ -145,7 +145,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
          io.dis_uops(w).lrs1_rtype === RT_FLT || io.dis_uops(w).lrs2_rtype === RT_FLT || io.dis_uops(w).lrs3_rtype === RT_FLT)) {
          issue_unit.io.dis_valids(w) := io.dis_valids(w)
          issue_unit.io.dis_uops(w).uopc := uopFPTOVEC
-         issue_unit.io.dis_uops(w).vec_val := Bool(false)
+         issue_unit.io.dis_uops(w).vec_val := false.B
          issue_unit.io.dis_uops(w).fu_code := FUConstants.FU_F2V
          issue_unit.io.dis_uops(w).prs1_busy := io.dis_uops(w).prs1_busy && io.dis_uops(w).lrs1_rtype === RT_FLT
          issue_unit.io.dis_uops(w).prs2_busy := io.dis_uops(w).prs2_busy && io.dis_uops(w).lrs2_rtype === RT_FLT
@@ -181,7 +181,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
    {
       issue_wakeup.valid := writeback.valid
       issue_wakeup.bits.pdst := writeback.bits.uop.pdst
-      issue_wakeup.bits.eidx := UInt(0) // TODO_Vec: Figure out how to add conditional wires to a bundle
+      issue_wakeup.bits.eidx := 0.U // TODO_Vec: Figure out how to add conditional wires to a bundle
    }
 
    //-------------------------------------------------------------
@@ -287,9 +287,9 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
                wbresp.bits.uop.ctrl.rf_wen
             fregfile.io.write_ports(w_cnt).bits.addr := wbresp.bits.uop.pdst
             fregfile.io.write_ports(w_cnt).bits.data := wbresp.bits.data
-            fregfile.io.write_ports(w_cnt).bits.mask := UInt(0) // todo_vec: This shouldn't matter
-            fregfile.io.write_ports(w_cnt).bits.eidx := UInt(0) // This definitely doesn't matter
-            fregfile.io.write_ports(w_cnt).bits.rd_vew := UInt(0)
+            fregfile.io.write_ports(w_cnt).bits.mask := DontCare
+            fregfile.io.write_ports(w_cnt).bits.eidx := DontCare
+            fregfile.io.write_ports(w_cnt).bits.rd_vew := DontCare
             wbresp.ready := fregfile.io.write_ports(w_cnt).ready
          }
 
