@@ -149,6 +149,12 @@ with Packing
       if (num_read_ports > 1) io.rf_read_ports(idx+1).addr := rs2_addr
       if (num_read_ports > 2) io.rf_read_ports(idx+2).addr := rs3_addr
 
+      if (isVector) {
+         io.rf_read_ports(idx+0).enable := io.iss_uops(w).lrs1_rtype === RT_VEC
+         io.rf_read_ports(idx+1).enable := io.iss_uops(w).lrs2_rtype === RT_VEC
+         io.rf_read_ports(idx+2).enable := io.iss_uops(w).lrs3_rtype === RT_VEC
+      }
+
       if (num_read_ports > 0) rrd_rs1_data(w) := io.rf_read_ports(idx+0).data
       if (num_read_ports > 1) rrd_rs2_data(w) := io.rf_read_ports(idx+1).data
       if (num_read_ports > 2) rrd_rs3_data(w) := io.rf_read_ports(idx+2).data

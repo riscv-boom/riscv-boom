@@ -24,6 +24,7 @@ class RegisterFileReadPortIO(addr_width: Int, data_width: Int)(implicit p: Param
 {
    val addr = Input(UInt(addr_width.W))
    val data = Output(UInt(data_width.W))
+   val enable = Input(Bool())
    override def cloneType = new RegisterFileReadPortIO(addr_width, data_width)(p).asInstanceOf[this.type]
 }
 
