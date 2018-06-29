@@ -3,7 +3,7 @@
 
 package boom.common
 
-import Chisel._
+import chisel3._
 import freechips.rocketchip.config._
 import freechips.rocketchip.subsystem._
 import freechips.rocketchip.devices.tilelink._
@@ -39,10 +39,10 @@ class BoomTile(
     crossing: SubsystemClockCrossing)
   (implicit p: Parameters) extends BaseTile(boomParams, crossing)(p)
     with HasExternalInterrupts
-    //with HasLazyRoCC  // implies CanHaveSharedFPU with CanHavePTW with HasHellaCache
     with CanHaveBoomPTW
     with HasBoomHellaCache
     with HasBoomICacheFrontend {
+    //with HasLazyRoCC  // implies CanHaveSharedFPU with CanHavePTW with HasHellaCache
 
   val intOutwardNode = IntIdentityNode()
   val slaveNode = TLIdentityNode()
@@ -100,20 +100,22 @@ class BoomTile(
 }
 
 class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer)
-    //with HasLazyRoCCModule[BoomTile]
     with CanHaveBoomPTWModule
     with HasBoomHellaCacheModule
     with HasBoomICacheFrontendModule {
+    //with HasLazyRoCCModule[BoomTile]
 
   val core = Module(new BoomCore()(outer.p, outer.dcache.module.edge))
+  core.io.rocc := DontCare
+  core.io.reset_vector := DontCare
 
   // Observe the Tilelink Channel C traffic leaving the L1D (writeback/releases).
   val tl_c = outer.dCacheTap.out(0)._1.c
   core.io.release.valid := tl_c.fire()
   core.io.release.bits.address := tl_c.bits.address
 
-  val uncorrectable = RegInit(Bool(false))
-  val halt_and_catch_fire = outer.boomParams.hcfOnUncorrectable.option(IO(Bool(OUTPUT)))
+  val uncorrectable = RegInit(false.B)
+  val halt_and_catch_fire = outer.boomParams.hcfOnUncorrectable.option(IO(Output(Bool())))
 
   outer.dtim_adapter.foreach { lm => dcachePorts += lm.module.io.dmem }
 
