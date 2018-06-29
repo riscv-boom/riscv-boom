@@ -28,7 +28,7 @@ with freechips.rocketchip.rocket.constants.VecCfgConstants
 {
   val vecIssueParams = issueParams.find(_.iqType == IQT_VEC.litValue).get
   val num_ll_ports = 1 // TODO_VEC: add ll wb ports
-  val num_wakeup_ports = vecIssueParams.issueWidth + num_ll_ports
+  val num_wakeup_ports = vecIssueParams.issueWidth
   val vec_preg_sz = log2Up(numVecPhysRegs)
 
   val io = new Bundle
@@ -82,9 +82,9 @@ with freechips.rocketchip.rocket.constants.VecCfgConstants
       128))
 
    require (exe_units.withFilter(_.uses_iss_unit).map(x=>x).length == issue_unit.issue_width)
-   require (exe_units.map(_.num_rf_write_ports).sum + num_ll_ports == num_wakeup_ports)
+   require (exe_units.map(_.num_rf_write_ports).sum == num_wakeup_ports)
    require (exe_units.withFilter(_.uses_iss_unit).map(e=>
-      e.num_rf_write_ports).sum + num_ll_ports == num_wakeup_ports)
+      e.num_rf_write_ports).sum == num_wakeup_ports)
 
 
    val tosdq = Module(new Queue(new MicroOpWithData(128), 4))
@@ -284,19 +284,20 @@ with freechips.rocketchip.rocket.constants.VecCfgConstants
    //-------------------------------------------------------------
    //-------------------------------------------------------------
 
-   io.wakeups(0).valid := ll_wb.io.deq.valid && ll_wb.io.deq.ready
-   io.wakeups(0).bits  := ll_wb.io.deq.bits
-
-   w_cnt = num_ll_ports
+   w_cnt = 0
+   var vec_eu_wakeup = false.B
    for (eu <- exe_units)
    {
       for (exe_resp <- eu.io.resp)
       {
          val wb_uop = exe_resp.bits.uop
-         if (!exe_resp.bits.writesToIRF && !eu.has_ifpu) {
-            val wport = io.wakeups(w_cnt)
-            wport.valid := exe_resp.valid && wb_uop.dst_rtype === RT_VEC
-            wport.bits := exe_resp.bits
+         assert (!exe_resp.bits.writesToIRF, "Why would this write to IRF?")
+         if (!exe_resp.bits.writesToIRF && !eu.has_ifpu) { // TODO_Vec: What is this for?
+            val wport        = io.wakeups(w_cnt)
+            val wakeup_valid = exe_resp.valid && wb_uop.dst_rtype === RT_VEC
+            wport.valid     := wakeup_valid
+            vec_eu_wakeup    = wakeup_valid | vec_eu_wakeup
+            wport.bits      := exe_resp.bits
 
             w_cnt += 1
 
@@ -305,6 +306,10 @@ with freechips.rocketchip.rocket.constants.VecCfgConstants
             assert(!(exe_resp.valid && wb_uop.is_amo))
          }
       }
+   }
+   when (!vec_eu_wakeup) {
+      io.wakeups(0).valid := ll_wb.io.deq.valid && ll_wb.io.deq.ready
+      io.wakeups(0).bits  := ll_wb.io.deq.bits
    }
 
 
