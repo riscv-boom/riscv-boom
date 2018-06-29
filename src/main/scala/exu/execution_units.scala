@@ -174,9 +174,9 @@ class ExecutionUnits(fpu: Boolean = false, vec: Boolean = false)(implicit val p:
       }
       else if (vec)
       {
-         // NOTE: hack for the long latency load pipe which is write_port(0) and doesn't support bypassing
-         val mask = Seq(false) ++ exe_units.withFilter(_.uses_iss_unit).map(_.isBypassable)
+         val mask = exe_units.withFilter(_.uses_iss_unit).map(_.isBypassable)
          require (!mask.reduce(_||_)) // don't support any bypassing in VEC
+         assert(mask.length == 1, "Vector regfile only has 1 write port!")
          mask
       }
       else

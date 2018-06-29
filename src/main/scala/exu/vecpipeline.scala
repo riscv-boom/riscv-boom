@@ -60,27 +60,13 @@ with freechips.rocketchip.rocket.constants.VecCfgConstants
      val commit_store_at_rob_head = Input(Bool())
   }
 
-   //**********************************
-   // TODO_VEC
-   // construct all of the modules
-   // TODO: Design and build VectorExecutionUnit
-   // TODO: Design and build VectorIssueUnit
-   // TODO: Design and build VectorRegisterFile
-   // Initial Plan pSIMD vectors
-   //   - Registers are fixed length, 128 bits
-   //   - Registers are 64bit fp only
-   //   - For now, leave i2v and f2v ports unconnected, no way to load vectors
-   //   - Later - add memory execution unit
-   //   - Later - add polymorphism, in decode microops should determine where operands come from
-
    val exe_units = new boom.exu.ExecutionUnits(vec = true)
    val issue_unit = Module(new IssueUnitCollasping(issueParams.find(_.iqType == IQT_VEC.litValue).get, true,
       true,
       num_wakeup_ports)) // TODO_VEC: Make this a VectorIssueUnit
    val vregfile = Module(new RegisterFileBehavorial(numVecRegFileRows,
       exe_units.withFilter(_.uses_iss_unit).map(e=>e.num_rf_read_ports).sum,
-      exe_units.withFilter(_.uses_iss_unit).map(e=>e.num_rf_write_ports).sum
-         + num_ll_ports, // TODO_VEC: Subtract write ports to IRF, FRF
+      exe_units.withFilter(_.uses_iss_unit).map(e=>e.num_rf_write_ports).sum, // TODO_VEC: Subtract write ports to IRF, FRF
       128,
       true,
       exe_units.bypassable_write_port_mask
@@ -157,15 +143,15 @@ with freechips.rocketchip.rocket.constants.VecCfgConstants
    // **** Issue Stage ****
    //-------------------------------------------------------------
 
+   val ll_wb_block_issue = Wire(Bool())
+
    // Output (Issue)
    for (i <- 0 until issue_unit.issue_width)
    {
       iss_valids(i) := issue_unit.io.iss_valids(i)
       iss_uops(i) := issue_unit.io.iss_uops(i)
 
-      var fu_types = exe_units(i).io.fu_types
-      // TODO_VEC: Add special case for fdiv?
-      issue_unit.io.fu_types(i) := fu_types
+      issue_unit.io.fu_types(i) := exe_units(i).io.fu_types & ~Mux(ll_wb_block_issue, FU_VALU | FU_VFPU, UInt(0)) 
 
       require (exe_units(i).uses_iss_unit)
    }
@@ -228,6 +214,10 @@ with freechips.rocketchip.rocket.constants.VecCfgConstants
          tosdq.io.enq.bits.uop  := vregister_read.io.exe_reqs(w).bits.uop
          tosdq.io.enq.bits.data := vregister_read.io.exe_reqs(w).bits.rs3_data >> shiftn
          io.tosdq               <> tosdq.io.deq
+         tosdq.io.deq.ready     := io.tosdq.ready
+         io.tosdq.valid         := tosdq.io.deq.valid
+         io.tosdq.bits.uop      := tosdq.io.deq.bits.uop
+         io.tosdq.bits.data     := tosdq.io.deq.bits.data
       }
    }
    require (exe_units.num_total_bypass_ports == 0)
@@ -237,31 +227,25 @@ with freechips.rocketchip.rocket.constants.VecCfgConstants
    // **** Writeback Stage ****
    //-------------------------------------------------------------
 
-   //TODO_VEC: add ll_wports?
-   //TODO_VEC: Add ARB for multiple ll_wb
-   val ll_wbarb = Module(new Arbiter(new ExeUnitResp(128), 1))
-   ll_wbarb.io.in(0) <> io.ll_wport
-   //ll_wbarb.io.in(1).valid := false.B // TODO_vec: fix this
-
-   vregfile.io.write_ports(0) <> WritePort(ll_wbarb.io.out, log2Ceil(numVecRegFileRows), 128, true, numVecPhysRegs)
-   assert (ll_wbarb.io.in(0).ready)
-   when (io.ll_wport.valid) { assert(io.ll_wport.bits.uop.ctrl.rf_wen && io.ll_wport.bits.uop.dst_rtype === RT_VEC) }
+   val ll_wb = Module(new Queue(new ExeUnitResp(128), 8)) // TODO_Vec: Tune these
+   ll_wb_block_issue := ll_wb.io.count >= UInt(4)
+   ll_wb.io.enq <> io.ll_wport
+   assert (ll_wb.io.enq.ready, "We do not support backpressure on this queue")
+   when   (io.ll_wport.valid) { assert(io.ll_wport.bits.uop.ctrl.rf_wen && io.ll_wport.bits.uop.dst_rtype === RT_VEC) }
 
 
-   var w_cnt = num_ll_ports // TODO_Vec: check if this should be 1 or 0 for vec?
-   var toint_found = false
+   var w_cnt = 0 // TODO_Vec: check if this should be 1 or 0 for vec?
+   var vec_eu_wb = false.B
    for (eu <- exe_units)
    {
       eu.io.debug_tsc_reg := io.debug_tsc_reg
       for (wbresp <- eu.io.resp)
       {
-         when (wbresp.valid)
-         {
-            // printf("%d Writeback received valid resp\n", io.debug_tsc_reg)
-         }
-         vregfile.io.write_ports(w_cnt).valid :=
-         wbresp.valid &&
-         wbresp.bits.uop.ctrl.rf_wen
+         val valid_write = wbresp.valid && wbresp.bits.uop.ctrl.rf_wen
+         vregfile.io.write_ports(w_cnt).valid := valid_write
+
+
+         vec_eu_wb = valid_write | vec_eu_wb
          vregfile.io.write_ports(w_cnt).bits.addr := CalcVecRegAddr(
             wbresp.bits.uop.rd_vew,
             wbresp.bits.uop.eidx,
@@ -287,6 +271,11 @@ with freechips.rocketchip.rocket.constants.VecCfgConstants
          w_cnt += 1
       }
    }
+   ll_wb.io.deq.ready := false.B
+   when (!vec_eu_wb) {
+      vregfile.io.write_ports(0) <> WritePort(ll_wb.io.deq, log2Ceil(numVecRegFileRows), 128, true, numVecPhysRegs)
+      ll_wb.io.deq.ready := true.B
+   }
    require (w_cnt == vregfile.io.write_ports.length)
 
    //-------------------------------------------------------------
@@ -295,11 +284,8 @@ with freechips.rocketchip.rocket.constants.VecCfgConstants
    //-------------------------------------------------------------
    //-------------------------------------------------------------
 
-   // TODO_VEC: Add ll_wb
-
-   io.wakeups(0).valid := ll_wbarb.io.out.valid
-   io.wakeups(0).bits  := ll_wbarb.io.out.bits
-   ll_wbarb.io.out.ready := true.B
+   io.wakeups(0).valid := ll_wb.io.deq.valid && ll_wb.io.deq.ready
+   io.wakeups(0).bits  := ll_wb.io.deq.bits
 
    w_cnt = num_ll_ports
    for (eu <- exe_units)
@@ -307,19 +293,9 @@ with freechips.rocketchip.rocket.constants.VecCfgConstants
       for (exe_resp <- eu.io.resp)
       {
          val wb_uop = exe_resp.bits.uop
-         when (wb_uop.valid)
-         {
-            // printf("%d wb uop is %d\n", io.debug_tsc_reg, wb_uop.uopc)
-            // printf("%d exe_resp uop is %d %d\n", io.debug_tsc_reg, exe_resp.bits.uop.uopc, exe_resp.valid)
-            // printf("%d %x %x\n", io.debug_tsc_reg, exe_resp.bits.writesToIRF.B, eu.has_ifpu.B)
-         }
          if (!exe_resp.bits.writesToIRF && !eu.has_ifpu) {
             val wport = io.wakeups(w_cnt)
             wport.valid := exe_resp.valid && wb_uop.dst_rtype === RT_VEC
-            // when (exe_resp.valid)
-            // {
-            //    printf("%d Commit wport exe_resp valid\n", io.debug_tsc_reg)
-            // }
             wport.bits := exe_resp.bits
 
             w_cnt += 1
