@@ -58,12 +58,13 @@ with freechips.rocketchip.rocket.constants.VecCfgConstants
      val lsu_stq_head      = Input(UInt())
      val commit_load_at_rob_head = Input(Bool())
      val commit_store_at_rob_head = Input(Bool())
-  }
+  } 
 
    val exe_units = new boom.exu.ExecutionUnits(vec = true)
    val issue_unit = Module(new IssueUnitCollasping(issueParams.find(_.iqType == IQT_VEC.litValue).get, true,
       true,
       num_wakeup_ports)) // TODO_VEC: Make this a VectorIssueUnit
+   assert(issue_unit.issue_width == 1, "Issue width of 1 supported only")
    val vregfile = Module(new VectorRegisterFileBehavorial(numVecRegFileRows,
       exe_units.withFilter(_.uses_iss_unit).map(e=>e.num_rf_read_ports).sum,
       exe_units.withFilter(_.uses_iss_unit).map(e=>e.num_rf_write_ports).sum, // TODO_VEC: Subtract write ports to IRF, FRF
@@ -74,9 +75,6 @@ with freechips.rocketchip.rocket.constants.VecCfgConstants
    val vregister_read = Module(new VectorRegisterRead(
       issue_unit.issue_width,
       exe_units.withFilter(_.uses_iss_unit).map(_.supportedFuncUnits),
-      exe_units.withFilter(_.uses_iss_unit).map(_.num_rf_read_ports).sum,
-      exe_units.withFilter(_.uses_iss_unit).map(_.num_rf_read_ports),
-      exe_units.num_total_bypass_ports,
       128))
 
    require (exe_units.withFilter(_.uses_iss_unit).map(x=>x).length == issue_unit.issue_width)
