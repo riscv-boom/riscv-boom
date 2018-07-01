@@ -17,9 +17,11 @@
 
 package boom.bpu
 
-import Chisel._
-import chisel3.core.withReset
+import chisel3._
+import chisel3.util.Valid
+import chisel3.experimental.withReset
 import freechips.rocketchip.config.{Parameters, Field}
+import boom.common._
 import boom.util.ElasticReg
 
 
@@ -41,10 +43,8 @@ object BaseOnlyBrPredictor
    }
 }
 
-class BaseOnlyBrPredictor(
-   fetch_width: Int
-   )(implicit p: Parameters)
-   extends BrPredictor(fetch_width, 8)(p)
+class BaseOnlyBrPredictor(implicit p: Parameters)
+   extends BrPredictor(8)(p)
 {
    //------------------------------------------------------------
    // Predictor state (none: use BIM).
@@ -52,15 +52,17 @@ class BaseOnlyBrPredictor(
    //------------------------------------------------------------
    // Get prediction in F2, buffer, and provide prediction in F3.
 
-   val q_s3_resp = withReset(reset || io.fe_clear || io.f4_redirect)
+   val q_s3_resp = withReset(reset.toBool || io.fe_clear || io.f4_redirect)
       {Module(new ElasticReg(Valid(new BimResp)))}
 
    q_s3_resp.io.enq.valid := io.f2_valid
    q_s3_resp.io.enq.bits := io.f2_bim_resp
+   q_s3_resp.io.deq.ready := io.resp.ready
 
    io.resp.valid := q_s3_resp.io.deq.valid && q_s3_resp.io.deq.bits.valid
    io.resp.bits.takens := q_s3_resp.io.deq.bits.bits.getTakens
    io.resp.bits.info := 0.U
+
 
    //------------------------------------------------------------
    // Update counter table.
@@ -68,7 +70,5 @@ class BaseOnlyBrPredictor(
    // Nothing to update, as the BIM is handled externally.
 
    override def toString: String = "  Building no predictor (just using BIM as a base predictor)."
-
-   override val compileOptions = chisel3.core.ExplicitCompileOptions.NotStrict.copy(explicitInvalidate = true)
 }
 
