@@ -4,7 +4,8 @@
 //------------------------------------------------------------------------------
 package boom.common
 
-import Chisel._
+import chisel3._
+import chisel3.util.{log2Ceil, isPow2}
 import freechips.rocketchip.rocket._
 import freechips.rocketchip.tile._
 import freechips.rocketchip.config.{Parameters, Field}
@@ -68,12 +69,12 @@ case class BoomCoreParams(
    useAtomics: Boolean = true,
    useDebug: Boolean = true,
    useUser: Boolean = true,
-   useVM: Boolean = true
+   useVM: Boolean = true,
+   useCompressed: Boolean = true
 ) extends freechips.rocketchip.tile.CoreParams
 {
    val haveFSDirty = false
    val retireWidth: Int = decodeWidth
-   val useCompressed: Boolean = true
    val instBits: Int = 32
 
    val jumpInFrontend: Boolean = false // unused in boom
@@ -198,12 +199,12 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
    else if (gshareParams.isDefined && gshareParams.get.enabled)
    {
       GLOBAL_HISTORY_LENGTH = gshareParams.get.history_length
-      BPD_INFO_SIZE = GShareBrPredictor.GetRespInfoSize(fetchWidth, GLOBAL_HISTORY_LENGTH)
+      BPD_INFO_SIZE = GShareBrPredictor.GetRespInfoSize(rvcFetchWidth, GLOBAL_HISTORY_LENGTH)
    }
    else if (tageParams.isDefined && tageParams.get.enabled)
    {
       GLOBAL_HISTORY_LENGTH = tageParams.get.history_lengths.max
-      BPD_INFO_SIZE = TageBrPredictor.GetRespInfoSize(p, fetchWidth)
+      BPD_INFO_SIZE = TageBrPredictor.GetRespInfoSize(p, rvcFetchWidth)
       ENABLE_VLHR = true
    }
    else if (boomParams.bpdRandom.isDefined && boomParams.bpdRandom.get.enabled)
@@ -227,19 +228,19 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
    //************************************
    // Implicitly calculated constants
    val NUM_ROB_ROWS      = NUM_ROB_ENTRIES/decodeWidth
-   val ROB_ADDR_SZ       = log2Up(NUM_ROB_ENTRIES)
+   val ROB_ADDR_SZ       = log2Ceil(NUM_ROB_ENTRIES)
    // the f-registers are mapped into the space above the x-registers
    val LOGICAL_REG_COUNT = if (usingFPU) 64 else 32
-   val LREG_SZ           = log2Up(LOGICAL_REG_COUNT)
-   val IPREG_SZ          = log2Up(numIntPhysRegs)
-   val FPREG_SZ          = log2Up(numFpPhysRegs)
+   val LREG_SZ           = log2Ceil(LOGICAL_REG_COUNT)
+   val IPREG_SZ          = log2Ceil(numIntPhysRegs)
+   val FPREG_SZ          = log2Ceil(numFpPhysRegs)
    val PREG_SZ          = IPREG_SZ max FPREG_SZ
-   val MEM_ADDR_SZ       = log2Up(NUM_LSU_ENTRIES)
+   val MEM_ADDR_SZ       = log2Ceil(NUM_LSU_ENTRIES)
    val MAX_ST_COUNT      = (1 << MEM_ADDR_SZ)
    val MAX_LD_COUNT      = (1 << MEM_ADDR_SZ)
-   val BR_TAG_SZ         = log2Up(MAX_BR_COUNT)
+   val BR_TAG_SZ         = log2Ceil(MAX_BR_COUNT)
    val NUM_BROB_ENTRIES  = NUM_ROB_ROWS //TODO explore smaller BROBs
-   val BROB_ADDR_SZ      = log2Up(NUM_BROB_ENTRIES)
+   val BROB_ADDR_SZ      = log2Ceil(NUM_BROB_ENTRIES)
 
    require (numIntPhysRegs >= (32 + decodeWidth))
    require (numFpPhysRegs >= (32 + decodeWidth))

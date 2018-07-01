@@ -44,6 +44,8 @@ class BoomTile(
     with HasBoomICacheFrontend {
     //with HasLazyRoCC  // implies CanHaveSharedFPU with CanHavePTW with HasHellaCache
 
+    Annotated.params(this, outer.boomParams)
+
   val intOutwardNode = IntIdentityNode()
   val slaveNode = TLIdentityNode()
   val masterNode = TLIdentityNode()
