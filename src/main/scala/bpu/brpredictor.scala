@@ -69,7 +69,7 @@ class BpdUpdate(implicit p: Parameters) extends BoomBundle()(p)
    val fetch_pc = UInt(vaddrBits.W)
    val history     = UInt(GLOBAL_HISTORY_LENGTH.W)
    val mispredict = Bool()
-   val miss_cfi_idx = UInt(log2Ceil(fetchWidth).W) // if mispredict, this is the cfi_idx of miss.
+   val miss_cfi_idx = UInt(log2Ceil(rvcFetchWidth).W) // if mispredict, this is the cfi_idx of miss.
    val taken = Bool()
 
    // Give the bpd back the information it sent out when it made a prediction.
@@ -85,13 +85,13 @@ class RestoreHistory(implicit p: Parameters) extends BoomBundle()(p)
 //--------------------------------------------------------------------------
 //--------------------------------------------------------------------------
 
-abstract class BrPredictor(
-   fetch_width: Int,
-   val history_length: Int
-   )(implicit p: Parameters) extends BoomModule()(p)
+abstract class BrPredictor(val history_length: Int)(implicit p: Parameters) extends BoomModule()(p)
 {
    val io = IO(new BoomBundle()(p)
    {
+      val capture = Input(Bool())
+      val s3_valid = Input(Bool())
+
       // The PC to predict on.
       // req.valid is false if stalling (aka, we won't read and use results).
       // req.bits.addr is available on cycle S0.
@@ -117,7 +117,7 @@ abstract class BrPredictor(
       // A BIM table is shared with the BTB and accessed in F1. Let's use this as our base predictor, if desired.
       val f2_bim_resp = Flipped(Valid(new BimResp))
 
-      val f3_is_br = Input(Vec(fetch_width, Bool()))
+      val f3_is_br = Input(Vec(rvcFetchWidth, Bool()))
 
       // Restore history on a F2 redirection (and clear out appropriate state).
       // Don't provide history since we have it ourselves.
@@ -228,8 +228,8 @@ abstract class BrPredictor(
          r_f1_history))))
 
 
-   assert (!io.f2_redirect || r_f2_history === r_f1_history,
-      "[bpd] if a F2 redirect occurs, F2-hist should equal F1-hist.")
+   //assert (!io.f2_redirect || r_f2_history === r_f1_history,
+   //   "[bpd] if a F2 redirect occurs, F2-hist should equal F1-hist.")
 
 
    //************************************************
@@ -240,10 +240,17 @@ abstract class BrPredictor(
       r_f2_history := r_f1_history
    }
 
+
    q_f3_history.io.enq.valid := io.f2_valid
    q_f3_history.io.enq.bits  := r_f2_history
 
    //assert (q_f3_history.io.enq.ready === !io.f2_stall)
+   val take_history_reg = Wire(Bool())
+   val f2f3_history_reg = RegEnable(r_f2_history, take_history_reg)
+   take_history_reg := io.capture
+   when (io.s3_valid) {
+      q_f3_history.io.enq.bits := f2f3_history_reg   
+   }
 
 
    //************************************************
@@ -263,8 +270,6 @@ abstract class BrPredictor(
 
 
    //************************************************
-
-   override val compileOptions = chisel3.core.ExplicitCompileOptions.NotStrict.copy(explicitInvalidate = true)
 }
 
 
@@ -278,26 +283,22 @@ object BrPredictor
       (implicit p: Parameters): BrPredictor =
    {
       val boomParams: BoomCoreParams = p(freechips.rocketchip.tile.TileKey).core.asInstanceOf[BoomCoreParams]
-      val fetch_width = boomParams.fetchWidth
       val enableCondBrPredictor = boomParams.enableBranchPredictor
 
       var br_predictor: BrPredictor = null
 
       if (enableCondBrPredictor && boomParams.bpdBaseOnly.isDefined && boomParams.bpdBaseOnly.get.enabled)
       {
-         br_predictor = Module(new BaseOnlyBrPredictor(
-            fetch_width = fetch_width))
+         br_predictor = Module(new BaseOnlyBrPredictor)
       }
       else if (enableCondBrPredictor && boomParams.gshare.isDefined && boomParams.gshare.get.enabled)
       {
          br_predictor = Module(new GShareBrPredictor(
-            fetch_width = fetch_width,
             history_length = boomParams.gshare.get.history_length))
       }
       else if (enableCondBrPredictor && boomParams.tage.isDefined && boomParams.tage.get.enabled)
       {
          br_predictor = Module(new TageBrPredictor(
-            fetch_width = fetch_width,
             num_tables = boomParams.tage.get.num_tables,
             table_sizes = boomParams.tage.get.table_sizes,
             history_lengths = boomParams.tage.get.history_lengths,
@@ -307,13 +308,11 @@ object BrPredictor
       }
       else if (enableCondBrPredictor && p(RandomBpdKey).enabled)
       {
-         br_predictor = Module(new RandomBrPredictor(
-            fetch_width = fetch_width))
+         br_predictor = Module(new RandomBrPredictor)
       }
       else
       {
          br_predictor = Module(new NullBrPredictor(
-            fetch_width = fetch_width,
             history_length = 1))
       }
 
@@ -327,9 +326,8 @@ object BrPredictor
 
 // Act as a "null" branch predictor (it makes no predictions).
 class NullBrPredictor(
-   fetch_width: Int,
    history_length: Int = 12
-   )(implicit p: Parameters) extends BrPredictor(fetch_width, history_length)(p)
+   )(implicit p: Parameters) extends BrPredictor(history_length)(p)
 {
    override def toString: String = "  Building (0 kB) Null Predictor (never predict)."
    io.resp.valid := false.B
@@ -353,8 +351,7 @@ object RandomBrPredictor
 }
 
 class RandomBrPredictor(
-   fetch_width: Int
-   )(implicit p: Parameters) extends BrPredictor(fetch_width, history_length = 1)(p)
+   )(implicit p: Parameters) extends BrPredictor(history_length = 1)(p)
 {
    override def toString: String = "  Building Random Branch Predictor."
    private val rand_val = RegInit(false.B)
@@ -367,6 +364,6 @@ class RandomBrPredictor(
    }
 
    io.resp.valid := rand_val
-   io.resp.bits.takens := rand(fetch_width)
+   io.resp.bits.takens := rand(rvcFetchWidth)
 }
 
