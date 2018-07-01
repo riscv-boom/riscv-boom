@@ -20,7 +20,7 @@
 package boom.bpu
 
 import chisel3._
-import chisel3.util.{Valid}
+import chisel3.util.{Valid, RegEnable}
 import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.util.{Str, UIntToAugmentedUInt}
 import boom.common._
@@ -43,7 +43,7 @@ class BranchPredInfo(implicit p: Parameters) extends BoomBundle()(p)
    val bpd_resp         = new BpdResp
 }
 
-class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p)
+class BranchPredictionStage(implicit p: Parameters) extends BoomModule()(p)
    with HasBoomCoreParameters
 {
    val io = IO(new BoomBundle()(p)
@@ -52,7 +52,12 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
       val s0_req        = Flipped(Valid(new freechips.rocketchip.rocket.BTBReq))
       val debug_imemresp_pc= Input(UInt(vaddrBitsExtended.W)) // For debug -- make sure I$ and BTB are synchronised.
 
-      // Fetch1
+      val extstageval = Input(Bool())
+      val extstageval1 = Output(Bool())
+      val s4_valid = Input(Bool())
+      val s3_valid = Input(Bool())
+      val respready = Input(Bool())
+      val capture_bim = Input(Bool())
 
       // Fetch2
       val f2_valid      = Input(Bool()) // f2 stage may proceed into the f3 stage.
@@ -62,7 +67,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
       val f2_redirect   = Input(Bool()) // I$ is being redirected from F2.
 
       // Fetch3
-      val f3_is_br      = Input(Vec(fetch_width, Bool())) // mask of branches from I$
+      val f3_is_br      = Input(Vec(rvcFetchWidth, Bool())) // mask of branches from I$
       val f3_bpd_resp   = Valid(new BpdResp)
       val f3_btb_update = Flipped(Valid(new BoomBTBUpdate))
       val f3_ras_update = Flipped(Valid(new RasUpdate))
@@ -116,9 +121,16 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    io.f2_btb_resp.bits := btb.io.resp.bits
    // BTB's resposne isn't valid if there's no instruction from I$ to match against.
    io.f2_btb_resp.valid := btb.io.resp.valid && io.f2_valid
+   io.extstageval1 := btb.io.resp.valid
 
-
+   bpd.io.capture := io.capture_bim
+   val capture_bim = Wire(Bool())
+   val reg_bim_resp = RegEnable(io.f2_btb_resp.bits.bim_resp, capture_bim)
+   capture_bim := io.capture_bim 
    bpd.io.f2_bim_resp := io.f2_btb_resp.bits.bim_resp
+   when (io.s3_valid) {
+      bpd.io.f2_bim_resp := reg_bim_resp   
+   }
 
 
    //************************************************
@@ -143,7 +155,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
 //   val jmp_idx = f2_btb.bits.cfi_idx
 
    btb.io.ras_update := io.f3_ras_update
-   btb.io.ras_update.valid := false.B // TODO XXX renable RAS (f2_btb.valid || io.f3_ras_update.valid) && !io.fetch_stalled
+   //btb.io.ras_update.valid := false.B // TODO XXX renable RAS (f2_btb.valid || io.f3_ras_update.valid) && !io.fetch_stalled
 //   when (f2_btb.valid)
 //   {
 //      btb.io.ras_update.bits.is_call      := BpredType.isCall(f2_btb.bits.bpd_type)
@@ -166,7 +178,8 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    //************************************************
    // Update the BPD
 
-   bpd.io.f2_valid := io.f2_valid
+   bpd.io.f2_valid := io.f2_valid && !io.s4_valid
+   bpd.io.s3_valid := io.s3_valid
    bpd.io.f2_stall := io.f2_stall
    bpd.io.f2_redirect := io.f2_redirect
    bpd.io.f3_is_br := io.f3_is_br
@@ -204,11 +217,12 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    //************************************************
    // asserts
    // forward progress into F3 will be made.
-   when (io.f2_valid && !io.f2_stall)
+   // TODO RVC decide if needed
+   /*when (io.f2_valid && !io.f2_stall)
    {
       assert (btb.io.resp.bits.fetch_pc(15,0) === io.debug_imemresp_pc(15,0),
          "[bpd-pipeline] mismatch between BTB and I$.")
-   }
+   }*/
 
 
    if (!enableBTB)
