@@ -25,7 +25,8 @@
 
 package boom.bpu
 
-import Chisel._
+import chisel3._
+import chisel3.util.{RegEnable, Cat, PriorityEncoder, UIntToOH, Counter, Queue, log2Ceil, isPow2}
 import freechips.rocketchip.config.Parameters
 import boom.common._
 import boom.exu._
@@ -40,7 +41,7 @@ import scala.math.{ceil,min}
 
 class DenseBTB(implicit p: Parameters) extends BoomBTB
 {
-   private val lsb_sz = log2Ceil(coreInstBytes)
+   private val lsb_sz = log2Ceil(minCoreInstBytes)
    private val bank_bit = log2Ceil(fetchWidth*coreInstBytes)
    private val way_idx_sz = log2Ceil(nWays)
    private val branch_levels = {
@@ -51,22 +52,22 @@ class DenseBTB(implicit p: Parameters) extends BoomBTB
    private val blevel_sz = if (branch_levels > 1) log2Ceil(branch_levels) else 1
 
    private def getBank (addr: UInt): UInt = addr(bank_bit)
-   private def getIdx (addr: UInt): UInt = Cat(addr(idx_sz+lsb_sz,bank_bit+1),addr(bank_bit-1,lsb_sz))
-   private def getTag (addr: UInt): UInt = addr(tag_sz+idx_sz+lsb_sz, idx_sz+lsb_sz+1)
+   private def getIdx (addr: UInt): UInt = addr(idx_sz+bank_bit,bank_bit+1) //  Cat(addr(idx_sz+lsb_sz,bank_bit+1),addr(bank_bit-1,lsb_sz))
+   private def getTag (addr: UInt): UInt = addr(tag_sz+idx_sz+bank_bit, idx_sz+bank_bit+1)  // addr(tag_sz+idx_sz+lsb_sz, idx_sz+lsb_sz+1)
    private def getOffset (addr: UInt): UInt = addr(offset_sz+lsb_sz-1, lsb_sz)
 
    class BTBSetData extends Bundle
    {
-      val tag      = UInt(width = tag_sz)
-      val offset   = UInt(width = offset_sz)
+      val tag      = UInt(tag_sz.W)
+      val offset   = UInt(offset_sz.W)
       val bpd_type = BpredType()
       val cfi_type = CfiType()
-      val cfi_idx  = UInt(width = log2Up(fetchWidth))
+      val cfi_idx  = UInt(log2Ceil(rvcFetchWidth).W)
    }
 
    class BTBUpdateQueueEntry extends Bundle
    {
-      val level  = UInt(width = blevel_sz)
+      val level  = UInt(blevel_sz.W)
       val update = new BoomBTBUpdate()
    }
 
@@ -99,15 +100,15 @@ class DenseBTB(implicit p: Parameters) extends BoomBTB
    // logic below assumes number of ways to be 4 and only supports writing the dense branches biased toward the lower ways
    require(nWays == 4)
    private def getBankWriteData(next_way: UInt, btb_q_entry: BTBUpdateQueueEntry) = {
-      val wdata = Wire(init = Vec.fill(nWays){new BTBSetData().fromBits(0.U)})
-      val wmask = Wire(UInt(0, width = nWays))
+      val wdata = WireInit(VecInit(Seq.fill(nWays){0.U.asTypeOf(new BTBSetData())}))
+      val wmask = WireInit(0.U(nWays.W))
 
       val level = btb_q_entry.level
       when (level === 0.U) {
          for (i <- 0 until nWays) {
             wdata(i).tag      := getTag(btb_q_entry.update.pc)
             wdata(i).offset   := btb_q_entry.update.target(offset_sz+lsb_sz-1,lsb_sz)
-            wdata(i).cfi_idx  := btb_q_entry.update.cfi_pc >> log2Up(coreInstBytes)
+            wdata(i).cfi_idx  := btb_q_entry.update.cfi_pc >> log2Ceil(minCoreInstBytes)
             wdata(i).bpd_type := btb_q_entry.update.bpd_type
             wdata(i).cfi_type := btb_q_entry.update.cfi_type
          }
@@ -117,7 +118,7 @@ class DenseBTB(implicit p: Parameters) extends BoomBTB
       when (level === 1.U) {
          wdata(1).tag      := getTag(btb_q_entry.update.pc)
          wdata(1).offset   := btb_q_entry.update.target(min(vaddrBits-1, tag_sz+2*offset_sz+lsb_sz-1), tag_sz+offset_sz+lsb_sz)
-         wdata(1).cfi_idx  := btb_q_entry.update.cfi_pc >> log2Up(coreInstBytes)
+         wdata(1).cfi_idx  := btb_q_entry.update.cfi_pc >> log2Ceil(minCoreInstBytes)
          wdata(1).bpd_type := btb_q_entry.update.bpd_type
          wdata(1).cfi_type := btb_q_entry.update.cfi_type
          wdata(0).tag      := btb_q_entry.update.target(tag_sz+offset_sz+lsb_sz-1, offset_sz+lsb_sz)
@@ -133,7 +134,7 @@ class DenseBTB(implicit p: Parameters) extends BoomBTB
             }
             wdata(2).tag      := getTag(btb_q_entry.update.pc)
             wdata(2).offset   := btb_q_entry.update.target(min(vaddrBits-1, 2*tag_sz + 3*offset_sz+lsb_sz-1), 2*(tag_sz+offset_sz)+lsb_sz)
-            wdata(2).cfi_idx  := btb_q_entry.update.cfi_pc >> log2Up(coreInstBytes)
+            wdata(2).cfi_idx  := btb_q_entry.update.cfi_pc >> log2Ceil(minCoreInstBytes)
             wdata(2).bpd_type := btb_q_entry.update.bpd_type
             wdata(2).cfi_type := btb_q_entry.update.cfi_type
             wmask             := 7.U
@@ -163,10 +164,11 @@ class DenseBTB(implicit p: Parameters) extends BoomBTB
    // wire declarations for collecting response
    val s1_valid     = Wire(Bool())
    val s1_resp_bits = Wire(new BoomBTBResp)
+   s1_resp_bits := DontCare
 
    // used to collect each hit; used in RAS
    val hits        = Wire(Vec(nWays, Bool()))
-   val blevels_vec = Wire(Vec(nWays, UInt(width = blevel_sz)))
+   val blevels_vec = Wire(Vec(nWays, UInt(blevel_sz.W)))
 
    // collect data out of the corresponding bank
    val data_out = Wire(Vec(nWays, new BTBSetData()))
@@ -190,26 +192,26 @@ class DenseBTB(implicit p: Parameters) extends BoomBTB
    btb_update_q.io.deq.ready := false.B
    for (b <- 0 until nBanks)
    {
-      val valids  = Reg(init = Vec(Seq.fill(nSets)(0.U(nWays.W))))
-      val blevels = Reg(init = Vec(Seq.fill(nSets)(0.U((nWays*blevel_sz).W))))
-      val data    = SeqMem(nSets, Vec(nWays, UInt(width=(new BTBSetData).getWidth.W)))
+      val valids  = RegInit(VecInit(Seq.fill(nSets)(0.U(nWays.W))))
+      val blevels = RegInit(VecInit(Seq.fill(nSets)(0.U((nWays*blevel_sz).W))))
+      val data    = SeqMem(nSets, Vec(nWays, UInt((new BTBSetData).getWidth.W)))
       data.suggestName("btb_data_array")
       valids.suggestName("valids_array")
 
       val bank_vals = valids(s1_idx)
       val ren       = getBank(io.req.bits.addr) === b.U
       val rout_bits = data.read(s0_idx, ren)
-      val rout      = Vec(rout_bits map { x => new BTBSetData().fromBits(x) })
+      val rout      = VecInit(rout_bits map { x => x.asTypeOf(new BTBSetData()) })
       val bank_hits = (bank_vals.toBools zip rout map {case(hit, data) => hit && data.tag === s1_req_tag})
 
       if (b == 0) {
          hits      := bank_hits
-         blevels_vec := Vec(blevels(s1_idx).grouped(blevel_sz))
+         blevels_vec := VecInit(blevels(s1_idx).grouped(blevel_sz))
          data_out  := rout
       } else {
          when (getBank(s1_pc) === b.U) {
             hits        := bank_hits
-            blevels_vec := Vec(blevels(s1_idx).grouped(blevel_sz))
+            blevels_vec := VecInit(blevels(s1_idx).grouped(blevel_sz))
             data_out  := rout
          }
       }
@@ -220,7 +222,7 @@ class DenseBTB(implicit p: Parameters) extends BoomBTB
       {
          btb_update_q.io.deq.ready := true.B
          val (wmask, wdata) = getBankWriteData(next_way, btb_update_q.io.deq.bits)
-         val wdata_bits = Vec(wdata map { x => x.asUInt })
+         val wdata_bits = VecInit(wdata map { x => x.asUInt })
          data.write(widx, wdata_bits, wmask.toBools)
 
          when (btb_update_q.io.deq.bits.level === 0.U) {
@@ -244,13 +246,13 @@ class DenseBTB(implicit p: Parameters) extends BoomBTB
    // cfi_idx to figure out which way has this to select the data!
 
    val cfi_oh = ((0 until nWays).map {
-      i => Mux(hits(i), UIntToOH(data_out(i.U).cfi_idx, fetchWidth), 0.U(fetchWidth.W))
+      i => Mux(hits(i), UIntToOH(data_out(i.U).cfi_idx, rvcFetchWidth), 0.U(rvcFetchWidth.W))
    }.reduce(_ | _)) & bim.io.resp.bits.getTakens
 
    val sel_cfi_idx = PriorityEncoder(cfi_oh)
 
-   val data_sel = Wire(init = UInt(0, width = way_idx_sz))
-   val hits_oh  = Wire(init = Vec.fill(nWays){ false.B })
+   val data_sel = WireInit(0.U(way_idx_sz.W))
+   val hits_oh  = WireInit(VecInit(Seq.fill(nWays){ false.B }))
    for (i <- 0 until nWays) {
       when (data_out(i).cfi_idx === sel_cfi_idx && hits(i)) {
          data_sel   := i.U
@@ -265,7 +267,7 @@ class DenseBTB(implicit p: Parameters) extends BoomBTB
    // TODO: Generalize the logic to read out; Currently, uses the same assumptions as in getBankWriteData
    val blevel = blevels_vec(data_sel)
    when (blevel === 0.U) {
-      s1_resp_bits.target   := Cat(s1_pc(vaddrBits-1,offset_sz+lsb_sz), data_out(data_sel).offset, UInt(0, lsb_sz))
+      s1_resp_bits.target   := Cat(s1_pc(vaddrBits-1,offset_sz+lsb_sz), data_out(data_sel).offset, 0.U(lsb_sz.W))
       s1_resp_bits.cfi_idx  := (if (fetchWidth > 1) data_out(data_sel).cfi_idx else 0.U)
       s1_resp_bits.bpd_type := data_out(data_sel).bpd_type
       s1_resp_bits.cfi_type := data_out(data_sel).cfi_type
@@ -280,7 +282,7 @@ class DenseBTB(implicit p: Parameters) extends BoomBTB
             data_out(1).offset((vaddrBits-1)-(tag_sz+offset_sz+lsb_sz), 0),
             data_out(0).tag,
             data_out(0).offset,
-            UInt(0,lsb_sz)
+            0.U(lsb_sz.W)
          )
       } else {
          Cat(
@@ -288,7 +290,7 @@ class DenseBTB(implicit p: Parameters) extends BoomBTB
             data_out(1).offset,
             data_out(0).tag,
             data_out(0).offset,
-            UInt(0,lsb_sz)
+            0.U(lsb_sz.W)
          )
       }
       s1_resp_bits.target := resp_target
@@ -306,7 +308,7 @@ class DenseBTB(implicit p: Parameters) extends BoomBTB
                data_out(1).offset,
                data_out(0).tag,
                data_out(0).offset,
-               UInt(0,lsb_sz)
+               0.U(lsb_sz.W)
             )
          } else {
             Cat(
@@ -316,16 +318,17 @@ class DenseBTB(implicit p: Parameters) extends BoomBTB
                data_out(1).offset,
                data_out(0).tag,
                data_out(0).offset,
-               UInt(0,lsb_sz)
+               0.U(lsb_sz.W)
             )
          }
          s1_resp_bits.target := resp_target
       }
    }
 
+
    if (nRAS > 0)
    {
-      val ras = new RAS(nRAS, coreInstBytes)
+      val ras = new RAS(nRAS, minCoreInstBytes, vaddrBits)
       // TODO: assumes only short branches...need to verify this
       val doPeek = (hits_oh zip data_out map {case(hit, d) => hit && BpredType.isReturn(d.bpd_type)}).reduce(_||_)
       val isEmpty = if (rasCheckForEmpty) ras.isEmpty else false.B
@@ -389,6 +392,4 @@ class DenseBTB(implicit p: Parameters) extends BoomBTB
       "\n   Tag Size      : " + tag_sz +
       "\n   Offset Size   : " + offset_sz + "\n" +
       bim.toString
-
-   override val compileOptions = chisel3.core.ExplicitCompileOptions.NotStrict.copy(explicitInvalidate = true)
 }
