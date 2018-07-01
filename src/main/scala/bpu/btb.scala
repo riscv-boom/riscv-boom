@@ -27,7 +27,7 @@ import freechips.rocketchip.util.Str
 case class BoomBTBParameters(
    btbsa: Boolean = false,
    densebtb: Boolean = true,
-   nSets: Int    = 512,
+   nSets: Int    = 64,
    nBanks: Int   = 2,
    nWays: Int    = 4,
    nRAS: Int     = 16,
@@ -125,7 +125,7 @@ class PCReq(implicit p: Parameters) extends BoomBTBBundle()(p)
 // Return Address Stack
 //------------------------------------------------------------------------------
 
-class RAS(nras: Int, coreInstBytes: Int)
+class RAS(nras: Int, coreInstBytes: Int, vaddrBits: Int)
 {
    def push(addr: UInt): Unit =
    {
@@ -144,8 +144,11 @@ class RAS(nras: Int, coreInstBytes: Int)
    def isEmpty: Bool = count === 0.U
 
    private val count = RegInit(0.U(log2Ceil(nras+1).W))
+   count.suggestName("count")
    private val pos = RegInit(0.U(log2Ceil(nras).W))
-   private val stack = VecInit.tabulate(nras)( i => RegInit(0.U))
+   pos.suggestName("pos")
+   private val stack = RegInit(VecInit(Seq.fill(nras)(0.U(vaddrBits.W))))
+   stack.suggestName("stack")
 }
 
 //------------------------------------------------------------------------------

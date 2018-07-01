@@ -161,7 +161,7 @@ class BTBsa(implicit p: Parameters) extends BoomBTB
 
    if (nRAS > 0)
    {
-      val ras = new RAS(nRAS, coreInstBytes)
+      val ras = new RAS(nRAS, coreInstBytes, vaddrBits)
       val doPeek = (hits_oh zip data_out map {case(hit, d) => hit && BpredType.isReturn(d.bpd_type)}).reduce(_||_)
       val isEmpty = if (rasCheckForEmpty) ras.isEmpty else false.B
       when (!isEmpty && doPeek)
