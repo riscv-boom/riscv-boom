@@ -9,7 +9,7 @@
 package boom.ifu
 
 import chisel3._
-import chisel3.util._
+import chisel3.util.{Decoupled, log2Ceil, PopCount, UIntToOH, Mux1H, DecoupledIO, Cat, PriorityEncoder}
 import chisel3.core.DontCare
 import freechips.rocketchip.config.Parameters
 import boom.common._
@@ -37,11 +37,11 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule()
    require (num_entries > 1)
    private val num_elements = num_entries*fetchWidth
    private val ram = Mem(num_elements, new MicroOp())
-   private val write_ptr = RegInit(0.asUInt(width=log2Ceil(num_elements).W))
-   private val read_ptr = RegInit(0.asUInt(width=log2Ceil(num_elements).W))
+   private val write_ptr = RegInit(0.asUInt(log2Ceil(num_elements).W))
+   private val read_ptr = RegInit(0.asUInt(log2Ceil(num_elements).W))
 
    // How many uops are stored within the ram? If zero, bypass to the output flops.
-   private val count = RegInit(0.asUInt(width=log2Ceil(num_elements).W))
+   private val count = RegInit(0.asUInt(log2Ceil(num_elements).W))
 
    //-------------------------------------------------------------
    // **** Enqueue Uops ****
@@ -63,18 +63,22 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule()
    // Step 1. Convert input FetchPacket into an array of MicroOps.
    for (i <- 0 until fetchWidth)
    {
-      //require (coreInstBytes==4) // TODO RVC
       in_uops(i)                := DontCare
       in_uops(i).valid          := io.enq.valid && io.enq.bits.mask(i)
-      in_uops(i).pc             := alignToFetchBoundary(io.enq.bits.pc) + (i << 2).U // RVC TODO
+      require (fetchWidth >= 2)
+      if (i != 0) {  in_uops(i).debug_pc       := alignToFetchBoundary(io.enq.bits.pc) + (io.enq.bits.fidx(i) << 1.U)   } 
+      else {   in_uops(0).debug_pc       := (alignToFetchBoundary(io.enq.bits.pc).asSInt + 
+                              Mux( io.enq.bits.instacross, -2.S, Cat(0.U(1.W),(io.enq.bits.fidx(0) << 1.U)).asSInt)).asUInt   }
       in_uops(i).ftq_idx        := io.enq.bits.ftq_idx
-      in_uops(i).pc_lob         := in_uops(i).pc // LHS width will cut off high-order bits.
+      in_uops(i).pc_lob         := in_uops(i).debug_pc // LHS width will cut off high-order bits.
       in_uops(i).inst           := io.enq.bits.insts(i)
       in_uops(i).xcpt_pf_if     := io.enq.bits.xcpt_pf_if
       in_uops(i).xcpt_ae_if     := io.enq.bits.xcpt_ae_if
       in_uops(i).replay_if      := io.enq.bits.replay_if
-      in_uops(i).xcpt_ma_if     := io.enq.bits.xcpt_ma_if_oh(i)
       in_uops(i).br_prediction  := io.enq.bits.bpu_info(i)
+      in_uops(i).rvc            := io.enq.bits.rvc(i)
+      in_uops(i).debug_raw      := io.enq.bits.debug_raw(i)
+      in_uops(i).acrossb        := !io.enq.bits.pc(log2Ceil(icBlockBytes)-1, 0).orR && io.enq.bits.instacross && (i == 0).B
       in_uops(i).debug_events   := io.enq.bits.debug_events(i)
    }
 
@@ -83,18 +87,11 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule()
    // such that index=0 corresponds to AlignedPC(fetch-pc) + (0 << lg(inst_sz)).
    // The "mask" arrives too late for our purposes, and we only need to know
    // where the first valid instruction is anyways.
-   val lsb = log2Ceil(coreInstBytes)
-   val msb =
-      if (icIsBanked) log2Ceil(fetchWidth)+lsb-1-1
-      else log2Ceil(fetchWidth)+lsb-1
-
-   val first_index =
-      if (fetchWidth==1) 0.U
-      else io.enq.bits.pc(msb, lsb)
+   val first_index = PriorityEncoder(io.enq.bits.mask)
    for (i <- 0 until fetchWidth)
    {
-      val selects_oh = Wire(UInt(width=fetchWidth.W))
-      selects_oh   := UIntToOH(i.asUInt(width=log2Ceil(fetchWidth).W) + first_index)
+      val selects_oh = Wire(UInt(fetchWidth.W))
+      selects_oh   := UIntToOH(i.U(log2Ceil(fetchWidth).W) + first_index)
 
       val invalid = first_index >= (fetchWidth - i).U // out-of-bounds
       compact_uops(i) := Mux1H(selects_oh, in_uops)
@@ -194,10 +191,9 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule()
    if (DEBUG_PRINTF)
    {
       // TODO a problem if we don't check the f3_valid?
-      printf(" Fetch3 : (%d mask: %x [%d] smask: %x) pc=0x%x enq_count (%d) %d\n",
+      printf(" Fetch3 : (%d mask: %x  smask: %x) pc=0x%x enq_count (%d) %d\n",
          io.enq.valid,
          io.enq.bits.mask,
-         first_index,
          compact_mask.asUInt,
          io.enq.bits.pc,
          enq_count,
@@ -213,7 +209,7 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule()
       printf("\n Fetch4 : %d deq_count (%d) pc=0x%x\n",
          io.deq.valid,
          deq_count,
-         io.deq.bits.uops(0).pc
+         io.deq.bits.uops(0).debug_pc
          )
    }
 
@@ -224,7 +220,5 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule()
    assert (count >= deq_count, "[fetchbuffer] Trying to dequeue more uops than are available.")
 
    assert (!(count === 0.U && write_ptr =/= read_ptr), "[fetchbuffer] pointers should match if count is zero.")
-
-   override val compileOptions = chisel3.core.ExplicitCompileOptions.NotStrict.copy(explicitInvalidate = true)
 }
 
