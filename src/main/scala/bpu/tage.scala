@@ -44,13 +44,13 @@ case class TageParameters(
    ubit_sz: Int = 1)
 
 class TageResp(
-   fetch_width: Int,
-   num_tables: Int,
-   max_history_length: Int,
-   max_index_sz: Int,
-   max_tag_sz: Int,
-   cntr_sz: Int,
-   ubit_sz: Int
+   val fetch_width: Int,
+   val num_tables: Int,
+   val max_history_length: Int,
+   val max_index_sz: Int,
+   val max_tag_sz: Int,
+   val cntr_sz: Int,
+   val ubit_sz: Int
    )
    extends Bundle
 {
@@ -74,15 +74,6 @@ class TageResp(
    val debug_indexes  = Vec(num_tables, UInt(width = max_index_sz))
    val debug_tags     = Vec(num_tables, UInt(width = max_tag_sz))
 
-   override def cloneType: this.type =
-      new TageResp(
-         fetch_width,
-         num_tables,
-         max_history_length,
-         max_index_sz,
-         max_tag_sz,
-         cntr_sz,
-         ubit_sz).asInstanceOf[this.type]
 }
 
 // provide information to the BpdResp bundle how many bits a TageResp needs
@@ -108,7 +99,6 @@ object TageBrPredictor
 //--------------------------------------------------------------------------
 
 class TageBrPredictor(
-   fetch_width: Int,
    num_tables: Int,
    table_sizes: Seq[Int],
    history_lengths: Seq[Int],
@@ -117,7 +107,6 @@ class TageBrPredictor(
    ubit_sz: Int
    )(implicit p: Parameters)
    extends BrPredictor(
-      fetch_width    = fetch_width,
       history_length = history_lengths.max)(p)
 {
    val size_in_bits = (for (i <- 0 until num_tables) yield
@@ -171,10 +160,10 @@ class TageBrPredictor(
    // of all zeroes.
    private def GetPredictionOH(cidx: UInt, cntr: UInt): UInt =
    {
-      val mask_oh = Wire(UInt(width=fetch_width.W))
+      val mask_oh = Wire(UInt(width=rvcFetchWidth.W))
       // Check high-order bit for prediction.
       val taken = cntr(cntr_sz-1)
-      mask_oh := UIntToOH(cidx) & Fill(fetch_width, taken)
+      mask_oh := UIntToOH(cidx) & Fill(rvcFetchWidth, taken)
       mask_oh
    }
 
@@ -206,7 +195,6 @@ class TageBrPredictor(
    val tables = for (i <- 0 until num_tables) yield
    {
       val table = Module(new TageTable(
-         fetch_width        = fetch_width,
          id                 = i,
          num_entries        = table_sizes(i),
          history_length     = history_lengths(i),
@@ -251,7 +239,7 @@ class TageBrPredictor(
    val q_f3_resps = for (i <- 0 until num_tables) yield
    {
       val q_resp = withReset(reset || io.fe_clear || io.f4_redirect)
-       {Module(new ElasticReg(Valid(new TageTableResp(fetch_width, tag_sizes.max, cntr_sz, ubit_sz))))}
+       {Module(new ElasticReg(Valid(new TageTableResp(rvcFetchWidth, tag_sizes.max, cntr_sz, ubit_sz))))}
 
       q_resp.io.enq.valid := io.f2_valid
       q_resp.io.enq.bits := tables_io(i).bp2_resp
@@ -281,18 +269,18 @@ class TageBrPredictor(
    }
 
    // Vector/bit-mask of taken/not-taken predictions.
-   val f3_takens = Wire(init = Vec.fill(fetch_width) { false.B })
+   val f3_takens = Wire(init = Vec.fill(rvcFetchWidth) { false.B })
    // Vector of best predictors (one for each cfi index).
-   val f3_best_hits = Wire(init = Vec.fill(fetch_width) { false.B })
-   val f3_best_ids  = Wire(Vec(fetch_width, UInt(width=log2Ceil(num_tables))))
+   val f3_best_hits = Wire(init = Vec.fill(rvcFetchWidth) { false.B })
+   val f3_best_ids  = Wire(Vec(rvcFetchWidth, UInt(width=log2Ceil(num_tables))))
    // Vector of alt predictors (one for each cfi index).
-   val f3_alt_hits  = Wire(init = Vec.fill(fetch_width) { false.B })
-   val f3_alt_ids   = Wire(Vec(fetch_width, UInt(width=log2Ceil(num_tables))))
+   val f3_alt_hits  = Wire(init = Vec.fill(rvcFetchWidth) { false.B })
+   val f3_alt_ids   = Wire(Vec(rvcFetchWidth, UInt(width=log2Ceil(num_tables))))
 
    // Build up a bit-mask of taken predictions (1 bit per cfi index).
    // Build up a best predictor (one per cfi index).
    // Build up an alt predictor (one per cfi index).
-   for (w <- 0 until fetch_width) yield
+   for (w <- 0 until rvcFetchWidth) yield
    {
       val found_first = f3_hits_matrix.map{mask => mask(w)}.reduce(_|_)
 
@@ -326,7 +314,7 @@ class TageBrPredictor(
          PriorityEncoder(f3_best_hits)) // TODO allow use_alt
 
    val resp_info = Wire(new TageResp(
-      fetch_width = fetch_width,
+      fetch_width = rvcFetchWidth,
       num_tables = num_tables,
       max_history_length = history_lengths.max,
       max_index_sz = log2Up(table_sizes.max),
@@ -368,7 +356,7 @@ class TageBrPredictor(
 
    val r_commit = RegNext(io.commit)
    val r_info = new TageResp(
-      fetch_width = fetch_width,
+      fetch_width = rvcFetchWidth,
       num_tables = num_tables,
       max_history_length = history_lengths.max,
       max_index_sz = log2Up(table_sizes.max),
@@ -469,7 +457,7 @@ class TageBrPredictor(
       when (table_wens(i))
       {
          // construct old entry so we can overwrite parts without having to do a RMW.
-         val com_entry = Wire(new TageTableEntry(fetch_width, tag_sizes.max, cntr_sz, ubit_sz))
+         val com_entry = Wire(new TageTableEntry(rvcFetchWidth, tag_sizes.max, cntr_sz, ubit_sz))
          com_entry.tag  := Mux(table_allocates(i), com_tags(i), r_info.tags(i))
          com_entry.cntr := r_info.cntrs(i)
          com_entry.cidx := Mux(table_allocates(i), r_commit.bits.miss_cfi_idx,  r_info.cidxs(i))

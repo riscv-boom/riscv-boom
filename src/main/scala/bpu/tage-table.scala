@@ -120,7 +120,6 @@ class TageTableWrite(fetch_width: Int, index_sz: Int, tag_sz: Int, cntr_sz: Int,
 // track the max_* size of the parameters, and then within the TageTable we must
 // mask off extra bits as needed.
 class TageTable(
-   fetch_width: Int,
    num_entries: Int,
    tag_sz: Int,
    max_num_entries: Int,
@@ -131,9 +130,9 @@ class TageTable(
    history_length: Int
    )(implicit p: Parameters) extends BoomModule()(p)
 {
-   val index_sz = log2Up(num_entries)
+   val index_sz = log2Ceil(num_entries)
 
-   val io = IO(new TageTableIo(fetch_width, index_sz, tag_sz, cntr_sz, ubit_sz))
+   val io = IO(new TageTableIo(rvcFetchWidth, index_sz, tag_sz, cntr_sz, ubit_sz))
 
    private val CNTR_MAX = ((1 << cntr_sz) - 1).U
    private val CNTR_WEAK_TAKEN = (1 << (cntr_sz-1)).U
@@ -199,7 +198,7 @@ class TageTable(
    // State
 
    // TODO add banking
-   val ram = SeqMem(num_entries, new TageTableEntry(fetch_width, tag_sz, cntr_sz, ubit_sz))
+   val ram = SeqMem(num_entries, new TageTableEntry(rvcFetchWidth, tag_sz, cntr_sz, ubit_sz))
    ram.suggestName("TageTableDataArray")
 
 
@@ -235,7 +234,7 @@ class TageTable(
       val taken      = io.write.bits.taken
       val mispredict = io.write.bits.mispredict
 
-      val wentry = Wire(new TageTableEntry(fetch_width, tag_sz, cntr_sz, ubit_sz))
+      val wentry = Wire(new TageTableEntry(rvcFetchWidth, tag_sz, cntr_sz, ubit_sz))
 
       when (fsm_state === s_clear)
       {

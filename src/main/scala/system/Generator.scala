@@ -19,7 +19,6 @@ object Generator extends GeneratorApp {
         "rv64uf-v-fadd",
         "rv64um-v-mul",
         // "rv64mi-p-breakpoint", TODO: breakpoints not implemented yet
-        // "rv64uc-v-rvc", TODO: RVC not implemented yet
         "rv64ud-v-structural",
         "rv64si-p-wfi",
         "rv64um-v-divw",
@@ -88,6 +87,7 @@ object Generator extends GeneratorApp {
     TestGeneration.addSuites(rvu.map(_("p")))
     TestGeneration.addSuites((if (vm) List("v") else List()).flatMap(env => rvu.map(_(env))))
     TestGeneration.addSuite(benchmarks)
+    if (coreParams.useCompressed) TestGeneration.addSuites(env.map(if (xlen == 64) rv64uc else rv32uc))
     TestGeneration.addSuite(new RegressionTestSuite(if (xlen == 64) rv64RegrTestNames else rv32RegrTestNames))
   }
 
