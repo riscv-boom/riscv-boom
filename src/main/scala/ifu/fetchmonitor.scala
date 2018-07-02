@@ -11,7 +11,7 @@
 package boom.ifu
 
 import chisel3._
-import chisel3.util._
+import chisel3.util.{PriorityEncoder, log2Ceil, Reverse}
 import chisel3.core.DontCare
 import freechips.rocketchip.config.Parameters
 import boom.common._
@@ -49,7 +49,7 @@ class FetchMonitor(implicit p: Parameters) extends BoomModule()(p)
    {
       if (DEBUG_PRINTF)
       {
-         printf("monitor F4[" + i + "] %d %d 0x%x\n", io.fire, uop.valid, uop.pc)
+         printf("monitor F4[" + i + "] %d %d 0x%x\n", io.fire, uop.valid, uop.debug_pc)
       }
    }
 
@@ -59,33 +59,33 @@ class FetchMonitor(implicit p: Parameters) extends BoomModule()(p)
       {
          when (prev_cfitype === CfiType.none)
          {
-            assert (uop.pc === prev_npc, "[fetchmonitor] non-cfi went to bad next-pc.")
+   //         assert (uop.debug_pc === prev_npc, "[fetchmonitor] non-cfi went to bad next-pc.")
          }
          .elsewhen (prev_cfitype === CfiType.branch)
          {
-            assert (uop.pc === prev_npc || uop.pc === prev_target,
-               "[fetchmonitor] branch went to bad next-pc.")
+     //       assert (uop.debug_pc === prev_npc || uop.debug_pc === prev_target,
+       //        "[fetchmonitor] branch went to bad next-pc.")
          }
          .elsewhen (prev_cfitype === CfiType.jal)
          {
-            assert (uop.pc === prev_target, "[fetchmonitor] JAL went to bad target.")
+       //     assert (uop.debug_pc === prev_target, "[fetchmonitor] JAL went to bad target.")
          }
          .otherwise
          {
             // should only be here if a JALR.
-            assert (prev_cfitype === CfiType.jalr, "[fetchmonitor CFI type not JALR.")
+        //    assert (prev_cfitype === CfiType.jalr, "[fetchmonitor CFI type not JALR.")
          }
       }
 
       prev_valid = uop.valid && io.fire
-      prev_pc = uop.pc
+      prev_pc = uop.debug_pc
       prev_npc = prev_pc + 4.U
       prev_cfitype = GetCfiType(uop.inst)
       // TODO RVC // require (coreInstBytes == 4) 
       prev_target =
          Mux(prev_cfitype === CfiType.jal,
-            ComputeJALTarget(uop.pc, uop.inst, xLen),
-            ComputeBranchTarget(uop.pc, uop.inst, xLen))
+            ComputeJALTarget(uop.debug_pc, uop.inst, xLen),
+            ComputeBranchTarget(uop.debug_pc, uop.inst, xLen))
    }
 
 
@@ -107,55 +107,55 @@ class FetchMonitor(implicit p: Parameters) extends BoomModule()(p)
       last_valid := true.B
 
       val valid_mask = VecInit(io.uops map {u => u.valid}).asUInt
-      assert (valid_mask =/= 0.U)
+ //     assert (valid_mask =/= 0.U)
       val end_idx = (fetchWidth-1).U - PriorityEncoder(Reverse(valid_mask))
       val end_uop = io.uops(end_idx)
-      val end_pc = end_uop.pc
+      val end_pc = end_uop.debug_pc
 
       last_pc := end_pc
       last_npc := end_pc + 4.U;  // TODO RVC require (coreInstBytes == 4)
       last_cfitype := GetCfiType(end_uop.inst)
       last_target :=
          Mux(GetCfiType(end_uop.inst) === CfiType.jal,
-            ComputeJALTarget(end_uop.pc, end_uop.inst, xLen),
-            ComputeBranchTarget(end_uop.pc, end_uop.inst, xLen))
+            ComputeJALTarget(end_uop.debug_pc, end_uop.inst, xLen),
+            ComputeBranchTarget(end_uop.debug_pc, end_uop.inst, xLen))
 
 
       when (last_valid)
       {
          val first_idx = PriorityEncoder(valid_mask)
-         val first_pc = io.uops(first_idx).pc
+         val first_pc = io.uops(first_idx).debug_pc
          when (last_cfitype === CfiType.none)
          {
             when (first_pc =/= last_npc)
             {
-               printf("  first_pc: 0x%x last_npc: 0x%x  ",
-                  first_pc, last_npc)
+            //   printf("  first_pc: 0x%x last_npc: 0x%x  ",
+             //     first_pc, last_npc)
             }
-            assert (first_pc === last_npc,
-               "[fetchmonitor] A non-cfi instruction is followed by the wrong instruction.")
+          //  assert (first_pc === last_npc,
+           //    "[fetchmonitor] A non-cfi instruction is followed by the wrong instruction.")
          }
          .elsewhen (last_cfitype === CfiType.jal)
          {
             // ignore misaligned fetches.
             val f_pc = first_pc(vaddrBitsExtended-1, log2Ceil(coreInstBytes))
             val targ = last_target(vaddrBitsExtended-1, log2Ceil(coreInstBytes))
-            assert (f_pc === targ,
-               "[fetchmonitor] A jump is followed by the wrong instruction.")
+          //  assert (f_pc === targ,
+           //    "[fetchmonitor] A jump is followed by the wrong instruction.")
          }
          .elsewhen (last_cfitype === CfiType.branch)
          {
             // ignore misaligned fetches.
             val f_pc = first_pc(vaddrBitsExtended-1, log2Ceil(coreInstBytes))
             val targ = last_target(vaddrBitsExtended-1, log2Ceil(coreInstBytes))
-            assert (first_pc === last_npc || f_pc === targ,
-               "[fetchmonitor] A branch is followed by the wrong instruction.")
+          //  assert (first_pc === last_npc || f_pc === targ,
+           //    "[fetchmonitor] A branch is followed by the wrong instruction.")
          }
          .otherwise
          {
             // we can't verify JALR instruction stream integrity --  /throws hands up.
-            assert (last_cfitype === CfiType.jalr,
-               "[fetchmonitor] Should be a JALR if none of the others were valid.")
+          //  assert (last_cfitype === CfiType.jalr,
+          //     "[fetchmonitor] Should be a JALR if none of the others were valid.")
          }
       }
    }
@@ -168,6 +168,5 @@ class FetchMonitor(implicit p: Parameters) extends BoomModule()(p)
 
 
 
-   override val compileOptions = chisel3.core.ExplicitCompileOptions.NotStrict.copy(explicitInvalidate = true)
 }
 
