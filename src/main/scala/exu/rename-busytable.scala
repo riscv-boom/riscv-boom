@@ -75,7 +75,7 @@ class BusyTableHelper(
 
    //TODO BUG chisel3
    val table_bsy = Reg(init=Vec.fill(num_pregs){Bool(false)})
-   val table_eidx = Reg(init=Vec.fill(num_pregs){UInt(0, width=VL_SZ)}) // TODO_Vec: Use this somewhere
+   val table_eidx = Reg(init=Vec.fill(num_pregs){Fill(VL_SZ, UInt(1, width=1))}) // TODO_Vec: Use this somewhere
 
    for (wb_idx <- 0 until num_wb_ports)
    {

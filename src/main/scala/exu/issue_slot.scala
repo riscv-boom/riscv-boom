@@ -127,8 +127,11 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean, isVec: Boolean
    }
    .otherwise
    {
-      slotUop.iw_state := updated_state
+      slotUop.iw_state  := updated_state
       slotUop.eidx      := updated_eidx
+      slotUop.lrs1_rtype:= updated_lrs1_rtype
+      slotUop.lrs2_rtype:= updated_lrs2_rtype
+      slotUop.lrs3_rtype:= updated_lrs3_rtype
       slotUop.prs1_busy := updated_prs1_busy
       slotUop.prs2_busy := updated_prs2_busy
       slotUop.prs3_busy := updated_prs3_busy
@@ -190,11 +193,16 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean, isVec: Boolean
          // TODO_Vec: We can issue these before all operands are not busy
          // Maybe implement that in the future
          when (slotUop.uopc === uopFPTOVEC && Array(slotUop.lrs1_rtype, slotUop.lrs2_rtype, slotUop.lrs3_rtype).map(_ === RT_FLT).reduce(_||_)) {
-            updated_state := slot_state
             when (slotUop.lrs1_rtype === RT_FLT) {
                updated_lrs1_rtype := RT_X
+               when (updated_lrs2_rtype === RT_FLT || updated_lrs3_rtype === RT_FLT) {
+                  updated_state := slot_state
+               }
             } .elsewhen (slotUop.lrs2_rtype === RT_FLT) {
                updated_lrs2_rtype := RT_X
+               when (updated_lrs3_rtype === RT_FLT) {
+                  updated_state := slot_state
+               }
             } // This logic reissues the microop. We assume that any FLT operands are sent to vector pipeline
          }
       }
@@ -237,9 +245,8 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean, isVec: Boolean
          updated_prs1_busy := false.B
          if (containsVec) {
             when (slotUop.vec_val && slotUop.lrs1_rtype === RT_VEC) {
-               updated_prs1_busy := next_eidx > io.wakeup_dsts(i).bits.eidx
-               updated_prs1_eidx := io.wakeup_dsts(i).bits.eidx // TODO_Vec: I think theres a bug here
-                                                                // This should be updated_eidx
+               updated_prs1_busy := Mux(io.grant, next_next_eidx, next_eidx) > io.wakeup_dsts(i).bits.eidx // TODO_Vec: Fix this somehow
+               updated_prs1_eidx := io.wakeup_dsts(i).bits.eidx
             }
          }
       }
@@ -248,7 +255,7 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean, isVec: Boolean
          updated_prs2_busy := false.B
          if (containsVec) {
             when (slotUop.vec_val && slotUop.lrs2_rtype === RT_VEC) {
-               updated_prs2_busy := next_eidx > io.wakeup_dsts(i).bits.eidx
+               updated_prs2_busy := Mux(io.grant, next_next_eidx, next_eidx) > io.wakeup_dsts(i).bits.eidx
                updated_prs2_eidx := io.wakeup_dsts(i).bits.eidx
             }
          }
@@ -258,7 +265,7 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean, isVec: Boolean
          updated_prs3_busy := false.B
          if (containsVec) {
             when (slotUop.vec_val && slotUop.lrs3_rtype === RT_VEC) {
-               updated_prs3_busy := next_eidx > io.wakeup_dsts(i).bits.eidx
+               updated_prs3_busy := Mux(io.grant, next_next_eidx, next_eidx) > io.wakeup_dsts(i).bits.eidx
                updated_prs3_eidx := io.wakeup_dsts(i).bits.eidx
             }
          }

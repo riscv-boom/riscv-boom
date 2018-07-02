@@ -65,8 +65,8 @@ class VALUUnit(num_stages: Int) (implicit p: Parameters)
    val imm_xprlen = ImmGen(uop.imm_packed, uop.ctrl.imm_sel)
    require(num_stages > 0, "This should be > 0 for now");
    when (io.req.valid) {
-      printf("VALU received valid input\n");
-      printf("%d %x %x %x\n", uop.uopc, uop.dst_rtype, uop.rd_verep, uop.rd_vshape)
+      // printf("VALU received valid input\n");
+      // printf("%d %x %x %x\n", uop.uopc, uop.dst_rtype, uop.rd_verep, uop.rd_vshape)
       assert (io.req.bits.uop.dst_rtype === RT_VEC && io.req.bits.uop.rd_vshape === VSHAPE_VECTOR && (io.req.bits.uop.rd_verep === VEREP_FP || io.req.bits.uop.rd_verep === VEREP_INT || io.req.bits.uop.rd_verep === VEREP_UINT),
          "Destination must be fp or int vector reg\n");
       when (uop.uopc === uopVFSJ || uop.uopc === uopVFSJN || uop.uopc === uopVFSJX) {

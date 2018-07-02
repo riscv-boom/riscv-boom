@@ -38,7 +38,7 @@ class DefaultBoomConfig extends Config((site, here, up) => {
             IssueParams(issueWidth=2, numEntries=20, iqType=IQT_VEC.litValue),
             IssueParams(issueWidth=1, numEntries=20, iqType=IQT_FP.litValue)),
          numIntPhysRegisters = 100,
-         numFpPhysRegisters = 64,
+         numFpPhysRegisters = 65,
          numLsuEntries = 16,
          maxBrCount = 8,
          btb = BoomBTBParameters(nSets=512, nWays=4, nRAS=8, tagSz=13),
@@ -68,7 +68,7 @@ class WithSmallBooms extends Config((site, here, up) => {
       core = r.core.copy(
          fetchWidth = 2,
          decodeWidth = 1,
-         numRobEntries = 16,
+         numRobEntries = 32,
          issueParams = Seq(
             IssueParams(issueWidth=1, numEntries=4, iqType=IQT_MEM.litValue),
             IssueParams(issueWidth=1, numEntries=4, iqType=IQT_INT.litValue),
@@ -100,7 +100,7 @@ class WithMediumBooms extends Config((site, here, up) => {
             IssueParams(issueWidth=2, numEntries=8,  iqType=IQT_VEC.litValue),
             IssueParams(issueWidth=1, numEntries=10, iqType=IQT_FP.litValue)),
          numIntPhysRegisters = 70,
-         numFpPhysRegisters = 64,
+         numFpPhysRegisters = 65,
          numLsuEntries = 16,
          maxBrCount = 8,
          regreadLatency = 1,
