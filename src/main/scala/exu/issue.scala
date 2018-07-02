@@ -10,7 +10,7 @@
 package boom.exu
 
 import chisel3._
-import chisel3.util._
+import chisel3.util.{Valid, Enum, Cat, log2Ceil, PopCount}
 import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.util.Str
 import boom.common._
@@ -38,7 +38,7 @@ trait IssueUnitConstants
 // Is the physical register poisoned (aka, was it woken up by a speculative issue)?
 class IqWakeup(val preg_sz: Int) extends Bundle
 {
-   val pdst = UInt(width=preg_sz.W)
+   val pdst = UInt(preg_sz.W)
    val poisoned = Bool()
 }
 
@@ -55,10 +55,10 @@ class IssueUnitIO(
    val iss_uops       = Output(Vec(issue_width, new MicroOp()))
    val wakeup_pdsts   = Flipped(Vec(num_wakeup_ports, Valid(new IqWakeup(PREG_SZ))))
 
-   val mem_ldSpecWakeup= Flipped(Valid(UInt(width=PREG_SZ.W)))
+   val mem_ldSpecWakeup= Flipped(Valid(UInt(PREG_SZ.W)))
 
    // tell the issue unit what each execution pipeline has in terms of functional units
-   val fu_types       = Input(Vec(issue_width, Bits(width=FUC_SZ.W)))
+   val fu_types       = Input(Vec(issue_width, UInt(FUC_SZ.W)))
 
    val brinfo         = Input(new BrResolutionInfo())
    val flush_pipeline = Input(Bool())
@@ -66,7 +66,7 @@ class IssueUnitIO(
 
    val event_empty    = Output(Bool()) // used by HPM events; is the issue unit empty?
 
-   val tsc_reg        = Input(UInt(width=xLen.W))
+   val tsc_reg        = Input(UInt(xLen.W))
 }
 
 abstract class IssueUnit(
@@ -113,7 +113,7 @@ abstract class IssueUnit(
    // However, if the load gets killed before it hits SXT stage, we may see
    // the sxt_ldMiss signal (from some other load) by not the ldSpecWakeup signal.
    // So track branch kills for the last 4 cycles to remove false negatives.
-   val brKills = RegInit(0.asUInt(width=4.W))
+   val brKills = RegInit(0.asUInt(4.W))
    brKills := Cat(brKills, (io.brinfo.valid && io.brinfo.mispredict) || io.flush_pipeline)
    assert (!(io.sxt_ldMiss && !RegNext(io.mem_ldSpecWakeup.valid, init=false.B) && brKills === 0.U),
       "[issue] IQ-" + iqType + " a ld miss was not preceded by a spec wakeup.")
@@ -138,9 +138,9 @@ abstract class IssueUnit(
    {
       for (i <- 0 until num_issue_slots)
       {
-         printf("  " + this.getType + "_issue_slot[%d](%c)(Req:%c):wen=%c P:(%c,%c,%c) OP:(%d,%d,%d) PDST:%d %c [[DASM(%x)]" +
+         printf("  " + this.getType + "_issue_slot[%d](%c)(Req:%c):wen=%c P:(%c,%c,%c) OP:(%d,%d,%d) PDST:%d %c [[DASM(%x)] %d" +
                " 0x%x: %d] ri:%d bm=%d imm=0x%x\n"
-            , UInt(i, log2Up(num_issue_slots))
+            , i.U(log2Ceil(num_issue_slots).W)
             , Mux(issue_slots(i).valid, Str("V"), Str("-"))
             , Mux(issue_slots(i).request, Str("R"), Str("-"))
             , Mux(issue_slots(i).in_uop.valid, Str("W"),  Str(" "))
@@ -156,11 +156,12 @@ abstract class IssueUnit(
               Mux(issue_slots(i).uop.dst_rtype === RT_FLT, Str("f"),
               Mux(issue_slots(i).uop.dst_rtype === RT_PAS, Str("C"), Str("?")))))
             , issue_slots(i).uop.inst
-            , issue_slots(i).uop.pc(31,0)
+            , issue_slots(i).uop.debug_pc(31,0)
             , issue_slots(i).uop.uopc
             , issue_slots(i).uop.rob_idx
             , issue_slots(i).uop.br_mask
             , issue_slots(i).uop.imm_packed
+            , issue_slots(i).uop.ctrl.rf_wen
             )
       }
       printf("-----------------------------------------------------------------------------------------\n")
@@ -171,8 +172,6 @@ abstract class IssueUnit(
       else if (iqType == IQT_MEM.litValue) "mem"
       else if (iqType == IQT_FP.litValue) " fp"
       else "unknown"
-
-   override val compileOptions = chisel3.core.ExplicitCompileOptions.NotStrict.copy(explicitInvalidate = true)
 }
 
 class IssueUnits(num_wakeup_ports: Int)(implicit val p: Parameters)

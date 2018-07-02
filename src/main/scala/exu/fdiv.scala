@@ -13,7 +13,8 @@
 
 package boom.exu
 
-import Chisel._
+import chisel3._
+import chisel3.util.BitPat
 import freechips.rocketchip.config.Parameters
 
 import freechips.rocketchip.tile.FPConstants._
@@ -25,8 +26,8 @@ import boom.util._
 class UOPCodeFDivDecoder extends Module
 {
   val io = IO(new Bundle {
-    val uopc = Bits(INPUT, UOPC_SZ)
-    val sigs = new tile.FPUCtrlSigs().asOutput
+    val uopc = Input(UInt(UOPC_SZ.W))
+    val sigs = Output(new tile.FPUCtrlSigs())
   })
 
    val N = BitPat("b0")
@@ -58,6 +59,25 @@ class UOPCodeFDivDecoder extends Module
                   s.swap23, s.singleIn, s.singleOut, s.fromint, s.toint, s.fastpipe, s.fma,
                   s.div, s.sqrt, s.wflags)
    sigs zip decoder map {case(s,d) => s := d}
+
+   def connectSigs[T <: freechips.rocketchip.tile.HasFPUCtrlSigs](bund: T) = {
+      bund.ldst  := io.sigs.ldst   
+      bund.wen  := io.sigs.wen   
+      bund.ren1  := io.sigs.ren1   
+      bund.ren2  := io.sigs.ren2   
+      bund.ren3  := io.sigs.ren3   
+      bund.swap12  := io.sigs.swap12   
+      bund.swap23  := io.sigs.swap23   
+      bund.singleIn  := io.sigs.singleIn   
+      bund.singleOut  := io.sigs.singleOut   
+      bund.fromint  := io.sigs.fromint   
+      bund.toint  := io.sigs.toint   
+      bund.fastpipe  := io.sigs.fastpipe   
+      bund.fma  := io.sigs.fma   
+      bund.div  := io.sigs.div   
+      bund.sqrt  := io.sigs.sqrt   
+      bund.wflags  := io.sigs.wflags   
+   }
 }
 
 
@@ -82,7 +102,7 @@ class FDivSqrtUnit(implicit p: Parameters)
    // buffer inputs and upconvert as needed
 
    // provide a one-entry queue to store incoming uops while waiting for the fdiv/fsqrt unit to become available.
-   val r_buffer_val = Reg(init = false.B)
+   val r_buffer_val = RegInit(false.B)
    val r_buffer_req = Reg(new FuncUnitReq(data_width=65))
    val r_buffer_fin = Reg(new tile.FPInput)
 
@@ -99,8 +119,9 @@ class FDivSqrtUnit(implicit p: Parameters)
    def upconvert(x: UInt) =
    {
       val s2d = Module(new hardfloat.RecFNToRecFN(inExpWidth = 8, inSigWidth = 24, outExpWidth = 11, outSigWidth = 53))
+      s2d.io := DontCare
       s2d.io.in := x
-      s2d.io.roundingMode := UInt(0)
+      s2d.io.roundingMode := 0.U
       s2d.io.out
    }
    val in1_upconvert = upconvert(unbox(io.req.bits.rs1_data, false.B, Some(tile.FType.S)))
@@ -111,12 +132,13 @@ class FDivSqrtUnit(implicit p: Parameters)
       r_buffer_val := true.B
       r_buffer_req := io.req.bits
       r_buffer_req.uop.br_mask := GetNewBrMask(io.brinfo, io.req.bits.uop)
-      r_buffer_fin := fdiv_decoder.io.sigs
+      fdiv_decoder.connectSigs(r_buffer_fin)
       r_buffer_fin.rm := io.fcsr_rm
       r_buffer_fin.typ := 0.U // unused for fdivsqrt
 		val tag = !fdiv_decoder.io.sigs.singleIn
       r_buffer_fin.in1 := unbox(io.req.bits.rs1_data, tag, Some(tile.FType.D))
       r_buffer_fin.in2 := unbox(io.req.bits.rs2_data, tag, Some(tile.FType.D))
+      r_buffer_fin.in2 := 0.U
       when (fdiv_decoder.io.sigs.singleIn)
       {
          r_buffer_fin.in1 := in1_upconvert
@@ -130,8 +152,9 @@ class FDivSqrtUnit(implicit p: Parameters)
    // fdiv/fsqrt
 
    val divsqrt = Module(new hardfloat.DivSqrtRecF64)
+   divsqrt.io.detectTininess := DontCare
 
-   val r_divsqrt_val = Reg(init = false.B)  // inflight uop?
+   val r_divsqrt_val = RegInit(false.B)  // inflight uop?
    val r_divsqrt_killed = Reg(Bool())           // has inflight uop been killed?
    val r_divsqrt_fin = Reg(new tile.FPInput)
    val r_divsqrt_uop = Reg(new MicroOp)
@@ -170,7 +193,7 @@ class FDivSqrtUnit(implicit p: Parameters)
    //-----------------------------------------
    // buffer output and down-convert as needed
 
-   val r_out_val = Reg(init=false.B)
+   val r_out_val = RegInit(false.B)
    val r_out_uop = Reg(new MicroOp)
    val r_out_flags_double = Reg(Bits())
    val r_out_wdata_double = Reg(Bits())
@@ -201,6 +224,7 @@ class FDivSqrtUnit(implicit p: Parameters)
 
    val downvert_d2s = Module(new hardfloat.RecFNToRecFN(
       inExpWidth = 11, inSigWidth = 53, outExpWidth = 8, outSigWidth = 24))
+   downvert_d2s.io.detectTininess := DontCare
    downvert_d2s.io.in := r_out_wdata_double
    downvert_d2s.io.roundingMode := r_divsqrt_fin.rm
    val out_flags = r_out_flags_double | Mux(r_divsqrt_fin.singleIn, downvert_d2s.io.exceptionFlags, 0.U)

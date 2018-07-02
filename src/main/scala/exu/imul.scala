@@ -6,7 +6,7 @@
 package boom.exu
 
 import chisel3._
-import chisel3.util._
+import chisel3.util.{Cat, Fill, MuxCase, Pipe}
 import freechips.rocketchip.rocket.ALU._
 import boom.common._
 // TODO can repurpose the FN_* ctrl signals,
