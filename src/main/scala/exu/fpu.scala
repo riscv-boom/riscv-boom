@@ -5,7 +5,8 @@
 
 package boom.exu
 
-import Chisel._
+import chisel3._
+import chisel3.util.{BitPat, ValidIO, Pipe}
 import freechips.rocketchip.config.Parameters
 
 import freechips.rocketchip.tile.FPConstants._
@@ -23,14 +24,14 @@ import boom.util.{ImmGenRm, ImmGenTyp}
 class UOPCodeFPUDecoder extends Module
 {
   val io = IO(new Bundle {
-    val uopc = Bits(INPUT, UOPC_SZ)
-    val sigs = new FPUCtrlSigs().asOutput
+    val uopc = Input(UInt(UOPC_SZ.W))
+    val sigs = Output(new FPUCtrlSigs())
   })
 
    // TODO change N,Y,X to BitPat("b1"), BitPat("b0"), and BitPat("b?")
-   val N = Bool(false)
-   val Y = Bool(true)
-   val X = Bool(false)
+   val N = false.B
+   val Y = true.B
+   val X = false.B
 
    val default: List[BitPat] = List(X,X,X,X,X, X,X,X,X,X,X,X, X,X,X,X)
 
@@ -128,14 +129,33 @@ class UOPCodeFPUDecoder extends Module
                   s.swap23, s.singleIn, s.singleOut, s.fromint, s.toint, s.fastpipe, s.fma,
                   s.div, s.sqrt, s.wflags)
    sigs zip decoder map {case(s,d) => s := d}
+
+   def connectSigs[T <: freechips.rocketchip.tile.HasFPUCtrlSigs](bund: T) = {
+      bund.ldst  := io.sigs.ldst   
+      bund.wen  := io.sigs.wen   
+      bund.ren1  := io.sigs.ren1   
+      bund.ren2  := io.sigs.ren2   
+      bund.ren3  := io.sigs.ren3   
+      bund.swap12  := io.sigs.swap12   
+      bund.swap23  := io.sigs.swap23   
+      bund.singleIn  := io.sigs.singleIn   
+      bund.singleOut  := io.sigs.singleOut   
+      bund.fromint  := io.sigs.fromint   
+      bund.toint  := io.sigs.toint   
+      bund.fastpipe  := io.sigs.fastpipe   
+      bund.fma  := io.sigs.fma   
+      bund.div  := io.sigs.div   
+      bund.sqrt  := io.sigs.sqrt   
+      bund.wflags  := io.sigs.wflags   
+   }
 }
 
 class FMADecoder extends Module
 {
    val io = IO(new Bundle
    {
-      val uopc = UInt(INPUT, UOPC_SZ)
-      val cmd = UInt(OUTPUT, 2)
+      val uopc = Input(UInt(UOPC_SZ.W))
+      val cmd = Output(UInt(2.W))
    })
 
    val default: List[BitPat] = List(BitPat("b??"))
@@ -166,17 +186,17 @@ class FMADecoder extends Module
 class FpuReq()(implicit p: Parameters) extends BoomBundle()(p)
 {
    val uop      = new MicroOp()
-   val rs1_data = Bits(width = 65)
-   val rs2_data = Bits(width = 65)
-   val rs3_data = Bits(width = 65)
-   val fcsr_rm  = Bits(width = tile.FPConstants.RM_SZ)
+   val rs1_data = UInt(65.W)
+   val rs2_data = UInt(65.W)
+   val rs3_data = UInt(65.W)
+   val fcsr_rm  = UInt(tile.FPConstants.RM_SZ.W)
 }
 
 class FPU(implicit p: Parameters) extends BoomModule()(p) with tile.HasFPUParameters
 {
    val io = IO(new Bundle
    {
-      val req = new ValidIO(new FpuReq).flip
+      val req = Flipped(new ValidIO(new FpuReq))
       val resp = new ValidIO(new ExeUnitResp(65))
    })
 
@@ -187,12 +207,13 @@ class FPU(implicit p: Parameters) extends BoomModule()(p) with tile.HasFPUParame
    val fp_decoder = Module(new UOPCodeFPUDecoder)
    fp_decoder.io.uopc := io_req.uop.uopc
    val fp_ctrl = fp_decoder.io.sigs
-   val fp_rm = Mux(ImmGenRm(io_req.uop.imm_packed) === Bits(7), io_req.fcsr_rm, ImmGenRm(io_req.uop.imm_packed))
+   val fp_rm = Mux(ImmGenRm(io_req.uop.imm_packed) === 7.U, io_req.fcsr_rm, ImmGenRm(io_req.uop.imm_packed))
 
 	def fuInput(minT: Option[tile.FType]): tile.FPInput = {
 		val req = Wire(new tile.FPInput)
 		val tag = !fp_ctrl.singleIn
-		req := fp_ctrl
+		fp_decoder.connectSigs(req)
+      //req <> fp_ctrl
 		req.rm := fp_rm
 		req.in1 := unbox(io_req.rs1_data, tag, minT)
 		req.in2 := unbox(io_req.rs2_data, tag, minT)
@@ -220,7 +241,7 @@ class FPU(implicit p: Parameters) extends BoomModule()(p) with tile.HasFPUParame
    val fpiu = Module(new tile.FPToInt)
 	fpiu.io.in.valid := io.req.valid && (fp_ctrl.toint || (fp_ctrl.fastpipe && fp_ctrl.wflags))
    fpiu.io.in.bits := fuInput(None)
-   val fpiu_out = Pipe(Reg(next=fpiu.io.in.valid && !fp_ctrl.fastpipe),
+   val fpiu_out = Pipe(RegNext(fpiu.io.in.valid && !fp_ctrl.fastpipe),
                           fpiu.io.out.bits, fpu_latency-1)
    val fpiu_result  = Wire(new tile.FPResult)
    fpiu_result.data := fpiu_out.bits.toint

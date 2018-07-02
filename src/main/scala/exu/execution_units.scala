@@ -9,7 +9,7 @@
 
 package boom.exu
 
-import Chisel._
+import chisel3._
 import freechips.rocketchip.config.Parameters
 import scala.collection.mutable.ArrayBuffer
 import boom.common._
@@ -109,6 +109,10 @@ class ExecutionUnits(fpu: Boolean = false)(implicit val p: Parameters) extends H
       for (w <- 0 until int_width-1) {
          val is_last = w == (int_width-2)
          exe_units += Module(new ALUExeUnit(has_ifpu = is_last))
+         exe_units(exe_units.length-1).io.lsu_io := DontCare
+         exe_units(exe_units.length-1).io.dmem := DontCare
+         exe_units(exe_units.length-1).io.status := DontCare
+         exe_units(exe_units.length-1).io.get_ftq_pc := DontCare
       }
    } else {
       require (usingFPU)
@@ -118,8 +122,16 @@ class ExecutionUnits(fpu: Boolean = false)(implicit val p: Parameters) extends H
          exe_units += Module(new FPUExeUnit(has_fpu = true,
                                             has_fdiv = usingFDivSqrt && (w==0),
                                             has_fpiu = (w==0)))
+         exe_units(exe_units.length-1).io.lsu_io := DontCare
+         exe_units(exe_units.length-1).io.dmem := DontCare
+         exe_units(exe_units.length-1).io.status := DontCare
+         exe_units(exe_units.length-1).io.get_ftq_pc := DontCare
       }
       exe_units += Module(new IntToFPExeUnit())
+      exe_units(exe_units.length-1).io.lsu_io := DontCare
+      exe_units(exe_units.length-1).io.dmem := DontCare
+      exe_units(exe_units.length-1).io.status := DontCare
+      exe_units(exe_units.length-1).io.get_ftq_pc := DontCare
    }
 
    val exe_units_str = new StringBuilder

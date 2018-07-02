@@ -15,7 +15,7 @@
 package boom.exu
 
 import chisel3._
-import chisel3.util._
+import chisel3.util.{Valid, Decoupled, log2Ceil, Arbiter}
 import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.rocket
 import freechips.rocketchip.tile
@@ -28,13 +28,13 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
    val fpIssueParams = issueParams.find(_.iqType == IQT_FP.litValue).get
    val num_ll_ports = 1 // hard-wired; used by mem port and i2f port.
    val num_wakeup_ports = fpIssueParams.issueWidth + num_ll_ports
-   val fp_preg_sz = log2Up(numFpPhysRegs)
+   val fp_preg_sz = log2Ceil(numFpPhysRegs)
 
    val io = new Bundle
    {
       val brinfo           = Input(new BrResolutionInfo())
       val flush_pipeline   = Input(Bool())
-      val fcsr_rm          = Input(UInt(width=freechips.rocketchip.tile.FPConstants.RM_SZ.W))
+      val fcsr_rm          = Input(UInt(freechips.rocketchip.tile.FPConstants.RM_SZ.W))
 
       val dis_valids       = Input(Vec(DISPATCH_WIDTH, Bool())) // REFACTOR into single Decoupled()
       val dis_uops         = Input(Vec(DISPATCH_WIDTH, new MicroOp()))
@@ -48,9 +48,9 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
 
       val wakeups          = Vec(num_wakeup_ports, Valid(new ExeUnitResp(fLen+1)))
       val wb_valids        = Input(Vec(num_wakeup_ports, Bool()))
-      val wb_pdsts         = Input(Vec(num_wakeup_ports, UInt(width=fp_preg_sz.W)))
+      val wb_pdsts         = Input(Vec(num_wakeup_ports, UInt(fp_preg_sz.W)))
 
-      val debug_tsc_reg    = Input(UInt(width=xLen.W))
+      val debug_tsc_reg    = Input(UInt(xLen.W))
    }
 
    //**********************************
@@ -316,6 +316,4 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
       fregfile.toString +
       "\n   Num Wakeup Ports      : " + num_wakeup_ports +
       "\n   Num Bypass Ports      : " + exe_units.num_total_bypass_ports + "\n"
-
-   override val compileOptions = chisel3.core.ExplicitCompileOptions.NotStrict.copy(explicitInvalidate = true)
 }
