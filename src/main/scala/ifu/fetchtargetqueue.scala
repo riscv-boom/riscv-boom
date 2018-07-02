@@ -16,8 +16,7 @@
 package boom.ifu
 
 import chisel3._
-import chisel3.util._
-import chisel3.core.DontCare
+import chisel3.util.{Counter, Valid, log2Ceil, Decoupled, Cat}
 import chisel3.experimental.dontTouch
 import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.util.Str
@@ -32,10 +31,10 @@ case class FtqParameters(
 
 class FTQBundle(implicit p: Parameters) extends BoomBundle()(p)
 {
-   val fetch_pc = UInt(width = vaddrBitsExtended.W) // TODO compress out high-order bits
-   val history = UInt(width = GLOBAL_HISTORY_LENGTH.W)
+   val fetch_pc = UInt(vaddrBitsExtended.W) // TODO compress out high-order bits
+   val history = UInt(GLOBAL_HISTORY_LENGTH.W)
    val bim_info = new BimStorage
-   val bpd_info = UInt(width = BPD_INFO_SIZE.W)
+   val bpd_info = UInt(BPD_INFO_SIZE.W)
 }
 
 // Initially, store a random branch entry for BIM (set cfi_type==branch).
@@ -49,7 +48,7 @@ class CfiMissInfo(implicit p: Parameters) extends BoomBundle()(p)
                               // Is DontCare if a misprediction occurred.
    val mispredicted = Bool()  // Was a branch or jump mispredicted in this fetch group?
    val taken = Bool()         // If a branch, was it taken?
-   val cfi_idx = UInt(width=log2Up(fetchWidth).W) // which instruction in fetch group?
+   val cfi_idx = UInt(log2Ceil(rvcFetchWidth).W) // which instruction in fetch group?
    val cfi_type = CfiType()   // What kind of instruction is stored here?
 }
 
@@ -57,7 +56,7 @@ class CfiMissInfo(implicit p: Parameters) extends BoomBundle()(p)
 // And for JALRs, the PC of the next instruction.
 class GetPCFromFtqIO(implicit p: Parameters) extends BoomBundle()(p)
 {
-   val ftq_idx  = Input(UInt(log2Up(ftqSz).W))
+   val ftq_idx  = Input(UInt(log2Ceil(ftqSz).W))
    val fetch_pc = Output(UInt(vaddrBitsExtended.W))
    // the next_pc may not be valid (stalled or still being fetched)
    val next_val = Output(Bool())
@@ -66,18 +65,18 @@ class GetPCFromFtqIO(implicit p: Parameters) extends BoomBundle()(p)
 
 
 class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomModule()(p)
-   with HasBoomCoreParameters
+   with HasL1ICacheBankedParameters
 {
-   private val idx_sz = log2Up(num_entries)
+   private val idx_sz = log2Ceil(num_entries)
 
    val io = IO(new BoomBundle()(p)
    {
       // Enqueue one entry for every fetch cycle.
       val enq = Flipped(Decoupled(new FTQBundle()))
       // Pass to FetchBuffer (newly fetched instructions).
-      val enq_idx = Output(UInt(width=idx_sz.W))
+      val enq_idx = Output(UInt(idx_sz.W))
       // ROB tells us the youngest committed ftq_idx to remove from FTQ.
-      val deq = Flipped(Valid(UInt(width=idx_sz.W)))
+      val deq = Flipped(Valid(UInt(idx_sz.W)))
 
       // Give PC info to BranchUnit.
       val get_ftq_pc = new GetPCFromFtqIO()
@@ -91,8 +90,8 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
       val take_pc = Valid(new PCReq())
       // Tell the CSRFile what the fetch-pc at the FTQ's Commit Head is.
       // Still need the low-order bits of the PC from the ROB to know the true Commit PC.
-      val com_ftq_idx = Input(UInt(width=log2Up(ftqSz).W))
-      val com_fetch_pc = Output(UInt(width=vaddrBitsExtended.W))
+      val com_ftq_idx = Input(UInt(log2Ceil(ftqSz).W))
+      val com_fetch_pc = Output(UInt(vaddrBitsExtended.W))
 
       val bim_update = Valid(new BimUpdate)
       val bpd_update = Valid(new BpdUpdate)
@@ -109,7 +108,7 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
    val full = ptr_match && maybe_full
 
    // What is the current commit point of the processor? Dequeue entries until deq_ptr matches commit_ptr.
-   val commit_ptr = RegInit(0.asUInt(log2Up(num_entries).W))
+   val commit_ptr = RegInit(0.U(log2Ceil(num_entries).W))
 
    val ram = Mem(num_entries, new FTQBundle())
    val cfi_info = Reg(Vec(num_entries, new CfiMissInfo()))
@@ -203,16 +202,16 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
    // Dequeue entry (it's been committed) and update predictors.
    when (do_deq)
    {
-      val com_data = ram(deq_ptr.value)
-      val miss_data = cfi_info(deq_ptr.value)
+      val com_data = ram(WrapInc(deq_ptr.value, num_entries))
+      val miss_data = cfi_info(WrapInc(deq_ptr.value, num_entries))
       val com_cntr = com_data.bim_info.value
       val com_taken = miss_data.taken
       val saturated = (com_cntr === 0.U && !com_taken) || (com_cntr === 3.U && com_taken)
 
       io.bim_update.valid :=
          miss_data.cfi_type === CfiType.branch &&
-         (miss_data.mispredicted) ||
-         (!miss_data.mispredicted && miss_data.executed && !saturated)
+         (miss_data.mispredicted ||
+         (!miss_data.mispredicted && miss_data.executed && !saturated))
 
       io.bim_update.bits.entry_idx    := com_data.bim_info.entry_idx
       io.bim_update.bits.cntr_value   := com_cntr
@@ -225,7 +224,7 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
       io.bpd_update.bits.mispredict    := miss_data.mispredicted
       io.bpd_update.bits.taken         := miss_data.taken
       io.bpd_update.bits.miss_cfi_idx  := miss_data.cfi_idx
-      io.bpd_update.bits.fetch_pc      := com_data.fetch_pc
+      io.bpd_update.bits.fetch_pc      := alignToFetchBoundary(com_data.fetch_pc)
       io.bpd_update.bits.history       := com_data.history
       io.bpd_update.bits.info          := com_data.bpd_info
 
@@ -296,8 +295,8 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
 
    // TODO CLEANUP this is wonky: the exception occurs 1 cycle faster than flushing,
    io.com_fetch_pc := ram(io.com_ftq_idx).fetch_pc
-   com_pc := RegNext(AlignPCToBoundary(io.com_fetch_pc, icBlockBytes)) + io.flush.bits.pc_lob
-   com_pc_plus4 := com_pc + 4.U // TODO RVC
+   com_pc := (RegNext(AlignPCToBoundary(io.com_fetch_pc, icBlockBytes)).asSInt + Mux( io.flush.bits.acrossb, -2.S, Cat( 0.U, io.flush.bits.pc_lob).asSInt)).asUInt
+   com_pc_plus4 := com_pc + Mux( io.flush.bits.rvc, 2.U, 4.U) // TODO RVC
 
    assert (RegNext(io.com_ftq_idx) === io.flush.bits.ftq_idx, "[ftq] this code depends on this assumption")
 
@@ -325,7 +324,7 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
       ){
          val idx = i+j*(num_entries/w)
          printf(" [%d %c%c%c pc=0x%x 0x%x [h] ms:%c%c%c%d-%d bim[%d]:0x%x]",
-            idx.asUInt(width=5.W),
+            idx.asUInt(5.W),
             Mux(enq_ptr.value === idx.U, Str("E"), Str(" ")),
             Mux(commit_ptr === idx.U, Str("C"), Str(" ")),
             Mux(deq_ptr.value === idx.U, Str("D"), Str(" ")),
@@ -346,7 +345,5 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
    // force to show up in the waveform
    val debug_deq_ptr = deq_ptr.value
    dontTouch(debug_deq_ptr)
-
-   override val compileOptions = chisel3.core.ExplicitCompileOptions.NotStrict.copy(explicitInvalidate = true)
 }
 
