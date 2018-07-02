@@ -44,8 +44,6 @@ class BoomTile(
     with HasBoomICacheFrontend {
     //with HasLazyRoCC  // implies CanHaveSharedFPU with CanHavePTW with HasHellaCache
 
-    Annotated.params(this, outer.boomParams)
-
   val intOutwardNode = IntIdentityNode()
   val slaveNode = TLIdentityNode()
   val masterNode = TLIdentityNode()
@@ -116,9 +114,11 @@ class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer)
     with HasBoomHellaCacheModule
     with HasBoomICacheFrontendModule {
     //with HasLazyRoCCModule[BoomTile]
+    Annotated.params(this, outer.boomParams)
 
   val core = Module(new BoomCore()(outer.p, outer.dcache.module.edge))
   core.io.rocc := DontCare
+  core.io.fpu := DontCare
   core.io.reset_vector := DontCare
 
   //val fpuOpt = outer.tileParams.core.fpu.map(params => Module(new FPU(params)(outer.p))) RocketFpu - not needed in boom

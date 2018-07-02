@@ -288,7 +288,7 @@ class DCacheShim(implicit p: Parameters) extends BoomModule()(p)
    io.dmem.s2_kill        := false.B
    io.dmem.s1_kill        := io.core.req.bits.kill || iflb_kill // kills request sent out last cycle
    io.dmem.req.bits.phys  := true.B // we always use physical addresses (TLB is in LSU).
-   io.dmem.invalidate_lr  := io.core.invalidate_lr
+  // io.dmem.invalidate_lr  := io.core.invalidate_lr // TODO "verify"
 
    //------------------------------------------------------------
    // handle responses and nacks

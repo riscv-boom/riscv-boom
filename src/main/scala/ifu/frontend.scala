@@ -376,7 +376,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
       fetch_controller.io.imem_resp.valid := outalloted(0)
       fetch_controller.io.imem_resp.bits.pc := s3_pc
       fetch_controller.io.imem_resp.bits.data := expunitout.asUInt
-      fetch_controller.io.imem_resp.bits.mask := VecInit(outalloted).asUInt
+      fetch_controller.io.imem_resp.bits.mask := outalloted.asUInt
       fetch_controller.io.imem_resp.bits.rvc_mask := expunitrvc.asUInt
       fetch_controller.io.imem_resp.bits.fidx := VecInit(allotedidx)
       fetch_controller.io.imem_resp.bits.xcpt := s3_tlb_xcpt
@@ -446,7 +446,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
       fetch_controller.io.imem_resp.valid := true.B
       fetch_controller.io.imem_resp.bits.pc := s4_pc + addnpc
       fetch_controller.io.imem_resp.bits.data := expunitout.asUInt
-      fetch_controller.io.imem_resp.bits.mask := VecInit(s4_outalloted).asUInt 
+      fetch_controller.io.imem_resp.bits.mask := s4_outalloted.asUInt 
       fetch_controller.io.imem_resp.bits.rvc_mask := expunitrvc.asUInt
       fetch_controller.io.imem_resp.bits.fidx := VecInit(s4_allotedidx)
       fetch_controller.io.imem_resp.bits.xcpt := s4_tlb_xcpt

@@ -76,7 +76,6 @@ case class BoomCoreParams(
    val haveFSDirty = false
    val retireWidth: Int = decodeWidth
    val instBits: Int = 32
-   val pmpGranularity: Int = 4
    val lrscCycles: Int = 80 // worst case is 14 mispredicted branches + slop
 
    val jumpInFrontend: Boolean = false // unused in boom
