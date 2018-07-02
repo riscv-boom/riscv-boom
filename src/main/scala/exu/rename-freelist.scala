@@ -10,7 +10,7 @@
 package boom.exu
 
 import chisel3._
-import chisel3.util._
+import chisel3.util.{PriorityEncoder, log2Ceil, PopCount}
 import freechips.rocketchip.config.Parameters
 import boom.common._
 import boom.util._
@@ -21,7 +21,7 @@ class FreeListIo(
    val pl_width: Int)
 (implicit p: Parameters) extends BoomBundle()(p)
 {
-   private val preg_sz = log2Up(num_phys_registers)
+   private val preg_sz = log2Ceil(num_phys_registers)
 
    val req_preg_vals = Input(Vec(pl_width, Bool()))
    val req_pregs     = Output(Vec(pl_width, UInt(preg_sz.W)))
@@ -92,7 +92,7 @@ class RenameFreeListHelper(
 
    val requested_pregs_oh_array = Array.fill(pl_width,num_phys_registers){false.B}
    val requested_pregs_oh       = Wire(Vec(pl_width, UInt(num_phys_registers.W)))
-   val requested_pregs          = Wire(Vec(pl_width, UInt(log2Up(num_phys_registers).W)))
+   val requested_pregs          = Wire(Vec(pl_width, UInt(log2Ceil(num_phys_registers).W)))
    var allocated                = Wire(Vec(pl_width, Bool())) // did each inst get allocated a register?
 
    // init
@@ -252,7 +252,7 @@ class RenameFreeList(
    num_phys_registers: Int) // Number of physical registers.
    (implicit p: Parameters) extends BoomModule()(p)
 {
-   private val preg_sz = log2Up(num_phys_registers)
+   private val preg_sz = log2Ceil(num_phys_registers)
 
    val io = IO(new Bundle
    {

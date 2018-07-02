@@ -10,7 +10,7 @@
 package boom.exu
 
 import chisel3._
-import chisel3.util._
+import chisel3.util.{PriorityMux, MuxCase, log2Ceil}
 import freechips.rocketchip.config.Parameters
 import boom.common._
 import boom.util._
