@@ -295,6 +295,8 @@ object FDivRRdDecode extends RRdDecodeConstants
          BitPat(uopFSQRT_D) ->List(BR_N, N, Y, N, FN_X   , DW_X  , OP1_X   , OP2_X   , IS_X, REN_1, CSR.N))
 }
 
+
+// Do we really need these tables? Literally the only thing they do is set rf_wen to 1
 object VFPURRdDecode extends RRdDecodeConstants
 {
    val table: Array[(BitPat, List[BitPat])] =
@@ -311,7 +313,8 @@ object VFPURRdDecode extends RRdDecodeConstants
          BitPat(uopVMADD)  ->List(BR_N, Y, N, N, FN_X   , DW_X  , OP1_X   , OP2_X   , IS_X, REN_1, CSR.N),
          BitPat(uopVMSUB)  ->List(BR_N, Y, N, N, FN_X   , DW_X  , OP1_X   , OP2_X   , IS_X, REN_1, CSR.N),
          BitPat(uopVNMADD) ->List(BR_N, Y, N, N, FN_X   , DW_X  , OP1_X   , OP2_X   , IS_X, REN_1, CSR.N),
-         BitPat(uopVNMSUB) ->List(BR_N, Y, N, N, FN_X   , DW_X  , OP1_X   , OP2_X   , IS_X, REN_1, CSR.N)
+         BitPat(uopVNMSUB) ->List(BR_N, Y, N, N, FN_X   , DW_X  , OP1_X   , OP2_X   , IS_X, REN_1, CSR.N),
+         BitPat(uopVINSV)  ->List(BR_N, Y, N, N, FN_X   , DW_X  , OP1_X   , OP2_X   , IS_X, REN_1, CSR.N)
               )
 }
 

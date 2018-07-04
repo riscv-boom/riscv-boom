@@ -120,6 +120,11 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
    issue_unit.io.fromfp_paddr      := DontCare
    issue_unit.io.fromfp_data       := DontCare
 
+   issue_unit.io.fromint_valid      := DontCare
+   issue_unit.io.fromint_paddr      := DontCare
+   issue_unit.io.fromint_data       := DontCare
+
+
    require (exe_units.num_total_bypass_ports == 0)
 
    //-------------------------------------------------------------
@@ -144,7 +149,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
       when (io.dis_uops(w).vec_val && (
          io.dis_uops(w).lrs1_rtype === RT_FLT || io.dis_uops(w).lrs2_rtype === RT_FLT || io.dis_uops(w).lrs3_rtype === RT_FLT)) {
          issue_unit.io.dis_valids(w) := io.dis_valids(w)
-         issue_unit.io.dis_uops(w).uopc := uopFPTOVEC
+         issue_unit.io.dis_uops(w).uopc := uopTOVEC
          issue_unit.io.dis_uops(w).vec_val := false.B
          issue_unit.io.dis_uops(w).fu_code := FUConstants.FU_F2V
          issue_unit.io.dis_uops(w).prs1_busy := io.dis_uops(w).prs1_busy && io.dis_uops(w).lrs1_rtype === RT_FLT
@@ -266,7 +271,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
       for (wbresp <- eu.io.resp)
       {
          val toint = wbresp.bits.uop.dst_rtype === RT_FIX
-         val tovec = wbresp.bits.uop.uopc === uopFPTOVEC
+         val tovec = wbresp.bits.uop.uopc === uopTOVEC
 
          if (wbresp.bits.writesToIRF) {
             io.toint <> wbresp

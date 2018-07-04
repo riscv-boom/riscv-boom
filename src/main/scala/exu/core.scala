@@ -79,7 +79,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    vec_pipeline = Module(new VecPipeline())
 
    //TODO_vec. Integer alu and memory pipelines are detailed here. Connect these to vector pipeline
-   val num_irf_write_ports = exe_units.map(_.num_rf_write_ports).sum
+   val num_irf_write_ports = exe_units.map(_.num_rf_write_ports).sum - 1 // -1 for IntToVec
    val num_fast_wakeup_ports = exe_units.count(_.isBypassable)
    val num_wakeup_ports = num_irf_write_ports + num_fast_wakeup_ports
    val decode_units     = for (w <- 0 until decodeWidth) yield { val d = Module(new DecodeUnit); d }
@@ -89,13 +89,13 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    val iregfile         = if (regreadLatency == 1 && enableCustomRf) {
                               Module(new RegisterFileSeqCustomArray(numIntPhysRegs,
                                  exe_units.withFilter(_.usesIRF).map(e => e.num_rf_read_ports).sum,
-                                 exe_units.withFilter(_.usesIRF).map(e => e.num_rf_write_ports).sum,
+                                 exe_units.withFilter(_.usesIRF).map(e => e.num_rf_write_ports).sum - 1, // -1 for I2V
                                  xLen,
                                  exe_units.bypassable_write_port_mask))
                           } else {
                               Module(new RegisterFileBehavorial(numIntPhysRegs,
                                  exe_units.withFilter(_.usesIRF).map(e => e.num_rf_read_ports).sum,
-                                 exe_units.withFilter(_.usesIRF).map(e => e.num_rf_write_ports).sum,
+                                 exe_units.withFilter(_.usesIRF).map(e => e.num_rf_write_ports).sum - 1, // -1 for I2V
                                  xLen,
                                  exe_units.bypassable_write_port_mask))
                           }
@@ -512,12 +512,16 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
             // TODO: don't add a slow wake-up port if the instructions
             // being written back are ALWAYS bypassable.
             val resp = exe_units(i).io.resp(j)
-            int_wakeups(wu_idx).valid := resp.valid &&
-                                         resp.bits.uop.ctrl.rf_wen &&
-                                        !resp.bits.uop.bypassable &&
-                                         resp.bits.uop.dst_rtype === RT_FIX
-            int_wakeups(wu_idx).bits := exe_units(i).io.resp(j).bits
-            wu_idx += 1
+
+            if (resp.bits.writesToIRF) {
+               int_wakeups(wu_idx).valid := resp.valid &&
+                                            resp.bits.uop.ctrl.rf_wen &&
+                                            !resp.bits.uop.bypassable &&
+                                            resp.bits.uop.dst_rtype === RT_FIX
+               int_wakeups(wu_idx).bits := exe_units(i).io.resp(j).bits
+               wu_idx += 1
+            }
+
          }
       }
       require (exe_units(i).usesIRF)
@@ -589,18 +593,25 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       iu.io.commit_load_at_rob_head := rob.io.com_load_is_at_rob_head
       iu.io.commit_store_at_rob_head := rob.io.com_store_is_at_rob_head
 
+
       when (dis_uops(w).uopc === uopSTA && dis_uops(w).lrs2_rtype === RT_FLT) {
          iu.io.dis_uops(w).lrs2_rtype := RT_X
          iu.io.dis_uops(w).prs2_busy  := Bool(false)
-      }
-      when (dis_uops(w).uopc === uopVST && dis_uops(w).lrs3_rtype === RT_VEC) {
+      } .elsewhen (dis_uops(w).uopc === uopVST && dis_uops(w).lrs3_rtype === RT_VEC) {
          iu.io.dis_uops(w).fu_code    := FU_VSTA
          iu.io.dis_uops(w).lrs3_rtype := RT_X
          iu.io.dis_uops(w).prs3_busy  := Bool(false)
          // Vec stores have operand in rs3 weird
          // TODO_vec polymorphic stores
+      } .elsewhen (dis_uops(w).uopc === uopVINSV) {
+         assert(dis_uops(w).dst_rtype === RT_VEC)
+         iu.io.dis_valids(w)          := dis_valids(w) && UInt(iu.iqType) === IQT_INT
+         iu.io.dis_uops(w).uopc       := uopTOVEC
+         iu.io.dis_uops(w).iqtype     := IQT_INT
+         iu.io.dis_uops(w).fu_code    := FU_I2V
+         iu.io.dis_uops(w).lrs3_rtype := RT_X
+         iu.io.dis_uops(w).prs3_busy  := Bool(false)
       }
-
    }
 
    fp_pipeline.io.dis_valids <> dis_valids
@@ -641,6 +652,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       if (w == ifpu_idx) {
          // TODO hack, need a more disciplined way to connect to an issue port
          // TODO XXX need to also apply back-pressure.
+         // TODO_vec: We lump I2V along with I2F here
          fu_types = fu_types | FUConstants.FU_I2F
       }
 
@@ -674,6 +686,10 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    issue_units.map(_.io.fromfp_valid := DontCare)
    issue_units.map(_.io.fromfp_paddr := DontCare)
    issue_units.map(_.io.fromfp_data  := DontCare)
+   issue_units.map(_.io.fromint_valid := DontCare)
+   issue_units.map(_.io.fromint_paddr := DontCare)
+   issue_units.map(_.io.fromint_data  := DontCare)
+
 
    // Load-hit Misspeculations
    require (issue_units.count(_.iqType == IQT_MEM.litValue) == 1)
@@ -682,7 +698,6 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    require (mem_iq.issue_width == 1)
    val iss_loadIssued = mem_iq.io.iss_valids(0) && mem_iq.io.iss_uops(0).is_load && !mem_iq.io.iss_uops(0).fp_val
    issue_units.map(_.io.sxt_ldMiss := lsu.io.nack.valid && lsu.io.nack.isload && Pipe(true.B, iss_loadIssued, 4).bits)
-
 
    // Wakeup (Issue & Writeback)
 
@@ -894,6 +909,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
    var w_cnt = 0
    var llidx = -1 // find which rf port corresponds to the long latency memory port.
+   var tovec_found = false
    for (i <- 0 until exe_units.length)
    {
       for (j <- 0 until exe_units(i).num_rf_write_ports)
@@ -912,8 +928,12 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
             assert (!(wbIsValid(RT_FIX) && exe_units(i).io.resp(j).bits.data(64).toBool),
                "the 65th bit was set on a fixed point write-back to the regfile.")
          }
-
-         if (exe_units(i).uses_csr_wport && (j == 0))
+         if (wbresp.bits.writesToVIQ) {
+            vec_pipeline.io.fromint <> wbresp
+            assert(!tovec_found)
+            tovec_found = true
+         }
+         else if (exe_units(i).uses_csr_wport && (j == 0))
          {
             iregfile.io.write_ports(w_cnt).valid     := wbIsValid(RT_FIX)
             iregfile.io.write_ports(w_cnt).bits.addr := wbpdst
@@ -963,8 +983,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
                exe_units(i).io.resp(j).bits.uop.dst_rtype =/= RT_FIX),
                "[fppipeline] writeback being attempted to Int RF with dst != Int type exe_units("+i+").resp("+j+")")
          }
-
-         w_cnt += 1
+         if (!wbresp.bits.writesToVIQ) w_cnt += 1
       }
    }
 
@@ -1010,7 +1029,10 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
          val wb_uop = resp.bits.uop
          var data: UInt = null
 
-         if (eu.is_mem_unit)
+         if (resp.bits.writesToVIQ) {
+
+         }
+         else if (eu.is_mem_unit)
          {
             val ll_uop = ll_wbarb.io.out.bits.uop
             rob.io.wb_resps(cnt).valid := ll_wbarb.io.out.valid && !(ll_uop.is_store && !ll_uop.is_amo)
@@ -1029,7 +1051,10 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
             data = resp.bits.data
          }
 
-         if (eu.hasFFlags || (eu.is_mem_unit && usingFPU))
+         if (resp.bits.writesToVIQ) {
+
+         }
+         else if (eu.hasFFlags || (eu.is_mem_unit && usingFPU))
          {
             if (eu.hasFFlags)
             {
@@ -1060,7 +1085,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
                rob.io.debug_wb_wdata(cnt) := data
             }
          }
-         cnt += 1
+         if (!resp.bits.writesToVIQ) cnt += 1
       }
    }
 

@@ -33,23 +33,24 @@ import boom.util._
 object FUConstants
 {
    // bit mask, since a given execution pipeline may support multiple functional units
-   val FUC_SZ = 14
+   val FUC_SZ = 15
    val FU_X   = BitPat.dontCare(FUC_SZ)
-   val FU_ALU = UInt(  1, FUC_SZ)
-   val FU_BRU = UInt(  2, FUC_SZ)
-   val FU_MEM = UInt(  4, FUC_SZ)
-   val FU_MUL = UInt(  8, FUC_SZ)
-   val FU_DIV = UInt( 16, FUC_SZ)
-   val FU_CSR = UInt( 32, FUC_SZ)
-   val FU_FPU = UInt( 64, FUC_SZ)
-   val FU_FDV = UInt(128, FUC_SZ)
-   val FU_I2F = UInt(256, FUC_SZ)
-   val FU_F2I = UInt(512, FUC_SZ)
-   val FU_VFPU= UInt(1024,FUC_SZ) // TODO_vec Add stuff for viu, vmem, etc
-   val FU_VALU= UInt(2048,FUC_SZ)
-   val FU_F2V = UInt(4096,FUC_SZ)
-   val FU_VSTA= UInt(8192,FUC_SZ)
-   val FU_POLY= UInt(   0,FUC_SZ)
+   val FU_ALU = UInt(   1, FUC_SZ)
+   val FU_BRU = UInt(   2, FUC_SZ)
+   val FU_MEM = UInt(   4, FUC_SZ)
+   val FU_MUL = UInt(   8, FUC_SZ)
+   val FU_DIV = UInt(  16, FUC_SZ)
+   val FU_CSR = UInt(  32, FUC_SZ)
+   val FU_FPU = UInt(  64, FUC_SZ)
+   val FU_FDV = UInt( 128, FUC_SZ)
+   val FU_I2F = UInt( 256, FUC_SZ)
+   val FU_F2I = UInt( 512, FUC_SZ)
+   val FU_VFPU= UInt( 1024,FUC_SZ) // TODO_vec Add stuff for viu, vmem, etc
+   val FU_VALU= UInt( 2048,FUC_SZ)
+   val FU_F2V = UInt( 4096,FUC_SZ)
+   val FU_VSTA= UInt( 8192,FUC_SZ)
+   val FU_I2V = UInt(16384,FUC_SZ)
+   val FU_POLY= UInt(    0,FUC_SZ)
 }
 import FUConstants._
 
@@ -63,6 +64,7 @@ class SupportedFuncUnits(
    val csr: Boolean  = false,
    val fdiv: Boolean = false,
    val ifpu: Boolean = false,
+   val itov: Boolean = false,
    val vfpu: Boolean = false,
    val valu: Boolean = false) // Todo_vec: Add stuff for viu, vmem, etc
 {

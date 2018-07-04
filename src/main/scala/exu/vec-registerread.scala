@@ -157,13 +157,22 @@ with Packing
          VEW_32 -> fill_w(n),
          VEW_64 -> fill_d(n)))
    }
+
+   //This fun code does two things. For vector-scalar ops, it creates a fake "strip" of data from the scalar operand
+   //For vector instructions with an int-reg operand, it just fills in the data with that operand
    when (exe_reg_uops.lrs1_rtype === RT_FLT) {
       io.exe_reqs(0).bits.rs1_data := fill_case(exe_reg_uops.rs1_data, exe_reg_uops.rs1_vew) // TODO_Vec: this data should not come from uop
+   } .elsewhen (exe_reg_uops.lrs1_rtype === RT_FIX) {
+      io.exe_reqs(0).bits.rs1_data := exe_reg_uops.rs1_data
    }
    when (exe_reg_uops.lrs2_rtype === RT_FLT) {
       io.exe_reqs(0).bits.rs2_data := fill_case(exe_reg_uops.rs2_data, exe_reg_uops.rs2_vew)
+   } .elsewhen (exe_reg_uops.lrs2_rtype === RT_FIX) {
+      io.exe_reqs(0).bits.rs2_data := exe_reg_uops.rs2_data
    }
    when (exe_reg_uops.lrs3_rtype === RT_FLT) {
       io.exe_reqs(0).bits.rs3_data := fill_case(exe_reg_uops.rs3_data, exe_reg_uops.rs3_vew)
+   } .elsewhen (exe_reg_uops.lrs3_rtype === RT_FIX) {
+      io.exe_reqs(0).bits.rs3_data := exe_reg_uops.rs3_data
    }
 }

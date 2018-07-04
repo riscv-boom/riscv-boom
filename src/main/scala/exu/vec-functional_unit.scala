@@ -96,17 +96,19 @@ class VALUUnit(num_stages: Int) (implicit p: Parameters)
       }
    }
 
+
    val results =
-      List((SZ_D, VEW_64, unpack_d _, repack_d _),
-           (SZ_W, VEW_32, unpack_w _, repack_w _),
-           (SZ_H, VEW_16, unpack_h _, repack_h _)) map {
-         case (sz, ew, unpack, repack) => {
+      List((SZ_D, VEW_64, unpack_d _, repack_d _, 1),
+           (SZ_W, VEW_32, unpack_w _, repack_w _, 2),
+           (SZ_H, VEW_16, unpack_h _, repack_h _, 3)) map {
+         case (sz, ew, unpack, repack, sidx_w) => {
             val n = 128 / sz
             val alu_val = io.req.valid && io.req.bits.uop.rd_vew === ew
+            val strip_vins = (io.req.bits.uop.eidx >> sidx_w) === (io.req.bits.rs2_data >> sidx_w)
             val results = for (i <- (0 until n)) yield {
                val op1 = unpack(io.req.bits.rs1_data, i).asUInt
                val op2 = unpack(io.req.bits.rs2_data, i).asUInt
-
+               val op3 = unpack(io.req.bits.rs3_data, i).asUInt
                val adder = Module(new Adder(sz))
                adder.io.in0 := op1
                adder.io.in1 := op2
@@ -124,6 +126,8 @@ class VALUUnit(num_stages: Int) (implicit p: Parameters)
                comp.io.sltu := uop.uopc === uopVSLTU
                val set_out = comp.io.set
 
+               val vins = Mux(strip_vins && UInt(i) === io.req.bits.rs2_data(sidx_w-1, 0), io.req.bits.rs1_data(sz-1,0), op3)
+
                val result = Wire(UInt(width=sz))
                result := Mux1H(Array(
                   (uop.uopc === uopVADD)  -> adder_out,
@@ -138,7 +142,8 @@ class VALUUnit(num_stages: Int) (implicit p: Parameters)
                   (uop.uopc === uopVOR)   -> (op1 | op2),
                   (uop.uopc === uopVFSJ)  -> Cat(op2(sz-1), op1(sz-2, 0)),
                   (uop.uopc === uopVFSJN) -> Cat(~op2(sz-1), op1(sz-2, 0)),
-                  (uop.uopc === uopVFSJX) -> Cat(op2(sz-1) ^ op1(sz-1), op1(sz-2, 0))))
+                  (uop.uopc === uopVFSJX) -> Cat(op2(sz-1) ^ op1(sz-1), op1(sz-2, 0)),
+                  (uop.uopc === uopVINSV) -> vins))
 
                val out = Pipe(io.req.valid && alu_val, result, num_stages) // TODO_vec: this shouldn't be zero right??
                val out_val = out.valid
@@ -152,11 +157,9 @@ class VALUUnit(num_stages: Int) (implicit p: Parameters)
             (result_val, result_out)
          }
       }
+
    val alumatch = results.map(_._1)
    io.resp.valid := alumatch.reduce(_||_)
-   when (alumatch.reduce(_||_)) {
-      printf("VALU valid response\n")
-   }
    io.resp.bits.data := Mux1H(alumatch, results.map(_._2))
 
 }

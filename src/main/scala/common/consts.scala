@@ -312,7 +312,7 @@ trait ScalarOpConstants
    val uopVINSV     = UInt(145, UOPC_SZ) // When vinserting into vector reg
                                          // Vinsert into scalar reg aliases to FMV
 
-   val uopFPTOVEC   = UInt(146, UOPC_SZ) // Move scalar vector operand to vector issue
+   val uopTOVEC     = UInt(146, UOPC_SZ) // Move scalar vector operand to vector issue
 
 
    // The Bubble Instruction (Machine generated NOP)

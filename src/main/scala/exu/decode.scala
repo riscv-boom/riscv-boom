@@ -362,7 +362,7 @@ object VecDecode extends DecodeConstants
    VNMSUB    ->List(Y, N, Y, N, uopVNMSUB,  IQT_VEC,FU_POLY,RT_VEC , RT_POLY, RT_POLY, RT_POLY, N, IS_X, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, N, N, N, CSR.N),
    VLD       ->List(Y, N, Y, N, uopVLD   ,  IQT_MEM,FU_MEM ,RT_VEC , RT_FIX , RT_X   , RT_X   , N, IS_I, Y, N, N, N, N, M_XRD, MT_D , UInt(0), N, N, N, N, N, N, N, CSR.N),
    VST       ->List(Y, N, Y, N, uopVST   ,  IQT_MEM,FU_MEM ,RT_X   , RT_FIX , RT_X   , RT_VEC , N, IS_S, N, Y, N, N, N, M_XWR, MT_D , UInt(0), N, N, N, N, N, N, N, CSR.N),
-   VINSERT   ->List(Y, N, Y, N, uopVINSV ,  IQT_INT,FU_I2F ,RT_POLY, RT_FIX , RT_FIX , RT_X   , N, IS_X, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, N, N, N, CSR.N)
+   VINSERT   ->List(Y, N, Y, N, uopVINSV ,  IQT_VEC,FU_VALU,RT_POLY, RT_FIX , RT_FIX , RT_VEC , N, IS_X, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, N, N, N, CSR.N)
       // TODO_Vec: VINSV needs to go to both int and v iqs
       //           This should default to FU_I2V
 
@@ -525,15 +525,21 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule()(p) with freechips.
    } .elsewhen (cs.uopc === uopVST) {
       uop.rate       := UInt(1)
       uop.mem_typ    := MuxLookup(io.vecstatus.vews(cs_rs3), VEW_8, Array(VEW_8 -> MT_B, VEW_16 -> MT_H, VEW_32 -> MT_W, VEW_64 -> MT_D))
-   } .elsewhen (cs.uopc === uopVINSV && uop.dst_rtype === RT_FLT) {
-      //assert(io.vecstatus.vshapes(cs_rd) === VSHAPE_SCALAR, "For now vinsert must be into scalar")
-      uop.fp_val     := true.B
-      uop.vec_val    := false.B
-      uop.uopc       := Mux(io.vecstatus.vews(cs_rd) === VEW_32, uopFMV_S_X, uopFMV_D_X)
+   } .elsewhen (cs.uopc === uopVINSV) {
+      when (uop.dst_rtype === RT_FLT) {
+         uop.iqtype     := IQT_INT
+         uop.fp_val     := true.B
+         uop.vec_val    := false.B
+         uop.uopc       := Mux(io.vecstatus.vews(cs_rd) === VEW_32, uopFMV_S_X, uopFMV_D_X)
+         uop.fu_code    := FU_I2F
+         uop.lrs2_rtype := RT_X
+      } .otherwise {
+         uop.lrs3       := uop.ldst
+         uop.rs3_vew    := uop.rd_vew
+         uop.rs3_vshape := uop.rd_vshape
+         uop.rs3_verep  := uop.rd_verep
+      }
 
-//      uop.dst_rtype  := RT_FLT
-      uop.lrs2_rtype := RT_X
-//      uop.ldst       := "b100000".U | cs_rd
    }
 
    //-------------------------------------------------------------

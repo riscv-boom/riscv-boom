@@ -53,7 +53,9 @@ class IssueSlotIO(num_wakeup_ports: Int)(implicit p: Parameters) extends BoomBun
    val fromfp_paddr   = Input(UInt(width=PREG_SZ.W)) // Address of physical scalar vector register operand (thats a lot of adjectives)
    val fromfp_data    = Input(UInt(width=xLen.W))    // Physical scalar vector register operand
 
-
+   val fromint_valid  = Input(Bool())
+   val fromint_paddr  = Input(UInt(width=PREG_SZ.W))
+   val fromint_data   = Input(UInt(width=xLen.W))
 
    val debug = {
      val result = new Bundle {
@@ -192,15 +194,16 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean, isVec: Boolean
 
          // TODO_Vec: We can issue these before all operands are not busy
          // Maybe implement that in the future
-         when (slotUop.uopc === uopFPTOVEC && Array(slotUop.lrs1_rtype, slotUop.lrs2_rtype, slotUop.lrs3_rtype).map(_ === RT_FLT).reduce(_||_)) {
-            when (slotUop.lrs1_rtype === RT_FLT) {
+         def sendToVec(rt: UInt): Bool = { rt === RT_FLT || rt === RT_FIX }
+         when (slotUop.uopc === uopTOVEC && Array(slotUop.lrs1_rtype, slotUop.lrs2_rtype, slotUop.lrs3_rtype).map(p => sendToVec(p)).reduce(_||_)) {
+            when (sendToVec(slotUop.lrs1_rtype)) {
                updated_lrs1_rtype := RT_X
-               when (updated_lrs2_rtype === RT_FLT || updated_lrs3_rtype === RT_FLT) {
+               when (sendToVec(slotUop.lrs2_rtype) || sendToVec(slotUop.lrs3_rtype)) {
                   updated_state := slot_state
                }
-            } .elsewhen (slotUop.lrs2_rtype === RT_FLT) {
+            } .elsewhen (sendToVec(slotUop.lrs2_rtype)) {
                updated_lrs2_rtype := RT_X
-               when (updated_lrs3_rtype === RT_FLT) {
+               when (sendToVec(slotUop.lrs3_rtype)) {
                   updated_state := slot_state
                }
             } // This logic reissues the microop. We assume that any FLT operands are sent to vector pipeline
@@ -287,6 +290,21 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean, isVec: Boolean
             updated_rs3_data := io.fromfp_data
          }
       }
+
+      when (io.fromint_valid) {
+         when (io.fromint_paddr === slotUop.pop1 && slotUop.lrs1_rtype === RT_FIX) {
+            updated_prs1_busy := false.B
+            updated_rs1_data := io.fromint_data
+         }
+         when (io.fromint_paddr === slotUop.pop2 && slotUop.lrs2_rtype === RT_FIX) {
+            updated_prs2_busy := false.B
+            updated_rs2_data := io.fromint_data
+         }
+         when (io.fromint_paddr === slotUop.pop3 && slotUop.lrs3_rtype === RT_FIX) {
+            updated_prs3_busy := false.B
+            updated_rs3_data := io.fromint_data
+         }
+      }
    }
 
 
@@ -342,7 +360,7 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean, isVec: Boolean
                           && ((slot_state === s_valid_1) || (slot_state === s_valid_2) && slot_p1 && slot_p2))
    } else {
       io.will_be_valid := isValid &&
-                          !(io.grant
+                          !(io.grant && slotUop.uopc =/= uopTOVEC
                           && ((slot_state === s_valid_1) || (slot_state === s_valid_2) && slot_p1 && slot_p2))
    }
 

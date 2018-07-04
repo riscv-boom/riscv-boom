@@ -75,9 +75,15 @@ class IssueUnitIO(
    val commit_load_at_rob_head = Input(Bool())
    val commit_store_at_rob_head = Input(Bool())
 
+
+   // TODO_Vec: This is messy
    val fromfp_valid = Input(Bool())
    val fromfp_paddr = Input(UInt(width=PREG_SZ.W))
    val fromfp_data  = Input(UInt(width=xLen.W))
+
+   val fromint_valid = Input(Bool())
+   val fromint_paddr = Input(UInt(width=PREG_SZ.W))
+   val fromint_data  = Input(UInt(width=xLen.W))
 }
 
 abstract class IssueUnit(
@@ -125,10 +131,20 @@ abstract class IssueUnit(
          issue_slots(i).fromfp_valid := io.fromfp_valid
          issue_slots(i).fromfp_paddr := io.fromfp_paddr
          issue_slots(i).fromfp_data  := io.fromfp_data
+
+         issue_slots(i).fromint_valid := io.fromint_valid
+         issue_slots(i).fromint_paddr := io.fromint_paddr
+         issue_slots(i).fromint_data  := io.fromint_data
+
       } else {
          issue_slots(i).fromfp_valid := false.B
          issue_slots(i).fromfp_paddr := DontCare
          issue_slots(i).fromfp_data  := DontCare
+
+         issue_slots(i).fromint_valid := false.B
+         issue_slots(i).fromint_paddr := DontCare
+         issue_slots(i).fromint_data  := DontCare
+
       }
    }
 

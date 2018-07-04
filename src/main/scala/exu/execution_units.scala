@@ -85,6 +85,12 @@ class ExecutionUnits(fpu: Boolean = false, vec: Boolean = false)(implicit val p:
       exe_units.find(_.has_ifpu).get
    }
 
+   lazy val itov_unit =
+   {
+      require (exe_units.count(_.has_itov) == 1)
+      exe_units.find(_.has_itov).get
+   }
+
    lazy val br_unit_io =
    {
       require (exe_units.count(_.hasBranchUnit) == 1)
@@ -106,10 +112,11 @@ class ExecutionUnits(fpu: Boolean = false, vec: Boolean = false)(implicit val p:
                                           , use_slow_mul     = false
                                           , has_div          = true
                                           , has_ifpu         = int_width==1
-                                          ))
+                                          , has_itov         = int_width==1
+      ))
       for (w <- 0 until int_width-1) {
          val is_last = w == (int_width-2)
-         exe_units += Module(new ALUExeUnit(has_ifpu = is_last))
+         exe_units += Module(new ALUExeUnit(has_ifpu = is_last, has_itov = is_last))
       }
    } else if (!vec) {
       require (usingFPU)

@@ -342,6 +342,10 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
    io.exe_vsta.ready := false.B
 
    exe_resp_valid    := false.B
+
+   // TODO_Vec: This method for dealing with killed ops in the queues may fail if the LSU fills up again with a valid entry
+   //           Should figure out if this actually can fail
+   // The VSTA head hasn't been killed by branch
    when (io.exe_vsta.valid && !saq_val(io.exe_vsta.bits.uop.stq_idx))
    {
       will_fire_sta_incoming := true.B
@@ -354,6 +358,11 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
       exe_resp_valid         := true.B
       exe_resp               := io.exe_vsta.bits
       assert(io.exe_vsta.bits.uop.ctrl.is_sta, "OP arriving through VSTA queue is not a sta!")
+   }
+   // The VSTA head has been killed by branch
+      .elsewhen (io.exe_vsta.valid && IsKilledByBranch(io.brinfo, io.exe_vsta.bits.uop.br_mask))
+   {
+      io.exe_vsta.ready      := true.B
    }
       .elsewhen (io.exe_resp.valid)
    {
@@ -387,15 +396,19 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
       }
       when (io.exe_resp.bits.uop.ctrl.is_sta)
       {
-         when (!saq_val(io.exe_resp.bits.uop.stq_idx)) {
-            will_fire_sta_incoming  := true.B
-            tlb_avail               := false.B
-            rob_avail               := false.B
-            lcam_avail              := false.B
+         when (!IsKilledByBranch(io.brinfo, io.exe_resp.bits.uop.br_mask)) {
+            when (!saq_val(io.exe_resp.bits.uop.stq_idx)) {
+               will_fire_sta_incoming  := true.B
+               tlb_avail               := false.B
+               rob_avail               := false.B
+               lcam_avail              := false.B
 
-            io.exe_resp.ready       := true.B
+               exe_resp_valid          := true.B
 
-            exe_resp_valid          := true.B
+               io.exe_resp.ready       := true.B
+            }
+         } .otherwise {
+            io.exe_resp.ready          := true.B
          }
       }
       when (io.exe_resp.bits.uop.ctrl.is_std)

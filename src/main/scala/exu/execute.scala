@@ -94,6 +94,7 @@ abstract class ExecutionUnit(val num_rf_read_ports: Int
                             , val has_div       : Boolean       = false
                             , val has_fdiv      : Boolean       = false
                             , val has_ifpu      : Boolean       = false
+                            , val has_itov      : Boolean       = false
                             , val has_fpiu      : Boolean       = false
                             , val has_vfpu      : Boolean       = false
                             , val has_valu      : Boolean       = false
@@ -129,6 +130,7 @@ abstract class ExecutionUnit(val num_rf_read_ports: Int
          csr = uses_csr_wport,
          fdiv = has_fdiv,
          ifpu = has_ifpu,
+         itov = has_itov,
          vfpu = has_vfpu,
          valu = has_valu
       )
@@ -144,11 +146,12 @@ class ALUExeUnit(
    has_div         : Boolean = false,
    has_fdiv        : Boolean = false,
    has_ifpu        : Boolean = false,
+   has_itov        : Boolean = true,
    use_slow_mul    : Boolean = false)
    (implicit p: Parameters)
    extends ExecutionUnit(
       num_rf_read_ports = if (has_fpu) 3 else 2,
-      num_rf_write_ports = 1,
+      num_rf_write_ports = if (has_itov) 2 else 1,
       num_bypass_stages =
          (if (has_fpu && has_alu) p(tile.TileKey).core.fpu.get.dfmaLatency
          else if (has_alu && has_mul && !use_slow_mul) 3 //TODO XXX p(tile.TileKey).core.imulLatency
@@ -163,7 +166,8 @@ class ALUExeUnit(
       has_mul  = has_mul,
       has_div  = has_div,
       has_fdiv = has_fdiv,
-      has_ifpu = has_ifpu)(p)
+      has_ifpu = has_ifpu,
+      has_itov = has_itov)(p)
 {
    val has_muldiv = has_div || (has_mul && use_slow_mul)
 
@@ -177,6 +181,7 @@ class ALUExeUnit(
    else if (has_div) out_str.append("\n       - Div")
    if (has_fdiv) out_str.append("\n       - FDiv/FSqrt")
    if (has_ifpu) out_str.append("\n       - IFPU (for read port access)")
+   if (has_itov) out_str.append("\n       - IToV (for vinsert into vector)")
 
    override def toString: String = out_str.toString
 
@@ -193,7 +198,8 @@ class ALUExeUnit(
                   (Mux(!muldiv_busy && Bool(has_div), FU_DIV, Bits(0))) |
                   (Mux(Bool(shares_csr_wport), FU_CSR, Bits(0))) |
                   (Mux(Bool(is_branch_unit), FU_BRU, Bits(0))) |
-                  Mux(!fdiv_busy && Bool(has_fdiv), FU_FDV, Bits(0))
+                  Mux(!fdiv_busy && Bool(has_fdiv), FU_FDV, Bits(0) |
+                  Mux(Bool(has_itov), FU_I2V, Bits(0)))
 
 
    // ALU Unit -------------------------------
@@ -343,6 +349,15 @@ class ALUExeUnit(
           (PopCount(fu_units.map(_.io.resp.valid)) <= UInt(2) && (muldiv_resp_val || fdiv_resp_val)) ||
           (PopCount(fu_units.map(_.io.resp.valid)) <= UInt(3) && muldiv_resp_val && fdiv_resp_val)
       , "Multiple functional units are fighting over the write port.")
+
+   if (has_itov) {
+      io.resp(1).bits.writesToIRF = false
+      io.resp(1).bits.writesToVIQ = true
+      io.resp(1).valid           := io.req.bits.uop.fu_code_is(FU_I2V) && io.req.valid
+      io.resp(1).bits.uop        := io.req.bits.uop
+      io.resp(1).bits.uop.pdst   := Mux(io.req.bits.uop.lrs1_rtype === RT_FIX, io.req.bits.uop.pop1, io.req.bits.uop.pop2)
+      io.resp(1).bits.data       := Mux(io.req.bits.uop.lrs1_rtype === RT_FIX, io.req.bits.rs1_data, io.req.bits.rs2_data)
+   }
 }
 
 class VecFPUExeUnit(
@@ -665,7 +680,6 @@ class MemExeUnit(implicit p: Parameters) extends ExecutionUnit(num_rf_read_ports
 
    val to_lsu_resp = Module(new Queue(new FuncUnitResp(128), 4))
    val to_lsu_vsta = Module(new Queue(new FuncUnitResp(128), 4))
-
 
    assert(!(maddrcalc.io.resp.valid && maddrcalc.io.resp.bits.uop.uopc =/= uopVST && !to_lsu_resp.io.enq.ready),
       "We do not support backpressure on this queue")

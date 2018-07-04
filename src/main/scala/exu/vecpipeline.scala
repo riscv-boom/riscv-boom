@@ -44,7 +44,7 @@ with freechips.rocketchip.rocket.constants.VecCfgConstants
 
      val ll_wport       = Flipped(Decoupled(new ExeUnitResp(128))) // from memory unit
      val tosdq          = new DecoupledIO(new MicroOpWithData(128))
-//     val fromint        = Flipped(Decoupled(new FuncUnitReq(fLen+1))) // from integer RF
+     val fromint        = Flipped(Decoupled(new ExeUnitResp(xLen))) // from integer RF
      val fromfp         = Flipped(Decoupled(new ExeUnitResp(xLen))) // from fp RF.
 //     val toint          = Decoupled(new ExeUnitResp(xLen))
 
@@ -102,6 +102,11 @@ with freechips.rocketchip.rocket.constants.VecCfgConstants
    issue_unit.io.fromfp_valid      := io.fromfp.valid
    issue_unit.io.fromfp_paddr      := io.fromfp.bits.uop.pdst
    issue_unit.io.fromfp_data       := io.fromfp.bits.data
+
+   issue_unit.io.fromint_valid     := io.fromint.valid
+   issue_unit.io.fromint_paddr     := io.fromint.bits.uop.pdst
+   issue_unit.io.fromint_data      := io.fromint.bits.data
+
    require (exe_units.num_total_bypass_ports == 0)
 
 
@@ -122,13 +127,17 @@ with freechips.rocketchip.rocket.constants.VecCfgConstants
          issue_unit.io.dis_uops(w).lrs1_rtype := RT_X
          issue_unit.io.dis_uops(w).prs1_busy := false.B
       }
-      when (io.dis_uops(w).lrs1_rtype === RT_FLT) {
+      when (io.dis_uops(w).uopc === uopVINSV) {
+         issue_unit.io.dis_valids(w)       := io.dis_valids(w)
+         issue_unit.io.dis_uops(w).fu_code := FUConstants.FU_VALU
+      }
+      when (issue_unit.io.dis_uops(w).lrs1_rtype === RT_FLT || issue_unit.io.dis_uops(w).lrs1_rtype === RT_FIX) {
          issue_unit.io.dis_uops(w).prs1_busy := true.B
       }
-      when (io.dis_uops(w).lrs2_rtype === RT_FLT) {
+      when (issue_unit.io.dis_uops(w).lrs2_rtype === RT_FLT || issue_unit.io.dis_uops(w).lrs2_rtype === RT_FIX) {
          issue_unit.io.dis_uops(w).prs2_busy := true.B
       }
-      when (io.dis_uops(w).lrs3_rtype === RT_FLT) {
+      when (issue_unit.io.dis_uops(w).lrs3_rtype === RT_FLT || issue_unit.io.dis_uops(w).lrs3_rtype === RT_FIX) {
          issue_unit.io.dis_uops(w).prs3_busy := true.B
       }
 
