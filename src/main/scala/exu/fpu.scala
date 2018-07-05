@@ -227,12 +227,13 @@ class FPU(implicit p: Parameters) extends BoomModule()(p) with tile.HasFPUParame
    fpiu_result.data := fpiu_out.bits.toint
    fpiu_result.exc  := fpiu_out.bits.exc
 
-   val fpvu = Pipe(io.req.valid,
+   val fpvu = Pipe(io.req.valid && io.req.bits.uop.uopc === uopTOVEC,
       Mux(io.req.bits.uop.lrs1_rtype === RT_FLT, io.req.bits.rs1_data,
       Mux(io.req.bits.uop.lrs2_rtype === RT_FLT, io.req.bits.rs2_data, io.req.bits.rs3_data)), fpu_latency)
    val fpvu_pdst = Pipe(io.req.valid,
+      Mux(io.req.bits.uop.uopc =/= uopTOVEC, io.req.bits.uop.pdst,
       Mux(io.req.bits.uop.lrs1_rtype === RT_FLT, io.req.bits.uop.pop1,
-      Mux(io.req.bits.uop.lrs2_rtype === RT_FLT, io.req.bits.uop.pop2, io.req.bits.uop.pop3)), fpu_latency)
+      Mux(io.req.bits.uop.lrs2_rtype === RT_FLT, io.req.bits.uop.pop2, io.req.bits.uop.pop3))), fpu_latency)
    // TODO_Vec: This requires some extra signals which aren't used anywhere else (pop signals).
    //           Should probably fix this
 
@@ -267,9 +268,7 @@ class FPU(implicit p: Parameters) extends BoomModule()(p) with tile.HasFPUParame
 
 
    io.resp.bits.data              := fpu_out_data
-   when (fpvu.valid) {
-      io.resp.bits.uop.pdst       := fpvu_pdst.bits
-   }
+   io.resp.bits.uop.pdst          := fpvu_pdst.bits
    io.resp.bits.fflags.valid      := io.resp.valid
    io.resp.bits.fflags.bits.flags := fpu_out_exc
 }

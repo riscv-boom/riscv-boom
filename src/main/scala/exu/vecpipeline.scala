@@ -127,7 +127,7 @@ with freechips.rocketchip.rocket.constants.VecCfgConstants
          issue_unit.io.dis_uops(w).lrs1_rtype := RT_X
          issue_unit.io.dis_uops(w).prs1_busy := false.B
       }
-      when (io.dis_uops(w).uopc === uopVINSV) {
+      when (io.dis_uops(w).uopc === uopVINSERT) {
          issue_unit.io.dis_valids(w)       := io.dis_valids(w)
          issue_unit.io.dis_uops(w).fu_code := FUConstants.FU_VALU
       }

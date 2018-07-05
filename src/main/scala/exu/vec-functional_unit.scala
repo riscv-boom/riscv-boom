@@ -143,7 +143,7 @@ class VALUUnit(num_stages: Int) (implicit p: Parameters)
                   (uop.uopc === uopVFSJ)  -> Cat(op2(sz-1), op1(sz-2, 0)),
                   (uop.uopc === uopVFSJN) -> Cat(~op2(sz-1), op1(sz-2, 0)),
                   (uop.uopc === uopVFSJX) -> Cat(op2(sz-1) ^ op1(sz-1), op1(sz-2, 0)),
-                  (uop.uopc === uopVINSV) -> vins))
+                  (uop.uopc === uopVINSERT)-> vins))
 
                val out = Pipe(io.req.valid && alu_val, result, num_stages) // TODO_vec: this shouldn't be zero right??
                val out_val = out.valid

@@ -603,14 +603,24 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
          iu.io.dis_uops(w).prs3_busy  := Bool(false)
          // Vec stores have operand in rs3 weird
          // TODO_vec polymorphic stores
-      } .elsewhen (dis_uops(w).uopc === uopVINSV) {
+      } .elsewhen (dis_uops(w).uopc === uopVINSERT) {
          assert(dis_uops(w).dst_rtype === RT_VEC)
          iu.io.dis_valids(w)          := dis_valids(w) && UInt(iu.iqType) === IQT_INT
+         iu.io.dis_uops(w).vec_val    := false.B
          iu.io.dis_uops(w).uopc       := uopTOVEC
          iu.io.dis_uops(w).iqtype     := IQT_INT
          iu.io.dis_uops(w).fu_code    := FU_I2V
          iu.io.dis_uops(w).lrs3_rtype := RT_X
          iu.io.dis_uops(w).prs3_busy  := Bool(false)
+      } .elsewhen (dis_uops(w).uopc === uopVEXTRACT) {
+         assert(dis_uops(w).lrs1_rtype === RT_VEC)
+         iu.io.dis_valids(w)          := dis_valids(w) && UInt(iu.iqType) === IQT_INT
+         iu.io.dis_uops(w).vec_val    := false.B
+         iu.io.dis_uops(w).uopc       := uopTOVEC
+         iu.io.dis_uops(w).iqtype     := IQT_INT
+         iu.io.dis_uops(w).fu_code    := FU_I2V
+         iu.io.dis_uops(w).lrs1_rtype := RT_X
+         iu.io.dis_uops(w).prs1_busy  := Bool(false)
       }
    }
 
