@@ -13,21 +13,22 @@
 
 package boom.bpu
 
-import Chisel._
+import chisel3._
+import chisel3.util.{Valid, PopCount, Counter, Enum, RegEnable, log2Ceil, switch, is, SwitchContext}
 import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.util.Str
 import boom.common._
 
 class TageTableIo(
-   fetch_width: Int,
-   index_sz: Int,
-   tag_sz: Int,
-   cntr_sz: Int,
-   ubit_sz: Int)
+   val fetch_width: Int,
+   val index_sz: Int,
+   val tag_sz: Int,
+   val cntr_sz: Int,
+   val ubit_sz: Int)
    extends Bundle
 {
    // bp1 - request a prediction (provide the index and tag).
-   val bp1_req = Valid(new TageTableReq(index_sz, tag_sz)).flip
+   val bp1_req = Flipped(Valid(new TageTableReq(index_sz, tag_sz)))
 
    // bp2 - send prediction to bpd pipeline.
    val bp2_resp = Valid(new TageTableResp(fetch_width, tag_sz, cntr_sz, ubit_sz))
@@ -35,7 +36,7 @@ class TageTableIo(
 
    // Write to this table. Can either be an Allocate, Update, or Degrade operation.
    // (Update and Degrade are not mutually exclusive).
-   val write = Valid(new TageTableWrite(fetch_width, index_sz, tag_sz, cntr_sz, ubit_sz)).flip
+   val write = Flipped(Valid(new TageTableWrite(fetch_width, index_sz, tag_sz, cntr_sz, ubit_sz)))
    def WriteEntry(
       idx: UInt, old: TageTableEntry, allocate: Bool, update: Bool, degrade: Bool, mispredict: Bool, taken: Bool) =
    {
@@ -53,7 +54,7 @@ class TageTableIo(
    {
       this.write.valid := false.B
       this.write.bits.index := 0.U
-      this.write.bits.old := new TageTableEntry(fetch_width, tag_sz, cntr_sz, ubit_sz).fromBits(0.U)
+      this.write.bits.old := 0.U.asTypeOf(new TageTableEntry(fetch_width, tag_sz, cntr_sz, ubit_sz))
       this.write.bits.allocate := false.B
       this.write.bits.update := false.B
       this.write.bits.degrade := false.B
@@ -61,45 +62,36 @@ class TageTableIo(
       this.write.bits.taken := false.B
    }
 
-   val do_reset = Bool(INPUT)
-
-   override def cloneType: this.type = new TageTableIo(
-      fetch_width, index_sz, tag_sz, cntr_sz, ubit_sz).asInstanceOf[this.type]
+   val do_reset = Input(Bool())
 }
 
-class TageTableReq(index_sz: Int, tag_sz: Int) extends Bundle
+class TageTableReq(val index_sz: Int, val tag_sz: Int) extends Bundle
 {
-   val index = UInt(width = index_sz)
-   val tag = UInt(width = tag_sz)
-
-   override def cloneType: this.type = new TageTableReq(index_sz, tag_sz).asInstanceOf[this.type]
+   val index = UInt(index_sz.W)
+   val tag = UInt(tag_sz.W)
 }
 
-class TageTableResp(fetch_width: Int, tag_sz: Int, cntr_sz: Int, ubit_sz: Int) extends Bundle
+class TageTableResp(val fetch_width: Int, val tag_sz: Int, val cntr_sz: Int, val ubit_sz: Int) extends Bundle
 {
-   val tag  = UInt(width = tag_sz)
-   val cntr = UInt(width = cntr_sz)
-   val cidx = UInt(width = log2Ceil(fetch_width))
-   val ubit = UInt(width = ubit_sz)
+   val tag  = UInt(tag_sz.W)
+   val cntr = UInt(cntr_sz.W)
+   val cidx = UInt(log2Ceil(fetch_width).W)
+   val ubit = UInt(ubit_sz.W)
 
    def predictsTaken = cntr(cntr_sz-1)
-
-   override def cloneType: this.type = new TageTableResp(fetch_width, tag_sz, cntr_sz, ubit_sz).asInstanceOf[this.type]
 }
 
-class TageTableEntry(fetch_width: Int, tag_sz: Int, cntr_sz: Int, ubit_sz: Int) extends Bundle
+class TageTableEntry(val fetch_width: Int, val tag_sz: Int, val cntr_sz: Int, val ubit_sz: Int) extends Bundle
 {
-   val tag  = UInt(width = tag_sz)                 // Tag.
-   val cntr = UInt(width = cntr_sz)                // Prediction counter.
-   val cidx = UInt(width = log2Ceil(fetch_width))  // Control-flow instruction index.
-   val ubit = UInt(width = ubit_sz)                // Usefulness counter.
-
-   override def cloneType: this.type = new TageTableEntry(fetch_width, tag_sz, cntr_sz, ubit_sz).asInstanceOf[this.type]
+   val tag  = UInt(tag_sz.W)                 // Tag.
+   val cntr = UInt(cntr_sz.W)                // Prediction counter.
+   val cidx = UInt(log2Ceil(fetch_width).W)  // Control-flow instruction index.
+   val ubit = UInt(ubit_sz.W)                // Usefulness counter.
 }
 
-class TageTableWrite(fetch_width: Int, index_sz: Int, tag_sz: Int, cntr_sz: Int, ubit_sz: Int) extends Bundle
+class TageTableWrite(val fetch_width: Int, val index_sz: Int, val tag_sz: Int, val cntr_sz: Int, val ubit_sz: Int) extends Bundle
 {
-   val index = UInt(width = index_sz)
+   val index = UInt(index_sz.W)
    val old = new TageTableEntry(fetch_width, tag_sz, cntr_sz, ubit_sz)
 
    // What kind of write are we going to perform?
@@ -109,8 +101,6 @@ class TageTableWrite(fetch_width: Int, index_sz: Int, tag_sz: Int, cntr_sz: Int,
    // What was the outcome of the branch?
    val mispredict = Bool()
    val taken = Bool()
-
-   override def cloneType: this.type = new TageTableWrite(fetch_width, index_sz, tag_sz, cntr_sz, ubit_sz).asInstanceOf[this.type]
 }
 
 
@@ -170,7 +160,7 @@ class TageTable(
          Mux(update && !mispredicted, 1.U,
             0.U))
 
-      assert (PopCount(Vec(allocate, update, degrade)) > 0.U, "[TageTable[" + id + "]] ubit not told to do something.")
+      assert (PopCount(VecInit(allocate, update, degrade)) > 0.U, "[TageTable[" + id + "]] ubit not told to do something.")
 
       next
    }
@@ -178,8 +168,8 @@ class TageTable(
    //------------------------------------------------------------
    // reset/initialization
 
-   val s_reset :: s_wait :: s_clear :: s_idle :: Nil = Enum(UInt(), 4)
-   val fsm_state = Reg(init = s_reset)
+   val s_reset :: s_wait :: s_clear :: s_idle :: Nil = Enum(4)
+   val fsm_state = RegInit(s_reset)
    val nResetLagCycles = 64
    val nBanks = 1
    val (lag_counter, lag_done) = Counter(fsm_state === s_wait, nResetLagCycles)
@@ -225,7 +215,7 @@ class TageTable(
 
    when (io.write.valid || fsm_state === s_clear)
    {
-      val widx = Wire(init=io.write.bits.index)
+      val widx = WireInit(io.write.bits.index)
 
       // Allocate, Update, and Degrade. Effects how we compute next counter, u-bit values.
       val allocate   = io.write.bits.allocate
@@ -265,7 +255,5 @@ class TageTable(
       history_length + " bits of history, " +
       tag_sz + "-bit tags, " +
       cntr_sz + "-bit counters"
-
-   override val compileOptions = chisel3.core.ExplicitCompileOptions.NotStrict.copy(explicitInvalidate = true)
 }
 
