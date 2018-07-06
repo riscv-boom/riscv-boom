@@ -200,6 +200,8 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
    //-------------------------------------------------------------
 
    // Dequeue entry (it's been committed) and update predictors.
+   io.bpd_update.valid := false.B
+   io.bim_update.valid := false.B
    when (do_deq)
    {
       val com_data = ram(WrapInc(deq_ptr.value, num_entries))
@@ -281,6 +283,12 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
    io.get_ftq_pc.fetch_pc := ram(curr_idx).fetch_pc
    io.get_ftq_pc.next_pc := ram(WrapInc(curr_idx, num_entries)).fetch_pc
    io.get_ftq_pc.next_val := WrapInc(curr_idx, num_entries) =/= enq_ptr.value
+
+   // optional similar to "bypassing"
+   when (enq_ptr.value === WrapInc(curr_idx, num_entries)) {
+      io.get_ftq_pc.next_pc := io.enq.bits.fetch_pc
+      io.get_ftq_pc.next_val := io.enq.fire()
+   }
 
 
    //-------------------------------------------------------------
