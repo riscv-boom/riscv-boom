@@ -146,7 +146,7 @@ abstract class BrPredictor(val history_length: Int)(implicit p: Parameters) exte
       val status_prv = Input(UInt(freechips.rocketchip.rocket.PRV.SZ.W))
    })
 
-   val r_f1_fetchpc = RegEnable(io.req.bits.addr, io.req.valid)
+   val r_f1_fetchpc = RegEnable(io.req.bits.addr >> log2Ceil(fetchWidth*coreInstBytes), io.req.valid)
 
    // The global history register  that will be hashed with the fetch-pc to compute tags and indices for our branch predictors.
    val f0_history   = WireInit(0.U(history_length.W))
@@ -170,7 +170,7 @@ abstract class BrPredictor(val history_length: Int)(implicit p: Parameters) exte
       val ret = WireInit(0.U(history_length.W))
 
       //ret := ((addr >> 4.U) & 0xf.U) | (old << 4.U) -- for debugging
-      val pc = addr >> log2Ceil(minCoreInstBytes)
+      val pc = addr >> log2Ceil(fetchWidth*coreInstBytes)
       val foldpc = (pc >> 17) ^ pc
       val shamt = 2
       val sz0 = 6
@@ -245,9 +245,7 @@ abstract class BrPredictor(val history_length: Int)(implicit p: Parameters) exte
    q_f3_history.io.enq.bits  := r_f2_history
 
    //assert (q_f3_history.io.enq.ready === !io.f2_stall)
-   val take_history_reg = Wire(Bool())
-   val f2f3_history_reg = RegEnable(r_f2_history, take_history_reg)
-   take_history_reg := io.capture
+   val f2f3_history_reg = RegEnable(r_f2_history, io.capture)
    when (io.s3_valid) {
       q_f3_history.io.enq.bits := f2f3_history_reg   
    }

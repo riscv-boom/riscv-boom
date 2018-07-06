@@ -86,7 +86,7 @@ class GShareBrPredictor(
    {
       // fold history if too big for our table
       val folded_history = Fold (hist, idx_sz, history_length)
-      ((addr >> log2Ceil(fetchWidth*coreInstBytes).U) ^ folded_history)(idx_sz-1,0)
+      (addr ^ folded_history)(idx_sz-1,0)
    }
 
    // for initializing the counter table, this is the value to reset the row to.
