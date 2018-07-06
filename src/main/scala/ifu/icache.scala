@@ -354,14 +354,14 @@ class ICacheModule(outer: ICache) extends ICacheBaseModule(outer)
   val s2_bank1DataDecoded = dECC.decode(s2_way_mux(sz-1, sz/2))
   // NOTE: if we run off the cache-line, the Bank0Data is garbage. The pipeline should not use those instructions.
 
-  val s2_data =
-    if (nBanks == 2) {
+  val s2_data = s2_unbankedDataDecoded.uncorrected
+    /*if (nBanks == 2) {
       Mux(s2_bankId,
         Cat(s2_bank0DataDecoded.uncorrected, s2_bank1DataDecoded.uncorrected),
         Cat(s2_bank1DataDecoded.uncorrected, s2_bank0DataDecoded.uncorrected))
     } else {
       s2_unbankedDataDecoded.uncorrected
-    }
+    }*/
   val s2_deccError =
     if (nBanks == 2) (s2_bank0DataDecoded.error || s2_bank1DataDecoded.error)
     else s2_unbankedDataDecoded.error
@@ -441,14 +441,14 @@ class ICacheModule(outer: ICache) extends ICacheBaseModule(outer)
           }
         }
 
-        val s2_dataCorrected =
-          if (nBanks == 2) {
+        val s2_dataCorrected = s2_unbankedDataDecoded.corrected
+          /*if (nBanks == 2) {
             Mux(s2_bankId,
               Cat(s2_bank0DataDecoded.corrected, s2_bank1DataDecoded.corrected),
               Cat(s2_bank1DataDecoded.corrected, s2_bank0DataDecoded.corrected))
           } else {
             s2_unbankedDataDecoded.corrected
-          }
+          }*/
 
         assert(!s2_valid || RegNext(RegNext(s0_vaddr)) === io.s2_vaddr)
         when (!(tl.a.valid || s1_slaveValid || s2_slaveValid || respValid)

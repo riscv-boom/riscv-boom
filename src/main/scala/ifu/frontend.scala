@@ -51,7 +51,7 @@ import boom.lsu.{CanHaveBoomPTW, CanHaveBoomPTWModule}
 trait HasL1ICacheBankedParameters extends HasL1ICacheParameters with HasBoomCoreParameters
 {
   // Use a bank interleaved I$ if our fetch width is wide enough.
-  val icIsBanked = fetchBytes > 8
+  val icIsBanked = fetchBytes > 8 // TODO RVC
   // How many bytes wide is a bank?
   val bankBytes = if (icIsBanked) fetchBytes/2 else fetchBytes
   // How many "chunks"/interleavings make up a cache line?
@@ -64,6 +64,12 @@ trait HasL1ICacheBankedParameters extends HasL1ICacheParameters with HasBoomCore
   // Round address down to the nearest fetch boundary.
   def alignToFetchBoundary(addr: UInt) =
   {
+    ~(~addr | (fetchBytes-1).U)
+  }
+
+  // Round address down to the nearest fetch boundary.
+  def alignToFetchBoundary1(addr: UInt) =
+  {
     if (icIsBanked) ~(~addr | (bankBytes-1).U)
     else ~(~addr | (fetchBytes-1).U)
   }
@@ -75,7 +81,7 @@ trait HasL1ICacheBankedParameters extends HasL1ICacheParameters with HasBoomCore
   {
     if (icIsBanked)
     {
-      addr + Mux(inLastChunk(addr), bankBytes.U, fetchBytes.U)
+      addr + Mux(bank(addr), bankBytes.U, fetchBytes.U)
     } else {
       addr + fetchBytes.U
     }
@@ -88,8 +94,8 @@ trait HasL1ICacheBankedParameters extends HasL1ICacheParameters with HasBoomCore
     val idx = addr.extract(log2Ceil(rvcFetchWidth)+log2Ceil(minCoreInstBytes) - 1, log2Ceil(minCoreInstBytes))
     if (icIsBanked) {
       // shave off the msb of idx since we are aligned to half-fetchWidth boundaries.
-      val shamt = idx.extract(log2Ceil(rvcFetchWidth)-2, 0)
-      val end_mask = Mux(inLastChunk(addr), Fill(fetchWidth, 1.U), Fill(rvcFetchWidth, 1.U))
+      val shamt = idx.extract(log2Ceil(rvcFetchWidth)-1, 0)
+      val end_mask = Mux(bank(addr), Cat(Fill(fetchWidth, 1.U), Fill(fetchWidth, 0.U)), Fill(rvcFetchWidth, 1.U))
       ((1 << rvcFetchWidth)-1).U << shamt & end_mask
     } else {
       ((1 << rvcFetchWidth)-1).U << idx
@@ -103,8 +109,8 @@ trait HasL1ICacheBankedParameters extends HasL1ICacheParameters with HasBoomCore
     val idx = addr.extract(log2Ceil(fetchWidth)+log2Ceil(coreInstBytes)-1, log2Ceil(coreInstBytes))
     if (icIsBanked) {
       // shave off the msb of idx since we are aligned to half-fetchWidth boundaries.
-      val shamt = idx.extract(log2Ceil(fetchWidth)-2, 0)
-      val end_mask = Mux(inLastChunk(addr), Fill(fetchWidth/2, 1.U), Fill(fetchWidth, 1.U))
+      val shamt = idx.extract(log2Ceil(fetchWidth)-1, 0)
+      val end_mask = Mux(bank(addr), Cat(Fill(fetchWidth/2, 1.U), Fill(fetchWidth/2, 0.U)), Fill(fetchWidth, 1.U))
       ((1 << fetchWidth)-1).U << shamt & end_mask
     } else {
       ((1 << fetchWidth)-1).U << idx
@@ -202,7 +208,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   val respready = Wire(Bool())
   respready := fetch_controller.io.imem_resp.ready
 
-  val s1_base_pc = alignToFetchBoundary(s1_pc)
+  val s1_base_pc = alignToFetchBoundary1(s1_pc)
   val ntpc = nextFetchStart(s1_base_pc)
   val predicted_npc = WireInit(ntpc)
   val predicted_taken = WireInit(false.B)
@@ -269,8 +275,9 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   }
   val rvc = VecInit(rvcvec).asUInt
   when (s2_irespvalid && !s2_replay) {
-      if (icIsBanked) { inst32across := overridenext || (!rvc(fetchWidth-1) && s2_mask(fetchWidth-1) && !s2_mask(fetchWidth)) }
-      else {   inst32across := overridenext  }
+      inst32across := overridenext
+      /*if (icIsBanked) { inst32across := overridenext || (!rvc(fetchWidth-1) && s2_mask(fetchWidth-1) && !s2_mask(fetchWidth)) }
+      else {   inst32across := overridenext  }*/
   }
   rvcexist := rvc.orR
   sendtos3 := rvcexist || inst32across || overridenext
@@ -281,7 +288,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   fetch_controller.io.imem_resp.bits.data := icache.io.resp.bits.data
   fetch_controller.io.imem_resp.bits.mask := norvcFetchMask(s2_pc)
   fetch_controller.io.imem_resp.bits.rvc_mask := 0.U
-  fetch_controller.io.imem_resp.bits.fidx := VecInit(Seq.tabulate(fetchWidth) { i => (Cat(0.U, s2_pc(1).asUInt) + (i << 1).U)(log2Ceil(fetchWidth), 0)  })
+  fetch_controller.io.imem_resp.bits.fidx := VecInit(Seq.tabulate(fetchWidth) ( i => (Cat(0.U, s2_pc(1).asUInt) + (i << 1).U(log2Ceil(rvcFetchWidth).W))(log2Ceil(fetchWidth), 0)  ))
   fetch_controller.io.imem_resp.bits.instacross := inst32across && s2_xcpt
   fetch_controller.io.imem_resp.bits.replay := icache.io.resp.bits.replay || icache.io.s2_kill && !icache.io.resp.valid && !s2_xcpt
   fetch_controller.io.imem_resp.bits.xcpt := s2_tlb_xcpt
@@ -386,8 +393,9 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
       fetch_controller.io.f2_split := canallot1.reduce(_ | _)
 
       when (inst32across) { // incorporate banking i.e. if fetchaddr is inLastChunk
-         if (icIsBanked) { s3_prevhalf := Mux(s3_mask(fetchWidth-1) && !s3_mask(fetchWidth), s3_respdata(16*fetchWidth-1, 16*(fetchWidth-1)), s3_respdata(32*fetchWidth-1, 16*(2*fetchWidth-1)))   }
-         else {   s3_prevhalf := s3_respdata(32*fetchWidth-1, 16*(2*fetchWidth-1))  }
+         s3_prevhalf := s3_respdata(32*fetchWidth-1, 16*(2*fetchWidth-1))
+         /*if (icIsBanked) { s3_prevhalf := Mux(s3_mask(fetchWidth-1) && !s3_mask(fetchWidth), s3_respdata(16*fetchWidth-1, 16*(fetchWidth-1)), s3_respdata(32*fetchWidth-1, 16*(2*fetchWidth-1)))   }
+         else {   s3_prevhalf := s3_respdata(32*fetchWidth-1, 16*(2*fetchWidth-1))  }*/
       }
   
       s4_rvc := s3_rvc 
@@ -486,15 +494,16 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 
    fetch_controller.io.f2_btb_resp       := bpdpipeline.io.f2_btb_resp 
    fetch_controller.io.f2_btb_resp.valid := !(sendtos3 || s2_replay) && bpdpipeline.io.f2_btb_resp.valid && (s2_mask & bpdpipeline.io.f2_btb_resp.bits.mask).orR
-   when (s3_valid && respready && !s4_valid) {
+   fetch_controller.io.f2_btb_resp.bits.mask := VecInit(Seq.tabulate(fetchWidth)( i => bpdpipeline.io.f2_btb_resp.bits.mask(2*i+1, 2*i).orR)).asUInt
+   when (s3_valid) {
       fetch_controller.io.f2_btb_resp.bits    := s3_btb_resp_bits  
-      fetch_controller.io.f2_btb_resp.valid   := s3_btb_resp_valid 
-      fetch_controller.io.f2_btb_resp.bits.mask := s3_btb_resp_bits.mask >> s3_pc(log2Ceil(rvcFetchWidth), 1)
+      fetch_controller.io.f2_btb_resp.valid   := s3_btb_resp_valid && respready && !s4_valid
+      fetch_controller.io.f2_btb_resp.bits.mask := VecInit(Seq.tabulate(fetchWidth)( i => (s3_btb_resp_bits.mask(allotedidx(i)) && outalloted(i)) )).asUInt
    }
-   when (s4_valid && respready) {
+   when (s4_valid) {
       fetch_controller.io.f2_btb_resp.bits    := s4_btb_resp_bits
-      fetch_controller.io.f2_btb_resp.valid   := s4_btb_resp_valid
-      fetch_controller.io.f2_btb_resp.bits.mask := s4_btb_resp_bits.mask >> (s4_pc + addnpc)(log2Ceil(rvcFetchWidth), 1)
+      fetch_controller.io.f2_btb_resp.valid   := s4_btb_resp_valid && respready
+      fetch_controller.io.f2_btb_resp.bits.mask := VecInit(Seq.tabulate(fetchWidth)( i => (s4_btb_resp_bits.mask(s4_allotedidx(i)) && s4_outalloted(i)) )).asUInt
    }
    fetch_controller.io.f3_bpd_resp       := bpdpipeline.io.f3_bpd_resp
 
