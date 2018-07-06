@@ -276,6 +276,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
          if (wbresp.bits.writesToIRF) {
             io.toint <> wbresp
             assert(!(wbresp.valid && !toint))
+            assert(!(io.toint.valid && !io.toint.ready), "Can't backpressure here")
             assert(!toint_found) // only support one toint connector
             toint_found = true
          } else if (eu.has_ifpu) {

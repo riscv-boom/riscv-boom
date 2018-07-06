@@ -176,7 +176,7 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean, isVec: Boolean
       updated_state := s_invalid
       if (containsVec) {
          updated_eidx := next_eidx
-         when (slotUop.vec_val && updated_eidx < io.vl) {
+         when (slotUop.vec_val && updated_eidx < io.vl && slotUop.uopc =/= uopVEXTRACT) {
             updated_state := slot_state
             when (slotUop.lrs1_rtype === RT_VEC) {
                updated_prs1_busy := next_next_eidx > slotUop.prs1_eidx
@@ -299,6 +299,10 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean, isVec: Boolean
          when (io.fromint_paddr === slotUop.pop2 && slotUop.lrs2_rtype === RT_FIX) {
             updated_prs2_busy := false.B
             updated_rs2_data := io.fromint_data
+
+            when (slotUop.uopc === uopVEXTRACT) {
+               updated_eidx := CalcEidxUpperMask(slotUop.rs1_vew, io.fromint_data)
+            }
          }
          when (io.fromint_paddr === slotUop.pop3 && slotUop.lrs3_rtype === RT_FIX) {
             updated_prs3_busy := false.B

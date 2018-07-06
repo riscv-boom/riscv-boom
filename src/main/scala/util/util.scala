@@ -477,6 +477,19 @@ object CalcEidxUpper
    }
 }
 
+object CalcEidxUpperMask
+{
+   def apply(vew: UInt, eidx: UInt) : UInt = {
+      val shiftn = MuxLookup(vew, VEW_8, Array(
+         VEW_8 -> UInt(4),
+         VEW_16-> UInt(3),
+         VEW_32-> UInt(2),
+         VEW_64-> UInt(1)))
+      val shifted = (eidx >> shiftn) << shiftn
+      shifted
+   }
+}
+
 object CalcEidxLower
 {
    def apply(vew: UInt, eidx: UInt) : UInt = {

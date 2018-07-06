@@ -46,7 +46,7 @@ with freechips.rocketchip.rocket.constants.VecCfgConstants
      val tosdq          = new DecoupledIO(new MicroOpWithData(128))
      val fromint        = Flipped(Decoupled(new ExeUnitResp(xLen))) // from integer RF
      val fromfp         = Flipped(Decoupled(new ExeUnitResp(xLen))) // from fp RF.
-//     val toint          = Decoupled(new ExeUnitResp(xLen))
+     val toint          = new DecoupledIO(new ExeUnitResp(xLen))
 
      val wakeups        = Vec(num_wakeup_ports, Valid(new ExeUnitResp(128)))
      val wb_valids      = Input(Vec(num_wakeup_ports, Bool()))
@@ -121,15 +121,11 @@ with freechips.rocketchip.rocket.constants.VecCfgConstants
       issue_unit.io.dis_uops(w) := io.dis_uops(w)
 
       when (io.dis_uops(w).uopc === uopVST && io.dis_uops(w).lrs3_rtype === RT_VEC) {
-         issue_unit.io.dis_valids(w) := io.dis_valids(w)
-         issue_unit.io.dis_uops(w).uopc := uopVST
-         issue_unit.io.dis_uops(w).fu_code := FUConstants.FU_VALU
+         issue_unit.io.dis_valids(w)          := io.dis_valids(w)
+         issue_unit.io.dis_uops(w).uopc       := uopVST
+         issue_unit.io.dis_uops(w).fu_code    := FUConstants.FU_VALU
          issue_unit.io.dis_uops(w).lrs1_rtype := RT_X
-         issue_unit.io.dis_uops(w).prs1_busy := false.B
-      }
-      when (io.dis_uops(w).uopc === uopVINSERT) {
-         issue_unit.io.dis_valids(w)       := io.dis_valids(w)
-         issue_unit.io.dis_uops(w).fu_code := FUConstants.FU_VALU
+         issue_unit.io.dis_uops(w).prs1_busy  := false.B
       }
       when (issue_unit.io.dis_uops(w).lrs1_rtype === RT_FLT || issue_unit.io.dis_uops(w).lrs1_rtype === RT_FIX) {
          issue_unit.io.dis_uops(w).prs1_busy := true.B
@@ -156,7 +152,7 @@ with freechips.rocketchip.rocket.constants.VecCfgConstants
       iss_valids(i) := issue_unit.io.iss_valids(i)
       iss_uops(i) := issue_unit.io.iss_uops(i)
 
-      issue_unit.io.fu_types(i) := exe_units(i).io.fu_types & ~Mux(ll_wb_block_issue, FU_VALU | FU_VFPU, 0.U) 
+      issue_unit.io.fu_types(i) := exe_units(i).io.fu_types & ~Mux(ll_wb_block_issue, FU_VALU | FU_VFPU, 0.U)
 
       require (exe_units(i).uses_iss_unit)
    }
@@ -239,6 +235,11 @@ with freechips.rocketchip.rocket.constants.VecCfgConstants
    when   (io.ll_wport.valid) { assert(io.ll_wport.bits.uop.ctrl.rf_wen && io.ll_wport.bits.uop.dst_rtype === RT_VEC) }
 
 
+   val toint = Module(new QueueForMicroOpWithData(entries = 4, 64))
+   io.toint <> toint.io.deq
+   toint.io.brinfo := io.brinfo
+   toint.io.flush  := io.flush_pipeline
+
    var w_cnt = 0 // TODO_Vec: check if this should be 1 or 0 for vec?
    var vec_eu_wb = false.B
    for (eu <- exe_units)
@@ -262,6 +263,9 @@ with freechips.rocketchip.rocket.constants.VecCfgConstants
          vregfile.io.write_ports(w_cnt).bits.rd_vew := wbresp.bits.uop.rd_vew
          wbresp.ready := vregfile.io.write_ports(w_cnt).ready
 
+         toint.io.enq.valid := wbresp.valid && wbresp.bits.uop.uopc === uopVEXTRACT
+         toint.io.enq.bits  := wbresp.bits
+         assert (!(toint.io.enq.ready && !toint.io.enq.ready), "Can't backpressure here")
 
          assert (!(wbresp.valid &&
             !wbresp.bits.uop.ctrl.rf_wen &&
@@ -276,6 +280,7 @@ with freechips.rocketchip.rocket.constants.VecCfgConstants
          w_cnt += 1
       }
    }
+   assert(w_cnt == 1, "Only one normal write back supported here")
    ll_wb.io.deq.ready := false.B
    when (!vec_eu_wb) {
       vregfile.io.write_ports(0) <> WritePort(ll_wb.io.deq, log2Ceil(numVecRegFileRows), 128, true, numVecPhysRegs)

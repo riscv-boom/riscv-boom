@@ -99,7 +99,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
                                  xLen,
                                  exe_units.bypassable_write_port_mask))
                           }
-   val ll_wbarb         = Module(new Arbiter(new ExeUnitResp(xLen), 2))
+   val ll_wbarb         = Module(new Arbiter(new ExeUnitResp(xLen), 3))
    val iregister_read   = Module(new RegisterRead(
                                  issue_units.map(_.issue_width).sum,
                                  exe_units.withFilter(_.usesIRF).map(_.supportedFuncUnits),
@@ -603,6 +603,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
          iu.io.dis_uops(w).prs3_busy  := Bool(false)
          // Vec stores have operand in rs3 weird
          // TODO_vec polymorphic stores
+         // TODO_Vec generalize this
       } .elsewhen (dis_uops(w).uopc === uopVINSERT) {
          assert(dis_uops(w).dst_rtype === RT_VEC)
          iu.io.dis_valids(w)          := dis_valids(w) && UInt(iu.iqType) === IQT_INT
@@ -984,7 +985,8 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
          assert (!(exe_units(i).io.resp(j).valid &&
             !exe_units(i).io.resp(j).bits.uop.ctrl.rf_wen &&
-            exe_units(i).io.resp(j).bits.uop.dst_rtype === RT_FIX),
+            exe_units(i).io.resp(j).bits.uop.dst_rtype === RT_FIX &&
+            !exe_units(i).io.resp(j).bits.writesToVIQ.B),
             "[fppipeline] An Int writeback is being attempted with rf_wen disabled.")
 
          if (!exe_units(i).is_mem_unit) {
@@ -1006,8 +1008,11 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    ll_wbarb.io.in(0).bits  := mem_resp.bits
 
    assert (ll_wbarb.io.in(0).ready) // never backpressure the memory unit.
-   ll_wbarb.io.in(1) <> fp_pipeline.io.toint
+   ll_wbarb.io.in(1) <> fp_pipeline.io.toint  // Queue is in execution unit
+   ll_wbarb.io.in(2) <> vec_pipeline.io.toint // Queue is in vecpipeline
    iregfile.io.write_ports(llidx) <> WritePort(ll_wbarb.io.out, IPREG_SZ, xLen, false, numVecPhysRegs)
+
+
 
    vec_pipeline.io.fromfp <> fp_pipeline.io.tovec
 
