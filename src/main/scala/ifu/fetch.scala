@@ -295,6 +295,7 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
    val f3_bpd_predictions = is_br.asUInt & VecInit(f3_imemresp.fidx.map { idx => io.f3_bpd_resp.bits.takens(idx) }).asUInt
    val f3_bpd_br_taken = f3_bpd_predictions.orR
    val f3_bpd_br_idx = PriorityEncoder(f3_bpd_predictions)
+   val f3_bpd_brnot_idx = (fetchWidth-1).U - PriorityEncoder((is_br.reverse zip (f3_imemresp.fidx.map { idx => !io.f3_bpd_resp.bits.takens(idx) }).reverse).map { case (br, tk) => br & tk })
    val f3_bpd_target = br_targs(f3_bpd_br_idx)
    // check for jumps -- if we decide to override a taken BTB and choose "nextline" we don't want to miss the JAL.
    val f3_has_jal = is_jal.reduce(_|_)
@@ -309,13 +310,13 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
          f3_bpd_br_idx,
       Mux(f3_has_jal,
          f3_jal_idx,
-         (fetch_width-1).U))
+         f3_bpd_brnot_idx))
    val f3_bpd_redirect_target =
       Mux(f3_bpd_may_redirect_taken,
          f3_bpd_target,
       Mux(f3_has_jal,
          f3_jal_target,
-         f3_aligned_pc + (f3_imemresp.fidx(f3_bpd_br_idx) << 1.U) + Mux( f3_imemresp.rvc_mask(f3_bpd_br_idx), 2.U, 4.U)))
+         f3_aligned_pc + (f3_imemresp.fidx(f3_bpd_brnot_idx) << 1.U) + Mux( f3_imemresp.rvc_mask(f3_bpd_brnot_idx) || (!f3_bpd_brnot_idx.orR && f3_imemresp.instacross), 2.U, 4.U)))
 
    val curridx = f3_imemresp.fidx.zipWithIndex.map { case (idx, i) => ((idx === f3_btb_resp.bits.cfi_idx) && f3_imemresp.mask(i)) }
    val incurr = curridx.reduce(_ || _)
