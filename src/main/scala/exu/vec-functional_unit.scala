@@ -31,9 +31,9 @@ class Adder(w: Int) extends Module {
       val sub = Bool(INPUT)
       val out = UInt(OUTPUT, w)
    })
-   val bits =
-      Cat(UInt(0, 1), io.in0).asUInt + Cat(UInt(0, 1), io.in1 ^ Fill(w, io.sub)).asUInt
-   io.out := bits(w-1, 0)
+   val in1_inv = Mux(io.sub, ~io.in1, io.in1)
+   val bits = io.in0 + in1_inv + io.sub
+   io.out := bits
 }
 
 class Comparator(w: Int) extends Module {
@@ -115,9 +115,11 @@ class VALUUnit(num_stages: Int) (implicit p: Parameters)
                val op1 = unpack(io.req.bits.rs1_data, i).asUInt
                val op2 = unpack(io.req.bits.rs2_data, i).asUInt
                val op3 = unpack(io.req.bits.rs3_data, i).asUInt
+               val sintop2 = Wire(SInt(width=sz))
+               sintop2 := ImmGen(uop.imm_packed, IS_V)
                val adder = Module(new Adder(sz))
                adder.io.in0 := op1
-               adder.io.in1 := op2
+               adder.io.in1 := Mux(uop.uopc === uopVADDI, sintop2.asUInt, op2)
                adder.io.sub := uop.uopc === uopVSUB
                val adder_out = adder.io.out
 
@@ -136,13 +138,15 @@ class VALUUnit(num_stages: Int) (implicit p: Parameters)
 
                val result = Wire(UInt(width=sz))
                result := Mux1H(Array(
-                  (uop.uopc === uopVADD)  -> adder_out,
-                  (uop.uopc === uopVSUB)  -> adder_out,
+                  // TODO_Vec: Wow this seems pretty not optimal
+                  (uop.uopc === uopVADD
+                || uop.uopc === uopVADDI
+                || uop.uopc === uopVSUB)  -> adder_out,
                   (uop.uopc === uopVSLL)  -> sll_out,
                   (uop.uopc === uopVSRL)  -> srl_out,
                   (uop.uopc === uopVSRA)  -> sra_out,
-                  (uop.uopc === uopVSLT)  -> set_out,
-                  (uop.uopc === uopVSLTU) -> set_out,
+                  (uop.uopc === uopVSLT
+                || uop.uopc === uopVSLTU) -> set_out,
                   (uop.uopc === uopVAND)  -> (op1 & op2),
                   (uop.uopc === uopVXOR)  -> (op1 ^ op2),
                   (uop.uopc === uopVOR)   -> (op1 | op2),

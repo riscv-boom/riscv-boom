@@ -363,7 +363,8 @@ object VecDecode extends DecodeConstants
    VLD       ->List(Y, N, Y, N, uopVLD   ,  IQT_MEM,FU_MEM ,RT_VEC , RT_FIX , RT_X   , RT_X   , N, IS_I, Y, N, N, N, N, M_XRD, MT_D , UInt(0), N, N, N, N, N, N, N, CSR.N),
    VST       ->List(Y, N, Y, N, uopVST   ,  IQT_MEM,FU_MEM ,RT_X   , RT_FIX , RT_X   , RT_VEC , N, IS_S, N, Y, N, N, N, M_XWR, MT_D , UInt(0), N, N, N, N, N, N, N, CSR.N),
    VINSERT   ->List(Y, N, Y, N, uopVINSERT, IQT_VEC,FU_VALU,RT_POLY, RT_FIX , RT_FIX , RT_VEC , N, IS_X, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, N, N, N, CSR.N),
-   VEXTRACT  ->List(Y, N, N, N, uopVEXTRACT,IQT_VEC,FU_VALU,RT_FIX , RT_POLY, RT_FIX , RT_X   , N, IS_X, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, N, N, N, CSR.N)
+   VEXTRACT  ->List(Y, N, Y, N, uopVEXTRACT,IQT_VEC,FU_VALU,RT_FIX , RT_POLY, RT_FIX , RT_X   , N, IS_X, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, N, N, N, CSR.N),
+   VADDI     ->List(Y, N, Y, N, uopVADDI ,  IQT_VEC,FU_VALU,RT_VEC , RT_POLY, RT_X   , RT_X   , N, IS_V, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, N, N, N, CSR.N)
      // TODO_Vec: VINSV needs to go to both int and v iqs
       //           This should default to FU_I2V
 
@@ -547,8 +548,6 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule()(p) with freechips.
          uop.uopc       := uopFMV_X_D
          uop.fu_code    := FU_F2I
          uop.lrs2_rtype := RT_X
-      } .otherwise {
-
       }
    }
 

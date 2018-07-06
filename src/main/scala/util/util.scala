@@ -240,17 +240,18 @@ object Sext
 // Asking for U-type gives it shifted up 12 bits.
 object ImmGen
 {
-   import boom.common.{LONGEST_IMM_SZ, IS_B, IS_I, IS_J, IS_S, IS_U}
+   import boom.common.{LONGEST_IMM_SZ, IS_B, IS_I, IS_J, IS_S, IS_U, IS_V}
    def apply(ip: UInt, isel: UInt): SInt =
    {
-      val sign = ip(LONGEST_IMM_SZ-1).asSInt
+      val sign = Mux(isel === IS_V, ip(15).asSInt, ip(LONGEST_IMM_SZ-1).asSInt)
       val i30_20 = Mux(isel === IS_U, ip(18,8).asSInt, sign)
       val i19_12 = Mux(isel === IS_U || isel === IS_J, ip(7,0).asSInt, sign)
       val i11    = Mux(isel === IS_U, SInt(0),
                    Mux(isel === IS_J || isel === IS_B, ip(8).asSInt, sign))
-      val i10_5  = Mux(isel === IS_U, SInt(0), ip(18,14).asSInt)
+      val i10_5  = Mux(isel === IS_U, SInt(0),
+                   Mux(isel === IS_V, ip(15, 14).asSInt, ip(18,14).asSInt))
       val i4_1   = Mux(isel === IS_U, SInt(0), ip(13,9).asSInt)
-      val i0     = Mux(isel === IS_S || isel === IS_I, ip(8).asSInt, SInt(0))
+      val i0     = Mux(isel === IS_S || isel === IS_I || isel === IS_V, ip(8).asSInt, SInt(0))
 
       return Cat(sign, i30_20, i19_12, i11, i10_5, i4_1, i0).asSInt
    }

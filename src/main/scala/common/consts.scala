@@ -122,6 +122,7 @@ trait ScalarOpConstants
    val IS_B   = UInt(2, 3)  // SB-Type (BR)
    val IS_U   = UInt(3, 3)  // U-Type  (LUI/AUIPC)
    val IS_J   = UInt(4, 3)  // UJ-Type (J/JAL)
+   val IS_V   = UInt(5, 3)  // V-Type  (VADDI, etc.)
    val IS_X   = BitPat("b???")
 
 
@@ -311,6 +312,8 @@ trait ScalarOpConstants
    val uopVINSERT   = UInt(144, UOPC_SZ) // When vinserting into vector reg
                                          // Vinsert into scalar reg aliases to FMV
    val uopVEXTRACT  = UInt(145, UOPC_SZ)
+
+   val uopVADDI     = UInt(146, UOPC_SZ)
 
    val uopTOVEC     = UInt(150, UOPC_SZ) // Move scalar vector operand to vector issue
 

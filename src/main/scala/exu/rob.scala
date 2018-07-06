@@ -306,7 +306,7 @@ class Rob(
          {
             rob_bsy(row_idx) := false.B
             val next_eidx = wb_resp.bits.uop.rate + rob_uop(row_idx).eidx
-            when (rob_uop(row_idx).vec_val && next_eidx < io.vl) {
+            when (rob_uop(row_idx).vec_val && next_eidx < io.vl && rob_uop(row_idx).uopc =/= uopVEXTRACT) {
                rob_bsy(row_idx) := true.B
                rob_uop(row_idx).eidx := next_eidx
                when (row_idx === rob_head) {
