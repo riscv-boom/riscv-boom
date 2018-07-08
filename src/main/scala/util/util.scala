@@ -15,7 +15,7 @@ import freechips.rocketchip.rocket.Instructions._
 import freechips.rocketchip.rocket.constants.{ScalarOpConstants, MemoryOpConstants}
 import boom.common._
 import freechips.rocketchip.util._
-import boom.exu.{BrResolutionInfo, ExeUnitResp}
+import boom.exu.{BrResolutionInfo, ExeUnitResp, FuncUnitResp}
 
 
 // XOR fold an input that is full_length sized down to a compressed_length.
@@ -326,6 +326,92 @@ class QueueForMicroOpWithData(entries: Int, data_width: Int)
    {
       val enq     = Decoupled(new ExeUnitResp(data_width)).flip
       val deq     = Decoupled(new ExeUnitResp(data_width))
+
+      val brinfo  = new BrResolutionInfo().asInput
+      val flush   = Bool(INPUT)
+
+      val empty   = Bool(OUTPUT)
+      val count   = UInt(OUTPUT, log2Up(entries))
+   })
+
+   private val ram     = Mem(entries, new ExeUnitResp(data_width))
+   private val valids  = Reg(init = Vec.fill(entries) {Bool(false)})
+   private val brmasks = Reg(Vec(entries, UInt(width = MAX_BR_COUNT)))
+
+   private val enq_ptr = Counter(entries)
+   private val deq_ptr = Counter(entries)
+   private val maybe_full = Reg(init=false.B)
+
+   private val ptr_match = enq_ptr.value === deq_ptr.value
+   io.empty := ptr_match && !maybe_full
+   private val full = ptr_match && maybe_full
+   private val do_enq = Wire(init=io.enq.fire())
+
+   private val deq_ram_valid = Wire(init= !(io.empty))
+   private val do_deq = Wire(init=io.deq.ready && deq_ram_valid)
+
+   for (i <- 0 until entries)
+   {
+      val mask = brmasks(i)
+      valids(i)  := valids(i) && !IsKilledByBranch(io.brinfo, mask) && !io.flush
+      when (valids(i)) {
+         brmasks(i) := GetNewBrMask(io.brinfo, mask)
+      }
+   }
+
+
+   when (do_enq) {
+      ram(enq_ptr.value) := io.enq.bits
+      valids(enq_ptr.value) := true.B //!IsKilledByBranch(io.brinfo, io.enq.bits.uop)
+      brmasks(enq_ptr.value) := GetNewBrMask(io.brinfo, io.enq.bits.uop)
+      enq_ptr.inc()
+   }
+   when (do_deq) {
+      deq_ptr.inc()
+   }
+   when (do_enq =/= do_deq) {
+      maybe_full := do_enq
+   }
+
+   io.enq.ready := !full
+
+   private val out = ram(deq_ptr.value)
+   io.deq.valid := deq_ram_valid && valids(deq_ptr.value) && !IsKilledByBranch(io.brinfo, out.uop)
+   io.deq.bits := out
+   io.deq.bits.uop.br_mask := GetNewBrMask(io.brinfo, brmasks(deq_ptr.value))
+
+
+   // For flow queue behavior.
+   when (io.empty)
+   {
+      io.deq.valid := io.enq.valid //&& !IsKilledByBranch(io.brinfo, io.enq.bits.uop)
+      io.deq.bits := io.enq.bits
+      io.deq.bits.uop.br_mask := GetNewBrMask(io.brinfo, io.enq.bits.uop)
+
+      do_deq := false.B
+      when (io.deq.ready) { do_enq := false.B }
+   }
+
+   private val ptr_diff = enq_ptr.value - deq_ptr.value
+   if (isPow2(entries)) {
+      io.count := Cat(maybe_full && ptr_match, ptr_diff)
+   } else {
+      io.count := Mux(ptr_match,
+                     Mux(maybe_full,
+                        entries.asUInt, 0.U),
+                     Mux(deq_ptr.value > enq_ptr.value,
+                        entries.asUInt + ptr_diff, ptr_diff))
+   }
+}
+class QueueForFuncUnitResp(entries: Int, data_width: Int)
+   (implicit p: freechips.rocketchip.config.Parameters)
+   extends boom.common.BoomModule()(p)
+   with boom.common.HasBoomCoreParameters
+{
+   val io = IO(new Bundle
+   {
+      val enq     = Decoupled(new FuncUnitResp(data_width)).flip
+      val deq     = Decoupled(new FuncUnitResp(data_width))
 
       val brinfo  = new BrResolutionInfo().asInput
       val flush   = Bool(INPUT)

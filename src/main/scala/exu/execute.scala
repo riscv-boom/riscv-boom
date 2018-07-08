@@ -25,7 +25,8 @@ import freechips.rocketchip.tile.XLen
 import freechips.rocketchip.tile
 import boom.common._
 import boom.ifu.GetPCFromFtqIO
-import boom.util.{ImmGen, IsKilledByBranch, QueueForMicroOpWithData}
+import boom.util.{ImmGen, IsKilledByBranch, QueueForMicroOpWithData, QueueForFuncUnitResp}
+
 
 // TODO rename to something like MicroOpWithData
 class ExeUnitResp(data_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
@@ -678,14 +679,18 @@ class MemExeUnit(implicit p: Parameters) extends ExecutionUnit(num_rf_read_ports
    maddrcalc.io.brinfo <> io.brinfo
    io.bypass <> maddrcalc.io.bypass  // TODO this is not where the bypassing should occur from, is there any bypassing happening?!
 
-   val to_lsu_resp = Module(new Queue(new FuncUnitResp(128), 4))
+
    val to_lsu_vsta = Module(new Queue(new FuncUnitResp(128), 4))
+   val to_lsu_resp = Module(new QueueForFuncUnitResp(4, 128))
 
    assert(!(maddrcalc.io.resp.valid && maddrcalc.io.resp.bits.uop.uopc =/= uopVST && !to_lsu_resp.io.enq.ready),
       "We do not support backpressure on this queue")
 
    to_lsu_resp.io.enq.valid := maddrcalc.io.resp.valid && maddrcalc.io.resp.bits.uop.uopc =/= uopVST
    to_lsu_resp.io.enq.bits  := maddrcalc.io.resp.bits
+   to_lsu_resp.io.brinfo    := io.brinfo
+   to_lsu_resp.io.flush     := io.req.bits.kill
+
    io.lsu_io.exe_resp       <> to_lsu_resp.io.deq
 
    // Vector store addrs need to go through a separate queue to avoid blocking loads
