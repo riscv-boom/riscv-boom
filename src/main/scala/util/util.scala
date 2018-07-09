@@ -420,7 +420,7 @@ class QueueForFuncUnitResp(entries: Int, data_width: Int)
       val count   = UInt(OUTPUT, log2Up(entries))
    })
 
-   private val ram     = Mem(entries, new ExeUnitResp(data_width))
+   private val ram     = Mem(entries, new FuncUnitResp(data_width))
    private val valids  = Reg(init = Vec.fill(entries) {Bool(false)})
    private val brmasks = Reg(Vec(entries, UInt(width = MAX_BR_COUNT)))
 
