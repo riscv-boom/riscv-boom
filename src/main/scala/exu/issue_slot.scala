@@ -334,9 +334,9 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean, isVec: Boolean
    {
       io.request := slot_p1 && slot_p2 && slot_p3 && !io.kill
       if (containsVec){
-         when (slotUop.uopc === uopVLD) {
+         when (slotUop.is_load) {
             io.request := (slot_p1 && slot_p2 && slot_p3 && !io.kill)
-         } .elsewhen (slotUop.uopc === uopVST) {
+         } .elsewhen (slotUop.is_store) {
             io.request := (slot_p1 && slot_p2 && slot_p3 && !io.kill
                && io.stdata_ready
                && slotUop.stq_idx === io.lsu_stq_head

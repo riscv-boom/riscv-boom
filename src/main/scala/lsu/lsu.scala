@@ -550,7 +550,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
          !laq_executed      (exe_ld_idx_wakeup) &&
          !laq_failure       (exe_ld_idx_wakeup) &&
          (!laq_is_uncacheable(exe_ld_idx_wakeup) || (io.commit_load_at_rob_head && laq_head === exe_ld_idx_wakeup))
-         )
+   )
    {
       can_fire_load_wakeup := Bool(true)
    }
@@ -1001,7 +1001,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
       when (io.memresp.bits.is_load)
       {
          laq_succeeded(io.memresp.bits.ldq_idx) := Bool(true)
-         when (laq_uop(io.memresp.bits.ldq_idx).uopc === uopVLD) {
+         when (laq_uop(io.memresp.bits.ldq_idx).vec_val) {
             val next_eidx = laq_uop(io.memresp.bits.ldq_idx).eidx + UInt(1)
             val bypass_executed                          = io.memreq_val && io.memreq_uop.ldq_idx === io.memresp.bits.ldq_idx && io.memreq_uop.is_load
             laq_addr_val (io.memresp.bits.ldq_idx)      := bypass_executed

@@ -361,6 +361,7 @@ object VecDecode extends DecodeConstants
    VNMADD    ->List(Y, N, Y, N, uopVNMADD,  IQT_VEC,FU_POLY,RT_VEC , RT_POLY, RT_POLY, RT_POLY, N, IS_X, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, N, N, N, CSR.N),
    VNMSUB    ->List(Y, N, Y, N, uopVNMSUB,  IQT_VEC,FU_POLY,RT_VEC , RT_POLY, RT_POLY, RT_POLY, N, IS_X, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, N, N, N, CSR.N),
    VLD       ->List(Y, N, Y, N, uopVLD   ,  IQT_MEM,FU_MEM ,RT_VEC , RT_FIX , RT_X   , RT_X   , N, IS_I, Y, N, N, N, N, M_XRD, MT_D , UInt(0), N, N, N, N, N, N, N, CSR.N),
+   VLDS      ->List(Y, N, Y, N, uopVLDS  ,  IQT_MEM,FU_MEM ,RT_VEC , RT_FIX , RT_FIX , RT_X   , N, IS_I, Y, N, N, N, N, M_XRD, MT_D , UInt(0), N, N, N, N, N, N, N, CSR.N),
    VST       ->List(Y, N, Y, N, uopVST   ,  IQT_MEM,FU_MEM ,RT_X   , RT_FIX , RT_X   , RT_VEC , N, IS_S, N, Y, N, N, N, M_XWR, MT_D , UInt(0), N, N, N, N, N, N, N, CSR.N),
    VINSERT   ->List(Y, N, Y, N, uopVINSERT, IQT_VEC,FU_VALU,RT_POLY, RT_FIX , RT_FIX , RT_VEC , N, IS_X, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, N, N, N, CSR.N),
    VEXTRACT  ->List(Y, N, Y, N, uopVEXTRACT,IQT_VEC,FU_VALU,RT_FIX , RT_POLY, RT_FIX , RT_X   , N, IS_X, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, N, N, N, CSR.N),
@@ -521,10 +522,10 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule()(p) with freechips.
 
    //-------------------------------------------------------------
    // Special cases for polymorphic vector instructions
-   when (cs.uopc === uopVLD) {
+   when (cs.vec_val && cs.is_load) {
       uop.rate       := UInt(1)
       uop.mem_typ    := MuxLookup(io.vecstatus.vews(cs_rd), VEW_8, Array(VEW_8 -> MT_B, VEW_16 -> MT_H, VEW_32 -> MT_W, VEW_64 -> MT_D))
-   } .elsewhen (cs.uopc === uopVST) {
+   } .elsewhen (cs.vec_val && cs.is_store) {
       uop.rate       := UInt(1)
       uop.mem_typ    := MuxLookup(io.vecstatus.vews(cs_rs3), VEW_8, Array(VEW_8 -> MT_B, VEW_16 -> MT_H, VEW_32 -> MT_W, VEW_64 -> MT_D))
    } .elsewhen (cs.uopc === uopVINSERT) {

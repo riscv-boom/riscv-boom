@@ -307,15 +307,19 @@ trait ScalarOpConstants
    val uopVFSJX     = UInt(141, UOPC_SZ)
 
    val uopVLD       = UInt(142, UOPC_SZ)
-   val uopVST       = UInt(143, UOPC_SZ)
+   val uopVLDS      = UInt(143, UOPC_SZ)
+   val uopVLDX      = UInt(144, UOPC_SZ)
+   val uopVST       = UInt(145, UOPC_SZ)
+   val uopVSTS      = UInt(146, UOPC_SZ)
+   val uopVSTX      = UInt(147, UOPC_SZ)
 
-   val uopVINSERT   = UInt(144, UOPC_SZ) // When vinserting into vector reg
-                                         // Vinsert into scalar reg aliases to FMV
-   val uopVEXTRACT  = UInt(145, UOPC_SZ)
+   val uopVINSERT   = UInt(148, UOPC_SZ) // When vinserting into vector reg
+                                        // Vinsert into scalar reg aliases to FMV
+   val uopVEXTRACT  = UInt(149, UOPC_SZ)
 
-   val uopVADDI     = UInt(146, UOPC_SZ)
+   val uopVADDI     = UInt(150, UOPC_SZ)
 
-   val uopTOVEC     = UInt(150, UOPC_SZ) // Move scalar vector operand to vector issue
+   val uopTOVEC     = UInt(160, UOPC_SZ) // Move scalar vector operand to vector issue
 
 
    // The Bubble Instruction (Machine generated NOP)

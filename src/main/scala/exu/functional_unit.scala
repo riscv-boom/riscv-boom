@@ -597,16 +597,18 @@ class MemAddrCalcUnit(implicit p: Parameters)
    with freechips.rocketchip.tile.HasFPUParameters
 {
    // perform address calculation
-   val imm = Mux(io.req.bits.uop.uopc === uopVLD, io.req.bits.uop.imm_packed(19,15), io.req.bits.uop.imm_packed(19,8))
+   val imm = Mux(io.req.bits.uop.vec_val && io.req.bits.uop.is_load, io.req.bits.uop.imm_packed(19,15), io.req.bits.uop.imm_packed(19,8))
    assert(io.req.bits.uop.vec_val || io.req.bits.uop.eidx === UInt(0), "Eidx should be 0 for normal insts")
-   val eidx_off = Cat(UInt(0), io.req.bits.uop.eidx << MuxLookup(
-      Mux(io.req.bits.uop.uopc === uopVLD, io.req.bits.uop.rd_vew, io.req.bits.uop.rs3_vew), VEW_DISABLE, Array(
-      VEW_8  -> UInt(0),
-      VEW_16 -> UInt(1),
-      VEW_32 -> UInt(2),
-      VEW_64 -> UInt(3)))) // TODO_vec : make this nicer with log2
+
+   // TODO_Vec: This probably shouldn't be a multiplier. 
+   val eidx_off = Cat(UInt(0), io.req.bits.uop.eidx * Mux(io.req.bits.uop.uopc === uopVLDS, io.req.bits.rs2_data, MuxLookup(
+      Mux(io.req.bits.uop.vec_val && io.req.bits.uop.is_load, io.req.bits.uop.rd_vew, io.req.bits.uop.rs3_vew), VEW_DISABLE, Array(
+      VEW_8  -> UInt(1),
+      VEW_16 -> UInt(2),
+      VEW_32 -> UInt(4),
+      VEW_64 -> UInt(8))))) // TODO_vec : make this nicer with log2
    val bound_off = Cat(UInt(0), io.vl << MuxLookup(
-      Mux(io.req.bits.uop.uopc === uopVLD, io.req.bits.uop.rd_vew, io.req.bits.uop.rs3_vew), VEW_DISABLE, Array(
+      Mux(io.req.bits.uop.vec_val && io.req.bits.uop.is_load, io.req.bits.uop.rd_vew, io.req.bits.uop.rs3_vew), VEW_DISABLE, Array(
          VEW_8  -> UInt(0),
          VEW_16 -> UInt(1),
          VEW_32 -> UInt(2),
@@ -648,8 +650,8 @@ class MemAddrCalcUnit(implicit p: Parameters)
       (((typ === MT_W) || (typ === MT_WU)) && (effective_address(1,0) =/= UInt(0))) ||
       ((typ ===  MT_D) && (effective_address(2,0) =/= UInt(0)))
 
-   val ma_ld = io.req.valid && (io.req.bits.uop.uopc === uopLD || io.req.bits.uop.uopc === uopVLD) && misaligned
-   val ma_st = io.req.valid && (io.req.bits.uop.uopc === uopSTA || io.req.bits.uop.uopc === uopAMO_AG || io.req.bits.uop.uopc === uopVST) && misaligned
+   val ma_ld = io.req.valid && (io.req.bits.uop.is_load) && misaligned
+   val ma_st = io.req.valid && (io.req.bits.uop.is_store && !io.req.bits.uop.uopc === uopSTD) && misaligned
 
    io.resp.bits.mxcpt.valid := ma_ld || ma_st
    io.resp.bits.mxcpt.bits  := Mux(ma_ld, UInt(freechips.rocketchip.rocket.Causes.misaligned_load),
