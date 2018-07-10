@@ -47,6 +47,7 @@ with freechips.rocketchip.rocket.constants.VecCfgConstants
      val fromint        = Flipped(Decoupled(new ExeUnitResp(xLen))) // from integer RF
      val fromfp         = Flipped(Decoupled(new ExeUnitResp(xLen))) // from fp RF.
      val toint          = new DecoupledIO(new ExeUnitResp(xLen))
+     val memreq         = new DecoupledIO(new FuncUnitReq(xLen)) // Indexed load uops are issued here, executed in integer pipeline
 
      val wakeups        = Vec(num_wakeup_ports, Valid(new ExeUnitResp(128)))
      val wb_valids      = Input(Vec(num_wakeup_ports, Bool()))
@@ -152,7 +153,8 @@ with freechips.rocketchip.rocket.constants.VecCfgConstants
       iss_valids(i) := issue_unit.io.iss_valids(i)
       iss_uops(i) := issue_unit.io.iss_uops(i)
 
-      issue_unit.io.fu_types(i) := exe_units(i).io.fu_types & ~Mux(ll_wb_block_issue, FU_VALU | FU_VFPU, 0.U)
+      issue_unit.io.fu_types(i) := ((exe_units(i).io.fu_types & ~Mux(ll_wb_block_issue, FU_VALU | FU_VFPU, 0.U))
+         | Mux(io.memreq.ready, FU_MEM, 0.U))
 
       require (exe_units(i).uses_iss_unit)
    }
@@ -160,10 +162,6 @@ with freechips.rocketchip.rocket.constants.VecCfgConstants
    // Wakeup
    for ((writeback, issue_wakeup) <- io.wakeups zip issue_unit.io.wakeup_pdsts)
    {
-      when (writeback.valid)
-      {
-         // printf("%d Vec wakeup writeback valid received\n", io.debug_tsc_reg)
-      }
       issue_wakeup.valid := writeback.valid
       issue_wakeup.bits.pdst  := writeback.bits.uop.pdst
       issue_wakeup.bits.eidx  := writeback.bits.uop.eidx + writeback.bits.uop.rate // TODO_vec: This is a lot of adders
@@ -192,33 +190,49 @@ with freechips.rocketchip.rocket.constants.VecCfgConstants
 
    for ((ex,w) <- exe_units.withFilter(_.uses_iss_unit).map(x=>x).zipWithIndex)
    {
-      ex.io.req <> vregister_read.io.exe_reqs(w)
+      val exe_req = vregister_read.io.exe_reqs(w)
+      ex.io.req <> exe_req
       require (!ex.isBypassable)
-
       require (w == 0)
       if (w == 0) {
-         when (vregister_read.io.exe_reqs(w).bits.uop.uopc === uopVST) {
+         when (exe_req.bits.uop.uopc === uopVST || exe_req.bits.uop.is_load) {
             ex.io.req.valid := false.B
          }
 
 
-         val vew = vregister_read.io.exe_reqs(w).bits.uop.rs3_vew
-         val eidx = vregister_read.io.exe_reqs(w).bits.uop.eidx
+         val vew = Mux(exe_req.bits.uop.is_load,
+            exe_req.bits.uop.rs2_vew,
+            exe_req.bits.uop.rs3_vew)
+         val eidx = exe_req.bits.uop.eidx
          val shiftn = Cat((eidx <<
-            MuxLookup(vregister_read.io.exe_reqs(w).bits.uop.rs3_vew, VEW_8, Array(
+            MuxLookup(vew, VEW_8, Array(
                VEW_8  -> 0.U,
                VEW_16 -> 1.U,
                VEW_32 -> 2.U,
                VEW_64 -> 3.U))) & "b1111".U, 0.U(width=3.W))
 
-         tosdq.io.enq.valid     := vregister_read.io.exe_reqs(w).bits.uop.uopc === uopVST
-         tosdq.io.enq.bits.uop  := vregister_read.io.exe_reqs(w).bits.uop
-         tosdq.io.enq.bits.data := vregister_read.io.exe_reqs(w).bits.rs3_data >> shiftn
+         tosdq.io.enq.valid     := exe_req.bits.uop.uopc === uopVST
+         tosdq.io.enq.bits.uop  := exe_req.bits.uop
+         tosdq.io.enq.bits.data := exe_req.bits.rs3_data >> shiftn
          io.tosdq               <> tosdq.io.deq
          tosdq.io.deq.ready     := io.tosdq.ready
          io.tosdq.valid         := tosdq.io.deq.valid
          io.tosdq.bits.uop      := tosdq.io.deq.bits.uop
          io.tosdq.bits.data     := tosdq.io.deq.bits.data
+
+
+         io.memreq.valid         := exe_req.bits.uop.uopc === uopVLDX
+         io.memreq.bits.uop      := exe_req.bits.uop
+         io.memreq.bits.rs1_data := exe_req.bits.rs1_data
+         io.memreq.bits.rs2_data := (exe_req.bits.rs2_data >> shiftn) & MuxLookup(vew, VEW_8, Array(
+            VEW_8  -> "hff".U,
+            VEW_16 -> "hffff".U,
+            VEW_32 -> "hffffffff".U,
+            VEW_64 -> "hffffffffffffffff".U)) // This is bad
+         io.memreq.bits.rs3_data := DontCare
+
+         // assert (!(io.memreq.valid && !io.memreq.ready), "No backpressure. Redesign")
+         // This technically doesn't follow the ready-valid interface
       }
    }
    require (exe_units.num_total_bypass_ports == 0)

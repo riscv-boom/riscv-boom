@@ -38,7 +38,7 @@ import freechips.rocketchip.rocket.Causes
 import freechips.rocketchip.util.{Str, UIntIsOneOf}
 import boom.common._
 import boom.exu.FUConstants._
-import boom.util.{GetNewUopAndBrMask, Sext, WrapInc}
+import boom.util.{GetNewUopAndBrMask, Sext, WrapInc, QueueForFuncUnitReq}
 
 
 //-------------------------------------------------------------
@@ -612,7 +612,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
          iu.io.dis_uops(w).iqtype     := IQT_INT
          iu.io.dis_uops(w).fu_code    := FU_I2V
          iu.io.dis_uops(w).lrs3_rtype := RT_X
-         iu.io.dis_uops(w).prs3_busy  := Bool(false)
+         iu.io.dis_uops(w).prs3_busy  := false.B
       } .elsewhen (dis_uops(w).uopc === uopVEXTRACT) {
          assert(dis_uops(w).lrs1_rtype === RT_VEC)
          iu.io.dis_valids(w)          := dis_valids(w) && UInt(iu.iqType) === IQT_INT
@@ -621,7 +621,17 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
          iu.io.dis_uops(w).iqtype     := IQT_INT
          iu.io.dis_uops(w).fu_code    := FU_I2V
          iu.io.dis_uops(w).lrs1_rtype := RT_X
-         iu.io.dis_uops(w).prs1_busy  := Bool(false)
+         iu.io.dis_uops(w).prs1_busy  := false.B
+      } .elsewhen (dis_uops(w).uopc === uopVLDX) {
+         assert(dis_uops(w).dst_rtype === RT_VEC)
+         iu.io.dis_valids(w)          := dis_valids(w) && UInt(iu.iqType) === IQT_INT
+         iu.io.dis_uops(w).vec_val    := false.B
+         iu.io.dis_uops(w).uopc       := uopTOVEC
+         iu.io.dis_uops(w).iqtype     := IQT_INT
+         iu.io.dis_uops(w).fu_code    := FU_I2V
+         iu.io.dis_uops(w).lrs2_rtype := RT_X
+         iu.io.dis_uops(w).prs2_busy  := false.B
+         iu.io.dis_uops(w).prs3_busy  := false.B
       }
    }
 
@@ -825,6 +835,12 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    // **** Execute Stage ****
    //-------------------------------------------------------------
    //-------------------------------------------------------------
+   val vec_memreq = Module(new QueueForFuncUnitReq(entries=4, data_width=xLen))
+   vec_memreq.io.brinfo      := br_unit.brinfo
+   vec_memreq.io.flush       := rob.io.flush.valid
+   vec_memreq.io.enq.valid   := vec_pipeline.io.memreq.valid
+   vec_memreq.io.enq.bits    := vec_pipeline.io.memreq.bits
+
 
    var idx = 0
    for (w <- 0 until exe_units.length)
@@ -842,6 +858,19 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
             bypasses.uop(idx)   := exe_units(w).io.bypass.uop(i)
             bypasses.data(idx)  := exe_units(w).io.bypass.data(i)
             idx = idx + 1
+         }
+      }
+      if (exe_units(w).is_mem_unit)
+      {
+         vec_pipeline.io.memreq.ready := (vec_memreq.io.count < 2.U) && (exe_units(w).io.fu_types & FU_MEM).orR
+         // TODO_Vec: Make this an arbiter
+         when (!iregister_read.io.exe_reqs(w).valid && vec_memreq.io.deq.valid)
+         {
+            vec_memreq.io.deq.ready      := true.B
+            exe_units(w).io.req.valid    := vec_memreq.io.deq.valid
+            exe_units(w).io.req.bits     := vec_memreq.io.deq.bits
+         } .otherwise {
+            vec_memreq.io.deq.ready       := false.B
          }
       }
 

@@ -116,7 +116,8 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean, isVec: Boolean
    val next_eidx = Mux(incr_eidx > io.vl, io.vl, incr_eidx) // The next eidx after this gets executed
                                                             // Updated_eidx may be set to this
 
-   val next_next_eidx = next_eidx + slotUop.rate
+   val next_incr_eidx = next_eidx + slotUop.rate
+   val next_next_eidx = Mux(next_incr_eidx > io.vl, io.vl, next_incr_eidx)
    
    when (io.in_uop.valid)
    {

@@ -681,7 +681,7 @@ class MemExeUnit(implicit p: Parameters) extends ExecutionUnit(num_rf_read_ports
 
 
    val to_lsu_vsta = Module(new Queue(new FuncUnitResp(128), 4))
-   val to_lsu_resp = Module(new QueueForFuncUnitResp(6, 128))
+   val to_lsu_resp = Module(new QueueForFuncUnitResp(8, 128))
 
    assert(!(maddrcalc.io.resp.valid && maddrcalc.io.resp.bits.uop.uopc =/= uopVST && !to_lsu_resp.io.enq.ready),
       "We do not support backpressure on this queue")

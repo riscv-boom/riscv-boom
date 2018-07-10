@@ -601,12 +601,14 @@ class MemAddrCalcUnit(implicit p: Parameters)
    assert(io.req.bits.uop.vec_val || io.req.bits.uop.eidx === UInt(0), "Eidx should be 0 for normal insts")
 
    // TODO_Vec: This probably shouldn't be a multiplier. 
-   val eidx_off = Cat(UInt(0), io.req.bits.uop.eidx * Mux(io.req.bits.uop.uopc === uopVLDS, io.req.bits.rs2_data, MuxLookup(
+   val eidx_off = Mux(io.req.bits.uop.uopc === uopVLDX,
+      io.req.bits.rs2_data,
+      Cat(UInt(0), io.req.bits.uop.eidx * Mux(io.req.bits.uop.uopc === uopVLDS, io.req.bits.rs2_data, MuxLookup(
       Mux(io.req.bits.uop.vec_val && io.req.bits.uop.is_load, io.req.bits.uop.rd_vew, io.req.bits.uop.rs3_vew), VEW_DISABLE, Array(
       VEW_8  -> UInt(1),
       VEW_16 -> UInt(2),
       VEW_32 -> UInt(4),
-      VEW_64 -> UInt(8))))) // TODO_vec : make this nicer with log2
+      VEW_64 -> UInt(8)))))) // TODO_vec : make this nicer with log2
    val bound_off = Cat(UInt(0), io.vl << MuxLookup(
       Mux(io.req.bits.uop.vec_val && io.req.bits.uop.is_load, io.req.bits.uop.rd_vew, io.req.bits.uop.rs3_vew), VEW_DISABLE, Array(
          VEW_8  -> UInt(0),
