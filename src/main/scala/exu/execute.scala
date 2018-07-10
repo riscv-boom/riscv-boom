@@ -683,10 +683,10 @@ class MemExeUnit(implicit p: Parameters) extends ExecutionUnit(num_rf_read_ports
    val to_lsu_vsta = Module(new Queue(new FuncUnitResp(128), 4))
    val to_lsu_resp = Module(new QueueForFuncUnitResp(8, 128))
 
-   assert(!(maddrcalc.io.resp.valid && maddrcalc.io.resp.bits.uop.uopc =/= uopVST && !to_lsu_resp.io.enq.ready),
+   assert(!(maddrcalc.io.resp.valid && !(maddrcalc.io.resp.bits.uop.vec_val && maddrcalc.io.resp.bits.uop.is_store) && !to_lsu_resp.io.enq.ready),
       "We do not support backpressure on this queue")
 
-   to_lsu_resp.io.enq.valid := maddrcalc.io.resp.valid && maddrcalc.io.resp.bits.uop.uopc =/= uopVST
+   to_lsu_resp.io.enq.valid := maddrcalc.io.resp.valid && !(maddrcalc.io.resp.bits.uop.vec_val && maddrcalc.io.resp.bits.uop.is_store)
    to_lsu_resp.io.enq.bits  := maddrcalc.io.resp.bits
    to_lsu_resp.io.brinfo    := io.brinfo
    to_lsu_resp.io.flush     := io.req.bits.kill
@@ -694,10 +694,10 @@ class MemExeUnit(implicit p: Parameters) extends ExecutionUnit(num_rf_read_ports
    io.lsu_io.exe_resp       <> to_lsu_resp.io.deq
 
    // Vector store addrs need to go through a separate queue to avoid blocking loads
-   assert(!(maddrcalc.io.resp.valid && maddrcalc.io.resp.bits.uop.uopc === uopVST && !to_lsu_vsta.io.enq.ready),
+   assert(!(maddrcalc.io.resp.valid && maddrcalc.io.resp.bits.uop.vec_val && maddrcalc.io.resp.bits.uop.is_store && !to_lsu_vsta.io.enq.ready),
       "We do not support backpressure on this queue")
 
-   to_lsu_vsta.io.enq.valid := maddrcalc.io.resp.valid && maddrcalc.io.resp.bits.uop.uopc === uopVST
+   to_lsu_vsta.io.enq.valid := maddrcalc.io.resp.valid && maddrcalc.io.resp.bits.uop.vec_val && maddrcalc.io.resp.bits.uop.is_store
    to_lsu_vsta.io.enq.bits  := maddrcalc.io.resp.bits
    io.lsu_io.exe_vsta       <> to_lsu_vsta.io.deq
 

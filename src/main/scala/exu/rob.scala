@@ -338,7 +338,7 @@ class Rob(
             rob_bsy(cidx) := false.B
             
             val next_eidx = UInt(1) + rob_uop(cidx).eidx // todo_vec For now only rate 1 stores
-            when (rob_uop(cidx).uopc === uopVST && rob_uop(cidx).vec_val && next_eidx < io.vl) {
+            when (rob_uop(cidx).is_store && rob_uop(cidx).vec_val && next_eidx < io.vl) {
                rob_bsy(cidx) := true.B
                rob_uop(cidx).eidx := next_eidx
                when (cidx === rob_head) {

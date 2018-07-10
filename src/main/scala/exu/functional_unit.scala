@@ -600,10 +600,13 @@ class MemAddrCalcUnit(implicit p: Parameters)
    val imm = Mux(io.req.bits.uop.vec_val && io.req.bits.uop.is_load, io.req.bits.uop.imm_packed(19,15), io.req.bits.uop.imm_packed(19,8))
    assert(io.req.bits.uop.vec_val || io.req.bits.uop.eidx === UInt(0), "Eidx should be 0 for normal insts")
 
+   val is_strided = io.req.bits.uop.uopc === uopVLDS || io.req.bits.uop.uopc === uopVSTS
+   val is_indexed = io.req.bits.uop.uopc === uopVLDX || io.req.bits.uop.uopc === uopVSTX
+
    // TODO_Vec: This probably shouldn't be a multiplier. 
-   val eidx_off = Mux(io.req.bits.uop.uopc === uopVLDX,
+   val eidx_off = Mux(is_indexed,
       io.req.bits.rs2_data,
-      Cat(UInt(0), io.req.bits.uop.eidx * Mux(io.req.bits.uop.uopc === uopVLDS, io.req.bits.rs2_data, MuxLookup(
+      Cat(UInt(0), io.req.bits.uop.eidx * Mux(is_strided, io.req.bits.rs2_data, MuxLookup(
       Mux(io.req.bits.uop.vec_val && io.req.bits.uop.is_load, io.req.bits.uop.rd_vew, io.req.bits.uop.rs3_vew), VEW_DISABLE, Array(
       VEW_8  -> UInt(1),
       VEW_16 -> UInt(2),

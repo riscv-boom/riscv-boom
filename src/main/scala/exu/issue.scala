@@ -198,10 +198,10 @@ abstract class IssueUnit(
             , Mux(issue_slots(i).debug.p1, Str("!"), Str(" "))
             , Mux(issue_slots(i).debug.p2, Str("!"), Str(" "))
             , Mux(issue_slots(i).debug.p3, Str("!"), Str(" "))
-            , issue_slots(i).uop.pop1
-            , issue_slots(i).uop.pop2
-            , issue_slots(i).uop.pop3
-            , issue_slots(i).uop.pdst
+            , Mux(issue_slots(i).uop.lrs1_rtype === RT_X, 99.U, issue_slots(i).uop.pop1)
+            , Mux(issue_slots(i).uop.lrs2_rtype === RT_X, 99.U, issue_slots(i).uop.pop2)
+            , Mux(issue_slots(i).uop.lrs3_rtype === RT_X, 99.U, issue_slots(i).uop.pop3)
+            , Mux(issue_slots(i).uop.dst_rtype  === RT_X, 99.U, issue_slots(i).uop.pdst)
             , Mux(issue_slots(i).uop.dst_rtype === RT_FIX, Str("X"),
               Mux(issue_slots(i).uop.dst_rtype === RT_X, Str("-"),
               Mux(issue_slots(i).uop.dst_rtype === RT_FLT, Str("f"),

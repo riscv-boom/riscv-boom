@@ -637,7 +637,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
          io.memreq_val   := Bool(true)
          stq_executed(stq_execute_head) := Bool(true)
          val next_eidx = stq_uop(stq_execute_head).eidx + UInt(1)
-         val invalidate_head = !(stq_uop(stq_execute_head).uopc === uopVST && next_eidx < io.vl)
+         val invalidate_head = !(stq_uop(stq_execute_head).vec_val && next_eidx < io.vl)
          stq_execute_head := Mux(invalidate_head, WrapInc(stq_execute_head, num_st_entries), stq_execute_head)
          mem_fired_st := Bool(true)
       }
@@ -1018,7 +1018,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
       {
          stq_succeeded(io.memresp.bits.stq_idx) := Bool(true)
 
-         when (stq_uop(io.memresp.bits.stq_idx).uopc === uopVST) {
+         when (stq_uop(io.memresp.bits.stq_idx).vec_val) {
             val next_eidx = stq_uop(io.memresp.bits.stq_idx).eidx + UInt(1)
             saq_val(io.memresp.bits.stq_idx)        := Bool(false)
             sdq_val(io.memresp.bits.stq_idx)        := Bool(false)

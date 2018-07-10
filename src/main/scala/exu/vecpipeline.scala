@@ -121,12 +121,15 @@ with freechips.rocketchip.rocket.constants.VecCfgConstants
       issue_unit.io.dis_valids(w) := io.dis_valids(w) && io.dis_uops(w).iqtype === issue_unit.iqType.U
       issue_unit.io.dis_uops(w) := io.dis_uops(w)
 
-      when (io.dis_uops(w).uopc === uopVST && io.dis_uops(w).lrs3_rtype === RT_VEC) {
+      when (io.dis_uops(w).vec_val && io.dis_uops(w).is_store) {
          issue_unit.io.dis_valids(w)          := io.dis_valids(w)
-         issue_unit.io.dis_uops(w).uopc       := uopVST
          issue_unit.io.dis_uops(w).fu_code    := FUConstants.FU_VALU
          issue_unit.io.dis_uops(w).lrs1_rtype := RT_X
          issue_unit.io.dis_uops(w).prs1_busy  := false.B
+         when (io.dis_uops(w).uopc === uopVSTS) {
+            issue_unit.io.dis_uops(w).lrs2_rtype := RT_X
+            issue_unit.io.dis_uops(w).prs2_busy  := false.B
+         }
       }
       when (issue_unit.io.dis_uops(w).lrs1_rtype === RT_FLT || issue_unit.io.dis_uops(w).lrs1_rtype === RT_FIX) {
          issue_unit.io.dis_uops(w).prs1_busy := true.B
@@ -195,7 +198,7 @@ with freechips.rocketchip.rocket.constants.VecCfgConstants
       require (!ex.isBypassable)
       require (w == 0)
       if (w == 0) {
-         when (exe_req.bits.uop.uopc === uopVST || exe_req.bits.uop.is_load) {
+         when (exe_req.bits.uop.is_store || exe_req.bits.uop.is_load) {
             ex.io.req.valid := false.B
          }
 
@@ -211,7 +214,7 @@ with freechips.rocketchip.rocket.constants.VecCfgConstants
                VEW_32 -> 2.U,
                VEW_64 -> 3.U))) & "b1111".U, 0.U(width=3.W))
 
-         tosdq.io.enq.valid     := exe_req.bits.uop.uopc === uopVST
+         tosdq.io.enq.valid     := exe_req.bits.uop.is_store
          tosdq.io.enq.bits.uop  := exe_req.bits.uop
          tosdq.io.enq.bits.data := exe_req.bits.rs3_data >> shiftn
          io.tosdq               <> tosdq.io.deq

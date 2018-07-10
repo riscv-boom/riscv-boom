@@ -371,8 +371,9 @@ class RegisterReadDecode(supported_units: SupportedFuncUnits)(implicit p: Parame
    io.rrd_uop.ctrl.op_fcn  := rrd_cs.op_fcn.asUInt
    io.rrd_uop.ctrl.fcn_dw  := rrd_cs.fcn_dw.toBool
    io.rrd_uop.ctrl.is_load := io.rrd_uop.is_load
-   io.rrd_uop.ctrl.is_sta  := io.rrd_uop.uopc === uopSTA || io.rrd_uop.uopc === uopAMO_AG || io.rrd_uop.uopc === uopVST
-   io.rrd_uop.ctrl.is_std  := io.rrd_uop.uopc === uopSTD || (io.rrd_uop.ctrl.is_sta && io.rrd_uop.lrs2_rtype === RT_FIX)
+   io.rrd_uop.ctrl.is_sta  := io.rrd_uop.uopc === uopSTA || io.rrd_uop.uopc === uopAMO_AG || (io.rrd_uop.vec_val && io.rrd_uop.is_store)
+   io.rrd_uop.ctrl.is_std  := io.rrd_uop.uopc === uopSTD || (io.rrd_uop.ctrl.is_sta && io.rrd_uop.lrs2_rtype === RT_FIX && !io.rrd_uop.vec_val)
+   // Vec store data should never go through here
 
    when (io.rrd_uop.uopc === uopAMO_AG)
    {
