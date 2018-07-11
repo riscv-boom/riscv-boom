@@ -124,8 +124,10 @@ with freechips.rocketchip.rocket.constants.VecCfgConstants
       when (io.dis_uops(w).vec_val && io.dis_uops(w).is_store) {
          issue_unit.io.dis_valids(w)          := io.dis_valids(w)
          issue_unit.io.dis_uops(w).fu_code    := FUConstants.FU_VALU
-         issue_unit.io.dis_uops(w).lrs1_rtype := RT_X
-         issue_unit.io.dis_uops(w).prs1_busy  := false.B
+         when (io.dis_uops(w).uopc =/= uopVSTX) {
+            issue_unit.io.dis_uops(w).lrs1_rtype := RT_X
+            issue_unit.io.dis_uops(w).prs1_busy  := false.B
+         }
          when (io.dis_uops(w).uopc === uopVSTS) {
             issue_unit.io.dis_uops(w).lrs2_rtype := RT_X
             issue_unit.io.dis_uops(w).prs2_busy  := false.B
@@ -224,7 +226,7 @@ with freechips.rocketchip.rocket.constants.VecCfgConstants
          io.tosdq.bits.data     := tosdq.io.deq.bits.data
 
 
-         io.memreq.valid         := exe_req.bits.uop.uopc === uopVLDX
+         io.memreq.valid         := exe_req.bits.uop.uopc === uopVLDX || exe_req.bits.uop.uopc === uopVSTX
          io.memreq.bits.uop      := exe_req.bits.uop
          io.memreq.bits.rs1_data := exe_req.bits.rs1_data
          io.memreq.bits.rs2_data := (exe_req.bits.rs2_data >> shiftn) & MuxLookup(vew, VEW_8, Array(

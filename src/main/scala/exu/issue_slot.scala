@@ -246,32 +246,35 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean, isVec: Boolean
    {
       when (io.wakeup_dsts(i).valid && (io.wakeup_dsts(i).bits.pdst === slotUop.pop1))
       {
-         updated_prs1_busy := false.B
-         if (containsVec) {
+         if (isVec) {
             when (slotUop.vec_val && slotUop.lrs1_rtype === RT_VEC) {
                updated_prs1_busy := Mux(io.grant, next_next_eidx, next_eidx) > io.wakeup_dsts(i).bits.eidx // TODO_Vec: Fix this somehow
                updated_prs1_eidx := io.wakeup_dsts(i).bits.eidx
             }
+         } else {
+            updated_prs1_busy := false.B
          }
       }
       when (io.wakeup_dsts(i).valid && (io.wakeup_dsts(i).bits.pdst === slotUop.pop2))
       {
-         updated_prs2_busy := false.B
-         if (containsVec) {
+         if (isVec) {
             when (slotUop.vec_val && slotUop.lrs2_rtype === RT_VEC) {
                updated_prs2_busy := Mux(io.grant, next_next_eidx, next_eidx) > io.wakeup_dsts(i).bits.eidx
                updated_prs2_eidx := io.wakeup_dsts(i).bits.eidx
             }
+         } else {
+            updated_prs2_busy := false.B
          }
       }
       when (io.wakeup_dsts(i).valid && (io.wakeup_dsts(i).bits.pdst === slotUop.pop3))
       {
-         updated_prs3_busy := false.B
-         if (containsVec) {
+         if (isVec) {
             when (slotUop.vec_val && slotUop.lrs3_rtype === RT_VEC) {
                updated_prs3_busy := Mux(io.grant, next_next_eidx, next_eidx) > io.wakeup_dsts(i).bits.eidx
                updated_prs3_eidx := io.wakeup_dsts(i).bits.eidx
             }
+         } else {
+            updated_prs3_busy := false.B
          }
       }
    }

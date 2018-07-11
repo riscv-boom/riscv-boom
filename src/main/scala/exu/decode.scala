@@ -362,9 +362,10 @@ object VecDecode extends DecodeConstants
    VNMSUB    ->List(Y, N, Y, N, uopVNMSUB,  IQT_VEC,FU_POLY,RT_VEC , RT_POLY, RT_POLY, RT_POLY, N, IS_X, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, N, N, N, CSR.N),
    VLD       ->List(Y, N, Y, N, uopVLD   ,  IQT_MEM,FU_MEM ,RT_VEC , RT_FIX , RT_X   , RT_X   , N, IS_I, Y, N, N, N, N, M_XRD, MT_D , UInt(0), N, N, N, N, N, N, N, CSR.N),
    VLDS      ->List(Y, N, Y, N, uopVLDS  ,  IQT_MEM,FU_MEM ,RT_VEC , RT_FIX , RT_FIX , RT_X   , N, IS_I, Y, N, N, N, N, M_XRD, MT_D , UInt(0), N, N, N, N, N, N, N, CSR.N),
-   VLDX      ->List(Y, N, Y, N, uopVLDX  ,  IQT_VEC,FU_MEM ,RT_VEC , RT_FIX , RT_VEC , RT_POLY, N, IS_I, Y, N, N, N, N, M_XRD, MT_D , UInt(0), N, N, N, N, N, N, N, CSR.N),
+   VLDX      ->List(Y, N, Y, N, uopVLDX  ,  IQT_VEC,FU_MEM ,RT_VEC , RT_FIX , RT_VEC , RT_X   , N, IS_I, Y, N, N, N, N, M_XRD, MT_D , UInt(0), N, N, N, N, N, N, N, CSR.N),
    VST       ->List(Y, N, Y, N, uopVST   ,  IQT_MEM,FU_MEM ,RT_X   , RT_FIX , RT_X   , RT_VEC , N, IS_S, N, Y, N, N, N, M_XWR, MT_D , UInt(0), N, N, N, N, N, N, N, CSR.N),
    VSTS      ->List(Y, N, Y, N, uopVSTS  ,  IQT_MEM,FU_MEM ,RT_X   , RT_FIX , RT_FIX , RT_VEC , N, IS_S, N, Y, N, N, N, M_XWR, MT_D , UInt(0), N, N, N, N, N, N, N, CSR.N),
+   VSTX      ->List(Y, N, Y, N, uopVSTX  ,  IQT_VEC,FU_MEM ,RT_X   , RT_FIX , RT_VEC , RT_VEC , N, IS_S, N, Y, N, N, N, M_XWR, MT_D , UInt(0), N, N, N, N, N, N, N, CSR.N),
    VINSERT   ->List(Y, N, Y, N, uopVINSERT, IQT_VEC,FU_VALU,RT_POLY, RT_FIX , RT_FIX , RT_VEC , N, IS_X, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, N, N, N, CSR.N),
    VEXTRACT  ->List(Y, N, Y, N, uopVEXTRACT,IQT_VEC,FU_VALU,RT_FIX , RT_POLY, RT_FIX , RT_X   , N, IS_X, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, N, N, N, CSR.N),
    VADDI     ->List(Y, N, Y, N, uopVADDI ,  IQT_VEC,FU_VALU,RT_VEC , RT_POLY, RT_X   , RT_X   , N, IS_V, N, N, N, N, N, M_X  , MT_X , UInt(0), N, N, N, N, N, N, N, CSR.N)

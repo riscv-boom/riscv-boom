@@ -597,7 +597,8 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       when (dis_uops(w).uopc === uopSTA && dis_uops(w).lrs2_rtype === RT_FLT) {
          iu.io.dis_uops(w).lrs2_rtype := RT_X
          iu.io.dis_uops(w).prs2_busy  := Bool(false)
-      } .elsewhen (dis_uops(w).vec_val && dis_uops(w).is_store && dis_uops(w).lrs3_rtype === RT_VEC) {
+      } .elsewhen (dis_uops(w).vec_val && dis_uops(w).is_store && dis_uops(w).lrs3_rtype === RT_VEC && dis_uops(w).uopc =/= uopVSTX) {
+         // VSTX gets issued by vector pipeline
          iu.io.dis_uops(w).fu_code    := FU_VSTA
          iu.io.dis_uops(w).lrs3_rtype := RT_X
          iu.io.dis_uops(w).prs3_busy  := Bool(false)
@@ -622,8 +623,8 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
          iu.io.dis_uops(w).fu_code    := FU_I2V
          iu.io.dis_uops(w).lrs1_rtype := RT_X
          iu.io.dis_uops(w).prs1_busy  := false.B
-      } .elsewhen (dis_uops(w).uopc === uopVLDX) {
-         assert(dis_uops(w).dst_rtype === RT_VEC)
+      } .elsewhen (dis_uops(w).uopc === uopVLDX || dis_uops(w).uopc === uopVSTX) {
+         //assert(dis_uops(w).dst_rtype === RT_VEC)
          iu.io.dis_valids(w)          := dis_valids(w) && UInt(iu.iqType) === IQT_INT
          iu.io.dis_uops(w).vec_val    := false.B
          iu.io.dis_uops(w).uopc       := uopTOVEC
@@ -632,7 +633,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
          iu.io.dis_uops(w).lrs2_rtype := RT_X
          iu.io.dis_uops(w).prs2_busy  := false.B
          iu.io.dis_uops(w).prs3_busy  := false.B
-      }
+      } 
    }
 
    fp_pipeline.io.dis_valids <> dis_valids
@@ -835,12 +836,12 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    // **** Execute Stage ****
    //-------------------------------------------------------------
    //-------------------------------------------------------------
-   val vec_memreq = Module(new QueueForFuncUnitReq(entries=4, data_width=xLen))
+   val vec_memreq = Module(new QueueForFuncUnitReq(entries=6, data_width=xLen))
    vec_memreq.io.brinfo      := br_unit.brinfo
    vec_memreq.io.flush       := rob.io.flush.valid
    vec_memreq.io.enq.valid   := vec_pipeline.io.memreq.valid
    vec_memreq.io.enq.bits    := vec_pipeline.io.memreq.bits
-
+   assert(!(vec_memreq.io.enq.valid && !vec_memreq.io.enq.ready), "Can't backpressure here")
 
    var idx = 0
    for (w <- 0 until exe_units.length)
