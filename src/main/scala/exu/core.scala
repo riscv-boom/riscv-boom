@@ -586,8 +586,6 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
       iu.io.vl := csr.io.vecstatus.vl
 
-      iu.io.stdata_ready      := true.B
-
       iu.io.lsu_stq_head      := lsu.io.stq_head
 
       iu.io.commit_load_at_rob_head := rob.io.com_load_is_at_rob_head

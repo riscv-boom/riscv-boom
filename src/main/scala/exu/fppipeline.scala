@@ -111,7 +111,6 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
 
    issue_unit.io.vl := io.vl
 
-   issue_unit.io.stdata_ready      := true.B
    issue_unit.io.lsu_stq_head      := io.lsu_stq_head
    issue_unit.io.commit_load_at_rob_head := io.commit_load_at_rob_head
    issue_unit.io.commit_store_at_rob_head := io.commit_store_at_rob_head

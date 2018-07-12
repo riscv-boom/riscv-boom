@@ -131,7 +131,11 @@ class IssueUnitCollasping(
    val min_eidx = Wire(UInt(width=VL_SZ.W))
    if (containsVec && !isVec) {
       min_eidx := issue_slots.foldLeft(Fill(VL_SZ, 1.U)) {
-         (x, y) => Mux((x > y.uop.eidx) && y.request && y.uop.vec_val && (y.uop.fu_code & all_available_fu) =/= 0.U, y.uop.eidx, x)
+         (x, y) => Mux(((x > y.uop.eidx)
+            && y.request
+            && y.uop.vec_val
+            && (y.uop.fu_code & all_available_fu) === y.uop.fu_code)
+            , y.uop.eidx, x)
       }
    }
    else
@@ -146,7 +150,7 @@ class IssueUnitCollasping(
 
       for (w <- 0 until issue_width)
       {
-         val can_allocate = (issue_slots(i).uop.fu_code & io.fu_types(w)) =/= 0.U
+         val can_allocate = (issue_slots(i).uop.fu_code & io.fu_types(w)) === issue_slots(i).uop.fu_code
          val vec_eidx_issue = !containsVec.B || issue_slots(i).uop.eidx === min_eidx || !issue_slots(i).uop.vec_val || isVec.B
          val was_port_issued_yet = port_issued(w)
          when (requests(i) && !uop_issued && can_allocate && !port_issued(w) && vec_eidx_issue)

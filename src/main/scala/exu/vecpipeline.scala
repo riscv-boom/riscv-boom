@@ -96,7 +96,6 @@ with freechips.rocketchip.rocket.constants.VecCfgConstants
    issue_unit.io.flush_pipeline := io.flush_pipeline
    issue_unit.io.vl := io.vl
 
-   issue_unit.io.stdata_ready      := tosdq.io.count < 2.U
    issue_unit.io.lsu_stq_head      := io.lsu_stq_head
    issue_unit.io.commit_load_at_rob_head := io.commit_load_at_rob_head
    issue_unit.io.commit_store_at_rob_head := io.commit_store_at_rob_head
@@ -123,7 +122,7 @@ with freechips.rocketchip.rocket.constants.VecCfgConstants
 
       when (io.dis_uops(w).vec_val && io.dis_uops(w).is_store) {
          issue_unit.io.dis_valids(w)          := io.dis_valids(w)
-         issue_unit.io.dis_uops(w).fu_code    := FUConstants.FU_VALU
+         issue_unit.io.dis_uops(w).fu_code    := io.dis_uops(w).fu_code | FU_V2I
          when (io.dis_uops(w).uopc =/= uopVSTX) {
             issue_unit.io.dis_uops(w).lrs1_rtype := RT_X
             issue_unit.io.dis_uops(w).prs1_busy  := false.B
@@ -159,7 +158,7 @@ with freechips.rocketchip.rocket.constants.VecCfgConstants
       iss_uops(i) := issue_unit.io.iss_uops(i)
 
       issue_unit.io.fu_types(i) := ((exe_units(i).io.fu_types & ~Mux(ll_wb_block_issue, FU_VALU | FU_VFPU, 0.U))
-         | Mux(io.memreq.ready, FU_MEM, 0.U))
+         | Mux(io.memreq.ready, FU_MEM, 0.U)) | Mux(tosdq.io.count < 2.U, FU_V2I, 0.U)
 
       require (exe_units(i).uses_iss_unit)
    }

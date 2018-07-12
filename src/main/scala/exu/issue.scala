@@ -69,8 +69,6 @@ class IssueUnitIO(
    val tsc_reg        = Input(UInt(width=xLen.W))
    val vl             = Input(UInt(width=VL_SZ.W))
 
-   val stdata_ready        = Input(Bool())
-
    val lsu_stq_head        = Input(UInt())
    val commit_load_at_rob_head = Input(Bool())
    val commit_store_at_rob_head = Input(Bool())
@@ -121,8 +119,6 @@ abstract class IssueUnit(
    val slots = for (i <- 0 until num_issue_slots) yield { val slot = Module(new IssueSlot(num_wakeup_ports, containsVec, isVec)); slot; }
    val issue_slots = VecInit(slots.map(_.io))
    for (i <- 0 until num_issue_slots) yield {
-      issue_slots(i).stdata_ready      := io.stdata_ready
-
       issue_slots(i).lsu_stq_head      := io.lsu_stq_head
       issue_slots(i).commit_load_at_rob_head := io.commit_load_at_rob_head
       issue_slots(i).commit_store_at_rob_head := io.commit_store_at_rob_head
