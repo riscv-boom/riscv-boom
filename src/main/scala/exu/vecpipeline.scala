@@ -57,8 +57,6 @@ with freechips.rocketchip.rocket.constants.VecCfgConstants
      val vl             = Input(UInt(width=VL_SZ.W))
 
      val lsu_stq_head      = Input(UInt())
-     val commit_load_at_rob_head = Input(Bool())
-     val commit_store_at_rob_head = Input(Bool())
   } 
 
    val exe_units = new boom.exu.ExecutionUnits(vec = true)
@@ -97,8 +95,6 @@ with freechips.rocketchip.rocket.constants.VecCfgConstants
    issue_unit.io.vl := io.vl
 
    issue_unit.io.lsu_stq_head      := io.lsu_stq_head
-   issue_unit.io.commit_load_at_rob_head := io.commit_load_at_rob_head
-   issue_unit.io.commit_store_at_rob_head := io.commit_store_at_rob_head
    issue_unit.io.fromfp_valid      := io.fromfp.valid
    issue_unit.io.fromfp_paddr      := io.fromfp.bits.uop.pdst
    issue_unit.io.fromfp_data       := io.fromfp.bits.data

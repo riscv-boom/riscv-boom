@@ -76,7 +76,6 @@ class RobIo(
    // tell the LSU that the head of the ROB is a load
    // (some loads can only execute once they are at the head of the ROB).
    val com_load_is_at_rob_head = Bool(OUTPUT)
-   val com_store_is_at_rob_head = Bool(OUTPUT)
 
    // Communicate exceptions to the CSRFile
    val com_xcpt = Valid(new CommitExceptionSignals())
@@ -853,7 +852,6 @@ class Rob(
    }
 
    io.com_load_is_at_rob_head  := rob_head_is_load(PriorityEncoder(rob_head_vals.asUInt))
-   io.com_store_is_at_rob_head := rob_head_is_store(PriorityEncoder(rob_head_vals.asUInt))
 
    //--------------------------------------------------
    // Handle passing out signals to printf in dpath

@@ -588,10 +588,6 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
       iu.io.lsu_stq_head      := lsu.io.stq_head
 
-      iu.io.commit_load_at_rob_head := rob.io.com_load_is_at_rob_head
-      iu.io.commit_store_at_rob_head := rob.io.com_store_is_at_rob_head
-
-
       when (dis_uops(w).uopc === uopSTA && dis_uops(w).lrs2_rtype === RT_FLT) {
          iu.io.dis_uops(w).lrs2_rtype := RT_X
          iu.io.dis_uops(w).prs2_busy  := Bool(false)
@@ -810,16 +806,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    fp_pipeline.io.vl := csr.io.vecstatus.vl
    vec_pipeline.io.vl := csr.io.vecstatus.vl
 
-   fp_pipeline.io.lsu_stq_head  := lsu.io.stq_head
    vec_pipeline.io.lsu_stq_head := lsu.io.stq_head
-
-   fp_pipeline.io.commit_load_at_rob_head  := rob.io.com_load_is_at_rob_head
-   vec_pipeline.io.commit_load_at_rob_head := rob.io.com_load_is_at_rob_head
-
-   fp_pipeline.io.commit_store_at_rob_head  := rob.io.com_store_is_at_rob_head
-   vec_pipeline.io.commit_store_at_rob_head := rob.io.com_store_is_at_rob_head
-
-
    vec_pipeline.io.fromfp <> fp_pipeline.io.tovec
 
    csr.io.hartid := io.hartid

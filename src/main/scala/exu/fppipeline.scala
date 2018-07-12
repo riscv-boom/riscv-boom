@@ -54,9 +54,6 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
       val debug_tsc_reg    = Input(UInt(width=xLen.W))
       val vl               = Input(UInt(width=VL_SZ.W))
 
-      val lsu_stq_head          = Input(UInt())
-      val commit_load_at_rob_head = Input(Bool())
-      val commit_store_at_rob_head = Input(Bool())
    }
 
    //**********************************
@@ -110,10 +107,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
    issue_unit.io.sxt_ldMiss := false.B
 
    issue_unit.io.vl := io.vl
-
-   issue_unit.io.lsu_stq_head      := io.lsu_stq_head
-   issue_unit.io.commit_load_at_rob_head := io.commit_load_at_rob_head
-   issue_unit.io.commit_store_at_rob_head := io.commit_store_at_rob_head
+   issue_unit.io.lsu_stq_head      := UInt(0)
 
    issue_unit.io.fromfp_valid      := DontCare
    issue_unit.io.fromfp_paddr      := DontCare

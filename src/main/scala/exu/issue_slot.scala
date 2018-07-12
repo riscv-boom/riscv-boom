@@ -39,8 +39,6 @@ class IssueSlotIO(num_wakeup_ports: Int)(implicit p: Parameters) extends BoomBun
    val vl             = Input(UInt(width=VL_SZ.W)) // The global vector length
 
    val lsu_stq_head        = Input(UInt())
-   val commit_load_at_rob_head = Input(Bool())
-   val commit_store_at_rob_head = Input(Bool())
    // TODO_vec: All this logic probably needs to be removed when separate vector memory unit is implemented
    // For now this tracks element indices of ops in the lsu ldq, we don't issue ops until the LDQ is ready to receive them
    // This is actually very bad since it is essentially unpipelined vector loads
@@ -340,8 +338,7 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean, isVec: Boolean
             io.request := (slot_p1 && slot_p2 && slot_p3 && !io.kill)
          } .elsewhen (slotUop.is_store) {
             io.request := (slot_p1 && slot_p2 && slot_p3 && !io.kill
-               && slotUop.stq_idx === io.lsu_stq_head
-               && io.commit_store_at_rob_head)
+               && slotUop.stq_idx === io.lsu_stq_head)
          }
       }
 

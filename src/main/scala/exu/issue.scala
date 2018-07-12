@@ -70,9 +70,6 @@ class IssueUnitIO(
    val vl             = Input(UInt(width=VL_SZ.W))
 
    val lsu_stq_head        = Input(UInt())
-   val commit_load_at_rob_head = Input(Bool())
-   val commit_store_at_rob_head = Input(Bool())
-
 
    // TODO_Vec: This is messy
    val fromfp_valid = Input(Bool())
@@ -120,8 +117,6 @@ abstract class IssueUnit(
    val issue_slots = VecInit(slots.map(_.io))
    for (i <- 0 until num_issue_slots) yield {
       issue_slots(i).lsu_stq_head      := io.lsu_stq_head
-      issue_slots(i).commit_load_at_rob_head := io.commit_load_at_rob_head
-      issue_slots(i).commit_store_at_rob_head := io.commit_store_at_rob_head
       issue_slots(i).vl := io.vl
       if (isVec) {
          issue_slots(i).fromfp_valid := io.fromfp_valid
