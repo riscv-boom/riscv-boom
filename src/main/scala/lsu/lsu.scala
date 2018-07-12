@@ -229,7 +229,10 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
    val bypassed_ldq_incr_idx = Wire(UInt(width=log2Ceil(num_ld_entries)))
    val bypassed_ldq_incr     = Wire(init = Bool(false))
 
-   // Issue helpers for vector instructions
+   // Bypass incremented vector stores
+   val bypassed_stq_incr_idx = Wire(UInt(width=log2Ceil(num_st_entries)))
+   val bypassed_stq_incr     = Wire(init = Bool(false))
+
    io.stq_head      := stq_head
 
 
@@ -346,7 +349,10 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
    // TODO_Vec: This method for dealing with killed ops in the queues may fail if the LSU fills up again with a valid entry
    //           Should figure out if this actually can fail
    // The VSTA head hasn't been killed by branch
-   when (io.exe_vsta.valid && !saq_val(io.exe_vsta.bits.uop.stq_idx))
+   when (io.exe_vsta.valid && (!saq_val(io.exe_vsta.bits.uop.stq_idx)
+                            || (io.exe_vsta.bits.uop.stq_idx === bypassed_stq_incr_idx
+                               && bypassed_stq_incr))
+   )
    {
       will_fire_sta_incoming := true.B
       tlb_avail              := false.B
@@ -683,7 +689,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
                                                                    // can we get around this?
       saq_is_virtual(exe_tlb_uop.stq_idx)      := tlb_miss
 
-      assert(!(will_fire_sta_incoming && saq_val(exe_tlb_uop.stq_idx)),
+      assert(!(will_fire_sta_incoming && saq_val(exe_tlb_uop.stq_idx) && exe_tlb_uop.stq_idx =/= bypassed_stq_incr_idx),
          "[lsu] incoming store is overwriting a valid address.")
    }
 
@@ -709,16 +715,16 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
       sdq_val (sidx) := Bool(true)
       sdq_data(sidx) := io.fp_stdata.bits.data.asUInt
    }
-   when (io.vec_stdata.valid)
+   val st_sidx = io.vec_stdata.bits.uop.stq_idx
+   when (io.vec_stdata.valid && (!sdq_val(st_sidx)
+                               || (io.vec_stdata.bits.uop.stq_idx === bypassed_stq_incr_idx && bypassed_stq_incr))
+   )
    {
-      val sidx = io.vec_stdata.bits.uop.stq_idx
-      when (!sdq_val(sidx)) {
-         io.vec_stdata.ready := true.B
-         sdq_val(sidx) := Bool(true)
-         sdq_data(sidx) := io.vec_stdata.bits.data.asUInt
-      } .otherwise {
-         io.vec_stdata.ready := false.B
-      }
+      io.vec_stdata.ready := true.B
+      sdq_val(st_sidx)    := Bool(true)
+      sdq_data(st_sidx)   := io.vec_stdata.bits.data.asUInt
+   } .otherwise {
+      io.vec_stdata.ready := false.B
    }
    assert(!(io.fp_stdata.valid && exe_resp_valid && exe_resp.uop.ctrl.is_std && io.vec_stdata.ready &&
       io.fp_stdata.bits.uop.stq_idx === exe_resp.uop.stq_idx),
@@ -1003,7 +1009,9 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
          laq_succeeded(io.memresp.bits.ldq_idx) := Bool(true)
          when (laq_uop(io.memresp.bits.ldq_idx).vec_val) {
             val next_eidx = laq_uop(io.memresp.bits.ldq_idx).eidx + UInt(1)
-            val bypass_executed                          = io.memreq_val && io.memreq_uop.ldq_idx === io.memresp.bits.ldq_idx && io.memreq_uop.is_load
+            val bypass_executed                          = (io.memreq_val
+                                                         && io.memreq_uop.ldq_idx === io.memresp.bits.ldq_idx
+                                                         && io.memreq_uop.is_load)
             laq_addr_val (io.memresp.bits.ldq_idx)      := bypass_executed
             laq_succeeded(io.memresp.bits.ldq_idx)      := next_eidx === io.vl
             laq_executed (io.memresp.bits.ldq_idx)      := next_eidx === io.vl || bypass_executed
@@ -1017,16 +1025,20 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
       .otherwise
       {
          stq_succeeded(io.memresp.bits.stq_idx) := Bool(true)
-
          when (stq_uop(io.memresp.bits.stq_idx).vec_val) {
             val next_eidx = stq_uop(io.memresp.bits.stq_idx).eidx + UInt(1)
-            saq_val(io.memresp.bits.stq_idx)        := Bool(false)
-            sdq_val(io.memresp.bits.stq_idx)        := Bool(false)
+            val bypass_executed_exe_resp             = (io.exe_vsta.ready
+                                                     && io.exe_vsta.bits.uop.stq_idx === io.memresp.bits.stq_idx)
+            val bypass_executed_vec_stdata           = (io.vec_stdata.ready
+                                                     && io.vec_stdata.bits.uop.stq_idx === io.memresp.bits.stq_idx)
+            saq_val(io.memresp.bits.stq_idx)        := bypass_executed_exe_resp
+            sdq_val(io.memresp.bits.stq_idx)        := bypass_executed_vec_stdata
             stq_uop(io.memresp.bits.stq_idx).eidx   := next_eidx
             stq_executed(io.memresp.bits.stq_idx)   := next_eidx === io.vl
-//            stq_committed(io.memresp.bits.stq_idx)  := Bool(false)
             stq_succeeded(io.memresp.bits.stq_idx)  := next_eidx === io.vl
 
+            bypassed_stq_incr_idx                   := io.memresp.bits.stq_idx
+            bypassed_stq_incr                       := next_eidx =/= io.vl
          }
 
          if (O3PIPEVIEW_PRINTF)
