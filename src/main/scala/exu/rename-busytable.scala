@@ -60,7 +60,6 @@ class BusyTableHelper(
    def BUSY     = true.B
    def NOT_BUSY = false.B
 
-   //TODO BUG chisel3
    val table_bsy = RegInit(VecInit(Seq.fill(num_pregs){false.B}))
 
    for (wb_idx <- 0 until num_wb_ports)

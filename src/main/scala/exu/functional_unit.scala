@@ -161,8 +161,6 @@ class BranchUnitResp(implicit p: Parameters) extends BoomBundle()(p)
 
    val brinfo          = new BrResolutionInfo()
    val btb_update      = Valid(new BoomBTBUpdate)
-
-   val xcpt            = Valid(new Exception)
 }
 
 abstract class FunctionalUnit(is_pipelined: Boolean
@@ -518,7 +516,6 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
       }
       bj_addr := (encodeVirtualAddress(targetXlen, targetXlen).asSInt & -2.S).asUInt
       br_unit.pc := uop_pc_
-      br_unit.xcpt := DontCare
       io.br_unit := br_unit
    }
 

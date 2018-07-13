@@ -69,7 +69,6 @@ class RobIo(
 
    val fflags = Flipped(Vec(num_fpu_ports, new ValidIO(new FFlagsResp())))
    val lxcpt = Flipped(new ValidIO(new Exception())) // LSU
-   val bxcpt = Flipped(new ValidIO(new Exception())) // BRU
 
    // Commit stage (free resources; also used for rollback).
    val commit = Output(new CommitSignals())
@@ -280,8 +279,7 @@ class Rob(
       when (io.enq_valids(w))
       {
          rob_val(rob_tail)       := true.B
-         rob_bsy(rob_tail)       := !io.enq_uops(w).is_fence &&
-                                    !(io.enq_uops(w).is_fencei)
+         rob_bsy(rob_tail)       := !io.enq_uops(w).is_fence && !io.enq_uops(w).is_fencei
          rob_uop(rob_tail)       := io.enq_uops(w)
          rob_exception(rob_tail) := io.enq_uops(w).exception
          rob_fflags(rob_tail)    := 0.U
@@ -370,17 +368,13 @@ class Rob(
       {
          rob_exception(GetRowIdx(io.lxcpt.bits.uop.rob_idx)) := true.B
       }
-      when (io.bxcpt.valid && MatchBank(GetBankIdx(io.bxcpt.bits.uop.rob_idx)))
-      {
-         rob_exception(GetRowIdx(io.bxcpt.bits.uop.rob_idx)) := true.B
-      }
       can_throw_exception(w) := rob_val(rob_head) && rob_exception(rob_head)
 
       //-----------------------------------------------
       // Commit or Rollback
 
       // Can this instruction commit? (the check for exceptions/rob_state happens later).
-      can_commit(w) := rob_val(rob_head) && !(rob_bsy(rob_head)) && !io.csr_stall
+      can_commit(w) := rob_val(rob_head) && !rob_bsy(rob_head) && !io.csr_stall
 
       val com_idx = Wire(UInt())
       com_idx := rob_head
@@ -615,20 +609,16 @@ class Rob(
 
    when (!(io.flush.valid || exception_thrown) && rob_state =/= s_rollback)
    {
-      when (io.lxcpt.valid || io.bxcpt.valid)
+      when (io.lxcpt.valid)
       {
-         val load_is_older =
-            (io.lxcpt.valid && !io.bxcpt.valid) ||
-            (io.lxcpt.valid && io.bxcpt.valid &&
-            IsOlder(io.lxcpt.bits.uop.rob_idx, io.bxcpt.bits.uop.rob_idx, rob_tail_idx))
-         val new_xcpt_uop = Mux(load_is_older, io.lxcpt.bits.uop, io.bxcpt.bits.uop)
+         val new_xcpt_uop = io.lxcpt.bits.uop
 
          when (!r_xcpt_val || IsOlder(new_xcpt_uop.rob_idx, r_xcpt_uop.rob_idx, rob_tail_idx))
          {
             r_xcpt_val              := true.B
             next_xcpt_uop           := new_xcpt_uop
-            next_xcpt_uop.exc_cause := Mux(io.lxcpt.valid, io.lxcpt.bits.cause, io.bxcpt.bits.cause)
-            r_xcpt_badvaddr         := Mux(io.lxcpt.valid, io.lxcpt.bits.badvaddr, io.bxcpt.bits.badvaddr)
+            next_xcpt_uop.exc_cause := io.lxcpt.bits.cause
+            r_xcpt_badvaddr         := io.lxcpt.bits.badvaddr
          }
       }
       .elsewhen (!r_xcpt_val && enq_xcpts.reduce(_|_))

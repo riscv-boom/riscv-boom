@@ -1081,7 +1081,6 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
    assert (!(csr.io.singleStep), "[core] single-step is unsupported.")
 
-   rob.io.bxcpt <> br_unit.xcpt
 
    //-------------------------------------------------------------
    // **** Flush Pipeline ****
