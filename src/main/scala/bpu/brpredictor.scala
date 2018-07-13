@@ -91,6 +91,7 @@ abstract class BrPredictor(val history_length: Int)(implicit p: Parameters) exte
    {
       val capture = Input(Bool())
       val s3_valid = Input(Bool())
+      val split = Input(Bool())
 
       // The PC to predict on.
       // req.valid is false if stalling (aka, we won't read and use results).
@@ -146,7 +147,7 @@ abstract class BrPredictor(val history_length: Int)(implicit p: Parameters) exte
       val status_prv = Input(UInt(freechips.rocketchip.rocket.PRV.SZ.W))
    })
 
-   val r_f1_fetchpc = RegEnable(io.req.bits.addr >> log2Ceil(fetchWidth*coreInstBytes), io.req.valid)
+   val r_f1_fetchpc = RegEnable(io.req.bits.addr, io.req.valid)
 
    // The global history register  that will be hashed with the fetch-pc to compute tags and indices for our branch predictors.
    val f0_history   = WireInit(0.U(history_length.W))
@@ -170,7 +171,7 @@ abstract class BrPredictor(val history_length: Int)(implicit p: Parameters) exte
       val ret = WireInit(0.U(history_length.W))
 
       //ret := ((addr >> 4.U) & 0xf.U) | (old << 4.U) -- for debugging
-      val pc = addr >> log2Ceil(fetchWidth*coreInstBytes)
+      val pc = addr >> log2Ceil(minCoreInstBytes)
       val foldpc = (pc >> 17) ^ pc
       val shamt = 2
       val sz0 = 6
@@ -261,7 +262,7 @@ abstract class BrPredictor(val history_length: Int)(implicit p: Parameters) exte
    //************************************************
    // Branch Prediction (F4 Stage)
 
-   when (io.resp.ready)
+   when (io.resp.ready || io.split)
    {
       r_f4_history := q_f3_history.io.deq.bits
    }

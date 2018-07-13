@@ -86,7 +86,7 @@ class GShareBrPredictor(
    {
       // fold history if too big for our table
       val folded_history = Fold (hist, idx_sz, history_length)
-      (addr ^ folded_history)(idx_sz-1,0)
+      ((addr >> log2Ceil(minCoreInstBytes)) ^ folded_history)(idx_sz-1,0)
    }
 
    // for initializing the counter table, this is the value to reset the row to.
@@ -203,10 +203,8 @@ class GShareBrPredictor(
    q_s3_resp.io.enq.bits.debug_index := RegNext(s1_ridx)
    //assert (q_s3_resp.io.enq.ready === !io.f2_stall)
 
-   val take_s2out_reg = Wire(Bool())
-   val s2out_reg = RegEnable(s2_out, take_s2out_reg)
-   val debug_index_reg = RegEnable(RegNext(s1_ridx), take_s2out_reg)
-   take_s2out_reg := io.capture
+   val s2out_reg = RegEnable(s2_out, io.capture)
+   val debug_index_reg = RegEnable(RegNext(s1_ridx), io.capture)
    when (io.s3_valid) {
       q_s3_resp.io.enq.bits.rowdata  := s2out_reg
       q_s3_resp.io.enq.bits.debug_index := debug_index_reg

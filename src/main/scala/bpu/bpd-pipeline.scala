@@ -57,7 +57,8 @@ class BranchPredictionStage(implicit p: Parameters) extends BoomModule()(p)
       val s4_valid = Input(Bool())
       val s3_valid = Input(Bool())
       val respready = Input(Bool())
-      val capture_bim = Input(Bool())
+      val capture = Input(Bool())
+      val split = Input(Bool())
 
       // Fetch2
       val f2_valid      = Input(Bool()) // f2 stage may proceed into the f3 stage.
@@ -123,10 +124,8 @@ class BranchPredictionStage(implicit p: Parameters) extends BoomModule()(p)
    io.f2_btb_resp.valid := btb.io.resp.valid && io.f2_valid
    io.extstageval1 := btb.io.resp.valid
 
-   bpd.io.capture := io.capture_bim
-   val capture_bim = Wire(Bool())
-   val reg_bim_resp = RegEnable(io.f2_btb_resp.bits.bim_resp, capture_bim)
-   capture_bim := io.capture_bim 
+   bpd.io.capture := io.capture
+   val reg_bim_resp = RegEnable(io.f2_btb_resp.bits.bim_resp, io.capture)
    bpd.io.f2_bim_resp := io.f2_btb_resp.bits.bim_resp
    when (io.s3_valid) {
       bpd.io.f2_bim_resp := reg_bim_resp   
@@ -186,6 +185,7 @@ class BranchPredictionStage(implicit p: Parameters) extends BoomModule()(p)
    bpd.io.f4_redirect := io.f4_redirect
    bpd.io.f4_taken := io.f4_taken
    bpd.io.fe_clear := io.fe_clear
+   bpd.io.split := io.split
    bpd.io.ftq_restore := io.ftq_restore
    bpd.io.commit := io.bpd_update
 

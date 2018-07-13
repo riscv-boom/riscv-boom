@@ -538,7 +538,8 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
    bpdpipeline.io.s4_valid := s4_valid
    bpdpipeline.io.s3_valid := s3_valid
    bpdpipeline.io.respready := respready
-   bpdpipeline.io.capture_bim := sendtos3 && s2_irespvalid && (respready || !s3_valid) && !(s3_valid && s4_valid)
+   bpdpipeline.io.capture := sendtos3 && s2_irespvalid && (respready || !s3_valid) && !(s3_valid && s4_valid)
+   bpdpipeline.io.split := fetch_controller.io.imem_resp.bits.split
    bpdpipeline.io.f2_stall := !fetch_controller.io.imem_resp.ready  
    bpdpipeline.io.f3_stall := fetch_controller.io.f3_stall 
    bpdpipeline.io.f3_is_br := fetch_controller.io.f3_is_br
