@@ -188,7 +188,7 @@ class TageTable(
    // State
 
    // TODO add banking
-   val ram = SeqMem(num_entries, new TageTableEntry(rvcFetchWidth, tag_sz, cntr_sz, ubit_sz))
+   val ram = SyncReadMem(num_entries, new TageTableEntry(rvcFetchWidth, tag_sz, cntr_sz, ubit_sz))
    ram.suggestName("TageTableDataArray")
 
 

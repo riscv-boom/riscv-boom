@@ -15,12 +15,12 @@ class ESramWritePort[T <: Data](val idx_sz: Int, val gen: T) extends Bundle
   *
   * @param num_entries the number of logical entries in our memory
   * @param gen the type of Data to store in our memory
-  * @param dualported use 1r1w SeqMem or use banking with two 1rw SeqMems
+  * @param dualported use 1r1w SyncReadMem or use banking with two 1rw SyncReadMems
   *
   * Assumptions:
   *   - If banked for 1rw, allowed to drop write updates
   *  */
-class ElasticSeqMem[T <: Data](
+class ElasticSyncReadMem[T <: Data](
    num_entries: Int,
    gen: T,
    dualported: Boolean = true)
@@ -40,7 +40,7 @@ class ElasticSeqMem[T <: Data](
       val flush = Input(Bool())
    })
 
-   private val ram = SeqMem(num_entries, gen)
+   private val ram = SyncReadMem(num_entries, gen)
 
    when (io.write.valid)
    {

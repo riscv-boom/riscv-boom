@@ -194,7 +194,7 @@ class DenseBTB(implicit p: Parameters) extends BoomBTB
    {
       val valids  = RegInit(VecInit(Seq.fill(nSets)(0.U(nWays.W))))
       val blevels = RegInit(VecInit(Seq.fill(nSets)(0.U((nWays*blevel_sz).W))))
-      val data    = SeqMem(nSets, Vec(nWays, UInt((new BTBSetData).getWidth.W)))
+      val data    = SyncReadMem(nSets, Vec(nWays, UInt((new BTBSetData).getWidth.W)))
       data.suggestName("btb_data_array")
       valids.suggestName("valids_array")
 

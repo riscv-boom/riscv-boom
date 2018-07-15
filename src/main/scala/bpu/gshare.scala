@@ -179,7 +179,7 @@ class GShareBrPredictor(
    //------------------------------------------------------------
    // Predictor state.
 
-   val counter_table = SeqMem(nSets, UInt(row_sz.W))
+   val counter_table = SyncReadMem(nSets, UInt(row_sz.W))
 
 
    //------------------------------------------------------------

@@ -180,7 +180,7 @@ class ICacheModule(outer: ICache) extends ICacheBaseModule(outer)
   tl_out.d.ready := !s3_slaveValid
   require (edge_out.manager.minLatency > 0)
 
-  val repl_way = if (isDM) UInt(0) else {
+  val repl_way = if (isDM) 0.U else {
     // pick a way that is not used by the scratchpad
     val v0 = LFSR16(refill_fire)(log2Ceil(nWays)-1,0)
     var v = v0
@@ -192,7 +192,7 @@ class ICacheModule(outer: ICache) extends ICacheBaseModule(outer)
     v
   }
 
-  val tag_array = SeqMem(nSets, Vec(nWays, UInt(tECC.width(1 + tagBits).W)))
+  val tag_array = SyncReadMem(nSets, Vec(nWays, UInt(tECC.width(1 + tagBits).W)))
   val tag_rdata = tag_array.read(s0_vaddr(untagBits-1,blockOffBits), !refill_done && s0_valid)
   val accruedRefillError = Reg(Bool())
   when (refill_done) {
@@ -246,12 +246,12 @@ class ICacheModule(outer: ICache) extends ICacheBaseModule(outer)
   val ramDepth =
     if (2*tl_out.d.bits.data.getWidth == wordBits) (nSets * refillCycles/2)
     else (nSets * refillCycles)
-  val dataArraysB0 = Seq.fill(nWays) { SeqMem(ramDepth, UInt(dECC.width(wordBits/nBanks).W)) }
-  val dataArraysB1 = Seq.fill(nWays) { SeqMem(ramDepth, UInt(dECC.width(wordBits/nBanks).W)) }
+  val dataArraysB0 = Seq.fill(nWays) { SyncReadMem(ramDepth, UInt(dECC.width(wordBits/nBanks).W)) }
+  val dataArraysB1 = Seq.fill(nWays) { SyncReadMem(ramDepth, UInt(dECC.width(wordBits/nBanks).W)) }
 
   if (cacheParams.fetchBytes <= 8) {
     // Use unbanked icache for narrow accesses.
-    val dataArrays = Seq.fill(nWays) { SeqMem(nSets * refillCycles, UInt(dECC.width(wordBits).W)) }
+    val dataArrays = Seq.fill(nWays) { SyncReadMem(nSets * refillCycles, UInt(dECC.width(wordBits).W)) }
     s1_bankId := 0.U
     for ((dataArray, i) <- dataArrays zipWithIndex) {
       def row(addr: UInt) = addr(untagBits-1, blockOffBits-log2Ceil(refillCycles))
@@ -516,7 +516,7 @@ class ICacheModule(outer: ICache) extends ICacheBaseModule(outer)
     when (send_hint) {
       tl_out.a.valid := true
       tl_out.a.bits := edge_out.Hint(
-                        fromSource = UInt(1),
+                        fromSource = 1.U,
                         toAddress = Cat(refill_paddr >> pgIdxBits, next_block) << blockOffBits,
                         lgSize = lgCacheBlockBytes,
                         param = TLHints.PREFETCH_READ)._2

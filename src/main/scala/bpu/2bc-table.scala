@@ -42,7 +42,8 @@
 package boom.bpu
 
 import Chisel._
-import boom.util.SeqMem1rwTransformable
+import chisel3.core.SyncReadMem
+import boom.util.SyncReadMem1rwTransformable
 
 
 class UpdateEntry(fetch_width: Int, index_sz: Int) extends Bundle
@@ -98,7 +99,7 @@ class PTableDualPorted(
    num_entries: Int
    ) extends PTable(fetch_width, num_entries)
 {
-   val p_table = SeqMem(num_entries, Vec(fetch_width, Bool()))
+   val p_table = SyncReadMem(num_entries, Vec(fetch_width, Bool()))
 
    io.update.ready := Bool(true)
 
@@ -122,8 +123,8 @@ class PTableBanked(
    num_entries: Int
    ) extends PTable(fetch_width, num_entries)
 {
-   val p_table_0 = Module(new SeqMem1rwTransformable(num_entries/2, fetch_width))
-   val p_table_1 = Module(new SeqMem1rwTransformable(num_entries/2, fetch_width))
+   val p_table_0 = Module(new SyncReadMem1rwTransformable(num_entries/2, fetch_width))
+   val p_table_1 = Module(new SyncReadMem1rwTransformable(num_entries/2, fetch_width))
 
    private def getBank (idx: UInt): UInt = idx(0)
    private def getRowIdx (idx: UInt): UInt = idx >> UInt(1)
@@ -138,7 +139,7 @@ class PTableBanked(
    val wdata   = Vec(io.update.bits.new_value.toBools)
    val wmask = io.update.bits.executed.toBools
 
-   // ** use resizable SeqMems ** //
+   // ** use resizable SyncReadMems ** //
    p_table_0.io.wen   := !ren_0 && wbank === UInt(0) && io.update.valid
    p_table_0.io.waddr := getRowIdx(widx)
    p_table_0.io.wmask := Vec(wmask).asUInt
@@ -180,7 +181,7 @@ class HTable(
       val pwq_enq  = Decoupled(new BrTableUpdate(fetch_width, ptable_idx_sz))
    })
 
-   val h_table = Module(new SeqMem1rwTransformable(num_h_entries, fetch_width))
+   val h_table = Module(new SyncReadMem1rwTransformable(num_h_entries, fetch_width))
    val hwq = Module(new Queue(new UpdateEntry(fetch_width, ptable_idx_sz), entries=4))
 
    hwq.io.enq <> io.update

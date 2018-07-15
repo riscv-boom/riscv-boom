@@ -234,7 +234,7 @@ class BimodalTable(implicit p: Parameters) extends BoomModule()(p) with HasBimPa
 
    for (w <- 0 until nBanks)
    {
-      val ram = SeqMem(nSets/nBanks, Vec(row_sz, Bool()))
+      val ram = SyncReadMem(nSets/nBanks, Vec(row_sz, Bool()))
       ram.suggestName("bimDataArray")
 
       val ren = Wire(Bool())

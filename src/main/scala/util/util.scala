@@ -179,7 +179,7 @@ object WrapInc
       }
       else
       {
-         val wrap = (value === UInt(n-1))
+         val wrap = (value === (n-1).U)
          Mux(wrap, 0.U, value + 1.U)
       }
    }

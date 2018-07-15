@@ -88,8 +88,8 @@ class BTBsa(implicit p: Parameters) extends BoomBTB
       val wen = update_valid && way_wen(w)
 
       val valids   = RegInit(0.U(nSets.W))
-      val tags     = SeqMem(nSets, UInt(tag_sz.W))
-      val data     = SeqMem(nSets, new BTBSetData())
+      val tags     = SyncReadMem(nSets, UInt(tag_sz.W))
+      val data     = SyncReadMem(nSets, new BTBSetData())
 
       tags.suggestName("btb_tag_array")
       data.suggestName("btb_data_array")
