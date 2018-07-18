@@ -46,12 +46,13 @@ class IssueSlotIO(num_wakeup_ports: Int)(implicit p: Parameters) extends BoomBun
 
    // TODO_Vec: This should probably get rolled into the wakeup system
    val fromfp_valid   = Input(Bool())
-   val fromfp_paddr   = Input(UInt(width=PREG_SZ.W)) // Address of physical scalar vector register operand (thats a lot of adjectives)
-   val fromfp_data    = Input(UInt(width=xLen.W))    // Physical scalar vector register operand
+   val fromfp_op_id   = Input(UInt(width=2.W)) // Address of physical scalar vector register operand (thats a lot of adjectives)
 
    val fromint_valid  = Input(Bool())
-   val fromint_paddr  = Input(UInt(width=PREG_SZ.W))
+   val fromint_op_id  = Input(UInt(width=2.W))
    val fromint_data   = Input(UInt(width=xLen.W))
+
+   val retire         = Output(Bool()) // This MicroOp has finished issuing
 
    val debug = {
      val result = new Bundle {
@@ -97,9 +98,6 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean, isVec: Boolean
    val updated_lrs1_rtype = Wire(UInt()) // the next reg type of this slot (which might then get moved to a new slot)
    val updated_lrs2_rtype = Wire(UInt()) // the next reg type of this slot (which might then get moved to a new slot)
    val updated_lrs3_rtype = Wire(UInt())
-   val updated_rs1_data   = Wire(UInt(width=xLen.W))
-   val updated_rs2_data   = Wire(UInt(width=xLen.W))
-   val updated_rs3_data   = Wire(UInt(width=xLen.W))
    val updated_prs1_eidx  = Wire(UInt(width=VL_SZ.W))
    val updated_prs2_eidx  = Wire(UInt(width=VL_SZ.W))
    val updated_prs3_eidx  = Wire(UInt(width=VL_SZ.W))
@@ -137,9 +135,6 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean, isVec: Boolean
       slotUop.prs1_eidx := updated_prs1_eidx
       slotUop.prs2_eidx := updated_prs2_eidx
       slotUop.prs3_eidx := updated_prs3_eidx
-      slotUop.rs1_data  := updated_rs1_data
-      slotUop.rs2_data  := updated_rs2_data
-      slotUop.rs3_data  := updated_rs3_data
       slotUop.br_mask   := updated_br_mask
    }
 
@@ -155,9 +150,6 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean, isVec: Boolean
    updated_lrs1_rtype  := slotUop.lrs1_rtype
    updated_lrs2_rtype  := slotUop.lrs2_rtype
    updated_lrs3_rtype  := slotUop.lrs3_rtype
-   updated_rs1_data    := slotUop.rs1_data
-   updated_rs2_data    := slotUop.rs2_data
-   updated_rs3_data    := slotUop.rs3_data
    updated_prs1_busy   := slotUop.prs1_busy
    updated_prs2_busy   := slotUop.prs2_busy
    updated_prs3_busy   := slotUop.prs3_busy
@@ -165,7 +157,7 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean, isVec: Boolean
    updated_prs2_eidx   := slotUop.prs2_eidx
    updated_prs3_eidx   := slotUop.prs3_eidx
 
-
+   io.retire := false.B
    when (io.kill ||
          (io.grant && (slot_state === s_valid_1)) ||
          (io.grant && (slot_state === s_valid_2) && slot_p1 && slot_p2))
@@ -173,8 +165,10 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean, isVec: Boolean
       updated_state := s_invalid
       if (containsVec) {
          updated_eidx := next_eidx
+         io.retire := true.B
          when (slotUop.vec_val && updated_eidx < io.vl && slotUop.uopc =/= uopVEXTRACT) {
             updated_state := slot_state
+            io.retire := false.B
             when (slotUop.lrs1_rtype === RT_VEC) {
                updated_prs1_busy := next_next_eidx > slotUop.prs1_eidx
             }
@@ -191,6 +185,8 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean, isVec: Boolean
 
          // TODO_Vec: We can issue these before all operands are not busy
          // Maybe implement that in the future
+         io.retire := false.B
+
          def sendToVec(rt: UInt): Bool = { rt === RT_FLT || rt === RT_FIX }
          when (slotUop.uopc === uopTOVEC && Array(slotUop.lrs1_rtype, slotUop.lrs2_rtype, slotUop.lrs3_rtype).map(p => sendToVec(p)).reduce(_||_)) {
             when (sendToVec(slotUop.lrs1_rtype)) {
@@ -277,36 +273,29 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean, isVec: Boolean
    // Here we handle scalar vector operand comparisons, these are a form of "wakeup"
    if (isVec) {
       when (io.fromfp_valid) {
-         when (io.fromfp_paddr === slotUop.pop1 && slotUop.lrs1_rtype === RT_FLT) {
+         when (io.fromfp_op_id === 0.U && slotUop.lrs1_rtype === RT_FLT) {
             updated_prs1_busy := false.B
-            updated_rs1_data := io.fromfp_data
          }
-         when (io.fromfp_paddr === slotUop.pop2 && slotUop.lrs2_rtype === RT_FLT) {
+         when (io.fromfp_op_id === 1.U && slotUop.lrs2_rtype === RT_FLT) {
             updated_prs2_busy := false.B
-            updated_rs2_data := io.fromfp_data
          }
-         when (io.fromfp_paddr === slotUop.pop3 && slotUop.lrs3_rtype === RT_FLT) {
+         when (io.fromfp_op_id === 2.U && slotUop.lrs3_rtype === RT_FLT) {
             updated_prs3_busy := false.B
-            updated_rs3_data := io.fromfp_data
          }
       }
 
       when (io.fromint_valid) {
-         when (io.fromint_paddr === slotUop.pop1 && slotUop.lrs1_rtype === RT_FIX) {
+         when (io.fromint_op_id === 0.U && slotUop.lrs1_rtype === RT_FIX) {
             updated_prs1_busy := false.B
-            updated_rs1_data := io.fromint_data
          }
-         when (io.fromint_paddr === slotUop.pop2 && slotUop.lrs2_rtype === RT_FIX) {
+         when (io.fromint_op_id === 1.U && slotUop.lrs2_rtype === RT_FIX) {
             updated_prs2_busy := false.B
-            updated_rs2_data := io.fromint_data
-
             when (slotUop.uopc === uopVEXTRACT) {
                updated_eidx := CalcEidxUpperMask(slotUop.rs1_vew, io.fromint_data)
             }
          }
-         when (io.fromint_paddr === slotUop.pop3 && slotUop.lrs3_rtype === RT_FIX) {
+         when (io.fromint_op_id === 2.U && slotUop.lrs3_rtype === RT_FIX) {
             updated_prs3_busy := false.B
-            updated_rs3_data := io.fromint_data
          }
       }
    }
@@ -381,9 +370,6 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean, isVec: Boolean
    io.updated_uop.prs2_eidx := updated_prs2_eidx
    io.updated_uop.prs3_eidx := updated_prs3_eidx
    io.updated_uop.eidx      := updated_eidx
-   io.updated_uop.rs1_data  := updated_rs1_data
-   io.updated_uop.rs2_data  := updated_rs2_data
-   io.updated_uop.rs3_data  := updated_rs3_data
 
    when (slot_state === s_valid_2)
    {

@@ -32,8 +32,8 @@ import boom.util.{ImmGen, IsKilledByBranch, QueueForMicroOpWithData, QueueForFun
 class ExeUnitResp(data_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
    val uop = new MicroOp()
-   val data = Bits(width = data_width)
-   val mask = UInt(width = 128 / 8)
+   val data  = Bits(width = data_width)
+   val mask  = UInt(width = 128 / 8)
    val fflags = new ValidIO(new FFlagsResp) // write fflags to ROB
 
    var writesToIRF = true // does this response unit plug into the integer regfile?
@@ -356,8 +356,13 @@ class ALUExeUnit(
       io.resp(1).bits.writesToVIQ = true
       io.resp(1).valid           := io.req.bits.uop.fu_code_is(FU_I2V) && io.req.valid
       io.resp(1).bits.uop        := io.req.bits.uop
-      io.resp(1).bits.uop.pdst   := Mux(io.req.bits.uop.lrs1_rtype === RT_FIX, io.req.bits.uop.pop1, io.req.bits.uop.pop2)
-      io.resp(1).bits.data       := Mux(io.req.bits.uop.lrs1_rtype === RT_FIX, io.req.bits.rs1_data, io.req.bits.rs2_data)
+      when (io.req.bits.uop.lrs1_rtype === RT_FIX) {
+         io.resp(1).bits.uop.pdst := UInt(0)
+         io.resp(1).bits.data     := io.req.bits.rs1_data
+      } .otherwise {
+         io.resp(1).bits.uop.pdst := UInt(1)
+         io.resp(1).bits.data     := io.req.bits.rs2_data
+      }
    }
 }
 
@@ -500,8 +505,7 @@ class FPUExeUnit(
       fpu = Module(new FPUUnit())
       fpu.io.req.valid           := io.req.valid &&
                                     (io.req.bits.uop.fu_code_is(FU_FPU) ||
-                                     io.req.bits.uop.fu_code_is(FU_F2I) ||
-                                     io.req.bits.uop.fu_code_is(FU_F2V)
+                                     io.req.bits.uop.fu_code_is(FU_F2I)
                                     ) // TODO move to using a separate unit
       fpu.io.req.bits.uop        := io.req.bits.uop
       fpu.io.req.bits.rs1_data   := io.req.bits.rs1_data
@@ -576,11 +580,18 @@ class FPUExeUnit(
 
    assert (queue.io.enq.ready) // If this backs up, we've miscalculated the size of the queue.
 
-   io.resp(2).valid         := fpu.io.resp.valid && fpu.io.resp.bits.uop.fu_code_is(FU_F2V)
-   io.resp(2).bits.uop      := fpu.io.resp.bits.uop
-   io.resp(2).bits.data     := fpu.io.resp.bits.data
-   io.resp(2).bits.fflags   := fpu.io.resp.bits.fflags
-
+   io.resp(2).valid         := io.req.valid && io.req.bits.uop.fu_code_is(FU_F2V)
+   io.resp(2).bits.uop      := io.req.bits.uop
+   when (io.req.bits.uop.lrs1_rtype === RT_FLT) {
+      io.resp(2).bits.data     := io.req.bits.rs1_data
+      io.resp(2).bits.uop.pdst := UInt(0)
+   } .elsewhen (io.req.bits.uop.lrs2_rtype === RT_FLT) {
+      io.resp(2).bits.data     := io.req.bits.rs2_data
+      io.resp(2).bits.uop.pdst := UInt(1)
+   } .otherwise {
+      io.resp(2).bits.data     := io.req.bits.rs3_data
+      io.resp(2).bits.uop.pdst := UInt(2)
+   }
 
    override def toString: String = out_str.toString
 }

@@ -699,13 +699,8 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    issue_units.map(_.io.tsc_reg := debug_tsc_reg)
    issue_units.map(_.io.brinfo := br_unit.brinfo)
    issue_units.map(_.io.flush_pipeline := rob.io.flush.valid)
-   issue_units.map(_.io.fromfp_valid := DontCare)
-   issue_units.map(_.io.fromfp_paddr := DontCare)
-   issue_units.map(_.io.fromfp_data  := DontCare)
-   issue_units.map(_.io.fromint_valid := DontCare)
-   issue_units.map(_.io.fromint_paddr := DontCare)
-   issue_units.map(_.io.fromint_data  := DontCare)
-
+   issue_units.map(_.io.fromfp  := DontCare)
+   issue_units.map(_.io.fromint := DontCare)
 
    // Load-hit Misspeculations
    require (issue_units.count(_.iqType == IQT_MEM.litValue) == 1)
@@ -878,6 +873,9 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    fp_pipeline.io.brinfo := br_unit.brinfo
 
    vec_pipeline.io.brinfo := br_unit.brinfo
+
+   rename_stage.io.retire_valids := vec_pipeline.io.retire_valids
+   rename_stage.io.retire_uops   := vec_pipeline.io.retire_uops
    //-------------------------------------------------------------
    //-------------------------------------------------------------
    // **** Load/Store Unit ****

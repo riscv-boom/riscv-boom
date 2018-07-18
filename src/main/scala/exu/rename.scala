@@ -71,6 +71,9 @@ class RenameStageIO(
 
    val vl = UInt(width=VL_SZ).asInput
 
+   val retire_valids = Bool().asInput
+   val retire_uops = new MicroOp().asInput
+
    val debug_rob_empty = Bool(INPUT)
    val debug = new DebugRenameStageIO(num_int_pregs, num_fp_pregs, num_vec_pregs).asOutput
 }
@@ -157,6 +160,10 @@ class RenameStage(
       num_wb_ports = num_vec_wb_ports,
       isVector = true)) // TODO: Figure out what this is
 
+
+
+   val vsfreelist = Module(new ScalarOpFreeList(pl_width))
+
    //-------------------------------------------------------------
    // Pipeline State & Wires
 
@@ -199,6 +206,24 @@ class RenameStage(
       val v_preg = vfreelist.io.req_pregs(w)
       uop.pdst := Mux(uop.dst_rtype === RT_FLT, f_preg, Mux(uop.dst_rtype === RT_FIX, i_preg, v_preg))
    }
+
+
+   // "Freelist" for scalar operand buffer rows
+   vsfreelist.io.brinfo        := io.brinfo
+   vsfreelist.io.kill          := io.kill
+   vsfreelist.io.ren_will_fire := ren1_will_fire
+   vsfreelist.io.ren_uops      := ren1_uops map {u => GetNewUopAndBrMask(u, io.brinfo)}
+   vsfreelist.io.ren_br_vals   := ren1_br_vals
+
+   vsfreelist.io.retire_valids     := io.retire_valids
+   vsfreelist.io.retire_uops       := io.retire_uops
+   vsfreelist.io.retire_rbk_valids := Bool(false)
+   vsfreelist.io.flush_pipeline    := io.flush_pipeline
+
+   for (w <- 0 until pl_width) {
+      ren1_uops(w).vscopb_idx := vsfreelist.io.req_scopb_idx(w)
+   }
+
 
    //-------------------------------------------------------------
    // Rename Table
@@ -350,8 +375,12 @@ class RenameStage(
    io.ren1_mask := ren1_will_fire
    io.ren1_uops := ren1_uops
 
+
+
+
    io.ren2_mask := ren2_will_fire
    io.ren2_uops := ren2_uops map {u => GetNewUopAndBrMask(u, io.brinfo)}
+
 
    for (w <- 0 until pl_width)
    {

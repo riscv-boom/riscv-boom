@@ -106,17 +106,9 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
    issue_unit.io.mem_ldSpecWakeup.bits := 0.U
    issue_unit.io.sxt_ldMiss := false.B
 
-   issue_unit.io.vl := io.vl
-   issue_unit.io.lsu_stq_head      := UInt(0)
-
-   issue_unit.io.fromfp_valid      := DontCare
-   issue_unit.io.fromfp_paddr      := DontCare
-   issue_unit.io.fromfp_data       := DontCare
-
-   issue_unit.io.fromint_valid      := DontCare
-   issue_unit.io.fromint_paddr      := DontCare
-   issue_unit.io.fromint_data       := DontCare
-
+   issue_unit.io.lsu_stq_head      := 0.U
+   issue_unit.io.fromfp            := DontCare
+   issue_unit.io.fromint           := DontCare
 
    require (exe_units.num_total_bypass_ports == 0)
 

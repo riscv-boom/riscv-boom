@@ -11,7 +11,7 @@
 package boom.exu
 
 import chisel3._
-import chisel3.util.{log2Ceil, PopCount, Fill}
+import chisel3.util.{log2Ceil, PopCount, Fill, Mux1H}
 import freechips.rocketchip.config.Parameters
 
 import FUConstants._
@@ -142,7 +142,8 @@ class IssueUnitCollasping(
    {
       min_eidx := 0.U
    }
-
+   io.retire_valids := issue_slots.map(_.retire).reduce(_||_)
+   io.retire_uops   := Mux1H(issue_slots.map(_.retire), issue_slots.map(_.uop))
    for (i <- 0 until num_issue_slots)
    {
       issue_slots(i).grant := false.B

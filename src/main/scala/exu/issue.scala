@@ -72,13 +72,11 @@ class IssueUnitIO(
    val lsu_stq_head        = Input(UInt())
 
    // TODO_Vec: This is messy
-   val fromfp_valid = Input(Bool())
-   val fromfp_paddr = Input(UInt(width=PREG_SZ.W))
-   val fromfp_data  = Input(UInt(width=xLen.W))
+   val fromfp       = Flipped(Decoupled(new ExeUnitResp(xLen)))
+   val fromint      = Flipped(Decoupled(new ExeUnitResp(xLen)))
 
-   val fromint_valid = Input(Bool())
-   val fromint_paddr = Input(UInt(width=PREG_SZ.W))
-   val fromint_data  = Input(UInt(width=xLen.W))
+   val retire_valids = Output(Bool())
+   val retire_uops = Output(new MicroOp)
 }
 
 abstract class IssueUnit(
@@ -113,29 +111,38 @@ abstract class IssueUnit(
    //-------------------------------------------------------------
    // Issue Table
 
+   io.fromfp.ready  := true.B
+   io.fromint.ready := true.B
+
    val slots = for (i <- 0 until num_issue_slots) yield { val slot = Module(new IssueSlot(num_wakeup_ports, containsVec, isVec)); slot; }
    val issue_slots = VecInit(slots.map(_.io))
    for (i <- 0 until num_issue_slots) yield {
       issue_slots(i).lsu_stq_head      := io.lsu_stq_head
       issue_slots(i).vl := io.vl
       if (isVec) {
-         issue_slots(i).fromfp_valid := io.fromfp_valid
-         issue_slots(i).fromfp_paddr := io.fromfp_paddr
-         issue_slots(i).fromfp_data  := io.fromfp_data
+         issue_slots(i).fromfp_valid := io.fromfp.valid && io.fromfp.bits.uop.vscopb_idx === issue_slots(i).uop.vscopb_idx
+         issue_slots(i).fromfp_op_id := io.fromfp.bits.uop.pdst
 
-         issue_slots(i).fromint_valid := io.fromint_valid
-         issue_slots(i).fromint_paddr := io.fromint_paddr
-         issue_slots(i).fromint_data  := io.fromint_data
+         issue_slots(i).fromint_valid := io.fromint.valid && io.fromint.bits.uop.vscopb_idx === issue_slots(i).uop.vscopb_idx
+         issue_slots(i).fromint_op_id := io.fromint.bits.uop.pdst
+         issue_slots(i).fromint_data  := io.fromint.bits.data
 
       } else {
          issue_slots(i).fromfp_valid := false.B
-         issue_slots(i).fromfp_paddr := DontCare
-         issue_slots(i).fromfp_data  := DontCare
+         issue_slots(i).fromfp_op_id := DontCare
 
          issue_slots(i).fromint_valid := false.B
-         issue_slots(i).fromint_paddr := DontCare
+         issue_slots(i).fromint_op_id := DontCare
          issue_slots(i).fromint_data  := DontCare
-
+      }
+   }
+   if (isVec) {
+      for (i <- 0 until num_issue_slots - 1) {
+         for (j <- i + 1 until num_issue_slots) {
+            assert(!(
+               issue_slots(i).valid && issue_slots(j).valid &&
+               issue_slots(i).uop.vscopb_idx === issue_slots(j).uop.vscopb_idx), "Two microops with the same operand buffer index")
+         }
       }
    }
 
@@ -181,7 +188,7 @@ abstract class IssueUnit(
       {
 
          printf("  " + this.getType + "_issue_slot[%d](%c)(Req:%c):wen=%c P:(%c,%c,%c) OP:(%d,%d,%d) PDST:%d %c [[DASM(%x)]" +
-               " 0x%x: %d] ri:%d bm=%d imm=0x%x eidx=%d\n"
+               " 0x%x: %d] ri:%d bm=%d imm=0x%x eidx=%d sx=%d\n"
             , i.U(log2Ceil(num_issue_slots).W)
             , Mux(issue_slots(i).valid, Str("V"), Str("-"))
             , Mux(issue_slots(i).request, Str("R"), Str("-"))
@@ -205,6 +212,7 @@ abstract class IssueUnit(
             , issue_slots(i).uop.br_mask
             , issue_slots(i).uop.imm_packed
             , issue_slots(i).uop.eidx
+            , issue_slots(i).uop.vscopb_idx
          )
       }
       printf("-----------------------------------------------------------------------------------------\n")

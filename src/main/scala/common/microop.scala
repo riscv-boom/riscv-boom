@@ -125,10 +125,8 @@ class MicroOp(implicit p: Parameters) extends BoomBundle()(p)
 
    // TODO_Vec: These are temporarily where scalar vector operands are stored
    //           In future store these in operand buffer in vector pipeline
-   val rs1_data         = UInt(width=xLen)
-   val rs2_data         = UInt(width=xLen)
-   val rs3_data         = UInt(width=xLen)
 
+   val vscopb_idx       = UInt(width=4)
 
    // floating point information
    val fp_val           = Bool()             // is a floating-point instruction (F- or D-extension)?

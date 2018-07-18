@@ -25,6 +25,7 @@ import boom.util._
 
 class VecPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFPUParameters
 with freechips.rocketchip.rocket.constants.VecCfgConstants
+with Packing
 {
   val vecIssueParams = issueParams.find(_.iqType == IQT_VEC.litValue).get
   val num_ll_ports = 1 // TODO_VEC: add ll wb ports
@@ -56,6 +57,9 @@ with freechips.rocketchip.rocket.constants.VecCfgConstants
      val debug_tsc_reg  = Input(UInt(width=128.W))
      val vl             = Input(UInt(width=VL_SZ.W))
 
+     val retire_valids    = Output(Bool())
+     val retire_uops      = Output(new MicroOp())
+
      val lsu_stq_head      = Input(UInt())
   } 
 
@@ -76,6 +80,8 @@ with freechips.rocketchip.rocket.constants.VecCfgConstants
       exe_units.withFilter(_.uses_iss_unit).map(_.supportedFuncUnits),
       128))
 
+   val vscalaropbuffer = Module(new ScalarOpBuffer())
+
    require (exe_units.withFilter(_.uses_iss_unit).map(x=>x).length == issue_unit.issue_width)
    require (exe_units.map(_.num_rf_write_ports).sum == num_wakeup_ports)
    require (exe_units.withFilter(_.uses_iss_unit).map(e=>
@@ -95,13 +101,22 @@ with freechips.rocketchip.rocket.constants.VecCfgConstants
    issue_unit.io.vl := io.vl
 
    issue_unit.io.lsu_stq_head      := io.lsu_stq_head
-   issue_unit.io.fromfp_valid      := io.fromfp.valid
-   issue_unit.io.fromfp_paddr      := io.fromfp.bits.uop.pdst
-   issue_unit.io.fromfp_data       := io.fromfp.bits.data
 
-   issue_unit.io.fromint_valid     := io.fromint.valid
-   issue_unit.io.fromint_paddr     := io.fromint.bits.uop.pdst
-   issue_unit.io.fromint_data      := io.fromint.bits.data
+   issue_unit.io.fromfp            <> io.fromfp
+   issue_unit.io.fromint           <> io.fromint
+
+   io.retire_valids                := issue_unit.io.retire_valids
+   io.retire_uops                  := issue_unit.io.retire_uops
+
+   vscalaropbuffer.io.w_valid(0)   := io.fromfp.valid
+   vscalaropbuffer.io.w_idx(0)     := io.fromfp.bits.uop.vscopb_idx
+   vscalaropbuffer.io.w_op_id(0)   := io.fromfp.bits.uop.pdst
+   vscalaropbuffer.io.w_data(0)    := io.fromfp.bits.data
+
+   vscalaropbuffer.io.w_valid(1)   := io.fromint.valid
+   vscalaropbuffer.io.w_idx(1)     := io.fromint.bits.uop.vscopb_idx
+   vscalaropbuffer.io.w_op_id(1)   := io.fromint.bits.uop.pdst
+   vscalaropbuffer.io.w_data(1)    := io.fromint.bits.data
 
    require (exe_units.num_total_bypass_ports == 0)
 
@@ -181,6 +196,17 @@ with freechips.rocketchip.rocket.constants.VecCfgConstants
    vregister_read.io.brinfo := io.brinfo
    vregister_read.io.kill := io.flush_pipeline
 
+   // Buffer Read
+   vscalaropbuffer.io.r_idx := iss_uops(0).vscopb_idx
+
+   def fill_case(n: UInt, s: UInt): UInt = {
+      MuxLookup(s, VEW_8, Array(
+         VEW_8  -> fill_b(n),
+         VEW_16 -> fill_h(n),
+         VEW_32 -> fill_w(n),
+         VEW_64 -> fill_d(n)))
+   }
+
    //-------------------------------------------------------------
    // **** Execute Stage ****
    //-------------------------------------------------------------
@@ -192,6 +218,22 @@ with freechips.rocketchip.rocket.constants.VecCfgConstants
    {
       val exe_req = vregister_read.io.exe_reqs(w)
       ex.io.req <> exe_req
+
+      val rs1_data = Mux(exe_req.bits.uop.lrs1_rtype === RT_FLT, fill_case(vscalaropbuffer.io.r_data(0), exe_req.bits.uop.rs1_vew),
+                     Mux(exe_req.bits.uop.lrs1_rtype === RT_FIX, vscalaropbuffer.io.r_data(0),
+                                                                 exe_req.bits.rs1_data))
+      val rs2_data = Mux(exe_req.bits.uop.lrs2_rtype === RT_FLT, fill_case(vscalaropbuffer.io.r_data(1), exe_req.bits.uop.rs2_vew),
+                     Mux(exe_req.bits.uop.lrs2_rtype === RT_FIX, vscalaropbuffer.io.r_data(1),
+                                                                 exe_req.bits.rs2_data))
+      val rs3_data = Mux(exe_req.bits.uop.lrs3_rtype === RT_FLT, fill_case(vscalaropbuffer.io.r_data(2), exe_req.bits.uop.rs3_vew),
+                     Mux(exe_req.bits.uop.lrs3_rtype === RT_FIX, vscalaropbuffer.io.r_data(2),
+                                                                 exe_req.bits.rs3_data))
+
+
+      ex.io.req.bits.rs1_data := rs1_data
+      ex.io.req.bits.rs2_data := rs2_data
+      ex.io.req.bits.rs3_data := rs3_data
+
       require (!ex.isBypassable)
       require (w == 0)
       if (w == 0) {
@@ -213,7 +255,7 @@ with freechips.rocketchip.rocket.constants.VecCfgConstants
 
          tosdq.io.enq.valid     := exe_req.bits.uop.is_store
          tosdq.io.enq.bits.uop  := exe_req.bits.uop
-         tosdq.io.enq.bits.data := exe_req.bits.rs3_data >> shiftn
+         tosdq.io.enq.bits.data := rs3_data >> shiftn
          io.tosdq               <> tosdq.io.deq
          tosdq.io.deq.ready     := io.tosdq.ready
          io.tosdq.valid         := tosdq.io.deq.valid
@@ -223,8 +265,8 @@ with freechips.rocketchip.rocket.constants.VecCfgConstants
 
          io.memreq.valid         := exe_req.bits.uop.uopc === uopVLDX || exe_req.bits.uop.uopc === uopVSTX
          io.memreq.bits.uop      := exe_req.bits.uop
-         io.memreq.bits.rs1_data := exe_req.bits.rs1_data
-         io.memreq.bits.rs2_data := (exe_req.bits.rs2_data >> shiftn) & MuxLookup(vew, VEW_8, Array(
+         io.memreq.bits.rs1_data := rs1_data
+         io.memreq.bits.rs2_data := (rs2_data >> shiftn) & MuxLookup(vew, VEW_8, Array(
             VEW_8  -> "hff".U,
             VEW_16 -> "hffff".U,
             VEW_32 -> "hffffffff".U,
