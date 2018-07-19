@@ -284,14 +284,16 @@ with Packing
    // **** Writeback Stage ****
    //-------------------------------------------------------------
 
-   val ll_wb = Module(new Queue(new ExeUnitResp(128), 8)) // TODO_Vec: Tune these
+   val ll_wb = Module(new BranchKillableQueue(new ExeUnitResp(128), entries = 8)) // TODO_Vec: Tune these
    ll_wb_block_issue := ll_wb.io.count >= 4.U
-   ll_wb.io.enq <> io.ll_wport
+   ll_wb.io.enq      <> io.ll_wport
+   ll_wb.io.brinfo   := io.brinfo
+   ll_wb.io.flush    := io.flush_pipeline
    assert (ll_wb.io.enq.ready, "We do not support backpressure on this queue")
    when   (io.ll_wport.valid) { assert(io.ll_wport.bits.uop.ctrl.rf_wen && io.ll_wport.bits.uop.dst_rtype === RT_VEC) }
 
 
-   val toint = Module(new QueueForMicroOpWithData(entries = 4, 64))
+   val toint = Module(new BranchKillableQueue(new ExeUnitResp(xLen), entries = 4))
    io.toint <> toint.io.deq
    toint.io.brinfo := io.brinfo
    toint.io.flush  := io.flush_pipeline

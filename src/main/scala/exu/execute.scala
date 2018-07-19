@@ -25,13 +25,12 @@ import freechips.rocketchip.tile.XLen
 import freechips.rocketchip.tile
 import boom.common._
 import boom.ifu.GetPCFromFtqIO
-import boom.util.{ImmGen, IsKilledByBranch, QueueForMicroOpWithData, QueueForFuncUnitResp}
-
+import boom.util.{ImmGen, BranchKillableQueue, HasBoomUOP, IsKilledByBranch}
 
 // TODO rename to something like MicroOpWithData
 class ExeUnitResp(data_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
+with HasBoomUOP
 {
-   val uop = new MicroOp()
    val data  = Bits(width = data_width)
    val mask  = UInt(width = 128 / 8)
    val fflags = new ValidIO(new FFlagsResp) // write fflags to ROB
@@ -567,7 +566,7 @@ class FPUExeUnit(
    // TODO_vec also instantiate our own fpvu, and remove it from fpu.scala
 
    // buffer up results since we share write-port on integer regfile.
-   val queue = Module(new QueueForMicroOpWithData(entries = dfmaLatency + 3, data_width)) // TODO being overly conservative
+   val queue = Module(new BranchKillableQueue(new ExeUnitResp(data_width), entries = dfmaLatency + 3)) // TODO being overly conservative
    queue.io.enq.valid       := fpu.io.resp.valid && fpu.io.resp.bits.uop.fu_code_is(FU_F2I)
    queue.io.enq.bits.uop    := fpu.io.resp.bits.uop
    queue.io.enq.bits.data   := fpu.io.resp.bits.data
@@ -648,7 +647,7 @@ class IntToFPExeUnit(implicit p: Parameters) extends ExecutionUnit(
    io.bypass <> ifpu.io.bypass
 
    // buffer up results since we share write-port on integer regfile.
-   val queue = Module(new QueueForMicroOpWithData(entries = intToFpLatency + 3, data_width)) // TODO being overly conservative
+   val queue = Module(new BranchKillableQueue(new ExeUnitResp(data_width), entries = intToFpLatency + 3)) // TODO being overly conservative
    queue.io.enq.valid       := ifpu.io.resp.valid
    queue.io.enq.bits.uop    := ifpu.io.resp.bits.uop
    queue.io.enq.bits.data   := ifpu.io.resp.bits.data
@@ -691,13 +690,14 @@ class MemExeUnit(implicit p: Parameters) extends ExecutionUnit(num_rf_read_ports
    io.bypass <> maddrcalc.io.bypass  // TODO this is not where the bypassing should occur from, is there any bypassing happening?!
 
 
-   val to_lsu_vsta = Module(new Queue(new FuncUnitResp(128), 4))
-   val to_lsu_resp = Module(new QueueForFuncUnitResp(8, 128))
+   val to_lsu_vsta = Module(new BranchKillableQueue(new FuncUnitResp(128), 4))
+   val to_lsu_resp = Module(new BranchKillableQueue(new FuncUnitResp(128), 8))
 
    assert(!(maddrcalc.io.resp.valid && !(maddrcalc.io.resp.bits.uop.vec_val && maddrcalc.io.resp.bits.uop.is_store) && !to_lsu_resp.io.enq.ready),
       "We do not support backpressure on this queue")
 
-   to_lsu_resp.io.enq.valid := maddrcalc.io.resp.valid && !(maddrcalc.io.resp.bits.uop.vec_val && maddrcalc.io.resp.bits.uop.is_store)
+   to_lsu_resp.io.enq.valid := (maddrcalc.io.resp.valid
+                             && !(maddrcalc.io.resp.bits.uop.vec_val && maddrcalc.io.resp.bits.uop.is_store))
    to_lsu_resp.io.enq.bits  := maddrcalc.io.resp.bits
    to_lsu_resp.io.brinfo    := io.brinfo
    to_lsu_resp.io.flush     := io.req.bits.kill
@@ -705,14 +705,21 @@ class MemExeUnit(implicit p: Parameters) extends ExecutionUnit(num_rf_read_ports
    io.lsu_io.exe_resp       <> to_lsu_resp.io.deq
 
    // Vector store addrs need to go through a separate queue to avoid blocking loads
-   assert(!(maddrcalc.io.resp.valid && maddrcalc.io.resp.bits.uop.vec_val && maddrcalc.io.resp.bits.uop.is_store && !to_lsu_vsta.io.enq.ready),
+   assert(!(maddrcalc.io.resp.valid && maddrcalc.io.resp.bits.uop.vec_val
+      && maddrcalc.io.resp.bits.uop.is_store && !to_lsu_vsta.io.enq.ready),
       "We do not support backpressure on this queue")
 
-   to_lsu_vsta.io.enq.valid := maddrcalc.io.resp.valid && maddrcalc.io.resp.bits.uop.vec_val && maddrcalc.io.resp.bits.uop.is_store
+   to_lsu_vsta.io.enq.valid := (maddrcalc.io.resp.valid
+                             && maddrcalc.io.resp.bits.uop.vec_val
+                             && maddrcalc.io.resp.bits.uop.is_store
+                             && !IsKilledByBranch(io.brinfo, maddrcalc.io.resp.bits.uop))
    to_lsu_vsta.io.enq.bits  := maddrcalc.io.resp.bits
+   to_lsu_vsta.io.brinfo    := io.brinfo
+   to_lsu_vsta.io.flush     := io.req.bits.kill
    io.lsu_io.exe_vsta       <> to_lsu_vsta.io.deq
 
-   io.fu_types := Mux(to_lsu_resp.io.count < UInt(2), FU_MEM, UInt(0)) | Mux(to_lsu_vsta.io.count < UInt(2), FU_VSTA, UInt(0))
+
+   io.fu_types := Mux(to_lsu_resp.io.count < UInt(1), FU_MEM, UInt(0)) | Mux(to_lsu_vsta.io.count < UInt(1), FU_VSTA, UInt(0))
    // TODO_Vec: Tune queue suze and limit here
 
 

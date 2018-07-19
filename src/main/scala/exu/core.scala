@@ -38,7 +38,7 @@ import freechips.rocketchip.rocket.Causes
 import freechips.rocketchip.util.{Str, UIntIsOneOf}
 import boom.common._
 import boom.exu.FUConstants._
-import boom.util.{GetNewUopAndBrMask, Sext, WrapInc, QueueForFuncUnitReq}
+import boom.util.{GetNewUopAndBrMask, Sext, WrapInc, BranchKillableQueue}
 
 
 //-------------------------------------------------------------
@@ -816,7 +816,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    // **** Execute Stage ****
    //-------------------------------------------------------------
    //-------------------------------------------------------------
-   val vec_memreq = Module(new QueueForFuncUnitReq(entries=6, data_width=xLen))
+   val vec_memreq = Module(new BranchKillableQueue(new FuncUnitReq(xLen), entries=6))
    vec_memreq.io.brinfo      := br_unit.brinfo
    vec_memreq.io.flush       := rob.io.flush.valid
    vec_memreq.io.enq.valid   := vec_pipeline.io.memreq.valid
@@ -845,7 +845,9 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       {
          vec_pipeline.io.memreq.ready := (vec_memreq.io.count < 2.U) && (exe_units(w).io.fu_types & FU_MEM).orR
          // TODO_Vec: Make this an arbiter
-         when (!iregister_read.io.exe_reqs(w).valid && vec_memreq.io.deq.valid)
+         when (!iregister_read.io.exe_reqs(w).valid
+            && vec_memreq.io.deq.valid
+            && (exe_units(w).io.fu_types & FU_MEM).orR)
          {
             vec_memreq.io.deq.ready      := true.B
             exe_units(w).io.req.valid    := vec_memreq.io.deq.valid
