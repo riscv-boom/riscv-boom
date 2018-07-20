@@ -19,39 +19,10 @@ import boom.common._
 import boom.exu.{BranchUnitResp, FlushSignals}
 import boom.lsu.{CanHaveBoomPTW, CanHaveBoomPTWModule}
 
-//class FrontendReq(implicit p: Parameters) extends CoreBundle()(p) {
-//  val pc = UInt(width = vaddrBitsExtended)
-//  val speculative = Bool()
-//}
-
-//class FrontendExceptions extends Bundle {
-//  val pf = new Bundle {
-//    val inst = Bool()
-//  }
-//  val ae = new Bundle {
-//    val inst = Bool()
-//  }
-//}
-//
-//class FrontendResp(implicit p: Parameters) extends CoreBundle()(p) {
-//  val btb = new BTBResp
-//  val pc = UInt(width = vaddrBitsExtended)  // ID stage PC
-//  val data = UInt(width = fetchWidth * coreInstBits)
-//  val mask = Bits(width = fetchWidth)
-//  val xcpt = new FrontendExceptions
-//  val replay = Bool()
-//}
-//
-//class FrontendPerfEvents extends Bundle {
-//  val acquire = Bool()
-//  val tlbMiss = Bool()
-//}
-//
-
 trait HasL1ICacheBankedParameters extends HasL1ICacheParameters with HasBoomCoreParameters
 {
   // Use a bank interleaved I$ if our fetch width is wide enough.
-  val icIsBanked = fetchBytes > 8 // TODO RVC
+  val icIsBanked = fetchBytes > 8 
   // How many bytes wide is a bank?
   val bankBytes = if (icIsBanked) fetchBytes/2 else fetchBytes
   // How many "chunks"/interleavings make up a cache line?
@@ -213,9 +184,9 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   val predicted_npc = WireInit(ntpc)
   val predicted_taken = WireInit(false.B)
 
-   val s3_valid = RegInit(false.B)
+   val s3_valid = RegInit(false.B) 
    val s4_valid = RegInit(false.B)
-   val inst32across = RegInit(false.B)
+   val inst32across = RegInit(false.B) // 32bit inst across fetch line
    val s2_replay = Wire(Bool())
    s2_replay := (s2_valid && !fetch_controller.io.imem_resp.fire() && !(sendtos3 && icache.io.resp.valid)) || RegNext(s2_replay && !s0_valid, true.B) ||
                   (s3_valid && sendtos3 && icache.io.resp.valid && s2_valid && !respready) || (s3_valid && s4_valid) || ((s3_valid || s4_valid) && !sendtos3 && s2_irespvalid) ||
@@ -225,7 +196,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   s1_pc := s0_pc
   // consider RVC fetches across blocks to be non-speculative if the first
   // part was non-speculative
-  val s0_speculative =
+  val s0_speculative = // TODO RVC not sure what goes in here
     if (usingCompressed) s1_speculative || s2_valid && !s2_speculative || predicted_taken
     else true.B
   s1_speculative := Mux(fetch_controller.io.imem_req.valid, fetch_controller.io.imem_req.bits.speculative, Mux(s2_replay, s2_speculative, s0_speculative))
@@ -267,7 +238,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   val s2_mask = cacheFetchMask(s2_pc)
   s2_irespvalid := RegNext(s1_valid) && s2_valid && icache.io.resp.valid
   var rvcvec : Seq[Bool] = Seq() 
-  var overridenext = inst32across
+  var overridenext = inst32across // next 16bit need not be considered
   for (i <- 0 until rvcFetchWidth) {
     val inst16 = !s2_respdata(16*i+1, 16*i).andR && !overridenext && s2_mask(i)
     overridenext = !inst16 && !overridenext && s2_mask(i)
@@ -275,9 +246,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   }
   val rvc = VecInit(rvcvec).asUInt
   when (s2_irespvalid && !s2_replay) {
-      inst32across := overridenext
-      /*if (icIsBanked) { inst32across := overridenext || (!rvc(fetchWidth-1) && s2_mask(fetchWidth-1) && !s2_mask(fetchWidth)) }
-      else {   inst32across := overridenext  }*/
+    inst32across := overridenext
   }
   rvcexist := rvc.orR
   sendtos3 := rvcexist || inst32across || overridenext
@@ -288,8 +257,8 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   fetch_controller.io.imem_resp.bits.data := icache.io.resp.bits.data
   fetch_controller.io.imem_resp.bits.mask := norvcFetchMask(s2_pc)
   fetch_controller.io.imem_resp.bits.rvc_mask := 0.U
-  fetch_controller.io.imem_resp.bits.fidx := VecInit(Seq.tabulate(fetchWidth) ( i => (Cat(0.U, s2_pc(1).asUInt) + (i << 1).U(log2Ceil(rvcFetchWidth).W))(log2Ceil(fetchWidth), 0)  ))
-  fetch_controller.io.imem_resp.bits.instacross := inst32across && s2_xcpt
+  fetch_controller.io.imem_resp.bits.fidx := VecInit(Seq.tabulate(fetchWidth) ( i => (Cat(0.U, s2_pc(1).asUInt) + (i << 1).U(log2Ceil(rvcFetchWidth).W)) ))
+  fetch_controller.io.imem_resp.bits.instacross := inst32across //&& s2_xcpt
   fetch_controller.io.imem_resp.bits.replay := icache.io.resp.bits.replay || icache.io.s2_kill && !icache.io.resp.valid && !s2_xcpt
   fetch_controller.io.imem_resp.bits.xcpt := s2_tlb_xcpt
   fetch_controller.io.imem_resp.bits.debug_raw.map { inst => inst := 0.U }
@@ -303,7 +272,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
    val s3_btb_resp_bits = Reg(new BoomBTBResp)
    val s3_btb_resp_valid = Reg(Bool())
    val s3_pc = Reg(UInt(vaddrBitsExtended.W))
-   val s3_prevhalf = Reg(UInt(16.W))
+   val s3_prevhalf = Reg(UInt(minInstBits.W))
    val s3_rvc = Reg(UInt(rvcFetchWidth.W))
    val prev_inst32across = RegInit(false.B)
    val s3_datawire = WireInit(VecInit(Seq.fill(fetchWidth)(0.U(32.W))))
@@ -317,7 +286,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
    val s4_btb_resp_bits = Reg(new BoomBTBResp)
    val s4_btb_resp_valid = Reg(Bool())
    val s4_rvc = Reg(UInt(rvcFetchWidth.W))
-   val s4_respdata = Reg(UInt((fetchWidth*16).W)) 
+   val s4_respdata = Reg(UInt((fetchWidth*minInstBits).W)) 
    val s4_pc = Reg(UInt(vaddrBitsExtended.W))
    val s4_datawire = WireInit(VecInit(Seq.fill(fetchWidth)(0.U(32.W))))
    val s4_tlb_xcpt = Reg(new FrontendExceptions)
@@ -335,7 +304,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
       prev_inst32across := inst32across
       s3_tlb_xcpt := s2_tlb_xcpt
       s3_btb_resp_bits := bpdpipeline.io.f2_btb_resp.bits
-      s3_btb_resp_valid := bpdpipeline.io.extstageval1 && (s2_mask & bpdpipeline.io.f2_btb_resp.bits.mask).orR
+      s3_btb_resp_valid := bpdpipeline.io.f2_btb_val && (s2_mask & bpdpipeline.io.f2_btb_resp.bits.mask).orR
    }
 
    /////////////////////
@@ -392,10 +361,8 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
       fetch_controller.io.imem_resp.bits.split := canallot1.reduce(_ | _)
       fetch_controller.io.f2_split := canallot1.reduce(_ | _)
 
-      when (inst32across) { // incorporate banking i.e. if fetchaddr is inLastChunk
+      when (inst32across) {
          s3_prevhalf := s3_respdata(32*fetchWidth-1, 16*(2*fetchWidth-1))
-         /*if (icIsBanked) { s3_prevhalf := Mux(s3_mask(fetchWidth-1) && !s3_mask(fetchWidth), s3_respdata(16*fetchWidth-1, 16*(fetchWidth-1)), s3_respdata(32*fetchWidth-1, 16*(2*fetchWidth-1)))   }
-         else {   s3_prevhalf := s3_respdata(32*fetchWidth-1, 16*(2*fetchWidth-1))  }*/
       }
   
       s4_rvc := s3_rvc 
@@ -534,10 +501,8 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 
 
    bpdpipeline.io.f2_replay := s2_replay
-   bpdpipeline.io.extstageval := s3_valid && sendtos3 && s2_irespvalid && !s4_valid && respready
    bpdpipeline.io.s4_valid := s4_valid
    bpdpipeline.io.s3_valid := s3_valid
-   bpdpipeline.io.respready := respready
    bpdpipeline.io.capture := sendtos3 && s2_irespvalid && (respready || !s3_valid) && !(s3_valid && s4_valid)
    bpdpipeline.io.split := fetch_controller.io.imem_resp.bits.split
    bpdpipeline.io.f2_stall := !fetch_controller.io.imem_resp.ready  

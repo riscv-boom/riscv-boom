@@ -300,12 +300,12 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
    val will_fire_load_wakeup   = WireInit(false.B) // uses      D$, SAQ-search, LAQ-search
    val will_fire_sfence        = WireInit(false.B) // uses TLB                            , ROB
 
-   val can_fire_sta_retry      = WireInit(false.B)  // TODO modified to resolve comb loop "verify"
-   val can_fire_load_retry     = WireInit(false.B)  // TODO modified to resolve comb loop "verify"
-   val can_fire_store_commit   = WireInit(false.B)  // TODO modified to resolve comb loop "verify"
-   val can_fire_load_wakeup    = WireInit(false.B)  // TODO modified to resolve comb loop "verify"
+   val can_fire_sta_retry      = WireInit(false.B) 
+   val can_fire_load_retry     = WireInit(false.B) 
+   val can_fire_store_commit   = WireInit(false.B) 
+   val can_fire_load_wakeup    = WireInit(false.B) 
 
-   val dc_avail  = WireInit(true.B) // TODO modified to resolve comb loop "verify"
+   val dc_avail  = WireInit(true.B) 
    val tlb_avail = WireInit(true.B)
    val rob_avail = WireInit(true.B)
    val lcam_avail= WireInit(true.B)

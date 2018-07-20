@@ -52,13 +52,11 @@ class BranchPredictionStage(implicit p: Parameters) extends BoomModule()(p)
       val s0_req        = Flipped(Valid(new freechips.rocketchip.rocket.BTBReq))
       val debug_imemresp_pc= Input(UInt(vaddrBitsExtended.W)) // For debug -- make sure I$ and BTB are synchronised.
 
-      val extstageval = Input(Bool())
-      val extstageval1 = Output(Bool())
+      val f2_btb_val = Output(Bool()) 
       val s4_valid = Input(Bool())
-      val s3_valid = Input(Bool())
-      val respready = Input(Bool())
-      val capture = Input(Bool())
-      val split = Input(Bool())
+      val s3_valid = Input(Bool()) 
+      val capture = Input(Bool()) // s3/s4 will be valid so capture f2 response due to bubble in current cycle
+      val split = Input(Bool())  // s3 just fired , s4 stage valid in next cycle
 
       // Fetch2
       val f2_valid      = Input(Bool()) // f2 stage may proceed into the f3 stage.
@@ -122,7 +120,7 @@ class BranchPredictionStage(implicit p: Parameters) extends BoomModule()(p)
    io.f2_btb_resp.bits := btb.io.resp.bits
    // BTB's resposne isn't valid if there's no instruction from I$ to match against.
    io.f2_btb_resp.valid := btb.io.resp.valid && io.f2_valid
-   io.extstageval1 := btb.io.resp.valid
+   io.f2_btb_val := btb.io.resp.valid
 
    bpd.io.capture := io.capture
    val reg_bim_resp = RegEnable(io.f2_btb_resp.bits.bim_resp, io.capture)
