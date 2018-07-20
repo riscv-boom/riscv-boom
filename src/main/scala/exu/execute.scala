@@ -35,7 +35,7 @@ with HasBoomUOP
    val mask  = UInt(width = 128 / 8)
    val fflags = new ValidIO(new FFlagsResp) // write fflags to ROB
 
-   var writesToIRF = true // does this response unit plug into the integer regfile?
+   var writesToIRF = true  // does this response unit plug into the integer regfile?
    var writesToVIQ = false // does this response unit plug into the vector issue slot?
    override def cloneType: this.type = new ExeUnitResp(data_width).asInstanceOf[this.type]
 }
@@ -49,6 +49,7 @@ class FFlagsResp(implicit p: Parameters) extends BoomBundle()(p)
 class ExecutionUnitIO(
    val num_rf_read_ports: Int,
    val num_rf_write_ports: Int,
+   val num_ll_write_ports: Int, // Write ports that don't connect straight back to the RF this execution unit uses
    val num_bypass_ports: Int,
    val data_width: Int
    )(implicit p: Parameters) extends BoomBundle()(p)
@@ -58,6 +59,8 @@ class ExecutionUnitIO(
 
    val req     = (new DecoupledIO(new FuncUnitReq(data_width))).flip
    val resp    = Vec(num_rf_write_ports, new DecoupledIO(new ExeUnitResp(data_width)))
+   val ll_resp = Vec(num_ll_write_ports, new DecoupledIO(new ExeUnitResp(data_width)))
+
    val bypass  = new BypassData(num_bypass_ports, data_width).asOutput
    val brinfo  = new BrResolutionInfo().asInput
 
@@ -80,9 +83,9 @@ class ExecutionUnitIO(
 
 abstract class ExecutionUnit(val num_rf_read_ports: Int
                             , val num_rf_write_ports: Int
+                            , val num_ll_write_ports: Int       = 0
                             , val num_bypass_stages: Int
                             , val data_width: Int
-                            , val num_variable_write_ports: Int = 0
                             , var bypassable: Boolean           = false // TODO make override def for code clarity
                             , val is_mem_unit: Boolean          = false
                             , var uses_csr_wport: Boolean       = false
@@ -101,7 +104,7 @@ abstract class ExecutionUnit(val num_rf_read_ports: Int
                             , val has_fpvu      : Boolean       = false
 )(implicit p: Parameters) extends BoomModule()(p)
 {
-   val io = IO(new ExecutionUnitIO(num_rf_read_ports, num_rf_write_ports
+   val io = IO(new ExecutionUnitIO(num_rf_read_ports, num_rf_write_ports, num_ll_write_ports
                                , num_bypass_stages, data_width))
 
    io.resp.map(_.bits.fflags.valid := Bool(false))
@@ -151,7 +154,8 @@ class ALUExeUnit(
    (implicit p: Parameters)
    extends ExecutionUnit(
       num_rf_read_ports = if (has_fpu) 3 else 2,
-      num_rf_write_ports = if (has_itov) 2 else 1,
+      num_rf_write_ports = 1,
+      num_ll_write_ports = if (has_itov) 1 else 0,
       num_bypass_stages =
          (if (has_fpu && has_alu) p(tile.TileKey).core.fpu.get.dfmaLatency
          else if (has_alu && has_mul && !use_slow_mul) 3 //TODO XXX p(tile.TileKey).core.imulLatency
@@ -351,16 +355,16 @@ class ALUExeUnit(
       , "Multiple functional units are fighting over the write port.")
 
    if (has_itov) {
-      io.resp(1).bits.writesToIRF = false
-      io.resp(1).bits.writesToVIQ = true
-      io.resp(1).valid           := io.req.bits.uop.fu_code_is(FU_I2V) && io.req.valid
-      io.resp(1).bits.uop        := io.req.bits.uop
+      io.ll_resp(0).bits.writesToIRF = false
+      io.ll_resp(0).bits.writesToVIQ = true
+      io.ll_resp(0).valid           := io.req.bits.uop.fu_code_is(FU_I2V) && io.req.valid
+      io.ll_resp(0).bits.uop        := io.req.bits.uop
       when (io.req.bits.uop.lrs1_rtype === RT_FIX) {
-         io.resp(1).bits.uop.pdst := UInt(0)
-         io.resp(1).bits.data     := io.req.bits.rs1_data
+         io.ll_resp(0).bits.uop.pdst := UInt(0)
+         io.ll_resp(0).bits.data     := io.req.bits.rs1_data
       } .otherwise {
-         io.resp(1).bits.uop.pdst := UInt(1)
-         io.resp(1).bits.data     := io.req.bits.rs2_data
+         io.ll_resp(0).bits.uop.pdst := UInt(1)
+         io.ll_resp(0).bits.data     := io.req.bits.rs2_data
       }
    }
 }
@@ -454,12 +458,14 @@ class FPUExeUnit(
    has_fpu  : Boolean = true,
    has_fdiv : Boolean = false,
    has_fpiu : Boolean = false,
-   has_fpvu : Boolean = false
+   has_fpvu : Boolean = false,
+   usingVec : Boolean = false
    )
    (implicit p: Parameters)
    extends ExecutionUnit(
       num_rf_read_ports = 3,
-      num_rf_write_ports = 3, // one for FRF, oen for IRF
+      num_rf_write_ports = 1,
+      num_ll_write_ports = if (usingVec) 2 else 1,  // +1 for FpToInt, +1 for FpToVec
       num_bypass_stages = 0,
       data_width = 65,
       bypassable = false,
@@ -489,11 +495,12 @@ class FPUExeUnit(
                   Mux(!fpvu_busy && Bool(has_fpvu), FU_F2V, Bits(0))
 
 
-   io.resp(0).bits.writesToIRF = false
-   io.resp(1).bits.writesToIRF = true
-   io.resp(2).bits.writesToIRF = false
-   io.resp(2).bits.writesToVIQ = true
-
+   io.resp(0).bits.writesToIRF    = false
+   io.ll_resp(0).bits.writesToIRF = true
+   if (usingVec) {
+      io.ll_resp(1).bits.writesToIRF = false
+      io.ll_resp(1).bits.writesToVIQ = usingVec
+   }
    // FPU Unit -----------------------
    var fpu: FPUUnit = null
    val fpu_resp_val = Wire(init=Bool(false))
@@ -573,23 +580,25 @@ class FPUExeUnit(
    queue.io.enq.bits.fflags := fpu.io.resp.bits.fflags
    queue.io.brinfo          := io.brinfo
    queue.io.flush           := io.req.bits.kill
-   io.resp(1) <> queue.io.deq
+   io.ll_resp(0) <> queue.io.deq
 
    fpiu_busy := !(queue.io.empty)
 
    assert (queue.io.enq.ready) // If this backs up, we've miscalculated the size of the queue.
 
-   io.resp(2).valid         := io.req.valid && io.req.bits.uop.fu_code_is(FU_F2V)
-   io.resp(2).bits.uop      := io.req.bits.uop
-   when (io.req.bits.uop.lrs1_rtype === RT_FLT) {
-      io.resp(2).bits.data     := io.req.bits.rs1_data
-      io.resp(2).bits.uop.pdst := UInt(0)
-   } .elsewhen (io.req.bits.uop.lrs2_rtype === RT_FLT) {
-      io.resp(2).bits.data     := io.req.bits.rs2_data
-      io.resp(2).bits.uop.pdst := UInt(1)
-   } .otherwise {
-      io.resp(2).bits.data     := io.req.bits.rs3_data
-      io.resp(2).bits.uop.pdst := UInt(2)
+   if (usingVec) {
+      io.ll_resp(1).valid         := io.req.valid && io.req.bits.uop.fu_code_is(FU_F2V)
+      io.ll_resp(1).bits.uop      := io.req.bits.uop
+      when (io.req.bits.uop.lrs1_rtype === RT_FLT) {
+         io.ll_resp(1).bits.data     := io.req.bits.rs1_data
+         io.ll_resp(1).bits.uop.pdst := UInt(0)
+      } .elsewhen (io.req.bits.uop.lrs2_rtype === RT_FLT) {
+         io.ll_resp(1).bits.data     := io.req.bits.rs2_data
+         io.ll_resp(1).bits.uop.pdst := UInt(1)
+      } .otherwise {
+         io.ll_resp(1).bits.data     := io.req.bits.rs3_data
+         io.ll_resp(1).bits.uop.pdst := UInt(2)
+      }
    }
 
    override def toString: String = out_str.toString
@@ -601,7 +610,6 @@ class FDivSqrtExeUnit(implicit p: Parameters)
                                        , num_rf_write_ports = 1
                                        , num_bypass_stages = 0
                                        , data_width = 65
-                                       , num_variable_write_ports = 1
                                        , has_fdiv = true
                                        )
 {
@@ -629,7 +637,8 @@ class FDivSqrtExeUnit(implicit p: Parameters)
 class IntToFPExeUnit(implicit p: Parameters) extends ExecutionUnit(
    has_ifpu = true,
    num_rf_read_ports = 2,
-   num_rf_write_ports = 1,
+   num_rf_write_ports = 0,
+   num_ll_write_ports = 1,
    num_bypass_stages = 0,
    data_width = 65,
    // don't schedule uops from issue-window -- we're hard-hacking the datapath,
@@ -638,7 +647,7 @@ class IntToFPExeUnit(implicit p: Parameters) extends ExecutionUnit(
 {
    val busy = Wire(init=Bool(false))
    io.fu_types := Mux(!busy, FU_I2F, Bits(0))
-   io.resp(0).bits.writesToIRF = false
+   io.ll_resp(0).bits.writesToIRF = false
 
    val ifpu = Module(new IntToFPUnit(latency=intToFpLatency))
    ifpu.io.req <> io.req
@@ -655,7 +664,7 @@ class IntToFPExeUnit(implicit p: Parameters) extends ExecutionUnit(
    queue.io.brinfo := io.brinfo
    queue.io.flush := io.req.bits.kill
 
-   io.resp(0) <> queue.io.deq
+   io.ll_resp(0) <> queue.io.deq
 
    busy := !(queue.io.empty)
 
@@ -671,8 +680,7 @@ class IntToFPExeUnit(implicit p: Parameters) extends ExecutionUnit(
 class MemExeUnit(implicit p: Parameters) extends ExecutionUnit(num_rf_read_ports = 2,
    num_rf_write_ports = 1,
    num_bypass_stages = 0,
-   data_width = 128,
-   num_variable_write_ports = 1,
+   data_width = if (p(tile.TileKey).core.fpu.nonEmpty) 65 else p(tile.XLen),
    bypassable = false,
    is_mem_unit = true)(p)
    with freechips.rocketchip.rocket.constants.MemoryOpConstants
@@ -682,9 +690,9 @@ class MemExeUnit(implicit p: Parameters) extends ExecutionUnit(num_rf_read_ports
    val maddrcalc = Module(new MemAddrCalcUnit())
    maddrcalc.io.req <> io.req
    maddrcalc.io.vl  := io.vl
-   when (io.req.valid && io.req.bits.uop.vec_val) {
-      assert(io.req.bits.uop.rate === UInt(1), "Loads and stores through this unit proceed at rate 1")
-   }
+   assert(!(io.req.valid && io.req.bits.uop.vec_val && io.req.bits.uop.rate =/= UInt(1)),
+      "Vector loads and stores through this unit proceed at rate 1")
+
 
    maddrcalc.io.brinfo <> io.brinfo
    io.bypass <> maddrcalc.io.bypass  // TODO this is not where the bypassing should occur from, is there any bypassing happening?!
@@ -693,7 +701,9 @@ class MemExeUnit(implicit p: Parameters) extends ExecutionUnit(num_rf_read_ports
    val to_lsu_vsta = Module(new BranchKillableQueue(new FuncUnitResp(128), 4))
    val to_lsu_resp = Module(new BranchKillableQueue(new FuncUnitResp(128), 8))
 
-   assert(!(maddrcalc.io.resp.valid && !(maddrcalc.io.resp.bits.uop.vec_val && maddrcalc.io.resp.bits.uop.is_store) && !to_lsu_resp.io.enq.ready),
+   assert(!(maddrcalc.io.resp.valid
+      && !(maddrcalc.io.resp.bits.uop.vec_val && maddrcalc.io.resp.bits.uop.is_store)
+      && !to_lsu_resp.io.enq.ready),
       "We do not support backpressure on this queue")
 
    to_lsu_resp.io.enq.valid := (maddrcalc.io.resp.valid
@@ -709,14 +719,18 @@ class MemExeUnit(implicit p: Parameters) extends ExecutionUnit(num_rf_read_ports
       && maddrcalc.io.resp.bits.uop.is_store && !to_lsu_vsta.io.enq.ready),
       "We do not support backpressure on this queue")
 
-   to_lsu_vsta.io.enq.valid := (maddrcalc.io.resp.valid
-                             && maddrcalc.io.resp.bits.uop.vec_val
-                             && maddrcalc.io.resp.bits.uop.is_store
-                             && !IsKilledByBranch(io.brinfo, maddrcalc.io.resp.bits.uop))
-   to_lsu_vsta.io.enq.bits  := maddrcalc.io.resp.bits
-   to_lsu_vsta.io.brinfo    := io.brinfo
-   to_lsu_vsta.io.flush     := io.req.bits.kill
-   io.lsu_io.exe_vsta       <> to_lsu_vsta.io.deq
+   if (usingVec) {
+      to_lsu_vsta.io.enq.valid := (maddrcalc.io.resp.valid
+                                && maddrcalc.io.resp.bits.uop.vec_val
+                                && maddrcalc.io.resp.bits.uop.is_store
+                                && !IsKilledByBranch(io.brinfo, maddrcalc.io.resp.bits.uop))
+      to_lsu_vsta.io.enq.bits  := maddrcalc.io.resp.bits
+      to_lsu_vsta.io.brinfo    := io.brinfo
+      to_lsu_vsta.io.flush     := io.req.bits.kill
+      io.lsu_io.exe_vsta       <> to_lsu_vsta.io.deq
+   } else {
+      to_lsu_vsta.io.enq.valid := false.B
+   }
 
 
    io.fu_types := Mux(to_lsu_resp.io.count < UInt(1), FU_MEM, UInt(0)) | Mux(to_lsu_vsta.io.count < UInt(1), FU_VSTA, UInt(0))

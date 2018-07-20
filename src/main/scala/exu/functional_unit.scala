@@ -688,7 +688,13 @@ class FPUUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(
 
    val vec_bp = Pipe(io.req.valid, io.req.bits.rs1_data, num_stages).bits
 
-   io.resp.bits.data              := Mux(io.resp.bits.uop.lrs1(5), vec_bp, fpu.io.resp.bits.data)
+
+   io.resp.bits.data              := fpu.io.resp.bits.data
+   if (usingVec) {
+      when (io.resp.bits.uop.lrs1(5)) {
+         io.resp.bits.data := vec_bp
+      }
+   }
    io.resp.bits.uop.pdst          := fpu.io.resp.bits.uop.pdst
    io.resp.bits.fflags.valid      := fpu.io.resp.bits.fflags.valid
    io.resp.bits.fflags.bits.uop   := io.resp.bits.uop
@@ -731,8 +737,12 @@ class IntToFPUnit(latency: Int)(implicit p: Parameters) extends PipelinedFunctio
 
    val vec_bp = Pipe(io.req.valid, io.req.bits.rs1_data, intToFpLatency).bits
 
-   //io.resp.bits.data              := box(ifpu.io.out.bits.data, !io.resp.bits.uop.fp_single)
-   io.resp.bits.data              := Mux(io.resp.bits.uop.ldst(5), vec_bp, box(ifpu.io.out.bits.data, out_double))
+   io.resp.bits.data              := box(ifpu.io.out.bits.data, !io.resp.bits.uop.fp_single)
+   if (usingVec) {
+      when (io.resp.bits.uop.ldst(5)) {
+         io.resp.bits.data        := vec_bp
+      }
+   }
    io.resp.bits.fflags.valid      := ifpu.io.out.valid
    io.resp.bits.fflags.bits.uop   := io.resp.bits.uop
    io.resp.bits.fflags.bits.flags := ifpu.io.out.bits.exc

@@ -29,6 +29,7 @@ case class BoomCoreParams(
    numFpPhysRegisters: Int = 64,
    numVecPhysRegisters: Int = 64,
    numVecRegFileRows: Int = 256,
+   enableVecPipeline: Boolean = false,
    enableCustomRf: Boolean = false,
    enableCustomRfModel: Boolean = true,
    maxBrCount: Int = 4,
@@ -169,6 +170,10 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
    require(icacheParams.nSets <= 64, "Handling aliases in the ICache is buggy.")
 
    //************************************
+   // Vector pipeline
+   val usingVec     = boomParams.enableVecPipeline
+
+   //************************************
    // Branch Prediction
 
    val enableBTB = true
@@ -234,8 +239,8 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
    // Implicitly calculated constants
    val NUM_ROB_ROWS      = NUM_ROB_ENTRIES/decodeWidth
    val ROB_ADDR_SZ       = log2Up(NUM_ROB_ENTRIES)
-   // the f-registers are mapped into the space above the x-registers
-   val LOGICAL_REG_COUNT = 64 //Need this to be 64 bc vector scala regs are going to occupy fp regfile
+   // The vector scalar registers are mapped above the fp registers
+   val LOGICAL_REG_COUNT = if (usingVec) 64 else 32
    val LREG_SZ           = log2Up(LOGICAL_REG_COUNT)
    val IPREG_SZ          = log2Up(numIntPhysRegs)
    val FPREG_SZ          = log2Up(numFpPhysRegs)
@@ -249,7 +254,7 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
    val BROB_ADDR_SZ      = log2Up(NUM_BROB_ENTRIES)
 
    require (numIntPhysRegs >= (32 + decodeWidth))
-   require (numFpPhysRegs >= (64 + decodeWidth))
+   require (numFpPhysRegs >= (LOGICAL_REG_COUNT + decodeWidth))
    require (MAX_BR_COUNT >=2)
    require (NUM_ROB_ROWS % 2 == 0)
    require (NUM_ROB_ENTRIES % decodeWidth == 0)

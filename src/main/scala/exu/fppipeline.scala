@@ -68,9 +68,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
    val fregfile         = Module(new RegisterFileBehavorial(
                                  numFpPhysRegs,
                                  exe_units.withFilter(_.uses_iss_unit).map(e => e.num_rf_read_ports).sum,
-      // TODO get rid of -1, as that's a write-port going to IRF
-      // TODO_Vec Also another -1 for fp to vec 
-                                 exe_units.withFilter(_.uses_iss_unit).map(e => e.num_rf_write_ports).sum - 1 - 1 +
+                                 exe_units.withFilter(_.uses_iss_unit).map(e => e.num_rf_write_ports).sum +
                                     num_ll_ports,
                                  fLen+1,
                                  exe_units.bypassable_write_port_mask
@@ -86,11 +84,11 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
    require (exe_units.withFilter(_.uses_iss_unit).map(x=>x).length == issue_unit.issue_width)
 
    // We're playing fast and loose on the number of wakeup and write ports.
-   // The -1 is for the F2I port; -1 for I2F port. -1 for F2V port
-   //println (exe_units.map(_.num_rf_write_ports).sum)
-   require (exe_units.map(_.num_rf_write_ports).sum-1-1-1 + num_ll_ports == num_wakeup_ports)
+   // The -1 for I2F port
+
+   require (exe_units.map(_.num_rf_write_ports).sum + num_ll_ports == num_wakeup_ports)
    require (exe_units.withFilter(_.uses_iss_unit).map(e =>
-      e.num_rf_write_ports).sum -1-1 + num_ll_ports == num_wakeup_ports)
+      e.num_rf_write_ports).sum + num_ll_ports == num_wakeup_ports)
 
    //*************************************************************
    // Issue window logic
@@ -106,6 +104,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
    issue_unit.io.mem_ldSpecWakeup.bits := 0.U
    issue_unit.io.sxt_ldMiss := false.B
 
+   issue_unit.io.vl                := io.vl
    issue_unit.io.lsu_stq_head      := 0.U
    issue_unit.io.fromfp            := DontCare
    issue_unit.io.fromint           := DontCare
@@ -131,7 +130,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
          issue_unit.io.dis_uops(w).prs1_busy := false.B
       }
       // Or... add a uop to send scalar vector reg values to the vecpipeline
-      when (io.dis_uops(w).vec_val && (
+      when (usingVec.B && io.dis_uops(w).vec_val && (
          io.dis_uops(w).lrs1_rtype === RT_FLT || io.dis_uops(w).lrs2_rtype === RT_FLT || io.dis_uops(w).lrs3_rtype === RT_FLT)) {
          issue_unit.io.dis_valids(w) := io.dis_valids(w)
          issue_unit.io.dis_uops(w).uopc := uopTOVEC
@@ -221,7 +220,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
    //-------------------------------------------------------------
 
    val ll_wbarb = Module(new Arbiter(new ExeUnitResp(fLen+1), 2))
-   val ifpu_resp = exe_units.ifpu_unit.io.resp(0)
+   val ifpu_resp = exe_units.ifpu_unit.io.ll_resp(0)
 
    // Hookup load writeback -- and recode FP values.
    ll_wbarb.io.in(0) <> io.ll_wport
@@ -248,41 +247,48 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
    when (ifpu_resp.valid) { assert (ifpu_resp.bits.uop.ctrl.rf_wen && ifpu_resp.bits.uop.dst_rtype === RT_FLT) }
 
 
-   var w_cnt = 1
+   var w_cnt = num_ll_ports
    var toint_found = false
    var tovec_found = false
    for (eu <- exe_units)
    {
+      for (wbresp <- eu.io.ll_resp)
+      {
+         val toint = wbresp.bits.uop.dst_rtype === RT_FIX
+         val tovec = wbresp.bits.uop.uopc === uopTOVEC
+         if (wbresp.bits.writesToIRF) {
+            io.toint <> wbresp
+            assert(!(wbresp.valid && !toint))
+            assert(!(io.toint.valid && !io.toint.ready))
+            assert(!toint_found)
+            toint_found = true
+         } else if (eu.has_ifpu) { // This is the ifpu write back
+
+         } else if (wbresp.bits.writesToVIQ) {
+            io.tovec <> wbresp
+            assert(!(wbresp.valid && !tovec))
+            assert(usingVec)
+            assert(!tovec_found)
+            tovec_found = true
+         } else {
+            assert(false, "What is this trying to write back to?")
+         }
+      }
       for (wbresp <- eu.io.resp)
       {
          val toint = wbresp.bits.uop.dst_rtype === RT_FIX
          val tovec = wbresp.bits.uop.uopc === uopTOVEC
 
-         if (wbresp.bits.writesToIRF) {
-            io.toint <> wbresp
-            assert(!(wbresp.valid && !toint))
-            assert(!(io.toint.valid && !io.toint.ready), "Can't backpressure here")
-            assert(!toint_found) // only support one toint connector
-            toint_found = true
-         } else if (eu.has_ifpu) {
-            // share with ll unit
-         } else if (wbresp.bits.writesToVIQ) {
-            io.tovec <> wbresp
-            assert(!(wbresp.valid && !tovec))
-            assert(!tovec_found) // only support one tovec connector
-            tovec_found = true
-         } else {
-            assert (!(wbresp.valid && (toint || tovec)))
-            fregfile.io.write_ports(w_cnt).valid :=
-               wbresp.valid &&
-               wbresp.bits.uop.ctrl.rf_wen
-            fregfile.io.write_ports(w_cnt).bits.addr := wbresp.bits.uop.pdst
-            fregfile.io.write_ports(w_cnt).bits.data := wbresp.bits.data
-            fregfile.io.write_ports(w_cnt).bits.mask := DontCare
-            fregfile.io.write_ports(w_cnt).bits.eidx := DontCare
-            fregfile.io.write_ports(w_cnt).bits.rd_vew := DontCare
-            wbresp.ready := fregfile.io.write_ports(w_cnt).ready
-         }
+         assert (!(wbresp.valid && (toint || tovec)))
+         fregfile.io.write_ports(w_cnt).valid :=
+         wbresp.valid &&
+         wbresp.bits.uop.ctrl.rf_wen
+         fregfile.io.write_ports(w_cnt).bits.addr := wbresp.bits.uop.pdst
+         fregfile.io.write_ports(w_cnt).bits.data := wbresp.bits.data
+         fregfile.io.write_ports(w_cnt).bits.mask := DontCare
+         fregfile.io.write_ports(w_cnt).bits.eidx := DontCare
+         fregfile.io.write_ports(w_cnt).bits.rd_vew := DontCare
+         wbresp.ready := fregfile.io.write_ports(w_cnt).ready
 
          assert (!(wbresp.valid &&
             !wbresp.bits.uop.ctrl.rf_wen &&
@@ -295,11 +301,14 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
             !toint),
             "[fppipeline] A writeback is being attempted to the FP RF with dst != FP type.")
 
-         if (!wbresp.bits.writesToIRF && !wbresp.bits.writesToVIQ && !eu.has_ifpu) w_cnt += 1
+         w_cnt += 1
       }
    }
    assert(toint_found, "[fppipeline] Didn't find a fptoint unit")
-   assert(tovec_found, "[fppipeline] Didn't find a fptovec unit")
+   assert(tovec_found || !usingVec, "[fppipeline] Didn't find a fptovec unit")
+   if (!tovec_found) {
+      io.tovec   := DontCare
+   }
    require (w_cnt == fregfile.io.write_ports.length)
 
 
@@ -319,18 +328,15 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
       for (exe_resp <- eu.io.resp)
       {
          val wb_uop = exe_resp.bits.uop
+         val wport = io.wakeups(w_cnt)
+         wport.valid := exe_resp.valid && wb_uop.dst_rtype === RT_FLT
+         wport.bits := exe_resp.bits
 
-         if (!exe_resp.bits.writesToIRF && !exe_resp.bits.writesToVIQ && !eu.has_ifpu) {
-            val wport = io.wakeups(w_cnt)
-            wport.valid := exe_resp.valid && wb_uop.dst_rtype === RT_FLT
-            wport.bits := exe_resp.bits
+         w_cnt += 1
 
-            w_cnt += 1
-
-            assert(!(exe_resp.valid && wb_uop.is_store))
-            assert(!(exe_resp.valid && wb_uop.is_load))
-            assert(!(exe_resp.valid && wb_uop.is_amo))
-         }
+         assert(!(exe_resp.valid && wb_uop.is_store))
+         assert(!(exe_resp.valid && wb_uop.is_load))
+         assert(!(exe_resp.valid && wb_uop.is_amo))
       }
    }
 

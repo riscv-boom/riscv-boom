@@ -779,7 +779,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
       mem_ld_killed := Bool(true) && mem_fired_ld
    }
 
-   io.mem_ldSpecWakeup.valid := RegNext(will_fire_load_incoming && !io.exe_resp.bits.uop.fp_val, init=false.B)
+   io.mem_ldSpecWakeup.valid := RegNext(will_fire_load_incoming && !exe_resp.uop.vec_val && !exe_resp.uop.fp_val, init=false.B)
    io.mem_ldSpecWakeup.bits := mem_ld_uop.pdst
 
    // tell the ROB to clear the busy bit on the incoming store

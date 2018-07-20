@@ -98,8 +98,13 @@ with Packing
    issue_unit.io.tsc_reg := io.debug_tsc_reg
    issue_unit.io.brinfo := io.brinfo
    issue_unit.io.flush_pipeline := io.flush_pipeline
-   issue_unit.io.vl := io.vl
 
+   // Don't support ld-hit speculation fo FP window
+   issue_unit.io.mem_ldSpecWakeup.valid := false.B
+   issue_unit.io.mem_ldSpecWakeup.bits  := 0.U
+   issue_unit.io.sxt_ldMiss             := false.B
+
+   issue_unit.io.vl := io.vl
    issue_unit.io.lsu_stq_head      := io.lsu_stq_head
 
    issue_unit.io.fromfp            <> io.fromfp

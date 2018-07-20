@@ -74,7 +74,7 @@ class CtrlSigs extends Bundle
    val rocc            = Bool()
 
 
-   def decode(inst: UInt, table: Iterable[(BitPat, List[BitPat])], vecstatus: freechips.rocketchip.rocket.VecStatus) = {
+   def decode(inst: UInt, table: Iterable[(BitPat, List[BitPat])]) = {
       val decoder = freechips.rocketchip.rocket.DecodeLogic(inst, XDecode.decode_default, table)
       val sigs =
          Seq(legal, fp_val, vec_val, fp_single, uopc, iqtype, fu_code, dst_type, rs1_type
@@ -406,8 +406,8 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule()(p) with freechips.
    var decode_table = XDecode.table
    if (usingFPU) decode_table ++= FDecode.table
    if (usingFPU && usingFDivSqrt) decode_table ++= FDivSqrtDecode.table
-   decode_table ++= VecDecode.table
-   val cs = Wire(new CtrlSigs()).decode(uop.inst, decode_table, io.vecstatus)
+   if (usingVec) decode_table ++= VecDecode.table
+   val cs = Wire(new CtrlSigs()).decode(uop.inst, decode_table)
 
 
    // Exception Handling
@@ -449,7 +449,7 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule()(p) with freechips.
 
    uop.uopc       := cs.uopc
    uop.iqtype     := cs.iqtype
-   when (cs.fu_code === FU_POLY) {
+   when (cs.fu_code === FU_POLY && usingVec.B) {
       uop.fu_code := Mux(io.vecstatus.vereps(uop.inst(RD_MSB, RD_LSB)) === VEREP_FP, FU_VFPU, FU_VALU)
    } .otherwise {
       uop.fu_code    := cs.fu_code
@@ -468,7 +468,7 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule()(p) with freechips.
       case (cs_reg, cs_rtype, uop_reg, uop_regtype) => {
          uop_regtype := cs_rtype
          uop_reg := cs_reg
-         when (cs_rtype === RT_POLY) {
+         when (cs_rtype === RT_POLY && usingVec.B) {
             when (io.vecstatus.vshapes(cs_reg) === VSHAPE_SCALAR) {
                uop_regtype := RT_FLT
                uop_reg := "b100000".U | cs_reg
@@ -525,33 +525,35 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule()(p) with freechips.
 
    //-------------------------------------------------------------
    // Special cases for polymorphic vector instructions
-   when (cs.vec_val && cs.is_load) {
-      uop.rate       := UInt(1)
-      uop.mem_typ    := MuxLookup(io.vecstatus.vews(cs_rd), VEW_8, Array(VEW_8 -> MT_B, VEW_16 -> MT_H, VEW_32 -> MT_W, VEW_64 -> MT_D))
-   } .elsewhen (cs.vec_val && cs.is_store) {
-      uop.rate       := UInt(1)
-      uop.mem_typ    := MuxLookup(io.vecstatus.vews(cs_rs3), VEW_8, Array(VEW_8 -> MT_B, VEW_16 -> MT_H, VEW_32 -> MT_W, VEW_64 -> MT_D))
-   } .elsewhen (cs.uopc === uopVINSERT) {
-      when (uop.dst_rtype === RT_FLT) {
-         uop.iqtype     := IQT_INT
-         uop.fp_val     := true.B
-         uop.vec_val    := false.B
-         uop.uopc       := uopFMV_D_X
-         uop.fu_code    := FU_I2F
-         uop.lrs2_rtype := RT_X
-      } .otherwise {
-         uop.lrs3       := uop.ldst
-         uop.rs3_vew    := uop.rd_vew
-         uop.rs3_vshape := uop.rd_vshape
-         uop.rs3_verep  := uop.rd_verep
-      }
-   } .elsewhen (cs.uopc === uopVEXTRACT) {
-      when (uop.lrs1_rtype === RT_FLT) {
-         uop.iqtype     := IQT_FP
-         uop.vec_val    := false.B
-         uop.uopc       := uopFMV_X_D
-         uop.fu_code    := FU_F2I
-         uop.lrs2_rtype := RT_X
+   if (usingVec) {
+      when (cs.vec_val && cs.is_load) {
+         uop.rate       := UInt(1)
+         uop.mem_typ    := MuxLookup(io.vecstatus.vews(cs_rd), VEW_8, Array(VEW_8 -> MT_B, VEW_16 -> MT_H, VEW_32 -> MT_W, VEW_64 -> MT_D))
+      } .elsewhen (cs.vec_val && cs.is_store) {
+         uop.rate       := UInt(1)
+         uop.mem_typ    := MuxLookup(io.vecstatus.vews(cs_rs3), VEW_8, Array(VEW_8 -> MT_B, VEW_16 -> MT_H, VEW_32 -> MT_W, VEW_64 -> MT_D))
+      } .elsewhen (cs.uopc === uopVINSERT) {
+         when (uop.dst_rtype === RT_FLT) {
+            uop.iqtype     := IQT_INT
+            uop.fp_val     := true.B
+            uop.vec_val    := false.B
+            uop.uopc       := uopFMV_D_X
+            uop.fu_code    := FU_I2F
+            uop.lrs2_rtype := RT_X
+         } .otherwise {
+            uop.lrs3       := uop.ldst
+            uop.rs3_vew    := uop.rd_vew
+            uop.rs3_vshape := uop.rd_vshape
+            uop.rs3_verep  := uop.rd_verep
+         }
+      } .elsewhen (cs.uopc === uopVEXTRACT) {
+         when (uop.lrs1_rtype === RT_FLT) {
+            uop.iqtype     := IQT_FP
+            uop.vec_val    := false.B
+            uop.uopc       := uopFMV_X_D
+            uop.fu_code    := FU_F2I
+            uop.lrs2_rtype := RT_X
+         }
       }
    }
 

@@ -194,7 +194,6 @@ class Rob(
    )(implicit p: Parameters) extends BoomModule()(p)
 {
    val io = IO(new RobIo(width, num_wakeup_ports, num_fpu_ports))
-
    val num_rob_rows = num_rob_entries / width
 
    require (num_rob_entries % width == 0)

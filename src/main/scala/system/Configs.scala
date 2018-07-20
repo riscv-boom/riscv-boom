@@ -32,6 +32,8 @@ class jtagSmallBoomConfig extends Config(new WithSmallBooms ++ new DefaultBoomCo
 class jtagMediumBoomConfig extends Config(new WithMediumBooms ++ new DefaultBoomConfig ++ new WithNBoomCores(1) ++ new WithoutTLMonitors ++ new freechips.rocketchip.system.BaseConfig ++ new WithJtagDTM)
 class jtagMegaBoomConfig extends Config(new WithMegaBooms ++ new DefaultBoomConfig ++ new WithNBoomCores(1) ++ new WithoutTLMonitors ++ new freechips.rocketchip.system.BaseConfig ++ new WithJtagDTM)
 
+
+class SmallVectorBoomConfig extends Config(new WithSmallBooms ++ new WithVectorBoom ++ new DefaultBoomConfig ++ new WithNBoomCores(1) ++ new WithoutTLMonitors ++ new freechips.rocketchip.system.BaseConfig)
 // scalastyle:on
 
 

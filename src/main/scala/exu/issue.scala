@@ -158,7 +158,7 @@ abstract class IssueUnit(
    // So track branch kills for the last 4 cycles to remove false negatives.
    val brKills = RegInit(0.asUInt(width=4.W))
    brKills := Cat(brKills, (io.brinfo.valid && io.brinfo.mispredict) || io.flush_pipeline)
-   assert (!(io.sxt_ldMiss && !RegNext(io.mem_ldSpecWakeup.valid, init=false.B) && brKills === 0.U),
+   assert ((!(io.sxt_ldMiss && !RegNext(io.mem_ldSpecWakeup.valid, init=false.B) && brKills === 0.U)),
       "[issue] IQ-" + iqType + " a ld miss was not preceded by a spec wakeup.")
 
    //-------------------------------------------------------------

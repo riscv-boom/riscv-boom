@@ -20,6 +20,7 @@
 package boom.exu
 
 import Chisel._
+import chisel3.core.DontCare
 import freechips.rocketchip.config.Parameters
 import boom.common._
 import boom.util._
@@ -204,24 +205,28 @@ class RenameStage(
       val i_preg = ifreelist.io.req_pregs(w)
       val f_preg = ffreelist.io.req_pregs(w)
       val v_preg = vfreelist.io.req_pregs(w)
-      uop.pdst := Mux(uop.dst_rtype === RT_FLT, f_preg, Mux(uop.dst_rtype === RT_FIX, i_preg, v_preg))
+      uop.pdst := i_preg
+      when (usingFPU.B && uop.dst_rtype === RT_FLT) { uop.pdst := f_preg }
+      when (usingVec.B && uop.dst_rtype === RT_VEC) { uop.pdst := v_preg }
    }
 
 
-   // "Freelist" for scalar operand buffer rows
-   vsfreelist.io.brinfo        := io.brinfo
-   vsfreelist.io.kill          := io.kill
-   vsfreelist.io.ren_will_fire := ren1_will_fire
-   vsfreelist.io.ren_uops      := ren1_uops map {u => GetNewUopAndBrMask(u, io.brinfo)}
-   vsfreelist.io.ren_br_vals   := ren1_br_vals
+   if (usingVec) {
+      // "Freelist" for scalar operand buffer rows
+      vsfreelist.io.brinfo        := io.brinfo
+      vsfreelist.io.kill          := io.kill
+      vsfreelist.io.ren_will_fire := ren1_will_fire
+      vsfreelist.io.ren_uops      := ren1_uops map {u => GetNewUopAndBrMask(u, io.brinfo)}
+      vsfreelist.io.ren_br_vals   := ren1_br_vals
 
-   vsfreelist.io.retire_valids     := io.retire_valids
-   vsfreelist.io.retire_uops       := io.retire_uops
-   vsfreelist.io.retire_rbk_valids := Bool(false)
-   vsfreelist.io.flush_pipeline    := io.flush_pipeline
+      vsfreelist.io.retire_valids     := io.retire_valids
+      vsfreelist.io.retire_uops       := io.retire_uops
+      vsfreelist.io.retire_rbk_valids := Bool(false)
+      vsfreelist.io.flush_pipeline    := io.flush_pipeline
 
-   for (w <- 0 until pl_width) {
-      ren1_uops(w).vscopb_idx := vsfreelist.io.req_scopb_idx(w)
+      for (w <- 0 until pl_width) {
+         ren1_uops(w).vscopb_idx := vsfreelist.io.req_scopb_idx(w)
+      }
    }
 
 
@@ -242,18 +247,30 @@ class RenameStage(
       table.io.debug_inst_can_proceed := io.inst_can_proceed
    }
    imaptable.io.debug_freelist_can_allocate := ifreelist.io.can_allocate
-   fmaptable.io.debug_freelist_can_allocate := ffreelist.io.can_allocate
-   vmaptable.io.debug_freelist_can_allocate := vfreelist.io.can_allocate
+   if (usingFPU) fmaptable.io.debug_freelist_can_allocate := ffreelist.io.can_allocate
+   if (usingVec) vmaptable.io.debug_freelist_can_allocate := vfreelist.io.can_allocate
    for ((uop, w) <- ren1_uops.zipWithIndex)
    {
       val imap = imaptable.io.values(w)
       val fmap = fmaptable.io.values(w)
       val vmap = vmaptable.io.values(w)
 
-      uop.pop1       := Mux(uop.lrs1_rtype === RT_FLT, fmap.prs1, Mux(uop.lrs1_rtype === RT_FIX, imap.prs1, vmap.prs1))
-      uop.pop2       := Mux(uop.lrs2_rtype === RT_FLT, fmap.prs2, Mux(uop.lrs2_rtype === RT_FIX, imap.prs2, vmap.prs2))
-      uop.pop3       := Mux(uop.lrs3_rtype === RT_FLT, fmap.prs3, vmap.prs3) // only FP has 3rd operand
-      uop.stale_pdst := Mux(uop.dst_rtype === RT_FLT,  fmap.stale_pdst, Mux(uop.dst_rtype === RT_FIX, imap.stale_pdst, vmap.stale_pdst))
+      uop.pop1          := imap.prs1
+      uop.pop2          := imap.prs2
+      uop.stale_pdst    := imap.stale_pdst
+      if (usingFPU) {
+         when (uop.lrs1_rtype === RT_FLT) { uop.pop1       := fmap.prs1 }
+         when (uop.lrs2_rtype === RT_FLT) { uop.pop2       := fmap.prs2 }
+         uop.pop3                                          := fmap.prs3
+         when (uop.dst_rtype  === RT_FLT) { uop.stale_pdst := fmap.stale_pdst }
+      }
+      if (usingVec) {
+         when (uop.lrs1_rtype === RT_VEC) { uop.pop1       := vmap.prs1 }
+         when (uop.lrs2_rtype === RT_VEC) { uop.pop2       := vmap.prs2 }
+         when (uop.lrs3_rtype === RT_VEC) { uop.pop3       := vmap.prs3 }
+         when (uop.dst_rtype  === RT_VEC) { uop.stale_pdst := vmap.stale_pdst }
+
+      }
    }
 
    //-------------------------------------------------------------
@@ -332,37 +349,47 @@ class RenameStage(
          ren2_uops(w).pop2 =/= ibusytable.io.map_table(w).prs2),
          "[rename] ren2 maptable prs2 value don't match uop's values.")
    }
+   if (usingFPU) {
+      fbusytable.io.ren_will_fire := ren2_will_fire
+      fbusytable.io.ren_uops := ren2_uops  // expects pdst to be set up.
+      fbusytable.io.map_table := ren2_fmapvalues
+      fbusytable.io.wb_valids := io.fp_wakeups.map(_.valid)
+      fbusytable.io.wb_pdsts := io.fp_wakeups.map(_.bits.uop.pdst)
 
-   fbusytable.io.ren_will_fire := ren2_will_fire
-   fbusytable.io.ren_uops := ren2_uops  // expects pdst to be set up.
-   fbusytable.io.map_table := ren2_fmapvalues
-   fbusytable.io.wb_valids := io.fp_wakeups.map(_.valid)
-   fbusytable.io.wb_pdsts := io.fp_wakeups.map(_.bits.uop.pdst)
+      assert (!(io.fp_wakeups.map(x => x.valid && x.bits.uop.dst_rtype =/= RT_FLT).reduce(_|_)),
+         "[rename] fp wakeup is not waking up a FP register.")
+   }
 
-   assert (!(io.fp_wakeups.map(x => x.valid && x.bits.uop.dst_rtype =/= RT_FLT).reduce(_|_)),
-      "[rename] fp wakeup is not waking up a FP register.")
-
-   vbusytable.io.ren_will_fire := ren2_will_fire
-   vbusytable.io.ren_uops := ren2_uops
-   vbusytable.io.map_table := ren2_vmapvalues
-   vbusytable.io.wb_valids := io.vec_wakeups.map(_.valid)
-   vbusytable.io.wb_pdsts := io.vec_wakeups.map(_.bits.uop.pdst)
-   vbusytable.io.wb_eidxs := io.vec_wakeups.map(x=>x.bits.uop.eidx + x.bits.uop.rate) // TODO_Vec: This is probably bad
-   vbusytable.io.vl := io.vl
-   assert (!(io.vec_wakeups.map(x => x.valid && x.bits.uop.dst_rtype =/= RT_VEC).reduce(_|_)),
-      "[rename] vec wakeup is not waking up a VEC register.")
+   if (usingVec) {
+      vbusytable.io.ren_will_fire := ren2_will_fire
+      vbusytable.io.ren_uops := ren2_uops
+      vbusytable.io.map_table := ren2_vmapvalues
+      vbusytable.io.wb_valids := io.vec_wakeups.map(_.valid)
+      vbusytable.io.wb_pdsts := io.vec_wakeups.map(_.bits.uop.pdst)
+      vbusytable.io.wb_eidxs := io.vec_wakeups.map(x=>x.bits.uop.eidx + x.bits.uop.rate) // TODO_Vec: This is probably bad
+      vbusytable.io.vl := io.vl
+      assert (!(io.vec_wakeups.map(x => x.valid && x.bits.uop.dst_rtype =/= RT_VEC).reduce(_|_)),
+         "[rename] vec wakeup is not waking up a VEC register.")
+   }
    for ((uop, w) <- ren2_uops.zipWithIndex)
    {
       val ibusy = ibusytable.io.values(w)
       val fbusy = fbusytable.io.values(w)
       val vbusy = vbusytable.io.values(w)
-      uop.prs1_busy := Mux(uop.lrs1_rtype === RT_FLT, fbusy.prs1_busy, Mux(uop.lrs1_rtype === RT_FIX, ibusy.prs1_busy, vbusy.prs1_busy))
-      uop.prs2_busy := Mux(uop.lrs2_rtype === RT_FLT, fbusy.prs2_busy, Mux(uop.lrs2_rtype === RT_FIX, ibusy.prs2_busy, vbusy.prs2_busy))
-      uop.prs3_busy := Mux(uop.lrs3_rtype === RT_FLT, fbusy.prs3_busy, vbusy.prs3_busy)
 
-      uop.prs1_eidx := Mux(uop.lrs1_rtype === RT_VEC, vbusy.prs1_eidx, UInt(0))
-      uop.prs2_eidx := Mux(uop.lrs2_rtype === RT_VEC, vbusy.prs2_eidx, UInt(0))
-      uop.prs3_eidx := Mux(uop.lrs3_rtype === RT_VEC, vbusy.prs3_eidx, UInt(0))
+      uop.prs1_busy := ibusy.prs1_busy
+      uop.prs2_busy := ibusy.prs2_busy
+      uop.prs3_busy := false.B
+      if (usingFPU) {
+         when (uop.lrs1_rtype === RT_FLT) { uop.prs1_busy := fbusy.prs1_busy }
+         when (uop.lrs2_rtype === RT_FLT) { uop.prs2_busy := fbusy.prs2_busy }
+         when (uop.lrs3_rtype === RT_FLT) { uop.prs3_busy := fbusy.prs3_busy }
+      }
+      if (usingVec) {
+         when (uop.lrs1_rtype === RT_VEC) { uop.prs1_busy := vbusy.prs1_busy ; uop.prs1_eidx := vbusy.prs1_eidx }
+         when (uop.lrs2_rtype === RT_VEC) { uop.prs2_busy := vbusy.prs2_busy ; uop.prs2_eidx := vbusy.prs2_eidx }
+         when (uop.lrs3_rtype === RT_VEC) { uop.prs3_busy := vbusy.prs3_busy ; uop.prs3_eidx := vbusy.prs3_eidx }
+      }
 
       val valid = ren2_valids(w)
       assert (!(valid && ibusy.prs1_busy && uop.lrs1_rtype === RT_FIX && uop.lrs1 === UInt(0)), "[rename] x0 is busy??")
@@ -400,13 +427,20 @@ class RenameStage(
    io.debug.ifreelist  := ifreelist.io.debug.freelist
    io.debug.iisprlist  := ifreelist.io.debug.isprlist
    io.debug.ibusytable := ibusytable.io.debug.busytable
-   io.debug.ffreelist  := ffreelist.io.debug.freelist
-   io.debug.fisprlist  := ffreelist.io.debug.isprlist
-   io.debug.fbusytable := fbusytable.io.debug.busytable
-   io.debug.vfreelist  := vfreelist.io.debug.freelist
-   io.debug.visprlist  := vfreelist.io.debug.isprlist
-   io.debug.vbusytable := vbusytable.io.debug.busytable
+   if (usingFPU) {
+      io.debug.ffreelist  := ffreelist.io.debug.freelist
+      io.debug.fisprlist  := ffreelist.io.debug.isprlist
+      io.debug.fbusytable := fbusytable.io.debug.busytable
+   }
+   if (usingVec) {
+      io.debug.vfreelist  := vfreelist.io.debug.freelist
+      io.debug.visprlist  := vfreelist.io.debug.isprlist
+      io.debug.vbusytable := vbusytable.io.debug.busytable
+   } else {
+      io.debug.vfreelist  := DontCare
+      io.debug.visprlist  := DontCare
+      io.debug.vbusytable := DontCare
+   }
 
    override val compileOptions = chisel3.core.ExplicitCompileOptions.NotStrict.copy(explicitInvalidate = true)
 }
-

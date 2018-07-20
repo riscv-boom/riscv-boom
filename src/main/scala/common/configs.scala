@@ -61,6 +61,12 @@ class WithNPerfCounters(n: Int) extends Config((site, here, up) => {
    ))}
 })
 
+class WithVectorBoom extends Config((site, here, up) => {
+   case BoomTilesKey => up(BoomTilesKey, site) map {r => r.copy(
+      core = r.core.copy(
+         enableVecPipeline = true
+      ))}
+})
 
 // Small BOOM! Try to be fast to compile and easier to debug.
 class WithSmallBooms extends Config((site, here, up) => {
