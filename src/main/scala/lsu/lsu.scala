@@ -398,16 +398,28 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
 
    // exceptions
    val ma_ld = io.exe_resp.valid && io.exe_resp.bits.mxcpt.valid && exe_tlb_uop.is_load
-   val pf_ld = dtlb.io.req.valid && dtlb.io.resp.pf.ld && exe_tlb_uop.is_load
+   val pf_ld = dtlb.io.req.valid && dtlb.io.resp.pf.ld && (exe_tlb_uop.is_load || exe_tlb_uop.is_amo)
    val pf_st = dtlb.io.req.valid && dtlb.io.resp.pf.st && exe_tlb_uop.is_store
-   val ae_ld = dtlb.io.req.valid && dtlb.io.resp.ae.ld && exe_tlb_uop.is_load
+   val ae_ld = dtlb.io.req.valid && dtlb.io.resp.ae.ld && (exe_tlb_uop.is_load || exe_tlb_uop.is_amo)
    val ae_st = dtlb.io.req.valid && dtlb.io.resp.ae.st && exe_tlb_uop.is_store
    // TODO check for xcpt_if and verify that never happens on non-speculative instructions.
-   val mem_xcpt_valid = Reg(next=((dtlb.io.req.valid && (pf_ld || pf_st || ae_ld || ae_st)) ||
+   val mem_xcpt_valid = Reg(next=((pf_ld || pf_st || ae_ld || ae_st) ||
                                  (io.exe_resp.valid && io.exe_resp.bits.mxcpt.valid)) &&
                                  !io.exception &&
                                  !IsKilledByBranch(io.brinfo, exe_tlb_uop),
                             init=Bool(false))
+
+   val xcpt_uop   = Reg(next=Mux(ma_ld, io.exe_resp.bits.uop, exe_tlb_uop))
+   when (mem_xcpt_valid) {
+      // Technically only faulting AMOs need this
+      assert(xcpt_uop.is_load ^ xcpt_uop.is_store)
+      when (xcpt_uop.is_load) {
+         laq_uop(xcpt_uop.ldq_idx).exception := true.B
+      } .otherwise {
+         stq_uop(xcpt_uop.stq_idx).exception := true.B
+      }
+   }
+
    val mem_xcpt_cause = RegNext(
       Mux(io.exe_resp.valid && io.exe_resp.bits.mxcpt.valid,
          io.exe_resp.bits.mxcpt.bits,
@@ -484,7 +496,10 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
             sdq_val(stq_execute_head)
             )) &&
          !stq_executed(stq_execute_head) &&
-         !(stq_uop(stq_execute_head).is_fence))
+         !stq_uop(stq_execute_head).is_fence &&
+         !mem_xcpt_valid &&
+         !stq_uop(stq_execute_head).exception
+   )
    {
       can_fire_store_commit := Bool(true)
    }
