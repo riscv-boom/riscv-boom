@@ -19,7 +19,7 @@ import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.rocket.ALU._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile
-import boom.bpu.{BpredType, BranchPredInfo, BTBsaUpdate}
+import boom.bpu.{BpredType, BranchPredInfo, BoomBTBUpdate}
 import boom.common._
 import boom.ifu._
 import boom.util._

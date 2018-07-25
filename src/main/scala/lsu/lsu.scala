@@ -119,7 +119,8 @@ class LoadStoreUnitIO(pl_width: Int)(implicit p: Parameters) extends BoomBundle(
    val xcpt = new ValidIO(new Exception)
 
    // cache nacks
-   val nack               = new NackInfo().asInput
+   val dc_nack            = new NackInfo().asInput
+   val dc_load_miss       = Bool(INPUT)
 
    // For stalling vector loads and stores elementwise in the issue slots
 
@@ -142,6 +143,7 @@ class LoadStoreUnitIO(pl_width: Int)(implicit p: Parameters) extends BoomBundle(
 
    // For speculative load wakeups
    val load_issued = Bool(OUTPUT)
+   val load_miss   = Bool(OUTPUT)
 
    val counters = new Bundle
    {
@@ -392,7 +394,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
          when (!laq_addr_val(io.exe_resp.bits.uop.ldq_idx)
             || (io.exe_resp.bits.uop.ldq_idx === bypassed_ldq_incr_idx
                && bypassed_ldq_incr
-               && !(io.nack.valid && io.nack.isload && io.nack.lsu_idx === bypassed_ldq_incr_idx))) {
+               && !(io.dc_nack.valid && io.dc_nack.isload && io.dc_nack.lsu_idx === bypassed_ldq_incr_idx))) {
             will_fire_load_incoming := true.B
             dc_avail                := false.B
             tlb_avail               := false.B
@@ -455,7 +457,14 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
 
    // By now we know if we are responding to an incoming load,
    // If so, send a signal for load wakeup
-   io.load_issued := will_fire_load_incoming && exe_resp_valid && exe_resp.uop.is_load && !exe_resp.uop.vec_val && !exe_resp.uop.fp_val
+   io.load_issued := will_fire_load_incoming &&
+                     exe_resp_valid &&
+                     exe_resp.uop.is_load &&
+                     !exe_resp.uop.vec_val &&
+                     !exe_resp.uop.fp_val &&
+                     !(io.load_miss && (exe_resp.uop.iw_p1_poisoned || exe_resp.uop.iw_p2_poisoned))
+   io.load_miss   := ((io.dc_nack.valid && io.dc_nack.isload) || io.dc_load_miss) &&
+                     Pipe(true.B, io.load_issued, 2).bits
 
    //--------------------------------------------
    // TLB Access
@@ -645,7 +654,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
       io.memreq_uop   := stq_uop (stq_execute_head)
 
       // prevent this store going out if an earlier store just got nacked!
-      when (!(io.nack.valid && !io.nack.isload))
+      when (!(io.dc_nack.valid && !io.dc_nack.isload))
       {
          io.memreq_val   := Bool(true)
          stq_executed(stq_execute_head) := Bool(true)
@@ -972,7 +981,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
                          (mem_fired_ld && ldst_addr_conflicts.asUInt=/= UInt(0)) ||
                          (mem_fired_ld && ldld_addr_conflict) ||
                          mem_ld_killed ||
-                         (mem_fired_st && io.nack.valid && !io.nack.isload)
+                         (mem_fired_st && io.dc_nack.valid && !io.dc_nack.isload)
    wb_forward_std_idx := forwarding_age_logic.io.forwarding_idx
 
    // kill forwarding if branch mispredict
@@ -999,7 +1008,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
    {
       io.forward_val := wb_forward_std_val &&
                         sdq_val(wb_forward_std_idx) &&
-                        !(io.nack.valid && io.nack.cache_nack)
+                        !(io.dc_nack.valid && io.dc_nack.cache_nack)
    }
    io.forward_data := LoadDataGenerator(sdq_data(wb_forward_std_idx).asUInt, wb_uop.mem_typ)
    io.forward_uop  := wb_uop
@@ -1363,15 +1372,15 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
    ld_was_put_to_sleep     := Bool(false)
 
    def IsOlder(i0: UInt, i1: UInt, tail: UInt) = (Cat(i0 <= tail, i0) < Cat(i1 <= tail, i1))
-   when (io.nack.valid)
+   when (io.dc_nack.valid)
    {
       // the cache nacked our store
-      when (!io.nack.isload)
+      when (!io.dc_nack.isload)
       {
-         stq_executed(io.nack.lsu_idx) := Bool(false)
-         when (IsOlder(io.nack.lsu_idx, stq_execute_head, stq_tail))
+         stq_executed(io.dc_nack.lsu_idx) := Bool(false)
+         when (IsOlder(io.dc_nack.lsu_idx, stq_execute_head, stq_tail))
          {
-            stq_execute_head := io.nack.lsu_idx
+            stq_execute_head := io.dc_nack.lsu_idx
          }
       }
       // the nackee is a load
@@ -1382,7 +1391,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
          {
             // handle case where sdq_val is no longer true (store was
             // committed) or was never valid
-            when (!(sdq_val(wb_forward_std_idx)) || (io.nack.valid && io.nack.cache_nack))
+            when (!(sdq_val(wb_forward_std_idx)) || (io.dc_nack.valid && io.dc_nack.cache_nack))
             {
                clr_ld := Bool(true)
             }
@@ -1394,11 +1403,11 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
 
          when (clr_ld)
          {
-            laq_executed(io.nack.lsu_idx) := Bool(false)
-            debug_laq_put_to_sleep(io.nack.lsu_idx) := Bool(true)
+            laq_executed(io.dc_nack.lsu_idx) := Bool(false)
+            debug_laq_put_to_sleep(io.dc_nack.lsu_idx) := Bool(true)
             ld_was_killed := Bool(true)
-            ld_was_put_to_sleep := !debug_laq_put_to_sleep(io.nack.lsu_idx)
-            laq_forwarded_std_val(io.nack.lsu_idx) := Bool(false)
+            ld_was_put_to_sleep := !debug_laq_put_to_sleep(io.dc_nack.lsu_idx)
+            laq_forwarded_std_val(io.dc_nack.lsu_idx) := Bool(false)
          }
       }
    }

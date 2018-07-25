@@ -552,7 +552,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       // Stop wakeup for bypassable children of spec-loads trying to issue during a ldMiss.
       renport.valid :=
          intport.valid &&
-         !(sxt_ldMiss && (intport.bits.uop.iw_p1_poisoned || intport.bits.uop.iw_p2_poisoned))
+         !(lsu.io.load_miss && (intport.bits.uop.iw_p1_poisoned || intport.bits.uop.iw_p2_poisoned))
       renport.bits := intport.bits
    }
 
@@ -732,10 +732,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    val mem_iq = issue_units.find(_.iqType == IQT_MEM.litValue).get
 
    require (mem_iq.issue_width == 1)
-   val sxt_ldMiss =
-      ((lsu.io.nack.valid && lsu.io.nack.isload || dc_shim.io.core.load_miss)
-         && Pipe(true.B, lsu.io.load_issued, 2).bits)
-   issue_units.map(_.io.sxt_ldMiss := sxt_ldMiss)
+   issue_units.map(_.io.sxt_ldMiss := lsu.io.load_miss)
 
    // Check that IF we see a speculative load-wakeup and NO load-miss, then we should
    // see a writeback to the register file!
@@ -745,9 +742,9 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    require (mem_unit.num_rf_write_ports == 1)
    val mem_resp = mem_unit.io.resp(0)
 
-   when (RegNext(!sxt_ldMiss) && RegNext(RegNext(lsu.io.mem_ldSpecWakeup.valid)) &
-      !(RegNext(br_unit.brinfo.valid && br_unit.brinfo.mispredict)) &&
-      !(RegNext(RegNext(br_unit.brinfo.valid && br_unit.brinfo.mispredict))))
+   when (RegNext(!lsu.io.load_miss) && RegNext(RegNext(lsu.io.mem_ldSpecWakeup.valid)) &&
+      !(RegNext(rob.io.flush.valid || (br_unit.brinfo.valid && br_unit.brinfo.mispredict))) &&
+      !(RegNext(RegNext(rob.io.flush.valid || (br_unit.brinfo.valid && br_unit.brinfo.mispredict)))))
    {
       assert (mem_resp.valid && mem_resp.bits.uop.ctrl.rf_wen && mem_resp.bits.uop.dst_rtype === RT_FIX,
          "[core] We did not see a RF writeback for a speculative load that claimed no load-miss.")
@@ -781,7 +778,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    for (w <- 0 until exe_units.length)
    {
       iregister_read.io.iss_valids(w) := (iss_valids(w) &&
-         !(sxt_ldMiss && (iss_uops(w).iw_p1_poisoned || iss_uops(w).iw_p2_poisoned)))
+         !(lsu.io.load_miss && (iss_uops(w).iw_p1_poisoned || iss_uops(w).iw_p2_poisoned)))
    }
    iregister_read.io.iss_uops := iss_uops
    iregister_read.io.iss_uops map { u => u.iw_p1_poisoned := false.B; u.iw_p2_poisoned := false.B }
@@ -973,7 +970,8 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
    dc_shim.io.core.flush_pipe := rob.io.flush.valid
 
-   lsu.io.nack <> dc_shim.io.core.nack
+   lsu.io.dc_nack <> dc_shim.io.core.nack
+   lsu.io.dc_load_miss := dc_shim.io.core.load_miss
 
    lsu.io.dmem_req_ready := dc_shim.io.core.req.ready
    lsu.io.dmem_is_ordered:= dc_shim.io.core.ordered
