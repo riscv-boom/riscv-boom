@@ -24,6 +24,12 @@ class MicroOp(implicit p: Parameters) extends BoomBundle()(p)
                                                       // for the compacting queue? TODO or is this not really belong
                                                       // here?
 
+   // Has operand 1 or 2 been waken speculatively by a load?
+   // Only integer operands are speculatively woken up,
+   // so we can ignore p3
+   val iw_p1_poisoned   = Bool()
+   val iw_p2_poisoned   = Bool()
+
    val uopc             = UInt(width = UOPC_SZ)       // micro-op code
    val inst             = UInt(width = 32)
    val pc               = UInt(width = coreMaxAddrBits) // TODO remove -- use FTQ to get PC. Change to debug_pc.

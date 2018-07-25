@@ -140,6 +140,9 @@ class LoadStoreUnitIO(pl_width: Int)(implicit p: Parameters) extends BoomBundle(
 
    val vl = UInt(INPUT, width=VL_SZ.W)
 
+   // For speculative load wakeups
+   val load_issued = Bool(OUTPUT)
+
    val counters = new Bundle
    {
       val ld_valid        = Bool(OUTPUT) // a load address micro-op has entered the LSU
@@ -449,6 +452,10 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
       will_fire_store_commit := can_fire_store_commit
       will_fire_load_wakeup  := !can_fire_store_commit && can_fire_load_wakeup && lcam_avail
    }
+
+   // By now we know if we are responding to an incoming load,
+   // If so, send a signal for load wakeup
+   io.load_issued := will_fire_load_incoming && exe_resp_valid && exe_resp.uop.is_load && !exe_resp.uop.vec_val && !exe_resp.uop.fp_val
 
    //--------------------------------------------
    // TLB Access

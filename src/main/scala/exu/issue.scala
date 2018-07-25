@@ -32,13 +32,13 @@ trait IssueUnitConstants
    // invalid  : slot holds no valid uop.
    // s_valid_1: slot holds a valid uop.
    // s_valid_2: slot holds a store-like uop that may be broken into two micro-ops.
-   // s_issued : slot was issued speculatively but may need to be retried.
-   val s_invalid :: s_valid_1 :: s_valid_2 :: s_issued :: Nil = Enum(UInt(),4)
+   val s_invalid :: s_valid_1 :: s_valid_2 :: Nil = Enum(UInt(),3)
 }
 class WakeupPdst(implicit p: Parameters) extends BoomBundle()(p)
 {
    val pdst = UInt(width=PREG_SZ.W)
    val eidx = UInt(width=VL_SZ.W)
+   val poisoned = Bool() // Is the physical register poisoned (aka, was it woken up by a speculative load?)
 }
 
 class IssueUnitIO(
@@ -97,10 +97,11 @@ abstract class IssueUnit(
    // special case "storing" 2 uops within one issue slot.
 
    val dis_uops = Array.fill(DISPATCH_WIDTH) {Wire(new MicroOp())}
-//   val vec_uops = Array.fill(issue_width) {Wire(new MicroOp())}
    for (w <- 0 until DISPATCH_WIDTH)
    {
       dis_uops(w) := io.dis_uops(w)
+      dis_uops(w).iw_p1_poisoned := false.B
+      dis_uops(w).iw_p2_poisoned := false.B
       dis_uops(w).iw_state := s_valid_1
       when ((dis_uops(w).uopc === uopSTA && dis_uops(w).lrs2_rtype === RT_FIX) || dis_uops(w).uopc === uopAMO_AG)
       {
@@ -183,7 +184,7 @@ abstract class IssueUnit(
                     else if (iqType == IQT_MEM.litValue) "mem"
                     else if (iqType == IQT_FP.litValue) " fp"
                     else if (iqType == IQT_VEC.litValue) "vec"
-                    else "unknown"
+                    else {assert(false)}
       for (i <- 0 until num_issue_slots)
       {
 
@@ -222,6 +223,7 @@ abstract class IssueUnit(
       if (iqType == IQT_INT.litValue) "int"
       else if (iqType == IQT_MEM.litValue) "mem"
       else if (iqType == IQT_FP.litValue) " fp"
+      else if (iqType == IQT_VEC.litValue) "vec"
       else "unknown"
 
    override val compileOptions = chisel3.core.ExplicitCompileOptions.NotStrict.copy(explicitInvalidate = true)

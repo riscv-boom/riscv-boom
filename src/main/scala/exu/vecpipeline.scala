@@ -185,6 +185,7 @@ with Packing
       issue_wakeup.valid := writeback.valid
       issue_wakeup.bits.pdst  := writeback.bits.uop.pdst
       issue_wakeup.bits.eidx  := writeback.bits.uop.eidx + writeback.bits.uop.rate // TODO_vec: This is a lot of adders
+      issue_wakeup.bits.poisoned := false.B
    }
 
 

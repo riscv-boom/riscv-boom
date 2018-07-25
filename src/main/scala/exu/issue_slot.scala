@@ -30,8 +30,10 @@ class IssueSlotIO(num_wakeup_ports: Int)(implicit p: Parameters) extends BoomBun
    val brinfo         = Input(new BrResolutionInfo())
    val kill           = Input(Bool()) // pipeline flush
    val clear          = Input(Bool()) // entry being moved elsewhere (not mutually exclusive with grant)
+   val ldspec_miss    = Input(Bool()) // Previous cycle's speculative load wakeup was mispredicted
 
    val wakeup_dsts    = Flipped(Vec(num_wakeup_ports, Valid(new WakeupPdst())))
+   val ldspec_dst     = Flipped(Valid(UInt(width=PREG_SZ.W)))
    val in_uop         = Flipped(Valid(new MicroOp())) // if valid, this WILL overwrite an entry!
    val updated_uop    = Output(new MicroOp()) // the updated slot uop; will be shifted upwards in a collasping queue.
    val uop            = Output(new MicroOp()) // the current Slot's uop. Sent down the pipeline when issued.
@@ -56,9 +58,10 @@ class IssueSlotIO(num_wakeup_ports: Int)(implicit p: Parameters) extends BoomBun
 
    val debug = {
      val result = new Bundle {
-       val p1 = Bool()
-       val p2 = Bool()
-       val p3 = Bool()
+        val p1 = Bool()
+        val p2 = Bool()
+        val p3 = Bool()
+        val state = UInt(width=2.W)
     }
     Output(result)
   }
@@ -86,6 +89,11 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean, isVec: Boolean
    val slot_p2 = !slotUop.prs2_busy
    val slot_p3 = !slotUop.prs3_busy
 
+   // Has operand 1 or 2 been waken speculatively by a load?
+   // Only integer operands are speculatively woken, so p3 is ignored
+   val slot_p1_poisoned = slotUop.iw_p1_poisoned
+   val slot_p2_poisoned = slotUop.iw_p2_poisoned
+
    // slot invalid?
    // slot is valid, holding 1 uop
    // slot is valid, holds 2 uops (like a store)
@@ -93,7 +101,7 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean, isVec: Boolean
    def isValid = slot_state =/= s_invalid
 
    val updated_state      = Wire(UInt()) // the next state of this slot (which might then get moved to a new slot)
-   val updated_eidx       = Wire(UInt())
+   val updated_eidx       = Wire(UInt()) // the next eidx of this slot (...ditto...)
    val updated_uopc       = Wire(UInt()) // the next uopc of this slot (which might then get moved to a new slot)
    val updated_lrs1_rtype = Wire(UInt()) // the next reg type of this slot (which might then get moved to a new slot)
    val updated_lrs2_rtype = Wire(UInt()) // the next reg type of this slot (which might then get moved to a new slot)
@@ -104,6 +112,8 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean, isVec: Boolean
    val updated_prs1_busy  = Wire(Bool())
    val updated_prs2_busy  = Wire(Bool())
    val updated_prs3_busy  = Wire(Bool())
+   val updated_p1_poisoned= Wire(Bool())
+   val updated_p2_poisoned= Wire(Bool())
    val updated_br_mask    = GetNewBrMask(io.brinfo, slotUop)
 
    val incr_eidx = slotUop.eidx + slotUop.rate
@@ -135,6 +145,8 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean, isVec: Boolean
       slotUop.prs1_eidx := updated_prs1_eidx
       slotUop.prs2_eidx := updated_prs2_eidx
       slotUop.prs3_eidx := updated_prs3_eidx
+      slotUop.iw_p1_poisoned := updated_p1_poisoned
+      slotUop.iw_p2_poisoned := updated_p2_poisoned
       slotUop.br_mask   := updated_br_mask
    }
 
@@ -156,68 +168,80 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean, isVec: Boolean
    updated_prs1_eidx   := slotUop.prs1_eidx
    updated_prs2_eidx   := slotUop.prs2_eidx
    updated_prs3_eidx   := slotUop.prs3_eidx
+   updated_p1_poisoned := false.B // Initialize these to false, since the poison state only lasts 1 cycle
+   updated_p2_poisoned := false.B
 
    io.retire := false.B
-   when (io.kill ||
+   when (io.kill)
+   {
+      updated_state := s_invalid
+   }
+   .elsewhen (
          (io.grant && (slot_state === s_valid_1)) ||
          (io.grant && (slot_state === s_valid_2) && slot_p1 && slot_p2))
    {
-      updated_state := s_invalid
-      if (containsVec) {
-         updated_eidx := next_eidx
-         io.retire := true.B
-         when (slotUop.vec_val && updated_eidx < io.vl && slotUop.uopc =/= uopVEXTRACT) {
-            updated_state := slot_state
+      // Try to issue this uop, we can't change it's state, since it may be reissued
+      when (!(io.ldspec_miss && (slot_p1_poisoned || slot_p2_poisoned)) || slotUop.vec_val) {
+         updated_state := s_invalid
+         if (containsVec && usingVec) {
+            updated_eidx := next_eidx
+            io.retire := true.B
+            when (slotUop.vec_val && updated_eidx < io.vl && slotUop.uopc =/= uopVEXTRACT) {
+               updated_state := slot_state
+               io.retire := false.B
+               when (slotUop.lrs1_rtype === RT_VEC) {
+                  updated_prs1_busy := next_next_eidx > slotUop.prs1_eidx
+               }
+               when (slotUop.lrs2_rtype === RT_VEC) {
+                  updated_prs2_busy := next_next_eidx > slotUop.prs2_eidx
+               }
+               when (slotUop.lrs3_rtype === RT_VEC) {
+                  updated_prs3_busy := next_next_eidx > slotUop.prs3_eidx
+               }
+            }
+         } else if (usingVec) {
+            // This means we are in a issue queue which sends elements
+            // sequentially to the vector pipeline
+
+            // TODO_Vec: We can issue these before all operands are not busy
+            // Maybe implement that in the future
             io.retire := false.B
-            when (slotUop.lrs1_rtype === RT_VEC) {
-               updated_prs1_busy := next_next_eidx > slotUop.prs1_eidx
-            }
-            when (slotUop.lrs2_rtype === RT_VEC) {
-               updated_prs2_busy := next_next_eidx > slotUop.prs2_eidx
-            }
-            when (slotUop.lrs3_rtype === RT_VEC) {
-               updated_prs3_busy := next_next_eidx > slotUop.prs3_eidx
-            }
-         }
-      } else {
-         // This means we are in a issue queue which sends elements
-         // sequentially to the vector pipeline
 
-         // TODO_Vec: We can issue these before all operands are not busy
-         // Maybe implement that in the future
-         io.retire := false.B
-
-         def sendToVec(rt: UInt): Bool = { rt === RT_FLT || rt === RT_FIX }
-         when (slotUop.uopc === uopTOVEC && Array(slotUop.lrs1_rtype, slotUop.lrs2_rtype, slotUop.lrs3_rtype).map(p => sendToVec(p)).reduce(_||_)) {
-            when (sendToVec(slotUop.lrs1_rtype)) {
-               updated_lrs1_rtype := RT_X
-               when (sendToVec(slotUop.lrs2_rtype) || sendToVec(slotUop.lrs3_rtype)) {
-                  updated_state := slot_state
-               }
-            } .elsewhen (sendToVec(slotUop.lrs2_rtype)) {
-               updated_lrs2_rtype := RT_X
-               when (sendToVec(slotUop.lrs3_rtype)) {
-                  updated_state := slot_state
-               }
-            } // This logic reissues the microop. We assume that any FLT operands are sent to vector pipeline
+            def sendToVec(rt: UInt): Bool = { rt === RT_FLT || rt === RT_FIX }
+            when (slotUop.uopc === uopTOVEC && Array(slotUop.lrs1_rtype, slotUop.lrs2_rtype, slotUop.lrs3_rtype).map(p => sendToVec(p)).reduce(_||_)) {
+               when (sendToVec(slotUop.lrs1_rtype)) {
+                  updated_lrs1_rtype := RT_X
+                  when (sendToVec(slotUop.lrs2_rtype) || sendToVec(slotUop.lrs3_rtype)) {
+                     updated_state := slot_state
+                  }
+               } .elsewhen (sendToVec(slotUop.lrs2_rtype)) {
+                  updated_lrs2_rtype := RT_X
+                  when (sendToVec(slotUop.lrs3_rtype)) {
+                     updated_state := slot_state
+                  }
+               } // This logic reissues the microop. We assume that any FLT operands are sent to vector pipeline
+            }
          }
       }
    }
    .elsewhen (io.grant && (slot_state === s_valid_2))
    {
-      updated_state := s_valid_1
-      when (slot_p1)
+      when (!(io.ldspec_miss && (slot_p1_poisoned || slot_p2_poisoned)))
       {
-         slotUop.uopc := uopSTD
-         updated_uopc := uopSTD
-         slotUop.lrs1_rtype := RT_X
-         updated_lrs1_rtype := RT_X
+         updated_state := s_valid_1
+         when (slot_p1)
+         {
+            slotUop.uopc := uopSTD
+            updated_uopc := uopSTD
+            slotUop.lrs1_rtype := RT_X
+            updated_lrs1_rtype := RT_X
 
-      }
-      .otherwise
-      {
-         slotUop.lrs2_rtype := RT_X
-         updated_lrs2_rtype := RT_X
+         }
+            .otherwise
+         {
+            slotUop.lrs2_rtype := RT_X
+            updated_lrs2_rtype := RT_X
+         }
       }
    }
 
@@ -236,7 +260,9 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean, isVec: Boolean
    // TODO_Vec: Support vector chaining
    for (i <- 0 until num_slow_wakeup_ports)
    {
-      when (io.wakeup_dsts(i).valid && (io.wakeup_dsts(i).bits.pdst === slotUop.pop1))
+      when (io.wakeup_dsts(i).valid
+         && (io.wakeup_dsts(i).bits.pdst === slotUop.pop1)
+         && !(io.ldspec_miss && io.wakeup_dsts(i).bits.poisoned))
       {
          if (isVec) {
             when (slotUop.vec_val && slotUop.lrs1_rtype === RT_VEC) {
@@ -247,7 +273,9 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean, isVec: Boolean
             updated_prs1_busy := false.B
          }
       }
-      when (io.wakeup_dsts(i).valid && (io.wakeup_dsts(i).bits.pdst === slotUop.pop2))
+      when (io.wakeup_dsts(i).valid
+         && (io.wakeup_dsts(i).bits.pdst === slotUop.pop2)
+         && !(io.ldspec_miss && io.wakeup_dsts(i).bits.poisoned))
       {
          if (isVec) {
             when (slotUop.vec_val && slotUop.lrs2_rtype === RT_VEC) {
@@ -258,7 +286,8 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean, isVec: Boolean
             updated_prs2_busy := false.B
          }
       }
-      when (io.wakeup_dsts(i).valid && (io.wakeup_dsts(i).bits.pdst === slotUop.pop3))
+      when (io.wakeup_dsts(i).valid
+         && (io.wakeup_dsts(i).bits.pdst === slotUop.pop3))
       {
          if (isVec) {
             when (slotUop.vec_val && slotUop.lrs3_rtype === RT_VEC) {
@@ -270,6 +299,26 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean, isVec: Boolean
          }
       }
    }
+
+   when (io.ldspec_dst.valid && io.ldspec_dst.bits === slotUop.pop1 && slotUop.lrs1_rtype === RT_FIX && isValid) {
+      updated_prs1_busy    := false.B
+      updated_p1_poisoned  := true.B
+      assert(!slotUop.iw_p1_poisoned)
+   }
+   when (io.ldspec_dst.valid && io.ldspec_dst.bits === slotUop.pop2 && slotUop.lrs2_rtype === RT_FIX && isValid) {
+      updated_prs2_busy    := false.B
+      updated_p2_poisoned  := true.B
+      assert(!slotUop.iw_p2_poisoned)
+   }
+   when (io.ldspec_miss && slotUop.iw_p1_poisoned) {
+      updated_prs1_busy := true.B
+      updated_p1_poisoned := false.B
+   }
+   when (io.ldspec_miss && slotUop.iw_p2_poisoned) {
+      updated_prs2_busy := true.B
+      updated_p2_poisoned := false.B
+   }
+
    // Here we handle scalar vector operand comparisons, these are a form of "wakeup"
    if (isVec) {
       when (io.fromfp_valid) {
@@ -314,7 +363,6 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean, isVec: Boolean
    // Request Logic
    io.request := isValid && slot_p1 && slot_p2 && slot_p3 && !io.kill
    val high_priority = slotUop.is_br_or_jmp
-//   io.request_hp := io.request && high_priority
    io.request_hp := false.B
 
 
@@ -345,16 +393,24 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean, isVec: Boolean
    //assign outputs
    io.valid         := isValid
    io.uop           := slotUop
-   if (containsVec) {
-      io.will_be_valid := isValid &&
-                          !(io.grant && (updated_eidx >= io.vl || !slotUop.vec_val)
-                          && ((slot_state === s_valid_1) || (slot_state === s_valid_2) && slot_p1 && slot_p2))
-   } else {
-      io.will_be_valid := isValid &&
-                          !(io.grant && slotUop.uopc =/= uopTOVEC
-                          && ((slot_state === s_valid_1) || (slot_state === s_valid_2) && slot_p1 && slot_p2))
-   }
 
+   val may_vacate = Wire(Bool())
+   val squash_grant = io.ldspec_miss && (slotUop.iw_p1_poisoned || slotUop.iw_p2_poisoned)
+   if (containsVec) {
+      may_vacate := (io.grant
+         && (updated_eidx >= io.vl || !slotUop.vec_val)
+         && ((slot_state === s_valid_1) || ((slot_state === s_valid_2) && slot_p1 && slot_p2)))
+   } else {
+      may_vacate := (io.grant
+         && slotUop.uopc =/= uopTOVEC
+         && ((slot_state === s_valid_1) || ((slot_state === s_valid_2) && slot_p1 && slot_p2)))
+   }
+   io.will_be_valid := isValid && !(may_vacate && !squash_grant)
+   // when (io.will_be_valid) {
+   //    assert(updated_state =/= s_invalid)
+   // } .otherwise {
+   //    assert(updated_state === s_invalid)
+   // }
 
    io.updated_uop           := slotUop
    io.updated_uop.iw_state  := updated_state
@@ -370,6 +426,8 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean, isVec: Boolean
    io.updated_uop.prs2_eidx := updated_prs2_eidx
    io.updated_uop.prs3_eidx := updated_prs3_eidx
    io.updated_uop.eidx      := updated_eidx
+   io.updated_uop.iw_p1_poisoned := updated_p1_poisoned
+   io.updated_uop.iw_p2_poisoned := updated_p2_poisoned
 
    when (slot_state === s_valid_2)
    {
@@ -393,6 +451,7 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean, isVec: Boolean
    io.debug.p1 := slot_p1
    io.debug.p2 := slot_p2
    io.debug.p3 := slot_p3
+   io.debug.state := slot_state
 
    override val compileOptions = chisel3.core.ExplicitCompileOptions.NotStrict.copy(explicitInvalidate = true)
 }
