@@ -370,10 +370,8 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean, isVec: Boolean
    when (slot_state === s_valid_1)
    {
       io.request := slot_p1 && slot_p2 && slot_p3 && !io.kill
-      if (containsVec){
-         when (slotUop.is_load) {
-            io.request := (slot_p1 && slot_p2 && slot_p3 && !io.kill)
-         } .elsewhen (slotUop.is_store) {
+      if (containsVec && usingVec){
+         when (slotUop.is_store && slotUop.vec_val) {
             io.request := (slot_p1 && slot_p2 && slot_p3 && !io.kill
                && slotUop.stq_idx === io.lsu_stq_head)
          }
@@ -396,7 +394,8 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean, isVec: Boolean
 
    val may_vacate = Wire(Bool())
    val squash_grant = io.ldspec_miss && (slotUop.iw_p1_poisoned || slotUop.iw_p2_poisoned)
-   if (containsVec) {
+
+   if (containsVec && usingVec) {
       may_vacate := (io.grant
          && (updated_eidx >= io.vl || !slotUop.vec_val)
          && ((slot_state === s_valid_1) || ((slot_state === s_valid_2) && slot_p1 && slot_p2)))
