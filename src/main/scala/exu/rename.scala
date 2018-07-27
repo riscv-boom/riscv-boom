@@ -186,7 +186,8 @@ class RenameStage(
    //-------------------------------------------------------------
    // Free List
 
-   for (list <- Seq(ifreelist, ffreelist, vfreelist))
+   val freelists = Seq(ifreelist) ++ (if (usingFPU) Seq(ffreelist) else Seq()) ++ (if (usingVec) Seq(vfreelist) else Seq())
+   for (list <- freelists)
    {
       list.io.brinfo := io.brinfo
       list.io.kill := io.kill
@@ -233,7 +234,8 @@ class RenameStage(
    //-------------------------------------------------------------
    // Rename Table
 
-   for (table <- Seq(imaptable, fmaptable, vmaptable))
+   val maptables = Seq(imaptable) ++ (if (usingFPU) Seq(fmaptable) else Seq()) ++ (if (usingVec) Seq(vmaptable) else Seq())
+   for (table <- maptables)
    {
       table.io.brinfo := io.brinfo
       table.io.kill := io.kill
@@ -252,19 +254,19 @@ class RenameStage(
    for ((uop, w) <- ren1_uops.zipWithIndex)
    {
       val imap = imaptable.io.values(w)
-      val fmap = fmaptable.io.values(w)
-      val vmap = vmaptable.io.values(w)
 
       uop.pop1          := imap.prs1
       uop.pop2          := imap.prs2
       uop.stale_pdst    := imap.stale_pdst
       if (usingFPU) {
+         val fmap = fmaptable.io.values(w)
          when (uop.lrs1_rtype === RT_FLT) { uop.pop1       := fmap.prs1 }
          when (uop.lrs2_rtype === RT_FLT) { uop.pop2       := fmap.prs2 }
          uop.pop3                                          := fmap.prs3
          when (uop.dst_rtype  === RT_FLT) { uop.stale_pdst := fmap.stale_pdst }
       }
       if (usingVec) {
+         val vmap = vmaptable.io.values(w)
          when (uop.lrs1_rtype === RT_VEC) { uop.pop1       := vmap.prs1 }
          when (uop.lrs2_rtype === RT_VEC) { uop.pop2       := vmap.prs2 }
          when (uop.lrs3_rtype === RT_VEC) { uop.pop3       := vmap.prs3 }

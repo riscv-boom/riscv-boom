@@ -698,28 +698,28 @@ class MemExeUnit(implicit p: Parameters) extends ExecutionUnit(num_rf_read_ports
    io.bypass <> maddrcalc.io.bypass  // TODO this is not where the bypassing should occur from, is there any bypassing happening?!
 
 
-   val to_lsu_vsta = Module(new BranchKillableQueue(new FuncUnitResp(128), 4))
-   val to_lsu_resp = Module(new BranchKillableQueue(new FuncUnitResp(128), 8))
-
-   assert(!(maddrcalc.io.resp.valid
-      && !(maddrcalc.io.resp.bits.uop.vec_val && maddrcalc.io.resp.bits.uop.is_store)
-      && !to_lsu_resp.io.enq.ready),
-      "We do not support backpressure on this queue")
-
-   to_lsu_resp.io.enq.valid := (maddrcalc.io.resp.valid
-                             && !(maddrcalc.io.resp.bits.uop.vec_val && maddrcalc.io.resp.bits.uop.is_store))
-   to_lsu_resp.io.enq.bits  := maddrcalc.io.resp.bits
-   to_lsu_resp.io.brinfo    := io.brinfo
-   to_lsu_resp.io.flush     := io.req.bits.kill
-
-   io.lsu_io.exe_resp       <> to_lsu_resp.io.deq
-
-   // Vector store addrs need to go through a separate queue to avoid blocking loads
-   assert(!(maddrcalc.io.resp.valid && maddrcalc.io.resp.bits.uop.vec_val
-      && maddrcalc.io.resp.bits.uop.is_store && !to_lsu_vsta.io.enq.ready),
-      "We do not support backpressure on this queue")
-
    if (usingVec) {
+      val to_lsu_vsta = Module(new BranchKillableQueue(new FuncUnitResp(128), 4))
+      val to_lsu_resp = Module(new BranchKillableQueue(new FuncUnitResp(128), 8))
+
+      assert(!(maddrcalc.io.resp.valid
+         && !(maddrcalc.io.resp.bits.uop.vec_val && maddrcalc.io.resp.bits.uop.is_store)
+         && !to_lsu_resp.io.enq.ready),
+         "We do not support backpressure on this queue")
+
+      to_lsu_resp.io.enq.valid := (maddrcalc.io.resp.valid
+         && !(maddrcalc.io.resp.bits.uop.vec_val && maddrcalc.io.resp.bits.uop.is_store))
+      to_lsu_resp.io.enq.bits  := maddrcalc.io.resp.bits
+      to_lsu_resp.io.brinfo    := io.brinfo
+      to_lsu_resp.io.flush     := io.req.bits.kill
+
+      io.lsu_io.exe_resp       <> to_lsu_resp.io.deq
+
+      // Vector store addrs need to go through a separate queue to avoid blocking loads
+      assert(!(maddrcalc.io.resp.valid && maddrcalc.io.resp.bits.uop.vec_val
+         && maddrcalc.io.resp.bits.uop.is_store && !to_lsu_vsta.io.enq.ready),
+         "We do not support backpressure on this queue")
+
       to_lsu_vsta.io.enq.valid := (maddrcalc.io.resp.valid
                                 && maddrcalc.io.resp.bits.uop.vec_val
                                 && maddrcalc.io.resp.bits.uop.is_store
@@ -728,12 +728,14 @@ class MemExeUnit(implicit p: Parameters) extends ExecutionUnit(num_rf_read_ports
       to_lsu_vsta.io.brinfo    := io.brinfo
       to_lsu_vsta.io.flush     := io.req.bits.kill
       io.lsu_io.exe_vsta       <> to_lsu_vsta.io.deq
+      io.fu_types := Mux(to_lsu_resp.io.count < UInt(1), FU_MEM, UInt(0)) | Mux(to_lsu_vsta.io.count < UInt(1), FU_VSTA, UInt(0))
    } else {
-      to_lsu_vsta.io.enq.valid := false.B
+      io.lsu_io.exe_resp       <> maddrcalc.io.resp
+      io.fu_types := FU_MEM
    }
 
 
-   io.fu_types := Mux(to_lsu_resp.io.count < UInt(1), FU_MEM, UInt(0)) | Mux(to_lsu_vsta.io.count < UInt(1), FU_VSTA, UInt(0))
+
    // TODO_Vec: Tune queue suze and limit here
 
 
