@@ -90,7 +90,7 @@ class BoomTile(
 
   val cpuDevice = new Device {
     def describe(resources: ResourceBindings): Description =
-      toDescription(resources)("sifive,rocket0", dtimProperty ++ itimProperty)
+      toDescription(resources)("ucb-bar,boom0", dtimProperty ++ itimProperty)
   }
 
   ResourceBinding {
