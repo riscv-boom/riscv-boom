@@ -36,7 +36,7 @@ case class BoomTileParams(
 
 class BoomTile(
     val boomParams: BoomTileParams,
-    crossing: SubsystemClockCrossing)
+    crossing: ClockCrossingType)
   (implicit p: Parameters) extends BaseTile(boomParams, crossing)(p)
     with HasExternalInterrupts
     with CanHaveBoomPTW

@@ -1,6 +1,6 @@
 organization := "edu.berkeley.cs"
 
-version := "1.0"
+version := "1.1"
 
 name := "boom"
 
