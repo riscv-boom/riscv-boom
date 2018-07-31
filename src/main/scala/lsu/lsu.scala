@@ -69,15 +69,15 @@ class LoadStoreUnitIO(pl_width: Int)(implicit p: Parameters) extends BoomBundle(
    val new_stq_idx        = UInt(OUTPUT, MEM_ADDR_SZ)
 
    // Execute Stage
-   val exe_resp           = (new DecoupledIO(new FuncUnitResp(128))).flip
-   val exe_vsta           = (new DecoupledIO(new FuncUnitResp(128))).flip // From vector store addr gen queue
+   val exe_resp           = (new DecoupledIO(new FuncUnitResp(xLen))).flip
+   val exe_vsta           = (new DecoupledIO(new FuncUnitResp(xLen))).flip // From vector store addr gen queue
    val fp_stdata          = Valid(new MicroOpWithData(fLen)).flip
-   val vec_stdata         = (new DecoupledIO(new MicroOpWithData(128))).flip
+   val vec_stdata         = (new DecoupledIO(new MicroOpWithData(xLen))).flip
 
    // Send out Memory Request
    val memreq_val         = Bool(OUTPUT)
    val memreq_addr        = UInt(OUTPUT, corePAddrBits)
-   val memreq_wdata       = UInt(OUTPUT, 128)
+   val memreq_wdata       = UInt(OUTPUT, xLen)
    val memreq_uop         = new MicroOp().asOutput
 
    // Memory Stage
@@ -87,7 +87,7 @@ class LoadStoreUnitIO(pl_width: Int)(implicit p: Parameters) extends BoomBundle(
    // Forward Store Data to Register File
    // TODO turn into forward bundle
    val forward_val        = Bool(OUTPUT)
-   val forward_data       = UInt(OUTPUT, 128)
+   val forward_data       = UInt(OUTPUT, xLen)
    val forward_uop        = new MicroOp().asOutput // the load microop (for its pdst)
 
    // Receive Memory Response
@@ -204,7 +204,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
 
    // Store-Data Queue
    val sdq_val       = Reg(Vec(num_st_entries, Bool()))
-   val sdq_data      = Reg(Vec(num_st_entries, UInt(width = 128)))
+   val sdq_data      = Reg(Vec(num_st_entries, UInt(width = xLen)))
 
    // Shared Store Queue Information
    val stq_uop       = Reg(Vec(num_st_entries, new MicroOp()))
@@ -344,7 +344,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
    // give first priority to incoming uops
 
    val exe_resp_valid = Wire(Bool())
-   val exe_resp       = Wire(new FuncUnitResp(128))
+   val exe_resp       = Wire(new FuncUnitResp(xLen))
 
    io.exe_resp.ready := false.B
    io.exe_vsta.ready := false.B
