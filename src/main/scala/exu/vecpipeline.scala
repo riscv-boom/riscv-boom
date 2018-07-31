@@ -291,7 +291,7 @@ with Packing
    //-------------------------------------------------------------
 
    val ll_wb = Module(new BranchKillableQueue(new ExeUnitResp(128), entries = 8)) // TODO_Vec: Tune these
-   ll_wb_block_issue := ll_wb.io.count >= 4.U
+   ll_wb_block_issue := ll_wb.io.count >= 1.U
    ll_wb.io.enq      <> io.ll_wport
    ll_wb.io.brinfo   := io.brinfo
    ll_wb.io.flush    := io.flush_pipeline

@@ -477,8 +477,8 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    //-------------------------------------------------------------
 
    // TODO for now, assume worst-case all instructions will dispatch towards one issue unit.
-   val fp_dis_readys  = if (usingFPU) fp_pipeline.io.dis_readys.asUInt else ~UInt(0)
-   val vec_dis_readys = if (usingVec) vec_pipeline.io.dis_readys.asUInt else ~UInt(0)
+   val fp_dis_readys  = if (usingFPU) fp_pipeline.io.dis_readys.asUInt else ~UInt(0, width=DISPATCH_WIDTH)
+   val vec_dis_readys = if (usingVec) vec_pipeline.io.dis_readys.asUInt else ~UInt(0, width=DISPATCH_WIDTH)
    val dis_readys     = issue_units.map(_.io.dis_readys.asUInt).reduce(_&_) & fp_dis_readys & vec_dis_readys
    rename_stage.io.dis_inst_can_proceed := dis_readys.toBools
 

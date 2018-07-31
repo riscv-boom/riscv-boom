@@ -446,10 +446,6 @@ class VecFPUExeUnit(
    io.resp(0).bits.fflags   := vfpu_resp_fflags // TODO_vec add div flags here
    io.resp(0).bits.mask     := "b1111111111111111".U
    assert(!(valu.io.resp.valid && vfpu.io.resp.valid), "VALU and VFPU contending for write port")
-   when (io.resp(0).valid) {
-      printf("A functional unit in the vector exe unit has valid response\n");
-      printf("%d %d %x\n", io.resp(0).bits.uop.uopc, io.resp(0).bits.uop.ldst, io.resp(0).bits.uop.inst)
-   }
    override def toString: String = out_str.toString
 }
 

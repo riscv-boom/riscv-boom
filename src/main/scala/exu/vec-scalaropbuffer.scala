@@ -8,8 +8,7 @@ import boom.util._
 
 class ScalarOpBuffer(implicit p: Parameters) extends BoomModule()(p) with freechips.rocketchip.rocket.constants.VecCfgConstants
 {
-   val vecParams = issueParams.find(_.iqType == IQT_VEC.litValue).get
-   val buf_size  = vecParams.numEntries + 4
+   val buf_size  = scalar_op_buff_sz
 
    val io = IO(new Bundle {
       val r_idx   = Input(UInt(width=log2Ceil(buf_size).W))
@@ -40,8 +39,7 @@ class ScalarOpBuffer(implicit p: Parameters) extends BoomModule()(p) with freech
 class ScalarOpFreeList(pl_width: Int)(implicit p: Parameters) extends BoomModule()(p)
       with freechips.rocketchip.rocket.constants.VecCfgConstants
 {
-   val vecParams = issueParams.find(_.iqType == IQT_VEC.litValue).get
-   val iw_size = vecParams.numEntries + 4
+   val buf_size = scalar_op_buff_sz
 
    val io = IO(new Bundle {
       val brinfo = Input(new BrResolutionInfo())
@@ -61,11 +59,11 @@ class ScalarOpFreeList(pl_width: Int)(implicit p: Parameters) extends BoomModule
 
       // Requested Scalar Operand Buffer Index
       //val can_allocate = Vec(pl_width, Bool()).asOuput
-      val req_scopb_idx = Output(Vec(pl_width, UInt(width=log2Ceil(iw_size).W)))
+      val req_scopb_idx = Output(Vec(pl_width, UInt(width=log2Ceil(buf_size).W)))
    })
 
    val freelist = Module(new RenameFreeListHelper(
-      iw_size,
+      buf_size,
       pl_width))
 
    freelist.io.br_mispredict_val := io.brinfo.mispredict

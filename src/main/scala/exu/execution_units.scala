@@ -115,9 +115,9 @@ class ExecutionUnits(fpu: Boolean = false, vec: Boolean = false)(implicit val p:
                                           , has_ifpu         = int_width==1
                                           , has_itov         = int_width==1 && usingVec
       ))
-      for (w <- 0 until int_width-1) {
-         val is_last = w == (int_width-2)
-         exe_units += Module(new ALUExeUnit(has_ifpu = is_last, has_itov = is_last))
+      for (w <- 1 until int_width) {
+         val is_last = w == (int_width-1)
+         exe_units += Module(new ALUExeUnit(has_ifpu = is_last, has_itov = is_last && usingVec))
       }
    } else if (!vec) {
       // FP execution units
