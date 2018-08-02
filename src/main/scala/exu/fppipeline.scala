@@ -260,7 +260,6 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
          if (wbresp.bits.writesToIRF) {
             io.toint <> wbresp
             assert(!(wbresp.valid && !toint))
-            assert(!(io.toint.valid && !io.toint.ready))
             assert(!toint_found)
             toint_found = true
          } else if (eu.has_ifpu) { // This is the ifpu write back

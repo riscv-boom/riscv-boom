@@ -54,8 +54,6 @@ class IssueSlotIO(num_wakeup_ports: Int)(implicit p: Parameters) extends BoomBun
    val fromint_op_id  = Input(UInt(width=2.W))
    val fromint_data   = Input(UInt(width=xLen.W))
 
-   val retire         = Output(Bool()) // This MicroOp has finished issuing
-
    val debug = {
      val result = new Bundle {
         val p1 = Bool()
@@ -171,7 +169,6 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean, isVec: Boolean
    updated_p1_poisoned := false.B // Initialize these to false, since the poison state only lasts 1 cycle
    updated_p2_poisoned := false.B
 
-   io.retire := false.B
    when (io.kill)
    {
       updated_state := s_invalid
@@ -185,10 +182,8 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean, isVec: Boolean
          updated_state := s_invalid
          if (containsVec && usingVec) {
             updated_eidx := next_eidx
-            io.retire := true.B
             when (slotUop.vec_val && updated_eidx < io.vl && slotUop.uopc =/= uopVEXTRACT) {
                updated_state := slot_state
-               io.retire := false.B
                when (slotUop.lrs1_rtype === RT_VEC) {
                   updated_prs1_busy := next_next_eidx > slotUop.prs1_eidx
                }
@@ -205,7 +200,6 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean, isVec: Boolean
 
             // TODO_Vec: We can issue these before all operands are not busy
             // Maybe implement that in the future
-            io.retire := false.B
 
             def sendToVec(rt: UInt): Bool = { rt === RT_FLT || rt === RT_FIX }
             when (slotUop.uopc === uopTOVEC && Array(slotUop.lrs1_rtype, slotUop.lrs2_rtype, slotUop.lrs3_rtype).map(p => sendToVec(p)).reduce(_||_)) {

@@ -57,9 +57,6 @@ with Packing
      val debug_tsc_reg  = Input(UInt(width=128.W))
      val vl             = Input(UInt(width=VL_SZ.W))
 
-     val retire_valids    = Output(Bool())
-     val retire_uops      = Output(new MicroOp())
-
      val lsu_stq_head      = Input(UInt())
   } 
 
@@ -109,9 +106,6 @@ with Packing
 
    issue_unit.io.fromfp            <> io.fromfp
    issue_unit.io.fromint           <> io.fromint
-
-   io.retire_valids                := issue_unit.io.retire_valids
-   io.retire_uops                  := issue_unit.io.retire_uops
 
    vscalaropbuffer.io.w_valid(0)   := io.fromfp.valid
    vscalaropbuffer.io.w_idx(0)     := io.fromfp.bits.uop.vscopb_idx

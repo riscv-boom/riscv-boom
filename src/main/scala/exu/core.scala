@@ -929,9 +929,6 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    }
    if (usingVec) {
       vec_pipeline.io.brinfo := br_unit.brinfo
-
-      rename_stage.io.retire_valids := vec_pipeline.io.retire_valids
-      rename_stage.io.retire_uops   := vec_pipeline.io.retire_uops
    }
    //-------------------------------------------------------------
    //-------------------------------------------------------------

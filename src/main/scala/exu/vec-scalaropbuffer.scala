@@ -51,15 +51,17 @@ class ScalarOpFreeList(pl_width: Int)(implicit p: Parameters) extends BoomModule
 
       // These represent when entries are deallocated from the vector issue window
       // Vector window should retire one at a time
-      val retire_valids     = Input(Bool())
-      val retire_uops       = Input(new MicroOp())
-      val retire_rbk_valids = Input(Bool())
+      val com_valids     = Input(Vec(pl_width, Bool()))
+      val com_uops       = Input(Vec(pl_width, new MicroOp()))
+      val com_rbk_valids = Input(Vec(pl_width, Bool()))
 
-      val flush_pipeline    = Input(Bool())
+      val flush_pipeline = Input(Bool())
 
       // Requested Scalar Operand Buffer Index
       //val can_allocate = Vec(pl_width, Bool()).asOuput
-      val req_scopb_idx = Output(Vec(pl_width, UInt(width=log2Ceil(buf_size).W)))
+      val req_scopb_idx  = Output(Vec(pl_width, UInt(width=log2Ceil(buf_size).W)))
+
+      val can_allocate   = Output(Vec(pl_width, Bool()))
    })
 
    val freelist = Module(new RenameFreeListHelper(
@@ -75,33 +77,29 @@ class ScalarOpFreeList(pl_width: Int)(implicit p: Parameters) extends BoomModule
       // TODO_Vec: Fix this logic
       freelist.io.req_preg_vals(w) := !io.kill &&
                                       io.ren_will_fire(w) &&
-                                      (io.ren_uops(w).iqtype === IQT_VEC || (io.ren_uops(w).vec_val && io.ren_uops(w).is_store)) 
+                                      io.ren_uops(w).use_vscopb
 
-      if (w == 0) {
-         freelist.io.enq_vals(w)      := io.retire_valids
-         freelist.io.enq_pregs(w)     := io.retire_uops.vscopb_idx
 
-         freelist.io.com_wens(w)      := io.retire_valids
-         freelist.io.com_uops(w)      := io.retire_uops
-      } else {
-         freelist.io.enq_vals(w)      := false.B
-         freelist.io.enq_pregs(w)     := DontCare
-
-         freelist.io.com_wens(w)      := false.B
-         freelist.io.com_uops(w)      := DontCare
-      }
+      freelist.io.enq_vals(w)      := io.com_valids(w) && io.com_uops(w).use_vscopb
+      freelist.io.enq_pregs(w)     := io.com_uops(w).vscopb_idx
 
       freelist.io.ren_br_vals(w)   := io.ren_br_vals(w)
       freelist.io.ren_br_tags(w)   := io.ren_uops(w).br_tag
 
       // What does rolling back mean here? I don't think we ever roll back
-      freelist.io.rollback_wens(w)  := false.B
-      freelist.io.rollback_pdsts(w) := DontCare
+      freelist.io.rollback_wens(w) := io.com_rbk_valids(w) && io.com_uops(w).use_vscopb
+      freelist.io.rollback_pdsts(w):= io.com_uops(w).vscopb_idx
+
+      freelist.io.com_wens(w)      := io.com_valids(w) && io.com_uops(w).use_vscopb
+      freelist.io.com_uops(w)      := io.com_uops(w)
+
+
 
       io.req_scopb_idx(w) := freelist.io.req_pregs(w)
    }
+   io.can_allocate := freelist.io.can_allocate
 
-   assert(freelist.io.can_allocate.reduce(_&&_), "We should always be able to allocate here")
+   //assert(freelist.io.can_allocate.reduce(_&&_), "We should always be able to allocate here")
 
 
 }

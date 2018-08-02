@@ -72,9 +72,6 @@ class RenameStageIO(
 
    val vl = UInt(width=VL_SZ).asInput
 
-   val retire_valids = Bool().asInput
-   val retire_uops = new MicroOp().asInput
-
    val debug_rob_empty = Bool(INPUT)
    val debug = new DebugRenameStageIO(num_int_pregs, num_fp_pregs, num_vec_pregs).asOutput
 }
@@ -214,16 +211,16 @@ class RenameStage(
 
    if (usingVec) {
       // "Freelist" for scalar operand buffer rows
-      vsfreelist.io.brinfo        := io.brinfo
-      vsfreelist.io.kill          := io.kill
-      vsfreelist.io.ren_will_fire := ren1_will_fire
-      vsfreelist.io.ren_uops      := ren1_uops map {u => GetNewUopAndBrMask(u, io.brinfo)}
-      vsfreelist.io.ren_br_vals   := ren1_br_vals
+      vsfreelist.io.brinfo         := io.brinfo
+      vsfreelist.io.kill           := io.kill
+      vsfreelist.io.ren_will_fire  := ren1_will_fire
+      vsfreelist.io.ren_uops       := ren1_uops map {u => GetNewUopAndBrMask(u, io.brinfo)}
+      vsfreelist.io.ren_br_vals    := ren1_br_vals
 
-      vsfreelist.io.retire_valids     := io.retire_valids
-      vsfreelist.io.retire_uops       := io.retire_uops
-      vsfreelist.io.retire_rbk_valids := Bool(false)
-      vsfreelist.io.flush_pipeline    := io.flush_pipeline
+      vsfreelist.io.com_valids     := io.com_valids
+      vsfreelist.io.com_uops       := io.com_uops
+      vsfreelist.io.com_rbk_valids := io.com_rbk_valids
+      vsfreelist.io.flush_pipeline := io.flush_pipeline
 
       for (w <- 0 until pl_width) {
          ren1_uops(w).vscopb_idx := vsfreelist.io.req_scopb_idx(w)
@@ -419,7 +416,8 @@ class RenameStage(
          ((ren1_uops(w).dst_rtype =/= RT_FIX && ren1_uops(w).dst_rtype =/= RT_FLT && ren1_uops(w).dst_rtype =/= RT_VEC) ||
          (ifreelist.io.can_allocate(w) && ren1_uops(w).dst_rtype === RT_FIX) ||
          (ffreelist.io.can_allocate(w) && ren1_uops(w).dst_rtype === RT_FLT) ||
-         (vfreelist.io.can_allocate(w) && ren1_uops(w).dst_rtype === RT_VEC))
+         (if (usingVec) (vfreelist.io.can_allocate(w) && ren1_uops(w).dst_rtype === RT_VEC) else true.B)) &&
+         (if (usingVec) (vsfreelist.io.can_allocate(w) || !ren1_uops(w).use_vscopb) else true.B)
    }
 
 

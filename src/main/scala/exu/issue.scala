@@ -75,8 +75,6 @@ class IssueUnitIO(
    val fromfp       = Flipped(Decoupled(new ExeUnitResp(xLen)))
    val fromint      = Flipped(Decoupled(new ExeUnitResp(xLen)))
 
-   val retire_valids = Output(Bool())
-   val retire_uops = Output(new MicroOp)
 }
 
 abstract class IssueUnit(

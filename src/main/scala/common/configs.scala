@@ -81,7 +81,7 @@ class WithSmallBooms extends Config((site, here, up) => {
             IssueParams(issueWidth=1, numEntries=4, iqType=IQT_INT.litValue),
             IssueParams(issueWidth=1, numEntries=4, iqType=IQT_VEC.litValue),
             IssueParams(issueWidth=1, numEntries=4, iqType=IQT_FP.litValue)),
-         scalarOpBuffSz = 8,
+         scalarOpBuffSz = 11,
          numIntPhysRegisters = 56,
          numFpPhysRegisters = 65,
          numLsuEntries = 8,
