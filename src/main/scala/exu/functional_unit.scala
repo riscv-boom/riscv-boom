@@ -104,7 +104,7 @@ class GetPredictionInfo(implicit p: Parameters) extends BoomBundle()(p)
 }
 
 class FuncUnitReq(data_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
-with HasBoomUOP
+with boom.common.HasBoomUOP
 {
    val num_operands = 3
 
@@ -118,7 +118,7 @@ with HasBoomUOP
 }
 
 class FuncUnitResp(data_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
-with HasBoomUOP
+with boom.common.HasBoomUOP
 {
    val data = UInt(width = data_width)
    val fflags = new ValidIO(new FFlagsResp)

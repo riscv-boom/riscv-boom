@@ -555,7 +555,10 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule()(p) with freechips.
             uop.lrs2_rtype := RT_X
          }
       }
-      uop.use_vscopb       := uop.iqtype === IQT_VEC || (cs.vec_val && cs.is_store)
+      uop.use_vscopb       := (uop.iqtype === IQT_VEC || (cs.vec_val && cs.is_store)) &&
+                              ((uop.lrs1_rtype === RT_FIX || uop.lrs1_rtype === RT_FLT) ||
+                               (uop.lrs2_rtype === RT_FIX || uop.lrs2_rtype === RT_FLT) ||
+                               (uop.lrs3_rtype === RT_FIX || uop.lrs3_rtype === RT_FLT))
    }
 
    //-------------------------------------------------------------

@@ -25,7 +25,7 @@ import freechips.rocketchip.tile.XLen
 import freechips.rocketchip.tile
 import boom.common._
 import boom.ifu.GetPCFromFtqIO
-import boom.util.{ImmGen, BranchKillableQueue, HasBoomUOP, IsKilledByBranch}
+import boom.util.{ImmGen, BranchKillableQueue, IsKilledByBranch}
 
 // TODO rename to something like MicroOpWithData
 class ExeUnitResp(data_width: Int)(implicit p: Parameters) extends BoomBundle()(p)

@@ -14,6 +14,10 @@ import freechips.rocketchip.config.Parameters
 import boom.bpu.BranchPredInfo
 import boom.exu.FUConstants
 
+abstract trait HasBoomUOP extends BoomBundle{
+   val uop = new MicroOp()
+}
+
 class MicroOp(implicit p: Parameters) extends BoomBundle()(p)
    with freechips.rocketchip.rocket.constants.MemoryOpConstants
    with freechips.rocketchip.rocket.constants.ScalarOpConstants
@@ -193,8 +197,8 @@ object CfiType
 }
 
 class MicroOpWithData(data_sz: Int)(implicit p: Parameters) extends BoomBundle()(p)
+with HasBoomUOP
 {
-   val uop = new MicroOp()
    val data = UInt(width = data_sz)
    override def cloneType = new MicroOpWithData(data_sz)(p).asInstanceOf[this.type]
 }

@@ -85,7 +85,9 @@ with Packing
       e.num_rf_write_ports).sum == num_wakeup_ports)
 
 
-   val tosdq = Module(new Queue(new MicroOpWithData(128), 4))
+   val tosdq = Module(new BranchKillableQueue(new MicroOpWithData(128), entries=4))
+   tosdq.io.brinfo := io.brinfo
+   tosdq.io.flush  := io.flush_pipeline
 
    // Todo_vec add checking for num write ports and number of functional units which use the issue unit
 
@@ -168,7 +170,7 @@ with Packing
       iss_uops(i) := issue_unit.io.iss_uops(i)
 
       issue_unit.io.fu_types(i) := ((exe_units(i).io.fu_types & ~Mux(ll_wb_block_issue, FU_VALU | FU_VFPU, 0.U))
-         | Mux(io.memreq.ready, FU_MEM, 0.U)) | Mux(tosdq.io.count < 2.U, FU_V2I, 0.U)
+         | Mux(io.memreq.ready, FU_MEM, 0.U)) | Mux(tosdq.io.count === 0.U, FU_V2I, 0.U)
 
       require (exe_units(i).uses_iss_unit)
    }
@@ -253,15 +255,13 @@ with Packing
                VEW_32 -> 2.U,
                VEW_64 -> 3.U))) & "b1111".U, 0.U(width=3.W))
 
-         tosdq.io.enq.valid     := exe_req.bits.uop.is_store
+         tosdq.io.enq.valid     := exe_req.bits.uop.is_store &&
+                                   exe_req.valid &&
+                                   !IsKilledByBranch(io.brinfo, exe_req.bits.uop)
          tosdq.io.enq.bits.uop  := exe_req.bits.uop
          tosdq.io.enq.bits.data := rs3_data >> shiftn
          io.tosdq               <> tosdq.io.deq
-         tosdq.io.deq.ready     := io.tosdq.ready
-         io.tosdq.valid         := tosdq.io.deq.valid
-         io.tosdq.bits.uop      := tosdq.io.deq.bits.uop
-         io.tosdq.bits.data     := tosdq.io.deq.bits.data
-
+         assert(!(tosdq.io.enq.valid && !tosdq.io.enq.ready), "This queue cannot fill up")
 
          io.memreq.valid         := exe_req.bits.uop.uopc === uopVLDX || exe_req.bits.uop.uopc === uopVSTX
          io.memreq.bits.uop      := exe_req.bits.uop

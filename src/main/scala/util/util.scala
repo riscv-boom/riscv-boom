@@ -316,11 +316,8 @@ object AgePriorityEncoder
 }
 
 
-abstract trait HasBoomUOP extends BoomBundle{
-   val uop = new MicroOp()
-}
 
-class BranchKillableQueue[T <: HasBoomUOP](gen: T, entries: Int)
+class BranchKillableQueue[T <: boom.common.HasBoomUOP](gen: T, entries: Int)
    (implicit p: freechips.rocketchip.config.Parameters)
    extends boom.common.BoomModule()(p)
    with boom.common.HasBoomCoreParameters
