@@ -140,6 +140,7 @@ abstract class IssueUnit(
          for (j <- i + 1 until num_issue_slots) {
             assert(!(
                issue_slots(i).valid && issue_slots(j).valid &&
+               issue_slots(i).uop.use_vscopb && issue_slots(j).uop.use_vscopb &&
                issue_slots(i).uop.vscopb_idx === issue_slots(j).uop.vscopb_idx), "Two microops with the same operand buffer index")
          }
       }
