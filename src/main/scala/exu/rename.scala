@@ -62,7 +62,7 @@ class RenameStageIO(
    // issue stage (fast wakeup)
    val int_wakeups = Vec(num_int_wb_ports, Valid(new ExeUnitResp(xLen))).flip
    val fp_wakeups = Vec(num_fp_wb_ports, Valid(new ExeUnitResp(fLen+1))).flip
-   val vec_wakeups = Vec(num_vec_wb_ports, Valid(new ExeUnitResp(128))).flip
+   val vec_wakeups = Vec(num_vec_wb_ports, Valid(new ExeUnitResp(vecStripLen))).flip
    // commit stage
    val com_valids = Vec(pl_width, Bool()).asInput
    val com_uops   = Vec(pl_width, new MicroOp()).asInput
@@ -158,7 +158,23 @@ class RenameStage(
       num_wb_ports = num_vec_wb_ports,
       isVector = true)) // TODO: Figure out what this is
 
-
+   val vpmaptable = Module(new RenameMapTable(
+      pl_width,
+      RT_VPRED.litValue,
+      1,
+      numVecPhysPRegs))
+   val vpfreelist = Module(new RenameFreeList(
+      pl_width,
+      RT_VPRED.litValue,
+      numVecPhysPRegs,
+      1))
+   val vpbusytable= Module(new BusyTable(
+      pl_width,
+      RT_VPRED.litValue,
+      num_pregs = numVecPhysPRegs,
+      num_read_ports = pl_width,
+      num_wb_ports = num_vec_wb_ports,
+      isVector = true))
 
    val vsfreelist = Module(new ScalarOpFreeList(pl_width))
 
@@ -183,7 +199,7 @@ class RenameStage(
    //-------------------------------------------------------------
    // Free List
 
-   val freelists = Seq(ifreelist) ++ (if (usingFPU) Seq(ffreelist) else Seq()) ++ (if (usingVec) Seq(vfreelist) else Seq())
+   val freelists = Seq(ifreelist) ++ (if (usingFPU) Seq(ffreelist) else Seq()) ++ (if (usingVec) Seq(vfreelist, vpfreelist) else Seq())
    for (list <- freelists)
    {
       list.io.brinfo := io.brinfo
@@ -203,14 +219,17 @@ class RenameStage(
       val i_preg = ifreelist.io.req_pregs(w)
       val f_preg = ffreelist.io.req_pregs(w)
       val v_preg = vfreelist.io.req_pregs(w)
+      val vp_preg= vpfreelist.io.req_pregs(w)
       uop.pdst := i_preg
       when (usingFPU.B && uop.dst_rtype === RT_FLT) { uop.pdst := f_preg }
       when (usingVec.B && uop.dst_rtype === RT_VEC) { uop.pdst := v_preg }
+      when (usingVec.B && uop.writes_vpred)         { uop.vp_pdst := vp_preg }
    }
 
 
    if (usingVec) {
       // "Freelist" for scalar operand buffer rows
+      // TODO_Vec: Roll this into above
       vsfreelist.io.brinfo         := io.brinfo
       vsfreelist.io.kill           := io.kill
       vsfreelist.io.ren_will_fire  := ren1_will_fire
@@ -231,7 +250,7 @@ class RenameStage(
    //-------------------------------------------------------------
    // Rename Table
 
-   val maptables = Seq(imaptable) ++ (if (usingFPU) Seq(fmaptable) else Seq()) ++ (if (usingVec) Seq(vmaptable) else Seq())
+   val maptables = Seq(imaptable) ++ (if (usingFPU) Seq(fmaptable) else Seq()) ++ (if (usingVec) Seq(vmaptable, vpmaptable) else Seq())
    for (table <- maptables)
    {
       table.io.brinfo := io.brinfo
@@ -245,9 +264,12 @@ class RenameStage(
       table.io.flush_pipeline := io.flush_pipeline
       table.io.debug_inst_can_proceed := io.inst_can_proceed
    }
+
+
    imaptable.io.debug_freelist_can_allocate := ifreelist.io.can_allocate
-   if (usingFPU) fmaptable.io.debug_freelist_can_allocate := ffreelist.io.can_allocate
-   if (usingVec) vmaptable.io.debug_freelist_can_allocate := vfreelist.io.can_allocate
+   if (usingFPU) fmaptable.io.debug_freelist_can_allocate  := ffreelist.io.can_allocate
+   if (usingVec) vmaptable.io.debug_freelist_can_allocate  := vfreelist.io.can_allocate
+   if (usingVec) vpmaptable.io.debug_freelist_can_allocate := vpfreelist.io.can_allocate
    for ((uop, w) <- ren1_uops.zipWithIndex)
    {
       val imap = imaptable.io.values(w)
@@ -269,6 +291,9 @@ class RenameStage(
          when (uop.lrs3_rtype === RT_VEC) { uop.pop3       := vmap.prs3 }
          when (uop.dst_rtype  === RT_VEC) { uop.stale_pdst := vmap.stale_pdst }
 
+         val vpmap = vpmaptable.io.values(w)
+         when (uop.reads_vpred)           { uop.vp_pop     := vpmap.prs1 }
+         when (uop.writes_vpred)          { uop.stale_vp_pdst := vpmap.stale_pdst }
       }
    }
 
@@ -284,12 +309,14 @@ class RenameStage(
 
 
 
-   val ren2_imapvalues = if (renameLatency == 2) RegEnable(imaptable.io.values, ren2_will_proceed)
-                         else imaptable.io.values
-   val ren2_fmapvalues = if (renameLatency == 2) RegEnable(fmaptable.io.values, ren2_will_proceed)
-                         else fmaptable.io.values
-   val ren2_vmapvalues = if (renameLatency == 2) RegEnable(vmaptable.io.values, ren2_will_proceed)
-                         else vmaptable.io.values
+   val ren2_imapvalues  = if (renameLatency == 2) RegEnable(imaptable.io.values, ren2_will_proceed)
+                          else imaptable.io.values
+   val ren2_fmapvalues  = if (renameLatency == 2) RegEnable(fmaptable.io.values, ren2_will_proceed)
+                          else fmaptable.io.values
+   val ren2_vmapvalues  = if (renameLatency == 2) RegEnable(vmaptable.io.values, ren2_will_proceed)
+                          else vmaptable.io.values
+   val ren2_vpmapvalues = if (renameLatency == 2) RegEnable(vpmaptable.io.values, ren2_will_proceed)
+                          else vpmaptable.io.values
    for (w <- 0 until pl_width)
    {
       if (renameLatency == 1)
@@ -327,10 +354,10 @@ class RenameStage(
    // Busy Table
 
    ibusytable.io.ren_will_fire := ren2_will_fire
-   ibusytable.io.ren_uops := ren2_uops  // expects pdst to be set up.
-   ibusytable.io.map_table := ren2_imapvalues
-   ibusytable.io.wb_valids := io.int_wakeups.map(_.valid)
-   ibusytable.io.wb_pdsts := io.int_wakeups.map(_.bits.uop.pdst)
+   ibusytable.io.ren_uops      := ren2_uops  // expects pdst to be set up.
+   ibusytable.io.map_table     := ren2_imapvalues
+   ibusytable.io.wb_valids     := io.int_wakeups.map(_.valid)
+   ibusytable.io.wb_pdsts      := io.int_wakeups.map(_.bits.uop.pdst)
 
    assert (!(io.int_wakeups.map(x => x.valid && x.bits.uop.dst_rtype =/= RT_FIX).reduce(_|_)),
       "[rename] int wakeup is not waking up a Int register.")
@@ -350,10 +377,10 @@ class RenameStage(
    }
    if (usingFPU) {
       fbusytable.io.ren_will_fire := ren2_will_fire
-      fbusytable.io.ren_uops := ren2_uops  // expects pdst to be set up.
-      fbusytable.io.map_table := ren2_fmapvalues
-      fbusytable.io.wb_valids := io.fp_wakeups.map(_.valid)
-      fbusytable.io.wb_pdsts := io.fp_wakeups.map(_.bits.uop.pdst)
+      fbusytable.io.ren_uops      := ren2_uops  // expects pdst to be set up.
+      fbusytable.io.map_table     := ren2_fmapvalues
+      fbusytable.io.wb_valids     := io.fp_wakeups.map(_.valid)
+      fbusytable.io.wb_pdsts      := io.fp_wakeups.map(_.bits.uop.pdst)
 
       assert (!(io.fp_wakeups.map(x => x.valid && x.bits.uop.dst_rtype =/= RT_FLT).reduce(_|_)),
          "[rename] fp wakeup is not waking up a FP register.")
@@ -361,24 +388,34 @@ class RenameStage(
 
    if (usingVec) {
       vbusytable.io.ren_will_fire := ren2_will_fire
-      vbusytable.io.ren_uops := ren2_uops
-      vbusytable.io.map_table := ren2_vmapvalues
-      vbusytable.io.wb_valids := io.vec_wakeups.map(_.valid)
-      vbusytable.io.wb_pdsts := io.vec_wakeups.map(_.bits.uop.pdst)
-      vbusytable.io.wb_eidxs := io.vec_wakeups.map(x=>x.bits.uop.eidx + x.bits.uop.rate) // TODO_Vec: This is probably bad
-      vbusytable.io.vl := io.vl
+      vbusytable.io.ren_uops      := ren2_uops
+      vbusytable.io.map_table     := ren2_vmapvalues
+      vbusytable.io.wb_valids     := io.vec_wakeups.map(_.valid)
+      vbusytable.io.wb_pdsts      := io.vec_wakeups.map(_.bits.uop.pdst)
+      vbusytable.io.wb_eidxs      := io.vec_wakeups.map(x=>x.bits.uop.eidx + x.bits.uop.rate) // TODO_Vec: This is probably bad
+      vbusytable.io.vl            := io.vl
       assert (!(io.vec_wakeups.map(x => x.valid && x.bits.uop.dst_rtype =/= RT_VEC).reduce(_|_)),
          "[rename] vec wakeup is not waking up a VEC register.")
+
+      vpbusytable.io.ren_will_fire:= ren2_will_fire
+      vpbusytable.io.ren_uops     := ren2_uops
+      vpbusytable.io.map_table    := ren2_vpmapvalues
+      vpbusytable.io.wb_valids    := io.vec_wakeups.map(x => x.valid && x.bits.uop.writes_vpred)
+      vpbusytable.io.wb_pdsts     := io.vec_wakeups.map(x => x.bits.uop.vp_pdst)
+      vpbusytable.io.wb_eidxs     := io.vec_wakeups.map(x => x.bits.uop.eidx + x.bits.uop.rate)
+      vpbusytable.io.vl           := io.vl
    }
    for ((uop, w) <- ren2_uops.zipWithIndex)
    {
-      val ibusy = ibusytable.io.values(w)
-      val fbusy = fbusytable.io.values(w)
-      val vbusy = vbusytable.io.values(w)
+      val ibusy  = ibusytable.io.values(w)
+      val fbusy  = fbusytable.io.values(w)
+      val vbusy  = vbusytable.io.values(w)
+      val vpbusy = vpbusytable.io.values(w)
 
       uop.prs1_busy := ibusy.prs1_busy
       uop.prs2_busy := ibusy.prs2_busy
       uop.prs3_busy := false.B
+      uop.vp_busy   := false.B
       if (usingFPU) {
          when (uop.lrs1_rtype === RT_FLT) { uop.prs1_busy := fbusy.prs1_busy }
          when (uop.lrs2_rtype === RT_FLT) { uop.prs2_busy := fbusy.prs2_busy }
@@ -388,6 +425,7 @@ class RenameStage(
          when (uop.lrs1_rtype === RT_VEC) { uop.prs1_busy := vbusy.prs1_busy ; uop.prs1_eidx := vbusy.prs1_eidx }
          when (uop.lrs2_rtype === RT_VEC) { uop.prs2_busy := vbusy.prs2_busy ; uop.prs2_eidx := vbusy.prs2_eidx }
          when (uop.lrs3_rtype === RT_VEC) { uop.prs3_busy := vbusy.prs3_busy ; uop.prs3_eidx := vbusy.prs3_eidx }
+         when (uop.reads_vpred)           { uop.vp_busy   := vpbusy.prs1_busy; uop.vp_eidx   := vpbusy.prs1_eidx }
       }
 
       val valid = ren2_valids(w)
@@ -417,7 +455,8 @@ class RenameStage(
          (ifreelist.io.can_allocate(w) && ren1_uops(w).dst_rtype === RT_FIX) ||
          (ffreelist.io.can_allocate(w) && ren1_uops(w).dst_rtype === RT_FLT) ||
          (if (usingVec) (vfreelist.io.can_allocate(w) && ren1_uops(w).dst_rtype === RT_VEC) else true.B)) &&
-         (if (usingVec) (vsfreelist.io.can_allocate(w) || !ren1_uops(w).use_vscopb) else true.B)
+         (if (usingVec) (vsfreelist.io.can_allocate(w) || !ren1_uops(w).use_vscopb) else true.B) &&
+         (if (usingVec) (vpfreelist.io.can_allocate(w) || !ren1_uops(w).writes_vpred) else true.B)
    }
 
 

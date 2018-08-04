@@ -306,15 +306,34 @@ class RenameFreeList(
 
 
       freelist.io.rollback_wens(w)  := io.com_rbk_valids(w) &&
-                                       (io.com_uops(w).pdst =/= UInt(0) || UInt(rtype) === RT_FLT || UInt(rtype) === RT_VEC) &&
-                                       io.com_uops(w).dst_rtype === UInt(rtype)
+                                       io.com_uops(w).dst_rtype === UInt(rtype) &&
+                                       (io.com_uops(w).pdst =/= UInt(0) || UInt(rtype) === RT_FLT || UInt(rtype) === RT_VEC)
       freelist.io.rollback_pdsts(w) := io.com_uops(w).pdst
 
       freelist.io.com_wens(w)       := io.com_valids(w) &&
-                                       (io.com_uops(w).pdst =/= UInt(0) || UInt(rtype) === RT_FLT || UInt(rtype) === RT_VEC) &&
-                                       io.com_uops(w).dst_rtype === UInt(rtype)
+                                       io.com_uops(w).dst_rtype === UInt(rtype) &&
+                                       (io.com_uops(w).stale_pdst =/= UInt(0) || UInt(rtype) === RT_FLT || UInt(rtype) === RT_VEC)
+
       freelist.io.com_uops(w)       := io.com_uops(w)
 
+
+      if (rtype == RT_VPRED.litValue) {
+         // Special case for vector predicates
+         freelist.io.req_preg_vals(w) := !io.kill &&
+                                         io.ren_will_fire(w) &&
+                                         io.ren_uops(w).writes_vpred
+
+         freelist.io.enq_vals(w)      := io.com_valids(w) &&
+                                         io.com_uops(w).writes_vpred
+         freelist.io.enq_pregs(w)     := io.com_uops(w).stale_vp_pdst
+
+         freelist.io.rollback_wens(w) := io.com_rbk_valids(w) &&
+                                         io.com_uops(w).writes_vpred
+         freelist.io.rollback_pdsts(w):= io.com_uops(w).vp_pdst
+
+         freelist.io.com_wens(w)      := io.com_valids(w) &&
+                                         io.com_uops(w).writes_vpred
+      }
       if (rtype == RT_FIX.litValue) {
          // x0 is a special-case and should not be renamed
          io.req_pregs(w) := Mux(io.ren_uops(w).ldst === UInt(0), UInt(0), freelist.io.req_pregs(w))
@@ -325,7 +344,6 @@ class RenameFreeList(
 
    io.can_allocate := freelist.io.can_allocate
    io.debug := freelist.io.debug
-
    when (io.debug_rob_empty) {
       assert (PopCount(freelist.io.debug.freelist) >= UInt(num_phys_registers - num_logical_registers),
          "[freelist] We're leaking physical registers")

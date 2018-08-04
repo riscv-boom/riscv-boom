@@ -29,7 +29,9 @@ case class BoomCoreParams(
    numIntPhysRegisters: Int = 96,
    numFpPhysRegisters: Int = 64,
    numVecPhysRegisters: Int = 64,
+   numVecPhysPRegisters: Int = 4,
    numVecRegFileRows: Int = 256,
+   vecStripLen: Int = 128,
    enableVecPipeline: Boolean = false,
    enableCustomRf: Boolean = false,
    enableCustomRfModel: Boolean = true,
@@ -122,11 +124,11 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
    val numIntPhysRegs   = boomParams.numIntPhysRegisters // size of the integer physical register file
    val numFpPhysRegs    = boomParams.numFpPhysRegisters  // size of the floating point physical register file
    val numVecPhysRegs   = boomParams.numVecPhysRegisters
-
+   val numVecPhysPRegs  = boomParams.numVecPhysPRegisters
    require (numFpPhysRegs > 64)
 
    val numVecRegFileRows= boomParams.numVecRegFileRows
-
+   val vecStripLen      = boomParams.vecStripLen
 
    //************************************
    // Functional Units
@@ -248,7 +250,8 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
    val IPREG_SZ          = log2Up(numIntPhysRegs)
    val FPREG_SZ          = log2Up(numFpPhysRegs)
    val VPREG_SZ          = log2Up(numVecPhysRegs)
-   val PREG_SZ          = IPREG_SZ max FPREG_SZ
+   val VPPREG_SZ         = log2Up(numVecPhysPRegs)
+   val PREG_SZ           = IPREG_SZ max FPREG_SZ max VPREG_SZ
    val MEM_ADDR_SZ       = log2Up(NUM_LSU_ENTRIES)
    val MAX_ST_COUNT      = (1 << MEM_ADDR_SZ)
    val MAX_LD_COUNT      = (1 << MEM_ADDR_SZ)

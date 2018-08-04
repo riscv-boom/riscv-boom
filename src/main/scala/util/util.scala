@@ -404,7 +404,7 @@ class BranchKillableQueue[T <: boom.common.HasBoomUOP](gen: T, entries: Int)
    }
 }
 
-abstract trait Packing {
+abstract trait Packing extends HasBoomCoreParameters{
    def recode_dp(n: Bits) = hardfloat.recFNFromFN(11, 53, n.asUInt)
    def recode_sp(n: Bits) = hardfloat.recFNFromFN(8, 24, n.asUInt)
    def recode_hp(n: Bits) = hardfloat.recFNFromFN(5, 11, n.asUInt)
@@ -420,23 +420,23 @@ abstract trait Packing {
    def _unpack(n: Bits, idx: Int, extent: Int, period: Int): UInt =
       _unpack(n, idx, extent, period, period)
 
-   def unpack_d(n: Bits, idx: Int) = _unpack(n, idx, 128, SZ_D, SZ_D)
-   def unpack_w(n: Bits, idx: Int) = _unpack(n, idx, 128, SZ_W, SZ_W)
-   def unpack_h(n: Bits, idx: Int) = _unpack(n, idx, 128, SZ_H, SZ_H)
+   def unpack_d(n: Bits, idx: Int) = _unpack(n, idx, vecStripLen, SZ_D, SZ_D)
+   def unpack_w(n: Bits, idx: Int) = _unpack(n, idx, vecStripLen, SZ_W, SZ_W)
+   def unpack_h(n: Bits, idx: Int) = _unpack(n, idx, vecStripLen, SZ_H, SZ_H)
    def _repack(n: Seq[Bits], len: Int) = {
       require(n.length == len)
       Cat(n.reverse)
    }
 
-   def repack_d(n: Seq[Bits]) = _repack(n, 128/SZ_D)
-   def repack_w(n: Seq[Bits]) = _repack(n, 128/SZ_W)
-   def repack_h(n: Seq[Bits]) = _repack(n, 128/SZ_H)
-   def repack_b(n: Seq[Bits]) = _repack(n, 128/SZ_B)
+   def repack_d(n: Seq[Bits]) = _repack(n, vecStripLen/SZ_D)
+   def repack_w(n: Seq[Bits]) = _repack(n, vecStripLen/SZ_W)
+   def repack_h(n: Seq[Bits]) = _repack(n, vecStripLen/SZ_H)
+   def repack_b(n: Seq[Bits]) = _repack(n, vecStripLen/SZ_B)
 
-   def fill_d(n: UInt) = Fill(128/SZ_D, n(SZ_D-1, 0))
-   def fill_w(n: UInt) = Fill(128/SZ_W, n(SZ_W-1, 0))
-   def fill_h(n: UInt) = Fill(128/SZ_H, n(SZ_H-1, 0))
-   def fill_b(n: UInt) = Fill(128/SZ_B, n(SZ_B-1, 0))
+   def fill_d(n: UInt) = Fill(vecStripLen/SZ_D, n(SZ_D-1, 0))
+   def fill_w(n: UInt) = Fill(vecStripLen/SZ_W, n(SZ_W-1, 0))
+   def fill_h(n: UInt) = Fill(vecStripLen/SZ_H, n(SZ_H-1, 0))
+   def fill_b(n: UInt) = Fill(vecStripLen/SZ_B, n(SZ_B-1, 0))
 
    def _expand(n: Bits, s: Bits, width: Int) = {
       Cat(Fill(SZ_D - width, s.asUInt), n)

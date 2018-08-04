@@ -180,25 +180,35 @@ class BusyTable(
       w <- 0 until pl_width
       xx <- w-1 to 0 by -1
    }{
-      when (io.ren_uops(w).lrs1_rtype === UInt(rtype)
-         && io.ren_will_fire(xx) && io.ren_uops(xx).ldst_val
-         && io.ren_uops(xx).dst_rtype === UInt(rtype) && (io.ren_uops(w).lrs1 === io.ren_uops(xx).ldst))
-      {
-         prs1_was_bypassed(w) := Bool(true)
+      if (rtype == RT_VPRED.litValue) {
+         when (io.ren_uops(w).reads_vpred
+            && io.ren_will_fire(xx)
+            && io.ren_uops(xx).writes_vpred) {
+            prs1_was_bypassed(w) := Bool(true)
+         }
       }
-      when (io.ren_uops(w).lrs2_rtype === UInt(rtype)
-         && io.ren_will_fire(xx) && io.ren_uops(xx).ldst_val
-         && io.ren_uops(xx).dst_rtype === UInt(rtype) && (io.ren_uops(w).lrs2 === io.ren_uops(xx).ldst))
+      else
       {
-         prs2_was_bypassed(w) := Bool(true)
-      }
-
-      if (rtype == RT_FLT.litValue || rtype == RT_VEC.litValue) {
-         when (io.ren_uops(w).frs3_en && io.ren_uops(w).lrs3_rtype === UInt(rtype)
+         when (io.ren_uops(w).lrs1_rtype === UInt(rtype)
             && io.ren_will_fire(xx) && io.ren_uops(xx).ldst_val
-            && io.ren_uops(xx).dst_rtype === UInt(rtype) && (io.ren_uops(w).lrs3 === io.ren_uops(xx).ldst))
+            && io.ren_uops(xx).dst_rtype === UInt(rtype) && (io.ren_uops(w).lrs1 === io.ren_uops(xx).ldst))
          {
-            prs3_was_bypassed(w) := Bool(true)
+            prs1_was_bypassed(w) := Bool(true)
+         }
+         when (io.ren_uops(w).lrs2_rtype === UInt(rtype)
+            && io.ren_will_fire(xx) && io.ren_uops(xx).ldst_val
+            && io.ren_uops(xx).dst_rtype === UInt(rtype) && (io.ren_uops(w).lrs2 === io.ren_uops(xx).ldst))
+         {
+            prs2_was_bypassed(w) := Bool(true)
+         }
+
+         if (rtype == RT_FLT.litValue || rtype == RT_VEC.litValue) {
+            when (io.ren_uops(w).frs3_en && io.ren_uops(w).lrs3_rtype === UInt(rtype)
+               && io.ren_will_fire(xx) && io.ren_uops(xx).ldst_val
+               && io.ren_uops(xx).dst_rtype === UInt(rtype) && (io.ren_uops(w).lrs3 === io.ren_uops(xx).ldst))
+            {
+               prs3_was_bypassed(w) := Bool(true)
+            }
          }
       }
    }
@@ -209,26 +219,32 @@ class BusyTable(
       // Reading the Busy Bits
       // for critical path reasons, we speculatively read out the busy-bits assuming no dependencies between uops
       // then verify if the uop actually uses a register and if it depends on a newly unfreed register
-      busy_table.io.prs(0,w) := io.map_table(w).prs1
-      busy_table.io.prs(1,w) := io.map_table(w).prs2
+      if (rtype == RT_VPRED.litValue) {
+         busy_table.io.prs(0,w) := io.map_table(w).prs1
+         io.values(w).prs1_busy := io.ren_uops(w).reads_vpred && busy_table.io.prs_busy(0,w) || prs1_was_bypassed(w)
+         io.values(w).prs1_eidx := Mux(prs1_was_bypassed(w), UInt(0), busy_table.io.prs_eidx(0, w))
+      } else {
+         busy_table.io.prs(0,w) := io.map_table(w).prs1
+         busy_table.io.prs(1,w) := io.map_table(w).prs2
 
-      io.values(w).prs1_busy := io.ren_uops(w).lrs1_rtype === UInt(rtype) && (busy_table.io.prs_busy(0,w) || prs1_was_bypassed(w))
-      io.values(w).prs2_busy := io.ren_uops(w).lrs2_rtype === UInt(rtype) && (busy_table.io.prs_busy(1,w) || prs2_was_bypassed(w))
+         io.values(w).prs1_busy := io.ren_uops(w).lrs1_rtype === UInt(rtype) && (busy_table.io.prs_busy(0,w) || prs1_was_bypassed(w))
+         io.values(w).prs2_busy := io.ren_uops(w).lrs2_rtype === UInt(rtype) && (busy_table.io.prs_busy(1,w) || prs2_was_bypassed(w))
 
-      if (isVector) {
-         io.values(w).prs1_eidx := Mux(prs1_was_bypassed(w), UInt(0), busy_table.io.prs_eidx(0,w))
-         io.values(w).prs2_eidx := Mux(prs2_was_bypassed(w), UInt(0), busy_table.io.prs_eidx(1,w))
-         io.values(w).prs3_eidx := Mux(prs3_was_bypassed(w), UInt(0), busy_table.io.prs_eidx(2,w))
-      }
+         if (isVector) {
+            io.values(w).prs1_eidx := Mux(prs1_was_bypassed(w), UInt(0), busy_table.io.prs_eidx(0,w))
+            io.values(w).prs2_eidx := Mux(prs2_was_bypassed(w), UInt(0), busy_table.io.prs_eidx(1,w))
+            io.values(w).prs3_eidx := Mux(prs3_was_bypassed(w), UInt(0), busy_table.io.prs_eidx(2,w))
+         }
 
-      if (rtype == RT_FLT.litValue || rtype == RT_VEC.litValue)
-      {
-         busy_table.io.prs(2,w) := io.map_table(w).prs3
-         io.values(w).prs3_busy := (io.ren_uops(w).frs3_en) && (busy_table.io.prs_busy(2,w) || prs3_was_bypassed(w))
-      }
-      else
-      {
-         io.values(w).prs3_busy := Bool(false)
+         if (rtype == RT_FLT.litValue || rtype == RT_VEC.litValue)
+         {
+            busy_table.io.prs(2,w) := io.map_table(w).prs3
+            io.values(w).prs3_busy := (io.ren_uops(w).frs3_en) && (busy_table.io.prs_busy(2,w) || prs3_was_bypassed(w))
+         }
+         else
+         {
+            io.values(w).prs3_busy := Bool(false)
+         }
       }
 
 
@@ -237,6 +253,12 @@ class BusyTable(
                                                io.ren_uops(w).ldst_val &&
                                                io.ren_uops(w).dst_rtype === UInt(rtype)
       busy_table.io.allocated_pdst(w).bits  := io.ren_uops(w).pdst
+      if (rtype == RT_VPRED.litValue) {
+         busy_table.io.allocated_pdst(w).valid := io.ren_will_fire(w) &&
+                                                  io.ren_uops(w).writes_vpred
+         busy_table.io.allocated_pdst(w).bits  := io.ren_uops(w).vp_pdst
+      }
+
    }
 
    // Clear Busy-bit

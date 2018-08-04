@@ -188,12 +188,19 @@ class RenameMapTable(
                                            io.ren_uops(w).ldst_val &&
                                            io.ren_uops(w).dst_rtype === UInt(rtype) &&
                                            !io.kill
+         entry.ren_pdsts(w)   := io.ren_uops(w).pdst
+         entry.ren_br_tags(w) := io.ren_uops(w).br_tag
+
+         if (rtype == RT_VPRED.litValue) {
+            entry.wens(w)     := io.ren_uops(w).writes_vpred &&
+                                 io.ren_will_fire(w) &&
+                                 !io.kill
+            entry.ren_pdsts(w):= io.ren_uops(w).vp_pdst
+         }
 
          assert (!(entry.wens(w) && !io.debug_inst_can_proceed(w)), "[maptable] wen shouldn't be high.")
          assert (!(entry.wens(w) && !io.debug_freelist_can_allocate(w)), "[maptable] wen shouldn't be high.")
 
-         entry.ren_pdsts(w)   := io.ren_uops(w).pdst
-         entry.ren_br_tags(w) := io.ren_uops(w).br_tag
       }
       entry.ren_br_vals := io.ren_br_vals
 
@@ -206,11 +213,20 @@ class RenameMapTable(
    // backwards, because rollback must give highest priority to 0 (the oldest instruction)
    for (w <- pl_width-1 to 0 by -1)
    {
-      val ldst = io.com_uops(w).ldst
-      when (io.com_rbk_valids(w) && io.com_uops(w).dst_rtype === UInt(rtype))
+      var ldst       = io.com_uops(w).ldst
+      var rb_val     = io.com_uops(w).dst_rtype === UInt(rtype)
+      var stale_pdst = io.com_uops(w).stale_pdst
+      if (rtype == RT_VPRED.litValue)
+      {
+         ldst        = UInt(0)
+         rb_val      = io.com_uops(w).writes_vpred
+         stale_pdst  = io.com_uops(w).stale_vp_pdst
+      }
+
+      when (io.com_rbk_valids(w) && rb_val)
       {
          map_table_io(ldst).rollback_wen        := Bool(true)
-         map_table_io(ldst).rollback_stale_pdst := io.com_uops(w).stale_pdst
+         map_table_io(ldst).rollback_stale_pdst := stale_pdst
       }
    }
 
@@ -218,11 +234,20 @@ class RenameMapTable(
    {
       for (w <- 0 until pl_width)
       {
-         val ldst = io.com_uops(w).ldst
-         when (io.com_valids(w) && (io.com_uops(w).dst_rtype === UInt(rtype)))
+         var ldst       = io.com_uops(w).ldst
+         var rb_val     = io.com_uops(w).dst_rtype === UInt(rtype)
+         var pdst       = io.com_uops(w).pdst
+         if (rtype == RT_VPRED.litValue)
          {
-            map_table_io(ldst).commit_wen := Bool(true)
-            map_table_io(ldst).commit_pdst := io.com_uops(w).pdst
+            ldst        = UInt(0)
+            rb_val      = io.com_uops(w).writes_vpred
+            pdst        = io.com_uops(w).vp_pdst
+         }
+
+         when (io.com_valids(w) && rb_val)
+         {
+            map_table_io(ldst).commit_wen  := Bool(true)
+            map_table_io(ldst).commit_pdst := pdst
          }
       }
    }
@@ -235,36 +260,45 @@ class RenameMapTable(
 
    for (w <- 0 until pl_width)
    {
-      map_table_prs1(w) := map_table_io(io.ren_uops(w).lrs1).element
-      map_table_prs2(w) := map_table_io(io.ren_uops(w).lrs2).element
-      if (rtype == RT_FLT.litValue || rtype == RT_VEC.litValue) {
-         map_table_prs3(w) := map_table_io(io.ren_uops(w).lrs3).element
-      } else {
-         map_table_prs3(w) := UInt(0)
+      if (rtype == RT_VPRED.litValue)
+      {
+         map_table_output(w) := map_table_io(0).element
+      }
+      else
+      {
+         map_table_prs1(w) := map_table_io(io.ren_uops(w).lrs1).element
+         map_table_prs2(w) := map_table_io(io.ren_uops(w).lrs2).element
+         if (rtype == RT_FLT.litValue || rtype == RT_VEC.litValue) {
+            map_table_prs3(w) := map_table_io(io.ren_uops(w).lrs3).element
+         } else {
+            map_table_prs3(w) := UInt(0)
+         }
       }
    }
-
 
    // Bypass the physical register mappings
    for (w <- 0 until pl_width)
    {
-      var rs1_cases =  Array((Bool(false),  UInt(0,PREG_SZ)))
-      var rs2_cases =  Array((Bool(false),  UInt(0,PREG_SZ)))
-      var rs3_cases =  Array((Bool(false),  UInt(0,PREG_SZ)))
-      var stale_cases= Array((Bool(false),  UInt(0,PREG_SZ)))
+      var rs1_cases =  Array((Bool(false),  UInt(0,preg_sz)))
+      var rs2_cases =  Array((Bool(false),  UInt(0,preg_sz)))
+      var rs3_cases =  Array((Bool(false),  UInt(0,preg_sz)))
+      var stale_cases= Array((Bool(false),  UInt(0,preg_sz)))
 
       // Handle bypassing new physical destinations to operands (and stale destination)
       // scalastyle:off
       for (xx <- w-1 to 0 by -1)
       {
-         rs1_cases  ++= Array((io.ren_uops(w).lrs1_rtype === UInt(rtype) && io.ren_will_fire(xx) && io.ren_uops(xx).ldst_val && io.ren_uops(xx).dst_rtype === UInt(rtype) && (io.ren_uops(w).lrs1 === io.ren_uops(xx).ldst), (io.ren_uops(xx).pdst)))
-         rs2_cases  ++= Array((io.ren_uops(w).lrs2_rtype === UInt(rtype) && io.ren_will_fire(xx) && io.ren_uops(xx).ldst_val && io.ren_uops(xx).dst_rtype === UInt(rtype) && (io.ren_uops(w).lrs2 === io.ren_uops(xx).ldst), (io.ren_uops(xx).pdst)))
-         stale_cases++= Array((io.ren_uops(w).dst_rtype === UInt(rtype)  && io.ren_will_fire(xx) && io.ren_uops(xx).ldst_val && io.ren_uops(xx).dst_rtype === UInt(rtype) && (io.ren_uops(w).ldst === io.ren_uops(xx).ldst), (io.ren_uops(xx).pdst)))
+         if (rtype == RT_VPRED.litValue) {
+            rs1_cases   ++= Array((io.ren_uops(w).reads_vpred  && io.ren_will_fire(xx) && io.ren_uops(xx).writes_vpred, io.ren_uops(xx).vp_pdst))
+            stale_cases ++= Array((io.ren_uops(w).writes_vpred && io.ren_will_fire(xx) && io.ren_uops(xx).writes_vpred, io.ren_uops(xx).vp_pdst))
+         } else {
+            rs1_cases   ++= Array((io.ren_uops(w).lrs1_rtype === UInt(rtype) && io.ren_will_fire(xx) && io.ren_uops(xx).ldst_val && io.ren_uops(xx).dst_rtype === UInt(rtype) && (io.ren_uops(w).lrs1 === io.ren_uops(xx).ldst), (io.ren_uops(xx).pdst)))
+            rs2_cases   ++= Array((io.ren_uops(w).lrs2_rtype === UInt(rtype) && io.ren_will_fire(xx) && io.ren_uops(xx).ldst_val && io.ren_uops(xx).dst_rtype === UInt(rtype) && (io.ren_uops(w).lrs2 === io.ren_uops(xx).ldst), (io.ren_uops(xx).pdst)))
+            stale_cases ++= Array((io.ren_uops(w).dst_rtype  === UInt(rtype) && io.ren_will_fire(xx) && io.ren_uops(xx).ldst_val && io.ren_uops(xx).dst_rtype === UInt(rtype) && (io.ren_uops(w).ldst === io.ren_uops(xx).ldst), (io.ren_uops(xx).pdst)))
 
-         if (rtype == RT_FLT.litValue || rtype == RT_VEC.litValue) {
-            rs3_cases  ++= Array((
-                  io.ren_uops(w).frs3_en && io.ren_will_fire(xx) && io.ren_uops(xx).ldst_val && io.ren_uops(xx).dst_rtype === UInt(rtype) && (io.ren_uops(w).lrs3 === io.ren_uops(xx).ldst),
-                  (io.ren_uops(xx).pdst)))
+            if (rtype == RT_FLT.litValue || rtype == RT_VEC.litValue) {
+               rs3_cases++= Array((io.ren_uops(w).frs3_en && io.ren_will_fire(xx) && io.ren_uops(xx).ldst_val && io.ren_uops(xx).dst_rtype === UInt(rtype) && (io.ren_uops(w).lrs3 === io.ren_uops(xx).ldst), (io.ren_uops(xx).pdst)))
+            }
          }
       }
 
@@ -272,19 +306,28 @@ class RenameMapTable(
       if (rtype == RT_FIX.litValue) {
          rs1_cases ++= Array((io.ren_uops(w).lrs1_rtype === UInt(rtype) && (io.ren_uops(w).lrs1 =/= UInt(0)), map_table_prs1(w)))
          rs2_cases ++= Array((io.ren_uops(w).lrs2_rtype === UInt(rtype) && (io.ren_uops(w).lrs2 =/= UInt(0)), map_table_prs2(w)))
+      } else if (rtype == RT_VPRED.litValue) {
+         rs1_cases ++= Array((io.ren_uops(w).reads_vpred, map_table_prs1(w)))
       } else {
          rs1_cases ++= Array((io.ren_uops(w).lrs1_rtype === UInt(rtype), map_table_prs1(w)))
          rs2_cases ++= Array((io.ren_uops(w).lrs2_rtype === UInt(rtype), map_table_prs2(w)))
+         rs3_cases ++= Array((io.ren_uops(w).frs3_en, map_table_prs3(w)))
       }
-      rs3_cases ++= Array((io.ren_uops(w).frs3_en, map_table_prs3(w)))
 
       // Set outputs.
       io.values(w).prs1       := MuxCase(io.ren_uops(w).lrs1, rs1_cases)
       io.values(w).prs2       := MuxCase(io.ren_uops(w).lrs2, rs2_cases)
       if (rtype == RT_FLT.litValue || rtype == RT_VEC.litValue)
-         {io.values(w).prs3 := MuxCase(io.ren_uops(w).lrs3, rs3_cases)}
+      {
+         io.values(w).prs3 := MuxCase(io.ren_uops(w).lrs3, rs3_cases)
+      }
       io.values(w).stale_pdst := MuxCase(map_table_io(io.ren_uops(w).ldst).element, stale_cases)
 
+      if (rtype == RT_VPRED.litValue)
+      {
+         io.values(w).prs1       := MuxCase(0.U, rs1_cases)
+         io.values(w).stale_pdst := MuxCase(map_table_io(0).element, stale_cases)
+      }
 
       if (rtype == RT_FIX.litValue) {
          assert (!(io.ren_uops(w).lrs1 === UInt(0) && io.ren_uops(w).lrs1_rtype === RT_FIX && io.values(w).prs1 =/= UInt(0)), "lrs1==0 but maptable(" + w + ") returning non-zero.")

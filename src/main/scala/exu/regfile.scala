@@ -92,7 +92,7 @@ abstract class RegisterFile(
 }
 
 // A behavorial model of a Register File. You will likely want to blackbox this for more than modest port counts.
-class RegisterFileBehavorial(
+class RegisterFileBehavioral(
    num_registers: Int,
    num_read_ports: Int,
    num_write_ports: Int,

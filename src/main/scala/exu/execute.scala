@@ -32,7 +32,7 @@ class ExeUnitResp(data_width: Int)(implicit p: Parameters) extends BoomBundle()(
 with HasBoomUOP
 {
    val data  = Bits(width = data_width)
-   val mask  = UInt(width = 128 / 8)
+   val mask  = UInt(width = vecStripLen / 8)
    val fflags = new ValidIO(new FFlagsResp) // write fflags to ROB
 
    var writesToIRF = true  // does this response unit plug into the integer regfile?
@@ -371,14 +371,15 @@ class ALUExeUnit(
 
 class VecFPUExeUnit(
    has_vfpu : Boolean = true,
-   has_valu : Boolean = true
+   has_valu : Boolean = true,
+   data_width : Int = 128
    )
    (implicit p: Parameters)
    extends ExecutionUnit(
       num_rf_read_ports = 3, // TODO_vec: add 4 for predication
       num_rf_write_ports = 1, // TODO_vec: Build mechanism for writes into IRF, this should get changed to 2 I think
       num_bypass_stages = 0,
-      data_width = 128,
+      data_width = data_width,
       bypassable = false,
       has_alu = false,
       has_valu = has_valu,
@@ -406,7 +407,7 @@ class VecFPUExeUnit(
    assert(has_vfpu, "The VecFPUExeUnit needs a vfpu");
    if (has_vfpu)
    {
-      vfpu = Module(new VFPUUnit())
+      vfpu = Module(new VFPUUnit(data_width=vecStripLen))
 
       vfpu.io.req.valid          := io.req.valid &&
                                     (io.req.bits.uop.fu_code_is(FU_VFPU))
@@ -425,7 +426,8 @@ class VecFPUExeUnit(
    val valu_resp_val = Wire(init=Bool(false))
    if (has_valu)
    {
-      valu = Module(new VALUUnit(num_stages=p(tile.TileKey).core.fpu.get.dfmaLatency))
+      valu = Module(new VALUUnit(num_stages=p(tile.TileKey).core.fpu.get.dfmaLatency,
+                                 data_width=vecStripLen))
       valu.io.req.valid          := io.req.valid &&
                                     (io.req.bits.uop.fu_code_is(FU_VALU))
       valu.io.req.bits.kill      := io.req.bits.kill
@@ -695,8 +697,8 @@ class MemExeUnit(implicit p: Parameters) extends ExecutionUnit(num_rf_read_ports
 
 
    if (usingVec) {
-      val to_lsu_vsta = Module(new BranchKillableQueue(new FuncUnitResp(128), 4))
-      val to_lsu_resp = Module(new BranchKillableQueue(new FuncUnitResp(128), 8))
+      val to_lsu_vsta = Module(new BranchKillableQueue(new FuncUnitResp(vecStripLen), 4))
+      val to_lsu_resp = Module(new BranchKillableQueue(new FuncUnitResp(vecStripLen), 8))
 
       assert(!(maddrcalc.io.resp.valid
          && !(maddrcalc.io.resp.bits.uop.vec_val && maddrcalc.io.resp.bits.uop.is_store)

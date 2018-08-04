@@ -54,11 +54,11 @@ class Comparator(w: Int) extends Module {
 }
 
 
-class VALUUnit(num_stages: Int) (implicit p: Parameters)
+class VALUUnit(num_stages: Int, data_width: Int) (implicit p: Parameters)
       extends PipelinedFunctionalUnit(num_stages = num_stages, // TODO_Vec: Maybe change this when contention for write port is allowed?
          num_bypass_stages = 0,
          earliest_bypass_stage = 0,
-         data_width = 128,
+         data_width = data_width,
          is_branch_unit = false)(p) with Packing
 {
    val uop = io.req.bits.uop
@@ -107,7 +107,7 @@ class VALUUnit(num_stages: Int) (implicit p: Parameters)
            (SZ_W, VEW_32, unpack_w _, repack_w _, 2),
            (SZ_H, VEW_16, unpack_h _, repack_h _, 3)) map {
          case (sz, ew, unpack, repack, sidx_w) => {
-            val n = 128 / sz
+            val n = vecStripLen / sz
             val alu_val = io.req.valid && (io.req.bits.uop.rd_vew === ew || io.req.bits.uop.rs1_vew === ew)
             val eidx_lower = io.req.bits.rs2_data(sidx_w-1,0)
             val strip_vins = (io.req.bits.uop.eidx >> sidx_w) === (io.req.bits.rs2_data >> sidx_w)
@@ -165,7 +165,7 @@ class VALUUnit(num_stages: Int) (implicit p: Parameters)
             val result_val = results.map(_._1).reduce(_||_)
             // assert ( result_val === results.map(_._1).reduce(_&&_),
             //    "VALU slice not all responding valid at the same time!")
-            val result_out = Wire(UInt(width=128))
+            val result_out = Wire(UInt(width=vecStripLen))
             when (results.map(_._1).reduce(_&&_)) {
                result_out := repack(results.map(_._2))
             } .otherwise {
@@ -181,11 +181,11 @@ class VALUUnit(num_stages: Int) (implicit p: Parameters)
 
 }
 
-class VFPUUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(
+class VFPUUnit(data_width: Int)(implicit p: Parameters) extends PipelinedFunctionalUnit(
    num_stages = p(tile.TileKey).core.fpu.get.dfmaLatency,
    num_bypass_stages = 0,
    earliest_bypass_stage = 0,
-   data_width = 128)(p)
+   data_width = data_width)(p)
 {
    val vfpu = Module(new VFPU())
    vfpu.io.req <> io.req

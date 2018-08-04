@@ -88,11 +88,11 @@ class VFMADecoder extends Module
 
 
 class VFpuReq()(implicit p: Parameters) extends BoomBundle()(p)
-{ // TODO_Vec: Figure out width. 128? 130?
+{
    val uop      = new MicroOp()
-   val rs1_data = Bits(width = 128)
-   val rs2_data = Bits(width = 128)
-   val rs3_data = Bits(width = 128)
+   val rs1_data = Bits(width = vecStripLen)
+   val rs2_data = Bits(width = vecStripLen)
+   val rs3_data = Bits(width = vecStripLen)
    val fcsr_rm  = Bits(width = tile.FPConstants.RM_SZ) // TODO_Vec: Is rounding mode still controlled by fp csrs?
 }
 class VFPU(implicit p: Parameters) extends BoomModule()(p) with tile.HasFPUParameters with Packing
@@ -100,7 +100,7 @@ class VFPU(implicit p: Parameters) extends BoomModule()(p) with tile.HasFPUParam
    val io = IO(new Bundle
       {
          val req = new ValidIO(new VFpuReq).flip
-         val resp = new ValidIO(new ExeUnitResp(128))
+         val resp = new ValidIO(new ExeUnitResp(vecStripLen))
       })
    val vfpu_latency = dfmaLatency
    val io_req = io.req.bits
@@ -166,7 +166,7 @@ class VFPU(implicit p: Parameters) extends BoomModule()(p) with tile.HasFPUParam
            (SZ_W, VEW_32, recode_sp _, unpack_w _, ieee_sp _, repack_w _, expand_float_s _, (8, 24)),
            (SZ_H, VEW_16, recode_hp _, unpack_h _, ieee_hp _, repack_h _, expand_float_h _, (5, 11))) map {
          case (sz, ew, recode, unpack, ieee, repack, expand, (exp, sig)) => {
-            val n = 128 / sz
+            val n = vecStripLen / sz
             val fp_val = io.req.valid && io.req.bits.uop.rd_vew === ew
             val results = for (i <- (0 until n)) yield {
                val fma = Module(new tile.FPUFMAPipe(latency=vfpu_latency, t=tile.FType(exp=exp, sig=sig)))

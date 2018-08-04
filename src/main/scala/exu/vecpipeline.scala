@@ -43,18 +43,18 @@ with Packing
      val dis_uops       = Input(Vec(DISPATCH_WIDTH, new MicroOp()))
      val dis_readys     = Output(Vec(DISPATCH_WIDTH, Bool()))
 
-     val ll_wport       = Flipped(Decoupled(new ExeUnitResp(128))) // from memory unit
-     val tosdq          = new DecoupledIO(new MicroOpWithData(128))
+     val ll_wport       = Flipped(Decoupled(new ExeUnitResp(vecStripLen))) // from memory unit
+     val tosdq          = new DecoupledIO(new MicroOpWithData(vecStripLen))
      val fromint        = Flipped(Decoupled(new ExeUnitResp(xLen))) // from integer RF
      val fromfp         = Flipped(Decoupled(new ExeUnitResp(xLen))) // from fp RF.
      val toint          = new DecoupledIO(new ExeUnitResp(xLen))
      val memreq         = new DecoupledIO(new FuncUnitReq(xLen)) // Indexed load uops are issued here, executed in integer pipeline
 
-     val wakeups        = Vec(num_wakeup_ports, Valid(new ExeUnitResp(128)))
+     val wakeups        = Vec(num_wakeup_ports, Valid(new ExeUnitResp(vecStripLen)))
      val wb_valids      = Input(Vec(num_wakeup_ports, Bool()))
      val vb_pdsts       = Input(Vec(num_wakeup_ports, UInt(width=vec_preg_sz.W)))
 
-     val debug_tsc_reg  = Input(UInt(width=128.W))
+     val debug_tsc_reg  = Input(UInt(width=vecStripLen.W))
      val vl             = Input(UInt(width=VL_SZ.W))
 
      val lsu_stq_head      = Input(UInt())
@@ -65,18 +65,26 @@ with Packing
       true,
       num_wakeup_ports)) // TODO_VEC: Make this a VectorIssueUnit
    assert(issue_unit.issue_width == 1, "Issue width of 1 supported only")
-   val vregfile = Module(new VectorRegisterFileBehavorial(numVecRegFileRows,
+   val vregfile = Module(new VectorRegisterFileBehavioral(numVecRegFileRows,
       exe_units.withFilter(_.uses_iss_unit).map(e=>e.num_rf_read_ports).sum,
       exe_units.withFilter(_.uses_iss_unit).map(e=>e.num_rf_write_ports).sum, // TODO_VEC: Subtract write ports to IRF, FRF
-      128,
+      vecStripLen,
       exe_units.bypassable_write_port_mask
    ))
    assert(exe_units.num_total_bypass_ports == 0, "Vector pipeline does not support bypassing")
+
+
+   // val vpregfile = Module(new VectorPredRegisterFileBehavioral(numVecPhysPRegs,
+   //    exe_units.withFilter(_.uses_iss_unit).map(e=>e.num_rf_read_ports).sum,
+   //    exe_units.withFilter(_.uses_iss_unit).map(e=>e.num_rf_write_ports).sum,
+   //    64, // TODO_Vec: this should be max possible vlen
+   //    exe_units.bypassable_write_port_mask))
+
    val vregister_read = Module(new VectorRegisterRead(
       issue_unit.issue_width,
       exe_units.withFilter(_.uses_iss_unit).map(_.supportedFuncUnits),
-      128))
-
+      vecStripLen,
+      64)) // TODO_Vec: This should probably be less
    val vscalaropbuffer = Module(new ScalarOpBuffer())
 
    require (exe_units.withFilter(_.uses_iss_unit).map(x=>x).length == issue_unit.issue_width)
@@ -85,7 +93,7 @@ with Packing
       e.num_rf_write_ports).sum == num_wakeup_ports)
 
 
-   val tosdq = Module(new BranchKillableQueue(new MicroOpWithData(128), entries=4))
+   val tosdq = Module(new BranchKillableQueue(new MicroOpWithData(vecStripLen), entries=4))
    tosdq.io.brinfo := io.brinfo
    tosdq.io.flush  := io.flush_pipeline
 
@@ -190,7 +198,8 @@ with Packing
    //-------------------------------------------------------------
 
    // Register Read <- Issue (rrd <- iss)
-   vregister_read.io.rf_read_ports <> vregfile.io.read_ports
+   vregister_read.io.rf_read_ports  <> vregfile.io.read_ports
+   //vregister_read.io.prf_read_ports <> vpregfile.io.read_ports
 
    vregister_read.io.iss_valids <> iss_valids
    vregister_read.io.iss_uops := iss_uops
@@ -284,7 +293,7 @@ with Packing
    // **** Writeback Stage ****
    //-------------------------------------------------------------
 
-   val ll_wb = Module(new BranchKillableQueue(new ExeUnitResp(128), entries = 8)) // TODO_Vec: Tune these
+   val ll_wb = Module(new BranchKillableQueue(new ExeUnitResp(vecStripLen), entries = 8)) // TODO_Vec: Tune these
    ll_wb_block_issue := ll_wb.io.count >= 1.U
    ll_wb.io.enq      <> io.ll_wport
    ll_wb.io.brinfo   := io.brinfo
@@ -341,7 +350,7 @@ with Packing
    assert(w_cnt == 1, "Only one normal write back supported here")
    ll_wb.io.deq.ready := false.B
    when (!vec_eu_wb) {
-      vregfile.io.write_ports(0) <> WritePort(ll_wb.io.deq, log2Ceil(numVecRegFileRows), 128, true, numVecPhysRegs)
+      vregfile.io.write_ports(0) <> WritePort(ll_wb.io.deq, log2Ceil(numVecRegFileRows), vecStripLen, true, numVecPhysRegs)
       ll_wb.io.deq.ready := true.B
    }
    require (w_cnt == vregfile.io.write_ports.length)

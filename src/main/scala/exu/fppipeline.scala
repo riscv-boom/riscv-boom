@@ -65,7 +65,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
                            false,
                            false,
                            num_wakeup_ports))
-   val fregfile         = Module(new RegisterFileBehavorial(
+   val fregfile         = Module(new RegisterFileBehavioral(
                                  numFpPhysRegs,
                                  exe_units.withFilter(_.uses_iss_unit).map(e => e.num_rf_read_ports).sum,
                                  exe_units.withFilter(_.uses_iss_unit).map(e => e.num_rf_write_ports).sum +

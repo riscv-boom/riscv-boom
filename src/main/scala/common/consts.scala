@@ -132,6 +132,7 @@ trait ScalarOpConstants
    val RT_FLT   = UInt(1, RT_SZ)
    val RT_VEC   = UInt(4, RT_SZ)
    val RT_POLY  = UInt(5, RT_SZ) // Used only in decode to decode vector polymorphic instructions
+   val RT_VPRED = UInt(6, RT_SZ) // Used only has a hack for rename hardware, this should never be the value in MicroOp
    val RT_PAS   = UInt(3, RT_SZ) // pass-through (pop1 := lrs1, etc)
    val RT_X     = UInt(2, RT_SZ) // not-a-register (but shouldn't get a busy-bit, etc.)
                              // TODO rename RT_NAR

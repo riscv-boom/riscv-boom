@@ -133,6 +133,14 @@ class MicroOp(implicit p: Parameters) extends BoomBundle()(p)
    val rate             = UInt(width=VRATE_SZ)
    val eidx             = UInt(width=VL_SZ)
 
+   // Vector predication
+   val writes_vpred     = Bool()
+   val reads_vpred      = Bool()
+   val vp_pop           = UInt(width=VPPREG_SZ)
+   val vp_pdst          = UInt(width=VPPREG_SZ)
+   val stale_vp_pdst    = UInt(width=VPPREG_SZ)
+   val vp_eidx          = UInt(width=VL_SZ)
+   val vp_busy          = Bool()
    // TODO_Vec: These are temporarily where scalar vector operands are stored
    //           In future store these in operand buffer in vector pipeline
    val use_vscopb       = Bool()

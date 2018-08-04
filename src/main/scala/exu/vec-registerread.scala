@@ -20,19 +20,40 @@ import Chisel._
 import freechips.rocketchip.config.Parameters
 import boom.common._
 import boom.util._
- 
+
+
+class VectorRegisterReadIO(issue_width: Int,
+                           register_width: Int,
+                           pregister_width: Int,
+                           reg_sz: Int)
+(implicit p: Parameters) extends RegisterReadIO(
+   issue_width = issue_width,
+   num_total_read_ports = issue_width*3,
+   num_total_bypass_ports = 0,
+   register_width = register_width,
+   reg_sz = reg_sz)(p)
+{
+   //val prf_read_ports = Vec(issue_width, new RegisterFileReadPortIO(VPPREG_SZ, pregister_width))
+   override def cloneType =
+      new VectorRegisterReadIO(issue_width, register_width, pregister_width, reg_sz)(p).asInstanceOf[this.type]
+}
 
 class VectorRegisterRead(
    issue_width: Int,
    supported_units_array: Seq[SupportedFuncUnits],
-   register_width: Int
+   register_width: Int,
+   pregister_width: Int
 )(implicit p: Parameters) extends BoomModule()(p)
 with Packing
 {
    val uop_invalid :: uop_rs1 :: uop_rs2 :: uop_rs3 :: uop_rp :: uop_done = Enum(UInt(), 6)
 
    val reg_sz = log2Ceil(numVecRegFileRows)
-   val io = IO(new RegisterReadIO(issue_width=1, num_total_read_ports=3, num_total_bypass_ports=0, register_width, reg_sz))
+   val io = IO(new VectorRegisterReadIO(
+      issue_width=issue_width,
+      register_width=register_width,
+      reg_sz=reg_sz,
+      pregister_width=pregister_width))
 
    val rrd_valids       = Wire(Bool())
    val rrd_uops         = Wire(new MicroOp())

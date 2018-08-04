@@ -98,7 +98,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
                                  xLen,
                                  exe_units.bypassable_write_port_mask))
                           } else {
-                              Module(new RegisterFileBehavorial(numIntPhysRegs,
+                              Module(new RegisterFileBehavioral(numIntPhysRegs,
                                  exe_units.withFilter(_.usesIRF).map(e => e.num_rf_read_ports).sum,
                                  exe_units.withFilter(_.usesIRF).map(e => e.num_rf_write_ports).sum,
                                  xLen,
