@@ -292,7 +292,7 @@ class RenameStage(
          when (uop.dst_rtype  === RT_VEC) { uop.stale_pdst := vmap.stale_pdst }
 
          val vpmap = vpmaptable.io.values(w)
-         when (uop.reads_vpred)           { uop.vp_pop     := vpmap.prs1 }
+         when (uop.vp_type =/= VPRED_X)   { uop.vp_pop     := vpmap.prs1 }
          when (uop.writes_vpred)          { uop.stale_vp_pdst := vpmap.stale_pdst }
       }
    }
@@ -425,7 +425,7 @@ class RenameStage(
          when (uop.lrs1_rtype === RT_VEC) { uop.prs1_busy := vbusy.prs1_busy ; uop.prs1_eidx := vbusy.prs1_eidx }
          when (uop.lrs2_rtype === RT_VEC) { uop.prs2_busy := vbusy.prs2_busy ; uop.prs2_eidx := vbusy.prs2_eidx }
          when (uop.lrs3_rtype === RT_VEC) { uop.prs3_busy := vbusy.prs3_busy ; uop.prs3_eidx := vbusy.prs3_eidx }
-         when (uop.reads_vpred)           { uop.vp_busy   := vpbusy.prs1_busy; uop.vp_eidx   := vpbusy.prs1_eidx }
+         when (uop.vp_type =/= VPRED_X)   { uop.vp_busy   := vpbusy.prs1_busy; uop.vp_eidx   := vpbusy.prs1_eidx }
       }
 
       val valid = ren2_valids(w)

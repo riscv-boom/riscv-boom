@@ -74,11 +74,11 @@ with Packing
    assert(exe_units.num_total_bypass_ports == 0, "Vector pipeline does not support bypassing")
 
 
-   // val vpregfile = Module(new VectorPredRegisterFileBehavioral(numVecPhysPRegs,
-   //    exe_units.withFilter(_.uses_iss_unit).map(e=>e.num_rf_read_ports).sum,
-   //    exe_units.withFilter(_.uses_iss_unit).map(e=>e.num_rf_write_ports).sum,
-   //    64, // TODO_Vec: this should be max possible vlen
-   //    exe_units.bypassable_write_port_mask))
+   val vpregfile = Module(new VectorPredRegisterFileBehavioral(numVecPhysPRegs,
+      exe_units.withFilter(_.uses_iss_unit).map(e=>1).sum,
+      exe_units.withFilter(_.uses_iss_unit).map(e=>e.num_rf_write_ports).sum,
+      64, // TODO_Vec: this should be max possible vlen
+      exe_units.bypassable_write_port_mask))
 
    val vregister_read = Module(new VectorRegisterRead(
       issue_unit.issue_width,
@@ -200,6 +200,8 @@ with Packing
    // Register Read <- Issue (rrd <- iss)
    vregister_read.io.rf_read_ports  <> vregfile.io.read_ports
    //vregister_read.io.prf_read_ports <> vpregfile.io.read_ports
+   vpregfile.io.read_ports(0).addr := 0.U
+   vpregfile.io.read_ports(0).enable := false.B
 
    vregister_read.io.iss_valids <> iss_valids
    vregister_read.io.iss_uops := iss_uops
@@ -315,10 +317,9 @@ with Packing
       for (wbresp <- eu.io.resp)
       {
          val valid_write = wbresp.valid && wbresp.bits.uop.ctrl.rf_wen
-         vregfile.io.write_ports(w_cnt).valid := valid_write
-
-
          vec_eu_wb = valid_write | vec_eu_wb
+
+         vregfile.io.write_ports(w_cnt).valid := valid_write
          vregfile.io.write_ports(w_cnt).bits.addr := CalcVecRegAddr(
             wbresp.bits.uop.rd_vew,
             wbresp.bits.uop.eidx,
@@ -330,7 +331,25 @@ with Packing
          vregfile.io.write_ports(w_cnt).bits.rd_vew := wbresp.bits.uop.rd_vew
          wbresp.ready := vregfile.io.write_ports(w_cnt).ready
 
+         vpregfile.io.write_ports(w_cnt).valid     := valid_write && wbresp.bits.uop.writes_vpred
+         vpregfile.io.write_ports(w_cnt).bits.addr := wbresp.bits.uop.vp_pdst
+         vpregfile.io.write_ports(w_cnt).bits.mask := CalcVecMaskFromData(
+            wbresp.bits.uop.rd_vew,
+            wbresp.bits.mask,
+            1,
+            vecStripLen / 8)
+
+         vpregfile.io.write_ports(w_cnt).bits.data := CalcVecMaskFromData(
+            wbresp.bits.uop.rd_vew,
+            wbresp.bits.data,
+            8,
+            vecStripLen)
+         vpregfile.io.write_ports(w_cnt).bits.eidx := wbresp.bits.uop.eidx
+         vpregfile.io.write_ports(w_cnt).bits.rd_vew := wbresp.bits.uop.rd_vew
+
          toint.io.enq.valid := wbresp.valid && wbresp.bits.uop.uopc === uopVEXTRACT
+
+
          toint.io.enq.bits  := wbresp.bits
          assert (!(toint.io.enq.ready && !toint.io.enq.ready), "Can't backpressure here")
 

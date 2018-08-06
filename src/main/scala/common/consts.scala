@@ -465,6 +465,12 @@ trait VecConstants
 
    val VL_SZ = 10
    val VRATE_SZ = 5
+
+   val VPRED_SZ = 2
+   val VPRED_T  = "b01".U
+   val VPRED_F  = "b10".U
+   val VPRED_X  = "b11".U
+
 }
 
 trait Sizes

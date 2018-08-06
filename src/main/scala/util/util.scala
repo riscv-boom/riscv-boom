@@ -503,3 +503,15 @@ object CalcEidxLower
       shifted
    }
 }
+
+object CalcVecMaskFromData
+{
+   def apply(vew: UInt, data: UInt, ew: Int, stripLen: Int) = {
+      val mask = MuxLookup(vew, VEW_8, Array(
+         VEW_8  -> Vec((0 until stripLen by ew  ).map(data(_))).asUInt,
+         VEW_16 -> Vec((0 until stripLen by ew*2).map(data(_))).asUInt,
+         VEW_32 -> Vec((0 until stripLen by ew*4).map(data(_))).asUInt,
+         VEW_64 -> Vec((0 until stripLen by ew*8).map(data(_))).asUInt))
+      mask
+   }
+}

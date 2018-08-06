@@ -29,7 +29,7 @@ case class BoomCoreParams(
    numIntPhysRegisters: Int = 96,
    numFpPhysRegisters: Int = 64,
    numVecPhysRegisters: Int = 64,
-   numVecPhysPRegisters: Int = 4,
+   numVecPhysPRegisters: Int = 6,
    numVecRegFileRows: Int = 256,
    vecStripLen: Int = 128,
    enableVecPipeline: Boolean = false,

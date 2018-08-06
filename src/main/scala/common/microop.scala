@@ -135,7 +135,7 @@ class MicroOp(implicit p: Parameters) extends BoomBundle()(p)
 
    // Vector predication
    val writes_vpred     = Bool()
-   val reads_vpred      = Bool()
+   val vp_type          = UInt(width=VPRED_SZ)
    val vp_pop           = UInt(width=VPPREG_SZ)
    val vp_pdst          = UInt(width=VPPREG_SZ)
    val stale_vp_pdst    = UInt(width=VPPREG_SZ)

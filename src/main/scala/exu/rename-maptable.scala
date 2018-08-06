@@ -289,7 +289,7 @@ class RenameMapTable(
       for (xx <- w-1 to 0 by -1)
       {
          if (rtype == RT_VPRED.litValue) {
-            rs1_cases   ++= Array((io.ren_uops(w).reads_vpred  && io.ren_will_fire(xx) && io.ren_uops(xx).writes_vpred, io.ren_uops(xx).vp_pdst))
+            rs1_cases   ++= Array((io.ren_uops(w).vp_type =/= VPRED_X && io.ren_will_fire(xx) && io.ren_uops(xx).writes_vpred, io.ren_uops(xx).vp_pdst))
             stale_cases ++= Array((io.ren_uops(w).writes_vpred && io.ren_will_fire(xx) && io.ren_uops(xx).writes_vpred, io.ren_uops(xx).vp_pdst))
          } else {
             rs1_cases   ++= Array((io.ren_uops(w).lrs1_rtype === UInt(rtype) && io.ren_will_fire(xx) && io.ren_uops(xx).ldst_val && io.ren_uops(xx).dst_rtype === UInt(rtype) && (io.ren_uops(w).lrs1 === io.ren_uops(xx).ldst), (io.ren_uops(xx).pdst)))
@@ -307,7 +307,7 @@ class RenameMapTable(
          rs1_cases ++= Array((io.ren_uops(w).lrs1_rtype === UInt(rtype) && (io.ren_uops(w).lrs1 =/= UInt(0)), map_table_prs1(w)))
          rs2_cases ++= Array((io.ren_uops(w).lrs2_rtype === UInt(rtype) && (io.ren_uops(w).lrs2 =/= UInt(0)), map_table_prs2(w)))
       } else if (rtype == RT_VPRED.litValue) {
-         rs1_cases ++= Array((io.ren_uops(w).reads_vpred, map_table_prs1(w)))
+         rs1_cases ++= Array((io.ren_uops(w).vp_type =/= VPRED_X, map_table_prs1(w)))
       } else {
          rs1_cases ++= Array((io.ren_uops(w).lrs1_rtype === UInt(rtype), map_table_prs1(w)))
          rs2_cases ++= Array((io.ren_uops(w).lrs2_rtype === UInt(rtype), map_table_prs2(w)))

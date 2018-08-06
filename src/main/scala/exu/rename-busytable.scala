@@ -181,7 +181,7 @@ class BusyTable(
       xx <- w-1 to 0 by -1
    }{
       if (rtype == RT_VPRED.litValue) {
-         when (io.ren_uops(w).reads_vpred
+         when (io.ren_uops(w).vp_type =/= VPRED_X
             && io.ren_will_fire(xx)
             && io.ren_uops(xx).writes_vpred) {
             prs1_was_bypassed(w) := Bool(true)
@@ -221,7 +221,7 @@ class BusyTable(
       // then verify if the uop actually uses a register and if it depends on a newly unfreed register
       if (rtype == RT_VPRED.litValue) {
          busy_table.io.prs(0,w) := io.map_table(w).prs1
-         io.values(w).prs1_busy := io.ren_uops(w).reads_vpred && busy_table.io.prs_busy(0,w) || prs1_was_bypassed(w)
+         io.values(w).prs1_busy := io.ren_uops(w).vp_type =/= VPRED_X && busy_table.io.prs_busy(0,w) || prs1_was_bypassed(w)
          io.values(w).prs1_eidx := Mux(prs1_was_bypassed(w), UInt(0), busy_table.io.prs_eidx(0, w))
       } else {
          busy_table.io.prs(0,w) := io.map_table(w).prs1
