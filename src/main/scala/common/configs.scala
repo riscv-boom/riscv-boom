@@ -47,7 +47,7 @@ class DefaultBoomConfig extends Config((site, here, up) => {
          fpu = Some(freechips.rocketchip.tile.FPUParams(sfmaLatency=4, dfmaLatency=4, divSqrt=true))),
       btb = Some(BTBParams(nEntries = 0, updatesOutOfOrder = true)),
       dcache = Some(DCacheParams(rowBits = site(SystemBusKey).beatBits, nSets=64, nWays=8, nMSHRs=4, nTLBEntries=16)),
-      icache = Some(ICacheParams(fetchBytes = 4*4, rowBits = site(SystemBusKey).beatBits, nSets=128, nWays=4))
+      icache = Some(ICacheParams(fetchBytes = 4*4, rowBits = site(SystemBusKey).beatBits, nSets=64, nWays=8))
       )}
    // Set TL network to 128bits wide
    case SystemBusKey => up(SystemBusKey, site).copy(beatBytes = 16)
