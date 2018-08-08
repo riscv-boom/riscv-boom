@@ -111,7 +111,7 @@ with boom.common.HasBoomUOP
    val rs1_data = UInt(width = data_width)
    val rs2_data = UInt(width = data_width)
    val rs3_data = UInt(width = data_width) // only used for FMA units
-
+   val mask = UInt(width = data_width/8)
    val kill = Bool() // kill everything
 
    override def cloneType = new FuncUnitReq(data_width)(p).asInstanceOf[this.type]

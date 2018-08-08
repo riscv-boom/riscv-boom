@@ -560,7 +560,7 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule()(p) with freechips.
                                (uop.lrs2_rtype === RT_FIX || uop.lrs2_rtype === RT_FLT) ||
                                (uop.lrs3_rtype === RT_FIX || uop.lrs3_rtype === RT_FLT))
       uop.vp_type          := Mux(uop.dst_rtype === RT_VEC, uop.inst(13,12), VPRED_X)
-      uop.writes_vpred     := (uop.dst_rtype === RT_VEC && uop.ldst === UInt(1)) ||
+      uop.writes_vp        := (uop.dst_rtype === RT_VEC && uop.ldst === UInt(1)) ||
                               (uop.dst_rtype === RT_FLT && uop.ldst === "b100001".U)
    }
 

@@ -177,6 +177,7 @@ with Packing
       iss_valids(i) := issue_unit.io.iss_valids(i)
       iss_uops(i) := issue_unit.io.iss_uops(i)
 
+      // TODO_Vec: block issue needs to be fixed
       issue_unit.io.fu_types(i) := ((exe_units(i).io.fu_types & ~Mux(ll_wb_block_issue, FU_VALU | FU_VFPU, 0.U))
          | Mux(io.memreq.ready, FU_MEM, 0.U)) | Mux(tosdq.io.count === 0.U, FU_V2I, 0.U)
 
@@ -186,10 +187,13 @@ with Packing
    // Wakeup
    for ((writeback, issue_wakeup) <- io.wakeups zip issue_unit.io.wakeup_pdsts)
    {
-      issue_wakeup.valid := writeback.valid
-      issue_wakeup.bits.pdst  := writeback.bits.uop.pdst
-      issue_wakeup.bits.eidx  := writeback.bits.uop.eidx + writeback.bits.uop.rate // TODO_vec: This is a lot of adders
+      issue_wakeup.valid         := writeback.valid
+      issue_wakeup.bits.pdst     := writeback.bits.uop.pdst
+      issue_wakeup.bits.eidx     := writeback.bits.uop.eidx + writeback.bits.uop.rate // TODO_vec: This is a lot of adders
       issue_wakeup.bits.poisoned := false.B
+
+      issue_wakeup.bits.writes_vp    := writeback.bits.uop.writes_vp
+      issue_wakeup.bits.vp_pdst      := writeback.bits.uop.vp_pdst
    }
 
 
@@ -199,9 +203,7 @@ with Packing
 
    // Register Read <- Issue (rrd <- iss)
    vregister_read.io.rf_read_ports  <> vregfile.io.read_ports
-   //vregister_read.io.prf_read_ports <> vpregfile.io.read_ports
-   vpregfile.io.read_ports(0).addr := 0.U
-   vpregfile.io.read_ports(0).enable := false.B
+   vregister_read.io.prf_read_ports <> vpregfile.io.read_ports
 
    vregister_read.io.iss_valids <> iss_valids
    vregister_read.io.iss_uops := iss_uops
@@ -331,7 +333,7 @@ with Packing
          vregfile.io.write_ports(w_cnt).bits.rd_vew := wbresp.bits.uop.rd_vew
          wbresp.ready := vregfile.io.write_ports(w_cnt).ready
 
-         vpregfile.io.write_ports(w_cnt).valid     := valid_write && wbresp.bits.uop.writes_vpred
+         vpregfile.io.write_ports(w_cnt).valid     := valid_write && wbresp.bits.uop.writes_vp
          vpregfile.io.write_ports(w_cnt).bits.addr := wbresp.bits.uop.vp_pdst
          vpregfile.io.write_ports(w_cnt).bits.mask := CalcVecMaskFromData(
             wbresp.bits.uop.rd_vew,
@@ -370,10 +372,27 @@ with Packing
    ll_wb.io.deq.ready := false.B
    when (!vec_eu_wb) {
       vregfile.io.write_ports(0) <> WritePort(ll_wb.io.deq, log2Ceil(numVecRegFileRows), vecStripLen, true, numVecPhysRegs)
+
+      val wbresp = ll_wb.io.deq.bits
+      vpregfile.io.write_ports(0).valid     := ll_wb.io.deq.valid && wbresp.uop.writes_vp
+      vpregfile.io.write_ports(0).bits.addr := wbresp.uop.vp_pdst
+      vpregfile.io.write_ports(0).bits.mask := CalcVecMaskFromData(
+         wbresp.uop.rd_vew,
+         wbresp.mask,
+         1,
+         vecStripLen/8)
+      vpregfile.io.write_ports(0).bits.data := CalcVecMaskFromData(
+         wbresp.uop.rd_vew,
+         wbresp.data,
+         8,
+         vecStripLen)
+      vpregfile.io.write_ports(0).bits.eidx := wbresp.uop.eidx
+      vpregfile.io.write_ports(0).bits.rd_vew := wbresp.uop.rd_vew
+
       ll_wb.io.deq.ready := true.B
    }
    require (w_cnt == vregfile.io.write_ports.length)
-
+   require (w_cnt == vpregfile.io.write_ports.length)
    //-------------------------------------------------------------
    //-------------------------------------------------------------
    // **** Commit Stage ****
@@ -408,7 +427,7 @@ with Packing
       io.wakeups(0).bits  := ll_wb.io.deq.bits
    }
 
-
+   assert(w_cnt == 1)
    exe_units.map(_.io.fcsr_rm := io.fcsr_rm)
 
    //-------------------------------------------------------------

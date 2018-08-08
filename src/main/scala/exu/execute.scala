@@ -32,7 +32,7 @@ class ExeUnitResp(data_width: Int)(implicit p: Parameters) extends BoomBundle()(
 with HasBoomUOP
 {
    val data  = Bits(width = data_width)
-   val mask  = UInt(width = vecStripLen / 8)
+   val mask  = UInt(width = data_width / 8)
    val fflags = new ValidIO(new FFlagsResp) // write fflags to ROB
 
    var writesToIRF = true  // does this response unit plug into the integer regfile?
@@ -438,13 +438,29 @@ class VecFPUExeUnit(
       valu.io.brinfo             <> io.brinfo
       fu_units += valu
    }
-
    // Outputs
    val resp_uop = new MicroOp().fromBits(
       PriorityMux(fu_units.map(f => (f.io.resp.valid, f.io.resp.bits.uop.asUInt))))
+
+   val req_mask = Pipe(io.req.valid, io.req.bits.mask, p(tile.TileKey).core.fpu.get.dfmaLatency)
+   val resp_masks = List((VEW_8, 8), (VEW_16, 16), (VEW_32, 32), (VEW_64, 64)) map {
+      case (vew, sz) => {
+         val n = vecStripLen / sz
+         val results = for (i <- (0 until n)) yield {
+            Fill(sz, req_mask.bits(i))
+         }
+         val result_val = vew === resp_uop.rd_vew
+         val result_out = Cat(results.reverse)
+         (result_val, result_out)
+      }
+   }
+   val resp_mask_match = resp_masks.map(_._1)
+   val resp_mask = Mux1H(resp_mask_match, resp_masks.map(_._2))
+
+
    io.resp(0).valid         := fu_units.map(_.io.resp.valid).reduce(_|_)
    io.resp(0).bits.uop      := resp_uop
-   io.resp(0).bits.data     := PriorityMux(fu_units.map(f =>(f.io.resp.valid, f.io.resp.bits.data.asUInt))).asUInt
+   io.resp(0).bits.data     := PriorityMux(fu_units.map(f =>(f.io.resp.valid, f.io.resp.bits.data.asUInt))).asUInt & resp_mask
    io.resp(0).bits.fflags   := vfpu_resp_fflags // TODO_vec add div flags here
    io.resp(0).bits.mask     := "b1111111111111111".U
    assert(!(valu.io.resp.valid && vfpu.io.resp.valid), "VALU and VFPU contending for write port")
@@ -777,4 +793,3 @@ class MemExeUnit(implicit p: Parameters) extends ExecutionUnit(num_rf_read_ports
       "\n     ExeUnit--" +
       "\n       - Mem"
 }
-

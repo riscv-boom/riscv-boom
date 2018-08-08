@@ -686,12 +686,14 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
 
    when (will_fire_load_incoming || will_fire_load_retry)
    {
-      laq_addr_val      (exe_tlb_uop.ldq_idx)      := Bool(true)
-      laq_addr          (exe_tlb_uop.ldq_idx)      := Mux(tlb_miss, exe_vaddr, exe_tlb_paddr)
-      laq_bound         (exe_tlb_uop.ldq_idx)      := Mux(tlb_miss, exe_vaddr + exe_bound, exe_tlb_paddr + exe_bound)
-      laq_uop           (exe_tlb_uop.ldq_idx).pdst := exe_tlb_uop.pdst
-      laq_is_virtual    (exe_tlb_uop.ldq_idx)      := tlb_miss
-      laq_is_uncacheable(exe_tlb_uop.ldq_idx)      := tlb_addr_uncacheable && !tlb_miss
+      laq_addr_val      (exe_tlb_uop.ldq_idx)         := Bool(true)
+      laq_addr          (exe_tlb_uop.ldq_idx)         := Mux(tlb_miss, exe_vaddr, exe_tlb_paddr)
+      laq_bound         (exe_tlb_uop.ldq_idx)         := Mux(tlb_miss, exe_vaddr + exe_bound, exe_tlb_paddr + exe_bound)
+      laq_uop           (exe_tlb_uop.ldq_idx).pdst    := exe_tlb_uop.pdst
+      laq_uop           (exe_tlb_uop.ldq_idx).writes_vp := exe_tlb_uop.writes_vp
+      laq_uop           (exe_tlb_uop.ldq_idx).vp_pdst := exe_tlb_uop.vp_pdst
+      laq_is_virtual    (exe_tlb_uop.ldq_idx)         := tlb_miss
+      laq_is_uncacheable(exe_tlb_uop.ldq_idx)         := tlb_addr_uncacheable && !tlb_miss
 
       assert(!(will_fire_load_incoming && laq_addr_val(exe_tlb_uop.ldq_idx) && exe_tlb_uop.ldq_idx =/= bypassed_ldq_incr_idx),
          "[lsu] incoming load is overwriting a valid address.")

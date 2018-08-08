@@ -66,9 +66,11 @@ with freechips.rocketchip.rocket.constants.VecCfgConstants
       when (wport.valid && (wport.bits.addr =/= 0.U))
       {
          val full_mask = Wire(UInt(width=64.W))
-         full_mask := wport.bits.mask
-         regfile.write(wport.bits.addr, VecInit((wport.bits.data >> wport.bits.eidx).toBools),
-                                        VecInit((full_mask >> wport.bits.eidx).toBools))
+         val full_data = Wire(UInt(width=64.W))
+         full_mask := wport.bits.mask << wport.bits.eidx
+         full_data := wport.bits.data << wport.bits.eidx
+         regfile.write(wport.bits.addr, VecInit(full_data.toBools),
+                                        VecInit(full_mask.toBools))
       }
    }
 }

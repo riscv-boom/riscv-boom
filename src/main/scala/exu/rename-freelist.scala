@@ -321,18 +321,18 @@ class RenameFreeList(
          // Special case for vector predicates
          freelist.io.req_preg_vals(w) := !io.kill &&
                                          io.ren_will_fire(w) &&
-                                         io.ren_uops(w).writes_vpred
+                                         io.ren_uops(w).writes_vp
 
          freelist.io.enq_vals(w)      := io.com_valids(w) &&
-                                         io.com_uops(w).writes_vpred
+                                         io.com_uops(w).writes_vp
          freelist.io.enq_pregs(w)     := io.com_uops(w).stale_vp_pdst
 
          freelist.io.rollback_wens(w) := io.com_rbk_valids(w) &&
-                                         io.com_uops(w).writes_vpred
+                                         io.com_uops(w).writes_vp
          freelist.io.rollback_pdsts(w):= io.com_uops(w).vp_pdst
 
          freelist.io.com_wens(w)      := io.com_valids(w) &&
-                                         io.com_uops(w).writes_vpred
+                                         io.com_uops(w).writes_vp
       }
       if (rtype == RT_FIX.litValue) {
          // x0 is a special-case and should not be renamed

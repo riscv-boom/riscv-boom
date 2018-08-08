@@ -192,7 +192,7 @@ class RenameMapTable(
          entry.ren_br_tags(w) := io.ren_uops(w).br_tag
 
          if (rtype == RT_VPRED.litValue) {
-            entry.wens(w)     := io.ren_uops(w).writes_vpred &&
+            entry.wens(w)     := io.ren_uops(w).writes_vp &&
                                  io.ren_will_fire(w) &&
                                  !io.kill
             entry.ren_pdsts(w):= io.ren_uops(w).vp_pdst
@@ -219,7 +219,7 @@ class RenameMapTable(
       if (rtype == RT_VPRED.litValue)
       {
          ldst        = UInt(0)
-         rb_val      = io.com_uops(w).writes_vpred
+         rb_val      = io.com_uops(w).writes_vp
          stale_pdst  = io.com_uops(w).stale_vp_pdst
       }
 
@@ -240,7 +240,7 @@ class RenameMapTable(
          if (rtype == RT_VPRED.litValue)
          {
             ldst        = UInt(0)
-            rb_val      = io.com_uops(w).writes_vpred
+            rb_val      = io.com_uops(w).writes_vp
             pdst        = io.com_uops(w).vp_pdst
          }
 
@@ -289,8 +289,8 @@ class RenameMapTable(
       for (xx <- w-1 to 0 by -1)
       {
          if (rtype == RT_VPRED.litValue) {
-            rs1_cases   ++= Array((io.ren_uops(w).vp_type =/= VPRED_X && io.ren_will_fire(xx) && io.ren_uops(xx).writes_vpred, io.ren_uops(xx).vp_pdst))
-            stale_cases ++= Array((io.ren_uops(w).writes_vpred && io.ren_will_fire(xx) && io.ren_uops(xx).writes_vpred, io.ren_uops(xx).vp_pdst))
+            rs1_cases   ++= Array((io.ren_uops(w).vp_type =/= VPRED_X && io.ren_will_fire(xx) && io.ren_uops(xx).writes_vp, io.ren_uops(xx).vp_pdst))
+            stale_cases ++= Array((io.ren_uops(w).writes_vp && io.ren_will_fire(xx) && io.ren_uops(xx).writes_vp, io.ren_uops(xx).vp_pdst))
          } else {
             rs1_cases   ++= Array((io.ren_uops(w).lrs1_rtype === UInt(rtype) && io.ren_will_fire(xx) && io.ren_uops(xx).ldst_val && io.ren_uops(xx).dst_rtype === UInt(rtype) && (io.ren_uops(w).lrs1 === io.ren_uops(xx).ldst), (io.ren_uops(xx).pdst)))
             rs2_cases   ++= Array((io.ren_uops(w).lrs2_rtype === UInt(rtype) && io.ren_will_fire(xx) && io.ren_uops(xx).ldst_val && io.ren_uops(xx).dst_rtype === UInt(rtype) && (io.ren_uops(w).lrs2 === io.ren_uops(xx).ldst), (io.ren_uops(xx).pdst)))

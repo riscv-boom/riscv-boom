@@ -33,7 +33,7 @@ class VectorRegisterReadIO(issue_width: Int,
    register_width = register_width,
    reg_sz = reg_sz)(p)
 {
-   //val prf_read_ports = Vec(issue_width, new RegisterFileReadPortIO(VPPREG_SZ, pregister_width))
+   val prf_read_ports = Vec(issue_width, new RegisterFileReadPortIO(VPPREG_SZ, pregister_width)).flip
    override def cloneType =
       new VectorRegisterReadIO(issue_width, register_width, pregister_width, reg_sz)(p).asInstanceOf[this.type]
 }
@@ -63,7 +63,7 @@ with Packing
    val exe_reg_rs1_data = Reg(Bits(width = register_width))
    val exe_reg_rs2_data = Reg(Bits(width = register_width))
    val exe_reg_rs3_data = Reg(Bits(width = register_width))
-   val exe_reg_rp_data  = Reg(Bits(width = register_width/8))
+   val exe_reg_vp_data  = Reg(Bits(width = register_width/8))
 
    assert(issue_width == 1, "Vector pipeline supports issue width of 1")
 
@@ -91,7 +91,7 @@ with Packing
    val rrd_rs1_data   = Wire(Bits(width=register_width))
    val rrd_rs2_data   = Wire(Bits(width=register_width))
    val rrd_rs3_data   = Wire(Bits(width=register_width))
-   val rrd_rp_data    = Wire(Bits(width=register_width/8))
+   val rrd_vp_data    = Wire(Bits(width=register_width/8))
 
 
 
@@ -120,14 +120,17 @@ with Packing
       io.iss_uops(0).pop3,
       numVecPhysRegs)
 
-   io.rf_read_ports(0).addr := rs1_addr
-   io.rf_read_ports(1).addr := rs2_addr
-   io.rf_read_ports(2).addr := rs3_addr
+   io.prf_read_ports(0).addr := io.iss_uops(0).vp_pop
+   io.rf_read_ports(0).addr  := rs1_addr
+   io.rf_read_ports(1).addr  := rs2_addr
+   io.rf_read_ports(2).addr  := rs3_addr
 
-   io.rf_read_ports(0).enable := io.iss_uops(0).lrs1_rtype === RT_VEC
-   io.rf_read_ports(1).enable := io.iss_uops(0).lrs2_rtype === RT_VEC
-   io.rf_read_ports(2).enable := io.iss_uops(0).lrs3_rtype === RT_VEC
+   io.prf_read_ports(0).enable := io.iss_uops(0).vp_type =/= VPRED_X
+   io.rf_read_ports(0).enable  := io.iss_uops(0).lrs1_rtype === RT_VEC
+   io.rf_read_ports(1).enable  := io.iss_uops(0).lrs2_rtype === RT_VEC
+   io.rf_read_ports(2).enable  := io.iss_uops(0).lrs3_rtype === RT_VEC
 
+   rrd_vp_data  := io.prf_read_ports(0).data >> rrd_uops.eidx
    rrd_rs1_data := io.rf_read_ports(0).data
    rrd_rs2_data := io.rf_read_ports(1).data
    rrd_rs3_data := io.rf_read_ports(2).data
@@ -157,7 +160,7 @@ with Packing
    exe_reg_rs1_data := rrd_rs1_data
    exe_reg_rs2_data := rrd_rs2_data
    exe_reg_rs3_data := rrd_rs3_data
-   exe_reg_rp_data  := rrd_rp_data
+   exe_reg_vp_data  := rrd_vp_data
 
    //-------------------------------------------------------------
    // set outputs to execute pipelines
@@ -169,6 +172,6 @@ with Packing
    io.exe_reqs(0).bits.rs1_data := exe_reg_rs1_data
    io.exe_reqs(0).bits.rs2_data := exe_reg_rs2_data
    io.exe_reqs(0).bits.rs3_data := exe_reg_rs3_data
-
+   io.exe_reqs(0).bits.mask     := exe_reg_vp_data
 
 }

@@ -86,6 +86,7 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean, isVec: Boolean
    val slot_p1 = !slotUop.prs1_busy
    val slot_p2 = !slotUop.prs2_busy
    val slot_p3 = !slotUop.prs3_busy
+   val slot_pvp = !slotUop.pvp_busy
 
    // Has operand 1 or 2 been waken speculatively by a load?
    // Only integer operands are speculatively woken, so p3 is ignored
@@ -107,9 +108,11 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean, isVec: Boolean
    val updated_prs1_eidx  = Wire(UInt(width=VL_SZ.W))
    val updated_prs2_eidx  = Wire(UInt(width=VL_SZ.W))
    val updated_prs3_eidx  = Wire(UInt(width=VL_SZ.W))
+   val updated_pvp_eidx   = Wire(UInt(width=VL_SZ.W))
    val updated_prs1_busy  = Wire(Bool())
    val updated_prs2_busy  = Wire(Bool())
    val updated_prs3_busy  = Wire(Bool())
+   val updated_pvp_busy   = Wire(Bool())
    val updated_p1_poisoned= Wire(Bool())
    val updated_p2_poisoned= Wire(Bool())
    val updated_br_mask    = GetNewBrMask(io.brinfo, slotUop)
@@ -140,9 +143,11 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean, isVec: Boolean
       slotUop.prs1_busy := updated_prs1_busy
       slotUop.prs2_busy := updated_prs2_busy
       slotUop.prs3_busy := updated_prs3_busy
+      slotUop.pvp_busy  := updated_pvp_busy
       slotUop.prs1_eidx := updated_prs1_eidx
       slotUop.prs2_eidx := updated_prs2_eidx
       slotUop.prs3_eidx := updated_prs3_eidx
+      slotUop.pvp_eidx  := updated_pvp_eidx
       slotUop.iw_p1_poisoned := updated_p1_poisoned
       slotUop.iw_p2_poisoned := updated_p2_poisoned
       slotUop.br_mask   := updated_br_mask
@@ -163,9 +168,11 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean, isVec: Boolean
    updated_prs1_busy   := slotUop.prs1_busy
    updated_prs2_busy   := slotUop.prs2_busy
    updated_prs3_busy   := slotUop.prs3_busy
+   updated_pvp_busy    := slotUop.pvp_busy
    updated_prs1_eidx   := slotUop.prs1_eidx
    updated_prs2_eidx   := slotUop.prs2_eidx
    updated_prs3_eidx   := slotUop.prs3_eidx
+   updated_pvp_eidx    := slotUop.pvp_eidx
    updated_p1_poisoned := false.B // Initialize these to false, since the poison state only lasts 1 cycle
    updated_p2_poisoned := false.B
 
@@ -192,6 +199,9 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean, isVec: Boolean
                }
                when (slotUop.lrs3_rtype === RT_VEC) {
                   updated_prs3_busy := next_next_eidx > slotUop.prs3_eidx
+               }
+               when (slotUop.vp_type =/= VPRED_X) {
+                  updated_pvp_busy  := next_next_eidx > slotUop.pvp_eidx
                }
             }
          } else if (usingVec) {
@@ -248,10 +258,11 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean, isVec: Boolean
       slotUop.prs1_busy := updated_prs1_busy
       slotUop.prs2_busy := updated_prs2_busy
       slotUop.prs3_busy := updated_prs3_busy
+      slotUop.pvp_busy  := updated_pvp_busy
       slotUop.br_mask   := updated_br_mask
    }
 
-   // TODO_Vec: Support vector chaining
+
    for (i <- 0 until num_slow_wakeup_ports)
    {
       when (io.wakeup_dsts(i).valid
@@ -290,6 +301,14 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean, isVec: Boolean
             }
          } else {
             updated_prs3_busy := false.B
+         }
+      }
+      if (isVec) {
+         when (io.wakeup_dsts(i).valid
+            && io.wakeup_dsts(i).bits.writes_vp
+            && (io.wakeup_dsts(i).bits.vp_pdst === slotUop.vp_pop)) {
+            updated_pvp_busy := Mux(io.grant, next_next_eidx, next_eidx) > io.wakeup_dsts(i).bits.eidx
+            updated_pvp_eidx := io.wakeup_dsts(i).bits.eidx
          }
       }
    }
@@ -355,7 +374,7 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean, isVec: Boolean
 
    //-------------------------------------------------------------
    // Request Logic
-   io.request := isValid && slot_p1 && slot_p2 && slot_p3 && !io.kill
+   io.request := isValid && slot_p1 && slot_p2 && slot_p3 && !io.kill && (slotUop.vp_type === VPRED_X || slot_pvp || !containsVec.B || !isVec.B)
    val high_priority = slotUop.is_br_or_jmp
    io.request_hp := false.B
 
@@ -415,9 +434,11 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean, isVec: Boolean
    io.updated_uop.prs1_busy := updated_prs1_busy
    io.updated_uop.prs2_busy := updated_prs2_busy
    io.updated_uop.prs3_busy := updated_prs3_busy
+   io.updated_uop.pvp_busy  := updated_pvp_busy
    io.updated_uop.prs1_eidx := updated_prs1_eidx
    io.updated_uop.prs2_eidx := updated_prs2_eidx
    io.updated_uop.prs3_eidx := updated_prs3_eidx
+   io.updated_uop.pvp_eidx  := updated_pvp_eidx
    io.updated_uop.eidx      := updated_eidx
    io.updated_uop.iw_p1_poisoned := updated_p1_poisoned
    io.updated_uop.iw_p2_poisoned := updated_p2_poisoned

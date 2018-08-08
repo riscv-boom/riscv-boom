@@ -73,19 +73,25 @@ class MicroOp(implicit p: Parameters) extends BoomBundle()(p)
    val ldq_idx          = UInt(width = MEM_ADDR_SZ)
    val stq_idx          = UInt(width = MEM_ADDR_SZ)
    val pdst             = UInt(width = PREG_SZ)
+   val vp_pdst          = UInt(width = VPREG_SZ)
    val pop1             = UInt(width = PREG_SZ)
    val pop2             = UInt(width = PREG_SZ)
    val pop3             = UInt(width = PREG_SZ)
+   val vp_pop           = UInt(width = VPREG_SZ)
 
    val prs1_busy        = Bool()
    val prs2_busy        = Bool()
    val prs3_busy        = Bool()
+   val pvp_busy         = Bool()
 
    val prs1_eidx        = UInt(width = VL_SZ)
    val prs2_eidx        = UInt(width = VL_SZ)
    val prs3_eidx        = UInt(width = VL_SZ)
+   val pvp_eidx         = UInt(width = VL_SZ)
 
    val stale_pdst       = UInt(width = PREG_SZ)
+   val stale_vp_pdst    = UInt(width = VPREG_SZ)
+
    val exception        = Bool()
    val exc_cause        = UInt(width = xLen)          // TODO compress this down, xlen is insanity
    val bypassable       = Bool()                      // can we bypass ALU results? (doesn't include loads, csr, etc...)
@@ -134,13 +140,8 @@ class MicroOp(implicit p: Parameters) extends BoomBundle()(p)
    val eidx             = UInt(width=VL_SZ)
 
    // Vector predication
-   val writes_vpred     = Bool()
+   val writes_vp        = Bool()
    val vp_type          = UInt(width=VPRED_SZ)
-   val vp_pop           = UInt(width=VPPREG_SZ)
-   val vp_pdst          = UInt(width=VPPREG_SZ)
-   val stale_vp_pdst    = UInt(width=VPPREG_SZ)
-   val vp_eidx          = UInt(width=VL_SZ)
-   val vp_busy          = Bool()
    // TODO_Vec: These are temporarily where scalar vector operands are stored
    //           In future store these in operand buffer in vector pipeline
    val use_vscopb       = Bool()

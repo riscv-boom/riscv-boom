@@ -172,6 +172,8 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
       issue_wakeup.bits.pdst     := writeback.bits.uop.pdst
       issue_wakeup.bits.eidx     := 0.U
       issue_wakeup.bits.poisoned := false.B
+      issue_wakeup.bits.vp_pdst  := 0.U
+      issue_wakeup.bits.writes_vp := false.B
    }
 
    //-------------------------------------------------------------

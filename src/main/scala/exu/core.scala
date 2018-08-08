@@ -762,6 +762,9 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       issport.bits.eidx := UInt(0)
       issport.bits.poisoned := wakeup.bits.uop.iw_p1_poisoned || wakeup.bits.uop.iw_p2_poisoned
       if (usingVec) issport.bits.eidx := wakeup.bits.uop.eidx + wakeup.bits.uop.rate
+
+      issport.bits.vp_pdst   := 0.U
+      issport.bits.writes_vp := false.B
       require (iu.io.wakeup_pdsts.length == int_wakeups.length)
    }
 

@@ -38,7 +38,10 @@ class WakeupPdst(implicit p: Parameters) extends BoomBundle()(p)
 {
    val pdst = UInt(width=PREG_SZ.W)
    val eidx = UInt(width=VL_SZ.W)
-   val poisoned = Bool() // Is the physical register poisoned (aka, was it woken up by a speculative load?)
+
+   val writes_vp = Bool()
+   val vp_pdst   = UInt(width=VPREG_SZ.W)
+   val poisoned  = Bool() // Is the physical register poisoned (aka, was it woken up by a speculative load?)
 }
 
 class IssueUnitIO(
@@ -74,7 +77,6 @@ class IssueUnitIO(
    // TODO_Vec: This is messy
    val fromfp       = Flipped(Decoupled(new ExeUnitResp(xLen)))
    val fromint      = Flipped(Decoupled(new ExeUnitResp(xLen)))
-
 }
 
 abstract class IssueUnit(

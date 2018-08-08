@@ -183,7 +183,7 @@ class BusyTable(
       if (rtype == RT_VPRED.litValue) {
          when (io.ren_uops(w).vp_type =/= VPRED_X
             && io.ren_will_fire(xx)
-            && io.ren_uops(xx).writes_vpred) {
+            && io.ren_uops(xx).writes_vp) {
             prs1_was_bypassed(w) := Bool(true)
          }
       }
@@ -255,7 +255,7 @@ class BusyTable(
       busy_table.io.allocated_pdst(w).bits  := io.ren_uops(w).pdst
       if (rtype == RT_VPRED.litValue) {
          busy_table.io.allocated_pdst(w).valid := io.ren_will_fire(w) &&
-                                                  io.ren_uops(w).writes_vpred
+                                                  io.ren_uops(w).writes_vp
          busy_table.io.allocated_pdst(w).bits  := io.ren_uops(w).vp_pdst
       }
 
