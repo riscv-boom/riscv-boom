@@ -460,7 +460,10 @@ class VecFPUExeUnit(
 
    io.resp(0).valid         := fu_units.map(_.io.resp.valid).reduce(_|_)
    io.resp(0).bits.uop      := resp_uop
-   io.resp(0).bits.data     := PriorityMux(fu_units.map(f =>(f.io.resp.valid, f.io.resp.bits.data.asUInt))).asUInt & resp_mask
+   io.resp(0).bits.data     := (PriorityMux(fu_units.map(f =>(f.io.resp.valid, f.io.resp.bits.data.asUInt))).asUInt
+      & MuxLookup(resp_uop.vp_type, VPRED_X, Array(VPRED_T -> resp_mask,
+                                                   VPRED_F -> ~resp_mask,
+                                                   VPRED_X -> ~(0.U(data_width.W)))))
    io.resp(0).bits.fflags   := vfpu_resp_fflags // TODO_vec add div flags here
    io.resp(0).bits.mask     := "b1111111111111111".U
    assert(!(valu.io.resp.valid && vfpu.io.resp.valid), "VALU and VFPU contending for write port")
