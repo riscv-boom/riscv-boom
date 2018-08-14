@@ -526,9 +526,19 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule()(p) with freechips.
    //-------------------------------------------------------------
    // Special cases for polymorphic vector instructions
    if (usingVec) {
+      uop.vp_type          := Mux(uop.dst_rtype === RT_VEC
+                               && uop.uopc =/= uopVINSERT
+                               && uop.uopc =/= uopVEXTRACT, uop.inst(13,12), VPRED_X)
+      uop.writes_vp        := (uop.dst_rtype === RT_VEC && uop.ldst === UInt(1)) ||
+                              (uop.dst_rtype === RT_FLT && uop.ldst === "b100001".U)
+
       when (cs.vec_val && cs.is_load) {
          uop.rate       := UInt(1)
          uop.mem_typ    := MuxLookup(io.vecstatus.vews(cs_rd), VEW_8, Array(VEW_8 -> MT_B, VEW_16 -> MT_H, VEW_32 -> MT_W, VEW_64 -> MT_D))
+
+         when (uop.vp_type =/= VPRED_X) {
+            uop.iqtype  := IQT_VEC // Predicated memory ops go to vector issue window
+         }
       } .elsewhen (cs.vec_val && cs.is_store) {
          uop.rate       := UInt(1)
          uop.mem_typ    := MuxLookup(io.vecstatus.vews(cs_rs3), VEW_8, Array(VEW_8 -> MT_B, VEW_16 -> MT_H, VEW_32 -> MT_W, VEW_64 -> MT_D))
@@ -559,9 +569,6 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule()(p) with freechips.
                               ((uop.lrs1_rtype === RT_FIX || uop.lrs1_rtype === RT_FLT) ||
                                (uop.lrs2_rtype === RT_FIX || uop.lrs2_rtype === RT_FLT) ||
                                (uop.lrs3_rtype === RT_FIX || uop.lrs3_rtype === RT_FLT))
-      uop.vp_type          := Mux(uop.dst_rtype === RT_VEC, uop.inst(13,12), VPRED_X)
-      uop.writes_vp        := (uop.dst_rtype === RT_VEC && uop.ldst === UInt(1)) ||
-                              (uop.dst_rtype === RT_FLT && uop.ldst === "b100001".U)
    }
 
    //-------------------------------------------------------------

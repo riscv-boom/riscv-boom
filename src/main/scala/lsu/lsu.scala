@@ -366,7 +366,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
 
       io.exe_vsta.ready      := true.B
 
-      exe_resp_valid         := true.B
+      exe_resp_valid         := !IsKilledByBranch(io.brinfo, io.exe_vsta.bits.uop)
       exe_resp               := io.exe_vsta.bits
       assert(io.exe_vsta.bits.uop.ctrl.is_sta, "OP arriving through VSTA queue is not a sta!")
    }
@@ -395,11 +395,15 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
             || (io.exe_resp.bits.uop.ldq_idx === bypassed_ldq_incr_idx
                && bypassed_ldq_incr
                && !(io.dc_nack.valid && io.dc_nack.isload && io.dc_nack.lsu_idx === bypassed_ldq_incr_idx))) {
-            will_fire_load_incoming := true.B
-            dc_avail                := false.B
-            tlb_avail               := false.B
-            lcam_avail              := false.B
+            when (io.exe_resp.bits.uop.vec_val && !io.exe_resp.bits.masked(0)) {
+               laq_uop(io.exe_resp.bits.uop.ldq_idx).eidx := io.exe_resp.bits.uop.eidx + 1.U
+            } .otherwise {
+               will_fire_load_incoming := true.B
 
+               dc_avail                := false.B
+               tlb_avail               := false.B
+               lcam_avail              := false.B
+            }
             io.exe_resp.ready       := true.B
 
             exe_resp_valid          := true.B
@@ -1339,8 +1343,12 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
       when (io.commit_load_mask(w))
       {
          assert (laq_allocated(idx), "[lsu] trying to commit an un-allocated load entry.")
-         assert (laq_executed(idx), "[lsu] trying to commit an un-executed load entry.")
-         assert (laq_succeeded(idx), "[lsu] trying to commit an un-succeeded load entry.")
+         // Relax this constraint slightly, since masked-off vector loads are "executed" in the ALUs
+         // We really should be broadcasting the committed index here
+         assert (laq_executed(idx) || (laq_uop(idx).vec_val && laq_uop(idx).vp_type =/= VPRED_X)
+            , "[lsu] trying to commit an un-executed load entry.")
+         assert (laq_succeeded(idx) || (laq_uop(idx).vec_val && laq_uop(idx).vp_type =/= VPRED_X)
+            , "[lsu] trying to commit an un-succeeded load entry.")
 
          laq_addr_val (idx)         := Bool(false)
          laq_executed (idx)         := Bool(false)

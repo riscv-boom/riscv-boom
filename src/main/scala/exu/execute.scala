@@ -455,15 +455,12 @@ class VecFPUExeUnit(
       }
    }
    val resp_mask_match = resp_masks.map(_._1)
-   val resp_mask = Mux1H(resp_mask_match, resp_masks.map(_._2))
+   val resp_mask = Mux(resp_uop.vp_type === VPRED_X, ~(0.U(data_width.W)), Mux1H(resp_mask_match, resp_masks.map(_._2)))
 
 
    io.resp(0).valid         := fu_units.map(_.io.resp.valid).reduce(_|_)
    io.resp(0).bits.uop      := resp_uop
-   io.resp(0).bits.data     := (PriorityMux(fu_units.map(f =>(f.io.resp.valid, f.io.resp.bits.data.asUInt))).asUInt
-      & MuxLookup(resp_uop.vp_type, VPRED_X, Array(VPRED_T -> resp_mask,
-                                                   VPRED_F -> ~resp_mask,
-                                                   VPRED_X -> ~(0.U(data_width.W)))))
+   io.resp(0).bits.data     := PriorityMux(fu_units.map(f =>(f.io.resp.valid, f.io.resp.bits.data.asUInt))).asUInt & resp_mask
    io.resp(0).bits.fflags   := vfpu_resp_fflags // TODO_vec add div flags here
    io.resp(0).bits.mask     := "b1111111111111111".U
    assert(!(valu.io.resp.valid && vfpu.io.resp.valid), "VALU and VFPU contending for write port")
@@ -714,10 +711,14 @@ class MemExeUnit(implicit p: Parameters) extends ExecutionUnit(num_rf_read_ports
    maddrcalc.io.brinfo <> io.brinfo
    io.bypass <> maddrcalc.io.bypass  // TODO this is not where the bypassing should occur from, is there any bypassing happening?!
 
+   var to_lsu_resp:BranchKillableQueue[FuncUnitResp] = null
+   var to_lsu_vsta:BranchKillableQueue[FuncUnitResp] = null
 
    if (usingVec) {
-      val to_lsu_vsta = Module(new BranchKillableQueue(new FuncUnitResp(vecStripLen), 4))
-      val to_lsu_resp = Module(new BranchKillableQueue(new FuncUnitResp(vecStripLen), 8))
+      to_lsu_vsta = Module(new BranchKillableQueue(new FuncUnitResp(vecStripLen), 6))
+      to_lsu_vsta.suggestName("lsu_vsta_queue")
+      to_lsu_resp = Module(new BranchKillableQueue(new FuncUnitResp(vecStripLen), 8))
+      to_lsu_resp.suggestName("lsu_resp_queue")
 
       assert(!(maddrcalc.io.resp.valid
          && !(maddrcalc.io.resp.bits.uop.vec_val && maddrcalc.io.resp.bits.uop.is_store)
@@ -725,27 +726,31 @@ class MemExeUnit(implicit p: Parameters) extends ExecutionUnit(num_rf_read_ports
          "We do not support backpressure on this queue")
 
       to_lsu_resp.io.enq.valid := (maddrcalc.io.resp.valid
-         && !(maddrcalc.io.resp.bits.uop.vec_val && maddrcalc.io.resp.bits.uop.is_store))
+                               && !(maddrcalc.io.resp.bits.uop.vec_val && maddrcalc.io.resp.bits.uop.is_store))
       to_lsu_resp.io.enq.bits  := maddrcalc.io.resp.bits
       to_lsu_resp.io.brinfo    := io.brinfo
       to_lsu_resp.io.flush     := io.req.bits.kill
 
       io.lsu_io.exe_resp       <> to_lsu_resp.io.deq
 
-      // Vector store addrs need to go through a separate queue to avoid blocking loads
-      assert(!(maddrcalc.io.resp.valid && maddrcalc.io.resp.bits.uop.vec_val
-         && maddrcalc.io.resp.bits.uop.is_store && !to_lsu_vsta.io.enq.ready),
-         "We do not support backpressure on this queue")
-
       to_lsu_vsta.io.enq.valid := (maddrcalc.io.resp.valid
                                 && maddrcalc.io.resp.bits.uop.vec_val
                                 && maddrcalc.io.resp.bits.uop.is_store
                                 && !IsKilledByBranch(io.brinfo, maddrcalc.io.resp.bits.uop))
+
+      // Vector store addrs need to go through a separate queue to avoid blocking loads
+      assert(!((maddrcalc.io.resp.valid
+             && maddrcalc.io.resp.bits.uop.vec_val
+             && maddrcalc.io.resp.bits.uop.is_store
+             && !IsKilledByBranch(io.brinfo, maddrcalc.io.resp.bits.uop))
+            && !to_lsu_vsta.io.enq.ready),
+         "We do not support backpressure on this queue")
+
       to_lsu_vsta.io.enq.bits  := maddrcalc.io.resp.bits
       to_lsu_vsta.io.brinfo    := io.brinfo
       to_lsu_vsta.io.flush     := io.req.bits.kill
       io.lsu_io.exe_vsta       <> to_lsu_vsta.io.deq
-      io.fu_types := Mux(to_lsu_resp.io.count < UInt(1), FU_MEM, UInt(0)) | Mux(to_lsu_vsta.io.count < UInt(1), FU_VSTA, UInt(0))
+      io.fu_types := Mux(to_lsu_resp.io.empty, FU_MEM, UInt(0)) | Mux(to_lsu_vsta.io.empty, FU_VSTA, UInt(0))
    } else {
       io.lsu_io.exe_resp       <> maddrcalc.io.resp
       io.fu_types := FU_MEM
@@ -769,6 +774,7 @@ class MemExeUnit(implicit p: Parameters) extends ExecutionUnit(num_rf_read_ports
 
    // I should be timing forwarding to coincide with dmem resps, so I'm not clobbering
    //anything....
+
    val memresp_val    = Mux(io.com_exception && io.dmem.resp.bits.uop.is_load, Bool(false),
                                                 io.lsu_io.forward_val || io.dmem.resp.valid)
    val memresp_rf_wen = (io.dmem.resp.valid && (io.dmem.resp.bits.uop.mem_cmd === M_XRD || io.dmem.resp.bits.uop.is_amo)) ||  // TODO should I refactor this to use is_load?
@@ -776,22 +782,51 @@ class MemExeUnit(implicit p: Parameters) extends ExecutionUnit(num_rf_read_ports
    val memresp_uop    = Mux(io.lsu_io.forward_val, io.lsu_io.forward_uop,
                                                 io.dmem.resp.bits.uop)
 
-   val memresp_data = Mux(io.lsu_io.forward_val, io.lsu_io.forward_data, io.dmem.resp.bits.data_subword)
+   val memresp_data   = Mux(io.lsu_io.forward_val, io.lsu_io.forward_data, io.dmem.resp.bits.data_subword)
 
    io.lsu_io.memresp.valid := memresp_val
    io.lsu_io.memresp.bits  := memresp_uop
 
 
    // Hook up loads to the response
-   io.resp(0).valid                 := RegNext(memresp_val && !IsKilledByBranch(io.brinfo, memresp_uop))
-   io.resp(0).bits.uop              := RegNext(memresp_uop)
-   io.resp(0).bits.uop.ctrl.rf_wen  := RegNext(memresp_rf_wen)
-   io.resp(0).bits.data             := RegNext(memresp_data)
-   io.resp(0).bits.mask             := RegNext(MuxLookup(memresp_uop.rd_vew, VEW_8, Array(
+   val resp_val       = Wire(Bool())
+   val resp_uop       = Wire(new MicroOp())
+   val resp_rf_wen    = Wire(Bool())
+   val resp_data      = Wire(UInt())
+
+   resp_val    := memresp_val && !IsKilledByBranch(io.brinfo, memresp_uop)
+   resp_uop    := memresp_uop
+   resp_rf_wen := memresp_rf_wen
+   resp_data   := memresp_data
+
+
+   if (usingVec) {
+      when (to_lsu_resp.io.deq.valid
+         && to_lsu_resp.io.deq.bits.uop.is_load
+         && to_lsu_resp.io.deq.bits.uop.vec_val
+         && !to_lsu_resp.io.deq.bits.masked) {
+         when (memresp_val) {
+            io.lsu_io.exe_resp.valid := false.B
+         } .elsewhen (to_lsu_resp.io.deq.valid && to_lsu_resp.io.deq.ready) {
+            resp_val              := true.B
+            resp_rf_wen           := true.B
+            resp_uop              := to_lsu_resp.io.deq.bits.uop
+            resp_data             := 0.U
+         }
+      }
+   }
+
+   io.resp(0).valid                 := RegNext(resp_val)
+   io.resp(0).bits.uop              := RegNext(resp_uop)
+   io.resp(0).bits.uop.ctrl.rf_wen  := RegNext(resp_rf_wen)
+   io.resp(0).bits.data             := RegNext(resp_data)
+   io.resp(0).bits.mask             := RegNext(MuxLookup(resp_uop.rd_vew, VEW_8, Array(
       VEW_8  -> "b1".U,
       VEW_16 -> "b11".U,
       VEW_32 -> "b1111".U,
       VEW_64 -> "b11111111".U)))
+
+
    override def toString: String =
       "\n     ExeUnit--" +
       "\n       - Mem"

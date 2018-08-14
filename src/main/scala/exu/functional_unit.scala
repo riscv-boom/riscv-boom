@@ -124,6 +124,7 @@ with boom.common.HasBoomUOP
    val fflags = new ValidIO(new FFlagsResp)
    val addr  = UInt(width = vaddrBits+1) // only for maddr -> LSU
    val bound = UInt(width = vaddrBits+1) // only for maddr -> LSU
+   val masked = Bool() // only for maddr -> LSU for vector masked ops
    val mxcpt = new ValidIO(UInt(width=freechips.rocketchip.rocket.Causes.all.max+2)) //only for maddr->LSU
    val sfence = Valid(new freechips.rocketchip.rocket.SFenceReq) // only for mcalc
 
@@ -631,9 +632,10 @@ class MemAddrCalcUnit(implicit p: Parameters)
    val effective_bound   = Cat(eb_sign, bound(vaddrBits-1,0)).asUInt
    val store_data = io.req.bits.rs2_data
 
-   io.resp.bits.addr  := effective_address
-   io.resp.bits.data  := store_data
-   io.resp.bits.bound := effective_bound
+   io.resp.bits.addr   := effective_address
+   io.resp.bits.data   := store_data
+   io.resp.bits.bound  := effective_bound
+   io.resp.bits.masked := io.req.bits.mask
 
    if (data_width > 63)
    {

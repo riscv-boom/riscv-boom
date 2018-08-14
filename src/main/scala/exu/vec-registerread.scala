@@ -172,6 +172,8 @@ with Packing
    io.exe_reqs(0).bits.rs1_data := exe_reg_rs1_data
    io.exe_reqs(0).bits.rs2_data := exe_reg_rs2_data
    io.exe_reqs(0).bits.rs3_data := exe_reg_rs3_data
-   io.exe_reqs(0).bits.mask     := exe_reg_vp_data
-
+   io.exe_reqs(0).bits.mask     := MuxLookup(exe_reg_uops.vp_type, VPRED_X,
+      Array(VPRED_T ->  exe_reg_vp_data,
+            VPRED_F -> ~exe_reg_vp_data,
+            VPRED_X -> ~(0.U((register_width/8).W))))
 }

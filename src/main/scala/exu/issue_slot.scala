@@ -374,7 +374,7 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean, isVec: Boolean
 
    //-------------------------------------------------------------
    // Request Logic
-   io.request := isValid && slot_p1 && slot_p2 && slot_p3 && !io.kill && (slotUop.vp_type === VPRED_X || slot_pvp || !containsVec.B || !isVec.B)
+   io.request := isValid && slot_p1 && slot_p2 && slot_p3 && !io.kill && slot_pvp
    val high_priority = slotUop.is_br_or_jmp
    io.request_hp := false.B
 
@@ -382,7 +382,7 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean, isVec: Boolean
 
    when (slot_state === s_valid_1)
    {
-      io.request := slot_p1 && slot_p2 && slot_p3 && !io.kill
+      io.request := slot_p1 && slot_p2 && slot_p3 && slot_pvp && !io.kill
       if (containsVec && usingVec){
          when (slotUop.is_store && slotUop.vec_val) {
             io.request := (slot_p1 && slot_p2 && slot_p3 && !io.kill

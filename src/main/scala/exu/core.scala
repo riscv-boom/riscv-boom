@@ -88,7 +88,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
    val rename_stage     = Module(new RenameStage(decodeWidth, num_wakeup_ports,
                                                  if (usingFPU) fp_pipeline.io.wakeups.length else 1,
-                                                 if (usingVec) vec_pipeline.io.wakeups.length else 1)) 
+                                                 if (usingVec) vec_pipeline.io.wakeups.length else 1))
                        // HACK here, set to 1 so we can still generate the freelists, but don't connect their outputs
    val issue_units      = new boom.exu.IssueUnits(num_wakeup_ports)
    val iregfile         = if (regreadLatency == 1 && enableCustomRf) {
@@ -603,49 +603,46 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
       iu.io.vl := csr.io.vecstatus.vl
 
-      iu.io.lsu_stq_head      := lsu.io.stq_head
+      iu.io.lsu_stq_head              := lsu.io.stq_head
+      iu.io.dis_uops(w).pvp_busy      := false.B
 
       when (dis_uops(w).uopc === uopSTA && dis_uops(w).lrs2_rtype === RT_FLT) {
          iu.io.dis_uops(w).lrs2_rtype := RT_X
          iu.io.dis_uops(w).prs2_busy  := Bool(false)
       }
-      if (usingVec)
-      when (dis_uops(w).vec_val && dis_uops(w).is_store && dis_uops(w).lrs3_rtype === RT_VEC && dis_uops(w).uopc =/= uopVSTX) {
-         // VSTX gets issued by vector pipeline
-         iu.io.dis_uops(w).fu_code    := FU_VSTA
-         iu.io.dis_uops(w).lrs3_rtype := RT_X
-         iu.io.dis_uops(w).prs3_busy  := Bool(false)
-         // Vec stores have operand in rs3 weird
-         // TODO_vec polymorphic stores
-         // TODO_Vec generalize this
-      } .elsewhen (dis_uops(w).uopc === uopVINSERT) {
-         assert(dis_uops(w).dst_rtype === RT_VEC)
-         iu.io.dis_valids(w)          := dis_valids(w) && UInt(iu.iqType) === IQT_INT
-         iu.io.dis_uops(w).vec_val    := false.B
-         iu.io.dis_uops(w).uopc       := uopTOVEC
-         iu.io.dis_uops(w).iqtype     := IQT_INT
-         iu.io.dis_uops(w).fu_code    := FU_I2V
-         iu.io.dis_uops(w).lrs3_rtype := RT_X
-         iu.io.dis_uops(w).prs3_busy  := false.B
-      } .elsewhen (dis_uops(w).uopc === uopVEXTRACT) {
-         assert(dis_uops(w).lrs1_rtype === RT_VEC)
-         iu.io.dis_valids(w)          := dis_valids(w) && UInt(iu.iqType) === IQT_INT
-         iu.io.dis_uops(w).vec_val    := false.B
-         iu.io.dis_uops(w).uopc       := uopTOVEC
-         iu.io.dis_uops(w).iqtype     := IQT_INT
-         iu.io.dis_uops(w).fu_code    := FU_I2V
-         iu.io.dis_uops(w).lrs1_rtype := RT_X
-         iu.io.dis_uops(w).prs1_busy  := false.B
-      } .elsewhen (dis_uops(w).uopc === uopVLDX || dis_uops(w).uopc === uopVSTX) {
-         //assert(dis_uops(w).dst_rtype === RT_VEC)
-         iu.io.dis_valids(w)          := dis_valids(w) && UInt(iu.iqType) === IQT_INT
-         iu.io.dis_uops(w).vec_val    := false.B
-         iu.io.dis_uops(w).uopc       := uopTOVEC
-         iu.io.dis_uops(w).iqtype     := IQT_INT
-         iu.io.dis_uops(w).fu_code    := FU_I2V
-         iu.io.dis_uops(w).lrs2_rtype := RT_X
-         iu.io.dis_uops(w).prs2_busy  := false.B
-         iu.io.dis_uops(w).prs3_busy  := false.B
+      if (usingVec) {
+         when (dis_uops(w).vec_val && dis_uops(w).is_store && dis_uops(w).lrs3_rtype === RT_VEC && dis_uops(w).uopc =/= uopVSTX) {
+            // VSTX gets issued by vector pipeline
+            iu.io.dis_uops(w).fu_code    := FU_VSTA
+            iu.io.dis_uops(w).lrs3_rtype := RT_X
+            iu.io.dis_uops(w).prs3_busy  := Bool(false)
+            // Vec stores have operand in rs3 weird
+            // TODO_vec polymorphic stores
+            // TODO_Vec generalize this
+         }
+         when (dis_uops(w).iqtype === IQT_VEC) {
+            // Integer operands to vector instructions are read-before-issue
+            // Here we dispatch a uop to read out the integer operand
+            iu.io.dis_valids(w)             := dis_valids(w) && UInt(iu.iqType) === IQT_INT &&
+                                               (dis_uops(w).lrs1_rtype === RT_FIX
+                                             || dis_uops(w).lrs2_rtype === RT_FIX
+                                             || dis_uops(w).lrs3_rtype === RT_FIX)
+            iu.io.dis_uops(w).uopc          := uopTOVEC
+            iu.io.dis_uops(w).iqtype        := IQT_INT
+            iu.io.dis_uops(w).fu_code       := FU_I2V
+            when (dis_uops(w).lrs1_rtype =/= RT_FIX) {
+               iu.io.dis_uops(w).lrs1_rtype := RT_X
+               iu.io.dis_uops(w).prs1_busy  := false.B
+            }
+            when (dis_uops(w).lrs2_rtype =/= RT_FIX) {
+               iu.io.dis_uops(w).lrs2_rtype := RT_X
+               iu.io.dis_uops(w).prs2_busy  := false.B
+            }
+            when (dis_uops(w).lrs3_rtype =/= RT_FIX) {
+               iu.io.dis_uops(w).lrs3_rtype := RT_X
+               iu.io.dis_uops(w).prs3_busy  := false.B
+            }
+         }
       }
    }
 
@@ -871,19 +868,12 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    // **** Execute Stage ****
    //-------------------------------------------------------------
    //-------------------------------------------------------------
-   val vec_memreq = Module(new BranchKillableQueue(new FuncUnitReq(xLen), entries=6))
-   if (usingVec) {
-      vec_memreq.io.brinfo      := br_unit.brinfo
-      vec_memreq.io.flush       := rob.io.flush.valid
-      vec_memreq.io.enq.valid   := vec_pipeline.io.memreq.valid
-      vec_memreq.io.enq.bits    := vec_pipeline.io.memreq.bits
-      assert(!(vec_memreq.io.enq.valid && !vec_memreq.io.enq.ready), "Can't backpressure here")
-   }
 
    var idx = 0
    for (w <- 0 until exe_units.length)
    {
       exe_units(w).io.req <> iregister_read.io.exe_reqs(w)
+      exe_units(w).io.req.bits.mask := ~(0.U)
       exe_units(w).io.brinfo := br_unit.brinfo
       exe_units(w).io.com_exception := rob.io.flush.valid
       exe_units(w).io.vl := csr.io.vecstatus.vl
@@ -900,17 +890,16 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       }
       if (exe_units(w).is_mem_unit && usingVec)
       {
-         vec_pipeline.io.memreq.ready := (vec_memreq.io.count < 2.U) && (exe_units(w).io.fu_types & FU_MEM).orR
          // TODO_Vec: Make this an arbiter
          when (!iregister_read.io.exe_reqs(w).valid
-            && vec_memreq.io.deq.valid
+            && vec_pipeline.io.memreq.valid
             && (exe_units(w).io.fu_types & FU_MEM).orR)
          {
-            vec_memreq.io.deq.ready      := true.B
-            exe_units(w).io.req.valid    := vec_memreq.io.deq.valid
-            exe_units(w).io.req.bits     := vec_memreq.io.deq.bits
+            vec_pipeline.io.memreq.ready := true.B
+            exe_units(w).io.req.valid    := vec_pipeline.io.memreq.valid
+            exe_units(w).io.req.bits     := vec_pipeline.io.memreq.bits
          } .otherwise {
-            vec_memreq.io.deq.ready       := false.B
+            vec_pipeline.io.memreq.ready       := false.B
          }
       }
 

@@ -97,6 +97,10 @@ with Packing
    tosdq.io.brinfo := io.brinfo
    tosdq.io.flush  := io.flush_pipeline
 
+   val memreq = Module(new BranchKillableQueue(new FuncUnitReq(xLen), entries=4))
+   memreq.io.brinfo := io.brinfo
+   memreq.io.flush  := io.flush_pipeline
+
    // Todo_vec add checking for num write ports and number of functional units which use the issue unit
 
    val iss_valids = Wire(Vec(exe_units.withFilter(_.uses_iss_unit).map(x=>x).length, Bool()))
@@ -128,6 +132,7 @@ with Packing
    vscalaropbuffer.io.w_data(1)    := io.fromint.bits.data
 
    require (exe_units.num_total_bypass_ports == 0)
+
 
 
    //-------------------------------------------------------------
@@ -179,7 +184,7 @@ with Packing
 
       // TODO_Vec: block issue needs to be fixed
       issue_unit.io.fu_types(i) := ((exe_units(i).io.fu_types & ~Mux(ll_wb_block_issue, FU_VALU | FU_VFPU, 0.U))
-         | Mux(io.memreq.ready, FU_MEM, 0.U)) | Mux(tosdq.io.count === 0.U, FU_V2I, 0.U)
+         | Mux(memreq.io.count === 0.U, FU_MEM, 0.U)) | Mux(tosdq.io.count === 0.U, FU_V2I, 0.U)
 
       require (exe_units(i).uses_iss_unit)
    }
@@ -248,7 +253,6 @@ with Packing
       ex.io.req.bits.rs1_data := rs1_data
       ex.io.req.bits.rs2_data := rs2_data
       ex.io.req.bits.rs3_data := rs3_data
-
       require (!ex.isBypassable)
       require (w == 0)
       if (w == 0) {
@@ -276,32 +280,40 @@ with Packing
          io.tosdq               <> tosdq.io.deq
          assert(!(tosdq.io.enq.valid && !tosdq.io.enq.ready), "This queue cannot fill up")
 
-         io.memreq.valid         := exe_req.bits.uop.uopc === uopVLDX || exe_req.bits.uop.uopc === uopVSTX
-         io.memreq.bits.uop      := exe_req.bits.uop
-         io.memreq.bits.rs1_data := rs1_data
-         io.memreq.bits.rs2_data := (rs2_data >> shiftn) & MuxLookup(vew, VEW_8, Array(
+         memreq.io.enq.valid         := exe_req.valid && (exe_req.bits.uop.uopc === uopVSTX || exe_req.bits.uop.is_load)
+         memreq.io.enq.bits.uop      := exe_req.bits.uop
+         memreq.io.enq.bits.rs1_data := rs1_data
+         memreq.io.enq.bits.rs2_data := (rs2_data >> shiftn) & MuxLookup(vew, VEW_8, Array(
             VEW_8  -> "hff".U,
             VEW_16 -> "hffff".U,
             VEW_32 -> "hffffffff".U,
             VEW_64 -> "hffffffffffffffff".U)) // This is bad
-         io.memreq.bits.rs3_data := DontCare
+         memreq.io.enq.bits.rs3_data := DontCare
+         memreq.io.enq.bits.kill     := false.B
+         memreq.io.enq.bits.mask     := exe_req.bits.mask
+         assert(!(memreq.io.enq.valid && !memreq.io.enq.ready))
+         assert(!(memreq.io.enq.valid && memreq.io.enq.bits.uop.is_load && memreq.io.enq.bits.uop.uopc =/= uopVLDX && memreq.io.enq.bits.uop.vp_type === VPRED_X),
+            "Non-predicated vector loads should not appear here")
 
-         // assert (!(io.memreq.valid && !io.memreq.ready), "No backpressure. Redesign")
-         // This technically doesn't follow the ready-valid interface
+         io.memreq <> memreq.io.deq
       }
    }
    require (exe_units.num_total_bypass_ports == 0)
 
 
+
+
    //-------------------------------------------------------------
    // **** Writeback Stage ****
    //-------------------------------------------------------------
-
    val ll_wb = Module(new BranchKillableQueue(new ExeUnitResp(vecStripLen), entries = 8)) // TODO_Vec: Tune these
    ll_wb_block_issue := ll_wb.io.count >= 1.U
    ll_wb.io.enq      <> io.ll_wport
    ll_wb.io.brinfo   := io.brinfo
    ll_wb.io.flush    := io.flush_pipeline
+
+
+
    assert (ll_wb.io.enq.ready, "We do not support backpressure on this queue")
    when   (io.ll_wport.valid) { assert(io.ll_wport.bits.uop.ctrl.rf_wen && io.ll_wport.bits.uop.dst_rtype === RT_VEC) }
 
