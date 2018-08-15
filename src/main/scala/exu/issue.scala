@@ -189,7 +189,7 @@ abstract class IssueUnit(
       for (i <- 0 until num_issue_slots)
       {
 
-         printf("  " + this.getType + "_issue_slot[%d](%c)(Req:%c):wen=%c P:(%c,%c,%c) OP:(%d,%d,%d) PDST:%d %c [[DASM(%x)]" +
+         printf("  " + this.getType + "_issue_slot[%d](%c)(Req:%c):wen=%c P:(%c,%c,%c,%c) OP:(%d,%d,%d) PDST:%d %c [[DASM(%x)]" +
                " 0x%x: %d] ri:%d bm=%d imm=0x%x eidx=%d sx=%d\n"
             , i.U(log2Ceil(num_issue_slots).W)
             , Mux(issue_slots(i).valid, Str("V"), Str("-"))
@@ -198,6 +198,7 @@ abstract class IssueUnit(
             , Mux(issue_slots(i).debug.p1, Str("!"), Str(" "))
             , Mux(issue_slots(i).debug.p2, Str("!"), Str(" "))
             , Mux(issue_slots(i).debug.p3, Str("!"), Str(" "))
+            , Mux(issue_slots(i).debug.pvp, Str("!"), Str(" " ))
             , Mux(issue_slots(i).uop.lrs1_rtype === RT_X, 99.U, issue_slots(i).uop.pop1)
             , Mux(issue_slots(i).uop.lrs2_rtype === RT_X, 99.U, issue_slots(i).uop.pop2)
             , Mux(issue_slots(i).uop.lrs3_rtype === RT_X, 99.U, issue_slots(i).uop.pop3)

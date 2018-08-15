@@ -59,6 +59,7 @@ class IssueSlotIO(num_wakeup_ports: Int)(implicit p: Parameters) extends BoomBun
         val p1 = Bool()
         val p2 = Bool()
         val p3 = Bool()
+        val pvp = Bool()
         val state = UInt(width=2.W)
     }
     Output(result)
@@ -465,6 +466,7 @@ class IssueSlot(num_slow_wakeup_ports: Int, containsVec: Boolean, isVec: Boolean
    io.debug.p1 := slot_p1
    io.debug.p2 := slot_p2
    io.debug.p3 := slot_p3
+   io.debug.pvp := slot_pvp
    io.debug.state := slot_state
 
    override val compileOptions = chisel3.core.ExplicitCompileOptions.NotStrict.copy(explicitInvalidate = true)

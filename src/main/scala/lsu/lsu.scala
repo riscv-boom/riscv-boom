@@ -323,6 +323,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
    // And loads and store-addresses must search the LAQ (lcam) for ordering failures (or to prevent ordering failures).
 
    val will_fire_load_incoming = Wire(init = Bool(false)) // uses TLB, D$, SAQ-search, LAQ-search
+   val will_fire_load_masked   = Wire(init = Bool(false))
    val will_fire_sta_incoming  = Wire(init = Bool(false)) // uses TLB,                 LAQ-search, ROB
    val will_fire_std_incoming  = Wire(init = Bool(false)) // uses                                  ROB
    val will_fire_sta_retry     = Wire(init = Bool(false)) // uses TLB,                             ROB
@@ -396,14 +397,16 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
                && bypassed_ldq_incr
                && !(io.dc_nack.valid && io.dc_nack.isload && io.dc_nack.lsu_idx === bypassed_ldq_incr_idx))) {
             when (io.exe_resp.bits.uop.vec_val && !io.exe_resp.bits.masked(0)) {
-               laq_uop(io.exe_resp.bits.uop.ldq_idx).eidx := io.exe_resp.bits.uop.eidx + 1.U
+               will_fire_load_masked   := true.B
+               //laq_uop(io.exe_resp.bits.uop.ldq_idx).eidx := io.exe_resp.bits.uop.eidx + 1.U
             } .otherwise {
                will_fire_load_incoming := true.B
-
-               dc_avail                := false.B
-               tlb_avail               := false.B
-               lcam_avail              := false.B
             }
+
+            dc_avail                := false.B
+            tlb_avail               := false.B
+            lcam_avail              := false.B
+
             io.exe_resp.ready       := true.B
 
             exe_resp_valid          := true.B
@@ -668,15 +671,17 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
          mem_fired_st := Bool(true)
       }
    }
-   .elsewhen (will_fire_load_incoming || will_fire_load_retry || will_fire_load_wakeup)
+   .elsewhen (will_fire_load_incoming || will_fire_load_retry || will_fire_load_wakeup || will_fire_load_masked)
    {
-      io.memreq_val   := Bool(true)
-      io.memreq_addr  := exe_ld_addr
-      io.memreq_uop   := exe_ld_uop
-
-      laq_executed(exe_ld_uop.ldq_idx) := Bool(true)
-      laq_failure (exe_ld_uop.ldq_idx) := (will_fire_load_incoming && (ma_ld || pf_ld)) ||
-                                          (will_fire_load_retry && pf_ld)
+      when (!will_fire_load_masked) {
+         io.memreq_val   := Bool(true)
+         io.memreq_addr  := exe_ld_addr
+         io.memreq_uop   := exe_ld_uop
+      }
+      val idx = Mux(will_fire_load_masked, exe_resp.uop.ldq_idx, exe_ld_uop.ldq_idx)
+      laq_executed(idx) := Bool(true)
+      laq_failure (idx) := ((will_fire_load_incoming && (ma_ld || pf_ld)) ||
+                           (will_fire_load_retry && pf_ld)) && !will_fire_load_masked
    }
 
    assert (PopCount(Vec(will_fire_store_commit, will_fire_load_incoming, will_fire_load_retry, will_fire_load_wakeup))
@@ -688,21 +693,20 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
    //-------------------------------------------------------------
    // Write Addr into the LAQ/SAQ
 
-   when (will_fire_load_incoming || will_fire_load_retry)
+   when (will_fire_load_incoming || will_fire_load_retry || will_fire_load_masked)
    {
-      laq_addr_val      (exe_tlb_uop.ldq_idx)         := Bool(true)
-      laq_addr          (exe_tlb_uop.ldq_idx)         := Mux(tlb_miss, exe_vaddr, exe_tlb_paddr)
-      laq_bound         (exe_tlb_uop.ldq_idx)         := Mux(tlb_miss, exe_vaddr + exe_bound, exe_tlb_paddr + exe_bound)
-      laq_uop           (exe_tlb_uop.ldq_idx).pdst    := exe_tlb_uop.pdst
+      laq_addr_val      (exe_tlb_uop.ldq_idx)           := Bool(true)
+      laq_addr          (exe_tlb_uop.ldq_idx)           := Mux(tlb_miss, exe_vaddr, exe_tlb_paddr)
+      laq_bound         (exe_tlb_uop.ldq_idx)           := Mux(tlb_miss, exe_vaddr + exe_bound, exe_tlb_paddr + exe_bound)
+      laq_uop           (exe_tlb_uop.ldq_idx).pdst      := exe_tlb_uop.pdst
       laq_uop           (exe_tlb_uop.ldq_idx).writes_vp := exe_tlb_uop.writes_vp
-      laq_uop           (exe_tlb_uop.ldq_idx).vp_pdst := exe_tlb_uop.vp_pdst
-      laq_is_virtual    (exe_tlb_uop.ldq_idx)         := tlb_miss
-      laq_is_uncacheable(exe_tlb_uop.ldq_idx)         := tlb_addr_uncacheable && !tlb_miss
+      laq_uop           (exe_tlb_uop.ldq_idx).vp_pdst   := exe_tlb_uop.vp_pdst
+      laq_is_virtual    (exe_tlb_uop.ldq_idx)           := tlb_miss && !will_fire_load_masked
+      laq_is_uncacheable(exe_tlb_uop.ldq_idx)           := tlb_addr_uncacheable && !tlb_miss && !will_fire_load_masked
 
       assert(!(will_fire_load_incoming && laq_addr_val(exe_tlb_uop.ldq_idx) && exe_tlb_uop.ldq_idx =/= bypassed_ldq_incr_idx),
          "[lsu] incoming load is overwriting a valid address.")
    }
-
    when (will_fire_sta_incoming || will_fire_sta_retry)
    {
       saq_val       (exe_tlb_uop.stq_idx)      := !pf_st // prevent AMOs from executing!
@@ -1029,20 +1033,6 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
       when (io.memresp.bits.is_load)
       {
          laq_succeeded(io.memresp.bits.ldq_idx) := Bool(true)
-         when (laq_uop(io.memresp.bits.ldq_idx).vec_val) {
-            val next_eidx = laq_uop(io.memresp.bits.ldq_idx).eidx + UInt(1)
-            val bypass_executed                          = (io.memreq_val
-                                                         && io.memreq_uop.ldq_idx === io.memresp.bits.ldq_idx
-                                                         && io.memreq_uop.is_load)
-            laq_addr_val (io.memresp.bits.ldq_idx)      := bypass_executed
-            laq_succeeded(io.memresp.bits.ldq_idx)      := next_eidx === io.vl
-            laq_executed (io.memresp.bits.ldq_idx)      := next_eidx === io.vl || bypass_executed
-            // TODO_Vec: this is the case in which the response is to the same slot which was just executed due to bypassing
-            //           The logic is pretty circular, since setting bypassed_ldq_incr here sets memreq to be an incoming load
-            laq_uop      (io.memresp.bits.ldq_idx).eidx := next_eidx
-            bypassed_ldq_incr_idx                       := io.memresp.bits.ldq_idx
-            bypassed_ldq_incr                           := next_eidx =/= io.vl
-         }
       }
       .otherwise
       {
@@ -1068,6 +1058,29 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
             // TODO supress printing out a store-comp for lr instructions.
             printf("%d; store-comp: %d\n", io.memresp.bits.debug_events.fetch_seq, io.debug_tsc)
          }
+      }
+   }
+
+
+   // Handle incrementing load eidx
+   when ((io.memresp.valid && io.memresp.bits.is_load)
+      || RegNext(RegNext(will_fire_load_masked))) {
+      assert(!(io.memresp.valid && io.memresp.bits.is_load && RegNext(RegNext(will_fire_load_masked))),
+         "This should be timed such that we never need to increment both a true load response and a masked load at once")
+      val idx = Mux(RegNext(RegNext(will_fire_load_masked)), RegNext(RegNext(exe_resp.uop.ldq_idx)),
+                                                             io.memresp.bits.ldq_idx)
+      when (laq_uop(idx).vec_val) {
+         val next_eidx          = laq_uop(idx).eidx + UInt(1)
+         val bypass_executed    = ((io.memreq_val && io.memreq_uop.ldq_idx === idx && io.memreq_uop.is_load) ||
+                                   (will_fire_load_masked && exe_resp.uop.ldq_idx === idx))
+         laq_addr_val(idx)     := bypass_executed
+         laq_succeeded(idx)    := next_eidx === io.vl
+         laq_executed(idx)     := next_eidx === io.vl || bypass_executed
+         // TODO_Vec: this is the case in which the response is to the same slot which was just executed due to bypassing
+         //           The logic is pretty circular, since setting bypassed_ldq_incr here sets memreq to be an incoming load
+         laq_uop(idx).eidx     := next_eidx
+         bypassed_ldq_incr_idx := idx
+         bypassed_ldq_incr     := next_eidx =/= io.vl
       }
    }
 
