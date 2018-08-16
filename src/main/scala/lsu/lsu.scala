@@ -208,6 +208,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
 
    // Shared Store Queue Information
    val stq_uop       = Reg(Vec(num_st_entries, new MicroOp()))
+   val stq_masked    = Reg(Vec(num_st_entries, Bool())) // This is definitely unnecessary
    // TODO not convinced I actually need stq_entry_val; I think other ctrl signals gate this off
    val stq_entry_val = Reg(Vec(num_st_entries, Bool())) // this may be valid, but not TRUE (on exceptions, this doesn't get cleared but STQ_TAIL gets moved)
    val stq_executed  = Reg(Vec(num_st_entries, Bool())) // sent to mem
@@ -325,16 +326,19 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
    val will_fire_load_incoming = Wire(init = Bool(false)) // uses TLB, D$, SAQ-search, LAQ-search
    val will_fire_load_masked   = Wire(init = Bool(false))
    val will_fire_sta_incoming  = Wire(init = Bool(false)) // uses TLB,                 LAQ-search, ROB
+   val will_fire_sta_masked    = Wire(init = Bool(false))
    val will_fire_std_incoming  = Wire(init = Bool(false)) // uses                                  ROB
    val will_fire_sta_retry     = Wire(init = Bool(false)) // uses TLB,                             ROB
    val will_fire_load_retry    = Wire(init = Bool(false)) // uses TLB, D$, SAQ-search, LAQ-search
    val will_fire_store_commit  = Wire(init = Bool(false)) // uses      D$
+   val will_fire_store_masked  = Wire(init = Bool(false))
    val will_fire_load_wakeup   = Wire(init = Bool(false)) // uses      D$, SAQ-search, LAQ-search
    val will_fire_sfence        = Wire(init = Bool(false)) // uses TLB                            , ROB
 
    val can_fire_sta_retry      = Wire(init = Bool(false))
    val can_fire_load_retry     = Wire(init = Bool(false))
    val can_fire_store_commit   = Wire(init = Bool(false))
+   val can_fire_store_masked   = Wire(init = Bool(false))
    val can_fire_load_wakeup    = Wire(init = Bool(false))
 
    val dc_avail  = Wire(init = Bool(true))
@@ -360,14 +364,18 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
                                && bypassed_stq_incr))
    )
    {
-      will_fire_sta_incoming := true.B
+      when (io.exe_vsta.bits.uop.vec_val && !io.exe_vsta.bits.masked(0)) {
+         will_fire_sta_masked   := true.B
+      } .otherwise {
+         will_fire_sta_incoming := true.B
+      }
       tlb_avail              := false.B
       rob_avail              := false.B
       lcam_avail             := false.B
 
       io.exe_vsta.ready      := true.B
 
-      exe_resp_valid         := !IsKilledByBranch(io.brinfo, io.exe_vsta.bits.uop)
+      exe_resp_valid         := true.B
       exe_resp               := io.exe_vsta.bits
       assert(io.exe_vsta.bits.uop.ctrl.is_sta, "OP arriving through VSTA queue is not a sta!")
    }
@@ -398,7 +406,6 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
                && !(io.dc_nack.valid && io.dc_nack.isload && io.dc_nack.lsu_idx === bypassed_ldq_incr_idx))) {
             when (io.exe_resp.bits.uop.vec_val && !io.exe_resp.bits.masked(0)) {
                will_fire_load_masked   := true.B
-               //laq_uop(io.exe_resp.bits.uop.ldq_idx).eidx := io.exe_resp.bits.uop.eidx + 1.U
             } .otherwise {
                will_fire_load_incoming := true.B
             }
@@ -459,6 +466,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
    {
       // TODO allow dyanmic priority here
       will_fire_store_commit := can_fire_store_commit
+      will_fire_store_masked := can_fire_store_masked
       will_fire_load_wakeup  := !can_fire_store_commit && can_fire_load_wakeup && lcam_avail
    }
 
@@ -477,7 +485,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
    // TLB Access
 
    val stq_retry_idx = Wire(UInt())
-   val laq_retry_idx = Wire(UInt()) 
+   val laq_retry_idx = Wire(UInt())
 
 
    // micro-op going through the TLB generate paddr's. If this is a load, it will continue
@@ -615,7 +623,8 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
          !stq_uop(stq_execute_head).exception
    )
    {
-      can_fire_store_commit := Bool(true)
+      can_fire_store_commit := !stq_masked(stq_execute_head)
+      can_fire_store_masked := stq_masked(stq_execute_head)
    }
 
    stq_retry_idx := stq_commit_head
@@ -655,20 +664,21 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
 
    val mem_fired_st = Reg(init = Bool(false))
    mem_fired_st := Bool(false)
-   when (will_fire_store_commit)
+   when (will_fire_store_commit || will_fire_store_masked)
    {
+      assert(!(will_fire_store_commit && will_fire_store_masked))
       io.memreq_addr  := saq_addr(stq_execute_head)
       io.memreq_uop   := stq_uop (stq_execute_head)
 
       // prevent this store going out if an earlier store just got nacked!
       when (!(io.dc_nack.valid && !io.dc_nack.isload))
       {
-         io.memreq_val   := Bool(true)
-         stq_executed(stq_execute_head) := Bool(true)
-         val next_eidx = stq_uop(stq_execute_head).eidx + UInt(1)
-         val invalidate_head = !(stq_uop(stq_execute_head).vec_val && next_eidx < io.vl)
-         stq_execute_head := Mux(invalidate_head, WrapInc(stq_execute_head, num_st_entries), stq_execute_head)
-         mem_fired_st := Bool(true)
+         io.memreq_val                  := will_fire_store_commit
+         stq_executed(stq_execute_head) := true.B
+         val next_eidx                   = stq_uop(stq_execute_head).eidx + UInt(1)
+         val invalidate_head             = !(stq_uop(stq_execute_head).vec_val && next_eidx < io.vl)
+         stq_execute_head               := Mux(invalidate_head, WrapInc(stq_execute_head, num_st_entries), stq_execute_head)
+         mem_fired_st                   := true.B
       }
    }
    .elsewhen (will_fire_load_incoming || will_fire_load_retry || will_fire_load_wakeup || will_fire_load_masked)
@@ -707,13 +717,14 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
       assert(!(will_fire_load_incoming && laq_addr_val(exe_tlb_uop.ldq_idx) && exe_tlb_uop.ldq_idx =/= bypassed_ldq_incr_idx),
          "[lsu] incoming load is overwriting a valid address.")
    }
-   when (will_fire_sta_incoming || will_fire_sta_retry)
+   when (will_fire_sta_incoming || will_fire_sta_retry || will_fire_sta_masked)
    {
-      saq_val       (exe_tlb_uop.stq_idx)      := !pf_st // prevent AMOs from executing!
+      saq_val       (exe_tlb_uop.stq_idx)      := !pf_st || will_fire_sta_masked // prevent AMOs from executing!
       saq_addr      (exe_tlb_uop.stq_idx)      := Mux(tlb_miss, exe_vaddr, exe_tlb_paddr)
       stq_uop       (exe_tlb_uop.stq_idx).pdst := exe_tlb_uop.pdst // needed for amo's TODO this is expensive,
                                                                    // can we get around this?
-      saq_is_virtual(exe_tlb_uop.stq_idx)      := tlb_miss
+      stq_masked    (exe_tlb_uop.stq_idx)      := will_fire_sta_masked
+      saq_is_virtual(exe_tlb_uop.stq_idx)      := tlb_miss && !will_fire_sta_masked
 
       assert(!(will_fire_sta_incoming && saq_val(exe_tlb_uop.stq_idx) && exe_tlb_uop.stq_idx =/= bypassed_stq_incr_idx),
          "[lsu] incoming store is overwriting a valid address.")
@@ -789,7 +800,8 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
    val mem_fired_ld = Reg(next=(will_fire_load_incoming ||
                                     will_fire_load_retry ||
                                     will_fire_load_wakeup))
-   val mem_fired_sta = Reg(next=(will_fire_sta_incoming || will_fire_sta_retry), init=Bool(false))
+   val mem_fired_sta = Reg(next=(will_fire_sta_incoming || will_fire_sta_retry || will_fire_sta_masked), init=Bool(false))
+   val mem_fired_sta_masked = Reg(next=(will_fire_sta_masked), init=Bool(false))
    val mem_fired_stdi = Reg(next=will_fire_std_incoming, init=Bool(false))
    val mem_fired_stdf = Reg(next=io.fp_stdata.valid, init=Bool(false))
    val mem_fired_stdv = Reg(next=io.vec_stdata.valid && io.vec_stdata.ready, init=Bool(false))
@@ -1037,21 +1049,6 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
       .otherwise
       {
          stq_succeeded(io.memresp.bits.stq_idx) := Bool(true)
-         when (stq_uop(io.memresp.bits.stq_idx).vec_val) {
-            val next_eidx = stq_uop(io.memresp.bits.stq_idx).eidx + UInt(1)
-            val bypass_executed_exe_resp             = (io.exe_vsta.ready
-                                                     && io.exe_vsta.bits.uop.stq_idx === io.memresp.bits.stq_idx)
-            val bypass_executed_vec_stdata           = (io.vec_stdata.ready
-                                                     && io.vec_stdata.bits.uop.stq_idx === io.memresp.bits.stq_idx)
-            saq_val(io.memresp.bits.stq_idx)        := bypass_executed_exe_resp
-            sdq_val(io.memresp.bits.stq_idx)        := bypass_executed_vec_stdata
-            stq_uop(io.memresp.bits.stq_idx).eidx   := next_eidx
-            stq_executed(io.memresp.bits.stq_idx)   := next_eidx === io.vl
-            stq_succeeded(io.memresp.bits.stq_idx)  := next_eidx === io.vl
-
-            bypassed_stq_incr_idx                   := io.memresp.bits.stq_idx
-            bypassed_stq_incr                       := next_eidx =/= io.vl
-         }
 
          if (O3PIPEVIEW_PRINTF)
          {
@@ -1060,12 +1057,36 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
          }
       }
    }
+   // Handle incrementing store eidx
+   when ((io.memresp.valid && !io.memresp.bits.is_load)
+      || RegNext(RegNext(will_fire_store_masked))) {
+      assert(!(io.memresp.valid && RegNext(RegNext(will_fire_store_masked))))
 
+      val idx = Mux(RegNext(RegNext(will_fire_store_masked)), RegNext(RegNext(stq_execute_head)),
+                                                              io.memresp.bits.stq_idx)
+
+      when (stq_uop(idx).vec_val) {
+         val next_eidx                  = stq_uop(idx).eidx + 1.U
+         val bypass_executed_exe_resp   = ((io.exe_vsta.ready && io.exe_vsta.bits.uop.stq_idx === idx) ||
+                                           (will_fire_sta_masked && exe_resp.uop.stq_idx === idx))
+         val bypass_executed_vec_stdata = ((io.vec_stdata.ready && io.vec_stdata.bits.uop.stq_idx === idx) ||
+                                           (will_fire_sta_masked && io.vec_stdata.bits.uop.stq_idx === idx))
+
+         saq_val(idx)                  := bypass_executed_exe_resp
+         sdq_val(idx)                  := bypass_executed_vec_stdata
+         stq_uop(idx).eidx             := next_eidx
+         stq_executed(idx)             := next_eidx === io.vl
+         stq_succeeded(idx)            := next_eidx === io.vl
+
+         bypassed_stq_incr_idx         := idx
+         bypassed_stq_incr             := next_eidx =/= io.vl
+      }
+   }
 
    // Handle incrementing load eidx
    when ((io.memresp.valid && io.memresp.bits.is_load)
       || RegNext(RegNext(will_fire_load_masked))) {
-      assert(!(io.memresp.valid && io.memresp.bits.is_load && RegNext(RegNext(will_fire_load_masked))),
+      assert(!(io.memresp.valid&& RegNext(RegNext(will_fire_load_masked))),
          "This should be timed such that we never need to increment both a true load response and a masked load at once")
       val idx = Mux(RegNext(RegNext(will_fire_load_masked)), RegNext(RegNext(exe_resp.uop.ldq_idx)),
                                                              io.memresp.bits.ldq_idx)

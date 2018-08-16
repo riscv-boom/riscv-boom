@@ -526,7 +526,8 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule()(p) with freechips.
    //-------------------------------------------------------------
    // Special cases for polymorphic vector instructions
    if (usingVec) {
-      uop.vp_type          := Mux(uop.dst_rtype === RT_VEC
+      uop.vp_type          := Mux((uop.dst_rtype === RT_VEC || uop.is_store)
+                               && uop.vec_val
                                && uop.uopc =/= uopVINSERT
                                && uop.uopc =/= uopVEXTRACT, uop.inst(13,12), VPRED_X)
       uop.writes_vp        := (uop.dst_rtype === RT_VEC && uop.ldst === UInt(1)) ||
@@ -542,6 +543,10 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule()(p) with freechips.
       } .elsewhen (cs.vec_val && cs.is_store) {
          uop.rate       := UInt(1)
          uop.mem_typ    := MuxLookup(io.vecstatus.vews(cs_rs3), VEW_8, Array(VEW_8 -> MT_B, VEW_16 -> MT_H, VEW_32 -> MT_W, VEW_64 -> MT_D))
+
+         when (uop.vp_type =/= VPRED_X) {
+            uop.iqtype  := IQT_VEC
+         }
       } .elsewhen (cs.uopc === uopVINSERT) {
          when (uop.dst_rtype === RT_FLT) {
             uop.iqtype     := IQT_INT

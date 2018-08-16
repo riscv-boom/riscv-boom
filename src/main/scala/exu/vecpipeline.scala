@@ -148,7 +148,7 @@ with Packing
       when (io.dis_uops(w).vec_val && io.dis_uops(w).is_store) {
          issue_unit.io.dis_valids(w)          := io.dis_valids(w)
          issue_unit.io.dis_uops(w).fu_code    := io.dis_uops(w).fu_code | FU_V2I
-         when (io.dis_uops(w).uopc =/= uopVSTX) {
+         when (io.dis_uops(w).uopc =/= uopVSTX && io.dis_uops(w).vp_type === VPRED_X) {
             issue_unit.io.dis_uops(w).lrs1_rtype := RT_X
             issue_unit.io.dis_uops(w).prs1_busy  := false.B
          }
@@ -280,7 +280,10 @@ with Packing
          io.tosdq               <> tosdq.io.deq
          assert(!(tosdq.io.enq.valid && !tosdq.io.enq.ready), "This queue cannot fill up")
 
-         memreq.io.enq.valid         := exe_req.valid && (exe_req.bits.uop.uopc === uopVSTX || exe_req.bits.uop.is_load)
+         memreq.io.enq.valid         := exe_req.valid && (
+            (exe_req.bits.uop.is_store && exe_req.bits.uop.vp_type =/= VPRED_X) // Predicated stores send addr-gen here
+            || exe_req.bits.uop.is_load                                         // Only predicated and indexed loads should appear here
+            || exe_req.bits.uop.uopc === uopVSTX)                               // Indexed stores always send addr-gen here
          memreq.io.enq.bits.uop      := exe_req.bits.uop
          memreq.io.enq.bits.rs1_data := rs1_data
          memreq.io.enq.bits.rs2_data := (rs2_data >> shiftn) & MuxLookup(vew, VEW_8, Array(
