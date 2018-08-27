@@ -56,6 +56,7 @@ case class BoomCoreParams(
 
    bootFreqHz: BigInt = 0,
    fpu: Option[FPUParams] = Some(FPUParams()),
+   usingFPU: Boolean = true,
    haveBasicCounters: Boolean = true,
    misaWritable: Boolean = true,
    mtvecInit: Option[BigInt] = Some(BigInt(0)),
@@ -119,6 +120,7 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
    //************************************
    // Functional Units
    val usingFDivSqrt = boomParams.fpu.isDefined && boomParams.fpu.get.divSqrt
+   override val usingFPU      = boomParams.usingFPU
 
    val mulDivParams = boomParams.mulDiv.getOrElse(MulDivParams())
 

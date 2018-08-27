@@ -53,6 +53,11 @@ class DefaultBoomConfig extends Config((site, here, up) => {
    case SystemBusKey => up(SystemBusKey, site).copy(beatBytes = 16)
 })
 
+class WithoutBoomFPU extends Config((site, here, up) => {
+   case BoomTilesKey => up(BoomTilesKey, site) map { r => r.copy(core = r.core.copy(
+      usingFPU = false))
+   }
+})
 
 class WithNPerfCounters(n: Int) extends Config((site, here, up) => {
    case BoomTilesKey => up(BoomTilesKey, site) map { r => r.copy(core = r.core.copy(
