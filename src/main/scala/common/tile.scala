@@ -43,7 +43,9 @@ class BoomTile(
     //with HasLazyRoCC  // implies CanHaveSharedFPU with CanHavePTW with HasHellaCache
     with CanHaveBoomPTW
     with HasBoomHellaCache
-    with HasBoomICacheFrontend {
+    with HasBoomICacheFrontend
+    with HasBoomVecMemUnit
+{
 
   val intOutwardNode = IntIdentityNode()
   val slaveNode = TLIdentityNode()
@@ -104,7 +106,9 @@ class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer)
     //with HasLazyRoCCModule[BoomTile]
     with CanHaveBoomPTWModule
     with HasBoomHellaCacheModule
-    with HasBoomICacheFrontendModule {
+    with HasBoomICacheFrontendModule
+    with HasBoomVecMemUnitModule
+{
 
   val core = Module(new BoomCore()(outer.p, outer.dcache.module.edge))
 
@@ -135,6 +139,10 @@ class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer)
   dcachePorts += core.io.dmem // TODO outer.dcachePorts += () => module.core.io.dmem ??
   fpuOpt foreach { fpu => core.io.fpu <> fpu.io }
   core.io.ptw <> ptw.io.dpath
+
+
+  core.io.vmu <> outer.vec_mem.module.io
+
   //roccCore.cmd <> core.io.rocc.cmd
   //roccCore.exception := core.io.rocc.exception
   //core.io.rocc.resp <> roccCore.resp

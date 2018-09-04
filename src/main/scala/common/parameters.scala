@@ -33,6 +33,8 @@ case class BoomCoreParams(
    numVecRegFileRows: Int = 256,
    vecStripLen: Int = 128,
    enableVecPipeline: Boolean = false,
+   enableVMU: Boolean = false,
+   numVMUEntries: Int = 8,
    enableCustomRf: Boolean = false,
    enableCustomRfModel: Boolean = true,
    maxBrCount: Int = 4,
@@ -129,6 +131,7 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
 
    val numVecRegFileRows= boomParams.numVecRegFileRows
    val vecStripLen      = boomParams.vecStripLen
+   val numVMUEntries    = boomParams.numVMUEntries
 
    //************************************
    // Functional Units

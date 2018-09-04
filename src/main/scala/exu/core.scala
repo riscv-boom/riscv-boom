@@ -55,6 +55,7 @@ trait HasBoomCoreIO extends freechips.rocketchip.tile.HasTileParameters {
          val fpu = new freechips.rocketchip.tile.FPUCoreIO().flip
          val rocc = new freechips.rocketchip.tile.RoCCCoreIO().flip
          val ptw_tlb = new freechips.rocketchip.rocket.TLBPTWIO()
+         val vmu = new boom.exu.BoomVecMemIO().flip
          val trace = Vec(coreParams.retireWidth,
             new freechips.rocketchip.rocket.TracedInstruction).asOutput
          val release = Valid(new boom.lsu.ReleaseInfo).flip
@@ -69,6 +70,8 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    // construct all of the modules
 
    // Only holds integer-registerfile execution units.
+   io.vmu := DontCare
+   io.vmu.memreq_val := false.B
    val exe_units = new boom.exu.ExecutionUnits(fpu=false)
    // Meanwhile, the FP pipeline holds the FP issue window, FP regfile, and FP arithmetic units.
    var fp_pipeline: FpPipeline = null
