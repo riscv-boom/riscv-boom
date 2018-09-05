@@ -122,62 +122,79 @@ class RenameStage(
       isVector = false))
 
    // floating point registers
-   val fmaptable = Module(new RenameMapTable(
-      pl_width,
-      RT_FLT.litValue,
-      64,
-      numFpPhysRegs))
-   val ffreelist = Module(new RenameFreeList(
-      pl_width,
-      RT_FLT.litValue,
-      numFpPhysRegs,
-      32 + 32))
-   val fbusytable = Module(new BusyTable(
-      pl_width,
-      RT_FLT.litValue,
-      num_pregs = numFpPhysRegs,
-      num_read_ports = pl_width*3,
-      num_wb_ports = num_fp_wb_ports,
-      isVector = false))
+   var fmaptable: RenameMapTable = null
+   var ffreelist: RenameFreeList = null
+   var fbusytable: BusyTable = null
 
-   val vmaptable = Module(new RenameMapTable(
-      pl_width,
-      RT_VEC.litValue,
-      32,
-      numVecPhysRegs)) // Todo change to num vec phys regs
-   val vfreelist = Module(new RenameFreeList(
-      pl_width,
-      RT_VEC.litValue,
-      numVecPhysRegs,
-      32))
-   val vbusytable = Module(new BusyTable(
-      pl_width,
-      RT_VEC.litValue,
-      num_pregs = numVecPhysRegs,
-      num_read_ports = pl_width*3,
-      num_wb_ports = num_vec_wb_ports,
-      isVector = true)) // TODO: Figure out what this is
+   if (usingFPU) {
+      fmaptable = Module(new RenameMapTable(
+         pl_width,
+         RT_FLT.litValue,
+         64,
+         numFpPhysRegs))
+      ffreelist = Module(new RenameFreeList(
+         pl_width,
+         RT_FLT.litValue,
+         numFpPhysRegs,
+         32 + 32))
+      fbusytable = Module(new BusyTable(
+         pl_width,
+         RT_FLT.litValue,
+         num_pregs = numFpPhysRegs,
+         num_read_ports = pl_width*3,
+         num_wb_ports = num_fp_wb_ports,
+         isVector = false))
+   }
 
-   val vpmaptable = Module(new RenameMapTable(
-      pl_width,
-      RT_VPRED.litValue,
-      1,
-      numVecPhysPRegs))
-   val vpfreelist = Module(new RenameFreeList(
-      pl_width,
-      RT_VPRED.litValue,
-      numVecPhysPRegs,
-      1))
-   val vpbusytable= Module(new BusyTable(
-      pl_width,
-      RT_VPRED.litValue,
-      num_pregs = numVecPhysPRegs,
-      num_read_ports = pl_width,
-      num_wb_ports = num_vec_wb_ports,
-      isVector = true))
+   var vmaptable: RenameMapTable = null
+   var vfreelist: RenameFreeList = null
+   var vbusytable: BusyTable = null
 
-   val vsfreelist = Module(new ScalarOpFreeList(pl_width))
+   var vpmaptable: RenameMapTable = null
+   var vpfreelist: RenameFreeList = null
+   var vpbusytable: BusyTable = null
 
+   var vsfreelist: ScalarOpFreeList = null
+
+   if (usingVec) {
+      vmaptable = Module(new RenameMapTable(
+         pl_width,
+         RT_VEC.litValue,
+         32,
+         numVecPhysRegs)) // Todo change to num vec phys regs
+      vfreelist = Module(new RenameFreeList(
+         pl_width,
+         RT_VEC.litValue,
+         numVecPhysRegs,
+         32))
+      vbusytable = Module(new BusyTable(
+         pl_width,
+         RT_VEC.litValue,
+         num_pregs = numVecPhysRegs,
+         num_read_ports = pl_width*3,
+         num_wb_ports = num_vec_wb_ports,
+         isVector = true)) // TODO: Figure out what this is
+
+      vpmaptable = Module(new RenameMapTable(
+         pl_width,
+         RT_VPRED.litValue,
+         1,
+         numVecPhysPRegs))
+      vpfreelist = Module(new RenameFreeList(
+         pl_width,
+         RT_VPRED.litValue,
+         numVecPhysPRegs,
+         1))
+      vpbusytable= Module(new BusyTable(
+         pl_width,
+         RT_VPRED.litValue,
+         num_pregs = numVecPhysPRegs,
+         num_read_ports = pl_width,
+         num_wb_ports = num_vec_wb_ports,
+         isVector = true))
+
+      vsfreelist = Module(new ScalarOpFreeList(pl_width))
+   }
    //-------------------------------------------------------------
    // Pipeline State & Wires
 
@@ -217,9 +234,9 @@ class RenameStage(
    for ((uop, w) <- ren1_uops.zipWithIndex)
    {
       val i_preg = ifreelist.io.req_pregs(w)
-      val f_preg = ffreelist.io.req_pregs(w)
-      val v_preg = vfreelist.io.req_pregs(w)
-      val vp_preg= vpfreelist.io.req_pregs(w)
+      val f_preg = if (usingFPU) ffreelist.io.req_pregs(w) else 0.U
+      val v_preg = if (usingVec) vfreelist.io.req_pregs(w) else 0.U
+      val vp_preg= if (usingVec) vpfreelist.io.req_pregs(w) else 0.U
       uop.pdst := i_preg
       when (usingFPU.B && uop.dst_rtype === RT_FLT) { uop.pdst := f_preg }
       when (usingVec.B && uop.dst_rtype === RT_VEC) { uop.pdst := v_preg }
@@ -309,14 +326,20 @@ class RenameStage(
 
 
 
+
+   val fmap_vals  = if (usingFPU) fmaptable.io.values else Wire(new MapTableOutput(1))
+   val vmap_vals  = if (usingVec) vmaptable.io.values else Wire(new MapTableOutput(1))
+   val vpmap_vals = if (usingVec) vpmaptable.io.values else Wire(new MapTableOutput(1))
+
+
    val ren2_imapvalues  = if (renameLatency == 2) RegEnable(imaptable.io.values, ren2_will_proceed)
                           else imaptable.io.values
-   val ren2_fmapvalues  = if (renameLatency == 2) RegEnable(fmaptable.io.values, ren2_will_proceed)
-                          else fmaptable.io.values
-   val ren2_vmapvalues  = if (renameLatency == 2) RegEnable(vmaptable.io.values, ren2_will_proceed)
-                          else vmaptable.io.values
-   val ren2_vpmapvalues = if (renameLatency == 2) RegEnable(vpmaptable.io.values, ren2_will_proceed)
-                          else vpmaptable.io.values
+   val ren2_fmapvalues  = if (renameLatency == 2) RegEnable(fmap_vals, ren2_will_proceed)
+                          else fmap_vals
+   val ren2_vmapvalues  = if (renameLatency == 2) RegEnable(vmap_vals, ren2_will_proceed)
+                          else vmap_vals
+   val ren2_vpmapvalues = if (renameLatency == 2) RegEnable(vpmap_vals, ren2_will_proceed)
+                          else vpmap_vals
    for (w <- 0 until pl_width)
    {
       if (renameLatency == 1)
@@ -408,9 +431,9 @@ class RenameStage(
    for ((uop, w) <- ren2_uops.zipWithIndex)
    {
       val ibusy  = ibusytable.io.values(w)
-      val fbusy  = fbusytable.io.values(w)
-      val vbusy  = vbusytable.io.values(w)
-      val vpbusy = vpbusytable.io.values(w)
+      val fbusy  = if (usingFPU) fbusytable.io.values(w) else new BusyTableOutput
+      val vbusy  = if (usingVec) vbusytable.io.values(w) else new BusyTableOutput
+      val vpbusy = if (usingVec) vpbusytable.io.values(w) else new BusyTableOutput
 
       uop.prs1_busy := ibusy.prs1_busy
       uop.prs2_busy := ibusy.prs2_busy
@@ -448,13 +471,15 @@ class RenameStage(
 
    for (w <- 0 until pl_width)
    {
+      val ifl_can_proceed = ifreelist.io.can_allocate(w) && ren1_uops(w).dst_rtype === RT_FIX
+
       // Push back against Decode stage if Rename1 can't proceed (and Rename2/Dispatch can't receive).
       io.inst_can_proceed(w) :=
          ren2_will_proceed &&
          ((ren1_uops(w).dst_rtype =/= RT_FIX && ren1_uops(w).dst_rtype =/= RT_FLT && ren1_uops(w).dst_rtype =/= RT_VEC) ||
          (ifreelist.io.can_allocate(w) && ren1_uops(w).dst_rtype === RT_FIX) ||
-         (ffreelist.io.can_allocate(w) && ren1_uops(w).dst_rtype === RT_FLT) ||
-         (if (usingVec) (vfreelist.io.can_allocate(w) && ren1_uops(w).dst_rtype === RT_VEC) else true.B)) &&
+         (if (usingFPU) (ffreelist.io.can_allocate(w) && ren1_uops(w).dst_rtype === RT_FLT) else false.B) ||
+         (if (usingVec) (vfreelist.io.can_allocate(w) && ren1_uops(w).dst_rtype === RT_VEC) else false.B)) &&
          (if (usingVec) (vsfreelist.io.can_allocate(w) || !ren1_uops(w).use_vscopb) else true.B) &&
          (if (usingVec) (vpfreelist.io.can_allocate(w) || !ren1_uops(w).writes_vp) else true.B)
    }
@@ -470,6 +495,10 @@ class RenameStage(
       io.debug.ffreelist  := ffreelist.io.debug.freelist
       io.debug.fisprlist  := ffreelist.io.debug.isprlist
       io.debug.fbusytable := fbusytable.io.debug.busytable
+   } else {
+      io.debug.ffreelist  := DontCare
+      io.debug.fisprlist  := DontCare
+      io.debug.fbusytable := DontCare
    }
    if (usingVec) {
       io.debug.vfreelist  := vfreelist.io.debug.freelist

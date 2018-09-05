@@ -282,7 +282,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    + "\n   Num Slow Wakeup Ports : " + num_irf_write_ports
    + "\n   Num Fast Wakeup Ports : " + exe_units.count(_.isBypassable)
    + "\n   Num Bypass Ports      : " + exe_units.num_total_bypass_ports
-   + "\n" + fp_pipeline.toString
+   + "\n" + (if (usingFPU) fp_pipeline.toString else "")
    + "\n   DCache Ways           : " + dcacheParams.nWays
    + "\n   DCache Sets           : " + dcacheParams.nSets
    + "\n   ICache Ways           : " + icacheParams.nWays

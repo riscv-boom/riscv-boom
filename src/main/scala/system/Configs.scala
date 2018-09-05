@@ -37,6 +37,8 @@ class SmallVectorBoomConfig extends Config(new WithVectorBoom ++ new WithSmallBo
 class MediumVectorBoomConfig extends Config(new WithVectorBoom ++ new WithMediumBooms ++ new DefaultBoomConfig ++ new WithNBoomCores(1) ++ new WithoutTLMonitors ++ new freechips.rocketchip.system.BaseConfig)
 class MegaVectorBoomConfig extends Config(new WithVectorBoom ++ new WithMegaBooms ++ new DefaultBoomConfig ++ new WithNBoomCores(1) ++ new WithoutTLMonitors ++ new freechips.rocketchip.system.BaseConfig)
 
+class SmallIntBoomConfig extends Config(new WithoutBoomFPU ++ new WithSmallBooms ++ new DefaultBoomConfig ++ new WithNBoomCores(1) ++ new WithoutTLMonitors ++ new freechips.rocketchip.system.BaseConfig)
+
 // scalastyle:on
 
 
