@@ -133,6 +133,7 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
    val numVecRegFileRows= boomParams.numVecRegFileRows
    val vecStripLen      = boomParams.vecStripLen
    val numVMUEntries    = boomParams.numVMUEntries
+   val vmuEntrySz       = log2Up(numVMUEntries)
 
    //************************************
    // Functional Units

@@ -55,7 +55,7 @@ trait HasBoomCoreIO extends freechips.rocketchip.tile.HasTileParameters {
          val fpu = new freechips.rocketchip.tile.FPUCoreIO().flip
          val rocc = new freechips.rocketchip.tile.RoCCCoreIO().flip
          val ptw_tlb = new freechips.rocketchip.rocket.TLBPTWIO()
-         val vmu = new boom.exu.BoomVecMemIO().flip
+         val vmu = new boom.vmu.BoomVecMemIO().flip
          val trace = Vec(coreParams.retireWidth,
             new freechips.rocketchip.rocket.TracedInstruction).asOutput
          val release = Valid(new boom.lsu.ReleaseInfo).flip

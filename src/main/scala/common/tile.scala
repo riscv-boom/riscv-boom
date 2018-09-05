@@ -16,6 +16,7 @@ import freechips.rocketchip.tile._
 import boom.exu._
 import boom.ifu._
 import boom.lsu._
+import boom.vmu._
 
 case class BoomTileParams(
     core: BoomCoreParams = BoomCoreParams(),

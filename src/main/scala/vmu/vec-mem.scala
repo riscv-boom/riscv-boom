@@ -1,4 +1,4 @@
-package boom.exu
+package boom.vmu
 
 import chisel3._
 import chisel3.util._
@@ -15,11 +15,15 @@ import chisel3.internal.sourceinfo.SourceInfo
 
 import boom.common._
 
-class BoomVecMemUnit(hartid: Int)(implicit p: Parameters) extends LazyModule {
+class BoomVecMemUnit(hartid: Int)(implicit p: Parameters) extends LazyModule
+// with HasBoomCoreParameters breaks TL here
+{
+   val numVMUEntries = p(TileKey).core.asInstanceOf[BoomCoreParams].numVMUEntries
+
    lazy val module = new BoomVecMemUnitModule(this, hartid)
    //val module: BoomVecMemUnitModule
    val node = TLClientNode(Seq(TLClientPortParameters(Seq(TLClientParameters(
-      sourceId = IdRange(0, 16), // What is this?
+      sourceId = IdRange(0, numVMUEntries), // What is this?
       name = s"Core ${hartid} Vector Memory Port")))))
 }
 
@@ -30,12 +34,12 @@ class BoomVecMemIO(implicit p: Parameters) extends BoomBundle()(p)
    val memreq_wdata = Input(UInt(width=vecStripLen.W))
    val memreq_mask  = Input(UInt(width=(vecStripLen/8).W))
    val memreq_uop   = Input(new MicroOp())
-   val memreq_tag   = Input(UInt(width=4.W))
+   val memreq_tag   = Input(UInt(width=vmuEntrySz.W))
    val memreq_ready = Output(Bool())
 
    val memresp_val  = Output(Bool())
    val memresp_data = Output(UInt(width=vecStripLen.W))
-   val memresp_tag  = Output(UInt(width=4.W))
+   val memresp_tag  = Output(UInt(width=vmuEntrySz.W))
    val memresp_store= Output(Bool())
 }
 
@@ -63,7 +67,7 @@ class BoomVecMemUnitModule(outer: BoomVecMemUnit, hartid: Int) extends LazyModul
    dmem.d.ready := !resp_en
 
    io.memresp_val    := dmem.d.valid && resp_en
-   io.memresp_tag    := dmem.d.bits.source(3,0)
+   io.memresp_tag    := dmem.d.bits.source(vmuEntrySz-1,0)
    io.memresp_data   := dmem.d.bits.data
    io.memresp_store  := dmem.d.bits.opcode === TLMessages.AccessAck
 
