@@ -118,6 +118,8 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    val dc_shim          = Module(new boom.lsu.DCacheShim())
    val lsu              = Module(new boom.lsu.LoadStoreUnit(decodeWidth))
 
+   val vmu_shim         = Module(new boom.vmu.VMUShim())
+
    val external_wakeups = ((if (usingFPU) fp_pipeline.io.wakeups.length else 0)
                          + (if (usingVec) vec_pipeline.io.wakeups.length else 0))
 

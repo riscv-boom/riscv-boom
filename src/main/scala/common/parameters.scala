@@ -34,7 +34,7 @@ case class BoomCoreParams(
    vecStripLen: Int = 128,
    enableVecPipeline: Boolean = false,
    enableVMU: Boolean = false,
-   numVMUEntries: Int = 8,
+   numVMUEntries: Int = 16,
    enableCustomRf: Boolean = false,
    enableCustomRfModel: Boolean = true,
    maxBrCount: Int = 4,
