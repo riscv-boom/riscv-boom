@@ -1499,8 +1499,25 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    io.fpu.inst := 0.U
 
    //io.trace := csr.io.trace unused
-   io.trace <> DontCare
-   io.trace map (t => t.valid := false.B)
+   if (tileParams.trace) {
+      for (w <- 0 until COMMIT_WIDTH)
+      {
+         io.trace(w).valid      := rob.io.commit.valids(w)
+         io.trace(w).iaddr      := Sext(rob.io.commit.uops(w).pc(vaddrBits,0), xLen)
+         io.trace(w).insn       := rob.io.commit.uops(w).inst
+         // I'm uncertain the commit signals from the ROB match these CSR exception signals
+         io.trace(w).priv       := csr.io.status.prv
+         io.trace(w).exception  := csr.io.exception
+         io.trace(w).interrupt  := csr.io.interrupt
+         io.trace(w).cause      := csr.io.cause
+         io.trace(w).tval       := csr.io.tval
+      }
+      dontTouch(io.trace)
+   } else {
+      io.trace := DontCare
+      io.trace map (t => t.valid := false.B)
+   }
+
 
    override val compileOptions = chisel3.core.ExplicitCompileOptions.NotStrict.copy(explicitInvalidate = true)
 }
