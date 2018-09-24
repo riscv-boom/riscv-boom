@@ -152,7 +152,7 @@ class DCMemPortIO(implicit p: Parameters) extends BoomBundle()(p)
    val brinfo  = new BrResolutionInfo().asOutput
    val nack    = new NackInfo().asInput
    val flush_pipe  = Bool(OUTPUT)   // exception or other misspec which flushes entire pipeline
-   val invalidate_lr = Bool(OUTPUT) // should the dcache clear ld/sc reservations?
+
    val load_miss = Bool(INPUT)      // Did a load suffer a cache miss? (not necessarily nacked, but no data).
    val ordered = Bool(INPUT)        // is the dcache ordered? (fence is done)
 
@@ -289,7 +289,7 @@ class DCacheShim(implicit p: Parameters) extends BoomModule()(p)
    io.dmem.s2_kill        := false.B
    io.dmem.s1_kill        := io.core.req.bits.kill || iflb_kill // kills request sent out last cycle
    io.dmem.req.bits.phys  := Bool(true) // we always use physical addresses (TLB is in LSU).
-   io.dmem.invalidate_lr  := io.core.invalidate_lr
+
 
    //------------------------------------------------------------
    // handle responses and nacks
