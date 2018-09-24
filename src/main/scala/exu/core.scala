@@ -142,7 +142,6 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    // Shim to DCache
    io.dmem <> dc_shim.io.dmem
    dc_shim.io.core <> exe_units.memory_unit.io.dmem
-   dc_shim.io.core.invalidate_lr := rob.io.com_xcpt.valid
 
    // Load/Store Unit & ExeUnits
    exe_units.memory_unit.io.lsu_io := lsu.io

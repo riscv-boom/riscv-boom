@@ -19,7 +19,7 @@ import freechips.rocketchip.amba.axi4._
 case object BoomTilesKey extends Field[Seq[boom.common.BoomTileParams]](Nil)
 
 trait HasBoomTiles extends HasTiles
-    with HasPeripheryPLIC
+    with CanHavePeripheryPLIC
     with CanHavePeripheryCLINT
     with HasPeripheryDebug { this: BaseSubsystem =>
   val module: HasBoomTilesModuleImp
@@ -37,7 +37,7 @@ trait HasBoomTiles extends HasTiles
 
     connectMasterPortsToSBus(boomCore, crossing)
     connectSlavePortsToCBus(boomCore, crossing)
-    connectInterrupts(boomCore, Some(debug), clintOpt, Some(plic))
+    connectInterrupts(boomCore, Some(debug), clintOpt, plicOpt)
 
     boomCore
   }
