@@ -36,7 +36,7 @@ case class BoomTileParams(
 
 class BoomTile(
     val boomParams: BoomTileParams,
-    crossing: SubsystemClockCrossing)
+    crossing: ClockCrossingType)
   (implicit p: Parameters) extends BaseTile(boomParams, crossing)(p)
     with HasExternalInterrupts
     //with HasLazyRoCC  // implies CanHaveSharedFPU with CanHavePTW with HasHellaCache
@@ -87,13 +87,16 @@ class BoomTile(
   val itimProperty = tileParams.icache.flatMap(_.itimAddr.map(i => Map(
     "sifive,itim" -> frontend.icache.device.asProperty))).getOrElse(Nil)
 
-  val cpuDevice = new Device {
-    def describe(resources: ResourceBindings): Description =
-      toDescription(resources)("ucb-bar,boom0", dtimProperty ++ itimProperty)
+  val cpuDevice = new SimpleDevice("cpu", Seq("ucb-bar,boom0", "riscv")) {
+    override def parent = Some(ResourceAnchors.cpus)
+    override def describe(resources: ResourceBindings): Description = {
+      val Description(name, mapping) = super.describe(resources)
+      Description(name, mapping ++ cpuProperties ++ nextLevelCacheProperty ++ tileProperties ++ dtimProperty ++ itimProperty)
+    }
   }
 
   ResourceBinding {
-    Resource(cpuDevice, "reg").bind(ResourceInt(BigInt(hartId)))
+    Resource(cpuDevice, "reg").bind(ResourceAddress(hartId))
   }
 
   override lazy val module = new BoomTileModuleImp(this)
