@@ -1464,6 +1464,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    io.rocc.cmd.bits <> DontCare
    io.rocc.resp.ready := false.B
    io.rocc.exception := false.B
+   io.rocc.mem.clock_enabled := false.B
    io.rocc.mem.req.bits := DontCare
    io.rocc.mem.resp.bits.replay := false.B
    io.rocc.mem.s2_xcpt.pf.st := false.B
@@ -1473,6 +1474,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    io.rocc.mem.replay_next := false.B
    io.rocc.mem.resp.bits.data_word_bypass := false.B
    io.rocc.mem.perf.acquire := false.B
+   io.rocc.mem.perf.grant := false.B
    io.rocc.mem.resp.bits.addr := false.B
    io.rocc.mem.resp.bits.store_data := false.B
    io.rocc.mem.resp.bits.typ := false.B
