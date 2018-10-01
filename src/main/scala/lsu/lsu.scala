@@ -80,6 +80,12 @@ class LoadStoreUnitIO(pl_width: Int)(implicit p: Parameters) extends BoomBundle(
    val memreq_wdata       = UInt(OUTPUT, xLen)
    val memreq_uop         = new MicroOp().asOutput
 
+   // Send out VMU Memory Request (For Vectors)
+   val vmu_memreq_val     = Bool(OUTPUT)
+   val vmu_memreq_addr    = UInt(OUTPUT, corePAddrBits)
+   val vmu_memreq_wdata   = UInt(OUTPUT, vecStripLen)
+   val vmu_memreq_uop     = new MicroOp().asOutput
+
    // Memory Stage
    val memreq_kill        = Bool(OUTPUT) // kill request sent out last cycle
    val mem_ldSpecWakeup   = Valid(UInt(width=PREG_SZ.W)) // do NOT send out FP loads.
@@ -662,6 +668,11 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
    io.memreq_wdata   := sdq_data(stq_execute_head)
    io.memreq_uop     := exe_ld_uop
 
+   io.vmu_memreq_val  := Bool(false)
+   io.vmu_memreq_addr := exe_ld_addr
+   io.vmu_memreq_wdata:= sdq_data(stq_execute_head)
+   io.vmu_memreq_uop  := exe_ld_uop
+
    val mem_fired_st = Reg(init = Bool(false))
    mem_fired_st := Bool(false)
    when (will_fire_store_commit || will_fire_store_masked)
@@ -684,7 +695,11 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
    .elsewhen (will_fire_load_incoming || will_fire_load_retry || will_fire_load_wakeup || will_fire_load_masked)
    {
       when (!will_fire_load_masked) {
-         io.memreq_val   := Bool(true)
+         when (exe_ld_uop.vec_val && usingVMU.B) {
+            io.vmu_memreq_val := Bool(true)
+         } .otherwise {
+            io.memreq_val   := Bool(true)
+         }
          io.memreq_addr  := exe_ld_addr
          io.memreq_uop   := exe_ld_uop
       }

@@ -74,6 +74,18 @@ class WithVectorBoom extends Config((site, here, up) => {
       ))}
 })
 
+class WithVMU extends Config((site, here, up) => {
+   case BoomTilesKey => up(BoomTilesKey, site) map {r => r.copy(
+      core = r.core.copy(
+         fetchWidth = 4,
+         enableVMU = true
+      ),
+      // TODO_Vec: make icache parameters completely independent
+      icache = Some(r.icache.get.copy(fetchBytes=4*4))
+   )}
+   case SystemBusKey => up(SystemBusKey, site).copy(beatBytes = 16)
+})
+
 // Small BOOM! Try to be fast to compile and easier to debug.
 class WithSmallBooms extends Config((site, here, up) => {
    case BoomTilesKey => up(BoomTilesKey, site) map { r =>r.copy(

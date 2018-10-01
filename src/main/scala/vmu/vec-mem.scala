@@ -2,6 +2,7 @@ package boom.vmu
 
 import chisel3._
 import chisel3.util._
+import chisel3.experimental.dontTouch
 
 import freechips.rocketchip.config._
 import freechips.rocketchip.subsystem._
@@ -14,6 +15,7 @@ import freechips.rocketchip.util.property._
 import chisel3.internal.sourceinfo.SourceInfo
 
 import boom.common._
+import boom.exu._
 
 class BoomVecMemUnit(hartid: Int)(implicit p: Parameters) extends LazyModule
 // with HasBoomCoreParameters breaks TL here
@@ -64,7 +66,7 @@ class BoomVecMemUnitModule(outer: BoomVecMemUnit, hartid: Int) extends LazyModul
       edge.Put(io.memreq_tag, req_addr_beat_aligned, req_size, io.memreq_wdata, io.memreq_mask)._2)
 
    val resp_en = edge.hasData(dmem.d.bits) || io.memresp_store
-   dmem.d.ready := !resp_en
+   dmem.d.ready := true.B
 
    io.memresp_val    := dmem.d.valid && resp_en
    io.memresp_tag    := dmem.d.bits.source(vmuEntrySz,0)
@@ -74,13 +76,20 @@ class BoomVecMemUnitModule(outer: BoomVecMemUnit, hartid: Int) extends LazyModul
    dmem.b.ready := true.B
    dmem.c.valid := false.B
    dmem.e.valid := false.B
+
+   dontTouch(dmem.d)
 }
 
 /** Mix-ins for a separate vector memory port to L2 */
 trait HasBoomVecMemUnit extends HasTileParameters { this: BaseTile =>
+   val build_vmu = p(TileKey).core.asInstanceOf[BoomCoreParams].enableVMU
+
    val module: HasBoomVecMemUnitModule
-   val vec_mem = LazyModule(new BoomVecMemUnit(hartId))
-   tlMasterXbar.node := vec_mem.node
+
+   val vec_mem: BoomVecMemUnit = if (build_vmu) LazyModule(new BoomVecMemUnit(hartId)) else null
+   if (build_vmu) {
+      tlMasterXbar.node := vec_mem.node
+   }
 
    // No PTW ports necessary, since the LSU walks the PT for us
 }
@@ -88,6 +97,7 @@ trait HasBoomVecMemUnit extends HasTileParameters { this: BaseTile =>
 trait HasBoomVecMemUnitModule {
    val outer: HasBoomVecMemUnit
    // What is this ???
+
 }
 
 

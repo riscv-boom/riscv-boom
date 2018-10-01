@@ -142,7 +142,9 @@ class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer)
   core.io.ptw <> ptw.io.dpath
 
 
-  core.io.vmu <> outer.vec_mem.module.io
+  if (outer.boomParams.core.enableVMU) {
+     core.io.vmu <> outer.vec_mem.module.io
+  }
 
   //roccCore.cmd <> core.io.rocc.cmd
   //roccCore.exception := core.io.rocc.exception

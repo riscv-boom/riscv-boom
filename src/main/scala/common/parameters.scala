@@ -182,6 +182,8 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
    //************************************
    // Vector pipeline
    val usingVec     = boomParams.enableVecPipeline
+   val usingVMU     = boomParams.enableVMU
+   assert(!(usingVMU && !usingVec))
 
    //************************************
    // Branch Prediction

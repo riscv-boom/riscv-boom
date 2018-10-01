@@ -70,8 +70,6 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    // construct all of the modules
 
    // Only holds integer-registerfile execution units.
-   io.vmu := DontCare
-   io.vmu.memreq_val := false.B
    val exe_units = new boom.exu.ExecutionUnits(fpu=false)
    // Meanwhile, the FP pipeline holds the FP issue window, FP regfile, and FP arithmetic units.
    var fp_pipeline: FpPipeline = null
@@ -160,8 +158,12 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
    // Shim to DCache
    io.dmem <> dc_shim.io.dmem
+   vmu_shim.io.vmu <> io.vmu
+
    dc_shim.io.core <> exe_units.memory_unit.io.dmem
    dc_shim.io.core.invalidate_lr := rob.io.com_xcpt.valid
+
+   vmu_shim.io.core <> exe_units.memory_unit.io.vmu
 
    // Load/Store Unit & ExeUnits
    exe_units.memory_unit.io.lsu_io := lsu.io

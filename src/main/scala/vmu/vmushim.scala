@@ -25,6 +25,7 @@ package boom.vmu
 
 import chisel3._
 import chisel3.util._
+import chisel3.experimental.dontTouch
 import freechips.rocketchip.config.Parameters
 import boom.common._
 import boom.exu.BrResolutionInfo
@@ -39,19 +40,22 @@ class VMUReq(implicit p: Parameters) extends BoomBundle()(p)
    val mask    = Bits(width = (vecStripLen/8).W)
 }
 
-class VMUResp(implicit p: Parameters) extends BoomBundle()(p)
+class VMURespWb(implicit p: Parameters) extends BoomBundle()(p)
 {
    val data    = Bits(width = vecStripLen.W)
    val uop     = new MicroOp
+   // TODO_vec: Add mask
 }
+
 
 class VMUShimIO(implicit p: Parameters) extends BoomBundle()(p)
 {
-   val req      = (new DecoupledIO(new VMUReq))
-   val resp     = (new ValidIO(new VMUResp)).flip
+   val req         = (new DecoupledIO(new VMUReq))
+   val resp_wb     = (new ValidIO(new VMURespWb)).flip
+   val resp_wakeup = (new ValidIO(new MicroOp)).flip
 
-   val brinfo   = new BrResolutionInfo().asOutput
-   val flush_pipe = Output(Bool())
+   val brinfo      = new BrResolutionInfo().asOutput
+   val flush_pipe  = Output(Bool())
 }
 class VMUShim(implicit p: Parameters) extends BoomModule()(p)
       with freechips.rocketchip.rocket.constants.MemoryOpConstants
@@ -59,7 +63,7 @@ class VMUShim(implicit p: Parameters) extends BoomModule()(p)
 
    val io = IO(new Bundle
       {
-         val core = new VMUShimIO()
+         val core = new VMUShimIO().flip
          val vmu = (new BoomVecMemIO()).flip
       })
 
@@ -67,15 +71,16 @@ class VMUShim(implicit p: Parameters) extends BoomModule()(p)
    val load_ack = io.vmu.memresp_val && !io.vmu.memresp_store
 
    // Inflight Load Queue
-   val ilq_vals = Vec.fill(numVMUEntries) {Reg(Bool(), init=false.B)}
-   val ilq_uops = Vec.fill(numVMUEntries) {Reg(new MicroOp())}
+   val ilq_vals      = Reg(Vec(numVMUEntries, Bool()))
+   val ilq_resp_vals = Reg(Vec(numVMUEntries, Bool()))
+   val ilq_uops      = Reg(Vec(numVMUEntries, new MicroOp))
 
    val ilq_head = Reg(UInt(width=log2Up(numVMUEntries).W), init=0.U)
    val ilq_tail = Reg(UInt(width=log2Up(numVMUEntries).W), init=0.U)
    val full = Reg(Bool(), init=false.B)
 
    val enq_val = io.core.req.valid && io.core.req.bits.uop.is_load
-
+   val deq_val = ilq_vals(ilq_head) && ilq_resp_vals(ilq_head)
 
 
    io.vmu.memreq_val := false.B
@@ -84,9 +89,9 @@ class VMUShim(implicit p: Parameters) extends BoomModule()(p)
       val next_tail = WrapInc(ilq_tail, numVMUEntries)
       when (next_tail === ilq_head) { full := true.B }
 
-      ilq_uops(ilq_tail) := io.core.req.bits.uop
-      ilq_vals(ilq_tail) := true.B
-
+      ilq_uops(ilq_tail)      := io.core.req.bits.uop
+      ilq_vals(ilq_tail)      := true.B
+      ilq_resp_vals(ilq_tail) := false.B
 
       ilq_tail := next_tail
 
@@ -98,5 +103,28 @@ class VMUShim(implicit p: Parameters) extends BoomModule()(p)
    io.vmu.memreq_uop    := io.core.req.bits.uop
    io.vmu.memreq_tag    := Cat(io.core.req.bits.uop.is_store, ilq_tail)
 
+   io.core.resp_wb.valid      := io.vmu.memresp_val
+   io.core.resp_wb.bits.data  := io.vmu.memresp_data
+   io.core.resp_wb.bits.uop   := ilq_uops(io.vmu.memresp_tag)
+
+   when (io.vmu.memresp_val) {
+      assert(ilq_vals(io.vmu.memresp_tag))
+      ilq_resp_vals(io.vmu.memresp_tag) := true.B
+   }
+
+   io.core.resp_wakeup.valid := false.B
+   when (deq_val){
+      val next_head = WrapInc(ilq_head, numVMUEntries)
+      full := false.B
+
+      ilq_vals(ilq_head)  := false.B
+
+      io.core.resp_wakeup.valid := true.B
+      io.core.resp_wakeup.bits  := ilq_uops(ilq_head)
+
+      ilq_head := next_head
+   }
+   dontTouch(io.vmu)
+   dontTouch(io.core)
 }
 

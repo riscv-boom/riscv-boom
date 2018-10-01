@@ -75,6 +75,8 @@ class ExecutionUnitIO(
    // only used by the mem unit
    val lsu_io = new boom.lsu.LoadStoreUnitIO(decodeWidth).flip
    val dmem   = new boom.lsu.DCMemPortIO() // TODO move this out of ExecutionUnit
+   val vmu    = new boom.vmu.VMUShimIO()
+
    val com_exception = Bool(INPUT)
    val debug_tsc_reg = UInt(width=128.W).asInput
 
@@ -751,6 +753,14 @@ class MemExeUnit(implicit p: Parameters) extends ExecutionUnit(num_rf_read_ports
       to_lsu_vsta.io.flush     := io.req.bits.kill
       io.lsu_io.exe_vsta       <> to_lsu_vsta.io.deq
       io.fu_types := Mux(to_lsu_resp.io.empty, FU_MEM, UInt(0)) | Mux(to_lsu_vsta.io.empty, FU_VSTA, UInt(0))
+
+      io.vmu.req.valid      := Mux(io.com_exception && io.lsu_io.vmu_memreq_uop.is_load,
+         Bool(false),
+         io.lsu_io.vmu_memreq_val)
+      io.vmu.req.bits.addr  := io.lsu_io.vmu_memreq_addr
+      io.vmu.req.bits.data  := io.lsu_io.vmu_memreq_wdata
+      io.vmu.req.bits.uop   := io.lsu_io.vmu_memreq_uop
+      //io.vmu.req.bits.kill  := io.lsu_io.memreq_kill
    } else {
       io.lsu_io.exe_resp       <> maddrcalc.io.resp
       io.fu_types := FU_MEM
