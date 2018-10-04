@@ -39,7 +39,7 @@ class DefaultBoomConfig extends Config((site, here, up) => {
             IssueParams(issueWidth=1, numEntries=20, iqType=IQT_FP.litValue)),
          scalarOpBuffSz = 16,
          numIntPhysRegisters = 100,
-         numFpPhysRegisters = 70,
+         numFpPhysRegisters = 64,
          numLsuEntries = 16,
          maxBrCount = 8,
          btb = BoomBTBParameters(nSets=512, nWays=4, nRAS=8, tagSz=13),
@@ -67,10 +67,12 @@ class WithNPerfCounters(n: Int) extends Config((site, here, up) => {
    ))}
 })
 
+
 class WithVectorBoom extends Config((site, here, up) => {
    case BoomTilesKey => up(BoomTilesKey, site) map {r => r.copy(
       core = r.core.copy(
-         enableVecPipeline = true
+         enableVecPipeline = true,
+         numFpPhysRegisters = 65
       ))}
 })
 
@@ -86,13 +88,17 @@ class WithVMU extends Config((site, here, up) => {
    case SystemBusKey => up(SystemBusKey, site).copy(beatBytes = 16)
 })
 
+class WithTrace extends Config((site, here, up) => {
+   case BoomTilesKey => up(BoomTilesKey, site) map { r => r.copy(trace = true) }
+})
+
 // Small BOOM! Try to be fast to compile and easier to debug.
 class WithSmallBooms extends Config((site, here, up) => {
    case BoomTilesKey => up(BoomTilesKey, site) map { r =>r.copy(
       core = r.core.copy(
          fetchWidth = 2,
          decodeWidth = 1,
-         numRobEntries = 32,
+         numRobEntries = 16,
          issueParams = Seq(
             IssueParams(issueWidth=1, numEntries=4, iqType=IQT_MEM.litValue),
             IssueParams(issueWidth=1, numEntries=4, iqType=IQT_INT.litValue),
@@ -100,7 +106,7 @@ class WithSmallBooms extends Config((site, here, up) => {
             IssueParams(issueWidth=1, numEntries=4, iqType=IQT_FP.litValue)),
          scalarOpBuffSz = 11,
          numIntPhysRegisters = 56,
-         numFpPhysRegisters = 65,
+         numFpPhysRegisters = 48,
          numLsuEntries = 8,
          maxBrCount = 4,
          tage = Some(TageParameters(enabled=false)),
@@ -126,7 +132,7 @@ class WithMediumBooms extends Config((site, here, up) => {
             IssueParams(issueWidth=1, numEntries=10, iqType=IQT_FP.litValue)),
          scalarOpBuffSz = 16,
          numIntPhysRegisters = 70,
-         numFpPhysRegisters = 70,
+         numFpPhysRegisters = 64,
          numLsuEntries = 16,
          maxBrCount = 8,
          regreadLatency = 1,

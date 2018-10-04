@@ -136,7 +136,7 @@ class RenameStage(
          pl_width,
          RT_FLT.litValue,
          numFpPhysRegs,
-         32 + 32))
+         LOGICAL_REG_COUNT))
       fbusytable = Module(new BusyTable(
          pl_width,
          RT_FLT.litValue,

@@ -128,7 +128,7 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
    val numFpPhysRegs    = boomParams.numFpPhysRegisters  // size of the floating point physical register file
    val numVecPhysRegs   = boomParams.numVecPhysRegisters
    val numVecPhysPRegs  = boomParams.numVecPhysPRegisters
-   require (numFpPhysRegs > 64)
+   require (!boomParams.enableVecPipeline || numFpPhysRegs > 64)
 
    val numVecRegFileRows= boomParams.numVecRegFileRows
    val vecStripLen      = boomParams.vecStripLen

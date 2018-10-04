@@ -88,8 +88,8 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
 
    val rename_stage     = Module(new RenameStage(decodeWidth, num_wakeup_ports,
-                                                 if (usingFPU) fp_pipeline.io.wakeups.length else 1,
-                                                 if (usingVec) vec_pipeline.io.wakeups.length else 1))
+                                                 if (usingFPU) fp_pipeline.io.wakeups.length else 0,
+                                                 if (usingVec) vec_pipeline.io.wakeups.length else 0))
                        // HACK here, set to 1 so we can still generate the freelists, but don't connect their outputs
    val issue_units      = new boom.exu.IssueUnits(num_wakeup_ports)
    val iregfile         = if (regreadLatency == 1 && enableCustomRf) {
