@@ -1,10 +1,11 @@
-package boom.exu
+package boom.vec
 
 import chisel3._
 import chisel3.util.{log2Ceil, PriorityEncoder, Fill, UIntToOH}
 import freechips.rocketchip.config.Parameters
 import boom.common._
 import boom.util._
+import boom.exu.{BrResolutionInfo, RenameFreeListHelper}
 
 class ScalarOpBuffer(implicit p: Parameters) extends BoomModule()(p) with freechips.rocketchip.rocket.constants.VecCfgConstants
 {

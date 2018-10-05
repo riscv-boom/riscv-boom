@@ -11,7 +11,7 @@
 // 2013 May 1
 
 
-package boom.exu
+package boom.vec
 
 import chisel3._
 import chisel3.util._
@@ -19,7 +19,7 @@ import freechips.rocketchip.config.Parameters
 import scala.collection.mutable.ArrayBuffer
 import boom.common._
 import boom.util._
-
+import boom.exu._
 
 // A behavorial model of a Register File. You will likely want to blackbox this for more than modest port counts.
 class VectorPredRegisterFileBehavioral(

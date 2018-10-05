@@ -3,7 +3,7 @@
 // All Rights Reserved. See LICENSE for license details.
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
-// Floating Point Datapath Pipeline
+// Vector Datapath Pipeline
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
 //
@@ -11,7 +11,7 @@
 
 // The vector issue window, regfile, and arithmetic units are all handled here.
 
-package boom.exu
+package boom.vec
 
 import chisel3._
 import chisel3.util._
@@ -20,6 +20,7 @@ import freechips.rocketchip.rocket
 import freechips.rocketchip.tile
 import freechips.rocketchip.util._
 import boom.exu.FUConstants._
+import boom.exu._
 import boom.common._
 import boom.util._
 

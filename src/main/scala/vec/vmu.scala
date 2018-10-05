@@ -21,7 +21,7 @@
 //    everything put in here will be executed by memory
 //    branch/kill signals will filter resp_val signals, but otherwise continue on
 
-package boom.vmu
+package boom.vec
 
 import chisel3._
 import chisel3.util._
@@ -48,7 +48,7 @@ class VMURespWb(implicit p: Parameters) extends BoomBundle()(p)
 }
 
 
-class VMUShimIO(implicit p: Parameters) extends BoomBundle()(p)
+class VMUIO(implicit p: Parameters) extends BoomBundle()(p)
 {
    val req         = (new DecoupledIO(new VMUReq))
    val resp_wb     = (new ValidIO(new VMURespWb)).flip
@@ -57,13 +57,13 @@ class VMUShimIO(implicit p: Parameters) extends BoomBundle()(p)
    val brinfo      = new BrResolutionInfo().asOutput
    val flush_pipe  = Output(Bool())
 }
-class VMUShim(implicit p: Parameters) extends BoomModule()(p)
+class VMU(implicit p: Parameters) extends BoomModule()(p)
       with freechips.rocketchip.rocket.constants.MemoryOpConstants
 {
 
    val io = IO(new Bundle
       {
-         val core = new VMUShimIO().flip
+         val core = new VMUIO().flip
          val vmu = (new BoomVecMemIO()).flip
       })
 

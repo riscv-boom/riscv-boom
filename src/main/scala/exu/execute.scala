@@ -75,7 +75,7 @@ class ExecutionUnitIO(
    // only used by the mem unit
    val lsu_io = new boom.lsu.LoadStoreUnitIO(decodeWidth).flip
    val dmem   = new boom.lsu.DCMemPortIO() // TODO move this out of ExecutionUnit
-   val vmu    = new boom.vmu.VMUShimIO()
+   val vmu    = new boom.vec.VMUIO()
 
    val com_exception = Bool(INPUT)
    val debug_tsc_reg = UInt(width=128.W).asInput
@@ -401,7 +401,7 @@ class VecFPUExeUnit(
    io.resp(0).bits.writesToIRF = false
    //io.resp(1).bits.writesToIRF = true
 
-   var vfpu: VFPUUnit = null
+   var vfpu: boom.vec.VFPUUnit = null
    val vfpu_resp_val = Wire(init=Bool(false))
    val vfpu_resp_fflags = Wire(new ValidIO(new FFlagsResp))
    vfpu_resp_fflags.valid := Bool(false)
@@ -409,7 +409,7 @@ class VecFPUExeUnit(
    assert(has_vfpu, "The VecFPUExeUnit needs a vfpu");
    if (has_vfpu)
    {
-      vfpu = Module(new VFPUUnit(data_width=vecStripLen))
+      vfpu = Module(new boom.vec.VFPUUnit(data_width=vecStripLen))
 
       vfpu.io.req.valid          := io.req.valid &&
                                     (io.req.bits.uop.fu_code_is(FU_VFPU))
@@ -424,11 +424,11 @@ class VecFPUExeUnit(
       vfpu_resp_fflags           := vfpu.io.resp.bits.fflags
       fu_units += vfpu
    }
-   var valu: VALUUnit = null
+   var valu: boom.vec.VALUUnit = null
    val valu_resp_val = Wire(init=Bool(false))
    if (has_valu)
    {
-      valu = Module(new VALUUnit(num_stages=p(tile.TileKey).core.fpu.get.dfmaLatency,
+      valu = Module(new boom.vec.VALUUnit(num_stages=p(tile.TileKey).core.fpu.get.dfmaLatency,
                                  data_width=vecStripLen))
       valu.io.req.valid          := io.req.valid &&
                                     (io.req.bits.uop.fu_code_is(FU_VALU))

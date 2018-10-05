@@ -13,7 +13,7 @@
 // If regfile bypassing is disabled, then the functional unit must do its own
 // bypassing in here on the WB stage (i.e., bypassing the io.resp.data)
 
-package boom.exu
+package boom.vec
 import Chisel._
 import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.rocket.ALU._
@@ -23,6 +23,7 @@ import boom.bpu.{BpredType, BranchPredInfo, BoomBTBUpdate}
 import boom.common._
 import boom.ifu._
 import boom.util._
+import boom.exu._
 
 class Adder(w: Int) extends Module {
    val io = IO(new Bundle {
@@ -187,7 +188,7 @@ class VFPUUnit(data_width: Int)(implicit p: Parameters) extends PipelinedFunctio
    earliest_bypass_stage = 0,
    data_width = data_width)(p)
 {
-   val vfpu = Module(new VFPU())
+   val vfpu = Module(new boom.vec.VFPU())
    vfpu.io.req <> io.req
 
    io.resp.bits.data               := vfpu.io.resp.bits.data

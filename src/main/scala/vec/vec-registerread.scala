@@ -14,13 +14,13 @@
 // interfaces with the issue window on the enqueue side, and the execution
 // pipelines on the dequeue side.
 
-package boom.exu
+package boom.vec
 
 import Chisel._
 import freechips.rocketchip.config.Parameters
 import boom.common._
 import boom.util._
-
+import boom.exu._
 
 class VectorRegisterReadIO(issue_width: Int,
                            register_width: Int,

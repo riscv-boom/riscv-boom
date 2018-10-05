@@ -24,6 +24,7 @@ import chisel3.core.DontCare
 import freechips.rocketchip.config.Parameters
 import boom.common._
 import boom.util._
+import boom.vec.ScalarOpFreeList
 
 
 class RenameStageIO(

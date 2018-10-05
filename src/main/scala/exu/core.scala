@@ -55,7 +55,7 @@ trait HasBoomCoreIO extends freechips.rocketchip.tile.HasTileParameters {
          val fpu = new freechips.rocketchip.tile.FPUCoreIO().flip
          val rocc = new freechips.rocketchip.tile.RoCCCoreIO().flip
          val ptw_tlb = new freechips.rocketchip.rocket.TLBPTWIO()
-         val vmu = new boom.vmu.BoomVecMemIO().flip
+         val vmu = new boom.vec.BoomVecMemIO().flip
          val trace = Vec(coreParams.retireWidth,
             new freechips.rocketchip.rocket.TracedInstruction).asOutput
          val release = Valid(new boom.lsu.ReleaseInfo).flip
@@ -76,8 +76,8 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    if (usingFPU) fp_pipeline = Module(new FpPipeline())
 
    //TODO_vec Parametrize this, add usingVec
-   var vec_pipeline: VecPipeline = null
-   if (usingVec) vec_pipeline = Module(new VecPipeline())
+   var vec_pipeline: boom.vec.VecPipeline = null
+   if (usingVec) vec_pipeline = Module(new boom.vec.VecPipeline())
 
    //TODO_vec. Integer alu and memory pipelines are detailed here. Connect these to vector pipeline
    val num_irf_write_ports = exe_units.map(_.num_rf_write_ports).sum
@@ -116,7 +116,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    val dc_shim          = Module(new boom.lsu.DCacheShim())
    val lsu              = Module(new boom.lsu.LoadStoreUnit(decodeWidth))
 
-   val vmu_shim         = Module(new boom.vmu.VMUShim())
+   val vmu              = Module(new boom.vec.VMU())
 
    val external_wakeups = ((if (usingFPU) fp_pipeline.io.wakeups.length else 0)
                          + (if (usingVec) vec_pipeline.io.wakeups.length else 0))
@@ -156,14 +156,14 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    val brunit_idx = exe_units.br_unit_idx
    br_unit <> exe_units.br_unit_io
 
-   // Shim to DCache
+   // VMU Interface
    io.dmem <> dc_shim.io.dmem
-   vmu_shim.io.vmu <> io.vmu
+   vmu.io.vmu <> io.vmu
 
    dc_shim.io.core <> exe_units.memory_unit.io.dmem
    dc_shim.io.core.invalidate_lr := rob.io.com_xcpt.valid
 
-   vmu_shim.io.core <> exe_units.memory_unit.io.vmu
+   vmu.io.core <> exe_units.memory_unit.io.vmu
 
    // Load/Store Unit & ExeUnits
    exe_units.memory_unit.io.lsu_io := lsu.io

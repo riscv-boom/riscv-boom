@@ -3,7 +3,7 @@
 // All Rights Reserved. See LICENSE for license details.
 //------------------------------------------------------------------------------
 
-package boom.exu
+package boom.vec
 import Chisel._
 import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.tile.FPConstants
@@ -13,6 +13,7 @@ import freechips.rocketchip.rocket
 import freechips.rocketchip.util.uintToBitPat
 import boom.common._
 import boom.util.{ImmGenRm, ImmGenTyp, Packing}
+import boom.exu._
 
 class UOPCodeVFPUDecoder extends Module
 {
