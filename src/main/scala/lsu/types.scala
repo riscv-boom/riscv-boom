@@ -10,6 +10,8 @@ import freechips.rocketchip.tile.{BaseTile, HasTileParameters}
 import freechips.rocketchip.tilelink.TLIdentityNode
 import scala.collection.mutable.ListBuffer
 
+import boom.common._
+
 
 /** Mix-ins for constructing tiles that have a HellaCache */
 
@@ -19,9 +21,13 @@ trait HasBoomHellaCache { this: BaseTile =>
   def findScratchpadFromICache: Option[AddressSet]
   var nDCachePorts = 0
   val dcache: HellaCache = LazyModule(
-    if(tileParams.dcache.get.nMSHRs == 0) {
+    if (tileParams.dcache.get.nMSHRs == 0) {
       new DCache(hartId, findScratchpadFromICache _, p(RocketCrossingKey).head.knownRatio)
-    } else { new NonBlockingDCache(hartId) })
+    } else if (tileParams.core.asInstanceOf[BoomCoreParams].enableSecureDCache) {
+      new BoomSecureDCache(hartId)
+    } else {
+      new NonBlockingDCache(hartId)
+    })
 
   //tlMasterXbar.node := dcache.node
   val dCacheTap = TLIdentityNode()

@@ -28,6 +28,7 @@ case class BoomCoreParams(
    numFpPhysRegisters: Int = 64,
    enableCustomRf: Boolean = false,
    enableCustomRfModel: Boolean = true,
+   enableSecureDCache: Boolean = false,
    maxBrCount: Int = 4,
    fetchBufferSz: Int = 8,
    enableAgePriorityIssue: Boolean = true,
