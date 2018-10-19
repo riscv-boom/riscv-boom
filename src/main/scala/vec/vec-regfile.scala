@@ -30,7 +30,6 @@ class VectorRegisterFileBehavioral(
    bypassable_array: Seq[Boolean])
    (implicit p: Parameters)
       extends RegisterFile(num_registers, num_read_ports, num_write_ports, register_width, bypassable_array)
-with freechips.rocketchip.rocket.constants.VecCfgConstants
 {
    // There's no way this is the easiest way to do this
    def toVec (data:UInt, elem_width:Int, elem_count:Int):Vec[UInt] = {

@@ -25,7 +25,6 @@ import boom.common._
 import boom.util._
 
 class VecPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFPUParameters
-with freechips.rocketchip.rocket.constants.VecCfgConstants
 with Packing
 {
   val vecIssueParams = issueParams.find(_.iqType == IQT_VEC.litValue).get

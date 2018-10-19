@@ -14,7 +14,7 @@ import freechips.rocketchip.util.{uintToBitPat,UIntIsOneOf}
 import FUConstants._
 import boom.common._
 import boom.util._
-
+import boom.common.constants.VecInstructions._
 
 abstract trait DecodeConstants
    extends freechips.rocketchip.rocket.constants.ScalarOpConstants
@@ -390,7 +390,7 @@ class DecodeUnitIo(implicit p: Parameters) extends BoomBundle()(p)
    val csr_decode = Flipped(new freechips.rocketchip.rocket.CSRDecodeIO)
    val interrupt = Bool(INPUT)
    val interrupt_cause = UInt(INPUT, xLen)
-   val vecstatus = new freechips.rocketchip.rocket.VecStatus().asInput
+   val vecstatus = new boom.vec.VecStatus().asInput
 
    override def cloneType: this.type = new DecodeUnitIo()(p).asInstanceOf[this.type]
 }
@@ -409,13 +409,16 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule()(p) with freechips.
    if (usingVec) decode_table ++= VecDecode.table
    val cs = Wire(new CtrlSigs()).decode(uop.inst, decode_table)
 
+   // This is a kludge for now, vector config insns will not be CSR ops in actual spec
+   val csr_addr = ImmGen(uop.inst(31,12), IS_I).asUInt
+   val vec_cfg_valid = boom.common.constants.VecCSRs.all.map(k => UInt(k) === csr_addr).reduce(_||_) && usingVec.B
 
    // Exception Handling
    io.csr_decode.csr := uop.inst(31,20)
-	val csr_en = cs.csr_cmd.isOneOf(CSR.S, CSR.C, CSR.W)
-	val csr_ren = cs.csr_cmd.isOneOf(CSR.S, CSR.C) && uop.lrs1 === 0.U
-	val system_insn = cs.csr_cmd >= CSR.I
-	val sfence = cs.uopc === uopSFENCE
+   val csr_en = cs.csr_cmd.isOneOf(CSR.S, CSR.C, CSR.W) && !vec_cfg_valid
+   val csr_ren = cs.csr_cmd.isOneOf(CSR.S, CSR.C) && uop.lrs1 === 0.U
+   val system_insn = cs.csr_cmd >= CSR.I
+   val sfence = cs.uopc === uopSFENCE
 
    val cs_legal = cs.legal
 //   dontTOuch(cs_legal)

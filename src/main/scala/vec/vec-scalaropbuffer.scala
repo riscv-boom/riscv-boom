@@ -7,7 +7,7 @@ import boom.common._
 import boom.util._
 import boom.exu.{BrResolutionInfo, RenameFreeListHelper}
 
-class ScalarOpBuffer(implicit p: Parameters) extends BoomModule()(p) with freechips.rocketchip.rocket.constants.VecCfgConstants
+class ScalarOpBuffer(implicit p: Parameters) extends BoomModule()(p)
 {
    val buf_size  = scalar_op_buff_sz
 
@@ -38,7 +38,6 @@ class ScalarOpBuffer(implicit p: Parameters) extends BoomModule()(p) with freech
    // This is fragile, it matches the latency of the normal register-read pipeline
 }
 class ScalarOpFreeList(pl_width: Int)(implicit p: Parameters) extends BoomModule()(p)
-      with freechips.rocketchip.rocket.constants.VecCfgConstants
 {
    val buf_size = scalar_op_buff_sz
 

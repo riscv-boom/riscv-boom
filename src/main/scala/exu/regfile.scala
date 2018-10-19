@@ -100,7 +100,6 @@ class RegisterFileBehavioral(
    bypassable_array: Seq[Boolean])
    (implicit p: Parameters)
       extends RegisterFile(num_registers, num_read_ports, num_write_ports, register_width, bypassable_array)
-with freechips.rocketchip.rocket.constants.VecCfgConstants
 {
    // --------------------------------------------------------------
 

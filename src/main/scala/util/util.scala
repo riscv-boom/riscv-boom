@@ -515,3 +515,19 @@ object CalcVecMaskFromData
       mask
    }
 }
+
+object FindFirst {
+   def apply(v: Vec[Bool], n: Int, head: UInt, fn: Int=>Bool) = {
+      val internal = Wire(Vec(2*n, Bool()))
+      for (i <- 0 until n) {
+         internal(i+n) := v(i) && fn(i)
+         internal(i) := internal(i+n) && (UInt(i) >= head)
+      }
+      val priority_oh = PriorityEncoderOH(internal)
+      val out = Wire(Vec(n, Bool()))
+      for (i <- 0 until n) {
+         out(i) := priority_oh(i) | priority_oh(i+n)
+      }
+      out
+   }
+}

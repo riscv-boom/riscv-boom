@@ -79,6 +79,13 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    var vec_pipeline: boom.vec.VecPipeline = null
    if (usingVec) vec_pipeline = Module(new boom.vec.VecPipeline())
 
+   var vec_cfg_unit: boom.vec.VecConfig = null
+   val vec_cfg = Wire(new boom.vec.VecStatus())
+   if (usingVec) {
+      vec_cfg_unit = Module(new boom.vec.VecConfig)
+      vec_cfg := vec_cfg_unit.io.vecstatus
+   }
+
    //TODO_vec. Integer alu and memory pipelines are detailed here. Connect these to vector pipeline
    val num_irf_write_ports = exe_units.map(_.num_rf_write_ports).sum
    val num_fast_wakeup_ports = exe_units.count(_.isBypassable)
@@ -383,7 +390,8 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       decode_units(w).io.csr_decode      := csr.io.decode(w)
       decode_units(w).io.interrupt       := csr.io.interrupt
       decode_units(w).io.interrupt_cause := csr.io.interrupt_cause
-      decode_units(w).io.vecstatus       := csr.io.vecstatus
+
+      decode_units(w).io.vecstatus       := vec_cfg
       val prev_insts_in_bundle_valid = Range(0,w).map{i => dec_valids(i)}.foldLeft(Bool(false))(_|_)
 
       // stall this instruction?
@@ -498,7 +506,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    rename_stage.io.dec_will_fire := dec_will_fire
    rename_stage.io.dec_uops := dec_uops
 
-   rename_stage.io.vl := csr.io.vecstatus.vl
+   rename_stage.io.vl := vec_cfg.vl
 
    var wu_idx = 0
    // loop through each issue-port (exe_units are statically connected to an issue-port)
@@ -608,7 +616,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       iu.io.dis_valids(w) := dis_valids(w) && dis_uops(w).iqtype === UInt(iu.iqType)
       iu.io.dis_uops(w) := dis_uops(w)
 
-      iu.io.vl := csr.io.vecstatus.vl
+      iu.io.vl := vec_cfg.vl
 
       iu.io.lsu_stq_head              := lsu.io.stq_head
       iu.io.dis_uops(w).pvp_busy      := false.B
@@ -807,9 +815,21 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    val csr_rw_cmd = csr_exe_unit.io.resp(0).bits.uop.ctrl.csr_cmd
    val wb_wdata = csr_exe_unit.io.resp(0).bits.data
 
+
+   val csr_addr = csr_exe_unit.io.resp(0).bits.uop.csr_addr
+   val vec_cfg_valid = boom.common.constants.VecCSRs.all.map(k => UInt(k) === csr_addr).reduce(_||_) && usingVec.B
+
    csr.io.rw.addr  := csr_exe_unit.io.resp(0).bits.uop.csr_addr
-   csr.io.rw.cmd   := Mux(csr_exe_unit.io.resp(0).valid, csr_rw_cmd, freechips.rocketchip.rocket.CSR.N)
-   csr.io.rw.wdata :=wb_wdata
+   csr.io.rw.cmd   := Mux(csr_exe_unit.io.resp(0).valid && !vec_cfg_valid, csr_rw_cmd, freechips.rocketchip.rocket.CSR.N)
+   csr.io.rw.wdata := wb_wdata
+
+   if (usingVec) {
+      vec_cfg_unit.io.rw.addr  := csr_addr
+      vec_cfg_unit.io.rw.cmd   := Mux(csr_exe_unit.io.resp(0).valid && vec_cfg_valid,
+         csr_rw_cmd,
+         freechips.rocketchip.rocket.CSR.N)
+      vec_cfg_unit.io.rw.wdata := wb_wdata
+   }
 
    // Extra I/O
    csr.io.retire    := PopCount(rob.io.commit.valids.asUInt)
@@ -853,12 +873,12 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
    if (usingFPU) {
       fp_pipeline.io.fcsr_rm := csr.io.fcsr_rm
-      fp_pipeline.io.vl := csr.io.vecstatus.vl
+      fp_pipeline.io.vl := vec_cfg.vl
    }
 
    if (usingVec) {
       vec_pipeline.io.fcsr_rm := csr.io.fcsr_rm // TODO_Vec: check if vec fp rm should be controlled by same csr
-      vec_pipeline.io.vl := csr.io.vecstatus.vl
+      vec_pipeline.io.vl := vec_cfg.vl
       vec_pipeline.io.lsu_stq_head := lsu.io.stq_head
       vec_pipeline.io.fromfp <> fp_pipeline.io.tovec
    }
@@ -883,7 +903,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       exe_units(w).io.req.bits.mask := ~(0.U)
       exe_units(w).io.brinfo := br_unit.brinfo
       exe_units(w).io.com_exception := rob.io.flush.valid
-      exe_units(w).io.vl := csr.io.vecstatus.vl
+      exe_units(w).io.vl := vec_cfg.vl
 
       if (exe_units(w).isBypassable)
       {
@@ -976,7 +996,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    if (usingFPU) lsu.io.fp_stdata <> fp_pipeline.io.tosdq
    if (usingVec) lsu.io.vec_stdata <> vec_pipeline.io.tosdq
 
-   lsu.io.vl := csr.io.vecstatus.vl
+   lsu.io.vl := vec_cfg.vl
 
    //-------------------------------------------------------------
    //-------------------------------------------------------------
@@ -1010,6 +1030,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
          def wbIsValid(rtype: UInt) =
             wbresp.valid && wbresp.bits.uop.ctrl.rf_wen && wbresp.bits.uop.dst_rtype === rtype
          val wbReadsCSR = wbresp.bits.uop.ctrl.csr_cmd =/= freechips.rocketchip.rocket.CSR.N
+         val wbReadsVecCSR = wbReadsCSR && vec_cfg_valid
 
          if (exe_units(i).data_width > 64)
          {
@@ -1023,6 +1044,10 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
             iregfile.io.write_ports(w_cnt).valid     := wbIsValid(RT_FIX)
             iregfile.io.write_ports(w_cnt).bits.addr := wbpdst
             iregfile.io.write_ports(w_cnt).bits.data := Mux(wbReadsCSR, csr.io.rw.rdata, wbdata)
+            if (usingVec)
+               when (wbReadsVecCSR) {
+                  iregfile.io.write_ports(w_cnt).bits.data := vec_cfg_unit.io.rw.rdata
+               }
             wbresp.ready := iregfile.io.write_ports(w_cnt).ready
          }
          else if (exe_units(i).is_mem_unit)
@@ -1102,7 +1127,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    rob.io.enq_partial_stall := dec_last_inst_was_stalled // TODO come up with better ROB compacting scheme.
    rob.io.debug_tsc := debug_tsc_reg
    rob.io.csr_stall := csr.io.csr_stall
-   rob.io.vl := csr.io.vecstatus.vl
+   rob.io.vl := vec_cfg.vl
 
    assert ((dec_will_fire zip rename_stage.io.ren1_mask map {case(d,r) => d === r}).reduce(_|_),
       "[core] Assumption that dec_will_fire and ren1_mask are equal is being violated.")

@@ -51,10 +51,10 @@ class VMURespWb(implicit p: Parameters) extends BoomBundle()(p)
 class VMUIO(implicit p: Parameters) extends BoomBundle()(p)
 {
    val req         = (new DecoupledIO(new VMUReq))
-   val resp_wb     = (new ValidIO(new VMURespWb)).flip
-   val resp_wakeup = (new ValidIO(new MicroOp)).flip
+   val resp_wb     = Flipped(new ValidIO(new VMURespWb))
+   val resp_wakeup = Flipped(new ValidIO(new MicroOp))
 
-   val brinfo      = new BrResolutionInfo().asOutput
+   val brinfo      = Output(new BrResolutionInfo())
    val flush_pipe  = Output(Bool())
 }
 class VMU(implicit p: Parameters) extends BoomModule()(p)
@@ -63,8 +63,8 @@ class VMU(implicit p: Parameters) extends BoomModule()(p)
 
    val io = IO(new Bundle
       {
-         val core = new VMUIO().flip
-         val vmu = (new BoomVecMemIO()).flip
+         val core = Flipped(new VMUIO())
+         val vmu = Flipped(new BoomVecMemIO())
       })
 
 
@@ -75,9 +75,9 @@ class VMU(implicit p: Parameters) extends BoomModule()(p)
    val ilq_resp_vals = Reg(Vec(numVMUEntries, Bool()))
    val ilq_uops      = Reg(Vec(numVMUEntries, new MicroOp))
 
-   val ilq_head = Reg(UInt(width=log2Up(numVMUEntries).W), init=0.U)
-   val ilq_tail = Reg(UInt(width=log2Up(numVMUEntries).W), init=0.U)
-   val full = Reg(Bool(), init=false.B)
+   val ilq_head = RegInit(UInt(width=log2Up(numVMUEntries).W), init=0.U)
+   val ilq_tail = RegInit(UInt(width=log2Up(numVMUEntries).W), init=0.U)
+   val full     = RegInit(Bool(), init=false.B)
 
    val enq_val = io.core.req.valid && io.core.req.bits.uop.is_load
    val deq_val = ilq_vals(ilq_head) && ilq_resp_vals(ilq_head)
