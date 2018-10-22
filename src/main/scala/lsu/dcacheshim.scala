@@ -188,7 +188,7 @@ class DCacheShim(implicit p: Parameters) extends BoomModule()(p)
    val io = IO(new Bundle
    {
       val core = (new DCMemPortIO()).flip
-      val dmem = new freechips.rocketchip.rocket.HellaCacheIO
+      val dmem = new SecureHellaCacheIO
    })
 
    // we are going to ignore store acks (for now at least), so filter them out and only listen to load acks

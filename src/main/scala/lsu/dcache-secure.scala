@@ -4,12 +4,32 @@
 package boom.lsu
 
 import Chisel._
+import chisel3.experimental.dontTouch
 import Chisel.ImplicitConversions._
 import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.diplomacy._
+import freechips.rocketchip.tile._
 import freechips.rocketchip.tilelink._
 import freechips.rocketchip.util._
 import freechips.rocketchip.rocket._
+import boom.common._
+
+class SecureHellaCacheReq(implicit p: Parameters) extends HellaCacheReq()(p) {
+  val uop = new MicroOp
+}
+
+class SecureHellaCacheIO(implicit p: Parameters) extends HellaCacheIO()(p) {
+  override val req = Decoupled(new SecureHellaCacheReq)
+}
+
+class SecureMSHRReq(implicit p: Parameters) extends MSHRReq()(p) {
+   val uop = new MicroOp()
+}
+
+
+class SecureMSHRReqInternal(implicit p: Parameters) extends MSHRReqInternal()(p) {
+   val uop = new MicroOp()
+}
 
 class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1HellaCacheModule()(p) {
   val io = new Bundle {
@@ -17,7 +37,7 @@ class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1Hel
     val req_pri_rdy    = Bool(OUTPUT)
     val req_sec_val    = Bool(INPUT)
     val req_sec_rdy    = Bool(OUTPUT)
-    val req_bits       = new MSHRReqInternal().asInput
+    val req_bits       = new SecureMSHRReqInternal().asInput
 
     val idx_match       = Bool(OUTPUT)
     val tag             = Bits(OUTPUT, tagBits)
@@ -37,7 +57,7 @@ class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1Hel
   val s_invalid :: s_wb_req :: s_wb_resp :: s_meta_clear :: s_refill_req :: s_refill_resp :: s_meta_write_req :: s_meta_write_resp :: s_drain_rpq :: Nil = Enum(UInt(), 9)
   val state = Reg(init=s_invalid)
 
-  val req = Reg(new MSHRReqInternal)
+  val req = Reg(new SecureMSHRReqInternal)
   val req_idx = req.addr(untagBits-1,blockOffBits)
   val req_tag = req.addr >> untagBits
   val req_block_addr = (req.addr >> blockOffBits) << blockOffBits
@@ -178,7 +198,7 @@ class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1Hel
 
 class SecureMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends L1HellaCacheModule()(p) {
   val io = new Bundle {
-    val req = Decoupled(new MSHRReq).flip
+    val req = Decoupled(new SecureMSHRReq).flip
     val resp = Decoupled(new HellaCacheResp)
     val secondary_miss = Bool(OUTPUT)
 
@@ -315,12 +335,56 @@ class SecureMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends L1HellaCac
   }
 }
 
+abstract class SecureHellaCache(hartid: Int)(implicit p: Parameters) extends LazyModule {
+  protected val cfg = p(TileKey).dcache.get
 
-class BoomSecureDCache(hartid: Int)(implicit p: Parameters) extends HellaCache(hartid)(p) {
+  protected def cacheClientParameters = cfg.scratch.map(x => Seq()).getOrElse(Seq(TLClientParameters(
+    name          = s"Core ${hartid} DCache",
+    sourceId      = IdRange(0, 1 max cfg.nMSHRs),
+    supportsProbe = TransferSizes(cfg.blockBytes, cfg.blockBytes))))
+
+  protected def mmioClientParameters = Seq(TLClientParameters(
+    name          = s"Core ${hartid} DCache MMIO",
+    sourceId      = IdRange(firstMMIO, firstMMIO + cfg.nMMIOs),
+    requestFifo   = true))
+
+  def firstMMIO = (cacheClientParameters.map(_.sourceId.end) :+ 0).max
+
+  val node = TLClientNode(Seq(TLClientPortParameters(
+    cacheClientParameters ++ mmioClientParameters,
+    minLatency = 1)))
+
+  val module: SecureHellaCacheModule
+}
+class SecureHellaCacheBundle(val outer: SecureHellaCache)(implicit p: Parameters) extends CoreBundle()(p) {
+  val hartid = UInt(INPUT, hartIdLen)
+  val cpu = (new HellaCacheIO).flip
+  val ptw = new TLBPTWIO()
+  val errors = new DCacheErrors
+}
+
+
+class BoomSecureDCache(hartid: Int)(implicit p: Parameters) extends SecureHellaCache(hartid)(p) {
   override lazy val module = new BoomSecureDCacheModule(this) 
 }
 
-class BoomSecureDCacheModule(outer: BoomSecureDCache) extends HellaCacheModule(outer) {
+class SecureHellaCacheModule(outer: SecureHellaCache) extends LazyModuleImp(outer)
+    with HasL1HellaCacheParameters {
+  implicit val edge = outer.node.edges.out(0)
+  val (tl_out, _) = outer.node.out(0)
+  val io = IO(new SecureHellaCacheBundle(outer))
+  dontTouch(io.cpu.resp) // Users like to monitor these fields even if the core ignores some signals
+  dontTouch(io.cpu.s1_data)
+
+  private val fifoManagers = edge.manager.managers.filter(TLFIFOFixer.allUncacheable)
+  fifoManagers.foreach { m =>
+    require (m.fifoId == fifoManagers.head.fifoId,
+      s"IOMSHRs must be FIFO for all regions with effects, but HellaCache sees ${m.nodePath.map(_.name)}")
+  }
+}
+
+
+class BoomSecureDCacheModule(outer: BoomSecureDCache) extends SecureHellaCacheModule(outer) {
 
   require(isPow2(nWays)) // TODO: relax this
   require(dataScratchpadSize == 0)
