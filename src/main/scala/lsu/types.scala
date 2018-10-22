@@ -20,14 +20,9 @@ trait HasBoomHellaCache { this: BaseTile =>
   implicit val p: Parameters
   def findScratchpadFromICache: Option[AddressSet]
   var nDCachePorts = 0
-  val dcache: HellaCache = LazyModule(
-    if (tileParams.dcache.get.nMSHRs == 0) {
-      new DCache(hartId, findScratchpadFromICache _, p(RocketCrossingKey).head.knownRatio)
-    } else if (tileParams.core.asInstanceOf[BoomCoreParams].enableSecureDCache) {
+  val dcache: BoomSecureDCache = LazyModule(
       new BoomSecureDCache(hartId)
-    } else {
-      new NonBlockingDCache(hartId)
-    })
+  )
 
   //tlMasterXbar.node := dcache.node
   val dCacheTap = TLIdentityNode()
