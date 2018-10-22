@@ -65,6 +65,12 @@ class WithNPerfCounters(n: Int) extends Config((site, here, up) => {
    ))}
 })
 
+class WithSecureDCache extends Config((site, here, up) => {
+   case BoomTilesKey => up(BoomTilesKey, site) map { r => r.copy(core = r.core.copy(
+      enableSecureDCache = true
+   ))}
+})
+
 class WithTrace extends Config((site, here, up) => {
    case BoomTilesKey => up(BoomTilesKey, site) map { r => r.copy(trace = true) }
 })
