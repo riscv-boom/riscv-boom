@@ -38,6 +38,9 @@ class SmallIntBoomConfig extends Config(new WithoutBoomFPU ++ new WithSmallBooms
 class TracedSmallBoomConfig extends Config(new WithTrace ++ new WithSmallBooms ++ new DefaultBoomConfig ++ new WithNBoomCores(1) ++ new WithoutTLMonitors ++ new freechips.rocketchip.system.BaseConfig)
 
 
+class SecureSmallBoomConfig extends Config(new WithSecureDCache ++ new WithSmallBooms ++ new DefaultBoomConfig ++ new WithNBoomCores(1) ++ new WithoutTLMonitors ++ new freechips.rocketchip.system.BaseConfig)
+
+
 // Allow for some number N BOOM cores.
 class WithNBoomCores(n: Int) extends Config((site, here, up) => {
   case BoomTilesKey => {
