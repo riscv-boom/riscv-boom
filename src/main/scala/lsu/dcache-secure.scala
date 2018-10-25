@@ -14,6 +14,75 @@ import freechips.rocketchip.util._
 import freechips.rocketchip.rocket._
 import boom.common._
 
+class SecureHellaCacheArbiter(n: Int)(implicit p: Parameters) extends Module
+{
+  val io = new Bundle {
+    val requestor = Vec(n, new SecureHellaCacheIO).flip
+    val mem = new SecureHellaCacheIO
+  }
+
+  if (n == 1) {
+    io.mem <> io.requestor.head
+  } else {
+    val s1_id = Reg(UInt())
+    val s2_id = Reg(next=s1_id)
+
+    io.mem.keep_clock_enabled := io.requestor.map(_.keep_clock_enabled).reduce(_||_)
+
+    io.mem.req.valid := io.requestor.map(_.req.valid).reduce(_||_)
+    io.requestor(0).req.ready := io.mem.req.ready
+    for (i <- 1 until n)
+      io.requestor(i).req.ready := io.requestor(i-1).req.ready && !io.requestor(i-1).req.valid
+
+    for (i <- n-1 to 0 by -1) {
+      val req = io.requestor(i).req
+      def connect_s0() = {
+        io.mem.req.bits.cmd := req.bits.cmd
+        io.mem.req.bits.typ := req.bits.typ
+        io.mem.req.bits.addr := req.bits.addr
+        io.mem.req.bits.phys := req.bits.phys
+        io.mem.req.bits.uop := req.bits.uop
+        io.mem.req.bits.tag := Cat(req.bits.tag, UInt(i, log2Up(n)))
+        s1_id := UInt(i)
+      }
+      def connect_s1() = {
+        io.mem.s1_kill := io.requestor(i).s1_kill
+        io.mem.s1_data := io.requestor(i).s1_data
+      }
+      def connect_s2() = {
+        io.mem.s2_kill := io.requestor(i).s2_kill
+      }
+
+      if (i == n-1) {
+        connect_s0()
+        connect_s1()
+        connect_s2()
+      } else {
+        when (req.valid) { connect_s0() }
+        when (s1_id === UInt(i)) { connect_s1() }
+        when (s2_id === UInt(i)) { connect_s2() }
+      }
+    }
+
+    for (i <- 0 until n) {
+      val resp = io.requestor(i).resp
+      val tag_hit = io.mem.resp.bits.tag(log2Up(n)-1,0) === UInt(i)
+      resp.valid := io.mem.resp.valid && tag_hit
+      io.requestor(i).s2_xcpt := io.mem.s2_xcpt
+      io.requestor(i).ordered := io.mem.ordered
+      io.requestor(i).perf := io.mem.perf
+      io.requestor(i).s2_nack := io.mem.s2_nack && s2_id === UInt(i)
+      io.requestor(i).s2_nack_cause_raw := io.mem.s2_nack_cause_raw
+      resp.bits := io.mem.resp.bits
+      resp.bits.tag := io.mem.resp.bits.tag >> log2Up(n)
+
+      io.requestor(i).replay_next := io.mem.replay_next
+    }
+  }
+}
+
+
+
 class SecureHellaCacheReq(implicit p: Parameters) extends HellaCacheReq()(p) {
   val uop = new MicroOp
 }
@@ -52,16 +121,23 @@ class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1Hel
     val replay = Decoupled(new ReplayInternal)
     val wb_req = Decoupled(new WritebackReq(edge.bundle))
     val probe_rdy = Bool(OUTPUT)
+
+    val debug_req = new SecureMSHRReqInternal().asOutput
   }
 
   val s_invalid :: s_wb_req :: s_wb_resp :: s_meta_clear :: s_refill_req :: s_refill_resp :: s_meta_write_req :: s_meta_write_resp :: s_drain_rpq :: Nil = Enum(UInt(), 9)
   val state = Reg(init=s_invalid)
 
   val req = Reg(new SecureMSHRReqInternal)
+  io.debug_req := req
+  dontTouch(io.debug_req)
   val req_idx = req.addr(untagBits-1,blockOffBits)
   val req_tag = req.addr >> untagBits
   val req_block_addr = (req.addr >> blockOffBits) << blockOffBits
   val idx_match = req_idx === io.req_bits.addr(untagBits-1,blockOffBits)
+
+  val data = Reg(Vec(8, UInt(width=64))) // TODO_sec: Find parameters that affect thes
+  val spec_buf_ptr = UInt(width=3)
 
   val new_coh = Reg(init=ClientMetadata.onReset)
   val (_, shrink_param, coh_on_clear)    = req.old_meta.coh.onCacheControl(M_FLUSH)
@@ -140,6 +216,11 @@ class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1Hel
     }
   }
 
+  when (io.mem_grant.valid) {
+     data(refill_address_inc(5,3)) := io.mem_grant.bits.data
+  }
+  dontTouch(data)
+
   val grantackq = Module(new Queue(io.mem_finish.bits, 1))
   val can_finish = state.isOneOf(s_invalid, s_refill_req)
   grantackq.io.enq.valid := refill_done && edge.isRequest(io.mem_grant.bits)
@@ -194,6 +275,8 @@ class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1Hel
     rpq.io.deq.ready := Bool(false)
     io.replay.bits.cmd := M_FLUSH_ALL /* nop */
   }
+
+
 }
 
 class SecureMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends L1HellaCacheModule()(p) {
@@ -358,7 +441,7 @@ abstract class SecureHellaCache(hartid: Int)(implicit p: Parameters) extends Laz
 }
 class SecureHellaCacheBundle(val outer: SecureHellaCache)(implicit p: Parameters) extends CoreBundle()(p) {
   val hartid = UInt(INPUT, hartIdLen)
-  val cpu = (new HellaCacheIO).flip
+  val cpu = (new SecureHellaCacheIO).flip
   val ptw = new TLBPTWIO()
   val errors = new DCacheErrors
 }
@@ -468,6 +551,7 @@ class BoomSecureDCacheModule(outer: BoomSecureDCache) extends SecureHellaCacheMo
     when (s1_recycled) { s2_req.data := s1_req.data }
     s2_req.tag := s1_req.tag
     s2_req.cmd := s1_req.cmd
+    s2_req.uop := s1_req.uop
   }
 
   // tags

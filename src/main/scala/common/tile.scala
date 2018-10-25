@@ -131,7 +131,12 @@ class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer)
   val uncorrectable = RegInit(Bool(false))
   val halt_and_catch_fire = outer.boomParams.hcfOnUncorrectable.option(IO(Bool(OUTPUT)))
 
-  outer.dtim_adapter.foreach { lm => dcachePorts += lm.module.io.dmem }
+   outer.dtim_adapter.foreach { lm => {
+      val dc_port = Wire(new SecureHellaCacheIO()(outer.p))
+      dc_port <> lm.module.io.dmem
+      dcachePorts += dc_port
+   }
+   }
 
   outer.bus_error_unit.foreach { lm =>
     lm.module.io.errors.dcache := outer.dcache.module.io.errors
