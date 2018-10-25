@@ -32,8 +32,8 @@ trait HasBoomHellaCache { this: BaseTile =>
 
 trait HasBoomHellaCacheModule {
   val outer: HasBoomHellaCache
-  val dcachePorts = ListBuffer[HellaCacheIO]()
-  val dcacheArb = Module(new HellaCacheArbiter(outer.nDCachePorts)(outer.p))
+  val dcachePorts = ListBuffer[SecureHellaCacheIO]()
+  val dcacheArb = Module(new SecureHellaCacheArbiter(outer.nDCachePorts)(outer.p))
   outer.dcache.module.io.cpu <> dcacheArb.io.mem
 }
 
@@ -50,8 +50,11 @@ trait CanHaveBoomPTWModule extends HasBoomHellaCacheModule {
   val outer: CanHaveBoomPTW
   val ptwPorts = ListBuffer(outer.dcache.module.io.ptw)
   val ptw = Module(new PTW(outer.nPTWPorts)(outer.dcache.node.edges.out(0), outer.p))
-  if (outer.usingPTW)
-    dcachePorts += ptw.io.mem
+  if (outer.usingPTW) {
+     val ptw_io = Wire(new SecureHellaCacheIO()(outer.p))
+     ptw_io <> ptw.io.mem
+     dcachePorts += ptw_io
+  }
 }
 
 
