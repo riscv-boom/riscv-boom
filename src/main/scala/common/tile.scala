@@ -185,4 +185,43 @@ class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer)
     frontendStr + core.toString + "\n"
   )
   print(outer.frontend.module.toString + core.toString + "\n")
+
+  val (tl_out, _) = outer.dCacheTap.out(0)
+
+  when (tl_out.a.valid) {
+    printf("a %x %x %x %x %x %x %x\n",
+      tl_out.a.bits.opcode,
+      tl_out.a.bits.param,
+      tl_out.a.bits.size,
+      tl_out.a.bits.source,
+      tl_out.a.bits.address,
+      tl_out.a.bits.mask,
+      tl_out.a.bits.data)
+  }
+  when (tl_out.b.valid) {
+    printf("b %x %x %x %x\n",
+      tl_out.b.bits.param,
+      tl_out.b.bits.size,
+      tl_out.b.bits.source,
+      tl_out.b.bits.address,
+    )
+  }
+  when (tl_out.c.valid) {
+    printf("c %x %x %x %x %x\n",
+      tl_out.c.bits.opcode,
+      tl_out.c.bits.size,
+      tl_out.c.bits.source,
+      tl_out.c.bits.address,
+      tl_out.c.bits.data)
+  }
+  when (tl_out.d.valid) {
+    printf("d %x %x %x %x %x %x\n",
+      tl_out.d.bits.opcode,
+      tl_out.d.bits.param,
+      tl_out.d.bits.size,
+      tl_out.d.bits.source,
+      tl_out.d.bits.sink,
+      tl_out.d.bits.data)
+  }
+
 }
