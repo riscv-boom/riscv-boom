@@ -100,6 +100,10 @@ class SecureMSHRReqInternal(implicit p: Parameters) extends MSHRReqInternal()(p)
    val uop = new MicroOp()
 }
 
+class SecureL1RefillReq(implicit p: Parameters) extends L1RefillReq()(p) {
+  val data = UInt(OUTPUT, width=64)
+}
+
 class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1HellaCacheModule()(p) {
   val io = new Bundle {
     val req_pri_val    = Bool(INPUT)
@@ -115,7 +119,7 @@ class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1Hel
     val mem_grant = Valid(new TLBundleD(edge.bundle)).flip
     val mem_finish = Decoupled(new TLBundleE(edge.bundle))
 
-    val refill = new L1RefillReq().asOutput // Data is bypassed
+    val refill = Decoupled(new SecureL1RefillReq().asOutput) // Data is bypassed
     val meta_read = Decoupled(new L1MetaReadReq)
     val meta_write = Decoupled(new L1MetaWriteReq)
     val replay = Decoupled(new ReplayInternal)
@@ -125,7 +129,7 @@ class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1Hel
     val debug_req = new SecureMSHRReqInternal().asOutput
   }
 
-  val s_invalid :: s_wb_req :: s_wb_resp :: s_meta_clear :: s_refill_req :: s_refill_resp :: s_meta_write_req :: s_meta_write_resp :: s_drain_rpq :: Nil = Enum(UInt(), 9)
+  val s_invalid :: s_wb_req :: s_wb_resp :: s_meta_clear :: s_refill_req :: s_refill_resp :: s_meta_write_req :: s_meta_write_resp :: s_drain_rpq :: s_commit_resp :: Nil = Enum(UInt(), 10)
   val state = Reg(init=s_invalid)
 
   val req = Reg(new SecureMSHRReqInternal)
@@ -152,6 +156,8 @@ class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1Hel
 
   val states_before_refill = Seq(s_wb_req, s_wb_resp, s_meta_clear)
   val (_, _, refill_done, refill_address_inc) = edge.addr_inc(io.mem_grant)
+  val commit_counter = RegInit(UInt(0, width=4))
+  val commit_done = commit_counter === UInt(7)
   val sec_rdy = idx_match &&
                   (state.isOneOf(states_before_refill) ||
                     (state.isOneOf(s_refill_req, s_refill_resp) &&
@@ -174,6 +180,14 @@ class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1Hel
   }
   when (state === s_refill_resp && refill_done) {
     new_coh := coh_on_grant
+    //state := s_meta_write_req
+    state := s_commit_resp
+    commit_counter := UInt(0)
+  }
+  when (state === s_commit_resp) {
+    commit_counter := commit_counter + UInt(1)
+  }
+  when (state === s_commit_resp && commit_done) {
     state := s_meta_write_req
   }
   when (io.mem_acquire.fire()) { // s_refill_req
@@ -217,7 +231,7 @@ class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1Hel
   }
 
   when (io.mem_grant.valid) {
-     data(refill_address_inc(5,3)) := io.mem_grant.bits.data
+     data(refill_address_inc >> 3) := io.mem_grant.bits.data
   }
   dontTouch(data)
 
@@ -230,8 +244,11 @@ class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1Hel
   grantackq.io.deq.ready := io.mem_finish.ready && can_finish
 
   io.idx_match := (state =/= s_invalid) && idx_match
-  io.refill.way_en := req.way_en
-  io.refill.addr := req_block_addr | refill_address_inc
+  io.refill.valid := state === s_commit_resp
+  io.refill.bits.way_en := req.way_en
+  //io.refill.bits.addr := req_block_addr | refill_address_inc
+  io.refill.bits.addr := req_block_addr | (commit_counter << 3)
+  io.refill.bits.data := data(commit_counter)
   io.tag := req_tag 
   io.req_pri_rdy := state === s_invalid
   io.req_sec_rdy := sec_rdy && rpq.io.enq.ready
@@ -289,7 +306,7 @@ class SecureMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends L1HellaCac
     val mem_grant = Valid(new TLBundleD(edge.bundle)).flip
     val mem_finish = Decoupled(new TLBundleE(edge.bundle))
 
-    val refill = new L1RefillReq().asOutput
+    val refill = Decoupled(new SecureL1RefillReq().asOutput)
     val meta_read = Decoupled(new L1MetaReadReq)
     val meta_write = Decoupled(new L1MetaWriteReq)
     val replay = Decoupled(new Replay)
@@ -315,7 +332,7 @@ class SecureMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends L1HellaCac
   val tag_match = Mux1H(idxMatch, tagList) === io.req.bits.addr >> untagBits
 
   val wbTagList = Wire(Vec(cfg.nMSHRs, Bits()))
-  val refillMux = Wire(Vec(cfg.nMSHRs, new L1RefillReq))
+  val refillMux = Wire(Vec(cfg.nMSHRs, new SecureL1RefillReq))
   val meta_read_arb = Module(new Arbiter(new L1MetaReadReq, cfg.nMSHRs))
   val meta_write_arb = Module(new Arbiter(new L1MetaWriteReq, cfg.nMSHRs))
   val wb_req_arb = Module(new Arbiter(new WritebackReq(edge.bundle), cfg.nMSHRs))
@@ -328,6 +345,8 @@ class SecureMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends L1HellaCac
 
   io.fence_rdy := true
   io.probe_rdy := true
+
+  val mshr_refill_sel = Wire(Vec(cfg.nMSHRs, Bool()))
 
   val mshrs = (0 until cfg.nMSHRs) map { i =>
     val mshr = Module(new SecureMSHR(i))
@@ -350,7 +369,8 @@ class SecureMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends L1HellaCac
 
     mshr.io.mem_grant.valid := io.mem_grant.valid && io.mem_grant.bits.source === UInt(i)
     mshr.io.mem_grant.bits := io.mem_grant.bits
-    refillMux(i) := mshr.io.refill
+    refillMux(i) := mshr.io.refill.bits
+    mshr_refill_sel(i) := mshr.io.refill.valid
 
     pri_rdy = pri_rdy || mshr.io.req_pri_rdy
     sec_rdy = sec_rdy || mshr.io.req_sec_rdy
@@ -406,7 +426,9 @@ class SecureMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends L1HellaCac
                     mmio_rdy,
                     sdq_rdy && Mux(idx_match, tag_match && sec_rdy, pri_rdy))
   io.secondary_miss := idx_match
-  io.refill := refillMux(io.mem_grant.bits.source)
+  //io.refill.bits := refillMux(io.mem_grant.bits.source)
+  io.refill.valid := mshr_refill_sel.reduce(_||_)
+  io.refill.bits := Mux1H(mshr_refill_sel, refillMux)
 
   val free_sdq = io.replay.fire() && isWrite(io.replay.bits.cmd)
   io.replay.bits.data := sdq(RegEnable(replay_arb.io.out.bits.sdq_id, free_sdq))
@@ -695,12 +717,14 @@ class BoomSecureDCacheModule(outer: BoomSecureDCache) extends SecureHellaCacheMo
   /* The last clause here is necessary in order to prevent the responses for
    * the IOMSHRs from being written into the data array. It works because the
    * IOMSHR ids start right the ones for the regular MSHRs. */
-  writeArb.io.in(1).valid := tl_out.d.valid && grant_has_data &&
-                               tl_out.d.bits.source < UInt(cfg.nMSHRs)
-  writeArb.io.in(1).bits.addr := mshrs.io.refill.addr
-  writeArb.io.in(1).bits.way_en := mshrs.io.refill.way_en
+  // writeArb.io.in(1).valid := tl_out.d.valid && grant_has_data &&
+  //                              tl_out.d.bits.source < UInt(cfg.nMSHRs)
+  writeArb.io.in(1).valid := mshrs.io.refill.valid
+  writeArb.io.in(1).bits.addr := mshrs.io.refill.bits.addr
+  writeArb.io.in(1).bits.way_en := mshrs.io.refill.bits.way_en
   writeArb.io.in(1).bits.wmask := ~UInt(0, rowWords)
-  writeArb.io.in(1).bits.data := tl_out.d.bits.data(encRowBits-1,0)
+  //writeArb.io.in(1).bits.data := tl_out.d.bits.data(encRowBits-1,0)
+  writeArb.io.in(1).bits.data := mshrs.io.refill.bits.data
   data.io.read <> readArb.io.out
   readArb.io.out.ready := !tl_out.d.valid || tl_out.d.ready // insert bubble if refill gets blocked
   tl_out.e <> mshrs.io.mem_finish
