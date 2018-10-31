@@ -28,7 +28,7 @@ trait HasBoomHellaCache { this: BaseTile =>
   val dcache: HellaCache = LazyModule(
     if(tileParams.dcache.get.nMSHRs == 0) {
       new DCache(hartId, findScratchpadFromICache _, p(RocketCrossingKey).head.knownRatio)
-    } else { new NonBlockingDCache(hartId) })
+    } else { new BoomNonBlockingDCache(hartId) })
 
   //tlMasterXbar.node := dcache.node
   val dCacheTap = TLIdentityNode()
