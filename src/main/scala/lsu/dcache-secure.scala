@@ -13,6 +13,12 @@ import freechips.rocketchip.tilelink._
 import freechips.rocketchip.util._
 import freechips.rocketchip.rocket._
 import boom.common._
+import boom.util._
+import boom.exu.BrResolutionInfo
+
+object CONSTS {
+  val ROB_ADDR_SZ: Int = 16
+}
 
 class SecureHellaCacheArbiter(n: Int)(implicit p: Parameters) extends Module
 {
@@ -84,20 +90,25 @@ class SecureHellaCacheArbiter(n: Int)(implicit p: Parameters) extends Module
 
 
 class SecureHellaCacheReq(implicit p: Parameters) extends HellaCacheReq()(p) {
-  val uop = new MicroOp
+  val uop = new MicroOp()
 }
 
 class SecureHellaCacheIO(implicit p: Parameters) extends HellaCacheIO()(p) {
   override val req = Decoupled(new SecureHellaCacheReq)
+  val brinfo = new BrResolutionInfo().asInput
+  val kill = Bool(INPUT)
+  val rob_pnr_head = UInt(INPUT, CONSTS.ROB_ADDR_SZ)
 }
 
 class SecureMSHRReq(implicit p: Parameters) extends MSHRReq()(p) {
-   val uop = new MicroOp()
+  val uop = new MicroOp()
+  val killed = Bool()
 }
 
 
 class SecureMSHRReqInternal(implicit p: Parameters) extends MSHRReqInternal()(p) {
-   val uop = new MicroOp()
+  val uop = new MicroOp()
+  val killed = Bool()
 }
 
 class SecureL1RefillReq(implicit p: Parameters) extends L1RefillReq()(p) {
@@ -127,12 +138,19 @@ class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1Hel
     val probe_rdy = Bool(OUTPUT)
 
     val debug_req = new SecureMSHRReqInternal().asOutput
+
+    val brinfo = new BrResolutionInfo().asInput
+    val kill = Bool(INPUT)
+    val rob_pnr_head = UInt(INPUT, CONSTS.ROB_ADDR_SZ)
   }
 
-  val s_invalid :: s_wb_req :: s_wb_resp :: s_meta_clear :: s_refill_req :: s_refill_resp :: s_meta_write_req :: s_meta_write_resp :: s_drain_rpq :: s_commit_resp :: Nil = Enum(UInt(), 10)
+  val s_invalid :: s_wb_req :: s_wb_resp :: s_meta_clear :: s_refill_req :: s_refill_resp :: s_meta_write_req :: s_meta_write_resp :: s_drain_rpq :: s_spec_wait :: s_commit_resp :: Nil = Enum(UInt(), 11)
   val state = Reg(init=s_invalid)
+  val next_state = Reg(init=s_invalid)
+  val nonspeculative = Reg(Bool())  // Is the refill still speculative?
+  val killed = Reg(Bool())          // Has the refill been killed by misspeculation since it's initiation?
 
-  val req = Reg(new SecureMSHRReqInternal)
+  val req = Reg(new SecureMSHRReqInternal())
   io.debug_req := req
   dontTouch(io.debug_req)
   val req_idx = req.addr(untagBits-1,blockOffBits)
@@ -181,8 +199,16 @@ class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1Hel
   when (state === s_refill_resp && refill_done) {
     new_coh := coh_on_grant
     //state := s_meta_write_req
-    state := s_commit_resp
+    state := s_spec_wait
+    next_state := s_commit_resp
     commit_counter := UInt(0)
+  }
+  when (state === s_spec_wait) {
+    when (killed) {               // Wait until this point to kill refill, ensuring it has been read off TL.
+      state := s_invalid
+    }.elsewhen(nonspeculative) {  // Don't commit refill until marked as nonspeculative. A refill may be marked as nonspecuative after it has been killed, which is why the killed transition has priority.
+      state := next_state
+    }
   }
   when (state === s_commit_resp) {
     commit_counter := commit_counter + UInt(1)
@@ -197,7 +223,8 @@ class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1Hel
     state := s_refill_req
   }
   when (state === s_wb_resp && io.mem_grant.valid) {
-    state := s_meta_clear
+    state := s_spec_wait
+    next_state := s_meta_clear
   }
   when (io.wb_req.fire()) { // s_wb_req
     state := s_wb_resp
@@ -213,23 +240,35 @@ class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1Hel
   }
   when (io.req_pri_val && io.req_pri_rdy) {
     req := io.req_bits
+    nonspeculative := false.B
+    killed := io.req_bits.killed
+
     val old_coh = io.req_bits.old_meta.coh
     val needs_wb = old_coh.onCacheControl(M_FLUSH)._1
     val (is_hit, _, coh_on_hit) = old_coh.onAccess(io.req_bits.cmd)
     when (io.req_bits.tag_match) {
       when (is_hit) { // set dirty bit
         new_coh := coh_on_hit
-        state := s_meta_write_req
+        state := s_spec_wait
+        next_state := s_meta_write_req
       }.otherwise { // upgrade permissions
         new_coh := old_coh
         state := s_refill_req
       }
     }.otherwise { // writback if necessary and refill
       new_coh := ClientMetadata.onReset
-      state := Mux(needs_wb, s_wb_req, s_meta_clear)
+      when (needs_wb) {
+        state := s_wb_req
+      }.otherwise {
+        state := s_spec_wait
+        next_state := s_meta_clear
+      }
     }
+  }.otherwise {
+    req.uop.br_mask := GetNewBrMask(io.brinfo, req.uop) // Deassert branch mask bits as branches are resolved.
+    nonspeculative := Mux(state === s_invalid, false.B, nonspeculative || IsOlder(req.uop.rob_idx, io.rob_pnr_head, CONSTS.ROB_ADDR_SZ))  // Check whether refill is still speculative.
+    killed := killed || IsKilledByBranch(io.brinfo, req.uop) || io.kill // Check whether refill has been killed by misspeculation.
   }
-
   when (io.mem_grant.valid) {
      data(refill_address_inc >> 3) := io.mem_grant.bits.data
   }
@@ -315,6 +354,10 @@ class SecureMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends L1HellaCac
     val probe_rdy = Bool(OUTPUT)
     val fence_rdy = Bool(OUTPUT)
     val replay_next = Bool(OUTPUT)
+
+    val brinfo = new BrResolutionInfo().asInput
+    val kill = Bool(INPUT)
+    val rob_pnr_head = UInt(INPUT, CONSTS.ROB_ADDR_SZ)
   }
 
   // determine if the request is cacheable or not
@@ -360,6 +403,8 @@ class SecureMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends L1HellaCac
 
     mshr.io.req_sec_val := io.req.valid && sdq_rdy && tag_match
     mshr.io.req_bits := io.req.bits
+    mshr.io.req_bits.uop := io.req.bits.uop
+    mshr.io.req_bits.killed := io.req.bits.killed
     mshr.io.req_bits.sdq_id := sdq_alloc_id
 
     meta_read_arb.io.in(i) <> mshr.io.meta_read
@@ -378,6 +423,10 @@ class SecureMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends L1HellaCac
 
     when (!mshr.io.req_pri_rdy) { io.fence_rdy := false }
     when (!mshr.io.probe_rdy) { io.probe_rdy := false }
+
+    mshr.io.brinfo := io.brinfo
+    mshr.io.kill := io.kill
+    mshr.io.rob_pnr_head := io.rob_pnr_head
 
     mshr
   }
@@ -502,10 +551,15 @@ class BoomSecureDCacheModule(outer: BoomSecureDCache) extends SecureHellaCacheMo
   val wb = Module(new WritebackUnit)
   val prober = Module(new ProbeUnit)
   val mshrs = Module(new SecureMSHRFile)
+  mshrs.io.brinfo := io.cpu.brinfo
+  mshrs.io.kill := io.cpu.kill
+  mshrs.io.rob_pnr_head := io.cpu.rob_pnr_head
 
   io.cpu.req.ready := Bool(true)
   val s1_valid = Reg(next=io.cpu.req.fire(), init=Bool(false))
   val s1_req = Reg(io.cpu.req.bits)
+  s1_req.uop := GetNewUopAndBrMask(io.cpu.req.bits.uop, io.cpu.brinfo)
+
   val s1_valid_masked = s1_valid && !io.cpu.s1_kill
   val s1_replay = Reg(init=Bool(false))
   val s1_clk_en = Reg(Bool())
@@ -513,9 +567,14 @@ class BoomSecureDCacheModule(outer: BoomSecureDCache) extends SecureHellaCacheMo
 
   val s2_valid = Reg(next=s1_valid_masked && !s1_sfence, init=Bool(false)) && !io.cpu.s2_xcpt.asUInt.orR
   val s2_req = Reg(io.cpu.req.bits)
+  s2_req.uop := GetNewUopAndBrMask(io.cpu.req.bits.uop, io.cpu.brinfo)
   val s2_replay = Reg(next=s1_replay, init=Bool(false)) && s2_req.cmd =/= M_FLUSH_ALL
   val s2_recycle = Wire(Bool())
   val s2_valid_masked = Wire(Bool())
+
+  // Might we need to prevent a cachefill resulting from an operation in stage 1 or 2?
+  val s1_killed = IsKilledByBranch(io.cpu.brinfo, s1_req.uop) || io.cpu.kill
+  val s2_killed = IsKilledByBranch(io.cpu.brinfo, s2_req.uop) || io.cpu.kill || Reg(next=s1_killed)
 
   val s3_valid = Reg(init=Bool(false))
   val s3_req = Reg(io.cpu.req.bits)
@@ -543,9 +602,10 @@ class BoomSecureDCacheModule(outer: BoomSecureDCache) extends SecureHellaCacheMo
   dtlb.io.sfence.bits.rs2 := s1_req.typ(1)
   dtlb.io.sfence.bits.addr := s1_req.addr
   dtlb.io.sfence.bits.asid := io.cpu.s1_data.data
-  
+
   when (io.cpu.req.valid) {
     s1_req := io.cpu.req.bits
+    s1_req.uop := GetNewUopAndBrMask(io.cpu.req.bits.uop, io.cpu.brinfo)
   }
   when (wb.io.meta_read.valid) {
     s1_req.addr := Cat(wb.io.meta_read.bits.tag, wb.io.meta_read.bits.idx) << blockOffBits
@@ -555,11 +615,13 @@ class BoomSecureDCacheModule(outer: BoomSecureDCache) extends SecureHellaCacheMo
     s1_req.addr := Cat(prober.io.meta_read.bits.tag, prober.io.meta_read.bits.idx) << blockOffBits
     s1_req.phys := Bool(true)
   }
-  when (mshrs.io.replay.valid) {
+  /*when (mshrs.io.replay.valid) {    Don't want replays to go through the cache pipeline - get them directly out of the MSHR fill buffer!
     s1_req := mshrs.io.replay.bits
-  }
+    s1_req.uop := GetNewUopAndBrMask(mshrs.io.replay.bits.uop, io.cpu.brinfo)
+  }*/
   when (s2_recycle) {
     s1_req := s2_req
+    s1_req.uop := GetNewUopAndBrMask(s2_req.uop, io.cpu.brinfo)
   }
   val s1_addr = dtlb.io.resp.paddr
 
@@ -573,7 +635,7 @@ class BoomSecureDCacheModule(outer: BoomSecureDCache) extends SecureHellaCacheMo
     when (s1_recycled) { s2_req.data := s1_req.data }
     s2_req.tag := s1_req.tag
     s2_req.cmd := s1_req.cmd
-    s2_req.uop := s1_req.uop
+    s2_req.uop := GetNewUopAndBrMask(s1_req.uop, io.cpu.brinfo)
   }
 
   // tags
@@ -687,6 +749,7 @@ class BoomSecureDCacheModule(outer: BoomSecureDCache) extends SecureHellaCacheMo
   mshrs.io.req.bits.old_meta := Mux(s2_tag_match, L1Metadata(s2_repl_meta.tag, s2_hit_state), s2_repl_meta)
   mshrs.io.req.bits.way_en := Mux(s2_tag_match, s2_tag_match_way, s2_replaced_way_en)
   mshrs.io.req.bits.data := s2_req.data
+  mshrs.io.req.bits.killed := s2_killed
   when (mshrs.io.req.fire()) { replacer.miss }
   tl_out.a <> mshrs.io.mem_acquire
 
@@ -695,7 +758,7 @@ class BoomSecureDCacheModule(outer: BoomSecureDCache) extends SecureHellaCacheMo
   readArb.io.in(1).bits := mshrs.io.replay.bits
   readArb.io.in(1).bits.way_en := ~UInt(0, nWays)
   mshrs.io.replay.ready := readArb.io.in(1).ready
-  s1_replay := mshrs.io.replay.valid && readArb.io.in(1).ready
+  s1_replay := false.B //mshrs.io.replay.valid && readArb.io.in(1).ready
   metaReadArb.io.in(1) <> mshrs.io.meta_read
   metaWriteArb.io.in(0) <> mshrs.io.meta_write
 

@@ -13,8 +13,8 @@ import Chisel._
 
 import freechips.rocketchip.rocket.Instructions._
 import freechips.rocketchip.rocket._
-import boom.common.MicroOp
 import boom.exu.{BrResolutionInfo, ExeUnitResp}
+import boom.common._
 
 
 // XOR fold an input that is full_length sized down to a compressed_length.
@@ -199,6 +199,49 @@ object WrapDec
          Mux(wrap, UInt(n-1), value - UInt(1))
       }
    }
+}
+
+// Increment the input "value", wrapping it if necessary (and flipping parity bit).
+object WrapIncPar
+{
+   // "n" is the number of increments, so we wrap at n-1.
+   def apply(value: UInt, n: Int): UInt =
+   {
+      val width = log2Up(n)
+      if (isPow2(n))
+      {
+         (value + UInt(1))(width,0)
+      }
+      else
+      {
+         val wrap = (value(width-1,0) === UInt(n-1))
+         Mux(wrap, Cat(~value(width), UInt(0, width)), value + UInt(1))
+      }
+   }
+}
+// Decrement the input "value", wrapping it if necessary (and flipping parity bit).
+object WrapDecPar
+{
+   // "n" is the number of increments, so we wrap at n-1.
+   def apply(value: UInt, n: Int): UInt =
+   {
+      val width = log2Up(n)
+      if (isPow2(n))
+      {
+         (value - UInt(1))(width,0)
+      }
+      else
+      {
+         val wrap = (value(width-1,0) === UInt(0))
+         Mux(wrap, Cat(~value(width), UInt(n-1, width)), value - UInt(1))
+      }
+   }
+}
+
+// Is instruction i0 older than i1?
+object IsOlder
+{
+   def apply(i0: UInt, i1: UInt, n: Int) = (i0 - i1)(n-1).toBool()
 }
 
 // Mask off lower bits of a PC to align to a "b" Byte boundary.
