@@ -29,11 +29,11 @@ package boom.exu
 
 import Chisel._
 import chisel3.experimental.chiselName
-import scala.math.ceil
 import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.util.Str
 import boom.common._
 import boom.util._
+import chisel3.experimental.dontTouch
 
 class RobIo(
    val machine_width: Int,
@@ -76,6 +76,9 @@ class RobIo(
    // tell the LSU that the head of the ROB is a load
    // (some loads can only execute once they are at the head of the ROB).
    val com_load_is_at_rob_head = Bool(OUTPUT)
+
+   // The LSU needs the PNR head to wake up spec buffer entries.
+   val rob_pnr_head = UInt(OUTPUT, ROB_ADDR_SZ)
 
    // Communicate exceptions to the CSRFile
    val com_xcpt = Valid(new CommitExceptionSignals())
@@ -193,9 +196,10 @@ class Rob(
    val io = IO(new RobIo(width, num_wakeup_ports, num_fpu_ports))
 
    val num_rob_rows = num_rob_entries / width
+   val rob_row_addr_sz = log2Up(num_rob_rows) + 1
+   val rob_addr_sz = log2Up(num_rob_entries) + 1
 
    require (num_rob_entries % width == 0)
-
    require (isPow2(width))
 
    // ROB Finite State Machine
@@ -204,8 +208,10 @@ class Rob(
 
 
    //commit entries at the head, and unwind exceptions from the tail
-   val rob_head = Reg(init = UInt(0, log2Up(num_rob_rows)))
-   val rob_tail = Reg(init = UInt(0, log2Up(num_rob_rows)))
+   val rob_head = Reg(init = UInt(0, rob_row_addr_sz))
+   val rob_tail = Reg(init = UInt(0, rob_row_addr_sz))
+   val rob_pnr_head = Reg(init = UInt(0, rob_addr_sz))
+   dontTouch(rob_pnr_head)
    val rob_tail_idx = rob_tail << UInt(log2Ceil(width))
 
    val will_commit         = Wire(Vec(width, Bool()))
@@ -231,7 +237,7 @@ class Rob(
    def GetRowIdx(rob_idx: UInt): UInt =
    {
       if (width == 1) return rob_idx
-      else return rob_idx >> UInt(log2Ceil(width))
+      else return (rob_idx >> UInt(log2Ceil(width)))(rob_row_addr_sz-1,0)
    }
    def GetBankIdx(rob_idx: UInt): UInt =
    {
@@ -256,6 +262,10 @@ class Rob(
    // --------------------------------------------------------------------------
    // **************************************************************************
 
+   // ROB entries corresponding to potential sources of mis-speculation.
+   // Branches (mispredicted or misaligned fetch) or L/S instructions (page faults).
+   // It is not safe to move the PNR head past these instructions until they have been unbusied.
+   val rob_unsafe = Wire(Vec(num_rob_entries, Bool()))
 
    for (w <- 0 until width)
    {
@@ -441,6 +451,12 @@ class Rob(
       }
 
       // -----------------------------------------------
+      // Is it safe to move the PNR head past this ROB entry?
+      for (i <- 0 until num_rob_rows) {
+         rob_unsafe(i*width + w) := rob_val(i) && rob_bsy(i) && (rob_uop(i).is_br_or_jmp || rob_uop(i).is_load || rob_uop(i).is_store) || rob_exception(i)
+      }
+
+      // -----------------------------------------------
       // Outputs
       rob_head_vals(w)     := rob_val(rob_head)
       rob_head_fflags(w)   := rob_fflags(rob_head)
@@ -464,7 +480,7 @@ class Rob(
 
       for (i <- 0 until num_wakeup_ports)
       {
-         val rob_idx = io.wb_resps(i).bits.uop.rob_idx
+         val rob_idx = io.wb_resps(i).bits.uop.rob_idx(rob_addr_sz-2,0)
          when (io.debug_wb_valids(i) && MatchBank(GetBankIdx(rob_idx)))
          {
             rob_uop(GetRowIdx(rob_idx)).debug_wdata := io.debug_wb_wdata(i)
@@ -591,10 +607,6 @@ class Rob(
    // Exception Tracking Logic
    // only store the oldest exception, since only one can happen!
 
-   // is i0 older than i1? (closest to zero). Provide the tail_ptr to the
-   // queue. This is Cat(i1 <= tail, i1) because the rob_tail can point to a
-   // valid (partially dispatched) row.
-   def IsOlder(i0: UInt, i1: UInt, tail: UInt) = (Cat(i0 <= tail, i0) < Cat(i1 <= tail, i1))
    val next_xcpt_uop = Wire(new MicroOp())
    next_xcpt_uop := r_xcpt_uop
    val enq_xcpts = Wire(Vec(width, Bool()))
@@ -610,10 +622,10 @@ class Rob(
          val load_is_older =
             (io.lxcpt.valid && !io.bxcpt.valid) ||
             (io.lxcpt.valid && io.bxcpt.valid &&
-            IsOlder(io.lxcpt.bits.uop.rob_idx, io.bxcpt.bits.uop.rob_idx, rob_tail_idx))
+            IsOlder(io.lxcpt.bits.uop.rob_idx, io.bxcpt.bits.uop.rob_idx, rob_addr_sz))
          val new_xcpt_uop = Mux(load_is_older, io.lxcpt.bits.uop, io.bxcpt.bits.uop)
 
-         when (!r_xcpt_val || IsOlder(new_xcpt_uop.rob_idx, r_xcpt_uop.rob_idx, rob_tail_idx))
+         when (!r_xcpt_val || IsOlder(new_xcpt_uop.rob_idx, r_xcpt_uop.rob_idx, rob_addr_sz))
          {
             r_xcpt_val              := true.B
             next_xcpt_uop           := new_xcpt_uop
@@ -677,23 +689,36 @@ class Rob(
 
    when (finished_committing_row)
    {
-      rob_head := WrapInc(rob_head, num_rob_rows)
+      rob_head := WrapIncPar(rob_head, num_rob_rows)
    }
+
+   // -----------------------------------------------
+   // ROB Point-of-No-Return (PNR) Head Logic
+
+   // The PNR head operates on the granularity of individual ROB entries, rather than ROB rows.
+   // Additionally, it is able to jump ahead by an arbitrary number of entries each cycle.
+   // This allows waiting speculative stores in the SAQ or speculative caches fills in the MSHR to commit more quickly.
+   // It points to the oldest "unsafe" instruction - if no instructions are unsafe, it is set to the tail.
+
+   rob_pnr_head := Mux(rob_unsafe.asUInt.orR,
+                       PriorityEncoder((rob_unsafe.asUInt << (UInt(num_rob_entries) - rob_head(rob_row_addr_sz-2,0) * UInt(width)) | rob_unsafe.asUInt >> (rob_head(rob_row_addr_sz-2,0) * UInt(width)))(num_rob_entries-1,0)) + rob_head * UInt(width),
+                       rob_tail * UInt(width))
+   io.rob_pnr_head := rob_pnr_head
 
    // -----------------------------------------------
    // ROB Tail Logic
 
    when (rob_state === s_rollback && rob_tail =/= rob_head)
    {
-      rob_tail := WrapDec(rob_tail, num_rob_rows)
+      rob_tail := WrapDecPar(rob_tail, num_rob_rows)
    }
    .elsewhen (io.brinfo.valid && io.brinfo.mispredict)
    {
-      rob_tail := WrapInc(GetRowIdx(io.brinfo.rob_idx), num_rob_rows)
+      rob_tail := WrapIncPar(GetRowIdx(io.brinfo.rob_idx), num_rob_rows)
    }
    .elsewhen (io.enq_valids.asUInt =/= 0.U && !io.enq_partial_stall)
    {
-      rob_tail := WrapInc(rob_tail, num_rob_rows)
+      rob_tail := WrapIncPar(rob_tail, num_rob_rows)
    }
 
    if (ENABLE_COMMIT_MAP_TABLE)
@@ -713,9 +738,11 @@ class Rob(
    // maybe full is reset on branch mispredict
    // ALSO must handle xcpt tail/age logic if we do this!
    // also must handle rob_pc valid logic.
-   val full = WrapInc(rob_tail, num_rob_rows) === rob_head
-
-   io.empty := (rob_head === rob_tail) && (rob_head_vals.asUInt === 0.U)
+   val addr_match = rob_head(rob_row_addr_sz-2,0) === rob_tail(rob_row_addr_sz-2,0)
+   val full  = (rob_head(rob_row_addr_sz-1) =/= rob_tail(rob_row_addr_sz-1)) && addr_match
+   val empty = (rob_head(rob_row_addr_sz-1) === rob_tail(rob_row_addr_sz-1)) && addr_match && (rob_head_vals.asUInt === 0.U)
+   
+   io.empty := empty
 
    io.curr_rob_tail := rob_tail
 
