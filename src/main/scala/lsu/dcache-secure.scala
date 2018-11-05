@@ -297,12 +297,13 @@ class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1Hel
                                 lgSize = lgCacheBlockBytes,
                                 growPermissions = grow_param)._2
 
-  io.meta_read.valid := state === s_drain_rpq
+  io.meta_read.valid := (state === s_drain_rpq ||
+                         state === s_drain_rpq_ld)
   io.meta_read.bits.idx := req_idx
   io.meta_read.bits.tag := io.tag
 
   io.replay.valid := (state === s_drain_rpq && rpq.io.deq.valid) ||
-                     (state === s_drain_rpq_ld && rpq.io.deq.bits.cmd === M_XRD)
+                     (state === s_drain_rpq_ld && rpq.io.deq.valid && rpq.io.deq.bits.cmd === M_XRD)
   io.replay.bits := rpq.io.deq.bits
   io.replay.bits.phys := Bool(true)
   io.replay.bits.addr := Cat(io.tag, req_idx, rpq.io.deq.bits.addr(blockOffBits-1,0))
@@ -610,6 +611,10 @@ class BoomSecureDCacheModule(outer: BoomSecureDCache) extends SecureHellaCacheMo
   meta.io.read <> metaReadArb.io.out
   meta.io.write <> metaWriteArb.io.out
 
+  when (meta.io.write.valid) {
+    printf("meta %x %x %x %x %x\n", meta.io.write.bits.idx, meta.io.write.bits.way_en, meta.io.write.bits.tag, meta.io.write.bits.data.coh.state, meta.io.write.bits.data.tag)
+  }
+
   // data
   val data = Module(new DataArray)
   val readArb = Module(new Arbiter(new L1DataReadReq, 4))
@@ -619,6 +624,10 @@ class BoomSecureDCacheModule(outer: BoomSecureDCache) extends SecureHellaCacheMo
   data.io.write.bits := writeArb.io.out.bits
   val wdata_encoded = (0 until rowWords).map(i => dECC.encode(writeArb.io.out.bits.data(coreDataBits*(i+1)-1,coreDataBits*i)))
   data.io.write.bits.data := wdata_encoded.asUInt
+
+  when (data.io.write.valid) {
+    printf("data %x %x %x\n", data.io.write.bits.way_en, data.io.write.bits.addr, data.io.write.bits.data)
+  }
 
   // tag read for new requests
   metaReadArb.io.in(4).valid := io.cpu.req.valid
