@@ -105,9 +105,9 @@ class SecureHellaCacheReq(implicit p: Parameters) extends HellaCacheReq()(p) {
 
 class SecureHellaCacheIO(implicit p: Parameters) extends HellaCacheIO()(p) {
   override val req = Decoupled(new SecureHellaCacheReq)
-  val brinfo = new BrResolutionInfo().asInput
-  val kill = Bool(INPUT)
-  val rob_pnr_head = UInt(INPUT, CONSTS.ROB_ADDR_SZ)
+  val brinfo = new BrResolutionInfo()
+  val kill = Bool()
+  val rob_pnr_head = UInt(width=CONSTS.ROB_ADDR_SZ)
 }
 
 class SecureMSHRReq(implicit p: Parameters) extends MSHRReq()(p) {
