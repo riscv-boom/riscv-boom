@@ -188,7 +188,7 @@ class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer)
 
   val (tl_out, _) = outer.dCacheTap.out(0)
 
-  when (tl_out.a.valid) {
+  when (tl_out.a.valid && tl_out.a.ready) {
     printf("a %x %x %x %x %x %x %x\n",
       tl_out.a.bits.opcode,
       tl_out.a.bits.param,
@@ -198,7 +198,7 @@ class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer)
       tl_out.a.bits.mask,
       tl_out.a.bits.data)
   }
-  when (tl_out.b.valid) {
+  when (tl_out.b.valid && tl_out.b.ready) {
     printf("b %x %x %x %x\n",
       tl_out.b.bits.param,
       tl_out.b.bits.size,
@@ -206,7 +206,7 @@ class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer)
       tl_out.b.bits.address,
     )
   }
-  when (tl_out.c.valid) {
+  when (tl_out.c.valid && tl_out.c.ready) {
     printf("c %x %x %x %x %x\n",
       tl_out.c.bits.opcode,
       tl_out.c.bits.size,
@@ -214,7 +214,7 @@ class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer)
       tl_out.c.bits.address,
       tl_out.c.bits.data)
   }
-  when (tl_out.d.valid) {
+  when (tl_out.d.valid && tl_out.d.ready) {
     printf("d %x %x %x %x %x %x\n",
       tl_out.d.bits.opcode,
       tl_out.d.bits.param,

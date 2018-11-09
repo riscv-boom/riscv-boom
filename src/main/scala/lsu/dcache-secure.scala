@@ -87,6 +87,16 @@ class SecureHellaCacheArbiter(n: Int)(implicit p: Parameters) extends Module
   }
 }
 
+trait HasSpecData {
+  val spec_data = UInt(width=64)
+  val use_spec_data = Bool()
+}
+
+class SecureReplayInternal(implicit p: Parameters) extends ReplayInternal()(p)
+    with HasSpecData
+
+class SecureReplay(implicit p: Parameters) extends Replay()(p)
+    with HasSpecData
 
 
 class SecureHellaCacheReq(implicit p: Parameters) extends HellaCacheReq()(p) {
@@ -115,6 +125,7 @@ class SecureL1RefillReq(implicit p: Parameters) extends L1RefillReq()(p) {
   val data = UInt(OUTPUT, width=64)
 }
 
+
 class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1HellaCacheModule()(p) {
   val io = new Bundle {
     val req_pri_val    = Bool(INPUT)
@@ -133,7 +144,7 @@ class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1Hel
     val refill = Decoupled(new SecureL1RefillReq().asOutput) // Data is bypassed
     val meta_read = Decoupled(new L1MetaReadReq)
     val meta_write = Decoupled(new L1MetaWriteReq)
-    val replay = Decoupled(new ReplayInternal)
+    val replay = Decoupled(new SecureReplayInternal)
     val wb_req = Decoupled(new WritebackReq(edge.bundle))
     val probe_rdy = Bool(OUTPUT)
 
@@ -144,11 +155,11 @@ class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1Hel
     val rob_pnr_head = UInt(INPUT, CONSTS.ROB_ADDR_SZ)
   }
 
-  val s_invalid :: s_wb_req :: s_wb_resp :: s_meta_clear :: s_refill_req :: s_refill_resp :: s_meta_write_req :: s_meta_write_resp :: s_drain_rpq :: s_spec_wait :: s_commit_resp :: Nil = Enum(UInt(), 11)
+  val s_invalid :: s_wb_req :: s_wb_resp :: s_meta_clear :: s_refill_req :: s_refill_resp :: s_meta_write_req :: s_meta_write_resp :: s_drain_rpd_ld :: s_drain_rpq :: s_spec_wait :: s_commit_resp :: Nil = Enum(UInt(), 11)
   val state = Reg(init=s_invalid)
   val next_state = Reg(init=s_invalid)
   val nonspeculative = Reg(Bool())  // Is the refill still speculative?
-  val killed = Reg(Bool())          // Has the refill been killed by misspeculation since it's initiation?
+  val killed = Reg(Bool())          // Has the refill been killed by misspeculation since its initiation?
 
   val req = Reg(new SecureMSHRReqInternal())
   io.debug_req := req
@@ -180,14 +191,21 @@ class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1Hel
                   (state.isOneOf(states_before_refill) ||
                     (state.isOneOf(s_refill_req, s_refill_resp) &&
                       !cmd_requires_second_acquire && !refill_done))
-
-  val rpq = Module(new Queue(new ReplayInternal, cfg.nRPQ))
+  assert(!(io.mem_grant.valid && !(state === s_refill_resp || state === s_wb_resp)))
+  val rpq = Module(new Queue(new SecureReplayInternal, cfg.nRPQ))
   rpq.io.enq.valid := (io.req_pri_val && io.req_pri_rdy || io.req_sec_val && sec_rdy) && !isPrefetch(io.req_bits.cmd)
   rpq.io.enq.bits := io.req_bits
-  rpq.io.deq.ready := (io.replay.ready && state === s_drain_rpq) || state === s_invalid
+  rpq.io.deq.ready := (io.replay.ready && state === s_drain_rpq) ||
+                       state === s_invalid ||
+                      (io.replay.ready && state === s_drain_rpq_ld && rpq.io.deq.bits.cmd === M_XRD)
 
+  when (state === s_drain_rpq_ld && !(rpq.io.deq.valid && rpq.io.deq.bits.cmd === M_XRD)) {
+    state := s_spec_wait
+    next_state := s_commit_resp
+  }
   when (state === s_drain_rpq && !rpq.io.deq.valid) {
     state := s_invalid
+    //state := s_commit_resp
   }
   when (state === s_meta_write_resp) {
     // this wait state allows us to catch RAW hazards on the tags via nack_victim
@@ -198,9 +216,7 @@ class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1Hel
   }
   when (state === s_refill_resp && refill_done) {
     new_coh := coh_on_grant
-    //state := s_meta_write_req
-    state := s_spec_wait
-    next_state := s_commit_resp
+    state := s_drain_rpq_ld
     commit_counter := UInt(0)
   }
   when (state === s_spec_wait) {
@@ -269,7 +285,7 @@ class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1Hel
     nonspeculative := Mux(state === s_invalid, false.B, nonspeculative || IsOlder(req.uop.rob_idx, io.rob_pnr_head, CONSTS.ROB_ADDR_SZ))  // Check whether refill is still speculative.
     killed := killed || IsKilledByBranch(io.brinfo, req.uop) || io.kill // Check whether refill has been killed by misspeculation.
   }
-  when (io.mem_grant.valid) {
+  when (io.mem_grant.valid && state === s_refill_resp) {
      data(refill_address_inc >> 3) := io.mem_grant.bits.data
   }
   dontTouch(data)
@@ -282,7 +298,7 @@ class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1Hel
   io.mem_finish.bits := grantackq.io.deq.bits
   grantackq.io.deq.ready := io.mem_finish.ready && can_finish
 
-  io.idx_match := (state =/= s_invalid) && idx_match
+  io.idx_match := (state =/= s_invalid) && idx_match 
   io.refill.valid := state === s_commit_resp
   io.refill.bits.way_en := req.way_en
   //io.refill.bits.addr := req_block_addr | refill_address_inc
@@ -318,15 +334,18 @@ class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1Hel
                                 lgSize = lgCacheBlockBytes,
                                 growPermissions = grow_param)._2
 
-  io.meta_read.valid := state === s_drain_rpq
+  io.meta_read.valid := (state === s_drain_rpq ||
+                         state === s_drain_rpq_ld)
   io.meta_read.bits.idx := req_idx
   io.meta_read.bits.tag := io.tag
 
-  io.replay.valid := state === s_drain_rpq && rpq.io.deq.valid
+  io.replay.valid := (state === s_drain_rpq && rpq.io.deq.valid) ||
+                     (state === s_drain_rpq_ld && rpq.io.deq.valid && rpq.io.deq.bits.cmd === M_XRD)
   io.replay.bits := rpq.io.deq.bits
   io.replay.bits.phys := Bool(true)
   io.replay.bits.addr := Cat(io.tag, req_idx, rpq.io.deq.bits.addr(blockOffBits-1,0))
-
+  io.replay.bits.spec_data := data(rpq.io.deq.bits.addr(blockOffBits-1,blockOffBits-3))
+  io.replay.bits.use_spec_data := state === s_drain_rpq_ld
   when (!io.meta_read.ready) {
     rpq.io.deq.ready := Bool(false)
     io.replay.bits.cmd := M_FLUSH_ALL /* nop */
@@ -348,7 +367,7 @@ class SecureMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends L1HellaCac
     val refill = Decoupled(new SecureL1RefillReq().asOutput)
     val meta_read = Decoupled(new L1MetaReadReq)
     val meta_write = Decoupled(new L1MetaWriteReq)
-    val replay = Decoupled(new Replay)
+    val replay = Decoupled(new SecureReplay)
     val wb_req = Decoupled(new WritebackReq(edge.bundle))
 
     val probe_rdy = Bool(OUTPUT)
@@ -379,7 +398,7 @@ class SecureMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends L1HellaCac
   val meta_read_arb = Module(new Arbiter(new L1MetaReadReq, cfg.nMSHRs))
   val meta_write_arb = Module(new Arbiter(new L1MetaWriteReq, cfg.nMSHRs))
   val wb_req_arb = Module(new Arbiter(new WritebackReq(edge.bundle), cfg.nMSHRs))
-  val replay_arb = Module(new Arbiter(new ReplayInternal, cfg.nMSHRs))
+  val replay_arb = Module(new Arbiter(new SecureReplayInternal, cfg.nMSHRs))
   val alloc_arb = Module(new Arbiter(Bool(), cfg.nMSHRs))
 
   var idx_match = Bool(false)
@@ -562,6 +581,8 @@ class BoomSecureDCacheModule(outer: BoomSecureDCache) extends SecureHellaCacheMo
 
   val s1_valid_masked = s1_valid && !io.cpu.s1_kill
   val s1_replay = Reg(init=Bool(false))
+  val s1_replay_data = Reg(UInt(width=64))
+  val s1_use_replay_data = Reg(init=Bool(false))
   val s1_clk_en = Reg(Bool())
   val s1_sfence = s1_req.cmd === M_SFENCE
 
@@ -569,6 +590,8 @@ class BoomSecureDCacheModule(outer: BoomSecureDCache) extends SecureHellaCacheMo
   val s2_req = Reg(io.cpu.req.bits)
   s2_req.uop := GetNewUopAndBrMask(io.cpu.req.bits.uop, io.cpu.brinfo)
   val s2_replay = Reg(next=s1_replay, init=Bool(false)) && s2_req.cmd =/= M_FLUSH_ALL
+  val s2_replay_data = Reg(next=s1_replay_data)
+  val s2_use_replay_data = Reg(next=s1_use_replay_data)
   val s2_recycle = Wire(Bool())
   val s2_valid_masked = Wire(Bool())
 
@@ -615,10 +638,11 @@ class BoomSecureDCacheModule(outer: BoomSecureDCache) extends SecureHellaCacheMo
     s1_req.addr := Cat(prober.io.meta_read.bits.tag, prober.io.meta_read.bits.idx) << blockOffBits
     s1_req.phys := Bool(true)
   }
-  /*when (mshrs.io.replay.valid) {    Don't want replays to go through the cache pipeline - get them directly out of the MSHR fill buffer!
+  when (mshrs.io.replay.valid) {    // Don't want replays to go through the cache pipeline - get them directly out of the MSHR fill buffer!
     s1_req := mshrs.io.replay.bits
-    s1_req.uop := GetNewUopAndBrMask(mshrs.io.replay.bits.uop, io.cpu.brinfo)
-  }*/
+    s1_replay_data := mshrs.io.replay.bits.spec_data
+    s1_use_replay_data := mshrs.io.replay.bits.use_spec_data
+  }
   when (s2_recycle) {
     s1_req := s2_req
     s1_req.uop := GetNewUopAndBrMask(s2_req.uop, io.cpu.brinfo)
@@ -646,6 +670,10 @@ class BoomSecureDCacheModule(outer: BoomSecureDCache) extends SecureHellaCacheMo
   meta.io.read <> metaReadArb.io.out
   meta.io.write <> metaWriteArb.io.out
 
+  when (meta.io.write.valid) {
+    printf("meta %x %x %x %x %x\n", meta.io.write.bits.idx, meta.io.write.bits.way_en, meta.io.write.bits.tag, meta.io.write.bits.data.coh.state, meta.io.write.bits.data.tag)
+  }
+
   // data
   val data = Module(new DataArray)
   val readArb = Module(new Arbiter(new L1DataReadReq, 4))
@@ -655,6 +683,10 @@ class BoomSecureDCacheModule(outer: BoomSecureDCache) extends SecureHellaCacheMo
   data.io.write.bits := writeArb.io.out.bits
   val wdata_encoded = (0 until rowWords).map(i => dECC.encode(writeArb.io.out.bits.data(coreDataBits*(i+1)-1,coreDataBits*i)))
   data.io.write.bits.data := wdata_encoded.asUInt
+
+  when (data.io.write.valid) {
+    printf("data %x %x %x\n", data.io.write.bits.way_en, data.io.write.bits.addr, data.io.write.bits.data)
+  }
 
   // tag read for new requests
   metaReadArb.io.in(4).valid := io.cpu.req.valid
@@ -678,7 +710,7 @@ class BoomSecureDCacheModule(outer: BoomSecureDCache) extends SecureHellaCacheMo
   def wayMap[T <: Data](f: Int => T) = Vec((0 until nWays).map(f))
   val s1_tag_eq_way = wayMap((w: Int) => meta.io.resp(w).tag === (s1_addr >> untagBits)).asUInt
   val s1_tag_match_way = wayMap((w: Int) => s1_tag_eq_way(w) && meta.io.resp(w).coh.isValid()).asUInt
-  s1_clk_en := metaReadArb.io.out.valid //TODO: should be metaReadArb.io.out.fire(), but triggers Verilog backend bug
+  s1_clk_en := (metaReadArb.io.out.valid || (mshrs.io.replay.valid && mshrs.io.replay.bits.use_spec_data)) //TODO: should be metaReadArb.io.out.fire(), but triggers Verilog backend bug
   val s1_writeback = s1_clk_en && !s1_valid && !s1_replay
   val s2_tag_match_way = RegEnable(s1_tag_match_way, s1_clk_en)
   val s2_tag_match = s2_tag_match_way.orR
@@ -714,7 +746,7 @@ class BoomSecureDCacheModule(outer: BoomSecureDCache) extends SecureHellaCacheMo
     }
     s2_data(w) := regs.asUInt
   }
-  val s2_data_muxed = Mux1H(s2_tag_match_way, s2_data)
+  val s2_data_muxed = Mux(s2_replay && s2_use_replay_data, s2_replay_data, Mux1H(s2_tag_match_way, s2_data))
   val s2_data_decoded = (0 until rowWords).map(i => dECC.decode(s2_data_muxed(encDataBits*(i+1)-1,encDataBits*i)))
   val s2_data_corrected = s2_data_decoded.map(_.corrected).asUInt
   val s2_data_uncorrected = s2_data_decoded.map(_.uncorrected).asUInt
