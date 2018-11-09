@@ -25,12 +25,12 @@ import freechips.rocketchip.tile.XLen
 import freechips.rocketchip.tile
 import boom.common._
 import boom.ifu.GetPCFromFtqIO
-import boom.util.{ImmGen, IsKilledByBranch, QueueForMicroOpWithData}
+import boom.util.{ImmGen, IsKilledByBranch, BranchKillableQueue}
 
 // TODO rename to something like MicroOpWithData
 class ExeUnitResp(data_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
+  with HasBoomUOP
 {
-   val uop = new MicroOp()
    val data = Bits(width = data_width)
    val fflags = new ValidIO(new FFlagsResp) // write fflags to ROB
 
@@ -440,7 +440,7 @@ class FPUExeUnit(
    // TODO instantiate our own fpiu; and remove it from fpu.scala.
 
    // buffer up results since we share write-port on integer regfile.
-   val queue = Module(new QueueForMicroOpWithData(entries = dfmaLatency + 3, data_width)) // TODO being overly conservative
+   val queue = Module(new BranchKillableQueue(new ExeUnitResp(data_width), entries = dfmaLatency + 3)) // TODO being overly conservative
    queue.io.enq.valid       := fpu.io.resp.valid && fpu.io.resp.bits.uop.fu_code_is(FU_F2I)
    queue.io.enq.bits.uop    := fpu.io.resp.bits.uop
    queue.io.enq.bits.data   := fpu.io.resp.bits.data
@@ -508,7 +508,7 @@ class IntToFPExeUnit(implicit p: Parameters) extends ExecutionUnit(
    io.bypass <> ifpu.io.bypass
 
    // buffer up results since we share write-port on integer regfile.
-   val queue = Module(new QueueForMicroOpWithData(entries = intToFpLatency + 3, data_width)) // TODO being overly conservative
+   val queue = Module(new BranchKillableQueue(new ExeUnitResp(data_width), entries = intToFpLatency + 3)) // TODO being overly conservative
    queue.io.enq.valid       := ifpu.io.resp.valid
    queue.io.enq.bits.uop    := ifpu.io.resp.bits.uop
    queue.io.enq.bits.data   := ifpu.io.resp.bits.data

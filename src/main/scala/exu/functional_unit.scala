@@ -93,9 +93,8 @@ class GetPredictionInfo(implicit p: Parameters) extends BoomBundle()(p)
 }
 
 class FuncUnitReq(data_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
+  with HasBoomUOP
 {
-   val uop = new MicroOp()
-
    val num_operands = 3
 
    val rs1_data = UInt(width = data_width)
@@ -108,8 +107,8 @@ class FuncUnitReq(data_width: Int)(implicit p: Parameters) extends BoomBundle()(
 }
 
 class FuncUnitResp(data_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
+  with HasBoomUOP
 {
-   val uop = new MicroOp()
    val data = UInt(width = data_width)
    val fflags = new ValidIO(new FFlagsResp)
    val addr = UInt(width = vaddrBits+1) // only for maddr -> LSU
