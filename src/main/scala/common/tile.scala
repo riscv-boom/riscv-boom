@@ -176,6 +176,7 @@ class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer)
   require(h == o, s"port list size was $h, outer counted $o")
   // TODO figure out how to move the below into their respective mix-ins
   dcacheArb.io.requestor <> dcachePorts
+  outer.dcache.module.io.spec_info := core.io.spec_info
   ptwPorts += core.io.ptw_tlb
   ptw.io.requestor <> ptwPorts
 

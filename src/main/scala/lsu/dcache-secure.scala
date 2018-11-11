@@ -17,7 +17,7 @@ import boom.util._
 import boom.exu.BrResolutionInfo
 
 object CONSTS {
-  val ROB_ADDR_SZ: Int = 16
+  val ROB_ADDR_SZ: Int = 5
 }
 
 class SecureHellaCacheArbiter(n: Int)(implicit p: Parameters) extends Module
@@ -105,6 +105,9 @@ class SecureHellaCacheReq(implicit p: Parameters) extends HellaCacheReq()(p) {
 
 class SecureHellaCacheIO(implicit p: Parameters) extends HellaCacheIO()(p) {
   override val req = Decoupled(new SecureHellaCacheReq)
+}
+
+class SpecInfo(implicit p: Parameters) extends BoomBundle()(p) {
   val brinfo = new BrResolutionInfo()
   val kill = Bool()
   val rob_pnr_head = UInt(width=CONSTS.ROB_ADDR_SZ)
@@ -152,7 +155,7 @@ class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1Hel
 
     val brinfo = new BrResolutionInfo().asInput
     val kill = Bool(INPUT)
-    val rob_pnr_head = UInt(INPUT, CONSTS.ROB_ADDR_SZ)
+    val rob_pnr_head = UInt(INPUT, width=CONSTS.ROB_ADDR_SZ)
   }
 
   val s_invalid :: s_wb_req :: s_wb_resp :: s_meta_clear :: s_refill_req :: s_refill_resp :: s_meta_write_req :: s_meta_write_resp :: s_drain_rpq_ld :: s_drain_rpq :: s_spec_wait :: s_commit_resp :: Nil = Enum(UInt(), 12)
@@ -271,7 +274,7 @@ class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1Hel
         new_coh := old_coh
         state := s_refill_req
       }
-    }.otherwise { // writback if necessary and refill
+    }.otherwise { // writeback if necessary and refill
       new_coh := ClientMetadata.onReset
       when (needs_wb) {
         state := s_wb_req
@@ -376,7 +379,7 @@ class SecureMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends L1HellaCac
 
     val brinfo = new BrResolutionInfo().asInput
     val kill = Bool(INPUT)
-    val rob_pnr_head = UInt(INPUT, CONSTS.ROB_ADDR_SZ)
+    val rob_pnr_head = UInt(INPUT, width=CONSTS.ROB_ADDR_SZ)
   }
 
   // determine if the request is cacheable or not
@@ -534,6 +537,7 @@ class SecureHellaCacheBundle(val outer: SecureHellaCache)(implicit p: Parameters
   val cpu = (new SecureHellaCacheIO).flip
   val ptw = new TLBPTWIO()
   val errors = new DCacheErrors
+  val spec_info = new SpecInfo().asInput
 }
 
 
@@ -563,6 +567,10 @@ class BoomSecureDCacheModule(outer: BoomSecureDCache) extends SecureHellaCacheMo
   require(dataScratchpadSize == 0)
   require(!usingVM || untagBits <= pgIdxBits, s"untagBits($untagBits) > pgIdxBits($pgIdxBits)")
 
+  val rob_pnr_head = Wire(UInt(width=CONSTS.ROB_ADDR_SZ))
+  rob_pnr_head := io.spec_info.rob_pnr_head
+  dontTouch(rob_pnr_head)
+
   // ECC is only supported on the data array
   require(cacheParams.tagCode.isInstanceOf[IdentityCode])
   val dECC = cacheParams.dataCode
@@ -570,14 +578,14 @@ class BoomSecureDCacheModule(outer: BoomSecureDCache) extends SecureHellaCacheMo
   val wb = Module(new WritebackUnit)
   val prober = Module(new ProbeUnit)
   val mshrs = Module(new SecureMSHRFile)
-  mshrs.io.brinfo := io.cpu.brinfo
-  mshrs.io.kill := io.cpu.kill
-  mshrs.io.rob_pnr_head := io.cpu.rob_pnr_head
+  mshrs.io.brinfo := io.spec_info.brinfo
+  mshrs.io.kill := io.spec_info.kill
+  mshrs.io.rob_pnr_head := io.spec_info.rob_pnr_head
 
   io.cpu.req.ready := Bool(true)
   val s1_valid = Reg(next=io.cpu.req.fire(), init=Bool(false))
   val s1_req = Reg(io.cpu.req.bits)
-  s1_req.uop := GetNewUopAndBrMask(io.cpu.req.bits.uop, io.cpu.brinfo)
+  s1_req.uop := GetNewUopAndBrMask(io.cpu.req.bits.uop, io.spec_info.brinfo)
 
   val s1_valid_masked = s1_valid && !io.cpu.s1_kill
   val s1_replay = Reg(init=Bool(false))
@@ -588,7 +596,7 @@ class BoomSecureDCacheModule(outer: BoomSecureDCache) extends SecureHellaCacheMo
 
   val s2_valid = Reg(next=s1_valid_masked && !s1_sfence, init=Bool(false)) && !io.cpu.s2_xcpt.asUInt.orR
   val s2_req = Reg(io.cpu.req.bits)
-  s2_req.uop := GetNewUopAndBrMask(io.cpu.req.bits.uop, io.cpu.brinfo)
+  s2_req.uop := GetNewUopAndBrMask(io.cpu.req.bits.uop, io.spec_info.brinfo)
   val s2_replay = Reg(next=s1_replay, init=Bool(false)) && s2_req.cmd =/= M_FLUSH_ALL
   val s2_replay_data = Reg(next=s1_replay_data)
   val s2_use_replay_data = Reg(next=s1_use_replay_data)
@@ -596,8 +604,8 @@ class BoomSecureDCacheModule(outer: BoomSecureDCache) extends SecureHellaCacheMo
   val s2_valid_masked = Wire(Bool())
 
   // Might we need to prevent a cachefill resulting from an operation in stage 1 or 2?
-  val s1_killed = IsKilledByBranch(io.cpu.brinfo, s1_req.uop) || io.cpu.kill
-  val s2_killed = IsKilledByBranch(io.cpu.brinfo, s2_req.uop) || io.cpu.kill || Reg(next=s1_killed)
+  val s1_killed = IsKilledByBranch(io.spec_info.brinfo, s1_req.uop) || io.spec_info.kill
+  val s2_killed = IsKilledByBranch(io.spec_info.brinfo, s2_req.uop) || io.spec_info.kill || Reg(next=s1_killed)
 
   val s3_valid = Reg(init=Bool(false))
   val s3_req = Reg(io.cpu.req.bits)
@@ -628,7 +636,7 @@ class BoomSecureDCacheModule(outer: BoomSecureDCache) extends SecureHellaCacheMo
 
   when (io.cpu.req.valid) {
     s1_req := io.cpu.req.bits
-    s1_req.uop := GetNewUopAndBrMask(io.cpu.req.bits.uop, io.cpu.brinfo)
+    s1_req.uop := GetNewUopAndBrMask(io.cpu.req.bits.uop, io.spec_info.brinfo)
   }
   when (wb.io.meta_read.valid) {
     s1_req.addr := Cat(wb.io.meta_read.bits.tag, wb.io.meta_read.bits.idx) << blockOffBits
@@ -645,7 +653,7 @@ class BoomSecureDCacheModule(outer: BoomSecureDCache) extends SecureHellaCacheMo
   }
   when (s2_recycle) {
     s1_req := s2_req
-    s1_req.uop := GetNewUopAndBrMask(s2_req.uop, io.cpu.brinfo)
+    s1_req.uop := GetNewUopAndBrMask(s2_req.uop, io.spec_info.brinfo)
   }
   val s1_addr = dtlb.io.resp.paddr
 
@@ -659,7 +667,7 @@ class BoomSecureDCacheModule(outer: BoomSecureDCache) extends SecureHellaCacheMo
     when (s1_recycled) { s2_req.data := s1_req.data }
     s2_req.tag := s1_req.tag
     s2_req.cmd := s1_req.cmd
-    s2_req.uop := GetNewUopAndBrMask(s1_req.uop, io.cpu.brinfo)
+    s2_req.uop := GetNewUopAndBrMask(s1_req.uop, io.spec_info.brinfo)
   }
 
   // tags

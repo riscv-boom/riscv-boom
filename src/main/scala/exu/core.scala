@@ -32,12 +32,12 @@ import Chisel._
 import chisel3.core.DontCare
 import chisel3.experimental.dontTouch
 import freechips.rocketchip.config.Parameters
-
 import freechips.rocketchip.rocket.Instructions._
 import freechips.rocketchip.rocket.Causes
 import freechips.rocketchip.util.{Str, UIntIsOneOf}
 import boom.common._
 import boom.exu.FUConstants._
+import boom.lsu.SpecInfo
 import boom.util.{GetNewUopAndBrMask, Sext, WrapInc}
 
 
@@ -58,6 +58,7 @@ trait HasBoomCoreIO extends freechips.rocketchip.tile.HasTileParameters {
          val trace = Vec(coreParams.retireWidth,
             new freechips.rocketchip.rocket.TracedInstruction).asOutput
          val release = Valid(new boom.lsu.ReleaseInfo).flip
+         val spec_info = new SpecInfo().asOutput
    }
 }
 
@@ -141,9 +142,9 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
    // Shim to DCache
    io.dmem <> dc_shim.io.dmem
-   io.dmem.brinfo := br_unit.brinfo             // Dcache needs to be able to kill mispredicted speculative cachefills,
-   io.dmem.kill := rob.io.flush.valid           // or those following exceptions.
-   io.dmem.rob_pnr_head := rob.io.rob_pnr_head  // Need to know the current PNR head for committing cache fills.
+   io.spec_info.brinfo := br_unit.brinfo             // Dcache needs to be able to kill mispredicted speculative cachefills,
+   io.spec_info.kill := rob.io.flush.valid           // or those following exceptions.
+   io.spec_info.rob_pnr_head := rob.io.rob_pnr_head  // Need to know the current PNR head to commit cache fills.
    dc_shim.io.core <> exe_units.memory_unit.io.dmem
 
    // Load/Store Unit & ExeUnits

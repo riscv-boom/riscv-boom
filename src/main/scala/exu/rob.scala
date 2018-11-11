@@ -78,7 +78,7 @@ class RobIo(
    val com_load_is_at_rob_head = Bool(OUTPUT)
 
    // The LSU needs the PNR head to wake up spec buffer entries.
-   val rob_pnr_head = UInt(OUTPUT, ROB_ADDR_SZ)
+   val rob_pnr_head = UInt(OUTPUT, width=ROB_ADDR_SZ)
 
    // Communicate exceptions to the CSRFile
    val com_xcpt = Valid(new CommitExceptionSignals())
