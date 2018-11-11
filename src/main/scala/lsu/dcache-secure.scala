@@ -201,10 +201,12 @@ class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1Hel
   rpq.io.deq.ready := (io.replay.ready && state === s_drain_rpq) ||
                        state === s_invalid ||
                       (io.replay.ready && state === s_drain_rpq_ld && rpq.io.deq.bits.cmd === M_XRD)
+  val waiting_store = rpq.io.deq.valid && (rpq.io.deq.bits.cmd === M_XWR)
 
   when (state === s_drain_rpq_ld && !(rpq.io.deq.valid && rpq.io.deq.bits.cmd === M_XRD)) {
     state := s_spec_wait
-    next_state := s_commit_resp
+    next_state := s_meta_clear
+    //next_state := s_commit_resp
   }
   when (state === s_drain_rpq && !rpq.io.deq.valid) {
     state := s_invalid
@@ -239,11 +241,13 @@ class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1Hel
     state := s_refill_resp
   }
   when (state === s_meta_clear && io.meta_write.ready) {
-    state := s_refill_req
+    state := s_commit_resp
+    //state := s_refill_req
   }
   when (state === s_wb_resp && io.mem_grant.valid) {
-    state := s_spec_wait
-    next_state := s_meta_clear
+    //state := s_spec_wait
+    //next_state := s_meta_clear
+    state := s_refill_req
   }
   when (io.wb_req.fire()) { // s_wb_req
     state := s_wb_resp
@@ -279,13 +283,14 @@ class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1Hel
       when (needs_wb) {
         state := s_wb_req
       }.otherwise {
-        state := s_spec_wait
-        next_state := s_meta_clear
+        state := s_refill_req
+        //state := s_spec_wait
+        //next_state := s_meta_clear
       }
     }
   }.otherwise {
     req.uop.br_mask := GetNewBrMask(io.brinfo, req.uop) // Deassert branch mask bits as branches are resolved.
-    nonspeculative := Mux(state === s_invalid, false.B, nonspeculative || IsOlder(req.uop.rob_idx, io.rob_pnr_head, CONSTS.ROB_ADDR_SZ))  // Check whether refill is still speculative.
+    nonspeculative := Mux(state === s_invalid, false.B, nonspeculative || IsOlder(req.uop.rob_idx, io.rob_pnr_head, CONSTS.ROB_ADDR_SZ) || waiting_store)  // Check whether refill is still speculative.
     killed := killed || IsKilledByBranch(io.brinfo, req.uop) || io.kill // Check whether refill has been killed by misspeculation.
   }
   when (io.mem_grant.valid && state === s_refill_resp) {
@@ -353,8 +358,6 @@ class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1Hel
     rpq.io.deq.ready := Bool(false)
     io.replay.bits.cmd := M_FLUSH_ALL /* nop */
   }
-
-
 }
 
 class SecureMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends L1HellaCacheModule()(p) {
@@ -798,7 +801,7 @@ class BoomSecureDCacheModule(outer: BoomSecureDCache) extends SecureHellaCacheMo
   readArb.io.in(1).bits := mshrs.io.replay.bits
   readArb.io.in(1).bits.way_en := ~UInt(0, nWays)
   mshrs.io.replay.ready := readArb.io.in(1).ready
-  s1_replay := false.B //mshrs.io.replay.valid && readArb.io.in(1).ready
+  s1_replay := mshrs.io.replay.valid && readArb.io.in(1).ready
   metaReadArb.io.in(1) <> mshrs.io.meta_read
   metaWriteArb.io.in(0) <> mshrs.io.meta_write
 
