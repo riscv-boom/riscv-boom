@@ -23,15 +23,13 @@ External Debug |√
 
 **Google group:** (https://groups.google.com/forum/#!forum/riscv-boom)
 
-For documentation on BOOM visit (https://ccelio.github.io/riscv-boom-doc).
-
-The [wiki](https://github.com/ucb-bar/riscv-boom/wiki) may also have more information. 
+For documentation on BOOM visit (https://riscv-boom.github.io/riscv-boom-doc).
 
 
 ### Important!
 
 This repository is **NOT A SELF-RUNNING** repository. To instantiate a BOOM core, please use the
-boom-template SoC generator found in the git repository (https://github.com/ccelio/boom-template).
+boom-template SoC generator found in the git repository (https://github.com/riscv-boom/boom-template).
 
 Note: you **MUST** build the riscv-tools as described to build the correct version. A copy of
 riscv-tools you have built yourself previously may be out of date! Likewise, the `master` branch of
@@ -66,7 +64,7 @@ To build a BOOM Verilator emulator and its corresponding RISC-V toolchain, and r
 couple of simple tests:
 
 ````
-   $ git clone https://github.com/ccelio/boom-template.git
+   $ git clone https://github.com/riscv-boom/boom-template.git
    $ cd boom-template
    $ ./scripts/init-submodules.sh
    $ ./scripts/build-tools.sh 
@@ -90,7 +88,7 @@ First, set the $RISCV environment variable (to where you want the toolchain to b
 will also need to add $RISCV/bin to your $PATH.
 
 ````
-   $ git clone https://github.com/ccelio/boom-template.git
+   $ git clone https://github.com/riscv-boom/boom-template.git
    $ cd boom-template
    $ ./scripts/build-tools.sh 
 ````
@@ -103,7 +101,7 @@ BOOM does not support the RVC extension.
 ````
    $ export RISCV=/path/to/install/riscv/toolchain
    $ export PATH="${PATH}:$RISCV/bin"
-   $ git clone https://github.com/ccelio/boom-template.git
+   $ git clone https://github.com/riscv-boom/boom-template.git
    $ cd boom-template/rocket-chip
    $ git submodule update --init
    $ cd riscv-tools
@@ -162,9 +160,8 @@ For more details (and to download o3-pipeview.py), visit the [gem5 wiki](http://
 
 ## More Info
 
-* **The Design Spec** - https://ccelio.github.io/riscv-boom-doc
+* **The Design Spec** - https://github.com/riscv-boom/riscv-boom-doc
 * **Google group:** - https://groups.google.com/forum/#!forum/riscv-boom
-* **The Wiki** - https://github.com/ucb-bar/riscv-boom/wiki
 * **Chisel Learning Journey** - https://github.com/librecores/riscv-sodor/wiki/Chisel-Learning-Journey
 * **Tech Report** - The Berkeley Out-of-Order Machine (BOOM): An Industry-Competitive, Synthesizable, Parameterized RISC-V Processor (https://www.eecs.berkeley.edu/Pubs/TechRpts/2015/EECS-2015-167.html)
 * **CARRV Workshop Report** - BOOM v2: an open-source out-of-order RISC-V core (https://www2.eecs.berkeley.edu/Pubs/TechRpts/2017/EECS-2017-157.html)
@@ -201,9 +198,9 @@ the boom-template/rocket-chip/riscv-tools repository. Otherwise a version mismat
 
 *Master branch is broken! How do I get a working BOOM?*
 
-The [boom-template](https://github.com/ccelio/boom-template) super-repo should
+The [boom-template](https://github.com/riscv-boom/boom-template) super-repo should
 always be pointing to a working boom/rocket-chip/riscv-tools combination. The
 `master` branch of riscv-boom may run ahead though. Ideally, `master` should never be
 broken, but it may be somewhat unstable as development continues. For more
 stability, I recommend using one of the tagged
-[releases](https://github.com/ucb-bar/riscv-boom/releases).
+[releases](https://github.com/riscv-boom/riscv-boom/releases).
