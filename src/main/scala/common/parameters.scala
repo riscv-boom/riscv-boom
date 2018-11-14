@@ -230,7 +230,7 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
 
    //************************************
    // Implicitly calculated constants
-   val NUM_ROB_ROWS      = NUM_ROB_ENTRIES/fetchWidth
+   val NUM_ROB_ROWS      = NUM_ROB_ENTRIES/decodeWidth
    val ROB_ADDR_SZ       = log2Up(NUM_ROB_ENTRIES) + 1
    // the f-registers are mapped into the space above the x-registers
    val LOGICAL_REG_COUNT = if (usingFPU) 64 else 32

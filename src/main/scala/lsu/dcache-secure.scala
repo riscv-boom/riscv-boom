@@ -16,10 +16,6 @@ import boom.common._
 import boom.util._
 import boom.exu.BrResolutionInfo
 
-object CONSTS {
-  val ROB_ADDR_SZ: Int = 5
-}
-
 class SecureHellaCacheArbiter(n: Int)(implicit p: Parameters) extends Module
 {
   val io = new Bundle {
@@ -110,7 +106,7 @@ class SecureHellaCacheIO(implicit p: Parameters) extends HellaCacheIO()(p) {
 class SpecInfo(implicit p: Parameters) extends BoomBundle()(p) {
   val brinfo = new BrResolutionInfo()
   val kill = Bool()
-  val rob_pnr_head = UInt(width=CONSTS.ROB_ADDR_SZ)
+  val rob_pnr_head = UInt(width=ROB_ADDR_SZ)
 }
 
 class SecureMSHRReq(implicit p: Parameters) extends MSHRReq()(p) {
@@ -129,7 +125,7 @@ class SecureL1RefillReq(implicit p: Parameters) extends L1RefillReq()(p) {
 }
 
 
-class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1HellaCacheModule()(p) {
+class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1HellaCacheModule()(p) with HasBoomCoreParameters {
   val io = new Bundle {
     val req_pri_val    = Bool(INPUT)
     val req_pri_rdy    = Bool(OUTPUT)
@@ -155,7 +151,7 @@ class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1Hel
 
     val brinfo = new BrResolutionInfo().asInput
     val kill = Bool(INPUT)
-    val rob_pnr_head = UInt(INPUT, width=CONSTS.ROB_ADDR_SZ)
+    val rob_pnr_head = UInt(INPUT, width=ROB_ADDR_SZ)
   }
 
   val s_invalid :: s_wb_req :: s_wb_resp :: s_meta_clear :: s_refill_req :: s_refill_resp :: s_meta_write_req :: s_meta_write_resp :: s_drain_rpq_ld :: s_drain_rpq :: s_spec_wait :: s_commit_resp :: Nil = Enum(UInt(), 12)
@@ -290,7 +286,7 @@ class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1Hel
     }
   }.otherwise {
     req.uop.br_mask := GetNewBrMask(io.brinfo, req.uop) // Deassert branch mask bits as branches are resolved.
-    nonspeculative := Mux(state === s_invalid, false.B, nonspeculative || IsOlder(req.uop.rob_idx, io.rob_pnr_head, CONSTS.ROB_ADDR_SZ) || waiting_store)  // Check whether refill is still speculative.
+    nonspeculative := Mux(state === s_invalid, false.B, nonspeculative || IsOlder(req.uop.rob_idx, io.rob_pnr_head, ROB_ADDR_SZ) || waiting_store)  // Check whether refill is still speculative.
     killed := killed || IsKilledByBranch(io.brinfo, req.uop) || io.kill // Check whether refill has been killed by misspeculation.
   }
   when (io.mem_grant.valid && state === s_refill_resp) {
@@ -360,7 +356,7 @@ class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1Hel
   }
 }
 
-class SecureMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends L1HellaCacheModule()(p) {
+class SecureMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends L1HellaCacheModule()(p) with HasBoomCoreParameters {
   val io = new Bundle {
     val req = Decoupled(new SecureMSHRReq).flip
     val resp = Decoupled(new HellaCacheResp)
@@ -382,7 +378,7 @@ class SecureMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends L1HellaCac
 
     val brinfo = new BrResolutionInfo().asInput
     val kill = Bool(INPUT)
-    val rob_pnr_head = UInt(INPUT, width=CONSTS.ROB_ADDR_SZ)
+    val rob_pnr_head = UInt(INPUT, width=ROB_ADDR_SZ)
   }
 
   // determine if the request is cacheable or not
@@ -569,10 +565,6 @@ class BoomSecureDCacheModule(outer: BoomSecureDCache) extends SecureHellaCacheMo
   require(isPow2(nWays)) // TODO: relax this
   require(dataScratchpadSize == 0)
   require(!usingVM || untagBits <= pgIdxBits, s"untagBits($untagBits) > pgIdxBits($pgIdxBits)")
-
-  val rob_pnr_head = Wire(UInt(width=CONSTS.ROB_ADDR_SZ))
-  rob_pnr_head := io.spec_info.rob_pnr_head
-  dontTouch(rob_pnr_head)
 
   // ECC is only supported on the data array
   require(cacheParams.tagCode.isInstanceOf[IdentityCode])

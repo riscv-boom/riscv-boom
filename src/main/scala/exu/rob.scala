@@ -702,7 +702,7 @@ class Rob(
 
    rob_pnr_head := Mux(rob_unsafe.asUInt.orR,
                        PriorityEncoder((rob_unsafe.asUInt << (UInt(num_rob_entries) - rob_head(rob_row_addr_sz-2,0) * UInt(width)) | rob_unsafe.asUInt >> (rob_head(rob_row_addr_sz-2,0) * UInt(width)))(num_rob_entries-1,0)) + rob_head * UInt(width),
-                       rob_tail * UInt(width))
+                       rob_tail * UInt(width) + Mux(rob_head === rob_tail, UInt(1), UInt(0)))
    io.rob_pnr_head := rob_pnr_head
 
    // -----------------------------------------------

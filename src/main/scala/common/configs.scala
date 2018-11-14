@@ -29,9 +29,9 @@ class DefaultBoomConfig extends Config((site, here, up) => {
    // Core Parameters
    case BoomTilesKey => up(BoomTilesKey, site) map { r => r.copy(
       core = r.core.copy(
-         fetchWidth = 4,
+         fetchWidth = 2,
          decodeWidth = 2,
-         numRobEntries = 80,
+         numRobEntries = 100,
          issueParams = Seq(
             IssueParams(issueWidth=1, numEntries=20, iqType=IQT_MEM.litValue),
             IssueParams(issueWidth=2, numEntries=20, iqType=IQT_INT.litValue),
@@ -42,15 +42,15 @@ class DefaultBoomConfig extends Config((site, here, up) => {
          maxBrCount = 8,
          btb = BoomBTBParameters(nSets=512, nWays=4, nRAS=8, tagSz=13),
          enableBranchPredictor = true,
-         tage = Some(TageParameters()),
+         gshare = Some(GShareParameters(enabled=true, history_length=23, num_sets=4096)),
          nPerfCounters = 29,
          fpu = Some(freechips.rocketchip.tile.FPUParams(sfmaLatency=4, dfmaLatency=4, divSqrt=true))),
       btb = Some(BTBParams(nEntries = 0, updatesOutOfOrder = true)),
       dcache = Some(DCacheParams(rowBits = site(SystemBusKey).beatBits, nSets=64, nWays=8, nMSHRs=4, nTLBEntries=16)),
-      icache = Some(ICacheParams(fetchBytes = 4*4, rowBits = site(SystemBusKey).beatBits, nSets=64, nWays=8))
+      icache = Some(ICacheParams(fetchBytes = 2*4, rowBits = site(SystemBusKey).beatBits, nSets=64, nWays=8))
       )}
    // Set TL network to 128bits wide
-   case SystemBusKey => up(SystemBusKey, site).copy(beatBytes = 16)
+   case SystemBusKey => up(SystemBusKey, site).copy(beatBytes = 8)
 })
 
 class WithoutBoomFPU extends Config((site, here, up) => {
