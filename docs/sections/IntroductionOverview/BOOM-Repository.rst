@@ -5,68 +5,92 @@ The BOOM repository holds the source code to the BOOM core; it is not a
 full processor and thus is **NOT A SELF-RUNNING** repository. To
 instantiate a BOOM core, the Rocket chip generator found in the
 rocket-chip git repository must be used
-(<https://github.com/ucb-bar/rocket-chip>), which provides the caches,
+https://github.com/ucb-bar/rocket-chip, which provides the caches,
 uncore, and other needed infrastructure to support a full processor.
 
-The BOOM source code can be found in `boom/src/main/scala`.
+The BOOM source code can be found in boom/src/main/scala.
 
 The code structure is shown below:
 
--   `boom/src/main/scala`/
+* boom/src/main/scala/
 
-    -   bpd\_pipeline.scala [ branch prediction stage.]{}
+  * bpu/
 
-    -   brpredictor.scala [ abstract branch predictor.]{}
+    * 2bc-table.scala
+    * base-only.scala
+    * bim.scala
+    * bpd-pipeline.scala
+    * brpredictor.scala
+    * btb-sa.scala
+    * btb.scala
+    * dense-btb.scala
+    * gshare.scala
+    * tage.scala
+    * tage-table.scala
 
-    -   configs.scala [ BOOM configurations. ]{}
+  * common/
 
-    -   consts.scala [ constant definitions. ]{}
+    * configs
+    * consts
+    * microop
+    * package
+    * parameters
+    * tile
+    * types
 
-    -   core.scala [ the top-level of the processor core.]{}
+  * exu/
 
-    -   dcacheshim.scala [ the shim between the the core and the
-        dcache.]{}
+    * core.scala
+    * decode.scala
+    * execute.scala
+    * execution_units.scala
+    * fdiv.scala
+    * fppipeline.scala
+    * fpu.scala
+    * fudecode.scala
+    * functional_unit.scala
+    * imul.scala
+    * issue_ageordered.scala
+    * issue.scala
+    * issue_slot.scala
+    * issue_unordered.scala
+    * regfile-custom.scala
+    * regfile.scala
+    * registerread.scala
+    * rename-busytable.scala
+    * rename-freelist.scala
+    * rename-maptable.scala
+    * rename.scala
+    * rob.scala
 
-    -   decode.scala [ decode stage.]{}
+  * ifu/
 
-    -   execute.scala [ high-level execution units (made up of
-        FUs).]{}
+    * branchchecker.scala
+    * fetchbuffer.scala
+    * fetchmonitor.scala
+    * fetch.scala
+    * fetchtargetqueue.scala
+    * frontend.scala
+    * icache.scala
+  
+  * lsu/
 
-    -   fpu.scala [ floating point unit.]{}
+    * dcacheshim.scala
+    * lsu.scala
+    * types.scala
 
-    -   functional\_unit.scala [ low-level functional units.]{}
+  * system/
 
-    -   gshare.scala [ gshare branch predictor.]{}
+    * BoomSubsystem.scala
+    * BoomTestSuites.scala
+    * Configs.scala
+    * ExampleBoomSystem.scala
+    * Generator.scala
+    * TestHarness.scala
 
-    -   imul.scala [ integer multiplier.]{}
+  * util/
 
-    -   issue\_ageordered.scala [ age-ordered (collasping-queue) issue
-        window implementation.]{}
-
-    -   issue.scala [ abstract issue window.]{}
-
-    -   issue\_slot.scala [ An issue window slot.]{}
-
-    -   issue\_unordered.scala [ un-ordered issue window
-        implementation.]{}
-
-    -   lsu.scala [ load/store unit.]{}
-
-    -   package.scala [ ]{}
-
-    -   parameters.scala [ knobs/parameters.]{}
-
-    -   prefetcher.scala [ data prefetcher.]{}
-
-    -   regfile.scala [ register file.]{}
-
-    -   registerread.scala [ registerRead stage and bypassing.]{}
-
-    -   rename.scala [ register renaming logic.]{}
-
-    -   rob.scala [ re-order buffer.]{}
-
-    -   tile.scala [ top-level tile.]{}
-
-    -   util.scala [ utility code.]{}
-
+    * elastic-reg.scala
+    * elastic-sram.scala
+    * seqmem-transformable.scala
+    * util.scala
