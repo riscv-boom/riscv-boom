@@ -3,7 +3,7 @@ The Rocket-chip Repository Layout
 
 As BOOM is just a core, an entire SoC infrastructure must be provided.
 BOOM was developed to use the open-source Rocket-chip SoC generator
-https://github.com/ucb-bar/rocket-chip. The Rocket-chip generator
+https://github.com/freechipsproject/rocket-chip. The Rocket-chip generator
 can instantiate a wide range of SoC designs, including cache-coherent
 multi-tile designs, cores with and without accelerators, and chips with
 or without a last-level shared cache.

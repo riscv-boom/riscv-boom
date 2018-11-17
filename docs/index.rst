@@ -12,7 +12,7 @@ Welcome to RISCV-BOOM's documentation!
    :numbered:
 
    sections/IntroductionOverview/index
-   sections/InstructionFetch/index
+   sections/InstructionFetch/FetchStage
    sections/BranchPrediction/index
    sections/Decode/index
    sections/Rename/index

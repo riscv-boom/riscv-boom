@@ -5,7 +5,7 @@ The BOOM repository holds the source code to the BOOM core; it is not a
 full processor and thus is **NOT A SELF-RUNNING** repository. To
 instantiate a BOOM core, the Rocket chip generator found in the
 rocket-chip git repository must be used
-https://github.com/ucb-bar/rocket-chip, which provides the caches,
+https://github.com/freechipsproject/rocket-chip, which provides the caches,
 uncore, and other needed infrastructure to support a full processor.
 
 The BOOM source code can be found in boom/src/main/scala.
