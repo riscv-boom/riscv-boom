@@ -166,6 +166,47 @@ object WrapSub
    }
 }
 
+// Increment the input "value", wrapping it if necessary (and flipping parity bit).
+object WrapAddPar
+{
+   // "n" is the number of increments, so we wrap at n-1.
+   def apply(value: UInt, amt: UInt, n: Int): UInt =
+   {
+      val width = log2Up(n)
+      if (isPow2(n))
+      {
+         (value + amt)(width,0)
+      }
+      else
+      {
+         val sum = Cat(UInt(0,1), value(width-1,0)) + Cat(UInt(0,1), amt)
+         Mux(sum >= UInt(n),
+            Cat(~value(width), (sum - UInt(n))(width-1,0)),
+            Cat(value(width), sum(width-1,0)))
+      }
+   }
+}
+
+// Decrement the input "value", wrapping it if necessary (and flipping parity bit).
+object WrapSubPar
+{
+   // "n" is the number of increments, so we wrap to n-1.
+   def apply(value: UInt, amt: UInt, n: Int): UInt =
+   {
+      val width = log2Up(n)
+      if (isPow2(n))
+      {
+         (value - amt)(width,0)
+      }
+      else
+      {
+         Mux(value(width-1,0) < amt,
+            Cat(~value(width), (value - amt + UInt(n))(width-1,0)),
+            value - amt)
+      }
+   }
+}
+
 // Increment the input "value", wrapping it if necessary.
 object WrapInc
 {

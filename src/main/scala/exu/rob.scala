@@ -453,7 +453,7 @@ class Rob(
       // -----------------------------------------------
       // Is it safe to move the PNR head past this ROB entry?
       for (i <- 0 until num_rob_rows) {
-         rob_unsafe(i*width + w) := rob_val(i) && rob_bsy(i) && (rob_uop(i).is_br_or_jmp || rob_uop(i).is_load || rob_uop(i).is_store) || rob_exception(i)
+         rob_unsafe(i*width + w) := rob_val(i) && rob_bsy(i) && rob_uop(i).is_br_or_jmp || rob_exception(i)
       }
 
       // -----------------------------------------------
@@ -701,8 +701,8 @@ class Rob(
    // It points to the oldest "unsafe" instruction - if no instructions are unsafe, it is set to the tail.
 
    rob_pnr_head := Mux(rob_unsafe.asUInt.orR,
-                       PriorityEncoder((rob_unsafe.asUInt << (UInt(num_rob_entries) - rob_head(rob_row_addr_sz-2,0) * UInt(width)) | rob_unsafe.asUInt >> (rob_head(rob_row_addr_sz-2,0) * UInt(width)))(num_rob_entries-1,0)) + rob_head * UInt(width),
-                       rob_tail * UInt(width) + Mux(rob_head === rob_tail, UInt(1), UInt(0)))
+                        WrapAddPar(rob_head << log2Up(width), PriorityEncoder((Cat(rob_unsafe.asUInt, rob_unsafe.asUInt) >> (rob_head(rob_row_addr_sz-2,0) << log2Up(width)))(num_rob_entries-1,0)), num_rob_entries),
+                        rob_tail * UInt(width) + Mux(rob_head === rob_tail, UInt(1), UInt(0)))
    io.rob_pnr_head := rob_pnr_head
 
    // -----------------------------------------------

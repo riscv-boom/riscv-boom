@@ -396,12 +396,12 @@ class SecureMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends L1HellaCac
   val tag_match = Mux1H(idxMatch, tagList) === io.req.bits.addr >> untagBits
 
   val wbTagList = Wire(Vec(cfg.nMSHRs, Bits()))
-  val refillMux = Wire(Vec(cfg.nMSHRs, new SecureL1RefillReq))
   val meta_read_arb = Module(new Arbiter(new L1MetaReadReq, cfg.nMSHRs))
   val meta_write_arb = Module(new Arbiter(new L1MetaWriteReq, cfg.nMSHRs))
   val wb_req_arb = Module(new Arbiter(new WritebackReq(edge.bundle), cfg.nMSHRs))
   val replay_arb = Module(new Arbiter(new SecureReplayInternal, cfg.nMSHRs))
   val alloc_arb = Module(new Arbiter(Bool(), cfg.nMSHRs))
+  val refill_arb = Module(new Arbiter(new SecureL1RefillReq, cfg.nMSHRs))
 
   var idx_match = Bool(false)
   var pri_rdy = Bool(false)
@@ -409,8 +409,6 @@ class SecureMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends L1HellaCac
 
   io.fence_rdy := true
   io.probe_rdy := true
-
-  val mshr_refill_sel = Wire(Vec(cfg.nMSHRs, Bool()))
 
   val mshrs = (0 until cfg.nMSHRs) map { i =>
     val mshr = Module(new SecureMSHR(i))
@@ -432,11 +430,10 @@ class SecureMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends L1HellaCac
     meta_write_arb.io.in(i) <> mshr.io.meta_write
     wb_req_arb.io.in(i) <> mshr.io.wb_req
     replay_arb.io.in(i) <> mshr.io.replay
+    refill_arb.io.in(i) <> mshr.io.refill
 
     mshr.io.mem_grant.valid := io.mem_grant.valid && io.mem_grant.bits.source === UInt(i)
     mshr.io.mem_grant.bits := io.mem_grant.bits
-    refillMux(i) := mshr.io.refill.bits
-    mshr_refill_sel(i) := mshr.io.refill.valid
 
     pri_rdy = pri_rdy || mshr.io.req_pri_rdy
     sec_rdy = sec_rdy || mshr.io.req_sec_rdy
@@ -458,6 +455,7 @@ class SecureMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends L1HellaCac
   io.meta_read <> meta_read_arb.io.out
   io.meta_write <> meta_write_arb.io.out
   io.wb_req <> wb_req_arb.io.out
+  io.refill <> refill_arb.io.out
 
   val mmio_alloc_arb = Module(new Arbiter(Bool(), nIOMSHRs))
   val resp_arb = Module(new Arbiter(new HellaCacheResp, nIOMSHRs))
@@ -496,9 +494,6 @@ class SecureMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends L1HellaCac
                     mmio_rdy,
                     sdq_rdy && Mux(idx_match, tag_match && sec_rdy, pri_rdy))
   io.secondary_miss := idx_match
-  //io.refill.bits := refillMux(io.mem_grant.bits.source)
-  io.refill.valid := mshr_refill_sel.reduce(_||_)
-  io.refill.bits := Mux1H(mshr_refill_sel, refillMux)
 
   val free_sdq = io.replay.fire() && isWrite(io.replay.bits.cmd)
   io.replay.bits.data := sdq(RegEnable(replay_arb.io.out.bits.sdq_id, free_sdq))
