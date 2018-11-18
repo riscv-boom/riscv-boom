@@ -189,7 +189,8 @@ class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1Hel
   val sec_rdy = idx_match &&
                   (state.isOneOf(states_before_refill) ||
                     (state.isOneOf(s_refill_req, s_refill_resp) &&
-                      !cmd_requires_second_acquire && !refill_done))
+                      !cmd_requires_second_acquire && !refill_done) || 
+                   state === s_spec_wait && next_state =/= s_meta_write_req)
   assert(!(io.mem_grant.valid && !(state === s_refill_resp || state === s_wb_resp)))
   val rpq = Module(new Queue(new SecureReplayInternal, cfg.nRPQ))
   rpq.io.enq.valid := (io.req_pri_val && io.req_pri_rdy || io.req_sec_val && sec_rdy) && !isPrefetch(io.req_bits.cmd)
@@ -221,10 +222,12 @@ class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1Hel
     commit_counter := UInt(0)
   }
   when (state === s_spec_wait) {
-    when (killed) {               // Wait until this point to kill refill, ensuring it has been read off TL.
-      state := s_invalid
-    }.elsewhen(nonspeculative) {  // Don't commit refill until marked as nonspeculative. A refill may be marked as nonspecuative after it has been killed, which is why the killed transition has priority.
-      state := next_state
+    when ((rpq.io.deq.valid && rpq.io.deq.bits.cmd === M_XRD) || (rpq.io.enq.valid && rpq.io.enq.bits.cmd === M_XRD)) {
+      state := s_drain_rpq_ld     // Drain the rpq if a load has been enqued while waiting for speculation to resolve.
+    }.elsewhen (killed) {
+      state := s_invalid        // Kill the refill.
+    }.elsewhen(nonspeculative) {
+      state := next_state       // Don't commit refill until marked as nonspeculative. A refill may be marked as nonspecuative after it has been killed, which is why the killed transition has priority.
     }
   }
   when (state === s_commit_resp) {
@@ -238,11 +241,8 @@ class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1Hel
   }
   when (state === s_meta_clear && io.meta_write.ready) {
     state := s_commit_resp
-    //state := s_refill_req
   }
   when (state === s_wb_resp && io.mem_grant.valid) {
-    //state := s_spec_wait
-    //next_state := s_meta_clear
     state := s_refill_req
   }
   when (io.wb_req.fire()) { // s_wb_req
@@ -280,8 +280,6 @@ class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1Hel
         state := s_wb_req
       }.otherwise {
         state := s_refill_req
-        //state := s_spec_wait
-        //next_state := s_meta_clear
       }
     }
   }.otherwise {
