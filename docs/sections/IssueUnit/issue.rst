@@ -1,4 +1,4 @@
-The Issue Unit {#chapter:issue}
+The Issue Unit
 ==============
 
 The issue window holds dispatched micro-ops that have not yet executed.
@@ -27,16 +27,15 @@ the issue window. More advanced techniques are also available.
 Issue Slot
 ----------
 
-Figure \[fig:riscv-boom\_issue\_slot\] shows a single issue slot from
-the [*Issue Window*]{}.[^1]
+Figure [fig:riscv-boom\_issue\_slot] shows a single issue slot from the
+*Issue Window*. [1]_
 
-Instructions are [*dispatched*]{} into the [*Issue Window*]{}. From
-here, they wait for all of their operands to be ready (“p" stands for
-[*presence*]{} bit, which marks when an operand is [*present*]{} in the
-register file).
+Instructions are *dispatched* into the *Issue Window*. From here, they
+wait for all of their operands to be ready (“p" stands for *presence*
+bit, which marks when an operand is *present* in the register file).
 
-Once ready, the [*issue slot*]{} will assert its “request" signal, and
-wait to be [*issued*]{}.
+Once ready, the *issue slot* will assert its “request" signal, and wait
+to be *issued*.
 
 Issue Select Logic
 ------------------
@@ -57,16 +56,16 @@ Un-ordered Issue Window
 
 There are two scheduling policies available in BOOM.
 
-The first is a R10K-style un-ordered issue window.[@mipsr10k]
-Dispatching instructions are placed into the first available issue
-window slot and remain there until they are [*issued*]{}. This can lead
-to pathologically poor performance, particularly in scenarios where
-unpredictable branches are placed into the lower priority slots and are
-unable to be issued until the ROB fills up and the issue window starts
-to drain. Because instructions following branches are only
-[*implicitly*]{} dependent on the branch, there is no other forcing
-function that enables the branches to issue earlier, except the filling
-of the ROB.
+The first is a R10K-style un-ordered issue
+window.:raw-latex:`\cite{mipsr10k}` Dispatching instructions are placed
+into the first available issue window slot and remain there until they
+are *issued*. This can lead to pathologically poor performance,
+particularly in scenarios where unpredictable branches are placed into
+the lower priority slots and are unable to be issued until the ROB fills
+up and the issue window starts to drain. Because instructions following
+branches are only *implicitly* dependent on the branch, there is no
+other forcing function that enables the branches to issue earlier,
+except the filling of the ROB.
 
 Age-ordered Issue Window
 ------------------------
@@ -83,16 +82,17 @@ is being read and written to on every cycle.
 Wake-up
 -------
 
-There are two types of wake-up in BOOM - [*fast*]{} wakeup and
-[*slow*]{} wakeup. Because ALU micro-ops can send their write-back data
-through the bypass network, issued ALU micro-ops will broadcast their
-wakeup to the issue-window as they are issued.
+There are two types of wake-up in BOOM - *fast* wakeup and *slow*
+wakeup. Because ALU micro-ops can send their write-back data through the
+bypass network, issued ALU micro-ops will broadcast their wakeup to the
+issue-window as they are issued.
 
 However, floating-point operations, loads, and variable latency
 operations are not sent through the bypass network, and instead the
-wakeup signal comes from the register file ports during the
-[*write-back*]{} stage.
+wakeup signal comes from the register file ports during the *write-back*
+stage.
 
-[^1]: Conceptually, a bus is shown for implementing the driving of the
-    signals sent to the [*Register Read*]{} Stage. In reality BOOM
-    actually uses muxes.
+.. [1]
+   Conceptually, a bus is shown for implementing the driving of the
+   signals sent to the *Register Read* Stage. In reality BOOM actually
+   uses muxes.

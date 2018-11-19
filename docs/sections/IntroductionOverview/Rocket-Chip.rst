@@ -46,7 +46,7 @@ found at http://hwacha.org.
 
 Rocket has been taped out at least thirteen times in three different
 commercial processes, and has been successfully demonstrated to reach
-over 1.65 GHz in IBM 45 nm SOI.[@riscv_nature] As its namesake suggests,
+over 1.65 GHz in IBM 45 nm SOI. As its namesake suggests,
 Rocket is the baseline core for the Rocket-chip SoC generator. As
 discussed earlier, BOOM is instantiated by replacing a Rocket tile with
 a BOOM tile.

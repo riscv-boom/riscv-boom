@@ -14,21 +14,21 @@ Welcome to RISCV-BOOM's documentation!
    sections/IntroductionOverview/index
    sections/InstructionFetch/FetchStage
    sections/BranchPrediction/index
-   sections/Decode/index
-   sections/Rename/index
-   sections/RobDispatch/index
-   sections/IssueUnit/index
-   sections/RegisterFileBypassNetwork/index
-   sections/Execute/index
-   sections/LoadStoreUnit/index
-   sections/MemorySystemDCacheShim/index
-   sections/MicroarchEventTracking/index
-   sections/Verification/index
+   sections/Decode/decode
+   sections/Rename/rename
+   sections/RobDispatch/rob
+   sections/IssueUnit/issue
+   sections/RegisterFileBypassNetwork/registerread
+   sections/Execute/execute
+   sections/LoadStoreUnit/lsu
+   sections/MemorySystemDCacheShim/memory
+   sections/MicroarchEventTracking/uarch-counters
+   sections/Verification/verification
    sections/Debugging/index
-   sections/Tools/index
-   sections/PhysicalRealization/index
-   sections/FutureWork/index
-   sections/Parameters/index
+   sections/Tools/visualization
+   sections/PhysicalRealization/physical
+   sections/FutureWork/futurework
+   sections/Parameters/parameterization
    sections/FAQ
    sections/Terminology
 

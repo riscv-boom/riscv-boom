@@ -6,7 +6,7 @@ these predictions.
 
 BOOM uses two levels of branch prediction- a single-cycle “next-line
 predictor" (NLP) and a slower but more complex “backing predictor"
-(BPD).[^1]
+(BPD).
 
 .. toctree::
     :maxdepth: 2
