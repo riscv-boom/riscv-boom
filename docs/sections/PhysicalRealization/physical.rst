@@ -1,4 +1,4 @@
-Physical Realization {#chapter:physical}
+Physical Realization
 ====================
 
 This chapter provides information useful for physically realizing the
@@ -6,7 +6,7 @@ BOOM processor. Although BOOM VLSI work is very preliminary, it has been
 synthesized at 1 GHz on a high-end mobile 28 nm process. Unfortunately,
 while VLSI flows are difficult to share or make portable (and encumbered
 with proprietary libraries and tools), an enterprising individual may
-want to visit the <https://github.com/ucb-bar/plsi> portable “Palmer’s
+want to visit the https://github.com/ucb-bar/plsi portable “Palmer’s
 VLSI Scripts” repository which describes one way to push BOOM through a
 VLSI flow.
 
@@ -19,8 +19,10 @@ need to be analyzed for retiming.
 In BOOM, the floating point units and the pipelined integer multiply
 unit are described combinationally and then padded to the requested
 latency with registers. In order to meet the desired clock frequency,
-[**the floating point units and the pipelined integer multiply unit must
-be register-retimed**]{}.
+**the floating point units and the pipelined integer multiply unit must
+be register-retimed**.
+
+::
 
     val mul_result = lhs.toSInt * rhs.toSInt
                                                                                    
@@ -38,7 +40,7 @@ be register-retimed**]{}.
                                                                                    
     io.out := ShiftRegister(mul_output_mux, imul_stages, io.valid)
 
-\[code:imul\]
+[code:imul]
 
 Pipelining Configuration Options
 --------------------------------
@@ -47,40 +49,43 @@ Although BOOM does not provide high-level configurable-latency pipeline
 stages, BOOM does provide a few configuration options to help the
 implementor trade off CPI performance for cycle-time.
 
-#### EnableFetchBufferFlowThrough
+EnableFetchBufferFlowThrough
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-The front-end fetches instructions and places them into a [*fetch
-buffer*]{}. The back-end pulls instructions out of the fetch buffer and
-then decodes, renames, and dispatches the instructions into the [*issue
-window*]{}. This fetch buffer can be optionally set to be a
-[*flow-through*]{} queue – instructions enqueued into the buffer can be
-immediately dequeued on the other side on the same clock cycle. Turning
-this option [**off**]{} forces all instructions to spend at least one
-cycle in the queue but decreases the critical path between instruction
-fetch and dispatch.
+The front-end fetches instructions and places them into a *fetch
+buffer*. The back-end pulls instructions out of the fetch buffer and
+then decodes, renames, and dispatches the instructions into the *issue
+window*. This fetch buffer can be optionally set to be a *flow-through*
+queue – instructions enqueued into the buffer can be immediately
+dequeued on the other side on the same clock cycle. Turning this option
+**off** forces all instructions to spend at least one cycle in the queue
+but decreases the critical path between instruction fetch and dispatch.
 
-#### EnableBrResolutionRegister
+EnableBrResolutionRegister
+^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 The branch unit resolves branches, detects mispredictions, fans out the
-branch kill signal to [*all*]{} inflight micro-ops, redirects the PC
-select stage to begin fetching down the correct path, and sends snapshot
+branch kill signal to *all* inflight micro-ops, redirects the PC select
+stage to begin fetching down the correct path, and sends snapshot
 information to the branch predictor to reset its state properly so it
-can begin predicting down the correct path. Turning this option
-[**on**]{} delays the branch resolution by a cycle. In particular, this
-adds a cycle to the branch misprediction penalty (which is hopefully a
-rare event).
+can begin predicting down the correct path. Turning this option **on**
+delays the branch resolution by a cycle. In particular, this adds a
+cycle to the branch misprediction penalty (which is hopefully a rare
+event).
 
-#### Functional Unit Latencies
+Functional Unit Latencies
+^^^^^^^^^^^^^^^^^^^^^^^^^
 
 The latencies of the pipelined floating point units and the pipelined
 integer multiplier unit can be modified. Currently, all floating point
 unit latencies are set to the latency of the longest floating point unit
-(i.e., the DFMA unit). This can be changed by setting the
-[*dfmaLatency*]{} in the [*FPUConfig*]{} class. Likewise, the integer
-multiplier is also set to the [*dfmaLatency*]{}.[^1]
+(i.e., the DFMA unit). This can be changed by setting the *dfmaLatency*
+in the *FPUConfig* class. Likewise, the integer multiplier is also set
+to the *dfmaLatency*. [1]_
 
-[^1]: The reason for this is that the imul unit is most likely sharing a
-    write port with the DFMA unit and so must be padded out to the same
-    length. However, this isn’t fundamental and there’s no reason an
-    imul unit not sharing a write port with the FPUs should be
-    constrained to their latencies.
+.. [1]
+   The reason for this is that the imul unit is most likely sharing a
+   write port with the DFMA unit and so must be padded out to the same
+   length. However, this isn’t fundamental and there’s no reason an imul
+   unit not sharing a write port with the FPUs should be constrained to
+   their latencies.

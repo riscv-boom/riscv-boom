@@ -74,7 +74,7 @@ BHT Updates
 The BHT is composed of two parts that require updates - a *global
 history (ghistory)* register and a table of *history counters*.
 
-The  register tracks the outcomes of the last $N$ branches that have
+The  register tracks the outcomes of the last *N* branches that have
 been fetched. It must be updated:
 
 -   in the *Branch Predict* stage - once we have decoded the

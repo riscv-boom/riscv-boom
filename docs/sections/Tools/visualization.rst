@@ -1,4 +1,4 @@
-Pipeline Visualization {#sec:visualization}
+Pipeline Visualization
 ======================
 
 “Pipevew" is a useful diagnostic and visualization tool for seeing how
@@ -11,6 +11,8 @@ also shows when stores were successfully acknowledged by the memory
 system (“store-completion"). It is useful for programmers who wish to
 see how their code is performing and for architects to see which
 bottlenecks are constricting machine performance.
+
+::
 
     -(       33320000) 0x00000018a0.0 sw a0, 220(gp)     
     [......f.d...i...c.........r.............]-(       33320000) 0x00000018a4.0 blt s1, a2, pc + 52
@@ -37,29 +39,29 @@ bottlenecks are constricting machine performance.
     [.................f.d...i.c...........r..]-(       33320000) 0x0000000650.0 addiw a6, a2, 5    
     [.................f.d....i...c........r..]-(       33320000) 0x0000000654.0 mv a5, a6          
 
-\[code:pipeview\]
+[code:pipeview]
 
 To display the text-based pipeline visualizations, BOOM generates traces
 compatible with the O3 Pipeline Viewer included in the gem5 simulator
-suite.[@gem5]
+suite.:raw-latex:`\cite{gem5}`
 
-To enable pipeline visualization, first set [`O`3PIPEVIEW\_PRINTF]{} in
-[`b`oom/src/main/scala/consts.scala]{} to [`t`rue]{}:
+To enable pipeline visualization, first set ``O``\ 3PIPEVIEW\_PRINTF in
+``b``\ oom/src/main/scala/consts.scala to ``t``\ rue:
 
-`val O3PIPEVIEW_PRINTF `=` true  // dump trace for O3PipeView from gem5`
+``val O3PIPEVIEW_PRINTF ``\ =\ `` true  // dump trace for O3PipeView from gem5``
 
 Rebuild and rerun BOOM. You should find the traces (\*.out) in
 emulator/output/. To generate the visualization, first download and
-install gem5[@gem5], and then run:
+install gem5:raw-latex:`\cite{gem5}`, and then run:
 
-`$` `boom/util/pipeview-helper.py -f <TRACE_FILE> > clean_trace.out`
+``$`` ``boom/util/pipeview-helper.py -f <TRACE_FILE> > clean_trace.out``
 
-`$`
-`gem5/util/o3-pipeview.py --color --store_completions -o pipeview.out clean_trace.out`
+``$``
+``gem5/util/o3-pipeview.py --color --store_completions -o pipeview.out clean_trace.out``
 
 You can view the visualization by running:
 
-`$` `less -r pipeview.out`
+``$`` ``less -r pipeview.out``
 
 To learn more about o3-pipeview.py and to download gem5 visit
-<http://www.m5sim.org/Visualization>.
+http://www.m5sim.org/Visualization.
