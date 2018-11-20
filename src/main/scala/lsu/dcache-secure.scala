@@ -264,6 +264,7 @@ class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1Hel
   }
   when (io.req_pri_val && io.req_pri_rdy) {
     req := io.req_bits
+    store_enqueued := rpq.io.enq.valid && isWrite(rpq.io.enq.bits.cmd)
     nonspeculative := false.B
     killed := io.req_bits.killed
 
