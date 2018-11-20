@@ -1,6 +1,17 @@
 The Register File and Bypass Network
 ====================================
 
+.. _simple-boom-pipeline:
+.. figure:: /figures/simple_boom_pipeline.png
+    :alt: Single Issue Pipeline
+
+    An example single-issue pipeline. The register file needs 3 read ports to satisfy FMA operations
+    and 2 write ports to satisfy the variable latency operations without interfering with the fixed latency ALU
+    and FP write-backs. To make scheduling of the write port trivial, the ALU’s pipeline is lengthened to match
+    the FPU latency. The ALU is able to bypass from any of these stages to dependent instructions in the
+    Register Read stage.
+
+
 BOOM is a unified, physical register file (PRF) design. The register
 file holds both the committed and speculative state. The register file
 also holds both integer and floating point register values. The map

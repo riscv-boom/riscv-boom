@@ -1,6 +1,12 @@
 The Load/Store Unit (LSU)
 =========================
 
+.. _lsu:
+.. figure:: /figures/lsu.png
+    :alt: Load Store Unit
+
+    The Load/Store Unit
+
 The Load/Store Unit is responsible for deciding when to fire memory
 operations to the memory system. There are three queues: the Load
 Address Queue (LAQ), the Store Address Queue (SAQ), and the Store Data

@@ -1,15 +1,15 @@
 Instruction Fetch
 =================
 
-.. _Fetch-Unit:
-.. figure:: /figures/boom_stages.png
+.. _fetch-unit:
+.. figure:: /figures/frontend.png
     :alt: The Fetch Unit
 
     The Fetch Unit. The grey box is the front-end instantiated from the Rocket code base.
 
 
 BOOM instantiates the Rocket core’s *Front-end* (highlighted in grey
-in :numref:`Fetch-Unit` , which fetches instructions and predicts every
+in :numref:`fetch-unit` , which fetches instructions and predicts every
 cycle where to fetch the next instructions using a “next-line predictor"
 (NLP). If a misprediction is detected in BOOM’s backend, or BOOM’s own
 predictor wants to redirect the pipeline in a different direction, a

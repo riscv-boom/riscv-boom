@@ -10,7 +10,7 @@ are not able to learn very complicated or long history patterns).
 
 To capture more branches and more complicated branching behaviors, BOOM
 provides support for a “Backing Predictor", or BPD (see 
-:numref:`Backing-Predictor-Unit`.
+:numref:`backing-predictor-unit`.
 
 The BPD’s goal is to provide very high accuracy in a (hopefully) dense
 area. To make this possible, the BPD will not make a prediction until
@@ -46,9 +46,9 @@ Prediction* stage will decode the instructions in the *fetch
 packet*, compute the branch targets, and decide in conjunction with
 the BPD’s prediction bit-vector if a front-end redirect should be made.
 
-.. _Backing-Predictor-Unit:
-.. figure:: /figures/boom_stages.png
-    :alt: The Next-line Predictor 
+.. _backing-predictor-unit:
+.. figure:: /figures/bpd.png
+    :alt: The Backing Branch Predictor 
 
     The Backing Branch Predictor (BPD) Unit. The front-end sends the “next PC” (npc) to
     the BPD (BP0 stage). A hash of the npc and the global history is used to index the predictor tables. The
@@ -211,7 +211,7 @@ abstract “BrPredictor" class is provided. It provides a standard
 interface into the BPD, the control logic for managing the global
 history register, and contains the *branch reorder buffer (BROB)*
 (which handles the inflight branch prediction checkpoints). This
-abstract class can be found in :numref:`Backing-Predictor-Unit` labeled “predictor
+abstract class can be found in :numref:`backing-predictor-unit` labeled “predictor
 (base)”.
 
 Global History
@@ -257,8 +257,8 @@ taken*. Likewise, repeatedly not-taken branches saturate towards zero
 low-order bit specifies the *hysteresis* (how “strong” the
 prediction is).
 
-.. _GShare-Predictor:
-.. figure:: /figures/boom_stages.png
+.. _gshare-predictor:
+.. figure:: /figures/2bc-prediction.png
     :alt: The GShare Predictor 
 
     A gshare predictor uses the global history hashed with the PC to index into a table of 2-bit
@@ -270,7 +270,7 @@ prediction. However, to fit these two-bit counters into dense SRAM, a
 change is made to the 2bc finite state machine – mispredictions made in
 the *weakly not-taken* state move the 2bc into the *strongly
 taken* state (and vice versa for *weakly taken* being
-mispredicted). The FSM behavior is shown in :numref:`Two-Bit-FSM`.
+mispredicted). The FSM behavior is shown in :numref:`two-bit-fsm`.
 
 Although it’s no longer strictly a “counter", this change allows us to
 separate out the read and write requirements on the *prediction* and
@@ -291,8 +291,8 @@ The H-bit:
 * **write** - when a branch is resolved (write the direction the
   branch took).
 
-.. _Two-Bit-FSM:
-.. figure:: /figures/boom_stages.png
+.. _two-bit-fsm:
+.. figure:: /figures/2bc-fsm.png
     :alt: The Two-bit counter state machine 
     
     The Two-bit counter state machine 
@@ -321,21 +321,29 @@ The GShare Predictor
 Predictions are made by hashing the instruction address and the global
 history (typically a simple XOR) and then indexing into a table of
 two-bit counters. :numref:`Gshare-Predictor` shows the logical
-architecture and :numref:`Gshare-predictor-pipeline` shows the physical implementation
+architecture and :numref:`gshare-predictor-pipeline` shows the physical implementation
 and structure of the *gshare* predictor. Note that the prediction
 begins in the BP0 stage when the requesting address is sent to the
 predictor but that the prediction is made later in the BP2 stage once
 the instructions have returned from the instruction cache and the
 prediction state has been read out of the *gshare*’s p-table.
 
-.. _Gshare-predictor-pipeline:
-.. figure:: /figures/boom_stages.png
+.. _gshare-predictor-pipeline:
+.. figure:: /figures/gshare.png
     :alt: The GShare predictor pipeline 
 
     The GShare predictor pipeline 
 
 The TAGE Predictor
 ------------------
+
+.. _tage-predictor:
+.. figure:: /figures/tage.png
+    :alt: The TAGE Predictor 
+
+    The TAGE predictor. The requesting address (PC) and the global history are fed into each
+    table’s index hash and tag hash. Each table provides its own prediction (or no prediction) and the table
+    with the longest history wins.
 
 BOOM also implements the TAGE conditional branch predictor. TAGE is a
 highly-parameterizable, state-of-the-art global history
@@ -402,6 +410,10 @@ the oldest history bit need to be provided to perform an update. Code
                                                                                  
     (c[4] ^ h[ 0] generates the new c[0]).                                        
     (c[1] ^ h[12] generates the new c[2]).       
+
+Code Caption: The circular shift register. When a new branch outcome is added, the register
+is shifted (and wrapped around). The new outcome is added and the oldest bit in the
+history is “evicted”.
 
 Each table must maintain *three* CSRs. The first CSR is used for
 computing the index hash and has a size $n=log(num\_table\_entries)$. As

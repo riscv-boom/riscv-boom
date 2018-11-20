@@ -1,6 +1,12 @@
 Branch Prediction
 =================
 
+.. _fetch-unit-bpu:
+.. figure:: /figures/frontend.png
+    :alt: Fetch Unit
+
+    The Fetch Unit
+
 This chapter discusses how BOOM predicts branches and then resolves
 these predictions.
 

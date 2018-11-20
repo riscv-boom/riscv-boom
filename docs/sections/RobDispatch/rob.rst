@@ -16,6 +16,16 @@ then redirects the PC to the appropriate exception handler.
 The ROB Organization
 --------------------
 
+.. _rob:
+.. figure:: /figures/rob.png
+    :alt: The Reorder Buffer
+
+    The Reorder Buffer for a two-wide BOOM with three-issue. Dispatched uops (dis uops) are
+    written at the bottom of the ROB (rob tail), while committed uops (com uops) are committed from the top,
+    at rob head, and update the rename state. Uops that finish executing (wb uops) clear their busy bit. Note:
+    the dispatched uops are written into the same ROB row together, and are located consecutively in memory
+    allowing a single PC to represent the entire row.
+
 The ROB is, conceptually, a circular buffer that tracks all inflight
 instructions in-order. The oldest instruction is pointed to by the
 *commit head*, and the newest instruction will be added at the *rob
@@ -24,7 +34,7 @@ tail*.
 To facilitate superscalar *Dispatch* and *Commit*, the ROB is
 implemented as a circular buffer with :math:`W` banks (where :math:`W`
 is the *dispatch* and *commit* width of the machine [1]_). This
-organization is shown in Figure [fig:rob].
+organization is shown in :numref:`rob`.
 
 At *dispatch*, up to :math:`W` instructions are written from the *fetch
 packet* into an ROB row, where each instruction is written to a
