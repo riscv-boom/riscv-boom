@@ -152,6 +152,8 @@ class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1Hel
     val brinfo = new BrResolutionInfo().asInput
     val kill = Bool(INPUT)
     val rob_pnr_head = UInt(INPUT, width=ROB_ADDR_SZ)
+
+    val victim_safe = Bool(OUTPUT)
   }
 
   val s_invalid :: s_wb_req :: s_wb_resp :: s_meta_clear :: s_refill_req :: s_refill_resp :: s_meta_write_req :: s_meta_write_resp :: s_drain_rpq_ld :: s_drain_rpq :: s_spec_wait :: s_commit_resp :: Nil = Enum(UInt(), 12)
@@ -198,9 +200,10 @@ class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1Hel
   rpq.io.deq.ready := (io.replay.ready && state === s_drain_rpq) ||
                        state === s_invalid ||
                       (io.replay.ready && state === s_drain_rpq_ld && rpq.io.deq.bits.cmd === M_XRD)
-  val waiting_store = rpq.io.deq.valid && (rpq.io.deq.bits.cmd === M_XWR)
+  val store_enqueued = Reg(Bool())
+  val waiting_load = (rpq.io.deq.valid && isRead(rpq.io.deq.bits.cmd)) || (!rpq.io.deq.valid && rpq.io.enq.valid && isRead(rpq.io.enq.bits.cmd)) 
 
-  when (state === s_drain_rpq_ld && !(rpq.io.deq.valid && rpq.io.deq.bits.cmd === M_XRD)) {
+  when (state === s_drain_rpq_ld && !waiting_load) {
     state := s_spec_wait
     next_state := s_meta_clear
     //next_state := s_commit_resp
@@ -222,12 +225,14 @@ class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1Hel
     commit_counter := UInt(0)
   }
   when (state === s_spec_wait) {
-    when ((rpq.io.deq.valid && rpq.io.deq.bits.cmd === M_XRD) || (rpq.io.enq.valid && rpq.io.enq.bits.cmd === M_XRD)) {
-      state := s_drain_rpq_ld     // Drain the rpq if a load has been enqued while waiting for speculation to resolve.
+    when (waiting_load) {
+      state := s_drain_rpq_ld   // Drain the rpq if a load has been enqueued while waiting for speculation to resolve.
+    }.elsewhen (store_enqueued) {
+      state := next_state       // A store to this cache block guarantees the refill is nonspeculative.
     }.elsewhen (killed) {
       state := s_invalid        // Kill the refill.
     }.elsewhen(nonspeculative) {
-      state := next_state       // Don't commit refill until marked as nonspeculative. A refill may be marked as nonspecuative after it has been killed, which is why the killed transition has priority.
+      state := next_state       // Don't commit refill until marked as nonspeculative by PNR. A refill may be falsely marked as nonspecuative after it has been killed, which is why the killed transition has priority.
     }
   }
   when (state === s_commit_resp) {
@@ -283,9 +288,10 @@ class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1Hel
       }
     }
   }.otherwise {
-    req.uop.br_mask := GetNewBrMask(io.brinfo, req.uop) // Deassert branch mask bits as branches are resolved.
-    nonspeculative := Mux(state === s_invalid, false.B, nonspeculative || IsOlder(req.uop.rob_idx, io.rob_pnr_head, ROB_ADDR_SZ) || waiting_store)  // Check whether refill is still speculative.
-    killed := killed || IsKilledByBranch(io.brinfo, req.uop) || io.kill // Check whether refill has been killed by misspeculation.
+    req.uop.br_mask := GetNewBrMask(io.brinfo, req.uop)  // Deassert branch mask bits as branches are resolved.
+    store_enqueued := store_enqueued || (rpq.io.deq.valid && isWrite(rpq.io.deq.bits.cmd)) || (rpq.io.enq.valid && isWrite(rpq.io.enq.bits.cmd))
+    nonspeculative := nonspeculative || IsOlder(req.uop.rob_idx, io.rob_pnr_head, ROB_ADDR_SZ)  // Check whether refill is still speculative.
+    killed := killed || IsKilledByBranch(io.brinfo, req.uop) || io.kill  // Check whether refill has been killed by misspeculation.
   }
   when (io.mem_grant.valid && state === s_refill_resp) {
      data(refill_address_inc >> 3) := io.mem_grant.bits.data
@@ -352,6 +358,8 @@ class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1Hel
     rpq.io.deq.ready := Bool(false)
     io.replay.bits.cmd := M_FLUSH_ALL /* nop */
   }
+
+  io.victim_safe := state === s_spec_wait
 }
 
 class SecureMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends L1HellaCacheModule()(p) with HasBoomCoreParameters {
@@ -408,6 +416,8 @@ class SecureMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends L1HellaCac
   io.fence_rdy := true
   io.probe_rdy := true
 
+  val victim_safe = Wire(Vec(cfg.nMSHRs, Bool()))
+
   val mshrs = (0 until cfg.nMSHRs) map { i =>
     val mshr = Module(new SecureMSHR(i))
 
@@ -444,9 +454,10 @@ class SecureMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends L1HellaCac
     mshr.io.kill := io.kill
     mshr.io.rob_pnr_head := io.rob_pnr_head
 
+    victim_safe(i) := mshr.io.victim_safe
+
     mshr
   }
-
 
   alloc_arb.io.out.ready := io.req.valid && sdq_rdy && cacheable && !idx_match
 
@@ -491,7 +502,7 @@ class SecureMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends L1HellaCac
   io.req.ready := Mux(!cacheable,
                     mmio_rdy,
                     sdq_rdy && Mux(idx_match, tag_match && sec_rdy, pri_rdy))
-  io.secondary_miss := idx_match
+  io.secondary_miss := idx_match && !Mux1H(idxMatch, victim_safe)
 
   val free_sdq = io.replay.fire() && isWrite(io.replay.bits.cmd)
   io.replay.bits.data := sdq(RegEnable(replay_arb.io.out.bits.sdq_id, free_sdq))
