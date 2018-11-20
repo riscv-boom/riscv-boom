@@ -1,7 +1,7 @@
 The BOOM Pipeline
 =================
 
-.. _BOOM-Pipeline:
+.. _boom-pipeline:
 .. figure:: /figures/boom_stages.png
     :alt: BOOM Pipeline Stages
 
@@ -105,7 +105,7 @@ depended on that branch. When a branch instructions passes through
 List** are made. On a mispredict, the saved processor state is
 restored.
 
-Although :numref:`BOOM-Pipeline` shows a simplified pipeline, BOOM
+Although :numref:`boom-pipeline` shows a simplified pipeline, BOOM
 implements the RV64G and privileged ISAs, which includes single- and
 double-precision floating point, atomic memory support, and page-based
 virtual memory.

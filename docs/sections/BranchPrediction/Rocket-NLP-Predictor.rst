@@ -29,8 +29,8 @@ instruction in the *fetch packet* is to blame. The BTB entry also
 contains a predicted PC target, which is used as the *Fetch PC* on
 the next cycle.
 
-.. _NLP-Predictor-Unit:
-.. figure:: /figures/boom_stages.png
+.. _nlp-predictor-unit:
+.. figure:: /figures/btb.png
     :alt: The Next-line Predictor 
 
     The Next-line Predictor (NLP) Unit. The Fetch PC scans the BTB’s “PC tags” for a match.

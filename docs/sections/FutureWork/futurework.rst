@@ -132,6 +132,12 @@ read ports and 3 write ports).
 The Compressed (“C") ISA Extension
 ----------------------------------
 
+.. _rvc:
+.. figure:: /figures/frontend.png
+    :alt: Frontend Pipeline 
+
+    The Fetch Unit. The grey box encompasses the Rocket front-end, which is re-used by BOOM.
+
 This section describes how to approach adding the Compressed ISA
 Extension to BOOM. The Compressed ISA Extension, or RVC
 (http://riscv.org/download.html#spec_compressed_isa) enables smaller, 16

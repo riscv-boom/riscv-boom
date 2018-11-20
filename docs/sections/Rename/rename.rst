@@ -21,6 +21,12 @@ specifiers on every loop iteration.
 The Explicit Renaming Design
 ----------------------------
 
+.. _prf-vs-data-in-rob:
+.. figure:: /figures/prf-and-arg.png
+    :alt: PRF vs Data-in-ROB design
+
+    A PRF design (left) and a data-in-ROB design (right)
+
 BOOM is an “explicit renaming" or “physical register file" out-of-order
 core design. A physical register file, containing many more registers
 than the ISA dictates, holds both the committed architectural register
@@ -37,6 +43,15 @@ the ARF.  [2]_
 
 The Rename Map Table
 --------------------
+
+.. _rename-stage:
+.. figure:: /figures/rename-pipeline.png
+    :alt: The Rename Stage 
+
+    The Rename Stage. Logical register specifiers read the map table to get their physical specifier.
+    For superscalar rename, any changes to the map tables must be bypassed to dependent instructions. The
+    physical source specifiers can then read the Busy Table. The Stale specifier is used to track which physical
+    register will be freed when the instruction later commits. P0 in the Physical Register File is always 0.
 
 The Rename Map Table holds the speculative mappings from ISA registers
 to physical registers.

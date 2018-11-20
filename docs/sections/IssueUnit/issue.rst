@@ -40,6 +40,12 @@ to be *issued*.
 Issue Select Logic
 ------------------
 
+.. _single-issue-slot:
+.. figure:: /figures/issue_slot.png
+    :alt: Single Issue Slot
+
+    A single issue slot from the Issue Window.
+
 Each issue select logic port is a static-priority encoder that picks
 that first available micro-op in the issue window. Each port will only
 schedule a micro-op that its port can handle (e.g., floating point

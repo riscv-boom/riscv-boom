@@ -1,6 +1,12 @@
 The Rocket-chip Repository Layout
 ====================================
 
+.. _boom-chip:
+.. figure:: /figures/chip.png
+    :alt: BOOM Chip
+
+    A single-core "BOOM-chip", with no L2 last-level cache
+
 As BOOM is just a core, an entire SoC infrastructure must be provided.
 BOOM was developed to use the open-source Rocket-chip SoC generator
 https://github.com/freechipsproject/rocket-chip. The Rocket-chip generator

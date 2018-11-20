@@ -1,15 +1,37 @@
 The Execute Pipeline
 ====================
 
+.. _dual-issue-pipeline:
+.. figure:: /figures/execution-pipeline-2w.png
+    :alt: Dual Issue Pipeline 
+
+    An example pipeline for a dual-issue BOOM. The first issue port schedules micro-ops onto
+    Execute Unit #0, which can accept ALU operations, FPU operations, and integer multiply instructions.
+    The second issue port schedules ALU operations, integer divide instructions (unpipelined), and load/store
+    operations. The ALU operations can bypass to dependent instructions. Note that the ALU in EU#0 is
+    padded with pipeline registers to match latencies with the FPU and iMul units to make scheduling for the
+    write-port trivial. Each Execution Unit has a single issue-port dedicated to it but contains within it a number
+    of lower-level Functional Units.
+
 The Execution Pipeline covers the execution and write-back of micro-ops.
 Although the micro-ops will travel down the pipeline one after the other
 (in the order they have been issued), the micro-ops themselves are
 likely to have been issued to the Execution Pipeline out-of-order.
-Figure [fig:execute-pipeline] shows an example Execution Pipeline for a
+:numref:`dual-issue-pipeline` shows an example Execution Pipeline for a
 dual-issue BOOM.
 
 Execution Units
 ---------------
+
+.. _example-fu:
+.. figure:: /figures/execution-unit.png
+    :alt: Example Execution Unit 
+
+    An example Execution Unit. This particular example shows an integer ALU (that can bypass
+    results to dependent instructions) and an unpipelined divider that becomes busy during operation. Both
+    functional units share a single write-port. The Execution Unit accepts both kill signals and branch resolution
+    signals and passes them to the internal functional units as required.
+
 
 An Execution Unit is a module that a single issue port will schedule
 micro-ops onto and contains some mix of functional units. Phrased in
@@ -29,10 +51,19 @@ An Execution Unit provides a bit-vector of the functional units it has
 available to the issue scheduler. The issue scheduler will only schedule
 micro-ops that the Execution Unit supports. For functional units that
 may not always be ready (e.g., an un-pipelined divider), the appropriate
-bit in the bit-vector will be disabled (See Fig [fig:execute-unit]).
+bit in the bit-vector will be disabled (See :numref:`dual-issue-pipeline`).
 
 Functional Units
 ----------------
+
+.. _abstract-fu:
+.. figure:: /figures/abstract-functional-unit.png
+    :alt: Abstract Functional Unit 
+
+    The abstract Pipelined Functional Unit class. An expert-written, low-level functional unit
+    is instantiated within the Functional Unit. The request and response ports are abstracted and bypass and
+    branch speculation support is provided. Micro-ops are individually killed by gating off their response as they
+    exit the low-level functional unit.
 
 Functional units are the muscle of the CPU, computing the necessary
 operations as required by the instructions. Functional units typically
@@ -85,6 +116,16 @@ The only requirement of the expert-written un-pipelined functional unit
 is to provide a *kill* signal to quickly remove misspeculated
 micro-ops. [1]_
 
+.. _fu-hierarchy:
+.. figure:: /figures/functional-unit-hierarchy.png
+    :alt: Functional Unit Hierarchy
+
+    The dashed ovals are the low-level functional units written by experts, the squares are
+    concrete classes that instantiate the low-level functional units, and the octagons are abstract classes that
+    provide generic speculation support and interfacing with the BOOM pipeline. The floating point divide
+    and squart-root unit doesn’t cleanly fit either the Pipelined nor Unpipelined abstract class, and so directly
+    inherits from the FunctionalUnit super class.
+
 Branch Unit & Branch Speculation
 --------------------------------
 
@@ -125,8 +166,6 @@ BOOM (currently) only supports having one Branch Unit.
 Load/Store Unit
 ---------------
 
-.
-
 The Load/Store Unit (LSU) handles the execution of load, store, atomic,
 and fence operations.
 
@@ -137,6 +176,15 @@ See Chapter [sec:lsu] for more details on the LSU.
 
 Floating Point Units
 --------------------
+
+.. _fp-fu:
+.. figure:: /figures/functional-unit-fpu.png
+    :alt: Functional Unit for FPU 
+
+    The class hierarchy of the FPU is shown. The expert-written code is contained within
+    the hardfloat and rocket repositories. The “FPU” class instantiates the Rocket components, which itself
+    is further wrapped by the abstract Functional Unit classes (which provides the out-of-order speculation
+    support).
 
 The low-level floating point units used by BOOM come from the Rocket
 processor (https://github.com/ucb-bar/rocket) and hardfloat
@@ -211,7 +259,10 @@ how to instantiate an execution pipeline in BOOM.
        exe_units += Module(new MemExeUnit())
     }
 
-[code:exe\_units]
+Code Caption: Instantiating the Execution Pipeline (in dpath.scala).
+Adding execution units is as simple as instantiating another
+ExecutionUnit module and adding it to the exe units
+ArrayBuffer.
 
 Additional parameterization, regarding things like the latency of the FP
 units can be found within the Configuration settings (configs.scala).
