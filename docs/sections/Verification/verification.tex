@@ -1,36 +1,0 @@
-\chapter{Verification}
-
-This chapter covers the current recommended techniques for verifying BOOM.  Although not provided as part of the BOOM or rocket-chip repositories, it is also recommended that BOOM be tested on ``hello-world + riscv-pk" and the RISC-V port of Linux to properly stress the processor.
-
-\section{RISC-V Tests}
-
-A basic set of functional tests and micro-benchmarks can be found at (\url{https://github.com/riscv/riscv-tests}).  These are invoked by the ``make run" targets in the emulator, fsim, and vsim directories. 
-
-\section{RISC-V Torture Tester}
-
-Berkeley's {\tt riscv-torture} tool is used to stress the BOOM pipeline, find bugs, and provide small code snippets that can be used to debug the processor. Torture can be found at (\url{https://github.com/ucb-bar/riscv-torture}).
-
-\
-
-\begin{quote}
-{\bf Quick-start}
-
-\texttt{\#} compile the BOOM C++ emulator
-
-\texttt{\$} \verb=cd rocket-chip/emulator; make run CONFIG==\verb=BOOMCPPConfig=
-
-\
-
-\texttt{\#} check out and run the {\tt riscv-torture} repository
-
-\texttt{\$} \verb=cd ../          # top-level rocket-chip directory=
-\texttt{\$} \verb=git clone https://github.com/ucb-bar/riscv-torture.git=
-\texttt{\$} \verb=cd riscv-torture=
-\texttt{\$} \verb=git submodule update --init=
-\texttt{\$} \verb=vim Makefile    # change RTL_CONFIG==\verb=BOOMCPPConfig=
-\texttt{\$} \verb=make igentest   # test that torture works, gen a single test=
-
-\texttt{\$} \verb=make cnight     # run C++ emulator overnight=
-\end{quote}
-
-
