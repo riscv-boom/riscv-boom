@@ -14,7 +14,7 @@ cycle where to fetch the next instructions using a “next-line predictor"
 (NLP). If a misprediction is detected in BOOM’s backend, or BOOM’s own
 predictor wants to redirect the pipeline in a different direction, a
 request is sent to the Front-End and it begins fetching along a new
-instruction path. See Chapter \[chapter:bpd\] for more information on
+instruction path. See :ref:`Branch Prediction` for more information on
 how branch prediction fits into the Fetch Unit’s pipeline.
 
 Since superscalar fetch is supported, the *Front-end* returns a

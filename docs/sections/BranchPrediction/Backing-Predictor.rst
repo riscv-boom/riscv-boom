@@ -10,15 +10,16 @@ are not able to learn very complicated or long history patterns).
 
 To capture more branches and more complicated branching behaviors, BOOM
 provides support for a “Backing Predictor", or BPD (see 
-:numref:`backing-predictor-unit`.
+:numref:`backing-predictor-unit`).
+
 
 The BPD’s goal is to provide very high accuracy in a (hopefully) dense
 area. To make this possible, the BPD will not make a prediction until
 the *fetch packet* has been decoded and the branch targets computed
 directly from the instructions themselves. This saves on needing to
-store the *PC tags* and *branch targets* within the BPD.
+store the *PC tags* and *branch targets* within the BPD [7]_.
 
-The BPD is accessed in parallel with the instruction cache access (See
+The BPD is accessed in parallel with the instruction cache access (see
 :numref:`Fetch-Unit`). This allows the BPD to be stored in sequential
 memory (i.e., SRAM instead of flip-flops). With some clever
 architecting, the BPD can be stored in single-ported SRAM to achieve the
@@ -94,9 +95,9 @@ info packet". This “info packet" is stored in a “branch re-order buffer"
 (BROB) until commit time. [11]_ Once all of the instructions
 corresponding to the “info packet" is committed, the “info packet" is
 set to the BPD (along with the eventual outcome of the branches) and the
-BPD is updated. Section \[sec:brob\] covers the BROB, which handles the
+BPD is updated. :ref:`The Branch Reorder Buffer (BROB)` covers the BROB, which handles the
 snapshot information needed for update the predictor during
-*Commit*. Section \[sec:bpd-rename\] covers the BPD Rename
+*Commit*. :ref:`Rename Snapshot State` covers the BPD Rename
 Snapshots, which handles the snapshot information needed to update the
 predictor during a misspeculation in the *Execute* stage.
 
@@ -104,11 +105,11 @@ Managing the Global History Register
 ------------------------------------
 
 The *global history register* is an important piece of a branch
-predictor. It contains the outcomes of the previous $N$ branches (where
-$N$ is the size of the global history register). [12]_
+predictor. It contains the outcomes of the previous :math:`N` branches (where
+:math:`N` is the size of the global history register). [12]_
 
-When fetching branch $i$, it is important that the direction of the
-previous $i-N$ branches is available so an accurate prediction can be
+When fetching branch :math:`i`, it is important that the direction of the
+previous :math:`i-N` branches is available so an accurate prediction can be
 made. Waiting till the *Commit* stage to update the global history
 register would be too late (dozens of branches would be inflight and not
 reflected!). Therefore, the global history register must be updated
@@ -136,7 +137,7 @@ any sort of pipeline flush event.
 The Branch Reorder Buffer (BROB)
 --------------------------------
 
-The Reorder Buffer (see Chapter \[chapter:rob\]) maintains a record of
+The Reorder Buffer (see :ref:`The Reorder Buffer (ROB) and the Dispatch Stage`) maintains a record of
 all inflight instructions. Likewise, the Branch Reorder Buffer (BROB)
 maintains a record of all inflight branch predictions. These two
 structure are decoupled as BROB entries are *incredibly* expensive
@@ -217,7 +218,7 @@ abstract class can be found in :numref:`backing-predictor-unit` labeled “predi
 Global History
 ^^^^^^^^^^^^^^
 
-As discussed in Section \[sec:ghistory\], global history is a vital
+As discussed in :ref:`Managing the Global History Register`, global history is a vital
 piece of any branch predictor. As such, it is handled by the abstract
 BranchPredictor class. Any branch predictor extending the abstract
 BranchPredictor class gets access to global history without having to
@@ -226,16 +227,16 @@ handle snapshotting, updating, and bypassing.
 Very Long Global History (VLHR)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Some branch predictors (see Section \[sec:tage\]) require access to
+Some branch predictors (see :ref:`The TAGE Predictor`) require access to
 incredibly long histories – over a thousand bits. Global history is
 speculatively updated after each prediction and must be snapshotted and
 reset if a misprediction was made. Snapshotting a thousand bits is
 untenable. Instead, VLHR is implemented as a circular buffer with a
 speculative head pointer and a commit head pointer. As a prediction is
-made, the prediction is written down at $VLHR[spec\_head]$ and the
+made, the prediction is written down at :math:`VLHR[spec\_head]` and the
 speculative head pointer is incremented and snapshotted. When a branch
-mispredicts, the head pointer is reset to $snapshot+1$ and the correct
-direction is written to $VLHR[snapshot]$. In this manner, each snapshot
+mispredicts, the head pointer is reset to :math:`snapshot+1` and the correct
+direction is written to :math:`VLHR[snapshot]`. In this manner, each snapshot
 is on the order of 10 bits, not 1000 bits.
 
 Operating System-aware Global Histories
@@ -371,16 +372,16 @@ there is no tag match). The table with the longest history making a
 prediction wins.
 
 On a misprediction, TAGE attempts to allocate a new entry. It will only
-overwrite an entry that is “not useful” ($ubits == 0$).
+overwrite an entry that is “not useful” (:math:`ubits == 0`).
 
 TAGE Global History and the Circular Shift Registers (CSRs) [15]_
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Each TAGE table has associated with it its own global history (and each
 table has geometrically more history than the last table). As the
 histories become incredibly long (and thus too expensive to snapshot
 directly), TAGE uses the Very Long Global History Register (VLHR) as
-described in Section \[sec:vlhr\]. The histories contain many more bits
+described in :ref:`Very Long Global History (VLHR)`. The histories contain many more bits
 of history that can be used to index a TAGE table; therefore, the
 history must be “folded” to fit. A table with 1024 entries uses 10 bits
 to index the table. Therefore, if the table uses 20 bits of global
@@ -390,10 +391,12 @@ bits of history.
 Instead of attempting to dynamically fold a very long history register
 every cycle, the VLHR can be stored in a circular shift register (CSR).
 The history is stored already folded and only the new history bit and
-the oldest history bit need to be provided to perform an update. Code
-\[code:tage-csr\] shows an example of how a CSR works.
+the oldest history bit need to be provided to perform an update. 
+:numref:`tage-csr` shows an example of how a CSR works.
 
-::
+.. _tage-csr:
+.. code-block:: none
+    :caption: The circular shift register. When a new branch outcome is added, the register is shifted (and wrapped around). The new outcome is added and the oldest bit in the history is “evicted”.
 
     Example:   
       A 12 bit value (0b_0111_1001_1111) folded onto a 5 bit CSR becomes 
@@ -411,16 +414,12 @@ the oldest history bit need to be provided to perform an update. Code
     (c[4] ^ h[ 0] generates the new c[0]).                                        
     (c[1] ^ h[12] generates the new c[2]).       
 
-Code Caption: The circular shift register. When a new branch outcome is added, the register
-is shifted (and wrapped around). The new outcome is added and the oldest bit in the
-history is “evicted”.
-
 Each table must maintain *three* CSRs. The first CSR is used for
-computing the index hash and has a size $n=log(num\_table\_entries)$. As
+computing the index hash and has a size :math:`n=log(num\_table\_entries)`. As
 a CSR contains the folded history, any periodic history pattern matching
 the length of the CSR will XOR to all zeroes (potentially quite common).
 For this reason, there are two CSRs for computing the tag hash, one of
-width $n$ and the other of width $n-1$.
+width :math:`n` and the other of width :math:`n-1`.
 
 For every prediction, all three CSRs (for every table) must be
 snapshotted and reset if a branch misprediction occurs. Another three
@@ -478,24 +477,11 @@ take?". This is very useful for both torturing-testing BOOM and for
 providing a worse-case performance baseline for comparing branch
 predictors.
 
-.. [6] Each BTB entry corresponds to a single *Fetch PC*, but it is
-    helping to predict across an entire *fetch packet*. However, the
-    BTB entry can only store meta-data and target-data on a single
-    control-flow instruction. While there are certainly pathological
-    cases that can harm performance with this design, the assumption is
-    that there is a correlation between which branch in a *fetch
-    packet* is the dominating branch relative to the *Fetch PC*,
-    and - at least for narrow fetch designs - evaluations of this design
-    has shown it is very complexity-friendly with no noticeable loss in
-    performance. Some other designs instead choose to provide a whole
-    bank of BTBs for each possible instruction in the *fetch
-    packet*.
-
 .. [7] It’s the *PC tag* storage and *branch target* storage that
     makes the BTB within the NLP so expensive.
 
-.. [8]  instructions jump to a $PC+Immediate$ location, whereas
-     instructions jump to a $PC+Register[rs1]+Immediate$ location.
+.. [8]  instructions jump to a :math:`PC+Immediate` location, whereas
+     instructions jump to a :math:`PC+Register[rs1]+Immediate` location.
 
 .. [9] Redirecting the Fetch Unit in the *Fetch2 Stage* for
      instructions is trivial, as the instruction can be decoded and its

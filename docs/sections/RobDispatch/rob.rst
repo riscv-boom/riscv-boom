@@ -1,3 +1,5 @@
+.. _rob-dispatch-stage:
+
 The Reorder Buffer (ROB) and the Dispatch Stage
 ===============================================
 
@@ -67,8 +69,8 @@ Each ROB entry contains relatively little state:
 -  other miscellaneous data (e.g., helpful for statistic tracking)
 
 The PC and the branch prediction information is stored on a per-row
-basis (see Sec [sec:pcstorage]). The Exception State only tracks the
-oldest known excepting instruction (see Sec [sec:rob\_xcpt]).
+basis (see :ref:`PC Storage`). The Exception State only tracks the
+oldest known excepting instruction (see :ref:`Exception State`).
 
 Exception State
 ~~~~~~~~~~~~~~~
@@ -149,7 +151,7 @@ Parameterization - Rollback versus Single-cycle Reset
 The behavior of resetting the map tables is parameterizable. The first
 option is to rollback the ROB one row per cycle to unwind the rename
 state (this is the behavior of the MIPS
-R10k:raw-latex:`\cite{mipsr10k}`). For each instruction, the *stale
+R10k). For each instruction, the *stale
 physical destination* register is written back into the map table for
 its *logical destination* specifier.
 
@@ -171,7 +173,7 @@ The RV64G ISA provides relatively few exception sources:
 
     Decode Stage
         - all other exceptions and interrupts can be handled before the
-        instruction is dispatched to the ROB
+          instruction is dispatched to the ROB
 
 Note that memory ordering speculation errors also originate from the
 Load/Store Unit, and are treated as exceptions in the BOOM pipeline

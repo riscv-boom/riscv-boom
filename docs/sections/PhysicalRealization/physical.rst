@@ -22,7 +22,7 @@ latency with registers. In order to meet the desired clock frequency,
 **the floating point units and the pipelined integer multiply unit must
 be register-retimed**.
 
-::
+.. code-block:: scala
 
     val mul_result = lhs.toSInt * rhs.toSInt
                                                                                    
@@ -39,8 +39,6 @@ be register-retimed**.
     ))                                                                             
                                                                                    
     io.out := ShiftRegister(mul_output_mux, imul_stages, io.valid)
-
-[code:imul]
 
 Pipelining Configuration Options
 --------------------------------
