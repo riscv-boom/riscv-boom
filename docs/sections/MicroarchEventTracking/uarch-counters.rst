@@ -7,6 +7,10 @@ a nearly infinite number of micro-architectural events to be multiplexed
 onto up to 29 physical counters. The privilege access levels can also be
 set on a per-counter basis.
 
+.. _uarch-counter-table:
+
+Table: UArch Events
+
 +----------+-----------------------------------+
 | Number   | Event                             |
 +==========+===================================+
@@ -17,15 +21,13 @@ set on a per-counter basis.
 | ...      | and many more (see core.scala)    |
 +----------+-----------------------------------+
 
-Table: Uarch Events
-
-[table:uarchcounters]
-
 The available events can be modified in core.scala as desired. [2]_ It
 is then up to machine-level software to set the privilege access level
 and the *event selectors* for each counter as desired.
 
-::
+.. _enable-uarch-counters:
+.. code-block:: c 
+    :caption: Enable Micro-arch counters 
 
     static void mstatus_init()
     {
@@ -37,29 +39,26 @@ and the *event selectors* for each counter as desired.
        write_csr(mhpmevent3, 1);
        write_csr(mhpmevent4, 2);
 
-[ref:code\_hpm\_init]
-
 Reading HPM Counters in Software
 --------------------------------
 
-The Code Example [ref:code\_uarch] demonstrates how to read the value of
+The Code Example :numref:`read-csr` demonstrates how to read the value of
 any CSR register from software.
 
-::
+.. _read-csr:
+.. code-block:: c
+    :caption: Read CSR Register 
 
     #define read_csr_safe(reg) ({ register long __tmp asm("a0"); \   
-      asm volatile ("csrr %0, " #reg : "=r"(__tmp)); \               
-      __tmp; })             
+            asm volatile ("csrr %0, " #reg : "=r"(__tmp)); \               
+            __tmp; })             
+    
+    long csr_cycle  = read_csr_safe(cycle);
+    long csr_instr  = read_csr_safe(instret);
+    long csr_hpmc3  = read_csr_safe(hpmcounter3);
+    ...
+    long csr_hpmc31 = read_csr_safe(hpmcounter31);
       
-      long csr_cycle  = read_csr_safe(cycle);
-      long csr_instr  = read_csr_safe(instret);
-      long csr_hpmc3  = read_csr_safe(hpmcounter3);
-      ...
-      long csr_hpmc31 = read_csr_safe(hpmcounter31);
-      
-
-[ref:code\_uarch]
-
 .. [1]
    Future efforts may add some counters into a memory-mapped access
    region. This will open up the ability to track events that, for

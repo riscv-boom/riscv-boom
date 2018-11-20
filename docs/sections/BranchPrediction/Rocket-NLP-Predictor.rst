@@ -117,21 +117,6 @@ packet* which of the many possible branches will be the dominating
 branch that redirects the PC. For this reason, we use a given branch’s
 *Fetch PC* rather than its own PC in the BTB tag match. [6]_
 
-.. [1] Unfortunately, the terminology in the literature gets a bit
-    muddled here in what to call different types and levels of branch
-    predictor. I have seen “micro-BTB" versus “BTB", “NLP" versus “BHT",
-    and “cache-line predictor" versus “overriding predictor". Although
-    the Rocket code calls its own predictor the “BTB", I have chosen to
-    refer to it in documentation as the “next-line predictor", to denote
-    that it is a combinational predictor that provides single-cycle
-    predictions for fetching “the next line", and the Rocket BTB
-    encompasses far more complexity than just a “branch target buffer"
-    structure. Likewise, I have chosen the name “backing predictor" as I
-    believe it is the most accurate name, while simultaneously avoiding
-    being overly descriptive of the internal design (is it a simple BHT?
-    Is it tagged? Does it override the NLP?). But in short, I am open
-    to better names!
-
 .. [2] In reality, only the very lowest bits must be saved, as the
     higher-order bits will be the same.
 

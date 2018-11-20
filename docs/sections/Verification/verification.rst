@@ -21,19 +21,3 @@ Berkeley’s riscv-torture tool is used to stress the BOOM pipeline, find
 bugs, and provide small code snippets that can be used to debug the
 processor. Torture can be found at
 (https://github.com/ucb-bar/riscv-torture).
-
-**Quick-start**
-
-::
-    #compile the BOOM C++ emulator
-    $ cd rocket-chip/emulator;
-    make run CONFIG=BOOMConfig
-    #check out and run the riscv-torture repository
-    $ cd ../
-    # top-level rocket-chip directory
-    $ git clone https://github.com/ucb-bar/riscv-torture.git
-    $ cd riscv-torture
-    $ git submodule update --init
-    $ vim Makefile    # change RTL_CONFIG=BOOMConfig
-    $ make igentest   # test that torture works, gen a single test
-    $ make cnight     # run C++ emulator overnight

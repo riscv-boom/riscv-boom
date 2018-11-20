@@ -6,8 +6,11 @@ main `GitHub organization <https://github.com/riscv-boom/boom-template>`__. Ther
 to setup your environment, build, and run the BOOM core on a C++ emulator. Here is a selected set of steps
 from that repositories README:
 
-::
+.. _quick-start-code:
+.. code-block:: bash
+    :caption: Quick-Start Code
 
+    # Download the template and setup environment
     git clone https://github.com/riscv-boom/boom-template.git
     cd boom-template
     ./scripts/init-submodules.sh
@@ -22,4 +25,4 @@ from that repositories README:
     cd verisim
     make run
 
-Note: This assumes you have don't have installed the riscv-tools toolchain. It will pull and build the toolchain for you.
+Note: :numref:`quick-start-code` assumes you have don't have installed the riscv-tools toolchain. It will pull and build the toolchain for you.

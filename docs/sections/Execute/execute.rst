@@ -72,15 +72,15 @@ efficiently.
 
 For this reason, BOOM uses an abstract Functional Unit class to “wrap"
 expert-written, low-level functional units from the Rocket repository
-(see Section [sec:rocket]). However, the expert-written functional units
+(see :ref:`The Rocket-chip Repository Layout`). However, the expert-written functional units
 created for the Rocket in-order processor make assumptions about
 in-order issue and commit points (namely, that once an instruction has
 been dispatched to them it will never need to be killed). These
 assumptions break down for BOOM.
 
 However, instead of re-writing or forking the functional units, BOOM
-provides an abstract Functional Unit class (see Fig
-[fig:abstract-functional-unit]) that “wraps" the lower-level functional
+provides an abstract Functional Unit class (see :numref:`abstract-fu`)
+that “wraps" the lower-level functional
 units with the parameterized auto-generated support code needed to make
 them work within BOOM. The request and response ports are abstracted,
 allowing Functional Units to provide a unified, interchangeable
@@ -98,8 +98,7 @@ the micro-op within the expert-written functional unit. If a micro-op is
 misspeculated, it’s response is de-asserted as it exits the functional
 unit.
 
-An example pipelined functional unit is shown in Fig
-[fig:abstract-functional-unit].
+An example pipelined functional unit is shown in :numref:`abstract-fu`.
 
 Un-pipelined Functional Units
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -172,7 +171,7 @@ and fence operations.
 BOOM (currently) only supports having one LSU (and thus can only send
 one load or store per cycle to memory). [2]_
 
-See Chapter [sec:lsu] for more details on the LSU.
+See `The Load/Store Unit (LSU)` for more details on the LSU.
 
 Floating Point Units
 --------------------
@@ -187,7 +186,7 @@ Floating Point Units
     support).
 
 The low-level floating point units used by BOOM come from the Rocket
-processor (https://github.com/ucb-bar/rocket) and hardfloat
+processor (https://github.com/freechipsproject/rocket-chip) and hardfloat
 (https://github.com/ucb-bar/berkeley-hardfloat) repositories. Figure
 [fig:functional-unit-fpu] shows the class hierarchy of the FPU.
 
@@ -198,7 +197,7 @@ Floating Point Divide and Square-root Unit
 ------------------------------------------
 
 BOOM fully supports floating point divide and square-root operations
-using a single “" (or  for short). BOOM accomplishes this by
+using a single **FDiv/Sqrt** (or **fdiv** for short). BOOM accomplishes this by
 instantiating a double-precision unit from the hardfloat repository. The
 unit comes with the following features/constraints:
 
@@ -218,7 +217,7 @@ double-precision (and then the output downscaled). [4]_
 
 Although the  unit is unpipelined, it does not fit cleanly into the
 Pipelined/Unpipelined abstraction used by the other functional units
-(Fig [fig:functional-unit-hierarchy]). This is because the unit provides
+(see :numref:`fu-hierarchy`). This is because the unit provides
 an unstable FIFO interface: although the  unit may provide a *ready*
 signal on Cycle :math:`i`, there is no guarantee that it will continue
 to be *ready* on Cycle :math:`i+1`, even if no operations are enqueued.
@@ -238,7 +237,11 @@ BOOM provides flexibility in specifying the issue width and the mix of
 functional units in the execution pipeline. Code [code:exe\_units] shows
 how to instantiate an execution pipeline in BOOM.
 
-::
+
+
+.. _parameterization-exe-unit:
+.. code-block:: scala
+    :caption: Instantiating the Execution Pipeline (in dpath.scala). Adding execution units is as simple as instantiating another ExecutionUnit module and adding it to the exe units ArrayBuffer.
 
     val exe_units = ArrayBuffer[ExecutionUnit]()
 
@@ -258,11 +261,6 @@ how to instantiate an execution pipeline in BOOM.
        exe_units += Module(new ALUExeUnit(has_div = true))
        exe_units += Module(new MemExeUnit())
     }
-
-Code Caption: Instantiating the Execution Pipeline (in dpath.scala).
-Adding execution units is as simple as instantiating another
-ExecutionUnit module and adding it to the exe units
-ArrayBuffer.
 
 Additional parameterization, regarding things like the latency of the FP
 units can be found within the Configuration settings (configs.scala).

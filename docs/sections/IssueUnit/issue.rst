@@ -27,7 +27,7 @@ the issue window. More advanced techniques are also available.
 Issue Slot
 ----------
 
-Figure [fig:riscv-boom\_issue\_slot] shows a single issue slot from the
+:numref:`single-issue-slot` shows a single issue slot from the
 *Issue Window*. [1]_
 
 Instructions are *dispatched* into the *Issue Window*. From here, they
@@ -63,7 +63,7 @@ Un-ordered Issue Window
 There are two scheduling policies available in BOOM.
 
 The first is a R10K-style un-ordered issue
-window.:raw-latex:`\cite{mipsr10k}` Dispatching instructions are placed
+window. Dispatching instructions are placed
 into the first available issue window slot and remain there until they
 are *issued*. This can lead to pathologically poor performance,
 particularly in scenarios where unpredictable branches are placed into

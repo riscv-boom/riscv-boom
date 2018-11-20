@@ -80,15 +80,15 @@ The BOOM Memory Model
 Currently, as of October 2016, the RISC-V memory model is underspecified
 and will take some time to settle on an exact specification. However,
 the current RISC-V specification describes as *relaxed consistency*
-model :raw-latex:`\cite{Gharachorloo:1990:MCE:325096.325102}` in which
+model in which
 stores and loads may be freely re-ordered.
 
 BOOM currently exhibits the following behavior:
 
-#. Write->Read constraint is relaxed (newer loads may execute before
+#. Write -> Read constraint is relaxed (newer loads may execute before
    older stores).
 
-#. Read->Read constraint is currently relaxed (loads to the same address
+#. Read -> Read constraint is currently relaxed (loads to the same address
    may be reordered).
 
 #. A thread can read its own writes early.
@@ -112,7 +112,7 @@ The Load/Store Unit has to be careful regarding
 store\ :math:`\rightarrow`\ load dependences. For the best performance,
 loads need to be fired to memory as soon as possible.
 
-    ``s``\ w x1 :math:`\rightarrow` 0(x2)
+    sw x1 :math:`\rightarrow` 0(x2)
 
     ld x3 :math:`\leftarrow` 0(x4)
 
@@ -129,7 +129,7 @@ checks to see if the load has *executed*, and if it got its data from
 memory or if the data was forwarded from an older store. In either case,
 a memory ordering failure has occurred.
 
-See Figure [fig:lsu] for more information about the Load/Store Unit.
+See :numref:`lsu` for more information about the Load/Store Unit.
 
 .. [1]
    When I refer to the *Store Queue*, I really mean both the SAQ and

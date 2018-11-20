@@ -22,7 +22,7 @@ The Explicit Renaming Design
 ----------------------------
 
 .. _prf-vs-data-in-rob:
-.. figure:: /figures/prf-and-arg.png
+.. figure:: /figures/prf-and-arf.png
     :alt: PRF vs Data-in-ROB design
 
     A PRF design (left) and a data-in-ROB design (right)
