@@ -14,6 +14,7 @@ import freechips.rocketchip.tile._
 import boom.bpu._
 import boom.exu._
 import boom.lsu._
+import boom.ifu._
 import boom.system.BoomTilesKey
 
 
@@ -41,6 +42,7 @@ class DefaultBoomConfig extends Config((site, here, up) => {
          numLsuEntries = 16,
          maxBrCount = 8,
          btb = BoomBTBParameters(nSets=512, nWays=4, nRAS=8, tagSz=13),
+         ftq = FtqParameters(nEntries=50),
          enableBranchPredictor = true,
          gshare = Some(GShareParameters(enabled=true, history_length=23, num_sets=4096)),
          nPerfCounters = 29,
