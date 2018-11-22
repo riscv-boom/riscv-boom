@@ -153,12 +153,13 @@ class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1Hel
     val kill = Bool(INPUT)
     val rob_pnr_head = UInt(INPUT, width=ROB_ADDR_SZ)
 
-    val victim_safe = Bool(OUTPUT)
+    val victim_safe  = Bool(OUTPUT)
+    val req_nacked   = Bool(INPUT)
+    val evict_refill = Bool(INPUT)
   }
 
   val s_invalid :: s_wb_req :: s_wb_resp :: s_meta_clear :: s_refill_req :: s_refill_resp :: s_meta_write_req :: s_meta_write_resp :: s_drain_rpq_ld :: s_drain_rpq :: s_spec_wait :: s_commit_resp :: Nil = Enum(UInt(), 12)
   val state = Reg(init=s_invalid)
-  val next_state = Reg(init=s_invalid)
   val nonspeculative = Reg(Bool())  // Is the refill still speculative?
   val killed = Reg(Bool())          // Has the refill been killed by misspeculation since its initiation?
 
@@ -184,33 +185,30 @@ class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1Hel
   val (cmd_requires_second_acquire, is_hit_again, _, dirtier_coh, dirtier_cmd) =
     new_coh.onSecondaryAccess(req.cmd, io.req_bits.cmd)
 
-  val states_before_refill = Seq(s_wb_req, s_wb_resp, s_meta_clear)
+  val states_before_refill = Seq(s_wb_req, s_wb_resp)
   val (_, _, refill_done, refill_address_inc) = edge.addr_inc(io.mem_grant)
-  val commit_counter = RegInit(UInt(0, width=4))
-  val commit_done = commit_counter === UInt(7)
+  val commit_counter = RegInit(UInt(0, width=3))
+  val commit_done = commit_counter === UInt(7) && io.refill.ready
   val sec_rdy = idx_match &&
                   (state.isOneOf(states_before_refill) ||
                     (state.isOneOf(s_refill_req, s_refill_resp) &&
                       !cmd_requires_second_acquire && !refill_done) || 
-                   state === s_spec_wait && next_state =/= s_meta_write_req)
+                   state === s_spec_wait)
   assert(!(io.mem_grant.valid && !(state === s_refill_resp || state === s_wb_resp)))
   val rpq = Module(new Queue(new SecureReplayInternal, cfg.nRPQ))
   rpq.io.enq.valid := (io.req_pri_val && io.req_pri_rdy || io.req_sec_val && sec_rdy) && !isPrefetch(io.req_bits.cmd)
   rpq.io.enq.bits := io.req_bits
   rpq.io.deq.ready := (io.replay.ready && state === s_drain_rpq) ||
                        state === s_invalid ||
-                      (io.replay.ready && state === s_drain_rpq_ld && rpq.io.deq.bits.cmd === M_XRD)
+                      (io.replay.ready && state === s_drain_rpq_ld && isRead(rpq.io.deq.bits.cmd))
   val store_enqueued = Reg(Bool())
   val waiting_load = (rpq.io.deq.valid && isRead(rpq.io.deq.bits.cmd)) || (!rpq.io.deq.valid && rpq.io.enq.valid && isRead(rpq.io.enq.bits.cmd)) 
 
   when (state === s_drain_rpq_ld && !waiting_load) {
     state := s_spec_wait
-    next_state := s_meta_clear
-    //next_state := s_commit_resp
   }
   when (state === s_drain_rpq && !rpq.io.deq.valid) {
     state := s_invalid
-    //state := s_commit_resp
   }
   when (state === s_meta_write_resp) {
     // this wait state allows us to catch RAW hazards on the tags via nack_victim
@@ -222,20 +220,19 @@ class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1Hel
   when (state === s_refill_resp && refill_done) {
     new_coh := coh_on_grant
     state := s_drain_rpq_ld
-    commit_counter := UInt(0)
   }
   when (state === s_spec_wait) {
     when (waiting_load) {
       state := s_drain_rpq_ld   // Drain the rpq if a load has been enqueued while waiting for speculation to resolve.
     }.elsewhen (store_enqueued) {
-      state := next_state       // A store to this cache block guarantees the refill is nonspeculative.
-    }.elsewhen (killed) {
+      state := s_meta_clear     // A store to this cache block guarantees the refill is nonspeculative.
+    }.elsewhen (killed || io.req_nacked && idx_match || io.req_nacked && io.evict_refill) {
       state := s_invalid        // Kill the refill.
     }.elsewhen(nonspeculative) {
-      state := next_state       // Don't commit refill until marked as nonspeculative by PNR. A refill may be falsely marked as nonspecuative after it has been killed, which is why the killed transition has priority.
+      state := s_meta_clear     // Don't commit refill until marked as nonspeculative by PNR. A refill may be falsely marked as nonspecuative after it has been killed, which is why the killed transition has priority.
     }
   }
-  when (state === s_commit_resp) {
+  when (state === s_commit_resp && io.refill.ready) {
     commit_counter := commit_counter + UInt(1)
   }
   when (state === s_commit_resp && commit_done) {
@@ -274,8 +271,7 @@ class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1Hel
     when (io.req_bits.tag_match) {
       when (is_hit) { // set dirty bit
         new_coh := coh_on_hit
-        state := s_spec_wait
-        next_state := s_meta_write_req
+        state := s_meta_write_req
       }.otherwise { // upgrade permissions
         new_coh := old_coh
         state := s_refill_req
@@ -310,7 +306,6 @@ class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1Hel
   io.idx_match := (state =/= s_invalid) && idx_match 
   io.refill.valid := state === s_commit_resp
   io.refill.bits.way_en := req.way_en
-  //io.refill.bits.addr := req_block_addr | refill_address_inc
   io.refill.bits.addr := req_block_addr | (commit_counter << 3)
   io.refill.bits.data := data(commit_counter)
   io.tag := req_tag 
@@ -349,7 +344,7 @@ class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1Hel
   io.meta_read.bits.tag := io.tag
 
   io.replay.valid := (state === s_drain_rpq && rpq.io.deq.valid) ||
-                     (state === s_drain_rpq_ld && rpq.io.deq.valid && rpq.io.deq.bits.cmd === M_XRD)
+                     (state === s_drain_rpq_ld && rpq.io.deq.valid && isRead(rpq.io.deq.bits.cmd))
   io.replay.bits := rpq.io.deq.bits
   io.replay.bits.phys := Bool(true)
   io.replay.bits.addr := Cat(io.tag, req_idx, rpq.io.deq.bits.addr(blockOffBits-1,0))
@@ -386,6 +381,7 @@ class SecureMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends L1HellaCac
     val brinfo = new BrResolutionInfo().asInput
     val kill = Bool(INPUT)
     val rob_pnr_head = UInt(INPUT, width=ROB_ADDR_SZ)
+    val req_nacked = Bool(INPUT)
   }
 
   // determine if the request is cacheable or not
@@ -418,6 +414,8 @@ class SecureMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends L1HellaCac
   io.probe_rdy := true
 
   val victim_safe = Wire(Vec(cfg.nMSHRs, Bool()))
+  val evict_counter = Reg(init=UInt(1, width=cfg.nMSHRs))
+  evict_counter := Cat(evict_counter(cfg.nMSHRs-2,0), evict_counter(cfg.nMSHRs-1))
 
   val mshrs = (0 until cfg.nMSHRs) map { i =>
     val mshr = Module(new SecureMSHR(i))
@@ -454,6 +452,8 @@ class SecureMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends L1HellaCac
     mshr.io.brinfo := io.brinfo
     mshr.io.kill := io.kill
     mshr.io.rob_pnr_head := io.rob_pnr_head
+    mshr.io.req_nacked := io.req_nacked && cacheable
+    mshr.io.evict_refill := !idxMatch.reduce(_||_) && evict_counter(i).toBool
 
     victim_safe(i) := mshr.io.victim_safe
 
@@ -822,12 +822,7 @@ class BoomSecureDCacheModule(outer: BoomSecureDCache) extends SecureHellaCacheMo
    * IOMSHR ids start right the ones for the regular MSHRs. */
   // writeArb.io.in(1).valid := tl_out.d.valid && grant_has_data &&
   //                              tl_out.d.bits.source < UInt(cfg.nMSHRs)
-  writeArb.io.in(1).valid := mshrs.io.refill.valid
-  writeArb.io.in(1).bits.addr := mshrs.io.refill.bits.addr
-  writeArb.io.in(1).bits.way_en := mshrs.io.refill.bits.way_en
-  writeArb.io.in(1).bits.wmask := ~UInt(0, rowWords)
-  //writeArb.io.in(1).bits.data := tl_out.d.bits.data(encRowBits-1,0)
-  writeArb.io.in(1).bits.data := mshrs.io.refill.bits.data
+  writeArb.io.in(1) <> mshrs.io.refill
   data.io.read <> readArb.io.out
   readArb.io.out.ready := !tl_out.d.valid || tl_out.d.ready // insert bubble if refill gets blocked
   tl_out.e <> mshrs.io.mem_finish
@@ -879,6 +874,7 @@ class BoomSecureDCacheModule(outer: BoomSecureDCache) extends SecureHellaCacheMo
   val s2_nack_miss = !s2_hit && !mshrs.io.req.ready
   val s2_nack = s2_nack_hit || s2_nack_victim || s2_nack_miss
   s2_valid_masked := s2_valid && !s2_nack && !io.cpu.s2_kill
+  mshrs.io.req_nacked := s2_nack_miss
 
   val s2_recycle_ecc = (s2_valid || s2_replay) && s2_hit && s2_data_correctable
   val s2_recycle_next = Reg(init=Bool(false))
