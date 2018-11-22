@@ -823,6 +823,7 @@ class BoomSecureDCacheModule(outer: BoomSecureDCache) extends SecureHellaCacheMo
   // writeArb.io.in(1).valid := tl_out.d.valid && grant_has_data &&
   //                              tl_out.d.bits.source < UInt(cfg.nMSHRs)
   writeArb.io.in(1) <> mshrs.io.refill
+  writeArb.io.in(1).bits.wmask := ~UInt(0, rowWords)
   data.io.read <> readArb.io.out
   readArb.io.out.ready := !tl_out.d.valid || tl_out.d.ready // insert bubble if refill gets blocked
   tl_out.e <> mshrs.io.mem_finish
