@@ -454,7 +454,7 @@ class Rob(
       // -----------------------------------------------
       // Is it safe to move the PNR head past this ROB entry?
       for (i <- 0 until num_rob_rows) {
-         rob_unsafe(i)(w) := rob_val(i) && rob_bsy(i) && rob_uop(i).is_br_or_jmp || rob_exception(i)
+         rob_unsafe(i)(w) := rob_val(i) && (rob_bsy(i) && rob_uop(i).is_br_or_jmp || rob_exception(i))
       }
 
       // -----------------------------------------------
