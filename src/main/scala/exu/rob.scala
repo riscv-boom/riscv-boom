@@ -266,7 +266,7 @@ class Rob(
    // Branches (mispredicted or misaligned fetch) or thrown exceptions.
    // L/S instructions (page faults, ordering failures) are not currently considered as it would require more complex changes.
    // The PNR will not move past these instructions until they have been unbusied.
-   val rob_unsafe = Wire(Vec(num_rob_entries, Vec(width, Bool())))
+   val rob_unsafe = Wire(Vec(num_rob_rows, Vec(width, Bool())))
 
    for (w <- 0 until width)
    {
