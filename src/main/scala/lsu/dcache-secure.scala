@@ -106,7 +106,7 @@ class SecureHellaCacheIO(implicit p: Parameters) extends HellaCacheIO()(p) {
 class SpecInfo(implicit p: Parameters) extends BoomBundle()(p) {
   val brinfo = new BrResolutionInfo()
   val kill = Bool()
-  val rob_pnr_head = UInt(width=ROB_ADDR_SZ)
+  val rob_pnr_idx = UInt(width=ROB_ADDR_SZ)
 }
 
 class SecureMSHRReq(implicit p: Parameters) extends MSHRReq()(p) {
@@ -151,7 +151,7 @@ class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1Hel
 
     val brinfo = new BrResolutionInfo().asInput
     val kill = Bool(INPUT)
-    val rob_pnr_head = UInt(INPUT, width=ROB_ADDR_SZ)
+    val rob_pnr_idx = UInt(INPUT, width=ROB_ADDR_SZ)
 
     val victim_safe  = Bool(OUTPUT)
     val req_nacked   = Bool(INPUT)
@@ -287,7 +287,7 @@ class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1Hel
   }.otherwise {
     req.uop.br_mask := GetNewBrMask(io.brinfo, req.uop)  // Deassert branch mask bits as branches are resolved.
     store_enqueued := store_enqueued || (rpq.io.deq.valid && isWrite(rpq.io.deq.bits.cmd)) || (rpq.io.enq.valid && isWrite(rpq.io.enq.bits.cmd))
-    nonspeculative := nonspeculative || IsOlder(req.uop.rob_idx, io.rob_pnr_head, ROB_ADDR_SZ)  // Check whether refill is still speculative.
+    nonspeculative := nonspeculative || IsOlder(req.uop.rob_idx, io.rob_pnr_idx, ROB_ADDR_SZ)  // Check whether refill is still speculative.
     killed := killed || IsKilledByBranch(io.brinfo, req.uop) || io.kill  // Check whether refill has been killed by misspeculation.
   }
   when (io.mem_grant.valid && state === s_refill_resp) {
@@ -380,7 +380,7 @@ class SecureMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends L1HellaCac
 
     val brinfo = new BrResolutionInfo().asInput
     val kill = Bool(INPUT)
-    val rob_pnr_head = UInt(INPUT, width=ROB_ADDR_SZ)
+    val rob_pnr_idx = UInt(INPUT, width=ROB_ADDR_SZ)
     val req_nacked = Bool(INPUT)
   }
 
@@ -451,7 +451,7 @@ class SecureMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends L1HellaCac
 
     mshr.io.brinfo := io.brinfo
     mshr.io.kill := io.kill
-    mshr.io.rob_pnr_head := io.rob_pnr_head
+    mshr.io.rob_pnr_idx := io.rob_pnr_idx
     mshr.io.req_nacked := io.req_nacked && cacheable
     mshr.io.evict_refill := !idxMatch.reduce(_||_) && evict_counter(i).toBool
 
@@ -580,7 +580,7 @@ class BoomSecureDCacheModule(outer: BoomSecureDCache) extends SecureHellaCacheMo
   val mshrs = Module(new SecureMSHRFile)
   mshrs.io.brinfo := io.spec_info.brinfo
   mshrs.io.kill := io.spec_info.kill
-  mshrs.io.rob_pnr_head := io.spec_info.rob_pnr_head
+  mshrs.io.rob_pnr_idx := io.spec_info.rob_pnr_idx
 
   io.cpu.req.ready := Bool(true)
   val s1_valid = Reg(next=io.cpu.req.fire(), init=Bool(false))

@@ -77,8 +77,8 @@ class RobIo(
    // (some loads can only execute once they are at the head of the ROB).
    val com_load_is_at_rob_head = Bool(OUTPUT)
 
-   // The LSU needs the PNR head to wake up spec buffer entries.
-   val rob_pnr_head = UInt(OUTPUT, width=ROB_ADDR_SZ)
+   // The dcache needs the PNR index to wake up spec buffer entries.
+   val rob_pnr_idx = UInt(OUTPUT, width=ROB_ADDR_SZ)
 
    // Communicate exceptions to the CSRFile
    val com_xcpt = Valid(new CommitExceptionSignals())
@@ -210,8 +210,8 @@ class Rob(
    //commit entries at the head, and unwind exceptions from the tail
    val rob_head = Reg(init = UInt(0, rob_row_addr_sz))
    val rob_tail = Reg(init = UInt(0, rob_row_addr_sz))
-   val rob_pnr_head = Reg(init = UInt(0, rob_addr_sz))
-   dontTouch(rob_pnr_head)
+   val rob_pnr  = Reg(init = UInt(0, rob_row_addr_sz))
+   dontTouch(rob_pnr)
    val rob_tail_idx = rob_tail << UInt(log2Ceil(width))
 
    val will_commit         = Wire(Vec(width, Bool()))
@@ -263,9 +263,10 @@ class Rob(
    // **************************************************************************
 
    // ROB entries corresponding to potential sources of mis-speculation.
-   // Branches (mispredicted or misaligned fetch) or L/S instructions (page faults).
-   // It is not safe to move the PNR head past these instructions until they have been unbusied.
-   val rob_unsafe = Wire(Vec(num_rob_entries, Bool()))
+   // Branches (mispredicted or misaligned fetch) or thrown exceptions.
+   // L/S instructions (page faults, ordering failures) are not currently considered as it would require more complex changes.
+   // The PNR will not move past these instructions until they have been unbusied.
+   val rob_unsafe = Wire(Vec(num_rob_entries, Vec(width, Bool())))
 
    for (w <- 0 until width)
    {
@@ -453,7 +454,7 @@ class Rob(
       // -----------------------------------------------
       // Is it safe to move the PNR head past this ROB entry?
       for (i <- 0 until num_rob_rows) {
-         rob_unsafe(i*width + w) := rob_val(i) && rob_bsy(i) && rob_uop(i).is_br_or_jmp || rob_exception(i)
+         rob_unsafe(i)(w) := rob_val(i) && rob_bsy(i) && rob_uop(i).is_br_or_jmp || rob_exception(i)
       }
 
       // -----------------------------------------------
@@ -693,17 +694,15 @@ class Rob(
    }
 
    // -----------------------------------------------
-   // ROB Point-of-No-Return (PNR) Head Logic
-
-   // The PNR head operates on the granularity of individual ROB entries, rather than ROB rows.
-   // Additionally, it is able to jump ahead by an arbitrary number of entries each cycle.
-   // This allows waiting speculative stores in the SAQ or speculative caches fills in the MSHR to commit more quickly.
-   // It points to the oldest "unsafe" instruction - if no instructions are unsafe, it is set to the tail.
-
-   rob_pnr_head := Mux(rob_unsafe.asUInt.orR,
-                        WrapAddPar(rob_head << log2Up(width), PriorityEncoder((Cat(rob_unsafe.asUInt, rob_unsafe.asUInt) >> (rob_head(rob_row_addr_sz-2,0) << log2Up(width)))(num_rob_entries-1,0)), num_rob_entries),
-                        rob_tail * UInt(width) + Mux(rob_head === rob_tail, UInt(1), UInt(0)))
-   io.rob_pnr_head := rob_pnr_head
+   // ROB Point-of-No-Return (PNR) Logic
+   // It behaves similarly to the rob_head, but moves past a column once its instructions are considered speculatively safe.
+   // For the time being, it only cares about branches and thrown exceptions. Waiting for load/store orderings to be resolved would require more complex changes.
+   val unsafe_row = rob_unsafe(rob_pnr)
+   val unsafe_row_offset = PriorityEncoder(unsafe_row)
+   when (unsafe_row.reduce(_||_) && rob_pnr =/= rob_tail) {
+      rob_pnr := WrapIncPar(rob_pnr, num_rob_rows)
+   }
+   io.rob_pnr_idx := rob_pnr << log2Up(width) | unsafe_row_offset
 
    // -----------------------------------------------
    // ROB Tail Logic
