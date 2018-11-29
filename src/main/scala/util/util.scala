@@ -13,8 +13,8 @@ import Chisel._
 
 import freechips.rocketchip.rocket.Instructions._
 import freechips.rocketchip.rocket._
-import boom.exu.{BrResolutionInfo, ExeUnitResp}
-import boom.common._
+import boom.common.MicroOp
+import boom.exu.{BrResolutionInfo}
 
 
 // XOR fold an input that is full_length sized down to a compressed_length.
@@ -399,15 +399,15 @@ object AgePriorityEncoder
 
 
 // Assumption: enq.valid only high if not killed by branch (so don't check IsKilled on io.enq).
-class QueueForMicroOpWithData(entries: Int, data_width: Int)
+class BranchKillableQueue[T <: boom.common.HasBoomUOP](gen: T, entries: Int)
    (implicit p: freechips.rocketchip.config.Parameters)
    extends boom.common.BoomModule()(p)
    with boom.common.HasBoomCoreParameters
 {
    val io = IO(new Bundle
    {
-      val enq     = Decoupled(new ExeUnitResp(data_width)).flip
-      val deq     = Decoupled(new ExeUnitResp(data_width))
+      val enq     = Decoupled(gen).flip
+      val deq     = Decoupled(gen)
 
       val brinfo  = new BrResolutionInfo().asInput
       val flush   = Bool(INPUT)
@@ -416,7 +416,7 @@ class QueueForMicroOpWithData(entries: Int, data_width: Int)
       val count   = UInt(OUTPUT, log2Up(entries))
    })
 
-   private val ram     = Mem(entries, new ExeUnitResp(data_width))
+   private val ram     = Mem(entries, gen)
    private val valids  = Reg(init = Vec.fill(entries) {Bool(false)})
    private val brmasks = Reg(Vec(entries, UInt(width = MAX_BR_COUNT)))
 
