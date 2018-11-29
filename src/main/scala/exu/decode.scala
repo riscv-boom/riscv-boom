@@ -371,7 +371,7 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule()(p)
    io.csr_decode.csr := uop.inst(31,20)
 	val csr_en = cs.csr_cmd.isOneOf(CSR.S, CSR.C, CSR.W)
 	val csr_ren = cs.csr_cmd.isOneOf(CSR.S, CSR.C) && uop.lrs1 === 0.U
-	val system_insn = cs.csr_cmd >= CSR.I
+	val system_insn = cs.csr_cmd === CSR.I
 	val sfence = cs.uopc === uopSFENCE
 
    val cs_legal = cs.legal
