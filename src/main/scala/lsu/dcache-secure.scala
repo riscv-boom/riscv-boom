@@ -185,13 +185,11 @@ class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1Hel
   val (cmd_requires_second_acquire, is_hit_again, _, dirtier_coh, dirtier_cmd) =
     new_coh.onSecondaryAccess(req.cmd, io.req_bits.cmd)
 
-  val states_before_refill = Seq(s_wb_req, s_wb_resp)
   val (_, _, refill_done, refill_address_inc) = edge.addr_inc(io.mem_grant)
   val commit_counter = RegInit(UInt(0, width=3))
   val commit_done = commit_counter === UInt(7) && io.refill.ready
   val sec_rdy = idx_match &&
-                  (state.isOneOf(states_before_refill) ||
-                    (state.isOneOf(s_refill_req, s_refill_resp) &&
+                   ((state.isOneOf(s_refill_req, s_refill_resp) &&
                       !cmd_requires_second_acquire && !refill_done) || 
                    state === s_spec_wait)
   assert(!(io.mem_grant.valid && !(state === s_refill_resp || state === s_wb_resp)))
@@ -222,14 +220,16 @@ class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1Hel
     state := s_drain_rpq_ld
   }
   when (state === s_spec_wait) {
+    val needs_wb = req.old_meta.coh.onCacheControl(M_FLUSH)._1
+    val next_state = Mux(needs_wb, s_wb_req, s_meta_clear)
     when (waiting_load) {
-      state := s_drain_rpq_ld   // Drain the rpq if a load has been enqueued while waiting for speculation to resolve.
+      state := s_drain_rpq_ld  // Drain the rpq if a load has been enqueued while waiting for speculation to resolve.
     }.elsewhen (store_enqueued) {
-      state := s_meta_clear     // A store to this cache block guarantees the refill is nonspeculative.
+      state := next_state      // A store to this cache block guarantees the refill is nonspeculative.
     }.elsewhen (killed || io.req_nacked && idx_match || io.req_nacked && io.evict_refill) {
-      state := s_invalid        // Kill the refill.
+      state := s_invalid       // Kill the refill.
     }.elsewhen(nonspeculative) {
-      state := s_meta_clear     // Don't commit refill until marked as nonspeculative by PNR. A refill may be falsely marked as nonspecuative after it has been killed, which is why the killed transition has priority.
+      state := next_state      // Don't commit refill until marked as nonspeculative by PNR. A refill may be falsely marked as nonspecuative after it has been killed, which is why the killed transition has priority.
     }
   }
   when (state === s_commit_resp && io.refill.ready) {
@@ -245,7 +245,7 @@ class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1Hel
     state := s_commit_resp
   }
   when (state === s_wb_resp && io.mem_grant.valid) {
-    state := s_refill_req
+    state := s_meta_clear
   }
   when (io.wb_req.fire()) { // s_wb_req
     state := s_wb_resp
@@ -266,7 +266,6 @@ class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1Hel
     killed := io.req_bits.killed
 
     val old_coh = io.req_bits.old_meta.coh
-    val needs_wb = old_coh.onCacheControl(M_FLUSH)._1
     val (is_hit, _, coh_on_hit) = old_coh.onAccess(io.req_bits.cmd)
     when (io.req_bits.tag_match) {
       when (is_hit) { // set dirty bit
@@ -278,15 +277,11 @@ class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1Hel
       }
     }.otherwise { // writeback if necessary and refill
       new_coh := ClientMetadata.onReset
-      when (needs_wb) {
-        state := s_wb_req
-      }.otherwise {
-        state := s_refill_req
-      }
+      state := s_refill_req
     }
   }.otherwise {
     req.uop.br_mask := GetNewBrMask(io.brinfo, req.uop)  // Deassert branch mask bits as branches are resolved.
-    store_enqueued := store_enqueued || (rpq.io.deq.valid && isWrite(rpq.io.deq.bits.cmd)) || (rpq.io.enq.valid && isWrite(rpq.io.enq.bits.cmd))
+    store_enqueued := store_enqueued || (rpq.io.enq.valid && isWrite(rpq.io.enq.bits.cmd))  // Has a store been missed on this cacheline?
     nonspeculative := nonspeculative || IsOlder(req.uop.rob_idx, io.rob_pnr_idx, ROB_ADDR_SZ)  // Check whether refill is still speculative.
     killed := killed || IsKilledByBranch(io.brinfo, req.uop) || io.kill  // Check whether refill has been killed by misspeculation.
   }
@@ -315,7 +310,7 @@ class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1Hel
   val meta_hazard = Reg(init=UInt(0,2))
   when (meta_hazard =/= UInt(0)) { meta_hazard := meta_hazard + 1 }
   when (io.meta_write.fire()) { meta_hazard := 1 }
-  io.probe_rdy := !idx_match || (!state.isOneOf(states_before_refill) && meta_hazard === 0) 
+  io.probe_rdy := !idx_match || meta_hazard === 0
 
   io.meta_write.valid := state.isOneOf(s_meta_write_req, s_meta_clear)
   io.meta_write.bits.idx := req_idx
