@@ -226,10 +226,12 @@ class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1Hel
       state := s_drain_rpq_ld  // Drain the rpq if a load has been enqueued while waiting for speculation to resolve.
     }.elsewhen (store_enqueued) {
       state := next_state      // A store to this cache block guarantees the refill is nonspeculative.
-    }.elsewhen (killed || io.req_nacked && idx_match || io.req_nacked && io.evict_refill) {
+    }.elsewhen (killed) {
       state := s_invalid       // Kill the refill.
     }.elsewhen(nonspeculative) {
       state := next_state      // Don't commit refill until marked as nonspeculative by PNR. A refill may be falsely marked as nonspecuative after it has been killed, which is why the killed transition has priority.
+    }.elsewhen (io.req_nacked && idx_match || io.req_nacked && io.evict_refill) {
+      state := s_invalid
     }
   }
   when (state === s_commit_resp && io.refill.ready) {
