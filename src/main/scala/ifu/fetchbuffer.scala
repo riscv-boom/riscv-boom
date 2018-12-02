@@ -37,11 +37,11 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule()
    require (num_entries > 1)
    private val num_elements = num_entries*fetchWidth
    private val ram = Mem(num_elements, new MicroOp())
-   private val write_ptr = RegInit(0.asUInt(width=log2Ceil(num_elements).W))
-   private val read_ptr = RegInit(0.asUInt(width=log2Ceil(num_elements).W))
+   private val write_ptr = RegInit(0.U(log2Ceil(num_elements).W))
+   private val read_ptr = RegInit(0.U(log2Ceil(num_elements).W))
 
    // How many uops are stored within the ram? If zero, bypass to the output flops.
-   private val count = RegInit(0.asUInt(width=log2Ceil(num_elements).W))
+   private val count = RegInit(0.U(log2Ceil(num_elements).W))
 
    //-------------------------------------------------------------
    // **** Enqueue Uops ****
@@ -93,8 +93,8 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule()
       else io.enq.bits.pc(msb, lsb)
    for (i <- 0 until fetchWidth)
    {
-      val selects_oh = Wire(UInt(width=fetchWidth.W))
-      selects_oh   := UIntToOH(i.asUInt(width=log2Ceil(fetchWidth).W) + first_index)
+      val selects_oh = Wire(UInt(fetchWidth.W))
+      selects_oh   := UIntToOH(i.U(log2Ceil(fetchWidth).W) + first_index)
 
       val invalid = first_index >= (fetchWidth - i).U // out-of-bounds
       compact_uops(i) := Mux1H(selects_oh, in_uops)
@@ -122,7 +122,7 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule()
 
    // If the ram is empty, bypass the first decodeWidth uops to the flops,
    // and only write the remaining uops into the ram.
-   val start_idx = Wire(UInt(width=(log2Ceil(fetchWidth)+1).W))
+   val start_idx = Wire(UInt((log2Ceil(fetchWidth)+1).W))
    start_idx := Mux(count === 0.U && io.deq.ready, decodeWidth.U, 0.U)
    for (i <- 0 until fetchWidth)
    {

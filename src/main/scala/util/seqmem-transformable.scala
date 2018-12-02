@@ -15,8 +15,8 @@
 
 package boom.util
 
-import Chisel._
-
+import chisel3._
+import chisel3.util._
 
 // Provide the "logical" sizes and we will map
 // the logical SeqMem into a physical, realizable SeqMem
@@ -27,7 +27,7 @@ class SeqMem1rwTransformable (
    l_width: Int
    ) extends Module
 {
-   val p_depth = 1 << log2Up(scala.math.sqrt(l_depth*l_width).toInt)
+   val p_depth = 1 << log2Ceil(scala.math.sqrt(l_depth*l_width).toInt)
    val p_width = l_depth*l_width/p_depth
 
    require (l_depth*l_width == p_depth*p_width)
@@ -45,17 +45,17 @@ class SeqMem1rwTransformable (
 
    val io = IO(new Bundle
    {
-      val wen   = Bool(INPUT)
-      val waddr = UInt(INPUT, width = l_idx_sz)
-      val wmask = UInt(INPUT, width = l_width) 
-      val wdata = UInt(INPUT, width = l_width)
+      val wen   = Input(Bool())
+      val waddr = Input(UInt(l_idx_sz.W))
+      val wmask = Input(UInt(l_width.W))
+      val wdata = Input(UInt(l_width.W))
 
-      val ren   = Bool(INPUT)                   // valid cycle s0
-      val raddr = UInt(INPUT, width = l_idx_sz) // input cycle s0
-      val rout  = UInt(OUTPUT, width = l_width) // returned cycle s1
+      val ren   = Input(Bool())                   // valid cycle s0
+      val raddr = Input(UInt(l_idx_sz.W)) // input cycle s0
+      val rout  = Output(UInt(l_width.W)) // returned cycle s1
    })
 
-   val smem = SeqMem(p_depth, Vec(p_width, Bool()))
+   val smem = SyncReadMem(p_depth, Vec(p_width, Bool()))
 
 
    private def getIdx(addr:UInt) = 
@@ -72,7 +72,7 @@ class SeqMem1rwTransformable (
       val waddr = getIdx(io.waddr)
       val wdata = (io.wdata << getOffset(io.waddr))(p_width-1, 0)
       val wmask = (io.wmask << getOffset(io.waddr))(p_width-1, 0)
-      smem.write(waddr, Vec(wdata.toBools), wmask.toBools)
+      smem.write(waddr, VecInit(wdata.toBools), wmask.toBools)
    }
 
    // read

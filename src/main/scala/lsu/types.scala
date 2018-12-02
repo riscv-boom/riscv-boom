@@ -1,6 +1,6 @@
 package boom.lsu
 
-import Chisel._
+import chisel3._
 
 import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.diplomacy.{AddressSet, LazyModule}
@@ -58,6 +58,6 @@ trait CanHaveBoomPTWModule extends HasBoomHellaCacheModule {
 
 class ReleaseInfo(implicit p: Parameters) extends boom.common.BoomBundle()(p)
 {
-   val address = UInt(width = corePAddrBits)
+   val address = UInt(corePAddrBits.W)
 }
 

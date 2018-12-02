@@ -23,7 +23,8 @@
 
 package boom.lsu
 
-import Chisel._
+import chisel3._
+import chisel3.util._
 import freechips.rocketchip.config.Parameters
 import boom.common._
 import boom.exu.BrResolutionInfo
@@ -33,18 +34,18 @@ import boom.util.maskMatch
 // Track Inflight Memory Requests
 class LoadReqSlotIo(implicit p: Parameters) extends BoomBundle()(p)
 {
-   val valid      = Bool(OUTPUT) // slot has an entry
+   val valid      = Output(Bool()) // slot has an entry
 
-   val wen        = Bool(INPUT)
-   val in_uop     = new MicroOp().asInput // need ldq_idx, brmask
+   val wen        = Input(Bool())
+   val in_uop     = Input(new MicroOp()) // need ldq_idx, brmask
 
-   val clear      = Bool(INPUT) // kill slot immediately (either nacked or succeeded)
-   val brinfo     = new BrResolutionInfo().asInput
-   val flush_pipe = Bool(INPUT) // exceptions, etc. but keep slot valid
+   val clear      = Input(Bool()) // kill slot immediately (either nacked or succeeded)
+   val brinfo     = Input(new BrResolutionInfo())
+   val flush_pipe = Input(Bool()) // exceptions, etc. but keep slot valid
 
-   val out_uop    = new MicroOp().asOutput // need ldq_idx
+   val out_uop    = Output(new MicroOp()) // need ldq_idx
 
-   val was_killed = Bool(OUTPUT) // should we filter out returning mem op?
+   val was_killed = Output(Bool()) // should we filter out returning mem op?
 }
 
 // Note: Anything incoming that gets killed by br or exception is still marked
@@ -53,33 +54,33 @@ class LoadReqSlot(implicit p: Parameters) extends BoomModule()(p)
 {
    val io = IO(new LoadReqSlotIo())
 
-   val valid      = Reg(init=Bool(false))
-   val was_killed = Reg(init=Bool(false))
+   val valid      = RegInit(false.B)
+   val was_killed = RegInit(false.B)
    val uop        = Reg((new MicroOp()))
 
    // did the existing uop get killed by a branch?
    val br_killed = Wire(Bool())
-   br_killed := Bool(false)
+   br_killed := false.B
    // Note: we need to check/clr br_mask for incoming uop, despite previous MAddr
    // unit will have already performed that for us, the LSU waking up loads may not have.
    val br_killed_incoming = Wire(Bool())
-   br_killed_incoming := Bool(false)
+   br_killed_incoming := false.B
 
    // only allow the clearing of a valid entry
    // otherwise we might overwrite an incoming entry
    when (io.clear && valid)
    {
-      valid      := Bool(false)
+      valid      := false.B
    }
    .elsewhen (io.wen)
    {
-      valid      := Bool(true)
+      valid      := true.B
       was_killed := io.flush_pipe || br_killed_incoming
       uop        := io.in_uop
    }
    .elsewhen (io.flush_pipe || br_killed)
    {
-      was_killed := Bool(true)
+      was_killed := true.B
    }
 
    val bmask_match = io.brinfo.valid && maskMatch(io.brinfo.mask, uop.br_mask)
@@ -101,11 +102,11 @@ class LoadReqSlot(implicit p: Parameters) extends BoomModule()(p)
    {
       when (bmask_match)
       {
-         br_killed := Bool(true)
+         br_killed := true.B
       }
       when (bmask_match_incoming)
       {
-         br_killed_incoming := Bool(true)
+         br_killed_incoming := true.B
       }
    }
 
@@ -118,16 +119,16 @@ class LoadReqSlot(implicit p: Parameters) extends BoomModule()(p)
 
 class DCacheReq(implicit p: Parameters) extends BoomBundle()(p)
 {
-   val addr    = UInt(width = coreMaxAddrBits)
+   val addr    = UInt(coreMaxAddrBits.W)
    val uop     = new MicroOp()
-   val data    = Bits(width = coreDataBits)
+   val data    = Bits(coreDataBits.W)
    val kill    = Bool()    // e.g., LSU detects load misspeculation
 }
 
 class NackInfo(implicit p: Parameters) extends BoomBundle()(p)
 {
    val valid      = Bool()
-   val lsu_idx    = UInt(width = MEM_ADDR_SZ)
+   val lsu_idx    = UInt(MEM_ADDR_SZ.W)
    val isload     = Bool()
    val cache_nack = Bool() // was the cache nacking us, or the LSU
                            // cache nacks for stuctural hazards (MUST kill st->ld forwardings)
@@ -136,10 +137,10 @@ class NackInfo(implicit p: Parameters) extends BoomBundle()(p)
 
 class DCacheResp(implicit p: Parameters) extends BoomBundle()(p)
 {
-   val data         = Bits(width = coreDataBits)
-   val data_subword = Bits(width = coreDataBits)
+   val data         = Bits(coreDataBits.W)
+   val data_subword = Bits(coreDataBits.W)
    val uop          = new MicroOp
-   val typ          = Bits(width = freechips.rocketchip.rocket.MT_SZ)
+   val typ          = Bits(freechips.rocketchip.rocket.MT_SZ.W)
 }
 
 
@@ -147,14 +148,14 @@ class DCacheResp(implicit p: Parameters) extends BoomBundle()(p)
 class DCMemPortIO(implicit p: Parameters) extends BoomBundle()(p)
 {
    val req     = (new DecoupledIO(new DCacheReq))
-   val resp    = (new ValidIO(new DCacheResp)).flip
+   val resp    = Flipped(new ValidIO(new DCacheResp))
 
-   val brinfo  = new BrResolutionInfo().asOutput
-   val nack    = new NackInfo().asInput
-   val flush_pipe  = Bool(OUTPUT)   // exception or other misspec which flushes entire pipeline
+   val brinfo  = Output(new BrResolutionInfo())
+   val nack    = Input(new NackInfo())
+   val flush_pipe  = Output(Bool())   // exception or other misspec which flushes entire pipeline
 
-   val load_miss = Bool(INPUT)      // Did a load suffer a cache miss? (not necessarily nacked, but no data).
-   val ordered = Bool(INPUT)        // is the dcache ordered? (fence is done)
+   val load_miss = Input(Bool())      // Did a load suffer a cache miss? (not necessarily nacked, but no data).
+   val ordered =   Input(Bool())        // is the dcache ordered? (fence is done)
 
 // TODO chisel3 broke this
 //   val debug = new BoomBundle()(p)
@@ -165,7 +166,7 @@ class DCMemPortIO(implicit p: Parameters) extends BoomBundle()(p)
 //      val req_kill = Bool()
 //      val nack = Bool()
 //      val cache_nack = Bool()
-//      val cache_resp_tag = UInt(width=log2Up(MAX_LD_COUNT))
+//      val cache_resp_tag = UInt(width=log2Ceil(MAX_LD_COUNT))
 //      val cache_not_ready = Bool()
 //
 ////      val ld_req_slot = Vec.fill(MAX_LD_COUNT) { new Bundle {
@@ -187,7 +188,7 @@ class DCacheShim(implicit p: Parameters) extends BoomModule()(p)
 
    val io = IO(new Bundle
    {
-      val core = (new DCMemPortIO()).flip
+      val core = Flipped(new DCMemPortIO())
       val dmem = new freechips.rocketchip.rocket.HellaCacheIO
    })
 
@@ -195,11 +196,11 @@ class DCacheShim(implicit p: Parameters) extends BoomModule()(p)
    // we know the store succeeded if it was not nacked
    val cache_load_ack = io.dmem.resp.valid && io.dmem.resp.bits.has_data
 
-   val inflight_load_buffer  = Vec.fill(max_num_inflight) {Module(new LoadReqSlot()).io}
+   val inflight_load_buffer  = VecInit(Seq.fill(max_num_inflight) {Module(new LoadReqSlot()).io})
 
    val m1_inflight_tag  = Wire(Bits()) // one cycle ago, aka now in the Mem1 Stage
    val m2_inflight_tag  = Wire(Bits()) // two cycles ago, aka now in the Mem2 Stage
-   val m2_req_uop       = Reg(next=Reg(next=io.core.req.bits.uop)) // nack signals come two cycles later
+   val m2_req_uop       = RegNext(RegNext(io.core.req.bits.uop)) // nack signals come two cycles later
 
    val enq_val = io.core.req.valid && (io.core.req.bits.uop.is_load || io.core.req.bits.uop.is_amo)
    val enq_rdy = Wire(Bool())
@@ -207,14 +208,14 @@ class DCacheShim(implicit p: Parameters) extends BoomModule()(p)
    for (i <- 0 until max_num_inflight)
    {
       // don't clr random entry, make sure m1_tag is correct
-      inflight_load_buffer(i).clear       := (cache_load_ack && io.dmem.resp.bits.tag === UInt(i)) ||
+      inflight_load_buffer(i).clear       := (cache_load_ack && io.dmem.resp.bits.tag === i.U) ||
                                              (io.dmem.s2_nack &&
                                                 (m2_req_uop.is_load || m2_req_uop.is_amo) &&
-                                                m2_inflight_tag === UInt(i) &&
-                                                Reg(next=Reg(next=(enq_val && enq_rdy)))) ||
+                                                m2_inflight_tag === i.U &&
+                                                RegNext(RegNext((enq_val && enq_rdy)))) ||
                                              (io.core.req.bits.kill &&
-                                                m1_inflight_tag === UInt(i) &&
-                                                Reg(next=(enq_val && enq_rdy)))
+                                                m1_inflight_tag === i.U &&
+                                                RegNext(enq_val && enq_rdy))
       inflight_load_buffer(i).brinfo      := io.core.brinfo
       inflight_load_buffer(i).flush_pipe  := io.core.flush_pipe
       inflight_load_buffer(i).in_uop      := io.core.req.bits.uop
@@ -222,34 +223,34 @@ class DCacheShim(implicit p: Parameters) extends BoomModule()(p)
 
 
    // dispatch/entry logic
-   val enq_idx = Wire(UInt(width = log2Up(max_num_inflight)))
-   enq_idx := UInt(0)
+   val enq_idx = Wire(UInt(log2Ceil(max_num_inflight).W))
+   enq_idx := 0.U
 
    for (i <- max_num_inflight-1 to 0 by -1)
    {
       when (!inflight_load_buffer(i).valid)
       {
-         enq_idx := UInt(i)
+         enq_idx := i.U
       }
    }
 
    // ready logic (is there a inflight buffer slot that's not valid yet?)
-   enq_rdy := Bool(false)
+   enq_rdy := false.B
    for (i <- 0 until max_num_inflight)
    {
       when (!inflight_load_buffer(i).valid && io.dmem.req.ready)
       {
-         enq_rdy := Bool(true)
+         enq_rdy := true.B
       }
    }
 
    val new_inflight_tag = enq_idx
-   m2_inflight_tag := Reg(next=Reg(next=enq_idx))
-   m1_inflight_tag := Reg(next=enq_idx)
+   m2_inflight_tag := RegNext(RegNext(enq_idx))
+   m1_inflight_tag := RegNext(enq_idx)
 
    val enq_can_occur = enq_val && enq_rdy
 
-   val enq_idx_1h = (Bits(1) << enq_idx) &
+   val enq_idx_1h = (1.U << enq_idx) &
                     Fill(max_num_inflight, enq_can_occur)
 
 
@@ -260,15 +261,15 @@ class DCacheShim(implicit p: Parameters) extends BoomModule()(p)
 
    // NOTE: if !enq_rdy, then we have to kill the memory request, and nack the LSU
    // inflight load buffer resource hazard
-   val iflb_kill = Reg(next=(enq_val && !enq_rdy))
+   val iflb_kill = RegNext(enq_val && !enq_rdy)
 
 
    // try to catch if there's a resource leak
-   val full_counter = Reg(init=UInt(0,32))
-   when (enq_rdy) { full_counter := UInt(0) }
-   .otherwise     { full_counter := full_counter + UInt(1) }
+   val full_counter = RegInit(0.U(32.W))
+   when (enq_rdy) { full_counter := 0.U }
+   .otherwise     { full_counter := full_counter + 1.U }
 
-   assert(full_counter <= UInt(10000), "Inflight buffers have been busy for 10k cycles. Probably a resource leak.")
+   assert(full_counter <= 10000.U, "Inflight buffers have been busy for 10k cycles. Probably a resource leak.")
 
 
    //------------------------------------------------------------
@@ -288,7 +289,7 @@ class DCacheShim(implicit p: Parameters) extends BoomModule()(p)
    io.dmem.s1_data.mask   := 0.U // Only used for partial puts from scratchpads.
    io.dmem.s2_kill        := false.B
    io.dmem.s1_kill        := io.core.req.bits.kill || iflb_kill // kills request sent out last cycle
-   io.dmem.req.bits.phys  := Bool(true) // we always use physical addresses (TLB is in LSU).
+   io.dmem.req.bits.phys  := true.B // we always use physical addresses (TLB is in LSU).
 
 
    //------------------------------------------------------------
@@ -299,16 +300,16 @@ class DCacheShim(implicit p: Parameters) extends BoomModule()(p)
    // was two cycles ago a store request?
    val was_store_and_not_amo = m2_req_uop.is_store &&
                                !m2_req_uop.is_amo &&
-                               Reg(next=Reg(next=(io.core.req.valid && io.dmem.req.ready)))
+                               RegNext(RegNext(io.core.req.valid && io.dmem.req.ready))
 
    // TODO add entry valid bit?
    val resp_tag = io.dmem.resp.bits.tag
 
    io.core.resp.valid := Mux(cache_load_ack,
                            !inflight_load_buffer(resp_tag).was_killed, // hide loads that were killed
-                         Mux(was_store_and_not_amo && !io.dmem.s2_nack && !Reg(next=io.core.req.bits.kill),
-                           Bool(true),    // stores succeed quietly, so valid if no nack
-                           Bool(false)))  // filter out nacked responses
+                         Mux(was_store_and_not_amo && !io.dmem.s2_nack && !RegNext(io.core.req.bits.kill),
+                           true.B,    // stores succeed quietly, so valid if no nack
+                           false.B))  // filter out nacked responses
 
    val m2_req_valid = was_store_and_not_amo && !io.dmem.s2_nack && !RegNext(io.core.req.bits.kill)
    io.core.resp.bits.uop := Mux(m2_req_valid, m2_req_uop, inflight_load_buffer(resp_tag).out_uop)
@@ -325,13 +326,13 @@ class DCacheShim(implicit p: Parameters) extends BoomModule()(p)
    //------------------------------------------------------------
    // handle nacks from the cache (or from the IFLB or the LSU)
 
-   io.core.nack.valid     := (io.dmem.s2_nack) || Reg(next=io.core.req.bits.kill) || Reg(next=iflb_kill) ||
-                              Reg(next=Reg(next=(io.core.req.valid && !(io.dmem.req.ready)), init = Bool(false)))
+   io.core.nack.valid     := (io.dmem.s2_nack) || RegNext(io.core.req.bits.kill) || RegNext(iflb_kill) ||
+                              RegNext(RegNext((io.core.req.valid && !(io.dmem.req.ready)), init = false.B))
    io.core.nack.lsu_idx   := Mux(m2_req_uop.is_load, m2_req_uop.ldq_idx, m2_req_uop.stq_idx)
    io.core.nack.isload    := m2_req_uop.is_load
    io.core.nack.cache_nack:= io.dmem.s2_nack ||
-                              Reg(next=iflb_kill) ||
-                              Reg(next=Reg(next= (!(io.dmem.req.ready))))
+                              RegNext(iflb_kill) ||
+                              RegNext(RegNext(!(io.dmem.req.ready)))
 
    //------------------------------------------------------------
    // detect load cache misses so we can kill speculative wakeups.
