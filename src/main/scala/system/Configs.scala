@@ -5,7 +5,7 @@
 
 package boom.system
 
-import Chisel._
+import chisel3._
 import freechips.rocketchip.config.{Parameters, Config}
 import freechips.rocketchip.devices.debug._
 import freechips.rocketchip.devices.tilelink._

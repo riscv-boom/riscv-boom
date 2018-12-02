@@ -10,7 +10,8 @@
 
 package boom.ifu
 
-import Chisel._
+import chisel3._
+import chisel3.util._
 import freechips.rocketchip.config.Parameters
 import boom.bpu._
 import boom.common._
@@ -32,33 +33,33 @@ class BranchChecker(fetch_width: Int)(implicit p: Parameters) extends BoomModule
    {
       val req           = Valid(new PCReq)
 
-      val valid         = Bool(INPUT)                      // are the inputs valid?
-      val inst_mask     = Vec(fetch_width, Bool()).asInput // valid instruction mask from I$
-      val is_br         = Vec(fetch_width, Bool()).asInput
-      val is_jal        = Vec(fetch_width, Bool()).asInput
-      val is_jr         = Vec(fetch_width, Bool()).asInput
-      val is_call       = Vec(fetch_width, Bool()).asInput
+      val valid         = Input(Bool())                      // are the inputs valid?
+      val inst_mask     = Input(Vec(fetch_width, Bool())) // valid instruction mask from I$
+      val is_br         = Input(Vec(fetch_width, Bool()))
+      val is_jal        = Input(Vec(fetch_width, Bool()))
+      val is_jr         = Input(Vec(fetch_width, Bool()))
+      val is_call       = Input(Vec(fetch_width, Bool()))
 
-      val br_targs      = Vec(fetch_width, UInt(width=vaddrBitsExtended)).asInput
-      val jal_targs     = Vec(fetch_width, UInt(width=vaddrBitsExtended)).asInput
+      val br_targs      = Input(Vec(fetch_width, UInt(vaddrBitsExtended.W)))
+      val jal_targs     = Input(Vec(fetch_width, UInt(vaddrBitsExtended.W)))
 
-      val fetch_pc      = UInt(INPUT, width=vaddrBitsExtended)
-      val aligned_pc    = UInt(INPUT, width=vaddrBitsExtended)
+      val fetch_pc      = Input(UInt(vaddrBitsExtended.W))
+      val aligned_pc    = Input(UInt(vaddrBitsExtended.W))
 
-      val btb_resp      = Valid(new BoomBTBResp).flip
-      val bpd_resp      = Valid(new BpdResp).flip
+      val btb_resp      = Flipped(Valid(new BoomBTBResp))
+      val bpd_resp      = Flipped(Valid(new BpdResp))
 
       val btb_update    = Valid(new BoomBTBUpdate)
       val ras_update    = Valid(new RasUpdate)
 
-      val req_cfi_idx   = UInt(OUTPUT, width = log2Up(fetchWidth)) // where is cfi we are predicting?
+      val req_cfi_idx   = Output(UInt(log2Ceil(fetchWidth).W)) // where is cfi we are predicting?
    })
 
    // Did the BTB mispredict the cfi type?
    // Did the BTB mispredict the cfi target?
    // Did the BTB predict a masked-off instruction?
-   val wrong_cfi = Wire(init = false.B)
-   val wrong_target = Wire(init = false.B)
+   val wrong_cfi = WireInit(false.B)
+   val wrong_target = WireInit(false.B)
 
    val btb_idx = io.btb_resp.bits.cfi_idx
    val btb_target = io.btb_resp.bits.target // TODO uncomment .sextTo(vaddrBitsExtended)
@@ -117,7 +118,7 @@ class BranchChecker(fetch_width: Int)(implicit p: Parameters) extends BoomModule
    io.req.valid := jal_wins || btb_was_wrong
    io.req.bits.addr := Mux(jal_wins, io.jal_targs(jal_idx), nextline_pc)
    // Help mask out instructions after predicted cfi.
-   io.req_cfi_idx := Mux(jal_wins, jal_idx, UInt(fetchWidth-1))
+   io.req_cfi_idx := Mux(jal_wins, jal_idx, (fetchWidth-1).U)
 
 
    //-------------------------------------------------------------
@@ -129,7 +130,7 @@ class BranchChecker(fetch_width: Int)(implicit p: Parameters) extends BoomModule
    io.btb_update.bits.pc := io.fetch_pc
    io.btb_update.bits.target := io.jal_targs(jal_idx)
    io.btb_update.bits.taken := true.B
-   io.btb_update.bits.cfi_pc := jal_idx << log2Up(coreInstBytes)
+   io.btb_update.bits.cfi_pc := jal_idx << log2Ceil(coreInstBytes)
    io.btb_update.bits.bpd_type := Mux(io.is_call(jal_idx), BpredType.call, BpredType.jump)
    io.btb_update.bits.cfi_type := CfiType.jal
 

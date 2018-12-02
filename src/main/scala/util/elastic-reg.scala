@@ -1,7 +1,7 @@
 package boom.util
 
-import Chisel._
-
+import chisel3._
+import chisel3.util._
 
 /** Implements the same interface as chisel3.util.Queue.
   * Effectively a two-entry Queue.
@@ -10,7 +10,7 @@ class ElasticReg[T <: Data](gen: T) extends Module {
    val entries = 2
    val io = IO(new QueueIO(gen, entries) {})
 
-   private val valid = RegInit(Vec.fill(entries) { false.B })
+   private val valid = RegInit(VecInit(Seq.fill(entries) { false.B }))
    private val elts = Reg(Vec(entries, gen))
 
    for (i <- 0 until entries) {
@@ -19,13 +19,13 @@ class ElasticReg[T <: Data](gen: T) extends Module {
       val wdata = if (i == entries-1) io.enq.bits else Mux(valid(i+1), elts(i+1), io.enq.bits)
       val wen =
          Mux(io.deq.ready,
-            paddedValid(i+1) || io.enq.fire() && (Bool(i == 0) || valid(i)),
+            paddedValid(i+1) || io.enq.fire() && ((i == 0).B || valid(i)),
             io.enq.fire() && paddedValid(i-1) && !valid(i))
       when (wen) { elts(i) := wdata }
 
       valid(i) :=
          Mux(io.deq.ready,
-            paddedValid(i+1) || io.enq.fire() && (Bool(i == 0) || valid(i)),
+            paddedValid(i+1) || io.enq.fire() && ((i == 0).B || valid(i)),
             io.enq.fire() && paddedValid(i-1) || valid(i))
    }
 

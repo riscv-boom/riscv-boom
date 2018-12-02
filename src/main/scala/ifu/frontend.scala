@@ -4,8 +4,8 @@
 package boom.ifu
 
 
-import Chisel._
-import Chisel.ImplicitConversions._
+import chisel3._
+import chisel3.util._
 import chisel3.core.withReset
 import freechips.rocketchip.config._
 import freechips.rocketchip.subsystem._
@@ -66,8 +66,8 @@ trait HasL1ICacheBankedParameters extends HasL1ICacheParameters
   // Round address down to the nearest fetch boundary.
   def alignToFetchBoundary(addr: UInt) =
   {
-    if (icIsBanked) ~(~addr | (bankBytes-1))
-    else ~(~addr | (fetchBytes-1))
+    if (icIsBanked) ~(~addr | (bankBytes.U-1.U))
+    else ~(~addr | (fetchBytes.U-1.U))
   }
 
   // Input: an ALIGNED pc.
@@ -103,38 +103,38 @@ trait HasL1ICacheBankedParameters extends HasL1ICacheParameters
 class BoomFrontendIO(implicit p: Parameters) extends BoomBundle()(p)
 {
    // Give the backend a packet of instructions.
-   val fetchpacket       = new DecoupledIO(new FetchBufferResp).flip
+   val fetchpacket       = Flipped(new DecoupledIO(new FetchBufferResp))
 
-   val br_unit           = new BranchUnitResp().asOutput
-   val get_pc            = new GetPCFromFtqIO().flip
+   val br_unit           = Output(new BranchUnitResp())
+   val get_pc            = Flipped(new GetPCFromFtqIO())
 
    val sfence            = Valid(new SFenceReq)
 
    // sfence needs to steal the TLB CAM part.
    // TODO redudcant with above sfenceReq
-   val sfence_take_pc    = Bool(OUTPUT)
-   val sfence_addr       = UInt(OUTPUT, vaddrBits+1)
+   val sfence_take_pc    = Output(Bool())
+   val sfence_addr       = Output(UInt((vaddrBits+1).W))
 
 
-   val commit            = Valid(UInt(width=ftqSz.W))
+   val commit            = Valid(UInt(ftqSz.W))
    val flush_info        = Valid(new FlushSignals())
-   val flush_take_pc     = Bool(OUTPUT)
-   val flush_pc          = UInt(OUTPUT, vaddrBits+1) // TODO rename; no longer catch-all flush_pc
-   val flush_icache      = Bool(OUTPUT)
+   val flush_take_pc     = Output(Bool())
+   val flush_pc          = Output(UInt((vaddrBits+1).W)) // TODO rename; no longer catch-all flush_pc
+   val flush_icache      = Output(Bool())
 
-   val com_ftq_idx       = UInt(OUTPUT, log2Up(ftqSz)) // ROB tells us the commit pointer so we can read out the PC.
-   val com_fetch_pc      = UInt(INPUT, vaddrBitsExtended) // tell CSRFile the fetch-pc at the FTQ head.
+   val com_ftq_idx       = Output(UInt(log2Ceil(ftqSz).W)) // ROB tells us the commit pointer so we can read out the PC.
+   val com_fetch_pc      = Input(UInt(vaddrBitsExtended.W)) // tell CSRFile the fetch-pc at the FTQ head.
 
    // bpd pipeline
    // should I take in the entire rob.io.flush?
-   val flush             = Bool(OUTPUT) // pipeline flush from ROB TODO CODEREVIEW (redudant with fe_clear?)
-   val clear_fetchbuffer = Bool(OUTPUT) // pipeline redirect (rob-flush, sfence request, branch mispredict)
+   val flush             = Output(Bool()) // pipeline flush from ROB TODO CODEREVIEW (redudant with fe_clear?)
+   val clear_fetchbuffer = Output(Bool()) // pipeline redirect (rob-flush, sfence request, branch mispredict)
 
-   val status_prv        = UInt(OUTPUT, width = freechips.rocketchip.rocket.PRV.SZ)
-   val status_debug      = Bool(OUTPUT)
+   val status_prv        = Output(UInt(freechips.rocketchip.rocket.PRV.SZ.W))
+   val status_debug      = Output(Bool())
 
-   val perf              = new FrontendPerfEvents().asInput
-   val tsc_reg           = UInt(OUTPUT, xLen)
+   val perf              = Input(new FrontendPerfEvents())
+   val tsc_reg           = Output(UInt(xLen.W))
 }
 
 class BoomFrontend(val icacheParams: ICacheParams, hartid: Int)(implicit p: Parameters) extends LazyModule {
@@ -146,7 +146,7 @@ class BoomFrontend(val icacheParams: ICacheParams, hartid: Int)(implicit p: Para
 
 class BoomFrontendBundle(val outer: BoomFrontend) extends CoreBundle()(outer.p)
     with HasExternallyDrivenTileConstants {
-  val cpu = new BoomFrontendIO().flip
+  val cpu = Flipped(new BoomFrontendIO())
   val ptw = new TLBPTWIO()
   val errors = new ICacheErrors
 }
@@ -167,27 +167,27 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 
   override def toString: String = bpdpipeline.toString + "\n" + icache.toString
 
-  val s0_pc = Wire(UInt(INPUT, width = vaddrBitsExtended))
+  val s0_pc = Wire(UInt(vaddrBitsExtended.W))
   val s0_valid = fetch_controller.io.imem_req.valid || fetch_controller.io.imem_resp.ready
   val s1_valid = RegNext(s0_valid)
-  val s1_pc = Reg(UInt(width=vaddrBitsExtended))
+  val s1_pc = Reg(UInt(vaddrBitsExtended.W))
   val s1_speculative = Reg(Bool())
   val s2_valid = RegInit(false.B)
-  val s2_pc = RegInit(t = UInt(width = vaddrBitsExtended), alignPC(io.reset_vector))
+  val s2_pc = RegInit(t = UInt(vaddrBitsExtended.W), alignPC(io.reset_vector))
   val s2_btb_resp_valid = if (usingBTB) Reg(Bool()) else false.B
   val s2_btb_resp_bits = Reg(new BTBResp)
   val s2_btb_taken = s2_btb_resp_valid && s2_btb_resp_bits.taken
-  val s2_tlb_resp = Reg(tlb.io.resp)
+  val s2_tlb_resp = Reg(new TLBResp())
   val s2_xcpt = s2_tlb_resp.ae.inst || s2_tlb_resp.pf.inst
-  val s2_speculative = Reg(init=Bool(false))
+  val s2_speculative = RegInit(false.B)
   val s2_partial_insn_valid = RegInit(false.B)
-  val s2_partial_insn = Reg(UInt(width = coreInstBits))
+  val s2_partial_insn = Reg(UInt(coreInstBits.W))
   val wrong_path = Reg(Bool())
 
   val s1_base_pc = alignToFetchBoundary(s1_pc)
   val ntpc = nextFetchStart(s1_base_pc)
-  val predicted_npc = Wire(init = ntpc)
-  val predicted_taken = Wire(init = Bool(false))
+  val predicted_npc = WireInit(ntpc)
+  val predicted_taken = WireInit(false.B)
 
   val s2_replay = Wire(Bool())
   s2_replay := (s2_valid && !fetch_controller.io.imem_resp.fire()) || RegNext(s2_replay && !s0_valid, true.B)
@@ -198,11 +198,11 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   // part was non-speculative
   val s0_speculative =
     if (usingCompressed) s1_speculative || s2_valid && !s2_speculative || predicted_taken
-    else Bool(true)
+    else true.B
   s1_speculative := Mux(fetch_controller.io.imem_req.valid, fetch_controller.io.imem_req.bits.speculative, Mux(s2_replay, s2_speculative, s0_speculative))
 
-  val s2_redirect = Wire(init = fetch_controller.io.imem_req.valid)
-  s2_valid := false
+  val s2_redirect = WireInit(fetch_controller.io.imem_req.valid)
+  s2_valid := false.B
   when (!s2_replay) {
     s2_valid := !s2_redirect
     s2_pc := s1_pc
@@ -212,10 +212,12 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 
   io.ptw <> tlb.io.ptw
   tlb.io.req.valid := !s2_replay
+  tlb.io.req.bits.cmd := DontCare
   tlb.io.req.bits.vaddr := s1_pc
-  tlb.io.req.bits.passthrough := Bool(false)
-  tlb.io.req.bits.size := log2Ceil(coreInstBytes*fetchWidth)
+  tlb.io.req.bits.passthrough := false.B
+  tlb.io.req.bits.size := log2Ceil(coreInstBytes*fetchWidth).U
   tlb.io.sfence := io.cpu.sfence
+  tlb.io.kill := DontCare
 
   icache.io.hartid := io.hartid
   icache.io.req.valid := s0_valid
@@ -240,7 +242,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   fetch_controller.io.imem_resp.bits.btb := s2_btb_resp_bits
   fetch_controller.io.imem_resp.bits.btb.taken := s2_btb_taken
   fetch_controller.io.imem_resp.bits.xcpt := s2_tlb_resp
-  when (icache.io.resp.valid && icache.io.resp.bits.ae) { fetch_controller.io.imem_resp.bits.xcpt.ae.inst := true }
+  when (icache.io.resp.valid && icache.io.resp.bits.ae) { fetch_controller.io.imem_resp.bits.xcpt.ae.inst := true.B }
 
   //-------------------------------------------------------------
   // **** Fetch Controller ****
@@ -251,6 +253,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 
    fetch_controller.io.f2_btb_resp       := bpdpipeline.io.f2_btb_resp
    fetch_controller.io.f3_bpd_resp       := bpdpipeline.io.f3_bpd_resp
+   fetch_controller.io.f2_bpd_resp       := DontCare 
 
    fetch_controller.io.clear_fetchbuffer := io.cpu.clear_fetchbuffer
 
@@ -308,11 +311,11 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 
   //-------------------------------------------------------------
   // performance events
-  io.cpu.perf := icache.io.perf
+  io.cpu.perf.acquire := icache.io.perf.acquire
   io.cpu.perf.tlbMiss := io.ptw.req.fire()
   io.errors := icache.io.errors
 
-  def alignPC(pc: UInt) = ~(~pc | (coreInstBytes - 1))
+  def alignPC(pc: UInt) = ~(~pc | (coreInstBytes.U - 1.U))
 
   def ccover(cond: Bool, label: String, desc: String)(implicit sourceInfo: SourceInfo) =
     cover(cond, s"FRONTEND_$label", "Rocket;;" + desc)

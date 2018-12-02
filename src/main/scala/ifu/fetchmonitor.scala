@@ -38,12 +38,12 @@ class FetchMonitor(implicit p: Parameters) extends BoomModule()(p)
    // Was the previous uop valid?
    var prev_valid  = WireInit(false.B)
    // What was the previous uop's PC?
-   var prev_pc = WireInit(0.asUInt(width=vaddrBitsExtended.W))
+   var prev_pc = WireInit(0.U(vaddrBitsExtended.W))
    var prev_cfitype = WireInit(CfiType.none)
    // What is the straight-line next PC for the previous uop?
-   var prev_npc = WireInit(0.asUInt(width=vaddrBitsExtended.W))
+   var prev_npc = WireInit(0.U(vaddrBitsExtended.W))
    // What is the target of the previous PC if a CFI.
-   var prev_target = WireInit(0.asUInt(width=vaddrBitsExtended.W))
+   var prev_target = WireInit(0.U(vaddrBitsExtended.W))
 
    for ((uop,i) <- io.uops.zipWithIndex)
    {
@@ -95,12 +95,12 @@ class FetchMonitor(implicit p: Parameters) extends BoomModule()(p)
    // Was the last uop from the previous decode group valid?
    var last_valid  = RegInit(false.B)
    // What was the previous decode group's last uop's PC?
-   var last_pc = RegInit(0.asUInt(width=vaddrBitsExtended.W))
+   var last_pc = RegInit(0.U(vaddrBitsExtended.W))
    var last_cfitype = RegInit(CfiType.none)
    // What is the straight-line next PC for the previous uop?
-   var last_npc = RegInit(0.asUInt(width=vaddrBitsExtended.W))
+   var last_npc = RegInit(0.U(vaddrBitsExtended.W))
    // What is the target of the previous PC if a CFI.
-   var last_target = RegInit(0.asUInt(width=vaddrBitsExtended.W))
+   var last_target = RegInit(0.U(vaddrBitsExtended.W))
 
    when (io.fire)
    {
