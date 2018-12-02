@@ -142,9 +142,10 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
    // Shim to DCache
    io.dmem <> dc_shim.io.dmem
-   io.spec_info.brinfo := br_unit.brinfo             // Dcache needs to be able to kill mispredicted speculative cachefills,
-   io.spec_info.kill := rob.io.flush.valid           // or those following exceptions.
+   io.spec_info.brinfo := br_unit.brinfo           // Dcache needs to be able to kill mispredicted speculative cachefills,
+   io.spec_info.kill := rob.io.flush.valid         // or those following exceptions.
    io.spec_info.rob_pnr_idx := rob.io.rob_pnr_idx  // Need to know the current PNR head to commit cache fills.
+   io.dmem.req.bits.ignore_spec_info := false.B    // Memory requests from the core care about speculative metadata.
    dc_shim.io.core <> exe_units.memory_unit.io.dmem
 
    // Load/Store Unit & ExeUnits

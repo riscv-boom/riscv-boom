@@ -97,6 +97,7 @@ class SecureReplay(implicit p: Parameters) extends Replay()(p)
 
 class SecureHellaCacheReq(implicit p: Parameters) extends HellaCacheReq()(p) {
   val uop = new MicroOp()
+  val ignore_spec_info = Bool()
 }
 
 class SecureHellaCacheIO(implicit p: Parameters) extends HellaCacheIO()(p) {
@@ -112,12 +113,14 @@ class SpecInfo(implicit p: Parameters) extends BoomBundle()(p) {
 class SecureMSHRReq(implicit p: Parameters) extends MSHRReq()(p) {
   val uop = new MicroOp()
   val killed = Bool()
+  val ignore_spec_info = Bool()
 }
 
 
 class SecureMSHRReqInternal(implicit p: Parameters) extends MSHRReqInternal()(p) {
   val uop = new MicroOp()
   val killed = Bool()
+  val ignore_spec_info = Bool()
 }
 
 class SecureL1RefillReq(implicit p: Parameters) extends L1RefillReq()(p) {
@@ -226,9 +229,9 @@ class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1Hel
       state := s_drain_rpq_ld  // Drain the rpq if a load has been enqueued while waiting for speculation to resolve.
     }.elsewhen (store_enqueued) {
       state := next_state      // A store to this cache block guarantees the refill is nonspeculative.
-    }.elsewhen (killed) {
+    }.elsewhen (killed && !req.ignore_spec_info) {
       state := s_invalid       // Kill the refill.
-    }.elsewhen(nonspeculative) {
+    }.elsewhen(nonspeculative || req.ignore_spec_info) {
       state := next_state      // Don't commit refill until marked as nonspeculative by PNR. A refill may be falsely marked as nonspecuative after it has been killed, which is why the killed transition has priority.
     }.elsewhen (io.req_nacked && idx_match || io.req_nacked && io.evict_refill) {
       state := s_invalid
@@ -428,6 +431,7 @@ class SecureMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends L1HellaCac
     mshr.io.req_bits := io.req.bits
     mshr.io.req_bits.uop := io.req.bits.uop
     mshr.io.req_bits.killed := io.req.bits.killed
+    mshr.io.req_bits.ignore_spec_info := io.req.bits.ignore_spec_info
     mshr.io.req_bits.sdq_id := sdq_alloc_id
 
     meta_read_arb.io.in(i) <> mshr.io.meta_read
@@ -787,6 +791,7 @@ class BoomSecureDCacheModule(outer: BoomSecureDCache) extends SecureHellaCacheMo
   mshrs.io.req.bits.way_en := Mux(s2_tag_match, s2_tag_match_way, s2_replaced_way_en)
   mshrs.io.req.bits.data := s2_req.data
   mshrs.io.req.bits.killed := s2_killed
+  mshrs.io.req.bits.ignore_spec_info := s2_req.ignore_spec_info
   when (mshrs.io.req.fire()) { replacer.miss }
   tl_out.a <> mshrs.io.mem_acquire
 
