@@ -25,7 +25,8 @@
 
 package boom.bpu
 
-import Chisel._
+import chisel3._
+import chisel3.util._
 import freechips.rocketchip.config.Parameters
 import boom.common._
 import boom.exu._
@@ -43,14 +44,14 @@ class BTBsa(implicit p: Parameters) extends BoomBTB
    bim.io.update := io.bim_update
 
 
-   private val lsb_sz = log2Up(coreInstBytes)
+   private val lsb_sz = log2Ceil(coreInstBytes)
    private def getTag (addr: UInt): UInt = addr(tag_sz+idx_sz+lsb_sz-1, idx_sz+lsb_sz)
    private def getIdx (addr: UInt): UInt = addr(idx_sz+lsb_sz-1, lsb_sz)
 
    class BTBSetData extends Bundle
    {
-      val target = UInt(width = vaddrBits - log2Up(coreInstBytes))
-      val cfi_idx = UInt(width = log2Up(fetchWidth))
+      val target = UInt((vaddrBits - log2Ceil(coreInstBytes)).W)
+      val cfi_idx = UInt(log2Ceil(fetchWidth).W)
       val bpd_type = BpredType()
       val cfi_type = CfiType()
    }
@@ -77,7 +78,7 @@ class BTBsa(implicit p: Parameters) extends BoomBTB
    val way_wen = UIntToOH(next_replace)
 
    // clear entries (e.g., multiple tag hits, which is an invalid variant)
-   val clear_valid = Wire(init=false.B)
+   val clear_valid = WireInit(false.B)
    val clear_idx = s1_idx
 
 
@@ -85,9 +86,9 @@ class BTBsa(implicit p: Parameters) extends BoomBTB
    {
       val wen = update_valid && way_wen(w)
 
-      val valids   = Reg(init = UInt(0, nSets))
-      val tags     = SeqMem(nSets, UInt(width = tag_sz))
-      val data     = SeqMem(nSets, new BTBSetData())
+      val valids   = RegInit(0.U(nSets.W))
+      val tags     = SyncReadMem(nSets, UInt(tag_sz.W))
+      val data     = SyncReadMem(nSets, new BTBSetData())
 
       tags.suggestName("btb_tag_array")
       data.suggestName("btb_data_array")
@@ -103,8 +104,8 @@ class BTBsa(implicit p: Parameters) extends BoomBTB
          valids := valids.bitSet(widx, true.B)
 
          val newdata = Wire(new BTBSetData())
-         newdata.target  := r_btb_update.bits.target(vaddrBits-1, log2Up(coreInstBytes))
-         newdata.cfi_idx := r_btb_update.bits.cfi_pc >> log2Up(coreInstBytes)
+         newdata.target  := r_btb_update.bits.target(vaddrBits-1, log2Ceil(coreInstBytes))
+         newdata.cfi_idx := r_btb_update.bits.cfi_pc >> log2Ceil(coreInstBytes)
          newdata.bpd_type := r_btb_update.bits.bpd_type
          newdata.cfi_type := r_btb_update.bits.cfi_type
 
@@ -120,14 +121,14 @@ class BTBsa(implicit p: Parameters) extends BoomBTB
       if (DEBUG_PRINTF)
       {
          //printf("BTB write (%c): %d 0x%x (PC= 0x%x, TARG= 0x%x) way=%d C=%d\n", Mux(wen, Str("w"), Str("-")), widx,
-         //wtag, r_btb_update.bits.pc, r_btb_update.bits.target, UInt(w), clear_valid)
+         //wtag, r_btb_update.bits.pc, r_btb_update.bits.target, w.U, clear_valid)
          //for (i <- 0 until nSets)
          //{
-         //   printf("    [%d] %d tag=0x%x targ=0x%x [0x%x 0x%x]\n", UInt(i), (valids >> UInt(i))(0),
-         //   tags.read(UInt(i)),
-         //   data.read(UInt(i)).target,
-         //   tags.read(UInt(i)) << UInt(idx_sz + log2Up(fetchWidth*coreInstBytes)),
-         //   data.read(UInt(i)).target << log2Up(coreInstBytes)
+         //   printf("    [%d] %d tag=0x%x targ=0x%x [0x%x 0x%x]\n", i.U, (valids >> i.U)(0),
+         //   tags.read(i.U),
+         //   data.read(i.U).target,
+         //   tags.read(i.U) << UInt(idx_sz + log2Ceil(fetchWidth*coreInstBytes)),
+         //   data.read(i.U).target << log2Ceil(coreInstBytes)
          //   )
          //}
       }
@@ -141,9 +142,9 @@ class BTBsa(implicit p: Parameters) extends BoomBTB
 
 
    // Mux out the winning hit.
-   s1_valid := PopCount(hits_oh) === UInt(1) && !io.flush
+   s1_valid := PopCount(hits_oh) === 1.U && !io.flush
    val s1_data = Mux1H(hits_oh, data_out)
-   val s1_target = Cat(s1_data.target, UInt(0, log2Up(coreInstBytes)))
+   val s1_target = Cat(s1_data.target, 0.U(log2Ceil(coreInstBytes).W))
    val s1_cfi_idx = s1_data.cfi_idx
    val s1_bpd_type = s1_data.bpd_type
    val s1_cfi_type = s1_data.cfi_type
@@ -155,7 +156,7 @@ class BTBsa(implicit p: Parameters) extends BoomBTB
    s1_resp_bits.cfi_type := s1_cfi_type
 //   s1_resp_bits.mask := Cat((1.U << ~Mux(s1_resp_bits.taken, ~s1_resp_bits.cfi_idx, 0.U))-1.U, 1.U)
 
-   val s0_pc = Wire(UInt(width=vaddrBits))
+   val s0_pc = Wire(UInt(vaddrBits.W))
    val s1_pc = RegEnable(io.req.bits.addr, !stall)
    s1_resp_bits.fetch_pc := s1_pc
 

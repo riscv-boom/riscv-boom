@@ -41,13 +41,14 @@
 
 package boom.bpu
 
-import Chisel._
+import chisel3._
+import chisel3.util._
 import boom.util.SeqMem1rwTransformable
 
 
 class UpdateEntry(fetch_width: Int, index_sz: Int) extends Bundle
 {
-   val index            = UInt(width = index_sz)
+   val index            = UInt(index_sz.W)
    val executed         = Vec(fetch_width, Bool())
    val takens           = Vec(fetch_width, Bool())
    // Was there a misprediction? If yes, we need to read the h-tables.
@@ -62,9 +63,9 @@ class UpdateEntry(fetch_width: Int, index_sz: Int) extends Bundle
 
 class BrTableUpdate(fetch_width: Int, index_sz: Int) extends Bundle
 {
-   val index      = UInt(width = index_sz)
-   val executed   = UInt(width = fetch_width) // which words in the fetch packet does the update correspond to?
-   val new_value  = UInt(width = fetch_width)
+   val index      = UInt(index_sz.W)
+   val executed   = UInt(fetch_width.W) // which words in the fetch packet does the update correspond to?
+   val new_value  = UInt(fetch_width.W)
 
    override def cloneType: this.type = new BrTableUpdate(fetch_width, index_sz).asInstanceOf[this.type]
 }
@@ -78,13 +79,13 @@ abstract class PTable(
    num_entries: Int
    ) extends Module
 {
-   val index_sz = log2Up(num_entries)
+   val index_sz = log2Ceil(num_entries)
    val io = IO(new Bundle
    {
-      val s1_r_idx = UInt(INPUT, width = index_sz)
-      val s2_r_out = UInt(OUTPUT, width = fetch_width)
-      val stall    = Bool(INPUT)
-      val update   = Decoupled(new BrTableUpdate(fetch_width, index_sz)).flip
+      val s1_r_idx = Input(UInt(index_sz.W))
+      val s2_r_out = Output(UInt(fetch_width.W))
+      val stall    = Input(Bool())
+      val update   = Flipped(Decoupled(new BrTableUpdate(fetch_width, index_sz)))
    })
 
    val ridx = Wire(UInt())
@@ -98,14 +99,14 @@ class PTableDualPorted(
    num_entries: Int
    ) extends PTable(fetch_width, num_entries)
 {
-   val p_table = SeqMem(num_entries, Vec(fetch_width, Bool()))
+   val p_table = SyncReadMem(num_entries, Vec(fetch_width, Bool()))
 
-   io.update.ready := Bool(true)
+   io.update.ready := true.B
 
    when (io.update.valid)
    {
       val waddr = io.update.bits.index
-      val wdata = Vec(io.update.bits.new_value.toBools)
+      val wdata = VecInit(io.update.bits.new_value.toBools)
       val wmask = io.update.bits.executed.toBools
       p_table.write(waddr, wdata, wmask)
    }
@@ -126,26 +127,26 @@ class PTableBanked(
    val p_table_1 = Module(new SeqMem1rwTransformable(num_entries/2, fetch_width))
 
    private def getBank (idx: UInt): UInt = idx(0)
-   private def getRowIdx (idx: UInt): UInt = idx >> UInt(1)
+   private def getRowIdx (idx: UInt): UInt = idx >> 1.U
 
    val widx = io.update.bits.index
    val rbank = getBank(ridx)
    val wbank = getBank(widx)
    io.update.ready := rbank =/= wbank
 
-   val ren_0   = rbank === UInt(0)
-   val ren_1   = rbank === UInt(1)
-   val wdata   = Vec(io.update.bits.new_value.toBools)
+   val ren_0   = rbank === 0.U
+   val ren_1   = rbank === 1.U
+   val wdata   = VecInit(io.update.bits.new_value.toBools)
    val wmask = io.update.bits.executed.toBools
 
-   // ** use resizable SeqMems ** //
-   p_table_0.io.wen   := !ren_0 && wbank === UInt(0) && io.update.valid
+   // ** use resizable SyncReadMems ** //
+   p_table_0.io.wen   := !ren_0 && wbank === 0.U && io.update.valid
    p_table_0.io.waddr := getRowIdx(widx)
-   p_table_0.io.wmask := Vec(wmask).asUInt
+   p_table_0.io.wmask := VecInit(wmask).asUInt
    p_table_0.io.wdata := wdata.asUInt
-   p_table_1.io.wen   := !ren_1 && wbank === UInt(1) && io.update.valid
+   p_table_1.io.wen   := !ren_1 && wbank === 1.U && io.update.valid
    p_table_1.io.waddr := getRowIdx(widx)
-   p_table_1.io.wmask := Vec(wmask).asUInt
+   p_table_1.io.wmask := VecInit(wmask).asUInt
    p_table_1.io.wdata := wdata.asUInt
 
    p_table_0.io.ren   := ren_0
@@ -170,12 +171,12 @@ class HTable(
    share_hbit: Boolean
    ) extends Module
 {
-   private val ptable_idx_sz = log2Up(num_p_entries)
+   private val ptable_idx_sz = log2Ceil(num_p_entries)
    private val num_h_entries = if (share_hbit) num_p_entries/2 else num_p_entries
    val io = IO(new Bundle
    {
       // Update the h-table.
-      val update   = Valid(new UpdateEntry(fetch_width, ptable_idx_sz)).flip
+      val update   = Flipped(Valid(new UpdateEntry(fetch_width, ptable_idx_sz)))
       // Enqueue an update to the p-table.
       val pwq_enq  = Decoupled(new BrTableUpdate(fetch_width, ptable_idx_sz))
    })
@@ -191,7 +192,7 @@ class HTable(
    h_table.io.wen   := !h_ren && hwq.io.deq.valid
    h_table.io.waddr := hwq.io.deq.bits.index
    h_table.io.wmask := hwq.io.deq.bits.executed.asUInt
-   h_table.io.wdata := Vec(hwq.io.deq.bits.takens.map(t =>
+   h_table.io.wdata := VecInit(hwq.io.deq.bits.takens.map(t =>
                         Mux(hwq.io.deq.bits.do_initialize, !t, t))).asUInt
 
    val h_raddr = io.update.bits.index
@@ -215,17 +216,17 @@ class TwobcCounterTable(
    share_hbit: Boolean = true // share 1 h-bit across 2 p-bits.
    ) extends Module
 {
-   private val index_sz = log2Up(num_entries)
+   private val index_sz = log2Ceil(num_entries)
    private val num_h_entries = if (share_hbit) num_entries/2 else num_entries
 
    val io = IO(new Bundle
    {
       // send read addr on cycle 0, get data out on cycle 2.
-      val s1_r_idx = UInt(INPUT, width = index_sz)
-      val s2_r_out = UInt(OUTPUT, width = fetch_width)
-      val stall    = Bool(INPUT)
+      val s1_r_idx = Input(UInt(index_sz.W))
+      val s2_r_out = Output(UInt(fetch_width.W))
+      val stall    = Input(Bool())
 
-      val update   = Valid(new UpdateEntry(fetch_width, index_sz)).flip
+      val update   = Flipped(Valid(new UpdateEntry(fetch_width, index_sz)))
    })
 
    //------------------------------------------------------------
