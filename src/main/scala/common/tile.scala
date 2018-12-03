@@ -3,7 +3,7 @@
 
 package boom.common
 
-import Chisel._
+import chisel3._
 import freechips.rocketchip.config._
 import freechips.rocketchip.subsystem._
 import freechips.rocketchip.devices.tilelink._
@@ -128,8 +128,8 @@ class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer)
   core.io.release.valid := tl_c.fire()
   core.io.release.bits.address := tl_c.bits.address
 
-  val uncorrectable = RegInit(Bool(false))
-  val halt_and_catch_fire = outer.boomParams.hcfOnUncorrectable.option(IO(Bool(OUTPUT)))
+  val uncorrectable = RegInit(false.B)
+  val halt_and_catch_fire = outer.boomParams.hcfOnUncorrectable.option(IO(Output(Bool())))
 
   outer.dtim_adapter.foreach { lm => dcachePorts += lm.module.io.dmem }
 
@@ -150,6 +150,9 @@ class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer)
   dcachePorts += core.io.dmem // TODO outer.dcachePorts += () => module.core.io.dmem ??
   //fpuOpt foreach { fpu => core.io.fpu <> fpu.io } RocketFpu - not needed in boom
   core.io.ptw <> ptw.io.dpath
+  core.io.rocc := DontCare
+  core.io.fpu := DontCare
+  core.io.reset_vector := DontCare
   //roccCore.cmd <> core.io.rocc.cmd
   //roccCore.exception := core.io.rocc.exception
   //core.io.rocc.resp <> roccCore.resp
