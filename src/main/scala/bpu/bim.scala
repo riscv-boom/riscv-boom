@@ -23,7 +23,8 @@
 
 package boom.bpu
 
-import Chisel._
+import chisel3._
+import chisel3.util._
 import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.util.Str
 import boom.common._
@@ -46,8 +47,8 @@ trait HasBimParameters extends HasBoomCoreParameters
    val nUpdateQueueEntries = bimParams.nUpdateQueueEntries
    val nWriteQueueEntries = bimParams.nWriteQueueEntries
 
-   val idx_sz = log2Up(nSets)
-   val row_idx_sz = log2Up(nSets)-log2Up(nBanks)
+   val idx_sz = log2Ceil(nSets)
+   val row_idx_sz = log2Ceil(nSets)-log2Ceil(nBanks)
    val row_sz = fetchWidth*2
 }
 
@@ -58,8 +59,8 @@ abstract class BimBundle(implicit val p: Parameters) extends freechips.rocketchi
 // The output from the BIM table.
 class BimResp(implicit p: Parameters) extends BimBundle()(p)
 {
-   val rowdata = UInt(width = row_sz)
-   val entry_idx = UInt(width = log2Up(nSets)) // what (logical) entry in the set is the prediction coming from?
+   val rowdata = UInt(row_sz.W)
+   val entry_idx = UInt(log2Ceil(nSets).W) // what (logical) entry in the set is the prediction coming from?
 
    def isTaken(cfi_idx: UInt) =
    {
@@ -77,7 +78,7 @@ class BimResp(implicit p: Parameters) extends BimBundle()(p)
    // Get a fetchWidth length bit-vector of taken/not-takens.
    def getTakens(): UInt =
    {
-      val takens = Wire(init=Vec.fill(fetchWidth){false.B})
+      val takens = WireInit(VecInit(Seq.fill(fetchWidth){false.B}))
       for (i <- 0 until fetchWidth)
       {
          // assumes 2-bits per branch.
@@ -92,12 +93,12 @@ class BimResp(implicit p: Parameters) extends BimBundle()(p)
 // Only store one branch worth of info.
 class BimStorage(implicit p: Parameters) extends BimBundle()(p)
 {
-   val value = UInt(width = 2) // save the old value -- needed for updating entry.
-   val entry_idx = UInt(width = log2Up(nSets)) // what (logical) entry in the set is the prediction coming from?
+   val value = UInt(2.W) // save the old value -- needed for updating entry.
+   val entry_idx = UInt(log2Ceil(nSets).W) // what (logical) entry in the set is the prediction coming from?
 
    // TODO make sure these two signals aren't stored-- push them into CfiMissInfo instead.
    val br_seen = Bool() // Track that there was a branch in the fetch packet (this storage info is valid).
-   val cfi_idx = UInt(width = log2Up(fetchWidth))
+   val cfi_idx = UInt(log2Ceil(fetchWidth).W)
 
    def isTaken = value(1)
 }
@@ -105,9 +106,9 @@ class BimStorage(implicit p: Parameters) extends BimBundle()(p)
 
 class BimUpdate(implicit p: Parameters) extends BimBundle()(p)
 {
-   val entry_idx = UInt(width = log2Up(nSets))
-   val cfi_idx = UInt(width = log2Up(fetchWidth))
-   val cntr_value = UInt(width = 2)
+   val entry_idx = UInt(log2Ceil(nSets).W)
+   val cfi_idx = UInt(log2Ceil(fetchWidth).W)
+   val cntr_value = UInt(2.W)
    val mispredicted = Bool()
    val taken = Bool()
 }
@@ -115,9 +116,9 @@ class BimUpdate(implicit p: Parameters) extends BimBundle()(p)
 
 class BimWrite(implicit p: Parameters) extends BimBundle()(p)
 {
-   val addr = UInt(width = row_idx_sz)
-   val data = UInt(width = row_sz)
-   val mask = UInt(width = row_sz)
+   val addr = UInt(row_idx_sz.W)
+   val data = UInt(row_sz.W)
+   val mask = UInt(row_sz.W)
 }
 
 
@@ -128,32 +129,32 @@ class BimodalTable(implicit p: Parameters) extends BoomModule()(p) with HasBimPa
       // req.valid is false if stalling (aka, we won't read and use BTB results, on cycle S1).
       // req.bits.addr is available on cycle S0.
       // resp is expected on cycle S2.
-      val req = Valid(new PCReq).flip
+      val req = Flipped(Valid(new PCReq))
       val resp = Valid(new BimResp)
       // Reset the table to some initialization state.
-      val do_reset = Bool(INPUT)
+      val do_reset = Input(Bool())
 
       // supress S1/upcoming S2 valids.
-      val flush = Bool(INPUT)
+      val flush = Input(Bool())
 
-      val update = Valid(new BimUpdate).flip
+      val update = Flipped(Valid(new BimUpdate))
    })
 
    // Which (conceptual) index do we map to?
-   private def getIdx (addr: UInt): UInt = addr >> log2Up(fetchWidth*coreInstBytes)
+   private def getIdx (addr: UInt): UInt = addr >> log2Ceil(fetchWidth*coreInstBytes)
    // Which physical row do we map to?
    private def getRowFromIdx (idx: UInt): UInt = idx >> log2Ceil(nBanks)
    // Which physical bank do we map to?
    // TODO which bits are the best to get the bank from?
-   private def getBankFromIdx (idx: UInt): UInt = idx(log2Up(nBanks)-1, 0)
+   private def getBankFromIdx (idx: UInt): UInt = idx(log2Ceil(nBanks)-1, 0)
 
 
    // for initializing the BIM, this is the value to reset the row to.
    private def initRowValue (): Vec[Bool] =
    {
-      val row = Wire(UInt(width=row_sz))
+      val row = Wire(UInt(row_sz.W))
       row := Fill(fetchWidth, 2.U)
-      Vec(row.toBools)
+      VecInit(row.toBools)
    }
 
    private def generateWriteInfo(update: BimUpdate): (UInt, UInt, UInt) =
@@ -183,9 +184,9 @@ class BimodalTable(implicit p: Parameters) extends BoomModule()(p) with HasBimPa
    // Return the new row.
    private def updateCounterInRow(old_row: UInt, cfi_idx: UInt, taken: Bool): UInt =
    {
-      val row = Wire(UInt(width=row_sz))
+      val row = Wire(UInt(row_sz.W))
       val shamt = cfi_idx << 1.U
-      val mask = Wire(UInt(width=row_sz))
+      val mask = Wire(UInt(row_sz.W))
       mask := ~(0x3.U << shamt)
       val old_cntr = (old_row >> shamt) & 0x3.U
       val new_cntr = updateCounter(old_cntr, taken)
@@ -198,7 +199,7 @@ class BimodalTable(implicit p: Parameters) extends BoomModule()(p) with HasBimPa
 
    val stall = !io.req.valid
    // Logical Index gets broken down into RowIdx and BankIdx.
-   val s0_logical_idx = Wire(UInt(width=idx_sz))
+   val s0_logical_idx = Wire(UInt(idx_sz.W))
    val last_idx = RegNext(s0_logical_idx)
    val new_idx = getIdx(io.req.bits.addr)
    s0_logical_idx := Mux(stall, last_idx, new_idx)
@@ -218,22 +219,22 @@ class BimodalTable(implicit p: Parameters) extends BoomModule()(p) with HasBimPa
    }
 
    // prediction
-   val s2_read_out = Reg(Vec(nBanks, UInt(width=row_sz)))
-   val s2_conflict = Reg(init = Vec.fill(nBanks){Bool(false)})
+   val s2_read_out = Reg(Vec(nBanks, UInt(row_sz.W)))
+   val s2_conflict = RegInit(VecInit(Seq.fill(nBanks){false.B}))
 
    // updates
    val r_update = Pipe(io.update)
 
    // reset/initialization
-   val s_reset :: s_wait :: s_clear :: s_idle :: Nil = Enum(UInt(), 4)
-   val fsm_state = Reg(init = s_reset)
+   val s_reset :: s_wait :: s_clear :: s_idle :: Nil = Enum(4)
+   val fsm_state = RegInit(s_reset)
    val (lag_counter, lag_done) = Counter(fsm_state === s_wait, nResetLagCycles)
    val (clear_row_addr, clear_done) = Counter(fsm_state === s_clear, nSets/nBanks)
 
 
    for (w <- 0 until nBanks)
    {
-      val ram = SeqMem(nSets/nBanks, Vec(row_sz, Bool()))
+      val ram = SyncReadMem(nSets/nBanks, Vec(row_sz, Bool()))
       ram.suggestName("bimDataArray")
 
       val ren = Wire(Bool())
@@ -257,9 +258,9 @@ class BimodalTable(implicit p: Parameters) extends BoomModule()(p) with HasBimPa
       // If a misprediction occurs, read out the counters and then enqueue update onto wq.
       val s0_rmw_valid = uq.io.deq.fire()
       s2_rmw_valid    := RegNext(RegNext(s0_rmw_valid))
-      val s2_rmw_row   = Wire(UInt(width = row_idx_sz))
-      val s2_rmw_data  = Wire(UInt(width = row_sz))
-      val s2_rmw_mask  = Wire(UInt(width = row_sz))
+      val s2_rmw_row   = Wire(UInt(row_idx_sz.W))
+      val s2_rmw_data  = Wire(UInt(row_sz.W))
+      val s2_rmw_mask  = Wire(UInt(row_sz.W))
 
       wq.io.enq.valid     := (uq.io.deq.valid && !uq.io.deq.bits.mispredicted) || s2_rmw_valid
       wq.io.enq.bits.addr := Mux(s2_rmw_valid, s2_rmw_row,  u_waddr)
@@ -274,11 +275,11 @@ class BimodalTable(implicit p: Parameters) extends BoomModule()(p) with HasBimPa
       when (wen)
       {
          val waddr = Mux(fsm_state === s_clear, clear_row_addr, wq.io.deq.bits.addr)
-         val wdata = Mux(fsm_state === s_clear, initRowValue(), Vec(wq.io.deq.bits.data.toBools))
+         val wdata = Mux(fsm_state === s_clear, initRowValue(), VecInit(wq.io.deq.bits.data.toBools))
          val wmask = Mux(fsm_state === s_clear, Fill(row_sz, 1.U), wq.io.deq.bits.mask).toBools
 
          ram.write(waddr, wdata, wmask)
-         if (DEBUG_PRINTF) printf("w:W (%d==%x) %x %x ", waddr, waddr, wdata.asUInt, Vec(wmask).asUInt)
+         if (DEBUG_PRINTF) printf("w:W (%d==%x) %x %x ", waddr, waddr, wdata.asUInt, VecInit(wmask).asUInt)
       }
       .otherwise
       {

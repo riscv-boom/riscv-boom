@@ -18,7 +18,8 @@
 
 package boom.bpu
 
-import Chisel._
+import chisel3._
+import chisel3.util._
 import chisel3.core.withReset
 import freechips.rocketchip.config.{Parameters, Field}
 import boom.common._
@@ -38,15 +39,15 @@ trait HasGShareParameters extends HasBoomCoreParameters
    // prevent us from building something too big (and taking millions of cycles to initialize!)
    val nSets = gsParams.num_sets
 
-   val idx_sz = log2Up(nSets)
+   val idx_sz = log2Ceil(nSets)
    val row_sz = fetchWidth*2
 }
 
 
 class GShareResp(fetch_width: Int, idx_sz: Int) extends Bundle
 {
-   val debug_index = UInt(width = idx_sz) // Can recompute index during update (but let's check for errors).
-   val rowdata = UInt(width = fetch_width*2) // Store to prevent a re-read during an update.
+   val debug_index = UInt(idx_sz.W) // Can recompute index during update (but let's check for errors).
+   val rowdata = UInt((fetch_width*2).W) // Store to prevent a re-read during an update.
 
    def isTaken(cfi_idx: UInt) =
    {
@@ -88,13 +89,13 @@ class GShareBrPredictor(
    {
       // fold history if too big for our table
       val folded_history = Fold (hist, idx_sz, history_length)
-      ((addr >> UInt(log2Up(fetch_width*coreInstBytes))) ^ folded_history)(idx_sz-1,0)
+      ((addr >> UInt(log2Ceil(fetch_width*coreInstBytes).W)) ^ folded_history)(idx_sz-1,0)
    }
 
    // for initializing the counter table, this is the value to reset the row to.
    private def initRowValue (): UInt =
    {
-      val row = Wire(UInt(width=row_sz))
+      val row = Wire(UInt(row_sz.W))
       row := Fill(fetchWidth, 2.U)
       row
    }
@@ -114,7 +115,7 @@ class GShareBrPredictor(
    // Get a fetchWidth length bit-vector of taken/not-takens.
    private def getTakensFromRow(row: UInt): UInt =
    {
-      val takens = Wire(init=Vec.fill(fetch_width){false.B})
+      val takens = WireInit(VecInit(Seq.fill(fetch_width){false.B}))
       for (i <- 0 until fetch_width)
       {
          // assumes 2-bits per branch.
@@ -128,9 +129,9 @@ class GShareBrPredictor(
    // Return the new row.
    private def updateCounterInRow(old_row: UInt, cfi_idx: UInt, taken: Bool): UInt =
    {
-      val row = Wire(UInt(width=row_sz))
+      val row = Wire(UInt(row_sz.W))
       val shamt = cfi_idx << 1.U
-      val mask = Wire(UInt(width=row_sz))
+      val mask = Wire(UInt(row_sz.W))
       mask := ~(0x3.U << shamt)
       val old_cntr = (old_row >> shamt) & 0x3.U
       val new_cntr = updateCounter(old_cntr, taken)
@@ -143,7 +144,7 @@ class GShareBrPredictor(
    // Return the new row.
    private def updateEntireCounterRow (old_row: UInt, was_mispredicted: Bool, cfi_idx: UInt, was_taken: Bool): UInt =
    {
-      val row = Wire(UInt(width=row_sz))
+      val row = Wire(UInt(row_sz.W))
 
       when (was_mispredicted)
       {
@@ -162,8 +163,8 @@ class GShareBrPredictor(
    //------------------------------------------------------------
    // reset/initialization
 
-   val s_reset :: s_wait :: s_clear :: s_idle :: Nil = Enum(UInt(), 4)
-   val fsm_state = Reg(init = s_reset)
+   val s_reset :: s_wait :: s_clear :: s_idle :: Nil = Enum(4)
+   val fsm_state = RegInit(s_reset)
    val nResetLagCycles = 128
    val nBanks = 1
    val (lag_counter, lag_done) = Counter(fsm_state === s_wait, nResetLagCycles)
@@ -181,7 +182,7 @@ class GShareBrPredictor(
    //------------------------------------------------------------
    // Predictor state.
 
-   val counter_table = SeqMem(nSets, UInt(width = row_sz))
+   val counter_table = SyncReadMem(nSets, UInt(row_sz.W))
 
 
    //------------------------------------------------------------
@@ -195,7 +196,7 @@ class GShareBrPredictor(
    // return data to superclass (via f2_resp bundle).
    val s2_out = counter_table.read(s1_ridx, this.f1_valid)
 
-   val q_s3_resp = withReset(reset || io.fe_clear || io.f4_redirect)
+   val q_s3_resp = withReset(reset.toBool || io.fe_clear || io.f4_redirect)
       {Module(new ElasticReg(new GShareResp(fetch_width, idx_sz)))}
 //      {Module(new ElasticReg(UInt(width=row_sz)))}
 
@@ -217,7 +218,7 @@ class GShareBrPredictor(
    //------------------------------------------------------------
    // Update counter table.
 
-   val com_info = new GShareResp(fetch_width, idx_sz).fromBits(io.commit.bits.info)
+   val com_info = (io.commit.bits.info).asTypeOf(new GShareResp(fetch_width, idx_sz))
 
    val com_idx = Hash(io.commit.bits.fetch_pc, io.commit.bits.history)(idx_sz-1,0)
 

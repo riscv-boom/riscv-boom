@@ -20,7 +20,8 @@
 
 package boom.bpu
 
-import Chisel._
+import chisel3._
+import chisel3.util._
 import chisel3.core.withReset
 import freechips.rocketchip.config.{Parameters, Field}
 
@@ -36,7 +37,7 @@ import boom.util.ElasticReg
 // expecting to receive it back when it needs to perform an update.
 class BpdResp(implicit p: Parameters) extends BoomBundle()(p)
 {
-   val takens = UInt(width = fetchWidth)
+   val takens = UInt(fetchWidth.W)
 
    // Roughly speaking, track the outcome of the last N branches.
    // The purpose of these is for resetting the global history on a branch
@@ -44,7 +45,7 @@ class BpdResp(implicit p: Parameters) extends BoomBundle()(p)
    // as speculative updates to the global history will have occurred between
    // the branch predictor is indexed and when the branch makes its own
    // prediction and update to the history.
-   val history = UInt(width = GLOBAL_HISTORY_LENGTH)
+   val history = UInt(GLOBAL_HISTORY_LENGTH.W)
 
    // The info field stores the response information from the branch predictor.
    // The response is stored (conceptually) in the ROB and is returned to the
@@ -52,7 +53,7 @@ class BpdResp(implicit p: Parameters) extends BoomBundle()(p)
    // predictor (and its configuration) changes the amount of information it
    // needs to store, and so we need to ask the predictor (in parameters.scala)
    // how many bits of info it requires.
-   val info = UInt(width = BPD_INFO_SIZE)
+   val info = UInt(BPD_INFO_SIZE.W)
 }
 
 // Update comes from the FTQ after Commit.
@@ -65,19 +66,19 @@ class BpdUpdate(implicit p: Parameters) extends BoomBundle()(p)
    // history: what was the history our branch saw?
    // cfi_idx: what is the index of the control-flow-instruction? (low-order PC bits).
    // taken: was the branch taken?
-   val fetch_pc = UInt(width = vaddrBits)
-   val history     = UInt(width = GLOBAL_HISTORY_LENGTH)
+   val fetch_pc = UInt(vaddrBits.W)
+   val history     = UInt(GLOBAL_HISTORY_LENGTH.W)
    val mispredict = Bool()
-   val miss_cfi_idx = UInt(width=log2Up(fetchWidth).W) // if mispredict, this is the cfi_idx of miss.
+   val miss_cfi_idx = UInt(log2Ceil(fetchWidth).W) // if mispredict, this is the cfi_idx of miss.
    val taken = Bool()
 
    // Give the bpd back the information it sent out when it made a prediction.
-   val info = UInt(width = BPD_INFO_SIZE)
+   val info = UInt(BPD_INFO_SIZE.W)
 }
 
 class RestoreHistory(implicit p: Parameters) extends BoomBundle()(p)
 {
-   val history = UInt(width = GLOBAL_HISTORY_LENGTH)
+   val history = UInt(GLOBAL_HISTORY_LENGTH.W)
    val taken = Bool()
 }
 
@@ -95,16 +96,16 @@ abstract class BrPredictor(
       // req.valid is false if stalling (aka, we won't read and use results).
       // req.bits.addr is available on cycle S0.
       // resp is expected on cycle S2.
-      val req = Valid(new PCReq).flip
+      val req = Flipped(Valid(new PCReq))
 
       // Update from the FTQ during commit.
-      val commit = Valid(new BpdUpdate).flip
+      val commit = Flipped(Valid(new BpdUpdate))
 
       // Not ready to dequeue F2 buffer (I$ did not provide a valid response in F2).
-      val f2_stall = Bool(INPUT)
+      val f2_stall = Input(Bool())
 
       // F2 stage is valid (the I$ resp is valid so the F3 buffer can accept an entry).
-      val f2_valid = Bool(INPUT)
+      val f2_valid = Input(Bool())
 
       // our prediction. Assert "valid==true" if we want our prediction to be honored.
       // For a tagged predictor, valid==true means we had a tag hit and trust our prediction.
@@ -114,50 +115,50 @@ abstract class BrPredictor(
       val resp = Decoupled(new BpdResp)
 
       // A BIM table is shared with the BTB and accessed in F1. Let's use this as our base predictor, if desired.
-      val f2_bim_resp = Valid(new BimResp).flip
+      val f2_bim_resp = Flipped(Valid(new BimResp))
 
-      val f3_is_br = Vec(fetch_width, Bool()).asInput
+      val f3_is_br = Input(Vec(fetch_width, Bool()))
 
       // Restore history on a F2 redirection (and clear out appropriate state).
       // Don't provide history since we have it ourselves.
-      val f2_redirect = Bool(INPUT)
+      val f2_redirect = Input(Bool())
 
       // Restore history on a F4 redirection (and clear out appropriate state).
       // Don't provide history since we have it ourselves.
       // Taken tells us if the redirect is to take a new path or to fix up a
       // previous prediction and "not take" the branch.
-      val f4_redirect = Bool(INPUT)
-      val f4_taken = Bool(INPUT)
+      val f4_redirect = Input(Bool())
+      val f4_taken = Input(Bool())
 
       // Restore history on a branch mispredict or pipeline flush.
-      val ftq_restore = Valid(new RestoreHistory).flip
+      val ftq_restore = Flipped(Valid(new RestoreHistory))
 
       // The I$ failed to succeed in S2 -- replay F2 (place into F0).
-      val f2_replay = Bool(INPUT)
+      val f2_replay = Input(Bool())
 
       // Clear/flush inflight state in the entire front-end.
-      val fe_clear = Bool(INPUT)
+      val fe_clear = Input(Bool())
 
       // TODO provide a way to reset/clear the predictor state.
-      val do_reset = Bool(INPUT)
+      val do_reset = Input(Bool())
 
       // privilege-level (allow predictor to change behavior in different privilege modes).
-      val status_prv = UInt(INPUT, width = freechips.rocketchip.rocket.PRV.SZ)
+      val status_prv = Input(UInt(freechips.rocketchip.rocket.PRV.SZ.W))
    })
 
    val r_f1_fetchpc = RegEnable(io.req.bits.addr, io.req.valid)
 
    // The global history register  that will be hashed with the fetch-pc to compute tags and indices for our branch predictors.
-   val f0_history   = Wire(UInt(width=history_length.W))
-   val new_history  = Wire(UInt(width=history_length.W))
-   val r_f1_history = Reg(init=0.asUInt(width=history_length.W))
-   val r_f2_history = Reg(init=0.asUInt(width=history_length.W))
-   val r_f4_history = Reg(init=0.asUInt(width=history_length.W))
+   val f0_history   = Wire(UInt(history_length.W))
+   val new_history  = Wire(UInt(history_length.W))
+   val r_f1_history = RegInit(0.asUInt(width=history_length.W))
+   val r_f2_history = RegInit(0.asUInt(width=history_length.W))
+   val r_f4_history = RegInit(0.asUInt(width=history_length.W))
 
 
    // match the other ERegs in the FrontEnd.
-   val q_f3_history = withReset(reset || io.fe_clear || io.f4_redirect)
-      { Module(new ElasticReg(UInt(width=history_length.W))) }
+   val q_f3_history = withReset(reset.toBool || io.fe_clear || io.f4_redirect)
+      { Module(new ElasticReg(UInt(history_length.W))) }
 
    require (history_length == GLOBAL_HISTORY_LENGTH)
 
@@ -166,7 +167,7 @@ abstract class BrPredictor(
 
    private def UpdateHistoryHash(old: UInt, addr: UInt): UInt =
    {
-      val ret = Wire(UInt(width=history_length))
+      val ret = Wire(UInt(history_length.W))
 
       //ret := ((addr >> 4.U) & 0xf.U) | (old << 4.U) -- for debugging
       val pc = addr >> log2Ceil(coreInstBytes)
@@ -356,7 +357,7 @@ class RandomBrPredictor(
    )(implicit p: Parameters) extends BrPredictor(fetch_width, history_length = 1)(p)
 {
    override def toString: String = "  Building Random Branch Predictor."
-   private val rand_val = Reg(init = false.B)
+   private val rand_val = RegInit(false.B)
    rand_val := ~rand_val
    private var lfsr= LFSR16(true.B)
    def rand(width: Int) = {
