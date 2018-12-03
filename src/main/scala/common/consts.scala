@@ -14,7 +14,8 @@ package boom.common
 package constants
 {
 
-import Chisel._
+import chisel3._
+import chisel3.util._
 import freechips.rocketchip.config.Parameters
 
 import freechips.rocketchip.util.Str
@@ -43,16 +44,16 @@ trait BOOMDebugConstants
 
 trait BrPredConstants
 {
-   val NOT_TAKEN = Bool(false)
-   val TAKEN = Bool(true)
+   val NOT_TAKEN = false.B
+   val TAKEN = true.B
 }
 
 trait IQType
 {
    val IQT_SZ  = 2
-   val IQT_INT = UInt(0, IQT_SZ)
-   val IQT_MEM = UInt(1, IQT_SZ)
-   val IQT_FP  = UInt(2, IQT_SZ)
+   val IQT_INT = 0.U(IQT_SZ.W)
+   val IQT_MEM = 1.U(IQT_SZ.W)
+   val IQT_FP  = 2.U(IQT_SZ.W)
 }
 
 trait ScalarOpConstants
@@ -69,227 +70,229 @@ trait ScalarOpConstants
    // Control Signals
 
    // PC Select Signal
-   val PC_PLUS4 = UInt(0, 2)  // PC + 4
-   val PC_BRJMP = UInt(1, 2)  // brjmp_target
-   val PC_JALR  = UInt(2, 2)  // jump_reg_target
+   val PC_PLUS4 = 0.U(2.W)  // PC + 4
+   val PC_BRJMP = 1.U(2.W)  // brjmp_target
+   val PC_JALR  = 2.U(2.W)  // jump_reg_target
 
    // Branch Type
-   val BR_N   = UInt(0, 4)  // Next
-   val BR_NE  = UInt(1, 4)  // Branch on NotEqual
-   val BR_EQ  = UInt(2, 4)  // Branch on Equal
-   val BR_GE  = UInt(3, 4)  // Branch on Greater/Equal
-   val BR_GEU = UInt(4, 4)  // Branch on Greater/Equal Unsigned
-   val BR_LT  = UInt(5, 4)  // Branch on Less Than
-   val BR_LTU = UInt(6, 4)  // Branch on Less Than Unsigned
-   val BR_J   = UInt(7, 4)  // Jump
-   val BR_JR  = UInt(8, 4)  // Jump Register
+   val BR_N   = 0.U(4.W)  // Next
+   val BR_NE  = 1.U(4.W)  // Branch on NotEqual
+   val BR_EQ  = 2.U(4.W)  // Branch on Equal
+   val BR_GE  = 3.U(4.W)  // Branch on Greater/Equal
+   val BR_GEU = 4.U(4.W)  // Branch on Greater/Equal Unsigned
+   val BR_LT  = 5.U(4.W)  // Branch on Less Than
+   val BR_LTU = 6.U(4.W)  // Branch on Less Than Unsigned
+   val BR_J   = 7.U(4.W)  // Jump
+   val BR_JR  = 8.U(4.W)  // Jump Register
 
    // RS1 Operand Select Signal
-   val OP1_RS1 = UInt(0, 2) // Register Source #1
-   val OP1_ZERO= UInt(1, 2)
-   val OP1_PC  = UInt(2, 2)
+   val OP1_RS1 = 0.U(2.W) // Register Source #1
+   val OP1_ZERO= 1.U(2.W)
+   val OP1_PC  = 2.U(2.W)
    val OP1_X   = BitPat("b??")
 
    // RS2 Operand Select Signal
-   val OP2_RS2 = UInt(0, 3) // Register Source #2
-   val OP2_IMM = UInt(1, 3) // immediate
-   val OP2_ZERO= UInt(2, 3) // constant 0
-   val OP2_FOUR= UInt(3, 3) // constant 4 (for PC+4)
-   val OP2_IMMC= UInt(4, 3) // for CSR imm found in RS1
+   val OP2_RS2 = 0.U(3.W) // Register Source #2
+   val OP2_IMM = 1.U(3.W) // immediate
+   val OP2_ZERO= 2.U(3.W) // constant 0
+   val OP2_FOUR= 3.U(3.W) // constant 4 (for PC+4)
+   val OP2_IMMC= 4.U(3.W) // for CSR imm found in RS1
    val OP2_X   = BitPat("b???")
 
    // Register File Write Enable Signal
-   val REN_0   = Bool(false)
-   val REN_1   = Bool(true)
+   val REN_0   = false.B
+   val REN_1   = true.B
 
    // Is 32b Word or 64b Doubldword?
    val SZ_DW = 1
-   val DW_X   = Bool(true) // Bool(xLen==64)
-   val DW_32  = Bool(false)
-   val DW_64  = Bool(true)
-   val DW_XPR = Bool(true) // Bool(xLen==64)
+   val DW_X   = true.B // Bool(xLen==64)
+   val DW_32  = false.B
+   val DW_64  = true.B
+   val DW_XPR = true.B // Bool(xLen==64)
 
    // Memory Enable Signal
-   val MEN_0   = Bool(false)
-   val MEN_1   = Bool(true)
-   val MEN_X   = Bool(false)
+   val MEN_0   = false.B
+   val MEN_1   = true.B
+   val MEN_X   = false.B
 
    // Immediate Extend Select
-   val IS_I   = UInt(0, 3)  // I-Type  (LD,ALU)
-   val IS_S   = UInt(1, 3)  // S-Type  (ST)
-   val IS_B   = UInt(2, 3)  // SB-Type (BR)
-   val IS_U   = UInt(3, 3)  // U-Type  (LUI/AUIPC)
-   val IS_J   = UInt(4, 3)  // UJ-Type (J/JAL)
+   val IS_I   = 0.U(3.W)  // I-Type  (LD,ALU)
+   val IS_S   = 1.U(3.W)  // S-Type  (ST)
+   val IS_B   = 2.U(3.W)  // SB-Type (BR)
+   val IS_U   = 3.U(3.W)  // U-Type  (LUI/AUIPC)
+   val IS_J   = 4.U(3.W)  // UJ-Type (J/JAL)
    val IS_X   = BitPat("b???")
 
 
    // Decode Stage Control Signals
-   val RT_FIX   = UInt(0, 2)
-   val RT_FLT   = UInt(1, 2)
-   val RT_PAS   = UInt(3, 2) // pass-through (pop1 := lrs1, etc)
-   val RT_X     = UInt(2, 2) // not-a-register (but shouldn't get a busy-bit, etc.)
+   val RT_FIX   = 0.U(2.W)
+   val RT_FLT   = 1.U(2.W)
+   val RT_PAS   = 3.U(2.W) // pass-through (pop1 := lrs1, etc)
+   val RT_X     = 2.U(2.W) // not-a-register (but shouldn't get a busy-bit, etc.)
                              // TODO rename RT_NAR
 
    // Micro-op opcodes
    // TODO change micro-op opcodes into using enum
    val UOPC_SZ = 9
    val uopX    = BitPat.dontCare(UOPC_SZ)
-   val uopNOP  = UInt( 0, UOPC_SZ)
-   val uopLD   = UInt( 1, UOPC_SZ)
-   val uopSTA  = UInt( 2, UOPC_SZ)  // store address generation
-   val uopSTD  = UInt( 3, UOPC_SZ)  // store data generation
-   val uopLUI  = UInt( 4, UOPC_SZ)
+   val uopNOP  =  0.U(UOPC_SZ.W)
+   val uopLD   =  1.U(UOPC_SZ.W)
+   val uopSTA  =  2.U(UOPC_SZ.W)  // store address generation
+   val uopSTD  =  3.U(UOPC_SZ.W)  // store data generation
+   val uopLUI  =  4.U(UOPC_SZ.W)
 
-   val uopADDI = UInt( 5, UOPC_SZ)
-   val uopANDI = UInt( 6, UOPC_SZ)
-   val uopORI  = UInt( 7, UOPC_SZ)
-   val uopXORI = UInt( 8, UOPC_SZ)
-   val uopSLTI = UInt( 9, UOPC_SZ)
-   val uopSLTIU= UInt(10, UOPC_SZ)
-   val uopSLLI = UInt(11, UOPC_SZ)
-   val uopSRAI = UInt(12, UOPC_SZ)
-   val uopSRLI = UInt(13, UOPC_SZ)
+   val uopADDI =  5.U(UOPC_SZ.W)
+   val uopANDI =  6.U(UOPC_SZ.W)
+   val uopORI  =  7.U(UOPC_SZ.W)
+   val uopXORI =  8.U(UOPC_SZ.W)
+   val uopSLTI =  9.U(UOPC_SZ.W)
+   val uopSLTIU= 10.U(UOPC_SZ.W)
+   val uopSLLI = 11.U(UOPC_SZ.W)
+   val uopSRAI = 12.U(UOPC_SZ.W)
+   val uopSRLI = 13.U(UOPC_SZ.W)
 
-   val uopSLL  = UInt(14, UOPC_SZ)
-   val uopADD  = UInt(15, UOPC_SZ)
-   val uopSUB  = UInt(16, UOPC_SZ)
-   val uopSLT  = UInt(17, UOPC_SZ)
-   val uopSLTU = UInt(18, UOPC_SZ)
-   val uopAND  = UInt(19, UOPC_SZ)
-   val uopOR   = UInt(20, UOPC_SZ)
-   val uopXOR  = UInt(21, UOPC_SZ)
-   val uopSRA  = UInt(22, UOPC_SZ)
-   val uopSRL  = UInt(23, UOPC_SZ)
+   val uopSLL  = 14.U(UOPC_SZ.W)
+   val uopADD  = 15.U(UOPC_SZ.W)
+   val uopSUB  = 16.U(UOPC_SZ.W)
+   val uopSLT  = 17.U(UOPC_SZ.W)
+   val uopSLTU = 18.U(UOPC_SZ.W)
+   val uopAND  = 19.U(UOPC_SZ.W)
+   val uopOR   = 20.U(UOPC_SZ.W)
+   val uopXOR  = 21.U(UOPC_SZ.W)
+   val uopSRA  = 22.U(UOPC_SZ.W)
+   val uopSRL  = 23.U(UOPC_SZ.W)
 
-   val uopBEQ  = UInt(24, UOPC_SZ)
-   val uopBNE  = UInt(25, UOPC_SZ)
-   val uopBGE  = UInt(26, UOPC_SZ)
-   val uopBGEU = UInt(27, UOPC_SZ)
-   val uopBLT  = UInt(28, UOPC_SZ)
-   val uopBLTU = UInt(29, UOPC_SZ)
-   val uopCSRRW= UInt(30, UOPC_SZ)
-   val uopCSRRS= UInt(31, UOPC_SZ)
-   val uopCSRRC= UInt(32, UOPC_SZ)
-   val uopCSRRWI=UInt(33, UOPC_SZ)
-   val uopCSRRSI=UInt(34, UOPC_SZ)
-   val uopCSRRCI=UInt(35, UOPC_SZ)
+   val uopBEQ  = 24.U(UOPC_SZ.W)
+   val uopBNE  = 25.U(UOPC_SZ.W)
+   val uopBGE  = 26.U(UOPC_SZ.W)
+   val uopBGEU = 27.U(UOPC_SZ.W)
+   val uopBLT  = 28.U(UOPC_SZ.W)
+   val uopBLTU = 29.U(UOPC_SZ.W)
+   val uopCSRRW= 30.U(UOPC_SZ.W)
+   val uopCSRRS= 31.U(UOPC_SZ.W)
+   val uopCSRRC= 32.U(UOPC_SZ.W)
+   val uopCSRRWI=33.U(UOPC_SZ.W)
+   val uopCSRRSI=34.U(UOPC_SZ.W)
+   val uopCSRRCI=35.U(UOPC_SZ.W)
 
-   val uopJ    = UInt(36, UOPC_SZ)
-   val uopJAL  = UInt(37, UOPC_SZ)
-   val uopJALR = UInt(38, UOPC_SZ)
-   val uopAUIPC= UInt(39, UOPC_SZ)
+   val uopJ    = 36.U(UOPC_SZ.W)
+   val uopJAL  = 37.U(UOPC_SZ.W)
+   val uopJALR = 38.U(UOPC_SZ.W)
+   val uopAUIPC= 39.U(UOPC_SZ.W)
 
-//   val uopSRET = UInt(40, UOPC_SZ)
-   val uopCFLSH= UInt(41, UOPC_SZ)
-   val uopFENCE= UInt(42, UOPC_SZ)
+// val uopSRET = 40.U(UOPC_SZ.W)
+   val uopCFLSH= 41.U(UOPC_SZ.W)
+   val uopFENCE= 42.U(UOPC_SZ.W)
 
-   val uopADDIW= UInt(43, UOPC_SZ)
-   val uopADDW = UInt(44, UOPC_SZ)
-   val uopSUBW = UInt(45, UOPC_SZ)
-   val uopSLLIW= UInt(46, UOPC_SZ)
-   val uopSLLW = UInt(47, UOPC_SZ)
-   val uopSRAIW= UInt(48, UOPC_SZ)
-   val uopSRAW = UInt(49, UOPC_SZ)
-   val uopSRLIW= UInt(50, UOPC_SZ)
-   val uopSRLW = UInt(51, UOPC_SZ)
-   val uopMUL  = UInt(52, UOPC_SZ)
-   val uopMULH = UInt(53, UOPC_SZ)
-   val uopMULHU= UInt(54, UOPC_SZ)
-   val uopMULHSU=UInt(55, UOPC_SZ)
-   val uopMULW = UInt(56, UOPC_SZ)
-   val uopDIV  = UInt(57, UOPC_SZ)
-   val uopDIVU = UInt(58, UOPC_SZ)
-   val uopREM  = UInt(59, UOPC_SZ)
-   val uopREMU = UInt(60, UOPC_SZ)
-   val uopDIVW = UInt(61, UOPC_SZ)
-   val uopDIVUW= UInt(62, UOPC_SZ)
-   val uopREMW = UInt(63, UOPC_SZ)
-   val uopREMUW= UInt(64, UOPC_SZ)
+   val uopADDIW= 43.U(UOPC_SZ.W)
+   val uopADDW = 44.U(UOPC_SZ.W)
+   val uopSUBW = 45.U(UOPC_SZ.W)
+   val uopSLLIW= 46.U(UOPC_SZ.W)
+   val uopSLLW = 47.U(UOPC_SZ.W)
+   val uopSRAIW= 48.U(UOPC_SZ.W)
+   val uopSRAW = 49.U(UOPC_SZ.W)
+   val uopSRLIW= 50.U(UOPC_SZ.W)
+   val uopSRLW = 51.U(UOPC_SZ.W)
+   val uopMUL  = 52.U(UOPC_SZ.W)
+   val uopMULH = 53.U(UOPC_SZ.W)
+   val uopMULHU= 54.U(UOPC_SZ.W)
+   val uopMULHSU=55.U(UOPC_SZ.W)
+   val uopMULW = 56.U(UOPC_SZ.W)
+   val uopDIV  = 57.U(UOPC_SZ.W)
+   val uopDIVU = 58.U(UOPC_SZ.W)
+   val uopREM  = 59.U(UOPC_SZ.W)
+   val uopREMU = 60.U(UOPC_SZ.W)
+   val uopDIVW = 61.U(UOPC_SZ.W)
+   val uopDIVUW= 62.U(UOPC_SZ.W)
+   val uopREMW = 63.U(UOPC_SZ.W)
+   val uopREMUW= 64.U(UOPC_SZ.W)
 
-   val uopFENCEI    = UInt(65, UOPC_SZ)
-   //               = UInt(66, UOPC_SZ)
-   val uopAMO_AG    = UInt(67, UOPC_SZ) // AMO-address gen (use normal STD for datagen)
+   val uopFENCEI    =  65.U(UOPC_SZ.W)
+   //               =  66.U(UOPC_SZ.W)
+   val uopAMO_AG    =  67.U(UOPC_SZ.W) // AMO-address gen (use normal STD for datagen)
 
-   val uopFMV_S_X   = UInt(68, UOPC_SZ)
-   val uopFMV_D_X   = UInt(69, UOPC_SZ)
-   val uopFMV_X_S   = UInt(70, UOPC_SZ)
-   val uopFMV_X_D   = UInt(71, UOPC_SZ)
+   val uopFMV_S_X   =  68.U(UOPC_SZ.W)
+   val uopFMV_D_X   =  69.U(UOPC_SZ.W)
+   val uopFMV_X_S   =  70.U(UOPC_SZ.W)
+   val uopFMV_X_D   =  71.U(UOPC_SZ.W)
 
-   val uopFSGNJ_S   = UInt(72, UOPC_SZ)
-   val uopFSGNJ_D   = UInt(73, UOPC_SZ)
+   val uopFSGNJ_S   =  72.U(UOPC_SZ.W)
+   val uopFSGNJ_D   =  73.U(UOPC_SZ.W)
 
-   val uopFCVT_S_D  = UInt(74, UOPC_SZ)
-   val uopFCVT_D_S  = UInt(75, UOPC_SZ)
+   val uopFCVT_S_D  =  74.U(UOPC_SZ.W)
+   val uopFCVT_D_S  =  75.U(UOPC_SZ.W)
 
-   val uopFCVT_S_X  = UInt(76, UOPC_SZ)
-   val uopFCVT_D_X  = UInt(77, UOPC_SZ)
+   val uopFCVT_S_X  =  76.U(UOPC_SZ.W)
+   val uopFCVT_D_X  =  77.U(UOPC_SZ.W)
 
-   val uopFCVT_X_S  = UInt(78, UOPC_SZ)
-   val uopFCVT_X_D  = UInt(79, UOPC_SZ)
+   val uopFCVT_X_S  =  78.U(UOPC_SZ.W)
+   val uopFCVT_X_D  =  79.U(UOPC_SZ.W)
 
-   val uopCMPR_S    = UInt(80, UOPC_SZ)
-   val uopCMPR_D    = UInt(81, UOPC_SZ)
+   val uopCMPR_S    =  80.U(UOPC_SZ.W)
+   val uopCMPR_D    =  81.U(UOPC_SZ.W)
 
-   val uopFCLASS_S  = UInt(82, UOPC_SZ)
-   val uopFCLASS_D  = UInt(83, UOPC_SZ)
+   val uopFCLASS_S  =  82.U(UOPC_SZ.W)
+   val uopFCLASS_D  =  83.U(UOPC_SZ.W)
 
-   val uopFMINMAX_S = UInt(84,UOPC_SZ)
-   val uopFMINMAX_D = UInt(85,UOPC_SZ)
+   val uopFMINMAX_S =  84.U(UOPC_SZ.W)
+   val uopFMINMAX_D =  85.U(UOPC_SZ.W)
 
-   //               = UInt(86, UOPC_SZ)
-   val uopFADD_S    = UInt(87,UOPC_SZ)
-   val uopFSUB_S    = UInt(88,UOPC_SZ)
-   val uopFMUL_S    = UInt(89,UOPC_SZ)
-   val uopFADD_D    = UInt(90,UOPC_SZ)
-   val uopFSUB_D    = UInt(91,UOPC_SZ)
-   val uopFMUL_D    = UInt(92,UOPC_SZ)
+   //               =  86.U(UOPC_SZ.W)
+   val uopFADD_S    =  87.U(UOPC_SZ.W)
+   val uopFSUB_S    =  88.U(UOPC_SZ.W)
+   val uopFMUL_S    =  89.U(UOPC_SZ.W)
+   val uopFADD_D    =  90.U(UOPC_SZ.W)
+   val uopFSUB_D    =  91.U(UOPC_SZ.W)
+   val uopFMUL_D    =  92.U(UOPC_SZ.W)
 
-   val uopFMADD_S   = UInt(93,UOPC_SZ)
-   val uopFMSUB_S   = UInt(94,UOPC_SZ)
-   val uopFNMADD_S  = UInt(95,UOPC_SZ)
-   val uopFNMSUB_S  = UInt(96,UOPC_SZ)
-   val uopFMADD_D   = UInt(97,UOPC_SZ)
-   val uopFMSUB_D   = UInt(98,UOPC_SZ)
-   val uopFNMADD_D  = UInt(99,UOPC_SZ)
-   val uopFNMSUB_D  = UInt(100,UOPC_SZ)
+   val uopFMADD_S   =  93.U(UOPC_SZ.W)
+   val uopFMSUB_S   =  94.U(UOPC_SZ.W)
+   val uopFNMADD_S  =  95.U(UOPC_SZ.W)
+   val uopFNMSUB_S  =  96.U(UOPC_SZ.W)
+   val uopFMADD_D   =  97.U(UOPC_SZ.W)
+   val uopFMSUB_D   =  98.U(UOPC_SZ.W)
+   val uopFNMADD_D  =  99.U(UOPC_SZ.W)
+   val uopFNMSUB_D  = 100.U(UOPC_SZ.W)
 
-   val uopFDIV_S    = UInt(101,UOPC_SZ)
-   val uopFDIV_D    = UInt(102,UOPC_SZ)
-   val uopFSQRT_S   = UInt(103,UOPC_SZ)
-   val uopFSQRT_D   = UInt(104,UOPC_SZ)
+   val uopFDIV_S    = 101.U(UOPC_SZ.W)
+   val uopFDIV_D    = 102.U(UOPC_SZ.W)
+   val uopFSQRT_S   = 103.U(UOPC_SZ.W)
+   val uopFSQRT_D   = 104.U(UOPC_SZ.W)
 
-   val uopSYSTEM    = UInt(105, UOPC_SZ) // pass uop down the CSR pipeline and let it handle it
-   val uopSFENCE    = UInt(106, UOPC_SZ)
+   val uopSYSTEM    = 105.U(UOPC_SZ.W) // pass uop down the CSR pipeline and let it handle it
+   val uopSFENCE    = 106.U(UOPC_SZ.W)
 
    // The Bubble Instruction (Machine generated NOP)
    // Insert (XOR x0,x0,x0) which is different from software compiler
    // generated NOPs which are (ADDI x0, x0, 0).
    // Reasoning for this is to let visualizers and stat-trackers differentiate
    // between software NOPs and machine-generated Bubbles in the pipeline.
-   val BUBBLE  = UInt(0x4033, 32)
+   val BUBBLE  = (0x4033).U(32.W)
 
 
    def NullMicroOp()(implicit p: Parameters): MicroOp =
    {
       val uop = Wire(new MicroOp()(p))
+      uop            := DontCare // Overridden in the following lines
       uop.uopc       := uopNOP // maybe not required, but helps on asserts that try to catch spurious behavior
-      uop.bypassable := Bool(false)
-      uop.fp_val     := Bool(false)
-      uop.is_store   := Bool(false)
-      uop.is_load    := Bool(false)
-      uop.pdst       := UInt(0)
+      uop.bypassable := false.B
+      uop.fp_val     := false.B
+      uop.is_store   := false.B
+      uop.is_load    := false.B
+      uop.pdst       := 0.U
       uop.dst_rtype  := RT_X
-      uop.valid      := Bool(false)
+      uop.valid      := false.B
       // TODO these unnecessary? used in regread stage?
-      uop.is_br_or_jmp := Bool(false)
+      uop.is_br_or_jmp := false.B
 
       val cs = Wire(new CtrlSignals())
+      cs             := DontCare // Overridden in the following lines
       cs.br_type     := BR_N
-      cs.rf_wen      := Bool(false)
+      cs.rf_wen      := false.B
       cs.csr_cmd     := freechips.rocketchip.rocket.CSR.N
-      cs.is_load     := Bool(false)
-      cs.is_sta      := Bool(false)
-      cs.is_std      := Bool(false)
+      cs.is_load     := false.B
+      cs.is_sta      := false.B
+      cs.is_std      := false.B
 
       uop.ctrl := cs
       uop
@@ -316,16 +319,16 @@ trait RISCVConstants
    // location of the fifth bit in the shamt (for checking for illegal ops for SRAIW,etc.)
    val SHAMT_5_BIT = 25
    val LONGEST_IMM_SZ = 20
-   val X0 = UInt(0)
-   val RA = UInt(1) // return address register
+   val X0 = 0.U
+   val RA = 1.U // return address register
 
    // memory consistency model
    // The C/C++ atomics MCM requires that two loads to the same address maintain program order.
    // The Cortex A9 does NOT enforce load/load ordering (which leads to buggy behavior).
    val MCM_ORDER_DEPENDENT_LOADS = false
 
-   val jal_opc = UInt(0x6f)
-   val jalr_opc = UInt(0x67)
+   val jal_opc = (0x6f).U
+   val jalr_opc = (0x67).U
    def GetUop(inst: UInt): UInt = inst(6,0)
    def GetRd (inst: UInt): UInt = inst(RD_MSB,RD_LSB)
    def GetRs1(inst: UInt): UInt = inst(RS1_MSB,RS1_LSB)
@@ -335,13 +338,13 @@ trait RISCVConstants
 
    def ComputeBranchTarget(pc: UInt, inst: UInt, xlen: Int): UInt =
    {
-      val b_imm32 = Cat(Fill(20,inst(31)), inst(7), inst(30,25), inst(11,8), UInt(0,1))
-      ((pc.asSInt + b_imm32.asSInt).asSInt & SInt(-2)).asUInt
+      val b_imm32 = Cat(Fill(20,inst(31)), inst(7), inst(30,25), inst(11,8), 0.U(1.W))
+      ((pc.asSInt + b_imm32.asSInt).asSInt & (-2).S).asUInt
    }
    def ComputeJALTarget(pc: UInt, inst: UInt, xlen: Int): UInt =
    {
-      val j_imm32 = Cat(Fill(12,inst(31)), inst(19,12), inst(20), inst(30,25), inst(24,21), UInt(0,1))
-      ((pc.asSInt + j_imm32.asSInt).asSInt & SInt(-2)).asUInt
+      val j_imm32 = Cat(Fill(12,inst(31)), inst(19,12), inst(20), inst(30,25), inst(24,21), 0.U(1.W))
+      ((pc.asSInt + j_imm32.asSInt).asSInt & (-2).S).asUInt
    }
 
    def GetCfiType(inst: UInt): UInt =

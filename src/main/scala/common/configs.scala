@@ -5,7 +5,7 @@
 
 package boom.common
 
-import Chisel._
+import chisel3._
 import freechips.rocketchip.config.{Parameters, Config}
 import freechips.rocketchip.subsystem.{SystemBusKey}
 import freechips.rocketchip.devices.tilelink.{BootROMParams}
