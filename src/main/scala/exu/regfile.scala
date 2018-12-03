@@ -13,22 +13,23 @@
 
 package boom.exu
 
-import Chisel._
+import chisel3._
+import chisel3.util._
 import freechips.rocketchip.config.Parameters
 import scala.collection.mutable.ArrayBuffer
 import boom.common._
 
 class RegisterFileReadPortIO(addr_width: Int, data_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
-   val addr = UInt(INPUT, addr_width)
-   val data = UInt(OUTPUT, data_width)
+   val addr = Input(UInt(addr_width.W))
+   val data = Output(UInt(data_width.W))
    override def cloneType = new RegisterFileReadPortIO(addr_width, data_width)(p).asInstanceOf[this.type]
 }
 
 class RegisterFileWritePort(addr_width: Int, data_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
-   val addr = UInt(width = addr_width)
-   val data = UInt(width = data_width)
+   val addr = UInt(width = addr_width.W)
+   val data = UInt(width = data_width.W)
    override def cloneType = new RegisterFileWritePort(addr_width, data_width)(p).asInstanceOf[this.type]
 }
 
@@ -61,7 +62,7 @@ abstract class RegisterFile(
    val io = IO(new BoomBundle()(p)
    {
       val read_ports = Vec(num_read_ports, new RegisterFileReadPortIO(PREG_SZ, register_width))
-      val write_ports = Vec(num_write_ports, Decoupled(new RegisterFileWritePort(PREG_SZ, register_width))).flip
+      val write_ports = Flipped(Vec(num_write_ports, Decoupled(new RegisterFileWritePort(PREG_SZ, register_width))))
    })
 
    private val rf_cost = (num_read_ports+num_write_ports)*(num_read_ports+2*num_write_ports)
@@ -86,13 +87,13 @@ class RegisterFileBehavorial(
 {
    // --------------------------------------------------------------
 
-   val regfile = Mem(num_registers, UInt(width=register_width))
+   val regfile = Mem(num_registers, UInt(register_width.W))
 
 
    // --------------------------------------------------------------
    // Read ports.
 
-   val read_data = Wire(Vec(num_read_ports, UInt(width = register_width)))
+   val read_data = Wire(Vec(num_read_ports, UInt(register_width.W)))
 
    // Register the read port addresses to give a full cycle to the RegisterRead Stage (if desired).
    val read_addrs =
@@ -106,8 +107,8 @@ class RegisterFileBehavorial(
    for (i <- 0 until num_read_ports)
    {
       read_data(i) :=
-         Mux(read_addrs(i) === UInt(0),
-            UInt(0),
+         Mux(read_addrs(i) === 0.U,
+            0.U,
             regfile(read_addrs(i)))
    }
 
@@ -129,10 +130,10 @@ class RegisterFileBehavorial(
       for (i <- 0 until num_read_ports)
       {
          val bypass_ens = bypassable_wports.map(x => x.valid &&
-                                                  x.bits.addr =/= UInt(0) &&
+                                                  x.bits.addr =/= 0.U &&
                                                   x.bits.addr === read_addrs(i))
 
-         val bypass_data = Mux1H(Vec(bypass_ens), Vec(bypassable_wports.map(_.bits.data)))
+         val bypass_data = Mux1H(VecInit(bypass_ens), VecInit(bypassable_wports.map(_.bits.data)))
 
          io.read_ports(i).data := Mux(bypass_ens.reduce(_|_), bypass_data, read_data(i))
       }
@@ -151,8 +152,8 @@ class RegisterFileBehavorial(
 
    for (wport <- io.write_ports)
    {
-      wport.ready := Bool(true)
-      when (wport.valid && (wport.bits.addr =/= UInt(0)))
+      wport.ready := true.B
+      when (wport.valid && (wport.bits.addr =/= 0.U))
       {
          regfile(wport.bits.addr) := wport.bits.data
       }

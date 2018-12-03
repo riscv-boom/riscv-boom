@@ -10,7 +10,8 @@
 
 package boom.exu
 
-import Chisel._
+import chisel3._
+import chisel3.util._
 import freechips.rocketchip.config.Parameters
 import FUConstants._
 import freechips.rocketchip.util.Str
@@ -26,7 +27,7 @@ class IssueUnitStatic(
    //-------------------------------------------------------------
    // Issue Table
 
-   val entry_wen_oh  = Vec.fill(num_issue_slots){ Wire(Bits(width=DISPATCH_WIDTH)) }
+   val entry_wen_oh  = VecInit(Seq.fill(num_issue_slots){ Wire(Bits(DISPATCH_WIDTH.W)) })
    for (i <- 0 until num_issue_slots)
    {
       issue_slots(i).in_uop.valid := entry_wen_oh(i).orR
@@ -42,8 +43,8 @@ class IssueUnitStatic(
    // Dispatch/Entry Logic
    // find a slot to enter a new dispatched instruction
 
-   val entry_wen_oh_array = Array.fill(num_issue_slots,DISPATCH_WIDTH){Bool(false)}
-   var allocated = Vec.fill(DISPATCH_WIDTH){Bool(false)} // did an instruction find an issue width?
+   val entry_wen_oh_array = Array.fill(num_issue_slots,DISPATCH_WIDTH){false.B}
+   var allocated = VecInit(Seq.fill(DISPATCH_WIDTH){false.B}) // did an instruction find an issue width?
 
 
    for (i <- 0 until num_issue_slots)
@@ -93,12 +94,12 @@ class IssueUnitStatic(
 
    for (w <- 0 until issue_width)
    {
-      io.iss_valids(w) := Bool(false)
+      io.iss_valids(w) := false.B
       io.iss_uops(w)   := NullMicroOp
       // unsure if this is overkill
-      io.iss_uops(w).pop1 := UInt(0)
-      io.iss_uops(w).pop2 := UInt(0)
-      io.iss_uops(w).pop3 := UInt(0)
+      io.iss_uops(w).pop1 := 0.U
+      io.iss_uops(w).pop2 := 0.U
+      io.iss_uops(w).pop3 := 0.U
       io.iss_uops(w).lrs1_rtype := RT_X
       io.iss_uops(w).lrs2_rtype := RT_X
    }
@@ -111,23 +112,23 @@ class IssueUnitStatic(
    {
       lo_request_not_satisfied(i) = issue_slots(i).request
       hi_request_not_satisfied(i) = issue_slots(i).request_hp
-      issue_slots(i).grant := Bool(false) // default
+      issue_slots(i).grant := false.B // default
    }
 
 
    for (w <- 0 until issue_width)
    {
-      var port_issued = Bool(false)
+      var port_issued = false.B
 
       // first look for high priority requests
       for (i <- 0 until num_requestors)
       {
-         val can_allocate = (issue_slots(i).uop.fu_code & io.fu_types(w)) =/= Bits(0)
+         val can_allocate = (issue_slots(i).uop.fu_code & io.fu_types(w)) =/= 0.U
 
          when (hi_request_not_satisfied(i) && can_allocate && !port_issued)
          {
-            issue_slots(i).grant := Bool(true)
-            io.iss_valids(w)     := Bool(true)
+            issue_slots(i).grant := true.B
+            io.iss_valids(w)     := true.B
             io.iss_uops(w)       := issue_slots(i).uop
          }
 
@@ -142,12 +143,12 @@ class IssueUnitStatic(
       // now look for low priority requests
       for (i <- 0 until num_requestors)
       {
-         val can_allocate = (issue_slots(i).uop.fu_code & io.fu_types(w)) =/= Bits(0)
+         val can_allocate = (issue_slots(i).uop.fu_code & io.fu_types(w)) =/= 0.U
 
          when (lo_request_not_satisfied(i) && can_allocate && !port_issued)
          {
-            issue_slots(i).grant := Bool(true)
-            io.iss_valids(w)     := Bool(true)
+            issue_slots(i).grant := true.B
+            io.iss_valids(w)     := true.B
             io.iss_uops(w)       := issue_slots(i).uop
          }
 

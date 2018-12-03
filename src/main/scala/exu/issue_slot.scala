@@ -81,7 +81,7 @@ class IssueSlot(num_slow_wakeup_ports: Int)(implicit p: Parameters)
    val slot_p1_poisoned   = RegInit(false.B)
    val slot_p2_poisoned   = RegInit(false.B)
 
-   val slotUop = Reg(init = NullMicroOp)
+   val slotUop = RegInit(NullMicroOp)
 
    //-----------------------------------------------------------------------------
    // next slot state computation

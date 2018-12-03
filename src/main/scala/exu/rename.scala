@@ -19,7 +19,8 @@
 
 package boom.exu
 
-import Chisel._
+import chisel3._
+import chisel3.util._
 import freechips.rocketchip.config.Parameters
 import boom.common._
 import boom.util._
@@ -33,53 +34,53 @@ class RenameStageIO(
    val num_fp_wb_ports: Int)
    (implicit p: Parameters) extends BoomBundle()(p)
 {
-   private val int_preg_sz = log2Up(num_int_pregs)
-   private val fp_preg_sz = log2Up(num_fp_pregs)
+   private val int_preg_sz = log2Ceil(num_int_pregs)
+   private val fp_preg_sz = log2Ceil(num_fp_pregs)
 
-   val inst_can_proceed = Vec(pl_width, Bool()).asOutput
+   val inst_can_proceed = Output(Vec(pl_width, Bool()))
 
-   val kill      = Bool(INPUT)
+   val kill      = Input(Bool())
 
-   val dec_will_fire = Vec(pl_width, Bool()).asInput // will commit state updates
-   val dec_uops  = Vec(pl_width, new MicroOp()).asInput
+   val dec_will_fire = Input(Vec(pl_width, Bool())) // will commit state updates
+   val dec_uops  = Input(Vec(pl_width, new MicroOp()))
 
    // physical specifiers now available (but not the busy/ready status of the operands).
-   val ren1_mask = Vec(pl_width, Bool().asOutput) // mask of valid instructions
-   val ren1_uops = Vec(pl_width, new MicroOp().asOutput)
+   val ren1_mask = Vec(pl_width, Output(Bool())) // mask of valid instructions
+   val ren1_uops = Vec(pl_width, Output(new MicroOp()))
 
    // physical specifiers available AND busy/ready status available.
-   val ren2_mask  = Vec(pl_width, Bool().asOutput) // mask of valid instructions
-   val ren2_uops  = Vec(pl_width, new MicroOp().asOutput)
+   val ren2_mask  = Vec(pl_width, Output(Bool())) // mask of valid instructions
+   val ren2_uops  = Vec(pl_width, Output(new MicroOp()))
 
    // branch resolution (execute)
-   val brinfo    = new BrResolutionInfo().asInput
+   val brinfo    = Input(new BrResolutionInfo())
 
-   val dis_inst_can_proceed = Vec(DISPATCH_WIDTH, Bool()).asInput
+   val dis_inst_can_proceed = Input(Vec(DISPATCH_WIDTH, Bool()))
 
    // issue stage (fast wakeup)
-   val int_wakeups = Vec(num_int_wb_ports, Valid(new ExeUnitResp(xLen))).flip
-   val fp_wakeups = Vec(num_fp_wb_ports, Valid(new ExeUnitResp(fLen+1))).flip
+   val int_wakeups = Flipped(Vec(num_int_wb_ports, Valid(new ExeUnitResp(xLen))))
+   val fp_wakeups = Flipped(Vec(num_fp_wb_ports, Valid(new ExeUnitResp(fLen+1))))
 
    // commit stage
-   val com_valids = Vec(pl_width, Bool()).asInput
-   val com_uops   = Vec(pl_width, new MicroOp()).asInput
-   val com_rbk_valids = Vec(pl_width, Bool()).asInput
+   val com_valids = Input(Vec(pl_width, Bool()))
+   val com_uops   = Input(Vec(pl_width, new MicroOp()))
+   val com_rbk_valids = Input(Vec(pl_width, Bool()))
 
-   val flush_pipeline = Bool(INPUT) // only used for SCR (single-cycle reset)
+   val flush_pipeline = Input(Bool()) // only used for SCR (single-cycle reset)
 
-   val debug_rob_empty = Bool(INPUT)
-   val debug = new DebugRenameStageIO(num_int_pregs, num_fp_pregs).asOutput
+   val debug_rob_empty = Input(Bool())
+   val debug = Output(new DebugRenameStageIO(num_int_pregs, num_fp_pregs))
 }
 
 
 class DebugRenameStageIO(int_num_pregs: Int, fp_num_pregs: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
-   val ifreelist = Bits(width=int_num_pregs)
-   val iisprlist = Bits(width=int_num_pregs)
-   val ibusytable = UInt(width=int_num_pregs)
-   val ffreelist = Bits(width=fp_num_pregs)
-   val fisprlist = Bits(width=fp_num_pregs)
-   val fbusytable = UInt(width=fp_num_pregs)
+   val ifreelist =  Bits(int_num_pregs.W)
+   val iisprlist =  Bits(int_num_pregs.W)
+   val ibusytable = UInt(int_num_pregs.W)
+   val ffreelist =  Bits(fp_num_pregs.W)
+   val fisprlist =  Bits(fp_num_pregs.W)
+   val fbusytable = UInt(fp_num_pregs.W)
    override def cloneType: this.type = new DebugRenameStageIO(int_num_pregs, fp_num_pregs).asInstanceOf[this.type]
 }
 
@@ -237,7 +238,7 @@ class RenameStage(
       else
       {
          require (renameLatency == 2)
-         val r_valid = Reg(init = false.B)
+         val r_valid = RegInit(false.B)
          val r_uop   = Reg(new MicroOp())
 
          when (io.kill)
@@ -307,8 +308,8 @@ class RenameStage(
       uop.prs3_busy := fbusy.prs3_busy
 
       val valid = ren2_valids(w)
-      assert (!(valid && ibusy.prs1_busy && uop.lrs1_rtype === RT_FIX && uop.lrs1 === UInt(0)), "[rename] x0 is busy??")
-      assert (!(valid && ibusy.prs2_busy && uop.lrs2_rtype === RT_FIX && uop.lrs2 === UInt(0)), "[rename] x0 is busy??")
+      assert (!(valid && ibusy.prs1_busy && uop.lrs1_rtype === RT_FIX && uop.lrs1 === 0.U), "[rename] x0 is busy??")
+      assert (!(valid && ibusy.prs2_busy && uop.lrs2_rtype === RT_FIX && uop.lrs2 === 0.U), "[rename] x0 is busy??")
    }
 
    //-------------------------------------------------------------

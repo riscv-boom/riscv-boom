@@ -9,7 +9,8 @@
 
 package boom.exu
 
-import Chisel._
+import chisel3._
+import chisel3.util._
 import freechips.rocketchip.config.Parameters
 import boom.common._
 import boom.util._
@@ -17,27 +18,27 @@ import boom.util._
 
 class RenameMapTableElementIo(pl_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
-   val element            = UInt(OUTPUT, PREG_SZ)
+   val element            = Output(UInt(PREG_SZ.W))
 
-   val wens               = Vec(pl_width, Bool()).asInput
-   val ren_pdsts          = Vec(pl_width, UInt(width=PREG_SZ)).asInput
+   val wens               = Input(Vec(pl_width, Bool()))
+   val ren_pdsts          = Input(Vec(pl_width, UInt(PREG_SZ.W)))
 
-   val ren_br_vals        = Vec(pl_width, Bool()).asInput
-   val ren_br_tags        = Vec(pl_width, UInt(width=BR_TAG_SZ)).asInput
+   val ren_br_vals        = Input(Vec(pl_width, Bool()))
+   val ren_br_tags        = Input(Vec(pl_width, UInt(BR_TAG_SZ.W)))
 
-   val br_mispredict      = Bool(INPUT)
-   val br_mispredict_tag  = UInt(INPUT, BR_TAG_SZ)
+   val br_mispredict      = Input(Bool())
+   val br_mispredict_tag  = Input(UInt(BR_TAG_SZ.W))
 
    // rollback (on exceptions)
    // TODO REMOVE THIS ROLLBACK PORT, since wens is mutually exclusive with rollback_wens
-   val rollback_wen        = Bool(INPUT)
-   val rollback_stale_pdst = UInt(INPUT, PREG_SZ)
+   val rollback_wen        = Input(Bool())
+   val rollback_stale_pdst = Input(UInt(PREG_SZ.W))
 
    // TODO scr option
-   val flush_pipeline      = Bool(INPUT)
-   val commit_wen          = Bool(INPUT)
-   val commit_pdst         = UInt(INPUT, PREG_SZ)
-   val committed_element   = UInt(OUTPUT, PREG_SZ)
+   val flush_pipeline      = Input(Bool())
+   val commit_wen          = Input(Bool())
+   val commit_pdst         = Input(UInt(PREG_SZ.W))
+   val committed_element   = Output(UInt(PREG_SZ.W))
 
    override def cloneType: this.type = new RenameMapTableElementIo(pl_width).asInstanceOf[this.type]
 }
@@ -54,10 +55,10 @@ class RenameMapTableElement(pipeline_width: Int, always_zero: Boolean)(implicit 
    // out in the meantime. A software solution is also possible, but I'm
    // unwilling to trust that.
 
-   val element = Reg(init = UInt(0, PREG_SZ))
+   val element = RegInit(0.U(PREG_SZ.W))
 
    // handle branch speculation
-   val element_br_copies = Mem(MAX_BR_COUNT, UInt(width = PREG_SZ))
+   val element_br_copies = Mem(MAX_BR_COUNT, UInt(PREG_SZ.W))
 
 
    // this is possibly the hardest piece of code I have ever had to reason about in my LIFE.
@@ -71,7 +72,7 @@ class RenameMapTableElement(pipeline_width: Int, always_zero: Boolean)(implicit 
 
    for (w <- 0 until pipeline_width)
    {
-      var elm_cases = Array((Bool(false),  UInt(0,PREG_SZ)))
+      var elm_cases = Array((false.B, 0.U(PREG_SZ.W)))
 
       for (xx <- w to 0 by -1)
       {
@@ -104,7 +105,7 @@ class RenameMapTableElement(pipeline_width: Int, always_zero: Boolean)(implicit 
 
    if (ENABLE_COMMIT_MAP_TABLE)
    {
-      val committed_element = Reg(init=UInt(0,PREG_SZ))
+      val committed_element = RegInit(0.U(PREG_SZ.W))
       when (io.commit_wen)
       {
          committed_element := io.commit_pdst
@@ -119,17 +120,17 @@ class RenameMapTableElement(pipeline_width: Int, always_zero: Boolean)(implicit 
    // outputs
    io.element := element
 
-   if (always_zero) io.element := UInt(0)
+   if (always_zero) io.element := 0.U
 }
 
 
 // Pass out the new physical register specifiers.
 class MapTableOutput(preg_sz: Int) extends Bundle
 {
-   val prs1              = UInt(width = preg_sz)
-   val prs2              = UInt(width = preg_sz)
-   val prs3              = UInt(width = preg_sz)
-   val stale_pdst        = UInt(width = preg_sz)
+   val prs1              = UInt(preg_sz.W)
+   val prs2              = UInt(preg_sz.W)
+   val prs3              = UInt(preg_sz.W)
+   val stale_pdst        = UInt(preg_sz.W)
    override def cloneType: this.type = new MapTableOutput(preg_sz).asInstanceOf[this.type]
 }
 
@@ -141,28 +142,28 @@ class RenameMapTable(
    )(implicit p: Parameters) extends BoomModule()(p)
    with HasBoomCoreParameters
 {
-   private val preg_sz = log2Up(num_physical_registers)
+   private val preg_sz = log2Ceil(num_physical_registers)
 
    val io = IO(new BoomBundle()(p)
    {
       // Inputs
-      val brinfo           = new BrResolutionInfo().asInput
-      val kill             = Bool(INPUT)
+      val brinfo           = Input(new BrResolutionInfo())
+      val kill             = Input(Bool())
 
-      val ren_will_fire    = Vec(pl_width, Bool()).asInput
-      val ren_uops         = Vec(pl_width, new MicroOp()).asInput
-      val ren_br_vals      = Vec(pl_width, Bool()).asInput
+      val ren_will_fire    = Input(Vec(pl_width, Bool()))
+      val ren_uops         = Input(Vec(pl_width, new MicroOp()))
+      val ren_br_vals      = Input(Vec(pl_width, Bool()))
 
-      val com_valids       = Vec(pl_width, Bool()).asInput
-      val com_uops         = Vec(pl_width, new MicroOp()).asInput
-      val com_rbk_valids   = Vec(pl_width, Bool()).asInput
-      val flush_pipeline   = Bool(INPUT) // only used for SCR (single-cycle reset)
+      val com_valids       = Input(Vec(pl_width, Bool()))
+      val com_uops         = Input(Vec(pl_width, new MicroOp()))
+      val com_rbk_valids   = Input(Vec(pl_width, Bool()))
+      val flush_pipeline   = Input(Bool()) // only used for SCR (single-cycle reset)
 
-      val debug_inst_can_proceed = Vec(pl_width, Bool()).asInput
-      val debug_freelist_can_allocate = Vec(pl_width, Bool()).asInput
+      val debug_inst_can_proceed = Input(Vec(pl_width, Bool()))
+      val debug_freelist_can_allocate = Input(Vec(pl_width, Bool()))
 
       // Outputs
-      val values           = Vec(pl_width, new MapTableOutput(preg_sz)).asOutput
+      val values           = Output(Vec(pl_width, new MapTableOutput(preg_sz)))
    })
 
 
@@ -171,22 +172,22 @@ class RenameMapTable(
       val entry = Module(new RenameMapTableElement(pl_width, always_zero = (i==0 && rtype == RT_FIX.litValue)))
       entry
    }
-   val map_table_io = Vec(entries.map(_.io))
+   val map_table_io = VecInit(entries.map(_.io))
 
    map_table_io.zipWithIndex.map{ case (entry, i) =>
    {
       // TODO get rid of this extra, init logic
-      entry.rollback_wen := Bool(false)
+      entry.rollback_wen := false.B
       entry.rollback_stale_pdst := io.com_uops(0).stale_pdst
-      entry.commit_wen := Bool(false)
+      entry.commit_wen := false.B
       entry.commit_pdst := io.com_uops(0).pdst
 
       for (w <- 0 until pl_width)
       {
-         entry.wens(w)        := io.ren_uops(w).ldst === UInt(i) &&
+         entry.wens(w)        := io.ren_uops(w).ldst === i.U &&
                                            io.ren_will_fire(w) &&
                                            io.ren_uops(w).ldst_val &&
-                                           io.ren_uops(w).dst_rtype === UInt(rtype) &&
+                                           io.ren_uops(w).dst_rtype === rtype.U &&
                                            !io.kill
 
          assert (!(entry.wens(w) && !io.debug_inst_can_proceed(w)), "[maptable] wen shouldn't be high.")
@@ -207,9 +208,9 @@ class RenameMapTable(
    for (w <- pl_width-1 to 0 by -1)
    {
       val ldst = io.com_uops(w).ldst
-      when (io.com_rbk_valids(w) && io.com_uops(w).dst_rtype === UInt(rtype))
+      when (io.com_rbk_valids(w) && io.com_uops(w).dst_rtype === rtype.U)
       {
-         map_table_io(ldst).rollback_wen        := Bool(true)
+         map_table_io(ldst).rollback_wen        := true.B
          map_table_io(ldst).rollback_stale_pdst := io.com_uops(w).stale_pdst
       }
    }
@@ -219,16 +220,17 @@ class RenameMapTable(
       for (w <- 0 until pl_width)
       {
          val ldst = io.com_uops(w).ldst
-         when (io.com_valids(w) && (io.com_uops(w).dst_rtype === UInt(rtype)))
+         when (io.com_valids(w) && (io.com_uops(w).dst_rtype === rtype.U))
          {
-            map_table_io(ldst).commit_wen := Bool(true)
+            map_table_io(ldst).commit_wen := true.B
             map_table_io(ldst).commit_pdst := io.com_uops(w).pdst
          }
       }
    }
 
    // Read out the map-table entries ASAP, then deal with bypassing busy-bits later.
-   private val map_table_output = Seq.fill(pl_width*3)(Wire(UInt(width=PREG_SZ)))
+   //private val map_table_output = Wire(Vec(pl_width*3, UInt(PREG_SZ.W)))
+   private val map_table_output = Seq.fill(pl_width*3)(Wire(UInt(PREG_SZ.W)))
    def map_table_prs1(w:Int) = map_table_output(w+0*pl_width)
    def map_table_prs2(w:Int) = map_table_output(w+1*pl_width)
    def map_table_prs3(w:Int) = map_table_output(w+2*pl_width)
@@ -240,7 +242,7 @@ class RenameMapTable(
       if (rtype == RT_FLT.litValue) {
          map_table_prs3(w) := map_table_io(io.ren_uops(w).lrs3).element
       } else {
-         map_table_prs3(w) := UInt(0)
+         map_table_prs3(w) := 0.U
       }
    }
 
@@ -248,33 +250,33 @@ class RenameMapTable(
    // Bypass the physical register mappings
    for (w <- 0 until pl_width)
    {
-      var rs1_cases =  Array((Bool(false),  UInt(0,PREG_SZ)))
-      var rs2_cases =  Array((Bool(false),  UInt(0,PREG_SZ)))
-      var rs3_cases =  Array((Bool(false),  UInt(0,PREG_SZ)))
-      var stale_cases= Array((Bool(false),  UInt(0,PREG_SZ)))
+      var rs1_cases =  Array((false.B, 0.U(PREG_SZ.W)))
+      var rs2_cases =  Array((false.B, 0.U(PREG_SZ.W)))
+      var rs3_cases =  Array((false.B, 0.U(PREG_SZ.W)))
+      var stale_cases= Array((false.B, 0.U(PREG_SZ.W)))
 
       // Handle bypassing new physical destinations to operands (and stale destination)
       // scalastyle:off
       for (xx <- w-1 to 0 by -1)
       {
-         rs1_cases  ++= Array((io.ren_uops(w).lrs1_rtype === UInt(rtype) && io.ren_will_fire(xx) && io.ren_uops(xx).ldst_val && io.ren_uops(xx).dst_rtype === UInt(rtype) && (io.ren_uops(w).lrs1 === io.ren_uops(xx).ldst), (io.ren_uops(xx).pdst)))
-         rs2_cases  ++= Array((io.ren_uops(w).lrs2_rtype === UInt(rtype) && io.ren_will_fire(xx) && io.ren_uops(xx).ldst_val && io.ren_uops(xx).dst_rtype === UInt(rtype) && (io.ren_uops(w).lrs2 === io.ren_uops(xx).ldst), (io.ren_uops(xx).pdst)))
-         stale_cases++= Array((io.ren_uops(w).dst_rtype === UInt(rtype)  && io.ren_will_fire(xx) && io.ren_uops(xx).ldst_val && io.ren_uops(xx).dst_rtype === UInt(rtype) && (io.ren_uops(w).ldst === io.ren_uops(xx).ldst), (io.ren_uops(xx).pdst)))
+         rs1_cases  ++= Array((io.ren_uops(w).lrs1_rtype === rtype.U && io.ren_will_fire(xx) && io.ren_uops(xx).ldst_val && io.ren_uops(xx).dst_rtype === rtype.U && (io.ren_uops(w).lrs1 === io.ren_uops(xx).ldst), (io.ren_uops(xx).pdst)))
+         rs2_cases  ++= Array((io.ren_uops(w).lrs2_rtype === rtype.U && io.ren_will_fire(xx) && io.ren_uops(xx).ldst_val && io.ren_uops(xx).dst_rtype === rtype.U && (io.ren_uops(w).lrs2 === io.ren_uops(xx).ldst), (io.ren_uops(xx).pdst)))
+         stale_cases++= Array((io.ren_uops(w).dst_rtype === rtype.U  && io.ren_will_fire(xx) && io.ren_uops(xx).ldst_val && io.ren_uops(xx).dst_rtype === rtype.U && (io.ren_uops(w).ldst === io.ren_uops(xx).ldst), (io.ren_uops(xx).pdst)))
 
          if (rtype == RT_FLT.litValue) {
             rs3_cases  ++= Array((
-                  io.ren_uops(w).frs3_en && io.ren_will_fire(xx) && io.ren_uops(xx).ldst_val && io.ren_uops(xx).dst_rtype === UInt(rtype) && (io.ren_uops(w).lrs3 === io.ren_uops(xx).ldst),
+                  io.ren_uops(w).frs3_en && io.ren_will_fire(xx) && io.ren_uops(xx).ldst_val && io.ren_uops(xx).dst_rtype === rtype.U && (io.ren_uops(w).lrs3 === io.ren_uops(xx).ldst),
                   (io.ren_uops(xx).pdst)))
          }
       }
 
       // add default case where we can just read the map table for our information
       if (rtype == RT_FIX.litValue) {
-         rs1_cases ++= Array((io.ren_uops(w).lrs1_rtype === UInt(rtype) && (io.ren_uops(w).lrs1 =/= UInt(0)), map_table_prs1(w)))
-         rs2_cases ++= Array((io.ren_uops(w).lrs2_rtype === UInt(rtype) && (io.ren_uops(w).lrs2 =/= UInt(0)), map_table_prs2(w)))
+         rs1_cases ++= Array((io.ren_uops(w).lrs1_rtype === rtype.U && (io.ren_uops(w).lrs1 =/= 0.U), map_table_prs1(w)))
+         rs2_cases ++= Array((io.ren_uops(w).lrs2_rtype === rtype.U && (io.ren_uops(w).lrs2 =/= 0.U), map_table_prs2(w)))
       } else {
-         rs1_cases ++= Array((io.ren_uops(w).lrs1_rtype === UInt(rtype), map_table_prs1(w)))
-         rs2_cases ++= Array((io.ren_uops(w).lrs2_rtype === UInt(rtype), map_table_prs2(w)))
+         rs1_cases ++= Array((io.ren_uops(w).lrs1_rtype === rtype.U, map_table_prs1(w)))
+         rs2_cases ++= Array((io.ren_uops(w).lrs2_rtype === rtype.U, map_table_prs2(w)))
       }
       rs3_cases ++= Array((io.ren_uops(w).frs3_en, map_table_prs3(w)))
 
@@ -287,10 +289,10 @@ class RenameMapTable(
 
 
       if (rtype == RT_FIX.litValue) {
-         assert (!(io.ren_uops(w).lrs1 === UInt(0) && io.ren_uops(w).lrs1_rtype === RT_FIX && io.values(w).prs1 =/= UInt(0)), "lrs1==0 but maptable(" + w + ") returning non-zero.")
-         assert (!(io.ren_uops(w).lrs2 === UInt(0) && io.ren_uops(w).lrs2_rtype === RT_FIX && io.values(w).prs2 =/= UInt(0)), "lrs2==0 but maptable(" + w + ") returning non-zero.")
-         assert (!(io.ren_uops(w).lrs1 === UInt(0) && io.ren_uops(w).lrs1_rtype === RT_FIX && map_table_prs1(w) =/= UInt(0)), "lrs1==0 but maptable(" + w + ") returning non-zero.")
-         assert (!(io.ren_uops(w).lrs2 === UInt(0) && io.ren_uops(w).lrs2_rtype === RT_FIX && map_table_prs2(w) =/= UInt(0)), "lrs2==0 but maptable(" + w + ") returning non-zero.")
+         assert (!(io.ren_uops(w).lrs1 === 0.U && io.ren_uops(w).lrs1_rtype === RT_FIX && io.values(w).prs1 =/= 0.U), "lrs1==0 but maptable(" + w + ") returning non-zero.")
+         assert (!(io.ren_uops(w).lrs2 === 0.U && io.ren_uops(w).lrs2_rtype === RT_FIX && io.values(w).prs2 =/= 0.U), "lrs2==0 but maptable(" + w + ") returning non-zero.")
+         assert (!(io.ren_uops(w).lrs1 === 0.U && io.ren_uops(w).lrs1_rtype === RT_FIX && map_table_prs1(w) =/= 0.U), "lrs1==0 but maptable(" + w + ") returning non-zero.")
+         assert (!(io.ren_uops(w).lrs2 === 0.U && io.ren_uops(w).lrs2_rtype === RT_FIX && map_table_prs2(w) =/= 0.U), "lrs2==0 but maptable(" + w + ") returning non-zero.")
       }
       // scalastyle:on
    }

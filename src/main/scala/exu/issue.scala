@@ -31,7 +31,7 @@ trait IssueUnitConstants
    // invalid  : slot holds no valid uop.
    // s_valid_1: slot holds a valid uop.
    // s_valid_2: slot holds a store-like uop that may be broken into two micro-ops.
-   val s_invalid :: s_valid_1 :: s_valid_2 :: Nil = Enum(UInt(), 3)
+   val s_invalid :: s_valid_1 :: s_valid_2 :: Nil = Enum(3)
 }
 
 // What physical register is broadcasting its wakeup?
@@ -140,7 +140,7 @@ abstract class IssueUnit(
       {
          printf("  " + this.getType + "_issue_slot[%d](%c)(Req:%c):wen=%c P:(%c,%c,%c) OP:(%d,%d,%d) PDST:%d %c [[DASM(%x)]" +
                " 0x%x: %d] ri:%d bm=%d imm=0x%x\n"
-            , UInt(i, log2Up(num_issue_slots))
+            , i.U(log2Ceil(num_issue_slots).W)
             , Mux(issue_slots(i).valid, Str("V"), Str("-"))
             , Mux(issue_slots(i).request, Str("R"), Str("-"))
             , Mux(issue_slots(i).in_uop.valid, Str("W"),  Str(" "))

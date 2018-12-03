@@ -16,7 +16,8 @@
 
 package boom.exu
 
-import Chisel._
+import chisel3._
+import chisel3.util._
 import freechips.rocketchip.config.Parameters
 import scala.collection.mutable.ArrayBuffer
 
@@ -31,7 +32,7 @@ import boom.util.{ImmGen, IsKilledByBranch, BranchKillableQueue}
 class ExeUnitResp(data_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
   with HasBoomUOP
 {
-   val data = Bits(width = data_width)
+   val data = Bits(data_width.W)
    val fflags = new ValidIO(new FFlagsResp) // write fflags to ROB
 
    var writesToIRF = true // does this response unit plug into the integer regfile?
@@ -41,7 +42,7 @@ class ExeUnitResp(data_width: Int)(implicit p: Parameters) extends BoomBundle()(
 class FFlagsResp(implicit p: Parameters) extends BoomBundle()(p)
 {
    val uop = new MicroOp()
-   val flags = Bits(width=tile.FPConstants.FLAGS_SZ)
+   val flags = Bits(tile.FPConstants.FLAGS_SZ.W)
 }
 
 class ExecutionUnitIO(
@@ -52,25 +53,25 @@ class ExecutionUnitIO(
    )(implicit p: Parameters) extends BoomBundle()(p)
 {
    // describe which functional units we support (used by the issue window)
-   val fu_types = Bits(OUTPUT, FUC_SZ)
+   val fu_types = Output(Bits(FUC_SZ.W))
 
-   val req     = (new DecoupledIO(new FuncUnitReq(data_width))).flip
+   val req     = Flipped(new DecoupledIO(new FuncUnitReq(data_width)))
    val resp    = Vec(num_rf_write_ports, new DecoupledIO(new ExeUnitResp(data_width)))
-   val bypass  = new BypassData(num_bypass_ports, data_width).asOutput
-   val brinfo  = new BrResolutionInfo().asInput
+   val bypass  = Output(new BypassData(num_bypass_ports, data_width))
+   val brinfo  = Input(new BrResolutionInfo())
 
    // only used by the branch unit
-   val br_unit = new BranchUnitResp().asOutput
-   val get_ftq_pc = new GetPCFromFtqIO().flip
-   val status = new freechips.rocketchip.rocket.MStatus().asInput
+   val br_unit = Output(new BranchUnitResp())
+   val get_ftq_pc = Flipped(new GetPCFromFtqIO())
+   val status = Input(new freechips.rocketchip.rocket.MStatus())
 
    // only used by the fpu unit
-   val fcsr_rm = Bits(INPUT, tile.FPConstants.RM_SZ)
+   val fcsr_rm = Input(Bits(tile.FPConstants.RM_SZ.W))
 
    // only used by the mem unit
-   val lsu_io = new boom.lsu.LoadStoreUnitIO(decodeWidth).flip
+   val lsu_io = Flipped(new boom.lsu.LoadStoreUnitIO(decodeWidth))
    val dmem   = new boom.lsu.DCMemPortIO() // TODO move this out of ExecutionUnit
-   val com_exception = Bool(INPUT)
+   val com_exception = Input(Bool())
 }
 
 abstract class ExecutionUnit(val num_rf_read_ports: Int
@@ -95,7 +96,7 @@ abstract class ExecutionUnit(val num_rf_read_ports: Int
    val io = IO(new ExecutionUnitIO(num_rf_read_ports, num_rf_write_ports
                                , num_bypass_stages, data_width))
 
-   io.resp.map(_.bits.fflags.valid := Bool(false))
+   io.resp.map(_.bits.fflags.valid := false.B)
 
    // TODO add "number of fflag ports", so we can properly account for FPU+Mem combinations
    def numBypassPorts: Int = num_bypass_stages
@@ -167,20 +168,20 @@ class ALUExeUnit(
 
    override def toString: String = out_str.toString
 
-   val muldiv_busy = Wire(init=Bool(false))
-   val fdiv_busy = Wire(init=Bool(false))
+   val muldiv_busy = WireInit(false.B)
+   val fdiv_busy = WireInit(false.B)
 
    // The Functional Units --------------------
    val fu_units = ArrayBuffer[FunctionalUnit]()
 
    io.fu_types := FU_ALU |
-                  Mux(Bool(has_fpu), FU_FPU, Bits(0)) |
-                  Mux(Bool(has_mul && !use_slow_mul), FU_MUL, Bits(0)) |
-                  (Mux(!muldiv_busy && Bool(has_mul && use_slow_mul), FU_MUL, Bits(0))) |
-                  (Mux(!muldiv_busy && Bool(has_div), FU_DIV, Bits(0))) |
-                  (Mux(Bool(shares_csr_wport), FU_CSR, Bits(0))) |
-                  (Mux(Bool(is_branch_unit), FU_BRU, Bits(0))) |
-                  Mux(!fdiv_busy && Bool(has_fdiv), FU_FDV, Bits(0))
+                  Mux(has_fpu.B, FU_FPU, 0.U) |
+                  Mux((has_mul && !use_slow_mul).B, FU_MUL, 0.U) |
+                  (Mux(!muldiv_busy && (has_mul && use_slow_mul).B, FU_MUL, 0.U)) |
+                  (Mux(!muldiv_busy && has_div.B, FU_DIV, 0.U)) |
+                  (Mux(shares_csr_wport.B, FU_CSR, 0.U)) |
+                  (Mux(is_branch_unit.B, FU_BRU, 0.U)) |
+                  Mux(!fdiv_busy && has_fdiv.B, FU_FDV, 0.U)
 
 
    // ALU Unit -------------------------------
@@ -196,7 +197,12 @@ class ALUExeUnit(
       alu.io.req.bits.kill     := io.req.bits.kill
       alu.io.req.bits.rs1_data := io.req.bits.rs1_data
       alu.io.req.bits.rs2_data := io.req.bits.rs2_data
+      alu.io.req.bits.rs3_data := DontCare
+      alu.io.resp.ready := DontCare
+      alu.io.fcsr_rm := DontCare
       alu.io.brinfo <> io.brinfo
+      alu.io.status := DontCare
+      alu.io.get_ftq_pc := DontCare
    }
 
    // branch unit is embedded inside the ALU
@@ -208,7 +214,7 @@ class ALUExeUnit(
    }
    else
    {
-      io.br_unit.brinfo.valid := Bool(false)
+      io.br_unit.brinfo.valid := false.B
    }
 
    if (has_alu) fu_units += alu
@@ -222,17 +228,23 @@ class ALUExeUnit(
       imul.io.req.bits.uop      := io.req.bits.uop
       imul.io.req.bits.rs1_data := io.req.bits.rs1_data
       imul.io.req.bits.rs2_data := io.req.bits.rs2_data
+      imul.io.req.bits.rs3_data := DontCare
       imul.io.req.bits.kill     := io.req.bits.kill
       imul.io.brinfo <> io.brinfo
+      imul.io.resp.ready := DontCare
+      imul.io.status := DontCare
+      imul.io.get_ftq_pc := DontCare
+      imul.io.fcsr_rm := DontCare
       fu_units += imul
       if (has_fpu) require (imulLatency == dfmaLatency)
    }
 
    // FPU Unit -----------------------
    var fpu: FPUUnit = null
-   val fpu_resp_val = Wire(init=Bool(false))
+   val fpu_resp_val = WireInit(false.B)
    val fpu_resp_fflags = Wire(new ValidIO(new FFlagsResp()))
-   fpu_resp_fflags.valid := Bool(false)
+   fpu_resp_fflags.valid := false.B
+   fpu_resp_fflags.bits := DontCare
    if (has_fpu)
    {
       fpu = Module(new FPUUnit())
@@ -244,8 +256,12 @@ class ALUExeUnit(
       fpu.io.req.bits.kill       := io.req.bits.kill
       fpu.io.fcsr_rm             := io.fcsr_rm
       fpu.io.brinfo <> io.brinfo
+      fpu.io.status := DontCare
+      fpu.io.get_ftq_pc := DontCare
+      fpu.io.fcsr_rm := DontCare
       fpu_resp_val := fpu.io.resp.valid
       fpu_resp_fflags := fpu.io.resp.bits.fflags
+      fpu.io.resp.ready := DontCare
       fu_units += fpu
    }
 
@@ -256,11 +272,14 @@ class ALUExeUnit(
 
    // FDiv/FSqrt Unit -----------------------
    var fdivsqrt: FDivSqrtUnit = null
-   val fdiv_resp_val = Wire(init=Bool(false))
+   val fdiv_resp_val = WireInit(false.B)
    val fdiv_resp_uop = Wire(new MicroOp())
-   val fdiv_resp_data = Wire(Bits(width=65))
+   val fdiv_resp_data = Wire(Bits(65.W))
    val fdiv_resp_fflags = Wire(new ValidIO(new FFlagsResp()))
-   fdiv_resp_fflags.valid := Bool(false)
+   fdiv_resp_fflags.valid := false.B
+   fdiv_resp_fflags.bits := DontCare
+   fdiv_resp_uop := DontCare 
+   fdiv_resp_data := DontCare
    if (has_fdiv)
    {
       fdivsqrt = Module(new FDivSqrtUnit())
@@ -268,9 +287,12 @@ class ALUExeUnit(
       fdivsqrt.io.req.bits.uop      := io.req.bits.uop
       fdivsqrt.io.req.bits.rs1_data := io.req.bits.rs1_data
       fdivsqrt.io.req.bits.rs2_data := io.req.bits.rs2_data
+      fdivsqrt.io.req.bits.rs3_data := DontCare
       fdivsqrt.io.req.bits.kill     := io.req.bits.kill
       fdivsqrt.io.fcsr_rm           := io.fcsr_rm
       fdivsqrt.io.brinfo <> io.brinfo
+      fdivsqrt.io.status := DontCare
+      fdivsqrt.io.get_ftq_pc := DontCare
 
       // share write port with the pipelined units
       fdivsqrt.io.resp.ready := !(fu_units.map(_.io.resp.valid).reduce(_|_))
@@ -287,18 +309,22 @@ class ALUExeUnit(
 
    // Mul/Div/Rem Unit -----------------------
    var muldiv: MulDivUnit = null
-   val muldiv_resp_val = Wire(init = Bool(false))
+   val muldiv_resp_val = WireInit(false.B)
    if (has_muldiv)
    {
       muldiv = Module(new MulDivUnit())
       muldiv.io.req.valid           := io.req.valid &&
-                                       ((io.req.bits.uop.fu_code_is(FU_DIV) && Bool(has_div)) ||
-                                        (io.req.bits.uop.fu_code_is(FU_MUL) && Bool(has_mul && use_slow_mul)))
+                                       ((io.req.bits.uop.fu_code_is(FU_DIV) && has_div.B) ||
+                                        (io.req.bits.uop.fu_code_is(FU_MUL) && (has_mul && use_slow_mul).B))
       muldiv.io.req.bits.uop        := io.req.bits.uop
       muldiv.io.req.bits.rs1_data   := io.req.bits.rs1_data
       muldiv.io.req.bits.rs2_data   := io.req.bits.rs2_data
+      muldiv.io.req.bits.rs3_data   := DontCare
       muldiv.io.brinfo              := io.brinfo
       muldiv.io.req.bits.kill       := io.req.bits.kill
+      muldiv.io.status := DontCare
+      muldiv.io.fcsr_rm := DontCare
+      muldiv.io.get_ftq_pc := DontCare
 
       // share write port with the pipelined units
       muldiv.io.resp.ready := !(fu_units.map(_.io.resp.valid).reduce(_|_))
@@ -306,7 +332,7 @@ class ALUExeUnit(
       muldiv_resp_val := muldiv.io.resp.valid
       muldiv_busy := !muldiv.io.req.ready ||
                      (io.req.valid && (io.req.bits.uop.fu_code_is(FU_DIV) ||
-                                      (io.req.bits.uop.fu_code_is(FU_MUL) && Bool(has_mul && use_slow_mul))))
+                                      (io.req.bits.uop.fu_code_is(FU_MUL) && (has_mul && use_slow_mul).B)))
       fu_units += muldiv
    }
 
@@ -315,8 +341,7 @@ class ALUExeUnit(
    assert (io.resp(0).ready) // don'yet support back-pressuring this unit.
 
    io.resp(0).valid    := fu_units.map(_.io.resp.valid).reduce(_|_)
-   io.resp(0).bits.uop := new MicroOp().fromBits(
-                           PriorityMux(fu_units.map(f => (f.io.resp.valid, f.io.resp.bits.uop.asUInt))))
+   io.resp(0).bits.uop := PriorityMux(fu_units.map(f => (f.io.resp.valid, f.io.resp.bits.uop.asUInt))).asTypeOf(new MicroOp())
    io.resp(0).bits.data:= PriorityMux(fu_units.map(f => (f.io.resp.valid, f.io.resp.bits.data.asUInt))).asUInt
    // pulled out for critical path reasons
    if (has_alu) {
@@ -326,9 +351,9 @@ class ALUExeUnit(
 
    io.resp(0).bits.fflags := Mux(fpu_resp_val, fpu_resp_fflags, fdiv_resp_fflags)
 
-   assert ((PopCount(fu_units.map(_.io.resp.valid)) <= UInt(1) && !muldiv_resp_val && !fdiv_resp_val) ||
-          (PopCount(fu_units.map(_.io.resp.valid)) <= UInt(2) && (muldiv_resp_val || fdiv_resp_val)) ||
-          (PopCount(fu_units.map(_.io.resp.valid)) <= UInt(3) && muldiv_resp_val && fdiv_resp_val)
+   assert ((PopCount(fu_units.map(_.io.resp.valid)) <= 1.U && !muldiv_resp_val && !fdiv_resp_val) ||
+          (PopCount(fu_units.map(_.io.resp.valid)) <= 2.U && (muldiv_resp_val || fdiv_resp_val)) ||
+          (PopCount(fu_units.map(_.io.resp.valid)) <= 3.U && muldiv_resp_val && fdiv_resp_val)
       , "Multiple functional units are fighting over the write port.")
 }
 
@@ -357,25 +382,27 @@ class FPUExeUnit(
    if (has_fdiv) out_str.append("\n       - FDiv/FSqrt")
    if (has_fpiu) out_str.append("\n       - FPIU (writes to Integer RF)")
 
-   val fdiv_busy = Wire(init=Bool(false))
-   val fpiu_busy = Wire(init=Bool(false))
+   val fdiv_busy = WireInit(false.B)
+   val fpiu_busy = WireInit(false.B)
 
    // The Functional Units --------------------
    val fu_units = ArrayBuffer[FunctionalUnit]()
 
-   io.fu_types := Mux(Bool(has_fpu), FU_FPU, Bits(0)) |
-                  Mux(!fdiv_busy && Bool(has_fdiv), FU_FDV, Bits(0)) |
-                  Mux(!fpiu_busy && Bool(has_fpiu), FU_F2I, Bits(0))
+   io.fu_types := Mux(has_fpu.B, FU_FPU, 0.U) |
+                  Mux(!fdiv_busy && has_fdiv.B, FU_FDV, 0.U) |
+                  Mux(!fpiu_busy && has_fpiu.B, FU_F2I, 0.U)
 
 
    io.resp(0).bits.writesToIRF = false
    io.resp(1).bits.writesToIRF = true
+   io.get_ftq_pc := DontCare
 
    // FPU Unit -----------------------
    var fpu: FPUUnit = null
-   val fpu_resp_val = Wire(init=Bool(false))
+   val fpu_resp_val = WireInit(false.B)
    val fpu_resp_fflags = Wire(new ValidIO(new FFlagsResp()))
-   fpu_resp_fflags.valid := Bool(false)
+   fpu_resp_fflags.valid := false.B
+   fpu_resp_fflags.bits := DontCare
    if (has_fpu)
    {
       fpu = Module(new FPUUnit())
@@ -389,6 +416,9 @@ class FPUExeUnit(
       fpu.io.req.bits.kill       := io.req.bits.kill
       fpu.io.fcsr_rm             := io.fcsr_rm
       fpu.io.brinfo <> io.brinfo
+      fpu.io.status := DontCare
+      fpu.io.get_ftq_pc := DontCare
+      fpu.io.resp.ready := DontCare
       fpu_resp_val := fpu.io.resp.valid
       fpu_resp_fflags := fpu.io.resp.bits.fflags
       fu_units += fpu
@@ -397,11 +427,14 @@ class FPUExeUnit(
 
    // FDiv/FSqrt Unit -----------------------
    var fdivsqrt: FDivSqrtUnit = null
-   val fdiv_resp_val = Wire(init=Bool(false))
+   val fdiv_resp_val = WireInit(false.B)
    val fdiv_resp_uop = Wire(new MicroOp())
-   val fdiv_resp_data = Wire(Bits(width=65))
+   val fdiv_resp_data = Wire(Bits(65.W))
    val fdiv_resp_fflags = Wire(new ValidIO(new FFlagsResp()))
-   fdiv_resp_fflags.valid := Bool(false)
+   fdiv_resp_fflags.valid := false.B
+   fdiv_resp_fflags.bits := DontCare
+   fdiv_resp_uop := DontCare 
+   fdiv_resp_data := DontCare
    if (has_fdiv)
    {
       fdivsqrt = Module(new FDivSqrtUnit())
@@ -409,9 +442,12 @@ class FPUExeUnit(
       fdivsqrt.io.req.bits.uop      := io.req.bits.uop
       fdivsqrt.io.req.bits.rs1_data := io.req.bits.rs1_data
       fdivsqrt.io.req.bits.rs2_data := io.req.bits.rs2_data
+      fdivsqrt.io.req.bits.rs3_data := DontCare
       fdivsqrt.io.req.bits.kill     := io.req.bits.kill
       fdivsqrt.io.fcsr_rm           := io.fcsr_rm
       fdivsqrt.io.brinfo <> io.brinfo
+      fdivsqrt.io.status := DontCare
+      fdivsqrt.io.get_ftq_pc := DontCare
 
       // share write port with the pipelined units
       fdivsqrt.io.resp.ready := !(fu_units.map(_.io.resp.valid).reduce(_|_)) // TODO PERF will get blocked by fpiu.
@@ -426,12 +462,12 @@ class FPUExeUnit(
       fu_units += fdivsqrt
    }
 
+
    // Outputs (Write Port #0)  ---------------
 
    io.resp(0).valid    := fu_units.map(_.io.resp.valid).reduce(_|_) &&
                           !(fpu.io.resp.valid && fpu.io.resp.bits.uop.fu_code_is(FU_F2I))
-   io.resp(0).bits.uop := new MicroOp().fromBits(
-                           PriorityMux(fu_units.map(f => (f.io.resp.valid, f.io.resp.bits.uop.asUInt))))
+   io.resp(0).bits.uop := PriorityMux(fu_units.map(f => (f.io.resp.valid, f.io.resp.bits.uop.asUInt))).asTypeOf(new MicroOp())
    io.resp(0).bits.data:= PriorityMux(fu_units.map(f => (f.io.resp.valid, f.io.resp.bits.data.asUInt))).asUInt
    io.resp(0).bits.fflags := Mux(fpu_resp_val, fpu_resp_fflags, fdiv_resp_fflags)
 
@@ -467,7 +503,7 @@ class FDivSqrtExeUnit(implicit p: Parameters)
                                        )
 {
    val fdiv_busy = Wire(Bool())
-   io.fu_types := Mux(!fdiv_busy, FU_FDV, Bits(0))
+   io.fu_types := Mux(!fdiv_busy, FU_FDV, 0.U)
 
    val fdivsqrt = Module(new FDivSqrtUnit())
    fdivsqrt.io.req <> io.req
@@ -477,6 +513,8 @@ class FDivSqrtExeUnit(implicit p: Parameters)
    io.resp(0).bits.data   := fdivsqrt.io.resp.bits.data
    io.resp(0).bits.fflags := fdivsqrt.io.resp.bits.fflags
    fdivsqrt.io.brinfo <> io.brinfo
+   fdivsqrt.io.status := DontCare
+   fdivsqrt.io.get_ftq_pc := DontCare
    io.bypass <> fdivsqrt.io.bypass
 
    fdiv_busy := !fdivsqrt.io.req.ready || io.req.valid
@@ -497,14 +535,17 @@ class IntToFPExeUnit(implicit p: Parameters) extends ExecutionUnit(
    // since the operand data comes from the IRF but writes back to the FRF.
    uses_iss_unit = false)
 {
-   val busy = Wire(init=Bool(false))
-   io.fu_types := Mux(!busy, FU_I2F, Bits(0))
+   val busy = WireInit(false.B)
+   io.fu_types := Mux(!busy, FU_I2F, 0.U)
    io.resp(0).bits.writesToIRF = false
 
    val ifpu = Module(new IntToFPUnit(latency=intToFpLatency))
    ifpu.io.req <> io.req
    ifpu.io.fcsr_rm := io.fcsr_rm
    ifpu.io.brinfo <> io.brinfo
+   ifpu.io.status := DontCare
+   ifpu.io.get_ftq_pc := DontCare
+   ifpu.io.resp.ready := DontCare
    io.bypass <> ifpu.io.bypass
 
    // buffer up results since we share write-port on integer regfile.
@@ -517,6 +558,7 @@ class IntToFPExeUnit(implicit p: Parameters) extends ExecutionUnit(
    queue.io.flush := io.req.bits.kill
 
    io.resp(0) <> queue.io.deq
+   io.get_ftq_pc := DontCare
 
    busy := !(queue.io.empty)
 
@@ -545,17 +587,23 @@ class MemExeUnit(implicit p: Parameters) extends ExecutionUnit(num_rf_read_ports
    maddrcalc.io.req <> io.req
 
    maddrcalc.io.brinfo <> io.brinfo
+   maddrcalc.io.status := DontCare
+   maddrcalc.io.get_ftq_pc := DontCare
+   maddrcalc.io.fcsr_rm := DontCare
+   maddrcalc.io.resp.ready := DontCare
    io.bypass <> maddrcalc.io.bypass  // TODO this is not where the bypassing should occur from, is there any bypassing happening?!
 
    // enqueue addresses,st-data at the end of Execute
-   io.lsu_io.exe_resp <> maddrcalc.io.resp
+   //io.lsu_io.exe_resp <> maddrcalc.io.resp
+   io.lsu_io.exe_resp.valid := maddrcalc.io.resp.valid
+   io.lsu_io.exe_resp.bits := maddrcalc.io.resp.bits
 
 
    // TODO get rid of com_exception and guard with an assert? Need to surpress within dc-shim.
 //   assert (!(io.com_exception && lsu.io.memreq_uop.is_load && lsu.io.memreq_val),
 //      "[execute] a valid load is returning while an exception is being thrown.")
    io.dmem.req.valid      := Mux(io.com_exception && io.lsu_io.memreq_uop.is_load,
-                              Bool(false),
+                              false.B,
                               io.lsu_io.memreq_val)
    io.dmem.req.bits.addr  := io.lsu_io.memreq_addr
    io.dmem.req.bits.data  := io.lsu_io.memreq_wdata
@@ -564,7 +612,7 @@ class MemExeUnit(implicit p: Parameters) extends ExecutionUnit(num_rf_read_ports
 
    // I should be timing forwarding to coincide with dmem resps, so I'm not clobbering
    //anything....
-   val memresp_val    = Mux(io.com_exception && io.dmem.resp.bits.uop.is_load, Bool(false),
+   val memresp_val    = Mux(io.com_exception && io.dmem.resp.bits.uop.is_load, false.B,
                                                 io.lsu_io.forward_val || io.dmem.resp.valid)
    val memresp_rf_wen = (io.dmem.resp.valid && (io.dmem.resp.bits.uop.mem_cmd === M_XRD || io.dmem.resp.bits.uop.is_amo)) ||  // TODO should I refactor this to use is_load?
                            io.lsu_io.forward_val
