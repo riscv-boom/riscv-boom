@@ -53,7 +53,6 @@ trait CanHaveBoomPTWModule extends HasBoomHellaCacheModule {
   if (outer.usingPTW) {
      val ptw_io = Wire(new SecureHellaCacheIO()(outer.p))
      ptw_io <> ptw.io.mem
-     ptw_io.req.bits.ignore_spec_info := true.B  // Memory requests from PTW don't care about speculative metadata.
      dcachePorts += ptw_io
   }
 }

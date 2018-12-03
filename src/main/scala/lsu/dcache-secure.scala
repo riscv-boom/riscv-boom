@@ -169,7 +169,6 @@ class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1Hel
 
   val req = Reg(new SecureMSHRReqInternal())
   io.debug_req := req
-  dontTouch(io.debug_req)
   val req_idx = req.addr(untagBits-1,blockOffBits)
   val req_tag = req.addr >> untagBits
   val req_block_addr = (req.addr >> blockOffBits) << blockOffBits
@@ -583,6 +582,7 @@ class BoomSecureDCacheModule(outer: BoomSecureDCache) extends SecureHellaCacheMo
   mshrs.io.brinfo := io.spec_info.brinfo
   mshrs.io.kill := io.spec_info.kill
   mshrs.io.rob_pnr_idx := io.spec_info.rob_pnr_idx
+  dontTouch(io.cpu.req.bits.ignore_spec_info)
 
   io.cpu.req.ready := Bool(true)
   val s1_valid = Reg(next=io.cpu.req.fire(), init=Bool(false))
@@ -670,6 +670,7 @@ class BoomSecureDCacheModule(outer: BoomSecureDCache) extends SecureHellaCacheMo
     s2_req.tag := s1_req.tag
     s2_req.cmd := s1_req.cmd
     s2_req.uop := GetNewUopAndBrMask(s1_req.uop, io.spec_info.brinfo)
+    s2_req.ignore_spec_info := s1_req.ignore_spec_info
   }
 
   // tags

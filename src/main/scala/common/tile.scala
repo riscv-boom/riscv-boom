@@ -153,6 +153,7 @@ class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer)
   outer.frontend.module.io.hartid := constants.hartid
   outer.dcache.module.io.hartid := constants.hartid
   dcachePorts += core.io.dmem // TODO outer.dcachePorts += () => module.core.io.dmem ??
+  outer.dcache.module.io.cpu.req.bits.ignore_spec_info := !(core.io.dmem.req.valid && core.io.dmem.req.ready)  // Ignore speculation metadata unless taking a request from the core.
   //fpuOpt foreach { fpu => core.io.fpu <> fpu.io } RocketFpu - not needed in boom
   core.io.ptw <> ptw.io.dpath
   //roccCore.cmd <> core.io.rocc.cmd
