@@ -44,6 +44,7 @@ class SecureHellaCacheArbiter(n: Int)(implicit p: Parameters) extends Module
         io.mem.req.bits.addr := req.bits.addr
         io.mem.req.bits.phys := req.bits.phys
         io.mem.req.bits.uop := req.bits.uop
+        io.mem.req.bits.ignore_spec_info := req.bits.ignore_spec_info
         io.mem.req.bits.tag := Cat(req.bits.tag, UInt(i, log2Up(n)))
         s1_id := UInt(i)
       }
