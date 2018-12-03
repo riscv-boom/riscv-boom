@@ -13,7 +13,8 @@
 
 package boom.exu
 
-import Chisel._
+import chisel3._
+import chisel3.util._
 import freechips.rocketchip.config.Parameters
 
 import freechips.rocketchip.tile.FPConstants._
@@ -25,8 +26,8 @@ import boom.util._
 class UOPCodeFDivDecoder extends Module
 {
   val io = IO(new Bundle {
-    val uopc = Bits(INPUT, UOPC_SZ)
-    val sigs = new tile.FPUCtrlSigs().asOutput
+    val uopc = Input(Bits(UOPC_SZ.W))
+    val sigs = Output(new tile.FPUCtrlSigs())
   })
 
    val N = BitPat("b0")
@@ -82,7 +83,7 @@ class FDivSqrtUnit(implicit p: Parameters)
    // buffer inputs and upconvert as needed
 
    // provide a one-entry queue to store incoming uops while waiting for the fdiv/fsqrt unit to become available.
-   val r_buffer_val = Reg(init = false.B)
+   val r_buffer_val = RegInit(false.B)
    val r_buffer_req = Reg(new FuncUnitReq(data_width=65))
    val r_buffer_fin = Reg(new tile.FPInput)
 
@@ -100,7 +101,8 @@ class FDivSqrtUnit(implicit p: Parameters)
    {
       val s2d = Module(new hardfloat.RecFNToRecFN(inExpWidth = 8, inSigWidth = 24, outExpWidth = 11, outSigWidth = 53))
       s2d.io.in := x
-      s2d.io.roundingMode := UInt(0)
+      s2d.io.roundingMode := 0.U
+      s2d.io.detectTininess := DontCare
       s2d.io.out
    }
    val in1_upconvert = upconvert(unbox(io.req.bits.rs1_data, false.B, Some(tile.FType.S)))
@@ -111,7 +113,8 @@ class FDivSqrtUnit(implicit p: Parameters)
       r_buffer_val := true.B
       r_buffer_req := io.req.bits
       r_buffer_req.uop.br_mask := GetNewBrMask(io.brinfo, io.req.bits.uop)
-      r_buffer_fin := fdiv_decoder.io.sigs
+      //r_buffer_fin := fdiv_decoder.io.sigs
+
       r_buffer_fin.rm := io.fcsr_rm
       r_buffer_fin.typ := 0.U // unused for fdivsqrt
 		val tag = !fdiv_decoder.io.sigs.singleIn
@@ -131,7 +134,7 @@ class FDivSqrtUnit(implicit p: Parameters)
 
    val divsqrt = Module(new hardfloat.DivSqrtRecF64)
 
-   val r_divsqrt_val = Reg(init = false.B)  // inflight uop?
+   val r_divsqrt_val = RegInit(false.B)  // inflight uop?
    val r_divsqrt_killed = Reg(Bool())           // has inflight uop been killed?
    val r_divsqrt_fin = Reg(new tile.FPInput)
    val r_divsqrt_uop = Reg(new MicroOp)
@@ -151,6 +154,7 @@ class FDivSqrtUnit(implicit p: Parameters)
    divsqrt.io.a := r_buffer_fin.in1
    divsqrt.io.b := Mux(divsqrt.io.sqrtOp, r_buffer_fin.in1, r_buffer_fin.in2)
    divsqrt.io.roundingMode := r_buffer_fin.rm
+   divsqrt.io.detectTininess := DontCare
 
    r_divsqrt_killed := r_divsqrt_killed || IsKilledByBranch(io.brinfo, r_divsqrt_uop) || io.req.bits.kill
    r_divsqrt_uop.br_mask := GetNewBrMask(io.brinfo, r_divsqrt_uop)
@@ -170,7 +174,7 @@ class FDivSqrtUnit(implicit p: Parameters)
    //-----------------------------------------
    // buffer output and down-convert as needed
 
-   val r_out_val = Reg(init=false.B)
+   val r_out_val = RegInit(false.B)
    val r_out_uop = Reg(new MicroOp)
    val r_out_flags_double = Reg(Bits())
    val r_out_wdata_double = Reg(Bits())
@@ -203,6 +207,7 @@ class FDivSqrtUnit(implicit p: Parameters)
       inExpWidth = 11, inSigWidth = 53, outExpWidth = 8, outSigWidth = 24))
    downvert_d2s.io.in := r_out_wdata_double
    downvert_d2s.io.roundingMode := r_divsqrt_fin.rm
+   downvert_d2s.io.detectTininess := DontCare
    val out_flags = r_out_flags_double | Mux(r_divsqrt_fin.singleIn, downvert_d2s.io.exceptionFlags, 0.U)
 
    io.resp.valid := r_out_val && !IsKilledByBranch(io.brinfo, r_out_uop)

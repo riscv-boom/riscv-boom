@@ -5,7 +5,8 @@
 
 package boom.exu
 
-import Chisel._
+import chisel3._
+import chisel3.util._
 import freechips.rocketchip.config.Parameters
 
 import freechips.rocketchip.tile.FPConstants._
@@ -23,14 +24,14 @@ import boom.util.{ImmGenRm, ImmGenTyp}
 class UOPCodeFPUDecoder extends Module
 {
   val io = IO(new Bundle {
-    val uopc = Bits(INPUT, UOPC_SZ)
-    val sigs = new FPUCtrlSigs().asOutput
+    val uopc = Input(Bits(UOPC_SZ.W))
+    val sigs = Output(new FPUCtrlSigs())
   })
 
    // TODO change N,Y,X to BitPat("b1"), BitPat("b0"), and BitPat("b?")
-   val N = Bool(false)
-   val Y = Bool(true)
-   val X = Bool(false)
+   val N = false.B
+   val Y = true.B
+   val X = false.B
 
    val default: List[BitPat] = List(X,X,X,X,X, X,X,X,X,X,X,X, X,X,X,X)
 
@@ -106,6 +107,7 @@ class UOPCodeFPUDecoder extends Module
    val decoder = rocket.DecodeLogic(io.uopc, default, insns)
 
    val s = io.sigs
+   io.sigs := DontCare //TODO: Overrides?
    val sigs = Seq(s.ldst, s.wen, s.ren1, s.ren2, s.ren3, s.swap12,
                   s.swap23, s.singleIn, s.singleOut, s.fromint, s.toint, s.fastpipe, s.fma,
                   s.div, s.sqrt, s.wflags)
@@ -116,8 +118,8 @@ class FMADecoder extends Module
 {
    val io = IO(new Bundle
    {
-      val uopc = UInt(INPUT, UOPC_SZ)
-      val cmd = UInt(OUTPUT, 2)
+      val uopc = Input(UInt(UOPC_SZ.W))
+      val cmd = Output(UInt(2.W))
    })
 
    val default: List[BitPat] = List(BitPat("b??"))
@@ -148,17 +150,17 @@ class FMADecoder extends Module
 class FpuReq()(implicit p: Parameters) extends BoomBundle()(p)
 {
    val uop      = new MicroOp()
-   val rs1_data = Bits(width = 65)
-   val rs2_data = Bits(width = 65)
-   val rs3_data = Bits(width = 65)
-   val fcsr_rm  = Bits(width = tile.FPConstants.RM_SZ)
+   val rs1_data = Bits(65.W)
+   val rs2_data = Bits(65.W)
+   val rs3_data = Bits(65.W)
+   val fcsr_rm  = Bits(tile.FPConstants.RM_SZ.W)
 }
 
 class FPU(implicit p: Parameters) extends BoomModule()(p) with tile.HasFPUParameters
 {
    val io = IO(new Bundle
    {
-      val req = new ValidIO(new FpuReq).flip
+      val req = Flipped(new ValidIO(new FpuReq))
       val resp = new ValidIO(new ExeUnitResp(65))
    })
 
@@ -169,21 +171,22 @@ class FPU(implicit p: Parameters) extends BoomModule()(p) with tile.HasFPUParame
    val fp_decoder = Module(new UOPCodeFPUDecoder)
    fp_decoder.io.uopc := io_req.uop.uopc
    val fp_ctrl = fp_decoder.io.sigs
-   val fp_rm = Mux(ImmGenRm(io_req.uop.imm_packed) === Bits(7), io_req.fcsr_rm, ImmGenRm(io_req.uop.imm_packed))
+   val fp_rm = Mux(ImmGenRm(io_req.uop.imm_packed) === 7.U, io_req.fcsr_rm, ImmGenRm(io_req.uop.imm_packed))
 
 	def fuInput(minT: Option[tile.FType]): tile.FPInput = {
 		val req = Wire(new tile.FPInput)
 		val tag = !fp_ctrl.singleIn
-		req := fp_ctrl
+		req := DontCare
+        req <> fp_ctrl
 		req.rm := fp_rm
 		req.in1 := unbox(io_req.rs1_data, tag, minT)
 		req.in2 := unbox(io_req.rs2_data, tag, minT)
 		req.in3 := unbox(io_req.rs3_data, tag, minT)
-   	when (fp_ctrl.swap23) { req.in3 := req.in2 }
-   	req.typ := ImmGenTyp(io_req.uop.imm_packed)
+        when (fp_ctrl.swap23) { req.in3 := req.in2 }
+        req.typ := ImmGenTyp(io_req.uop.imm_packed)
 
-      val fma_decoder = Module(new FMADecoder)
-      fma_decoder.io.uopc := io_req.uop.uopc
+        val fma_decoder = Module(new FMADecoder)
+        fma_decoder.io.uopc := io_req.uop.uopc
 		req.fmaCmd := fma_decoder.io.cmd // ex_reg_inst(3,2) | (!fp_ctrl.ren3 && ex_reg_inst(27))
     	req
   	}
@@ -202,7 +205,7 @@ class FPU(implicit p: Parameters) extends BoomModule()(p) with tile.HasFPUParame
    val fpiu = Module(new tile.FPToInt)
 	fpiu.io.in.valid := io.req.valid && (fp_ctrl.toint || (fp_ctrl.fastpipe && fp_ctrl.wflags))
    fpiu.io.in.bits := fuInput(None)
-   val fpiu_out = Pipe(Reg(next=fpiu.io.in.valid && !fp_ctrl.fastpipe),
+   val fpiu_out = Pipe(RegNext(fpiu.io.in.valid && !fp_ctrl.fastpipe),
                           fpiu.io.out.bits, fpu_latency-1)
    val fpiu_result  = Wire(new tile.FPResult)
    fpiu_result.data := fpiu_out.bits.toint

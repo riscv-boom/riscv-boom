@@ -9,7 +9,8 @@
 
 package boom.exu
 
-import Chisel._
+import chisel3._
+import chisel3.util._
 import freechips.rocketchip.config.Parameters
 
 import scala.collection.mutable.ArrayBuffer
@@ -34,17 +35,17 @@ class RegisterFileSeqCustomArray(
    regfile.io.clock := clock
 
   // Decode addr
-   val waddr_OH = Wire(Vec(num_write_ports, UInt(width = num_registers)))
-   val raddr_OH = Reg(Vec(num_read_ports, UInt(width = num_registers)))
-   val write_select_OH = Wire(Vec(num_registers, UInt(width = num_write_ports)))
+   val waddr_OH = Wire(Vec(num_write_ports, UInt(num_registers.W)))
+   val raddr_OH = Reg(Vec(num_read_ports, UInt(num_registers.W)))
+   val write_select_OH = Wire(Vec(num_registers, UInt(num_write_ports.W)))
 
    for (w <-0 until num_write_ports) {
       regfile.io.WD(w) := io.write_ports(w).bits.data
       waddr_OH(w) := UIntToOH(io.write_ports(w).bits.addr)
-      io.write_ports(w).ready := Bool(true)
+      io.write_ports(w).ready := true.B
    }
 
-   val read_data = Wire(Vec(num_read_ports, UInt(width = register_width)))
+   val read_data = Wire(Vec(num_read_ports, UInt(register_width.W)))
    for (r <-0 until num_read_ports) {
       read_data(r) := Mux(RegNext(io.read_ports(r).addr === 0.U), 0.U, regfile.io.RD(r))
       raddr_OH(r) := UIntToOH(io.read_ports(r).addr)
@@ -87,10 +88,10 @@ class RegisterFileSeqCustomArray(
       for (i <- 0 until num_read_ports)
       {
          val bypass_ens = bypassable_wports.map(x => x.valid &&
-                                                  x.bits.addr =/= UInt(0) &&
+                                                  x.bits.addr =/= 0.U &&
                                                   x.bits.addr === RegNext(io.read_ports(i).addr))
 
-         val bypass_data = Mux1H(Vec(bypass_ens), Vec(bypassable_wports.map(_.bits.data)))
+         val bypass_data = Mux1H(VecInit(bypass_ens), VecInit(bypassable_wports.map(_.bits.data)))
 
          io.read_ports(i).data := Mux(bypass_ens.reduce(_|_), bypass_data, read_data(i))
       }
@@ -114,12 +115,12 @@ trait HasRegisterFileIO extends chisel3.experimental.BaseModule
    val register_width: Int
 
    val io = IO(new Bundle {
-      val clock = Clock(INPUT)
-      val WE = Vec(num_registers, Bool()).asInput
-      val WD = Vec(num_write_ports, UInt(width = register_width)).asInput
-      val RD = Vec(num_read_ports, UInt(width = register_width)).asOutput
-      val WS = Vec(num_registers, UInt(width = log2Up(num_write_ports))).asInput
-      val OE = Vec(num_registers, UInt(width = num_read_ports)).asInput
+      val clock = Input(Clock())
+      val WE = Input(Vec(num_registers, Bool()))
+      val WD = Input(Vec(num_write_ports, UInt(register_width.W)))
+      val RD = Output(Vec(num_read_ports, UInt(register_width.W)))
+      val WS = Input(Vec(num_registers, UInt(log2Ceil(num_write_ports).W)))
+      val OE = Input(Vec(num_registers, UInt(num_read_ports.W)))
    })
 }
 
@@ -181,18 +182,18 @@ class RegisterFileArrayModel(
 class RegisterFile6r3wRegisterModel extends Module
 {
    val io = IO(new Bundle {
-      val we  = Bool(INPUT)
-      val ws  = UInt(INPUT, width = 2)
-      val wd0 = UInt(INPUT, width = 64)
-      val wd1 = UInt(INPUT, width = 64)
-      val wd2 = UInt(INPUT, width = 64)
-      val oe  = UInt(INPUT, width = 6)
-      val rd0 = UInt(OUTPUT, width = 64)
-      val rd1 = UInt(OUTPUT, width = 64)
-      val rd2 = UInt(OUTPUT, width = 64)
-      val rd3 = UInt(OUTPUT, width = 64)
-      val rd4 = UInt(OUTPUT, width = 64)
-      val rd5 = UInt(OUTPUT, width = 64)
+      val we  = Input(Bool())
+      val ws  = Input(UInt(2.W))
+      val wd0 = Input(UInt(64.W))
+      val wd1 = Input(UInt(64.W))
+      val wd2 = Input(UInt(64.W))
+      val oe  = Input(UInt(6.W))
+      val rd0 = Output(UInt(64.W))
+      val rd1 = Output(UInt(64.W))
+      val rd2 = Output(UInt(64.W))
+      val rd3 = Output(UInt(64.W))
+      val rd4 = Output(UInt(64.W))
+      val rd5 = Output(UInt(64.W))
    })
 
    val rd0 = Wire(Vec(64, Bool()))
@@ -233,18 +234,18 @@ class RegisterFile6r3wRegisterModel extends Module
 class Rf6r3wBitModel extends Module
 {
    val io = IO(new Bundle {
-      val we  = Bool(INPUT)
-      val ws  = UInt(INPUT, width = 2)
-      val wd0 = Bool(INPUT)
-      val wd1 = Bool(INPUT)
-      val wd2 = Bool(INPUT)
-      val oe  = UInt(INPUT, width = 6)
-      val rd0 = Bool(OUTPUT)
-      val rd1 = Bool(OUTPUT)
-      val rd2 = Bool(OUTPUT)
-      val rd3 = Bool(OUTPUT)
-      val rd4 = Bool(OUTPUT)
-      val rd5 = Bool(OUTPUT)
+      val we  = Input(Bool())
+      val ws  = Input(UInt(2.W))
+      val wd0 = Input(Bool())
+      val wd1 = Input(Bool())
+      val wd2 = Input(Bool())
+      val oe  = Input(UInt(6.W))
+      val rd0 = Output(Bool())
+      val rd1 = Output(Bool())
+      val rd2 = Output(Bool())
+      val rd3 = Output(Bool())
+      val rd4 = Output(Bool())
+      val rd5 = Output(Bool())
    })
 
    val din = Wire(Bool())

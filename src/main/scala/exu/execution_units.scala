@@ -9,7 +9,7 @@
 
 package boom.exu
 
-import Chisel._
+import chisel3._
 import freechips.rocketchip.config.Parameters
 import scala.collection.mutable.ArrayBuffer
 import boom.common._

@@ -28,7 +28,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
    val fpIssueParams = issueParams.find(_.iqType == IQT_FP.litValue).get
    val num_ll_ports = 1 // hard-wired; used by mem port and i2f port.
    val num_wakeup_ports = fpIssueParams.issueWidth + num_ll_ports
-   val fp_preg_sz = log2Up(numFpPhysRegs)
+   val fp_preg_sz = log2Ceil(numFpPhysRegs)
 
    val io = new Bundle
    {
@@ -84,6 +84,13 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
    require (exe_units.map(_.num_rf_write_ports).sum-1-1 + num_ll_ports == num_wakeup_ports)
    require (exe_units.withFilter(_.uses_iss_unit).map(e =>
       e.num_rf_write_ports).sum -1 + num_ll_ports == num_wakeup_ports)
+
+   //*********************************
+   // dontcare unconnected signals
+   exe_units.map(_.io.lsu_io := DontCare)
+   exe_units.map(_.io.status := DontCare)
+   exe_units.map(_.io.dmem := DontCare)
+   exe_units.map(_.io.get_ftq_pc := DontCare)
 
    //*************************************************************
    // Issue window logic
@@ -171,6 +178,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
 
    exe_units.map(_.io.brinfo := io.brinfo)
    exe_units.map(_.io.com_exception := io.flush_pipeline)
+
 
    for ((ex,w) <- exe_units.withFilter(_.uses_iss_unit).map(x=>x).zipWithIndex)
    {

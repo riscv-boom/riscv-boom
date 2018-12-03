@@ -11,7 +11,8 @@
 
 package boom.exu
 
-import Chisel._
+import chisel3._
+import chisel3.util._
 import freechips.rocketchip.config.Parameters
 
 import freechips.rocketchip.rocket.ALU._
@@ -21,17 +22,17 @@ import boom.common._
 
 class RRdCtrlSigs(implicit p: Parameters) extends BoomBundle()(p)
 {
-   val br_type          = UInt(width = BR_N.getWidth)
+   val br_type          = UInt(BR_N.getWidth.W)
    val use_alupipe      = Bool()
    val use_muldivpipe   = Bool()
    val use_mempipe      = Bool()
-   val op_fcn      = Bits(width = SZ_ALU_FN)
+   val op_fcn      = Bits(SZ_ALU_FN.W)
    val fcn_dw      = Bool()
-   val op1_sel     = UInt(width = OP1_X.getWidth)
-   val op2_sel     = UInt(width = OP2_X.getWidth)
-   val imm_sel     = UInt(width = IS_X.getWidth)
+   val op1_sel     = UInt(OP1_X.getWidth.W)
+   val op2_sel     = UInt(OP2_X.getWidth.W)
+   val imm_sel     = UInt(IS_X.getWidth.W)
    val rf_wen      = Bool()
-   val csr_cmd     = Bits(width = CSR.SZ)
+   val csr_cmd     = Bits(CSR.SZ.W)
 
    def decode(uopc: UInt, table: Iterable[(BitPat, List[BitPat])]) =
    {
@@ -275,11 +276,11 @@ class RegisterReadDecode(supported_units: SupportedFuncUnits)(implicit p: Parame
 {
    val io = IO(new BoomBundle()(p)
    {
-      val iss_valid = Bool(INPUT)
-      val iss_uop   = new MicroOp().asInput
+      val iss_valid = Input(Bool())
+      val iss_uop   = Input(new MicroOp())
 
-      val rrd_valid = Bool(OUTPUT)
-      val rrd_uop   = new MicroOp().asOutput
+      val rrd_valid = Output(Bool())
+      val rrd_uop   = Output(new MicroOp())
    })
 
    // Issued Instruction

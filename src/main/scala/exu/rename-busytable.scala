@@ -11,7 +11,8 @@
 
 package boom.exu
 
-import Chisel._
+import chisel3._
+import chisel3.util._
 import freechips.rocketchip.config.Parameters
 import boom.common._
 import boom.util._
@@ -25,22 +26,22 @@ class BusyTableIo(
    val num_wb_ports:Int)
    (implicit p: Parameters) extends BoomBundle()(p)
 {
-   private val preg_sz = log2Up(num_pregs)
+   private val preg_sz = log2Ceil(num_pregs)
 
    // reading out the busy bits
-   val p_rs           = Vec(num_read_ports, UInt(width=preg_sz)).asInput
-   val p_rs_busy      = Vec(num_read_ports, Bool()).asOutput
+   val p_rs           = Input(Vec(num_read_ports, UInt(preg_sz.W)))
+   val p_rs_busy      = Output(Vec(num_read_ports, Bool()))
 
    def prs(i:Int, w:Int):UInt      = p_rs     (w+i*pipeline_width)
    def prs_busy(i:Int, w:Int):Bool = p_rs_busy(w+i*pipeline_width)
 
    // marking new registers as busy
-   val allocated_pdst = Vec(pipeline_width, new ValidIO(UInt(width=preg_sz))).flip
+   val allocated_pdst = Flipped(Vec(pipeline_width, new ValidIO(UInt(preg_sz.W))))
 
    // marking registers being written back as unbusy
-   val unbusy_pdst    = Vec(num_wb_ports, new ValidIO(UInt(width = preg_sz))).flip
+   val unbusy_pdst    = Flipped(Vec(num_wb_ports, new ValidIO(UInt(preg_sz.W))))
 
-   val debug = new Bundle { val busytable= Bits(width=num_pregs).asOutput }
+   val debug = new Bundle { val busytable= Output(Bits(num_pregs.W)) }
 }
 
 // Register P0 is always NOT_BUSY, and cannot be set to BUSY
@@ -56,11 +57,11 @@ class BusyTableHelper(
 {
    val io = IO(new BusyTableIo(pipeline_width, num_pregs, num_read_ports, num_wb_ports))
 
-   def BUSY     = Bool(true)
-   def NOT_BUSY = Bool(false)
+   def BUSY     = true.B
+   def NOT_BUSY = false.B
 
    //TODO BUG chisel3
-   val table_bsy = Reg(init=Vec.fill(num_pregs){Bool(false)})
+   val table_bsy = RegInit(VecInit(Seq.fill(num_pregs){false.B}))
 
    for (wb_idx <- 0 until num_wb_ports)
    {
@@ -72,7 +73,7 @@ class BusyTableHelper(
 
    for (w <- 0 until pipeline_width)
    {
-      when (io.allocated_pdst(w).valid && io.allocated_pdst(w).bits =/= UInt(0))
+      when (io.allocated_pdst(w).valid && io.allocated_pdst(w).bits =/= 0.U)
       {
          table_bsy(io.allocated_pdst(w).bits) := BUSY
       }
@@ -106,23 +107,23 @@ class BusyTable(
    num_wb_ports:Int)
    (implicit p: Parameters) extends BoomModule()(p)
 {
-   private val preg_sz = log2Up(num_pregs)
+   private val preg_sz = log2Ceil(num_pregs)
 
    val io = IO(new Bundle
    {
       // Inputs
-      val ren_will_fire         = Vec(pl_width, Bool()).asInput
-      val ren_uops              = Vec(pl_width, new MicroOp()).asInput
+      val ren_will_fire         = Input(Vec(pl_width, Bool()))
+      val ren_uops              = Input(Vec(pl_width, new MicroOp()))
 
-      val map_table             = Vec(pl_width, new MapTableOutput(preg_sz)).asInput
+      val map_table             = Input(Vec(pl_width, new MapTableOutput(preg_sz)))
 
-      val wb_valids             = Vec(num_wb_ports, Bool()).asInput
-      val wb_pdsts              = Vec(num_wb_ports, UInt(width=preg_sz)).asInput
+      val wb_valids             = Input(Vec(num_wb_ports, Bool()))
+      val wb_pdsts              = Input(Vec(num_wb_ports, UInt(preg_sz.W)))
 
       // Outputs
-      val values                = Vec(pl_width, new BusyTableOutput()).asOutput
+      val values                = Output(Vec(pl_width, new BusyTableOutput()))
 
-      val debug                 = new Bundle { val busytable= Bits(width=num_pregs).asOutput }
+      val debug                 = new Bundle { val busytable= Output(Bits(num_pregs.W)) }
    })
 
    val busy_table = Module(new BusyTableHelper(
@@ -133,21 +134,21 @@ class BusyTable(
 
 
    // figure out if we need to bypass a newly allocated physical register from a previous instruction in this cycle.
-   val prs1_was_bypassed = Wire(init = Vec.fill(pl_width) {Bool(false)})
-   val prs2_was_bypassed = Wire(init = Vec.fill(pl_width) {Bool(false)})
-   val prs3_was_bypassed = Wire(init = Vec.fill(pl_width) {Bool(false)})
+   val prs1_was_bypassed = WireInit(VecInit(Seq.fill(pl_width) {false.B}))
+   val prs2_was_bypassed = WireInit(VecInit(Seq.fill(pl_width) {false.B}))
+   val prs3_was_bypassed = WireInit(VecInit(Seq.fill(pl_width) {false.B}))
    for {
       w <- 0 until pl_width
       xx <- w-1 to 0 by -1
    }{
-      when (io.ren_uops(w).lrs1_rtype === UInt(rtype) && io.ren_will_fire(xx) && io.ren_uops(xx).ldst_val && io.ren_uops(xx).dst_rtype === UInt(rtype) && (io.ren_uops(w).lrs1 === io.ren_uops(xx).ldst))
-         { prs1_was_bypassed(w) := Bool(true) }
-      when (io.ren_uops(w).lrs2_rtype === UInt(rtype) && io.ren_will_fire(xx) && io.ren_uops(xx).ldst_val && io.ren_uops(xx).dst_rtype === UInt(rtype) && (io.ren_uops(w).lrs2 === io.ren_uops(xx).ldst))
-         { prs2_was_bypassed(w) := Bool(true) }
+      when (io.ren_uops(w).lrs1_rtype === rtype.U && io.ren_will_fire(xx) && io.ren_uops(xx).ldst_val && io.ren_uops(xx).dst_rtype === rtype.U && (io.ren_uops(w).lrs1 === io.ren_uops(xx).ldst))
+         { prs1_was_bypassed(w) := true.B }
+      when (io.ren_uops(w).lrs2_rtype === rtype.U && io.ren_will_fire(xx) && io.ren_uops(xx).ldst_val && io.ren_uops(xx).dst_rtype === rtype.U && (io.ren_uops(w).lrs2 === io.ren_uops(xx).ldst))
+         { prs2_was_bypassed(w) := true.B }
 
       if (rtype == RT_FLT.litValue) {
-         when (io.ren_uops(w).frs3_en && io.ren_will_fire(xx) && io.ren_uops(xx).ldst_val && io.ren_uops(xx).dst_rtype === UInt(rtype) && (io.ren_uops(w).lrs3 === io.ren_uops(xx).ldst))
-            { prs3_was_bypassed(w) := Bool(true) }
+         when (io.ren_uops(w).frs3_en && io.ren_will_fire(xx) && io.ren_uops(xx).ldst_val && io.ren_uops(xx).dst_rtype === rtype.U && (io.ren_uops(w).lrs3 === io.ren_uops(xx).ldst))
+            { prs3_was_bypassed(w) := true.B }
       }
    }
 
@@ -160,8 +161,8 @@ class BusyTable(
       busy_table.io.prs(0,w) := io.map_table(w).prs1
       busy_table.io.prs(1,w) := io.map_table(w).prs2
 
-      io.values(w).prs1_busy := io.ren_uops(w).lrs1_rtype === UInt(rtype) && (busy_table.io.prs_busy(0,w) || prs1_was_bypassed(w))
-      io.values(w).prs2_busy := io.ren_uops(w).lrs2_rtype === UInt(rtype) && (busy_table.io.prs_busy(1,w) || prs2_was_bypassed(w))
+      io.values(w).prs1_busy := io.ren_uops(w).lrs1_rtype === rtype.U && (busy_table.io.prs_busy(0,w) || prs1_was_bypassed(w))
+      io.values(w).prs2_busy := io.ren_uops(w).lrs2_rtype === rtype.U && (busy_table.io.prs_busy(1,w) || prs2_was_bypassed(w))
 
       if (rtype == RT_FLT.litValue)
       {
@@ -170,14 +171,14 @@ class BusyTable(
       }
       else
       {
-         io.values(w).prs3_busy := Bool(false)
+         io.values(w).prs3_busy := false.B
       }
 
 
        // Updating the Table (new busy register)
       busy_table.io.allocated_pdst(w).valid := io.ren_will_fire(w) &&
                                                io.ren_uops(w).ldst_val &&
-                                               io.ren_uops(w).dst_rtype === UInt(rtype)
+                                               io.ren_uops(w).dst_rtype === rtype.U
       busy_table.io.allocated_pdst(w).bits  := io.ren_uops(w).pdst
    }
 

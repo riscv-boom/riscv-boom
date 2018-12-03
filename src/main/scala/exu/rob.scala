@@ -27,7 +27,8 @@
 
 package boom.exu
 
-import Chisel._
+import chisel3._
+import chisel3.util._
 import chisel3.experimental.chiselName
 import scala.math.ceil
 import freechips.rocketchip.config.Parameters
@@ -43,59 +44,59 @@ class RobIo(
 {
    // Decode Stage
    // (Allocate, write instruction to ROB).
-   val enq_valids       = Vec(machine_width, Bool()).asInput
-   val enq_uops         = Vec(machine_width, new MicroOp()).asInput
-   val enq_partial_stall= Bool(INPUT) // we're dispatching only a partial packet, and stalling on the rest of it (don't
+   val enq_valids       = Input(Vec(machine_width, Bool()))
+   val enq_uops         = Input(Vec(machine_width, new MicroOp()))
+   val enq_partial_stall= Input(Bool()) // we're dispatching only a partial packet, and stalling on the rest of it (don't
                                       // advance the tail ptr)
-   val enq_new_packet   = Bool(INPUT) // we're dispatching the first (and perhaps only) part of a dispatch packet.
-   val curr_rob_tail    = UInt(OUTPUT, ROB_ADDR_SZ)
+   val enq_new_packet   = Input(Bool()) // we're dispatching the first (and perhaps only) part of a dispatch packet.
+   val curr_rob_tail    = Output(UInt(ROB_ADDR_SZ.W))
 
    // Handle Branch Misspeculations
-   val brinfo = new BrResolutionInfo().asInput
+   val brinfo = Input(new BrResolutionInfo())
 
    // Write-back Stage
    // (Update of ROB)
    // Instruction is no longer busy and can be committed
-   val wb_resps = Vec(num_wakeup_ports, Valid(new ExeUnitResp(xLen max fLen+1))).flip
+   val wb_resps = Flipped(Vec(num_wakeup_ports, Valid(new ExeUnitResp(xLen max fLen+1))))
 
-   val lsu_clr_bsy_valid = Vec(2, Bool()).asInput
-   val lsu_clr_bsy_rob_idx = Vec(2, UInt(width=ROB_ADDR_SZ)).asInput
+   val lsu_clr_bsy_valid = Input(Vec(2, Bool()))
+   val lsu_clr_bsy_rob_idx = Input(Vec(2, UInt(ROB_ADDR_SZ.W)))
 
    // Track side-effects for debug purposes.
    // Also need to know when loads write back, whereas we don't need loads to unbusy.
-   val debug_wb_valids = Vec(num_wakeup_ports, Bool()).asInput
-   val debug_wb_wdata  = Vec(num_wakeup_ports, Bits(width=xLen)).asInput
+   val debug_wb_valids = Input(Vec(num_wakeup_ports, Bool()))
+   val debug_wb_wdata  = Input(Vec(num_wakeup_ports, Bits(xLen.W)))
 
-   val fflags = Vec(num_fpu_ports, new ValidIO(new FFlagsResp())).flip
-   val lxcpt = new ValidIO(new Exception()).flip // LSU
-   val bxcpt = new ValidIO(new Exception()).flip // BRU
+   val fflags = Flipped(Vec(num_fpu_ports, new ValidIO(new FFlagsResp())))
+   val lxcpt = Flipped(new ValidIO(new Exception())) // LSU
+   val bxcpt = Flipped(new ValidIO(new Exception())) // BRU
 
    // Commit stage (free resources; also used for rollback).
-   val commit = new CommitSignals().asOutput
+   val commit = Output(new CommitSignals())
 
    // tell the LSU that the head of the ROB is a load
    // (some loads can only execute once they are at the head of the ROB).
-   val com_load_is_at_rob_head = Bool(OUTPUT)
+   val com_load_is_at_rob_head = Output(Bool())
 
    // Communicate exceptions to the CSRFile
    val com_xcpt = Valid(new CommitExceptionSignals())
-   val csr_eret = Bool(INPUT)
+   val csr_eret = Input(Bool())
 
    // Let the CSRFile stall us (e.g., wfi).
-   val csr_stall = Bool(INPUT)
+   val csr_stall = Input(Bool())
 
    // Flush signals (including exceptions, pipeline replays, and memory ordering failures)
    // to send to the frontend for redirection.
    val flush = Valid(new FlushSignals)
 
    // Stall Decode as appropriate
-   val empty = Bool(OUTPUT)
-   val ready = Bool(OUTPUT) // ROB is busy unrolling rename state...
+   val empty = Output(Bool())
+   val ready = Output(Bool()) // ROB is busy unrolling rename state...
 
    // pass out debug information to high-level printf
-   val debug = new DebugRobSignals().asOutput
+   val debug = Output(new DebugRobSignals())
 
-   val debug_tsc = UInt(INPUT, xLen)
+   val debug_tsc = Input(UInt(xLen.W))
 }
 
 
@@ -103,7 +104,7 @@ class CommitSignals(implicit p: Parameters) extends BoomBundle()(p)
 {
    val valids     = Vec(retireWidth, Bool())
    val uops       = Vec(retireWidth, new MicroOp())
-   val fflags     = Valid(UInt(width = 5))
+   val fflags     = Valid(UInt(5.W))
 
    // Perform rollback of rename state (in conjuction with commit.uops).
    val rbk_valids = Vec(retireWidth, Bool())
@@ -117,18 +118,18 @@ class CommitSignals(implicit p: Parameters) extends BoomBundle()(p)
 // TODO combine FlushSignals and ExceptionSignals (currently timed to different cycles).
 class CommitExceptionSignals(implicit p: Parameters) extends BoomBundle()(p)
 {
-   val ftq_idx    = UInt(width = log2Up(ftqSz))
-   val pc_lob     = UInt(width = log2Ceil(icBlockBytes).W)
-   val cause      = UInt(width = xLen)
-   val badvaddr   = UInt(width = xLen)
+   val ftq_idx    = UInt(log2Ceil(ftqSz).W)
+   val pc_lob     = UInt(log2Ceil(icBlockBytes).W)
+   val cause      = UInt(xLen.W)
+   val badvaddr   = UInt(xLen.W)
 }
 
 // The ROB needs to tell the FTQ if there's a pipeline flush (and what type)
 // so the FTQ can drive the frontend with the correct redirected PC.
 class FlushSignals(implicit p: Parameters) extends BoomBundle()(p)
 {
-   val ftq_idx = UInt(width=log2Up(ftqSz).W)
-   val pc_lob = UInt(width=log2Ceil(icBlockBytes).W)
+   val ftq_idx = UInt(log2Ceil(ftqSz).W)
+   val pc_lob = UInt(log2Ceil(icBlockBytes).W)
    val flush_typ = FlushTypes()
 }
 
@@ -136,7 +137,7 @@ class FlushSignals(implicit p: Parameters) extends BoomBundle()(p)
 object FlushTypes
 {
    def SZ = 3
-   def apply() = UInt(width = SZ)
+   def apply() = UInt(SZ.W)
    def none = 0.U
    def xcpt = 1.U // An exception occurred.
    def eret = (2+1).U // Execute an environment return instruction.
@@ -163,8 +164,8 @@ object FlushTypes
 class Exception(implicit p: Parameters) extends BoomBundle()(p)
 {
    val uop = new MicroOp()
-   val cause = Bits(width=log2Up(freechips.rocketchip.rocket.Causes.all.max+2))
-   val badvaddr = UInt(width=coreMaxAddrBits)
+   val cause = Bits(log2Ceil(freechips.rocketchip.rocket.Causes.all.max+2).W)
+   val badvaddr = UInt(coreMaxAddrBits.W)
 }
 
 
@@ -172,10 +173,10 @@ class Exception(implicit p: Parameters) extends BoomBundle()(p)
 class DebugRobSignals(implicit p: Parameters) extends BoomBundle()(p)
 {
    val state = UInt()
-   val rob_head = UInt(width = ROB_ADDR_SZ)
+   val rob_head = UInt(ROB_ADDR_SZ.W)
    val xcpt_val = Bool()
    val xcpt_uop = new MicroOp()
-   val xcpt_badvaddr = UInt(width = xLen)
+   val xcpt_badvaddr = UInt(xLen.W)
 }
 
 
@@ -199,14 +200,14 @@ class Rob(
    require (isPow2(width))
 
    // ROB Finite State Machine
-   val s_reset :: s_normal :: s_rollback :: s_wait_till_empty :: Nil = Enum(UInt(),4)
-   val rob_state = Reg(init = s_reset)
+   val s_reset :: s_normal :: s_rollback :: s_wait_till_empty :: Nil = Enum(4)
+   val rob_state = RegInit(s_reset)
 
 
    //commit entries at the head, and unwind exceptions from the tail
-   val rob_head = Reg(init = UInt(0, log2Up(num_rob_rows)))
-   val rob_tail = Reg(init = UInt(0, log2Up(num_rob_rows)))
-   val rob_tail_idx = rob_tail << UInt(log2Ceil(width))
+   val rob_head = RegInit(0.U(log2Ceil(num_rob_rows).W))
+   val rob_tail = RegInit(0.U(log2Ceil(num_rob_rows).W))
+   val rob_tail_idx = rob_tail << log2Ceil(width).U
 
    val will_commit         = Wire(Vec(width, Bool()))
    val can_commit          = Wire(Vec(width, Bool()))
@@ -214,16 +215,15 @@ class Rob(
    val rob_head_vals       = Wire(Vec(width, Bool())) // are the instructions at the head valid?
    val rob_head_is_store   = Wire(Vec(width, Bool()))
    val rob_head_is_load    = Wire(Vec(width, Bool()))
-   val rob_head_is_branch  = Wire(Vec(width, Bool()))
-   val rob_head_fflags     = Wire(Vec(width, UInt(width=freechips.rocketchip.tile.FPConstants.FLAGS_SZ)))
+   val rob_head_fflags     = Wire(Vec(width, UInt(freechips.rocketchip.tile.FPConstants.FLAGS_SZ.W)))
 
    val exception_thrown = Wire(Bool())
 
    // exception info
    // TODO compress xcpt cause size. Most bits in the middle are zero.
-   val r_xcpt_val       = Reg(init=false.B)
+   val r_xcpt_val       = RegInit(false.B)
    val r_xcpt_uop       = Reg(new MicroOp())
-   val r_xcpt_badvaddr  = Reg(UInt(width=xLen))
+   val r_xcpt_badvaddr  = Reg(UInt(xLen.W))
 
    //--------------------------------------------------
    // Utility
@@ -231,12 +231,12 @@ class Rob(
    def GetRowIdx(rob_idx: UInt): UInt =
    {
       if (width == 1) return rob_idx
-      else return rob_idx >> UInt(log2Ceil(width))
+      else return rob_idx >> log2Ceil(width).U
    }
    def GetBankIdx(rob_idx: UInt): UInt =
    {
       if(width == 1) { return 0.U }
-      else           { return rob_idx(log2Up(width)-1, 0).asUInt }
+      else           { return rob_idx(log2Ceil(width)-1, 0).asUInt }
    }
 
    // **************************************************************************
@@ -259,14 +259,14 @@ class Rob(
 
    for (w <- 0 until width)
    {
-      def MatchBank(bank_idx: UInt): Bool = (bank_idx === UInt(w))
+      def MatchBank(bank_idx: UInt): Bool = (bank_idx === w.U)
 
       // one bank
-      val rob_val       = Reg(init = Vec.fill(num_rob_rows){false.B})
+      val rob_val       = RegInit(VecInit(Seq.fill(num_rob_rows){false.B}))
       val rob_bsy       = Mem(num_rob_rows, Bool())
       val rob_uop       = Reg(Vec(num_rob_rows, new MicroOp()))
       val rob_exception = Mem(num_rob_rows, Bool())
-      val rob_fflags    = Mem(num_rob_rows, Bits(width=freechips.rocketchip.tile.FPConstants.FLAGS_SZ))
+      val rob_fflags    = Mem(num_rob_rows, Bits(freechips.rocketchip.tile.FPConstants.FLAGS_SZ.W))
 
       //-----------------------------------------------
       // Dispatch: Add Entry to ROB
@@ -312,7 +312,7 @@ class Rob(
          // TODO check that the wb is to a valid ROB entry, give it a time stamp
 //         assert (!(wb_resp.valid && MatchBank(GetBankIdx(wb_uop.rob_idx)) &&
 //                  wb_uop.fp_val && !(wb_uop.is_load || wb_uop.is_store) &&
-//                  rob_exc_cause(row_idx) =/= Bits(0)),
+//                  rob_exc_cause(row_idx) =/= 0.U),
 //                  "FP instruction writing back exc bits is overriding an existing exception.")
       }
 
@@ -392,7 +392,7 @@ class Rob(
                               (rob_state === s_rollback) &&
                               rob_val(com_idx) &&
                               (rob_uop(com_idx).dst_rtype === RT_FIX || rob_uop(com_idx).dst_rtype === RT_FLT) &&
-                              Bool(!ENABLE_COMMIT_MAP_TABLE)
+                              (!(ENABLE_COMMIT_MAP_TABLE.B))
 
       when (rob_state === s_rollback)
       {
@@ -402,7 +402,7 @@ class Rob(
 
       if (ENABLE_COMMIT_MAP_TABLE)
       {
-         when (Reg(next=exception_thrown))
+         when (RegNext(exception_thrown))
          {
             for (i <- 0 until num_rob_rows)
             {
@@ -486,6 +486,9 @@ class Rob(
       //--------------------------------------------------
       // Debug: handle passing out signals to printf in dpath
 
+      for (i <- 0 until num_rob_rows){
+          debug_entry(w + i*width) := DontCare // Set everything to DontCare first then override
+      }
       if (DEBUG_PRINTF_ROB)
       {
          for (i <- 0 until num_rob_rows)
@@ -563,7 +566,7 @@ class Rob(
    // send fflags bits to the CSRFile to accrue
 
    val fflags_val = Wire(Vec(width, Bool()))
-   val fflags     = Wire(Vec(width, UInt(width=freechips.rocketchip.tile.FPConstants.FLAGS_SZ)))
+   val fflags     = Wire(Vec(width, UInt(freechips.rocketchip.tile.FPConstants.FLAGS_SZ.W)))
 
    for (w <- 0 until width)
    {
@@ -572,7 +575,7 @@ class Rob(
          io.commit.uops(w).fp_val &&
          !(io.commit.uops(w).is_load || io.commit.uops(w).is_store)
 
-      fflags(w) := Mux(fflags_val(w), rob_head_fflags(w), Bits(0))
+      fflags(w) := Mux(fflags_val(w), rob_head_fflags(w), 0.U)
 
       assert (!(io.commit.valids(w) &&
                !io.commit.uops(w).fp_val &&
@@ -663,7 +666,7 @@ class Rob(
    // dispatch the rest of it.
    // update when committed ALL valid instructions in commit_bundle
 
-   val r_partial_row = Reg(init=false.B)
+   val r_partial_row = RegInit(false.B)
 
    when (io.enq_valids.reduce(_|_))
    {
@@ -698,7 +701,7 @@ class Rob(
 
    if (ENABLE_COMMIT_MAP_TABLE)
    {
-      when (Reg(next=exception_thrown))
+      when (RegNext(exception_thrown))
       {
          rob_tail := 0.U
          rob_head := 0.U
@@ -860,15 +863,15 @@ class Rob(
 //            rob[ 3]           (vv)(bb) 0x00002010 [lw      s1, 0(ra)        ][lui     t3, 0xff0        ]    ,   (d:x p 4, bm:0 - sdt: 0) (d:x p 5, bm:0 - sdt: 0)
 //            rob[ 4]      TL-> (v )(b ) 0x00002018 [addiw   t3, t3, 255      ][li      t2, 2            ]    ,   (d:x p 6, bm:0 - sdt: 5) (d:x p 7, bm:0 - sdt: 0)
 
-         val row = if (COMMIT_WIDTH == 1) r_idx else (r_idx >> log2Up(COMMIT_WIDTH))
+         val row = if (COMMIT_WIDTH == 1) r_idx else (r_idx >> log2Ceil(COMMIT_WIDTH))
          val r_head = rob_head
          val r_tail = rob_tail
 
          printf("    rob[%d] %c (",
-            UInt(row, ROB_ADDR_SZ),
-            Mux(r_head === UInt(row) && r_tail === UInt(row), Str("B"),
-              Mux(r_head === UInt(row), Str("H"),
-              Mux(r_tail === UInt(row), Str("T"),
+            row.U(ROB_ADDR_SZ.W),
+            Mux(r_head === row.U && r_tail === row.U, Str("B"),
+              Mux(r_head === row.U, Str("H"),
+              Mux(r_tail === row.U, Str("T"),
                                         Str(" "))))
             )
 
@@ -958,8 +961,8 @@ class Rob(
       "\n   Machine Width  : " + width +
       "\n   Rob Entries    : " + num_rob_entries +
       "\n   Rob Rows       : " + num_rob_rows +
-      "\n   Rob Row size   : " + log2Up(num_rob_rows) +
-      "\n   log2UP(width)  : " + log2Up(width) +
+      "\n   Rob Row size   : " + log2Ceil(num_rob_rows) +
+      "\n   log2UP(width)  : " + log2Ceil(width) +
       "\n   log2Ceil(width): " + log2Ceil(width) +
       "\n   FPU FFlag Ports: " + num_fpu_ports
 }
