@@ -224,17 +224,13 @@ class ALUExeUnit(
    if (has_mul && !use_slow_mul)
    {
       imul = Module(new PipelinedMulUnit(imulLatency))
+      imul.io <> DontCare
       imul.io.req.valid         := io.req.valid && io.req.bits.uop.fu_code_is(FU_MUL)
       imul.io.req.bits.uop      := io.req.bits.uop
       imul.io.req.bits.rs1_data := io.req.bits.rs1_data
       imul.io.req.bits.rs2_data := io.req.bits.rs2_data
-      imul.io.req.bits.rs3_data := DontCare
       imul.io.req.bits.kill     := io.req.bits.kill
       imul.io.brinfo <> io.brinfo
-      imul.io.resp.ready := DontCare
-      imul.io.status := DontCare
-      imul.io.get_ftq_pc := DontCare
-      imul.io.fcsr_rm := DontCare
       fu_units += imul
       if (has_fpu) require (imulLatency == dfmaLatency)
    }
@@ -256,12 +252,8 @@ class ALUExeUnit(
       fpu.io.req.bits.kill       := io.req.bits.kill
       fpu.io.fcsr_rm             := io.fcsr_rm
       fpu.io.brinfo <> io.brinfo
-      fpu.io.status := DontCare
-      fpu.io.get_ftq_pc := DontCare
-      fpu.io.fcsr_rm := DontCare
       fpu_resp_val := fpu.io.resp.valid
       fpu_resp_fflags := fpu.io.resp.bits.fflags
-      fpu.io.resp.ready := DontCare
       fu_units += fpu
    }
 
@@ -276,10 +268,10 @@ class ALUExeUnit(
    val fdiv_resp_uop = Wire(new MicroOp())
    val fdiv_resp_data = Wire(Bits(65.W))
    val fdiv_resp_fflags = Wire(new ValidIO(new FFlagsResp()))
+   fdiv_resp_uop := DontCare
+   fdiv_resp_data := DontCare
    fdiv_resp_fflags.valid := false.B
    fdiv_resp_fflags.bits := DontCare
-   fdiv_resp_uop := DontCare 
-   fdiv_resp_data := DontCare
    if (has_fdiv)
    {
       fdivsqrt = Module(new FDivSqrtUnit())
@@ -287,12 +279,9 @@ class ALUExeUnit(
       fdivsqrt.io.req.bits.uop      := io.req.bits.uop
       fdivsqrt.io.req.bits.rs1_data := io.req.bits.rs1_data
       fdivsqrt.io.req.bits.rs2_data := io.req.bits.rs2_data
-      fdivsqrt.io.req.bits.rs3_data := DontCare
       fdivsqrt.io.req.bits.kill     := io.req.bits.kill
       fdivsqrt.io.fcsr_rm           := io.fcsr_rm
       fdivsqrt.io.brinfo <> io.brinfo
-      fdivsqrt.io.status := DontCare
-      fdivsqrt.io.get_ftq_pc := DontCare
 
       // share write port with the pipelined units
       fdivsqrt.io.resp.ready := !(fu_units.map(_.io.resp.valid).reduce(_|_))
@@ -313,18 +302,15 @@ class ALUExeUnit(
    if (has_muldiv)
    {
       muldiv = Module(new MulDivUnit())
+      muldiv.io <> DontCare
       muldiv.io.req.valid           := io.req.valid &&
                                        ((io.req.bits.uop.fu_code_is(FU_DIV) && has_div.B) ||
                                         (io.req.bits.uop.fu_code_is(FU_MUL) && (has_mul && use_slow_mul).B))
       muldiv.io.req.bits.uop        := io.req.bits.uop
       muldiv.io.req.bits.rs1_data   := io.req.bits.rs1_data
       muldiv.io.req.bits.rs2_data   := io.req.bits.rs2_data
-      muldiv.io.req.bits.rs3_data   := DontCare
       muldiv.io.brinfo              := io.brinfo
       muldiv.io.req.bits.kill       := io.req.bits.kill
-      muldiv.io.status := DontCare
-      muldiv.io.fcsr_rm := DontCare
-      muldiv.io.get_ftq_pc := DontCare
 
       // share write port with the pipelined units
       muldiv.io.resp.ready := !(fu_units.map(_.io.resp.valid).reduce(_|_))
@@ -395,14 +381,13 @@ class FPUExeUnit(
 
    io.resp(0).bits.writesToIRF = false
    io.resp(1).bits.writesToIRF = true
-   io.get_ftq_pc := DontCare
+   //io.get_ftq_pc := DontCare
 
    // FPU Unit -----------------------
    var fpu: FPUUnit = null
    val fpu_resp_val = WireInit(false.B)
    val fpu_resp_fflags = Wire(new ValidIO(new FFlagsResp()))
    fpu_resp_fflags.valid := false.B
-   fpu_resp_fflags.bits := DontCare
    if (has_fpu)
    {
       fpu = Module(new FPUUnit())
@@ -432,9 +417,6 @@ class FPUExeUnit(
    val fdiv_resp_data = Wire(Bits(65.W))
    val fdiv_resp_fflags = Wire(new ValidIO(new FFlagsResp()))
    fdiv_resp_fflags.valid := false.B
-   fdiv_resp_fflags.bits := DontCare
-   fdiv_resp_uop := DontCare 
-   fdiv_resp_data := DontCare
    if (has_fdiv)
    {
       fdivsqrt = Module(new FDivSqrtUnit())
@@ -513,8 +495,6 @@ class FDivSqrtExeUnit(implicit p: Parameters)
    io.resp(0).bits.data   := fdivsqrt.io.resp.bits.data
    io.resp(0).bits.fflags := fdivsqrt.io.resp.bits.fflags
    fdivsqrt.io.brinfo <> io.brinfo
-   fdivsqrt.io.status := DontCare
-   fdivsqrt.io.get_ftq_pc := DontCare
    io.bypass <> fdivsqrt.io.bypass
 
    fdiv_busy := !fdivsqrt.io.req.ready || io.req.valid
@@ -558,7 +538,6 @@ class IntToFPExeUnit(implicit p: Parameters) extends ExecutionUnit(
    queue.io.flush := io.req.bits.kill
 
    io.resp(0) <> queue.io.deq
-   io.get_ftq_pc := DontCare
 
    busy := !(queue.io.empty)
 
@@ -594,7 +573,6 @@ class MemExeUnit(implicit p: Parameters) extends ExecutionUnit(num_rf_read_ports
    io.bypass <> maddrcalc.io.bypass  // TODO this is not where the bypassing should occur from, is there any bypassing happening?!
 
    // enqueue addresses,st-data at the end of Execute
-   //io.lsu_io.exe_resp <> maddrcalc.io.resp
    io.lsu_io.exe_resp.valid := maddrcalc.io.resp.valid
    io.lsu_io.exe_resp.bits := maddrcalc.io.resp.bits
 

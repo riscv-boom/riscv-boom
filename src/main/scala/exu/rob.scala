@@ -250,6 +250,7 @@ class Rob(
          override def cloneType: this.type = new DebugRobBundle().asInstanceOf[this.type]
       }
    val debug_entry = Wire(Vec(NUM_ROB_ENTRIES, new DebugRobBundle))
+   debug_entry := DontCare // override in statements below
 
 
    // **************************************************************************
@@ -486,9 +487,6 @@ class Rob(
       //--------------------------------------------------
       // Debug: handle passing out signals to printf in dpath
 
-      for (i <- 0 until num_rob_rows){
-          debug_entry(w + i*width) := DontCare // Set everything to DontCare first then override
-      }
       if (DEBUG_PRINTF_ROB)
       {
          for (i <- 0 until num_rob_rows)

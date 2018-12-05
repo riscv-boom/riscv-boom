@@ -74,6 +74,15 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    // Meanwhile, the FP pipeline holds the FP issue window, FP regfile, and FP arithmetic units.
    var fp_pipeline: FpPipeline = null
    if (usingFPU) fp_pipeline = Module(new FpPipeline())
+
+   // ********************************************************
+   // Clear fp_pipeline before use
+   if (usingFPU){
+     fp_pipeline.io.ll_wport := DontCare
+     fp_pipeline.io.wb_valids := DontCare
+     fp_pipeline.io.wb_pdsts := DontCare
+   }
+   
    val num_fp_wakeup_ports = if (usingFPU) fp_pipeline.io.wakeups.length else 0
 
    val num_irf_write_ports = exe_units.map(_.num_rf_write_ports).sum
@@ -113,6 +122,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
                                  exe_units.num_fpu_ports + num_fp_wakeup_ports))
    // Used to wakeup registers in rename and issue. ROB needs to listen to something else.
    val int_wakeups      = Wire(Vec(num_wakeup_ports, Valid(new ExeUnitResp(xLen))))
+   int_wakeups := DontCare
 
    require (exe_units.length == issue_units.map(_.issue_width).sum)
 
@@ -203,6 +213,8 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
 
    val csr = Module(new freechips.rocketchip.rocket.CSRFile(perfEvents))
+   csr.io.inst foreach { c => c := DontCare }
+   csr.io.rocc_interrupt := DontCare
 
    // evaluate performance counters
    val icache_blocked = !(io.ifu.fetchpacket.valid || RegNext(io.ifu.fetchpacket.valid))
@@ -457,13 +469,6 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    //-------------------------------------------------------------
    //-------------------------------------------------------------
 
-   // ********************************************************
-   // Clear fp_pipeline before use
-   if (usingFPU){
-     fp_pipeline.io.ll_wport := DontCare
-     fp_pipeline.io.wb_valids := DontCare
-     fp_pipeline.io.wb_pdsts := DontCare
-   }
 
    // TODO for now, assume worst-case all instructions will dispatch towards one issue unit.
    var dis_readys = issue_units.map(_.io.dis_readys.asUInt).reduce(_&_)
@@ -485,9 +490,6 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    // loop through each issue-port (exe_units are statically connected to an issue-port)
    for (i <- 0 until exe_units.length)
    {
-      // Overridden in the following section
-      int_wakeups(wu_idx).bits := DontCare
-
       if (exe_units(i).is_mem_unit)
       {
          // If Memory, it's the shared long-latency port.
@@ -675,7 +677,6 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    val mem_unit = exe_units.memory_unit
    require (mem_unit.num_rf_write_ports == 1)
    val mem_resp = mem_unit.io.resp(0)
-   mem_unit.io.resp(0).ready := DontCare
 
    when (RegNext(!sxt_ldMiss) && RegNext(RegNext(lsu.io.mem_ldSpecWakeup.valid)) &&
       !(RegNext(rob.io.flush.valid || (br_unit.brinfo.valid && br_unit.brinfo.mispredict))) &&
@@ -737,8 +738,6 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    csr.io.rw.addr        := csr_exe_unit.io.resp(0).bits.uop.csr_addr
    csr.io.rw.cmd         := freechips.rocketchip.rocket.CSR.maskCmd(csr_exe_unit.io.resp(0).valid, csr_rw_cmd)
    csr.io.rw.wdata       := wb_wdata
-   csr.io.inst           := DontCare
-   csr.io.rocc_interrupt := DontCare // We don't support RoCC interrupts
 
    // Extra I/O
    csr.io.retire    := PopCount(rob.io.commit.valids.asUInt)
@@ -802,12 +801,6 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       exe_units(w).io.req <> iregister_read.io.exe_reqs(w)
       exe_units(w).io.brinfo := br_unit.brinfo
       exe_units(w).io.com_exception := rob.io.flush.valid
-      exe_units(w).io.status := DontCare
-      exe_units(w).io.get_ftq_pc := DontCare
-      if (!exe_units(w).is_mem_unit){
-          exe_units(w).io.dmem := DontCare
-          exe_units(w).io.lsu_io := DontCare
-      }
 
       if (exe_units(w).isBypassable)
       {
@@ -1126,7 +1119,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    assert (!(idle_cycles.value(13)), "Pipeline has hung.")
 
    if (usingFPU)
-   fp_pipeline.io.debug_tsc_reg := debug_tsc_reg
+      fp_pipeline.io.debug_tsc_reg := debug_tsc_reg
 
    //-------------------------------------------------------------
    // Uarch Hardware Performance Events (HPEs)
