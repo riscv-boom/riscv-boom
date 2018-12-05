@@ -113,7 +113,7 @@ class FDivSqrtUnit(implicit p: Parameters)
       r_buffer_val := true.B
       r_buffer_req := io.req.bits
       r_buffer_req.uop.br_mask := GetNewBrMask(io.brinfo, io.req.bits.uop)
-      //r_buffer_fin := fdiv_decoder.io.sigs
+      r_buffer_fin <> fdiv_decoder.io.sigs
 
       r_buffer_fin.rm := io.fcsr_rm
       r_buffer_fin.typ := 0.U // unused for fdivsqrt

@@ -103,6 +103,9 @@ class RegisterRead(
    val rrd_rs1_data   = Wire(Vec(issue_width, Bits(regwidth.W)))
    val rrd_rs2_data   = Wire(Vec(issue_width, Bits(regwidth.W)))
    val rrd_rs3_data   = Wire(Vec(issue_width, Bits(regwidth.W)))
+   rrd_rs1_data := DontCare 
+   rrd_rs2_data := DontCare 
+   rrd_rs3_data := DontCare 
 
    var idx = 0 // index into flattened read_ports array
    for (w <- 0 until issue_width)
@@ -118,14 +121,10 @@ class RegisterRead(
       val rs2_addr = io.iss_uops(w).pop2
       val rs3_addr = io.iss_uops(w).pop3
 
-      // Set to DontCare then override
       if (num_read_ports > 0) io.rf_read_ports(idx+0).addr := rs1_addr
       if (num_read_ports > 1) io.rf_read_ports(idx+1).addr := rs2_addr
       if (num_read_ports > 2) io.rf_read_ports(idx+2).addr := rs3_addr
 
-      rrd_rs1_data(w) := DontCare
-      rrd_rs2_data(w) := DontCare
-      rrd_rs3_data(w) := DontCare
       if (num_read_ports > 0) rrd_rs1_data(w) := io.rf_read_ports(idx+0).data
       if (num_read_ports > 1) rrd_rs2_data(w) := io.rf_read_ports(idx+1).data
       if (num_read_ports > 2) rrd_rs3_data(w) := io.rf_read_ports(idx+2).data

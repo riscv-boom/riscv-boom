@@ -107,7 +107,6 @@ class UOPCodeFPUDecoder extends Module
    val decoder = rocket.DecodeLogic(io.uopc, default, insns)
 
    val s = io.sigs
-   io.sigs := DontCare //TODO: Overrides?
    val sigs = Seq(s.ldst, s.wen, s.ren1, s.ren2, s.ren3, s.swap12,
                   s.swap23, s.singleIn, s.singleOut, s.fromint, s.toint, s.fastpipe, s.fma,
                   s.div, s.sqrt, s.wflags)
@@ -176,7 +175,6 @@ class FPU(implicit p: Parameters) extends BoomModule()(p) with tile.HasFPUParame
 	def fuInput(minT: Option[tile.FType]): tile.FPInput = {
 		val req = Wire(new tile.FPInput)
 		val tag = !fp_ctrl.singleIn
-		req := DontCare
         req <> fp_ctrl
 		req.rm := fp_rm
 		req.in1 := unbox(io_req.rs1_data, tag, minT)

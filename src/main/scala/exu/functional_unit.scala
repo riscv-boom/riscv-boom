@@ -644,13 +644,12 @@ class FPUUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(
    data_width = 65)(p)
 {
    val fpu = Module(new FPU())
-   //fpu.io.req <> io.req
-   fpu.io.req.valid := io.req.valid
+   fpu.io.req.valid         := io.req.valid
+   fpu.io.req.bits.uop      := io.req.bits.uop 
    fpu.io.req.bits.rs1_data := io.req.bits.rs1_data
-   fpu.io.req.bits.rs2_data := io.req.bits.rs1_data
-   fpu.io.req.bits.rs3_data := io.req.bits.rs1_data
-   fpu.io.req.bits.fcsr_rm := io.fcsr_rm
-   fpu.io.req.bits.uop := DontCare
+   fpu.io.req.bits.rs2_data := io.req.bits.rs2_data
+   fpu.io.req.bits.rs3_data := io.req.bits.rs3_data
+   fpu.io.req.bits.fcsr_rm  := io.fcsr_rm
 
    io.resp.bits.data              := fpu.io.resp.bits.data
    io.resp.bits.fflags.valid      := fpu.io.resp.bits.fflags.valid
@@ -674,12 +673,14 @@ class IntToFPUnit(latency: Int)(implicit p: Parameters) extends PipelinedFunctio
    val req = Wire(new tile.FPInput)
    val tag = !fp_ctrl.singleIn
 
-   req := DontCare
    req <> fp_ctrl
+
    req.rm := fp_rm
    req.in1 := unbox(io_req.rs1_data, tag, None)
    req.in2 := unbox(io_req.rs2_data, tag, None)
+   req.in3 := DontCare
    req.typ := ImmGenTyp(io_req.uop.imm_packed)
+   req.fmaCmd := DontCare
 
    assert (!(io.req.valid && fp_ctrl.fromint && req.in1(64).toBool),
       "[func] IntToFP integer input has 65th high-order bit set!")

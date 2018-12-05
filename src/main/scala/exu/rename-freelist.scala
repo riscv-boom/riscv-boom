@@ -79,7 +79,7 @@ class RenameFreeListHelper(
    val io = IO(new FreeListIo(num_phys_registers, pl_width))
 
    // ** FREE LIST TABLE ** //
-   val free_list = RegInit((~(1.U(num_phys_registers.W))))
+   val free_list = RegInit(~(1.U(num_phys_registers.W)))
 
    // track all allocations that have occurred since branch passed by
    // can quickly reset pipeline on branch mispredict
@@ -212,7 +212,7 @@ class RenameFreeListHelper(
    // allowing for a single-cycle reset of the rename state on a pipeline flush.
    if (ENABLE_COMMIT_MAP_TABLE)
    {
-      val committed_free_list = RegInit((~1.U(num_phys_registers.W)))
+      val committed_free_list = RegInit(~(1.U(num_phys_registers.W)))
 
       val com_mask = Wire(Vec(pl_width,   Bits(num_phys_registers.W)))
       val stale_mask = Wire(Vec(pl_width, Bits(num_phys_registers.W)))

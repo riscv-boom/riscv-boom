@@ -98,28 +98,64 @@ class ExecutionUnits(fpu: Boolean = false)(implicit val p: Parameters) extends H
 
    if (!fpu) {
       val int_width = issueParams.find(_.iqType == IQT_INT.litValue).get.issueWidth
-      exe_units += Module(new MemExeUnit())
-      exe_units += Module(new ALUExeUnit(is_branch_unit      = true
+      val memExeUnit = Module(new MemExeUnit())
+
+      memExeUnit.io.status := DontCare
+      memExeUnit.io.get_ftq_pc := DontCare
+      memExeUnit.io.resp foreach { c => c.ready := DontCare }
+
+      exe_units += memExeUnit 
+
+      val aluExeUnit = Module(new ALUExeUnit(is_branch_unit      = true
                                           , shares_csr_wport = true
                                           , has_mul          = true
                                           , use_slow_mul     = false
                                           , has_div          = true
                                           , has_ifpu         = int_width==1
                                           ))
+
+      aluExeUnit.io.lsu_io := DontCare
+      aluExeUnit.io.dmem := DontCare
+      aluExeUnit.io.get_ftq_pc := DontCare
+
+      exe_units += aluExeUnit 
+
       for (w <- 0 until int_width-1) {
          val is_last = w == (int_width-2)
-         exe_units += Module(new ALUExeUnit(has_ifpu = is_last))
+         val aluExeUnit = Module(new ALUExeUnit(has_ifpu = is_last))
+
+         aluExeUnit.io.dmem := DontCare
+         aluExeUnit.io.lsu_io := DontCare
+         aluExeUnit.io.get_ftq_pc := DontCare
+         aluExeUnit.io.status := DontCare
+
+         exe_units += aluExeUnit
       }
    } else {
       require (usingFPU)
       val fp_width = issueParams.find(_.iqType == IQT_FP.litValue).get.issueWidth
       require (fp_width <= 1) // TODO hacks to fix include uopSTD_fp needing a proper func unit.
       for (w <- 0 until fp_width) {
-         exe_units += Module(new FPUExeUnit(has_fpu = true,
+         val fpuExeUnit = Module(new FPUExeUnit(has_fpu = true,
                                             has_fdiv = usingFDivSqrt && (w==0),
                                             has_fpiu = (w==0)))
+         fpuExeUnit.io.status := DontCare
+         fpuExeUnit.io.lsu_io := DontCare
+         fpuExeUnit.io.dmem := DontCare
+         fpuExeUnit.io.get_ftq_pc := DontCare
+         
+         exe_units += fpuExeUnit
       }
-      exe_units += Module(new IntToFPExeUnit())
+
+      val intToExeUnit = Module(new IntToFPExeUnit())
+
+      intToExeUnit.io.status := DontCare
+      intToExeUnit.io.lsu_io := DontCare
+      intToExeUnit.io.dmem := DontCare
+      intToExeUnit.io.get_ftq_pc := DontCare
+
+      exe_units += intToExeUnit
+
    }
 
    val exe_units_str = new StringBuilder

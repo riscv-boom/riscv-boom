@@ -85,13 +85,6 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
    require (exe_units.withFilter(_.uses_iss_unit).map(e =>
       e.num_rf_write_ports).sum -1 + num_ll_ports == num_wakeup_ports)
 
-   //*********************************
-   // dontcare unconnected signals
-   exe_units.map(_.io.lsu_io := DontCare)
-   exe_units.map(_.io.status := DontCare)
-   exe_units.map(_.io.dmem := DontCare)
-   exe_units.map(_.io.get_ftq_pc := DontCare)
-
    //*************************************************************
    // Issue window logic
 
