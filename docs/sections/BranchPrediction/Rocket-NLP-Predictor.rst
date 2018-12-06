@@ -31,6 +31,8 @@ the next cycle.
 
 .. _nlp-predictor-unit:
 .. figure:: /figures/btb.png
+    :scale: 35 %
+    :align: center
     :alt: The Next-line Predictor 
 
     The Next-line Predictor (NLP) Unit. The Fetch PC scans the BTB’s “PC tags” for a match.

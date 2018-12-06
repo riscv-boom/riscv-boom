@@ -260,6 +260,8 @@ prediction is).
 
 .. _gshare-predictor:
 .. figure:: /figures/2bc-prediction.png
+    :scale: 30 %
+    :align: center
     :alt: The GShare Predictor 
 
     A gshare predictor uses the global history hashed with the PC to index into a table of 2-bit
@@ -294,6 +296,8 @@ The H-bit:
 
 .. _two-bit-fsm:
 .. figure:: /figures/2bc-fsm.png
+    :scale: 30 %
+    :align: center
     :alt: The Two-bit counter state machine 
     
     The Two-bit counter state machine 
