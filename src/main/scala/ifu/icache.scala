@@ -5,7 +5,6 @@ package boom.ifu
 
 import chisel3._
 import chisel3.util._
-//import Chisel.ImplicitConversions._
 import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.subsystem.RocketTilesKey
 import freechips.rocketchip.diplomacy._
