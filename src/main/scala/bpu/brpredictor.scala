@@ -168,6 +168,7 @@ abstract class BrPredictor(
    private def UpdateHistoryHash(old: UInt, addr: UInt): UInt =
    {
       val ret = Wire(UInt(history_length.W))
+      ret := DontCare
 
       //ret := ((addr >> 4.U) & 0xf.U) | (old << 4.U) -- for debugging
       val pc = addr >> log2Ceil(coreInstBytes)
@@ -188,8 +189,8 @@ abstract class BrPredictor(
          val h2 = (o1 ^ (o1 >> (sz0/2).U))(sz0/2-1,0)
          val min = h0.getWidth + h1.getWidth
          ret := Cat(old(history_length-1, min), h2, h1, h0)
+         ret
       }
-      ret
    }
 
 
