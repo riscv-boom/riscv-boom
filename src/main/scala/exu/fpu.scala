@@ -103,7 +103,7 @@ class UOPCodeFPUDecoder extends Module
 //      case 32 => f_table
 //      case 64 => f_table ++ d_table
 //   }
-	val insns = f_table ++ d_table
+   val insns = f_table ++ d_table
    val decoder = rocket.DecodeLogic(io.uopc, default, insns)
 
    val s = io.sigs
@@ -172,22 +172,22 @@ class FPU(implicit p: Parameters) extends BoomModule()(p) with tile.HasFPUParame
    val fp_ctrl = fp_decoder.io.sigs
    val fp_rm = Mux(ImmGenRm(io_req.uop.imm_packed) === 7.U, io_req.fcsr_rm, ImmGenRm(io_req.uop.imm_packed))
 
-	def fuInput(minT: Option[tile.FType]): tile.FPInput = {
-		val req = Wire(new tile.FPInput)
-		val tag = !fp_ctrl.singleIn
+   def fuInput(minT: Option[tile.FType]): tile.FPInput = {
+        val req = Wire(new tile.FPInput)
+        val tag = !fp_ctrl.singleIn
         req <> fp_ctrl
-		req.rm := fp_rm
-		req.in1 := unbox(io_req.rs1_data, tag, minT)
-		req.in2 := unbox(io_req.rs2_data, tag, minT)
-		req.in3 := unbox(io_req.rs3_data, tag, minT)
+        req.rm := fp_rm
+        req.in1 := unbox(io_req.rs1_data, tag, minT)
+        req.in2 := unbox(io_req.rs2_data, tag, minT)
+        req.in3 := unbox(io_req.rs3_data, tag, minT)
         when (fp_ctrl.swap23) { req.in3 := req.in2 }
         req.typ := ImmGenTyp(io_req.uop.imm_packed)
 
         val fma_decoder = Module(new FMADecoder)
         fma_decoder.io.uopc := io_req.uop.uopc
-		req.fmaCmd := fma_decoder.io.cmd // ex_reg_inst(3,2) | (!fp_ctrl.ren3 && ex_reg_inst(27))
-    	req
-  	}
+        req.fmaCmd := fma_decoder.io.cmd // ex_reg_inst(3,2) | (!fp_ctrl.ren3 && ex_reg_inst(27))
+        req
+   }
 
 
    val dfma = Module(new tile.FPUFMAPipe(latency = fpu_latency, t = tile.FType.D))
