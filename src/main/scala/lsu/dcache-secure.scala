@@ -203,6 +203,7 @@ class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1Hel
                        state === s_invalid ||
                       (io.replay.ready && state === s_drain_rpq_ld && isRead(rpq.io.deq.bits.cmd))
   val store_enqueued = Reg(Bool())
+  val store_enqueueing = rpq.io.enq.valid && isWrite(rpq.io.enq.bits.cmd)
   val waiting_load = (rpq.io.deq.valid && isRead(rpq.io.deq.bits.cmd)) || (!rpq.io.deq.valid && rpq.io.enq.valid && isRead(rpq.io.enq.bits.cmd)) 
 
   when (state === s_drain_rpq_ld && !waiting_load) {
@@ -227,7 +228,7 @@ class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1Hel
     val next_state = Mux(needs_wb, s_wb_req, s_meta_clear)
     when (waiting_load) {
       state := s_drain_rpq_ld  // Drain the rpq if a load has been enqueued while waiting for speculation to resolve.
-    }.elsewhen (store_enqueued) {
+    }.elsewhen (store_enqueued || store_enqueueing) {
       state := next_state      // A store to this cache block guarantees the refill is nonspeculative.
     }.elsewhen (killed && !req.ignore_spec_info) {
       state := s_invalid       // Kill the refill.
@@ -266,7 +267,7 @@ class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1Hel
   }
   when (io.req_pri_val && io.req_pri_rdy) {
     req := io.req_bits
-    store_enqueued := rpq.io.enq.valid && isWrite(rpq.io.enq.bits.cmd)
+    store_enqueued := store_enqueueing
     nonspeculative := false.B
     killed := io.req_bits.killed
 
@@ -286,7 +287,7 @@ class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1Hel
     }
   }.otherwise {
     req.uop.br_mask := GetNewBrMask(io.brinfo, req.uop)  // Deassert branch mask bits as branches are resolved.
-    store_enqueued := store_enqueued || (rpq.io.enq.valid && isWrite(rpq.io.enq.bits.cmd))  // Has a store been missed on this cacheline?
+    store_enqueued := store_enqueued || store_enqueueing  // Has a store been missed on this cacheline?
     nonspeculative := nonspeculative || IsOlder(req.uop.rob_idx, io.rob_pnr_idx, ROB_ADDR_SZ)  // Check whether refill is still speculative.
     killed := killed || IsKilledByBranch(io.brinfo, req.uop) || io.kill  // Check whether refill has been killed by misspeculation.
   }
