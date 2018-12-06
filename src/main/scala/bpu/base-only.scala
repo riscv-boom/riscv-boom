@@ -58,6 +58,7 @@ class BaseOnlyBrPredictor(
 
    q_s3_resp.io.enq.valid := io.f2_valid
    q_s3_resp.io.enq.bits := io.f2_bim_resp
+   q_s3_resp.io.deq.ready := DontCare
 
    io.resp.valid := q_s3_resp.io.deq.valid && q_s3_resp.io.deq.bits.valid
    io.resp.bits.takens := q_s3_resp.io.deq.bits.bits.getTakens
