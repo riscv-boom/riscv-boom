@@ -21,3 +21,15 @@ All memory requests to the Hellacache may be killed the cycle after
 issuing the request (while the request is accessing the data arrays).
 
 The current data cache design accesses the SRAMs in a single-cycle.
+
+The cache has a three-stage pipeline and can accept a new request every cycle.
+The stages do the following:
+
+* S0: Send request address
+
+* S1: Access SRAM
+
+* S2: Perform way-select and format response data
+
+The data cache is also cache coherent which is helpful even in uniprocessor configurations
+for allowing a host machine or debugger to read BOOM’s memory.
