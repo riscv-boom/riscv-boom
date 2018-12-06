@@ -2,8 +2,6 @@
 
 package boom.system
 
-//TODO: Figure out how to switch to Chisel3
-
 import chisel3._
 import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.diplomacy.LazyModule
