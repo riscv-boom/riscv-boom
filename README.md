@@ -160,9 +160,9 @@ For more details (and to download o3-pipeview.py), visit the [gem5 wiki](http://
 
 ## More Info
 
-Check out the BOOM website @ boom-core.org!
+Check out the BOOM website @ boom-core.org/ !
 
-* **The Design Spec** - docs.boom-core.org
+* **The Design Spec** - docs.boom-core.org/
 * **Google group:** - https://groups.google.com/forum/#!forum/riscv-boom
 * **Chisel Learning Journey** - https://github.com/librecores/riscv-sodor/wiki/Chisel-Learning-Journey
 * **Tech Report** - The Berkeley Out-of-Order Machine (BOOM): An Industry-Competitive, Synthesizable, Parameterized RISC-V Processor (https://www.eecs.berkeley.edu/Pubs/TechRpts/2015/EECS-2015-167.html)
