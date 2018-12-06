@@ -8,7 +8,10 @@ Berkeley in the [Berkeley Architecture Research](https://bar.eecs.berkeley.edu/)
 performance, synthesizable, and parameterizable core for architecture research. 
 
 Feature | BOOM
---- | --- ISA | RISC-V (RV64G) Synthesizable |√ FPGA |√
+--- | ---
+ISA | RISC-V (RV64G)
+Synthesizable |√
+FPGA |√
 Parameterized |√
 Floating Point (IEEE 754-2008) |√
 Atomic Memory Op Support |√
