@@ -8,10 +8,7 @@ Berkeley in the [Berkeley Architecture Research](https://bar.eecs.berkeley.edu/)
 performance, synthesizable, and parameterizable core for architecture research. 
 
 Feature | BOOM
---- | ---
-ISA | RISC-V (RV64G)
-Synthesizable |√
-FPGA |√
+--- | --- ISA | RISC-V (RV64G) Synthesizable |√ FPGA |√
 Parameterized |√
 Floating Point (IEEE 754-2008) |√
 Atomic Memory Op Support |√
@@ -160,9 +157,9 @@ For more details (and to download o3-pipeview.py), visit the [gem5 wiki](http://
 
 ## More Info
 
-Check out the BOOM website @ [boom-core.org](boom-core.org) !
+Check out the BOOM website @ https://boom-core.org!
 
-* **The Design Spec** - [docs.boom-core.org](docs.boom-core.org)
+* **The Design Spec** - https://docs.boom-core.org
 * **Google group:** - https://groups.google.com/forum/#!forum/riscv-boom
 * **Chisel Learning Journey** - https://github.com/librecores/riscv-sodor/wiki/Chisel-Learning-Journey
 * **Tech Report** - The Berkeley Out-of-Order Machine (BOOM): An Industry-Competitive, Synthesizable, Parameterized RISC-V Processor (https://www.eecs.berkeley.edu/Pubs/TechRpts/2015/EECS-2015-167.html)
