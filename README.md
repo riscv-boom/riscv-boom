@@ -1,13 +1,13 @@
 The Berkeley Out-of-Order RISC-V Processor
 ================================================
 
-This is the source repository for the RV64G RISC-V superscalar Berkeley Out-of-Order Machine (BOOM), 
-written in the [Chisel hardware construction language](http://chisel.eecs.berkeley.edu). BOOM 
-is a synthesizable core that targets ASIC processes. It can run on an FPGA (50 MHz on a zc706), 
-but optimizing it to be an FPGA soft-core is a non-goal.
+The Berkeley Out-of-Order Machine (BOOM) is a synthesizable and parameterizable open source RV64G RISC-V core written in the 
+[Chisel](https://chisel.eecs.berkeley.edu/) hardware construction language. While BOOM is primarily ASIC optimized, it is also usable on FPGAs. 
+We support the FireSim flow to run BOOM at 90+ MHz on FPGAs on Amazon EC2 F1. Created at the University of California,
+Berkeley in the [Berkeley Architecture Research](https://bar.eecs.berkeley.edu/) group, its focus is to create a high 
+performance, synthesizable, and parameterizable core for architecture research. 
 
-
- Feature | BOOM
+Feature | BOOM
 --- | ---
 ISA | RISC-V (RV64G)
 Synthesizable |√
@@ -23,7 +23,7 @@ External Debug |√
 
 **Google group:** (https://groups.google.com/forum/#!forum/riscv-boom)
 
-For documentation on BOOM visit (https://riscv-boom.github.io/riscv-boom-doc).
+For documentation and publications on BOOM visit the BOOM website (www.boom-core.org/).
 
 
 ### Important!
@@ -160,7 +160,9 @@ For more details (and to download o3-pipeview.py), visit the [gem5 wiki](http://
 
 ## More Info
 
-* **The Design Spec** - https://github.com/riscv-boom/riscv-boom-doc
+Check out the BOOM website @ boom-core.org!
+
+* **The Design Spec** - docs.boom-core.org
 * **Google group:** - https://groups.google.com/forum/#!forum/riscv-boom
 * **Chisel Learning Journey** - https://github.com/librecores/riscv-sodor/wiki/Chisel-Learning-Journey
 * **Tech Report** - The Berkeley Out-of-Order Machine (BOOM): An Industry-Competitive, Synthesizable, Parameterized RISC-V Processor (https://www.eecs.berkeley.edu/Pubs/TechRpts/2015/EECS-2015-167.html)
