@@ -724,8 +724,8 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    val wb_wdata = csr_exe_unit.io.resp(0).bits.data
 
    csr.io.rw.addr  := csr_exe_unit.io.resp(0).bits.uop.csr_addr
-   csr.io.rw.cmd   := Mux(csr_exe_unit.io.resp(0).valid, csr_rw_cmd, freechips.rocketchip.rocket.CSR.N)
-   csr.io.rw.wdata :=wb_wdata
+   csr.io.rw.cmd   := freechips.rocketchip.rocket.CSR.maskCmd(csr_exe_unit.io.resp(0).valid, csr_rw_cmd)
+   csr.io.rw.wdata := wb_wdata
 
    // Extra I/O
    csr.io.retire    := PopCount(rob.io.commit.valids.asUInt)
