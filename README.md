@@ -23,7 +23,7 @@ External Debug |√
 
 **Google group:** (https://groups.google.com/forum/#!forum/riscv-boom)
 
-For documentation on BOOM visit the BOOM website (www.boom-core.org/).
+For documentation and publications on BOOM visit the BOOM website (www.boom-core.org/).
 
 
 ### Important!
@@ -160,7 +160,9 @@ For more details (and to download o3-pipeview.py), visit the [gem5 wiki](http://
 
 ## More Info
 
-* **The Design Spec** - https://github.com/riscv-boom/riscv-boom-doc
+Check out the BOOM website @ https://boom-core.org!
+
+* **The Design Spec** - https://docs.boom-core.org
 * **Google group:** - https://groups.google.com/forum/#!forum/riscv-boom
 * **Chisel Learning Journey** - https://github.com/librecores/riscv-sodor/wiki/Chisel-Learning-Journey
 * **Tech Report** - The Berkeley Out-of-Order Machine (BOOM): An Industry-Competitive, Synthesizable, Parameterized RISC-V Processor (https://www.eecs.berkeley.edu/Pubs/TechRpts/2015/EECS-2015-167.html)
