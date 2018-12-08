@@ -2,7 +2,7 @@ The Memory System and the Data-cache Shim
 =========================================
 
 BOOM uses the Rocket non-blocking cache (“Hellacache"). Designed for use
-in in-order vector processors, a “shim” is used to connect BOOM to the
+in in-order processors, a “shim” is used to connect BOOM to the
 data cache. The source code for the cache can be found in
 nbdcache.scala in the Rocket repository (https://github.com/freechipsproject/rocket-chip).
 
