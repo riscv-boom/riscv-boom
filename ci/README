@@ -1,0 +1,14 @@
+These are the scripts that Travis CI uses to run the tests during a PR.
+
+Note: This uses the most up to date version of riscv-boom/boom-template to run the tests
+
+Things to look into:
+--------------------
+- Sometime during the clone of riscv-tools there is a timeout for cloning gcc. This is because
+during the clone step, there is no output to the screen for over 10mins. This causes Travis to 
+error out and not finish the build
+
+- This does not test changes across multiple sub-modules of boom-template. For ex, if rocket-chip
+also needs to be updated, then this will not reflect those changes unless boom-template has those
+changes already put in.
+

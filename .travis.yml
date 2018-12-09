@@ -1,0 +1,97 @@
+git:
+    submodules: false # dont clone submodules
+
+# default language
+language: scala
+
+# need sudo to build tools/verilator
+sudo: required
+
+cache:
+    timeout: 1000 # have cache loading time be extended
+    apt: true
+    directories: # store directories that are shared across things
+        $HOME/.ivy2
+        $TRAVIS_BUILD_DIR/../riscv-tools-install
+        $TRAVIS_BUILD_DIR/../boom-template
+
+
+# packages needed to build riscv-tools
+addons:
+    apt:
+        sources:
+            - ubuntu-toolchain-r-test
+        packages:
+            - gcc-4.8
+            - g++-4.8
+            - gperf
+            - autoconf
+            - automake
+            - autotools-dev
+            - libmpc-dev
+            - libmpfr-dev
+            - libgmp-dev
+            - gawk
+            - build-essential
+            - bison
+            - flex
+            - texinfo
+            - device-tree-compiler
+            - libusb-1.0-0-dev
+            - python-pexpect
+
+branches:
+    only:
+        - master
+
+# what order should the stages go in
+stages:
+    - prepare riscv-tools
+    - prepare verilator-build
+    - run tests
+
+jobs:
+    include:
+        # build the riscv-tools
+        - stage: prepare riscv-tools
+          script:
+              - travis_wait 120 ci/prepare-riscv-tools.sh
+          before_install: #Setup dependencies for the script above
+              - export CXX=g++-4.8 CC=gcc-4.8
+              - export RISCV=$TRAVIS_BUILD_DIR/../riscv-tools-install
+              - export PATH=$RISCV/bin:$PATH
+
+        # build verilator build of default BoomConfig
+        - stage: prepare verilator-build
+          script:
+              - travis_wait 120 ci/prepare-verilator-build.sh
+          before_install:
+              - export CXX=g++-4.8 CC=gcc-4.8
+              - export RISCV=$TRAVIS_BUILD_DIR/../riscv-tools-install
+              - export PATH=$RISCV/bin:$PATH
+
+        # run 3 tests
+        # run the checkstyle to enforce consistent style
+        - &test
+          stage: Run Tests
+          script:
+              - travis_wait 120 make checkstyle
+          before_script:
+              - export RISCV=$TRAVIS_BUILD_DIR/../riscv-tools-install
+              - export PATH=$RISCV/bin:$PATH
+
+        # run the regression tests
+        - <<: *test
+          script:
+              - travis_wait 120 make run-regression-tests -C ../boom-template/verisim CONFIG=BoomConfig
+          before_script:
+              - export RISCV=$TRAVIS_BUILD_DIR/../riscv-tools-install
+              - export PATH=$RISCV/bin:$PATH
+
+        # run the benchmark tests
+        - <<: *test
+          script:
+              - travis_wait 120 make run-bmark-tests -C ../boom-template/verisim CONFIG=BoomConfig
+          before_script:
+              - export RISCV=$TRAVIS_BUILD_DIR/../riscv-tools-install
+              - export PATH=$RISCV/bin:$PATH
