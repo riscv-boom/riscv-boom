@@ -588,7 +588,6 @@ class BoomSecureDCacheModule(outer: BoomSecureDCache) extends SecureHellaCacheMo
   io.cpu.req.ready := Bool(true)
   val s1_valid = Reg(next=io.cpu.req.fire(), init=Bool(false))
   val s1_req = Reg(io.cpu.req.bits)
-  s1_req.uop := GetNewUopAndBrMask(io.cpu.req.bits.uop, io.spec_info.brinfo)
 
   val s1_valid_masked = s1_valid && !io.cpu.s1_kill
   val s1_replay = Reg(init=Bool(false))
@@ -599,7 +598,6 @@ class BoomSecureDCacheModule(outer: BoomSecureDCache) extends SecureHellaCacheMo
 
   val s2_valid = Reg(next=s1_valid_masked && !s1_sfence, init=Bool(false)) && !io.cpu.s2_xcpt.asUInt.orR
   val s2_req = Reg(io.cpu.req.bits)
-  s2_req.uop := GetNewUopAndBrMask(io.cpu.req.bits.uop, io.spec_info.brinfo)
   val s2_replay = Reg(next=s1_replay, init=Bool(false)) && s2_req.cmd =/= M_FLUSH_ALL
   val s2_replay_data = Reg(next=s1_replay_data)
   val s2_use_replay_data = Reg(next=s1_use_replay_data)
@@ -789,6 +787,7 @@ class BoomSecureDCacheModule(outer: BoomSecureDCache) extends SecureHellaCacheMo
   // miss handling
   mshrs.io.req.valid := s2_valid_masked && !s2_hit && (isPrefetch(s2_req.cmd) || isRead(s2_req.cmd) || isWrite(s2_req.cmd))
   mshrs.io.req.bits := s2_req
+  mshrs.io.req.bits.uop := GetNewUopAndBrMask(s2_req.uop, io.spec_info.brinfo)
   mshrs.io.req.bits.tag_match := s2_tag_match
   mshrs.io.req.bits.old_meta := Mux(s2_tag_match, L1Metadata(s2_repl_meta.tag, s2_hit_state), s2_repl_meta)
   mshrs.io.req.bits.way_en := Mux(s2_tag_match, s2_tag_match_way, s2_replaced_way_en)

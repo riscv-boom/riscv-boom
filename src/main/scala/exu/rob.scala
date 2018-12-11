@@ -698,7 +698,8 @@ class Rob(
    // It behaves similarly to the rob_head, but moves past a column once its instructions are considered speculatively safe.
    // For the time being, it only cares about branches and thrown exceptions. Waiting for load/store orderings to be resolved would require more complex changes.
    val unsafe_row = rob_unsafe(rob_pnr)
-   val unsafe_row_offset = PriorityEncoder(unsafe_row)
+   val pnr_at_head = (rob_pnr(rob_row_addr_sz-2,0) === rob_head(rob_row_addr_sz-2,0)) && (rob_pnr(rob_row_addr_sz-1) =/= rob_head(rob_row_addr_sz-1))
+   val unsafe_row_offset = Mux(pnr_at_head, 0.U, PriorityEncoder(unsafe_row))
    when (!unsafe_row.reduce(_||_) && rob_pnr =/= rob_tail) {
       rob_pnr := WrapIncPar(rob_pnr, num_rob_rows)
    }
