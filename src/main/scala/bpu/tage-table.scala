@@ -1,15 +1,14 @@
 //******************************************************************************
-// Copyright (c) 2018, The Regents of the University of California (Regents).
+// Copyright (c) 2016 - 2018, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE for license details.
 //------------------------------------------------------------------------------
+// Author: Christopher Celio
+//------------------------------------------------------------------------------
+
 //------------------------------------------------------------------------------
 // TAGE Table (used by the TAGE branch predictor)
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
-//
-// Christopher Celio
-// 2016 Feb 26
-
 
 package boom.bpu
 

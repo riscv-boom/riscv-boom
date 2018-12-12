@@ -1,15 +1,14 @@
 //******************************************************************************
-// Copyright (c) 2018, The Regents of the University of California (Regents).
+// Copyright (c) 2017 - 2018, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE for license details.
+//------------------------------------------------------------------------------
+// Author: Christopher Celio
 //------------------------------------------------------------------------------
 
 //------------------------------------------------------------------------------
 // Transformable SeqReadMem
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
-//
-// Christopher Celio
-// 2017 Apr 2
 //
 // Provide an abstract sequential-read memory that can be transformed from a
 // tall, skinny aspect ratio to a more rectangular shape.

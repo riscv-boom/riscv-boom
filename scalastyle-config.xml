@@ -8,10 +8,8 @@
  </check>
  <check level="warning" class="org.scalastyle.file.HeaderMatchesChecker" enabled="true">
   <parameters>
-   <parameter name="header"><![CDATA[//******************************************************************************
-// Copyright (c) 2018, The Regents of the University of California (Regents).
-// All Rights Reserved. See LICENSE for license details.
-//------------------------------------------------------------------------------]]></parameter>
+   <parameter name="regex">true</parameter>
+   <parameter name="header">//\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\n// Copyright \(c\) \d{4} - \d{4}, The Regents of the University of California \(Regents\).\n// All Rights Reserved. See LICENSE for license details.\n//------------------------------------------------------------------------------\n// Author: .*\n//------------------------------------------------------------------------------</parameter>
   </parameters>
  </check>
  <check enabled="false" level="warning" class="org.scalastyle.scalariform.SpaceAfterCommentStartChecker"/>

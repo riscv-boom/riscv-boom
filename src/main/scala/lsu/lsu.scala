@@ -1,15 +1,14 @@
 //******************************************************************************
-// Copyright (c) 2018, The Regents of the University of California (Regents).
+// Copyright (c) 2012 - 2018, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE for license details.
+//------------------------------------------------------------------------------
+// Author: Christopher Celio
 //------------------------------------------------------------------------------
 
 //------------------------------------------------------------------------------
 // RISCV Out-of-Order Load/Store Unit
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
-//
-// Christopher Celio
-// 2012 Jun 3
 //
 // Load/Store Unit is made up of the Load-Address Queue, the Store-Address
 // Queue, and the Store-Data queue (LAQ, SAQ, and SDQ).

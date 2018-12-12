@@ -1,6 +1,8 @@
 //******************************************************************************
-// Copyright (c) 2018, The Regents of the University of California (Regents).
+// Copyright (c) 2015 - 2018, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE for license details.
+//------------------------------------------------------------------------------
+// Author: Christopher Celio
 //------------------------------------------------------------------------------
 
 //------------------------------------------------------------------------------
@@ -8,9 +10,6 @@
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
 //
-// Christopher Celio
-// 2018 Apr 28
-
 // Notes:
 //    - Implements gshare in a a 1r1w SRAM (need to bank to get to 1rw).
 //    - Does not rectangularize the memory.

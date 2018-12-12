@@ -1,15 +1,14 @@
 //******************************************************************************
-// Copyright (c) 2018, The Regents of the University of California (Regents).
+// Copyright (c) 2017 - 2018, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE for license details.
+//------------------------------------------------------------------------------
+// Author: Christopher Celio
 //------------------------------------------------------------------------------
 
 //------------------------------------------------------------------------------
 // RISCV Processor Branch Prediction Pipeline
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
-//
-// Christopher Celio
-// 2017
 //
 // Access BTB and BPD to feed predictions to the Fetch Unit.
 //

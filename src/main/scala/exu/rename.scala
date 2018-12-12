@@ -1,14 +1,14 @@
 //******************************************************************************
-// Copyright (c) 2018, The Regents of the University of California (Regents).
+// Copyright (c) 2012 - 2018, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE for license details.
 //------------------------------------------------------------------------------
+// Author: Christopher Celio
+//------------------------------------------------------------------------------
+
 //------------------------------------------------------------------------------
 // RISCV Processor Datapath: Rename Logic
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
-//
-// Christopher Celio
-// 2012 Feb 14
 //
 // Supports 1-cycle and 2-cycle latencies. (aka, passthrough versus registers between ren1 and ren2).
 //    - ren1: read the map tables and allocate a new physical register from the freelist.
