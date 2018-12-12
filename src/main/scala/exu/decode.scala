@@ -1,5 +1,5 @@
 //******************************************************************************
-// Copyright (c) 2015, The Regents of the University of California (Regents).
+// Copyright (c) 2018, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE for license details.
 //------------------------------------------------------------------------------
 
@@ -222,7 +222,7 @@ object XDecode extends DecodeConstants
 // scalastyle:on
 }
 
-object FDecode extends DecodeConstants 
+object FDecode extends DecodeConstants
 {
 // scalastyle:off
   val table: Array[(BitPat, List[BitPat])] = Array(
@@ -370,10 +370,10 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule()(p)
 
    // Exception Handling
    io.csr_decode.csr := uop.inst(31,20)
-	val csr_en = cs.csr_cmd.isOneOf(CSR.S, CSR.C, CSR.W)
-	val csr_ren = cs.csr_cmd.isOneOf(CSR.S, CSR.C) && uop.lrs1 === 0.U
-	val system_insn = cs.csr_cmd === CSR.I
-	val sfence = cs.uopc === uopSFENCE
+    val csr_en = cs.csr_cmd.isOneOf(CSR.S, CSR.C, CSR.W)
+    val csr_ren = cs.csr_cmd.isOneOf(CSR.S, CSR.C) && uop.lrs1 === 0.U
+    val system_insn = cs.csr_cmd === CSR.I
+    val sfence = cs.uopc === uopSFENCE
 
    val cs_legal = cs.legal
 //   dontTOuch(cs_legal)

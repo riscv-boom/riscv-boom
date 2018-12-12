@@ -1,5 +1,5 @@
 //******************************************************************************
-// Copyright (c) 2015, The Regents of the University of California (Regents).
+// Copyright (c) 2018, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE for license details.
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
@@ -235,7 +235,7 @@ object FpuRRdDecode extends RRdDecodeConstants
          BitPat(uopFNMADD_D)->List(BR_N, Y, N, N, FN_X   , DW_X  , OP1_X   , OP2_X   , IS_X, REN_1, CSR.N),
          BitPat(uopFNMSUB_D)->List(BR_N, Y, N, N, FN_X   , DW_X  , OP1_X   , OP2_X   , IS_X, REN_1, CSR.N))
 }
- 
+
 
 object IfmvRRdDecode extends RRdDecodeConstants
 {
@@ -254,7 +254,7 @@ object IfmvRRdDecode extends RRdDecodeConstants
          BitPat(uopFCVT_D_X) ->List(BR_N,Y, N, N, FN_X   , DW_X  , OP1_X   , OP2_X   , IS_X, REN_1, CSR.N))
 }
 
- 
+
 
 object FDivRRdDecode extends RRdDecodeConstants
 {

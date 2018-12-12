@@ -1,5 +1,5 @@
 //******************************************************************************
-// Copyright (c) 2015, The Regents of the University of California (Regents).
+// Copyright (c) 2018, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE for license details.
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
@@ -71,7 +71,7 @@ class UOPCodeFDivDecoder extends Module
 // contains up to 2 inflight uops due to the need to buffer the input as the
 // fdiv unit uses an unstable FIFO interface.
 // TODO extend UnpipelinedFunctionalUnit to handle a >1 uops inflight.
-class FDivSqrtUnit(implicit p: Parameters) 
+class FDivSqrtUnit(implicit p: Parameters)
    extends FunctionalUnit(
       is_pipelined = false,
       num_stages = 1,
@@ -117,7 +117,7 @@ class FDivSqrtUnit(implicit p: Parameters)
 
       r_buffer_fin.rm := io.fcsr_rm
       r_buffer_fin.typ := 0.U // unused for fdivsqrt
-		val tag = !fdiv_decoder.io.sigs.singleIn
+      val tag = !fdiv_decoder.io.sigs.singleIn
       r_buffer_fin.in1 := unbox(io.req.bits.rs1_data, tag, Some(tile.FType.D))
       r_buffer_fin.in2 := unbox(io.req.bits.rs2_data, tag, Some(tile.FType.D))
       when (fdiv_decoder.io.sigs.singleIn)
@@ -212,9 +212,9 @@ class FDivSqrtUnit(implicit p: Parameters)
 
    io.resp.valid := r_out_val && !IsKilledByBranch(io.brinfo, r_out_uop)
    io.resp.bits.uop := r_out_uop
-   io.resp.bits.data := 
-      Mux(r_divsqrt_fin.singleIn, 
-         box(downvert_d2s.io.out, false.B), 
+   io.resp.bits.data :=
+      Mux(r_divsqrt_fin.singleIn,
+         box(downvert_d2s.io.out, false.B),
          box(r_out_wdata_double, true.B))
    io.resp.bits.fflags.valid := io.resp.valid
    io.resp.bits.fflags.bits.uop := r_out_uop

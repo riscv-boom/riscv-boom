@@ -1,5 +1,5 @@
 //******************************************************************************
-// Copyright (c) 2015, The Regents of the University of California (Regents).
+// Copyright (c) 2018, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE for license details.
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
@@ -111,7 +111,8 @@ class TageTableWrite(fetch_width: Int, index_sz: Int, tag_sz: Int, cntr_sz: Int,
    val mispredict = Bool()
    val taken = Bool()
 
-   override def cloneType: this.type = new TageTableWrite(fetch_width, index_sz, tag_sz, cntr_sz, ubit_sz).asInstanceOf[this.type]
+   override def cloneType: this.type = new TageTableWrite(fetch_width, index_sz, tag_sz, cntr_sz,
+                                                          ubit_sz).asInstanceOf[this.type]
 }
 
 
@@ -172,7 +173,8 @@ class TageTable(
          Mux(update && !mispredicted, 1.U,
             0.U))
 
-      assert (PopCount(VecInit(allocate, update, degrade)) > 0.U, "[TageTable[" + id + "]] ubit not told to do something.")
+      assert (PopCount(VecInit(allocate, update, degrade)) > 0.U,
+              "[TageTable[" + id + "]] ubit not told to do something.")
 
       next
    }

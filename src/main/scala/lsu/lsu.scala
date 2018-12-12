@@ -1,7 +1,8 @@
 //******************************************************************************
-// Copyright (c) 2015, The Regents of the University of California (Regents).
+// Copyright (c) 2018, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE for license details.
 //------------------------------------------------------------------------------
+
 //------------------------------------------------------------------------------
 // RISCV Out-of-Order Load/Store Unit
 //------------------------------------------------------------------------------
@@ -147,7 +148,8 @@ class LoadStoreUnitIO(pl_width: Int)(implicit p: Parameters) extends BoomBundle(
 }
 
 
-class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut) extends BoomModule()(p)
+class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
+                                   edge: freechips.rocketchip.tilelink.TLEdgeOut) extends BoomModule()(p)
    with freechips.rocketchip.rocket.constants.MemoryOpConstants
 {
    val io = IO(new LoadStoreUnitIO(pl_width))
@@ -161,28 +163,51 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
    val laq_addr           = Mem(num_ld_entries, UInt(coreMaxAddrBits.W))
 
    val laq_allocated      = Reg(Vec(num_ld_entries, Bool())) // entry has been allocated
-   val laq_is_virtual     = Reg(Vec(num_ld_entries, Bool())) // address in LAQ is a virtual address. There was a tlb_miss and a retry is required.
-   val laq_is_uncacheable = Reg(Vec(num_ld_entries, Bool())) // address in LAQ is an uncacheable address. Can only execute once it's the head of the ROB
-   val laq_executed       = Reg(Vec(num_ld_entries, Bool())) // load has been issued to memory (immediately set this bit)
-   val laq_succeeded      = Reg(Vec(num_ld_entries, Bool())) // load has returned from memory, but may still have an ordering failure
-   val laq_failure        = RegInit(VecInit(Seq.fill(num_ld_entries) { false.B }))  // ordering fail, must retry (at commit time, which requires a rollback)
+   val laq_is_virtual     = Reg(Vec(num_ld_entries, Bool())) // address in LAQ is a virtual address.
+                                                             // There was a tlb_miss and a retry is required.
+   val laq_is_uncacheable = Reg(Vec(num_ld_entries, Bool())) // address in LAQ is an uncacheable address.
+                                                             // Can only execute once it's the head of the ROB
+   val laq_executed       = Reg(Vec(num_ld_entries, Bool())) // load has been issued to memory
+                                                             // (immediately set this bit)
+   val laq_succeeded      = Reg(Vec(num_ld_entries, Bool())) // load has returned from memory,
+                                                             // but may still have an ordering failure
+   val laq_failure        = RegInit(VecInit(Seq.fill(num_ld_entries) { false.B }))  // ordering fail, must retry
+                                                                                    // (at commit time,
+                                                                                    // which requires a rollback)
    val laq_uop            = Reg(Vec(num_ld_entries, new MicroOp()))
-   //laq_uop.stq_idx between oldest and youngest (dep_mask can't establish age :( ), "aka store coloring" if you're Intel
-//   val laq_request   = Vec.fill(num_ld_entries) { Reg(resetVal = false.B) } // TODO sleeper load requesting issue to memory (perhaps stores broadcast, sees its store-set finished up)
-
+   //laq_uop.stq_idx between oldest and youngest (dep_mask can't establish age :( ),
+   // "aka store coloring" if you're Intel
+   //val laq_request   = Vec.fill(num_ld_entries) { Reg(resetVal = false.B) } // TODO sleeper load requesting
+                                                                              // issue to memory (perhaps stores
+                                                                              // broadcast, sees its store-set
+                                                                              // finished up)
 
    // track window of stores we depend on
-   val laq_st_dep_mask        = Reg(Vec(num_ld_entries, UInt(num_st_entries.W))) // list of stores we might depend (cleared when a store commits)
+   val laq_st_dep_mask        = Reg(Vec(num_ld_entries, UInt(num_st_entries.W))) // list of stores we might
+                                                                                 // depend (cleared when a
+                                                                                 // store commits)
    val laq_forwarded_std_val  = Reg(Vec(num_ld_entries, Bool()))
-   val laq_forwarded_stq_idx  = Reg(Vec(num_ld_entries, UInt(MEM_ADDR_SZ.W)))    // which store did get store-load forwarded data from? compare later to see I got things correct
-   val debug_laq_put_to_sleep = Reg(Vec(num_ld_entries, Bool()))                       // did a load get put to sleep at least once?
-//   val laq_st_wait_mask = Vec.fill(num_ld_entries) { Reg() { Bits(width = num_st_entries) } }// TODO list of stores we might depend on whose addresses are not yet computed
-//   val laq_block_val    = Vec.fill(num_ld_entries) { Reg() { Bool() } }                     // TODO something is blocking us from executing
-//   val laq_block_id     = Vec.fill(num_ld_entries) { Reg() { UInt(width = MEM_ADDR_SZ) } }  // TODO something is blocking us from executing, listen for this ID to wakeup
+   val laq_forwarded_stq_idx  = Reg(Vec(num_ld_entries, UInt(MEM_ADDR_SZ.W)))    // which store did get
+                                                                                 // store-load forwarded
+                                                                                 // data from? compare later
+                                                                                 // to see I got things correct
+   val debug_laq_put_to_sleep = Reg(Vec(num_ld_entries, Bool())) // did a load get put to sleep at least once?
+   //val laq_st_wait_mask = Vec.fill(num_ld_entries) { Reg() { Bits(width = num_st_entries) } } // TODO list of stores
+                                                                                                // we might depend on
+                                                                                                // whose addresses are
+                                                                                                // not yet computed
+   //val laq_block_val    = Vec.fill(num_ld_entries) { Reg() { Bool() } }                       // TODO something is
+                                                                                                //blocking us from
+                                                                                                //executing
+   //val laq_block_id     = Vec.fill(num_ld_entries) { Reg() { UInt(width = MEM_ADDR_SZ) } }    // TODO something is
+                                                                                                // blocking us from
+                                                                                                // executing, listen
+                                                                                                // for this ID to wakeup
 
    // Store-Address Queue
    val saq_val       = Reg(Vec(num_st_entries, Bool()))
-   val saq_is_virtual= Reg(Vec(num_st_entries, Bool())) // address in SAQ is a virtual address. There was a tlb_miss and a retry is required.
+   val saq_is_virtual= Reg(Vec(num_st_entries, Bool())) // address in SAQ is a virtual address. There was a tlb_miss and
+                                                        // a retry is required.
    val saq_addr      = Mem(num_st_entries, UInt(coreMaxAddrBits.W))
 
    // Store-Data Queue
@@ -192,10 +217,13 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
    // Shared Store Queue Information
    val stq_uop       = Reg(Vec(num_st_entries, new MicroOp()))
    // TODO not convinced I actually need stq_entry_val; I think other ctrl signals gate this off
-   val stq_entry_val = Reg(Vec(num_st_entries, Bool())) // this may be valid, but not TRUE (on exceptions, this doesn't get cleared but STQ_TAIL gets moved)
+   val stq_entry_val = Reg(Vec(num_st_entries, Bool())) // this may be valid, but not TRUE (on exceptions, this doesn't
+                                                        // get cleared but STQ_TAIL gets moved)
    val stq_executed  = Reg(Vec(num_st_entries, Bool())) // sent to mem
-   val stq_succeeded = Reg(Vec(num_st_entries, Bool())) // returned TODO is this needed, or can we just advance the stq_head?
-   val stq_committed = Reg(Vec(num_st_entries, Bool())) // the ROB has committed us, so we can now send our store to memory
+   val stq_succeeded = Reg(Vec(num_st_entries, Bool())) // returned TODO is this needed, or can we just advance the
+                                                        // stq_head?
+   val stq_committed = Reg(Vec(num_st_entries, Bool())) // the ROB has committed us, so we can now send our store
+                                                        // to memory
 
 
    val laq_head = Reg(UInt())
@@ -568,7 +596,8 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters, edge: freechips.rocke
                                           (will_fire_load_retry && pf_ld)
    }
 
-   assert (PopCount(VecInit(will_fire_store_commit, will_fire_load_incoming, will_fire_load_retry, will_fire_load_wakeup))
+   assert (PopCount(VecInit(will_fire_store_commit, will_fire_load_incoming,
+                            will_fire_load_retry, will_fire_load_wakeup))
       <= 1.U, "Multiple requestors firing to the data cache.")
 
 
@@ -1436,7 +1465,8 @@ class ForwardingAgeLogic(num_entries: Int)(implicit p: Parameters) extends BoomM
 {
    val io = IO(new Bundle
    {
-      val addr_matches    = Input(UInt(num_entries.W)) // bit vector of addresses that match between the load and the SAQ
+      val addr_matches    = Input(UInt(num_entries.W)) // bit vector of addresses that match
+                                                       // between the load and the SAQ
       val youngest_st_idx = Input(UInt(MEM_ADDR_SZ.W)) // needed to get "age"
 
       val forwarding_val  = Output(Bool())

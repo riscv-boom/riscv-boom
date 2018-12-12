@@ -1,3 +1,8 @@
+//******************************************************************************
+// Copyright (c) 2018, The Regents of the University of California (Regents).
+// All Rights Reserved. See LICENSE for license details.
+//------------------------------------------------------------------------------
+
 // See LICENSE.SiFive for license details.
 // See LICENSE.Berkeley for license details.
 
@@ -49,7 +54,9 @@ class BoomTile(
   val masterNode = TLIdentityNode()
 
   val dtim_adapter = tileParams.dcache.flatMap { d => d.scratch.map(s =>
-    LazyModule(new ScratchpadSlavePort(AddressSet(s, d.dataScratchpadBytes-1), xBytes, tileParams.core.useAtomics && !tileParams.core.useAtomicsOnlyForIO)))
+    LazyModule(new ScratchpadSlavePort(AddressSet(s, d.dataScratchpadBytes-1),
+                                       xBytes,
+                                       tileParams.core.useAtomics && !tileParams.core.useAtomicsOnlyForIO)))
   }
   dtim_adapter.foreach(lm => connectTLSlave(lm.node, xBytes))
 
@@ -91,7 +98,12 @@ class BoomTile(
     override def parent = Some(ResourceAnchors.cpus)
     override def describe(resources: ResourceBindings): Description = {
       val Description(name, mapping) = super.describe(resources)
-      Description(name, mapping ++ cpuProperties ++ nextLevelCacheProperty ++ tileProperties ++ dtimProperty ++ itimProperty)
+      Description(name, mapping ++
+                        cpuProperties ++
+                        nextLevelCacheProperty ++
+                        tileProperties ++
+                        dtimProperty ++
+                        itimProperty)
     }
   }
 
@@ -121,7 +133,7 @@ class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer)
 
   val core = Module(new BoomCore()(outer.p, outer.dcache.module.edge))
 
-  //val fpuOpt = outer.tileParams.core.fpu.map(params => Module(new FPU(params)(outer.p))) RocketFpu - not needed in boom
+  //val fpuOpt = outer.tileParams.core.fpu.map(params => Module(new FPU(params)(outer.p))) //RocketFpu - not needed
 
   // Observe the Tilelink Channel C traffic leaving the L1D (writeback/releases).
   val tl_c = outer.dCacheTap.out(0)._1.c

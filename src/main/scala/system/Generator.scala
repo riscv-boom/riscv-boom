@@ -1,3 +1,8 @@
+//******************************************************************************
+// Copyright (c) 2018, The Regents of the University of California (Regents).
+// All Rights Reserved. See LICENSE for license details.
+//------------------------------------------------------------------------------
+
 // See LICENSE.SiFive for license details.
 
 package boom.system
@@ -71,10 +76,12 @@ object Generator extends GeneratorApp {
       }
     }
     if (coreParams.useAtomics) {
-      if (tileParams.dcache.flatMap(_.scratch).isEmpty)
+      if (tileParams.dcache.flatMap(_.scratch).isEmpty) {
         TestGeneration.addSuites(env.map(if (xlen == 64) rv64ua else rv32ua))
-      else
+      }
+      else {
         TestGeneration.addSuites(env.map(if (xlen == 64) rv64uaSansLRSC else rv32uaSansLRSC))
+      }
     }
     if (coreParams.useCompressed) TestGeneration.addSuites(env.map(if (xlen == 64) rv64uc else rv32uc))
 

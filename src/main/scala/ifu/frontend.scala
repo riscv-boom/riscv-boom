@@ -1,3 +1,8 @@
+//******************************************************************************
+// Copyright (c) 2018, The Regents of the University of California (Regents).
+// All Rights Reserved. See LICENSE for license details.
+//------------------------------------------------------------------------------
+
 // See LICENSE.Berkeley for license details.
 // See LICENSE.SiFive for license details.
 
@@ -199,7 +204,9 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   val s0_speculative =
     if (usingCompressed) s1_speculative || s2_valid && !s2_speculative || predicted_taken
     else true.B
-  s1_speculative := Mux(fetch_controller.io.imem_req.valid, fetch_controller.io.imem_req.bits.speculative, Mux(s2_replay, s2_speculative, s0_speculative))
+  s1_speculative := Mux(fetch_controller.io.imem_req.valid,
+                        fetch_controller.io.imem_req.bits.speculative,
+                        Mux(s2_replay, s2_speculative, s0_speculative))
 
   val s2_redirect = WireInit(fetch_controller.io.imem_req.valid)
   s2_valid := false.B
@@ -231,14 +238,16 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   icache.io.s2_prefetch := s2_tlb_resp.prefetchable
 
   s0_pc := alignPC(Mux(fetch_controller.io.imem_req.valid, fetch_controller.io.imem_req.bits.pc, npc))
-  fetch_controller.io.imem_resp.valid := RegNext(s1_valid) && s2_valid && (icache.io.resp.valid || !s2_tlb_resp.miss && icache.io.s2_kill)
+  fetch_controller.io.imem_resp.valid := RegNext(s1_valid) && s2_valid &&
+                                         (icache.io.resp.valid || !s2_tlb_resp.miss && icache.io.s2_kill)
   fetch_controller.io.imem_resp.bits.pc := s2_pc
 
   fetch_controller.io.imem_resp.bits.data := icache.io.resp.bits.data
   fetch_controller.io.imem_resp.bits.mask := fetchMask(s2_pc)
 
 
-  fetch_controller.io.imem_resp.bits.replay := icache.io.resp.bits.replay || icache.io.s2_kill && !icache.io.resp.valid && !s2_xcpt
+  fetch_controller.io.imem_resp.bits.replay := icache.io.resp.bits.replay || icache.io.s2_kill &&
+                                               !icache.io.resp.valid && !s2_xcpt
   fetch_controller.io.imem_resp.bits.btb := s2_btb_resp_bits
   fetch_controller.io.imem_resp.bits.btb.taken := s2_btb_taken
   fetch_controller.io.imem_resp.bits.xcpt := s2_tlb_resp
@@ -253,7 +262,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 
    fetch_controller.io.f2_btb_resp       := bpdpipeline.io.f2_btb_resp
    fetch_controller.io.f3_bpd_resp       := bpdpipeline.io.f3_bpd_resp
-   fetch_controller.io.f2_bpd_resp       := DontCare 
+   fetch_controller.io.f2_bpd_resp       := DontCare
 
    fetch_controller.io.clear_fetchbuffer := io.cpu.clear_fetchbuffer
 

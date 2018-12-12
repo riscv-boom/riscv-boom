@@ -1,14 +1,15 @@
 //******************************************************************************
-// Copyright (c) 2015, The Regents of the University of California (Regents).
+// Copyright (c) 2018, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE for license details.
 //------------------------------------------------------------------------------
+
 //------------------------------------------------------------------------------
 // RISCV GShare Branch Predictor
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
 //
 // Christopher Celio
-// 2015 Apr 28
+// 2018 Apr 28
 
 // Notes:
 //    - Implements gshare in a a 1r1w SRAM (need to bank to get to 1rw).

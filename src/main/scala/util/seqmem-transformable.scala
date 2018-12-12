@@ -1,7 +1,8 @@
 //******************************************************************************
-// Copyright (c) 2015, The Regents of the University of California (Regents).
+// Copyright (c) 2018, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE for license details.
 //------------------------------------------------------------------------------
+
 //------------------------------------------------------------------------------
 // Transformable SeqReadMem
 //------------------------------------------------------------------------------
@@ -58,11 +59,11 @@ class SeqMem1rwTransformable (
    val smem = SyncReadMem(p_depth, Vec(p_width, Bool()))
 
 
-   private def getIdx(addr:UInt) = 
+   private def getIdx(addr:UInt) =
       addr >> p_off_sz
-      
+
    // must compute offset from address but then factor in the l_width.
-   private def getOffset(addr:UInt) = 
+   private def getOffset(addr:UInt) =
       addr(p_off_sz-1,0) << l_off_sz
 
 

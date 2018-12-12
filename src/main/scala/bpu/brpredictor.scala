@@ -1,14 +1,15 @@
 //******************************************************************************
-// Copyright (c) 2015, The Regents of the University of California (Regents).
+// Copyright (c) 2018, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE for license details.
 //------------------------------------------------------------------------------
+
 //------------------------------------------------------------------------------
 // RISCV Branch Predictor (abstract class)
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
 //
 // Christopher Celio
-// 2015 Oct 12
+// 2018 Oct 12
 
 // provide an abstract class for branch predictors. Provides support by
 // maintaining the global history.
@@ -148,7 +149,8 @@ abstract class BrPredictor(
 
    val r_f1_fetchpc = RegEnable(io.req.bits.addr, io.req.valid)
 
-   // The global history register  that will be hashed with the fetch-pc to compute tags and indices for our branch predictors.
+   // The global history register  that will be hashed with the fetch-pc to
+   // compute tags and indices for our branch predictors.
    val f0_history   = Wire(UInt(history_length.W))
    val new_history  = Wire(UInt(history_length.W))
    val r_f1_history = RegInit(0.asUInt(width=history_length.W))

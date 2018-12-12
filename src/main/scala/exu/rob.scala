@@ -1,5 +1,5 @@
 //******************************************************************************
-// Copyright (c) 2015, The Regents of the University of California (Regents).
+// Copyright (c) 2018, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE for license details.
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
@@ -46,7 +46,8 @@ class RobIo(
    // (Allocate, write instruction to ROB).
    val enq_valids       = Input(Vec(machine_width, Bool()))
    val enq_uops         = Input(Vec(machine_width, new MicroOp()))
-   val enq_partial_stall= Input(Bool()) // we're dispatching only a partial packet, and stalling on the rest of it (don't
+   val enq_partial_stall= Input(Bool()) // we're dispatching only a partial packet,
+                                        // and stalling on the rest of it (don't
                                       // advance the tail ptr)
    val enq_new_packet   = Input(Bool()) // we're dispatching the first (and perhaps only) part of a dispatch packet.
    val curr_rob_tail    = Output(UInt(ROB_ADDR_SZ.W))

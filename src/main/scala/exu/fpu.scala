@@ -1,5 +1,5 @@
 //******************************************************************************
-// Copyright (c) 2015, The Regents of the University of California (Regents).
+// Copyright (c) 2018, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE for license details.
 //------------------------------------------------------------------------------
 
@@ -201,7 +201,7 @@ class FPU(implicit p: Parameters) extends BoomModule()(p) with tile.HasFPUParame
 
 
    val fpiu = Module(new tile.FPToInt)
-	fpiu.io.in.valid := io.req.valid && (fp_ctrl.toint || (fp_ctrl.fastpipe && fp_ctrl.wflags))
+   fpiu.io.in.valid := io.req.valid && (fp_ctrl.toint || (fp_ctrl.fastpipe && fp_ctrl.wflags))
    fpiu.io.in.bits := fuInput(None)
    val fpiu_out = Pipe(RegNext(fpiu.io.in.valid && !fp_ctrl.fastpipe),
                           fpiu.io.out.bits, fpu_latency-1)

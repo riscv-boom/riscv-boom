@@ -1,5 +1,5 @@
 //******************************************************************************
-// Copyright (c) 2015, The Regents of the University of California (Regents).
+// Copyright (c) 2018, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE for license details.
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
@@ -196,8 +196,9 @@ class RenameStage(
       table.io.debug_inst_can_proceed := io.inst_can_proceed
    }
    imaptable.io.debug_freelist_can_allocate := ifreelist.io.can_allocate
-   if (usingFPU)
+   if (usingFPU) {
       fmaptable.io.debug_freelist_can_allocate := ffreelist.io.can_allocate
+   }
 
    for ((uop, w) <- ren1_uops.zipWithIndex)
    {
@@ -324,7 +325,12 @@ class RenameStage(
    for (w <- 0 until pl_width)
    {
       val ifl_can_proceed = ifreelist.io.can_allocate(w) && ren1_uops(w).dst_rtype === RT_FIX
-      val ffl_can_proceed = if (usingFPU) (ffreelist.io.can_allocate(w) && ren1_uops(w).dst_rtype === RT_FLT) else false.B
+      val ffl_can_proceed = if (usingFPU) {
+        (ffreelist.io.can_allocate(w) && ren1_uops(w).dst_rtype === RT_FLT)
+      }
+      else {
+        false.B
+      }
       // Push back against Decode stage if Rename1 can't proceed (and Rename2/Dispatch can't receive).
       io.inst_can_proceed(w) :=
          ren2_will_proceed &&
