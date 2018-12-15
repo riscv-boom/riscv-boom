@@ -224,7 +224,7 @@ class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1Hel
     state := s_drain_rpq_ld
   }
   when (state === s_spec_wait) {
-    val needs_wb = req.old_meta.coh.onCacheControl(M_FLUSH)._1
+    val needs_wb = req.old_meta.coh.onCacheControl(M_FLUSH)._1 && !req.tag_match
     val next_state = Mux(needs_wb, s_wb_req, s_meta_clear)
     when (waiting_load) {
       state := s_drain_rpq_ld  // Drain the rpq if a load has been enqueued while waiting for speculation to resolve.
@@ -820,7 +820,7 @@ class BoomSecureDCacheModule(outer: BoomSecureDCache) extends SecureHellaCacheMo
   val grant_has_data = edge.hasData(tl_out.d.bits)
   mshrs.io.mem_grant.valid := tl_out.d.fire()
   mshrs.io.mem_grant.bits := tl_out.d.bits
-  tl_out.d.ready := writeArb.io.in(1).ready || !grant_has_data
+  tl_out.d.ready := true.B
   /* The last clause here is necessary in order to prevent the responses for
    * the IOMSHRs from being written into the data array. It works because the
    * IOMSHR ids start right the ones for the regular MSHRs. */
@@ -924,4 +924,6 @@ class BoomSecureDCacheModule(outer: BoomSecureDCache) extends SecureHellaCacheMo
 
   // no clock-gating support
   io.cpu.clock_enabled := true
+
+  assert(!(readArb.io.out.fire() && writeArb.io.out.fire() && (readArb.io.out.bits.addr === writeArb.io.out.bits.addr) && (readArb.io.out.bits.way_en === writeArb.io.out.bits.way_en)), "Read/write conflict on data array.");
 }
