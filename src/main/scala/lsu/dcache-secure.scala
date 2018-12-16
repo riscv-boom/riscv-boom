@@ -191,10 +191,7 @@ class SecureMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends L1Hel
   val (_, _, refill_done, refill_address_inc) = edge.addr_inc(io.mem_grant)
   val commit_counter = RegInit(UInt(0, width=3))
   val commit_done = commit_counter === UInt(7) && io.refill.ready
-  val sec_rdy = idx_match &&
-                   ((state.isOneOf(s_refill_req, s_refill_resp) &&
-                      !cmd_requires_second_acquire && !refill_done) || 
-                   state === s_spec_wait)
+  val sec_rdy = idx_match && (state.isOneOf(s_refill_req, s_refill_resp, s_spec_wait) && !cmd_requires_second_acquire)
   assert(!(io.mem_grant.valid && !(state === s_refill_resp || state === s_wb_resp)))
   val rpq = Module(new Queue(new SecureReplayInternal, cfg.nRPQ))
   rpq.io.enq.valid := (io.req_pri_val && io.req_pri_rdy || io.req_sec_val && sec_rdy) && !isPrefetch(io.req_bits.cmd)
