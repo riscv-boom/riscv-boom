@@ -143,7 +143,7 @@ class WithMegaBooms extends Config((site, here, up) => {
          tage = Some(TageParameters())),
       dcache = Some(DCacheParams(rowBits = site(SystemBusKey).beatBytes*8,
                                  nSets=64, nWays=16, nMSHRs=8, nTLBEntries=32)),
-      icache = Some(ICacheParams(fetchBytes = 8*4, rowBits = site(SystemBusKey).beatBytes*8, nSets=128, nWays=4))
+      icache = Some(ICacheParams(fetchBytes = 8*4, rowBits = site(SystemBusKey).beatBytes*8, nSets=64, nWays=8))
       )}
    // Set TL network to 128bits wide
    case SystemBusKey => up(SystemBusKey, site).copy(beatBytes = 16)
