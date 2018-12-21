@@ -1,5 +1,7 @@
 #!/bin/bash
 
+# create the riscv tools from the boom-template clone
+
 set -x #echo on
 
 printenv

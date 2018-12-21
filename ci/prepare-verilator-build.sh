@@ -1,5 +1,7 @@
 #!/bin/bash
 
+# create the verilator build of BoomConfig
+
 set -x #echo on
 
 printenv

@@ -10,5 +10,7 @@ error out and not finish the build
 
 - This does not test changes across multiple sub-modules of boom-template. For ex, if rocket-chip
 also needs to be updated, then this will not reflect those changes unless boom-template has those
-changes already put in.
+changes already put in
+
+- Probably need to build all the different base configs and test them all
 
