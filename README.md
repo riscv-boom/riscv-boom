@@ -1,4 +1,4 @@
-The Berkeley Out-of-Order RISC-V Processor
+The Berkeley Out-of-Order RISC-V Processor [![Build Status](https://travis-ci.com/riscv-boom/riscv-boom.svg?branch=master)](https://travis-ci.com/riscv-boom/riscv-boom)
 ================================================
 
 The Berkeley Out-of-Order Machine (BOOM) is a synthesizable and parameterizable open source RV64G RISC-V core written in the 
