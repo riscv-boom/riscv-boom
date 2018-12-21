@@ -1,14 +1,14 @@
 //******************************************************************************
-// Copyright (c) 2015, The Regents of the University of California (Regents).
+// Copyright (c) 2016 - 2018, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE for license details.
 //------------------------------------------------------------------------------
+// Author: Christopher Celio
+//------------------------------------------------------------------------------
+
 //------------------------------------------------------------------------------
 // Two-bit Counter Table
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
-//
-// Christopher Celio
-// 2016 Sept 27
 //
 // Provide a two-bit counter table for use by branch predictors. Should only be
 // updated during Commit.

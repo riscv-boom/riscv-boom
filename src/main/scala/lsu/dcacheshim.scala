@@ -1,14 +1,14 @@
 //******************************************************************************
-// Copyright (c) 2015, The Regents of the University of California (Regents).
+// Copyright (c) 2012 - 2018, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE for license details.
 //------------------------------------------------------------------------------
+// Author: Christopher Celio
+//------------------------------------------------------------------------------
+
 //------------------------------------------------------------------------------
 // Data Cache Shim/Wrapper to the Hella-Cache
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
-//
-// Christopher Celio
-// 2012 Oct 15
 
 // We need to track inflight loads that may have been misspeculated, and filter
 // them out before they can be returned to the pipeline (we do not want to hold

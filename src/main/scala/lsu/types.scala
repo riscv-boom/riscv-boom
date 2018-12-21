@@ -1,3 +1,10 @@
+//******************************************************************************
+// Copyright (c) 2018 - 2018, The Regents of the University of California (Regents).
+// All Rights Reserved. See LICENSE for license details.
+//------------------------------------------------------------------------------
+// Author: Christopher Celio
+//------------------------------------------------------------------------------
+
 package boom.lsu
 
 import chisel3._
@@ -49,8 +56,9 @@ trait CanHaveBoomPTWModule extends HasBoomHellaCacheModule {
   val outer: CanHaveBoomPTW
   val ptwPorts = ListBuffer(outer.dcache.module.io.ptw)
   val ptw = Module(new PTW(outer.nPTWPorts)(outer.dcache.node.edges.out(0), outer.p))
-  if (outer.usingPTW)
+  if (outer.usingPTW) {
     dcachePorts += ptw.io.mem
+  }
 }
 
 

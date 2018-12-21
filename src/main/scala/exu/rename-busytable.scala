@@ -1,13 +1,14 @@
 //******************************************************************************
-// Copyright (c) 2015, The Regents of the University of California (Regents).
+// Copyright (c) 2015 - 2018, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE for license details.
 //------------------------------------------------------------------------------
+// Author: Christopher Celio
+//------------------------------------------------------------------------------
+
 //------------------------------------------------------------------------------
 // Rename BusyTable
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
-//
-// Christopher Celio
 
 package boom.exu
 
@@ -141,13 +142,16 @@ class BusyTable(
       w <- 0 until pl_width
       xx <- w-1 to 0 by -1
    }{
-      when (io.ren_uops(w).lrs1_rtype === rtype.U && io.ren_will_fire(xx) && io.ren_uops(xx).ldst_val && io.ren_uops(xx).dst_rtype === rtype.U && (io.ren_uops(w).lrs1 === io.ren_uops(xx).ldst))
+      when (io.ren_uops(w).lrs1_rtype === rtype.U && io.ren_will_fire(xx) && io.ren_uops(xx).ldst_val &&
+            io.ren_uops(xx).dst_rtype === rtype.U && (io.ren_uops(w).lrs1 === io.ren_uops(xx).ldst))
          { prs1_was_bypassed(w) := true.B }
-      when (io.ren_uops(w).lrs2_rtype === rtype.U && io.ren_will_fire(xx) && io.ren_uops(xx).ldst_val && io.ren_uops(xx).dst_rtype === rtype.U && (io.ren_uops(w).lrs2 === io.ren_uops(xx).ldst))
+      when (io.ren_uops(w).lrs2_rtype === rtype.U && io.ren_will_fire(xx) && io.ren_uops(xx).ldst_val &&
+            io.ren_uops(xx).dst_rtype === rtype.U && (io.ren_uops(w).lrs2 === io.ren_uops(xx).ldst))
          { prs2_was_bypassed(w) := true.B }
 
       if (rtype == RT_FLT.litValue) {
-         when (io.ren_uops(w).frs3_en && io.ren_will_fire(xx) && io.ren_uops(xx).ldst_val && io.ren_uops(xx).dst_rtype === rtype.U && (io.ren_uops(w).lrs3 === io.ren_uops(xx).ldst))
+         when (io.ren_uops(w).frs3_en && io.ren_will_fire(xx) && io.ren_uops(xx).ldst_val &&
+               io.ren_uops(xx).dst_rtype === rtype.U && (io.ren_uops(w).lrs3 === io.ren_uops(xx).ldst))
             { prs3_was_bypassed(w) := true.B }
       }
    }
@@ -161,8 +165,10 @@ class BusyTable(
       busy_table.io.prs(0,w) := io.map_table(w).prs1
       busy_table.io.prs(1,w) := io.map_table(w).prs2
 
-      io.values(w).prs1_busy := io.ren_uops(w).lrs1_rtype === rtype.U && (busy_table.io.prs_busy(0,w) || prs1_was_bypassed(w))
-      io.values(w).prs2_busy := io.ren_uops(w).lrs2_rtype === rtype.U && (busy_table.io.prs_busy(1,w) || prs2_was_bypassed(w))
+      io.values(w).prs1_busy := io.ren_uops(w).lrs1_rtype === rtype.U &&
+                                (busy_table.io.prs_busy(0,w) || prs1_was_bypassed(w))
+      io.values(w).prs2_busy := io.ren_uops(w).lrs2_rtype === rtype.U &&
+                                (busy_table.io.prs_busy(1,w) || prs2_was_bypassed(w))
 
       if (rtype == RT_FLT.litValue)
       {

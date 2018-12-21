@@ -1,3 +1,10 @@
+//******************************************************************************
+// Copyright (c) 2018 - 2018, The Regents of the University of California (Regents).
+// All Rights Reserved. See LICENSE for license details.
+//------------------------------------------------------------------------------
+// Author: Christopher Celio
+//------------------------------------------------------------------------------
+
 // See LICENSE.SiFive for license details.
 
 package boom.system
@@ -26,7 +33,7 @@ trait HasBoomTiles extends HasTiles
 
   protected val boomTileParams = p(BoomTilesKey)
   private val crossings = perTileOrGlobalSetting(p(RocketCrossingKey), boomTileParams.size)
-  
+
   // Make a tile and wire its nodes into the system,
   // according to the specified type of clock crossing.
   // Note that we also inject new nodes into the tile itself,

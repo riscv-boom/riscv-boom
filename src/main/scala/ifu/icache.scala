@@ -1,3 +1,10 @@
+//******************************************************************************
+// Copyright (c) 2017 - 2018, The Regents of the University of California (Regents).
+// All Rights Reserved. See LICENSE for license details.
+//------------------------------------------------------------------------------
+// Author: Christopher Celio
+//------------------------------------------------------------------------------
+
 // See LICENSE.Berkeley for license details.
 // See LICENSE.SiFive for license details.
 
@@ -42,10 +49,12 @@ class ICache(
     val enableBlackBox: Boolean = false)(implicit p: Parameters)
   extends LazyModule
 {
-  lazy val module: ICacheBaseModule = if (!enableBlackBox)
+  lazy val module: ICacheBaseModule = if (!enableBlackBox) {
     new ICacheModule(this)
-  else
+  }
+  else {
     new ICacheModuleBlackBox(this)
+  }
   val masterNode = TLClientNode(Seq(TLClientPortParameters(Seq(TLClientParameters(
     sourceId = IdRange(0, 1 + icacheParams.prefetch.toInt), // 0=refill, 1=hint
     name = s"Core ${hartId} ICache")))))
@@ -141,8 +150,10 @@ class ICacheModule(outer: ICache) extends ICacheBaseModule(outer)
   val scratchpadBase = outer.icacheParams.itimAddr.map { dummy =>
     GetPropertyByHartId(p(RocketTilesKey), _.icache.flatMap(_.itimAddr.map(_.U)), io.hartid)
   }
-  def addrMaybeInScratchpad(addr: UInt) = scratchpadBase.map(base => addr >= base && addr < base + outer.size.U).getOrElse(false.B)
-  def addrInScratchpad(addr: UInt) = addrMaybeInScratchpad(addr) && lineInScratchpad(addr(untagBits+log2Ceil(nWays)-1, blockOffBits))
+  def addrMaybeInScratchpad(addr: UInt) = scratchpadBase.map(base => addr >= base &&
+                                                             addr < base + outer.size.U).getOrElse(false.B)
+  def addrInScratchpad(addr: UInt) = addrMaybeInScratchpad(addr) &&
+                                     lineInScratchpad(addr(untagBits+log2Ceil(nWays)-1, blockOffBits))
   def scratchpadWay(addr: UInt) = addr.extract(untagBits+log2Ceil(nWays)-1, untagBits)
   def scratchpadWayValid(way: UInt) = way < nWays.U - 1.U
   def scratchpadLine(addr: UInt) = addr(untagBits+log2Ceil(nWays)-1, blockOffBits)
@@ -238,7 +249,8 @@ class ICacheModule(outer: ICache) extends ICacheBaseModule(outer)
     s1_tl_error(i) := tagMatch && tl_error.toBool
     s1_tag_hit(i) := tagMatch || scratchpadHit
   }
-  assert(!(s1_valid || s1_slaveValid) || PopCount(s1_tag_hit zip s1_tag_disparity map { case (h, d) => h && !d }) <= 1.U)
+  assert(!(s1_valid || s1_slaveValid) ||
+         PopCount(s1_tag_hit zip s1_tag_disparity map { case (h, d) => h && !d }) <= 1.U)
 
   assert (!(s1_slaveValid), "[icache] We do not support the icache slave.")
 
@@ -338,7 +350,10 @@ class ICacheModule(outer: ICache) extends ICacheBaseModule(outer)
   val s1_clk_en = s1_valid || s1_slaveValid
   val s2_tag_hit = RegEnable(s1_tag_hit, s1_clk_en)
   val s2_hit_way = OHToUInt(s2_tag_hit)
-  val s2_scratchpad_word_addr = Cat(s2_hit_way, Mux(s2_slaveValid, s1s3_slaveAddr, io.s2_vaddr)(untagBits-1, log2Ceil(wordBits/8)), 0.U(log2Ceil(wordBits/8).W))
+  val s2_scratchpad_word_addr = Cat(s2_hit_way,
+                                    Mux(s2_slaveValid,
+                                        s1s3_slaveAddr,
+                                        io.s2_vaddr)(untagBits-1, log2Ceil(wordBits/8)), 0.U(log2Ceil(wordBits/8).W))
   val s2_dout = RegEnable(s1_dout, s1_clk_en)
   val s2_bankId = RegEnable(s1_bankId, s1_clk_en)
   val s2_way_mux = Mux1H(s2_tag_hit, s2_dout)
@@ -376,13 +391,17 @@ class ICacheModule(outer: ICache) extends ICacheBaseModule(outer)
   val s2_disparity = s2_tag_disparity || s2_deccError
   val s2_full_word_write = WireInit(false.B)
 
-  val s1_scratchpad_hit = Mux(s1_slaveValid, lineInScratchpad(scratchpadLine(s1s3_slaveAddr)), addrInScratchpad(io.s1_paddr))
+  val s1_scratchpad_hit = Mux(s1_slaveValid,
+                              lineInScratchpad(scratchpadLine(s1s3_slaveAddr)),
+                              addrInScratchpad(io.s1_paddr))
   val s2_scratchpad_hit = RegEnable(s1_scratchpad_hit, s1_clk_en)
   val s2_report_uncorrectable_error =
     s2_scratchpad_hit &&
     s2_deccUncorrectable &&
     (s2_valid || (s2_slaveValid && !s2_full_word_write))
-  val s2_error_addr = scratchpadBase.map(base => Mux(s2_scratchpad_hit, base + s2_scratchpad_word_addr, 0.U)).getOrElse(0.U)
+  val s2_error_addr = scratchpadBase.map(base => Mux(s2_scratchpad_hit,
+                                                     base + s2_scratchpad_word_addr,
+                                                     0.U)).getOrElse(0.U)
 
   // output signals
   outer.icacheParams.latency match {
@@ -472,7 +491,9 @@ class ICacheModule(outer: ICache) extends ICacheBaseModule(outer)
         when (s2_slaveValid) {
           when (edge_in.get.hasData(s1_a) || s2_deccError) { s3_slaveValid := true.B }
           def byteEn(i: Int) = !(edge_in.get.hasData(s1_a) && s1_a.mask(i))
-          s1s3_slaveData := (0 until wordBits/8).map(i => Mux(byteEn(i), s2_dataCorrected, s1s3_slaveData)(8*(i+1)-1, 8*i)).asUInt
+          s1s3_slaveData := (0 until wordBits/8).map(i => Mux(byteEn(i),
+                                                              s2_dataCorrected,
+                                                              s1s3_slaveData)(8*(i+1)-1, 8*i)).asUInt
         }
 
         tl.d.valid := respValid
@@ -487,7 +508,7 @@ class ICacheModule(outer: ICache) extends ICacheBaseModule(outer)
         tl.e.ready := true.B
 
         ccover(s0_valid && s1_slaveValid, "CONCURRENT_ITIM_ACCESS_1", "ITIM accessed, then I$ accessed next cycle")
-        ccover(s0_valid && s2_slaveValid, "CONCURRENT_ITIM_ACCESS_2", "ITIM accessed, then I$ accessed two cycles later")
+        ccover(s0_valid && s2_slaveValid, "CONCURRENT_ITIM_ACCESS_2", "ITIM accessed, then I$ accessed 2 cycles later")
         ccover(tl.d.valid && !tl.d.ready, "ITIM_D_STALL", "ITIM response blocked by D-channel")
         ccover(tl_out.d.valid && !tl_out.d.ready, "ITIM_BLOCK_D", "D-channel blocked by ITIM access")
       }
@@ -523,10 +544,14 @@ class ICacheModule(outer: ICache) extends ICacheBaseModule(outer)
                         param = TLHints.PREFETCH_READ)._2
     }
 
-    ccover(send_hint && !tl_out.a.ready, "PREFETCH_A_STALL", "I$ prefetch blocked by A-channel")
-    ccover(refill_valid && (tl_out.d.fire() && !refill_one_beat), "PREFETCH_D_BEFORE_MISS_D", "I$ prefetch resolves before miss")
-    ccover(!refill_valid && (tl_out.d.fire() && !refill_one_beat), "PREFETCH_D_AFTER_MISS_D", "I$ prefetch resolves after miss")
-    ccover(tl_out.a.fire() && hint_outstanding, "PREFETCH_D_AFTER_MISS_A", "I$ prefetch resolves after second miss")
+    ccover(send_hint && !tl_out.a.ready,
+           "PREFETCH_A_STALL", "I$ prefetch blocked by A-channel")
+    ccover(refill_valid && (tl_out.d.fire() && !refill_one_beat),
+           "PREFETCH_D_BEFORE_MISS_D", "I$ prefetch resolves before miss")
+    ccover(!refill_valid && (tl_out.d.fire() && !refill_one_beat),
+           "PREFETCH_D_AFTER_MISS_D", "I$ prefetch resolves after miss")
+    ccover(tl_out.a.fire() && hint_outstanding,
+           "PREFETCH_D_AFTER_MISS_A", "I$ prefetch resolves after second miss")
   }
   tl_out.b.ready := true.B
   tl_out.c.valid := false.B

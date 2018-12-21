@@ -1,7 +1,10 @@
 //******************************************************************************
-// Copyright (c) 2015, The Regents of the University of California (Regents).
+// Copyright (c) 2015 - 2018, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE for license details.
 //------------------------------------------------------------------------------
+// Author: Christopher Celio
+//------------------------------------------------------------------------------
+
 //------------------------------------------------------------------------------
 // Fetch Control Unit
 //------------------------------------------------------------------------------
@@ -93,7 +96,8 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
       val flush_take_pc     = Input(Bool())
       val flush_pc          = Input(UInt((vaddrBits+1).W)) // TODO rename; no longer catch-all flush_pc
 
-      val com_ftq_idx       = Input(UInt(log2Ceil(ftqSz).W)) // ROB tells us the commit pointer so we can read out the PC.
+      val com_ftq_idx       = Input(UInt(log2Ceil(ftqSz).W)) // ROB tells us the commit pointer so we
+                                                             // can read out the PC.
       val com_fetch_pc      = Output(UInt(vaddrBitsExtended.W)) // tell CSRFile the fetch-pc at the FTQ head.
 
       // sfence needs to steal the TLB CAM part.
@@ -114,7 +118,8 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
 
 
    val clear_f3         = WireInit(false.B)
-   val q_f3_imemresp    = withReset(reset.toBool || clear_f3) { Module(new ElasticReg(gen = new freechips.rocketchip.rocket.FrontendResp)) }
+   val q_f3_imemresp    = withReset(reset.toBool || clear_f3) {
+                              Module(new ElasticReg(gen = new freechips.rocketchip.rocket.FrontendResp)) }
    val q_f3_btb_resp    = withReset(reset.toBool || clear_f3) { Module(new ElasticReg(gen = Valid(new BoomBTBResp))) }
 
    val f3_req           = Wire(Valid(new PCReq()))
@@ -362,8 +367,10 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
       f3_bpd_may_redirect &&
       !jal_overrides_bpd &&
       (!bchecker.io.req.valid || (f3_bpd_redirect_cfiidx < bchecker.io.req_cfi_idx))
-//   f3_req.valid := (bchecker.io.req.valid || (f3_bpd_may_redirect && !jal_overrides_bpd)) && f3_valid && !(f0_redirect_val && !io.f3_bpu_request.valid)
-   f3_req.valid := f3_valid && (bchecker.io.req.valid || (f3_bpd_may_redirect && !jal_overrides_bpd)) // && !(f0_redirect_val)
+   //f3_req.valid := (bchecker.io.req.valid || (f3_bpd_may_redirect && !jal_overrides_bpd))
+   //                && f3_valid && !(f0_redirect_val && !io.f3_bpu_request.valid)
+   f3_req.valid := f3_valid && (bchecker.io.req.valid ||
+                   (f3_bpd_may_redirect && !jal_overrides_bpd)) // && !(f0_redirect_val)
    f3_req.bits.addr := Mux(f3_bpd_overrides_bcheck, f3_bpd_redirect_target, bchecker.io.req.bits.addr)
 
 

@@ -1,7 +1,11 @@
 //******************************************************************************
-// Copyright (c) 2015, The Regents of the University of California (Regents).
+// Copyright (c) 2015 - 2018, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE for license details.
 //------------------------------------------------------------------------------
+// Author: Christopher Celio
+//------------------------------------------------------------------------------
+
+
 //------------------------------------------------------------------------------
 // RISC-V Processor Core
 //------------------------------------------------------------------------------
@@ -82,7 +86,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
      fp_pipeline.io.wb_valids := DontCare
      fp_pipeline.io.wb_pdsts := DontCare
    }
-   
+
    val num_fp_wakeup_ports = if (usingFPU) fp_pipeline.io.wakeups.length else 0
 
    val num_irf_write_ports = exe_units.map(_.num_rf_write_ports).sum
@@ -172,9 +176,11 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
          ("exception", () => rob.io.com_xcpt.valid),
          ("nop", () => false.B), // ("load", () => id_ctrl.mem && id_ctrl.mem_cmd === M_XRD && !id_ctrl.fp),
          ("nop", () => false.B), // ("store", () => id_ctrl.mem && id_ctrl.mem_cmd === M_XWR && !id_ctrl.fp),
-         ("nop", () => false.B))), // ("amo", () => Bool(usingAtomics) && id_ctrl.mem && (isAMO(id_ctrl.mem_cmd) || id_ctrl.mem_cmd.isOneOf(M_XLR, M_XSC))),
+         ("nop", () => false.B))), // ("amo", () => Bool(usingAtomics) && id_ctrl.mem &&
+                                   //               (isAMO(id_ctrl.mem_cmd) || id_ctrl.mem_cmd.isOneOf(M_XLR, M_XSC))),
 //         ("system", () => =/= CSR.N))),
-//       ("arith", () => id_ctrl.wxd && !(id_ctrl.jal || id_ctrl.jalr || id_ctrl.mem || id_ctrl.fp || id_ctrl.div || id_ctrl.csr =/= CSR.N)),
+//       ("arith", () => id_ctrl.wxd && !(id_ctrl.jal || id_ctrl.jalr || id_ctrl.mem || id_ctrl.fp ||
+//                       id_ctrl.div || id_ctrl.csr =/= CSR.N)),
 //       ("branch", () => id_ctrl.branch),
 //       ("jal", () => id_ctrl.jal),
 //       ("jalr", () => id_ctrl.jalr))
@@ -188,20 +194,25 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 //         ("fp mul", () => id_ctrl.fp && io.fpu.dec.fma && !io.fpu.dec.swap23 && !io.fpu.dec.ren3),
 //         ("fp mul-add", () => id_ctrl.fp && io.fpu.dec.fma && io.fpu.dec.ren3),
 //         ("fp div/sqrt", () => id_ctrl.fp && (io.fpu.dec.div || io.fpu.dec.sqrt)),
-//         ("fp other", () => id_ctrl.fp && !(io.fpu.dec.ldst || io.fpu.dec.fma || io.fpu.dec.div || io.fpu.dec.sqrt))))),
+//         ("fp other", () => id_ctrl.fp && !(io.fpu.dec.ldst || io.fpu.dec.fma ||
+//                            io.fpu.dec.div || io.fpu.dec.sqrt))))),
       new freechips.rocketchip.rocket.EventSet((mask, hits) => (mask & hits).orR, Seq(
-//       ("load-use interlock", () => id_ex_hazard && ex_ctrl.mem || id_mem_hazard && mem_ctrl.mem || id_wb_hazard && wb_ctrl.mem),
+//       ("load-use interlock", () => id_ex_hazard && ex_ctrl.mem || id_mem_hazard && mem_ctrl.mem ||
+//                                    id_wb_hazard && wb_ctrl.mem),
 //       ("long-latency interlock", () => id_sboard_hazard),
-//       ("csr interlock", () => id_ex_hazard && ex_ctrl.csr =/= CSR.N || id_mem_hazard && mem_ctrl.csr =/= CSR.N || id_wb_hazard && wb_ctrl.csr =/= CSR.N),
+//       ("csr interlock", () => id_ex_hazard && ex_ctrl.csr =/= CSR.N || id_mem_hazard && mem_ctrl.csr =/= CSR.N ||
+//                               id_wb_hazard && wb_ctrl.csr =/= CSR.N),
          ("I$ blocked", () => icache_blocked),
          ("nop", () => false.B),  //("D$ blocked", () => id_ctrl.mem && dcache_blocked),
          ("branch misprediction", () => br_unit.brinfo.mispredict),
          ("control-flow target misprediction", () =>  br_unit.brinfo.mispredict && br_unit.brinfo.is_jr),
          ("flush", () => rob.io.flush.valid),
 //       ++ (if (!usingMulDiv) Seq() else Seq(
-//         ("mul/div interlock", () => id_ex_hazard && ex_ctrl.div || id_mem_hazard && mem_ctrl.div || id_wb_hazard && wb_ctrl.div)))
+//         ("mul/div interlock", () => id_ex_hazard && ex_ctrl.div || id_mem_hazard &&
+//                                     mem_ctrl.div || id_wb_hazard && wb_ctrl.div)))
 //       ++ (if (!usingFPU) Seq() else Seq(
-//         ("fp interlock", () => id_ex_hazard && ex_ctrl.fp || id_mem_hazard && mem_ctrl.fp || id_wb_hazard && wb_ctrl.fp || id_ctrl.fp && id_stall_fpu)))),
+//         ("fp interlock", () => id_ex_hazard && ex_ctrl.fp || id_mem_hazard && mem_ctrl.fp ||
+//                                id_wb_hazard && wb_ctrl.fp || id_ctrl.fp && id_stall_fpu)))),
        ("branch resolved", () => br_unit.brinfo.valid))),
      new freechips.rocketchip.rocket.EventSet((mask, hits) => (mask & hits).orR, Seq(
        ("I$ miss", () => io.ifu.perf.acquire),
@@ -364,7 +375,8 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
    for (w <- 0 until decodeWidth)
    {
-      dec_valids(w)                      := io.ifu.fetchpacket.valid && dec_fbundle.uops(w).valid && !dec_finished_mask(w)
+      dec_valids(w)                      := io.ifu.fetchpacket.valid && dec_fbundle.uops(w).valid &&
+                                            !dec_finished_mask(w)
       decode_units(w).io.enq.uop         := dec_fbundle.uops(w)
       decode_units(w).io.status          := csr.io.status
       decode_units(w).io.csr_decode      <> csr.io.decode(w)
@@ -420,7 +432,8 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    for (w <- 0 until decodeWidth)
    {
       dec_brmask_logic.io.is_branch(w) := !dec_finished_mask(w) && dec_uops(w).allocate_brtag
-      dec_brmask_logic.io.will_fire(w) :=  dec_will_fire(w) && dec_uops(w).allocate_brtag // ren, dis can back pressure us
+      dec_brmask_logic.io.will_fire(w) :=  dec_will_fire(w) &&
+                                           dec_uops(w).allocate_brtag // ren, dis can back pressure us
 
       dec_uops(w).br_tag  := dec_brmask_logic.io.br_tag(w)
       dec_uops(w).br_mask := dec_brmask_logic.io.br_mask(w)
@@ -454,10 +467,12 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    {
       // note: this assumes uops haven't been shifted - there's a 1:1 match between PC's LSBs and "w" here
       // (thus the LSB of the rob_idx gives part of the PC)
-      if (decodeWidth == 1)
+      if (decodeWidth == 1){
          dec_uops(w).rob_idx := rob.io.curr_rob_tail
-      else
+      }
+      else{
          dec_uops(w).rob_idx := Cat(rob.io.curr_rob_tail, w.U(log2Ceil(decodeWidth).W))
+      }
    }
 
    val dec_has_br_or_jalr_in_packet =
@@ -543,11 +558,12 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
          !(sxt_ldMiss && (intport.bits.uop.iw_p1_poisoned || intport.bits.uop.iw_p2_poisoned))
       renport.bits := intport.bits
    }
-   if (usingFPU)
+   if (usingFPU) {
       for ((renport, fpport) <- rename_stage.io.fp_wakeups zip fp_pipeline.io.wakeups)
       {
          renport <> fpport
       }
+   }
 
    rename_stage.io.com_valids := rob.io.commit.valids
    rename_stage.io.com_uops := rob.io.commit.uops
@@ -779,14 +795,17 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
    exe_units.map(_.io.fcsr_rm := csr.io.fcsr_rm)
 
-   if (usingFPU)
+   if (usingFPU) {
       fp_pipeline.io.fcsr_rm := csr.io.fcsr_rm
+   }
 
    csr.io.hartid := io.hartid
    csr.io.interrupts := io.interrupts
 
-// TODO can we add this back in, but handle reset properly and save us the mux above on csr.io.rw.cmd?
-//   assert (!(csr_rw_cmd =/= rocket.CSR.N && !exe_units(0).io.resp(0).valid), "CSRFile is being written to spuriously.")
+// TODO can we add this back in, but handle reset properly and save us
+//      the mux above on csr.io.rw.cmd?
+//   assert (!(csr_rw_cmd =/= rocket.CSR.N && !exe_units(0).io.resp(0).valid),
+//   "CSRFile is being written to spuriously.")
 
 
    //-------------------------------------------------------------
@@ -875,8 +894,9 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    lsu.io.dmem_is_ordered:= dc_shim.io.core.ordered
    lsu.io.release := io.release
 
-   if (usingFPU)
+   if (usingFPU) {
       lsu.io.fp_stdata <> fp_pipeline.io.tosdq
+   }
 
 
    //-------------------------------------------------------------
@@ -902,7 +922,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
          if (exe_units(i).data_width > 64)
          {
-				require (exe_units(i).is_mem_unit)
+            require (exe_units(i).is_mem_unit)
             assert (!(wbIsValid(RT_FIX) && exe_units(i).io.resp(j).bits.data(64).toBool),
                "the 65th bit was set on a fixed point write-back to the regfile.")
          }
@@ -962,8 +982,9 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    ll_wbarb.io.in(0).bits  := mem_resp.bits
 
    assert (ll_wbarb.io.in(0).ready) // never backpressure the memory unit.
-   if (usingFPU)
+   if (usingFPU) {
       ll_wbarb.io.in(1) <> fp_pipeline.io.toint
+   }
    iregfile.io.write_ports(llidx) <> WritePort(ll_wbarb.io.out, IPREG_SZ, xLen)
 
 
@@ -1027,7 +1048,8 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
                "[core] I think we never use FP now.")
             if (eu.uses_csr_wport && (j == 0))
             {
-               rob.io.debug_wb_wdata(cnt) := Mux(wb_uop.ctrl.csr_cmd =/= freechips.rocketchip.rocket.CSR.N, csr.io.rw.rdata, data)
+               rob.io.debug_wb_wdata(cnt) := Mux(wb_uop.ctrl.csr_cmd =/= freechips.rocketchip.rocket.CSR.N,
+                                                 csr.io.rw.rdata, data)
             }
             else
             {
@@ -1038,7 +1060,8 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
          {
             if (eu.uses_csr_wport && (j == 0))
             {
-               rob.io.debug_wb_wdata(cnt) := Mux(wb_uop.ctrl.csr_cmd =/= freechips.rocketchip.rocket.CSR.N, csr.io.rw.rdata, data)
+               rob.io.debug_wb_wdata(cnt) := Mux(wb_uop.ctrl.csr_cmd =/= freechips.rocketchip.rocket.CSR.N,
+                                                 csr.io.rw.rdata, data)
             }
             else
             {
@@ -1097,8 +1120,10 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    //-------------------------------------------------------------
    // flush on exceptions, miniexeptions, and after some special instructions
 
-   if (usingFPU)
+   if (usingFPU) {
       fp_pipeline.io.flush_pipeline := rob.io.flush.valid
+   }
+
    for (w <- 0 until exe_units.length)
    {
       exe_units(w).io.req.bits.kill := rob.io.flush.valid
@@ -1118,8 +1143,9 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    when (rob.io.commit.valids.asUInt.orR || csr.io.csr_stall || reset.toBool) { idle_cycles := 0.U }
    assert (!(idle_cycles.value(13)), "Pipeline has hung.")
 
-   if (usingFPU)
+   if (usingFPU) {
       fp_pipeline.io.debug_tsc_reg := debug_tsc_reg
+   }
 
    //-------------------------------------------------------------
    // Uarch Hardware Performance Events (HPEs)

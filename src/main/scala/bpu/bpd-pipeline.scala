@@ -1,14 +1,14 @@
 //******************************************************************************
-// Copyright (c) 2015, The Regents of the University of California (Regents).
+// Copyright (c) 2017 - 2018, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE for license details.
 //------------------------------------------------------------------------------
+// Author: Christopher Celio
+//------------------------------------------------------------------------------
+
 //------------------------------------------------------------------------------
 // RISCV Processor Branch Prediction Pipeline
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
-//
-// Christopher Celio
-// 2017
 //
 // Access BTB and BPD to feed predictions to the Fetch Unit.
 //
@@ -148,7 +148,8 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
 //   val jmp_idx = f2_btb.bits.cfi_idx
 
    btb.io.ras_update := io.f3_ras_update
-   btb.io.ras_update.valid := false.B // TODO XXX renable RAS (f2_btb.valid || io.f3_ras_update.valid) && !io.fetch_stalled
+   btb.io.ras_update.valid := false.B // TODO XXX renable RAS (f2_btb.valid || io.f3_ras_update.valid) &&
+                                      // !io.fetch_stalled
 //   when (f2_btb.valid)
 //   {
 //      btb.io.ras_update.bits.is_call      := BpredType.isCall(f2_btb.bits.bpd_type)

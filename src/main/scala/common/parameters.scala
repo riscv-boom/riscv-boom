@@ -1,7 +1,10 @@
 //******************************************************************************
-// Copyright (c) 2015, The Regents of the University of California (Regents).
+// Copyright (c) 2015 - 2018, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE for license details.
 //------------------------------------------------------------------------------
+// Author: Christopher Celio
+//------------------------------------------------------------------------------
+
 package boom.common
 
 import chisel3._
@@ -53,7 +56,7 @@ case class BoomCoreParams(
    renameLatency: Int = 2,
    regreadLatency: Int = 1,
    nPerfCounters: Int = 0,
-	/* more stuff */
+   /* more stuff */
 
    bootFreqHz: BigInt = 0,
    fpu: Option[FPUParams] = Some(FPUParams()),
@@ -75,13 +78,13 @@ case class BoomCoreParams(
 {
    val retireWidth: Int = decodeWidth
    val useCompressed: Boolean = false
-	require (useCompressed == false)
+   require (useCompressed == false)
    val haveFSDirty = false
    val pmpGranularity: Int = 4
    val instBits: Int = if (useCompressed) 16 else 32
    val lrscCycles: Int = 80 // worst case is 14 mispredicted branches + slop
 
-	val jumpInFrontend: Boolean = false // unused in boom
+   val jumpInFrontend: Boolean = false // unused in boom
    val nPMPs: Int = 0
 }
 

@@ -1,7 +1,10 @@
 //******************************************************************************
-// Copyright (c) 2018, The Regents of the University of California (Regents).
+// Copyright (c) 2015 - 2018, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE for license details.
 //------------------------------------------------------------------------------
+// Author: Christopher Celio
+//------------------------------------------------------------------------------
+
 //------------------------------------------------------------------------------
 // Dense Branch Target Buffer with RAS and BIM predictor (DenseBTB)
 //------------------------------------------------------------------------------
@@ -96,8 +99,10 @@ class DenseBTB(implicit p: Parameters) extends BoomBTB
       entry
    }
 
-   // TODO: Generalize this logic to handle writing to mixed type entries based on the number of ways; Currently, the
-   // logic below assumes number of ways to be 4 and only supports writing the dense branches biased toward the lower ways
+   // TODO: Generalize this logic to handle writing to mixed type entries
+   //       based on the number of ways; Currently, the
+   // logic below assumes number of ways to be 4 and only supports writing the dense branches
+   // biased toward the lower ways
    require(nWays == 4)
    private def getBankWriteData(next_way: UInt, btb_q_entry: BTBUpdateQueueEntry) = {
       val wdata = WireInit(VecInit(Seq.fill(nWays){(0.U).asTypeOf(new BTBSetData())}))
@@ -117,7 +122,8 @@ class DenseBTB(implicit p: Parameters) extends BoomBTB
 
       when (level === 1.U) {
          wdata(1).tag      := getTag(btb_q_entry.update.pc)
-         wdata(1).offset   := btb_q_entry.update.target(min(vaddrBits-1, tag_sz+2*offset_sz+lsb_sz-1), tag_sz+offset_sz+lsb_sz)
+         wdata(1).offset   := btb_q_entry.update.target(min(vaddrBits-1, tag_sz+2*offset_sz+lsb_sz-1),
+                                                        tag_sz+offset_sz+lsb_sz)
          wdata(1).cfi_idx  := btb_q_entry.update.cfi_pc >> log2Ceil(coreInstBytes)
          wdata(1).bpd_type := btb_q_entry.update.bpd_type
          wdata(1).cfi_type := btb_q_entry.update.cfi_type
@@ -129,11 +135,14 @@ class DenseBTB(implicit p: Parameters) extends BoomBTB
       if (branch_levels > 2) {
          when (level === 2.U) {
             for (i <- 0 until 1) {
-               wdata(i).tag    := btb_q_entry.update.target((i+1)*(tag_sz+offset_sz)+lsb_sz-1, i*tag_sz+(i+1)*offset_sz+lsb_sz)
-               wdata(i).offset := btb_q_entry.update.target(i*tag_sz+(i+1)*offset_sz+lsb_sz-1, i*(tag_sz+offset_sz)+lsb_sz)
+               wdata(i).tag    := btb_q_entry.update.target((i+1)*(tag_sz+offset_sz)+lsb_sz-1,
+                                                            i*tag_sz+(i+1)*offset_sz+lsb_sz)
+               wdata(i).offset := btb_q_entry.update.target(i*tag_sz+(i+1)*offset_sz+lsb_sz-1,
+                                                            i*(tag_sz+offset_sz)+lsb_sz)
             }
             wdata(2).tag      := getTag(btb_q_entry.update.pc)
-            wdata(2).offset   := btb_q_entry.update.target(min(vaddrBits-1, 2*tag_sz + 3*offset_sz+lsb_sz-1), 2*(tag_sz+offset_sz)+lsb_sz)
+            wdata(2).offset   := btb_q_entry.update.target(min(vaddrBits-1, 2*tag_sz + 3*offset_sz+lsb_sz-1),
+                                                           2*(tag_sz+offset_sz)+lsb_sz)
             wdata(2).cfi_idx  := btb_q_entry.update.cfi_pc >> log2Ceil(coreInstBytes)
             wdata(2).bpd_type := btb_q_entry.update.bpd_type
             wdata(2).cfi_type := btb_q_entry.update.cfi_type
@@ -216,7 +225,8 @@ class DenseBTB(implicit p: Parameters) extends BoomBTB
          }
       }
 
-      val wen    = btb_update_q.io.deq.valid && !io.status_debug && (getBank(btb_update_q.io.deq.bits.update.pc) === b.U)
+      val wen    = btb_update_q.io.deq.valid && !io.status_debug &&
+                   (getBank(btb_update_q.io.deq.bits.update.pc) === b.U)
       val bmask  = if (blevel_sz > 1) ((1.U << blevel_sz) - 1.U) else 1.U
       when (!ren && wen)
       {
@@ -227,7 +237,8 @@ class DenseBTB(implicit p: Parameters) extends BoomBTB
 
          when (btb_update_q.io.deq.bits.level === 0.U) {
             valids(widx)  := valids(widx).bitSet(next_way, true.B)
-            blevels(widx) := blevels(widx) & ~(bmask << (blevel_sz.U*next_way)) | (btb_update_q.io.deq.bits.level << (blevel_sz.U*next_way))
+            blevels(widx) := blevels(widx) & ~(bmask << (blevel_sz.U*next_way)) |
+                             (btb_update_q.io.deq.bits.level << (blevel_sz.U*next_way))
          } .elsewhen (btb_update_q.io.deq.bits.level === 1.U) {
             // change only the lower two bits of valid
             valids(widx)  := (valids(widx) & 12.U) | 2.U
@@ -378,8 +389,15 @@ class DenseBTB(implicit p: Parameters) extends BoomBTB
    if (DEBUG_PRINTF)
    {
       printf("BTB predi (%c): hits:%x %d (PC= 0x%x, TARG= 0x%x %d) s2_BIM [%d %d 0x%x]\n",
-         Mux(s1_valid, Str("V"), Str("-")), hits.asUInt, true.B, RegNext(io.req.bits.addr), s1_resp_bits.target, s1_resp_bits.cfi_type,
-         bim.io.resp.valid, bim.io.resp.bits.entry_idx, bim.io.resp.bits.rowdata)
+         Mux(s1_valid, Str("V"), Str("-")),
+         hits.asUInt,
+         true.B,
+         RegNext(io.req.bits.addr),
+         s1_resp_bits.target,
+         s1_resp_bits.cfi_type,
+         bim.io.resp.valid,
+         bim.io.resp.bits.entry_idx,
+         bim.io.resp.bits.rowdata)
    }
 
    override def toString: String =

@@ -1,7 +1,10 @@
 //******************************************************************************
-// Copyright (c) 2015, The Regents of the University of California (Regents).
+// Copyright (c) 2015 - 2018, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE for license details.
 //------------------------------------------------------------------------------
+// Author: Christopher Celio
+//------------------------------------------------------------------------------
+
 //------------------------------------------------------------------------------
 // RISC-V Constructing the Execution Units
 //------------------------------------------------------------------------------
@@ -104,7 +107,7 @@ class ExecutionUnits(fpu: Boolean = false)(implicit val p: Parameters) extends H
       memExeUnit.io.get_ftq_pc := DontCare
       memExeUnit.io.resp foreach { c => c.ready := DontCare }
 
-      exe_units += memExeUnit 
+      exe_units += memExeUnit
 
       val aluExeUnit = Module(new ALUExeUnit(is_branch_unit      = true
                                           , shares_csr_wport = true
@@ -118,7 +121,7 @@ class ExecutionUnits(fpu: Boolean = false)(implicit val p: Parameters) extends H
       aluExeUnit.io.dmem := DontCare
       aluExeUnit.io.get_ftq_pc := DontCare
 
-      exe_units += aluExeUnit 
+      exe_units += aluExeUnit
 
       for (w <- 0 until int_width-1) {
          val is_last = w == (int_width-2)
@@ -143,7 +146,7 @@ class ExecutionUnits(fpu: Boolean = false)(implicit val p: Parameters) extends H
          fpuExeUnit.io.lsu_io := DontCare
          fpuExeUnit.io.dmem := DontCare
          fpuExeUnit.io.get_ftq_pc := DontCare
-         
+
          exe_units += fpuExeUnit
       }
 
@@ -175,7 +178,8 @@ class ExecutionUnits(fpu: Boolean = false)(implicit val p: Parameters) extends H
    require (exe_units.map(_.is_mem_unit).reduce(_|_) || fpu, "Datapath is missing a memory unit.")
    require (exe_units.map(_.has_mul).reduce(_|_) || fpu, "Datapath is missing a multiplier.")
    require (exe_units.map(_.has_div).reduce(_|_) || fpu, "Datapath is missing a divider.")
-   require (exe_units.map(_.has_fpu).reduce(_|_) == usingFPU || !fpu, "Datapath is missing a fpu (or has an fpu and shouldnt).")
+   require (exe_units.map(_.has_fpu).reduce(_|_) == usingFPU || !fpu,
+            "Datapath is missing a fpu (or has an fpu and shouldnt).")
 
    val num_rf_read_ports = exe_units.map(_.num_rf_read_ports).reduce[Int](_+_)
    val num_rf_write_ports = exe_units.map(_.num_rf_write_ports).reduce[Int](_+_)

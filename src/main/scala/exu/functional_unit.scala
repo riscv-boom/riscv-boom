@@ -1,14 +1,14 @@
 //******************************************************************************
-// Copyright (c) 2015, The Regents of the University of California (Regents).
+// Copyright (c) 2013 - 2018, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE for license details.
 //------------------------------------------------------------------------------
+// Author: Christopher Celio
+//------------------------------------------------------------------------------
+
 //------------------------------------------------------------------------------
 // Functional Units
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
-//
-// Christopher Celio
-// 2013 Mar 10
 //
 // If regfile bypassing is disabled, then the functional unit must do its own
 // bypassing in here on the WB stage (i.e., bypassing the io.resp.data)
@@ -398,13 +398,15 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
       when (is_br_or_jalr && pc_sel === PC_BRJMP && !mispredict && io.get_ftq_pc.next_val)
       {
          // ignore misaligned issues -- we'll catch that elsewhere as an exception.
-         when (io.get_ftq_pc.next_pc(vaddrBits, log2Ceil(coreInstBytes)) =/= bj_addr(vaddrBits, log2Ceil(coreInstBytes)))
+         when (io.get_ftq_pc.next_pc(vaddrBits, log2Ceil(coreInstBytes)) =/=
+               bj_addr(vaddrBits, log2Ceil(coreInstBytes)))
          {
             printf ("[FuncUnit] Branch jumped to 0x%x, should have jumped to 0x%x.\n",
                io.get_ftq_pc.next_pc, bj_addr)
          }
-         assert (io.get_ftq_pc.next_pc(vaddrBits, log2Ceil(coreInstBytes)) === bj_addr(vaddrBits, log2Ceil(coreInstBytes)),
-            "[FuncUnit] branch is taken to the wrong target.")
+         assert (io.get_ftq_pc.next_pc(vaddrBits, log2Ceil(coreInstBytes)) ===
+                 bj_addr(vaddrBits, log2Ceil(coreInstBytes)),
+                 "[FuncUnit] branch is taken to the wrong target.")
       }
 
       when (is_br_or_jalr)
@@ -494,14 +496,14 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
       br_unit.btb_update.bits.target           := (target.asSInt & (-coreInstBytes).S).asUInt
       br_unit.btb_update.bits.taken            := is_taken   // was this branch/jal/jalr "taken"
       br_unit.btb_update.bits.cfi_type         :=
-			Mux(uop.is_jal, CfiType.jal,
-			Mux(uop.is_jump && !uop.is_jal, CfiType.jalr,
-				CfiType.branch))
-      br_unit.btb_update.bits.bpd_type			  :=
-			Mux(uop.is_ret, BpredType.ret,
-			Mux(uop.is_call, BpredType.call,
-			Mux(uop.is_jump, BpredType.jump,
-				BpredType.branch)))
+            Mux(uop.is_jal, CfiType.jal,
+            Mux(uop.is_jump && !uop.is_jal, CfiType.jalr,
+                CfiType.branch))
+      br_unit.btb_update.bits.bpd_type              :=
+            Mux(uop.is_ret, BpredType.ret,
+            Mux(uop.is_call, BpredType.call,
+            Mux(uop.is_jump, BpredType.jump,
+                BpredType.branch)))
 
       require (coreInstBytes == 4)
 
@@ -605,8 +607,9 @@ class MemAddrCalcUnit(implicit p: Parameters)
          "FP store-data should now be going through a different unit.")
    }
 
-   assert (!(io.req.bits.uop.fp_val && io.req.valid && io.req.bits.uop.uopc =/= uopLD && io.req.bits.uop.uopc =/= uopSTA),
-      "[maddrcalc] assert we never get store data in here.")
+   assert (!(io.req.bits.uop.fp_val && io.req.valid && io.req.bits.uop.uopc =/=
+           uopLD && io.req.bits.uop.uopc =/= uopSTA),
+           "[maddrcalc] assert we never get store data in here.")
 
 
    // Handle misaligned exceptions
@@ -645,7 +648,7 @@ class FPUUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(
 {
    val fpu = Module(new FPU())
    fpu.io.req.valid         := io.req.valid
-   fpu.io.req.bits.uop      := io.req.bits.uop 
+   fpu.io.req.bits.uop      := io.req.bits.uop
    fpu.io.req.bits.rs1_data := io.req.bits.rs1_data
    fpu.io.req.bits.rs2_data := io.req.bits.rs2_data
    fpu.io.req.bits.rs3_data := io.req.bits.rs3_data

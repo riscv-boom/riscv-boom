@@ -1,3 +1,10 @@
+//******************************************************************************
+// Copyright (c) 2017 - 2018, The Regents of the University of California (Regents).
+// All Rights Reserved. See LICENSE for license details.
+//------------------------------------------------------------------------------
+// Author: Christopher Celio
+//------------------------------------------------------------------------------
+
 // See LICENSE.SiFive for license details.
 
 package boom.system

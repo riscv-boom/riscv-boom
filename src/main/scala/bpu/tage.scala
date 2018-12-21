@@ -1,15 +1,15 @@
 //******************************************************************************
-// Copyright (c) 2015, The Regents of the University of California (Regents).
+// Copyright (c) 2016 - 2018, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE for license details.
 //------------------------------------------------------------------------------
+// Author: Christopher Celio
+//------------------------------------------------------------------------------
+
 //------------------------------------------------------------------------------
 // TAGE-based Branch Predictor
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
 //
-// Christopher Celio
-// 2016 Feb 26
-
 // Terminology:
 //    - provider
 //       The table that provides the prediction (typically the "best" prediction).

@@ -1,7 +1,10 @@
 //******************************************************************************
-// Copyright (c) 2015, The Regents of the University of California (Regents).
+// Copyright (c) 2015 - 2018, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE for license details.
 //------------------------------------------------------------------------------
+// Author: Christopher Celio
+//------------------------------------------------------------------------------
+
 //------------------------------------------------------------------------------
 // RISCV Processor Datapath Register File (Custom Blackboxes and Models)
 //------------------------------------------------------------------------------
@@ -28,10 +31,12 @@ class RegisterFileSeqCustomArray(
    // --------------------------------------------------------------
 
    val regfile =
-      if (enableCustomRfModel)
+      if (enableCustomRfModel) {
          Module(new RegisterFileArrayModel(num_registers, num_read_ports, num_write_ports, register_width))
-      else
+      }
+      else {
          Module(new RegisterFileArray(num_registers, num_read_ports, num_write_ports, register_width))
+      }
    regfile.io.clock := clock
 
   // Decode addr
@@ -58,7 +63,9 @@ class RegisterFileSeqCustomArray(
          regfile.io.WE(0) := false.B
          regfile.io.WS(0) := 0.U
       } else {
-         regfile.io.OE(i) := Cat(raddr_OH(5)(i), raddr_OH(4)(i), raddr_OH(3)(i), raddr_OH(2)(i), raddr_OH(1)(i), raddr_OH(0)(i))
+         regfile.io.OE(i) := Cat(raddr_OH(5)(i), raddr_OH(4)(i),
+                                 raddr_OH(3)(i), raddr_OH(2)(i),
+                                 raddr_OH(1)(i), raddr_OH(0)(i))
          write_select_OH(i) := Cat(
             waddr_OH(2)(i) && io.write_ports(2).valid,
             waddr_OH(1)(i) && io.write_ports(1).valid,

@@ -1,14 +1,14 @@
 //******************************************************************************
-// Copyright (c) 2015, The Regents of the University of California (Regents).
+// Copyright (c) 2013 - 2018, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE for license details.
 //------------------------------------------------------------------------------
+// Author: Christopher Celio
+//------------------------------------------------------------------------------
+
 //------------------------------------------------------------------------------
 // Execution Units
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
-//
-// Christopher Celio
-// 2013 Apr 27
 //
 // The issue window schedules micro-ops onto a specific execution pipeline
 // A given execution pipeline may contain multiple functional units; one or more
@@ -327,7 +327,8 @@ class ALUExeUnit(
    assert (io.resp(0).ready) // don'yet support back-pressuring this unit.
 
    io.resp(0).valid    := fu_units.map(_.io.resp.valid).reduce(_|_)
-   io.resp(0).bits.uop := PriorityMux(fu_units.map(f => (f.io.resp.valid, f.io.resp.bits.uop.asUInt))).asTypeOf(new MicroOp())
+   io.resp(0).bits.uop := PriorityMux(fu_units.map(f => (f.io.resp.valid,
+                                                   f.io.resp.bits.uop.asUInt))).asTypeOf(new MicroOp())
    io.resp(0).bits.data:= PriorityMux(fu_units.map(f => (f.io.resp.valid, f.io.resp.bits.data.asUInt))).asUInt
    // pulled out for critical path reasons
    if (has_alu) {
@@ -449,7 +450,8 @@ class FPUExeUnit(
 
    io.resp(0).valid    := fu_units.map(_.io.resp.valid).reduce(_|_) &&
                           !(fpu.io.resp.valid && fpu.io.resp.bits.uop.fu_code_is(FU_F2I))
-   io.resp(0).bits.uop := PriorityMux(fu_units.map(f => (f.io.resp.valid, f.io.resp.bits.uop.asUInt))).asTypeOf(new MicroOp())
+   io.resp(0).bits.uop := PriorityMux(fu_units.map(f => (f.io.resp.valid,
+                                                         f.io.resp.bits.uop.asUInt))).asTypeOf(new MicroOp())
    io.resp(0).bits.data:= PriorityMux(fu_units.map(f => (f.io.resp.valid, f.io.resp.bits.data.asUInt))).asUInt
    io.resp(0).bits.fflags := Mux(fpu_resp_val, fpu_resp_fflags, fdiv_resp_fflags)
 
@@ -458,7 +460,8 @@ class FPUExeUnit(
    // TODO instantiate our own fpiu; and remove it from fpu.scala.
 
    // buffer up results since we share write-port on integer regfile.
-   val queue = Module(new BranchKillableQueue(new ExeUnitResp(data_width), entries = dfmaLatency + 3)) // TODO being overly conservative
+   val queue = Module(new BranchKillableQueue(new ExeUnitResp(data_width),
+                                              entries = dfmaLatency + 3)) // TODO being overly conservative
    queue.io.enq.valid       := fpu.io.resp.valid && fpu.io.resp.bits.uop.fu_code_is(FU_F2I)
    queue.io.enq.bits.uop    := fpu.io.resp.bits.uop
    queue.io.enq.bits.data   := fpu.io.resp.bits.data
@@ -529,7 +532,8 @@ class IntToFPExeUnit(implicit p: Parameters) extends ExecutionUnit(
    io.bypass <> ifpu.io.bypass
 
    // buffer up results since we share write-port on integer regfile.
-   val queue = Module(new BranchKillableQueue(new ExeUnitResp(data_width), entries = intToFpLatency + 3)) // TODO being overly conservative
+   val queue = Module(new BranchKillableQueue(new ExeUnitResp(data_width),
+                                              entries = intToFpLatency + 3)) // TODO being overly conservative
    queue.io.enq.valid       := ifpu.io.resp.valid
    queue.io.enq.bits.uop    := ifpu.io.resp.bits.uop
    queue.io.enq.bits.data   := ifpu.io.resp.bits.data
@@ -570,7 +574,8 @@ class MemExeUnit(implicit p: Parameters) extends ExecutionUnit(num_rf_read_ports
    maddrcalc.io.get_ftq_pc := DontCare
    maddrcalc.io.fcsr_rm := DontCare
    maddrcalc.io.resp.ready := DontCare
-   io.bypass <> maddrcalc.io.bypass  // TODO this is not where the bypassing should occur from, is there any bypassing happening?!
+   io.bypass <> maddrcalc.io.bypass  // TODO this is not where the bypassing should
+                                     // occur from, is there any bypassing happening?!
 
    // enqueue addresses,st-data at the end of Execute
    io.lsu_io.exe_resp.valid := maddrcalc.io.resp.valid
@@ -592,8 +597,9 @@ class MemExeUnit(implicit p: Parameters) extends ExecutionUnit(num_rf_read_ports
    //anything....
    val memresp_val    = Mux(io.com_exception && io.dmem.resp.bits.uop.is_load, false.B,
                                                 io.lsu_io.forward_val || io.dmem.resp.valid)
-   val memresp_rf_wen = (io.dmem.resp.valid && (io.dmem.resp.bits.uop.mem_cmd === M_XRD || io.dmem.resp.bits.uop.is_amo)) ||  // TODO should I refactor this to use is_load?
-                           io.lsu_io.forward_val
+   val memresp_rf_wen = (io.dmem.resp.valid &&
+                        (io.dmem.resp.bits.uop.mem_cmd === M_XRD || io.dmem.resp.bits.uop.is_amo)) ||
+                        io.lsu_io.forward_val // TODO should I refactor this to use is_load?
    val memresp_uop    = Mux(io.lsu_io.forward_val, io.lsu_io.forward_uop,
                                                 io.dmem.resp.bits.uop)
 

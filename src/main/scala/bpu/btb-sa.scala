@@ -1,7 +1,10 @@
 //******************************************************************************
-// Copyright (c) 2017, The Regents of the University of California (Regents).
+// Copyright (c) 2017 - 2018, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE for license details.
 //------------------------------------------------------------------------------
+// Author: Christopher Celio
+//------------------------------------------------------------------------------
+
 //------------------------------------------------------------------------------
 // Set-associative Branch Target Buffer with RAS and BIM predictor (BTB-sa)
 //------------------------------------------------------------------------------

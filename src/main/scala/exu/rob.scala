@@ -1,16 +1,14 @@
 //******************************************************************************
-// Copyright (c) 2015, The Regents of the University of California (Regents).
+// Copyright (c) 2013 - 2018, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE for license details.
 //------------------------------------------------------------------------------
+// Author: Christopher Celio
+//------------------------------------------------------------------------------
+
 //------------------------------------------------------------------------------
 // Re-order Buffer
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
-//
-// Christopher Celio
-// 2013 Oct 18
-//
-
 // Bank the ROB, such that each "dispatch" group gets its own row of the ROB,
 // and each instruction in the dispatch group goes to a different bank.
 // We can compress out the PC by only saving the high-order bits!
@@ -46,7 +44,8 @@ class RobIo(
    // (Allocate, write instruction to ROB).
    val enq_valids       = Input(Vec(machine_width, Bool()))
    val enq_uops         = Input(Vec(machine_width, new MicroOp()))
-   val enq_partial_stall= Input(Bool()) // we're dispatching only a partial packet, and stalling on the rest of it (don't
+   val enq_partial_stall= Input(Bool()) // we're dispatching only a partial packet,
+                                        // and stalling on the rest of it (don't
                                       // advance the tail ptr)
    val enq_new_packet   = Input(Bool()) // we're dispatching the first (and perhaps only) part of a dispatch packet.
    val curr_rob_tail    = Output(UInt(ROB_ADDR_SZ.W))
@@ -859,7 +858,7 @@ class Rob(
 //            rob[ 1]           (  )(B ) 0xc71cb68e [flw     fa3, -961(s11)   ][ -                       ] E31,   (d:- p22, bm:e T sdt:57) (d:- p 0, bm:0 - sdt: 0)
 //            rob[ 2] HEAD ---> (vv)( b) 0x00002008 [lui     ra, 0x2          ][addi    ra, ra, 704      ]    ,   (d:x p 2, bm:1 - sdt: 0) (d:x p 3, bm:1 - sdt: 2)
 //            rob[ 3]           (vv)(bb) 0x00002010 [lw      s1, 0(ra)        ][lui     t3, 0xff0        ]    ,   (d:x p 4, bm:0 - sdt: 0) (d:x p 5, bm:0 - sdt: 0)
-//            rob[ 4]      TL-> (v )(b ) 0x00002018 [addiw   t3, t3, 255      ][li      t2, 2            ]    ,   (d:x p 6, bm:0 - sdt: 5) (d:x p 7, bm:0 - sdt: 0)
+//            rob[ 4]      TL-> (v )(b ) 0x00002015 - 2018 [addiw   t3, t3, 255      ][li      t2, 2            ]    ,   (d:x p 6, bm:0 - sdt: 5) (d:x p 7, bm:0 - sdt: 0)
 
          val row = if (COMMIT_WIDTH == 1) r_idx else (r_idx >> log2Ceil(COMMIT_WIDTH))
          val r_head = rob_head
