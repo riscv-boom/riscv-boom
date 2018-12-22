@@ -67,6 +67,7 @@ class BTBsa(implicit p: Parameters) extends BoomBTB
    // prediction
    val s1_valid = Wire(Bool())
    val s1_resp_bits = Wire(new BoomBTBResp)
+   s1_resp_bits := DontCare
    val hits_oh = Wire(Vec(nWays, Bool()))
    val data_out = Wire(Vec(nWays, new BTBSetData()))
    val s1_req_tag = RegEnable(getTag(io.req.bits.addr), !stall)
@@ -159,7 +160,6 @@ class BTBsa(implicit p: Parameters) extends BoomBTB
    s1_resp_bits.cfi_type := s1_cfi_type
 //   s1_resp_bits.mask := Cat((1.U << ~Mux(s1_resp_bits.taken, ~s1_resp_bits.cfi_idx, 0.U))-1.U, 1.U)
 
-   val s0_pc = Wire(UInt(vaddrBits.W))
    val s1_pc = RegEnable(io.req.bits.addr, !stall)
    s1_resp_bits.fetch_pc := s1_pc
 
