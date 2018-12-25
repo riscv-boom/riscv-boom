@@ -1,0 +1,810 @@
+# CircleCI Configuration File
+
+# version of circleci
+version: 2
+
+# set of jobs to run
+jobs:
+    prepare-riscv-tools:
+        docker:
+            - image: circleci/openjdk:8-jdk
+        environment:
+            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
+            TERM: dumb
+            
+        steps:
+            # Checkout the code 
+            - checkout
+
+            - run:
+                name: Source environment variables
+                command: |
+                    echo 'export RISCV=$HOME/riscv-tools-install' >> $BASH_ENV
+                    echo 'export PATH=$RISCV/bin:$PATH' >> $BASH_ENV
+                    source /home/circleci/.bashrc
+
+            - run: 
+                name: Install dependencies
+                command: |
+                    sudo apt-get update
+                    gcc --version
+                    g++ --version
+                    sudo apt-get install autoconf automake autotools-dev curl
+                    sudo apt-get install libmpc-dev libmpfr-dev libgmp-dev libusb-1.0-0-dev
+                    sudo apt-get install gawk build-essential bison flex 
+                    sudo apt-get install texinfo gperf libtool patchutils
+                    sudo apt-get install bc zlib1g-dev device-tree-compiler pkg-config libexpat-dev 
+                    sudo apt-get install expat python-pexpect python libipt1 babeltrace
+
+            - run: 
+                name: Building RISC-V Tools
+                command: |
+                    ci/prepare-riscv-tools.sh
+                no_output_timeout: 120m
+
+            - save_cache:
+                key: riscv-tools-installed-{{ .Branch }}-{{ .Revision }}
+                paths:
+                    - "/home/circleci/riscv-tools-install"
+
+    prepare-boomconfig:
+        docker:
+            - image: circleci/openjdk:8-jdk
+        environment:
+            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
+            TERM: dumb
+
+        steps:
+            # Checkout the code 
+            - checkout
+
+            - restore_cache:
+                keys:
+                    - riscv-tools-installed-{{ .Branch }}-{{ .Revision }}
+
+            - run:
+                name: Source environment variables
+                command: |
+                    echo 'export RISCV=$HOME/riscv-tools-install' >> $BASH_ENV
+                    echo 'export PATH=$RISCV/bin:$PATH' >> $BASH_ENV
+                    source /home/circleci/.bashrc
+
+            - run: 
+                name: Install dependencies
+                command: |
+                    sudo apt-get update
+                    gcc --version
+                    g++ --version
+                    sudo apt-get install autoconf automake autotools-dev curl
+                    sudo apt-get install libmpc-dev libmpfr-dev libgmp-dev libusb-1.0-0-dev
+                    sudo apt-get install gawk build-essential bison flex 
+                    sudo apt-get install texinfo gperf libtool patchutils
+                    sudo apt-get install bc zlib1g-dev device-tree-compiler pkg-config libexpat-dev 
+                    sudo apt-get install expat python-pexpect python libipt1 babeltrace
+
+            - run: 
+                name: Building BoomConfig using Verilator
+                command: ci/prepare-verilator-build.sh BoomConfig
+                no_output_timeout: 120m
+
+            - save_cache:
+                key: boom-template-boomconfig-{{ .Branch }}-{{ .Revision }}
+                paths:
+                    - "/home/circleci/boom-template"
+                      
+    prepare-smallboomconfig:
+        docker:
+            - image: circleci/openjdk:8-jdk
+        environment:
+            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
+            TERM: dumb
+
+        steps:
+            # Checkout the code 
+            - checkout
+
+            - restore_cache:
+                keys:
+                    - riscv-tools-installed-{{ .Branch }}-{{ .Revision }}
+
+            - run:
+                name: Source environment variables
+                command: |
+                    echo 'export RISCV=$HOME/riscv-tools-install' >> $BASH_ENV
+                    echo 'export PATH=$RISCV/bin:$PATH' >> $BASH_ENV
+                    source /home/circleci/.bashrc
+
+            - run: 
+                name: Install dependencies
+                command: |
+                    sudo apt-get update
+                    gcc --version
+                    g++ --version
+                    sudo apt-get install autoconf automake autotools-dev curl
+                    sudo apt-get install libmpc-dev libmpfr-dev libgmp-dev libusb-1.0-0-dev
+                    sudo apt-get install gawk build-essential bison flex 
+                    sudo apt-get install texinfo gperf libtool patchutils
+                    sudo apt-get install bc zlib1g-dev device-tree-compiler pkg-config libexpat-dev 
+                    sudo apt-get install expat python-pexpect python libipt1 babeltrace
+
+            - run: 
+                name: Building SmallBoomConfig using Verilator
+                command: ci/prepare-verilator-build.sh SmallBoomConfig
+                no_output_timeout: 120m
+
+            - save_cache:
+                key: boom-template-smallboomconfig-{{ .Branch }}-{{ .Revision }}
+                paths:
+                    - "/home/circleci/boom-template"
+                      
+    prepare-mediumboomconfig:
+        docker:
+            - image: circleci/openjdk:8-jdk
+        environment:
+            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
+            TERM: dumb
+
+        steps:
+            # Checkout the code 
+            - checkout
+
+            - restore_cache:
+                keys:
+                    - riscv-tools-installed-{{ .Branch }}-{{ .Revision }}
+
+            - run:
+                name: Source environment variables
+                command: |
+                    echo 'export RISCV=$HOME/riscv-tools-install' >> $BASH_ENV
+                    echo 'export PATH=$RISCV/bin:$PATH' >> $BASH_ENV
+                    source /home/circleci/.bashrc
+
+            - run: 
+                name: Install dependencies
+                command: |
+                    sudo apt-get update
+                    gcc --version
+                    g++ --version
+                    sudo apt-get install autoconf automake autotools-dev curl
+                    sudo apt-get install libmpc-dev libmpfr-dev libgmp-dev libusb-1.0-0-dev
+                    sudo apt-get install gawk build-essential bison flex 
+                    sudo apt-get install texinfo gperf libtool patchutils
+                    sudo apt-get install bc zlib1g-dev device-tree-compiler pkg-config libexpat-dev 
+                    sudo apt-get install expat python-pexpect python libipt1 babeltrace
+
+            - run: 
+                name: Building MediumBoomConfig using Verilator
+                command: ci/prepare-verilator-build.sh MediumBoomConfig
+                no_output_timeout: 120m
+
+            - save_cache:
+                key: boom-template-mediumboomconfig-{{ .Branch }}-{{ .Revision }}
+                paths:
+                    - "/home/circleci/boom-template"
+
+#    prepare-megaboomconfig:
+#        docker:
+#            - image: circleci/openjdk:8-jdk
+#        environment:
+#            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
+#            TERM: dumb
+#
+#        steps:
+#            # Checkout the code 
+#            - checkout
+#
+#            - restore_cache:
+#                keys:
+#                    - riscv-tools-installed-{{ .Branch }}-{{ .Revision }}
+#
+#            - run:
+#                name: Source environment variables
+#                command: |
+#                    echo 'export RISCV=$HOME/riscv-tools-install' >> $BASH_ENV
+#                    echo 'export PATH=$RISCV/bin:$PATH' >> $BASH_ENV
+#                    source /home/circleci/.bashrc
+#
+#            - run: 
+#                name: Install dependencies
+#                command: |
+#                    sudo apt-get update
+#                    gcc --version
+#                    g++ --version
+#                    sudo apt-get install autoconf automake autotools-dev curl
+#                    sudo apt-get install libmpc-dev libmpfr-dev libgmp-dev libusb-1.0-0-dev
+#                    sudo apt-get install gawk build-essential bison flex 
+#                    sudo apt-get install texinfo gperf libtool patchutils
+#                    sudo apt-get install bc zlib1g-dev device-tree-compiler pkg-config libexpat-dev 
+#                    sudo apt-get install expat python-pexpect python libipt1 babeltrace
+#
+#            - run: 
+#                name: Building MegaBoomConfig using Verilator
+#                command: ci/prepare-verilator-build.sh MegaBoomConfig
+#                no_output_timeout: 120m
+#
+#            - save_cache:
+#                key: boom-template-megaboomconfig-{{ .Branch }}-{{ .Revision }}
+#                paths:
+#                    - "/home/circleci/boom-template"
+
+    run-scala-checkstyle:
+        docker:
+            - image: circleci/openjdk:8-jdk
+        environment:
+            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
+            TERM: dumb
+
+        steps:
+            # Checkout the code 
+            - checkout
+
+            - restore_cache:
+                keys:
+                    - riscv-tools-installed-{{ .Branch }}-{{ .Revision }}
+
+            - run:
+                name: Source environment variables
+                command: |
+                    echo 'export RISCV=$HOME/riscv-tools-install' >> $BASH_ENV
+                    echo 'export PATH=$RISCV/bin:$PATH' >> $BASH_ENV
+                    source /home/circleci/.bashrc
+
+            - run: 
+                name: Install dependencies
+                command: |
+                    sudo apt-get update
+                    gcc --version g++ --version
+                    sudo apt-get install autoconf automake autotools-dev curl
+                    sudo apt-get install libmpc-dev libmpfr-dev libgmp-dev libusb-1.0-0-dev
+                    sudo apt-get install gawk build-essential bison flex 
+                    sudo apt-get install texinfo gperf libtool patchutils
+                    sudo apt-get install bc zlib1g-dev device-tree-compiler pkg-config libexpat-dev 
+                    sudo apt-get install expat python-pexpect python libipt1 babeltrace
+
+            - run:
+                name: Run Scala checkstyle
+                command: make checkstyle
+
+    boomconfig-run-benchmark-tests:
+        docker:
+            - image: circleci/openjdk:8-jdk
+        environment:
+            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
+            TERM: dumb
+
+        steps:
+            - restore_cache:
+                keys:
+                    - riscv-tools-installed-{{ .Branch }}-{{ .Revision }}
+
+            - restore_cache:
+                keys:
+                    - boom-template-boomconfig-{{ .Branch }}-{{ .Revision }}
+
+            - run:
+                name: Source environment variables
+                command: |
+                    echo 'export RISCV=$HOME/riscv-tools-install' >> $BASH_ENV
+                    echo 'export PATH=$RISCV/bin:$PATH' >> $BASH_ENV
+                    source /home/circleci/.bashrc
+
+            - run: 
+                name: Install dependencies
+                command: |
+                    sudo apt-get update
+                    gcc --version g++ --version
+                    sudo apt-get install autoconf automake autotools-dev curl
+                    sudo apt-get install libmpc-dev libmpfr-dev libgmp-dev libusb-1.0-0-dev
+                    sudo apt-get install gawk build-essential bison flex 
+                    sudo apt-get install texinfo gperf libtool patchutils
+                    sudo apt-get install bc zlib1g-dev device-tree-compiler pkg-config libexpat-dev 
+                    sudo apt-get install expat python-pexpect python libipt1 babeltrace
+
+            - run:
+                name: Run BoomConfig benchmark tests
+                command: make run-bmark-tests -C ../boom-template/verisim CONFIG=BoomConfig
+
+    boomconfig-run-regression-tests:
+        docker:
+            - image: circleci/openjdk:8-jdk
+        environment:
+            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
+            TERM: dumb
+
+        steps:
+            - restore_cache:
+                keys:
+                    - riscv-tools-installed-{{ .Branch }}-{{ .Revision }}
+
+            - restore_cache:
+                keys:
+                    - boom-template-boomconfig-{{ .Branch }}-{{ .Revision }}
+
+            - run:
+                name: Source environment variables
+                command: |
+                    echo 'export RISCV=$HOME/riscv-tools-install' >> $BASH_ENV
+                    echo 'export PATH=$RISCV/bin:$PATH' >> $BASH_ENV
+                    source /home/circleci/.bashrc
+
+            - run: 
+                name: Install dependencies
+                command: |
+                    sudo apt-get update
+                    gcc --version g++ --version
+                    sudo apt-get install autoconf automake autotools-dev curl
+                    sudo apt-get install libmpc-dev libmpfr-dev libgmp-dev libusb-1.0-0-dev
+                    sudo apt-get install gawk build-essential bison flex 
+                    sudo apt-get install texinfo gperf libtool patchutils
+                    sudo apt-get install bc zlib1g-dev device-tree-compiler pkg-config libexpat-dev 
+                    sudo apt-get install expat python-pexpect python libipt1 babeltrace
+
+            - run:
+                name: Run BoomConfig regression tests
+                command: make run-regression-tests -C ../boom-template/verisim CONFIG=BoomConfig
+
+    boomconfig-run-assembly-tests:
+        docker:
+            - image: circleci/openjdk:8-jdk
+        environment:
+            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
+            TERM: dumb
+
+        steps:
+            - restore_cache:
+                keys:
+                    - riscv-tools-installed-{{ .Branch }}-{{ .Revision }}
+
+            - restore_cache:
+                keys:
+                    - boom-template-boomconfig-{{ .Branch }}-{{ .Revision }}
+
+            - run:
+                name: Source environment variables
+                command: |
+                    echo 'export RISCV=$HOME/riscv-tools-install' >> $BASH_ENV
+                    echo 'export PATH=$RISCV/bin:$PATH' >> $BASH_ENV
+                    source /home/circleci/.bashrc
+
+            - run: 
+                name: Install dependencies
+                command: |
+                    sudo apt-get update
+                    gcc --version g++ --version
+                    sudo apt-get install autoconf automake autotools-dev curl
+                    sudo apt-get install libmpc-dev libmpfr-dev libgmp-dev libusb-1.0-0-dev
+                    sudo apt-get install gawk build-essential bison flex 
+                    sudo apt-get install texinfo gperf libtool patchutils
+                    sudo apt-get install bc zlib1g-dev device-tree-compiler pkg-config libexpat-dev 
+                    sudo apt-get install expat python-pexpect python libipt1 babeltrace
+
+            - run:
+                name: Run BoomConfig assembly tests
+                command: make run-asm-tests -C ../boom-template/verisim CONFIG=BoomConfig
+                no_output_timeout: 300m
+
+    smallboomconfig-run-benchmark-tests:
+        docker:
+            - image: circleci/openjdk:8-jdk
+        environment:
+            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
+            TERM: dumb
+
+        steps:
+            - restore_cache:
+                keys:
+                    - riscv-tools-installed-{{ .Branch }}-{{ .Revision }}
+
+            - restore_cache:
+                keys:
+                    - boom-template-smallboomconfig-{{ .Branch }}-{{ .Revision }}
+
+            - run:
+                name: Source environment variables
+                command: |
+                    echo 'export RISCV=$HOME/riscv-tools-install' >> $BASH_ENV
+                    echo 'export PATH=$RISCV/bin:$PATH' >> $BASH_ENV
+                    source /home/circleci/.bashrc
+
+            - run: 
+                name: Install dependencies
+                command: |
+                    sudo apt-get update
+                    gcc --version g++ --version
+                    sudo apt-get install autoconf automake autotools-dev curl
+                    sudo apt-get install libmpc-dev libmpfr-dev libgmp-dev libusb-1.0-0-dev
+                    sudo apt-get install gawk build-essential bison flex 
+                    sudo apt-get install texinfo gperf libtool patchutils
+                    sudo apt-get install bc zlib1g-dev device-tree-compiler pkg-config libexpat-dev 
+                    sudo apt-get install expat python-pexpect python libipt1 babeltrace
+
+            - run:
+                name: Run SmallBoomConfig benchmark tests
+                command: make run-bmark-tests -C ../boom-template/verisim CONFIG=SmallBoomConfig
+
+    smallboomconfig-run-regression-tests:
+        docker:
+            - image: circleci/openjdk:8-jdk
+        environment:
+            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
+            TERM: dumb
+
+        steps:
+            - restore_cache:
+                keys:
+                    - riscv-tools-installed-{{ .Branch }}-{{ .Revision }}
+
+            - restore_cache:
+                keys:
+                    - boom-template-smallboomconfig-{{ .Branch }}-{{ .Revision }}
+
+            - run:
+                name: Source environment variables
+                command: |
+                    echo 'export RISCV=$HOME/riscv-tools-install' >> $BASH_ENV
+                    echo 'export PATH=$RISCV/bin:$PATH' >> $BASH_ENV
+                    source /home/circleci/.bashrc
+
+            - run: 
+                name: Install dependencies
+                command: |
+                    sudo apt-get update
+                    gcc --version g++ --version
+                    sudo apt-get install autoconf automake autotools-dev curl
+                    sudo apt-get install libmpc-dev libmpfr-dev libgmp-dev libusb-1.0-0-dev
+                    sudo apt-get install gawk build-essential bison flex 
+                    sudo apt-get install texinfo gperf libtool patchutils
+                    sudo apt-get install bc zlib1g-dev device-tree-compiler pkg-config libexpat-dev 
+                    sudo apt-get install expat python-pexpect python libipt1 babeltrace
+
+            - run:
+                name: Run SmallBoomConfig regression tests
+                command: make run-regression-tests -C ../boom-template/verisim CONFIG=SmallBoomConfig
+
+    smallboomconfig-run-assembly-tests:
+        docker:
+            - image: circleci/openjdk:8-jdk
+        environment:
+            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
+            TERM: dumb
+
+        steps:
+            - restore_cache:
+                keys:
+                    - riscv-tools-installed-{{ .Branch }}-{{ .Revision }}
+
+            - restore_cache:
+                keys:
+                    - boom-template-smallboomconfig-{{ .Branch }}-{{ .Revision }}
+
+            - run:
+                name: Source environment variables
+                command: |
+                    echo 'export RISCV=$HOME/riscv-tools-install' >> $BASH_ENV
+                    echo 'export PATH=$RISCV/bin:$PATH' >> $BASH_ENV
+                    source /home/circleci/.bashrc
+
+            - run: 
+                name: Install dependencies
+                command: |
+                    sudo apt-get update
+                    gcc --version g++ --version
+                    sudo apt-get install autoconf automake autotools-dev curl
+                    sudo apt-get install libmpc-dev libmpfr-dev libgmp-dev libusb-1.0-0-dev
+                    sudo apt-get install gawk build-essential bison flex 
+                    sudo apt-get install texinfo gperf libtool patchutils
+                    sudo apt-get install bc zlib1g-dev device-tree-compiler pkg-config libexpat-dev 
+                    sudo apt-get install expat python-pexpect python libipt1 babeltrace
+
+            - run:
+                name: Run SmallBoomConfig assembly tests
+                command: make run-asm-tests -C ../boom-template/verisim CONFIG=SmallBoomConfig
+                no_output_timeout: 300m
+
+    mediumboomconfig-run-benchmark-tests:
+        docker:
+            - image: circleci/openjdk:8-jdk
+        environment:
+            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
+            TERM: dumb
+
+        steps:
+            - restore_cache:
+                keys:
+                    - riscv-tools-installed-{{ .Branch }}-{{ .Revision }}
+
+            - restore_cache:
+                keys:
+                    - boom-template-mediumboomconfig-{{ .Branch }}-{{ .Revision }}
+
+            - run:
+                name: Source environment variables
+                command: |
+                    echo 'export RISCV=$HOME/riscv-tools-install' >> $BASH_ENV
+                    echo 'export PATH=$RISCV/bin:$PATH' >> $BASH_ENV
+                    source /home/circleci/.bashrc
+
+            - run: 
+                name: Install dependencies
+                command: |
+                    sudo apt-get update
+                    gcc --version g++ --version
+                    sudo apt-get install autoconf automake autotools-dev curl
+                    sudo apt-get install libmpc-dev libmpfr-dev libgmp-dev libusb-1.0-0-dev
+                    sudo apt-get install gawk build-essential bison flex 
+                    sudo apt-get install texinfo gperf libtool patchutils
+                    sudo apt-get install bc zlib1g-dev device-tree-compiler pkg-config libexpat-dev 
+                    sudo apt-get install expat python-pexpect python libipt1 babeltrace
+
+            - run:
+                name: Run MediumBoomConfig benchmark tests
+                command: make run-bmark-tests -C ../boom-template/verisim CONFIG=MediumBoomConfig
+
+    mediumboomconfig-run-regression-tests:
+        docker:
+            - image: circleci/openjdk:8-jdk
+        environment:
+            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
+            TERM: dumb
+
+        steps:
+            - restore_cache:
+                keys:
+                    - riscv-tools-installed-{{ .Branch }}-{{ .Revision }}
+
+            - restore_cache:
+                keys:
+                    - boom-template-mediumboomconfig-{{ .Branch }}-{{ .Revision }}
+
+            - run:
+                name: Source environment variables
+                command: |
+                    echo 'export RISCV=$HOME/riscv-tools-install' >> $BASH_ENV
+                    echo 'export PATH=$RISCV/bin:$PATH' >> $BASH_ENV
+                    source /home/circleci/.bashrc
+
+            - run: 
+                name: Install dependencies
+                command: |
+                    sudo apt-get update
+                    gcc --version g++ --version
+                    sudo apt-get install autoconf automake autotools-dev curl
+                    sudo apt-get install libmpc-dev libmpfr-dev libgmp-dev libusb-1.0-0-dev
+                    sudo apt-get install gawk build-essential bison flex 
+                    sudo apt-get install texinfo gperf libtool patchutils
+                    sudo apt-get install bc zlib1g-dev device-tree-compiler pkg-config libexpat-dev 
+                    sudo apt-get install expat python-pexpect python libipt1 babeltrace
+
+            - run:
+                name: Run MediumBoomConfig regression tests
+                command: make run-regression-tests -C ../boom-template/verisim CONFIG=MediumBoomConfig
+
+    mediumboomconfig-run-assembly-tests:
+        docker:
+            - image: circleci/openjdk:8-jdk
+        environment:
+            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
+            TERM: dumb
+
+        steps:
+            - restore_cache:
+                keys:
+                    - riscv-tools-installed-{{ .Branch }}-{{ .Revision }}
+
+            - restore_cache:
+                keys:
+                    - boom-template-mediumboomconfig-{{ .Branch }}-{{ .Revision }}
+
+            - run:
+                name: Source environment variables
+                command: |
+                    echo 'export RISCV=$HOME/riscv-tools-install' >> $BASH_ENV
+                    echo 'export PATH=$RISCV/bin:$PATH' >> $BASH_ENV
+                    source /home/circleci/.bashrc
+
+            - run: 
+                name: Install dependencies
+                command: |
+                    sudo apt-get update
+                    gcc --version g++ --version
+                    sudo apt-get install autoconf automake autotools-dev curl
+                    sudo apt-get install libmpc-dev libmpfr-dev libgmp-dev libusb-1.0-0-dev
+                    sudo apt-get install gawk build-essential bison flex 
+                    sudo apt-get install texinfo gperf libtool patchutils
+                    sudo apt-get install bc zlib1g-dev device-tree-compiler pkg-config libexpat-dev 
+                    sudo apt-get install expat python-pexpect python libipt1 babeltrace
+
+            - run:
+                name: Run MediumBoomConfig assembly tests
+                command: make run-asm-tests -C ../boom-template/verisim CONFIG=MediumBoomConfig
+                no_output_timeout: 300m
+
+#    megaboomconfig-run-benchmark-tests:
+#        docker:
+#            - image: circleci/openjdk:8-jdk
+#        environment:
+#            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
+#            TERM: dumb
+#
+#        steps:
+#            - restore_cache:
+#                keys:
+#                    - riscv-tools-installed-{{ .Branch }}-{{ .Revision }}
+#
+#            - restore_cache:
+#                keys:
+#                    - boom-template-megaboomconfig-{{ .Branch }}-{{ .Revision }}
+#
+#            - run:
+#                name: Source environment variables
+#                command: |
+#                    echo 'export RISCV=$HOME/riscv-tools-install' >> $BASH_ENV
+#                    echo 'export PATH=$RISCV/bin:$PATH' >> $BASH_ENV
+#                    source /home/circleci/.bashrc
+#
+#            - run: 
+#                name: Install dependencies
+#                command: |
+#                    sudo apt-get update
+#                    gcc --version g++ --version
+#                    sudo apt-get install autoconf automake autotools-dev curl
+#                    sudo apt-get install libmpc-dev libmpfr-dev libgmp-dev libusb-1.0-0-dev
+#                    sudo apt-get install gawk build-essential bison flex 
+#                    sudo apt-get install texinfo gperf libtool patchutils
+#                    sudo apt-get install bc zlib1g-dev device-tree-compiler pkg-config libexpat-dev 
+#                    sudo apt-get install expat python-pexpect python libipt1 babeltrace
+#
+#            - run:
+#                name: Run MegaBoomConfig benchmark tests
+#                command: make run-bmark-tests -C ../boom-template/verisim CONFIG=MegaBoomConfig
+#
+#    megaboomconfig-run-regression-tests:
+#        docker:
+#            - image: circleci/openjdk:8-jdk
+#        environment:
+#            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
+#            TERM: dumb
+#
+#        steps:
+#            - restore_cache:
+#                keys:
+#                    - riscv-tools-installed-{{ .Branch }}-{{ .Revision }}
+#
+#            - restore_cache:
+#                keys:
+#                    - boom-template-megaboomconfig-{{ .Branch }}-{{ .Revision }}
+#
+#            - run:
+#                name: Source environment variables
+#                command: |
+#                    echo 'export RISCV=$HOME/riscv-tools-install' >> $BASH_ENV
+#                    echo 'export PATH=$RISCV/bin:$PATH' >> $BASH_ENV
+#                    source /home/circleci/.bashrc
+#
+#            - run: 
+#                name: Install dependencies
+#                command: |
+#                    sudo apt-get update
+#                    gcc --version g++ --version
+#                    sudo apt-get install autoconf automake autotools-dev curl
+#                    sudo apt-get install libmpc-dev libmpfr-dev libgmp-dev libusb-1.0-0-dev
+#                    sudo apt-get install gawk build-essential bison flex 
+#                    sudo apt-get install texinfo gperf libtool patchutils
+#                    sudo apt-get install bc zlib1g-dev device-tree-compiler pkg-config libexpat-dev 
+#                    sudo apt-get install expat python-pexpect python libipt1 babeltrace
+#
+#            - run:
+#                name: Run MegaBoomConfig regression tests
+#                command: make run-regression-tests -C ../boom-template/verisim CONFIG=MegaBoomConfig
+#
+#    megaboomconfig-run-assembly-tests:
+#        docker:
+#            - image: circleci/openjdk:8-jdk
+#        environment:
+#            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
+#            TERM: dumb
+#
+#        steps:
+#            - restore_cache:
+#                keys:
+#                    - riscv-tools-installed-{{ .Branch }}-{{ .Revision }}
+#
+#            - restore_cache:
+#                keys:
+#                    - boom-template-megaboomconfig-{{ .Branch }}-{{ .Revision }}
+#
+#            - run:
+#                name: Source environment variables
+#                command: |
+#                    echo 'export RISCV=$HOME/riscv-tools-install' >> $BASH_ENV
+#                    echo 'export PATH=$RISCV/bin:$PATH' >> $BASH_ENV
+#                    source /home/circleci/.bashrc
+#
+#            - run: 
+#                name: Install dependencies
+#                command: |
+#                    sudo apt-get update
+#                    gcc --version g++ --version
+#                    sudo apt-get install autoconf automake autotools-dev curl
+#                    sudo apt-get install libmpc-dev libmpfr-dev libgmp-dev libusb-1.0-0-dev
+#                    sudo apt-get install gawk build-essential bison flex 
+#                    sudo apt-get install texinfo gperf libtool patchutils
+#                    sudo apt-get install bc zlib1g-dev device-tree-compiler pkg-config libexpat-dev 
+#                    sudo apt-get install expat python-pexpect python libipt1 babeltrace
+#
+#            - run:
+#                name: Run MegaBoomConfig assembly tests
+#                command: make run-asm-tests -C ../boom-template/verisim CONFIG=MegaBoomConfig
+#                no_output_timeout: 300m
+
+# Order and dependencies of jobs to run
+workflows:
+    version: 2
+    build-and-test-boom-configs:
+        jobs:
+            # Make the toolchain
+            - prepare-riscv-tools
+
+            # Run generic syntax checking
+            - run-scala-checkstyle:
+                requires:
+                    - prepare-riscv-tools
+
+            # Prepare the verilator builds
+            - prepare-boomconfig:
+                requires:
+                    - prepare-riscv-tools
+            - prepare-smallboomconfig:
+                requires:
+                    - prepare-riscv-tools
+            - prepare-mediumboomconfig:
+                requires:
+                    - prepare-riscv-tools
+#            - prepare-megaboomconfig:
+#                requires:
+#                    - prepare-riscv-tools
+
+            # Run the respective tests
+            # Run the BoomConfig tests
+            - boomconfig-run-benchmark-tests:
+                requires:
+                    - prepare-boomconfig
+            - boomconfig-run-regression-tests:
+                requires:
+                    - prepare-boomconfig
+            - boomconfig-run-assembly-tests:
+                requires:
+                    - prepare-boomconfig
+
+            # Run the SmallBoomConfig tests
+            - smallboomconfig-run-benchmark-tests:
+                requires:
+                    - prepare-smallboomconfig
+            - smallboomconfig-run-regression-tests:
+                requires:
+                    - prepare-smallboomconfig
+            - smallboomconfig-run-assembly-tests:
+                requires:
+                    - prepare-smallboomconfig
+
+            # Run the MediumBoomConfig tests
+            - mediumboomconfig-run-benchmark-tests:
+                requires:
+                    - prepare-mediumboomconfig
+            - mediumboomconfig-run-regression-tests:
+                requires:
+                    - prepare-mediumboomconfig
+            - mediumboomconfig-run-assembly-tests:
+                requires:
+                    - prepare-mediumboomconfig
+
+#            # Run the MegaBoomConfig tests
+#            - megaboomconfig-run-benchmark-tests:
+#                requires:
+#                    - prepare-megaboomconfig
+#            - megaboomconfig-run-regression-tests:
+#                requires:
+#                    - prepare-megaboomconfig
+#            - megaboomconfig-run-assembly-tests:
+#                requires:
+#                    - prepare-megaboomconfig
