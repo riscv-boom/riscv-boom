@@ -228,7 +228,7 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
 
    // round off to nearest fetch boundary
    val f3_aligned_pc = alignToFetchBoundary(f3_imemresp.pc)
-   val is_valid  = Wire(Vec(fetch_width, Bool()))
+   val f3_valid_mask = Wire(Vec(fetch_width, Bool()))
    val is_br     = Wire(Vec(fetch_width, Bool()))
    val is_jal    = Wire(Vec(fetch_width, Bool()))
    val is_jr     = Wire(Vec(fetch_width, Bool()))
@@ -247,7 +247,7 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
       if (i == 0)
          is_half := false.B
       else
-         is_half := is_valid(i-1) && f3_fetch_bundle.insts(i-1)(1,0) === 3.U
+         is_half := f3_valid_mask(i-1) && f3_fetch_bundle.insts(i-1)(1,0) === 3.U
 
       var inst = f3_imemresp.data(i*coreInstBits+coreInstBits-1,i*coreInstBits)
       if (i == fetch_width - 1)
@@ -259,7 +259,7 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
 
       // TODO do not compute a vector of targets
       val pc = f3_aligned_pc + (i << 1).U
-      is_valid(i) := f3_valid && f3_imemresp.mask(i) && !is_half
+      f3_valid_mask(i) := f3_valid && f3_imemresp.mask(i) && !is_half
       is_br(i)    := f3_valid && bpd_decoder.io.is_br && f3_imemresp.mask(i) && !is_half
       is_jal(i)   := f3_valid && bpd_decoder.io.is_jal  && f3_imemresp.mask(i) && !is_half
       is_jr(i)    := f3_valid && bpd_decoder.io.is_jalr  && f3_imemresp.mask(i) && !is_half
@@ -407,8 +407,6 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
       Mux(f3_bpd_overrides_bcheck, f3_bpd_redirect_cfiidx, bchecker.io.req_cfi_idx),
       fetchWidth)
 
-
-
    val btb_mask = Mux(f3_btb_resp.valid && !f3_req.valid,
                   f3_btb_resp.bits.mask,
                   Fill(fetchWidth, 1.U(1.W)))
@@ -416,7 +414,11 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
 //   val bpd_mask = Mux(io.f3_bpu_request.valid && !f3_req.valid,
 //                  io.f3_bpu_request.bits.mask,
 //                  Fill(fetchWidth, UInt(1,1)))
-   f3_fetch_bundle.mask := f3_imemresp.mask & ~f3_kill_mask & btb_mask & bpd_mask
+   f3_fetch_bundle.mask := (f3_imemresp.mask
+      & ~f3_kill_mask
+      & btb_mask
+      & bpd_mask
+      & f3_valid_mask.toBits)
 
 
    val f3_taken = WireInit(false.B) // was a branch taken in the F3 stage?

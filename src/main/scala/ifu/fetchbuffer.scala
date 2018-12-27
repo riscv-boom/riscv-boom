@@ -78,14 +78,8 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule()
    // Step 1. Convert input FetchPacket into an array of MicroOps.
    for (i <- 0 until fetchWidth)
    {
-      val is_half = Wire(Bool())
-      if (i == 0)
-         is_half := false.B
-      else
-         is_half := in_uops(i-1).valid && in_uops(i-1).inst(1,0) === 3.U
-
       in_uops(i)                := DontCare
-      in_uops(i).valid          := io.enq.valid && io.enq.bits.mask(i) && !is_half
+      in_uops(i).valid          := io.enq.valid && io.enq.bits.mask(i)
       in_uops(i).pc             := alignToFetchBoundary(io.enq.bits.pc) + (i << 1).U // RVC TODO
       in_uops(i).ftq_idx        := io.enq.bits.ftq_idx
       in_uops(i).pc_lob         := in_uops(i).pc // LHS width will cut off high-order bits.
