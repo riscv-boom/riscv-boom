@@ -505,7 +505,7 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
             Mux(uop.is_jump, BpredType.jump,
                 BpredType.branch)))
 
-      require (coreInstBytes == 4)
+      //require (coreInstBytes == 4)
 
 
       // Branch/Jump Target Calculation
@@ -529,7 +529,7 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
       br_unit.pc := uop_pc_
 
       // handle misaligned branch/jmp targets
-      require (coreInstBytes == 4) // no RVC support
+      //require (coreInstBytes == 4) // no RVC support
       br_unit.xcpt.valid     := bj_addr(1) && io.req.valid && is_taken && !killed
       br_unit.xcpt.bits.uop  := uop
       br_unit.xcpt.bits.cause:= freechips.rocketchip.rocket.Causes.misaligned_fetch.U

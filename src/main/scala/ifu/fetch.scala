@@ -228,7 +228,7 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
 
    // round off to nearest fetch boundary
    val f3_aligned_pc = alignToFetchBoundary(f3_imemresp.pc)
-
+   val is_valid  = Wire(Vec(fetch_width, Bool()))
    val is_br     = Wire(Vec(fetch_width, Bool()))
    val is_jal    = Wire(Vec(fetch_width, Bool()))
    val is_jr     = Wire(Vec(fetch_width, Bool()))
@@ -243,16 +243,27 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
    {
       val bpd_decoder = Module(new BranchDecode)
 
-      val inst = f3_imemresp.data(i*coreInstBits+coreInstBits-1,i*coreInstBits)
+      val is_half = Wire(Bool())
+      if (i == 0)
+         is_half := false.B
+      else
+         is_half := is_valid(i-1) && f3_fetch_bundle.insts(i-1)(1,0) === 3.U
+
+      var inst = f3_imemresp.data(i*coreInstBits+coreInstBits-1,i*coreInstBits)
+      if (i == fetch_width - 1)
+         inst = Cat(0.U(16.W), inst)
+      else
+         inst = Cat(f3_imemresp.data((i+1)*coreInstBits+coreInstBits-1,(i+1)*coreInstBits), inst)
       bpd_decoder.io.inst := inst
       f3_fetch_bundle.insts(i) := inst
 
       // TODO do not compute a vector of targets
-      val pc = f3_aligned_pc + (i << 2).U
-      is_br(i)    := f3_valid && bpd_decoder.io.is_br && f3_imemresp.mask(i)
-      is_jal(i)   := f3_valid && bpd_decoder.io.is_jal  && f3_imemresp.mask(i)
-      is_jr(i)    := f3_valid && bpd_decoder.io.is_jalr  && f3_imemresp.mask(i)
-      is_call(i)  := f3_valid && IsCall(inst) && f3_imemresp.mask(i)
+      val pc = f3_aligned_pc + (i << 1).U
+      is_valid(i) := f3_valid && f3_imemresp.mask(i) && !is_half
+      is_br(i)    := f3_valid && bpd_decoder.io.is_br && f3_imemresp.mask(i) && !is_half
+      is_jal(i)   := f3_valid && bpd_decoder.io.is_jal  && f3_imemresp.mask(i) && !is_half
+      is_jr(i)    := f3_valid && bpd_decoder.io.is_jalr  && f3_imemresp.mask(i) && !is_half
+      is_call(i)  := f3_valid && IsCall(inst) && f3_imemresp.mask(i) && !is_half
       br_targs(i) := ComputeBranchTarget(pc, inst, xLen)
       jal_targs(i) := ComputeJALTarget(pc, inst, xLen)
       jal_targs_ma(i) := jal_targs(i)(1) && is_jal(i)
@@ -603,7 +614,7 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
    val cfi_idx = (fetch_width-1).U - PriorityEncoder(Reverse(f3_fetch_bundle.mask))
    val fetch_pc = f3_fetch_bundle.pc
    val curr_aligned_pc = alignToFetchBoundary(fetch_pc)
-   val cfi_pc = curr_aligned_pc  + (cfi_idx << 2.U)
+   val cfi_pc = curr_aligned_pc  + (cfi_idx << 1.U)
 
    when (fb.io.enq.fire() &&
       !f3_fetch_bundle.replay_if &&

@@ -17,6 +17,7 @@ package boom.ifu
 
 import chisel3._
 import chisel3.util._
+import chisel3.experimental.dontTouch
 import chisel3.core.DontCare
 import freechips.rocketchip.config.Parameters
 import boom.common._
@@ -39,6 +40,7 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule()
 
       // Was the pipeline redirected? Clear/reset the fetchbuffer.
       val clear = Input(Bool())
+      val debug_count = Output(UInt())
    })
 
    require (num_entries > 1)
@@ -49,7 +51,8 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule()
 
    // How many uops are stored within the ram? If zero, bypass to the output flops.
    private val count = RegInit(0.U(log2Ceil(num_elements).W))
-
+   io.debug_count := count
+   dontTouch(io.debug_count)
    //-------------------------------------------------------------
    // **** Enqueue Uops ****
    //-------------------------------------------------------------
@@ -67,13 +70,23 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule()
    val compact_mask = Wire(Vec(fetchWidth, Bool()))
    val compact_uops = Wire(Vec(fetchWidth, new MicroOp()))
 
+   for (i <- 0 until fetchWidth) {
+      compact_mask(i) := false.B
+      compact_uops(i) := DontCare
+      compact_uops(i).inst := 7.U
+   }
    // Step 1. Convert input FetchPacket into an array of MicroOps.
    for (i <- 0 until fetchWidth)
    {
-      require (coreInstBytes==4)
+      val is_half = Wire(Bool())
+      if (i == 0)
+         is_half := false.B
+      else
+         is_half := in_uops(i-1).valid && in_uops(i-1).inst(1,0) === 3.U
+
       in_uops(i)                := DontCare
-      in_uops(i).valid          := io.enq.valid && io.enq.bits.mask(i)
-      in_uops(i).pc             := alignToFetchBoundary(io.enq.bits.pc) + (i << 2).U // RVC TODO
+      in_uops(i).valid          := io.enq.valid && io.enq.bits.mask(i) && !is_half
+      in_uops(i).pc             := alignToFetchBoundary(io.enq.bits.pc) + (i << 1).U // RVC TODO
       in_uops(i).ftq_idx        := io.enq.bits.ftq_idx
       in_uops(i).pc_lob         := in_uops(i).pc // LHS width will cut off high-order bits.
       in_uops(i).inst           := io.enq.bits.insts(i)
@@ -98,14 +111,18 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule()
    val first_index =
       if (fetchWidth==1) 0.U
       else io.enq.bits.pc(msb, lsb)
+   var compact_idx = 0.U(log2Ceil(fetchWidth).W)
    for (i <- 0 until fetchWidth)
    {
-      val selects_oh = Wire(UInt(fetchWidth.W))
-      selects_oh   := UIntToOH(i.U(log2Ceil(fetchWidth).W) + first_index)
-
-      val invalid = first_index >= (fetchWidth - i).U // out-of-bounds
-      compact_uops(i) := Mux1H(selects_oh, in_uops)
-      compact_mask(i) := Mux1H(selects_oh, io.enq.bits.mask) && !invalid
+      val use_uop = i.U >= first_index && in_uops(i.U).valid
+      when (use_uop) {
+         compact_uops(compact_idx) := in_uops(i.U)
+         compact_mask(compact_idx) := true.B
+      }
+      compact_idx = compact_idx + use_uop
+      // val invalid = first_index >= (fetchWidth - i).U // out-of-bounds
+      // compact_uops(i) := Mux1H(selects_oh, in_uops)
+      // compact_mask(i) := Mux1H(selects_oh, io.enq.bits.mask) && !invalid && in_uops(selects).valid
 
 //      if (DEBUG_PRINTF)
 //      {
@@ -117,7 +134,7 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule()
 
    // all enqueuing uops have been compacted.
    // How many incoming uops are there?
-   val popc_enqmask = PopCount(io.enq.bits.mask)
+   val popc_enqmask = PopCount(in_uops.map(_.valid))
    // What is the count of uops being added to the ram. Subtract off the bypassed uops.
    // But only bypass if ram is empty AND dequeue flops will be consumed.
    val enq_count =

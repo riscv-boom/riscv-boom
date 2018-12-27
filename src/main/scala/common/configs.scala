@@ -75,7 +75,7 @@ class WithTrace extends Config((site, here, up) => {
 class WithSmallBooms extends Config((site, here, up) => {
    case BoomTilesKey => up(BoomTilesKey, site) map { r =>r.copy(
       core = r.core.copy(
-         fetchWidth = 2,
+         fetchWidth = 4,
          decodeWidth = 1,
          numRobEntries = 16,
          issueParams = Seq(

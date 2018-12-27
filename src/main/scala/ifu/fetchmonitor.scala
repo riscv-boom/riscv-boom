@@ -88,7 +88,7 @@ class FetchMonitor(implicit p: Parameters) extends BoomModule()(p)
       prev_pc = uop.pc
       prev_npc = prev_pc + 4.U
       prev_cfitype = GetCfiType(uop.inst)
-      require (coreInstBytes == 4)
+      //require (coreInstBytes == 4)
       prev_target =
          Mux(prev_cfitype === CfiType.jal,
             ComputeJALTarget(uop.pc, uop.inst, xLen),
@@ -118,9 +118,14 @@ class FetchMonitor(implicit p: Parameters) extends BoomModule()(p)
       val end_idx = (fetchWidth-1).U - PriorityEncoder(Reverse(valid_mask))
       val end_uop = io.uops(end_idx)
       val end_pc = end_uop.pc
+      val end_compressed = end_uop.inst(1,0) =/= 3.U
 
       last_pc := end_pc
-      last_npc := end_pc + 4.U; require (coreInstBytes == 4)
+      when (end_compressed) {
+         last_npc := end_pc + 2.U
+      } .otherwise {
+         last_npc := end_pc + 4.U
+      }
       last_cfitype := GetCfiType(end_uop.inst)
       last_target :=
          Mux(GetCfiType(end_uop.inst) === CfiType.jal,
