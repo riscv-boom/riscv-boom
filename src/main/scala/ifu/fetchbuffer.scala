@@ -92,6 +92,7 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule()
       in_uops(i).ftq_idx        := io.enq.bits.ftq_idx
       in_uops(i).pc_lob         := in_uops(i).pc // LHS width will cut off high-order bits.
       in_uops(i).inst           := io.enq.bits.insts(i)
+      in_uops(i).is_rvc         := io.enq.bits.insts(i)(1,0) =/= 3.U
       in_uops(i).xcpt_pf_if     := io.enq.bits.xcpt_pf_if
       in_uops(i).xcpt_ae_if     := io.enq.bits.xcpt_ae_if
       in_uops(i).replay_if      := io.enq.bits.replay_if

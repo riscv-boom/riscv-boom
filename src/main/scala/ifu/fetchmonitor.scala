@@ -85,8 +85,8 @@ class FetchMonitor(implicit p: Parameters) extends BoomModule()(p)
       }
 
       prev_valid = uop.valid && io.fire
-      prev_pc = uop.pc
-      prev_npc = prev_pc + 4.U
+      prev_pc  = uop.pc
+      prev_npc = prev_pc + Mux(uop.is_rvc, 2.U, 4.U)
       prev_cfitype = GetCfiType(uop.inst)
       //require (coreInstBytes == 4)
       prev_target =

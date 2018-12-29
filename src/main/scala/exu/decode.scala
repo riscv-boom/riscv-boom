@@ -369,15 +369,16 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule()(p)
    if (usingFPU && usingFDivSqrt) decode_table ++= FDivSqrtDecode.table
 
 
-   val rvc_exp = Module(new RVCExpander)
+   val rvc_exp    = Module(new RVCExpander)
    rvc_exp.io.in := io.enq.uop.inst
-   uop.inst := Mux(rvc_exp.io.rvc, rvc_exp.io.out.bits, io.enq.uop.inst)
+   uop.is_rvc    := rvc_exp.io.rvc
+   val inst       = Mux(rvc_exp.io.rvc, rvc_exp.io.out.bits, io.enq.uop.inst)
 
-   val cs = Wire(new CtrlSigs()).decode(uop.inst, decode_table)
+   val cs = Wire(new CtrlSigs()).decode(inst, decode_table)
 
 
    // Exception Handling
-   io.csr_decode.csr := uop.inst(31,20)
+   io.csr_decode.csr := inst(31,20)
     val csr_en = cs.csr_cmd.isOneOf(CSR.S, CSR.C, CSR.W)
     val csr_ren = cs.csr_cmd.isOneOf(CSR.S, CSR.C) && uop.lrs1 === 0.U
     val system_insn = cs.csr_cmd === CSR.I
@@ -420,10 +421,10 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule()(p)
    // x-registers placed in 0-31, f-registers placed in 32-63.
    // This allows us to straight-up compare register specifiers and not need to
    // verify the rtypes (e.g., bypassing in rename).
-   uop.ldst       := uop.inst(RD_MSB,RD_LSB)
-   uop.lrs1       := uop.inst(RS1_MSB,RS1_LSB)
-   uop.lrs2       := uop.inst(RS2_MSB,RS2_LSB)
-   uop.lrs3       := uop.inst(RS3_MSB,RS3_LSB)
+   uop.ldst       := inst(RD_MSB,RD_LSB)
+   uop.lrs1       := inst(RS1_MSB,RS1_LSB)
+   uop.lrs2       := inst(RS2_MSB,RS2_LSB)
+   uop.lrs3       := inst(RS3_MSB,RS3_LSB)
 
    uop.ldst_val   := cs.dst_type =/= RT_X && !(uop.ldst === 0.U && uop.dst_rtype === RT_FIX)
    uop.dst_rtype  := cs.dst_type
@@ -451,8 +452,8 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule()(p)
    // immediates
 
    // repackage the immediate, and then pass the fewest number of bits around
-   val di24_20 = Mux(cs.imm_sel === IS_B || cs.imm_sel === IS_S, uop.inst(11,7), uop.inst(24,20))
-   uop.imm_packed := Cat(uop.inst(31,25), di24_20, uop.inst(19,12))
+   val di24_20 = Mux(cs.imm_sel === IS_B || cs.imm_sel === IS_S, inst(11,7), inst(24,20))
+   uop.imm_packed := Cat(inst(31,25), di24_20, inst(19,12))
 
    //-------------------------------------------------------------
 
@@ -465,7 +466,7 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule()(p)
                          (uop.lrs1 === RA)
    uop.is_call        := (uop.uopc === uopJALR || uop.uopc === uopJAL) &&
                          (uop.ldst === RA)
-
+   
    //-------------------------------------------------------------
 
    io.deq.uop := uop
