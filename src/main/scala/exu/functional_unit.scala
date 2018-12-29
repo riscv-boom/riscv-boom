@@ -530,7 +530,7 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
 
       // handle misaligned branch/jmp targets
       //require (coreInstBytes == 4) // no RVC support
-      br_unit.xcpt.valid     := bj_addr(1) && io.req.valid && is_taken && !killed
+      br_unit.xcpt.valid     := bj_addr(0) && io.req.valid && is_taken && !killed
       br_unit.xcpt.bits.uop  := uop
       br_unit.xcpt.bits.cause:= freechips.rocketchip.rocket.Causes.misaligned_fetch.U
       // TODO is there a better way to get this information to the CSR file? maybe use brinfo.target?

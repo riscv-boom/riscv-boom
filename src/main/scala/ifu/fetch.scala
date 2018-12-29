@@ -39,6 +39,7 @@ import freechips.rocketchip.util.UIntToAugmentedUInt
 class FetchBundle(implicit p: Parameters) extends BoomBundle()(p)
 {
    val pc            = UInt(vaddrBitsExtended.W)
+   val edge_inst     = Bool() // True if 1st instruction in this bundle is pc - 2
    val ftq_idx       = UInt(log2Ceil(ftqSz).W)
    val insts         = Vec(fetchWidth, Bits(32.W))
    val mask          = Bits(fetchWidth.W) // mark which words are valid instructions
@@ -124,7 +125,7 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
 
    val f3_req           = Wire(Valid(new PCReq()))
    val f3_fetch_bundle  = Wire(new FetchBundle)
-
+   dontTouch(f3_fetch_bundle)
    val r_f4_valid = RegInit(false.B)
    val r_f4_req = Reg(Valid(new PCReq()))
    val r_f4_taken = RegInit(false.B)
@@ -239,34 +240,53 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
    // branches though since only taken branches are exceptions.
    val jal_targs_ma = Wire(Vec(fetch_width, Bool()))
 
+   val prev_half    = Reg(UInt(coreInstBits.W))
+   val prev_is_half = RegInit(false.B)
+   assert(fetch_width >= 4) // Logic gets kind of annoying with fetch_width = 2
    for (i <- 0 until fetch_width)
    {
       val bpd_decoder = Module(new BranchDecode)
-
-      val is_half = Wire(Bool())
-      if (i == 0)
-         is_half := false.B
-      else
-         is_half := f3_valid_mask(i-1) && f3_fetch_bundle.insts(i-1)(1,0) === 3.U
-
-      var inst = f3_imemresp.data(i*coreInstBits+coreInstBits-1,i*coreInstBits)
-      if (i == fetch_width - 1)
-         inst = Cat(0.U(16.W), inst)
-      else
-         inst = Cat(f3_imemresp.data((i+1)*coreInstBits+coreInstBits-1,(i+1)*coreInstBits), inst)
+      val is_valid = Wire(Bool())
+      val inst = Wire(UInt((2*coreInstBits).W))
+      if (i == 0) {
+         when (prev_is_half) {
+            inst := Cat(f3_imemresp.data(15,0), prev_half)
+            f3_fetch_bundle.edge_inst := true.B
+         } .otherwise {
+            inst := f3_imemresp.data(31,0)
+            f3_fetch_bundle.edge_inst := false.B
+         }
+         is_valid := true.B
+      } else if (i == 1) {
+         // Need special case since 0th instruction may carry over the wrap around
+         inst     := f3_imemresp.data(i*coreInstBits+2*coreInstBits-1,i*coreInstBits)
+         is_valid := prev_is_half || !(f3_valid_mask(i-1) && f3_fetch_bundle.insts(i-1)(1,0) === 3.U)
+      } else if (i == fetch_width - 1) {
+         inst     := Cat(0.U(16.W), f3_imemresp.data(fetchWidth*coreInstBits-1,i*coreInstBits))
+         is_valid := !((f3_valid_mask(i-1) && f3_fetch_bundle.insts(i-1)(1,0) === 3.U) ||
+                       inst(1,0) === 3.U)
+         when (f3_valid) {
+            prev_is_half := (!(f3_valid_mask(i-1) && f3_fetch_bundle.insts(i-1)(1,0) === 3.U)
+                           && inst(1,0) === 3.U)
+            prev_half    := inst(15,0)
+         }
+      } else {
+         inst     := f3_imemresp.data(i*coreInstBits+2*coreInstBits-1,i*coreInstBits)
+         is_valid := !(f3_valid_mask(i-1) && f3_fetch_bundle.insts(i-1)(1,0) === 3.U)
+      }
       bpd_decoder.io.inst := inst
       f3_fetch_bundle.insts(i) := inst
 
       // TODO do not compute a vector of targets
       val pc = f3_aligned_pc + (i << 1).U
-      f3_valid_mask(i) := f3_valid && f3_imemresp.mask(i) && !is_half
-      is_br(i)    := f3_valid && bpd_decoder.io.is_br && f3_imemresp.mask(i) && !is_half
-      is_jal(i)   := f3_valid && bpd_decoder.io.is_jal  && f3_imemresp.mask(i) && !is_half
-      is_jr(i)    := f3_valid && bpd_decoder.io.is_jalr  && f3_imemresp.mask(i) && !is_half
-      is_call(i)  := f3_valid && IsCall(inst) && f3_imemresp.mask(i) && !is_half
+      f3_valid_mask(i) := f3_valid && f3_imemresp.mask(i) && is_valid
+      is_br(i)    := f3_valid && bpd_decoder.io.is_br   && f3_imemresp.mask(i) && is_valid
+      is_jal(i)   := f3_valid && bpd_decoder.io.is_jal  && f3_imemresp.mask(i) && is_valid
+      is_jr(i)    := f3_valid && bpd_decoder.io.is_jalr && f3_imemresp.mask(i) && is_valid
+      is_call(i)  := f3_valid && IsCall(inst) && f3_imemresp.mask(i) && is_valid
       br_targs(i) := ComputeBranchTarget(pc, inst, xLen)
       jal_targs(i) := ComputeJALTarget(pc, inst, xLen)
-      jal_targs_ma(i) := jal_targs(i)(1) && is_jal(i)
+      jal_targs_ma(i) := jal_targs(i)(0) && is_jal(i)
    }
 
    val f3_br_seen = f3_valid &&
@@ -506,7 +526,7 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
    //-------------------------------------------------------------
 
    // Fetch Buffer
-   fb.io.enq.valid := f3_valid && !r_f4_req.valid && f4_ready
+   fb.io.enq.valid := f3_valid && !r_f4_req.valid && f4_ready && f3_fetch_bundle.mask =/= 0.U
    fb.io.enq.bits  := f3_fetch_bundle
    fb.io.clear := io.clear_fetchbuffer
 
@@ -525,7 +545,7 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
    // **** FetchTargetQueue ****
    //-------------------------------------------------------------
 
-   ftq.io.enq.valid := fb.io.enq.valid
+   ftq.io.enq.valid := f3_valid && !r_f4_req.valid && f4_ready
    ftq.io.enq.bits.fetch_pc := f3_imemresp.pc
    ftq.io.enq.bits.history := io.f3_bpd_resp.bits.history
    ftq.io.enq.bits.bpd_info := io.f3_bpd_resp.bits.info
@@ -607,11 +627,12 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
    // check if enqueue'd PC is a target of the previous valid enqueue'd PC.
 
    // clear checking if misprediction/flush/etc.
-   val last_valid = RegInit(false.B)
-   val last_pc = Reg(UInt(vaddrBitsExtended.W))
-   val last_target = Reg(UInt(vaddrBitsExtended.W))
+   val last_valid      = RegInit(false.B)
+   val last_pc         = Reg(UInt(vaddrBitsExtended.W))
+   val last_edge_inst  = Reg(Bool())
+   val last_target     = Reg(UInt(vaddrBitsExtended.W))
    val last_nextlinepc = Reg(UInt(vaddrBitsExtended.W))
-   val last_cfi_type = Reg(UInt(CfiType.SZ.W))
+   val last_cfi_type   = Reg(UInt(CfiType.SZ.W))
 
    val cfi_idx = (fetch_width-1).U - PriorityEncoder(Reverse(f3_fetch_bundle.mask))
    val fetch_pc = f3_fetch_bundle.pc
@@ -625,8 +646,8 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
    {
       assert (f3_fetch_bundle.mask =/= 0.U)
       val curr_inst = if (fetchWidth == 1) f3_fetch_bundle.insts(0) else f3_fetch_bundle.insts(cfi_idx)
-      last_valid := true.B
-      last_pc := cfi_pc
+      last_valid     := true.B
+      last_pc        := cfi_pc
       last_nextlinepc := nextFetchStart(curr_aligned_pc)
 
       val cfi_type = GetCfiType(curr_inst)
@@ -647,7 +668,13 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
          {
             // ignore misaligned fetches -- we should have marked the instruction as excepting,
             // but when it makes a misaligned fetch request the I$ gives us back an aligned PC.
-            val f_pc = fetch_pc(vaddrBitsExtended-1, log2Ceil(coreInstBytes))
+            val f_pc = Wire(UInt(vaddrBitsExtended.W))
+
+            when (f3_fetch_bundle.edge_inst) {
+               f_pc := fetch_pc(vaddrBitsExtended-1, log2Ceil(coreInstBytes)) - 1.U
+            } .otherwise {
+               f_pc := fetch_pc(vaddrBitsExtended-1, log2Ceil(coreInstBytes))
+            }
             val targ = last_target(vaddrBitsExtended-1, log2Ceil(coreInstBytes))
             when (f_pc =/= targ) {
                printf("about to abort: [fetch] JAL is followed by the wrong instruction.")
@@ -677,6 +704,7 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
          (f3_fetch_bundle.replay_if || f3_fetch_bundle.xcpt_pf_if || f3_fetch_bundle.xcpt_ae_if)))
    {
       last_valid := false.B
+      prev_is_half := false.B
    }
 
    when (fb.io.enq.fire() &&
