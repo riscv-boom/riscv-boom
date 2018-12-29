@@ -95,7 +95,7 @@ trait ScalarOpConstants
    val OP2_RS2 = 0.U(3.W) // Register Source #2
    val OP2_IMM = 1.U(3.W) // immediate
    val OP2_ZERO= 2.U(3.W) // constant 0
-   val OP2_FOUR= 3.U(3.W) // constant 4 (for PC+4)
+   val OP2_NEXT= 3.U(3.W) // constant 2/4 (for PC+2/4)
    val OP2_IMMC= 4.U(3.W) // for CSR imm found in RS1
    val OP2_X   = BitPat("b???")
 
