@@ -12,6 +12,7 @@ import chisel3.util._
 import freechips.rocketchip.config.Parameters
 
 import freechips.rocketchip.rocket.Instructions._
+import freechips.rocketchip.rocket.RVCExpander
 import freechips.rocketchip.rocket.{CSR,Causes}
 import freechips.rocketchip.util.{uintToBitPat,UIntIsOneOf}
 import FUConstants._
@@ -367,6 +368,11 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule()(p)
    if (usingFPU) decode_table ++= FDecode.table
    if (usingFPU && usingFDivSqrt) decode_table ++= FDivSqrtDecode.table
 
+
+   val rvc_exp = Module(new RVCExpander)
+   rvc_exp.io.in := io.enq.uop.inst
+   uop.inst := Mux(rvc_exp.io.rvc, rvc_exp.io.out.bits, io.enq.uop.inst)
+
    val cs = Wire(new CtrlSigs()).decode(uop.inst, decode_table)
 
 
@@ -470,7 +476,7 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule()(p)
 }
 
 
-class BranchDecode extends Module
+class BranchDecode(implicit p: Parameters) extends Module
 {
    val io = IO(new Bundle
    {
@@ -478,10 +484,17 @@ class BranchDecode extends Module
       val is_br   = Output(Bool())
       val is_jal  = Output(Bool())
       val is_jalr = Output(Bool())
+      val cfi_type = Output(UInt(CfiType.SZ.W))
    })
 
+
+   val rvc_exp = Module(new RVCExpander)
+   rvc_exp.io.in := io.inst
+
    val bpd_csignals =
-      freechips.rocketchip.rocket.DecodeLogic(io.inst,
+      freechips.rocketchip.rocket.DecodeLogic(Mux(rvc_exp.io.rvc,
+         rvc_exp.io.out.bits,
+         io.inst),
                   List[BitPat](N, N, N, IS_X),
 ////                      //   is br?
 ////                      //   |  is jal?
@@ -504,6 +517,14 @@ class BranchDecode extends Module
    io.is_br   := cs_is_br
    io.is_jal  := cs_is_jal
    io.is_jalr := cs_is_jalr
+   io.cfi_type :=
+      Mux(cs_is_jalr,
+          CfiType.jalr,
+      Mux(cs_is_jal,
+          CfiType.jal,
+      Mux(cs_is_br,
+          CfiType.branch,
+          CfiType.none)))
 }
 
 

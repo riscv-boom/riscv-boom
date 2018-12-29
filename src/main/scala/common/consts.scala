@@ -23,7 +23,7 @@ import freechips.rocketchip.util.Str
 trait BOOMDebugConstants
 {
    val DEBUG_PRINTF        = false // use the Chisel printf functionality
-   val COMMIT_LOG_PRINTF   = false // dump commit state, for comparision against ISA sim
+   val COMMIT_LOG_PRINTF   = true // dump commit state, for comparision against ISA sim
    val O3PIPEVIEW_PRINTF   = false // dump trace for O3PipeView from gem5
    val O3_CYCLE_TIME       = (1000)// "cycle" time expected by o3pipeview.py
 
@@ -347,39 +347,42 @@ trait RISCVConstants
       ((pc.asSInt + j_imm32.asSInt).asSInt & (-2).S).asUInt
    }
 
-   def GetCfiType(inst: UInt): UInt =
+   def GetCfiType(inst: UInt)(implicit p: Parameters): UInt =
    {
-      import freechips.rocketchip.util.uintToBitPat
-      val bpd_csignals =
-         freechips.rocketchip.rocket.DecodeLogic(inst,
-                     List[BitPat](N, N, N, IS_X),
-                                                 //   is br?
-                                                 //   |  is jal?
-                                                 //   |  |  is jalr?
-                                                 //   |  |  |  br type
-                                                 //   |  |  |  |
-                  Array[(BitPat, List[BitPat])](
-                  freechips.rocketchip.rocket.Instructions.JAL     -> List(N, Y, N, IS_J),
-                  freechips.rocketchip.rocket.Instructions.JALR    -> List(N, N, Y, IS_I),
-                  freechips.rocketchip.rocket.Instructions.BEQ     -> List(Y, N, N, IS_B),
-                  freechips.rocketchip.rocket.Instructions.BNE     -> List(Y, N, N, IS_B),
-                  freechips.rocketchip.rocket.Instructions.BGE     -> List(Y, N, N, IS_B),
-                  freechips.rocketchip.rocket.Instructions.BGEU    -> List(Y, N, N, IS_B),
-                  freechips.rocketchip.rocket.Instructions.BLT     -> List(Y, N, N, IS_B),
-                  freechips.rocketchip.rocket.Instructions.BLTU    -> List(Y, N, N, IS_B)
-               ))
+      val bdecode = Module(new boom.exu.BranchDecode)
+      bdecode.io.inst := inst
+      bdecode.io.cfi_type
+      // import freechips.rocketchip.util.uintToBitPat
+      // val bpd_csignals =
+      //    freechips.rocketchip.rocket.DecodeLogic(inst,
+      //                List[BitPat](N, N, N, IS_X),
+      //                                            //   is br?
+      //                                            //   |  is jal?
+      //                                            //   |  |  is jalr?
+      //                                            //   |  |  |  br type
+      //                                            //   |  |  |  |
+      //             Array[(BitPat, List[BitPat])](
+      //             freechips.rocketchip.rocket.Instructions.JAL     -> List(N, Y, N, IS_J),
+      //             freechips.rocketchip.rocket.Instructions.JALR    -> List(N, N, Y, IS_I),
+      //             freechips.rocketchip.rocket.Instructions.BEQ     -> List(Y, N, N, IS_B),
+      //             freechips.rocketchip.rocket.Instructions.BNE     -> List(Y, N, N, IS_B),
+      //             freechips.rocketchip.rocket.Instructions.BGE     -> List(Y, N, N, IS_B),
+      //             freechips.rocketchip.rocket.Instructions.BGEU    -> List(Y, N, N, IS_B),
+      //             freechips.rocketchip.rocket.Instructions.BLT     -> List(Y, N, N, IS_B),
+      //             freechips.rocketchip.rocket.Instructions.BLTU    -> List(Y, N, N, IS_B)
+      //          ))
 
-      val (cs_is_br: Bool) :: (cs_is_jal: Bool) :: (cs_is_jalr:Bool) :: imm_sel_ :: Nil = bpd_csignals
+      // val (cs_is_br: Bool) :: (cs_is_jal: Bool) :: (cs_is_jalr:Bool) :: imm_sel_ :: Nil = bpd_csignals
 
-      val ret =
-         Mux(cs_is_jalr,
-            CfiType.jalr,
-         Mux(cs_is_jal,
-            CfiType.jal,
-         Mux(cs_is_br,
-            CfiType.branch,
-            CfiType.none)))
-      ret
+      // val ret =
+      //    Mux(cs_is_jalr,
+      //       CfiType.jalr,
+      //    Mux(cs_is_jal,
+      //       CfiType.jal,
+      //    Mux(cs_is_br,
+      //       CfiType.branch,
+      //       CfiType.none)))
+      // ret
    }
 
 
