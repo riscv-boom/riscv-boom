@@ -242,13 +242,16 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
 
    val prev_half    = Reg(UInt(coreInstBits.W))
    val prev_is_half = RegInit(false.B)
-   assert(fetch_width >= 4) // Logic gets kind of annoying with fetch_width = 2
+   assert(fetch_width >= 4 || !usingCompressed) // Logic gets kind of annoying with fetch_width = 2
    for (i <- 0 until fetch_width)
    {
       val bpd_decoder = Module(new BranchDecode)
       val is_valid = Wire(Bool())
       val inst = Wire(UInt((2*coreInstBits).W))
-      if (i == 0) {
+      if (!usingCompressed) {
+         is_valid := true.B
+         inst     := f3_imemresp.data(i*coreInstBits+coreInstBits-1,i*coreInstBits)
+      } else if (i == 0) {
          when (prev_is_half) {
             inst := Cat(f3_imemresp.data(15,0), prev_half)
             f3_fetch_bundle.edge_inst := true.B
@@ -278,7 +281,7 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
       f3_fetch_bundle.insts(i) := inst
 
       // TODO do not compute a vector of targets
-      val pc = f3_aligned_pc + (i << 1).U
+      val pc = f3_aligned_pc + (i << log2Ceil(coreInstBytes)).U
       f3_valid_mask(i) := f3_valid && f3_imemresp.mask(i) && is_valid
       is_br(i)    := f3_valid && bpd_decoder.io.is_br   && f3_imemresp.mask(i) && is_valid
       is_jal(i)   := f3_valid && bpd_decoder.io.is_jal  && f3_imemresp.mask(i) && is_valid
@@ -286,7 +289,7 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
       is_call(i)  := f3_valid && IsCall(inst) && f3_imemresp.mask(i) && is_valid
       br_targs(i) := ComputeBranchTarget(pc, inst, xLen)
       jal_targs(i) := ComputeJALTarget(pc, inst, xLen)
-      jal_targs_ma(i) := jal_targs(i)(0) && is_jal(i)
+      jal_targs_ma(i) := jal_targs(i)(0) && is_jal(i) && (if (usingCompressed) jal_targs(i)(1) else true.B)
    }
 
    val f3_br_seen = f3_valid &&
@@ -637,7 +640,7 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
    val cfi_idx = (fetch_width-1).U - PriorityEncoder(Reverse(f3_fetch_bundle.mask))
    val fetch_pc = f3_fetch_bundle.pc
    val curr_aligned_pc = alignToFetchBoundary(fetch_pc)
-   val cfi_pc = curr_aligned_pc  + (cfi_idx << 1.U)
+   val cfi_pc = curr_aligned_pc  + (cfi_idx << log2Ceil(coreInstBytes).U)
 
    when (fb.io.enq.fire() &&
       !f3_fetch_bundle.replay_if &&

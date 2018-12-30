@@ -88,7 +88,6 @@ class FetchMonitor(implicit p: Parameters) extends BoomModule()(p)
       prev_pc  = uop.pc
       prev_npc = prev_pc + Mux(uop.is_rvc, 2.U, 4.U)
       prev_cfitype = GetCfiType(uop.inst)
-      //require (coreInstBytes == 4)
       prev_target =
          Mux(prev_cfitype === CfiType.jal,
             ComputeJALTarget(uop.pc, uop.inst, xLen),
@@ -115,10 +114,10 @@ class FetchMonitor(implicit p: Parameters) extends BoomModule()(p)
 
       val valid_mask = VecInit(io.uops map {u => u.valid}).asUInt
       assert (valid_mask =/= 0.U)
-      val end_idx = (fetchWidth-1).U - PriorityEncoder(Reverse(valid_mask))
-      val end_uop = io.uops(end_idx)
-      val end_pc = end_uop.pc
-      val end_compressed = end_uop.inst(1,0) =/= 3.U
+      val end_idx    = (fetchWidth-1).U - PriorityEncoder(Reverse(valid_mask))
+      val end_uop    = io.uops(end_idx)
+      val end_pc     = end_uop.pc
+      val end_compressed = end_uop.inst(1,0) =/= 3.U && usingCompressed.B
 
       last_pc := end_pc
       when (end_compressed) {

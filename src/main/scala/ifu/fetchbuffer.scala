@@ -40,7 +40,6 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule()
 
       // Was the pipeline redirected? Clear/reset the fetchbuffer.
       val clear = Input(Bool())
-      val debug_count = Output(UInt())
    })
 
    require (num_entries > 1)
@@ -51,8 +50,7 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule()
 
    // How many uops are stored within the ram? If zero, bypass to the output flops.
    private val count = RegInit(0.U(log2Ceil(num_elements).W))
-   io.debug_count := count
-   dontTouch(io.debug_count)
+
    //-------------------------------------------------------------
    // **** Enqueue Uops ****
    //-------------------------------------------------------------
@@ -82,17 +80,18 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule()
       in_uops(i).valid          := io.enq.valid && io.enq.bits.mask(i)
       if (i == 0) {
          when (io.enq.bits.edge_inst) {
+            assert(usingCompressed.B)
             in_uops(i).pc       := alignToFetchBoundary(io.enq.bits.pc) - 2.U
          } .otherwise {
             in_uops(i).pc       := alignToFetchBoundary(io.enq.bits.pc)
          }
       } else {
-         in_uops(i).pc          := alignToFetchBoundary(io.enq.bits.pc) + (i << 1).U
+         in_uops(i).pc          := alignToFetchBoundary(io.enq.bits.pc) + (i << log2Ceil(coreInstBytes)).U
       }
       in_uops(i).ftq_idx        := io.enq.bits.ftq_idx
       in_uops(i).pc_lob         := in_uops(i).pc // LHS width will cut off high-order bits.
       in_uops(i).inst           := io.enq.bits.insts(i)
-      in_uops(i).is_rvc         := io.enq.bits.insts(i)(1,0) =/= 3.U
+      in_uops(i).is_rvc         := io.enq.bits.insts(i)(1,0) =/= 3.U && usingCompressed.B
       in_uops(i).xcpt_pf_if     := io.enq.bits.xcpt_pf_if
       in_uops(i).xcpt_ae_if     := io.enq.bits.xcpt_ae_if
       in_uops(i).replay_if      := io.enq.bits.replay_if
@@ -123,9 +122,6 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule()
          compact_mask(compact_idx) := true.B
       }
       compact_idx = compact_idx + use_uop
-      // val invalid = first_index >= (fetchWidth - i).U // out-of-bounds
-      // compact_uops(i) := Mux1H(selects_oh, in_uops)
-      // compact_mask(i) := Mux1H(selects_oh, io.enq.bits.mask) && !invalid && in_uops(selects).valid
 
 //      if (DEBUG_PRINTF)
 //      {

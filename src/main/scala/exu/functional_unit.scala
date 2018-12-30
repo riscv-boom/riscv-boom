@@ -505,8 +505,6 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
             Mux(uop.is_jump, BpredType.jump,
                 BpredType.branch)))
 
-      //require (coreInstBytes == 4)
-
 
       // Branch/Jump Target Calculation
       // we can't push this through the ALU though, b/c jalr needs both PC+4 and rs1+offset
@@ -529,8 +527,8 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
       br_unit.pc := uop_pc_
 
       // handle misaligned branch/jmp targets
-      //require (coreInstBytes == 4) // no RVC support
-      br_unit.xcpt.valid     := bj_addr(0) && io.req.valid && is_taken && !killed
+      br_unit.xcpt.valid     := bj_addr(0) && (if (!usingCompressed) bj_addr(1) else true.B) &&
+                                io.req.valid && is_taken && !killed
       br_unit.xcpt.bits.uop  := uop
       br_unit.xcpt.bits.cause:= freechips.rocketchip.rocket.Causes.misaligned_fetch.U
       // TODO is there a better way to get this information to the CSR file? maybe use brinfo.target?
