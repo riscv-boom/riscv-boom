@@ -51,6 +51,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
       val wb_pdsts         = Input(Vec(num_wakeup_ports, UInt(width=fp_preg_sz.W)))
 
       val debug_tsc_reg    = Input(UInt(width=xLen.W))
+      val debug_wb_wdata   = Output(Vec(num_wakeup_ports, UInt((fLen+1).W)))
    }
 
    //**********************************
@@ -299,6 +300,9 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
       }
    }
 
+   for ((wdata, wakeup) <- io.debug_wb_wdata zip io.wakeups) {
+      wdata := ieee(wakeup.bits.data)
+   }
 
    exe_units.map(_.io.fcsr_rm := io.fcsr_rm)
 

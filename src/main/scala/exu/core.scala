@@ -68,7 +68,6 @@ trait HasBoomCoreIO extends freechips.rocketchip.tile.HasTileParameters {
 
 class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut) extends BoomModule()(p)
    with HasBoomCoreIO
-   with freechips.rocketchip.tile.HasFPUParameters
 {
    //**********************************
    // construct all of the modules
@@ -109,7 +108,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
                                  xLen,
                                  exe_units.bypassable_write_port_mask))
                           }
-   val ll_wbarb         = Module(new Arbiter(new ExeUnitResp(xLen), 2))
+   val ll_wbarb         = Module(new Arbiter(new ExeUnitResp(xLen), if (usingFPU) 2 else 1))
    val iregister_read   = Module(new RegisterRead(
                                  issue_units.map(_.issue_width).sum,
                                  exe_units.withFilter(_.usesIRF).map(_.supportedFuncUnits),
@@ -1073,12 +1072,12 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    }
 
    if (usingFPU) {
-      for (wakeup <- fp_pipeline.io.wakeups)
+      for ((wdata, wakeup) <- fp_pipeline.io.debug_wb_wdata zip fp_pipeline.io.wakeups)
       {
          rob.io.wb_resps(cnt) <> wakeup
          rob.io.fflags(f_cnt) <> wakeup.bits.fflags
          rob.io.debug_wb_valids(cnt) := wakeup.valid
-         rob.io.debug_wb_wdata(cnt) := ieee(wakeup.bits.data)
+         rob.io.debug_wb_wdata(cnt) := wdata
          cnt += 1
          f_cnt += 1
 

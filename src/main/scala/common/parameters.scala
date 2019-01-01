@@ -126,7 +126,6 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
    //************************************
    // Functional Units
    val usingFDivSqrt = boomParams.fpu.isDefined && boomParams.fpu.get.divSqrt
-   override val usingFPU      = boomParams.usingFPU
 
    val mulDivParams = boomParams.mulDiv.getOrElse(MulDivParams())
 

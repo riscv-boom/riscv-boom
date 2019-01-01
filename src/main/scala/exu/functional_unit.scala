@@ -585,7 +585,6 @@ class MemAddrCalcUnit(implicit p: Parameters)
       is_branch_unit = false)(p)
    with freechips.rocketchip.rocket.constants.MemoryOpConstants
    with freechips.rocketchip.rocket.constants.ScalarOpConstants
-   with freechips.rocketchip.tile.HasFPUParameters
 {
    // perform address calculation
    val sum = (io.req.bits.rs1_data.asSInt + io.req.bits.uop.imm_packed(19,8).asSInt).asUInt

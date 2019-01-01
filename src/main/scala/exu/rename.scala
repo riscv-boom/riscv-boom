@@ -204,6 +204,7 @@ class RenameStage(
    {
       val imap = imaptable.io.values(w)
       val fmap = if (usingFPU) fmaptable.io.values(w) else Wire(new MapTableOutput(1))
+      if (!usingFPU) fmap := DontCare
 
       uop.pop1       := Mux(uop.lrs1_rtype === RT_FLT, fmap.prs1, imap.prs1)
       uop.pop2       := Mux(uop.lrs2_rtype === RT_FLT, fmap.prs2, imap.prs2)
@@ -303,6 +304,7 @@ class RenameStage(
    {
       val ibusy = ibusytable.io.values(w)
       val fbusy = if (usingFPU) fbusytable.io.values(w) else Wire(new BusyTableOutput)
+      if (!usingFPU) fbusy := DontCare
 
       uop.prs1_busy := Mux(uop.lrs1_rtype === RT_FLT, fbusy.prs1_busy, ibusy.prs1_busy)
       uop.prs2_busy := Mux(uop.lrs2_rtype === RT_FLT, fbusy.prs2_busy, ibusy.prs2_busy)
