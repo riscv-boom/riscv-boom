@@ -57,7 +57,7 @@ class DefaultBoomConfig extends Config((site, here, up) => {
 
 class WithoutBoomFPU extends Config((site, here, up) => {
    case BoomTilesKey => up(BoomTilesKey, site) map { r => r.copy(core = r.core.copy(
-      usingFPU = false))
+      fpu = None))
    }
 })
 
