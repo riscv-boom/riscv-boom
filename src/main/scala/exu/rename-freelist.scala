@@ -60,11 +60,10 @@ class FreeListIo(
    val debug = Output(new DebugFreeListIO(num_phys_registers))
 }
 
-class DebugFreeListIO(num_phys_registers: Int) extends Bundle
+class DebugFreeListIO(val num_phys_registers: Int) extends Bundle
 {
    val freelist = Bits(num_phys_registers.W)
    val isprlist = Bits(num_phys_registers.W)
-   override def cloneType: this.type = new DebugFreeListIO(num_phys_registers).asInstanceOf[this.type]
 }
 
 // provide a fixed set of renamed destination registers

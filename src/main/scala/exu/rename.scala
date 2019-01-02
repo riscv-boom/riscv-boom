@@ -73,7 +73,7 @@ class RenameStageIO(
 }
 
 
-class DebugRenameStageIO(int_num_pregs: Int, fp_num_pregs: Int)(implicit p: Parameters) extends BoomBundle()(p)
+class DebugRenameStageIO(val int_num_pregs: Int, val fp_num_pregs: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
    val ifreelist =  Bits(int_num_pregs.W)
    val iisprlist =  Bits(int_num_pregs.W)
@@ -81,7 +81,6 @@ class DebugRenameStageIO(int_num_pregs: Int, fp_num_pregs: Int)(implicit p: Para
    val ffreelist =  Bits(fp_num_pregs.W)
    val fisprlist =  Bits(fp_num_pregs.W)
    val fbusytable = UInt(fp_num_pregs.W)
-   override def cloneType: this.type = new DebugRenameStageIO(int_num_pregs, fp_num_pregs).asInstanceOf[this.type]
 }
 
 

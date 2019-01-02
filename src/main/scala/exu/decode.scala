@@ -352,7 +352,6 @@ class DecodeUnitIo(implicit p: Parameters) extends BoomBundle()(p)
    val interrupt = Input(Bool())
    val interrupt_cause = Input(UInt(xLen.W))
 
-   override def cloneType: this.type = new DecodeUnitIo()(p).asInstanceOf[this.type]
 }
 
 // Takes in a single instruction, generates a MicroOp.
