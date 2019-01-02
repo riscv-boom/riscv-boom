@@ -55,7 +55,7 @@ import boom.common._
 import boom.exu.{BrResolutionInfo, Exception, FlushSignals, FuncUnitResp}
 import boom.util.{AgePriorityEncoder, IsKilledByBranch, GetNewBrMask, WrapInc}
 
-class LoadStoreUnitIO(pl_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
+class LoadStoreUnitIO(val pl_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
    // Decode Stage
    // Track which stores are "alive" in the pipeline
@@ -143,7 +143,6 @@ class LoadStoreUnitIO(pl_width: Int)(implicit p: Parameters) extends BoomBundle(
 
    val debug_tsc = Input(UInt(xLen.W))     // time stamp counter
 
-   override def cloneType: this.type = new LoadStoreUnitIO(pl_width)(p).asInstanceOf[this.type]
 }
 
 

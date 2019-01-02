@@ -46,7 +46,7 @@ import chisel3.util._
 import boom.util.SeqMem1rwTransformable
 
 
-class UpdateEntry(fetch_width: Int, index_sz: Int) extends Bundle
+class UpdateEntry(val fetch_width: Int, val index_sz: Int) extends Bundle
 {
    val index            = UInt(index_sz.W)
    val executed         = Vec(fetch_width, Bool())
@@ -57,17 +57,15 @@ class UpdateEntry(fetch_width: Int, index_sz: Int) extends Bundle
    // If takens(i), then we initialize entry to Weak-Taken. Otherwise, Weak-NotTaken.
    val do_initialize    = Bool()
 
-   override def cloneType: this.type = new UpdateEntry(fetch_width, index_sz).asInstanceOf[this.type]
 }
 
 
-class BrTableUpdate(fetch_width: Int, index_sz: Int) extends Bundle
+class BrTableUpdate(val fetch_width: Int, val index_sz: Int) extends Bundle
 {
    val index      = UInt(index_sz.W)
    val executed   = UInt(fetch_width.W) // which words in the fetch packet does the update correspond to?
    val new_value  = UInt(fetch_width.W)
 
-   override def cloneType: this.type = new BrTableUpdate(fetch_width, index_sz).asInstanceOf[this.type]
 }
 
 
