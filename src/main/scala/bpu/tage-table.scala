@@ -269,6 +269,5 @@ class TageTable(
       tag_sz + "-bit tags, " +
       cntr_sz + "-bit counters"
 
-   override val compileOptions = chisel3.core.ExplicitCompileOptions.NotStrict.copy(explicitInvalidate = true)
 }
 

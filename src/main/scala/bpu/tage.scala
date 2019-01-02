@@ -500,6 +500,5 @@ class TageBrPredictor(
       (size_in_bits/1024) + " Kbits) (max history length: " + history_lengths.max + " bits)\n" +
       tables.mkString("\n")
 
-   override val compileOptions = chisel3.core.ExplicitCompileOptions.NotStrict.copy(explicitInvalidate = true)
 }
 

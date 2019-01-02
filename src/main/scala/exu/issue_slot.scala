@@ -318,6 +318,5 @@ class IssueSlot(num_slow_wakeup_ports: Int)(implicit p: Parameters)
    io.debug.p3 := slot_p3
    io.debug.state := slot_state
 
-   override val compileOptions = chisel3.core.ExplicitCompileOptions.NotStrict.copy(explicitInvalidate = true)
 }
 

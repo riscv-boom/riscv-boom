@@ -766,6 +766,5 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
          )
    }
 
-   override val compileOptions = chisel3.core.ExplicitCompileOptions.NotStrict.copy(explicitInvalidate = true)
 }
 

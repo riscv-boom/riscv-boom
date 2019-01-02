@@ -322,5 +322,4 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
       "\n   Num Wakeup Ports      : " + num_wakeup_ports +
       "\n   Num Bypass Ports      : " + exe_units.num_total_bypass_ports + "\n"
 
-   override val compileOptions = chisel3.core.ExplicitCompileOptions.NotStrict.copy(explicitInvalidate = true)
 }

@@ -354,6 +354,5 @@ class RenameStage(
    io.debug.fbusytable := (if (usingFPU) fbusytable.io.debug.busytable else 0.U)
 
 
-   override val compileOptions = chisel3.core.ExplicitCompileOptions.NotStrict.copy(explicitInvalidate = true)
 }
 
