@@ -251,6 +251,7 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
       if (!usingCompressed) {
          is_valid := true.B
          inst     := f3_imemresp.data(i*coreInstBits+coreInstBits-1,i*coreInstBits)
+         f3_fetch_bundle.edge_inst := false.B
       } else if (i == 0) {
          when (prev_is_half) {
             inst := Cat(f3_imemresp.data(15,0), prev_half)
@@ -269,8 +270,10 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
          is_valid := !((f3_valid_mask(i-1) && f3_fetch_bundle.insts(i-1)(1,0) === 3.U) ||
                        inst(1,0) === 3.U)
          when (f3_valid) {
+            // r_f4_req_valid means the next bundle is not immediately after this one
             prev_is_half := (!(f3_valid_mask(i-1) && f3_fetch_bundle.insts(i-1)(1,0) === 3.U)
-                           && inst(1,0) === 3.U)
+                             && inst(1,0) === 3.U
+                             && !r_f4_req.valid)
             prev_half    := inst(15,0)
          }
       } else {

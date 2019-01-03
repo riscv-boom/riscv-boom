@@ -26,7 +26,7 @@ object Generator extends GeneratorApp {
         "rv64uf-v-fadd",
         "rv64um-v-mul",
         // "rv64mi-p-breakpoint", TODO: breakpoints not implemented yet
-        // "rv64uc-v-rvc", TODO: RVC not implemented yet
+        "rv64uc-v-rvc",
         "rv64ud-v-structural",
         "rv64si-p-wfi",
         "rv64um-v-divw",
