@@ -331,7 +331,6 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   def ccover(cond: Bool, label: String, desc: String)(implicit sourceInfo: SourceInfo) =
     cover(cond, s"FRONTEND_$label", "Rocket;;" + desc)
 
-   override val compileOptions = chisel3.core.ExplicitCompileOptions.NotStrict.copy(explicitInvalidate = true)
 }
 
 /** Mix-ins for constructing tiles that have an ICache-based pipeline frontend */

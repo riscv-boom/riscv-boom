@@ -352,7 +352,6 @@ class DecodeUnitIo(implicit p: Parameters) extends BoomBundle()(p)
    val interrupt = Input(Bool())
    val interrupt_cause = Input(UInt(xLen.W))
 
-   override def cloneType: this.type = new DecodeUnitIo()(p).asInstanceOf[this.type]
 }
 
 // Takes in a single instruction, generates a MicroOp.
@@ -466,7 +465,6 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule()(p)
 
    //-------------------------------------------------------------
 
-   override val compileOptions = chisel3.core.ExplicitCompileOptions.NotStrict.copy(explicitInvalidate = true)
 }
 
 
@@ -601,6 +599,5 @@ class BranchMaskGenerationLogic(val pl_width: Int)(implicit p: Parameters) exten
 
    io.debug.branch_mask := branch_mask
 
-   override val compileOptions = chisel3.core.ExplicitCompileOptions.NotStrict.copy(explicitInvalidate = true)
 }
 

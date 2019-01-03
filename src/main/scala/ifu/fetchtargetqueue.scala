@@ -350,6 +350,5 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
    val debug_deq_ptr = deq_ptr.value
    dontTouch(debug_deq_ptr)
 
-   override val compileOptions = chisel3.core.ExplicitCompileOptions.NotStrict.copy(explicitInvalidate = true)
 }
 

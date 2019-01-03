@@ -44,7 +44,7 @@ trait HasGShareParameters extends HasBoomCoreParameters
 }
 
 
-class GShareResp(fetch_width: Int, idx_sz: Int) extends Bundle
+class GShareResp(val fetch_width: Int, val idx_sz: Int) extends Bundle
 {
    val debug_index = UInt(idx_sz.W) // Can recompute index during update (but let's check for errors).
    val rowdata = UInt((fetch_width*2).W) // Store to prevent a re-read during an update.
@@ -62,7 +62,6 @@ class GShareResp(fetch_width: Int, idx_sz: Int) extends Bundle
       cntr
    }
 
-   override def cloneType: this.type = new GShareResp(fetch_width, idx_sz).asInstanceOf[this.type]
 }
 
 object GShareBrPredictor

@@ -74,6 +74,5 @@ class BaseOnlyBrPredictor(
 
    override def toString: String = "  Building no predictor (just using BIM as a base predictor)."
 
-   override val compileOptions = chisel3.core.ExplicitCompileOptions.NotStrict.copy(explicitInvalidate = true)
 }
 

@@ -266,7 +266,6 @@ abstract class BrPredictor(
 
    //************************************************
 
-   override val compileOptions = chisel3.core.ExplicitCompileOptions.NotStrict.copy(explicitInvalidate = true)
 }
 
 
