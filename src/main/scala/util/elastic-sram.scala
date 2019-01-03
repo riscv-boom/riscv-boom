@@ -10,7 +10,7 @@ package boom.util
 import chisel3._
 import chisel3.util._
 
-class ESramWritePort[T <: Data](val idx_sz: Int, val gen: T) extends Bundle
+class ESramWritePort[T <: Data](val idx_sz: Int, private val gen: T) extends Bundle
 {
    val idx = UInt(idx_sz.W)
    val data = gen
