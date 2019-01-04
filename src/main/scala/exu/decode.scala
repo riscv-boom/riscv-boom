@@ -466,7 +466,7 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule()(p)
                          (uop.lrs1 === RA)
    uop.is_call        := (uop.uopc === uopJALR || uop.uopc === uopJAL) &&
                          (uop.ldst === RA)
-   
+
    //-------------------------------------------------------------
 
    io.deq.uop := uop
