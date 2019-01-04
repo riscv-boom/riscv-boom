@@ -272,13 +272,6 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
          inst     := Cat(0.U(16.W), f3_imemresp.data(fetchWidth*coreInstBits-1,i*coreInstBits))
          is_valid := !((f3_valid_mask(i-1) && f3_fetch_bundle.insts(i-1)(1,0) === 3.U) ||
                        inst(1,0) === 3.U)
-         when (f3_valid) {
-            // r_f4_req_valid means the next bundle is not immediately after this one
-            prev_is_half := (!(f3_valid_mask(i-1) && f3_fetch_bundle.insts(i-1)(1,0) === 3.U)
-                             && inst(1,0) === 3.U
-                             && !r_f4_req.valid)
-            prev_half    := inst(15,0)
-         }
       } else {
          inst     := f3_imemresp.data(i*coreInstBits+2*coreInstBits-1,i*coreInstBits)
          is_valid := !(f3_valid_mask(i-1) && f3_fetch_bundle.insts(i-1)(1,0) === 3.U)
@@ -342,6 +335,14 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
       Mux(f3_has_jal,
          f3_jal_target,
          nextFetchStart(f3_aligned_pc)))
+
+   when (f3_valid) {
+      // We discard the trailing instruction if there's a JAL
+      prev_is_half := (!(f3_valid_mask(fetchWidth-2) && f3_fetch_bundle.insts(fetchWidth-2)(1,0) === 3.U)
+                    && f3_fetch_bundle.insts(fetchWidth-1)(1,0) === 3.U
+                    && !f3_has_jal)
+      prev_half    := f3_fetch_bundle.insts(fetchWidth-1)(15,0)
+   }
 
    when (f3_valid && f3_btb_resp.valid)
    {
@@ -677,16 +678,12 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
          {
             // ignore misaligned fetches -- we should have marked the instruction as excepting,
             // but when it makes a misaligned fetch request the I$ gives us back an aligned PC.
-            val f_pc = Wire(UInt(vaddrBitsExtended.W))
-
-            when (f3_fetch_bundle.edge_inst) {
-               f_pc := fetch_pc(vaddrBitsExtended-1, log2Ceil(coreInstBytes)) - 1.U
-            } .otherwise {
-               f_pc := fetch_pc(vaddrBitsExtended-1, log2Ceil(coreInstBytes))
-            }
+            val f_pc = (fetch_pc(vaddrBitsExtended-1, log2Ceil(coreInstBytes))
+                      - Mux(f3_fetch_bundle.edge_inst, 1.U, 0.U))
             val targ = last_target(vaddrBitsExtended-1, log2Ceil(coreInstBytes))
             when (f_pc =/= targ) {
-               printf("about to abort: [fetch] JAL is followed by the wrong instruction.")
+               printf("about to abort: [fetch] JAL is followed by the wrong instruction. 0x%x =/= 0x%x\n",
+                  f_pc, targ)
                printf("fetch_pc: 0x%x, last_target: 0x%x, last_nextlinepc: 0x%x\n",
                   fetch_pc, last_target, last_nextlinepc)
             }
@@ -695,7 +692,8 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
          .elsewhen (last_cfi_type === CfiType.branch)
          {
             // again, ignore misaligned fetches -- an exception should be caught.
-            val f_pc = fetch_pc(vaddrBitsExtended-1, log2Ceil(coreInstBytes))
+            val f_pc = (fetch_pc(vaddrBitsExtended-1, log2Ceil(coreInstBytes))
+                      - Mux(f3_fetch_bundle.edge_inst, 1.U, 0.U))
             val targ = last_target(vaddrBitsExtended-1, log2Ceil(coreInstBytes))
             assert (fetch_pc === last_nextlinepc || f_pc === targ,
                "[fetch] branch is followed by the wrong instruction.")
