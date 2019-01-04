@@ -240,8 +240,11 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
    // branches though since only taken branches are exceptions.
    val jal_targs_ma = Wire(Vec(fetch_width, Bool()))
 
+   // Tracks trailing 16b of previous fetch packet
    val prev_half    = Reg(UInt(coreInstBits.W))
+   // Tracks if last fetchpacket contained a half-inst
    val prev_is_half = RegInit(false.B)
+
    assert(fetch_width >= 4 || !usingCompressed) // Logic gets kind of annoying with fetch_width = 2
    for (i <- 0 until fetch_width)
    {

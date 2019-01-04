@@ -759,7 +759,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    csr.io.retire    := PopCount(rob.io.commit.valids.asUInt)
    csr.io.exception := rob.io.com_xcpt.valid
    // csr.io.pc used for setting EPC during exception or CSR.io.trace.
-   csr.io.pc        := boom.util.AlignPCToBoundary(io.ifu.com_fetch_pc, icBlockBytes) + rob.io.com_xcpt.bits.pc_lob
+   csr.io.pc        := boom.util.AlignPCToBoundary(io.ifu.com_fetch_pc, icBlockBytes) + rob.io.com_xcpt.bits.pc_lob - Mux(rob.io.com_xcpt.bits.edge_inst, icBlockBytes.U, 0.U)
    // Cause not valid for for CALL or BREAKPOINTs (CSRFile will override it).
    csr.io.cause     := rob.io.com_xcpt.bits.cause
 

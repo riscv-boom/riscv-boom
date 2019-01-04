@@ -78,10 +78,12 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule()
    {
       in_uops(i)                := DontCare
       in_uops(i).valid          := io.enq.valid && io.enq.bits.mask(i)
+      in_uops(i).edge_inst      := false.B
       if (i == 0) {
          when (io.enq.bits.edge_inst) {
             assert(usingCompressed.B)
             in_uops(i).pc       := alignToFetchBoundary(io.enq.bits.pc) - 2.U
+            in_uops(i).edge_inst:= true.B
          } .otherwise {
             in_uops(i).pc       := alignToFetchBoundary(io.enq.bits.pc)
          }
