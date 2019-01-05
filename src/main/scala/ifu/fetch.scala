@@ -280,7 +280,9 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
       f3_fetch_bundle.insts(i) := inst
 
       // TODO do not compute a vector of targets
-      val pc = f3_aligned_pc + (i << log2Ceil(coreInstBytes)).U
+      val pc = (f3_aligned_pc
+              + (i << log2Ceil(coreInstBytes)).U
+              - Mux(prev_is_half && (i == 0).B, 2.U, 0.U))
       f3_valid_mask(i) := f3_valid && f3_imemresp.mask(i) && is_valid
       is_br(i)    := f3_valid && bpd_decoder.io.is_br   && f3_imemresp.mask(i) && is_valid
       is_jal(i)   := f3_valid && bpd_decoder.io.is_jal  && f3_imemresp.mask(i) && is_valid
@@ -695,6 +697,10 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
             val f_pc = (fetch_pc(vaddrBitsExtended-1, log2Ceil(coreInstBytes))
                       - Mux(f3_fetch_bundle.edge_inst, 1.U, 0.U))
             val targ = last_target(vaddrBitsExtended-1, log2Ceil(coreInstBytes))
+            when (f_pc =/= targ && fetch_pc =/= last_nextlinepc) {
+               printf("about to abort: [fetch] Branch is followed by the wrong instruction\n")
+               printf("0x%x =/= 0x%x, 0x%x =/= 0x%x\n", f_pc, targ, fetch_pc, last_nextlinepc)
+            }
             assert (fetch_pc === last_nextlinepc || f_pc === targ,
                "[fetch] branch is followed by the wrong instruction.")
          }
