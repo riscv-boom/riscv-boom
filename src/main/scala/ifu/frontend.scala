@@ -25,7 +25,7 @@ import freechips.rocketchip.util.property._
 import chisel3.internal.sourceinfo.SourceInfo
 import boom.bpu._
 import boom.common._
-import boom.exu.{BranchUnitResp, FlushSignals}
+import boom.exu.{BranchUnitResp, CommitExceptionSignals}
 import boom.lsu.{CanHaveBoomPTW, CanHaveBoomPTWModule}
 
 //class FrontendReq(implicit p: Parameters) extends CoreBundle()(p) {
@@ -124,7 +124,7 @@ class BoomFrontendIO(implicit p: Parameters) extends BoomBundle()(p)
 
 
    val commit            = Valid(UInt(ftqSz.W))
-   val flush_info        = Valid(new FlushSignals())
+   val flush_info        = Valid(new CommitExceptionSignals())
    val flush_take_pc     = Output(Bool())
    val flush_pc          = Output(UInt((vaddrBits+1).W)) // TODO rename; no longer catch-all flush_pc
    val flush_icache      = Output(Bool())

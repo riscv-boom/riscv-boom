@@ -89,7 +89,7 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
       val restore_history = Valid(new RestoreHistory)
 
       // on any sort misprediction or rob flush, reset the enq_ptr, make a PC redirect request.
-      val flush = Flipped(Valid(new FlushSignals()))
+      val flush = Flipped(Valid(new CommitExceptionSignals()))
       // Redirect the frontend as we see fit (due to ROB/flush interactions).
       val take_pc = Valid(new PCReq())
       // Tell the CSRFile what the fetch-pc at the FTQ's Commit Head is.
@@ -292,15 +292,17 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
    //-------------------------------------------------------------
 
    val com_pc = Wire(UInt())
-   val com_pc_plus4 = Wire(UInt())
+   val com_pc_next = Wire(UInt())
 
    io.take_pc.valid := io.flush.valid && !FlushTypes.useCsrEvec(io.flush.bits.flush_typ)
-   io.take_pc.bits.addr := Mux(FlushTypes.useSamePC(io.flush.bits.flush_typ), com_pc, com_pc_plus4)
+   io.take_pc.bits.addr := Mux(FlushTypes.useSamePC(io.flush.bits.flush_typ), com_pc, com_pc_next)
 
    // TODO CLEANUP this is wonky: the exception occurs 1 cycle faster than flushing,
    io.com_fetch_pc := ram(io.com_ftq_idx).fetch_pc
-   com_pc := RegNext(AlignPCToBoundary(io.com_fetch_pc, icBlockBytes)) + io.flush.bits.pc_lob
-   com_pc_plus4 := com_pc + 4.U // TODO RVC
+   com_pc := (RegNext(AlignPCToBoundary(io.com_fetch_pc, icBlockBytes))
+            + io.flush.bits.pc_lob
+            - Mux(io.flush.bits.edge_inst, 2.U, 0.U))
+   com_pc_next := com_pc + Mux(io.flush.bits.is_rvc, 2.U, 4.U)
 
    assert (RegNext(io.com_ftq_idx) === io.flush.bits.ftq_idx, "[ftq] this code depends on this assumption")
 

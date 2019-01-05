@@ -79,19 +79,18 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule()
       in_uops(i)                := DontCare
       in_uops(i).valid          := io.enq.valid && io.enq.bits.mask(i)
       in_uops(i).edge_inst      := false.B
+      in_uops(i).pc             := (alignToFetchBoundary(io.enq.bits.pc)
+                                  + (i << log2Ceil(coreInstBytes)).U)
+      in_uops(i).pc_lob         := in_uops(i).pc // LHS width will cut off high-order bits.
       if (i == 0) {
          when (io.enq.bits.edge_inst) {
             assert(usingCompressed.B)
             in_uops(i).pc       := alignToFetchBoundary(io.enq.bits.pc) - 2.U
+            in_uops(i).pc_lob   := alignToFetchBoundary(io.enq.bits.pc)
             in_uops(i).edge_inst:= true.B
-         } .otherwise {
-            in_uops(i).pc       := alignToFetchBoundary(io.enq.bits.pc)
          }
-      } else {
-         in_uops(i).pc          := alignToFetchBoundary(io.enq.bits.pc) + (i << log2Ceil(coreInstBytes)).U
       }
       in_uops(i).ftq_idx        := io.enq.bits.ftq_idx
-      in_uops(i).pc_lob         := in_uops(i).pc // LHS width will cut off high-order bits.
       in_uops(i).inst           := io.enq.bits.insts(i)
       in_uops(i).is_rvc         := io.enq.bits.insts(i)(1,0) =/= 3.U && usingCompressed.B
       in_uops(i).xcpt_pf_if     := io.enq.bits.xcpt_pf_if

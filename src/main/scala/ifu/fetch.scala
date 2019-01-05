@@ -93,7 +93,7 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
       val clear_fetchbuffer = Input(Bool())
 
       val commit            = Flipped(Valid(UInt(ftqSz.W)))
-      val flush_info        = Flipped(Valid(new FlushSignals()))
+      val flush_info        = Flipped(Valid(new CommitExceptionSignals))
       val flush_take_pc     = Input(Bool())
       val flush_pc          = Input(UInt((vaddrBits+1).W)) // TODO rename; no longer catch-all flush_pc
 
@@ -338,7 +338,7 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
          f3_jal_target,
          nextFetchStart(f3_aligned_pc)))
 
-   when (f3_valid) {
+   when (f3_valid && f4_ready) {
       // We discard the trailing instruction if there's a JAL
       prev_is_half := (!(f3_valid_mask(fetchWidth-2) && f3_fetch_bundle.insts(fetchWidth-2)(1,0) === 3.U)
                     && f3_fetch_bundle.insts(fetchWidth-1)(1,0) === 3.U
@@ -646,11 +646,12 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
    val last_nextlinepc = Reg(UInt(vaddrBitsExtended.W))
    val last_cfi_type   = Reg(UInt(CfiType.SZ.W))
 
-   val cfi_idx = (fetch_width-1).U - PriorityEncoder(Reverse(f3_fetch_bundle.mask))
-   val fetch_pc = f3_fetch_bundle.pc
+   val cfi_idx         = (fetch_width-1).U - PriorityEncoder(Reverse(f3_fetch_bundle.mask))
+   val fetch_pc        = f3_fetch_bundle.pc
    val curr_aligned_pc = alignToFetchBoundary(fetch_pc)
-   val cfi_pc = curr_aligned_pc  + (cfi_idx << log2Ceil(coreInstBytes).U)
-
+   val cfi_pc          = (curr_aligned_pc
+                        + (cfi_idx << log2Ceil(coreInstBytes).U)
+                        - Mux(f3_fetch_bundle.edge_inst && cfi_idx === 0.U, 2.U, 0.U))
    when (fb.io.enq.fire() &&
       !f3_fetch_bundle.replay_if &&
       !f3_fetch_bundle.xcpt_pf_if &&

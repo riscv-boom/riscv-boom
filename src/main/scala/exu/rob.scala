@@ -86,7 +86,7 @@ class RobIo(
 
    // Flush signals (including exceptions, pipeline replays, and memory ordering failures)
    // to send to the frontend for redirection.
-   val flush = Valid(new FlushSignals)
+   val flush = Valid(new CommitExceptionSignals)
 
    // Stall Decode as appropriate
    val empty = Output(Bool())
@@ -119,18 +119,13 @@ class CommitExceptionSignals(implicit p: Parameters) extends BoomBundle()(p)
 {
    val ftq_idx    = UInt(log2Ceil(ftqSz).W)
    val edge_inst  = Bool()
+   val is_rvc     = Bool()
    val pc_lob     = UInt(log2Ceil(icBlockBytes).W)
    val cause      = UInt(xLen.W)
    val badvaddr   = UInt(xLen.W)
-}
-
 // The ROB needs to tell the FTQ if there's a pipeline flush (and what type)
 // so the FTQ can drive the frontend with the correct redirected PC.
-class FlushSignals(implicit p: Parameters) extends BoomBundle()(p)
-{
-   val ftq_idx = UInt(log2Ceil(ftqSz).W)
-   val pc_lob = UInt(log2Ceil(icBlockBytes).W)
-   val flush_typ = FlushTypes()
+   val flush_typ  = FlushTypes()
 }
 
 // Tell the frontend the type of flush so it can set up the next PC properly.
@@ -543,6 +538,7 @@ class Rob(
    val refetch_inst = exception_thrown || insn_sys_pc2epc
    io.com_xcpt.bits.ftq_idx   := PriorityMux(rob_head_vals, io.commit.uops.map{u => u.ftq_idx})
    io.com_xcpt.bits.edge_inst := PriorityMux(rob_head_vals, io.commit.uops.map{u => u.edge_inst})
+   io.com_xcpt.bits.is_rvc    := PriorityMux(rob_head_vals, io.commit.uops.map{u => u.is_rvc})
    io.com_xcpt.bits.pc_lob    := PriorityMux(rob_head_vals, io.commit.uops.map{u => u.pc_lob})
 
    val flush_val =
@@ -551,9 +547,11 @@ class Rob(
       (Range(0,width).map{i => io.commit.valids(i) && io.commit.uops(i).flush_on_commit}).reduce(_|_)
 
    // delay a cycle for critical path considerations
-   io.flush.valid := RegNext(flush_val, init=false.B)
-   io.flush.bits.ftq_idx := RegNext(io.com_xcpt.bits.ftq_idx)
-   io.flush.bits.pc_lob := RegNext(io.com_xcpt.bits.pc_lob)
+   io.flush.valid          := RegNext(flush_val, init=false.B)
+   io.flush.bits.ftq_idx   := RegNext(io.com_xcpt.bits.ftq_idx)
+   io.flush.bits.pc_lob    := RegNext(io.com_xcpt.bits.pc_lob)
+   io.flush.bits.edge_inst := RegNext(io.com_xcpt.bits.edge_inst)
+   io.flush.bits.is_rvc    := RegNext(io.com_xcpt.bits.is_rvc)
    io.flush.bits.flush_typ :=
       RegNext(FlushTypes.getType(flush_val, io.com_xcpt.valid, io.csr_eret, refetch_inst))
 
