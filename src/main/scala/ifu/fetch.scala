@@ -244,7 +244,9 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
    val prev_half    = Reg(UInt(coreInstBits.W))
    // Tracks if last fetchpacket contained a half-inst
    val prev_is_half = RegInit(false.B)
-
+   // Tracks previously fetched pc
+   val prev_fetchedpc = Reg(UInt(vaddrBitsExtended.W))
+   val use_prev = prev_is_half && f3_fetch_bundle.pc === prev_fetchedpc + fetchBytes.U
    assert(fetch_width >= 4 || !usingCompressed) // Logic gets kind of annoying with fetch_width = 2
    for (i <- 0 until fetch_width)
    {
@@ -256,7 +258,7 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
          inst     := f3_imemresp.data(i*coreInstBits+coreInstBits-1,i*coreInstBits)
          f3_fetch_bundle.edge_inst := false.B
       } else if (i == 0) {
-         when (prev_is_half) {
+         when (use_prev) {
             inst := Cat(f3_imemresp.data(15,0), prev_half)
             f3_fetch_bundle.edge_inst := true.B
          } .otherwise {
@@ -267,7 +269,7 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
       } else if (i == 1) {
          // Need special case since 0th instruction may carry over the wrap around
          inst     := f3_imemresp.data(i*coreInstBits+2*coreInstBits-1,i*coreInstBits)
-         is_valid := prev_is_half || !(f3_valid_mask(i-1) && f3_fetch_bundle.insts(i-1)(1,0) === 3.U)
+         is_valid := use_prev || !(f3_valid_mask(i-1) && f3_fetch_bundle.insts(i-1)(1,0) === 3.U)
       } else if (i == fetch_width - 1) {
          inst     := Cat(0.U(16.W), f3_imemresp.data(fetchWidth*coreInstBits-1,i*coreInstBits))
          is_valid := !((f3_valid_mask(i-1) && f3_fetch_bundle.insts(i-1)(1,0) === 3.U) ||
@@ -282,7 +284,7 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
       // TODO do not compute a vector of targets
       val pc = (f3_aligned_pc
               + (i << log2Ceil(coreInstBytes)).U
-              - Mux(prev_is_half && (i == 0).B, 2.U, 0.U))
+              - Mux(use_prev && (i == 0).B, 2.U, 0.U))
       f3_valid_mask(i) := f3_valid && f3_imemresp.mask(i) && is_valid
       is_br(i)    := f3_valid && bpd_decoder.io.is_br   && f3_imemresp.mask(i) && is_valid
       is_jal(i)   := f3_valid && bpd_decoder.io.is_jal  && f3_imemresp.mask(i) && is_valid
@@ -339,11 +341,13 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
          nextFetchStart(f3_aligned_pc)))
 
    when (f3_valid && f4_ready) {
-      // We discard the trailing instruction if there's a JAL
+      // We discard the trailing instruction if there's a JAL, or if we redirect the next fetch
+      // to not be npc
       prev_is_half := (!(f3_valid_mask(fetchWidth-2) && f3_fetch_bundle.insts(fetchWidth-2)(1,0) === 3.U)
                     && f3_fetch_bundle.insts(fetchWidth-1)(1,0) === 3.U
-                    && !f3_has_jal)
+      )
       prev_half    := f3_fetch_bundle.insts(fetchWidth-1)(15,0)
+      prev_fetchedpc := alignToFetchBoundary(f3_fetch_bundle.pc)
    }
 
    when (f3_valid && f3_btb_resp.valid)
@@ -637,7 +641,6 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
    //-------------------------------------------------------------
 
    // check if enqueue'd PC is a target of the previous valid enqueue'd PC.
-
    // clear checking if misprediction/flush/etc.
    val last_valid      = RegInit(false.B)
    val last_pc         = Reg(UInt(vaddrBitsExtended.W))
@@ -645,6 +648,7 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
    val last_target     = Reg(UInt(vaddrBitsExtended.W))
    val last_nextlinepc = Reg(UInt(vaddrBitsExtended.W))
    val last_cfi_type   = Reg(UInt(CfiType.SZ.W))
+
 
    val cfi_idx         = (fetch_width-1).U - PriorityEncoder(Reverse(f3_fetch_bundle.mask))
    val fetch_pc        = f3_fetch_bundle.pc

@@ -135,7 +135,7 @@ class FetchMonitor(implicit p: Parameters) extends BoomModule()(p)
       when (last_valid)
       {
          val first_idx = PriorityEncoder(valid_mask)
-         val first_pc = io.uops(first_idx).pc
+         val first_pc  = io.uops(first_idx).pc
          when (last_cfitype === CfiType.none)
          {
             when (first_pc =/= last_npc)
