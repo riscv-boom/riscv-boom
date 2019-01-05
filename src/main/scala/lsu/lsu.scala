@@ -52,7 +52,7 @@ import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.rocket
 import freechips.rocketchip.util.Str
 import boom.common._
-import boom.exu.{BrResolutionInfo, Exception, FlushSignals, FuncUnitResp}
+import boom.exu.{BrResolutionInfo, Exception, FuncUnitResp}
 import boom.util.{AgePriorityEncoder, IsKilledByBranch, GetNewBrMask, WrapInc}
 
 class LoadStoreUnitIO(pl_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
