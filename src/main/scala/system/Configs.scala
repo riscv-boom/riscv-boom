@@ -23,6 +23,7 @@ import boom.common._
 // scalastyle:off
 
 class BoomConfig extends Config(
+   new WithRVC ++
    new DefaultBoomConfig ++
    new WithNBoomCores(1) ++
    new WithoutTLMonitors ++
