@@ -294,7 +294,7 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
       is_rvc(i)   := f3_valid_mask(i) && inst(1,0) =/= 3.U && usingCompressed.B
       br_targs(i) := ComputeBranchTarget(pc, inst, xLen)
       jal_targs(i) := ComputeJALTarget(pc, inst, xLen)
-      jal_targs_ma(i) := jal_targs(i)(0) && is_jal(i) && (if (usingCompressed) jal_targs(i)(1) else true.B)
+      jal_targs_ma(i) := jal_targs(i)(1) && is_jal(i) && !usingCompressed.B
    }
 
    val f3_br_seen = f3_valid &&

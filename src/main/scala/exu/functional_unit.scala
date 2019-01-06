@@ -531,7 +531,7 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
       br_unit.pc := uop_pc_
 
       // handle misaligned branch/jmp targets
-      br_unit.xcpt.valid     := bj_addr(0) && (if (!usingCompressed) bj_addr(1) else true.B) &&
+      br_unit.xcpt.valid     := bj_addr(1) && !usingCompressed.B &&
                                 io.req.valid && is_taken && !killed
       br_unit.xcpt.bits.uop  := uop
       br_unit.xcpt.bits.cause:= freechips.rocketchip.rocket.Causes.misaligned_fetch.U
