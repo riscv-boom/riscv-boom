@@ -751,9 +751,9 @@ workflows:
                     - prepare-riscv-tools
 
             # Prepare the verilator builds
-            - prepare-boomconfig:
-                requires:
-                    - prepare-riscv-tools
+            # - prepare-boomconfig:
+            #     requires:
+            #         - prepare-riscv-tools
             - prepare-smallboomconfig:
                 requires:
                     - prepare-riscv-tools
@@ -766,15 +766,15 @@ workflows:
 
             # Run the respective tests
             # Run the BoomConfig tests
-            - boomconfig-run-benchmark-tests:
-                requires:
-                    - prepare-boomconfig
-            - boomconfig-run-regression-tests:
-                requires:
-                    - prepare-boomconfig
-            - boomconfig-run-assembly-tests:
-                requires:
-                    - prepare-boomconfig
+            # - boomconfig-run-benchmark-tests:
+            #     requires:
+            #         - prepare-boomconfig
+            # - boomconfig-run-regression-tests:
+            #     requires:
+            #         - prepare-boomconfig
+            # - boomconfig-run-assembly-tests:
+            #     requires:
+            #         - prepare-boomconfig
 
             # Run the SmallBoomConfig tests
             - smallboomconfig-run-benchmark-tests:
