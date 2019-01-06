@@ -42,7 +42,7 @@ class BranchChecker(fetch_width: Int)(implicit p: Parameters) extends BoomModule
       val is_jal        = Input(Vec(fetch_width, Bool()))
       val is_jr         = Input(Vec(fetch_width, Bool()))
       val is_call       = Input(Vec(fetch_width, Bool()))
-
+      val is_rvc        = Input(Vec(fetch_width, Bool()))
       val br_targs      = Input(Vec(fetch_width, UInt(vaddrBitsExtended.W)))
       val jal_targs     = Input(Vec(fetch_width, UInt(vaddrBitsExtended.W)))
 
@@ -142,6 +142,8 @@ class BranchChecker(fetch_width: Int)(implicit p: Parameters) extends BoomModule
    io.ras_update.valid := jal_may_win && io.is_call(jal_idx)
    io.ras_update.bits.is_call := true.B
    io.ras_update.bits.is_ret := false.B
-   io.ras_update.bits.return_addr := io.aligned_pc + (jal_idx << 2.U) + 4.U
+   io.ras_update.bits.return_addr := (io.aligned_pc
+                                    + (jal_idx << log2Ceil(fetchBytes))
+                                    + Mux(io.is_rvc(jal_idx), 2.U, 4.U))
 }
 

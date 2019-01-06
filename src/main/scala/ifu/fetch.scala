@@ -234,6 +234,7 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
    val is_jal    = Wire(Vec(fetch_width, Bool()))
    val is_jr     = Wire(Vec(fetch_width, Bool()))
    val is_call   = Wire(Vec(fetch_width, Bool()))
+   val is_rvc    = Wire(Vec(fetch_width, Bool()))
    val br_targs  = Wire(Vec(fetch_width, UInt(vaddrBitsExtended.W)))
    val jal_targs = Wire(Vec(fetch_width, UInt(vaddrBitsExtended.W)))
    // catch misaligned jumps -- let backend handle misaligned
@@ -290,6 +291,7 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
       is_jal(i)   := f3_valid && bpd_decoder.io.is_jal  && f3_imemresp.mask(i) && is_valid
       is_jr(i)    := f3_valid && bpd_decoder.io.is_jalr && f3_imemresp.mask(i) && is_valid
       is_call(i)  := f3_valid && IsCall(inst) && f3_imemresp.mask(i) && is_valid
+      is_rvc(i)   := f3_valid_mask(i) && inst(1,0) =/= 3.U && usingCompressed.B
       br_targs(i) := ComputeBranchTarget(pc, inst, xLen)
       jal_targs(i) := ComputeJALTarget(pc, inst, xLen)
       jal_targs_ma(i) := jal_targs(i)(0) && is_jal(i) && (if (usingCompressed) jal_targs(i)(1) else true.B)
@@ -401,6 +403,7 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
    bchecker.io.is_jal := is_jal
    bchecker.io.is_jr  := is_jr
    bchecker.io.is_call  := is_call
+   bchecker.io.is_rvc   := is_rvc
    bchecker.io.br_targs := br_targs
    bchecker.io.jal_targs := jal_targs
    bchecker.io.fetch_pc := f3_imemresp.pc
