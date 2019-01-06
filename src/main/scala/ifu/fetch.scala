@@ -428,8 +428,8 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
    f3_btb_update_bits := bchecker.io.btb_update.bits
    when (f3_bpd_overrides_bcheck)
    {
-      f3_btb_update_bits.target := f3_bpd_target
-      f3_btb_update_bits.cfi_pc := f3_bpd_br_idx << log2Ceil(coreInstBytes)
+      f3_btb_update_bits.target   := f3_bpd_target
+      f3_btb_update_bits.cfi_idx  := f3_bpd_br_idx
       f3_btb_update_bits.bpd_type := BpredType.branch
       f3_btb_update_bits.cfi_type := CfiType.branch
    }

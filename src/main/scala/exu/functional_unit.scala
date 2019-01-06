@@ -495,7 +495,8 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
       }
 
       br_unit.btb_update.bits.pc               := io.get_ftq_pc.fetch_pc// tell the BTB which pc to tag check against
-      br_unit.btb_update.bits.cfi_pc           := uop_pc_
+      br_unit.btb_update.bits.cfi_idx          := Mux(io.req.bits.uop.edge_inst,
+                                                      0.U, uop_pc_(log2Ceil(fetchWidth)-1,0))
       br_unit.btb_update.bits.target           := (target.asSInt & (-coreInstBytes).S).asUInt
       br_unit.btb_update.bits.taken            := is_taken   // was this branch/jal/jalr "taken"
       br_unit.btb_update.bits.cfi_type         :=
