@@ -302,7 +302,7 @@ jobs:
 
             - run:
                 name: Run BoomConfig benchmark tests
-                command: make run-bmark-tests -C ../boom-template/verisim CONFIG=BoomConfig
+                command: make run-bmark-tests -C ../boom-template/verisim CONFIG=BoomConfig -j2
 
     boomconfig-run-regression-tests:
         docker:
@@ -341,7 +341,7 @@ jobs:
 
             - run:
                 name: Run BoomConfig regression tests
-                command: make run-regression-tests -C ../boom-template/verisim CONFIG=BoomConfig
+                command: make run-regression-tests -C ../boom-template/verisim CONFIG=BoomConfig -j2
 
     boomconfig-run-assembly-tests:
         docker:
@@ -380,7 +380,7 @@ jobs:
 
             - run:
                 name: Run BoomConfig assembly tests
-                command: make run-asm-tests -C ../boom-template/verisim CONFIG=BoomConfig
+                command: make run-asm-tests -C ../boom-template/verisim CONFIG=BoomConfig -j2
                 no_output_timeout: 300m
 
     smallboomconfig-run-benchmark-tests:
@@ -420,7 +420,7 @@ jobs:
 
             - run:
                 name: Run SmallBoomConfig benchmark tests
-                command: make run-bmark-tests -C ../boom-template/verisim CONFIG=SmallBoomConfig
+                command: make run-bmark-tests -C ../boom-template/verisim CONFIG=SmallBoomConfig -j2
 
     smallboomconfig-run-regression-tests:
         docker:
@@ -459,7 +459,7 @@ jobs:
 
             - run:
                 name: Run SmallBoomConfig regression tests
-                command: make run-regression-tests -C ../boom-template/verisim CONFIG=SmallBoomConfig
+                command: make run-regression-tests -C ../boom-template/verisim CONFIG=SmallBoomConfig -j2
 
     smallboomconfig-run-assembly-tests:
         docker:
@@ -498,7 +498,7 @@ jobs:
 
             - run:
                 name: Run SmallBoomConfig assembly tests
-                command: make run-asm-tests -C ../boom-template/verisim CONFIG=SmallBoomConfig
+                command: make run-asm-tests -C ../boom-template/verisim CONFIG=SmallBoomConfig -j2
                 no_output_timeout: 300m
 
     mediumboomconfig-run-benchmark-tests:
@@ -538,7 +538,7 @@ jobs:
 
             - run:
                 name: Run MediumBoomConfig benchmark tests
-                command: make run-bmark-tests -C ../boom-template/verisim CONFIG=MediumBoomConfig
+                command: make run-bmark-tests -C ../boom-template/verisim CONFIG=MediumBoomConfig -j2
 
     mediumboomconfig-run-regression-tests:
         docker:
@@ -577,7 +577,7 @@ jobs:
 
             - run:
                 name: Run MediumBoomConfig regression tests
-                command: make run-regression-tests -C ../boom-template/verisim CONFIG=MediumBoomConfig
+                command: make run-regression-tests -C ../boom-template/verisim CONFIG=MediumBoomConfig -j2
 
     mediumboomconfig-run-assembly-tests:
         docker:
@@ -616,7 +616,7 @@ jobs:
 
             - run:
                 name: Run MediumBoomConfig assembly tests
-                command: make run-asm-tests -C ../boom-template/verisim CONFIG=MediumBoomConfig
+                command: make run-asm-tests -C ../boom-template/verisim CONFIG=MediumBoomConfig -j2
                 no_output_timeout: 300m
 
 #    megaboomconfig-run-benchmark-tests:
@@ -656,7 +656,7 @@ jobs:
 #
 #            - run:
 #                name: Run MegaBoomConfig benchmark tests
-#                command: make run-bmark-tests -C ../boom-template/verisim CONFIG=MegaBoomConfig
+#                command: make run-bmark-tests -C ../boom-template/verisim CONFIG=MegaBoomConfig -j2
 #
 #    megaboomconfig-run-regression-tests:
 #        docker:
@@ -695,7 +695,7 @@ jobs:
 #
 #            - run:
 #                name: Run MegaBoomConfig regression tests
-#                command: make run-regression-tests -C ../boom-template/verisim CONFIG=MegaBoomConfig
+#                command: make run-regression-tests -C ../boom-template/verisim CONFIG=MegaBoomConfig -j2
 #
 #    megaboomconfig-run-assembly-tests:
 #        docker:
@@ -734,7 +734,7 @@ jobs:
 #
 #            - run:
 #                name: Run MegaBoomConfig assembly tests
-#                command: make run-asm-tests -C ../boom-template/verisim CONFIG=MegaBoomConfig
+#                command: make run-asm-tests -C ../boom-template/verisim CONFIG=MegaBoomConfig -j2
 #                no_output_timeout: 300m
 
 # Order and dependencies of jobs to run
