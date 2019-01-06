@@ -494,16 +494,17 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
          br_unit.btb_update.valid := is_br_or_jalr && mispredict && uop.is_jump
       }
 
-      br_unit.btb_update.bits.pc               := io.get_ftq_pc.fetch_pc// tell the BTB which pc to tag check against
-      br_unit.btb_update.bits.cfi_idx          := Mux(io.req.bits.uop.edge_inst,
-                                                      0.U, uop_pc_(log2Ceil(fetchWidth)-1,0))
-      br_unit.btb_update.bits.target           := (target.asSInt & (-coreInstBytes).S).asUInt
-      br_unit.btb_update.bits.taken            := is_taken   // was this branch/jal/jalr "taken"
-      br_unit.btb_update.bits.cfi_type         :=
+      br_unit.btb_update.bits.pc      := io.get_ftq_pc.fetch_pc// tell the BTB which pc to tag check against
+      br_unit.btb_update.bits.cfi_idx := Mux(io.req.bits.uop.edge_inst,
+                                             0.U,
+                                             (uop_pc_ >> log2Ceil(coreInstBytes)))
+      br_unit.btb_update.bits.target  := (target.asSInt & (-coreInstBytes).S).asUInt
+      br_unit.btb_update.bits.taken   := is_taken   // was this branch/jal/jalr "taken"
+      br_unit.btb_update.bits.cfi_type :=
             Mux(uop.is_jal, CfiType.jal,
             Mux(uop.is_jump && !uop.is_jal, CfiType.jalr,
                 CfiType.branch))
-      br_unit.btb_update.bits.bpd_type              :=
+      br_unit.btb_update.bits.bpd_type :=
             Mux(uop.is_ret, BpredType.ret,
             Mux(uop.is_call, BpredType.call,
             Mux(uop.is_jump, BpredType.jump,
