@@ -725,7 +725,6 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
          (f3_fetch_bundle.replay_if || f3_fetch_bundle.xcpt_pf_if || f3_fetch_bundle.xcpt_ae_if)))
    {
       last_valid := false.B
-      prev_is_half := false.B
    }
 
    when (fb.io.enq.fire() &&
