@@ -5,9 +5,9 @@ version: 2
 
 # set of jobs to run
 jobs:
-    prepare-riscv-tools:
+    install-riscv-tools:
         docker:
-            - image: circleci/openjdk:8-jdk
+            - image: riscvboom/riscvboom-images:0.0.4
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -17,24 +17,13 @@ jobs:
             - checkout
 
             - run:
-                name: Source environment variables
+                name: Create hash of RISC-V Tools based on RocketChip
                 command: |
-                    echo 'export RISCV=$HOME/riscv-tools-install' >> $BASH_ENV
-                    echo 'export PATH=$RISCV/bin:$PATH' >> $BASH_ENV
-                    source /home/circleci/.bashrc
+                    ci/create-hash.sh rocket-chip
 
-            - run: 
-                name: Install dependencies
-                command: |
-                    sudo apt-get update
-                    gcc --version
-                    g++ --version
-                    sudo apt-get install autoconf automake autotools-dev curl
-                    sudo apt-get install libmpc-dev libmpfr-dev libgmp-dev libusb-1.0-0-dev
-                    sudo apt-get install gawk build-essential bison flex 
-                    sudo apt-get install texinfo gperf libtool patchutils
-                    sudo apt-get install bc zlib1g-dev device-tree-compiler pkg-config libexpat-dev 
-                    sudo apt-get install expat python-pexpect python libipt1 babeltrace
+            - restore_cache:
+                keys:
+                    - riscv-tools-installed-v1-{{ checksum "../rocket-chip.hash" }}
 
             - run: 
                 name: Building RISC-V Tools
@@ -43,13 +32,44 @@ jobs:
                 no_output_timeout: 120m
 
             - save_cache:
-                key: riscv-tools-installed-{{ .Branch }}-{{ .Revision }}
+                key: riscv-tools-installed-v1-{{ checksum "../rocket-chip.hash" }}
                 paths:
                     - "/home/circleci/riscv-tools-install"
 
+    prepare-build-environment:
+        docker:
+            - image: riscvboom/riscvboom-images:0.0.4
+        environment:
+            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
+            TERM: dumb
+            
+        steps:
+            # Checkout the code 
+            - checkout
+
+            - run:
+                name: Create hash of BoomTemplate
+                command: |
+                    ci/create-hash.sh
+
+            - restore_cache:
+                keys:
+                    - boom-template-with-verilator-v1-{{ checksum "../boom-template.hash" }}
+
+            - run: 
+                name: Building Verilator
+                command: |
+                    ci/prepare-for-build.sh
+                no_output_timeout: 120m
+
+            - save_cache:
+                key: boom-template-with-verilator-v1-{{ checksum "../boom-template.hash" }}
+                paths:
+                    - "/home/circleci/boom-template"
+
     prepare-boomconfig:
         docker:
-            - image: circleci/openjdk:8-jdk
+            - image: riscvboom/riscvboom-images:0.0.4
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -58,29 +78,19 @@ jobs:
             # Checkout the code 
             - checkout
 
+            - run:
+                name: Create hash of RISC-V Tools and BoomTemplate
+                command: |
+                    ci/create-hash.sh rocket-chip
+                    ci/create-hash.sh
+
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-{{ .Branch }}-{{ .Revision }}
+                    - riscv-tools-installed-v1-{{ checksum "../rocket-chip.hash" }}
 
-            - run:
-                name: Source environment variables
-                command: |
-                    echo 'export RISCV=$HOME/riscv-tools-install' >> $BASH_ENV
-                    echo 'export PATH=$RISCV/bin:$PATH' >> $BASH_ENV
-                    source /home/circleci/.bashrc
-
-            - run: 
-                name: Install dependencies
-                command: |
-                    sudo apt-get update
-                    gcc --version
-                    g++ --version
-                    sudo apt-get install autoconf automake autotools-dev curl
-                    sudo apt-get install libmpc-dev libmpfr-dev libgmp-dev libusb-1.0-0-dev
-                    sudo apt-get install gawk build-essential bison flex 
-                    sudo apt-get install texinfo gperf libtool patchutils
-                    sudo apt-get install bc zlib1g-dev device-tree-compiler pkg-config libexpat-dev 
-                    sudo apt-get install expat python-pexpect python libipt1 babeltrace
+            - restore_cache:
+                keys:
+                    - boom-template-with-verilator-v1-{{ checksum "../boom-template.hash" }}
 
             - run: 
                 name: Building BoomConfig using Verilator
@@ -94,7 +104,7 @@ jobs:
                       
     prepare-smallboomconfig:
         docker:
-            - image: circleci/openjdk:8-jdk
+            - image: riscvboom/riscvboom-images:0.0.4
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -103,29 +113,19 @@ jobs:
             # Checkout the code 
             - checkout
 
+            - run:
+                name: Create hash of RISC-V Tools and BoomTemplate
+                command: |
+                    ci/create-hash.sh rocket-chip
+                    ci/create-hash.sh
+
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-{{ .Branch }}-{{ .Revision }}
+                    - riscv-tools-installed-v1-{{ checksum "../rocket-chip.hash" }}
 
-            - run:
-                name: Source environment variables
-                command: |
-                    echo 'export RISCV=$HOME/riscv-tools-install' >> $BASH_ENV
-                    echo 'export PATH=$RISCV/bin:$PATH' >> $BASH_ENV
-                    source /home/circleci/.bashrc
-
-            - run: 
-                name: Install dependencies
-                command: |
-                    sudo apt-get update
-                    gcc --version
-                    g++ --version
-                    sudo apt-get install autoconf automake autotools-dev curl
-                    sudo apt-get install libmpc-dev libmpfr-dev libgmp-dev libusb-1.0-0-dev
-                    sudo apt-get install gawk build-essential bison flex 
-                    sudo apt-get install texinfo gperf libtool patchutils
-                    sudo apt-get install bc zlib1g-dev device-tree-compiler pkg-config libexpat-dev 
-                    sudo apt-get install expat python-pexpect python libipt1 babeltrace
+            - restore_cache:
+                keys:
+                    - boom-template-with-verilator-v1-{{ checksum "../boom-template.hash" }}
 
             - run: 
                 name: Building SmallBoomConfig using Verilator
@@ -139,7 +139,7 @@ jobs:
                       
     prepare-mediumboomconfig:
         docker:
-            - image: circleci/openjdk:8-jdk
+            - image: riscvboom/riscvboom-images:0.0.4
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -147,30 +147,20 @@ jobs:
         steps:
             # Checkout the code 
             - checkout
+             
+            - run:
+                name: Create hash of RISC-V Tools and BoomTemplate
+                command: |
+                    ci/create-hash.sh rocket-chip
+                    ci/create-hash.sh
 
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-{{ .Branch }}-{{ .Revision }}
+                    - riscv-tools-installed-v1-{{ checksum "../rocket-chip.hash" }}
 
-            - run:
-                name: Source environment variables
-                command: |
-                    echo 'export RISCV=$HOME/riscv-tools-install' >> $BASH_ENV
-                    echo 'export PATH=$RISCV/bin:$PATH' >> $BASH_ENV
-                    source /home/circleci/.bashrc
-
-            - run: 
-                name: Install dependencies
-                command: |
-                    sudo apt-get update
-                    gcc --version
-                    g++ --version
-                    sudo apt-get install autoconf automake autotools-dev curl
-                    sudo apt-get install libmpc-dev libmpfr-dev libgmp-dev libusb-1.0-0-dev
-                    sudo apt-get install gawk build-essential bison flex 
-                    sudo apt-get install texinfo gperf libtool patchutils
-                    sudo apt-get install bc zlib1g-dev device-tree-compiler pkg-config libexpat-dev 
-                    sudo apt-get install expat python-pexpect python libipt1 babeltrace
+            - restore_cache:
+                keys:
+                    - boom-template-with-verilator-v1-{{ checksum "../boom-template.hash" }}
 
             - run: 
                 name: Building MediumBoomConfig using Verilator
@@ -184,7 +174,7 @@ jobs:
 
 #    prepare-megaboomconfig:
 #        docker:
-#            - image: circleci/openjdk:8-jdk
+#            - image: riscvboom/riscvboom-images:0.0.4
 #        environment:
 #            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
 #            TERM: dumb
@@ -193,29 +183,19 @@ jobs:
 #            # Checkout the code 
 #            - checkout
 #
-#            - restore_cache:
-#                keys:
-#                    - riscv-tools-installed-{{ .Branch }}-{{ .Revision }}
+#           - run:
+#               name: Create hash of RISC-V Tools and BoomTemplate
+#               command: |
+#                   ci/create-hash.sh rocket-chip
+#                   ci/create-hash.sh
 #
-#            - run:
-#                name: Source environment variables
-#                command: |
-#                    echo 'export RISCV=$HOME/riscv-tools-install' >> $BASH_ENV
-#                    echo 'export PATH=$RISCV/bin:$PATH' >> $BASH_ENV
-#                    source /home/circleci/.bashrc
+#           - restore_cache:
+#               keys:
+#                   - riscv-tools-installed-v1-{{ checksum "../rocket-chip.hash" }}
 #
-#            - run: 
-#                name: Install dependencies
-#                command: |
-#                    sudo apt-get update
-#                    gcc --version
-#                    g++ --version
-#                    sudo apt-get install autoconf automake autotools-dev curl
-#                    sudo apt-get install libmpc-dev libmpfr-dev libgmp-dev libusb-1.0-0-dev
-#                    sudo apt-get install gawk build-essential bison flex 
-#                    sudo apt-get install texinfo gperf libtool patchutils
-#                    sudo apt-get install bc zlib1g-dev device-tree-compiler pkg-config libexpat-dev 
-#                    sudo apt-get install expat python-pexpect python libipt1 babeltrace
+#           - restore_cache:
+#               keys:
+#                   - boom-template-with-verilator-v1-{{ checksum "../boom-template.hash" }}
 #
 #            - run: 
 #                name: Building MegaBoomConfig using Verilator
@@ -229,7 +209,7 @@ jobs:
 
     run-scala-checkstyle:
         docker:
-            - image: circleci/openjdk:8-jdk
+            - image: riscvboom/riscvboom-images:0.0.4
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -238,28 +218,14 @@ jobs:
             # Checkout the code 
             - checkout
 
+            - run:
+                name: Create hash of RISC-V Tools based on RocketChip
+                command: |
+                    ci/create-hash.sh rocket-chip
+
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-{{ .Branch }}-{{ .Revision }}
-
-            - run:
-                name: Source environment variables
-                command: |
-                    echo 'export RISCV=$HOME/riscv-tools-install' >> $BASH_ENV
-                    echo 'export PATH=$RISCV/bin:$PATH' >> $BASH_ENV
-                    source /home/circleci/.bashrc
-
-            - run: 
-                name: Install dependencies
-                command: |
-                    sudo apt-get update
-                    gcc --version g++ --version
-                    sudo apt-get install autoconf automake autotools-dev curl
-                    sudo apt-get install libmpc-dev libmpfr-dev libgmp-dev libusb-1.0-0-dev
-                    sudo apt-get install gawk build-essential bison flex 
-                    sudo apt-get install texinfo gperf libtool patchutils
-                    sudo apt-get install bc zlib1g-dev device-tree-compiler pkg-config libexpat-dev 
-                    sudo apt-get install expat python-pexpect python libipt1 babeltrace
+                    - riscv-tools-installed-v1-{{ checksum "../rocket-chip.hash" }}
 
             - run:
                 name: Run Scala checkstyle
@@ -267,38 +233,27 @@ jobs:
 
     boomconfig-run-benchmark-tests:
         docker:
-            - image: circleci/openjdk:8-jdk
+            - image: riscvboom/riscvboom-images:0.0.4
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
 
         steps:
+            # Checkout the code 
+            - checkout
+
+            - run:
+                name: Create hash of RISC-V Tools based on RocketChip
+                command: |
+                    ci/create-hash.sh rocket-chip
+
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-{{ .Branch }}-{{ .Revision }}
+                    - riscv-tools-installed-v1-{{ checksum "../rocket-chip.hash" }}
 
             - restore_cache:
                 keys:
                     - boom-template-boomconfig-{{ .Branch }}-{{ .Revision }}
-
-            - run:
-                name: Source environment variables
-                command: |
-                    echo 'export RISCV=$HOME/riscv-tools-install' >> $BASH_ENV
-                    echo 'export PATH=$RISCV/bin:$PATH' >> $BASH_ENV
-                    source /home/circleci/.bashrc
-
-            - run: 
-                name: Install dependencies
-                command: |
-                    sudo apt-get update
-                    gcc --version g++ --version
-                    sudo apt-get install autoconf automake autotools-dev curl
-                    sudo apt-get install libmpc-dev libmpfr-dev libgmp-dev libusb-1.0-0-dev
-                    sudo apt-get install gawk build-essential bison flex 
-                    sudo apt-get install texinfo gperf libtool patchutils
-                    sudo apt-get install bc zlib1g-dev device-tree-compiler pkg-config libexpat-dev 
-                    sudo apt-get install expat python-pexpect python libipt1 babeltrace
 
             - run:
                 name: Run BoomConfig benchmark tests
@@ -306,38 +261,27 @@ jobs:
 
     boomconfig-run-regression-tests:
         docker:
-            - image: circleci/openjdk:8-jdk
+            - image: riscvboom/riscvboom-images:0.0.4
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
 
         steps:
+            # Checkout the code 
+            - checkout
+
+            - run:
+                name: Create hash of RISC-V Tools based on RocketChip
+                command: |
+                    ci/create-hash.sh rocket-chip
+
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-{{ .Branch }}-{{ .Revision }}
+                    - riscv-tools-installed-v1-{{ checksum "../rocket-chip.hash" }}
 
             - restore_cache:
                 keys:
                     - boom-template-boomconfig-{{ .Branch }}-{{ .Revision }}
-
-            - run:
-                name: Source environment variables
-                command: |
-                    echo 'export RISCV=$HOME/riscv-tools-install' >> $BASH_ENV
-                    echo 'export PATH=$RISCV/bin:$PATH' >> $BASH_ENV
-                    source /home/circleci/.bashrc
-
-            - run: 
-                name: Install dependencies
-                command: |
-                    sudo apt-get update
-                    gcc --version g++ --version
-                    sudo apt-get install autoconf automake autotools-dev curl
-                    sudo apt-get install libmpc-dev libmpfr-dev libgmp-dev libusb-1.0-0-dev
-                    sudo apt-get install gawk build-essential bison flex 
-                    sudo apt-get install texinfo gperf libtool patchutils
-                    sudo apt-get install bc zlib1g-dev device-tree-compiler pkg-config libexpat-dev 
-                    sudo apt-get install expat python-pexpect python libipt1 babeltrace
 
             - run:
                 name: Run BoomConfig regression tests
@@ -345,38 +289,27 @@ jobs:
 
     boomconfig-run-assembly-tests:
         docker:
-            - image: circleci/openjdk:8-jdk
+            - image: riscvboom/riscvboom-images:0.0.4
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
 
         steps:
+            # Checkout the code 
+            - checkout
+
+            - run:
+                name: Create hash of RISC-V Tools based on RocketChip
+                command: |
+                    ci/create-hash.sh rocket-chip
+
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-{{ .Branch }}-{{ .Revision }}
+                    - riscv-tools-installed-v1-{{ checksum "../rocket-chip.hash" }}
 
             - restore_cache:
                 keys:
                     - boom-template-boomconfig-{{ .Branch }}-{{ .Revision }}
-
-            - run:
-                name: Source environment variables
-                command: |
-                    echo 'export RISCV=$HOME/riscv-tools-install' >> $BASH_ENV
-                    echo 'export PATH=$RISCV/bin:$PATH' >> $BASH_ENV
-                    source /home/circleci/.bashrc
-
-            - run: 
-                name: Install dependencies
-                command: |
-                    sudo apt-get update
-                    gcc --version g++ --version
-                    sudo apt-get install autoconf automake autotools-dev curl
-                    sudo apt-get install libmpc-dev libmpfr-dev libgmp-dev libusb-1.0-0-dev
-                    sudo apt-get install gawk build-essential bison flex 
-                    sudo apt-get install texinfo gperf libtool patchutils
-                    sudo apt-get install bc zlib1g-dev device-tree-compiler pkg-config libexpat-dev 
-                    sudo apt-get install expat python-pexpect python libipt1 babeltrace
 
             - run:
                 name: Run BoomConfig assembly tests
@@ -385,38 +318,27 @@ jobs:
 
     smallboomconfig-run-benchmark-tests:
         docker:
-            - image: circleci/openjdk:8-jdk
+            - image: riscvboom/riscvboom-images:0.0.4
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
 
         steps:
+            # Checkout the code 
+            - checkout
+
+            - run:
+                name: Create hash of RISC-V Tools based on RocketChip
+                command: |
+                    ci/create-hash.sh rocket-chip
+
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-{{ .Branch }}-{{ .Revision }}
+                    - riscv-tools-installed-v1-{{ checksum "../rocket-chip.hash" }}
 
             - restore_cache:
                 keys:
                     - boom-template-smallboomconfig-{{ .Branch }}-{{ .Revision }}
-
-            - run:
-                name: Source environment variables
-                command: |
-                    echo 'export RISCV=$HOME/riscv-tools-install' >> $BASH_ENV
-                    echo 'export PATH=$RISCV/bin:$PATH' >> $BASH_ENV
-                    source /home/circleci/.bashrc
-
-            - run: 
-                name: Install dependencies
-                command: |
-                    sudo apt-get update
-                    gcc --version g++ --version
-                    sudo apt-get install autoconf automake autotools-dev curl
-                    sudo apt-get install libmpc-dev libmpfr-dev libgmp-dev libusb-1.0-0-dev
-                    sudo apt-get install gawk build-essential bison flex 
-                    sudo apt-get install texinfo gperf libtool patchutils
-                    sudo apt-get install bc zlib1g-dev device-tree-compiler pkg-config libexpat-dev 
-                    sudo apt-get install expat python-pexpect python libipt1 babeltrace
 
             - run:
                 name: Run SmallBoomConfig benchmark tests
@@ -424,38 +346,27 @@ jobs:
 
     smallboomconfig-run-regression-tests:
         docker:
-            - image: circleci/openjdk:8-jdk
+            - image: riscvboom/riscvboom-images:0.0.4
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
 
         steps:
+            # Checkout the code 
+            - checkout
+
+            - run:
+                name: Create hash of RISC-V Tools based on RocketChip
+                command: |
+                    ci/create-hash.sh rocket-chip
+
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-{{ .Branch }}-{{ .Revision }}
+                    - riscv-tools-installed-v1-{{ checksum "../rocket-chip.hash" }}
 
             - restore_cache:
                 keys:
                     - boom-template-smallboomconfig-{{ .Branch }}-{{ .Revision }}
-
-            - run:
-                name: Source environment variables
-                command: |
-                    echo 'export RISCV=$HOME/riscv-tools-install' >> $BASH_ENV
-                    echo 'export PATH=$RISCV/bin:$PATH' >> $BASH_ENV
-                    source /home/circleci/.bashrc
-
-            - run: 
-                name: Install dependencies
-                command: |
-                    sudo apt-get update
-                    gcc --version g++ --version
-                    sudo apt-get install autoconf automake autotools-dev curl
-                    sudo apt-get install libmpc-dev libmpfr-dev libgmp-dev libusb-1.0-0-dev
-                    sudo apt-get install gawk build-essential bison flex 
-                    sudo apt-get install texinfo gperf libtool patchutils
-                    sudo apt-get install bc zlib1g-dev device-tree-compiler pkg-config libexpat-dev 
-                    sudo apt-get install expat python-pexpect python libipt1 babeltrace
 
             - run:
                 name: Run SmallBoomConfig regression tests
@@ -463,38 +374,27 @@ jobs:
 
     smallboomconfig-run-assembly-tests:
         docker:
-            - image: circleci/openjdk:8-jdk
+            - image: riscvboom/riscvboom-images:0.0.4
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
 
         steps:
+            # Checkout the code 
+            - checkout
+
+            - run:
+                name: Create hash of RISC-V Tools based on RocketChip
+                command: |
+                    ci/create-hash.sh rocket-chip
+
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-{{ .Branch }}-{{ .Revision }}
+                    - riscv-tools-installed-v1-{{ checksum "../rocket-chip.hash" }}
 
             - restore_cache:
                 keys:
                     - boom-template-smallboomconfig-{{ .Branch }}-{{ .Revision }}
-
-            - run:
-                name: Source environment variables
-                command: |
-                    echo 'export RISCV=$HOME/riscv-tools-install' >> $BASH_ENV
-                    echo 'export PATH=$RISCV/bin:$PATH' >> $BASH_ENV
-                    source /home/circleci/.bashrc
-
-            - run: 
-                name: Install dependencies
-                command: |
-                    sudo apt-get update
-                    gcc --version g++ --version
-                    sudo apt-get install autoconf automake autotools-dev curl
-                    sudo apt-get install libmpc-dev libmpfr-dev libgmp-dev libusb-1.0-0-dev
-                    sudo apt-get install gawk build-essential bison flex 
-                    sudo apt-get install texinfo gperf libtool patchutils
-                    sudo apt-get install bc zlib1g-dev device-tree-compiler pkg-config libexpat-dev 
-                    sudo apt-get install expat python-pexpect python libipt1 babeltrace
 
             - run:
                 name: Run SmallBoomConfig assembly tests
@@ -503,38 +403,27 @@ jobs:
 
     mediumboomconfig-run-benchmark-tests:
         docker:
-            - image: circleci/openjdk:8-jdk
+            - image: riscvboom/riscvboom-images:0.0.4
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
 
         steps:
+            # Checkout the code 
+            - checkout
+
+            - run:
+                name: Create hash of RISC-V Tools based on RocketChip
+                command: |
+                    ci/create-hash.sh rocket-chip
+
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-{{ .Branch }}-{{ .Revision }}
+                    - riscv-tools-installed-v1-{{ checksum "../rocket-chip.hash" }}
 
             - restore_cache:
                 keys:
                     - boom-template-mediumboomconfig-{{ .Branch }}-{{ .Revision }}
-
-            - run:
-                name: Source environment variables
-                command: |
-                    echo 'export RISCV=$HOME/riscv-tools-install' >> $BASH_ENV
-                    echo 'export PATH=$RISCV/bin:$PATH' >> $BASH_ENV
-                    source /home/circleci/.bashrc
-
-            - run: 
-                name: Install dependencies
-                command: |
-                    sudo apt-get update
-                    gcc --version g++ --version
-                    sudo apt-get install autoconf automake autotools-dev curl
-                    sudo apt-get install libmpc-dev libmpfr-dev libgmp-dev libusb-1.0-0-dev
-                    sudo apt-get install gawk build-essential bison flex 
-                    sudo apt-get install texinfo gperf libtool patchutils
-                    sudo apt-get install bc zlib1g-dev device-tree-compiler pkg-config libexpat-dev 
-                    sudo apt-get install expat python-pexpect python libipt1 babeltrace
 
             - run:
                 name: Run MediumBoomConfig benchmark tests
@@ -542,38 +431,27 @@ jobs:
 
     mediumboomconfig-run-regression-tests:
         docker:
-            - image: circleci/openjdk:8-jdk
+            - image: riscvboom/riscvboom-images:0.0.4
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
 
         steps:
+            # Checkout the code 
+            - checkout
+
+            - run:
+                name: Create hash of RISC-V Tools based on RocketChip
+                command: |
+                    ci/create-hash.sh rocket-chip
+
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-{{ .Branch }}-{{ .Revision }}
+                    - riscv-tools-installed-v1-{{ checksum "../rocket-chip.hash" }}
 
             - restore_cache:
                 keys:
                     - boom-template-mediumboomconfig-{{ .Branch }}-{{ .Revision }}
-
-            - run:
-                name: Source environment variables
-                command: |
-                    echo 'export RISCV=$HOME/riscv-tools-install' >> $BASH_ENV
-                    echo 'export PATH=$RISCV/bin:$PATH' >> $BASH_ENV
-                    source /home/circleci/.bashrc
-
-            - run: 
-                name: Install dependencies
-                command: |
-                    sudo apt-get update
-                    gcc --version g++ --version
-                    sudo apt-get install autoconf automake autotools-dev curl
-                    sudo apt-get install libmpc-dev libmpfr-dev libgmp-dev libusb-1.0-0-dev
-                    sudo apt-get install gawk build-essential bison flex 
-                    sudo apt-get install texinfo gperf libtool patchutils
-                    sudo apt-get install bc zlib1g-dev device-tree-compiler pkg-config libexpat-dev 
-                    sudo apt-get install expat python-pexpect python libipt1 babeltrace
 
             - run:
                 name: Run MediumBoomConfig regression tests
@@ -581,38 +459,27 @@ jobs:
 
     mediumboomconfig-run-assembly-tests:
         docker:
-            - image: circleci/openjdk:8-jdk
+            - image: riscvboom/riscvboom-images:0.0.4
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
 
         steps:
+            # Checkout the code 
+            - checkout
+
+            - run:
+                name: Create hash of RISC-V Tools based on RocketChip
+                command: |
+                    ci/create-hash.sh rocket-chip
+
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-{{ .Branch }}-{{ .Revision }}
+                    - riscv-tools-installed-v1-{{ checksum "../rocket-chip.hash" }}
 
             - restore_cache:
                 keys:
                     - boom-template-mediumboomconfig-{{ .Branch }}-{{ .Revision }}
-
-            - run:
-                name: Source environment variables
-                command: |
-                    echo 'export RISCV=$HOME/riscv-tools-install' >> $BASH_ENV
-                    echo 'export PATH=$RISCV/bin:$PATH' >> $BASH_ENV
-                    source /home/circleci/.bashrc
-
-            - run: 
-                name: Install dependencies
-                command: |
-                    sudo apt-get update
-                    gcc --version g++ --version
-                    sudo apt-get install autoconf automake autotools-dev curl
-                    sudo apt-get install libmpc-dev libmpfr-dev libgmp-dev libusb-1.0-0-dev
-                    sudo apt-get install gawk build-essential bison flex 
-                    sudo apt-get install texinfo gperf libtool patchutils
-                    sudo apt-get install bc zlib1g-dev device-tree-compiler pkg-config libexpat-dev 
-                    sudo apt-get install expat python-pexpect python libipt1 babeltrace
 
             - run:
                 name: Run MediumBoomConfig assembly tests
@@ -621,38 +488,27 @@ jobs:
 
 #    megaboomconfig-run-benchmark-tests:
 #        docker:
-#            - image: circleci/openjdk:8-jdk
+#            - image: riscvboom/riscvboom-images:0.0.4
 #        environment:
 #            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
 #            TERM: dumb
 #
 #        steps:
+#           # Checkout the code 
+#           - checkout
+#
+#            - run:
+#               name: Create hash of RISC-V Tools based on RocketChip
+#               command: |
+#                   ci/create-hash.sh rocket-chip
+#
 #            - restore_cache:
 #                keys:
-#                    - riscv-tools-installed-{{ .Branch }}-{{ .Revision }}
+#                    - riscv-tools-installed-v1-{{ checksum "../rocket-chip.hash" }}
 #
 #            - restore_cache:
 #                keys:
 #                    - boom-template-megaboomconfig-{{ .Branch }}-{{ .Revision }}
-#
-#            - run:
-#                name: Source environment variables
-#                command: |
-#                    echo 'export RISCV=$HOME/riscv-tools-install' >> $BASH_ENV
-#                    echo 'export PATH=$RISCV/bin:$PATH' >> $BASH_ENV
-#                    source /home/circleci/.bashrc
-#
-#            - run: 
-#                name: Install dependencies
-#                command: |
-#                    sudo apt-get update
-#                    gcc --version g++ --version
-#                    sudo apt-get install autoconf automake autotools-dev curl
-#                    sudo apt-get install libmpc-dev libmpfr-dev libgmp-dev libusb-1.0-0-dev
-#                    sudo apt-get install gawk build-essential bison flex 
-#                    sudo apt-get install texinfo gperf libtool patchutils
-#                    sudo apt-get install bc zlib1g-dev device-tree-compiler pkg-config libexpat-dev 
-#                    sudo apt-get install expat python-pexpect python libipt1 babeltrace
 #
 #            - run:
 #                name: Run MegaBoomConfig benchmark tests
@@ -660,38 +516,27 @@ jobs:
 #
 #    megaboomconfig-run-regression-tests:
 #        docker:
-#            - image: circleci/openjdk:8-jdk
+#            - image: riscvboom/riscvboom-images:0.0.4
 #        environment:
 #            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
 #            TERM: dumb
 #
 #        steps:
+#           # Checkout the code 
+#           - checkout
+#
+#           - run:
+#               name: Create hash of RISC-V Tools based on RocketChip
+#               command: |
+#                   ci/create-hash.sh rocket-chip
+#
 #            - restore_cache:
 #                keys:
-#                    - riscv-tools-installed-{{ .Branch }}-{{ .Revision }}
+#                    - riscv-tools-installed-v1-{{ checksum "../rocket-chip.hash" }}
 #
 #            - restore_cache:
 #                keys:
 #                    - boom-template-megaboomconfig-{{ .Branch }}-{{ .Revision }}
-#
-#            - run:
-#                name: Source environment variables
-#                command: |
-#                    echo 'export RISCV=$HOME/riscv-tools-install' >> $BASH_ENV
-#                    echo 'export PATH=$RISCV/bin:$PATH' >> $BASH_ENV
-#                    source /home/circleci/.bashrc
-#
-#            - run: 
-#                name: Install dependencies
-#                command: |
-#                    sudo apt-get update
-#                    gcc --version g++ --version
-#                    sudo apt-get install autoconf automake autotools-dev curl
-#                    sudo apt-get install libmpc-dev libmpfr-dev libgmp-dev libusb-1.0-0-dev
-#                    sudo apt-get install gawk build-essential bison flex 
-#                    sudo apt-get install texinfo gperf libtool patchutils
-#                    sudo apt-get install bc zlib1g-dev device-tree-compiler pkg-config libexpat-dev 
-#                    sudo apt-get install expat python-pexpect python libipt1 babeltrace
 #
 #            - run:
 #                name: Run MegaBoomConfig regression tests
@@ -699,38 +544,27 @@ jobs:
 #
 #    megaboomconfig-run-assembly-tests:
 #        docker:
-#            - image: circleci/openjdk:8-jdk
+#            - image: riscvboom/riscvboom-images:0.0.4
 #        environment:
 #            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
 #            TERM: dumb
 #
 #        steps:
+#           # Checkout the code 
+#           - checkout
+#
+#            - run:
+#               name: Create hash of RISC-V Tools based on RocketChip
+#               command: |
+#                   ci/create-hash.sh rocket-chip
+#
 #            - restore_cache:
 #                keys:
-#                    - riscv-tools-installed-{{ .Branch }}-{{ .Revision }}
+#                    - riscv-tools-installed-v1-{{ checksum "../rocket-chip.hash" }}
 #
 #            - restore_cache:
 #                keys:
 #                    - boom-template-megaboomconfig-{{ .Branch }}-{{ .Revision }}
-#
-#            - run:
-#                name: Source environment variables
-#                command: |
-#                    echo 'export RISCV=$HOME/riscv-tools-install' >> $BASH_ENV
-#                    echo 'export PATH=$RISCV/bin:$PATH' >> $BASH_ENV
-#                    source /home/circleci/.bashrc
-#
-#            - run: 
-#                name: Install dependencies
-#                command: |
-#                    sudo apt-get update
-#                    gcc --version g++ --version
-#                    sudo apt-get install autoconf automake autotools-dev curl
-#                    sudo apt-get install libmpc-dev libmpfr-dev libgmp-dev libusb-1.0-0-dev
-#                    sudo apt-get install gawk build-essential bison flex 
-#                    sudo apt-get install texinfo gperf libtool patchutils
-#                    sudo apt-get install bc zlib1g-dev device-tree-compiler pkg-config libexpat-dev 
-#                    sudo apt-get install expat python-pexpect python libipt1 babeltrace
 #
 #            - run:
 #                name: Run MegaBoomConfig assembly tests
@@ -743,26 +577,30 @@ workflows:
     build-and-test-boom-configs:
         jobs:
             # Make the toolchain
-            - prepare-riscv-tools
+            - install-riscv-tools
+
+            - prepare-build-environment:
+                requires:
+                    - install-riscv-tools
 
             # Run generic syntax checking
             - run-scala-checkstyle:
                 requires:
-                    - prepare-riscv-tools
+                    - install-riscv-tools
 
             # Prepare the verilator builds
             - prepare-boomconfig:
                 requires:
-                    - prepare-riscv-tools
+                    - prepare-build-environment
             - prepare-smallboomconfig:
                 requires:
-                    - prepare-riscv-tools
+                    - prepare-build-environment
             - prepare-mediumboomconfig:
                 requires:
-                    - prepare-riscv-tools
+                    - prepare-build-environment
 #            - prepare-megaboomconfig:
 #                requires:
-#                    - prepare-riscv-tools
+#                    - prepare-build-environment
 
             # Run the respective tests
             # Run the BoomConfig tests
