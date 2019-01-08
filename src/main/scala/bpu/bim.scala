@@ -381,6 +381,5 @@ class BimodalTable(implicit p: Parameters) extends BoomModule()(p) with HasBimPa
       "\n   (" + size_kbits + " Kbits = " + size_kbits/8 + " kB) Bimodal Table (" +
       nSets + " entries across " + nBanks + " banks)"
 
-   override val compileOptions = chisel3.core.ExplicitCompileOptions.NotStrict.copy(explicitInvalidate = true)
 }
 

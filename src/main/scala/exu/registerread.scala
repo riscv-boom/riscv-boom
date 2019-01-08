@@ -23,10 +23,10 @@ import boom.common._
 import boom.util._
 
 class RegisterReadIO(
-   issue_width: Int,
-   num_total_read_ports: Int,
-   num_total_bypass_ports: Int,
-   register_width: Int
+   val issue_width: Int,
+   val num_total_read_ports: Int,
+   val num_total_bypass_ports: Int,
+   val register_width: Int
 )(implicit p: Parameters) extends  BoomBundle()(p)
 {
    // issued micro-ops
@@ -44,9 +44,6 @@ class RegisterReadIO(
    val kill   = Input(Bool())
    val brinfo = Input(new BrResolutionInfo())
 
-   override def cloneType =
-      new RegisterReadIO(issue_width, num_total_read_ports, num_total_bypass_ports, register_width
-   )(p).asInstanceOf[this.type]
 }
 
 

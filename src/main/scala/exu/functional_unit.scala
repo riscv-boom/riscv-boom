@@ -93,7 +93,7 @@ class GetPredictionInfo(implicit p: Parameters) extends BoomBundle()(p)
    val info = Input(new BranchPredInfo())
 }
 
-class FuncUnitReq(data_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
+class FuncUnitReq(val data_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
   with HasBoomUOP
 {
    val num_operands = 3
@@ -104,10 +104,9 @@ class FuncUnitReq(data_width: Int)(implicit p: Parameters) extends BoomBundle()(
 
    val kill = Bool() // kill everything
 
-   override def cloneType = new FuncUnitReq(data_width)(p).asInstanceOf[this.type]
 }
 
-class FuncUnitResp(data_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
+class FuncUnitResp(val data_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
   with HasBoomUOP
 {
    val data = UInt(data_width.W)
@@ -116,17 +115,15 @@ class FuncUnitResp(data_width: Int)(implicit p: Parameters) extends BoomBundle()
    val mxcpt = new ValidIO(UInt((freechips.rocketchip.rocket.Causes.all.max+2).W)) //only for maddr->LSU
    val sfence = Valid(new freechips.rocketchip.rocket.SFenceReq) // only for mcalc
 
-   override def cloneType = new FuncUnitResp(data_width)(p).asInstanceOf[this.type]
 }
 
-class BypassData(num_bypass_ports: Int, data_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
+class BypassData(val num_bypass_ports: Int, val data_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
    val valid = Vec(num_bypass_ports, Bool())
    val uop   = Vec(num_bypass_ports, new MicroOp())
    val data  = Vec(num_bypass_ports, UInt(data_width.W))
 
    def getNumPorts: Int = num_bypass_ports
-   override def cloneType: this.type = new BypassData(num_bypass_ports, data_width).asInstanceOf[this.type]
 }
 
 class BrResolutionInfo(implicit p: Parameters) extends BoomBundle()(p)
@@ -588,7 +585,6 @@ class MemAddrCalcUnit(implicit p: Parameters)
       is_branch_unit = false)(p)
    with freechips.rocketchip.rocket.constants.MemoryOpConstants
    with freechips.rocketchip.rocket.constants.ScalarOpConstants
-   with freechips.rocketchip.tile.HasFPUParameters
 {
    // perform address calculation
    val sum = (io.req.bits.rs1_data.asSInt + io.req.bits.uop.imm_packed(19,8).asSInt).asUInt

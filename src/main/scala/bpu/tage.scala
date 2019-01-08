@@ -45,13 +45,13 @@ case class TageParameters(
    ubit_sz: Int = 1)
 
 class TageResp(
-   fetch_width: Int,
-   num_tables: Int,
-   max_history_length: Int,
-   max_index_sz: Int,
-   max_tag_sz: Int,
-   cntr_sz: Int,
-   ubit_sz: Int
+   val fetch_width: Int,
+   val num_tables: Int,
+   val max_history_length: Int,
+   val max_index_sz: Int,
+   val max_tag_sz: Int,
+   val cntr_sz: Int,
+   val ubit_sz: Int
    )
    extends Bundle
 {
@@ -75,15 +75,6 @@ class TageResp(
    val debug_indexes  = Vec(num_tables, UInt(max_index_sz.W))
    val debug_tags     = Vec(num_tables, UInt(max_tag_sz.W))
 
-   override def cloneType: this.type =
-      new TageResp(
-         fetch_width,
-         num_tables,
-         max_history_length,
-         max_index_sz,
-         max_tag_sz,
-         cntr_sz,
-         ubit_sz).asInstanceOf[this.type]
 }
 
 // provide information to the BpdResp bundle how many bits a TageResp needs
@@ -500,6 +491,5 @@ class TageBrPredictor(
       (size_in_bits/1024) + " Kbits) (max history length: " + history_lengths.max + " bits)\n" +
       tables.mkString("\n")
 
-   override val compileOptions = chisel3.core.ExplicitCompileOptions.NotStrict.copy(explicitInvalidate = true)
 }
 

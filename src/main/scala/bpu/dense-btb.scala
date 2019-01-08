@@ -410,5 +410,4 @@ class DenseBTB(implicit p: Parameters) extends BoomBTB
       "\n   Offset Size   : " + offset_sz + "\n" +
       bim.toString
 
-   override val compileOptions = chisel3.core.ExplicitCompileOptions.NotStrict.copy(explicitInvalidate = true)
 }

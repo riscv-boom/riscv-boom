@@ -179,6 +179,5 @@ class FetchMonitor(implicit p: Parameters) extends BoomModule()(p)
 
 
 
-   override val compileOptions = chisel3.core.ExplicitCompileOptions.NotStrict.copy(explicitInvalidate = true)
 }
 

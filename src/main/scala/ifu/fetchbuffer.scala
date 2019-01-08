@@ -249,6 +249,5 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule()
 
    assert (!(count === 0.U && write_ptr =/= read_ptr), "[fetchbuffer] pointers should match if count is zero.")
 
-   override val compileOptions = chisel3.core.ExplicitCompileOptions.NotStrict.copy(explicitInvalidate = true)
 }
 

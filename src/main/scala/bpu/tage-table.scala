@@ -19,11 +19,11 @@ import freechips.rocketchip.util.Str
 import boom.common._
 
 class TageTableIo(
-   fetch_width: Int,
-   index_sz: Int,
-   tag_sz: Int,
-   cntr_sz: Int,
-   ubit_sz: Int)
+   val fetch_width: Int,
+   val index_sz: Int,
+   val tag_sz: Int,
+   val cntr_sz: Int,
+   val ubit_sz: Int)
    extends Bundle
 {
    // bp1 - request a prediction (provide the index and tag).
@@ -63,19 +63,16 @@ class TageTableIo(
 
    val do_reset = Input(Bool())
 
-   override def cloneType: this.type = new TageTableIo(
-      fetch_width, index_sz, tag_sz, cntr_sz, ubit_sz).asInstanceOf[this.type]
 }
 
-class TageTableReq(index_sz: Int, tag_sz: Int) extends Bundle
+class TageTableReq(val index_sz: Int, val tag_sz: Int) extends Bundle
 {
    val index = UInt(index_sz.W)
    val tag = UInt(tag_sz.W)
 
-   override def cloneType: this.type = new TageTableReq(index_sz, tag_sz).asInstanceOf[this.type]
 }
 
-class TageTableResp(fetch_width: Int, tag_sz: Int, cntr_sz: Int, ubit_sz: Int) extends Bundle
+class TageTableResp(val fetch_width: Int, val tag_sz: Int, val cntr_sz: Int, val ubit_sz: Int) extends Bundle
 {
    val tag  = UInt(tag_sz.W)
    val cntr = UInt(cntr_sz.W)
@@ -84,20 +81,18 @@ class TageTableResp(fetch_width: Int, tag_sz: Int, cntr_sz: Int, ubit_sz: Int) e
 
    def predictsTaken = cntr(cntr_sz-1)
 
-   override def cloneType: this.type = new TageTableResp(fetch_width, tag_sz, cntr_sz, ubit_sz).asInstanceOf[this.type]
 }
 
-class TageTableEntry(fetch_width: Int, tag_sz: Int, cntr_sz: Int, ubit_sz: Int) extends Bundle
+class TageTableEntry(val fetch_width: Int, val tag_sz: Int, val cntr_sz: Int, val ubit_sz: Int) extends Bundle
 {
    val tag  = UInt(tag_sz.W)                 // Tag.
    val cntr = UInt(cntr_sz.W)                // Prediction counter.
    val cidx = UInt(log2Ceil(fetch_width).W)  // Control-flow instruction index.
    val ubit = UInt(ubit_sz.W)                // Usefulness counter.
 
-   override def cloneType: this.type = new TageTableEntry(fetch_width, tag_sz, cntr_sz, ubit_sz).asInstanceOf[this.type]
 }
 
-class TageTableWrite(fetch_width: Int, index_sz: Int, tag_sz: Int, cntr_sz: Int, ubit_sz: Int) extends Bundle
+class TageTableWrite(val fetch_width: Int, val index_sz: Int, val tag_sz: Int, val cntr_sz: Int, val ubit_sz: Int) extends Bundle
 {
    val index = UInt(index_sz.W)
    val old = new TageTableEntry(fetch_width, tag_sz, cntr_sz, ubit_sz)
@@ -110,8 +105,6 @@ class TageTableWrite(fetch_width: Int, index_sz: Int, tag_sz: Int, cntr_sz: Int,
    val mispredict = Bool()
    val taken = Bool()
 
-   override def cloneType: this.type = new TageTableWrite(fetch_width, index_sz, tag_sz, cntr_sz,
-                                                          ubit_sz).asInstanceOf[this.type]
 }
 
 
@@ -269,6 +262,5 @@ class TageTable(
       tag_sz + "-bit tags, " +
       cntr_sz + "-bit counters"
 
-   override val compileOptions = chisel3.core.ExplicitCompileOptions.NotStrict.copy(explicitInvalidate = true)
 }
 

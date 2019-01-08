@@ -24,7 +24,7 @@ import freechips.rocketchip.config.Parameters
 import boom.common._
 import boom.util._
 
-class IssueSlotIO(num_wakeup_ports: Int)(implicit p: Parameters) extends BoomBundle()(p)
+class IssueSlotIO(val num_wakeup_ports: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
    val valid          = Output(Bool())
    val will_be_valid  = Output(Bool()) // TODO code review, do we need this signal so explicitely?
@@ -53,7 +53,6 @@ class IssueSlotIO(num_wakeup_ports: Int)(implicit p: Parameters) extends BoomBun
     Output(result)
   }
 
-   override def cloneType = new IssueSlotIO(num_wakeup_ports)(p).asInstanceOf[this.type]
 }
 
 class IssueSlot(num_slow_wakeup_ports: Int)(implicit p: Parameters)
@@ -318,6 +317,5 @@ class IssueSlot(num_slow_wakeup_ports: Int)(implicit p: Parameters)
    io.debug.p3 := slot_p3
    io.debug.state := slot_state
 
-   override val compileOptions = chisel3.core.ExplicitCompileOptions.NotStrict.copy(explicitInvalidate = true)
 }
 

@@ -29,14 +29,13 @@ import boom.ifu.GetPCFromFtqIO
 import boom.util.{ImmGen, IsKilledByBranch, BranchKillableQueue}
 
 // TODO rename to something like MicroOpWithData
-class ExeUnitResp(data_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
+class ExeUnitResp(val data_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
   with HasBoomUOP
 {
    val data = Bits(data_width.W)
    val fflags = new ValidIO(new FFlagsResp) // write fflags to ROB
 
    var writesToIRF = true // does this response unit plug into the integer regfile?
-   override def cloneType: this.type = new ExeUnitResp(data_width).asInstanceOf[this.type]
 }
 
 class FFlagsResp(implicit p: Parameters) extends BoomBundle()(p)

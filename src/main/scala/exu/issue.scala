@@ -175,7 +175,6 @@ abstract class IssueUnit(
       else if (iqType == IQT_FP.litValue) " fp"
       else "unknown"
 
-   override val compileOptions = chisel3.core.ExplicitCompileOptions.NotStrict.copy(explicitInvalidate = true)
 }
 
 class IssueUnits(num_wakeup_ports: Int)(implicit val p: Parameters)

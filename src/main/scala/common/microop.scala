@@ -171,9 +171,8 @@ object CfiType
    def jalr = 3.U
 }
 
-class MicroOpWithData(data_sz: Int)(implicit p: Parameters) extends BoomBundle()(p)
+class MicroOpWithData(val data_sz: Int)(implicit p: Parameters) extends BoomBundle()(p)
   with HasBoomUOP
 {
    val data = UInt(data_sz.W)
-   override def cloneType = new MicroOpWithData(data_sz)(p).asInstanceOf[this.type]
 }

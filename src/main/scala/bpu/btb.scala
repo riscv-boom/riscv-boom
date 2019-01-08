@@ -183,7 +183,6 @@ abstract class BoomBTB(implicit p: Parameters) extends BoomModule()(p) with HasB
       val status_debug = Input(Bool())
    })
 
-   override val compileOptions = chisel3.core.ExplicitCompileOptions.NotStrict.copy(explicitInvalidate = true)
 }
 
 object BoomBTB

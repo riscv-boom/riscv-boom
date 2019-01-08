@@ -18,18 +18,16 @@ import freechips.rocketchip.config.Parameters
 import scala.collection.mutable.ArrayBuffer
 import boom.common._
 
-class RegisterFileReadPortIO(addr_width: Int, data_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
+class RegisterFileReadPortIO(val addr_width: Int, val data_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
    val addr = Input(UInt(addr_width.W))
    val data = Output(UInt(data_width.W))
-   override def cloneType = new RegisterFileReadPortIO(addr_width, data_width)(p).asInstanceOf[this.type]
 }
 
-class RegisterFileWritePort(addr_width: Int, data_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
+class RegisterFileWritePort(val addr_width: Int, val data_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
    val addr = UInt(width = addr_width.W)
    val data = UInt(width = data_width.W)
-   override def cloneType = new RegisterFileWritePort(addr_width, data_width)(p).asInstanceOf[this.type]
 }
 
 

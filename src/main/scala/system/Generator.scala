@@ -69,12 +69,10 @@ object Generator extends GeneratorApp {
         if (cfg.fLen >= 64) {
           TestGeneration.addSuites(env.map(rv32ud))
         }
-      } else {
-        TestGeneration.addSuite(rv32udBenchmarks)
-        TestGeneration.addSuites(env.map(rv64uf))
-        if (cfg.fLen >= 64) {
+      } else if (cfg.fLen >= 64) {
           TestGeneration.addSuites(env.map(rv64ud))
-        }
+          TestGeneration.addSuites(env.map(rv64uf))
+          TestGeneration.addSuite(rv32udBenchmarks)
       }
     }
     if (coreParams.useAtomics) {

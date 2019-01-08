@@ -51,6 +51,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
       val wb_pdsts         = Input(Vec(num_wakeup_ports, UInt(width=fp_preg_sz.W)))
 
       val debug_tsc_reg    = Input(UInt(width=xLen.W))
+      val debug_wb_wdata   = Output(Vec(num_wakeup_ports, UInt((fLen+1).W)))
    }
 
    //**********************************
@@ -299,6 +300,9 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
       }
    }
 
+   for ((wdata, wakeup) <- io.debug_wb_wdata zip io.wakeups) {
+      wdata := ieee(wakeup.bits.data)
+   }
 
    exe_units.map(_.io.fcsr_rm := io.fcsr_rm)
 
@@ -318,5 +322,4 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
       "\n   Num Wakeup Ports      : " + num_wakeup_ports +
       "\n   Num Bypass Ports      : " + exe_units.num_total_bypass_ports + "\n"
 
-   override val compileOptions = chisel3.core.ExplicitCompileOptions.NotStrict.copy(explicitInvalidate = true)
 }

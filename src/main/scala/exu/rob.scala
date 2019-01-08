@@ -242,7 +242,6 @@ class Rob(
          val busy = Bool()
          val uop = new MicroOp()
          val exception = Bool()
-         override def cloneType: this.type = new DebugRobBundle().asInstanceOf[this.type]
       }
    val debug_entry = Wire(Vec(NUM_ROB_ENTRIES, new DebugRobBundle))
    debug_entry := DontCare // override in statements below

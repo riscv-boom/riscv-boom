@@ -10,12 +10,11 @@ package boom.util
 import chisel3._
 import chisel3.util._
 
-class ESramWritePort[T <: Data](idx_sz: Int, gen: T) extends Bundle
+class ESramWritePort[T <: Data](val idx_sz: Int, private val gen: T) extends Bundle
 {
    val idx = UInt(idx_sz.W)
    val data = gen
 
-   override def cloneType = new ESramWritePort(idx_sz, gen).asInstanceOf[this.type]
 }
 
 /** Implements a decoupled SRAM which can be back-pressured on the read response side,

@@ -54,7 +54,6 @@ class FetchBundle(implicit p: Parameters) extends BoomBundle()(p)
 
    val debug_events  = Vec(fetchWidth, new DebugStageEvents)
 
-  override def cloneType: this.type = new FetchBundle().asInstanceOf[this.type]
 }
 
 
@@ -827,6 +826,5 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
          )
    }
 
-   override val compileOptions = chisel3.core.ExplicitCompileOptions.NotStrict.copy(explicitInvalidate = true)
 }
 

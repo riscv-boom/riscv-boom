@@ -77,12 +77,11 @@ class ICache(
       minLatency = 1)})
 }
 
-class ICacheResp(outer: ICache) extends Bundle {
+class ICacheResp(val outer: ICache) extends Bundle {
   val data = UInt((outer.icacheParams.fetchBytes*8).W)
   val replay = Bool()
   val ae = Bool()
 
-  override def cloneType = new ICacheResp(outer).asInstanceOf[this.type]
 }
 
 class ICachePerfEvents extends Bundle {

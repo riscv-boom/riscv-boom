@@ -19,7 +19,7 @@ import boom.common._
 import boom.util._
 
 
-class RenameMapTableElementIo(pl_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
+class RenameMapTableElementIo(val pl_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
    val element            = Output(UInt(PREG_SZ.W))
 
@@ -43,7 +43,6 @@ class RenameMapTableElementIo(pl_width: Int)(implicit p: Parameters) extends Boo
    val commit_pdst         = Input(UInt(PREG_SZ.W))
    val committed_element   = Output(UInt(PREG_SZ.W))
 
-   override def cloneType: this.type = new RenameMapTableElementIo(pl_width).asInstanceOf[this.type]
 }
 
 class RenameMapTableElement(pipeline_width: Int, always_zero: Boolean)(implicit p: Parameters) extends BoomModule()(p)
@@ -128,13 +127,12 @@ class RenameMapTableElement(pipeline_width: Int, always_zero: Boolean)(implicit 
 
 
 // Pass out the new physical register specifiers.
-class MapTableOutput(preg_sz: Int) extends Bundle
+class MapTableOutput(val preg_sz: Int) extends Bundle
 {
    val prs1              = UInt(preg_sz.W)
    val prs2              = UInt(preg_sz.W)
    val prs3              = UInt(preg_sz.W)
    val stale_pdst        = UInt(preg_sz.W)
-   override def cloneType: this.type = new MapTableOutput(preg_sz).asInstanceOf[this.type]
 }
 
 class RenameMapTable(
