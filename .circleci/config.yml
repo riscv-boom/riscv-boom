@@ -17,7 +17,7 @@ jobs:
             - checkout
 
             - run:
-                name: Create hash of RISC-V Tools based on RocketChip
+                name: Create hash of riscv-tools based on rocket-chip
                 command: |
                     ci/create-hash.sh rocket-chip
 
@@ -26,7 +26,7 @@ jobs:
                     - riscv-tools-installed-v1-{{ checksum "../rocket-chip.hash" }}
 
             - run: 
-                name: Building RISC-V Tools
+                name: Building riscv-tools
                 command: |
                     ci/prepare-riscv-tools.sh
                 no_output_timeout: 120m
@@ -48,7 +48,7 @@ jobs:
             - checkout
 
             - run:
-                name: Create hash of BoomTemplate
+                name: Create hash of boom-template
                 command: |
                     ci/create-hash.sh
 
@@ -79,7 +79,7 @@ jobs:
             - checkout
 
             - run:
-                name: Create hash of RISC-V Tools and BoomTemplate
+                name: Create hash of riscv-tools and boom-template
                 command: |
                     ci/create-hash.sh rocket-chip
                     ci/create-hash.sh
@@ -114,7 +114,7 @@ jobs:
             - checkout
 
             - run:
-                name: Create hash of RISC-V Tools and BoomTemplate
+                name: Create hash of riscv-tools and boom-template
                 command: |
                     ci/create-hash.sh rocket-chip
                     ci/create-hash.sh
@@ -149,7 +149,7 @@ jobs:
             - checkout
              
             - run:
-                name: Create hash of RISC-V Tools and BoomTemplate
+                name: Create hash of riscv-tools and boom-template
                 command: |
                     ci/create-hash.sh rocket-chip
                     ci/create-hash.sh
@@ -184,7 +184,7 @@ jobs:
 #            - checkout
 #
 #           - run:
-#               name: Create hash of RISC-V Tools and BoomTemplate
+#               name: Create hash of riscv-tools and boom-template
 #               command: |
 #                   ci/create-hash.sh rocket-chip
 #                   ci/create-hash.sh
@@ -219,7 +219,7 @@ jobs:
             - checkout
 
             - run:
-                name: Create hash of RISC-V Tools based on RocketChip
+                name: Create hash of riscv-tools based on rocket-chip
                 command: |
                     ci/create-hash.sh rocket-chip
 
@@ -243,7 +243,7 @@ jobs:
             - checkout
 
             - run:
-                name: Create hash of RISC-V Tools based on RocketChip
+                name: Create hash of riscv-tools based on rocket-chip
                 command: |
                     ci/create-hash.sh rocket-chip
 
@@ -271,7 +271,7 @@ jobs:
             - checkout
 
             - run:
-                name: Create hash of RISC-V Tools based on RocketChip
+                name: Create hash of riscv-tools based on rocket-chip
                 command: |
                     ci/create-hash.sh rocket-chip
 
@@ -299,7 +299,7 @@ jobs:
             - checkout
 
             - run:
-                name: Create hash of RISC-V Tools based on RocketChip
+                name: Create hash of riscv-tools based on rocket-chip
                 command: |
                     ci/create-hash.sh rocket-chip
 
@@ -328,7 +328,7 @@ jobs:
             - checkout
 
             - run:
-                name: Create hash of RISC-V Tools based on RocketChip
+                name: Create hash of riscv-tools based on rocket-chip
                 command: |
                     ci/create-hash.sh rocket-chip
 
@@ -356,7 +356,7 @@ jobs:
             - checkout
 
             - run:
-                name: Create hash of RISC-V Tools based on RocketChip
+                name: Create hash of riscv-tools based on rocket-chip
                 command: |
                     ci/create-hash.sh rocket-chip
 
@@ -384,7 +384,7 @@ jobs:
             - checkout
 
             - run:
-                name: Create hash of RISC-V Tools based on RocketChip
+                name: Create hash of riscv-tools based on rocket-chip
                 command: |
                     ci/create-hash.sh rocket-chip
 
@@ -413,7 +413,7 @@ jobs:
             - checkout
 
             - run:
-                name: Create hash of RISC-V Tools based on RocketChip
+                name: Create hash of riscv-tools based on rocket-chip
                 command: |
                     ci/create-hash.sh rocket-chip
 
@@ -441,7 +441,7 @@ jobs:
             - checkout
 
             - run:
-                name: Create hash of RISC-V Tools based on RocketChip
+                name: Create hash of riscv-tools based on rocket-chip
                 command: |
                     ci/create-hash.sh rocket-chip
 
@@ -469,7 +469,7 @@ jobs:
             - checkout
 
             - run:
-                name: Create hash of RISC-V Tools based on RocketChip
+                name: Create hash of riscv-tools based on rocket-chip
                 command: |
                     ci/create-hash.sh rocket-chip
 
@@ -498,7 +498,7 @@ jobs:
 #           - checkout
 #
 #            - run:
-#               name: Create hash of RISC-V Tools based on RocketChip
+#               name: Create hash of riscv-tools based on rocket-chip
 #               command: |
 #                   ci/create-hash.sh rocket-chip
 #
@@ -526,7 +526,7 @@ jobs:
 #           - checkout
 #
 #           - run:
-#               name: Create hash of RISC-V Tools based on RocketChip
+#               name: Create hash of riscv-tools based on rocket-chip
 #               command: |
 #                   ci/create-hash.sh rocket-chip
 #
@@ -554,7 +554,7 @@ jobs:
 #           - checkout
 #
 #            - run:
-#               name: Create hash of RISC-V Tools based on RocketChip
+#               name: Create hash of riscv-tools based on rocket-chip
 #               command: |
 #                   ci/create-hash.sh rocket-chip
 #
@@ -579,6 +579,7 @@ workflows:
             # Make the toolchain
             - install-riscv-tools
 
+            # Build verilator
             - prepare-build-environment:
                 requires:
                     - install-riscv-tools

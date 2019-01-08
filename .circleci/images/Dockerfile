@@ -1,3 +1,4 @@
+### Note: This DockerFile is adapted from https://github.com/CircleCI-Public/example-images/openjdk
 ###
 ### this Dockerfile is an example representing one variant of this image;
 ### please see https://github.com/circleci-public/circleci-dockerfiles
@@ -112,7 +113,7 @@ RUN apt-get install -y autoconf automake autotools-dev curl libmpc-dev libmpfr-d
 # Update PATH for Java tools
 ENV PATH="/opt/sbt/bin:/opt/apache-maven/bin:/opt/apache-ant/bin:/opt/gradle/bin:$PATH"
 
-# Update PATH for RISCV toolchain
+# Update PATH for RISCV toolchain (note: hardcoded for CircleCI)
 ENV RISCV="/home/circleci/riscv-tools-install"
 ENV PATH="$RISCV/bin:$PATH"
 

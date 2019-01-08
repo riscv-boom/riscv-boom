@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# create the different verilator builds of BOOM based on arg
+# build verilator and init submodules
 
 # turn echo on and error on earliest command
 set -x
