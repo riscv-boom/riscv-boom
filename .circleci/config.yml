@@ -28,7 +28,7 @@ jobs:
             - run: 
                 name: Building riscv-tools
                 command: |
-                    ci/prepare-riscv-tools.sh
+                    ci/build-riscv-tools.sh
                 no_output_timeout: 120m
 
             - save_cache:
@@ -50,16 +50,16 @@ jobs:
             - run:
                 name: Create hash of boom-template
                 command: |
-                    ci/create-hash.sh
+                    ci/create-hash.sh boom-template
 
             - restore_cache:
                 keys:
                     - boom-template-with-verilator-v1-{{ checksum "../boom-template.hash" }}
 
             - run: 
-                name: Building Verilator
+                name: Build Verilator and setup build environment
                 command: |
-                    ci/prepare-for-build.sh
+                    ci/prepare-for-rtl-build.sh
                 no_output_timeout: 120m
 
             - save_cache:
@@ -82,7 +82,7 @@ jobs:
                 name: Create hash of riscv-tools and boom-template
                 command: |
                     ci/create-hash.sh rocket-chip
-                    ci/create-hash.sh
+                    ci/create-hash.sh boom-template
 
             - restore_cache:
                 keys:
@@ -94,7 +94,7 @@ jobs:
 
             - run: 
                 name: Building BoomConfig using Verilator
-                command: ci/prepare-verilator-build.sh BoomConfig
+                command: ci/do-rtl-build.sh BoomConfig
                 no_output_timeout: 120m
 
             - save_cache:
@@ -117,7 +117,7 @@ jobs:
                 name: Create hash of riscv-tools and boom-template
                 command: |
                     ci/create-hash.sh rocket-chip
-                    ci/create-hash.sh
+                    ci/create-hash.sh boom-template
 
             - restore_cache:
                 keys:
@@ -129,7 +129,7 @@ jobs:
 
             - run: 
                 name: Building SmallBoomConfig using Verilator
-                command: ci/prepare-verilator-build.sh SmallBoomConfig
+                command: ci/do-rtl-build.sh SmallBoomConfig
                 no_output_timeout: 120m
 
             - save_cache:
@@ -152,7 +152,7 @@ jobs:
                 name: Create hash of riscv-tools and boom-template
                 command: |
                     ci/create-hash.sh rocket-chip
-                    ci/create-hash.sh
+                    ci/create-hash.sh boom-template
 
             - restore_cache:
                 keys:
@@ -164,7 +164,7 @@ jobs:
 
             - run: 
                 name: Building MediumBoomConfig using Verilator
-                command: ci/prepare-verilator-build.sh MediumBoomConfig
+                command: ci/do-rtl-build.sh MediumBoomConfig
                 no_output_timeout: 120m
 
             - save_cache:
@@ -187,7 +187,7 @@ jobs:
 #               name: Create hash of riscv-tools and boom-template
 #               command: |
 #                   ci/create-hash.sh rocket-chip
-#                   ci/create-hash.sh
+#                   ci/create-hash.sh boom-template
 #
 #           - restore_cache:
 #               keys:
@@ -199,7 +199,7 @@ jobs:
 #
 #            - run: 
 #                name: Building MegaBoomConfig using Verilator
-#                command: ci/prepare-verilator-build.sh MegaBoomConfig
+#                command: ci/do-rtl-build.sh MegaBoomConfig
 #                no_output_timeout: 120m
 #
 #            - save_cache:
