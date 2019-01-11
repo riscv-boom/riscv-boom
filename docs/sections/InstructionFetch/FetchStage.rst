@@ -46,8 +46,73 @@ miss has been handled. This is less than ideal for scenarios in which
 the pipeline discovers a branch mispredict and would like to redirect
 the icache to start fetching along the correct path.
 
-The front-end (currently) only handles the RV64G ISA, which uses
-fixed-size 4 bytes instructions.
+Fetching Compressed Instructions
+--------------------------------
+This section describes how the RISC-V Compressed ISA extension
+was implemented in BOOM. The Compressed ISA Extension, or RVC
+(http://riscv.org/download.html#spec_compressed_isa) enables smaller, 16
+bit encodings of common instructions to decrease the static and dynamic
+code size. “RVC" comes with a number of features that are of particular
+interest to micro-architects:
+
+-  32b instructions have no alignment requirement, and may start on a
+   half-word boundary.
+
+-  All 16b instructions map directly into a longer 32b instruction.
+
+BOOM re-uses the front-end design from Rocket, a 5-stage in-order core.
+BOOM then takes instructions returning (the *fetch packet*) from the
+Rocket front-end, quickly decodes the instructions for branch
+prediction, and pushes the *fetch packet* into the *Fetch Buffer*.
+
+-  Increased decoding complexity (e.g., operands can now move around).
+
+-  Finding *where* the instruction begins.
+
+-  Removing :math:`+4` assumptions throughout the code base,
+   particularly with branch handling.
+
+-  Unaligned instructions, in particular, running off cache lines and
+   virtual pages.
+
+The last point requires some additional “statefulness" in the Fetch
+Unit, as fetching all of the pieces of an instruction may take multiple
+cycles.
+
+The following describes the implementation of RVC in BOOM by describing
+the lifetime of a instruction.
+
+-  The front-end returns fetchpackets of fetchWidth*16 bits wide. This
+   was supported inherently in the Rocket front-end
+
+-  Maintain statefulness in F3, in the cycle where fetchbundles are
+   dequeued from the ICache response queue and enqueued onto the
+   fetch buffer
+
+-  F3 tracks the trailing 16b, PC, and instruction boundaries of the
+   last fetchbundle. These bits are combined with the current
+   fetchbundle and expanded to fetchWidth*32 bits for enqueuing onto the
+   fetch buffer. Predecode determines the start address of every
+   instruction in this fetch bundle and masks the fetch packet for the
+   fetch buffer
+
+-  The fetch buffer now compacts away invalid, or misaligned
+   when storing to its memory.
+
+The following section describes miscellaneous implementation details.
+
+-  RVC decode is performed by expanding RVC instructions using Rocket's
+   RVCExpander in the normal Decode stage
+
+-  A challenging problem is dealing with instructions that cross a
+   fetch boundary. We track these instructions as belonging to the
+   fetch packet that contains their higher-order 16 bits. We have to
+   be careful when determining the PC of these instructions, by tracking
+   all instructions which were initially misaligned across a fetch
+   boundary.
+
+-  The pipeline must also track whether an instruction was originally
+   16b or 32b, for calculating PC+4 or PC+2.
 
 The Fetch Buffer
 ----------------
@@ -55,9 +120,6 @@ The Fetch Buffer
 *Fetch packets* coming from the i-cache are placed into a *Fetch
 Buffer*. The *Fetch Buffer* helps to decouple the instruction
 fetch front-end from the execution pipeline in the back-end.
-
-The instructions within a *fetch packet* are *not* collapsed or
-compressed - any bubbles within a *fetch packet* are maintained.
 
 The *Fetch Buffer* is parameterizable. The number of entries can be
 changed and whether the buffer is implemented as a “flow-through"
