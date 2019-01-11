@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# build verilator and init submodules
+# build verilator and init submodules with rocket-chip hash given by riscv-boom
 
 # turn echo on and error on earliest command
 set -x
