@@ -22,5 +22,5 @@ cd ../torture
 git submodule update --init --recursive
 
 # make boom-template verilator version
-cd verisim
+cd ../verisim
 make verilator_install
