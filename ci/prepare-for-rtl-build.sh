@@ -18,7 +18,7 @@ git checkout $(cat ../boom/ROCKETCHIP_VERSION)
 
 echo "Initialize final submodules"
 git submodule update --init --recursive hardfloat chisel3 firrtl
-cd torture
+cd ../torture
 git submodule update --init --recursive
 
 # make boom-template verilator version
