@@ -54,7 +54,7 @@ jobs:
 
             - restore_cache:
                 keys:
-                    - boom-template-with-verilator-v1-{{ checksum "../boom-template.hash" }}
+                    - boom-template-with-verilator-v2-{{ checksum "../boom-template.hash" }}
 
             - run: 
                 name: Build Verilator and setup build environment
@@ -63,7 +63,7 @@ jobs:
                 no_output_timeout: 120m
 
             - save_cache:
-                key: boom-template-with-verilator-v1-{{ checksum "../boom-template.hash" }}
+                key: boom-template-with-verilator-v2-{{ checksum "../boom-template.hash" }}
                 paths:
                     - "/home/circleci/boom-template"
 
@@ -90,7 +90,7 @@ jobs:
 
             - restore_cache:
                 keys:
-                    - boom-template-with-verilator-v1-{{ checksum "../boom-template.hash" }}
+                    - boom-template-with-verilator-v2-{{ checksum "../boom-template.hash" }}
 
             - run: 
                 name: Building BoomConfig using Verilator
@@ -125,7 +125,7 @@ jobs:
 
             - restore_cache:
                 keys:
-                    - boom-template-with-verilator-v1-{{ checksum "../boom-template.hash" }}
+                    - boom-template-with-verilator-v2-{{ checksum "../boom-template.hash" }}
 
             - run: 
                 name: Building SmallBoomConfig using Verilator
@@ -160,7 +160,7 @@ jobs:
 
             - restore_cache:
                 keys:
-                    - boom-template-with-verilator-v1-{{ checksum "../boom-template.hash" }}
+                    - boom-template-with-verilator-v2-{{ checksum "../boom-template.hash" }}
 
             - run: 
                 name: Building MediumBoomConfig using Verilator
@@ -195,7 +195,7 @@ jobs:
 #
 #           - restore_cache:
 #               keys:
-#                   - boom-template-with-verilator-v1-{{ checksum "../boom-template.hash" }}
+#                   - boom-template-with-verilator-v2-{{ checksum "../boom-template.hash" }}
 #
 #            - run: 
 #                name: Building MegaBoomConfig using Verilator
