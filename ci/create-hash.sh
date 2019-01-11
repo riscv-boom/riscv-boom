@@ -16,8 +16,7 @@ if [ ! -d "../boom-template" ]; then
 
     # move the pull request riscv-boom repo into boom-template
     rm -rf boom
-    #mv ../project boom/ TODO: CHANGE
-    cp -r ../riscv-boom boom/
+    cp -r ../project boom/
 fi
 
 cd ../boom-template
