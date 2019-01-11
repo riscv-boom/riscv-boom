@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# get the hash of repo and store in file
+# get the hash of rocket-chip or boom-template and store in file
 
 # turn echo on and error on earliest command
 set -x
@@ -24,6 +24,7 @@ if [ $1 == "boom-template" ]; then
     git rev-parse HEAD >> ../$1.hash
     echo "Hashfile for $1 created in ..$PWD"
 elif [ $1 == "rocket-chip" ]; then
+    # Use riscv-boom rocket-chip hash to specify version of rocket-chip to use
     git submodule update --init rocket-chip
     echo "Checking out rocket-chip with hash: $(cat boom/ROCKETCHIP_VERSION)"
     cd rocket-chip
