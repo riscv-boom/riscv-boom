@@ -20,10 +20,8 @@ if [ ! -d "$HOME/riscv-tools-install" ]; then
 
     echo "Initializing riscv-tools"
     git submodule update --init riscv-tools
-    cd rocket-chip/riscv-tools
+    cd riscv-tools
     git submodule update --init --recursive riscv-isa-sim riscv-fesvr riscv-pk riscv-opcodes riscv-tests riscv-gnu-toolchain riscv-openocd
-
-    cd $HOME/boom-template/rocket-chip/riscv-tools
 
     # We need to build a RV64G toolchain (not RVC which is the current riscv-tools default).
     # Therefore, let's make our own build script and then invoke it.
