@@ -39,7 +39,8 @@ release = ''
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 extensions = [
-    'sphinx.ext.autosectionlabel'
+    'sphinx.ext.autosectionlabel',
+    'sphinxcontrib.bibtex'
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -154,7 +155,7 @@ man_pages = [
 #  dir menu entry, description, category)
 texinfo_documents = [
     (master_doc, 'RISCV-BOOM', 'RISCV-BOOM Documentation',
-     author, 'RISCV-BOOM', 'One line description of project.',
+     author, 'RISCV-BOOM', 'The Berkeley Out-of-Order Processor',
      'Miscellaneous'),
 ]
 

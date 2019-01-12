@@ -1,5 +1,16 @@
+Debugging
+=========
+
+FireSim Debugging
+-----------------
+
+In addition to Verilator and VCS software simulation testing, one can use
+the FireSim tool to debug faster using an FPGA. This tools comes out of the
+UC Berkeley Architecture Research group and is still a work in progress. You
+can find the documentation and website at https://fires.im/.
+
 Pipeline Visualization
-======================
+----------------------
 
 “Pipevew" is a useful diagnostic and visualization tool for seeing how
 instructions are scheduled on an out-of-order pipeline.
@@ -45,16 +56,16 @@ To display the text-based pipeline visualizations, BOOM generates traces
 compatible with the O3 Pipeline Viewer included in the gem5 simulator
 suite.
 
-To enable pipeline visualization, first set O3PIPEVIEW\_PRINTF in
-boom/src/main/scala/consts.scala to true:
+To enable pipeline visualization, first set :code:`O3PIPEVIEW_PRINTF` in
+:code:`boom/src/main/scala/consts.scala` to :code:`true`:
 
 .. code-block:: bash
 
     val O3PIPEVIEW_PRINTF = true // dump trace for O3PipeView from gem5
 
-Rebuild and rerun BOOM. You should find the traces (\*.out) in
-emulator/output/. To generate the visualization, first download and
-install gem5, and then run:
+Rebuild and rerun BOOM. You should find the traces (:code:`*.out`) in
+the :code:`verisim/output/` or :code:`vsim/output/` directories if you are using :code:`boom-template` to
+run the core. To generate the visualization, first download and install gem5, and then run:
 
 .. code-block:: bash
 
@@ -65,7 +76,7 @@ You can view the visualization by running:
 
 .. code-block:: bash
 
-    less -r pipeview.out``
+    less -r pipeview.out
 
-To learn more about o3-pipeview.py and to download gem5 visit
+To learn more about :code:`o3-pipeview.py` and to download gem5 visit
 http://www.m5sim.org/Visualization.

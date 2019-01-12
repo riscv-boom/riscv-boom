@@ -19,13 +19,13 @@ Welcome to RISCV-BOOM's documentation!
    sections/MemorySystemDCacheShim/memory
    sections/MicroarchEventTracking/uarch-counters
    sections/Verification/verification
-   sections/Debugging/index
-   sections/Tools/visualization
+   sections/Debugging/debugging
    sections/PhysicalRealization/physical
    sections/FutureWork/futurework
    sections/Parameters/parameterization
    sections/FAQ
    sections/Terminology
+   sections/Bibliography/Bibliography
 
 
 Indices and tables

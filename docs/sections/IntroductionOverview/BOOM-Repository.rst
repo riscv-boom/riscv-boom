@@ -8,89 +8,89 @@ rocket-chip git repository must be used
 https://github.com/freechipsproject/rocket-chip, which provides the caches,
 uncore, and other needed infrastructure to support a full processor.
 
-The BOOM source code can be found in boom/src/main/scala.
+The BOOM source code can be found in :code:`boom/src/main/scala`.
 
 The code structure is shown below:
 
-* boom/src/main/scala/
+* :code:`boom/src/main/scala/`
 
-  * bpu/
+  * :code:`bpu/`
 
-    * 2bc-table.scala
-    * base-only.scala
-    * bim.scala
-    * bpd-pipeline.scala
-    * brpredictor.scala
-    * btb-sa.scala
-    * btb.scala
-    * dense-btb.scala
-    * gshare.scala
-    * tage.scala
-    * tage-table.scala
+    * :code:`2bc-table.scala`
+    * :code:`base-only.scala`
+    * :code:`bim.scala`
+    * :code:`bpd-pipeline.scala`
+    * :code:`brpredictor.scala`
+    * :code:`btb-sa.scala`
+    * :code:`btb.scala`
+    * :code:`dense-btb.scala`
+    * :code:`gshare.scala`
+    * :code:`tage.scala`
+    * :code:`tage-table.scala`
 
-  * common/
+  * :code:`common/`
 
-    * configs
-    * consts
-    * microop
-    * package
-    * parameters
-    * tile
-    * types
+    * :code:`configs`
+    * :code:`consts`
+    * :code:`microop`
+    * :code:`package`
+    * :code:`parameters`
+    * :code:`tile`
+    * :code:`types`
 
-  * exu/
+  * :code:`exu/`
 
-    * core.scala
-    * decode.scala
-    * execute.scala
-    * execution_units.scala
-    * fdiv.scala
-    * fppipeline.scala
-    * fpu.scala
-    * fudecode.scala
-    * functional_unit.scala
-    * imul.scala
-    * issue_ageordered.scala
-    * issue.scala
-    * issue_slot.scala
-    * issue_unordered.scala
-    * regfile-custom.scala
-    * regfile.scala
-    * registerread.scala
-    * rename-busytable.scala
-    * rename-freelist.scala
-    * rename-maptable.scala
-    * rename.scala
-    * rob.scala
+    * :code:`core.scala`
+    * :code:`decode.scala`
+    * :code:`execute.scala`
+    * :code:`execution_units.scala`
+    * :code:`fdiv.scala`
+    * :code:`fppipeline.scala`
+    * :code:`fpu.scala`
+    * :code:`fudecode.scala`
+    * :code:`functional_unit.scala`
+    * :code:`imul.scala`
+    * :code:`issue_ageordered.scala`
+    * :code:`issue.scala`
+    * :code:`issue_slot.scala`
+    * :code:`issue_unordered.scala`
+    * :code:`regfile-custom.scala`
+    * :code:`regfile.scala`
+    * :code:`registerread.scala`
+    * :code:`rename-busytable.scala`
+    * :code:`rename-freelist.scala`
+    * :code:`rename-maptable.scala`
+    * :code:`rename.scala`
+    * :code:`rob.scala`
 
-  * ifu/
+  * :code:`ifu/`
 
-    * branchchecker.scala
-    * fetchbuffer.scala
-    * fetchmonitor.scala
-    * fetch.scala
-    * fetchtargetqueue.scala
-    * frontend.scala
-    * icache.scala
+    * :code:`branchchecker.scala`
+    * :code:`fetchbuffer.scala`
+    * :code:`fetchmonitor.scala`
+    * :code:`fetch.scala`
+    * :code:`fetchtargetqueue.scala`
+    * :code:`frontend.scala`
+    * :code:`icache.scala`
   
-  * lsu/
+  * :code:`lsu/`
 
-    * dcacheshim.scala
-    * lsu.scala
-    * types.scala
+    * :code:`dcacheshim.scala`
+    * :code:`lsu.scala`
+    * :code:`types.scala`
 
-  * system/
+  * :code:`system/`
 
-    * BoomSubsystem.scala
-    * BoomTestSuites.scala
-    * Configs.scala
-    * ExampleBoomSystem.scala
-    * Generator.scala
-    * TestHarness.scala
+    * :code:`BoomSubsystem.scala`
+    * :code:`BoomTestSuites.scala`
+    * :code:`Configs.scala`
+    * :code:`ExampleBoomSystem.scala`
+    * :code:`Generator.scala`
+    * :code:`TestHarness.scala`
 
-  * util/
+  * :code:`util/`
 
-    * elastic-reg.scala
-    * elastic-sram.scala
-    * seqmem-transformable.scala
-    * util.scala
+    * :code:`elastic-reg.scala`
+    * :code:`elastic-sram.scala`
+    * :code:`seqmem-transformable.scala`
+    * :code:`util.scala`
