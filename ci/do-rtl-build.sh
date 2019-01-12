@@ -7,7 +7,7 @@ set -x
 set -e
 
 # enter the verisim directory and build the specific config
-cd ../boom-template/verisim
+cd $HOME/boom-template/verisim
 make CONFIG=$1
 
 # remove generated sources to make cache smaller

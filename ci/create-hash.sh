@@ -7,8 +7,8 @@ set -x
 set -e
 
 # only execute if boom-template is not present (if it is present then it should have run this command before already)
-if [ ! -d "../boom-template" ]; then
-    cd ..
+if [ ! -d "$HOME/boom-template" ]; then
+    cd $HOME
 
     # clone boom-template and create the riscv-tools
     git clone --progress --verbose https://github.com/riscv-boom/boom-template.git
@@ -16,12 +16,12 @@ if [ ! -d "../boom-template" ]; then
 
     # move the pull request riscv-boom repo into boom-template
     rm -rf boom
-    cp -r ../project boom/
+    cp -r $CIRCLE_WORKING_DIRECTORY boom/
 fi
 
-cd ../boom-template
+cd $HOME/boom-template
 if [ $1 == "boom-template" ]; then
-    git rev-parse HEAD >> ../$1.hash
+    git rev-parse HEAD >> $HOME/$1.hash
     echo "Hashfile for $1 created in ..$PWD"
 elif [ $1 == "rocket-chip" ]; then
     # Use riscv-boom rocket-chip hash to specify version of rocket-chip to use
@@ -30,7 +30,7 @@ elif [ $1 == "rocket-chip" ]; then
     cd rocket-chip
     git fetch
     git checkout $(cat ../boom/ROCKETCHIP_VERSION)
-    git rev-parse HEAD >> ../../$1.hash
+    git rev-parse HEAD >> $HOME/$1.hash
     echo "Hashfile for $1 created in ..$PWD"
 fi
 
