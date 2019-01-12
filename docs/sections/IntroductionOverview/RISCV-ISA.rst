@@ -16,24 +16,24 @@ high-performance designs:
       have loads snoop other loads nor does coherence traffic need to snoop
       the LSU, as required by sequential consistency.
     
-* **accrued floating point exception flags**
+* **Accrued floating point exception flags**
 
     * The fp status register does not need to be renamed, nor can FP
       instructions throw exceptions themselves.
 
-* **no integer side-effects**
+* **No integer side-effects**
 
     * All integer ALU operations exhibit no side-effects, save the writing
       of the destination register. This prevents the need to rename
       additional condition state.
 
-* **no cmov or predication**
+* **No cmov or predication**
 
     * Although predication can lower the branch predictor complexity of
       small designs, it greatly complicates OoO pipelines, including the
       addition of a third read port for integer operations.
 
-* **no implicit register specifiers**
+* **No implicit register specifiers**
 
     * Even JAL requires specifying an explicit . This simplifies rename
       logic, which prevents either the need to know the instruction first

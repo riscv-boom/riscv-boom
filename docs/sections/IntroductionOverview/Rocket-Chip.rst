@@ -16,30 +16,22 @@ or without a last-level shared cache.
 
 To manage the wide array of actively developed projects that encompass
 Rocket-chip, the Rocket-chip repository makes heavy use of git
-submodules. The directory structure of the Rocket-chip repository is
+submodules. Selected directories of the Rocket-chip repository is
 shown below.
 
-* rocket-chip/
+* :code:`rocket-chip/`
 
-  * boom/ **Git submodule of the  source code for the BOOM core.**
-  * chisel **The source code to the Chisel language itself.**
-  * firrtl **The source code to the FIRRTL project.**
-  * csrc/ **Utility C/C++ source code.**
-  * emulator/ **Verilator simulation tools and support.**
-  * generated-src/ **Auto-generated Verilog code.**
-  * Makefile **Makefile for Verilator simulation.**
-  * output/ **Output files from Verilator simulation runs.**
-  * riscv-tools/ **Git submodule that points to the RISC-V toolchain.**
-  * riscv-tests/ **Source code for benchmarks and tests.**
-  * riscv-bmarks/ **Benchmarks written in C.**
-  * riscv-tests/ **Tests written in assembly.**
-  * Makefrag **The high-level Makefile fragment.**
-  * src/ **source code for rocket-chip.**
-  * rocket/ **Git submodule of the  source code for the Rocket core (used as a library of processor components).**
-  * junctions/ **Git submodule of the  source code for the uncore and off-chip network.**
-  * uncore/ **Git submodule of the  source code for the uncore components (including LLC).**
-  * sbt/ **Scala voodoo.**
-  * vsim/ **The ASIC Verilog simulation and build directories.**
+  * :code:`bootrom/` **Files used to create a boomrom.**
+  * :code:`chisel3/` **Git submodule pointing to the source code to the Chisel3 language itself.**
+  * :code:`emulator/` **The Verilator simulation tools and support directories.**
+  * :code:`firrtl/` **Git submodule pointing to the source code to the FIRRTL project.**
+  * :code:`hardfloat/` **Git submodule pointing to the Berkeley Hardware FPUs.** 
+  * :code:`project/` **SBT voodoo.** 
+  * :code:`regression/` **Used for TravisCI regression testing.**
+  * :code:`riscv-tools/` **Git submodule that points to the RISC-V toolchain.**
+  * :code:`src/` **Source code for rocket-chip.**
+  * :code:`torture/` **Git submodule that points to the RISC-V Torture Test Generator.**
+  * :code:`vsim/` **The VCS ASIC Verilog simulation and build directories.**
 
 The Rocket Core - a Library of Processor Components!
 -------------------------------------------------------------------

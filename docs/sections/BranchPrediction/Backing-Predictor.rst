@@ -376,7 +376,7 @@ there is no tag match). The table with the longest history making a
 prediction wins.
 
 On a misprediction, TAGE attempts to allocate a new entry. It will only
-overwrite an entry that is “not useful” (:math:`ubits == 0`).
+overwrite an entry that is “not useful” (`ubits == 0`).
 
 TAGE Global History and the Circular Shift Registers (CSRs) [15]_
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
