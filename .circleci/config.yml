@@ -38,7 +38,7 @@ jobs:
 
     prepare-build-environment:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.4
+            - image: riscvboom/riscvboom-images:0.0.5
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -69,7 +69,7 @@ jobs:
 
     prepare-boomconfig:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.4
+            - image: riscvboom/riscvboom-images:0.0.5
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -104,7 +104,7 @@ jobs:
                       
     prepare-smallboomconfig:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.4
+            - image: riscvboom/riscvboom-images:0.0.5
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -139,7 +139,7 @@ jobs:
                       
     prepare-mediumboomconfig:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.4
+            - image: riscvboom/riscvboom-images:0.0.5
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -174,7 +174,7 @@ jobs:
 
 #    prepare-megaboomconfig:
 #        docker:
-#            - image: riscvboom/riscvboom-images:0.0.4
+#            - image: riscvboom/riscvboom-images:0.0.5
 #        environment:
 #            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
 #            TERM: dumb
@@ -209,7 +209,7 @@ jobs:
 
     run-scala-checkstyle:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.4
+            - image: riscvboom/riscvboom-images:0.0.5
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -233,7 +233,7 @@ jobs:
 
     boomconfig-run-benchmark-tests:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.4
+            - image: riscvboom/riscvboom-images:0.0.5
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -261,7 +261,7 @@ jobs:
 
     boomconfig-run-regression-tests:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.4
+            - image: riscvboom/riscvboom-images:0.0.5
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -289,7 +289,7 @@ jobs:
 
     boomconfig-run-assembly-tests:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.4
+            - image: riscvboom/riscvboom-images:0.0.5
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -318,7 +318,7 @@ jobs:
 
     smallboomconfig-run-benchmark-tests:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.4
+            - image: riscvboom/riscvboom-images:0.0.5
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -346,7 +346,7 @@ jobs:
 
     smallboomconfig-run-regression-tests:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.4
+            - image: riscvboom/riscvboom-images:0.0.5
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -374,7 +374,7 @@ jobs:
 
     smallboomconfig-run-assembly-tests:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.4
+            - image: riscvboom/riscvboom-images:0.0.5
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -403,7 +403,7 @@ jobs:
 
     mediumboomconfig-run-benchmark-tests:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.4
+            - image: riscvboom/riscvboom-images:0.0.5
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -431,7 +431,7 @@ jobs:
 
     mediumboomconfig-run-regression-tests:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.4
+            - image: riscvboom/riscvboom-images:0.0.5
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -459,7 +459,7 @@ jobs:
 
     mediumboomconfig-run-assembly-tests:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.4
+            - image: riscvboom/riscvboom-images:0.0.5
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -488,7 +488,7 @@ jobs:
 
 #    megaboomconfig-run-benchmark-tests:
 #        docker:
-#            - image: riscvboom/riscvboom-images:0.0.4
+#            - image: riscvboom/riscvboom-images:0.0.5
 #        environment:
 #            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
 #            TERM: dumb
@@ -516,7 +516,7 @@ jobs:
 #
 #    megaboomconfig-run-regression-tests:
 #        docker:
-#            - image: riscvboom/riscvboom-images:0.0.4
+#            - image: riscvboom/riscvboom-images:0.0.5
 #        environment:
 #            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
 #            TERM: dumb
@@ -544,7 +544,7 @@ jobs:
 #
 #    megaboomconfig-run-assembly-tests:
 #        docker:
-#            - image: riscvboom/riscvboom-images:0.0.4
+#            - image: riscvboom/riscvboom-images:0.0.5
 #        environment:
 #            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
 #            TERM: dumb
