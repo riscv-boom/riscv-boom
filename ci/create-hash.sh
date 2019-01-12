@@ -16,7 +16,7 @@ if [ ! -d "$HOME/boom-template" ]; then
 
     # move the pull request riscv-boom repo into boom-template
     rm -rf boom
-    cp -r $CIRCLE_WORKING_DIRECTORY boom/
+    cp -r $HOME/project boom/
 fi
 
 cd $HOME/boom-template
