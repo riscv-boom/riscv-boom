@@ -6,7 +6,7 @@
 set -x
 set -e
 
-cd ../boom-template
+cd $HOME/boom-template
 
 echo "Initialize top-level submodules"
 git submodule update --init

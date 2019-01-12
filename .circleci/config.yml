@@ -7,7 +7,7 @@ version: 2
 jobs:
     install-riscv-tools:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.4
+            - image: riscvboom/riscvboom-images:0.0.5
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -34,7 +34,7 @@ jobs:
             - save_cache:
                 key: riscv-tools-installed-v1-{{ checksum "../rocket-chip.hash" }}
                 paths:
-                    - "/home/circleci/riscv-tools-install"
+                    - "/home/riscvuser/riscv-tools-install"
 
     prepare-build-environment:
         docker:
@@ -65,7 +65,7 @@ jobs:
             - save_cache:
                 key: boom-template-with-verilator-v2-{{ checksum "../boom-template.hash" }}
                 paths:
-                    - "/home/circleci/boom-template"
+                    - "/home/riscvuser/boom-template"
 
     prepare-boomconfig:
         docker:
@@ -100,7 +100,7 @@ jobs:
             - save_cache:
                 key: boom-template-boomconfig-{{ .Branch }}-{{ .Revision }}
                 paths:
-                    - "/home/circleci/boom-template"
+                    - "/home/riscvuser/boom-template"
                       
     prepare-smallboomconfig:
         docker:
@@ -135,7 +135,7 @@ jobs:
             - save_cache:
                 key: boom-template-smallboomconfig-{{ .Branch }}-{{ .Revision }}
                 paths:
-                    - "/home/circleci/boom-template"
+                    - "/home/riscvuser/boom-template"
                       
     prepare-mediumboomconfig:
         docker:
@@ -170,7 +170,7 @@ jobs:
             - save_cache:
                 key: boom-template-mediumboomconfig-{{ .Branch }}-{{ .Revision }}
                 paths:
-                    - "/home/circleci/boom-template"
+                    - "/home/riscvuser/boom-template"
 
 #    prepare-megaboomconfig:
 #        docker:
@@ -205,7 +205,7 @@ jobs:
 #            - save_cache:
 #                key: boom-template-megaboomconfig-{{ .Branch }}-{{ .Revision }}
 #                paths:
-#                    - "/home/circleci/boom-template"
+#                    - "/home/riscvuser/boom-template"
 
     run-scala-checkstyle:
         docker:
