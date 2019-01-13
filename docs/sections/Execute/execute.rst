@@ -72,7 +72,7 @@ efficiently.
 
 For this reason, BOOM uses an abstract Functional Unit class to “wrap"
 expert-written, low-level functional units from the Rocket repository
-(see :ref:`The Rocket-chip Repository Layout`). However, the expert-written functional units
+(see :ref:`The Rocket-Chip Repository Layout`). However, the expert-written functional units
 created for the Rocket in-order processor make assumptions about
 in-order issue and commit points (namely, that once an instruction has
 been dispatched to them it will never need to be killed). These
