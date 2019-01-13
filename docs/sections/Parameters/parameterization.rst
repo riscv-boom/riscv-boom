@@ -7,7 +7,8 @@ BOOM Parameters
 General Parameters
 ~~~~~~~~~~~~~~~~~~
 
-Listing :numref:`general-boom-params` lists of most of the top-level parameters that you can manipulate for a BOOM core.
+Listing :numref:`general-boom-params` lists most of the top-level
+parameters that you can manipulate for a BOOM core.
 This is taken from :code:`src/main/scala/common/parameters.scala`.
 
 .. _general-boom-params:
@@ -70,7 +71,7 @@ This is taken from :code:`src/main/scala/common/parameters.scala`.
 Other Parameters
 ------------------------
 
-You can also manipulate other parameters such as Rocket Chip parameters, Uncore, BTB, BIM,
+You can also manipulate other parameters such as Rocket-Chip parameters, Uncore, BTB, BIM,
 BPU, and more! To start exploring look at the default configs given in :code:`src/main/scala/common/configs.scala`
 and :code:`src/main/scala/common/Configs.scala` to get a sample of
 BOOM configurations.

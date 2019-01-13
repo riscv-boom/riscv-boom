@@ -2,7 +2,7 @@ Verification
 ============
 
 This chapter covers the current recommended techniques for verifying
-BOOM. Although not provided as part of the BOOM or Rocket Chip
+BOOM. Although not provided as part of the BOOM or Rocket-Chip
 repositories, it is also recommended that BOOM be tested on “hello-world
 + riscv-pk" and the RISC-V port of Linux to properly stress the
 processor.
@@ -33,7 +33,7 @@ are run using which BOOM configurations. Additionally, the DockerFile used to
 build the CI docker images resides in :code:`.circleci/images`. Finally, all
 scripts that are used during the CI run are located at :code:`ci`. Note that even
 though BOOM template is cloned during the CI process, the BOOM repository specifies
-which version of Rocket Chip to use (which in turn determines the proper version of
+which version of Rocket-Chip to use (which in turn determines the proper version of
 riscv-tools).
 
 Current Configurations Tested:

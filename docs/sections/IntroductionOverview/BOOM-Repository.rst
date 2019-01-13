@@ -3,7 +3,7 @@ The BOOM Repository
 
 The BOOM repository holds the source code to the BOOM core; it is not a
 full processor and thus is **NOT A SELF-RUNNING** repository. To
-instantiate a BOOM core, the Rocket chip generator found in the
+instantiate a BOOM core, the Rocket-Chip generator found in the
 rocket-chip git repository must be used
 https://github.com/freechipsproject/rocket-chip, which provides the caches,
 uncore, and other needed infrastructure to support a full processor.
