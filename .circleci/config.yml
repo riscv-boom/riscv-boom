@@ -259,34 +259,6 @@ jobs:
                 name: Run BoomConfig benchmark tests
                 command: make run-bmark-tests -C ../boom-template/verisim CONFIG=BoomConfig
 
-    boomconfig-run-regression-tests:
-        docker:
-            - image: riscvboom/riscvboom-images:0.0.5
-        environment:
-            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
-            TERM: dumb
-
-        steps:
-            # Checkout the code 
-            - checkout
-
-            - run:
-                name: Create hash of riscv-tools based on rocket-chip
-                command: |
-                    ci/create-hash.sh rocket-chip
-
-            - restore_cache:
-                keys:
-                    - riscv-tools-installed-v2-{{ checksum "../rocket-chip.hash" }}
-
-            - restore_cache:
-                keys:
-                    - boom-template-boomconfig-{{ .Branch }}-{{ .Revision }}
-
-            - run:
-                name: Run BoomConfig regression tests
-                command: make run-regression-tests -C ../boom-template/verisim CONFIG=BoomConfig
-
     boomconfig-run-assembly-tests:
         docker:
             - image: riscvboom/riscvboom-images:0.0.5
@@ -343,34 +315,6 @@ jobs:
             - run:
                 name: Run SmallBoomConfig benchmark tests
                 command: make run-bmark-tests -C ../boom-template/verisim CONFIG=SmallBoomConfig
-
-    smallboomconfig-run-regression-tests:
-        docker:
-            - image: riscvboom/riscvboom-images:0.0.5
-        environment:
-            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
-            TERM: dumb
-
-        steps:
-            # Checkout the code 
-            - checkout
-
-            - run:
-                name: Create hash of riscv-tools based on rocket-chip
-                command: |
-                    ci/create-hash.sh rocket-chip
-
-            - restore_cache:
-                keys:
-                    - riscv-tools-installed-v2-{{ checksum "../rocket-chip.hash" }}
-
-            - restore_cache:
-                keys:
-                    - boom-template-smallboomconfig-{{ .Branch }}-{{ .Revision }}
-
-            - run:
-                name: Run SmallBoomConfig regression tests
-                command: make run-regression-tests -C ../boom-template/verisim CONFIG=SmallBoomConfig
 
     smallboomconfig-run-assembly-tests:
         docker:
@@ -429,34 +373,6 @@ jobs:
                 name: Run MediumBoomConfig benchmark tests
                 command: make run-bmark-tests -C ../boom-template/verisim CONFIG=MediumBoomConfig
 
-    mediumboomconfig-run-regression-tests:
-        docker:
-            - image: riscvboom/riscvboom-images:0.0.5
-        environment:
-            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
-            TERM: dumb
-
-        steps:
-            # Checkout the code 
-            - checkout
-
-            - run:
-                name: Create hash of riscv-tools based on rocket-chip
-                command: |
-                    ci/create-hash.sh rocket-chip
-
-            - restore_cache:
-                keys:
-                    - riscv-tools-installed-v2-{{ checksum "../rocket-chip.hash" }}
-
-            - restore_cache:
-                keys:
-                    - boom-template-mediumboomconfig-{{ .Branch }}-{{ .Revision }}
-
-            - run:
-                name: Run MediumBoomConfig regression tests
-                command: make run-regression-tests -C ../boom-template/verisim CONFIG=MediumBoomConfig
-
     mediumboomconfig-run-assembly-tests:
         docker:
             - image: riscvboom/riscvboom-images:0.0.5
@@ -513,34 +429,6 @@ jobs:
 #            - run:
 #                name: Run MegaBoomConfig benchmark tests
 #                command: make run-bmark-tests -C ../boom-template/verisim CONFIG=MegaBoomConfig
-#
-#    megaboomconfig-run-regression-tests:
-#        docker:
-#            - image: riscvboom/riscvboom-images:0.0.5
-#        environment:
-#            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
-#            TERM: dumb
-#
-#        steps:
-#           # Checkout the code 
-#           - checkout
-#
-#           - run:
-#               name: Create hash of riscv-tools based on rocket-chip
-#               command: |
-#                   ci/create-hash.sh rocket-chip
-#
-#            - restore_cache:
-#                keys:
-#                    - riscv-tools-installed-v2-{{ checksum "../rocket-chip.hash" }}
-#
-#            - restore_cache:
-#                keys:
-#                    - boom-template-megaboomconfig-{{ .Branch }}-{{ .Revision }}
-#
-#            - run:
-#                name: Run MegaBoomConfig regression tests
-#                command: make run-regression-tests -C ../boom-template/verisim CONFIG=MegaBoomConfig
 #
 #    megaboomconfig-run-assembly-tests:
 #        docker:
@@ -608,18 +496,12 @@ workflows:
             - boomconfig-run-benchmark-tests:
                 requires:
                     - prepare-boomconfig
-            - boomconfig-run-regression-tests:
-                requires:
-                    - prepare-boomconfig
             - boomconfig-run-assembly-tests:
                 requires:
                     - prepare-boomconfig
 
             # Run the SmallBoomConfig tests
             - smallboomconfig-run-benchmark-tests:
-                requires:
-                    - prepare-smallboomconfig
-            - smallboomconfig-run-regression-tests:
                 requires:
                     - prepare-smallboomconfig
             - smallboomconfig-run-assembly-tests:
@@ -630,18 +512,12 @@ workflows:
             - mediumboomconfig-run-benchmark-tests:
                 requires:
                     - prepare-mediumboomconfig
-            - mediumboomconfig-run-regression-tests:
-                requires:
-                    - prepare-mediumboomconfig
             - mediumboomconfig-run-assembly-tests:
                 requires:
                     - prepare-mediumboomconfig
 
 #            # Run the MegaBoomConfig tests
 #            - megaboomconfig-run-benchmark-tests:
-#                requires:
-#                    - prepare-megaboomconfig
-#            - megaboomconfig-run-regression-tests:
 #                requires:
 #                    - prepare-megaboomconfig
 #            - megaboomconfig-run-assembly-tests:
