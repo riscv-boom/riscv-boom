@@ -109,7 +109,7 @@ class BTBsa(implicit p: Parameters) extends BoomBTB
 
          val newdata = Wire(new BTBSetData())
          newdata.target  := r_btb_update.bits.target(vaddrBits-1, log2Ceil(coreInstBytes))
-         newdata.cfi_idx := r_btb_update.bits.cfi_pc >> log2Ceil(coreInstBytes)
+         newdata.cfi_idx := r_btb_update.bits.cfi_idx
          newdata.bpd_type := r_btb_update.bits.bpd_type
          newdata.cfi_type := r_btb_update.bits.cfi_type
 

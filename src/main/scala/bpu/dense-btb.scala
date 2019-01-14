@@ -113,7 +113,7 @@ class DenseBTB(implicit p: Parameters) extends BoomBTB
          for (i <- 0 until nWays) {
             wdata(i).tag      := getTag(btb_q_entry.update.pc)
             wdata(i).offset   := btb_q_entry.update.target(offset_sz+lsb_sz-1,lsb_sz)
-            wdata(i).cfi_idx  := btb_q_entry.update.cfi_pc >> log2Ceil(coreInstBytes)
+            wdata(i).cfi_idx  := btb_q_entry.update.cfi_idx
             wdata(i).bpd_type := btb_q_entry.update.bpd_type
             wdata(i).cfi_type := btb_q_entry.update.cfi_type
          }
@@ -124,7 +124,7 @@ class DenseBTB(implicit p: Parameters) extends BoomBTB
          wdata(1).tag      := getTag(btb_q_entry.update.pc)
          wdata(1).offset   := btb_q_entry.update.target(min(vaddrBits-1, tag_sz+2*offset_sz+lsb_sz-1),
                                                         tag_sz+offset_sz+lsb_sz)
-         wdata(1).cfi_idx  := btb_q_entry.update.cfi_pc >> log2Ceil(coreInstBytes)
+         wdata(1).cfi_idx  := btb_q_entry.update.cfi_idx
          wdata(1).bpd_type := btb_q_entry.update.bpd_type
          wdata(1).cfi_type := btb_q_entry.update.cfi_type
          wdata(0).tag      := btb_q_entry.update.target(tag_sz+offset_sz+lsb_sz-1, offset_sz+lsb_sz)
@@ -143,7 +143,7 @@ class DenseBTB(implicit p: Parameters) extends BoomBTB
             wdata(2).tag      := getTag(btb_q_entry.update.pc)
             wdata(2).offset   := btb_q_entry.update.target(min(vaddrBits-1, 2*tag_sz + 3*offset_sz+lsb_sz-1),
                                                            2*(tag_sz+offset_sz)+lsb_sz)
-            wdata(2).cfi_idx  := btb_q_entry.update.cfi_pc >> log2Ceil(coreInstBytes)
+            wdata(2).cfi_idx  := btb_q_entry.update.cfi_idx
             wdata(2).bpd_type := btb_q_entry.update.bpd_type
             wdata(2).cfi_type := btb_q_entry.update.cfi_type
             wmask             := 7.U

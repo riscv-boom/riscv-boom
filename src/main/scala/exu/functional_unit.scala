@@ -265,7 +265,9 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
    var op1_data: UInt = null
    if (is_branch_unit)
    {
-      val curr_pc = AlignPCToBoundary(io.get_ftq_pc.fetch_pc, icBlockBytes) + io.req.bits.uop.pc_lob
+      val curr_pc = (AlignPCToBoundary(io.get_ftq_pc.fetch_pc, icBlockBytes)
+                   + io.req.bits.uop.pc_lob
+                   - Mux(io.req.bits.uop.edge_inst, 2.U, 0.U))
       op1_data = Mux(io.req.bits.uop.ctrl.op1_sel.asUInt === OP1_RS1 , io.req.bits.rs1_data,
                  Mux(io.req.bits.uop.ctrl.op1_sel.asUInt === OP1_PC  , Sext(curr_pc, xLen),
                                                                        0.U))
@@ -280,7 +282,7 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
    val op2_data = Mux(io.req.bits.uop.ctrl.op2_sel === OP2_IMM,  Sext(imm_xprlen.asUInt, xLen),
                   Mux(io.req.bits.uop.ctrl.op2_sel === OP2_IMMC, io.req.bits.uop.pop1(4,0),
                   Mux(io.req.bits.uop.ctrl.op2_sel === OP2_RS2 , io.req.bits.rs2_data,
-                  Mux(io.req.bits.uop.ctrl.op2_sel === OP2_FOUR, 4.U,
+                  Mux(io.req.bits.uop.ctrl.op2_sel === OP2_NEXT, Mux(io.req.bits.uop.is_rvc, 2.U, 4.U),
                                                                  0.U))))
 
    val alu = Module(new freechips.rocketchip.rocket.ALU())
@@ -293,8 +295,9 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
 
    if (is_branch_unit)
    {
-      val uop_pc_ = AlignPCToBoundary(io.get_ftq_pc.fetch_pc, icBlockBytes) + io.req.bits.uop.pc_lob
-
+      val uop_pc_ = (AlignPCToBoundary(io.get_ftq_pc.fetch_pc, icBlockBytes)
+                   + io.req.bits.uop.pc_lob
+                   - Mux(io.req.bits.uop.edge_inst, 2.U, 0.U))
       // The Branch Unit redirects the PC immediately, but delays the mispredict
       // signal a cycle (for critical path reasons)
 
@@ -317,7 +320,7 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
       val br_lt  = (~(rs1(xLen-1) ^ rs2(xLen-1)) & br_ltu |
                       rs1(xLen-1) & ~rs2(xLen-1)).toBool
 
-      val pc_plus4 = (uop_pc_ + 4.U)(vaddrBits,0)
+      val pc_plus4 = (uop_pc_ + Mux(io.req.bits.uop.is_rvc, 2.U, 4.U))(vaddrBits,0)
 
       val pc_sel = MuxLookup(io.req.bits.uop.ctrl.br_type, PC_PLUS4,
                Seq  (   BR_N  -> PC_PLUS4,
@@ -488,21 +491,21 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
          br_unit.btb_update.valid := is_br_or_jalr && mispredict && uop.is_jump
       }
 
-      br_unit.btb_update.bits.pc               := io.get_ftq_pc.fetch_pc// tell the BTB which pc to tag check against
-      br_unit.btb_update.bits.cfi_pc           := uop_pc_
-      br_unit.btb_update.bits.target           := (target.asSInt & (-coreInstBytes).S).asUInt
-      br_unit.btb_update.bits.taken            := is_taken   // was this branch/jal/jalr "taken"
-      br_unit.btb_update.bits.cfi_type         :=
+      br_unit.btb_update.bits.pc      := io.get_ftq_pc.fetch_pc// tell the BTB which pc to tag check against
+      br_unit.btb_update.bits.cfi_idx := Mux(io.req.bits.uop.edge_inst,
+                                             0.U,
+                                             (uop_pc_ >> log2Ceil(coreInstBytes)))
+      br_unit.btb_update.bits.target  := (target.asSInt & (-coreInstBytes).S).asUInt
+      br_unit.btb_update.bits.taken   := is_taken   // was this branch/jal/jalr "taken"
+      br_unit.btb_update.bits.cfi_type :=
             Mux(uop.is_jal, CfiType.jal,
             Mux(uop.is_jump && !uop.is_jal, CfiType.jalr,
                 CfiType.branch))
-      br_unit.btb_update.bits.bpd_type              :=
+      br_unit.btb_update.bits.bpd_type :=
             Mux(uop.is_ret, BpredType.ret,
             Mux(uop.is_call, BpredType.call,
             Mux(uop.is_jump, BpredType.jump,
                 BpredType.branch)))
-
-      require (coreInstBytes == 4)
 
 
       // Branch/Jump Target Calculation
@@ -526,8 +529,8 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
       br_unit.pc := uop_pc_
 
       // handle misaligned branch/jmp targets
-      require (coreInstBytes == 4) // no RVC support
-      br_unit.xcpt.valid     := bj_addr(1) && io.req.valid && is_taken && !killed
+      br_unit.xcpt.valid     := bj_addr(1) && !usingCompressed.B &&
+                                io.req.valid && is_taken && !killed
       br_unit.xcpt.bits.uop  := uop
       br_unit.xcpt.bits.cause:= freechips.rocketchip.rocket.Causes.misaligned_fetch.U
       // TODO is there a better way to get this information to the CSR file? maybe use brinfo.target?

@@ -9,7 +9,7 @@ performance, synthesizable, and parameterizable core for architecture research.
 
 Feature | BOOM
 --- | ---
-ISA | RISC-V (RV64G)
+ISA | RISC-V (RV64GC)
 Synthesizable |√
 FPGA |√
 Parameterized |√
@@ -90,39 +90,12 @@ will also need to add $RISCV/bin to your $PATH.
 ````
    $ git clone https://github.com/riscv-boom/boom-template.git
    $ cd boom-template
-   $ ./scripts/build-tools.sh 
-````
-
-That's it. But read on for some more information about what's going on behind the scenes.
-
-By default, `riscv-tools/build.sh` builds a RV64GC compiler. Therefore, We need to change that as
-BOOM does not support the RVC extension.
-
-````
-   $ export RISCV=/path/to/install/riscv/toolchain
-   $ export PATH="${PATH}:$RISCV/bin"
-   $ git clone https://github.com/riscv-boom/boom-template.git
-   $ cd boom-template/rocket-chip
-   $ git submodule update --init
-   $ cd riscv-tools
    $ git submodule update --init --recursive
-   $ cp build.sh build-rv64g.sh
-   $ vim build-rv64g.sh
-````
-
-Modify the `riscv-gnu-toolchain` and `riscv-isa-sim` entries to specify rv64imafd as the ISA we want
-to build:
+   $ ./scripts/build-tools.sh
 
 ````
-build_project riscv-isa-sim --prefix=$RISCV --with-fesvr=$RISCV --with-isa=rv64imafd
-build_project riscv-gnu-toolchain --prefix=$RISCV --with-arch=rv64imafd
-````
 
-Now we can build the riscv-tools within (boom-template/rocket-chip/riscv-tools):
-
-````
-   $ ./build-rv64g.sh
-````
+That's it.
 
 For more detailed information on the toolchain, visit 
 [the riscv-tools repository](https://github.com/riscv/riscv-tools).
@@ -186,7 +159,7 @@ First verify the software is not an issue. Run spike first:
 
 ````
 # Verify it works on spike.
-spike --isa=rv64imafd my_program
+spike my_program
 
 # Then we can run on BOOM.
 ./emulator-freechips.rocketchip.system-SmallBoomConfig my_program 

@@ -71,6 +71,13 @@ class WithTrace extends Config((site, here, up) => {
    case BoomTilesKey => up(BoomTilesKey, site) map { r => r.copy(trace = true) }
 })
 
+class WithRVC extends Config((site, here, up) => {
+   case BoomTilesKey => up(BoomTilesKey, site) map {r => r.copy(
+      core = r.core.copy(
+         fetchWidth = r.core.fetchWidth * 2,
+         useCompressed = true))}
+})
+
 // Small BOOM! Try to be fast to compile and easier to debug.
 class WithSmallBooms extends Config((site, here, up) => {
    case BoomTilesKey => up(BoomTilesKey, site) map { r =>r.copy(

@@ -101,13 +101,13 @@ class BoomBTBResp(implicit p: Parameters) extends BoomBTBBundle()(p)
 
 // BTB update occurs during branch resolution (and only on a mispredict that's taken).
 //  - "pc" is what future fetch PCs will tag match against.
-//  - "cfi_pc" is the PC of the branch instruction.
+//  - "cfi_idx" is the offset of the PC of the branch
 class BoomBTBUpdate(implicit p: Parameters) extends BoomBTBBundle()(p)
 {
    val pc = UInt(vaddrBits.W)
    val target = UInt(vaddrBits.W)
    val taken = Bool()
-   val cfi_pc = UInt(vaddrBits.W)
+   val cfi_idx = UInt(log2Ceil(fetchWidth).W)
    val bpd_type = BpredType()
    val cfi_type = CfiType()
 }

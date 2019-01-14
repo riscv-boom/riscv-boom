@@ -95,7 +95,7 @@ trait ScalarOpConstants
    val OP2_RS2 = 0.U(3.W) // Register Source #2
    val OP2_IMM = 1.U(3.W) // immediate
    val OP2_ZERO= 2.U(3.W) // constant 0
-   val OP2_FOUR= 3.U(3.W) // constant 4 (for PC+4)
+   val OP2_NEXT= 3.U(3.W) // constant 2/4 (for PC+2/4)
    val OP2_IMMC= 4.U(3.W) // for CSR imm found in RS1
    val OP2_X   = BitPat("b???")
 
@@ -332,54 +332,45 @@ trait RISCVConstants
    def GetUop(inst: UInt): UInt = inst(6,0)
    def GetRd (inst: UInt): UInt = inst(RD_MSB,RD_LSB)
    def GetRs1(inst: UInt): UInt = inst(RS1_MSB,RS1_LSB)
-   def IsCall(inst: UInt): Bool = (inst === freechips.rocketchip.rocket.Instructions.JAL ||
-                                  inst === freechips.rocketchip.rocket.Instructions.JALR) && GetRd(inst) === RA
-   def IsReturn(inst: UInt): Bool = GetUop(inst) === jalr_opc && GetRs1(inst) === BitPat("b00?01")
-
-   def ComputeBranchTarget(pc: UInt, inst: UInt, xlen: Int): UInt =
+   def IsCall(inst: UInt)(implicit p: Parameters): Bool =
    {
-      val b_imm32 = Cat(Fill(20,inst(31)), inst(7), inst(30,25), inst(11,8), 0.U(1.W))
+      val rvc_exp = Module(new freechips.rocketchip.rocket.RVCExpander)
+      rvc_exp.io.in := inst
+      val e_inst = Mux(rvc_exp.io.rvc, rvc_exp.io.out.bits, inst)
+
+      (e_inst === freechips.rocketchip.rocket.Instructions.JAL ||
+       e_inst === freechips.rocketchip.rocket.Instructions.JALR) && GetRd(e_inst) === RA
+   }
+   def IsReturn(inst: UInt)(implicit p: Parameters): Bool =
+   {
+      val rvc_exp = Module(new freechips.rocketchip.rocket.RVCExpander)
+      rvc_exp.io.in := inst
+      val e_inst = Mux(rvc_exp.io.rvc, rvc_exp.io.out.bits, inst)
+      GetUop(e_inst) === jalr_opc && GetRs1(e_inst) === BitPat("b00?01")
+   }
+
+   def ComputeBranchTarget(pc: UInt, inst: UInt, xlen: Int)(implicit p: Parameters): UInt =
+   {
+      val rvc_exp = Module(new freechips.rocketchip.rocket.RVCExpander)
+      rvc_exp.io.in := inst
+      val e_inst = Mux(rvc_exp.io.rvc, rvc_exp.io.out.bits, inst)
+      val b_imm32 = Cat(Fill(20,e_inst(31)), e_inst(7), e_inst(30,25), e_inst(11,8), 0.U(1.W))
       ((pc.asSInt + b_imm32.asSInt).asSInt & (-2).S).asUInt
    }
-   def ComputeJALTarget(pc: UInt, inst: UInt, xlen: Int): UInt =
+   def ComputeJALTarget(pc: UInt, inst: UInt, xlen: Int)(implicit p: Parameters): UInt =
    {
-      val j_imm32 = Cat(Fill(12,inst(31)), inst(19,12), inst(20), inst(30,25), inst(24,21), 0.U(1.W))
+      val rvc_exp = Module(new freechips.rocketchip.rocket.RVCExpander)
+      rvc_exp.io.in := inst
+      val e_inst = Mux(rvc_exp.io.rvc, rvc_exp.io.out.bits, inst)
+      val j_imm32 = Cat(Fill(12,e_inst(31)), e_inst(19,12), e_inst(20), e_inst(30,25), e_inst(24,21), 0.U(1.W))
       ((pc.asSInt + j_imm32.asSInt).asSInt & (-2).S).asUInt
    }
 
-   def GetCfiType(inst: UInt): UInt =
+   def GetCfiType(inst: UInt)(implicit p: Parameters): UInt =
    {
-      import freechips.rocketchip.util.uintToBitPat
-      val bpd_csignals =
-         freechips.rocketchip.rocket.DecodeLogic(inst,
-                     List[BitPat](N, N, N, IS_X),
-                                                 //   is br?
-                                                 //   |  is jal?
-                                                 //   |  |  is jalr?
-                                                 //   |  |  |  br type
-                                                 //   |  |  |  |
-                  Array[(BitPat, List[BitPat])](
-                  freechips.rocketchip.rocket.Instructions.JAL     -> List(N, Y, N, IS_J),
-                  freechips.rocketchip.rocket.Instructions.JALR    -> List(N, N, Y, IS_I),
-                  freechips.rocketchip.rocket.Instructions.BEQ     -> List(Y, N, N, IS_B),
-                  freechips.rocketchip.rocket.Instructions.BNE     -> List(Y, N, N, IS_B),
-                  freechips.rocketchip.rocket.Instructions.BGE     -> List(Y, N, N, IS_B),
-                  freechips.rocketchip.rocket.Instructions.BGEU    -> List(Y, N, N, IS_B),
-                  freechips.rocketchip.rocket.Instructions.BLT     -> List(Y, N, N, IS_B),
-                  freechips.rocketchip.rocket.Instructions.BLTU    -> List(Y, N, N, IS_B)
-               ))
-
-      val (cs_is_br: Bool) :: (cs_is_jal: Bool) :: (cs_is_jalr:Bool) :: imm_sel_ :: Nil = bpd_csignals
-
-      val ret =
-         Mux(cs_is_jalr,
-            CfiType.jalr,
-         Mux(cs_is_jal,
-            CfiType.jal,
-         Mux(cs_is_br,
-            CfiType.branch,
-            CfiType.none)))
-      ret
+      val bdecode = Module(new boom.exu.BranchDecode)
+      bdecode.io.inst := inst
+      bdecode.io.cfi_type
    }
 
 

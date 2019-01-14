@@ -758,7 +758,9 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    csr.io.retire    := PopCount(rob.io.commit.valids.asUInt)
    csr.io.exception := rob.io.com_xcpt.valid
    // csr.io.pc used for setting EPC during exception or CSR.io.trace.
-   csr.io.pc        := boom.util.AlignPCToBoundary(io.ifu.com_fetch_pc, icBlockBytes) + rob.io.com_xcpt.bits.pc_lob
+   csr.io.pc        := (boom.util.AlignPCToBoundary(io.ifu.com_fetch_pc, icBlockBytes)
+                      + rob.io.com_xcpt.bits.pc_lob
+                      - Mux(rob.io.com_xcpt.bits.edge_inst, 2.U, 0.U))
    // Cause not valid for for CALL or BREAKPOINTs (CSRFile will override it).
    csr.io.cause     := rob.io.com_xcpt.bits.cause
 
@@ -1415,24 +1417,39 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       {
          val priv = csr.io.status.prv
 
+         // To allow for diffs against spike :/
+         def printf_inst(uop: MicroOp) = {
+            when (uop.is_rvc) {
+               printf("(0x%x)", uop.inst(15,0))
+            } .otherwise {
+               printf("(0x%x)", uop.inst)
+            }
+         }
          when (rob.io.commit.valids(w))
          {
             when (rob.io.commit.uops(w).dst_rtype === RT_FIX && rob.io.commit.uops(w).ldst =/= 0.U)
             {
-               printf("%d 0x%x (0x%x) x%d 0x%x\n",
-                  priv, Sext(rob.io.commit.uops(w).pc(vaddrBits,0), xLen), rob.io.commit.uops(w).inst,
-                  rob.io.commit.uops(w).inst(RD_MSB,RD_LSB), rob.io.commit.uops(w).debug_wdata)
+               printf("%d 0x%x ",
+                  priv, Sext(rob.io.commit.uops(w).pc(vaddrBits,0), xLen))
+               printf_inst(rob.io.commit.uops(w))
+               printf(" x%d 0x%x\n",
+                  rob.io.commit.uops(w).ldst, rob.io.commit.uops(w).debug_wdata)
+
             }
             .elsewhen (rob.io.commit.uops(w).dst_rtype === RT_FLT)
             {
-               printf("%d 0x%x (0x%x) f%d 0x%x\n",
-                  priv, Sext(rob.io.commit.uops(w).pc(vaddrBits,0), xLen), rob.io.commit.uops(w).inst,
-                  rob.io.commit.uops(w).inst(RD_MSB,RD_LSB), rob.io.commit.uops(w).debug_wdata)
+               printf("%d 0x%x ",
+                  priv, Sext(rob.io.commit.uops(w).pc(vaddrBits,0), xLen))
+               printf_inst(rob.io.commit.uops(w))
+               printf(" f%d 0x%x\n",
+                  rob.io.commit.uops(w).ldst, rob.io.commit.uops(w).debug_wdata)
             }
             .otherwise
             {
-               printf("%d 0x%x (0x%x)\n",
-                  priv, Sext(rob.io.commit.uops(w).pc(vaddrBits,0), xLen), rob.io.commit.uops(w).inst)
+               printf("%d 0x%x ",
+                  priv, Sext(rob.io.commit.uops(w).pc(vaddrBits,0), xLen))
+               printf_inst(rob.io.commit.uops(w))
+               printf("\n")
             }
          }
       }
