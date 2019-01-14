@@ -23,7 +23,7 @@ jobs:
 
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v2-{{ checksum "../rocket-chip.hash" }}
+                    - riscv-tools-installed-v3-{{ checksum "../rocket-chip.hash" }}
 
             - run: 
                 name: Building riscv-tools
@@ -32,7 +32,7 @@ jobs:
                 no_output_timeout: 120m
 
             - save_cache:
-                key: riscv-tools-installed-v2-{{ checksum "../rocket-chip.hash" }}
+                key: riscv-tools-installed-v3-{{ checksum "../rocket-chip.hash" }}
                 paths:
                     - "/home/riscvuser/riscv-tools-install"
 
@@ -86,7 +86,7 @@ jobs:
 
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v2-{{ checksum "../rocket-chip.hash" }}
+                    - riscv-tools-installed-v3-{{ checksum "../rocket-chip.hash" }}
 
             - restore_cache:
                 keys:
@@ -121,7 +121,7 @@ jobs:
 
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v2-{{ checksum "../rocket-chip.hash" }}
+                    - riscv-tools-installed-v3-{{ checksum "../rocket-chip.hash" }}
 
             - restore_cache:
                 keys:
@@ -156,7 +156,7 @@ jobs:
 
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v2-{{ checksum "../rocket-chip.hash" }}
+                    - riscv-tools-installed-v3-{{ checksum "../rocket-chip.hash" }}
 
             - restore_cache:
                 keys:
@@ -191,7 +191,7 @@ jobs:
 #
 #           - restore_cache:
 #               keys:
-#                   - riscv-tools-installed-v2-{{ checksum "../rocket-chip.hash" }}
+#                   - riscv-tools-installed-v3-{{ checksum "../rocket-chip.hash" }}
 #
 #           - restore_cache:
 #               keys:
@@ -225,7 +225,7 @@ jobs:
 
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v2-{{ checksum "../rocket-chip.hash" }}
+                    - riscv-tools-installed-v3-{{ checksum "../rocket-chip.hash" }}
 
             - run:
                 name: Run Scala checkstyle
@@ -249,7 +249,7 @@ jobs:
 
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v2-{{ checksum "../rocket-chip.hash" }}
+                    - riscv-tools-installed-v3-{{ checksum "../rocket-chip.hash" }}
 
             - restore_cache:
                 keys:
@@ -277,7 +277,7 @@ jobs:
 
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v2-{{ checksum "../rocket-chip.hash" }}
+                    - riscv-tools-installed-v3-{{ checksum "../rocket-chip.hash" }}
 
             - restore_cache:
                 keys:
@@ -306,7 +306,7 @@ jobs:
 
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v2-{{ checksum "../rocket-chip.hash" }}
+                    - riscv-tools-installed-v3-{{ checksum "../rocket-chip.hash" }}
 
             - restore_cache:
                 keys:
@@ -334,7 +334,7 @@ jobs:
 
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v2-{{ checksum "../rocket-chip.hash" }}
+                    - riscv-tools-installed-v3-{{ checksum "../rocket-chip.hash" }}
 
             - restore_cache:
                 keys:
@@ -363,7 +363,7 @@ jobs:
 
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v2-{{ checksum "../rocket-chip.hash" }}
+                    - riscv-tools-installed-v3-{{ checksum "../rocket-chip.hash" }}
 
             - restore_cache:
                 keys:
@@ -391,7 +391,7 @@ jobs:
 
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v2-{{ checksum "../rocket-chip.hash" }}
+                    - riscv-tools-installed-v3-{{ checksum "../rocket-chip.hash" }}
 
             - restore_cache:
                 keys:
@@ -420,7 +420,7 @@ jobs:
 #
 #            - restore_cache:
 #                keys:
-#                    - riscv-tools-installed-v2-{{ checksum "../rocket-chip.hash" }}
+#                    - riscv-tools-installed-v3-{{ checksum "../rocket-chip.hash" }}
 #
 #            - restore_cache:
 #                keys:
@@ -448,7 +448,7 @@ jobs:
 #
 #            - restore_cache:
 #                keys:
-#                    - riscv-tools-installed-v2-{{ checksum "../rocket-chip.hash" }}
+#                    - riscv-tools-installed-v3-{{ checksum "../rocket-chip.hash" }}
 #
 #            - restore_cache:
 #                keys:
