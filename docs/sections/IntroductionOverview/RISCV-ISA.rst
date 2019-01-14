@@ -1,8 +1,8 @@
 The RISC-V ISA
 ====================================
 
-BOOM implements the RV64G variant of the RISC-V ISA. This includes the
-MAFD extensions and the privileged specification (multiply/divide, AMOs,
+BOOM implements the RV64GC variant of the RISC-V ISA. This includes the
+MAFDC extensions and the privileged specification (multiply/divide, AMOs,
 load-reserve/store-conditional, single- and double-precision IEEE
 754-2008 floating point). More information about the RISC-V ISA can be
 found at http://riscv.org.
@@ -44,7 +44,6 @@ high-performance designs:
 
     * This allows decode and rename to proceed in parallel.
 
-BOOM (currently) does not implement the “C" compressed extension nor the
-“V" vector extension.
+BOOM (currently) does not implement the proposed “V" vector extension.
 
 

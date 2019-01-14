@@ -90,15 +90,12 @@ will also need to add $RISCV/bin to your $PATH.
 ````
    $ git clone https://github.com/riscv-boom/boom-template.git
    $ cd boom-template
-   $ git submodule update --init rocket-chip
-   $ cd rocket-chip
-   $ git submodule update --init riscv-tools
-   $ cd riscv-tools
    $ git submodule update --init --recursive
-   $ ./build.sh
+   $ ./scripts/build-tools.sh
+
 ````
 
-That's it. But read on for some more information about what's going on behind the scenes.
+That's it.
 
 For more detailed information on the toolchain, visit 
 [the riscv-tools repository](https://github.com/riscv/riscv-tools).
