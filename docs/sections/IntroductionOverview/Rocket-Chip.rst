@@ -1,4 +1,4 @@
-The Rocket-chip Repository Layout
+The Rocket-Chip Repository Layout
 ====================================
 
 .. _boom-chip:
@@ -8,38 +8,30 @@ The Rocket-chip Repository Layout
     A single-core "BOOM-chip", with no L2 last-level cache
 
 As BOOM is just a core, an entire SoC infrastructure must be provided.
-BOOM was developed to use the open-source Rocket-chip SoC generator
-https://github.com/freechipsproject/rocket-chip. The Rocket-chip generator
+BOOM was developed to use the open-source Rocket-Chip SoC generator
+https://github.com/freechipsproject/rocket-chip. The Rocket-Chip generator
 can instantiate a wide range of SoC designs, including cache-coherent
 multi-tile designs, cores with and without accelerators, and chips with
 or without a last-level shared cache.
 
 To manage the wide array of actively developed projects that encompass
-Rocket-chip, the Rocket-chip repository makes heavy use of git
-submodules. The directory structure of the Rocket-chip repository is
+Rocket-Chip, the Rocket-Chip repository makes heavy use of git
+submodules. Selected directories of the Rocket-Chip repository are 
 shown below.
 
-* rocket-chip/
+* :code:`rocket-chip/`
 
-  * boom/ **Git submodule of the  source code for the BOOM core.**
-  * chisel **The source code to the Chisel language itself.**
-  * firrtl **The source code to the FIRRTL project.**
-  * csrc/ **Utility C/C++ source code.**
-  * emulator/ **Verilator simulation tools and support.**
-  * generated-src/ **Auto-generated Verilog code.**
-  * Makefile **Makefile for Verilator simulation.**
-  * output/ **Output files from Verilator simulation runs.**
-  * riscv-tools/ **Git submodule that points to the RISC-V toolchain.**
-  * riscv-tests/ **Source code for benchmarks and tests.**
-  * riscv-bmarks/ **Benchmarks written in C.**
-  * riscv-tests/ **Tests written in assembly.**
-  * Makefrag **The high-level Makefile fragment.**
-  * src/ **source code for rocket-chip.**
-  * rocket/ **Git submodule of the  source code for the Rocket core (used as a library of processor components).**
-  * junctions/ **Git submodule of the  source code for the uncore and off-chip network.**
-  * uncore/ **Git submodule of the  source code for the uncore components (including LLC).**
-  * sbt/ **Scala voodoo.**
-  * vsim/ **The ASIC Verilog simulation and build directories.**
+  * :code:`bootrom/` **Files used to create a boomrom.**
+  * :code:`chisel3/` **Git submodule pointing to the source code to the Chisel3 language itself.**
+  * :code:`emulator/` **The Verilator simulation tools and support directories.**
+  * :code:`firrtl/` **Git submodule pointing to the source code to the FIRRTL project.**
+  * :code:`hardfloat/` **Git submodule pointing to the Berkeley Hardware FPUs.** 
+  * :code:`project/` **SBT voodoo.** 
+  * :code:`regression/` **Used for TravisCI regression testing.**
+  * :code:`riscv-tools/` **Git submodule that points to the RISC-V toolchain.**
+  * :code:`src/` **Source code for rocket-chip.**
+  * :code:`torture/` **Git submodule that points to the RISC-V Torture Test Generator.**
+  * :code:`vsim/` **The VCS ASIC Verilog simulation and build directories.**
 
 The Rocket Core - a Library of Processor Components!
 -------------------------------------------------------------------
@@ -53,7 +45,7 @@ found at http://hwacha.org.
 Rocket has been taped out at least thirteen times in three different
 commercial processes, and has been successfully demonstrated to reach
 over 1.65 GHz in IBM 45 nm SOI. As its namesake suggests,
-Rocket is the baseline core for the Rocket-chip SoC generator. As
+Rocket is the baseline core for the Rocket-Chip SoC generator. As
 discussed earlier, BOOM is instantiated by replacing a Rocket tile with
 a BOOM tile.
 

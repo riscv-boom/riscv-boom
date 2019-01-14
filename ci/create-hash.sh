@@ -1,24 +1,36 @@
 #!/bin/bash
 
-# get the hash of repo and store in file
+# get the hash of rocket-chip or boom-template and store in file
 
 # turn echo on and error on earliest command
 set -x
 set -e
 
-# move to top level dir
-cd ..
-if [ ! -d "/home/circleci/boom-template" ]; then
+# only execute if boom-template is not present (if it is present then it should have run this command before already)
+if [ ! -d "$HOME/boom-template" ]; then
+    cd $HOME
+
     # clone boom-template and create the riscv-tools
     git clone --progress --verbose https://github.com/riscv-boom/boom-template.git
-fi
-cd boom-template
+    cd boom-template
 
-if [ -z $1 ]; then
-    git rev-parse HEAD >> ../boom-template.hash
-    echo "Hashfile for boom-template created in ..$PWD"
-else
-    git rev-parse HEAD:$1 >> ../$1.hash
+    # move the pull request riscv-boom repo into boom-template
+    rm -rf boom
+    cp -r $HOME/project boom/
+fi
+
+cd $HOME/boom-template
+if [ $1 == "boom-template" ]; then
+    git rev-parse HEAD >> $HOME/$1.hash
+    echo "Hashfile for $1 created in ..$PWD"
+elif [ $1 == "rocket-chip" ]; then
+    # Use riscv-boom rocket-chip hash to specify version of rocket-chip to use
+    git submodule update --init rocket-chip
+    echo "Checking out rocket-chip with hash: $(cat boom/ROCKETCHIP_VERSION)"
+    cd rocket-chip
+    git fetch
+    git checkout $(cat ../boom/ROCKETCHIP_VERSION)
+    git rev-parse HEAD >> $HOME/$1.hash
     echo "Hashfile for $1 created in ..$PWD"
 fi
 
