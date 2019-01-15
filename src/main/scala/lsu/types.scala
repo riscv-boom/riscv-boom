@@ -23,11 +23,10 @@ import scala.collection.mutable.ListBuffer
 trait HasBoomHellaCache { this: BaseTile =>
   val module: HasBoomHellaCacheModule
   implicit val p: Parameters
-  def findScratchpadFromICache: Option[AddressSet]
   var nDCachePorts = 0
-  val dcache: HellaCache = LazyModule(
+  lazy val dcache: HellaCache = LazyModule(
     if(tileParams.dcache.get.nMSHRs == 0) {
-      new DCache(hartId, findScratchpadFromICache _, p(RocketCrossingKey).head.knownRatio)
+      new DCache(hartId, crossing)
     } else { new BoomNonBlockingDCache(hartId) })
 
   //tlMasterXbar.node := dcache.node
@@ -37,7 +36,8 @@ trait HasBoomHellaCache { this: BaseTile =>
 
 
 trait HasBoomHellaCacheModule {
-  val outer: HasBoomHellaCache
+  val outer: HasBoomHellaCache with HasTileParameters
+  implicit val p: Parameters
   val dcachePorts = ListBuffer[HellaCacheIO]()
   val dcacheArb = Module(new HellaCacheArbiter(outer.nDCachePorts)(outer.p))
   outer.dcache.module.io.cpu <> dcacheArb.io.mem
