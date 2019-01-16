@@ -46,4 +46,5 @@ Current Tests Used:
 
 * riscv-tools assembly tests
 * riscv-tools benchmarks
+* csmith random C tests
 * scala style checks 

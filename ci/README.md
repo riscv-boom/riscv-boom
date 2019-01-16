@@ -10,3 +10,4 @@ since there is only 2GB of RAM per docker instance). So far as I can tell, the o
 get a paid account with better docker instances (or to use machine for now and stop using once machine is a
 paid service which might happen soon). (Note 1/5/19 BoomConfig seems to suffer from same issue)
 
+* How to get more coverage of pipeline using something like csmith and/or riscv-torture.
