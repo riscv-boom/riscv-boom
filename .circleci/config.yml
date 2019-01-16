@@ -486,33 +486,33 @@ jobs:
                 command: make run-asm-tests -C ../boom-template/verisim CONFIG=MediumBoomConfig
                 no_output_timeout: 300m
 
-   megaboomconfig-run-csmith-tests:
-       docker:
-           - image: riscvboom/riscvboom-images:0.0.5
-       environment:
-           JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
-           TERM: dumb
+    megaboomconfig-run-csmith-tests:
+        docker:
+            - image: riscvboom/riscvboom-images:0.0.5
+        environment:
+            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
+            TERM: dumb
 
-       steps:
-           # Checkout the code 
-           - checkout
+        steps:
+            # Checkout the code 
+            - checkout
 
-           - run:
-               name: Create hash of riscv-tools based on rocket-chip
-               command: |
-                   ci/create-hash.sh rocket-chip
+            - run:
+                name: Create hash of riscv-tools based on rocket-chip
+                command: |
+                    ci/create-hash.sh rocket-chip
 
-           - restore_cache:
-               keys:
-                   - riscv-tools-installed-v3-{{ checksum "../rocket-chip.hash" }}
+            - restore_cache:
+                keys:
+                    - riscv-tools-installed-v3-{{ checksum "../rocket-chip.hash" }}
 
-           - restore_cache:
-               keys:
-                   - boom-template-megaboomconfig-{{ .Branch }}-{{ .Revision }}
+            - restore_cache:
+                keys:
+                    - boom-template-megaboomconfig-{{ .Branch }}-{{ .Revision }}
 
-           - run:
-               name: Run MegaBoomConfig torture tests
-               command: ci/build-run-csmith-tests.sh MegaBoomConfig 75 
+            - run:
+                name: Run MegaBoomConfig torture tests
+                command: ci/build-run-csmith-tests.sh MegaBoomConfig 75 
 
     megaboomconfig-run-benchmark-tests:
         docker:
