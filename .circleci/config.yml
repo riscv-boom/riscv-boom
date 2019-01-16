@@ -183,19 +183,19 @@ jobs:
             # Checkout the code 
             - checkout
 
-           - run:
-               name: Create hash of riscv-tools and boom-template
-               command: |
-                   ci/create-hash.sh rocket-chip
-                   ci/create-hash.sh boom-template
+            - run:
+                name: Create hash of riscv-tools and boom-template
+                command: |
+                    ci/create-hash.sh rocket-chip
+                    ci/create-hash.sh boom-template
 
-           - restore_cache:
-               keys:
-                   - riscv-tools-installed-v3-{{ checksum "../rocket-chip.hash" }}
+            - restore_cache:
+                keys:
+                    - riscv-tools-installed-v3-{{ checksum "../rocket-chip.hash" }}
 
-           - restore_cache:
-               keys:
-                   - boom-template-with-verilator-v5-{{ checksum "../boom-template.hash" }}
+            - restore_cache:
+                keys:
+                    - boom-template-with-verilator-v5-{{ checksum "../boom-template.hash" }}
 
             - run: 
                 name: Building MegaBoomConfig using Verilator
@@ -522,13 +522,13 @@ jobs:
             TERM: dumb
 
         steps:
-           # Checkout the code 
-           - checkout
+            # Checkout the code 
+            - checkout
 
             - run:
-               name: Create hash of riscv-tools based on rocket-chip
-               command: |
-                   ci/create-hash.sh rocket-chip
+                name: Create hash of riscv-tools based on rocket-chip
+                command: |
+                    ci/create-hash.sh rocket-chip
 
             - restore_cache:
                 keys:
@@ -550,13 +550,13 @@ jobs:
             TERM: dumb
 
         steps:
-           # Checkout the code 
-           - checkout
+            # Checkout the code 
+            - checkout
 
             - run:
-               name: Create hash of riscv-tools based on rocket-chip
-               command: |
-                   ci/create-hash.sh rocket-chip
+                name: Create hash of riscv-tools based on rocket-chip
+                command: |
+                    ci/create-hash.sh rocket-chip
 
             - restore_cache:
                 keys:
