@@ -30,6 +30,7 @@ elif [ $1 == "rocket-chip" ]; then
     cd rocket-chip
     git fetch
     git checkout $(cat ../boom/ROCKETCHIP_VERSION)
+    git submodule update --recursive
     git rev-parse HEAD >> $HOME/$1.hash
     echo "Hashfile for $1 created in ..$PWD"
 fi
