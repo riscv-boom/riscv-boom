@@ -92,7 +92,6 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
 //   val rocketParams: RocketCoreParams = tileParams.core.asInstanceOf[RocketCoreParams]
 //   val boomParams: BoomCoreParams = p(BoomKey)
    val boomParams: BoomCoreParams = tileParams.core.asInstanceOf[BoomCoreParams]
-   require(xLen == 64)
 
 
    //************************************

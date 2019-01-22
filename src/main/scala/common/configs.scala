@@ -55,6 +55,16 @@ class DefaultBoomConfig extends Config((site, here, up) => {
    case SystemBusKey => up(SystemBusKey, site).copy(beatBytes = 16)
 })
 
+class WithBoomRV32 extends Config((site, here, up) => {
+  case XLen => 32
+  case BoomTilesKey => up(BoomTilesKey, site) map { r =>
+    r.copy(core = r.core.copy(
+      fpu = r.core.fpu.map(_.copy(fLen = 32)),
+      mulDiv = Some(MulDivParams(mulUnroll = 8))))
+  }
+})
+
+
 class WithoutBoomFPU extends Config((site, here, up) => {
    case BoomTilesKey => up(BoomTilesKey, site) map { r => r.copy(core = r.core.copy(
       fpu = None))
