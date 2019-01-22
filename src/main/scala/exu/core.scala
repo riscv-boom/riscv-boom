@@ -159,7 +159,10 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
    // Load/Store Unit & ExeUnits
    exe_units.memory_unit.io.lsu_io <> lsu.io
+
+   // TODO: Generate this in lsu
    val sxt_ldMiss = Wire(Bool())
+
 
 
 
@@ -679,6 +682,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       mem_iq.io.iss_valids(0) &&
       mem_iq.io.iss_uops(0).is_load &&
       !mem_iq.io.iss_uops(0).fp_val &&
+      mem_iq.io.iss_uops(0).pdst =/= 0.U &&
       !(sxt_ldMiss && (mem_iq.io.iss_uops(0).iw_p1_poisoned || mem_iq.io.iss_uops(0).iw_p2_poisoned))
    sxt_ldMiss :=
       ((lsu.io.nack.valid && lsu.io.nack.isload) || dc_shim.io.core.load_miss) &&
