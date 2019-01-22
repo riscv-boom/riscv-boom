@@ -320,7 +320,7 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
       val br_lt  = (~(rs1(xLen-1) ^ rs2(xLen-1)) & br_ltu |
                       rs1(xLen-1) & ~rs2(xLen-1)).toBool
 
-      val pc_plus4 = (uop_pc_ + Mux(io.req.bits.uop.is_rvc, 2.U, 4.U))(vaddrBits,0)
+      val pc_plus4 = (uop_pc_ + Mux(io.req.bits.uop.is_rvc, 2.U, 4.U))(vaddrBits-1,0)
 
       val pc_sel = MuxLookup(io.req.bits.uop.ctrl.br_type, PC_PLUS4,
                Seq  (   BR_N  -> PC_PLUS4,
@@ -398,14 +398,14 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: 
       when (is_br_or_jalr && pc_sel === PC_BRJMP && !mispredict && io.get_ftq_pc.next_val)
       {
          // ignore misaligned issues -- we'll catch that elsewhere as an exception.
-         when (io.get_ftq_pc.next_pc(vaddrBits, log2Ceil(coreInstBytes)) =/=
-               bj_addr(vaddrBits, log2Ceil(coreInstBytes)))
+         when (io.get_ftq_pc.next_pc(vaddrBits-1, log2Ceil(coreInstBytes)) =/=
+               bj_addr(vaddrBits-1, log2Ceil(coreInstBytes)))
          {
             printf ("[FuncUnit] Branch jumped to 0x%x, should have jumped to 0x%x.\n",
                io.get_ftq_pc.next_pc, bj_addr)
          }
-         assert (io.get_ftq_pc.next_pc(vaddrBits, log2Ceil(coreInstBytes)) ===
-                 bj_addr(vaddrBits, log2Ceil(coreInstBytes)),
+         assert (io.get_ftq_pc.next_pc(vaddrBits-1, log2Ceil(coreInstBytes)) ===
+                 bj_addr(vaddrBits-1, log2Ceil(coreInstBytes)),
                  "[FuncUnit] branch is taken to the wrong target.")
       }
 
@@ -684,7 +684,7 @@ class IntToFPUnit(latency: Int)(implicit p: Parameters) extends PipelinedFunctio
    req.typ := ImmGenTyp(io_req.uop.imm_packed)
    req.fmaCmd := DontCare
 
-   assert (!(io.req.valid && fp_ctrl.fromint && req.in1(64).toBool),
+   assert (!(io.req.valid && fp_ctrl.fromint && req.in1(xLen).toBool),
       "[func] IntToFP integer input has 65th high-order bit set!")
 
    assert (!(io.req.valid && !fp_ctrl.fromint),

@@ -27,8 +27,10 @@ class BoomConfig extends Config(
    new DefaultBoomConfig ++
    new WithNBoomCores(1) ++
    new WithoutTLMonitors ++
-   new freechips.rocketchip.system.BaseConfig)
+      new freechips.rocketchip.system.BaseConfig)
 
+// Main configs. SmallBoomConfig and MediumBoomConfig are best-maintained
+// MediumBoomConfig is typically described in documentation
 class SmallBoomConfig extends Config(
    new WithRVC ++
    new WithSmallBooms ++
@@ -53,6 +55,9 @@ class MegaBoomConfig extends Config(
    new WithoutTLMonitors ++
    new freechips.rocketchip.system.BaseConfig)
 
+
+
+// Assorted configs
 class MegaBoomECCConfig extends Config(
    new WithL1IECC("parity", "parity") ++
    new WithL1DECC("identity", "parity") ++
@@ -99,7 +104,6 @@ class SmallIntBoomConfig extends Config(
    new WithNBoomCores(1) ++
    new WithoutTLMonitors ++
    new freechips.rocketchip.system.BaseConfig)
-// scalastyle:on
 
 class SmallDualBoomConfig extends Config(
    new WithRVC ++
@@ -109,10 +113,18 @@ class SmallDualBoomConfig extends Config(
    new WithoutTLMonitors ++
    new freechips.rocketchip.system.BaseConfig)
 
-
 class TracedSmallBoomConfig extends Config(
    new WithRVC ++
    new WithTrace ++
+   new WithSmallBooms ++
+   new DefaultBoomConfig ++
+   new WithNBoomCores(1) ++
+   new WithoutTLMonitors ++
+   new freechips.rocketchip.system.BaseConfig)
+
+class SmallRV32BoomConfig extends Config(
+   new WithBoomRV32 ++
+   new WithRVC ++
    new WithSmallBooms ++
    new DefaultBoomConfig ++
    new WithNBoomCores(1) ++
