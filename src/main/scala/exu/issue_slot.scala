@@ -208,6 +208,10 @@ class IssueSlot(num_slow_wakeup_ports: Int)(implicit p: Parameters)
       }
    }
 
+   assert (!(io.ldspec_dst.valid && io.ldspec_dst.bits === 0.U),
+      "Loads to x0 should never speculatively wakeup other instructions")
+
+
    // TODO disable if FP IQ.
    when (io.ldspec_dst.valid && io.ldspec_dst.bits === slotUop.pop1 && slotUop.lrs1_rtype === RT_FIX)
    {
@@ -224,10 +228,12 @@ class IssueSlot(num_slow_wakeup_ports: Int)(implicit p: Parameters)
 
    when (io.ldspec_miss && slot_p1_poisoned)
    {
+      assert(slotUop.pop1 =/= 0.U, "Poison bit can't be set for pop1=x0!")
       updated_p1 := false.B
    }
    when (io.ldspec_miss && slot_p2_poisoned)
    {
+      assert(slotUop.pop2 =/= 0.U, "Poison bit can't be set for pop2=x0!")
       updated_p2 := false.B
    }
 
