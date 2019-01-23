@@ -1,7 +1,7 @@
 The Berkeley Out-of-Order RISC-V Processor [![CircleCI](https://circleci.com/gh/riscv-boom/riscv-boom.svg?style=svg)](https://circleci.com/gh/riscv-boom/riscv-boom)
 ================================================
 
-The Berkeley Out-of-Order Machine (BOOM) is a synthesizable and parameterizable open source RV64G RISC-V core written in the 
+The Berkeley Out-of-Order Machine (BOOM) is a synthesizable and parameterizable open source RV64GC RISC-V core written in the 
 [Chisel](https://chisel.eecs.berkeley.edu/) hardware construction language. While BOOM is primarily ASIC optimized, it is also usable on FPGAs. 
 We support the FireSim flow to run BOOM at 90+ MHz on FPGAs on Amazon EC2 F1. Created at the University of California,
 Berkeley in the [Berkeley Architecture Research](https://bar.eecs.berkeley.edu/) group, its focus is to create a high 
@@ -73,11 +73,6 @@ couple of simple tests:
    $ make CONFIG=BoomConfig
    $ make run CONFIG=BoomConfig
 ````
-
-Note: the above `build-tools.sh` script builds a specific commit of the risv-tools that BOOM is
-compatible with. Building your own riscv-tools copy *may* produce an incompatible version (there is
-too much development churn in risv-tools currently!). The `build-tools.sh` will also build a RV64G
-toolchain -- the default riscv-tool build scripts produce an incompatible RV64GC toolchain.
 
 There are many BOOM configurations to choose from (and modify!). In fact, the `CONFIG` variable
 defaults to `BoomConfig`, so it is not necessary to pass a `CONFIG` option.
