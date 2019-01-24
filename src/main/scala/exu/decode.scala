@@ -26,19 +26,20 @@ abstract trait DecodeConstants
 {
 // scalastyle:off
   val xpr64 = Y // TODO inform this from xLen
-
+  val DC2 = BitPat.dontCare(2) // Makes the listing below more readable
   def decode_default: List[BitPat] =
-            //                                                                 frs3_en                              wakeup_delay
-            //     is val inst?                                                |  imm sel                           |                    bypassable (aka, known/fixed latency)
-            //     |  is fp inst?                                              |  |     is_load                     |                    |  br/jmp
-            //     |  |  is single-prec?                      rs1 regtype      |  |     |  is_store                 |                    |  |  is jal
-            //     |  |  |  micro-code                         |       rs2 type|  |     |  |  is_amo                |                    |  |  |  allocate_brtag
-            //     |  |  |  |                 func unit        |       |       |  |     |  |  |  is_fence           |                    |  |  |  |
-            //     |  |  |  |                 |                |       |       |  |     |  |  |  |  is_fencei       |                    |  |  |  |  is breakpoint or ecall
-            //     |  |  |  |                 |        dst     |       |       |  |     |  |  |  |  |  mem    mem   |                    |  |  |  |  |  is unique? (clear pipeline for it)
-            //     |  |  |  |                 |        regtype |       |       |  |     |  |  |  |  |  cmd    msk   |                    |  |  |  |  |  |  flush on commit
-            //     |  |  |  |                 |        |       |       |       |  |     |  |  |  |  |  |      |     |                    |  |  |  |  |  |  |  csr cmd
-              List(N, N, X, uopX   , IQT_INT, FU_X   ,RT_X,BitPat.dontCare(2),BitPat.dontCare(2),X,IS_X,X,X,X,X,N, M_X,   MT_X, BitPat.dontCare(2),        X, X, X, X, N, N, X, CSR.X)
+            //                                                                  frs3_en                               wakeup_delay
+            //     is val inst?                                                 |  imm sel                            |    bypassable (aka, known/fixed latency)
+            //     |  is fp inst?                                               |  |     is_load                      |    |  br/jmp
+            //     |  |  is single-prec?                        rs1 regtype     |  |     |  is_store                  |    |  |  is jal
+            //     |  |  |  micro-code                          |       rs2 type|  |     |  |  is_amo                 |    |  |  |  allocate_brtag
+            //     |  |  |  |         iq-type  func unit        |       |       |  |     |  |  |  is_fence            |    |  |  |  |
+            //     |  |  |  |         |        |                |       |       |  |     |  |  |  |  is_fencei        |    |  |  |  |  is breakpoint or ecall?
+            //     |  |  |  |         |        |        dst     |       |       |  |     |  |  |  |  |  mem    mem    |    |  |  |  |  |  is unique? (clear pipeline for it)
+            //     |  |  |  |         |        |        regtype |       |       |  |     |  |  |  |  |  cmd    msk    |    |  |  |  |  |  |  flush on commit
+            //     |  |  |  |         |        |        |       |       |       |  |     |  |  |  |  |  |      |      |    |  |  |  |  |  |  |  csr cmd
+            //     |  |  |  |         |        |        |       |       |       |  |     |  |  |  |  |  |      |      |    |  |  |  |  |  |  |  |
+              List(N, N, X, uopX    , IQT_INT, FU_X   , RT_X  , DC2    ,DC2    ,X, IS_X, X, X, X, X, N, M_X,   MT_X,  DC2, X, X, X, X, N, N, X, CSR.X)
 
   val table: Array[(BitPat, List[BitPat])]
 // scalastyle:on
@@ -93,16 +94,16 @@ object XDecode extends DecodeConstants
 {
 // scalastyle:off
             //                                                                  frs3_en                               wakeup_delay
-            //     is val inst?                                                 |  imm sel                            |        bypassable (aka, known/fixed latency)
-            //     |  is fp inst?                                               |  |     is_load                      |        |  br/jmp
-            //     |  |  is single-prec?                        rs1 regtype     |  |     |  is_store                  |        |  |  is jal
-            //     |  |  |  micro-code                          |       rs2 type|  |     |  |  is_amo                 |        |  |  |  allocate_brtag
-            //     |  |  |  |         iq-type  func unit        |       |       |  |     |  |  |  is_fence            |        |  |  |  |
-            //     |  |  |  |         |        |                |       |       |  |     |  |  |  |  is_fencei        |        |  |  |  |  is breakpoint or ecall?
-            //     |  |  |  |         |        |        dst     |       |       |  |     |  |  |  |  |  mem    mem    |        |  |  |  |  |  is unique? (clear pipeline for it)
-            //     |  |  |  |         |        |        regtype |       |       |  |     |  |  |  |  |  cmd    msk    |        |  |  |  |  |  |  flush on commit
-            //     |  |  |  |         |        |        |       |       |       |  |     |  |  |  |  |  |      |      |        |  |  |  |  |  |  |  csr cmd
-   val table: Array[(BitPat, List[BitPat])] = Array(//  |       |       |       |  |     |  |  |  |  |  |      |      |        |  |  |  |  |  |  |  |
+            //     is val inst?                                                 |  imm sel                            |    bypassable (aka, known/fixed latency)
+            //     |  is fp inst?                                               |  |     is_load                      |    |  br/jmp
+            //     |  |  is single-prec?                        rs1 regtype     |  |     |  is_store                  |    |  |  is jal
+            //     |  |  |  micro-code                          |       rs2 type|  |     |  |  is_amo                 |    |  |  |  allocate_brtag
+            //     |  |  |  |         iq-type  func unit        |       |       |  |     |  |  |  is_fence            |    |  |  |  |
+            //     |  |  |  |         |        |                |       |       |  |     |  |  |  |  is_fencei        |    |  |  |  |  is breakpoint or ecall?
+            //     |  |  |  |         |        |        dst     |       |       |  |     |  |  |  |  |  mem    mem    |    |  |  |  |  |  is unique? (clear pipeline for it)
+            //     |  |  |  |         |        |        regtype |       |       |  |     |  |  |  |  |  cmd    msk    |    |  |  |  |  |  |  flush on commit
+            //     |  |  |  |         |        |        |       |       |       |  |     |  |  |  |  |  |      |      |    |  |  |  |  |  |  |  csr cmd
+   val table: Array[(BitPat, List[BitPat])] = Array(//  |       |       |       |  |     |  |  |  |  |  |      |      |    |  |  |  |  |  |  |  |
    LD      -> List(Y, N, X, uopLD   , IQT_MEM, FU_MEM , RT_FIX, RT_FIX, RT_X  , N, IS_I, Y, N, N, N, N, M_XRD, MT_D , 3.U, N, N, N, N, N, N, N, CSR.N),
    LW      -> List(Y, N, X, uopLD   , IQT_MEM, FU_MEM , RT_FIX, RT_FIX, RT_X  , N, IS_I, Y, N, N, N, N, M_XRD, MT_W , 3.U, N, N, N, N, N, N, N, CSR.N),
    LWU     -> List(Y, N, X, uopLD   , IQT_MEM, FU_MEM , RT_FIX, RT_FIX, RT_X  , N, IS_I, Y, N, N, N, N, M_XRD, MT_WU, 3.U, N, N, N, N, N, N, N, CSR.N),
@@ -230,15 +231,15 @@ object FDecode extends DecodeConstants
 // scalastyle:off
   val table: Array[(BitPat, List[BitPat])] = Array(
              //                                                                  frs3_en                               wakeup_delay
-             //                                                                  |  imm sel                            |        bypassable (aka, known/fixed latency)
-             //                                                                  |  |     is_load                      |        |  br/jmp
-             //    is val inst?                                  rs1 regtype     |  |     |  is_store                  |        |  |  is jal
-             //    |  is fp inst?                                |       rs2 type|  |     |  |  is_amo                 |        |  |  |  allocate_brtag
-             //    |  |  is dst single-prec?                     |       |       |  |     |  |  |  is_fence            |        |  |  |  |
-             //    |  |  |  micro-opcode                         |       |       |  |     |  |  |  |  is_fencei        |        |  |  |  |  is breakpoint or ecall
-             //    |  |  |  |           iq_type  func    dst     |       |       |  |     |  |  |  |  |  mem    mem    |        |  |  |  |  |  is unique? (clear pipeline for it)
-             //    |  |  |  |           |        unit    regtype |       |       |  |     |  |  |  |  |  cmd    msk    |        |  |  |  |  |  |  flush on commit
-             //    |  |  |  |           |        |       |       |       |       |  |     |  |  |  |  |  |      |      |        |  |  |  |  |  |  |  csr cmd
+             //                                                                  |  imm sel                            |    bypassable (aka, known/fixed latency)
+             //                                                                  |  |     is_load                      |    |  br/jmp
+             //    is val inst?                                  rs1 regtype     |  |     |  is_store                  |    |  |  is jal
+             //    |  is fp inst?                                |       rs2 type|  |     |  |  is_amo                 |    |  |  |  allocate_brtag
+             //    |  |  is dst single-prec?                     |       |       |  |     |  |  |  is_fence            |    |  |  |  |
+             //    |  |  |  micro-opcode                         |       |       |  |     |  |  |  |  is_fencei        |    |  |  |  |  is breakpoint or ecall
+             //    |  |  |  |           iq_type  func    dst     |       |       |  |     |  |  |  |  |  mem    mem    |    |  |  |  |  |  is unique? (clear pipeline for it)
+             //    |  |  |  |           |        unit    regtype |       |       |  |     |  |  |  |  |  cmd    msk    |    |  |  |  |  |  |  flush on commit
+             //    |  |  |  |           |        |       |       |       |       |  |     |  |  |  |  |  |      |      |    |  |  |  |  |  |  |  csr cmd
    FLW     -> List(Y, Y, Y, uopLD     , IQT_MEM, FU_MEM, RT_FLT, RT_FIX, RT_X  , N, IS_I, Y, N, N, N, N, M_XRD, MT_W , 0.U, N, N, N, N, N, N, N, CSR.N),
    FLD     -> List(Y, Y, N, uopLD     , IQT_MEM, FU_MEM, RT_FLT, RT_FIX, RT_X  , N, IS_I, Y, N, N, N, N, M_XRD, MT_D , 0.U, N, N, N, N, N, N, N, CSR.N),
    FSW     -> List(Y, Y, Y, uopSTA    , IQT_MEM, FU_MEM, RT_X  , RT_FIX, RT_FLT, N, IS_S, N, Y, N, N, N, M_XWR, MT_W , 0.U, N, N, N, N, N, N, N, CSR.N), // sort of a lie; broken into two micro-ops
@@ -324,15 +325,15 @@ object FDivSqrtDecode extends DecodeConstants
 // scalastyle:off
   val table: Array[(BitPat, List[BitPat])] = Array(
              //                                                                  frs3_en                               wakeup_delay
-             //                                                                  |  imm sel                            |        bypassable (aka, known/fixed latency)
-             //                                                                  |  |     is_load                      |        |  br/jmp
-             //     is val inst?                                 rs1 regtype     |  |     |  is_store                  |        |  |  is jal
-             //     |  is fp inst?                               |       rs2 type|  |     |  |  is_amo                 |        |  |  |  allocate_brtag
-             //     |  |  is dst single-prec?                    |       |       |  |     |  |  |  is_fence            |        |  |  |  |
-             //     |  |  |  micro-opcode                        |       |       |  |     |  |  |  |  is_fencei        |        |  |  |  |  is breakpoint or ecall
-             //     |  |  |  |           iq-type func    dst     |       |       |  |     |  |  |  |  |  mem    mem    |        |  |  |  |  |  is unique? (clear pipeline for it)
-             //     |  |  |  |           |       unit    regtype |       |       |  |     |  |  |  |  |  cmd    msk    |        |  |  |  |  |  |  flush on commit
-             //     |  |  |  |           |       |       |       |       |       |  |     |  |  |  |  |  |      |      |        |  |  |  |  |  |  |  csr cmd
+             //                                                                  |  imm sel                            |    bypassable (aka, known/fixed latency)
+             //                                                                  |  |     is_load                      |    |  br/jmp
+             //     is val inst?                                 rs1 regtype     |  |     |  is_store                  |    |  |  is jal
+             //     |  is fp inst?                               |       rs2 type|  |     |  |  is_amo                 |    |  |  |  allocate_brtag
+             //     |  |  is dst single-prec?                    |       |       |  |     |  |  |  is_fence            |    |  |  |  |
+             //     |  |  |  micro-opcode                        |       |       |  |     |  |  |  |  is_fencei        |    |  |  |  |  is breakpoint or ecall
+             //     |  |  |  |           iq-type func    dst     |       |       |  |     |  |  |  |  |  mem    mem    |    |  |  |  |  |  is unique? (clear pipeline for it)
+             //     |  |  |  |           |       unit    regtype |       |       |  |     |  |  |  |  |  cmd    msk    |    |  |  |  |  |  |  flush on commit
+             //     |  |  |  |           |       |       |       |       |       |  |     |  |  |  |  |  |      |      |    |  |  |  |  |  |  |  csr cmd
    FDIV_S    ->List(Y, Y, Y, uopFDIV_S , IQT_FP, FU_FDV, RT_FLT, RT_FLT, RT_FLT, N, IS_X, N, N, N, N, N, M_X  , MT_X , 0.U, N, N, N, N, N, N, N, CSR.N),
    FDIV_D    ->List(Y, Y, N, uopFDIV_D , IQT_FP, FU_FDV, RT_FLT, RT_FLT, RT_FLT, N, IS_X, N, N, N, N, N, M_X  , MT_X , 0.U, N, N, N, N, N, N, N, CSR.N),
    FSQRT_S   ->List(Y, Y, Y, uopFSQRT_S, IQT_FP, FU_FDV, RT_FLT, RT_FLT, RT_X  , N, IS_X, N, N, N, N, N, M_X  , MT_X , 0.U, N, N, N, N, N, N, N, CSR.N),
