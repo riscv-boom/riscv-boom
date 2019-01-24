@@ -31,6 +31,7 @@ class BoomConfig extends Config(
 
 // Main configs. SmallBoomConfig and MediumBoomConfig are best-maintained
 // MediumBoomConfig is typically described in documentation
+// All RV64IMAFDC
 class SmallBoomConfig extends Config(
    new WithRVC ++
    new WithSmallBooms ++
@@ -96,6 +97,7 @@ class jtagMegaBoomConfig extends Config(
    new freechips.rocketchip.system.BaseConfig ++
    new WithJtagDTM)
 
+// RV64IMAC
 class SmallIntBoomConfig extends Config(
    new WithRVC ++
    new WithoutBoomFPU ++
@@ -122,9 +124,11 @@ class TracedSmallBoomConfig extends Config(
    new WithoutTLMonitors ++
    new freechips.rocketchip.system.BaseConfig)
 
+//RV32IMAC TODO: Support FP
 class SmallRV32BoomConfig extends Config(
    new WithBoomRV32 ++
    new WithRVC ++
+   new WithoutBoomFPU ++
    new WithSmallBooms ++
    new DefaultBoomConfig ++
    new WithNBoomCores(1) ++

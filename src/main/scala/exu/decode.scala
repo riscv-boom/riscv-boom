@@ -88,7 +88,59 @@ class CtrlSigs extends Bundle
       this
    }
 }
+object X32Decode extends DecodeConstants
+{
+// scalastyle:off
+             //                                                                  frs3_en                               wakeup_delay
+             //     is val inst?                                                 |  imm sel                            |    bypassable (aka, known/fixed latency)
+             //     |  is fp inst?                                               |  |     is_load                      |    |  br/jmp
+             //     |  |  is single-prec?                        rs1 regtype     |  |     |  is_store                  |    |  |  is jal
+             //     |  |  |  micro-code                          |       rs2 type|  |     |  |  is_amo                 |    |  |  |  allocate_brtag
+             //     |  |  |  |         iq-type  func unit        |       |       |  |     |  |  |  is_fence            |    |  |  |  |
+             //     |  |  |  |         |        |                |       |       |  |     |  |  |  |  is_fencei        |    |  |  |  |  is breakpoint or ecall?
+             //     |  |  |  |         |        |        dst     |       |       |  |     |  |  |  |  |  mem    mem    |    |  |  |  |  |  is unique? (clear pipeline for it)
+             //     |  |  |  |         |        |        regtype |       |       |  |     |  |  |  |  |  cmd    msk    |    |  |  |  |  |  |  flush on commit
+             //     |  |  |  |         |        |        |       |       |       |  |     |  |  |  |  |  |      |      |    |  |  |  |  |  |  |  csr cmd
+   val table: Array[(BitPat, List[BitPat])] = Array(//  |       |       |       |  |     |  |  |  |  |  |      |      |    |  |  |  |  |  |  |  |
+   SLLI_RV32-> List(Y, N, X, uopSLLI , IQT_INT, FU_ALU , RT_FIX, RT_FIX, RT_X  , N, IS_I, N, N, N, N, N, M_X  , MT_X , 1.U, Y, N, N, N, N, N, N, CSR.N),
+   SRLI_RV32-> List(Y, N, X, uopSRLI , IQT_INT, FU_ALU , RT_FIX, RT_FIX, RT_X  , N, IS_I, N, N, N, N, N, M_X  , MT_X , 1.U, Y, N, N, N, N, N, N, CSR.N),
+   SRAI_RV32-> List(Y, N, X, uopSRAI , IQT_INT, FU_ALU , RT_FIX, RT_FIX, RT_X  , N, IS_I, N, N, N, N, N, M_X  , MT_X , 1.U, Y, N, N, N, N, N, N, CSR.N),
+   )
+}
+object X64Decode extends DecodeConstants
+{
+// scalastyle:off
+            //                                                                  frs3_en                               wakeup_delay
+            //     is val inst?                                                 |  imm sel                            |    bypassable (aka, known/fixed latency)
+            //     |  is fp inst?                                               |  |     is_load                      |    |  br/jmp
+            //     |  |  is single-prec?                        rs1 regtype     |  |     |  is_store                  |    |  |  is jal
+            //     |  |  |  micro-code                          |       rs2 type|  |     |  |  is_amo                 |    |  |  |  allocate_brtag
+            //     |  |  |  |         iq-type  func unit        |       |       |  |     |  |  |  is_fence            |    |  |  |  |
+            //     |  |  |  |         |        |                |       |       |  |     |  |  |  |  is_fencei        |    |  |  |  |  is breakpoint or ecall?
+            //     |  |  |  |         |        |        dst     |       |       |  |     |  |  |  |  |  mem    mem    |    |  |  |  |  |  is unique? (clear pipeline for it)
+            //     |  |  |  |         |        |        regtype |       |       |  |     |  |  |  |  |  cmd    msk    |    |  |  |  |  |  |  flush on commit
+            //     |  |  |  |         |        |        |       |       |       |  |     |  |  |  |  |  |      |      |    |  |  |  |  |  |  |  csr cmd
+   val table: Array[(BitPat, List[BitPat])] = Array(//  |       |       |       |  |     |  |  |  |  |  |      |      |    |  |  |  |  |  |  |  |
+   LD      -> List(Y, N, X, uopLD   , IQT_MEM, FU_MEM , RT_FIX, RT_FIX, RT_X  , N, IS_I, Y, N, N, N, N, M_XRD, MT_D , 3.U, N, N, N, N, N, N, N, CSR.N),
+   LWU     -> List(Y, N, X, uopLD   , IQT_MEM, FU_MEM , RT_FIX, RT_FIX, RT_X  , N, IS_I, Y, N, N, N, N, M_XRD, MT_WU, 3.U, N, N, N, N, N, N, N, CSR.N),
+   SD      -> List(Y, N, X, uopSTA  , IQT_MEM, FU_MEM , RT_X  , RT_FIX, RT_FIX, N, IS_S, N, Y, N, N, N, M_XWR, MT_D , 0.U, N, N, N, N, N, N, N, CSR.N),
 
+   SLLI    -> List(Y, N, X, uopSLLI , IQT_INT, FU_ALU , RT_FIX, RT_FIX, RT_X  , N, IS_I, N, N, N, N, N, M_X  , MT_X , 1.U, Y, N, N, N, N, N, N, CSR.N),
+   SRLI    -> List(Y, N, X, uopSRLI , IQT_INT, FU_ALU , RT_FIX, RT_FIX, RT_X  , N, IS_I, N, N, N, N, N, M_X  , MT_X , 1.U, Y, N, N, N, N, N, N, CSR.N),
+   SRAI    -> List(Y, N, X, uopSRAI , IQT_INT, FU_ALU , RT_FIX, RT_FIX, RT_X  , N, IS_I, N, N, N, N, N, M_X  , MT_X , 1.U, Y, N, N, N, N, N, N, CSR.N),
+
+   ADDIW   -> List(Y, N, X, uopADDIW, IQT_INT, FU_ALU , RT_FIX, RT_FIX, RT_X  , N, IS_I, N, N, N, N, N, M_X  , MT_X , 1.U, Y, N, N, N, N, N, N, CSR.N),
+   SLLIW   -> List(Y, N, X, uopSLLIW, IQT_INT, FU_ALU , RT_FIX, RT_FIX, RT_X  , N, IS_I, N, N, N, N, N, M_X  , MT_X , 1.U, Y, N, N, N, N, N, N, CSR.N),
+   SRAIW   -> List(Y, N, X, uopSRAIW, IQT_INT, FU_ALU , RT_FIX, RT_FIX, RT_X  , N, IS_I, N, N, N, N, N, M_X  , MT_X , 1.U, Y, N, N, N, N, N, N, CSR.N),
+   SRLIW   -> List(Y, N, X, uopSRLIW, IQT_INT, FU_ALU , RT_FIX, RT_FIX, RT_X  , N, IS_I, N, N, N, N, N, M_X  , MT_X , 1.U, Y, N, N, N, N, N, N, CSR.N),
+
+   ADDW    -> List(Y, N, X, uopADDW , IQT_INT, FU_ALU , RT_FIX, RT_FIX, RT_FIX, N, IS_I, N, N, N, N, N, M_X  , MT_X , 1.U, Y, N, N, N, N, N, N, CSR.N),
+   SUBW    -> List(Y, N, X, uopSUBW , IQT_INT, FU_ALU , RT_FIX, RT_FIX, RT_FIX, N, IS_I, N, N, N, N, N, M_X  , MT_X , 1.U, Y, N, N, N, N, N, N, CSR.N),
+   SLLW    -> List(Y, N, X, uopSLLW , IQT_INT, FU_ALU , RT_FIX, RT_FIX, RT_FIX, N, IS_I, N, N, N, N, N, M_X  , MT_X , 1.U, Y, N, N, N, N, N, N, CSR.N),
+   SRAW    -> List(Y, N, X, uopSRAW , IQT_INT, FU_ALU , RT_FIX, RT_FIX, RT_FIX, N, IS_I, N, N, N, N, N, M_X  , MT_X , 1.U, Y, N, N, N, N, N, N, CSR.N),
+   SRLW    -> List(Y, N, X, uopSRLW , IQT_INT, FU_ALU , RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, N, N, N, N, M_X  , MT_X , 1.U, Y, N, N, N, N, N, N, CSR.N),
+   )
+}
 
 object XDecode extends DecodeConstants
 {
@@ -104,15 +156,12 @@ object XDecode extends DecodeConstants
             //     |  |  |  |         |        |        regtype |       |       |  |     |  |  |  |  |  cmd    msk    |    |  |  |  |  |  |  flush on commit
             //     |  |  |  |         |        |        |       |       |       |  |     |  |  |  |  |  |      |      |    |  |  |  |  |  |  |  csr cmd
    val table: Array[(BitPat, List[BitPat])] = Array(//  |       |       |       |  |     |  |  |  |  |  |      |      |    |  |  |  |  |  |  |  |
-   LD      -> List(Y, N, X, uopLD   , IQT_MEM, FU_MEM , RT_FIX, RT_FIX, RT_X  , N, IS_I, Y, N, N, N, N, M_XRD, MT_D , 3.U, N, N, N, N, N, N, N, CSR.N),
    LW      -> List(Y, N, X, uopLD   , IQT_MEM, FU_MEM , RT_FIX, RT_FIX, RT_X  , N, IS_I, Y, N, N, N, N, M_XRD, MT_W , 3.U, N, N, N, N, N, N, N, CSR.N),
-   LWU     -> List(Y, N, X, uopLD   , IQT_MEM, FU_MEM , RT_FIX, RT_FIX, RT_X  , N, IS_I, Y, N, N, N, N, M_XRD, MT_WU, 3.U, N, N, N, N, N, N, N, CSR.N),
    LH      -> List(Y, N, X, uopLD   , IQT_MEM, FU_MEM , RT_FIX, RT_FIX, RT_X  , N, IS_I, Y, N, N, N, N, M_XRD, MT_H , 3.U, N, N, N, N, N, N, N, CSR.N),
    LHU     -> List(Y, N, X, uopLD   , IQT_MEM, FU_MEM , RT_FIX, RT_FIX, RT_X  , N, IS_I, Y, N, N, N, N, M_XRD, MT_HU, 3.U, N, N, N, N, N, N, N, CSR.N),
    LB      -> List(Y, N, X, uopLD   , IQT_MEM, FU_MEM , RT_FIX, RT_FIX, RT_X  , N, IS_I, Y, N, N, N, N, M_XRD, MT_B , 3.U, N, N, N, N, N, N, N, CSR.N),
    LBU     -> List(Y, N, X, uopLD   , IQT_MEM, FU_MEM , RT_FIX, RT_FIX, RT_X  , N, IS_I, Y, N, N, N, N, M_XRD, MT_BU, 3.U, N, N, N, N, N, N, N, CSR.N),
 
-   SD      -> List(Y, N, X, uopSTA  , IQT_MEM, FU_MEM , RT_X  , RT_FIX, RT_FIX, N, IS_S, N, Y, N, N, N, M_XWR, MT_D , 0.U, N, N, N, N, N, N, N, CSR.N),
    SW      -> List(Y, N, X, uopSTA  , IQT_MEM, FU_MEM , RT_X  , RT_FIX, RT_FIX, N, IS_S, N, Y, N, N, N, M_XWR, MT_W , 0.U, N, N, N, N, N, N, N, CSR.N),
    SH      -> List(Y, N, X, uopSTA  , IQT_MEM, FU_MEM , RT_X  , RT_FIX, RT_FIX, N, IS_S, N, Y, N, N, N, M_XWR, MT_H , 0.U, N, N, N, N, N, N, N, CSR.N),
    SB      -> List(Y, N, X, uopSTA  , IQT_MEM, FU_MEM , RT_X  , RT_FIX, RT_FIX, N, IS_S, N, Y, N, N, N, M_XWR, MT_B , 0.U, N, N, N, N, N, N, N, CSR.N),
@@ -125,14 +174,6 @@ object XDecode extends DecodeConstants
    XORI    -> List(Y, N, X, uopXORI , IQT_INT, FU_ALU , RT_FIX, RT_FIX, RT_X  , N, IS_I, N, N, N, N, N, M_X  , MT_X , 1.U, Y, N, N, N, N, N, N, CSR.N),
    SLTI    -> List(Y, N, X, uopSLTI , IQT_INT, FU_ALU , RT_FIX, RT_FIX, RT_X  , N, IS_I, N, N, N, N, N, M_X  , MT_X , 1.U, Y, N, N, N, N, N, N, CSR.N),
    SLTIU   -> List(Y, N, X, uopSLTIU, IQT_INT, FU_ALU , RT_FIX, RT_FIX, RT_X  , N, IS_I, N, N, N, N, N, M_X  , MT_X , 1.U, Y, N, N, N, N, N, N, CSR.N),
-   SLLI    -> List(Y, N, X, uopSLLI , IQT_INT, FU_ALU , RT_FIX, RT_FIX, RT_X  , N, IS_I, N, N, N, N, N, M_X  , MT_X , 1.U, Y, N, N, N, N, N, N, CSR.N),
-   SRAI    -> List(Y, N, X, uopSRAI , IQT_INT, FU_ALU , RT_FIX, RT_FIX, RT_X  , N, IS_I, N, N, N, N, N, M_X  , MT_X , 1.U, Y, N, N, N, N, N, N, CSR.N),
-   SRLI    -> List(Y, N, X, uopSRLI , IQT_INT, FU_ALU , RT_FIX, RT_FIX, RT_X  , N, IS_I, N, N, N, N, N, M_X  , MT_X , 1.U, Y, N, N, N, N, N, N, CSR.N),
-
-   ADDIW   -> List(Y, N, X, uopADDIW, IQT_INT, FU_ALU , RT_FIX, RT_FIX, RT_X  , N, IS_I, N, N, N, N, N, M_X  , MT_X , 1.U, Y, N, N, N, N, N, N, CSR.N),
-   SLLIW   -> List(Y, N, X, uopSLLIW, IQT_INT, FU_ALU , RT_FIX, RT_FIX, RT_X  , N, IS_I, N, N, N, N, N, M_X  , MT_X , 1.U, Y, N, N, N, N, N, N, CSR.N),
-   SRAIW   -> List(Y, N, X, uopSRAIW, IQT_INT, FU_ALU , RT_FIX, RT_FIX, RT_X  , N, IS_I, N, N, N, N, N, M_X  , MT_X , 1.U, Y, N, N, N, N, N, N, CSR.N),
-   SRLIW   -> List(Y, N, X, uopSRLIW, IQT_INT, FU_ALU , RT_FIX, RT_FIX, RT_X  , N, IS_I, N, N, N, N, N, M_X  , MT_X , 1.U, Y, N, N, N, N, N, N, CSR.N),
 
    SLL     -> List(Y, N, X, uopSLL  , IQT_INT, FU_ALU , RT_FIX, RT_FIX, RT_FIX, N, IS_I, N, N, N, N, N, M_X  , MT_X , 1.U, Y, N, N, N, N, N, N, CSR.N),
    ADD     -> List(Y, N, X, uopADD  , IQT_INT, FU_ALU , RT_FIX, RT_FIX, RT_FIX, N, IS_I, N, N, N, N, N, M_X  , MT_X , 1.U, Y, N, N, N, N, N, N, CSR.N),
@@ -144,12 +185,6 @@ object XDecode extends DecodeConstants
    XOR     -> List(Y, N, X, uopXOR  , IQT_INT, FU_ALU , RT_FIX, RT_FIX, RT_FIX, N, IS_I, N, N, N, N, N, M_X  , MT_X , 1.U, Y, N, N, N, N, N, N, CSR.N),
    SRA     -> List(Y, N, X, uopSRA  , IQT_INT, FU_ALU , RT_FIX, RT_FIX, RT_FIX, N, IS_I, N, N, N, N, N, M_X  , MT_X , 1.U, Y, N, N, N, N, N, N, CSR.N),
    SRL     -> List(Y, N, X, uopSRL  , IQT_INT, FU_ALU , RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, N, N, N, N, M_X  , MT_X , 1.U, Y, N, N, N, N, N, N, CSR.N),
-
-   ADDW    -> List(Y, N, X, uopADDW , IQT_INT, FU_ALU , RT_FIX, RT_FIX, RT_FIX, N, IS_I, N, N, N, N, N, M_X  , MT_X , 1.U, Y, N, N, N, N, N, N, CSR.N),
-   SUBW    -> List(Y, N, X, uopSUBW , IQT_INT, FU_ALU , RT_FIX, RT_FIX, RT_FIX, N, IS_I, N, N, N, N, N, M_X  , MT_X , 1.U, Y, N, N, N, N, N, N, CSR.N),
-   SLLW    -> List(Y, N, X, uopSLLW , IQT_INT, FU_ALU , RT_FIX, RT_FIX, RT_FIX, N, IS_I, N, N, N, N, N, M_X  , MT_X , 1.U, Y, N, N, N, N, N, N, CSR.N),
-   SRAW    -> List(Y, N, X, uopSRAW , IQT_INT, FU_ALU , RT_FIX, RT_FIX, RT_FIX, N, IS_I, N, N, N, N, N, M_X  , MT_X , 1.U, Y, N, N, N, N, N, N, CSR.N),
-   SRLW    -> List(Y, N, X, uopSRLW , IQT_INT, FU_ALU , RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, N, N, N, N, M_X  , MT_X , 1.U, Y, N, N, N, N, N, N, CSR.N),
 
    MUL     -> List(Y, N, X, uopMUL  , IQT_INT, FU_MUL , RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, N, N, N, N, M_X  , MT_X , 0.U, N, N, N, N, N, N, N, CSR.N),
    MULH    -> List(Y, N, X, uopMULH , IQT_INT, FU_MUL , RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, N, N, N, N, M_X  , MT_X , 0.U, N, N, N, N, N, N, N, CSR.N),
@@ -367,7 +402,7 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule()(p)
    var decode_table = XDecode.table
    if (usingFPU) decode_table ++= FDecode.table
    if (usingFPU && usingFDivSqrt) decode_table ++= FDivSqrtDecode.table
-
+   decode_table ++= (if (xLen == 64) X64Decode.table else X32Decode.table)
 
    val rvc_exp    = Module(new RVCExpander)
    rvc_exp.io.in := io.enq.uop.inst
@@ -390,7 +425,7 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule()(p)
    val id_illegal_insn = !cs_legal ||
       cs.fp_val && io.csr_decode.fp_illegal || // TODO check for illegal rm mode: (io.fpu.illegal_rm)
       cs.rocc && io.csr_decode.rocc_illegal ||
-      cs.is_amo && !io.status.isa('a'-'a') ||
+      cs.is_amo && !io.status.isa('a'-'a')  ||
       (cs.fp_val && !cs.fp_single) && !io.status.isa('d'-'a') ||
      csr_en && (io.csr_decode.read_illegal || !csr_ren && io.csr_decode.write_illegal) ||
      ((sfence || system_insn) && io.csr_decode.system_illegal)
