@@ -19,12 +19,11 @@ import FUConstants._
 import boom.common._
 import boom.util._
 
-
+// scalastyle:off
 abstract trait DecodeConstants
    extends freechips.rocketchip.rocket.constants.ScalarOpConstants
    with freechips.rocketchip.rocket.constants.MemoryOpConstants
 {
-// scalastyle:off
   val xpr64 = Y // TODO inform this from xLen
   val DC2 = BitPat.dontCare(2) // Makes the listing below more readable
   def decode_default: List[BitPat] =
@@ -42,8 +41,8 @@ abstract trait DecodeConstants
               List(N, N, X, uopX    , IQT_INT, FU_X   , RT_X  , DC2    ,DC2    ,X, IS_X, X, X, X, X, N, M_X,   MT_X,  DC2, X, X, X, X, N, N, X, CSR.X)
 
   val table: Array[(BitPat, List[BitPat])]
-// scalastyle:on
 }
+// scalastyle:on
 
 class CtrlSigs extends Bundle
 {
@@ -88,9 +87,10 @@ class CtrlSigs extends Bundle
       this
    }
 }
+
+// scalastyle:off
 object X32Decode extends DecodeConstants
 {
-// scalastyle:off
              //                                                                  frs3_en                               wakeup_delay
              //     is val inst?                                                 |  imm sel                            |    bypassable (aka, known/fixed latency)
              //     |  is fp inst?                                               |  |     is_load                      |    |  br/jmp
@@ -101,16 +101,14 @@ object X32Decode extends DecodeConstants
              //     |  |  |  |         |        |        dst     |       |       |  |     |  |  |  |  |  mem    mem    |    |  |  |  |  |  is unique? (clear pipeline for it)
              //     |  |  |  |         |        |        regtype |       |       |  |     |  |  |  |  |  cmd    msk    |    |  |  |  |  |  |  flush on commit
              //     |  |  |  |         |        |        |       |       |       |  |     |  |  |  |  |  |      |      |    |  |  |  |  |  |  |  csr cmd
-   val table: Array[(BitPat, List[BitPat])] = Array(//  |       |       |       |  |     |  |  |  |  |  |      |      |    |  |  |  |  |  |  |  |
+   val table: Array[(BitPat, List[BitPat])] = Array(//   |       |       |       |  |     |  |  |  |  |  |      |      |    |  |  |  |  |  |  |  |
    SLLI_RV32-> List(Y, N, X, uopSLLI , IQT_INT, FU_ALU , RT_FIX, RT_FIX, RT_X  , N, IS_I, N, N, N, N, N, M_X  , MT_X , 1.U, Y, N, N, N, N, N, N, CSR.N),
    SRLI_RV32-> List(Y, N, X, uopSRLI , IQT_INT, FU_ALU , RT_FIX, RT_FIX, RT_X  , N, IS_I, N, N, N, N, N, M_X  , MT_X , 1.U, Y, N, N, N, N, N, N, CSR.N),
-   SRAI_RV32-> List(Y, N, X, uopSRAI , IQT_INT, FU_ALU , RT_FIX, RT_FIX, RT_X  , N, IS_I, N, N, N, N, N, M_X  , MT_X , 1.U, Y, N, N, N, N, N, N, CSR.N),
+   SRAI_RV32-> List(Y, N, X, uopSRAI , IQT_INT, FU_ALU , RT_FIX, RT_FIX, RT_X  , N, IS_I, N, N, N, N, N, M_X  , MT_X , 1.U, Y, N, N, N, N, N, N, CSR.N)
    )
-// scalastyle:on
 }
 object X64Decode extends DecodeConstants
 {
-// scalastyle:off
             //                                                                  frs3_en                               wakeup_delay
             //     is val inst?                                                 |  imm sel                            |    bypassable (aka, known/fixed latency)
             //     |  is fp inst?                                               |  |     is_load                      |    |  br/jmp
@@ -139,14 +137,12 @@ object X64Decode extends DecodeConstants
    SUBW    -> List(Y, N, X, uopSUBW , IQT_INT, FU_ALU , RT_FIX, RT_FIX, RT_FIX, N, IS_I, N, N, N, N, N, M_X  , MT_X , 1.U, Y, N, N, N, N, N, N, CSR.N),
    SLLW    -> List(Y, N, X, uopSLLW , IQT_INT, FU_ALU , RT_FIX, RT_FIX, RT_FIX, N, IS_I, N, N, N, N, N, M_X  , MT_X , 1.U, Y, N, N, N, N, N, N, CSR.N),
    SRAW    -> List(Y, N, X, uopSRAW , IQT_INT, FU_ALU , RT_FIX, RT_FIX, RT_FIX, N, IS_I, N, N, N, N, N, M_X  , MT_X , 1.U, Y, N, N, N, N, N, N, CSR.N),
-   SRLW    -> List(Y, N, X, uopSRLW , IQT_INT, FU_ALU , RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, N, N, N, N, M_X  , MT_X , 1.U, Y, N, N, N, N, N, N, CSR.N),
+   SRLW    -> List(Y, N, X, uopSRLW , IQT_INT, FU_ALU , RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, N, N, N, N, M_X  , MT_X , 1.U, Y, N, N, N, N, N, N, CSR.N)
    )
-// scalastyle:on
 }
 
 object XDecode extends DecodeConstants
 {
-// scalastyle:off
             //                                                                  frs3_en                               wakeup_delay
             //     is val inst?                                                 |  imm sel                            |    bypassable (aka, known/fixed latency)
             //     |  is fp inst?                                               |  |     is_load                      |    |  br/jmp
@@ -260,12 +256,10 @@ object XDecode extends DecodeConstants
    SC_W    -> List(Y, N, X, uopAMO_AG, IQT_MEM, FU_MEM, RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, Y, Y, N, N, M_XSC   , MT_W,0.U,N, N, N, N, N, Y, Y, CSR.N), // one which isn't needed
    SC_D    -> List(Y, N, X, uopAMO_AG, IQT_MEM, FU_MEM, RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, Y, Y, N, N, M_XSC   , MT_D,0.U,N, N, N, N, N, Y, Y, CSR.N)
    )
-// scalastyle:on
 }
 
 object FDecode extends DecodeConstants
 {
-// scalastyle:off
   val table: Array[(BitPat, List[BitPat])] = Array(
              //                                                                  frs3_en                               wakeup_delay
              //                                                                  |  imm sel                            |    bypassable (aka, known/fixed latency)
@@ -353,13 +347,10 @@ object FDecode extends DecodeConstants
    FNMADD_D ->List(Y, Y, N, uopFNMADD_D,IQT_FP,  FU_FPU, RT_FLT, RT_FLT, RT_FLT, Y, IS_X, N, N, N, N, N, M_X  , MT_X , 0.U, N, N, N, N, N, N, N, CSR.N),
    FNMSUB_D ->List(Y, Y, N, uopFNMSUB_D,IQT_FP,  FU_FPU, RT_FLT, RT_FLT, RT_FLT, Y, IS_X, N, N, N, N, N, M_X  , MT_X , 0.U, N, N, N, N, N, N, N, CSR.N)
    )
-
-// scalastyle:on
 }
 
 object FDivSqrtDecode extends DecodeConstants
 {
-// scalastyle:off
   val table: Array[(BitPat, List[BitPat])] = Array(
              //                                                                  frs3_en                               wakeup_delay
              //                                                                  |  imm sel                            |    bypassable (aka, known/fixed latency)
@@ -376,9 +367,8 @@ object FDivSqrtDecode extends DecodeConstants
    FSQRT_S   ->List(Y, Y, Y, uopFSQRT_S, IQT_FP, FU_FDV, RT_FLT, RT_FLT, RT_X  , N, IS_X, N, N, N, N, N, M_X  , MT_X , 0.U, N, N, N, N, N, N, N, CSR.N),
    FSQRT_D   ->List(Y, Y, N, uopFSQRT_D, IQT_FP, FU_FDV, RT_FLT, RT_FLT, RT_X  , N, IS_X, N, N, N, N, N, M_X  , MT_X , 0.U, N, N, N, N, N, N, N, CSR.N)
    )
-// scalastyle:on
 }
-
+//scalastyle:on
 
 class DecodeUnitIo(implicit p: Parameters) extends BoomBundle()(p)
 {
