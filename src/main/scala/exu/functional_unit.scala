@@ -24,6 +24,7 @@ import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.rocket.ALU._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile
+import freechips.rocketchip.rocket.PipelinedMultiplier
 import chisel3.experimental.chiselName
 import boom.bpu.{BpredType, BranchPredInfo, BoomBTBUpdate}
 import boom.common._
@@ -249,11 +250,11 @@ abstract class PipelinedFunctionalUnit(val num_stages: Int,
 }
 
 @chiselName
-class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1)(implicit p: Parameters)
+class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1, data_width: Int)(implicit p: Parameters)
              extends PipelinedFunctionalUnit(num_stages = num_stages
                                             , num_bypass_stages = num_stages
                                             , earliest_bypass_stage = 0
-                                            , data_width = 64  //xLen
+                                            , data_width = data_width
                                             , is_branch_unit = is_branch_unit)(p)
 {
    val uop = io.req.bits.uop
@@ -707,11 +708,11 @@ class IntToFPUnit(latency: Int)(implicit p: Parameters) extends PipelinedFunctio
 
 // Iterative/unpipelined, can only hold a single MicroOp at a time TODO allow up to N micro-ops simultaneously.
 // assumes at least one register between request and response
-abstract class IterativeFunctionalUnit(implicit p: Parameters)
+abstract class IterativeFunctionalUnit(data_width: Int)(implicit p: Parameters)
                                        extends FunctionalUnit(is_pipelined = false
                                                             , num_stages = 1
                                                             , num_bypass_stages = 0
-                                                            , data_width = 64
+                                                            , data_width = data_width
                                                             , has_branch_unit = false)(p)
 {
    val r_uop = Reg(new MicroOp())
@@ -738,9 +739,9 @@ abstract class IterativeFunctionalUnit(implicit p: Parameters)
 }
 
 
-class MulDivUnit(implicit p: Parameters) extends IterativeFunctionalUnit()(p)
+class MulDivUnit(data_width: Int)(implicit p: Parameters) extends IterativeFunctionalUnit(data_width)(p)
 {
-   val muldiv = Module(new freechips.rocketchip.rocket.MulDiv(mulDivParams, width = xLen))
+   val muldiv = Module(new freechips.rocketchip.rocket.MulDiv(mulDivParams, width = data_width))
 
    // request
    muldiv.io.req.valid    := io.req.valid && !this.do_kill
@@ -760,21 +761,21 @@ class MulDivUnit(implicit p: Parameters) extends IterativeFunctionalUnit()(p)
    io.resp.bits.data      := muldiv.io.resp.bits.data
 }
 
-class PipelinedMulUnit(num_stages: Int)(implicit p: Parameters)
+class PipelinedMulUnit(num_stages: Int, data_width: Int)(implicit p: Parameters)
       extends PipelinedFunctionalUnit (num_stages = num_stages
                                       , num_bypass_stages = 0
                                       , earliest_bypass_stage = 0
-                                      , data_width = 64)(p)
+                                      , data_width = data_width)(p)
 {
-   val imul = Module(new IMul(num_stages))
+   val imul = Module(new PipelinedMultiplier(xLen, num_stages))
    // request
-   imul.io.valid := io.req.valid
-   imul.io.in0   := io.req.bits.rs1_data
-   imul.io.in1   := io.req.bits.rs2_data
-   imul.io.dw    := io.req.bits.uop.ctrl.fcn_dw
-   imul.io.fn    := io.req.bits.uop.ctrl.op_fcn
-
+   imul.io.req.valid    := io.req.valid
+   imul.io.req.bits.fn  := io.req.bits.uop.ctrl.op_fcn
+   imul.io.req.bits.dw  := io.req.bits.uop.ctrl.fcn_dw
+   imul.io.req.bits.in1 := io.req.bits.rs1_data
+   imul.io.req.bits.in2 := io.req.bits.rs2_data
+   imul.io.req.bits.tag := DontCare
    // response
-   io.resp.bits.data      := imul.io.out
+   io.resp.bits.data    := imul.io.resp.bits.data
 }
 
