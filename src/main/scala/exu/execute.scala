@@ -187,7 +187,9 @@ class ALUExeUnit(
    var alu: ALUUnit = null
    if (has_alu)
    {
-      alu = Module(new ALUUnit(is_branch_unit = is_branch_unit, num_stages = num_bypass_stages))
+      alu = Module(new ALUUnit(is_branch_unit = is_branch_unit,
+                               num_stages = num_bypass_stages,
+                               data_width = xLen))
       alu.io.req.valid         := io.req.valid &&
                                       (io.req.bits.uop.fu_code === FU_ALU ||
                                        io.req.bits.uop.fu_code === FU_BRU ||
@@ -222,7 +224,7 @@ class ALUExeUnit(
    var imul: PipelinedMulUnit = null
    if (has_mul && !use_slow_mul)
    {
-      imul = Module(new PipelinedMulUnit(imulLatency))
+      imul = Module(new PipelinedMulUnit(imulLatency, xLen))
       imul.io <> DontCare
       imul.io.req.valid         := io.req.valid && io.req.bits.uop.fu_code_is(FU_MUL)
       imul.io.req.bits.uop      := io.req.bits.uop
@@ -300,7 +302,7 @@ class ALUExeUnit(
    val muldiv_resp_val = WireInit(false.B)
    if (has_muldiv)
    {
-      muldiv = Module(new MulDivUnit())
+      muldiv = Module(new MulDivUnit(xLen))
       muldiv.io <> DontCare
       muldiv.io.req.valid           := io.req.valid &&
                                        ((io.req.bits.uop.fu_code_is(FU_DIV) && has_div.B) ||
