@@ -8,6 +8,8 @@ set -e
 
 cd $HOME/boom-template
 
+# Same steps as ./scripts/init-submodules-no-riscv-tools.sh 
+# Main difference is that you checkout the rocket-chip version
 echo "Initialize top-level submodules"
 git submodule update --init
 
