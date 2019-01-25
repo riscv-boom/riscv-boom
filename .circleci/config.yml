@@ -11,9 +11,9 @@ jobs:
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
-            
+
         steps:
-            # Checkout the code 
+            # Checkout the code
             - checkout
 
             - run:
@@ -25,7 +25,7 @@ jobs:
                 keys:
                     - riscv-tools-installed-v3-{{ checksum "../rocket-chip.hash" }}
 
-            - run: 
+            - run:
                 name: Building riscv-tools
                 command: |
                     ci/build-riscv-tools.sh
@@ -42,9 +42,9 @@ jobs:
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
-            
+
         steps:
-            # Checkout the code 
+            # Checkout the code
             - checkout
 
             - run:
@@ -56,7 +56,7 @@ jobs:
                 keys:
                     - boom-template-with-verilator-v5-{{ checksum "../boom-template.hash" }}
 
-            - run: 
+            - run:
                 name: Build Verilator and setup build environment
                 command: |
                     ci/prepare-for-rtl-build.sh
@@ -75,7 +75,7 @@ jobs:
             TERM: dumb
 
         steps:
-            # Checkout the code 
+            # Checkout the code
             - checkout
 
             - run:
@@ -92,7 +92,7 @@ jobs:
                 keys:
                     - boom-template-with-verilator-v5-{{ checksum "../boom-template.hash" }}
 
-            - run: 
+            - run:
                 name: Building BoomConfig using Verilator
                 command: ci/do-rtl-build.sh BoomConfig
                 no_output_timeout: 120m
@@ -101,7 +101,7 @@ jobs:
                 key: boom-template-boomconfig-{{ .Branch }}-{{ .Revision }}
                 paths:
                     - "/home/riscvuser/boom-template"
-                      
+
     prepare-smallboomconfig:
         docker:
             - image: riscvboom/riscvboom-images:0.0.5
@@ -110,7 +110,7 @@ jobs:
             TERM: dumb
 
         steps:
-            # Checkout the code 
+            # Checkout the code
             - checkout
 
             - run:
@@ -127,7 +127,7 @@ jobs:
                 keys:
                     - boom-template-with-verilator-v5-{{ checksum "../boom-template.hash" }}
 
-            - run: 
+            - run:
                 name: Building SmallBoomConfig using Verilator
                 command: ci/do-rtl-build.sh SmallBoomConfig
                 no_output_timeout: 120m
@@ -136,7 +136,7 @@ jobs:
                 key: boom-template-smallboomconfig-{{ .Branch }}-{{ .Revision }}
                 paths:
                     - "/home/riscvuser/boom-template"
-                      
+
     prepare-mediumboomconfig:
         docker:
             - image: riscvboom/riscvboom-images:0.0.5
@@ -145,9 +145,9 @@ jobs:
             TERM: dumb
 
         steps:
-            # Checkout the code 
+            # Checkout the code
             - checkout
-             
+
             - run:
                 name: Create hash of riscv-tools and boom-template
                 command: |
@@ -162,7 +162,7 @@ jobs:
                 keys:
                     - boom-template-with-verilator-v5-{{ checksum "../boom-template.hash" }}
 
-            - run: 
+            - run:
                 name: Building MediumBoomConfig using Verilator
                 command: ci/do-rtl-build.sh MediumBoomConfig
                 no_output_timeout: 120m
@@ -180,7 +180,7 @@ jobs:
             TERM: dumb
 
         steps:
-            # Checkout the code 
+            # Checkout the code
             - checkout
 
             - run:
@@ -197,7 +197,7 @@ jobs:
                 keys:
                     - boom-template-with-verilator-v5-{{ checksum "../boom-template.hash" }}
 
-            - run: 
+            - run:
                 name: Building MegaBoomConfig using Verilator
                 command: ci/do-rtl-build.sh MegaBoomConfig
                 no_output_timeout: 120m
@@ -215,7 +215,7 @@ jobs:
             TERM: dumb
 
         steps:
-            # Checkout the code 
+            # Checkout the code
             - checkout
 
             - run:
@@ -239,7 +239,7 @@ jobs:
             TERM: dumb
 
         steps:
-            # Checkout the code 
+            # Checkout the code
             - checkout
 
             - run:
@@ -257,7 +257,7 @@ jobs:
 
             - run:
                 name: Run BoomConfig csmith tests
-                command: ci/build-run-csmith-tests.sh BoomConfig 75 
+                command: ci/build-run-csmith-tests.sh BoomConfig 75
 
     boomconfig-run-benchmark-tests:
         docker:
@@ -267,7 +267,7 @@ jobs:
             TERM: dumb
 
         steps:
-            # Checkout the code 
+            # Checkout the code
             - checkout
 
             - run:
@@ -295,7 +295,7 @@ jobs:
             TERM: dumb
 
         steps:
-            # Checkout the code 
+            # Checkout the code
             - checkout
 
             - run:
@@ -324,7 +324,7 @@ jobs:
             TERM: dumb
 
         steps:
-            # Checkout the code 
+            # Checkout the code
             - checkout
 
             - run:
@@ -342,7 +342,7 @@ jobs:
 
             - run:
                 name: Run SmallBoomConfig torture tests
-                command: ci/build-run-csmith-tests.sh SmallBoomConfig 75 
+                command: ci/build-run-csmith-tests.sh SmallBoomConfig 75
 
     smallboomconfig-run-benchmark-tests:
         docker:
@@ -352,7 +352,7 @@ jobs:
             TERM: dumb
 
         steps:
-            # Checkout the code 
+            # Checkout the code
             - checkout
 
             - run:
@@ -380,7 +380,7 @@ jobs:
             TERM: dumb
 
         steps:
-            # Checkout the code 
+            # Checkout the code
             - checkout
 
             - run:
@@ -409,7 +409,7 @@ jobs:
             TERM: dumb
 
         steps:
-            # Checkout the code 
+            # Checkout the code
             - checkout
 
             - run:
@@ -427,7 +427,7 @@ jobs:
 
             - run:
                 name: Run MediumBoomConfig torture tests
-                command: ci/build-run-csmith-tests.sh MediumBoomConfig 75 
+                command: ci/build-run-csmith-tests.sh MediumBoomConfig 75
 
     mediumboomconfig-run-benchmark-tests:
         docker:
@@ -437,7 +437,7 @@ jobs:
             TERM: dumb
 
         steps:
-            # Checkout the code 
+            # Checkout the code
             - checkout
 
             - run:
@@ -465,7 +465,7 @@ jobs:
             TERM: dumb
 
         steps:
-            # Checkout the code 
+            # Checkout the code
             - checkout
 
             - run:
@@ -494,7 +494,7 @@ jobs:
             TERM: dumb
 
         steps:
-            # Checkout the code 
+            # Checkout the code
             - checkout
 
             - run:
@@ -512,7 +512,7 @@ jobs:
 
             - run:
                 name: Run MegaBoomConfig torture tests
-                command: ci/build-run-csmith-tests.sh MegaBoomConfig 75 
+                command: ci/build-run-csmith-tests.sh MegaBoomConfig 75
 
     megaboomconfig-run-benchmark-tests:
         docker:
@@ -522,7 +522,7 @@ jobs:
             TERM: dumb
 
         steps:
-            # Checkout the code 
+            # Checkout the code
             - checkout
 
             - run:
@@ -550,7 +550,7 @@ jobs:
             TERM: dumb
 
         steps:
-            # Checkout the code 
+            # Checkout the code
             - checkout
 
             - run:
@@ -604,6 +604,7 @@ workflows:
 #                    - prepare-build-environment
 
             # Run the respective tests
+
             # Run the BoomConfig tests
 #            - boomconfig-run-csmith-tests:
 #                requires:
