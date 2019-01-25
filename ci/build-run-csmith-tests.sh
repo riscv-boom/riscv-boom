@@ -12,6 +12,6 @@ SIM=${SIM_BASE}${CONFIG}
 AMT_RUNS=$2
 
 # run csmith utility
-cd ci/csmith
+cd $HOME/boom-template/scripts/csmith
 ./install-csmith.sh
 ./run-csmith.sh --sim $HOME/boom-template/verisim/$SIM --run $AMT_RUNS 
