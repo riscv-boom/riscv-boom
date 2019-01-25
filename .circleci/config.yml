@@ -116,8 +116,8 @@ jobs:
             - run:
                 name: Create hash of riscv-tools and boom-template
                 command: |
-                    ci/create-hash.sh rocket-chip
-                    ci/create-hash.sh boom-template
+                    .circleci/create-hash.sh rocket-chip
+                    .circleci/create-hash.sh boom-template
 
             - restore_cache:
                 keys:
@@ -129,7 +129,7 @@ jobs:
 
             - run:
                 name: Building SmallRV32BoomConfig using Verilator
-                command: ci/do-rtl-build.sh SmallRV32BoomConfig
+                command: .circleci/do-rtl-build.sh SmallRV32BoomConfig
                 no_output_timeout: 120m
 
             - save_cache:
@@ -391,7 +391,7 @@ jobs:
             - run:
                 name: Create hash of riscv-tools based on rocket-chip
                 command: |
-                    ci/create-hash.sh rocket-chip
+                    .circleci/create-hash.sh rocket-chip
             - restore_cache:
                 keys:
                     - riscv-tools-installed-v3-{{ checksum "../rocket-chip.hash" }}
