@@ -191,7 +191,7 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
       Mux(io.flush_take_pc,
          io.flush_pc,
       Mux(br_unit.take_pc,
-         br_unit.target(vaddrBits-1,0),
+         br_unit.target,
       Mux(r_f4_valid && r_f4_req.valid,
          r_f4_req.bits.addr,
          io.f2_btb_resp.bits.target)))))
