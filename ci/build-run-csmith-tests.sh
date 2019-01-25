@@ -8,7 +8,7 @@ set -e
 
 SIM_BASE=simulator-boom.system-
 CONFIG=$1
-SIM=${SIM_BASE}${1}
+SIM=${SIM_BASE}${CONFIG}
 AMT_RUNS=$2
 
 # run csmith utility

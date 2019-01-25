@@ -31,59 +31,70 @@ kill_group(){
 }
 
 # Run the csmith test once
+#
+# Args:
+#   $1 instance that this test is running on
+#   $2 seed to run the test with
 run_once () {
+    BASE_NAME=$OUTPUT_DIR/$TEST_NAME-$1-$2
+
     echo "[$1] Running csmith test with seed=$2"
-    csmith --seed $2 > $OUTPUT_DIR/$TEST_NAME-$1-$2.c
+    csmith --seed $2 > $BASE_NAME.c
 
     # Build both a RISCV binary and normal binary
 
     # Test x86-64 first
-    gcc -I$RISCV/include/csmith-2.4.0 -w $OUTPUT_DIR/$TEST_NAME-$1-$2.c -o $OUTPUT_DIR/$TEST_NAME-$1-$2.bin
-    timeout 1s ./$OUTPUT_DIR/$TEST_NAME-$1-$2.bin | awk '{print tolower($0)}' > $OUTPUT_DIR/$TEST_NAME-$1-$2.host.out
+    gcc -I$RISCV/include/csmith-2.4.0 -w $BASE_NAME.c -o $BASE_NAME.bin
+    timeout 1s ./$BASE_NAME.bin | awk '{print tolower($0)}' > $BASE_NAME.host.out
     RV=$?
     if [ $RV -ne 0 ]; then
         echo "[$1] x86-64 binary timed out. Discard and start over."
-        rm $OUTPUT_DIR/$TEST_NAME-$1-$2.bin $OUTPUT_DIR/$TEST_NAME-$1-$2.host.out $OUTPUT_DIR/$TEST_NAME-$1-$2.c
+        rm $BASE_NAME.bin $BASE_NAME.host.out $BASE_NAME.c
         return 0
     fi
 
     # Test RISCV spike version
-    riscv64-unknown-elf-gcc -w -I./$SRC_DIR -DPREALLOCATE=1 -mcmodel=medany -static -std=gnu99 -O2 -ffast-math -fno-common -o $OUTPUT_DIR/$TEST_NAME-$1-$2.riscv $OUTPUT_DIR/$TEST_NAME-$1-$2.c $SRC_DIR/syscalls.c $SRC_DIR/crt.S -static -nostdlib -nostartfiles -lm -lgcc -T $SRC_DIR/link.ld -I$RISCV/include/csmith-2.4.0
-    timeout --foreground 10s spike $OUTPUT_DIR/$TEST_NAME-$1-$2.riscv 1> $OUTPUT_DIR/$TEST_NAME-$1-$2.spike.out 2> $OUTPUT_DIR/$TEST_NAME-$1-$2.spike.log
+    riscv64-unknown-elf-gcc -w -I./$SRC_DIR -DPREALLOCATE=1 -mcmodel=medany -static -std=gnu99 -O2 -ffast-math -fno-common -o $BASE_NAME.riscv $BASE_NAME.c $SRC_DIR/syscalls.c $SRC_DIR/crt.S -static -nostdlib -nostartfiles -lm -lgcc -T $SRC_DIR/link.ld -I$RISCV/include/csmith-2.4.0
+    timeout --foreground 10s spike $BASE_NAME.riscv 1> $BASE_NAME.spike.out 2> $BASE_NAME.spike.log
     RV=$?
     if [ $RV -ne 0 ]; then
         echo "[$1] Spike timed out. Discard and start over."
-        rm $OUTPUT_DIR/$TEST_NAME-$1-$2.bin $OUTPUT_DIR/$TEST_NAME-$1-$2.host.out $OUTPUT_DIR/$TEST_NAME-$1-$2.c $OUTPUT_DIR/$TEST_NAME-$1-$2.riscv $OUTPUT_DIR/$TEST_NAME-$1-$2.spike.out $OUTPUT_DIR/$TEST_NAME-$1-$2.spike.log
+        rm $BASE_NAME.bin $BASE_NAME.host.out $BASE_NAME.c $BASE_NAME.riscv $BASE_NAME.spike.out $BASE_NAME.spike.log
         return 0
     fi
 
     # Compare x86-64 and Spike
-    cmp -s $OUTPUT_DIR/$TEST_NAME-$1-$2.spike.out $OUTPUT_DIR/$TEST_NAME-$1-$2.host.out
+    cmp -s $BASE_NAME.spike.out $BASE_NAME.host.out
     RV=$?
     if [ $RV -ne 0 ]; then
         echo "[$1] Spike produces wrong result compared to x86-64 binary. Discard and start over."
-        rm $OUTPUT_DIR/$TEST_NAME-$1-$2.bin $OUTPUT_DIR/$TEST_NAME-$1-$2.host.out $OUTPUT_DIR/$TEST_NAME-$1-$2.c $OUTPUT_DIR/$TEST_NAME-$1-$2.riscv $OUTPUT_DIR/$TEST_NAME-$1-$2.spike.out $OUTPUT_DIR/$TEST_NAME-$1-$2.spike.log
+        rm $BASE_NAME.bin $BASE_NAME.host.out $BASE_NAME.c $BASE_NAME.riscv $BASE_NAME.spike.out $BASE_NAME.spike.log
         return 0
     fi
 
     # Compare simulator output versus spike
-    $SIM $OUTPUT_DIR/$TEST_NAME-$1-$2.riscv 1> $OUTPUT_DIR/$TEST_NAME-$1-$2.sim.out
-    cmp -s $OUTPUT_DIR/$TEST_NAME-$1-$2.sim.out $OUTPUT_DIR/$TEST_NAME-$1-$2.spike.out
+    $SIM $BASE_NAME.riscv 1> $BASE_NAME.sim.out
+    cmp -s $BASE_NAME.sim.out $BASE_NAME.spike.out
     RV=$?
     if [ $RV -ne 0 ]; then
         echo "[$1] Simulator produced wrong result."
-        $SIM $OUTPUT_DIR/$TEST_NAME-$1-$2.riscv +verbose +vcdplusfile=$OUTPUT_DIR/$TEST_NAME-$1-$2.vpd 1> $OUTPUT_DIR/$TEST_NAME-$1-$2.sim.out 2> $OUTPUT_DIR/$TEST_NAME-$1-$2.sim.log
-        echo "[$1]  Vpd of error file:     $OUTPUT_DIR/$TEST_NAME-$1-$2.vpd"
-        echo "[$1]  Simulator output file: $OUTPUT_DIR/$TEST_NAME-$1-$2.sim.out"
-        echo "[$1]  Simulator log file:    $OUTPUT_DIR/$TEST_NAME-$1-$2.sim.log"
+        $SIM $BASE_NAME.riscv +verbose +vcdplusfile=$BASE_NAME.vpd 1> $BASE_NAME.sim.out 2> $BASE_NAME.sim.log
+        echo "[$1]  Vpd of error file:     $BASE_NAME.vpd"
+        echo "[$1]  Simulator output file: $BASE_NAME.sim.out"
+        echo "[$1]  Simulator log file:    $BASE_NAME.sim.log"
         kill_group
     else
         echo "[$1] Simulator and spike agree."
-        rm $OUTPUT_DIR/$TEST_NAME-$1-$2.bin $OUTPUT_DIR/$TEST_NAME-$1-$2.host.out $OUTPUT_DIR/$TEST_NAME-$1-$2.c $OUTPUT_DIR/$TEST_NAME-$1-$2.riscv $OUTPUT_DIR/$TEST_NAME-$1-$2.spike.out $OUTPUT_DIR/$TEST_NAME-$1-$2.spike.log $OUTPUT_DIR/$TEST_NAME-$1-$2.sim.out
+        rm $BASE_NAME.bin $BASE_NAME.host.out $BASE_NAME.c $BASE_NAME.riscv $BASE_NAME.spike.out $BASE_NAME.spike.log $BASE_NAME.sim.out
         return 0
     fi
 }
 
+# Run the test for a certain amount of times
+# Also setup a random seed
+#
+# Args:
+#   $1 instance that this is running on
 run() {
     if [ $SEED == -1 ]; then
         if [ $RUN_AMT == -1 ]; then
@@ -104,6 +115,7 @@ run() {
     fi
 }
 
+# Parse arguments
 while [ "$1" != "" ];
 do
     case $1 in
@@ -120,7 +132,7 @@ do
                         SEED=$1
                         ;;
         -h | --help )   usage
-                        return 0
+                        exit 0
     esac
     shift
 done
