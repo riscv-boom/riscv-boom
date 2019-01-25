@@ -13,6 +13,10 @@ cd $HOME/boom-template
 echo "Initialize top-level submodules"
 git submodule update --init
 
+# move the pull request riscv-boom repo into boom-template
+rm -rf $HOME/boom-template/boom
+cp -r $HOME/project $HOME/boom-template/boom/
+
 echo "Checking out rocket-chip with hash: $(cat boom/ROCKETCHIP_VERSION)"
 cd rocket-chip
 git fetch

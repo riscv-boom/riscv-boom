@@ -13,11 +13,12 @@ if [ ! -d "$HOME/boom-template" ]; then
     # clone boom-template and create the riscv-tools
     git clone --progress --verbose https://github.com/riscv-boom/boom-template.git
     cd boom-template
-
-    # move the pull request riscv-boom repo into boom-template
-    rm -rf boom
-    cp -r $HOME/project boom/
 fi
+
+# move the pull request riscv-boom repo into boom-template
+rm -rf $HOME/boom-template/boom
+cp -r $HOME/project $HOME/boom-template/boom/
+
 
 cd $HOME/boom-template
 if [ $1 == "boom-template" ]; then
