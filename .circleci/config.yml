@@ -341,7 +341,7 @@ jobs:
                     - boom-template-smallboomconfig-{{ .Branch }}-{{ .Revision }}
 
             - run:
-                name: Run SmallBoomConfig torture tests
+                name: Run SmallBoomConfig csmith tests
                 command: ci/build-run-csmith-tests.sh SmallBoomConfig 75
 
     smallboomconfig-run-benchmark-tests:
@@ -426,7 +426,7 @@ jobs:
                     - boom-template-mediumboomconfig-{{ .Branch }}-{{ .Revision }}
 
             - run:
-                name: Run MediumBoomConfig torture tests
+                name: Run MediumBoomConfig csmith tests
                 command: ci/build-run-csmith-tests.sh MediumBoomConfig 75
 
     mediumboomconfig-run-benchmark-tests:
@@ -511,7 +511,7 @@ jobs:
                     - boom-template-megaboomconfig-{{ .Branch }}-{{ .Revision }}
 
             - run:
-                name: Run MegaBoomConfig torture tests
+                name: Run MegaBoomConfig csmith tests
                 command: ci/build-run-csmith-tests.sh MegaBoomConfig 75
 
     megaboomconfig-run-benchmark-tests:
