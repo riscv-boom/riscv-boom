@@ -19,7 +19,7 @@ jobs:
             - run:
                 name: Create hash of riscv-tools based on rocket-chip
                 command: |
-                    ci/create-hash.sh rocket-chip
+                    .circleci/create-hash.sh rocket-chip
 
             - restore_cache:
                 keys:
@@ -28,7 +28,7 @@ jobs:
             - run:
                 name: Building riscv-tools
                 command: |
-                    ci/build-riscv-tools.sh
+                    .circleci/build-riscv-tools.sh
                 no_output_timeout: 120m
 
             - save_cache:
@@ -50,7 +50,7 @@ jobs:
             - run:
                 name: Create hash of boom-template
                 command: |
-                    ci/create-hash.sh boom-template
+                    .circleci/create-hash.sh boom-template
 
             - restore_cache:
                 keys:
@@ -59,7 +59,7 @@ jobs:
             - run:
                 name: Build Verilator and setup build environment
                 command: |
-                    ci/prepare-for-rtl-build.sh
+                    .circleci/prepare-for-rtl-build.sh
                 no_output_timeout: 120m
 
             - save_cache:
@@ -81,8 +81,8 @@ jobs:
             - run:
                 name: Create hash of riscv-tools and boom-template
                 command: |
-                    ci/create-hash.sh rocket-chip
-                    ci/create-hash.sh boom-template
+                    .circleci/create-hash.sh rocket-chip
+                    .circleci/create-hash.sh boom-template
 
             - restore_cache:
                 keys:
@@ -94,7 +94,7 @@ jobs:
 
             - run:
                 name: Building BoomConfig using Verilator
-                command: ci/do-rtl-build.sh BoomConfig
+                command: .circleci/do-rtl-build.sh BoomConfig
                 no_output_timeout: 120m
 
             - save_cache:
@@ -116,8 +116,8 @@ jobs:
             - run:
                 name: Create hash of riscv-tools and boom-template
                 command: |
-                    ci/create-hash.sh rocket-chip
-                    ci/create-hash.sh boom-template
+                    .circleci/create-hash.sh rocket-chip
+                    .circleci/create-hash.sh boom-template
 
             - restore_cache:
                 keys:
@@ -129,7 +129,7 @@ jobs:
 
             - run:
                 name: Building SmallBoomConfig using Verilator
-                command: ci/do-rtl-build.sh SmallBoomConfig
+                command: .circleci/do-rtl-build.sh SmallBoomConfig
                 no_output_timeout: 120m
 
             - save_cache:
@@ -151,8 +151,8 @@ jobs:
             - run:
                 name: Create hash of riscv-tools and boom-template
                 command: |
-                    ci/create-hash.sh rocket-chip
-                    ci/create-hash.sh boom-template
+                    .circleci/create-hash.sh rocket-chip
+                    .circleci/create-hash.sh boom-template
 
             - restore_cache:
                 keys:
@@ -164,7 +164,7 @@ jobs:
 
             - run:
                 name: Building MediumBoomConfig using Verilator
-                command: ci/do-rtl-build.sh MediumBoomConfig
+                command: .circleci/do-rtl-build.sh MediumBoomConfig
                 no_output_timeout: 120m
 
             - save_cache:
@@ -186,8 +186,8 @@ jobs:
             - run:
                 name: Create hash of riscv-tools and boom-template
                 command: |
-                    ci/create-hash.sh rocket-chip
-                    ci/create-hash.sh boom-template
+                    .circleci/create-hash.sh rocket-chip
+                    .circleci/create-hash.sh boom-template
 
             - restore_cache:
                 keys:
@@ -199,7 +199,7 @@ jobs:
 
             - run:
                 name: Building MegaBoomConfig using Verilator
-                command: ci/do-rtl-build.sh MegaBoomConfig
+                command: .circleci/do-rtl-build.sh MegaBoomConfig
                 no_output_timeout: 120m
 
             - save_cache:
@@ -221,7 +221,7 @@ jobs:
             - run:
                 name: Create hash of riscv-tools based on rocket-chip
                 command: |
-                    ci/create-hash.sh rocket-chip
+                    .circleci/create-hash.sh rocket-chip
 
             - restore_cache:
                 keys:
@@ -245,7 +245,7 @@ jobs:
             - run:
                 name: Create hash of riscv-tools based on rocket-chip
                 command: |
-                    ci/create-hash.sh rocket-chip
+                    .circleci/create-hash.sh rocket-chip
 
             - restore_cache:
                 keys:
@@ -257,7 +257,7 @@ jobs:
 
             - run:
                 name: Run BoomConfig csmith tests
-                command: ci/build-run-csmith-tests.sh BoomConfig 75
+                command: .circleci/build-run-csmith-tests.sh BoomConfig 75
 
     boomconfig-run-benchmark-tests:
         docker:
@@ -273,7 +273,7 @@ jobs:
             - run:
                 name: Create hash of riscv-tools based on rocket-chip
                 command: |
-                    ci/create-hash.sh rocket-chip
+                    .circleci/create-hash.sh rocket-chip
 
             - restore_cache:
                 keys:
@@ -301,7 +301,7 @@ jobs:
             - run:
                 name: Create hash of riscv-tools based on rocket-chip
                 command: |
-                    ci/create-hash.sh rocket-chip
+                    .circleci/create-hash.sh rocket-chip
 
             - restore_cache:
                 keys:
@@ -330,7 +330,7 @@ jobs:
             - run:
                 name: Create hash of riscv-tools based on rocket-chip
                 command: |
-                    ci/create-hash.sh rocket-chip
+                    .circleci/create-hash.sh rocket-chip
 
             - restore_cache:
                 keys:
@@ -342,7 +342,7 @@ jobs:
 
             - run:
                 name: Run SmallBoomConfig csmith tests
-                command: ci/build-run-csmith-tests.sh SmallBoomConfig 75
+                command: .circleci/build-run-csmith-tests.sh SmallBoomConfig 75
 
     smallboomconfig-run-benchmark-tests:
         docker:
@@ -358,7 +358,7 @@ jobs:
             - run:
                 name: Create hash of riscv-tools based on rocket-chip
                 command: |
-                    ci/create-hash.sh rocket-chip
+                    .circleci/create-hash.sh rocket-chip
 
             - restore_cache:
                 keys:
@@ -386,7 +386,7 @@ jobs:
             - run:
                 name: Create hash of riscv-tools based on rocket-chip
                 command: |
-                    ci/create-hash.sh rocket-chip
+                    .circleci/create-hash.sh rocket-chip
 
             - restore_cache:
                 keys:
@@ -415,7 +415,7 @@ jobs:
             - run:
                 name: Create hash of riscv-tools based on rocket-chip
                 command: |
-                    ci/create-hash.sh rocket-chip
+                    .circleci/create-hash.sh rocket-chip
 
             - restore_cache:
                 keys:
@@ -427,7 +427,7 @@ jobs:
 
             - run:
                 name: Run MediumBoomConfig csmith tests
-                command: ci/build-run-csmith-tests.sh MediumBoomConfig 75
+                command: .circleci/build-run-csmith-tests.sh MediumBoomConfig 75
 
     mediumboomconfig-run-benchmark-tests:
         docker:
@@ -443,7 +443,7 @@ jobs:
             - run:
                 name: Create hash of riscv-tools based on rocket-chip
                 command: |
-                    ci/create-hash.sh rocket-chip
+                    .circleci/create-hash.sh rocket-chip
 
             - restore_cache:
                 keys:
@@ -471,7 +471,7 @@ jobs:
             - run:
                 name: Create hash of riscv-tools based on rocket-chip
                 command: |
-                    ci/create-hash.sh rocket-chip
+                    .circleci/create-hash.sh rocket-chip
 
             - restore_cache:
                 keys:
@@ -500,7 +500,7 @@ jobs:
             - run:
                 name: Create hash of riscv-tools based on rocket-chip
                 command: |
-                    ci/create-hash.sh rocket-chip
+                    .circleci/create-hash.sh rocket-chip
 
             - restore_cache:
                 keys:
@@ -512,7 +512,7 @@ jobs:
 
             - run:
                 name: Run MegaBoomConfig csmith tests
-                command: ci/build-run-csmith-tests.sh MegaBoomConfig 75
+                command: .circleci/build-run-csmith-tests.sh MegaBoomConfig 75
 
     megaboomconfig-run-benchmark-tests:
         docker:
@@ -528,7 +528,7 @@ jobs:
             - run:
                 name: Create hash of riscv-tools based on rocket-chip
                 command: |
-                    ci/create-hash.sh rocket-chip
+                    .circleci/create-hash.sh rocket-chip
 
             - restore_cache:
                 keys:
@@ -556,7 +556,7 @@ jobs:
             - run:
                 name: Create hash of riscv-tools based on rocket-chip
                 command: |
-                    ci/create-hash.sh rocket-chip
+                    .circleci/create-hash.sh rocket-chip
 
             - restore_cache:
                 keys:
