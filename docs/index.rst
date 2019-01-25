@@ -6,26 +6,26 @@ Welcome to RISCV-BOOM's documentation!
    :caption: Contents:
    :numbered:
 
-   sections/IntroductionOverview/index
-   sections/InstructionFetch/FetchStage
-   sections/BranchPrediction/index
-   sections/Decode/decode
-   sections/Rename/rename
-   sections/RobDispatch/rob
-   sections/IssueUnit/issue
-   sections/RegisterFileBypassNetwork/registerread
-   sections/Execute/execute
-   sections/LoadStoreUnit/lsu
-   sections/MemorySystemDCacheShim/memory
-   sections/MicroarchEventTracking/uarch-counters
-   sections/Verification/verification
-   sections/Debugging/debugging
-   sections/PhysicalRealization/physical
-   sections/FutureWork/futurework
-   sections/Parameters/parameterization
-   sections/FAQ
-   sections/Terminology
-   sections/Bibliography/Bibliography
+   sections/intro-overview/index
+   sections/instruction-fetch-stage
+   sections/branch-prediction/index
+   sections/decode-stage
+   sections/rename-stage
+   sections/reorder-buffer
+   sections/issue-units
+   sections/reg-file-bypass-network
+   sections/execution-stages
+   sections/load-store-unit
+   sections/memory-system
+   sections/uarch-counters
+   sections/verification
+   sections/debugging
+   sections/physical-realization
+   sections/future-work
+   sections/parameterization
+   sections/faq
+   sections/terminology
+   sections/bibliography/bibliography
 
 
 Indices and tables
