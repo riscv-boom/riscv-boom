@@ -27,7 +27,7 @@ class BoomConfig extends Config(
    new DefaultBoomConfig ++
    new WithNBoomCores(1) ++
    new WithoutTLMonitors ++
-      new freechips.rocketchip.system.BaseConfig)
+   new freechips.rocketchip.system.BaseConfig)
 
 // Main configs. SmallBoomConfig and MediumBoomConfig are best-maintained
 // MediumBoomConfig is typically described in documentation

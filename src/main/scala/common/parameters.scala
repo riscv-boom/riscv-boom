@@ -126,7 +126,7 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
    val usingFDivSqrt = boomParams.fpu.isDefined && boomParams.fpu.get.divSqrt
 
    val mulDivParams = boomParams.mulDiv.getOrElse(MulDivParams())
-   // TODO: Allow this
+   // TODO: Allow RV32IF
    require(!(xLen == 32 && usingFPU), "RV32 does not support fp")
 
    //************************************
