@@ -739,26 +739,29 @@ abstract class IterativeFunctionalUnit(data_width: Int)(implicit p: Parameters)
 }
 
 
-class MulDivUnit(data_width: Int)(implicit p: Parameters) extends IterativeFunctionalUnit(data_width)(p)
+class DivUnit(data_width: Int)(implicit p: Parameters) extends IterativeFunctionalUnit(data_width)(p)
 {
-   val muldiv = Module(new freechips.rocketchip.rocket.MulDiv(mulDivParams, width = data_width))
+
+   // We don't use the iterative multiply functionality here.
+   // Instead we use the PipelinedMultiplier
+   val div = Module(new freechips.rocketchip.rocket.MulDiv(mulDivParams, width = data_width))
 
    // request
-   muldiv.io.req.valid    := io.req.valid && !this.do_kill
-   muldiv.io.req.bits.dw  := io.req.bits.uop.ctrl.fcn_dw
-   muldiv.io.req.bits.fn  := io.req.bits.uop.ctrl.op_fcn
-   muldiv.io.req.bits.in1 := io.req.bits.rs1_data
-   muldiv.io.req.bits.in2 := io.req.bits.rs2_data
-   muldiv.io.req.bits.tag := DontCare
-   io.req.ready           := muldiv.io.req.ready
+   div.io.req.valid    := io.req.valid && !this.do_kill
+   div.io.req.bits.dw  := io.req.bits.uop.ctrl.fcn_dw
+   div.io.req.bits.fn  := io.req.bits.uop.ctrl.op_fcn
+   div.io.req.bits.in1 := io.req.bits.rs1_data
+   div.io.req.bits.in2 := io.req.bits.rs2_data
+   div.io.req.bits.tag := DontCare
+   io.req.ready        := div.io.req.ready
 
    // handle pipeline kills and branch misspeculations
-   muldiv.io.kill         := this.do_kill
+   div.io.kill         := this.do_kill
 
    // response
-   io.resp.valid          := muldiv.io.resp.valid && !this.do_kill
-   muldiv.io.resp.ready   := io.resp.ready
-   io.resp.bits.data      := muldiv.io.resp.bits.data
+   io.resp.valid       := div.io.resp.valid && !this.do_kill
+   div.io.resp.ready   := io.resp.ready
+   io.resp.bits.data   := div.io.resp.bits.data
 }
 
 class PipelinedMulUnit(num_stages: Int, data_width: Int)(implicit p: Parameters)

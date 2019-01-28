@@ -293,12 +293,11 @@ class ALUExeUnit(
    }
 
    // Div/Rem Unit -----------------------
-   // Note: We use the PipelinedMul unit for muls
-   var div: MulDivUnit = null
+   var div: DivUnit = null
    val div_resp_val = WireInit(false.B)
    if (has_div)
    {
-      div = Module(new MulDivUnit(xLen))
+      div = Module(new DivUnit(xLen))
       div.io <> DontCare
       div.io.req.valid           := io.req.valid && io.req.bits.uop.fu_code_is(FU_DIV) && has_div.B
       div.io.req.bits.uop        := io.req.bits.uop
