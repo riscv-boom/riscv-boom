@@ -269,7 +269,6 @@ jobs:
     boomconfig-run-csmith-tests:
         docker:
             - image: riscvboom/riscvboom-images:0.0.5
-        no_output_timeout: 30m
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -294,6 +293,7 @@ jobs:
             - run:
                 name: Run BoomConfig csmith tests
                 command: .circleci/build-run-csmith-tests.sh BoomConfig 50
+                no_output_timeout: 30m
 
     boomconfig-run-benchmark-tests:
         docker:
@@ -355,7 +355,6 @@ jobs:
     smallboomconfig-run-csmith-tests:
         docker:
             - image: riscvboom/riscvboom-images:0.0.5
-        no_output_timeout: 30m
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -379,6 +378,7 @@ jobs:
             - run:
                 name: Run SmallBoomConfig csmith tests
                 command: .circleci/build-run-csmith-tests.sh SmallBoomConfig 50
+                no_output_timeout: 30m
 
     # No benchmark tests because those are rv64gc
     smallrv32boomconfig-run-assembly-tests:
@@ -465,7 +465,6 @@ jobs:
     mediumboomconfig-run-csmith-tests:
         docker:
             - image: riscvboom/riscvboom-images:0.0.5
-        no_output_timeout: 30m
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -490,6 +489,7 @@ jobs:
             - run:
                 name: Run MediumBoomConfig csmith tests
                 command: .circleci/build-run-csmith-tests.sh MediumBoomConfig 50
+                no_output_timeout: 30m
 
     mediumboomconfig-run-benchmark-tests:
         docker:
@@ -551,7 +551,6 @@ jobs:
     megaboomconfig-run-csmith-tests:
         docker:
             - image: riscvboom/riscvboom-images:0.0.5
-        no_output_timeout: 30m
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -576,6 +575,7 @@ jobs:
             - run:
                 name: Run MegaBoomConfig csmith tests
                 command: .circleci/build-run-csmith-tests.sh MegaBoomConfig 50
+                no_output_timeout: 30m
 
     megaboomconfig-run-benchmark-tests:
         docker:
