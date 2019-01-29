@@ -273,15 +273,6 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
          // Need special case since 0th instruction may carry over the wrap around
          inst     := f3_imemresp.data(i*coreInstBits+2*coreInstBits-1,i*coreInstBits)
          is_valid := use_prev || !(f3_valid_mask(i-1) && f3_fetch_bundle.insts(i-1)(1,0) === 3.U)
-      } else if (fetchBytes > 8 && i == fetch_width / 2 - 1) {
-         // If we are using a banked I$ we could get cut-off halfway through the fetch bundle
-         inst     := f3_imemresp.data(i*coreInstBits+2*coreInstBits-1,i*coreInstBits)
-         is_valid := !(f3_valid_mask(i-1) && f3_fetch_bundle.insts(i-1)(1,0) === 3.U) &&
-                     !(inst(1,0) === 3.U && !f3_imemresp.mask(i+1))
-         when (!(f3_valid_mask(i-1) && f3_fetch_bundle.insts(i-1)(1,0) === 3.U) &&
-            (inst(1,0) === 3.U && !f3_imemresp.mask(i+1))) {
-            is_half_packet := true.B
-         }
       } else if (i == fetch_width - 1) {
          inst     := Cat(0.U(16.W), f3_imemresp.data(fetchWidth*coreInstBits-1,i*coreInstBits))
          is_valid := !((f3_valid_mask(i-1) && f3_fetch_bundle.insts(i-1)(1,0) === 3.U) ||
@@ -353,13 +344,14 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
          f3_jal_target,
          nextFetchStart(f3_aligned_pc)))
 
+
    when (f3_valid && f4_ready && !r_f4_req.valid) {
-      val last_idx  = Mux(is_half_packet, (fetchWidth/2-1).U, (fetchWidth-1).U)
+      val last_idx  = Mux(inLastChunk(f3_fetch_bundle.pc), (fetchWidth/2-1).U, (fetchWidth-1).U)
       prev_is_half := (!(f3_valid_mask(last_idx-1.U) && f3_fetch_bundle.insts(last_idx-1.U)(1,0) === 3.U)
                     && f3_fetch_bundle.insts(last_idx)(1,0) === 3.U)
       prev_half    := f3_fetch_bundle.insts(last_idx)(15,0)
       prev_nextpc  := alignToFetchBoundary(f3_fetch_bundle.pc) + Mux( is_half_packet
-                                                                    , (fetchBytes/2).U
+                                                                    , bankBytes.U
                                                                     , fetchBytes.U)
 
    }
