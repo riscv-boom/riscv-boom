@@ -244,7 +244,7 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
    val prev_half    = Reg(UInt(coreInstBits.W))
    // Tracks if last fetchpacket contained a half-inst
    val prev_is_half = RegInit(false.B)
-   // Tracks nextpc after the previous fetch bundl
+   // Tracks nextpc after the previous fetch bundle
    val prev_nextpc = Reg(UInt(vaddrBitsExtended.W))
 
    val is_half_packet = WireInit(false.B) // This fetch packet only contains 1 bank worth of data
