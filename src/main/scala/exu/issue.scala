@@ -201,5 +201,8 @@ class IssueUnits(num_wakeup_ports: Int)(implicit val p: Parameters)
 //      issue_Units =issueConfigs colect {if iqType=....)
    iss_units += Module(new IssueUnitCollasping(issueParams.find(_.iqType == IQT_MEM.litValue).get, num_wakeup_ports))
    iss_units += Module(new IssueUnitCollasping(issueParams.find(_.iqType == IQT_INT.litValue).get, num_wakeup_ports))
+
+   def mem_iq = iss_units.find(_.iqType == IQT_MEM.litValue).get
+   def int_iq = iss_units.find(_.iqType == IQT_INT.litValue).get
 }
 
