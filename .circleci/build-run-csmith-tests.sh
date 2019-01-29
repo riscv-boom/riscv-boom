@@ -14,4 +14,4 @@ AMT_RUNS=$2
 # run csmith utility
 cd $HOME/boom-template/scripts/csmith
 ./install-csmith.sh
-./run-csmith.sh --sim $HOME/boom-template/verisim/$SIM --run $AMT_RUNS 
+./run-csmith.sh --sim $HOME/boom-template/verisim/$SIM --run $AMT_RUNS --nodebug
