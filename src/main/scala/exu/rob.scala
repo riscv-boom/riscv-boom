@@ -183,7 +183,7 @@ class Rob(
    width: Int,
    num_rob_entries: Int,
    val num_wakeup_ports: Int,
-   num_fpu_ports: Int
+   val num_fpu_ports: Int
    )(implicit p: Parameters) extends BoomModule()(p)
 {
    val io = IO(new RobIo(width, num_wakeup_ports, num_fpu_ports))

@@ -17,7 +17,7 @@ import freechips.rocketchip.config.Parameters
 import scala.collection.mutable.ArrayBuffer
 import boom.common._
 
-class ExecutionUnits(fpu: Boolean = false)(implicit val p: Parameters) extends HasBoomCoreParameters
+class ExecutionUnits(fpu: Boolean)(implicit val p: Parameters) extends HasBoomCoreParameters
 {
    val totalIssueWidth = issueParams.map(_.issueWidth).sum
 
@@ -65,14 +65,14 @@ class ExecutionUnits(fpu: Boolean = false)(implicit val p: Parameters) extends H
 
    lazy val memory_unit =
    {
-      require (exe_units.count(_.is_mem_unit) == 1) // only one mem_unit supported
-      exe_units.find(_.is_mem_unit).get
+      require (exe_units.count(_.has_mem) == 1) // only one mem_unit supported
+      exe_units.find(_.has_mem).get
    }
 
    lazy val br_unit =
    {
-      require (exe_units.count(_.hasBranchUnit) == 1)
-      exe_units.find(_.hasBranchUnit).get
+      require (exe_units.count(_.has_br_unit) == 1)
+      exe_units.find(_.has_br_unit).get
    }
 
    lazy val csr_unit =
@@ -83,38 +83,45 @@ class ExecutionUnits(fpu: Boolean = false)(implicit val p: Parameters) extends H
 
    lazy val ifpu_unit =
    {
+      require (usingFPU)
       require (exe_units.count(_.has_ifpu) == 1)
       exe_units.find(_.has_ifpu).get
+   }
+   lazy val fpiu_unit =
+   {
+      require (usingFPU)
+      require (exe_units.count(_.has_fpiu) == 1)
+      exe_units.find(_.has_fpiu).get
    }
 
    lazy val br_unit_io =
    {
-      require (exe_units.count(_.hasBranchUnit) == 1)
-      (exe_units.find(_.hasBranchUnit).get).io.br_unit
+      require (exe_units.count(_.has_br_unit) == 1)
+      (exe_units.find(_.has_br_unit).get).io.br_unit
    }
 
    lazy val br_unit_idx =
    {
-      exe_units.indexWhere(_.hasBranchUnit)
+      exe_units.indexWhere(_.has_br_unit)
    }
 
-
-   if (!fpu) {
+   if (!fpu)
+   {
       val int_width = issueParams.find(_.iqType == IQT_INT.litValue).get.issueWidth
       val memExeUnit = Module(new MemExeUnit())
 
       memExeUnit.io.status := DontCare
       memExeUnit.io.get_ftq_pc := DontCare
-      memExeUnit.io.resp foreach { c => c.ready := DontCare }
+      memExeUnit.io.ll_iresp.ready := DontCare
 
       exe_units += memExeUnit
 
-      val aluExeUnit = Module(new ALUExeUnit(is_branch_unit      = true
-                                          , shares_csr_wport = true
-                                          , has_mul          = true
-                                          , has_div          = true
-                                          , has_ifpu         = int_width==1
-                                          ))
+      val aluExeUnit = Module(new ALUExeUnit(has_br_unit      = true
+         , shares_csr_wport = true
+         , has_mul          = true
+         , has_div          = true
+         , has_ifpu         = usingFPU
+      ))
 
       aluExeUnit.io.lsu_io := DontCare
       aluExeUnit.io.dmem := DontCare
@@ -123,8 +130,7 @@ class ExecutionUnits(fpu: Boolean = false)(implicit val p: Parameters) extends H
       exe_units += aluExeUnit
 
       for (w <- 0 until int_width-1) {
-         val is_last = w == (int_width-2)
-         val aluExeUnit = Module(new ALUExeUnit(has_ifpu = is_last))
+         val aluExeUnit = Module(new ALUExeUnit)
 
          aluExeUnit.io.dmem := DontCare
          aluExeUnit.io.lsu_io := DontCare
@@ -133,10 +139,11 @@ class ExecutionUnits(fpu: Boolean = false)(implicit val p: Parameters) extends H
 
          exe_units += aluExeUnit
       }
-   } else {
-      require (usingFPU)
+   }
+   else
+   {
       val fp_width = issueParams.find(_.iqType == IQT_FP.litValue).get.issueWidth
-      require (fp_width <= 1) // TODO hacks to fix include uopSTD_fp needing a proper func unit.
+      require (fp_width == 1) // TODO hacks to fix include uopSTD_fp needing a proper func unit.
       for (w <- 0 until fp_width) {
          val fpuExeUnit = Module(new FPUExeUnit(has_fpu = true,
                                             has_fdiv = usingFDivSqrt && (w==0),
@@ -148,16 +155,6 @@ class ExecutionUnits(fpu: Boolean = false)(implicit val p: Parameters) extends H
 
          exe_units += fpuExeUnit
       }
-
-      val intToExeUnit = Module(new IntToFPExeUnit())
-
-      intToExeUnit.io.status := DontCare
-      intToExeUnit.io.lsu_io := DontCare
-      intToExeUnit.io.dmem := DontCare
-      intToExeUnit.io.get_ftq_pc := DontCare
-
-      exe_units += intToExeUnit
-
    }
 
    val exe_units_str = new StringBuilder
@@ -167,45 +164,39 @@ class ExecutionUnits(fpu: Boolean = false)(implicit val p: Parameters) extends H
          + "\n    -== " + Seq("Single","Dual","Triple","Quad","Five","Six")(totalIssueWidth-1) + " Issue ==- \n")
       }
    )
+
    for (exe_unit <- exe_units) {
       exe_units_str.append(exe_unit.toString)
    }
    override def toString: String =  exe_units_str.toString
 
    require (exe_units.length != 0)
-   // if this is for FPU units, we don't need a memory unit (or other integer units)..
-   require (exe_units.map(_.is_mem_unit).reduce(_|_) || fpu, "Datapath is missing a memory unit.")
-   require (exe_units.map(_.has_mul).reduce(_|_) || fpu, "Datapath is missing a multiplier.")
-   require (exe_units.map(_.has_div).reduce(_|_) || fpu, "Datapath is missing a divider.")
-   require (exe_units.map(_.has_fpu).reduce(_|_) == usingFPU || !fpu,
-            "Datapath is missing a fpu (or has an fpu and shouldnt).")
-
-   val num_rf_read_ports = exe_units.map(_.num_rf_read_ports).reduce[Int](_+_)
-   val num_rf_write_ports = exe_units.map(_.num_rf_write_ports).reduce[Int](_+_)
-   val num_total_bypass_ports = exe_units.withFilter(_.isBypassable).map(_.numBypassPorts).foldLeft(0)(_+_)
-//   val num_fast_wakeup_ports = exe_units.count(_.isBypassable)
-   // TODO reduce the number of slow wakeup ports - currently have every write-port also be a slow-wakeup-port.
-   // +1 is for FP->Int moves. TODO HACK move toint to share the mem port.
-//   val num_slow_wakeup_ports = num_rf_write_ports + 1
-   // The slow write ports to the regfile are variable latency, and thus can't be bypassed.
-   // val num_slow_wakeup_ports = exe_units.map(_.num_variable_write_ports).reduce[Int](_+_)
-
-   // TODO bug, this can return too many fflag ports,e.g., the FPU is shared with the mem unit and thus has two wb ports
-   val num_fpu_ports = exe_units.withFilter(_.hasFFlags).map(_.num_rf_write_ports).foldLeft(0)(_+_)
-
-   val bypassable_write_port_mask = {
-      if (fpu)
-      {
-         // NOTE: hack for the long latency load pipe which is write_port(0) and doesn't support bypassing.
-         val mask = Seq(false) ++ exe_units.withFilter(_.uses_iss_unit).map(_.isBypassable)
-         require (!mask.reduce(_||_)) // don't support any bypassing in FP
-         mask
-      }
-      else
-      {
-         // The mem-unit will also bypass writes to readers in the RRD stage.
-         exe_units.withFilter(_.usesIRF).map(u => u.isBypassable || u.is_mem_unit)
-      }
+   if (!fpu)
+   {
+      // if this is for FPU units, we don't need a memory unit (or other integer units)..
+      require (exe_units.map(_.has_mem).reduce(_|_), "Datapath is missing a memory unit.")
+      require (exe_units.map(_.has_mul).reduce(_|_), "Datapath is missing a multiplier.")
+      require (exe_units.map(_.has_div).reduce(_|_), "Datapath is missing a divider.")
    }
+   else
+   {
+      require (exe_units.map(_.has_fpu).reduce(_|_),
+         "Datapath is missing a fpu (or has an fpu and shouldnt).")
+   }
+
+   val num_irf_readers        = exe_units.count(_.reads_irf)
+   val num_irf_read_ports     = exe_units.count(_.reads_irf) * 2
+   val num_irf_write_ports    = exe_units.count(_.writes_irf)
+   val num_ll_irf_write_ports = exe_units.count(_.writes_ll_irf)
+   val num_total_bypass_ports = exe_units.withFilter(_.bypassable).map(_.num_bypass_stages).foldLeft(0)(_+_)
+
+   val num_frf_readers        = exe_units.count(_.reads_frf)
+   val num_frf_read_ports     = exe_units.count(_.reads_frf) * 3
+   val num_frf_write_ports    = exe_units.count(_.writes_frf)
+   val num_ll_frf_write_ports = exe_units.count(_.writes_ll_frf)
+
+   // The mem-unit will also bypass writes to readers in the RRD stage.
+   // NOTE: This does NOT include the ll_wport
+   val bypassable_write_port_mask = exe_units.withFilter(x => x.writes_irf).map(u => u.bypassable)
 
 }
