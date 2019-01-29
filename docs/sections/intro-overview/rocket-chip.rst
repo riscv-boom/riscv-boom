@@ -1,5 +1,5 @@
-The Rocket-Chip Repository Layout
-====================================
+The Rocket-Chip Repository
+==========================
 
 .. _boom-chip:
 .. figure:: /figures/chip.png

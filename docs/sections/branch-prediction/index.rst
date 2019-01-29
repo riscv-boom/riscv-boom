@@ -18,9 +18,9 @@ predictor" (NLP) and a slower but more complex “backing predictor"
     :maxdepth: 2
     :caption: Branch Prediction:
 
-    Rocket-NLP-Predictor
-    Backing-Predictor
-    Configurations
+    rocket-nl-predictor
+    backing-predictor
+    configurations
 
 .. [1] Unfortunately, the terminology in the literature gets a bit
     muddled here in what to call different types and levels of branch

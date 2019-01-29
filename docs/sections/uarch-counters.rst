@@ -14,11 +14,11 @@ The available HPE's are split into *event sets* and *events*.
 *Event sets* are groupings of similar microarchitectural *events* (branch prediction events,
 memory events, etc). To access an *HPE* you must choose the correct *event set* and
 *event* bit and write to the proper HPE register for that event. An example of event set
-numbers and the event bit for a particular event is given in :ref:`uarch-counter-table`.
+numbers and the event bit for a particular event is given below.
 
 .. _uarch-counter-table:
+    :caption: UArch Event Sets and Events
 
-Table: UArch Events
 +-------------+-----------+--------------------------------+
 | Event Set # | Event Bit | Description                    |
 +=============+===========+================================+
@@ -33,7 +33,7 @@ To access an HPC, you must first set up the privilege access level
 of the particular HPC using ``mcounteren`` and ``scounteren``. Afterwards,
 you write to the particular HPE register to setup which event(s) you want to
 track. The value to write to the HPE register is in bits [7:0] the event set
-and in bits [...:8] the event bitmask. Note that the bitmask can be a
+and in bits [?:8] the event bitmask. Note that the bitmask can be a
 singular event **or** multiple events.
 
 .. _enable-uarch-counters:
