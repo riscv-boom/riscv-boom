@@ -160,7 +160,10 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
    // Load/Store Unit & ExeUnits
    exe_units.memory_unit.io.lsu_io <> lsu.io
+
+   // TODO: Generate this in lsu
    val sxt_ldMiss = Wire(Bool())
+
 
 
 
@@ -680,6 +683,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       mem_iq.io.iss_valids(0) &&
       mem_iq.io.iss_uops(0).is_load &&
       !mem_iq.io.iss_uops(0).fp_val &&
+      mem_iq.io.iss_uops(0).pdst =/= 0.U &&
       !(sxt_ldMiss && (mem_iq.io.iss_uops(0).iw_p1_poisoned || mem_iq.io.iss_uops(0).iw_p2_poisoned))
    sxt_ldMiss :=
       ((lsu.io.nack.valid && lsu.io.nack.isload) || dc_shim.io.core.load_miss) &&
@@ -1432,7 +1436,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
             when (rob.io.commit.uops(w).dst_rtype === RT_FIX && rob.io.commit.uops(w).ldst =/= 0.U)
             {
                printf("%d 0x%x ",
-                  priv, Sext(rob.io.commit.uops(w).pc(vaddrBits,0), xLen))
+                  priv, Sext(rob.io.commit.uops(w).pc(vaddrBits-1,0), xLen))
                printf_inst(rob.io.commit.uops(w))
                printf(" x%d 0x%x\n",
                   rob.io.commit.uops(w).ldst, rob.io.commit.uops(w).debug_wdata)
@@ -1441,7 +1445,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
             .elsewhen (rob.io.commit.uops(w).dst_rtype === RT_FLT)
             {
                printf("%d 0x%x ",
-                  priv, Sext(rob.io.commit.uops(w).pc(vaddrBits,0), xLen))
+                  priv, Sext(rob.io.commit.uops(w).pc(vaddrBits-1,0), xLen))
                printf_inst(rob.io.commit.uops(w))
                printf(" f%d 0x%x\n",
                   rob.io.commit.uops(w).ldst, rob.io.commit.uops(w).debug_wdata)
@@ -1449,7 +1453,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
             .otherwise
             {
                printf("%d 0x%x ",
-                  priv, Sext(rob.io.commit.uops(w).pc(vaddrBits,0), xLen))
+                  priv, Sext(rob.io.commit.uops(w).pc(vaddrBits-1,0), xLen))
                printf_inst(rob.io.commit.uops(w))
                printf("\n")
             }
@@ -1560,7 +1564,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       for (w <- 0 until COMMIT_WIDTH)
       {
          io.trace(w).valid      := rob.io.commit.valids(w)
-         io.trace(w).iaddr      := Sext(rob.io.commit.uops(w).pc(vaddrBits,0), xLen)
+         io.trace(w).iaddr      := Sext(rob.io.commit.uops(w).pc(vaddrBits-1,0), xLen)
          io.trace(w).insn       := rob.io.commit.uops(w).inst
          // I'm uncertain the commit signals from the ROB match these CSR exception signals
          io.trace(w).priv       := csr.io.status.prv

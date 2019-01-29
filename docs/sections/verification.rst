@@ -31,7 +31,7 @@ two directories. Firstly, the configuration file used to run CI is located at
 :code:`.circleci/config.yml`. This specifies the current tests and builds that
 are run using which BOOM configurations. Additionally, the DockerFile used to 
 build the CI docker images resides in :code:`.circleci/images`. Finally, all
-scripts that are used during the CI run are located at :code:`ci`. Note that even
+scripts that are used during the CI run are located at :code:`.circleci/`. Note that even
 though BOOM template is cloned during the CI process, the BOOM repository specifies
 which version of Rocket-Chip to use (which in turn determines the proper version of
 riscv-tools).
@@ -46,4 +46,5 @@ Current Tests Used:
 
 * riscv-tools assembly tests
 * riscv-tools benchmarks
+* csmith random C tests
 * scala style checks 

@@ -696,7 +696,9 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
       mem_ld_killed := true.B && mem_fired_ld
    }
 
-   io.mem_ldSpecWakeup.valid := RegNext(will_fire_load_incoming && !io.exe_resp.bits.uop.fp_val, init=false.B)
+   io.mem_ldSpecWakeup.valid := RegNext(will_fire_load_incoming
+                                     && !io.exe_resp.bits.uop.fp_val
+                                     && io.exe_resp.bits.uop.pdst =/= 0.U, init=false.B)
    io.mem_ldSpecWakeup.bits := mem_ld_uop.pdst
 
    // tell the ROB to clear the busy bit on the incoming store

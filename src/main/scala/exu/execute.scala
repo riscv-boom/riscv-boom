@@ -130,15 +130,14 @@ class ALUExeUnit(
    has_mul         : Boolean = false,
    has_div         : Boolean = false,
    has_fdiv        : Boolean = false,
-   has_ifpu        : Boolean = false,
-   use_slow_mul    : Boolean = false)
+   has_ifpu        : Boolean = false)
    (implicit p: Parameters)
    extends ExecutionUnit(
       num_rf_read_ports = if (has_fpu) 3 else 2,
       num_rf_write_ports = 1,
       num_bypass_stages =
          (if (has_fpu && has_alu) p(tile.TileKey).core.fpu.get.dfmaLatency
-         else if (has_alu && has_mul && !use_slow_mul) 3 //TODO XXX p(tile.TileKey).core.imulLatency
+         else if (has_alu && has_mul) 3 //TODO XXX p(tile.TileKey).core.imulLatency
          else if (has_alu) 1 else 0),
       data_width = if (has_fpu || has_fdiv) 65 else 64,
       bypassable = has_alu,
@@ -152,22 +151,19 @@ class ALUExeUnit(
       has_fdiv = has_fdiv,
       has_ifpu = has_ifpu)(p)
 {
-   val has_muldiv = has_div || (has_mul && use_slow_mul)
 
    val out_str = new StringBuilder
    out_str.append("\n     ExeUnit--")
    if (has_alu) out_str.append("\n       - ALU")
    if (has_fpu) out_str.append("\n       - FPU (Latency: " + dfmaLatency + ")")
-   if (has_mul && !use_slow_mul) out_str.append("\n       - Mul (pipelined)")
-   if (has_div && has_mul && use_slow_mul) out_str.append("\n       - Mul/Div (unpipelined)")
-   else if (has_mul && use_slow_mul) out_str.append("\n       - Mul (unpipelined)")
-   else if (has_div) out_str.append("\n       - Div")
+   if (has_mul) out_str.append("\n       - Mul")
+   if (has_div) out_str.append("\n       - Div")
    if (has_fdiv) out_str.append("\n       - FDiv/FSqrt")
    if (has_ifpu) out_str.append("\n       - IFPU (for read port access)")
 
    override def toString: String = out_str.toString
 
-   val muldiv_busy = WireInit(false.B)
+   val div_busy = WireInit(false.B)
    val fdiv_busy = WireInit(false.B)
 
    // The Functional Units --------------------
@@ -175,11 +171,10 @@ class ALUExeUnit(
 
    io.fu_types := FU_ALU |
                   Mux(has_fpu.B, FU_FPU, 0.U) |
-                  Mux((has_mul && !use_slow_mul).B, FU_MUL, 0.U) |
-                  (Mux(!muldiv_busy && (has_mul && use_slow_mul).B, FU_MUL, 0.U)) |
-                  (Mux(!muldiv_busy && has_div.B, FU_DIV, 0.U)) |
-                  (Mux(shares_csr_wport.B, FU_CSR, 0.U)) |
-                  (Mux(is_branch_unit.B, FU_BRU, 0.U)) |
+                  Mux(has_mul.B, FU_MUL, 0.U) |
+                  Mux(!div_busy && has_div.B, FU_DIV, 0.U) |
+                  Mux(shares_csr_wport.B, FU_CSR, 0.U) |
+                  Mux(is_branch_unit.B, FU_BRU, 0.U) |
                   Mux(!fdiv_busy && has_fdiv.B, FU_FDV, 0.U)
 
 
@@ -187,7 +182,9 @@ class ALUExeUnit(
    var alu: ALUUnit = null
    if (has_alu)
    {
-      alu = Module(new ALUUnit(is_branch_unit = is_branch_unit, num_stages = num_bypass_stages))
+      alu = Module(new ALUUnit(is_branch_unit = is_branch_unit,
+                               num_stages = num_bypass_stages,
+                               data_width = xLen))
       alu.io.req.valid         := io.req.valid &&
                                       (io.req.bits.uop.fu_code === FU_ALU ||
                                        io.req.bits.uop.fu_code === FU_BRU ||
@@ -220,9 +217,9 @@ class ALUExeUnit(
 
    // Pipelined, IMul Unit ------------------
    var imul: PipelinedMulUnit = null
-   if (has_mul && !use_slow_mul)
+   if (has_mul)
    {
-      imul = Module(new PipelinedMulUnit(imulLatency))
+      imul = Module(new PipelinedMulUnit(imulLatency, xLen))
       imul.io <> DontCare
       imul.io.req.valid         := io.req.valid && io.req.bits.uop.fu_code_is(FU_MUL)
       imul.io.req.bits.uop      := io.req.bits.uop
@@ -295,30 +292,28 @@ class ALUExeUnit(
       fu_units += fdivsqrt
    }
 
-   // Mul/Div/Rem Unit -----------------------
-   var muldiv: MulDivUnit = null
-   val muldiv_resp_val = WireInit(false.B)
-   if (has_muldiv)
+   // Div/Rem Unit -----------------------
+   var div: DivUnit = null
+   val div_resp_val = WireInit(false.B)
+   if (has_div)
    {
-      muldiv = Module(new MulDivUnit())
-      muldiv.io <> DontCare
-      muldiv.io.req.valid           := io.req.valid &&
-                                       ((io.req.bits.uop.fu_code_is(FU_DIV) && has_div.B) ||
-                                        (io.req.bits.uop.fu_code_is(FU_MUL) && (has_mul && use_slow_mul).B))
-      muldiv.io.req.bits.uop        := io.req.bits.uop
-      muldiv.io.req.bits.rs1_data   := io.req.bits.rs1_data
-      muldiv.io.req.bits.rs2_data   := io.req.bits.rs2_data
-      muldiv.io.brinfo              := io.brinfo
-      muldiv.io.req.bits.kill       := io.req.bits.kill
+      div = Module(new DivUnit(xLen))
+      div.io <> DontCare
+      div.io.req.valid           := io.req.valid && io.req.bits.uop.fu_code_is(FU_DIV) && has_div.B
+      div.io.req.bits.uop        := io.req.bits.uop
+      div.io.req.bits.rs1_data   := io.req.bits.rs1_data
+      div.io.req.bits.rs2_data   := io.req.bits.rs2_data
+      div.io.brinfo              := io.brinfo
+      div.io.req.bits.kill       := io.req.bits.kill
 
       // share write port with the pipelined units
-      muldiv.io.resp.ready := !(fu_units.map(_.io.resp.valid).reduce(_|_))
+      div.io.resp.ready := !(fu_units.map(_.io.resp.valid).reduce(_|_))
 
-      muldiv_resp_val := muldiv.io.resp.valid
-      muldiv_busy := !muldiv.io.req.ready ||
-                     (io.req.valid && (io.req.bits.uop.fu_code_is(FU_DIV) ||
-                                      (io.req.bits.uop.fu_code_is(FU_MUL) && (has_mul && use_slow_mul).B)))
-      fu_units += muldiv
+      div_resp_val := div.io.resp.valid
+      div_busy     := !div.io.req.ready ||
+                      (io.req.valid && io.req.bits.uop.fu_code_is(FU_DIV))
+
+      fu_units += div
    }
 
    // Outputs (Write Port #0)  ---------------
@@ -337,9 +332,9 @@ class ALUExeUnit(
 
    io.resp(0).bits.fflags := Mux(fpu_resp_val, fpu_resp_fflags, fdiv_resp_fflags)
 
-   assert ((PopCount(fu_units.map(_.io.resp.valid)) <= 1.U && !muldiv_resp_val && !fdiv_resp_val) ||
-          (PopCount(fu_units.map(_.io.resp.valid)) <= 2.U && (muldiv_resp_val || fdiv_resp_val)) ||
-          (PopCount(fu_units.map(_.io.resp.valid)) <= 3.U && muldiv_resp_val && fdiv_resp_val)
+   assert ((PopCount(fu_units.map(_.io.resp.valid)) <= 1.U && !div_resp_val && !fdiv_resp_val) ||
+          (PopCount(fu_units.map(_.io.resp.valid)) <= 2.U && (div_resp_val || fdiv_resp_val)) ||
+          (PopCount(fu_units.map(_.io.resp.valid)) <= 3.U && div_resp_val && fdiv_resp_val)
       , "Multiple functional units are fighting over the write port.")
 }
 

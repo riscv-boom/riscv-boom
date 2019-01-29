@@ -112,7 +112,6 @@ class ExecutionUnits(fpu: Boolean = false)(implicit val p: Parameters) extends H
       val aluExeUnit = Module(new ALUExeUnit(is_branch_unit      = true
                                           , shares_csr_wport = true
                                           , has_mul          = true
-                                          , use_slow_mul     = false
                                           , has_div          = true
                                           , has_ifpu         = int_width==1
                                           ))
