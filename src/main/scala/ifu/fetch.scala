@@ -244,9 +244,12 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
    val prev_half    = Reg(UInt(coreInstBits.W))
    // Tracks if last fetchpacket contained a half-inst
    val prev_is_half = RegInit(false.B)
-   // Tracks previously fetched pc
-   val prev_fetchedpc = Reg(UInt(vaddrBitsExtended.W))
-   val use_prev = prev_is_half && f3_fetch_bundle.pc === prev_fetchedpc + fetchBytes.U
+   // Tracks nextpc after the previous fetch bundl
+   val prev_nextpc = Reg(UInt(vaddrBitsExtended.W))
+
+   val is_half_packet = WireInit(false.B) // This fetch packet only contains 1 bank worth of data
+                                          // i.e. The first fetchBytes/2 bits are valid here only
+   val use_prev = prev_is_half && f3_fetch_bundle.pc === prev_nextpc
    assert(fetch_width >= 4 || !usingCompressed) // Logic gets kind of annoying with fetch_width = 2
    for (i <- 0 until fetch_width)
    {
@@ -270,6 +273,15 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
          // Need special case since 0th instruction may carry over the wrap around
          inst     := f3_imemresp.data(i*coreInstBits+2*coreInstBits-1,i*coreInstBits)
          is_valid := use_prev || !(f3_valid_mask(i-1) && f3_fetch_bundle.insts(i-1)(1,0) === 3.U)
+      } else if (fetchBytes > 8 && i == fetch_width / 2 - 1) {
+         // If we are using a banked I$ we could get cut-off halfway through the fetch bundle
+         inst     := f3_imemresp.data(i*coreInstBits+2*coreInstBits-1,i*coreInstBits)
+         is_valid := !(f3_valid_mask(i-1) && f3_fetch_bundle.insts(i-1)(1,0) === 3.U) &&
+                     !(inst(1,0) === 3.U && !f3_imemresp.mask(i+1))
+         when (!(f3_valid_mask(i-1) && f3_fetch_bundle.insts(i-1)(1,0) === 3.U) &&
+            (inst(1,0) === 3.U && !f3_imemresp.mask(i+1))) {
+            is_half_packet := true.B
+         }
       } else if (i == fetch_width - 1) {
          inst     := Cat(0.U(16.W), f3_imemresp.data(fetchWidth*coreInstBits-1,i*coreInstBits))
          is_valid := !((f3_valid_mask(i-1) && f3_fetch_bundle.insts(i-1)(1,0) === 3.U) ||
@@ -342,11 +354,14 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
          nextFetchStart(f3_aligned_pc)))
 
    when (f3_valid && f4_ready && !r_f4_req.valid) {
-      prev_is_half := (!(f3_valid_mask(fetchWidth-2) && f3_fetch_bundle.insts(fetchWidth-2)(1,0) === 3.U)
-                    && f3_fetch_bundle.insts(fetchWidth-1)(1,0) === 3.U
-      )
-      prev_half    := f3_fetch_bundle.insts(fetchWidth-1)(15,0)
-      prev_fetchedpc := alignToFetchBoundary(f3_fetch_bundle.pc)
+      val last_idx  = Mux(is_half_packet, (fetchWidth/2-1).U, (fetchWidth-1).U)
+      prev_is_half := (!(f3_valid_mask(last_idx-1.U) && f3_fetch_bundle.insts(last_idx-1.U)(1,0) === 3.U)
+                    && f3_fetch_bundle.insts(last_idx)(1,0) === 3.U)
+      prev_half    := f3_fetch_bundle.insts(last_idx)(15,0)
+      prev_nextpc  := alignToFetchBoundary(f3_fetch_bundle.pc) + Mux( is_half_packet
+                                                                    , (fetchBytes/2).U
+                                                                    , fetchBytes.U)
+
    }
 
    when (f3_valid && f3_btb_resp.valid)
