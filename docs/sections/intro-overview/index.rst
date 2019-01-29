@@ -15,9 +15,9 @@ The source code to BOOM can be found at https://github.com/riscv-boom/riscv-boom
     :maxdepth: 2
     :caption: Introduction and Overview:
 
-    BOOM-Pipeline
-    RISCV-ISA
-    Chisel-HCL
-    Quick-start
-    BOOM-Repository
-    Rocket-Chip
+    boom-pipeline
+    riscv-isa
+    chisel-hcl
+    quick-start
+    boom-repository
+    rocket-chip
