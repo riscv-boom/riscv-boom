@@ -2,48 +2,60 @@ Micro-architectural Event Tracking
 ==================================
 
 Version 1.9.1 of the RISC-V Privileged Architecture adds support for
-Hardware Performance Monitor (HPM) counters. [1]_ The HPM support allows
-a nearly infinite number of micro-architectural events to be multiplexed
-onto up to 29 physical counters. The privilege access levels can also be
-set on a per-counter basis.
+**Hardware Performance Monitor (HPM)** counters. [1]_ The HPM support allows
+a nearly infinite number of micro-architectural events (called **Hardware 
+Performance Events (HPEs)**) to be multiplexed onto up to multiple physical counters 
+(called **Hardware Performance Counters (HPCs)**).
+
+Setup HPM events to track
+-------------------------
+
+The available HPE's are split into *event sets* and *events*.
+*Event sets* are groupings of similar microarchitectural *events* (branch prediction events,
+memory events, etc). To access an *HPE* you must choose the correct *event set* and
+*event* bit and write to the proper HPE register for that event. An example of event set
+numbers and the event bit for a particular event is given in :ref:`uarch-counter-table`.
 
 .. _uarch-counter-table:
 
 Table: UArch Events
++-------------+-----------+--------------------------------+
+| Event Set # | Event Bit | Description                    |
++=============+===========+================================+
+| 1           | 1         | I$ Blocked                     |
++-------------+-----------+--------------------------------+
+| 1           | 2         | NOP                            |
++-------------+-----------+--------------------------------+
+| 1           | 4         | Control Flow Target Mispredict |
++-------------+-----------+--------------------------------+
 
-+----------+-----------------------------------+
-| Number   | Event                             |
-+==========+===================================+
-| 1        | Committed Branches                |
-+----------+-----------------------------------+
-| 2        | Committed Branch Mispredictions   |
-+----------+-----------------------------------+
-| ...      | and many more (see core.scala)    |
-+----------+-----------------------------------+
-
-The available events can be modified in core.scala as desired. [2]_ It
-is then up to machine-level software to set the privilege access level
-and the *event selectors* for each counter as desired.
+To access an HPC, you must first set up the privilege access level
+of the particular HPC using ``mcounteren`` and ``scounteren``. Afterwards,
+you write to the particular HPE register to setup which event(s) you want to
+track. The value to write to the HPE register is in bits [7:0] the event set
+and in bits [...:8] the event bitmask. Note that the bitmask can be a
+singular event **or** multiple events.
 
 .. _enable-uarch-counters:
 .. code-block:: c 
-    :caption: Enable Micro-arch counters 
+    :caption: Enable Hardware Performance Monitor Counters 
 
-    static void mstatus_init()
-    {
-       // Enable user/supervisor use of perf counters
-       write_csr(mucounteren, -1);
-       write_csr(mscounteren, -1);
+    write_csr(mcounteren, -1); // Enable supervisor use of all perf counters
+    write_csr(scounteren, -1); // Enable user use of all perf counters
 
-       // set events 1 and 2 to counters 3 and 4.
-       write_csr(mhpmevent3, 1);
-       write_csr(mhpmevent4, 2);
+    write_csr(mhpmevent3, 0x101); // read I$ Blocked event
+    write_csr(mhpmevent4, 0x801); // read Ctrl Flow Target Mispred. event
+    ...
 
-Reading HPM Counters in Software
+Reading HPM counters in software
 --------------------------------
 
 The Code Example :numref:`read-csr` demonstrates how to read the value of
-any CSR register from software.
+any HPC from software. Note that HPCs need to be "zero'd" out
+by first reading the value at the beginning of the program, then reading the
+counter again the end, and then subtracting the initial value from the second
+read. However, this only applies to the HPC's not ``cycle``, ``instret``, and
+``time``.
 
 .. _read-csr:
 .. code-block:: c
@@ -53,18 +65,36 @@ any CSR register from software.
             asm volatile ("csrr %0, " #reg : "=r"(__tmp)); \               
             __tmp; })             
     
-    long csr_cycle  = read_csr_safe(cycle);
-    long csr_instr  = read_csr_safe(instret);
-    long csr_hpmc3  = read_csr_safe(hpmcounter3);
+    // read cycle and instruction counts in user mode
+    uint64_t csr_cycle  = read_csr_safe(cycle);
+    uint64_t csr_instr  = read_csr_safe(instret);
+
+    // read initial value of HPMC's in user mode
+    uint64_t start_hpmc3  = read_csr_safe(hpmcounter3);
     ...
-    long csr_hpmc31 = read_csr_safe(hpmcounter31);
+    uint64_t start_hpmc31 = read_csr_safe(hpmcounter31);
+
+    // program to monitor
+
+    // read final value of HPMC's and substract initial in user mode
+    printf("Value of Event (zero'd): %d\n", read_csr_safe(hpmcounter3) - start_hpmc3);
+
+
+Adding your own HPE
+-------------------
+
+To add your own HPE, you modify the event set and particular event in 
+``src/main/scala/exu/core.scala``. Note that the 1st item in the ``Seq`` corresponds
+to the first bit in the event set.
+
+External Resources
+------------------
+
+Information in this section was adapted from https://static.dev.sifive.com/U54-MC-RVCoreIP.pdf
+which details more about HPE/C's from RocketChip's perspective.
       
 .. [1]
    Future efforts may add some counters into a memory-mapped access
    region. This will open up the ability to track events that, for
    example, may not be tied to any particular core (like last-level
    cache misses).
-
-.. [2]
-   Note: io.events(0) will get mapped to being Event #1 (etc.) from the
-   point of view of the RISC-V software.

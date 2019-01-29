@@ -164,66 +164,70 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    val sxt_ldMiss = Wire(Bool())
 
 
-
-
-
-
    //-------------------------------------------------------------
    // Uarch Hardware Performance Events (HPEs)
 
-
    val perfEvents = new freechips.rocketchip.rocket.EventSets(Seq(
-      //new EventSet((mask, hits) => Mux(mask(0), wb_xcpt, wb_valid && pipelineIDToWB((mask & hits).orR)), Seq(
       new freechips.rocketchip.rocket.EventSet((mask, hits) => (mask & hits).orR, Seq(
          ("exception", () => rob.io.com_xcpt.valid),
-         ("nop", () => false.B), // ("load", () => id_ctrl.mem && id_ctrl.mem_cmd === M_XRD && !id_ctrl.fp),
-         ("nop", () => false.B), // ("store", () => id_ctrl.mem && id_ctrl.mem_cmd === M_XWR && !id_ctrl.fp),
-         ("nop", () => false.B))), // ("amo", () => Bool(usingAtomics) && id_ctrl.mem &&
-                                   //               (isAMO(id_ctrl.mem_cmd) || id_ctrl.mem_cmd.isOneOf(M_XLR, M_XSC))),
-//         ("system", () => =/= CSR.N))),
-//       ("arith", () => id_ctrl.wxd && !(id_ctrl.jal || id_ctrl.jalr || id_ctrl.mem || id_ctrl.fp ||
-//                       id_ctrl.div || id_ctrl.csr =/= CSR.N)),
-//       ("branch", () => id_ctrl.branch),
-//       ("jal", () => id_ctrl.jal),
-//       ("jalr", () => id_ctrl.jalr))
-//       ++ (if (!usingMulDiv) Seq() else Seq(
-//         ("mul", () => id_ctrl.div && (id_ctrl.alu_fn & ALU.FN_DIV) =/= ALU.FN_DIV),
-//         ("div", () => id_ctrl.div && (id_ctrl.alu_fn & ALU.FN_DIV) === ALU.FN_DIV)))
-//       ++ (if (!usingFPU) Seq() else Seq(
-//         ("fp load", () => id_ctrl.fp && io.fpu.dec.ldst && io.fpu.dec.wen),
-//         ("fp store", () => id_ctrl.fp && io.fpu.dec.ldst && !io.fpu.dec.wen),
-//         ("fp add", () => id_ctrl.fp && io.fpu.dec.fma && io.fpu.dec.swap23),
-//         ("fp mul", () => id_ctrl.fp && io.fpu.dec.fma && !io.fpu.dec.swap23 && !io.fpu.dec.ren3),
-//         ("fp mul-add", () => id_ctrl.fp && io.fpu.dec.fma && io.fpu.dec.ren3),
-//         ("fp div/sqrt", () => id_ctrl.fp && (io.fpu.dec.div || io.fpu.dec.sqrt)),
-//         ("fp other", () => id_ctrl.fp && !(io.fpu.dec.ldst || io.fpu.dec.fma ||
-//                            io.fpu.dec.div || io.fpu.dec.sqrt))))),
-      new freechips.rocketchip.rocket.EventSet((mask, hits) => (mask & hits).orR, Seq(
-//       ("load-use interlock", () => id_ex_hazard && ex_ctrl.mem || id_mem_hazard && mem_ctrl.mem ||
-//                                    id_wb_hazard && wb_ctrl.mem),
-//       ("long-latency interlock", () => id_sboard_hazard),
-//       ("csr interlock", () => id_ex_hazard && ex_ctrl.csr =/= CSR.N || id_mem_hazard && mem_ctrl.csr =/= CSR.N ||
-//                               id_wb_hazard && wb_ctrl.csr =/= CSR.N),
-         ("I$ blocked", () => icache_blocked),
-         ("nop", () => false.B),  //("D$ blocked", () => id_ctrl.mem && dcache_blocked),
-         ("branch misprediction", () => br_unit.brinfo.mispredict),
-         ("control-flow target misprediction", () =>  br_unit.brinfo.mispredict && br_unit.brinfo.is_jr),
-         ("flush", () => rob.io.flush.valid),
-//       ++ (if (!usingMulDiv) Seq() else Seq(
-//         ("mul/div interlock", () => id_ex_hazard && ex_ctrl.div || id_mem_hazard &&
-//                                     mem_ctrl.div || id_wb_hazard && wb_ctrl.div)))
-//       ++ (if (!usingFPU) Seq() else Seq(
-//         ("fp interlock", () => id_ex_hazard && ex_ctrl.fp || id_mem_hazard && mem_ctrl.fp ||
-//                                id_wb_hazard && wb_ctrl.fp || id_ctrl.fp && id_stall_fpu)))),
-       ("branch resolved", () => br_unit.brinfo.valid))),
-     new freechips.rocketchip.rocket.EventSet((mask, hits) => (mask & hits).orR, Seq(
-       ("I$ miss", () => io.ifu.perf.acquire),
-       ("D$ miss", () => io.dmem.perf.acquire),
-       ("D$ release", () => io.dmem.perf.release),
-       ("ITLB miss", () => io.ifu.perf.tlbMiss),
-       ("DTLB miss", () => io.dmem.perf.tlbMiss),
-       ("L2 TLB miss", () => io.ptw.perf.l2miss)))))
+         ("nop",       () => false.B),
+         ("nop",       () => false.B),
+         ("nop",       () => false.B))),
 
+         // Unused RocketCore HPE's
+         //("load",   () => id_ctrl.mem && id_ctrl.mem_cmd === M_XRD && !id_ctrl.fp),
+         //("store",  () => id_ctrl.mem && id_ctrl.mem_cmd === M_XWR && !id_ctrl.fp),
+         //("amo",    () => Bool(usingAtomics) && id_ctrl.mem && (isAMO(id_ctrl.mem_cmd) ||
+         //                 id_ctrl.mem_cmd.isOneOf(M_XLR, M_XSC))),
+         //("system", () => =/= CSR.N))),
+         //("arith",  () => id_ctrl.wxd && !(id_ctrl.jal || id_ctrl.jalr || id_ctrl.mem || id_ctrl.fp ||
+         //                id_ctrl.div || id_ctrl.csr =/= CSR.N)),
+         //("branch", () => id_ctrl.branch),
+         //("jal",    () => id_ctrl.jal),
+         //("jalr",   () => id_ctrl.jalr))
+         //++ (if (!usingMulDiv) Seq() else Seq(
+         //  ("mul", () => id_ctrl.div && (id_ctrl.alu_fn & ALU.FN_DIV) =/= ALU.FN_DIV),
+         //  ("div", () => id_ctrl.div && (id_ctrl.alu_fn & ALU.FN_DIV) === ALU.FN_DIV)))
+         //++ (if (!usingFPU) Seq() else Seq(
+         //  ("fp load",     () => id_ctrl.fp && io.fpu.dec.ldst && io.fpu.dec.wen),
+         //  ("fp store",    () => id_ctrl.fp && io.fpu.dec.ldst && !io.fpu.dec.wen),
+         //  ("fp add",      () => id_ctrl.fp && io.fpu.dec.fma && io.fpu.dec.swap23),
+         //  ("fp mul",      () => id_ctrl.fp && io.fpu.dec.fma && !io.fpu.dec.swap23 && !io.fpu.dec.ren3),
+         //  ("fp mul-add",  () => id_ctrl.fp && io.fpu.dec.fma && io.fpu.dec.ren3),
+         //  ("fp div/sqrt", () => id_ctrl.fp && (io.fpu.dec.div || io.fpu.dec.sqrt)),
+         //  ("fp other",    () => id_ctrl.fp && !(io.fpu.dec.ldst || io.fpu.dec.fma ||
+         //                        io.fpu.dec.div || io.fpu.dec.sqrt))))),
+
+      new freechips.rocketchip.rocket.EventSet((mask, hits) => (mask & hits).orR, Seq(
+         ("I$ blocked",                        () => icache_blocked),
+         ("nop",                               () => false.B),
+         ("branch misprediction",              () => br_unit.brinfo.mispredict),
+         ("control-flow target misprediction", () => br_unit.brinfo.mispredict &&
+                                                     br_unit.brinfo.is_jr),
+         ("flush",                             () => rob.io.flush.valid),
+         ("branch resolved",                   () => br_unit.brinfo.valid))),
+
+         // Unused RocketCore HPE's
+         //("load-use interlock",     () => id_ex_hazard && ex_ctrl.mem || id_mem_hazard && mem_ctrl.mem ||
+         //                                 id_wb_hazard && wb_ctrl.mem),
+         //("long-latency interlock", () => id_sboard_hazard),
+         //("csr interlock",          () => id_ex_hazard && ex_ctrl.csr =/= CSR.N || id_mem_hazard && mem_ctrl.csr =/= CSR.N ||
+         //                                 id_wb_hazard && wb_ctrl.csr =/= CSR.N),
+         //("D$ blocked",             () => id_ctrl.mem && dcache_blocked),
+         //++ (if (!usingMulDiv) Seq() else Seq(
+         //  ("mul/div interlock", () => id_ex_hazard && ex_ctrl.div || id_mem_hazard &&
+         //                              mem_ctrl.div || id_wb_hazard && wb_ctrl.div)))
+         //++ (if (!usingFPU) Seq() else Seq(
+         //  ("fp interlock", () => id_ex_hazard && ex_ctrl.fp || id_mem_hazard && mem_ctrl.fp ||
+         //                         id_wb_hazard && wb_ctrl.fp || id_ctrl.fp && id_stall_fpu)))),
+
+     new freechips.rocketchip.rocket.EventSet((mask, hits) => (mask & hits).orR, Seq(
+        ("I$ miss",     () => io.ifu.perf.acquire),
+        ("D$ miss",     () => io.dmem.perf.acquire),
+        ("D$ release",  () => io.dmem.perf.release),
+        ("ITLB miss",   () => io.ifu.perf.tlbMiss),
+        ("DTLB miss",   () => io.dmem.perf.tlbMiss),
+        ("L2 TLB miss", () => io.ptw.perf.l2miss)))))
 
    val csr = Module(new freechips.rocketchip.rocket.CSRFile(perfEvents))
    csr.io.inst foreach { c => c := DontCare }
@@ -233,7 +237,97 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    val icache_blocked = !(io.ifu.fetchpacket.valid || RegNext(io.ifu.fetchpacket.valid))
    csr.io.counters foreach { c => c.inc := RegNext(perfEvents.evaluate(c.eventSel)) }
 
+   // Old BOOM Core HPE's
+   //// User-level instruction count.
+   //csr.io.events(2) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+   //   rob.io.commit.valids(w) && (csr.io.status.prv === UInt(freechips.rocketchip.rocket.PRV.U))})
 
+   //csr.io.events(5)  := csr.io.status.prv === UInt(freechips.rocketchip.rocket.PRV.U)
+
+   //// Instruction mixes.
+   //csr.io.events(6)  := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+   //   rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && !rob.io.commit.uops(w).is_jal})
+   //csr.io.events(7)  := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+   //   rob.io.commit.valids(w) && rob.io.commit.uops(w).is_jal})
+   //csr.io.events(8)  := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+   //   rob.io.commit.valids(w) && rob.io.commit.uops(w).is_jump && !rob.io.commit.uops(w).is_jal})
+   //csr.io.events(9)  := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+   //   rob.io.commit.valids(w) && rob.io.commit.uops(w).is_load})
+   //csr.io.events(10) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+   //   rob.io.commit.valids(w) && rob.io.commit.uops(w).is_store})
+   //csr.io.events(11) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+   //   rob.io.commit.valids(w) && rob.io.commit.uops(w).fp_val})
+
+   //// Decode stall causes.
+   //csr.io.events(12) := !rob.io.ready
+   //csr.io.events(13) := lsu.io.laq_full
+   //csr.io.events(14) := lsu.io.stq_full
+   //csr.io.events(15) := !dis_readys.toBools.reduce(_&_) // issue queues
+   //csr.io.events(16) := branch_mask_full.reduce(_|_)
+   //csr.io.events(17) := rob.io.flush.valid
+
+   //// LSU Speculation stats.
+   //csr.io.events(18) := lsu.io.counters.ld_valid
+   //csr.io.events(19) := lsu.io.counters.stld_order_fail
+   //csr.io.events(20) := lsu.io.counters.ldld_order_fail
+
+   //// Branch prediction stats.
+   //csr.io.events(21)  := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+   //   rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && !rob.io.commit.uops(w).is_jal &&
+   //   rob.io.commit.uops(w).stat_brjmp_mispredicted})
+   //csr.io.events(22) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+   //   rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && !rob.io.commit.uops(w).is_jal &&
+   //   rob.io.commit.uops(w).stat_btb_made_pred})
+   //csr.io.events(23) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+   //   rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && !rob.io.commit.uops(w).is_jal &&
+   //   rob.io.commit.uops(w).stat_btb_mispredicted})
+   //csr.io.events(24) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+   //   rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && !rob.io.commit.uops(w).is_jal &&
+   //   rob.io.commit.uops(w).stat_bpd_made_pred})
+   //csr.io.events(25) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+   //   rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && !rob.io.commit.uops(w).is_jal &&
+   //   rob.io.commit.uops(w).stat_bpd_mispredicted})
+
+   //// Branch prediction - no prediction made.
+   //csr.io.events(26) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+   //   rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && !rob.io.commit.uops(w).is_jal &&
+   //   !rob.io.commit.uops(w).stat_btb_made_pred && !rob.io.commit.uops(w).stat_bpd_made_pred})
+
+   //// Branch prediction - no predition made & a mispredict occurred.
+   //csr.io.events(27) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+   //   rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && !rob.io.commit.uops(w).is_jal &&
+   //   !rob.io.commit.uops(w).stat_btb_made_pred && !rob.io.commit.uops(w).stat_bpd_made_pred &&
+   //   rob.io.commit.uops(w).stat_brjmp_mispredicted})
+
+   //// Count user-level branches (subtract from total to get privilege branch accuracy)
+   //csr.io.events(28) := br_unit.brinfo.valid && (csr.io.status.prv === UInt(freechips.rocketchip.rocket.PRV.U))
+   //csr.io.events(29) := br_unit.brinfo.mispredict && (csr.io.status.prv === UInt(rocket.PRV.U))
+
+   //// count change of privilege modes
+   //csr.io.events(30) := csr.io.status.prv =/= RegNext(csr.io.status.prv)
+
+   //csr.io.events(31) := !issue_units(0).io.dis_readys.reduce(_&_)
+   //csr.io.events(32) := !issue_units(1).io.dis_readys.reduce(_&_)
+   //csr.io.events(33) := !fp_pipeline.io.dis_readys.reduce(_&_)
+
+   //assert (!(Range(0,COMMIT_WIDTH).map{w =>
+   //   rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && rob.io.commit.uops(w).is_jal &&
+   //   rob.io.commit.uops(w).stat_brjmp_mispredicted}.reduce(_|_)),
+   //   "[dpath] A committed JAL was marked as having been mispredicted.")
+
+   //// Count issued instructions (only integer currently).
+   //require (log2Ceil(1+iss_valids.length) <= csr.io.events(0).getWidth) // CSR.scala sets increment width.
+   //csr.io.events(34) := PopCount(iss_valids)
+
+   //// Count not-issued slots due to empty issue windows (only integer currently).
+   //val not_issued_and_empty = for {iu <- issue_units; iss_valid <- iu.io.iss_valids} yield {
+   //      !iss_valid && iu.io.event_empty }
+   //csr.io.events(35) := PopCount(not_issued_and_empty)
+
+   //// Count not-issued slots due to backend hazards/unsatisified dependencies (only integer currently).
+   //val not_issued_and_not_empty = for {iu <- issue_units; iss_valid <- iu.io.iss_valids} yield {
+   //      !iss_valid && !iu.io.event_empty}
+   //csr.io.events(36) := PopCount(not_issued_and_not_empty)
 
 
    //****************************************
@@ -1152,101 +1246,6 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       fp_pipeline.io.debug_tsc_reg := debug_tsc_reg
    }
 
-   //-------------------------------------------------------------
-   // Uarch Hardware Performance Events (HPEs)
-
-//   // User-level instruction count.
-//   csr.io.events(2) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
-//      rob.io.commit.valids(w) && (csr.io.status.prv === UInt(freechips.rocketchip.rocket.PRV.U))})
-//
-//   csr.io.events(5)  := csr.io.status.prv === UInt(freechips.rocketchip.rocket.PRV.U)
-//
-//   // Instruction mixes.
-//   csr.io.events(6)  := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
-//      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && !rob.io.commit.uops(w).is_jal})
-//   csr.io.events(7)  := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
-//      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_jal})
-//   csr.io.events(8)  := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
-//      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_jump && !rob.io.commit.uops(w).is_jal})
-//   csr.io.events(9)  := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
-//      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_load})
-//   csr.io.events(10) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
-//      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_store})
-//   csr.io.events(11) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
-//      rob.io.commit.valids(w) && rob.io.commit.uops(w).fp_val})
-//
-//   // Decode stall causes.
-//   csr.io.events(12) := !rob.io.ready
-//   csr.io.events(13) := lsu.io.laq_full
-//   csr.io.events(14) := lsu.io.stq_full
-//   csr.io.events(15) := !dis_readys.toBools.reduce(_&_) // issue queues
-//   csr.io.events(16) := branch_mask_full.reduce(_|_)
-//   csr.io.events(17) := rob.io.flush.valid
-//
-//   // LSU Speculation stats.
-//   csr.io.events(18) := lsu.io.counters.ld_valid
-//   csr.io.events(19) := lsu.io.counters.stld_order_fail
-//   csr.io.events(20) := lsu.io.counters.ldld_order_fail
-//
-//   // Branch prediction stats.
-//   csr.io.events(21)  := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
-//      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && !rob.io.commit.uops(w).is_jal &&
-//      rob.io.commit.uops(w).stat_brjmp_mispredicted})
-//   csr.io.events(22) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
-//      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && !rob.io.commit.uops(w).is_jal &&
-//      rob.io.commit.uops(w).stat_btb_made_pred})
-//   csr.io.events(23) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
-//      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && !rob.io.commit.uops(w).is_jal &&
-//      rob.io.commit.uops(w).stat_btb_mispredicted})
-//   csr.io.events(24) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
-//      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && !rob.io.commit.uops(w).is_jal &&
-//      rob.io.commit.uops(w).stat_bpd_made_pred})
-//   csr.io.events(25) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
-//      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && !rob.io.commit.uops(w).is_jal &&
-//      rob.io.commit.uops(w).stat_bpd_mispredicted})
-//
-//   // Branch prediction - no prediction made.
-//   csr.io.events(26) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
-//      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && !rob.io.commit.uops(w).is_jal &&
-//      !rob.io.commit.uops(w).stat_btb_made_pred && !rob.io.commit.uops(w).stat_bpd_made_pred})
-//
-//   // Branch prediction - no predition made & a mispredict occurred.
-//   csr.io.events(27) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
-//      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && !rob.io.commit.uops(w).is_jal &&
-//      !rob.io.commit.uops(w).stat_btb_made_pred && !rob.io.commit.uops(w).stat_bpd_made_pred &&
-//      rob.io.commit.uops(w).stat_brjmp_mispredicted})
-//
-//
-//   // Count user-level branches (subtract from total to get privilege branch accuracy)
-//   csr.io.events(28) := br_unit.brinfo.valid && (csr.io.status.prv === UInt(freechips.rocketchip.rocket.PRV.U))
-//freechips.rocketchip.   csr.io.events(29) := br_unit.brinfo.mispredict && (csr.io.status.prv === UInt(rocket.PRV.U))
-//
-//   // count change of privilege modes
-//   csr.io.events(30) := csr.io.status.prv =/= RegNext(csr.io.status.prv)
-//
-//   csr.io.events(31) := !issue_units(0).io.dis_readys.reduce(_&_)
-//   csr.io.events(32) := !issue_units(1).io.dis_readys.reduce(_&_)
-//   csr.io.events(33) := !fp_pipeline.io.dis_readys.reduce(_&_)
-//
-//   assert (!(Range(0,COMMIT_WIDTH).map{w =>
-//      rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && rob.io.commit.uops(w).is_jal &&
-//      rob.io.commit.uops(w).stat_brjmp_mispredicted}.reduce(_|_)),
-//      "[dpath] A committed JAL was marked as having been mispredicted.")
-//
-//   // Count issued instructions (only integer currently).
-//   require (log2Ceil(1+iss_valids.length) <= csr.io.events(0).getWidth) // CSR.scala sets increment width.
-//   csr.io.events(34) := PopCount(iss_valids)
-//
-//   // Count not-issued slots due to empty issue windows (only integer currently).
-//   val not_issued_and_empty = for {iu <- issue_units; iss_valid <- iu.io.iss_valids} yield {
-//         !iss_valid && iu.io.event_empty }
-//   csr.io.events(35) := PopCount(not_issued_and_empty)
-//
-//   // Count not-issued slots due to backend hazards/unsatisified dependencies (only integer currently).
-//   val not_issued_and_not_empty = for {iu <- issue_units; iss_valid <- iu.io.iss_valids} yield {
-//         !iss_valid && !iu.io.event_empty}
-//   csr.io.events(36) := PopCount(not_issued_and_not_empty)
-
 
    //-------------------------------------------------------------
    //-------------------------------------------------------------
@@ -1576,7 +1575,5 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       io.trace := DontCare
       io.trace map (t => t.valid := false.B)
    }
-
-
 }
 
