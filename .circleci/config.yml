@@ -653,9 +653,9 @@ workflows:
                     - install-riscv-tools
 
             # Prepare the verilator builds
-#            - prepare-boomconfig:
-#                requires:
-#                    - prepare-build-environment
+            - prepare-boomconfig:
+                requires:
+                    - prepare-build-environment
             - prepare-smallrv32boomconfig:
                 requires:
                     - prepare-build-environment
@@ -665,22 +665,22 @@ workflows:
             - prepare-mediumboomconfig:
                 requires:
                     - prepare-build-environment
-#            - prepare-megaboomconfig:
-#                requires:
-#                    - prepare-build-environment
+            #- prepare-megaboomconfig:
+            #    requires:
+            #        - prepare-build-environment
 
             # Run the respective tests
 
             # Run the BoomConfig tests
-#            - boomconfig-run-csmith-tests:
-#                requires:
-#                    - prepare-boomconfig
-#            - boomconfig-run-benchmark-tests:
-#                requires:
-#                    - prepare-boomconfig
-#            - boomconfig-run-assembly-tests:
-#                requires:
-#                    - prepare-boomconfig
+            - boomconfig-run-csmith-tests:
+                requires:
+                    - prepare-boomconfig
+            - boomconfig-run-benchmark-tests:
+                requires:
+                    - prepare-boomconfig
+            - boomconfig-run-assembly-tests:
+                requires:
+                    - prepare-boomconfig
 
             # Run the SmallRV32BoomConfig tests
             - smallrv32boomconfig-run-assembly-tests:
@@ -709,13 +709,13 @@ workflows:
                 requires:
                     - prepare-mediumboomconfig
 
-             # Run the MegaBoomConfig tests
-#             - megaboomconfig-run-csmith-tests:
-#                 requires:
-#                     - prepare-megaboomconfig
-#             - megaboomconfig-run-benchmark-tests:
-#                 requires:
-#                     - prepare-megaboomconfig
-#             - megaboomconfig-run-assembly-tests:
-#                 requires:
-#                     - prepare-megaboomconfig
+            # Run the MegaBoomConfig tests
+            #- megaboomconfig-run-csmith-tests:
+            #    requires:
+            #        - prepare-megaboomconfig
+            #- megaboomconfig-run-benchmark-tests:
+            #    requires:
+            #        - prepare-megaboomconfig
+            #- megaboomconfig-run-assembly-tests:
+            #    requires:
+            #        - prepare-megaboomconfig
