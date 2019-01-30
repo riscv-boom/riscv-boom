@@ -247,8 +247,6 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
    // Tracks nextpc after the previous fetch bundle
    val prev_nextpc = Reg(UInt(vaddrBitsExtended.W))
 
-   val is_half_packet = WireInit(false.B) // This fetch packet only contains 1 bank worth of data
-                                          // i.e. The first fetchBytes/2 bits are valid here only
    val use_prev = prev_is_half && f3_fetch_bundle.pc === prev_nextpc
    assert(fetch_width >= 4 || !usingCompressed) // Logic gets kind of annoying with fetch_width = 2
    for (i <- 0 until fetch_width)
@@ -273,6 +271,11 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
          // Need special case since 0th instruction may carry over the wrap around
          inst     := f3_imemresp.data(i*coreInstBits+2*coreInstBits-1,i*coreInstBits)
          is_valid := use_prev || !(f3_valid_mask(i-1) && f3_fetch_bundle.insts(i-1)(1,0) === 3.U)
+      } else if (icIsBanked && i == (fetch_width / 2) - 1) {
+         // If we are using a banked I$ we could get cut-off halfway through the fetch bundle
+         inst     := f3_imemresp.data(i*coreInstBits+2*coreInstBits-1,i*coreInstBits)
+         is_valid := !(f3_valid_mask(i-1) && f3_fetch_bundle.insts(i-1)(1,0) === 3.U) &&
+                     !(inst(1,0) === 3.U && !f3_imemresp.mask(i+1))
       } else if (i == fetch_width - 1) {
          inst     := Cat(0.U(16.W), f3_imemresp.data(fetchWidth*coreInstBits-1,i*coreInstBits))
          is_valid := !((f3_valid_mask(i-1) && f3_fetch_bundle.insts(i-1)(1,0) === 3.U) ||
@@ -346,11 +349,12 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
 
 
    when (f3_valid && f4_ready && !r_f4_req.valid) {
-      val last_idx  = Mux(inLastChunk(f3_fetch_bundle.pc), (fetchWidth/2-1).U, (fetchWidth-1).U)
+      val last_idx  = Mux(inLastChunk(f3_fetch_bundle.pc) && icIsBanked.B,
+                          (fetchWidth/2-1).U, (fetchWidth-1).U)
       prev_is_half := (!(f3_valid_mask(last_idx-1.U) && f3_fetch_bundle.insts(last_idx-1.U)(1,0) === 3.U)
                     && f3_fetch_bundle.insts(last_idx)(1,0) === 3.U)
       prev_half    := f3_fetch_bundle.insts(last_idx)(15,0)
-      prev_nextpc  := alignToFetchBoundary(f3_fetch_bundle.pc) + Mux( is_half_packet
+      prev_nextpc  := alignToFetchBoundary(f3_fetch_bundle.pc) + Mux( inLastChunk(f3_fetch_bundle.pc) && icIsBanked.B
                                                                     , bankBytes.U
                                                                     , fetchBytes.U)
 
