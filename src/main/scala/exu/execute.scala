@@ -134,12 +134,14 @@ class ALUExeUnit(
    has_alu         : Boolean = true,
    has_mul         : Boolean = false,
    has_div         : Boolean = false,
-   has_ifpu        : Boolean = false)
+   has_ifpu        : Boolean = false,
+   has_mem         : Boolean = false)
    (implicit p: Parameters)
    extends ExecutionUnit(
       reads_irf  = true,
-      writes_irf = true,
-      writes_ll_frf = has_ifpu,
+      writes_irf = has_alu || has_mul || has_div,
+      writes_ll_irf = has_mem,
+      writes_ll_frf = has_ifpu || has_mem, 
       num_bypass_stages =
          if (has_alu && has_mul) 3 //TODO XXX p(tile.TileKey).core.imulLatency
          else if (has_alu) 1 else 0,
@@ -150,8 +152,12 @@ class ALUExeUnit(
       has_alu        = has_alu,
       has_mul        = has_mul,
       has_div        = has_div,
-      has_ifpu       = has_ifpu)(p)
+      has_ifpu       = has_ifpu,
+      has_mem        = has_mem)(p)
+   with freechips.rocketchip.rocket.constants.MemoryOpConstants
 {
+   require(!(has_mem && has_ifpu),
+      "TODO. Currently do not support AluMemExeUnit with FP")
 
    val out_str = new StringBuilder
    out_str.append("\n     ExeUnit--")
@@ -159,6 +165,7 @@ class ALUExeUnit(
    if (has_mul)  out_str.append("\n       - Mul")
    if (has_div)  out_str.append("\n       - Div")
    if (has_ifpu) out_str.append("\n       - IFPU")
+   if (has_mem)  out_str.append("\n       - Mem")
    override def toString: String = out_str.toString
 
    val div_busy  = WireInit(false.B)
@@ -167,13 +174,13 @@ class ALUExeUnit(
    // The Functional Units --------------------
    val fu_units = ArrayBuffer[FunctionalUnit]()
 
-   io.fu_types := FU_ALU |
+   io.fu_types := Mux(has_alu.B, FU_ALU, 0.U) |
                   Mux(has_mul.B, FU_MUL, 0.U) |
                   Mux(!div_busy && has_div.B, FU_DIV, 0.U) |
                   Mux(shares_csr_wport.B, FU_CSR, 0.U) |
                   Mux(has_br_unit.B, FU_BRU, 0.U) |
-                  Mux(!ifpu_busy && has_ifpu.B, FU_I2F, 0.U)
-
+                  Mux(!ifpu_busy && has_ifpu.B, FU_I2F, 0.U) |
+                  Mux(has_mem.B, FU_MEM, 0.U)
 
    // ALU Unit -------------------------------
    var alu: ALUUnit = null
@@ -284,17 +291,88 @@ class ALUExeUnit(
       fu_units += div
    }
 
-   // Outputs (Write Port #0)  ---------------
+   // Mem Unit --------------------------
+   if (has_mem)
+   {
+      require(!has_alu || usingUnifiedMemIntIQs)
+      val maddrcalc = Module(new MemAddrCalcUnit)
+      maddrcalc.io.req        <> io.req
+      maddrcalc.io.req.valid  := io.req.valid && io.req.bits.uop.fu_code_is(FU_MEM)
+      maddrcalc.io.brinfo     <> io.brinfo
+      maddrcalc.io.status     := DontCare
+      maddrcalc.io.get_ftq_pc := DontCare
+      maddrcalc.io.fcsr_rm    := DontCare
+      maddrcalc.io.resp.ready := DontCare
+      io.bypass <> maddrcalc.io.bypass // TODO this is not where the bypassing should
+                                       // occur from, is there any bypassing happening?!
 
-   io.iresp.valid    := fu_units.map(_.io.resp.valid).reduce(_|_)
-   io.iresp.bits.uop := PriorityMux(fu_units.map(f => (f.io.resp.valid,
-                                                   f.io.resp.bits.uop.asUInt))).asTypeOf(new MicroOp())
-   io.iresp.bits.data:= PriorityMux(fu_units.map(f => (f.io.resp.valid, f.io.resp.bits.data.asUInt))).asUInt
-   // pulled out for critical path reasons
-   // TODO: Does this make sense as part of the iresp bundle?
-   if (has_alu) {
-      io.iresp.bits.uop.csr_addr := ImmGen(alu.io.resp.bits.uop.imm_packed, IS_I).asUInt
-      io.iresp.bits.uop.ctrl.csr_cmd := alu.io.resp.bits.uop.ctrl.csr_cmd
+      io.lsu_io.exe_resp.valid := maddrcalc.io.resp.valid
+      io.lsu_io.exe_resp.bits  := maddrcalc.io.resp.bits
+
+
+      // TODO get rid of com_exception and guard with an assert? Need to surpress within dc-shim.
+      //   assert (!(io.com_exception && lsu.io.memreq_uop.is_load && lsu.io.memreq_val),
+      //      "[execute] a valid load is returning while an exception is being thrown.")
+      io.dmem.req.valid       := Mux(io.com_exception && io.lsu_io.memreq_uop.is_load,
+                                     false.B,
+                                     io.lsu_io.memreq_val)
+      io.dmem.req.bits.addr  := io.lsu_io.memreq_addr
+      io.dmem.req.bits.data  := io.lsu_io.memreq_wdata
+      io.dmem.req.bits.uop   := io.lsu_io.memreq_uop
+      io.dmem.req.bits.kill  := io.lsu_io.memreq_kill // load kill request sent to memory
+
+      // I should be timing forwarding to coincide with dmem resps, so I'm not clobbering
+      //anything....
+      val memresp_val    = Mux(io.com_exception && io.dmem.resp.bits.uop.is_load, false.B,
+                               io.lsu_io.forward_val || io.dmem.resp.valid)
+      val memresp_rf_wen = (io.dmem.resp.valid &&
+                           (io.dmem.resp.bits.uop.mem_cmd === M_XRD || io.dmem.resp.bits.uop.is_amo)) ||
+                        io.lsu_io.forward_val // TODO should I refactor this to use is_load?
+      val memresp_uop    = Mux(io.lsu_io.forward_val, io.lsu_io.forward_uop,
+                                                      io.dmem.resp.bits.uop)
+
+      val memresp_data = Mux(io.lsu_io.forward_val,
+         io.lsu_io.forward_data, io.dmem.resp.bits.data_subword)
+
+      io.lsu_io.memresp.valid := memresp_val
+      io.lsu_io.memresp.bits  := memresp_uop
+
+      // Hook up loads to the response
+      io.ll_iresp.valid                 := RegNext(memresp_val
+                                                && !IsKilledByBranch(io.brinfo, memresp_uop)
+                                                && memresp_uop.dst_rtype === RT_FIX)
+      io.ll_iresp.bits.uop              := RegNext(memresp_uop)
+      io.ll_iresp.bits.uop.ctrl.rf_wen  := RegNext(memresp_rf_wen)
+      io.ll_iresp.bits.data             := RegNext(memresp_data)
+
+      if (usingFPU)
+      {
+         require(!has_alu, "Don't support this yet")
+         io.ll_fresp.valid                 := RegNext(memresp_val
+            && !IsKilledByBranch(io.brinfo, memresp_uop)
+            && memresp_uop.dst_rtype === RT_FLT)
+         io.ll_fresp.bits.uop              := RegNext(memresp_uop)
+         io.ll_fresp.bits.uop.ctrl.rf_wen  := RegNext(memresp_rf_wen)
+         io.ll_fresp.bits.data             := RegNext(memresp_data)
+      }
+
+   }
+
+   // Outputs (Write Port #0)  ---------------
+   if (writes_irf)
+   {
+      io.iresp.valid    := fu_units.map(_.io.resp.valid).reduce(_|_)
+      io.iresp.bits.uop := PriorityMux(fu_units.map(f =>
+         (f.io.resp.valid, f.io.resp.bits.uop.asUInt))).asTypeOf(new MicroOp())
+      io.iresp.bits.data:= PriorityMux(fu_units.map(f =>
+         (f.io.resp.valid, f.io.resp.bits.data.asUInt))).asUInt
+
+      // pulled out for critical path reasons
+      // TODO: Does this make sense as part of the iresp bundle?
+      if (has_alu) {
+         io.iresp.bits.uop.csr_addr := ImmGen(alu.io.resp.bits.uop.imm_packed, IS_I).asUInt
+         io.iresp.bits.uop.ctrl.csr_cmd := alu.io.resp.bits.uop.ctrl.csr_cmd
+      }
    }
 
    assert ((PopCount(fu_units.map(_.io.resp.valid)) <= 1.U && !div_resp_val) ||
@@ -434,83 +512,4 @@ class FPUExeUnit(
    override def toString: String = out_str.toString
 }
 
-
-class MemExeUnit(implicit p: Parameters) extends ExecutionUnit(
-   reads_irf = true,
-   writes_ll_irf = true,
-   writes_ll_frf = p(tile.TileKey).core.fpu.nonEmpty,
-   num_bypass_stages = 0,
-   data_width = if(p(tile.TileKey).core.fpu.nonEmpty) p(tile.XLen) + 1 else p(tile.XLen),
-   bypassable = false,
-   has_mem = true)(p)
-   with freechips.rocketchip.rocket.constants.MemoryOpConstants
-{
-   io.fu_types := FU_MEM
-
-   // Perform address calculation
-   val maddrcalc = Module(new MemAddrCalcUnit())
-   maddrcalc.io.req <> io.req
-
-   maddrcalc.io.brinfo <> io.brinfo
-   maddrcalc.io.status := DontCare
-   maddrcalc.io.get_ftq_pc := DontCare
-   maddrcalc.io.fcsr_rm := DontCare
-   maddrcalc.io.resp.ready := DontCare
-   io.bypass <> maddrcalc.io.bypass  // TODO this is not where the bypassing should
-                                     // occur from, is there any bypassing happening?!
-
-   // enqueue addresses,st-data at the end of Execute
-   io.lsu_io.exe_resp.valid := maddrcalc.io.resp.valid
-   io.lsu_io.exe_resp.bits := maddrcalc.io.resp.bits
-
-
-   // TODO get rid of com_exception and guard with an assert? Need to surpress within dc-shim.
-//   assert (!(io.com_exception && lsu.io.memreq_uop.is_load && lsu.io.memreq_val),
-//      "[execute] a valid load is returning while an exception is being thrown.")
-   io.dmem.req.valid      := Mux(io.com_exception && io.lsu_io.memreq_uop.is_load,
-                              false.B,
-                              io.lsu_io.memreq_val)
-   io.dmem.req.bits.addr  := io.lsu_io.memreq_addr
-   io.dmem.req.bits.data  := io.lsu_io.memreq_wdata
-   io.dmem.req.bits.uop   := io.lsu_io.memreq_uop
-   io.dmem.req.bits.kill  := io.lsu_io.memreq_kill // load kill request sent to memory
-
-   // I should be timing forwarding to coincide with dmem resps, so I'm not clobbering
-   //anything....
-   val memresp_val    = Mux(io.com_exception && io.dmem.resp.bits.uop.is_load, false.B,
-                                                io.lsu_io.forward_val || io.dmem.resp.valid)
-   val memresp_rf_wen = (io.dmem.resp.valid &&
-                        (io.dmem.resp.bits.uop.mem_cmd === M_XRD || io.dmem.resp.bits.uop.is_amo)) ||
-                        io.lsu_io.forward_val // TODO should I refactor this to use is_load?
-   val memresp_uop    = Mux(io.lsu_io.forward_val, io.lsu_io.forward_uop,
-                                                io.dmem.resp.bits.uop)
-
-   val memresp_data = Mux(io.lsu_io.forward_val, io.lsu_io.forward_data, io.dmem.resp.bits.data_subword)
-
-   io.lsu_io.memresp.valid := memresp_val
-   io.lsu_io.memresp.bits  := memresp_uop
-
-
-   // Hook up loads to the response
-   io.ll_iresp.valid                 := RegNext(memresp_val
-                                     && !IsKilledByBranch(io.brinfo, memresp_uop)
-                                     && memresp_uop.dst_rtype === RT_FIX)
-   io.ll_iresp.bits.uop              := RegNext(memresp_uop)
-   io.ll_iresp.bits.uop.ctrl.rf_wen  := RegNext(memresp_rf_wen)
-   io.ll_iresp.bits.data             := RegNext(memresp_data)
-
-   if (usingFPU)
-   {
-      io.ll_fresp.valid                 := RegNext(memresp_val
-         && !IsKilledByBranch(io.brinfo, memresp_uop)
-         && memresp_uop.dst_rtype === RT_FLT)
-      io.ll_fresp.bits.uop              := RegNext(memresp_uop)
-      io.ll_fresp.bits.uop.ctrl.rf_wen  := RegNext(memresp_rf_wen)
-      io.ll_fresp.bits.data             := RegNext(memresp_data)
-   }
-
-   override def toString: String =
-      "\n     ExeUnit--" +
-      "\n       - Mem"
-}
 

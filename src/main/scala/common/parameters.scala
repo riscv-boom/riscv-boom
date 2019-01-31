@@ -153,10 +153,11 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
 
    val issueParams: Seq[IssueParams] = boomParams.issueParams
    val enableAgePriorityIssue = boomParams.enableAgePriorityIssue
+   val usingUnifiedMemIntIQs = issueParams.count(_.iqType == IQT_MEM.litValue) == 0
 
    // currently, only support one of each.
    require (issueParams.count(_.iqType == IQT_FP.litValue) == 1 || !usingFPU)
-   require (issueParams.count(_.iqType == IQT_MEM.litValue) == 1)
+   require (issueParams.count(_.iqType == IQT_MEM.litValue) == 1 || usingUnifiedMemIntIQs)
    require (issueParams.count(_.iqType == IQT_INT.litValue) == 1)
 
    //************************************
