@@ -443,6 +443,8 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule()(p)
 
    uop.uopc       := cs.uopc
    uop.iqtype     := cs.iqtype
+   if (usingUnifiedMemIntIQs)
+      when (cs.iqtype === IQT_MEM) { uop.iqtype := IQT_INT }
    uop.fu_code    := cs.fu_code
 
    // x-registers placed in 0-31, f-registers placed in 32-63.

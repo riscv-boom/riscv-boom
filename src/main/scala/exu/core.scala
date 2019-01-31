@@ -771,7 +771,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    issue_units.map(_.io.flush_pipeline := rob.io.flush.valid)
 
    // Load-hit Misspeculations
-   require (issue_units.count(_.iqType == IQT_MEM.litValue) == 1)
+   require (issue_units.count(_.iqType == IQT_MEM.litValue) == 1 || usingUnifiedMemIntIQs)
    val mem_iq = issue_units.mem_iq
 
    require (mem_iq.issue_width == 1)
@@ -791,7 +791,6 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
    // Share the memory port with other long latency operations.
    val mem_unit = exe_units.memory_unit
-   require (mem_unit.writes_ll_irf)
    val mem_resp = mem_unit.io.ll_iresp
 
    when (RegNext(!sxt_ldMiss) && RegNext(RegNext(lsu.io.mem_ldSpecWakeup.valid)) &&
@@ -1037,9 +1036,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       }
    }
    require(w_cnt == iregfile.io.write_ports.length)
-
-   ll_wbarb.io.in(0).valid := mem_resp.valid && mem_resp.bits.uop.ctrl.rf_wen && mem_resp.bits.uop.dst_rtype === RT_FIX
-   ll_wbarb.io.in(0).bits  := mem_resp.bits
+   ll_wbarb.io.in(0) <> mem_resp
    assert (ll_wbarb.io.in(0).ready) // never backpressure the memory unit.
 
    if (usingFPU)
@@ -1087,7 +1084,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
          val resp   = eu.io.iresp
          val wb_uop = resp.bits.uop
          val data   = resp.bits.data
-         assert(!eu.has_mem)
+
          rob.io.wb_resps(cnt).valid := resp.valid && !(wb_uop.is_store && !wb_uop.is_amo)
          rob.io.wb_resps(cnt).bits  <> resp.bits
          rob.io.debug_wb_valids(cnt) := resp.valid && wb_uop.ctrl.rf_wen && wb_uop.dst_rtype === RT_FIX
