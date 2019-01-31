@@ -125,15 +125,17 @@ class TracedSmallBoomConfig extends Config(
    new freechips.rocketchip.system.BaseConfig)
 
 //RV32IMAC TODO: Support FP
-class SmallRV32BoomConfig extends Config(
+class SmallRV32UnifiedBoomConfig extends Config(
    new WithBoomRV32 ++
    new WithRVC ++
    new WithoutBoomFPU ++
+   new WithUnifiedMemIntIQs ++
    new WithSmallBooms ++
    new DefaultBoomConfig ++
    new WithNBoomCores(1) ++
    new WithoutTLMonitors ++
    new freechips.rocketchip.system.BaseConfig)
+
 
 
 // Allow for some number N BOOM cores.

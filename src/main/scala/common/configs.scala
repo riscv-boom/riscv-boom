@@ -64,6 +64,13 @@ class WithBoomRV32 extends Config((site, here, up) => {
   }
 })
 
+class WithUnifiedMemIntIQs extends Config((site, here, up) => {
+   case BoomTilesKey => up(BoomTilesKey, site) map { r =>
+      r.copy(core = r.core.copy(
+         issueParams = r.core.issueParams.filter(_.iqType != IQT_MEM.litValue)
+      ))
+   }
+})
 
 
 class WithoutBoomFPU extends Config((site, here, up) => {
@@ -90,6 +97,7 @@ class WithRVC extends Config((site, here, up) => {
          fetchWidth = r.core.fetchWidth * 2,
          useCompressed = true))}
 })
+
 
 // Small BOOM! Try to be fast to compile and easier to debug.
 class WithSmallBooms extends Config((site, here, up) => {

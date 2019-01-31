@@ -141,7 +141,8 @@ class ALUExeUnit(
       reads_irf  = true,
       writes_irf = has_alu || has_mul || has_div,
       writes_ll_irf = has_mem,
-      writes_ll_frf = has_ifpu || has_mem, 
+      writes_ll_frf = (has_ifpu || has_mem)
+         && p(tile.TileKey).core.fpu != None,
       num_bypass_stages =
          if (has_alu && has_mul) 3 //TODO XXX p(tile.TileKey).core.imulLatency
          else if (has_alu) 1 else 0,
@@ -340,6 +341,7 @@ class ALUExeUnit(
       // Hook up loads to the response
       io.ll_iresp.valid                 := RegNext(memresp_val
                                                 && !IsKilledByBranch(io.brinfo, memresp_uop)
+                                                && memresp_rf_wen
                                                 && memresp_uop.dst_rtype === RT_FIX)
       io.ll_iresp.bits.uop              := RegNext(memresp_uop)
       io.ll_iresp.bits.uop.ctrl.rf_wen  := RegNext(memresp_rf_wen)
@@ -349,8 +351,9 @@ class ALUExeUnit(
       {
          require(!has_alu, "Don't support this yet")
          io.ll_fresp.valid                 := RegNext(memresp_val
-            && !IsKilledByBranch(io.brinfo, memresp_uop)
-            && memresp_uop.dst_rtype === RT_FLT)
+                                                   && !IsKilledByBranch(io.brinfo, memresp_uop)
+                                                   && memresp_rf_wen
+                                                   && memresp_uop.dst_rtype === RT_FLT)
          io.ll_fresp.bits.uop              := RegNext(memresp_uop)
          io.ll_fresp.bits.uop.ctrl.rf_wen  := RegNext(memresp_rf_wen)
          io.ll_fresp.bits.data             := RegNext(memresp_data)
