@@ -198,11 +198,15 @@ class IssueUnits(num_wakeup_ports: Int)(implicit val p: Parameters)
 
    require (enableAgePriorityIssue) // unordered is currently unsupported.
 
-//      issue_Units =issueConfigs colect {if iqType=....)
-   iss_units += Module(new IssueUnitCollasping(issueParams.find(_.iqType == IQT_MEM.litValue).get, num_wakeup_ports))
-   iss_units += Module(new IssueUnitCollasping(issueParams.find(_.iqType == IQT_INT.litValue).get, num_wakeup_ports))
-
-   def mem_iq = iss_units.find(_.iqType == IQT_MEM.litValue).get
+   for (issParam <- issueParams.filter(_.iqType != IQT_FP.litValue))
+   {
+      iss_units += Module(new IssueUnitCollasping(issParam, num_wakeup_ports))
+   }
+   def mem_iq = if (usingUnifiedMemIntIQs)
+      // When using unified IQs the IQT_INT handles everything
+      iss_units.find(_.iqType == IQT_INT.litValue).get
+   else
+      iss_units.find(_.iqType == IQT_MEM.litValue).get
    def int_iq = iss_units.find(_.iqType == IQT_INT.litValue).get
 }
 

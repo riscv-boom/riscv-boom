@@ -108,7 +108,9 @@ class ExecutionUnits(fpu: Boolean)(implicit val p: Parameters) extends HasBoomCo
    if (!fpu)
    {
       val int_width = issueParams.find(_.iqType == IQT_INT.litValue).get.issueWidth
-      val memExeUnit = Module(new MemExeUnit())
+      val memExeUnit = Module(new ALUExeUnit(
+         has_alu = false,
+         has_mem = true))
 
       memExeUnit.io.status := DontCare
       memExeUnit.io.get_ftq_pc := DontCare
