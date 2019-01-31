@@ -65,9 +65,12 @@ class WithBoomRV32 extends Config((site, here, up) => {
 })
 
 
+
 class WithoutBoomFPU extends Config((site, here, up) => {
-   case BoomTilesKey => up(BoomTilesKey, site) map { r => r.copy(core = r.core.copy(
-      fpu = None))
+   case BoomTilesKey => up(BoomTilesKey, site) map { r =>
+      r.copy(core = r.core.copy(
+         issueParams = r.core.issueParams.filter(_.iqType != IQT_FP.litValue),
+         fpu = None))
    }
 })
 
