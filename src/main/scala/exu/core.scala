@@ -160,8 +160,9 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    val brunit_idx = exe_units.br_unit_idx
    br_unit <> exe_units.br_unit_io
 
-   for (eu <- exe_units) {
-      eu.io.brinfo := br_unit.brinfo
+   for (eu <- exe_units)
+   {
+      eu.io.brinfo        := br_unit.brinfo
       eu.io.com_exception := rob.io.flush.valid
    }
    if (usingFPU)

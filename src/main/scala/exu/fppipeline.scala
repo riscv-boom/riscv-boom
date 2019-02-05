@@ -65,8 +65,8 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
                                  exe_units.num_frf_read_ports,
                                  exe_units.num_frf_write_ports + 1, // + 1 for ll writeback
                                  fLen+1,
-                                 // No bypassing for FP
-                                 Seq(false) ++ (0 until exe_units.num_frf_write_ports).map(x=>false)
+                                 // No bypassing for any FP units, + 1 for ll_wb
+                                 Seq.fill(exe_units.num_frf_write_ports + 1){ false }
                                  ))
    val fregister_read   = Module(new RegisterRead(
                            issue_unit.issue_width,
