@@ -173,7 +173,7 @@ class ExecutionUnits(fpu: Boolean)(implicit val p: Parameters) extends HasBoomCo
    require (exe_units.length != 0)
    if (!fpu)
    {
-      // if this is for FPU units, we don't need a memory unit (or other integer units)..
+      // if this is for FPU units, we don't need a memory unit (or other integer units).
       require (exe_units.map(_.has_mem).reduce(_|_), "Datapath is missing a memory unit.")
       require (exe_units.map(_.has_mul).reduce(_|_), "Datapath is missing a multiplier.")
       require (exe_units.map(_.has_div).reduce(_|_), "Datapath is missing a divider.")
