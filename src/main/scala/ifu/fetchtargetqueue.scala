@@ -165,7 +165,9 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
    // **** Handle Mispredictions ****
    //-------------------------------------------------------------
 
-   when (io.brinfo.valid && io.brinfo.mispredict)
+   when (io.brinfo.valid && io.brinfo.mispredict && !io.flush.valid)
+   // Flush signal is sent out at commit, so that should override
+   // earlier branch mispredict signals.
    {
       val new_ptr = WrapInc(io.brinfo.ftq_idx, num_entries)
       enq_ptr.value := new_ptr
