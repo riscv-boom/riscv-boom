@@ -24,7 +24,7 @@ import boom.util._
 
 class UOPCodeFDivDecoder extends Module
 {
-  val io = IO(new Bundle 
+  val io = IO(new Bundle
   {
     val uopc = Input(Bits(UOPC_SZ.W))
     val sigs = Output(new tile.FPUCtrlSigs())

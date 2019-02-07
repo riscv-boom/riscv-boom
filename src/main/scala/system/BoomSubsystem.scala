@@ -49,20 +49,20 @@ trait HasBoomTiles extends HasTiles
 }
 
 trait HasBoomTilesModuleImp extends HasTilesModuleImp
-    with HasPeripheryDebugModuleImp 
+    with HasPeripheryDebugModuleImp
 {
   val outer: HasBoomTiles
 }
 
 class BoomSubsystem(implicit p: Parameters) extends BaseSubsystem
-    with HasBoomTiles 
+    with HasBoomTiles
 {
   val tiles = boomTiles
   override lazy val module = new BoomSubsystemModule(this)
 }
 
 class BoomSubsystemModule[+L <: BoomSubsystem](_outer: L) extends BaseSubsystemModuleImp(_outer)
-    with HasBoomTilesModuleImp 
+    with HasBoomTilesModuleImp
 {
   tile_inputs.zip(outer.hartIdList).foreach { case(wire, i) =>
     wire.clock := clock
@@ -109,7 +109,7 @@ trait CanHaveMisalignedMasterAXI4MemPort { this: BaseSubsystem =>
 }
 
 /** Actually generates the corresponding IO in the concrete Module */
-trait CanHaveMisalignedMasterAXI4MemPortModuleImp extends LazyModuleImp 
+trait CanHaveMisalignedMasterAXI4MemPortModuleImp extends LazyModuleImp
 {
   val outer: CanHaveMisalignedMasterAXI4MemPort
 

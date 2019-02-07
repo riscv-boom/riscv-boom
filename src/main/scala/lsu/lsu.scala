@@ -435,11 +435,11 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
                             init=false.B)
 
    val xcpt_uop   = RegNext(Mux(ma_ld, io.exe_resp.bits.uop, exe_tlb_uop))
-   when (mem_xcpt_valid) 
+   when (mem_xcpt_valid)
    {
       // Technically only faulting AMOs need this
       assert(xcpt_uop.is_load ^ xcpt_uop.is_store)
-      when (xcpt_uop.is_load) 
+      when (xcpt_uop.is_load)
       {
          laq_uop(xcpt_uop.ldq_idx).exception := true.B
       }

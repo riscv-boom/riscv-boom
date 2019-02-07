@@ -372,7 +372,7 @@ class ALUExeUnit(
 
       // pulled out for critical path reasons
       // TODO: Does this make sense as part of the iresp bundle?
-      if (has_alu) 
+      if (has_alu)
       {
          io.iresp.bits.uop.csr_addr := ImmGen(alu.io.resp.bits.uop.imm_packed, IS_I).asUInt
          io.iresp.bits.uop.ctrl.csr_cmd := alu.io.resp.bits.uop.ctrl.csr_cmd

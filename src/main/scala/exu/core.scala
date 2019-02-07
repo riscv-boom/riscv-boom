@@ -50,7 +50,7 @@ trait HasBoomCoreIO extends freechips.rocketchip.tile.HasTileParameters
 {
    implicit val p: Parameters
    val io = IO(new freechips.rocketchip.tile.CoreBundle()(p)
-      with freechips.rocketchip.tile.HasExternallyDrivenTileConstants 
+      with freechips.rocketchip.tile.HasExternallyDrivenTileConstants
    {
          val interrupts = Input(new freechips.rocketchip.tile.CoreInterrupts())
          val ifu = new boom.ifu.BoomFrontendIO
@@ -108,7 +108,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
                                  xLen,
                                  Seq(true) ++ exe_units.bypassable_write_port_mask)) // 0th is bypassable ll_wb
                           }
-                          else 
+                          else
                           {
                               Module(new RegisterFileBehavorial(numIntPhysRegs,
                                  num_irf_read_ports,
@@ -670,7 +670,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
          !(sxt_ldMiss && (intport.bits.uop.iw_p1_poisoned || intport.bits.uop.iw_p2_poisoned))
       renport.bits := intport.bits
    }
-   if (usingFPU) 
+   if (usingFPU)
    {
       for ((renport, fpport) <- rename_stage.io.fp_wakeups zip fp_pipeline.io.wakeups)
       {
@@ -710,13 +710,13 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       iu.io.dis_valids(w) := dis_valids(w) && dis_uops(w).iqtype === (iu.iqType).U
       iu.io.dis_uops(w) := dis_uops(w)
 
-      when (dis_uops(w).uopc === uopSTA && dis_uops(w).lrs2_rtype === RT_FLT) 
+      when (dis_uops(w).uopc === uopSTA && dis_uops(w).lrs2_rtype === RT_FLT)
       {
          iu.io.dis_uops(w).lrs2_rtype := RT_X
          iu.io.dis_uops(w).prs2_busy := false.B
       }
    }
-   if (usingFPU) 
+   if (usingFPU)
    {
       fp_pipeline.io.dis_valids <> dis_valids
       fp_pipeline.io.dis_uops <> dis_uops
@@ -754,7 +754,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
             fu_types = fu_types & RegNext(~Mux(idiv_issued, FU_DIV, 0.U))
          }
 
-         if (exe_unit.has_mem) 
+         if (exe_unit.has_mem)
          {
             iss_valids(iss_idx) := issue_units.mem_iq.io.iss_valids(0)
             iss_uops(iss_idx)   := issue_units.mem_iq.io.iss_uops(0)
@@ -888,7 +888,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    def encodeVirtualAddress(a0: UInt, ea: UInt) = if (vaddrBitsExtended == vaddrBits)
    {
      ea
-   } 
+   }
    else
    {
       // Efficient means to compress 64-bit VA into vaddrBits+1 bits.
@@ -904,7 +904,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
    exe_units.map(_.io.fcsr_rm := csr.io.fcsr_rm)
 
-   if (usingFPU) 
+   if (usingFPU)
    {
       fp_pipeline.io.fcsr_rm := csr.io.fcsr_rm
    }
@@ -1212,7 +1212,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
       for (w <- 0 until decodeWidth)
       {
-         if (w == 0) 
+         if (w == 0)
          {
             printf("\n  Dec:  ([0x%x]                        ", dec_uops(w).pc(19,0))
          }
@@ -1233,11 +1233,11 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
       for (w <- 0 until decodeWidth)
       {
-         if (w == 0) 
+         if (w == 0)
          {
             printf("\n  Ren:  ([0x%x]                        ", rename_stage.io.ren2_uops(w).pc(19,0))
          }
-         else 
+         else
          {
             printf("[0x%x]                        ", rename_stage.io.ren2_uops(w).pc(19,0))
          }
@@ -1367,7 +1367,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
          // To allow for diffs against spike :/
          def printf_inst(uop: MicroOp) = {
-            when (uop.is_rvc) 
+            when (uop.is_rvc)
             {
                printf("(0x%x)", uop.inst(15,0))
             }
@@ -1418,16 +1418,16 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
       for (w <- 0 until decodeWidth)
       {
-         when (dec_valids(w) && !dec_printed_mask(w)) 
+         when (dec_valids(w) && !dec_printed_mask(w))
          {
             printf("%d; O3PipeView:decode:%d\n", dec_uops(w).debug_events.fetch_seq, debug_tsc_reg)
          }
          // Rename begins when uop leaves fetch buffer (Dec+Ren1 are in same stage).
-         when (dec_will_fire(w)) 
+         when (dec_will_fire(w))
          {
             printf("%d; O3PipeView:rename: %d\n", dec_uops(w).debug_events.fetch_seq, debug_tsc_reg)
          }
-         when (dis_valids(w)) 
+         when (dis_valids(w))
          {
             printf("%d; O3PipeView:dispatch: %d\n", dis_uops(w).debug_events.fetch_seq, debug_tsc_reg)
          }
@@ -1506,7 +1506,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    io.fpu.inst := 0.U
 
    //io.trace := csr.io.trace unused
-   if (tileParams.trace) 
+   if (tileParams.trace)
    {
       for (w <- 0 until COMMIT_WIDTH)
       {
@@ -1522,7 +1522,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       }
       dontTouch(io.trace)
    }
-   else 
+   else
    {
       io.trace := DontCare
       io.trace map (t => t.valid := false.B)

@@ -13,9 +13,9 @@ import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.diplomacy.LazyModule
 import freechips.rocketchip.devices.debug.Debug
 
-class TestHarness()(implicit p: Parameters) extends Module 
+class TestHarness()(implicit p: Parameters) extends Module
 {
-  val io = IO(new Bundle 
+  val io = IO(new Bundle
   {
     val success = Output(Bool())
   })

@@ -13,7 +13,7 @@ import chisel3.util._
 /** Implements the same interface as chisel3.util.Queue.
   * Effectively a two-entry Queue.
   *  */
-class ElasticReg[T <: Data](gen: T) extends Module 
+class ElasticReg[T <: Data](gen: T) extends Module
 {
    val entries = 2
    val io = IO(new QueueIO(gen, entries) {})
@@ -21,7 +21,7 @@ class ElasticReg[T <: Data](gen: T) extends Module
    private val valid = RegInit(VecInit(Seq.fill(entries) { false.B }))
    private val elts = Reg(Vec(entries, gen))
 
-   for (i <- 0 until entries) 
+   for (i <- 0 until entries)
    {
       def paddedValid(i: Int) = if (i == -1) true.B else if (i == entries) false.B else valid(i)
 
