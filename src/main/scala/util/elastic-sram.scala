@@ -1,6 +1,6 @@
 //******************************************************************************
 // Copyright (c) 2018 - 2018, The Regents of the University of California (Regents).
-// All Rights Reserved. See LICENSE for license details.
+// All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
 // Author: Christopher Celio
 //------------------------------------------------------------------------------
@@ -35,7 +35,8 @@ class ElasticSeqMem[T <: Data](
 {
    private val idx_sz = log2Ceil(num_entries)
 
-   val io = IO(new Bundle {
+   val io = IO(new Bundle 
+   {
       // read request on cycle S0 (pass in read address)
       val rreq = Flipped(Decoupled(UInt(idx_sz.W)))
       // read response on cycle S1 (receive read output)
@@ -54,11 +55,9 @@ class ElasticSeqMem[T <: Data](
       ram.write(io.write.bits.idx, io.write.bits.data)
    }
 
-
    // Shadow flop.
    // we provide a shadow flop to decouple the not-ready read response from the
    // read request.
-
 
 
    // Replay s0 onto s1 if s1_resp is not ready,
@@ -76,7 +75,6 @@ class ElasticSeqMem[T <: Data](
    io.rresp.valid := s1_valid
    io.rresp.bits := ram.read(s0_ridx, s0_valid)
 
-
    when (io.flush)
    {
       // TODO XXX
@@ -85,4 +83,3 @@ class ElasticSeqMem[T <: Data](
    }
 
 }
-

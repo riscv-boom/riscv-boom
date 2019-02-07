@@ -1,10 +1,11 @@
 //******************************************************************************
 // Copyright (c) 2015 - 2018, The Regents of the University of California (Regents).
-// All Rights Reserved. See LICENSE for license details.
+// All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
 // Author: Christopher Celio
 //------------------------------------------------------------------------------
 
+//------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
 // RISCV GShare Branch Predictor
 //------------------------------------------------------------------------------
@@ -15,23 +16,22 @@
 //    - Does not rectangularize the memory.
 //    - Folds history if it is too long for the number of sets available.
 
-
 package boom.bpu
 
 import chisel3._
 import chisel3.util._
 import chisel3.core.withReset
+
 import freechips.rocketchip.config.{Parameters, Field}
+
 import boom.common._
 import boom.util.{ElasticReg, Fold}
-
 
 case class GShareParameters(
    enabled: Boolean = true,
    history_length: Int = 12,
    num_sets: Int = 4096 // 12b
    )
-
 
 trait HasGShareParameters extends HasBoomCoreParameters
 {
@@ -42,7 +42,6 @@ trait HasGShareParameters extends HasBoomCoreParameters
    val idx_sz = log2Ceil(nSets)
    val row_sz = fetchWidth*2
 }
-
 
 class GShareResp(val fetch_width: Int, val idx_sz: Int) extends Bundle
 {
@@ -110,7 +109,6 @@ class GShareBrPredictor(
       next
    }
 
-
    // Get a fetchWidth length bit-vector of taken/not-takens.
    private def getTakensFromRow(row: UInt): UInt =
    {
@@ -122,7 +120,6 @@ class GShareBrPredictor(
       }
       takens.asUInt
    }
-
 
    // Pick out the old counter value from a full row and increment it.
    // Return the new row.
@@ -137,7 +134,6 @@ class GShareBrPredictor(
       row := (old_row & mask) | (new_cntr << shamt)
       row
    }
-
 
    // Update the counters in a row (only one if mispredicted or all counters to strenthen).
    // Return the new row.
@@ -158,7 +154,6 @@ class GShareBrPredictor(
       row
    }
 
-
    //------------------------------------------------------------
    // reset/initialization
 
@@ -177,12 +172,10 @@ class GShareBrPredictor(
       is (s_idle)  { when (io.do_reset) { fsm_state := s_clear } }
    }
 
-
    //------------------------------------------------------------
    // Predictor state.
 
    val counter_table = SyncReadMem(nSets, UInt(row_sz.W))
-
 
    //------------------------------------------------------------
    // Perform hash on F1.
@@ -197,7 +190,6 @@ class GShareBrPredictor(
 
    val q_s3_resp = withReset(reset.toBool || io.fe_clear || io.f4_redirect)
       {Module(new ElasticReg(new GShareResp(fetch_width, idx_sz)))}
-//      {Module(new ElasticReg(UInt(width=row_sz)))}
 
    q_s3_resp.io.enq.valid := io.f2_valid
    q_s3_resp.io.enq.bits.rowdata  := s2_out
@@ -213,14 +205,12 @@ class GShareBrPredictor(
 
    q_s3_resp.io.deq.ready := io.resp.ready
 
-
    //------------------------------------------------------------
    // Update counter table.
 
    val com_info = (io.commit.bits.info).asTypeOf(new GShareResp(fetch_width, idx_sz))
 
    val com_idx = Hash(io.commit.bits.fetch_pc, io.commit.bits.history)(idx_sz-1,0)
-
 
    val wen = io.commit.valid || (fsm_state === s_clear)
 
@@ -238,14 +228,12 @@ class GShareBrPredictor(
       counter_table.write(waddr, wdata)
    }
 
-
    // First commit will have garbage so ignore it.
    val enable_assert = RegInit(false.B); when (io.commit.valid) { enable_assert := true.B }
    when (enable_assert && io.commit.valid)
    {
       assert (com_idx === com_info.debug_index, "[gshare] disagreement on update indices.")
    }
-
 
    override def toString: String =
       "\n   ==GShare==" +

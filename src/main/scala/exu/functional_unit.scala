@@ -1,10 +1,11 @@
 //******************************************************************************
 // Copyright (c) 2013 - 2018, The Regents of the University of California (Regents).
-// All Rights Reserved. See LICENSE for license details.
+// All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
 // Author: Christopher Celio
 //------------------------------------------------------------------------------
 
+//------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
 // Functional Units
 //------------------------------------------------------------------------------
@@ -12,25 +13,25 @@
 //
 // If regfile bypassing is disabled, then the functional unit must do its own
 // bypassing in here on the WB stage (i.e., bypassing the io.resp.data)
-
+//
 // TODO: explore possibility of conditional IO fields? if a branch unit... how to add extra to IO in subclass?
 
 package boom.exu
 
 import chisel3._
 import chisel3.util._
-import freechips.rocketchip.config.Parameters
+import chisel3.experimental.chiselName
 
+import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.rocket.ALU._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile
 import freechips.rocketchip.rocket.PipelinedMultiplier
-import chisel3.experimental.chiselName
+
 import boom.bpu.{BpredType, BranchPredInfo, BoomBTBUpdate}
 import boom.common._
 import boom.ifu._
 import boom.util._
-
 
 object FUConstants
 {
@@ -62,7 +63,6 @@ class SupportedFuncUnits(
    val ifpu: Boolean = false)
 {
 }
-
 
 class FunctionalUnitIo(
    val num_stages: Int,
@@ -177,7 +177,6 @@ abstract class FunctionalUnit(is_pipelined: Boolean
    val io = IO(new FunctionalUnitIo(num_stages, num_bypass_stages, data_width))
 }
 
-
 // Note: this helps track which uops get killed while in intermediate stages,
 // but it is the job of the consumer to check for kills on the same cycle as consumption!!!
 abstract class PipelinedFunctionalUnit(val num_stages: Int,
@@ -193,7 +192,6 @@ abstract class PipelinedFunctionalUnit(val num_stages: Int,
 {
    // Pipelined functional unit is always ready.
    io.req.ready := true.B
-
 
    if (num_stages > 0)
    {
@@ -293,7 +291,6 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1, data_width: 
    alu.io.fn  := io.req.bits.uop.ctrl.op_fcn
    alu.io.dw  := io.req.bits.uop.ctrl.fcn_dw
 
-
    if (is_branch_unit)
    {
       val uop_pc_ = (AlignPCToBoundary(io.get_ftq_pc.fetch_pc, icBlockBytes)
@@ -358,13 +355,13 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1, data_width: 
       // if b/j is taken, does it go to the wrong target?
       val wrong_taken_target = !io.get_ftq_pc.next_val || (io.get_ftq_pc.next_pc =/= bj_addr)
 
-
       if (DEBUG_PRINTF)
       {
          printf("  BR-UNIT: PC: 0x%x+%x, Next: %d, 0x%x ,bj_addr: 0x%x\n",
             io.get_ftq_pc.fetch_pc, io.req.bits.uop.pc_lob, io.get_ftq_pc.next_val, io.get_ftq_pc.next_pc, bj_addr)
       }
-      when (io.req.valid && uop.is_jal && io.get_ftq_pc.next_val && io.get_ftq_pc.next_pc =/= bj_addr) {
+      when (io.req.valid && uop.is_jal && io.get_ftq_pc.next_val && io.get_ftq_pc.next_pc =/= bj_addr) 
+      {
          printf("[func] JAL went to the wrong target [curr: 0x%x+%x next: 0x%x, target: 0x%x]",
             io.get_ftq_pc.fetch_pc, io.req.bits.uop.pc_lob, io.get_ftq_pc.next_pc, bj_addr)
       }
@@ -437,11 +434,9 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1, data_width: 
          }
       }
 
-
       val br_unit =
          if (enableBrResolutionRegister) Reg(new BranchUnitResp)
          else Wire(new BranchUnitResp)
-
 
 
       br_unit.take_pc := mispredict
@@ -508,11 +503,15 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1, data_width: 
             Mux(uop.is_jump, BpredType.jump,
                 BpredType.branch)))
 
-
       // Branch/Jump Target Calculation
       // we can't push this through the ALU though, b/c jalr needs both PC+4 and rs1+offset
 
-      def encodeVirtualAddress(a0: UInt, ea: UInt) = if (vaddrBitsExtended == vaddrBits) ea else {
+      def encodeVirtualAddress(a0: UInt, ea: UInt) = if (vaddrBitsExtended == vaddrBits)
+      {
+        ea
+      }
+      else
+      {
          // Efficient means to compress 64-bit VA into vaddrBits+1 bits.
          // (VA is bad if VA(vaddrBits) != VA(vaddrBits-1)).
          val a = a0.asSInt >> vaddrBits
@@ -574,7 +573,6 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1, data_width: 
    io.resp.bits.fflags.valid := false.B
 }
 
-
 // passes in base+imm to calculate addresses, and passes store data, to the LSU
 // for floating point, 65bit FP store-data needs to be decoded into 64bit FP form
 class MemAddrCalcUnit(implicit p: Parameters)
@@ -611,7 +609,6 @@ class MemAddrCalcUnit(implicit p: Parameters)
            uopLD && io.req.bits.uop.uopc =/= uopSTA),
            "[maddrcalc] assert we never get store data in here.")
 
-
    // Handle misaligned exceptions
    val typ = io.req.bits.uop.mem_typ
    val misaligned =
@@ -636,7 +633,6 @@ class MemAddrCalcUnit(implicit p: Parameters)
 }
 
 
-
 // currently, bypassing is unsupported!
 // All FP instructions are padded out to the max latency unit for easy
 // write-port scheduling.
@@ -659,7 +655,6 @@ class FPUUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(
    io.resp.bits.fflags.bits.uop   := io.resp.bits.uop
    io.resp.bits.fflags.bits.flags := fpu.io.resp.bits.fflags.bits.flags // kill me now
 }
-
 
 class IntToFPUnit(latency: Int)(implicit p: Parameters) extends PipelinedFunctionalUnit(
    num_stages = latency,
@@ -705,7 +700,6 @@ class IntToFPUnit(latency: Int)(implicit p: Parameters) extends PipelinedFunctio
 }
 
 
-
 // Iterative/unpipelined, can only hold a single MicroOp at a time TODO allow up to N micro-ops simultaneously.
 // assumes at least one register between request and response
 abstract class IterativeFunctionalUnit(data_width: Int)(implicit p: Parameters)
@@ -733,11 +727,9 @@ abstract class IterativeFunctionalUnit(data_width: Int)(implicit p: Parameters)
       r_uop.br_mask := GetNewBrMask(io.brinfo, r_uop)
    }
 
-
    // assumes at least one pipeline register between request and response
    io.resp.bits.uop := r_uop
 }
-
 
 class DivUnit(data_width: Int)(implicit p: Parameters) extends IterativeFunctionalUnit(data_width)(p)
 {
@@ -781,4 +773,3 @@ class PipelinedMulUnit(num_stages: Int, data_width: Int)(implicit p: Parameters)
    // response
    io.resp.bits.data    := imul.io.resp.bits.data
 }
-

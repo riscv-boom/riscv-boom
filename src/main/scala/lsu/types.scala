@@ -1,11 +1,13 @@
 //******************************************************************************
 // Copyright (c) 2018 - 2018, The Regents of the University of California (Regents).
-// All Rights Reserved. See LICENSE for license details.
+// All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
 // Author: Christopher Celio
 //------------------------------------------------------------------------------
 
 package boom.lsu
+
+import scala.collection.mutable.ListBuffer
 
 import chisel3._
 
@@ -15,8 +17,6 @@ import freechips.rocketchip.rocket.{DCache, HellaCache, HellaCacheArbiter, Hella
 import freechips.rocketchip.subsystem.RocketCrossingKey
 import freechips.rocketchip.tile.{BaseTile, HasTileParameters}
 import freechips.rocketchip.tilelink.TLIdentityNode
-import scala.collection.mutable.ListBuffer
-
 
 /** Mix-ins for constructing tiles that have a HellaCache */
 
@@ -26,23 +26,27 @@ trait HasBoomHellaCache { this: BaseTile =>
   def findScratchpadFromICache: Option[AddressSet]
   var nDCachePorts = 0
   val dcache: HellaCache = LazyModule(
-    if(tileParams.dcache.get.nMSHRs == 0) {
+    if (tileParams.dcache.get.nMSHRs == 0) 
+    {
       new DCache(hartId, findScratchpadFromICache _, p(RocketCrossingKey).head.knownRatio)
-    } else { new BoomNonBlockingDCache(hartId) })
+    } 
+    else 
+    { 
+      new BoomNonBlockingDCache(hartId)
+    })
 
   //tlMasterXbar.node := dcache.node
   val dCacheTap = TLIdentityNode()
   tlMasterXbar.node := dCacheTap := dcache.node
 }
 
-
-trait HasBoomHellaCacheModule {
+trait HasBoomHellaCacheModule 
+{
   val outer: HasBoomHellaCache
   val dcachePorts = ListBuffer[HellaCacheIO]()
   val dcacheArb = Module(new HellaCacheArbiter(outer.nDCachePorts)(outer.p))
   outer.dcache.module.io.cpu <> dcacheArb.io.mem
 }
-
 
 /** Mix-ins for constructing tiles that might have a PTW */
 trait CanHaveBoomPTW extends HasTileParameters with HasBoomHellaCache { this: BaseTile =>
@@ -51,17 +55,17 @@ trait CanHaveBoomPTW extends HasTileParameters with HasBoomHellaCache { this: Ba
   nDCachePorts += (if (usingPTW) 1 else 0)
 }
 
-
-trait CanHaveBoomPTWModule extends HasBoomHellaCacheModule {
+trait CanHaveBoomPTWModule extends HasBoomHellaCacheModule 
+{
   val outer: CanHaveBoomPTW
   val ptwPorts = ListBuffer(outer.dcache.module.io.ptw)
   val ptw = Module(new PTW(outer.nPTWPorts)(outer.dcache.node.edges.out(0), outer.p))
   ptw.io <> DontCare // Is overridden below if PTW is connected
-  if (outer.usingPTW) {
+  if (outer.usingPTW) 
+  {
     dcachePorts += ptw.io.mem
   }
 }
-
 
 /** Monitor cache data writebacks/releases for memory ordering. */
 
@@ -69,4 +73,3 @@ class ReleaseInfo(implicit p: Parameters) extends boom.common.BoomBundle()(p)
 {
    val address = UInt(corePAddrBits.W)
 }
-

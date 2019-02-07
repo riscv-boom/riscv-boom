@@ -1,10 +1,11 @@
 //******************************************************************************
 // Copyright (c) 2017 - 2018, The Regents of the University of California (Regents).
-// All Rights Reserved. See LICENSE for license details.
+// All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
 // Author: Christopher Celio
 //------------------------------------------------------------------------------
 
+//------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
 // Set-associative Branch Target Buffer with RAS and BIM predictor (BTB-sa)
 //------------------------------------------------------------------------------
@@ -30,22 +31,21 @@ package boom.bpu
 
 import chisel3._
 import chisel3.util._
+
 import freechips.rocketchip.config.Parameters
+import freechips.rocketchip.util.Str
+
 import boom.common._
 import boom.exu._
-
-import freechips.rocketchip.util.Str
 
 // Set-associative branch target buffer.
 class BTBsa(implicit p: Parameters) extends BoomBTB
 {
-
    val bim = Module(new BimodalTable())
    bim.io.req := io.req
    bim.io.do_reset := false.B // TODO
    bim.io.flush := false.B // TODO
    bim.io.update := io.bim_update
-
 
    private val lsb_sz = log2Ceil(coreInstBytes)
    private def getTag (addr: UInt): UInt = addr(tag_sz+idx_sz+lsb_sz-1, idx_sz+lsb_sz)
@@ -58,7 +58,6 @@ class BTBsa(implicit p: Parameters) extends BoomBTB
       val bpd_type = BpredType()
       val cfi_type = CfiType()
    }
-
 
    val stall = !io.req.valid
    val s0_idx = getIdx(io.req.bits.addr)(idx_sz-1,0)
@@ -84,7 +83,6 @@ class BTBsa(implicit p: Parameters) extends BoomBTB
    // clear entries (e.g., multiple tag hits, which is an invalid variant)
    val clear_valid = WireInit(false.B)
    val clear_idx = s1_idx
-
 
    for (w <- 0 until nWays)
    {
@@ -144,7 +142,6 @@ class BTBsa(implicit p: Parameters) extends BoomBTB
       clear_valid := true.B
    }
 
-
    // Mux out the winning hit.
    s1_valid := PopCount(hits_oh) === 1.U && !io.flush
    val s1_data = Mux1H(hits_oh, data_out)
@@ -152,7 +149,6 @@ class BTBsa(implicit p: Parameters) extends BoomBTB
    val s1_cfi_idx = s1_data.cfi_idx
    val s1_bpd_type = s1_data.bpd_type
    val s1_cfi_type = s1_data.cfi_type
-
 
    s1_resp_bits.target := s1_target
    s1_resp_bits.cfi_idx := (if (fetchWidth > 1) s1_cfi_idx else 0.U)
@@ -194,7 +190,6 @@ class BTBsa(implicit p: Parameters) extends BoomBTB
       }
    }
 
-
    //************************************************
    // Output.
 
@@ -208,7 +203,6 @@ class BTBsa(implicit p: Parameters) extends BoomBTB
       (bim.io.resp.valid && bim.io.resp.bits.isTaken(io.resp.bits.cfi_idx)) ||
       RegNext(BpredType.isAlwaysTaken(s1_bpd_type))
    io.resp.bits.mask := Cat((1.U << ~Mux(io.resp.bits.taken, ~io.resp.bits.cfi_idx, 0.U))-1.U, 1.U)
-
 
    //************************************************
    // Debug.

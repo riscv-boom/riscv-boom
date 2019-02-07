@@ -1,10 +1,11 @@
 //******************************************************************************
 // Copyright (c) 2016 - 2018, The Regents of the University of California (Regents).
-// All Rights Reserved. See LICENSE for license details.
+// All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
 // Author: Christopher Celio
 //------------------------------------------------------------------------------
 
+//------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
 // Two-bit Counter Table
 //------------------------------------------------------------------------------
@@ -33,18 +34,16 @@
 //    Read: on a branch misprediction.
 //    Write: on a branch resolution (with the direction of the branch).
 //
-//
 // TODO:
 //    - Don't read the p-table SRAM if stalled (need extra state to store data
 //       while stalled)..
-
 
 package boom.bpu
 
 import chisel3._
 import chisel3.util._
-import boom.util.SeqMem1rwTransformable
 
+import boom.util.SeqMem1rwTransformable
 
 class UpdateEntry(val fetch_width: Int, val index_sz: Int) extends Bundle
 {
@@ -56,18 +55,14 @@ class UpdateEntry(val fetch_width: Int, val index_sz: Int) extends Bundle
    // Are we initializing this entry? If yes, we need to write directly to both P and H-tables.
    // If takens(i), then we initialize entry to Weak-Taken. Otherwise, Weak-NotTaken.
    val do_initialize    = Bool()
-
 }
-
 
 class BrTableUpdate(val fetch_width: Int, val index_sz: Int) extends Bundle
 {
    val index      = UInt(index_sz.W)
    val executed   = UInt(fetch_width.W) // which words in the fetch packet does the update correspond to?
    val new_value  = UInt(fetch_width.W)
-
 }
-
 
 // Read p-table every cycle for a prediction.
 // Write p-table only if a misprediction occurs.
@@ -158,7 +153,6 @@ class PTableBanked(
    io.s2_r_out := Mux(s2_ren, rout_0, rout_1)
 }
 
-
 // Write h-table for every branch resolution (we can buffer these up).
 // Read h-table immediately to update the p-table (only if a mispredict occurred).
 // Track the number of entries in the P-table (needed to couple our I/Os).
@@ -206,7 +200,6 @@ class HTable(
                                     h_rout)
 }
 
-
 class TwobcCounterTable(
    fetch_width: Int,
    num_entries: Int,
@@ -235,7 +228,6 @@ class TwobcCounterTable(
                  else            Module(new PTableBanked(fetch_width, num_entries))
    val h_table = Module(new HTable(fetch_width, num_p_entries = num_entries, share_hbit = share_hbit))
 
-
    //------------------------------------------------------------
    // write queue from h-table to p-table.
 
@@ -252,7 +244,6 @@ class TwobcCounterTable(
    p_table.io.update <> pwq.io.deq
    p_table.io.stall := io.stall
 
-
    //------------------------------------------------------------
    // h-table
    // Write table for every branch resolution (we can buffer these up).
@@ -260,7 +251,6 @@ class TwobcCounterTable(
 
    h_table.io.update <> io.update
    pwq.io.enq <> h_table.io.pwq_enq
-
 
    //------------------------------------------------------------
 

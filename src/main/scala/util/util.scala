@@ -1,10 +1,11 @@
 //******************************************************************************
 // Copyright (c) 2015 - 2018, The Regents of the University of California (Regents).
-// All Rights Reserved. See LICENSE for license details.
+// All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
 // Author: Christopher Celio
 //------------------------------------------------------------------------------
 
+//------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
 // RISCV BOOM Utility Functions
 //------------------------------------------------------------------------------
@@ -17,6 +18,7 @@ import chisel3.util._
 
 import freechips.rocketchip.rocket.Instructions._
 import freechips.rocketchip.rocket._
+
 import boom.common.MicroOp
 import boom.exu.{BrResolutionInfo}
 
@@ -186,6 +188,7 @@ object WrapInc
       }
    }
 }
+
 // Decrement the input "value", wrapping it if necessary.
 object WrapDec
 {
@@ -215,7 +218,6 @@ object AlignPCToBoundary
    }
 }
 
-
 object RotateL1
 {
    def apply(signal: UInt): UInt =
@@ -227,7 +229,6 @@ object RotateL1
    }
 }
 
-
 object Sext
 {
    def apply(x: UInt, length: Int): UInt =
@@ -236,7 +237,6 @@ object Sext
       else return Cat(Fill(length-x.getWidth, x(x.getWidth-1)), x)
    }
 }
-
 
 // translates from BOOM's special "packed immediate" to a 32b signed immediate
 // Asking for U-type gives it shifted up 12 bits.
@@ -316,7 +316,6 @@ object AgePriorityEncoder
    }
 }
 
-
 // Assumption: enq.valid only high if not killed by branch (so don't check IsKilled on io.enq).
 class BranchKillableQueue[T <: boom.common.HasBoomUOP](gen: T, entries: Int)
    (implicit p: freechips.rocketchip.config.Parameters)
@@ -355,22 +354,25 @@ class BranchKillableQueue[T <: boom.common.HasBoomUOP](gen: T, entries: Int)
    {
       val mask = brmasks(i)
       valids(i)  := valids(i) && !IsKilledByBranch(io.brinfo, mask) && !io.flush
-      when (valids(i)) {
+      when (valids(i)) 
+      {
          brmasks(i) := GetNewBrMask(io.brinfo, mask)
       }
    }
 
-
-   when (do_enq) {
+   when (do_enq) 
+   {
       ram(enq_ptr.value) := io.enq.bits
       valids(enq_ptr.value) := true.B //!IsKilledByBranch(io.brinfo, io.enq.bits.uop)
       brmasks(enq_ptr.value) := GetNewBrMask(io.brinfo, io.enq.bits.uop)
       enq_ptr.inc()
    }
-   when (do_deq) {
+   when (do_deq) 
+   {
       deq_ptr.inc()
    }
-   when (do_enq =/= do_deq) {
+   when (do_enq =/= do_deq) 
+   {
       maybe_full := do_enq
    }
 
@@ -380,7 +382,6 @@ class BranchKillableQueue[T <: boom.common.HasBoomUOP](gen: T, entries: Int)
    io.deq.valid := deq_ram_valid && valids(deq_ptr.value) && !IsKilledByBranch(io.brinfo, out.uop)
    io.deq.bits := out
    io.deq.bits.uop.br_mask := GetNewBrMask(io.brinfo, brmasks(deq_ptr.value))
-
 
    // For flow queue behavior.
    when (io.empty)
@@ -394,9 +395,12 @@ class BranchKillableQueue[T <: boom.common.HasBoomUOP](gen: T, entries: Int)
    }
 
    private val ptr_diff = enq_ptr.value - deq_ptr.value
-   if (isPow2(entries)) {
+   if (isPow2(entries)) 
+   {
       io.count := Cat(maybe_full && ptr_match, ptr_diff)
-   } else {
+   }
+   else 
+   {
       io.count := Mux(ptr_match,
                      Mux(maybe_full,
                         entries.asUInt, 0.U),
@@ -404,4 +408,3 @@ class BranchKillableQueue[T <: boom.common.HasBoomUOP](gen: T, entries: Int)
                         entries.asUInt + ptr_diff, ptr_diff))
    }
 }
-

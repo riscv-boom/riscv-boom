@@ -1,6 +1,6 @@
 //******************************************************************************
 // Copyright (c) 2015 - 2018, The Regents of the University of California (Regents).
-// All Rights Reserved. See LICENSE for license details.
+// All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
 // Author: Christopher Celio
 //------------------------------------------------------------------------------
@@ -9,15 +9,15 @@ package boom.common
 
 import chisel3._
 import chisel3.util._
+
 import freechips.rocketchip.rocket._
 import freechips.rocketchip.tile._
 import freechips.rocketchip.config.{Parameters, Field}
+
 import boom.ifu._
 import boom.bpu._
 import boom.exu._
 import boom.lsu._
-
-//case object BoomKey extends Field[BoomCoreParams]
 
 case class BoomCoreParams(
    fetchWidth: Int = 1,
@@ -89,10 +89,7 @@ case class BoomCoreParams(
 
 trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
 {
-//   val rocketParams: RocketCoreParams = tileParams.core.asInstanceOf[RocketCoreParams]
-//   val boomParams: BoomCoreParams = p(BoomKey)
    val boomParams: BoomCoreParams = tileParams.core.asInstanceOf[BoomCoreParams]
-
 
    //************************************
    // Superscalar Widths
@@ -119,7 +116,6 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
 
    val numIntPhysRegs   = boomParams.numIntPhysRegisters // size of the integer physical register file
    val numFpPhysRegs    = boomParams.numFpPhysRegisters  // size of the floating point physical register file
-
 
    //************************************
    // Functional Units
@@ -225,11 +221,9 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
    }
    VLHR_LENGTH = GLOBAL_HISTORY_LENGTH+2*NUM_ROB_ENTRIES
 
-
    //************************************
    // Extra Knobs and Features
    val ENABLE_COMMIT_MAP_TABLE = boomParams.enableCommitMapTable
-
 
    //************************************
    // Implicitly calculated constants
@@ -256,7 +250,6 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
    require (isPow2(NUM_LSU_ENTRIES))
    require ((NUM_LSU_ENTRIES-1) > decodeWidth)
 
-
    //************************************
    // Custom Logic
 
@@ -269,4 +262,3 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
    val corePAddrBits = paddrBits
    val corePgIdxBits = pgIdxBits
 }
-

@@ -1,6 +1,6 @@
 //******************************************************************************
 // Copyright (c) 2015 - 2018, The Regents of the University of California (Regents).
-// All Rights Reserved. See LICENSE for license details.
+// All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
 // Author: Christopher Celio
 //------------------------------------------------------------------------------
@@ -8,6 +8,7 @@
 package boom.system
 
 import chisel3._
+
 import freechips.rocketchip.config.{Parameters, Config}
 import freechips.rocketchip.devices.debug._
 import freechips.rocketchip.devices.tilelink._
@@ -18,6 +19,7 @@ import freechips.rocketchip.system._
 import freechips.rocketchip.tile._
 import freechips.rocketchip.tilelink._
 import freechips.rocketchip.util._
+
 import boom.common._
 
 // scalastyle:off
@@ -57,7 +59,6 @@ class MegaBoomConfig extends Config(
    new freechips.rocketchip.system.BaseConfig)
 
 
-
 // Assorted configs
 class MegaBoomECCConfig extends Config(
    new WithL1IECC("parity", "parity") ++
@@ -68,7 +69,6 @@ class MegaBoomECCConfig extends Config(
    new WithNBoomCores(1) ++
    new WithoutTLMonitors ++
    new freechips.rocketchip.system.BaseConfig)
-
 
 class jtagSmallBoomConfig extends Config(
    new WithRVC ++
@@ -137,7 +137,6 @@ class SmallRV32UnifiedBoomConfig extends Config(
    new freechips.rocketchip.system.BaseConfig)
 
 
-
 // Allow for some number N BOOM cores.
 class WithNBoomCores(n: Int) extends Config((site, here, up) => {
   case BoomTilesKey => {
@@ -169,4 +168,3 @@ class WithL1DECC(tecc: String, decc: String) extends Config((site, here, up) => 
   case BoomTilesKey => up(BoomTilesKey, site) map { r =>
     r.copy(dcache = r.dcache.map(_.copy(tagECC = Some(tecc), dataECC = Some(decc)))) }
 })
-

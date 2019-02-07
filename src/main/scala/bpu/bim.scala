@@ -1,10 +1,11 @@
 //******************************************************************************
 // Copyright (c) 2015 - 2018, The Regents of the University of California (Regents).
-// All Rights Reserved. See LICENSE for license details.
+// All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
 // Author: Christopher Celio
 //------------------------------------------------------------------------------
 
+//------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
 // Bimodal Predictor Table
 //------------------------------------------------------------------------------
@@ -20,16 +21,15 @@
 // TODO:
 //    - Add reset FSM
 //    - Parameterize Pbit:Hbit ratio
-//
-// NOTES:
-//    -
 
 package boom.bpu
 
 import chisel3._
 import chisel3.util._
+
 import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.util.Str
+
 import boom.common._
 import boom.exu._
 
@@ -57,7 +57,6 @@ trait HasBimParameters extends HasBoomCoreParameters
 
 abstract class BimBundle(implicit val p: Parameters) extends freechips.rocketchip.util.ParameterizedBundle()(p)
   with HasBimParameters
-
 
 // The output from the BIM table.
 class BimResp(implicit p: Parameters) extends BimBundle()(p)
@@ -91,7 +90,6 @@ class BimResp(implicit p: Parameters) extends BimBundle()(p)
    }
 }
 
-
 // What do we store in the FTQ for updating BIM later?
 // Only store one branch worth of info.
 class BimStorage(implicit p: Parameters) extends BimBundle()(p)
@@ -106,7 +104,6 @@ class BimStorage(implicit p: Parameters) extends BimBundle()(p)
    def isTaken = value(1)
 }
 
-
 class BimUpdate(implicit p: Parameters) extends BimBundle()(p)
 {
    val entry_idx = UInt(log2Ceil(nSets).W)
@@ -116,14 +113,12 @@ class BimUpdate(implicit p: Parameters) extends BimBundle()(p)
    val taken = Bool()
 }
 
-
 class BimWrite(implicit p: Parameters) extends BimBundle()(p)
 {
    val addr = UInt(row_idx_sz.W)
    val data = UInt(row_sz.W)
    val mask = UInt(row_sz.W)
 }
-
 
 class BimodalTable(implicit p: Parameters) extends BoomModule()(p) with HasBimParameters
 {
@@ -150,7 +145,6 @@ class BimodalTable(implicit p: Parameters) extends BoomModule()(p) with HasBimPa
    // Which physical bank do we map to?
    // TODO which bits are the best to get the bank from?
    private def getBankFromIdx (idx: UInt): UInt = idx(log2Ceil(nBanks)-1, 0)
-
 
    // for initializing the BIM, this is the value to reset the row to.
    private def initRowValue (): Vec[Bool] =
@@ -181,7 +175,6 @@ class BimodalTable(implicit p: Parameters) extends BoomModule()(p) with HasBimPa
             cntr))
       next
    }
-
 
    // Pick out the old counter value from a full row and increment it.
    // Return the new row.
@@ -234,7 +227,6 @@ class BimodalTable(implicit p: Parameters) extends BoomModule()(p) with HasBimPa
    val (lag_counter, lag_done) = Counter(fsm_state === s_wait, nResetLagCycles)
    val (clear_row_addr, clear_done) = Counter(fsm_state === s_clear, nSets/nBanks)
 
-
    for (w <- 0 until nBanks)
    {
       val ram = SyncReadMem(nSets/nBanks, Vec(row_sz, Bool()))
@@ -255,7 +247,6 @@ class BimodalTable(implicit p: Parameters) extends BoomModule()(p) with HasBimPa
       uq.io.enq.bits  := r_update.bits
       uq.io.deq.ready := wq.io.enq.ready && !s2_rmw_valid
       val (u_waddr, u_wdata, u_wmask) = generateWriteInfo(uq.io.deq.bits)
-
 
       // Read-Modify-Write update path.
       // If a misprediction occurs, read out the counters and then enqueue update onto wq.
@@ -327,7 +318,6 @@ class BimodalTable(implicit p: Parameters) extends BoomModule()(p) with HasBimPa
 
    }
 
-
    //************************************************
    // Output.
 
@@ -368,18 +358,14 @@ class BimodalTable(implicit p: Parameters) extends BoomModule()(p) with HasBimPa
       }
    }
 
-
    //************************************************
    // Debug.
-
    // Trust me, I just work.
-
 
    val size_kbits = nSets * fetchWidth * 2/1024 // assumes 2 bits / fetchWidth
    override def toString: String =
       "\n   ==BIM==" +
       "\n   (" + size_kbits + " Kbits = " + size_kbits/8 + " kB) Bimodal Table (" +
       nSets + " entries across " + nBanks + " banks)"
-
 }
 

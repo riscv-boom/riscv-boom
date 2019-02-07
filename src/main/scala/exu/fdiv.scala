@@ -1,10 +1,11 @@
 //******************************************************************************
 // Copyright (c) 2016 - 2018, The Regents of the University of California (Regents).
-// All Rights Reserved. See LICENSE for license details.
+// All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
 // Author: Christopher Celio
 //------------------------------------------------------------------------------
 
+//------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
 // FDiv/FSqrt Unit
 //------------------------------------------------------------------------------
@@ -21,10 +22,10 @@ import freechips.rocketchip.tile
 import boom.common._
 import boom.util._
 
-
 class UOPCodeFDivDecoder extends Module
 {
-  val io = IO(new Bundle {
+  val io = IO(new Bundle 
+  {
     val uopc = Input(Bits(UOPC_SZ.W))
     val sigs = Output(new tile.FPUCtrlSigs())
   })
@@ -59,7 +60,6 @@ class UOPCodeFDivDecoder extends Module
                   s.div, s.sqrt, s.wflags)
    sigs zip decoder map {case(s,d) => s := d}
 }
-
 
 // fdiv/fsqrt is douple-precision. Must upconvert inputs and downconvert outputs
 // as necessary.  Must wait till killed uop finishes before we're ready again.
@@ -220,4 +220,3 @@ class FDivSqrtUnit(implicit p: Parameters)
    io.resp.bits.fflags.bits.uop.br_mask := GetNewBrMask(io.brinfo, r_out_uop)
    io.resp.bits.fflags.bits.flags := out_flags
 }
-

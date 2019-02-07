@@ -1,10 +1,11 @@
 //******************************************************************************
 // Copyright (c) 2017 - 2018, The Regents of the University of California (Regents).
-// All Rights Reserved. See LICENSE for license details.
+// All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
 // Author: Christopher Celio
 //------------------------------------------------------------------------------
 
+//------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
 // Transformable SeqReadMem
 //------------------------------------------------------------------------------
@@ -57,14 +58,12 @@ class SeqMem1rwTransformable (
 
    val smem = SyncReadMem(p_depth, Vec(p_width, Bool()))
 
-
    private def getIdx(addr:UInt) =
       addr >> p_off_sz
 
    // must compute offset from address but then factor in the l_width.
    private def getOffset(addr:UInt) =
       addr(p_off_sz-1,0) << l_off_sz
-
 
    assert (!(io.wen && io.ren), "[SMUtil] writer and reader fighting over the single port.")
    when (io.wen && !io.ren)
@@ -83,4 +82,3 @@ class SeqMem1rwTransformable (
    val s1_rrow = smem.read(ridx, io.ren).asUInt
    io.rout := (s1_rrow >> r_offset)(l_width-1, 0)
 }
-

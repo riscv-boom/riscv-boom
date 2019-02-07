@@ -1,10 +1,11 @@
 //******************************************************************************
 // Copyright (c) 2015 - 2018, The Regents of the University of California (Regents).
-// All Rights Reserved. See LICENSE for license details.
+// All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
 // Author: Christopher Celio
 //------------------------------------------------------------------------------
 
+//------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
 // RISCV Branch Predictor (abstract class)
 //------------------------------------------------------------------------------
@@ -16,22 +17,21 @@
 // Notes:
 //    - The sub-class of BrPredictor must flop its own output and set io.resp
 //       itself for F3.
-//
 
 package boom.bpu
 
 import chisel3._
 import chisel3.util._
 import chisel3.core.withReset
-import freechips.rocketchip.config.{Parameters, Field}
 
+import freechips.rocketchip.config.{Parameters, Field}
 import freechips.rocketchip.util.{Str}
 import freechips.rocketchip.rocket.RocketCoreParams
+
 import boom.common._
 import boom.exu._
 import boom.exu.BranchUnitResp
 import boom.util.ElasticReg
-
 
 // This is the response packet from the branch predictor. The predictor is
 // expecting to receive it back when it needs to perform an update.
@@ -81,9 +81,6 @@ class RestoreHistory(implicit p: Parameters) extends BoomBundle()(p)
    val history = UInt(GLOBAL_HISTORY_LENGTH.W)
    val taken = Bool()
 }
-
-//--------------------------------------------------------------------------
-//--------------------------------------------------------------------------
 
 abstract class BrPredictor(
    fetch_width: Int,
@@ -156,7 +153,6 @@ abstract class BrPredictor(
    val r_f2_history = RegInit(0.asUInt(width=history_length.W))
    val r_f4_history = RegInit(0.asUInt(width=history_length.W))
 
-
    // match the other ERegs in the FrontEnd.
    val q_f3_history = withReset(reset.toBool || io.fe_clear || io.f4_redirect)
       { Module(new ElasticReg(UInt(history_length.W))) }
@@ -194,7 +190,6 @@ abstract class BrPredictor(
       }
    }
 
-
    // As predictions come in (or pipelines are flushed/replayed), we need to correct the history.
    f0_history :=
       Mux(io.ftq_restore.valid,
@@ -205,7 +200,6 @@ abstract class BrPredictor(
 
    // Hash target into history.
    new_history := UpdateHistoryHash(f0_history, io.req.bits.addr)
-
 
    //************************************************
    // Branch Prediction (F1 Stage)
@@ -229,10 +223,8 @@ abstract class BrPredictor(
          new_history,
          r_f1_history))))
 
-
    assert (!io.f2_redirect || r_f2_history === r_f1_history,
       "[bpd] if a F2 redirect occurs, F2-hist should equal F1-hist.")
-
 
    //************************************************
    // Branch Prediction (F2 Stage)
@@ -247,13 +239,11 @@ abstract class BrPredictor(
 
    assert (q_f3_history.io.enq.ready === !io.f2_stall)
 
-
    //************************************************
    // Branch Prediction (F3 Stage)
 
    io.resp.bits.history := q_f3_history.io.deq.bits
    q_f3_history.io.deq.ready := io.resp.ready
-
 
    //************************************************
    // Branch Prediction (F4 Stage)
@@ -263,14 +253,8 @@ abstract class BrPredictor(
       r_f4_history := q_f3_history.io.deq.bits
    }
 
-
    //************************************************
-
 }
-
-
-//------------------------------------------------------------------------------
-//------------------------------------------------------------------------------
 
 // Return the desired branch predictor based on the provided parameters.
 object BrPredictor
@@ -322,10 +306,6 @@ object BrPredictor
    }
 }
 
-
-//------------------------------------------------------------------------------
-//------------------------------------------------------------------------------
-
 // Act as a "null" branch predictor (it makes no predictions).
 class NullBrPredictor(
    fetch_width: Int,
@@ -335,9 +315,6 @@ class NullBrPredictor(
    override def toString: String = "  Building (0 kB) Null Predictor (never predict)."
    io.resp.valid := false.B
 }
-
-//------------------------------------------------------------------------------
-//------------------------------------------------------------------------------
 
 // Provide a branch predictor that generates random predictions. Good for testing!
 

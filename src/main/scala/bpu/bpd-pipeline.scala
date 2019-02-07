@@ -1,10 +1,11 @@
 //******************************************************************************
 // Copyright (c) 2017 - 2018, The Regents of the University of California (Regents).
-// All Rights Reserved. See LICENSE for license details.
+// All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
 // Author: Christopher Celio
 //------------------------------------------------------------------------------
 
+//------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
 // RISCV Processor Branch Prediction Pipeline
 //------------------------------------------------------------------------------
@@ -22,11 +23,12 @@ package boom.bpu
 import chisel3._
 import chisel3.util._
 import chisel3.core.withReset
+
 import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.util.{Str, UIntToAugmentedUInt}
+
 import boom.common._
 import boom.exu.BranchUnitResp
-
 
 // Give this to each instruction/uop and pass this down the pipeline to the branch-unit
 // This covers the per-instruction info on all cfi-related predictions.
@@ -97,19 +99,16 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    bpd.io.status_prv := io.status_prv
    bpd.io.do_reset := false.B // TODO
 
-
    //************************************************
    // Branch Prediction (BP0 Stage)
 
    btb.io.req := io.s0_req
-
 
    //************************************************
    // Branch Prediction (BP1 Stage)
 
    bpd.io.req := io.s0_req
    bpd.io.f2_replay := io.f2_replay
-
 
    //************************************************
    // Branch Prediction (BP2 Stage)
@@ -118,9 +117,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    // BTB's resposne isn't valid if there's no instruction from I$ to match against.
    io.f2_btb_resp.valid := btb.io.resp.valid && io.f2_valid
 
-
    bpd.io.f2_bim_resp := io.f2_btb_resp.bits.bim_resp
-
 
    //************************************************
    // Branch Prediction (BP3 Stage)
@@ -136,13 +133,9 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    io.f3_bpd_resp.valid := bpd.io.resp.valid
    io.f3_bpd_resp.bits := bpd.io.resp.bits
 
-
-
-
-
-
    //************************************************
-   // Update the RAS TODO XXX  reenable RAS
+   // Update the RAS
+   // TODO XXX  reenable RAS
 
    // update RAS based on BTB's prediction information (or the branch-check correction).
 //   val jmp_idx = f2_btb.bits.cfi_idx
@@ -157,7 +150,6 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
 //      btb.io.ras_update.bits.return_addr  := f2_aligned_pc + (jmp_idx << 2.U) + 4.U
 //   }
 
-
    //************************************************
    // Update the BTB/BIM
 
@@ -167,7 +159,6 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
          io.f3_btb_update)
 
    btb.io.bim_update := io.bim_update
-
 
    //************************************************
    // Update the BPD
@@ -182,7 +173,6 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    bpd.io.ftq_restore := io.ftq_restore
    bpd.io.commit := io.bpd_update
 
-
    //************************************************
    // Handle redirects/flushes
 
@@ -192,7 +182,6 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    {
       btb.io.btb_update.valid := false.B
    }
-
 
    //************************************************
    // printfs
@@ -221,7 +210,6 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
       assert (btb.io.resp.bits.fetch_pc(15,0) === io.debug_imemresp_pc(15,0),
          "[bpd-pipeline] mismatch between BTB and I$.")
    }
-
 
    if (!enableBTB)
    {

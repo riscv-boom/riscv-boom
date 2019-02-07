@@ -1,10 +1,11 @@
 //******************************************************************************
 // Copyright (c) 2015 - 2018, The Regents of the University of California (Regents).
-// All Rights Reserved. See LICENSE for license details.
+// All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
 // Author: Christopher Celio
 //------------------------------------------------------------------------------
 
+//------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
 // RISCV BaseOnly Branch Predictor
 //------------------------------------------------------------------------------
@@ -17,15 +18,15 @@
 // This predictor is useful for testing the BIM in isolation, and for demonstrating
 // how to build your own predictor that leverages the BIM as a base predictor.
 
-
 package boom.bpu
 
 import chisel3._
 import chisel3.util._
 import chisel3.core.withReset
-import freechips.rocketchip.config.{Parameters, Field}
-import boom.util.ElasticReg
 
+import freechips.rocketchip.config.{Parameters, Field}
+
+import boom.util.ElasticReg
 
 case class BaseOnlyParameters(
    enabled: Boolean = true
@@ -73,6 +74,4 @@ class BaseOnlyBrPredictor(
    // Nothing to update, as the BIM is handled externally.
 
    override def toString: String = "  Building no predictor (just using BIM as a base predictor)."
-
 }
-
