@@ -156,20 +156,18 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
       commit_ptr := io.deq.bits
    }
 
-   when (io.flush.valid)
-   {
-      enq_ptr.value := WrapInc(io.flush.bits.ftq_idx, num_entries)
-   }
-
    //-------------------------------------------------------------
-   // **** Handle Mispredictions ****
+   // **** Handle Mispredictions/Flush ****
    //-------------------------------------------------------------
 
-   when (io.brinfo.valid && io.brinfo.mispredict && !io.flush.valid)
-   // Flush signal is sent out at commit, so that should override
-   // earlier branch mispredict signals.
+   when ((io.brinfo.valid && io.brinfo.mispredict) || io.flush.valid)
    {
-      val new_ptr = WrapInc(io.brinfo.ftq_idx, num_entries)
+      // Flush signal is sent out at commit, so that should override
+      // earlier branch mispredict signals.
+      val new_ptr = WrapInc(Mux(io.flush.valid,
+                                io.flush.bits.ftq_idx,
+                                io.brinfo.ftq_idx),
+                            num_entries)
       enq_ptr.value := new_ptr
       // If ptr is adjusted, we deleted entries and thus can't be full.
       maybe_full := (enq_ptr.value === new_ptr)
