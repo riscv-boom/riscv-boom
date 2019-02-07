@@ -1,11 +1,9 @@
 //******************************************************************************
 // Copyright (c) 2017 - 2018, The Regents of the University of California (Regents).
-// All Rights Reserved. See LICENSE for license details.
+// All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
 // Author: Christopher Celio
 //------------------------------------------------------------------------------
-
-// See LICENSE.SiFive for license details.
 
 package boom.system
 
@@ -23,7 +21,8 @@ class ExampleBoomSystem(implicit p: Parameters) extends BoomSubsystem
     with CanHaveMisalignedMasterAXI4MemPort
     with CanHaveMasterAXI4MMIOPort
     with CanHaveSlaveAXI4Port
-    with HasPeripheryBootROM {
+    with HasPeripheryBootROM 
+{
   override lazy val module = new ExampleBoomSystemModule(this)
 
   // Error device used for testing and to NACK invalid front port transactions

@@ -1,10 +1,11 @@
 //******************************************************************************
 // Copyright (c) 2016 - 2018, The Regents of the University of California (Regents).
-// All Rights Reserved. See LICENSE for license details.
+// All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
 // Author: Christopher Celio
 //------------------------------------------------------------------------------
 
+//------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
 // TAGE-based Branch Predictor
 //------------------------------------------------------------------------------
@@ -17,7 +18,6 @@
 //       The table that would have provided the prediction if the provider had
 //       missed.
 //
-
 // TODO:
 //    - alt-pred tracking (choosing between +2 tables, sometimes using alt pred if u is low)
 //    - u-bit handling, clearing (count failed allocations)
@@ -29,11 +29,12 @@ package boom.bpu
 import chisel3._
 import chisel3.util._
 import chisel3.core.withReset
+
 import freechips.rocketchip.config.{Parameters, Field}
+import freechips.rocketchip.util.Str
+
 import boom.common._
 import boom.util.{ElasticReg, Fold}
-
-import freechips.rocketchip.util.Str
 
 case class TageParameters(
    enabled: Boolean = true,
@@ -188,7 +189,6 @@ class TageBrPredictor(
       tag
    }
 
-
    //------------------------------------------------------------
    //------------------------------------------------------------
 
@@ -216,7 +216,6 @@ class TageBrPredictor(
 
    val tables_io = VecInit(tables.map(_.io))
 
-
    // perform index hash
    tables_io.zipWithIndex.map{ case (table, i) =>
       bp1_idxs(i) := IdxHash(r_f1_fetchpc, r_f1_history, history_lengths(i), log2Ceil(table_sizes(i)))
@@ -236,7 +235,6 @@ class TageBrPredictor(
 
       table.do_reset := false.B // TODO
    }
-
 
    // Buffer all of the table responses into a queue.
    // Match the other ElasticRegs in the FrontEnd.
@@ -369,7 +367,6 @@ class TageBrPredictor(
       ubit_sz = ubit_sz
    ))
 
-
    val com_indexes = history_lengths zip table_sizes map { case (hlen, tsize)  =>
       val idx = IdxHash(r_commit.bits.fetch_pc, r_commit.bits.history, hlen, log2Ceil(tsize))
       idx
@@ -385,7 +382,6 @@ class TageBrPredictor(
       r_info.alt_hit &&
       r_info.cntrs(r_info.alt_id)(cntr_sz-1) === r_info.cntrs(r_info.provider_id)(cntr_sz-1)
 
-
    // Provide some randomization to the allocation process (count up to 4).
    val (rand, overflow) = Counter(io.commit.valid, 4)
 
@@ -395,7 +391,6 @@ class TageBrPredictor(
    val table_allocates  = WireInit(VecInit(Seq.fill(num_tables) {false.B}))
    val table_updates    = WireInit(VecInit(Seq.fill(num_tables) {false.B}))
    val table_degrades   = WireInit(VecInit(Seq.fill(num_tables) {false.B}))
-
 
    when (r_commit.valid)
    {
@@ -408,7 +403,6 @@ class TageBrPredictor(
          table_updates(r_info.provider_id) := true.B
          //when (!alt_agrees) { ubit(provider_id) := !com_mispredict } TODO XXX
       }
-
 
       when (r_commit.bits.mispredict && (r_info.provider_id < MAX_TABLE_ID.U || !r_info.provider_hit))
       {
@@ -479,7 +473,6 @@ class TageBrPredictor(
       }
    }
 
-
    when (r_commit.valid)
    {
       assert (r_info.provider_id < num_tables.U || !r_info.provider_hit, "[Tage] provider_id is out-of-bounds.")
@@ -490,6 +483,5 @@ class TageBrPredictor(
       "\n   " + (size_in_bits/8/1024.0) + " kB TAGE Predictor (" +
       (size_in_bits/1024) + " Kbits) (max history length: " + history_lengths.max + " bits)\n" +
       tables.mkString("\n")
-
 }
 

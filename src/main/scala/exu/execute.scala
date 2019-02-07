@@ -1,10 +1,11 @@
 //******************************************************************************
 // Copyright (c) 2013 - 2018, The Regents of the University of California (Regents).
-// All Rights Reserved. See LICENSE for license details.
+// All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
 // Author: Christopher Celio
 //------------------------------------------------------------------------------
 
+//------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
 // Execution Units
 //------------------------------------------------------------------------------
@@ -16,14 +17,16 @@
 
 package boom.exu
 
-import chisel3._
-import chisel3.util._
-import freechips.rocketchip.config.Parameters
 import scala.collection.mutable.ArrayBuffer
 
-import FUConstants._
+import chisel3._
+import chisel3.util._
+
+import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.tile.XLen
 import freechips.rocketchip.tile
+
+import FUConstants._
 import boom.common._
 import boom.ifu.GetPCFromFtqIO
 import boom.util.{ImmGen, IsKilledByBranch, BranchKillableQueue}
@@ -55,7 +58,6 @@ class ExecutionUnitIO(
    val fu_types = Output(Bits(FUC_SZ.W))
 
    val req     = Flipped(new DecoupledIO(new FuncUnitReq(data_width)))
-
 
    val iresp    = if (writes_irf)    new DecoupledIO(new ExeUnitResp(data_width)) else null
    val fresp    = if (writes_frf)    new DecoupledIO(new ExeUnitResp(data_width)) else null
@@ -224,7 +226,6 @@ class ALUExeUnit(
 
    }
 
-
    // Pipelined, IMul Unit ------------------
    var imul: PipelinedMulUnit = null
    if (has_mul)
@@ -310,7 +311,6 @@ class ALUExeUnit(
       io.lsu_io.exe_resp.valid := maddrcalc.io.resp.valid
       io.lsu_io.exe_resp.bits  := maddrcalc.io.resp.bits
 
-
       // TODO get rid of com_exception and guard with an assert? Need to surpress within dc-shim.
       //   assert (!(io.com_exception && lsu.io.memreq_uop.is_load && lsu.io.memreq_val),
       //      "[execute] a valid load is returning while an exception is being thrown.")
@@ -372,7 +372,8 @@ class ALUExeUnit(
 
       // pulled out for critical path reasons
       // TODO: Does this make sense as part of the iresp bundle?
-      if (has_alu) {
+      if (has_alu) 
+      {
          io.iresp.bits.uop.csr_addr := ImmGen(alu.io.resp.bits.uop.imm_packed, IS_I).asUInt
          io.iresp.bits.uop.ctrl.csr_cmd := alu.io.resp.bits.uop.ctrl.csr_cmd
       }
@@ -382,7 +383,6 @@ class ALUExeUnit(
           (PopCount(fu_units.map(_.io.resp.valid)) <= 2.U && (div_resp_val))
       , "Multiple functional units are fighting over the write port.")
 }
-
 
 // FPU-only unit, with optional second write-port for ToInt micro-ops.
 class FPUExeUnit(
@@ -448,7 +448,6 @@ class FPUExeUnit(
       fu_units += fpu
    }
 
-
    // FDiv/FSqrt Unit -----------------------
    var fdivsqrt: FDivSqrtUnit = null
    val fdiv_resp_val = WireInit(false.B)
@@ -483,7 +482,6 @@ class FPUExeUnit(
       fu_units += fdivsqrt
    }
 
-
    // Outputs (Write Port #0)  ---------------
 
    io.fresp.valid    := fu_units.map(_.io.resp.valid).reduce(_|_) &&
@@ -512,7 +510,6 @@ class FPUExeUnit(
 
       assert (queue.io.enq.ready) // If this backs up, we've miscalculated the size of the queue.
    }
+
    override def toString: String = out_str.toString
 }
-
-

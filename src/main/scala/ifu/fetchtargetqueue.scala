@@ -1,10 +1,11 @@
 //******************************************************************************
 // Copyright (c) 2015 - 2018, The Regents of the University of California (Regents).
-// All Rights Reserved. See LICENSE for license details.
+// All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
 // Author: Christopher Celio
 //------------------------------------------------------------------------------
 
+//------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
 // Fetch Target Queue (FTQ)
 //------------------------------------------------------------------------------
@@ -15,15 +16,16 @@
 // TODO:
 // * reduce port counts.
 
-
 package boom.ifu
 
 import chisel3._
 import chisel3.util._
 import chisel3.core.DontCare
 import chisel3.experimental.dontTouch
+
 import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.util.Str
+
 import boom.bpu._
 import boom.common._
 import boom.exu._
@@ -66,7 +68,6 @@ class GetPCFromFtqIO(implicit p: Parameters) extends BoomBundle()(p)
    val next_val = Output(Bool())
    val next_pc  = Output(UInt(vaddrBitsExtended.W))
 }
-
 
 class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomModule()(p)
    with HasBoomCoreParameters
@@ -128,7 +129,6 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
       b
    }
 
-
    //-------------------------------------------------------------
    // **** Pointer Arithmetic and Enqueueing of Data ****
    //-------------------------------------------------------------
@@ -136,15 +136,18 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
    private val do_enq = WireInit(io.enq.fire())
    private val do_deq = WireInit(deq_ptr.value =/= commit_ptr)
 
-   when (do_enq) {
+   when (do_enq) 
+   {
      ram(enq_ptr.value) := io.enq.bits
      cfi_info(enq_ptr.value) := initCfiInfo(io.enq.bits.bim_info.br_seen, io.enq.bits.bim_info.cfi_idx)
      enq_ptr.inc()
    }
-   when (do_deq) {
+   when (do_deq)
+   {
      deq_ptr.inc()
    }
-   when (do_enq =/= do_deq) {
+   when (do_enq =/= do_deq)
+   {
      maybe_full := do_enq
    }
 
@@ -199,8 +202,6 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
       }
    }
 
-
-
    //-------------------------------------------------------------
    // **** Commit Data Read ****
    //-------------------------------------------------------------
@@ -225,7 +226,6 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
       io.bim_update.bits.taken        := miss_data.taken
       io.bim_update.bits.mispredicted := miss_data.mispredicted
 
-
       io.bpd_update.valid              := true.B
       io.bpd_update.bits.mispredict    := miss_data.mispredicted
       io.bpd_update.bits.taken         := miss_data.taken
@@ -233,7 +233,6 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
       io.bpd_update.bits.fetch_pc      := com_data.fetch_pc
       io.bpd_update.bits.history       := com_data.history
       io.bpd_update.bits.info          := com_data.bpd_info
-
 
       if (DEBUG_PRINTF)
       {
@@ -265,7 +264,6 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
    // **** Restore Predictor History ****
    //-------------------------------------------------------------
 
-
    io.restore_history.valid := (io.brinfo.valid && io.brinfo.mispredict) || io.flush.valid
    io.restore_history.bits.history := 0.U
    io.restore_history.bits.taken := io.brinfo.valid && io.brinfo.taken
@@ -275,7 +273,6 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
       val ridx = Mux(io.flush.valid, io.flush.bits.ftq_idx, io.brinfo.ftq_idx)
       io.restore_history.bits.history := ram(ridx).history
    }
-
 
    //-------------------------------------------------------------
    // **** BranchResolutionUnit Read ****
@@ -287,7 +284,6 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
    io.get_ftq_pc.fetch_pc := ram(curr_idx).fetch_pc
    io.get_ftq_pc.next_pc := ram(WrapInc(curr_idx, num_entries)).fetch_pc
    io.get_ftq_pc.next_val := WrapInc(curr_idx, num_entries) =/= enq_ptr.value
-
 
    //-------------------------------------------------------------
    // **** Handle Flush/Pipeline Redirections ****
@@ -354,6 +350,5 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
    // force to show up in the waveform
    val debug_deq_ptr = deq_ptr.value
    dontTouch(debug_deq_ptr)
-
 }
 

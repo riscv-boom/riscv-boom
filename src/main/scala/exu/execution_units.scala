@@ -1,10 +1,11 @@
 //******************************************************************************
 // Copyright (c) 2015 - 2018, The Regents of the University of California (Regents).
-// All Rights Reserved. See LICENSE for license details.
+// All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
 // Author: Christopher Celio
 //------------------------------------------------------------------------------
 
+//------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
 // RISC-V Constructing the Execution Units
 //------------------------------------------------------------------------------
@@ -12,9 +13,12 @@
 
 package boom.exu
 
-import chisel3._
-import freechips.rocketchip.config.Parameters
 import scala.collection.mutable.ArrayBuffer
+
+import chisel3._
+
+import freechips.rocketchip.config.Parameters
+
 import boom.common._
 
 class ExecutionUnits(fpu: Boolean)(implicit val p: Parameters) extends HasBoomCoreParameters
@@ -136,7 +140,8 @@ class ExecutionUnits(fpu: Boolean)(implicit val p: Parameters) extends HasBoomCo
 
       exe_units += aluExeUnit
 
-      for (w <- 0 until int_width-1) {
+      for (w <- 0 until int_width-1)
+      {
          val aluExeUnit = Module(new ALUExeUnit)
 
          aluExeUnit.io.dmem := DontCare
@@ -151,7 +156,8 @@ class ExecutionUnits(fpu: Boolean)(implicit val p: Parameters) extends HasBoomCo
    {
       val fp_width = issueParams.find(_.iqType == IQT_FP.litValue).get.issueWidth
       require (fp_width == 1) // TODO hacks to fix include uopSTD_fp needing a proper func unit.
-      for (w <- 0 until fp_width) {
+      for (w <- 0 until fp_width) 
+      {
          val fpuExeUnit = Module(new FPUExeUnit(has_fpu = true,
                                             has_fdiv = usingFDivSqrt && (w==0),
                                             has_fpiu = (w==0)))
@@ -166,13 +172,15 @@ class ExecutionUnits(fpu: Boolean)(implicit val p: Parameters) extends HasBoomCo
 
    val exe_units_str = new StringBuilder
    exe_units_str.append(
-      if (!fpu) {
+      if (!fpu) 
+      {
          ( "\n   ~*** " + Seq("One","Two","Three","Four")(decodeWidth-1) + "-wide Machine ***~\n"
          + "\n    -== " + Seq("Single","Dual","Triple","Quad","Five","Six")(totalIssueWidth-1) + " Issue ==- \n")
       }
    )
 
-   for (exe_unit <- exe_units) {
+   for (exe_unit <- exe_units) 
+   {
       exe_units_str.append(exe_unit.toString)
    }
    override def toString: String =  exe_units_str.toString
@@ -205,5 +213,4 @@ class ExecutionUnits(fpu: Boolean)(implicit val p: Parameters) extends HasBoomCo
    // The mem-unit will also bypass writes to readers in the RRD stage.
    // NOTE: This does NOT include the ll_wport
    val bypassable_write_port_mask = exe_units.withFilter(x => x.writes_irf).map(u => u.bypassable)
-
 }

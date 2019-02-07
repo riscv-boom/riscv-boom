@@ -1,10 +1,11 @@
 //******************************************************************************
 // Copyright (c) 2012 - 2018, The Regents of the University of California (Regents).
-// All Rights Reserved. See LICENSE for license details.
+// All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
 // Author: Christopher Celio
 //------------------------------------------------------------------------------
 
+//------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
 // RISCV Out-of-Order Load/Store Unit
 //------------------------------------------------------------------------------
@@ -18,7 +19,7 @@
 // cleared. Loads put to sleep are retried.  If a LoadAddr and StoreAddr match,
 // the Load can receive its data by forwarding data out of the Store-Data
 // Queue.
-
+//
 // Currently, loads are sent to memory immediately, and in parallel do an
 // associative search of the SAQ, on entering the LSU. If a hit on the SAQ
 // search, the memory request is killed on the next cycle, and if the SDQ entry
@@ -26,31 +27,32 @@
 // load-use delay to delay with the write-port structural hazard). If the store
 // data is not present, or it's only a partial match (SB->LH), the load is put
 // to sleep in the LAQ.
-
+//
 // Memory ordering violations are detected by stores at their addr-gen time by
 // associatively searching the LAQ for newer loads that have been issued to
 // memory.
-
+//
 // The store queue contains both speculated and committed stores.
-
+//
 // Only one port to memory... loads and stores have to fight for it, West Side
 // Story style.
-
+//
 // TODO:
 //    - Add predicting structure for ordering failures
 //    - currently won't STD forward if DMEM is busy
 //    - ability to turn off things if VM is disabled
 //    - reconsider port count of the wakeup, retry stuff
 
-
 package boom.lsu
 
 import chisel3._
 import chisel3.util._
 import chisel3.experimental.dontTouch
+
 import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.rocket
 import freechips.rocketchip.util.Str
+
 import boom.common._
 import boom.exu.{BrResolutionInfo, Exception, FuncUnitResp}
 import boom.util.{AgePriorityEncoder, IsKilledByBranch, GetNewBrMask, WrapInc}
@@ -145,7 +147,6 @@ class LoadStoreUnitIO(val pl_width: Int)(implicit p: Parameters) extends BoomBun
 
 }
 
-
 class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
                                    edge: freechips.rocketchip.tilelink.TLEdgeOut) extends BoomModule()(p)
    with freechips.rocketchip.rocket.constants.MemoryOpConstants
@@ -154,7 +155,6 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
 
    val num_ld_entries = NUM_LSU_ENTRIES
    val num_st_entries = NUM_LSU_ENTRIES
-
 
    // Load-Address Queue
    val laq_addr_val       = Reg(Vec(num_ld_entries, Bool()))
@@ -222,7 +222,6 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
                                                         // stq_head?
    val stq_committed = Reg(Vec(num_st_entries, Bool())) // the ROB has committed us, so we can now send our store
                                                         // to memory
-
 
    val laq_head = Reg(UInt())
    val laq_tail = Reg(UInt()) // point to next available (or if full, the laq_head entry).
@@ -301,7 +300,6 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
 
    laq_tail := ld_enq_idx
    stq_tail := st_enq_idx
-
 
    //-------------------------------------------------------------
    //-------------------------------------------------------------
@@ -397,7 +395,6 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
    val stq_retry_idx = Wire(UInt())
    val laq_retry_idx = Wire(UInt())
 
-
    // micro-op going through the TLB generate paddr's. If this is a load, it will continue
    // to the D$ and search the SAQ. uopSTD also uses this uop.
    val exe_tlb_uop = Mux(will_fire_sta_retry,  stq_uop(stq_retry_idx),
@@ -438,12 +435,16 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
                             init=false.B)
 
    val xcpt_uop   = RegNext(Mux(ma_ld, io.exe_resp.bits.uop, exe_tlb_uop))
-   when (mem_xcpt_valid) {
+   when (mem_xcpt_valid) 
+   {
       // Technically only faulting AMOs need this
       assert(xcpt_uop.is_load ^ xcpt_uop.is_store)
-      when (xcpt_uop.is_load) {
+      when (xcpt_uop.is_load) 
+      {
          laq_uop(xcpt_uop.ldq_idx).exception := true.B
-      } .otherwise {
+      }
+      .otherwise
+      {
          stq_uop(xcpt_uop.stq_idx).exception := true.B
       }
    }
@@ -468,7 +469,6 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
    val tlb_miss = dtlb.io.req.valid && (dtlb.io.resp.miss || !dtlb.io.req.ready)
 
 
-
    // output
    val exe_tlb_paddr = Cat(dtlb.io.resp.paddr(paddrBits-1,corePgIdxBits), exe_vaddr(corePgIdxBits-1,0))
    assert (exe_tlb_paddr === dtlb.io.resp.paddr || io.exe_resp.bits.sfence.valid, "[lsu] paddrs should match.")
@@ -486,7 +486,6 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
    // Compute this for the next cycle to remove can_fire, ld_idx_wakeup off critical path.
    val exe_ld_idx_wakeup = RegNext(
       AgePriorityEncoder((0 until num_ld_entries).map(i => laq_addr_val(i) & ~laq_executed(i)), laq_head))
-
 
    when (laq_addr_val       (exe_ld_idx_wakeup) &&
          !laq_is_virtual    (exe_ld_idx_wakeup) &&
@@ -512,7 +511,6 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
    {
       can_fire_load_retry := true.B
    }
-
 
    // *** STORES ***
 
@@ -541,7 +539,6 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
    {
       can_fire_sta_retry := true.B
    }
-
 
    assert (!(can_fire_store_commit && saq_is_virtual(stq_execute_head)),
             "a committed store is trying to fire to memory that has a bad paddr.")
@@ -597,7 +594,6 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
    assert (PopCount(VecInit(will_fire_store_commit, will_fire_load_incoming,
                             will_fire_load_retry, will_fire_load_wakeup))
       <= 1.U, "Multiple requestors firing to the data cache.")
-
 
 
 
@@ -743,7 +739,6 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
       clr_bsy_brmask := GetNewBrMask(io.brinfo, mem_tlb_uop)
    }
 
-
    val mem_uop_stdf = RegNext(io.fp_stdata.bits.uop)
    val stdf_clr_bsy_valid = RegNext(mem_fired_stdf &&
                            saq_val(mem_uop_stdf.stq_idx) &&
@@ -784,7 +779,6 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
 
    // do the load and store memory types match (aka, B == BU, H == HU, W == WU)
    def MemTypesMatch(typ_1: UInt, typ_2: UInt) = typ_1(1,0) === typ_2(1,0)
-
 
    // TODO totally refactor how conflict/forwarding logic is generated
    for (i <- 0 until num_st_entries)
@@ -842,7 +836,6 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
          force_ld_to_sleep := true.B
       }
    }
-
 
    val forwarding_age_logic = Module(new ForwardingAgeLogic(num_st_entries))
    forwarding_age_logic.io.addr_matches    := forwarding_matches.asUInt()
@@ -904,7 +897,6 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
    }
    io.forward_data := LoadDataGenerator(sdq_data(wb_forward_std_idx).asUInt, wb_uop.mem_typ)
    io.forward_uop  := wb_uop
-
 
    //------------------------
    // Handle Memory Responses
@@ -1088,7 +1080,6 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
    r_xcpt.cause := Mux(mem_xcpt_valid, mem_xcpt_cause, MINI_EXCEPTION_MEM_ORDERING)
    r_xcpt.badvaddr := RegNext(exe_vaddr) // TODO is there another register we can use instead?
 
-
    io.xcpt.valid := r_xcpt_valid && !io.exception && !IsKilledByBranch(io.brinfo, r_xcpt.uop)
    io.xcpt.bits := r_xcpt
 
@@ -1142,7 +1133,6 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
       laq_tail := io.brinfo.ldq_idx
    }
 
-
    //-------------------------------------------------------------
    //-------------------------------------------------------------
    // dequeue old entries on commit
@@ -1187,7 +1177,6 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
       }
    }
 
-
    var temp_laq_head = laq_head
    for (w <- 0 until pl_width)
    {
@@ -1209,7 +1198,6 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
       temp_laq_head = Mux(io.commit_load_mask(w), WrapInc(temp_laq_head, num_ld_entries), temp_laq_head)
    }
    laq_head := temp_laq_head
-
 
 
    //-------------------------------------------------------------
@@ -1268,7 +1256,6 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
          }
       }
    }
-
 
    //-------------------------------------------------------------
    // Exception / Reset
@@ -1421,7 +1408,6 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
       }}
 }
 
-
 // take an address and generate an 8-bit mask of which bytes within a double-word are touched
 object GenByteMask
 {
@@ -1436,7 +1422,6 @@ object GenByteMask
       mask
    }
 }
-
 
 // TODO currently assumes w_addr and r_addr are identical, so no shifting
 // store data is already aligned (since its the value straight from the register
@@ -1489,7 +1474,6 @@ class ForwardingAgeLogic(num_entries: Int)(implicit p: Parameters) extends BoomM
    matches := Cat(io.addr_matches & age_mask.asUInt,
                   io.addr_matches)
 
-
    val found_match = Wire(Bool())
    found_match       := false.B
    io.forwarding_idx := 0.U
@@ -1504,7 +1488,5 @@ class ForwardingAgeLogic(num_entries: Int)(implicit p: Parameters) extends BoomM
       }
    }
 
-
    io.forwarding_val := found_match
 }
-

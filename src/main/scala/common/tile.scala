@@ -1,16 +1,14 @@
 //******************************************************************************
 // Copyright (c) 2017 - 2018, The Regents of the University of California (Regents).
-// All Rights Reserved. See LICENSE for license details.
+// All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
 // Author: Christopher Celio
 //------------------------------------------------------------------------------
 
-// See LICENSE.SiFive for license details.
-// See LICENSE.Berkeley for license details.
-
 package boom.common
 
 import chisel3._
+
 import freechips.rocketchip.config._
 import freechips.rocketchip.subsystem._
 import freechips.rocketchip.devices.tilelink._
@@ -20,6 +18,7 @@ import freechips.rocketchip.tilelink._
 import freechips.rocketchip.interrupts._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
+
 import boom.exu._
 import boom.ifu._
 import boom.lsu._
@@ -36,7 +35,8 @@ case class BoomTileParams(
     hartId: Int = 0,
     blockerCtrlAddr: Option[BigInt] = None,
     boundaryBuffers: Boolean = false // if synthesized with hierarchical PnR, cut feed-throughs?
-    ) extends TileParams {
+    ) extends TileParams 
+{
   require(icache.isDefined)
   require(dcache.isDefined)
 }
@@ -49,7 +49,8 @@ class BoomTile(
     //with HasLazyRoCC  // implies CanHaveSharedFPU with CanHavePTW with HasHellaCache
     with CanHaveBoomPTW
     with HasBoomHellaCache
-    with HasBoomICacheFrontend {
+    with HasBoomICacheFrontend 
+{
 
   val intOutwardNode = IntIdentityNode()
   val slaveNode = TLIdentityNode()
@@ -130,7 +131,8 @@ class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer)
     //with HasLazyRoCCModule[BoomTile]
     with CanHaveBoomPTWModule
     with HasBoomHellaCacheModule
-    with HasBoomICacheFrontendModule {
+    with HasBoomICacheFrontendModule 
+{
   Annotated.params(this, outer.boomParams)
 
   val core = Module(new BoomCore()(outer.p, outer.dcache.module.edge))
@@ -173,7 +175,9 @@ class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer)
   //core.io.rocc.busy := roccCore.busy
   //core.io.rocc.interrupt := roccCore.interrupt
 
-  when(!uncorrectable) { uncorrectable :=
+  when(!uncorrectable) 
+  { 
+    uncorrectable :=
     List(outer.frontend.module.io.errors, outer.dcache.module.io.errors)
       .flatMap { e => e.uncorrectable.map(_.valid) }
       .reduceOption(_||_)

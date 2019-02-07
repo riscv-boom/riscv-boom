@@ -1,25 +1,16 @@
 //******************************************************************************
 // Copyright (c) 2015 - 2018, The Regents of the University of California (Regents).
-// All Rights Reserved. See LICENSE for license details.
+// All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
 // Author: Christopher Celio
 //------------------------------------------------------------------------------
 
 //------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // Branch Checker Unit
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
-
-
-package boom.ifu
-
-import chisel3._
-import chisel3.util._
-import freechips.rocketchip.config.Parameters
-import boom.bpu._
-import boom.common._
-
-
+//
 // The branch checker performs the following tasks:
 //    - Verify BTB predicted the type and target of instructions correctly.
 //    - Catch any JALs and redirect the frontend.
@@ -29,6 +20,17 @@ import boom.common._
 // misprediction.
 // NOTE: Incoming signals may be garbage (if f2_valid not true); consumer will
 // have to handle that scenario.
+
+package boom.ifu
+
+import chisel3._
+import chisel3.util._
+
+import freechips.rocketchip.config.Parameters
+
+import boom.bpu._
+import boom.common._
+
 class BranchChecker(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p)
    with HasL1ICacheBankedParameters
 {
@@ -36,7 +38,7 @@ class BranchChecker(fetch_width: Int)(implicit p: Parameters) extends BoomModule
    {
       val req           = Valid(new PCReq)
 
-      val valid         = Input(Bool())                      // are the inputs valid?
+      val valid         = Input(Bool())                   // are the inputs valid?
       val inst_mask     = Input(Vec(fetch_width, Bool())) // valid instruction mask from I$
       val is_br         = Input(Vec(fetch_width, Bool()))
       val is_jal        = Input(Vec(fetch_width, Bool()))
@@ -65,7 +67,7 @@ class BranchChecker(fetch_width: Int)(implicit p: Parameters) extends BoomModule
    val wrong_target = WireInit(false.B)
 
    val btb_idx = io.btb_resp.bits.cfi_idx
-   val btb_target = io.btb_resp.bits.target // TODO uncomment .sextTo(vaddrBitsExtended)
+   val btb_target = io.btb_resp.bits.target
    val bpd_predicted_taken = io.bpd_resp.valid && io.bpd_resp.bits.takens(io.btb_resp.bits.cfi_idx)
 
    when (io.btb_resp.valid)
@@ -101,10 +103,10 @@ class BranchChecker(fetch_width: Int)(implicit p: Parameters) extends BoomModule
    val jal_idx = PriorityEncoder(io.is_jal.asUInt)
    val btb_hit  = io.btb_resp.valid
    val jal_wins = io.is_jal.reduce(_|_) &&
-      (!btb_hit ||
-      btb_was_wrong ||
-      (jal_idx < btb_idx) ||
-      !io.btb_resp.bits.taken)
+                  (!btb_hit ||
+                  btb_was_wrong ||
+                  (jal_idx < btb_idx) ||
+                  !io.btb_resp.bits.taken)
 
    //-------------------------------------------------------------
    // Perform redirection
@@ -130,9 +132,9 @@ class BranchChecker(fetch_width: Int)(implicit p: Parameters) extends BoomModule
    // update the BTB for jumps it missed.
    // TODO XXX also allow us to clear bad BTB entries when btb is wrong.
    io.btb_update.valid := jal_wins
-   io.btb_update.bits.pc := io.fetch_pc
-   io.btb_update.bits.target := io.jal_targs(jal_idx)
-   io.btb_update.bits.taken := true.B
+   io.btb_update.bits.pc       := io.fetch_pc
+   io.btb_update.bits.target   := io.jal_targs(jal_idx)
+   io.btb_update.bits.taken    := true.B
    io.btb_update.bits.cfi_idx  := jal_idx
    io.btb_update.bits.bpd_type := Mux(io.is_call(jal_idx), BpredType.call, BpredType.jump)
    io.btb_update.bits.cfi_type := CfiType.jal
@@ -140,10 +142,10 @@ class BranchChecker(fetch_width: Int)(implicit p: Parameters) extends BoomModule
    // for critical path reasons, remove dependence on bpu_request to ras_update.
    val jal_may_win = io.is_jal.reduce(_|_) && (!btb_hit || btb_was_wrong || jal_idx < btb_idx)
    io.ras_update.valid := jal_may_win && io.is_call(jal_idx)
-   io.ras_update.bits.is_call := true.B
-   io.ras_update.bits.is_ret := false.B
+   io.ras_update.bits.is_call     := true.B
+   io.ras_update.bits.is_ret      := false.B
    io.ras_update.bits.return_addr := (io.aligned_pc
-                                    + (jal_idx << log2Ceil(fetchBytes))
-                                    + Mux(io.is_rvc(jal_idx), 2.U, 4.U))
+                                     + (jal_idx << log2Ceil(fetchBytes))
+                                     + Mux(io.is_rvc(jal_idx), 2.U, 4.U))
 }
 

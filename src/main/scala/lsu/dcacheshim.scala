@@ -1,15 +1,16 @@
 //******************************************************************************
 // Copyright (c) 2012 - 2018, The Regents of the University of California (Regents).
-// All Rights Reserved. See LICENSE for license details.
+// All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
 // Author: Christopher Celio
 //------------------------------------------------------------------------------
 
 //------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // Data Cache Shim/Wrapper to the Hella-Cache
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
-
+//
 // We need to track inflight loads that may have been misspeculated, and filter
 // them out before they can be returned to the pipeline (we do not want to hold
 // up pipeline resources like LD/ST entries on them).
@@ -25,11 +26,12 @@ package boom.lsu
 
 import chisel3._
 import chisel3.util._
+
 import freechips.rocketchip.config.Parameters
+
 import boom.common._
 import boom.exu.BrResolutionInfo
 import boom.util.maskMatch
-
 
 // Track Inflight Memory Requests
 class LoadReqSlotIo(implicit p: Parameters) extends BoomBundle()(p)
@@ -143,7 +145,6 @@ class DCacheResp(implicit p: Parameters) extends BoomBundle()(p)
    val typ          = Bits(freechips.rocketchip.rocket.MT_SZ.W)
 }
 
-
 // from pov of datapath
 class DCMemPortIO(implicit p: Parameters) extends BoomBundle()(p)
 {
@@ -221,7 +222,6 @@ class DCacheShim(implicit p: Parameters) extends BoomModule()(p)
       inflight_load_buffer(i).in_uop      := io.core.req.bits.uop
    }
 
-
    // dispatch/entry logic
    val enq_idx = Wire(UInt(log2Ceil(max_num_inflight).W))
    enq_idx := 0.U
@@ -253,7 +253,6 @@ class DCacheShim(implicit p: Parameters) extends BoomModule()(p)
    val enq_idx_1h = (1.U << enq_idx) &
                     Fill(max_num_inflight, enq_can_occur)
 
-
    for (i <- 0 until max_num_inflight)
    {
       inflight_load_buffer(i).wen := enq_idx_1h(i)
@@ -263,14 +262,12 @@ class DCacheShim(implicit p: Parameters) extends BoomModule()(p)
    // inflight load buffer resource hazard
    val iflb_kill = RegNext(enq_val && !enq_rdy)
 
-
    // try to catch if there's a resource leak
    val full_counter = RegInit(0.U(32.W))
    when (enq_rdy) { full_counter := 0.U }
    .otherwise     { full_counter := full_counter + 1.U }
 
    assert(full_counter <= 10000.U, "Inflight buffers have been busy for 10k cycles. Probably a resource leak.")
-
 
    //------------------------------------------------------------
    // hook up requests
@@ -290,7 +287,6 @@ class DCacheShim(implicit p: Parameters) extends BoomModule()(p)
    io.dmem.s2_kill        := false.B
    io.dmem.s1_kill        := io.core.req.bits.kill || iflb_kill // kills request sent out last cycle
    io.dmem.req.bits.phys  := true.B // we always use physical addresses (TLB is in LSU).
-
 
    //------------------------------------------------------------
    // handle responses and nacks
@@ -379,6 +375,4 @@ class DCacheShim(implicit p: Parameters) extends BoomModule()(p)
 //   }
 
    //------------------------------------------------------------
-
 }
-

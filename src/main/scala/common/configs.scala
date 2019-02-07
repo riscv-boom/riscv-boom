@@ -1,6 +1,6 @@
 //******************************************************************************
 // Copyright (c) 2015 - 2018, The Regents of the University of California (Regents).
-// All Rights Reserved. See LICENSE for license details.
+// All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
 // Author: Christopher Celio
 //------------------------------------------------------------------------------
@@ -8,16 +8,17 @@
 package boom.common
 
 import chisel3._
+
 import freechips.rocketchip.config.{Parameters, Config}
 import freechips.rocketchip.subsystem.{SystemBusKey}
 import freechips.rocketchip.devices.tilelink.{BootROMParams}
 import freechips.rocketchip.rocket._
 import freechips.rocketchip.tile._
+
 import boom.bpu._
 import boom.exu._
 import boom.lsu._
 import boom.system.BoomTilesKey
-
 
 // Try to be a reasonable BOOM design point.
 class DefaultBoomConfig extends Config((site, here, up) => {
@@ -72,7 +73,6 @@ class WithUnifiedMemIntIQs extends Config((site, here, up) => {
    }
 })
 
-
 class WithoutBoomFPU extends Config((site, here, up) => {
    case BoomTilesKey => up(BoomTilesKey, site) map { r =>
       r.copy(core = r.core.copy(
@@ -98,7 +98,6 @@ class WithRVC extends Config((site, here, up) => {
          useCompressed = true))}
 })
 
-
 // Small BOOM! Try to be fast to compile and easier to debug.
 class WithSmallBooms extends Config((site, here, up) => {
    case BoomTilesKey => up(BoomTilesKey, site) map { r =>r.copy(
@@ -121,7 +120,6 @@ class WithSmallBooms extends Config((site, here, up) => {
       )}
    case SystemBusKey => up(SystemBusKey, site).copy(beatBytes = 8)
 })
-
 
 // Try to match the Cortex-A9.
 class WithMediumBooms extends Config((site, here, up) => {
@@ -151,7 +149,6 @@ class WithMediumBooms extends Config((site, here, up) => {
    case SystemBusKey => up(SystemBusKey, site).copy(beatBytes = 8)
 })
 
-
 // Try to match the Cortex-A15. Don't expect good QoR (yet).
 class WithMegaBooms extends Config((site, here, up) => {
    case BoomTilesKey => up(BoomTilesKey, site) map { r =>r.copy(
@@ -176,4 +173,3 @@ class WithMegaBooms extends Config((site, here, up) => {
    // Set TL network to 128bits wide
    case SystemBusKey => up(SystemBusKey, site).copy(beatBytes = 16)
 })
-

@@ -1,25 +1,27 @@
 //******************************************************************************
 // Copyright (c) 2015 - 2018, The Regents of the University of California (Regents).
-// All Rights Reserved. See LICENSE for license details.
+// All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
 // Author: Christopher Celio
 //------------------------------------------------------------------------------
 
 //------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // RISCV Processor Issue Logic
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
-//
 
 package boom.exu
 
+import scala.collection.mutable.ArrayBuffer
+
 import chisel3._
 import chisel3.util.{log2Ceil, PopCount}
+
 import freechips.rocketchip.config.Parameters
+import freechips.rocketchip.util.Str
 
 import FUConstants._
-import freechips.rocketchip.util.Str
-import scala.collection.mutable.ArrayBuffer
 import boom.common._
 
 //-------------------------------------------------------------
@@ -38,7 +40,6 @@ class IssueUnitCollasping(
    val shamt_oh = Array.fill(num_issue_slots){UInt(width=issue_width.W)}
    // count total grants before this entry, and tus how many to shift upwards by
    val shamt = Array.fill(num_issue_slots){UInt(width=log2Ceil(issue_width+1).W)}
-
 
    val vacants = issue_slots.map(s => !(s.valid)) ++ io.dis_valids.map(!_.toBool)
    val shamts_oh = Array.fill(num_issue_slots+DISPATCH_WIDTH) {Wire(UInt(width=MAX_SHIFT.W))}
@@ -149,4 +150,3 @@ class IssueUnitCollasping(
       }
    }
 }
-

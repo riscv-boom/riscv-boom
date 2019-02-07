@@ -1,27 +1,29 @@
 //******************************************************************************
 // Copyright (c) 2015 - 2018, The Regents of the University of California (Regents).
-// All Rights Reserved. See LICENSE for license details.
+// All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
 // Author: Christopher Celio
 //------------------------------------------------------------------------------
 
 //------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // Floating Point Datapath Pipeline
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
+//
 // The floating point issue window, regfile, and arithmetic units are all handled here.
-
 
 package boom.exu
 
 import chisel3._
 import chisel3.util._
+
 import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.rocket
 import freechips.rocketchip.tile
+
 import boom.exu.FUConstants._
 import boom.common._
-
 
 class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFPUParameters
 {
@@ -30,7 +32,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
    val num_wakeup_ports = fpIssueParams.issueWidth + num_ll_ports
    val fp_preg_sz = log2Ceil(numFpPhysRegs)
 
-   val io = new Bundle
+   val io = IO(new Bundle
    {
       val brinfo           = Input(new BrResolutionInfo())
       val flush_pipeline   = Input(Bool())
@@ -52,7 +54,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
 
       val debug_tsc_reg    = Input(UInt(width=xLen.W))
       val debug_wb_wdata   = Output(Vec(num_wakeup_ports, UInt((fLen+1).W)))
-   }
+   })
 
    //**********************************
    // construct all of the modules
@@ -106,7 +108,8 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
       issue_unit.io.dis_uops(w) := io.dis_uops(w)
 
       // Or... add STDataGen micro-op for FP stores.
-      when (io.dis_uops(w).uopc === uopSTA && io.dis_uops(w).lrs2_rtype === RT_FLT) {
+      when (io.dis_uops(w).uopc === uopSTA && io.dis_uops(w).lrs2_rtype === RT_FLT)
+      {
          issue_unit.io.dis_valids(w) := io.dis_valids(w)
          issue_unit.io.dis_uops(w).uopc := uopSTD
          issue_unit.io.dis_uops(w).fu_code := FUConstants.FU_FPU
@@ -158,14 +161,12 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
    fregister_read.io.brinfo := io.brinfo
    fregister_read.io.kill := io.flush_pipeline
 
-
    //-------------------------------------------------------------
    // **** Execute Stage ****
    //-------------------------------------------------------------
 
    exe_units.map(_.io.brinfo := io.brinfo)
    exe_units.map(_.io.com_exception := io.flush_pipeline)
-
 
    for ((ex,w) <- exe_units.withFilter(_.reads_frf).map(x=>x).zipWithIndex)
    {
@@ -175,7 +176,8 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
       // TODO HACK only let one FPU issue port issue these.
       // Solution : Make STDataGen a functional unit time
       require (w == 0)
-      when (fregister_read.io.exe_reqs(w).bits.uop.uopc === uopSTD) {
+      when (fregister_read.io.exe_reqs(w).bits.uop.uopc === uopSTD) 
+      {
          ex.io.req.valid :=  false.B
       }
 
@@ -202,19 +204,21 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
 
    ll_wbarb.io.in(1) <> ifpu_resp
 
-   if (regreadLatency > 0) {
+   if (regreadLatency > 0) 
+   {
       // Cut up critical path by delaying the write by a cycle.
       // Wakeup signal is sent on cycle S0, write is now delayed until end of S1,
       // but Issue happens on S1 and RegRead doesn't happen until S2 so we're safe.
       // (for regreadlatency >0).
       fregfile.io.write_ports(0) <> WritePort(RegNext(ll_wbarb.io.out), FPREG_SZ, fLen+1)
-   } else {
+   }
+   else
+   {
       fregfile.io.write_ports(0) <> WritePort(ll_wbarb.io.out, FPREG_SZ, fLen+1)
    }
 
    assert (ll_wbarb.io.in(0).ready) // never backpressure the memory unit.
    when (ifpu_resp.valid) { assert (ifpu_resp.bits.uop.ctrl.rf_wen && ifpu_resp.bits.uop.dst_rtype === RT_FLT) }
-
 
    var w_cnt = 1
    var toint_found = false
@@ -270,7 +274,8 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
       }
    }
 
-   for ((wdata, wakeup) <- io.debug_wb_wdata zip io.wakeups) {
+   for ((wdata, wakeup) <- io.debug_wb_wdata zip io.wakeups) 
+   {
       wdata := ieee(wakeup.bits.data)
    }
 
@@ -291,5 +296,4 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
       fregfile.toString +
       "\n   Num Wakeup Ports      : " + num_wakeup_ports +
       "\n   Num Bypass Ports      : " + exe_units.num_total_bypass_ports + "\n"
-
 }

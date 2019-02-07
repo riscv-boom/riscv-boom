@@ -1,6 +1,6 @@
 //******************************************************************************
 // Copyright (c) 2018 - 2018, The Regents of the University of California (Regents).
-// All Rights Reserved. See LICENSE for license details.
+// All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
 // Author: Christopher Celio
 //------------------------------------------------------------------------------
@@ -19,9 +19,10 @@ import chisel3._
 import chisel3.util._
 import chisel3.experimental.dontTouch
 import chisel3.core.DontCare
-import freechips.rocketchip.config.Parameters
-import boom.common._
 
+import freechips.rocketchip.config.Parameters
+
+import boom.common._
 
 class FetchBufferResp(implicit p: Parameters) extends BoomBundle()(p)
 {
@@ -54,7 +55,6 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule()
    //-------------------------------------------------------------
    // **** Enqueue Uops ****
    //-------------------------------------------------------------
-
    // Step 1: convert FetchPacket into a vector of MicroOps.
    // Step 2: Compact/shift all MicroOps down towards index=0 (compress out any invalid MicroOps).
    // Step 3: Write CompactedMicroOps into the RAM.
@@ -68,11 +68,13 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule()
    val compact_mask = Wire(Vec(fetchWidth, Bool()))
    val compact_uops = Wire(Vec(fetchWidth, new MicroOp()))
 
-   for (i <- 0 until fetchWidth) {
+   for (i <- 0 until fetchWidth) 
+   {
       compact_mask(i) := false.B
       compact_uops(i) := DontCare
       compact_uops(i).inst := 7.U
    }
+
    // Step 1. Convert input FetchPacket into an array of MicroOps.
    for (i <- 0 until fetchWidth)
    {
@@ -82,8 +84,10 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule()
       in_uops(i).pc             := (alignToFetchBoundary(io.enq.bits.pc)
                                   + (i << log2Ceil(coreInstBytes)).U)
       in_uops(i).pc_lob         := in_uops(i).pc // LHS width will cut off high-order bits.
-      if (i == 0) {
-         when (io.enq.bits.edge_inst) {
+      if (i == 0)
+      {
+         when (io.enq.bits.edge_inst)
+         {
             assert(usingCompressed.B)
             in_uops(i).pc       := alignToFetchBoundary(io.enq.bits.pc) - 2.U
             in_uops(i).pc_lob   := alignToFetchBoundary(io.enq.bits.pc)
@@ -118,7 +122,8 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule()
    for (i <- 0 until fetchWidth)
    {
       val use_uop = i.U >= first_index && in_uops(i.U).valid
-      when (use_uop) {
+      when (use_uop)
+      {
          compact_uops(compact_idx) := in_uops(i.U)
          compact_mask(compact_idx) := true.B
       }
@@ -196,7 +201,6 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule()
    write_ptr := write_ptr + enq_count
    read_ptr := read_ptr + deq_count
 
-
    when (io.clear)
    {
       count := 0.U
@@ -209,7 +213,6 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule()
    {
       io.deq.bits.uops map { u => u.valid := false.B }
    }
-
 
    //-------------------------------------------------------------
    // **** Printfs ****
@@ -246,8 +249,6 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule()
    //-------------------------------------------------------------
 
    assert (count >= deq_count, "[fetchbuffer] Trying to dequeue more uops than are available.")
-
    assert (!(count === 0.U && write_ptr =/= read_ptr), "[fetchbuffer] pointers should match if count is zero.")
-
 }
 

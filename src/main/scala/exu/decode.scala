@@ -1,6 +1,6 @@
 //******************************************************************************
 // Copyright (c) 2015 - 2018, The Regents of the University of California (Regents).
-// All Rights Reserved. See LICENSE for license details.
+// All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
 // Author: Christopher Celio
 //------------------------------------------------------------------------------
@@ -9,12 +9,13 @@ package boom.exu
 
 import chisel3._
 import chisel3.util._
-import freechips.rocketchip.config.Parameters
 
+import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.rocket.Instructions._
 import freechips.rocketchip.rocket.RVCExpander
 import freechips.rocketchip.rocket.{CSR,Causes}
 import freechips.rocketchip.util.{uintToBitPat,UIntIsOneOf}
+
 import FUConstants._
 import boom.common._
 import boom.util._
@@ -403,7 +404,6 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule()(p)
 
    val cs = Wire(new CtrlSigs()).decode(inst, decode_table)
 
-
    // Exception Handling
    io.csr_decode.csr := inst(31,20)
     val csr_en = cs.csr_cmd.isOneOf(CSR.S, CSR.C, CSR.W)
@@ -423,7 +423,6 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule()(p)
      ((sfence || system_insn) && io.csr_decode.system_illegal)
 
 //     cs.div && !csr.io.status.isa('m'-'a') || TODO check for illegal div instructions
-
 
    def checkExceptions(x: Seq[(Bool, UInt)]) =
       (x.map(_._1).reduce(_||_), PriorityMux(x))
@@ -504,7 +503,6 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule()(p)
 
 }
 
-
 class BranchDecode(implicit p: Parameters) extends Module
 {
    val io = IO(new Bundle
@@ -515,7 +513,6 @@ class BranchDecode(implicit p: Parameters) extends Module
       val is_jalr = Output(Bool())
       val cfi_type = Output(UInt(CfiType.SZ.W))
    })
-
 
    val rvc_exp = Module(new RVCExpander)
    rvc_exp.io.in := io.inst
@@ -555,7 +552,6 @@ class BranchDecode(implicit p: Parameters) extends Module
           CfiType.branch,
           CfiType.none)))
 }
-
 
 // track the current "branch mask", and give out the branch mask to each micro-op in Decode
 // (each micro-op in the machine has a branch mask which says which branches it
@@ -652,4 +648,3 @@ class BranchMaskGenerationLogic(val pl_width: Int)(implicit p: Parameters) exten
    io.debug.branch_mask := branch_mask
 
 }
-

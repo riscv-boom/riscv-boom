@@ -1,6 +1,6 @@
 //******************************************************************************
 // Copyright (c) 2015 - 2018, The Regents of the University of California (Regents).
-// All Rights Reserved. See LICENSE for license details.
+// All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
 // Author: Christopher Celio
 //------------------------------------------------------------------------------
@@ -9,23 +9,24 @@ package boom.exu
 
 import chisel3._
 import chisel3.util._
-import freechips.rocketchip.config.Parameters
 
+import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.tile.FPConstants._
 import freechips.rocketchip.tile.FPUCtrlSigs
 import freechips.rocketchip.tile
 import freechips.rocketchip.rocket
 import freechips.rocketchip.util.uintToBitPat
+
 import boom.common._
 import boom.util.{ImmGenRm, ImmGenTyp}
-
 
 // TODO get rid of this decoder and move into the Decode stage? Or the RRd stage?
 // most of these signals are already created, just need to be translated
 // to the Rocket FPU-speak
 class UOPCodeFPUDecoder extends Module
 {
-  val io = IO(new Bundle {
+  val io = IO(new Bundle
+  {
     val uopc = Input(Bits(UOPC_SZ.W))
     val sigs = Output(new FPUCtrlSigs())
   })
@@ -191,16 +192,13 @@ class FPU(implicit p: Parameters) extends BoomModule()(p) with tile.HasFPUParame
         req
    }
 
-
    val dfma = Module(new tile.FPUFMAPipe(latency = fpu_latency, t = tile.FType.D))
    dfma.io.in.valid := io.req.valid && fp_ctrl.fma && !fp_ctrl.singleOut
    dfma.io.in.bits := fuInput(Some(dfma.t))
 
-
    val sfma = Module(new tile.FPUFMAPipe(latency = fpu_latency, t = tile.FType.S))
    sfma.io.in.valid := io.req.valid && fp_ctrl.fma && fp_ctrl.singleOut
    sfma.io.in.bits := fuInput(Some(sfma.t))
-
 
    val fpiu = Module(new tile.FPToInt)
    fpiu.io.in.valid := io.req.valid && (fp_ctrl.toint || (fp_ctrl.fastpipe && fp_ctrl.wflags))
@@ -211,13 +209,11 @@ class FPU(implicit p: Parameters) extends BoomModule()(p) with tile.HasFPUParame
    fpiu_result.data := fpiu_out.bits.toint
    fpiu_result.exc  := fpiu_out.bits.exc
 
-
    val fpmu = Module(new tile.FPToFP(fpu_latency)) // latency 2 for rocket
    fpmu.io.in.valid := io.req.valid && fp_ctrl.fastpipe
    fpmu.io.in.bits := fpiu.io.in.bits
    fpmu.io.lt := fpiu.io.out.bits.lt
    val fpmu_double = Pipe(io.req.valid && fp_ctrl.fastpipe, !fp_ctrl.singleOut, fpu_latency).bits
-
 
    // Response (all FP units have been padded out to the same latency)
    io.resp.valid := fpiu_out.valid ||
@@ -236,9 +232,7 @@ class FPU(implicit p: Parameters) extends BoomModule()(p) with tile.HasFPUParame
       Mux(fpiu_out.valid,    fpiu_result.exc,
          fpmu.io.out.bits.exc)))
 
-
    io.resp.bits.data              := fpu_out_data
    io.resp.bits.fflags.valid      := io.resp.valid
    io.resp.bits.fflags.bits.flags := fpu_out_exc
 }
-

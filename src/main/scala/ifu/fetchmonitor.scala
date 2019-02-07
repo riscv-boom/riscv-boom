@@ -1,6 +1,6 @@
 //******************************************************************************
 // Copyright (c) 2018 - 2018, The Regents of the University of California (Regents).
-// All Rights Reserved. See LICENSE for license details.
+// All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
 // Author: Christopher Celio
 //------------------------------------------------------------------------------
@@ -12,7 +12,6 @@
 //------------------------------------------------------------------------------
 //
 // Monitor a vector of MicroOps and their PCs and verify it is a valid sequence.
-//
 // NOTE: I should not be synthesized!
 
 package boom.ifu
@@ -20,7 +19,9 @@ package boom.ifu
 import chisel3._
 import chisel3.util._
 import chisel3.core.DontCare
+
 import freechips.rocketchip.config.Parameters
+
 import boom.common._
 
 class FetchMonitor(implicit p: Parameters) extends BoomModule()(p)
@@ -94,8 +95,6 @@ class FetchMonitor(implicit p: Parameters) extends BoomModule()(p)
             ComputeBranchTarget(uop.pc, uop.inst, xLen))
    }
 
-
-
    // Check if the enqueue'd PC is a target of the previous valid enqueue'd PC.
 
    // Was the last uop from the previous decode group valid?
@@ -130,7 +129,6 @@ class FetchMonitor(implicit p: Parameters) extends BoomModule()(p)
          Mux(GetCfiType(end_uop.inst) === CfiType.jal,
             ComputeJALTarget(end_uop.pc, end_uop.inst, xLen),
             ComputeBranchTarget(end_uop.pc, end_uop.inst, xLen))
-
 
       when (last_valid)
       {
@@ -171,13 +169,9 @@ class FetchMonitor(implicit p: Parameters) extends BoomModule()(p)
       }
    }
 
-
    when (io.clear)
    {
       last_valid := false.B
    }
-
-
-
 }
 

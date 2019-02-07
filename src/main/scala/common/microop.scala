@@ -1,10 +1,11 @@
 //******************************************************************************
 // Copyright (c) 2015 - 2018, The Regents of the University of California (Regents).
-// All Rights Reserved. See LICENSE for license details.
+// All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
 // Author: Christopher Celio
 //------------------------------------------------------------------------------
 
+//------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
 // MicroOp
 //------------------------------------------------------------------------------
@@ -14,11 +15,14 @@ package boom.common
 
 import chisel3._
 import chisel3.util._
+
 import freechips.rocketchip.config.Parameters
+
 import boom.bpu.BranchPredInfo
 import boom.exu.FUConstants
 
-abstract trait HasBoomUOP extends BoomBundle {
+abstract trait HasBoomUOP extends BoomBundle 
+{
   val uop = new MicroOp()
 }
 
@@ -72,7 +76,6 @@ class MicroOp(implicit p: Parameters) extends BoomBundle()(p)
    // Low-order bits of our own PC. Combine with ftq[ftq_idx] to get PC.
    // Aligned to a cache-line size, as that is the greater fetch granularity.
    val pc_lob           = UInt(log2Ceil(icBlockBytes).W)
-
 
    val imm_packed       = UInt(LONGEST_IMM_SZ.W) // densely pack the imm in decode...
                                                // then translate and sign-extend in execute

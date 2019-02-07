@@ -1,26 +1,28 @@
 //******************************************************************************
 // Copyright (c) 2015 - 2018, The Regents of the University of California (Regents).
-// All Rights Reserved. See LICENSE for license details.
+// All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
 // Author: Christopher Celio
 //------------------------------------------------------------------------------
 
 //------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // Functional Unit Decode
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
-
+//
 // Generate the functional unit control signals from the micro-op opcodes.
 
 package boom.exu
 
 import chisel3._
 import chisel3.util._
-import freechips.rocketchip.config.Parameters
 
+import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.rocket.ALU._
 import freechips.rocketchip.util.uintToBitPat
 import freechips.rocketchip.rocket.CSR
+
 import boom.common._
 
 class RRdCtrlSigs(implicit p: Parameters) extends BoomBundle()(p)
@@ -240,7 +242,6 @@ object FpuRRdDecode extends RRdDecodeConstants
          BitPat(uopFNMSUB_D)->List(BR_N, Y, N, N, FN_X   , DW_X  , OP1_X   , OP2_X   , IS_X, REN_1, CSR.N))
 }
 
-
 object IfmvRRdDecode extends RRdDecodeConstants
 {
    val table: Array[(BitPat, List[BitPat])] =
@@ -257,7 +258,6 @@ object IfmvRRdDecode extends RRdDecodeConstants
          BitPat(uopFCVT_S_X) ->List(BR_N,Y, N, N, FN_X   , DW_X  , OP1_X   , OP2_X   , IS_X, REN_1, CSR.N),
          BitPat(uopFCVT_D_X) ->List(BR_N,Y, N, N, FN_X   , DW_X  , OP1_X   , OP2_X   , IS_X, REN_1, CSR.N))
 }
-
 
 
 object FDivRRdDecode extends RRdDecodeConstants
@@ -322,12 +322,10 @@ class RegisterReadDecode(supported_units: SupportedFuncUnits)(implicit p: Parame
    val csr_ren = (rrd_cs.csr_cmd === CSR.S || rrd_cs.csr_cmd === CSR.C) && raddr1 === 0.U
    io.rrd_uop.ctrl.csr_cmd := Mux(csr_ren, CSR.R, rrd_cs.csr_cmd)
 
-
    require (rrd_cs.op_fcn.getWidth == FN_SRA.getWidth)
 
    //-------------------------------------------------------------
    // set outputs
 
    io.rrd_valid := rrd_valid
-
 }

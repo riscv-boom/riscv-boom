@@ -1,23 +1,22 @@
 //******************************************************************************
 // Copyright (c) 2011 - 2018, The Regents of the University of California (Regents).
-// All Rights Reserved. See LICENSE for license details.
+// All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
 // Author: Christopher Celio
 //------------------------------------------------------------------------------
 
 //------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // RISCV Processor Constants
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
 
-package boom.common
-package constants
-{
+package boom.common.constants
 
 import chisel3._
 import chisel3.util._
-import freechips.rocketchip.config.Parameters
 
+import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.util.Str
 
 trait BOOMDebugConstants
@@ -64,7 +63,6 @@ trait ScalarOpConstants
 
    //************************************
    // Extra Constants
-
 
    //************************************
    // Control Signals
@@ -122,7 +120,6 @@ trait ScalarOpConstants
    val IS_U   = 3.U(3.W)  // U-Type  (LUI/AUIPC)
    val IS_J   = 4.U(3.W)  // UJ-Type (J/JAL)
    val IS_X   = BitPat("b???")
-
 
    // Decode Stage Control Signals
    val RT_FIX   = 0.U(2.W)
@@ -270,7 +267,6 @@ trait ScalarOpConstants
    // between software NOPs and machine-generated Bubbles in the pipeline.
    val BUBBLE  = (0x4033).U(32.W)
 
-
    def NullMicroOp()(implicit p: Parameters): MicroOp =
    {
       val uop = Wire(new MicroOp()(p))
@@ -298,7 +294,6 @@ trait ScalarOpConstants
       uop.ctrl := cs
       uop
    }
-
 }
 
 trait RISCVConstants
@@ -330,9 +325,11 @@ trait RISCVConstants
 
    val jal_opc = (0x6f).U
    val jalr_opc = (0x67).U
+
    def GetUop(inst: UInt): UInt = inst(6,0)
    def GetRd (inst: UInt): UInt = inst(RD_MSB,RD_LSB)
    def GetRs1(inst: UInt): UInt = inst(RS1_MSB,RS1_LSB)
+
    def IsCall(inst: UInt)(implicit p: Parameters): Bool =
    {
       val rvc_exp = Module(new freechips.rocketchip.rocket.RVCExpander)
@@ -342,6 +339,7 @@ trait RISCVConstants
       (e_inst === freechips.rocketchip.rocket.Instructions.JAL ||
        e_inst === freechips.rocketchip.rocket.Instructions.JALR) && GetRd(e_inst) === RA
    }
+
    def IsReturn(inst: UInt)(implicit p: Parameters): Bool =
    {
       val rvc_exp = Module(new freechips.rocketchip.rocket.RVCExpander)
@@ -358,6 +356,7 @@ trait RISCVConstants
       val b_imm32 = Cat(Fill(20,e_inst(31)), e_inst(7), e_inst(30,25), e_inst(11,8), 0.U(1.W))
       ((pc.asSInt + b_imm32.asSInt).asSInt & (-2).S).asUInt
    }
+
    def ComputeJALTarget(pc: UInt, inst: UInt, xlen: Int)(implicit p: Parameters): UInt =
    {
       val rvc_exp = Module(new freechips.rocketchip.rocket.RVCExpander)
@@ -373,8 +372,6 @@ trait RISCVConstants
       bdecode.io.inst := inst
       bdecode.io.cfi_type
    }
-
-
 }
 
 trait ExcCauseConstants
@@ -385,6 +382,4 @@ trait ExcCauseConstants
    val MINI_EXCEPTION_REPLAY = 17.U
    require (!freechips.rocketchip.rocket.Causes.all.contains(16))
    require (!freechips.rocketchip.rocket.Causes.all.contains(17))
-}
-
 }
