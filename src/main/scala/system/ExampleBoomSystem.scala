@@ -21,7 +21,7 @@ class ExampleBoomSystem(implicit p: Parameters) extends BoomSubsystem
     with CanHaveMisalignedMasterAXI4MemPort
     with CanHaveMasterAXI4MMIOPort
     with CanHaveSlaveAXI4Port
-    with HasPeripheryBootROM 
+    with HasPeripheryBootROM
 {
   override lazy val module = new ExampleBoomSystemModule(this)
 

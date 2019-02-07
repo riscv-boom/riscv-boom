@@ -35,7 +35,7 @@ case class BoomTileParams(
     hartId: Int = 0,
     blockerCtrlAddr: Option[BigInt] = None,
     boundaryBuffers: Boolean = false // if synthesized with hierarchical PnR, cut feed-throughs?
-    ) extends TileParams 
+    ) extends TileParams
 {
   require(icache.isDefined)
   require(dcache.isDefined)
@@ -49,7 +49,7 @@ class BoomTile(
     //with HasLazyRoCC  // implies CanHaveSharedFPU with CanHavePTW with HasHellaCache
     with CanHaveBoomPTW
     with HasBoomHellaCache
-    with HasBoomICacheFrontend 
+    with HasBoomICacheFrontend
 {
 
   val intOutwardNode = IntIdentityNode()
@@ -131,7 +131,7 @@ class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer)
     //with HasLazyRoCCModule[BoomTile]
     with CanHaveBoomPTWModule
     with HasBoomHellaCacheModule
-    with HasBoomICacheFrontendModule 
+    with HasBoomICacheFrontendModule
 {
   Annotated.params(this, outer.boomParams)
 
@@ -175,8 +175,8 @@ class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer)
   //core.io.rocc.busy := roccCore.busy
   //core.io.rocc.interrupt := roccCore.interrupt
 
-  when(!uncorrectable) 
-  { 
+  when(!uncorrectable)
+  {
     uncorrectable :=
     List(outer.frontend.module.io.errors, outer.dcache.module.io.errors)
       .flatMap { e => e.uncorrectable.map(_.valid) }

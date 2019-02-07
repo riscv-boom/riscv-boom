@@ -136,7 +136,7 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
    private val do_enq = WireInit(io.enq.fire())
    private val do_deq = WireInit(deq_ptr.value =/= commit_ptr)
 
-   when (do_enq) 
+   when (do_enq)
    {
      ram(enq_ptr.value) := io.enq.bits
      cfi_info(enq_ptr.value) := initCfiInfo(io.enq.bits.bim_info.br_seen, io.enq.bits.bim_info.cfi_idx)

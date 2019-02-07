@@ -15,7 +15,7 @@ import freechips.rocketchip.util.GeneratorApp
 import freechips.rocketchip.system.{TestGeneration, RegressionTestSuite}
 
 /** A Generator for platforms containing Rocket Subsystems */
-object Generator extends GeneratorApp 
+object Generator extends GeneratorApp
 {
   val rv64RegrTestNames = LinkedHashSet(
         "rv64ud-v-fcvt",
@@ -62,28 +62,28 @@ object Generator extends GeneratorApp
     val vm = coreParams.useVM
     val env = if (vm) List("p","v") else List("p")
     coreParams.fpu foreach { case cfg =>
-      if (xlen == 32) 
+      if (xlen == 32)
       {
         TestGeneration.addSuites(env.map(rv32uf))
-        if (cfg.fLen >= 64) 
+        if (cfg.fLen >= 64)
         {
           TestGeneration.addSuites(env.map(rv32ud))
         }
       }
-      else if (cfg.fLen >= 64) 
+      else if (cfg.fLen >= 64)
       {
           TestGeneration.addSuites(env.map(rv64ud))
           TestGeneration.addSuites(env.map(rv64uf))
           TestGeneration.addSuite(rv32udBenchmarks)
       }
     }
-    if (coreParams.useAtomics) 
+    if (coreParams.useAtomics)
     {
-      if (tileParams.dcache.flatMap(_.scratch).isEmpty) 
+      if (tileParams.dcache.flatMap(_.scratch).isEmpty)
       {
         TestGeneration.addSuites(env.map(if (xlen == 64) rv64ua else rv32ua))
       }
-      else 
+      else
       {
         TestGeneration.addSuites(env.map(if (xlen == 64) rv64uaSansLRSC else rv32uaSansLRSC))
       }

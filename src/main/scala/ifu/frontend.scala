@@ -304,8 +304,8 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 }
 
 /** Mix-ins for constructing tiles that have an ICache-based pipeline frontend */
-trait HasBoomICacheFrontend extends CanHaveBoomPTW 
-{ 
+trait HasBoomICacheFrontend extends CanHaveBoomPTW
+{
   this: BaseTile =>
   val module: HasBoomICacheFrontendModule
   val frontend = LazyModule(new BoomFrontend(tileParams.icache.get, hartId))

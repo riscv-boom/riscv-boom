@@ -354,24 +354,24 @@ class BranchKillableQueue[T <: boom.common.HasBoomUOP](gen: T, entries: Int)
    {
       val mask = brmasks(i)
       valids(i)  := valids(i) && !IsKilledByBranch(io.brinfo, mask) && !io.flush
-      when (valids(i)) 
+      when (valids(i))
       {
          brmasks(i) := GetNewBrMask(io.brinfo, mask)
       }
    }
 
-   when (do_enq) 
+   when (do_enq)
    {
       ram(enq_ptr.value) := io.enq.bits
       valids(enq_ptr.value) := true.B //!IsKilledByBranch(io.brinfo, io.enq.bits.uop)
       brmasks(enq_ptr.value) := GetNewBrMask(io.brinfo, io.enq.bits.uop)
       enq_ptr.inc()
    }
-   when (do_deq) 
+   when (do_deq)
    {
       deq_ptr.inc()
    }
-   when (do_enq =/= do_deq) 
+   when (do_enq =/= do_deq)
    {
       maybe_full := do_enq
    }
@@ -395,11 +395,11 @@ class BranchKillableQueue[T <: boom.common.HasBoomUOP](gen: T, entries: Int)
    }
 
    private val ptr_diff = enq_ptr.value - deq_ptr.value
-   if (isPow2(entries)) 
+   if (isPow2(entries))
    {
       io.count := Cat(maybe_full && ptr_match, ptr_diff)
    }
-   else 
+   else
    {
       io.count := Mux(ptr_match,
                      Mux(maybe_full,

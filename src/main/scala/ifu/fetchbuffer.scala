@@ -68,7 +68,7 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule()
    val compact_mask = Wire(Vec(fetchWidth, Bool()))
    val compact_uops = Wire(Vec(fetchWidth, new MicroOp()))
 
-   for (i <- 0 until fetchWidth) 
+   for (i <- 0 until fetchWidth)
    {
       compact_mask(i) := false.B
       compact_uops(i) := DontCare

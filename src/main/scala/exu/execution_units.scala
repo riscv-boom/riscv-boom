@@ -156,7 +156,7 @@ class ExecutionUnits(fpu: Boolean)(implicit val p: Parameters) extends HasBoomCo
    {
       val fp_width = issueParams.find(_.iqType == IQT_FP.litValue).get.issueWidth
       require (fp_width == 1) // TODO hacks to fix include uopSTD_fp needing a proper func unit.
-      for (w <- 0 until fp_width) 
+      for (w <- 0 until fp_width)
       {
          val fpuExeUnit = Module(new FPUExeUnit(has_fpu = true,
                                             has_fdiv = usingFDivSqrt && (w==0),
@@ -172,14 +172,14 @@ class ExecutionUnits(fpu: Boolean)(implicit val p: Parameters) extends HasBoomCo
 
    val exe_units_str = new StringBuilder
    exe_units_str.append(
-      if (!fpu) 
+      if (!fpu)
       {
          ( "\n   ~*** " + Seq("One","Two","Three","Four")(decodeWidth-1) + "-wide Machine ***~\n"
          + "\n    -== " + Seq("Single","Dual","Triple","Quad","Five","Six")(totalIssueWidth-1) + " Issue ==- \n")
       }
    )
 
-   for (exe_unit <- exe_units) 
+   for (exe_unit <- exe_units)
    {
       exe_units_str.append(exe_unit.toString)
    }

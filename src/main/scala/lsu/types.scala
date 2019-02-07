@@ -26,12 +26,12 @@ trait HasBoomHellaCache { this: BaseTile =>
   def findScratchpadFromICache: Option[AddressSet]
   var nDCachePorts = 0
   val dcache: HellaCache = LazyModule(
-    if (tileParams.dcache.get.nMSHRs == 0) 
+    if (tileParams.dcache.get.nMSHRs == 0)
     {
       new DCache(hartId, findScratchpadFromICache _, p(RocketCrossingKey).head.knownRatio)
-    } 
-    else 
-    { 
+    }
+    else
+    {
       new BoomNonBlockingDCache(hartId)
     })
 
@@ -40,7 +40,7 @@ trait HasBoomHellaCache { this: BaseTile =>
   tlMasterXbar.node := dCacheTap := dcache.node
 }
 
-trait HasBoomHellaCacheModule 
+trait HasBoomHellaCacheModule
 {
   val outer: HasBoomHellaCache
   val dcachePorts = ListBuffer[HellaCacheIO]()
@@ -55,13 +55,13 @@ trait CanHaveBoomPTW extends HasTileParameters with HasBoomHellaCache { this: Ba
   nDCachePorts += (if (usingPTW) 1 else 0)
 }
 
-trait CanHaveBoomPTWModule extends HasBoomHellaCacheModule 
+trait CanHaveBoomPTWModule extends HasBoomHellaCacheModule
 {
   val outer: CanHaveBoomPTW
   val ptwPorts = ListBuffer(outer.dcache.module.io.ptw)
   val ptw = Module(new PTW(outer.nPTWPorts)(outer.dcache.node.edges.out(0), outer.p))
   ptw.io <> DontCare // Is overridden below if PTW is connected
-  if (outer.usingPTW) 
+  if (outer.usingPTW)
   {
     dcachePorts += ptw.io.mem
   }

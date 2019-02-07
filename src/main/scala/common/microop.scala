@@ -21,7 +21,7 @@ import freechips.rocketchip.config.Parameters
 import boom.bpu.BranchPredInfo
 import boom.exu.FUConstants
 
-abstract trait HasBoomUOP extends BoomBundle 
+abstract trait HasBoomUOP extends BoomBundle
 {
   val uop = new MicroOp()
 }

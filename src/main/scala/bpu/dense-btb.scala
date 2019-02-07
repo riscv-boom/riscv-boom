@@ -81,22 +81,22 @@ class DenseBTB(implicit p: Parameters) extends BoomBTB
       entry.update := btb_update
 
       val overflow = (0 until branch_levels).map { l =>
-         if (vaddrBits-1 > (l*(tag_sz+offset_sz)+offset_sz+lsb_sz)) 
+         if (vaddrBits-1 > (l*(tag_sz+offset_sz)+offset_sz+lsb_sz))
          {
             val update_bits = btb_update.pc(vaddrBits-1, l*(tag_sz+offset_sz)+offset_sz+lsb_sz)
             val target_bits = btb_update.target(vaddrBits-1, l*(tag_sz+offset_sz)+offset_sz+lsb_sz)
             (update_bits ^ target_bits).orR
-         } 
-         else 
+         }
+         else
          {
             false.B
          }
       }
 
       entry.level := 0.U
-      for (i <- 0 until branch_levels) 
+      for (i <- 0 until branch_levels)
       {
-         when (overflow(i)) 
+         when (overflow(i))
          {
             entry.level := (i+1).U
          }
@@ -115,9 +115,9 @@ class DenseBTB(implicit p: Parameters) extends BoomBTB
       val wmask = WireInit(0.U(nWays.W))
 
       val level = btb_q_entry.level
-      when (level === 0.U) 
+      when (level === 0.U)
       {
-         for (i <- 0 until nWays) 
+         for (i <- 0 until nWays)
          {
             wdata(i).tag      := getTag(btb_q_entry.update.pc)
             wdata(i).offset   := btb_q_entry.update.target(offset_sz+lsb_sz-1,lsb_sz)
@@ -128,7 +128,7 @@ class DenseBTB(implicit p: Parameters) extends BoomBTB
          wmask := (1.U << next_way)
       }
 
-      when (level === 1.U) 
+      when (level === 1.U)
       {
          wdata(1).tag      := getTag(btb_q_entry.update.pc)
          wdata(1).offset   := btb_q_entry.update.target(min(vaddrBits-1, tag_sz+2*offset_sz+lsb_sz-1),
@@ -141,11 +141,11 @@ class DenseBTB(implicit p: Parameters) extends BoomBTB
          wmask             := 3.U
       }
 
-      if (branch_levels > 2) 
+      if (branch_levels > 2)
       {
-         when (level === 2.U) 
+         when (level === 2.U)
          {
-            for (i <- 0 until 1) 
+            for (i <- 0 until 1)
             {
                wdata(i).tag    := btb_q_entry.update.target((i+1)*(tag_sz+offset_sz)+lsb_sz-1,
                                                             i*tag_sz+(i+1)*offset_sz+lsb_sz)
@@ -225,15 +225,15 @@ class DenseBTB(implicit p: Parameters) extends BoomBTB
       val rout      = VecInit(rout_bits map { x => x.asTypeOf(new BTBSetData()) })
       val bank_hits = (bank_vals.toBools zip rout map {case(hit, data) => hit && data.tag === s1_req_tag})
 
-      if (b == 0) 
+      if (b == 0)
       {
          hits      := bank_hits
          blevels_vec := VecInit(blevels(s1_idx).grouped(blevel_sz))
          data_out  := rout
       }
-      else 
+      else
       {
-         when (getBank(s1_pc) === b.U) 
+         when (getBank(s1_pc) === b.U)
          {
             hits        := bank_hits
             blevels_vec := VecInit(blevels(s1_idx).grouped(blevel_sz))
@@ -251,19 +251,19 @@ class DenseBTB(implicit p: Parameters) extends BoomBTB
          val wdata_bits = VecInit(wdata map { x => x.asUInt })
          data.write(widx, wdata_bits, wmask.toBools)
 
-         when (btb_update_q.io.deq.bits.level === 0.U) 
+         when (btb_update_q.io.deq.bits.level === 0.U)
          {
             valids(widx)  := valids(widx).bitSet(next_way, true.B)
             blevels(widx) := blevels(widx) & ~(bmask << (blevel_sz.U*next_way)) |
                              (btb_update_q.io.deq.bits.level << (blevel_sz.U*next_way))
          }
-         .elsewhen (btb_update_q.io.deq.bits.level === 1.U) 
+         .elsewhen (btb_update_q.io.deq.bits.level === 1.U)
          {
             // change only the lower two bits of valid
             valids(widx)  := (valids(widx) & 12.U) | 2.U
             blevels(widx) := blevels(widx) & ~(bmask << blevel_sz) | (1.U << blevel_sz)
          }
-         .elsewhen (btb_update_q.io.deq.bits.level === 2.U) 
+         .elsewhen (btb_update_q.io.deq.bits.level === 2.U)
          {
             // change only the lower three bits of valid
             valids(widx)  := (valids(widx) & 8.U) | 4.U
@@ -285,9 +285,9 @@ class DenseBTB(implicit p: Parameters) extends BoomBTB
 
    val data_sel = WireInit(0.U(way_idx_sz.W))
    val hits_oh  = WireInit(VecInit(Seq.fill(nWays){ false.B }))
-   for (i <- 0 until nWays) 
+   for (i <- 0 until nWays)
    {
-      when (data_out(i).cfi_idx === sel_cfi_idx && hits(i) && bim.io.resp.valid) 
+      when (data_out(i).cfi_idx === sel_cfi_idx && hits(i) && bim.io.resp.valid)
       {
          data_sel   := i.U
          hits_oh(i) := true.B
@@ -300,7 +300,7 @@ class DenseBTB(implicit p: Parameters) extends BoomBTB
 
    // TODO: Generalize the logic to read out; Currently, uses the same assumptions as in getBankWriteData
    val blevel = blevels_vec(data_sel)
-   when (blevel === 0.U) 
+   when (blevel === 0.U)
    {
       s1_resp_bits.target   := Cat(s1_pc(vaddrBits-1,offset_sz+lsb_sz), data_out(data_sel).offset, 0.U(lsb_sz.W))
       s1_resp_bits.cfi_idx  := (if (fetchWidth > 1) data_out(data_sel).cfi_idx else 0.U)
@@ -308,12 +308,12 @@ class DenseBTB(implicit p: Parameters) extends BoomBTB
       s1_resp_bits.cfi_type := data_out(data_sel).cfi_type
    }
 
-   when (blevel === 1.U) 
+   when (blevel === 1.U)
    {
       s1_resp_bits.cfi_idx  := (if (fetchWidth > 1) data_out(1).cfi_idx else 0.U)
       s1_resp_bits.bpd_type := data_out(1).bpd_type
       s1_resp_bits.cfi_type := data_out(1).cfi_type
-      val resp_target = if ((vaddrBits-lsb_sz) <= tag_sz+2*offset_sz+lsb_sz) 
+      val resp_target = if ((vaddrBits-lsb_sz) <= tag_sz+2*offset_sz+lsb_sz)
       {
          Cat(
             data_out(1).offset((vaddrBits-1)-(tag_sz+offset_sz+lsb_sz), 0),
@@ -322,7 +322,7 @@ class DenseBTB(implicit p: Parameters) extends BoomBTB
             0.U(lsb_sz.W)
          )
       }
-      else 
+      else
       {
          Cat(
             s1_pc(vaddrBits-1,tag_sz+2*offset_sz+lsb_sz),
@@ -335,14 +335,14 @@ class DenseBTB(implicit p: Parameters) extends BoomBTB
       s1_resp_bits.target := resp_target
    }
 
-   if (branch_levels > 2) 
+   if (branch_levels > 2)
    {
-      when (blevel === 2.U) 
+      when (blevel === 2.U)
       {
          s1_resp_bits.cfi_idx  := (if (fetchWidth > 1) data_out(2).cfi_idx else 0.U)
          s1_resp_bits.bpd_type := data_out(2).bpd_type
          s1_resp_bits.cfi_type := data_out(2).cfi_type
-         val resp_target = if ((vaddrBits-lsb_sz) <= 2*tag_sz+3*offset_sz+lsb_sz) 
+         val resp_target = if ((vaddrBits-lsb_sz) <= 2*tag_sz+3*offset_sz+lsb_sz)
          {
             Cat(
                data_out(2).offset((vaddrBits-1)-(2*(tag_sz+offset_sz)+lsb_sz), 0),
@@ -353,7 +353,7 @@ class DenseBTB(implicit p: Parameters) extends BoomBTB
                0.U(lsb_sz.W)
             )
          }
-         else 
+         else
          {
             Cat(
                s1_pc(vaddrBits-1,2*tag_sz+3*offset_sz+lsb_sz),

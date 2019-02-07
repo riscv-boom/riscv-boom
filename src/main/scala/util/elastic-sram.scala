@@ -35,7 +35,7 @@ class ElasticSeqMem[T <: Data](
 {
    private val idx_sz = log2Ceil(num_entries)
 
-   val io = IO(new Bundle 
+   val io = IO(new Bundle
    {
       // read request on cycle S0 (pass in read address)
       val rreq = Flipped(Decoupled(UInt(idx_sz.W)))

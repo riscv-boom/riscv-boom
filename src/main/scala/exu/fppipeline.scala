@@ -176,7 +176,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
       // TODO HACK only let one FPU issue port issue these.
       // Solution : Make STDataGen a functional unit time
       require (w == 0)
-      when (fregister_read.io.exe_reqs(w).bits.uop.uopc === uopSTD) 
+      when (fregister_read.io.exe_reqs(w).bits.uop.uopc === uopSTD)
       {
          ex.io.req.valid :=  false.B
       }
@@ -204,7 +204,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
 
    ll_wbarb.io.in(1) <> ifpu_resp
 
-   if (regreadLatency > 0) 
+   if (regreadLatency > 0)
    {
       // Cut up critical path by delaying the write by a cycle.
       // Wakeup signal is sent on cycle S0, write is now delayed until end of S1,
@@ -274,7 +274,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
       }
    }
 
-   for ((wdata, wakeup) <- io.debug_wb_wdata zip io.wakeups) 
+   for ((wdata, wakeup) <- io.debug_wb_wdata zip io.wakeups)
    {
       wdata := ieee(wakeup.bits.data)
    }
