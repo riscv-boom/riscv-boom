@@ -267,9 +267,9 @@ trait ScalarOpConstants
    // between software NOPs and machine-generated Bubbles in the pipeline.
    val BUBBLE  = (0x4033).U(32.W)
 
-   def NullMicroOp()(implicit p: Parameters): MicroOp =
+   def NullMicroOp()(implicit p: Parameters): boom.common.MicroOp =
    {
-      val uop = Wire(new MicroOp()(p))
+      val uop = Wire(new boom.common.MicroOp()(p))
       uop            := DontCare // Overridden in the following lines
       uop.uopc       := uopNOP // maybe not required, but helps on asserts that try to catch spurious behavior
       uop.bypassable := false.B
@@ -282,7 +282,7 @@ trait ScalarOpConstants
       // TODO these unnecessary? used in regread stage?
       uop.is_br_or_jmp := false.B
 
-      val cs = Wire(new CtrlSignals())
+      val cs = Wire(new boom.common.CtrlSignals())
       cs             := DontCare // Overridden in the following lines
       cs.br_type     := BR_N
       cs.rf_wen      := false.B

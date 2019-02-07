@@ -6,17 +6,19 @@
 //------------------------------------------------------------------------------
 
 //------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // RISCV Processor Datapath Register File (Custom Blackboxes and Models)
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
 
 package boom.exu
 
+import scala.collection.mutable.ArrayBuffer
+
 import chisel3._
 import chisel3.util._
-import freechips.rocketchip.config.Parameters
 
-import scala.collection.mutable.ArrayBuffer
+import freechips.rocketchip.config.Parameters
 
 class RegisterFileSeqCustomArray(
    num_registers: Int,
@@ -31,10 +33,12 @@ class RegisterFileSeqCustomArray(
    // --------------------------------------------------------------
 
    val regfile =
-      if (enableCustomRfModel) {
+      if (enableCustomRfModel)
+      {
          Module(new RegisterFileArrayModel(num_registers, num_read_ports, num_write_ports, register_width))
       }
-      else {
+      else
+      {
          Module(new RegisterFileArray(num_registers, num_read_ports, num_write_ports, register_width))
       }
    regfile.io.clock := clock
@@ -44,25 +48,31 @@ class RegisterFileSeqCustomArray(
    val raddr_OH = Reg(Vec(num_read_ports, UInt(num_registers.W)))
    val write_select_OH = Wire(Vec(num_registers, UInt(num_write_ports.W)))
 
-   for (w <-0 until num_write_ports) {
+   for (w <-0 until num_write_ports)
+   {
       regfile.io.WD(w) := io.write_ports(w).bits.data
       waddr_OH(w) := UIntToOH(io.write_ports(w).bits.addr)
       io.write_ports(w).ready := true.B
    }
 
    val read_data = Wire(Vec(num_read_ports, UInt(register_width.W)))
-   for (r <-0 until num_read_ports) {
+   for (r <-0 until num_read_ports)
+   {
       read_data(r) := Mux(RegNext(io.read_ports(r).addr === 0.U), 0.U, regfile.io.RD(r))
       raddr_OH(r) := UIntToOH(io.read_ports(r).addr)
    }
 
-   for (i <- 0 until num_registers) {
-      if (i == 0) {
+   for (i <- 0 until num_registers)
+   {
+      if (i == 0)
+      {
          // P0 is always zero.
          regfile.io.OE(0) := 0.U
          regfile.io.WE(0) := false.B
          regfile.io.WS(0) := 0.U
-      } else {
+      }
+      else
+      {
          regfile.io.OE(i) := Cat(raddr_OH(5)(i), raddr_OH(4)(i),
                                  raddr_OH(3)(i), raddr_OH(2)(i),
                                  raddr_OH(1)(i), raddr_OH(0)(i))
@@ -75,12 +85,12 @@ class RegisterFileSeqCustomArray(
       }
 
       //printf("regfile.WS(%d)=%d, ws_OH=0x%x\n", i.U, regfile.io.WS(i), write_select_OH(i))
-      if (i > 0) {
+      if (i > 0)
+      {
          assert(PopCount(write_select_OH(i).toBools) <= 1.U,
             "[regfile] write-select has too many writers to this register p[" + i + "]")
       }
    }
-
 
    // --------------------------------------------------------------
    // Bypass out of the ALU's write ports.
@@ -121,7 +131,8 @@ trait HasRegisterFileIO extends chisel3.experimental.BaseModule
    val num_write_ports: Int
    val register_width: Int
 
-   val io = IO(new Bundle {
+   val io = IO(new Bundle
+   {
       val clock = Input(Clock())
       val WE = Input(Vec(num_registers, Bool()))
       val WD = Input(Vec(num_write_ports, UInt(register_width.W)))
@@ -140,7 +151,6 @@ class RegisterFileArray(
    with HasRegisterFileIO
 {
 }
-
 
 // This is a model of the above blackbox RegisterFileArray. Don't ship this.
 class RegisterFileArrayModel(
@@ -184,11 +194,11 @@ class RegisterFileArrayModel(
    assert (PopCount(io.OE.map(e => e(5))) <= 1.U, "[rf] OE(*)(5) has too many enables set.")
 }
 
-
 // This is a model of a register file row (which covers one register). Don't ship this either.
 class RegisterFile6r3wRegisterModel extends Module
 {
-   val io = IO(new Bundle {
+   val io = IO(new Bundle
+   {
       val we  = Input(Bool())
       val ws  = Input(UInt(2.W))
       val wd0 = Input(UInt(64.W))
@@ -236,11 +246,11 @@ class RegisterFile6r3wRegisterModel extends Module
 
 }
 
-
 // This is only a model of a register file bit. Warranty voided if synthesized.
 class Rf6r3wBitModel extends Module
 {
-   val io = IO(new Bundle {
+   val io = IO(new Bundle
+   {
       val we  = Input(Bool())
       val ws  = Input(UInt(2.W))
       val wd0 = Input(Bool())
@@ -282,6 +292,4 @@ class Rf6r3wBitModel extends Module
       dff := din
    }
    dout := dff
-
 }
-

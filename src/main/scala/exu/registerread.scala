@@ -6,10 +6,11 @@
 //------------------------------------------------------------------------------
 
 //------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // RISCV Processor Register Read
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
-
+//
 // Handle the register read and bypass network for the OoO backend
 // interfaces with the issue window on the enqueue side, and the execution
 // pipelines on the dequeue side.
@@ -18,7 +19,9 @@ package boom.exu
 
 import chisel3._
 import chisel3.util._
+
 import freechips.rocketchip.config.Parameters
+
 import boom.common._
 import boom.util._
 
@@ -43,9 +46,7 @@ class RegisterReadIO(
 
    val kill   = Input(Bool())
    val brinfo = Input(new BrResolutionInfo())
-
 }
-
 
 class RegisterRead(
    issue_width: Int,
@@ -70,7 +71,6 @@ class RegisterRead(
    val exe_reg_rs2_data = Reg(Vec(issue_width, Bits(register_width.W)))
    val exe_reg_rs3_data = Reg(Vec(issue_width, Bits(register_width.W)))
 
-
    //-------------------------------------------------------------
    // hook up inputs
 
@@ -80,16 +80,18 @@ class RegisterRead(
       rrd_decode_unit.io.iss_valid := io.iss_valids(w)
       rrd_decode_unit.io.iss_uop   := io.iss_uops(w)
 
-      if (regreadLatency == 1) {
+      if (regreadLatency == 1)
+      {
          rrd_valids(w) := RegNext(rrd_decode_unit.io.rrd_valid &&
                            !IsKilledByBranch(io.brinfo, rrd_decode_unit.io.rrd_uop))
          rrd_uops(w)   := RegNext(GetNewUopAndBrMask(rrd_decode_unit.io.rrd_uop, io.brinfo))
-      } else {
+      }
+      else
+      {
          rrd_valids(w) := rrd_decode_unit.io.rrd_valid
          rrd_uops(w)   := rrd_decode_unit.io.rrd_uop
       }
    }
-
 
    //-------------------------------------------------------------
    // read ports
@@ -139,7 +141,6 @@ class RegisterRead(
       idx += num_read_ports
    }
 
-
    //-------------------------------------------------------------
    //-------------------------------------------------------------
    // BYPASS MUXES -----------------------------------------------
@@ -177,7 +178,6 @@ class RegisterRead(
       if (num_read_ports > 0) bypassed_rs1_data(w) := MuxCase(rrd_rs1_data(w), rs1_cases)
       if (num_read_ports > 1) bypassed_rs2_data(w) := MuxCase(rrd_rs2_data(w), rs2_cases)
    }
-
 
    //-------------------------------------------------------------
    //-------------------------------------------------------------

@@ -6,16 +6,20 @@
 //------------------------------------------------------------------------------
 
 //------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // RISCV Processor Datapath Register File
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
 
 package boom.exu
 
+import scala.collection.mutable.ArrayBuffer
+
 import chisel3._
 import chisel3.util._
+
 import freechips.rocketchip.config.Parameters
-import scala.collection.mutable.ArrayBuffer
+
 import boom.common._
 
 class RegisterFileReadPortIO(val addr_width: Int, val data_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
@@ -29,7 +33,6 @@ class RegisterFileWritePort(val addr_width: Int, val data_width: Int)(implicit p
    val addr = UInt(width = addr_width.W)
    val data = UInt(width = data_width.W)
 }
-
 
 // utility function to turn ExeUnitResps to match the regfile's WritePort I/Os.
 object WritePort
@@ -46,7 +49,6 @@ object WritePort
       wport
    }
 }
-
 
 abstract class RegisterFile(
    num_registers: Int,
@@ -86,7 +88,6 @@ class RegisterFileBehavorial(
 
    val regfile = Mem(num_registers, UInt(register_width.W))
 
-
    // --------------------------------------------------------------
    // Read ports.
 
@@ -94,9 +95,12 @@ class RegisterFileBehavorial(
 
    // Register the read port addresses to give a full cycle to the RegisterRead Stage (if desired).
    val read_addrs =
-      if (regreadLatency == 0) {
+      if (regreadLatency == 0)
+      {
          io.read_ports map {_.addr}
-      } else {
+      }
+      else
+      {
          require (regreadLatency == 1)
          io.read_ports.map(p => RegNext(p.addr))
       }
@@ -108,7 +112,6 @@ class RegisterFileBehavorial(
             0.U,
             regfile(read_addrs(i)))
    }
-
 
    // --------------------------------------------------------------
    // Bypass out of the ALU's write ports.
@@ -142,7 +145,6 @@ class RegisterFileBehavorial(
          io.read_ports(i).data := read_data(i)
       }
    }
-
 
    // --------------------------------------------------------------
    // Write ports.

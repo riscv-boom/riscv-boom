@@ -49,7 +49,7 @@ import boom.util.{GetNewUopAndBrMask, Sext, WrapInc}
 trait HasBoomCoreIO extends freechips.rocketchip.tile.HasTileParameters
 {
    implicit val p: Parameters
-   val io = IO(new freechips.rocketchip.tile.CoreBundle()(p)
+   val io = new freechips.rocketchip.tile.CoreBundle()(p)
       with freechips.rocketchip.tile.HasExternallyDrivenTileConstants
    {
          val interrupts = Input(new freechips.rocketchip.tile.CoreInterrupts())
@@ -62,7 +62,7 @@ trait HasBoomCoreIO extends freechips.rocketchip.tile.HasTileParameters
          val trace = Output(Vec(coreParams.retireWidth,
             new freechips.rocketchip.rocket.TracedInstruction))
          val release = Flipped(Valid(new boom.lsu.ReleaseInfo))
-   })
+   }
 }
 
 class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut) extends BoomModule()(p)
