@@ -33,8 +33,10 @@ import boom.exu._
 import boom.exu.BranchUnitResp
 import boom.util.ElasticReg
 
-// This is the response packet from the branch predictor. The predictor is
-// expecting to receive it back when it needs to perform an update.
+/**
+ * This is the response packet from the branch predictor. The predictor is
+ * expecting to receive it back when it needs to perform an update.
+ */
 class BpdResp(implicit p: Parameters) extends BoomBundle()(p)
 {
    val takens = UInt(fetchWidth.W)
@@ -56,7 +58,9 @@ class BpdResp(implicit p: Parameters) extends BoomBundle()(p)
    val info = UInt(BPD_INFO_SIZE.W)
 }
 
-// Update comes from the FTQ after Commit.
+/**
+ * Update comes from the FTQ after Commit.
+ */
 class BpdUpdate(implicit p: Parameters) extends BoomBundle()(p)
 {
    // valid: an FTQ entry is being committed/deallocated.
@@ -76,12 +80,22 @@ class BpdUpdate(implicit p: Parameters) extends BoomBundle()(p)
    val info = UInt(BPD_INFO_SIZE.W)
 }
 
+/**
+ * History to restore when there is a branch mispredict or pipeline flush
+ */
 class RestoreHistory(implicit p: Parameters) extends BoomBundle()(p)
 {
    val history = UInt(GLOBAL_HISTORY_LENGTH.W)
    val taken = Bool()
 }
 
+/**
+ * Abstract Branch Predictor class. Exposes the necessary signals for different BPD
+ * types to "hook" into BOOM nicely.
+ *
+ * @param fetch_width # of instructions fetched
+ * @param history_length length of the GHR
+ */
 abstract class BrPredictor(
    fetch_width: Int,
    val history_length: Int
@@ -252,11 +266,12 @@ abstract class BrPredictor(
    {
       r_f4_history := q_f3_history.io.deq.bits
    }
-
-   //************************************************
 }
 
-// Return the desired branch predictor based on the provided parameters.
+/**
+ * Companion object to the Abstract Branch Predictor. Return the desired branch
+ * predictor based on the provided parameters.
+ */
 object BrPredictor
 {
    def apply(tileParams: freechips.rocketchip.tile.TileParams, boomParams: BoomCoreParams)
@@ -305,46 +320,3 @@ object BrPredictor
       br_predictor
    }
 }
-
-// Act as a "null" branch predictor (it makes no predictions).
-class NullBrPredictor(
-   fetch_width: Int,
-   history_length: Int = 12
-   )(implicit p: Parameters) extends BrPredictor(fetch_width, history_length)(p)
-{
-   override def toString: String = "  Building (0 kB) Null Predictor (never predict)."
-   io.resp.valid := false.B
-}
-
-// Provide a branch predictor that generates random predictions. Good for testing!
-
-case object RandomBpdKey extends Field[RandomBpdParameters]
-case class RandomBpdParameters(enabled: Boolean = false)
-
-object RandomBrPredictor
-{
-   def GetRespInfoSize(p: Parameters): Int =
-   {
-      // Should be zero (no RespInfo needed for Random predictor), but avoid 0-width wires.
-      1
-   }
-}
-
-class RandomBrPredictor(
-   fetch_width: Int
-   )(implicit p: Parameters) extends BrPredictor(fetch_width, history_length = 1)(p)
-{
-   override def toString: String = "  Building Random Branch Predictor."
-   private val rand_val = RegInit(false.B)
-   rand_val := ~rand_val
-   private var lfsr= LFSR16(true.B)
-   def rand(width: Int) = {
-        lfsr = lfsr(lfsr.getWidth-1,1)
-        val mod = (1 << width) - 1
-          freechips.rocketchip.util.Random(mod, lfsr)
-   }
-
-   io.resp.valid := rand_val
-   io.resp.bits.takens := rand(fetch_width)
-}
-
