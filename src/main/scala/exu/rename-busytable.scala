@@ -6,6 +6,7 @@
 //------------------------------------------------------------------------------
 
 //------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // Rename BusyTable
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
@@ -14,7 +15,9 @@ package boom.exu
 
 import chisel3._
 import chisel3.util._
+
 import freechips.rocketchip.config.Parameters
+
 import boom.common._
 import boom.util._
 
@@ -91,14 +94,12 @@ class BusyTableHelper(
    io.debug.busytable := table_bsy.asUInt
 }
 
-
 class BusyTableOutput extends Bundle
 {
    val prs1_busy = Bool()
    val prs2_busy = Bool()
    val prs3_busy = Bool()
 }
-
 
 class BusyTable(
    pl_width:Int,
@@ -133,7 +134,6 @@ class BusyTable(
       num_read_ports = num_read_ports,
       num_wb_ports = num_wb_ports))
 
-
    // figure out if we need to bypass a newly allocated physical register from a previous instruction in this cycle.
    val prs1_was_bypassed = WireInit(VecInit(Seq.fill(pl_width) {false.B}))
    val prs2_was_bypassed = WireInit(VecInit(Seq.fill(pl_width) {false.B}))
@@ -149,13 +149,13 @@ class BusyTable(
             io.ren_uops(xx).dst_rtype === rtype.U && (io.ren_uops(w).lrs2 === io.ren_uops(xx).ldst))
          { prs2_was_bypassed(w) := true.B }
 
-      if (rtype == RT_FLT.litValue) {
+      if (rtype == RT_FLT.litValue)
+      {
          when (io.ren_uops(w).frs3_en && io.ren_will_fire(xx) && io.ren_uops(xx).ldst_val &&
                io.ren_uops(xx).dst_rtype === rtype.U && (io.ren_uops(w).lrs3 === io.ren_uops(xx).ldst))
             { prs3_was_bypassed(w) := true.B }
       }
    }
-
 
    for (w <- 0 until pl_width)
    {
@@ -179,7 +179,6 @@ class BusyTable(
       {
          io.values(w).prs3_busy := false.B
       }
-
 
        // Updating the Table (new busy register)
       busy_table.io.allocated_pdst(w).valid := io.ren_will_fire(w) &&

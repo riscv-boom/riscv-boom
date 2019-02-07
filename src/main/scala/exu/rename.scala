@@ -6,6 +6,7 @@
 //------------------------------------------------------------------------------
 
 //------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // RISCV Processor Datapath: Rename Logic
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
@@ -16,15 +17,15 @@
 //
 // Ren1 data is provided as an output to be fed directly into the ROB.
 
-
 package boom.exu
 
 import chisel3._
 import chisel3.util._
+
 import freechips.rocketchip.config.Parameters
+
 import boom.common._
 import boom.util._
-
 
 class RenameStageIO(
    val pl_width: Int,
@@ -72,7 +73,6 @@ class RenameStageIO(
    val debug = Output(new DebugRenameStageIO(num_int_pregs, num_fp_pregs))
 }
 
-
 class DebugRenameStageIO(val int_num_pregs: Int, val fp_num_pregs: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
    val ifreelist =  Bits(int_num_pregs.W)
@@ -82,7 +82,6 @@ class DebugRenameStageIO(val int_num_pregs: Int, val fp_num_pregs: Int)(implicit
    val fisprlist =  Bits(fp_num_pregs.W)
    val fbusytable = UInt(fp_num_pregs.W)
 }
-
 
 class RenameStage(
    pl_width: Int,
@@ -114,7 +113,8 @@ class RenameStage(
    var ffreelist: RenameFreeList = null
    var fbusytable: BusyTable = null
 
-   if (usingFPU) {
+   if (usingFPU)
+   {
       fmaptable = Module(new RenameMapTable(
          pl_width,
          RT_FLT.litValue,
@@ -195,7 +195,8 @@ class RenameStage(
       table.io.debug_inst_can_proceed := io.inst_can_proceed
    }
    imaptable.io.debug_freelist_can_allocate := ifreelist.io.can_allocate
-   if (usingFPU) {
+   if (usingFPU)
+   {
       fmaptable.io.debug_freelist_can_allocate := ffreelist.io.can_allocate
    }
 
@@ -220,7 +221,6 @@ class RenameStage(
    val ren2_will_proceed =
       if (renameLatency == 2) (ren2_valids zip ren2_will_fire map {case (v,f) => (v === f)}).reduce(_&_)
       else io.dis_inst_can_proceed.reduce(_&_)
-
 
 
    val ren2_imapvalues = if (renameLatency == 2) RegEnable(imaptable.io.values, ren2_will_proceed)
@@ -288,7 +288,8 @@ class RenameStage(
          "[rename] ren2 maptable prs2 value don't match uop's values.")
    }
 
-   if (usingFPU) {
+   if (usingFPU)
+   {
       fbusytable.io.ren_will_fire := ren2_will_fire
       // expects pdst to be set up.
       fbusytable.io.ren_uops := ren2_uops
@@ -326,10 +327,12 @@ class RenameStage(
    for (w <- 0 until pl_width)
    {
       val ifl_can_proceed = ifreelist.io.can_allocate(w) && ren1_uops(w).dst_rtype === RT_FIX
-      val ffl_can_proceed = if (usingFPU) {
+      val ffl_can_proceed = if (usingFPU)
+      {
         (ffreelist.io.can_allocate(w) && ren1_uops(w).dst_rtype === RT_FLT)
       }
-      else {
+      else
+      {
         false.B
       }
       // Push back against Decode stage if Rename1 can't proceed (and Rename2/Dispatch can't receive).
@@ -339,7 +342,6 @@ class RenameStage(
          ifl_can_proceed ||
          ffl_can_proceed)
    }
-
 
    //-------------------------------------------------------------
    // Debug signals
@@ -351,7 +353,4 @@ class RenameStage(
    io.debug.ffreelist  := (if (usingFPU) ffreelist.io.debug.freelist else 0.U)
    io.debug.fisprlist  := (if (usingFPU) ffreelist.io.debug.isprlist else 0.U)
    io.debug.fbusytable := (if (usingFPU) fbusytable.io.debug.busytable else 0.U)
-
-
 }
-

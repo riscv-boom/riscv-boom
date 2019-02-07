@@ -6,6 +6,7 @@
 //------------------------------------------------------------------------------
 
 //------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // Rename Map Table
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
@@ -14,10 +15,11 @@ package boom.exu
 
 import chisel3._
 import chisel3.util._
+
 import freechips.rocketchip.config.Parameters
+
 import boom.common._
 import boom.util._
-
 
 class RenameMapTableElementIo(val pl_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
@@ -62,7 +64,6 @@ class RenameMapTableElement(pipeline_width: Int, always_zero: Boolean)(implicit 
    // handle branch speculation
    val element_br_copies = Mem(MAX_BR_COUNT, UInt(PREG_SZ.W))
 
-
    // this is possibly the hardest piece of code I have ever had to reason about in my LIFE.
    // Or maybe that's the 5am talking.
    // on every branch, make a copy of the rename map table state
@@ -86,7 +87,6 @@ class RenameMapTableElement(pipeline_width: Int, always_zero: Boolean)(implicit 
          element_br_copies(io.ren_br_tags(w)) := MuxCase(element, elm_cases)
       }
    }
-
 
    // reset table on mispredict
    when(io.br_mispredict)
@@ -124,7 +124,6 @@ class RenameMapTableElement(pipeline_width: Int, always_zero: Boolean)(implicit 
 
    if (always_zero) io.element := 0.U
 }
-
 
 // Pass out the new physical register specifiers.
 class MapTableOutput(val preg_sz: Int) extends Bundle
@@ -166,7 +165,6 @@ class RenameMapTable(
       // Outputs
       val values           = Output(Vec(pl_width, new MapTableOutput(preg_sz)))
    })
-
 
    val entries = for (i <- 0 until num_logical_registers) yield
    {
@@ -240,13 +238,15 @@ class RenameMapTable(
    {
       map_table_prs1(w) := map_table_io(io.ren_uops(w).lrs1).element
       map_table_prs2(w) := map_table_io(io.ren_uops(w).lrs2).element
-      if (rtype == RT_FLT.litValue) {
+      if (rtype == RT_FLT.litValue)
+      {
          map_table_prs3(w) := map_table_io(io.ren_uops(w).lrs3).element
-      } else {
+      }
+      else
+      {
          map_table_prs3(w) := 0.U
       }
    }
-
 
    // Bypass the physical register mappings
    for (w <- 0 until pl_width)
@@ -264,7 +264,8 @@ class RenameMapTable(
          rs2_cases  ++= Array((io.ren_uops(w).lrs2_rtype === rtype.U && io.ren_will_fire(xx) && io.ren_uops(xx).ldst_val && io.ren_uops(xx).dst_rtype === rtype.U && (io.ren_uops(w).lrs2 === io.ren_uops(xx).ldst), (io.ren_uops(xx).pdst)))
          stale_cases++= Array((io.ren_uops(w).dst_rtype === rtype.U  && io.ren_will_fire(xx) && io.ren_uops(xx).ldst_val && io.ren_uops(xx).dst_rtype === rtype.U && (io.ren_uops(w).ldst === io.ren_uops(xx).ldst), (io.ren_uops(xx).pdst)))
 
-         if (rtype == RT_FLT.litValue) {
+         if (rtype == RT_FLT.litValue)
+         {
             rs3_cases  ++= Array((
                   io.ren_uops(w).frs3_en && io.ren_will_fire(xx) && io.ren_uops(xx).ldst_val && io.ren_uops(xx).dst_rtype === rtype.U && (io.ren_uops(w).lrs3 === io.ren_uops(xx).ldst),
                   (io.ren_uops(xx).pdst)))
@@ -272,10 +273,13 @@ class RenameMapTable(
       }
 
       // add default case where we can just read the map table for our information
-      if (rtype == RT_FIX.litValue) {
+      if (rtype == RT_FIX.litValue)
+      {
          rs1_cases ++= Array((io.ren_uops(w).lrs1_rtype === rtype.U && (io.ren_uops(w).lrs1 =/= 0.U), map_table_prs1(w)))
          rs2_cases ++= Array((io.ren_uops(w).lrs2_rtype === rtype.U && (io.ren_uops(w).lrs2 =/= 0.U), map_table_prs2(w)))
-      } else {
+      }
+      else
+      {
          rs1_cases ++= Array((io.ren_uops(w).lrs1_rtype === rtype.U, map_table_prs1(w)))
          rs2_cases ++= Array((io.ren_uops(w).lrs2_rtype === rtype.U, map_table_prs2(w)))
       }
@@ -288,8 +292,8 @@ class RenameMapTable(
          {io.values(w).prs3 := MuxCase(io.ren_uops(w).lrs3, rs3_cases)}
       io.values(w).stale_pdst := MuxCase(map_table_io(io.ren_uops(w).ldst).element, stale_cases)
 
-
-      if (rtype == RT_FIX.litValue) {
+      if (rtype == RT_FIX.litValue)
+      {
          assert (!(io.ren_uops(w).lrs1 === 0.U && io.ren_uops(w).lrs1_rtype === RT_FIX && io.values(w).prs1 =/= 0.U), "lrs1==0 but maptable(" + w + ") returning non-zero.")
          assert (!(io.ren_uops(w).lrs2 === 0.U && io.ren_uops(w).lrs2_rtype === RT_FIX && io.values(w).prs2 =/= 0.U), "lrs2==0 but maptable(" + w + ") returning non-zero.")
          assert (!(io.ren_uops(w).lrs1 === 0.U && io.ren_uops(w).lrs1_rtype === RT_FIX && map_table_prs1(w) =/= 0.U), "lrs1==0 but maptable(" + w + ") returning non-zero.")
@@ -298,4 +302,3 @@ class RenameMapTable(
       // scalastyle:on
    }
 }
-

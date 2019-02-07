@@ -6,9 +6,11 @@
 //------------------------------------------------------------------------------
 
 //------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // Re-order Buffer
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
+//
 // Bank the ROB, such that each "dispatch" group gets its own row of the ROB,
 // and each instruction in the dispatch group goes to a different bank.
 // We can compress out the PC by only saving the high-order bits!
@@ -21,16 +23,18 @@
 //    - commit_width is tied directly to the dispatch_width.
 //    - Exceptions are only taken when at the head of the commit bundle --
 //      this helps deal with loads, stores, and refetch instructions.
-//
 
 package boom.exu
+
+import scala.math.ceil
 
 import chisel3._
 import chisel3.util._
 import chisel3.experimental.chiselName
-import scala.math.ceil
+
 import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.util.Str
+
 import boom.common._
 import boom.util._
 
@@ -97,7 +101,6 @@ class RobIo(
    val debug_tsc = Input(UInt(xLen.W))
 }
 
-
 class CommitSignals(implicit p: Parameters) extends BoomBundle()(p)
 {
    val valids     = Vec(retireWidth, Bool())
@@ -111,7 +114,6 @@ class CommitSignals(implicit p: Parameters) extends BoomBundle()(p)
    val st_mask    = Vec(retireWidth, Bool())
    val ld_mask    = Vec(retireWidth, Bool())
 }
-
 
 // TODO combine FlushSignals and ExceptionSignals (currently timed to different cycles).
 class CommitExceptionSignals(implicit p: Parameters) extends BoomBundle()(p)
@@ -154,14 +156,12 @@ object FlushTypes
    }
 }
 
-
 class Exception(implicit p: Parameters) extends BoomBundle()(p)
 {
    val uop = new MicroOp()
    val cause = Bits(log2Ceil(freechips.rocketchip.rocket.Causes.all.max+2).W)
    val badvaddr = UInt(coreMaxAddrBits.W)
 }
-
 
 // These should not be synthesized!
 class DebugRobSignals(implicit p: Parameters) extends BoomBundle()(p)
@@ -172,7 +172,6 @@ class DebugRobSignals(implicit p: Parameters) extends BoomBundle()(p)
    val xcpt_uop = new MicroOp()
    val xcpt_badvaddr = UInt(xLen.W)
 }
-
 
 // width = the dispatch and commit width of the processor
 // num_wakeup_ports = self-explanatory
@@ -196,7 +195,6 @@ class Rob(
    // ROB Finite State Machine
    val s_reset :: s_normal :: s_rollback :: s_wait_till_empty :: Nil = Enum(4)
    val rob_state = RegInit(s_reset)
-
 
    //commit entries at the head, and unwind exceptions from the tail
    val rob_head = RegInit(0.U(log2Ceil(num_rob_rows).W))
@@ -245,11 +243,9 @@ class Rob(
    val debug_entry = Wire(Vec(NUM_ROB_ENTRIES, new DebugRobBundle))
    debug_entry := DontCare // override in statements below
 
-
    // **************************************************************************
    // --------------------------------------------------------------------------
    // **************************************************************************
-
 
    for (w <- 0 until width)
    {
@@ -337,7 +333,6 @@ class Rob(
          rob_uop(GetRowIdx(io.brinfo.rob_idx)).stat_bpd_mispredicted   := io.brinfo.bpd_mispredict
          rob_uop(GetRowIdx(io.brinfo.rob_idx)).stat_bpd_made_pred      := io.brinfo.bpd_made_pred
       }
-
 
       //-----------------------------------------------
       // Accruing fflags
@@ -452,7 +447,6 @@ class Rob(
          rob_uop(rob_tail).inst := BUBBLE
       }
 
-
       //--------------------------------------------------
       // Debug: for debug purposes, track side-effects to all register destinations
 
@@ -497,7 +491,6 @@ class Rob(
    // **************************************************************************
    // --------------------------------------------------------------------------
    // **************************************************************************
-
 
    // -----------------------------------------------
    // Commit Logic
@@ -637,7 +630,8 @@ class Rob(
          // TODO XXX REMOVE THIS. Temporary hack to fix ma-fetch tests.
          // The problem is we shouldn't have access to pc and inst in the ROB.
          // This should be handled by the front-end.
-         when ((io.enq_uops(idx).uopc === uopJAL) && !io.enq_uops(idx).exc_cause.orR) {
+         when ((io.enq_uops(idx).uopc === uopJAL) && !io.enq_uops(idx).exc_cause.orR)
+         {
             r_xcpt_badvaddr := ComputeJALTarget(io.enq_uops(idx).pc, io.enq_uops(idx).inst, xLen)
          }
       }
@@ -822,7 +816,6 @@ class Rob(
       }
    }
 
-
    // -----------------------------------------------
    // Outputs
 
@@ -843,7 +836,6 @@ class Rob(
    io.debug.xcpt_val := r_xcpt_val
    io.debug.xcpt_uop := r_xcpt_uop
    io.debug.xcpt_badvaddr := r_xcpt_badvaddr
-
 
    if (DEBUG_PRINTF_ROB)
    {
