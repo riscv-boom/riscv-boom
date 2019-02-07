@@ -14,10 +14,21 @@ package boom.bpu
 
 import chisel3._
 import chisel3.util._
+
 import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.util.Str
+
 import boom.common._
 
+/**
+ * The IO bundle to connect the Tage Table to the Tage predictor top
+ *
+ * @param fetch_width # of instructions fetched
+ * @param index_sz ...
+ * @param tag_sz ...
+ * @param cntr_sz ...
+ * @param ubit_sz ...
+ */
 class TageTableIo(
    val fetch_width: Int,
    val index_sz: Int,
@@ -31,7 +42,6 @@ class TageTableIo(
 
    // bp2 - send prediction to bpd pipeline.
    val bp2_resp = Valid(new TageTableResp(fetch_width, tag_sz, cntr_sz, ubit_sz))
-
 
    // Write to this table. Can either be an Allocate, Update, or Degrade operation.
    // (Update and Degrade are not mutually exclusive).
@@ -62,16 +72,28 @@ class TageTableIo(
    }
 
    val do_reset = Input(Bool())
-
 }
 
+/**
+ * Data send to the TAGE predictor table
+ *
+ * @param index_sz ...
+ * @param tag_sz ...
+ */
 class TageTableReq(val index_sz: Int, val tag_sz: Int) extends Bundle
 {
    val index = UInt(index_sz.W)
    val tag = UInt(tag_sz.W)
-
 }
 
+/**
+ * Data sent from the TAGE predictor table
+ *
+ * @param fetch_width # of instructions fetched
+ * @param tag_sz ...
+ * @param cntr_sz ...
+ * @param ubit_sz ...
+ */
 class TageTableResp(val fetch_width: Int, val tag_sz: Int, val cntr_sz: Int, val ubit_sz: Int) extends Bundle
 {
    val tag  = UInt(tag_sz.W)
@@ -80,18 +102,33 @@ class TageTableResp(val fetch_width: Int, val tag_sz: Int, val cntr_sz: Int, val
    val ubit = UInt(ubit_sz.W)
 
    def predictsTaken = cntr(cntr_sz-1)
-
 }
 
+/**
+ * Single entry in the TAGE table
+ *
+ * @param fetch_width # of instructions fetched
+ * @param tag_sz ...
+ * @param cntr_sz ...
+ * @param ubit_sz ...
+ */
 class TageTableEntry(val fetch_width: Int, val tag_sz: Int, val cntr_sz: Int, val ubit_sz: Int) extends Bundle
 {
    val tag  = UInt(tag_sz.W)                 // Tag.
    val cntr = UInt(cntr_sz.W)                // Prediction counter.
    val cidx = UInt(log2Ceil(fetch_width).W)  // Control-flow instruction index.
    val ubit = UInt(ubit_sz.W)                // Usefulness counter.
-
 }
 
+/**
+ * IO bundle to write into the TAGE table
+ *
+ * @param fetch_width # of instructions fetched
+ * @param index_sz ...
+ * @param tag_sz ...
+ * @param cntr_sz ...
+ * @param ubit_sz ...
+ */
 class TageTableWrite(val fetch_width: Int, val index_sz: Int, val tag_sz: Int, val cntr_sz: Int, val ubit_sz: Int)
   extends Bundle
 {
@@ -105,16 +142,28 @@ class TageTableWrite(val fetch_width: Int, val index_sz: Int, val tag_sz: Int, v
    // What was the outcome of the branch?
    val mispredict = Bool()
    val taken = Bool()
-
 }
 
-
-// In Chisel3, all Bundle elements in a Vec() must be homogenous (i.e., when
-// using a Vec() of TageTableIOs, the sub-fields within the TageTableIOs must
-// have the exact same widths (no heterogenous types/widths). Therefore, we must
-// track the max_* size of the parameters, and then within the TageTable we must
-// mask off extra bits as needed.
-class TageTable(
+/**
+ * Construct a TAGE table
+ *
+ * Note: In Chisel3, all Bundle elements in a Vec() must be homogenous (i.e., when
+ * using a Vec() of TageTableIOs, the sub-fields within the TageTableIOs must
+ * have the exact same widths (no heterogenous types/widths). Therefore, we must
+ * track the max_* size of the parameters, and then within the TageTable we must
+ * mask off extra bits as needed.
+ *
+ * @param fetch_width # of instructions fetched
+ * @param num_entries ...
+ * @param tag_sz ...
+ * @param max_num_entries ...
+ * @param max_history_length ...
+ * @param cntr_sz ...
+ * @param ubit_sz ...
+ * @param id ...
+ * @param history_length ...
+ */
+class TageTable(  
    fetch_width: Int,
    num_entries: Int,
    tag_sz: Int,
@@ -135,7 +184,6 @@ class TageTable(
    private val CNTR_WEAK_NOTTAKEN = CNTR_WEAK_TAKEN - 1.U
    private val UBIT_MAX = ((1 << ubit_sz) - 1).U
    private val UBIT_INIT_VALUE = 0.U
-
 
    //------------------------------------------------------------
    // Utility functions
@@ -190,14 +238,12 @@ class TageTable(
       is (s_idle)  { when (io.do_reset) { fsm_state := s_clear } }
    }
 
-
    //------------------------------------------------------------
    // State
 
    // TODO add banking
    val ram = SyncReadMem(num_entries, new TageTableEntry(fetch_width, tag_sz, cntr_sz, ubit_sz))
    ram.suggestName("TageTableDataArray")
-
 
    //------------------------------------------------------------
    // Get Prediction
@@ -215,7 +261,6 @@ class TageTable(
    io.bp2_resp.bits.cntr := s2_out.cntr
    io.bp2_resp.bits.cidx := s2_out.cidx
    io.bp2_resp.bits.ubit := s2_out.ubit
-
 
    //------------------------------------------------------------
    // Update (Commit)
@@ -262,6 +307,4 @@ class TageTable(
       history_length + " bits of history, " +
       tag_sz + "-bit tags, " +
       cntr_sz + "-bit counters"
-
 }
-

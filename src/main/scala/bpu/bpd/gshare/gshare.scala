@@ -27,12 +27,22 @@ import freechips.rocketchip.config.{Parameters, Field}
 import boom.common._
 import boom.util.{ElasticReg, Fold}
 
+/**
+ * GShare configuration parameters used in configs
+ *
+ * @param enabled using GShare?
+ * @param history_length length of the GHR
+ * @param num_sets number of entries in the BHT
+ */
 case class GShareParameters(
    enabled: Boolean = true,
    history_length: Int = 12,
-   num_sets: Int = 4096 // 12b
-   )
+   num_sets: Int = 4096 // 2^(default history_length) = 2 ^ 12b
+)
 
+/**
+ * Trait to inherit parameters from the config
+ */
 trait HasGShareParameters extends HasBoomCoreParameters
 {
    val gsParams = boomParams.gshare.get
@@ -43,6 +53,13 @@ trait HasGShareParameters extends HasBoomCoreParameters
    val row_sz = fetchWidth*2
 }
 
+/**
+ * Set of data values passed around the GShare predictor and used to update the 
+ * predictor state at commit
+ *
+ * @param fetch_width # of instructions fetched
+ * @param idx_sz log2 of the number of sets/entries in the BHT
+ */
 class GShareResp(val fetch_width: Int, val idx_sz: Int) extends Bundle
 {
    val debug_index = UInt(idx_sz.W) // Can recompute index during update (but let's check for errors).
@@ -63,6 +80,10 @@ class GShareResp(val fetch_width: Int, val idx_sz: Int) extends Bundle
 
 }
 
+/**
+ * Companion object to GShareBrPredictor to get the the size of the 
+ * BPD resp.
+ */
 object GShareBrPredictor
 {
    def GetRespInfoSize(fetch_width: Int, hlen: Int): Int =
@@ -72,6 +93,12 @@ object GShareBrPredictor
    }
 }
 
+/**
+ * Class to create a GShare predictor
+ * 
+ * @param fetch_width # of instructions fetched
+ * @param history_length length of GHR in bits
+ */
 class GShareBrPredictor(
    fetch_width: Int,
    history_length: Int = 12
@@ -80,8 +107,6 @@ class GShareBrPredictor(
    with HasGShareParameters
 {
    require (log2Ceil(nSets) == idx_sz)
-
-   //------------------------------------------------------------
 
    private def Hash (addr: UInt, hist: UInt) =
    {
@@ -178,12 +203,12 @@ class GShareBrPredictor(
    val counter_table = SyncReadMem(nSets, UInt(row_sz.W))
 
    //------------------------------------------------------------
-   // Perform hash on F1.
+   // Perform hash in F1.
 
    val s1_ridx = Hash(this.r_f1_fetchpc, this.r_f1_history)
 
    //------------------------------------------------------------
-   // Get prediction on F2 (and store into an ElasticRegister).
+   // Get prediction in F2 (and store into an ElasticRegister).
 
    // return data to superclass (via f2_resp bundle).
    val s2_out = counter_table.read(s1_ridx, this.f1_valid)
@@ -197,7 +222,7 @@ class GShareBrPredictor(
    assert (q_s3_resp.io.enq.ready === !io.f2_stall)
 
    //------------------------------------------------------------
-   // Give out prediction on F3.
+   // Give out prediction in F3.
 
    io.resp.valid := fsm_state === s_idle
    io.resp.bits.takens := getTakensFromRow(q_s3_resp.io.deq.bits.rowdata)
@@ -209,11 +234,9 @@ class GShareBrPredictor(
    // Update counter table.
 
    val com_info = (io.commit.bits.info).asTypeOf(new GShareResp(fetch_width, idx_sz))
-
    val com_idx = Hash(io.commit.bits.fetch_pc, io.commit.bits.history)(idx_sz-1,0)
 
    val wen = io.commit.valid || (fsm_state === s_clear)
-
    when (wen)
    {
       val new_row = updateEntireCounterRow(

@@ -28,15 +28,28 @@ import freechips.rocketchip.config.{Parameters, Field}
 
 import boom.util.ElasticReg
 
+/**
+ * BaseOnly predictor configuration parameters used in configs
+ *
+ * @param enabled using BaseOnly predictor?
+ */
 case class BaseOnlyParameters(
    enabled: Boolean = true
-   )
+)
 
+/**
+ * Dummy response for commit (nothing to commit since you are just using the BIM
+ */
 class BaseOnlyResp() extends Bundle
 {
+   // Used to avoid 0 width wires
    val not_used = Bool()
 }
 
+/**
+ * Companion object to BaseOnlyBrPredictor to get the the size of the 
+ * BPD resp.
+ */
 object BaseOnlyBrPredictor
 {
    def GetRespInfoSize(p: Parameters, hlen: Int): Int =
@@ -46,6 +59,11 @@ object BaseOnlyBrPredictor
    }
 }
 
+/**
+ * Class to create a BaseOnlyBr Predictor
+ *
+ * @param fetch_width # of instructions fetched
+ */
 class BaseOnlyBrPredictor(
    fetch_width: Int
    )(implicit p: Parameters)

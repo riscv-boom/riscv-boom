@@ -14,9 +14,11 @@
 // Access BTB and BPD to feed predictions to the Fetch Unit.
 //
 // Stages (these are in parallel with instruction fetch):
-//    * F0 - Select next PC.
-//    * F1 - Access I$ and BTB RAMs. Perform BPD hashing.
-//    * F2 - Access BPD RAMs. Begin decoding instruction bits and computing targets from I$.
+//    * F0 - Select next PC. Perform BPD hashing.
+//    * F1 - Access I$ and BTB RAMs. First stage of BPD.
+//    * F2 - Second stage of BPD.
+//    * F3 - Begin decoding instruction bits and computing targets from I$. Check results from BPD.
+//    *      Put data in FB and FTQ
 
 package boom.bpu
 
@@ -30,8 +32,10 @@ import freechips.rocketchip.util.{Str, UIntToAugmentedUInt}
 import boom.common._
 import boom.exu.BranchUnitResp
 
-// Give this to each instruction/uop and pass this down the pipeline to the branch-unit
-// This covers the per-instruction info on all cfi-related predictions.
+/**
+ * Give this to each instruction/uop and pass this down the pipeline to the branch-unit
+ * This covers the per-instruction info on all cfi-related predictions.
+ */
 class BranchPredInfo(implicit p: Parameters) extends BoomBundle()(p)
 {
    val btb_blame         = Bool() // Does the BTB get credit for the prediction? (during BRU check).
@@ -46,6 +50,11 @@ class BranchPredInfo(implicit p: Parameters) extends BoomBundle()(p)
    val bpd_resp         = new BpdResp
 }
 
+/**
+ * Wraps the BTB and BPD into a pipeline that is parallel with the Fetch pipeline.
+ *
+ * @param fetch_width # of instructions fetched
+ */
 class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p)
    with HasBoomCoreParameters
 {
@@ -100,27 +109,26 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    bpd.io.do_reset := false.B // TODO
 
    //************************************************
-   // Branch Prediction (BP0 Stage)
+   // Branch Prediction (F0 Stage)
 
    btb.io.req := io.s0_req
-
-   //************************************************
-   // Branch Prediction (BP1 Stage)
-
    bpd.io.req := io.s0_req
-   bpd.io.f2_replay := io.f2_replay
 
    //************************************************
-   // Branch Prediction (BP2 Stage)
+   // Branch Prediction (F1 Stage)
+
+   //************************************************
+   // Branch Prediction (F2 Stage)
 
    io.f2_btb_resp.bits := btb.io.resp.bits
-   // BTB's resposne isn't valid if there's no instruction from I$ to match against.
+   // BTB's response isn't valid if there's no instruction from I$ to match against.
    io.f2_btb_resp.valid := btb.io.resp.valid && io.f2_valid
 
    bpd.io.f2_bim_resp := io.f2_btb_resp.bits.bim_resp
+   bpd.io.f2_replay := io.f2_replay
 
    //************************************************
-   // Branch Prediction (BP3 Stage)
+   // Branch Prediction (F3 Stage)
 
    bpd.io.resp.ready := !io.f3_stall
 

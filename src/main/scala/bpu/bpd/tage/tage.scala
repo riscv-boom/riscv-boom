@@ -36,6 +36,17 @@ import freechips.rocketchip.util.Str
 import boom.common._
 import boom.util.{ElasticReg, Fold}
 
+/**
+ * TAGE parameters used in configs
+ *
+ * @param enabled using TAGE?
+ * @param num_tables ...
+ * @param table_sizes ...
+ * @param history_lengths ...
+ * @param tag_sizes ...
+ * @param cntr_sz ...
+ * @param ubit_sz ...
+ */
 case class TageParameters(
    enabled: Boolean = true,
    num_tables: Int = 4,
@@ -45,6 +56,19 @@ case class TageParameters(
    cntr_sz: Int = 3,
    ubit_sz: Int = 1)
 
+/**
+ * Set of data values passed around the TAGE predictor and used to update the 
+ * predictor state at commit.
+ *
+ * @param fetch_width # instructions fetched
+ * @param num_tables ...
+ * @param max_history_length ...
+ * @param max_index_sz ...
+ * @param max_tag_sz ...
+ * @param table_sizes ...
+ * @param cntr_sz ...
+ * @param ubit_sz ...
+ */
 class TageResp(
    val fetch_width: Int,
    val num_tables: Int,
@@ -75,10 +99,12 @@ class TageResp(
    // Only used for error checking --- recompute these during commit.
    val debug_indexes  = Vec(num_tables, UInt(max_index_sz.W))
    val debug_tags     = Vec(num_tables, UInt(max_tag_sz.W))
-
 }
 
-// provide information to the BpdResp bundle how many bits a TageResp needs
+/**
+ * Companion object to TageBrPredictor to get the the size of the 
+ * BPD resp.
+ */
 object TageBrPredictor
 {
    def GetRespInfoSize(p: Parameters, fetchWidth: Int): Int =
@@ -97,9 +123,17 @@ object TageBrPredictor
    }
 }
 
-//--------------------------------------------------------------------------
-//--------------------------------------------------------------------------
-
+/**
+ * Class to create a TAGE predictor
+ *
+ * @param fetch_width # of instructions fetched
+ * @param num_tables ...
+ * @param table_sizes ...
+ * @param history_lengths ...
+ * @param tag_sizes ...
+ * @param cntr_sz ...
+ * @param ubit_sz ...
+ */
 class TageBrPredictor(
    fetch_width: Int,
    num_tables: Int,
@@ -121,9 +155,6 @@ class TageBrPredictor(
    require (num_tables == table_sizes.size)
    require (num_tables == history_lengths.size)
    require (num_tables == tag_sizes.size)
-
-   //------------------------------------------------------------
-   //------------------------------------------------------------
 
    private val MAX_TABLE_ID = num_tables-1
 
