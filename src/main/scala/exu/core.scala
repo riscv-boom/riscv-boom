@@ -167,7 +167,9 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       eu.io.com_exception := rob.io.flush.valid
    }
    if (usingFPU)
+   {
       fp_pipeline.io.brinfo := br_unit.brinfo
+   }
 
    // Shim to DCache
    io.dmem <> dc_shim.io.dmem
@@ -226,7 +228,8 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
          //("load-use interlock",     () => id_ex_hazard && ex_ctrl.mem || id_mem_hazard && mem_ctrl.mem ||
          //                                 id_wb_hazard && wb_ctrl.mem),
          //("long-latency interlock", () => id_sboard_hazard),
-         //("csr interlock",          () => id_ex_hazard && ex_ctrl.csr =/= CSR.N || id_mem_hazard && mem_ctrl.csr =/= CSR.N ||
+         //("csr interlock",          () => id_ex_hazard && ex_ctrl.csr =/= CSR.N ||
+         //                                 id_mem_hazard && mem_ctrl.csr =/= CSR.N ||
          //                                 id_wb_hazard && wb_ctrl.csr =/= CSR.N),
          //("D$ blocked",             () => id_ctrl.mem && dcache_blocked),
          //++ (if (!usingMulDiv) Seq() else Seq(
@@ -992,7 +995,9 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    lsu.io.release := io.release
 
    if (usingFPU)
+   {
       lsu.io.fp_stdata <> fp_pipeline.io.tosdq
+   }
 
    //-------------------------------------------------------------
    //-------------------------------------------------------------

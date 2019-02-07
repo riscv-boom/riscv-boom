@@ -92,7 +92,8 @@ class TageTableEntry(val fetch_width: Int, val tag_sz: Int, val cntr_sz: Int, va
 
 }
 
-class TageTableWrite(val fetch_width: Int, val index_sz: Int, val tag_sz: Int, val cntr_sz: Int, val ubit_sz: Int) extends Bundle
+class TageTableWrite(val fetch_width: Int, val index_sz: Int, val tag_sz: Int, val cntr_sz: Int, val ubit_sz: Int)
+  extends Bundle
 {
    val index = UInt(index_sz.W)
    val old = new TageTableEntry(fetch_width, tag_sz, cntr_sz, ubit_sz)
