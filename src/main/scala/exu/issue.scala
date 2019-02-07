@@ -141,8 +141,10 @@ abstract class IssueUnit(
    {
       for (i <- 0 until num_issue_slots)
       {
-         printf("  " + this.getType + "_issue_slot[%d](%c)(Req:%c):wen=%c P:(%c,%c,%c) OP:(%d,%d,%d) PDST:%d %c [[DASM(%x)]" +
-               " 0x%x: %d] ri:%d bm=%d imm=0x%x\n"
+         printf("  " +
+                this.getType +
+                "_issue_slot[%d](%c)(Req:%c):wen=%c P:(%c,%c,%c) OP:(%d,%d,%d) PDST:%d %c [[DASM(%x)]" +
+                " 0x%x: %d] ri:%d bm=%d imm=0x%x\n"
             , i.U(log2Ceil(num_issue_slots).W)
             , Mux(issue_slots(i).valid, Str("V"), Str("-"))
             , Mux(issue_slots(i).request, Str("R"), Str("-"))
@@ -203,10 +205,14 @@ class IssueUnits(num_wakeup_ports: Int)(implicit val p: Parameters)
       iss_units += Module(new IssueUnitCollasping(issParam, num_wakeup_ports))
    }
    def mem_iq = if (usingUnifiedMemIntIQs)
+   {
       // When using unified IQs the IQT_INT handles everything
       iss_units.find(_.iqType == IQT_INT.litValue).get
+   }
    else
+   {
       iss_units.find(_.iqType == IQT_MEM.litValue).get
+   }
    def int_iq = iss_units.find(_.iqType == IQT_INT.litValue).get
 }
 
