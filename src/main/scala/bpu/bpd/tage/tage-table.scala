@@ -163,7 +163,7 @@ class TageTableWrite(val fetch_width: Int, val index_sz: Int, val tag_sz: Int, v
  * @param id ...
  * @param history_length ...
  */
-class TageTable(  
+class TageTable(
    fetch_width: Int,
    num_entries: Int,
    tag_sz: Int,

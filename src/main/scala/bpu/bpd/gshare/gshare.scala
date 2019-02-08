@@ -54,7 +54,7 @@ trait HasGShareParameters extends HasBoomCoreParameters
 }
 
 /**
- * Set of data values passed around the GShare predictor and used to update the 
+ * Set of data values passed around the GShare predictor and used to update the
  * predictor state at commit
  *
  * @param fetch_width # of instructions fetched
@@ -81,7 +81,7 @@ class GShareResp(val fetch_width: Int, val idx_sz: Int) extends Bundle
 }
 
 /**
- * Companion object to GShareBrPredictor to get the the size of the 
+ * Companion object to GShareBrPredictor to get the the size of the
  * BPD resp.
  */
 object GShareBrPredictor
@@ -95,7 +95,7 @@ object GShareBrPredictor
 
 /**
  * Class to create a GShare predictor
- * 
+ *
  * @param fetch_width # of instructions fetched
  * @param history_length length of GHR in bits
  */

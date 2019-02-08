@@ -57,7 +57,7 @@ case class TageParameters(
    ubit_sz: Int = 1)
 
 /**
- * Set of data values passed around the TAGE predictor and used to update the 
+ * Set of data values passed around the TAGE predictor and used to update the
  * predictor state at commit.
  *
  * @param fetch_width # instructions fetched
@@ -102,7 +102,7 @@ class TageResp(
 }
 
 /**
- * Companion object to TageBrPredictor to get the the size of the 
+ * Companion object to TageBrPredictor to get the the size of the
  * BPD resp.
  */
 object TageBrPredictor

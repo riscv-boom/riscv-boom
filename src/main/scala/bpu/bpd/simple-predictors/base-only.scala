@@ -47,7 +47,7 @@ class BaseOnlyResp() extends Bundle
 }
 
 /**
- * Companion object to BaseOnlyBrPredictor to get the the size of the 
+ * Companion object to BaseOnlyBrPredictor to get the the size of the
  * BPD resp.
  */
 object BaseOnlyBrPredictor

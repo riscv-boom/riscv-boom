@@ -54,7 +54,7 @@ case class RandomBpdParameters(
 )
 
 /**
- * Companion object to RandomBrPredictor to get the the size of the 
+ * Companion object to RandomBrPredictor to get the the size of the
  * BPD resp.
  */
 object RandomBrPredictor
