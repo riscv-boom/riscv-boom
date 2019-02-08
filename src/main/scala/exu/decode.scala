@@ -219,13 +219,13 @@ object XDecode extends DecodeConstants
    CSRRCI  -> List(Y, N, X, uopCSRRCI,IQT_INT, FU_CSR , RT_FIX, RT_PAS, RT_X  , N, IS_I, N, N, N, N, N, M_X  , MT_X , 0.U, N, N, N, N, N, Y, Y, CSR.C),
 
    SFENCE_VMA->List(Y,N, X, uopSFENCE,IQT_MEM, FU_MEM , RT_X  , RT_FIX, RT_FIX, N, IS_X, N, N, N, N, N, M_SFENCE,MT_X,0.U, N, N, N, N, N, Y, Y, CSR.N),
-   SCALL   -> List(Y, N, X, uopSYSTEM,IQT_INT, FU_CSR , RT_X  , RT_X  , RT_X  , N, IS_I, N, N, N, N, N, M_X  , MT_X , 0.U, N, N, N, N, Y, Y, N, CSR.I),
-   SBREAK  -> List(Y, N, X, uopSYSTEM,IQT_INT, FU_CSR , RT_X  , RT_X  , RT_X  , N, IS_I, N, N, N, N, N, M_X  , MT_X , 0.U, N, N, N, N, Y, Y, N, CSR.I),
-   SRET    -> List(Y, N, X, uopSYSTEM,IQT_INT, FU_CSR , RT_X  , RT_X  , RT_X  , N, IS_I, N, N, N, N, N, M_X  , MT_X , 0.U, N, N, N, N, N, Y, N, CSR.I),
-   MRET    -> List(Y, N, X, uopSYSTEM,IQT_INT, FU_CSR , RT_X  , RT_X  , RT_X  , N, IS_I, N, N, N, N, N, M_X  , MT_X , 0.U, N, N, N, N, N, Y, N, CSR.I),
-   DRET    -> List(Y, N, X, uopSYSTEM,IQT_INT, FU_CSR , RT_X  , RT_X  , RT_X  , N, IS_I, N, N, N, N, N, M_X  , MT_X , 0.U, N, N, N, N, N, Y, N, CSR.I),
+   SCALL   -> List(Y, N, X, uopERET  ,IQT_INT, FU_CSR , RT_X  , RT_X  , RT_X  , N, IS_I, N, N, N, N, N, M_X  , MT_X , 0.U, N, N, N, N, Y, Y, Y, CSR.I),
+   SBREAK  -> List(Y, N, X, uopERET  ,IQT_INT, FU_CSR , RT_X  , RT_X  , RT_X  , N, IS_I, N, N, N, N, N, M_X  , MT_X , 0.U, N, N, N, N, Y, Y, Y, CSR.I),
+   SRET    -> List(Y, N, X, uopERET  ,IQT_INT, FU_CSR , RT_X  , RT_X  , RT_X  , N, IS_I, N, N, N, N, N, M_X  , MT_X , 0.U, N, N, N, N, N, Y, Y, CSR.I),
+   MRET    -> List(Y, N, X, uopERET  ,IQT_INT, FU_CSR , RT_X  , RT_X  , RT_X  , N, IS_I, N, N, N, N, N, M_X  , MT_X , 0.U, N, N, N, N, N, Y, Y, CSR.I),
+   DRET    -> List(Y, N, X, uopERET  ,IQT_INT, FU_CSR , RT_X  , RT_X  , RT_X  , N, IS_I, N, N, N, N, N, M_X  , MT_X , 0.U, N, N, N, N, N, Y, Y, CSR.I),
 
-   WFI     -> List(Y, N, X, uopSYSTEM,IQT_INT, FU_CSR , RT_X  , RT_X  , RT_X  , N, IS_X, N, N, N, N, N, M_X  , MT_X , 0.U, N, N, N, N, N, Y, Y, CSR.I),
+   WFI     -> List(Y, N, X, uopWFI   ,IQT_INT, FU_CSR , RT_X  , RT_X  , RT_X  , N, IS_X, N, N, N, N, N, M_X  , MT_X , 0.U, N, N, N, N, N, Y, Y, CSR.I),
 
    FENCE_I -> List(Y, N, X, uopNOP  , IQT_INT, FU_X   , RT_X  , RT_X  , RT_X  , N, IS_X, N, N, N, N, Y, M_X  , MT_X , 0.U, N, N, N, N, N, Y, Y, CSR.N),
    FENCE   -> List(Y, N, X, uopFENCE, IQT_INT, FU_MEM , RT_X  , RT_X  , RT_X  , N, IS_X, N, Y, N, Y, N, M_X  , MT_X , 0.U, N, N, N, N, N, Y, Y, CSR.N), // TODO PERF make fence higher performance

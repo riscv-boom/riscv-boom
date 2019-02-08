@@ -306,7 +306,8 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
             - Mux(io.flush.bits.edge_inst, 2.U, 0.U))
    com_pc_next := com_pc + Mux(io.flush.bits.is_rvc, 2.U, 4.U)
 
-   assert (RegNext(io.com_ftq_idx) === io.flush.bits.ftq_idx, "[ftq] this code depends on this assumption")
+   assert (!(io.flush.valid && RegNext(io.com_ftq_idx) =/= io.flush.bits.ftq_idx),
+      "[ftq] this code depends on this assumption")
 
    //-------------------------------------------------------------
    // **** Printfs ****
