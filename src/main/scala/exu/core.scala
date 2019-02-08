@@ -43,9 +43,10 @@ import boom.common._
 import boom.exu.FUConstants._
 import boom.util.{GetNewUopAndBrMask, Sext, WrapInc}
 
-//-------------------------------------------------------------
-//-------------------------------------------------------------
-
+/**
+ * IO bundle for the BOOM Core. Connects the external components such as
+ * the Frontend to the core.
+ */
 trait HasBoomCoreIO extends freechips.rocketchip.tile.HasTileParameters
 {
    implicit val p: Parameters
@@ -65,7 +66,10 @@ trait HasBoomCoreIO extends freechips.rocketchip.tile.HasTileParameters
    }
 }
 
-class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut) extends BoomModule()(p)
+/**
+ * Top level core object that connects the Frontend to the rest of the pipeline.
+ */
+class BoomCore(implicit p: Parameters) extends BoomModule()(p)
    with HasBoomCoreIO
 {
    //**********************************

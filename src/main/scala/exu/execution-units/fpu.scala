@@ -20,9 +20,13 @@ import freechips.rocketchip.util.uintToBitPat
 import boom.common._
 import boom.util.{ImmGenRm, ImmGenTyp}
 
-// TODO get rid of this decoder and move into the Decode stage? Or the RRd stage?
-// most of these signals are already created, just need to be translated
-// to the Rocket FPU-speak
+/**
+ * FP Decoder for the FPU
+ *
+ * TODO get rid of this decoder and move into the Decode stage? Or the RRd stage?
+ * most of these signals are already created, just need to be translated
+ * to the Rocket FPU-speak
+ */
 class UOPCodeFPUDecoder extends Module
 {
   val io = IO(new Bundle
@@ -116,6 +120,9 @@ class UOPCodeFPUDecoder extends Module
    sigs zip decoder map {case(s,d) => s := d}
 }
 
+/**
+ * FP fused multiple add decoder for the FPU
+ */
 class FMADecoder extends Module
 {
    val io = IO(new Bundle
@@ -149,6 +156,9 @@ class FMADecoder extends Module
    io.cmd := cmd
 }
 
+/**
+ * Bundle representing data to be sent to the FPU
+ */
 class FpuReq()(implicit p: Parameters) extends BoomBundle()(p)
 {
    val uop      = new MicroOp()
@@ -158,6 +168,9 @@ class FpuReq()(implicit p: Parameters) extends BoomBundle()(p)
    val fcsr_rm  = Bits(tile.FPConstants.RM_SZ.W)
 }
 
+/**
+ * FPU unit that wraps the RocketChip FPU units (which in turn wrap hardfloat)
+ */
 class FPU(implicit p: Parameters) extends BoomModule()(p) with tile.HasFPUParameters
 {
    val io = IO(new Bundle

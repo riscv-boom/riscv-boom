@@ -21,6 +21,11 @@ import freechips.rocketchip.config.Parameters
 
 import boom.common._
 
+/**
+ * Top level class to wrap all execution units together into a "collection"
+ *
+ * @param fpu using a FPU?
+ */
 class ExecutionUnits(fpu: Boolean)(implicit val p: Parameters) extends HasBoomCoreParameters
 {
    val totalIssueWidth = issueParams.map(_.issueWidth).sum

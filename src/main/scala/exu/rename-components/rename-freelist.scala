@@ -18,7 +18,12 @@ import freechips.rocketchip.config.Parameters
 import boom.common._
 import boom.util._
 
-
+/**
+ * IO bundle for accessing the free list
+ *
+ * @param num_phys_registers number of physical registers
+ * @param pl_width pipeline width (dispatch group size)
+ */
 class FreeListIo(
    val num_phys_registers: Int,
    val pl_width: Int)
@@ -66,16 +71,21 @@ class DebugFreeListIO(val num_phys_registers: Int) extends Bundle
    val isprlist = Bits(num_phys_registers.W)
 }
 
-// provide a fixed set of renamed destination registers
-// i.e., it doesn't matter if a previous UOP needs a pdst or not
-// this prevents a dependency chain from existing between UOPs when trying to
-// compute a pdst to give away (as well as computing if an available free
-// register exists.
-// NOTE: we never give out p0 -- that is the "unitialized" state of the map-table,
-// and the pipeline will give any reader of p0 0x0 as read data.
+/**
+ * Provide a fixed set of renamed destination registers
+ * i.e., it doesn't matter if a previous UOP needs a pdst or not
+ * this prevents a dependency chain from existing between UOPs when trying to
+ * compute a pdst to give away (as well as computing if an available free
+ * register exists.
+ * NOTE: we never give out p0 -- that is the "unitialized" state of the map-table,
+ * and the pipeline will give any reader of p0 0x0 as read data.
+ *
+ * @param num_phys_registers number of physical registers
+ * @param pl_width pipeline width (dispatch group size)
+ */
 class RenameFreeListHelper(
-   num_phys_registers: Int, // number of physical registers
-   pl_width: Int)           // pipeline width ("dispatch group size")
+   num_phys_registers: Int,
+   pl_width: Int)
    (implicit p: Parameters) extends BoomModule()(p)
 {
    val io = IO(new FreeListIo(num_phys_registers, pl_width))
@@ -246,11 +256,18 @@ class RenameFreeListHelper(
    io.debug.freelist := free_list
 }
 
-
+/**
+ * Rename free list that keeps track of what registers are free in the physical
+ * register file
+ *
+ * @param pl_width pipeline width (dispatch group size)
+ * @param rtype type of register the free list is operating on
+ * @param num_phys_registers number of physical registers
+ */
 class RenameFreeList(
-   pl_width: Int,           // Pipeline width ("dispatch group size").
-   rtype: BigInt,           // What type of register are we in charge of?
-   num_phys_registers: Int) // Number of physical registers.
+   pl_width: Int,
+   rtype: BigInt,
+   num_phys_registers: Int)
    (implicit p: Parameters) extends BoomModule()(p)
 {
    private val preg_sz = log2Ceil(num_phys_registers)

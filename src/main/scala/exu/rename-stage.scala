@@ -27,6 +27,15 @@ import freechips.rocketchip.config.Parameters
 import boom.common._
 import boom.util._
 
+/**
+ * IO bundle to interface with the Register Rename logic
+ *
+ * @param pl_width pipeline width
+ * @param num_int_pregs number of int physical registers
+ * @param num_fp_pregs number of FP physical registers
+ * @param num_int_wb_ports number of int writeback ports
+ * @param num_fp_wb_ports number of FP writeback ports
+ */
 class RenameStageIO(
    val pl_width: Int,
    val num_int_pregs: Int,
@@ -73,6 +82,12 @@ class RenameStageIO(
    val debug = Output(new DebugRenameStageIO(num_int_pregs, num_fp_pregs))
 }
 
+/**
+ * IO bundle to debug the rename stage
+ *
+ * @param int_num_pregs number of int physical registers
+ * @param fp_num_pregs number of FP physical registers
+ */
 class DebugRenameStageIO(val int_num_pregs: Int, val fp_num_pregs: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
    val ifreelist =  Bits(int_num_pregs.W)
@@ -83,6 +98,14 @@ class DebugRenameStageIO(val int_num_pregs: Int, val fp_num_pregs: Int)(implicit
    val fbusytable = UInt(fp_num_pregs.W)
 }
 
+/**
+ * Rename stage that connets the map table, free list, and busy table.
+ * Can be used in both the FP pipeline and the normal execute pipeline.
+ *
+ * @param pl_width pipeline width
+ * @param num_int_wb_ports number of int writeback ports
+ * @param num_fp_wb_ports number of FP writeback ports
+ */
 class RenameStage(
    pl_width: Int,
    num_int_wb_ports: Int,
@@ -300,6 +323,7 @@ class RenameStage(
       assert (!(io.fp_wakeups.map(x => x.valid && x.bits.uop.dst_rtype =/= RT_FLT).reduce(_|_)),
          "[rename] fp wakeup is not waking up a FP register.")
    }
+
    for ((uop, w) <- ren2_uops.zipWithIndex)
    {
       val ibusy = ibusytable.io.values(w)

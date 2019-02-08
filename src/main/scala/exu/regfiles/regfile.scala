@@ -22,19 +22,33 @@ import freechips.rocketchip.config.Parameters
 
 import boom.common._
 
+/**
+ * IO bundle for a register read port
+ *
+ * @param addr_width size of register address in bits
+ * @param data_width size of register in bits
+ */
 class RegisterFileReadPortIO(val addr_width: Int, val data_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
    val addr = Input(UInt(addr_width.W))
    val data = Output(UInt(data_width.W))
 }
 
+/**
+ * IO bundle for the register write port
+ *
+ * @param addr_width size of register address in bits
+ * @param data_width size of register in bits
+ */
 class RegisterFileWritePort(val addr_width: Int, val data_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
    val addr = UInt(width = addr_width.W)
    val data = UInt(width = data_width.W)
 }
 
-// utility function to turn ExeUnitResps to match the regfile's WritePort I/Os.
+/**
+ * Utility function to turn ExeUnitResps to match the regfile's WritePort I/Os.
+ */
 object WritePort
 {
    def apply(enq: DecoupledIO[ExeUnitResp], addr_width: Int, data_width: Int)
@@ -50,6 +64,15 @@ object WritePort
    }
 }
 
+/**
+ * Abstract top level register file
+ *
+ * @param num_registers number of registers
+ * @param num_read_ports number of read ports
+ * @param num_write_ports number of write ports
+ * @param register_width size of registers in bits
+ * @param bypassable_array list of write ports from func units to the read port of the regfile
+ */
 abstract class RegisterFile(
    num_registers: Int,
    num_read_ports: Int,
@@ -74,7 +97,15 @@ abstract class RegisterFile(
       "\n   Bypassable Units      : " + bypassable_array
 }
 
-// A behavorial model of a Register File. You will likely want to blackbox this for more than modest port counts.
+/**
+ * A behavorial model of a Register File. You will likely want to blackbox this for more than modest port counts.
+ *
+ * @param num_registers number of registers
+ * @param num_read_ports number of read ports
+ * @param num_write_ports number of write ports
+ * @param register_width size of registers in bits
+ * @param bypassable_array list of write ports from func units to the read port of the regfile
+ */
 class RegisterFileBehavorial(
    num_registers: Int,
    num_read_ports: Int,
