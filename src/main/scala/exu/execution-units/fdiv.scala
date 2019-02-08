@@ -22,6 +22,9 @@ import freechips.rocketchip.tile
 import boom.common._
 import boom.util._
 
+/**
+ * Decoder for FPU divide and square root signals
+ */
 class UOPCodeFDivDecoder extends Module
 {
   val io = IO(new Bundle
@@ -61,15 +64,22 @@ class UOPCodeFDivDecoder extends Module
    sigs zip decoder map {case(s,d) => s := d}
 }
 
-// fdiv/fsqrt is douple-precision. Must upconvert inputs and downconvert outputs
-// as necessary.  Must wait till killed uop finishes before we're ready again.
-// fdiv/fsqrt unit uses an unstable FIFO interface, and thus we must spend a
-// cycle buffering up an uop to provide slack between the issue queue and the
-// fdiv/fsqrt unit.  FDivUnit inherents directly from FunctionalUnit, because
-// UnpipelinedFunctionalUnit can only handle 1 inflight uop, whereas FDivUnit
-// contains up to 2 inflight uops due to the need to buffer the input as the
-// fdiv unit uses an unstable FIFO interface.
-// TODO extend UnpipelinedFunctionalUnit to handle a >1 uops inflight.
+/**
+ * fdiv/fsqrt is douple-precision. Must upconvert inputs and downconvert outputs
+ * as necessary.  Must wait till killed uop finishes before we're ready again.
+ * fdiv/fsqrt unit uses an unstable FIFO interface, and thus we must spend a
+ * cycle buffering up an uop to provide slack between the issue queue and the
+ * fdiv/fsqrt unit.  FDivUnit inherents directly from FunctionalUnit, because
+ * UnpipelinedFunctionalUnit can only handle 1 inflight uop, whereas FDivUnit
+ * contains up to 2 inflight uops due to the need to buffer the input as the
+ * fdiv unit uses an unstable FIFO interface.
+ * TODO extend UnpipelinedFunctionalUnit to handle a >1 uops inflight.
+ *
+ * @param is_pipelined is the functional unit pipelined
+ * @param num_stages number of stages for the functional unit
+ * @param num_bypass_stages number of bypass stages
+ * @param data_width width of the data out of the functional unit
+ */
 class FDivSqrtUnit(implicit p: Parameters)
    extends FunctionalUnit(
       is_pipelined = false,

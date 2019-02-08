@@ -21,8 +21,15 @@ import freechips.rocketchip.config.Parameters
 import boom.common._
 import boom.util._
 
-// internally bypasses newly busy registers (.write) to the read ports (.read)
-// num_operands is the maximum number of operands per instruction (.e.g., 2 normally, but 3 if FMAs are supported)
+/**
+ * IO bundle to interact with the busy table.
+ * Internally bypasses newly busy registers (.write) to the read ports (.read)
+ *
+ * @param pipeline_width pipeline width
+ * @param num_pregs number of physical registers
+ * @param num_read_ports number of read ports to the regfile
+ * @param num_wb_ports number of writeback ports to the regfile
+ */
 class BusyTableIo(
    val pipeline_width:Int,
    val num_pregs: Int,
@@ -48,10 +55,17 @@ class BusyTableIo(
    val debug = new Bundle { val busytable= Output(Bits(num_pregs.W)) }
 }
 
-// Register P0 is always NOT_BUSY, and cannot be set to BUSY
-// Note: I do NOT bypass from newly busied registers to the read ports.
-// That bypass check should be done elsewhere (this is to get it off the
-// critical path).
+/**
+ * Register P0 is always NOT_BUSY, and cannot be set to BUSY
+ * Note: I do NOT bypass from newly busied registers to the read ports.
+ * That bypass check should be done elsewhere (this is to get it off the
+ * critical path).
+ *
+ * @param pipeline_width pipeline width
+ * @param num_pregs number of physical registers
+ * @param num_read_ports number of read ports to the regfile
+ * @param num_wb_ports number of writeback ports to the regfile
+ */
 class BusyTableHelper(
    pipeline_width:Int,
    num_pregs: Int,
@@ -94,6 +108,9 @@ class BusyTableHelper(
    io.debug.busytable := table_bsy.asUInt
 }
 
+/**
+ * Bundle indicating what physical register is busy
+ */
 class BusyTableOutput extends Bundle
 {
    val prs1_busy = Bool()
@@ -101,6 +118,15 @@ class BusyTableOutput extends Bundle
    val prs3_busy = Bool()
 }
 
+/**
+ * Busy table indicating which physical registers are currently busy
+ *
+ * @param pl_width pipeline width (dispatch group size)
+ * @param rtype type of register the free list is operating on
+ * @param num_pregs number of physical registers
+ * @param num_read_ports number of read ports to the regfile
+ * @param num_wb_ports number of writeback ports to the regfile
+ */
 class BusyTable(
    pl_width:Int,
    rtype: BigInt,

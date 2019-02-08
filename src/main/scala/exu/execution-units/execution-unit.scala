@@ -31,7 +31,12 @@ import boom.common._
 import boom.ifu.GetPCFromFtqIO
 import boom.util.{ImmGen, IsKilledByBranch, BranchKillableQueue}
 
-// TODO rename to something like MicroOpWithData
+/**
+ * Response from Execution Unit. Bundles a MicroOp with data
+ * TODO rename to something like MicroOpWithData
+ *
+ * @param data_width width of the data coming from the execution unit
+ */
 class ExeUnitResp(val data_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
   with HasBoomUOP
 {
@@ -39,12 +44,25 @@ class ExeUnitResp(val data_width: Int)(implicit p: Parameters) extends BoomBundl
    val fflags = new ValidIO(new FFlagsResp) // write fflags to ROB
 }
 
+/**
+ * Floating Point flag response
+ */
 class FFlagsResp(implicit p: Parameters) extends BoomBundle()(p)
 {
    val uop = new MicroOp()
    val flags = Bits(tile.FPConstants.FLAGS_SZ.W)
 }
 
+/**
+ * IO bundle for a Execution Unit.
+ *
+ * @param writes_irf does this exe unit need a integer regfile port 
+ * @param writes_ll_irf does this exe unit need a long latency integer regfile port  
+ * @param writes_frf does this exe unit need a FP regfile port 
+ * @param writes_ll_frf does this exe unit need a long latency FP regfile port  
+ * @param num_bypass_ports number of bypass ports for the exe unit
+ * @param data_width width of the data coming out of the execution unit
+ */
 class ExecutionUnitIO(
    val writes_irf: Boolean,
    val writes_ll_irf: Boolean,
@@ -81,6 +99,30 @@ class ExecutionUnitIO(
    val com_exception = Input(Bool())
 }
 
+/**
+ * Abstract Top level Execution Unit that wraps lower level functional units to make a
+ * multi function execution unit.
+ *
+ * @param reads_irf does this exe unit need a integer regfile port
+ * @param writes_irf does this exe unit need a integer regfile port
+ * @param reads_frf does this exe unit need a integer regfile port
+ * @param writes_frf does this exe unit need a integer regfile port
+ * @param writes_ll_irf does this exe unit need a integer regfile port
+ * @param writes_ll_frf does this exe unit need a integer regfile port
+ * @param num_bypass_stages number of bypass ports for the exe unit
+ * @param data_width width of the data coming out of the exe unit   
+ * @param bypassable is the exe unit able to be bypassed
+ * @param has_mem does the exe unit have a MemAddrCalcUnit
+ * @param uses_csr_wport does the exe unit write to the CSRFile
+ * @param has_br_unit does the exe unit have a branch unit
+ * @param has_alu does the exe unit have a alu      
+ * @param has_fpu does the exe unit have a fpu 
+ * @param has_mul does the exe unit have a multiplier 
+ * @param has_div does the exe unit have a divider      
+ * @param has_fdiv does the exe unit have a FP divider     
+ * @param has_ifpu does the exe unit have a int to FP unit
+ * @param has_fpiu does the exe unit have a FP to int unit
+ */
 abstract class ExecutionUnit( val reads_irf     : Boolean       = false
                             , val writes_irf    : Boolean       = false
                             , val reads_frf     : Boolean       = false
@@ -130,6 +172,18 @@ abstract class ExecutionUnit( val reads_irf     : Boolean       = false
    }
 }
 
+/**
+ * ALU execution unit that can have a branch, alu, mul, div, int to FP,
+ * and memory unit.
+ *
+ * @param has_br_unit does the exe unit have a branch unit
+ * @param shares_csr_wport does the exe unit write to the CSRFile
+ * @param has_alu does the exe unit have a alu      
+ * @param has_mul does the exe unit have a multiplier 
+ * @param has_div does the exe unit have a divider      
+ * @param has_ifpu does the exe unit have a int to FP unit
+ * @param has_mem does the exe unit have a MemAddrCalcUnit
+ */
 class ALUExeUnit(
    has_br_unit     : Boolean = false,
    shares_csr_wport: Boolean = false,
@@ -223,7 +277,6 @@ class ALUExeUnit(
       {
          io.br_unit.brinfo.valid := false.B
       }
-
    }
 
    // Pipelined, IMul Unit ------------------
@@ -384,7 +437,13 @@ class ALUExeUnit(
       , "Multiple functional units are fighting over the write port.")
 }
 
-// FPU-only unit, with optional second write-port for ToInt micro-ops.
+/**
+ * FPU-only unit, with optional second write-port for ToInt micro-ops.
+ *
+ * @param has_fpu does the exe unit have a fpu 
+ * @param has_fdiv does the exe unit have a FP divider     
+ * @param has_fpiu does the exe unit have a FP to int unit
+ */
 class FPUExeUnit(
    has_fpu  : Boolean = true,
    has_fdiv : Boolean = false,

@@ -25,6 +25,9 @@ import freechips.rocketchip.rocket.CSR
 
 import boom.common._
 
+/**
+ * Control signal bundle for register renaming
+ */
 class RRdCtrlSigs(implicit p: Parameters) extends BoomBundle()(p)
 {
    val br_type          = UInt(BR_N.getWidth.W)
@@ -49,6 +52,9 @@ class RRdCtrlSigs(implicit p: Parameters) extends BoomBundle()(p)
    }
 }
 
+/**
+ * Default register read constants
+ */
 abstract trait RRdDecodeConstants
 {
    val default: List[BitPat] =
@@ -56,6 +62,9 @@ abstract trait RRdDecodeConstants
    val table: Array[(BitPat, List[BitPat])]
 }
 
+/**
+ * ALU register read constants
+ */
 object AluRRdDecode extends RRdDecodeConstants
 {
    val table: Array[(BitPat, List[BitPat])] =
@@ -101,6 +110,9 @@ object AluRRdDecode extends RRdDecodeConstants
          BitPat(uopSRLW)  -> List(BR_N , Y, N, N, FN_SR  , DW_32 , OP1_RS1 , OP2_RS2 , IS_X, REN_1, CSR.N))
 }
 
+/**
+ * Branch unit register read constants
+ */
 object BruRRdDecode extends RRdDecodeConstants
 {
    val table: Array[(BitPat, List[BitPat])] =
@@ -123,6 +135,9 @@ object BruRRdDecode extends RRdDecodeConstants
          BitPat(uopAUIPC) -> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP1_PC  , OP2_IMM , IS_U, REN_1, CSR.N))
 }
 
+/**
+ * Multiply divider register read constants
+ */
 object MulDivRRdDecode extends RRdDecodeConstants
 {
    val table: Array[(BitPat, List[BitPat])] =
@@ -149,6 +164,9 @@ object MulDivRRdDecode extends RRdDecodeConstants
          BitPat(uopREMUW) -> List(BR_N , N, Y, N, FN_REMU, DW_32 , OP1_RS1 , OP2_RS2 , IS_X, REN_1, CSR.N))
 }
 
+/**
+ * Memory unit register read constants
+ */
 object MemRRdDecode extends RRdDecodeConstants
 {
    val table: Array[(BitPat, List[BitPat])] =
@@ -167,6 +185,9 @@ object MemRRdDecode extends RRdDecodeConstants
          BitPat(uopAMO_AG)-> List(BR_N , N, N, Y, FN_ADD , DW_XPR, OP1_RS1 , OP2_ZERO, IS_X, REN_0, CSR.N))
 }
 
+/**
+ * CSR register read constants
+ */
 object CsrRRdDecode extends RRdDecodeConstants
 {
    val table: Array[(BitPat, List[BitPat])] =
@@ -189,6 +210,9 @@ object CsrRRdDecode extends RRdDecodeConstants
          BitPat(uopERET)  -> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP1_ZERO, OP2_IMMC, IS_I, REN_0, CSR.I))
 }
 
+/**
+ * FPU register read constants
+ */
 object FpuRRdDecode extends RRdDecodeConstants
 {
    val table: Array[(BitPat, List[BitPat])] =
@@ -242,6 +266,9 @@ object FpuRRdDecode extends RRdDecodeConstants
          BitPat(uopFNMSUB_D)->List(BR_N, Y, N, N, FN_X   , DW_X  , OP1_X   , OP2_X   , IS_X, REN_1, CSR.N))
 }
 
+/**
+ * Fused multiple add register read constants
+ */
 object IfmvRRdDecode extends RRdDecodeConstants
 {
    val table: Array[(BitPat, List[BitPat])] =
@@ -259,7 +286,9 @@ object IfmvRRdDecode extends RRdDecodeConstants
          BitPat(uopFCVT_D_X) ->List(BR_N,Y, N, N, FN_X   , DW_X  , OP1_X   , OP2_X   , IS_X, REN_1, CSR.N))
 }
 
-
+/**
+ * Floating point divide and square root register read constants
+ */
 object FDivRRdDecode extends RRdDecodeConstants
 {
    val table: Array[(BitPat, List[BitPat])] =
@@ -276,6 +305,11 @@ object FDivRRdDecode extends RRdDecodeConstants
          BitPat(uopFSQRT_D) ->List(BR_N, N, Y, N, FN_X   , DW_X  , OP1_X   , OP2_X   , IS_X, REN_1, CSR.N))
 }
 
+/**
+ * Register read decoder
+ *
+ * @param supported_units indicate what functional units are being used
+ */
 class RegisterReadDecode(supported_units: SupportedFuncUnits)(implicit p: Parameters) extends BoomModule()(p)
 {
    val io = IO(new BoomBundle()(p)

@@ -21,6 +21,11 @@ import freechips.rocketchip.config.Parameters
 import boom.common._
 import boom.util._
 
+/**
+ * Rename map table element IO
+ *
+ * @param pl_width pipeline width
+ */
 class RenameMapTableElementIo(val pl_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
    val element            = Output(UInt(PREG_SZ.W))
@@ -47,6 +52,13 @@ class RenameMapTableElementIo(val pl_width: Int)(implicit p: Parameters) extends
 
 }
 
+/**
+ * Element in the Rename Map Table. Keeps track of the idx of the physical register, and extra data
+ * to recover from branches
+ *
+ * @param pipeline_width pipeline width
+ * @param always_zero the element is always zero (used for x0)
+ */
 class RenameMapTableElement(pipeline_width: Int, always_zero: Boolean)(implicit p: Parameters) extends BoomModule()(p)
 {
    val io = IO(new RenameMapTableElementIo(pipeline_width))
@@ -125,7 +137,12 @@ class RenameMapTableElement(pipeline_width: Int, always_zero: Boolean)(implicit 
    if (always_zero) io.element := 0.U
 }
 
-// Pass out the new physical register specifiers.
+/**
+ * Output bundle of the map table
+ * Pass out the new physical register specifiers.
+ *
+ * @param preg_sz size of the physical register index in bits
+ */
 class MapTableOutput(val preg_sz: Int) extends Bundle
 {
    val prs1              = UInt(preg_sz.W)
@@ -134,6 +151,14 @@ class MapTableOutput(val preg_sz: Int) extends Bundle
    val stale_pdst        = UInt(preg_sz.W)
 }
 
+/**
+ * Rename map table which maps architectural registers to physical registers
+ *
+ * @param pl_width pipeline width
+ * @param rtype type of registers being mapped
+ * @param num_logical_registers number of logical ISA registers
+ * @param num_physical_registers number of physical registers
+ */
 class RenameMapTable(
    pl_width: Int,
    rtype: BigInt,

@@ -6,21 +6,28 @@
 //------------------------------------------------------------------------------
 
 //------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // RISCV Processor Issue Logic
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
-//
 
 package boom.exu
 
 import chisel3._
 import chisel3.util._
+
 import freechips.rocketchip.config.Parameters
-import FUConstants._
 import freechips.rocketchip.util.Str
-import scala.collection.mutable.ArrayBuffer
+
+import FUConstants._
 import boom.common._
 
+/**
+ * Specific type of issue unit
+ *
+ * @param params issue queue params
+ * @param num_wakeup_ports number of wakeup ports for the issue queue
+ */
 class IssueUnitStatic(
    params: IssueParams,
    num_wakeup_ports: Int)
@@ -49,7 +56,6 @@ class IssueUnitStatic(
    val entry_wen_oh_array = Array.fill(num_issue_slots,DISPATCH_WIDTH){false.B}
    var allocated = VecInit(Seq.fill(DISPATCH_WIDTH){false.B}) // did an instruction find an issue width?
 
-
    for (i <- 0 until num_issue_slots)
    {
       var next_allocated = Wire(Vec(DISPATCH_WIDTH, Bool()))
@@ -65,7 +71,6 @@ class IssueUnitStatic(
 
       allocated = next_allocated
    }
-
 
    // if we can find an issue slot, do we actually need it?
    // also, translate from Scala data structures to Chisel Vecs
@@ -118,7 +123,6 @@ class IssueUnitStatic(
       issue_slots(i).grant := false.B // default
    }
 
-
    for (w <- 0 until issue_width)
    {
       var port_issued = false.B
@@ -162,4 +166,3 @@ class IssueUnitStatic(
       }
    }
 }
-

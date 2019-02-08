@@ -10,10 +10,6 @@
 // RISCV Processor Register Read
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
-//
-// Handle the register read and bypass network for the OoO backend
-// interfaces with the issue window on the enqueue side, and the execution
-// pipelines on the dequeue side.
 
 package boom.exu
 
@@ -25,6 +21,15 @@ import freechips.rocketchip.config.Parameters
 import boom.common._
 import boom.util._
 
+/**
+ * IO bundle to interface the issue window on the enqueue side and the execution
+ * pipelines on the dequeue side.
+ *
+ * @param issue_width total issue width from all issue queues
+ * @param num_total_read_ports number of read ports
+ * @param num_total_bypass_ports number of bypass ports out of the execution units
+ * @param register_width size of register in bits
+ */
 class RegisterReadIO(
    val issue_width: Int,
    val num_total_read_ports: Int,
@@ -48,6 +53,18 @@ class RegisterReadIO(
    val brinfo = Input(new BrResolutionInfo())
 }
 
+/**
+ * Handle the register read and bypass network for the OoO backend
+ * interfaces with the issue window on the enqueue side, and the execution
+ * pipelines on the dequeue side.
+ *
+ * @param issue_width total issue width from all issue queues
+ * @param supported_units_array seq of SupportedFuncUnits classes indicating what the functional units do
+ * @param num_total_read_ports number of read ports
+ * @param num_read_ports_array execution units read port sequence
+ * @param num_total_bypass_ports number of bypass ports out of the execution units
+ * @param register_width size of register in bits
+ */
 class RegisterRead(
    issue_width: Int,
    supported_units_array: Seq[SupportedFuncUnits],

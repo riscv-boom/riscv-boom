@@ -13,8 +13,6 @@
 
 package boom.exu
 
-import scala.collection.mutable.ArrayBuffer
-
 import chisel3._
 import chisel3.util.{log2Ceil, PopCount}
 
@@ -24,9 +22,12 @@ import freechips.rocketchip.util.Str
 import FUConstants._
 import boom.common._
 
-//-------------------------------------------------------------
-//-------------------------------------------------------------
-
+/**
+ * Specific type of issue unit
+ *
+ * @param params issue queue params
+ * @param num_wakeup_ports number of wakeup ports for the issue queue
+ */
 class IssueUnitCollasping(
    params: IssueParams,
    num_wakeup_ports: Int)

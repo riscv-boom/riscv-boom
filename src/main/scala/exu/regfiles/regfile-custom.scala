@@ -20,6 +20,15 @@ import chisel3.util._
 
 import freechips.rocketchip.config.Parameters
 
+/**
+ * Custom RegFile
+ *
+ * @param num_registers number of registers
+ * @param num_read_ports number of read ports
+ * @param num_write_ports number of write ports
+ * @param register_width size of registers in bits
+ * @param bypassable_array list of write ports from func units to the read port of the regfile
+ */
 class RegisterFileSeqCustomArray(
    num_registers: Int,
    num_read_ports: Int,
@@ -122,7 +131,10 @@ class RegisterFileSeqCustomArray(
    }
 }
 
-// Provide shared I/O trait between BlackBox and Module.
+/**
+ * IO trait for reg file to provide shared I/O trait between BlackBox
+ * and Module.
+ */
 trait HasRegisterFileIO extends chisel3.experimental.BaseModule
 {
    // Require these parameters exist.
@@ -142,6 +154,14 @@ trait HasRegisterFileIO extends chisel3.experimental.BaseModule
    })
 }
 
+/**
+ * Blackboxed reg file array
+ *
+ * @param num_registers number of registers
+ * @param num_read_ports number of read ports for the regfile
+ * @param num_write_ports number of write ports to the regfile
+ * @param register_width register width in bits
+ */
 class RegisterFileArray(
    val num_registers: Int,
    val num_read_ports: Int,
@@ -152,7 +172,14 @@ class RegisterFileArray(
 {
 }
 
-// This is a model of the above blackbox RegisterFileArray. Don't ship this.
+/**
+ * This is a model of the above blackbox RegisterFileArray. Don't ship this.
+ *
+ * @param num_registers number of registers
+ * @param num_read_ports number of read ports for the regfile
+ * @param num_write_ports number of write ports to the regfile
+ * @param register_width register width in bits
+ */
 class RegisterFileArrayModel(
    val num_registers: Int,
    val num_read_ports: Int,
@@ -194,7 +221,9 @@ class RegisterFileArrayModel(
    assert (PopCount(io.OE.map(e => e(5))) <= 1.U, "[rf] OE(*)(5) has too many enables set.")
 }
 
-// This is a model of a register file row (which covers one register). Don't ship this either.
+/**
+ * This is a model of a register file row (which covers one register). Don't ship this either.
+ */
 class RegisterFile6r3wRegisterModel extends Module
 {
    val io = IO(new Bundle
@@ -246,7 +275,9 @@ class RegisterFile6r3wRegisterModel extends Module
 
 }
 
-// This is only a model of a register file bit. Warranty voided if synthesized.
+/**
+ * This is only a model of a register file bit. Warranty voided if synthesized.
+ */
 class Rf6r3wBitModel extends Module
 {
    val io = IO(new Bundle

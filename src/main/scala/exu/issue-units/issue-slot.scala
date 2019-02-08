@@ -6,6 +6,7 @@
 //------------------------------------------------------------------------------
 
 //------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // RISCV Processor Issue Slot Logic
 //--------------------------------------------------------------------------
 //------------------------------------------------------------------------------
@@ -14,16 +15,22 @@
 // TODO XXX make a separate issueSlot for MemoryIssueSlots, and only they break apart stores.
 // TODO Disable ldspec for FP queue.
 
-
 package boom.exu
 
 import chisel3._
 import chisel3.util.Valid
-import FUConstants._
+
 import freechips.rocketchip.config.Parameters
+
 import boom.common._
 import boom.util._
+import FUConstants._
 
+/**
+ * IO bundle to interact with Issue slot
+ *
+ * @param num_wakeup_ports number of wakeup ports for the slot
+ */
 class IssueSlotIO(val num_wakeup_ports: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
    val valid          = Output(Bool())
@@ -55,6 +62,11 @@ class IssueSlotIO(val num_wakeup_ports: Int)(implicit p: Parameters) extends Boo
 
 }
 
+/**
+ * Single issue slot. Holds a uop within the issue queue
+ *
+ * @param num_slow_wakeup_ports number of wakeup ports
+ */
 class IssueSlot(num_slow_wakeup_ports: Int)(implicit p: Parameters)
    extends BoomModule()(p)
    with IssueUnitConstants
@@ -211,7 +223,6 @@ class IssueSlot(num_slow_wakeup_ports: Int)(implicit p: Parameters)
    assert (!(io.ldspec_dst.valid && io.ldspec_dst.bits === 0.U),
       "Loads to x0 should never speculatively wakeup other instructions")
 
-
    // TODO disable if FP IQ.
    when (io.ldspec_dst.valid && io.ldspec_dst.bits === slotUop.pop1 && slotUop.lrs1_rtype === RT_FIX)
    {
@@ -237,7 +248,6 @@ class IssueSlot(num_slow_wakeup_ports: Int)(implicit p: Parameters)
       updated_p2 := false.B
    }
 
-
    // Handle branch misspeculations
    val updated_br_mask = GetNewBrMask(io.brinfo, slotUop)
 
@@ -252,7 +262,6 @@ class IssueSlot(num_slow_wakeup_ports: Int)(implicit p: Parameters)
    {
       slotUop.br_mask := updated_br_mask
    }
-
 
    //-------------------------------------------------------------
    // Request Logic
@@ -273,19 +282,16 @@ class IssueSlot(num_slow_wakeup_ports: Int)(implicit p: Parameters)
       io.request := false.B
    }
 
-
    //assign outputs
    io.valid := isValid
    io.uop := slotUop
    io.uop.iw_p1_poisoned := slot_p1_poisoned
    io.uop.iw_p2_poisoned := slot_p2_poisoned
 
-
    // micro-op will vacate due to grant.
    val may_vacate = io.grant && ((slot_state === s_valid_1) || (slot_state === s_valid_2) && slot_p1 && slot_p2)
    val squash_grant = io.ldspec_miss && (slot_p1_poisoned || slot_p2_poisoned)
    io.will_be_valid := isValid && !(may_vacate && !squash_grant)
-
 
    io.updated_uop           := slotUop
    io.updated_uop.iw_state  := updated_state
@@ -322,6 +328,4 @@ class IssueSlot(num_slow_wakeup_ports: Int)(implicit p: Parameters)
    io.debug.p2 := slot_p2
    io.debug.p3 := slot_p3
    io.debug.state := slot_state
-
 }
-

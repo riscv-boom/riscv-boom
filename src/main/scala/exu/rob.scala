@@ -38,6 +38,13 @@ import freechips.rocketchip.util.Str
 import boom.common._
 import boom.util._
 
+/**
+ * IO bundle to interact with the ROB
+ *
+ * @param machine_width dispatch and commit width
+ * @param num_wakeup_ports number of wakeup ports to the rob
+ * @param num_fpu_ports number of fpu ports that will write back fflags
+ */
 class RobIo(
    val machine_width: Int,
    val num_wakeup_ports: Int,
@@ -101,6 +108,9 @@ class RobIo(
    val debug_tsc = Input(UInt(xLen.W))
 }
 
+/**
+ * Bundle to send commit signals across processor
+ */
 class CommitSignals(implicit p: Parameters) extends BoomBundle()(p)
 {
    val valids     = Vec(retireWidth, Bool())
@@ -115,7 +125,11 @@ class CommitSignals(implicit p: Parameters) extends BoomBundle()(p)
    val ld_mask    = Vec(retireWidth, Bool())
 }
 
-// TODO combine FlushSignals and ExceptionSignals (currently timed to different cycles).
+/**
+ * Bundle to communicate exceptions to CSRFile
+ *
+ * TODO combine FlushSignals and ExceptionSignals (currently timed to different cycles).
+ */
 class CommitExceptionSignals(implicit p: Parameters) extends BoomBundle()(p)
 {
    val ftq_idx    = UInt(log2Ceil(ftqSz).W)
@@ -129,7 +143,9 @@ class CommitExceptionSignals(implicit p: Parameters) extends BoomBundle()(p)
    val flush_typ  = FlushTypes()
 }
 
-// Tell the frontend the type of flush so it can set up the next PC properly.
+/**
+ * Tell the frontend the type of flush so it can set up the next PC properly.
+ */
 object FlushTypes
 {
    def SZ = 3
@@ -156,6 +172,9 @@ object FlushTypes
    }
 }
 
+/**
+ * Bundle of signals indicating that an exception occurred
+ */
 class Exception(implicit p: Parameters) extends BoomBundle()(p)
 {
    val uop = new MicroOp()
@@ -163,7 +182,10 @@ class Exception(implicit p: Parameters) extends BoomBundle()(p)
    val badvaddr = UInt(coreMaxAddrBits.W)
 }
 
-// These should not be synthesized!
+/**
+ * Bundle for debug ROB signals
+ * These should not be synthesized!
+ */
 class DebugRobSignals(implicit p: Parameters) extends BoomBundle()(p)
 {
    val state = UInt()
@@ -173,9 +195,13 @@ class DebugRobSignals(implicit p: Parameters) extends BoomBundle()(p)
    val xcpt_badvaddr = UInt(xLen.W)
 }
 
-// width = the dispatch and commit width of the processor
-// num_wakeup_ports = self-explanatory
-// num_fpu_ports = number of FPU units that will write back fflags
+/**
+ * Reorder Buffer to keep track of dependencies and inflight instructions
+ *
+ * @param width the dispatch and commit width of the processor
+ * @param num_wakeup_ports number of wakeup ports to the ROB
+ * @param num_fpu_ports number of FPU units that will write back fflags
+ */
 @chiselName
 class Rob(
    width: Int,

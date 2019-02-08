@@ -21,6 +21,9 @@ import boom.common._
 import boom.util._
 
 // scalastyle:off
+/**
+ * Abstract trait giving defaults and other relevant values to different Decode constants/
+ */
 abstract trait DecodeConstants
    extends freechips.rocketchip.rocket.constants.ScalarOpConstants
    with freechips.rocketchip.rocket.constants.MemoryOpConstants
@@ -45,6 +48,9 @@ abstract trait DecodeConstants
 }
 // scalastyle:on
 
+/**
+ * Decoded control signals
+ */
 class CtrlSigs extends Bundle
 {
    val legal           = Bool()
@@ -90,6 +96,9 @@ class CtrlSigs extends Bundle
 }
 
 // scalastyle:off
+/**
+ * Decode constants for RV32
+ */
 object X32Decode extends DecodeConstants
 {
              //                                                                  frs3_en                               wakeup_delay
@@ -108,6 +117,10 @@ object X32Decode extends DecodeConstants
    SRAI_RV32-> List(Y, N, X, uopSRAI , IQT_INT, FU_ALU , RT_FIX, RT_FIX, RT_X  , N, IS_I, N, N, N, N, N, M_X  , MT_X , 1.U, Y, N, N, N, N, N, N, CSR.N)
    )
 }
+
+/**
+ * Decode constants for RV64
+ */
 object X64Decode extends DecodeConstants
 {
             //                                                                  frs3_en                               wakeup_delay
@@ -142,6 +155,9 @@ object X64Decode extends DecodeConstants
    )
 }
 
+/**
+ * Overall Decode constants
+ */
 object XDecode extends DecodeConstants
 {
             //                                                                  frs3_en                               wakeup_delay
@@ -259,6 +275,9 @@ object XDecode extends DecodeConstants
    )
 }
 
+/**
+ * FP Decode constants
+ */
 object FDecode extends DecodeConstants
 {
   val table: Array[(BitPat, List[BitPat])] = Array(
@@ -350,6 +369,9 @@ object FDecode extends DecodeConstants
    )
 }
 
+/**
+ * FP Divide SquareRoot Constants
+ */
 object FDivSqrtDecode extends DecodeConstants
 {
   val table: Array[(BitPat, List[BitPat])] = Array(
@@ -371,6 +393,9 @@ object FDivSqrtDecode extends DecodeConstants
 }
 //scalastyle:on
 
+/**
+ * IO bundle for the Decode unit
+ */
 class DecodeUnitIo(implicit p: Parameters) extends BoomBundle()(p)
 {
    val enq = new Bundle { val uop = Input(new MicroOp()) }
@@ -384,7 +409,9 @@ class DecodeUnitIo(implicit p: Parameters) extends BoomBundle()(p)
 
 }
 
-// Takes in a single instruction, generates a MicroOp.
+/**
+ * Decode unit that takes in a single instruction and generates a MicroOp.
+ */
 class DecodeUnit(implicit p: Parameters) extends BoomModule()(p)
 {
    val io = IO(new DecodeUnitIo)
@@ -412,7 +439,7 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule()(p)
     val sfence = cs.uopc === uopSFENCE
 
    val cs_legal = cs.legal
-//   dontTOuch(cs_legal)
+//   dontTouch(cs_legal)
 
    val id_illegal_insn = !cs_legal ||
       cs.fp_val && io.csr_decode.fp_illegal || // TODO check for illegal rm mode: (io.fpu.illegal_rm)
@@ -500,11 +527,12 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule()(p)
    //-------------------------------------------------------------
 
    io.deq.uop := uop
-
-   //-------------------------------------------------------------
-
 }
 
+/**
+ * Smaller Decode unit for the Frontend to decode different
+ * branches.
+ */
 class BranchDecode(implicit p: Parameters) extends Module
 {
    val io = IO(new Bundle
@@ -555,15 +583,21 @@ class BranchDecode(implicit p: Parameters) extends Module
           CfiType.none)))
 }
 
-// track the current "branch mask", and give out the branch mask to each micro-op in Decode
-// (each micro-op in the machine has a branch mask which says which branches it
-// is being speculated under).
-
+/**
+ * IO bundle for getting the branch mask
+ */
 class DebugBranchMaskGenerationLogicIO(implicit p: Parameters) extends BoomBundle()(p)
 {
    val branch_mask = UInt(MAX_BR_COUNT.W)
 }
 
+/**
+ * Track the current "branch mask", and give out the branch mask to each micro-op in Decode
+ * (each micro-op in the machine has a branch mask which says which branches it
+ * is being speculated under).
+ *
+ * @param pl_width pipeline width for the processor
+ */
 class BranchMaskGenerationLogic(val pl_width: Int)(implicit p: Parameters) extends BoomModule()(p)
 {
    val io = IO(new Bundle
@@ -648,5 +682,4 @@ class BranchMaskGenerationLogic(val pl_width: Int)(implicit p: Parameters) exten
    }
 
    io.debug.branch_mask := branch_mask
-
 }

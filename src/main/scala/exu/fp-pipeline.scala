@@ -10,8 +10,6 @@
 // Floating Point Datapath Pipeline
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
-//
-// The floating point issue window, regfile, and arithmetic units are all handled here.
 
 package boom.exu
 
@@ -25,6 +23,9 @@ import freechips.rocketchip.tile
 import boom.exu.FUConstants._
 import boom.common._
 
+/**
+ * Top level datapath that wraps the floating point issue window, regfile, and arithmetic units.
+ */
 class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFPUParameters
 {
    val fpIssueParams = issueParams.find(_.iqType == IQT_FP.litValue).get

@@ -6,6 +6,7 @@
 //------------------------------------------------------------------------------
 
 //------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // RISCV Processor Issue Logic
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
@@ -14,21 +15,29 @@ package boom.exu
 
 import chisel3._
 import chisel3.util._
+
 import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.util.Str
+
 import boom.common._
 import boom.exu.FUConstants._
-import scala.collection.mutable.ArrayBuffer
 
-//-------------------------------------------------------------
-//-------------------------------------------------------------
-
+/**
+ * Class used for configurations
+ *
+ * @param issueWidth amount of things that can be issued
+ * @param numEntries size of issue queue
+ * @param iqType type of issue queue
+ */
 case class IssueParams(
    issueWidth: Int = 1,
    numEntries: Int = 8,
    iqType: BigInt
 )
 
+/**
+ * Constants for knowing about the status of a MicroOp
+ */
 trait IssueUnitConstants
 {
    // invalid  : slot holds no valid uop.
@@ -37,14 +46,24 @@ trait IssueUnitConstants
    val s_invalid :: s_valid_1 :: s_valid_2 :: Nil = Enum(3)
 }
 
-// What physical register is broadcasting its wakeup?
-// Is the physical register poisoned (aka, was it woken up by a speculative issue)?
+/**
+ * What physical register is broadcasting its wakeup?
+ * Is the physical register poisoned (aka, was it woken up by a speculative issue)?
+ *
+ * @param preg_sz size of physical destination register
+ */
 class IqWakeup(val preg_sz: Int) extends Bundle
 {
    val pdst = UInt(width=preg_sz.W)
    val poisoned = Bool()
 }
 
+/**
+ * IO bundle to interact with the issue unit
+ *
+ * @param issue_width amount of operations that can be issued at once
+ * @param num_wakeup_ports number of wakeup ports for issue unit
+ */
 class IssueUnitIO(
    val issue_width: Int,
    val num_wakeup_ports: Int)
@@ -72,6 +91,14 @@ class IssueUnitIO(
    val tsc_reg        = Input(UInt(width=xLen.W))
 }
 
+/**
+ * Abstract top level issue unit
+ *
+ * @param num_issue_slots depth of issue queue
+ * @param issue_width amoutn of operations that can be issued at once
+ * @param num_wakeup_ports number of wakeup ports for issue unit
+ * @param iqType type of issue queue (mem, int, fp)
+ */
 abstract class IssueUnit(
    val num_issue_slots: Int,
    val issue_width: Int,
@@ -176,43 +203,4 @@ abstract class IssueUnit(
       else if (iqType == IQT_MEM.litValue) "mem"
       else if (iqType == IQT_FP.litValue) " fp"
       else "unknown"
-
 }
-
-class IssueUnits(num_wakeup_ports: Int)(implicit val p: Parameters)
-   extends HasBoomCoreParameters
-   with IndexedSeq[IssueUnit]
-{
-   //*******************************
-   // Instantiate the IssueUnits
-
-   private val iss_units = ArrayBuffer[IssueUnit]()
-
-   //*******************************
-   // Act like a collection
-
-   def length = iss_units.length
-
-   def apply(n: Int): IssueUnit = iss_units(n)
-
-   //*******************************
-   // Construct.
-
-   require (enableAgePriorityIssue) // unordered is currently unsupported.
-
-   for (issParam <- issueParams.filter(_.iqType != IQT_FP.litValue))
-   {
-      iss_units += Module(new IssueUnitCollasping(issParam, num_wakeup_ports))
-   }
-   def mem_iq = if (usingUnifiedMemIntIQs)
-   {
-      // When using unified IQs the IQT_INT handles everything
-      iss_units.find(_.iqType == IQT_INT.litValue).get
-   }
-   else
-   {
-      iss_units.find(_.iqType == IQT_MEM.litValue).get
-   }
-   def int_iq = iss_units.find(_.iqType == IQT_INT.litValue).get
-}
-
