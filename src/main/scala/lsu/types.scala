@@ -18,8 +18,9 @@ import freechips.rocketchip.subsystem.RocketCrossingKey
 import freechips.rocketchip.tile.{BaseTile, HasTileParameters}
 import freechips.rocketchip.tilelink.TLIdentityNode
 
-/** Mix-ins for constructing tiles that have a HellaCache */
-
+/**
+ * Top level mixin to construct a tile with a BOOM HellaCache.
+ */
 trait HasBoomHellaCache { this: BaseTile =>
   val module: HasBoomHellaCacheModule
   implicit val p: Parameters
@@ -40,6 +41,9 @@ trait HasBoomHellaCache { this: BaseTile =>
   tlMasterXbar.node := dCacheTap := dcache.node
 }
 
+/**
+ * Mixin to construct a tile with a BOOM HellaCache.
+ */
 trait HasBoomHellaCacheModule
 {
   val outer: HasBoomHellaCache
@@ -48,13 +52,18 @@ trait HasBoomHellaCacheModule
   outer.dcache.module.io.cpu <> dcacheArb.io.mem
 }
 
-/** Mix-ins for constructing tiles that might have a PTW */
+/**
+ * Top level mixin to construct a tile with a BOOM PTW.
+ */
 trait CanHaveBoomPTW extends HasTileParameters with HasBoomHellaCache { this: BaseTile =>
   val module: CanHaveBoomPTWModule
   var nPTWPorts = 1
   nDCachePorts += (if (usingPTW) 1 else 0)
 }
 
+/**
+ * Mixin to construct a tile with a BOOM PTW.
+ */
 trait CanHaveBoomPTWModule extends HasBoomHellaCacheModule
 {
   val outer: CanHaveBoomPTW
@@ -67,8 +76,9 @@ trait CanHaveBoomPTWModule extends HasBoomHellaCacheModule
   }
 }
 
-/** Monitor cache data writebacks/releases for memory ordering. */
-
+/**
+ * Bundle to monitor cache data writebacks/releases for memory ordering.
+ */
 class ReleaseInfo(implicit p: Parameters) extends boom.common.BoomBundle()(p)
 {
    val address = UInt(corePAddrBits.W)

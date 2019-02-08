@@ -10,9 +10,12 @@ package boom.util
 import chisel3._
 import chisel3.util._
 
-/** Implements the same interface as chisel3.util.Queue.
-  * Effectively a two-entry Queue.
-  *  */
+/**
+ * Implements the same interface as chisel3.util.Queue.
+ * Effectively a two-entry Queue.
+ *
+ * @param gen the type of Data object to store in the register
+ */
 class ElasticReg[T <: Data](gen: T) extends Module
 {
    val entries = 2
@@ -45,6 +48,10 @@ class ElasticReg[T <: Data](gen: T) extends Module
    io.count := PopCount(valid.asUInt)
 }
 
+/**
+ * Companion object to ElasticReg which enqueues a data type
+ * and returns a dequeued Data object.
+ */
 object ElasticReg
 {
    def apply[T <: Data](enq: DecoupledIO[T]): DecoupledIO[T] = {

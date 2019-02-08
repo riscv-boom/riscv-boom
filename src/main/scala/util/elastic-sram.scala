@@ -10,23 +10,29 @@ package boom.util
 import chisel3._
 import chisel3.util._
 
+/**
+ * Bundle serving as the write port to the ESram.
+ *
+ * @param idx_sz the size of the idx to index into the memory
+ * @param gen the type of Data object to store in the memory
+ */
 class ESramWritePort[T <: Data](val idx_sz: Int, private val gen: T) extends Bundle
 {
    val idx = UInt(idx_sz.W)
    val data = gen
-
 }
 
-/** Implements a decoupled SRAM which can be back-pressured on the read response side,
-  * and thus will in turn back-pressure the read request side.
-  *
-  * @param num_entries the number of logical entries in our memory
-  * @param gen the type of Data to store in our memory
-  * @param dualported use 1r1w SeqMem or use banking with two 1rw SeqMems
-  *
-  * Assumptions:
-  *   - If banked for 1rw, allowed to drop write updates
-  *  */
+/**
+ * Implements a decoupled SRAM which can be back-pressured on the read response side,
+ * and thus will in turn back-pressure the read request side.
+ *
+ * Assumptions:
+ *   - If banked for 1rw, allowed to drop write updates
+ *
+ * @param num_entries the number of logical entries in the memory
+ * @param gen the type of Data to store in the memory
+ * @param dualported use 1r1w SeqMem or use banking with two 1rw SeqMems
+ */
 class ElasticSeqMem[T <: Data](
    num_entries: Int,
    gen: T,
@@ -59,7 +65,6 @@ class ElasticSeqMem[T <: Data](
    // we provide a shadow flop to decouple the not-ready read response from the
    // read request.
 
-
    // Replay s0 onto s1 if s1_resp is not ready,
    // as we need to maintain the same read index as the last cycle.
    val s1_replay = io.rresp.ready
@@ -79,7 +84,5 @@ class ElasticSeqMem[T <: Data](
    {
       // TODO XXX
       last_val := false.B
-
    }
-
 }

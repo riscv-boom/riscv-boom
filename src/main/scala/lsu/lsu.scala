@@ -57,6 +57,12 @@ import boom.common._
 import boom.exu.{BrResolutionInfo, Exception, FuncUnitResp}
 import boom.util.{AgePriorityEncoder, IsKilledByBranch, GetNewBrMask, WrapInc}
 
+/**
+ * IO bundle representing the different signals to interact with the backend
+ * (dcache, dcache shim, etc) memory system.
+ *
+ * @param pl_width pipeline width of the processor
+ */
 class LoadStoreUnitIO(val pl_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
    // Decode Stage
@@ -147,6 +153,11 @@ class LoadStoreUnitIO(val pl_width: Int)(implicit p: Parameters) extends BoomBun
 
 }
 
+/**
+ * Load store unit. Holds SAQ, LAQ, SDQ.
+ *
+ * @param pl_width pipeline width of the processor
+ */
 class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
                                    edge: freechips.rocketchip.tilelink.TLEdgeOut) extends BoomModule()(p)
    with freechips.rocketchip.rocket.constants.MemoryOpConstants
@@ -1408,7 +1419,10 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
       }}
 }
 
-// take an address and generate an 8-bit mask of which bytes within a double-word are touched
+/**
+ * Object to take an address and generate an 8-bit mask of which bytes within a
+ * double-word.
+ */
 object GenByteMask
 {
    def apply(addr: UInt, typ: UInt): UInt =
@@ -1423,9 +1437,13 @@ object GenByteMask
    }
 }
 
-// TODO currently assumes w_addr and r_addr are identical, so no shifting
-// store data is already aligned (since its the value straight from the register
-// but the load data may need to be re-aligned...
+/**
+ * Object to generate data based on the size of the data (according to
+ * its type.
+ * TODO currently assumes w_addr and r_addr are identical, so no shifting
+ * store data is already aligned (since its the value straight from the register
+ * but the load data may need to be re-aligned...
+ */
 object LoadDataGenerator
 {
    def apply(data: UInt, mem_type: UInt): UInt =
@@ -1442,10 +1460,13 @@ object LoadDataGenerator
                 Mux (half , Cat(Fill(48, sext & data(15)), data(15, 0)),
                 Mux (byte_, Cat(Fill(56, sext & data( 7)), data( 7, 0)),
                             data))))
-      out // return
+      out
    }
 }
 
+/**
+ * ...
+ */
 class ForwardingAgeLogic(num_entries: Int)(implicit p: Parameters) extends BoomModule()(p)
 {
    val io = IO(new Bundle

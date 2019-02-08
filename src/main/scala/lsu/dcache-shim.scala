@@ -33,7 +33,9 @@ import boom.common._
 import boom.exu.BrResolutionInfo
 import boom.util.maskMatch
 
-// Track Inflight Memory Requests
+/**
+ * IO bundle to keep track of inflight load memory requests.
+ */
 class LoadReqSlotIo(implicit p: Parameters) extends BoomBundle()(p)
 {
    val valid      = Output(Bool()) // slot has an entry
@@ -50,8 +52,12 @@ class LoadReqSlotIo(implicit p: Parameters) extends BoomBundle()(p)
    val was_killed = Output(Bool()) // should we filter out returning mem op?
 }
 
-// Note: Anything incoming that gets killed by br or exception is still marked
-// as "valid", since it also got sent to the datacache.
+
+/**
+ * Buffer entry tracking an inflight load memory request.
+ * Note: Anything incoming that gets killed by br or exception is still marked
+ * as "valid", since it also got sent to the datacache.
+ */
 class LoadReqSlot(implicit p: Parameters) extends BoomModule()(p)
 {
    val io = IO(new LoadReqSlotIo())
@@ -119,6 +125,9 @@ class LoadReqSlot(implicit p: Parameters) extends BoomModule()(p)
    io.out_uop    := uop
 }
 
+/**
+ * Bundle representing a request for the dcache to complete.
+ */
 class DCacheReq(implicit p: Parameters) extends BoomBundle()(p)
 {
    val addr    = UInt(coreMaxAddrBits.W)
@@ -127,6 +136,9 @@ class DCacheReq(implicit p: Parameters) extends BoomBundle()(p)
    val kill    = Bool()    // e.g., LSU detects load misspeculation
 }
 
+/**
+ * Bundle representing not acknowledge info coming from the dcache.
+ */
 class NackInfo(implicit p: Parameters) extends BoomBundle()(p)
 {
    val valid      = Bool()
@@ -137,6 +149,9 @@ class NackInfo(implicit p: Parameters) extends BoomBundle()(p)
                            // LSU nacks for address conflicts/forwarding
 }
 
+/**
+ * Bundle representing a response from the dcache.
+ */
 class DCacheResp(implicit p: Parameters) extends BoomBundle()(p)
 {
    val data         = Bits(coreDataBits.W)
@@ -145,7 +160,10 @@ class DCacheResp(implicit p: Parameters) extends BoomBundle()(p)
    val typ          = Bits(freechips.rocketchip.rocket.MT_SZ.W)
 }
 
-// from pov of datapath
+/**
+ * IO bundle representing the interface to the dcache from BOOM.
+ * Note: from pov of datapath
+ */
 class DCMemPortIO(implicit p: Parameters) extends BoomBundle()(p)
 {
    val req     = (new DecoupledIO(new DCacheReq))
@@ -181,6 +199,9 @@ class DCMemPortIO(implicit p: Parameters) extends BoomBundle()(p)
 //   override def cloneType: this.type = new DCMemPortIO()(p).asInstanceOf[this.type]
 }
 
+/**
+ * Module that sits between the Rocket dcache and BOOM.
+ */
 class DCacheShim(implicit p: Parameters) extends BoomModule()(p)
    with freechips.rocketchip.rocket.constants.MemoryOpConstants
 {
@@ -373,6 +394,4 @@ class DCacheShim(implicit p: Parameters) extends BoomModule()(p)
 //      io.core.debug.ld_req_slot(i).killed := inflight_load_buffer(i).was_killed
 //      io.core.debug.ld_req_slot(i).uop := inflight_load_buffer(i).out_uop
 //   }
-
-   //------------------------------------------------------------
 }
