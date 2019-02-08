@@ -151,9 +151,11 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
    io.enq.ready := !full
    io.enq_idx := enq_ptr.value
 
-   when (io.deq.valid)
+   when (io.deq.valid || io.flush.valid)
    {
-      commit_ptr := io.deq.bits
+      assert (!(io.deq.valid && io.flush.valid && io.deq.bits =/= io.flush.bits.ftq_idx),
+         "FTQ received conflicting flush and deq on same cycle")
+      commit_ptr := Mux(io.flush.valid, io.flush.bits.ftq_idx, io.deq.bits)
    }
 
    //-------------------------------------------------------------
