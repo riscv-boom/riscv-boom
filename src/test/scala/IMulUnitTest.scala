@@ -1,17 +1,18 @@
 //******************************************************************************
 // Copyright (c) 2018 - 2018, The Regents of the University of California (Regents).
-// All Rights Reserved. See LICENSE for license details.
+// All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
 // Author: Christopher Celio
 //------------------------------------------------------------------------------
 
 package boom.common
 
+import org.scalatest.{Matchers, FlatSpec}
+
 import chisel3._
 import chisel3.iotesters.{ChiselFlatSpec, Driver, PeekPokeTester, TesterOptionsManager, SteppedHWIOTester}
-import org.scalatest.{Matchers, FlatSpec}
-import boom.exu.Imul
 
+import boom.exu.Imul
 
 class IMulUnitTester(c: IMul) extends PeekPokeTester(c) {
 
@@ -50,7 +51,6 @@ class IMulSpec extends FlatSpec with Matchers {
    }
 }
 
-
 class IMulHWIOUnitTester extends SteppedHWIOTester {
 
    val device_under_test = Module(new IMul(imul_stages = 3))
@@ -77,7 +77,6 @@ class IMulHWIOUnitTester extends SteppedHWIOTester {
    step(1)
    step(1)
    step(1)
-
 }
 
 // Invoke test with:
@@ -88,6 +87,3 @@ class IMulTester extends ChiselFlatSpec {
     assertTesterPasses { new IMulHWIOUnitTester }
   }
 }
-
-
-

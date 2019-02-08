@@ -31,6 +31,12 @@ import freechips.rocketchip.config.Parameters
 import boom.bpu._
 import boom.common._
 
+/**
+ * Combinational logic to verify that the BTB predicted correctly, choose BPD or
+ * BTB results, and catch JALs.
+ *
+ * @param fetch_width # of instructions fetched
+ */
 class BranchChecker(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p)
    with HasL1ICacheBankedParameters
 {

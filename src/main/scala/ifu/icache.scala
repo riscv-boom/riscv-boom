@@ -24,6 +24,13 @@ import freechips.rocketchip.rocket.{HasL1ICacheParameters, ICacheParams, ICacheE
 
 import boom.common._
 
+/**
+ * ICache module
+ *
+ * @param icacheParams parameters for the icache
+ * @param hartId the id of the hardware thread in the cache
+ * @param enableBlackBox use a blackbox icache
+ */
 class ICache(
     val icacheParams: ICacheParams,
     val hartId: Int,
@@ -60,6 +67,11 @@ class ICache(
       minLatency = 1)})
 }
 
+/**
+ * IO Signals leaving the ICache
+ *
+ * @param outer top level ICache class
+ */
 class ICacheResp(val outer: ICache) extends Bundle
 {
   val data = UInt((outer.icacheParams.fetchBytes*8).W)
@@ -67,11 +79,19 @@ class ICacheResp(val outer: ICache) extends Bundle
   val ae = Bool()
 }
 
+/**
+ * ICache performance events
+ */
 class ICachePerfEvents extends Bundle
 {
   val acquire = Bool()
 }
 
+/**
+ * IO Signals for interacting with the ICache
+ *
+ * @param outer top level ICache class
+ */
 class ICacheBundle(val outer: ICache) extends CoreBundle()(outer.p)
 {
   val hartid = Input(UInt(hartIdLen.W))
@@ -90,7 +110,9 @@ class ICacheBundle(val outer: ICache) extends CoreBundle()(outer.p)
   val perf = Output(new ICachePerfEvents())
 }
 
-// get a tile-specific property without breaking deduplication
+/**
+ * Get a tile-specific property without breaking deduplication
+ */
 object GetPropertyByHartId
 {
   def apply[T <: Data](tiles: Seq[RocketTileParams], f: RocketTileParams => Option[T], hartId: UInt): T = {
@@ -98,6 +120,11 @@ object GetPropertyByHartId
   }
 }
 
+/**
+ * Base ICache module
+ *
+ * @param outer top level ICache class
+ */
 abstract class ICacheBaseModule(outer: ICache) extends LazyModuleImp(outer)
   with HasL1ICacheBankedParameters
 {
@@ -105,6 +132,11 @@ abstract class ICacheBaseModule(outer: ICache) extends LazyModuleImp(outer)
   val io = IO(new ICacheBundle(outer))
 }
 
+/**
+ * Main ICache module
+ *
+ * @param outer top level ICache class
+ */
 @chiselName
 class ICacheModule(outer: ICache) extends ICacheBaseModule(outer)
 {
@@ -248,7 +280,6 @@ class ICacheModule(outer: ICache) extends ICacheBaseModule(outer)
          PopCount(s1_tag_hit zip s1_tag_disparity map { case (h, d) => h && !d }) <= 1.U)
 
   assert (!(s1_slaveValid), "[icache] We do not support the icache slave.")
-
 
   // declare arrays outside conditional so they show up named in Verilog.
   val ramDepth =
@@ -643,22 +674,36 @@ class ICacheModule(outer: ICache) extends ICacheBaseModule(outer)
     "\n   I-TLB entries : " + cacheParams.nTLBEntries + "\n"
 }
 
-// Provide a BlackBox version of the ICache.
-// NOTE: we can't really BlackBox a LazyModule, so instead we use the
-// LazyModuleImp as a thin shim around the actual BlackBox itself.
-// However, we have to provide another level of indirection through the IOs to
-// avoid an emitter error (which may be related to Option()s).
+/**
+ * Provide a BlackBox version of the ICache.
+ * NOTE: we can't really BlackBox a LazyModule, so instead we use the
+ * LazyModuleImp as a thin shim around the actual BlackBox itself.
+ * However, we have to provide another level of indirection through the IOs to
+ * avoid an emitter error (which may be related to Option()s).
+ *
+ * @param outer ICache top level class
+ */
 class ICacheModuleBlackBox(outer: ICache) extends ICacheBaseModule(outer)
 {
   val icachebb = Module(new ICacheBlackBox(outer))
   io <> icachebb.io.signals
 }
 
+/**
+ * ICache blackbox
+ *
+ * @param outer ICache top level class
+ */
 class ICacheBlackBox(outer: ICache) extends BlackBox
 {
   val io = IO(new ICacheBundleShim(outer))
 }
 
+/**
+ * ICache Bundle Shim
+ *
+ * @param outer ICache top level class
+ */
 class ICacheBundleShim(val outer: ICache) extends CoreBundle()(outer.p)
 {
   val signals = new ICacheBundle(outer)

@@ -26,6 +26,9 @@ import boom.common._
 import boom.exu.{BranchUnitResp, CommitExceptionSignals}
 import boom.lsu.{CanHaveBoomPTW, CanHaveBoomPTWModule}
 
+/**
+ * Parameters to manage a L1 Banked ICache
+ */
 trait HasL1ICacheBankedParameters extends HasL1ICacheParameters
 {
   // Use a bank interleaved I$ if our fetch width is wide enough.
@@ -80,6 +83,9 @@ trait HasL1ICacheBankedParameters extends HasL1ICacheParameters
   }
 }
 
+/**
+ * IO for the BOOM Frontend to/from the CPU
+ */
 class BoomFrontendIO(implicit p: Parameters) extends BoomBundle()(p)
 {
    // Give the backend a packet of instructions.
@@ -116,6 +122,12 @@ class BoomFrontendIO(implicit p: Parameters) extends BoomBundle()(p)
    val tsc_reg           = Output(UInt(xLen.W))
 }
 
+/**
+ * Top level Frontend class
+ *
+ * @param icacheParams parameters for the icache
+ * @param hartid id for the hardware thread of the core
+ */
 class BoomFrontend(val icacheParams: ICacheParams, hartid: Int)(implicit p: Parameters) extends LazyModule
 {
   lazy val module = new BoomFrontendModule(this)
@@ -124,6 +136,11 @@ class BoomFrontend(val icacheParams: ICacheParams, hartid: Int)(implicit p: Para
   val slaveNode = icache.slaveNode
 }
 
+/**
+ * Bundle wrapping the IO for the Frontend as a whole
+ *
+ * @param outer top level Frontend class
+ */
 class BoomFrontendBundle(val outer: BoomFrontend) extends CoreBundle()(outer.p)
     with HasExternallyDrivenTileConstants
 {
@@ -132,6 +149,12 @@ class BoomFrontendBundle(val outer: BoomFrontend) extends CoreBundle()(outer.p)
   val errors = new ICacheErrors
 }
 
+/**
+ * Main Frontend module that connects the icache, TLB, fetch controller,
+ * and branch prediction pipeline together.
+ *
+ * @param outer top level Frontend class
+ */
 class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   with HasCoreParameters
   with HasL1ICacheParameters
@@ -303,7 +326,9 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
     cover(cond, s"FRONTEND_$label", "Rocket;;" + desc)
 }
 
-/** Mix-ins for constructing tiles that have an ICache-based pipeline frontend */
+/**
+ * Mix-in for constructing tiles that have an ICache-based pipeline frontend
+ */
 trait HasBoomICacheFrontend extends CanHaveBoomPTW
 {
   this: BaseTile =>
@@ -315,6 +340,9 @@ trait HasBoomICacheFrontend extends CanHaveBoomPTW
   nPTWPorts += 1 // boom -- needs an extra PTW port for its LSU.
 }
 
+/**
+ * Mix-in for constructing tiles that have an ICache-based pipeline frontend
+ */
 trait HasBoomICacheFrontendModule extends CanHaveBoomPTWModule
 {
   val outer: HasBoomICacheFrontend
