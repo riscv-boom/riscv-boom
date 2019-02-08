@@ -15,11 +15,21 @@ import freechips.rocketchip.tilelink._
 import freechips.rocketchip.util._
 import freechips.rocketchip.rocket._
 
+/**
+ * Top level class wrapping a non-blocking dcache.
+ *
+ * @param hartid hardware thread for the cache
+ */
 class BoomNonBlockingDCache(hartid: Int)(implicit p: Parameters) extends HellaCache(hartid)(p)
 {
   override lazy val module = new BoomNonBlockingDCacheModule(this)
 }
 
+/**
+ * Main module implementing a non-blocking dcache.
+ *
+ * @param outer reference to top level class
+ */
 class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends HellaCacheModule(outer)
 {
   require(isPow2(nWays)) // TODO: relax this

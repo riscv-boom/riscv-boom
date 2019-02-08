@@ -10,19 +10,21 @@
 // Transformable SeqReadMem
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
-//
-// Provide an abstract sequential-read memory that can be transformed from a
-// tall, skinny aspect ratio to a more rectangular shape.
 
 package boom.util
 
 import chisel3._
 import chisel3.util._
 
-// Provide the "logical" sizes and we will map
-// the logical SeqMem into a physical, realizable SeqMem
-// that is in a square aspect ratio (rounded to a pow2 for the depth).
-// Only supports a single read/write port.
+/**
+ * Implements a realizable SeqMem that is in a square aspect ratio (rounded
+ * to a pow2 for the depth). Used for transforming a tall, skinny aspect
+ * ratio memory into a more rectangular shape. Currently, only supports 
+ * a single R/W port.
+ *
+ * @param l_depth logical depth of the memory
+ * @param l_width logical width of the memory
+ */
 class SeqMem1rwTransformable (
    l_depth: Int,
    l_width: Int
