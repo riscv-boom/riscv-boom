@@ -171,29 +171,29 @@ abstract class IssueUnit(
          printf("  " +
                 this.getType +
                 "_issue_slot[%d](%c)(Req:%c):wen=%c P:(%c,%c,%c) OP:(%d,%d,%d) PDST:%d %c [[DASM(%x)]" +
-                " 0x%x: %d] ri:%d bm=%d imm=0x%x\n"
-            , i.U(log2Ceil(num_issue_slots).W)
-            , Mux(issue_slots(i).valid, Str("V"), Str("-"))
-            , Mux(issue_slots(i).request, Str("R"), Str("-"))
-            , Mux(issue_slots(i).in_uop.valid, Str("W"),  Str(" "))
-            , Mux(issue_slots(i).debug.p1, Str("!"), Str(" "))
-            , Mux(issue_slots(i).debug.p2, Str("!"), Str(" "))
-            , Mux(issue_slots(i).debug.p3, Str("!"), Str(" "))
-            , issue_slots(i).uop.pop1
-            , issue_slots(i).uop.pop2
-            , issue_slots(i).uop.pop3
-            , issue_slots(i).uop.pdst
-            , Mux(issue_slots(i).uop.dst_rtype === RT_FIX, Str("X"),
-              Mux(issue_slots(i).uop.dst_rtype === RT_X, Str("-"),
-              Mux(issue_slots(i).uop.dst_rtype === RT_FLT, Str("f"),
-              Mux(issue_slots(i).uop.dst_rtype === RT_PAS, Str("C"), Str("?")))))
-            , issue_slots(i).uop.inst
-            , issue_slots(i).uop.pc(31,0)
-            , issue_slots(i).uop.uopc
-            , issue_slots(i).uop.rob_idx
-            , issue_slots(i).uop.br_mask
-            , issue_slots(i).uop.imm_packed
-            )
+                " 0x%x: %d] ri:%d bm=%d imm=0x%x\n",
+                i.U(log2Ceil(num_issue_slots).W),
+                Mux(issue_slots(i).valid, Str("V"), Str("-")),
+                Mux(issue_slots(i).request, Str("R"), Str("-")),
+                Mux(issue_slots(i).in_uop.valid, Str("W"),  Str(" ")),
+                Mux(issue_slots(i).debug.p1, Str("!"), Str(" ")),
+                Mux(issue_slots(i).debug.p2, Str("!"), Str(" ")),
+                Mux(issue_slots(i).debug.p3, Str("!"), Str(" ")),
+                issue_slots(i).uop.pop1,
+                issue_slots(i).uop.pop2,
+                issue_slots(i).uop.pop3,
+                issue_slots(i).uop.pdst,
+                Mux(issue_slots(i).uop.dst_rtype === RT_FIX, Str("X"),
+                Mux(issue_slots(i).uop.dst_rtype === RT_X, Str("-"),
+                Mux(issue_slots(i).uop.dst_rtype === RT_FLT, Str("f"),
+                Mux(issue_slots(i).uop.dst_rtype === RT_PAS, Str("C"), Str("?"))))),
+                issue_slots(i).uop.inst,
+                issue_slots(i).uop.pc(31,0),
+                issue_slots(i).uop.uopc,
+                issue_slots(i).uop.rob_idx,
+                issue_slots(i).uop.br_mask,
+                issue_slots(i).uop.imm_packed
+                )
       }
       printf("-----------------------------------------------------------------------------------------\n")
    }

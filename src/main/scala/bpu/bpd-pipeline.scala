@@ -196,12 +196,12 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
 
    if (DEBUG_PRINTF)
    {
-      printf("btb, f0_npc=%c req_pc 0x%x, f1=%c targ=0x%x\n"
-         , Mux(btb.io.req.valid, Str("V"), Str("-"))
-         , io.s0_req.bits.addr
-         , Mux(btb.io.resp.valid, Str("V"), Str("-"))
-         , btb.io.resp.bits.target
-         )
+      printf("btb, f0_npc=%c req_pc 0x%x, f1=%c targ=0x%x\n",
+             Mux(btb.io.req.valid, Str("V"), Str("-")),
+             io.s0_req.bits.addr,
+             Mux(btb.io.resp.valid, Str("V"), Str("-")),
+             btb.io.resp.bits.target
+             )
    }
 
    //************************************************

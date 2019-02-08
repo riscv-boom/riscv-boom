@@ -19,7 +19,7 @@ import chisel3.util._
 /**
  * Implements a realizable SeqMem that is in a square aspect ratio (rounded
  * to a pow2 for the depth). Used for transforming a tall, skinny aspect
- * ratio memory into a more rectangular shape. Currently, only supports 
+ * ratio memory into a more rectangular shape. Currently, only supports
  * a single R/W port.
  *
  * @param l_depth logical depth of the memory

@@ -56,10 +56,10 @@ class FFlagsResp(implicit p: Parameters) extends BoomBundle()(p)
 /**
  * IO bundle for a Execution Unit.
  *
- * @param writes_irf does this exe unit need a integer regfile port 
- * @param writes_ll_irf does this exe unit need a long latency integer regfile port  
- * @param writes_frf does this exe unit need a FP regfile port 
- * @param writes_ll_frf does this exe unit need a long latency FP regfile port  
+ * @param writes_irf does this exe unit need a integer regfile port
+ * @param writes_ll_irf does this exe unit need a long latency integer regfile port
+ * @param writes_frf does this exe unit need a FP regfile port
+ * @param writes_ll_frf does this exe unit need a long latency FP regfile port
  * @param num_bypass_ports number of bypass ports for the exe unit
  * @param data_width width of the data coming out of the execution unit
  */
@@ -110,38 +110,38 @@ class ExecutionUnitIO(
  * @param writes_ll_irf does this exe unit need a integer regfile port
  * @param writes_ll_frf does this exe unit need a integer regfile port
  * @param num_bypass_stages number of bypass ports for the exe unit
- * @param data_width width of the data coming out of the exe unit   
+ * @param data_width width of the data coming out of the exe unit
  * @param bypassable is the exe unit able to be bypassed
  * @param has_mem does the exe unit have a MemAddrCalcUnit
  * @param uses_csr_wport does the exe unit write to the CSRFile
  * @param has_br_unit does the exe unit have a branch unit
- * @param has_alu does the exe unit have a alu      
- * @param has_fpu does the exe unit have a fpu 
- * @param has_mul does the exe unit have a multiplier 
- * @param has_div does the exe unit have a divider      
- * @param has_fdiv does the exe unit have a FP divider     
+ * @param has_alu does the exe unit have a alu
+ * @param has_fpu does the exe unit have a fpu
+ * @param has_mul does the exe unit have a multiplier
+ * @param has_div does the exe unit have a divider
+ * @param has_fdiv does the exe unit have a FP divider
  * @param has_ifpu does the exe unit have a int to FP unit
  * @param has_fpiu does the exe unit have a FP to int unit
  */
-abstract class ExecutionUnit( val reads_irf     : Boolean       = false
-                            , val writes_irf    : Boolean       = false
-                            , val reads_frf     : Boolean       = false
-                            , val writes_frf    : Boolean       = false
-                            , val writes_ll_irf : Boolean       = false
-                            , val writes_ll_frf : Boolean       = false
-                            , val num_bypass_stages: Int
-                            , val data_width    : Int
-                            , val bypassable    : Boolean       = false // TODO make override def for code clarity
-                            , val has_mem       : Boolean       = false
-                            , val uses_csr_wport: Boolean       = false
-                            , val has_br_unit   : Boolean       = false
-                            , val has_alu       : Boolean       = false
-                            , val has_fpu       : Boolean       = false
-                            , val has_mul       : Boolean       = false
-                            , val has_div       : Boolean       = false
-                            , val has_fdiv      : Boolean       = false
-                            , val has_ifpu      : Boolean       = false
-                            , val has_fpiu      : Boolean       = false
+abstract class ExecutionUnit( val reads_irf     : Boolean       = false,
+                              val writes_irf    : Boolean       = false,
+                              val reads_frf     : Boolean       = false,
+                              val writes_frf    : Boolean       = false,
+                              val writes_ll_irf : Boolean       = false,
+                              val writes_ll_frf : Boolean       = false,
+                              val num_bypass_stages: Int,
+                              val data_width    : Int,
+                              val bypassable    : Boolean       = false, // TODO make override def for code clarity
+                              val has_mem       : Boolean       = false,
+                              val uses_csr_wport: Boolean       = false,
+                              val has_br_unit   : Boolean       = false,
+                              val has_alu       : Boolean       = false,
+                              val has_fpu       : Boolean       = false,
+                              val has_mul       : Boolean       = false,
+                              val has_div       : Boolean       = false,
+                              val has_fdiv      : Boolean       = false,
+                              val has_ifpu      : Boolean       = false,
+                              val has_fpiu      : Boolean       = false
                             )(implicit p: Parameters) extends BoomModule()(p)
 {
    val io = IO(new ExecutionUnitIO(writes_irf, writes_ll_irf, writes_frf, writes_ll_frf,
@@ -178,9 +178,9 @@ abstract class ExecutionUnit( val reads_irf     : Boolean       = false
  *
  * @param has_br_unit does the exe unit have a branch unit
  * @param shares_csr_wport does the exe unit write to the CSRFile
- * @param has_alu does the exe unit have a alu      
- * @param has_mul does the exe unit have a multiplier 
- * @param has_div does the exe unit have a divider      
+ * @param has_alu does the exe unit have a alu
+ * @param has_mul does the exe unit have a multiplier
+ * @param has_div does the exe unit have a divider
  * @param has_ifpu does the exe unit have a int to FP unit
  * @param has_mem does the exe unit have a MemAddrCalcUnit
  */
@@ -433,15 +433,15 @@ class ALUExeUnit(
    }
 
    assert ((PopCount(fu_units.map(_.io.resp.valid)) <= 1.U && !div_resp_val) ||
-          (PopCount(fu_units.map(_.io.resp.valid)) <= 2.U && (div_resp_val))
-      , "Multiple functional units are fighting over the write port.")
+           (PopCount(fu_units.map(_.io.resp.valid)) <= 2.U && (div_resp_val)),
+           "Multiple functional units are fighting over the write port.")
 }
 
 /**
  * FPU-only unit, with optional second write-port for ToInt micro-ops.
  *
- * @param has_fpu does the exe unit have a fpu 
- * @param has_fdiv does the exe unit have a FP divider     
+ * @param has_fpu does the exe unit have a fpu
+ * @param has_fdiv does the exe unit have a FP divider
  * @param has_fpiu does the exe unit have a FP to int unit
  */
 class FPUExeUnit(

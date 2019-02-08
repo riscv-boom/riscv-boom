@@ -85,10 +85,10 @@ class CtrlSigs extends Bundle
    def decode(inst: UInt, table: Iterable[(BitPat, List[BitPat])]) = {
       val decoder = freechips.rocketchip.rocket.DecodeLogic(inst, XDecode.decode_default, table)
       val sigs =
-         Seq(legal, fp_val, fp_single, uopc, iqtype, fu_code, dst_type, rs1_type
-         , rs2_type, frs3_en, imm_sel, is_load, is_store, is_amo
-         , is_fence, is_fencei, mem_cmd, mem_typ, wakeup_delay, bypassable
-         , br_or_jmp, is_jal, allocate_brtag, is_sys_pc2epc, inst_unique, flush_on_commit, csr_cmd)
+         Seq(legal, fp_val, fp_single, uopc, iqtype, fu_code, dst_type, rs1_type,
+             rs2_type, frs3_en, imm_sel, is_load, is_store, is_amo,
+             is_fence, is_fencei, mem_cmd, mem_typ, wakeup_delay, bypassable,
+             br_or_jmp, is_jal, allocate_brtag, is_sys_pc2epc, inst_unique, flush_on_commit, csr_cmd)
       sigs zip decoder map {case(s,d) => s := d}
       rocc := false.B
       this

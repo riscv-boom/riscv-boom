@@ -474,8 +474,8 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
 
    assert (!(dtlb.io.req.valid && exe_tlb_uop.is_fence), "Fence is pretending to talk to the TLB")
    assert (!(io.exe_resp.bits.mxcpt.valid && io.exe_resp.valid &&
-            !(io.exe_resp.bits.uop.ctrl.is_load || io.exe_resp.bits.uop.ctrl.is_sta))
-            , "A uop that's not a load or store-address is throwing a memory exception.")
+           !(io.exe_resp.bits.uop.ctrl.is_load || io.exe_resp.bits.uop.ctrl.is_sta)),
+           "A uop that's not a load or store-address is throwing a memory exception.")
 
    val tlb_miss = dtlb.io.req.valid && (dtlb.io.resp.miss || !dtlb.io.req.ready)
 
@@ -1382,39 +1382,39 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
       {
          val t_laddr = laq_addr(i)
          val t_saddr = saq_addr(i)
-         printf("         ldq[%d]=(%c%c%c%c%c%c%c%d) st_dep(%d,m=%x) 0x%x %c %c   saq[%d]=(%c%c%c%c%c%c%c) b:%x 0x%x -> 0x%x %c %c %c %c\n"
-            , i.U(MEM_ADDR_SZ.W)
-            , Mux(laq_allocated(i), Str("V"), Str("-"))
-            , Mux(laq_addr_val(i), Str("A"), Str("-"))
-            , Mux(laq_executed(i), Str("E"), Str("-"))
-            , Mux(laq_succeeded(i), Str("S"), Str("-"))
-            , Mux(laq_failure(i), Str("F"), Str("_"))
-            , Mux(laq_is_uncacheable(i), Str("U"), Str("_"))
-            , Mux(laq_forwarded_std_val(i), Str("X"), Str("_"))
-            , laq_forwarded_stq_idx(i)
-            , laq_uop(i).stq_idx // youngest dep-store
-            , laq_st_dep_mask(i)
-            , t_laddr(19,0)
+         printf("         ldq[%d]=(%c%c%c%c%c%c%c%d) st_dep(%d,m=%x) 0x%x %c %c   saq[%d]=(%c%c%c%c%c%c%c) b:%x 0x%x -> 0x%x %c %c %c %c\n",
+                i.U(MEM_ADDR_SZ.W),
+                Mux(laq_allocated(i), Str("V"), Str("-")),
+                Mux(laq_addr_val(i), Str("A"), Str("-")),
+                Mux(laq_executed(i), Str("E"), Str("-")),
+                Mux(laq_succeeded(i), Str("S"), Str("-")),
+                Mux(laq_failure(i), Str("F"), Str("_")),
+                Mux(laq_is_uncacheable(i), Str("U"), Str("_")),
+                Mux(laq_forwarded_std_val(i), Str("X"), Str("_")),
+                laq_forwarded_stq_idx(i),
+                laq_uop(i).stq_idx, // youngest dep-store
+                laq_st_dep_mask(i),
+                t_laddr(19,0),
 
-            , Mux(laq_head === i.U, Str("H"), Str(" "))
-            , Mux(laq_tail===  i.U, Str("T"), Str(" "))
+                Mux(laq_head === i.U, Str("H"), Str(" ")),
+                Mux(laq_tail===  i.U, Str("T"), Str(" ")),
 
-            , i.U(MEM_ADDR_SZ.W)
-            , Mux(stq_entry_val(i), Str("V"), Str("-"))
-            , Mux(saq_val(i), Str("A"), Str("-"))
-            , Mux(sdq_val(i), Str("D"), Str("-"))
-            , Mux(stq_committed(i), Str("C"), Str("-"))
-            , Mux(stq_executed(i), Str("E"), Str("-"))
-            , Mux(stq_succeeded(i), Str("S"), Str("-"))
-            , Mux(saq_is_virtual(i), Str("T"), Str("-"))
-            , stq_uop(i).br_mask
-            , t_saddr(19,0)
-            , sdq_data(i)
+                i.U(MEM_ADDR_SZ.W),
+                Mux(stq_entry_val(i), Str("V"), Str("-")),
+                Mux(saq_val(i), Str("A"), Str("-")),
+                Mux(sdq_val(i), Str("D"), Str("-")),
+                Mux(stq_committed(i), Str("C"), Str("-")),
+                Mux(stq_executed(i), Str("E"), Str("-")),
+                Mux(stq_succeeded(i), Str("S"), Str("-")),
+                Mux(saq_is_virtual(i), Str("T"), Str("-")),
+                stq_uop(i).br_mask,
+                t_saddr(19,0),
+                sdq_data(i),
 
-            , Mux(stq_head === i.U, Str("H"), Str(" "))
-            , Mux(stq_execute_head === i.U, Str("E"), Str(" "))
-            , Mux(stq_commit_head === i.U, Str("C"), Str(" "))
-            , Mux(stq_tail === i.U, Str("T"), Str(" "))
+                Mux(stq_head === i.U, Str("H"), Str(" ")),
+                Mux(stq_execute_head === i.U, Str("E"), Str(" ")),
+                Mux(stq_commit_head === i.U, Str("C"), Str(" ")),
+                Mux(stq_tail === i.U, Str("T"), Str(" "))
          )
       }}
 }

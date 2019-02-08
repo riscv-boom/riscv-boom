@@ -1215,9 +1215,9 @@ class BoomCore(implicit p: Parameters) extends BoomModule()(p)
 
       println("Whitespace padded: " + whitespace)
 
-      printf("--- Cyc=%d , ----------------- Ret: %d ----------------------------------"
-         , debug_tsc_reg
-         , debug_irt_reg & (0xffffff).U)
+      printf("--- Cyc=%d , ----------------- Ret: %d ----------------------------------",
+             debug_tsc_reg,
+             debug_irt_reg & (0xffffff).U)
 
       for (w <- 0 until decodeWidth)
       {
@@ -1233,11 +1233,11 @@ class BoomCore(implicit p: Parameters) extends BoomModule()(p)
 
       for (w <- 0 until decodeWidth)
       {
-         printf("(%c%c) " + "DASM(%x)" + " |  "
-            , Mux(io.ifu.fetchpacket.valid && dec_fbundle.uops(w).valid && !dec_finished_mask(w), Str("v"), Str("-"))
-            , Mux(dec_will_fire(w), Str("V"), Str("-"))
-            , dec_fbundle.uops(w).inst
-            )
+         printf("(%c%c) " + "DASM(%x)" + " |  ",
+                Mux(io.ifu.fetchpacket.valid && dec_fbundle.uops(w).valid && !dec_finished_mask(w), Str("v"), Str("-")),
+                Mux(dec_will_fire(w), Str("V"), Str("-")),
+                dec_fbundle.uops(w).inst
+                )
       }
 
       for (w <- 0 until decodeWidth)
@@ -1254,90 +1254,90 @@ class BoomCore(implicit p: Parameters) extends BoomModule()(p)
 
       for (w <- 0 until decodeWidth)
       {
-         printf(" (%c) " + "DASM(%x)" + " |  "
-            , Mux(rename_stage.io.ren2_mask(w), Str("V"), Str("-"))
-            , rename_stage.io.ren2_uops(w).inst
-            )
+         printf(" (%c) " + "DASM(%x)" + " |  ",
+                Mux(rename_stage.io.ren2_mask(w), Str("V"), Str("-")),
+                rename_stage.io.ren2_uops(w).inst
+                )
       }
 
       printf(") fin(%x)\n", dec_finished_mask)
       for (w <- 0 until decodeWidth)
       {
-         printf("        [ISA:%d,%d,%d,%d] [Phs:%d(%c)%d[%c](%c)%d[%c](%c)%d[%c](%c)] "
-            , dis_uops(w).ldst
-            , dis_uops(w).lrs1
-            , dis_uops(w).lrs2
-            , dis_uops(w).lrs3
-            , dis_uops(w).pdst
-            , Mux(dis_uops(w).dst_rtype   === RT_FIX, Str("X")
-              , Mux(dis_uops(w).dst_rtype === RT_X  , Str("-")
-              , Mux(dis_uops(w).dst_rtype === RT_FLT, Str("f")
-              , Mux(dis_uops(w).dst_rtype === RT_PAS, Str("C"), Str("?")))))
-            , dis_uops(w).pop1
-            , Mux(rename_stage.io.ren2_uops(w).prs1_busy, Str("B"), Str("R"))
-            , Mux(dis_uops(w).lrs1_rtype    === RT_FIX, Str("X")
-               , Mux(dis_uops(w).lrs1_rtype === RT_X  , Str("-")
-               , Mux(dis_uops(w).lrs1_rtype === RT_FLT, Str("f")
-               , Mux(dis_uops(w).lrs1_rtype === RT_PAS, Str("C"), Str("?")))))
-            , dis_uops(w).pop2
-            , Mux(rename_stage.io.ren2_uops(w).prs2_busy, Str("B"), Str("R"))
-            , Mux(dis_uops(w).lrs2_rtype    === RT_FIX, Str("X")
-               , Mux(dis_uops(w).lrs2_rtype === RT_X  , Str("-")
-               , Mux(dis_uops(w).lrs2_rtype === RT_FLT, Str("f")
-               , Mux(dis_uops(w).lrs2_rtype === RT_PAS, Str("C"), Str("?")))))
-            , dis_uops(w).pop3
-            , Mux(rename_stage.io.ren2_uops(w).prs3_busy, Str("B"), Str("R"))
-            , Mux(dis_uops(w).frs3_en, Str("f"), Str("-"))
-            )
+         printf("        [ISA:%d,%d,%d,%d] [Phs:%d(%c)%d[%c](%c)%d[%c](%c)%d[%c](%c)] ",
+                dis_uops(w).ldst,
+                dis_uops(w).lrs1,
+                dis_uops(w).lrs2,
+                dis_uops(w).lrs3,
+                dis_uops(w).pdst,
+                Mux(dis_uops(w).dst_rtype   === RT_FIX, Str("X"),
+                  Mux(dis_uops(w).dst_rtype === RT_X  , Str("-"),
+                  Mux(dis_uops(w).dst_rtype === RT_FLT, Str("f"),
+                  Mux(dis_uops(w).dst_rtype === RT_PAS, Str("C"), Str("?"))))),
+                dis_uops(w).pop1,
+                Mux(rename_stage.io.ren2_uops(w).prs1_busy, Str("B"), Str("R")),
+                Mux(dis_uops(w).lrs1_rtype    === RT_FIX, Str("X"),
+                   Mux(dis_uops(w).lrs1_rtype === RT_X  , Str("-"),
+                   Mux(dis_uops(w).lrs1_rtype === RT_FLT, Str("f"),
+                   Mux(dis_uops(w).lrs1_rtype === RT_PAS, Str("C"), Str("?"))))),
+                dis_uops(w).pop2,
+                Mux(rename_stage.io.ren2_uops(w).prs2_busy, Str("B"), Str("R")),
+                Mux(dis_uops(w).lrs2_rtype    === RT_FIX, Str("X"),
+                   Mux(dis_uops(w).lrs2_rtype === RT_X  , Str("-"),
+                   Mux(dis_uops(w).lrs2_rtype === RT_FLT, Str("f"),
+                   Mux(dis_uops(w).lrs2_rtype === RT_PAS, Str("C"), Str("?"))))),
+                dis_uops(w).pop3,
+                Mux(rename_stage.io.ren2_uops(w).prs3_busy, Str("B"), Str("R")),
+                Mux(dis_uops(w).frs3_en, Str("f"), Str("-"))
+                )
       }
 
       if (DEBUG_PRINTF_ROB)
       {
-         printf("\n) ctate: (%c: %c %c %c %c %c %c) BMsk:%x Mode:%c\n"
-         , Mux(rob.io.debug.state === 0.U, Str("R"),
-           Mux(rob.io.debug.state === 1.U, Str("N"),
-           Mux(rob.io.debug.state === 2.U, Str("B"),
-           Mux(rob.io.debug.state === 3.U, Str("W"),
-                                               Str(" ")))))
-         , Mux(rob.io.ready,Str("_"), Str("!"))
-         , Mux(lsu.io.laq_full, Str("L"), Str("_"))
-         , Mux(lsu.io.stq_full, Str("S"), Str("_"))
-         , Mux(rob.io.flush.valid, Str("F"), Str(" "))
-         , Mux(branch_mask_full.reduce(_|_), Str("B"), Str(" "))
-         , Mux(dc_shim.io.core.req.ready, Str("R"), Str("B"))
-         , dec_brmask_logic.io.debug.branch_mask
-         , Mux(csr.io.status.prv === (0x3).U, Str("M"),
-           Mux(csr.io.status.prv === (0x0).U, Str("U"),
-           Mux(csr.io.status.prv === (0x1).U, Str("S"),  //2 is H
-                                                 Str("?"))))
-         )
+         printf("\n) ctate: (%c: %c %c %c %c %c %c) BMsk:%x Mode:%c\n",
+                Mux(rob.io.debug.state === 0.U, Str("R"),
+                Mux(rob.io.debug.state === 1.U, Str("N"),
+                Mux(rob.io.debug.state === 2.U, Str("B"),
+                Mux(rob.io.debug.state === 3.U, Str("W"),
+                                                    Str(" "))))),
+                Mux(rob.io.ready,Str("_"), Str("!")),
+                Mux(lsu.io.laq_full, Str("L"), Str("_")),
+                Mux(lsu.io.stq_full, Str("S"), Str("_")),
+                Mux(rob.io.flush.valid, Str("F"), Str(" ")),
+                Mux(branch_mask_full.reduce(_|_), Str("B"), Str(" ")),
+                Mux(dc_shim.io.core.req.ready, Str("R"), Str("B")),
+                dec_brmask_logic.io.debug.branch_mask,
+                Mux(csr.io.status.prv === (0x3).U, Str("M"),
+                Mux(csr.io.status.prv === (0x0).U, Str("U"),
+                Mux(csr.io.status.prv === (0x1).U, Str("S"),  //2 is H
+                                                      Str("?"))))
+                )
       }
 
-      printf("Exct(%c%d) Commit(%x) fl: 0x%x (%d) is: 0x%x (%d)\n"
-         , Mux(rob.io.com_xcpt.valid, Str("E"), Str("-"))
-         , rob.io.com_xcpt.bits.cause
-         , rob.io.commit.valids.asUInt
-         , rename_stage.io.debug.ifreelist
-         , PopCount(rename_stage.io.debug.ifreelist)
-         , rename_stage.io.debug.iisprlist
-         , PopCount(rename_stage.io.debug.iisprlist)
-         )
+      printf("Exct(%c%d) Commit(%x) fl: 0x%x (%d) is: 0x%x (%d)\n",
+             Mux(rob.io.com_xcpt.valid, Str("E"), Str("-")),
+             rob.io.com_xcpt.bits.cause,
+             rob.io.commit.valids.asUInt,
+             rename_stage.io.debug.ifreelist,
+             PopCount(rename_stage.io.debug.ifreelist),
+             rename_stage.io.debug.iisprlist,
+             PopCount(rename_stage.io.debug.iisprlist)
+             )
 
-      printf("                                      fl: 0x%x (%d) is: 0x%x (%d)\n"
-         , rename_stage.io.debug.ffreelist
-         , PopCount(rename_stage.io.debug.ffreelist)
-         , rename_stage.io.debug.fisprlist
-         , PopCount(rename_stage.io.debug.fisprlist)
-         )
+      printf("                                      fl: 0x%x (%d) is: 0x%x (%d)\n",
+             rename_stage.io.debug.ffreelist,
+             PopCount(rename_stage.io.debug.ffreelist),
+             rename_stage.io.debug.fisprlist,
+             PopCount(rename_stage.io.debug.fisprlist)
+             )
 
       // branch unit
-      printf("                          Branch Unit: %c,%c,%d  NPC=%d,0x%x\n"
-         , Mux(br_unit.brinfo.valid,Str("V"), Str(" "))
-         , Mux(br_unit.brinfo.mispredict, Str("M"), Str(" "))
-         , br_unit.brinfo.taken
-         , exe_units(brunit_idx).io.get_ftq_pc.next_val
-         , exe_units(brunit_idx).io.get_ftq_pc.next_pc(19,0)
-      )
+      printf("                          Branch Unit: %c,%c,%d  NPC=%d,0x%x\n",
+             Mux(br_unit.brinfo.valid,Str("V"), Str(" ")),
+             Mux(br_unit.brinfo.mispredict, Str("M"), Str(" ")),
+             br_unit.brinfo.taken,
+             exe_units(brunit_idx).io.get_ftq_pc.next_val,
+             exe_units(brunit_idx).io.get_ftq_pc.next_pc(19,0)
+             )
 
       // Rename Map Tables / ISA Register File
       val xpr_to_string =
