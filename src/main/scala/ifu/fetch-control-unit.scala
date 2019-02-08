@@ -460,7 +460,7 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
       & ~f3_kill_mask
       & btb_mask
       & bpd_mask
-      & f3_valid_mask.toBits)
+      & f3_valid_mask.asUInt())
 
 
    val f3_taken = WireInit(false.B) // was a branch taken in the F3 stage?

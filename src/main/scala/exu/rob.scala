@@ -956,7 +956,6 @@ class Rob(
       "\n   Rob Entries    : " + num_rob_entries +
       "\n   Rob Rows       : " + num_rob_rows +
       "\n   Rob Row size   : " + log2Ceil(num_rob_rows) +
-      "\n   log2UP(width)  : " + log2Ceil(width) +
       "\n   log2Ceil(width): " + log2Ceil(width) +
       "\n   FPU FFlag Ports: " + num_fpu_ports
 }
