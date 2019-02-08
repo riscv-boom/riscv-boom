@@ -56,12 +56,12 @@ class RenameMapTableElementIo(val pl_width: Int)(implicit p: Parameters) extends
  * Element in the Rename Map Table. Keeps track of the idx of the physical register, and extra data
  * to recover from branches
  *
- * @param pipeline_width pipeline width
+ * @param pl_width pipeline width
  * @param always_zero the element is always zero (used for x0)
  */
-class RenameMapTableElement(pipeline_width: Int, always_zero: Boolean)(implicit p: Parameters) extends BoomModule()(p)
+class RenameMapTableElement(pl_width: Int, always_zero: Boolean)(implicit p: Parameters) extends BoomModule()(p)
 {
-   val io = IO(new RenameMapTableElementIo(pipeline_width))
+   val io = IO(new RenameMapTableElementIo(pl_width))
 
    // Note: I don't use a "valid" signal, since it's annoying to deal with and
    // only necessary until the map tables are filled. So instead I reset the
@@ -85,7 +85,7 @@ class RenameMapTableElement(pipeline_width: Int, always_zero: Boolean)(implicit 
    // 2nd, is older instructions in same bundle
    // 3rd, current element
 
-   for (w <- 0 until pipeline_width)
+   for (w <- 0 until pl_width)
    {
       var elm_cases = Array((false.B, 0.U(PREG_SZ.W)))
 
