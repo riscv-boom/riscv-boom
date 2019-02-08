@@ -272,7 +272,7 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
 
    when (io.restore_history.valid)
    {
-      val ridx = Mux(io.flush.valid, io.com_ftq_idx, io.brinfo.ftq_idx)
+      val ridx = Mux(io.flush.valid, io.flush.bits.ftq_idx, io.brinfo.ftq_idx)
       io.restore_history.bits.history := ram(ridx).history
    }
 
