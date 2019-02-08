@@ -10,9 +10,6 @@
 // Fetch Monitor
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
-//
-// Monitor a vector of MicroOps and their PCs and verify it is a valid sequence.
-// NOTE: I should not be synthesized!
 
 package boom.ifu
 
@@ -24,6 +21,10 @@ import freechips.rocketchip.config.Parameters
 
 import boom.common._
 
+/**
+ * A class to monitor a vector of MicroOps and their PCs and verify it is a valid sequence.
+ * NOTE: I should not be synthesized!
+ */
 class FetchMonitor(implicit p: Parameters) extends BoomModule()(p)
    with HasBoomCoreParameters
 {

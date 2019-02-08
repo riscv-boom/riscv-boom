@@ -37,6 +37,10 @@ import boom.common._
 import boom.exu._
 import boom.util.{AgePriorityEncoder, ElasticReg}
 
+/**
+ * Bundle passed into the FetchBuffer and used to combine multiple
+ * relevant signals together.
+ */
 class FetchBundle(implicit p: Parameters) extends BoomBundle()(p)
 {
    val pc            = UInt(vaddrBitsExtended.W)
@@ -56,6 +60,13 @@ class FetchBundle(implicit p: Parameters) extends BoomBundle()(p)
    val debug_events  = Vec(fetchWidth, new DebugStageEvents)
 }
 
+/**
+ * Fetch control unit that interfaces with the branch predictor pipeline externally.
+ * This holds and manages things like the Fetch Target Queue, Fetch Buffer,
+ * Branch Checker, Branch Decoder, and more.
+ *
+ * @param fetch_width # of instructions fetched
+ */
 class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p)
    with HasL1ICacheBankedParameters
 {

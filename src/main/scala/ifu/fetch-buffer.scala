@@ -24,12 +24,21 @@ import freechips.rocketchip.config.Parameters
 
 import boom.common._
 
+/**
+ * Bundle that is made up of converted MicroOps from the Fetch Bundle
+ * input to the Fetch Buffer. This is handed to the Decode stage.
+ */
 class FetchBufferResp(implicit p: Parameters) extends BoomBundle()(p)
 {
    val uops = Vec(decodeWidth, new MicroOp())
 }
 
-// num_entries: effectively the number of full-sized fetch packets we can hold.
+/**
+ * Buffer to hold fetched packets and convert then into a vector of MicroOps
+ * to give the Decode stage
+ *
+ * @param num_entries effectively the number of full-sized fetch packets we can hold.
+ */
 class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule()(p)
    with HasBoomCoreParameters
    with HasL1ICacheBankedParameters
@@ -135,7 +144,6 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule()
 //            io.enq.bits.pc, first_index, io.enq.bits.mask, compact_mask(i), selects_oh, invalid)
 //      }
    }
-
 
    // all enqueuing uops have been compacted.
    // How many incoming uops are there?
@@ -251,4 +259,3 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule()
    assert (count >= deq_count, "[fetchbuffer] Trying to dequeue more uops than are available.")
    assert (!(count === 0.U && write_ptr =/= read_ptr), "[fetchbuffer] pointers should match if count is zero.")
 }
-

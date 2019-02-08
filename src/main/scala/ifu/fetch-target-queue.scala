@@ -31,10 +31,18 @@ import boom.common._
 import boom.exu._
 import boom.util._
 
+/**
+ * Parameters used in configs for the FTQ
+ *
+ * @param nEntries # of entries in the FTQ
+ */
 case class FtqParameters(
    nEntries: Int = 16
 )
 
+/**
+ * Bundle to add to the FTQ RAM and to be used as the pass in IO
+ */
 class FTQBundle(implicit p: Parameters) extends BoomBundle()(p)
 {
    val fetch_pc = UInt(vaddrBitsExtended.W) // TODO compress out high-order bits
@@ -43,10 +51,12 @@ class FTQBundle(implicit p: Parameters) extends BoomBundle()(p)
    val bpd_info = UInt(BPD_INFO_SIZE.W)
 }
 
-// Initially, store a random branch entry for BIM (set cfi_type==branch).
-// If a branch is resolved that matches the stored BIM entry, set "executed" to high.
-// Otherwise, if a branch is resolved and mispredicted, track the oldest
-// mispredicted cfi instruction for a given fetch entry.
+/**
+ * Initially, store a random branch entry for BIM (set cfi_type==branch).
+ * If a branch is resolved that matches the stored BIM entry, set "executed" to high.
+ * Otherwise, if a branch is resolved and mispredicted, track the oldest
+ * mispredicted cfi instruction for a given fetch entry.
+ */
 class CfiMissInfo(implicit p: Parameters) extends BoomBundle()(p)
 {
    val executed = Bool()      // Was the branch stored here for the BIM executed?
@@ -58,8 +68,10 @@ class CfiMissInfo(implicit p: Parameters) extends BoomBundle()(p)
    val cfi_type = CfiType()   // What kind of instruction is stored here?
 }
 
-// provide a port for a FunctionalUnit to get the PC of an instruction.
-// And for JALRs, the PC of the next instruction.
+/**
+ * IO to provide a port for a FunctionalUnit to get the PC of an instruction.
+ * And for JALRs, the PC of the next instruction.
+ */
 class GetPCFromFtqIO(implicit p: Parameters) extends BoomBundle()(p)
 {
    val ftq_idx  = Input(UInt(log2Ceil(ftqSz).W))
@@ -69,6 +81,12 @@ class GetPCFromFtqIO(implicit p: Parameters) extends BoomBundle()(p)
    val next_pc  = Output(UInt(vaddrBitsExtended.W))
 }
 
+/**
+ * Queue to store the fetch PC and other relevant BPD signals that are inflight in the
+ * processor.
+ *
+ * @param num_entries # of entries in the FTQ
+ */
 class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomModule()(p)
    with HasBoomCoreParameters
 {
@@ -93,6 +111,7 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
       val flush = Flipped(Valid(new CommitExceptionSignals()))
       // Redirect the frontend as we see fit (due to ROB/flush interactions).
       val take_pc = Valid(new PCReq())
+
       // Tell the CSRFile what the fetch-pc at the FTQ's Commit Head is.
       // Still need the low-order bits of the PC from the ROB to know the true Commit PC.
       val com_ftq_idx = Input(UInt(log2Ceil(ftqSz).W))
@@ -142,10 +161,12 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
      cfi_info(enq_ptr.value) := initCfiInfo(io.enq.bits.bim_info.br_seen, io.enq.bits.bim_info.cfi_idx)
      enq_ptr.inc()
    }
+
    when (do_deq)
    {
      deq_ptr.inc()
    }
+
    when (do_enq =/= do_deq)
    {
      maybe_full := do_enq
@@ -351,4 +372,3 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
    val debug_deq_ptr = deq_ptr.value
    dontTouch(debug_deq_ptr)
 }
-
