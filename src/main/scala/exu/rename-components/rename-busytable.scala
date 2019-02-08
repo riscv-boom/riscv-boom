@@ -25,16 +25,16 @@ import boom.util._
  * IO bundle to interact with the busy table.
  * Internally bypasses newly busy registers (.write) to the read ports (.read)
  *
- * @param pipeline_width pipeline width
+ * @param pl_width pipeline width
  * @param num_pregs number of physical registers
  * @param num_read_ports number of read ports to the regfile
  * @param num_wb_ports number of writeback ports to the regfile
  */
 class BusyTableIo(
-   val pipeline_width:Int,
+   val pl_width: Int,
    val num_pregs: Int,
-   val num_read_ports:Int,
-   val num_wb_ports:Int)
+   val num_read_ports: Int,
+   val num_wb_ports: Int)
    (implicit p: Parameters) extends BoomBundle()(p)
 {
    private val preg_sz = log2Ceil(num_pregs)
@@ -43,11 +43,11 @@ class BusyTableIo(
    val p_rs           = Input(Vec(num_read_ports, UInt(preg_sz.W)))
    val p_rs_busy      = Output(Vec(num_read_ports, Bool()))
 
-   def prs(i:Int, w:Int):UInt      = p_rs     (w+i*pipeline_width)
-   def prs_busy(i:Int, w:Int):Bool = p_rs_busy(w+i*pipeline_width)
+   def prs(i:Int, w:Int):UInt      = p_rs     (w+i*pl_width)
+   def prs_busy(i:Int, w:Int):Bool = p_rs_busy(w+i*pl_width)
 
    // marking new registers as busy
-   val allocated_pdst = Flipped(Vec(pipeline_width, new ValidIO(UInt(preg_sz.W))))
+   val allocated_pdst = Flipped(Vec(pl_width, new ValidIO(UInt(preg_sz.W))))
 
    // marking registers being written back as unbusy
    val unbusy_pdst    = Flipped(Vec(num_wb_ports, new ValidIO(UInt(preg_sz.W))))
@@ -61,19 +61,19 @@ class BusyTableIo(
  * That bypass check should be done elsewhere (this is to get it off the
  * critical path).
  *
- * @param pipeline_width pipeline width
+ * @param pl_width pipeline width
  * @param num_pregs number of physical registers
  * @param num_read_ports number of read ports to the regfile
  * @param num_wb_ports number of writeback ports to the regfile
  */
 class BusyTableHelper(
-   pipeline_width:Int,
+   pl_width: Int,
    num_pregs: Int,
-   num_read_ports:Int,
-   num_wb_ports:Int)
+   num_read_ports: Int,
+   num_wb_ports: Int)
    (implicit p: Parameters) extends BoomModule()(p)
 {
-   val io = IO(new BusyTableIo(pipeline_width, num_pregs, num_read_ports, num_wb_ports))
+   val io = IO(new BusyTableIo(pl_width, num_pregs, num_read_ports, num_wb_ports))
 
    def BUSY     = true.B
    def NOT_BUSY = false.B
@@ -89,7 +89,7 @@ class BusyTableHelper(
       }
    }
 
-   for (w <- 0 until pipeline_width)
+   for (w <- 0 until pl_width)
    {
       when (io.allocated_pdst(w).valid && io.allocated_pdst(w).bits =/= 0.U)
       {
@@ -128,11 +128,11 @@ class BusyTableOutput extends Bundle
  * @param num_wb_ports number of writeback ports to the regfile
  */
 class BusyTable(
-   pl_width:Int,
+   pl_width: Int,
    rtype: BigInt,
    num_pregs: Int,
-   num_read_ports:Int,
-   num_wb_ports:Int)
+   num_read_ports: Int,
+   num_wb_ports: Int)
    (implicit p: Parameters) extends BoomModule()(p)
 {
    private val preg_sz = log2Ceil(num_pregs)
@@ -155,7 +155,7 @@ class BusyTable(
    })
 
    val busy_table = Module(new BusyTableHelper(
-      pipeline_width = pl_width,
+      pl_width = pl_width,
       num_pregs = num_pregs,
       num_read_ports = num_read_ports,
       num_wb_ports = num_wb_ports))

@@ -21,15 +21,15 @@ import boom.util._
 /**
  * IO bundle for accessing the free list
  *
- * @param num_phys_registers number of physical registers
+ * @param num_pregs number of physical registers
  * @param pl_width pipeline width (dispatch group size)
  */
 class FreeListIo(
-   val num_phys_registers: Int,
+   val num_pregs: Int,
    val pl_width: Int)
 (implicit p: Parameters) extends BoomBundle()(p)
 {
-   private val preg_sz = log2Ceil(num_phys_registers)
+   private val preg_sz = log2Ceil(num_pregs)
 
    val req_preg_vals = Input(Vec(pl_width, Bool()))
    val req_pregs     = Output(Vec(pl_width, UInt(preg_sz.W))) // TODO: Confirm functionality
@@ -62,13 +62,13 @@ class FreeListIo(
    val com_wens       = Input(Vec(pl_width, Bool()))
    val com_uops       = Input(Vec(pl_width, new MicroOp()))
 
-   val debug = Output(new DebugFreeListIO(num_phys_registers))
+   val debug = Output(new DebugFreeListIO(num_pregs))
 }
 
-class DebugFreeListIO(val num_phys_registers: Int) extends Bundle
+class DebugFreeListIO(val num_pregs: Int) extends Bundle
 {
-   val freelist = Bits(num_phys_registers.W)
-   val isprlist = Bits(num_phys_registers.W)
+   val freelist = Bits(num_pregs.W)
+   val isprlist = Bits(num_pregs.W)
 }
 
 /**
@@ -80,32 +80,32 @@ class DebugFreeListIO(val num_phys_registers: Int) extends Bundle
  * NOTE: we never give out p0 -- that is the "unitialized" state of the map-table,
  * and the pipeline will give any reader of p0 0x0 as read data.
  *
- * @param num_phys_registers number of physical registers
+ * @param num_pregs number of physical registers
  * @param pl_width pipeline width (dispatch group size)
  */
 class RenameFreeListHelper(
-   num_phys_registers: Int,
+   num_pregs: Int,
    pl_width: Int)
    (implicit p: Parameters) extends BoomModule()(p)
 {
-   val io = IO(new FreeListIo(num_phys_registers, pl_width))
+   val io = IO(new FreeListIo(num_pregs, pl_width))
 
    // ** FREE LIST TABLE ** //
-   val free_list = RegInit(~(1.U(num_phys_registers.W)))
+   val free_list = RegInit(~(1.U(num_pregs.W)))
 
    // track all allocations that have occurred since branch passed by
    // can quickly reset pipeline on branch mispredict
-   val allocation_lists = Reg(Vec(MAX_BR_COUNT, Bits(num_phys_registers.W)))
+   val allocation_lists = Reg(Vec(MAX_BR_COUNT, Bits(num_pregs.W)))
 
    // TODO why is this a Vec? can I do this all on one bit-vector?
-   val enq_mask = Wire(Vec(pl_width, Bits(num_phys_registers.W)))
+   val enq_mask = Wire(Vec(pl_width, Bits(num_pregs.W)))
 
    // ------------------------------------------
    // find new,free physical registers
 
-   val requested_pregs_oh_array = Array.fill(pl_width,num_phys_registers){false.B}
-   val requested_pregs_oh       = Wire(Vec(pl_width, Bits(num_phys_registers.W)))
-   val requested_pregs          = Wire(Vec(pl_width, UInt(log2Ceil(num_phys_registers).W)))
+   val requested_pregs_oh_array = Array.fill(pl_width,num_pregs){false.B}
+   val requested_pregs_oh       = Wire(Vec(pl_width, Bits(num_pregs.W)))
+   val requested_pregs          = Wire(Vec(pl_width, UInt(log2Ceil(num_pregs).W)))
    var allocated                = Wire(Vec(pl_width, Bool())) // did each inst get allocated a register?
 
    // init
@@ -116,7 +116,7 @@ class RenameFreeListHelper(
 
 
    // don't give out p0
-   for (i <- 1 until num_phys_registers)
+   for (i <- 1 until num_pregs)
    {
       val next_allocated = Wire(Vec(pl_width, Bool()))
       var can_allocate = free_list(i)
@@ -141,15 +141,15 @@ class RenameFreeListHelper(
 
    // ------------------------------------------
    // Calculate next Free List
-   val req_free_list = Wire(Bits(num_phys_registers.W))
-   val enq_free_list = Wire(Bits(num_phys_registers.W))
+   val req_free_list = Wire(Bits(num_pregs.W))
+   val enq_free_list = Wire(Bits(num_pregs.W))
    req_free_list := free_list
    enq_free_list := free_list
 
    // ** Set requested PREG to "Not Free" ** //
 
    // bit vector of newly allocated physical registers
-   var just_allocated_mask = 0.U(num_phys_registers.W)
+   var just_allocated_mask = 0.U(num_pregs.W)
 
    // track which allocation_lists just got cleared out by a branch,
    // to enforce a write priority to allocation_lists()
@@ -183,7 +183,7 @@ class RenameFreeListHelper(
    // ** Set enqueued PREG to "Free" ** //
    for (w <- 0 until pl_width)
    {
-      enq_mask(w) := 0.U(num_phys_registers.W)
+      enq_mask(w) := 0.U(num_pregs.W)
       when (io.enq_vals(w))
       {
          enq_mask(w) := 1.U << io.enq_pregs(w)
@@ -203,7 +203,7 @@ class RenameFreeListHelper(
 
    // Handle Misprediction
    //merge misspeculated allocation_list with free_list
-   val allocation_list = Wire(Bits(num_phys_registers.W))
+   val allocation_list = Wire(Bits(num_pregs.W))
    allocation_list := allocation_lists(io.br_mispredict_tag)
 
    when (io.br_mispredict_val)
@@ -224,14 +224,14 @@ class RenameFreeListHelper(
    // allowing for a single-cycle reset of the rename state on a pipeline flush.
    if (ENABLE_COMMIT_MAP_TABLE)
    {
-      val committed_free_list = RegInit(~(1.U(num_phys_registers.W)))
+      val committed_free_list = RegInit(~(1.U(num_pregs.W)))
 
-      val com_mask = Wire(Vec(pl_width,   Bits(num_phys_registers.W)))
-      val stale_mask = Wire(Vec(pl_width, Bits(num_phys_registers.W)))
+      val com_mask = Wire(Vec(pl_width,   Bits(num_pregs.W)))
+      val stale_mask = Wire(Vec(pl_width, Bits(num_pregs.W)))
       for (w <- 0 until pl_width)
       {
-         com_mask(w) :=   0.U(num_phys_registers.W)
-         stale_mask(w) := 0.U(num_phys_registers.W)
+         com_mask(w) :=   0.U(num_pregs.W)
+         stale_mask(w) := 0.U(num_pregs.W)
          when (io.com_wens(w))
          {
             com_mask(w) := 1.U << io.com_uops(w).pdst
@@ -262,15 +262,15 @@ class RenameFreeListHelper(
  *
  * @param pl_width pipeline width (dispatch group size)
  * @param rtype type of register the free list is operating on
- * @param num_phys_registers number of physical registers
+ * @param num_pregs number of physical registers
  */
 class RenameFreeList(
    pl_width: Int,
    rtype: BigInt,
-   num_phys_registers: Int)
+   num_pregs: Int)
    (implicit p: Parameters) extends BoomModule()(p)
 {
-   private val preg_sz = log2Ceil(num_phys_registers)
+   private val preg_sz = log2Ceil(num_pregs)
 
    val io = IO(new Bundle
    {
@@ -294,12 +294,12 @@ class RenameFreeList(
       val can_allocate     = Output(Vec(pl_width, Bool()))
       val req_pregs        = Output(Vec(pl_width, UInt(preg_sz.W)))
 
-      val debug            = Output(new DebugFreeListIO(num_phys_registers))
+      val debug            = Output(new DebugFreeListIO(num_pregs))
       val debug_rob_empty  = Input(Bool())
    })
 
    val freelist = Module(new RenameFreeListHelper(
-      num_phys_registers,
+      num_pregs,
       pl_width))
 
    freelist.io.br_mispredict_val := io.brinfo.mispredict
@@ -344,7 +344,7 @@ class RenameFreeList(
    io.debug := freelist.io.debug
 
    when (io.debug_rob_empty) {
-      assert (PopCount(freelist.io.debug.freelist) >= (num_phys_registers - 32).U,
+      assert (PopCount(freelist.io.debug.freelist) >= (num_pregs - 32).U,
          "[freelist] We're leaking physical registers")
    }
 }
