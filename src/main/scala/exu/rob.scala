@@ -79,7 +79,6 @@ class RobIo(
 
    // Communicate exceptions to the CSRFile
    val com_xcpt = Valid(new CommitExceptionSignals())
-   val csr_eret = Input(Bool())
 
    // Let the CSRFile stall us (e.g., wfi).
    val csr_stall = Input(Bool())
@@ -535,27 +534,34 @@ class Rob(
       rob_head_vals.reduce(_|_) && PriorityMux(rob_head_vals, io.commit.uops.map{u => u.is_sys_pc2epc})
 
    val refetch_inst = exception_thrown || insn_sys_pc2epc
-   io.com_xcpt.bits.ftq_idx   := PriorityMux(rob_head_vals, io.commit.uops.map{u => u.ftq_idx})
-   io.com_xcpt.bits.edge_inst := PriorityMux(rob_head_vals, io.commit.uops.map{u => u.edge_inst})
-   io.com_xcpt.bits.is_rvc    := PriorityMux(rob_head_vals, io.commit.uops.map{u => u.is_rvc})
-   io.com_xcpt.bits.pc_lob    := PriorityMux(rob_head_vals, io.commit.uops.map{u => u.pc_lob})
+   val com_xcpt_uop = PriorityMux(rob_head_vals, io.commit.uops)
+   io.com_xcpt.bits.ftq_idx   := com_xcpt_uop.ftq_idx
+   io.com_xcpt.bits.edge_inst := com_xcpt_uop.edge_inst
+   io.com_xcpt.bits.is_rvc    := com_xcpt_uop.is_rvc
+   io.com_xcpt.bits.pc_lob    := com_xcpt_uop.pc_lob
 
-   val flush_val =
-      exception_thrown ||
-      io.csr_eret ||
-      (Range(0,width).map{i => io.commit.valids(i) && io.commit.uops(i).flush_on_commit}).reduce(_|_)
+   val flush_commit_mask = Range(0,width).map{i => io.commit.valids(i) && io.commit.uops(i).flush_on_commit}
+   val flush_commit = flush_commit_mask.reduce(_|_)
+   val flush_val = exception_thrown || flush_commit
+
+   assert(!(PopCount(flush_commit_mask) > 1.U),
+      "[rob] Can't commit multiple flush_on_commit instructions on one cycle")
+
+   val flush_uop = Mux(exception_thrown, com_xcpt_uop, Mux1H(flush_commit_mask, io.commit.uops))
 
    // delay a cycle for critical path considerations
    io.flush.valid          := RegNext(flush_val, init=false.B)
-   io.flush.bits.ftq_idx   := RegNext(io.com_xcpt.bits.ftq_idx)
-   io.flush.bits.pc_lob    := RegNext(io.com_xcpt.bits.pc_lob)
-   io.flush.bits.edge_inst := RegNext(io.com_xcpt.bits.edge_inst)
-   io.flush.bits.is_rvc    := RegNext(io.com_xcpt.bits.is_rvc)
-   io.flush.bits.flush_typ :=
-      RegNext(FlushTypes.getType(flush_val, io.com_xcpt.valid, io.csr_eret, refetch_inst))
+   io.flush.bits.ftq_idx   := RegNext(flush_uop.ftq_idx)
+   io.flush.bits.pc_lob    := RegNext(flush_uop.pc_lob)
+   io.flush.bits.edge_inst := RegNext(flush_uop.edge_inst)
+   io.flush.bits.is_rvc    := RegNext(flush_uop.is_rvc)
+   io.flush.bits.flush_typ := RegNext(FlushTypes.getType(flush_val,
+                                                         exception_thrown && !is_mini_exception,
+                                                         flush_commit && flush_uop.uopc === uopERET,
+                                                         refetch_inst))
 
    val com_lsu_misspec = RegNext(exception_thrown && io.com_xcpt.bits.cause === MINI_EXCEPTION_MEM_ORDERING)
-   assert (!(com_lsu_misspec && !io.flush.valid), "[rob] pipeline flush not be excercised during a LSU misspeculation")
+   assert (!(com_lsu_misspec && !io.flush.valid), "[rob] pipeline flush not be exercised during a LSU misspeculation")
 
    // -----------------------------------------------
    // FP Exceptions

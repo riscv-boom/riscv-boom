@@ -421,15 +421,26 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
    // We must redirect the PC the cycle after playing the SFENCE game.
    io.ifu.flush_take_pc     := rob.io.flush.valid || RegNext(lsu.io.exe_resp.bits.sfence.valid)
-   io.ifu.flush_pc          := RegNext(csr.io.evec)
+
+   // TODO FIX THIS HACK
+   // The below code works because of two quirks with the flush mechanism
+   //  1 ) All flush_on_commit instructions are also is_unique,
+   //      In the future, this constraint will be relaxed.
+   //  2 ) We send out flush signals one cycle after the commit signal. We need to
+   //      mux between one/two cycle delay for the following cases:
+   //       ERETs are reported to the CSR two cycles before we send the flush
+   //       Exceptions are reported to the CSR one cycle before we send the flush
+   // This discrepency should be resolved elsewhere.
+   io.ifu.flush_pc          := Mux(RegNext(RegNext(csr.io.eret)),
+                                   RegNext(RegNext(csr.io.evec)),
+                                   RegNext(csr.io.evec))
    io.ifu.com_ftq_idx       := rob.io.com_xcpt.bits.ftq_idx
 
    io.ifu.clear_fetchbuffer := br_unit.brinfo.mispredict ||
                                rob.io.flush.valid ||
                                io.ifu.sfence_take_pc
 
-   // TODO is sfence_take_pc correct? Can probably remove it.
-   io.ifu.flush_info.valid  := rob.io.flush.valid || io.ifu.sfence_take_pc
+   io.ifu.flush_info.valid  := rob.io.flush.valid
    io.ifu.flush_info.bits   := rob.io.flush.bits
 
    // Tell the FTQ it can deallocate entries by passing youngest ftq_idx.
@@ -1146,8 +1157,6 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    rob.io.lsu_clr_bsy_valid   := lsu.io.lsu_clr_bsy_valid
    rob.io.lsu_clr_bsy_rob_idx := lsu.io.lsu_clr_bsy_rob_idx
    rob.io.lxcpt <> lsu.io.xcpt
-
-   rob.io.csr_eret := csr.io.eret
 
    assert (!(csr.io.singleStep), "[core] single-step is unsupported.")
 

@@ -183,7 +183,8 @@ object CsrRRdDecode extends RRdDecodeConstants
          BitPat(uopCSRRSI)-> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP1_ZERO, OP2_IMMC, IS_I, REN_1, CSR.S),
          BitPat(uopCSRRCI)-> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP1_ZERO, OP2_IMMC, IS_I, REN_1, CSR.C),
 
-         BitPat(uopSYSTEM)-> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP1_ZERO, OP2_IMMC, IS_I, REN_0, CSR.I))
+         BitPat(uopWFI)   -> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP1_ZERO, OP2_IMMC, IS_I, REN_0, CSR.I),
+         BitPat(uopERET)  -> List(BR_N , Y, N, N, FN_ADD , DW_XPR, OP1_ZERO, OP2_IMMC, IS_I, REN_0, CSR.I))
 }
 
 object FpuRRdDecode extends RRdDecodeConstants
