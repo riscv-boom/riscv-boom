@@ -131,13 +131,13 @@ class ExecutionUnits(fpu: Boolean)(implicit val p: Parameters) extends HasBoomCo
          exe_units += memExeUnit
       }
 
-      val aluExeUnit = Module(new ALUExeUnit(has_br_unit      = true
-         , shares_csr_wport = true
-         , has_mul          = true
-         , has_div          = true
-         , has_ifpu         = usingFPU
-         , has_mem          = usingUnifiedMemIntIQs
-      ))
+      val aluExeUnit = Module(new ALUExeUnit(
+         has_br_unit      = true,
+         shares_csr_wport = true,
+         has_mul          = true,
+         has_div          = true,
+         has_ifpu         = usingFPU,
+         has_mem          = usingUnifiedMemIntIQs))
 
       aluExeUnit.io.lsu_io := DontCare
       aluExeUnit.io.dmem := DontCare

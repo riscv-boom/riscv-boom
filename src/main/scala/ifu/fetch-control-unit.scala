@@ -364,9 +364,9 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
       prev_is_half := (!(f3_valid_mask(last_idx-1.U) && f3_fetch_bundle.insts(last_idx-1.U)(1,0) === 3.U)
                     && f3_fetch_bundle.insts(last_idx)(1,0) === 3.U)
       prev_half    := f3_fetch_bundle.insts(last_idx)(15,0)
-      prev_nextpc  := alignToFetchBoundary(f3_fetch_bundle.pc) + Mux( inLastChunk(f3_fetch_bundle.pc) && icIsBanked.B
-                                                                    , bankBytes.U
-                                                                    , fetchBytes.U)
+      prev_nextpc  := alignToFetchBoundary(f3_fetch_bundle.pc) + Mux(inLastChunk(f3_fetch_bundle.pc) && icIsBanked.B,
+                                                                     bankBytes.U,
+                                                                     fetchBytes.U)
    }
 
    when (f3_valid && f3_btb_resp.valid)
@@ -763,73 +763,72 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
    if (DEBUG_PRINTF)
    {
       // Fetch Stage 1
-      printf("BrPred1:  ------ PC: [%c%c-%c for br_id:(n/a), %c %c next: 0x%x]\n"
-         , Mux(br_unit.brinfo.valid, Str("V"), Str("-"))
-         , Mux(br_unit.brinfo.taken, Str("T"), Str("-"))
-         , Mux(br_unit.brinfo.mispredict, Str("M"), Str(" "))
-         , Mux(f0_redirect_val, Str("T"), Str(" "))
-         , Mux(io.flush_take_pc, Str("F"),
-           Mux(br_unit.take_pc, Str("B"), Str(" ")))
-         , f0_redirect_pc
-         )
+      printf("BrPred1:  ------ PC: [%c%c-%c for br_id:(n/a), %c %c next: 0x%x]\n",
+             Mux(br_unit.brinfo.valid, Str("V"), Str("-")),
+             Mux(br_unit.brinfo.taken, Str("T"), Str("-")),
+             Mux(br_unit.brinfo.mispredict, Str("M"), Str(" ")),
+             Mux(f0_redirect_val, Str("T"), Str(" ")),
+             Mux(io.flush_take_pc, Str("F"),
+             Mux(br_unit.take_pc, Str("B"), Str(" "))),
+             f0_redirect_pc
+             )
 
       // Fetch Stage 2
-      printf(" Fetch2 : (%c%c) 0x%x I$ Response <<-- IF2_PC (mask:0x%x) "
-         , Mux(io.imem_resp.valid, Str("V"), Str("-"))
-         , Mux(io.imem_resp.ready, Str("R"), Str("-"))
-         , io.imem_resp.bits.pc
-         , io.imem_resp.bits.mask
-         )
+      printf(" Fetch2 : (%c%c) 0x%x I$ Response <<-- IF2_PC (mask:0x%x) ",
+             Mux(io.imem_resp.valid, Str("V"), Str("-")),
+             Mux(io.imem_resp.ready, Str("R"), Str("-")),
+             io.imem_resp.bits.pc,
+             io.imem_resp.bits.mask
+             )
 
       if (fetch_width == 1)
       {
-         printf("DASM(%x) "
-            , io.imem_resp.bits.data(coreInstBits-1,0)
-            )
+         printf("DASM(%x) ",
+                io.imem_resp.bits.data(coreInstBits-1,0)
+                )
       }
       else if (fetch_width == 2)
       {
-         printf("DASM(%x)DASM(%x) "
-            , io.imem_resp.bits.data(2*coreInstBits-1, coreInstBits)
-            , io.imem_resp.bits.data(coreInstBits-1,0)
-            )
+         printf("DASM(%x)DASM(%x) ",
+                io.imem_resp.bits.data(2*coreInstBits-1, coreInstBits),
+                io.imem_resp.bits.data(coreInstBits-1,0)
+                )
       }
       else if (fetch_width == 4)
       {
-         printf("DASM(%x)DASM(%x)DASM(%x)DASM(%x) "
-            , io.imem_resp.bits.data(4*coreInstBits-1, 3*coreInstBits)
-            , io.imem_resp.bits.data(3*coreInstBits-1, 2*coreInstBits)
-            , io.imem_resp.bits.data(2*coreInstBits-1, 1*coreInstBits)
-            , io.imem_resp.bits.data(1*coreInstBits-1,0)
-            )
+         printf("DASM(%x)DASM(%x)DASM(%x)DASM(%x) ",
+                io.imem_resp.bits.data(4*coreInstBits-1, 3*coreInstBits),
+                io.imem_resp.bits.data(3*coreInstBits-1, 2*coreInstBits),
+                io.imem_resp.bits.data(2*coreInstBits-1, 1*coreInstBits),
+                io.imem_resp.bits.data(1*coreInstBits-1,0)
+                )
       }
       else if (fetch_width == 8)
       {
-         printf("\n      DASM(%x)DASM(%x)DASM(%x)DASM(%x)\n      DASM(%x)DASM(%x)DASM(%x)DASM(%x) "
-            , io.imem_resp.bits.data(8*coreInstBits-1, 7*coreInstBits)
-            , io.imem_resp.bits.data(7*coreInstBits-1, 6*coreInstBits)
-            , io.imem_resp.bits.data(6*coreInstBits-1, 5*coreInstBits)
-            , io.imem_resp.bits.data(5*coreInstBits-1, 4*coreInstBits)
-            , io.imem_resp.bits.data(4*coreInstBits-1, 3*coreInstBits)
-            , io.imem_resp.bits.data(3*coreInstBits-1, 2*coreInstBits)
-            , io.imem_resp.bits.data(2*coreInstBits-1, 1*coreInstBits)
-            , io.imem_resp.bits.data(1*coreInstBits-1, 0)
-            )
+         printf("\n      DASM(%x)DASM(%x)DASM(%x)DASM(%x)\n      DASM(%x)DASM(%x)DASM(%x)DASM(%x) ",
+                io.imem_resp.bits.data(8*coreInstBits-1, 7*coreInstBits),
+                io.imem_resp.bits.data(7*coreInstBits-1, 6*coreInstBits),
+                io.imem_resp.bits.data(6*coreInstBits-1, 5*coreInstBits),
+                io.imem_resp.bits.data(5*coreInstBits-1, 4*coreInstBits),
+                io.imem_resp.bits.data(4*coreInstBits-1, 3*coreInstBits),
+                io.imem_resp.bits.data(3*coreInstBits-1, 2*coreInstBits),
+                io.imem_resp.bits.data(2*coreInstBits-1, 1*coreInstBits),
+                io.imem_resp.bits.data(1*coreInstBits-1, 0)
+                )
       }
 
-      printf("----BrPred2:(%c,%d) [btbtarg: 0x%x]\n"
-         , Mux(io.imem_resp.bits.btb.taken, Str("T"), Str("-"))
-         , io.imem_resp.bits.btb.bridx
-         , io.imem_resp.bits.btb.target(19,0)
-         )
+      printf("----BrPred2:(%c,%d) [btbtarg: 0x%x]\n",
+             Mux(io.imem_resp.bits.btb.taken, Str("T"), Str("-")),
+             io.imem_resp.bits.btb.bridx,
+             io.imem_resp.bits.btb.target(19,0)
+             )
 
       // Fetch Stage 3
-      printf(" Fetch3 : (%c) 0x%x jkilmsk:0x%x ->(0x%x)\n"
-         , Mux(fb.io.enq.valid, Str("V"), Str("-"))
-         , fb.io.enq.bits.pc
-         , 0.U //io.bp2_pred_resp.mask
-         , fb.io.enq.bits.mask
-         )
+      printf(" Fetch3 : (%c) 0x%x jkilmsk:0x%x ->(0x%x)\n",
+             Mux(fb.io.enq.valid, Str("V"), Str("-")),
+             fb.io.enq.bits.pc,
+             0.U, //io.bp2_pred_resp.mask
+             fb.io.enq.bits.mask
+             )
    }
 }
-

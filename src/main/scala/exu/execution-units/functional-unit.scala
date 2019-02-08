@@ -133,7 +133,6 @@ class FuncUnitReq(val data_width: Int)(implicit p: Parameters) extends BoomBundl
    val rs3_data = UInt(data_width.W) // only used for FMA units
 
    val kill = Bool() // kill everything
-
 }
 
 /**
@@ -149,7 +148,6 @@ class FuncUnitResp(val data_width: Int)(implicit p: Parameters) extends BoomBund
    val addr = UInt((vaddrBits+1).W) // only for maddr -> LSU
    val mxcpt = new ValidIO(UInt((freechips.rocketchip.rocket.Causes.all.max+2).W)) //only for maddr->LSU
    val sfence = Valid(new freechips.rocketchip.rocket.SFenceReq) // only for mcalc
-
 }
 
 /**
@@ -222,11 +220,11 @@ class BranchUnitResp(implicit p: Parameters) extends BoomBundle()(p)
  * @param data_width width of the data being operated on in the functional unit
  * @param has_branch_unit does this functional unit have a branch unit?
  */
-abstract class FunctionalUnit(is_pipelined: Boolean
-                              , num_stages: Int
-                              , num_bypass_stages: Int
-                              , data_width: Int
-                              , has_branch_unit: Boolean = false)
+abstract class FunctionalUnit(is_pipelined: Boolean,
+                              num_stages: Int,
+                              num_bypass_stages: Int,
+                              data_width: Int,
+                              has_branch_unit: Boolean = false)
                               (implicit p: Parameters) extends BoomModule()(p)
 {
    val io = IO(new FunctionalUnitIo(num_stages, num_bypass_stages, data_width))
@@ -249,11 +247,11 @@ abstract class PipelinedFunctionalUnit(val num_stages: Int,
                                        val earliest_bypass_stage: Int,
                                        val data_width: Int,
                                        is_branch_unit: Boolean = false
-                                      )(implicit p: Parameters) extends FunctionalUnit(is_pipelined = true
-                                                              , num_stages = num_stages
-                                                              , num_bypass_stages = num_bypass_stages
-                                                              , data_width = data_width
-                                                              , has_branch_unit = is_branch_unit)(p)
+                                      )(implicit p: Parameters) extends FunctionalUnit(is_pipelined = true,
+                                                              num_stages = num_stages,
+                                                              num_bypass_stages = num_bypass_stages,
+                                                              data_width = data_width,
+                                                              has_branch_unit = is_branch_unit)(p)
 {
    // Pipelined functional unit is always ready.
    io.req.ready := true.B
@@ -321,11 +319,11 @@ abstract class PipelinedFunctionalUnit(val num_stages: Int,
  */
 @chiselName
 class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1, data_width: Int)(implicit p: Parameters)
-             extends PipelinedFunctionalUnit(num_stages = num_stages
-                                            , num_bypass_stages = num_stages
-                                            , earliest_bypass_stage = 0
-                                            , data_width = data_width
-                                            , is_branch_unit = is_branch_unit)(p)
+             extends PipelinedFunctionalUnit(num_stages = num_stages,
+                                             num_bypass_stages = num_stages,
+                                             earliest_bypass_stage = 0,
+                                             data_width = data_width,
+                                             is_branch_unit = is_branch_unit)(p)
 {
    val uop = io.req.bits.uop
 
@@ -792,11 +790,11 @@ class IntToFPUnit(latency: Int)(implicit p: Parameters) extends PipelinedFunctio
  * @param data_width width of the data to be passed into the functional unit
  */
 abstract class IterativeFunctionalUnit(data_width: Int)(implicit p: Parameters)
-                                       extends FunctionalUnit(is_pipelined = false
-                                                            , num_stages = 1
-                                                            , num_bypass_stages = 0
-                                                            , data_width = data_width
-                                                            , has_branch_unit = false)(p)
+                                       extends FunctionalUnit(is_pipelined = false,
+                                                              num_stages = 1,
+                                                              num_bypass_stages = 0,
+                                                              data_width = data_width,
+                                                              has_branch_unit = false)(p)
 {
    val r_uop = Reg(new MicroOp())
 
@@ -857,10 +855,10 @@ class DivUnit(data_width: Int)(implicit p: Parameters) extends IterativeFunction
  * @param data_width size of the data being passed into the functional unit
  */
 class PipelinedMulUnit(num_stages: Int, data_width: Int)(implicit p: Parameters)
-      extends PipelinedFunctionalUnit (num_stages = num_stages
-                                      , num_bypass_stages = 0
-                                      , earliest_bypass_stage = 0
-                                      , data_width = data_width)(p)
+      extends PipelinedFunctionalUnit (num_stages = num_stages,
+                                       num_bypass_stages = 0,
+                                       earliest_bypass_stage = 0,
+                                       data_width = data_width)(p)
 {
    val imul = Module(new PipelinedMultiplier(xLen, num_stages))
    // request

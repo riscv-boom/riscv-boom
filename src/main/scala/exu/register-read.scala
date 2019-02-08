@@ -145,9 +145,9 @@ class RegisterRead(
       if (num_read_ports > 2) rrd_rs3_data(w) := io.rf_read_ports(idx+2).data
 
       val rrd_kill = Mux(io.kill, true.B,
-                     Mux(io.brinfo.valid && io.brinfo.mispredict
-                                       , maskMatch(rrd_uops(w).br_mask, io.brinfo.mask)
-                                       , false.B))
+                     Mux(io.brinfo.valid && io.brinfo.mispredict,
+                         maskMatch(rrd_uops(w).br_mask, io.brinfo.mask),
+                         false.B))
 
       exe_reg_valids(w) := Mux(rrd_kill, false.B, rrd_valids(w))
       // TODO use only the valids signal, don't require us to set nullUop
