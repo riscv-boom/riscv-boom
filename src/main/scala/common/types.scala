@@ -11,9 +11,14 @@ import chisel3._
 
 import freechips.rocketchip.config.Parameters
 
+/**
+ * BOOM module that is used to add parameters to the module
+ */
 abstract class BoomModule(implicit p: Parameters) extends freechips.rocketchip.tile.CoreModule()(p)
   with HasBoomCoreParameters
 
+/**
+ * BOOM bundle used to add parameters to the object/class/trait/etc
+ */
 class BoomBundle(implicit val p: Parameters) extends freechips.rocketchip.util.ParameterizedBundle()(p)
   with HasBoomCoreParameters
-

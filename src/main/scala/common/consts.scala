@@ -19,6 +19,10 @@ import chisel3.util._
 import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.util.Str
 
+/**
+ * Mixin indicating the debug flags that can be set for viewing different
+ * debug printf's
+ */
 trait BOOMDebugConstants
 {
    val DEBUG_PRINTF        = false // use the Chisel printf functionality
@@ -41,12 +45,18 @@ trait BOOMDebugConstants
    if (O3PIPEVIEW_PRINTF) require (!DEBUG_PRINTF && !COMMIT_LOG_PRINTF)
 }
 
+/**
+ * Mixin for branch prediction constants
+ */
 trait BrPredConstants
 {
    val NOT_TAKEN = false.B
    val TAKEN = true.B
 }
 
+/**
+ * Mixin for issue queue types
+ */
 trait IQType
 {
    val IQT_SZ  = 2
@@ -55,6 +65,9 @@ trait IQType
    val IQT_FP  = 2.U(IQT_SZ.W)
 }
 
+/**
+ * Mixin for scalar operation constants
+ */
 trait ScalarOpConstants
 {
    val X = BitPat("b?")
@@ -296,6 +309,9 @@ trait ScalarOpConstants
    }
 }
 
+/**
+ * Mixin for RISCV constants
+ */
 trait RISCVConstants
 {
    // abstract out instruction decode magic numbers
@@ -374,12 +390,16 @@ trait RISCVConstants
    }
 }
 
+/**
+ * Mixin for exception cause constants
+ */
 trait ExcCauseConstants
 {
    // a memory disambigious misspeculation occurred
    val MINI_EXCEPTION_MEM_ORDERING = 16.U
    // an instruction needs to be replayed (e.g., I$ asks for a replay)
    val MINI_EXCEPTION_REPLAY = 17.U
+
    require (!freechips.rocketchip.rocket.Causes.all.contains(16))
    require (!freechips.rocketchip.rocket.Causes.all.contains(17))
 }

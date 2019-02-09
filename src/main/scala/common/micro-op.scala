@@ -21,11 +21,17 @@ import freechips.rocketchip.config.Parameters
 import boom.bpu.BranchPredInfo
 import boom.exu.FUConstants
 
+/**
+ * Extension to BoomBundle to add a MicroOp
+ */
 abstract trait HasBoomUOP extends BoomBundle
 {
   val uop = new MicroOp()
 }
 
+/**
+ * MicroOp passing through the pipeline
+ */
 class MicroOp(implicit p: Parameters) extends BoomBundle()(p)
    with freechips.rocketchip.rocket.constants.MemoryOpConstants
    with freechips.rocketchip.rocket.constants.ScalarOpConstants
@@ -136,12 +142,17 @@ class MicroOp(implicit p: Parameters) extends BoomBundle()(p)
    def fu_code_is(_fu: UInt) = fu_code === _fu
 }
 
-// NOTE: I can't promise these signals get killed/cleared on a mispredict,
-// so I should listen to the corresponding valid bit
-// For example, on a bypassing, we listen to rf_wen to see if bypass is valid,
-// but we "could" be bypassing to a branch which kills us (a false positive combinational loop),
-// so we have to keep the rf_wen enabled, and not dependent on a branch kill signal
-// TODO REFACTOR this, as this should no longer be true, as bypass occurs in stage before branch resolution
+/**
+ * Control signals within a MicroOp
+ *
+ * NOTE: I can't promise these signals get killed/cleared on a mispredict,
+ * so I should listen to the corresponding valid bit
+ * For example, on a bypassing, we listen to rf_wen to see if bypass is valid,
+ * but we "could" be bypassing to a branch which kills us (a false positive combinational loop),
+ * so we have to keep the rf_wen enabled, and not dependent on a branch kill signal
+ *
+ * TODO REFACTOR this, as this should no longer be true, as bypass occurs in stage before branch resolution
+ */
 class CtrlSignals extends Bundle()
 {
    val br_type     = UInt(BR_N.getWidth.W)
@@ -157,13 +168,18 @@ class CtrlSignals extends Bundle()
    val is_std      = Bool()
 }
 
+/**
+ * Debug stage events for Fetch stage
+ */
 class DebugStageEvents extends Bundle()
 {
    // Track the sequence number of each instruction fetched.
    val fetch_seq        = UInt(32.W)
 }
 
-// What type of Control-Flow Instruction is it?
+/**
+ * Object to get type of control flow instruction
+ */
 object CfiType
 {
    def SZ = 3
@@ -174,6 +190,11 @@ object CfiType
    def jalr = 3.U
 }
 
+/**
+ * MicroOp with data
+ *
+ * @param data_sz size of data to put with MicroOp
+ */
 class MicroOpWithData(val data_sz: Int)(implicit p: Parameters) extends BoomBundle()(p)
   with HasBoomUOP
 {

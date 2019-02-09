@@ -7,7 +7,9 @@
 
 package boom.system
 
-// Any BOOM-specific tests can go here to override default rocket-chip behavior.
+/**
+ * Any BOOM-specific tests can go here to override default rocket-chip behavior.
+ */
 object BoomTestSuites
 {
   import freechips.rocketchip.system.DefaultTestSuites._

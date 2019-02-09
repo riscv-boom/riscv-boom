@@ -19,6 +19,9 @@ import boom.bpu._
 import boom.exu._
 import boom.lsu._
 
+/**
+ * Default BOOM core parameters
+ */
 case class BoomCoreParams(
    fetchWidth: Int = 1,
    decodeWidth: Int = 1,
@@ -87,6 +90,9 @@ case class BoomCoreParams(
    val nPMPs: Int = 8
 }
 
+/**
+ * Mixin trait to add BOOM parameters to expand other traits/objects/etc
+ */
 trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
 {
    val boomParams: BoomCoreParams = tileParams.core.asInstanceOf[BoomCoreParams]

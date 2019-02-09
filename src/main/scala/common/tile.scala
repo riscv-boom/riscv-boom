@@ -23,6 +23,21 @@ import boom.exu._
 import boom.ifu._
 import boom.lsu._
 
+/**
+ * BOOM tile parameter class used in configurations
+ *
+ * @param core BOOM core params
+ * @param icache i$ params
+ * @param dcache d$ params
+ * @param btb btb params
+ * @param dataScratchpadBytes ...
+ * @param trace ...
+ * @param hcfOnUncorrectable ...
+ * @param name name of tile
+ * @param hartId hardware thread id
+ * @param blockerCtrlAddr ...
+ * @param boundaryBuffers ...
+ */
 case class BoomTileParams(
     core: BoomCoreParams = BoomCoreParams(),
     icache: Option[ICacheParams] = Some(ICacheParams()),
@@ -41,6 +56,12 @@ case class BoomTileParams(
   require(dcache.isDefined)
 }
 
+/**
+ * BOOM tile
+ *
+ * @param boomParams BOOM tile params
+ * @param crossing ...
+ */
 class BoomTile(
     val boomParams: BoomTileParams,
     crossing: ClockCrossingType)
@@ -127,6 +148,11 @@ class BoomTile(
   }
 }
 
+/**
+ * BOOM tile implicit
+ *
+ * @param outer top level BOOM tile
+ */
 class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer)
     //with HasLazyRoCCModule[BoomTile]
     with CanHaveBoomPTWModule

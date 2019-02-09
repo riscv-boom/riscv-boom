@@ -14,7 +14,9 @@ import freechips.rocketchip.tile.XLen
 import freechips.rocketchip.util.GeneratorApp
 import freechips.rocketchip.system.{TestGeneration, RegressionTestSuite}
 
-/** A Generator for platforms containing Rocket Subsystems */
+/**
+ * A generator for platforms containing Rocket Subsystems
+ */
 object Generator extends GeneratorApp
 {
   val rv64RegrTestNames = LinkedHashSet(
