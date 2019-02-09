@@ -29,10 +29,6 @@ import boom.common._
 import boom.exu._
 import boom.util._
 
-case class FtqParameters(
-   nEntries: Int = 16
-)
-
 class FTQBundle(implicit p: Parameters) extends BoomBundle()(p)
 {
    val fetch_pc = UInt(vaddrBitsExtended.W) // TODO compress out high-order bits

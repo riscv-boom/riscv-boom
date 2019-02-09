@@ -31,9 +31,9 @@ class DefaultBoomConfig extends Config((site, here, up) => {
    // Core Parameters
    case BoomTilesKey => up(BoomTilesKey, site) map { r => r.copy(
       core = r.core.copy(
-         fetchWidth = 4,
+         fetchWidth = 2,
          decodeWidth = 2,
-         numRobEntries = 80,
+         numRobEntries = 100,
          issueParams = Seq(
             IssueParams(issueWidth=1, numEntries=20, iqType=IQT_MEM.litValue),
             IssueParams(issueWidth=2, numEntries=20, iqType=IQT_INT.litValue),
@@ -49,10 +49,10 @@ class DefaultBoomConfig extends Config((site, here, up) => {
          fpu = Some(freechips.rocketchip.tile.FPUParams(sfmaLatency=4, dfmaLatency=4, divSqrt=true))),
       btb = Some(BTBParams(nEntries = 0, updatesOutOfOrder = true)),
       dcache = Some(DCacheParams(rowBits = site(SystemBusKey).beatBits, nSets=64, nWays=8, nMSHRs=4, nTLBEntries=16)),
-      icache = Some(ICacheParams(fetchBytes = 4*4, rowBits = site(SystemBusKey).beatBits, nSets=64, nWays=8))
+      icache = Some(ICacheParams(fetchBytes = 2*4, rowBits = site(SystemBusKey).beatBits, nSets=64, nWays=8))
       )}
    // Set TL network to 128bits wide
-   case SystemBusKey => up(SystemBusKey, site).copy(beatBytes = 16)
+   case SystemBusKey => up(SystemBusKey, site).copy(beatBytes = 8)
 })
 
 class WithBoomRV32 extends Config((site, here, up) => {
@@ -110,9 +110,9 @@ class WithSmallBooms extends Config((site, here, up) => {
             IssueParams(issueWidth=1, numEntries=4, iqType=IQT_MEM.litValue),
             IssueParams(issueWidth=1, numEntries=4, iqType=IQT_INT.litValue),
             IssueParams(issueWidth=1, numEntries=4, iqType=IQT_FP.litValue)),
-         numIntPhysRegisters = 56,
+         numIntPhysRegisters = 48,
          numFpPhysRegisters = 48,
-         numLsuEntries = 8,
+         numLsuEntries = 4,
          maxBrCount = 4,
          tage = Some(TageParameters(enabled=false)),
          bpdBaseOnly = Some(BaseOnlyParameters(enabled=true)),
@@ -131,10 +131,10 @@ class WithMediumBooms extends Config((site, here, up) => {
          decodeWidth = 2,
          numRobEntries = 48,
          issueParams = Seq(
-            IssueParams(issueWidth=1, numEntries=20, iqType=IQT_MEM.litValue),
+            IssueParams(issueWidth=1, numEntries=10, iqType=IQT_MEM.litValue),
             IssueParams(issueWidth=2, numEntries=16, iqType=IQT_INT.litValue),
             IssueParams(issueWidth=1, numEntries=10, iqType=IQT_FP.litValue)),
-         numIntPhysRegisters = 70,
+         numIntPhysRegisters = 64,
          numFpPhysRegisters = 64,
          numLsuEntries = 16,
          maxBrCount = 8,
