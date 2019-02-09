@@ -15,6 +15,7 @@ import freechips.rocketchip.devices.tilelink.{BootROMParams}
 import freechips.rocketchip.rocket._
 import freechips.rocketchip.tile._
 
+import boom.ifu._
 import boom.bpu._
 import boom.exu._
 import boom.lsu._
@@ -36,7 +37,7 @@ class DefaultBoomConfig extends Config((site, here, up) => {
       core = r.core.copy(
          fetchWidth = 4,
          decodeWidth = 2,
-         numRobEntries = 80,
+         numRobEntries = 100,
          issueParams = Seq(
             IssueParams(issueWidth=1, numEntries=20, iqType=IQT_MEM.litValue),
             IssueParams(issueWidth=2, numEntries=20, iqType=IQT_INT.litValue),
@@ -45,6 +46,7 @@ class DefaultBoomConfig extends Config((site, here, up) => {
          numFpPhysRegisters = 64,
          numLsuEntries = 16,
          maxBrCount = 8,
+         ftq = FtqParameters(nEntries=25),
          btb = BoomBTBParameters(nSets=512, nWays=4, nRAS=8, tagSz=13),
          enableBranchPredictor = true,
          tage = Some(TageParameters()),
@@ -133,8 +135,9 @@ class WithSmallBooms extends Config((site, here, up) => {
             IssueParams(issueWidth=1, numEntries=4, iqType=IQT_FP.litValue)),
          numIntPhysRegisters = 48,
          numFpPhysRegisters = 48,
-         numLsuEntries = 8,
+         numLsuEntries = 4,
          maxBrCount = 4,
+         ftq = FtqParameters(nEntries=8),
          gshare = Some(GShareParameters(enabled=true, history_length=11, num_sets=2048)),
          nPerfCounters = 2),
       dcache = Some(DCacheParams(rowBits = site(SystemBusKey).beatBits, nSets=64, nWays=4, nMSHRs=2, nTLBEntries=8)),
@@ -156,12 +159,13 @@ class WithMediumBooms extends Config((site, here, up) => {
             IssueParams(issueWidth=1, numEntries=20, iqType=IQT_MEM.litValue),
             IssueParams(issueWidth=2, numEntries=16, iqType=IQT_INT.litValue),
             IssueParams(issueWidth=1, numEntries=10, iqType=IQT_FP.litValue)),
-         numIntPhysRegisters = 70,
+         numIntPhysRegisters = 64,
          numFpPhysRegisters = 64,
          numLsuEntries = 16,
          maxBrCount = 8,
          regreadLatency = 1,
          renameLatency = 2,
+         ftq = FtqParameters(nEntries=24),
          btb = BoomBTBParameters(btbsa=true, nSets=64, nWays=2,
                                  nRAS=8, tagSz=20, bypassCalls=false, rasCheckForEmpty=false),
          gshare = Some(GShareParameters(enabled=true, history_length=23, num_sets=4096)),
@@ -190,6 +194,7 @@ class WithMegaBooms extends Config((site, here, up) => {
          numFpPhysRegisters = 128,
          numLsuEntries = 32,
          maxBrCount = 16,
+         ftq = FtqParameters(nEntries=16),
          btb = BoomBTBParameters(nSets=512, nWays=4, nRAS=16, tagSz=20),
          tage = Some(TageParameters())),
       dcache = Some(DCacheParams(rowBits = site(SystemBusKey).beatBytes*8,
