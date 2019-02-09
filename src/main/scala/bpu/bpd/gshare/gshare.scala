@@ -28,7 +28,7 @@ import boom.common._
 import boom.util.{ElasticReg, Fold}
 
 /**
- * GShare configuration parameters used in configs
+ * GShare configuration parameters used in configurations
  *
  * @param enabled using GShare?
  * @param history_length length of the GHR
@@ -41,7 +41,7 @@ case class GShareParameters(
 )
 
 /**
- * Trait to inherit parameters from the config
+ * Trait to inherit parameters from the configuration
  */
 trait HasGShareParameters extends HasBoomCoreParameters
 {
@@ -82,7 +82,7 @@ class GShareResp(val fetch_width: Int, val idx_sz: Int) extends Bundle
 
 /**
  * Companion object to GShareBrPredictor to get the the size of the
- * BPD resp.
+ * branch predictor response
  */
 object GShareBrPredictor
 {
@@ -264,4 +264,3 @@ class GShareBrPredictor(
       " kB) GShare Predictor, with " + history_length + " bits of history for (" +
       fetch_width + "-wide fetch) and " + nSets + " entries."
 }
-

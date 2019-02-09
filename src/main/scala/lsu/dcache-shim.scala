@@ -55,6 +55,7 @@ class LoadReqSlotIo(implicit p: Parameters) extends BoomBundle()(p)
 
 /**
  * Buffer entry tracking an inflight load memory request.
+ *
  * Note: Anything incoming that gets killed by br or exception is still marked
  * as "valid", since it also got sent to the datacache.
  */

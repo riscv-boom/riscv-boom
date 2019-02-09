@@ -32,7 +32,7 @@ import boom.exu._
 import boom.util._
 
 /**
- * Parameters used in configs for the FTQ
+ * FTQ Parameters used in configurations
  *
  * @param nEntries # of entries in the FTQ
  */
@@ -82,7 +82,7 @@ class GetPCFromFtqIO(implicit p: Parameters) extends BoomBundle()(p)
 }
 
 /**
- * Queue to store the fetch PC and other relevant BPD signals that are inflight in the
+ * Queue to store the fetch PC and other relevant branch predictor signals that are inflight in the
  * processor.
  *
  * @param num_entries # of entries in the FTQ

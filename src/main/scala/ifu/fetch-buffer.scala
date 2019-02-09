@@ -34,7 +34,7 @@ class FetchBufferResp(implicit p: Parameters) extends BoomBundle()(p)
 }
 
 /**
- * Buffer to hold fetched packets and convert then into a vector of MicroOps
+ * Buffer to hold fetched packets and convert them into a vector of MicroOps
  * to give the Decode stage
  *
  * @param num_entries effectively the number of full-sized fetch packets we can hold.

@@ -33,7 +33,7 @@ import boom.common._
 import boom.exu.BranchUnitResp
 
 /**
- * Give this to each instruction/uop and pass this down the pipeline to the branch-unit
+ * Give this to each instruction/uop and pass this down the pipeline to the branch unit
  * This covers the per-instruction info on all cfi-related predictions.
  */
 class BranchPredInfo(implicit p: Parameters) extends BoomBundle()(p)
@@ -51,7 +51,7 @@ class BranchPredInfo(implicit p: Parameters) extends BoomBundle()(p)
 }
 
 /**
- * Wraps the BTB and BPD into a pipeline that is parallel with the Fetch pipeline.
+ * Wraps the BoomBTB and BrPredictor into a pipeline that is parallel with the Fetch pipeline.
  *
  * @param fetch_width # of instructions fetched
  */

@@ -32,8 +32,8 @@ import boom.bpu._
 import boom.common._
 
 /**
- * Combinational logic to verify that the BTB predicted correctly, choose BPD or
- * BTB results, and catch JALs.
+ * Combinational logic to verify that the BoomBTB predicted correctly. This chooses
+ * between the BrPredictor or the BoomBTB. Also catch JALs.
  *
  * @param fetch_width # of instructions fetched
  */
@@ -154,4 +154,3 @@ class BranchChecker(fetch_width: Int)(implicit p: Parameters) extends BoomModule
                                      + (jal_idx << log2Ceil(fetchBytes))
                                      + Mux(io.is_rvc(jal_idx), 2.U, 4.U))
 }
-

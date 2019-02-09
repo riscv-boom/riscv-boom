@@ -29,7 +29,7 @@ import freechips.rocketchip.config.{Parameters, Field}
 import boom.util.ElasticReg
 
 /**
- * BaseOnly predictor configuration parameters used in configs
+ * BaseOnly predictor configuration parameters used in configurations
  *
  * @param enabled using BaseOnly predictor?
  */
@@ -38,7 +38,8 @@ case class BaseOnlyParameters(
 )
 
 /**
- * Dummy response for commit (nothing to commit since you are just using the BIM
+ * Dummy response for commit (nothing to commit since you are just using the
+ * bi-modal table
  */
 class BaseOnlyResp() extends Bundle
 {
@@ -48,7 +49,7 @@ class BaseOnlyResp() extends Bundle
 
 /**
  * Companion object to BaseOnlyBrPredictor to get the the size of the
- * BPD resp.
+ * branch predictor response
  */
 object BaseOnlyBrPredictor
 {
@@ -60,7 +61,8 @@ object BaseOnlyBrPredictor
 }
 
 /**
- * Class to create a BaseOnlyBr Predictor
+ * Class to create a BaseOnlyBr predictor that only uses
+ * the BoomBTB's bi-modal table
  *
  * @param fetch_width # of instructions fetched
  */
