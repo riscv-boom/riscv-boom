@@ -15,7 +15,9 @@ import freechips.rocketchip.devices.tilelink._
 import freechips.rocketchip.diplomacy._
 import freechips.rocketchip.util.DontTouch
 
-/** Example Top with periphery devices and ports, and a Boom subsystem */
+/**
+ * Example top with periphery devices and ports, and a BOOM subsystem
+ */
 class ExampleBoomSystem(implicit p: Parameters) extends BoomSubsystem
     with HasAsyncExtInterrupts
     with CanHaveMisalignedMasterAXI4MemPort
@@ -31,6 +33,9 @@ class ExampleBoomSystem(implicit p: Parameters) extends BoomSubsystem
   sbus.coupleTo("slave_named_error"){ error.node := TLBuffer() := _ }
 }
 
+/**
+ * Example top module with periphery devices and ports, and a BOOM subsystem
+ */
 class ExampleBoomSystemModule[+L <: ExampleBoomSystem](_outer: L) extends BoomSubsystemModule(_outer)
     with HasRTCModuleImp
     with HasExtInterruptsModuleImp

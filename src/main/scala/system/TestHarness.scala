@@ -13,6 +13,9 @@ import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.diplomacy.LazyModule
 import freechips.rocketchip.devices.debug.Debug
 
+/**
+ * A test harness to wrap around the BOOM system
+ */
 class TestHarness()(implicit p: Parameters) extends Module
 {
   val io = IO(new Bundle
