@@ -27,8 +27,7 @@ import boom.exu.BranchUnitResp
 import boom.util.ElasticReg
 
 /**
- * Create a null branch predictor
- * Act as a "null" branch predictor (it makes no predictions).
+ * Create a null branch predictor that makes no predictions
  *
  * @param fetch_width # of instructions fetched
  * @param history_length length of the BHR in bits
@@ -45,7 +44,7 @@ class NullBrPredictor(
 case object RandomBpdKey extends Field[RandomBpdParameters]
 
 /**
- * Random predictor configuration parameters used in configs
+ * Random predictor configuration parameters used in configurations
  *
  * @param enabled using Random predictor?
  */
@@ -55,7 +54,7 @@ case class RandomBpdParameters(
 
 /**
  * Companion object to RandomBrPredictor to get the the size of the
- * BPD resp.
+ * branch predictor response
  */
 object RandomBrPredictor
 {
@@ -67,7 +66,7 @@ object RandomBrPredictor
 }
 
 /**
- * Class to create a Random predictor Provide a branch predictor that generates random predictions. Good for testing!
+ * Class to create a Random predictor that generates random predictions. Good for testing!
  *
  * @param fetch_width # of instructions fetched
  */

@@ -37,7 +37,7 @@ import boom.common._
 import boom.util.{ElasticReg, Fold}
 
 /**
- * TAGE parameters used in configs
+ * TAGE parameters used in configurations
  *
  * @param enabled using TAGE?
  * @param num_tables ...
@@ -58,7 +58,7 @@ case class TageParameters(
 
 /**
  * Set of data values passed around the TAGE predictor and used to update the
- * predictor state at commit.
+ * predictor state at commit
  *
  * @param fetch_width # instructions fetched
  * @param num_tables ...
@@ -103,7 +103,7 @@ class TageResp(
 
 /**
  * Companion object to TageBrPredictor to get the the size of the
- * BPD resp.
+ * branch predictor response.
  */
 object TageBrPredictor
 {
@@ -515,4 +515,3 @@ class TageBrPredictor(
       (size_in_bits/1024) + " Kbits) (max history length: " + history_lengths.max + " bits)\n" +
       tables.mkString("\n")
 }
-

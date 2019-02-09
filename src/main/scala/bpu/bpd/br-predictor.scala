@@ -90,8 +90,8 @@ class RestoreHistory(implicit p: Parameters) extends BoomBundle()(p)
 }
 
 /**
- * Abstract Branch Predictor class. Exposes the necessary signals for different BPD
- * types to "hook" into BOOM nicely.
+ * Abstract top level branch predictor class. Exposes the necessary signals for different
+ * branch predictor types to be instantiated into BOOM.
  *
  * @param fetch_width # of instructions fetched
  * @param history_length length of the GHR
@@ -269,7 +269,7 @@ abstract class BrPredictor(
 }
 
 /**
- * Companion object to the Abstract Branch Predictor. Return the desired branch
+ * Companion object to the abstract branch bredictor. Return the desired branch
  * predictor based on the provided parameters.
  */
 object BrPredictor

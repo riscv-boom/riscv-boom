@@ -21,7 +21,7 @@ import freechips.rocketchip.util.Str
 import boom.common._
 
 /**
- * The IO bundle to connect the Tage Table to the Tage predictor top
+ * IO bundle to connect the TAGE table to the TAGE predictor top
  *
  * @param fetch_width # of instructions fetched
  * @param index_sz ...
