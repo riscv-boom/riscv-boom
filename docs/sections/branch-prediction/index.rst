@@ -1,24 +1,25 @@
 Branch Prediction
 =================
 
-.. _fetch-unit-bpu:
+.. _front-end-bpu:
 .. figure:: /figures/frontend.png
-    :alt: Fetch Unit
+    :alt: BOOM Front-end
 
-    The Fetch Unit
+    The BOOM Front-end
 
 This chapter discusses how BOOM predicts branches and then resolves
 these predictions.
 
-BOOM uses two levels of branch prediction- a single-cycle “next-line
-predictor" (NLP) and a slower but more complex “backing predictor"
-(BPD) [1]_.
+BOOM uses two levels of branch prediction - a fast "next-line predictor" (NLP)
+and a slower but more complex "backing predictor" (BPD) [1]_. In this case,
+the next-line predictor is a Branch Target Buffer and the backing predictor
+is a more complicated structure like a GShare predictor.
 
 .. toctree::
     :maxdepth: 2
     :caption: Branch Prediction:
 
-    rocket-nl-predictor
+    nl-predictor
     backing-predictor
     configurations
 
@@ -36,5 +37,3 @@ predictor" (NLP) and a slower but more complex “backing predictor"
     being overly descriptive of the internal design (is it a simple BHT?
     Is it tagged? Does it override the NLP?). But in short, I am open
     to better names!
-
-

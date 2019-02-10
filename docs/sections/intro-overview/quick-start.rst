@@ -1,5 +1,5 @@
 Quick-start
-====================================
+===========
 
 The best way to get started with the BOOM core is to use the BOOM project template located in the
 main `GitHub organization <https://github.com/riscv-boom/boom-template>`__. There you will find the main steps
@@ -25,4 +25,5 @@ from that repositories README:
     cd verisim
     make run
 
-Note: :numref:`quick-start-code` assumes you have don't have installed the riscv-tools toolchain. It will pull and build the toolchain for you.
+Note: :numref:`quick-start-code` assumes you don't have riscv-tools toolchain installed.
+It will pull and build the toolchain for you.

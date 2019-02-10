@@ -1,5 +1,5 @@
 Introduction and Overview
-================================
+=========================
 
 The goal of this document is to describe the design and implementation
 of the Berkeley Out–of–Order Machine (BOOM).

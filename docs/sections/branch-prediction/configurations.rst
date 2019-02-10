@@ -11,8 +11,8 @@ Global History Length
 ~~~~~~~~~~~~~~~~~~~~~
 
 How long of a history should be tracked? The length of the global
-history sets the size of the branch predictor. An :math:`n`-bit history pairs
-with a :math:`2^n` entry two-bit counter table.
+history sets the size of the branch predictor. An n-bit history pairs
+with a 2^n entry two-bit counter table.
 
 TAGE Configurations
 -----------------------
@@ -42,5 +42,3 @@ TAGE Table U-bit Size
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 How many bits should be used to describe the usefulness of an entry?
-
-

@@ -98,7 +98,7 @@ is used in the following situations:
 
 -  Jump-register instructions must know both their own PC **and the PC
    of the following instruction** in the program to verify if the
-   front-end predicted the correct JR target.
+   Front-end predicted the correct JR target.
 
 This information is incredibly expensive to store. Instead of passing
 PCs down the pipeline, branch and jump instructions access the ROB’s “PC
@@ -138,7 +138,7 @@ Exceptions and Flushes
 Exceptions are handled when the instruction at the *commit head* is
 excepting. The pipeline is then flushed and the ROB emptied. The rename
 map tables must be reset to represent the true, non-speculative
-*committed* state. The front-end is then directed to the appropriate PC.
+*committed* state. The Front-end is then directed to the appropriate PC.
 If it is an architectural exception, the excepting instruction’s PC
 (referred to as the *exception vector*) is sent to the Control/Status
 Register file. If it is a micro-architectural exception (e.g., a
