@@ -139,25 +139,25 @@ and all following micro-ops will have the corresponding bit in the
 *branch mask* set (until the branch is resolved by the Branch Unit).
 
 If the branches (or jumps) have been correctly speculated by the
-front-end, then the Branch Unit’s only action is to broadcast the
+Front-end, then the Branch Unit’s only action is to broadcast the
 corresponding branch tag to *all* inflight micro-ops that the branch has
 been resolved correctly. Each micro-op can then clear the corresponding
 bit in its *branch mask*, and that branch tag can then be allocated to a
 new branch in the *Decode* stage.
 
 If a branch (or jump) is misspeculated, the Branch Unit must redirect
-the PC to the correct target, kill the front-end and fetch buffer, and
+the PC to the correct target, kill the Front-end and fetch buffer, and
 broadcast the misspeculated *branch tag* so that all dependent, inflight
 micro-ops may be killed. The PC redirect signal goes out immediately, to
 decrease the misprediction penalty. However, the *kill* signal is
 delayed a cycle for critical path reasons.
 
-The front-end must pass down the pipeline the appropriate branch
+The Front-end must pass down the pipeline the appropriate branch
 speculation meta-data, so that the correct direction can be reconciled
 with the prediction. Jump Register instructions are evaluated by
 comparing the correct target with the PC of the next instruction in the
 ROB (if not available, then a misprediction is assumed). Jumps are
-evaluated and handled in the front-end (as their direction and target
+evaluated and handled in the Front-end (as their direction and target
 are both known once the instruction can be decoded).
 
 BOOM (currently) only supports having one Branch Unit.

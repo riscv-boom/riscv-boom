@@ -62,7 +62,7 @@ branch’s copy of the map table.
 
 As the RV64G ISA uses fixed locations of the register specifiers (and no
 implicit register specifiers), the map table can be read before the
-instruction is decoded!
+instruction is decoded! And hence the **Decode** and **Rename** stages can be combined.
 
 Resets on Exceptions and Flushes
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

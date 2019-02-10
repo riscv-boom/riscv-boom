@@ -50,8 +50,8 @@ implementor trade off CPI performance for cycle-time.
 EnableFetchBufferFlowThrough
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-The front-end fetches instructions and places them into a *fetch
-buffer*. The back-end pulls instructions out of the fetch buffer and
+The Front-end fetches instructions and places them into a *fetch
+buffer*. The Back-end pulls instructions out of the fetch buffer and
 then decodes, renames, and dispatches the instructions into the *issue
 window*. This fetch buffer can be optionally set to be a *flow-through*
 queue – instructions enqueued into the buffer can be immediately

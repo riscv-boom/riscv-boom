@@ -34,7 +34,7 @@ shown below.
   * :code:`vsim/` **The VCS ASIC Verilog simulation and build directories.**
 
 The Rocket Core - a Library of Processor Components!
--------------------------------------------------------------------
+----------------------------------------------------
 
 Rocket is a 5-stage in-order core that implements the RV64G ISA and
 page-based virtual memory. The original design purpose of the Rocket
@@ -44,7 +44,7 @@ found at http://hwacha.org.
 
 Rocket has been taped out at least thirteen times in three different
 commercial processes, and has been successfully demonstrated to reach
-over 1.65 GHz in IBM 45 nm SOI. As its namesake suggests,
+over 1.65 GHz in IBM 45nm SOI. As its namesake suggests,
 Rocket is the baseline core for the Rocket-Chip SoC generator. As
 discussed earlier, BOOM is instantiated by replacing a Rocket tile with
 a BOOM tile.
@@ -57,5 +57,3 @@ more. Thus, throughout this document you will find references to these
 Rocket components and descriptions on how they fit into BOOM.
 
 The source code to Rocket can be found at https://github.com/freechipsproject/rocket-chip.
-
-
