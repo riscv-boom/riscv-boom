@@ -109,12 +109,12 @@ Memory Ordering Failures
 ------------------------
 
 The Load/Store Unit has to be careful regarding
-store\ :math:`\rightarrow`\ load dependences. For the best performance,
+store -> load dependences. For the best performance,
 loads need to be fired to memory as soon as possible.
 
-    sw x1 :math:`\rightarrow` 0(x2)
+    sw x1 -> 0(x2)
 
-    ld x3 :math:`\leftarrow` 0(x4)
+    ld x3 <- 0(x4)
 
 However, if x2 and x4 reference the same memory address, then the load
 in our example *depends* on the earlier store. If the load issues to

@@ -34,11 +34,11 @@ instructions in-order. The oldest instruction is pointed to by the
 tail*.
 
 To facilitate superscalar *Dispatch* and *Commit*, the ROB is
-implemented as a circular buffer with :math:`W` banks (where :math:`W`
+implemented as a circular buffer with W banks (where W
 is the *dispatch* and *commit* width of the machine [1]_). This
 organization is shown in :numref:`rob`.
 
-At *dispatch*, up to :math:`W` instructions are written from the *fetch
+At *dispatch*, up to W instructions are written from the *fetch
 packet* into an ROB row, where each instruction is written to a
 different bank across the row. As the instructions within a *fetch
 packet* are all consecutive (and aligned) in memory, this allows a
