@@ -19,7 +19,7 @@ The code structure is shown below:
     * ``bpd-pipeline.scala``
     * ``bpd/``
       
-        * ``brpredictor.scala``
+        * ``br-predictor.scala``
         * ``gshare/``
 
             * ``gshare.scala``
@@ -79,7 +79,7 @@ The code structure is shown below:
 
     * ``register-read/``
 
-        * ``fudecode.scala``
+        * ``func-unit-decode.scala``
         * ``regfile-custom.scala``
         * ``regfile.scala``
         * ``register-read.scala``
@@ -104,6 +104,7 @@ The code structure is shown below:
   * ``lsu/``
 
     * ``dcache-shim.scala``
+    * ``dcache.scala``
     * ``lsu.scala``
     * ``types.scala``
 
