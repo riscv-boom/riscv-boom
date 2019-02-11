@@ -308,7 +308,9 @@ class DCacheShim(implicit p: Parameters) extends BoomModule()(p)
    io.dmem.s1_data.mask   := 0.U // Only used for partial puts from scratchpads.
    io.dmem.s2_kill        := false.B
    io.dmem.s1_kill        := io.core.req.bits.kill || iflb_kill // kills request sent out last cycle
-   io.dmem.req.bits.phys  := true.B // we always use physical addresses (TLB is in LSU).
+   io.dmem.req.bits.phys  := !(usingDataScratchpad.B) // we always use physical addresses (TLB is in LSU).
+                                                      // the data scratchpad repurposes this bit
+
 
    //------------------------------------------------------------
    // handle responses and nacks
