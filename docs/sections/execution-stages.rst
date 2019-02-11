@@ -3,7 +3,7 @@ The Execute Pipeline
 
 .. _dual-issue-pipeline:
 .. figure:: /figures/execution-pipeline-2w.png
-    :alt: Dual Issue Pipeline 
+    :alt: Dual Issue Pipeline
 
     An example pipeline for a dual-issue BOOM. The first issue port schedules micro-ops onto
     Execute Unit #0, which can accept ALU operations, FPU operations, and integer multiply instructions.
@@ -25,7 +25,7 @@ Execution Units
 
 .. _example-fu:
 .. figure:: /figures/execution-unit.png
-    :alt: Example Execution Unit 
+    :alt: Example Execution Unit
 
     An example Execution Unit. This particular example shows an integer ALU (that can bypass
     results to dependent instructions) and an unpipelined divider that becomes busy during operation. Both
@@ -58,7 +58,7 @@ Functional Units
 
 .. _abstract-fu:
 .. figure:: /figures/abstract-functional-unit.png
-    :alt: Abstract Functional Unit 
+    :alt: Abstract Functional Unit
 
     The abstract Pipelined Functional Unit class. An expert-written, low-level functional unit
     is instantiated within the Functional Unit. The request and response ports are abstracted and bypass and
@@ -178,7 +178,7 @@ Floating Point Units
 
 .. _fp-fu:
 .. figure:: /figures/functional-unit-fpu.png
-    :alt: Functional Unit for FPU 
+    :alt: Functional Unit for FPU
 
     The class hierarchy of the FPU is shown. The expert-written code is contained within
     the hardfloat and rocket repositories. The “FPU” class instantiates the Rocket components, which itself

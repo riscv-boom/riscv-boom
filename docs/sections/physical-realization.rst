@@ -25,19 +25,19 @@ be register-retimed**.
 .. code-block:: scala
 
     val mul_result = lhs.toSInt * rhs.toSInt
-                                                                                   
-    val mul_output_mux = MuxCase(                                                  
-       UInt(0, 64), Array(                                                         
-          FN(DW_64, FN_MUL)    -> mul_result(63,0),                                
-          FN(DW_64, FN_MULH)   -> mul_result(127,64),                              
-          FN(DW_64, FN_MULHU)  -> mul_result(127,64),                              
-          FN(DW_64, FN_MULHSU) -> mul_result(127,64),                              
-          FN(DW_32, FN_MUL)    -> Cat(Fill(32, mul_result(31)), mul_result(31,0)), 
+
+    val mul_output_mux = MuxCase(
+       UInt(0, 64), Array(
+          FN(DW_64, FN_MUL)    -> mul_result(63,0),
+          FN(DW_64, FN_MULH)   -> mul_result(127,64),
+          FN(DW_64, FN_MULHU)  -> mul_result(127,64),
+          FN(DW_64, FN_MULHSU) -> mul_result(127,64),
+          FN(DW_32, FN_MUL)    -> Cat(Fill(32, mul_result(31)), mul_result(31,0)),
           FN(DW_32, FN_MULH)   -> Cat(Fill(32, mul_result(63)), mul_result(63,32)),
           FN(DW_32, FN_MULHU)  -> Cat(Fill(32, mul_result(63)), mul_result(63,32)),
-          FN(DW_32, FN_MULHSU) -> Cat(Fill(32, mul_result(63)), mul_result(63,32)) 
-    ))                                                                             
-                                                                                   
+          FN(DW_32, FN_MULHSU) -> Cat(Fill(32, mul_result(63)), mul_result(63,32))
+    ))
+
     io.out := ShiftRegister(mul_output_mux, imul_stages, io.valid)
 
 Pipelining Configuration Options

@@ -18,7 +18,7 @@ The code structure is shown below:
 
     * ``bpd-pipeline.scala``
     * ``bpd/``
-      
+
         * ``br-predictor.scala``
         * ``gshare/``
 
@@ -100,7 +100,7 @@ The code structure is shown below:
     * ``fetch-target-queue.scala``
     * ``frontend.scala``
     * ``icache.scala``
-  
+
   * ``lsu/``
 
     * ``dcache-shim.scala``

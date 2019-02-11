@@ -46,7 +46,7 @@ The Rename Map Table
 
 .. _rename-stage:
 .. figure:: /figures/rename-pipeline.png
-    :alt: The Rename Stage 
+    :alt: The Rename Stage
 
     The Rename Stage. Logical register specifiers read the map table to get their physical specifier.
     For superscalar rename, any changes to the map tables must be bypassed to dependent instructions. The

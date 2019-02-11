@@ -3,8 +3,8 @@ Micro-architectural Event Tracking
 
 Version 1.9.1 of the RISC-V Privileged Architecture adds support for
 **Hardware Performance Monitor (HPM)** counters. [1]_ The HPM support allows
-a nearly infinite number of micro-architectural events (called **Hardware 
-Performance Events (HPEs)**) to be multiplexed onto up to multiple physical counters 
+a nearly infinite number of micro-architectural events (called **Hardware
+Performance Events (HPEs)**) to be multiplexed onto up to multiple physical counters
 (called **Hardware Performance Counters (HPCs)**).
 
 Setup HPM events to track
@@ -37,8 +37,8 @@ and in bits [?:8] the event bitmask. Note that the bitmask can be a
 singular event **or** multiple events.
 
 .. _enable-uarch-counters:
-.. code-block:: c 
-    :caption: Enable Hardware Performance Monitor Counters 
+.. code-block:: c
+    :caption: Enable Hardware Performance Monitor Counters
 
     write_csr(mcounteren, -1); // Enable supervisor use of all perf counters
     write_csr(scounteren, -1); // Enable user use of all perf counters
@@ -59,12 +59,12 @@ read. However, this only applies to the HPC's not ``cycle``, ``instret``, and
 
 .. _read-csr:
 .. code-block:: c
-    :caption: Read CSR Register 
+    :caption: Read CSR Register
 
-    #define read_csr_safe(reg) ({ register long __tmp asm("a0"); \   
-            asm volatile ("csrr %0, " #reg : "=r"(__tmp)); \               
-            __tmp; })             
-    
+    #define read_csr_safe(reg) ({ register long __tmp asm("a0"); \
+            asm volatile ("csrr %0, " #reg : "=r"(__tmp)); \
+            __tmp; })
+
     // read cycle and instruction counts in user mode
     uint64_t csr_cycle  = read_csr_safe(cycle);
     uint64_t csr_instr  = read_csr_safe(instret);
@@ -83,7 +83,7 @@ read. However, this only applies to the HPC's not ``cycle``, ``instret``, and
 Adding your own HPE
 -------------------
 
-To add your own HPE, you modify the event set and particular event in 
+To add your own HPE, you modify the event set and particular event in
 ``src/main/scala/exu/core.scala``. Note that the 1st item in the ``Seq`` corresponds
 to the first bit in the event set.
 
@@ -92,7 +92,7 @@ External Resources
 
 Information in this section was adapted from https://static.dev.sifive.com/U54-MC-RVCoreIP.pdf
 which details more about HPE/C's from RocketChip's perspective.
-      
+
 .. [1]
    Future efforts may add some counters into a memory-mapped access
    region. This will open up the ability to track events that, for

@@ -15,7 +15,7 @@ high-performance designs:
     * This greatly simplifies the Load/Store Unit, which does not need to
       have loads snoop other loads nor does coherence traffic need to snoop
       the LSU, as required by sequential consistency.
-    
+
 * **Accrued Floating Point (FP) exception flags**
 
     * The FP status register does not need to be renamed, nor can FP
