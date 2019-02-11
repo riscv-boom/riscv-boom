@@ -72,7 +72,7 @@ efficiently.
 
 For this reason, BOOM uses an abstract Functional Unit class to “wrap"
 expert-written, low-level functional units from the Rocket repository
-(see :ref:`The Rocket-Chip Repository Layout`). However, the expert-written functional units
+(see :ref:`The Rocket-Chip Repository`). However, the expert-written functional units
 created for the Rocket in-order processor make assumptions about
 in-order issue and commit points (namely, that once an instruction has
 been dispatched to them it will never need to be killed). These
@@ -219,8 +219,8 @@ Although the  unit is unpipelined, it does not fit cleanly into the
 Pipelined/Unpipelined abstraction used by the other functional units
 (see :numref:`fu-hierarchy`). This is because the unit provides
 an unstable FIFO interface: although the  unit may provide a *ready*
-signal on Cycle :math:`i`, there is no guarantee that it will continue
-to be *ready* on Cycle :math:`i+1`, even if no operations are enqueued.
+signal on Cycle i, there is no guarantee that it will continue
+to be *ready* on Cycle i+1, even if no operations are enqueued.
 This proves to be a challenge, as the issue window may attempt to issue
 an  instruction but cannot be certain the  unit will accept it once it
 reaches the  unit on a later cycle.
