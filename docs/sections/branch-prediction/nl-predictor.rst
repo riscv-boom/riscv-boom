@@ -26,14 +26,14 @@ prediction in concert with the RAS as to whether there is a
 branch, jump, or return found in the Fetch Packet and which
 instruction in the Fetch Packet is to blame. The BIM is used to
 determine if that prediction made was a branch taken or not taken.
-The BTB entry also contains a predicted PC target, which is used 
+The BTB entry also contains a predicted PC target, which is used
 as the Fetch PC on the next cycle.
 
 .. _nlp-predictor-unit:
 .. figure:: /figures/btb.png
     :scale: 35 %
     :align: center
-    :alt: The Next-line Predictor 
+    :alt: The Next-line Predictor
 
     The Next-line Predictor (NLP) Unit. The Fetch PC scans the BTB’s “PC tags” for a match.
     If a match is found (and the entry is valid), the BIM and RAS are consulted for the final verdict. If the entry

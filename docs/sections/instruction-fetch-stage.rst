@@ -8,8 +8,8 @@ Instruction Fetch
     The BOOM Front-end
 
 
-BOOM instantiates its own **Front-end**, similar to how the Rocket core’s 
-instantiates its own Front-end. This Front-end fetches instructions and 
+BOOM instantiates its own **Front-end**, similar to how the Rocket core’s
+instantiates its own Front-end. This Front-end fetches instructions and
 makes predictions throughout the Fetch stage to redirect the instruction
 stream in multiple Fetch cycles (F0, F1...). If a misprediction is detected in BOOM’s
 **Back-end** (execution pipeline), or one of BOOM’s own predictors wants to redirect the pipeline in
@@ -19,7 +19,7 @@ more information on how branch prediction fits into the Fetch Stage’s pipeline
 
 Since superscalar fetch is supported, the Front-end retrieves a **Fetch
 Packet** of instructions from instruction memory and puts them into the
-Fetch Buffer to give to the rest of the pipeline. The Fetch Packet also 
+Fetch Buffer to give to the rest of the pipeline. The Fetch Packet also
 contains other meta-data, such as a valid mask (which instructions in the
 packet are valid?) and some branch prediction information that is used
 later in the pipeline. Additionally, the PC and branch prediction information

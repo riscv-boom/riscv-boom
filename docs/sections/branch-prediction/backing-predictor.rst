@@ -9,18 +9,18 @@ can be remembered), and very simple (the BIM hysterisis bits
 are not able to learn very complicated or long history patterns).
 
 To capture more branches and more complicated branching behaviors, BOOM
-provides support for a “Backing Predictor", or BPD (see 
+provides support for a “Backing Predictor", or BPD (see
 :numref:`backing-predictor-unit`).
 
 The BPD’s goal is to provide very high accuracy in a (hopefully) dense
 area. The BPD only makes taken/not-taken predictions; it therefore relies
-on some other agent to provide information on what instructions are 
+on some other agent to provide information on what instructions are
 branches and what their targets are. The BPD can either use the BTB
 for this information or it can wait and decode the instructions themselves
 once they have been fetched from the i-cache. This saves on needing to
 store the PC tags and branch targets within the BPD [7]_.
 
-The BPD is accessed throughout the Fetch stages and in parallel with the instruction cache access and BTB(see
+The BPD is accessed throughout the Fetch stages and in parallel with the instruction cache access and BTB (see
 :numref:`Front-end`). This allows the BPD to be stored in sequential
 memory (i.e., SRAM instead of flip-flops). With some clever
 architecting, the BPD can be stored in single-ported SRAM to achieve the
@@ -50,7 +50,7 @@ the BPD’s prediction bit-vector if a Front-end redirect should be made.
 
 .. _backing-predictor-unit:
 .. figure:: /figures/bpd.png
-    :alt: The Backing Branch Predictor 
+    :alt: The Backing Branch Predictor
 
     The Backing Branch Predictor (BPD) Unit. The Front-end sends the “next PC” (npc) to
     the BPD (F0 stage). A hash of the npc and the global history is used to index the predictor tables. The
@@ -209,7 +209,7 @@ The Abstract Branch Predictor Class
 To facilitate exploring different global history-based BPD designs, an
 abstract “BrPredictor" class is provided. It provides a standard
 interface into the BPD and the control logic for managing the global
-history register. This abstract class can be found in 
+history register. This abstract class can be found in
 :numref:`backing-predictor-unit` labeled “predictor
 (base)”.
 
@@ -245,7 +245,7 @@ prediction is).
 .. figure:: /figures/2bc-prediction.png
     :scale: 30 %
     :align: center
-    :alt: The GShare Predictor 
+    :alt: The GShare Predictor
 
     A gshare predictor uses the global history hashed with the PC to index into a table of 2-bit
     counters. The high-order bit makes the prediction.
@@ -281,9 +281,9 @@ The H-bit:
 .. figure:: /figures/2bc-fsm.png
     :scale: 30 %
     :align: center
-    :alt: The Two-bit counter state machine 
-    
-    The Two-bit counter state machine 
+    :alt: The Two-bit counter state machine
+
+    The Two-bit counter state machine
 
 By breaking the high-order p-bit and the low-order h-bit apart, we can
 place each in 1 read/1 write SRAM. A few more assumptions can help us do
@@ -318,16 +318,16 @@ prediction state has been read out of the Gshare’s p-table.
 
 .. _gshare-predictor-pipeline:
 .. figure:: /figures/gshare.png
-    :alt: The GShare predictor pipeline 
+    :alt: The GShare predictor pipeline
 
-    The GShare predictor pipeline 
+    The GShare predictor pipeline
 
 The TAGE Predictor
 ------------------
 
 .. _tage-predictor:
 .. figure:: /figures/tage.png
-    :alt: The TAGE Predictor 
+    :alt: The TAGE Predictor
 
     The TAGE predictor. The requesting address (PC) and the global history are fed into each
     table’s index hash and tag hash. Each table provides its own prediction (or no prediction) and the table
@@ -375,31 +375,31 @@ bits of history.
 Instead of attempting to dynamically fold a very long history register
 every cycle, the history can be stored in a circular shift register (CSR).
 The history is stored already folded and only the new history bit and
-the oldest history bit need to be provided to perform an update. 
+the oldest history bit need to be provided to perform an update.
 :numref:`tage-csr` shows an example of how a CSR works.
 
 .. _tage-csr:
 .. code-block:: none
     :caption: The circular shift register. When a new branch outcome is added, the register is shifted (and wrapped around). The new outcome is added and the oldest bit in the history is “evicted”.
 
-    Example:   
-      A 12 bit value (0b_0111_1001_1111) folded onto a 5 bit CSR becomes 
-      (0b_0_0010), which can be found by:                                       
-                                                                                 
-                                                                                 
-                   /-- history[12] (evict bit)                                   
-                   |                                                             
-     c[4], c[3], c[2], c[1], c[0]                                                
-      |                        ^                                                 
-      |                        |                                                 
-      \_______________________/ \---history[0] (newly taken bit)                 
-                                                                                 
-                                                                                 
-    (c[4] ^ h[ 0] generates the new c[0]).                                        
-    (c[1] ^ h[12] generates the new c[2]).       
+    Example:
+      A 12 bit value (0b_0111_1001_1111) folded onto a 5 bit CSR becomes
+      (0b_0_0010), which can be found by:
+
+
+                   /-- history[12] (evict bit)
+                   |
+     c[4], c[3], c[2], c[1], c[0]
+      |                        ^
+      |                        |
+      \_______________________/ \---history[0] (newly taken bit)
+
+
+    (c[4] ^ h[ 0] generates the new c[0]).
+    (c[1] ^ h[12] generates the new c[2]).
 
 Each table must maintain *three* CSRs. The first CSR is used for
-computing the index hash and has a size n=log(num\_table\_entries). As
+computing the index hash and has a size n=log(num_table_entries). As
 a CSR contains the folded history, any periodic history pattern matching
 the length of the CSR will XOR to all zeroes (potentially quite common).
 For this reason, there are two CSRs for computing the tag hash, one of

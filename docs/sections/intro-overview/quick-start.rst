@@ -14,7 +14,7 @@ from that repositories README:
     git clone https://github.com/riscv-boom/boom-template.git
     cd boom-template
     ./scripts/init-submodules.sh
-    
+
     # You may want to add the following two lines to your shell profile
     export RISCV=/path/to/install/dir
     export PATH=$RISCV/bin:$PATH

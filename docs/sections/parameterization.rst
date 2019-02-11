@@ -12,8 +12,8 @@ parameters that you can manipulate for a BOOM core.
 This is taken from :code:`src/main/scala/common/parameters.scala`.
 
 .. _general-boom-params:
-.. code-block:: scala 
-    :caption: General BOOM Parameters 
+.. code-block:: scala
+    :caption: General BOOM Parameters
 
     fetchWidth: Int = ?,
     decodeWidth: Int = ?,
