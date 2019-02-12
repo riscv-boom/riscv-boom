@@ -116,7 +116,8 @@ class WithSmallBooms extends Config((site, here, up) => {
          tage = Some(TageParameters(enabled=false)),
          bpdBaseOnly = Some(BaseOnlyParameters(enabled=true)),
          nPerfCounters = 2),
-      icache = Some(r.icache.get.copy(fetchBytes=2*4))
+      dcache = Some(DCacheParams(rowBits = site(SystemBusKey).beatBits, nSets=64, nWays=4, nMSHRs=2, nTLBEntries=8)),
+      icache = Some(ICacheParams(rowBits = site(SystemBusKey).beatBits, nSets=64, nWays=4, fetchBytes=2*4))
       )}
    case SystemBusKey => up(SystemBusKey, site).copy(beatBytes = 8)
 })
