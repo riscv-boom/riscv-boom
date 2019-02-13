@@ -113,8 +113,7 @@ class WithSmallBooms extends Config((site, here, up) => {
          numFpPhysRegisters = 48,
          numLsuEntries = 8,
          maxBrCount = 4,
-         tage = Some(TageParameters(enabled=false)),
-         bpdBaseOnly = Some(BaseOnlyParameters(enabled=true)),
+         gshare = Some(GShareParameters(enabled=true, history_length=11, num_sets=2048)),
          nPerfCounters = 2),
       icache = Some(r.icache.get.copy(fetchBytes=2*4))
       )}
