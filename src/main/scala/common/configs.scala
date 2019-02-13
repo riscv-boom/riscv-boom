@@ -20,7 +20,9 @@ import boom.exu._
 import boom.lsu._
 import boom.system.BoomTilesKey
 
-// Try to be a reasonable BOOM design point.
+/**
+ * Try to be a reasonable BOOM design point.
+ */
 class DefaultBoomConfig extends Config((site, here, up) => {
 
    // Top-Level
@@ -56,6 +58,9 @@ class DefaultBoomConfig extends Config((site, here, up) => {
    case SystemBusKey => up(SystemBusKey, site).copy(beatBytes = 16)
 })
 
+/**
+ * Enables RV32 version of the core
+ */
 class WithBoomRV32 extends Config((site, here, up) => {
   case XLen => 32
   case BoomTilesKey => up(BoomTilesKey, site) map { r =>
@@ -65,6 +70,9 @@ class WithBoomRV32 extends Config((site, here, up) => {
   }
 })
 
+/**
+ * Combines the Memory and Integer Issue Queues. Similar to BOOM v1.
+ */
 class WithUnifiedMemIntIQs extends Config((site, here, up) => {
    case BoomTilesKey => up(BoomTilesKey, site) map { r =>
       r.copy(core = r.core.copy(
@@ -73,6 +81,9 @@ class WithUnifiedMemIntIQs extends Config((site, here, up) => {
    }
 })
 
+/**
+ * Remove FPU
+ */
 class WithoutBoomFPU extends Config((site, here, up) => {
    case BoomTilesKey => up(BoomTilesKey, site) map { r =>
       r.copy(core = r.core.copy(
@@ -81,16 +92,25 @@ class WithoutBoomFPU extends Config((site, here, up) => {
    }
 })
 
+/**
+ * Customize the amount of perf. counters (HPMs) for the core
+ */
 class WithNPerfCounters(n: Int) extends Config((site, here, up) => {
    case BoomTilesKey => up(BoomTilesKey, site) map { r => r.copy(core = r.core.copy(
       nPerfCounters = n
    ))}
 })
 
+/**
+ * Enable tracing
+ */
 class WithTrace extends Config((site, here, up) => {
    case BoomTilesKey => up(BoomTilesKey, site) map { r => r.copy(trace = true) }
 })
 
+/**
+ * Enable RVC
+ */
 class WithRVC extends Config((site, here, up) => {
    case BoomTilesKey => up(BoomTilesKey, site) map {r => r.copy(
       core = r.core.copy(
@@ -98,7 +118,9 @@ class WithRVC extends Config((site, here, up) => {
          useCompressed = true))}
 })
 
-// Small BOOM! Try to be fast to compile and easier to debug.
+/**
+ * Small BOOM! Try to be fast to compile and easier to debug.
+ */
 class WithSmallBooms extends Config((site, here, up) => {
    case BoomTilesKey => up(BoomTilesKey, site) map { r =>r.copy(
       core = r.core.copy(
@@ -121,7 +143,9 @@ class WithSmallBooms extends Config((site, here, up) => {
    case SystemBusKey => up(SystemBusKey, site).copy(beatBytes = 8)
 })
 
-// Try to match the Cortex-A9.
+/**
+ * Intermediate BOOM. Try to match the Cortex-A9.
+ */
 class WithMediumBooms extends Config((site, here, up) => {
    case BoomTilesKey => up(BoomTilesKey, site) map { r =>r.copy(
       core = r.core.copy(
@@ -149,7 +173,9 @@ class WithMediumBooms extends Config((site, here, up) => {
    case SystemBusKey => up(SystemBusKey, site).copy(beatBytes = 8)
 })
 
-// Try to match the Cortex-A15. Don't expect good QoR (yet).
+/**
+ * Try to match the Cortex-A15. Don't expect good QoR (yet).
+ */
 class WithMegaBooms extends Config((site, here, up) => {
    case BoomTilesKey => up(BoomTilesKey, site) map { r =>r.copy(
       core = r.core.copy(
