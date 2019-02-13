@@ -22,6 +22,24 @@ import freechips.rocketchip.util._
 
 import boom.common._
 
+/**
+ * Note: For all these configs, the mix-ins are applied from
+ * "bottom" to "top". This means that the "lower" mix-ins set the
+ * default values of the parameters, and the "higher" mix-ins
+ * overwrite the defaults to implement a new configuration.
+ *
+ * This order is specified in the GeneratorApp class (aka foldRight)
+ *
+ * Ex.
+ * class SmallBoomConfig extends Config(
+ *    new WithRVC ++ <-- Applied 6th
+ *    new WithSmallBooms ++ <-- Applied 5th
+ *    new DefaultBoomConfig ++ <-- Applied 4th
+ *    new WithNBoomCores(1) ++ <-- Applied 3rd
+ *    new WithoutTLMonitors ++ <-- Applied 2nd
+ *    new freechips.rocketchip.system.BaseConfig) <-- Applied 1st
+ */
+
 // scalastyle:off
 
 class BoomConfig extends Config(
