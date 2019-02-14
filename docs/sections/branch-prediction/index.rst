@@ -21,7 +21,6 @@ is a more complicated structure like a GShare predictor.
 
     nl-predictor
     backing-predictor
-    configurations
 
 .. [1] Unfortunately, the terminology in the literature gets a bit
     muddled here in what to call different types and levels of branch

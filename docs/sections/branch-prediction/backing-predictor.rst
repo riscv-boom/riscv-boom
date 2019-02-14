@@ -55,7 +55,7 @@ the BPD’s prediction bit-vector if a Front-end redirect should be made.
     The Backing Branch Predictor (BPD) Unit. The Front-end sends the “next PC” (npc) to
     the BPD (F0 stage). A hash of the npc and the global history is used to index the predictor tables. The
     predictor tables (ideally stored in SRAM) are accessed in parallel with the instruction cache (F1/2 stage).
-    The BPD then returns a prediction for each instruction in the fetch packet. The instructions returning from
+    The BPD then returns a prediction for each instruction in the Fetch Packet. The instructions returning from
     the instruction cache are quickly decoded; any branches that are predicted as taken will redirect the front-
     end from the F3 stage. Prediction snapshots and metadata are stored in the branch rename snapshots (for
     fixing the predictor after mispredictions) and the Branch Re-order Buffer (for updating the predictor in the
@@ -72,7 +72,7 @@ The NLP learns any “taken" instruction’s PC and target PC -
 thus, the NLP is able to predict jumps and jump-register instructions.
 
 If the NLP does not make a prediction on a JAL instruction, the pipeline
-will redirect the Front-end in F2 (see :numref:`Front-end`). [9]_
+will redirect the Front-end in F4 (see :numref:`Front-end`). [9]_
 
 Jump-register instructions that were not predicted by the NLP will be
 sent down the pipeline with no prediction made. As JALR instructions require
@@ -138,15 +138,13 @@ The Fetch Target Queue (FTQ)
 
 The Reorder Buffer (see :ref:`The Reorder Buffer (ROB) and the Dispatch Stage`)
 maintains a record of all inflight instructions. Likewise, the **Fetch Target Queue (FTQ)**
-maintains a record of all inflight branch predictions. These two
+maintains a record of all inflight branch predictions and PC information. These two
 structures are decoupled as FTQ entries are *incredibly* expensive
 and not all ROB entries will contain a branch instruction. As only
 roughly one in every six instructions is a branch, the FTQ can be made
 to have fewer entries than the ROB to leverage additional savings.
 
-Each FTQ entry corresponds to a single superscalar branch prediction.
-Said another way, there is a 1:1 correspondence between a single fetch
-cycle’s prediction and a FTQ entry. For each prediction made, the
+Each FTQ entry corresponds to one Fetch cycle. For each prediction made, the
 branch predictor packs up data that it will need later to perform an
 update. For example, a branch predictor will want to remember what
 *index* a prediction came from so it can update the counters at that
@@ -175,13 +173,6 @@ multiple loop iterations are inflight. However, the FTQ could be used
 to bypass branch predictions to mitigate this issue. Currently, this
 bypass behavior is not supported in BOOM.
 
-The FTQ is broken up into two parts: the prediction *data* and the
-branch execution *metadata*. The metadata tracks which instructions
-within the fetch packet where branches, which direction they took, and
-which branches were mispredicted (this requires random access). The
-prediction data is written once into the BROB upon instruction
-**Dispatch** and read out (and deallocated) during **Commit**.
-
 Rename Snapshot State
 ---------------------
 
@@ -199,7 +190,7 @@ stored in parallel with the **Rename Snapshots**. During **Decode**
 and **Rename**, a branch tag is allocated to each branch and a
 snapshot of the rename tables are made to facilitate single-cycle
 rollback if a misprediction occurs. Like the branch tag and rename
-maptable snapshots, the corresponding branch predictor “rename” snapshot
+Map Table snapshots, the corresponding branch predictor “rename” snapshot
 can be deallocated once the branch is resolved by the Branch Unit in
 **Execute**.
 
@@ -446,28 +437,34 @@ Other Predictors
 
 BOOM provides a number of other predictors that may provide useful.
 
+The Base Only Predictor
+^^^^^^^^^^^^^^^^^^^^^^^
+
+The Base Only Predictor uses the BTBs BIM to make a prediction on
+whether the branch was taken or not.
+
 The Null Predictor
 ^^^^^^^^^^^^^^^^^^
 
 The Null Predictor is used when no BPD predictor is desired. It will
-always predict “not taken".
+always predict "not taken".
 
 The Random Predictor
 ^^^^^^^^^^^^^^^^^^^^
 
-The Random Predictor uses an LFSR to randomize both “was a prediction
-made?" and “which direction each branch in the *fetch packet* should
+The Random Predictor uses an LFSR to randomize both "was a prediction
+made?" and "which direction each branch in the *Fetch Packet* should
 take?". This is very useful for both torturing-testing BOOM and for
 providing a worse-case performance baseline for comparing branch
 predictors.
 
-.. [7] It’s the *PC tag* storage and *branch target* storage that
+.. [7] It’s the *PC Tag* storage and *Branch Target* storage that
     makes the BTB within the NLP so expensive.
 
 .. [8] JAL instructions jump to a PC+Immediate location, whereas
      JALR instructions jump to a PC+Register[rs1]+Immediate location.
 
-.. [9] Redirecting the Front-end in the *F2 Stage* for
+.. [9] Redirecting the Front-end in the *F4 Stage* for
      instructions is trivial, as the instruction can be decoded and its
     target can be known.
 
@@ -496,7 +493,7 @@ predictors.
 
 .. [13] Notice that there is a delay between beginning to make a
     prediction in the *F0* stage (when the global history is read)
-    and redirecting the Front-end in the *F3* stage (when the
+    and redirecting the Front-end in the *F4* stage (when the
     global history is updated). This results in a “shadow” in which a
     branch beginning to make a prediction in *F0* will not see the
     branches (or their outcomes) that came a cycle (or two) earlier in

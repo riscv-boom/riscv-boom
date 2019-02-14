@@ -40,7 +40,7 @@ high-performance designs:
       before accessing the rename tables, or it prevents adding more ports
       to remove the instruction decode off the critical path.
 
-* **rs1, rs2, rs3, rd are always in the same place**
+* **Registers rs1, rs2, rs3, rd are always in the same place**
 
     * This allows decode and rename to proceed in parallel.
 

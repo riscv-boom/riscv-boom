@@ -37,7 +37,7 @@ Bi-Modal Table (BIM)
 
 Micro-Op
     Element sent throughout the pipeline holding information about the type of
-    micro-op, its PC, pointers to the FTQ, ROB, LDQ, STQs, and more.
+    Micro-Op, its PC, pointers to the FTQ, ROB, LDQ, STQs, and more.
 
 Speculative Execution
     A microarchitectural technique that allows the processor to run-ahead during
@@ -100,7 +100,7 @@ Rename Map Table
 
 Busy Table
     Table indicating the status of a physical register. Once a physical
-    register is ready, then the **Micro0Op** can procede through the
+    register is ready, then the **Micro-Op** can procede through the
     rest of the pipeline (issued).
 
 Free List

@@ -63,10 +63,10 @@ interest to micro-architects:
 
 -  All 16b instructions map directly into a longer 32b instruction.
 
-BOOM re-uses the Front-end design from Rocket, a 5-stage in-order core.
-BOOM then takes instructions returning (the Fetch Packet) from the
-Rocket Front-end, quickly decodes the instructions for branch
-prediction, and pushes the Fetch Packet into the Fetch Buffer.
+During the Front-end stages, BOOM retrieves a Fetch Packet from the
+i-cache, quickly decodes the instructions for branch
+prediction, and pushes the Fetch Packet into the Fetch Buffer. However,
+doing this brings up a particular set of issues to manage:
 
 -  Increased decoding complexity (e.g., operands can now move around).
 
@@ -86,7 +86,7 @@ The following describes the implementation of RVC in BOOM by describing
 the lifetime of a instruction.
 
 -  The Front-end returns Fetch Packets of fetchWidth*16 bits wide. This
-   was supported inherently in the Rocket Front-end
+   was supported inherently in the BOOM Front-end.
 
 -  Maintain statefulness in F3, in the cycle where Fetch Packets
    are dequeued from the i-cache response queue and enqueued onto the
@@ -97,15 +97,12 @@ the lifetime of a instruction.
    Fetch Packet and expanded to fetchWidth*32 bits for enqueuing onto the
    Fetch Buffer. Predecode determines the start address of every
    instruction in this Fetch Packet and masks the Fetch Packet for the
-   fetch buffer
+   Fetch Buffer
 
 -  The Fetch Buffer now compacts away invalid, or misaligned instructions
    when storing to its memory.
 
 The following section describes miscellaneous implementation details.
-
--  RVC decode is performed by expanding RVC instructions using Rocket's
-   RVCExpander in the normal Decode stage
 
 -  A challenging problem is dealing with instructions that cross a
    **Fetch Boundary**. We track these instructions as belonging to the
