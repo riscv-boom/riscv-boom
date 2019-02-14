@@ -1,13 +1,14 @@
 The Register Files and Bypass Network
 =====================================
 
-.. _simple-boom-pipeline:
-.. figure:: /figures/simple_boom_pipeline.png
-    :alt: Single Issue Pipeline
+.. _full-boom-pipeline:
+.. figure:: /figures/boom-pipeline.svg
+    :alt: Multi-Issue Pipeline
 
-    An example single-issue pipeline. The register file needs 3 read ports to satisfy FMA operations
-    and 2 write ports to satisfy the variable latency operations without interfering with the fixed latency ALU
-    and FP write-backs. To make scheduling of the write port trivial, the ALU’s pipeline is lengthened to match
+    An example multi-issue pipeline. The integer register file needs 6 read ports and 3 write ports for the 
+    execution units present. The FP register file needs 3 read ports and 2 write ports. FP and memory
+    operations share a long latency write port to both the integer and FP 
+    register file. To make scheduling of the write port trivial, the ALU’s pipeline is lengthened to match
     the FPU latency. The ALU is able to bypass from any of these stages to dependent instructions in the
     Register Read stage.
 

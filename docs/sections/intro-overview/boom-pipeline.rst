@@ -2,10 +2,10 @@ The BOOM Pipeline
 =================
 
 .. _boom-pipeline:
-.. figure:: /figures/boom_stages.png
-    :alt: BOOM Pipeline Stages
+.. figure:: /figures/boom-pipeline.svg
+    :alt: Default BOOM Pipeline with Stages
 
-    BOOM Pipeline Stages
+    Default BOOM Pipeline with Stages
 
 Overview
 --------
