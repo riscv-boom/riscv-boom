@@ -13,8 +13,8 @@ Overview
 Conceptually, BOOM is broken up into 10 stages: **Fetch**, **Decode**,
 **Register Rename**, **Dispatch**, **Issue**, **Register Read**, **Execute**, **Memory**,
 **Writeback** and **Commit**. However, many of those stages are
-combined in the current implementation, yielding **six** stages:
-**Fetch**, **Decode/Rename/Dispatch**, **Issue/RegisterRead**, **Execute**,
+combined in the current implementation, yielding **seven** stages:
+**Fetch**, **Decode/Rename**, **Rename/Dispatch**, **Issue/RegisterRead**, **Execute**,
 **Memory** and **Writeback** (**Commit** occurs asynchronously, so
 it is not counted as part of the “pipeline").
 

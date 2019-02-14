@@ -42,8 +42,8 @@ At *dispatch*, up to W instructions are written from the *fetch
 packet* into an ROB row, where each instruction is written to a
 different bank across the row. As the instructions within a *fetch
 packet* are all consecutive (and aligned) in memory, this allows a
-single PC to be associated with the entire *fetch packet* (and the
-instruction’s position within the *fetch packet* provides the low-order
+single PC to be associated with the entire *Fetch Packet* (and the
+instruction’s position within the *Fetch Packet* provides the low-order
 bits to its own PC). While this means that branching code will leave
 bubbles in the ROB, it makes adding more instructions to the ROB very
 cheap as the expensive costs are amortized across each ROB row.
@@ -137,7 +137,7 @@ Exceptions and Flushes
 
 Exceptions are handled when the instruction at the *commit head* is
 excepting. The pipeline is then flushed and the ROB emptied. The rename
-map tables must be reset to represent the true, non-speculative
+Map Tables must be reset to represent the true, non-speculative
 *committed* state. The Front-end is then directed to the appropriate PC.
 If it is an architectural exception, the excepting instruction’s PC
 (referred to as the *exception vector*) is sent to the Control/Status
@@ -148,16 +148,16 @@ and execution can begin anew.
 Parameterization - Rollback versus Single-cycle Reset
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The behavior of resetting the map tables is parameterizable. The first
+The behavior of resetting the Map Tables is parameterizable. The first
 option is to rollback the ROB one row per cycle to unwind the rename
 state (this is the behavior of the MIPS
 R10k). For each instruction, the *stale
-physical destination* register is written back into the map table for
+physical destination* register is written back into the Map Table for
 its *logical destination* specifier.
 
 A faster single-cycle reset is available. This is accomplished by using
 another rename snapshot that tracks the *committed* state of the rename
-tables. This *committed map table* is updated as instructions
+tables. This *committed Map Table* is updated as instructions
 commit. [3]_
 
 Causes

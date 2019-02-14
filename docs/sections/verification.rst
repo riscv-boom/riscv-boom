@@ -41,6 +41,7 @@ Current Configurations Tested:
 * BoomConfig
 * SmallBoomConfig
 * MediumBoomConfig
+* SmallRV32UnifiedBoomConfig
 
 Current Tests Used:
 
