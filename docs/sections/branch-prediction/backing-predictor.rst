@@ -9,8 +9,7 @@ can be remembered), and very simple (the BIM hysterisis bits
 are not able to learn very complicated or long history patterns).
 
 To capture more branches and more complicated branching behaviors, BOOM
-provides support for a “Backing Predictor", or BPD (see
-:numref:`backing-predictor-unit`).
+provides support for a “Backing Predictor", or BPD.
 
 The BPD’s goal is to provide very high accuracy in a (hopefully) dense
 area. The BPD only makes taken/not-taken predictions; it therefore relies
@@ -21,10 +20,20 @@ once they have been fetched from the i-cache. This saves on needing to
 store the PC tags and branch targets within the BPD [7]_.
 
 The BPD is accessed throughout the Fetch stages and in parallel with the instruction cache access and BTB (see
-:numref:`Front-end`). This allows the BPD to be stored in sequential
+:numref:`front-end-bpu-bpd`). This allows the BPD to be stored in sequential
 memory (i.e., SRAM instead of flip-flops). With some clever
 architecting, the BPD can be stored in single-ported SRAM to achieve the
 density desired.
+
+.. _front-end-bpu-bpd:
+.. figure:: /figures/front-end.svg
+    :alt: BOOM Front-end
+
+    The BOOM Front-end. Here you can see the BTB and Branch Predictor on the lower portion of the diagram.
+    The instructions returning from the instruction cache are quickly decoded; any branches that are predicted as taken
+    from the BTB or Backing Predictor will redirect the front-end from the F4 stage. Prediction snapshots and metadata
+    are stored in the branch rename snapshots (for fixing the predictor after mispredictions) and the Fetch Target Queue
+    (for updating the predictors in the Commit stage).
 
 Making Predictions
 ------------------
@@ -47,19 +56,6 @@ bit for each instruction in the Fetch Packet). A later Fetch stage will
 will decode the instructions in the Fetch
 Packet, compute the branch targets, and decide in conjunction with
 the BPD’s prediction bit-vector if a Front-end redirect should be made.
-
-.. _backing-predictor-unit:
-.. figure:: /figures/bpd.png
-    :alt: The Backing Branch Predictor
-
-    The Backing Branch Predictor (BPD) Unit. The Front-end sends the “next PC” (npc) to
-    the BPD (F0 stage). A hash of the npc and the global history is used to index the predictor tables. The
-    predictor tables (ideally stored in SRAM) are accessed in parallel with the instruction cache (F1/2 stage).
-    The BPD then returns a prediction for each instruction in the Fetch Packet. The instructions returning from
-    the instruction cache are quickly decoded; any branches that are predicted as taken will redirect the front-
-    end from the F3 stage. Prediction snapshots and metadata are stored in the branch rename snapshots (for
-    fixing the predictor after mispredictions) and the Branch Re-order Buffer (for updating the predictor in the
-    Commit stage).
 
 Jump and Jump-Register Instructions
 -----------------------------------
@@ -194,6 +190,15 @@ Map Table snapshots, the corresponding branch predictor “rename” snapshot
 can be deallocated once the branch is resolved by the Branch Unit in
 **Execute**.
 
+.. _predictor-pipeline:
+.. figure:: /figures/br-prediction-pipeline.svg
+    :alt: The Branch Predictor Pipeline
+
+    The Branch Predictor Pipeline. Although a simple diagram, this helps show the I/O within the Branch Prediction
+    Pipeline. The Front-end sends the “next PC” (shown as req) to the pipeline in the F0 stage. Within the Abstract
+    Predictor, hashing is managed by the Abstract Predictor wrapper. The Abstract Predictor then returns a "BPD response"
+    or in other words a prediction for each instruction in the Fetch Packet.
+
 The Abstract Branch Predictor Class
 -----------------------------------
 
@@ -201,8 +206,8 @@ To facilitate exploring different global history-based BPD designs, an
 abstract “BrPredictor" class is provided. It provides a standard
 interface into the BPD and the control logic for managing the global
 history register. This abstract class can be found in
-:numref:`backing-predictor-unit` labeled “predictor
-(base)”.
+:numref:`predictor-pipeline` labeled “Abstract Predictor”. For a more detailed view of the predictor
+with an example look at :numref:`gshare-predictor-pipeline`.
 
 Global History
 ^^^^^^^^^^^^^^
@@ -269,12 +274,12 @@ The H-bit:
   branch took).
 
 .. _two-bit-fsm:
-.. figure:: /figures/2bc-fsm.png
+.. figure:: /figures/2bc-fsm.svg
     :scale: 30 %
     :align: center
-    :alt: The Two-bit counter state machine
+    :alt: The Two-bit Counter State Machine
 
-    The Two-bit counter state machine
+    The Two-bit Counter State Machine
 
 By breaking the high-order p-bit and the low-order h-bit apart, we can
 place each in 1 read/1 write SRAM. A few more assumptions can help us do
@@ -308,10 +313,10 @@ the instructions have returned from the instruction cache and the
 prediction state has been read out of the Gshare’s p-table.
 
 .. _gshare-predictor-pipeline:
-.. figure:: /figures/gshare.png
-    :alt: The GShare predictor pipeline
+.. figure:: /figures/gshare.svg
+    :alt: The GShare Predictor Pipeline
 
-    The GShare predictor pipeline
+    The GShare Predictor Pipeline
 
 The TAGE Predictor
 ------------------

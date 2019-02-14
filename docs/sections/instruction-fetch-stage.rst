@@ -2,7 +2,7 @@ Instruction Fetch
 =================
 
 .. _front-end:
-.. figure:: /figures/frontend.png
+.. figure:: /figures/front-end.svg
     :alt: BOOM Front-end
 
     The BOOM Front-end
