@@ -131,6 +131,7 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
    val q_f3_btb_resp    = withReset(reset.toBool || clear_f3) { Module(new ElasticReg(gen = Valid(new BoomBTBResp))) }
    val f3_req           = Wire(Valid(new PCReq()))
    val f3_fetch_bundle  = Wire(new FetchBundle)
+
    dontTouch(f3_fetch_bundle)
 
    val r_f4_valid = RegInit(false.B)
@@ -356,13 +357,21 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
          f3_jal_target,
          nextFetchStart(f3_aligned_pc)))
 
+   // mask out instructions after predicted branch
+   val f3_kill_mask = Wire(UInt(fetch_width.W))
+   val f3_btb_mask = Wire(UInt(fetch_width.W))
+   val f3_bpd_mask = Wire(UInt(fetch_width.W))
 
    when (f3_valid && f4_ready && !r_f4_req.valid)
    {
       val last_idx  = Mux(inLastChunk(f3_fetch_bundle.pc) && icIsBanked.B,
                           (fetchWidth/2-1).U, (fetchWidth-1).U)
-      prev_is_half := (!(f3_valid_mask(last_idx-1.U) && f3_fetch_bundle.insts(last_idx-1.U)(1,0) === 3.U)
-                    && f3_fetch_bundle.insts(last_idx)(1,0) === 3.U)
+      prev_is_half := (
+         !(f3_valid_mask(last_idx-1.U) && f3_fetch_bundle.insts(last_idx-1.U)(1,0) === 3.U)
+      && !f3_kill_mask(last_idx)
+      && f3_btb_mask(last_idx)
+      && f3_bpd_mask(last_idx)
+      && f3_fetch_bundle.insts(last_idx)(1,0) === 3.U)
       prev_half    := f3_fetch_bundle.insts(last_idx)(15,0)
       prev_nextpc  := alignToFetchBoundary(f3_fetch_bundle.pc) + Mux(inLastChunk(f3_fetch_bundle.pc) && icIsBanked.B,
                                                                      bankBytes.U,
@@ -454,23 +463,22 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
 
    io.f3_ras_update := bchecker.io.ras_update
 
-   // mask out instructions after predicted branch
-   val f3_kill_mask = KillMask(
+   f3_kill_mask := KillMask(
       f3_req.valid,
       Mux(f3_bpd_overrides_bcheck, f3_bpd_redirect_cfiidx, bchecker.io.req_cfi_idx),
       fetchWidth)
 
-   val btb_mask = Mux(f3_btb_resp.valid && !f3_req.valid,
-                  f3_btb_resp.bits.mask,
-                  Fill(fetchWidth, 1.U(1.W)))
-   val bpd_mask = Fill(fetchWidth, 1.U(1.W))  // TODO XXX add back bpd
-//   val bpd_mask = Mux(io.f3_bpu_request.valid && !f3_req.valid,
+   f3_btb_mask := Mux(f3_btb_resp.valid && !f3_req.valid,
+                      f3_btb_resp.bits.mask,
+                      Fill(fetchWidth, 1.U(1.W)))
+   f3_bpd_mask := Fill(fetchWidth, 1.U(1.W))  // TODO XXX add back bpd
+//   f3_bpd_mask := Mux(io.f3_bpu_request.valid && !f3_req.valid,
 //                  io.f3_bpu_request.bits.mask,
 //                  Fill(fetchWidth, UInt(1,1)))
    f3_fetch_bundle.mask := (f3_imemresp.mask
       & ~f3_kill_mask
-      & btb_mask
-      & bpd_mask
+      & f3_btb_mask
+      & f3_bpd_mask
       & f3_valid_mask.asUInt())
 
 
@@ -655,7 +663,6 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
    // clear checking if misprediction/flush/etc.
    val last_valid      = RegInit(false.B)
    val last_pc         = Reg(UInt(vaddrBitsExtended.W))
-   val last_edge_inst  = Reg(Bool())
    val last_target     = Reg(UInt(vaddrBitsExtended.W))
    val last_nextlinepc = Reg(UInt(vaddrBitsExtended.W))
    val last_cfi_type   = Reg(UInt(CfiType.SZ.W))
