@@ -129,7 +129,7 @@ The Fetch Target Queue
 ----------------------
 
 The Fetch Target Queue is a queue that holds the PC
-recieved from the i-cache and the branch prediction info associated
+received from the i-cache and the branch prediction info associated
 with that address. It holds this information for the pipeline to
 reference during the executions of its Micro-ops. It is dequeued by
 the ROB once an instruction is committed and is updated during pipeline
