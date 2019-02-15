@@ -117,8 +117,10 @@ class LoadStoreUnitIO(val pl_width: Int)(implicit p: Parameters) extends BoomBun
    // Let the stores clear out the busy bit in the ROB.
    // Two ports, one for integer and the other for FP.
    // Otherwise, we must back-pressure incoming FP store-data micro-ops.
-   val lsu_clr_bsy_valid  = Output(Vec(2, Bool()))
-   val lsu_clr_bsy_rob_idx= Output(Vec(2, UInt(ROB_ADDR_SZ.W)))
+   val clr_bsy_valid      = Output(Vec(2, Bool()))
+   val clr_bsy_rob_idx    = Output(Vec(2, UInt(ROB_ADDR_SZ.W)))
+   val ld_success         = Output(Bool())
+   val ld_success_rob_idx = Output(UInt(ROB_ADDR_SZ.W))
    val lsu_fencei_rdy     = Output(Bool())
 
    val xcpt = new ValidIO(new Exception)
@@ -163,6 +165,10 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
    with freechips.rocketchip.rocket.constants.MemoryOpConstants
 {
    val io = IO(new LoadStoreUnitIO(pl_width))
+
+   // TODO: This needs to be high when we find a load that will not fail a mem-ordering check
+   io.ld_success := false.B
+   io.ld_success_rob_idx := 0.U
 
    // Load-Address Queue
    val laq_addr_val       = Reg(Vec(NUM_LDQ_ENTRIES, Bool()))
@@ -476,7 +482,6 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
 
    val tlb_miss = dtlb.io.req.valid && (dtlb.io.resp.miss || !dtlb.io.req.ready)
 
-
    // output
    val exe_tlb_paddr = Cat(dtlb.io.resp.paddr(paddrBits-1,corePgIdxBits), exe_vaddr(corePgIdxBits-1,0))
    assert (exe_tlb_paddr === dtlb.io.resp.paddr || io.exe_resp.bits.sfence.valid, "[lsu] paddrs should match.")
@@ -597,6 +602,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
       laq_executed(exe_ld_uop.ldq_idx) := true.B
       laq_failure (exe_ld_uop.ldq_idx) := (will_fire_load_incoming && (ma_ld || pf_ld)) ||
                                           (will_fire_load_retry && pf_ld)
+
    }
 
    assert (PopCount(VecInit(will_fire_store_commit, will_fire_load_incoming,
@@ -757,10 +763,10 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
    val stdf_clr_bsy_robidx = RegEnable(mem_uop_stdf.rob_idx, mem_fired_stdf)
    val stdf_clr_bsy_brmask = RegEnable(GetNewBrMask(io.brinfo, mem_uop_stdf), mem_fired_stdf)
 
-   io.lsu_clr_bsy_valid(0)   := clr_bsy_valid && !io.exception && !IsKilledByBranch(io.brinfo, clr_bsy_brmask)
-   io.lsu_clr_bsy_rob_idx(0) := clr_bsy_robidx
-   io.lsu_clr_bsy_valid(1)   := stdf_clr_bsy_valid && !io.exception && !IsKilledByBranch(io.brinfo, stdf_clr_bsy_brmask)
-   io.lsu_clr_bsy_rob_idx(1) := stdf_clr_bsy_robidx
+   io.clr_bsy_valid(0)   := clr_bsy_valid && !io.exception && !IsKilledByBranch(io.brinfo, clr_bsy_brmask)
+   io.clr_bsy_rob_idx(0) := clr_bsy_robidx
+   io.clr_bsy_valid(1)   := stdf_clr_bsy_valid && !io.exception && !IsKilledByBranch(io.brinfo, stdf_clr_bsy_brmask)
+   io.clr_bsy_rob_idx(1) := stdf_clr_bsy_robidx
 
    //-------------------------------------------------------------
    // Load Issue Datapath (ALL loads need to use this path,
