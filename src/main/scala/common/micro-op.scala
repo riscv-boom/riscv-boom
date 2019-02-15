@@ -68,6 +68,7 @@ class MicroOp(implicit p: Parameters) extends BoomBundle()(p)
 
    val br_prediction    = new BranchPredInfo
 
+
    // stat tracking of committed instructions
    val stat_brjmp_mispredicted = Bool()                 // number of mispredicted branches/jmps
    val stat_btb_made_pred      = Bool()                 // the BTB made a prediction (even if BPD overrided it)
@@ -138,6 +139,10 @@ class MicroOp(implicit p: Parameters) extends BoomBundle()(p)
    // purely debug information
    val debug_wdata      = UInt(xLen.W)
    val debug_events     = new DebugStageEvents
+
+
+   // Is it possible for this uop to not commit once it is in the ROB?
+   def may_xcpt         = (is_load || is_store || is_br_or_jmp || exception) && !(is_fence || is_fencei)
 
    def fu_code_is(_fu: UInt) = fu_code === _fu
 }

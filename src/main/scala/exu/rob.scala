@@ -69,8 +69,10 @@ class RobIo(
    // Instruction is no longer busy and can be committed
    val wb_resps = Flipped(Vec(num_wakeup_ports, Valid(new ExeUnitResp(xLen max fLen+1))))
 
-   val lsu_clr_bsy_valid = Input(Vec(2, Bool()))
-   val lsu_clr_bsy_rob_idx = Input(Vec(2, UInt(ROB_ADDR_SZ.W)))
+   val lsu_clr_bsy_valid      = Input(Vec(2, Bool()))
+   val lsu_clr_bsy_rob_idx    = Input(Vec(2, UInt(ROB_ADDR_SZ.W)))
+   val lsu_ld_success         = Input(Bool())
+   val lsu_ld_success_rob_idx = Input(UInt(ROB_ADDR_SZ.W))
 
    // Track side-effects for debug purposes.
    // Also need to know when loads write back, whereas we don't need loads to unbusy.
@@ -190,6 +192,7 @@ class DebugRobSignals(implicit p: Parameters) extends BoomBundle()(p)
 {
    val state = UInt()
    val rob_head = UInt(ROB_ADDR_SZ.W)
+   val pnr_head = UInt(ROB_ADDR_SZ.W)
    val xcpt_val = Bool()
    val xcpt_uop = new MicroOp()
    val xcpt_badvaddr = UInt(xLen.W)
@@ -223,13 +226,16 @@ class Rob(
    val rob_state = RegInit(s_reset)
 
    //commit entries at the head, and unwind exceptions from the tail
-   val rob_head = RegInit(0.U(log2Ceil(num_rob_rows).W))
-   val rob_tail = RegInit(0.U(log2Ceil(num_rob_rows).W))
+   val rob_head     = RegInit(0.U(log2Ceil(num_rob_rows).W))
+   val rob_tail     = RegInit(0.U(log2Ceil(num_rob_rows).W))
+   val pnr_head     = RegInit(0.U(log2Ceil(num_rob_rows).W))
+   chisel3.experimental.dontTouch(pnr_head)
    val rob_tail_idx = rob_tail << log2Ceil(width).U
 
    val will_commit         = Wire(Vec(width, Bool()))
    val can_commit          = Wire(Vec(width, Bool()))
    val can_throw_exception = Wire(Vec(width, Bool()))
+   val pnr_safe            = Wire(Vec(width, Bool())) // are the instructions at the pnr head safe?
    val rob_head_vals       = Wire(Vec(width, Bool())) // are the instructions at the head valid?
    val rob_head_is_store   = Wire(Vec(width, Bool()))
    val rob_head_is_load    = Wire(Vec(width, Bool()))
@@ -260,12 +266,14 @@ class Rob(
    // **************************************************************************
    // Debug
 
-   class DebugRobBundle extends BoomBundle()(p) {
-         val valid = Bool()
-         val busy = Bool()
-         val uop = new MicroOp()
-         val exception = Bool()
-      }
+   class DebugRobBundle extends BoomBundle()(p)
+   {
+      val valid      = Bool()
+      val busy       = Bool()
+      val safe       = Bool()
+      val uop        = new MicroOp()
+      val exception  = Bool()
+   }
    val debug_entry = Wire(Vec(NUM_ROB_ENTRIES, new DebugRobBundle))
    debug_entry := DontCare // override in statements below
 
@@ -280,6 +288,7 @@ class Rob(
       // one bank
       val rob_val       = RegInit(VecInit(Seq.fill(num_rob_rows){false.B}))
       val rob_bsy       = Mem(num_rob_rows, Bool())
+      val rob_safe      = Mem(num_rob_rows, Bool())
       val rob_uop       = Reg(Vec(num_rob_rows, new MicroOp()))
       val rob_exception = Mem(num_rob_rows, Bool())
       val rob_fflags    = Mem(num_rob_rows, Bits(freechips.rocketchip.tile.FPConstants.FLAGS_SZ.W))
@@ -292,6 +301,7 @@ class Rob(
          rob_val(rob_tail)       := true.B
          rob_bsy(rob_tail)       := !io.enq_uops(w).is_fence &&
                                     !(io.enq_uops(w).is_fencei)
+         rob_safe(rob_tail)      := !io.enq_uops(w).may_xcpt
          rob_uop(rob_tail)       := io.enq_uops(w)
          rob_exception(rob_tail) := io.enq_uops(w).exception
          rob_fflags(rob_tail)    := 0.U
@@ -315,8 +325,8 @@ class Rob(
          val row_idx = GetRowIdx(wb_uop.rob_idx)
          when (wb_resp.valid && MatchBank(GetBankIdx(wb_uop.rob_idx)))
          {
-            rob_bsy(row_idx) := false.B
-
+            rob_bsy(row_idx)    := false.B
+            rob_safe(row_idx)   := true.B
             if (O3PIPEVIEW_PRINTF)
             {
                printf("%d; O3PipeView:complete:%d\n",
@@ -338,8 +348,8 @@ class Rob(
          when (clr_valid && MatchBank(GetBankIdx(clr_rob_idx)))
          {
             val cidx = GetRowIdx(clr_rob_idx)
-            rob_bsy(cidx) := false.B
-
+            rob_bsy(cidx)    := false.B
+            rob_safe(cidx)   := true.B
             assert (rob_val(cidx) === true.B, "[rob] store writing back to invalid entry.")
             assert (rob_bsy(cidx) === true.B, "[rob] store writing back to a not-busy entry.")
 
@@ -349,6 +359,12 @@ class Rob(
                   rob_uop(GetRowIdx(clr_rob_idx)).debug_events.fetch_seq, io.debug_tsc)
             }
          }
+      }
+
+      when (io.lsu_ld_success && MatchBank(GetBankIdx(io.lsu_ld_success_rob_idx)))
+      {
+         val cidx = GetRowIdx(io.lsu_ld_success_rob_idx)
+         rob_safe(cidx) := true.B
       }
 
       when (io.brinfo.valid && MatchBank(GetBankIdx(io.brinfo.rob_idx)))
@@ -390,6 +406,7 @@ class Rob(
 
       // Can this instruction commit? (the check for exceptions/rob_state happens later).
       can_commit(w) := rob_val(rob_head) && !(rob_bsy(rob_head)) && !io.csr_stall
+      pnr_safe(w)   := !rob_val(pnr_head) || rob_safe(pnr_head)
 
       val com_idx = Wire(UInt())
       com_idx := rob_head
@@ -504,10 +521,10 @@ class Rob(
       {
          for (i <- 0 until num_rob_rows)
          {
-            debug_entry(w + i*width).valid := rob_val(i)
-            debug_entry(w + i*width).busy := rob_bsy(i.U)
-            debug_entry(w + i*width).uop := rob_uop(i.U)
-            debug_entry(w + i*width).uop.pc := rob_uop(i.U).pc
+            debug_entry(w + i*width).valid     := rob_val(i)
+            debug_entry(w + i*width).busy      := rob_bsy(i.U)
+            debug_entry(w + i*width).safe      := rob_safe(i.U)
+            debug_entry(w + i*width).uop       := rob_uop(i.U)
             debug_entry(w + i*width).exception := rob_exception(i.U)
          }
       }
@@ -704,6 +721,18 @@ class Rob(
    {
       rob_head := WrapInc(rob_head, num_rob_rows)
    }
+   assert(!(rob_head === WrapInc(pnr_head, num_rob_rows) && rob_head =/= rob_tail),
+      "ROB head overran the PNR head!")
+   // -----------------------------------------------
+   // ROB PNR Head Logic
+
+   val pnr_safe_to_advance =
+      !(pnr_head === rob_tail) &&
+      (pnr_safe.reduce(_&&_))
+   when (pnr_safe_to_advance)
+   {
+      pnr_head := WrapInc(pnr_head, num_rob_rows)
+   }
 
    // -----------------------------------------------
    // ROB Tail Logic
@@ -727,6 +756,7 @@ class Rob(
       {
          rob_tail := 0.U
          rob_head := 0.U
+         pnr_head := 0.U
       }
    }
 
@@ -859,6 +889,7 @@ class Rob(
 
    io.debug.state    := rob_state
    io.debug.rob_head := rob_head
+   io.debug.pnr_head := pnr_head
    io.debug.xcpt_val := r_xcpt_val
    io.debug.xcpt_uop := r_xcpt_uop
    io.debug.xcpt_badvaddr := r_xcpt_badvaddr
@@ -887,19 +918,21 @@ class Rob(
          val r_head = rob_head
          val r_tail = rob_tail
 
-         printf("    rob[%d] %c (",
+         printf("    rob[%d] %c %c (",
             row.U(ROB_ADDR_SZ.W),
             Mux(r_head === row.U && r_tail === row.U, Str("B"),
               Mux(r_head === row.U, Str("H"),
               Mux(r_tail === row.U, Str("T"),
-                                        Str(" "))))
-            )
+                                        Str(" ")))),
+            Mux(pnr_head === row.U, Str("P"), Str(" "))
+          )
 
          if (COMMIT_WIDTH == 1)
          {
-            printf("(%c)(%c) 0x%x [DASM(%x)] %c ",
+            printf("(%c)(%c)(%c) 0x%x [DASM(%x)] %c ",
                    Mux(debug_entry(r_idx+0).valid, Str("V"), Str(" ")),
                    Mux(debug_entry(r_idx+0).busy, Str("B"),  Str(" ")),
+                   Mux(debug_entry(r_idx+0).safe, Str("S"),  Str(" ")),
                    debug_entry(r_idx+0).uop.pc(31,0),
                    debug_entry(r_idx+0).uop.inst,
                    Mux(debug_entry(r_idx+0).exception, Str("E"), Str("-"))
@@ -908,11 +941,13 @@ class Rob(
          else if (COMMIT_WIDTH == 2)
          {
             val row_is_val = debug_entry(r_idx+0).valid || debug_entry(r_idx+1).valid
-            printf("(%c%c)(%c%c) 0x%x %x [DASM(%x)][DASM(%x)" + "] %c,%c %d,%d ",
+            printf("(%c%c)(%c%c)(%c%c) 0x%x %x [DASM(%x)][DASM(%x)" + "] %c,%c %d,%d ",
                    Mux(debug_entry(r_idx+0).valid, Str("V"), Str(" ")),
                    Mux(debug_entry(r_idx+1).valid, Str("V"), Str(" ")),
                    Mux(debug_entry(r_idx+0).busy,  Str("B"), Str(" ")),
                    Mux(debug_entry(r_idx+1).busy,  Str("B"), Str(" ")),
+                   Mux(debug_entry(r_idx+0).safe,  Str("S"), Str(" ")),
+                   Mux(debug_entry(r_idx+1).safe,  Str("S"), Str(" ")),
                    debug_entry(r_idx+0).uop.pc(31,0),
                    debug_entry(r_idx+1).uop.pc(15,0),
                    debug_entry(r_idx+0).uop.inst,
@@ -926,7 +961,7 @@ class Rob(
          else if (COMMIT_WIDTH == 4)
          {
             val row_is_val = debug_entry(r_idx+0).valid || debug_entry(r_idx+1).valid || debug_entry(r_idx+2).valid || debug_entry(r_idx+3).valid
-            printf("(%c%c%c%c)(%c%c%c%c) 0x%x %x %x %x [DASM(%x)][DASM(%x)][DASM(%x)][DASM(%x)" + "]%c%c%c%c",
+            printf("(%c%c%c%c)(%c%c%c%c)(%c%c%c%c) 0x%x %x %x %x [DASM(%x)][DASM(%x)][DASM(%x)][DASM(%x)" + "]%c%c%c%c",
                    Mux(debug_entry(r_idx+0).valid, Str("V"), Str(" ")),
                    Mux(debug_entry(r_idx+1).valid, Str("V"), Str(" ")),
                    Mux(debug_entry(r_idx+2).valid, Str("V"), Str(" ")),
@@ -935,6 +970,10 @@ class Rob(
                    Mux(debug_entry(r_idx+1).busy,  Str("B"), Str(" ")),
                    Mux(debug_entry(r_idx+2).busy,  Str("B"), Str(" ")),
                    Mux(debug_entry(r_idx+3).busy,  Str("B"), Str(" ")),
+                   Mux(debug_entry(r_idx+0).safe,  Str("S"), Str(" ")),
+                   Mux(debug_entry(r_idx+1).safe,  Str("S"), Str(" ")),
+                   Mux(debug_entry(r_idx+2).safe,  Str("S"), Str(" ")),
+                   Mux(debug_entry(r_idx+3).safe,  Str("S"), Str(" ")),
                    debug_entry(r_idx+0).uop.pc(23,0),
                    debug_entry(r_idx+1).uop.pc(15,0),
                    debug_entry(r_idx+2).uop.pc(15,0),

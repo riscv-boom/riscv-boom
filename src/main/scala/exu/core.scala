@@ -1156,8 +1156,10 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    exe_units(brunit_idx).io.status := csr.io.status
 
    // LSU <> ROB
-   rob.io.lsu_clr_bsy_valid   := lsu.io.lsu_clr_bsy_valid
-   rob.io.lsu_clr_bsy_rob_idx := lsu.io.lsu_clr_bsy_rob_idx
+   rob.io.lsu_clr_bsy_valid      := lsu.io.clr_bsy_valid
+   rob.io.lsu_clr_bsy_rob_idx    := lsu.io.clr_bsy_rob_idx
+   rob.io.lsu_ld_success         := lsu.io.ld_success
+   rob.io.lsu_ld_success_rob_idx := lsu.io.ld_success_rob_idx
    rob.io.lxcpt <> lsu.io.xcpt
 
    assert (!(csr.io.singleStep), "[core] single-step is unsupported.")
