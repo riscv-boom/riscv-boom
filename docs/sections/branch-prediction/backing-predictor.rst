@@ -5,7 +5,7 @@ When the next-line predictor (NLP) is predicting well, the processor’s
 Back-end is provided an unbroken stream of instructions to execute. The
 NLP is able to provide fast, single-cycle predictions by being expensive
 (in terms of both area and power), very small (only a few dozen branches
-can be remembered), and very simple (the BIM hysterisis bits
+can be remembered), and very simple (the BIM hysteresis bits
 are not able to learn very complicated or long history patterns).
 
 To capture more branches and more complicated branching behaviors, BOOM

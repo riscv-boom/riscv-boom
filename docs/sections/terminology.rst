@@ -29,7 +29,7 @@ TAGE Predictor
     read the paper "A case for (partially) tagged geometric history length predictors".
 
 GShare Predictor
-    A simplier branch predictor that uses a global history to index into a set of
+    A simpler branch predictor that uses a global history to index into a set of
     counters.
 
 Bi-Modal Table (BIM)
@@ -54,7 +54,7 @@ Back-end
     The stages starting from **Dispatch** to **Writeback**. Here instructions
     are executed, dependencies resolved, branches resolved, etc.
 
-Fetch Boundry
+Fetch Boundary
     The bytes at the end of a i-cache response that might be half of an instruction
     used in RVC.
 
@@ -96,11 +96,11 @@ Rename Snapshots
 
 Rename Map Table
     Holds the mapping from logical ISA registers (x0-x31) to physical
-    registers. Must be restored on a mis-speculation.
+    registers. Must be restored on a misspeculation.
 
 Busy Table
     Table indicating the status of a physical register. Once a physical
-    register is ready, then the **Micro-Op** can procede through the
+    register is ready, then the **Micro-Op** can proceed through the
     rest of the pipeline (issued).
 
 Free List

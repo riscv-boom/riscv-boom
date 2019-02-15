@@ -12,7 +12,7 @@ can find the documentation and website at https://fires.im/.
 Pipeline Visualization
 ----------------------
 
-“Pipevew" is a useful diagnostic and visualization tool for seeing how
+“Pipeview" is a useful diagnostic and visualization tool for seeing how
 instructions are scheduled on an out-of-order pipeline.
 
 Pipeview displays every fetched instruction and shows when it is
