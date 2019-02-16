@@ -406,7 +406,7 @@ class Rob(
 
       // Can this instruction commit? (the check for exceptions/rob_state happens later).
       can_commit(w) := rob_val(rob_head) && !(rob_bsy(rob_head)) && !io.csr_stall
-      pnr_safe(w)   := !rob_val(pnr_head) || rob_safe(pnr_head)
+      pnr_safe(w)   := !rob_val(pnr_head) || (rob_safe(pnr_head) && !rob_exception(pnr_head))
 
       val com_idx = Wire(UInt())
       com_idx := rob_head
@@ -721,14 +721,16 @@ class Rob(
    {
       rob_head := WrapInc(rob_head, num_rob_rows)
    }
-   assert(!(rob_head === WrapInc(pnr_head, num_rob_rows) && rob_head =/= rob_tail),
+   assert(!(rob_head === WrapInc(pnr_head, num_rob_rows) && pnr_head =/= rob_tail),
       "ROB head overran the PNR head!")
    // -----------------------------------------------
    // ROB PNR Head Logic
 
    val pnr_safe_to_advance =
-      !(pnr_head === rob_tail) &&
-      (pnr_safe.reduce(_&&_))
+      pnr_head =/= rob_tail &&
+      pnr_safe.reduce(_&&_) &&
+      (rob_state === s_normal || rob_state === s_wait_till_empty) &&
+      !exception_thrown
    when (pnr_safe_to_advance)
    {
       pnr_head := WrapInc(pnr_head, num_rob_rows)
