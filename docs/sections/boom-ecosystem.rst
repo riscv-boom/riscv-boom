@@ -5,7 +5,7 @@ Scala, Chisel, Generators, Configs, Oh My!
 ------------------------------------------
 
 Working with BOOM has a large learning curve for those people new to *Chisel* and the BOOM ecosystem.
-To be productive it takes time to learn about the micro-architecture, *Rocket-chip* components, *Chisel* (maybe *Firrtl*), *Scala*, and the build system.
+To be productive, it takes time to learn about the micro-architecture, *Rocket-chip* components, *Chisel* (maybe *Firrtl*), *Scala*, and the build system.
 Luckily, the micro-architecture is detailed in this documentation and some of the other topics (*Chisel*, *Firrtl*, *Scala*) are discussed in their respective websites. [1]_
 Instead of focusing solely on those topics, this section hopes to show how they all fit together by giving a high level of the entire build process.
 Put in more specific terms: How do you get from *Scala*/*Chisel* to Verilog? [2]_
