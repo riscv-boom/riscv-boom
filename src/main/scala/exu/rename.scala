@@ -57,7 +57,7 @@ class RenameStageIO(
 
    val dis_inst_can_proceed = Input(Vec(DISPATCH_WIDTH, Bool()))
 
-   // issue stage (fast wakeup)
+   // writeback ports
    val int_wakeups = Flipped(Vec(num_int_wb_ports, Valid(new ExeUnitResp(xLen))))
    val fp_wakeups = Flipped(Vec(num_fp_wb_ports, Valid(new ExeUnitResp(fLen+1))))
 

@@ -95,12 +95,13 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
    val num_fast_wakeup_ports  = exe_units.count(_.bypassable)
 
-   val num_int_wakeup_ports   = num_irf_write_ports + 1 + num_fast_wakeup_ports // + 1 for ll_wb
+   val num_int_wakeup_ports   = num_irf_write_ports + 1 + num_fast_wakeup_ports  // + 1 for ll_wb
    val num_fp_wakeup_ports    = if (usingFPU) fp_pipeline.io.wakeups.length else 0
+   val num_int_rename_wakeup_ports = if (enableFastWakeupsToRename) num_int_wakeup_ports else num_irf_write_ports + 1
 
    val decode_units     = for (w <- 0 until decodeWidth) yield { val d = Module(new DecodeUnit); d }
    val dec_brmask_logic = Module(new BranchMaskGenerationLogic(decodeWidth))
-   val rename_stage     = Module(new RenameStage(decodeWidth, num_int_wakeup_ports, num_fp_wakeup_ports))
+   val rename_stage     = Module(new RenameStage(decodeWidth, num_int_rename_wakeup_ports, num_fp_wakeup_ports))
    val issue_units      = new boom.exu.IssueUnits(num_int_wakeup_ports)
    val iregfile         = if (regreadLatency == 1 && enableCustomRf) {
                               Module(new RegisterFileSeqCustomArray(numIntPhysRegs,
@@ -618,6 +619,24 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    int_wakeups(0).bits  := ll_wbarb.io.out.bits
 
    // loop through each issue-port (exe_units are statically connected to an issue-port)
+   // Get the slow wakeups.
+   for (i <- 0 until exe_units.length)
+   {
+      if (exe_units(i).writes_irf)
+      {
+         // Slow Wakeup (uses write-port to register file)
+         // TODO: don't add a slow wake-up port if the instructions
+         // being written back are ALWAYS bypassable.
+         val resp = exe_units(i).io.iresp
+         int_wakeups(wu_idx).valid := resp.valid &&
+                                      resp.bits.uop.ctrl.rf_wen &&
+                                      resp.bits.uop.dst_rtype === RT_FIX
+         assert(!(resp.valid && resp.bits.uop.ctrl.rf_wen && resp.bits.uop.dst_rtype =/= RT_FIX))
+         int_wakeups(wu_idx).bits  := resp.bits
+         wu_idx += 1
+      }
+   }
+   // Get the fast wakeups. 
    for (i <- 0 until exe_units.length)
    {
       if (exe_units(i).writes_irf)
@@ -634,18 +653,6 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
             assert (!(iss_uops(i).dst_rtype === RT_FLT && iss_uops(i).bypassable),
                "Bypassing FP is not supported.")
          }
-
-         // Slow Wakeup (uses write-port to register file)
-         // TODO: don't add a slow wake-up port if the instructions
-         // being written back are ALWAYS bypassable.
-         val resp = exe_units(i).io.iresp
-         int_wakeups(wu_idx).valid := resp.valid &&
-                                      resp.bits.uop.ctrl.rf_wen &&
-                                      !resp.bits.uop.bypassable &&
-                                      resp.bits.uop.dst_rtype === RT_FIX
-         assert(!(resp.valid && resp.bits.uop.ctrl.rf_wen && resp.bits.uop.dst_rtype =/= RT_FIX))
-         int_wakeups(wu_idx).bits  := resp.bits
-         wu_idx += 1
       }
    }
    require (wu_idx == num_int_wakeup_ports)
@@ -655,14 +662,22 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       iu.io.mem_ldSpecWakeup <> lsu.io.mem_ldSpecWakeup
    }
 
-
+   wu_idx = 0
    for ((renport, intport) <- rename_stage.io.int_wakeups zip int_wakeups)
    {
-      // Stop wakeup for bypassable children of spec-loads trying to issue during a ldMiss.
-      renport.valid :=
-         intport.valid &&
-         !(sxt_ldMiss && (intport.bits.uop.iw_p1_poisoned || intport.bits.uop.iw_p2_poisoned))
-      renport.bits := intport.bits
+      if (wu_idx < num_irf_write_ports + 1)
+      {
+         renport.valid := intport.valid
+         renport.bits := intport.bits
+      }
+      else if (enableFastWakeupsToRename)
+      {
+         // Stop wakeup for bypassable children of spec-loads trying to issue during a ldMiss.
+         renport.valid := intport.valid &&
+            !(sxt_ldMiss && (intport.bits.uop.iw_p1_poisoned || intport.bits.uop.iw_p2_poisoned))
+         renport.bits := intport.bits
+      }
+      wu_idx += 1
    }
    if (usingFPU) {
       for ((renport, fpport) <- rename_stage.io.fp_wakeups zip fp_pipeline.io.wakeups)
