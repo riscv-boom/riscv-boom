@@ -204,6 +204,8 @@ class Rob(
    val rob_tail = RegInit(0.U(log2Ceil(num_rob_rows).W))
    val rob_tail_idx = rob_tail << log2Ceil(width).U
 
+   val r_tail_bump = Reg(Bool())
+
    val will_commit         = Wire(Vec(width, Bool()))
    val can_commit          = Wire(Vec(width, Bool()))
    val can_throw_exception = Wire(Vec(width, Bool()))
@@ -251,7 +253,6 @@ class Rob(
    // --------------------------------------------------------------------------
    // **************************************************************************
 
-
    for (w <- 0 until width)
    {
       def MatchBank(bank_idx: UInt): Bool = (bank_idx === w.U)
@@ -266,22 +267,37 @@ class Rob(
       //-----------------------------------------------
       // Dispatch: Add Entry to ROB
 
+      // Reuse ROB dispatch port for invalidating misspeculated entries.
+      // Similar to how commit port is reused for exception rollback.
+      val disp_idx = Mux(io.brinfo.mispredict, GetRowIdx(io.brinfo.rob_idx), rob_tail)
       when (io.enq_valids(w))
       {
-         rob_val(rob_tail)       := true.B
-         rob_bsy(rob_tail)       := !io.enq_uops(w).is_fence &&
+         rob_val(disp_idx)       := true.B
+         rob_bsy(disp_idx)       := !io.enq_uops(w).is_fence &&
                                     !(io.enq_uops(w).is_fencei)
-         rob_uop(rob_tail)       := io.enq_uops(w)
-         rob_exception(rob_tail) := io.enq_uops(w).exception
-         rob_fflags(rob_tail)    := 0.U
-         rob_uop(rob_tail).stat_brjmp_mispredicted := false.B
+         rob_uop(disp_idx)       := io.enq_uops(w)
+         rob_exception(disp_idx) := io.enq_uops(w).exception
+         rob_fflags(disp_idx)    := 0.U
+         rob_uop(disp_idx).stat_brjmp_mispredicted := false.B
 
-         assert (rob_val(rob_tail) === false.B, "[rob] overwriting a valid entry.")
+         // Entries outside of head/tail range are now implicitly invalid.
+         //assert (rob_val(rob_tail) === false.B, "[rob] overwriting a valid entry.")
          assert ((io.enq_uops(w).rob_idx >> log2Ceil(width)) === rob_tail)
       }
-      .elsewhen (io.enq_valids.reduce(_|_) && !rob_val(rob_tail))
+      .elsewhen (io.brinfo.mispredict)
       {
-         rob_uop(rob_tail).inst := BUBBLE // just for debug purposes
+         // Only need to invalidate misspeculated entries in same row as branch.
+         // All others are implicitly invalidated when tail is yanked back.
+         when (w.U > GetBankIdx(io.brinfo.rob_idx))
+         {
+            rob_val(disp_idx) := false.B
+         }
+      }
+      .elsewhen (r_tail_bump)
+      {
+         // Invalidate entries which have not been filled in the first cycle following a tail bump.
+         rob_val(disp_idx) := false.B
+         rob_uop(disp_idx).inst := BUBBLE // just for debug purposes 
       }
 
       //-----------------------------------------------
@@ -384,15 +400,18 @@ class Rob(
       io.commit.uops(w)       := rob_uop(com_idx)
 
       io.commit.rbk_valids(w) :=
-                              (rob_state === s_rollback) &&
+                              (rob_state === s_rollback) && !r_tail_bump &&
                               rob_val(com_idx) &&
                               (rob_uop(com_idx).dst_rtype === RT_FIX || rob_uop(com_idx).dst_rtype === RT_FLT) &&
                               (!(ENABLE_COMMIT_MAP_TABLE.B))
 
       when (rob_state === s_rollback)
       {
-         rob_val(com_idx)       := false.B
          rob_exception(com_idx) := false.B
+      }
+      when (will_commit(w) || rob_state === s_rollback)
+      {
+         rob_val(com_idx) := false.B
       }
 
       if (ENABLE_COMMIT_MAP_TABLE)
@@ -406,33 +425,6 @@ class Rob(
                rob_uop(i).inst := BUBBLE
             }
          }
-      }
-
-      // -----------------------------------------------
-      // Kill speculated entries on branch mispredict
-      for (i <- 0 until num_rob_rows)
-      {
-         val br_mask = rob_uop(i).br_mask
-         val entry_match = rob_val(i) && maskMatch(io.brinfo.mask, br_mask)
-
-         //kill instruction if mispredict & br mask match
-         when (io.brinfo.valid && io.brinfo.mispredict && entry_match)
-         {
-            rob_val(i) := false.B
-            rob_uop(i.U).inst := BUBBLE
-         }
-         .elsewhen (io.brinfo.valid && !io.brinfo.mispredict && entry_match)
-         {
-            // clear speculation bit even on correct speculation
-            rob_uop(i).br_mask := (br_mask & ~io.brinfo.mask)
-         }
-      }
-
-      // -----------------------------------------------
-      // Commit
-      when (will_commit(w))
-      {
-         rob_val(rob_head) := false.B
       }
 
       // -----------------------------------------------
@@ -682,17 +674,21 @@ class Rob(
    // -----------------------------------------------
    // ROB Tail Logic
 
+   r_tail_bump := false.B
+
    when (rob_state === s_rollback && rob_tail =/= rob_head)
    {
       rob_tail := WrapDec(rob_tail, num_rob_rows)
    }
-   .elsewhen (io.brinfo.valid && io.brinfo.mispredict)
+   .elsewhen (io.brinfo.mispredict)
    {
       rob_tail := WrapInc(GetRowIdx(io.brinfo.rob_idx), num_rob_rows)
+      r_tail_bump := true.B
    }
    .elsewhen (io.enq_valids.asUInt =/= 0.U && !io.enq_partial_stall)
    {
       rob_tail := WrapInc(rob_tail, num_rob_rows)
+      r_tail_bump := true.B
    }
 
    if (ENABLE_COMMIT_MAP_TABLE)
@@ -797,7 +793,7 @@ class Rob(
          }
          is (s_rollback)
          {
-            when (rob_tail  === rob_head)
+            when (rob_tail === rob_head)
             {
                rob_state := s_normal
             }
