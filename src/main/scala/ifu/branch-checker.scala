@@ -50,6 +50,7 @@ class BranchChecker(fetch_width: Int)(implicit p: Parameters) extends BoomModule
       val is_jal        = Input(Vec(fetch_width, Bool()))
       val is_jr         = Input(Vec(fetch_width, Bool()))
       val is_call       = Input(Vec(fetch_width, Bool()))
+      val is_ret        = Input(Vec(fetch_width, Bool()))
       val is_rvc        = Input(Vec(fetch_width, Bool()))
       val br_targs      = Input(Vec(fetch_width, UInt(vaddrBitsExtended.W)))
       val jal_targs     = Input(Vec(fetch_width, UInt(vaddrBitsExtended.W)))
