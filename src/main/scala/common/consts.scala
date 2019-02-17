@@ -386,6 +386,7 @@ trait RISCVConstants
    {
       val bdecode = Module(new boom.exu.BranchDecode)
       bdecode.io.inst := inst
+      bdecode.io.pc := 0.U
       bdecode.io.cfi_type
    }
 }
