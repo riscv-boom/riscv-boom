@@ -170,7 +170,7 @@ class BTBsa(implicit p: Parameters) extends BoomBTB
       val doingPeek = Wire(Bool())
       doingPeek := doPeek
       chisel3.experimental.dontTouch(doingPeek)
-      val isEmpty = if (rasCheckForEmpty) ras.isEmpty else false.B
+      val isEmpty = if (rasCheckForEmpty) ras.io.empty else false.B
       when (!isEmpty && doPeek)
       {
          s1_resp_bits.target := ras.io.peek

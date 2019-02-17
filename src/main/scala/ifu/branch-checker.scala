@@ -46,6 +46,7 @@ class BranchChecker(fetch_width: Int)(implicit p: Parameters) extends BoomModule
 
       val valid         = Input(Bool())                   // are the inputs valid?
       val inst_mask     = Input(Vec(fetch_width, Bool())) // valid instruction mask from I$
+      val is_ret        = Input(Vec(fetch_width, Bool()))
       val is_br         = Input(Vec(fetch_width, Bool()))
       val is_jal        = Input(Vec(fetch_width, Bool()))
       val is_jr         = Input(Vec(fetch_width, Bool()))
@@ -106,13 +107,22 @@ class BranchChecker(fetch_width: Int)(implicit p: Parameters) extends BoomModule
 
    val btb_was_wrong = io.btb_resp.valid && (wrong_cfi || wrong_target || !io.inst_mask(btb_idx))
 
-   val jal_idx = PriorityEncoder(io.is_jal.asUInt)
+   val jal_idx  = PriorityEncoder(io.is_jal.asUInt)
+   val ret_idx  = PriorityEncoder(io.is_ret.asUInt)
    val btb_hit  = io.btb_resp.valid
    val jal_wins = io.is_jal.reduce(_|_) &&
+                  (!io.is_ret.reduce(_|_) || jal_idx < ret_idx) &&
                   (!btb_hit ||
                   btb_was_wrong ||
                   (jal_idx < btb_idx) ||
-                  !io.btb_resp.bits.taken)
+                     !io.btb_resp.bits.taken)
+   val ret_wins = io.is_ret.reduce(_|_) &&
+                  (!io.is_jal.reduce(_|_) || ret_idx < jal_idx) &&
+                  (!btb_hit ||
+                  btb_was_wrong ||
+                  (ret_idx < btb_idx) ||
+                     !io.btb_resp.bits.taken)
+
 
    //-------------------------------------------------------------
    // Perform redirection
@@ -146,10 +156,13 @@ class BranchChecker(fetch_width: Int)(implicit p: Parameters) extends BoomModule
    io.btb_update.bits.cfi_type := CfiType.jal
 
    // for critical path reasons, remove dependence on bpu_request to ras_update.
-   val jal_may_win = io.is_jal.reduce(_|_) && (!btb_hit || btb_was_wrong || jal_idx < btb_idx)
-   io.ras_update.valid := jal_may_win && io.is_call(jal_idx)
-   io.ras_update.bits.is_call     := true.B
-   io.ras_update.bits.is_ret      := false.B
+   //val jal_may_win = io.is_jal.reduce(_|_) && (!btb_hit || btb_was_wrong || jal_idx < btb_idx)
+   val jal_may_win = jal_wins
+   val ret_may_win = ret_wins
+   io.ras_update.valid := ((jal_may_win && io.is_call(jal_idx))
+                        || (ret_may_win && io.is_ret(ret_idx)))
+   io.ras_update.bits.is_call     := io.is_call(jal_idx)
+   io.ras_update.bits.is_ret      := io.is_ret(ret_idx)
    io.ras_update.bits.return_addr := (io.aligned_pc
                                      + (jal_idx << log2Ceil(fetchBytes))
                                      + Mux(io.is_rvc(jal_idx), 2.U, 4.U))

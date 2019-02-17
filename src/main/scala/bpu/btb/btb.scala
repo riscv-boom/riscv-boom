@@ -133,6 +133,7 @@ class PCReq(implicit p: Parameters) extends BoomBTBBundle()(p)
 
 class RAS(nras: Int, coreInstBytes: Int)(implicit p: Parameters) extends BoomModule()(p)
 {
+   require(nras > 1)
    val count = Reg(UInt(log2Ceil(nras+1).W))
    val pos   = Reg(UInt(log2Ceil(nras).W))
    val stack = Mem(nras, UInt())
@@ -145,10 +146,10 @@ class RAS(nras: Int, coreInstBytes: Int)(implicit p: Parameters) extends BoomMod
       val pop  = Input(Bool())
       val empty = Output(Bool())
    })
-   def isEmpty: Bool = count === 0.U
+
 
    io.peek  := Cat(stack(pos), 0.U(log2Ceil(coreInstBytes).W))
-   io.empty := isEmpty
+   io.empty := count === 0.U
 
    when (io.push)
    {
@@ -160,7 +161,7 @@ class RAS(nras: Int, coreInstBytes: Int)(implicit p: Parameters) extends BoomMod
    }
    when (io.pop)
    {
-      when (!isEmpty)
+      when (!io.empty)
       {
          count := count - 1.U
          pos := Mux(isPow2(nras).B || pos > 0.U, pos-1.U, (nras-1).U)

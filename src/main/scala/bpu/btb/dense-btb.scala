@@ -377,7 +377,7 @@ class DenseBTB(implicit p: Parameters) extends BoomBTB
       ras.io.pop  := false.B
       // TODO: assumes only short branches...need to verify this
       val doPeek = (hits_oh zip data_out map {case(hit, d) => hit && BpredType.isReturn(d.bpd_type)}).reduce(_||_)
-      val isEmpty = if (rasCheckForEmpty) ras.isEmpty else false.B
+      val isEmpty = if (rasCheckForEmpty) ras.io.empty else false.B
       when (!isEmpty && doPeek)
       {
          s1_resp_bits.target := ras.io.peek
