@@ -161,19 +161,27 @@ class BTBsa(implicit p: Parameters) extends BoomBTB
 
    if (nRAS > 0)
    {
-      val ras = new RAS(nRAS, coreInstBytes)
+      val ras = Module(new RAS(nRAS, coreInstBytes))
+      ras.io.push := false.B
+      ras.io.addr := 0.U
+      ras.io.pop  := false.B
+
       val doPeek = (hits_oh zip data_out map {case(hit, d) => hit && BpredType.isReturn(d.bpd_type)}).reduce(_||_)
+      val doingPeek = Wire(Bool())
+      doingPeek := doPeek
+      chisel3.experimental.dontTouch(doingPeek)
       val isEmpty = if (rasCheckForEmpty) ras.isEmpty else false.B
       when (!isEmpty && doPeek)
       {
-         s1_resp_bits.target := ras.peek
+         s1_resp_bits.target := ras.io.peek
       }
 
       when (io.ras_update.valid)
       {
          when (io.ras_update.bits.is_call)
          {
-            ras.push(io.ras_update.bits.return_addr)
+            ras.io.push := true.B
+            ras.io.addr := io.ras_update.bits.return_addr
             if (bypassCalls)
             {
                // bypassing couples ras_update.valid to the critical path.
@@ -185,7 +193,7 @@ class BTBsa(implicit p: Parameters) extends BoomBTB
          }
          .elsewhen (io.ras_update.bits.is_ret) // only pop if BTB hit!
          {
-            ras.pop()
+            ras.io.pop := true.B
          }
       }
    }
