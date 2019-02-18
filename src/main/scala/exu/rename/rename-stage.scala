@@ -30,14 +30,18 @@ import boom.util._
 /**
  * IO bundle to interface with the Register Rename logic
  *
- * @param pl_width pipeline width
+ * @param int_ren_width number of integer uops we can rename per cycle
+ * @param fp_ren_width number of fp uops we can rename per cycle
+ * @param com_width number of uops we can commit per cycle
  * @param num_int_pregs number of int physical registers
  * @param num_fp_pregs number of FP physical registers
  * @param num_int_wb_ports number of int writeback ports
  * @param num_fp_wb_ports number of FP writeback ports
  */
 class RenameStageIO(
-   val pl_width: Int,
+   val int_ren_width: Int,
+   val fp_ren_width: Int,
+   val com_width: Int,
    val num_int_pregs: Int,
    val num_fp_pregs: Int,
    val num_int_wb_ports: Int,
@@ -47,20 +51,20 @@ class RenameStageIO(
    private val int_preg_sz = log2Ceil(num_int_pregs)
    private val fp_preg_sz = log2Ceil(num_fp_pregs)
 
-   val inst_can_proceed = Output(Vec(pl_width, Bool()))
+   val inst_can_proceed = Output(Vec(int_ren_width, Bool()))
 
    val kill      = Input(Bool())
 
-   val dec_will_fire = Input(Vec(pl_width, Bool())) // will commit state updates
-   val dec_uops  = Input(Vec(pl_width, new MicroOp()))
+   val dec_will_fire = Input(Vec(int_ren_width, Bool())) // will commit state updates
+   val dec_uops      = Input(Vec(int_ren_width, new MicroOp()))
 
    // physical specifiers now available (but not the busy/ready status of the operands).
-   val ren1_mask = Vec(pl_width, Output(Bool())) // mask of valid instructions
-   val ren1_uops = Vec(pl_width, Output(new MicroOp()))
+   val ren1_mask = Vec(int_ren_width, Output(Bool())) // mask of valid instructions
+   val ren1_uops = Vec(int_ren_width, Output(new MicroOp()))
 
    // physical specifiers available AND busy/ready status available.
-   val ren2_mask  = Vec(pl_width, Output(Bool())) // mask of valid instructions
-   val ren2_uops  = Vec(pl_width, Output(new MicroOp()))
+   val ren2_mask  = Vec(int_ren_width, Output(Bool())) // mask of valid instructions
+   val ren2_uops  = Vec(int_ren_width, Output(new MicroOp()))
 
    // branch resolution (execute)
    val brinfo    = Input(new BrResolutionInfo())
@@ -69,12 +73,12 @@ class RenameStageIO(
 
    // issue stage (fast wakeup)
    val int_wakeups = Flipped(Vec(num_int_wb_ports, Valid(new ExeUnitResp(xLen))))
-   val fp_wakeups = Flipped(Vec(num_fp_wb_ports, Valid(new ExeUnitResp(fLen+1))))
+   val fp_wakeups  = Flipped(Vec(num_fp_wb_ports, Valid(new ExeUnitResp(fLen+1))))
 
    // commit stage
-   val com_valids = Input(Vec(pl_width, Bool()))
-   val com_uops   = Input(Vec(pl_width, new MicroOp()))
-   val com_rbk_valids = Input(Vec(pl_width, Bool()))
+   val com_valids     = Input(Vec(com_width, Bool()))
+   val com_uops       = Input(Vec(com_width, new MicroOp()))
+   val com_rbk_valids = Input(Vec(com_width, Bool()))
 
    val flush_pipeline = Input(Bool()) // only used for SCR (single-cycle reset)
 
@@ -102,33 +106,41 @@ class DebugRenameStageIO(val int_num_pregs: Int, val fp_num_pregs: Int)(implicit
  * Rename stage that connets the map table, free list, and busy table.
  * Can be used in both the FP pipeline and the normal execute pipeline.
  *
- * @param pl_width pipeline width
+ * @param int_ren_width number of int uops we can rename per cycle
+ * @param fp_ren_width number of fp uops we can rename per cycle
+ * @param com_width number of uops we can commit per cycle
  * @param num_int_wb_ports number of int writeback ports
  * @param num_fp_wb_ports number of FP writeback ports
  */
 class RenameStage(
-   pl_width: Int,
+   int_ren_width: Int,
+   fp_ren_width: Int,
+   com_width: Int,
    num_int_wb_ports: Int,
    num_fp_wb_ports: Int)
 (implicit p: Parameters) extends BoomModule()(p)
 {
-   val io = IO(new RenameStageIO(pl_width, numIntPhysRegs, numFpPhysRegs, num_int_wb_ports, num_fp_wb_ports))
+   require (fp_ren_width <= int_ren_width)
+   val io = IO(new RenameStageIO(int_ren_width, fp_ren_width, com_width,
+      numIntPhysRegs, numFpPhysRegs, num_int_wb_ports, num_fp_wb_ports))
 
    // integer registers
    val imaptable = Module(new RenameMapTable(
-      pl_width,
+      int_ren_width,
+      com_width,
       RT_FIX.litValue,
       32,
       numIntPhysRegs))
    val ifreelist = Module(new RenameFreeList(
-      pl_width,
+      int_ren_width,
+      com_width,
       RT_FIX.litValue,
       numIntPhysRegs))
    val ibusytable = Module(new BusyTable(
-      pl_width,
+      int_ren_width,
       RT_FIX.litValue,
       num_pregs = numIntPhysRegs,
-      num_read_ports = pl_width*2,
+      num_read_ports = int_ren_width*2,
       num_wb_ports = num_int_wb_ports))
 
    // floating point registers
@@ -139,33 +151,42 @@ class RenameStage(
    if (usingFPU)
    {
       fmaptable = Module(new RenameMapTable(
-         pl_width,
+         fp_ren_width,
+         com_width,
          RT_FLT.litValue,
          32,
          numFpPhysRegs))
       ffreelist = Module(new RenameFreeList(
-         pl_width,
+         fp_ren_width,
+         com_width,
          RT_FLT.litValue,
          numFpPhysRegs))
       fbusytable = Module(new BusyTable(
-         pl_width,
+         fp_ren_width,
          RT_FLT.litValue,
          num_pregs = numFpPhysRegs,
-         num_read_ports = pl_width*3,
+         num_read_ports = fp_ren_width*3,
          num_wb_ports = num_fp_wb_ports))
    }
 
    //-------------------------------------------------------------
    // Pipeline State & Wires
 
-   val ren1_br_vals   = Wire(Vec(pl_width, Bool()))
-   val ren1_will_fire = Wire(Vec(pl_width, Bool()))
-   val ren1_uops      = Wire(Vec(pl_width, new MicroOp()))
+   val ren1_br_vals   = Wire(Vec(int_ren_width, Bool()))
+   val ren1_will_fire = Wire(Vec(int_ren_width, Bool()))
+   val ren1_uops      = Wire(Vec(int_ren_width, new MicroOp()))
 
-   val ren2_valids    = Wire(Vec(pl_width, Bool()))
-   val ren2_uops      = Wire(Vec(pl_width, new MicroOp()))
+   // val ren1_fp_br_vals   = Wire(Vec(fp_ren_width, Bool()))
+   // val ren1_fp_will_fire = Wire(Vec(fp_ren_width, Bool()))
+   // val ren1_fp_uops      = Wire(Vec(fp_ren_width, new MicroOp()))
 
-   for (w <- 0 until pl_width)
+   val ren2_valids    = Wire(Vec(int_ren_width, Bool()))
+   val ren2_uops      = Wire(Vec(int_ren_width, new MicroOp()))
+
+   // val ren2_fp_valids = Wire(Vec(fp_ren_width, Bool()))
+   // val ren2_fp_uops   = Wire(Vec(fp_ren_width, new MicroOp()))
+
+   for (w <- 0 until int_ren_width)
    {
       // TODO silly, we've already verified this beforehand on the inst_can_proceed
       ren1_will_fire(w) := io.dec_will_fire(w) && io.inst_can_proceed(w) && !io.kill
@@ -252,7 +273,7 @@ class RenameStage(
                          else if (usingFPU) fmaptable.io.values
                          else new MapTableOutput(1)
 
-   for (w <- 0 until pl_width)
+   for (w <- 0 until int_ren_width)
    {
       if (renameLatency == 1)
       {
@@ -297,7 +318,7 @@ class RenameStage(
    assert (!(io.int_wakeups.map(x => x.valid && x.bits.uop.dst_rtype =/= RT_FIX).reduce(_|_)),
       "[rename] int wakeup is not waking up a Int register.")
 
-   for (w <- 0 until pl_width)
+   for (w <- 0 until int_ren_width)
    {
       assert (!(
          ren2_will_fire(w) &&
@@ -348,7 +369,7 @@ class RenameStage(
    io.ren2_mask := ren2_will_fire
    io.ren2_uops := ren2_uops map {u => GetNewUopAndBrMask(u, io.brinfo)}
 
-   for (w <- 0 until pl_width)
+   for (w <- 0 until int_ren_width)
    {
       val ifl_can_proceed = ifreelist.io.can_allocate(w) && ren1_uops(w).dst_rtype === RT_FIX
       val ffl_can_proceed = if (usingFPU)

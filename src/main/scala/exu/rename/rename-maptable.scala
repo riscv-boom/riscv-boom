@@ -24,17 +24,19 @@ import boom.util._
 /**
  * Rename map table element IO
  *
- * @param pl_width pipeline width
+ * @param ren_width rename width
+ * @param com_width commit width
  */
-class RenameMapTableElementIo(val pl_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
+class RenameMapTableElementIo(val ren_width: Int)
+   (implicit p: Parameters) extends BoomBundle()(p)
 {
    val element            = Output(UInt(PREG_SZ.W))
 
-   val wens               = Input(Vec(pl_width, Bool()))
-   val ren_pdsts          = Input(Vec(pl_width, UInt(PREG_SZ.W)))
+   val wens               = Input(Vec(ren_width, Bool()))
+   val ren_pdsts          = Input(Vec(ren_width, UInt(PREG_SZ.W)))
 
-   val ren_br_vals        = Input(Vec(pl_width, Bool()))
-   val ren_br_tags        = Input(Vec(pl_width, UInt(BR_TAG_SZ.W)))
+   val ren_br_vals        = Input(Vec(ren_width, Bool()))
+   val ren_br_tags        = Input(Vec(ren_width, UInt(BR_TAG_SZ.W)))
 
    val br_mispredict      = Input(Bool())
    val br_mispredict_tag  = Input(UInt(BR_TAG_SZ.W))
@@ -56,12 +58,12 @@ class RenameMapTableElementIo(val pl_width: Int)(implicit p: Parameters) extends
  * Element in the Rename Map Table. Keeps track of the idx of the physical register, and extra data
  * to recover from branches
  *
- * @param pl_width pipeline width
+ * @param ren_width rename width
  * @param always_zero the element is always zero (used for x0)
  */
-class RenameMapTableElement(pl_width: Int, always_zero: Boolean)(implicit p: Parameters) extends BoomModule()(p)
+class RenameMapTableElement(ren_width: Int, always_zero: Boolean)(implicit p: Parameters) extends BoomModule()(p)
 {
-   val io = IO(new RenameMapTableElementIo(pl_width))
+   val io = IO(new RenameMapTableElementIo(ren_width))
 
    // Note: I don't use a "valid" signal, since it's annoying to deal with and
    // only necessary until the map tables are filled. So instead I reset the
@@ -85,7 +87,7 @@ class RenameMapTableElement(pl_width: Int, always_zero: Boolean)(implicit p: Par
    // 2nd, is older instructions in same bundle
    // 3rd, current element
 
-   for (w <- 0 until pl_width)
+   for (w <- 0 until ren_width)
    {
       var elm_cases = Array((false.B, 0.U(PREG_SZ.W)))
 
@@ -154,13 +156,15 @@ class MapTableOutput(val preg_sz: Int) extends Bundle
 /**
  * Rename map table which maps architectural registers to physical registers
  *
- * @param pl_width pipeline width
+ * @param ren_width rename width
+ * @param com_width commit width
  * @param rtype type of registers being mapped
  * @param num_logical_registers number of logical ISA registers
  * @param num_physical_registers number of physical registers
  */
 class RenameMapTable(
-   pl_width: Int,
+   ren_width: Int,
+   com_width: Int,
    rtype: BigInt,
    num_logical_registers: Int,
    num_physical_registers: Int
@@ -175,25 +179,26 @@ class RenameMapTable(
       val brinfo           = Input(new BrResolutionInfo())
       val kill             = Input(Bool())
 
-      val ren_will_fire    = Input(Vec(pl_width, Bool()))
-      val ren_uops         = Input(Vec(pl_width, new MicroOp()))
-      val ren_br_vals      = Input(Vec(pl_width, Bool()))
+      val ren_will_fire    = Input(Vec(ren_width, Bool()))
+      val ren_uops         = Input(Vec(ren_width, new MicroOp()))
+      val ren_br_vals      = Input(Vec(ren_width, Bool()))
 
-      val com_valids       = Input(Vec(pl_width, Bool()))
-      val com_uops         = Input(Vec(pl_width, new MicroOp()))
-      val com_rbk_valids   = Input(Vec(pl_width, Bool()))
+      val com_valids       = Input(Vec(com_width, Bool()))
+      val com_uops         = Input(Vec(com_width, new MicroOp()))
+      val com_rbk_valids   = Input(Vec(com_width, Bool()))
       val flush_pipeline   = Input(Bool()) // only used for SCR (single-cycle reset)
 
-      val debug_inst_can_proceed = Input(Vec(pl_width, Bool()))
-      val debug_freelist_can_allocate = Input(Vec(pl_width, Bool()))
+      val debug_inst_can_proceed = Input(Vec(ren_width, Bool()))
+      val debug_freelist_can_allocate = Input(Vec(ren_width, Bool()))
 
       // Outputs
-      val values           = Output(Vec(pl_width, new MapTableOutput(preg_sz)))
+      val values           = Output(Vec(ren_width, new MapTableOutput(preg_sz)))
    })
 
    val entries = for (i <- 0 until num_logical_registers) yield
    {
-      val entry = Module(new RenameMapTableElement(pl_width, always_zero = (i==0 && rtype == RT_FIX.litValue)))
+      val entry = Module(new RenameMapTableElement(ren_width,
+         always_zero = (i==0 && rtype == RT_FIX.litValue)))
       entry
    }
    val map_table_io = VecInit(entries.map(_.io))
@@ -206,7 +211,7 @@ class RenameMapTable(
       entry.commit_wen := false.B
       entry.commit_pdst := io.com_uops(0).pdst
 
-      for (w <- 0 until pl_width)
+      for (w <- 0 until ren_width)
       {
          entry.wens(w)        := io.ren_uops(w).ldst === i.U &&
                                            io.ren_will_fire(w) &&
@@ -229,7 +234,7 @@ class RenameMapTable(
    }}
 
    // backwards, because rollback must give highest priority to 0 (the oldest instruction)
-   for (w <- pl_width-1 to 0 by -1)
+   for (w <- com_width-1 to 0 by -1)
    {
       val ldst = io.com_uops(w).ldst
       when (io.com_rbk_valids(w) && io.com_uops(w).dst_rtype === rtype.U)
@@ -241,25 +246,24 @@ class RenameMapTable(
 
    if (ENABLE_COMMIT_MAP_TABLE)
    {
-      for (w <- 0 until pl_width)
-      {
-         val ldst = io.com_uops(w).ldst
-         when (io.com_valids(w) && (io.com_uops(w).dst_rtype === rtype.U))
-         {
-            map_table_io(ldst).commit_wen := true.B
-            map_table_io(ldst).commit_pdst := io.com_uops(w).pdst
-         }
-      }
+      // for (w <- 0 until pl_width)
+      // {
+      //    val ldst = io.com_uops(w).ldst
+      //    when (io.com_valids(w) && (io.com_uops(w).dst_rtype === rtype.U))
+      //    {
+      //       map_table_io(ldst).commit_wen := true.B
+      //       map_table_io(ldst).commit_pdst := io.com_uops(w).pdst
+      //    }
+      // }
    }
 
    // Read out the map-table entries ASAP, then deal with bypassing busy-bits later.
-   //private val map_table_output = Wire(Vec(pl_width*3, UInt(PREG_SZ.W)))
-   private val map_table_output = Seq.fill(pl_width*3)(Wire(UInt(PREG_SZ.W)))
-   def map_table_prs1(w:Int) = map_table_output(w+0*pl_width)
-   def map_table_prs2(w:Int) = map_table_output(w+1*pl_width)
-   def map_table_prs3(w:Int) = map_table_output(w+2*pl_width)
+   private val map_table_output = Seq.fill(ren_width*3)(Wire(UInt(PREG_SZ.W)))
+   def map_table_prs1(w:Int) = map_table_output(w+0*ren_width)
+   def map_table_prs2(w:Int) = map_table_output(w+1*ren_width)
+   def map_table_prs3(w:Int) = map_table_output(w+2*ren_width)
 
-   for (w <- 0 until pl_width)
+   for (w <- 0 until ren_width)
    {
       map_table_prs1(w) := map_table_io(io.ren_uops(w).lrs1).element
       map_table_prs2(w) := map_table_io(io.ren_uops(w).lrs2).element
@@ -274,7 +278,7 @@ class RenameMapTable(
    }
 
    // Bypass the physical register mappings
-   for (w <- 0 until pl_width)
+   for (w <- 0 until ren_width)
    {
       var rs1_cases =  Array((false.B, 0.U(PREG_SZ.W)))
       var rs2_cases =  Array((false.B, 0.U(PREG_SZ.W)))

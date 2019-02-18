@@ -22,36 +22,38 @@ import boom.util._
  * IO bundle for accessing the free list
  *
  * @param num_pregs number of physical registers
- * @param pl_width pipeline width (dispatch group size)
+ * @param ren_width rename width
+ * @param com_width commit width
  */
 class FreeListIo(
    val num_pregs: Int,
-   val pl_width: Int)
+   val ren_width: Int,
+   val com_width: Int)
 (implicit p: Parameters) extends BoomBundle()(p)
 {
    private val preg_sz = log2Ceil(num_pregs)
 
-   val req_preg_vals = Input(Vec(pl_width, Bool()))
-   val req_pregs     = Output(Vec(pl_width, UInt(preg_sz.W))) // TODO: Confirm functionality
+   val req_preg_vals = Input(Vec(ren_width, Bool()))
+   val req_pregs     = Output(Vec(ren_width, UInt(preg_sz.W))) // TODO: Confirm functionality
 
    // committed and newly freed register
-   val enq_vals      = Input(Vec(pl_width, Bool()))
-   val enq_pregs     = Input(Vec(pl_width, UInt(preg_sz.W)))
+   val enq_vals      = Input(Vec(com_width, Bool()))
+   val enq_pregs     = Input(Vec(com_width, UInt(preg_sz.W)))
 
    // do we have space to service incoming requests? (per inst granularity)
-   val can_allocate  = Output(Vec(pl_width, Bool()))
+   val can_allocate  = Output(Vec(ren_width, Bool()))
 
    // handle branches (save copy of freelist on branch, merge on mispredict)
-   val ren_br_vals   = Input(Vec(pl_width, Bool()))
-   val ren_br_tags   = Input(Vec(pl_width, UInt(BR_TAG_SZ.W)))
+   val ren_br_vals   = Input(Vec(ren_width, Bool()))
+   val ren_br_tags   = Input(Vec(ren_width, UInt(BR_TAG_SZ.W)))
 
    // handle mispredicts
    val br_mispredict_val = Input(Bool())
    val br_mispredict_tag = Input(UInt(BR_TAG_SZ.W))
 
    // rollback (on exceptions)
-   val rollback_wens  = Input(Vec(pl_width, Bool()))
-   val rollback_pdsts = Input(Vec(pl_width, UInt(preg_sz.W)))
+   val rollback_wens  = Input(Vec(com_width, Bool()))
+   val rollback_pdsts = Input(Vec(com_width, UInt(preg_sz.W)))
 
    // or...
    // TODO there are TWO free-list IOs now, based on constants. What is the best way to handle these two designs?
@@ -59,8 +61,8 @@ class FreeListIo(
    // TODO naming is inconsistent
    // TODO combine with rollback, whatever?
    val flush_pipeline = Input(Bool())
-   val com_wens       = Input(Vec(pl_width, Bool()))
-   val com_uops       = Input(Vec(pl_width, new MicroOp()))
+   val com_wens       = Input(Vec(com_width, Bool()))
+   val com_uops       = Input(Vec(com_width, new MicroOp()))
 
    val debug = Output(new DebugFreeListIO(num_pregs))
 }
@@ -81,14 +83,16 @@ class DebugFreeListIO(val num_pregs: Int) extends Bundle
  * and the pipeline will give any reader of p0 0x0 as read data.
  *
  * @param num_pregs number of physical registers
- * @param pl_width pipeline width (dispatch group size)
+ * @param ren_width renane width
+ * @param com_width commit width
  */
 class RenameFreeListHelper(
    num_pregs: Int,
-   pl_width: Int)
+   ren_width: Int,
+   com_width: Int)
    (implicit p: Parameters) extends BoomModule()(p)
 {
-   val io = IO(new FreeListIo(num_pregs, pl_width))
+   val io = IO(new FreeListIo(num_pregs, ren_width, com_width))
 
    // ** FREE LIST TABLE ** //
    val free_list = RegInit(~(1.U(num_pregs.W)))
@@ -98,18 +102,18 @@ class RenameFreeListHelper(
    val allocation_lists = Reg(Vec(MAX_BR_COUNT, Bits(num_pregs.W)))
 
    // TODO why is this a Vec? can I do this all on one bit-vector?
-   val enq_mask = Wire(Vec(pl_width, Bits(num_pregs.W)))
+   val enq_mask = Wire(Vec(com_width, Bits(num_pregs.W)))
 
    // ------------------------------------------
    // find new,free physical registers
 
-   val requested_pregs_oh_array = Array.fill(pl_width,num_pregs){false.B}
-   val requested_pregs_oh       = Wire(Vec(pl_width, Bits(num_pregs.W)))
-   val requested_pregs          = Wire(Vec(pl_width, UInt(log2Ceil(num_pregs).W)))
-   var allocated                = Wire(Vec(pl_width, Bool())) // did each inst get allocated a register?
+   val requested_pregs_oh_array = Array.fill(ren_width,num_pregs){false.B}
+   val requested_pregs_oh       = Wire(Vec(ren_width, Bits(num_pregs.W)))
+   val requested_pregs          = Wire(Vec(ren_width, UInt(log2Ceil(num_pregs).W)))
+   var allocated                = Wire(Vec(ren_width, Bool())) // did each inst get allocated a register?
 
    // init
-   for (w <- 0 until pl_width)
+   for (w <- 0 until ren_width)
    {
       allocated(w) := false.B
    }
@@ -118,10 +122,10 @@ class RenameFreeListHelper(
    // don't give out p0
    for (i <- 1 until num_pregs)
    {
-      val next_allocated = Wire(Vec(pl_width, Bool()))
+      val next_allocated = Wire(Vec(ren_width, Bool()))
       var can_allocate = free_list(i)
 
-      for (w <- 0 until pl_width)
+      for (w <- 0 until ren_width)
       {
          requested_pregs_oh_array(w)(i) = can_allocate && !allocated(w)
 
@@ -132,7 +136,7 @@ class RenameFreeListHelper(
       allocated = next_allocated
    }
 
-   for (w <- 0 until pl_width)
+   for (w <- 0 until ren_width)
    {
       requested_pregs_oh(w) := VecInit(requested_pregs_oh_array(w)).asUInt
       requested_pregs(w) := PriorityEncoder(requested_pregs_oh(w))
@@ -156,7 +160,7 @@ class RenameFreeListHelper(
    val br_cleared = Wire(Vec(MAX_BR_COUNT, Bool()))
    for (i <- 0 until MAX_BR_COUNT) { br_cleared(i) := false.B }
 
-   for (w <- pl_width-1 to 0 by -1)
+   for (w <- ren_width-1 to 0 by -1)
    {
       // When branching, start a fresh copy of the allocation_list
       // but don't forget to bypass in the allocations within our bundle
@@ -181,7 +185,7 @@ class RenameFreeListHelper(
 
 
    // ** Set enqueued PREG to "Free" ** //
-   for (w <- 0 until pl_width)
+   for (w <- 0 until com_width)
    {
       enq_mask(w) := 0.U(num_pregs.W)
       when (io.enq_vals(w))
@@ -222,31 +226,31 @@ class RenameFreeListHelper(
    // OPTIONALLY: handle single-cycle resets
    // Committed Free List tracks what the free list is at the commit point,
    // allowing for a single-cycle reset of the rename state on a pipeline flush.
-   if (ENABLE_COMMIT_MAP_TABLE)
-   {
-      val committed_free_list = RegInit(~(1.U(num_pregs.W)))
+   // if (ENABLE_COMMIT_MAP_TABLE)
+   // {
+   //    val committed_free_list = RegInit(~(1.U(num_pregs.W)))
 
-      val com_mask = Wire(Vec(pl_width,   Bits(num_pregs.W)))
-      val stale_mask = Wire(Vec(pl_width, Bits(num_pregs.W)))
-      for (w <- 0 until pl_width)
-      {
-         com_mask(w) :=   0.U(num_pregs.W)
-         stale_mask(w) := 0.U(num_pregs.W)
-         when (io.com_wens(w))
-         {
-            com_mask(w) := 1.U << io.com_uops(w).pdst
-            stale_mask(w) := 1.U << io.com_uops(w).stale_pdst
-         }
-      }
+   //    val com_mask = Wire(Vec(pl_width,   Bits(num_pregs.W)))
+   //    val stale_mask = Wire(Vec(pl_width, Bits(num_pregs.W)))
+   //    for (w <- 0 until pl_width)
+   //    {
+   //       com_mask(w) :=   0.U(num_pregs.W)
+   //       stale_mask(w) := 0.U(num_pregs.W)
+   //       when (io.com_wens(w))
+   //       {
+   //          com_mask(w) := 1.U << io.com_uops(w).pdst
+   //          stale_mask(w) := 1.U << io.com_uops(w).stale_pdst
+   //       }
+   //    }
 
-      committed_free_list := (committed_free_list & ~(com_mask.reduce(_|_))) | stale_mask.reduce(_|_)
+   //    committed_free_list := (committed_free_list & ~(com_mask.reduce(_|_))) | stale_mask.reduce(_|_)
 
-      when (io.flush_pipeline)
-      {
-         free_list := committed_free_list
-      }
-      io.debug.isprlist := committed_free_list
-   }
+   //    when (io.flush_pipeline)
+   //    {
+   //       free_list := committed_free_list
+   //    }
+   //    io.debug.isprlist := committed_free_list
+   // }
 
    // ** SET OUTPUTS ** //
    io.req_pregs := requested_pregs
@@ -260,12 +264,14 @@ class RenameFreeListHelper(
  * Rename free list that keeps track of what registers are free in the physical
  * register file
  *
- * @param pl_width pipeline width (dispatch group size)
+ * @param ren_width rename width (dispatch group size)
+ * @param com_width commit width
  * @param rtype type of register the free list is operating on
  * @param num_pregs number of physical registers
  */
 class RenameFreeList(
-   pl_width: Int,
+   ren_width: Int,
+   com_width: Int,
    rtype: BigInt,
    num_pregs: Int)
    (implicit p: Parameters) extends BoomModule()(p)
@@ -278,21 +284,21 @@ class RenameFreeList(
       val brinfo           = Input(new BrResolutionInfo())
       val kill             = Input(Bool())
 
-      val ren_will_fire    = Input(Vec(pl_width, Bool()))
-      val ren_uops         = Input(Vec(pl_width, new MicroOp()))
-      val ren_br_vals      = Input(Vec(pl_width, Bool()))
+      val ren_will_fire    = Input(Vec(ren_width, Bool()))
+      val ren_uops         = Input(Vec(ren_width, new MicroOp()))
+      val ren_br_vals      = Input(Vec(ren_width, Bool()))
 
 
-      val com_valids       = Input(Vec(pl_width, Bool()))
-      val com_uops         = Input(Vec(pl_width, new MicroOp()))
-      val com_rbk_valids   = Input(Vec(pl_width, Bool()))
+      val com_valids       = Input(Vec(com_width, Bool()))
+      val com_uops         = Input(Vec(com_width, new MicroOp()))
+      val com_rbk_valids   = Input(Vec(com_width, Bool()))
 
 
       val flush_pipeline   = Input(Bool())
 
       // Outputs
-      val can_allocate     = Output(Vec(pl_width, Bool()))
-      val req_pregs        = Output(Vec(pl_width, UInt(preg_sz.W)))
+      val can_allocate     = Output(Vec(ren_width, Bool()))
+      val req_pregs        = Output(Vec(ren_width, UInt(preg_sz.W)))
 
       val debug            = Output(new DebugFreeListIO(num_pregs))
       val debug_rob_empty  = Input(Bool())
@@ -300,26 +306,37 @@ class RenameFreeList(
 
    val freelist = Module(new RenameFreeListHelper(
       num_pregs,
-      pl_width))
+      ren_width,
+      com_width))
 
    freelist.io.br_mispredict_val := io.brinfo.mispredict
    freelist.io.br_mispredict_tag := io.brinfo.tag
    freelist.io.flush_pipeline    := io.flush_pipeline
 
-   for (w <- 0 until pl_width)
+   for (w <- 0 until ren_width)
    {
       freelist.io.req_preg_vals(w)  := !io.kill &&
                                        io.ren_will_fire(w) &&
                                        io.ren_uops(w).ldst_val &&
                                        io.ren_uops(w).dst_rtype === rtype.U
 
+      freelist.io.ren_br_vals(w)    := io.ren_br_vals(w)
+      freelist.io.ren_br_tags(w)    := io.ren_uops(w).br_tag
+
+      if (rtype == RT_FIX.litValue) {
+         // x0 is a special-case and should not be renamed
+         io.req_pregs(w) := Mux(io.ren_uops(w).ldst === 0.U, 0.U, freelist.io.req_pregs(w))
+      } else {
+         io.req_pregs(w) := freelist.io.req_pregs(w)
+      }
+
+   }
+   for (w <- 0 until com_width)
+   {
       freelist.io.enq_vals(w)       := io.com_valids(w) &&
                                        io.com_uops(w).dst_rtype === rtype.U &&
                                        (io.com_uops(w).stale_pdst =/= 0.U || rtype.U === RT_FLT)
       freelist.io.enq_pregs(w)      := io.com_uops(w).stale_pdst
-
-      freelist.io.ren_br_vals(w)    := io.ren_br_vals(w)
-      freelist.io.ren_br_tags(w)    := io.ren_uops(w).br_tag
 
 
       freelist.io.rollback_wens(w)  := io.com_rbk_valids(w) &&
@@ -331,13 +348,6 @@ class RenameFreeList(
                                        (io.com_uops(w).pdst =/= 0.U || rtype.U === RT_FLT) &&
                                        io.com_uops(w).dst_rtype === rtype.U
       freelist.io.com_uops(w)       := io.com_uops(w)
-
-      if (rtype == RT_FIX.litValue) {
-         // x0 is a special-case and should not be renamed
-         io.req_pregs(w) := Mux(io.ren_uops(w).ldst === 0.U, 0.U, freelist.io.req_pregs(w))
-      } else {
-         io.req_pregs(w) := freelist.io.req_pregs(w)
-      }
    }
 
    io.can_allocate := freelist.io.can_allocate

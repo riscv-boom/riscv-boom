@@ -25,13 +25,13 @@ import boom.util._
  * IO bundle to interact with the busy table.
  * Internally bypasses newly busy registers (.write) to the read ports (.read)
  *
- * @param pl_width pipeline width
+ * @param ren_width renamee width
  * @param num_pregs number of physical registers
  * @param num_read_ports number of read ports to the regfile
  * @param num_wb_ports number of writeback ports to the regfile
  */
 class BusyTableIo(
-   val pl_width: Int,
+   val ren_width: Int,
    val num_pregs: Int,
    val num_read_ports: Int,
    val num_wb_ports: Int)
@@ -43,11 +43,11 @@ class BusyTableIo(
    val p_rs           = Input(Vec(num_read_ports, UInt(preg_sz.W)))
    val p_rs_busy      = Output(Vec(num_read_ports, Bool()))
 
-   def prs(i:Int, w:Int):UInt      = p_rs     (w+i*pl_width)
-   def prs_busy(i:Int, w:Int):Bool = p_rs_busy(w+i*pl_width)
+   def prs(i:Int, w:Int):UInt      = p_rs     (w+i*ren_width)
+   def prs_busy(i:Int, w:Int):Bool = p_rs_busy(w+i*ren_width)
 
    // marking new registers as busy
-   val allocated_pdst = Flipped(Vec(pl_width, new ValidIO(UInt(preg_sz.W))))
+   val allocated_pdst = Flipped(Vec(ren_width, new ValidIO(UInt(preg_sz.W))))
 
    // marking registers being written back as unbusy
    val unbusy_pdst    = Flipped(Vec(num_wb_ports, new ValidIO(UInt(preg_sz.W))))
@@ -61,19 +61,19 @@ class BusyTableIo(
  * That bypass check should be done elsewhere (this is to get it off the
  * critical path).
  *
- * @param pl_width pipeline width
+ * @param ren_width rename_width
  * @param num_pregs number of physical registers
  * @param num_read_ports number of read ports to the regfile
  * @param num_wb_ports number of writeback ports to the regfile
  */
 class BusyTableHelper(
-   pl_width: Int,
+   ren_width: Int,
    num_pregs: Int,
    num_read_ports: Int,
    num_wb_ports: Int)
    (implicit p: Parameters) extends BoomModule()(p)
 {
-   val io = IO(new BusyTableIo(pl_width, num_pregs, num_read_ports, num_wb_ports))
+   val io = IO(new BusyTableIo(ren_width, num_pregs, num_read_ports, num_wb_ports))
 
    def BUSY     = true.B
    def NOT_BUSY = false.B
@@ -89,7 +89,7 @@ class BusyTableHelper(
       }
    }
 
-   for (w <- 0 until pl_width)
+   for (w <- 0 until ren_width)
    {
       when (io.allocated_pdst(w).valid && io.allocated_pdst(w).bits =/= 0.U)
       {
@@ -121,14 +121,15 @@ class BusyTableOutput extends Bundle
 /**
  * Busy table indicating which physical registers are currently busy
  *
- * @param pl_width pipeline width (dispatch group size)
+ * @param ren_width rename width
+ * @param com_width commit_width
  * @param rtype type of register the free list is operating on
  * @param num_pregs number of physical registers
  * @param num_read_ports number of read ports to the regfile
  * @param num_wb_ports number of writeback ports to the regfile
  */
 class BusyTable(
-   pl_width: Int,
+   ren_width: Int,
    rtype: BigInt,
    num_pregs: Int,
    num_read_ports: Int,
@@ -140,32 +141,32 @@ class BusyTable(
    val io = IO(new Bundle
    {
       // Inputs
-      val ren_will_fire         = Input(Vec(pl_width, Bool()))
-      val ren_uops              = Input(Vec(pl_width, new MicroOp()))
+      val ren_will_fire         = Input(Vec(ren_width, Bool()))
+      val ren_uops              = Input(Vec(ren_width, new MicroOp()))
 
-      val map_table             = Input(Vec(pl_width, new MapTableOutput(preg_sz)))
+      val map_table             = Input(Vec(ren_width, new MapTableOutput(preg_sz)))
 
       val wb_valids             = Input(Vec(num_wb_ports, Bool()))
       val wb_pdsts              = Input(Vec(num_wb_ports, UInt(preg_sz.W)))
 
       // Outputs
-      val values                = Output(Vec(pl_width, new BusyTableOutput()))
+      val values                = Output(Vec(ren_width, new BusyTableOutput()))
 
       val debug                 = new Bundle { val busytable= Output(Bits(num_pregs.W)) }
    })
 
    val busy_table = Module(new BusyTableHelper(
-      pl_width = pl_width,
+      ren_width = ren_width,
       num_pregs = num_pregs,
       num_read_ports = num_read_ports,
       num_wb_ports = num_wb_ports))
 
    // figure out if we need to bypass a newly allocated physical register from a previous instruction in this cycle.
-   val prs1_was_bypassed = WireInit(VecInit(Seq.fill(pl_width) {false.B}))
-   val prs2_was_bypassed = WireInit(VecInit(Seq.fill(pl_width) {false.B}))
-   val prs3_was_bypassed = WireInit(VecInit(Seq.fill(pl_width) {false.B}))
+   val prs1_was_bypassed = WireInit(VecInit(Seq.fill(ren_width) {false.B}))
+   val prs2_was_bypassed = WireInit(VecInit(Seq.fill(ren_width) {false.B}))
+   val prs3_was_bypassed = WireInit(VecInit(Seq.fill(ren_width) {false.B}))
    for {
-      w <- 0 until pl_width
+      w <- 0 until ren_width
       xx <- w-1 to 0 by -1
    }{
       when (io.ren_uops(w).lrs1_rtype === rtype.U && io.ren_will_fire(xx) && io.ren_uops(xx).ldst_val &&
@@ -183,7 +184,7 @@ class BusyTable(
       }
    }
 
-   for (w <- 0 until pl_width)
+   for (w <- 0 until ren_width)
    {
       // Reading the Busy Bits
       // for critical path reasons, we speculatively read out the busy-bits assuming no dependencies between uops

@@ -104,13 +104,16 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
    // decodeWidth provided by CoreParams class.
    // retireWidth provided by BoomCoreParams class.
 //   val decodeWidth     = boomParams.decodeWidth
-   val DISPATCH_WIDTH   = decodeWidth                // number of insts put into the IssueWindow
-   val COMMIT_WIDTH     = boomParams.retireWidth
+   val DISPATCH_WIDTH    = decodeWidth                // number of insts put into the IssueWindow
+                                                      //val FP_DISPATCH_WIDTH = boomParams.issueParams.get(_.iqType == IQT_FP.litValue).issueWidth
+   val FP_DISPATCH_WIDTH = decodeWidth
+   val COMMIT_WIDTH      = boomParams.retireWidth
 
    require (decodeWidth == COMMIT_WIDTH)
    require (DISPATCH_WIDTH == COMMIT_WIDTH)
    require (isPow2(fetchWidth))
    require (decodeWidth <= fetchWidth)
+   require (FP_DISPATCH_WIDTH <= DISPATCH_WIDTH)
 
    //************************************
    // Data Structure Sizes
