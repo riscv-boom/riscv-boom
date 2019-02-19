@@ -138,8 +138,8 @@ class BrResolutionInfo(implicit p: Parameters) extends BoomBundle()(p)
    val pc_lob     = UInt(log2Ceil(fetchWidth*coreInstBytes).W)
    val ftq_idx    = UInt(ftqSz.W)
    val rob_idx    = UInt(ROB_ADDR_SZ.W)
-   val ldq_idx    = UInt(MEM_ADDR_SZ.W)  // track the "tail" of loads and stores, so we can
-   val stq_idx    = UInt(MEM_ADDR_SZ.W)  // quickly reset the LSU on a mispredict
+   val ldq_idx    = UInt(LDQ_ADDR_SZ.W)  // track the "tail" of loads and stores, so we can
+   val stq_idx    = UInt(STQ_ADDR_SZ.W)  // quickly reset the LSU on a mispredict
    val taken      = Bool()                     // which direction did the branch go?
    val is_jr      = Bool() // TODO remove use cfi_type instead
    val cfi_type   = CfiType()
