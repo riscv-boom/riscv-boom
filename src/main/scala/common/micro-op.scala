@@ -87,8 +87,8 @@ class MicroOp(implicit p: Parameters) extends BoomBundle()(p)
                                                // then translate and sign-extend in execute
    val csr_addr         = UInt(CSR_ADDR_SZ.W)    // only used for critical path reasons in Exe
    val rob_idx          = UInt(ROB_ADDR_SZ.W)
-   val ldq_idx          = UInt(MEM_ADDR_SZ.W)
-   val stq_idx          = UInt(MEM_ADDR_SZ.W)
+   val ldq_idx          = UInt(LDQ_ADDR_SZ.W)
+   val stq_idx          = UInt(STQ_ADDR_SZ.W)
    val pdst             = UInt(PREG_SZ.W)
    val pop1             = UInt(PREG_SZ.W)
    val pop2             = UInt(PREG_SZ.W)

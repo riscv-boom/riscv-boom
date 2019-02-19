@@ -367,10 +367,11 @@ object AgePriorityEncoder
    def apply(in: Seq[Bool], head: UInt): UInt =
    {
       val n = in.size
-      require (isPow2(n))
-      val temp_vec = (0 until n).map(i => in(i) && i.U >= head) ++ in
+      val width = log2Ceil(in.size)
+      val n_padded = 1 << width
+      val temp_vec = (0 until n_padded).map(i => if (i < n) in(i) && i.U >= head else false.B) ++ in
       val idx = PriorityEncoder(temp_vec)
-      idx(log2Ceil(n)-1, 0) //discard msb
+      idx(width-1, 0) //discard msb
    }
 }
 

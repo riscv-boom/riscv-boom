@@ -25,12 +25,13 @@ import boom.lsu._
 case class BoomCoreParams(
    fetchWidth: Int = 1,
    decodeWidth: Int = 1,
-   numRobEntries: Int = 16,
+   numRobEntries: Int = 64,
    issueParams: Seq[IssueParams] = Seq(
          IssueParams(issueWidth=1, numEntries=16, iqType=IQT_MEM.litValue),
          IssueParams(issueWidth=2, numEntries=16, iqType=IQT_INT.litValue),
          IssueParams(issueWidth=1, numEntries=16, iqType=IQT_FP.litValue)),
-   numLsuEntries: Int = 8,
+   numLdqEntries: Int = 16,
+   numStqEntries: Int = 16,
    numIntPhysRegisters: Int = 96,
    numFpPhysRegisters: Int = 64,
    enableCustomRf: Boolean = false,
@@ -114,14 +115,15 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
 
    //************************************
    // Data Structure Sizes
-   val NUM_ROB_ENTRIES  = boomParams.numRobEntries     // number of ROB entries (e.g., 32 entries for R10k)
-   val NUM_LSU_ENTRIES  = boomParams.numLsuEntries     // number of LD/ST entries
-   val MAX_BR_COUNT     = boomParams.maxBrCount        // number of branches we can speculate simultaneously
-   val ftqSz            = boomParams.ftq.nEntries
-   val fetchBufferSz    = boomParams.fetchBufferSz     // number of instructions that stored between fetch&decode
+   val NUM_ROB_ENTRIES = boomParams.numRobEntries       // number of ROB entries (e.g., 32 entries for R10k)
+   val NUM_LDQ_ENTRIES = boomParams.numLdqEntries       // number of LAQ entries
+   val NUM_STQ_ENTRIES = boomParams.numStqEntries       // number of SAQ/SDQ entries
+   val MAX_BR_COUNT    = boomParams.maxBrCount          // number of branches we can speculate simultaneously
+   val ftqSz           = NUM_ROB_ENTRIES / fetchWidth   // number of FTQ entries should match (or slightly exceed) ROB entries
+   val fetchBufferSz   = boomParams.fetchBufferSz       // number of instructions that stored between fetch&decode
 
-   val numIntPhysRegs   = boomParams.numIntPhysRegisters // size of the integer physical register file
-   val numFpPhysRegs    = boomParams.numFpPhysRegisters  // size of the floating point physical register file
+   val numIntPhysRegs  = boomParams.numIntPhysRegisters // size of the integer physical register file
+   val numFpPhysRegs   = boomParams.numFpPhysRegisters  // size of the floating point physical register file
 
    //************************************
    // Functional Units
@@ -240,10 +242,10 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
    val LREG_SZ           = log2Ceil(LOGICAL_REG_COUNT)
    val IPREG_SZ          = log2Ceil(numIntPhysRegs)
    val FPREG_SZ          = log2Ceil(numFpPhysRegs)
-   val PREG_SZ          = IPREG_SZ max FPREG_SZ
-   val MEM_ADDR_SZ       = log2Ceil(NUM_LSU_ENTRIES)
-   val MAX_ST_COUNT      = (1 << MEM_ADDR_SZ)
-   val MAX_LD_COUNT      = (1 << MEM_ADDR_SZ)
+   val PREG_SZ           = IPREG_SZ max FPREG_SZ
+   val LDQ_ADDR_SZ       = log2Ceil(NUM_LDQ_ENTRIES)
+   val STQ_ADDR_SZ       = log2Ceil(NUM_STQ_ENTRIES)
+   val LSU_ADDR_SZ       = LDQ_ADDR_SZ max STQ_ADDR_SZ
    val BR_TAG_SZ         = log2Ceil(MAX_BR_COUNT)
    val NUM_BROB_ENTRIES  = NUM_ROB_ROWS //TODO explore smaller BROBs
    val BROB_ADDR_SZ      = log2Ceil(NUM_BROB_ENTRIES)
@@ -253,8 +255,8 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
    require (MAX_BR_COUNT >=2)
    require (NUM_ROB_ROWS % 2 == 0)
    require (NUM_ROB_ENTRIES % decodeWidth == 0)
-   require (isPow2(NUM_LSU_ENTRIES))
-   require ((NUM_LSU_ENTRIES-1) > decodeWidth)
+   require ((NUM_LDQ_ENTRIES-1) > decodeWidth)
+   require ((NUM_STQ_ENTRIES-1) > decodeWidth)
 
    //************************************
    // Custom Logic

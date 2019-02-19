@@ -386,7 +386,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    + "\n   Issue Width           : " + issueParams.map(_.issueWidth).sum
    + "\n   ROB Size              : " + NUM_ROB_ENTRIES
    + "\n   Issue Window Size     : " + issueParams.map(_.numEntries) + iss_str
-   + "\n   Load/Store Unit Size  : " + NUM_LSU_ENTRIES + "/" + NUM_LSU_ENTRIES
+   + "\n   Load/Store Unit Size  : " + NUM_LDQ_ENTRIES + "/" + NUM_STQ_ENTRIES
    + "\n   Num Int Phys Registers: " + numIntPhysRegs
    + "\n   Num FP  Phys Registers: " + numFpPhysRegs
    + "\n   Max Branch Count      : " + MAX_BR_COUNT
@@ -581,8 +581,8 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       dec_uops(w).ldq_idx := new_lidx
       dec_uops(w).stq_idx := new_sidx
 
-      new_lidx = Mux(dec_will_fire(w) && dec_uops(w).is_load,  WrapInc(new_lidx, NUM_LSU_ENTRIES), new_lidx)
-      new_sidx = Mux(dec_will_fire(w) && dec_uops(w).is_store, WrapInc(new_sidx, NUM_LSU_ENTRIES), new_sidx)
+      new_lidx = Mux(dec_will_fire(w) && dec_uops(w).is_load,  WrapInc(new_lidx, NUM_LDQ_ENTRIES), new_lidx)
+      new_sidx = Mux(dec_will_fire(w) && dec_uops(w).is_store, WrapInc(new_sidx, NUM_STQ_ENTRIES), new_sidx)
    }
 
    //-------------------------------------------------------------
@@ -1208,7 +1208,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
       val numFtqWhitespace = if (DEBUG_PRINTF_FTQ) (ftqSz/4)+1 else 0
       val fetchWhitespace = if (fetchWidth >= 8) 2 else 0
-       var whitespace = (debugScreenheight - 25 + 3 -10 + 3 + 4 - decodeWidth - NUM_LSU_ENTRIES -
+       var whitespace = (debugScreenheight - 25 + 3 -10 + 3 + 4 - decodeWidth - (NUM_LDQ_ENTRIES max NUM_STQ_ENTRIES) -
          issueParams.map(_.numEntries).sum - issueParams.length - (NUM_ROB_ENTRIES/COMMIT_WIDTH) -
          numFtqWhitespace - fetchWhitespace
      )
