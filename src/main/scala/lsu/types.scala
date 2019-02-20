@@ -68,8 +68,7 @@ trait CanHaveBoomPTWModule extends HasBoomHellaCacheModule
 {
   val outer: CanHaveBoomPTW
   val ptwPorts = ListBuffer(outer.dcache.module.io.ptw)
-  val ptw = Module(new PTW(outer.nPTWPorts)(outer.dcache.node.edges.out(0), outer.p))
-  ptw.io <> DontCare // Is overridden below if PTW is connected
+  val ptw = if (outer.usingPTW) Module(new PTW(outer.nPTWPorts)(outer.dcache.node.edges.out(0), outer.p)) else null
   if (outer.usingPTW)
   {
     dcachePorts += ptw.io.mem
