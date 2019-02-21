@@ -71,7 +71,7 @@ class DebugFreeListIO(val num_phys_registers: Int) extends Bundle
 // this prevents a dependency chain from existing between UOPs when trying to
 // compute a pdst to give away (as well as computing if an available free
 // register exists.
-// NOTE: we never give out p0 -- that is the "unitialized" state of the map-table,
+// NOTE: we never give out p0 -- that is the "uninitialized" state of the map-table,
 // and the pipeline will give any reader of p0 0x0 as read data.
 class RenameFreeListHelper(
    num_phys_registers: Int, // number of physical registers
@@ -93,10 +93,14 @@ class RenameFreeListHelper(
    // ------------------------------------------
    // find new,free physical registers
 
-   val requested_pregs_oh_array = Array.fill(pl_width,num_phys_registers){false.B}
-   val requested_pregs_oh       = Wire(Vec(pl_width, Bits(num_phys_registers.W)))
-   val requested_pregs          = Wire(Vec(pl_width, UInt(log2Ceil(num_phys_registers).W)))
-   var allocated                = Wire(Vec(pl_width, Bool())) // did each inst get allocated a register?
+   val requested_pregs = Wire(Vec(pl_width, UInt(log2Ceil(num_phys_registers).W)))
+   val requested_preg_vals = Wire(Vec(pl_width, Bool()))
+   val requested_preg_rdys = Wire(Vec(pl_width, Bool()))
+
+   val selected_pregs_oh_array = Array.fill(pl_width,num_phys_registers){false.B}
+   val selected_pregs_oh       = Wire(Vec(pl_width, Bits(num_phys_registers.W)))
+   val selected_pregs          = Wire(Vec(pl_width, UInt(log2Ceil(num_phys_registers).W)))
+   var allocated               = Wire(Vec(pl_width, Bool())) // did each inst get allocated a register?
 
    // init
    for (w <- 0 until pl_width)
@@ -113,7 +117,7 @@ class RenameFreeListHelper(
 
       for (w <- 0 until pl_width)
       {
-         requested_pregs_oh_array(w)(i) = can_allocate && !allocated(w)
+         selected_pregs_oh_array(w)(i) = can_allocate && !allocated(w)
 
          next_allocated(w) := can_allocate | allocated(w)
          can_allocate = can_allocate && allocated(w)
@@ -124,10 +128,26 @@ class RenameFreeListHelper(
 
    for (w <- 0 until pl_width)
    {
-      requested_pregs_oh(w) := VecInit(requested_pregs_oh_array(w)).asUInt
-      requested_pregs(w) := PriorityEncoder(requested_pregs_oh(w))
+      selected_pregs_oh(w) := VecInit(selected_pregs_oh_array(w)).asUInt
+      selected_pregs(w) := PriorityEncoder(selected_pregs_oh(w))
    }
 
+   if (enablePipelinedAllocation) {
+      for (w <- 0 until pl_width) {
+         val valid = RegInit(false.B)
+         val ready = !valid || io.req_preg_vals(w)
+         valid := !ready || allocated(w)
+         val fire = ready && allocated(w)
+
+         requested_preg_rdys(w) := ready
+         requested_pregs(w) := RegEnable(selected_pregs(w), fire)
+         requested_preg_vals(w) := valid
+      }
+   } else {
+      requested_pregs := selected_pregs
+      requested_preg_vals := allocated
+      requested_preg_rdys := io.req_preg_vals
+   }
 
    // ------------------------------------------
    // Calculate next Free List
@@ -140,6 +160,7 @@ class RenameFreeListHelper(
 
    // bit vector of newly allocated physical registers
    var just_allocated_mask = 0.U(num_phys_registers.W)
+   var last_allocated_mask = 0.U(num_phys_registers.W)
 
    // track which allocation_lists just got cleared out by a branch,
    // to enforce a write priority to allocation_lists()
@@ -152,20 +173,20 @@ class RenameFreeListHelper(
       // but don't forget to bypass in the allocations within our bundle
       when (io.ren_br_vals(w))
       {
-         allocation_lists(io.ren_br_tags(w)) := just_allocated_mask
+         allocation_lists(io.ren_br_tags(w)) := Mux(enablePipelinedAllocation.B, last_allocated_mask, just_allocated_mask)
          br_cleared(io.ren_br_tags(w)) := true.B
       }
 
       // check that we both request a register and was able to allocate a register
-      just_allocated_mask = Mux(io.req_preg_vals(w) && allocated(w), requested_pregs_oh(w) | just_allocated_mask,
-                                                                     just_allocated_mask)
+      just_allocated_mask = Mux(requested_preg_rdys(w) && allocated(w), selected_pregs_oh(w) | just_allocated_mask, just_allocated_mask)
+      last_allocated_mask = Mux(io.req_preg_vals(w) && requested_preg_vals(w), UIntToOH(requested_pregs(w)) | last_allocated_mask, last_allocated_mask)
    }
 
    for (i <- 0 until MAX_BR_COUNT)
    {
       when (!br_cleared(i))
       {
-         allocation_lists(i) := allocation_lists(i) | just_allocated_mask
+         allocation_lists(i) := allocation_lists(i) | Mux(enablePipelinedAllocation.B, last_allocated_mask, just_allocated_mask)
       }
    }
 
@@ -241,9 +262,12 @@ class RenameFreeListHelper(
    // ** SET OUTPUTS ** //
    io.req_pregs := requested_pregs
 
-   io.can_allocate := allocated
+   io.can_allocate := requested_preg_vals
 
-   io.debug.freelist := free_list
+   if (enablePipelinedAllocation)
+      io.debug.freelist := (requested_pregs zip requested_preg_vals).map{case (preg, valid) => UIntToOH(preg) & Fill(num_phys_registers, valid.asUInt)}.fold(free_list)(_|_)
+   else
+      io.debug.freelist := free_list
 }
 
 
