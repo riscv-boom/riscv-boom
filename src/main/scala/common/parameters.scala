@@ -48,6 +48,7 @@ case class BoomCoreParams(
    enableBTB: Boolean = true,
    enableBpdUModeOnly: Boolean = false,
    enableBpdUSModeHistory: Boolean = false,
+   enablePipelinedAllocation: Boolean = true,
    useAtomicsOnlyForIO: Boolean = false,
    ftq: FtqParameters = FtqParameters(),
    btb: BoomBTBParameters = BoomBTBParameters(),
@@ -227,6 +228,7 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
    // Extra Knobs and Features
    val ENABLE_COMMIT_MAP_TABLE = boomParams.enableCommitMapTable
    val enableFastPNR = boomParams.enableFastPNR
+   val enablePipelinedAllocation = boomParams.enablePipelinedAllocation
 
    //************************************
    // Implicitly calculated constants
