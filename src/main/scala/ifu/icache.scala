@@ -281,17 +281,18 @@ class ICacheModule(outer: ICache) extends ICacheBaseModule(outer)
 
   assert (!(s1_slaveValid), "[icache] We do not support the icache slave.")
 
-  // declare arrays outside conditional so they show up named in Verilog.
   val ramDepth =
     if (2*tl_out.d.bits.data.getWidth == wordBits) (nSets * refillCycles/2)
     else (nSets * refillCycles)
-  val dataArraysB0 = Seq.fill(nWays) { SyncReadMem(ramDepth, UInt(dECC.width(wordBits/nBanks).W)) }
-  val dataArraysB1 = Seq.fill(nWays) { SyncReadMem(ramDepth, UInt(dECC.width(wordBits/nBanks).W)) }
 
   if (cacheParams.fetchBytes <= 8)
   {
     // Use unbanked icache for narrow accesses.
-    val dataArrays = Seq.fill(nWays) { SyncReadMem(nSets * refillCycles, UInt(dECC.width(wordBits).W)) }
+    val dataArrays = (0 until nWays).map { x =>
+       SyncReadMem(nSets * refillCycles, UInt(dECC.width(wordBits).W)).suggestName(
+          "dataArrayWay_" + x.toString)
+    }
+
     s1_bankId := 0.U
     for ((dataArray, i) <- dataArrays zipWithIndex)
     {
@@ -315,6 +316,12 @@ class ICacheModule(outer: ICache) extends ICacheBaseModule(outer)
   }
   else
   {
+    val dataArraysB0 = (0 until nWays).map { x =>
+       SyncReadMem(ramDepth, UInt(dECC.width(wordBits/nBanks).W)).suggestName(
+          "dataArrayB0Way_" + x.toString)}
+    val dataArraysB1 = (0 until nWays).map { x =>
+       SyncReadMem(ramDepth, UInt(dECC.width(wordBits/nBanks).W)).suggestName(
+          "dataArrayB1Way_" + x.toString)}
     // Use two banks, interleaved.
     require (nBanks == 2)
 
