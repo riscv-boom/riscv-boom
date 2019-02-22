@@ -103,7 +103,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    val decode_units     = for (w <- 0 until decodeWidth) yield { val d = Module(new DecodeUnit); d }
    val dec_brmask_logic = Module(new BranchMaskGenerationLogic(decodeWidth))
    val rename_stage     = Module(new RenameStage(
-      DISPATCH_WIDTH, FP_DISPATCH_WIDTH, COMMIT_WIDTH,
+      DISPATCH_WIDTH, DISPATCH_WIDTH*2, FP_DISPATCH_WIDTH*3, COMMIT_WIDTH,
       num_int_wakeup_ports, num_fp_wakeup_ports))
    val issue_units      = new boom.exu.IssueUnits(num_int_wakeup_ports)
    val iregfile         = if (regreadLatency == 1 && enableCustomRf)
