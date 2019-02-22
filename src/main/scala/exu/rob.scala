@@ -658,7 +658,7 @@ class Rob(
          // This should be handled by the front-end.
          when ((io.enq_uops(idx).uopc === uopJAL) && !io.enq_uops(idx).exc_cause.orR)
          {
-            r_xcpt_badvaddr := ComputeJALTarget(io.enq_uops(idx).pc, io.enq_uops(idx).inst, xLen)
+            r_xcpt_badvaddr := ComputeJALTarget(io.enq_uops(idx).pc, ExpandRVC(io.enq_uops(idx).inst), xLen)
          }
       }
    }

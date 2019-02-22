@@ -90,11 +90,12 @@ class FetchMonitor(implicit p: Parameters) extends BoomModule()(p)
       prev_valid = uop.valid && io.fire
       prev_pc  = uop.pc
       prev_npc = prev_pc + Mux(uop.is_rvc, 2.U, 4.U)
-      prev_cfitype = GetCfiType(uop.inst)
+      val inst = ExpandRVC(uop.inst)
+      prev_cfitype = GetCfiType(inst)
       prev_target =
          Mux(prev_cfitype === CfiType.jal,
-            ComputeJALTarget(uop.pc, uop.inst, xLen),
-            ComputeBranchTarget(uop.pc, uop.inst, xLen))
+            ComputeJALTarget(uop.pc, inst, xLen),
+            ComputeBranchTarget(uop.pc, inst, xLen))
    }
 
    // Check if the enqueue'd PC is a target of the previous valid enqueue'd PC.
@@ -119,18 +120,18 @@ class FetchMonitor(implicit p: Parameters) extends BoomModule()(p)
       val end_uop    = io.uops(end_idx)
       val end_pc     = end_uop.pc
       val end_compressed = end_uop.inst(1,0) =/= 3.U && usingCompressed.B
-
+      val inst       = ExpandRVC(end_uop.inst)
       last_pc := end_pc
       when (end_compressed) {
          last_npc := end_pc + 2.U
       } .otherwise {
          last_npc := end_pc + 4.U
       }
-      last_cfitype := GetCfiType(end_uop.inst)
+      last_cfitype := GetCfiType(inst)
       last_target :=
-         Mux(GetCfiType(end_uop.inst) === CfiType.jal,
-            ComputeJALTarget(end_uop.pc, end_uop.inst, xLen),
-            ComputeBranchTarget(end_uop.pc, end_uop.inst, xLen))
+         Mux(GetCfiType(inst) === CfiType.jal,
+            ComputeJALTarget(end_uop.pc, inst, xLen),
+            ComputeBranchTarget(end_uop.pc, inst, xLen))
 
       when (last_valid)
       {

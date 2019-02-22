@@ -302,7 +302,7 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
               + (i << log2Ceil(coreInstBytes)).U
               - Mux(use_prev && (i == 0).B, 2.U, 0.U))
 
-      bpd_decoder.io.inst := inst
+      bpd_decoder.io.inst := ExpandRVC(inst)
       bpd_decoder.io.pc   := pc
 
       f3_valid_mask(i) := f3_valid && f3_imemresp.mask(i) && is_valid
@@ -679,7 +679,7 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
       !f3_fetch_bundle.xcpt_ae_if)
    {
       assert (f3_fetch_bundle.mask =/= 0.U)
-      val curr_inst = if (fetchWidth == 1) f3_fetch_bundle.insts(0) else f3_fetch_bundle.insts(cfi_idx)
+      val curr_inst = ExpandRVC(if (fetchWidth == 1) f3_fetch_bundle.insts(0) else f3_fetch_bundle.insts(cfi_idx))
       last_valid     := true.B
       last_pc        := cfi_pc
       last_nextlinepc := nextFetchStart(curr_aligned_pc)
@@ -749,7 +749,7 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
       // check that, if there is a jal, the last valid instruction is not after him.
       // <beq, jal, bne, ...>, either the beq or jal may be the last instruction, but because
       // the jal dominates everything after it, nothing valid can be after it.
-      val f3_is_jal = VecInit(f3_fetch_bundle.insts map (GetCfiType(_) === CfiType.jal)).asUInt & f3_fetch_bundle.mask
+      val f3_is_jal = VecInit(f3_fetch_bundle.insts map {x => GetCfiType(ExpandRVC(x)) === CfiType.jal}).asUInt & f3_fetch_bundle.mask
       val f3_jal_idx = PriorityEncoder(f3_is_jal)
       val has_jal = f3_is_jal.orR
 

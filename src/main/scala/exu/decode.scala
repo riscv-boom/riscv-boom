@@ -532,6 +532,7 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule()(p)
 /**
  * Smaller Decode unit for the Frontend to decode different
  * branches.
+ * Accepts EXPANDED RVC instructions
  */
 
 class BranchDecode(implicit p: Parameters) extends BoomModule
@@ -549,12 +550,8 @@ class BranchDecode(implicit p: Parameters) extends BoomModule
       val cfi_type = Output(UInt(CfiType.SZ.W))
    })
 
-
-   val rvc_exp = Module(new RVCExpander)
-   rvc_exp.io.in := io.inst
-   val inst = Mux(rvc_exp.io.rvc, rvc_exp.io.out.bits, io.inst)
    val bpd_csignals =
-      freechips.rocketchip.rocket.DecodeLogic(inst,
+      freechips.rocketchip.rocket.DecodeLogic(io.inst,
                   List[BitPat](N, N, N, IS_X),
 ////                      //   is br?
 ////                      //   |  is jal?
@@ -577,12 +574,11 @@ class BranchDecode(implicit p: Parameters) extends BoomModule
    io.is_br   := cs_is_br
    io.is_jal  := cs_is_jal
    io.is_jalr := cs_is_jalr
-   io.is_call := (cs_is_jal || cs_is_jalr) && GetRd(inst) === RA
-   io.is_ret  := cs_is_jalr && GetRs1(inst) === BitPat("b00?01")
+   io.is_call := (cs_is_jal || cs_is_jalr) && GetRd(io.inst) === RA
+   io.is_ret  := cs_is_jalr && GetRs1(io.inst) === BitPat("b00?01")
 
-   val b_imm32 = Cat(Fill(20,inst(31)),inst(7),inst(30,25),inst(11,8),0.U(1.W))
-   val j_imm32 = Cat(Fill(12,inst(31)),inst(19,12),inst(20),inst(30,25),inst(24,21),0.U(1.W))
-   io.target := ((io.pc.asSInt + Mux(cs_is_br, b_imm32, j_imm32).asSInt).asSInt & (-2).S).asUInt
+   io.target := Mux(cs_is_br, ComputeBranchTarget(io.pc, io.inst, xLen),
+                              ComputeJALTarget(io.pc, io.inst, xLen))
    io.cfi_type :=
       Mux(cs_is_jalr,
           CfiType.jalr,
