@@ -18,6 +18,7 @@ import chisel3.util._
 
 import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.util.Str
+import freechips.rocketchip.rocket.RVCExpander
 
 /**
  * Mixin indicating the debug flags that can be set for viewing different
@@ -346,42 +347,28 @@ trait RISCVConstants
    def GetRd (inst: UInt): UInt = inst(RD_MSB,RD_LSB)
    def GetRs1(inst: UInt): UInt = inst(RS1_MSB,RS1_LSB)
 
-   def IsCall(inst: UInt)(implicit p: Parameters): Bool =
+   def ExpandRVC(inst: UInt)(implicit p: Parameters): UInt =
    {
-      val rvc_exp = Module(new freechips.rocketchip.rocket.RVCExpander)
+      val rvc_exp = Module(new RVCExpander)
       rvc_exp.io.in := inst
-      val e_inst = Mux(rvc_exp.io.rvc, rvc_exp.io.out.bits, inst)
-
-      (e_inst === freechips.rocketchip.rocket.Instructions.JAL ||
-       e_inst === freechips.rocketchip.rocket.Instructions.JALR) && GetRd(e_inst) === RA
+      Mux(rvc_exp.io.rvc, rvc_exp.io.out.bits, inst)
    }
 
-   def IsReturn(inst: UInt)(implicit p: Parameters): Bool =
-   {
-      val rvc_exp = Module(new freechips.rocketchip.rocket.RVCExpander)
-      rvc_exp.io.in := inst
-      val e_inst = Mux(rvc_exp.io.rvc, rvc_exp.io.out.bits, inst)
-      GetUop(e_inst) === jalr_opc && GetRs1(e_inst) === BitPat("b00?01")
-   }
-
+   // Note: Accepts only EXPANDED rvc instructions
    def ComputeBranchTarget(pc: UInt, inst: UInt, xlen: Int)(implicit p: Parameters): UInt =
    {
-      val rvc_exp = Module(new freechips.rocketchip.rocket.RVCExpander)
-      rvc_exp.io.in := inst
-      val e_inst = Mux(rvc_exp.io.rvc, rvc_exp.io.out.bits, inst)
-      val b_imm32 = Cat(Fill(20,e_inst(31)), e_inst(7), e_inst(30,25), e_inst(11,8), 0.U(1.W))
+      val b_imm32 = Cat(Fill(20,inst(31)), inst(7), inst(30,25), inst(11,8), 0.U(1.W))
       ((pc.asSInt + b_imm32.asSInt).asSInt & (-2).S).asUInt
    }
 
+   // Note: Accepts only EXPANDED rvc instructions
    def ComputeJALTarget(pc: UInt, inst: UInt, xlen: Int)(implicit p: Parameters): UInt =
    {
-      val rvc_exp = Module(new freechips.rocketchip.rocket.RVCExpander)
-      rvc_exp.io.in := inst
-      val e_inst = Mux(rvc_exp.io.rvc, rvc_exp.io.out.bits, inst)
-      val j_imm32 = Cat(Fill(12,e_inst(31)), e_inst(19,12), e_inst(20), e_inst(30,25), e_inst(24,21), 0.U(1.W))
+      val j_imm32 = Cat(Fill(12,inst(31)), inst(19,12), inst(20), inst(30,25), inst(24,21), 0.U(1.W))
       ((pc.asSInt + j_imm32.asSInt).asSInt & (-2).S).asUInt
    }
 
+   // Note: Accepts only EXPANDED rvc instructions
    def GetCfiType(inst: UInt)(implicit p: Parameters): UInt =
    {
       val bdecode = Module(new boom.exu.BranchDecode)
