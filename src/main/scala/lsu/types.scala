@@ -11,6 +11,7 @@ import scala.collection.mutable.ListBuffer
 
 import chisel3._
 
+import freechips.rocketchip.util._
 import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.diplomacy.{AddressSet, LazyModule}
 import freechips.rocketchip.rocket.{DCache, HellaCache, HellaCacheArbiter, HellaCacheIO, NonBlockingDCache, PTW}
@@ -68,10 +69,10 @@ trait CanHaveBoomPTWModule extends HasBoomHellaCacheModule
 {
   val outer: CanHaveBoomPTW
   val ptwPorts = ListBuffer(outer.dcache.module.io.ptw)
-  val ptw = if (outer.usingPTW) Module(new PTW(outer.nPTWPorts)(outer.dcache.node.edges.out(0), outer.p)) else null
+  val ptw: Option[PTW] = (outer.usingPTW).option(Module(new PTW(outer.nPTWPorts)(outer.dcache.node.edges.out(0), outer.p)))
   if (outer.usingPTW)
   {
-    dcachePorts += ptw.io.mem
+    dcachePorts += ptw.get.io.mem
   }
 }
 
