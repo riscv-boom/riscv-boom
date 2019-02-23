@@ -364,6 +364,7 @@ class RenameStage(
    io.ren2_mask := ren2_will_fire
    io.ren2_uops := ren2_uops map {u => GetNewUopAndBrMask(u, io.brinfo)}
 
+   var num_fp_reads = 0.U
    for (w <- 0 until ren_width)
    {
       val ifl_can_proceed = ifreelist.io.can_allocate(w) && ren1_uops(w).dst_rtype === RT_FIX
@@ -375,9 +376,11 @@ class RenameStage(
       {
         false.B
       }
+      num_fp_reads = num_fp_reads + ren1_uops(w).busytable_rd_count(RT_FLT)
       // Push back against Decode stage if Rename1 can't proceed (and Rename2/Dispatch can't receive).
       io.inst_can_proceed(w) :=
          ren2_will_proceed &&
+         num_fp_reads <= fp_btable_ports.U &&
          ((ren1_uops(w).dst_rtype =/= RT_FIX && ren1_uops(w).dst_rtype =/= RT_FLT) ||
          ifl_can_proceed ||
          ffl_can_proceed)

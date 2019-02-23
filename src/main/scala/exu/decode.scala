@@ -487,6 +487,7 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule()(p)
    uop.dst_rtype  := cs.dst_type
    uop.lrs1_rtype := cs.rs1_type
    uop.lrs2_rtype := cs.rs2_type
+   uop.lrs3_rtype := Mux(cs.frs3_en, RT_FLT, RT_X)
    uop.frs3_en    := cs.frs3_en
 
    uop.fp_val     := cs.fp_val

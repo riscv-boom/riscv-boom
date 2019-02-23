@@ -30,7 +30,7 @@ import boom.util._
  * @param num_read_ports number of read ports to the regfile
  * @param num_wb_ports number of writeback ports to the regfile
  */
-class BusyTableIo(
+class BusyTableHelperIo(
    val ren_width: Int,
    val num_pregs: Int,
    val num_read_ports: Int,
@@ -40,11 +40,8 @@ class BusyTableIo(
    private val preg_sz = log2Ceil(num_pregs)
 
    // reading out the busy bits
-   val p_rs           = Input(Vec(num_read_ports, UInt(preg_sz.W)))
-   val p_rs_busy      = Output(Vec(num_read_ports, Bool()))
-
-   def prs(i:Int, w:Int):UInt      = p_rs     (w+i*ren_width)
-   def prs_busy(i:Int, w:Int):Bool = p_rs_busy(w+i*ren_width)
+   val prs           = Input(Vec(num_read_ports, UInt(preg_sz.W)))
+   val prs_busy      = Output(Vec(num_read_ports, Bool()))
 
    // marking new registers as busy
    val allocated_pdst = Flipped(Vec(ren_width, new ValidIO(UInt(preg_sz.W))))
@@ -73,7 +70,7 @@ class BusyTableHelper(
    num_wb_ports: Int)
    (implicit p: Parameters) extends BoomModule()(p)
 {
-   val io = IO(new BusyTableIo(ren_width, num_pregs, num_read_ports, num_wb_ports))
+   val io = IO(new BusyTableHelperIo(ren_width, num_pregs, num_read_ports, num_wb_ports))
 
    def BUSY     = true.B
    def NOT_BUSY = false.B
@@ -100,9 +97,9 @@ class BusyTableHelper(
    // handle bypassing a clearing of the busy-bit
    for (ridx <- 0 until num_read_ports)
    {
-      val just_cleared = io.unbusy_pdst.map(p => p.valid && (p.bits === io.p_rs(ridx))).reduce(_|_)
+      val just_cleared = io.unbusy_pdst.map(p => p.valid && (p.bits === io.prs(ridx))).reduce(_|_)
       // note: no bypassing of the newly busied (that is done outside this module)
-      io.p_rs_busy(ridx) := (table_bsy(io.p_rs(ridx)) && !just_cleared)
+      io.prs_busy(ridx) := (table_bsy(io.prs(ridx)) && !just_cleared)
    }
 
    io.debug.busytable := table_bsy.asUInt
@@ -184,29 +181,67 @@ class BusyTable(
       }
    }
 
+   if (rtype == RT_FIX.litValue || (rtype == RT_FLT.litValue && ren_width*3 == num_read_ports))
+   {
+      // In this case we statically allocate busy table ports to uops
+      var rd_idx = 0
+      for (w <- 0 until ren_width)
+      {
+         // Reading the Busy Bits
+         // for critical path reasons, we speculatively read out the busy-bits assuming no dependencies between uops
+         // then verify if the uop actually uses a register and if it depends on a newly unfreed register
+         busy_table.io.prs(rd_idx) := io.map_table(w).prs1
+         io.values(w).prs1_busy := io.ren_uops(w).lrs1_rtype === rtype.U &&
+                                   (busy_table.io.prs_busy(rd_idx) || prs1_was_bypassed(w))
+         rd_idx += 1
+
+
+         busy_table.io.prs(rd_idx) := io.map_table(w).prs2
+         io.values(w).prs2_busy := io.ren_uops(w).lrs2_rtype === rtype.U &&
+                                   (busy_table.io.prs_busy(rd_idx) || prs2_was_bypassed(w))
+         rd_idx += 1
+
+         if (rtype == RT_FLT.litValue)
+         {
+            busy_table.io.prs(rd_idx) := io.map_table(w).prs3
+            io.values(w).prs3_busy := (io.ren_uops(w).frs3_en) && (busy_table.io.prs_busy(rd_idx) || prs3_was_bypassed(w))
+            rd_idx += 1
+         }
+         else
+         {
+            io.values(w).prs3_busy := false.B
+         }
+      }
+      require(rd_idx == num_read_ports)
+   }
+   else
+   {
+      // In this case we dynamically allocate busy table ports
+      var rd_idx = 0.U
+      busy_table.io.prs := DontCare
+      for (w <- 0 until ren_width)
+      {
+         val read_lrs1 = io.ren_uops(w).lrs1_rtype === rtype.U
+         when (read_lrs1) { busy_table.io.prs(rd_idx) := io.map_table(w).prs1 }
+         io.values(w).prs1_busy := read_lrs1 && (busy_table.io.prs_busy(rd_idx) || prs1_was_bypassed(w))
+         rd_idx = rd_idx + read_lrs1
+
+         val read_lrs2 = io.ren_uops(w).lrs2_rtype === rtype.U
+         when (read_lrs2) { busy_table.io.prs(rd_idx) := io.map_table(w).prs2 }
+         io.values(w).prs2_busy := read_lrs2 && (busy_table.io.prs_busy(rd_idx) || prs2_was_bypassed(w))
+         rd_idx = rd_idx + read_lrs2
+
+         val read_lrs3 = io.ren_uops(w).lrs3_rtype === rtype.U
+         when (read_lrs3) { busy_table.io.prs(rd_idx) := io.map_table(w).prs3 }
+         io.values(w).prs3_busy := read_lrs3 && (busy_table.io.prs_busy(rd_idx) || prs3_was_bypassed(w))
+         rd_idx = rd_idx + read_lrs3
+      }
+      assert(rd_idx <= num_read_ports.U,
+         "We are trying to use more busy table read ports than we are allowed to!")
+   }
+
    for (w <- 0 until ren_width)
    {
-      // Reading the Busy Bits
-      // for critical path reasons, we speculatively read out the busy-bits assuming no dependencies between uops
-      // then verify if the uop actually uses a register and if it depends on a newly unfreed register
-      busy_table.io.prs(0,w) := io.map_table(w).prs1
-      busy_table.io.prs(1,w) := io.map_table(w).prs2
-
-      io.values(w).prs1_busy := io.ren_uops(w).lrs1_rtype === rtype.U &&
-                                (busy_table.io.prs_busy(0,w) || prs1_was_bypassed(w))
-      io.values(w).prs2_busy := io.ren_uops(w).lrs2_rtype === rtype.U &&
-                                (busy_table.io.prs_busy(1,w) || prs2_was_bypassed(w))
-
-      if (rtype == RT_FLT.litValue)
-      {
-         busy_table.io.prs(2,w) := io.map_table(w).prs3
-         io.values(w).prs3_busy := (io.ren_uops(w).frs3_en) && (busy_table.io.prs_busy(2,w) || prs3_was_bypassed(w))
-      }
-      else
-      {
-         io.values(w).prs3_busy := false.B
-      }
-
        // Updating the Table (new busy register)
       busy_table.io.allocated_pdst(w).valid := io.ren_will_fire(w) &&
                                                io.ren_uops(w).ldst_val &&

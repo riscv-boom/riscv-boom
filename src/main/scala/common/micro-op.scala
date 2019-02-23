@@ -122,6 +122,7 @@ class MicroOp(implicit p: Parameters) extends BoomBundle()(p)
    val dst_rtype        = UInt(2.W)
    val lrs1_rtype       = UInt(2.W)
    val lrs2_rtype       = UInt(2.W)
+   val lrs3_rtype       = UInt(2.W)
    val frs3_en          = Bool()
 
    // floating point information
@@ -139,6 +140,7 @@ class MicroOp(implicit p: Parameters) extends BoomBundle()(p)
    val debug_wdata      = UInt(xLen.W)
    val debug_events     = new DebugStageEvents
 
+   def busytable_rd_count(rtype: UInt) = (lrs1_rtype === rtype) + (lrs2_rtype === rtype) + (lrs3_rtype === rtype)
    def fu_code_is(_fu: UInt) = fu_code === _fu
 }
 
