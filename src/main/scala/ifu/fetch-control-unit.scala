@@ -224,6 +224,7 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
 
    // round off to nearest fetch boundary
    val f3_aligned_pc = alignToFetchBoundary(f3_imemresp.pc)
+   val f3_debug_pcs  = Wire(Vec(fetch_width, UInt(vaddrBitsExtended.W)))
    val f3_valid_mask = Wire(Vec(fetch_width, Bool()))
    val is_br     = Wire(Vec(fetch_width, Bool()))
    val is_jal    = Wire(Vec(fetch_width, Bool()))
@@ -302,7 +303,7 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
       val pc = (f3_aligned_pc
               + (i << log2Ceil(coreInstBytes)).U
               - Mux(use_prev && (i == 0).B, 2.U, 0.U))
-
+      f3_debug_pcs(i)     := pc
       bpd_decoder.io.inst := ExpandRVC(inst)
       bpd_decoder.io.pc   := pc
 
@@ -653,7 +654,7 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
                printf("%d; O3PipeView:fetch:%d:0x%x:0:%d:DASM(%x)\n",
                   bundle.debug_events(i).fetch_seq,
                   io.tsc_reg - (2*O3_CYCLE_TIME).U,
-                  (bundle.pc.asSInt & (-(fetch_width*coreInstBytes)).S).asUInt + (i << 2).U,
+                  f3_debug_pcs(i),
                   bundle.debug_events(i).fetch_seq,
                   bundle.insts(i))
             }
