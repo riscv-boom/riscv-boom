@@ -454,12 +454,13 @@ class FPUExeUnit(
       reads_frf  = true,
       writes_frf = true,
       writes_ll_irf = has_fpiu,
+      writes_irf = has_fpiu, // HACK: the "irf" port actually goes to the LSU fpu SDATAGen
       num_bypass_stages = 0,
       data_width = p(tile.TileKey).core.fpu.get.fLen + 1,
       bypassable = false,
       has_fpu  = has_fpu,
       has_fdiv = has_fdiv,
-      has_fpiu = has_fpiu)(p)
+      has_fpiu = has_fpiu)(p) with tile.HasFPUParameters
 {
    assert(!(has_fpu && !has_fpiu), "FPU units must contain FPIU")
    // TODO: Separate out FPIU so this isn't needed.
@@ -557,7 +558,9 @@ class FPUExeUnit(
       // buffer up results since we share write-port on integer regfile.
       val queue = Module(new BranchKillableQueue(new ExeUnitResp(data_width),
          entries = dfmaLatency + 3)) // TODO being overly conservative
-      queue.io.enq.valid       := fpu.io.resp.valid && fpu.io.resp.bits.uop.fu_code_is(FU_F2I)
+      queue.io.enq.valid       := (fpu.io.resp.valid &&
+                                   fpu.io.resp.bits.uop.fu_code_is(FU_F2I) &&
+                                   fpu.io.resp.bits.uop.uopc =/= uopSTD)
       queue.io.enq.bits.uop    := fpu.io.resp.bits.uop
       queue.io.enq.bits.data   := fpu.io.resp.bits.data
       queue.io.enq.bits.fflags := fpu.io.resp.bits.fflags
@@ -566,6 +569,10 @@ class FPUExeUnit(
       io.ll_iresp <> queue.io.deq
 
       fpiu_busy := !(queue.io.empty)
+
+      io.iresp.valid     := io.req.valid && io.req.bits.uop.uopc === uopSTD
+      io.iresp.bits.uop  := io.req.bits.uop
+      io.iresp.bits.data := ieee(io.req.bits.rs2_data)
 
       assert (queue.io.enq.ready) // If this backs up, we've miscalculated the size of the queue.
    }
