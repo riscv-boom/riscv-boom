@@ -113,7 +113,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
       {
          issue_unit.io.dis_valids(w) := io.dis_valids(w)
          issue_unit.io.dis_uops(w).uopc := uopSTD
-         issue_unit.io.dis_uops(w).fu_code := FUConstants.FU_FPU
+         issue_unit.io.dis_uops(w).fu_code := FUConstants.FU_F2I
          issue_unit.io.dis_uops(w).lrs1_rtype := RT_X
          issue_unit.io.dis_uops(w).prs1_busy := false.B
       }
@@ -173,20 +173,6 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
    {
       ex.io.req <> fregister_read.io.exe_reqs(w)
       require (!ex.bypassable)
-
-      // TODO HACK only let one FPU issue port issue these.
-      // Solution : Make STDataGen a functional unit time
-      require (w == 0)
-      when (fregister_read.io.exe_reqs(w).bits.uop.uopc === uopSTD)
-      {
-         ex.io.req.valid :=  false.B
-      }
-
-      io.tosdq.valid    := fregister_read.io.exe_reqs(w).bits.uop.uopc === uopSTD
-      io.tosdq.bits.uop := fregister_read.io.exe_reqs(w).bits.uop
-      val sdata = fregister_read.io.exe_reqs(w).bits.rs2_data
-
-      io.tosdq.bits.data := ieee(sdata)
    }
    require (exe_units.num_total_bypass_ports == 0)
 
@@ -222,7 +208,6 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
    when (ifpu_resp.valid) { assert (ifpu_resp.bits.uop.ctrl.rf_wen && ifpu_resp.bits.uop.dst_rtype === RT_FLT) }
 
    var w_cnt = 1
-   var toint_found = false
    for (eu <- exe_units)
    {
       if (eu.writes_frf)
@@ -245,6 +230,9 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
 
    val fpiu_unit = exe_units.fpiu_unit
    io.toint <> fpiu_unit.io.ll_iresp
+   io.tosdq.valid := fpiu_unit.io.iresp.valid
+   io.tosdq.bits  := fpiu_unit.io.iresp.bits
+   fpiu_unit.io.iresp.ready := true.B
 
    //-------------------------------------------------------------
    //-------------------------------------------------------------
