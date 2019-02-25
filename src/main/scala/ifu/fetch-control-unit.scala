@@ -29,8 +29,7 @@ import chisel3.core.{withReset, DontCare}
 import chisel3.experimental.dontTouch
 
 import freechips.rocketchip.config.Parameters
-import freechips.rocketchip.util.Str
-import freechips.rocketchip.util.UIntToAugmentedUInt
+import freechips.rocketchip.util._
 
 import boom.bpu._
 import boom.common._
@@ -119,7 +118,7 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
    val bchecker = Module (new BranchChecker(fetchWidth))
    val ftq = Module(new FetchTargetQueue(num_entries = ftqSz))
    val fb = Module(new FetchBuffer(num_entries=fetchBufferSz))
-   val monitor = Module(new FetchMonitor)
+   val monitor: Option[FetchMonitor] = (useFetchMonitor).option(Module(new FetchMonitor))
 
    val br_unit = io.br_unit
    val fseq_reg = RegInit(0.U(xLen.W))
@@ -630,9 +629,13 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
    io.fetchpacket.bits.uops map { _ := DontCare }
    io.fetchpacket <> fb.io.deq
 
-   monitor.io.fire := io.fetchpacket.fire()
-   monitor.io.uops := io.fetchpacket.bits.uops
-   monitor.io.clear := io.clear_fetchbuffer
+   // enable/disable depending on parameters (should be disconnected in normal tapeouts)
+   if (useFetchMonitor)
+   {
+      monitor.get.io.fire := io.fetchpacket.fire()
+      monitor.get.io.uops := io.fetchpacket.bits.uops
+      monitor.get.io.clear := io.clear_fetchbuffer
+   }
 
    //-------------------------------------------------------------
    // **** Pipeview Support ****

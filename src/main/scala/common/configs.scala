@@ -74,11 +74,11 @@ class WithBoomRV32 extends Config((site, here, up) => {
  * Combines the Memory and Integer Issue Queues. Similar to BOOM v1.
  */
 class WithUnifiedMemIntIQs extends Config((site, here, up) => {
-   case BoomTilesKey => up(BoomTilesKey, site) map { r =>
-      r.copy(core = r.core.copy(
-         issueParams = r.core.issueParams.filter(_.iqType != IQT_MEM.litValue)
-      ))
-   }
+  case BoomTilesKey => up(BoomTilesKey, site) map { r =>
+    r.copy(core = r.core.copy(
+       issueParams = r.core.issueParams.filter(_.iqType != IQT_MEM.litValue)
+    ))
+  }
 })
 
 /**
@@ -90,6 +90,17 @@ class WithoutBoomFPU extends Config((site, here, up) => {
          issueParams = r.core.issueParams.filter(_.iqType != IQT_FP.litValue),
          fpu = None))
    }
+})
+
+/**
+ * Remove Fetch Monitor (should not be synthesized (although it can be))
+ */
+class WithoutFetchMonitor extends Config((site, here, up) => {
+  case BoomTilesKey => up(BoomTilesKey, site) map { r =>
+    r.copy(core = r.core.copy(
+      useFetchMonitor = false
+    ))
+  }
 })
 
 /**

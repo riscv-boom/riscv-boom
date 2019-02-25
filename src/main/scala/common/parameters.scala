@@ -61,6 +61,7 @@ case class BoomCoreParams(
    nPerfCounters: Int = 0,
    /* more stuff */
 
+   useFetchMonitor: Boolean = true,
    bootFreqHz: BigInt = 0,
    fpu: Option[FPUParams] = Some(FPUParams()),
    usingFPU: Boolean = true,
@@ -103,7 +104,6 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
    // fetchWidth provided by CoreParams class.
    // decodeWidth provided by CoreParams class.
    // retireWidth provided by BoomCoreParams class.
-//   val decodeWidth     = boomParams.decodeWidth
    val DISPATCH_WIDTH   = decodeWidth                // number of insts put into the IssueWindow
    val COMMIT_WIDTH     = boomParams.retireWidth
 
@@ -258,9 +258,12 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
 
    //************************************
    // Custom Logic
-
    val enableCustomRf      = boomParams.enableCustomRf
    val enableCustomRfModel = boomParams.enableCustomRfModel
+
+   //************************************
+   // Non-sythesizable modules
+   val useFetchMonitor = boomParams.useFetchMonitor
 
    //************************************
    // Non-BOOM parameters
