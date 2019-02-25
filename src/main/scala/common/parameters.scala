@@ -262,7 +262,7 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
    val enableCustomRfModel = boomParams.enableCustomRfModel
 
    //************************************
-   // Non-sythesizable modules
+   // Other Non/Should-not-be sythesizable modules
    val useFetchMonitor = boomParams.useFetchMonitor
 
    //************************************
