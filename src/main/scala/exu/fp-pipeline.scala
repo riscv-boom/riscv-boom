@@ -225,7 +225,6 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
          w_cnt += 1
       }
    }
-   require(w_cnt == 2) // TODO: right now +1 for ll_wport, +1 for FPU
    require (w_cnt == fregfile.io.write_ports.length)
 
    val fpiu_unit = exe_units.fpiu_unit
