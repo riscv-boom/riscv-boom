@@ -462,10 +462,6 @@ class FPUExeUnit(
       has_fdiv = has_fdiv,
       has_fpiu = has_fpiu)(p) with tile.HasFPUParameters
 {
-   assert(!(has_fpu && !has_fpiu), "FPU units must contain FPIU")
-   // TODO: Separate out FPIU so this isn't needed.
-   //       This is actually somewhat difficult because FPMU depends on FPIU
-
    val out_str = new StringBuilder
    out_str.append("\n     ExeUnit--")
    if (has_fpu)  out_str.append("\n       - FPU (Latency: " + dfmaLatency + ")")
@@ -510,10 +506,8 @@ class FPUExeUnit(
 
    // FDiv/FSqrt Unit -----------------------
    var fdivsqrt: FDivSqrtUnit = null
-   val fdiv_resp_val = WireInit(false.B)
-   val fdiv_resp_uop = Wire(new MicroOp())
-   val fdiv_resp_data = Wire(Bits(65.W))
    val fdiv_resp_fflags = Wire(new ValidIO(new FFlagsResp()))
+   fdiv_resp_fflags := DontCare
    fdiv_resp_fflags.valid := false.B
    if (has_fdiv)
    {
@@ -534,9 +528,6 @@ class FPUExeUnit(
 
       fdiv_busy := !fdivsqrt.io.req.ready || (io.req.valid && io.req.bits.uop.fu_code_is(FU_FDV))
 
-      fdiv_resp_val := fdivsqrt.io.resp.valid
-      fdiv_resp_uop := fdivsqrt.io.resp.bits.uop
-      fdiv_resp_data := fdivsqrt.io.resp.bits.data
       fdiv_resp_fflags := fdivsqrt.io.resp.bits.fflags
 
       fu_units += fdivsqrt
