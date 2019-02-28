@@ -55,6 +55,7 @@ class RobIo(
    // (Allocate, write instruction to ROB).
    val enq_valids       = Input(Vec(machine_width, Bool()))
    val enq_uops         = Input(Vec(machine_width, new MicroOp()))
+   val enq_insts        = Input(Vec(machine_width, UInt(32.W)))
    val enq_partial_stall= Input(Bool()) // we're dispatching only a partial packet,
                                         // and stalling on the rest of it (don't
                                       // advance the tail ptr)
@@ -115,6 +116,7 @@ class CommitSignals(implicit p: Parameters) extends BoomBundle()(p)
 {
    val valids     = Vec(retireWidth, Bool())
    val uops       = Vec(retireWidth, new MicroOp())
+   val insts      = Vec(retireWidth, UInt(32.W))
    val fflags     = Valid(UInt(5.W))
 
    // Perform rollback of rename state (in conjuction with commit.uops).
@@ -225,6 +227,8 @@ class Rob(
    //commit entries at the head, and unwind exceptions from the tail
    val rob_head = RegInit(0.U(log2Ceil(num_rob_rows).W))
    val rob_tail = RegInit(0.U(log2Ceil(num_rob_rows).W))
+   val com_idx  = Mux(rob_state === s_rollback, rob_tail, rob_head)
+
    val rob_tail_idx = rob_tail << log2Ceil(width).U
 
    val will_commit         = Wire(Vec(width, Bool()))
@@ -273,6 +277,16 @@ class Rob(
    // --------------------------------------------------------------------------
    // **************************************************************************
 
+   // If we define it outside this becomes 1 big memory
+   // TODO: Arbitrate reads to this memory between the ROB and issuing RoCC insts
+   // TODO: Can we make mini-exceptions faster using this buffer?
+   val rob_insts = Mem(num_rob_rows, Vec(width, UInt(32.W)))
+   val rob_com_insts = rob_insts(com_idx)
+
+   when (io.enq_valids.reduce(_||_))
+   {
+      rob_insts.write(rob_tail, io.enq_insts)
+   }
    for (w <- 0 until width)
    {
       def MatchBank(bank_idx: UInt): Bool = (bank_idx === w.U)
@@ -391,18 +405,14 @@ class Rob(
       // Can this instruction commit? (the check for exceptions/rob_state happens later).
       can_commit(w) := rob_val(rob_head) && !(rob_bsy(rob_head)) && !io.csr_stall
 
-      val com_idx = Wire(UInt())
-      com_idx := rob_head
-      when (rob_state === s_rollback)
-      {
-         com_idx := rob_tail
-      }
 
       // use the same "com_uop" for both rollback AND commit
       // Perform Commit
       io.commit.valids(w)     := will_commit(w)
       io.commit.uops(w)       := rob_uop(com_idx)
-
+      io.commit.insts(w)      := rob_com_insts(w)
+      assert (!io.commit.valids(w) || rob_com_insts(w) === rob_uop(com_idx).debug_inst,
+         "Mismatch between committed UOP and instruction buffer!")
       io.commit.rbk_valids(w) :=
                               (rob_state === s_rollback) &&
                               rob_val(com_idx) &&

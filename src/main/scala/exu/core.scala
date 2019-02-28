@@ -1074,6 +1074,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    // Dispatch
    rob.io.enq_valids := rename_stage.io.ren1_mask
    rob.io.enq_uops   := rename_stage.io.ren1_uops
+   rob.io.enq_insts  := dec_fbundle.insts
    rob.io.enq_new_packet := dec_finished_mask === 0.U
    rob.io.enq_partial_stall := dec_last_inst_was_stalled // TODO come up with better ROB compacting scheme.
    rob.io.debug_tsc := debug_tsc_reg
@@ -1522,7 +1523,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       {
          io.trace(w).valid      := rob.io.commit.valids(w)
          io.trace(w).iaddr      := Sext(rob.io.commit.uops(w).pc(vaddrBits-1,0), xLen)
-         io.trace(w).insn       := rob.io.commit.uops(w).debug_inst
+         io.trace(w).insn       := rob.io.commit.insts(w)
          // I'm uncertain the commit signals from the ROB match these CSR exception signals
          io.trace(w).priv       := csr.io.status.prv
          io.trace(w).exception  := csr.io.exception
