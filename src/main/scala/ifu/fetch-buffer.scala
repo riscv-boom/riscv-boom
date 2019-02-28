@@ -30,7 +30,8 @@ import boom.common._
  */
 class FetchBufferResp(implicit p: Parameters) extends BoomBundle()(p)
 {
-   val uops = Vec(decodeWidth, new MicroOp())
+   val uops  = Vec(decodeWidth, new MicroOp())
+   val insts = Vec(decodeWidth, UInt(32.W))
 }
 
 /**
@@ -55,6 +56,7 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule()
    require (num_entries > 1)
    private val num_elements = num_entries*fetchWidth
    private val ram = Mem(num_elements, new MicroOp())
+   private val inst_ram = Mem(num_elements, UInt(32.W))
    private val write_ptr = RegInit(0.U(log2Ceil(num_elements).W))
    private val read_ptr = RegInit(0.U(log2Ceil(num_elements).W))
 
@@ -71,17 +73,18 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule()
    io.enq.ready := count < (num_elements-fetchWidth).U
 
    // Input microops.
-   val in_uops = Wire(Vec(fetchWidth, new MicroOp()))
-
+   val in_uops  = Wire(Vec(fetchWidth, new MicroOp()))
+   val in_insts = Wire(Vec(fetchWidth, UInt(32.W)))
    // Compacted/shifted microops (and the shifted valid mask).
    val compact_mask = Wire(Vec(fetchWidth, Bool()))
    val compact_uops = Wire(Vec(fetchWidth, new MicroOp()))
-
+   val compact_insts = Wire(Vec(fetchWidth, UInt(32.W)))
    for (i <- 0 until fetchWidth)
    {
       compact_mask(i) := false.B
       compact_uops(i) := DontCare
-      compact_uops(i).inst := 7.U
+      compact_uops(i).debug_inst := 7.U
+      compact_insts(i):= 7.U
    }
 
    // Step 1. Convert input FetchPacket into an array of MicroOps.
@@ -104,7 +107,8 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule()
          }
       }
       in_uops(i).ftq_idx        := io.enq.bits.ftq_idx
-      in_uops(i).inst           := io.enq.bits.insts(i)
+      in_uops(i).debug_inst     := io.enq.bits.insts(i)
+      in_insts(i)               := io.enq.bits.insts(i)
       in_uops(i).is_rvc         := io.enq.bits.insts(i)(1,0) =/= 3.U && usingCompressed.B
       in_uops(i).xcpt_pf_if     := io.enq.bits.xcpt_pf_if
       in_uops(i).xcpt_ae_if     := io.enq.bits.xcpt_ae_if
@@ -135,6 +139,7 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule()
       {
          compact_uops(compact_idx) := in_uops(i.U)
          compact_mask(compact_idx) := true.B
+         compact_insts(compact_idx):= in_insts(i.U)
       }
       compact_idx = compact_idx + use_uop
 
@@ -165,7 +170,8 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule()
    {
       when (io.enq.fire() && i.U < enq_count)
       {
-         ram(write_ptr + i.U) := compact_uops(start_idx + i.U)
+         ram(write_ptr + i.U)      := compact_uops(start_idx + i.U)
+         inst_ram(write_ptr + i.U) := compact_insts(start_idx + i.U)
          assert (compact_mask(start_idx + i.U), s"compact_mask[$i] is invalid.")
       }
       .otherwise
@@ -180,20 +186,22 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule()
    //-------------------------------------------------------------
 
    val r_valid = RegInit(false.B)
-   val r_uops = Reg(Vec(decodeWidth, new MicroOp()))
-
+   val r_uops  = Reg(Vec(decodeWidth, new MicroOp()))
+   val r_insts = Reg(Vec(decodeWidth, UInt(32.W)))
    for (w <- 0 until decodeWidth)
    {
       when (io.deq.ready)
       {
          r_valid := count > 0.U || io.enq.valid
-         r_uops(w) := Mux(count === 0.U, compact_uops(w), ram(read_ptr + w.U))
+         r_uops(w)  := Mux(count === 0.U, compact_uops(w), ram(read_ptr + w.U))
+         r_insts(w) := Mux(count === 0.U, compact_insts(w), inst_ram(read_ptr+w.U))
          r_uops(w).valid := Mux(count === 0.U, compact_mask(w), count > w.U)
       }
    }
 
-   io.deq.valid := r_valid
-   io.deq.bits.uops := r_uops
+   io.deq.valid      := r_valid
+   io.deq.bits.uops  := r_uops
+   io.deq.bits.insts := r_insts
 
    //-------------------------------------------------------------
    // **** Update State ****

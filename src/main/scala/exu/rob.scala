@@ -302,7 +302,7 @@ class Rob(
       }
       .elsewhen (io.enq_valids.reduce(_|_) && !rob_val(rob_tail))
       {
-         rob_uop(rob_tail).inst := BUBBLE // just for debug purposes
+         rob_uop(rob_tail).debug_inst := BUBBLE // just for debug purposes
       }
 
       //-----------------------------------------------
@@ -423,7 +423,7 @@ class Rob(
             {
                rob_val(i)      := false.B
                rob_bsy(i)      := false.B
-               rob_uop(i).inst := BUBBLE
+               rob_uop(i).debug_inst := BUBBLE
             }
          }
       }
@@ -439,7 +439,7 @@ class Rob(
          when (io.brinfo.valid && io.brinfo.mispredict && entry_match)
          {
             rob_val(i) := false.B
-            rob_uop(i.U).inst := BUBBLE
+            rob_uop(i.U).debug_inst := BUBBLE
          }
          .elsewhen (io.brinfo.valid && !io.brinfo.mispredict && entry_match)
          {
@@ -466,11 +466,11 @@ class Rob(
       // debugging write ports that should not be synthesized
       when (will_commit(w))
       {
-         rob_uop(rob_head).inst := BUBBLE
+         rob_uop(rob_head).debug_inst := BUBBLE
       }
       .elsewhen (rob_state === s_rollback)
       {
-         rob_uop(rob_tail).inst := BUBBLE
+         rob_uop(rob_tail).debug_inst := BUBBLE
       }
 
       //--------------------------------------------------
@@ -658,7 +658,7 @@ class Rob(
          // This should be handled by the front-end.
          when ((io.enq_uops(idx).uopc === uopJAL) && !io.enq_uops(idx).exc_cause.orR)
          {
-            r_xcpt_badvaddr := ComputeJALTarget(io.enq_uops(idx).pc, ExpandRVC(io.enq_uops(idx).inst), xLen)
+            r_xcpt_badvaddr := ComputeJALTarget(io.enq_uops(idx).pc, ExpandRVC(io.enq_uops(idx).debug_inst), xLen)
          }
       }
    }
@@ -901,7 +901,7 @@ class Rob(
                    Mux(debug_entry(r_idx+0).valid, Str("V"), Str(" ")),
                    Mux(debug_entry(r_idx+0).busy, Str("B"),  Str(" ")),
                    debug_entry(r_idx+0).uop.pc(31,0),
-                   debug_entry(r_idx+0).uop.inst,
+                   debug_entry(r_idx+0).uop.debug_inst,
                    Mux(debug_entry(r_idx+0).exception, Str("E"), Str("-"))
                    )
          }
@@ -915,8 +915,8 @@ class Rob(
                    Mux(debug_entry(r_idx+1).busy,  Str("B"), Str(" ")),
                    debug_entry(r_idx+0).uop.pc(31,0),
                    debug_entry(r_idx+1).uop.pc(15,0),
-                   debug_entry(r_idx+0).uop.inst,
-                   debug_entry(r_idx+1).uop.inst,
+                   debug_entry(r_idx+0).uop.debug_inst,
+                   debug_entry(r_idx+1).uop.debug_inst,
                    Mux(debug_entry(r_idx+0).exception, Str("E"), Str("-")),
                    Mux(debug_entry(r_idx+1).exception, Str("E"), Str("-")),
                    debug_entry(r_idx+0).uop.ftq_idx,
@@ -939,10 +939,10 @@ class Rob(
                    debug_entry(r_idx+1).uop.pc(15,0),
                    debug_entry(r_idx+2).uop.pc(15,0),
                    debug_entry(r_idx+3).uop.pc(15,0),
-                   debug_entry(r_idx+0).uop.inst,
-                   debug_entry(r_idx+1).uop.inst,
-                   debug_entry(r_idx+2).uop.inst,
-                   debug_entry(r_idx+3).uop.inst,
+                   debug_entry(r_idx+0).uop.debug_inst,
+                   debug_entry(r_idx+1).uop.debug_inst,
+                   debug_entry(r_idx+2).uop.debug_inst,
+                   debug_entry(r_idx+3).uop.debug_inst,
                    Mux(debug_entry(r_idx+0).exception, Str("E"), Str("-")),
                    Mux(debug_entry(r_idx+1).exception, Str("E"), Str("-")),
                    Mux(debug_entry(r_idx+2).exception, Str("E"), Str("-")),

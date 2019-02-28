@@ -398,7 +398,10 @@ object FDivSqrtDecode extends DecodeConstants
  */
 class DecodeUnitIo(implicit p: Parameters) extends BoomBundle()(p)
 {
-   val enq = new Bundle { val uop = Input(new MicroOp()) }
+   val enq = new Bundle {
+      val uop  = Input(new MicroOp())
+      val inst = Input(UInt(32.W))
+   }
    val deq = new Bundle { val uop = Output(new MicroOp()) }
 
    // from CSRFile
@@ -425,9 +428,9 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule()(p)
    decode_table ++= (if (xLen == 64) X64Decode.table else X32Decode.table)
 
    val rvc_exp    = Module(new RVCExpander)
-   rvc_exp.io.in := io.enq.uop.inst
+   rvc_exp.io.in := io.enq.inst
    uop.is_rvc    := rvc_exp.io.rvc
-   val inst       = Mux(rvc_exp.io.rvc, rvc_exp.io.out.bits, io.enq.uop.inst)
+   val inst       = Mux(rvc_exp.io.rvc, rvc_exp.io.out.bits, io.enq.inst)
 
    val cs = Wire(new CtrlSigs()).decode(inst, decode_table)
 

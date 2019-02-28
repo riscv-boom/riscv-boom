@@ -90,7 +90,7 @@ class FetchMonitor(implicit p: Parameters) extends BoomModule()(p)
       prev_valid = uop.valid && io.fire
       prev_pc  = uop.pc
       prev_npc = prev_pc + Mux(uop.is_rvc, 2.U, 4.U)
-      val inst = ExpandRVC(uop.inst)
+      val inst = ExpandRVC(uop.debug_inst)
       prev_cfitype = GetCfiType(inst)
       prev_target =
          Mux(prev_cfitype === CfiType.jal,
@@ -119,8 +119,8 @@ class FetchMonitor(implicit p: Parameters) extends BoomModule()(p)
       val end_idx    = (fetchWidth-1).U - PriorityEncoder(Reverse(valid_mask))
       val end_uop    = io.uops(end_idx)
       val end_pc     = end_uop.pc
-      val end_compressed = end_uop.inst(1,0) =/= 3.U && usingCompressed.B
-      val inst       = ExpandRVC(end_uop.inst)
+      val end_compressed = end_uop.debug_inst(1,0) =/= 3.U && usingCompressed.B
+      val inst       = ExpandRVC(end_uop.debug_inst)
       last_pc := end_pc
       when (end_compressed) {
          last_npc := end_pc + 2.U
