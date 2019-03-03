@@ -57,12 +57,12 @@ trait HasBoomCoreIO extends freechips.rocketchip.tile.HasTileParameters
          val ifu = new boom.ifu.BoomFrontendIO
          val dmem = new freechips.rocketchip.rocket.HellaCacheIO
          val ptw = Flipped(new freechips.rocketchip.rocket.DatapathPTWIO())
-         val fpu = Flipped(new freechips.rocketchip.tile.FPUCoreIO())
          val rocc = Flipped(new freechips.rocketchip.tile.RoCCCoreIO())
          val ptw_tlb = new freechips.rocketchip.rocket.TLBPTWIO()
          val trace = Output(Vec(coreParams.retireWidth,
             new freechips.rocketchip.rocket.TracedInstruction))
          val release = Flipped(Valid(new boom.lsu.ReleaseInfo))
+         val fcsr_rm = UInt(freechips.rocketchip.tile.FPConstants.RM_SZ.W)
    }
 }
 
@@ -911,6 +911,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    csr.io.fcsr_flags.bits  := rob.io.commit.fflags.bits
 
    exe_units.map(_.io.fcsr_rm := csr.io.fcsr_rm)
+   io.fcsr_rm := csr.io.fcsr_rm
 
    if (usingFPU)
    {
@@ -1511,11 +1512,6 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    io.rocc.mem.s2_nack_cause_raw := false.B
    io.rocc.mem.s2_xcpt.ma.st := false.B
    io.rocc.mem.s2_xcpt.ma.ld := false.B
-
-   // Wire off other unused CoreIO signals.
-   io.fpu <> DontCare
-   io.fpu.valid := false.B
-   io.fpu.inst := 0.U
 
    //io.trace := csr.io.trace unused
    if (tileParams.trace)
