@@ -301,7 +301,7 @@ class Rob(
          rob_val(rob_tail)       := true.B
          rob_bsy(rob_tail)       := !io.enq_uops(w).is_fence &&
                                     !(io.enq_uops(w).is_fencei)
-         rob_safe(rob_tail)      := !io.enq_uops(w).may_xcpt
+         rob_safe(rob_tail)      := !io.enq_uops(w).may_xcpt && !io.enq_uops(w).exception
          rob_uop(rob_tail)       := io.enq_uops(w)
          rob_exception(rob_tail) := io.enq_uops(w).exception
          rob_fflags(rob_tail)    := 0.U
@@ -394,10 +394,15 @@ class Rob(
       when (io.lxcpt.valid && MatchBank(GetBankIdx(io.lxcpt.bits.uop.rob_idx)))
       {
          rob_exception(GetRowIdx(io.lxcpt.bits.uop.rob_idx)) := true.B
+         assert(!rob_safe(GetRowIdx(io.lxcpt.bits.uop.rob_idx)),
+            "An instruction marked as safe is causing an exception")
       }
       when (io.bxcpt.valid && MatchBank(GetBankIdx(io.bxcpt.bits.uop.rob_idx)))
       {
          rob_exception(GetRowIdx(io.bxcpt.bits.uop.rob_idx)) := true.B
+         assert(!rob_safe(GetRowIdx(io.bxcpt.bits.uop.rob_idx)),
+            "An instruction marked as safe is causing an exception")
+
       }
       can_throw_exception(w) := rob_val(rob_head) && rob_exception(rob_head)
 
