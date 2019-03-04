@@ -192,7 +192,7 @@ class DebugRobSignals(implicit p: Parameters) extends BoomBundle()(p)
 {
    val state = UInt()
    val rob_head = UInt(ROB_ADDR_SZ.W)
-   val pnr_head = UInt(ROB_ADDR_SZ.W)
+   val rob_pnr = UInt(ROB_ADDR_SZ.W)
    val xcpt_val = Bool()
    val xcpt_uop = new MicroOp()
    val xcpt_badvaddr = UInt(xLen.W)
@@ -228,8 +228,8 @@ class Rob(
    //commit entries at the head, and unwind exceptions from the tail
    val rob_head     = RegInit(0.U(log2Ceil(num_rob_rows).W))
    val rob_tail     = RegInit(0.U(log2Ceil(num_rob_rows).W))
-   val pnr_head     = RegInit(0.U(log2Ceil(num_rob_rows).W))
-   chisel3.experimental.dontTouch(pnr_head)
+   val rob_pnr     = RegInit(0.U(log2Ceil(num_rob_rows).W))
+   chisel3.experimental.dontTouch(rob_pnr)
    val rob_tail_idx = rob_tail << log2Ceil(width).U
 
    val will_commit         = Wire(Vec(width, Bool()))
@@ -406,7 +406,7 @@ class Rob(
 
       // Can this instruction commit? (the check for exceptions/rob_state happens later).
       can_commit(w) := rob_val(rob_head) && !(rob_bsy(rob_head)) && !io.csr_stall
-      pnr_safe(w)   := !rob_val(pnr_head) || (rob_safe(pnr_head) && !rob_exception(pnr_head))
+      pnr_safe(w)   := !rob_val(rob_pnr) || (rob_safe(rob_pnr) && !rob_exception(rob_pnr))
 
       val com_idx = Wire(UInt())
       com_idx := rob_head
@@ -721,19 +721,19 @@ class Rob(
    {
       rob_head := WrapInc(rob_head, num_rob_rows)
    }
-   assert(!(rob_head === WrapInc(pnr_head, num_rob_rows) && pnr_head =/= rob_tail),
+   assert(!(rob_head === WrapInc(rob_pnr, num_rob_rows) && rob_pnr =/= rob_tail),
       "ROB head overran the PNR head!")
    // -----------------------------------------------
    // ROB PNR Head Logic
 
    val pnr_safe_to_advance =
-      pnr_head =/= rob_tail &&
+      rob_pnr =/= rob_tail &&
       pnr_safe.reduce(_&&_) &&
       (rob_state === s_normal || rob_state === s_wait_till_empty) &&
       !exception_thrown
    when (pnr_safe_to_advance)
    {
-      pnr_head := WrapInc(pnr_head, num_rob_rows)
+      rob_pnr := WrapInc(rob_pnr, num_rob_rows)
    }
 
    // -----------------------------------------------
@@ -758,7 +758,7 @@ class Rob(
       {
          rob_tail := 0.U
          rob_head := 0.U
-         pnr_head := 0.U
+         rob_pnr := 0.U
       }
    }
 
@@ -891,7 +891,7 @@ class Rob(
 
    io.debug.state    := rob_state
    io.debug.rob_head := rob_head
-   io.debug.pnr_head := pnr_head
+   io.debug.rob_pnr := rob_pnr
    io.debug.xcpt_val := r_xcpt_val
    io.debug.xcpt_uop := r_xcpt_uop
    io.debug.xcpt_badvaddr := r_xcpt_badvaddr
@@ -926,7 +926,7 @@ class Rob(
               Mux(r_head === row.U, Str("H"),
               Mux(r_tail === row.U, Str("T"),
                                         Str(" ")))),
-            Mux(pnr_head === row.U, Str("P"), Str(" "))
+            Mux(rob_pnr === row.U, Str("P"), Str(" "))
           )
 
          if (COMMIT_WIDTH == 1)
