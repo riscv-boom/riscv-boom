@@ -120,7 +120,9 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
                                  xLen,
                                  Seq(true) ++ exe_units.bypassable_write_port_mask)) // 0th is bypassable ll_wb
                           }
-   val ll_wbarb         = Module(new Arbiter(new ExeUnitResp(xLen), if (usingFPU) 2 else 1))
+   val ll_wbarb         = Module(new Arbiter(new ExeUnitResp(xLen), 1 +
+                                                                    (if (usingFPU) 1 else 0) +
+                                                                    (if (usingRoCC) 1 else 0)))
    val iregister_read   = Module(new RegisterRead(
                                  issue_units.map(_.issue_width).sum,
                                  exe_units.withFilter(_.reads_irf).map(_.supportedFuncUnits),
@@ -168,8 +170,8 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    for (eu <- exe_units)
    {
       eu.io.brinfo        := br_unit.brinfo
-      eu.io.com_exception := rob.io.flush.valid
    }
+
    if (usingFPU)
    {
       fp_pipeline.io.brinfo := br_unit.brinfo
@@ -806,6 +808,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    // Share the memory port with other long latency operations.
    val mem_unit = exe_units.memory_unit
    val mem_resp = mem_unit.io.ll_iresp
+   mem_unit.io.com_exception := rob.io.flush.valid
 
    when (RegNext(!sxt_ldMiss) && RegNext(RegNext(lsu.io.mem_ldSpecWakeup.valid)) &&
       !(RegNext(rob.io.flush.valid || (br_unit.brinfo.valid && br_unit.brinfo.mispredict))) &&
@@ -910,7 +913,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    csr.io.fcsr_flags.valid := rob.io.commit.fflags.valid
    csr.io.fcsr_flags.bits  := rob.io.commit.fflags.bits
 
-   exe_units.map(_.io.fcsr_rm := csr.io.fcsr_rm)
+   exe_units.withFilter(_.has_fcsr).map(_.io.fcsr_rm := csr.io.fcsr_rm)
    io.fcsr_rm := csr.io.fcsr_rm
 
    if (usingFPU)
@@ -1064,6 +1067,11 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       ll_wbarb.io.in(1)       <> fp_pipeline.io.toint
       // Connect FLDs
       fp_pipeline.io.ll_wport <> exe_units.memory_unit.io.ll_fresp
+   }
+   if (usingRoCC)
+   {
+      require(usingFPU)
+      ll_wbarb.io.in(2)       <> exe_units.rocc_unit.io.ll_iresp
    }
 
    //-------------------------------------------------------------
@@ -1479,39 +1487,19 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    //-------------------------------------------------------------
    //-------------------------------------------------------------
 
-   // We do not support RoCC.
-   io.rocc.cmd.valid := false.B
-   io.rocc.cmd.bits <> DontCare
-   io.rocc.resp.ready := false.B
-   io.rocc.exception := false.B
-   io.rocc.mem.clock_enabled := false.B
-   io.rocc.mem.req.bits := DontCare
-   io.rocc.mem.resp.bits.replay := false.B
-   io.rocc.mem.s2_xcpt.pf.st := false.B
-   io.rocc.mem.s2_xcpt.pf.ld := false.B
-   io.rocc.mem.resp.bits.tag := 0.U
-   io.rocc.mem.resp.valid := false.B
-   io.rocc.mem.replay_next := false.B
-   io.rocc.mem.resp.bits.data_word_bypass := false.B
-   io.rocc.mem.perf.acquire := false.B
-   io.rocc.mem.perf.grant := false.B
-   io.rocc.mem.resp.bits.addr := false.B
-   io.rocc.mem.resp.bits.store_data := false.B
-   io.rocc.mem.resp.bits.typ := false.B
-   io.rocc.mem.req.ready := false.B
-   io.rocc.mem.resp.bits.cmd := false.B
-   io.rocc.mem.perf.tlbMiss := false.B
-   io.rocc.mem.s2_xcpt.ae.st := false.B
-   io.rocc.mem.s2_xcpt.ae.ld := false.B
-   io.rocc.mem.ordered := false.B
-   io.rocc.mem.resp.bits.data := 0.U
-   io.rocc.mem.resp.bits.has_data := false.B
-   io.rocc.mem.resp.bits.data_raw := false.B
-   io.rocc.mem.perf.release := false.B
-   io.rocc.mem.s2_nack := false.B
-   io.rocc.mem.s2_nack_cause_raw := false.B
-   io.rocc.mem.s2_xcpt.ma.st := false.B
-   io.rocc.mem.s2_xcpt.ma.ld := false.B
+   if (usingRoCC)
+   {
+      exe_units.rocc_unit.io.rocc <> io.rocc
+      exe_units.rocc_unit.io.dec_uops := dec_uops
+      for (w <- 0 until decodeWidth)
+      {
+         exe_units.rocc_unit.io.dec_rocc_vals(w) := (
+            dec_will_fire(w) &&
+            rename_stage.io.inst_can_proceed(w) &&
+            !rob.io.flush.valid &&
+            dec_uops(w).uopc === uopROCC)
+      }
+   }
 
    //io.trace := csr.io.trace unused
    if (tileParams.trace)

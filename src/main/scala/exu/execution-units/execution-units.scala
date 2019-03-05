@@ -114,6 +114,13 @@ class ExecutionUnits(fpu: Boolean)(implicit val p: Parameters) extends HasBoomCo
       exe_units.indexWhere(_.has_br_unit)
    }
 
+   lazy val rocc_unit =
+   {
+      require (usingRoCC)
+      require (exe_units.count(_.has_rocc) == 1)
+      exe_units.find(_.has_rocc).get
+   }
+
    if (!fpu)
    {
       val int_width = issueParams.find(_.iqType == IQT_INT.litValue).get.issueWidth
@@ -124,8 +131,6 @@ class ExecutionUnits(fpu: Boolean)(implicit val p: Parameters) extends HasBoomCo
             has_alu = false,
             has_mem = true))
 
-         memExeUnit.io.status := DontCare
-         memExeUnit.io.get_ftq_pc := DontCare
          memExeUnit.io.ll_iresp.ready := DontCare
 
          exe_units += memExeUnit
@@ -134,25 +139,17 @@ class ExecutionUnits(fpu: Boolean)(implicit val p: Parameters) extends HasBoomCo
       val aluExeUnit = Module(new ALUExeUnit(
          has_br_unit      = true,
          shares_csr_wport = true,
+         has_rocc         = usingRoCC,
          has_mul          = true,
          has_div          = true,
          has_ifpu         = usingFPU,
          has_mem          = usingUnifiedMemIntIQs))
-
-      aluExeUnit.io.lsu_io := DontCare
-      aluExeUnit.io.dmem := DontCare
-      aluExeUnit.io.get_ftq_pc := DontCare
 
       exe_units += aluExeUnit
 
       for (w <- 0 until int_width-1)
       {
          val aluExeUnit = Module(new ALUExeUnit)
-
-         aluExeUnit.io.dmem := DontCare
-         aluExeUnit.io.lsu_io := DontCare
-         aluExeUnit.io.get_ftq_pc := DontCare
-         aluExeUnit.io.status := DontCare
 
          exe_units += aluExeUnit
       }
@@ -165,10 +162,6 @@ class ExecutionUnits(fpu: Boolean)(implicit val p: Parameters) extends HasBoomCo
          val fpuExeUnit = Module(new FPUExeUnit(has_fpu = true,
                                                 has_fdiv = usingFDivSqrt && (w==0),
                                                 has_fpiu = (w==0)))
-         fpuExeUnit.io.status := DontCare
-         fpuExeUnit.io.lsu_io := DontCare
-         fpuExeUnit.io.dmem := DontCare
-         fpuExeUnit.io.get_ftq_pc := DontCare
 
          exe_units += fpuExeUnit
       }

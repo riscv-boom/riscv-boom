@@ -168,7 +168,6 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
    //-------------------------------------------------------------
 
    exe_units.map(_.io.brinfo := io.brinfo)
-   exe_units.map(_.io.com_exception := io.flush_pipeline)
 
    for ((ex,w) <- exe_units.withFilter(_.reads_frf).map(x=>x).zipWithIndex)
    {

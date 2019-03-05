@@ -33,7 +33,7 @@ import boom.common._
 import boom.ifu._
 import boom.util._
 
-/**
+/**t
  * Functional unit constants
  */
 object FUConstants
@@ -88,7 +88,9 @@ class SupportedFuncUnits(
 class FunctionalUnitIo(
    val num_stages: Int,
    val num_bypass_stages: Int,
-   val data_width: Int
+   val data_width: Int,
+   val is_br_unit: Boolean,
+   val needs_fcsr: Boolean
    )(implicit p: Parameters) extends BoomBundle()(p)
 {
    val req     = Flipped(new DecoupledIO(new FuncUnitReq(data_width)))
@@ -98,14 +100,13 @@ class FunctionalUnitIo(
 
    val bypass  = Output(new BypassData(num_bypass_stages, data_width))
 
-   val br_unit = Output(new BranchUnitResp())
-
    // only used by the fpu unit
-   val fcsr_rm = Input(UInt(tile.FPConstants.RM_SZ.W))
+   val fcsr_rm = if (needs_fcsr) Input(UInt(tile.FPConstants.RM_SZ.W)) else null
 
    // only used by branch unit
-   val get_ftq_pc = Flipped(new GetPCFromFtqIO())
-   val status = Input(new freechips.rocketchip.rocket.MStatus())
+   val br_unit    = if (is_br_unit) Output(new BranchUnitResp()) else null
+   val get_ftq_pc = if (is_br_unit) Flipped(new GetPCFromFtqIO()) else null
+   val status     = if (is_br_unit) Input(new freechips.rocketchip.rocket.MStatus()) else null
 }
 
 /**
@@ -224,10 +225,12 @@ abstract class FunctionalUnit(is_pipelined: Boolean,
                               num_stages: Int,
                               num_bypass_stages: Int,
                               data_width: Int,
-                              has_branch_unit: Boolean = false)
+                              is_branch_unit: Boolean = false,
+                              needs_fcsr: Boolean = false)
                               (implicit p: Parameters) extends BoomModule()(p)
 {
-   val io = IO(new FunctionalUnitIo(num_stages, num_bypass_stages, data_width))
+   val io = IO(new FunctionalUnitIo(num_stages, num_bypass_stages, data_width,
+      is_branch_unit, needs_fcsr))
 }
 
 /**
@@ -246,12 +249,14 @@ abstract class PipelinedFunctionalUnit(val num_stages: Int,
                                        val num_bypass_stages: Int,
                                        val earliest_bypass_stage: Int,
                                        val data_width: Int,
-                                       is_branch_unit: Boolean = false
-                                      )(implicit p: Parameters) extends FunctionalUnit(is_pipelined = true,
+                                       is_branch_unit: Boolean = false,
+                                       needs_fcsr: Boolean = false
+             )(implicit p: Parameters) extends FunctionalUnit(is_pipelined = true,
                                                               num_stages = num_stages,
                                                               num_bypass_stages = num_bypass_stages,
                                                               data_width = data_width,
-                                                              has_branch_unit = is_branch_unit)(p)
+                                                              is_branch_unit = is_branch_unit,
+                                                              needs_fcsr = needs_fcsr)(p)
 {
    // Pipelined functional unit is always ready.
    io.req.ready := true.B
@@ -717,7 +722,8 @@ class FPUUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(
    num_stages = p(tile.TileKey).core.fpu.get.dfmaLatency,
    num_bypass_stages = 0,
    earliest_bypass_stage = 0,
-   data_width = 65)(p)
+   data_width = 65,
+   needs_fcsr = true)(p)
 {
    val fpu = Module(new FPU())
    fpu.io.req.valid         := io.req.valid
@@ -742,7 +748,8 @@ class IntToFPUnit(latency: Int)(implicit p: Parameters) extends PipelinedFunctio
    num_stages = latency,
    num_bypass_stages = 0,
    earliest_bypass_stage = 0,
-   data_width = 65)(p)
+   data_width = 65,
+   needs_fcsr = true)(p)
    with tile.HasFPUParameters
 {
    val fp_decoder = Module(new UOPCodeFPUDecoder) // TODO use a simpler decoder
@@ -794,7 +801,7 @@ abstract class IterativeFunctionalUnit(data_width: Int)(implicit p: Parameters)
                                                               num_stages = 1,
                                                               num_bypass_stages = 0,
                                                               data_width = data_width,
-                                                              has_branch_unit = false)(p)
+                                                              is_branch_unit = false)(p)
 {
    val r_uop = Reg(new MicroOp())
 
