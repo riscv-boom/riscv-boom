@@ -95,11 +95,13 @@ class ExecutionUnitIO(
    val rocc          = if (has_rocc)      Flipped(new RoCCCoreIO) else null
    val dec_rocc_vals = if (has_rocc)      Input(Vec(decodeWidth, Bool())) else null
    val dec_uops      = if (has_rocc)      Input(Vec(decodeWidth, new MicroOp)) else null
+   val roccq_full    = if (has_rocc)      Output(Bool())
+   val roccq_idx     = if (has_rocc)      Output(UInt(log2Ceil(NUM_ROCC_ENTRIES).W))
 
    // only used by the branch unit
    val br_unit    = if (has_br_unit) Output(new BranchUnitResp()) else null
    val get_ftq_pc = if (has_br_unit) Flipped(new GetPCFromFtqIO()) else null
-   val status     = if (has_br_unit) Input(new freechips.rocketchip.rocket.MStatus()) else null
+   val status     = if (has_br_unit || has_rocc) Input(new freechips.rocketchip.rocket.MStatus()) else null
 
    // only used by the fpu unit
    val fcsr_rm = if (has_fcsr) Input(Bits(tile.FPConstants.RM_SZ.W)) else null
@@ -309,8 +311,11 @@ class ALUExeUnit(
       rocc.io.req.bits.rs1_data := io.req.bits.rs1_data
       rocc.io.req.bits.rs2_data := io.req.bits.rs2_data
       rocc.io.brinfo            <> io.brinfo // We should assert on this somewhere
+      rocc.io.status            := io.status
       rocc.io.dec_rocc_vals     := io.dec_rocc_vals
       rocc.io.dec_uops          := io.dec_uops
+
+      io.roccq_full             := rocc.io.roccq_full
 
       rocc.io.rocc              <> io.rocc
 

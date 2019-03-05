@@ -499,6 +499,9 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    var dec_stall_next_inst = false.B
    var dec_last_inst_was_stalled = false.B
 
+   // send only 1 RoCC instructions at a time
+   var dec_rocc_found = if (usingRoCC) exe_units.rocc_unit.io.roccq_full else false.B
+
    // stall fetch/dcode because we ran out of branch tags
    val branch_mask_full = Wire(Vec(decodeWidth, Bool()))
 
@@ -528,12 +531,14 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
                         || rob.io.flush.valid
                         || dec_stall_next_inst
                         || (dec_uops(w).is_fencei && !lsu.io.lsu_fencei_rdy)
+                        || (dec_uops(w).is_rocc && dec_rocc_found)
                         )) ||
                      dec_last_inst_was_stalled
 
       // stall the next instruction following me in the decode bundle?
       dec_last_inst_was_stalled = stall_me
       dec_stall_next_inst  = stall_me || (dec_valids(w) && dec_uops(w).is_unique)
+      dec_rocc_found = dec_rocc_found || (dec_valids(w) && dec_uops(w).is_rocc)
 
       dec_will_fire(w) := dec_valids(w) && !stall_me && !io.ifu.clear_fetchbuffer
       dec_uops(w)      := decode_units(w).io.deq.uop
@@ -586,6 +591,16 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
       new_lidx = Mux(dec_will_fire(w) && dec_uops(w).is_load,  WrapInc(new_lidx, NUM_LDQ_ENTRIES), new_lidx)
       new_sidx = Mux(dec_will_fire(w) && dec_uops(w).is_store, WrapInc(new_sidx, NUM_STQ_ENTRIES), new_sidx)
+   }
+
+   //-------------------------------------------------------------
+   // RoCC allocation logic
+   if (usingRoCC)
+   {
+      for (w <- 0 until decodeWidth)
+      {
+         dec_uops(w).roccq_idx := exe_units.rocc_unit.io.roccq_idx
+      }
    }
 
    //-------------------------------------------------------------
@@ -1489,8 +1504,9 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
    if (usingRoCC)
    {
-      exe_units.rocc_unit.io.rocc <> io.rocc
+      exe_units.rocc_unit.io.rocc     <> io.rocc
       exe_units.rocc_unit.io.dec_uops := dec_uops
+      exe_units.rocc_unit.io.status   := csr.io.status
       for (w <- 0 until decodeWidth)
       {
          exe_units.rocc_unit.io.dec_rocc_vals(w) := (
