@@ -60,6 +60,7 @@ class RobIo(
                                       // advance the tail ptr)
    val enq_new_packet   = Input(Bool()) // we're dispatching the first (and perhaps only) part of a dispatch packet.
    val curr_rob_tail    = Output(UInt(ROB_ADDR_SZ.W))
+   val curr_rob_pnr     = Output(UInt(ROB_ADDR_SZ.W))
 
    // Handle Branch Misspeculations
    val brinfo = Input(new BrResolutionInfo())
@@ -785,7 +786,7 @@ class Rob(
    io.empty := (rob_head === rob_tail) && (rob_head_vals.asUInt === 0.U)
 
    io.curr_rob_tail := rob_tail
-
+   io.curr_rob_pnr  := rob_pnr
    io.ready := (rob_state === s_normal) && !full
 
    //-----------------------------------------------

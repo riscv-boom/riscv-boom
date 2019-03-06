@@ -182,6 +182,7 @@ class BrResolutionInfo(implicit p: Parameters) extends BoomBundle()(p)
    val rob_idx    = UInt(ROB_ADDR_SZ.W)
    val ldq_idx    = UInt(LDQ_ADDR_SZ.W)  // track the "tail" of loads and stores, so we can
    val stq_idx    = UInt(STQ_ADDR_SZ.W)  // quickly reset the LSU on a mispredict
+   val roccq_idx  = UInt(log2Ceil(NUM_ROCC_ENTRIES).W) // ditto for RoCC queue
    val taken      = Bool()                     // which direction did the branch go?
    val is_jr      = Bool() // TODO remove use cfi_type instead
    val cfi_type   = CfiType()
@@ -536,6 +537,7 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1, data_width: 
       brinfo.rob_idx        := uop.rob_idx
       brinfo.ldq_idx        := uop.ldq_idx
       brinfo.stq_idx        := uop.stq_idx
+      brinfo.roccq_idx      := uop.roccq_idx
       brinfo.is_jr          := pc_sel === PC_JALR
       brinfo.cfi_type       := Mux(uop.is_jal, CfiType.jal,
                                Mux(pc_sel === PC_JALR, CfiType.jalr,

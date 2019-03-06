@@ -375,6 +375,15 @@ object AgePriorityEncoder
    }
 }
 
+// is i0 older than i1? (closest to zero). Provide the tail_ptr to the
+// queue. This is Cat(i1 <= tail, i1) because the rob_tail can point to a
+// valid (partially dispatched) row.
+object IsOlder
+{
+   def apply(i0: UInt, i1: UInt, tail: UInt) = (Cat(i0 <= tail, i0) < Cat(i1 <= tail, i1))
+}
+
+
 /**
  * Create a queue that can be killed with a branch kill signal.
  * Assumption: enq.valid only high if not killed by branch (so don't check IsKilled on io.enq).

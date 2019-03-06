@@ -92,11 +92,7 @@ class ExecutionUnitIO(
 
 
    // only used by the rocc unit
-   val rocc          = if (has_rocc)      Flipped(new RoCCCoreIO) else null
-   val dec_rocc_vals = if (has_rocc)      Input(Vec(decodeWidth, Bool())) else null
-   val dec_uops      = if (has_rocc)      Input(Vec(decodeWidth, new MicroOp)) else null
-   val roccq_full    = if (has_rocc)      Output(Bool())
-   val roccq_idx     = if (has_rocc)      Output(UInt(log2Ceil(NUM_ROCC_ENTRIES).W))
+   val rocc       = if (has_rocc)      new RoCCShimCoreIO else null
 
    // only used by the branch unit
    val br_unit    = if (has_br_unit) Output(new BranchUnitResp()) else null
@@ -110,7 +106,7 @@ class ExecutionUnitIO(
    val lsu_io        = if (has_mem) Flipped(new boom.lsu.LoadStoreUnitIO(decodeWidth)) else null
    val dmem          = if (has_mem) new boom.lsu.DCMemPortIO() else null
    // TODO move this out of ExecutionUnit
-   val com_exception = if (has_mem) Input(Bool()) else null
+   val com_exception = if (has_mem || has_rocc) Input(Bool()) else null
 }
 
 /**
@@ -275,7 +271,7 @@ class ALUExeUnit(
          io.req.valid &&
          (io.req.bits.uop.fu_code === FU_ALU ||
           io.req.bits.uop.fu_code === FU_BRU ||
-          (io.req.bits.uop.fu_code === FU_CSR && !io.req.bits.uop.uopc === uopROCC)))
+          (io.req.bits.uop.fu_code === FU_CSR && io.req.bits.uop.uopc =/= uopROCC)))
       //ROCC Rocc Commands are taken by the RoCC unit
 
       alu.io.req.bits.uop      := io.req.bits.uop
@@ -312,12 +308,8 @@ class ALUExeUnit(
       rocc.io.req.bits.rs2_data := io.req.bits.rs2_data
       rocc.io.brinfo            <> io.brinfo // We should assert on this somewhere
       rocc.io.status            := io.status
-      rocc.io.dec_rocc_vals     := io.dec_rocc_vals
-      rocc.io.dec_uops          := io.dec_uops
-
-      io.roccq_full             := rocc.io.roccq_full
-
-      rocc.io.rocc              <> io.rocc
+      rocc.io.exception         := io.com_exception
+      io.rocc                   <> rocc.io.core
 
       rocc.io.resp.ready        := io.ll_iresp.ready
       io.ll_iresp.valid         := rocc.io.resp.valid
