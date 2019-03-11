@@ -228,8 +228,8 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
 
    // Shared Store Queue Information
    val stq_uop       = Reg(Vec(NUM_STQ_ENTRIES, new MicroOp()))
-   // TODO not convinced I actually need stq_entry_val; I think other ctrl signals gate this off
-   val stq_entry_val = Reg(Vec(NUM_STQ_ENTRIES, Bool())) // this may be valid, but not TRUE (on exceptions, this doesn't
+   // TODO not convinced I actually need stq_allocated; I think other ctrl signals gate this off
+   val stq_allocated = Reg(Vec(NUM_STQ_ENTRIES, Bool())) // this may be valid, but not TRUE (on exceptions, this doesn't
                                                         // get cleared but STQ_TAIL gets moved)
    val stq_executed  = Reg(Vec(NUM_STQ_ENTRIES, Bool())) // sent to mem
    val stq_succeeded = Reg(Vec(NUM_STQ_ENTRIES, Bool())) // returned TODO is this needed, or can we just advance the
@@ -297,7 +297,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
       {
          stq_uop(st_enq_idx)       := io.dec_uops(w)
 
-         stq_entry_val(st_enq_idx) := true.B
+         stq_allocated(st_enq_idx) := true.B
          saq_val      (st_enq_idx) := false.B
          sdq_val      (st_enq_idx) := false.B
          stq_executed (st_enq_idx) := false.B
@@ -527,7 +527,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
 
    // *** STORES ***
 
-   when (stq_entry_val(stq_execute_head) &&
+   when (stq_allocated(stq_execute_head) &&
          (stq_committed(stq_execute_head) ||
             (stq_uop(stq_execute_head).is_amo &&
             saq_val(stq_execute_head) &&
@@ -545,7 +545,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
 
    stq_retry_idx := stq_commit_head
 
-   when (stq_entry_val (stq_retry_idx) &&
+   when (stq_allocated (stq_retry_idx) &&
          saq_val       (stq_retry_idx) &&
          saq_is_virtual(stq_retry_idx) &&
          RegNext(dtlb.io.req.ready))
@@ -556,7 +556,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
    assert (!(can_fire_store_commit && saq_is_virtual(stq_execute_head)),
             "a committed store is trying to fire to memory that has a bad paddr.")
 
-   assert (stq_entry_val(stq_execute_head) ||
+   assert (stq_allocated(stq_execute_head) ||
             stq_head === stq_execute_head || stq_tail === stq_execute_head,
             "stq_execute_head got off track.")
 
@@ -801,7 +801,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
 
       dword_addr_matches(i) := false.B
 
-      when (stq_entry_val(i) &&
+      when (stq_allocated(i) &&
             st_dep_mask(i) &&
             saq_val(i) &&
             !saq_is_virtual(i) &&
@@ -820,7 +820,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
          ldst_addr_conflicts(i) := true.B
       }
       // fences/flushes are treated as stores that touch all addresses
-      .elsewhen (stq_entry_val(i) &&
+      .elsewhen (stq_allocated(i) &&
                   st_dep_mask(i) &&
                   stq_uop(i).is_fence)
       {
@@ -839,7 +839,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
 
       // did a load see a conflicting store (sb->lw) or a fence/AMO? if so, put the load to sleep
       // TODO this shuts down all loads so long as there is a store live in the dependent mask
-      when ((stq_entry_val(i) &&
+      when ((stq_allocated(i) &&
                st_dep_mask(i) &&
                (stq_uop(i).is_fence || stq_uop(i).is_amo)) ||
             (dword_addr_matches(i) &&
@@ -1107,13 +1107,13 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
    {
       st_brkilled_mask(i) := false.B
 
-      when (stq_entry_val(i))
+      when (stq_allocated(i))
       {
          stq_uop(i).br_mask := GetNewBrMask(io.brinfo, stq_uop(i))
 
          when (IsKilledByBranch(io.brinfo, stq_uop(i)))
          {
-            stq_entry_val(i)   := false.B
+            stq_allocated(i)   := false.B
             saq_val(i)         := false.B
             sdq_val(i)         := false.B
             stq_uop(i).br_mask := 0.U
@@ -1121,7 +1121,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
          }
       }
 
-      assert (!(IsKilledByBranch(io.brinfo, stq_uop(i)) && stq_entry_val(i) && stq_committed(i)),
+      assert (!(IsKilledByBranch(io.brinfo, stq_uop(i)) && stq_allocated(i) && stq_committed(i)),
          "Branch is trying to clear a committed store.")
    }
 
@@ -1169,7 +1169,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
    stq_commit_head := temp_stq_commit_head
 
    // store has been committed AND successfully sent data to memory
-   when (stq_entry_val(stq_head) && stq_committed(stq_head))
+   when (stq_allocated(stq_head) && stq_committed(stq_head))
    {
       clear_store := Mux(stq_uop(stq_head).is_fence, io.dmem_is_ordered,
                                                      stq_succeeded(stq_head))
@@ -1177,7 +1177,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
 
    when (clear_store)
    {
-      stq_entry_val(stq_head)   := false.B
+      stq_allocated(stq_head)   := false.B
       saq_val(stq_head)         := false.B
       sdq_val(stq_head)         := false.B
       stq_executed(stq_head)    := false.B
@@ -1296,7 +1296,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
          {
             saq_val(i)         := false.B
             sdq_val(i)         := false.B
-            stq_entry_val(i)   := false.B
+            stq_allocated(i)   := false.B
          }
          for (i <- 0 until NUM_STQ_ENTRIES)
          {
@@ -1313,7 +1313,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
             {
                saq_val(i)            := false.B
                sdq_val(i)            := false.B
-               stq_entry_val(i)      := false.B
+               stq_allocated(i)      := false.B
                st_exc_killed_mask(i) := true.B
             }
          }
@@ -1341,7 +1341,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
    //-------------------------------------------------------------
 
    val laq_maybe_full = (laq_allocated.asUInt =/= 0.U)
-   val stq_maybe_full = (stq_entry_val.asUInt =/= 0.U)
+   val stq_maybe_full = (stq_allocated.asUInt =/= 0.U)
 
    var laq_is_full = false.B
    var stq_is_full = false.B
@@ -1364,7 +1364,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
 
    io.lsu_fencei_rdy := stq_empty && io.dmem_is_ordered
 
-   assert (!(stq_empty ^ stq_entry_val.asUInt === 0.U), "[lsu] mismatch in SAQ empty logic.")
+   assert (!(stq_empty ^ stq_allocated.asUInt === 0.U), "[lsu] mismatch in SAQ empty logic.")
 
    //-------------------------------------------------------------
    // Debug & Counter outputs
@@ -1404,7 +1404,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
          val t_saddr = saq_addr(i)
          printf("         saq[%d]=(%c%c%c%c%c%c%c) b:%x 0x%x -> 0x%x %c %c %c %c\n"
             , i.U(STQ_ADDR_SZ.W)
-            , Mux(stq_entry_val(i), Str("V"), Str("-"))
+            , Mux(stq_allocated(i), Str("V"), Str("-"))
             , Mux(saq_val(i), Str("A"), Str("-"))
             , Mux(sdq_val(i), Str("D"), Str("-"))
             , Mux(stq_committed(i), Str("C"), Str("-"))
