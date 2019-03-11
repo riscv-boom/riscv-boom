@@ -228,7 +228,8 @@ class Rob(
    //commit entries at the head, and unwind exceptions from the tail
    val rob_head     = RegInit(0.U(log2Ceil(num_rob_rows).W))
    val rob_tail     = RegInit(0.U(log2Ceil(num_rob_rows).W))
-   val rob_pnr     = RegInit(0.U(log2Ceil(num_rob_rows).W))
+   val rob_pnr      = RegInit(0.U(log2Ceil(num_rob_rows).W))
+   val rob_pnr_idx  = rob_pnr << log2Ceil(width).U
    chisel3.experimental.dontTouch(rob_pnr)
    val rob_tail_idx = rob_tail << log2Ceil(width).U
 
@@ -394,8 +395,12 @@ class Rob(
       when (io.lxcpt.valid && MatchBank(GetBankIdx(io.lxcpt.bits.uop.rob_idx)))
       {
          rob_exception(GetRowIdx(io.lxcpt.bits.uop.rob_idx)) := true.B
-         assert(!rob_safe(GetRowIdx(io.lxcpt.bits.uop.rob_idx)),
-            "An instruction marked as safe is causing an exception")
+         when (io.lxcpt.bits.cause =/= MINI_EXCEPTION_MEM_ORDERING)
+         {
+            // For mem-ordering failures the failing load will have been marked safe already
+            assert(!rob_safe(GetRowIdx(io.lxcpt.bits.uop.rob_idx)),
+               "An instruction marked as safe is causing an exception")
+         }
       }
       when (io.bxcpt.valid && MatchBank(GetBankIdx(io.bxcpt.bits.uop.rob_idx)))
       {
