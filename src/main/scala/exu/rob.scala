@@ -71,8 +71,8 @@ class RobIo(
 
    val lsu_clr_bsy_valid      = Input(Vec(2, Bool()))
    val lsu_clr_bsy_rob_idx    = Input(Vec(2, UInt(ROB_ADDR_SZ.W)))
-   val lsu_ld_success         = Input(Bool())
-   val lsu_ld_success_rob_idx = Input(UInt(ROB_ADDR_SZ.W))
+   val lsu_mem_success         = Input(Bool())
+   val lsu_mem_success_rob_idx = Input(UInt(ROB_ADDR_SZ.W))
 
    // Track side-effects for debug purposes.
    // Also need to know when loads write back, whereas we don't need loads to unbusy.
@@ -362,9 +362,9 @@ class Rob(
          }
       }
 
-      when (io.lsu_ld_success && MatchBank(GetBankIdx(io.lsu_ld_success_rob_idx)))
+      when (io.lsu_mem_success && MatchBank(GetBankIdx(io.lsu_mem_success_rob_idx)))
       {
-         val cidx = GetRowIdx(io.lsu_ld_success_rob_idx)
+         val cidx = GetRowIdx(io.lsu_mem_success_rob_idx)
          rob_safe(cidx) := true.B
       }
 

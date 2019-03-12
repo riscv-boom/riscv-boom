@@ -119,8 +119,10 @@ class LoadStoreUnitIO(val pl_width: Int)(implicit p: Parameters) extends BoomBun
    // Otherwise, we must back-pressure incoming FP store-data micro-ops.
    val clr_bsy_valid      = Output(Vec(2, Bool()))
    val clr_bsy_rob_idx    = Output(Vec(2, UInt(ROB_ADDR_SZ.W)))
-   val ld_success         = Output(Bool())
-   val ld_success_rob_idx = Output(UInt(ROB_ADDR_SZ.W))
+
+   // Tell the ROB we've successfully translated this operation
+   val mem_success         = Output(Bool())
+   val mem_success_rob_idx = Output(UInt(ROB_ADDR_SZ.W))
    val lsu_fencei_rdy     = Output(Bool())
 
    val xcpt = new ValidIO(new Exception)
@@ -165,10 +167,6 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
    with freechips.rocketchip.rocket.constants.MemoryOpConstants
 {
    val io = IO(new LoadStoreUnitIO(pl_width))
-
-   // TODO: This needs to be high when we find a load that will not fail a mem-ordering check
-   io.ld_success := false.B
-   io.ld_success_rob_idx := 0.U
 
    // Load-Address Queue
    val laq_addr_val       = Reg(Vec(NUM_LDQ_ENTRIES, Bool()))
@@ -448,7 +446,13 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
                                  !IsKilledByBranch(io.brinfo, exe_tlb_uop),
                             init=false.B)
 
-   val xcpt_uop   = RegNext(Mux(ma_ld, io.exe_resp.bits.uop, exe_tlb_uop))
+   val xcpt_uop       = RegNext(Mux(ma_ld, io.exe_resp.bits.uop, exe_tlb_uop))
+
+   io.mem_success         := RegNext(dtlb.io.req.valid) &&
+                             !mem_xcpt_valid &&
+                             !RegNext(dtlb.io.resp.miss)
+   io.mem_success_rob_idx := RegNext(exe_tlb_uop.rob_idx)
+
    when (mem_xcpt_valid)
    {
       // Technically only faulting AMOs need this
