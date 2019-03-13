@@ -448,10 +448,6 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
 
    val xcpt_uop       = RegNext(Mux(ma_ld, io.exe_resp.bits.uop, exe_tlb_uop))
 
-   io.mem_success         := RegNext(dtlb.io.req.valid) &&
-                             !mem_xcpt_valid &&
-                             !RegNext(dtlb.io.resp.miss)
-   io.mem_success_rob_idx := RegNext(exe_tlb_uop.rob_idx)
 
    when (mem_xcpt_valid)
    {
@@ -1100,6 +1096,16 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
 
    io.xcpt.valid := r_xcpt_valid && !io.exception && !IsKilledByBranch(io.brinfo, r_xcpt.uop)
    io.xcpt.bits := r_xcpt
+
+   // A memory operation can mark its entry in the ROB as "safe" when
+   //  1) it hits in the TLB and does not raise PF or AE xcpt
+   //  2) it does not cause younger load to fail
+   // 2) happens cycle after 1), so we delay accordingly
+   io.mem_success         := RegNext(RegNext(dtlb.io.req.valid) &&
+                                     !mem_xcpt_valid &&
+                                     !RegNext(dtlb.io.resp.miss)) && !failed_loads.reduce(_|_)
+   io.mem_success_rob_idx := RegNext(RegNext(exe_tlb_uop.rob_idx))
+
 
    //-------------------------------------------------------------
    // Kill speculated entries on branch mispredict
