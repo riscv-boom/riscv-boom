@@ -1,16 +1,14 @@
 //******************************************************************************
 // Copyright (c) 2017 - 2018, The Regents of the University of California (Regents).
-// All Rights Reserved. See LICENSE for license details.
+// All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
 // Author: Christopher Celio
 //------------------------------------------------------------------------------
 
-// See LICENSE.SiFive for license details.
-// See LICENSE.Berkeley for license details.
-
 package boom.common
 
 import chisel3._
+
 import freechips.rocketchip.config._
 import freechips.rocketchip.subsystem._
 import freechips.rocketchip.devices.tilelink._
@@ -21,10 +19,26 @@ import freechips.rocketchip.tilelink._
 import freechips.rocketchip.interrupts._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
+
 import boom.exu._
 import boom.ifu._
 import boom.lsu._
 
+/**
+ * BOOM tile parameter class used in configurations
+ *
+ * @param core BOOM core params
+ * @param icache i$ params
+ * @param dcache d$ params
+ * @param btb btb params
+ * @param dataScratchpadBytes ...
+ * @param trace ...
+ * @param hcfOnUncorrectable ...
+ * @param name name of tile
+ * @param hartId hardware thread id
+ * @param blockerCtrlAddr ...
+ * @param boundaryBuffers ...
+ */
 case class BoomTileParams(
     core: BoomCoreParams = BoomCoreParams(),
     icache: Option[ICacheParams] = Some(ICacheParams()),
@@ -37,11 +51,18 @@ case class BoomTileParams(
     beuAddr: Option[BigInt] = None,
     blockerCtrlAddr: Option[BigInt] = None,
     boundaryBuffers: Boolean = false // if synthesized with hierarchical PnR, cut feed-throughs?
-    ) extends TileParams {
+    ) extends TileParams
+{
   require(icache.isDefined)
   require(dcache.isDefined)
 }
 
+/**
+ * BOOM tile
+ *
+ * @param boomParams BOOM tile params
+ * @param crossing ...
+ */
 class BoomTile(
     val boomParams: BoomTileParams,
     crossing: ClockCrossingType)
@@ -51,7 +72,8 @@ class BoomTile(
     //with HasLazyRoCC  // implies CanHaveSharedFPU with CanHavePTW with HasHellaCache
     with CanHaveBoomPTW
     with HasBoomHellaCache
-    with HasBoomICacheFrontend {
+    with HasBoomICacheFrontend
+{
 
   val intOutwardNode = IntIdentityNode()
   val slaveNode = TLIdentityNode()
@@ -193,12 +215,18 @@ class BoomTile(
   }
 }
 
+/**
+ * BOOM tile implicit
+ *
+ * @param outer top level BOOM tile
+ */
 class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer)
     //with HasFpuOpt
     //with HasLazyRoCCModule
     with CanHaveBoomPTWModule
     with HasBoomHellaCacheModule
-    with HasBoomICacheFrontendModule {
+    with HasBoomICacheFrontendModule
+{
   Annotated.params(this, outer.boomParams)
 
   val core = Module(new BoomCore()(outer.p, outer.dcache.module.edge))
@@ -239,7 +267,11 @@ class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer)
   outer.frontend.module.io.cpu <> core.io.ifu
   dcachePorts += core.io.dmem // TODO outer.dcachePorts += () => module.core.io.dmem ??
   //fpuOpt foreach { fpu => core.io.fpu <> fpu.io } RocketFpu - not needed in boom
-  core.io.ptw <> ptw.io.dpath
+  core.io.ptw := DontCare
+  if (usingPTW)
+  {
+    core.io.ptw <> ptw.get.io.dpath
+  }
   core.io.rocc := DontCare
   core.io.fpu := DontCare
   core.io.reset_vector := DontCare
@@ -264,8 +296,11 @@ class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer)
   // TODO figure out how to move the below into their respective mix-ins
   dcacheArb.io.requestor <> dcachePorts
   ptwPorts += core.io.ptw_tlb
-  ptw.io.requestor <> ptwPorts
-
+  core.io.ptw_tlb := DontCare
+  if (usingPTW)
+  {
+    ptw.get.io.requestor <> ptwPorts
+  }
   val frontendStr = outer.frontend.module.toString
   ElaborationArtefacts.add(
     """core.config""",

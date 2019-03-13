@@ -1,10 +1,11 @@
 //******************************************************************************
 // Copyright (c) 2015 - 2018, The Regents of the University of California (Regents).
-// All Rights Reserved. See LICENSE for license details.
+// All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
 // Author: Christopher Celio
 //------------------------------------------------------------------------------
 
+//------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
 // RISCV BOOM Utility Functions
 //------------------------------------------------------------------------------
@@ -17,10 +18,13 @@ import chisel3.util._
 
 import freechips.rocketchip.rocket.Instructions._
 import freechips.rocketchip.rocket._
+
 import boom.common.MicroOp
 import boom.exu.{BrResolutionInfo}
 
-// XOR fold an input that is full_length sized down to a compressed_length.
+/**
+ * Object to XOR fold a input register of full_length into a compressed_length.
+ */
 object Fold
 {
    def apply(input: UInt, compressed_length: Int, full_length: Int): UInt =
@@ -47,6 +51,9 @@ object Fold
    }
 }
 
+/**
+ * Object to check if MicroOp was killed due to a branch mispredict.
+ */
 object IsKilledByBranch
 {
    def apply(brinfo: BrResolutionInfo, uop: MicroOp): Bool =
@@ -64,6 +71,10 @@ object IsKilledByBranch
    }
 }
 
+/**
+ * Object to return new MicroOp with a new BR mask given a MicroOp mask
+ * and old BR mask.
+ */
 object GetNewUopAndBrMask
 {
    def apply(uop: MicroOp, brinfo: BrResolutionInfo)
@@ -78,6 +89,9 @@ object GetNewUopAndBrMask
    }
 }
 
+/**
+ * Object to return a BR mask given a MicroOp mask and old BR mask.
+ */
 object GetNewBrMask
 {
    def apply(brinfo: BrResolutionInfo, uop: MicroOp): UInt =
@@ -92,19 +106,25 @@ object GetNewBrMask
    }
 }
 
-//do two masks have at least 1 bit match?
+/**
+ * Object to check if at least 1 bit matches in two masks
+ */
 object maskMatch
 {
    def apply(msk1: UInt, msk2: UInt): Bool = (msk1 & msk2) =/= 0.U
 }
 
-//clear one-bit in the Mask as specified by the idx
+/**
+ * Object to clear one bit in a mask given an index
+ */
 object clearMaskBit
 {
    def apply(msk: UInt, idx: UInt): UInt = (msk & ~(1.U << idx))(msk.getWidth-1, 0)
 }
 
-//shift a register over by one bit
+/**
+ * Object to shift a register over by one bit and concat a new one
+ */
 object PerformShiftRegister
 {
    def apply(reg_val: UInt, new_bit: Bool): UInt =
@@ -114,10 +134,12 @@ object PerformShiftRegister
    }
 }
 
-// Shift a register over by one bit, wrapping the top bit around to the bottom
-// (XOR'ed with a new-bit), and evicting a bit at index HLEN.
-// This is used to simulate a longer HLEN-width shift register that is folded
-// down to a compressed CLEN.
+/**
+ * Object to shift a register over by one bit, wrapping the top bit around to the bottom
+ * (XOR'ed with a new-bit), and evicting a bit at index HLEN.
+ * This is used to simulate a longer HLEN-width shift register that is folded
+ * down to a compressed CLEN.
+ */
 object PerformCircularShiftRegister
 {
    def apply(csr: UInt, new_bit: Bool, evict_bit: Bool, hlen: Int, clen: Int): UInt =
@@ -128,7 +150,10 @@ object PerformCircularShiftRegister
    }
 }
 
-// Increment the input "value", wrapping it if necessary.
+/**
+ * Object to increment an input value, wrapping it if
+ * necessary.
+ */
 object WrapAdd
 {
    // "n" is the number of increments, so we wrap at n-1.
@@ -148,7 +173,10 @@ object WrapAdd
    }
 }
 
-// Decrement the input "value", wrapping it if necessary.
+/**
+ * Object to decrement an input value, wrapping it if
+ * necessary.
+ */
 object WrapSub
 {
    // "n" is the number of increments, so we wrap to n-1.
@@ -169,7 +197,10 @@ object WrapSub
    }
 }
 
-// Increment the input "value", wrapping it if necessary.
+/**
+ * Object to increment an input value, wrapping it if
+ * necessary.
+ */
 object WrapInc
 {
    // "n" is the number of increments, so we wrap at n-1.
@@ -186,7 +217,11 @@ object WrapInc
       }
    }
 }
-// Decrement the input "value", wrapping it if necessary.
+
+/**
+ * Object to decrement an input value, wrapping it if
+ * necessary.
+ */
 object WrapDec
 {
    // "n" is the number of increments, so we wrap at n-1.
@@ -204,7 +239,10 @@ object WrapDec
    }
 }
 
-// Mask off lower bits of a PC to align to a "b" Byte boundary.
+/**
+ * Object to mask off lower bits of a PC to align to a "b"
+ * Byte boundary.
+ */
 object AlignPCToBoundary
 {
    def apply(pc: UInt, b: Int): UInt =
@@ -215,7 +253,9 @@ object AlignPCToBoundary
    }
 }
 
-
+/**
+ * Object to rotate a signal left by one
+ */
 object RotateL1
 {
    def apply(signal: UInt): UInt =
@@ -227,7 +267,9 @@ object RotateL1
    }
 }
 
-
+/**
+ * Object to sext a value to a particular length.
+ */
 object Sext
 {
    def apply(x: UInt, length: Int): UInt =
@@ -237,9 +279,10 @@ object Sext
    }
 }
 
-
-// translates from BOOM's special "packed immediate" to a 32b signed immediate
-// Asking for U-type gives it shifted up 12 bits.
+/**
+ * Object to translate from BOOM's special "packed immediate" to a 32b signed immediate
+ * Asking for U-type gives it shifted up 12 bits.
+ */
 object ImmGen
 {
    import boom.common.{LONGEST_IMM_SZ, IS_B, IS_I, IS_J, IS_S, IS_U}
@@ -258,10 +301,20 @@ object ImmGen
    }
 }
 
-// store the rounding-mode and func type for FP in the packed immediate as well
-object ImmGenRm { def apply(ip: UInt): UInt = { return ip(2,0) }}
-object ImmGenTyp { def apply(ip: UInt): UInt = { return ip(9,8) }} // only works if !(IS_B or IS_S)
+/**
+ * Object to get the FP rounding mode out of a packed immediate.
+ */
+object ImmGenRm { def apply(ip: UInt): UInt = { return ip(2,0) } }
 
+/**
+ * Object to get the FP function fype from a packed immediate.
+ * Note: only works if !(IS_B or IS_S)
+ */
+object ImmGenTyp { def apply(ip: UInt): UInt = { return ip(9,8) } }
+
+/**
+ * Object to see if an instruction is a JALR.
+ */
 object DebugIsJALR
 {
    def apply(inst: UInt): Bool =
@@ -274,9 +327,11 @@ object DebugIsJALR
    }
 }
 
-// take an instruction and output its branch or jal target. Only used for a
-// debug assert (no where else would we jump straight from instruction bits to
-// a target).
+/**
+ * Object to take an instruction and output its branch or jal target. Only used
+ * for a debug assert (no where else would we jump straight from instruction
+ * bits to a target).
+ */
 object DebugGetBJImm
 {
    def apply(inst: UInt): UInt =
@@ -304,20 +359,26 @@ object DebugGetBJImm
   }
 }
 
+/**
+ * Object to return the lowest bit position after the head.
+ */
 object AgePriorityEncoder
 {
    def apply(in: Seq[Bool], head: UInt): UInt =
    {
       val n = in.size
-      require (isPow2(n))
-      val temp_vec = (0 until n).map(i => in(i) && i.U >= head) ++ in
+      val width = log2Ceil(in.size)
+      val n_padded = 1 << width
+      val temp_vec = (0 until n_padded).map(i => if (i < n) in(i) && i.U >= head else false.B) ++ in
       val idx = PriorityEncoder(temp_vec)
-      idx(log2Ceil(n)-1, 0) //discard msb
+      idx(width-1, 0) //discard msb
    }
 }
 
-
-// Assumption: enq.valid only high if not killed by branch (so don't check IsKilled on io.enq).
+/**
+ * Create a queue that can be killed with a branch kill signal.
+ * Assumption: enq.valid only high if not killed by branch (so don't check IsKilled on io.enq).
+ */
 class BranchKillableQueue[T <: boom.common.HasBoomUOP](gen: T, entries: Int)
    (implicit p: freechips.rocketchip.config.Parameters)
    extends boom.common.BoomModule()(p)
@@ -355,22 +416,27 @@ class BranchKillableQueue[T <: boom.common.HasBoomUOP](gen: T, entries: Int)
    {
       val mask = brmasks(i)
       valids(i)  := valids(i) && !IsKilledByBranch(io.brinfo, mask) && !io.flush
-      when (valids(i)) {
+      when (valids(i))
+      {
          brmasks(i) := GetNewBrMask(io.brinfo, mask)
       }
    }
 
-
-   when (do_enq) {
+   when (do_enq)
+   {
       ram(enq_ptr.value) := io.enq.bits
       valids(enq_ptr.value) := true.B //!IsKilledByBranch(io.brinfo, io.enq.bits.uop)
       brmasks(enq_ptr.value) := GetNewBrMask(io.brinfo, io.enq.bits.uop)
       enq_ptr.inc()
    }
-   when (do_deq) {
+
+   when (do_deq)
+   {
       deq_ptr.inc()
    }
-   when (do_enq =/= do_deq) {
+
+   when (do_enq =/= do_deq)
+   {
       maybe_full := do_enq
    }
 
@@ -380,7 +446,6 @@ class BranchKillableQueue[T <: boom.common.HasBoomUOP](gen: T, entries: Int)
    io.deq.valid := deq_ram_valid && valids(deq_ptr.value) && !IsKilledByBranch(io.brinfo, out.uop)
    io.deq.bits := out
    io.deq.bits.uop.br_mask := GetNewBrMask(io.brinfo, brmasks(deq_ptr.value))
-
 
    // For flow queue behavior.
    when (io.empty)
@@ -394,9 +459,12 @@ class BranchKillableQueue[T <: boom.common.HasBoomUOP](gen: T, entries: Int)
    }
 
    private val ptr_diff = enq_ptr.value - deq_ptr.value
-   if (isPow2(entries)) {
+   if (isPow2(entries))
+   {
       io.count := Cat(maybe_full && ptr_match, ptr_diff)
-   } else {
+   }
+   else
+   {
       io.count := Mux(ptr_match,
                      Mux(maybe_full,
                         entries.asUInt, 0.U),
@@ -404,4 +472,3 @@ class BranchKillableQueue[T <: boom.common.HasBoomUOP](gen: T, entries: Int)
                         entries.asUInt + ptr_diff, ptr_diff))
    }
 }
-

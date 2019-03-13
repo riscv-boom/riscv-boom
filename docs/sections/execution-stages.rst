@@ -3,9 +3,9 @@ The Execute Pipeline
 
 .. _dual-issue-pipeline:
 .. figure:: /figures/execution-pipeline-2w.png
-    :alt: Dual Issue Pipeline 
+    :alt: Dual Issue Pipeline
 
-    An example pipeline for a dual-issue BOOM. The first issue port schedules micro-ops onto
+    An example pipeline for a dual-issue BOOM. The first issue port schedules Micro-Ops onto
     Execute Unit #0, which can accept ALU operations, FPU operations, and integer multiply instructions.
     The second issue port schedules ALU operations, integer divide instructions (unpipelined), and load/store
     operations. The ALU operations can bypass to dependent instructions. Note that the ALU in EU#0 is
@@ -13,9 +13,9 @@ The Execute Pipeline
     write-port trivial. Each Execution Unit has a single issue-port dedicated to it but contains within it a number
     of lower-level Functional Units.
 
-The Execution Pipeline covers the execution and write-back of micro-ops.
-Although the micro-ops will travel down the pipeline one after the other
-(in the order they have been issued), the micro-ops themselves are
+The Execution Pipeline covers the execution and write-back of Micro-Ops.
+Although the Micro-Ops will travel down the pipeline one after the other
+(in the order they have been issued), the Micro-Ops themselves are
 likely to have been issued to the Execution Pipeline out-of-order.
 :numref:`dual-issue-pipeline` shows an example Execution Pipeline for a
 dual-issue BOOM.
@@ -25,7 +25,7 @@ Execution Units
 
 .. _example-fu:
 .. figure:: /figures/execution-unit.png
-    :alt: Example Execution Unit 
+    :alt: Example Execution Unit
 
     An example Execution Unit. This particular example shows an integer ALU (that can bypass
     results to dependent instructions) and an unpipelined divider that becomes busy during operation. Both
@@ -34,8 +34,8 @@ Execution Units
 
 
 An Execution Unit is a module that a single issue port will schedule
-micro-ops onto and contains some mix of functional units. Phrased in
-another way, each issue port from the Issue Window talks to one and only
+Micro-Ops onto and contains some mix of functional units. Phrased in
+another way, each issue port from the Issue Queue talks to one and only
 one Execution Unit. An Execution Unit may contain just a single simple
 integer ALU, or it could contain a full complement of floating point
 units, a integer ALU, and an integer multiply unit.
@@ -49,7 +49,7 @@ Scheduling Readiness
 
 An Execution Unit provides a bit-vector of the functional units it has
 available to the issue scheduler. The issue scheduler will only schedule
-micro-ops that the Execution Unit supports. For functional units that
+Micro-Ops that the Execution Unit supports. For functional units that
 may not always be ready (e.g., an un-pipelined divider), the appropriate
 bit in the bit-vector will be disabled (See :numref:`dual-issue-pipeline`).
 
@@ -58,11 +58,11 @@ Functional Units
 
 .. _abstract-fu:
 .. figure:: /figures/abstract-functional-unit.png
-    :alt: Abstract Functional Unit 
+    :alt: Abstract Functional Unit
 
     The abstract Pipelined Functional Unit class. An expert-written, low-level functional unit
     is instantiated within the Functional Unit. The request and response ports are abstracted and bypass and
-    branch speculation support is provided. Micro-ops are individually killed by gating off their response as they
+    branch speculation support is provided. Micro-Ops are individually killed by gating off their response as they
     exit the low-level functional unit.
 
 Functional units are the muscle of the CPU, computing the necessary
@@ -72,7 +72,7 @@ efficiently.
 
 For this reason, BOOM uses an abstract Functional Unit class to “wrap"
 expert-written, low-level functional units from the Rocket repository
-(see :ref:`The Rocket-Chip Repository Layout`). However, the expert-written functional units
+(see :ref:`The Rocket-Chip Repository`). However, the expert-written functional units
 created for the Rocket in-order processor make assumptions about
 in-order issue and commit points (namely, that once an instruction has
 been dispatched to them it will never need to be killed). These
@@ -89,12 +89,12 @@ interface.
 Pipelined Functional Units
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-A pipelined functional unit can accept a new micro-op every cycle. Each
-micro-op will take a known, fixed latency.
+A pipelined functional unit can accept a new Micro-Op every cycle. Each
+Micro-Op will take a known, fixed latency.
 
 Speculation support is provided by auto-generating a pipeline that
-passes down the micro-op meta-data and *branch mask* in parallel with
-the micro-op within the expert-written functional unit. If a micro-op is
+passes down the Micro-Op meta-data and *branch mask* in parallel with
+the Micro-Op within the expert-written functional unit. If a Micro-Op is
 misspeculated, it’s response is de-asserted as it exits the functional
 unit.
 
@@ -105,15 +105,15 @@ Un-pipelined Functional Units
 
 Un-pipelined functional units (e.g., a divider) take an variable (and
 unknown) number of cycles to complete a single operation. Once occupied,
-they de-assert their ready signal and no additional micro-ops may be
+they de-assert their ready signal and no additional Micro-Ops may be
 scheduled to them.
 
 Speculation support is provided by tracking the *branch mask* of the
-micro-op in the functional unit.
+Micro-Op in the functional unit.
 
 The only requirement of the expert-written un-pipelined functional unit
 is to provide a *kill* signal to quickly remove misspeculated
-micro-ops. [1]_
+Micro-Ops. [1]_
 
 .. _fu-hierarchy:
 .. figure:: /figures/functional-unit-hierarchy.png
@@ -131,33 +131,33 @@ Branch Unit & Branch Speculation
 The Branch Unit handles the resolution of all branch and jump
 instructions.
 
-All micro-ops that are “inflight" in the pipeline (have an allocated ROB
+All Micro-Ops that are “inflight" in the pipeline (have an allocated ROB
 entry) are given a *branch mask*, where each bit in the *branch mask*
-corresponds to an un-executed, inflight branch that the micro-op is
+corresponds to an un-executed, inflight branch that the Micro-Op is
 speculated under. Each branch in *Decode* is allocated a *branch tag*,
-and all following micro-ops will have the corresponding bit in the
+and all following Micro-Ops will have the corresponding bit in the
 *branch mask* set (until the branch is resolved by the Branch Unit).
 
 If the branches (or jumps) have been correctly speculated by the
-front-end, then the Branch Unit’s only action is to broadcast the
-corresponding branch tag to *all* inflight micro-ops that the branch has
-been resolved correctly. Each micro-op can then clear the corresponding
+Front-end, then the Branch Unit’s only action is to broadcast the
+corresponding branch tag to *all* inflight Micro-Ops that the branch has
+been resolved correctly. Each Micro-Op can then clear the corresponding
 bit in its *branch mask*, and that branch tag can then be allocated to a
 new branch in the *Decode* stage.
 
 If a branch (or jump) is misspeculated, the Branch Unit must redirect
-the PC to the correct target, kill the front-end and fetch buffer, and
+the PC to the correct target, kill the Front-end and fetch buffer, and
 broadcast the misspeculated *branch tag* so that all dependent, inflight
-micro-ops may be killed. The PC redirect signal goes out immediately, to
+Micro-Ops may be killed. The PC redirect signal goes out immediately, to
 decrease the misprediction penalty. However, the *kill* signal is
 delayed a cycle for critical path reasons.
 
-The front-end must pass down the pipeline the appropriate branch
+The Front-end must pass down the pipeline the appropriate branch
 speculation meta-data, so that the correct direction can be reconciled
 with the prediction. Jump Register instructions are evaluated by
 comparing the correct target with the PC of the next instruction in the
 ROB (if not available, then a misprediction is assumed). Jumps are
-evaluated and handled in the front-end (as their direction and target
+evaluated and handled in the Front-end (as their direction and target
 are both known once the instruction can be decoded).
 
 BOOM (currently) only supports having one Branch Unit.
@@ -178,7 +178,7 @@ Floating Point Units
 
 .. _fp-fu:
 .. figure:: /figures/functional-unit-fpu.png
-    :alt: Functional Unit for FPU 
+    :alt: Functional Unit for FPU
 
     The class hierarchy of the FPU is shown. The expert-written code is contained within
     the hardfloat and rocket repositories. The “FPU” class instantiates the Rocket components, which itself
@@ -188,7 +188,7 @@ Floating Point Units
 The low-level floating point units used by BOOM come from the Rocket
 processor (https://github.com/freechipsproject/rocket-chip) and hardfloat
 (https://github.com/ucb-bar/berkeley-hardfloat) repositories. Figure
-[fig:functional-unit-fpu] shows the class hierarchy of the FPU.
+:numref:`fp-fu` shows the class hierarchy of the FPU.
 
 To make the scheduling of the write-port trivial, all of the pipelined
 FP units are padded to have the same latency. [3]_
@@ -215,29 +215,27 @@ unit comes with the following features/constraints:
 Single-precision operations have their operands upscaled to
 double-precision (and then the output downscaled). [4]_
 
-Although the  unit is unpipelined, it does not fit cleanly into the
+Although the unit is unpipelined, it does not fit cleanly into the
 Pipelined/Unpipelined abstraction used by the other functional units
 (see :numref:`fu-hierarchy`). This is because the unit provides
 an unstable FIFO interface: although the  unit may provide a *ready*
-signal on Cycle :math:`i`, there is no guarantee that it will continue
-to be *ready* on Cycle :math:`i+1`, even if no operations are enqueued.
-This proves to be a challenge, as the issue window may attempt to issue
+signal on Cycle i, there is no guarantee that it will continue
+to be *ready* on Cycle i+1, even if no operations are enqueued.
+This proves to be a challenge, as the Issue Queue may attempt to issue
 an  instruction but cannot be certain the  unit will accept it once it
 reaches the  unit on a later cycle.
 
-The solution is to add extra buffering within the  unit to hold
+The solution is to add extra buffering within the unit to hold
 instructions until they can be released directly into the unit. If the
-buffering of the  unit fills up, back pressure can be safely applied to
-the issue window. [5]_
+buffering of the unit fills up, back pressure can be safely applied to
+the Issue Queue. [5]_
 
 Parameterization
 ----------------
 
 BOOM provides flexibility in specifying the issue width and the mix of
-functional units in the execution pipeline. Code [code:exe\_units] shows
+functional units in the execution pipeline. :numref:`parameterization-exe-unit` shows
 how to instantiate an execution pipeline in BOOM.
-
-
 
 .. _parameterization-exe-unit:
 .. code-block:: scala
@@ -278,12 +276,12 @@ their own side-effects upon reading (or writing).
 
 BOOM (currently) does not rename *any* of the CSRs, and in addition to
 the potential side-effects caused by reading or writing a CSR, **BOOM
-will only execute a CSR instruction non-speculatively.**\  [6]_ This is
+will only execute a CSR instruction non-speculatively.** [6]_ This is
 accomplished by marking the CSR instruction as a “unique" (or
 “serializing") instruction - the ROB must be empty before it may proceed
-to the Issue Window (and no instruction may follow it until it has
+to the Issue Queue (and no instruction may follow it until it has
 finished execution and been committed by the ROB). It is then issued by
-the Issue Window, reads the appropriate operands from the Physical
+the Issue Queue, reads the appropriate operands from the Physical
 Register File, and is then sent to the CSRFile. [7]_ The CSR instruction
 executes in the CSRFile and then writes back data as required to the
 Physical Register File. The CSRFile may also emit a PC redirect and/or
@@ -313,7 +311,7 @@ an exception as part of executing a CSR instruction (e.g., a syscall).
 
 .. [5]
    It is this ability to hold multiple inflight instructions within the
-    unit simultaneously that breaks the “only one instruction at a time"
+   unit simultaneously that breaks the “only one instruction at a time"
    assumption required by the UnpipelinedFunctionalUnit abstract class.
 
 .. [6]

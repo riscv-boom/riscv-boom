@@ -12,7 +12,7 @@ RISC-V Tests
 
 A basic set of functional tests and micro-benchmarks can be found at
 (https://github.com/riscv/riscv-tests). These are invoked by the :code:`make
-run` targets in the :code:`verisim` and :code:`vsim` directories located in the 
+run` targets in the :code:`verisim` and :code:`vsim` directories located in the
 BOOM template repository.
 
 RISC-V Torture Tester
@@ -29,7 +29,7 @@ The CircleCI Continuous Integration (CI) tool is used to check pull requests and
 the master branch of BOOM. All files associated with it can be found in
 two directories. Firstly, the configuration file used to run CI is located at
 :code:`.circleci/config.yml`. This specifies the current tests and builds that
-are run using which BOOM configurations. Additionally, the DockerFile used to 
+are run using which BOOM configurations. Additionally, the DockerFile used to
 build the CI docker images resides in :code:`.circleci/images`. Finally, all
 scripts that are used during the CI run are located at :code:`.circleci/`. Note that even
 though BOOM template is cloned during the CI process, the BOOM repository specifies
@@ -41,10 +41,11 @@ Current Configurations Tested:
 * BoomConfig
 * SmallBoomConfig
 * MediumBoomConfig
+* SmallRV32UnifiedBoomConfig
 
 Current Tests Used:
 
 * riscv-tools assembly tests
 * riscv-tools benchmarks
 * csmith random C tests
-* scala style checks 
+* scala style checks

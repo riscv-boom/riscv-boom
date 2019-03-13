@@ -1,6 +1,6 @@
 //******************************************************************************
 // Copyright (c) 2015 - 2018, The Regents of the University of California (Regents).
-// All Rights Reserved. See LICENSE for license details.
+// All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
 // Author: Christopher Celio
 //------------------------------------------------------------------------------
@@ -9,25 +9,29 @@ package boom.common
 
 import chisel3._
 import chisel3.util._
+
 import freechips.rocketchip.rocket._
 import freechips.rocketchip.tile._
 import freechips.rocketchip.config.{Parameters, Field}
+
 import boom.ifu._
 import boom.bpu._
 import boom.exu._
 import boom.lsu._
 
-//case object BoomKey extends Field[BoomCoreParams]
-
+/**
+ * Default BOOM core parameters
+ */
 case class BoomCoreParams(
    fetchWidth: Int = 1,
    decodeWidth: Int = 1,
-   numRobEntries: Int = 16,
+   numRobEntries: Int = 64,
    issueParams: Seq[IssueParams] = Seq(
          IssueParams(issueWidth=1, numEntries=16, iqType=IQT_MEM.litValue),
          IssueParams(issueWidth=2, numEntries=16, iqType=IQT_INT.litValue),
          IssueParams(issueWidth=1, numEntries=16, iqType=IQT_FP.litValue)),
-   numLsuEntries: Int = 8,
+   numLdqEntries: Int = 16,
+   numStqEntries: Int = 16,
    numIntPhysRegisters: Int = 96,
    numFpPhysRegisters: Int = 64,
    enableCustomRf: Boolean = false,
@@ -58,6 +62,7 @@ case class BoomCoreParams(
    nPerfCounters: Int = 0,
    /* more stuff */
 
+   useFetchMonitor: Boolean = true,
    bootFreqHz: BigInt = 0,
    fpu: Option[FPUParams] = Some(FPUParams()),
    usingFPU: Boolean = true,
@@ -89,12 +94,12 @@ case class BoomCoreParams(
    val nPMPs: Int = 8
 }
 
+/**
+ * Mixin trait to add BOOM parameters to expand other traits/objects/etc
+ */
 trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
 {
-//   val rocketParams: RocketCoreParams = tileParams.core.asInstanceOf[RocketCoreParams]
-//   val boomParams: BoomCoreParams = p(BoomKey)
    val boomParams: BoomCoreParams = tileParams.core.asInstanceOf[BoomCoreParams]
-
 
    //************************************
    // Superscalar Widths
@@ -102,7 +107,6 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
    // fetchWidth provided by CoreParams class.
    // decodeWidth provided by CoreParams class.
    // retireWidth provided by BoomCoreParams class.
-//   val decodeWidth     = boomParams.decodeWidth
    val DISPATCH_WIDTH   = decodeWidth                // number of insts put into the IssueWindow
    val COMMIT_WIDTH     = boomParams.retireWidth
 
@@ -113,15 +117,15 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
 
    //************************************
    // Data Structure Sizes
-   val NUM_ROB_ENTRIES  = boomParams.numRobEntries     // number of ROB entries (e.g., 32 entries for R10k)
-   val NUM_LSU_ENTRIES  = boomParams.numLsuEntries     // number of LD/ST entries
-   val MAX_BR_COUNT     = boomParams.maxBrCount        // number of branches we can speculate simultaneously
-   val ftqSz            = boomParams.ftq.nEntries
-   val fetchBufferSz    = boomParams.fetchBufferSz     // number of instructions that stored between fetch&decode
+   val NUM_ROB_ENTRIES = boomParams.numRobEntries       // number of ROB entries (e.g., 32 entries for R10k)
+   val NUM_LDQ_ENTRIES = boomParams.numLdqEntries       // number of LAQ entries
+   val NUM_STQ_ENTRIES = boomParams.numStqEntries       // number of SAQ/SDQ entries
+   val MAX_BR_COUNT    = boomParams.maxBrCount          // number of branches we can speculate simultaneously
+   val ftqSz           = NUM_ROB_ENTRIES / fetchWidth   // number of FTQ entries should match (or slightly exceed) ROB entries
+   val fetchBufferSz   = boomParams.fetchBufferSz       // number of instructions that stored between fetch&decode
 
-   val numIntPhysRegs   = boomParams.numIntPhysRegisters // size of the integer physical register file
-   val numFpPhysRegs    = boomParams.numFpPhysRegisters  // size of the floating point physical register file
-
+   val numIntPhysRegs  = boomParams.numIntPhysRegisters // size of the integer physical register file
+   val numFpPhysRegs   = boomParams.numFpPhysRegisters  // size of the floating point physical register file
 
    //************************************
    // Functional Units
@@ -155,10 +159,11 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
 
    val issueParams: Seq[IssueParams] = boomParams.issueParams
    val enableAgePriorityIssue = boomParams.enableAgePriorityIssue
+   val usingUnifiedMemIntIQs = issueParams.count(_.iqType == IQT_MEM.litValue) == 0
 
    // currently, only support one of each.
-   require (issueParams.count(_.iqType == IQT_FP.litValue) == 1)
-   require (issueParams.count(_.iqType == IQT_MEM.litValue) == 1)
+   require (issueParams.count(_.iqType == IQT_FP.litValue) == 1 || !usingFPU)
+   require (issueParams.count(_.iqType == IQT_MEM.litValue) == 1 || usingUnifiedMemIntIQs)
    require (issueParams.count(_.iqType == IQT_INT.litValue) == 1)
 
    //************************************
@@ -226,11 +231,9 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
    }
    VLHR_LENGTH = GLOBAL_HISTORY_LENGTH+2*NUM_ROB_ENTRIES
 
-
    //************************************
    // Extra Knobs and Features
    val ENABLE_COMMIT_MAP_TABLE = boomParams.enableCommitMapTable
-
 
    //************************************
    // Implicitly calculated constants
@@ -241,10 +244,10 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
    val LREG_SZ           = log2Ceil(LOGICAL_REG_COUNT)
    val IPREG_SZ          = log2Ceil(numIntPhysRegs)
    val FPREG_SZ          = log2Ceil(numFpPhysRegs)
-   val PREG_SZ          = IPREG_SZ max FPREG_SZ
-   val MEM_ADDR_SZ       = log2Ceil(NUM_LSU_ENTRIES)
-   val MAX_ST_COUNT      = (1 << MEM_ADDR_SZ)
-   val MAX_LD_COUNT      = (1 << MEM_ADDR_SZ)
+   val PREG_SZ           = IPREG_SZ max FPREG_SZ
+   val LDQ_ADDR_SZ       = log2Ceil(NUM_LDQ_ENTRIES)
+   val STQ_ADDR_SZ       = log2Ceil(NUM_STQ_ENTRIES)
+   val LSU_ADDR_SZ       = LDQ_ADDR_SZ max STQ_ADDR_SZ
    val BR_TAG_SZ         = log2Ceil(MAX_BR_COUNT)
    val NUM_BROB_ENTRIES  = NUM_ROB_ROWS //TODO explore smaller BROBs
    val BROB_ADDR_SZ      = log2Ceil(NUM_BROB_ENTRIES)
@@ -254,15 +257,17 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
    require (MAX_BR_COUNT >=2)
    require (NUM_ROB_ROWS % 2 == 0)
    require (NUM_ROB_ENTRIES % decodeWidth == 0)
-   require (isPow2(NUM_LSU_ENTRIES))
-   require ((NUM_LSU_ENTRIES-1) > decodeWidth)
-
+   require ((NUM_LDQ_ENTRIES-1) > decodeWidth)
+   require ((NUM_STQ_ENTRIES-1) > decodeWidth)
 
    //************************************
    // Custom Logic
-
    val enableCustomRf      = boomParams.enableCustomRf
    val enableCustomRfModel = boomParams.enableCustomRfModel
+
+   //************************************
+   // Other Non/Should-not-be sythesizable modules
+   val useFetchMonitor = boomParams.useFetchMonitor
 
    //************************************
    // Non-BOOM parameters
@@ -270,4 +275,3 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
    val corePAddrBits = paddrBits
    val corePgIdxBits = pgIdxBits
 }
-

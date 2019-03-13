@@ -30,7 +30,7 @@ The Explicit Renaming Design
 BOOM is an “explicit renaming" or “physical register file" out-of-order
 core design. A physical register file, containing many more registers
 than the ISA dictates, holds both the committed architectural register
-state and speculative register state. The rename map tables contain the
+state and speculative register state. The Rename Map Tables contain the
 information needed to recover the committed state. As instructions are
 renamed, their register specifiers are explicitly updated to point to
 physical registers located in the physical register file. [1]_
@@ -46,23 +46,23 @@ The Rename Map Table
 
 .. _rename-stage:
 .. figure:: /figures/rename-pipeline.png
-    :alt: The Rename Stage 
+    :alt: The Rename Stage
 
-    The Rename Stage. Logical register specifiers read the map table to get their physical specifier.
-    For superscalar rename, any changes to the map tables must be bypassed to dependent instructions. The
+    The Rename Stage. Logical register specifiers read the Map Table to get their physical specifier.
+    For superscalar rename, any changes to the Map Tables must be bypassed to dependent instructions. The
     physical source specifiers can then read the Busy Table. The Stale specifier is used to track which physical
     register will be freed when the instruction later commits. P0 in the Physical Register File is always 0.
 
 The Rename Map Table holds the speculative mappings from ISA registers
 to physical registers.
 
-Each branch gets its own copy of the rename map table. [3]_ On a branch
-mispredict, the map table can be reset instantly from the mispredicting
-branch’s copy of the map table.
+Each branch gets its own copy of the rename Map Table. [3]_ On a branch
+mispredict, the Map Table can be reset instantly from the mispredicting
+branch’s copy of the Map Table.
 
 As the RV64G ISA uses fixed locations of the register specifiers (and no
-implicit register specifiers), the map table can be read before the
-instruction is decoded!
+implicit register specifiers), the Map Table can be read before the
+instruction is decoded! And hence the **Decode** and **Rename** stages can be combined.
 
 Resets on Exceptions and Flushes
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -70,7 +70,7 @@ Resets on Exceptions and Flushes
 An additional, optional “Committed Map Table" holds the rename map for
 the committed architectural state. If enabled, this allows single-cycle
 reset of the pipeline during flushes and exceptions (the current map
-table is reset to the committed map table). Otherwise, pipeline flushes
+table is reset to the committed Map Table). Otherwise, pipeline flushes
 require multiple cycles to “unwind" the ROB to write back in the rename
 state at the commit point, one ROB row per cycle.
 
@@ -84,7 +84,7 @@ issued.
 The Free List
 -------------
 
-The free-list tracks the physical registers that are currently un-used
+The Free List tracks the physical registers that are currently un-used
 and is used to allocate new physical registers to instructions passing
 through the *Rename* stage.
 
@@ -92,7 +92,7 @@ The Free List is implemented as a bit-vector. A priority decoder can
 then be used to find the first free register. BOOM uses a cascading
 priority decoder to allocate multiple registers per cycle. [4]_
 
-On every branch (or jalr), the rename map tables are snapshotted to
+On every branch (or jalr), the rename Map Tables are snapshotted to
 allow single-cycle recovery on a branch misprediction. Likewise, the
 Free List also sets aside a new “Allocation List", initialized to zero.
 As new physical registers are allocated, the Allocation List for each
@@ -104,14 +104,13 @@ List with the Free List. [5]_
 Stale Destination Specifiers
 ----------------------------
 
-For instructions that will write a register, the map table is read to
+For instructions that will write a register, the Map Table is read to
 get the *stale physical destination specifier* (“stale pdst"). Once the
-instruction commits, the *stale pdst* is returned to the free list, as
+instruction commits, the *stale pdst* is returned to the Free List, as
 no future instructions will read it.
 
 .. [1]
-   The MIPS R10k:raw-latex:`\cite{mipsr10k}`, Alpha
-   21264:raw-latex:`\cite{alpha21264}`, Intel Sandy Bridge, and ARM
+   The MIPS R10k, Alpha 21264, Intel Sandy Bridge, and ARM
    Cortex A15 cores are all example of explicit renaming out-of-order
    cores.
 
@@ -123,7 +122,7 @@ no future instructions will read it.
    An alternate design for wider pipelines may prefer to only make up to
    one snapshot per cycle, but this comes with additional complexity to
    deduce the precise mappings for any given instruction within the
-   fetch packet.
+   Fetch Packet.
 
 .. [4]
    A two-wide rename stage could use two priority decoders starting from
@@ -139,5 +138,5 @@ no future instructions will read it.
    neither the snapshot nor the current Free List know that it had been
    freed. Eventually, the processor slows as it struggles to maintain
    enough inflight physical registers, until finally the machine comes
-   to a halt. If this sounds autobiographical because the author may
-   have trusted computer architecture lectures, well...
+   to a halt. If this sounds autobiographical because the original author
+   (Chris) may have trusted computer architecture lectures, well...

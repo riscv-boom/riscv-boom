@@ -1,27 +1,30 @@
 //******************************************************************************
 // Copyright (c) 2017 - 2018, The Regents of the University of California (Regents).
-// All Rights Reserved. See LICENSE for license details.
+// All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
 // Author: Christopher Celio
 //------------------------------------------------------------------------------
 
 //------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // Transformable SeqReadMem
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
-//
-// Provide an abstract sequential-read memory that can be transformed from a
-// tall, skinny aspect ratio to a more rectangular shape.
 
 package boom.util
 
 import chisel3._
 import chisel3.util._
 
-// Provide the "logical" sizes and we will map
-// the logical SeqMem into a physical, realizable SeqMem
-// that is in a square aspect ratio (rounded to a pow2 for the depth).
-// Only supports a single read/write port.
+/**
+ * Implements a realizable SeqMem that is in a square aspect ratio (rounded
+ * to a pow2 for the depth). Used for transforming a tall, skinny aspect
+ * ratio memory into a more rectangular shape. Currently, only supports
+ * a single R/W port.
+ *
+ * @param l_depth logical depth of the memory
+ * @param l_width logical width of the memory
+ */
 class SeqMem1rwTransformable (
    l_depth: Int,
    l_width: Int
@@ -57,14 +60,12 @@ class SeqMem1rwTransformable (
 
    val smem = SyncReadMem(p_depth, Vec(p_width, Bool()))
 
-
    private def getIdx(addr:UInt) =
       addr >> p_off_sz
 
    // must compute offset from address but then factor in the l_width.
    private def getOffset(addr:UInt) =
       addr(p_off_sz-1,0) << l_off_sz
-
 
    assert (!(io.wen && io.ren), "[SMUtil] writer and reader fighting over the single port.")
    when (io.wen && !io.ren)
@@ -83,4 +84,3 @@ class SeqMem1rwTransformable (
    val s1_rrow = smem.read(ridx, io.ren).asUInt
    io.rout := (s1_rrow >> r_offset)(l_width-1, 0)
 }
-

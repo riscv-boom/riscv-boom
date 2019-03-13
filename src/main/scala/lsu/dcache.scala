@@ -1,22 +1,37 @@
-// See LICENSE.Berkeley for license details.
-// See LICENSE.SiFive for license details.
+//******************************************************************************
+// Ported from Rocket-Chip
+// See LICENSE.Berkeley and LICENSE.SiFive in Rocket-Chip for license details.
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 
 package boom.lsu
 
 import Chisel._
 import Chisel.ImplicitConversions._
+
 import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.diplomacy._
 import freechips.rocketchip.tilelink._
 import freechips.rocketchip.util._
 import freechips.rocketchip.rocket._
 
-class BoomNonBlockingDCache(hartid: Int)(implicit p: Parameters) extends HellaCache(hartid)(p) {
+/**
+ * Top level class wrapping a non-blocking dcache.
+ *
+ * @param hartid hardware thread for the cache
+ */
+class BoomNonBlockingDCache(hartid: Int)(implicit p: Parameters) extends HellaCache(hartid)(p)
+{
   override lazy val module = new BoomNonBlockingDCacheModule(this)
 }
 
-class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends HellaCacheModule(outer) {
-
+/**
+ * Main module implementing a non-blocking dcache.
+ *
+ * @param outer reference to top level class
+ */
+class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends HellaCacheModule(outer)
+{
   require(isPow2(nWays)) // TODO: relax this
   require(dataScratchpadSize == 0)
   require(!usingVM || untagBits <= pgIdxBits, s"untagBits($untagBits) > pgIdxBits($pgIdxBits)")
@@ -70,30 +85,36 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends HellaCac
   dtlb.io.sfence.bits.addr := s1_req.addr
   dtlb.io.sfence.bits.asid := io.cpu.s1_data.data
 
-
-  when (io.cpu.req.valid) {
+  when (io.cpu.req.valid)
+  {
     s1_req := io.cpu.req.bits
   }
-  when (wb.io.meta_read.valid) {
+  when (wb.io.meta_read.valid)
+  {
     s1_req.addr := Cat(wb.io.meta_read.bits.tag, wb.io.meta_read.bits.idx) << blockOffBits
     s1_req.phys := Bool(true)
   }
-  when (prober.io.meta_read.valid) {
+  when (prober.io.meta_read.valid)
+  {
     s1_req.addr := Cat(prober.io.meta_read.bits.tag, prober.io.meta_read.bits.idx) << blockOffBits
     s1_req.phys := Bool(true)
   }
-  when (mshrs.io.replay.valid) {
+  when (mshrs.io.replay.valid)
+  {
     s1_req := mshrs.io.replay.bits
   }
-  when (s2_recycle) {
+  when (s2_recycle)
+  {
     s1_req := s2_req
   }
   val s1_addr = s1_req.addr
-  when (s1_clk_en) {
+  when (s1_clk_en)
+  {
     s2_req.typ := s1_req.typ
     s2_req.phys := s1_req.phys
     s2_req.addr := s1_addr
-    when (s1_write) {
+    when (s1_write)
+    {
       s2_req.data := Mux(s1_replay, mshrs.io.replay.bits.data, io.cpu.s1_data.data)
     }
     when (s1_recycled) { s2_req.data := s1_req.data }
@@ -116,7 +137,8 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends HellaCac
   data.io.write.valid := writeArb.io.out.valid
   writeArb.io.out.ready := data.io.write.ready
   data.io.write.bits := writeArb.io.out.bits
-  val wdata_encoded = (0 until rowWords).map(i => dECC.encode(writeArb.io.out.bits.data(coreDataBits*(i+1)-1,coreDataBits*i)))
+  val wdata_encoded = (0 until rowWords).map(
+    i => dECC.encode(writeArb.io.out.bits.data(coreDataBits*(i+1)-1,coreDataBits*i)))
   data.io.write.bits.data := wdata_encoded.asUInt
 
   // tag read for new requests
@@ -157,21 +179,26 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends HellaCac
   val s2_lrsc_addr_match = lrsc_valid && lrsc_addr === (s2_req.addr >> blockOffBits)
   val s2_sc_fail = s2_sc && !s2_lrsc_addr_match
   when (lrsc_count > 0) { lrsc_count := lrsc_count - 1 }
-  when (s2_valid_masked && s2_hit || s2_replay) {
-    when (s2_lr) {
+  when (s2_valid_masked && s2_hit || s2_replay)
+  {
+    when (s2_lr)
+    {
       lrsc_count := lrscCycles - 1
       lrsc_addr := s2_req.addr >> blockOffBits
     }
-    when (lrsc_count > 0) {
+    when (lrsc_count > 0)
+    {
       lrsc_count := 0
     }
   }
 
   val s2_data = Wire(Vec(nWays, Bits(width=encRowBits)))
-  for (w <- 0 until nWays) {
+  for (w <- 0 until nWays)
+  {
     val regs = Reg(Vec(rowWords, Bits(width = encDataBits)))
     val en1 = s1_clk_en && s1_tag_eq_way(w)
-    for (i <- 0 until regs.size) {
+    for (i <- 0 until regs.size)
+    {
       val en = en1 && ((Bool(i == 0) || !Bool(doNarrowRead)) || s1_writeback)
       when (en) { regs(i) := data.io.resp(w) >> encDataBits*i }
     }
@@ -187,7 +214,8 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends HellaCac
   // store/amo hits
   s3_valid := (s2_valid_masked && s2_hit || s2_replay) && !s2_sc_fail && isWrite(s2_req.cmd)
   val amoalu = Module(new AMOALU(xLen))
-  when ((s2_valid || s2_replay) && (isWrite(s2_req.cmd) || s2_data_correctable)) {
+  when ((s2_valid || s2_replay) && (isWrite(s2_req.cmd) || s2_data_correctable))
+  {
     s3_req := s2_req
     s3_req.data := Mux(s2_data_correctable, s2_data_corrected, amoalu.io.out)
     s3_way := s2_tag_match_way
@@ -203,10 +231,12 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends HellaCac
   val replacer = cacheParams.replacement
   val s1_replaced_way_en = UIntToOH(replacer.way)
   val s2_replaced_way_en = UIntToOH(RegEnable(replacer.way, s1_clk_en))
-  val s2_repl_meta = Mux1H(s2_replaced_way_en, wayMap((w: Int) => RegEnable(meta.io.resp(w), s1_clk_en && s1_replaced_way_en(w))).toSeq)
+  val s2_repl_meta = Mux1H(s2_replaced_way_en,
+    wayMap((w: Int) => RegEnable(meta.io.resp(w), s1_clk_en && s1_replaced_way_en(w))).toSeq)
 
   // miss handling
-  mshrs.io.req.valid := s2_valid_masked && !s2_hit && (isPrefetch(s2_req.cmd) || isRead(s2_req.cmd) || isWrite(s2_req.cmd))
+  mshrs.io.req.valid := s2_valid_masked && !s2_hit && (isPrefetch(s2_req.cmd) ||
+                        isRead(s2_req.cmd) || isWrite(s2_req.cmd))
   mshrs.io.req.bits := s2_req
   mshrs.io.req.bits.tag_match := s2_tag_match
   mshrs.io.req.bits.old_meta := Mux(s2_tag_match, L1Metadata(s2_repl_meta.tag, s2_hit_state), s2_repl_meta)
@@ -272,9 +302,11 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends HellaCac
   ).map(r => (r._1 && (s1_addr >> wordOffBits === r._2.addr >> wordOffBits) && isWrite(r._2.cmd), r._3))
   val s2_store_bypass_data = Reg(Bits(width = coreDataBits))
   val s2_store_bypass = Reg(Bool())
-  when (s1_clk_en) {
+  when (s1_clk_en)
+  {
     s2_store_bypass := false
-    when (bypasses.map(_._1).reduce(_||_)) {
+    when (bypasses.map(_._1).reduce(_||_))
+    {
       s2_store_bypass_data := PriorityMux(bypasses)
       s2_store_bypass := true
     }
@@ -308,7 +340,8 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends HellaCac
   // after a nack, block until nack condition resolves to save energy
   val block_miss = Reg(init=Bool(false))
   block_miss := (s2_valid || block_miss) && s2_nack_miss
-  when (block_miss) {
+  when (block_miss)
+  {
     io.cpu.req.ready := Bool(false)
   }
 
@@ -331,7 +364,6 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends HellaCac
   io.cpu.resp.bits.data_raw := s2_data_word
   io.cpu.ordered := mshrs.io.fence_rdy && !s1_valid && !s2_valid
   io.cpu.replay_next := (s1_replay && s1_read) || mshrs.io.replay_next
-
 
   // Tie off the s2_xcpt signal, since exceptions generated
   // here are due to TLB falsely setting requests to S level

@@ -9,7 +9,7 @@
  <check level="warning" class="org.scalastyle.file.HeaderMatchesChecker" enabled="true">
   <parameters>
    <parameter name="regex">true</parameter>
-   <parameter name="header">//\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\n// Copyright \(c\) \d{4} - \d{4}, The Regents of the University of California \(Regents\).\n// All Rights Reserved. See LICENSE for license details.\n//------------------------------------------------------------------------------\n// Author: .*\n//------------------------------------------------------------------------------</parameter>
+   <parameter name="header">//\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\n// Copyright \(c\) \d{4} - \d{4}, The Regents of the University of California \(Regents\).\n// All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.\n//------------------------------------------------------------------------------\n// Author: .*\n//------------------------------------------------------------------------------</parameter>
   </parameters>
  </check>
  <check enabled="false" level="warning" class="org.scalastyle.scalariform.SpaceAfterCommentStartChecker"/>
@@ -96,7 +96,7 @@
    <parameter name="doubleLineAllowed"><![CDATA[true]]></parameter>
   </parameters>
  </check>
- <check level="warning" class="org.scalastyle.scalariform.MethodLengthChecker" enabled="true">
+ <check level="warning" class="org.scalastyle.scalariform.MethodLengthChecker" enabled="false">
   <parameters>
    <parameter name="maxLength"><![CDATA[50]]></parameter>
   </parameters>

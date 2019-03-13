@@ -24,6 +24,7 @@ Welcome to RISCV-BOOM's documentation!
    sections/future-work
    sections/parameterization
    sections/faq
+   sections/boom-ecosystem
    sections/terminology
    sections/bibliography/bibliography
 

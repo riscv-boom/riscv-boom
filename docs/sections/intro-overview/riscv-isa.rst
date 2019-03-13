@@ -1,5 +1,5 @@
 The RISC-V ISA
-====================================
+==============
 
 BOOM implements the RV64GC variant of the RISC-V ISA. This includes the
 MAFDC extensions and the privileged specification (multiply/divide, AMOs,
@@ -15,15 +15,15 @@ high-performance designs:
     * This greatly simplifies the Load/Store Unit, which does not need to
       have loads snoop other loads nor does coherence traffic need to snoop
       the LSU, as required by sequential consistency.
-    
-* **Accrued floating point exception flags**
 
-    * The fp status register does not need to be renamed, nor can FP
+* **Accrued Floating Point (FP) exception flags**
+
+    * The FP status register does not need to be renamed, nor can FP
       instructions throw exceptions themselves.
 
 * **No integer side-effects**
 
-    * All integer ALU operations exhibit no side-effects, save the writing
+    * All integer ALU operations exhibit no side-effects, other than the writing
       of the destination register. This prevents the need to rename
       additional condition state.
 
@@ -35,15 +35,13 @@ high-performance designs:
 
 * **No implicit register specifiers**
 
-    * Even JAL requires specifying an explicit . This simplifies rename
+    * Even JAL requires specifying an explicit register. This simplifies rename
       logic, which prevents either the need to know the instruction first
       before accessing the rename tables, or it prevents adding more ports
       to remove the instruction decode off the critical path.
 
-* **rs1, rs2, rs3, rd are always in the same place**
+* **Registers rs1, rs2, rs3, rd are always in the same place**
 
     * This allows decode and rename to proceed in parallel.
 
 BOOM (currently) does not implement the proposed “V" vector extension.
-
-

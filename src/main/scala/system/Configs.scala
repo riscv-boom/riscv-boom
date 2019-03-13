@@ -1,6 +1,6 @@
 //******************************************************************************
 // Copyright (c) 2015 - 2018, The Regents of the University of California (Regents).
-// All Rights Reserved. See LICENSE for license details.
+// All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
 // Author: Christopher Celio
 //------------------------------------------------------------------------------
@@ -8,6 +8,7 @@
 package boom.system
 
 import chisel3._
+
 import freechips.rocketchip.config.{Parameters, Config}
 import freechips.rocketchip.devices.debug._
 import freechips.rocketchip.devices.tilelink._
@@ -18,7 +19,26 @@ import freechips.rocketchip.system._
 import freechips.rocketchip.tile._
 import freechips.rocketchip.tilelink._
 import freechips.rocketchip.util._
+
 import boom.common._
+
+/**
+ * Note: For all these configs, the mix-ins are applied from
+ * "bottom" to "top". This means that the "lower" mix-ins set the
+ * default values of the parameters, and the "higher" mix-ins
+ * overwrite the defaults to implement a new configuration.
+ *
+ * This order is specified in the GeneratorApp class (aka foldRight)
+ *
+ * Ex.
+ * class SmallBoomConfig extends Config(
+ *    new WithRVC ++ <-- Applied 6th
+ *    new WithSmallBooms ++ <-- Applied 5th
+ *    new DefaultBoomConfig ++ <-- Applied 4th
+ *    new WithNBoomCores(1) ++ <-- Applied 3rd
+ *    new WithoutTLMonitors ++ <-- Applied 2nd
+ *    new freechips.rocketchip.system.BaseConfig) <-- Applied 1st
+ */
 
 // scalastyle:off
 
@@ -57,7 +77,6 @@ class MegaBoomConfig extends Config(
    new freechips.rocketchip.system.BaseConfig)
 
 
-
 // Assorted configs
 class MegaBoomECCConfig extends Config(
    new WithL1IECC("parity", "parity") ++
@@ -68,7 +87,6 @@ class MegaBoomECCConfig extends Config(
    new WithNBoomCores(1) ++
    new WithoutTLMonitors ++
    new freechips.rocketchip.system.BaseConfig)
-
 
 class jtagSmallBoomConfig extends Config(
    new WithRVC ++
@@ -125,10 +143,11 @@ class TracedSmallBoomConfig extends Config(
    new freechips.rocketchip.system.BaseConfig)
 
 //RV32IMAC TODO: Support FP
-class SmallRV32BoomConfig extends Config(
+class SmallRV32UnifiedBoomConfig extends Config(
    new WithBoomRV32 ++
    new WithRVC ++
    new WithoutBoomFPU ++
+   new WithUnifiedMemIntIQs ++
    new WithSmallBooms ++
    new DefaultBoomConfig ++
    new WithNBoomCores(1) ++
@@ -167,4 +186,3 @@ class WithL1DECC(tecc: String, decc: String) extends Config((site, here, up) => 
   case BoomTilesKey => up(BoomTilesKey, site) map { r =>
     r.copy(dcache = r.dcache.map(_.copy(tagECC = Some(tecc), dataECC = Some(decc)))) }
 })
-

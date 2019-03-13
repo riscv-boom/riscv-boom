@@ -1,19 +1,17 @@
 //******************************************************************************
 // Copyright (c) 2017 - 2018, The Regents of the University of California (Regents).
-// All Rights Reserved. See LICENSE for license details.
+// All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
 // Author: Christopher Celio
 //------------------------------------------------------------------------------
 
-// See LICENSE.Berkeley for license details.
-// See LICENSE.SiFive for license details.
-
 package boom.ifu
-
 
 import chisel3._
 import chisel3.util._
 import chisel3.core.withReset
+import chisel3.internal.sourceinfo.SourceInfo
+
 import freechips.rocketchip.config._
 import freechips.rocketchip.subsystem._
 import freechips.rocketchip.diplomacy._
@@ -22,41 +20,15 @@ import freechips.rocketchip.tilelink._
 import freechips.rocketchip.tile._
 import freechips.rocketchip.util._
 import freechips.rocketchip.util.property._
-import chisel3.internal.sourceinfo.SourceInfo
+
 import boom.bpu._
 import boom.common._
 import boom.exu.{BranchUnitResp, CommitExceptionSignals}
 import boom.lsu.{CanHaveBoomPTW, CanHaveBoomPTWModule}
 
-//class FrontendReq(implicit p: Parameters) extends CoreBundle()(p) {
-//  val pc = UInt(width = vaddrBitsExtended)
-//  val speculative = Bool()
-//}
-
-//class FrontendExceptions extends Bundle {
-//  val pf = new Bundle {
-//    val inst = Bool()
-//  }
-//  val ae = new Bundle {
-//    val inst = Bool()
-//  }
-//}
-//
-//class FrontendResp(implicit p: Parameters) extends CoreBundle()(p) {
-//  val btb = new BTBResp
-//  val pc = UInt(width = vaddrBitsExtended)  // ID stage PC
-//  val data = UInt(width = fetchWidth * coreInstBits)
-//  val mask = Bits(width = fetchWidth)
-//  val xcpt = new FrontendExceptions
-//  val replay = Bool()
-//}
-//
-//class FrontendPerfEvents extends Bundle {
-//  val acquire = Bool()
-//  val tlbMiss = Bool()
-//}
-//
-
+/**
+ * Parameters to manage a L1 Banked ICache
+ */
 trait HasL1ICacheBankedParameters extends HasL1ICacheParameters
 {
   // Use a bank interleaved I$ if our fetch width is wide enough.
@@ -85,7 +57,9 @@ trait HasL1ICacheBankedParameters extends HasL1ICacheParameters
     if (icIsBanked)
     {
       addr + Mux(inLastChunk(addr), bankBytes.U, fetchBytes.U)
-    } else {
+    }
+    else
+    {
       addr + fetchBytes.U
     }
   }
@@ -95,18 +69,23 @@ trait HasL1ICacheBankedParameters extends HasL1ICacheParameters
   {
     // where is the first instruction, aligned to a log(fetchWidth) boundary?
     val idx = addr.extract(log2Ceil(fetchWidth)+log2Ceil(coreInstBytes)-1, log2Ceil(coreInstBytes))
-    if (icIsBanked) {
+    if (icIsBanked)
+    {
       // shave off the msb of idx since we are aligned to half-fetchWidth boundaries.
       val shamt = idx.extract(log2Ceil(fetchWidth)-2, 0)
       val end_mask = Mux(inLastChunk(addr), Fill(fetchWidth/2, 1.U), Fill(fetchWidth, 1.U))
       ((1 << fetchWidth)-1).U << shamt & end_mask
-    } else {
+    }
+    else
+    {
       ((1 << fetchWidth)-1).U << idx
     }
   }
 }
 
-
+/**
+ * IO for the BOOM Frontend to/from the CPU
+ */
 class BoomFrontendIO(implicit p: Parameters) extends BoomBundle()(p)
 {
    // Give the backend a packet of instructions.
@@ -121,7 +100,6 @@ class BoomFrontendIO(implicit p: Parameters) extends BoomBundle()(p)
    // TODO redudcant with above sfenceReq
    val sfence_take_pc    = Output(Bool())
    val sfence_addr       = Output(UInt((vaddrBits+1).W))
-
 
    val commit            = Valid(UInt(ftqSz.W))
    val flush_info        = Valid(new CommitExceptionSignals())
@@ -144,20 +122,39 @@ class BoomFrontendIO(implicit p: Parameters) extends BoomBundle()(p)
    val tsc_reg           = Output(UInt(xLen.W))
 }
 
-class BoomFrontend(val icacheParams: ICacheParams, hartid: Int)(implicit p: Parameters) extends LazyModule {
+/**
+ * Top level Frontend class
+ *
+ * @param icacheParams parameters for the icache
+ * @param hartid id for the hardware thread of the core
+ */
+class BoomFrontend(val icacheParams: ICacheParams, hartid: Int)(implicit p: Parameters) extends LazyModule
+{
   lazy val module = new BoomFrontendModule(this)
   val icache = LazyModule(new boom.ifu.ICache(icacheParams, hartid))
   val masterNode = icache.masterNode
   val slaveNode = icache.slaveNode
 }
 
+/**
+ * Bundle wrapping the IO for the Frontend as a whole
+ *
+ * @param outer top level Frontend class
+ */
 class BoomFrontendBundle(val outer: BoomFrontend) extends CoreBundle()(outer.p)
-    with HasExternallyDrivenTileConstants {
+    with HasExternallyDrivenTileConstants
+{
   val cpu = Flipped(new BoomFrontendIO())
   val ptw = new TLBPTWIO()
   val errors = new ICacheErrors
 }
 
+/**
+ * Main Frontend module that connects the icache, TLB, fetch controller,
+ * and branch prediction pipeline together.
+ *
+ * @param outer top level Frontend class
+ */
 class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   with HasCoreParameters
   with HasL1ICacheParameters
@@ -212,7 +209,8 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 
   val s2_redirect = WireInit(fetch_controller.io.imem_req.valid)
   s2_valid := false.B
-  when (!s2_replay) {
+  when (!s2_replay)
+  {
     s2_valid := !s2_redirect
     s2_pc := s1_pc
     s2_speculative := s1_speculative
@@ -246,7 +244,6 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 
   fetch_controller.io.imem_resp.bits.data := icache.io.resp.bits.data
   fetch_controller.io.imem_resp.bits.mask := fetchMask(s2_pc)
-
 
   fetch_controller.io.imem_resp.bits.replay := icache.io.resp.bits.replay || icache.io.s2_kill &&
                                                !icache.io.resp.valid && !s2_xcpt
@@ -291,7 +288,6 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
    bpdpipeline.io.s0_req.valid := s0_valid
    bpdpipeline.io.s0_req.bits.addr := s0_pc
 
-
    bpdpipeline.io.f2_replay := s2_replay
    bpdpipeline.io.f2_stall := !fetch_controller.io.imem_resp.ready
    bpdpipeline.io.f3_stall := fetch_controller.io.f3_stall
@@ -315,8 +311,6 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
    bpdpipeline.io.bim_update    := fetch_controller.io.bim_update
    bpdpipeline.io.bpd_update    := fetch_controller.io.bpd_update
 
-
-
    bpdpipeline.io.status_prv    := io.cpu.status_prv
    bpdpipeline.io.status_debug  := io.cpu.status_debug
 
@@ -330,11 +324,14 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 
   def ccover(cond: Bool, label: String, desc: String)(implicit sourceInfo: SourceInfo) =
     cover(cond, s"FRONTEND_$label", "Rocket;;" + desc)
-
 }
 
-/** Mix-ins for constructing tiles that have an ICache-based pipeline frontend */
-trait HasBoomICacheFrontend extends CanHaveBoomPTW { this: BaseTile =>
+/**
+ * Mix-in for constructing tiles that have an ICache-based pipeline frontend
+ */
+trait HasBoomICacheFrontend extends CanHaveBoomPTW
+{
+  this: BaseTile =>
   val module: HasBoomICacheFrontendModule
   val frontend = LazyModule(new BoomFrontend(tileParams.icache.get, hartId))
   tlMasterXbar.node := frontend.masterNode
@@ -343,7 +340,11 @@ trait HasBoomICacheFrontend extends CanHaveBoomPTW { this: BaseTile =>
   nPTWPorts += 1 // boom -- needs an extra PTW port for its LSU.
 }
 
-trait HasBoomICacheFrontendModule extends CanHaveBoomPTWModule {
+/**
+ * Mix-in for constructing tiles that have an ICache-based pipeline frontend
+ */
+trait HasBoomICacheFrontendModule extends CanHaveBoomPTWModule
+{
   val outer: HasBoomICacheFrontend
   ptwPorts += outer.frontend.module.io.ptw
 }

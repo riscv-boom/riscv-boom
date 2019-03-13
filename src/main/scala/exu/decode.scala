@@ -1,6 +1,6 @@
 //******************************************************************************
 // Copyright (c) 2015 - 2018, The Regents of the University of California (Regents).
-// All Rights Reserved. See LICENSE for license details.
+// All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
 // Author: Christopher Celio
 //------------------------------------------------------------------------------
@@ -9,17 +9,21 @@ package boom.exu
 
 import chisel3._
 import chisel3.util._
-import freechips.rocketchip.config.Parameters
 
+import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.rocket.Instructions._
 import freechips.rocketchip.rocket.RVCExpander
 import freechips.rocketchip.rocket.{CSR,Causes}
 import freechips.rocketchip.util.{uintToBitPat,UIntIsOneOf}
+
 import FUConstants._
 import boom.common._
 import boom.util._
 
 // scalastyle:off
+/**
+ * Abstract trait giving defaults and other relevant values to different Decode constants/
+ */
 abstract trait DecodeConstants
    extends freechips.rocketchip.rocket.constants.ScalarOpConstants
    with freechips.rocketchip.rocket.constants.MemoryOpConstants
@@ -44,6 +48,9 @@ abstract trait DecodeConstants
 }
 // scalastyle:on
 
+/**
+ * Decoded control signals
+ */
 class CtrlSigs extends Bundle
 {
    val legal           = Bool()
@@ -78,10 +85,10 @@ class CtrlSigs extends Bundle
    def decode(inst: UInt, table: Iterable[(BitPat, List[BitPat])]) = {
       val decoder = freechips.rocketchip.rocket.DecodeLogic(inst, XDecode.decode_default, table)
       val sigs =
-         Seq(legal, fp_val, fp_single, uopc, iqtype, fu_code, dst_type, rs1_type
-         , rs2_type, frs3_en, imm_sel, is_load, is_store, is_amo
-         , is_fence, is_fencei, mem_cmd, mem_typ, wakeup_delay, bypassable
-         , br_or_jmp, is_jal, allocate_brtag, is_sys_pc2epc, inst_unique, flush_on_commit, csr_cmd)
+         Seq(legal, fp_val, fp_single, uopc, iqtype, fu_code, dst_type, rs1_type,
+             rs2_type, frs3_en, imm_sel, is_load, is_store, is_amo,
+             is_fence, is_fencei, mem_cmd, mem_typ, wakeup_delay, bypassable,
+             br_or_jmp, is_jal, allocate_brtag, is_sys_pc2epc, inst_unique, flush_on_commit, csr_cmd)
       sigs zip decoder map {case(s,d) => s := d}
       rocc := false.B
       this
@@ -89,6 +96,9 @@ class CtrlSigs extends Bundle
 }
 
 // scalastyle:off
+/**
+ * Decode constants for RV32
+ */
 object X32Decode extends DecodeConstants
 {
              //                                                                  frs3_en                               wakeup_delay
@@ -107,6 +117,10 @@ object X32Decode extends DecodeConstants
    SRAI_RV32-> List(Y, N, X, uopSRAI , IQT_INT, FU_ALU , RT_FIX, RT_FIX, RT_X  , N, IS_I, N, N, N, N, N, M_X  , MT_X , 1.U, Y, N, N, N, N, N, N, CSR.N)
    )
 }
+
+/**
+ * Decode constants for RV64
+ */
 object X64Decode extends DecodeConstants
 {
             //                                                                  frs3_en                               wakeup_delay
@@ -141,6 +155,9 @@ object X64Decode extends DecodeConstants
    )
 }
 
+/**
+ * Overall Decode constants
+ */
 object XDecode extends DecodeConstants
 {
             //                                                                  frs3_en                               wakeup_delay
@@ -219,13 +236,13 @@ object XDecode extends DecodeConstants
    CSRRCI  -> List(Y, N, X, uopCSRRCI,IQT_INT, FU_CSR , RT_FIX, RT_PAS, RT_X  , N, IS_I, N, N, N, N, N, M_X  , MT_X , 0.U, N, N, N, N, N, Y, Y, CSR.C),
 
    SFENCE_VMA->List(Y,N, X, uopSFENCE,IQT_MEM, FU_MEM , RT_X  , RT_FIX, RT_FIX, N, IS_X, N, N, N, N, N, M_SFENCE,MT_X,0.U, N, N, N, N, N, Y, Y, CSR.N),
-   SCALL   -> List(Y, N, X, uopSYSTEM,IQT_INT, FU_CSR , RT_X  , RT_X  , RT_X  , N, IS_I, N, N, N, N, N, M_X  , MT_X , 0.U, N, N, N, N, Y, Y, N, CSR.I),
-   SBREAK  -> List(Y, N, X, uopSYSTEM,IQT_INT, FU_CSR , RT_X  , RT_X  , RT_X  , N, IS_I, N, N, N, N, N, M_X  , MT_X , 0.U, N, N, N, N, Y, Y, N, CSR.I),
-   SRET    -> List(Y, N, X, uopSYSTEM,IQT_INT, FU_CSR , RT_X  , RT_X  , RT_X  , N, IS_I, N, N, N, N, N, M_X  , MT_X , 0.U, N, N, N, N, N, Y, N, CSR.I),
-   MRET    -> List(Y, N, X, uopSYSTEM,IQT_INT, FU_CSR , RT_X  , RT_X  , RT_X  , N, IS_I, N, N, N, N, N, M_X  , MT_X , 0.U, N, N, N, N, N, Y, N, CSR.I),
-   DRET    -> List(Y, N, X, uopSYSTEM,IQT_INT, FU_CSR , RT_X  , RT_X  , RT_X  , N, IS_I, N, N, N, N, N, M_X  , MT_X , 0.U, N, N, N, N, N, Y, N, CSR.I),
+   SCALL   -> List(Y, N, X, uopERET  ,IQT_INT, FU_CSR , RT_X  , RT_X  , RT_X  , N, IS_I, N, N, N, N, N, M_X  , MT_X , 0.U, N, N, N, N, Y, Y, Y, CSR.I),
+   SBREAK  -> List(Y, N, X, uopERET  ,IQT_INT, FU_CSR , RT_X  , RT_X  , RT_X  , N, IS_I, N, N, N, N, N, M_X  , MT_X , 0.U, N, N, N, N, Y, Y, Y, CSR.I),
+   SRET    -> List(Y, N, X, uopERET  ,IQT_INT, FU_CSR , RT_X  , RT_X  , RT_X  , N, IS_I, N, N, N, N, N, M_X  , MT_X , 0.U, N, N, N, N, N, Y, Y, CSR.I),
+   MRET    -> List(Y, N, X, uopERET  ,IQT_INT, FU_CSR , RT_X  , RT_X  , RT_X  , N, IS_I, N, N, N, N, N, M_X  , MT_X , 0.U, N, N, N, N, N, Y, Y, CSR.I),
+   DRET    -> List(Y, N, X, uopERET  ,IQT_INT, FU_CSR , RT_X  , RT_X  , RT_X  , N, IS_I, N, N, N, N, N, M_X  , MT_X , 0.U, N, N, N, N, N, Y, Y, CSR.I),
 
-   WFI     -> List(Y, N, X, uopSYSTEM,IQT_INT, FU_CSR , RT_X  , RT_X  , RT_X  , N, IS_X, N, N, N, N, N, M_X  , MT_X , 0.U, N, N, N, N, N, Y, Y, CSR.I),
+   WFI     -> List(Y, N, X, uopWFI   ,IQT_INT, FU_CSR , RT_X  , RT_X  , RT_X  , N, IS_X, N, N, N, N, N, M_X  , MT_X , 0.U, N, N, N, N, N, Y, Y, CSR.I),
 
    FENCE_I -> List(Y, N, X, uopNOP  , IQT_INT, FU_X   , RT_X  , RT_X  , RT_X  , N, IS_X, N, N, N, N, Y, M_X  , MT_X , 0.U, N, N, N, N, N, Y, Y, CSR.N),
    FENCE   -> List(Y, N, X, uopFENCE, IQT_INT, FU_MEM , RT_X  , RT_X  , RT_X  , N, IS_X, N, Y, N, Y, N, M_X  , MT_X , 0.U, N, N, N, N, N, Y, Y, CSR.N), // TODO PERF make fence higher performance
@@ -258,6 +275,9 @@ object XDecode extends DecodeConstants
    )
 }
 
+/**
+ * FP Decode constants
+ */
 object FDecode extends DecodeConstants
 {
   val table: Array[(BitPat, List[BitPat])] = Array(
@@ -349,6 +369,9 @@ object FDecode extends DecodeConstants
    )
 }
 
+/**
+ * FP Divide SquareRoot Constants
+ */
 object FDivSqrtDecode extends DecodeConstants
 {
   val table: Array[(BitPat, List[BitPat])] = Array(
@@ -370,6 +393,9 @@ object FDivSqrtDecode extends DecodeConstants
 }
 //scalastyle:on
 
+/**
+ * IO bundle for the Decode unit
+ */
 class DecodeUnitIo(implicit p: Parameters) extends BoomBundle()(p)
 {
    val enq = new Bundle { val uop = Input(new MicroOp()) }
@@ -383,7 +409,9 @@ class DecodeUnitIo(implicit p: Parameters) extends BoomBundle()(p)
 
 }
 
-// Takes in a single instruction, generates a MicroOp.
+/**
+ * Decode unit that takes in a single instruction and generates a MicroOp.
+ */
 class DecodeUnit(implicit p: Parameters) extends BoomModule()(p)
 {
    val io = IO(new DecodeUnitIo)
@@ -403,7 +431,6 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule()(p)
 
    val cs = Wire(new CtrlSigs()).decode(inst, decode_table)
 
-
    // Exception Handling
    io.csr_decode.csr := inst(31,20)
     val csr_en = cs.csr_cmd.isOneOf(CSR.S, CSR.C, CSR.W)
@@ -412,7 +439,7 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule()(p)
     val sfence = cs.uopc === uopSFENCE
 
    val cs_legal = cs.legal
-//   dontTOuch(cs_legal)
+//   dontTouch(cs_legal)
 
    val id_illegal_insn = !cs_legal ||
       cs.fp_val && io.csr_decode.fp_illegal || // TODO check for illegal rm mode: (io.fpu.illegal_rm)
@@ -423,7 +450,6 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule()(p)
      ((sfence || system_insn) && io.csr_decode.system_illegal)
 
 //     cs.div && !csr.io.status.isa('m'-'a') || TODO check for illegal div instructions
-
 
    def checkExceptions(x: Seq[(Bool, UInt)]) =
       (x.map(_._1).reduce(_||_), PriorityMux(x))
@@ -443,6 +469,10 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule()(p)
 
    uop.uopc       := cs.uopc
    uop.iqtype     := cs.iqtype
+   if (usingUnifiedMemIntIQs)
+   {
+      when (cs.iqtype === IQT_MEM) { uop.iqtype := IQT_INT }
+   }
    uop.fu_code    := cs.fu_code
 
    // x-registers placed in 0-31, f-registers placed in 32-63.
@@ -497,31 +527,31 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule()(p)
    //-------------------------------------------------------------
 
    io.deq.uop := uop
-
-   //-------------------------------------------------------------
-
 }
 
+/**
+ * Smaller Decode unit for the Frontend to decode different
+ * branches.
+ * Accepts EXPANDED RVC instructions
+ */
 
-class BranchDecode(implicit p: Parameters) extends Module
+class BranchDecode(implicit p: Parameters) extends BoomModule
 {
    val io = IO(new Bundle
    {
       val inst    = Input(UInt(32.W))
+      val pc      = Input(UInt(vaddrBitsExtended.W))
       val is_br   = Output(Bool())
       val is_jal  = Output(Bool())
       val is_jalr = Output(Bool())
+      val is_ret  = Output(Bool())
+      val is_call = Output(Bool())
+      val target = Output(UInt(vaddrBitsExtended.W))
       val cfi_type = Output(UInt(CfiType.SZ.W))
    })
 
-
-   val rvc_exp = Module(new RVCExpander)
-   rvc_exp.io.in := io.inst
-
    val bpd_csignals =
-      freechips.rocketchip.rocket.DecodeLogic(Mux(rvc_exp.io.rvc,
-         rvc_exp.io.out.bits,
-         io.inst),
+      freechips.rocketchip.rocket.DecodeLogic(io.inst,
                   List[BitPat](N, N, N, IS_X),
 ////                      //   is br?
 ////                      //   |  is jal?
@@ -544,6 +574,11 @@ class BranchDecode(implicit p: Parameters) extends Module
    io.is_br   := cs_is_br
    io.is_jal  := cs_is_jal
    io.is_jalr := cs_is_jalr
+   io.is_call := (cs_is_jal || cs_is_jalr) && GetRd(io.inst) === RA
+   io.is_ret  := cs_is_jalr && GetRs1(io.inst) === BitPat("b00?01")
+
+   io.target := Mux(cs_is_br, ComputeBranchTarget(io.pc, io.inst, xLen),
+                              ComputeJALTarget(io.pc, io.inst, xLen))
    io.cfi_type :=
       Mux(cs_is_jalr,
           CfiType.jalr,
@@ -554,16 +589,21 @@ class BranchDecode(implicit p: Parameters) extends Module
           CfiType.none)))
 }
 
-
-// track the current "branch mask", and give out the branch mask to each micro-op in Decode
-// (each micro-op in the machine has a branch mask which says which branches it
-// is being speculated under).
-
+/**
+ * IO bundle for getting the branch mask
+ */
 class DebugBranchMaskGenerationLogicIO(implicit p: Parameters) extends BoomBundle()(p)
 {
    val branch_mask = UInt(MAX_BR_COUNT.W)
 }
 
+/**
+ * Track the current "branch mask", and give out the branch mask to each micro-op in Decode
+ * (each micro-op in the machine has a branch mask which says which branches it
+ * is being speculated under).
+ *
+ * @param pl_width pipeline width for the processor
+ */
 class BranchMaskGenerationLogic(val pl_width: Int)(implicit p: Parameters) extends BoomModule()(p)
 {
    val io = IO(new Bundle
@@ -648,6 +688,4 @@ class BranchMaskGenerationLogic(val pl_width: Int)(implicit p: Parameters) exten
    }
 
    io.debug.branch_mask := branch_mask
-
 }
-

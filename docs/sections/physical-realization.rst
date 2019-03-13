@@ -25,19 +25,19 @@ be register-retimed**.
 .. code-block:: scala
 
     val mul_result = lhs.toSInt * rhs.toSInt
-                                                                                   
-    val mul_output_mux = MuxCase(                                                  
-       UInt(0, 64), Array(                                                         
-          FN(DW_64, FN_MUL)    -> mul_result(63,0),                                
-          FN(DW_64, FN_MULH)   -> mul_result(127,64),                              
-          FN(DW_64, FN_MULHU)  -> mul_result(127,64),                              
-          FN(DW_64, FN_MULHSU) -> mul_result(127,64),                              
-          FN(DW_32, FN_MUL)    -> Cat(Fill(32, mul_result(31)), mul_result(31,0)), 
+
+    val mul_output_mux = MuxCase(
+       UInt(0, 64), Array(
+          FN(DW_64, FN_MUL)    -> mul_result(63,0),
+          FN(DW_64, FN_MULH)   -> mul_result(127,64),
+          FN(DW_64, FN_MULHU)  -> mul_result(127,64),
+          FN(DW_64, FN_MULHSU) -> mul_result(127,64),
+          FN(DW_32, FN_MUL)    -> Cat(Fill(32, mul_result(31)), mul_result(31,0)),
           FN(DW_32, FN_MULH)   -> Cat(Fill(32, mul_result(63)), mul_result(63,32)),
           FN(DW_32, FN_MULHU)  -> Cat(Fill(32, mul_result(63)), mul_result(63,32)),
-          FN(DW_32, FN_MULHSU) -> Cat(Fill(32, mul_result(63)), mul_result(63,32)) 
-    ))                                                                             
-                                                                                   
+          FN(DW_32, FN_MULHSU) -> Cat(Fill(32, mul_result(63)), mul_result(63,32))
+    ))
+
     io.out := ShiftRegister(mul_output_mux, imul_stages, io.valid)
 
 Pipelining Configuration Options
@@ -50,10 +50,10 @@ implementor trade off CPI performance for cycle-time.
 EnableFetchBufferFlowThrough
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-The front-end fetches instructions and places them into a *fetch
-buffer*. The back-end pulls instructions out of the fetch buffer and
-then decodes, renames, and dispatches the instructions into the *issue
-window*. This fetch buffer can be optionally set to be a *flow-through*
+The Front-end fetches instructions and places them into a *Fetch
+Buffer*. The Back-end pulls instructions out of the Fetch Buffer and
+then decodes, renames, and dispatches the instructions into the *Issue
+Queue*. This Fetch Buffer can be optionally set to be a *flow-through*
 queue – instructions enqueued into the buffer can be immediately
 dequeued on the other side on the same clock cycle. Turning this option
 **off** forces all instructions to spend at least one cycle in the queue
@@ -63,7 +63,7 @@ EnableBrResolutionRegister
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 The branch unit resolves branches, detects mispredictions, fans out the
-branch kill signal to *all* inflight micro-ops, redirects the PC select
+branch kill signal to *all* inflight Micro-Ops, redirects the PC select
 stage to begin fetching down the correct path, and sends snapshot
 information to the branch predictor to reset its state properly so it
 can begin predicting down the correct path. Turning this option **on**

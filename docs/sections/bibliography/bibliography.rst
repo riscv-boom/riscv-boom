@@ -1,5 +1,5 @@
 Bibliography
 ============
 
-.. bibliography:: /sections/Bibliography/bibliography.bib
+.. bibliography:: /sections/bibliography/bibliography.bib
     :all:

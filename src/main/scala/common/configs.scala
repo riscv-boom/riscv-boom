@@ -1,6 +1,6 @@
 //******************************************************************************
 // Copyright (c) 2015 - 2018, The Regents of the University of California (Regents).
-// All Rights Reserved. See LICENSE for license details.
+// All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
 // Author: Christopher Celio
 //------------------------------------------------------------------------------
@@ -8,18 +8,21 @@
 package boom.common
 
 import chisel3._
+
 import freechips.rocketchip.config.{Parameters, Config}
 import freechips.rocketchip.subsystem.{SystemBusKey}
 import freechips.rocketchip.devices.tilelink.{BootROMParams}
 import freechips.rocketchip.rocket._
 import freechips.rocketchip.tile._
+
 import boom.bpu._
 import boom.exu._
 import boom.lsu._
 import boom.system.BoomTilesKey
 
-
-// Try to be a reasonable BOOM design point.
+/**
+ * Try to be a reasonable BOOM design point.
+ */
 class DefaultBoomConfig extends Config((site, here, up) => {
 
    // Top-Level
@@ -40,7 +43,8 @@ class DefaultBoomConfig extends Config((site, here, up) => {
             IssueParams(issueWidth=1, numEntries=20, iqType=IQT_FP.litValue)),
          numIntPhysRegisters = 100,
          numFpPhysRegisters = 64,
-         numLsuEntries = 16,
+         numLdqEntries = 32,
+         numStqEntries = 18,
          maxBrCount = 8,
          btb = BoomBTBParameters(nSets=512, nWays=4, nRAS=8, tagSz=13),
          enableBranchPredictor = true,
@@ -55,6 +59,9 @@ class DefaultBoomConfig extends Config((site, here, up) => {
    case SystemBusKey => up(SystemBusKey, site).copy(beatBytes = 16)
 })
 
+/**
+ * Enables RV32 version of the core
+ */
 class WithBoomRV32 extends Config((site, here, up) => {
   case XLen => 32
   case BoomTilesKey => up(BoomTilesKey, site) map { r =>
@@ -64,23 +71,58 @@ class WithBoomRV32 extends Config((site, here, up) => {
   }
 })
 
+/**
+ * Combines the Memory and Integer Issue Queues. Similar to BOOM v1.
+ */
+class WithUnifiedMemIntIQs extends Config((site, here, up) => {
+  case BoomTilesKey => up(BoomTilesKey, site) map { r =>
+    r.copy(core = r.core.copy(
+       issueParams = r.core.issueParams.filter(_.iqType != IQT_MEM.litValue)
+    ))
+  }
+})
 
+/**
+ * Remove FPU
+ */
 class WithoutBoomFPU extends Config((site, here, up) => {
-   case BoomTilesKey => up(BoomTilesKey, site) map { r => r.copy(core = r.core.copy(
-      fpu = None))
+   case BoomTilesKey => up(BoomTilesKey, site) map { r =>
+      r.copy(core = r.core.copy(
+         issueParams = r.core.issueParams.filter(_.iqType != IQT_FP.litValue),
+         fpu = None))
    }
 })
 
+/**
+ * Remove Fetch Monitor (should not be synthesized (although it can be))
+ */
+class WithoutFetchMonitor extends Config((site, here, up) => {
+  case BoomTilesKey => up(BoomTilesKey, site) map { r =>
+    r.copy(core = r.core.copy(
+      useFetchMonitor = false
+    ))
+  }
+})
+
+/**
+ * Customize the amount of perf. counters (HPMs) for the core
+ */
 class WithNPerfCounters(n: Int) extends Config((site, here, up) => {
    case BoomTilesKey => up(BoomTilesKey, site) map { r => r.copy(core = r.core.copy(
       nPerfCounters = n
    ))}
 })
 
+/**
+ * Enable tracing
+ */
 class WithTrace extends Config((site, here, up) => {
    case BoomTilesKey => up(BoomTilesKey, site) map { r => r.copy(trace = true) }
 })
 
+/**
+ * Enable RVC
+ */
 class WithRVC extends Config((site, here, up) => {
    case BoomTilesKey => up(BoomTilesKey, site) map {r => r.copy(
       core = r.core.copy(
@@ -88,7 +130,9 @@ class WithRVC extends Config((site, here, up) => {
          useCompressed = true))}
 })
 
-// Small BOOM! Try to be fast to compile and easier to debug.
+/**
+ * Small BOOM! Try to be fast to compile and easier to debug.
+ */
 class WithSmallBooms extends Config((site, here, up) => {
    case BoomTilesKey => up(BoomTilesKey, site) map { r =>r.copy(
       core = r.core.copy(
@@ -99,20 +143,22 @@ class WithSmallBooms extends Config((site, here, up) => {
             IssueParams(issueWidth=1, numEntries=4, iqType=IQT_MEM.litValue),
             IssueParams(issueWidth=1, numEntries=4, iqType=IQT_INT.litValue),
             IssueParams(issueWidth=1, numEntries=4, iqType=IQT_FP.litValue)),
-         numIntPhysRegisters = 56,
+         numIntPhysRegisters = 48,
          numFpPhysRegisters = 48,
-         numLsuEntries = 8,
+         numLdqEntries=4,
+         numStqEntries=4,
          maxBrCount = 4,
-         tage = Some(TageParameters(enabled=false)),
-         bpdBaseOnly = Some(BaseOnlyParameters(enabled=true)),
+         gshare = Some(GShareParameters(enabled=true, history_length=11, num_sets=2048)),
          nPerfCounters = 2),
-      icache = Some(r.icache.get.copy(fetchBytes=2*4))
+      dcache = Some(DCacheParams(rowBits = site(SystemBusKey).beatBits, nSets=64, nWays=4, nMSHRs=2, nTLBEntries=8)),
+      icache = Some(ICacheParams(rowBits = site(SystemBusKey).beatBits, nSets=64, nWays=4, fetchBytes=2*4))
       )}
    case SystemBusKey => up(SystemBusKey, site).copy(beatBytes = 8)
 })
 
-
-// Try to match the Cortex-A9.
+/**
+ * Intermediate BOOM. Try to match the Cortex-A9.
+ */
 class WithMediumBooms extends Config((site, here, up) => {
    case BoomTilesKey => up(BoomTilesKey, site) map { r =>r.copy(
       core = r.core.copy(
@@ -125,7 +171,8 @@ class WithMediumBooms extends Config((site, here, up) => {
             IssueParams(issueWidth=1, numEntries=10, iqType=IQT_FP.litValue)),
          numIntPhysRegisters = 70,
          numFpPhysRegisters = 64,
-         numLsuEntries = 16,
+         numLdqEntries = 16,
+         numStqEntries = 9,
          maxBrCount = 8,
          regreadLatency = 1,
          renameLatency = 2,
@@ -140,8 +187,9 @@ class WithMediumBooms extends Config((site, here, up) => {
    case SystemBusKey => up(SystemBusKey, site).copy(beatBytes = 8)
 })
 
-
-// Try to match the Cortex-A15. Don't expect good QoR (yet).
+/**
+ * Try to match the Cortex-A15. Don't expect good QoR (yet).
+ */
 class WithMegaBooms extends Config((site, here, up) => {
    case BoomTilesKey => up(BoomTilesKey, site) map { r =>r.copy(
       core = r.core.copy(
@@ -154,7 +202,8 @@ class WithMegaBooms extends Config((site, here, up) => {
             IssueParams(issueWidth=1, numEntries=20, iqType=IQT_FP.litValue)),
          numIntPhysRegisters = 128,
          numFpPhysRegisters = 128,
-         numLsuEntries = 32,
+         numLdqEntries = 32,
+         numStqEntries = 18,
          maxBrCount = 16,
          btb = BoomBTBParameters(nSets=512, nWays=4, nRAS=16, tagSz=20),
          tage = Some(TageParameters())),
@@ -165,4 +214,3 @@ class WithMegaBooms extends Config((site, here, up) => {
    // Set TL network to 128bits wide
    case SystemBusKey => up(SystemBusKey, site).copy(beatBytes = 16)
 })
-

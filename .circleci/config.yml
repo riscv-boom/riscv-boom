@@ -102,7 +102,7 @@ jobs:
                 paths:
                     - "/home/riscvuser/boom-template"
 
-    prepare-smallrv32boomconfig:
+    prepare-smallrv32unifiedboomconfig:
         docker:
             - image: riscvboom/riscvboom-images:0.0.5
         environment:
@@ -128,12 +128,12 @@ jobs:
                     - boom-template-with-verilator-v5-{{ checksum "../boom-template.hash" }}
 
             - run:
-                name: Building SmallRV32BoomConfig using Verilator
-                command: .circleci/do-rtl-build.sh SmallRV32BoomConfig
+                name: Building SmallRV32UnifiedBoomConfig using Verilator
+                command: .circleci/do-rtl-build.sh SmallRV32UnifiedBoomConfig
                 no_output_timeout: 120m
 
             - save_cache:
-                key: boom-template-smallrv32boomconfig-{{ .Branch }}-{{ .Revision }}
+                key: boom-template-smallrv32unifiedboomconfig-{{ .Branch }}-{{ .Revision }}
                 paths:
                     - "/home/riscvuser/boom-template"
 
@@ -381,7 +381,7 @@ jobs:
                 no_output_timeout: 30m
 
     # No benchmark tests because those are rv64gc
-    smallrv32boomconfig-run-assembly-tests:
+    smallrv32unifiedboomconfig-run-assembly-tests:
         docker:
             - image: riscvboom/riscvboom-images:0.0.5
         environment:
@@ -399,10 +399,10 @@ jobs:
                     - riscv-tools-installed-v3-{{ checksum "../rocket-chip.hash" }}
             - restore_cache:
                 keys:
-                    - boom-template-smallrv32boomconfig-{{ .Branch }}-{{ .Revision }}
+                    - boom-template-smallrv32unifiedboomconfig-{{ .Branch }}-{{ .Revision }}
             - run:
-                name: Run SmallRV32BoomConfig assembly tests
-                command: make run-asm-tests -C ../boom-template/verisim CONFIG=SmallRV32BoomConfig
+                name: Run SmallRV32UnifiedBoomConfig assembly tests
+                command: make run-asm-tests -C ../boom-template/verisim CONFIG=SmallRV32UnifiedBoomConfig
                 no_output_timeout: 300m
 
     smallboomconfig-run-benchmark-tests:
@@ -653,10 +653,10 @@ workflows:
                     - install-riscv-tools
 
             # Prepare the verilator builds
-#            - prepare-boomconfig:
-#                requires:
-#                    - prepare-build-environment
-            - prepare-smallrv32boomconfig:
+            - prepare-boomconfig:
+                requires:
+                    - prepare-build-environment
+            - prepare-smallrv32unifiedboomconfig:
                 requires:
                     - prepare-build-environment
             - prepare-smallboomconfig:
@@ -665,27 +665,27 @@ workflows:
             - prepare-mediumboomconfig:
                 requires:
                     - prepare-build-environment
-#            - prepare-megaboomconfig:
-#                requires:
-#                    - prepare-build-environment
+            #- prepare-megaboomconfig:
+            #    requires:
+            #        - prepare-build-environment
 
             # Run the respective tests
 
             # Run the BoomConfig tests
-#            - boomconfig-run-csmith-tests:
-#                requires:
-#                    - prepare-boomconfig
-#            - boomconfig-run-benchmark-tests:
-#                requires:
-#                    - prepare-boomconfig
-#            - boomconfig-run-assembly-tests:
-#                requires:
-#                    - prepare-boomconfig
-
-            # Run the SmallRV32BoomConfig tests
-            - smallrv32boomconfig-run-assembly-tests:
+            - boomconfig-run-csmith-tests:
                 requires:
-                    - prepare-smallrv32boomconfig
+                    - prepare-boomconfig
+            - boomconfig-run-benchmark-tests:
+                requires:
+                    - prepare-boomconfig
+            - boomconfig-run-assembly-tests:
+                requires:
+                    - prepare-boomconfig
+
+            # Run the SmallRV32UnifiedBoomConfig tests
+            - smallrv32unifiedboomconfig-run-assembly-tests:
+                requires:
+                    - prepare-smallrv32unifiedboomconfig
 
             # Run the SmallBoomConfig tests
             - smallboomconfig-run-csmith-tests:
@@ -709,13 +709,13 @@ workflows:
                 requires:
                     - prepare-mediumboomconfig
 
-             # Run the MegaBoomConfig tests
-#             - megaboomconfig-run-csmith-tests:
-#                 requires:
-#                     - prepare-megaboomconfig
-#             - megaboomconfig-run-benchmark-tests:
-#                 requires:
-#                     - prepare-megaboomconfig
-#             - megaboomconfig-run-assembly-tests:
-#                 requires:
-#                     - prepare-megaboomconfig
+            # Run the MegaBoomConfig tests
+            #- megaboomconfig-run-csmith-tests:
+            #    requires:
+            #        - prepare-megaboomconfig
+            #- megaboomconfig-run-benchmark-tests:
+            #    requires:
+            #        - prepare-megaboomconfig
+            #- megaboomconfig-run-assembly-tests:
+            #    requires:
+            #        - prepare-megaboomconfig

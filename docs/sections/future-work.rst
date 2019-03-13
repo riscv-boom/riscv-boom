@@ -12,7 +12,7 @@ The Rocket in-order processor comes with a ROCC interface that
 facilitates communication with co-processor/accelerators. Such
 accelerators include crypto units (e.g., SHA3) and vector processing
 units (e.g., the open-source Hwacha vector-thread
-unit:raw-latex:`\cite{hwacha}`).
+unit).
 
 The ROCC interface accepts co-processor commands emitted by *committed*
 instructions run on the “Control Processor" (e.g., a scalar Rocket

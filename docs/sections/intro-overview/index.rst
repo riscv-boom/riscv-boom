@@ -1,5 +1,5 @@
 Introduction and Overview
-================================
+=========================
 
 The goal of this document is to describe the design and implementation
 of the Berkeley Out–of–Order Machine (BOOM).
@@ -15,9 +15,9 @@ The source code to BOOM can be found at https://github.com/riscv-boom/riscv-boom
     :maxdepth: 2
     :caption: Introduction and Overview:
 
-    BOOM-Pipeline
-    RISCV-ISA
-    Chisel-HCL
-    Quick-start
-    BOOM-Repository
-    Rocket-Chip
+    boom-pipeline
+    riscv-isa
+    chisel
+    quick-start
+    boom-repository
+    rocket-chip

@@ -1,16 +1,15 @@
 //******************************************************************************
 // Copyright (c) 2018 - 2018, The Regents of the University of California (Regents).
-// All Rights Reserved. See LICENSE for license details.
+// All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
 // Author: Christopher Celio
 //------------------------------------------------------------------------------
 
-// See LICENSE.SiFive for license details.
-// See LICENSE.Berkeley for license details.
-
 package boom.system
 
-// Any BOOM-specific tests can go here to override default rocket-chip behavior.
+/**
+ * Any BOOM-specific tests can go here to override default rocket-chip behavior.
+ */
 object BoomTestSuites
 {
   import freechips.rocketchip.system.DefaultTestSuites._

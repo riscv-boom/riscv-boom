@@ -10,15 +10,15 @@ The Load/Store Unit (LSU)
 The Load/Store Unit is responsible for deciding when to fire memory
 operations to the memory system. There are three queues: the Load
 Address Queue (LAQ), the Store Address Queue (SAQ), and the Store Data
-Queue (SDQ). Load instructions generate a “uopLD" micro-op. When issued,
+Queue (SDQ). Load instructions generate a “uopLD" Micro-Op. When issued,
 “uopLD" calculates the load address and places its result in the LAQ.
-Store instructions (may) generate *two* micro-ops, “uopSTA" (Store
+Store instructions (may) generate *two* Micro-Ops, “uopSTA" (Store
 Address Generation) and “uopSTD" (Store Data Generation). The STA
-micro-op calculates the store address and places its result in the SAQ
-queue. The STD micro-op moves the store data from the register file to
-the SDQ. Each of these micro-ops will issue out of the *Issue Window* as
-soon their operands are ready. See Section [sec:storeuops] for more
-details on the store micro-op specifics.
+Micro-Op calculates the store address and places its result in the SAQ
+queue. The STD Micro-Op moves the store data from the register file to
+the SDQ. Each of these Micro-Ops will issue out of the *Issue Window* as
+soon their operands are ready. See :ref:`Store Micro-Ops` for more
+details on the store Micro-Op specifics.
 
 Store Instructions
 ------------------
@@ -31,15 +31,15 @@ committed, the corresponding entry in the Store Queue is marked as
 committed. The store is then free to be fired to the memory system at
 its convenience. Stores are fired to the memory in program order.
 
-Store Micro-ops
+Store Micro-Ops
 ~~~~~~~~~~~~~~~
 
 Stores are inserted into the issue window as a single instruction (as
 opposed to being broken up into separate addr-gen and data-gen
-micro-ops). This prevents wasteful usage of the expensive issue window
+Micro-Ops). This prevents wasteful usage of the expensive issue window
 entries and extra contention on the issue port to the LSU. A store in
 which both operands are ready can be issued to the LSU as a single
-micro-op which provides both the address and the data to the LSU. While
+Micro-Op which provides both the address and the data to the LSU. While
 this requires store instructions to have access to two register file
 read ports, this is motivated by a desire to not cut performance in half
 on store-heavy code. Sequences involving stores to the stack should
@@ -48,7 +48,7 @@ operate at IPC=1!
 However, it is common for store addresses to be known well in advance of
 the store data. Store addresses should be moved to the SAQ as soon as
 possible to allow later loads to avoid any memory ordering failures.
-Thus, the issue window will emit uopSTA or uopSTD micro-ops as required,
+Thus, the issue window will emit uopSTA or uopSTD Micro-Ops as required,
 but retain the remaining half of the store until the second operand is
 ready.
 
@@ -109,18 +109,18 @@ Memory Ordering Failures
 ------------------------
 
 The Load/Store Unit has to be careful regarding
-store\ :math:`\rightarrow`\ load dependences. For the best performance,
+store -> load dependences. For the best performance,
 loads need to be fired to memory as soon as possible.
 
-    sw x1 :math:`\rightarrow` 0(x2)
+    sw x1 -> 0(x2)
 
-    ld x3 :math:`\leftarrow` 0(x4)
+    ld x3 <- 0(x4)
 
 However, if x2 and x4 reference the same memory address, then the load
 in our example *depends* on the earlier store. If the load issues to
 memory before the store has been issued, the load will read the wrong
 value from memory, and a *memory ordering failure* has occurred. On an
-ordering failure, the pipeline must be flushed and the rename map tables
+ordering failure, the pipeline must be flushed and the Rename Map Tables
 reset. This is an incredibly expensive operation.
 
 To discover ordering failures, when a store commits, it checks the

@@ -1,25 +1,29 @@
 //******************************************************************************
 // Copyright (c) 2011 - 2018, The Regents of the University of California (Regents).
-// All Rights Reserved. See LICENSE for license details.
+// All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
 // Author: Christopher Celio
 //------------------------------------------------------------------------------
 
 //------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // RISCV Processor Constants
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
 
-package boom.common
-package constants
-{
+package boom.common.constants
 
 import chisel3._
 import chisel3.util._
+
 import freechips.rocketchip.config.Parameters
-
 import freechips.rocketchip.util.Str
+import freechips.rocketchip.rocket.RVCExpander
 
+/**
+ * Mixin indicating the debug flags that can be set for viewing different
+ * debug printf's
+ */
 trait BOOMDebugConstants
 {
    val DEBUG_PRINTF        = false // use the Chisel printf functionality
@@ -42,12 +46,18 @@ trait BOOMDebugConstants
    if (O3PIPEVIEW_PRINTF) require (!DEBUG_PRINTF && !COMMIT_LOG_PRINTF)
 }
 
+/**
+ * Mixin for branch prediction constants
+ */
 trait BrPredConstants
 {
    val NOT_TAKEN = false.B
    val TAKEN = true.B
 }
 
+/**
+ * Mixin for issue queue types
+ */
 trait IQType
 {
    val IQT_SZ  = 2
@@ -56,6 +66,9 @@ trait IQType
    val IQT_FP  = 2.U(IQT_SZ.W)
 }
 
+/**
+ * Mixin for scalar operation constants
+ */
 trait ScalarOpConstants
 {
    val X = BitPat("b?")
@@ -64,7 +77,6 @@ trait ScalarOpConstants
 
    //************************************
    // Extra Constants
-
 
    //************************************
    // Control Signals
@@ -122,7 +134,6 @@ trait ScalarOpConstants
    val IS_U   = 3.U(3.W)  // U-Type  (LUI/AUIPC)
    val IS_J   = 4.U(3.W)  // UJ-Type (J/JAL)
    val IS_X   = BitPat("b???")
-
 
    // Decode Stage Control Signals
    val RT_FIX   = 0.U(2.W)
@@ -259,8 +270,9 @@ trait ScalarOpConstants
    val uopFSQRT_S   = 103.U(UOPC_SZ.W)
    val uopFSQRT_D   = 104.U(UOPC_SZ.W)
 
-   val uopSYSTEM    = 105.U(UOPC_SZ.W) // pass uop down the CSR pipeline and let it handle it
-   val uopSFENCE    = 106.U(UOPC_SZ.W)
+   val uopWFI       = 105.U(UOPC_SZ.W) // pass uop down the CSR pipeline
+   val uopERET      = 106.U(UOPC_SZ.W) // pass uop down the CSR pipeline, also is ERET
+   val uopSFENCE    = 107.U(UOPC_SZ.W)
 
    // The Bubble Instruction (Machine generated NOP)
    // Insert (XOR x0,x0,x0) which is different from software compiler
@@ -269,10 +281,9 @@ trait ScalarOpConstants
    // between software NOPs and machine-generated Bubbles in the pipeline.
    val BUBBLE  = (0x4033).U(32.W)
 
-
-   def NullMicroOp()(implicit p: Parameters): MicroOp =
+   def NullMicroOp()(implicit p: Parameters): boom.common.MicroOp =
    {
-      val uop = Wire(new MicroOp()(p))
+      val uop = Wire(new boom.common.MicroOp()(p))
       uop            := DontCare // Overridden in the following lines
       uop.uopc       := uopNOP // maybe not required, but helps on asserts that try to catch spurious behavior
       uop.bypassable := false.B
@@ -285,7 +296,7 @@ trait ScalarOpConstants
       // TODO these unnecessary? used in regread stage?
       uop.is_br_or_jmp := false.B
 
-      val cs = Wire(new CtrlSignals())
+      val cs = Wire(new boom.common.CtrlSignals())
       cs             := DontCare // Overridden in the following lines
       cs.br_type     := BR_N
       cs.rf_wen      := false.B
@@ -297,9 +308,11 @@ trait ScalarOpConstants
       uop.ctrl := cs
       uop
    }
-
 }
 
+/**
+ * Mixin for RISCV constants
+ */
 trait RISCVConstants
 {
    // abstract out instruction decode magic numbers
@@ -329,61 +342,52 @@ trait RISCVConstants
 
    val jal_opc = (0x6f).U
    val jalr_opc = (0x67).U
+
    def GetUop(inst: UInt): UInt = inst(6,0)
    def GetRd (inst: UInt): UInt = inst(RD_MSB,RD_LSB)
    def GetRs1(inst: UInt): UInt = inst(RS1_MSB,RS1_LSB)
-   def IsCall(inst: UInt)(implicit p: Parameters): Bool =
-   {
-      val rvc_exp = Module(new freechips.rocketchip.rocket.RVCExpander)
-      rvc_exp.io.in := inst
-      val e_inst = Mux(rvc_exp.io.rvc, rvc_exp.io.out.bits, inst)
 
-      (e_inst === freechips.rocketchip.rocket.Instructions.JAL ||
-       e_inst === freechips.rocketchip.rocket.Instructions.JALR) && GetRd(e_inst) === RA
-   }
-   def IsReturn(inst: UInt)(implicit p: Parameters): Bool =
+   def ExpandRVC(inst: UInt)(implicit p: Parameters): UInt =
    {
-      val rvc_exp = Module(new freechips.rocketchip.rocket.RVCExpander)
+      val rvc_exp = Module(new RVCExpander)
       rvc_exp.io.in := inst
-      val e_inst = Mux(rvc_exp.io.rvc, rvc_exp.io.out.bits, inst)
-      GetUop(e_inst) === jalr_opc && GetRs1(e_inst) === BitPat("b00?01")
+      Mux(rvc_exp.io.rvc, rvc_exp.io.out.bits, inst)
    }
 
+   // Note: Accepts only EXPANDED rvc instructions
    def ComputeBranchTarget(pc: UInt, inst: UInt, xlen: Int)(implicit p: Parameters): UInt =
    {
-      val rvc_exp = Module(new freechips.rocketchip.rocket.RVCExpander)
-      rvc_exp.io.in := inst
-      val e_inst = Mux(rvc_exp.io.rvc, rvc_exp.io.out.bits, inst)
-      val b_imm32 = Cat(Fill(20,e_inst(31)), e_inst(7), e_inst(30,25), e_inst(11,8), 0.U(1.W))
+      val b_imm32 = Cat(Fill(20,inst(31)), inst(7), inst(30,25), inst(11,8), 0.U(1.W))
       ((pc.asSInt + b_imm32.asSInt).asSInt & (-2).S).asUInt
    }
+
+   // Note: Accepts only EXPANDED rvc instructions
    def ComputeJALTarget(pc: UInt, inst: UInt, xlen: Int)(implicit p: Parameters): UInt =
    {
-      val rvc_exp = Module(new freechips.rocketchip.rocket.RVCExpander)
-      rvc_exp.io.in := inst
-      val e_inst = Mux(rvc_exp.io.rvc, rvc_exp.io.out.bits, inst)
-      val j_imm32 = Cat(Fill(12,e_inst(31)), e_inst(19,12), e_inst(20), e_inst(30,25), e_inst(24,21), 0.U(1.W))
+      val j_imm32 = Cat(Fill(12,inst(31)), inst(19,12), inst(20), inst(30,25), inst(24,21), 0.U(1.W))
       ((pc.asSInt + j_imm32.asSInt).asSInt & (-2).S).asUInt
    }
 
+   // Note: Accepts only EXPANDED rvc instructions
    def GetCfiType(inst: UInt)(implicit p: Parameters): UInt =
    {
       val bdecode = Module(new boom.exu.BranchDecode)
       bdecode.io.inst := inst
+      bdecode.io.pc := 0.U
       bdecode.io.cfi_type
    }
-
-
 }
 
+/**
+ * Mixin for exception cause constants
+ */
 trait ExcCauseConstants
 {
    // a memory disambigious misspeculation occurred
    val MINI_EXCEPTION_MEM_ORDERING = 16.U
    // an instruction needs to be replayed (e.g., I$ asks for a replay)
    val MINI_EXCEPTION_REPLAY = 17.U
+
    require (!freechips.rocketchip.rocket.Causes.all.contains(16))
    require (!freechips.rocketchip.rocket.Causes.all.contains(17))
-}
-
 }
