@@ -216,8 +216,8 @@ class WithMegaBooms extends Config((site, here, up) => {
          btb = BoomBTBParameters(btbsa=true, densebtb=false, nSets=512, nWays=4, nRAS=16, tagSz=20),
          bpdBaseOnly = None,
          gshare = None,
-         tage = Some(TageParameters())),
-         bpdRandom = None,
+         tage = Some(TageParameters()),
+         bpdRandom = None),
       dcache = Some(DCacheParams(rowBits = site(SystemBusKey).beatBytes*8,
                                  nSets=64, nWays=16, nMSHRs=8, nTLBEntries=32)),
       icache = Some(ICacheParams(fetchBytes = 8*4, rowBits = site(SystemBusKey).beatBytes*8, nSets=64, nWays=8))
