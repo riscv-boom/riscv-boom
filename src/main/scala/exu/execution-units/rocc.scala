@@ -112,7 +112,7 @@ class RoCCShim(implicit p: Parameters) extends BoomModule()(p)
    // Execute
    val head_rob_idx = roccq_uop(roccq_exe_head).rob_idx(ROB_ADDR_SZ-1, log2Ceil(decodeWidth))
    io.core.rocc.cmd.valid := false.B
-   when (roccq_op_val(roccq_exe_head) &&
+   when (roccq_op_val(roccq_exe_head) && io.core.rocc.cmd.ready &&
       (IsOlder(head_rob_idx, io.core.rob_pnr, io.core.rob_tail)))
    {
       io.core.rocc.cmd.valid         := true.B
@@ -125,6 +125,7 @@ class RoCCShim(implicit p: Parameters) extends BoomModule()(p)
    }
 
    // Handle responses
+   io.core.rocc.resp.ready := true.B
    when (roccq_head =/= roccq_exe_head && roccq_val(roccq_head))
    {
       val resp_rcvd = io.core.rocc.resp.valid
