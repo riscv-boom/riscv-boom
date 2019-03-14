@@ -531,14 +531,14 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
                         || rob.io.flush.valid
                         || dec_stall_next_inst
                         || (dec_uops(w).is_fencei && !lsu.io.lsu_fencei_rdy)
-                        || (dec_uops(w).is_rocc && dec_rocc_found)
+                        || (dec_uops(w).uopc === uopROCC && dec_rocc_found)
                         )) ||
                      dec_last_inst_was_stalled
 
       // stall the next instruction following me in the decode bundle?
       dec_last_inst_was_stalled = stall_me
       dec_stall_next_inst  = stall_me || (dec_valids(w) && dec_uops(w).is_unique)
-      dec_rocc_found = dec_rocc_found || (dec_valids(w) && dec_uops(w).is_rocc)
+      dec_rocc_found = dec_rocc_found || (dec_valids(w) && dec_uops(w).uopc === uopROCC)
 
       dec_will_fire(w) := dec_valids(w) && !stall_me && !io.ifu.clear_fetchbuffer
       dec_uops(w)      := decode_units(w).io.deq.uop

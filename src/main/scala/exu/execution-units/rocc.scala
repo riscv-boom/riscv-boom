@@ -78,7 +78,7 @@ class RoCCShim(implicit p: Parameters) extends BoomModule()(p)
    // Decode
    for (w <- 0 until decodeWidth)
    {
-      when (io.core.dec_rocc_vals(w) && io.core.dec_uops(w).is_rocc)
+      when (io.core.dec_rocc_vals(w) && io.core.dec_uops(w).uopc === uopROCC)
       {
          enq_val      := true.B
          enq_uop      := io.core.dec_uops(w)
@@ -109,17 +109,18 @@ class RoCCShim(implicit p: Parameters) extends BoomModule()(p)
    }
 
    // Execute
-   val head_rob_idx = roccq_uop(roccq_exe_head).rob_idx
-   when (roccq_val(roccq_exe_head) &&
-      (IsOlder(head_rob_idx >> log2Ceil(decodeWidth).U, io.core.rob_pnr, io.core.rob_tail)))
+   val head_rob_idx = roccq_uop(roccq_exe_head).rob_idx(ROB_ADDR_SZ-1, log2Ceil(decodeWidth))
+   io.core.rocc.cmd.valid := false.B
+   when (roccq_op_val(roccq_exe_head) &&
+      (IsOlder(head_rob_idx, io.core.rob_pnr, io.core.rob_tail)))
    {
-      io.core.rocc.cmd.valid       := true.B
-      io.core.rocc.cmd.bits.inst   := roccq_uop(roccq_exe_head).inst.asTypeOf(new RoCCInstruction)
-      io.core.rocc.cmd.bits.rs1    := roccq_rs1(roccq_exe_head)
-      io.core.rocc.cmd.bits.rs2    := roccq_rs2(roccq_exe_head)
-      io.core.rocc.cmd.bits.status := io.status
+      io.core.rocc.cmd.valid         := true.B
+      io.core.rocc.cmd.bits.inst     := roccq_uop(roccq_exe_head).inst.asTypeOf(new RoCCInstruction)
+      io.core.rocc.cmd.bits.rs1      := roccq_rs1(roccq_exe_head)
+      io.core.rocc.cmd.bits.rs2      := roccq_rs2(roccq_exe_head)
+      io.core.rocc.cmd.bits.status   := io.status
       roccq_executed(roccq_exe_head) := true.B
-      roccq_exe_head               := WrapInc(roccq_exe_head, NUM_ROCC_ENTRIES)
+      roccq_exe_head                 := WrapInc(roccq_exe_head, NUM_ROCC_ENTRIES)
    }
 
    // Handle responses
