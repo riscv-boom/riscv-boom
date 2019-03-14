@@ -216,8 +216,6 @@ class Rob(
 {
    val io = IO(new RobIo(width, num_wakeup_ports, num_fpu_ports))
 
-   val num_rob_rows = num_rob_entries / width
-
    require (num_rob_entries % width == 0)
 
    require (isPow2(width))
@@ -227,9 +225,9 @@ class Rob(
    val rob_state = RegInit(s_reset)
 
    //commit entries at the head, and unwind exceptions from the tail
-   val rob_head     = RegInit(0.U(log2Ceil(num_rob_rows).W))
-   val rob_tail     = RegInit(0.U(log2Ceil(num_rob_rows).W))
-   val rob_pnr      = RegInit(0.U(log2Ceil(num_rob_rows).W))
+   val rob_head     = RegInit(0.U(log2Ceil(NUM_ROB_ROWS).W))
+   val rob_tail     = RegInit(0.U(log2Ceil(NUM_ROB_ROWS).W))
+   val rob_pnr      = RegInit(0.U(log2Ceil(NUM_ROB_ROWS).W))
    val rob_pnr_idx  = rob_pnr << log2Ceil(width).U
    chisel3.experimental.dontTouch(rob_pnr)
    val rob_tail_idx = rob_tail << log2Ceil(width).U
@@ -288,12 +286,12 @@ class Rob(
       def MatchBank(bank_idx: UInt): Bool = (bank_idx === w.U)
 
       // one bank
-      val rob_val       = RegInit(VecInit(Seq.fill(num_rob_rows){false.B}))
-      val rob_bsy       = Mem(num_rob_rows, Bool())
-      val rob_safe      = Mem(num_rob_rows, Bool())
-      val rob_uop       = Reg(Vec(num_rob_rows, new MicroOp()))
-      val rob_exception = Mem(num_rob_rows, Bool())
-      val rob_fflags    = Mem(num_rob_rows, Bits(freechips.rocketchip.tile.FPConstants.FLAGS_SZ.W))
+      val rob_val       = RegInit(VecInit(Seq.fill(NUM_ROB_ROWS){false.B}))
+      val rob_bsy       = Mem(NUM_ROB_ROWS, Bool())
+      val rob_safe      = Mem(NUM_ROB_ROWS, Bool())
+      val rob_uop       = Reg(Vec(NUM_ROB_ROWS, new MicroOp()))
+      val rob_exception = Mem(NUM_ROB_ROWS, Bool())
+      val rob_fflags    = Mem(NUM_ROB_ROWS, Bits(freechips.rocketchip.tile.FPConstants.FLAGS_SZ.W))
 
       //-----------------------------------------------
       // Dispatch: Add Entry to ROB
@@ -447,7 +445,7 @@ class Rob(
       {
          when (RegNext(exception_thrown))
          {
-            for (i <- 0 until num_rob_rows)
+            for (i <- 0 until NUM_ROB_ROWS)
             {
                rob_val(i)      := false.B
                rob_bsy(i)      := false.B
@@ -458,7 +456,7 @@ class Rob(
 
       // -----------------------------------------------
       // Kill speculated entries on branch mispredict
-      for (i <- 0 until num_rob_rows)
+      for (i <- 0 until NUM_ROB_ROWS)
       {
          val br_mask = rob_uop(i).br_mask
          val entry_match = rob_val(i) && maskMatch(io.brinfo.mask, br_mask)
@@ -530,7 +528,7 @@ class Rob(
 
       if (DEBUG_PRINTF_ROB)
       {
-         for (i <- 0 until num_rob_rows)
+         for (i <- 0 until NUM_ROB_ROWS)
          {
             debug_entry(w + i*width).valid     := rob_val(i)
             debug_entry(w + i*width).busy      := rob_bsy(i.U)
@@ -730,9 +728,9 @@ class Rob(
 
    when (finished_committing_row)
    {
-      rob_head := WrapInc(rob_head, num_rob_rows)
+      rob_head := WrapInc(rob_head, NUM_ROB_ROWS)
    }
-   assert(!(rob_head === WrapInc(rob_pnr, num_rob_rows) && rob_pnr =/= rob_tail),
+   assert(!(rob_head === WrapInc(rob_pnr, NUM_ROB_ROWS) && rob_pnr =/= rob_tail),
       "ROB head overran the PNR head!")
    // -----------------------------------------------
    // ROB PNR Head Logic
@@ -744,7 +742,7 @@ class Rob(
       !exception_thrown
    when (pnr_safe_to_advance)
    {
-      rob_pnr := WrapInc(rob_pnr, num_rob_rows)
+      rob_pnr := WrapInc(rob_pnr, NUM_ROB_ROWS)
    }
 
    // -----------------------------------------------
@@ -752,15 +750,15 @@ class Rob(
 
    when (rob_state === s_rollback && rob_tail =/= rob_head)
    {
-      rob_tail := WrapDec(rob_tail, num_rob_rows)
+      rob_tail := WrapDec(rob_tail, NUM_ROB_ROWS)
    }
    .elsewhen (io.brinfo.valid && io.brinfo.mispredict)
    {
-      rob_tail := WrapInc(GetRowIdx(io.brinfo.rob_idx), num_rob_rows)
+      rob_tail := WrapInc(GetRowIdx(io.brinfo.rob_idx), NUM_ROB_ROWS)
    }
    .elsewhen (io.enq_valids.asUInt =/= 0.U && !io.enq_partial_stall)
    {
-      rob_tail := WrapInc(rob_tail, num_rob_rows)
+      rob_tail := WrapInc(rob_tail, NUM_ROB_ROWS)
    }
 
    if (ENABLE_COMMIT_MAP_TABLE)
@@ -781,7 +779,7 @@ class Rob(
    // maybe full is reset on branch mispredict
    // ALSO must handle xcpt tail/age logic if we do this!
    // also must handle rob_pc valid logic.
-   val full = WrapInc(rob_tail, num_rob_rows) === rob_head
+   val full = WrapInc(rob_tail, NUM_ROB_ROWS) === rob_head
 
    io.empty := (rob_head === rob_tail) && (rob_head_vals.asUInt === 0.U)
 
@@ -1032,8 +1030,8 @@ class Rob(
       "\n   ==ROB==" +
       "\n   Machine Width  : " + width +
       "\n   Rob Entries    : " + num_rob_entries +
-      "\n   Rob Rows       : " + num_rob_rows +
-      "\n   Rob Row size   : " + log2Ceil(num_rob_rows) +
+      "\n   Rob Rows       : " + NUM_ROB_ROWS +
+      "\n   Rob Row size   : " + log2Ceil(NUM_ROB_ROWS) +
       "\n   log2Ceil(width): " + log2Ceil(width) +
       "\n   FPU FFlag Ports: " + num_fpu_ports
 }
