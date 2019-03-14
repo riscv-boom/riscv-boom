@@ -103,9 +103,10 @@ class RoCCShim(implicit p: Parameters) extends BoomModule()(p)
       assert(roccq_val(roccq_idx),
          "Trying to execute rocc inst without the instruction bits")
 
-      roccq_op_val   (roccq_idx) := true.B
-      roccq_rs1      (roccq_idx) := io.req.bits.rs1_data
-      roccq_rs2      (roccq_idx) := io.req.bits.rs2_data
+      roccq_op_val   (roccq_idx)      := true.B
+      roccq_uop      (roccq_idx).pdst := io.req.bits.uop.pdst
+      roccq_rs1      (roccq_idx)      := io.req.bits.rs1_data
+      roccq_rs2      (roccq_idx)      := io.req.bits.rs2_data
    }
 
    // Execute
@@ -133,10 +134,15 @@ class RoCCShim(implicit p: Parameters) extends BoomModule()(p)
             "RoCC response destination register does not match expected")
          assert(!(resp_rcvd && !roccq_executed(roccq_head)),
             "Received a response for a RoCC instruction we haven't executed")
-         io.resp.valid             := resp_rcvd
-         io.resp.bits.uop          := roccq_uop(roccq_head)
-         io.resp.bits.data         := io.core.rocc.resp.bits.data
-         roccq_head                := WrapInc(roccq_head, NUM_ROCC_ENTRIES)
+         io.resp.valid              := resp_rcvd
+         io.resp.bits.uop           := roccq_uop(roccq_head)
+         io.resp.bits.data          := io.core.rocc.resp.bits.data
+
+         roccq_val     (roccq_head) := false.B
+         roccq_op_val  (roccq_head) := false.B
+         roccq_executed(roccq_head) := false.B
+
+         roccq_head                 := WrapInc(roccq_head, NUM_ROCC_ENTRIES)
       }
    }
 
