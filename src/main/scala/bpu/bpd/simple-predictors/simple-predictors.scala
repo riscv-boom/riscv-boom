@@ -35,13 +35,11 @@ import boom.util.ElasticReg
 class NullBrPredictor(
    fetch_width: Int,
    history_length: Int = 12
-   )(implicit p: Parameters) extends BrPredictor(fetch_width, history_length)(p)
+   )(implicit p: Parameters) extends BoomBrPredictor(fetch_width, history_length)(p)
 {
    override def toString: String = "  Building (0 kB) Null Predictor (never predict)."
    io.resp.valid := false.B
 }
-
-case object RandomBpdKey extends Field[RandomBpdParameters]
 
 /**
  * Random predictor configuration parameters used in configurations
@@ -49,7 +47,7 @@ case object RandomBpdKey extends Field[RandomBpdParameters]
  * @param enabled using Random predictor?
  */
 case class RandomBpdParameters(
-  enabled: Boolean = false
+  enabled: Boolean = true
 )
 
 /**
@@ -72,7 +70,7 @@ object RandomBrPredictor
  */
 class RandomBrPredictor(
    fetch_width: Int
-   )(implicit p: Parameters) extends BrPredictor(fetch_width, history_length = 1)(p)
+   )(implicit p: Parameters) extends BoomBrPredictor(fetch_width, history_length = 1)(p)
 {
    override def toString: String = "  Building Random Branch Predictor."
    private val rand_val = RegInit(false.B)

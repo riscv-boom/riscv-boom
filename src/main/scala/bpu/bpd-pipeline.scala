@@ -102,7 +102,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    // construct all of the modules
 
    val btb = BoomBTB(boomParams)
-   val bpd = BrPredictor(tileParams, boomParams)
+   val bpd = BoomBrPredictor(boomParams)
 
    btb.io.status_debug := io.status_debug
    bpd.io.status_prv := io.status_prv
@@ -134,9 +134,6 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
 
    // does the BPD predict a taken branch?
    //private def bitRead(bits: UInt, offset: UInt): Bool = (bits >> offset)(0)
-
-   val bpd_valid = bpd.io.resp.valid
-   val bpd_bits = bpd.io.resp.bits
 
    io.f3_bpd_resp.valid := bpd.io.resp.valid
    io.f3_bpd_resp.bits := bpd.io.resp.bits

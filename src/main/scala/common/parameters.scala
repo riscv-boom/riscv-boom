@@ -43,7 +43,7 @@ case class BoomCoreParams(
    enableBrResolutionRegister: Boolean = true,
    enableCommitMapTable: Boolean = false,
    enableBTBContainsBranches: Boolean = true,
-   enableBranchPredictor: Boolean = false,
+   enableBranchPredictor: Boolean = true,
    enableBpdUModeOnly: Boolean = false,
    enableBpdUSModeHistory: Boolean = false,
    useAtomicsOnlyForIO: Boolean = false,
@@ -187,47 +187,38 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
    // What is the physical length of the VeryLongHistoryRegister? This must be
    // able to handle the GHIST_LENGTH as well as being able hold all speculative
    // updates well beyond the GHIST_LENGTH (i.e., +ROB_SZ and other buffering).
-   var VLHR_LENGTH = 0
    var BPD_INFO_SIZE = 0
-   var ENABLE_VLHR = false
 
-   val tageParams = boomParams.tage
-   val gshareParams = boomParams.gshare
-   val bpdBaseOnlyParams = boomParams.bpdBaseOnly
+   val tageBpuParams = boomParams.tage
+   val gshareBpuParams = boomParams.gshare
+   val baseOnlyBpuParams = boomParams.bpdBaseOnly
+   val randomBpuParams = boomParams.bpdRandom
 
    if (!ENABLE_BRANCH_PREDICTOR)
    {
       BPD_INFO_SIZE = 1
       GLOBAL_HISTORY_LENGTH = 1
    }
-   else if (bpdBaseOnlyParams.isDefined && bpdBaseOnlyParams.get.enabled)
+   else if (baseOnlyBpuParams.isDefined && baseOnlyBpuParams.get.enabled)
    {
       GLOBAL_HISTORY_LENGTH = 8
       BPD_INFO_SIZE = BaseOnlyBrPredictor.GetRespInfoSize(p, GLOBAL_HISTORY_LENGTH)
    }
-   else if (gshareParams.isDefined && gshareParams.get.enabled)
+   else if (gshareBpuParams.isDefined && gshareBpuParams.get.enabled)
    {
-      GLOBAL_HISTORY_LENGTH = gshareParams.get.history_length
+      GLOBAL_HISTORY_LENGTH = gshareBpuParams.get.history_length
       BPD_INFO_SIZE = GShareBrPredictor.GetRespInfoSize(fetchWidth, GLOBAL_HISTORY_LENGTH)
    }
-   else if (tageParams.isDefined && tageParams.get.enabled)
+   else if (tageBpuParams.isDefined && tageBpuParams.get.enabled)
    {
-      GLOBAL_HISTORY_LENGTH = tageParams.get.history_lengths.max
+      GLOBAL_HISTORY_LENGTH = tageBpuParams.get.history_lengths.max
       BPD_INFO_SIZE = TageBrPredictor.GetRespInfoSize(p, fetchWidth)
-      ENABLE_VLHR = true
    }
-   else if (boomParams.bpdRandom.isDefined && boomParams.bpdRandom.get.enabled)
+   else if (randomBpuParams.isDefined && randomBpuParams.get.enabled)
    {
       GLOBAL_HISTORY_LENGTH = 1
       BPD_INFO_SIZE = RandomBrPredictor.GetRespInfoSize(p)
    }
-   else
-   {
-      require(!ENABLE_BRANCH_PREDICTOR) // set branch predictor in configs.scala
-      BPD_INFO_SIZE = 1
-      GLOBAL_HISTORY_LENGTH = 1
-   }
-   VLHR_LENGTH = GLOBAL_HISTORY_LENGTH+2*NUM_ROB_ENTRIES
 
    //************************************
    // Extra Knobs and Features

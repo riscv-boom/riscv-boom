@@ -70,11 +70,11 @@ class BpdUpdate(implicit p: Parameters) extends BoomBundle()(p)
    // history: what was the history our branch saw?
    // cfi_idx: what is the index of the control-flow-instruction? (low-order PC bits).
    // taken: was the branch taken?
-   val fetch_pc = UInt(vaddrBits.W)
-   val history     = UInt(GLOBAL_HISTORY_LENGTH.W)
-   val mispredict = Bool()
+   val fetch_pc     = UInt(vaddrBits.W)
+   val history      = UInt(GLOBAL_HISTORY_LENGTH.W)
+   val mispredict   = Bool()
    val miss_cfi_idx = UInt(log2Ceil(fetchWidth).W) // if mispredict, this is the cfi_idx of miss.
-   val taken = Bool()
+   val taken        = Bool()
 
    // Give the bpd back the information it sent out when it made a prediction.
    val info = UInt(BPD_INFO_SIZE.W)
@@ -96,7 +96,7 @@ class RestoreHistory(implicit p: Parameters) extends BoomBundle()(p)
  * @param fetch_width # of instructions fetched
  * @param history_length length of the GHR
  */
-abstract class BrPredictor(
+abstract class BoomBrPredictor(
    fetch_width: Int,
    val history_length: Int
    )(implicit p: Parameters) extends BoomModule()(p)
@@ -163,9 +163,9 @@ abstract class BrPredictor(
    // compute tags and indices for our branch predictors.
    val f0_history   = Wire(UInt(history_length.W))
    val new_history  = Wire(UInt(history_length.W))
-   val r_f1_history = RegInit(0.asUInt(width=history_length.W))
-   val r_f2_history = RegInit(0.asUInt(width=history_length.W))
-   val r_f4_history = RegInit(0.asUInt(width=history_length.W))
+   val r_f1_history = RegInit(0.U(history_length.W))
+   val r_f2_history = RegInit(0.U(history_length.W))
+   val r_f4_history = RegInit(0.U(history_length.W))
 
    // match the other ERegs in the FrontEnd.
    val q_f3_history = withReset(reset.toBool || io.fe_clear || io.f4_redirect)
@@ -269,46 +269,63 @@ abstract class BrPredictor(
 }
 
 /**
- * Companion object to the abstract branch bredictor. Return the desired branch
- * predictor based on the provided parameters.
+ * Factory object to create a branch predictor
  */
-object BrPredictor
+object BoomBrPredictor
 {
-   def apply(tileParams: freechips.rocketchip.tile.TileParams, boomParams: BoomCoreParams)
-      (implicit p: Parameters): BrPredictor =
+   /**
+    * Create a specific type of branch predictor based on the parameters specified
+    *
+    * @param boomParams general boom core parameters that determine the BPU type
+    * @return a BoomBrPredictor instance determined by the input parameters
+    */
+   def apply(boomParams: BoomCoreParams)(implicit p: Parameters): BoomBrPredictor =
    {
       val boomParams: BoomCoreParams = p(freechips.rocketchip.tile.TileKey).core.asInstanceOf[BoomCoreParams]
+
       val fetch_width = boomParams.fetchWidth
       val enableCondBrPredictor = boomParams.enableBranchPredictor
 
-      var br_predictor: BrPredictor = null
+      var br_predictor: BoomBrPredictor = null
 
-      if (enableCondBrPredictor && boomParams.bpdBaseOnly.isDefined && boomParams.bpdBaseOnly.get.enabled)
+      val useBaseOnly = boomParams.bpdBaseOnly.isDefined && boomParams.bpdBaseOnly.get.enabled
+      val useGshare   = boomParams.gshare.isDefined && boomParams.gshare.get.enabled
+      val useTage     = boomParams.tage.isDefined && boomParams.tage.get.enabled
+      val useRandom   = boomParams.bpdRandom.isDefined && boomParams.bpdRandom.get.enabled
+
+      // a BPU must be defined with the enable flag
+      require(!enableCondBrPredictor || (Seq(useBaseOnly, useGshare, useTage, useRandom).count(_ == true) == 1))
+
+      // select BPU based on parameters specified
+      if (enableCondBrPredictor)
       {
-         br_predictor = Module(new BaseOnlyBrPredictor(
-            fetch_width = fetch_width))
-      }
-      else if (enableCondBrPredictor && boomParams.gshare.isDefined && boomParams.gshare.get.enabled)
-      {
-         br_predictor = Module(new GShareBrPredictor(
-            fetch_width = fetch_width,
-            history_length = boomParams.gshare.get.history_length))
-      }
-      else if (enableCondBrPredictor && boomParams.tage.isDefined && boomParams.tage.get.enabled)
-      {
-         br_predictor = Module(new TageBrPredictor(
-            fetch_width = fetch_width,
-            num_tables = boomParams.tage.get.num_tables,
-            table_sizes = boomParams.tage.get.table_sizes,
-            history_lengths = boomParams.tage.get.history_lengths,
-            tag_sizes = boomParams.tage.get.tag_sizes,
-            cntr_sz = boomParams.tage.get.cntr_sz,
-            ubit_sz = boomParams.tage.get.ubit_sz))
-      }
-      else if (enableCondBrPredictor && p(RandomBpdKey).enabled)
-      {
-         br_predictor = Module(new RandomBrPredictor(
-            fetch_width = fetch_width))
+        if (useBaseOnly)
+        {
+           br_predictor = Module(new BaseOnlyBrPredictor(
+              fetch_width = fetch_width))
+        }
+        else if (useGshare)
+        {
+           br_predictor = Module(new GShareBrPredictor(
+              fetch_width = fetch_width,
+              history_length = boomParams.gshare.get.history_length))
+        }
+        else if (useTage)
+        {
+           br_predictor = Module(new TageBrPredictor(
+              fetch_width = fetch_width,
+              num_tables = boomParams.tage.get.num_tables,
+              table_sizes = boomParams.tage.get.table_sizes,
+              history_lengths = boomParams.tage.get.history_lengths,
+              tag_sizes = boomParams.tage.get.tag_sizes,
+              cntr_sz = boomParams.tage.get.cntr_sz,
+              ubit_sz = boomParams.tage.get.ubit_sz))
+        }
+        else if (useRandom)
+        {
+           br_predictor = Module(new RandomBrPredictor(
+              fetch_width = fetch_width))
+        }
       }
       else
       {

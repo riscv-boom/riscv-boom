@@ -188,14 +188,24 @@ abstract class BoomBTB(implicit p: Parameters) extends BoomModule()(p) with HasB
 
 }
 
+/**
+ * Factory object to create a branch target buffer (BTB)
+ */
 object BoomBTB
 {
-   def apply(boomParams: BoomCoreParams)
-      (implicit p: Parameters): BoomBTB =
+   /**
+    * Create a specific type of branch target buffer (BTB) based on the parameters specified
+    *
+    * @param boomParams general boom core parameters that determine the BTB
+    * @return a BoomBTB instance determined by the input parameters
+    */
+   def apply(boomParams: BoomCoreParams)(implicit p: Parameters): BoomBTB =
    {
       val boomParams: BoomCoreParams = p(freechips.rocketchip.tile.TileKey).core.asInstanceOf[BoomCoreParams]
+
       var btb: BoomBTB = null
 
+      // select BTB based on parameters
       if (boomParams.btb.btbsa)
       {
          btb = Module(new BTBsa())
