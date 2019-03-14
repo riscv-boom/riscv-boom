@@ -103,7 +103,7 @@ class GShareBrPredictor(
    fetch_width: Int,
    history_length: Int = 12
    )(implicit p: Parameters)
-   extends BrPredictor(fetch_width, history_length)(p)
+   extends BoomBrPredictor(fetch_width, history_length)(p)
    with HasGShareParameters
 {
    require (log2Ceil(nSets) == idx_sz)

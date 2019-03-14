@@ -69,7 +69,7 @@ object BaseOnlyBrPredictor
 class BaseOnlyBrPredictor(
    fetch_width: Int
    )(implicit p: Parameters)
-   extends BrPredictor(fetch_width, 8)(p)
+   extends BoomBrPredictor(fetch_width, 8)(p)
 {
    //------------------------------------------------------------
    // Predictor state (none: use BIM).

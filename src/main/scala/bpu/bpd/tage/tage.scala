@@ -143,7 +143,7 @@ class TageBrPredictor(
    cntr_sz: Int,
    ubit_sz: Int
    )(implicit p: Parameters)
-   extends BrPredictor(
+   extends BoomBrPredictor(
       fetch_width    = fetch_width,
       history_length = history_lengths.max)(p)
 {
