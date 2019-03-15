@@ -7,7 +7,7 @@
 
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
-// RISCV Processor Issue Units Logic
+// RISCV Processor Issue Units Collection Logic
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
 
@@ -25,7 +25,8 @@ import boom.common._
 import boom.exu.FUConstants._
 
 /**
- * Top level class to wrap all issue units together into a "collection"
+ * Top level class to wrap integer and memory issue units together
+ * into a single "collection"
  *
  * @param num_wakeup_ports number of wakeup ports per issue unit
  */
@@ -33,23 +34,27 @@ class IssueUnits(num_wakeup_ports: Int)(implicit val p: Parameters)
    extends HasBoomCoreParameters
    with IndexedSeq[IssueUnit]
 {
-   //*******************************
-   // Instantiate the IssueUnits
+   // issue unit collection
+   private val issue_units = ArrayBuffer[IssueUnit]()
 
-   private val iss_units = ArrayBuffer[IssueUnit]()
+   /**
+    * Amount of issue units in the collection
+    *
+    * @return amount of issue units in collection
+    */
+   def length = issue_units.length
 
-   //*******************************
-   // Act like a collection
-
-   def length = iss_units.length
-
-   def apply(n: Int): IssueUnit = iss_units(n)
-
-   //*******************************
-   // Construct.
+   /**
+    * Retrieve the nth issue unit in the collection
+    *
+    * @param n index of issue unit to retrieve
+    * @return the IssueUnit of that index
+    */
+   def apply(n: Int): IssueUnit = issue_units(n)
 
    require (enableAgePriorityIssue) // unordered is currently unsupported.
 
+   // create the issue units (note: this does not create the fp issue unit)
    for (issueParam <- issueParams.filter(_.iqType != IQT_FP.litValue))
    {
       val issueUnit = Module(new IssueUnitCollapsing(issueParam, num_wakeup_ports))
@@ -71,18 +76,28 @@ class IssueUnits(num_wakeup_ports: Int)(implicit val p: Parameters)
         issueUnit.suggestName("mem_issue_unit")
       }
 
-      iss_units += issueUnit
+      issue_units += issueUnit
    }
 
+   /**
+    * Get the memory issue queue
+    *
+    * @return the IssueUnit used for memory uops
+    */
    def mem_iq = if (usingUnifiedMemIntIQs)
    {
-      // When using unified IQs the IQT_INT handles everything
-      iss_units.find(_.iqType == IQT_INT.litValue).get
+      // When using unified issue queues the IQT_INT handles everything
+      issue_units.find(_.iqType == IQT_INT.litValue).get
    }
    else
    {
-      iss_units.find(_.iqType == IQT_MEM.litValue).get
+      issue_units.find(_.iqType == IQT_MEM.litValue).get
    }
 
-   def int_iq = iss_units.find(_.iqType == IQT_INT.litValue).get
+   /**
+    * Get the integer issue queue
+    *
+    * @return the IssueUnit used for integer uops
+    */
+   def int_iq = issue_units.find(_.iqType == IQT_INT.litValue).get
 }
