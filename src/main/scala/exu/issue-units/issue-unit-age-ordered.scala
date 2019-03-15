@@ -28,7 +28,7 @@ import boom.common._
  * @param params issue queue params
  * @param num_wakeup_ports number of wakeup ports for the issue queue
  */
-class IssueUnitCollasping(
+class IssueUnitCollapsing(
    params: IssueParams,
    num_wakeup_ports: Int)
    (implicit p: Parameters)
