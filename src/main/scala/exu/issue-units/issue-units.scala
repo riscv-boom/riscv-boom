@@ -52,12 +52,19 @@ class IssueUnits(num_wakeup_ports: Int)(implicit val p: Parameters)
 
    for (issueParam <- issueParams.filter(_.iqType != IQT_FP.litValue))
    {
-      val issueUnit = Module(new IssueUnitCollasping(issueParam, num_wakeup_ports))
+      val issueUnit = Module(new IssueUnitCollapsing(issueParam, num_wakeup_ports))
 
       // name the issue units
       if (issueParam.iqType == IQT_INT.litValue)
       {
-        issueUnit.suggestName("int_issue_unit")
+        if (usingUnifiedMemIntIQs)
+        {
+          issueUnit.suggestName("intmem_issue_unit")
+        }
+        else
+        {
+          issueUnit.suggestName("int_issue_unit")
+        }
       }
       else if (issueParam.iqType == IQT_MEM.litValue)
       {
