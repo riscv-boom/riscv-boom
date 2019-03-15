@@ -191,11 +191,7 @@ class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer)
   outer.dcache.module.io.hartid := constants.hartid
   dcachePorts += core.io.dmem // TODO outer.dcachePorts += () => module.core.io.dmem ??
   //fpuOpt foreach { fpu => core.io.fpu <> fpu.io } RocketFpu - not needed in boom
-  core.io.ptw := DontCare
-  if (usingPTW)
-  {
-    core.io.ptw <> ptw.io.dpath
-  }
+  core.io.ptw <> ptw.io.dpath
   core.io.rocc := DontCare
   core.io.fpu := DontCare
   core.io.reset_vector := DontCare
@@ -223,11 +219,8 @@ class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer)
   // TODO figure out how to move the below into their respective mix-ins
   dcacheArb.io.requestor <> dcachePorts
   ptwPorts += core.io.ptw_tlb
-  core.io.ptw_tlb := DontCare
-  if (usingPTW)
-  {
-    ptw.io.requestor <> ptwPorts
-  }
+  ptw.io.requestor <> ptwPorts
+
   val frontendStr = outer.frontend.module.toString
   ElaborationArtefacts.add(
     """core.config""",
