@@ -304,8 +304,11 @@ class Rob(
       when (io.enq_valids(w))
       {
          rob_val(rob_tail)       := true.B
-         rob_bsy(rob_tail)       := !io.enq_uops(w).is_fence &&
-                                    !(io.enq_uops(w).is_fencei)
+         // List of cases in which the uop starts unbusy
+         // TODO: List this in a more sensible way somehow?
+         rob_bsy(rob_tail)       := !(io.enq_uops(w).is_fence ||
+                                      io.enq_uops(w).is_fencei ||
+                                      (io.enq_uops(w).uopc === uopROCC && io.enq_uops(w).dst_rtype === RT_X))
          rob_safe(rob_tail)      := !io.enq_uops(w).may_xcpt && !io.enq_uops(w).exception
          rob_uop(rob_tail)       := io.enq_uops(w)
          rob_exception(rob_tail) := io.enq_uops(w).exception

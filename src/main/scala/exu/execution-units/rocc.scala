@@ -128,17 +128,19 @@ class RoCCShim(implicit p: Parameters) extends BoomModule()(p)
    // Handle responses
 
    // Either we get a response, or the RoCC op expects no response
-   val resp_rcvd = ((io.core.rocc.resp.valid && io.resp.ready)
-                 || roccq_uop(roccq_head).dst_rtype === RT_X)
+   val handle_resp = ((io.core.rocc.resp.valid && io.resp.ready)
+                    || roccq_uop(roccq_head).dst_rtype === RT_X)
 
    io.core.rocc.resp.ready := io.resp.ready
-   when (roccq_head =/= roccq_exe_head && roccq_val(roccq_head) && resp_rcvd)
+   io.resp.valid           := false.B
+   when (roccq_head =/= roccq_exe_head && roccq_val(roccq_head) && handle_resp)
    {
-      assert(!resp_rcvd || io.core.rocc.resp.bits.rd === roccq_uop(roccq_head).ldst,
+      assert((roccq_uop(roccq_head).dst_rtype === RT_X)
+          || io.core.rocc.resp.bits.rd === roccq_uop(roccq_head).ldst,
          "RoCC response destination register does not match expected")
-      assert(!(resp_rcvd && !roccq_executed(roccq_head)),
+      assert(roccq_executed(roccq_head),
          "Received a response for a RoCC instruction we haven't executed")
-      io.resp.valid              := resp_rcvd
+      io.resp.valid              := roccq_uop(roccq_head).dst_rtype === RT_FIX
       io.resp.bits.uop           := roccq_uop(roccq_head)
       io.resp.bits.data          := io.core.rocc.resp.bits.data
 
