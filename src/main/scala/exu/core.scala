@@ -530,6 +530,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
                         || br_unit.brinfo.mispredict
                         || rob.io.flush.valid
                         || dec_stall_next_inst
+                        || ((dec_uops(w).is_fence || dec_uops(w).is_fencei) && io.rocc.busy)
                         || (dec_uops(w).is_fencei && !lsu.io.lsu_fencei_rdy)
                         || (dec_uops(w).uopc === uopROCC && dec_rocc_found)
                         )) ||
