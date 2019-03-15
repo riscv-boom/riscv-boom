@@ -30,8 +30,8 @@ class RoCCShimCoreIO(implicit p: Parameters) extends BoomBundle()(p)
    val dec_uops         = Input(Vec(decodeWidth, new MicroOp))
    val roccq_full       = Output(Bool())
    val roccq_idx        = Output(UInt(log2Ceil(NUM_ROCC_ENTRIES).W))
-   val rob_pnr          = Input(UInt(log2Ceil(NUM_ROB_ROWS).W))
-   val rob_tail         = Input(UInt(log2Ceil(NUM_ROB_ROWS).W))
+   val rob_pnr_idx      = Input(UInt(ROB_ADDR_SZ.W))
+   val rob_tail_idx     = Input(UInt(ROB_ADDR_SZ.W))
 
    val rocc             = Flipped(new RoCCCoreIO)
 }
@@ -110,10 +110,10 @@ class RoCCShim(implicit p: Parameters) extends BoomModule()(p)
    }
 
    // Execute
-   val head_rob_idx = roccq_uop(roccq_exe_head).rob_idx(ROB_ADDR_SZ-1, log2Ceil(decodeWidth))
+   val head_rob_idx = roccq_uop(roccq_exe_head).rob_idx
    io.core.rocc.cmd.valid := false.B
    when (roccq_op_val(roccq_exe_head) && io.core.rocc.cmd.ready &&
-      (IsOlder(head_rob_idx, io.core.rob_pnr, io.core.rob_tail)))
+      (IsOlder(head_rob_idx, io.core.rob_pnr_idx, io.core.rob_tail_idx)))
    {
       io.core.rocc.cmd.valid         := true.B
       io.core.rocc.cmd.bits.inst     := roccq_uop(roccq_exe_head).inst.asTypeOf(new RoCCInstruction)
@@ -124,27 +124,29 @@ class RoCCShim(implicit p: Parameters) extends BoomModule()(p)
       roccq_exe_head                 := WrapInc(roccq_exe_head, NUM_ROCC_ENTRIES)
    }
 
+   //------------------
    // Handle responses
-   io.core.rocc.resp.ready := true.B
-   when (roccq_head =/= roccq_exe_head && roccq_val(roccq_head))
+
+   // Either we get a response, or the RoCC op expects no response
+   val resp_rcvd = ((io.core.rocc.resp.valid && io.resp.ready)
+                 || roccq_uop(roccq_head).dst_rtype === RT_X)
+
+   io.core.rocc.resp.ready := io.resp.ready
+   when (roccq_head =/= roccq_exe_head && roccq_val(roccq_head) && resp_rcvd)
    {
-      val resp_rcvd = io.core.rocc.resp.valid
-      when (roccq_uop(roccq_head).dst_rtype === RT_X || resp_rcvd)
-      {
-         assert(!resp_rcvd || io.core.rocc.resp.bits.rd === roccq_uop(roccq_head).ldst,
-            "RoCC response destination register does not match expected")
-         assert(!(resp_rcvd && !roccq_executed(roccq_head)),
-            "Received a response for a RoCC instruction we haven't executed")
-         io.resp.valid              := resp_rcvd
-         io.resp.bits.uop           := roccq_uop(roccq_head)
-         io.resp.bits.data          := io.core.rocc.resp.bits.data
+      assert(!resp_rcvd || io.core.rocc.resp.bits.rd === roccq_uop(roccq_head).ldst,
+         "RoCC response destination register does not match expected")
+      assert(!(resp_rcvd && !roccq_executed(roccq_head)),
+         "Received a response for a RoCC instruction we haven't executed")
+      io.resp.valid              := resp_rcvd
+      io.resp.bits.uop           := roccq_uop(roccq_head)
+      io.resp.bits.data          := io.core.rocc.resp.bits.data
 
-         roccq_val     (roccq_head) := false.B
-         roccq_op_val  (roccq_head) := false.B
-         roccq_executed(roccq_head) := false.B
+      roccq_val     (roccq_head) := false.B
+      roccq_op_val  (roccq_head) := false.B
+      roccq_executed(roccq_head) := false.B
 
-         roccq_head                 := WrapInc(roccq_head, NUM_ROCC_ENTRIES)
-      }
+      roccq_head                 := WrapInc(roccq_head, NUM_ROCC_ENTRIES)
    }
 
    io.core.roccq_full := WrapInc(roccq_tail, NUM_ROCC_ENTRIES) === roccq_head

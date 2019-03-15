@@ -58,9 +58,12 @@ class RobIo(
    val enq_partial_stall= Input(Bool()) // we're dispatching only a partial packet,
                                         // and stalling on the rest of it (don't
                                       // advance the tail ptr)
-   val enq_new_packet   = Input(Bool()) // we're dispatching the first (and perhaps only) part of a dispatch packet.
-   val curr_rob_tail    = Output(UInt(ROB_ADDR_SZ.W))
-   val curr_rob_pnr     = Output(UInt(ROB_ADDR_SZ.W))
+   val enq_new_packet    = Input(Bool()) // we're dispatching the first (and perhaps only) part of a dispatch packet.
+
+   val curr_rob_tail_idx = Output(UInt(ROB_ADDR_SZ.W))
+   // For the PNR we send the idx instead of the row addr
+   // because otherwise partial rows stall the PNR
+   val curr_rob_pnr_idx  = Output(UInt(ROB_ADDR_SZ.W))
 
    // Handle Branch Misspeculations
    val brinfo = Input(new BrResolutionInfo())
@@ -227,15 +230,17 @@ class Rob(
    //commit entries at the head, and unwind exceptions from the tail
    val rob_head     = RegInit(0.U(log2Ceil(NUM_ROB_ROWS).W))
    val rob_tail     = RegInit(0.U(log2Ceil(NUM_ROB_ROWS).W))
+   val rob_tail_lsb = RegInit(0.U(log2Ceil(width).W))
+   val rob_tail_idx = if (width == 1) rob_tail else Cat(rob_tail, rob_tail_lsb)
    val rob_pnr      = RegInit(0.U(log2Ceil(NUM_ROB_ROWS).W))
-   val rob_pnr_idx  = rob_pnr << log2Ceil(width).U
-   chisel3.experimental.dontTouch(rob_pnr)
-   val rob_tail_idx = rob_tail << log2Ceil(width).U
+   val rob_pnr_lsb  = RegInit(0.U(log2Ceil(width).W))
+   val rob_pnr_idx  = if (width == 1) rob_pnr  else Cat(rob_pnr , rob_pnr_lsb)
+
 
    val will_commit         = Wire(Vec(width, Bool()))
    val can_commit          = Wire(Vec(width, Bool()))
    val can_throw_exception = Wire(Vec(width, Bool()))
-   val pnr_safe            = Wire(Vec(width, Bool())) // are the instructions at the pnr head safe?
+   val rob_pnr_safe        = Wire(Vec(width, Bool())) // are the instructions at the pnr head safe?
    val rob_head_vals       = Wire(Vec(width, Bool())) // are the instructions at the head valid?
    val rob_head_is_store   = Wire(Vec(width, Bool()))
    val rob_head_is_load    = Wire(Vec(width, Bool()))
@@ -414,8 +419,16 @@ class Rob(
       // Commit or Rollback
 
       // Can this instruction commit? (the check for exceptions/rob_state happens later).
-      can_commit(w) := rob_val(rob_head) && !(rob_bsy(rob_head)) && !io.csr_stall
-      pnr_safe(w)   := !rob_val(rob_pnr) || (rob_safe(rob_pnr) && !rob_exception(rob_pnr))
+      can_commit(w)   := rob_val(rob_head) && !(rob_bsy(rob_head)) && !io.csr_stall
+
+      // If the PNR is at the tail, we could be in a partially enqueued row,
+      //  so block the pointer from moving past invalid entries when enq_stall
+      // If the PNR is at the head, we could be in a partially committing row,
+      //  so move the pointer ahead past invalid entries
+      // Handle both cases here
+      rob_pnr_safe(w) := Mux((rob_pnr === rob_tail) && io.enq_partial_stall,
+         rob_val(rob_pnr) && rob_safe(rob_pnr) && !rob_exception(rob_pnr),
+         !rob_val(rob_pnr) || (rob_safe(rob_pnr) && !rob_exception(rob_pnr)))
 
       val com_idx = Wire(UInt())
       com_idx := rob_head
@@ -735,14 +748,25 @@ class Rob(
    // -----------------------------------------------
    // ROB PNR Head Logic
 
-   val pnr_safe_to_advance =
+   val pnr_safe_to_advance_row =
       rob_pnr =/= rob_tail &&
-      pnr_safe.reduce(_&&_) &&
+      rob_pnr_safe.reduce(_&&_) &&
       (rob_state === s_normal || rob_state === s_wait_till_empty) &&
       !exception_thrown
-   when (pnr_safe_to_advance)
+   val pnr_safe_to_advance_entry =
+      rob_pnr_safe(rob_pnr_lsb) &&
+      (rob_state === s_normal || rob_state === s_wait_till_empty) &&
+      !exception_thrown
+   // We advance the PNR by a row
+   when (pnr_safe_to_advance_row)
    {
-      rob_pnr := WrapInc(rob_pnr, NUM_ROB_ROWS)
+      rob_pnr     := WrapInc(rob_pnr, NUM_ROB_ROWS)
+      rob_pnr_lsb := 0.U
+   }
+      // If the ROB row is partially valid, we advance the LSB
+      .elsewhen (pnr_safe_to_advance_entry)
+   {
+      rob_pnr_lsb := rob_pnr_lsb + 1.U
    }
 
    // -----------------------------------------------
@@ -750,24 +774,33 @@ class Rob(
 
    when (rob_state === s_rollback && rob_tail =/= rob_head)
    {
-      rob_tail := WrapDec(rob_tail, NUM_ROB_ROWS)
+      rob_tail     := WrapDec(rob_tail, NUM_ROB_ROWS)
+      rob_tail_lsb := 0.U
    }
    .elsewhen (io.brinfo.valid && io.brinfo.mispredict)
    {
-      rob_tail := WrapInc(GetRowIdx(io.brinfo.rob_idx), NUM_ROB_ROWS)
+      rob_tail     := WrapInc(GetRowIdx(io.brinfo.rob_idx), NUM_ROB_ROWS)
+      rob_tail_lsb := 0.U
    }
    .elsewhen (io.enq_valids.asUInt =/= 0.U && !io.enq_partial_stall)
    {
-      rob_tail := WrapInc(rob_tail, NUM_ROB_ROWS)
+      rob_tail     := WrapInc(rob_tail, NUM_ROB_ROWS)
+      rob_tail_lsb := 0.U
+   }
+   .elsewhen (io.enq_valids.asUInt =/= 0.U && io.enq_partial_stall)
+   {
+      rob_tail_lsb := OHToUInt(io.enq_valids) + 1.U
    }
 
    if (ENABLE_COMMIT_MAP_TABLE)
    {
       when (RegNext(exception_thrown))
       {
-         rob_tail := 0.U
-         rob_head := 0.U
-         rob_pnr := 0.U
+         rob_tail     := 0.U
+         rob_tail_lsb := 0.U
+         rob_head     := 0.U
+         rob_pnr      := 0.U
+         rob_pnr_lsb  := 0.U
       }
    }
 
@@ -783,8 +816,8 @@ class Rob(
 
    io.empty := (rob_head === rob_tail) && (rob_head_vals.asUInt === 0.U)
 
-   io.curr_rob_tail := rob_tail
-   io.curr_rob_pnr  := rob_pnr
+   io.curr_rob_tail_idx := rob_tail_idx
+   io.curr_rob_pnr_idx  := rob_pnr_idx
    io.ready := (rob_state === s_normal) && !full
 
    //-----------------------------------------------

@@ -613,11 +613,12 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       // (thus the LSB of the rob_idx gives part of the PC)
       if (decodeWidth == 1)
       {
-         dec_uops(w).rob_idx := rob.io.curr_rob_tail
+         dec_uops(w).rob_idx := rob.io.curr_rob_tail_idx
       }
       else
       {
-         dec_uops(w).rob_idx := Cat(rob.io.curr_rob_tail, w.U(log2Ceil(decodeWidth).W))
+         dec_uops(w).rob_idx := Cat(rob.io.curr_rob_tail_idx >> log2Ceil(decodeWidth).U,
+                                    w.U(log2Ceil(decodeWidth).W))
       }
    }
 
@@ -1505,12 +1506,12 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
    if (usingRoCC)
    {
-      exe_units.rocc_unit.io.rocc.rocc      <> io.rocc
-      exe_units.rocc_unit.io.rocc.dec_uops  := dec_uops
-      exe_units.rocc_unit.io.rocc.rob_tail  := rob.io.curr_rob_tail
-      exe_units.rocc_unit.io.rocc.rob_pnr   := rob.io.curr_rob_pnr
-      exe_units.rocc_unit.io.com_exception  := rob.io.com_xcpt.valid
-      exe_units.rocc_unit.io.status         := csr.io.status
+      exe_units.rocc_unit.io.rocc.rocc         <> io.rocc
+      exe_units.rocc_unit.io.rocc.dec_uops     := dec_uops
+      exe_units.rocc_unit.io.rocc.rob_tail_idx := rob.io.curr_rob_tail_idx
+      exe_units.rocc_unit.io.rocc.rob_pnr_idx  := rob.io.curr_rob_pnr_idx
+      exe_units.rocc_unit.io.com_exception     := rob.io.com_xcpt.valid
+      exe_units.rocc_unit.io.status            := csr.io.status
       for (w <- 0 until decodeWidth)
       {
          exe_units.rocc_unit.io.rocc.dec_rocc_vals(w) := (
