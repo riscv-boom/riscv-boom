@@ -55,6 +55,7 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule()
    require (num_entries > 1)
    private val num_elements = num_entries*fetchWidth
    private val ram = Mem(num_elements, new MicroOp())
+   ram.suggestName("fb_uop_ram")
    private val write_ptr = RegInit(0.U(log2Ceil(num_elements).W))
    private val read_ptr = RegInit(0.U(log2Ceil(num_elements).W))
 
