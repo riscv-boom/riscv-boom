@@ -98,7 +98,7 @@ abstract class RegisterFile(
 }
 
 /**
- * A behavorial model of a Register File. You will likely want to blackbox this for more than modest port counts.
+ * A synthesizable model of a Register File. You will likely want to blackbox this for more than modest port counts.
  *
  * @param num_registers number of registers
  * @param num_read_ports number of read ports
@@ -106,7 +106,7 @@ abstract class RegisterFile(
  * @param register_width size of registers in bits
  * @param bypassable_array list of write ports from func units to the read port of the regfile
  */
-class RegisterFileBehavorial(
+class RegisterFileSynthesizable(
    num_registers: Int,
    num_read_ports: Int,
    num_write_ports: Int,

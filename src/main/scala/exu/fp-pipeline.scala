@@ -64,7 +64,8 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
    val issue_unit       = Module(new IssueUnitCollasping(
                            issueParams.find(_.iqType == IQT_FP.litValue).get,
                            num_wakeup_ports))
-   val fregfile         = Module(new RegisterFileBehavorial(numFpPhysRegs,
+   issue_unit.suggestName("fp_issue_unit")
+   val fregfile         = Module(new RegisterFileSynthesizable(numFpPhysRegs,
                                  exe_units.num_frf_read_ports,
                                  exe_units.num_frf_write_ports + 1, // + 1 for ll writeback
                                  fLen+1,

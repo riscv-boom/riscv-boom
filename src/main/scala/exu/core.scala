@@ -114,7 +114,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
                           }
                           else
                           {
-                              Module(new RegisterFileBehavorial(numIntPhysRegs,
+                              Module(new RegisterFileSynthesizable(numIntPhysRegs,
                                  num_irf_read_ports,
                                  num_irf_write_ports + 1, // + 1 for ll writebacks
                                  xLen,
