@@ -230,10 +230,10 @@ class Rob(
    //commit entries at the head, and unwind exceptions from the tail
    val rob_head     = RegInit(0.U(log2Ceil(NUM_ROB_ROWS).W))
    val rob_tail     = RegInit(0.U(log2Ceil(NUM_ROB_ROWS).W))
-   val rob_tail_lsb = RegInit(0.U(log2Ceil(width).W))
+   val rob_tail_lsb = RegInit(0.U((1 max log2Ceil(width)).W))
    val rob_tail_idx = if (width == 1) rob_tail else Cat(rob_tail, rob_tail_lsb)
    val rob_pnr      = RegInit(0.U(log2Ceil(NUM_ROB_ROWS).W))
-   val rob_pnr_lsb  = RegInit(0.U(log2Ceil(width).W))
+   val rob_pnr_lsb  = RegInit(0.U((1 max log2Ceil(width)).W))
    val rob_pnr_idx  = if (width == 1) rob_pnr  else Cat(rob_pnr , rob_pnr_lsb)
 
 
