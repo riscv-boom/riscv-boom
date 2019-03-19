@@ -44,6 +44,7 @@ case class BoomCoreParams(
    enableCommitMapTable: Boolean = false,
    enableBTBContainsBranches: Boolean = true,
    enableBranchPredictor: Boolean = true,
+   enableBTB: Boolean = true,
    enableBpdUModeOnly: Boolean = false,
    enableBpdUSModeHistory: Boolean = false,
    useAtomicsOnlyForIO: Boolean = false,
@@ -175,7 +176,7 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
    //************************************
    // Branch Prediction
 
-   val enableBTB = true
+   val enableBTB = boomParams.enableBTB
    val enableBTBContainsBranches = boomParams.enableBTBContainsBranches
 
    val ENABLE_BRANCH_PREDICTOR = boomParams.enableBranchPredictor

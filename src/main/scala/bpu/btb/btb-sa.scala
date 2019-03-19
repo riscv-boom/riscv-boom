@@ -38,7 +38,12 @@ import freechips.rocketchip.util.Str
 import boom.common._
 import boom.exu._
 
-// Set-associative branch target buffer.
+/**
+ * Normal set-associative branch target buffer. Checks an incoming
+ * address against the BTB, returns a target if any, then uses
+ * a bi-modal table to determine whether the prediction is taken or not
+ * taken.
+ */
 class BTBsa(implicit p: Parameters) extends BoomBTB
 {
    val bim = Module(new BimodalTable())
@@ -51,6 +56,9 @@ class BTBsa(implicit p: Parameters) extends BoomBTB
    private def getTag (addr: UInt): UInt = addr(tag_sz+idx_sz+lsb_sz-1, idx_sz+lsb_sz)
    private def getIdx (addr: UInt): UInt = addr(idx_sz+lsb_sz-1, lsb_sz)
 
+   /**
+    * Data stored in the BTB entry
+    */
    class BTBSetData extends Bundle
    {
       val target = UInt((vaddrBits - log2Ceil(coreInstBytes)).W)
@@ -215,10 +223,10 @@ class BTBsa(implicit p: Parameters) extends BoomBTB
    }
 
    override def toString: String =
-      "\n   ==BTB==" +
+      "   ==BTB-SA==" +
       "\n   Sets          : " + nSets +
       "\n   Ways          : " + nWays +
-      "\n   Tag Size      : " + tag_sz + "\n" +
+      "\n   Tag Size      : " + tag_sz +
+      "\n\n" +
       bim.toString
 }
-

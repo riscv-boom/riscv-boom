@@ -38,16 +38,16 @@ import boom.exu.BranchUnitResp
  */
 class BranchPredInfo(implicit p: Parameters) extends BoomBundle()(p)
 {
-   val btb_blame         = Bool() // Does the BTB get credit for the prediction? (during BRU check).
-   val btb_hit           = Bool() // this instruction was the br/jmp predicted by the BTB
-   val btb_taken         = Bool() // this instruction was the br/jmp predicted by the BTB and was taken
+   val btb_blame = Bool() // Does the BTB get credit for the prediction? (during BRU check).
+   val btb_hit   = Bool() // this instruction was the br/jmp predicted by the BTB
+   val btb_taken = Bool() // this instruction was the br/jmp predicted by the BTB and was taken
 
-   val bpd_blame         = Bool() // Does the BPD get credit for this prediction? (during BRU check).
-   val bpd_hit           = Bool() // did the bpd predict this instruction? (ie, tag hit in the BPD)
-   val bpd_taken         = Bool() // did the bpd predict taken for this instruction?
+   val bpd_blame = Bool() // Does the BPD get credit for this prediction? (during BRU check).
+   val bpd_hit   = Bool() // did the bpd predict this instruction? (ie, tag hit in the BPD)
+   val bpd_taken = Bool() // did the bpd predict taken for this instruction?
 
-   val bim_resp         = new BimResp
-   val bpd_resp         = new BpdResp
+   val bim_resp  = new BimResp
+   val bpd_resp  = new BpdResp
 }
 
 /**
@@ -209,8 +209,8 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
       assert (io.f2_valid, "[bpd-pipeline] BTB has a valid request but imem.resp is invalid.")
    }
 
-   // forward progress into F3 will be made.
-   when (io.f2_valid)
+   // forward progress into F3 will be made assuming the BTB is giving valid resp
+   when (io.f2_valid && btb.io.resp.valid)
    {
       assert (btb.io.resp.bits.fetch_pc(15,0) === io.debug_imemresp_pc(15,0),
          "[bpd-pipeline] mismatch between BTB and I$.")
@@ -221,5 +221,5 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
       assert (!(io.f2_btb_resp.valid), "[bpd_pipeline] BTB predicted, but it's been disabled.")
    }
 
-   override def toString: String = btb.toString + "\n" + bpd.toString
+   override def toString: String = btb.toString + "\n\n" + bpd.toString
 }
