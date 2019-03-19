@@ -375,40 +375,41 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    val rob_str = rob.toString
 
    override def toString: String =
-   ( exe_units_str + "\n"
-   + fp_pipeline_str + "\n"
-   + rob_str + "\n"
-   + (if (usingFPU)      ("\n    FPU Unit Enabled") else  ("\n    FPU Unit Disabled"))
-   + (if (usingVM)       ("\n    VM       Enabled") else  ("\n    VM       Disabled"))
-   + (if (usingFDivSqrt) ("\n    FDivSqrt Enabled") else  ("\n    FDivSqrt Disabled"))
-   + "\n\n   Fetch Width           : " + fetchWidth
-   + "\n   Decode Width          : " + decodeWidth
-   + "\n   Issue Width           : " + issueParams.map(_.issueWidth).sum
-   + "\n   ROB Size              : " + NUM_ROB_ENTRIES
-   + "\n   Issue Window Size     : " + issueParams.map(_.numEntries) + iss_str
-   + "\n   Load/Store Unit Size  : " + NUM_LDQ_ENTRIES + "/" + NUM_STQ_ENTRIES
-   + "\n   Num Int Phys Registers: " + numIntPhysRegs
-   + "\n   Num FP  Phys Registers: " + numFpPhysRegs
-   + "\n   Max Branch Count      : " + MAX_BR_COUNT
-   + "\n   BTB Size              : " +
-      (if (enableBTB) ("" + boomParams.btb.nSets * boomParams.btb.nWays + " entries (" +
-         boomParams.btb.nSets + " x " + boomParams.btb.nWays + " ways)") else 0)
-   + "\n   RAS Size              : " + (if (enableBTB) boomParams.btb.nRAS else 0)
-   + "\n   Rename  Stage Latency : " + renameLatency
-   + "\n   RegRead Stage Latency : " + regreadLatency
-   + "\n" + iregfile.toString
-   + "\n   Num Slow Wakeup Ports : " + num_irf_write_ports
-   + "\n   Num Fast Wakeup Ports : " + exe_units.count(_.bypassable)
-   + "\n   Num Bypass Ports      : " + exe_units.num_total_bypass_ports
-   + "\n" + (if (usingFPU) fp_pipeline.toString else "")
-   + "\n   DCache Ways           : " + dcacheParams.nWays
-   + "\n   DCache Sets           : " + dcacheParams.nSets
-   + "\n   ICache Ways           : " + icacheParams.nWays
-   + "\n   ICache Sets           : " + icacheParams.nSets
-   + "\n   D-TLB Entries         : " + dcacheParams.nTLBEntries
-   + "\n   I-TLB Entries         : " + icacheParams.nTLBEntries
-   + "\n   Paddr Bits            : " + paddrBits
-   + "\n   Vaddr Bits            : " + vaddrBits)
+     ( exe_units_str + "\n"
+     + fp_pipeline_str + "\n"
+     + rob_str + "\n"
+     + "\n   ==Overall Core Params=="
+     + "\n   Fetch Width           : " + fetchWidth
+     + "\n   Decode Width          : " + decodeWidth
+     + "\n   Issue Width           : " + issueParams.map(_.issueWidth).sum
+     + "\n   ROB Size              : " + NUM_ROB_ENTRIES
+     + "\n   Issue Window Size     : " + issueParams.map(_.numEntries) + iss_str
+     + "\n   Load/Store Unit Size  : " + NUM_LDQ_ENTRIES + "/" + NUM_STQ_ENTRIES
+     + "\n   Num Int Phys Registers: " + numIntPhysRegs
+     + "\n   Num FP  Phys Registers: " + numFpPhysRegs
+     + "\n   Max Branch Count      : " + MAX_BR_COUNT
+     + "\n   BTB Size              : "
+     + (if (enableBTB) ("" + boomParams.btb.nSets * boomParams.btb.nWays + " entries (" +
+          boomParams.btb.nSets + " x " + boomParams.btb.nWays + " ways)") else 0)
+     + "\n   RAS Size              : " + (if (enableBTB) boomParams.btb.nRAS else 0)
+     + "\n   Rename  Stage Latency : " + renameLatency
+     + "\n   RegRead Stage Latency : " + regreadLatency
+     + "\n" + iregfile.toString
+     + "\n   Num Slow Wakeup Ports : " + num_irf_write_ports
+     + "\n   Num Fast Wakeup Ports : " + exe_units.count(_.bypassable)
+     + "\n   Num Bypass Ports      : " + exe_units.num_total_bypass_ports
+     + "\n" + (if (usingFPU) fp_pipeline.toString else "")
+     + "\n   DCache Ways           : " + dcacheParams.nWays
+     + "\n   DCache Sets           : " + dcacheParams.nSets
+     + "\n   ICache Ways           : " + icacheParams.nWays
+     + "\n   ICache Sets           : " + icacheParams.nSets
+     + "\n   D-TLB Entries         : " + dcacheParams.nTLBEntries
+     + "\n   I-TLB Entries         : " + icacheParams.nTLBEntries
+     + "\n   Paddr Bits            : " + paddrBits
+     + "\n   Vaddr Bits            : " + vaddrBits
+     + "\n\n   Using FPU Unit?       : " + usingFPU.toString
+     + "\n   Using FDivSqrt?       : " + usingFDivSqrt.toString
+     + "\n   Using VM?             : " + usingVM.toString)
 
    //-------------------------------------------------------------
    //-------------------------------------------------------------

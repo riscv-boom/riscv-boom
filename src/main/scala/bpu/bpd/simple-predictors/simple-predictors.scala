@@ -27,7 +27,7 @@ import boom.exu.BranchUnitResp
 import boom.util.ElasticReg
 
 /**
- * Create a null branch predictor that makes no predictions
+ * A null branch predictor that makes no predictions
  *
  * @param fetch_width # of instructions fetched
  * @param history_length length of the BHR in bits
@@ -37,7 +37,8 @@ class NullBrPredictor(
    history_length: Int = 12
    )(implicit p: Parameters) extends BoomBrPredictor(fetch_width, history_length)(p)
 {
-   override def toString: String = "  Building (0 kB) Null Predictor (never predict)."
+   override def toString: String = "   ==Null BPU==" +
+     "\n   Building (0 kB) Null Predictor (never predict)."
    io.resp.valid := false.B
 }
 
@@ -72,7 +73,8 @@ class RandomBrPredictor(
    fetch_width: Int
    )(implicit p: Parameters) extends BoomBrPredictor(fetch_width, history_length = 1)(p)
 {
-   override def toString: String = "  Building Random Branch Predictor."
+   override def toString: String = "   ==Random BPU==" +
+     "\n  Building Random Branch Predictor."
    private val rand_val = RegInit(false.B)
    rand_val := ~rand_val
    private var lfsr= LFSR16(true.B)

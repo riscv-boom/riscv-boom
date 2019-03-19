@@ -93,5 +93,6 @@ class BaseOnlyBrPredictor(
 
    // Nothing to update, as the BIM is handled externally.
 
-   override def toString: String = "  Building no predictor (just using BIM as a base predictor)."
+   override def toString: String = "   ==Base Only BPU==" +
+     "\n   Building no predictor (just using BIM as a base predictor)."
 }

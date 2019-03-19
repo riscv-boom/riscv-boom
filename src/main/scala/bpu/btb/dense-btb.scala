@@ -433,12 +433,13 @@ class DenseBTB(implicit p: Parameters) extends BoomBTB
    }
 
    override def toString: String =
-      "\n   ==Dense BTB==" +
+      "   ==Dense BTB==" +
       "\n   Sets          : " + nSets +
       "\n   Banks         : " + nBanks +
       "\n   Ways          : " + nWays +
       "\n   Branch Levels : " + branch_levels +
       "\n   Tag Size      : " + tag_sz +
-      "\n   Offset Size   : " + offset_sz + "\n" +
+      "\n   Offset Size   : " + offset_sz +
+      "\n\n" +
       bim.toString
 }

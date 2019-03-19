@@ -175,13 +175,12 @@ class ExecutionUnits(fpu: Boolean)(implicit val p: Parameters) extends HasBoomCo
    }
 
    val exe_units_str = new StringBuilder
-   exe_units_str.append(
-      if (!fpu)
-      {
-         ( "\n   ~*** " + Seq("One","Two","Three","Four")(decodeWidth-1) + "-wide Machine ***~\n"
-         + "\n    -== " + Seq("Single","Dual","Triple","Quad","Five","Six")(totalIssueWidth-1) + " Issue ==- \n")
-      }
-   )
+   if (!fpu)
+   {
+     exe_units_str.append(
+       ( "\n   ==" + Seq("One","Two","Three","Four")(decodeWidth-1) + "-wide Machine=="
+       + "\n   ==" + Seq("Single","Dual","Triple","Quad","Five","Six")(totalIssueWidth-1) + " Issue==\n"))
+   }
 
    for (exe_unit <- exe_units)
    {
