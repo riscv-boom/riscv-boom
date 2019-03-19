@@ -44,6 +44,7 @@ import freechips.rocketchip.util.Str
  * @param offsetSz offset size for the DenseBTB
  * @param bypassCalls bypass RAS update to the BTB resp target
  * @param rasCheckForEmpty check if RAS is empty before reading
+ * @param numBufferEntries num entries for the BTB update queue
  */
 case class BoomBTBParameters(
    btbsa: Boolean = false,
@@ -58,6 +59,7 @@ case class BoomBTBParameters(
    // Extra knobs
    bypassCalls: Boolean = true,
    rasCheckForEmpty: Boolean = true,
+   numBufferEntries: Int = 8
 )
 
 /**
@@ -75,6 +77,7 @@ trait HasBoomBTBParameters extends HasBoomCoreParameters
    val idx_sz = log2Ceil(nSets)
    val bypassCalls = btbParams.bypassCalls
    val rasCheckForEmpty = btbParams.rasCheckForEmpty
+   val num_buff_entries = btbParams.numBufferEntries
 }
 
 /**
