@@ -888,8 +888,23 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
          Causes.store_page_fault.U,
          Causes.fetch_page_fault.U)
 
-   csr.io.tval := Mux(tval_valid,
-      encodeVirtualAddress(rob.io.com_xcpt.bits.badvaddr, rob.io.com_xcpt.bits.badvaddr), 0.U)
+
+   // If the fetch access or page fault is on a 32b instruction misaligned across a page, (ex: 0x4ffe),
+   // the first exception needs to see badaddr = 0x4ffe, the second exception needs to see 0x5000.
+   // This is somewhat confusing, because typically we subtract 2 for edge instructions, here we add 2
+   // to get back the aligned address (which we need here for the second exception)
+   val tval_addr_pc = Mux((rob.io.com_xcpt.bits.uopc === uopJAL &&
+                           rob.io.com_xcpt.bits.cause === Causes.misaligned_fetch.U),
+                          ComputeJALTarget(csr.io.pc, ExpandRVC(rob.io.com_xcpt.bits.inst), xLen),
+                          csr.io.pc + Mux(rob.io.com_xcpt.bits.edge_inst, 2.U, 0.U))
+   val tval_addr = Mux(csr.io.cause.isOneOf(Causes.misaligned_fetch.U,
+                                            Causes.fetch_access.U,
+                                            Causes.fetch_page_fault.U),
+                       tval_addr_pc,
+                       rob.io.com_xcpt.bits.badvaddr)
+
+
+   csr.io.tval := Mux(tval_valid, encodeVirtualAddress(tval_addr, tval_addr), 0.U)
 
    // TODO move this function to some central location (since this is used elsewhere).
    def encodeVirtualAddress(a0: UInt, ea: UInt) = if (vaddrBitsExtended == vaddrBits)
@@ -1071,9 +1086,9 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    //-------------------------------------------------------------
 
    // Dispatch
-   rob.io.enq_valids := rename_stage.io.ren1_mask
-   rob.io.enq_uops   := rename_stage.io.ren1_uops
-   rob.io.enq_new_packet := dec_finished_mask === 0.U
+   rob.io.enq_valids        := rename_stage.io.ren1_mask
+   rob.io.enq_uops          := rename_stage.io.ren1_uops
+   rob.io.enq_new_packet    := dec_finished_mask === 0.U
    rob.io.enq_partial_stall := dec_last_inst_was_stalled // TODO come up with better ROB compacting scheme.
    rob.io.debug_tsc := debug_tsc_reg
    rob.io.csr_stall := csr.io.csr_stall
@@ -1149,7 +1164,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
    // branch unit requests PCs and predictions from ROB during register read
    // (fetch PC from ROB cycle earlier than needed for critical path reasons)
-   io.ifu.get_pc.ftq_idx := RegNext(iss_uops(brunit_idx).ftq_idx)
+   io.ifu.get_pc.ftq_idx                              := RegNext(iss_uops(brunit_idx).ftq_idx)
    exe_units(brunit_idx).io.get_ftq_pc.fetch_pc       := RegNext(io.ifu.get_pc.fetch_pc)
    exe_units(brunit_idx).io.get_ftq_pc.next_val       := RegNext(io.ifu.get_pc.next_val)
    exe_units(brunit_idx).io.get_ftq_pc.next_pc        := RegNext(io.ifu.get_pc.next_pc)

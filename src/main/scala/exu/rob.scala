@@ -134,6 +134,8 @@ class CommitSignals(implicit p: Parameters) extends BoomBundle()(p)
  */
 class CommitExceptionSignals(implicit p: Parameters) extends BoomBundle()(p)
 {
+   val uopc       = UInt(UOPC_SZ.W)
+   val inst       = UInt(32.W)
    val ftq_idx    = UInt(log2Ceil(ftqSz).W)
    val edge_inst  = Bool()
    val is_rvc     = Bool()
@@ -585,7 +587,8 @@ class Rob(
    io.com_xcpt.bits.edge_inst := com_xcpt_uop.edge_inst
    io.com_xcpt.bits.is_rvc    := com_xcpt_uop.is_rvc
    io.com_xcpt.bits.pc_lob    := com_xcpt_uop.pc_lob
-
+   io.com_xcpt.bits.inst      := com_xcpt_uop.inst // TODO FIX we should never use uop.inst
+   io.com_xcpt.bits.uopc      := com_xcpt_uop.uopc
    val flush_commit_mask = Range(0,width).map{i => io.commit.valids(i) && io.commit.uops(i).flush_on_commit}
    val flush_commit = flush_commit_mask.reduce(_|_)
    val flush_val = exception_thrown || flush_commit
@@ -679,14 +682,7 @@ class Rob(
          // if no exception yet, dispatch exception wins
          r_xcpt_val      := true.B
          next_xcpt_uop   := io.enq_uops(idx)
-         r_xcpt_badvaddr := io.enq_uops(idx).pc + Mux(io.enq_uops(idx).edge_inst, 2.U, 0.U)
-         // TODO XXX REMOVE THIS. Temporary hack to fix ma-fetch tests.
-         // The problem is we shouldn't have access to pc and inst in the ROB.
-         // This should be handled by the front-end.
-         when ((io.enq_uops(idx).uopc === uopJAL) && !io.enq_uops(idx).exc_cause.orR)
-         {
-            r_xcpt_badvaddr := ComputeJALTarget(io.enq_uops(idx).pc, ExpandRVC(io.enq_uops(idx).inst), xLen)
-         }
+
       }
    }
 
