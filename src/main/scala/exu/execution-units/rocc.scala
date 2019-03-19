@@ -29,6 +29,7 @@ class RoCCShimCoreIO(implicit p: Parameters) extends BoomBundle()(p)
    val dec_rocc_vals    = Input(Vec(decodeWidth, Bool()))
    val dec_uops         = Input(Vec(decodeWidth, new MicroOp))
    val roccq_full       = Output(Bool())
+   val roccq_empty      = Output(Bool())
    val roccq_idx        = Output(UInt(log2Ceil(NUM_ROCC_ENTRIES).W))
    val rob_pnr_idx      = Input(UInt(ROB_ADDR_SZ.W))
    val rob_tail_idx     = Input(UInt(ROB_ADDR_SZ.W))
@@ -151,8 +152,8 @@ class RoCCShim(implicit p: Parameters) extends BoomModule()(p)
       roccq_head                 := WrapInc(roccq_head, NUM_ROCC_ENTRIES)
    }
 
-   io.core.roccq_full := WrapInc(roccq_tail, NUM_ROCC_ENTRIES) === roccq_head
-
+   io.core.roccq_full  := WrapInc(roccq_tail, NUM_ROCC_ENTRIES) === roccq_head
+   io.core.roccq_empty :=  roccq_tail === roccq_head
    //--------------------------
    // Branches
    for (i <- 0 until NUM_ROCC_ENTRIES)
