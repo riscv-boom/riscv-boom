@@ -60,6 +60,7 @@ class RobIo(
                                       // advance the tail ptr)
    val enq_new_packet   = Input(Bool()) // we're dispatching the first (and perhaps only) part of a dispatch packet.
    val curr_rob_tail    = Output(UInt(ROB_ADDR_SZ.W))
+   val rob_pnr_idx      = Output(UInt(ROB_ADDR_SZ.W))
 
    // Handle Branch Misspeculations
    val brinfo = Input(new BrResolutionInfo())
@@ -69,10 +70,13 @@ class RobIo(
    // Instruction is no longer busy and can be committed
    val wb_resps = Flipped(Vec(num_wakeup_ports, Valid(new ExeUnitResp(xLen max fLen+1))))
 
+   // Unbusying ports for stores.
    val lsu_clr_bsy_valid      = Input(Vec(2, Bool()))
    val lsu_clr_bsy_rob_idx    = Input(Vec(2, UInt(ROB_ADDR_SZ.W)))
-   val lsu_mem_success         = Input(Bool())
-   val lsu_mem_success_rob_idx = Input(UInt(ROB_ADDR_SZ.W))
+
+   // Port for unmarking loads/stores as speculation hazards..
+   val lsu_clr_unsafe_valid   = Input(Bool())
+   val lsu_clr_unsafe_rob_idx = Input(UInt(ROB_ADDR_SZ.W))
 
    // Track side-effects for debug purposes.
    // Also need to know when loads write back, whereas we don't need loads to unbusy.
@@ -229,15 +233,20 @@ class Rob(
    val rob_head     = RegInit(0.U(log2Ceil(num_rob_rows).W))
    val rob_tail     = RegInit(0.U(log2Ceil(num_rob_rows).W))
    val rob_pnr      = RegInit(0.U(log2Ceil(num_rob_rows).W))
-   val rob_pnr_idx  = rob_pnr << log2Ceil(width).U
-   chisel3.experimental.dontTouch(rob_pnr)
+   val rob_pnr_bank = RegInit(0.U(log2Ceil(width).W))
+
+   val rob_head_idx = rob_head << log2Ceil(width).U
    val rob_tail_idx = rob_tail << log2Ceil(width).U
+   val rob_pnr_idx  = Cat(rob_pnr, rob_pnr_bank)
+   chisel3.experimental.dontTouch(rob_pnr_idx)
+   io.rob_pnr_idx := rob_pnr_idx
 
    val will_commit         = Wire(Vec(width, Bool()))
    val can_commit          = Wire(Vec(width, Bool()))
    val can_throw_exception = Wire(Vec(width, Bool()))
-   val pnr_safe            = Wire(Vec(width, Bool())) // are the instructions at the pnr head safe?
+   val pnr_unsafe          = Wire(Vec(width, Bool())) // are the instructions at the pnr unsafe?
    val rob_head_vals       = Wire(Vec(width, Bool())) // are the instructions at the head valid?
+   val rob_tail_vals       = Wire(Vec(width, Bool())) // are the instructions at the tail valid? (to track partial row dispatches)
    val rob_head_is_store   = Wire(Vec(width, Bool()))
    val rob_head_is_load    = Wire(Vec(width, Bool()))
    val rob_head_fflags     = Wire(Vec(width, UInt(freechips.rocketchip.tile.FPConstants.FLAGS_SZ.W)))
@@ -271,7 +280,7 @@ class Rob(
    {
       val valid      = Bool()
       val busy       = Bool()
-      val safe       = Bool()
+      val unsafe     = Bool()
       val uop        = new MicroOp()
       val exception  = Bool()
    }
@@ -289,7 +298,7 @@ class Rob(
       // one bank
       val rob_val       = RegInit(VecInit(Seq.fill(num_rob_rows){false.B}))
       val rob_bsy       = Mem(num_rob_rows, Bool())
-      val rob_safe      = Mem(num_rob_rows, Bool())
+      val rob_unsafe    = Mem(num_rob_rows, Bool())
       val rob_uop       = Reg(Vec(num_rob_rows, new MicroOp()))
       val rob_exception = Mem(num_rob_rows, Bool())
       val rob_fflags    = Mem(num_rob_rows, Bits(freechips.rocketchip.tile.FPConstants.FLAGS_SZ.W))
@@ -302,7 +311,7 @@ class Rob(
          rob_val(rob_tail)       := true.B
          rob_bsy(rob_tail)       := !io.enq_uops(w).is_fence &&
                                     !(io.enq_uops(w).is_fencei)
-         rob_safe(rob_tail)      := !io.enq_uops(w).may_xcpt && !io.enq_uops(w).exception
+         rob_unsafe(rob_tail)    := io.enq_uops(w).unsafe
          rob_uop(rob_tail)       := io.enq_uops(w)
          rob_exception(rob_tail) := io.enq_uops(w).exception
          rob_fflags(rob_tail)    := 0.U
@@ -326,8 +335,8 @@ class Rob(
          val row_idx = GetRowIdx(wb_uop.rob_idx)
          when (wb_resp.valid && MatchBank(GetBankIdx(wb_uop.rob_idx)))
          {
-            rob_bsy(row_idx)    := false.B
-            rob_safe(row_idx)   := true.B
+            rob_bsy(row_idx)      := false.B
+            rob_unsafe(row_idx)   := false.B
             if (O3PIPEVIEW_PRINTF)
             {
                printf("%d; O3PipeView:complete:%d\n",
@@ -350,7 +359,6 @@ class Rob(
          {
             val cidx = GetRowIdx(clr_rob_idx)
             rob_bsy(cidx)    := false.B
-            rob_safe(cidx)   := true.B
             assert (rob_val(cidx) === true.B, "[rob] store writing back to invalid entry.")
             assert (rob_bsy(cidx) === true.B, "[rob] store writing back to a not-busy entry.")
 
@@ -362,10 +370,10 @@ class Rob(
          }
       }
 
-      when (io.lsu_mem_success && MatchBank(GetBankIdx(io.lsu_mem_success_rob_idx)))
+      when (io.lsu_clr_unsafe_valid && MatchBank(GetBankIdx(io.lsu_clr_unsafe_rob_idx)))
       {
-         val cidx = GetRowIdx(io.lsu_mem_success_rob_idx)
-         rob_safe(cidx) := true.B
+         val cidx = GetRowIdx(io.lsu_clr_unsafe_rob_idx)
+         rob_unsafe(cidx) := false.B
       }
 
       when (io.brinfo.valid && MatchBank(GetBankIdx(io.brinfo.rob_idx)))
@@ -397,15 +405,15 @@ class Rob(
          rob_exception(GetRowIdx(io.lxcpt.bits.uop.rob_idx)) := true.B
          when (io.lxcpt.bits.cause =/= MINI_EXCEPTION_MEM_ORDERING)
          {
-            // For mem-ordering failures the failing load will have been marked safe already
-            assert(!rob_safe(GetRowIdx(io.lxcpt.bits.uop.rob_idx)),
+            // In the case of a mem-ordering failure, the failing load will have been marked safe already.
+            assert(rob_unsafe(GetRowIdx(io.lxcpt.bits.uop.rob_idx)),
                "An instruction marked as safe is causing an exception")
          }
       }
       when (io.bxcpt.valid && MatchBank(GetBankIdx(io.bxcpt.bits.uop.rob_idx)))
       {
          rob_exception(GetRowIdx(io.bxcpt.bits.uop.rob_idx)) := true.B
-         assert(!rob_safe(GetRowIdx(io.bxcpt.bits.uop.rob_idx)),
+         assert(rob_unsafe(GetRowIdx(io.bxcpt.bits.uop.rob_idx)),
             "An instruction marked as safe is causing an exception")
 
       }
@@ -416,7 +424,7 @@ class Rob(
 
       // Can this instruction commit? (the check for exceptions/rob_state happens later).
       can_commit(w) := rob_val(rob_head) && !(rob_bsy(rob_head)) && !io.csr_stall
-      pnr_safe(w)   := !rob_val(rob_pnr) || (rob_safe(rob_pnr) && !rob_exception(rob_pnr))
+      pnr_unsafe(w) := rob_val(rob_pnr) && (rob_unsafe(rob_pnr) || rob_exception(rob_pnr))
 
       val com_idx = Wire(UInt())
       com_idx := rob_head
@@ -485,6 +493,7 @@ class Rob(
       // -----------------------------------------------
       // Outputs
       rob_head_vals(w)     := rob_val(rob_head)
+      rob_tail_vals(w)     := rob_val(rob_tail)
       rob_head_fflags(w)   := rob_fflags(rob_head)
       rob_head_is_store(w) := rob_uop(rob_head).is_store
       rob_head_is_load(w)  := rob_uop(rob_head).is_load
@@ -533,7 +542,7 @@ class Rob(
          {
             debug_entry(w + i*width).valid     := rob_val(i)
             debug_entry(w + i*width).busy      := rob_bsy(i.U)
-            debug_entry(w + i*width).safe      := rob_safe(i.U)
+            debug_entry(w + i*width).unsafe    := rob_unsafe(i.U)
             debug_entry(w + i*width).uop       := rob_uop(i.U)
             debug_entry(w + i*width).exception := rob_exception(i.U)
          }
@@ -727,20 +736,28 @@ class Rob(
    {
       rob_head := WrapInc(rob_head, num_rob_rows)
    }
-   assert(!(rob_head === WrapInc(rob_pnr, num_rob_rows) && rob_pnr =/= rob_tail),
-      "ROB head overran the PNR head!")
-   // -----------------------------------------------
-   // ROB PNR Head Logic
 
-   val pnr_safe_to_advance =
-      rob_pnr =/= rob_tail &&
-      pnr_safe.reduce(_&&_) &&
-      (rob_state === s_normal || rob_state === s_wait_till_empty) &&
-      !exception_thrown
-   when (pnr_safe_to_advance)
-   {
-      rob_pnr := WrapInc(rob_pnr, num_rob_rows)
-   }
+   // -----------------------------------------------
+   // ROB Point-of-No-Return (PNR) Logic
+   // Acts as a second head, but only waits on busy instructions which might cause misspeculation.
+   // TODO is it worth it to add an extra 'parity' bit to all rob pointer logic?
+   // Makes 'older than' comparisons ~3x cheaper, in case we're going to use the PNR to do a large number of those.
+   // Also doesn't require the rob tail (or head) to be exported to whatever we want to compare with the PNR.
+
+   val do_inc_pnr = !pnr_unsafe.reduce(_||_) && rob_pnr =/= rob_tail
+   val pnr_at_tail = rob_pnr === rob_tail
+   rob_pnr := Mux(do_inc_pnr, WrapInc(rob_pnr, num_rob_rows), rob_pnr)
+   rob_pnr_bank := Mux(do_inc_pnr,
+                     0.U,
+                   Mux(pnr_at_tail,
+                      PriorityEncoder(~rob_head_vals.asUInt),
+                      PriorityEncoder(pnr_unsafe.asUInt)))
+
+   // Head overrunning PNR likely means an entry hasn't been marked as safe when it should have been.
+   assert(!IsOlder(rob_pnr, rob_head, rob_tail) || rob_pnr === rob_tail)
+
+   // PNR overrunning tail likely means an entry has been marked as safe when it shouldn't have been.
+   assert(!IsOlder(rob_tail, rob_pnr, rob_head))
 
    // -----------------------------------------------
    // ROB Tail Logic
@@ -940,7 +957,7 @@ class Rob(
             printf("(%c)(%c)(%c) 0x%x [DASM(%x)] %c ",
                    Mux(debug_entry(r_idx+0).valid, Str("V"), Str(" ")),
                    Mux(debug_entry(r_idx+0).busy, Str("B"),  Str(" ")),
-                   Mux(debug_entry(r_idx+0).safe, Str("S"),  Str(" ")),
+                   Mux(debug_entry(r_idx+0).unsafe, Str("U"),  Str(" ")),
                    debug_entry(r_idx+0).uop.pc(31,0),
                    debug_entry(r_idx+0).uop.inst,
                    Mux(debug_entry(r_idx+0).exception, Str("E"), Str("-"))
@@ -954,8 +971,8 @@ class Rob(
                    Mux(debug_entry(r_idx+1).valid, Str("V"), Str(" ")),
                    Mux(debug_entry(r_idx+0).busy,  Str("B"), Str(" ")),
                    Mux(debug_entry(r_idx+1).busy,  Str("B"), Str(" ")),
-                   Mux(debug_entry(r_idx+0).safe,  Str("S"), Str(" ")),
-                   Mux(debug_entry(r_idx+1).safe,  Str("S"), Str(" ")),
+                   Mux(debug_entry(r_idx+0).unsafe,  Str("U"), Str(" ")),
+                   Mux(debug_entry(r_idx+1).unsafe,  Str("U"), Str(" ")),
                    debug_entry(r_idx+0).uop.pc(31,0),
                    debug_entry(r_idx+1).uop.pc(15,0),
                    debug_entry(r_idx+0).uop.inst,
@@ -970,18 +987,18 @@ class Rob(
          {
             val row_is_val = debug_entry(r_idx+0).valid || debug_entry(r_idx+1).valid || debug_entry(r_idx+2).valid || debug_entry(r_idx+3).valid
             printf("(%c%c%c%c)(%c%c%c%c)(%c%c%c%c) 0x%x %x %x %x [DASM(%x)][DASM(%x)][DASM(%x)][DASM(%x)" + "]%c%c%c%c",
-                   Mux(debug_entry(r_idx+0).valid, Str("V"), Str(" ")),
-                   Mux(debug_entry(r_idx+1).valid, Str("V"), Str(" ")),
-                   Mux(debug_entry(r_idx+2).valid, Str("V"), Str(" ")),
-                   Mux(debug_entry(r_idx+3).valid, Str("V"), Str(" ")),
-                   Mux(debug_entry(r_idx+0).busy,  Str("B"), Str(" ")),
-                   Mux(debug_entry(r_idx+1).busy,  Str("B"), Str(" ")),
-                   Mux(debug_entry(r_idx+2).busy,  Str("B"), Str(" ")),
-                   Mux(debug_entry(r_idx+3).busy,  Str("B"), Str(" ")),
-                   Mux(debug_entry(r_idx+0).safe,  Str("S"), Str(" ")),
-                   Mux(debug_entry(r_idx+1).safe,  Str("S"), Str(" ")),
-                   Mux(debug_entry(r_idx+2).safe,  Str("S"), Str(" ")),
-                   Mux(debug_entry(r_idx+3).safe,  Str("S"), Str(" ")),
+                   Mux(debug_entry(r_idx+0).valid,  Str("V"), Str(" ")),
+                   Mux(debug_entry(r_idx+1).valid,  Str("V"), Str(" ")),
+                   Mux(debug_entry(r_idx+2).valid,  Str("V"), Str(" ")),
+                   Mux(debug_entry(r_idx+3).valid,  Str("V"), Str(" ")),
+                   Mux(debug_entry(r_idx+0).busy,   Str("B"), Str(" ")),
+                   Mux(debug_entry(r_idx+1).busy,   Str("B"), Str(" ")),
+                   Mux(debug_entry(r_idx+2).busy,   Str("B"), Str(" ")),
+                   Mux(debug_entry(r_idx+3).busy,   Str("B"), Str(" ")),
+                   Mux(debug_entry(r_idx+0).unsafe, Str("U"), Str(" ")),
+                   Mux(debug_entry(r_idx+1).unsafe, Str("U"), Str(" ")),
+                   Mux(debug_entry(r_idx+2).unsafe, Str("U"), Str(" ")),
+                   Mux(debug_entry(r_idx+3).unsafe, Str("U"), Str(" ")),
                    debug_entry(r_idx+0).uop.pc(23,0),
                    debug_entry(r_idx+1).uop.pc(15,0),
                    debug_entry(r_idx+2).uop.pc(15,0),
