@@ -55,7 +55,7 @@ import freechips.rocketchip.util.Str
 
 import boom.common._
 import boom.exu.{BrResolutionInfo, Exception, FuncUnitResp}
-import boom.util.{AgePriorityEncoder, IsKilledByBranch, GetNewBrMask, WrapInc}
+import boom.util.{AgePriorityEncoder, IsKilledByBranch, GetNewBrMask, WrapInc, IsOlder}
 
 /**
  * IO bundle representing the different signals to interact with the backend
@@ -1026,8 +1026,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
       }
       .elsewhen (do_ldld_search)
       {
-         def IsSearcherOlder(i0: UInt, i1: UInt, tail: UInt) = (Cat(i0 < tail, i0) < Cat(i1 < tail, i1))
-         val searcher_is_older = IsSearcherOlder(lcam_ldq_idx, laq_uop(i).ldq_idx, laq_tail)
+         val searcher_is_older = IsOlder(lcam_ldq_idx, i.U, laq_head)
 
          // Does the load entry depend on the searching load?
          // Aka, is the searching load older than the load entry?
@@ -1240,14 +1239,13 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
    ld_was_killed           := false.B
    ld_was_put_to_sleep     := false.B
 
-   def IsOlder(i0: UInt, i1: UInt, tail: UInt) = (Cat(i0 <= tail, i0) < Cat(i1 <= tail, i1))
    when (io.nack.valid)
    {
       // the cache nacked our store
       when (!io.nack.isload)
       {
          stq_executed(io.nack.lsu_idx) := false.B
-         when (IsOlder(io.nack.lsu_idx, stq_execute_head, stq_tail))
+         when (IsOlder(io.nack.lsu_idx, stq_execute_head, stq_head))
          {
             stq_execute_head := io.nack.lsu_idx
          }
