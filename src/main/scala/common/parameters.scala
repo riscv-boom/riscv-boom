@@ -42,6 +42,7 @@ case class BoomCoreParams(
    enablePrefetching: Boolean = false,
    enableBrResolutionRegister: Boolean = true,
    enableCommitMapTable: Boolean = false,
+   enableFastPNR: Boolean = true,
    enableBTBContainsBranches: Boolean = true,
    enableBranchPredictor: Boolean = false,
    enableBpdUModeOnly: Boolean = false,
@@ -232,6 +233,7 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
    //************************************
    // Extra Knobs and Features
    val ENABLE_COMMIT_MAP_TABLE = boomParams.enableCommitMapTable
+   val enableFastPNR = boomParams.enableFastPNR
 
    //************************************
    // Implicitly calculated constants

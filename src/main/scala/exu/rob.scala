@@ -291,6 +291,9 @@ class Rob(
    // --------------------------------------------------------------------------
    // **************************************************************************
 
+   // Contains all information the PNR needs to find the oldest instruction which can't be safely speculated past.
+   val rob_unsafe_masked = WireInit(VecInit(Seq.fill(num_rob_rows << log2Ceil(width)){false.B}))
+
    for (w <- 0 until width)
    {
       def MatchBank(bank_idx: UInt): Bool = (bank_idx === w.U)
@@ -424,7 +427,6 @@ class Rob(
 
       // Can this instruction commit? (the check for exceptions/rob_state happens later).
       can_commit(w) := rob_val(rob_head) && !(rob_bsy(rob_head)) && !io.csr_stall
-      pnr_unsafe(w) := rob_val(rob_pnr) && (rob_unsafe(rob_pnr) || rob_exception(rob_pnr))
 
       val com_idx = Wire(UInt())
       com_idx := rob_head
@@ -497,6 +499,14 @@ class Rob(
       rob_head_fflags(w)   := rob_fflags(rob_head)
       rob_head_is_store(w) := rob_uop(rob_head).is_store
       rob_head_is_load(w)  := rob_uop(rob_head).is_load
+
+      //------------------------------------------------
+      // Invalid entries are safe; thrown exceptions are unsafe.
+      for (i <- 0 until num_rob_rows) {
+         rob_unsafe_masked((i << log2Ceil(width)) + w) := rob_val(i) && (rob_unsafe(i) || rob_exception(i))
+      }
+      // Read unsafe status of PNR row.
+      pnr_unsafe(w) := rob_unsafe_masked(rob_pnr << log2Ceil(width) + w)
 
       // -----------------------------------------------
       // debugging write ports that should not be synthesized
@@ -744,14 +754,26 @@ class Rob(
    // Makes 'older than' comparisons ~3x cheaper, in case we're going to use the PNR to do a large number of those.
    // Also doesn't require the rob tail (or head) to be exported to whatever we want to compare with the PNR.
 
-   val do_inc_pnr = !pnr_unsafe.reduce(_||_) && rob_pnr =/= rob_tail
-   val pnr_at_tail = rob_pnr === rob_tail
-   rob_pnr := Mux(do_inc_pnr, WrapInc(rob_pnr, num_rob_rows), rob_pnr)
-   rob_pnr_bank := Mux(do_inc_pnr,
-                     0.U,
-                   Mux(pnr_at_tail,
-                      PriorityEncoder(~rob_head_vals.asUInt),
-                      PriorityEncoder(pnr_unsafe.asUInt)))
+   if (enableFastPNR)
+   {
+      val unsafe_entry_in_rob = rob_unsafe_masked.reduce(_||_)
+      val next_rob_pnr_idx = Mux(unsafe_entry_in_rob,
+                                 AgePriorityEncoder(rob_unsafe_masked, rob_head_idx),
+                                 rob_tail << log2Ceil(width) | PriorityEncoder(~rob_head_vals.asUInt))
+      rob_pnr := next_rob_pnr_idx >> log2Ceil(width)
+      rob_pnr_bank := next_rob_pnr_idx(log2Ceil(width)-1, 0)
+   }
+   else
+   {
+      val do_inc_pnr = !pnr_unsafe.reduce(_||_) && rob_pnr =/= rob_tail
+      val pnr_at_tail = rob_pnr === rob_tail
+      rob_pnr := Mux(do_inc_pnr, WrapInc(rob_pnr, num_rob_rows), rob_pnr)
+      rob_pnr_bank := Mux(do_inc_pnr,
+                        0.U,
+                      Mux(pnr_at_tail,
+                         PriorityEncoder(~rob_head_vals.asUInt),
+                         PriorityEncoder(pnr_unsafe.asUInt)))
+   }
 
    // Head overrunning PNR likely means an entry hasn't been marked as safe when it should have been.
    assert(!IsOlder(rob_pnr, rob_head, rob_tail) || rob_pnr === rob_tail)
