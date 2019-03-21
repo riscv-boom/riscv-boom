@@ -1,3 +1,10 @@
+//******************************************************************************
+// Copyright (c) 2018 - 2019, The Regents of the University of California (Regents).
+// All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
+//------------------------------------------------------------------------------
+// Author: Abraham Gonzalez
+//------------------------------------------------------------------------------
+
 package boom.tests
 
 import org.scalatest._
@@ -21,11 +28,15 @@ object BoomTestUtils {
 
   private def augment(tp: TileParams)(implicit p: Parameters): Parameters = p.alterPartial {
     case TileKey => tp
+
+    // TODO: Figure out proper TL parameters
     case SharedMemoryTLEdge => new TLEdgeOut(TLClientPortParameters(Seq(TLClientParameters(
                                                                           name = "fake-client-node",
                                                                           sourceId = IdRange(0,2)))),
                                              TLManagerPortParameters(Seq(TLManagerParameters(
-                                                                           address = Seq(AddressSet(x"8000_0000", x"1000_0000" - 1)),
+                                                                           address = Seq(
+                                                                             AddressSet(x"8000_0000",
+                                                                                        x"1000_0000" - 1)),
                                                                            supportsGet = TransferSizes(1, 64),
                                                                            supportsPutFull = TransferSizes(1, 64),
                                                                            supportsPutPartial = TransferSizes(1, 64))),

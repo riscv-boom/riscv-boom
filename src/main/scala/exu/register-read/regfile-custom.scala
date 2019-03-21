@@ -49,8 +49,8 @@ class RegisterFileSeqCustomArray(
   regfile.io.clock := clock
 
   // decode addrs into OH's
-  val        waddr_OH = Wire(Vec(num_write_ports, UInt(num_registers.W)))
-  val        raddr_OH =  Reg(Vec( num_read_ports, UInt(num_registers.W)))
+  val waddr_OH = Wire(Vec(num_write_ports, UInt(num_registers.W)))
+  val raddr_OH = Reg(Vec( num_read_ports, UInt(num_registers.W)))
 
   for (w <-0 until num_write_ports)
   {
@@ -60,7 +60,7 @@ class RegisterFileSeqCustomArray(
   }
 
   val read_data = Wire(Vec(num_read_ports, UInt(register_width.W)))
-  for (r <-0 until num_read_ports)
+  for (r <- 0 until num_read_ports)
   {
     read_data(r) := Mux(RegNext(io.read_ports(r).addr === 0.U), 0.U, regfile.io.RD(r))
     raddr_OH(r) := UIntToOH(io.read_ports(r).addr) // what register are you reading in OH
@@ -72,26 +72,26 @@ class RegisterFileSeqCustomArray(
   // on a per register basis, enabling read/writes based on the read/write ports
   for (i <- 0 until num_registers)
   {
-
     if (i == 0)
     {
       // physical register 0 (P0) is always zero
-      regfile.io.OE(0) := 0.U
-      regfile.io.WE(0) := false.B
-      regfile.io.WS(0) := 0.U
+      write_select_OH(i) := 0.U
+      regfile.io.OE(i)   := 0.U
+      regfile.io.WE(i)   := false.B
+      regfile.io.WS(i)   := 0.U
     }
     else
     {
       // setup reads
-      regfile.io.OE(i) := Cat(raddr_OH.map{ item => item(i) }) // read from a particular register
+      regfile.io.OE(i) := VecInit(raddr_OH.map{ item => item(i) }).asUInt // read from a particular register
 
       // setup writes
-      write_select_OH(i) := Cat((waddr_OH zip io.write_ports).map{ case (item, wp) => item(i) && wp.valid }) // write to a particular register
+      write_select_OH(i) := VecInit(
+        (waddr_OH zip io.write_ports).map{case (item, wp) => item(i) && wp.valid}).asUInt // write to a register
       regfile.io.WE(i) := write_select_OH(i).orR // someone is writing to that register
       regfile.io.WS(i) := OHToUInt(write_select_OH(i)) // who is writing to that register
     }
 
-    //printf("regfile.WS(%d)=%d, ws_OH=0x%x\n", i.U, regfile.io.WS(i), write_select_OH(i))
     if (i > 0)
     {
       // ensure there is only 1 writer to a preg
@@ -196,6 +196,13 @@ class RegisterFileArrayModel(
 {
   println("WARNING: This register file model should not be synthesized")
 
+  // cheat a bit, since we don't simulate tri-states fighting over a single wire
+  // we need to first set the wire to 0.U to make firrtl happy
+  for (rPortIdx <- 0 until num_read_ports)
+  {
+    io.RD(rPortIdx) := 0.U // technically this should be high-Z
+  }
+
   for (i <- 0 until num_registers) yield
   {
     val register = Module(new RegFileRegisterModel(
@@ -207,19 +214,20 @@ class RegisterFileArrayModel(
     register.io.wd := io.WD
     register.io.oe := io.OE(i)
 
-    // cheat a bit, since we don't simulate tri-states fighting over a single wire.
     for (rPortIdx <- 0 until num_read_ports)
     {
-      when(io.OE(i)(rPortIdx)) { io.RD(rPortIdx) := register.io.rd(rPortIdx) }
+      when (io.OE(i)(rPortIdx))
+      {
+        io.RD(rPortIdx) := register.io.rd(rPortIdx)
+      }
     }
   }
 
   // assert only one reader set for each read port.
   for (rPortIdx <- 0 until num_read_ports)
   {
-    // TODO: Is this right?
     assert (PopCount(io.OE.map(e => e(rPortIdx))) <= 1.U,
-      "[regfile] OE(*)(" + rPortIdx + ") has too many enables set.")
+      "[custom_regfile] OE(*)(" + rPortIdx + ") has too many enables set.")
   }
 }
 
@@ -233,11 +241,11 @@ class RegFileRegisterModel(
 {
   val io = IO(new Bundle
   {
-    val we  = Input(Bool())
-    val ws  = Input(UInt(log2Ceil(num_write_ports).W))
-    val wd  = Input(Vec(num_write_ports, UInt(register_width.W)))
-    val oe  = Input(UInt(num_read_ports.W))
-    val rd  = Output(Vec(num_read_ports, UInt(register_width.W)))
+    val we = Input(Bool())
+    val ws = Input(UInt(log2Ceil(num_write_ports).W))
+    val wd = Input(Vec(num_write_ports, UInt(register_width.W)))
+    val oe = Input(UInt(num_read_ports.W))
+    val rd = Output(Vec(num_read_ports, UInt(register_width.W)))
   })
 
   val rd = Wire(Vec(num_read_ports, Vec(register_width, Bool())))
@@ -249,7 +257,7 @@ class RegFileRegisterModel(
       num_write_ports))
     bit.io.we := io.we
     bit.io.ws := io.ws
-    bit.io.wd := Cat(io.wd.map{ wPortData => wPortData(i) })
+    bit.io.wd := VecInit(io.wd.map{ wPortData => wPortData(i) })
     bit.io.oe := io.oe
     for (rPortIdx <- 0 until num_read_ports) yield
     {
@@ -283,14 +291,15 @@ class RegFileBitModel(
   val z = true.B
 
   // model tri-state buffer to output line
-  (io.rd zip io.oe.toBools).map{ case (rd_bit, oe_bit) => Mux(oe_bit, dout, z) }
+  (io.rd zip io.oe.toBools).map{ case (rd_bit, oe_bit) => rd_bit := Mux(oe_bit, dout, z) }
 
   // note: normally this would have the Z connected to any unused inputs into the mux
   val mux_out = Mux1H(UIntToOH(io.ws), io.wd)
   din := mux_out
 
-  // ensure that
-  assert (!(io.we && io.ws >= num_write_ports.U), "[regfile_bit_model] write-select set to invalid value.")
+  // ensure that there is only 1 write port writing
+  assert (!(io.we && io.ws >= num_write_ports.U),
+    "[custom_regfile_bit] write-select set to invalid value.")
 
   // d flip-flop model
   val dff = Reg(Bool())
