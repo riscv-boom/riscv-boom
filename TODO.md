@@ -9,5 +9,3 @@ Here's a short list of TODO ideas:
    * Add data prefetchers.
 
    * Allow for under-provisioned register file ports.
-
-   * Add support for RV64C. Requires modifications to Rocket's icache as well.
