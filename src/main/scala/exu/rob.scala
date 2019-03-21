@@ -233,11 +233,11 @@ class Rob(
    val rob_head     = RegInit(0.U(log2Ceil(num_rob_rows).W))
    val rob_tail     = RegInit(0.U(log2Ceil(num_rob_rows).W))
    val rob_pnr      = RegInit(0.U(log2Ceil(num_rob_rows).W))
-   val rob_pnr_bank = RegInit(0.U(log2Ceil(width).W))
+   val rob_pnr_bank = if (width > 1) RegInit(0.U(log2Ceil(width).W)) else 0.U
 
    val rob_head_idx = rob_head << log2Ceil(width).U
    val rob_tail_idx = rob_tail << log2Ceil(width).U
-   val rob_pnr_idx  = Cat(rob_pnr, rob_pnr_bank)
+   val rob_pnr_idx  = if (width > 1) Cat(rob_pnr, rob_pnr_bank) else rob_pnr
    chisel3.experimental.dontTouch(rob_pnr_idx)
    io.rob_pnr_idx := rob_pnr_idx
 
@@ -770,18 +770,20 @@ class Rob(
                                  AgePriorityEncoder(rob_unsafe_masked, rob_head_idx),
                                  rob_tail << log2Ceil(width) | PriorityEncoder(~rob_head_vals.asUInt))
       rob_pnr := next_rob_pnr_idx >> log2Ceil(width)
-      rob_pnr_bank := next_rob_pnr_idx(log2Ceil(width)-1, 0)
+      if (width > 1)
+         rob_pnr_bank := next_rob_pnr_idx(log2Ceil(width)-1, 0)
    }
    else
    {
       val do_inc_pnr = !pnr_unsafe.reduce(_||_) && rob_pnr =/= rob_tail
       val pnr_at_tail = rob_pnr === rob_tail
       rob_pnr := Mux(do_inc_pnr, WrapInc(rob_pnr, num_rob_rows), rob_pnr)
-      rob_pnr_bank := Mux(do_inc_pnr,
-                        0.U,
-                      Mux(pnr_at_tail,
-                         PriorityEncoder(~rob_head_vals.asUInt),
-                         PriorityEncoder(pnr_unsafe.asUInt)))
+      if (width > 1)
+         rob_pnr_bank := Mux(do_inc_pnr,
+                           0.U,
+                         Mux(pnr_at_tail,
+                            PriorityEncoder(~rob_head_vals.asUInt),
+                          PriorityEncoder(pnr_unsafe.asUInt)))
    }
 
    // Head overrunning PNR likely means an entry hasn't been marked as safe when it should have been.
