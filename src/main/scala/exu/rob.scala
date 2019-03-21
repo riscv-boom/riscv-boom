@@ -241,6 +241,10 @@ class Rob(
    chisel3.experimental.dontTouch(rob_pnr_idx)
    io.rob_pnr_idx := rob_pnr_idx
 
+   val maybe_full = RegInit(false.B)
+   val full = Wire(Bool())
+   val empty = Wire(Bool())
+
    val will_commit         = Wire(Vec(width, Bool()))
    val can_commit          = Wire(Vec(width, Bool()))
    val can_throw_exception = Wire(Vec(width, Bool()))
@@ -425,6 +429,9 @@ class Rob(
       //-----------------------------------------------
       // Commit or Rollback
 
+      // Don't attempt to rollback the tail's row when the rob is full.
+      val rbk_row = rob_state === s_rollback && !full
+
       // Can this instruction commit? (the check for exceptions/rob_state happens later).
       can_commit(w) := rob_val(rob_head) && !(rob_bsy(rob_head)) && !io.csr_stall
 
@@ -441,12 +448,12 @@ class Rob(
       io.commit.uops(w)       := rob_uop(com_idx)
 
       io.commit.rbk_valids(w) :=
-                              (rob_state === s_rollback) &&
+                              rbk_row &&
                               rob_val(com_idx) &&
                               (rob_uop(com_idx).dst_rtype === RT_FIX || rob_uop(com_idx).dst_rtype === RT_FLT) &&
                               (!(ENABLE_COMMIT_MAP_TABLE.B))
 
-      when (rob_state === s_rollback)
+      when (rbk_row)
       {
          rob_val(com_idx)       := false.B
          rob_exception(com_idx) := false.B
@@ -514,7 +521,7 @@ class Rob(
       {
          rob_uop(rob_head).inst := BUBBLE
       }
-      .elsewhen (rob_state === s_rollback)
+      .elsewhen (rbk_row)
       {
          rob_uop(rob_tail).inst := BUBBLE
       }
@@ -715,7 +722,7 @@ class Rob(
    assert (!(exception_thrown && !r_xcpt_val),
       "ROB trying to throw an exception, but it doesn't have a valid xcpt_cause")
 
-   assert (!(io.empty && r_xcpt_val),
+   assert (!(empty && r_xcpt_val),
       "ROB is empty, but believes it has an outstanding exception.")
 
    assert (!(will_throw_exception && (GetRowIdx(r_xcpt_uop.rob_idx) =/= rob_head)),
@@ -730,6 +737,7 @@ class Rob(
    // dispatch the rest of it.
    // update when committed ALL valid instructions in commit_bundle
 
+   val rob_deq = WireInit(false.B)
    val r_partial_row = RegInit(false.B)
 
    when (io.enq_valids.reduce(_|_))
@@ -745,6 +753,7 @@ class Rob(
    when (finished_committing_row)
    {
       rob_head := WrapInc(rob_head, num_rob_rows)
+      rob_deq := true.B
    }
 
    // -----------------------------------------------
@@ -779,22 +788,26 @@ class Rob(
    assert(!IsOlder(rob_pnr, rob_head, rob_tail) || rob_pnr === rob_tail)
 
    // PNR overrunning tail likely means an entry has been marked as safe when it shouldn't have been.
-   assert(!IsOlder(rob_tail, rob_pnr, rob_head))
+   assert(!IsOlder(rob_tail, rob_pnr, rob_head) || full)
 
    // -----------------------------------------------
    // ROB Tail Logic
 
-   when (rob_state === s_rollback && rob_tail =/= rob_head)
+   val rob_enq = WireInit(false.B)
+
+   when (rob_state === s_rollback && (rob_tail =/= rob_head || maybe_full))
    {
       rob_tail := WrapDec(rob_tail, num_rob_rows)
+      rob_deq := true.B
    }
-   .elsewhen (io.brinfo.valid && io.brinfo.mispredict)
+   .elsewhen (io.brinfo.mispredict)
    {
       rob_tail := WrapInc(GetRowIdx(io.brinfo.rob_idx), num_rob_rows)
    }
    .elsewhen (io.enq_valids.asUInt =/= 0.U && !io.enq_partial_stall)
    {
       rob_tail := WrapInc(rob_tail, num_rob_rows)
+      rob_enq := true.B
    }
 
    if (ENABLE_COMMIT_MAP_TABLE)
@@ -808,19 +821,18 @@ class Rob(
    }
 
    // -----------------------------------------------
-   // Full Logic
+   // Full/Empty Logic
+   // The ROB can be completely full, but only if it did not dispatch a row in the prior cycle.
+   // I.E. at least one entry will be empty when in a steady state of dispatching and committing a row each cycle.
+   // TODO should we add an extra 'parity bit' onto the ROB pointers to simplify this logic?
 
-   // TODO can we let the ROB fill up completely?
-   // can we track "maybe_full"?
-   // maybe full is reset on branch mispredict
-   // ALSO must handle xcpt tail/age logic if we do this!
-   // also must handle rob_pc valid logic.
-   val full = WrapInc(rob_tail, num_rob_rows) === rob_head
+   maybe_full := !rob_deq && (rob_enq || maybe_full)
 
-   io.empty := (rob_head === rob_tail) && (rob_head_vals.asUInt === 0.U)
+   full := rob_tail === rob_head && maybe_full
+   empty := (rob_head === rob_tail) && (rob_head_vals.asUInt === 0.U)
 
+   io.empty := empty
    io.curr_rob_tail := rob_tail
-
    io.ready := (rob_state === s_normal) && !full
 
    //-----------------------------------------------
@@ -855,7 +867,7 @@ class Rob(
          }
          is (s_rollback)
          {
-            when (io.empty)
+            when (empty)
             {
                rob_state := s_normal
             }
@@ -866,7 +878,7 @@ class Rob(
             {
                rob_state := s_rollback
             }
-            .elsewhen (io.empty)
+            .elsewhen (empty)
             {
                rob_state := s_normal
             }
