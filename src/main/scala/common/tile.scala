@@ -110,6 +110,7 @@ class BoomTile(
     finalNode.get.address(0)
   }
 
+  nPTWPorts += 1    // for LSU
   nDCachePorts += 1 /*core */ + (dtim_adapter.isDefined).toInt
 
   val dtimProperty = dtim_adapter.map(d => Map(

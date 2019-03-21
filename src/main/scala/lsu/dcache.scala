@@ -69,22 +69,6 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends HellaCac
   // check for unsupported operations
   assert(!s1_valid || !s1_req.cmd.isOneOf(M_PWR))
 
-  val dtlb = Module(new TLB(false, log2Ceil(coreDataBytes), TLBConfig(nTLBEntries)))
-  io.ptw <> dtlb.io.ptw
-  dtlb.io.kill := io.cpu.s2_kill
-  dtlb.io.req.valid := s1_valid && !io.cpu.s1_kill && s1_readwrite
-  dtlb.io.req.bits.passthrough := s1_req.phys
-  dtlb.io.req.bits.vaddr := s1_req.addr
-  dtlb.io.req.bits.size := s1_req.typ
-  dtlb.io.req.bits.cmd := s1_req.cmd
-  when (!dtlb.io.req.ready && !io.cpu.req.bits.phys) { io.cpu.req.ready := Bool(false) }
-
-  dtlb.io.sfence.valid := s1_valid && !io.cpu.s1_kill && s1_sfence
-  dtlb.io.sfence.bits.rs1 := s1_req.typ(0)
-  dtlb.io.sfence.bits.rs2 := s1_req.typ(1)
-  dtlb.io.sfence.bits.addr := s1_req.addr
-  dtlb.io.sfence.bits.asid := io.cpu.s1_data.data
-
   when (io.cpu.req.valid)
   {
     s1_req := io.cpu.req.bits
@@ -323,8 +307,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends HellaCac
   amoalu.io.rhs := s2_req.data
 
   // nack it like it's hot
-  val s1_nack = dtlb.io.req.valid && dtlb.io.resp.miss ||
-                s1_req.addr(idxMSB,idxLSB) === prober.io.meta_write.bits.idx && !prober.io.req.ready
+  val s1_nack = s1_req.addr(idxMSB,idxLSB) === prober.io.meta_write.bits.idx && !prober.io.req.ready
   val s2_nack_hit = RegEnable(s1_nack, s1_valid || s1_replay)
   when (s2_nack_hit) { mshrs.io.req.valid := Bool(false) }
   val s2_nack_victim = s2_hit && mshrs.io.secondary_miss
@@ -372,7 +355,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends HellaCac
   // performance events
   io.cpu.perf.acquire := edge.done(tl_out.a)
   io.cpu.perf.release := edge.done(tl_out.c)
-  io.cpu.perf.tlbMiss := io.ptw.req.fire()
+  io.cpu.perf.tlbMiss := false.B
 
   // no clock-gating support
   io.cpu.clock_enabled := true

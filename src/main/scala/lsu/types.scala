@@ -13,7 +13,7 @@ import chisel3._
 
 import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.diplomacy.{AddressSet, LazyModule}
-import freechips.rocketchip.rocket.{DCache, HellaCache, HellaCacheArbiter, HellaCacheIO, NonBlockingDCache, PTW}
+import freechips.rocketchip.rocket.{DCache, HellaCache, HellaCacheArbiter, HellaCacheIO, NonBlockingDCache, PTW, TLBPTWIO}
 import freechips.rocketchip.subsystem.RocketCrossingKey
 import freechips.rocketchip.tile.{BaseTile, HasTileParameters}
 import freechips.rocketchip.tilelink.TLIdentityNode
@@ -57,7 +57,7 @@ trait HasBoomHellaCacheModule
  */
 trait CanHaveBoomPTW extends HasTileParameters with HasBoomHellaCache { this: BaseTile =>
   val module: CanHaveBoomPTWModule
-  var nPTWPorts = 1
+  var nPTWPorts = 0
   nDCachePorts += (if (usingPTW) 1 else 0)
 }
 
@@ -67,7 +67,7 @@ trait CanHaveBoomPTW extends HasTileParameters with HasBoomHellaCache { this: Ba
 trait CanHaveBoomPTWModule extends HasBoomHellaCacheModule
 {
   val outer: CanHaveBoomPTW
-  val ptwPorts = ListBuffer(outer.dcache.module.io.ptw)
+  val ptwPorts = ListBuffer[TLBPTWIO]()
   val ptw = Module(new PTW(outer.nPTWPorts)(outer.dcache.node.edges.out(0), outer.p))
   ptw.io <> DontCare // Is overridden below if PTW is connected
   if (outer.usingPTW)

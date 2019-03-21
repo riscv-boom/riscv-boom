@@ -337,7 +337,6 @@ trait HasBoomICacheFrontend extends CanHaveBoomPTW
   tlMasterXbar.node := frontend.masterNode
   connectTLSlave(frontend.slaveNode, tileParams.core.fetchBytes)
   nPTWPorts += 1
-  nPTWPorts += 1 // boom -- needs an extra PTW port for its LSU.
 }
 
 /**
