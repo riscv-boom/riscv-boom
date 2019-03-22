@@ -24,11 +24,15 @@ In addition we have the following coding guidelines:
     * E.g. `local_variable_name`
 * Classes should be in camel case with the first letter capitalized
     * E.g. `RegisterFile`
-* Registers should be labeled with a `r_` before the name
-    * E.g. `val r_f2_valid = Reg(...)`
+* Registers should be labeled with a `_r` after the name
+    * E.g. `val f2_valid_r = Reg(...)`
+* Queues should be labeled with a `_q` after the name
+    * E.g. `val imem_resp_q = Queue(...)`
 * If the variable is in a particular stage, please put the stage cycle it is associated with
     * E.g. `val f2_valid = Wire(...)`
-* Braces for control structures (`for`, `while`, `if`, etc...) should be on the same line as the condition
+* Braces for control structures (`for`, `while`, `if`, `when`, etc...) should be on the same line as the condition
     * E.g. `for (i <- something){`
 * Braces for classes should be on the next line
     * E.g. `class SomeModule extends Module\n{`
+* Braces for things such as `else`, `.otherwise`, etc should be on the next line
+    * E.g. `if (...){\n...\n}\nelse{`
