@@ -72,8 +72,8 @@ class LoadStoreUnitIO(val pl_width: Int)(implicit p: Parameters) extends BoomBun
    val dec_ld_vals        = Input(Vec(pl_width,  Bool()))
    val dec_uops           = Input(Vec(pl_width, new MicroOp()))
 
-   val new_ldq_idx        = Output(UInt(LDQ_ADDR_SZ.W))
-   val new_stq_idx        = Output(UInt(STQ_ADDR_SZ.W))
+   val new_ldq_idx        = Output(Vec(pl_width, UInt(LDQ_ADDR_SZ.W)))
+   val new_stq_idx        = Output(Vec(pl_width, UInt(STQ_ADDR_SZ.W)))
 
    // Execute Stage
    val exe_resp           = Flipped(new ValidIO(new FuncUnitResp(xLen)))
@@ -110,8 +110,8 @@ class LoadStoreUnitIO(val pl_width: Int)(implicit p: Parameters) extends BoomBun
    val brinfo             = Input(new BrResolutionInfo())
 
    // Stall Decode as appropriate
-   val laq_full           = Output(Bool())
-   val stq_full           = Output(Bool())
+   val laq_full           = Output(Vec(pl_width, Bool()))
+   val stq_full           = Output(Vec(pl_width, Bool()))
 
    val exception          = Input(Bool())
    // Let the stores clear out the busy bit in the ROB.
@@ -270,12 +270,20 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
    var ld_enq_idx = laq_tail
    var st_enq_idx = stq_tail
 
+   val laq_nonempty = laq_allocated.asUInt =/= 0.U
+   val stq_nonempty = stq_allocated.asUInt =/= 0.U
+
+   var laq_full = Bool()
+   var stq_full = Bool()
+
    for (w <- 0 until pl_width)
    {
+      laq_full = ld_enq_idx === laq_head && laq_nonempty
+      io.laq_full(w) := laq_full
+      io.new_ldq_idx(w) := ld_enq_idx
+
       when (io.dec_ld_vals(w))
       {
-         // TODO is it better to read out ld_idx?
-         // val ld_enq_idx = io.dec_uops(w).ldq_idx
          laq_uop(ld_enq_idx)          := io.dec_uops(w)
          laq_st_dep_mask(ld_enq_idx)  := next_live_store_mask
 
@@ -292,6 +300,10 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
       ld_enq_idx = Mux(io.dec_ld_vals(w), WrapInc(ld_enq_idx, NUM_LDQ_ENTRIES),
                                           ld_enq_idx)
 
+      stq_full = st_enq_idx === stq_head && stq_nonempty
+      io.stq_full(w) := stq_full
+      io.new_stq_idx(w) := st_enq_idx
+
       when (io.dec_st_vals(w))
       {
          stq_uop(st_enq_idx)       := io.dec_uops(w)
@@ -302,17 +314,19 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
          stq_executed (st_enq_idx) := false.B
          stq_succeeded(st_enq_idx) := false.B
          stq_committed(st_enq_idx) := false.B
+
+         assert (st_enq_idx === io.dec_uops(w).stq_idx, "[lsu] mismatch enq store tag.")
       }
       next_live_store_mask = Mux(io.dec_st_vals(w), next_live_store_mask | (1.U << st_enq_idx),
                                                     next_live_store_mask)
-
       st_enq_idx = Mux(io.dec_st_vals(w), WrapInc(st_enq_idx, NUM_STQ_ENTRIES),
                                           st_enq_idx)
-
    }
 
    laq_tail := ld_enq_idx
    stq_tail := st_enq_idx
+
+   io.lsu_fencei_rdy := !stq_nonempty && io.dmem_is_ordered
 
    //-------------------------------------------------------------
    //-------------------------------------------------------------
@@ -1030,7 +1044,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
                }
             }
          }
-      }
+   }
       .elsewhen (do_ldld_search)
       {
          val searcher_is_older = IsOlder(lcam_ldq_idx, i.U, laq_tail)
@@ -1242,7 +1256,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
       when (!io.nack.isload)
       {
          stq_executed(io.nack.lsu_idx) := false.B
-         when (IsOlder(io.nack.lsu_idx, stq_execute_head, stq_tail))
+         when (IsOlder(io.nack.lsu_idx, stq_execute_head, stq_head) || stq_executed.reduce(_&&_))
          {
             stq_execute_head := io.nack.lsu_idx
          }
@@ -1342,34 +1356,6 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
    live_store_mask := next_live_store_mask &
                         ~(st_brkilled_mask.asUInt) &
                         ~(st_exc_killed_mask.asUInt)
-
-   //-------------------------------------------------------------
-
-   val laq_maybe_full = (laq_allocated.asUInt =/= 0.U)
-   val stq_maybe_full = (stq_allocated.asUInt =/= 0.U)
-
-   var laq_is_full = false.B
-   var stq_is_full = false.B
-
-   // TODO refactor this logic
-   for (w <- 0 until coreWidth)
-   {
-      val l_temp = laq_tail + w.U
-      laq_is_full = ((l_temp === laq_head || l_temp === (laq_head + NUM_LDQ_ENTRIES.U)) && laq_maybe_full) | laq_is_full
-      val s_temp = stq_tail + (w+1).U // +1 since we don't do let SAQ completely fill up.
-      stq_is_full = (s_temp === stq_head || s_temp === (stq_head + NUM_STQ_ENTRIES.U)) | stq_is_full
-   }
-
-   io.laq_full  := laq_is_full
-   io.stq_full  := stq_is_full
-   val stq_empty = stq_tail === stq_head //&& !stq_maybe_full
-
-   io.new_ldq_idx := laq_tail
-   io.new_stq_idx := stq_tail
-
-   io.lsu_fencei_rdy := stq_empty && io.dmem_is_ordered
-
-   assert (!(stq_empty ^ stq_allocated.asUInt === 0.U), "[lsu] mismatch in SAQ empty logic.")
 
    //-------------------------------------------------------------
    // Debug & Counter outputs
