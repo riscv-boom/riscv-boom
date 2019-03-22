@@ -1,5 +1,5 @@
 //******************************************************************************
-// Copyright (c) 2015 - 2018, The Regents of the University of California (Regents).
+// Copyright (c) 2015 - 2019, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
 // Author: Christopher Celio
@@ -47,19 +47,19 @@ import freechips.rocketchip.util.Str
  * @param numBufferEntries num entries for the BTB update queue
  */
 case class BoomBTBParameters(
-   btbsa: Boolean = false,
-   densebtb: Boolean = true,
-   nSets: Int    = 512,
-   nBanks: Int   = 2,
-   nWays: Int    = 4,
-   nRAS: Int     = 16,
-   tagSz: Int    = 13,
-   offsetSz: Int = 13,
+  btbsa: Boolean = false,
+  densebtb: Boolean = true,
+  nSets: Int    = 512,
+  nBanks: Int   = 2,
+  nWays: Int    = 4,
+  nRAS: Int     = 16,
+  tagSz: Int    = 13,
+  offsetSz: Int = 13,
 
-   // Extra knobs
-   bypassCalls: Boolean = true,
-   rasCheckForEmpty: Boolean = true,
-   numBufferEntries: Int = 8
+  // Extra knobs
+  bypassCalls: Boolean = true,
+  rasCheckForEmpty: Boolean = true,
+  numBufferEntries: Int = 8
 )
 
 /**
@@ -67,17 +67,17 @@ case class BoomBTBParameters(
  */
 trait HasBoomBTBParameters extends HasBoomCoreParameters
 {
-   val btbParams = boomParams.btb
-   val nSets = btbParams.nSets
-   val nBanks = btbParams.nBanks
-   val nWays = btbParams.nWays
-   val nRAS = btbParams.nRAS
-   val tag_sz = btbParams.tagSz
-   val offset_sz = btbParams.offsetSz
-   val idx_sz = log2Ceil(nSets)
-   val bypassCalls = btbParams.bypassCalls
-   val rasCheckForEmpty = btbParams.rasCheckForEmpty
-   val num_buff_entries = btbParams.numBufferEntries
+  val btbParams = boomParams.btb
+  val nSets = btbParams.nSets
+  val nBanks = btbParams.nBanks
+  val nWays = btbParams.nWays
+  val nRAS = btbParams.nRAS
+  val tagSz = btbParams.tagSz
+  val offsetSz = btbParams.offsetSz
+  val idxSz = log2Ceil(nSets)
+  val bypassCalls = btbParams.bypassCalls
+  val rasCheckForEmpty = btbParams.rasCheckForEmpty
+  val numBuffEntries = btbParams.numBufferEntries
 }
 
 /**
@@ -85,18 +85,20 @@ trait HasBoomBTBParameters extends HasBoomCoreParameters
  */
 object BpredType
 {
-   def SZ = 3
-   def apply() = UInt(SZ.W)
-   def branch = 0.U
-   def jump = 1.U
-   def ret =  (2+1).U
-   def call = (4+1).U
+  def apply() = UInt(SZ.W)
 
-   def isAlwaysTaken(typ: UInt): Bool = typ(0)
-   def isReturn(typ: UInt): Bool = typ(1)
-   def isCall(typ: UInt): Bool = typ(2)
-   def isJump(typ: UInt): Bool = typ === jump
-   def isBranch(typ: UInt): Bool = typ === branch
+  def SZ = 3
+
+  def BRANCH = 0.U // COND BR
+  def JUMP   = 1.U // UNCOND JMP (JAL(R) Rd=x0)
+  def RET    = (2+1).U // UNCOND JMP (JALR Rd=x0, Rs=RA)
+  def CALL   = (4+1).U // UNCOND JMP (JAL(R) Rd=RA)
+
+  def isAlwaysTaken(typ: UInt): Bool = typ(0)
+  def      isReturn(typ: UInt): Bool = typ(1)
+  def        isCall(typ: UInt): Bool = typ(2)
+  def        isJump(typ: UInt): Bool = typ === JUMP
+  def      isBranch(typ: UInt): Bool = typ === BRANCH
 }
 
 //------------------------------------------------------------------------------
@@ -106,64 +108,66 @@ object BpredType
 /**
  * Abstract class to allow bundles to have the Boom BTB parameters
  */
-abstract class BoomBTBBundle(implicit val p: Parameters) extends freechips.rocketchip.util.ParameterizedBundle()(p)
+abstract class BoomBTBBundle(implicit val p: Parameters) extends freechips.rocketchip.util.ParameterizedBundle
   with HasBoomBTBParameters
 
 /**
  * The response packet sent back from the BTB
  */
-class BoomBTBResp(implicit p: Parameters) extends BoomBTBBundle()(p)
+class BoomBTBResp(implicit p: Parameters) extends BoomBTBBundle
 {
-   val taken     = Bool()   // is BTB predicting a taken cfi?
-   val target    = UInt(vaddrBits.W) // what target are we predicting?
+  val taken     = Bool()   // is BTB predicting a taken cfi?
+  val target    = UInt(vaddrBits.W) // what target are we predicting?
 
-   // a mask of valid instructions (instructions are
-   //   masked off by the predicted taken branch from the BTB).
-   val mask      = UInt(fetchWidth.W) // mask of valid instructions.
+  // a mask of valid instructions (instructions are
+  //   masked off by the predicted taken branch from the BTB).
+  val mask      = UInt(fetchWidth.W) // mask of valid instructions.
 
-   // the low-order PC bits of the predicted branch (after
-   //   shifting off the lowest log(inst_bytes) bits off).
-   val cfi_idx   = UInt(log2Ceil(fetchWidth).W) // where is cfi we are predicting?
-   val bpd_type  = BpredType() // which predictor should we use?
-   val cfi_type  = CfiType()  // what type of instruction is this?
-   val fetch_pc  = UInt(vaddrBits.W) // the PC we're predicting on (start of the fetch packet).
+  // the low-order PC bits of the predicted branch (after
+  //   shifting off the lowest log(inst_bytes) bits off).
+  val cfi_idx   = UInt(log2Ceil(fetchWidth).W) // where is cfi we are predicting?
+  val bpd_type  = BpredType() // which predictor should we use?
+  val cfi_type  = CfiType()  // what type of instruction is this?
+  val fetch_pc  = UInt(vaddrBits.W) // the PC we're predicting on (start of the fetch packet).
 
-   val bim_resp  = Valid(new BimResp) // Output from the bimodal table. Valid if prediction provided.
+  val bim_resp  = Valid(new BimResp) // Output from the bimodal table. Valid if prediction provided.
 }
 
 /**
  * The incoming packet to update the BTB state. BTB update occurs during branch resolution
  * (and only on a mispredict that's taken).
  */
-class BoomBTBUpdate(implicit p: Parameters) extends BoomBTBBundle()(p)
+class BoomBTBUpdate(implicit p: Parameters) extends BoomBTBBundle
 {
-   // what future fetch PCs will tag match against.
-   val pc = UInt(vaddrBits.W)
-   val target = UInt(vaddrBits.W)
-   val taken = Bool()
+  // what future fetch PCs will tag match against.
+  val pc = UInt(vaddrBits.W)
+  val target = UInt(vaddrBits.W)
+  val taken = Bool()
 
-   // the offset of the PC of the branch
-   val cfi_idx = UInt(log2Ceil(fetchWidth).W)
-   val bpd_type = BpredType()
-   val cfi_type = CfiType()
+  // the offset of the PC of the branch
+  val cfi_idx = UInt(log2Ceil(fetchWidth).W)
+
+  // other branch information
+  val bpd_type = BpredType()
+  val cfi_type = CfiType()
 }
 
 /**
  * RAS update packet
  */
-class RasUpdate(implicit p: Parameters) extends BoomBTBBundle()(p)
+class RasUpdate(implicit p: Parameters) extends BoomBTBBundle
 {
-   val is_call = Bool()
-   val is_ret = Bool()
-   val return_addr = UInt(vaddrBits.W)
+  val is_call = Bool()
+  val is_ret = Bool()
+  val return_addr = UInt(vaddrBits.W)
 }
 
 /**
  * PC address request packet
  */
-class PCReq(implicit p: Parameters) extends BoomBTBBundle()(p)
+class PCReq(implicit p: Parameters) extends BoomBTBBundle
 {
-   val addr = UInt(vaddrBitsExtended.W)
+  val addr = UInt(vaddrBitsExtended.W)
 }
 
 //------------------------------------------------------------------------------
@@ -179,43 +183,41 @@ class PCReq(implicit p: Parameters) extends BoomBTBBundle()(p)
  */
 class RAS(nras: Int, coreInstBytes: Int)
 {
-   /**
-    * Push an address onto the RAS
-    *
-    * @param addr the address to push onto the stack
-    */
-   def push(addr: UInt): Unit =
-   {
-      when (count < nras.U) { count := count + 1.U }
-      val nextPos = Mux(isPow2(nras).B || pos < (nras-1).U, pos+1.U, 0.U)
-      stack(nextPos) := addr >> log2Ceil(coreInstBytes)
-      pos := nextPos
-   }
+  /**
+   * Push an address onto the RAS
+   *
+   * @param addr the address to push onto the stack
+   */
+  def push(addr: UInt): Unit = {
+    when (count < nras.U) { count := count + 1.U }
+    val nextPos = Mux(isPow2(nras).B || pos < (nras-1).U, pos+1.U, 0.U)
+    stack(nextPos) := addr >> log2Ceil(coreInstBytes)
+    pos := nextPos
+  }
 
-   /**
-    * Look at the address at the top of the stack
-    */
-   def peek: UInt = Cat(stack(pos), 0.U(log2Ceil(coreInstBytes).W))
+  /**
+   * Look at the address at the top of the stack
+   */
+  def peek: UInt = Cat(stack(pos), 0.U(log2Ceil(coreInstBytes).W))
 
-   /**
-    * Pop the top entry of the stack
-    */
-   def pop(): Unit = when (!isEmpty)
-   {
-      count := count - 1.U
-      pos := Mux(isPow2(nras).B || pos > 0.U, pos-1.U, (nras-1).U)
-   }
+  /**
+   * Pop the top entry of the stack
+   */
+  def pop(): Unit = when (!isEmpty) {
+    count := count - 1.U
+    pos := Mux(isPow2(nras).B || pos > 0.U, pos-1.U, (nras-1).U)
+  }
 
-   /**
-    * Check if the stack is empty
-    */
-   def isEmpty: Bool = count === 0.U
+  /**
+   * Check if the stack is empty
+   */
+  def isEmpty: Bool = count === 0.U
 
-   //def clear(): Unit = count := 0.U
+  //def clear(): Unit = count := 0.U
 
-   private val count = Reg(UInt(log2Ceil(nras+1).W))
-   private val pos = Reg(UInt(log2Ceil(nras).W))
-   private val stack = Reg(Vec(nras, UInt()))
+  private val count = RegInit(UInt(log2Ceil(nras+1).W), 0.U)
+  private val pos = RegInit(UInt(log2Ceil(nras).W), 0.U)
+  private val stack = Reg(Vec(nras, UInt()))
 }
 
 //------------------------------------------------------------------------------
@@ -226,33 +228,32 @@ class RAS(nras: Int, coreInstBytes: Int)
  * Abstract top level branch target buffer class. Exposes the necessary i/o for different
  * branch target buffers to be instantiated into BOOM.
  */
-abstract class BoomBTB(implicit p: Parameters) extends BoomModule()(p) with HasBoomBTBParameters
+abstract class BoomBTB(implicit p: Parameters) extends BoomModule with HasBoomBTBParameters
 {
-   val io = IO(new Bundle
-   {
-      // req.valid is false if stalling (aka, we won't read and use BTB results, on cycle S1).
-      // req.bits.addr is available on cycle S0.
-      // resp is expected on cycle S2.
-      val req = Flipped(Valid(new PCReq))
+  val io = IO(new Bundle {
+    // req.valid is false if stalling (aka, we won't read and use BTB results, on cycle S1).
+    // req.bits.addr is available on cycle S0.
+    // resp is expected on cycle S2.
+    val req = Flipped(Valid(new PCReq))
 
-      // resp is valid if there is a BTB hit.
-      val resp = Valid(new BoomBTBResp)
+    // resp is valid if there is a BTB hit.
+    val resp = Valid(new BoomBTBResp)
 
-      // the PC we're predicting on (start of the fetch packet).
-      // Pass this to the BPD.
-      //val s1_pc  = UInt(width = vaddrBits)
+    // the PC we're predicting on (start of the fetch packet).
+    // Pass this to the BPD.
+    //val s1_pc  = UInt(width = vaddrBits)
 
-      // supress S1 (so next cycle S2 is not valid).
-      val flush = Input(Bool())
+    // supress S1 (so next cycle S2 is not valid).
+    val flush = Input(Bool())
 
-      val btb_update = Flipped(Valid(new BoomBTBUpdate))
-      val bim_update = Flipped(Valid(new BimUpdate))
-      val ras_update = Flipped(Valid(new RasUpdate))
+    val btb_update = Flipped(Valid(new BoomBTBUpdate))
+    val bim_update = Flipped(Valid(new BimUpdate))
+    val ras_update = Flipped(Valid(new RasUpdate))
 
-      // HACK: prevent BTB updating/predicting during program load.
-      // Easier to diff against spike which doesn't run debug mode.
-      val status_debug = Input(Bool())
-   })
+    // HACK: prevent BTB updating/predicting during program load.
+    // Easier to diff against spike which doesn't run debug mode.
+    val status_debug = Input(Bool())
+  })
 }
 
 /**
@@ -270,40 +271,33 @@ class NullBTB(implicit p: Parameters) extends BoomBTB
  */
 object BoomBTB
 {
-   /**
-    * Create a specific type of branch target buffer (BTB) based on the parameters specified
-    *
-    * @param boomParams general boom core parameters that determine the BTB
-    * @return a BoomBTB instance determined by the input parameters
-    */
-   def apply(boomParams: BoomCoreParams)(implicit p: Parameters): BoomBTB =
-   {
-      val boomParams: BoomCoreParams = p(freechips.rocketchip.tile.TileKey).core.asInstanceOf[BoomCoreParams]
+  /**
+   * Create a specific type of branch target buffer (BTB) based on the parameters specified
+   *
+   * @param boomParams general boom core parameters that determine the BTB
+   * @return a BoomBTB instance determined by the input parameters
+   */
+  def apply(boomParams: BoomCoreParams)(implicit p: Parameters): BoomBTB = {
+    val boomParams: BoomCoreParams = p(freechips.rocketchip.tile.TileKey).core.asInstanceOf[BoomCoreParams]
 
-      val enableBTBPredictor = boomParams.enableBTB
+    val enableBTBPredictor = boomParams.enableBTB
 
-      var btb: BoomBTB = null
+    var btb: BoomBTB = null
 
-      // a BTB must be defined with the enable flag
-      require(!enableBTBPredictor || (Seq(boomParams.btb.btbsa, boomParams.btb.densebtb).count(_ == true) == 1))
+    // a BTB must be defined with the enable flag
+    require(!enableBTBPredictor || (Seq(boomParams.btb.btbsa, boomParams.btb.densebtb).count(_ == true) == 1))
 
-      // select BTB based on parameters
-      if (enableBTBPredictor)
-      {
-        if (boomParams.btb.btbsa)
-        {
-          btb = Module(new BTBsa())
-        }
-        else if (boomParams.btb.densebtb)
-        {
-          btb = Module(new DenseBTB())
-        }
+    // select BTB based on parameters
+    if (enableBTBPredictor) {
+      if (boomParams.btb.btbsa) {
+        btb = Module(new BTBsa())
+      } else if (boomParams.btb.densebtb) {
+        btb = Module(new DenseBTB())
       }
-      else
-      {
-        btb = Module(new NullBTB())
-      }
+    } else {
+      btb = Module(new NullBTB())
+    }
 
-      btb
-   }
+    btb
+  }
 }

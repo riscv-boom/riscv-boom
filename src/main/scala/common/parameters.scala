@@ -186,11 +186,11 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
    val ENABLE_BPD_UMODE_ONLY = boomParams.enableBpdUModeOnly
    val ENABLE_BPD_USHISTORY = boomParams.enableBpdUSModeHistory
    // What is the maximum length of global history tracked?
-   var GLOBAL_HISTORY_LENGTH = 0
+   var globalHistoryLength = 0
    // What is the physical length of the VeryLongHistoryRegister? This must be
    // able to handle the GHIST_LENGTH as well as being able hold all speculative
    // updates well beyond the GHIST_LENGTH (i.e., +ROB_SZ and other buffering).
-   var BPD_INFO_SIZE = 0
+   var bpdInfoSize = 0
 
    val tageBpuParams = boomParams.tage
    val gshareBpuParams = boomParams.gshare
@@ -199,28 +199,28 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
 
    if (!ENABLE_BRANCH_PREDICTOR)
    {
-      BPD_INFO_SIZE = 1
-      GLOBAL_HISTORY_LENGTH = 1
+      bpdInfoSize = 1
+      globalHistoryLength = 1
    }
    else if (baseOnlyBpuParams.isDefined && baseOnlyBpuParams.get.enabled)
    {
-      GLOBAL_HISTORY_LENGTH = 8
-      BPD_INFO_SIZE = BaseOnlyBrPredictor.GetRespInfoSize(p, GLOBAL_HISTORY_LENGTH)
+      globalHistoryLength = 8
+      bpdInfoSize = BaseOnlyBrPredictor.GetRespInfoSize()
    }
    else if (gshareBpuParams.isDefined && gshareBpuParams.get.enabled)
    {
-      GLOBAL_HISTORY_LENGTH = gshareBpuParams.get.history_length
-      BPD_INFO_SIZE = GShareBrPredictor.GetRespInfoSize(fetchWidth, GLOBAL_HISTORY_LENGTH)
+      globalHistoryLength = gshareBpuParams.get.historyLength
+      bpdInfoSize = GShareBrPredictor.GetRespInfoSize(globalHistoryLength)
    }
    else if (tageBpuParams.isDefined && tageBpuParams.get.enabled)
    {
-      GLOBAL_HISTORY_LENGTH = tageBpuParams.get.history_lengths.max
-      BPD_INFO_SIZE = TageBrPredictor.GetRespInfoSize(p, fetchWidth)
+      globalHistoryLength = tageBpuParams.get.historyLengths.max
+      bpdInfoSize = TageBrPredictor.GetRespInfoSize(p)
    }
    else if (randomBpuParams.isDefined && randomBpuParams.get.enabled)
    {
-      GLOBAL_HISTORY_LENGTH = 1
-      BPD_INFO_SIZE = RandomBrPredictor.GetRespInfoSize(p)
+      globalHistoryLength = 1
+      bpdInfoSize = RandomBrPredictor.GetRespInfoSize()
    }
 
    //************************************

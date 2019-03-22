@@ -167,7 +167,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   val icache = outer.icache.module
   val tlb = Module(new TLB(true, log2Ceil(fetchBytes), TLBConfig(nTLBEntries)))
   val fetch_controller = Module(new FetchControlUnit(fetchWidth))
-  val bpdpipeline = Module(new BranchPredictionStage(fetchWidth))
+  val bpdpipeline = Module(new BranchPredictionStage)
 
   override def toString: String = bpdpipeline.toString + "\n" + icache.toString
 
@@ -294,7 +294,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
    bpdpipeline.io.f3_is_br := fetch_controller.io.f3_is_br
    bpdpipeline.io.debug_imemresp_pc := fetch_controller.io.imem_resp.bits.pc
 
-   bpdpipeline.io.br_unit := io.cpu.br_unit
+   bpdpipeline.io.br_unit_resp := io.cpu.br_unit
    bpdpipeline.io.ftq_restore := fetch_controller.io.ftq_restore_history
    bpdpipeline.io.redirect := fetch_controller.io.imem_req.valid
 

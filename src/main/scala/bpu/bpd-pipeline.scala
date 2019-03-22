@@ -1,5 +1,5 @@
 //******************************************************************************
-// Copyright (c) 2017 - 2018, The Regents of the University of California (Regents).
+// Copyright (c) 2017 - 2019, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
 // Author: Christopher Celio
@@ -7,18 +7,19 @@
 
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
-// RISCV Processor Branch Prediction Pipeline
+// Branch Prediction Pipeline
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
 //
-// Access BTB and BPD to feed predictions to the Fetch Unit.
+// Access BTB and BPD to feed predictions to the FetchControlUnit.
 //
 // Stages (these are in parallel with instruction fetch):
-//    * F0 - Select next PC. Perform BPD hashing.
-//    * F1 - Access I$ and BTB RAMs. First stage of BPD.
-//    * F2 - Second stage of BPD.
-//    * F3 - Begin decoding instruction bits and computing targets from I$. Check results from BPD.
-//    *      Put data in FB and FTQ
+//    * F0 - Send in next PC into the BTB and the BPD.
+//           Hash the PC with the older history of the BPD.
+//    * F1 - Access the BTB RAMs. Do 1st stage of BPD.
+//    * F2 - Get resp from BTB (send BIM results to BPD). 2nd stage of BPD.
+//    * F3 - Get resp from BPD.
+//    * F4 - Other logic
 
 package boom.bpu
 
@@ -26,200 +27,185 @@ import chisel3._
 import chisel3.util._
 import chisel3.core.withReset
 
-import freechips.rocketchip.config.Parameters
+import freechips.rocketchip.config.{Parameters}
 import freechips.rocketchip.util.{Str, UIntToAugmentedUInt}
 
 import boom.common._
-import boom.exu.BranchUnitResp
+import boom.exu.{BranchUnitResp}
 
 /**
  * Give this to each instruction/uop and pass this down the pipeline to the branch unit
  * This covers the per-instruction info on all cfi-related predictions.
  */
-class BranchPredInfo(implicit p: Parameters) extends BoomBundle()(p)
+class BranchPredInfo(implicit p: Parameters) extends BoomBundle
 {
-   val btb_blame = Bool() // Does the BTB get credit for the prediction? (during BRU check).
-   val btb_hit   = Bool() // this instruction was the br/jmp predicted by the BTB
-   val btb_taken = Bool() // this instruction was the br/jmp predicted by the BTB and was taken
+  val btb_blame = Bool() // Does the BTB get credit for the prediction? (during BRU check).
+  val btb_hit   = Bool() // this instruction was the br/jmp predicted by the BTB
+  val btb_taken = Bool() // this instruction was the br/jmp predicted by the BTB and was taken
 
-   val bpd_blame = Bool() // Does the BPD get credit for this prediction? (during BRU check).
-   val bpd_hit   = Bool() // did the bpd predict this instruction? (ie, tag hit in the BPD)
-   val bpd_taken = Bool() // did the bpd predict taken for this instruction?
+  val bpd_blame = Bool() // Does the BPD get credit for this prediction? (during BRU check).
+  val bpd_hit   = Bool() // did the bpd predict this instruction? (ie, tag hit in the BPD)
+  val bpd_taken = Bool() // did the bpd predict taken for this instruction?
 
-   val bim_resp  = new BimResp
-   val bpd_resp  = new BpdResp
+  val bim_resp  = new BimResp
+  val bpd_resp  = new BpdResp
 }
 
 /**
  * Wraps the BoomBTB and BrPredictor into a pipeline that is parallel with the Fetch pipeline.
- *
- * @param fetch_width # of instructions fetched
  */
-class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends BoomModule()(p)
-   with HasBoomCoreParameters
+class BranchPredictionStage(implicit p: Parameters) extends BoomModule
 {
-   val io = IO(new BoomBundle()(p)
-   {
-      // Fetch0
-      val s0_req        = Flipped(Valid(new freechips.rocketchip.rocket.BTBReq))
-      val debug_imemresp_pc= Input(UInt(vaddrBitsExtended.W)) // For debug -- make sure I$ and BTB are synchronised.
+  val io = IO(new BoomBundle {
+    // Fetch0
+    val s0_req            = Flipped(Valid(new freechips.rocketchip.rocket.BTBReq))
+    val debug_imemresp_pc = Input(UInt(vaddrBitsExtended.W)) // For debug -- make sure I$ and BTB are synchronised.
 
-      // Fetch1
+    // Fetch1
 
-      // Fetch2
-      val f2_valid      = Input(Bool()) // f2 stage may proceed into the f3 stage.
-      val f2_btb_resp   = Valid(new BoomBTBResp)
-      val f2_stall      = Input(Bool()) // f3 is not ready -- back-pressure the f2 stage.
-      val f2_replay     = Input(Bool()) // I$ is replaying S2 PC into S0 again (S2 backed up or failed).
-      val f2_redirect   = Input(Bool()) // I$ is being redirected from F2.
+    // Fetch2
+    val f2_valid      = Input(Bool()) // f2 stage may proceed into the f3 stage.
+    val f2_btb_resp   = Valid(new BoomBTBResp)
+    val f2_stall      = Input(Bool()) // f3 is not ready -- back-pressure the f2 stage.
+    val f2_replay     = Input(Bool()) // I$ is replaying S2 PC into S0 again (S2 backed up or failed).
+    val f2_redirect   = Input(Bool()) // I$ is being redirected from F2.
 
-      // Fetch3
-      val f3_is_br      = Input(Vec(fetch_width, Bool())) // mask of branches from I$
-      val f3_bpd_resp   = Valid(new BpdResp)
-      val f3_btb_update = Flipped(Valid(new BoomBTBUpdate))
-      val f3_ras_update = Flipped(Valid(new RasUpdate))
-      val f3_stall      = Input(Bool()) // f4 is not ready -- back-pressure the f3 stage.
+    // Fetch3
+    val f3_is_br      = Input(Vec(fetchWidth, Bool())) // mask of branches from I$
+    val f3_bpd_resp   = Valid(new BpdResp)
+    val f3_btb_update = Flipped(Valid(new BoomBTBUpdate))
+    val f3_ras_update = Flipped(Valid(new RasUpdate))
+    val f3_stall      = Input(Bool()) // f4 is not ready -- back-pressure the f3 stage.
 
-      // Fetch4
-      val f4_redirect   = Input(Bool()) // I$ is being redirected from F4.
-      val f4_taken      = Input(Bool()) // I$ is being redirected from F4 (and it is to take a CFI).
+    // Fetch4
+    val f4_redirect   = Input(Bool()) // I$ is being redirected from F4.
+    val f4_taken      = Input(Bool()) // I$ is being redirected from F4 (and it is to take a CFI).
 
-      // Commit
-      val bim_update    = Flipped(Valid(new BimUpdate))
-      val bpd_update    = Flipped(Valid(new BpdUpdate))
+    // Commit
+    val bim_update    = Flipped(Valid(new BimUpdate))
+    val bpd_update    = Flipped(Valid(new BpdUpdate))
 
-      // Other
-      val br_unit       = Input(new BranchUnitResp())
-      val fe_clear      = Input(Bool()) // The FrontEnd needs to be cleared (due to redirect or flush).
-      val ftq_restore   = Flipped(Valid(new RestoreHistory))
-      val flush         = Input(Bool()) // pipeline flush from ROB TODO CODEREVIEW (redudant with fe_clear?)
-      val redirect      = Input(Bool())
-      val status_prv    = Input(UInt(freechips.rocketchip.rocket.PRV.SZ.W))
-      val status_debug  = Input(Bool())
-   })
+    // Other
+    val br_unit_resp  = Input(new BranchUnitResp())
+    val fe_clear      = Input(Bool()) // The FrontEnd needs to be cleared (due to redirect or flush).
+    val ftq_restore   = Flipped(Valid(new RestoreHistory))
+    val flush         = Input(Bool()) // pipeline flush from ROB TODO CODEREVIEW (redudant with fe_clear?)
+    val redirect      = Input(Bool())
+    val status_prv    = Input(UInt(freechips.rocketchip.rocket.PRV.SZ.W))
+    val status_debug  = Input(Bool())
+  })
 
-   //************************************************
-   // construct all of the modules
+  //************************************************
+  // construct all of the modules
 
-   val btb = BoomBTB(boomParams)
-   val bpd = BoomBrPredictor(boomParams)
+  val btb = BoomBTB(boomParams)
+  val bpd = BoomBrPredictor(boomParams)
 
-   btb.io.status_debug := io.status_debug
-   bpd.io.status_prv := io.status_prv
-   bpd.io.do_reset := false.B // TODO
+  btb.io.status_debug := io.status_debug
+  bpd.io.status_prv := io.status_prv
+  bpd.io.do_reset := false.B // TODO
 
-   //************************************************
-   // Branch Prediction (F0 Stage)
+  //************************************************
+  // Branch Prediction (F0 Stage)
 
-   btb.io.req := io.s0_req
-   bpd.io.req := io.s0_req
+  btb.io.req := io.s0_req
+  bpd.io.req := io.s0_req
 
-   //************************************************
-   // Branch Prediction (F1 Stage)
+  //************************************************
+  // Branch Prediction (F1 Stage)
 
-   //************************************************
-   // Branch Prediction (F2 Stage)
+  //************************************************
+  // Branch Prediction (F2 Stage)
 
-   io.f2_btb_resp.bits := btb.io.resp.bits
-   // BTB's response isn't valid if there's no instruction from I$ to match against.
-   io.f2_btb_resp.valid := btb.io.resp.valid && io.f2_valid
+  // BTB's response isn't valid if there's no instruction from I$ to match against.
+  io.f2_btb_resp.valid := btb.io.resp.valid && io.f2_valid
+  io.f2_btb_resp.bits := btb.io.resp.bits
 
-   bpd.io.f2_bim_resp := io.f2_btb_resp.bits.bim_resp
-   bpd.io.f2_replay := io.f2_replay
+  bpd.io.f2_bim_resp := btb.io.resp.bits.bim_resp
+  bpd.io.f2_replay := io.f2_replay
 
-   //************************************************
-   // Branch Prediction (F3 Stage)
+  //************************************************
+  // Branch Prediction (F3 Stage)
 
-   bpd.io.resp.ready := !io.f3_stall
+  bpd.io.resp.ready := !io.f3_stall
+  io.f3_bpd_resp.valid := bpd.io.resp.valid
+  io.f3_bpd_resp.bits := bpd.io.resp.bits
 
-   // does the BPD predict a taken branch?
-   //private def bitRead(bits: UInt, offset: UInt): Bool = (bits >> offset)(0)
+  //************************************************
+  // Update the RAS
+  // TODO XXX  reenable RAS
 
-   io.f3_bpd_resp.valid := bpd.io.resp.valid
-   io.f3_bpd_resp.bits := bpd.io.resp.bits
+  // update RAS based on BTB's prediction information (or the branch-check correction).
+  //val jmp_idx = f2_btb.bits.cfi_idx
 
-   //************************************************
-   // Update the RAS
-   // TODO XXX  reenable RAS
+  btb.io.ras_update := io.f3_ras_update
+  btb.io.ras_update.valid := false.B // TODO XXX renable RAS (f2_btb.valid || io.f3_ras_update.valid) &&
+                                     // !io.fetch_stalled
+  //when (f2_btb.valid) {
+  //   btb.io.ras_update.bits.is_call      := BpredType.isCall(f2_btb.bits.bpd_type)
+  //   btb.io.ras_update.bits.is_ret       := BpredType.isReturn(f2_btb.bits.bpd_type)
+  //   btb.io.ras_update.bits.return_addr  := f2_aligned_pc + (jmp_idx << 2.U) + 4.U
+  //}
 
-   // update RAS based on BTB's prediction information (or the branch-check correction).
-//   val jmp_idx = f2_btb.bits.cfi_idx
+  //************************************************
+  // Update the BTB/BIM
 
-   btb.io.ras_update := io.f3_ras_update
-   btb.io.ras_update.valid := false.B // TODO XXX renable RAS (f2_btb.valid || io.f3_ras_update.valid) &&
-                                      // !io.fetch_stalled
-//   when (f2_btb.valid)
-//   {
-//      btb.io.ras_update.bits.is_call      := BpredType.isCall(f2_btb.bits.bpd_type)
-//      btb.io.ras_update.bits.is_ret       := BpredType.isReturn(f2_btb.bits.bpd_type)
-//      btb.io.ras_update.bits.return_addr  := f2_aligned_pc + (jmp_idx << 2.U) + 4.U
-//   }
+  // br unit has higher priority than a f3 update
+  btb.io.btb_update := Mux(io.br_unit_resp.btb_update.valid,
+                           io.br_unit_resp.btb_update,
+                           io.f3_btb_update)
 
-   //************************************************
-   // Update the BTB/BIM
+  btb.io.bim_update := io.bim_update
 
-   btb.io.btb_update :=
-      Mux(io.br_unit.btb_update.valid,
-         io.br_unit.btb_update,
-         io.f3_btb_update)
+  //************************************************
+  // Update the BPD
 
-   btb.io.bim_update := io.bim_update
+  bpd.io.f2_valid := io.f2_valid
+  bpd.io.f2_stall := io.f2_stall
+  bpd.io.f2_redirect := io.f2_redirect
+  bpd.io.f3_is_br := io.f3_is_br
+  bpd.io.f4_redirect := io.f4_redirect
+  bpd.io.f4_taken := io.f4_taken
+  bpd.io.fe_clear := io.fe_clear
+  bpd.io.ftq_restore := io.ftq_restore
+  bpd.io.commit := io.bpd_update
 
-   //************************************************
-   // Update the BPD
+  //************************************************
+  // Handle redirects/flushes
 
-   bpd.io.f2_valid := io.f2_valid
-   bpd.io.f2_stall := io.f2_stall
-   bpd.io.f2_redirect := io.f2_redirect
-   bpd.io.f3_is_br := io.f3_is_br
-   bpd.io.f4_redirect := io.f4_redirect
-   bpd.io.f4_taken := io.f4_taken
-   bpd.io.fe_clear := io.fe_clear
-   bpd.io.ftq_restore := io.ftq_restore
-   bpd.io.commit := io.bpd_update
+  btb.io.flush := io.flush || reset.toBool || io.redirect || io.f2_replay
 
-   //************************************************
-   // Handle redirects/flushes
+  when (io.flush || reset.toBool) {
+     btb.io.btb_update.valid := false.B
+  }
 
-   btb.io.flush := io.flush || reset.toBool || io.redirect || io.f2_replay
+  //************************************************
+  // printfs
 
-   when (io.flush || reset.toBool)
-   {
-      btb.io.btb_update.valid := false.B
-   }
+  if (DEBUG_PRINTF) {
+    printf("btb, f0_npc=%c req_pc 0x%x, f1=%c targ=0x%x\n",
+           Mux(btb.io.req.valid, Str("V"), Str("-")),
+           io.s0_req.bits.addr,
+           Mux(btb.io.resp.valid, Str("V"), Str("-")),
+           btb.io.resp.bits.target)
+  }
 
-   //************************************************
-   // printfs
+  //************************************************
+  // asserts
 
-   if (DEBUG_PRINTF)
-   {
-      printf("btb, f0_npc=%c req_pc 0x%x, f1=%c targ=0x%x\n",
-             Mux(btb.io.req.valid, Str("V"), Str("-")),
-             io.s0_req.bits.addr,
-             Mux(btb.io.resp.valid, Str("V"), Str("-")),
-             btb.io.resp.bits.target
-             )
-   }
+  when (io.f2_btb_resp.valid) {
+    assert (io.f2_valid, "[bpd-pipeline] BTB has a valid request but imem.resp is invalid.")
+  }
 
-   //************************************************
-   // asserts
+  // forward progress into F3 will be made assuming the BTB is giving valid resp
+  when (io.f2_valid && btb.io.resp.valid) {
+    assert (btb.io.resp.bits.fetch_pc(15,0) === io.debug_imemresp_pc(15,0),
+      "[bpd-pipeline] Mismatch between BTB and I$ fetch PCs")
+  }
 
-   when (io.f2_btb_resp.valid)
-   {
-      assert (io.f2_valid, "[bpd-pipeline] BTB has a valid request but imem.resp is invalid.")
-   }
+  if (!enableBTB) {
+    assert (!(io.f2_btb_resp.valid), "[bpd-pipeline] BTB predicted, but it's been disabled.")
+  }
 
-   // forward progress into F3 will be made assuming the BTB is giving valid resp
-   when (io.f2_valid && btb.io.resp.valid)
-   {
-      assert (btb.io.resp.bits.fetch_pc(15,0) === io.debug_imemresp_pc(15,0),
-         "[bpd-pipeline] mismatch between BTB and I$.")
-   }
-
-   if (!enableBTB)
-   {
-      assert (!(io.f2_btb_resp.valid), "[bpd_pipeline] BTB predicted, but it's been disabled.")
-   }
-
-   override def toString: String = btb.toString + "\n\n" + bpd.toString
+  override def toString: String = btb.toString + "\n\n" + bpd.toString
 }
