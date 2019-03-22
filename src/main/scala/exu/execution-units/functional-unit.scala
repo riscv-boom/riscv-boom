@@ -568,10 +568,10 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1, data_width: 
             Mux(uop.is_jump && !uop.is_jal, CfiType.jalr,
                 CfiType.branch))
       br_unit.btb_update.bits.bpd_type :=
-            Mux(uop.is_ret, BpredType.ret,
-            Mux(uop.is_call, BpredType.call,
-            Mux(uop.is_jump, BpredType.jump,
-                BpredType.branch)))
+            Mux(uop.is_ret, BpredType.RET,
+            Mux(uop.is_call, BpredType.CALL,
+            Mux(uop.is_jump, BpredType.JUMP,
+                BpredType.BRANCH)))
 
       // Branch/Jump Target Calculation
       // we can't push this through the ALU though, b/c jalr needs both PC+4 and rs1+offset

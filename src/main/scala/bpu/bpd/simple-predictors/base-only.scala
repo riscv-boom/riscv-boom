@@ -1,5 +1,5 @@
 //******************************************************************************
-// Copyright (c) 2015 - 2018, The Regents of the University of California (Regents).
+// Copyright (c) 2015 - 2019, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
 // Author: Christopher Celio
@@ -7,7 +7,7 @@
 
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
-// RISCV BaseOnly Branch Predictor
+// BaseOnly Branch Predictor
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
 //
@@ -34,7 +34,7 @@ import boom.util.ElasticReg
  * @param enabled using BaseOnly predictor?
  */
 case class BaseOnlyParameters(
-   enabled: Boolean = true
+  enabled: Boolean = true
 )
 
 /**
@@ -43,8 +43,8 @@ case class BaseOnlyParameters(
  */
 class BaseOnlyResp() extends Bundle
 {
-   // Used to avoid 0 width wires
-   val not_used = Bool()
+  // Used to avoid 0 width wires
+  val not_used = Bool()
 }
 
 /**
@@ -53,46 +53,42 @@ class BaseOnlyResp() extends Bundle
  */
 object BaseOnlyBrPredictor
 {
-   def GetRespInfoSize(p: Parameters, hlen: Int): Int =
-   {
-      val dummy = new BaseOnlyResp()
-      dummy.getWidth
-   }
+  def GetRespInfoSize(): Int = {
+    val dummy = new BaseOnlyResp()
+    dummy.getWidth
+  }
 }
 
 /**
  * Class to create a BaseOnlyBr predictor that only uses
  * the BoomBTB's bi-modal table
- *
- * @param fetch_width # of instructions fetched
  */
 class BaseOnlyBrPredictor(
-   fetch_width: Int
    )(implicit p: Parameters)
-   extends BoomBrPredictor(fetch_width, 8)(p)
+   extends BoomBrPredictor(8)
 {
-   //------------------------------------------------------------
-   // Predictor state (none: use BIM).
+  //------------------------------------------------------------
+  // Predictor state (none: use BIM).
 
-   //------------------------------------------------------------
-   // Get prediction in F2, buffer, and provide prediction in F3.
+  //------------------------------------------------------------
+  // Get prediction in F2, buffer, and provide prediction in F3.
 
-   val q_s3_resp = withReset(reset.toBool || io.fe_clear || io.f4_redirect)
-      {Module(new ElasticReg(Valid(new BimResp)))}
+  val q_s3_resp = withReset(reset.toBool || io.fe_clear || io.f4_redirect)
+    {Module(new ElasticReg(Valid(new BimResp)))}
 
-   q_s3_resp.io.enq.valid := io.f2_valid
-   q_s3_resp.io.enq.bits := io.f2_bim_resp
-   q_s3_resp.io.deq.ready := DontCare
+  q_s3_resp.io.enq.valid := io.f2_valid
+  q_s3_resp.io.enq.bits := io.f2_bim_resp
+  q_s3_resp.io.deq.ready := DontCare
 
-   io.resp.valid := q_s3_resp.io.deq.valid && q_s3_resp.io.deq.bits.valid
-   io.resp.bits.takens := q_s3_resp.io.deq.bits.bits.getTakens
-   io.resp.bits.info := 0.U
+  io.resp.valid := q_s3_resp.io.deq.valid && q_s3_resp.io.deq.bits.valid
+  io.resp.bits.takens := q_s3_resp.io.deq.bits.bits.getTakens
+  io.resp.bits.info := 0.U
 
-   //------------------------------------------------------------
-   // Update counter table.
+  //------------------------------------------------------------
+  // Update counter table.
 
-   // Nothing to update, as the BIM is handled externally.
+  // Nothing to update, as the BIM is handled externally.
 
-   override def toString: String = "   ==Base Only BPU==" +
-     "\n   Building no predictor (just using BIM as a base predictor)."
+  override def toString: String = "   ==Base Only BPU==" +
+    "\n   Building no predictor (just using BIM as a base predictor)."
 }

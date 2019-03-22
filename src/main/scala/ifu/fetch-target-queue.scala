@@ -46,9 +46,9 @@ case class FtqParameters(
 class FTQBundle(implicit p: Parameters) extends BoomBundle()(p)
 {
    val fetch_pc = UInt(vaddrBitsExtended.W) // TODO compress out high-order bits
-   val history = UInt(GLOBAL_HISTORY_LENGTH.W)
+   val history = UInt(globalHistoryLength.W)
    val bim_info = new BimStorage
-   val bpd_info = UInt(BPD_INFO_SIZE.W)
+   val bpd_info = UInt(bpdInfoSize.W)
 }
 
 /**
