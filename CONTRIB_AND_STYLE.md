@@ -35,33 +35,33 @@ In addition we have the following coding guidelines:
 * Braces for control structures (`for`, `while`, `if`, `when`, etc...) should be on the same line as the condition
     * E.g. `for (i <- something){`
 * Braces for classes should be on the next line
-    * E.g. ```
-           class SomeModule extends Module
-           {
-           ```
+    * ```
+      class SomeModule extends Module
+      {
+      ```
 * Braces for things such as `else`, `.otherwise`, etc should be on the next line
-    * E.g. ```
-           if (...){
-             ...
-           }
-           else{
-           ```
+    * ```
+      if (...){
+        ...
+      }
+      else{
+      ```
 * Indentation should be two spaces...
-    * E.g. ```
-           if (...){
-             if (...){
-               if (...){
-                 ...
-               }
-             }
-           }
+    * ```
+      if (...){
+        if (...){
+          if (...){
+            ...
+          }
+        }
+      }
            ```
 * Multiline comments within the code should be indented on the second line associated with it
-    * E.g. ```
-           // this is a start of a comment that
-           //   overflows to the next line that
-           //   overflows for the final time
-           ```
+    * ```
+      // this is a start of a comment that
+      //   overflows to the next line that
+      //   overflows for the final time
+      ```
 * To denote a new section of the code that needs to be separated with a comment, use the follwing format
     * ```
       //----------------------------
