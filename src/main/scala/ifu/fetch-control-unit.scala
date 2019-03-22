@@ -92,7 +92,7 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
 
       val ftq_restore_history= Valid(new RestoreHistory)
 
-      val br_unit           = Input(new BranchUnitResp())
+      val br_unit_resp           = Input(new BranchUnitResp())
       val get_pc            = new GetPCFromFtqIO()
 
       val tsc_reg           = Input(UInt(xLen.W))
@@ -120,7 +120,6 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
    val fb = Module(new FetchBuffer(num_entries=fetchBufferSz))
    val monitor: Option[FetchMonitor] = (useFetchMonitor).option(Module(new FetchMonitor))
 
-   val br_unit = io.br_unit
    val fseq_reg = RegInit(0.U(xLen.W))
    val f0_redirect_pc = Wire(UInt(vaddrBitsExtended.W))
 
@@ -167,14 +166,14 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
    // **** NextPC Select (F0) ****
    //-------------------------------------------------------------
 
-   val f0_redirect_val =
-      br_unit.take_pc ||
+   val f0_redirect_valid =
+      io.br_unit_resp.take_pc ||
       io.flush_take_pc ||
       io.sfence_take_pc ||
       (io.f2_btb_resp.valid && io.f2_btb_resp.bits.taken && io.imem_resp.ready) ||
       (r_f4_valid && r_f4_req.valid)
 
-   io.imem_req.valid   := f0_redirect_val // tell front-end we had an unexpected change in the stream
+   io.imem_req.valid   := f0_redirect_valid // tell front-end we had an unexpected change in the stream
    io.imem_req.bits.pc := f0_redirect_pc
    io.imem_req.bits.speculative := !(io.flush_take_pc)
    io.imem_resp.ready  := q_f3_imemresp.io.enq.ready
@@ -186,8 +185,8 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
          ftq.io.take_pc.bits.addr,
       Mux(io.flush_take_pc,
          io.flush_pc,
-      Mux(br_unit.take_pc,
-         br_unit.target,
+      Mux(io.br_unit_resp.take_pc,
+         io.br_unit_resp.target,
       Mux(r_f4_valid && r_f4_req.valid,
          r_f4_req.bits.addr,
          io.f2_btb_resp.bits.target)))))
@@ -450,7 +449,7 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
       !jal_overrides_bpd &&
       (!bchecker.io.req.valid || (f3_bpd_redirect_cfiidx < bchecker.io.req_cfi_idx))
    f3_req.valid := f3_valid && (bchecker.io.req.valid ||
-                   (f3_bpd_may_redirect && !jal_overrides_bpd)) // && !(f0_redirect_val)
+                   (f3_bpd_may_redirect && !jal_overrides_bpd)) // && !(f0_redirect_valid)
    f3_req.bits.addr := Mux(f3_bpd_overrides_bcheck, f3_bpd_redirect_target, bchecker.io.req.bits.addr)
 
 
@@ -563,7 +562,7 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
 
    assert (!(r_f4_req.valid && !r_f4_valid),
       "[fetch] f4-request is high but f4_valid is not.")
-   assert (!(io.clear_fetchbuffer && !(br_unit.take_pc || io.flush_take_pc || io.sfence_take_pc)),
+   assert (!(io.clear_fetchbuffer && !(io.br_unit_resp.take_pc || io.flush_take_pc || io.sfence_take_pc)),
       "[fetch] F4 should be cleared if a F0_redirect due to BRU/Flush/Sfence.")
 
    //-------------------------------------------------------------
@@ -608,7 +607,7 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
    ftq.io.enq.bits.bim_info.cfi_idx := GetRandomCfiIdx(is_br.asUInt & f3_imemresp.mask)
 
    ftq.io.deq := io.commit
-   ftq.io.brinfo := br_unit.brinfo
+   ftq.io.brinfo := io.br_unit_resp.brinfo
    io.get_pc <> ftq.io.get_ftq_pc
    ftq.io.flush := io.flush_info
    ftq.io.com_ftq_idx := io.com_ftq_idx
@@ -781,12 +780,12 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
    {
       // Fetch Stage 1
       printf("BrPred1:  ------ PC: [%c%c-%c for br_id:(n/a), %c %c next: 0x%x]\n",
-             Mux(br_unit.brinfo.valid, Str("V"), Str("-")),
-             Mux(br_unit.brinfo.taken, Str("T"), Str("-")),
-             Mux(br_unit.brinfo.mispredict, Str("M"), Str(" ")),
-             Mux(f0_redirect_val, Str("T"), Str(" ")),
+             Mux(io.br_unit_resp.brinfo.valid, Str("V"), Str("-")),
+             Mux(io.br_unit_resp.brinfo.taken, Str("T"), Str("-")),
+             Mux(io.br_unit_resp.brinfo.mispredict, Str("M"), Str(" ")),
+             Mux(f0_redirect_valid, Str("T"), Str(" ")),
              Mux(io.flush_take_pc, Str("F"),
-             Mux(br_unit.take_pc, Str("B"), Str(" "))),
+             Mux(io.br_unit_resp.take_pc, Str("B"), Str(" "))),
              f0_redirect_pc
              )
 

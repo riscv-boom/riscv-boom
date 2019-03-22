@@ -1,5 +1,5 @@
 //******************************************************************************
-// Copyright (c) 2017 - 2018, The Regents of the University of California (Regents).
+// Copyright (c) 2017 - 2019, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
 // Author: Christopher Celio
@@ -7,18 +7,19 @@
 
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
-// RISCV Processor Branch Prediction Pipeline
+// Branch Prediction Pipeline
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
 //
-// Access BTB and BPD to feed predictions to the Fetch Unit.
+// Access BTB and BPD to feed predictions to the FetchControlUnit.
 //
 // Stages (these are in parallel with instruction fetch):
-//    * F0 - Select next PC. Perform BPD hashing.
-//    * F1 - Access I$ and BTB RAMs. First stage of BPD.
-//    * F2 - Second stage of BPD.
-//    * F3 - Begin decoding instruction bits and computing targets from I$. Check results from BPD.
-//    *      Put data in FB and FTQ
+//    * F0 - Send in next PC into the BTB and the BPD.
+//           Hash the PC with the older history of the BPD.
+//    * F1 - Access the BTB RAMs. Do 1st stage of BPD.
+//    * F2 - Get resp from BTB (send BIM results to BPD). 2nd stage of BPD.
+//    * F3 - Get resp from BPD.
+//    * F4 - Other logic
 
 package boom.bpu
 
@@ -61,8 +62,8 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    val io = IO(new BoomBundle()(p)
    {
       // Fetch0
-      val s0_req        = Flipped(Valid(new freechips.rocketchip.rocket.BTBReq))
-      val debug_imemresp_pc= Input(UInt(vaddrBitsExtended.W)) // For debug -- make sure I$ and BTB are synchronised.
+      val s0_req            = Flipped(Valid(new freechips.rocketchip.rocket.BTBReq))
+      val debug_imemresp_pc = Input(UInt(vaddrBitsExtended.W)) // For debug -- make sure I$ and BTB are synchronised.
 
       // Fetch1
 
@@ -89,7 +90,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
       val bpd_update    = Flipped(Valid(new BpdUpdate))
 
       // Other
-      val br_unit       = Input(new BranchUnitResp())
+      val br_unit_resp  = Input(new BranchUnitResp())
       val fe_clear      = Input(Bool()) // The FrontEnd needs to be cleared (due to redirect or flush).
       val ftq_restore   = Flipped(Valid(new RestoreHistory))
       val flush         = Input(Bool()) // pipeline flush from ROB TODO CODEREVIEW (redudant with fe_clear?)
@@ -120,21 +121,17 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    //************************************************
    // Branch Prediction (F2 Stage)
 
-   io.f2_btb_resp.bits := btb.io.resp.bits
    // BTB's response isn't valid if there's no instruction from I$ to match against.
    io.f2_btb_resp.valid := btb.io.resp.valid && io.f2_valid
+   io.f2_btb_resp.bits := btb.io.resp.bits
 
-   bpd.io.f2_bim_resp := io.f2_btb_resp.bits.bim_resp
+   bpd.io.f2_bim_resp := btb.io.resp.bits.bim_resp
    bpd.io.f2_replay := io.f2_replay
 
    //************************************************
    // Branch Prediction (F3 Stage)
 
    bpd.io.resp.ready := !io.f3_stall
-
-   // does the BPD predict a taken branch?
-   //private def bitRead(bits: UInt, offset: UInt): Bool = (bits >> offset)(0)
-
    io.f3_bpd_resp.valid := bpd.io.resp.valid
    io.f3_bpd_resp.bits := bpd.io.resp.bits
 
@@ -158,10 +155,9 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    //************************************************
    // Update the BTB/BIM
 
-   btb.io.btb_update :=
-      Mux(io.br_unit.btb_update.valid,
-         io.br_unit.btb_update,
-         io.f3_btb_update)
+   btb.io.btb_update := Mux(io.br_unit_resp.btb_update.valid,
+                            io.br_unit_resp.btb_update,
+                            io.f3_btb_update)
 
    btb.io.bim_update := io.bim_update
 
@@ -213,7 +209,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    when (io.f2_valid && btb.io.resp.valid)
    {
       assert (btb.io.resp.bits.fetch_pc(15,0) === io.debug_imemresp_pc(15,0),
-         "[bpd-pipeline] mismatch between BTB and I$.")
+         "[bpd-pipeline] Mismatch between BTB and I$ fetch PCs")
    }
 
    if (!enableBTB)
