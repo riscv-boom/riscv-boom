@@ -90,9 +90,9 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
       val bim_update        = Valid(new BimUpdate)
       val bpd_update        = Valid(new BpdUpdate)
 
-      val ftq_restore_history= Valid(new RestoreHistory)
+      val ftq_restore_history = Valid(new RestoreHistory)
 
-      val br_unit_resp           = Input(new BranchUnitResp())
+      val br_unit_resp      = Input(new BranchUnitResp())
       val get_pc            = new GetPCFromFtqIO()
 
       val tsc_reg           = Input(UInt(xLen.W))
@@ -124,7 +124,7 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
    val f0_redirect_pc = Wire(UInt(vaddrBitsExtended.W))
 
    val clear_f3         = WireInit(false.B)
-   val q_f3_imemresp    = withReset(reset.toBool || clear_f3) {
+   val q_f3_imem_resp    = withReset(reset.toBool || clear_f3) {
                               Module(new ElasticReg(gen = new freechips.rocketchip.rocket.FrontendResp)) }
    val q_f3_btb_resp    = withReset(reset.toBool || clear_f3) { Module(new ElasticReg(gen = Valid(new BoomBTBResp))) }
    val f3_req           = Wire(Valid(new PCReq()))
@@ -176,7 +176,7 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
    io.imem_req.valid   := f0_redirect_valid // tell front-end we had an unexpected change in the stream
    io.imem_req.bits.pc := f0_redirect_pc
    io.imem_req.bits.speculative := !(io.flush_take_pc)
-   io.imem_resp.ready  := q_f3_imemresp.io.enq.ready
+   io.imem_resp.ready  := q_f3_imem_resp.io.enq.ready
 
    f0_redirect_pc :=
       Mux(io.sfence_take_pc,
@@ -201,10 +201,10 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
    // **** ICache Response/Pre-decode (F2) ****
    //-------------------------------------------------------------
 
-   q_f3_imemresp.io.enq.valid := io.imem_resp.valid
+   q_f3_imem_resp.io.enq.valid := io.imem_resp.valid
    q_f3_btb_resp.io.enq.valid := io.imem_resp.valid
 
-   q_f3_imemresp.io.enq.bits := io.imem_resp.bits
+   q_f3_imem_resp.io.enq.bits := io.imem_resp.bits
    q_f3_btb_resp.io.enq.bits := io.f2_btb_resp
 
    //-------------------------------------------------------------
@@ -213,11 +213,11 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
 
    clear_f3 := io.clear_fetchbuffer || (r_f4_valid && r_f4_req.valid)
 
-   val f3_valid = q_f3_imemresp.io.deq.valid
-   val f3_imemresp = q_f3_imemresp.io.deq.bits
+   val f3_valid = q_f3_imem_resp.io.deq.valid
+   val f3_imemresp = q_f3_imem_resp.io.deq.bits
    val f3_btb_resp = q_f3_btb_resp.io.deq.bits
 
-   q_f3_imemresp.io.deq.ready := f4_ready
+   q_f3_imem_resp.io.deq.ready := f4_ready
    q_f3_btb_resp.io.deq.ready := f4_ready
 
    // round off to nearest fetch boundary
@@ -768,10 +768,10 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
    }
 
    // Check that all elastic registers in the same stage show the same control signals.
-   assert(q_f3_imemresp.io.deq.valid === q_f3_btb_resp.io.deq.valid)
-   assert(q_f3_imemresp.io.enq.valid === q_f3_btb_resp.io.enq.valid)
-   assert(q_f3_imemresp.io.deq.ready === q_f3_btb_resp.io.deq.ready)
-   assert(q_f3_imemresp.io.enq.ready === q_f3_btb_resp.io.enq.ready)
+   assert(q_f3_imem_resp.io.deq.valid === q_f3_btb_resp.io.deq.valid)
+   assert(q_f3_imem_resp.io.enq.valid === q_f3_btb_resp.io.enq.valid)
+   assert(q_f3_imem_resp.io.deq.ready === q_f3_btb_resp.io.deq.ready)
+   assert(q_f3_imem_resp.io.enq.ready === q_f3_btb_resp.io.enq.ready)
 
    //-------------------------------------------------------------
    // **** Printfs ****

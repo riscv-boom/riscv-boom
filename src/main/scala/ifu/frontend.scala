@@ -91,7 +91,7 @@ class BoomFrontendIO(implicit p: Parameters) extends BoomBundle()(p)
    // Give the backend a packet of instructions.
    val fetchpacket       = Flipped(new DecoupledIO(new FetchBufferResp))
 
-   val br_unit           = Output(new BranchUnitResp())
+   val br_unit_resp           = Output(new BranchUnitResp())
    val get_pc            = Flipped(new GetPCFromFtqIO())
 
    val sfence            = Valid(new SFenceReq)
@@ -256,7 +256,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   // **** Fetch Controller ****
   //-------------------------------------------------------------
 
-   fetch_controller.io.br_unit           := io.cpu.br_unit
+   fetch_controller.io.br_unit_resp      := io.cpu.br_unit_resp
    fetch_controller.io.tsc_reg           := io.cpu.tsc_reg
 
    fetch_controller.io.f2_btb_resp       := bpdpipeline.io.f2_btb_resp
@@ -294,7 +294,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
    bpdpipeline.io.f3_is_br := fetch_controller.io.f3_is_br
    bpdpipeline.io.debug_imemresp_pc := fetch_controller.io.imem_resp.bits.pc
 
-   bpdpipeline.io.br_unit := io.cpu.br_unit
+   bpdpipeline.io.br_unit_resp := io.cpu.br_unit_resp
    bpdpipeline.io.ftq_restore := fetch_controller.io.ftq_restore_history
    bpdpipeline.io.redirect := fetch_controller.io.imem_req.valid
 
@@ -304,7 +304,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
    bpdpipeline.io.f2_redirect := fetch_controller.io.f2_redirect
    bpdpipeline.io.f4_redirect := fetch_controller.io.f4_redirect
    bpdpipeline.io.f4_taken := fetch_controller.io.f4_taken
-   bpdpipeline.io.fe_clear := fetch_controller.io.clear_fetchbuffer
+   bpdpipeline.io.fe_clear := io.cpu.clear_fetchbuffer
 
    bpdpipeline.io.f3_ras_update := fetch_controller.io.f3_ras_update
    bpdpipeline.io.f3_btb_update := fetch_controller.io.f3_btb_update
