@@ -161,18 +161,18 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    val bypasses       = Wire(new BypassData(exe_units.num_total_bypass_ports, xLen))
 
    // Branch Unit
-   val br_unit = Wire(new BranchUnitResp())
+   val br_unit_resp = Wire(new BranchUnitResp())
    val brunit_idx = exe_units.br_unit_idx
-   br_unit <> exe_units.br_unit_io
+   br_unit_resp <> exe_units.br_unit_io
 
    for (eu <- exe_units)
    {
-      eu.io.brinfo        := br_unit.brinfo
+      eu.io.brinfo        := br_unit_resp.brinfo
       eu.io.com_exception := rob.io.flush.valid
    }
    if (usingFPU)
    {
-      fp_pipeline.io.brinfo := br_unit.brinfo
+      fp_pipeline.io.brinfo := br_unit_resp.brinfo
    }
 
    // Shim to DCache
@@ -222,11 +222,11 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       new freechips.rocketchip.rocket.EventSet((mask, hits) => (mask & hits).orR, Seq(
          ("I$ blocked",                        () => icache_blocked),
          ("nop",                               () => false.B),
-         ("branch misprediction",              () => br_unit.brinfo.mispredict),
-         ("control-flow target misprediction", () => br_unit.brinfo.mispredict &&
-                                                     br_unit.brinfo.is_jr),
+         ("branch misprediction",              () => br_unit_resp.brinfo.mispredict),
+         ("control-flow target misprediction", () => br_unit_resp.brinfo.mispredict &&
+                                                     br_unit_resp.brinfo.is_jr),
          ("flush",                             () => rob.io.flush.valid),
-         ("branch resolved",                   () => br_unit.brinfo.valid))),
+         ("branch resolved",                   () => br_unit_resp.brinfo.valid))),
 
          // Unused RocketCore HPE's
          //("load-use interlock",     () => id_ex_hazard && ex_ctrl.mem || id_mem_hazard && mem_ctrl.mem ||
@@ -322,8 +322,8 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    //   rob.io.commit.uops(w).stat_brjmp_mispredicted})
 
    //// Count user-level branches (subtract from total to get privilege branch accuracy)
-   //csr.io.events(28) := br_unit.brinfo.valid && (csr.io.status.prv === UInt(freechips.rocketchip.rocket.PRV.U))
-   //csr.io.events(29) := br_unit.brinfo.mispredict && (csr.io.status.prv === UInt(rocket.PRV.U))
+   //csr.io.events(28) := br_unit_resp.brinfo.valid && (csr.io.status.prv === UInt(freechips.rocketchip.rocket.PRV.U))
+   //csr.io.events(29) := br_unit_resp.brinfo.mispredict && (csr.io.status.prv === UInt(rocket.PRV.U))
 
    //// count change of privilege modes
    //csr.io.events(30) := csr.io.status.prv =/= RegNext(csr.io.status.prv)
@@ -417,7 +417,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    //-------------------------------------------------------------
    //-------------------------------------------------------------
 
-   io.ifu.br_unit := br_unit
+   io.ifu.br_unit_resp := br_unit_resp
    io.ifu.tsc_reg := debug_tsc_reg
 
    // SFence needs access to the PC to inject an address into the TLB's CAM port. The ROB
@@ -442,7 +442,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
                                    RegNext(csr.io.evec))
    io.ifu.com_ftq_idx       := rob.io.com_xcpt.bits.ftq_idx
 
-   io.ifu.clear_fetchbuffer := br_unit.brinfo.mispredict ||
+   io.ifu.clear_fetchbuffer := br_unit_resp.brinfo.mispredict ||
                                rob.io.flush.valid ||
                                io.ifu.sfence_take_pc
 
@@ -456,7 +456,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
    io.ifu.flush_icache :=
       Range(0,decodeWidth).map{i => rob.io.commit.valids(i) && rob.io.commit.uops(i).is_fencei}.reduce(_|_) ||
-      (br_unit.brinfo.mispredict && br_unit.brinfo.is_jr &&  csr.io.status.debug)
+      (br_unit_resp.brinfo.mispredict && br_unit_resp.brinfo.is_jr &&  csr.io.status.debug)
 
    // Delay sfence to match pushing the sfence.addr into the TLB's CAM port.
    io.ifu.sfence := RegNext(lsu.io.exe_resp.bits.sfence)
@@ -522,7 +522,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
                         || lsu.io.laq_full
                         || lsu.io.stq_full
                         || branch_mask_full(w)
-                        || br_unit.brinfo.mispredict
+                        || br_unit_resp.brinfo.mispredict
                         || rob.io.flush.valid
                         || dec_stall_next_inst
                         || (dec_uops(w).is_fencei && !lsu.io.lsu_fencei_rdy)
@@ -552,7 +552,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    //-------------------------------------------------------------
    // Branch Mask Logic
 
-   dec_brmask_logic.io.brinfo := br_unit.brinfo
+   dec_brmask_logic.io.brinfo := br_unit_resp.brinfo
    dec_brmask_logic.io.flush_pipeline := rob.io.flush.valid
 
    for (w <- 0 until decodeWidth)
@@ -619,7 +619,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    rename_stage.io.dis_inst_can_proceed := dis_readys.toBools
 
    rename_stage.io.kill     := io.ifu.clear_fetchbuffer // mispredict or flush
-   rename_stage.io.brinfo   := br_unit.brinfo
+   rename_stage.io.brinfo   := br_unit_resp.brinfo
 
    rename_stage.io.flush_pipeline := rob.io.flush.valid
    rename_stage.io.debug_rob_empty := rob.io.empty
@@ -699,7 +699,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    for (w <- 0 until decodeWidth)
    {
       dis_valids(w)       := rename_stage.io.ren2_mask(w)
-      dis_uops(w)         := GetNewUopAndBrMask(rename_stage.io.ren2_uops(w), br_unit.brinfo)
+      dis_uops(w)         := GetNewUopAndBrMask(rename_stage.io.ren2_uops(w), br_unit_resp.brinfo)
    }
 
    //-------------------------------------------------------------
@@ -781,7 +781,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    require(iss_idx == exe_units.num_irf_readers)
 
    issue_units.map(_.io.tsc_reg := debug_tsc_reg)
-   issue_units.map(_.io.brinfo := br_unit.brinfo)
+   issue_units.map(_.io.brinfo := br_unit_resp.brinfo)
    issue_units.map(_.io.flush_pipeline := rob.io.flush.valid)
 
    // Load-hit Misspeculations
@@ -808,8 +808,8 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    val mem_resp = mem_unit.io.ll_iresp
 
    when (RegNext(!sxt_ldMiss) && RegNext(RegNext(lsu.io.mem_ldSpecWakeup.valid)) &&
-      !(RegNext(rob.io.flush.valid || (br_unit.brinfo.valid && br_unit.brinfo.mispredict))) &&
-      !(RegNext(RegNext(rob.io.flush.valid || (br_unit.brinfo.valid && br_unit.brinfo.mispredict)))))
+      !(RegNext(rob.io.flush.valid || (br_unit_resp.brinfo.valid && br_unit_resp.brinfo.mispredict))) &&
+      !(RegNext(RegNext(rob.io.flush.valid || (br_unit_resp.brinfo.valid && br_unit_resp.brinfo.mispredict)))))
    {
       assert (mem_resp.valid && mem_resp.bits.uop.ctrl.rf_wen && mem_resp.bits.uop.dst_rtype === RT_FIX,
          "[core] We did not see a RF writeback for a speculative load that claimed no load-miss.")
@@ -845,7 +845,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    iregister_read.io.iss_uops := iss_uops
    iregister_read.io.iss_uops map { u => u.iw_p1_poisoned := false.B; u.iw_p2_poisoned := false.B }
 
-   iregister_read.io.brinfo := br_unit.brinfo
+   iregister_read.io.brinfo := br_unit_resp.brinfo
    iregister_read.io.kill   := rob.io.flush.valid
 
    iregister_read.io.bypass := bypasses
@@ -983,8 +983,8 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    lsu.io.exception := rob.io.flush.valid
 
    // Handle Branch Mispeculations
-   lsu.io.brinfo := br_unit.brinfo
-   dc_shim.io.core.brinfo := br_unit.brinfo
+   lsu.io.brinfo := br_unit_resp.brinfo
+   dc_shim.io.core.brinfo := br_unit_resp.brinfo
 
    new_ldq_idx := lsu.io.new_ldq_idx
    new_stq_idx := lsu.io.new_stq_idx
@@ -1146,7 +1146,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    require (f_cnt == rob.num_fpu_ports)
 
    // branch resolution
-   rob.io.brinfo <> br_unit.brinfo
+   rob.io.brinfo <> br_unit_resp.brinfo
 
    // branch unit requests PCs and predictions from ROB during register read
    // (fetch PC from ROB cycle earlier than needed for critical path reasons)
@@ -1165,7 +1165,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
    assert (!(csr.io.singleStep), "[core] single-step is unsupported.")
 
-   rob.io.bxcpt <> br_unit.xcpt
+   rob.io.bxcpt <> br_unit_resp.xcpt
 
    //-------------------------------------------------------------
    // **** Flush Pipeline ****
@@ -1335,9 +1335,9 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
       // branch unit
       printf("                          Branch Unit: %c,%c,%d  NPC=%d,0x%x\n",
-             Mux(br_unit.brinfo.valid,Str("V"), Str(" ")),
-             Mux(br_unit.brinfo.mispredict, Str("M"), Str(" ")),
-             br_unit.brinfo.taken,
+             Mux(br_unit_resp.brinfo.valid,Str("V"), Str(" ")),
+             Mux(br_unit_resp.brinfo.mispredict, Str("M"), Str(" ")),
+             br_unit_resp.brinfo.taken,
              exe_units(brunit_idx).io.get_ftq_pc.next_val,
              exe_units(brunit_idx).io.get_ftq_pc.next_pc(19,0)
              )
