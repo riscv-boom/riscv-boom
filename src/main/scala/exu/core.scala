@@ -1506,6 +1506,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    //-------------------------------------------------------------
    //-------------------------------------------------------------
 
+   io.rocc := DontCare
    if (usingRoCC)
    {
       exe_units.rocc_unit.io.rocc.rocc         <> io.rocc
