@@ -94,8 +94,8 @@ class RegisterFileSeqCustomArray(
 
     if (i > 0)
     {
-      // ensure there is only 1 writer to a preg
-      assert(PopCount(write_select_OH(i).toBools) <= 1.U,
+      // ensure there is only 1 writer to a preg (unless its preg0)
+      assert((PopCount(write_select_OH(i).toBools) <= 1.U) || (i.U === 0.U),
         "[custom_regfile] write-select has too many writers to this register p[" + i + "]")
     }
   }

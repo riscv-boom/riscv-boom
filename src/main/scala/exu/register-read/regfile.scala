@@ -189,7 +189,7 @@ class RegisterFileSynthesizable(
     }
   }
 
-  // ensure there is only writer per register
+  // ensure there is only 1 writer per register (unless to preg0)
   if (num_write_ports > 1)
   {
     for (i <- 0 until (num_write_ports - 1))
@@ -198,7 +198,8 @@ class RegisterFileSynthesizable(
       {
         assert(!io.write_ports(i).valid ||
                !io.write_ports(j).valid ||
-               (io.write_ports(i).bits.addr =/= io.write_ports(j).bits.addr),
+               (io.write_ports(i).bits.addr =/= io.write_ports(j).bits.addr) ||
+               (io.write_ports(i).bits.addr === 0.U), // note: you only have to check one here
           "[regfile] too many writers a register")
       }
     }

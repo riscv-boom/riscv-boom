@@ -96,7 +96,7 @@ class RegisterFileTester extends ChiselFlatSpec
       {
         chisel3.iotesters.Driver(() => regfile, "verilator")
         {
-          (c) => new TwoWritesToSameRegisterTest(c, wport_cnt)
+          (c) => new TwoWritesToSameRegisterTest(c, wport_cnt, NUM_REGISTERS)
         } should be (false)
       }
 
@@ -156,9 +156,10 @@ class ZeroRegisterTest[R <: RegisterFile](
  */
 class TwoWritesToSameRegisterTest[R <: RegisterFile](
   c: R,
-  num_write_ports: Int) extends PeekPokeTester(c)
+  num_write_ports: Int,
+  num_registers: Int) extends PeekPokeTester(c)
 {
-  if (num_write_ports > 1)
+  if (num_write_ports > 1 && num_registers > 1)
   {
     // chose two random write ports
     val rand = new Random()
@@ -197,7 +198,7 @@ class TwoWritesToSameRegisterTest[R <: RegisterFile](
   }
   else {
     // hacky way to avoid PeekPoke backend showing that this is an error
-    expect(false, ">1 write port should pass the test")
+    expect(false, ">1 write port (or only 1 register) should pass the test")
   }
 }
 
