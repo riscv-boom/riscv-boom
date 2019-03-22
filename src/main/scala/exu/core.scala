@@ -530,8 +530,8 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
                         || (dec_uops(w).is_unique &&
                            (!(rob.io.empty) || !lsu.io.lsu_fencei_rdy || prev_insts_in_bundle_valid))
                         || !rob.io.ready
-                        || lsu.io.laq_full
-                        || lsu.io.stq_full
+                        || lsu.io.laq_full(w) && dec_uops(w).is_load
+                        || lsu.io.stq_full(w) && dec_uops(w).is_store
                         || branch_mask_full(w)
                         || br_unit.brinfo.mispredict
                         || rob.io.flush.valid
@@ -544,7 +544,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
       // stall the next instruction following me in the decode bundle?
       dec_last_inst_was_stalled = stall_me
-      dec_stall_next_inst  = stall_me || (dec_valids(w) && dec_uops(w).is_unique)
+      dec_stall_next_inst = stall_me || (dec_valids(w) && dec_uops(w).is_unique)
       dec_rocc_found = dec_rocc_found || (dec_valids(w) && dec_uops(w).uopc === uopROCC)
 
       dec_will_fire(w) := dec_valids(w) && !stall_me && !io.ifu.clear_fetchbuffer
@@ -584,20 +584,10 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    //-------------------------------------------------------------
    // LD/ST Unit Allocation Logic
 
-   // TODO this is dupliciated logic with the the LSU... do we need ldq_idx/stq elsewhere?
-   val new_ldq_idx = Wire(UInt())
-   val new_stq_idx = Wire(UInt())
-
-   var new_lidx = new_ldq_idx
-   var new_sidx = new_stq_idx
-
-   for (w <- 0 until coreWidth)
+   for (w <- 0 until decodeWidth)
    {
-      dec_uops(w).ldq_idx := new_lidx
-      dec_uops(w).stq_idx := new_sidx
-
-      new_lidx = Mux(dec_will_fire(w) && dec_uops(w).is_load,  WrapInc(new_lidx, NUM_LDQ_ENTRIES), new_lidx)
-      new_sidx = Mux(dec_will_fire(w) && dec_uops(w).is_store, WrapInc(new_sidx, NUM_STQ_ENTRIES), new_sidx)
+      dec_uops(w).ldq_idx := lsu.io.new_ldq_idx(w)
+      dec_uops(w).stq_idx := lsu.io.new_stq_idx(w)
    }
 
    //-------------------------------------------------------------
@@ -1020,12 +1010,11 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
    for (w <- 0 until coreWidth)
    {
-      lsu.io.dec_st_vals(w) := dec_will_fire(w) && rename_stage.io.inst_can_proceed(w) && !rob.io.flush.valid &&
-                               dec_uops(w).is_store
-      lsu.io.dec_ld_vals(w) := dec_will_fire(w) && rename_stage.io.inst_can_proceed(w) && !rob.io.flush.valid &&
-                               dec_uops(w).is_load
+      // Decoding instructions request load/store queue entries when they can proceed.
+      lsu.io.dec_ld_vals(w) := dec_will_fire(w) && dec_uops(w).is_load
+      lsu.io.dec_st_vals(w) := dec_will_fire(w) && dec_uops(w).is_store
 
-      lsu.io.dec_uops(w).rob_idx := dec_uops(w).rob_idx // for debug purposes (comit logging)
+      lsu.io.dec_uops(w).rob_idx := dec_uops(w).rob_idx // for debug purposes (commit logging)
    }
 
    lsu.io.commit_store_mask := rob.io.commit.st_mask
@@ -1038,9 +1027,6 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    // Handle Branch Mispeculations
    lsu.io.brinfo := br_unit.brinfo
    dc_shim.io.core.brinfo := br_unit.brinfo
-
-   new_ldq_idx := lsu.io.new_ldq_idx
-   new_stq_idx := lsu.io.new_stq_idx
 
    lsu.io.debug_tsc := debug_tsc_reg
 
@@ -1366,8 +1352,8 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
                 Mux(rob.io.debug.state === 3.U, Str("W"),
                                                     Str(" "))))),
                 Mux(rob.io.ready,Str("_"), Str("!")),
-                Mux(lsu.io.laq_full, Str("L"), Str("_")),
-                Mux(lsu.io.stq_full, Str("S"), Str("_")),
+                Mux(lsu.io.laq_full(0), Str("L"), Str("_")),
+                Mux(lsu.io.stq_full(0), Str("S"), Str("_")),
                 Mux(rob.io.flush.valid, Str("F"), Str(" ")),
                 Mux(branch_mask_full.reduce(_|_), Str("B"), Str(" ")),
                 Mux(dc_shim.io.core.req.ready, Str("R"), Str("B")),
