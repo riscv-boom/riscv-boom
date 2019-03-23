@@ -240,6 +240,18 @@ object WrapDec
 }
 
 /**
+ * Object to determine whether queue
+ * index i0 is older than index i1.
+ */
+object IsOlder
+{
+   def apply(i0: UInt, i1: UInt, head: UInt): Bool =
+   {
+      (i0 < i1) ^ (i0 < head) ^ (i1 < head)
+   }
+}
+
+/**
  * Object to mask off lower bits of a PC to align to a "b"
  * Byte boundary.
  */
