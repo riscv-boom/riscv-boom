@@ -760,7 +760,8 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
       // check that, if there is a jal, the last valid instruction is not after him.
       // <beq, jal, bne, ...>, either the beq or jal may be the last instruction, but because
       // the jal dominates everything after it, nothing valid can be after it.
-      val f3_is_jal = VecInit(f3_fetch_bundle.insts map {x => GetCfiType(ExpandRVC(x)) === CfiType.jal}).asUInt & f3_fetch_bundle.mask
+      val f3_is_jal = VecInit(f3_fetch_bundle.insts map {x =>
+        GetCfiType(ExpandRVC(x)) === CfiType.jal}).asUInt & f3_fetch_bundle.mask
       val f3_jal_idx = PriorityEncoder(f3_is_jal)
       val has_jal = f3_is_jal.orR
 

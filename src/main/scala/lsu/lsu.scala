@@ -217,8 +217,8 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
 
    // Store-Address Queue
    val saq_val       = Reg(Vec(NUM_STQ_ENTRIES, Bool()))
-   val saq_is_virtual= Reg(Vec(NUM_STQ_ENTRIES, Bool())) // address in SAQ is a virtual address. There was a tlb_miss and
-                                                        // a retry is required.
+   val saq_is_virtual= Reg(Vec(NUM_STQ_ENTRIES, Bool())) // address in SAQ is a virtual address.
+                                                         // There was a tlb_miss and a retry is required.
    val saq_addr      = Mem(NUM_STQ_ENTRIES, UInt(coreMaxAddrBits.W))
 
    // Store-Data Queue

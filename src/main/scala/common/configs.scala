@@ -57,6 +57,7 @@ class DefaultBoomConfig extends Config((site, here, up) => {
       dcache = Some(DCacheParams(rowBits = site(SystemBusKey).beatBits, nSets=64, nWays=8, nMSHRs=4, nTLBEntries=16)),
       icache = Some(ICacheParams(fetchBytes = 4*4, rowBits = site(SystemBusKey).beatBits, nSets=64, nWays=8))
       )}
+
    // Set TL network to 128bits wide
    case SystemBusKey => up(SystemBusKey, site).copy(beatBytes = 16)
 })
@@ -222,6 +223,7 @@ class WithMegaBooms extends Config((site, here, up) => {
                                  nSets=64, nWays=16, nMSHRs=8, nTLBEntries=32)),
       icache = Some(ICacheParams(fetchBytes = 8*4, rowBits = site(SystemBusKey).beatBytes*8, nSets=64, nWays=8))
       )}
+
    // Set TL network to 128bits wide
    case SystemBusKey => up(SystemBusKey, site).copy(beatBytes = 16)
 })
