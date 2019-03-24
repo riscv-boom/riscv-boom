@@ -15,19 +15,17 @@ We also recommend that you try to cut up contributions into smaller, digestable 
 
 **Style Guide**
 
-You can invoke `make checkstyle` to verify that your changes respect the style guide.
-In addition we have the following coding guidelines:
+You can invoke `make checkstyle` to verify that some of your changes respect the style guide.
+However, checkstyle does not cover all cases of the code.
 
-* Scala global variables should be in capital snake case
-    * E.g. `GLOBAL_SCALA_VARIABLE_NAME`
-* Scala local variables should be in lowercase camel case
+We have the following coding guidelines:
+
+* Scala variables should be in lowercase camel case
     * E.g. `localScalaVariableName`
 * Chisel variables should be in lowercase snake case
     * E.g. `local_chisel_variable_name`
 * Classes should be in camel case with the first letter capitalized
     * E.g. `RegisterFile`
-* Registers should be labeled with a `_r` after the name
-    * E.g. `val f2_valid_r = Reg(...)`
 * If the variable is in a particular stage, please put the stage cycle it is associated with
     * E.g. `val f2_valid = Wire(...)`
 * Braces for control structures (`for`, `while`, `if`, `when`, etc...) should be on the same line as the condition
@@ -37,12 +35,11 @@ In addition we have the following coding guidelines:
       class SomeModule extends Module
       {
       ```
-* Things such as `else`, `.otherwise`, etc should be on the next line
+* Things such as `else`, `.otherwise`, etc should be on the same line as the closing bracket of the previous scope
     * ```
       if (...) {
         ...
-      }
-      else {
+      } else {
       ```
 * Braces following conditions should have a space separating them
     * E.g. `if (...) {`
@@ -55,7 +52,10 @@ In addition we have the following coding guidelines:
           }
         }
       }
-           ```
+      class SomeModule extends Module
+      {
+        if (...) {
+      ```
 * Multiline comments within the code should be indented on the second line associated with it
     * ```
       // this is a start of a comment that
