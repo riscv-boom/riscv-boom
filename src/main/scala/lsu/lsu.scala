@@ -55,7 +55,7 @@ import freechips.rocketchip.util.Str
 
 import boom.common._
 import boom.exu.{BrResolutionInfo, Exception, FuncUnitResp}
-import boom.util.{AgePriorityEncoder, IsKilledByBranch, GetNewBrMask, WrapInc}
+import boom.util.{AgePriorityEncoder, IsKilledByBranch, GetNewBrMask, WrapInc, IsOlder}
 
 /**
  * IO bundle representing the different signals to interact with the backend
@@ -120,9 +120,10 @@ class LoadStoreUnitIO(val pl_width: Int)(implicit p: Parameters) extends BoomBun
    val clr_bsy_valid      = Output(Vec(2, Bool()))
    val clr_bsy_rob_idx    = Output(Vec(2, UInt(ROB_ADDR_SZ.W)))
 
-   // Tell the ROB we've successfully translated this operation
-   val mem_success         = Output(Bool())
-   val mem_success_rob_idx = Output(UInt(ROB_ADDR_SZ.W))
+   // LSU can mark its instructions as speculatively safe in the ROB.
+   val clr_unsafe_valid   = Output(Bool())
+   val clr_unsafe_rob_idx = Output(UInt(ROB_ADDR_SZ.W))
+
    val lsu_fencei_rdy     = Output(Bool())
 
    val xcpt = new ValidIO(new Exception)
@@ -216,8 +217,8 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
 
    // Store-Address Queue
    val saq_val       = Reg(Vec(NUM_STQ_ENTRIES, Bool()))
-   val saq_is_virtual= Reg(Vec(NUM_STQ_ENTRIES, Bool())) // address in SAQ is a virtual address. There was a tlb_miss and
-                                                        // a retry is required.
+   val saq_is_virtual= Reg(Vec(NUM_STQ_ENTRIES, Bool())) // address in SAQ is a virtual address.
+                                                         // There was a tlb_miss and a retry is required.
    val saq_addr      = Mem(NUM_STQ_ENTRIES, UInt(coreMaxAddrBits.W))
 
    // Store-Data Queue
@@ -696,6 +697,12 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
    val mem_fired_stdf = RegNext(io.fp_stdata.valid, init=false.B)
    val mem_fired_sfence = RegNext(will_fire_sfence, init=false.B)
 
+   // Mark instructions as safe after successful address translation.
+   // Need to delay to same cycle as exception broadcast into ROB to avoid
+   // the PNR 'jumping the gun' over a misspeculated ordering.
+   io.clr_unsafe_valid := RegNext(!mem_tlb_miss && (mem_ld_used_tlb || mem_fired_sta))
+   io.clr_unsafe_rob_idx := RegNext(mem_tlb_uop.rob_idx)
+
    mem_ld_killed := false.B
    when (RegNext(
          (IsKilledByBranch(io.brinfo, exe_ld_uop) ||
@@ -1026,8 +1033,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
       }
       .elsewhen (do_ldld_search)
       {
-         def IsSearcherOlder(i0: UInt, i1: UInt, tail: UInt) = (Cat(i0 < tail, i0) < Cat(i1 < tail, i1))
-         val searcher_is_older = IsSearcherOlder(lcam_ldq_idx, laq_uop(i).ldq_idx, laq_tail)
+         val searcher_is_older = IsOlder(lcam_ldq_idx, i.U, laq_tail)
 
          // Does the load entry depend on the searching load?
          // Aka, is the searching load older than the load entry?
@@ -1096,16 +1102,6 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
 
    io.xcpt.valid := r_xcpt_valid && !io.exception && !IsKilledByBranch(io.brinfo, r_xcpt.uop)
    io.xcpt.bits := r_xcpt
-
-   // A memory operation can mark its entry in the ROB as "safe" when
-   //  1) it hits in the TLB and does not raise PF or AE xcpt
-   //  2) it does not cause younger load to fail
-   // 2) happens cycle after 1), so we delay accordingly
-   io.mem_success         := RegNext(RegNext(dtlb.io.req.valid) &&
-                                     !mem_xcpt_valid &&
-                                     !RegNext(dtlb.io.resp.miss)) && !failed_loads.reduce(_|_)
-   io.mem_success_rob_idx := RegNext(RegNext(exe_tlb_uop.rob_idx))
-
 
    //-------------------------------------------------------------
    // Kill speculated entries on branch mispredict
@@ -1240,7 +1236,6 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
    ld_was_killed           := false.B
    ld_was_put_to_sleep     := false.B
 
-   def IsOlder(i0: UInt, i1: UInt, tail: UInt) = (Cat(i0 <= tail, i0) < Cat(i1 <= tail, i1))
    when (io.nack.valid)
    {
       // the cache nacked our store

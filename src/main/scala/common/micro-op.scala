@@ -142,8 +142,8 @@ class MicroOp(implicit p: Parameters) extends BoomBundle()(p)
    val debug_events     = new DebugStageEvents
 
 
-   // Is it possible for this uop to not commit once it is in the ROB?
-   def may_xcpt         = (is_load || is_store || is_br_or_jmp || exception) && !(is_fence || is_fencei)
+   // Is it possible for this uop to misspeculate, preventing the commit of subsequent uops?
+   def unsafe           = is_load || is_store && !is_fence || is_br_or_jmp && !is_jal
 
    def fu_code_is(_fu: UInt) = fu_code === _fu
 }

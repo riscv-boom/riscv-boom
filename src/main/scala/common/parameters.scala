@@ -42,6 +42,7 @@ case class BoomCoreParams(
    enablePrefetching: Boolean = false,
    enableBrResolutionRegister: Boolean = true,
    enableCommitMapTable: Boolean = false,
+   enableFastPNR: Boolean = true,
    enableBTBContainsBranches: Boolean = true,
    enableBranchPredictor: Boolean = true,
    enableBTB: Boolean = true,
@@ -121,7 +122,8 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
    val NUM_LDQ_ENTRIES = boomParams.numLdqEntries       // number of LAQ entries
    val NUM_STQ_ENTRIES = boomParams.numStqEntries       // number of SAQ/SDQ entries
    val MAX_BR_COUNT    = boomParams.maxBrCount          // number of branches we can speculate simultaneously
-   val ftqSz           = NUM_ROB_ENTRIES / fetchWidth   // number of FTQ entries should match (or slightly exceed) ROB entries
+   val ftqSz           = NUM_ROB_ENTRIES / fetchWidth   // number of FTQ entries should match
+                                                        //   (or slightly exceed) ROB entries
    val fetchBufferSz   = boomParams.fetchBufferSz       // number of instructions that stored between fetch&decode
 
    val numIntPhysRegs  = boomParams.numIntPhysRegisters // size of the integer physical register file
@@ -225,6 +227,7 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
    //************************************
    // Extra Knobs and Features
    val ENABLE_COMMIT_MAP_TABLE = boomParams.enableCommitMapTable
+   val enableFastPNR = boomParams.enableFastPNR
 
    //************************************
    // Implicitly calculated constants
