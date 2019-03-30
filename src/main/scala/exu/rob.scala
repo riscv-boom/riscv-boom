@@ -319,8 +319,9 @@ class Rob(
       when (io.enq_valids(w))
       {
          rob_val(rob_tail)       := true.B
-         rob_bsy(rob_tail)       := !io.enq_uops(w).is_fence &&
-                                    !(io.enq_uops(w).is_fencei)
+         rob_bsy(rob_tail)       := !(io.enq_uops(w).is_fence ||
+                                      io.enq_uops(w).is_fencei ||
+                                      (io.enq_uops(w).uopc === uopROCC && io.enq_uops(w).dst_rtype === RT_X))
          rob_unsafe(rob_tail)    := io.enq_uops(w).unsafe
          rob_uop(rob_tail)       := io.enq_uops(w)
          rob_exception(rob_tail) := io.enq_uops(w).exception
@@ -516,7 +517,7 @@ class Rob(
          rob_unsafe_masked((i << log2Ceil(width)) + w) := rob_val(i) && (rob_unsafe(i) || rob_exception(i))
       }
       // Read unsafe status of PNR row.
-      rob_pnr_unsafe(w) := rob_unsafe_masked(rob_pnr << log2Ceil(width) + w)
+      rob_pnr_unsafe(w) := rob_val(rob_pnr) && (rob_unsafe(rob_pnr) || rob_exception(rob_pnr))
 
       // -----------------------------------------------
       // debugging write ports that should not be synthesized
@@ -771,7 +772,7 @@ class Rob(
       val unsafe_entry_in_rob = rob_unsafe_masked.reduce(_||_)
       val next_rob_pnr_idx = Mux(unsafe_entry_in_rob,
                                  AgePriorityEncoder(rob_unsafe_masked, rob_head_idx),
-                                 rob_tail << log2Ceil(width) | PriorityEncoder(~rob_head_vals.asUInt))
+                                 rob_tail << log2Ceil(width) | PriorityEncoder(~rob_tail_vals.asUInt))
       rob_pnr := next_rob_pnr_idx >> log2Ceil(width)
       if (width > 1)
          rob_pnr_lsb := next_rob_pnr_idx(log2Ceil(width)-1, 0)
@@ -779,21 +780,33 @@ class Rob(
    else
    {
       val do_inc_pnr = !rob_pnr_unsafe.reduce(_||_) && rob_pnr =/= rob_tail
-      val pnr_at_tail = rob_pnr === rob_tail
-      rob_pnr := Mux(do_inc_pnr, WrapInc(rob_pnr, NUM_ROB_ROWS), rob_pnr)
-      if (width > 1)
-         rob_pnr_lsb := Mux(do_inc_pnr,
-                           0.U,
-                         Mux(pnr_at_tail,
-                            PriorityEncoder(~rob_head_vals.asUInt),
-                          PriorityEncoder(rob_pnr_unsafe.asUInt)))
+      when (empty && io.enq_valids.asUInt =/= 0.U) {
+         // Unforunately for us, the ROB does not use its entries in monotonically
+         //  increasing order, even in the case of no exceptions. The edge case
+         //  arises when partial rows are enqueued and committed, leaving an empty
+         //  ROB.
+         rob_pnr     := rob_head
+         rob_pnr_lsb := 0.U
+      } .elsewhen (do_inc_pnr) {
+         rob_pnr     := WrapInc(rob_pnr, NUM_ROB_ROWS)
+         rob_pnr_lsb := 0.U
+      } .elsewhen (!rob_pnr_unsafe(rob_pnr_lsb) && rob_tail_vals(rob_pnr_lsb)) {
+         rob_pnr_lsb := rob_pnr_lsb + 1.U
+      }
+      // rob_pnr := Mux(do_inc_pnr, WrapInc(rob_pnr, NUM_ROB_ROWS), rob_pnr)
+      // if (width > 1)
+      //    rob_pnr_lsb := Mux(do_inc_pnr,
+      //                      0.U,
+      //                    Mux(pnr_at_tail,
+      //                       PriorityEncoder(~rob_tail_vals.asUInt | rob_pnr_unsafe.asUInt),
+      //                     PriorityEncoder(rob_pnr_unsafe.asUInt)))
    }
 
    // Head overrunning PNR likely means an entry hasn't been marked as safe when it should have been.
-   assert(!IsOlder(rob_pnr, rob_head, rob_tail) || rob_pnr === rob_tail)
+   assert(!IsOlder(rob_pnr_idx, rob_head_idx, rob_tail_idx))
 
    // PNR overrunning tail likely means an entry has been marked as safe when it shouldn't have been.
-   assert(!IsOlder(rob_tail, rob_pnr, rob_tail) || full)
+   assert(!IsOlder(rob_tail_idx, rob_pnr_idx, rob_tail_idx) || full)
 
    // -----------------------------------------------
    // ROB Tail Logic
@@ -821,6 +834,7 @@ class Rob(
    {
       rob_tail_lsb := OHToUInt(io.enq_valids) + 1.U
    }
+
 
    if (ENABLE_COMMIT_MAP_TABLE)
    {
