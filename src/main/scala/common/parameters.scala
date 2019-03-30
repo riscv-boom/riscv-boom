@@ -42,7 +42,7 @@ case class BoomCoreParams(
    enablePrefetching: Boolean = false,
    enableBrResolutionRegister: Boolean = true,
    enableCommitMapTable: Boolean = false,
-   enableFastPNR: Boolean = true,
+   enableFastPNR: Boolean = false,
    enableBTBContainsBranches: Boolean = true,
    enableBranchPredictor: Boolean = true,
    enableBTB: Boolean = true,
