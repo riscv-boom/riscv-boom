@@ -233,7 +233,8 @@ class Rob(
 
    //commit entries at the head, and unwind exceptions from the tail
    val rob_head     = RegInit(0.U(log2Ceil(NUM_ROB_ROWS).W))
-   val rob_head_idx = rob_head << log2Ceil(width).U
+   val rob_head_lsb = RegInit(0.U((1 max log2Ceil(width)).W)) // TODO: Accurately track head LSB (currently always 0)
+   val rob_head_idx = if (width == 1) rob_head else Cat(rob_head, rob_head_lsb)
 
    val rob_tail     = RegInit(0.U(log2Ceil(NUM_ROB_ROWS).W))
    val rob_tail_lsb = RegInit(0.U((1 max log2Ceil(width)).W))
