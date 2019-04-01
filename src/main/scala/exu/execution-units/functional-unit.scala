@@ -391,16 +391,15 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1, data_width: 
       val pc_plus4 = (uop_pc_ + Mux(io.req.bits.uop.is_rvc, 2.U, 4.U))(vaddrBitsExtended-1,0)
 
       val pc_sel = MuxLookup(io.req.bits.uop.ctrl.br_type, PC_PLUS4,
-               Seq  (   BR_N  -> PC_PLUS4,
-                        BR_NE -> Mux(!br_eq,  PC_BRJMP, PC_PLUS4),
-                        BR_EQ -> Mux( br_eq,  PC_BRJMP, PC_PLUS4),
-                        BR_GE -> Mux(!br_lt,  PC_BRJMP, PC_PLUS4),
-                        BR_GEU-> Mux(!br_ltu, PC_BRJMP, PC_PLUS4),
-                        BR_LT -> Mux( br_lt,  PC_BRJMP, PC_PLUS4),
-                        BR_LTU-> Mux( br_ltu, PC_BRJMP, PC_PLUS4),
-                        BR_J  -> PC_BRJMP,
-                        BR_JR -> PC_JALR
-                        ))
+               Seq( BR_N   -> PC_PLUS4,
+                    BR_NE  -> Mux(!br_eq,  PC_BRJMP, PC_PLUS4),
+                    BR_EQ  -> Mux( br_eq,  PC_BRJMP, PC_PLUS4),
+                    BR_GE  -> Mux(!br_lt,  PC_BRJMP, PC_PLUS4),
+                    BR_GEU -> Mux(!br_ltu, PC_BRJMP, PC_PLUS4),
+                    BR_LT  -> Mux( br_lt,  PC_BRJMP, PC_PLUS4),
+                    BR_LTU -> Mux( br_ltu, PC_BRJMP, PC_PLUS4),
+                    BR_J   -> PC_BRJMP,
+                    BR_JR  -> PC_JALR ))
 
       val bj_addr = Wire(UInt(vaddrBitsExtended.W))
 
@@ -423,19 +422,25 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1, data_width: 
       val bpd_mispredict = WireInit(false.B)
 
       // if b/j is taken, does it go to the wrong target?
-      val wrong_taken_target = !io.get_ftq_pc.next_val || (io.get_ftq_pc.next_pc =/= bj_addr)
+      val wrong_taken_target = !io.get_ftq_pc.next_pc.valid || (io.get_ftq_pc.next_pc.bits =/= bj_addr)
 
       if (DEBUG_PRINTF)
       {
-         printf("  BR-UNIT: PC: 0x%x+%x, Next: %d, 0x%x ,bj_addr: 0x%x\n",
-            io.get_ftq_pc.fetch_pc, io.req.bits.uop.pc_lob, io.get_ftq_pc.next_val, io.get_ftq_pc.next_pc, bj_addr)
+         printf("BR-UNIT:\n")
+         printf("    PC:0x%x+0x%x Next:(V:%c PC:0x%x) BJAddr:0x%x\n",
+                io.get_ftq_pc.fetch_pc,
+                io.req.bits.uop.pc_lob,
+                PrintUtil.ConvertChar(io.get_ftq_pc.next_pc.valid, 'V'),
+                io.get_ftq_pc.next_pc.bits,
+                bj_addr)
       }
-      when (io.req.valid && uop.is_jal && io.get_ftq_pc.next_val && io.get_ftq_pc.next_pc =/= bj_addr)
+
+      when (io.req.valid && uop.is_jal && io.get_ftq_pc.next_pc.valid && io.get_ftq_pc.next_pc.bits =/= bj_addr)
       {
          printf("[func] JAL went to the wrong target [curr: 0x%x+%x next: 0x%x, target: 0x%x]",
-            io.get_ftq_pc.fetch_pc, io.req.bits.uop.pc_lob, io.get_ftq_pc.next_pc, bj_addr)
+            io.get_ftq_pc.fetch_pc, io.req.bits.uop.pc_lob, io.get_ftq_pc.next_pc.bits, bj_addr)
       }
-      assert (!(io.req.valid && uop.is_jal && io.get_ftq_pc.next_val && io.get_ftq_pc.next_pc =/= bj_addr),
+      assert (!(io.req.valid && uop.is_jal && io.get_ftq_pc.next_pc.valid && io.get_ftq_pc.next_pc.bits =/= bj_addr),
          "[func] JAL went to the wrong target.")
 
       when (is_br_or_jalr)
@@ -463,16 +468,16 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1, data_width: 
          }
       }
 
-      when (is_br_or_jalr && pc_sel === PC_BRJMP && !mispredict && io.get_ftq_pc.next_val)
+      when (is_br_or_jalr && pc_sel === PC_BRJMP && !mispredict && io.get_ftq_pc.next_pc.valid)
       {
          // ignore misaligned issues -- we'll catch that elsewhere as an exception.
-         when (io.get_ftq_pc.next_pc(vaddrBits-1, log2Ceil(coreInstBytes)) =/=
+         when (io.get_ftq_pc.next_pc.bits(vaddrBits-1, log2Ceil(coreInstBytes)) =/=
                bj_addr(vaddrBits-1, log2Ceil(coreInstBytes)))
          {
             printf ("[FuncUnit] Branch jumped to 0x%x, should have jumped to 0x%x.\n",
-               io.get_ftq_pc.next_pc, bj_addr)
+               io.get_ftq_pc.next_pc.bits, bj_addr)
          }
-         assert (io.get_ftq_pc.next_pc(vaddrBits-1, log2Ceil(coreInstBytes)) ===
+         assert (io.get_ftq_pc.next_pc.bits(vaddrBits-1, log2Ceil(coreInstBytes)) ===
                  bj_addr(vaddrBits-1, log2Ceil(coreInstBytes)),
                  "[FuncUnit] branch is taken to the wrong target.")
       }
@@ -532,9 +537,9 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1, data_width: 
       brinfo.ldq_idx        := uop.ldq_idx
       brinfo.stq_idx        := uop.stq_idx
       brinfo.is_jr          := pc_sel === PC_JALR
-      brinfo.cfi_type       := Mux(uop.is_jal, CfiType.jal,
-                               Mux(pc_sel === PC_JALR, CfiType.jalr,
-                               Mux(uop.is_br_or_jmp, CfiType.branch, CfiType.none)))
+      brinfo.cfi_type       := Mux(uop.is_jal, CfiType.JAL,
+                               Mux(pc_sel === PC_JALR, CfiType.JALR,
+                               Mux(uop.is_br_or_jmp, CfiType.BRANCH, CfiType.NONE)))
       brinfo.taken          := is_taken
       brinfo.btb_mispredict := btb_mispredict
       brinfo.bpd_mispredict := bpd_mispredict
@@ -557,21 +562,21 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1, data_width: 
          br_unit.btb_update.valid := is_br_or_jalr && mispredict && uop.is_jump
       }
 
-      br_unit.btb_update.bits.pc      := io.get_ftq_pc.fetch_pc// tell the BTB which pc to tag check against
+      br_unit.btb_update.bits.pc      := io.get_ftq_pc.fetch_pc // tell the BTB which pc to tag check against
       br_unit.btb_update.bits.cfi_idx := Mux(io.req.bits.uop.edge_inst,
                                              0.U,
                                              (uop_pc_ >> log2Ceil(coreInstBytes)))
       br_unit.btb_update.bits.target  := (target.asSInt & (-coreInstBytes).S).asUInt
       br_unit.btb_update.bits.taken   := is_taken   // was this branch/jal/jalr "taken"
       br_unit.btb_update.bits.cfi_type :=
-            Mux(uop.is_jal, CfiType.jal,
-            Mux(uop.is_jump && !uop.is_jal, CfiType.jalr,
-                CfiType.branch))
+            Mux(uop.is_jal, CfiType.JAL,
+            Mux(uop.is_jump && !uop.is_jal, CfiType.JALR,
+                CfiType.BRANCH))
       br_unit.btb_update.bits.bpd_type :=
-            Mux(uop.is_ret, BpredType.ret,
-            Mux(uop.is_call, BpredType.call,
-            Mux(uop.is_jump, BpredType.jump,
-                BpredType.branch)))
+            Mux(uop.is_ret, BpredType.RET,
+            Mux(uop.is_call, BpredType.CALL,
+            Mux(uop.is_jump, BpredType.JUMP,
+                BpredType.BRANCH)))
 
       // Branch/Jump Target Calculation
       // we can't push this through the ALU though, b/c jalr needs both PC+4 and rs1+offset

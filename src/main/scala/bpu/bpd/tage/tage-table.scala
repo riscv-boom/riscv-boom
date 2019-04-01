@@ -24,10 +24,10 @@ import boom.common._
  * IO bundle to connect the TAGE table to the TAGE predictor top
  *
  * @param fetch_width # of instructions fetched
- * @param index_sz ...
- * @param tag_sz ...
- * @param cntr_sz ...
- * @param ubit_sz ...
+ * @param index_sz log2Ceil of the number of entries in the table
+ * @param tag_sz size of the tag for each entry
+ * @param cntr_sz size of the prediction counter in bits
+ * @param ubit_sz size of the usefulness counter in bits
  */
 class TageTableIo(
    val fetch_width: Int,
@@ -77,8 +77,8 @@ class TageTableIo(
 /**
  * Data send to the TAGE predictor table
  *
- * @param index_sz ...
- * @param tag_sz ...
+ * @param index_sz log2Ceil of the number entries in the table
+ * @param tag_sz size of the tag per entry
  */
 class TageTableReq(val index_sz: Int, val tag_sz: Int) extends Bundle
 {
@@ -90,9 +90,9 @@ class TageTableReq(val index_sz: Int, val tag_sz: Int) extends Bundle
  * Data sent from the TAGE predictor table
  *
  * @param fetch_width # of instructions fetched
- * @param tag_sz ...
- * @param cntr_sz ...
- * @param ubit_sz ...
+ * @param tag_sz size of the tag per entry
+ * @param cntr_sz size of the prediction counter in bits
+ * @param ubit_sz size of the usefulness counter in bits
  */
 class TageTableResp(val fetch_width: Int, val tag_sz: Int, val cntr_sz: Int, val ubit_sz: Int) extends Bundle
 {
@@ -108,9 +108,9 @@ class TageTableResp(val fetch_width: Int, val tag_sz: Int, val cntr_sz: Int, val
  * Single entry in the TAGE table
  *
  * @param fetch_width # of instructions fetched
- * @param tag_sz ...
- * @param cntr_sz ...
- * @param ubit_sz ...
+ * @param tag_sz size of the tag per entry
+ * @param cntr_sz size of the prediction counter in bits
+ * @param ubit_sz size of the usefulness counter in bits
  */
 class TageTableEntry(val fetch_width: Int, val tag_sz: Int, val cntr_sz: Int, val ubit_sz: Int) extends Bundle
 {
@@ -124,10 +124,10 @@ class TageTableEntry(val fetch_width: Int, val tag_sz: Int, val cntr_sz: Int, va
  * IO bundle to write into the TAGE table
  *
  * @param fetch_width # of instructions fetched
- * @param index_sz ...
- * @param tag_sz ...
- * @param cntr_sz ...
- * @param ubit_sz ...
+ * @param index_sz log2Ceil of the number entries in the table
+ * @param tag_sz size of the tag per entry
+ * @param cntr_sz size of the prediction counter in bits
+ * @param ubit_sz size of the usefulness counter in bits
  */
 class TageTableWrite(val fetch_width: Int, val index_sz: Int, val tag_sz: Int, val cntr_sz: Int, val ubit_sz: Int)
   extends Bundle
@@ -154,14 +154,14 @@ class TageTableWrite(val fetch_width: Int, val index_sz: Int, val tag_sz: Int, v
  * mask off extra bits as needed.
  *
  * @param fetch_width # of instructions fetched
- * @param num_entries ...
- * @param tag_sz ...
- * @param max_num_entries ...
- * @param max_history_length ...
- * @param cntr_sz ...
- * @param ubit_sz ...
- * @param id ...
- * @param history_length ...
+ * @param num_entries number of entries in a singular TAGE table
+ * @param tag_sz size of the tag per entry
+ * @param max_num_entries max number of entries in all tables
+ * @param max_history_length max history length in all tables
+ * @param cntr_sz size of the prediction counter in bits
+ * @param ubit_sz size of the usefulness counter in bits
+ * @param id id of the table
+ * @param history_length history length that this table uses
  */
 class TageTable(
    fetch_width: Int,

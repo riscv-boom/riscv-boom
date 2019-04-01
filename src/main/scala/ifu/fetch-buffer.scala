@@ -23,6 +23,7 @@ import chisel3.core.DontCare
 import freechips.rocketchip.config.Parameters
 
 import boom.common._
+import boom.util.{PrintUtil}
 
 /**
  * Bundle that is made up of converted MicroOps from the Fetch Bundle
@@ -229,28 +230,26 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule()
 
    if (DEBUG_PRINTF)
    {
+      printf("FetchBuffer:\n")
       // TODO a problem if we don't check the f3_valid?
-      printf(" Fetch3 : (%d mask: %x [%d] smask: %x) pc=0x%x enq_count (%d) %d\n",
-         io.enq.valid,
-         io.enq.bits.mask,
-         first_index,
-         compact_mask.asUInt,
-         io.enq.bits.pc,
-         enq_count,
-         io.clear
-         )
+      printf("    Fetch3: Enq:(V:%c Msk:0x%x FIdx:%d CmptMsk:0x%x PC:0x%x EnqCnt:%d) Clear:%c\n",
+             PrintUtil.ConvertChar(io.enq.valid, 'V'),
+             io.enq.bits.mask,
+             first_index,
+             compact_mask.asUInt,
+             io.enq.bits.pc,
+             enq_count,
+             PrintUtil.ConvertChar(io.clear, 'C'))
 
-      printf(" FB RAM :     count (%d) WA: %d, RA: %d ",
-         count,
-         write_ptr,
-         read_ptr
-         )
+      printf("    RAM: Cnt:%d WPtr:%d RPtr:%d\n",
+             count,
+             write_ptr,
+             read_ptr)
 
-      printf("\n Fetch4 : %d deq_count (%d) pc=0x%x\n",
-         io.deq.valid,
-         deq_count,
-         io.deq.bits.uops(0).pc
-         )
+      printf("    Fetch4: Deq:(V:%c DeqCnt:%d PC:0x%x)\n",
+             PrintUtil.ConvertChar(io.deq.valid, 'V'),
+             deq_count,
+             io.deq.bits.uops(0).pc)
    }
 
    //-------------------------------------------------------------

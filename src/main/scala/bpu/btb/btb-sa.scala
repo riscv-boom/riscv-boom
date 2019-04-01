@@ -37,6 +37,7 @@ import freechips.rocketchip.util.Str
 
 import boom.common._
 import boom.exu._
+import boom.util.PrintUtil
 
 /**
  * Normal set-associative branch target buffer. Checks an incoming
@@ -68,6 +69,8 @@ class BTBsa(implicit p: Parameters) extends BoomBTB
    }
 
    val stall = !io.req.valid
+
+   // index into the tag/data arrays
    val s0_idx = getIdx(io.req.bits.addr)(idx_sz-1,0)
    val s1_idx = RegEnable(s0_idx, !stall)
 
@@ -84,7 +87,7 @@ class BTBsa(implicit p: Parameters) extends BoomBTB
    val update_valid = r_btb_update.valid && !io.status_debug
    val widx = getIdx(r_btb_update.bits.pc)
    val wtag = getTag(r_btb_update.bits.pc)
-   // TODO: currently a not-very-clever way to choose a replacement way.
+   // TODO: currently a not-very-clever way to choose a replacement way
    val next_replace = Counter(r_btb_update.valid, nWays)._1
    val way_wen = UIntToOH(next_replace)
 
@@ -92,59 +95,68 @@ class BTBsa(implicit p: Parameters) extends BoomBTB
    val clear_valid = WireInit(false.B)
    val clear_idx = s1_idx
 
-   for (w <- 0 until nWays)
+   for (way <- 0 until nWays)
    {
-      val wen = update_valid && way_wen(w)
+     val wen = update_valid && way_wen(way)
 
-      val valids   = RegInit(0.U(nSets.W))
-      val tags     = SyncReadMem(nSets, UInt(tag_sz.W))
-      val data     = SyncReadMem(nSets, new BTBSetData())
+     val valids   = RegInit(0.U(nSets.W))
+     val tags     = SyncReadMem(nSets, UInt(tag_sz.W))
+     tags.suggestName("btb_tag_array")
+     val data     = SyncReadMem(nSets, new BTBSetData())
+     data.suggestName("btb_data_array")
 
-      tags.suggestName("btb_tag_array")
-      data.suggestName("btb_data_array")
+     val is_valid = (valids >> s1_idx)(0) && RegNext(!wen)
+     val rout     = data.read(s0_idx, !wen)
+     val rtag     = tags.read(s0_idx, !wen)
+     hits_oh(way)   := is_valid && (rtag === s1_req_tag)
+     data_out(way)  := rout
 
-      val is_valid = (valids >> s1_idx)(0) && RegNext(!wen)
-      val rout     = data.read(s0_idx, !wen)
-      val rtag     = tags.read(s0_idx, !wen)
-      hits_oh(w)   := is_valid && (rtag === s1_req_tag)
-      data_out(w)  := rout
+     when (wen)
+     {
+        valids := valids.bitSet(widx, true.B)
 
-      when (wen)
-      {
-         valids := valids.bitSet(widx, true.B)
+        val newdata = Wire(new BTBSetData())
+        newdata.target  := r_btb_update.bits.target(vaddrBits-1, log2Ceil(coreInstBytes))
+        newdata.cfi_idx := r_btb_update.bits.cfi_idx
+        newdata.bpd_type := r_btb_update.bits.bpd_type
+        newdata.cfi_type := r_btb_update.bits.cfi_type
 
-         val newdata = Wire(new BTBSetData())
-         newdata.target  := r_btb_update.bits.target(vaddrBits-1, log2Ceil(coreInstBytes))
-         newdata.cfi_idx := r_btb_update.bits.cfi_idx
-         newdata.bpd_type := r_btb_update.bits.bpd_type
-         newdata.cfi_type := r_btb_update.bits.cfi_type
+        tags(widx) := wtag
+        data(widx) := newdata
+     }
 
-         tags(widx) := wtag
-         data(widx) := newdata
-      }
+     // if multiple ways hit, clear the entry last read
+     when (clear_valid)
+     {
+        valids := valids.bitSet(clear_idx, false.B)
+     }
 
-      when (clear_valid)
-      {
-         valids := valids.bitSet(clear_idx, false.B)
-      }
+     if (DEBUG_PRINTF)
+     {
+       printf("BTB-SA:\n")
+       printf("    Write (%c): (TAG[%d][%d] <- 0x%x) (PC:0x%x TARG:0x%x)\n",
+         PrintUtil.ConvertChar(wen, 'W'),
+         way.U,
+         widx,
+         wtag,
+         r_btb_update.bits.pc,
+         r_btb_update.bits.target)
 
-      if (DEBUG_PRINTF)
-      {
-         //printf("BTB write (%c): %d 0x%x (PC= 0x%x, TARG= 0x%x) way=%d C=%d\n", Mux(wen, Str("w"), Str("-")), widx,
-         //wtag, r_btb_update.bits.pc, r_btb_update.bits.target, w.U, clear_valid)
-         //for (i <- 0 until nSets)
-         //{
-         //   printf("    [%d] %d tag=0x%x targ=0x%x [0x%x 0x%x]\n", i.U, (valids >> i.U)(0),
-         //   tags.read(i.U),
-         //   data.read(i.U).target,
-         //   tags.read(i.U) << UInt(idx_sz + log2Ceil(fetchWidth*coreInstBytes)),
-         //   data.read(i.U).target << log2Ceil(coreInstBytes)
-         //   )
-         //}
-      }
+       for (set <- 0 until nSets)
+       {
+         printf("        BTB-ARRAY[%d][%d]: V:%c TAG:0x%x TARG:0x%x [Shifted: TAG:0x%x TARG:0x%x]\n",
+           way.U,
+           set.U,
+           PrintUtil.ConvertChar((valids >> set.U)(0), 'V'),
+           tags.read(set.U),
+           data.read(set.U).target,
+           tags.read(set.U) << (idx_sz + log2Ceil(fetchWidth*coreInstBytes)).U,
+           data.read(set.U).target << log2Ceil(coreInstBytes))
+       }
+     }
    }
 
-   // Zap entries if multiple hits.
+   // if multiple ways hit, invalidate entries so there is only one
    when (freechips.rocketchip.util.PopCountAtLeast(hits_oh.asUInt, 2))
    {
       clear_valid := true.B
@@ -162,21 +174,23 @@ class BTBsa(implicit p: Parameters) extends BoomBTB
    s1_resp_bits.cfi_idx := (if (fetchWidth > 1) s1_cfi_idx else 0.U)
    s1_resp_bits.bpd_type := s1_bpd_type
    s1_resp_bits.cfi_type := s1_cfi_type
-//   s1_resp_bits.mask := Cat((1.U << ~Mux(s1_resp_bits.taken, ~s1_resp_bits.cfi_idx, 0.U))-1.U, 1.U)
 
    val s1_pc = RegEnable(io.req.bits.addr, !stall)
    s1_resp_bits.fetch_pc := s1_pc
 
+   // modify the RAS state and give RAS predictions
+   //   only gives values on btb hit since you need the btb prediction to determine the type of instruction
    if (nRAS > 0)
    {
       val ras = new RAS(nRAS, coreInstBytes)
-      val doPeek = (hits_oh zip data_out map {case(hit, d) => hit && BpredType.isReturn(d.bpd_type)}).reduce(_||_)
+      val doPeek = (hits_oh zip data_out map {case(hit, data) => hit && BpredType.isReturn(data.bpd_type)}).reduce(_||_)
       val isEmpty = if (rasCheckForEmpty) ras.isEmpty else false.B
       when (!isEmpty && doPeek)
       {
          s1_resp_bits.target := ras.peek
       }
 
+      // update the RAS and bypass if available
       when (io.ras_update.valid)
       {
          when (io.ras_update.bits.is_call)
@@ -217,9 +231,20 @@ class BTBsa(implicit p: Parameters) extends BoomBTB
 
    if (DEBUG_PRINTF)
    {
-      printf("BTB predi (%c): hits:%x %d (PC= 0x%x, TARG= 0x%x %d) s2_BIM [%d %d 0x%x]\n",
-         Mux(s1_valid, Str("V"), Str("-")), hits_oh.asUInt, true.B, RegNext(io.req.bits.addr), s1_target, s1_cfi_type,
-         bim.io.resp.valid, bim.io.resp.bits.entry_idx, bim.io.resp.bits.rowdata)
+     val cfiTypeStrs = PrintUtil.CfiTypeChars(io.resp.bits.cfi_type)
+     printf("    Predicted (%c): Hits:b%b (PC:0x%x -> TARG:0x%x) CFI:%c%c%c%c\n",
+            PrintUtil.ConvertChar(io.resp.valid, 'V'),
+            RegNext(hits_oh.asUInt),
+            io.resp.bits.fetch_pc,
+            io.resp.bits.target,
+            cfiTypeStrs(0),
+            cfiTypeStrs(1),
+            cfiTypeStrs(2),
+            cfiTypeStrs(3))
+     printf("    BIM: Predicted (%c): Idx:%d Row:0x%x\n",
+       PrintUtil.ConvertChar(bim.io.resp.valid, 'V'),
+       bim.io.resp.bits.entry_idx,
+       bim.io.resp.bits.rowdata)
    }
 
    override def toString: String =

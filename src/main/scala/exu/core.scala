@@ -37,11 +37,12 @@ import chisel3.experimental.dontTouch
 import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.rocket.Instructions._
 import freechips.rocketchip.rocket.Causes
+import freechips.rocketchip.rocket.PRV
 import freechips.rocketchip.util.{Str, UIntIsOneOf}
 
 import boom.common._
 import boom.exu.FUConstants._
-import boom.util.{GetNewUopAndBrMask, Sext, WrapInc}
+import boom.util.{PrintUtil, GetNewUopAndBrMask, Sext, WrapInc}
 
 /**
  * IO bundle for the BOOM Core. Connects the external components such as
@@ -1152,7 +1153,6 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    // (fetch PC from ROB cycle earlier than needed for critical path reasons)
    io.ifu.get_pc.ftq_idx := RegNext(iss_uops(brunit_idx).ftq_idx)
    exe_units(brunit_idx).io.get_ftq_pc.fetch_pc       := RegNext(io.ifu.get_pc.fetch_pc)
-   exe_units(brunit_idx).io.get_ftq_pc.next_val       := RegNext(io.ifu.get_pc.next_val)
    exe_units(brunit_idx).io.get_ftq_pc.next_pc        := RegNext(io.ifu.get_pc.next_pc)
    exe_units(brunit_idx).io.status := csr.io.status
 
@@ -1218,150 +1218,107 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
       println("Whitespace padded: " + whitespace)
 
-      printf("--- Cyc=%d , ----------------- Ret: %d ----------------------------------",
+      printf("--- Cycle=%d --- Retired Instrs=%d ----------------------------------------------\n",
              debug_tsc_reg,
              debug_irt_reg & (0xffffff).U)
 
+      printf("Decode:\n")
       for (w <- 0 until decodeWidth)
       {
-         if (w == 0)
-         {
-            printf("\n  Dec:  ([0x%x]                        ", dec_uops(w).pc(19,0))
-         }
-         else
-         {
-            printf("[0x%x]                        ", dec_uops(w).pc(19,0))
-         }
+         printf("    Slot:%d (PC:0x%x Valids:%c%c Inst:DASM(%x))\n",
+           w.U,
+           dec_uops(w).pc(19,0),
+           PrintUtil.ConvertChar(io.ifu.fetchpacket.valid && dec_fbundle.uops(w).valid && !dec_finished_mask(w), 'V'),
+           PrintUtil.ConvertChar(dec_will_fire(w), 'V'),
+           dec_fbundle.uops(w).inst)
       }
 
+      printf("Rename:\n")
       for (w <- 0 until decodeWidth)
       {
-         printf("(%c%c) " + "DASM(%x)" + " |  ",
-                Mux(io.ifu.fetchpacket.valid && dec_fbundle.uops(w).valid && !dec_finished_mask(w), Str("v"), Str("-")),
-                Mux(dec_will_fire(w), Str("V"), Str("-")),
-                dec_fbundle.uops(w).inst
-                )
+         printf("    Slot:%d (PC:0x%x Valid:%c Inst:DASM(%x))\n",
+           w.U,
+           rename_stage.io.ren2_uops(w).pc(19,0),
+           PrintUtil.ConvertChar(rename_stage.io.ren2_mask(w), 'V'),
+           rename_stage.io.ren2_uops(w).inst)
       }
 
-      for (w <- 0 until decodeWidth)
-      {
-         if (w == 0)
-         {
-            printf("\n  Ren:  ([0x%x]                        ", rename_stage.io.ren2_uops(w).pc(19,0))
-         }
-         else
-         {
-            printf("[0x%x]                        ", rename_stage.io.ren2_uops(w).pc(19,0))
-         }
-      }
+      printf("Decode Finished:0x%x\n", dec_finished_mask)
 
-      for (w <- 0 until decodeWidth)
+      printf("Dispatch:\n")
+      for (w <- 0 until DISPATCH_WIDTH)
       {
-         printf(" (%c) " + "DASM(%x)" + " |  ",
-                Mux(rename_stage.io.ren2_mask(w), Str("V"), Str("-")),
-                rename_stage.io.ren2_uops(w).inst
-                )
-      }
-
-      printf(") fin(%x)\n", dec_finished_mask)
-      for (w <- 0 until decodeWidth)
-      {
-         printf("        [ISA:%d,%d,%d,%d] [Phs:%d(%c)%d[%c](%c)%d[%c](%c)%d[%c](%c)] ",
+         printf("    Slot:%d (ISAREG: DST:%d SRCS:%d,%d,%d) (PREG: (#,Bsy,Typ) %d[-](%c) %d[%c](%c) %d[%c](%c) %d[%c](%c))\n",
+                w.U,
                 dis_uops(w).ldst,
                 dis_uops(w).lrs1,
                 dis_uops(w).lrs2,
                 dis_uops(w).lrs3,
                 dis_uops(w).pdst,
                 Mux(dis_uops(w).dst_rtype   === RT_FIX, Str("X"),
-                  Mux(dis_uops(w).dst_rtype === RT_X  , Str("-"),
-                  Mux(dis_uops(w).dst_rtype === RT_FLT, Str("f"),
-                  Mux(dis_uops(w).dst_rtype === RT_PAS, Str("C"), Str("?"))))),
+                    Mux(dis_uops(w).dst_rtype === RT_X  , Str("-"),
+                        Mux(dis_uops(w).dst_rtype === RT_FLT, Str("f"),
+                            Mux(dis_uops(w).dst_rtype === RT_PAS, Str("C"), Str("?"))))),
                 dis_uops(w).pop1,
-                Mux(rename_stage.io.ren2_uops(w).prs1_busy, Str("B"), Str("R")),
+                PrintUtil.ConvertChar(rename_stage.io.ren2_uops(w).prs1_busy, 'B', 'R'),
                 Mux(dis_uops(w).lrs1_rtype    === RT_FIX, Str("X"),
-                   Mux(dis_uops(w).lrs1_rtype === RT_X  , Str("-"),
-                   Mux(dis_uops(w).lrs1_rtype === RT_FLT, Str("f"),
-                   Mux(dis_uops(w).lrs1_rtype === RT_PAS, Str("C"), Str("?"))))),
+                    Mux(dis_uops(w).lrs1_rtype === RT_X  , Str("-"),
+                        Mux(dis_uops(w).lrs1_rtype === RT_FLT, Str("f"),
+                            Mux(dis_uops(w).lrs1_rtype === RT_PAS, Str("C"), Str("?"))))),
                 dis_uops(w).pop2,
-                Mux(rename_stage.io.ren2_uops(w).prs2_busy, Str("B"), Str("R")),
+                PrintUtil.ConvertChar(rename_stage.io.ren2_uops(w).prs2_busy, 'B', 'R'),
                 Mux(dis_uops(w).lrs2_rtype    === RT_FIX, Str("X"),
-                   Mux(dis_uops(w).lrs2_rtype === RT_X  , Str("-"),
-                   Mux(dis_uops(w).lrs2_rtype === RT_FLT, Str("f"),
-                   Mux(dis_uops(w).lrs2_rtype === RT_PAS, Str("C"), Str("?"))))),
+                    Mux(dis_uops(w).lrs2_rtype === RT_X  , Str("-"),
+                        Mux(dis_uops(w).lrs2_rtype === RT_FLT, Str("f"),
+                            Mux(dis_uops(w).lrs2_rtype === RT_PAS, Str("C"), Str("?"))))),
                 dis_uops(w).pop3,
-                Mux(rename_stage.io.ren2_uops(w).prs3_busy, Str("B"), Str("R")),
-                Mux(dis_uops(w).frs3_en, Str("f"), Str("-"))
-                )
+                PrintUtil.ConvertChar(rename_stage.io.ren2_uops(w).prs3_busy, 'B', 'R'),
+                PrintUtil.ConvertChar(dis_uops(w).frs3_en, 'f', '-'))
       }
 
       if (DEBUG_PRINTF_ROB)
       {
-         printf("\n) ctate: (%c: %c %c %c %c %c %c) BMsk:%x Mode:%c\n",
-                Mux(rob.io.debug.state === 0.U, Str("R"),
-                Mux(rob.io.debug.state === 1.U, Str("N"),
-                Mux(rob.io.debug.state === 2.U, Str("B"),
-                Mux(rob.io.debug.state === 3.U, Str("W"),
-                                                    Str(" "))))),
-                Mux(rob.io.ready,Str("_"), Str("!")),
-                Mux(lsu.io.laq_full, Str("L"), Str("_")),
-                Mux(lsu.io.stq_full, Str("S"), Str("_")),
-                Mux(rob.io.flush.valid, Str("F"), Str(" ")),
-                Mux(branch_mask_full.reduce(_|_), Str("B"), Str(" ")),
-                Mux(dc_shim.io.core.req.ready, Str("R"), Str("B")),
+         val robTypeStrs = PrintUtil.RobTypeChars(rob.io.debug.state)
+         printf("ROB:\n")
+         printf("    (State:%c%c%c Rdy:%c LAQFull:%c STQFull:%c Flush:%c BMskFull:%c DShimRdy:%c) BMsk:0x%x Mode:%c\n",
+                robTypeStrs(0),
+                robTypeStrs(1),
+                robTypeStrs(2),
+                PrintUtil.ConvertChar(                rob.io.ready, '_', '!'),
+                PrintUtil.ConvertChar(             lsu.io.laq_full, 'L'),
+                PrintUtil.ConvertChar(             lsu.io.stq_full, 'S'),
+                PrintUtil.ConvertChar(          rob.io.flush.valid, 'F'),
+                PrintUtil.ConvertChar(branch_mask_full.reduce(_|_), 'B'),
+                PrintUtil.ConvertChar(   dc_shim.io.core.req.ready, 'R', 'B'),
                 dec_brmask_logic.io.debug.branch_mask,
-                Mux(csr.io.status.prv === (0x3).U, Str("M"),
-                Mux(csr.io.status.prv === (0x0).U, Str("U"),
-                Mux(csr.io.status.prv === (0x1).U, Str("S"),  //2 is H
-                                                      Str("?"))))
-                )
+                Mux(csr.io.status.prv === (PRV.M).U, Str("M"),
+                    Mux(csr.io.status.prv === (PRV.U).U, Str("U"),
+                        Mux(csr.io.status.prv === (PRV.S).U, Str("S"), Str("?")))))
       }
 
-      printf("Exct(%c%d) Commit(%x) fl: 0x%x (%d) is: 0x%x (%d)\n",
-             Mux(rob.io.com_xcpt.valid, Str("E"), Str("-")),
+      printf("Other:\n")
+      printf("    Expt:(V:%c Cause:%d) Commit:%x IFreeLst:0x%x TotFree:%d IPregLst:0x%x TotPreg:%d\n",
+             PrintUtil.ConvertChar(rob.io.com_xcpt.valid, 'E'),
              rob.io.com_xcpt.bits.cause,
              rob.io.commit.valids.asUInt,
              rename_stage.io.debug.ifreelist,
              PopCount(rename_stage.io.debug.ifreelist),
              rename_stage.io.debug.iisprlist,
-             PopCount(rename_stage.io.debug.iisprlist)
-             )
-
-      printf("                                      fl: 0x%x (%d) is: 0x%x (%d)\n",
+             PopCount(rename_stage.io.debug.iisprlist))
+      printf("    FFreeList:0x%x TotFree:%d FPrefLst:0x%x TotPreg:%d\n",
              rename_stage.io.debug.ffreelist,
              PopCount(rename_stage.io.debug.ffreelist),
              rename_stage.io.debug.fisprlist,
-             PopCount(rename_stage.io.debug.fisprlist)
-             )
+             PopCount(rename_stage.io.debug.fisprlist))
 
       // branch unit
-      printf("                          Branch Unit: %c,%c,%d  NPC=%d,0x%x\n",
-             Mux(br_unit_resp.brinfo.valid,Str("V"), Str(" ")),
-             Mux(br_unit_resp.brinfo.mispredict, Str("M"), Str(" ")),
-             br_unit_resp.brinfo.taken,
-             exe_units(brunit_idx).io.get_ftq_pc.next_val,
-             exe_units(brunit_idx).io.get_ftq_pc.next_pc(19,0)
-             )
-
-      // Rename Map Tables / ISA Register File
-      val xpr_to_string =
-              VecInit(Str(" x0"), Str(" ra"), Str(" sp"), Str(" gp"),
-                   Str(" tp"), Str(" t0"), Str(" t1"), Str(" t2"),
-                   Str(" s0"), Str(" s1"), Str(" a0"), Str(" a1"),
-                   Str(" a2"), Str(" a3"), Str(" a4"), Str(" a5"),
-                   Str(" a6"), Str(" a7"), Str(" s2"), Str(" s3"),
-                   Str(" s4"), Str(" s5"), Str(" s6"), Str(" s7"),
-                   Str(" s8"), Str(" s9"), Str("s10"), Str("s11"),
-                   Str(" t3"), Str(" t4"), Str(" t5"), Str(" t6"))
-
-      val fpr_to_string =
-              VecInit( Str("ft0"), Str("ft1"), Str("ft2"), Str("ft3"),
-                   Str("ft4"), Str("ft5"), Str("ft6"), Str("ft7"),
-                   Str("fs0"), Str("fs1"), Str("fa0"), Str("fa1"),
-                   Str("fa2"), Str("fa3"), Str("fa4"), Str("fa5"),
-                   Str("fa6"), Str("fa7"), Str("fs2"), Str("fs3"),
-                   Str("fs4"), Str("fs5"), Str("fs6"), Str("fs7"),
-                   Str("fs8"), Str("fs9"), Str("fs10"), Str("fs11"),
-                   Str("ft8"), Str("ft9"), Str("ft10"), Str("ft11"))
+      printf("Branch Unit:\n")
+      printf("    V:%c Mispred:%c T/NT:%c NPC:(V:%c PC:0x%x)\n",
+             PrintUtil.ConvertChar(br_unit_resp.brinfo.valid, 'V'),
+             PrintUtil.ConvertChar(br_unit_resp.brinfo.mispredict, 'M'),
+             PrintUtil.ConvertChar(br_unit_resp.brinfo.taken, 'T', 'N'),
+             PrintUtil.ConvertChar(exe_units(brunit_idx).io.get_ftq_pc.next_pc.valid, 'V'),
+             exe_units(brunit_idx).io.get_ftq_pc.next_pc.bits(19,0))
 
       for (x <- 0 until whitespace)
       {

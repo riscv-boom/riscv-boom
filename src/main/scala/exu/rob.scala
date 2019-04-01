@@ -957,36 +957,28 @@ class Rob(
 
    if (DEBUG_PRINTF_ROB)
    {
-      printf("  RobXcpt[%c%x r:%d b:%x bva:0x%x]\n",
-         Mux(r_xcpt_val, Str("E"),Str("-")),
-         io.debug.xcpt_uop.exc_cause,
-         io.debug.xcpt_uop.rob_idx,
-         io.debug.xcpt_uop.br_mask,
-         io.debug.xcpt_badvaddr
-         )
+      printf("ROB:\n")
+      printf("    Xcpt: V:%c Cause:0x%x RobIdx:%d BMsk:0x%x BadVAddr:0x%x\n",
+             PrintUtil.ConvertChar(r_xcpt_val, 'E'),
+             io.debug.xcpt_uop.exc_cause,
+             io.debug.xcpt_uop.rob_idx,
+             io.debug.xcpt_uop.br_mask,
+             io.debug.xcpt_badvaddr)
 
       var r_idx = 0
       // scalastyle:off
       for (i <- 0 until (NUM_ROB_ENTRIES/COMMIT_WIDTH))
       {
-//            rob[ 0]           (  )(  ) 0x00002000 [ -                       ][unknown                  ]    ,   (d:X p 1, bm:0 - sdt: 0) (d:- p 3, bm:f - sdt:60)
-//            rob[ 1]           (  )(B ) 0xc71cb68e [flw     fa3, -961(s11)   ][ -                       ] E31,   (d:- p22, bm:e T sdt:57) (d:- p 0, bm:0 - sdt: 0)
-//            rob[ 2] HEAD ---> (vv)( b) 0x00002008 [lui     ra, 0x2          ][addi    ra, ra, 704      ]    ,   (d:x p 2, bm:1 - sdt: 0) (d:x p 3, bm:1 - sdt: 2)
-//            rob[ 3]           (vv)(bb) 0x00002010 [lw      s1, 0(ra)        ][lui     t3, 0xff0        ]    ,   (d:x p 4, bm:0 - sdt: 0) (d:x p 5, bm:0 - sdt: 0)
-//            rob[ 4]      TL-> (v )(b ) 0x00002015 - 2018 [addiw   t3, t3, 255      ][li      t2, 2            ]    ,   (d:x p 6, bm:0 - sdt: 5) (d:x p 7, bm:0 - sdt: 0)
-
          val row = if (COMMIT_WIDTH == 1) r_idx else (r_idx >> log2Ceil(COMMIT_WIDTH))
          val r_head = rob_head
          val r_tail = rob_tail
 
-         printf("    rob[%d] %c %c (",
-            row.U(ROB_ADDR_SZ.W),
-            Mux(r_head === row.U && r_tail === row.U, Str("B"),
-              Mux(r_head === row.U, Str("H"),
-              Mux(r_tail === row.U, Str("T"),
-                                        Str(" ")))),
-            Mux(rob_pnr === row.U, Str("P"), Str(" "))
-          )
+         printf("    ROB[%d]: %c %c (",
+                row.U(ROB_ADDR_SZ.W),
+                Mux(r_head === row.U && r_tail === row.U, Str("B"),
+                    Mux(r_head === row.U, Str("H"),
+                        Mux(r_tail === row.U, Str("T"), Str(" ")))),
+                Mux(rob_pnr === row.U, Str("P"), Str(" ")))
 
          if (COMMIT_WIDTH == 1)
          {
@@ -996,8 +988,7 @@ class Rob(
                    Mux(debug_entry(r_idx+0).unsafe, Str("U"),  Str(" ")),
                    debug_entry(r_idx+0).uop.pc(31,0),
                    debug_entry(r_idx+0).uop.inst,
-                   Mux(debug_entry(r_idx+0).exception, Str("E"), Str("-"))
-                   )
+                   Mux(debug_entry(r_idx+0).exception, Str("E"), Str("-")))
          }
          else if (COMMIT_WIDTH == 2)
          {

@@ -187,12 +187,14 @@ class DebugStageEvents extends Bundle()
  */
 object CfiType
 {
-   def SZ = 3
    def apply() = UInt(SZ.W)
-   def none = 0.U
-   def branch = 1.U
-   def jal = 2.U
-   def jalr = 3.U
+
+   def SZ = 3
+
+   def NONE = 0.U
+   def BRANCH = 1.U
+   def JAL = 2.U
+   def JALR = 3.U
 }
 
 /**
