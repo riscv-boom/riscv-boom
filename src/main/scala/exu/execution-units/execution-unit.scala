@@ -94,7 +94,7 @@ class ExecutionUnitIO(
    val fcsr_rm = Input(Bits(tile.FPConstants.RM_SZ.W))
 
    // only used by the mem unit
-   val lsu_io = Flipped(new boom.lsu.LoadStoreUnitIO)
+   val lsu_io = Flipped(new boom.lsu.LoadStoreUnitExeUnitIO)
    val com_exception = Input(Bool())
 }
 
@@ -360,8 +360,8 @@ class ALUExeUnit(
       io.bypass <> maddrcalc.io.bypass // TODO this is not where the bypassing should
                                        // occur from, is there any bypassing happening?!
 
-      io.lsu_io.exe_resp.valid := maddrcalc.io.resp.valid
-      io.lsu_io.exe_resp.bits  := maddrcalc.io.resp.bits
+      io.lsu_io.req.valid := maddrcalc.io.resp.valid
+      io.lsu_io.req.bits  := maddrcalc.io.resp.bits
 
       io.ll_iresp <> io.lsu_io.iresp
       assert(io.ll_iresp.ready)

@@ -58,6 +58,22 @@ import boom.exu.{BrResolutionInfo, Exception, FuncUnitResp}
 import boom.util.{AgePriorityEncoder, IsKilledByBranch, GetNewBrMask, WrapInc, IsOlder}
 
 /**
+ * IO bundle representing the "execution unit" interface of the LSU
+ *
+ */
+
+class LoadStoreUnitExeUnitIO(implicit p: Parameters) extends BoomBundle()(p)
+{
+   // The "resp" of the maddrcalc is really a "req" to the LSU
+   val req = Flipped(new ValidIO(new FuncUnitResp(xLen)))
+
+   // Send load data to regfiles
+   val iresp    = new DecoupledIO(new boom.exu.ExeUnitResp(xLen))
+   val fresp    = new DecoupledIO(new boom.exu.ExeUnitResp(xLen+1)) // TODO: Should this be fLen?
+
+}
+
+/**
  * IO bundle representing the different signals to interact with the backend
  * (dcache, dcache shim, etc) memory system.
  *
@@ -74,9 +90,11 @@ class LoadStoreUnitIO(implicit p: Parameters) extends BoomBundle()(p)
    val new_ldq_idx        = Output(UInt(LDQ_ADDR_SZ.W))
    val new_stq_idx        = Output(UInt(STQ_ADDR_SZ.W))
 
-   // Execute Stage
-   val exe_resp           = Flipped(new ValidIO(new FuncUnitResp(xLen)))
+   // Interface with fp-pipeline
    val fp_stdata          = Flipped(Valid(new MicroOpWithData(fLen)))
+
+   // Interface with mem execution unit
+   val exe                = new LoadStoreUnitExeUnitIO
 
    // Interface with DCShim
    val dmem               = new DCMemPortIO
@@ -84,9 +102,6 @@ class LoadStoreUnitIO(implicit p: Parameters) extends BoomBundle()(p)
    // Inform core of speculative load wakeups
    val mem_ldSpecWakeup   = Valid(UInt(PREG_SZ.W)) // do NOT send out FP loads.
 
-   // Send load data to regfiles
-   val iresp              = new DecoupledIO(new boom.exu.ExeUnitResp(xLen))
-   val fresp              = new DecoupledIO(new boom.exu.ExeUnitResp(xLen+1)) // TODO: Should this be fLen?
 
    // Commit Stage
    val commit_store_mask  = Input(Vec(DISPATCH_WIDTH, Bool()))
@@ -339,30 +354,30 @@ class LoadStoreUnit(implicit p: Parameters,
    val lcam_avail= WireInit(true.B)
 
    // give first priority to incoming uops
-   when (io.exe_resp.valid)
+   when (io.exe.req.valid)
    {
-      when (io.exe_resp.bits.sfence.valid)
+      when (io.exe.req.bits.sfence.valid)
       {
          will_fire_sfence := true.B
          dc_avail   := false.B
          tlb_avail  := false.B
          lcam_avail := false.B
       }
-      when (io.exe_resp.bits.uop.ctrl.is_load)
+      when (io.exe.req.bits.uop.ctrl.is_load)
       {
          will_fire_load_incoming := true.B
          dc_avail   := false.B
          tlb_avail  := false.B
          lcam_avail := false.B
       }
-      when (io.exe_resp.bits.uop.ctrl.is_sta)
+      when (io.exe.req.bits.uop.ctrl.is_sta)
       {
          will_fire_sta_incoming := true.B
          tlb_avail  := false.B
          rob_avail  := false.B
          lcam_avail := false.B
       }
-      when (io.exe_resp.bits.uop.ctrl.is_std)
+      when (io.exe.req.bits.uop.ctrl.is_std)
       {
          will_fire_std_incoming := true.B
          rob_avail := false.B
@@ -401,11 +416,11 @@ class LoadStoreUnit(implicit p: Parameters,
    // to the D$ and search the SAQ. uopSTD also uses this uop.
    val exe_tlb_uop = Mux(will_fire_sta_retry,  stq_uop(stq_retry_idx),
                      Mux(will_fire_load_retry, laq_uop(laq_retry_idx),
-                                               io.exe_resp.bits.uop))
+                                               io.exe.req.bits.uop))
 
    val exe_vaddr   = Mux(will_fire_sta_retry,  saq_addr(stq_retry_idx),
                      Mux(will_fire_load_retry, laq_addr(laq_retry_idx),
-                                               io.exe_resp.bits.addr.asUInt))
+                                               io.exe.req.bits.addr.asUInt))
 
    val dtlb = Module(new rocket.TLB(
       instruction = false, lgMaxSize = log2Ceil(coreDataBytes), rocket.TLBConfig(dcacheParams.nTLBEntries)))
@@ -416,27 +431,27 @@ class LoadStoreUnit(implicit p: Parameters,
                         will_fire_sta_retry ||
                         will_fire_load_retry ||
                         will_fire_sfence
-   dtlb.io.req.bits.vaddr := Mux(io.exe_resp.bits.sfence.valid, io.exe_resp.bits.sfence.bits.addr, exe_vaddr)
+   dtlb.io.req.bits.vaddr := Mux(io.exe.req.bits.sfence.valid, io.exe.req.bits.sfence.bits.addr, exe_vaddr)
    dtlb.io.req.bits.size := exe_tlb_uop.mem_typ
    dtlb.io.req.bits.cmd := exe_tlb_uop.mem_cmd
    dtlb.io.req.bits.passthrough := false.B // let status.vm decide
-   dtlb.io.sfence := io.exe_resp.bits.sfence
+   dtlb.io.sfence := io.exe.req.bits.sfence
    dtlb.io.kill := DontCare
 
    // exceptions
-   val ma_ld = io.exe_resp.valid && io.exe_resp.bits.mxcpt.valid && exe_tlb_uop.is_load
+   val ma_ld = io.exe.req.valid && io.exe.req.bits.mxcpt.valid && exe_tlb_uop.is_load
    val pf_ld = dtlb.io.req.valid && dtlb.io.resp.pf.ld && (exe_tlb_uop.is_load || exe_tlb_uop.is_amo)
    val pf_st = dtlb.io.req.valid && dtlb.io.resp.pf.st && exe_tlb_uop.is_store
    val ae_ld = dtlb.io.req.valid && dtlb.io.resp.ae.ld && (exe_tlb_uop.is_load || exe_tlb_uop.is_amo)
    val ae_st = dtlb.io.req.valid && dtlb.io.resp.ae.st && exe_tlb_uop.is_store
    // TODO check for xcpt_if and verify that never happens on non-speculative instructions.
    val mem_xcpt_valid = RegNext(((pf_ld || pf_st || ae_ld || ae_st) ||
-                                 (io.exe_resp.valid && io.exe_resp.bits.mxcpt.valid)) &&
+                                 (io.exe.req.valid && io.exe.req.bits.mxcpt.valid)) &&
                                  !io.exception &&
                                  !IsKilledByBranch(io.brinfo, exe_tlb_uop),
                             init=false.B)
 
-   val xcpt_uop       = RegNext(Mux(ma_ld, io.exe_resp.bits.uop, exe_tlb_uop))
+   val xcpt_uop       = RegNext(Mux(ma_ld, io.exe.req.bits.uop, exe_tlb_uop))
 
 
    when (mem_xcpt_valid)
@@ -454,8 +469,8 @@ class LoadStoreUnit(implicit p: Parameters,
    }
 
    val mem_xcpt_cause = RegNext(
-      Mux(io.exe_resp.valid && io.exe_resp.bits.mxcpt.valid,
-         io.exe_resp.bits.mxcpt.bits,
+      Mux(io.exe.req.valid && io.exe.req.bits.mxcpt.valid,
+         io.exe.req.bits.mxcpt.bits,
       Mux(pf_ld,
          rocket.Causes.load_page_fault.U,
       Mux(pf_st,
@@ -466,15 +481,15 @@ class LoadStoreUnit(implicit p: Parameters,
       )))))
 
    assert (!(dtlb.io.req.valid && exe_tlb_uop.is_fence), "Fence is pretending to talk to the TLB")
-   assert (!(io.exe_resp.bits.mxcpt.valid && io.exe_resp.valid &&
-           !(io.exe_resp.bits.uop.ctrl.is_load || io.exe_resp.bits.uop.ctrl.is_sta)),
+   assert (!(io.exe.req.bits.mxcpt.valid && io.exe.req.valid &&
+           !(io.exe.req.bits.uop.ctrl.is_load || io.exe.req.bits.uop.ctrl.is_sta)),
            "A uop that's not a load or store-address is throwing a memory exception.")
 
    val tlb_miss = dtlb.io.req.valid && (dtlb.io.resp.miss || !dtlb.io.req.ready)
 
    // output
    val exe_tlb_paddr = Cat(dtlb.io.resp.paddr(paddrBits-1,corePgIdxBits), exe_vaddr(corePgIdxBits-1,0))
-   assert (exe_tlb_paddr === dtlb.io.resp.paddr || io.exe_resp.bits.sfence.valid, "[lsu] paddrs should match.")
+   assert (exe_tlb_paddr === dtlb.io.resp.paddr || io.exe.req.bits.sfence.valid, "[lsu] paddrs should match.")
 
    // check if a load is uncacheable - must stop it from executing speculatively,
    // as it might have side-effects!
@@ -637,9 +652,9 @@ class LoadStoreUnit(implicit p: Parameters,
    // use two ports on STD to handle Integer and FP store data.
    when (will_fire_std_incoming)
    {
-      val sidx = io.exe_resp.bits.uop.stq_idx
+      val sidx = io.exe.req.bits.uop.stq_idx
       sdq_val (sidx) := true.B
-      sdq_data(sidx) := io.exe_resp.bits.data.asUInt
+      sdq_data(sidx) := io.exe.req.bits.data.asUInt
 
       assert(!(will_fire_std_incoming && sdq_val(sidx)),
          "[lsu] incoming store is overwriting a valid data entry.")
@@ -648,7 +663,7 @@ class LoadStoreUnit(implicit p: Parameters,
    //--------------------------------------------
    // FP Data
    // Store Data Generation MicroOps come in directly from the FP registerfile,
-   // and not through the exe_resp datapath.
+   // and not through the exe.req datapath.
 
    when (io.fp_stdata.valid)
    {
@@ -656,8 +671,8 @@ class LoadStoreUnit(implicit p: Parameters,
       sdq_val (sidx) := true.B
       sdq_data(sidx) := io.fp_stdata.bits.data.asUInt
    }
-   assert(!(io.fp_stdata.valid && io.exe_resp.valid && io.exe_resp.bits.uop.ctrl.is_std &&
-      io.fp_stdata.bits.uop.stq_idx === io.exe_resp.bits.uop.stq_idx),
+   assert(!(io.fp_stdata.valid && io.exe.req.valid && io.exe.req.bits.uop.ctrl.is_std &&
+      io.fp_stdata.bits.uop.stq_idx === io.exe.req.bits.uop.stq_idx),
       "[lsu] FP and INT data is fighting over the same sdq entry.")
 
    require (xLen >= fLen) // otherwise the SDQ is missized.
@@ -671,7 +686,7 @@ class LoadStoreUnit(implicit p: Parameters,
    // search SAQ for matches
 
    val mem_tlb_paddr    = RegNext(exe_tlb_paddr)
-   // TODO can we/should we use mem_tlb_uop from the LAQ/SAQ and avoid the exe_resp.uop (move need for mem_typ, etc.).
+   // TODO can we/should we use mem_tlb_uop from the LAQ/SAQ and avoid the exe.req.uop (move need for mem_typ, etc.).
    val mem_tlb_uop      = RegNext(exe_tlb_uop) // not valid for std_incoming!
    mem_tlb_uop.br_mask := GetNewBrMask(io.brinfo, exe_tlb_uop)
    val mem_tlb_miss     = RegNext(tlb_miss, init=false.B)
@@ -709,8 +724,8 @@ class LoadStoreUnit(implicit p: Parameters,
    }
 
    io.mem_ldSpecWakeup.valid := RegNext(will_fire_load_incoming
-                                     && !io.exe_resp.bits.uop.fp_val
-                                     && io.exe_resp.bits.uop.pdst =/= 0.U, init=false.B)
+                                     && !io.exe.req.bits.uop.fp_val
+                                     && io.exe.req.bits.uop.pdst =/= 0.U, init=false.B)
    io.mem_ldSpecWakeup.bits := mem_ld_uop.pdst
 
    // tell the ROB to clear the busy bit on the incoming store
@@ -739,7 +754,7 @@ class LoadStoreUnit(implicit p: Parameters,
    }
    .elsewhen (mem_fired_stdi)
    {
-      val mem_std_uop = RegNext(io.exe_resp.bits.uop)
+      val mem_std_uop = RegNext(io.exe.req.bits.uop)
       clr_bsy_valid := saq_val(mem_std_uop.stq_idx) &&
                               !saq_is_virtual(mem_std_uop.stq_idx) &&
                               !mem_std_uop.is_amo &&
@@ -939,23 +954,23 @@ class LoadStoreUnit(implicit p: Parameters,
       }
    }
 
-   io.iresp.valid                 := RegNext(memresp_val
+   io.exe.iresp.valid                 := RegNext(memresp_val
                                              && !IsKilledByBranch(io.brinfo, memresp_uop)
                                              && memresp_rf_wen
                                              && memresp_uop.dst_rtype === RT_FIX)
-   io.iresp.bits.uop              := RegNext(memresp_uop)
-   io.iresp.bits.uop.ctrl.rf_wen  := RegNext(memresp_rf_wen)
-   io.iresp.bits.data             := RegNext(memresp_data)
+   io.exe.iresp.bits.uop              := RegNext(memresp_uop)
+   io.exe.iresp.bits.uop.ctrl.rf_wen  := RegNext(memresp_rf_wen)
+   io.exe.iresp.bits.data             := RegNext(memresp_data)
 
    if (usingFPU)
    {
-      io.fresp.valid                 := RegNext(memresp_val
+      io.exe.fresp.valid                 := RegNext(memresp_val
                                                 && !IsKilledByBranch(io.brinfo, memresp_uop)
                                                 && memresp_rf_wen
                                                 && memresp_uop.dst_rtype === RT_FLT)
-      io.fresp.bits.uop              := RegNext(memresp_uop)
-      io.fresp.bits.uop.ctrl.rf_wen  := RegNext(memresp_rf_wen)
-      io.fresp.bits.data             := RegNext(memresp_data)
+      io.exe.fresp.bits.uop              := RegNext(memresp_uop)
+      io.exe.fresp.bits.uop.ctrl.rf_wen  := RegNext(memresp_rf_wen)
+      io.exe.fresp.bits.data             := RegNext(memresp_data)
    }
 
    //-------------------------------------------------------------
@@ -1391,7 +1406,7 @@ class LoadStoreUnit(implicit p: Parameters,
    //-------------------------------------------------------------
    // Debug & Counter outputs
 
-   io.counters.ld_valid        := RegNext(io.exe_resp.valid && io.exe_resp.bits.uop.is_load)
+   io.counters.ld_valid        := RegNext(io.exe.req.valid && io.exe.req.bits.uop.is_load)
    io.counters.ld_forwarded    := RegNext(forward_val)
    io.counters.ld_sleep        := RegNext(ld_was_put_to_sleep)
    io.counters.ld_killed       := RegNext(ld_was_killed)
