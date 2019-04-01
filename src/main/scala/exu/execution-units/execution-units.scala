@@ -140,7 +140,6 @@ class ExecutionUnits(fpu: Boolean)(implicit val p: Parameters) extends HasBoomCo
          has_mem          = usingUnifiedMemIntIQs))
 
       aluExeUnit.io.lsu_io := DontCare
-      aluExeUnit.io.dmem := DontCare
       aluExeUnit.io.get_ftq_pc := DontCare
 
       exe_units += aluExeUnit
@@ -149,7 +148,6 @@ class ExecutionUnits(fpu: Boolean)(implicit val p: Parameters) extends HasBoomCo
       {
          val aluExeUnit = Module(new ALUExeUnit)
 
-         aluExeUnit.io.dmem := DontCare
          aluExeUnit.io.lsu_io := DontCare
          aluExeUnit.io.get_ftq_pc := DontCare
          aluExeUnit.io.status := DontCare
@@ -167,7 +165,6 @@ class ExecutionUnits(fpu: Boolean)(implicit val p: Parameters) extends HasBoomCo
                                                 has_fpiu = (w==0)))
          fpuExeUnit.io.status := DontCare
          fpuExeUnit.io.lsu_io := DontCare
-         fpuExeUnit.io.dmem := DontCare
          fpuExeUnit.io.get_ftq_pc := DontCare
 
          exe_units += fpuExeUnit

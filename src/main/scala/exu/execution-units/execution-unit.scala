@@ -95,7 +95,6 @@ class ExecutionUnitIO(
 
    // only used by the mem unit
    val lsu_io = Flipped(new boom.lsu.LoadStoreUnitIO)
-   val dmem   = new boom.lsu.DCMemPortIO() // TODO move this out of ExecutionUnit
    val com_exception = Input(Bool())
 }
 
@@ -364,52 +363,13 @@ class ALUExeUnit(
       io.lsu_io.exe_resp.valid := maddrcalc.io.resp.valid
       io.lsu_io.exe_resp.bits  := maddrcalc.io.resp.bits
 
-      // TODO get rid of com_exception and guard with an assert? Need to surpress within dc-shim.
-      //   assert (!(io.com_exception && lsu.io.memreq_uop.is_load && lsu.io.memreq_val),
-      //      "[execute] a valid load is returning while an exception is being thrown.")
-      io.dmem.req.valid       := Mux(io.com_exception && io.lsu_io.memreq_uop.is_load,
-                                     false.B,
-                                     io.lsu_io.memreq_val)
-      io.dmem.req.bits.addr  := io.lsu_io.memreq_addr
-      io.dmem.req.bits.data  := io.lsu_io.memreq_wdata
-      io.dmem.req.bits.uop   := io.lsu_io.memreq_uop
-      io.dmem.req.bits.kill  := io.lsu_io.memreq_kill // load kill request sent to memory
-
-      // I should be timing forwarding to coincide with dmem resps, so I'm not clobbering
-      //anything....
-      val memresp_val    = Mux(io.com_exception && io.dmem.resp.bits.uop.is_load, false.B,
-                               io.lsu_io.forward_val || io.dmem.resp.valid)
-      val memresp_rf_wen = (io.dmem.resp.valid &&
-                           (io.dmem.resp.bits.uop.mem_cmd === M_XRD || io.dmem.resp.bits.uop.is_amo)) ||
-                        io.lsu_io.forward_val // TODO should I refactor this to use is_load?
-      val memresp_uop    = Mux(io.lsu_io.forward_val, io.lsu_io.forward_uop,
-                                                      io.dmem.resp.bits.uop)
-
-      val memresp_data = Mux(io.lsu_io.forward_val,
-         io.lsu_io.forward_data, io.dmem.resp.bits.data_subword)
-
-      io.lsu_io.memresp.valid := memresp_val
-      io.lsu_io.memresp.bits  := memresp_uop
-
-      // Hook up loads to the response
-      io.ll_iresp.valid                 := RegNext(memresp_val
-                                                && !IsKilledByBranch(io.brinfo, memresp_uop)
-                                                && memresp_rf_wen
-                                                && memresp_uop.dst_rtype === RT_FIX)
-      io.ll_iresp.bits.uop              := RegNext(memresp_uop)
-      io.ll_iresp.bits.uop.ctrl.rf_wen  := RegNext(memresp_rf_wen)
-      io.ll_iresp.bits.data             := RegNext(memresp_data)
-
+      io.ll_iresp <> io.lsu_io.iresp
+      assert(io.ll_iresp.ready)
       if (usingFPU)
       {
          require(!has_alu, "Don't support this yet")
-         io.ll_fresp.valid                 := RegNext(memresp_val
-                                                   && !IsKilledByBranch(io.brinfo, memresp_uop)
-                                                   && memresp_rf_wen
-                                                   && memresp_uop.dst_rtype === RT_FLT)
-         io.ll_fresp.bits.uop              := RegNext(memresp_uop)
-         io.ll_fresp.bits.uop.ctrl.rf_wen  := RegNext(memresp_rf_wen)
-         io.ll_fresp.bits.data             := RegNext(memresp_data)
+         assert(io.ll_fresp.ready)
+         io.ll_fresp <> io.lsu_io.fresp
       }
 
    }

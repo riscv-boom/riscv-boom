@@ -177,10 +177,10 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
    // Shim to DCache
    io.dmem <> dc_shim.io.dmem
-   dc_shim.io.core <> exe_units.memory_unit.io.dmem
 
    // Load/Store Unit & ExeUnits
    exe_units.memory_unit.io.lsu_io <> lsu.io
+   dc_shim.io.core <> lsu.io.dmem
 
    // TODO: Generate this in lsu
    val sxt_ldMiss = Wire(Bool())

@@ -78,24 +78,15 @@ class LoadStoreUnitIO(implicit p: Parameters) extends BoomBundle()(p)
    val exe_resp           = Flipped(new ValidIO(new FuncUnitResp(xLen)))
    val fp_stdata          = Flipped(Valid(new MicroOpWithData(fLen)))
 
-   // Send out Memory Request
-   val memreq_val         = Output(Bool())
-   val memreq_addr        = Output(UInt(corePAddrBits.W))
-   val memreq_wdata       = Output(UInt(xLen.W))
-   val memreq_uop         = Output(new MicroOp())
+   // Interface with DCShim
+   val dmem               = new DCMemPortIO
 
-   // Memory Stage
-   val memreq_kill        = Output(Bool()) // kill request sent out last cycle
+   // Inform core of speculative load wakeups
    val mem_ldSpecWakeup   = Valid(UInt(PREG_SZ.W)) // do NOT send out FP loads.
 
-   // Forward Store Data to Register File
-   // TODO turn into forward bundle
-   val forward_val        = Output(Bool())
-   val forward_data       = Output(UInt(xLen.W))
-   val forward_uop        = Output(new MicroOp()) // the load microop (for its pdst)
-
-   // Receive Memory Response
-   val memresp            = Flipped(new ValidIO(new MicroOp()))
+   // Send load data to regfiles
+   val iresp              = new DecoupledIO(new boom.exu.ExeUnitResp(xLen))
+   val fresp              = new DecoupledIO(new boom.exu.ExeUnitResp(xLen+1)) // TODO: Should this be fLen?
 
    // Commit Stage
    val commit_store_mask  = Input(Vec(DISPATCH_WIDTH, Bool()))
@@ -571,22 +562,23 @@ class LoadStoreUnit(implicit p: Parameters,
    val exe_ld_uop  = Mux(will_fire_load_incoming || will_fire_load_retry, exe_tlb_uop,   laq_uop(exe_ld_idx_wakeup))
 
    // defaults
-   io.memreq_val     := false.B
-   io.memreq_addr    := exe_ld_addr
-   io.memreq_wdata   := sdq_data(stq_execute_head)
-   io.memreq_uop     := exe_ld_uop
+   val memreq_val   = WireInit(false.B)
+   val memreq_addr  = WireInit(exe_ld_addr)
+   val memreq_wdata = WireInit(sdq_data(stq_execute_head))
+   val memreq_uop   = WireInit(exe_ld_uop)
+   val memreq_kill  = Wire(Bool())
 
    val mem_fired_st = RegInit(false.B)
    mem_fired_st := false.B
    when (will_fire_store_commit)
    {
-      io.memreq_addr  := saq_addr(stq_execute_head)
-      io.memreq_uop   := stq_uop (stq_execute_head)
+      memreq_addr  := saq_addr(stq_execute_head)
+      memreq_uop   := stq_uop (stq_execute_head)
 
       // prevent this store going out if an earlier store just got nacked!
       when (!(io.nack.valid && !io.nack.isload))
       {
-         io.memreq_val   := true.B
+         memreq_val   := true.B
          stq_executed(stq_execute_head) := true.B
          stq_execute_head := WrapInc(stq_execute_head, NUM_STQ_ENTRIES)
          mem_fired_st := true.B
@@ -594,9 +586,9 @@ class LoadStoreUnit(implicit p: Parameters,
    }
    .elsewhen (will_fire_load_incoming || will_fire_load_retry || will_fire_load_wakeup)
    {
-      io.memreq_val   := true.B
-      io.memreq_addr  := exe_ld_addr
-      io.memreq_uop   := exe_ld_uop
+      memreq_val   := true.B
+      memreq_addr  := exe_ld_addr
+      memreq_uop   := exe_ld_uop
 
       laq_executed(exe_ld_uop.ldq_idx) := true.B
       laq_failure (exe_ld_uop.ldq_idx) := (will_fire_load_incoming && (ma_ld || pf_ld)) ||
@@ -608,7 +600,12 @@ class LoadStoreUnit(implicit p: Parameters,
                             will_fire_load_retry, will_fire_load_wakeup))
       <= 1.U, "Multiple requestors firing to the data cache.")
 
-
+   // Fire off dmem request
+   io.dmem.req.valid     := memreq_val && !(io.exception && memreq_uop.is_load)
+   io.dmem.req.bits.addr := memreq_addr
+   io.dmem.req.bits.data := memreq_wdata
+   io.dmem.req.bits.uop  := memreq_uop
+   io.dmem.req.bits.kill := memreq_kill
 
    //-------------------------------------------------------------
    // Write Addr into the LAQ/SAQ
@@ -881,11 +878,11 @@ class LoadStoreUnit(implicit p: Parameters,
 
    // Kill load request to mem if address matches (we will either sleep load, or forward data) or TLB miss.
    // Also kill load request if load address matches an older, unexecuted load.
-   io.memreq_kill     := (mem_ld_used_tlb && (mem_tlb_miss || RegNext(pf_ld || ma_ld))) ||
-                         (mem_fired_ld && ldst_addr_conflicts.asUInt=/= 0.U) ||
-                         (mem_fired_ld && ldld_addr_conflict) ||
-                         mem_ld_killed ||
-                         (mem_fired_st && io.nack.valid && !io.nack.isload)
+   memreq_kill     := (mem_ld_used_tlb && (mem_tlb_miss || RegNext(pf_ld || ma_ld))) ||
+                       (mem_fired_ld && ldst_addr_conflicts.asUInt=/= 0.U) ||
+                       (mem_fired_ld && ldld_addr_conflict) ||
+                       mem_ld_killed ||
+                       (mem_fired_st && io.nack.valid && !io.nack.isload)
    wb_forward_std_idx := forwarding_age_logic.io.forwarding_idx
 
    // kill forwarding if branch mispredict
@@ -902,41 +899,63 @@ class LoadStoreUnit(implicit p: Parameters,
    // Notes:
    //    - Time the forwarding of the data to coincide with what would be a HIT
    //       from the cache (to only use one port).
-
-   io.forward_val := false.B
-   when (IsKilledByBranch(io.brinfo, wb_uop))
+   val forward_val = WireInit(false.B)
+   when (!IsKilledByBranch(io.brinfo, wb_uop))
    {
-      io.forward_val := false.B
+      forward_val := wb_forward_std_val &&
+                     sdq_val(wb_forward_std_idx) &&
+                     !(io.nack.valid && io.nack.cache_nack)
    }
-   .otherwise
-   {
-      io.forward_val := wb_forward_std_val &&
-                        sdq_val(wb_forward_std_idx) &&
-                        !(io.nack.valid && io.nack.cache_nack)
-   }
-   io.forward_data := LoadDataGenerator(sdq_data(wb_forward_std_idx).asUInt, wb_uop.mem_typ)
-   io.forward_uop  := wb_uop
+   val forward_data = LoadDataGenerator(sdq_data(wb_forward_std_idx).asUInt, wb_uop.mem_typ)
+   val forward_uop  = wb_uop
 
    //------------------------
    // Handle Memory Responses
    //------------------------
 
-   when (io.memresp.valid)
+   val memresp_val    = (forward_val || io.dmem.resp.valid) &&
+                       !(io.exception && io.dmem.resp.bits.uop.is_load)
+   val memresp_uop    = Mux(forward_val, forward_uop, io.dmem.resp.bits.uop)
+   val memresp_rf_wen = (io.dmem.resp.valid &&
+                        (io.dmem.resp.bits.uop.mem_cmd === M_XRD || io.dmem.resp.bits.uop.is_amo)) ||
+                        forward_val // TODO should I refactor this to use is_load?
+   val memresp_data   = Mux(forward_val, forward_data, io.dmem.resp.bits.data_subword)
+
+   when (memresp_val)
    {
-      when (io.memresp.bits.is_load)
+      when (memresp_uop.is_load)
       {
-         laq_succeeded(io.memresp.bits.ldq_idx) := true.B
+         laq_succeeded(memresp_uop.ldq_idx) := true.B
       }
       .otherwise
       {
-         stq_succeeded(io.memresp.bits.stq_idx) := true.B
+         stq_succeeded(memresp_uop.stq_idx) := true.B
 
          if (O3PIPEVIEW_PRINTF)
          {
             // TODO supress printing out a store-comp for lr instructions.
-            printf("%d; store-comp: %d\n", io.memresp.bits.debug_events.fetch_seq, io.debug_tsc)
+            printf("%d; store-comp: %d\n", memresp_uop.debug_events.fetch_seq, io.debug_tsc)
          }
       }
+   }
+
+   io.iresp.valid                 := RegNext(memresp_val
+                                             && !IsKilledByBranch(io.brinfo, memresp_uop)
+                                             && memresp_rf_wen
+                                             && memresp_uop.dst_rtype === RT_FIX)
+   io.iresp.bits.uop              := RegNext(memresp_uop)
+   io.iresp.bits.uop.ctrl.rf_wen  := RegNext(memresp_rf_wen)
+   io.iresp.bits.data             := RegNext(memresp_data)
+
+   if (usingFPU)
+   {
+      io.fresp.valid                 := RegNext(memresp_val
+                                                && !IsKilledByBranch(io.brinfo, memresp_uop)
+                                                && memresp_rf_wen
+                                                && memresp_uop.dst_rtype === RT_FLT)
+      io.fresp.bits.uop              := RegNext(memresp_uop)
+      io.fresp.bits.uop.ctrl.rf_wen  := RegNext(memresp_rf_wen)
+      io.fresp.bits.data             := RegNext(memresp_data)
    }
 
    //-------------------------------------------------------------
@@ -1373,7 +1392,7 @@ class LoadStoreUnit(implicit p: Parameters,
    // Debug & Counter outputs
 
    io.counters.ld_valid        := RegNext(io.exe_resp.valid && io.exe_resp.bits.uop.is_load)
-   io.counters.ld_forwarded    := RegNext(io.forward_val)
+   io.counters.ld_forwarded    := RegNext(forward_val)
    io.counters.ld_sleep        := RegNext(ld_was_put_to_sleep)
    io.counters.ld_killed       := RegNext(ld_was_killed)
    io.counters.stld_order_fail := RegNext(stld_order_fail)
