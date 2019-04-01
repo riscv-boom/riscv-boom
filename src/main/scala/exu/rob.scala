@@ -835,7 +835,7 @@ class Rob(
    }
    .elsewhen (io.enq_valids.asUInt =/= 0.U && io.enq_partial_stall)
    {
-      rob_tail_lsb := OHToUInt(io.enq_valids) + 1.U
+      rob_tail_lsb := PriorityEncoder(~io.enq_valids.asUInt)
    }
 
 
