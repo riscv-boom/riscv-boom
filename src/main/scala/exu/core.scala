@@ -999,10 +999,13 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    lsu.io.dmem_is_ordered:= dc_shim.io.core.ordered
    lsu.io.release := io.release
 
+   lsu.io.fp_stdata.valid := false.B
+   lsu.io.fp_stdata.bits  := DontCare
    if (usingFPU)
    {
       lsu.io.fp_stdata <> fp_pipeline.io.tosdq
    }
+
 
    //-------------------------------------------------------------
    //-------------------------------------------------------------
