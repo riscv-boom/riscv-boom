@@ -128,8 +128,8 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
                                  exe_units.withFilter(_.reads_irf).map(x => 2),
                                  exe_units.num_total_bypass_ports,
                                  xLen))
-   val dc_shim          = Module(new boom.lsu.DCacheShim())
-   val lsu              = Module(new boom.lsu.LoadStoreUnit(decodeWidth))
+   val dc_shim          = Module(new boom.lsu.DCacheShim)
+   val lsu              = Module(new boom.lsu.LoadStoreUnit)
    val rob              = Module(new Rob(
                                  decodeWidth,
                                  NUM_ROB_ENTRIES,

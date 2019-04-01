@@ -61,16 +61,15 @@ import boom.util.{AgePriorityEncoder, IsKilledByBranch, GetNewBrMask, WrapInc, I
  * IO bundle representing the different signals to interact with the backend
  * (dcache, dcache shim, etc) memory system.
  *
- * @param pl_width pipeline width of the processor
  */
-class LoadStoreUnitIO(val pl_width: Int)(implicit p: Parameters) extends BoomBundle()(p)
+class LoadStoreUnitIO(implicit p: Parameters) extends BoomBundle()(p)
 {
    // Decode Stage
    // Track which stores are "alive" in the pipeline
    // allows us to know which stores get killed by branch mispeculation
-   val dec_st_vals        = Input(Vec(pl_width,  Bool()))
-   val dec_ld_vals        = Input(Vec(pl_width,  Bool()))
-   val dec_uops           = Input(Vec(pl_width, new MicroOp()))
+   val dec_st_vals        = Input(Vec(DISPATCH_WIDTH,  Bool()))
+   val dec_ld_vals        = Input(Vec(DISPATCH_WIDTH,  Bool()))
+   val dec_uops           = Input(Vec(DISPATCH_WIDTH, new MicroOp()))
 
    val new_ldq_idx        = Output(UInt(LDQ_ADDR_SZ.W))
    val new_stq_idx        = Output(UInt(STQ_ADDR_SZ.W))
@@ -99,8 +98,8 @@ class LoadStoreUnitIO(val pl_width: Int)(implicit p: Parameters) extends BoomBun
    val memresp            = Flipped(new ValidIO(new MicroOp()))
 
    // Commit Stage
-   val commit_store_mask  = Input(Vec(pl_width, Bool()))
-   val commit_load_mask   = Input(Vec(pl_width, Bool()))
+   val commit_store_mask  = Input(Vec(DISPATCH_WIDTH, Bool()))
+   val commit_load_mask   = Input(Vec(DISPATCH_WIDTH, Bool()))
    val commit_load_at_rob_head = Input(Bool())
 
    // Handle Release Probes
@@ -161,13 +160,12 @@ class LoadStoreUnitIO(val pl_width: Int)(implicit p: Parameters) extends BoomBun
 /**
  * Load store unit. Holds SAQ, LAQ, SDQ.
  *
- * @param pl_width pipeline width of the processor
  */
-class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
-                                   edge: freechips.rocketchip.tilelink.TLEdgeOut) extends BoomModule()(p)
+class LoadStoreUnit(implicit p: Parameters,
+                    edge: freechips.rocketchip.tilelink.TLEdgeOut) extends BoomModule()(p)
    with freechips.rocketchip.rocket.constants.MemoryOpConstants
 {
-   val io = IO(new LoadStoreUnitIO(pl_width))
+   val io = IO(new LoadStoreUnitIO)
 
    // Load-Address Queue
    val laq_addr_val       = Reg(Vec(NUM_LDQ_ENTRIES, Bool()))
@@ -270,7 +268,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
    var ld_enq_idx = laq_tail
    var st_enq_idx = stq_tail
 
-   for (w <- 0 until pl_width)
+   for (w <- 0 until DISPATCH_WIDTH)
    {
       when (io.dec_ld_vals(w))
       {
@@ -1160,7 +1158,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
    //-------------------------------------------------------------
 
    var temp_stq_commit_head = stq_commit_head
-   for (w <- 0 until pl_width)
+   for (w <- 0 until DISPATCH_WIDTH)
    {
       when (io.commit_store_mask(w))
       {
@@ -1198,7 +1196,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
    }
 
    var temp_laq_head = laq_head
-   for (w <- 0 until pl_width)
+   for (w <- 0 until DISPATCH_WIDTH)
    {
       val idx = temp_laq_head
       when (io.commit_load_mask(w))

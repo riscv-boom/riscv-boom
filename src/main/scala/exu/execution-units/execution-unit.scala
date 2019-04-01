@@ -94,7 +94,7 @@ class ExecutionUnitIO(
    val fcsr_rm = Input(Bits(tile.FPConstants.RM_SZ.W))
 
    // only used by the mem unit
-   val lsu_io = Flipped(new boom.lsu.LoadStoreUnitIO(decodeWidth))
+   val lsu_io = Flipped(new boom.lsu.LoadStoreUnitIO)
    val dmem   = new boom.lsu.DCMemPortIO() // TODO move this out of ExecutionUnit
    val com_exception = Input(Bool())
 }
