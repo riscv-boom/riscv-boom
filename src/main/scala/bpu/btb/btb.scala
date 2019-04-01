@@ -85,18 +85,20 @@ trait HasBoomBTBParameters extends HasBoomCoreParameters
  */
 object BpredType
 {
-   def SZ = 3
    def apply() = UInt(SZ.W)
-   def branch = 0.U
-   def jump = 1.U
-   def ret =  (2+1).U
-   def call = (4+1).U
+
+   def SZ = 3
+
+   def BRANCH = 0.U // COND BR
+   def JUMP   = 1.U // UNCOND JMP (JAL(R) Rd=x0)
+   def RET    = (2+1).U // UNCOND JMP (JALR Rd=x0, Rs=RA)
+   def CALL   = (4+1).U // UNCOND JMP (JAL(R) Rd=RA)
 
    def isAlwaysTaken(typ: UInt): Bool = typ(0)
-   def isReturn(typ: UInt): Bool = typ(1)
-   def isCall(typ: UInt): Bool = typ(2)
-   def isJump(typ: UInt): Bool = typ === jump
-   def isBranch(typ: UInt): Bool = typ === branch
+   def      isReturn(typ: UInt): Bool = typ(1)
+   def        isCall(typ: UInt): Bool = typ(2)
+   def        isJump(typ: UInt): Bool = typ === JUMP
+   def      isBranch(typ: UInt): Bool = typ === BRANCH
 }
 
 //------------------------------------------------------------------------------

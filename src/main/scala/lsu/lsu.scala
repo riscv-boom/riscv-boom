@@ -55,7 +55,7 @@ import freechips.rocketchip.util.Str
 
 import boom.common._
 import boom.exu.{BrResolutionInfo, Exception, FuncUnitResp}
-import boom.util.{AgePriorityEncoder, IsKilledByBranch, GetNewBrMask, WrapInc}
+import boom.util.{PrintUtil, AgePriorityEncoder, IsKilledByBranch, GetNewBrMask, WrapInc}
 
 /**
  * IO bundle representing the different signals to interact with the backend
@@ -1388,48 +1388,47 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
 
    if (DEBUG_PRINTF_LSU)
    {
-      printf("wakeup_idx: %d, ld is head of ROB:%d\n", exe_ld_idx_wakeup, io.commit_load_at_rob_head)
+      printf("LSU:\n")
+      printf("    wakeup_idx:%d, ld is head of ROB:%c\n",
+             exe_ld_idx_wakeup,
+             PrintUtil.ConvertChar(io.commit_load_at_rob_head, 'V'))
       for (i <- 0 until NUM_LDQ_ENTRIES)
       {
          val t_laddr = laq_addr(i)
-         printf("         ldq[%d]=(%c%c%c%c%c%c%c%d) st_dep(%d,m=%x) 0x%x %c %c\n"
-            , i.U(LDQ_ADDR_SZ.W)
-            , Mux(laq_allocated(i), Str("V"), Str("-"))
-            , Mux(laq_addr_val(i), Str("A"), Str("-"))
-            , Mux(laq_executed(i), Str("E"), Str("-"))
-            , Mux(laq_succeeded(i), Str("S"), Str("-"))
-            , Mux(laq_failure(i), Str("F"), Str("_"))
-            , Mux(laq_is_uncacheable(i), Str("U"), Str("_"))
-            , Mux(laq_forwarded_std_val(i), Str("X"), Str("_"))
-            , laq_forwarded_stq_idx(i)
-            , laq_uop(i).stq_idx // youngest dep-store
-            , laq_st_dep_mask(i)
-            , t_laddr(19,0)
-
-            , Mux(laq_head === i.U, Str("H"), Str(" "))
-            , Mux(laq_tail===  i.U, Str("T"), Str(" "))
-         )
+         printf("    LDQ[%d]: State:(%c%c%c%c%c%c%c%d) STDep:(StqIdx:%d,Msk:%x) Addr:0x%x H,T:(%c %c)\n",
+                i.U(LDQ_ADDR_SZ.W),
+                PrintUtil.ConvertChar(        laq_allocated(i), 'V'),
+                PrintUtil.ConvertChar(         laq_addr_val(i), 'A'),
+                PrintUtil.ConvertChar(         laq_executed(i), 'E'),
+                PrintUtil.ConvertChar(        laq_succeeded(i), 'S'),
+                PrintUtil.ConvertChar(          laq_failure(i), 'F'),
+                PrintUtil.ConvertChar(   laq_is_uncacheable(i), 'U'),
+                PrintUtil.ConvertChar(laq_forwarded_std_val(i), 'X'),
+                laq_forwarded_stq_idx(i),
+                laq_uop(i).stq_idx, // youngest dep-store
+                laq_st_dep_mask(i),
+                t_laddr(19,0),
+                PrintUtil.ConvertChar(laq_head === i.U, 'H', ' '),
+                PrintUtil.ConvertChar(laq_tail===  i.U, 'T', ' '))
       }
       for (i <- 0 until NUM_STQ_ENTRIES) {
          val t_saddr = saq_addr(i)
-         printf("         saq[%d]=(%c%c%c%c%c%c%c) b:%x 0x%x -> 0x%x %c %c %c %c\n"
-            , i.U(STQ_ADDR_SZ.W)
-            , Mux(stq_allocated(i), Str("V"), Str("-"))
-            , Mux(saq_val(i), Str("A"), Str("-"))
-            , Mux(sdq_val(i), Str("D"), Str("-"))
-            , Mux(stq_committed(i), Str("C"), Str("-"))
-            , Mux(stq_executed(i), Str("E"), Str("-"))
-            , Mux(stq_succeeded(i), Str("S"), Str("-"))
-            , Mux(saq_is_virtual(i), Str("T"), Str("-"))
-            , stq_uop(i).br_mask
-            , t_saddr(19,0)
-            , sdq_data(i)
-
-            , Mux(stq_head === i.U, Str("H"), Str(" "))
-            , Mux(stq_execute_head === i.U, Str("E"), Str(" "))
-            , Mux(stq_commit_head === i.U, Str("C"), Str(" "))
-            , Mux(stq_tail === i.U, Str("T"), Str(" "))
-         )
+         printf("    SAQ[%d]: State:(%c%c%c%c%c%c%c) BMsk:0x%x (Addr:0x%x -> Data:0x%x) H,ExH,CmH,T:(%c %c %c %c)\n",
+                i.U(STQ_ADDR_SZ.W),
+                PrintUtil.ConvertChar( stq_allocated(i), 'V'),
+                PrintUtil.ConvertChar(       saq_val(i), 'A'),
+                PrintUtil.ConvertChar(       sdq_val(i), 'D'),
+                PrintUtil.ConvertChar( stq_committed(i), 'C'),
+                PrintUtil.ConvertChar(  stq_executed(i), 'E'),
+                PrintUtil.ConvertChar( stq_succeeded(i), 'S'),
+                PrintUtil.ConvertChar(saq_is_virtual(i), 'T'),
+                stq_uop(i).br_mask,
+                t_saddr(19,0),
+                sdq_data(i),
+                PrintUtil.ConvertChar(        stq_head === i.U, 'H', ' '),
+                PrintUtil.ConvertChar(stq_execute_head === i.U, 'E', ' '),
+                PrintUtil.ConvertChar( stq_commit_head === i.U, 'C', ' '),
+                PrintUtil.ConvertChar(        stq_tail === i.U, 'T', ' '))
       }
    }
 }

@@ -32,6 +32,7 @@ import freechips.rocketchip.util.{Str, UIntToAugmentedUInt}
 
 import boom.common._
 import boom.exu.BranchUnitResp
+import boom.util.{PrintUtil}
 
 /**
  * Give this to each instruction/uop and pass this down the pipeline to the branch unit
@@ -143,7 +144,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
 //   val jmp_idx = f2_btb.bits.cfi_idx
 
    btb.io.ras_update := io.f3_ras_update
-   btb.io.ras_update.valid := false.B // TODO XXX renable RAS (f2_btb.valid || io.f3_ras_update.valid) &&
+   btb.io.ras_update.valid := false.B // (f2_btb.valid || io.f3_ras_update.valid) &&
                                       // !io.fetch_stalled
 //   when (f2_btb.valid)
 //   {
@@ -155,6 +156,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
    //************************************************
    // Update the BTB/BIM
 
+   // br unit has higher pri than a f3 update
    btb.io.btb_update := Mux(io.br_unit_resp.btb_update.valid,
                             io.br_unit_resp.btb_update,
                             io.f3_btb_update)
@@ -189,12 +191,12 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
 
    if (DEBUG_PRINTF)
    {
-      printf("btb, f0_npc=%c req_pc 0x%x, f1=%c targ=0x%x\n",
-             Mux(btb.io.req.valid, Str("V"), Str("-")),
+      printf("BPD Pipeline:\n")
+      printf("    BTB: F0NPC:(V:%c PC:0x%x) F2RESP:(V:%c TRG:0x%x)\n",
+             PrintUtil.ConvertChar(btb.io.req.valid, 'V'),
              io.s0_req.bits.addr,
-             Mux(btb.io.resp.valid, Str("V"), Str("-")),
-             btb.io.resp.bits.target
-             )
+             PrintUtil.ConvertChar(btb.io.resp.valid, 'V'),
+             btb.io.resp.bits.target)
    }
 
    //************************************************

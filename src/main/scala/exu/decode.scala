@@ -532,24 +532,24 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule()(p)
 /**
  * Smaller Decode unit for the Frontend to decode different
  * branches.
- * Accepts EXPANDED RVC instructions
  */
-
 class BranchDecode(implicit p: Parameters) extends BoomModule
 {
    val io = IO(new Bundle
    {
-      val inst    = Input(UInt(32.W))
+      val inst    = Input(UInt(32.W)) // expanded RVC instruction
       val pc      = Input(UInt(vaddrBitsExtended.W))
-      val is_br   = Output(Bool())
-      val is_jal  = Output(Bool())
-      val is_jalr = Output(Bool())
-      val is_ret  = Output(Bool())
-      val is_call = Output(Bool())
-      val target = Output(UInt(vaddrBitsExtended.W))
+
+      val is_br    = Output(Bool())
+      val is_jal   = Output(Bool())
+      val is_jalr  = Output(Bool())
+      val is_ret   = Output(Bool())
+      val is_call  = Output(Bool())
+      val target   = Output(UInt(vaddrBitsExtended.W))
       val cfi_type = Output(UInt(CfiType.SZ.W))
    })
 
+   // decode based off bit pattern
    val bpd_csignals =
       freechips.rocketchip.rocket.DecodeLogic(io.inst,
                   List[BitPat](N, N, N, IS_X),
@@ -579,14 +579,13 @@ class BranchDecode(implicit p: Parameters) extends BoomModule
 
    io.target := Mux(cs_is_br, ComputeBranchTarget(io.pc, io.inst, xLen),
                               ComputeJALTarget(io.pc, io.inst, xLen))
-   io.cfi_type :=
-      Mux(cs_is_jalr,
-          CfiType.jalr,
-      Mux(cs_is_jal,
-          CfiType.jal,
-      Mux(cs_is_br,
-          CfiType.branch,
-          CfiType.none)))
+   io.cfi_type := Mux(cs_is_jalr,
+                      CfiType.JALR,
+                      Mux(cs_is_jal,
+                          CfiType.JAL,
+                          Mux(cs_is_br,
+                              CfiType.BRANCH,
+                              CfiType.NONE)))
 }
 
 /**

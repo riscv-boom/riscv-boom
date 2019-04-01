@@ -18,8 +18,9 @@ import chisel3.util._
 
 import freechips.rocketchip.rocket.Instructions._
 import freechips.rocketchip.rocket._
+import freechips.rocketchip.util.Str
 
-import boom.common.MicroOp
+import boom.common.{MicroOp}
 import boom.exu.{BrResolutionInfo}
 
 /**
@@ -471,4 +472,47 @@ class BranchKillableQueue[T <: boom.common.HasBoomUOP](gen: T, entries: Int)
                      Mux(deq_ptr.value > enq_ptr.value,
                         entries.asUInt + ptr_diff, ptr_diff))
    }
+}
+
+/**
+ * Functions to help printf's during debugging
+ */
+object PrintUtil
+{
+  /**
+   * Take in a Chisel Bool and convert it into a Str
+   * based on the Chars given
+   *
+   * @param b Chisel Bool
+   * @param tr Scala Char
+   * @param fa Scala Char
+   * @return UInt ASCII Char for "tr" or "fa"
+   */
+  def ConvertChar(b: Bool, tr: Char, fa: Char = '-'): UInt = {
+    Mux(b, Str(tr), Str(fa))
+  }
+
+  /**
+   * Get a Vec of Strs that can be used for printing
+   *
+   * @param cfi specific cfi type
+   * @return Vec of Strs (must be indexed to get specific char)
+   */
+  def CfiTypeChars(cfi: UInt) = {
+    val strings = Seq("----", "BR  ", "JAL ", "JALR")
+    val multiVec = VecInit(for(string <- strings) yield { VecInit(for (c <- string) yield { Str(c) }) })
+    multiVec(cfi)
+  }
+
+  /**
+   * Get a Vec of Strs that can be used for printing
+   *
+   * @param rob specific cfi type
+   * @return Vec of Strs (must be indexed to get specific char)
+   */
+  def RobTypeChars(rob: UInt) = {
+    val strings = Seq("Rst", "Nml", "Rbk", " Wt")
+    val multiVec = VecInit(for(string <- strings) yield { VecInit(for (c <- string) yield { Str(c) }) })
+    multiVec(rob)
+  }
 }

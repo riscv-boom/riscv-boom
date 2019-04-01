@@ -32,6 +32,7 @@ import freechips.rocketchip.util.Str
 
 import boom.common._
 import boom.exu._
+import boom.util.{PrintUtil}
 
 case class BimParameters(
    nSets: Int = 1024, // how many sets (conceptually) should we have?
@@ -205,13 +206,13 @@ class BimodalTable(implicit p: Parameters) extends BoomModule()(p) with HasBimPa
 
    if (DEBUG_PRINTF)
    {
-      printf("BIM: fetchpc: 0x%x, idx:[%d,%d,%d] s2_resp_idx: %d\n",
-         io.req.bits.addr,
-         s0_logical_idx,
-         s0_bank_idx,
-         getRowFromIdx(s0_logical_idx),
-         io.resp.bits.entry_idx
-         )
+      printf("BIM:\n")
+      printf("    ReqPC:0x%x (LIdx:%d BnkIdx:%d Row:%d) S2RespIdx:%d\n",
+             io.req.bits.addr,
+             s0_logical_idx,
+             s0_bank_idx,
+             getRowFromIdx(s0_logical_idx),
+             io.resp.bits.entry_idx)
    }
 
    // prediction
@@ -263,7 +264,12 @@ class BimodalTable(implicit p: Parameters) extends BoomModule()(p) with HasBimPa
 
       wq.io.deq.ready := !p_will_read
 
-      if (DEBUG_PRINTF) printf("BIM bank[" + w + "] (r:%d ", ren)
+      if (DEBUG_PRINTF)
+      {
+         printf("    Bank[%d]: REN:%c ",
+                w.U,
+                PrintUtil.ConvertChar(ren, 'R'))
+      }
 
       val wen = ((wq.io.deq.valid && !ren) || fsm_state === s_clear)
       when (wen)
@@ -273,11 +279,11 @@ class BimodalTable(implicit p: Parameters) extends BoomModule()(p) with HasBimPa
          val wmask = Mux(fsm_state === s_clear, Fill(row_sz, 1.U), wq.io.deq.bits.mask).toBools
 
          ram.write(waddr, wdata, wmask)
-         if (DEBUG_PRINTF) printf("w:W (%d==%x) %x %x ", waddr, waddr, wdata.asUInt, VecInit(wmask).asUInt)
+         if (DEBUG_PRINTF) printf("WEN:W WAddr:(%d=0x%x) Data:0x%x Msk:0x%x ", waddr, waddr, wdata.asUInt, VecInit(wmask).asUInt)
       }
       .otherwise
       {
-         if (DEBUG_PRINTF) printf("w:----------")
+         if (DEBUG_PRINTF) printf("WEN:- ")
       }
 
       // read (either for prediction or rmw for updates)
@@ -304,16 +310,16 @@ class BimodalTable(implicit p: Parameters) extends BoomModule()(p) with HasBimPa
 
       if (DEBUG_PRINTF)
       {
-         printf("uq.enq:(%d,%d) uq.deq:(%d,%d), s0_rmw:%d s2_out: %x rmw_data: %x  wq:%d,%d\n",
-            uq.io.enq.valid,
-            uq.io.enq.ready,
-            uq.io.deq.valid,
-            uq.io.deq.ready,
-            s0_rmw_valid,
-            s2_read_out(w),
-            s2_rmw_data.asUInt,
-            wq.io.enq.valid,
-            wq.io.deq.valid)
+         printf("UpdQ:(Enq:(V:%c R:%c) Deq:(V:%c R:%c)) S0_RMW:%c S2_OUT:0x%x RMW_DATA:0x%x WrQ:(EnqV:%d DeqV:%d)\n",
+                PrintUtil.ConvertChar(uq.io.enq.valid, 'V'),
+                PrintUtil.ConvertChar(uq.io.enq.ready, 'R'),
+                PrintUtil.ConvertChar(uq.io.deq.valid, 'V'),
+                PrintUtil.ConvertChar(uq.io.deq.ready, 'R'),
+                PrintUtil.ConvertChar(s0_rmw_valid, 'V'),
+                s2_read_out(w),
+                s2_rmw_data.asUInt,
+                PrintUtil.ConvertChar(wq.io.enq.valid, 'V'),
+                PrintUtil.ConvertChar(wq.io.deq.valid, 'V'))
       }
 
    }
