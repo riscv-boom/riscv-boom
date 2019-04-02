@@ -49,6 +49,9 @@ trait HasBoomLSUModule
   val outer: HasBoomLSU
   val dcachePorts = ListBuffer[HellaCacheIO]()
   val dcacheArb = Module(new HellaCacheArbiter(outer.nDCachePorts)(outer.p))
+
+  val dc_shim = Module(new boom.lsu.DCacheShim()(outer.p))
+
   outer.dcache.module.io.cpu <> dcacheArb.io.mem
 }
 

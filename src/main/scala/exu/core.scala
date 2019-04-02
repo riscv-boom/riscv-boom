@@ -55,7 +55,7 @@ trait HasBoomCoreIO extends freechips.rocketchip.tile.HasTileParameters
    {
          val interrupts = Input(new freechips.rocketchip.tile.CoreInterrupts())
          val ifu = new boom.ifu.BoomFrontendIO
-         val dmem = new freechips.rocketchip.rocket.HellaCacheIO
+         val dmem = new boom.lsu.DCMemPortIO
          val ptw = Flipped(new freechips.rocketchip.rocket.DatapathPTWIO())
          val fpu = Flipped(new freechips.rocketchip.tile.FPUCoreIO())
          val rocc = Flipped(new freechips.rocketchip.tile.RoCCCoreIO())
@@ -128,7 +128,6 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
                                  exe_units.withFilter(_.reads_irf).map(x => 2),
                                  exe_units.num_total_bypass_ports,
                                  xLen))
-   val dc_shim          = Module(new boom.lsu.DCacheShim)
    val lsu              = Module(new boom.lsu.LoadStoreUnit)
    val rob              = Module(new Rob(
                                  decodeWidth,
@@ -175,12 +174,9 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       fp_pipeline.io.brinfo := br_unit.brinfo
    }
 
-   // Shim to DCache
-   io.dmem <> dc_shim.io.dmem
-
    // Load/Store Unit & ExeUnits
    exe_units.memory_unit.io.lsu_io <> lsu.io.exe
-   dc_shim.io.core <> lsu.io.dmem
+   io.dmem <> lsu.io.dmem
 
    // TODO: Generate this in lsu
    val sxt_ldMiss = Wire(Bool())
@@ -243,12 +239,13 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
          //  ("fp interlock", () => id_ex_hazard && ex_ctrl.fp || id_mem_hazard && mem_ctrl.fp ||
          //                         id_wb_hazard && wb_ctrl.fp || id_ctrl.fp && id_stall_fpu)))),
 
+      // TODO: Re-enable D$ perf events
      new freechips.rocketchip.rocket.EventSet((mask, hits) => (mask & hits).orR, Seq(
         ("I$ miss",     () => io.ifu.perf.acquire),
-        ("D$ miss",     () => io.dmem.perf.acquire),
-        ("D$ release",  () => io.dmem.perf.release),
+//        ("D$ miss",     () => io.dmem.perf.acquire),
+//        ("D$ release",  () => io.dmem.perf.release),
         ("ITLB miss",   () => io.ifu.perf.tlbMiss),
-        ("DTLB miss",   () => io.dmem.perf.tlbMiss),
+//        ("DTLB miss",   () => io.dmem.perf.tlbMiss),
         ("L2 TLB miss", () => io.ptw.perf.l2miss)))))
 
    val csr = Module(new freechips.rocketchip.rocket.CSRFile(perfEvents))
@@ -982,19 +979,19 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
    // Handle Branch Mispeculations
    lsu.io.brinfo := br_unit.brinfo
-   dc_shim.io.core.brinfo := br_unit.brinfo
+   io.dmem.brinfo := br_unit.brinfo
 
    new_ldq_idx := lsu.io.new_ldq_idx
    new_stq_idx := lsu.io.new_stq_idx
 
    lsu.io.debug_tsc := debug_tsc_reg
 
-   dc_shim.io.core.flush_pipe := rob.io.flush.valid
+   io.dmem.flush_pipe := rob.io.flush.valid
 
-   lsu.io.nack <> dc_shim.io.core.nack
+   lsu.io.nack <> io.dmem.nack
 
-   lsu.io.dmem_req_ready := dc_shim.io.core.req.ready
-   lsu.io.dmem_is_ordered:= dc_shim.io.core.ordered
+   lsu.io.dmem_req_ready := io.dmem.req.ready
+   lsu.io.dmem_is_ordered:= io.dmem.ordered
    lsu.io.release := io.release
 
    lsu.io.fp_stdata.valid := false.B
