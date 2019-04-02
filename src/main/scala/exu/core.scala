@@ -1297,7 +1297,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
       if (DEBUG_PRINTF_ROB)
       {
-         printf("\n) ctate: (%c: %c %c %c %c %c %c) BMsk:%x Mode:%c\n",
+         printf("\n) ctate: (%c: %c %c %c %c %c) BMsk:%x Mode:%c\n",
                 Mux(rob.io.debug.state === 0.U, Str("R"),
                 Mux(rob.io.debug.state === 1.U, Str("N"),
                 Mux(rob.io.debug.state === 2.U, Str("B"),
@@ -1308,7 +1308,6 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
                 Mux(lsu.io.stq_full, Str("S"), Str("_")),
                 Mux(rob.io.flush.valid, Str("F"), Str(" ")),
                 Mux(branch_mask_full.reduce(_|_), Str("B"), Str(" ")),
-                Mux(dc_shim.io.core.req.ready, Str("R"), Str("B")),
                 dec_brmask_logic.io.debug.branch_mask,
                 Mux(csr.io.status.prv === (0x3).U, Str("M"),
                 Mux(csr.io.status.prv === (0x0).U, Str("U"),
