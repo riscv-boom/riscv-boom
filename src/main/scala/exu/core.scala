@@ -980,19 +980,12 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
    // Handle Branch Mispeculations
    lsu.io.brinfo := br_unit.brinfo
-   io.dmem.brinfo := br_unit.brinfo
 
    new_ldq_idx := lsu.io.new_ldq_idx
    new_stq_idx := lsu.io.new_stq_idx
 
    lsu.io.debug_tsc := debug_tsc_reg
 
-   io.dmem.flush_pipe := rob.io.flush.valid
-
-   lsu.io.nack <> io.dmem.nack
-
-   lsu.io.dmem_req_ready := io.dmem.req.ready
-   lsu.io.dmem_is_ordered:= io.dmem.ordered
    lsu.io.release := io.release
 
    lsu.io.fp_stdata.valid := false.B

@@ -97,6 +97,7 @@ class LoadStoreUnitIO(implicit p: Parameters) extends BoomBundle()(p)
    val exe                = new LoadStoreUnitExeUnitIO
 
    // Interface with DCShim
+   // TODO: Use dmem.req.ready to avoid spurious requests that will get nacked later
    val dmem               = new DCMemPortIO
 
    // Inform core of speculative load wakeups
@@ -132,19 +133,6 @@ class LoadStoreUnitIO(implicit p: Parameters) extends BoomBundle()(p)
    val lsu_fencei_rdy     = Output(Bool())
 
    val xcpt = new ValidIO(new Exception)
-
-   // cache nacks
-   val nack               = Input(new NackInfo())
-
-// causing stuff to dissapear
-//   val dmem = new DCMemPortIO().flip()
-   val dmem_is_ordered = Input(Bool())
-   val dmem_req_ready = Input(Bool())    // arbiter can back-pressure us (or MSHRs can fill up).
-                                       // although this is also turned into a
-                                       // nack two cycles later in the cache
-                                       // wrapper, we can prevent spurious
-                                       // retries as well as some load ordering
-                                       // failures.
 
    val ptw = new rocket.TLBPTWIO
    val sfence = new rocket.SFenceReq
@@ -583,6 +571,9 @@ class LoadStoreUnit(implicit p: Parameters,
    val memreq_uop   = WireInit(exe_ld_uop)
    val memreq_kill  = Wire(Bool())
 
+   // Nacks from dcache-shim/dmem
+   val nack = io.dmem.nack
+
    val mem_fired_st = RegInit(false.B)
    mem_fired_st := false.B
    when (will_fire_store_commit)
@@ -591,7 +582,7 @@ class LoadStoreUnit(implicit p: Parameters,
       memreq_uop   := stq_uop (stq_execute_head)
 
       // prevent this store going out if an earlier store just got nacked!
-      when (!(io.nack.valid && !io.nack.isload))
+      when (!(nack.valid && !nack.isload))
       {
          memreq_val   := true.B
          stq_executed(stq_execute_head) := true.B
@@ -729,7 +720,7 @@ class LoadStoreUnit(implicit p: Parameters,
                                      && io.exe.req.bits.uop.pdst =/= 0.U, init=false.B)
    io.mem_ldSpecWakeup.bits := mem_ld_uop.pdst
 
-   io.ld_miss := (io.nack.valid && io.nack.isload) || io.dmem.load_miss
+   io.ld_miss := (nack.valid && nack.isload) || io.dmem.load_miss
 
    // tell the ROB to clear the busy bit on the incoming store
    val clr_bsy_valid = RegInit(false.B)
@@ -900,7 +891,7 @@ class LoadStoreUnit(implicit p: Parameters,
                        (mem_fired_ld && ldst_addr_conflicts.asUInt=/= 0.U) ||
                        (mem_fired_ld && ldld_addr_conflict) ||
                        mem_ld_killed ||
-                       (mem_fired_st && io.nack.valid && !io.nack.isload)
+                       (mem_fired_st && nack.valid && !nack.isload)
    wb_forward_std_idx := forwarding_age_logic.io.forwarding_idx
 
    // kill forwarding if branch mispredict
@@ -922,7 +913,7 @@ class LoadStoreUnit(implicit p: Parameters,
    {
       forward_val := wb_forward_std_val &&
                      sdq_val(wb_forward_std_idx) &&
-                     !(io.nack.valid && io.nack.cache_nack)
+                     !(nack.valid && nack.cache_nack)
    }
    val forward_data = LoadDataGenerator(sdq_data(wb_forward_std_idx).asUInt, wb_uop.mem_typ)
    val forward_uop  = wb_uop
@@ -1212,7 +1203,7 @@ class LoadStoreUnit(implicit p: Parameters,
    // store has been committed AND successfully sent data to memory
    when (stq_allocated(stq_head) && stq_committed(stq_head))
    {
-      clear_store := Mux(stq_uop(stq_head).is_fence, io.dmem_is_ordered,
+      clear_store := Mux(stq_uop(stq_head).is_fence, io.dmem.ordered,
                                                      stq_succeeded(stq_head))
    }
 
@@ -1271,15 +1262,15 @@ class LoadStoreUnit(implicit p: Parameters,
    ld_was_killed           := false.B
    ld_was_put_to_sleep     := false.B
 
-   when (io.nack.valid)
+   when (nack.valid)
    {
       // the cache nacked our store
-      when (!io.nack.isload)
+      when (!nack.isload)
       {
-         stq_executed(io.nack.lsu_idx) := false.B
-         when (IsOlder(io.nack.lsu_idx, stq_execute_head, stq_head))
+         stq_executed(nack.lsu_idx) := false.B
+         when (IsOlder(nack.lsu_idx, stq_execute_head, stq_head))
          {
-            stq_execute_head := io.nack.lsu_idx
+            stq_execute_head := nack.lsu_idx
          }
       }
       // the nackee is a load
@@ -1290,7 +1281,7 @@ class LoadStoreUnit(implicit p: Parameters,
          {
             // handle case where sdq_val is no longer true (store was
             // committed) or was never valid
-            when (!(sdq_val(wb_forward_std_idx)) || (io.nack.valid && io.nack.cache_nack))
+            when (!(sdq_val(wb_forward_std_idx)) || (nack.valid && nack.cache_nack))
             {
                clr_ld := true.B
             }
@@ -1302,11 +1293,11 @@ class LoadStoreUnit(implicit p: Parameters,
 
          when (clr_ld)
          {
-            laq_executed(io.nack.lsu_idx) := false.B
-            debug_laq_put_to_sleep(io.nack.lsu_idx) := true.B
+            laq_executed(nack.lsu_idx) := false.B
+            debug_laq_put_to_sleep(nack.lsu_idx) := true.B
             ld_was_killed := true.B
-            ld_was_put_to_sleep := !debug_laq_put_to_sleep(io.nack.lsu_idx)
-            laq_forwarded_std_val(io.nack.lsu_idx) := false.B
+            ld_was_put_to_sleep := !debug_laq_put_to_sleep(nack.lsu_idx)
+            laq_forwarded_std_val(nack.lsu_idx) := false.B
          }
       }
    }
@@ -1402,9 +1393,16 @@ class LoadStoreUnit(implicit p: Parameters,
    io.new_ldq_idx := laq_tail
    io.new_stq_idx := stq_tail
 
-   io.lsu_fencei_rdy := stq_empty && io.dmem_is_ordered
+   io.lsu_fencei_rdy := stq_empty && io.dmem.ordered
 
    assert (!(stq_empty ^ stq_allocated.asUInt === 0.U), "[lsu] mismatch in SAQ empty logic.")
+
+   //-------------------------------------------------------------
+   // Pass throughs to dcache-shim OR BoomDCache
+   io.dmem.brinfo     := io.brinfo
+   io.dmem.flush_pipe := io.exception
+
+
 
    //-------------------------------------------------------------
    // Debug & Counter outputs
