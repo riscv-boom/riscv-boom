@@ -192,6 +192,7 @@ class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer)
 
   dc_shim.io.core <> core.io.dmem
   dcachePorts += dc_shim.io.dmem
+  core.io.dc_perf <> dc_shim.io.dmem.perf
   //fpuOpt foreach { fpu => core.io.fpu <> fpu.io } RocketFpu - not needed in boom
   core.io.ptw <> ptw.io.dpath
   core.io.rocc := DontCare
