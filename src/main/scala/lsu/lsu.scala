@@ -101,7 +101,7 @@ class LoadStoreUnitIO(implicit p: Parameters) extends BoomBundle()(p)
 
    // Inform core of speculative load wakeups
    val mem_ldSpecWakeup   = Valid(UInt(PREG_SZ.W)) // do NOT send out FP loads.
-
+   val ld_miss            = Output(Bool())
 
    // Commit Stage
    val commit_store_mask  = Input(Vec(DISPATCH_WIDTH, Bool()))
@@ -723,10 +723,13 @@ class LoadStoreUnit(implicit p: Parameters,
       mem_ld_killed := true.B && mem_fired_ld
    }
 
+   // For speculative load wakeups and kills
    io.mem_ldSpecWakeup.valid := RegNext(will_fire_load_incoming
                                      && !io.exe.req.bits.uop.fp_val
                                      && io.exe.req.bits.uop.pdst =/= 0.U, init=false.B)
    io.mem_ldSpecWakeup.bits := mem_ld_uop.pdst
+
+   io.ld_miss := (io.nack.valid && io.nack.isload) || io.dmem.load_miss
 
    // tell the ROB to clear the busy bit on the incoming store
    val clr_bsy_valid = RegInit(false.B)
