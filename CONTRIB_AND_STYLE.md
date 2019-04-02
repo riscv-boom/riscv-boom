@@ -28,11 +28,14 @@ We have the following coding guidelines:
     * E.g. `RegisterFile`
 * If the variable is in a particular stage, please put the stage cycle it is associated with
     * E.g. `val f2_valid = Wire(...)`
-* Braces for control structures (`for`, `while`, `if`, `when`, etc...) should be on the same line as the condition
+* Braces for control structures (`for`, `while`, `if`, `when`, etc...) and functions should be on the same line as the condition
     * E.g. `for (i <- something) {`
-* Braces for classes should be on the next line
+    * E.g. `def foo(): Type = {`
+* Braces for classes and objects should be on the next line
     * ```
       class SomeModule extends Module
+      {
+      object SomeObject
       {
       ```
 * Things such as `else`, `.otherwise`, etc should be on the same line as the closing bracket of the previous scope
