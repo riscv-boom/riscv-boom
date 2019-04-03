@@ -757,8 +757,13 @@ class Rob(
 
    when (finished_committing_row)
    {
-      rob_head := WrapInc(rob_head, NUM_ROB_ROWS)
-      rob_deq := true.B
+      rob_head     := WrapInc(rob_head, NUM_ROB_ROWS)
+      rob_head_lsb := 0.U
+      rob_deq      := true.B
+   }
+   .elsewhen (io.commit.valids.asUInt =/= 0.U)
+   {
+      rob_head_lsb := (width-1).U - PriorityEncoder(Reverse(io.commit.valids.asUInt))
    }
 
    // -----------------------------------------------
@@ -816,11 +821,17 @@ class Rob(
 
    val rob_enq = WireInit(false.B)
 
+   // Rollback a row
    when (rob_state === s_rollback && (rob_tail =/= rob_head || maybe_full))
    {
       rob_tail     := WrapDec(rob_tail, NUM_ROB_ROWS)
-      rob_tail_lsb := 0.U
+      rob_tail_lsb := (width-1).U
       rob_deq := true.B
+   }
+   // Rollback a entry
+   .elsewhen (rob_state === s_rollback && (rob_tail === rob_head) && rob_tail_lsb =/= rob_head_lsb)
+   {
+      rob_tail_lsb := rob_tail_lsb - 1.U
    }
    .elsewhen (io.brinfo.mispredict)
    {
@@ -835,7 +846,7 @@ class Rob(
    }
    .elsewhen (io.enq_valids.asUInt =/= 0.U && io.enq_partial_stall)
    {
-      rob_tail_lsb := PriorityEncoder(~io.enq_valids.asUInt)
+      rob_tail_lsb := width.U - PriorityEncoder(Reverse(io.enq_valids.asUInt))
    }
 
 
@@ -943,7 +954,7 @@ class Rob(
          }
          is (s_rollback)
          {
-            when (rob_tail  === rob_head)
+            when (rob_tail_idx  === rob_head_idx)
             {
                rob_state := s_normal
             }
