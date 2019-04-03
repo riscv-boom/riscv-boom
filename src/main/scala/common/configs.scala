@@ -158,7 +158,7 @@ class WithSmallBooms extends Config((site, here, up) => {
          //gshare = Some(GShareParameters(history_length=12, num_sets=4096)),
          //tage = None,
          //bpdRandom = None,
-         nPerfCounters = 2),
+         nPerfCounters = 5),
       dcache = Some(DCacheParams(rowBits = site(SystemBusKey).beatBits, nSets=64, nWays=4, nMSHRs=2, nTLBEntries=8)),
       icache = Some(ICacheParams(rowBits = site(SystemBusKey).beatBits, nSets=64, nWays=4, fetchBytes=2*4))
       )}
