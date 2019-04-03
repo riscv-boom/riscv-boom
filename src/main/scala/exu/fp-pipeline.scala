@@ -211,7 +211,10 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
       // Wakeup signal is sent on cycle S0, write is now delayed until end of S1,
       // but Issue happens on S1 and RegRead doesn't happen until S2 so we're safe.
       // (for regreadlatency >0).
-      fregfile.io.write_ports(0) <> WritePort(RegNext(ll_wbarb.io.out), FPREG_SZ, fLen+1)
+      val write = Wire(chiselTypeOf(ll_wbarb.io.out))
+      write.bits := RegNext(ll_wbarb.io.out.bits)
+      write.valid := RegNext(ll_wbarb.io.out.valid)
+      fregfile.io.write_ports(0) <> WritePort(write, FPREG_SZ, fLen+1)
    }
    else
    {
