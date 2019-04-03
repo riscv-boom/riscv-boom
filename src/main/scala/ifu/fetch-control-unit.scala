@@ -248,9 +248,12 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
    assert(fetch_width >= 4 || !usingCompressed) // Logic gets kind of annoying with fetch_width = 2
    for (i <- 0 until fetch_width) {
       val bpd_decoder = Module(new BranchDecode)
+      bpd_decoder.suggestName("bpd_decoder")
+
       val is_valid = Wire(Bool())
       // hold either an rvc instruction (with extra bits) or full 32b instruction
       val inst = Wire(UInt()) // let the wire width be determined by chisel
+      dontTouch(inst)
 
       val startOffset = i*coreInstBits
 
@@ -366,7 +369,25 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
    val f3_btb_mask  = Wire(UInt(fetch_width.W))
    val f3_bpd_mask  = Wire(UInt(fetch_width.W))
 
-   when (f3_valid && f4_ready && !r_f4_req.valid) {
+   dontTouch(f3_bpd_predictions)
+   dontTouch(f3_bpd_br_taken)
+   //dontTouch(f3_bpd_br_idx)
+   //dontTouch(f3_bpd_target)
+   dontTouch(f3_bpd_btb_update_valid)
+   dontTouch(f3_bpd_may_redirect_taken)
+   dontTouch(f3_bpd_may_redirect_next)
+   dontTouch(f3_bpd_may_redirect)
+   dontTouch(f3_bpd_redirect_cfiidx)
+   dontTouch(f3_bpd_redirect_target)
+   dontTouch(f3_kill_mask)
+   dontTouch(f3_btb_mask)
+   dontTouch(f3_bpd_mask)
+
+   // signals to indicate that fb/ftq enqueues are valid
+   val f3_continue_to_f4_valid = f3_valid && f4_ready && !r_f4_req.valid
+   dontTouch(f3_continue_to_f4_valid)
+
+   when (f3_continue_to_f4_valid) {
       val last_idx  = Mux(inLastChunk(f3_fetch_bundle.pc) && icIsBanked.B,
                           (fetchWidth/2-1).U, (fetchWidth-1).U)
       prev_is_half := usingCompressed.B &&
@@ -393,9 +414,13 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
 
       // is the decoded instruction that the BTB predicts on always taken
       val f3_decode_always_taken = is_jalr(f3_btb_idx) || is_jal(f3_btb_idx) || is_ret(f3_btb_idx) || is_call(f3_btb_idx)
+      dontTouch(f3_decode_always_taken)
 
-      // if the decoded instruciton is not valid use the BTB's type to predict
-      val always_taken = Mux(f3_valid_mask(f3_btb_idx), f3_decode_always_taken, BpredType.isAlwaysTaken(f3_btb_resp.bits.bpd_type))
+      // problem... the inst is invalid since previous packet had a jal... thus this packet doesn't count
+      val use_decoded = f3_valid_mask(f3_btb_idx) && f3_continue_to_f4_valid // if the decoded instruciton is not valid use the BTB's type to predict
+      dontTouch(use_decoded)
+      val always_taken = Mux(use_decoded, f3_decode_always_taken, BpredType.isAlwaysTaken(f3_btb_resp.bits.bpd_type))
+      dontTouch(always_taken)
 
       assert(f3_aligned_pc === alignToFetchBoundary(f3_btb_resp.bits.fetch_pc), "[fetch-control-unit] BTB and F3 PC do not match")
 
@@ -426,7 +451,7 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
       "[fetch-control-unit] mutually-exclusive signals firing")
 
    // catch any BTB mispredictions (and fix-up missed JALs)
-   brchecker.io.valid := f3_valid
+   brchecker.io.valid := f3_continue_to_f4_valid // only want to be valid if the stage is moving on
    brchecker.io.inst_mask := VecInit(f3_imemresp.mask.toBools)
    brchecker.io.is_br  := is_br
    brchecker.io.is_jal := is_jal
@@ -447,6 +472,9 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
    val f3_bpd_overrides_bcheck = f3_bpd_may_redirect &&
                                  !jal_overrides_bpd &&
                                  (!brchecker.io.resp.valid || (f3_bpd_redirect_cfiidx < brchecker.io.resp_cfi_idx))
+   dontTouch(jal_overrides_bpd)
+   dontTouch(f3_bpd_overrides_bcheck)
+
    f3_req.valid := f3_valid &&
                    (brchecker.io.resp.valid || (f3_bpd_may_redirect && !jal_overrides_bpd)) // && !(f0_redirect_valid)
    f3_req.bits.addr := Mux(f3_bpd_overrides_bcheck, f3_bpd_redirect_target, brchecker.io.resp.bits.addr)
@@ -552,7 +580,7 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
    //-------------------------------------------------------------
 
    // Fetch Buffer
-   fb.io.enq.valid := f3_valid && !r_f4_req.valid && f4_ready && f3_fetch_bundle.mask =/= 0.U
+   fb.io.enq.valid := f3_continue_to_f4_valid && f3_fetch_bundle.mask =/= 0.U
    fb.io.enq.bits  := f3_fetch_bundle
    fb.io.clear := io.clear_fetchbuffer
 
@@ -569,7 +597,7 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
    // **** FetchTargetQueue ****
    //-------------------------------------------------------------
 
-   ftq.io.enq.valid := f3_valid && !r_f4_req.valid && f4_ready
+   ftq.io.enq.valid := f3_continue_to_f4_valid
    ftq.io.enq.bits.fetch_pc := f3_imemresp.pc
    ftq.io.enq.bits.history := io.f3_bpd_resp.bits.history
    ftq.io.enq.bits.bpd_info := io.f3_bpd_resp.bits.info

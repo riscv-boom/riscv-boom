@@ -214,7 +214,7 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
      val cfiTypeStrings = PrintUtil.CfiTypeChars(btb.io.btb_update.bits.cfi_type)
      val bpdTypeStrings = PrintUtil.BpdTypeChars(btb.io.btb_update.bits.bpd_type)
      printf("    Update: BTB: V:%c From:%c%c PC:0x%x TARG:0x%x T:%c BpdType:%c%c%c%c CfiType:%c%c%c%c\n",
-            PrintUtil.ConvertChar(io.br_unit_resp.btb_update.valid, 'V'),
+            PrintUtil.ConvertChar(btb.io.btb_update.valid, 'V'),
             PrintUtil.ConvertChar(io.br_unit_resp.btb_update.valid, 'B', 'F'),
             PrintUtil.ConvertChar(io.br_unit_resp.btb_update.valid, 'R', '3'),
             btb.io.btb_update.bits.pc,

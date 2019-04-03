@@ -352,6 +352,7 @@ trait RISCVConstants
    def ExpandRVC(inst: UInt)(implicit p: Parameters): UInt =
    {
       val rvc_exp = Module(new RVCExpander)
+      rvc_exp.suggestName("rvc_exp_helper")
       rvc_exp.io.in := inst
       Mux(rvc_exp.io.rvc, rvc_exp.io.out.bits, inst)
    }
@@ -373,10 +374,11 @@ trait RISCVConstants
    // Note: Accepts only EXPANDED rvc instructions
    def GetCfiType(inst: UInt)(implicit p: Parameters): UInt =
    {
-      val bdecode = Module(new boom.exu.BranchDecode)
-      bdecode.io.inst := inst
-      bdecode.io.pc := 0.U
-      bdecode.io.cfi_type
+      val br_decode = Module(new boom.exu.BranchDecode)
+      br_decode.suggestName("br_decode_helper")
+      br_decode.io.inst := inst
+      br_decode.io.pc := 0.U
+      br_decode.io.cfi_type
    }
 }
 
