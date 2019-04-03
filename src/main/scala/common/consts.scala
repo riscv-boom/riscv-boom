@@ -30,6 +30,7 @@ trait BOOMDebugConstants
    val COMMIT_LOG_PRINTF   = false // dump commit state, for comparision against ISA sim
    val O3PIPEVIEW_PRINTF   = false // dump trace for O3PipeView from gem5
    val O3_CYCLE_TIME       = (1000)// "cycle" time expected by o3pipeview.py
+   val BPU_PRINTF          = true  // debug printf's for just the bpu
 
    // When enabling DEBUG_PRINTF, the vertical whitespace can be padded out
    // such that viewing the *.out file in vim can line up veritically to
@@ -38,10 +39,11 @@ trait BOOMDebugConstants
    val debugScreenheight  = 79
 
    // turn off stuff to dramatically reduce Chisel node count
-   val DEBUG_PRINTF_LSU    = true && DEBUG_PRINTF
+   val DEBUG_PRINTF_LSU    = false && DEBUG_PRINTF
    val DEBUG_PRINTF_ROB    = true && DEBUG_PRINTF
-   val DEBUG_PRINTF_TAGE   = true && DEBUG_PRINTF
+   val DEBUG_PRINTF_TAGE   = false && DEBUG_PRINTF
    val DEBUG_PRINTF_FTQ    = true && DEBUG_PRINTF
+   val DEBUG_PRINTF_IQ     = false && DEBUG_PRINTF
 
    if (O3PIPEVIEW_PRINTF) require (!DEBUG_PRINTF && !COMMIT_LOG_PRINTF)
 }

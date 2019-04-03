@@ -1205,6 +1205,13 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    //-------------------------------------------------------------
    //-------------------------------------------------------------
 
+   if (BPU_PRINTF)
+   {
+      printf("--- Cycle=%d --- Retired Instrs=%d ----------------------------------------------\n",
+             debug_tsc_reg,
+             debug_irt_reg & (0xffffff).U)
+   }
+
    if (DEBUG_PRINTF)
    {
       println("\n Chisel Printout Enabled\n")
@@ -1344,30 +1351,28 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
                printf("(0x%x)", uop.inst)
             }
          }
+
          when (rob.io.commit.valids(w))
          {
+            printf("%d 0x%x ",
+                   priv,
+                   Sext(rob.io.commit.uops(w).pc(vaddrBits-1,0), xLen))
+            printf_inst(rob.io.commit.uops(w))
             when (rob.io.commit.uops(w).dst_rtype === RT_FIX && rob.io.commit.uops(w).ldst =/= 0.U)
             {
-               printf("%d 0x%x ",
-                  priv, Sext(rob.io.commit.uops(w).pc(vaddrBits-1,0), xLen))
-               printf_inst(rob.io.commit.uops(w))
                printf(" x%d 0x%x\n",
-                  rob.io.commit.uops(w).ldst, rob.io.commit.uops(w).debug_wdata)
+                      rob.io.commit.uops(w).ldst,
+                      rob.io.commit.uops(w).debug_wdata)
 
             }
             .elsewhen (rob.io.commit.uops(w).dst_rtype === RT_FLT)
             {
-               printf("%d 0x%x ",
-                  priv, Sext(rob.io.commit.uops(w).pc(vaddrBits-1,0), xLen))
-               printf_inst(rob.io.commit.uops(w))
                printf(" f%d 0x%x\n",
-                  rob.io.commit.uops(w).ldst, rob.io.commit.uops(w).debug_wdata)
+                      rob.io.commit.uops(w).ldst,
+                      rob.io.commit.uops(w).debug_wdata)
             }
             .otherwise
             {
-               printf("%d 0x%x ",
-                  priv, Sext(rob.io.commit.uops(w).pc(vaddrBits-1,0), xLen))
-               printf_inst(rob.io.commit.uops(w))
                printf("\n")
             }
          }

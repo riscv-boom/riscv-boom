@@ -165,7 +165,7 @@ abstract class IssueUnit(
       }
    }
 
-   if (DEBUG_PRINTF)
+   if (DEBUG_PRINTF_IQ)
    {
       printf(this.getType + " issue slots:\n")
       for (i <- 0 until num_issue_slots)

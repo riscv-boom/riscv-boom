@@ -25,6 +25,7 @@ import boom.bpu._
 import boom.common._
 import boom.exu.{BranchUnitResp, CommitExceptionSignals}
 import boom.lsu.{CanHaveBoomPTW, CanHaveBoomPTWModule}
+import boom.util.{PrintUtil}
 
 /**
  * Parameters to manage a L1 Banked ICache
@@ -161,7 +162,9 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   with HasL1ICacheBankedParameters
 {
   val io = IO(new BoomFrontendBundle(outer))
+
   implicit val edge = outer.masterNode.edges.out(0)
+
   require(fetchWidth*coreInstBytes == outer.icacheParams.fetchBytes)
 
   val icache = outer.icache.module
@@ -169,13 +172,13 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   val fetch_controller = Module(new FetchControlUnit(fetchWidth))
   val bpdpipeline = Module(new BranchPredictionStage(fetchWidth))
 
-  override def toString: String = bpdpipeline.toString + "\n" + icache.toString
-
   val s0_pc = Wire(UInt(vaddrBitsExtended.W))
   val s0_valid = fetch_controller.io.imem_req.valid || fetch_controller.io.imem_resp.ready
+
   val s1_valid = RegNext(s0_valid)
   val s1_pc = Reg(UInt(vaddrBitsExtended.W))
   val s1_speculative = Reg(Bool())
+
   val s2_valid = RegInit(false.B)
   val s2_pc = RegInit(t = UInt(vaddrBitsExtended.W), alignPC(io.reset_vector))
   val s2_btb_resp_valid = if (usingBTB) Reg(Bool()) else false.B
@@ -184,25 +187,29 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   val s2_tlb_resp = Reg(new TLBResp())
   val s2_xcpt = s2_tlb_resp.ae.inst || s2_tlb_resp.pf.inst
   val s2_speculative = RegInit(false.B)
-  val s2_partial_insn_valid = RegInit(false.B)
-  val s2_partial_insn = Reg(UInt(coreInstBits.W))
-  val wrong_path = Reg(Bool())
 
   val s1_base_pc = alignToFetchBoundary(s1_pc)
-  val ntpc = nextFetchStart(s1_base_pc)
-  val predicted_npc = WireInit(ntpc)
+  val s1_next_pc = nextFetchStart(s1_base_pc)
+  val predicted_npc = WireInit(s1_next_pc)
   val predicted_taken = WireInit(false.B)
 
+  // replay s2 to s0 or just use the NPC
   val s2_replay = Wire(Bool())
   s2_replay := (s2_valid && !fetch_controller.io.imem_resp.fire()) || RegNext(s2_replay && !s0_valid, true.B)
   val npc = Mux(s2_replay, s2_pc, predicted_npc)
 
   s1_pc := s0_pc
+
   // consider RVC fetches across blocks to be non-speculative if the first
   // part was non-speculative
-  val s0_speculative =
-    if (usingCompressed) s1_speculative || s2_valid && !s2_speculative || predicted_taken
-    else true.B
+  val s0_speculative = if (usingCompressed)
+  {
+    s1_speculative || s2_valid && !s2_speculative || predicted_taken
+  }
+  else
+  {
+    true.B
+  }
   s1_speculative := Mux(fetch_controller.io.imem_req.valid,
                         fetch_controller.io.imem_req.bits.speculative,
                         Mux(s2_replay, s2_speculative, s0_speculative))
@@ -215,6 +222,27 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
     s2_pc := s1_pc
     s2_speculative := s1_speculative
     s2_tlb_resp := tlb.io.resp
+  }
+
+  if (BPU_PRINTF)
+  {
+    printf("---------------------------------------------------------------------------------------------------------------------\n")
+    printf("Frontend:\n")
+    printf("    S0: V:%c From:%c PC:0x%x Spec?:%c\n",
+           PrintUtil.ConvertChar(s0_valid, 'V'),
+           PrintUtil.ConvertChar(fetch_controller.io.imem_req.valid, 'I', 'N'),
+           s0_pc,
+           PrintUtil.ConvertChar(s0_speculative, 'S'))
+    printf("    S1: V:%c PC:0x%x Spec?:%c\n",
+           PrintUtil.ConvertChar(s1_valid, 'V'),
+           s1_pc,
+           PrintUtil.ConvertChar(s1_speculative, 'S'))
+    printf("    S2: Redir:%c Replay:%c V:%c PC:0x%x Spec?:%c\n",
+           PrintUtil.ConvertChar(s2_redirect, 'R'),
+           PrintUtil.ConvertChar(s2_replay, 'R'),
+           PrintUtil.ConvertChar(s2_valid, 'V'),
+           s2_pc,
+           PrintUtil.ConvertChar(s2_speculative, 'S'))
   }
 
   io.ptw <> tlb.io.ptw
@@ -250,7 +278,10 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   fetch_controller.io.imem_resp.bits.btb := s2_btb_resp_bits
   fetch_controller.io.imem_resp.bits.btb.taken := s2_btb_taken
   fetch_controller.io.imem_resp.bits.xcpt := s2_tlb_resp
-  when (icache.io.resp.valid && icache.io.resp.bits.ae) { fetch_controller.io.imem_resp.bits.xcpt.ae.inst := true.B }
+  when (icache.io.resp.valid && icache.io.resp.bits.ae)
+  {
+    fetch_controller.io.imem_resp.bits.xcpt.ae.inst := true.B
+  }
 
   //-------------------------------------------------------------
   // **** Fetch Controller ****
@@ -324,6 +355,8 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 
   def ccover(cond: Bool, label: String, desc: String)(implicit sourceInfo: SourceInfo) =
     cover(cond, s"FRONTEND_$label", "Rocket;;" + desc)
+
+  override def toString: String = bpdpipeline.toString + "\n" + icache.toString
 }
 
 /**

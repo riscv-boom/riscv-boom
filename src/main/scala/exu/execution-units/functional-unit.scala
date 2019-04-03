@@ -200,7 +200,7 @@ class BrResolutionInfo(implicit p: Parameters) extends BoomBundle()(p)
  */
 class BranchUnitResp(implicit p: Parameters) extends BoomBundle()(p)
 {
-   val take_pc         = Bool()
+   val take_pc         = Bool() // redirect the frontend
    val target          = UInt(vaddrBitsExtended.W) // TODO XXX REMOVE this -- use FTQ to redirect instead
 
    val pc              = UInt(vaddrBitsExtended.W) // TODO this isn't really a branch_unit thing
@@ -337,8 +337,8 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1, data_width: 
       val curr_pc = (AlignPCToBoundary(io.get_ftq_pc.fetch_pc, icBlockBytes)
                    + io.req.bits.uop.pc_lob
                    - Mux(io.req.bits.uop.edge_inst, 2.U, 0.U))
-      op1_data = Mux(io.req.bits.uop.ctrl.op1_sel.asUInt === OP1_RS1 , io.req.bits.rs1_data,
-                 Mux(io.req.bits.uop.ctrl.op1_sel.asUInt === OP1_PC  , Sext(curr_pc, xLen),
+      op1_data = Mux(io.req.bits.uop.ctrl.op1_sel.asUInt === OP1_RS1, io.req.bits.rs1_data,
+                     Mux(io.req.bits.uop.ctrl.op1_sel.asUInt === OP1_PC, Sext(curr_pc, xLen),
                                                                        0.U))
    }
    else
@@ -349,10 +349,10 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1, data_width: 
 
    // operand 2 select
    val op2_data = Mux(io.req.bits.uop.ctrl.op2_sel === OP2_IMM,  Sext(imm_xprlen.asUInt, xLen),
-                  Mux(io.req.bits.uop.ctrl.op2_sel === OP2_IMMC, io.req.bits.uop.pop1(4,0),
-                  Mux(io.req.bits.uop.ctrl.op2_sel === OP2_RS2 , io.req.bits.rs2_data,
-                  Mux(io.req.bits.uop.ctrl.op2_sel === OP2_NEXT, Mux(io.req.bits.uop.is_rvc, 2.U, 4.U),
-                                                                 0.U))))
+                      Mux(io.req.bits.uop.ctrl.op2_sel === OP2_IMMC, io.req.bits.uop.pop1(4,0),
+                          Mux(io.req.bits.uop.ctrl.op2_sel === OP2_RS2 , io.req.bits.rs2_data,
+                              Mux(io.req.bits.uop.ctrl.op2_sel === OP2_NEXT, Mux(io.req.bits.uop.is_rvc, 2.U, 4.U),
+                                  0.U))))
 
    val alu = Module(new freechips.rocketchip.rocket.ALU())
 
@@ -493,18 +493,18 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1, data_width: 
             mispredict :=
                Mux(uop.br_prediction.btb_blame,
                   btb_mispredict,
-               Mux(uop.br_prediction.bpd_blame,
-                  bpd_mispredict,
-                  false.B)) // if neither BTB nor BPD predicted and it's not-taken, then no misprediction occurred.
+                  Mux(uop.br_prediction.bpd_blame,
+                     bpd_mispredict,
+                     false.B)) // if neither BTB nor BPD predicted and it's not-taken, then no misprediction occurred.
          }
          when (pc_sel === PC_BRJMP)
          {
             mispredict :=
                Mux(uop.br_prediction.btb_blame,
                   btb_mispredict,
-               Mux(uop.br_prediction.bpd_blame,
-                  bpd_mispredict,
-                  true.B)) // if neither BTB nor BPD predicted and it's taken, then a misprediction occurred.
+                  Mux(uop.br_prediction.bpd_blame,
+                     bpd_mispredict,
+                     true.B)) // if neither BTB nor BPD predicted and it's taken, then a misprediction occurred.
 
          }
       }
@@ -538,8 +538,8 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1, data_width: 
       brinfo.stq_idx        := uop.stq_idx
       brinfo.is_jr          := pc_sel === PC_JALR
       brinfo.cfi_type       := Mux(uop.is_jal, CfiType.JAL,
-                               Mux(pc_sel === PC_JALR, CfiType.JALR,
-                               Mux(uop.is_br_or_jmp, CfiType.BRANCH, CfiType.NONE)))
+                                   Mux(pc_sel === PC_JALR, CfiType.JALR,
+                                       Mux(uop.is_br_or_jmp, CfiType.BRANCH, CfiType.NONE)))
       brinfo.taken          := is_taken
       brinfo.btb_mispredict := btb_mispredict
       brinfo.bpd_mispredict := bpd_mispredict
@@ -570,13 +570,13 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1, data_width: 
       br_unit.btb_update.bits.taken   := is_taken   // was this branch/jal/jalr "taken"
       br_unit.btb_update.bits.cfi_type :=
             Mux(uop.is_jal, CfiType.JAL,
-            Mux(uop.is_jump && !uop.is_jal, CfiType.JALR,
-                CfiType.BRANCH))
+                Mux(uop.is_jump && !uop.is_jal, CfiType.JALR,
+                    CfiType.BRANCH))
       br_unit.btb_update.bits.bpd_type :=
             Mux(uop.is_ret, BpredType.RET,
-            Mux(uop.is_call, BpredType.CALL,
-            Mux(uop.is_jump, BpredType.JUMP,
-                BpredType.BRANCH)))
+                Mux(uop.is_call, BpredType.CALL,
+                    Mux(uop.is_jump, BpredType.JUMP,
+                        BpredType.BRANCH)))
 
       // Branch/Jump Target Calculation
       // we can't push this through the ALU though, b/c jalr needs both PC+4 and rs1+offset
@@ -612,6 +612,29 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1, data_width: 
       br_unit.xcpt.bits.badvaddr:= bj_addr
 
       io.br_unit := br_unit
+
+      if (BPU_PRINTF)
+      {
+        printf("BR Unit:\n")
+        printf("    TakePC:%c TARG:0x%x PC:0x%x\n",
+               PrintUtil.ConvertChar(br_unit.take_pc, 'T'),
+               br_unit.target,
+               br_unit.pc)
+        val cfiTypeStrings = PrintUtil.CfiTypeChars(brinfo.cfi_type)
+        printf("    BR Resolution Info:\n")
+        printf("        V:%c Mispred:%c CfiType:%c%c%c%c T:%c BTB:(Mispred:%c Blame:%c) BPD:(Mispred:%c Blame:%c)\n",
+               PrintUtil.ConvertChar(brinfo.valid, 'V'),
+               PrintUtil.ConvertChar(brinfo.mispredict, 'M'),
+               cfiTypeStrings(0),
+               cfiTypeStrings(1),
+               cfiTypeStrings(2),
+               cfiTypeStrings(3),
+               PrintUtil.ConvertChar(brinfo.taken, 'T'),
+               PrintUtil.ConvertChar(brinfo.btb_mispredict, 'M'),
+               PrintUtil.ConvertChar(brinfo.btb_made_pred, 'B'),
+               PrintUtil.ConvertChar(brinfo.bpd_mispredict, 'M'),
+               PrintUtil.ConvertChar(brinfo.bpd_made_pred, 'B'))
+      }
    }
 
    // Response

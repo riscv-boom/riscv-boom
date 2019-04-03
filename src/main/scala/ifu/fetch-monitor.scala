@@ -56,19 +56,19 @@ class FetchMonitor(implicit p: Parameters) extends BoomModule()(p)
    // What is the target of the previous PC if a CFI.
    var prev_target = WireInit(0.U(vaddrBitsExtended.W))
 
-   if (DEBUG_PRINTF)
-   {
-      printf("FetchMonitor:\n")
-      printf("    Fetch4:\n")
-      for ((uop,i) <- io.uops.zipWithIndex)
-      {
-         printf("        UOP[%d]: Fire:%c V:%c PC:0x%x\n",
-                i.U,
-                PrintUtil.ConvertChar(io.fire, 'F'),
-                PrintUtil.ConvertChar(uop.valid, 'V'),
-                uop.pc)
-      }
-   }
+   //if (DEBUG_PRINTF)
+   //{
+   //   printf("FetchMonitor:\n")
+   //   printf("    Fetch4:\n")
+   //   for ((uop,i) <- io.uops.zipWithIndex)
+   //   {
+   //      printf("        UOP[%d]: Fire:%c V:%c PC:0x%x\n",
+   //             i.U,
+   //             PrintUtil.ConvertChar(io.fire, 'F'),
+   //             PrintUtil.ConvertChar(uop.valid, 'V'),
+   //             uop.pc)
+   //   }
+   //}
 
    for (uop <- io.uops)
    {

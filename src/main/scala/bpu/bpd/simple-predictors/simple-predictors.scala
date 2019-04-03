@@ -29,13 +29,11 @@ import boom.util.ElasticReg
 /**
  * A null branch predictor that makes no predictions
  *
- * @param fetch_width # of instructions fetched
  * @param history_length length of the BHR in bits
  */
 class NullBrPredictor(
-   fetch_width: Int,
    history_length: Int = 12
-   )(implicit p: Parameters) extends BoomBrPredictor(fetch_width, history_length)(p)
+   )(implicit p: Parameters) extends BoomBrPredictor(history_length)(p)
 {
    override def toString: String = "   ==Null BPU==" +
      "\n   Building (0 kB) Null Predictor (never predict)."
@@ -66,12 +64,9 @@ object RandomBrPredictor
 
 /**
  * Class to create a Random predictor that generates random predictions. Good for testing!
- *
- * @param fetch_width # of instructions fetched
  */
 class RandomBrPredictor(
-   fetch_width: Int
-   )(implicit p: Parameters) extends BoomBrPredictor(fetch_width, history_length = 1)(p)
+   )(implicit p: Parameters) extends BoomBrPredictor(history_length = 1)(p)
 {
    override def toString: String = "   ==Random BPU==" +
      "\n  Building Random Branch Predictor."
@@ -85,5 +80,5 @@ class RandomBrPredictor(
    }
 
    io.resp.valid := rand_val
-   io.resp.bits.takens := rand(fetch_width)
+   io.resp.bits.takens := rand(fetchWidth)
 }

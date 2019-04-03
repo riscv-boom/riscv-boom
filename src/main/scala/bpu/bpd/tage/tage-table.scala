@@ -153,7 +153,6 @@ class TageTableWrite(val fetch_width: Int, val index_sz: Int, val tag_sz: Int, v
  * track the max_* size of the parameters, and then within the TageTable we must
  * mask off extra bits as needed.
  *
- * @param fetch_width # of instructions fetched
  * @param num_entries number of entries in a singular TAGE table
  * @param tag_sz size of the tag per entry
  * @param max_num_entries max number of entries in all tables
@@ -164,7 +163,6 @@ class TageTableWrite(val fetch_width: Int, val index_sz: Int, val tag_sz: Int, v
  * @param history_length history length that this table uses
  */
 class TageTable(
-   fetch_width: Int,
    num_entries: Int,
    tag_sz: Int,
    max_num_entries: Int,
@@ -177,7 +175,7 @@ class TageTable(
 {
    val index_sz = log2Ceil(num_entries)
 
-   val io = IO(new TageTableIo(fetch_width, index_sz, tag_sz, cntr_sz, ubit_sz))
+   val io = IO(new TageTableIo(fetchWidth, index_sz, tag_sz, cntr_sz, ubit_sz))
 
    private val CNTR_MAX = ((1 << cntr_sz) - 1).U
    private val CNTR_WEAK_TAKEN = (1 << (cntr_sz-1)).U
@@ -242,7 +240,7 @@ class TageTable(
    // State
 
    // TODO add banking
-   val ram = SyncReadMem(num_entries, new TageTableEntry(fetch_width, tag_sz, cntr_sz, ubit_sz))
+   val ram = SyncReadMem(num_entries, new TageTableEntry(fetchWidth, tag_sz, cntr_sz, ubit_sz))
    ram.suggestName("TageTableDataArray")
 
    //------------------------------------------------------------
@@ -276,7 +274,7 @@ class TageTable(
       val taken      = io.write.bits.taken
       val mispredict = io.write.bits.mispredict
 
-      val wentry = Wire(new TageTableEntry(fetch_width, tag_sz, cntr_sz, ubit_sz))
+      val wentry = Wire(new TageTableEntry(fetchWidth, tag_sz, cntr_sz, ubit_sz))
 
       when (fsm_state === s_clear)
       {

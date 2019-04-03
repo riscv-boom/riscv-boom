@@ -134,7 +134,6 @@ object TageBrPredictor
  * @param ubit_sz size of the usefulness counter in bits
  */
 class TageBrPredictor(
-   fetch_width: Int,
    num_tables: Int,
    table_sizes: Seq[Int],
    history_lengths: Seq[Int],
@@ -143,7 +142,6 @@ class TageBrPredictor(
    ubit_sz: Int
    )(implicit p: Parameters)
    extends BoomBrPredictor(
-      fetch_width    = fetch_width,
       history_length = history_lengths.max)(p)
 {
    val size_in_bits = (for (i <- 0 until num_tables) yield
@@ -194,10 +192,10 @@ class TageBrPredictor(
    // of all zeroes.
    private def GetPredictionOH(cidx: UInt, cntr: UInt): UInt =
    {
-      val mask_oh = Wire(UInt(fetch_width.W))
+      val mask_oh = Wire(UInt(fetchWidth.W))
       // Check high-order bit for prediction.
       val taken = cntr(cntr_sz-1)
-      mask_oh := UIntToOH(cidx) & Fill(fetch_width, taken)
+      mask_oh := UIntToOH(cidx) & Fill(fetchWidth, taken)
       mask_oh
    }
 
@@ -228,7 +226,6 @@ class TageBrPredictor(
    val tables = for (i <- 0 until num_tables) yield
    {
       val table = Module(new TageTable(
-         fetch_width        = fetch_width,
          id                 = i,
          num_entries        = table_sizes(i),
          history_length     = history_lengths(i),
@@ -271,7 +268,7 @@ class TageBrPredictor(
    val q_f3_resps = for (i <- 0 until num_tables) yield
    {
       val q_resp = withReset(reset.toBool || io.fe_clear || io.f4_redirect)
-       {Module(new ElasticReg(Valid(new TageTableResp(fetch_width, tag_sizes.max, cntr_sz, ubit_sz))))}
+       {Module(new ElasticReg(Valid(new TageTableResp(fetchWidth, tag_sizes.max, cntr_sz, ubit_sz))))}
 
       q_resp.io.enq.valid := io.f2_valid
       q_resp.io.enq.bits := tables_io(i).bp2_resp
@@ -301,18 +298,18 @@ class TageBrPredictor(
    }
 
    // Vector/bit-mask of taken/not-taken predictions.
-   val f3_takens = WireInit(VecInit(Seq.fill(fetch_width) { false.B }))
+   val f3_takens = WireInit(VecInit(Seq.fill(fetchWidth) { false.B }))
    // Vector of best predictors (one for each cfi index).
-   val f3_best_hits = WireInit(VecInit(Seq.fill(fetch_width) { false.B }))
-   val f3_best_ids  = Wire(Vec(fetch_width, UInt(log2Ceil(num_tables).W)))
+   val f3_best_hits = WireInit(VecInit(Seq.fill(fetchWidth) { false.B }))
+   val f3_best_ids  = Wire(Vec(fetchWidth, UInt(log2Ceil(num_tables).W)))
    // Vector of alt predictors (one for each cfi index).
-   val f3_alt_hits  = WireInit(VecInit(Seq.fill(fetch_width) { false.B }))
-   val f3_alt_ids   = Wire(Vec(fetch_width, UInt(log2Ceil(num_tables).W)))
+   val f3_alt_hits  = WireInit(VecInit(Seq.fill(fetchWidth) { false.B }))
+   val f3_alt_ids   = Wire(Vec(fetchWidth, UInt(log2Ceil(num_tables).W)))
 
    // Build up a bit-mask of taken predictions (1 bit per cfi index).
    // Build up a best predictor (one per cfi index).
    // Build up an alt predictor (one per cfi index).
-   for (w <- 0 until fetch_width) yield
+   for (w <- 0 until fetchWidth) yield
    {
       val found_first = f3_hits_matrix.map{mask => mask(w)}.reduce(_|_)
 
@@ -346,7 +343,7 @@ class TageBrPredictor(
          PriorityEncoder(f3_best_hits)) // TODO allow use_alt
 
    val resp_info = Wire(new TageResp(
-      fetch_width = fetch_width,
+      fetch_width = fetchWidth,
       num_tables = num_tables,
       max_history_length = history_lengths.max,
       max_index_sz = log2Ceil(table_sizes.max),
@@ -388,7 +385,7 @@ class TageBrPredictor(
 
    val r_commit = RegNext(io.commit)
    val r_info = (r_commit.bits.info).asTypeOf(new TageResp(
-      fetch_width = fetch_width,
+      fetch_width = fetchWidth,
       num_tables = num_tables,
       max_history_length = history_lengths.max,
       max_index_sz = log2Ceil(table_sizes.max),
@@ -485,7 +482,7 @@ class TageBrPredictor(
       when (table_wens(i))
       {
          // construct old entry so we can overwrite parts without having to do a RMW.
-         val com_entry = Wire(new TageTableEntry(fetch_width, tag_sizes.max, cntr_sz, ubit_sz))
+         val com_entry = Wire(new TageTableEntry(fetchWidth, tag_sizes.max, cntr_sz, ubit_sz))
          com_entry.tag  := Mux(table_allocates(i), com_tags(i), r_info.tags(i))
          com_entry.cntr := r_info.cntrs(i)
          com_entry.cidx := Mux(table_allocates(i), r_commit.bits.miss_cfi_idx,  r_info.cidxs(i))

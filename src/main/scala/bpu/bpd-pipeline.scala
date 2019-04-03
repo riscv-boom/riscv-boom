@@ -199,6 +199,55 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
              btb.io.resp.bits.target)
    }
 
+   if (BPU_PRINTF)
+   {
+     printf("BPD Pipeline:\n")
+     printf("    Fetch0: BTB: Req:(V:%c PC:0x%x)\n",
+            PrintUtil.ConvertChar(btb.io.req.valid, 'V'),
+            btb.io.req.bits.addr)
+     printf("    Fetch2: BTB: Resp:(V:%c T:%c ReqPC:0x%x TARG:0x%x)\n",
+            PrintUtil.ConvertChar(btb.io.resp.valid, 'V'),
+            PrintUtil.ConvertChar(btb.io.resp.bits.taken, 'T'),
+            btb.io.resp.bits.fetch_pc,
+            btb.io.resp.bits.target)
+
+     val cfiTypeStrings = PrintUtil.CfiTypeChars(btb.io.btb_update.bits.cfi_type)
+     val bpdTypeStrings = PrintUtil.BpdTypeChars(btb.io.btb_update.bits.bpd_type)
+     printf("    Update: BTB: V:%c From:%c%c PC:0x%x TARG:0x%x T:%c BpdType:%c%c%c%c CfiType:%c%c%c%c\n",
+            PrintUtil.ConvertChar(io.br_unit_resp.btb_update.valid, 'V'),
+            PrintUtil.ConvertChar(io.br_unit_resp.btb_update.valid, 'B', 'F'),
+            PrintUtil.ConvertChar(io.br_unit_resp.btb_update.valid, 'R', '3'),
+            btb.io.btb_update.bits.pc,
+            btb.io.btb_update.bits.target,
+            PrintUtil.ConvertChar(btb.io.btb_update.bits.taken, 'T'),
+            bpdTypeStrings(0),
+            bpdTypeStrings(1),
+            bpdTypeStrings(2),
+            bpdTypeStrings(3),
+            cfiTypeStrings(0),
+            cfiTypeStrings(1),
+            cfiTypeStrings(2),
+            cfiTypeStrings(3))
+     printf("            RAS: V:%c Call?:%c Ret?:%c RetAddr:0x%x\n",
+            PrintUtil.ConvertChar(btb.io.ras_update.valid, 'V'),
+            PrintUtil.ConvertChar(btb.io.ras_update.bits.is_call, 'C'),
+            PrintUtil.ConvertChar(btb.io.ras_update.bits.is_ret, 'R'),
+            btb.io.ras_update.bits.return_addr)
+     printf("            BIM: V:%c EntryIdx:%d Cntr:%d Mispred:%c T:%c\n",
+            PrintUtil.ConvertChar(btb.io.bim_update.valid, 'V'),
+            btb.io.bim_update.bits.entry_idx,
+            btb.io.bim_update.bits.cntr_value,
+            PrintUtil.ConvertChar(btb.io.bim_update.bits.mispredicted, 'M'),
+            PrintUtil.ConvertChar(btb.io.bim_update.bits.taken, 'T'))
+     printf("            BPD: V:%c PC:0x%x Hist:0x%x Mispred:%c MissCfiIdx:%x T:%c +PriorInfo\n",
+            PrintUtil.ConvertChar(bpd.io.commit.valid, 'V'),
+            bpd.io.commit.bits.fetch_pc,
+            bpd.io.commit.bits.history,
+            PrintUtil.ConvertChar(bpd.io.commit.bits.mispredict, 'M'),
+            bpd.io.commit.bits.miss_cfi_idx,
+            PrintUtil.ConvertChar(bpd.io.commit.bits.taken, 'T'))
+   }
+
    //************************************************
    // asserts
 

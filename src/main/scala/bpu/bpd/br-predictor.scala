@@ -31,7 +31,7 @@ import freechips.rocketchip.rocket.RocketCoreParams
 import boom.common._
 import boom.exu._
 import boom.exu.BranchUnitResp
-import boom.util.ElasticReg
+import boom.util.{ElasticReg, PrintUtil}
 
 /**
  * This is the response packet from the branch predictor. The predictor is
@@ -93,11 +93,9 @@ class RestoreHistory(implicit p: Parameters) extends BoomBundle()(p)
  * Abstract top level branch predictor class. Exposes the necessary signals for different
  * branch predictor types to be instantiated into BOOM.
  *
- * @param fetch_width # of instructions fetched
  * @param history_length length of the GHR
  */
 abstract class BoomBrPredictor(
-   fetch_width: Int,
    val history_length: Int
    )(implicit p: Parameters) extends BoomModule()(p)
 {
@@ -128,7 +126,7 @@ abstract class BoomBrPredictor(
       // A BIM table is shared with the BTB and accessed in F1. Let's use this as our base predictor, if desired.
       val f2_bim_resp = Flipped(Valid(new BimResp))
 
-      val f3_is_br = Input(Vec(fetch_width, Bool()))
+      val f3_is_br = Input(Vec(fetchWidth, Bool()))
 
       // Restore history on a F2 redirection (and clear out appropriate state).
       // Don't provide history since we have it ourselves.
@@ -157,25 +155,9 @@ abstract class BoomBrPredictor(
       val status_prv = Input(UInt(freechips.rocketchip.rocket.PRV.SZ.W))
    })
 
-   val r_f1_fetchpc = RegEnable(io.req.bits.addr, io.req.valid)
-
-   // The global history register  that will be hashed with the fetch-pc to
-   // compute tags and indices for our branch predictors.
-   val f0_history   = Wire(UInt(history_length.W))
-   val new_history  = Wire(UInt(history_length.W))
-   val r_f1_history = RegInit(0.U(history_length.W))
-   val r_f2_history = RegInit(0.U(history_length.W))
-   val r_f4_history = RegInit(0.U(history_length.W))
-
-   // match the other ERegs in the FrontEnd.
-   val q_f3_history = withReset(reset.toBool || io.fe_clear || io.f4_redirect)
-      { Module(new ElasticReg(UInt(history_length.W))) }
-
-   require (history_length == GLOBAL_HISTORY_LENGTH)
-
-   //************************************************
-   // Branch Prediction (F0 Stage)
-
+   /**
+    * Hash input history with an address
+    */
    private def UpdateHistoryHash(old: UInt, addr: UInt): UInt =
    {
       val ret = Wire(UInt(history_length.W))
@@ -204,13 +186,31 @@ abstract class BoomBrPredictor(
       }
    }
 
+   val r_f1_fetchpc = RegEnable(io.req.bits.addr, io.req.valid)
+
+   // The global history register  that will be hashed with the fetch-pc to
+   // compute tags and indices for our branch predictors.
+   val f0_history   = Wire(UInt(history_length.W))
+   val new_history  = Wire(UInt(history_length.W))
+   val r_f1_history = RegInit(0.U(history_length.W))
+   val r_f2_history = RegInit(0.U(history_length.W))
+   val r_f4_history = RegInit(0.U(history_length.W))
+
+   // match the other ERegs in the FrontEnd.
+   val q_f3_history = withReset(reset.toBool || io.fe_clear || io.f4_redirect)
+      { Module(new ElasticReg(UInt(history_length.W))) }
+
+   require (history_length == GLOBAL_HISTORY_LENGTH)
+
+   //************************************************
+   // Branch Prediction (F0 Stage)
+
    // As predictions come in (or pipelines are flushed/replayed), we need to correct the history.
-   f0_history :=
-      Mux(io.ftq_restore.valid,
-         io.ftq_restore.bits.history,
-      Mux(io.f4_redirect,
-         r_f4_history,
-         r_f1_history)) // valid for f2_redirect
+   f0_history := Mux(io.ftq_restore.valid,
+                     io.ftq_restore.bits.history,
+                     Mux(io.f4_redirect,
+                         r_f4_history,
+                         r_f1_history)) // valid for f2_redirect
 
    // Hash target into history.
    new_history := UpdateHistoryHash(f0_history, io.req.bits.addr)
@@ -226,16 +226,15 @@ abstract class BoomBrPredictor(
       (io.f4_redirect && io.f4_taken) ||
       io.f2_redirect
 
-   r_f1_history :=
-      Mux(io.f2_replay,
-         r_f2_history,
-      Mux(io.ftq_restore.valid && !io.ftq_restore.bits.taken,
-         io.ftq_restore.bits.history,
-      Mux(io.f4_redirect && !io.f4_taken,
-         r_f4_history,
-      Mux(use_new_hash,
-         new_history,
-         r_f1_history))))
+   r_f1_history := Mux(io.f2_replay,
+                       r_f2_history,
+                       Mux(io.ftq_restore.valid && !io.ftq_restore.bits.taken,
+                           io.ftq_restore.bits.history,
+                           Mux(io.f4_redirect && !io.f4_taken,
+                               r_f4_history,
+                               Mux(use_new_hash,
+                                   new_history,
+                                   r_f1_history))))
 
    assert (!io.f2_redirect || r_f2_history === r_f1_history,
       "[bpd] if a F2 redirect occurs, F2-hist should equal F1-hist.")
@@ -266,6 +265,18 @@ abstract class BoomBrPredictor(
    {
       r_f4_history := q_f3_history.io.deq.bits
    }
+
+   if (BPU_PRINTF)
+   {
+     printf("BrPredictor:\n")
+     printf("    F0_Hist:0x%x F1_Hist:0x%x F2_Hist:0x%x F3_Hist:(V:%c Hist:0x%x) F4_Hist:0x%x\n",
+            f0_history,
+            r_f1_history,
+            r_f2_history,
+            PrintUtil.ConvertChar(q_f3_history.io.deq.valid, 'V'),
+            q_f3_history.io.deq.bits,
+            r_f4_history)
+   }
 }
 
 /**
@@ -283,7 +294,6 @@ object BoomBrPredictor
    {
       val boomParams: BoomCoreParams = p(freechips.rocketchip.tile.TileKey).core.asInstanceOf[BoomCoreParams]
 
-      val fetch_width = boomParams.fetchWidth
       val enableCondBrPredictor = boomParams.enableBranchPredictor
 
       var br_predictor: BoomBrPredictor = null
@@ -301,19 +311,16 @@ object BoomBrPredictor
       {
         if (useBaseOnly)
         {
-           br_predictor = Module(new BaseOnlyBrPredictor(
-              fetch_width = fetch_width))
+           br_predictor = Module(new BaseOnlyBrPredictor())
         }
         else if (useGshare)
         {
            br_predictor = Module(new GShareBrPredictor(
-              fetch_width = fetch_width,
               history_length = boomParams.gshare.get.history_length))
         }
         else if (useTage)
         {
            br_predictor = Module(new TageBrPredictor(
-              fetch_width = fetch_width,
               num_tables = boomParams.tage.get.num_tables,
               table_sizes = boomParams.tage.get.table_sizes,
               history_lengths = boomParams.tage.get.history_lengths,
@@ -323,14 +330,12 @@ object BoomBrPredictor
         }
         else if (useRandom)
         {
-           br_predictor = Module(new RandomBrPredictor(
-              fetch_width = fetch_width))
+           br_predictor = Module(new RandomBrPredictor())
         }
       }
       else
       {
          br_predictor = Module(new NullBrPredictor(
-            fetch_width = fetch_width,
             history_length = 1))
       }
 

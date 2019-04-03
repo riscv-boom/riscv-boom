@@ -95,6 +95,15 @@ class BTBsa(implicit p: Parameters) extends BoomBTB
    val clear_valid = WireInit(false.B)
    val clear_idx = s1_idx
 
+   if (DEBUG_PRINTF)
+   {
+     printf("BTB-SA:\n")
+   }
+   if (BPU_PRINTF)
+   {
+     printf("BTB-SA:\n")
+   }
+
    for (way <- 0 until nWays)
    {
      val wen = update_valid && way_wen(way)
@@ -131,9 +140,21 @@ class BTBsa(implicit p: Parameters) extends BoomBTB
         valids := valids.bitSet(clear_idx, false.B)
      }
 
+     if (BPU_PRINTF)
+     {
+       when (wen)
+       {
+         printf("    Write to (Idx:%d Way:%d) <- ((PC:0x%x Tag:0x%x) TARG:0x%x)\n",
+           widx,
+           way.U,
+           r_btb_update.bits.pc,
+           wtag,
+           r_btb_update.bits.target)
+       }
+     }
+
      if (DEBUG_PRINTF)
      {
-       printf("BTB-SA:\n")
        printf("    Write (%c): (TAG[%d][%d] <- 0x%x) (PC:0x%x TARG:0x%x)\n",
          PrintUtil.ConvertChar(wen, 'W'),
          way.U,
@@ -142,17 +163,17 @@ class BTBsa(implicit p: Parameters) extends BoomBTB
          r_btb_update.bits.pc,
          r_btb_update.bits.target)
 
-       for (set <- 0 until nSets)
-       {
-         printf("        BTB-ARRAY[%d][%d]: V:%c TAG:0x%x TARG:0x%x [Shifted: TAG:0x%x TARG:0x%x]\n",
-           way.U,
-           set.U,
-           PrintUtil.ConvertChar((valids >> set.U)(0), 'V'),
-           tags.read(set.U),
-           data.read(set.U).target,
-           tags.read(set.U) << (idx_sz + log2Ceil(fetchWidth*coreInstBytes)).U,
-           data.read(set.U).target << log2Ceil(coreInstBytes))
-       }
+       //for (set <- 0 until nSets)
+       //{
+       //  printf("        BTB-ARRAY[%d][%d]: V:%c TAG:0x%x TARG:0x%x [Shifted: TAG:0x%x TARG:0x%x]\n",
+       //    way.U,
+       //    set.U,
+       //    PrintUtil.ConvertChar((valids >> set.U)(0), 'V'),
+       //    tags.read(set.U),
+       //    data.read(set.U).target,
+       //    tags.read(set.U) << (idx_sz + log2Ceil(fetchWidth*coreInstBytes)).U,
+       //    data.read(set.U).target << log2Ceil(coreInstBytes))
+       //}
      }
    }
 
@@ -245,6 +266,30 @@ class BTBsa(implicit p: Parameters) extends BoomBTB
        PrintUtil.ConvertChar(bim.io.resp.valid, 'V'),
        bim.io.resp.bits.entry_idx,
        bim.io.resp.bits.rowdata)
+   }
+
+   if (BPU_PRINTF)
+   {
+     val cfiTypeStrs = PrintUtil.CfiTypeChars(io.resp.bits.cfi_type)
+     val bpdTypeStrs = PrintUtil.BpdTypeChars(io.resp.bits.bpd_type)
+     printf("    Resp: V:%c Hits:b%b T:%c PC:0x%x TARG:0x%x CfiType:%c%c%c%c BrType:%c%c%c%c\n",
+            PrintUtil.ConvertChar(io.resp.valid, 'V'),
+            RegNext(hits_oh.asUInt),
+            PrintUtil.ConvertChar(io.resp.bits.taken, 'T'),
+            io.resp.bits.fetch_pc,
+            io.resp.bits.target,
+            cfiTypeStrs(0),
+            cfiTypeStrs(1),
+            cfiTypeStrs(2),
+            cfiTypeStrs(3),
+            bpdTypeStrs(0),
+            bpdTypeStrs(1),
+            bpdTypeStrs(2),
+            bpdTypeStrs(3))
+     printf("    BimResp: V:%c EntryIdx:%d Row:0x%x\n",
+            PrintUtil.ConvertChar(bim.io.resp.valid, 'V'),
+            bim.io.resp.bits.entry_idx,
+            bim.io.resp.bits.rowdata)
    }
 
    override def toString: String =

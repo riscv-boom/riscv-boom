@@ -25,7 +25,7 @@ import chisel3.core.withReset
 import freechips.rocketchip.config.{Parameters, Field}
 
 import boom.common._
-import boom.util.{ElasticReg, Fold}
+import boom.util.{PrintUtil, ElasticReg, Fold}
 
 /**
  * GShare configuration parameters used in configurations
@@ -96,14 +96,12 @@ object GShareBrPredictor
 /**
  * Class to create a GShare predictor
  *
- * @param fetch_width # of instructions fetched
  * @param history_length length of GHR in bits
  */
 class GShareBrPredictor(
-   fetch_width: Int,
    history_length: Int = 12
    )(implicit p: Parameters)
-   extends BoomBrPredictor(fetch_width, history_length)(p)
+   extends BoomBrPredictor(history_length)(p)
    with HasGShareParameters
 {
    require (log2Ceil(nSets) == idx_sz)
@@ -112,7 +110,7 @@ class GShareBrPredictor(
    {
       // fold history if too big for our table
       val folded_history = Fold (hist, idx_sz, history_length)
-      ((addr >> (log2Ceil(fetch_width*coreInstBytes).U)) ^ folded_history)(idx_sz-1,0)
+      ((addr >> (log2Ceil(fetchWidth*coreInstBytes).U)) ^ folded_history)(idx_sz-1,0)
    }
 
    // for initializing the counter table, this is the value to reset the row to.
@@ -137,8 +135,8 @@ class GShareBrPredictor(
    // Get a fetchWidth length bit-vector of taken/not-takens.
    private def getTakensFromRow(row: UInt): UInt =
    {
-      val takens = WireInit(VecInit(Seq.fill(fetch_width){false.B}))
-      for (i <- 0 until fetch_width)
+      val takens = WireInit(VecInit(Seq.fill(fetchWidth){false.B}))
+      for (i <- 0 until fetchWidth)
       {
          // assumes 2-bits per branch.
          takens(i) := row(2*i+1)
@@ -173,7 +171,7 @@ class GShareBrPredictor(
       .otherwise
       {
          // strengthen hysteresis bits on correct
-         val h_mask = Fill(fetch_width, 0x1.asUInt(width=2.W))
+         val h_mask = Fill(fetchWidth, 0x1.asUInt(width=2.W))
          row := old_row | h_mask
       }
       row
@@ -214,7 +212,7 @@ class GShareBrPredictor(
    val s2_out = counter_table.read(s1_ridx, this.f1_valid)
 
    val q_s3_resp = withReset(reset.toBool || io.fe_clear || io.f4_redirect)
-      {Module(new ElasticReg(new GShareResp(fetch_width, idx_sz)))}
+      {Module(new ElasticReg(new GShareResp(fetchWidth, idx_sz)))}
 
    q_s3_resp.io.enq.valid := io.f2_valid
    q_s3_resp.io.enq.bits.rowdata  := s2_out
@@ -233,7 +231,7 @@ class GShareBrPredictor(
    //------------------------------------------------------------
    // Update counter table.
 
-   val com_info = (io.commit.bits.info).asTypeOf(new GShareResp(fetch_width, idx_sz))
+   val com_info = (io.commit.bits.info).asTypeOf(new GShareResp(fetchWidth, idx_sz))
    val com_idx = Hash(io.commit.bits.fetch_pc, io.commit.bits.history)(idx_sz-1,0)
 
    val wen = io.commit.valid || (fsm_state === s_clear)
@@ -258,9 +256,19 @@ class GShareBrPredictor(
       assert (com_idx === com_info.debug_index, "[gshare] disagreement on update indices.")
    }
 
+   if (BPU_PRINTF)
+   {
+     printf("GShare:\n")
+     printf("    Resp: V:%c Ts:b%b DbgIdx:%d Row:0x%x\n",
+            PrintUtil.ConvertChar(io.resp.valid, 'V'),
+            io.resp.bits.takens,
+            q_s3_resp.io.deq.bits.debug_index,
+            q_s3_resp.io.deq.bits.rowdata)
+   }
+
    override def toString: String =
       "   ==GShare BPU==" +
-      "\n   (" + (nSets * fetch_width * 2/8/1024) +
+      "\n   (" + (nSets * fetchWidth * 2/8/1024) +
       " kB) GShare Predictor, with " + history_length + " bits of history for (" +
-      fetch_width + "-wide fetch) and " + nSets + " entries."
+      fetchWidth + "-wide fetch) and " + nSets + " entries."
 }
