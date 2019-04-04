@@ -401,6 +401,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
      + "\n" + (if (usingFPU) fp_pipeline.toString else "")
      + "\n   DCache Ways           : " + dcacheParams.nWays
      + "\n   DCache Sets           : " + dcacheParams.nSets
+     + "\n   DCache nMSHRs         : " + dcacheParams.nMSHRs
      + "\n   ICache Ways           : " + icacheParams.nWays
      + "\n   ICache Sets           : " + icacheParams.nSets
      + "\n   D-TLB Entries         : " + dcacheParams.nTLBEntries
