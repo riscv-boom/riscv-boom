@@ -50,8 +50,8 @@ class BoomConfig extends Config(
   new freechips.rocketchip.system.BaseConfig)
 
 // Main configs. SmallBoomConfig and MediumBoomConfig are best-maintained
-// MediumBoomConfig is typically described in documentation
-// All RV64IMAFDC
+//   MediumBoomConfig is typically described in documentation
+//   All RV64IMAFDC
 class SmallBoomConfig extends Config(
   new WithRVC ++
   new WithSmallBooms ++

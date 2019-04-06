@@ -23,13 +23,13 @@ import boom.common.{MicroOp}
 import boom.exu.{BrResolutionInfo}
 
 /**
- * Object to XOR fold a input register of full_length into a compressed_length.
+ * Object to XOR fold a input register of fullLength into a compressedLength.
  */
 object Fold
 {
-  def apply(input: UInt, compressed_length: Int, full_length: Int): UInt = {
-    val clen = compressed_length
-    val hlen = full_length
+  def apply(input: UInt, compressedLength: Int, fullLength: Int): UInt = {
+    val clen = compressedLength
+    val hlen = fullLength
     if (hlen <= clen) {
       input
     } else {
@@ -232,7 +232,7 @@ object AlignPCToBoundary
 {
   def apply(pc: UInt, b: Int): UInt = {
     // Invert for scenario where pc longer than b
-    // (which would clear all bits above size(b)).
+    //   (which would clear all bits above size(b)).
     ~(~pc | (b-1).U)
   }
 }
