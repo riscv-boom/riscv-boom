@@ -1,5 +1,5 @@
 //******************************************************************************
-// Copyright (c) 2015 - 2018, The Regents of the University of California (Regents).
+// Copyright (c) 2015 - 2019, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
 // Author: Christopher Celio
@@ -43,116 +43,115 @@ import boom.common._
 // scalastyle:off
 
 class BoomConfig extends Config(
-   new WithRVC ++
-   new DefaultBoomConfig ++
-   new WithNBoomCores(1) ++
-   new WithoutTLMonitors ++
-   new freechips.rocketchip.system.BaseConfig)
+  new WithRVC ++
+  new DefaultBoomConfig ++
+  new WithNBoomCores(1) ++
+  new WithoutTLMonitors ++
+  new freechips.rocketchip.system.BaseConfig)
 
 // Main configs. SmallBoomConfig and MediumBoomConfig are best-maintained
 // MediumBoomConfig is typically described in documentation
 // All RV64IMAFDC
 class SmallBoomConfig extends Config(
-   new WithRVC ++
-   new WithSmallBooms ++
-   new DefaultBoomConfig ++
-   new WithNBoomCores(1) ++
-   new WithoutTLMonitors ++
-   new freechips.rocketchip.system.BaseConfig)
+  new WithRVC ++
+  new WithSmallBooms ++
+  new DefaultBoomConfig ++
+  new WithNBoomCores(1) ++
+  new WithoutTLMonitors ++
+  new freechips.rocketchip.system.BaseConfig)
 
 class MediumBoomConfig extends Config(
-   new WithRVC ++
-   new WithMediumBooms ++
-   new DefaultBoomConfig ++
-   new WithNBoomCores(1) ++
-   new WithoutTLMonitors ++
-   new freechips.rocketchip.system.BaseConfig)
+  new WithRVC ++
+  new WithMediumBooms ++
+  new DefaultBoomConfig ++
+  new WithNBoomCores(1) ++
+  new WithoutTLMonitors ++
+  new freechips.rocketchip.system.BaseConfig)
 
 class MegaBoomConfig extends Config(
-   new WithRVC ++
-   new WithMegaBooms ++
-   new DefaultBoomConfig ++
-   new WithNBoomCores(1) ++
-   new WithoutTLMonitors ++
-   new freechips.rocketchip.system.BaseConfig)
-
+  new WithRVC ++
+  new WithMegaBooms ++
+  new DefaultBoomConfig ++
+  new WithNBoomCores(1) ++
+  new WithoutTLMonitors ++
+  new freechips.rocketchip.system.BaseConfig)
 
 // Assorted configs
 class MegaBoomECCConfig extends Config(
-   new WithL1IECC("parity", "parity") ++
-   new WithL1DECC("identity", "parity") ++
-   new WithRVC ++
-   new WithMegaBooms ++
-   new DefaultBoomConfig ++
-   new WithNBoomCores(1) ++
-   new WithoutTLMonitors ++
-   new freechips.rocketchip.system.BaseConfig)
+  new WithL1IECC("parity", "parity") ++
+  new WithL1DECC("identity", "parity") ++
+  new WithRVC ++
+  new WithMegaBooms ++
+  new DefaultBoomConfig ++
+  new WithNBoomCores(1) ++
+  new WithoutTLMonitors ++
+  new freechips.rocketchip.system.BaseConfig)
 
 class jtagSmallBoomConfig extends Config(
-   new WithRVC ++
-   new WithSmallBooms ++
-   new DefaultBoomConfig ++
-   new WithNBoomCores(1) ++
-   new WithoutTLMonitors ++
-   new freechips.rocketchip.system.BaseConfig ++
-   new WithJtagDTM)
+  new WithRVC ++
+  new WithSmallBooms ++
+  new DefaultBoomConfig ++
+  new WithNBoomCores(1) ++
+  new WithoutTLMonitors ++
+  new freechips.rocketchip.system.BaseConfig ++
+  new WithJtagDTM)
 
 class jtagMediumBoomConfig extends Config(
-   new WithRVC ++
-   new WithMediumBooms ++
-   new DefaultBoomConfig ++
-   new WithNBoomCores(1) ++
-   new WithoutTLMonitors ++
-   new freechips.rocketchip.system.BaseConfig ++
-   new WithJtagDTM)
+  new WithRVC ++
+  new WithMediumBooms ++
+  new DefaultBoomConfig ++
+  new WithNBoomCores(1) ++
+  new WithoutTLMonitors ++
+  new freechips.rocketchip.system.BaseConfig ++
+  new WithJtagDTM)
 
 class jtagMegaBoomConfig extends Config(
-   new WithRVC ++
-   new WithMegaBooms ++
-   new DefaultBoomConfig ++
-   new WithNBoomCores(1) ++
-   new WithoutTLMonitors ++
-   new freechips.rocketchip.system.BaseConfig ++
-   new WithJtagDTM)
+  new WithRVC ++
+  new WithMegaBooms ++
+  new DefaultBoomConfig ++
+  new WithNBoomCores(1) ++
+  new WithoutTLMonitors ++
+  new freechips.rocketchip.system.BaseConfig ++
+  new WithJtagDTM)
 
 // RV64IMAC
 class SmallIntBoomConfig extends Config(
-   new WithRVC ++
-   new WithoutBoomFPU ++
-   new WithSmallBooms ++
-   new DefaultBoomConfig ++
-   new WithNBoomCores(1) ++
-   new WithoutTLMonitors ++
-   new freechips.rocketchip.system.BaseConfig)
+  new WithRVC ++
+  new WithoutBoomFPU ++
+  new WithSmallBooms ++
+  new DefaultBoomConfig ++
+  new WithNBoomCores(1) ++
+  new WithoutTLMonitors ++
+  new freechips.rocketchip.system.BaseConfig)
 
 class SmallDualBoomConfig extends Config(
-   new WithRVC ++
-   new WithSmallBooms ++
-   new DefaultBoomConfig ++
-   new WithNBoomCores(2) ++
-   new WithoutTLMonitors ++
-   new freechips.rocketchip.system.BaseConfig)
+  new WithRVC ++
+  new WithSmallBooms ++
+  new DefaultBoomConfig ++
+  new WithNBoomCores(2) ++
+  new WithoutTLMonitors ++
+  new freechips.rocketchip.system.BaseConfig)
 
 class TracedSmallBoomConfig extends Config(
-   new WithRVC ++
-   new WithTrace ++
-   new WithSmallBooms ++
-   new DefaultBoomConfig ++
-   new WithNBoomCores(1) ++
-   new WithoutTLMonitors ++
-   new freechips.rocketchip.system.BaseConfig)
+  new WithRVC ++
+  new WithTrace ++
+  new WithSmallBooms ++
+  new DefaultBoomConfig ++
+  new WithNBoomCores(1) ++
+  new WithoutTLMonitors ++
+  new freechips.rocketchip.system.BaseConfig)
 
 //RV32IMAC TODO: Support FP
 class SmallRV32UnifiedBoomConfig extends Config(
-   new WithBoomRV32 ++
-   new WithRVC ++
-   new WithoutBoomFPU ++
-   new WithUnifiedMemIntIQs ++
-   new WithSmallBooms ++
-   new DefaultBoomConfig ++
-   new WithNBoomCores(1) ++
-   new WithoutTLMonitors ++
-   new freechips.rocketchip.system.BaseConfig)
+  new WithBoomRV32 ++
+  new WithRVC ++
+  new WithoutBoomFPU ++
+  new WithUnifiedMemIntIQs ++
+  new WithSmallBooms ++
+  new DefaultBoomConfig ++
+  new WithNBoomCores(1) ++
+  new WithoutTLMonitors ++
+  new freechips.rocketchip.system.BaseConfig)
 
 
 // Allow for some number N BOOM cores.

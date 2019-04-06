@@ -1,5 +1,5 @@
 //******************************************************************************
-// Copyright (c) 2017 - 2018, The Regents of the University of California (Regents).
+// Copyright (c) 2017 - 2019, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
 // Author: Christopher Celio
@@ -9,17 +9,16 @@ package boom.system
 
 import chisel3._
 
-import freechips.rocketchip.config.Parameters
-import freechips.rocketchip.diplomacy.LazyModule
-import freechips.rocketchip.devices.debug.Debug
+import freechips.rocketchip.config.{Parameters}
+import freechips.rocketchip.diplomacy.{LazyModule}
+import freechips.rocketchip.devices.debug.{Debug}
 
 /**
  * A test harness to wrap around the BOOM system
  */
-class TestHarness()(implicit p: Parameters) extends Module
+class TestHarness(implicit p: Parameters) extends Module
 {
-  val io = IO(new Bundle
-  {
+  val io = IO(new Bundle {
     val success = Output(Bool())
   })
 
