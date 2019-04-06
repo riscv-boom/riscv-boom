@@ -1,5 +1,5 @@
 //******************************************************************************
-// Copyright (c) 2018 - 2018, The Regents of the University of California (Regents).
+// Copyright (c) 2018 - 2019, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
 // Author: Christopher Celio
@@ -8,7 +8,7 @@
 package boom.system
 
 import chisel3._
-import chisel3.internal.sourceinfo.SourceInfo
+import chisel3.internal.sourceinfo.{SourceInfo}
 
 import freechips.rocketchip.config.{Field, Parameters}
 import freechips.rocketchip.devices.tilelink._
@@ -24,9 +24,11 @@ import freechips.rocketchip.amba.axi4._
 case object BoomTilesKey extends Field[Seq[boom.common.BoomTileParams]](Nil)
 
 trait HasBoomTiles extends HasTiles
-    with CanHavePeripheryPLIC
-    with CanHavePeripheryCLINT
-    with HasPeripheryDebug { this: BaseSubsystem =>
+  with CanHavePeripheryPLIC
+  with CanHavePeripheryCLINT
+  with HasPeripheryDebug
+{ this: BaseSubsystem =>
+
   val module: HasBoomTilesModuleImp
 
   protected val boomTileParams = p(BoomTilesKey)
@@ -37,8 +39,8 @@ trait HasBoomTiles extends HasTiles
   // Note that we also inject new nodes into the tile itself,
   // also based on the crossing type.
   val boomTiles = boomTileParams.zip(crossings).map { case (tp, crossing) =>
-    val boomCore = LazyModule(new boom.common.BoomTile(tp, crossing.crossingType)(augmentedTileParameters(tp)))
-      .suggestName(tp.name)
+    val boomCore = LazyModule(
+      new boom.common.BoomTile(tp, crossing.crossingType)(augmentedTileParameters(tp))).suggestName(tp.name)
 
     connectMasterPortsToSBus(boomCore, crossing)
     connectSlavePortsToCBus(boomCore, crossing)
@@ -49,20 +51,20 @@ trait HasBoomTiles extends HasTiles
 }
 
 trait HasBoomTilesModuleImp extends HasTilesModuleImp
-    with HasPeripheryDebugModuleImp
+  with HasPeripheryDebugModuleImp
 {
   val outer: HasBoomTiles
 }
 
 class BoomSubsystem(implicit p: Parameters) extends BaseSubsystem
-    with HasBoomTiles
+  with HasBoomTiles
 {
   val tiles = boomTiles
   override lazy val module = new BoomSubsystemModule(this)
 }
 
 class BoomSubsystemModule[+L <: BoomSubsystem](_outer: L) extends BaseSubsystemModuleImp(_outer)
-    with HasBoomTilesModuleImp
+  with HasBoomTilesModuleImp
 {
   tile_inputs.zip(outer.hartIdList).foreach { case(wire, i) =>
     wire.clock := clock
@@ -74,7 +76,9 @@ class BoomSubsystemModule[+L <: BoomSubsystem](_outer: L) extends BaseSubsystemM
 
 ///// Adds a port to the system intended to master an AXI4 DRAM controller that supports a large physical address size
 
-trait CanHaveMisalignedMasterAXI4MemPort { this: BaseSubsystem =>
+trait CanHaveMisalignedMasterAXI4MemPort
+{ this: BaseSubsystem =>
+
   val module: CanHaveMisalignedMasterAXI4MemPortModuleImp
   val nMemoryChannels: Int
   private val memPortParamsOpt = p(ExtMem)
