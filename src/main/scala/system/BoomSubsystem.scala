@@ -35,9 +35,9 @@ trait HasBoomTiles extends HasTiles
   private val crossings = perTileOrGlobalSetting(p(RocketCrossingKey), boomTileParams.size)
 
   // Make a tile and wire its nodes into the system,
-  // according to the specified type of clock crossing.
-  // Note that we also inject new nodes into the tile itself,
-  // also based on the crossing type.
+  //   according to the specified type of clock crossing.
+  //   Note that we also inject new nodes into the tile itself,
+  //   also based on the crossing type.
   val boomTiles = boomTileParams.zip(crossings).map { case (tp, crossing) =>
     val boomCore = LazyModule(
       new boom.common.BoomTile(tp, crossing.crossingType)(augmentedTileParameters(tp))).suggestName(tp.name)
