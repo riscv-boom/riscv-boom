@@ -124,8 +124,7 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
    val NUM_LDQ_ENTRIES = boomParams.numLdqEntries       // number of LAQ entries
    val NUM_STQ_ENTRIES = boomParams.numStqEntries       // number of SAQ/SDQ entries
    val MAX_BR_COUNT    = boomParams.maxBrCount          // number of branches we can speculate simultaneously
-   val ftqSz           = numRobEntries / fetchWidth   // number of FTQ entries should match
-                                                        //   (or slightly exceed) ROB entries
+   val ftqSz           = boomParams.ftq.nEntries        // number of FTQ entries
    val fetchBufferSz   = boomParams.fetchBufferSz       // number of instructions that stored between fetch&decode
 
    val numIntPhysRegs  = boomParams.numIntPhysRegisters // size of the integer physical register file
