@@ -61,17 +61,20 @@ class RoCCShim(implicit p: Parameters) extends BoomModule()(p)
    enq_val := false.B
    enq_uop := DontCare
 
-   val roccq_val      = Reg(Vec(NUM_ROCC_ENTRIES, Bool()))
-   val roccq_op_val   = Reg(Vec(NUM_ROCC_ENTRIES, Bool()))
-   val roccq_executed = Reg(Vec(NUM_ROCC_ENTRIES, Bool()))
-   val roccq_uop      = Reg(Vec(NUM_ROCC_ENTRIES, new MicroOp()))
-   val roccq_rs1      = Reg(Vec(NUM_ROCC_ENTRIES, UInt(xLen.W)))
-   val roccq_rs2      = Reg(Vec(NUM_ROCC_ENTRIES, UInt(xLen.W)))
+   val roccq_val       = Reg(Vec(NUM_ROCC_ENTRIES, Bool()))
+   val roccq_op_val    = Reg(Vec(NUM_ROCC_ENTRIES, Bool()))
+   val roccq_executed  = Reg(Vec(NUM_ROCC_ENTRIES, Bool()))
+   val roccq_committed = Reg(Vec(NUM_ROCC_ENTRIES, Bool()))
+   val roccq_uop       = Reg(Vec(NUM_ROCC_ENTRIES, new MicroOp()))
+   val roccq_rs1       = Reg(Vec(NUM_ROCC_ENTRIES, UInt(xLen.W)))
+   val roccq_rs2       = Reg(Vec(NUM_ROCC_ENTRIES, UInt(xLen.W)))
 
    // The instruction we are waiting for response from
    val roccq_head     = RegInit(0.U(log2Ceil(NUM_ROCC_ENTRIES).W))
-   // The instruction we are waiting for PNR to execute
+   // The instruction we are waiting for clearance to execute
    val roccq_exe_head = RegInit(0.U(log2Ceil(NUM_ROCC_ENTRIES).W))
+   // The next instruction we are waiting to "commit" through PNR
+   val roccq_com_head = RegInit(0.U(log2Ceil(NUM_ROCC_ENTRIES).W))
    val roccq_tail     = RegInit(0.U(log2Ceil(NUM_ROCC_ENTRIES).W))
 
    io.core.roccq_idx := roccq_tail
@@ -110,11 +113,17 @@ class RoCCShim(implicit p: Parameters) extends BoomModule()(p)
       roccq_rs2      (roccq_idx)      := io.req.bits.rs2_data
    }
 
+   // Commit
+   when (roccq_op_val(roccq_com_head) &&
+      IsOlder(roccq_uop(roccq_com_head).rob_idx, io.core.rob_pnr_idx, io.core.rob_tail_idx))
+   {
+      roccq_committed(roccq_com_head) := true.B
+      roccq_com_head                  := WrapInc(roccq_com_head, NUM_ROCC_ENTRIES)
+   }
    // Execute
-   val head_rob_idx = roccq_uop(roccq_exe_head).rob_idx
    io.core.rocc.cmd.valid := false.B
    when (roccq_op_val(roccq_exe_head) && io.core.rocc.cmd.ready &&
-      (IsOlder(head_rob_idx, io.core.rob_pnr_idx, io.core.rob_tail_idx)))
+      roccq_committed(roccq_exe_head))
    {
       io.core.rocc.cmd.valid         := true.B
       io.core.rocc.cmd.bits.inst     := roccq_uop(roccq_exe_head).inst.asTypeOf(new RoCCInstruction)
@@ -166,7 +175,7 @@ class RoCCShim(implicit p: Parameters) extends BoomModule()(p)
          roccq_op_val(i)   := false.B
          roccq_executed(i) := false.B
       }
-      roccq_uop(i) := GetNewBrMask(io.brinfo, roccq_uop(i))
+      roccq_uop(i).br_mask := GetNewBrMask(io.brinfo, roccq_uop(i))
    }
    when (io.brinfo.valid && io.brinfo.mispredict && !io.exception)
    {
@@ -177,11 +186,12 @@ class RoCCShim(implicit p: Parameters) extends BoomModule()(p)
    //--------------------------
    // Exception / Reset
 
-   when (io.exception || reset.toBool)
+   when (reset.toBool)
    {
       roccq_tail     := 0.U
       roccq_head     := 0.U
       roccq_exe_head := 0.U
+      roccq_com_head := 0.U
       for (i <- 0 until NUM_ROCC_ENTRIES)
       {
          roccq_val(i)      := false.B
@@ -189,5 +199,17 @@ class RoCCShim(implicit p: Parameters) extends BoomModule()(p)
          roccq_executed(i) := false.B
       }
    }
+     .elsewhen (io.exception)
+   {
+      roccq_tail := roccq_com_head
+      for (i <- 0 until NUM_ROCC_ENTRIES)
+      {
+         when (!roccq_committed(i))
+         {
+            roccq_val(i)      := false.B
+            roccq_op_val(i)   := false.B
+            roccq_executed(i) := false.B
+         }
+      }
+   }
 }
-
