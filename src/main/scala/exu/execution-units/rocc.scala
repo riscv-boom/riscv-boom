@@ -166,6 +166,7 @@ class RoCCShim(implicit p: Parameters) extends BoomModule()(p)
          roccq_op_val(i)   := false.B
          roccq_executed(i) := false.B
       }
+      roccq_uop(i) := GetNewBrMask(io.brinfo, roccq_uop(i))
    }
    when (io.brinfo.valid && io.brinfo.mispredict && !io.exception)
    {
