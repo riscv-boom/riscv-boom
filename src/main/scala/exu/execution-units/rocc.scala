@@ -139,12 +139,13 @@ class RoCCShim(implicit p: Parameters) extends BoomModule()(p)
    // Handle responses
 
    // Either we get a response, or the RoCC op expects no response
-   val handle_resp = ((io.core.rocc.resp.valid && io.resp.ready)
-                    || roccq_uop(roccq_head).dst_rtype === RT_X)
+   val handle_resp = (io.core.rocc.resp.valid || roccq_uop(roccq_head).dst_rtype === RT_X) && io.resp.ready
 
    io.core.rocc.resp.ready := io.resp.ready
    io.resp.valid           := false.B
-   when (roccq_head =/= roccq_exe_head && roccq_val(roccq_head) && handle_resp)
+   when (roccq_head =/= roccq_exe_head &&
+         roccq_val(roccq_head) &&
+         handle_resp)
    {
       assert((roccq_uop(roccq_head).dst_rtype === RT_X)
           || io.core.rocc.resp.bits.rd === roccq_uop(roccq_head).ldst,

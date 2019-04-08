@@ -1116,7 +1116,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    val ll_uop = ll_wbarb.io.out.bits.uop
    rob.io.wb_resps(0).valid  := ll_wbarb.io.out.valid && !(ll_uop.is_store && !ll_uop.is_amo)
    rob.io.wb_resps(0).bits   <> ll_wbarb.io.out.bits
-   rob.io.debug_wb_valids(0) := ll_wbarb.io.out.valid
+   rob.io.debug_wb_valids(0) := ll_wbarb.io.out.valid && ll_uop.dst_rtype =/= RT_X
    rob.io.debug_wb_wdata(0)  := ll_wbarb.io.out.bits.data
    var cnt = 1
    var f_cnt = 0 // rob fflags port index
