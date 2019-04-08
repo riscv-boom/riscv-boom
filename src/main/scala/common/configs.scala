@@ -15,13 +15,14 @@ import freechips.rocketchip.devices.tilelink.{BootROMParams}
 import freechips.rocketchip.rocket._
 import freechips.rocketchip.tile._
 
+import boom.ifu._
 import boom.bpu._
 import boom.exu._
 import boom.lsu._
 import boom.system.BoomTilesKey
 
 /**
- * Try to be a reasonable BOOM design point.
+ * Try to be a reasonable BOOM design point with a deep speculation window.
  */
 class DefaultBoomConfig extends Config((site, here, up) => {
 
@@ -36,7 +37,7 @@ class DefaultBoomConfig extends Config((site, here, up) => {
       core = r.core.copy(
          fetchWidth = 4,
          decodeWidth = 2,
-         numRobEntries = 80,
+         numRobEntries = 100,
          issueParams = Seq(
             IssueParams(issueWidth=1, numEntries=20, iqType=IQT_MEM.litValue, dispatchWidth=2),
             IssueParams(issueWidth=2, numEntries=20, iqType=IQT_INT.litValue, dispatchWidth=2),
@@ -45,8 +46,9 @@ class DefaultBoomConfig extends Config((site, here, up) => {
          numFpPhysRegisters = 64,
          numLdqEntries = 32,
          numStqEntries = 18,
-         maxBrCount = 8,
-         btb = BoomBTBParameters(btbsa=true, densebtb=false, nSets=512, nWays=4, nRAS=8, tagSz=13),
+         maxBrCount = 16,
+         ftq = FtqParameters(nEntries=25),
+         btb = BoomBTBParameters(btbsa=true, densebtb=false, nSets=512, nWays=4, nRAS=16, tagSz=13),
          bpdBaseOnly = None,
          gshare = Some(GShareParameters(historyLength=11, numSets=2048)),
          tage = None,
@@ -130,6 +132,7 @@ class WithRVC extends Config((site, here, up) => {
    case BoomTilesKey => up(BoomTilesKey, site) map {r => r.copy(
       core = r.core.copy(
          fetchWidth = r.core.fetchWidth * 2,
+         ftq = FtqParameters(r.core.ftq.nEntries * 2/3),  // Assume ~67% of instructions are compressed.
          useCompressed = true))}
 })
 
@@ -152,6 +155,7 @@ class WithSmallBooms extends Config((site, here, up) => {
          numStqEntries=4,
          maxBrCount = 4,
          bpdBaseOnly = None,
+         ftq = FtqParameters(nEntries=8),
          gshare = Some(GShareParameters(historyLength=11, numSets=2048)),
          tage = None,
          bpdRandom = None,
@@ -181,6 +185,7 @@ class WithMediumBooms extends Config((site, here, up) => {
          numStqEntries = 9,
          maxBrCount = 8,
          renameLatency = 2,
+         ftq = FtqParameters(nEntries=24),
          btb = BoomBTBParameters(btbsa=true, densebtb=false, nSets=64, nWays=2,
                                  nRAS=8, tagSz=20, bypassCalls=false, rasCheckForEmpty=false),
          bpdBaseOnly = None,
@@ -196,23 +201,24 @@ class WithMediumBooms extends Config((site, here, up) => {
 })
 
 /**
- * Try to match the Cortex-A15. Don't expect good QoR (yet).
+ * Try to match the Cortex-A15.
  */
 class WithMegaBooms extends Config((site, here, up) => {
    case BoomTilesKey => up(BoomTilesKey, site) map { r =>r.copy(
       core = r.core.copy(
-         fetchWidth = 8,
-         decodeWidth = 4,
-         numRobEntries = 128,
+         fetchWidth = 4,
+         decodeWidth = 3,
+         numRobEntries = 96,
          issueParams = Seq(
-            IssueParams(issueWidth=1, numEntries=20, iqType=IQT_MEM.litValue, dispatchWidth=4),
-            IssueParams(issueWidth=2, numEntries=20, iqType=IQT_INT.litValue, dispatchWidth=4),
-            IssueParams(issueWidth=1, numEntries=20, iqType=IQT_FP.litValue , dispatchWidth=4)),
-         numIntPhysRegisters = 128,
-         numFpPhysRegisters = 128,
+            IssueParams(issueWidth=1, numEntries=20, iqType=IQT_MEM.litValue, dispatchWidth=3),
+            IssueParams(issueWidth=2, numEntries=20, iqType=IQT_INT.litValue, dispatchWidth=3),
+            IssueParams(issueWidth=1, numEntries=20, iqType=IQT_FP.litValue , dispatchWidth=3)),
+         numIntPhysRegisters = 96,
+         numFpPhysRegisters = 64,
          numLdqEntries = 32,
-         numStqEntries = 18,
+         numStqEntries = 16,
          maxBrCount = 16,
+         ftq = FtqParameters(nEntries=24),
          btb = BoomBTBParameters(btbsa=true, densebtb=false, nSets=512, nWays=4, nRAS=16, tagSz=20),
          bpdBaseOnly = None,
          gshare = None,
@@ -220,7 +226,7 @@ class WithMegaBooms extends Config((site, here, up) => {
          bpdRandom = None),
       dcache = Some(DCacheParams(rowBits = site(SystemBusKey).beatBytes*8,
                                  nSets=64, nWays=16, nMSHRs=8, nTLBEntries=32)),
-      icache = Some(ICacheParams(fetchBytes = 8*4, rowBits = site(SystemBusKey).beatBytes*8, nSets=64, nWays=8))
+      icache = Some(ICacheParams(fetchBytes = 4*4, rowBits = site(SystemBusKey).beatBytes*8, nSets=64, nWays=8))
       )}
 
    // Set TL network to 128bits wide
