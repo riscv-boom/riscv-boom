@@ -94,6 +94,7 @@ class RoCCShim(implicit p: Parameters) extends BoomModule()(p)
       roccq_val      (roccq_tail) := true.B
       roccq_op_val   (roccq_tail) := false.B
       roccq_executed (roccq_tail) := false.B
+      roccq_committed(roccq_tail) := false.B
       roccq_uop      (roccq_tail) := enq_uop
       roccq_tail                  := WrapInc(roccq_tail, NUM_ROCC_ENTRIES)
    }
@@ -150,13 +151,14 @@ class RoCCShim(implicit p: Parameters) extends BoomModule()(p)
          "RoCC response destination register does not match expected")
       assert(roccq_executed(roccq_head),
          "Received a response for a RoCC instruction we haven't executed")
-      io.resp.valid              := roccq_uop(roccq_head).dst_rtype === RT_FIX
+      io.resp.valid              := true.B
       io.resp.bits.uop           := roccq_uop(roccq_head)
       io.resp.bits.data          := io.core.rocc.resp.bits.data
 
-      roccq_val     (roccq_head) := false.B
-      roccq_op_val  (roccq_head) := false.B
-      roccq_executed(roccq_head) := false.B
+      roccq_val      (roccq_head) := false.B
+      roccq_op_val   (roccq_head) := false.B
+      roccq_executed (roccq_head) := false.B
+      roccq_committed(roccq_head) := false.B
 
       roccq_head                 := WrapInc(roccq_head, NUM_ROCC_ENTRIES)
    }
@@ -194,9 +196,10 @@ class RoCCShim(implicit p: Parameters) extends BoomModule()(p)
       roccq_com_head := 0.U
       for (i <- 0 until NUM_ROCC_ENTRIES)
       {
-         roccq_val(i)      := false.B
-         roccq_op_val(i)   := false.B
-         roccq_executed(i) := false.B
+         roccq_val(i)       := false.B
+         roccq_op_val(i)    := false.B
+         roccq_executed(i)  := false.B
+         roccq_committed(i) := false.B
       }
    }
      .elsewhen (io.exception)

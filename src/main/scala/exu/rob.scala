@@ -321,8 +321,7 @@ class Rob(
       {
          rob_val(rob_tail)       := true.B
          rob_bsy(rob_tail)       := !(io.enq_uops(w).is_fence ||
-                                      io.enq_uops(w).is_fencei ||
-                                      (io.enq_uops(w).uopc === uopROCC && io.enq_uops(w).dst_rtype === RT_X))
+                                      io.enq_uops(w).is_fencei)
          rob_unsafe(rob_tail)    := io.enq_uops(w).unsafe
          rob_uop(rob_tail)       := io.enq_uops(w)
          rob_exception(rob_tail) := io.enq_uops(w).exception

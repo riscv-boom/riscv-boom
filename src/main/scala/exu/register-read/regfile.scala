@@ -55,7 +55,7 @@ object WritePort
     (implicit p: Parameters): DecoupledIO[RegisterFileWritePort] =
   {
     val wport = Wire(Decoupled(new RegisterFileWritePort(addr_width, data_width)))
-    wport.valid := enq.valid
+    wport.valid := enq.valid && enq.bits.uop.dst_rtype =/= RT_X
     wport.bits.addr := enq.bits.uop.pdst
     wport.bits.data := enq.bits.data
     enq.ready := wport.ready

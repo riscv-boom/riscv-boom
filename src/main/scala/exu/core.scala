@@ -650,7 +650,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
    var wu_idx = 1
    // The 0th wakeup port goes to the ll_wbarb
-   int_wakeups(0).valid := ll_wbarb.io.out.fire()
+   int_wakeups(0).valid := ll_wbarb.io.out.fire() && ll_wbarb.io.out.bits.uop.dst_rtype === RT_FIX
    int_wakeups(0).bits  := ll_wbarb.io.out.bits
 
    // loop through each issue-port (exe_units are statically connected to an issue-port)
