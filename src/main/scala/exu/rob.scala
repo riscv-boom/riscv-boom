@@ -225,8 +225,6 @@ class Rob(
 
    require (num_rob_entries % width == 0)
 
-   require (isPow2(width))
-
    // ROB Finite State Machine
    val s_reset :: s_normal :: s_rollback :: s_wait_till_empty :: Nil = Enum(4)
    val rob_state = RegInit(s_reset)
