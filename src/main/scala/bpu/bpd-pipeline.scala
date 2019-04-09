@@ -138,20 +138,22 @@ class BranchPredictionStage(fetch_width: Int)(implicit p: Parameters) extends Bo
 
    //************************************************
    // Update the RAS
-   // TODO XXX  reenable RAS
 
-   // update RAS based on BTB's prediction information (or the branch-check correction).
-//   val jmp_idx = f2_btb.bits.cfi_idx
+   // update RAS based on BTB's prediction information or the branch-check correction
+   val btb_resp = btb.io.resp.bits
 
    btb.io.ras_update := io.f3_ras_update
-   btb.io.ras_update.valid := false.B // (f2_btb.valid || io.f3_ras_update.valid) &&
-                                      // !io.fetch_stalled
-//   when (f2_btb.valid)
-//   {
-//      btb.io.ras_update.bits.is_call      := BpredType.isCall(f2_btb.bits.bpd_type)
-//      btb.io.ras_update.bits.is_ret       := BpredType.isReturn(f2_btb.bits.bpd_type)
-//      btb.io.ras_update.bits.return_addr  := f2_aligned_pc + (jmp_idx << 2.U) + 4.U
-//   }
+   btb.io.ras_update.valid := (btb.io.resp.valid && !io.f2_stall) || (io.f3_ras_update.valid && !io.f3_stall)
+
+   when (btb.io.resp.valid)
+   {
+      btb.io.ras_update.bits.is_call      := BpredType.isCall(btb_resp.bpd_type)
+      btb.io.ras_update.bits.is_ret       := BpredType.isReturn(btb_resp.bpd_type)
+      // TODO: double check that this is right? how do you know if the return pc is correct here
+      btb.io.ras_update.bits.return_addr  := (btb_resp.fetch_pc
+                                             + (btb_resp.cfi_idx << log2Ceil(coreInstBytes).U)
+                                             + Mux(btb_resp.is_rvc || (btb_resp.edge_inst && (btb_resp.cfi_idx === 0.U)), 2.U, 4.U))
+   }
 
    //************************************************
    // Update the BTB/BIM

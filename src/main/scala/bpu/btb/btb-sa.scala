@@ -62,8 +62,10 @@ class BTBsa(implicit p: Parameters) extends BoomBTB
     */
    class BTBSetData extends Bundle
    {
-      val target = UInt((vaddrBits - log2Ceil(coreInstBytes)).W)
-      val cfi_idx = UInt(log2Ceil(fetchWidth).W)
+      val target   = UInt((vaddrBits - log2Ceil(coreInstBytes)).W)
+      val cfi_idx  = UInt(log2Ceil(fetchWidth).W)
+      val is_rvc   = Bool()
+      val edge_inst = Bool()
       val bpd_type = BpredType()
       val cfi_type = CfiType()
    }
@@ -84,7 +86,8 @@ class BTBsa(implicit p: Parameters) extends BoomBTB
 
    // updates
    val r_btb_update = Pipe(io.btb_update)
-   val update_valid = r_btb_update.valid && !io.status_debug
+   val r_status_debug = RegNext(io.status_debug)
+   val update_valid = r_btb_update.valid && !r_status_debug // align the status debug with the actual btb update
    val widx = getIdx(r_btb_update.bits.pc)
    val wtag = getTag(r_btb_update.bits.pc)
    // TODO: currently a not-very-clever way to choose a replacement way
@@ -93,6 +96,8 @@ class BTBsa(implicit p: Parameters) extends BoomBTB
 
    // clear entries (e.g., multiple tag hits, which is an invalid variant)
    val clear_valid = WireInit(false.B)
+   val clear_way_oh = Wire(Vec(nWays, Bool()))
+   for (w <- 0 until nWays) { clear_way_oh(w) := false.B } // set signal to 0 at first
    val clear_idx = s1_idx
 
    if (DEBUG_PRINTF)
@@ -109,6 +114,7 @@ class BTBsa(implicit p: Parameters) extends BoomBTB
      val wen = update_valid && way_wen(way)
 
      val valids   = RegInit(0.U(nSets.W))
+     valids.suggestName(s"btb_valids_$way")
      val tags     = SyncReadMem(nSets, UInt(tag_sz.W))
      tags.suggestName("btb_tag_array")
      val data     = SyncReadMem(nSets, new BTBSetData())
@@ -127,6 +133,8 @@ class BTBsa(implicit p: Parameters) extends BoomBTB
         val newdata = Wire(new BTBSetData())
         newdata.target  := r_btb_update.bits.target(vaddrBits-1, log2Ceil(coreInstBytes))
         newdata.cfi_idx := r_btb_update.bits.cfi_idx
+        newdata.is_rvc   := r_btb_update.bits.is_rvc
+        newdata.edge_inst   := r_btb_update.bits.edge_inst
         newdata.bpd_type := r_btb_update.bits.bpd_type
         newdata.cfi_type := r_btb_update.bits.cfi_type
 
@@ -134,9 +142,12 @@ class BTBsa(implicit p: Parameters) extends BoomBTB
         data(widx) := newdata
      }
 
+     assert(!(wen && clear_valid), "[btb-sa] both should not be high")
+
      // if multiple ways hit, clear the entry last read
-     when (clear_valid)
+     when (clear_valid && clear_way_oh(way))
      {
+        printf("BTB: Cleared Idx:%d Way:%d\n", clear_idx, way.U)
         valids := valids.bitSet(clear_idx, false.B)
      }
 
@@ -177,22 +188,27 @@ class BTBsa(implicit p: Parameters) extends BoomBTB
      }
    }
 
-   // if multiple ways hit, invalidate entries so there is only one
+   // if multiple ways hit, invalidate all matched entries
    when (freechips.rocketchip.util.PopCountAtLeast(hits_oh.asUInt, 2))
    {
+      clear_way_oh := hits_oh
       clear_valid := true.B
    }
 
    // Mux out the winning hit.
-   s1_valid := PopCount(hits_oh) === 1.U && !io.flush
-   val s1_data = Mux1H(hits_oh, data_out)
+   s1_valid := (PopCount(hits_oh) >= 1.U) && !io.flush
+   val s1_data = PriorityMux(hits_oh, data_out) // arbitrarily choose a data out
    val s1_target = Cat(s1_data.target, 0.U(log2Ceil(coreInstBytes).W))
    val s1_cfi_idx = s1_data.cfi_idx
+   val s1_is_rvc   = s1_data.is_rvc
+   val s1_edge_inst   = s1_data.edge_inst
    val s1_bpd_type = s1_data.bpd_type
    val s1_cfi_type = s1_data.cfi_type
 
    s1_resp_bits.target := s1_target
    s1_resp_bits.cfi_idx := (if (fetchWidth > 1) s1_cfi_idx else 0.U)
+   s1_resp_bits.is_rvc := s1_is_rvc
+   s1_resp_bits.edge_inst := s1_edge_inst
    s1_resp_bits.bpd_type := s1_bpd_type
    s1_resp_bits.cfi_type := s1_cfi_type
 
@@ -212,7 +228,7 @@ class BTBsa(implicit p: Parameters) extends BoomBTB
       }
 
       // update the RAS and bypass if available
-      when (io.ras_update.valid)
+      when (io.ras_update.valid && !io.status_debug) // TODO: Hack to ensure that debug BRs are not counted
       {
          when (io.ras_update.bits.is_call)
          {
@@ -272,12 +288,14 @@ class BTBsa(implicit p: Parameters) extends BoomBTB
    {
      val cfiTypeStrs = PrintUtil.CfiTypeChars(io.resp.bits.cfi_type)
      val bpdTypeStrs = PrintUtil.BpdTypeChars(io.resp.bits.bpd_type)
-     printf("    Resp: V:%c Hits:b%b T:%c PC:0x%x TARG:0x%x CfiType:%c%c%c%c BrType:%c%c%c%c\n",
+     printf("    Resp: V:%c Hits:b%b T:%c PC:0x%x TARG:0x%x RVC:%c EDGE:%c CfiType:%c%c%c%c BrType:%c%c%c%c\n",
             PrintUtil.ConvertChar(io.resp.valid, 'V'),
             RegNext(hits_oh.asUInt),
             PrintUtil.ConvertChar(io.resp.bits.taken, 'T'),
             io.resp.bits.fetch_pc,
             io.resp.bits.target,
+            PrintUtil.ConvertChar(io.resp.bits.is_rvc, 'C'),
+            PrintUtil.ConvertChar(io.resp.bits.edge_inst, 'E'),
             cfiTypeStrs(0),
             cfiTypeStrs(1),
             cfiTypeStrs(2),

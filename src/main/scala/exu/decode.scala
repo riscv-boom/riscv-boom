@@ -569,7 +569,7 @@ class BranchDecode(implicit p: Parameters) extends BoomModule
                BLTU    -> List(Y, N, N, IS_B)
             ))
 
-   val (cs_is_br: Bool) :: (cs_is_jal: Bool) :: (cs_is_jalr:Bool) :: imm_sel_ :: Nil = bpd_csignals
+   val (cs_is_br: Bool) :: (cs_is_jal: Bool) :: (cs_is_jalr: Bool) :: imm_sel_ :: Nil = bpd_csignals
 
    io.is_br   := cs_is_br
    io.is_jal  := cs_is_jal
@@ -586,6 +586,11 @@ class BranchDecode(implicit p: Parameters) extends BoomModule
                           Mux(cs_is_br,
                               CfiType.BRANCH,
                               CfiType.NONE)))
+
+   // -------
+   // Asserts
+   // -------
+   assert(PopCount(VecInit(cs_is_br, cs_is_jal, cs_is_jalr)) <= 1.U, "[br-decoder] there should only be 1 type of cfi type if any")
 }
 
 /**

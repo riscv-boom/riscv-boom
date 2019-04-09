@@ -20,7 +20,7 @@ package boom.exu
 
 import chisel3._
 import chisel3.util._
-import chisel3.experimental.chiselName
+import chisel3.experimental.{chiselName, dontTouch}
 
 import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.rocket.ALU._
@@ -513,6 +513,9 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1, data_width: 
          if (enableBrResolutionRegister) Reg(new BranchUnitResp)
          else Wire(new BranchUnitResp)
 
+      dontTouch(killed)
+      dontTouch(mispredict)
+      dontTouch(is_br_or_jalr)
 
       br_unit.take_pc := mispredict
       val target = Mux(pc_sel === PC_PLUS4, pc_plus4, bj_addr)
@@ -526,8 +529,8 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1, data_width: 
          else Reg(new BrResolutionInfo)
 
       // note: jal doesn't allocate a branch-mask, so don't clear a br-mask bit
-      brinfo.valid          := io.req.valid && uop.is_br_or_jmp && !uop.is_jal && !killed
-      brinfo.mispredict     := mispredict
+      brinfo.valid          := is_br_or_jalr
+      brinfo.mispredict     := mispredict // if this is high then this is valid
       brinfo.mask           := 1.U << uop.br_tag
       brinfo.exe_mask       := GetNewBrMask(io.brinfo, uop.br_mask)
       brinfo.tag            := uop.br_tag
@@ -566,6 +569,8 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1, data_width: 
       br_unit.btb_update.bits.cfi_idx := Mux(io.req.bits.uop.edge_inst,
                                              0.U,
                                              (uop_pc_ >> log2Ceil(coreInstBytes)))
+      br_unit.btb_update.bits.is_rvc  := uop.is_rvc
+      br_unit.btb_update.bits.edge_inst := uop.edge_inst
       br_unit.btb_update.bits.target  := (target.asSInt & (-coreInstBytes).S).asUInt
       br_unit.btb_update.bits.taken   := is_taken   // was this branch/jal/jalr "taken"
       br_unit.btb_update.bits.cfi_type :=

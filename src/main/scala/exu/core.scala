@@ -186,6 +186,9 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    // TODO: Generate this in lsu
    val sxt_ldMiss = Wire(Bool())
 
+   // mask the Br mispred/resolved with the debug signal
+   val status_debug = Wire(Bool())
+
    //-------------------------------------------------------------
    // Uarch Hardware Performance Events (HPEs)
 
@@ -227,8 +230,15 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
          ("control-flow target misprediction", () => br_unit_resp.brinfo.mispredict &&
                                                      br_unit_resp.brinfo.is_jr),
          ("flush",                             () => rob.io.flush.valid),
-         ("branch resolved",                   () => br_unit_resp.brinfo.valid))),
-
+         ("branch resolved",                   () => br_unit_resp.brinfo.valid),
+         //("btb blame",                         () => br_unit_resp.brinfo.btb_made_pred),
+         //("bpd blame",                         () => br_unit_resp.brinfo.bpd_made_pred),
+         ("btb blame",                         () => false.B),
+         ("bpd blame",                         () => false.B),
+         //("btb mispreds",                      () => br_unit_resp.brinfo.btb_mispredict),
+         //("bpd mispreds",                      () => br_unit_resp.brinfo.bpd_mispredict))),
+         ("branch misprediction",              () => !status_debug && br_unit_resp.brinfo.mispredict),
+         ("branch resolved",                   () => !status_debug && br_unit_resp.brinfo.valid))),
          // Unused RocketCore HPE's
          //("load-use interlock",     () => id_ex_hazard && ex_ctrl.mem || id_mem_hazard && mem_ctrl.mem ||
          //                                 id_wb_hazard && wb_ctrl.mem),
@@ -472,6 +482,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
    io.ifu.status_prv    := csr.io.status.prv
    io.ifu.status_debug  := csr.io.status.debug
+   status_debug         := csr.io.status.debug
 
    //-------------------------------------------------------------
    //-------------------------------------------------------------
@@ -1210,6 +1221,15 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       printf("--- Cycle=%d --- Retired Instrs=%d ----------------------------------------------\n",
              debug_tsc_reg,
              debug_irt_reg & (0xffffff).U)
+
+      printf("    D:%c TakePC:%c TARG:0x%x PC:0x%x\n",
+             PrintUtil.ConvertChar(csr.io.status.debug, 'D'),
+             PrintUtil.ConvertChar(br_unit_resp.take_pc, 'T'),
+             br_unit_resp.target,
+             br_unit_resp.pc)
+
+
+
    }
 
    if (DEBUG_PRINTF)

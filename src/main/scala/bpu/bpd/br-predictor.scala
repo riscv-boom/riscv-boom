@@ -268,14 +268,14 @@ abstract class BoomBrPredictor(
 
    if (BPU_PRINTF)
    {
-     printf("BrPredictor:\n")
-     printf("    F0_Hist:0x%x F1_Hist:0x%x F2_Hist:0x%x F3_Hist:(V:%c Hist:0x%x) F4_Hist:0x%x\n",
-            f0_history,
-            r_f1_history,
-            r_f2_history,
-            PrintUtil.ConvertChar(q_f3_history.io.deq.valid, 'V'),
-            q_f3_history.io.deq.bits,
-            r_f4_history)
+     //printf("BrPredictor:\n")
+     //printf("    F0_Hist:0x%x F1_Hist:0x%x F2_Hist:0x%x F3_Hist:(V:%c Hist:0x%x) F4_Hist:0x%x\n",
+     //       f0_history,
+     //       r_f1_history,
+     //       r_f2_history,
+     //       PrintUtil.ConvertChar(q_f3_history.io.deq.valid, 'V'),
+     //       q_f3_history.io.deq.bits,
+     //       r_f4_history)
    }
 }
 
