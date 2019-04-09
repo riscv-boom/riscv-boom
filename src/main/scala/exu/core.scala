@@ -97,8 +97,9 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    val num_irf_read_ports     = exe_units.num_irf_read_ports
 
    val num_fast_wakeup_ports  = exe_units.count(_.bypassable)
+   val num_always_bypassable  = exe_units.count(_.always_bypassable)
 
-   val num_int_wakeup_ports   = num_irf_write_ports + 1 + num_fast_wakeup_ports // + 1 for ll_wb
+   val num_int_wakeup_ports   = num_irf_write_ports + 1 + num_fast_wakeup_ports - num_always_bypassable // + 1 for ll_wb
    val num_fp_wakeup_ports    = if (usingFPU) fp_pipeline.io.wakeups.length else 0
 
    val decode_units     = for (w <- 0 until coreWidth) yield { val d = Module(new DecodeUnit); d }
@@ -673,16 +674,17 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
          }
 
          // Slow Wakeup (uses write-port to register file)
-         // TODO: don't add a slow wake-up port if the instructions
-         // being written back are ALWAYS bypassable.
-         val resp = exe_units(i).io.iresp
-         int_wakeups(wu_idx).valid := resp.valid &&
-                                      resp.bits.uop.ctrl.rf_wen &&
-                                      !resp.bits.uop.bypassable &&
-                                      resp.bits.uop.dst_rtype === RT_FIX
-         assert(!(resp.valid && resp.bits.uop.ctrl.rf_wen && resp.bits.uop.dst_rtype =/= RT_FIX))
-         int_wakeups(wu_idx).bits  := resp.bits
-         wu_idx += 1
+         if (!exe_units(i).always_bypassable)
+         {
+            val resp = exe_units(i).io.iresp
+            int_wakeups(wu_idx).valid := resp.valid &&
+                                         resp.bits.uop.ctrl.rf_wen &&
+                                         !resp.bits.uop.bypassable &&
+                                         resp.bits.uop.dst_rtype === RT_FIX
+            assert(!(resp.valid && resp.bits.uop.ctrl.rf_wen && resp.bits.uop.dst_rtype =/= RT_FIX))
+            int_wakeups(wu_idx).bits  := resp.bits
+            wu_idx += 1
+         }
       }
    }
    require (wu_idx == num_int_wakeup_ports)
