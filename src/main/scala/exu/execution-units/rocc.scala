@@ -16,6 +16,7 @@ package boom.exu
 
 import chisel3._
 import chisel3.util._
+import chisel3.experimental.dontTouch
 
 import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.tile.{RoCCCoreIO, RoCCInstruction}
@@ -56,10 +57,7 @@ class RoCCShim(implicit p: Parameters) extends BoomModule()(p)
 {
    val io = IO(new RoCCShimIO)
 
-   val enq_val      = Wire(Bool())
-   val enq_uop      = Wire(new MicroOp)
-   enq_val := false.B
-   enq_uop := DontCare
+   val enq_val      = WireInit(false.B)
 
    val roccq_val       = Reg(Vec(NUM_ROCC_ENTRIES, Bool()))
    val roccq_op_val    = Reg(Vec(NUM_ROCC_ENTRIES, Bool()))
@@ -80,12 +78,15 @@ class RoCCShim(implicit p: Parameters) extends BoomModule()(p)
    io.core.roccq_idx := roccq_tail
 
    // Decode
+   val rocc_idx = WireInit(0.U)
+   val br_mask = WireInit(0.U(MAX_BR_COUNT.W))
    for (w <- 0 until decodeWidth)
    {
       when (io.core.dec_rocc_vals(w) && io.core.dec_uops(w).uopc === uopROCC)
       {
          enq_val      := true.B
-         enq_uop      := io.core.dec_uops(w)
+         rocc_idx     := w.U
+
       }
    }
 
@@ -95,7 +96,7 @@ class RoCCShim(implicit p: Parameters) extends BoomModule()(p)
       roccq_op_val   (roccq_tail) := false.B
       roccq_executed (roccq_tail) := false.B
       roccq_committed(roccq_tail) := false.B
-      roccq_uop      (roccq_tail) := enq_uop
+      roccq_uop      (roccq_tail) := io.core.dec_uops(rocc_idx)
       roccq_tail                  := WrapInc(roccq_tail, NUM_ROCC_ENTRIES)
    }
 
@@ -170,15 +171,18 @@ class RoCCShim(implicit p: Parameters) extends BoomModule()(p)
    // Branches
    for (i <- 0 until NUM_ROCC_ENTRIES)
    {
-      when (roccq_val(i) && IsKilledByBranch(io.brinfo, roccq_uop(i)))
+      when (roccq_val(i))
       {
-         assert(!roccq_executed(i),
-            "We executed a RoCC instruction that was killed by branch!")
-         roccq_val(i)      := false.B
-         roccq_op_val(i)   := false.B
-         roccq_executed(i) := false.B
+         roccq_uop(i).br_mask := GetNewBrMask(io.brinfo, roccq_uop(i))
+         when (IsKilledByBranch(io.brinfo, roccq_uop(i)))
+         {
+            assert(!roccq_executed(i),
+              "We executed a RoCC instruction that was killed by branch!")
+            roccq_val(i)      := false.B
+            roccq_op_val(i)   := false.B
+            roccq_executed(i) := false.B
+         }
       }
-      roccq_uop(i).br_mask := GetNewBrMask(io.brinfo, roccq_uop(i))
    }
    when (io.brinfo.valid && io.brinfo.mispredict && !io.exception)
    {
