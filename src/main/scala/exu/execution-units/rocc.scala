@@ -29,9 +29,9 @@ class RoCCShimCoreIO(implicit p: Parameters) extends BoomBundle()(p)
    // Decode Stage
    val dec_rocc_vals    = Input(Vec(decodeWidth, Bool()))
    val dec_uops         = Input(Vec(decodeWidth, new MicroOp))
-   val roccq_full       = Output(Bool())
-   val roccq_empty      = Output(Bool())
-   val roccq_idx        = Output(UInt(log2Ceil(NUM_ROCC_ENTRIES).W))
+   val rxq_full         = Output(Bool())
+   val rxq_empty        = Output(Bool())
+   val rxq_idx          = Output(UInt(log2Ceil(NUM_RXQ_ENTRIES).W))
    val rob_pnr_idx      = Input(UInt(ROB_ADDR_SZ.W))
    val rob_tail_idx     = Input(UInt(ROB_ADDR_SZ.W))
 
@@ -59,23 +59,24 @@ class RoCCShim(implicit p: Parameters) extends BoomModule()(p)
 
    val enq_val      = WireInit(false.B)
 
-   val roccq_val       = Reg(Vec(NUM_ROCC_ENTRIES, Bool()))
-   val roccq_op_val    = Reg(Vec(NUM_ROCC_ENTRIES, Bool()))
-   val roccq_executed  = Reg(Vec(NUM_ROCC_ENTRIES, Bool()))
-   val roccq_committed = Reg(Vec(NUM_ROCC_ENTRIES, Bool()))
-   val roccq_uop       = Reg(Vec(NUM_ROCC_ENTRIES, new MicroOp()))
-   val roccq_rs1       = Reg(Vec(NUM_ROCC_ENTRIES, UInt(xLen.W)))
-   val roccq_rs2       = Reg(Vec(NUM_ROCC_ENTRIES, UInt(xLen.W)))
+   // RoCC execute queue. Wait for PNR, holds operands and inst bits
+   val rxq_val       = Reg(Vec(NUM_RXQ_ENTRIES, Bool()))
+   val rxq_op_val    = Reg(Vec(NUM_RXQ_ENTRIES, Bool()))
+   val rxq_executed  = Reg(Vec(NUM_RXQ_ENTRIES, Bool()))
+   val rxq_committed = Reg(Vec(NUM_RXQ_ENTRIES, Bool()))
+   val rxq_uop       = Reg(Vec(NUM_RXQ_ENTRIES, new MicroOp()))
+   val rxq_rs1       = Reg(Vec(NUM_RXQ_ENTRIES, UInt(xLen.W)))
+   val rxq_rs2       = Reg(Vec(NUM_RXQ_ENTRIES, UInt(xLen.W)))
 
    // The instruction we are waiting for response from
-   val roccq_head     = RegInit(0.U(log2Ceil(NUM_ROCC_ENTRIES).W))
+   val rxq_head     = RegInit(0.U(log2Ceil(NUM_RXQ_ENTRIES).W))
    // The instruction we are waiting for clearance to execute
-   val roccq_exe_head = RegInit(0.U(log2Ceil(NUM_ROCC_ENTRIES).W))
+   val rxq_exe_head = RegInit(0.U(log2Ceil(NUM_RXQ_ENTRIES).W))
    // The next instruction we are waiting to "commit" through PNR
-   val roccq_com_head = RegInit(0.U(log2Ceil(NUM_ROCC_ENTRIES).W))
-   val roccq_tail     = RegInit(0.U(log2Ceil(NUM_ROCC_ENTRIES).W))
+   val rxq_com_head = RegInit(0.U(log2Ceil(NUM_RXQ_ENTRIES).W))
+   val rxq_tail     = RegInit(0.U(log2Ceil(NUM_RXQ_ENTRIES).W))
 
-   io.core.roccq_idx := roccq_tail
+   io.core.rxq_idx := rxq_tail
 
    // Decode
    val rocc_idx = WireInit(0.U)
@@ -92,101 +93,101 @@ class RoCCShim(implicit p: Parameters) extends BoomModule()(p)
 
    when (enq_val)
    {
-      roccq_val      (roccq_tail) := true.B
-      roccq_op_val   (roccq_tail) := false.B
-      roccq_executed (roccq_tail) := false.B
-      roccq_committed(roccq_tail) := false.B
-      roccq_uop      (roccq_tail) := io.core.dec_uops(rocc_idx)
-      roccq_tail                  := WrapInc(roccq_tail, NUM_ROCC_ENTRIES)
+      rxq_val      (rxq_tail) := true.B
+      rxq_op_val   (rxq_tail) := false.B
+      rxq_executed (rxq_tail) := false.B
+      rxq_committed(rxq_tail) := false.B
+      rxq_uop      (rxq_tail) := io.core.dec_uops(rocc_idx)
+      rxq_tail                  := WrapInc(rxq_tail, NUM_RXQ_ENTRIES)
    }
 
    // Issue
    when (io.req.valid)
    {
-      val roccq_idx = io.req.bits.uop.roccq_idx
-      assert(io.req.bits.uop.rob_idx === roccq_uop(roccq_idx).rob_idx,
+      val rxq_idx = io.req.bits.uop.rxq_idx
+      assert(io.req.bits.uop.rob_idx === rxq_uop(rxq_idx).rob_idx,
          "Mismatch between RoCCUnit request and RoCC execute head")
-      assert(roccq_val(roccq_idx),
+      assert(rxq_val(rxq_idx),
          "Trying to execute rocc inst without the instruction bits")
 
-      roccq_op_val   (roccq_idx)      := true.B
-      roccq_uop      (roccq_idx).pdst := io.req.bits.uop.pdst
-      roccq_rs1      (roccq_idx)      := io.req.bits.rs1_data
-      roccq_rs2      (roccq_idx)      := io.req.bits.rs2_data
+      rxq_op_val   (rxq_idx)      := true.B
+      rxq_uop      (rxq_idx).pdst := io.req.bits.uop.pdst
+      rxq_rs1      (rxq_idx)      := io.req.bits.rs1_data
+      rxq_rs2      (rxq_idx)      := io.req.bits.rs2_data
    }
 
    // Commit
-   when (roccq_op_val(roccq_com_head) &&
-      IsOlder(roccq_uop(roccq_com_head).rob_idx, io.core.rob_pnr_idx, io.core.rob_tail_idx))
+   when (rxq_op_val(rxq_com_head) &&
+      IsOlder(rxq_uop(rxq_com_head).rob_idx, io.core.rob_pnr_idx, io.core.rob_tail_idx))
    {
-      roccq_committed(roccq_com_head) := true.B
-      roccq_com_head                  := WrapInc(roccq_com_head, NUM_ROCC_ENTRIES)
+      rxq_committed(rxq_com_head) := true.B
+      rxq_com_head                  := WrapInc(rxq_com_head, NUM_RXQ_ENTRIES)
    }
    // Execute
    io.core.rocc.cmd.valid := false.B
-   when (roccq_op_val(roccq_exe_head) && io.core.rocc.cmd.ready &&
-      roccq_committed(roccq_exe_head))
+   when (rxq_op_val(rxq_exe_head) && io.core.rocc.cmd.ready &&
+      rxq_committed(rxq_exe_head))
    {
       io.core.rocc.cmd.valid         := true.B
-      io.core.rocc.cmd.bits.inst     := roccq_uop(roccq_exe_head).inst.asTypeOf(new RoCCInstruction)
-      io.core.rocc.cmd.bits.rs1      := roccq_rs1(roccq_exe_head)
-      io.core.rocc.cmd.bits.rs2      := roccq_rs2(roccq_exe_head)
+      io.core.rocc.cmd.bits.inst     := rxq_uop(rxq_exe_head).inst.asTypeOf(new RoCCInstruction)
+      io.core.rocc.cmd.bits.rs1      := rxq_rs1(rxq_exe_head)
+      io.core.rocc.cmd.bits.rs2      := rxq_rs2(rxq_exe_head)
       io.core.rocc.cmd.bits.status   := io.status
-      roccq_executed(roccq_exe_head) := true.B
-      roccq_exe_head                 := WrapInc(roccq_exe_head, NUM_ROCC_ENTRIES)
+      rxq_executed(rxq_exe_head) := true.B
+      rxq_exe_head                 := WrapInc(rxq_exe_head, NUM_RXQ_ENTRIES)
    }
 
    //------------------
    // Handle responses
 
    // Either we get a response, or the RoCC op expects no response
-   val handle_resp = (io.core.rocc.resp.valid || roccq_uop(roccq_head).dst_rtype === RT_X) && io.resp.ready
+   val handle_resp = (io.core.rocc.resp.valid || rxq_uop(rxq_head).dst_rtype === RT_X) && io.resp.ready
 
    io.core.rocc.resp.ready := io.resp.ready
    io.resp.valid           := false.B
-   when (roccq_head =/= roccq_exe_head &&
-         roccq_val(roccq_head) &&
+   when (rxq_head =/= rxq_exe_head &&
+         rxq_val(rxq_head) &&
          handle_resp)
    {
-      assert((roccq_uop(roccq_head).dst_rtype === RT_X)
-          || io.core.rocc.resp.bits.rd === roccq_uop(roccq_head).ldst,
+      assert((rxq_uop(rxq_head).dst_rtype === RT_X)
+          || io.core.rocc.resp.bits.rd === rxq_uop(rxq_head).ldst,
          "RoCC response destination register does not match expected")
-      assert(roccq_executed(roccq_head),
+      assert(rxq_executed(rxq_head),
          "Received a response for a RoCC instruction we haven't executed")
       io.resp.valid              := true.B
-      io.resp.bits.uop           := roccq_uop(roccq_head)
+      io.resp.bits.uop           := rxq_uop(rxq_head)
       io.resp.bits.data          := io.core.rocc.resp.bits.data
 
-      roccq_val      (roccq_head) := false.B
-      roccq_op_val   (roccq_head) := false.B
-      roccq_executed (roccq_head) := false.B
-      roccq_committed(roccq_head) := false.B
+      rxq_val      (rxq_head) := false.B
+      rxq_op_val   (rxq_head) := false.B
+      rxq_executed (rxq_head) := false.B
+      rxq_committed(rxq_head) := false.B
 
-      roccq_head                 := WrapInc(roccq_head, NUM_ROCC_ENTRIES)
+      rxq_head                 := WrapInc(rxq_head, NUM_RXQ_ENTRIES)
    }
 
-   io.core.roccq_full  := WrapInc(roccq_tail, NUM_ROCC_ENTRIES) === roccq_head
-   io.core.roccq_empty :=  roccq_tail === roccq_head
+   io.core.rxq_full  := WrapInc(rxq_tail, NUM_RXQ_ENTRIES) === rxq_head
+   io.core.rxq_empty :=  rxq_tail === rxq_head
    //--------------------------
    // Branches
-   for (i <- 0 until NUM_ROCC_ENTRIES)
+   for (i <- 0 until NUM_RXQ_ENTRIES)
    {
-      when (roccq_val(i))
+      when (rxq_val(i))
       {
-         roccq_uop(i).br_mask := GetNewBrMask(io.brinfo, roccq_uop(i))
-         when (IsKilledByBranch(io.brinfo, roccq_uop(i)))
+         rxq_uop(i).br_mask := GetNewBrMask(io.brinfo, rxq_uop(i))
+         when (IsKilledByBranch(io.brinfo, rxq_uop(i)))
          {
-            assert(!roccq_executed(i),
+            assert(!rxq_executed(i),
               "We executed a RoCC instruction that was killed by branch!")
-            roccq_val(i)      := false.B
-            roccq_op_val(i)   := false.B
-            roccq_executed(i) := false.B
+            rxq_val(i)      := false.B
+            rxq_op_val(i)   := false.B
+            rxq_executed(i) := false.B
          }
       }
    }
    when (io.brinfo.valid && io.brinfo.mispredict && !io.exception)
    {
-      roccq_tail := io.brinfo.roccq_idx
+      rxq_tail := io.brinfo.rxq_idx
    }
 
 
@@ -195,28 +196,28 @@ class RoCCShim(implicit p: Parameters) extends BoomModule()(p)
 
    when (reset.toBool)
    {
-      roccq_tail     := 0.U
-      roccq_head     := 0.U
-      roccq_exe_head := 0.U
-      roccq_com_head := 0.U
-      for (i <- 0 until NUM_ROCC_ENTRIES)
+      rxq_tail     := 0.U
+      rxq_head     := 0.U
+      rxq_exe_head := 0.U
+      rxq_com_head := 0.U
+      for (i <- 0 until NUM_RXQ_ENTRIES)
       {
-         roccq_val(i)       := false.B
-         roccq_op_val(i)    := false.B
-         roccq_executed(i)  := false.B
-         roccq_committed(i) := false.B
+         rxq_val(i)       := false.B
+         rxq_op_val(i)    := false.B
+         rxq_executed(i)  := false.B
+         rxq_committed(i) := false.B
       }
    }
      .elsewhen (io.exception)
    {
-      roccq_tail := roccq_com_head
-      for (i <- 0 until NUM_ROCC_ENTRIES)
+      rxq_tail := rxq_com_head
+      for (i <- 0 until NUM_RXQ_ENTRIES)
       {
-         when (!roccq_committed(i))
+         when (!rxq_committed(i))
          {
-            roccq_val(i)      := false.B
-            roccq_op_val(i)   := false.B
-            roccq_executed(i) := false.B
+            rxq_val(i)      := false.B
+            rxq_op_val(i)   := false.B
+            rxq_executed(i) := false.B
          }
       }
    }

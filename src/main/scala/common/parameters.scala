@@ -118,7 +118,7 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
    //************************************
    // Data Structure Sizes
    val NUM_ROB_ENTRIES = boomParams.numRobEntries       // number of ROB entries (e.g., 32 entries for R10k)
-   val NUM_ROCC_ENTRIES= 4
+   val NUM_RXQ_ENTRIES = 4                              // number of RoCC execute queue entries. Keep small since this holds operands and instruction bits
    val NUM_LDQ_ENTRIES = boomParams.numLdqEntries       // number of LAQ entries
    val NUM_STQ_ENTRIES = boomParams.numStqEntries       // number of SAQ/SDQ entries
    val MAX_BR_COUNT    = boomParams.maxBrCount          // number of branches we can speculate simultaneously

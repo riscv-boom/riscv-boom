@@ -500,8 +500,8 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    var dec_last_inst_was_stalled = false.B
 
    // send only 1 RoCC instructions at a time
-   var dec_rocc_found = if (usingRoCC) exe_units.rocc_unit.io.rocc.roccq_full else false.B
-   val rocc_shim_busy = if (usingRoCC) !exe_units.rocc_unit.io.rocc.roccq_empty else false.B
+   var dec_rocc_found = if (usingRoCC) exe_units.rocc_unit.io.rocc.rxq_full else false.B
+   val rocc_shim_busy = if (usingRoCC) !exe_units.rocc_unit.io.rocc.rxq_empty else false.B
 
    // stall fetch/dcode because we ran out of branch tags
    val branch_mask_full = Wire(Vec(decodeWidth, Bool()))
@@ -602,7 +602,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       for (w <- 0 until decodeWidth)
       {
          // We guarantee only decoding 1 RoCC instruction per cycle
-         dec_uops(w).roccq_idx := exe_units.rocc_unit.io.rocc.roccq_idx
+         dec_uops(w).rxq_idx := exe_units.rocc_unit.io.rocc.rxq_idx
       }
    }
 
