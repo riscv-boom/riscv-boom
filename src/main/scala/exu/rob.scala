@@ -762,9 +762,12 @@ class Rob(
    }
    .elsewhen (io.commit.valids.asUInt =/= 0.U)
    {
-      rob_head_lsb := (width-1).U - PriorityEncoder(Reverse(io.commit.valids.asUInt))
+      rob_head_lsb := width.U - PriorityEncoder(Reverse(io.commit.valids.asUInt))
    }
-
+   .elsewhen (empty && io.enq_valids.asUInt =/= 0.U)
+   {
+      rob_head_lsb := PriorityEncoder(io.enq_valids)
+   }
    // -----------------------------------------------
    // ROB Point-of-No-Return (PNR) Logic
    // Acts as a second head, but only waits on busy instructions which might cause misspeculation.
@@ -786,18 +789,19 @@ class Rob(
    {
       val safe_to_inc    = rob_state === s_normal || rob_state === s_wait_till_empty
       val do_inc_row     = !rob_pnr_unsafe.reduce(_||_) && rob_pnr =/= rob_tail
-      val do_inc_partial = !rob_pnr_unsafe(rob_pnr_lsb) && rob_pnr === rob_tail && rob_tail_vals(rob_pnr_lsb)
+      val do_inc_partial = !rob_pnr_unsafe(rob_pnr_lsb) && (rob_pnr =/= rob_tail || (rob_pnr === rob_tail && rob_tail_vals(rob_pnr_lsb)))
       when (empty && io.enq_valids.asUInt =/= 0.U) {
          // Unforunately for us, the ROB does not use its entries in monotonically
          //  increasing order, even in the case of no exceptions. The edge case
          //  arises when partial rows are enqueued and committed, leaving an empty
          //  ROB.
          rob_pnr     := rob_head
-         rob_pnr_lsb := 0.U
+         rob_pnr_lsb := PriorityEncoder(io.enq_valids)
       } .elsewhen (safe_to_inc && do_inc_row) {
          rob_pnr     := WrapInc(rob_pnr, NUM_ROB_ROWS)
          rob_pnr_lsb := 0.U
       } .elsewhen (safe_to_inc && do_inc_partial) {
+         // TODO: Fix this, this needs to be faster for width > 2
          rob_pnr_lsb := rob_pnr_lsb + 1.U
       }
       // rob_pnr := Mux(do_inc_pnr, WrapInc(rob_pnr, NUM_ROB_ROWS), rob_pnr)
