@@ -322,3 +322,35 @@ an exception as part of executing a CSR instruction (e.g., a syscall).
 
 .. [7]
    The CSRFile is a Rocket component.
+
+
+The Rocket Custom Co-Processor Interface (RoCC)
+-----------------------------------------------
+The ROCC interface accepts a ROCC command and up to two register inputs
+from the Control Processor’s scalar register file. The ROCC command is
+actually the entire RISC-V instruction fetched by the Control Processor
+(a “ROCC instruction"). Thus, each ROCC queue entry is at least
+2\*XPRLEN + 32 bits in size (additional ROCC instructions may use the
+longer instruction formats to encode additional behaviors).
+
+As BOOM does not store the instruction bits in the ROB, a separate data
+structure (A “ROCC Shim") holds the
+instructions until the ROCC instruction can be committed and the ROCC
+command sent to the co-processor.
+
+The source operands will also require access to BOOM’s register file.
+ROCC instructions are dispatched to the Issue Window, and scheduled
+so that they may access the read ports of the register file once the
+operands are available. The operands are then written into the ROCC
+Shim, which stores the operands and the instruction
+bits until they can be sent to the co-processor. This requires
+significant state.
+
+After issue to RoCC, we track a queue of in-flight RoCC instructions,
+since we need to translate the logical destination register identifier
+from the RoCC response into the previously renamed physical destination
+register identifier.
+
+Currently the RoCC interface does not support interrupts, exceptions,
+reusing the BOOM FPU, or direct access to the L1 data cache. This should
+all be straightforward to add, and will be completed as demand arises.
