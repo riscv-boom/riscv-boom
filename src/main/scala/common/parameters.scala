@@ -62,6 +62,8 @@ case class BoomCoreParams(
    renameLatency: Int = 2,
    regreadLatency: Int = 1,
    nPerfCounters: Int = 0,
+   numRXQEntries: Int = 4,
+   numRCQEntries: Int = 8,
    /* more stuff */
 
    useFetchMonitor: Boolean = true,
@@ -118,7 +120,8 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
    //************************************
    // Data Structure Sizes
    val NUM_ROB_ENTRIES = boomParams.numRobEntries       // number of ROB entries (e.g., 32 entries for R10k)
-   val NUM_RXQ_ENTRIES = 4                              // number of RoCC execute queue entries. Keep small since this holds operands and instruction bits
+   val NUM_RXQ_ENTRIES = boomParams.numRXQEntries       // number of RoCC execute queue entries. Keep small since this holds operands and instruction bits
+   val NUM_RCQ_ENTRIES = boomParams.numRCQEntries       // number of RoCC commit queue entries. This can be large since it just keeps a pdst
    val NUM_LDQ_ENTRIES = boomParams.numLdqEntries       // number of LAQ entries
    val NUM_STQ_ENTRIES = boomParams.numStqEntries       // number of SAQ/SDQ entries
    val MAX_BR_COUNT    = boomParams.maxBrCount          // number of branches we can speculate simultaneously
