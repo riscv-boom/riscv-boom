@@ -1,5 +1,5 @@
 //******************************************************************************
-// Copyright (c) 2017 - 2018, The Regents of the University of California (Regents).
+// Copyright (c) 2017 - 2019, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
 // Author: Christopher Celio
@@ -64,29 +64,21 @@ object Generator extends GeneratorApp
     val vm = coreParams.useVM
     val env = if (vm) List("p","v") else List("p")
     coreParams.fpu foreach { case cfg =>
-      if (xlen == 32)
-      {
+      if (xlen == 32) {
         TestGeneration.addSuites(env.map(rv32uf))
-        if (cfg.fLen >= 64)
-        {
+        if (cfg.fLen >= 64) {
           TestGeneration.addSuites(env.map(rv32ud))
         }
-      }
-      else if (cfg.fLen >= 64)
-      {
-          TestGeneration.addSuites(env.map(rv64ud))
-          TestGeneration.addSuites(env.map(rv64uf))
-          TestGeneration.addSuite(rv32udBenchmarks)
+      } else if (cfg.fLen >= 64) {
+        TestGeneration.addSuites(env.map(rv64ud))
+        TestGeneration.addSuites(env.map(rv64uf))
+        TestGeneration.addSuite(rv32udBenchmarks)
       }
     }
-    if (coreParams.useAtomics)
-    {
-      if (tileParams.dcache.flatMap(_.scratch).isEmpty)
-      {
+    if (coreParams.useAtomics) {
+      if (tileParams.dcache.flatMap(_.scratch).isEmpty) {
         TestGeneration.addSuites(env.map(if (xlen == 64) rv64ua else rv32ua))
-      }
-      else
-      {
+      } else {
         TestGeneration.addSuites(env.map(if (xlen == 64) rv64uaSansLRSC else rv32uaSansLRSC))
       }
     }

@@ -1,5 +1,5 @@
 //******************************************************************************
-// Copyright (c) 2015 - 2018, The Regents of the University of California (Regents).
+// Copyright (c) 2015 - 2019, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
 // Author: Christopher Celio
@@ -7,7 +7,7 @@
 
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
-// RISCV BOOM Utility Functions
+// Utility Functions
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
 
@@ -19,36 +19,31 @@ import chisel3.util._
 import freechips.rocketchip.rocket.Instructions._
 import freechips.rocketchip.rocket._
 
-import boom.common.MicroOp
+import boom.common.{MicroOp}
 import boom.exu.{BrResolutionInfo}
 
 /**
- * Object to XOR fold a input register of full_length into a compressed_length.
+ * Object to XOR fold a input register of fullLength into a compressedLength.
  */
 object Fold
 {
-   def apply(input: UInt, compressed_length: Int, full_length: Int): UInt =
-   {
-      val clen = compressed_length
-      val hlen = full_length
-      if (hlen <= clen)
-      {
-         input
+  def apply(input: UInt, compressedLength: Int, fullLength: Int): UInt = {
+    val clen = compressedLength
+    val hlen = fullLength
+    if (hlen <= clen) {
+      input
+    } else {
+      var res = 0.U(clen.W)
+      var remaining = input.asUInt
+      for (i <- 0 to hlen-1 by clen) {
+        val len = if (i + clen > hlen ) (hlen - i) else clen
+        require(len > 0)
+        res = res(clen-1,0) ^ remaining(len-1,0)
+        remaining = remaining >> len.U
       }
-      else
-      {
-         var res = 0.U(clen.W)
-         var remaining = input.asUInt
-         for (i <- 0 to hlen-1 by clen)
-         {
-            val len = if (i + clen > hlen ) (hlen - i) else clen
-            require(len > 0)
-            res = res(clen-1,0) ^ remaining(len-1,0)
-            remaining = remaining >> len.U
-         }
-         res
-      }
-   }
+      res
+    }
+  }
 }
 
 /**
@@ -56,19 +51,17 @@ object Fold
  */
 object IsKilledByBranch
 {
-   def apply(brinfo: BrResolutionInfo, uop: MicroOp): Bool =
-   {
-      return (brinfo.valid &&
-              brinfo.mispredict &&
-              maskMatch(brinfo.mask, uop.br_mask))
-   }
+  def apply(brinfo: BrResolutionInfo, uop: MicroOp): Bool = {
+    return (brinfo.valid &&
+            brinfo.mispredict &&
+            maskMatch(brinfo.mask, uop.br_mask))
+  }
 
-   def apply(brinfo: BrResolutionInfo, uop_mask: UInt): Bool =
-   {
-      return (brinfo.valid &&
-              brinfo.mispredict &&
-              maskMatch(brinfo.mask, uop_mask))
-   }
+  def apply(brinfo: BrResolutionInfo, uop_mask: UInt): Bool = {
+    return (brinfo.valid &&
+            brinfo.mispredict &&
+            maskMatch(brinfo.mask, uop_mask))
+  }
 }
 
 /**
@@ -77,16 +70,14 @@ object IsKilledByBranch
  */
 object GetNewUopAndBrMask
 {
-   def apply(uop: MicroOp, brinfo: BrResolutionInfo)
-      (implicit p: freechips.rocketchip.config.Parameters): MicroOp =
-   {
-      val newuop = WireInit(uop)
-      newuop.br_mask :=
-         Mux(brinfo.valid,
-            (uop.br_mask & ~brinfo.mask),
-            uop.br_mask)
-      newuop
-   }
+  def apply(uop: MicroOp, brinfo: BrResolutionInfo)
+    (implicit p: freechips.rocketchip.config.Parameters): MicroOp = {
+    val newuop = WireInit(uop)
+    newuop.br_mask := Mux(brinfo.valid,
+                          (uop.br_mask & ~brinfo.mask),
+                           uop.br_mask)
+    newuop
+  }
 }
 
 /**
@@ -94,15 +85,16 @@ object GetNewUopAndBrMask
  */
 object GetNewBrMask
 {
-   def apply(brinfo: BrResolutionInfo, uop: MicroOp): UInt =
-   {
-      return Mux(brinfo.valid, (uop.br_mask & ~brinfo.mask),
-                               uop.br_mask)
+   def apply(brinfo: BrResolutionInfo, uop: MicroOp): UInt = {
+     return Mux(brinfo.valid,
+                (uop.br_mask & ~brinfo.mask),
+                uop.br_mask)
    }
-   def apply(brinfo: BrResolutionInfo, br_mask: UInt): UInt =
-   {
-      return Mux(brinfo.valid, (br_mask & ~brinfo.mask),
-                               br_mask)
+
+   def apply(brinfo: BrResolutionInfo, br_mask: UInt): UInt = {
+     return Mux(brinfo.valid,
+                (br_mask & ~brinfo.mask),
+                br_mask)
    }
 }
 
@@ -111,7 +103,7 @@ object GetNewBrMask
  */
 object maskMatch
 {
-   def apply(msk1: UInt, msk2: UInt): Bool = (msk1 & msk2) =/= 0.U
+  def apply(msk1: UInt, msk2: UInt): Bool = (msk1 & msk2) =/= 0.U
 }
 
 /**
@@ -119,7 +111,7 @@ object maskMatch
  */
 object clearMaskBit
 {
-   def apply(msk: UInt, idx: UInt): UInt = (msk & ~(1.U << idx))(msk.getWidth-1, 0)
+  def apply(msk: UInt, idx: UInt): UInt = (msk & ~(1.U << idx))(msk.getWidth-1, 0)
 }
 
 /**
@@ -127,11 +119,10 @@ object clearMaskBit
  */
 object PerformShiftRegister
 {
-   def apply(reg_val: UInt, new_bit: Bool): UInt =
-   {
-      reg_val := Cat(reg_val(reg_val.getWidth-1, 0).asUInt, new_bit.asUInt).asUInt
-      reg_val
-   }
+  def apply(reg_val: UInt, new_bit: Bool): UInt = {
+    reg_val := Cat(reg_val(reg_val.getWidth-1, 0).asUInt, new_bit.asUInt).asUInt
+    reg_val
+  }
 }
 
 /**
@@ -142,12 +133,11 @@ object PerformShiftRegister
  */
 object PerformCircularShiftRegister
 {
-   def apply(csr: UInt, new_bit: Bool, evict_bit: Bool, hlen: Int, clen: Int): UInt =
-   {
-      val carry = csr(clen-1)
-      val newval = Cat(csr, new_bit ^ carry) ^ (evict_bit << (hlen % clen).U)
-      newval
-   }
+  def apply(csr: UInt, new_bit: Bool, evict_bit: Bool, hlen: Int, clen: Int): UInt = {
+    val carry = csr(clen-1)
+    val newval = Cat(csr, new_bit ^ carry) ^ (evict_bit << (hlen % clen).U)
+    newval
+  }
 }
 
 /**
@@ -156,21 +146,17 @@ object PerformCircularShiftRegister
  */
 object WrapAdd
 {
-   // "n" is the number of increments, so we wrap at n-1.
-   def apply(value: UInt, amt: UInt, n: Int): UInt =
-   {
-      if (isPow2(n))
-      {
-         (value + amt)(log2Ceil(n)-1,0)
-      }
-      else
-      {
-         val sum = Cat(0.U(1.W), value) + Cat(0.U(1.W), amt)
-         Mux(sum >= n.U,
-            sum - n.U,
-            sum)
-      }
-   }
+  // "n" is the number of increments, so we wrap at n-1.
+  def apply(value: UInt, amt: UInt, n: Int): UInt = {
+    if (isPow2(n)) {
+      (value + amt)(log2Ceil(n)-1,0)
+    } else {
+      val sum = Cat(0.U(1.W), value) + Cat(0.U(1.W), amt)
+      Mux(sum >= n.U,
+          sum - n.U,
+          sum)
+    }
+  }
 }
 
 /**
@@ -179,22 +165,18 @@ object WrapAdd
  */
 object WrapSub
 {
-   // "n" is the number of increments, so we wrap to n-1.
-   def apply(value: UInt, amt: Int, n: Int): UInt =
-   {
-      if (isPow2(n))
-      {
-         (value - amt.U)(log2Ceil(n)-1,0)
-      }
-      else
-      {
-         val v = Cat(0.U(1.W), value)
-         val b = Cat(0.U(1.W), amt.U)
-         Mux(value >= amt.U,
-            value - amt.U,
-            n.U - amt.U - value)
-      }
-   }
+  // "n" is the number of increments, so we wrap to n-1.
+  def apply(value: UInt, amt: Int, n: Int): UInt = {
+    if (isPow2(n)) {
+       (value - amt.U)(log2Ceil(n)-1,0)
+    } else {
+      val v = Cat(0.U(1.W), value)
+      val b = Cat(0.U(1.W), amt.U)
+      Mux(value >= amt.U,
+          value - amt.U,
+          n.U - amt.U - value)
+    }
+  }
 }
 
 /**
@@ -203,19 +185,15 @@ object WrapSub
  */
 object WrapInc
 {
-   // "n" is the number of increments, so we wrap at n-1.
-   def apply(value: UInt, n: Int): UInt =
-   {
-      if (isPow2(n))
-      {
-         (value + 1.U)(log2Ceil(n)-1,0)
-      }
-      else
-      {
-         val wrap = (value === (n-1).U)
-         Mux(wrap, 0.U, value + 1.U)
-      }
-   }
+  // "n" is the number of increments, so we wrap at n-1.
+  def apply(value: UInt, n: Int): UInt = {
+    if (isPow2(n)) {
+      (value + 1.U)(log2Ceil(n)-1,0)
+    } else {
+      val wrap = (value === (n-1).U)
+      Mux(wrap, 0.U, value + 1.U)
+    }
+  }
 }
 
 /**
@@ -224,19 +202,15 @@ object WrapInc
  */
 object WrapDec
 {
-   // "n" is the number of increments, so we wrap at n-1.
-   def apply(value: UInt, n: Int): UInt =
-   {
-      if (isPow2(n))
-      {
-         (value - 1.U)(log2Ceil(n)-1,0)
-      }
-      else
-      {
-         val wrap = (value === 0.U)
-         Mux(wrap, (n-1).U, value - 1.U)
-      }
-   }
+  // "n" is the number of increments, so we wrap at n-1.
+  def apply(value: UInt, n: Int): UInt = {
+    if (isPow2(n)) {
+      (value - 1.U)(log2Ceil(n)-1,0)
+    } else {
+      val wrap = (value === 0.U)
+      Mux(wrap, (n-1).U, value - 1.U)
+    }
+  }
 }
 
 /**
@@ -245,12 +219,11 @@ object WrapDec
  */
 object AlignPCToBoundary
 {
-   def apply(pc: UInt, b: Int): UInt =
-   {
-   // Invert for scenario where pc longer than b
-   // (which would clear all bits above size(b)).
-      ~(~pc | (b-1).U)
-   }
+  def apply(pc: UInt, b: Int): UInt = {
+    // Invert for scenario where pc longer than b
+    //   (which would clear all bits above size(b)).
+    ~(~pc | (b-1).U)
+  }
 }
 
 /**
@@ -258,13 +231,12 @@ object AlignPCToBoundary
  */
 object RotateL1
 {
-   def apply(signal: UInt): UInt =
-   {
-      val w = signal.getWidth
-      val out = Cat(signal(w-2,0), signal(w-1))
+  def apply(signal: UInt): UInt = {
+    val w = signal.getWidth
+    val out = Cat(signal(w-2,0), signal(w-1))
 
-      return out
-   }
+    return out
+  }
 }
 
 /**
@@ -272,11 +244,10 @@ object RotateL1
  */
 object Sext
 {
-   def apply(x: UInt, length: Int): UInt =
-   {
-      if (x.getWidth == length) return x
-      else return Cat(Fill(length-x.getWidth, x(x.getWidth-1)), x)
-   }
+  def apply(x: UInt, length: Int): UInt = {
+    if (x.getWidth == length) return x
+    else return Cat(Fill(length-x.getWidth, x(x.getWidth-1)), x)
+  }
 }
 
 /**
@@ -285,20 +256,19 @@ object Sext
  */
 object ImmGen
 {
-   import boom.common.{LONGEST_IMM_SZ, IS_B, IS_I, IS_J, IS_S, IS_U}
-   def apply(ip: UInt, isel: UInt): SInt =
-   {
-      val sign = ip(LONGEST_IMM_SZ-1).asSInt
-      val i30_20 = Mux(isel === IS_U, ip(18,8).asSInt, sign)
-      val i19_12 = Mux(isel === IS_U || isel === IS_J, ip(7,0).asSInt, sign)
-      val i11    = Mux(isel === IS_U, 0.S,
-                   Mux(isel === IS_J || isel === IS_B, ip(8).asSInt, sign))
-      val i10_5  = Mux(isel === IS_U, 0.S, ip(18,14).asSInt)
-      val i4_1   = Mux(isel === IS_U, 0.S, ip(13,9).asSInt)
-      val i0     = Mux(isel === IS_S || isel === IS_I, ip(8).asSInt, 0.S)
+  import boom.common.{LONGEST_IMM_SZ, IS_B, IS_I, IS_J, IS_S, IS_U}
+  def apply(ip: UInt, isel: UInt): SInt = {
+    val sign = ip(LONGEST_IMM_SZ-1).asSInt
+    val i30_20 = Mux(isel === IS_U, ip(18,8).asSInt, sign)
+    val i19_12 = Mux(isel === IS_U || isel === IS_J, ip(7,0).asSInt, sign)
+    val i11    = Mux(isel === IS_U, 0.S,
+                 Mux(isel === IS_J || isel === IS_B, ip(8).asSInt, sign))
+    val i10_5  = Mux(isel === IS_U, 0.S, ip(18,14).asSInt)
+    val i4_1   = Mux(isel === IS_U, 0.S, ip(13,9).asSInt)
+    val i0     = Mux(isel === IS_S || isel === IS_I, ip(8).asSInt, 0.S)
 
-      return Cat(sign, i30_20, i19_12, i11, i10_5, i4_1, i0).asSInt
-   }
+    return Cat(sign, i30_20, i19_12, i11, i10_5, i4_1, i0).asSInt
+  }
 }
 
 /**
@@ -317,14 +287,13 @@ object ImmGenTyp { def apply(ip: UInt): UInt = { return ip(9,8) } }
  */
 object DebugIsJALR
 {
-   def apply(inst: UInt): Bool =
-   {
-      // TODO Chisel not sure why this won't compile
-//      val is_jalr = rocket.DecodeLogic(inst, List(Bool(false)),
-//                                       Array(
-//                                       JALR -> Bool(true)))
-      inst(6,0) === "b1100111".U
-   }
+  def apply(inst: UInt): Bool = {
+    // TODO Chisel not sure why this won't compile
+//    val is_jalr = rocket.DecodeLogic(inst, List(Bool(false)),
+//                                     Array(
+//                                     JALR -> Bool(true)))
+    inst(6,0) === "b1100111".U
+  }
 }
 
 /**
@@ -334,28 +303,27 @@ object DebugIsJALR
  */
 object DebugGetBJImm
 {
-   def apply(inst: UInt): UInt =
-   {
-      // TODO Chisel not sure why this won't compile
-      //val csignals =
-      //rocket.DecodeLogic(inst,
-      //                    List(Bool(false), Bool(false)),
-      //      Array(
-      //         BEQ     -> List(Bool(true ), Bool(false)),
-      //         BNE     -> List(Bool(true ), Bool(false)),
-      //         BGE     -> List(Bool(true ), Bool(false)),
-      //         BGEU    -> List(Bool(true ), Bool(false)),
-      //         BLT     -> List(Bool(true ), Bool(false)),
-      //         BLTU    -> List(Bool(true ), Bool(false))
-      //      ))
-      //val is_br :: nothing :: Nil = csignals
+  def apply(inst: UInt): UInt = {
+    // TODO Chisel not sure why this won't compile
+    //val csignals =
+    //rocket.DecodeLogic(inst,
+    //                    List(Bool(false), Bool(false)),
+    //      Array(
+    //         BEQ     -> List(Bool(true ), Bool(false)),
+    //         BNE     -> List(Bool(true ), Bool(false)),
+    //         BGE     -> List(Bool(true ), Bool(false)),
+    //         BGEU    -> List(Bool(true ), Bool(false)),
+    //         BLT     -> List(Bool(true ), Bool(false)),
+    //         BLTU    -> List(Bool(true ), Bool(false))
+    //      ))
+    //val is_br :: nothing :: Nil = csignals
 
-   val is_br = (inst(6,0) === "b1100011".U)
+    val is_br = (inst(6,0) === "b1100011".U)
 
-   val br_targ = Cat(Fill(12, inst(31)), Fill(8,inst(31)), inst(7), inst(30,25), inst(11,8), 0.U(1.W))
-   val jal_targ= Cat(Fill(12, inst(31)), inst(19,12), inst(20), inst(30,25), inst(24,21), 0.U(1.W))
+    val br_targ = Cat(Fill(12, inst(31)), Fill(8,inst(31)), inst(7), inst(30,25), inst(11,8), 0.U(1.W))
+    val jal_targ= Cat(Fill(12, inst(31)), inst(19,12), inst(20), inst(30,25), inst(24,21), 0.U(1.W))
 
-   Mux(is_br, br_targ, jal_targ)
+    Mux(is_br, br_targ, jal_targ)
   }
 }
 
@@ -364,20 +332,23 @@ object DebugGetBJImm
  */
 object AgePriorityEncoder
 {
-   def apply(in: Seq[Bool], head: UInt): UInt =
-   {
-      val n = in.size
-      val width = log2Ceil(in.size)
-      val n_padded = 1 << width
-      val temp_vec = (0 until n_padded).map(i => if (i < n) in(i) && i.U >= head else false.B) ++ in
-      val idx = PriorityEncoder(temp_vec)
-      idx(width-1, 0) //discard msb
-   }
+  def apply(in: Seq[Bool], head: UInt): UInt = {
+    val n = in.size
+    val width = log2Ceil(in.size)
+    val n_padded = 1 << width
+    val temp_vec = (0 until n_padded).map(i => if (i < n) in(i) && i.U >= head else false.B) ++ in
+    val idx = PriorityEncoder(temp_vec)
+    idx(width-1, 0) //discard msb
+  }
 }
 
 // is i0 older than i1? (closest to zero). Provide the tail_ptr to the
 // queue. This is Cat(i1 <= tail, i1) because the rob_tail can point to a
 // valid (partially dispatched) row.
+/**
+ * Object to determine whether queue
+ * index i0 is older than index i1.
+ */
 object IsOlder
 {
    def apply(i0: UInt, i1: UInt, tail: UInt) = (Cat(i0 <= tail, i0) < Cat(i1 <= tail, i1))
@@ -389,95 +360,86 @@ object IsOlder
  * Assumption: enq.valid only high if not killed by branch (so don't check IsKilled on io.enq).
  */
 class BranchKillableQueue[T <: boom.common.HasBoomUOP](gen: T, entries: Int)
-   (implicit p: freechips.rocketchip.config.Parameters)
-   extends boom.common.BoomModule()(p)
-   with boom.common.HasBoomCoreParameters
+  (implicit p: freechips.rocketchip.config.Parameters)
+  extends boom.common.BoomModule()(p)
+  with boom.common.HasBoomCoreParameters
 {
-   val io = IO(new Bundle
-   {
-      val enq     = Flipped(Decoupled(gen))
-      val deq     = Decoupled(gen)
+  val io = IO(new Bundle {
+    val enq     = Flipped(Decoupled(gen))
+    val deq     = Decoupled(gen)
 
-      val brinfo  = Input(new BrResolutionInfo())
-      val flush   = Input(Bool())
+    val brinfo  = Input(new BrResolutionInfo())
+    val flush   = Input(Bool())
 
-      val empty   = Output(Bool())
-      val count   = Output(UInt(log2Ceil(entries).W))
-   })
+    val empty   = Output(Bool())
+    val count   = Output(UInt(log2Ceil(entries).W))
+  })
 
-   private val ram     = Mem(entries, gen)
-   private val valids  = RegInit(VecInit(Seq.fill(entries) {false.B}))
-   private val brmasks = Reg(Vec(entries, UInt(MAX_BR_COUNT.W)))
+  private val ram     = Mem(entries, gen)
+  private val valids  = RegInit(VecInit(Seq.fill(entries) {false.B}))
+  private val brmasks = Reg(Vec(entries, UInt(MAX_BR_COUNT.W)))
 
-   private val enq_ptr = Counter(entries)
-   private val deq_ptr = Counter(entries)
-   private val maybe_full = RegInit(false.B)
+  private val enq_ptr = Counter(entries)
+  private val deq_ptr = Counter(entries)
+  private val maybe_full = RegInit(false.B)
 
-   private val ptr_match = enq_ptr.value === deq_ptr.value
-   io.empty := ptr_match && !maybe_full
-   private val full = ptr_match && maybe_full
-   private val do_enq = WireInit(io.enq.fire())
+  private val ptr_match = enq_ptr.value === deq_ptr.value
+  io.empty := ptr_match && !maybe_full
+  private val full = ptr_match && maybe_full
+  private val do_enq = WireInit(io.enq.fire())
 
-   private val deq_ram_valid = WireInit(!(io.empty))
-   private val do_deq = WireInit(io.deq.ready && deq_ram_valid)
+  private val deq_ram_valid = WireInit(!(io.empty))
+  private val do_deq = WireInit(io.deq.ready && deq_ram_valid)
 
-   for (i <- 0 until entries)
-   {
-      val mask = brmasks(i)
-      valids(i)  := valids(i) && !IsKilledByBranch(io.brinfo, mask) && !io.flush
-      when (valids(i))
-      {
-         brmasks(i) := GetNewBrMask(io.brinfo, mask)
-      }
-   }
+  for (i <- 0 until entries) {
+    val mask = brmasks(i)
+    valids(i)  := valids(i) && !IsKilledByBranch(io.brinfo, mask) && !io.flush
+    when (valids(i)) {
+      brmasks(i) := GetNewBrMask(io.brinfo, mask)
+    }
+  }
 
-   when (do_enq)
-   {
-      ram(enq_ptr.value) := io.enq.bits
-      valids(enq_ptr.value) := true.B //!IsKilledByBranch(io.brinfo, io.enq.bits.uop)
-      brmasks(enq_ptr.value) := GetNewBrMask(io.brinfo, io.enq.bits.uop)
-      enq_ptr.inc()
-   }
+  when (do_enq) {
+    ram(enq_ptr.value) := io.enq.bits
+    valids(enq_ptr.value) := true.B //!IsKilledByBranch(io.brinfo, io.enq.bits.uop)
+    brmasks(enq_ptr.value) := GetNewBrMask(io.brinfo, io.enq.bits.uop)
+    enq_ptr.inc()
+  }
 
-   when (do_deq)
-   {
-      deq_ptr.inc()
-   }
+  when (do_deq) {
+    deq_ptr.inc()
+  }
 
-   when (do_enq =/= do_deq)
-   {
-      maybe_full := do_enq
-   }
+  when (do_enq =/= do_deq) {
+    maybe_full := do_enq
+  }
 
-   io.enq.ready := !full
+  io.enq.ready := !full
 
-   private val out = ram(deq_ptr.value)
-   io.deq.valid := deq_ram_valid && valids(deq_ptr.value) && !IsKilledByBranch(io.brinfo, out.uop)
-   io.deq.bits := out
-   io.deq.bits.uop.br_mask := GetNewBrMask(io.brinfo, brmasks(deq_ptr.value))
+  private val out = ram(deq_ptr.value)
+  io.deq.valid := deq_ram_valid && valids(deq_ptr.value) && !IsKilledByBranch(io.brinfo, out.uop)
+  io.deq.bits := out
+  io.deq.bits.uop.br_mask := GetNewBrMask(io.brinfo, brmasks(deq_ptr.value))
 
-   // For flow queue behavior.
-   when (io.empty)
-   {
-      io.deq.valid := io.enq.valid //&& !IsKilledByBranch(io.brinfo, io.enq.bits.uop)
-      io.deq.bits := io.enq.bits
-      io.deq.bits.uop.br_mask := GetNewBrMask(io.brinfo, io.enq.bits.uop)
+  // For flow queue behavior.
+  when (io.empty) {
+    io.deq.valid := io.enq.valid //&& !IsKilledByBranch(io.brinfo, io.enq.bits.uop)
+    io.deq.bits := io.enq.bits
+    io.deq.bits.uop.br_mask := GetNewBrMask(io.brinfo, io.enq.bits.uop)
 
-      do_deq := false.B
-      when (io.deq.ready) { do_enq := false.B }
-   }
+    do_deq := false.B
+    when (io.deq.ready) { do_enq := false.B }
+  }
 
-   private val ptr_diff = enq_ptr.value - deq_ptr.value
-   if (isPow2(entries))
-   {
-      io.count := Cat(maybe_full && ptr_match, ptr_diff)
-   }
-   else
-   {
-      io.count := Mux(ptr_match,
-                     Mux(maybe_full,
+  private val ptr_diff = enq_ptr.value - deq_ptr.value
+  if (isPow2(entries)) {
+    io.count := Cat(maybe_full && ptr_match, ptr_diff)
+  }
+  else {
+    io.count := Mux(ptr_match,
+                    Mux(maybe_full,
                         entries.asUInt, 0.U),
-                     Mux(deq_ptr.value > enq_ptr.value,
+                    Mux(deq_ptr.value > enq_ptr.value,
                         entries.asUInt + ptr_diff, ptr_diff))
-   }
+  }
 }
