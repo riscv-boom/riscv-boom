@@ -72,16 +72,18 @@ case class BoomCoreParams(
    misaWritable: Boolean = true,
    mtvecInit: Option[BigInt] = Some(BigInt(0)),
    mtvecWritable: Boolean = true,
+   haveCFlush: Boolean = false,
    mulDiv: Option[freechips.rocketchip.rocket.MulDivParams] = Some(MulDivParams()),
    nBreakpoints: Int = 1,
    nL2TLBEntries: Int = 512,
    nLocalInterrupts: Int = 0,
-   tileControlAddr: Option[BigInt] = None,
    useAtomics: Boolean = true,
    useDebug: Boolean = true,
    useUser: Boolean = true,
    useVM: Boolean = true,
-   useCompressed: Boolean = false
+   useCompressed: Boolean = false,
+   useSCIE: Boolean = false,
+   clockGate: Boolean = false
 ) extends freechips.rocketchip.tile.CoreParams
 {
    val retireWidth: Int = decodeWidth

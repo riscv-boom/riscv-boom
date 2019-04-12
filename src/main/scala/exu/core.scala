@@ -41,6 +41,7 @@ import freechips.rocketchip.util.{Str, UIntIsOneOf}
 
 import boom.common._
 import boom.exu.FUConstants._
+import boom.system.BoomTilesKey
 import boom.util.{GetNewUopAndBrMask, Sext, WrapInc}
 
 /**
@@ -876,6 +877,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
                       - Mux(rob.io.com_xcpt.bits.edge_inst, 2.U, 0.U))
    // Cause not valid for for CALL or BREAKPOINTs (CSRFile will override it).
    csr.io.cause     := rob.io.com_xcpt.bits.cause
+   csr.io.ungated_clock := clock
 
    val tval_valid = csr.io.exception &&
       csr.io.cause.isOneOf(
@@ -1519,7 +1521,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    io.fpu.inst := 0.U
 
    //io.trace := csr.io.trace unused
-   if (tileParams.trace)
+   if (p(BoomTilesKey)(0).trace)
    {
       for (w <- 0 until COMMIT_WIDTH)
       {
