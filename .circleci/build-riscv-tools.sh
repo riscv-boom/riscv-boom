@@ -10,6 +10,9 @@ if [ ! -d "$HOME/riscv-tools-install" ]; then
 
     cd $HOME/boom-template
 
+    # init all submodules including the tools
+    ./scripts/init-submodules.sh
+
     # build the tools
     ./scripts/build-tools.sh
 fi
