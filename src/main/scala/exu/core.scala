@@ -37,7 +37,7 @@ import chisel3.experimental.dontTouch
 import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.rocket.Instructions._
 import freechips.rocketchip.rocket.Causes
-import freechips.rocketchip.util.{Str, UIntIsOneOf}
+import freechips.rocketchip.util.{Str, UIntIsOneOf, CoreMonitorBundle}
 
 import boom.common._
 import boom.exu.FUConstants._
@@ -1419,6 +1419,23 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
          }
       }
    }
+
+   // TODO: Does anyone want this debugging functionality?
+   val coreMonitorBundle = Wire(new CoreMonitorBundle(xLen))
+   coreMonitorBundle.clock  := clock
+   coreMonitorBundle.reset  := reset
+   coreMonitorBundle.hartid := DontCare
+   coreMonitorBundle.timer  := DontCare
+   coreMonitorBundle.valid  := DontCare
+   coreMonitorBundle.pc     := DontCare
+   coreMonitorBundle.wrdst  := DontCare
+   coreMonitorBundle.wrdata := DontCare
+   coreMonitorBundle.wren   := DontCare
+   coreMonitorBundle.rd0src := DontCare
+   coreMonitorBundle.rd0val := DontCare
+   coreMonitorBundle.rd1src := DontCare
+   coreMonitorBundle.rd1val := DontCare
+   coreMonitorBundle.inst   := DontCare
 
    //-------------------------------------------------------------
    //-------------------------------------------------------------
