@@ -32,7 +32,7 @@ trait HasBoomHellaCache { this: BaseTile =>
     }
     else
     {
-      new NonBlockingDCache(hartId)
+      new BoomNonBlockingDCache(hartId)
     })
 
   //tlMasterXbar.node := dcache.node
