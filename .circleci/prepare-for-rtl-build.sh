@@ -23,7 +23,7 @@ git fetch
 git checkout $(cat ../boom/ROCKETCHIP_VERSION)
 
 echo "Initialize final submodules"
-git submodule update --init --recursive hardfloat chisel3 firrtl
+git submodule update --init --recursive
 cd ../torture
 git submodule update --init --recursive
 

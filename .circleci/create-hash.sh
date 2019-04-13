@@ -18,7 +18,6 @@ fi
 rm -rf $HOME/boom-template/boom
 cp -r $HOME/project $HOME/boom-template/boom/
 
-
 cd $HOME/boom-template
 if [ $1 == "boom-template" ]; then
     git rev-parse HEAD >> $HOME/$1.hash
