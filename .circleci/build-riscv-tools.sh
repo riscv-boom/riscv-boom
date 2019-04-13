@@ -3,8 +3,7 @@
 # create the riscv tools binaries from riscv-boom/boom-template with rocket-chip hash given by riscv-boom
 
 # turn echo on and error on earliest command
-set -x
-set -e
+set -ex
 
 if [ ! -d "$HOME/riscv-tools-install" ]; then
 

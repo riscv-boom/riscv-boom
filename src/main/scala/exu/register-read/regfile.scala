@@ -51,14 +51,25 @@ class RegisterFileWritePort(val addr_width: Int, val data_width: Int)(implicit p
  */
 object WritePort
 {
-  def apply(enq: DecoupledIO[ExeUnitResp], addr_width: Int, data_width: Int)
+  def apply(enq: DecoupledIO[ExeUnitResp], addr_width: Int, data_width: Int, delay_by_one: Boolean = false)
     (implicit p: Parameters): DecoupledIO[RegisterFileWritePort] =
   {
     val wport = Wire(Decoupled(new RegisterFileWritePort(addr_width, data_width)))
-    wport.valid := enq.valid
-    wport.bits.addr := enq.bits.uop.pdst
-    wport.bits.data := enq.bits.data
-    enq.ready := wport.ready
+
+    if (delay_by_one)
+    {
+      wport.valid := RegNext(enq.valid)
+      wport.bits.addr := RegNext(enq.bits.uop.pdst)
+      wport.bits.data := RegNext(enq.bits.data)
+      enq.ready := RegNext(wport.ready)
+    }
+    else
+    {
+      wport.valid := enq.valid
+      wport.bits.addr := enq.bits.uop.pdst
+      wport.bits.data := enq.bits.data
+      enq.ready := wport.ready
+    }
 
     wport
   }

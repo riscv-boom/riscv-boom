@@ -3,8 +3,7 @@
 # create the different verilator builds of BOOM based on arg
 
 # turn echo on and error on earliest command
-set -x
-set -e
+set -ex
 
 # move the pull request riscv-boom repo into boom-template
 rm -rf $HOME/boom-template/boom

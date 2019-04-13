@@ -3,8 +3,7 @@
 # build verilator and init submodules with rocket-chip hash given by riscv-boom
 
 # turn echo on and error on earliest command
-set -x
-set -e
+set -ex
 
 cd $HOME/boom-template
 
@@ -24,6 +23,10 @@ git checkout $(cat ../boom/ROCKETCHIP_VERSION)
 
 echo "Initialize final submodules"
 git submodule update --init --recursive
+
+# TODO: Remove FIRRTL patch in next rocket-bump (fixes const prop issue)
+git -C firrtl checkout 9535e03020c6e654dae3ce7e95f4d8649405ce3d
+
 cd ../torture
 git submodule update --init --recursive
 
