@@ -1,10 +1,9 @@
 #!/bin/bash
 
-# get the hash of rocket-chip or boom-template and store in file
+# get the hash of riscv-tools or boom-template and store in file
 
 # turn echo on and error on earliest command
-set -x
-set -e
+set -ex
 
 # only execute if boom-template is not present (if it is present then it should have run this command before already)
 if [ ! -d "$HOME/boom-template" ]; then
@@ -19,12 +18,11 @@ fi
 rm -rf $HOME/boom-template/boom
 cp -r $HOME/project $HOME/boom-template/boom/
 
-
 cd $HOME/boom-template
 if [ $1 == "boom-template" ]; then
     git rev-parse HEAD >> $HOME/$1.hash
-    echo "Hashfile for $1 created in ..$PWD"
-elif [ $1 == "rocket-chip" ]; then
+    echo "Hashfile for $1 created in $HOME"
+elif [ $1 == "riscv-tools" ]; then
     # Use riscv-boom rocket-chip hash to specify version of rocket-chip to use
     git submodule update --init rocket-chip
     echo "Checking out rocket-chip with hash: $(cat boom/ROCKETCHIP_VERSION)"
@@ -32,7 +30,9 @@ elif [ $1 == "rocket-chip" ]; then
     git fetch
     git checkout $(cat ../boom/ROCKETCHIP_VERSION)
     git submodule update --recursive
-    git rev-parse HEAD >> $HOME/$1.hash
-    echo "Hashfile for $1 created in ..$PWD"
+
+    # rocket-chip now provides their own hash for the tools
+    cp riscv-tools.hash $HOME/$1.hash
+    echo "Hashfile for $1 created in $HOME"
 fi
 

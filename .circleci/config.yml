@@ -17,13 +17,13 @@ jobs:
             - checkout
 
             - run:
-                name: Create hash of riscv-tools based on rocket-chip
+                name: Create hash of riscv-tools
                 command: |
-                    .circleci/create-hash.sh rocket-chip
+                    .circleci/create-hash.sh riscv-tools
 
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../rocket-chip.hash" }}
+                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
 
             - run:
                 name: Building riscv-tools
@@ -32,7 +32,7 @@ jobs:
                 no_output_timeout: 120m
 
             - save_cache:
-                key: riscv-tools-installed-v3-{{ checksum "../rocket-chip.hash" }}
+                key: riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
                 paths:
                     - "/home/riscvuser/riscv-tools-install"
 
@@ -54,7 +54,7 @@ jobs:
 
             - restore_cache:
                 keys:
-                    - boom-template-with-verilator-v5-{{ checksum "../boom-template.hash" }}
+                    - boom-template-with-verilator-v7-{{ checksum "../boom-template.hash" }}
 
             - run:
                 name: Build Verilator and setup build environment
@@ -63,7 +63,7 @@ jobs:
                 no_output_timeout: 120m
 
             - save_cache:
-                key: boom-template-with-verilator-v5-{{ checksum "../boom-template.hash" }}
+                key: boom-template-with-verilator-v7-{{ checksum "../boom-template.hash" }}
                 paths:
                     - "/home/riscvuser/boom-template"
 
@@ -81,16 +81,16 @@ jobs:
             - run:
                 name: Create hash of riscv-tools and boom-template
                 command: |
-                    .circleci/create-hash.sh rocket-chip
+                    .circleci/create-hash.sh riscv-tools
                     .circleci/create-hash.sh boom-template
 
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../rocket-chip.hash" }}
+                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
 
             - restore_cache:
                 keys:
-                    - boom-template-with-verilator-v5-{{ checksum "../boom-template.hash" }}
+                    - boom-template-with-verilator-v7-{{ checksum "../boom-template.hash" }}
 
             - run:
                 name: Building BoomConfig using Verilator
@@ -116,16 +116,16 @@ jobs:
             - run:
                 name: Create hash of riscv-tools and boom-template
                 command: |
-                    .circleci/create-hash.sh rocket-chip
+                    .circleci/create-hash.sh riscv-tools
                     .circleci/create-hash.sh boom-template
 
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../rocket-chip.hash" }}
+                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
 
             - restore_cache:
                 keys:
-                    - boom-template-with-verilator-v5-{{ checksum "../boom-template.hash" }}
+                    - boom-template-with-verilator-v7-{{ checksum "../boom-template.hash" }}
 
             - run:
                 name: Building SmallRV32UnifiedBoomConfig using Verilator
@@ -151,16 +151,16 @@ jobs:
             - run:
                 name: Create hash of riscv-tools and boom-template
                 command: |
-                    .circleci/create-hash.sh rocket-chip
+                    .circleci/create-hash.sh riscv-tools
                     .circleci/create-hash.sh boom-template
 
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../rocket-chip.hash" }}
+                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
 
             - restore_cache:
                 keys:
-                    - boom-template-with-verilator-v5-{{ checksum "../boom-template.hash" }}
+                    - boom-template-with-verilator-v7-{{ checksum "../boom-template.hash" }}
 
             - run:
                 name: Building SmallBoomConfig using Verilator
@@ -186,16 +186,16 @@ jobs:
             - run:
                 name: Create hash of riscv-tools and boom-template
                 command: |
-                    .circleci/create-hash.sh rocket-chip
+                    .circleci/create-hash.sh riscv-tools
                     .circleci/create-hash.sh boom-template
 
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../rocket-chip.hash" }}
+                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
 
             - restore_cache:
                 keys:
-                    - boom-template-with-verilator-v5-{{ checksum "../boom-template.hash" }}
+                    - boom-template-with-verilator-v7-{{ checksum "../boom-template.hash" }}
 
             - run:
                 name: Building MediumBoomConfig using Verilator
@@ -221,16 +221,16 @@ jobs:
             - run:
                 name: Create hash of riscv-tools and boom-template
                 command: |
-                    .circleci/create-hash.sh rocket-chip
+                    .circleci/create-hash.sh riscv-tools
                     .circleci/create-hash.sh boom-template
 
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../rocket-chip.hash" }}
+                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
 
             - restore_cache:
                 keys:
-                    - boom-template-with-verilator-v5-{{ checksum "../boom-template.hash" }}
+                    - boom-template-with-verilator-v7-{{ checksum "../boom-template.hash" }}
 
             - run:
                 name: Building MegaBoomConfig using Verilator
@@ -254,13 +254,13 @@ jobs:
             - checkout
 
             - run:
-                name: Create hash of riscv-tools based on rocket-chip
+                name: Create hash of riscv-tools based on riscv-tools
                 command: |
-                    .circleci/create-hash.sh rocket-chip
+                    .circleci/create-hash.sh riscv-tools
 
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../rocket-chip.hash" }}
+                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
 
             - run:
                 name: Run Scala checkstyle
@@ -278,13 +278,13 @@ jobs:
             - checkout
 
             - run:
-                name: Create hash of riscv-tools based on rocket-chip
+                name: Create hash of riscv-tools
                 command: |
-                    .circleci/create-hash.sh rocket-chip
+                    .circleci/create-hash.sh riscv-tools
 
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../rocket-chip.hash" }}
+                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
 
             - restore_cache:
                 keys:
@@ -307,13 +307,13 @@ jobs:
             - checkout
 
             - run:
-                name: Create hash of riscv-tools based on rocket-chip
+                name: Create hash of riscv-tools
                 command: |
-                    .circleci/create-hash.sh rocket-chip
+                    .circleci/create-hash.sh riscv-tools
 
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../rocket-chip.hash" }}
+                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
 
             - restore_cache:
                 keys:
@@ -335,13 +335,13 @@ jobs:
             - checkout
 
             - run:
-                name: Create hash of riscv-tools based on rocket-chip
+                name: Create hash of riscv-tools
                 command: |
-                    .circleci/create-hash.sh rocket-chip
+                    .circleci/create-hash.sh riscv-tools
 
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../rocket-chip.hash" }}
+                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
 
             - restore_cache:
                 keys:
@@ -363,13 +363,13 @@ jobs:
             - checkout
 
             - run:
-                name: Create hash of riscv-tools based on rocket-chip
+                name: Create hash of riscv-tools
                 command: |
-                    .circleci/create-hash.sh rocket-chip
+                    .circleci/create-hash.sh riscv-tools
 
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../rocket-chip.hash" }}
+                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
 
             - restore_cache:
                 keys:
@@ -391,12 +391,12 @@ jobs:
             # Checkout the code
             - checkout
             - run:
-                name: Create hash of riscv-tools based on rocket-chip
+                name: Create hash of riscv-tools
                 command: |
-                    .circleci/create-hash.sh rocket-chip
+                    .circleci/create-hash.sh riscv-tools
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../rocket-chip.hash" }}
+                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
             - restore_cache:
                 keys:
                     - boom-template-smallrv32unifiedboomconfig-{{ .Branch }}-{{ .Revision }}
@@ -417,13 +417,13 @@ jobs:
             - checkout
 
             - run:
-                name: Create hash of riscv-tools based on rocket-chip
+                name: Create hash of riscv-tools
                 command: |
-                    .circleci/create-hash.sh rocket-chip
+                    .circleci/create-hash.sh riscv-tools
 
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../rocket-chip.hash" }}
+                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
 
             - restore_cache:
                 keys:
@@ -445,13 +445,13 @@ jobs:
             - checkout
 
             - run:
-                name: Create hash of riscv-tools based on rocket-chip
+                name: Create hash of riscv-tools
                 command: |
-                    .circleci/create-hash.sh rocket-chip
+                    .circleci/create-hash.sh riscv-tools
 
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../rocket-chip.hash" }}
+                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
 
             - restore_cache:
                 keys:
@@ -474,13 +474,13 @@ jobs:
             - checkout
 
             - run:
-                name: Create hash of riscv-tools based on rocket-chip
+                name: Create hash of riscv-tools
                 command: |
-                    .circleci/create-hash.sh rocket-chip
+                    .circleci/create-hash.sh riscv-tools
 
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../rocket-chip.hash" }}
+                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
 
             - restore_cache:
                 keys:
@@ -503,13 +503,13 @@ jobs:
             - checkout
 
             - run:
-                name: Create hash of riscv-tools based on rocket-chip
+                name: Create hash of riscv-tools
                 command: |
-                    .circleci/create-hash.sh rocket-chip
+                    .circleci/create-hash.sh riscv-tools
 
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../rocket-chip.hash" }}
+                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
 
             - restore_cache:
                 keys:
@@ -531,13 +531,13 @@ jobs:
             - checkout
 
             - run:
-                name: Create hash of riscv-tools based on rocket-chip
+                name: Create hash of riscv-tools
                 command: |
-                    .circleci/create-hash.sh rocket-chip
+                    .circleci/create-hash.sh riscv-tools
 
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../rocket-chip.hash" }}
+                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
 
             - restore_cache:
                 keys:
@@ -560,13 +560,13 @@ jobs:
             - checkout
 
             - run:
-                name: Create hash of riscv-tools based on rocket-chip
+                name: Create hash of riscv-tools
                 command: |
-                    .circleci/create-hash.sh rocket-chip
+                    .circleci/create-hash.sh riscv-tools
 
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../rocket-chip.hash" }}
+                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
 
             - restore_cache:
                 keys:
@@ -589,13 +589,13 @@ jobs:
             - checkout
 
             - run:
-                name: Create hash of riscv-tools based on rocket-chip
+                name: Create hash of riscv-tools
                 command: |
-                    .circleci/create-hash.sh rocket-chip
+                    .circleci/create-hash.sh riscv-tools
 
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../rocket-chip.hash" }}
+                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
 
             - restore_cache:
                 keys:
@@ -617,13 +617,13 @@ jobs:
             - checkout
 
             - run:
-                name: Create hash of riscv-tools based on rocket-chip
+                name: Create hash of riscv-tools
                 command: |
-                    .circleci/create-hash.sh rocket-chip
+                    .circleci/create-hash.sh riscv-tools
 
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../rocket-chip.hash" }}
+                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
 
             - restore_cache:
                 keys:

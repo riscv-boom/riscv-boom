@@ -147,6 +147,13 @@ class BoomTile(
       omDTIM.orElse(omDCache)
     }
 
+    def getInterruptTargets(): Seq[OMInterruptTarget] = {
+      Seq(OMInterruptTarget(
+        hartId = boomParams.hartId,
+        modes = OMModes.getModes(boomParams.core.useVM)
+      ))
+    }
+
     def getOMRocketCores(resourceBindingsMap: ResourceBindingsMap): Seq[OMRocketCore] = {
       val coreParams = rocketCoreParams(boomParams.core)
 
@@ -160,7 +167,7 @@ class BoomTile(
         fpu = coreParams.fpu.map{f => OMFPU(fLen = f.fLen)},
         performanceMonitor = PerformanceMonitor.permon(coreParams),
         pmp = OMPMP.pmp(coreParams),
-        documentationName = "TODO",
+        documentationName = tileParams.name.getOrElse("boom"),
         hartIds = Seq(hartId),
         hasVectoredInterrupts = true,
         interruptLatency = 4,

@@ -1,10 +1,9 @@
 #!/bin/bash
 
-# test the verilator simulation using csmith random testing 
+# test the verilator simulation using csmith random testing
 
 # turn echo on and error on earliest command
-set -x
-set -e
+set -ex
 
 SIM_BASE=simulator-boom.system-
 CONFIG=$1

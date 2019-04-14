@@ -59,41 +59,42 @@ object Generator extends GeneratorApp
     import freechips.rocketchip.system.DefaultTestSuites._
     val xlen = params(XLen)
     // TODO: for now only generate tests for the first core in the first subsystem
-    val tileParams = params(BoomTilesKey).head
-    val coreParams = tileParams.core
-    val vm = coreParams.useVM
-    val env = if (vm) List("p","v") else List("p")
-    coreParams.fpu foreach { case cfg =>
-      if (xlen == 32) {
-        TestGeneration.addSuites(env.map(rv32uf))
-        if (cfg.fLen >= 64) {
-          TestGeneration.addSuites(env.map(rv32ud))
+    params(BoomTilesKey).headOption.map { tileParams =>
+      val coreParams = tileParams.core
+      val vm = coreParams.useVM
+      val env = if (vm) List("p","v") else List("p")
+      coreParams.fpu foreach { case cfg =>
+        if (xlen == 32) {
+          TestGeneration.addSuites(env.map(rv32uf))
+          if (cfg.fLen >= 64) {
+            TestGeneration.addSuites(env.map(rv32ud))
+          }
+        } else if (cfg.fLen >= 64) {
+          TestGeneration.addSuites(env.map(rv64ud))
+          TestGeneration.addSuites(env.map(rv64uf))
+          TestGeneration.addSuite(rv32udBenchmarks)
         }
-      } else if (cfg.fLen >= 64) {
-        TestGeneration.addSuites(env.map(rv64ud))
-        TestGeneration.addSuites(env.map(rv64uf))
-        TestGeneration.addSuite(rv32udBenchmarks)
       }
-    }
-    if (coreParams.useAtomics) {
-      if (tileParams.dcache.flatMap(_.scratch).isEmpty) {
-        TestGeneration.addSuites(env.map(if (xlen == 64) rv64ua else rv32ua))
-      } else {
-        TestGeneration.addSuites(env.map(if (xlen == 64) rv64uaSansLRSC else rv32uaSansLRSC))
+      if (coreParams.useAtomics) {
+        if (tileParams.dcache.flatMap(_.scratch).isEmpty) {
+          TestGeneration.addSuites(env.map(if (xlen == 64) rv64ua else rv32ua))
+        } else {
+          TestGeneration.addSuites(env.map(if (xlen == 64) rv64uaSansLRSC else rv32uaSansLRSC))
+        }
       }
+      if (coreParams.useCompressed) TestGeneration.addSuites(env.map(if (xlen == 64) rv64uc else rv32uc))
+
+      // Include our BOOM-specific overrides.
+      val (rvi, rvu) =
+        if (xlen == 64) ((if (vm) BoomTestSuites.rv64i else BoomTestSuites.rv64pi), rv64u)
+        else            ((if (vm) rv32i else rv32pi), rv32u)
+
+      TestGeneration.addSuites(rvi.map(_("p")))
+      TestGeneration.addSuites(rvu.map(_("p")))
+      TestGeneration.addSuites((if (vm) List("v") else List()).flatMap(env => rvu.map(_(env))))
+      TestGeneration.addSuite(benchmarks)
+      TestGeneration.addSuite(new RegressionTestSuite(if (xlen == 64) rv64RegrTestNames else rv32RegrTestNames))
     }
-    if (coreParams.useCompressed) TestGeneration.addSuites(env.map(if (xlen == 64) rv64uc else rv32uc))
-
-    // Include our BOOM-specific overrides.
-    val (rvi, rvu) =
-      if (xlen == 64) ((if (vm) BoomTestSuites.rv64i else BoomTestSuites.rv64pi), rv64u)
-      else            ((if (vm) rv32i else rv32pi), rv32u)
-
-    TestGeneration.addSuites(rvi.map(_("p")))
-    TestGeneration.addSuites(rvu.map(_("p")))
-    TestGeneration.addSuites((if (vm) List("v") else List()).flatMap(env => rvu.map(_(env))))
-    TestGeneration.addSuite(benchmarks)
-    TestGeneration.addSuite(new RegressionTestSuite(if (xlen == 64) rv64RegrTestNames else rv32RegrTestNames))
   }
 
   val longName = names.topModuleProject + "." + names.topModuleClass + "." + names.configs
