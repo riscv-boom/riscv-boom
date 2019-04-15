@@ -15,7 +15,8 @@ cd boom-template
 cd $HOME/boom-template
 if [ $1 == "boom-template" ]; then
     git rev-parse HEAD >> $HOME/$1.hash
-    echo "Hashfile for $1 created in $HOME"
+    cat $HOME/project/ROCKETCHIP_VERSION $HOME/$1.hash > $HOME/$1.hash
+    echo "Hashfile for $1 created in $HOME (note: combined with rocket-chip hash)"
 elif [ $1 == "riscv-tools" ]; then
     # Use riscv-boom rocket-chip hash to specify version of rocket-chip to use
     git submodule update --init rocket-chip
