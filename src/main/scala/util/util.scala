@@ -342,12 +342,13 @@ object AgePriorityEncoder
   }
 }
 
-// is i0 older than i1? (closest to zero). Provide the tail_ptr to the
-// queue. This is Cat(i1 <= tail, i1) because the rob_tail can point to a
-// valid (partially dispatched) row.
 /**
- * Object to determine whether queue
- * index i0 is older than index i1.
+  * Object to determine whether queue
+  * index i0 is older than index i1.
+  *
+  * is i0 older than i1? (closest to zero). Provide the tail_ptr to the
+  *  queue. This is Cat(i1 <= tail, i1) because the rob_tail can point to a
+  * valid (partially dispatched) row.
  */
 object IsOlder
 {

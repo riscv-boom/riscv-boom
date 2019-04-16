@@ -198,10 +198,11 @@ Point of No Return (PNR)
 ------------------------
 
 The point-of-no-return head runs ahead of the ROB commit head, marking the
-next instruction which might not commit, cause misspeculation. These include
-unresolved branches and untranslated memory operations. Thus, the instructions
-*ahead* of the commit head and *behind* the PNR head are guaranteed to be
-*non-speculative*, even if they have not yet written back.
+next instruction which might be misspeculated or generate an exception.
+These include unresolved branches and untranslated memory operations.
+Thus, the instructions *ahead* of the commit head and *behind* the PNR
+head are guaranteed to be *non-speculative*, even if they have not yet
+written back.
 
 Currently the PNR is only used for RoCC instructions. RoCC co-processors
 typically expect their instructions in-order, and do not tolerate misspeculation.

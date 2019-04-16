@@ -1,3 +1,17 @@
+//******************************************************************************
+// Copyright (c) 2013 - 2019, The Regents of the University of California (Regents).
+// All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
+//------------------------------------------------------------------------------
+// Author: Jerry Zhao, SiFive
+//------------------------------------------------------------------------------
+
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
+// Mixins for BOOM RoCC accelerators
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
+
+
 package boom.common
 
 import chisel3._
@@ -9,9 +23,10 @@ import freechips.rocketchip.util._
 
 import boom.lsu._
 
-/*
- * Different from normal HasLazyRoCC because we create a new FPU
- */
+/**
+  * Mixin for BOOM when it uses a RoCC accelerator
+  * Different from normal HasLazyRoCC because we create a new FPU
+  */
 trait HasBoomLazyRoCC extends CanHaveBoomPTW { this: BaseTile =>
    val roccs = p(BuildRoCC).map(_(p))
 
@@ -22,6 +37,9 @@ trait HasBoomLazyRoCC extends CanHaveBoomPTW { this: BaseTile =>
    nDCachePorts += roccs.size
 }
 
+/**
+  * Mixin for BOOM when it uses a RoCC accelerator
+  */
 trait HasBoomLazyRoCCModule extends CanHaveBoomPTWModule
       with HasCoreParameters { this: BoomTileModuleImp =>
 
@@ -43,6 +61,7 @@ trait HasBoomLazyRoCCModule extends CanHaveBoomPTWModule
     {
        require(usingFPU)
        val fpuOpt = outer.tileParams.core.fpu.map(params => Module(new FPU(params)(outer.p)))
+       // TODO: Check this FPU works properly
        fpuOpt foreach { fpu =>
           // This FPU does not get CPU requests
           fpu.io := DontCare

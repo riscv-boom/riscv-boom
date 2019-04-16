@@ -1,5 +1,5 @@
 //******************************************************************************
-// Copyright (c) 2013 - 2018, The Regents of the University of California (Regents).
+// Copyright (c) 2013 - 2019, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
 // Author: Jerry Zhao
@@ -21,9 +21,13 @@ import chisel3.experimental.dontTouch
 import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.tile.{RoCCCoreIO, RoCCInstruction}
 import freechips.rocketchip.rocket._
+
 import boom.common._
 import boom.util._
 
+/**
+  * IO Bundle representing RoCC shim interface with the core
+  */
 class RoCCShimCoreIO(implicit p: Parameters) extends BoomBundle()(p)
 {
   // Decode Stage
@@ -40,7 +44,7 @@ class RoCCShimCoreIO(implicit p: Parameters) extends BoomBundle()(p)
 
 /**
  * IO bundle representing the different signals to interact with the RoCC
- *
+ * Vaguely follows the IO of a functional unit.
   */
 class RoCCShimIO(implicit p: Parameters) extends BoomBundle()(p)
 {
@@ -53,6 +57,13 @@ class RoCCShimIO(implicit p: Parameters) extends BoomBundle()(p)
   val exception        = Input(Bool())
 }
 
+/**
+  * Structure similar to LSU
+  *  - Holds instruction and operand bits prior to issuing RoCC inst to
+  *    accelerator
+  *  - After issue, holds queue of translations between logical and physical
+  *    specifiers to handle RoCC responses
+  */
 class RoCCShim(implicit p: Parameters) extends BoomModule()(p)
 {
   val io = IO(new RoCCShimIO)
