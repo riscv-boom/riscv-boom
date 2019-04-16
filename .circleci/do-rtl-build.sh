@@ -5,6 +5,9 @@
 # turn echo on and error on earliest command
 set -ex
 
+# this file assumes cache is updated correctly
+
+# TODO: this is redundant but safe
 # move the pull request riscv-boom repo into boom-template
 rm -rf $HOME/boom-template/boom
 cp -r $HOME/project $HOME/boom-template/boom/
