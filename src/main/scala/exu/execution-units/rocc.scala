@@ -31,8 +31,8 @@ import boom.util._
 class RoCCShimCoreIO(implicit p: Parameters) extends BoomBundle()(p)
 {
   // Decode Stage
-  val dec_rocc_vals    = Input(Vec(decodeWidth, Bool()))
-  val dec_uops         = Input(Vec(decodeWidth, new MicroOp))
+  val dec_rocc_vals    = Input(Vec(coreWidth, Bool()))
+  val dec_uops         = Input(Vec(coreWidth, new MicroOp))
   val rxq_full         = Output(Bool())
   val rxq_empty        = Output(Bool())
   val rxq_idx          = Output(UInt(log2Ceil(NUM_RXQ_ENTRIES).W))
@@ -93,7 +93,7 @@ class RoCCShim(implicit p: Parameters) extends BoomModule()(p)
   val rocc_idx = WireInit(0.U)
   val br_mask = WireInit(0.U(MAX_BR_COUNT.W))
 
-  for (w <- 0 until decodeWidth) {
+  for (w <- 0 until coreWidth) {
     when (io.core.dec_rocc_vals(w)
        && io.core.dec_uops(w).uopc === uopROCC) {
       enq_val      := true.B

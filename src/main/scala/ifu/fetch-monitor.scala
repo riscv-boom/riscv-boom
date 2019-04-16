@@ -34,7 +34,7 @@ class FetchMonitor(implicit p: Parameters) extends BoomModule()(p)
       // The stream is valid and accepted by the backend.
       val fire = Input(Bool())
       // The stream of uops being sent to the backend.
-      val uops = Input(Vec(decodeWidth, new MicroOp()))
+      val uops = Input(Vec(coreWidth, new MicroOp()))
       // Was the pipeline redirected? Clear/reset the fetchbuffer.
       val clear = Input(Bool())
    })
