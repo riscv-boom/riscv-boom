@@ -69,7 +69,7 @@ class BoomTile(
   (implicit p: Parameters) extends BaseTile(boomParams, crossing)(p)
     with SinksExternalInterrupts
     with SourcesExternalNotifications
-    //with HasLazyRoCC  // implies CanHaveSharedFPU with CanHavePTW with HasHellaCache
+    with HasBoomLazyRoCC  // implies CanHaveSharedFPU with CanHavePTW with HasHellaCache
     with CanHaveBoomPTW
     with HasBoomHellaCache
     with HasBoomICacheFrontend
@@ -228,8 +228,7 @@ class BoomTile(
  * @param outer top level BOOM tile
  */
 class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer)
-    //with HasFpuOpt
-    //with HasLazyRoCCModule
+    with HasBoomLazyRoCCModule
     with CanHaveBoomPTWModule
     with HasBoomHellaCacheModule
     with HasBoomICacheFrontendModule
@@ -275,18 +274,20 @@ class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer)
   dcachePorts += core.io.dmem // TODO outer.dcachePorts += () => module.core.io.dmem ??
   //fpuOpt foreach { fpu => core.io.fpu <> fpu.io } RocketFpu - not needed in boom
   core.io.ptw <> ptw.io.dpath
+  fcsr_rm := core.io.fcsr_rm
   core.io.rocc := DontCare
-  core.io.fpu := DontCare
   core.io.reset_vector := DontCare
 
-  // Connect the coprocessor interface
-  //if (outer.roccs.size > 0) {
-  //  cmdRouter.get.io.in <> core.io.rocc.cmd
-  //  outer.roccs.foreach(_.module.io.exception := core.io.rocc.exception)
-  //  core.io.rocc.resp <> respArb.get.io.out
-  //  core.io.rocc.busy <> (cmdRouter.get.io.busy || outer.roccs.map(_.module.io.busy).reduce(_ || _))
-  //  core.io.rocc.interrupt := outer.roccs.map(_.module.io.interrupt).reduce(_ || _)
-  //} // rocc is not supported
+
+  if (outer.roccs.size > 0)
+  {
+     cmdRouter.get.io.in <> core.io.rocc.cmd
+     outer.roccs.foreach(_.module.io.exception := core.io.rocc.exception)
+     core.io.rocc.resp <> respArb.get.io.out
+     core.io.rocc.busy <> (cmdRouter.get.io.busy || outer.roccs.map(_.module.io.busy).reduce(_||_))
+     core.io.rocc.interrupt := outer.roccs.map(_.module.io.interrupt).reduce(_||_)
+  }
+
 
   outer.dtim_adapter.foreach { lm => dcachePorts += lm.module.io.dmem }
 

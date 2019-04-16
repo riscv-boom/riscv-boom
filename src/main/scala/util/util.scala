@@ -214,17 +214,6 @@ object WrapDec
 }
 
 /**
- * Object to determine whether queue
- * index i0 is older than index i1.
- */
-object IsOlder
-{
-  def apply(i0: UInt, i1: UInt, head: UInt): Bool = {
-    (i0 < i1) ^ (i0 < head) ^ (i1 < head)
-  }
-}
-
-/**
  * Object to mask off lower bits of a PC to align to a "b"
  * Byte boundary.
  */
@@ -352,6 +341,20 @@ object AgePriorityEncoder
     idx(width-1, 0) //discard msb
   }
 }
+
+/**
+  * Object to determine whether queue
+  * index i0 is older than index i1.
+  *
+  * is i0 older than i1? (closest to zero). Provide the tail_ptr to the
+  *  queue. This is Cat(i1 <= tail, i1) because the rob_tail can point to a
+  * valid (partially dispatched) row.
+ */
+object IsOlder
+{
+   def apply(i0: UInt, i1: UInt, tail: UInt) = (Cat(i0 <= tail, i0) < Cat(i1 <= tail, i1))
+}
+
 
 /**
  * Create a queue that can be killed with a branch kill signal.

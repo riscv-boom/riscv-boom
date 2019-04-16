@@ -70,7 +70,6 @@ object WritePort
       wport.bits.data := enq.bits.data
       enq.ready := wport.ready
     }
-
     wport
   }
 }

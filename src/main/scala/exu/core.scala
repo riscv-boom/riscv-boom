@@ -58,12 +58,12 @@ trait HasBoomCoreIO extends freechips.rocketchip.tile.HasTileParameters
          val ifu = new boom.ifu.BoomFrontendIO
          val dmem = new freechips.rocketchip.rocket.HellaCacheIO
          val ptw = Flipped(new freechips.rocketchip.rocket.DatapathPTWIO())
-         val fpu = Flipped(new freechips.rocketchip.tile.FPUCoreIO())
          val rocc = Flipped(new freechips.rocketchip.tile.RoCCCoreIO())
          val ptw_tlb = new freechips.rocketchip.rocket.TLBPTWIO()
          val trace = Output(Vec(coreParams.retireWidth,
             new freechips.rocketchip.rocket.TracedInstruction))
          val release = Flipped(Valid(new boom.lsu.ReleaseInfo))
+         val fcsr_rm = UInt(freechips.rocketchip.tile.FPConstants.RM_SZ.W)
    }
 }
 
@@ -121,7 +121,9 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
                                  xLen,
                                  Seq(true) ++ exe_units.bypassable_write_port_mask)) // 0th is bypassable ll_wb
                           }
-   val ll_wbarb         = Module(new Arbiter(new ExeUnitResp(xLen), if (usingFPU) 2 else 1))
+   val ll_wbarb         = Module(new Arbiter(new ExeUnitResp(xLen), 1 +
+                                                                    (if (usingFPU) 1 else 0) +
+                                                                    (if (usingRoCC) 1 else 0)))
    val iregister_read   = Module(new RegisterRead(
                                  issue_units.map(_.issue_width).sum,
                                  exe_units.withFilter(_.reads_irf).map(_.supportedFuncUnits),
@@ -169,8 +171,8 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    for (eu <- exe_units)
    {
       eu.io.brinfo        := br_unit.brinfo
-      eu.io.com_exception := rob.io.flush.valid
    }
+
    if (usingFPU)
    {
       fp_pipeline.io.brinfo := br_unit.brinfo
@@ -499,6 +501,10 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    var dec_stall_next_inst = false.B
    var dec_last_inst_was_stalled = false.B
 
+   // send only 1 RoCC instructions at a time
+   var dec_rocc_found = if (usingRoCC) exe_units.rocc_unit.io.rocc.rxq_full else false.B
+   val rocc_shim_busy = if (usingRoCC) !exe_units.rocc_unit.io.rocc.rxq_empty else false.B
+
    // stall fetch/dcode because we ran out of branch tags
    val branch_mask_full = Wire(Vec(decodeWidth, Bool()))
 
@@ -527,13 +533,16 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
                         || br_unit.brinfo.mispredict
                         || rob.io.flush.valid
                         || dec_stall_next_inst
+                        || ((dec_uops(w).is_fence || dec_uops(w).is_fencei) && (io.rocc.busy || rocc_shim_busy))
                         || (dec_uops(w).is_fencei && !lsu.io.lsu_fencei_rdy)
+                        || (dec_uops(w).uopc === uopROCC && dec_rocc_found)
                         )) ||
                      dec_last_inst_was_stalled
 
       // stall the next instruction following me in the decode bundle?
       dec_last_inst_was_stalled = stall_me
       dec_stall_next_inst  = stall_me || (dec_valids(w) && dec_uops(w).is_unique)
+      dec_rocc_found = dec_rocc_found || (dec_valids(w) && dec_uops(w).uopc === uopROCC)
 
       dec_will_fire(w) := dec_valids(w) && !stall_me && !io.ifu.clear_fetchbuffer
       dec_uops(w)      := decode_units(w).io.deq.uop
@@ -589,6 +598,17 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    }
 
    //-------------------------------------------------------------
+   // RoCC allocation logic
+   if (usingRoCC)
+   {
+      for (w <- 0 until decodeWidth)
+      {
+         // We guarantee only decoding 1 RoCC instruction per cycle
+         dec_uops(w).rxq_idx := exe_units.rocc_unit.io.rocc.rxq_idx
+      }
+   }
+
+   //-------------------------------------------------------------
    // Rob Allocation Logic
 
    for (w <- 0 until decodeWidth)
@@ -597,11 +617,12 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       // (thus the LSB of the rob_idx gives part of the PC)
       if (decodeWidth == 1)
       {
-         dec_uops(w).rob_idx := rob.io.curr_rob_tail
+         dec_uops(w).rob_idx := rob.io.curr_rob_tail_idx
       }
       else
       {
-         dec_uops(w).rob_idx := Cat(rob.io.curr_rob_tail, w.U(log2Ceil(decodeWidth).W))
+         dec_uops(w).rob_idx := Cat(rob.io.curr_rob_tail_idx >> log2Ceil(decodeWidth).U,
+                                    w.U(log2Ceil(decodeWidth).W))
       }
    }
 
@@ -631,7 +652,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
    var wu_idx = 1
    // The 0th wakeup port goes to the ll_wbarb
-   int_wakeups(0).valid := ll_wbarb.io.out.fire()
+   int_wakeups(0).valid := ll_wbarb.io.out.fire() && ll_wbarb.io.out.bits.uop.dst_rtype === RT_FIX
    int_wakeups(0).bits  := ll_wbarb.io.out.bits
 
    // loop through each issue-port (exe_units are statically connected to an issue-port)
@@ -808,6 +829,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    // Share the memory port with other long latency operations.
    val mem_unit = exe_units.memory_unit
    val mem_resp = mem_unit.io.ll_iresp
+   mem_unit.io.com_exception := rob.io.flush.valid
 
    when (RegNext(!sxt_ldMiss) && RegNext(RegNext(lsu.io.mem_ldSpecWakeup.valid)) &&
       !(RegNext(rob.io.flush.valid || (br_unit.brinfo.valid && br_unit.brinfo.mispredict))) &&
@@ -913,7 +935,8 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    csr.io.fcsr_flags.valid := rob.io.commit.fflags.valid
    csr.io.fcsr_flags.bits  := rob.io.commit.fflags.bits
 
-   exe_units.map(_.io.fcsr_rm := csr.io.fcsr_rm)
+   exe_units.withFilter(_.has_fcsr).map(_.io.fcsr_rm := csr.io.fcsr_rm)
+   io.fcsr_rm := csr.io.fcsr_rm
 
    if (usingFPU)
    {
@@ -1067,6 +1090,11 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       // Connect FLDs
       fp_pipeline.io.ll_wport <> exe_units.memory_unit.io.ll_fresp
    }
+   if (usingRoCC)
+   {
+      require(usingFPU)
+      ll_wbarb.io.in(2)       <> exe_units.rocc_unit.io.ll_iresp
+   }
 
    //-------------------------------------------------------------
    //-------------------------------------------------------------
@@ -1091,7 +1119,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    val ll_uop = ll_wbarb.io.out.bits.uop
    rob.io.wb_resps(0).valid  := ll_wbarb.io.out.valid && !(ll_uop.is_store && !ll_uop.is_amo)
    rob.io.wb_resps(0).bits   <> ll_wbarb.io.out.bits
-   rob.io.debug_wb_valids(0) := ll_wbarb.io.out.valid
+   rob.io.debug_wb_valids(0) := ll_wbarb.io.out.valid && ll_uop.dst_rtype =/= RT_X
    rob.io.debug_wb_wdata(0)  := ll_wbarb.io.out.bits.data
    var cnt = 1
    var f_cnt = 0 // rob fflags port index
@@ -1195,7 +1223,12 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
    // detect pipeline freezes and throw error
    val idle_cycles = freechips.rocketchip.util.WideCounter(32)
-   when (rob.io.commit.valids.asUInt.orR || csr.io.csr_stall || reset.toBool) { idle_cycles := 0.U }
+   when (rob.io.commit.valids.asUInt.orR ||
+         csr.io.csr_stall ||
+         io.rocc.busy ||
+         reset.toBool) {
+      idle_cycles := 0.U
+   }
    assert (!(idle_cycles.value(13)), "Pipeline has hung.")
 
    if (usingFPU) {
@@ -1498,44 +1531,24 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    //-------------------------------------------------------------
    //-------------------------------------------------------------
 
-   // We do not support RoCC.
-   io.rocc.cmd.valid := false.B
-   io.rocc.cmd.bits <> DontCare
-   io.rocc.resp.ready := false.B
-   io.rocc.exception := false.B
-   io.rocc.mem.clock_enabled := false.B
-   io.rocc.mem.req.bits := DontCare
-   io.rocc.mem.resp.bits.replay := false.B
-   io.rocc.mem.s2_xcpt.pf.st := false.B
-   io.rocc.mem.s2_xcpt.pf.ld := false.B
-   io.rocc.mem.resp.bits.tag := 0.U
-   io.rocc.mem.resp.valid := false.B
-   io.rocc.mem.replay_next := false.B
-   io.rocc.mem.resp.bits.data_word_bypass := false.B
-   io.rocc.mem.perf.acquire := false.B
-   io.rocc.mem.perf.grant := false.B
-   io.rocc.mem.resp.bits.addr := false.B
-   io.rocc.mem.resp.bits.store_data := false.B
-   io.rocc.mem.resp.bits.typ := false.B
-   io.rocc.mem.req.ready := false.B
-   io.rocc.mem.resp.bits.cmd := false.B
-   io.rocc.mem.perf.tlbMiss := false.B
-   io.rocc.mem.s2_xcpt.ae.st := false.B
-   io.rocc.mem.s2_xcpt.ae.ld := false.B
-   io.rocc.mem.ordered := false.B
-   io.rocc.mem.resp.bits.data := 0.U
-   io.rocc.mem.resp.bits.has_data := false.B
-   io.rocc.mem.resp.bits.data_raw := false.B
-   io.rocc.mem.perf.release := false.B
-   io.rocc.mem.s2_nack := false.B
-   io.rocc.mem.s2_nack_cause_raw := false.B
-   io.rocc.mem.s2_xcpt.ma.st := false.B
-   io.rocc.mem.s2_xcpt.ma.ld := false.B
-
-   // Wire off other unused CoreIO signals.
-   io.fpu <> DontCare
-   io.fpu.valid := false.B
-   io.fpu.inst := 0.U
+   io.rocc := DontCare
+   if (usingRoCC)
+   {
+      exe_units.rocc_unit.io.rocc.rocc         <> io.rocc
+      exe_units.rocc_unit.io.rocc.dec_uops     := dec_uops
+      exe_units.rocc_unit.io.rocc.rob_tail_idx := rob.io.curr_rob_tail_idx
+      exe_units.rocc_unit.io.rocc.rob_pnr_idx  := rob.io.curr_rob_pnr_idx
+      exe_units.rocc_unit.io.com_exception     := rob.io.com_xcpt.valid
+      exe_units.rocc_unit.io.status            := csr.io.status
+      for (w <- 0 until decodeWidth)
+      {
+         exe_units.rocc_unit.io.rocc.dec_rocc_vals(w) := (
+            dec_will_fire(w) &&
+            rename_stage.io.inst_can_proceed(w) &&
+            !rob.io.flush.valid &&
+            dec_uops(w).uopc === uopROCC)
+      }
+   }
 
    //io.trace := csr.io.trace unused
    if (p(BoomTilesKey)(0).trace)

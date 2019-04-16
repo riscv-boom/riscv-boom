@@ -193,3 +193,18 @@ Load/Store Unit, and are treated as exceptions in the BOOM pipeline
 .. [3]
    The tradeoff here is between longer latencies on exceptions versus an
    increase in area and wiring.
+
+Point of No Return (PNR)
+------------------------
+
+The point-of-no-return head runs ahead of the ROB commit head, marking the
+next instruction which might be misspeculated or generate an exception.
+These include unresolved branches and untranslated memory operations.
+Thus, the instructions *ahead* of the commit head and *behind* the PNR
+head are guaranteed to be *non-speculative*, even if they have not yet
+written back.
+
+Currently the PNR is only used for RoCC instructions. RoCC co-processors
+typically expect their instructions in-order, and do not tolerate misspeculation.
+Thus we can only issue a instruction to our co-processor when it has past the
+PNR head, and thus is no longer speculative.

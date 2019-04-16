@@ -274,6 +274,8 @@ trait ScalarOpConstants
    val uopERET      = 106.U(UOPC_SZ.W) // pass uop down the CSR pipeline, also is ERET
    val uopSFENCE    = 107.U(UOPC_SZ.W)
 
+   val uopROCC      = 108.U(UOPC_SZ.W)
+
    // The Bubble Instruction (Machine generated NOP)
    // Insert (XOR x0,x0,x0) which is different from software compiler
    // generated NOPs which are (ADDI x0, x0, 0).

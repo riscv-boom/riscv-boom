@@ -58,9 +58,13 @@ class RobIo(
    val enq_partial_stall= Input(Bool()) // we're dispatching only a partial packet,
                                         // and stalling on the rest of it (don't
                                       // advance the tail ptr)
-   val enq_new_packet   = Input(Bool()) // we're dispatching the first (and perhaps only) part of a dispatch packet.
-   val curr_rob_tail    = Output(UInt(ROB_ADDR_SZ.W))
-   val rob_pnr_idx      = Output(UInt(ROB_ADDR_SZ.W))
+
+   val enq_new_packet    = Input(Bool()) // we're dispatching the first (and perhaps only) part of a dispatch packet.
+
+   val curr_rob_tail_idx = Output(UInt(ROB_ADDR_SZ.W))
+   // For the PNR we send the idx instead of the row addr
+   // because otherwise partial rows stall the PNR
+   val curr_rob_pnr_idx  = Output(UInt(ROB_ADDR_SZ.W))
 
    // Handle Branch Misspeculations
    val brinfo = Input(new BrResolutionInfo())
@@ -219,8 +223,6 @@ class Rob(
 {
    val io = IO(new RobIo(width, num_wakeup_ports, num_fpu_ports))
 
-   val num_rob_rows = num_rob_entries / width
-
    require (num_rob_entries % width == 0)
 
    require (isPow2(width))
@@ -230,25 +232,27 @@ class Rob(
    val rob_state = RegInit(s_reset)
 
    //commit entries at the head, and unwind exceptions from the tail
-   val rob_head     = RegInit(0.U(log2Ceil(num_rob_rows).W))
-   val rob_tail     = RegInit(0.U(log2Ceil(num_rob_rows).W))
-   val rob_pnr      = RegInit(0.U(log2Ceil(num_rob_rows).W))
-   val rob_pnr_bank = if (width > 1) RegInit(0.U(log2Ceil(width).W)) else 0.U
+   val rob_head     = RegInit(0.U(log2Ceil(NUM_ROB_ROWS).W))
+   val rob_head_lsb = RegInit(0.U((1 max log2Ceil(width)).W)) // TODO: Accurately track head LSB (currently always 0)
+   val rob_head_idx = if (width == 1) rob_head else Cat(rob_head, rob_head_lsb)
 
-   val rob_head_idx = rob_head << log2Ceil(width).U
-   val rob_tail_idx = rob_tail << log2Ceil(width).U
-   val rob_pnr_idx  = if (width > 1) Cat(rob_pnr, rob_pnr_bank) else rob_pnr
-   chisel3.experimental.dontTouch(rob_pnr_idx)
-   io.rob_pnr_idx := rob_pnr_idx
+   val rob_tail     = RegInit(0.U(log2Ceil(NUM_ROB_ROWS).W))
+   val rob_tail_lsb = RegInit(0.U((1 max log2Ceil(width)).W))
+   val rob_tail_idx = if (width == 1) rob_tail else Cat(rob_tail, rob_tail_lsb)
 
-   val maybe_full = RegInit(false.B)
-   val full = Wire(Bool())
-   val empty = Wire(Bool())
+   val rob_pnr      = RegInit(0.U(log2Ceil(NUM_ROB_ROWS).W))
+   val rob_pnr_lsb  = RegInit(0.U((1 max log2Ceil(width)).W))
+   val rob_pnr_idx  = if (width == 1) rob_pnr  else Cat(rob_pnr , rob_pnr_lsb)
+
+   val maybe_full   = RegInit(false.B)
+   val full         = Wire(Bool())
+   val empty        = Wire(Bool())
 
    val will_commit         = Wire(Vec(width, Bool()))
    val can_commit          = Wire(Vec(width, Bool()))
    val can_throw_exception = Wire(Vec(width, Bool()))
-   val pnr_unsafe          = Wire(Vec(width, Bool())) // are the instructions at the pnr unsafe?
+
+   val rob_pnr_unsafe      = Wire(Vec(width, Bool())) // are the instructions at the pnr unsafe?
    val rob_head_vals       = Wire(Vec(width, Bool())) // are the instructions at the head valid?
    val rob_tail_vals       = Wire(Vec(width, Bool())) // are the instructions at the tail valid? (to track partial row dispatches)
    val rob_head_is_store   = Wire(Vec(width, Bool()))
@@ -296,19 +300,19 @@ class Rob(
    // **************************************************************************
 
    // Contains all information the PNR needs to find the oldest instruction which can't be safely speculated past.
-   val rob_unsafe_masked = WireInit(VecInit(Seq.fill(num_rob_rows << log2Ceil(width)){false.B}))
+   val rob_unsafe_masked = WireInit(VecInit(Seq.fill(NUM_ROB_ROWS << log2Ceil(width)){false.B}))
 
    for (w <- 0 until width)
    {
       def MatchBank(bank_idx: UInt): Bool = (bank_idx === w.U)
 
       // one bank
-      val rob_val       = RegInit(VecInit(Seq.fill(num_rob_rows){false.B}))
-      val rob_bsy       = Mem(num_rob_rows, Bool())
-      val rob_unsafe    = Mem(num_rob_rows, Bool())
-      val rob_uop       = Reg(Vec(num_rob_rows, new MicroOp()))
-      val rob_exception = Mem(num_rob_rows, Bool())
-      val rob_fflags    = Mem(num_rob_rows, Bits(freechips.rocketchip.tile.FPConstants.FLAGS_SZ.W))
+      val rob_val       = RegInit(VecInit(Seq.fill(NUM_ROB_ROWS){false.B}))
+      val rob_bsy       = Mem(NUM_ROB_ROWS, Bool())
+      val rob_unsafe    = Mem(NUM_ROB_ROWS, Bool())
+      val rob_uop       = Reg(Vec(NUM_ROB_ROWS, new MicroOp()))
+      val rob_exception = Mem(NUM_ROB_ROWS, Bool())
+      val rob_fflags    = Mem(NUM_ROB_ROWS, Bits(freechips.rocketchip.tile.FPConstants.FLAGS_SZ.W))
 
       //-----------------------------------------------
       // Dispatch: Add Entry to ROB
@@ -316,8 +320,8 @@ class Rob(
       when (io.enq_valids(w))
       {
          rob_val(rob_tail)       := true.B
-         rob_bsy(rob_tail)       := !io.enq_uops(w).is_fence &&
-                                    !(io.enq_uops(w).is_fencei)
+         rob_bsy(rob_tail)       := !(io.enq_uops(w).is_fence ||
+                                      io.enq_uops(w).is_fencei)
          rob_unsafe(rob_tail)    := io.enq_uops(w).unsafe
          rob_uop(rob_tail)       := io.enq_uops(w)
          rob_exception(rob_tail) := io.enq_uops(w).exception
@@ -463,7 +467,7 @@ class Rob(
       {
          when (RegNext(exception_thrown))
          {
-            for (i <- 0 until num_rob_rows)
+            for (i <- 0 until NUM_ROB_ROWS)
             {
                rob_val(i)      := false.B
                rob_bsy(i)      := false.B
@@ -474,7 +478,7 @@ class Rob(
 
       // -----------------------------------------------
       // Kill speculated entries on branch mispredict
-      for (i <- 0 until num_rob_rows)
+      for (i <- 0 until NUM_ROB_ROWS)
       {
          val br_mask = rob_uop(i).br_mask
          val entry_match = rob_val(i) && maskMatch(io.brinfo.mask, br_mask)
@@ -509,11 +513,11 @@ class Rob(
 
       //------------------------------------------------
       // Invalid entries are safe; thrown exceptions are unsafe.
-      for (i <- 0 until num_rob_rows) {
+      for (i <- 0 until NUM_ROB_ROWS) {
          rob_unsafe_masked((i << log2Ceil(width)) + w) := rob_val(i) && (rob_unsafe(i) || rob_exception(i))
       }
       // Read unsafe status of PNR row.
-      pnr_unsafe(w) := rob_unsafe_masked(rob_pnr << log2Ceil(width) + w)
+      rob_pnr_unsafe(w) := rob_val(rob_pnr) && (rob_unsafe(rob_pnr) || rob_exception(rob_pnr))
 
       // -----------------------------------------------
       // debugging write ports that should not be synthesized
@@ -555,7 +559,7 @@ class Rob(
 
       if (DEBUG_PRINTF_ROB)
       {
-         for (i <- 0 until num_rob_rows)
+         for (i <- 0 until NUM_ROB_ROWS)
          {
             debug_entry(w + i*width).valid     := rob_val(i)
             debug_entry(w + i*width).busy      := rob_bsy(i.U)
@@ -683,10 +687,10 @@ class Rob(
          val load_is_older =
             (io.lxcpt.valid && !io.bxcpt.valid) ||
             (io.lxcpt.valid && io.bxcpt.valid &&
-            IsOlder(io.lxcpt.bits.uop.rob_idx, io.bxcpt.bits.uop.rob_idx, rob_head_idx))
+            IsOlder(io.lxcpt.bits.uop.rob_idx, io.bxcpt.bits.uop.rob_idx, rob_tail_idx))
          val new_xcpt_uop = Mux(load_is_older, io.lxcpt.bits.uop, io.bxcpt.bits.uop)
 
-         when (!r_xcpt_val || IsOlder(new_xcpt_uop.rob_idx, r_xcpt_uop.rob_idx, rob_head_idx))
+         when (!r_xcpt_val || IsOlder(new_xcpt_uop.rob_idx, r_xcpt_uop.rob_idx, rob_tail_idx))
          {
             r_xcpt_val              := true.B
             next_xcpt_uop           := new_xcpt_uop
@@ -752,10 +756,18 @@ class Rob(
 
    when (finished_committing_row)
    {
-      rob_head := WrapInc(rob_head, num_rob_rows)
-      rob_deq := true.B
+      rob_head     := WrapInc(rob_head, NUM_ROB_ROWS)
+      rob_head_lsb := 0.U
+      rob_deq      := true.B
    }
-
+   .elsewhen (io.commit.valids.asUInt =/= 0.U)
+   {
+      rob_head_lsb := width.U - PriorityEncoder(Reverse(io.commit.valids.asUInt))
+   }
+   .elsewhen (empty && io.enq_valids.asUInt =/= 0.U)
+   {
+      rob_head_lsb := PriorityEncoder(io.enq_valids)
+   }
    // -----------------------------------------------
    // ROB Point-of-No-Return (PNR) Logic
    // Acts as a second head, but only waits on busy instructions which might cause misspeculation.
@@ -768,57 +780,88 @@ class Rob(
       val unsafe_entry_in_rob = rob_unsafe_masked.reduce(_||_)
       val next_rob_pnr_idx = Mux(unsafe_entry_in_rob,
                                  AgePriorityEncoder(rob_unsafe_masked, rob_head_idx),
-                                 rob_tail << log2Ceil(width) | PriorityEncoder(~rob_head_vals.asUInt))
+                                 rob_tail << log2Ceil(width) | PriorityEncoder(~rob_tail_vals.asUInt))
       rob_pnr := next_rob_pnr_idx >> log2Ceil(width)
       if (width > 1)
-         rob_pnr_bank := next_rob_pnr_idx(log2Ceil(width)-1, 0)
+         rob_pnr_lsb := next_rob_pnr_idx(log2Ceil(width)-1, 0)
    }
    else
    {
-      val do_inc_pnr = !pnr_unsafe.reduce(_||_) && rob_pnr =/= rob_tail
-      val pnr_at_tail = rob_pnr === rob_tail
-      rob_pnr := Mux(do_inc_pnr, WrapInc(rob_pnr, num_rob_rows), rob_pnr)
-      if (width > 1)
-         rob_pnr_bank := Mux(do_inc_pnr,
-                           0.U,
-                         Mux(pnr_at_tail,
-                            PriorityEncoder(~rob_head_vals.asUInt),
-                          PriorityEncoder(pnr_unsafe.asUInt)))
+      val safe_to_inc    = rob_state === s_normal || rob_state === s_wait_till_empty
+      val do_inc_row     = !rob_pnr_unsafe.reduce(_||_) && rob_pnr =/= rob_tail
+      val do_inc_partial = !rob_pnr_unsafe(rob_pnr_lsb) && (rob_pnr =/= rob_tail || (rob_pnr === rob_tail && rob_tail_vals(rob_pnr_lsb)))
+      when (empty && io.enq_valids.asUInt =/= 0.U) {
+         // Unforunately for us, the ROB does not use its entries in monotonically
+         //  increasing order, even in the case of no exceptions. The edge case
+         //  arises when partial rows are enqueued and committed, leaving an empty
+         //  ROB.
+         rob_pnr     := rob_head
+         rob_pnr_lsb := PriorityEncoder(io.enq_valids)
+      } .elsewhen (safe_to_inc && do_inc_row) {
+         rob_pnr     := WrapInc(rob_pnr, NUM_ROB_ROWS)
+         rob_pnr_lsb := 0.U
+      } .elsewhen (safe_to_inc && do_inc_partial) {
+         // TODO: Fix this, this needs to be faster for width > 2
+         rob_pnr_lsb := rob_pnr_lsb + 1.U
+      }
+      // rob_pnr := Mux(do_inc_pnr, WrapInc(rob_pnr, NUM_ROB_ROWS), rob_pnr)
+      // if (width > 1)
+      //    rob_pnr_lsb := Mux(do_inc_pnr,
+      //                      0.U,
+      //                    Mux(pnr_at_tail,
+      //                       PriorityEncoder(~rob_tail_vals.asUInt | rob_pnr_unsafe.asUInt),
+      //                     PriorityEncoder(rob_pnr_unsafe.asUInt)))
    }
 
    // Head overrunning PNR likely means an entry hasn't been marked as safe when it should have been.
-   assert(!IsOlder(rob_pnr, rob_head, rob_tail) || rob_pnr === rob_tail)
+   assert(!IsOlder(rob_pnr_idx, rob_head_idx, rob_tail_idx))
 
    // PNR overrunning tail likely means an entry has been marked as safe when it shouldn't have been.
-   assert(!IsOlder(rob_tail, rob_pnr, rob_head) || full)
+   assert(!IsOlder(rob_tail_idx, rob_pnr_idx, rob_tail_idx) || full)
 
    // -----------------------------------------------
    // ROB Tail Logic
 
    val rob_enq = WireInit(false.B)
 
+   // Rollback a row
    when (rob_state === s_rollback && (rob_tail =/= rob_head || maybe_full))
    {
-      rob_tail := WrapDec(rob_tail, num_rob_rows)
+      rob_tail     := WrapDec(rob_tail, NUM_ROB_ROWS)
+      rob_tail_lsb := (width-1).U
       rob_deq := true.B
+   }
+   // Rollback a entry
+   .elsewhen (rob_state === s_rollback && (rob_tail === rob_head) && rob_tail_lsb =/= rob_head_lsb)
+   {
+      rob_tail_lsb := rob_tail_lsb - 1.U
    }
    .elsewhen (io.brinfo.mispredict)
    {
-      rob_tail := WrapInc(GetRowIdx(io.brinfo.rob_idx), num_rob_rows)
+      rob_tail     := WrapInc(GetRowIdx(io.brinfo.rob_idx), NUM_ROB_ROWS)
+      rob_tail_lsb := 0.U
    }
    .elsewhen (io.enq_valids.asUInt =/= 0.U && !io.enq_partial_stall)
    {
-      rob_tail := WrapInc(rob_tail, num_rob_rows)
-      rob_enq := true.B
+      rob_tail     := WrapInc(rob_tail, NUM_ROB_ROWS)
+      rob_tail_lsb := 0.U
+      rob_enq      := true.B
    }
+   .elsewhen (io.enq_valids.asUInt =/= 0.U && io.enq_partial_stall)
+   {
+      rob_tail_lsb := width.U - PriorityEncoder(Reverse(io.enq_valids.asUInt))
+   }
+
 
    if (ENABLE_COMMIT_MAP_TABLE)
    {
       when (RegNext(exception_thrown))
       {
-         rob_tail := 0.U
-         rob_head := 0.U
-         rob_pnr := 0.U
+         rob_tail     := 0.U
+         rob_tail_lsb := 0.U
+         rob_head     := 0.U
+         rob_pnr      := 0.U
+         rob_pnr_lsb  := 0.U
       }
    }
 
@@ -829,13 +872,13 @@ class Rob(
    // TODO should we add an extra 'parity bit' onto the ROB pointers to simplify this logic?
 
    maybe_full := !rob_deq && (rob_enq || maybe_full)
+   full       := rob_tail === rob_head && maybe_full
+   empty      := (rob_head === rob_tail) && (rob_head_vals.asUInt === 0.U)
 
-   full := rob_tail === rob_head && maybe_full
-   empty := (rob_head === rob_tail) && (rob_head_vals.asUInt === 0.U)
-
-   io.empty := empty
-   io.curr_rob_tail := rob_tail
-   io.ready := (rob_state === s_normal) && !full
+   io.curr_rob_tail_idx := rob_tail_idx
+   io.curr_rob_pnr_idx  := rob_pnr_idx
+   io.empty             := empty
+   io.ready             := (rob_state === s_normal) && !full
 
    //-----------------------------------------------
    //-----------------------------------------------
@@ -914,7 +957,7 @@ class Rob(
          }
          is (s_rollback)
          {
-            when (rob_tail  === rob_head)
+            when (rob_tail_idx  === rob_head_idx)
             {
                rob_state := s_normal
             }
@@ -1080,8 +1123,8 @@ class Rob(
       "\n   ==ROB==" +
       "\n   Machine Width  : " + width +
       "\n   Rob Entries    : " + num_rob_entries +
-      "\n   Rob Rows       : " + num_rob_rows +
-      "\n   Rob Row size   : " + log2Ceil(num_rob_rows) +
+      "\n   Rob Rows       : " + NUM_ROB_ROWS +
+      "\n   Rob Row size   : " + log2Ceil(NUM_ROB_ROWS) +
       "\n   log2Ceil(width): " + log2Ceil(width) +
       "\n   FPU FFlag Ports: " + num_fpu_ports
 }

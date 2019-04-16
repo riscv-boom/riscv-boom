@@ -394,6 +394,55 @@ object FDivSqrtDecode extends DecodeConstants
 //scalastyle:on
 
 /**
+ * RoCC initial decode
+ */
+object RoCCDecode extends DecodeConstants
+{
+   // Note: We use FU_CSR since CSR instructions cannot co-execute with RoCC instructions
+                        //                                                                   frs3_en                               wakeup_delay
+                        //     is val inst?                                                  |  imm sel                            |    bypassable (aka, known/fixed latency)
+                        //     |  is fp inst?                                                |  |     is_load                      |    |  br/jmp
+                        //     |  |  is single-prec                          rs1 regtype     |  |     |  is_store                  |    |  |  is jal
+                        //     |  |  |                                       |       rs2 type|  |     |  |  is_amo                 |    |  |  |  allocate_brtag
+                        //     |  |  |  micro-code           func unit       |       |       |  |     |  |  |  is_fence            |    |  |  |  |
+                        //     |  |  |  |           iq-type  |               |       |       |  |     |  |  |  |  is_fencei        |    |  |  |  |  is breakpoint or ecall?
+                        //     |  |  |  |           |        |       dst     |       |       |  |     |  |  |  |  |  mem    mem    |    |  |  |  |  |  is unique? (clear pipeline for it)
+                        //     |  |  |  |           |        |       regtype |       |       |  |     |  |  |  |  |  cmd    msk    |    |  |  |  |  |  |  flush on commit
+                        //     |  |  |  |           |        |       |       |       |       |  |     |  |  |  |  |  |      |      |    |  |  |  |  |  |  |  csr cmd
+                        //     |  |  |  |           |        |       |       |       |       |  |     |  |  |  |  |  |      |      |    |  |  |  |  |  |  |  |
+  val table: Array[(BitPat, List[BitPat])] = Array(//        |       |       |       |       |  |     |  |  |  |  |  |      |      |    |  |  |  |  |  |  |  |
+     CUSTOM0            ->List(Y, N, X, uopROCC   , IQT_INT, FU_CSR, RT_X  , RT_X  , RT_X  , N, IS_X, N, N, N, N, N, M_X  , MT_X , 0.U, N, N, N, N, N, N, N, CSR.N),
+     CUSTOM0_RS1        ->List(Y, N, X, uopROCC   , IQT_INT, FU_CSR, RT_X  , RT_FIX, RT_X  , N, IS_X, N, N, N, N, N, M_X  , MT_X , 0.U, N, N, N, N, N, N, N, CSR.N),
+     CUSTOM0_RS1_RS2    ->List(Y, N, X, uopROCC   , IQT_INT, FU_CSR, RT_X  , RT_FIX, RT_FIX, N, IS_X, N, N, N, N, N, M_X  , MT_X , 0.U, N, N, N, N, N, N, N, CSR.N),
+     CUSTOM0_RD         ->List(Y, N, X, uopROCC   , IQT_INT, FU_CSR, RT_FIX, RT_X  , RT_X  , N, IS_X, N, N, N, N, N, M_X  , MT_X , 0.U, N, N, N, N, N, N, N, CSR.N),
+     CUSTOM0_RD_RS1     ->List(Y, N, X, uopROCC   , IQT_INT, FU_CSR, RT_FIX, RT_FIX, RT_X  , N, IS_X, N, N, N, N, N, M_X  , MT_X , 0.U, N, N, N, N, N, N, N, CSR.N),
+     CUSTOM0_RD_RS1_RS2 ->List(Y, N, X, uopROCC   , IQT_INT, FU_CSR, RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, N, N, N, N, M_X  , MT_X , 0.U, N, N, N, N, N, N, N, CSR.N),
+     CUSTOM1            ->List(Y, N, X, uopROCC   , IQT_INT, FU_CSR, RT_X  , RT_X  , RT_X  , N, IS_X, N, N, N, N, N, M_X  , MT_X , 0.U, N, N, N, N, N, N, N, CSR.N),
+     CUSTOM1_RS1        ->List(Y, N, X, uopROCC   , IQT_INT, FU_CSR, RT_X  , RT_FIX, RT_X  , N, IS_X, N, N, N, N, N, M_X  , MT_X , 0.U, N, N, N, N, N, N, N, CSR.N),
+     CUSTOM1_RS1_RS2    ->List(Y, N, X, uopROCC   , IQT_INT, FU_CSR, RT_X  , RT_FIX, RT_FIX, N, IS_X, N, N, N, N, N, M_X  , MT_X , 0.U, N, N, N, N, N, N, N, CSR.N),
+     CUSTOM1_RD         ->List(Y, N, X, uopROCC   , IQT_INT, FU_CSR, RT_FIX, RT_X  , RT_X  , N, IS_X, N, N, N, N, N, M_X  , MT_X , 0.U, N, N, N, N, N, N, N, CSR.N),
+     CUSTOM1_RD_RS1     ->List(Y, N, X, uopROCC   , IQT_INT, FU_CSR, RT_FIX, RT_FIX, RT_X  , N, IS_X, N, N, N, N, N, M_X  , MT_X , 0.U, N, N, N, N, N, N, N, CSR.N),
+     CUSTOM1_RD_RS1_RS2 ->List(Y, N, X, uopROCC   , IQT_INT, FU_CSR, RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, N, N, N, N, M_X  , MT_X , 0.U, N, N, N, N, N, N, N, CSR.N),
+     CUSTOM2            ->List(Y, N, X, uopROCC   , IQT_INT, FU_CSR, RT_X  , RT_X  , RT_X  , N, IS_X, N, N, N, N, N, M_X  , MT_X , 0.U, N, N, N, N, N, N, N, CSR.N),
+     CUSTOM2_RS1        ->List(Y, N, X, uopROCC   , IQT_INT, FU_CSR, RT_X  , RT_FIX, RT_X  , N, IS_X, N, N, N, N, N, M_X  , MT_X , 0.U, N, N, N, N, N, N, N, CSR.N),
+     CUSTOM2_RS1_RS2    ->List(Y, N, X, uopROCC   , IQT_INT, FU_CSR, RT_X  , RT_FIX, RT_FIX, N, IS_X, N, N, N, N, N, M_X  , MT_X , 0.U, N, N, N, N, N, N, N, CSR.N),
+     CUSTOM2_RD         ->List(Y, N, X, uopROCC   , IQT_INT, FU_CSR, RT_FIX, RT_X  , RT_X  , N, IS_X, N, N, N, N, N, M_X  , MT_X , 0.U, N, N, N, N, N, N, N, CSR.N),
+     CUSTOM2_RD_RS1     ->List(Y, N, X, uopROCC   , IQT_INT, FU_CSR, RT_FIX, RT_FIX, RT_X  , N, IS_X, N, N, N, N, N, M_X  , MT_X , 0.U, N, N, N, N, N, N, N, CSR.N),
+     CUSTOM2_RD_RS1_RS2 ->List(Y, N, X, uopROCC   , IQT_INT, FU_CSR, RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, N, N, N, N, M_X  , MT_X , 0.U, N, N, N, N, N, N, N, CSR.N),
+     CUSTOM3            ->List(Y, N, X, uopROCC   , IQT_INT, FU_CSR, RT_X  , RT_X  , RT_X  , N, IS_X, N, N, N, N, N, M_X  , MT_X , 0.U, N, N, N, N, N, N, N, CSR.N),
+     CUSTOM3_RS1        ->List(Y, N, X, uopROCC   , IQT_INT, FU_CSR, RT_X  , RT_FIX, RT_X  , N, IS_X, N, N, N, N, N, M_X  , MT_X , 0.U, N, N, N, N, N, N, N, CSR.N),
+     CUSTOM3_RS1_RS2    ->List(Y, N, X, uopROCC   , IQT_INT, FU_CSR, RT_X  , RT_FIX, RT_FIX, N, IS_X, N, N, N, N, N, M_X  , MT_X , 0.U, N, N, N, N, N, N, N, CSR.N),
+     CUSTOM3_RD         ->List(Y, N, X, uopROCC   , IQT_INT, FU_CSR, RT_FIX, RT_X  , RT_X  , N, IS_X, N, N, N, N, N, M_X  , MT_X , 0.U, N, N, N, N, N, N, N, CSR.N),
+     CUSTOM3_RD_RS1     ->List(Y, N, X, uopROCC   , IQT_INT, FU_CSR, RT_FIX, RT_FIX, RT_X  , N, IS_X, N, N, N, N, N, M_X  , MT_X , 0.U, N, N, N, N, N, N, N, CSR.N),
+     CUSTOM3_RD_RS1_RS2 ->List(Y, N, X, uopROCC   , IQT_INT, FU_CSR, RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, N, N, N, N, M_X  , MT_X , 0.U, N, N, N, N, N, N, N, CSR.N)
+  )
+}
+
+
+
+
+
+/**
  * IO bundle for the Decode unit
  */
 class DecodeUnitIo(implicit p: Parameters) extends BoomBundle()(p)
@@ -422,6 +471,7 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule()(p)
    var decode_table = XDecode.table
    if (usingFPU) decode_table ++= FDecode.table
    if (usingFPU && usingFDivSqrt) decode_table ++= FDivSqrtDecode.table
+   if (usingRoCC) decode_table ++= RoCCDecode.table
    decode_table ++= (if (xLen == 64) X64Decode.table else X32Decode.table)
 
    val rvc_exp    = Module(new RVCExpander)
