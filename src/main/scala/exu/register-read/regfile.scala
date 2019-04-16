@@ -51,26 +51,17 @@ class RegisterFileWritePort(val addr_width: Int, val data_width: Int)(implicit p
  */
 object WritePort
 {
-  def apply(enq: DecoupledIO[ExeUnitResp], addr_width: Int, data_width: Int, delay_by_one: Boolean = false)
+  def apply(enq: DecoupledIO[ExeUnitResp], addr_width: Int, data_width: Int)
     (implicit p: Parameters): DecoupledIO[RegisterFileWritePort] =
   {
-    val wport = Wire(Decoupled(new RegisterFileWritePort(addr_width, data_width)))
+     val wport = Wire(Decoupled(new RegisterFileWritePort(addr_width, data_width)))
 
-    if (delay_by_one)
-    {
-      wport.valid := RegNext(enq.valid)
-      wport.bits.addr := RegNext(enq.bits.uop.pdst)
-      wport.bits.data := RegNext(enq.bits.data)
-      enq.ready := RegNext(wport.ready)
-    }
-    else
-    {
-      wport.valid := enq.valid
-      wport.bits.addr := enq.bits.uop.pdst
-      wport.bits.data := enq.bits.data
-      enq.ready := wport.ready
-    }
-    wport
+     wport.valid     := RegNext(enq.valid)
+     wport.bits.addr := RegNext(enq.bits.uop.pdst)
+     wport.bits.data := RegNext(enq.bits.data)
+     enq.ready       := RegNext(wport.ready)
+
+     wport
   }
 }
 
@@ -135,16 +126,7 @@ class RegisterFileSynthesizable(
   val read_data = Wire(Vec(num_read_ports, UInt(register_width.W)))
 
   // Register the read port addresses to give a full cycle to the RegisterRead Stage (if desired).
-  val read_addrs =
-    if (regreadLatency == 0)
-    {
-      io.read_ports map {_.addr}
-    }
-    else
-    {
-      require (regreadLatency == 1)
-      io.read_ports.map(p => RegNext(p.addr))
-    }
+  val read_addrs = io.read_ports.map(p => RegNext(p.addr))
 
   for (i <- 0 until num_read_ports)
   {

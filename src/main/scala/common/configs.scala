@@ -180,7 +180,6 @@ class WithMediumBooms extends Config((site, here, up) => {
          numLdqEntries = 16,
          numStqEntries = 9,
          maxBrCount = 8,
-         regreadLatency = 1,
          renameLatency = 2,
          btb = BoomBTBParameters(btbsa=true, densebtb=false, nSets=64, nWays=2,
                                  nRAS=8, tagSz=20, bypassCalls=false, rasCheckForEmpty=false),

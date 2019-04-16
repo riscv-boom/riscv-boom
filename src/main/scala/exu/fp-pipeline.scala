@@ -132,7 +132,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
       iss_uops(i) := issue_unit.io.iss_uops(i)
 
       var fu_types = exe_units(i).io.fu_types
-      if (exe_units(i).supportedFuncUnits.fdiv && regreadLatency > 0)
+      if (exe_units(i).supportedFuncUnits.fdiv)
       {
          val fdiv_issued = iss_valids(i) && iss_uops(i).fu_code_is(FU_FDV)
          fu_types = fu_types & RegNext(~Mux(fdiv_issued, FU_FDV, 0.U))
@@ -191,18 +191,11 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
 
    ll_wbarb.io.in(1) <> ifpu_resp
 
-   if (regreadLatency > 0)
-   {
-      // Cut up critical path by delaying the write by a cycle.
-      // Wakeup signal is sent on cycle S0, write is now delayed until end of S1,
-      // but Issue happens on S1 and RegRead doesn't happen until S2 so we're safe.
-      // (for regreadlatency >0).
-      fregfile.io.write_ports(0) <> WritePort(ll_wbarb.io.out, FPREG_SZ, fLen+1, delay_by_one=true)
-   }
-   else
-   {
-      fregfile.io.write_ports(0) <> WritePort(ll_wbarb.io.out, FPREG_SZ, fLen+1)
-   }
+
+   // Cut up critical path by delaying the write by a cycle.
+   // Wakeup signal is sent on cycle S0, write is now delayed until end of S1,
+   // but Issue happens on S1 and RegRead doesn't happen until S2 so we're safe.
+   fregfile.io.write_ports(0) <> WritePort(ll_wbarb.io.out, FPREG_SZ, fLen+1)
 
    assert (ll_wbarb.io.in(0).ready) // never backpressure the memory unit.
    when (ifpu_resp.valid) { assert (ifpu_resp.bits.uop.ctrl.rf_wen && ifpu_resp.bits.uop.dst_rtype === RT_FLT) }
