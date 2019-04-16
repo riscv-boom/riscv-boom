@@ -1010,7 +1010,7 @@ class Rob(
 
       var r_idx = 0
       // scalastyle:off
-      for (i <- 0 until (NUM_ROB_ENTRIES/COMMIT_WIDTH))
+      for (i <- 0 until (NUM_ROB_ENTRIES/coreWidth))
       {
 //            rob[ 0]           (  )(  ) 0x00002000 [ -                       ][unknown                  ]    ,   (d:X p 1, bm:0 - sdt: 0) (d:- p 3, bm:f - sdt:60)
 //            rob[ 1]           (  )(B ) 0xc71cb68e [flw     fa3, -961(s11)   ][ -                       ] E31,   (d:- p22, bm:e T sdt:57) (d:- p 0, bm:0 - sdt: 0)
@@ -1018,7 +1018,7 @@ class Rob(
 //            rob[ 3]           (vv)(bb) 0x00002010 [lw      s1, 0(ra)        ][lui     t3, 0xff0        ]    ,   (d:x p 4, bm:0 - sdt: 0) (d:x p 5, bm:0 - sdt: 0)
 //            rob[ 4]      TL-> (v )(b ) 0x00002015 - 2018 [addiw   t3, t3, 255      ][li      t2, 2            ]    ,   (d:x p 6, bm:0 - sdt: 5) (d:x p 7, bm:0 - sdt: 0)
 
-         val row = if (COMMIT_WIDTH == 1) r_idx else (r_idx >> log2Ceil(COMMIT_WIDTH))
+         val row = if (coreWidth == 1) r_idx else (r_idx >> log2Ceil(coreWidth))
          val r_head = rob_head
          val r_tail = rob_tail
 
@@ -1031,7 +1031,7 @@ class Rob(
             Mux(rob_pnr === row.U, Str("P"), Str(" "))
           )
 
-         if (COMMIT_WIDTH == 1)
+         if (coreWidth == 1)
          {
             printf("(%c)(%c)(%c) 0x%x [DASM(%x)] %c ",
                    Mux(debug_entry(r_idx+0).valid, Str("V"), Str(" ")),
@@ -1042,7 +1042,7 @@ class Rob(
                    Mux(debug_entry(r_idx+0).exception, Str("E"), Str("-"))
                    )
          }
-         else if (COMMIT_WIDTH == 2)
+         else if (coreWidth == 2)
          {
             val row_is_val = debug_entry(r_idx+0).valid || debug_entry(r_idx+1).valid
             printf("(%c%c)(%c%c)(%c%c) 0x%x %x [DASM(%x)][DASM(%x)" + "] %c,%c %d,%d ",
@@ -1062,7 +1062,7 @@ class Rob(
                    debug_entry(r_idx+1).uop.ftq_idx
                    )
          }
-         else if (COMMIT_WIDTH == 4)
+         else if (coreWidth == 4)
          {
             val row_is_val = debug_entry(r_idx+0).valid || debug_entry(r_idx+1).valid || debug_entry(r_idx+2).valid || debug_entry(r_idx+3).valid
             printf("(%c%c%c%c)(%c%c%c%c)(%c%c%c%c) 0x%x %x %x %x [DASM(%x)][DASM(%x)][DASM(%x)][DASM(%x)" + "]%c%c%c%c",
@@ -1094,11 +1094,11 @@ class Rob(
          }
          else
          {
-            println("  BOOM's Chisel printf does not support commit_width >= " + COMMIT_WIDTH)
+            println("  BOOM's Chisel printf does not support commit_width >= " + coreWidth)
          }
 
          var temp_idx = r_idx
-         for (w <- 0 until COMMIT_WIDTH)
+         for (w <- 0 until coreWidth)
          {
             printf("(d:%c p%d, bm:%x sdt:%d) ",
                    Mux(debug_entry(temp_idx).uop.dst_rtype === RT_FIX, Str("X"),
@@ -1112,7 +1112,7 @@ class Rob(
             temp_idx = temp_idx + 1
          }
 
-         r_idx = r_idx + COMMIT_WIDTH
+         r_idx = r_idx + coreWidth
 
          printf("\n")
       }

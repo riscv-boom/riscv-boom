@@ -264,23 +264,23 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
    // Old BOOM Core HPE's
    //// User-level instruction count.
-   //csr.io.events(2) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+   //csr.io.events(2) := PopCount((Range(0,coreWidth)).map{w =>
    //   rob.io.commit.valids(w) && (csr.io.status.prv === UInt(freechips.rocketchip.rocket.PRV.U))})
 
    //csr.io.events(5)  := csr.io.status.prv === UInt(freechips.rocketchip.rocket.PRV.U)
 
    //// Instruction mixes.
-   //csr.io.events(6)  := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+   //csr.io.events(6)  := PopCount((Range(0,coreWidth)).map{w =>
    //   rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && !rob.io.commit.uops(w).is_jal})
-   //csr.io.events(7)  := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+   //csr.io.events(7)  := PopCount((Range(0,coreWidth)).map{w =>
    //   rob.io.commit.valids(w) && rob.io.commit.uops(w).is_jal})
-   //csr.io.events(8)  := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+   //csr.io.events(8)  := PopCount((Range(0,coreWidth)).map{w =>
    //   rob.io.commit.valids(w) && rob.io.commit.uops(w).is_jump && !rob.io.commit.uops(w).is_jal})
-   //csr.io.events(9)  := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+   //csr.io.events(9)  := PopCount((Range(0,coreWidth)).map{w =>
    //   rob.io.commit.valids(w) && rob.io.commit.uops(w).is_load})
-   //csr.io.events(10) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+   //csr.io.events(10) := PopCount((Range(0,coreWidth)).map{w =>
    //   rob.io.commit.valids(w) && rob.io.commit.uops(w).is_store})
-   //csr.io.events(11) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+   //csr.io.events(11) := PopCount((Range(0,coreWidth)).map{w =>
    //   rob.io.commit.valids(w) && rob.io.commit.uops(w).fp_val})
 
    //// Decode stall causes.
@@ -297,29 +297,29 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    //csr.io.events(20) := lsu.io.counters.ldld_order_fail
 
    //// Branch prediction stats.
-   //csr.io.events(21)  := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+   //csr.io.events(21)  := PopCount((Range(0,coreWidth)).map{w =>
    //   rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && !rob.io.commit.uops(w).is_jal &&
    //   rob.io.commit.uops(w).stat_brjmp_mispredicted})
-   //csr.io.events(22) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+   //csr.io.events(22) := PopCount((Range(0,coreWidth)).map{w =>
    //   rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && !rob.io.commit.uops(w).is_jal &&
    //   rob.io.commit.uops(w).stat_btb_made_pred})
-   //csr.io.events(23) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+   //csr.io.events(23) := PopCount((Range(0,coreWidth)).map{w =>
    //   rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && !rob.io.commit.uops(w).is_jal &&
    //   rob.io.commit.uops(w).stat_btb_mispredicted})
-   //csr.io.events(24) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+   //csr.io.events(24) := PopCount((Range(0,coreWidth)).map{w =>
    //   rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && !rob.io.commit.uops(w).is_jal &&
    //   rob.io.commit.uops(w).stat_bpd_made_pred})
-   //csr.io.events(25) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+   //csr.io.events(25) := PopCount((Range(0,coreWidth)).map{w =>
    //   rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && !rob.io.commit.uops(w).is_jal &&
    //   rob.io.commit.uops(w).stat_bpd_mispredicted})
 
    //// Branch prediction - no prediction made.
-   //csr.io.events(26) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+   //csr.io.events(26) := PopCount((Range(0,coreWidth)).map{w =>
    //   rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && !rob.io.commit.uops(w).is_jal &&
    //   !rob.io.commit.uops(w).stat_btb_made_pred && !rob.io.commit.uops(w).stat_bpd_made_pred})
 
    //// Branch prediction - no predition made & a mispredict occurred.
-   //csr.io.events(27) := PopCount((Range(0,COMMIT_WIDTH)).map{w =>
+   //csr.io.events(27) := PopCount((Range(0,coreWidth)).map{w =>
    //   rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && !rob.io.commit.uops(w).is_jal &&
    //   !rob.io.commit.uops(w).stat_btb_made_pred && !rob.io.commit.uops(w).stat_bpd_made_pred &&
    //   rob.io.commit.uops(w).stat_brjmp_mispredicted})
@@ -335,7 +335,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    //csr.io.events(32) := !issue_units(1).io.dis_readys.reduce(_&_)
    //csr.io.events(33) := !fp_pipeline.io.dis_readys.reduce(_&_)
 
-   //assert (!(Range(0,COMMIT_WIDTH).map{w =>
+   //assert (!(Range(0,coreWidth).map{w =>
    //   rob.io.commit.valids(w) && rob.io.commit.uops(w).is_br_or_jmp && rob.io.commit.uops(w).is_jal &&
    //   rob.io.commit.uops(w).stat_brjmp_mispredicted}.reduce(_|_)),
    //   "[dpath] A committed JAL was marked as having been mispredicted.")
@@ -453,7 +453,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    io.ifu.flush_info.bits   := rob.io.flush.bits
 
    // Tell the FTQ it can deallocate entries by passing youngest ftq_idx.
-   val youngest_com_idx     = (COMMIT_WIDTH-1).U - PriorityEncoder(rob.io.commit.valids.reverse)
+   val youngest_com_idx     = (coreWidth-1).U - PriorityEncoder(rob.io.commit.valids.reverse)
    io.ifu.commit.valid      := rob.io.commit.valids.reduce(_|_)
    io.ifu.commit.bits       := rob.io.commit.uops(youngest_com_idx).ftq_idx
 
@@ -1247,7 +1247,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       val numFtqWhitespace = if (DEBUG_PRINTF_FTQ) (ftqSz/4)+1 else 0
       val fetchWhitespace = if (fetchWidth >= 8) 2 else 0
        var whitespace = (debugScreenheight - 25 + 3 -10 + 3 + 4 - coreWidth - (NUM_LDQ_ENTRIES max NUM_STQ_ENTRIES) -
-         issueParams.map(_.numEntries).sum - issueParams.length - (NUM_ROB_ENTRIES/COMMIT_WIDTH) -
+         issueParams.map(_.numEntries).sum - issueParams.length - (NUM_ROB_ENTRIES/coreWidth) -
          numFtqWhitespace - fetchWhitespace
      )
 
@@ -1408,7 +1408,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    if (COMMIT_LOG_PRINTF)
    {
       var new_commit_cnt = 0.U
-      for (w <- 0 until COMMIT_WIDTH)
+      for (w <- 0 until coreWidth)
       {
          val priv = csr.io.status.prv
 
@@ -1506,7 +1506,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
          }
       }
 
-      for (i <- 0 until COMMIT_WIDTH)
+      for (i <- 0 until coreWidth)
       {
          when (rob.io.commit.valids(i))
          {
@@ -1552,7 +1552,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    //io.trace := csr.io.trace unused
    if (p(BoomTilesKey)(0).trace)
    {
-      for (w <- 0 until COMMIT_WIDTH)
+      for (w <- 0 until coreWidth)
       {
          io.trace(w).valid      := rob.io.commit.valids(w)
          io.trace(w).iaddr      := Sext(rob.io.commit.uops(w).pc(vaddrBits-1,0), xLen)
