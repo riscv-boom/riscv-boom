@@ -396,16 +396,15 @@ class ALUUnit(is_branch_unit: Boolean = false, num_stages: Int = 1, data_width: 
 
       val pc_plus4 = (uop_pc_ + Mux(io.req.bits.uop.is_rvc, 2.U, 4.U))(vaddrBitsExtended-1,0)
 
-      val pc_sel = MuxLookup(io.req.bits.uop.ctrl.br_type, PC_PLUS4,
-               Seq  (   BR_N  -> PC_PLUS4,
-                        BR_NE -> Mux(!br_eq,  PC_BRJMP, PC_PLUS4),
-                        BR_EQ -> Mux( br_eq,  PC_BRJMP, PC_PLUS4),
-                        BR_GE -> Mux(!br_lt,  PC_BRJMP, PC_PLUS4),
-                        BR_GEU-> Mux(!br_ltu, PC_BRJMP, PC_PLUS4),
-                        BR_LT -> Mux( br_lt,  PC_BRJMP, PC_PLUS4),
-                        BR_LTU-> Mux( br_ltu, PC_BRJMP, PC_PLUS4),
-                        BR_J  -> PC_BRJMP,
-                        BR_JR -> PC_JALR
+      val pc_sel = MuxLookup(io.req.bits.uop.uopc, PC_PLUS4,
+                    Seq(udopBNE -> Mux(!br_eq,  PC_BRJMP, PC_PLUS4),
+                        uopBEQ -> Mux( br_eq,  PC_BRJMP, PC_PLUS4),
+                        uopBGE -> Mux(!br_lt,  PC_BRJMP, PC_PLUS4),
+                        uopBGEU-> Mux(!br_ltu, PC_BRJMP, PC_PLUS4),
+                        uopBLT -> Mux( br_lt,  PC_BRJMP, PC_PLUS4),
+                        uopBLTU-> Mux( br_ltu, PC_BRJMP, PC_PLUS4),
+                        uopJAL -> PC_BRJMP,
+                        uopJALR-> PC_JALR
                         ))
 
       val bj_addr = Wire(UInt(vaddrBitsExtended.W))

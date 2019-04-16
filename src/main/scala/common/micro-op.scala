@@ -65,7 +65,6 @@ class MicroOp(implicit p: Parameters) extends BoomBundle()(p)
    val is_call          = Bool()                      //
    val br_mask          = UInt(MAX_BR_COUNT.W)  // which branches are we being speculated under?
    val br_tag           = UInt(BR_TAG_SZ.W)
-
    val br_prediction    = new BranchPredInfo
 
 
@@ -161,7 +160,6 @@ class MicroOp(implicit p: Parameters) extends BoomBundle()(p)
  */
 class CtrlSignals extends Bundle()
 {
-   val br_type     = UInt(BR_N.getWidth.W)
    val op1_sel     = UInt(OP1_X.getWidth.W)
    val op2_sel     = UInt(OP2_X.getWidth.W)
    val imm_sel     = UInt(IS_X.getWidth.W)

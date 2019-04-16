@@ -336,7 +336,6 @@ class RegisterReadDecode(supported_units: SupportedFuncUnits)(implicit p: Parame
    val rrd_cs = Wire(new RRdCtrlSigs()).decode(io.rrd_uop.uopc, dec_table)
 
    // rrd_use_alupipe is unused
-   io.rrd_uop.ctrl.br_type := rrd_cs.br_type
    io.rrd_uop.ctrl.rf_wen  := rrd_cs.rf_wen
    io.rrd_uop.ctrl.op1_sel := rrd_cs.op1_sel
    io.rrd_uop.ctrl.op2_sel := rrd_cs.op2_sel
