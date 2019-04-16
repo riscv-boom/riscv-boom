@@ -69,9 +69,9 @@ class IssueUnitIO(
    val num_wakeup_ports: Int)
    (implicit p: Parameters) extends BoomBundle()(p)
 {
-   val dis_valids     = Input(Vec(DISPATCH_WIDTH, Bool()))
-   val dis_uops       = Input(Vec(DISPATCH_WIDTH, new MicroOp()))
-   val dis_readys     = Output(Vec(DISPATCH_WIDTH, Bool()))
+   val dis_valids     = Input(Vec(dispatchWidth, Bool()))
+   val dis_uops       = Input(Vec(dispatchWidth, new MicroOp()))
+   val dis_readys     = Output(Vec(dispatchWidth, Bool()))
 
    val iss_valids     = Output(Vec(issue_width, Bool()))
    val iss_uops       = Output(Vec(issue_width, new MicroOp()))
@@ -114,8 +114,8 @@ abstract class IssueUnit(
    // Set up the dispatch uops
    // special case "storing" 2 uops within one issue slot.
 
-   val dis_uops = Array.fill(DISPATCH_WIDTH) {Wire(new MicroOp())}
-   for (w <- 0 until DISPATCH_WIDTH)
+   val dis_uops = Array.fill(dispatchWidth) {Wire(new MicroOp())}
+   for (w <- 0 until dispatchWidth)
    {
       dis_uops(w) := io.dis_uops(w)
       dis_uops(w).iw_p1_poisoned := false.B

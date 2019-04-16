@@ -111,7 +111,9 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
 
    // coreWidth is width of decode, width of integer rename, width of ROB, and commit width
    val coreWidth = decodeWidth
-   val DISPATCH_WIDTH = coreWidth
+   // dispatchWidth is number of uops any issue queue can accept per cycle
+   // TODO: Let this be less than coreWidth
+   val dispatchWidth = coreWidth
    val COMMIT_WIDTH = coreWidth
 
    require (isPow2(fetchWidth))
