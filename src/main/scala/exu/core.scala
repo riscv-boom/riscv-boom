@@ -155,8 +155,8 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    val dec_rdy        = Wire(Bool())
 
    // Dispatch Stage
-   val dis_valids     = Wire(Vec(DISPATCH_WIDTH, Bool())) // true if uop WILL enter IW
-   val dis_uops       = Wire(Vec(DISPATCH_WIDTH, new MicroOp()))
+   val dis_valids     = Wire(Vec(dispatchWidth, Bool())) // true if uop WILL enter IW
+   val dis_uops       = Wire(Vec(dispatchWidth, new MicroOp()))
 
    // Issue Stage/Register Read
    val iss_valids     = Wire(Vec(exe_units.num_irf_readers, Bool()))
@@ -735,7 +735,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    // Input (Dispatch)
    for {
       iu <- issue_units
-      w <- 0 until DISPATCH_WIDTH
+      w <- 0 until dispatchWidth
    }{
       iu.io.dis_valids(w) := dis_valids(w) && dis_uops(w).iqtype === (iu.iqType).U
       iu.io.dis_uops(w) := dis_uops(w)
