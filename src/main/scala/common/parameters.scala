@@ -60,7 +60,6 @@ case class BoomCoreParams(
    imulLatency: Int = 3,
    fetchLatency: Int = 3,
    renameLatency: Int = 2,
-   regreadLatency: Int = 1,
    nPerfCounters: Int = 0,
    numRXQEntries: Int = 4,
    numRCQEntries: Int = 8,
@@ -156,8 +155,6 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
    val fetchLatency = boomParams.fetchLatency // how many cycles does fetch occupy?
    require (fetchLatency == 3) // do not currently support changing this
    val renameLatency = boomParams.renameLatency // how many cycles does rename occupy?
-   val regreadLatency = boomParams.regreadLatency // how many cycles does rrd occupy?
-   require (regreadLatency == 1) // Any color you like, so long as its black.
 
    val enableBrResolutionRegister = boomParams.enableBrResolutionRegister
 

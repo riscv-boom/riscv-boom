@@ -97,17 +97,9 @@ class RegisterRead(
       rrd_decode_unit.io.iss_valid := io.iss_valids(w)
       rrd_decode_unit.io.iss_uop   := io.iss_uops(w)
 
-      if (regreadLatency == 1)
-      {
-         rrd_valids(w) := RegNext(rrd_decode_unit.io.rrd_valid &&
-                           !IsKilledByBranch(io.brinfo, rrd_decode_unit.io.rrd_uop))
-         rrd_uops(w)   := RegNext(GetNewUopAndBrMask(rrd_decode_unit.io.rrd_uop, io.brinfo))
-      }
-      else
-      {
-         rrd_valids(w) := rrd_decode_unit.io.rrd_valid
-         rrd_uops(w)   := rrd_decode_unit.io.rrd_uop
-      }
+      rrd_valids(w) := RegNext(rrd_decode_unit.io.rrd_valid &&
+                  !IsKilledByBranch(io.brinfo, rrd_decode_unit.io.rrd_uop))
+      rrd_uops(w)   := RegNext(GetNewUopAndBrMask(rrd_decode_unit.io.rrd_uop, io.brinfo))
    }
 
    //-------------------------------------------------------------
@@ -128,10 +120,9 @@ class RegisterRead(
       val num_read_ports = num_read_ports_array(w)
 
       // NOTE:
-      // If rrdLatency==0, ISS and RRD are in same cycle so this "just works".
-      // If rrdLatency==1, we need to send read address at end of ISS stage,
+      // rrdLatency==1, we need to send read address at end of ISS stage,
       //    in order to get read data back at end of RRD stage.
-      require (regreadLatency == 0 || regreadLatency == 1)
+
       val rs1_addr = io.iss_uops(w).pop1
       val rs2_addr = io.iss_uops(w).pop2
       val rs3_addr = io.iss_uops(w).pop3

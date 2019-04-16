@@ -105,7 +105,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    val dec_brmask_logic = Module(new BranchMaskGenerationLogic(decodeWidth))
    val rename_stage     = Module(new RenameStage(decodeWidth, num_int_wakeup_ports, num_fp_wakeup_ports))
    val issue_units      = new boom.exu.IssueUnits(num_int_wakeup_ports)
-   val iregfile         = if (regreadLatency == 1 && enableCustomRf)
+   val iregfile         = if (enableCustomRf)
                           {
                               Module(new RegisterFileSeqCustomArray(numIntPhysRegs,
                                  num_irf_read_ports,
@@ -396,7 +396,6 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
           boomParams.btb.nSets + " x " + boomParams.btb.nWays + " ways)") else 0)
      + "\n   RAS Size              : " + (if (enableBTB) boomParams.btb.nRAS else 0)
      + "\n   Rename  Stage Latency : " + renameLatency
-     + "\n   RegRead Stage Latency : " + regreadLatency
      + "\n" + iregfile.toString
      + "\n   Num Slow Wakeup Ports : " + num_irf_write_ports
      + "\n   Num Fast Wakeup Ports : " + exe_units.count(_.bypassable)
@@ -777,7 +776,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       val exe_unit = exe_units(w)
       if (exe_unit.reads_irf)
       {
-         if (exe_unit.supportedFuncUnits.muld && regreadLatency > 0)
+         if (exe_unit.supportedFuncUnits.muld)
          {
             // Supress just-issued divides from issuing back-to-back, since it's an iterative divider.
             // But it takes a cycle to get to the Exe stage, so it can't tell us it is busy yet.
