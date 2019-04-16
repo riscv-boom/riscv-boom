@@ -103,7 +103,7 @@ class ExecutionUnitIO(
    val fcsr_rm = if (has_fcsr) Input(Bits(tile.FPConstants.RM_SZ.W)) else null
 
    // only used by the mem unit
-   val lsu_io        = if (has_mem) Flipped(new boom.lsu.LoadStoreUnitIO(decodeWidth)) else null
+   val lsu_io        = if (has_mem) Flipped(new boom.lsu.LoadStoreUnitIO(coreWidth)) else null
    val dmem          = if (has_mem) new boom.lsu.DCMemPortIO() else null
    // TODO move this out of ExecutionUnit
    val com_exception = if (has_mem || has_rocc) Input(Bool()) else null

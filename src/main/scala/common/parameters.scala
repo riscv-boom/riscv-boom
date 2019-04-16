@@ -87,12 +87,11 @@ case class BoomCoreParams(
    clockGate: Boolean = false
 ) extends freechips.rocketchip.tile.CoreParams
 {
-   val retireWidth: Int = decodeWidth
    val haveFSDirty = false
    val pmpGranularity: Int = 4
    val instBits: Int = if (useCompressed) 16 else 32
    val lrscCycles: Int = 80 // worst case is 14 mispredicted branches + slop
-
+   val retireWidth = decodeWidth
    val jumpInFrontend: Boolean = false // unused in boom
    val nPMPs: Int = 8
 }
@@ -109,14 +108,14 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
 
    // fetchWidth provided by CoreParams class.
    // decodeWidth provided by CoreParams class.
-   // retireWidth provided by BoomCoreParams class.
-   val DISPATCH_WIDTH   = decodeWidth                // number of insts put into the IssueWindow
-   val COMMIT_WIDTH     = boomParams.retireWidth
 
-   require (decodeWidth == COMMIT_WIDTH)
-   require (DISPATCH_WIDTH == COMMIT_WIDTH)
+   // coreWidth is width of decode, width of integer rename, width of ROB, and commit width
+   val coreWidth = decodeWidth
+   val DISPATCH_WIDTH = coreWidth
+   val COMMIT_WIDTH = coreWidth
+
    require (isPow2(fetchWidth))
-   require (decodeWidth <= fetchWidth)
+   require (coreWidth <= fetchWidth)
 
    //************************************
    // Data Structure Sizes
@@ -233,7 +232,7 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
 
    //************************************
    // Implicitly calculated constants
-   val NUM_ROB_ROWS      = NUM_ROB_ENTRIES/decodeWidth
+   val NUM_ROB_ROWS      = NUM_ROB_ENTRIES/coreWidth
    val ROB_ADDR_SZ       = log2Ceil(NUM_ROB_ENTRIES)
    // the f-registers are mapped into the space above the x-registers
    val LOGICAL_REG_COUNT = if (usingFPU) 64 else 32
@@ -248,13 +247,13 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
    val NUM_BROB_ENTRIES  = NUM_ROB_ROWS //TODO explore smaller BROBs
    val BROB_ADDR_SZ      = log2Ceil(NUM_BROB_ENTRIES)
 
-   require (numIntPhysRegs >= (32 + decodeWidth))
-   require (numFpPhysRegs >= (32 + decodeWidth))
+   require (numIntPhysRegs >= (32 + coreWidth))
+   require (numFpPhysRegs >= (32 + coreWidth))
    require (MAX_BR_COUNT >=2)
    require (NUM_ROB_ROWS % 2 == 0)
-   require (NUM_ROB_ENTRIES % decodeWidth == 0)
-   require ((NUM_LDQ_ENTRIES-1) > decodeWidth)
-   require ((NUM_STQ_ENTRIES-1) > decodeWidth)
+   require (NUM_ROB_ENTRIES % coreWidth == 0)
+   require ((NUM_LDQ_ENTRIES-1) > coreWidth)
+   require ((NUM_STQ_ENTRIES-1) > coreWidth)
 
    //************************************
    // Custom Logic

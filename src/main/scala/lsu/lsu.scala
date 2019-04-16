@@ -1352,7 +1352,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
    var stq_is_full = false.B
 
    // TODO refactor this logic
-   for (w <- 0 until decodeWidth)
+   for (w <- 0 until coreWidth)
    {
       val l_temp = laq_tail + w.U
       laq_is_full = ((l_temp === laq_head || l_temp === (laq_head + NUM_LDQ_ENTRIES.U)) && laq_maybe_full) | laq_is_full

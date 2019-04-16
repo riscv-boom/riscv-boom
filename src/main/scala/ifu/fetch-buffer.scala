@@ -30,7 +30,7 @@ import boom.common._
  */
 class FetchBufferResp(implicit p: Parameters) extends BoomBundle()(p)
 {
-   val uops = Vec(decodeWidth, new MicroOp())
+   val uops = Vec(coreWidth, new MicroOp())
 }
 
 /**
@@ -154,14 +154,14 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule()
    val enq_count =
       Mux(io.enq.fire() && (!io.deq.ready || count =/= 0.U),
          popc_enqmask,
-      Mux(io.enq.fire() && count === 0.U && popc_enqmask > decodeWidth.U,
-         popc_enqmask - decodeWidth.U,
+      Mux(io.enq.fire() && count === 0.U && popc_enqmask > coreWidth.U,
+         popc_enqmask - coreWidth.U,
          0.U)) // !enq.fire || (count===0 and popc <= decodeWIdth)
 
-   // If the ram is empty, bypass the first decodeWidth uops to the flops,
+   // If the ram is empty, bypass the first coreWidth uops to the flops,
    // and only write the remaining uops into the ram.
    val start_idx = Wire(UInt((log2Ceil(fetchWidth)+1).W))
-   start_idx := Mux(count === 0.U && io.deq.ready, decodeWidth.U, 0.U)
+   start_idx := Mux(count === 0.U && io.deq.ready, coreWidth.U, 0.U)
    for (i <- 0 until fetchWidth)
    {
       when (io.enq.fire() && i.U < enq_count)
@@ -181,9 +181,9 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule()
    //-------------------------------------------------------------
 
    val r_valid = RegInit(false.B)
-   val r_uops = Reg(Vec(decodeWidth, new MicroOp()))
+   val r_uops = Reg(Vec(coreWidth, new MicroOp()))
 
-   for (w <- 0 until decodeWidth)
+   for (w <- 0 until coreWidth)
    {
       when (io.deq.ready)
       {
@@ -202,7 +202,7 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule()
 
    val deq_count =
       Mux(io.deq.ready,
-         Mux(count < decodeWidth.U, count, decodeWidth.U),
+         Mux(count < coreWidth.U, count, coreWidth.U),
          0.U)
    count := count + enq_count - deq_count
 
