@@ -187,7 +187,7 @@ abstract class IssueUnit(
                 Mux(issue_slots(i).uop.dst_rtype === RT_X, Str("-"),
                 Mux(issue_slots(i).uop.dst_rtype === RT_FLT, Str("f"),
                 Mux(issue_slots(i).uop.dst_rtype === RT_PAS, Str("C"), Str("?"))))),
-                issue_slots(i).uop.inst,
+                issue_slots(i).uop.debug_inst,
                 issue_slots(i).uop.pc(31,0),
                 issue_slots(i).uop.uopc,
                 issue_slots(i).uop.rob_idx,

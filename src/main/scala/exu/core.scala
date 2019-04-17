@@ -761,7 +761,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
          uop.br_prediction := DontCare
          uop.debug_wdata := DontCare
          if (!DEBUG_PRINTF && !COMMIT_LOG_PRINTF) uop.pc := DontCare
-         if (!DEBUG_PRINTF && !COMMIT_LOG_PRINTF) uop.inst := DontCare
+         if (!DEBUG_PRINTF && !COMMIT_LOG_PRINTF) uop.debug_inst := DontCare
          if (!O3PIPEVIEW_PRINTF) uop.debug_events.fetch_seq := DontCare
       }
    }
@@ -1274,7 +1274,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
          printf("(%c%c) " + "DASM(%x)" + " |  ",
                 Mux(io.ifu.fetchpacket.valid && dec_fbundle.uops(w).valid && !dec_finished_mask(w), Str("v"), Str("-")),
                 Mux(dec_will_fire(w), Str("V"), Str("-")),
-                dec_fbundle.uops(w).bits.inst
+                dec_fbundle.uops(w).bits.debug_inst
                 )
       }
 
@@ -1294,7 +1294,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       {
          printf(" (%c) " + "DASM(%x)" + " |  ",
                 Mux(rename_stage.io.ren2_mask(w), Str("V"), Str("-")),
-                rename_stage.io.ren2_uops(w).inst
+                rename_stage.io.ren2_uops(w).debug_inst
                 )
       }
 
@@ -1416,10 +1416,10 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
          def printf_inst(uop: MicroOp) = {
             when (uop.is_rvc)
             {
-               printf("(0x%x)", uop.inst(15,0))
+               printf("(0x%x)", uop.debug_inst(15,0))
             }
             .otherwise {
-               printf("(0x%x)", uop.inst)
+               printf("(0x%x)", uop.debug_inst)
             }
          }
          when (rob.io.commit.valids(w))
@@ -1556,7 +1556,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       {
          io.trace(w).valid      := rob.io.commit.valids(w)
          io.trace(w).iaddr      := Sext(rob.io.commit.uops(w).pc(vaddrBits-1,0), xLen)
-         io.trace(w).insn       := rob.io.commit.uops(w).inst
+         io.trace(w).insn       := rob.io.commit.uops(w).debug_inst
          // I'm uncertain the commit signals from the ROB match these CSR exception signals
          io.trace(w).priv       := csr.io.status.prv
          io.trace(w).exception  := csr.io.exception

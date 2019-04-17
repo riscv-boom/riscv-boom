@@ -37,7 +37,7 @@ class MicroOp(implicit p: Parameters) extends BoomBundle()(p)
    with freechips.rocketchip.rocket.constants.ScalarOpConstants
 {
    val uopc             = UInt(UOPC_SZ.W)       // micro-op code
-   val inst             = UInt(32.W)
+   val debug_inst       = UInt(32.W)
    val is_rvc           = Bool()
    val pc               = UInt(coreMaxAddrBits.W) // TODO remove -- use FTQ to get PC. Change to debug_pc.
    val iqtype           = UInt(IQT_SZ.W)        // which issue unit do we use?
