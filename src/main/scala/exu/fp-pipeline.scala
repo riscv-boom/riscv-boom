@@ -195,7 +195,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
    // Cut up critical path by delaying the write by a cycle.
    // Wakeup signal is sent on cycle S0, write is now delayed until end of S1,
    // but Issue happens on S1 and RegRead doesn't happen until S2 so we're safe.
-   fregfile.io.write_ports(0) <> WritePort(ll_wbarb.io.out, FPREG_SZ, fLen+1)
+   fregfile.io.write_ports(0) := RegNext(WritePort(ll_wbarb.io.out, FPREG_SZ, fLen+1))
 
    assert (ll_wbarb.io.in(0).ready) // never backpressure the memory unit.
    when (ifpu_resp.valid) { assert (ifpu_resp.bits.uop.ctrl.rf_wen && ifpu_resp.bits.uop.dst_rtype === RT_FLT) }
@@ -208,7 +208,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
          fregfile.io.write_ports(w_cnt).valid     := eu.io.fresp.valid && eu.io.fresp.bits.uop.ctrl.rf_wen
          fregfile.io.write_ports(w_cnt).bits.addr := eu.io.fresp.bits.uop.pdst
          fregfile.io.write_ports(w_cnt).bits.data := eu.io.fresp.bits.data
-         eu.io.fresp.ready                        := fregfile.io.write_ports(w_cnt).ready
+         eu.io.fresp.ready                        := true.B
          when (eu.io.fresp.valid)
          {
             assert(eu.io.fresp.ready, "No backpressuring the FPU")

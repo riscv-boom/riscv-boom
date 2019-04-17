@@ -52,15 +52,14 @@ class RegisterFileWritePort(val addr_width: Int, val data_width: Int)(implicit p
 object WritePort
 {
   def apply(enq: DecoupledIO[ExeUnitResp], addr_width: Int, data_width: Int)
-    (implicit p: Parameters): DecoupledIO[RegisterFileWritePort] =
+    (implicit p: Parameters): Valid[RegisterFileWritePort] =
   {
-     val wport = Wire(Decoupled(new RegisterFileWritePort(addr_width, data_width)))
+     val wport = Wire(Valid(new RegisterFileWritePort(addr_width, data_width)))
 
-     wport.valid     := RegNext(enq.valid)
-     wport.bits.addr := RegNext(enq.bits.uop.pdst)
-     wport.bits.data := RegNext(enq.bits.data)
-     enq.ready       := RegNext(wport.ready)
-
+     wport.valid     := enq.valid
+     wport.bits.addr := enq.bits.uop.pdst
+     wport.bits.data := enq.bits.data
+     enq.ready       := true.B
      wport
   }
 }
@@ -85,7 +84,7 @@ abstract class RegisterFile(
   val io = IO(new BoomBundle()(p)
   {
     val read_ports = Vec(num_read_ports, new RegisterFileReadPortIO(PREG_SZ, register_width))
-    val write_ports = Flipped(Vec(num_write_ports, Decoupled(new RegisterFileWritePort(PREG_SZ, register_width))))
+    val write_ports = Flipped(Vec(num_write_ports, Valid(new RegisterFileWritePort(PREG_SZ, register_width))))
   })
 
   private val rf_cost = (num_read_ports + num_write_ports) * (num_read_ports + 2*num_write_ports)
@@ -147,7 +146,7 @@ class RegisterFileSynthesizable(
 
   if (bypassable_array.reduce(_||_))
   {
-    val bypassable_wports = ArrayBuffer[DecoupledIO[RegisterFileWritePort]]()
+    val bypassable_wports = ArrayBuffer[Valid[RegisterFileWritePort]]()
     io.write_ports zip bypassable_array map { case (wport, b) => if (b) { bypassable_wports += wport} }
 
     for (i <- 0 until num_read_ports)
@@ -174,7 +173,6 @@ class RegisterFileSynthesizable(
 
   for (wport <- io.write_ports)
   {
-    wport.ready := true.B
     when (wport.valid && (wport.bits.addr =/= 0.U))
     {
       regfile(wport.bits.addr) := wport.bits.data

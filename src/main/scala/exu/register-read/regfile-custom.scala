@@ -56,7 +56,6 @@ class RegisterFileSeqCustomArray(
   {
     regfile.io.WD(w) := io.write_ports(w).bits.data
     waddr_OH(w) := UIntToOH(io.write_ports(w).bits.addr) // what register are you writing in OH
-    io.write_ports(w).ready := true.B
   }
 
   val read_data = Wire(Vec(num_read_ports, UInt(register_width.W)))
@@ -107,7 +106,7 @@ class RegisterFileSeqCustomArray(
   if (bypassable_array.reduce(_||_))
   {
     // bypass specific write ports
-    val bypassable_wports = ArrayBuffer[DecoupledIO[RegisterFileWritePort]]()
+    val bypassable_wports = ArrayBuffer[Valid[RegisterFileWritePort]]()
     io.write_ports zip bypassable_array map { case (wport, b) => if (b) { bypassable_wports += wport} }
 
     for (i <- 0 until num_read_ports)
