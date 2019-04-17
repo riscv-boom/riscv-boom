@@ -112,9 +112,6 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
 
    // coreWidth is width of decode, width of integer rename, width of ROB, and commit width
    val coreWidth = decodeWidth
-   // dispatchWidth is number of uops any issue queue can accept per cycle
-   // TODO: Let this be less than coreWidth
-   val dispatchWidth = coreWidth
 
    require (isPow2(fetchWidth))
    require (coreWidth <= fetchWidth)
@@ -170,6 +167,10 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
    require (issueParams.count(_.iqType == IQT_FP.litValue) == 1 || !usingFPU)
    require (issueParams.count(_.iqType == IQT_MEM.litValue) == 1 || usingUnifiedMemIntIQs)
    require (issueParams.count(_.iqType == IQT_INT.litValue) == 1)
+   // Currently, require issue dispatch widths all equal coreWidth
+   issueParams.map(x => require(x.dispatchWidth == coreWidth))
+   // In future, relax this constraint
+   issueParams.map(x => require(x.dispatchWidth <= coreWidth && x.dispatchWidth > 0))
 
    //************************************
    // Load/Store Unit
