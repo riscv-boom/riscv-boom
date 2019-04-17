@@ -65,7 +65,7 @@ class RenameStageIO(
    // branch resolution (execute)
    val brinfo    = Input(new BrResolutionInfo())
 
-   val dis_inst_can_proceed = Input(Vec(dispatchWidth, Bool()))
+   val dis_inst_can_proceed = Input(Vec(coreWidth, Bool()))
 
    // issue stage (fast wakeup)
    val int_wakeups = Flipped(Vec(num_int_wb_ports, Valid(new ExeUnitResp(xLen))))

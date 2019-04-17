@@ -30,6 +30,7 @@ import boom.exu.FUConstants._
  * @param iqType type of issue queue
  */
 case class IssueParams(
+   dispatchWidth: Int = 1,
    issueWidth: Int = 1,
    numEntries: Int = 8,
    iqType: BigInt
@@ -66,7 +67,8 @@ class IqWakeup(val preg_sz: Int) extends Bundle
  */
 class IssueUnitIO(
    val issue_width: Int,
-   val num_wakeup_ports: Int)
+   val num_wakeup_ports: Int,
+   val dispatchWidth: Int)
    (implicit p: Parameters) extends BoomBundle()(p)
 {
    val dis_valids     = Input(Vec(dispatchWidth, Bool()))
@@ -103,12 +105,13 @@ abstract class IssueUnit(
    val num_issue_slots: Int,
    val issue_width: Int,
    num_wakeup_ports: Int,
-   val iqType: BigInt)
+   val iqType: BigInt,
+   val dispatchWidth: Int)
    (implicit p: Parameters)
    extends BoomModule()(p)
    with IssueUnitConstants
 {
-   val io = IO(new IssueUnitIO(issue_width, num_wakeup_ports))
+   val io = IO(new IssueUnitIO(issue_width, num_wakeup_ports, dispatchWidth))
 
    //-------------------------------------------------------------
    // Set up the dispatch uops
