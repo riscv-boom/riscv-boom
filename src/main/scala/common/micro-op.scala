@@ -36,10 +36,6 @@ class MicroOp(implicit p: Parameters) extends BoomBundle()(p)
    with freechips.rocketchip.rocket.constants.MemoryOpConstants
    with freechips.rocketchip.rocket.constants.ScalarOpConstants
 {
-   // Is this uop valid? or has it been masked out,
-   // Used by fetch buffer and Decode stage.
-   val valid            = Bool()
-
    val uopc             = UInt(UOPC_SZ.W)       // micro-op code
    val inst             = UInt(32.W)
    val is_rvc           = Bool()

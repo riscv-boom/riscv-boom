@@ -511,7 +511,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    {
       dec_valids(w)                      := io.ifu.fetchpacket.valid && dec_fbundle.uops(w).valid &&
                                             !dec_finished_mask(w)
-      decode_units(w).io.enq.uop         := dec_fbundle.uops(w)
+      decode_units(w).io.enq.uop         := dec_fbundle.uops(w).bits
       decode_units(w).io.status          := csr.io.status
       decode_units(w).io.csr_decode      <> csr.io.decode(w)
       decode_units(w).io.interrupt       := csr.io.interrupt
@@ -1274,7 +1274,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
          printf("(%c%c) " + "DASM(%x)" + " |  ",
                 Mux(io.ifu.fetchpacket.valid && dec_fbundle.uops(w).valid && !dec_finished_mask(w), Str("v"), Str("-")),
                 Mux(dec_will_fire(w), Str("V"), Str("-")),
-                dec_fbundle.uops(w).inst
+                dec_fbundle.uops(w).bits.inst
                 )
       }
 
