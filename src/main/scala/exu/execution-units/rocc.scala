@@ -75,6 +75,7 @@ class RoCCShim(implicit p: Parameters) extends BoomModule()(p)
   val rxq_op_val    = Reg(Vec(NUM_RXQ_ENTRIES, Bool()))
   val rxq_committed = Reg(Vec(NUM_RXQ_ENTRIES, Bool()))
   val rxq_uop       = Reg(Vec(NUM_RXQ_ENTRIES, new MicroOp()))
+  val rxq_inst      = Reg(Vec(NUM_RXQ_ENTRIES, UInt(32.W)))
   val rxq_rs1       = Reg(Vec(NUM_RXQ_ENTRIES, UInt(xLen.W)))
   val rxq_rs2       = Reg(Vec(NUM_RXQ_ENTRIES, UInt(xLen.W)))
 
@@ -106,6 +107,7 @@ class RoCCShim(implicit p: Parameters) extends BoomModule()(p)
     rxq_op_val   (rxq_tail) := false.B
     rxq_committed(rxq_tail) := false.B
     rxq_uop      (rxq_tail) := io.core.dec_uops(rocc_idx)
+    rxq_inst     (rxq_tail) := io.core.dec_uops(rocc_idx).debug_inst
     rxq_tail                := WrapInc(rxq_tail, NUM_RXQ_ENTRIES)
   }
 
@@ -141,7 +143,7 @@ class RoCCShim(implicit p: Parameters) extends BoomModule()(p)
         io.core.rocc.cmd.ready &&
         rcq.io.enq.ready) {
     io.core.rocc.cmd.valid         := true.B
-    io.core.rocc.cmd.bits.inst     := rxq_uop(rxq_head).inst.asTypeOf(new RoCCInstruction)
+    io.core.rocc.cmd.bits.inst     := rxq_inst(rxq_head).asTypeOf(new RoCCInstruction)
     io.core.rocc.cmd.bits.rs1      := rxq_rs1(rxq_head)
     io.core.rocc.cmd.bits.rs2      := rxq_rs2(rxq_head)
     io.core.rocc.cmd.bits.status   := io.status
