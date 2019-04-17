@@ -294,7 +294,6 @@ trait ScalarOpConstants
       uop.is_load    := false.B
       uop.pdst       := 0.U
       uop.dst_rtype  := RT_X
-      uop.valid      := false.B
       // TODO these unnecessary? used in regread stage?
       uop.is_br_or_jmp := false.B
 

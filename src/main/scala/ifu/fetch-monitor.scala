@@ -34,7 +34,7 @@ class FetchMonitor(implicit p: Parameters) extends BoomModule()(p)
       // The stream is valid and accepted by the backend.
       val fire = Input(Bool())
       // The stream of uops being sent to the backend.
-      val uops = Input(Vec(coreWidth, new MicroOp()))
+      val uops = Input(Vec(coreWidth, Valid(new MicroOp())))
       // Was the pipeline redirected? Clear/reset the fetchbuffer.
       val clear = Input(Bool())
    })
@@ -59,7 +59,7 @@ class FetchMonitor(implicit p: Parameters) extends BoomModule()(p)
    {
       if (DEBUG_PRINTF)
       {
-         printf("monitor F4[" + i + "] %d %d 0x%x\n", io.fire, uop.valid, uop.pc)
+         printf("monitor F4[" + i + "] %d %d 0x%x\n", io.fire, uop.valid, uop.bits.pc)
       }
    }
 
@@ -69,16 +69,16 @@ class FetchMonitor(implicit p: Parameters) extends BoomModule()(p)
       {
          when (prev_cfitype === CfiType.none)
          {
-            assert (uop.pc === prev_npc, "[fetchmonitor] non-cfi went to bad next-pc.")
+            assert (uop.bits.pc === prev_npc, "[fetchmonitor] non-cfi went to bad next-pc.")
          }
          .elsewhen (prev_cfitype === CfiType.branch)
          {
-            assert (uop.pc === prev_npc || uop.pc === prev_target,
+            assert (uop.bits.pc === prev_npc || uop.bits.pc === prev_target,
                "[fetchmonitor] branch went to bad next-pc.")
          }
          .elsewhen (prev_cfitype === CfiType.jal)
          {
-            assert (uop.pc === prev_target, "[fetchmonitor] JAL went to bad target.")
+            assert (uop.bits.pc === prev_target, "[fetchmonitor] JAL went to bad target.")
          }
          .otherwise
          {
@@ -88,14 +88,14 @@ class FetchMonitor(implicit p: Parameters) extends BoomModule()(p)
       }
 
       prev_valid = uop.valid && io.fire
-      prev_pc  = uop.pc
-      prev_npc = prev_pc + Mux(uop.is_rvc, 2.U, 4.U)
-      val inst = ExpandRVC(uop.inst)
+      prev_pc  = uop.bits.pc
+      prev_npc = prev_pc + Mux(uop.bits.is_rvc, 2.U, 4.U)
+      val inst = ExpandRVC(uop.bits.inst)
       prev_cfitype = GetCfiType(inst)
       prev_target =
          Mux(prev_cfitype === CfiType.jal,
-            ComputeJALTarget(uop.pc, inst, xLen),
-            ComputeBranchTarget(uop.pc, inst, xLen))
+            ComputeJALTarget(uop.bits.pc, inst, xLen),
+            ComputeBranchTarget(uop.bits.pc, inst, xLen))
    }
 
    // Check if the enqueue'd PC is a target of the previous valid enqueue'd PC.
@@ -117,7 +117,7 @@ class FetchMonitor(implicit p: Parameters) extends BoomModule()(p)
       val valid_mask = VecInit(io.uops map {u => u.valid}).asUInt
       assert (valid_mask =/= 0.U)
       val end_idx    = (fetchWidth-1).U - PriorityEncoder(Reverse(valid_mask))
-      val end_uop    = io.uops(end_idx)
+      val end_uop    = io.uops(end_idx).bits
       val end_pc     = end_uop.pc
       val end_compressed = end_uop.inst(1,0) =/= 3.U && usingCompressed.B
       val inst       = ExpandRVC(end_uop.inst)
@@ -136,7 +136,7 @@ class FetchMonitor(implicit p: Parameters) extends BoomModule()(p)
       when (last_valid)
       {
          val first_idx = PriorityEncoder(valid_mask)
-         val first_pc  = io.uops(first_idx).pc
+         val first_pc  = io.uops(first_idx).bits.pc
          when (last_cfitype === CfiType.none)
          {
             when (first_pc =/= last_npc)
