@@ -29,7 +29,7 @@ class DefaultBoomConfig extends Config((site, here, up) => {
    case XLen => 64
 
    // Use this boot ROM for SimDTM.
-   case BootROMParams => BootROMParams(contentFileName = "./rocket-chip/bootrom/bootrom.img")
+   case BootROMParams => BootROMParams(contentFileName = s"./bootrom/bootrom.rv${site(XLen)}.img")
 
    // Core Parameters
    case BoomTilesKey => up(BoomTilesKey, site) map { r => r.copy(
