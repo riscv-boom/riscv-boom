@@ -39,9 +39,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
       val flush_pipeline   = Input(Bool())
       val fcsr_rm          = Input(UInt(width=freechips.rocketchip.tile.FPConstants.RM_SZ.W))
 
-      val dis_valids       = Input(Vec(coreWidth, Bool())) // REFACTOR into single Decoupled()
-      val dis_uops         = Input(Vec(coreWidth, new MicroOp()))
-      val dis_readys       = Output(Vec(coreWidth, Bool()))
+      val dis_uops         = Vec(coreWidth, Flipped(Decoupled(new MicroOp)))
 
       // +1 for recoding.
       val ll_wport         = Flipped(Decoupled(new ExeUnitResp(fLen+1)))// from memory unit
@@ -104,12 +102,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
    //-------------------------------------------------------------
 
    // Input (Dispatch)
-   for (w <- 0 until coreWidth)
-   {
-      issue_unit.io.dis_valids(w) := io.dis_valids(w)
-      issue_unit.io.dis_uops(w)   := io.dis_uops(w)
-   }
-   io.dis_readys := issue_unit.io.dis_readys
+   issue_unit.io.dis_uops <> io.dis_uops
 
    //-------------------------------------------------------------
    // **** Issue Stage ****

@@ -71,9 +71,7 @@ class IssueUnitIO(
    val dispatchWidth: Int)
    (implicit p: Parameters) extends BoomBundle()(p)
 {
-   val dis_valids     = Input(Vec(dispatchWidth, Bool()))
-   val dis_uops       = Input(Vec(dispatchWidth, new MicroOp()))
-   val dis_readys     = Output(Vec(dispatchWidth, Bool()))
+   val dis_uops       = Vec(dispatchWidth, Flipped(Decoupled(new MicroOp)))
 
    val iss_valids     = Output(Vec(issue_width, Bool()))
    val iss_uops       = Output(Vec(issue_width, new MicroOp()))
@@ -120,24 +118,24 @@ abstract class IssueUnit(
    val dis_uops = Array.fill(dispatchWidth) {Wire(new MicroOp())}
    for (w <- 0 until dispatchWidth)
    {
-      dis_uops(w) := io.dis_uops(w)
+      dis_uops(w) := io.dis_uops(w).bits
       dis_uops(w).iw_p1_poisoned := false.B
       dis_uops(w).iw_p2_poisoned := false.B
       dis_uops(w).iw_state := s_valid_1
 
       if (iqType == IQT_MEM.litValue || iqType == IQT_INT.litValue) {
          // For StoreAddrGen for Int, or AMOAddrGen, we go to addr gen state
-         when ((io.dis_uops(w).uopc === uopSTA && io.dis_uops(w).lrs2_rtype === RT_FIX) || io.dis_uops(w).uopc === uopAMO_AG)
+         when ((io.dis_uops(w).bits.uopc === uopSTA && io.dis_uops(w).bits.lrs2_rtype === RT_FIX) || io.dis_uops(w).bits.uopc === uopAMO_AG)
          {
             dis_uops(w).iw_state := s_valid_2
          // For store addr gen for FP, rs2 is the FP register, and we don't wait for that here
-         } .elsewhen (io.dis_uops(w).uopc === uopSTA && io.dis_uops(w).lrs2_rtype =/= RT_FIX) {
+         } .elsewhen (io.dis_uops(w).bits.uopc === uopSTA && io.dis_uops(w).bits.lrs2_rtype =/= RT_FIX) {
             dis_uops(w).lrs2_rtype := RT_X
             dis_uops(w).prs2_busy  := false.B
          }
       } else if (iqType == IQT_FP.litValue) {
          // FP "StoreAddrGen" is really storeDataGen, and rs1 is the integer address register
-         when (io.dis_uops(w).uopc === uopSTA) {
+         when (io.dis_uops(w).bits.uopc === uopSTA) {
             dis_uops(w).lrs1_rtype := RT_X
             dis_uops(w).prs1_busy  := false.B
          }
