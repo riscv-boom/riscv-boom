@@ -98,8 +98,8 @@ class PTableDualPorted(numEntries: Int)(implicit p: Parameters) extends PTable(n
 
   when (io.update.valid) {
     val waddr = io.update.bits.index
-    val wdata = VecInit(io.update.bits.new_value.toBools)
-    val wmask = io.update.bits.executed.toBools
+    val wdata = VecInit(io.update.bits.new_value.asBools)
+    val wmask = io.update.bits.executed.asBools
     p_table.write(waddr, wdata, wmask)
   }
 
@@ -127,8 +127,8 @@ class PTableBanked(numEntries: Int)(implicit p: Parameters) extends PTable(numEn
 
   val ren_0   = rbank === 0.U
   val ren_1   = rbank === 1.U
-  val wdata   = VecInit(io.update.bits.new_value.toBools)
-  val wmask = io.update.bits.executed.toBools
+  val wdata   = VecInit(io.update.bits.new_value.asBools)
+  val wmask = io.update.bits.executed.asBools
 
   // ** use resizable SyncReadMems ** //
   p_table_0.io.wen   := !ren_0 && wbank === 0.U && io.update.valid

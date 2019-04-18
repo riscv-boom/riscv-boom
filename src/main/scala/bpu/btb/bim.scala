@@ -145,7 +145,7 @@ class BimodalTable(implicit p: Parameters) extends BoomModule with HasBimParamet
   private def initRowValue (): Vec[Bool] = {
     val row = Wire(UInt(rowSz.W))
     row := Fill(fetchWidth, 2.U)
-    VecInit(row.toBools)
+    VecInit(row.asBools)
   }
 
   private def generateWriteInfo(update: BimUpdate): (UInt, UInt, UInt) = {
@@ -257,8 +257,8 @@ class BimodalTable(implicit p: Parameters) extends BoomModule with HasBimParamet
     val wen = ((wq.io.deq.valid && !ren) || fsm_state === s_clear)
     when (wen) {
       val waddr = Mux(fsm_state === s_clear, clear_row_addr, wq.io.deq.bits.addr)
-      val wdata = Mux(fsm_state === s_clear, initRowValue(), VecInit(wq.io.deq.bits.data.toBools))
-      val wmask = Mux(fsm_state === s_clear, Fill(rowSz, 1.U), wq.io.deq.bits.mask).toBools
+      val wdata = Mux(fsm_state === s_clear, initRowValue(), VecInit(wq.io.deq.bits.data.asBools))
+      val wmask = Mux(fsm_state === s_clear, Fill(rowSz, 1.U), wq.io.deq.bits.mask).asBools
 
       ram.write(waddr, wdata, wmask)
       if (DEBUG_PRINTF) printf("w:W (%d==%x) %x %x ", waddr, waddr, wdata.asUInt, VecInit(wmask).asUInt)
