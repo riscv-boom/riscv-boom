@@ -27,9 +27,9 @@ case class BoomCoreParams(
    decodeWidth: Int = 1,
    numRobEntries: Int = 64,
    issueParams: Seq[IssueParams] = Seq(
-         IssueParams(issueWidth=1, numEntries=16, iqType=IQT_MEM.litValue),
-         IssueParams(issueWidth=2, numEntries=16, iqType=IQT_INT.litValue),
-         IssueParams(issueWidth=1, numEntries=16, iqType=IQT_FP.litValue)),
+         IssueParams(issueWidth=1, numEntries=16, iqType=IQT_MEM.litValue, dispatchWidth=1),
+         IssueParams(issueWidth=2, numEntries=16, iqType=IQT_INT.litValue, dispatchWidth=1),
+         IssueParams(issueWidth=1, numEntries=16, iqType=IQT_FP.litValue , dispatchWidth=1)),
    numLdqEntries: Int = 16,
    numStqEntries: Int = 16,
    numIntPhysRegisters: Int = 96,
