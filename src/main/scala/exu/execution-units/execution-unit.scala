@@ -587,7 +587,7 @@ class FPUExeUnit(
          entries = dfmaLatency + 3)) // TODO being overly conservative
       queue.io.enq.valid       := (fpu.io.resp.valid &&
                                    fpu.io.resp.bits.uop.fu_code_is(FU_F2I) &&
-                                   fpu.io.resp.bits.uop.uopc =/= uopSTD)
+                                   fpu.io.resp.bits.uop.uopc =/= uopSTA) // STA means store data gen for floating point
       queue.io.enq.bits.uop    := fpu.io.resp.bits.uop
       queue.io.enq.bits.data   := fpu.io.resp.bits.data
       queue.io.enq.bits.fflags := fpu.io.resp.bits.fflags
@@ -597,7 +597,7 @@ class FPUExeUnit(
 
       fpiu_busy := !(queue.io.empty)
 
-      io.iresp.valid     := io.req.valid && io.req.bits.uop.uopc === uopSTD
+      io.iresp.valid     := io.req.valid && io.req.bits.uop.uopc === uopSTA
       io.iresp.bits.uop  := io.req.bits.uop
       io.iresp.bits.data := ieee(io.req.bits.rs2_data)
 
