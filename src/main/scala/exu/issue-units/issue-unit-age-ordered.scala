@@ -70,9 +70,9 @@ class IssueUnitCollapsing(
    // which entries' uops will still be next cycle? (not being issued and vacated)
    val will_be_valid = (0 until num_issue_slots).map(i => issue_slots(i).will_be_valid) ++
                        (0 until dispatchWidth).map(i => io.dis_valids(i) &&
-                                                         !io.dis_uops(i).exception &&
-                                                         !io.dis_uops(i).is_fence &&
-                                                         !io.dis_uops(i).is_fencei)
+                                                         !dis_uops(i).exception &&
+                                                         !dis_uops(i).is_fence &&
+                                                         !dis_uops(i).is_fencei)
 
    val uops = issue_slots.map(s=>s.updated_uop) ++ dis_uops.map(s=>s)
    for (i <- 0 until num_issue_slots)

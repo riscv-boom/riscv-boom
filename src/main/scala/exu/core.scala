@@ -107,6 +107,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    val dec_brmask_logic = Module(new BranchMaskGenerationLogic(coreWidth))
    val rename_stage     = Module(new RenameStage(coreWidth, num_int_ren_wakeup_ports, num_fp_wakeup_ports))
    val issue_units      = new boom.exu.IssueUnits(num_int_iss_wakeup_ports)
+   val dispatcher       = Module(new BasicDispatcher)
 
    val iregfile         = if (enableCustomRf)
                           {
@@ -158,10 +159,6 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    val dec_will_fire  = Wire(Vec(coreWidth, Bool()))  // can the instruction fire beyond decode?
                                                          // (can still be stopped in ren or dis)
    val dec_rdy        = Wire(Bool())
-
-   // Dispatch Stage
-   val dis_valids     = Wire(Vec(coreWidth, Bool())) // true if uop WILL enter IW
-   val dis_uops       = Wire(Vec(coreWidth, new MicroOp()))
 
    // Issue Stage/Register Read
    val iss_valids     = Wire(Vec(exe_units.num_irf_readers, Bool()))
@@ -628,13 +625,6 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    // **** Register Rename Stage ****
    //-------------------------------------------------------------
    //-------------------------------------------------------------
-
-   // TODO for now, assume worst-case all instructions will dispatch towards one issue unit.
-   var dis_readys = issue_units.map(_.io.dis_readys.asUInt).reduce(_&_)
-   if (usingFPU) dis_readys = dis_readys & fp_pipeline.io.dis_readys.asUInt
-
-   rename_stage.io.dis_inst_can_proceed := dis_readys.asBools
-
    rename_stage.io.kill     := io.ifu.clear_fetchbuffer // mispredict or flush
    rename_stage.io.brinfo   := br_unit.brinfo
 
@@ -737,10 +727,35 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    //-------------------------------------------------------------
    //-------------------------------------------------------------
 
+   // Get uops from rename 2, and backpressure ren2 if necessary
+   rename_stage.io.dis_inst_can_proceed := VecInit(dispatcher.io.ren_uops.map(_.ready))
    for (w <- 0 until coreWidth)
    {
-      dis_valids(w)       := rename_stage.io.ren2_mask(w)
-      dis_uops(w)         := GetNewUopAndBrMask(rename_stage.io.ren2_uops(w), br_unit.brinfo)
+      dispatcher.io.ren_uops(w).valid := rename_stage.io.ren2_mask(w)
+      dispatcher.io.ren_uops(w).bits  := GetNewUopAndBrMask(rename_stage.io.ren2_uops(w), br_unit.brinfo)
+   }
+
+
+   var iu_idx = 0
+   // Send dispatched uops to correct issue queues
+   // Backpressure through dispatcher if necessary
+   for (i <- 0 until issueParams.size) {
+      if (issueParams(i).iqType == IQT_FP.litValue) {
+         for (w <- 0 until issueParams(i).dispatchWidth) {
+            dispatcher.io.dis_uops(i)(w).ready := fp_pipeline.io.dis_readys(w)
+
+            fp_pipeline.io.dis_valids(w) := dispatcher.io.dis_uops(i)(w).valid
+            fp_pipeline.io.dis_uops(w)   := dispatcher.io.dis_uops(i)(w).bits
+         }
+      } else {
+         for (w <- 0 until issueParams(i).dispatchWidth) {
+            dispatcher.io.dis_uops(i)(w).ready := issue_units(iu_idx).io.dis_readys(w)
+
+            issue_units(iu_idx).io.dis_valids(w) := dispatcher.io.dis_uops(i)(w).valid
+            issue_units(iu_idx).io.dis_uops(w)   := dispatcher.io.dis_uops(i)(w).bits
+         }
+         iu_idx += 1
+      }
    }
 
    //-------------------------------------------------------------
@@ -750,40 +765,6 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    //-------------------------------------------------------------
 
    require (issue_units.map(_.issue_width).sum == exe_units.length)
-
-   // Input (Dispatch)
-   for {
-      iu <- issue_units
-      w <- 0 until coreWidth
-   }{
-      iu.io.dis_valids(w) := dis_valids(w) && dis_uops(w).iqtype === (iu.iqType).U
-      iu.io.dis_uops(w) := dis_uops(w)
-
-      when (dis_uops(w).uopc === uopSTA && dis_uops(w).lrs2_rtype === RT_FLT)
-      {
-         iu.io.dis_uops(w).lrs2_rtype := RT_X
-         iu.io.dis_uops(w).prs2_busy := false.B
-      }
-   }
-   if (usingFPU)
-   {
-      fp_pipeline.io.dis_valids <> dis_valids
-      fp_pipeline.io.dis_uops <> dis_uops
-      // Manually specify unused signals so they don't show up in the
-      // FpPipeline's I/O field. This is only necessary if the FpPipeline
-      // is the top module being synthesized (otherwise cross-module
-      // optimization can remove the signals).
-      for (uop <- fp_pipeline.io.dis_uops)
-      {
-         uop.exc_cause := DontCare
-         uop.csr_addr := DontCare
-         uop.br_prediction := DontCare
-         uop.debug_wdata := DontCare
-         if (!DEBUG_PRINTF && !COMMIT_LOG_PRINTF) uop.pc := DontCare
-         if (!DEBUG_PRINTF && !COMMIT_LOG_PRINTF) uop.debug_inst := DontCare
-         if (!O3PIPEVIEW_PRINTF) uop.debug_events.fetch_seq := DontCare
-      }
-   }
 
    // Output (Issue)
 
@@ -1316,31 +1297,32 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       printf(") fin(%x)\n", dec_finished_mask)
       for (w <- 0 until coreWidth)
       {
+         val ren_uop = dispatcher.io.ren_uops(w).bits
          printf("        [ISA:%d,%d,%d,%d] [Phs:%d(%c)%d[%c](%c)%d[%c](%c)%d[%c](%c)] ",
-                dis_uops(w).ldst,
-                dis_uops(w).lrs1,
-                dis_uops(w).lrs2,
-                dis_uops(w).lrs3,
-                dis_uops(w).pdst,
-                Mux(dis_uops(w).dst_rtype   === RT_FIX, Str("X"),
-                  Mux(dis_uops(w).dst_rtype === RT_X  , Str("-"),
-                  Mux(dis_uops(w).dst_rtype === RT_FLT, Str("f"),
-                  Mux(dis_uops(w).dst_rtype === RT_PAS, Str("C"), Str("?"))))),
-                dis_uops(w).pop1,
+                ren_uop.ldst,
+                ren_uop.lrs1,
+                ren_uop.lrs2,
+                ren_uop.lrs3,
+                ren_uop.pdst,
+                Mux(ren_uop.dst_rtype   === RT_FIX, Str("X"),
+                  Mux(ren_uop.dst_rtype === RT_X  , Str("-"),
+                  Mux(ren_uop.dst_rtype === RT_FLT, Str("f"),
+                  Mux(ren_uop.dst_rtype === RT_PAS, Str("C"), Str("?"))))),
+                ren_uop.pop1,
                 Mux(rename_stage.io.ren2_uops(w).prs1_busy, Str("B"), Str("R")),
-                Mux(dis_uops(w).lrs1_rtype    === RT_FIX, Str("X"),
-                   Mux(dis_uops(w).lrs1_rtype === RT_X  , Str("-"),
-                   Mux(dis_uops(w).lrs1_rtype === RT_FLT, Str("f"),
-                   Mux(dis_uops(w).lrs1_rtype === RT_PAS, Str("C"), Str("?"))))),
-                dis_uops(w).pop2,
+                Mux(ren_uop.lrs1_rtype    === RT_FIX, Str("X"),
+                   Mux(ren_uop.lrs1_rtype === RT_X  , Str("-"),
+                   Mux(ren_uop.lrs1_rtype === RT_FLT, Str("f"),
+                   Mux(ren_uop.lrs1_rtype === RT_PAS, Str("C"), Str("?"))))),
+                ren_uop.pop2,
                 Mux(rename_stage.io.ren2_uops(w).prs2_busy, Str("B"), Str("R")),
-                Mux(dis_uops(w).lrs2_rtype    === RT_FIX, Str("X"),
-                   Mux(dis_uops(w).lrs2_rtype === RT_X  , Str("-"),
-                   Mux(dis_uops(w).lrs2_rtype === RT_FLT, Str("f"),
-                   Mux(dis_uops(w).lrs2_rtype === RT_PAS, Str("C"), Str("?"))))),
-                dis_uops(w).pop3,
+                Mux(ren_uop.lrs2_rtype    === RT_FIX, Str("X"),
+                   Mux(ren_uop.lrs2_rtype === RT_X  , Str("-"),
+                   Mux(ren_uop.lrs2_rtype === RT_FLT, Str("f"),
+                   Mux(ren_uop.lrs2_rtype === RT_PAS, Str("C"), Str("?"))))),
+                ren_uop.pop3,
                 Mux(rename_stage.io.ren2_uops(w).prs3_busy, Str("B"), Str("R")),
-                Mux(dis_uops(w).frs3_en, Str("f"), Str("-"))
+                Mux(ren_uop.frs3_en, Str("f"), Str("-"))
                 )
       }
 
@@ -1506,9 +1488,9 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
          {
             printf("%d; O3PipeView:rename: %d\n", dec_uops(w).debug_events.fetch_seq, debug_tsc_reg)
          }
-         when (dis_valids(w))
+         when (dispatcher.io.ren_uops(w).valid)
          {
-            printf("%d; O3PipeView:dispatch: %d\n", dis_uops(w).debug_events.fetch_seq, debug_tsc_reg)
+            printf("%d; O3PipeView:dispatch: %d\n", dispatcher.io.ren_uops(w).bits.debug_events.fetch_seq, debug_tsc_reg)
          }
 
          when (dec_rdy || io.ifu.clear_fetchbuffer)
