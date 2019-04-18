@@ -751,19 +751,9 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    // Backpressure through dispatcher if necessary
    for (i <- 0 until issueParams.size) {
       if (issueParams(i).iqType == IQT_FP.litValue) {
-         for (w <- 0 until issueParams(i).dispatchWidth) {
-            dispatcher.io.dis_uops(i)(w).ready := fp_pipeline.io.dis_readys(w)
-
-            fp_pipeline.io.dis_valids(w) := dispatcher.io.dis_uops(i)(w).valid
-            fp_pipeline.io.dis_uops(w)   := dispatcher.io.dis_uops(i)(w).bits
-         }
+         fp_pipeline.io.dis_uops <> dispatcher.io.dis_uops(i)
       } else {
-         for (w <- 0 until issueParams(i).dispatchWidth) {
-            dispatcher.io.dis_uops(i)(w).ready := issue_units(iu_idx).io.dis_readys(w)
-
-            issue_units(iu_idx).io.dis_valids(w) := dispatcher.io.dis_uops(i)(w).valid
-            issue_units(iu_idx).io.dis_uops(w)   := dispatcher.io.dis_uops(i)(w).bits
-         }
+         issue_units(iu_idx).io.dis_uops <> dispatcher.io.dis_uops(i)
          iu_idx += 1
       }
    }

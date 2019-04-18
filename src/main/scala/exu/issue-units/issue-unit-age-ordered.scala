@@ -42,7 +42,7 @@ class IssueUnitCollapsing(
    // count total grants before this entry, and tus how many to shift upwards by
    val shamt = Array.fill(num_issue_slots){UInt(width=log2Ceil(issue_width+1).W)}
 
-   val vacants = issue_slots.map(s => !(s.valid)) ++ io.dis_valids.map(!_.toBool)
+   val vacants = issue_slots.map(s => !(s.valid)) ++ io.dis_uops.map(_.valid).map(!_.toBool)
    val shamts_oh = Array.fill(num_issue_slots+dispatchWidth) {Wire(UInt(width=MAX_SHIFT.W))}
    // track how many to shift up this entry by by counting previous vacant spots
    def SaturatingCounterOH(count_oh:UInt, inc: Bool, max: Int): UInt =
@@ -69,7 +69,7 @@ class IssueUnitCollapsing(
 
    // which entries' uops will still be next cycle? (not being issued and vacated)
    val will_be_valid = (0 until num_issue_slots).map(i => issue_slots(i).will_be_valid) ++
-                       (0 until dispatchWidth).map(i => io.dis_valids(i) &&
+                       (0 until dispatchWidth).map(i => io.dis_uops(i).valid &&
                                                          !dis_uops(i).exception &&
                                                          !dis_uops(i).is_fence &&
                                                          !dis_uops(i).is_fencei)
@@ -104,7 +104,7 @@ class IssueUnitCollapsing(
    val num_available = PopCount(will_be_available)
    for (w <- 0 until dispatchWidth)
    {
-      io.dis_readys(w) := RegNext(num_available > w.U)
+      io.dis_uops(w).ready := RegNext(num_available > w.U)
    }
 
    //-------------------------------------------------------------
