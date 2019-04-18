@@ -1047,7 +1047,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
    }
       .elsewhen (do_ldld_search)
       {
-         val searcher_is_older = IsOlder(lcam_ldq_idx, i.U, laq_tail)
+         val searcher_is_older = IsOlder(lcam_ldq_idx, i.U, laq_head)
 
          // Does the load entry depend on the searching load?
          // Aka, is the searching load older than the load entry?

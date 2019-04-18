@@ -61,10 +61,9 @@ class RobIo(
 
    val enq_new_packet    = Input(Bool()) // we're dispatching the first (and perhaps only) part of a dispatch packet.
 
-   val curr_rob_tail_idx = Output(UInt(ROB_ADDR_SZ.W))
-   // For the PNR we send the idx instead of the row addr
-   // because otherwise partial rows stall the PNR
-   val curr_rob_pnr_idx  = Output(UInt(ROB_ADDR_SZ.W))
+   val rob_tail_idx = Output(UInt(ROB_ADDR_SZ.W))
+   val rob_pnr_idx  = Output(UInt(ROB_ADDR_SZ.W))
+   val rob_head_idx = Output(UInt(ROB_ADDR_SZ.W))
 
    // Handle Branch Misspeculations
    val brinfo = Input(new BrResolutionInfo())
@@ -687,10 +686,10 @@ class Rob(
          val load_is_older =
             (io.lxcpt.valid && !io.bxcpt.valid) ||
             (io.lxcpt.valid && io.bxcpt.valid &&
-            IsOlder(io.lxcpt.bits.uop.rob_idx, io.bxcpt.bits.uop.rob_idx, rob_tail_idx))
+            IsOlder(io.lxcpt.bits.uop.rob_idx, io.bxcpt.bits.uop.rob_idx, rob_head_idx))
          val new_xcpt_uop = Mux(load_is_older, io.lxcpt.bits.uop, io.bxcpt.bits.uop)
 
-         when (!r_xcpt_val || IsOlder(new_xcpt_uop.rob_idx, r_xcpt_uop.rob_idx, rob_tail_idx))
+         when (!r_xcpt_val || IsOlder(new_xcpt_uop.rob_idx, r_xcpt_uop.rob_idx, rob_head_idx))
          {
             r_xcpt_val              := true.B
             next_xcpt_uop           := new_xcpt_uop
@@ -762,7 +761,7 @@ class Rob(
    }
    .elsewhen (io.commit.valids.asUInt =/= 0.U)
    {
-      rob_head_lsb := width.U - PriorityEncoder(Reverse(io.commit.valids.asUInt))
+      rob_head_lsb := PriorityEncoder(~io.commit.valids.asUInt)
    }
    .elsewhen (empty && io.enq_valids.asUInt =/= 0.U)
    {
@@ -814,10 +813,10 @@ class Rob(
    }
 
    // Head overrunning PNR likely means an entry hasn't been marked as safe when it should have been.
-   assert(!IsOlder(rob_pnr_idx, rob_head_idx, rob_tail_idx))
+   assert(!IsOlder(rob_pnr_idx, rob_head_idx, rob_tail_idx) || rob_pnr_idx === rob_tail_idx)
 
    // PNR overrunning tail likely means an entry has been marked as safe when it shouldn't have been.
-   assert(!IsOlder(rob_tail_idx, rob_pnr_idx, rob_tail_idx) || full)
+   assert(!IsOlder(rob_tail_idx, rob_pnr_idx, rob_head_idx) || full)
 
    // -----------------------------------------------
    // ROB Tail Logic
@@ -875,10 +874,10 @@ class Rob(
    full       := rob_tail === rob_head && maybe_full
    empty      := (rob_head === rob_tail) && (rob_head_vals.asUInt === 0.U)
 
-   io.curr_rob_tail_idx := rob_tail_idx
-   io.curr_rob_pnr_idx  := rob_pnr_idx
-   io.empty             := empty
-   io.ready             := (rob_state === s_normal) && !full
+   io.rob_tail_idx := rob_tail_idx
+   io.rob_pnr_idx  := rob_pnr_idx
+   io.empty        := empty
+   io.ready        := (rob_state === s_normal) && !full
 
    //-----------------------------------------------
    //-----------------------------------------------

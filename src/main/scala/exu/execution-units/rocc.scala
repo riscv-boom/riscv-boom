@@ -37,7 +37,7 @@ class RoCCShimCoreIO(implicit p: Parameters) extends BoomBundle()(p)
   val rxq_empty        = Output(Bool())
   val rxq_idx          = Output(UInt(log2Ceil(NUM_RXQ_ENTRIES).W))
   val rob_pnr_idx      = Input(UInt(ROB_ADDR_SZ.W))
-  val rob_tail_idx     = Input(UInt(ROB_ADDR_SZ.W))
+  val rob_head_idx     = Input(UInt(ROB_ADDR_SZ.W))
 
   val rocc             = Flipped(new RoCCCoreIO)
 }
@@ -128,7 +128,7 @@ class RoCCShim(implicit p: Parameters) extends BoomModule()(p)
   // Commit
   when (rxq_op_val(rxq_com_head) &&
         rxq_val   (rxq_com_head) &&
-        IsOlder(rxq_uop(rxq_com_head).rob_idx, io.core.rob_pnr_idx, io.core.rob_tail_idx)) {
+        IsOlder(rxq_uop(rxq_com_head).rob_idx, io.core.rob_pnr_idx, io.core.rob_head_idx)) {
     rxq_committed(rxq_com_head) := true.B
     rxq_com_head                  := WrapInc(rxq_com_head, NUM_RXQ_ENTRIES)
   }
