@@ -106,18 +106,8 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
    // Input (Dispatch)
    for (w <- 0 until coreWidth)
    {
-      issue_unit.io.dis_valids(w) := io.dis_valids(w) && io.dis_uops(w).iqtype === issue_unit.iqType.U
-      issue_unit.io.dis_uops(w) := io.dis_uops(w)
-
-      // Or... add STDataGen micro-op for FP stores.
-      when (io.dis_uops(w).uopc === uopSTA && io.dis_uops(w).lrs2_rtype === RT_FLT)
-      {
-         issue_unit.io.dis_valids(w) := io.dis_valids(w)
-         issue_unit.io.dis_uops(w).uopc := uopSTD
-         issue_unit.io.dis_uops(w).fu_code := FUConstants.FU_F2I
-         issue_unit.io.dis_uops(w).lrs1_rtype := RT_X
-         issue_unit.io.dis_uops(w).prs1_busy := false.B
-      }
+      issue_unit.io.dis_valids(w) := io.dis_valids(w)
+      issue_unit.io.dis_uops(w)   := io.dis_uops(w)
    }
    io.dis_readys := issue_unit.io.dis_readys
 

@@ -60,10 +60,12 @@ trait BrPredConstants
  */
 trait IQType
 {
-   val IQT_SZ  = 2
-   val IQT_INT = 0.U(IQT_SZ.W)
-   val IQT_MEM = 1.U(IQT_SZ.W)
-   val IQT_FP  = 2.U(IQT_SZ.W)
+   val IQT_SZ  = 3
+   val IQT_INT = 1.U(IQT_SZ.W)
+   val IQT_MEM = 2.U(IQT_SZ.W)
+   val IQT_FP  = 4.U(IQT_SZ.W)
+
+   val IQT_MFP = 5.U(IQT_SZ.W)
 }
 
 /**

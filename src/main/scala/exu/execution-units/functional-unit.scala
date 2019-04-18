@@ -51,6 +51,9 @@ object FUConstants
    val FU_FDV = 128.U(FUC_SZ.W)
    val FU_I2F = 256.U(FUC_SZ.W)
    val FU_F2I = 512.U(FUC_SZ.W)
+
+   // FP stores generate data through FP F2I, and generate address through MemAddrCalc
+   val FU_F2IMEM = 516.U(FUC_SZ.W)
 }
 import FUConstants._
 
