@@ -92,15 +92,15 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
      fp_pipeline.io.wb_pdsts  := DontCare
    }
 
-   val num_irf_write_ports      = exe_units.num_irf_write_ports
-   val num_ll_irf_write_ports   = exe_units.num_ll_irf_write_ports
-   val num_irf_read_ports       = exe_units.num_irf_read_ports
+   val numIrfWritePorts      = exe_units.numIrfWritePorts
+   val numLlIrfWritePorts   = exe_units.numLlIrfWritePorts
+   val numIrfReadPorts       = exe_units.numIrfReadPorts
 
    val num_fast_wakeup_ports    = exe_units.count(_.bypassable)
-   val num_always_bypassable    = exe_units.count(_.always_bypassable)
+   val num_alwaysBypassable    = exe_units.count(_.alwaysBypassable)
 
-   val num_int_iss_wakeup_ports = num_irf_write_ports + 1 + num_fast_wakeup_ports - num_always_bypassable // + 1 for ll_wb
-   val num_int_ren_wakeup_ports = if (enableFastWakeupsToRename) num_int_iss_wakeup_ports else num_irf_write_ports + 1
+   val num_int_iss_wakeup_ports = numIrfWritePorts + 1 + num_fast_wakeup_ports - num_alwaysBypassable // + 1 for ll_wb
+   val num_int_ren_wakeup_ports = if (enableFastWakeupsToRename) num_int_iss_wakeup_ports else numIrfWritePorts + 1
    val num_fp_wakeup_ports      = if (usingFPU) fp_pipeline.io.wakeups.length else 0
 
    val decode_units     = for (w <- 0 until decodeWidth) yield { val d = Module(new DecodeUnit); d }
@@ -112,16 +112,16 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    val iregfile         = if (enableCustomRf)
                           {
                               Module(new RegisterFileSeqCustomArray(numIntPhysRegs,
-                                 num_irf_read_ports,
-                                 num_irf_write_ports + 1, // + 1 for ll writebacks
+                                 numIrfReadPorts,
+                                 numIrfWritePorts + 1, // + 1 for ll writebacks
                                  xLen,
                                  Seq(true) ++ exe_units.bypassable_write_port_mask)) // 0th is bypassable ll_wb
                           }
                           else
                           {
                               Module(new RegisterFileSynthesizable(numIntPhysRegs,
-                                 num_irf_read_ports,
-                                 num_irf_write_ports + 1, // + 1 for ll writebacks
+                                 numIrfReadPorts,
+                                 numIrfWritePorts + 1, // + 1 for ll writebacks
                                  xLen,
                                  Seq(true) ++ exe_units.bypassable_write_port_mask)) // 0th is bypassable ll_wb
                           }
@@ -130,17 +130,17 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
                                                                     (if (usingRoCC) 1 else 0)))
    val iregister_read   = Module(new RegisterRead(
                                  issue_units.map(_.issueWidth).sum,
-                                 exe_units.withFilter(_.reads_irf).map(_.supportedFuncUnits),
-                                 num_irf_read_ports,
-                                 exe_units.withFilter(_.reads_irf).map(x => 2),
-                                 exe_units.num_total_bypass_ports,
+                                 exe_units.withFilter(_.readsIrf).map(_.supportedFuncUnits),
+                                 numIrfReadPorts,
+                                 exe_units.withFilter(_.readsIrf).map(x => 2),
+                                 exe_units.numTotalBypassPorts,
                                  xLen))
    val dc_shim          = Module(new boom.lsu.DCacheShim())
    val lsu              = Module(new boom.lsu.LoadStoreUnit(coreWidth))
    val rob              = Module(new Rob(
                                  coreWidth,
                                  NUM_ROB_ENTRIES,
-                                 num_irf_write_ports + 1 + num_fp_wakeup_ports, // +1 for ll writebacks
+                                 numIrfWritePorts + 1 + num_fp_wakeup_ports, // +1 for ll writebacks
                                  num_fp_wakeup_ports))
    // Used to wakeup registers in rename and issue. ROB needs to listen to something else.
    val int_iss_wakeups  = Wire(Vec(num_int_iss_wakeup_ports, Valid(new ExeUnitResp(xLen))))
@@ -161,9 +161,9 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    val dec_rdy        = Wire(Bool())
 
    // Issue Stage/Register Read
-   val iss_valids     = Wire(Vec(exe_units.num_irf_readers, Bool()))
-   val iss_uops       = Wire(Vec(exe_units.num_irf_readers, new MicroOp()))
-   val bypasses       = Wire(new BypassData(exe_units.num_total_bypass_ports, xLen))
+   val iss_valids     = Wire(Vec(exe_units.numIrfReaders, Bool()))
+   val iss_uops       = Wire(Vec(exe_units.numIrfReaders, new MicroOp()))
+   val bypasses       = Wire(new BypassData(exe_units.numTotalBypassPorts, xLen))
 
    // Branch Unit
    val br_unit = Wire(new BranchUnitResp())
@@ -399,9 +399,9 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
      + "\n   RAS Size              : " + (if (enableBTB) boomParams.btb.nRAS else 0)
      + "\n   Rename  Stage Latency : " + renameLatency
      + "\n" + iregfile.toString
-     + "\n   Num Slow Wakeup Ports : " + num_irf_write_ports
+     + "\n   Num Slow Wakeup Ports : " + numIrfWritePorts
      + "\n   Num Fast Wakeup Ports : " + exe_units.count(_.bypassable)
-     + "\n   Num Bypass Ports      : " + exe_units.num_total_bypass_ports
+     + "\n   Num Bypass Ports      : " + exe_units.numTotalBypassPorts
      + "\n" + (if (usingFPU) fp_pipeline.toString else "")
      + "\n   DCache Ways           : " + dcacheParams.nWays
      + "\n   DCache Sets           : " + dcacheParams.nSets
@@ -645,7 +645,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    // loop through each issue-port (exe_units are statically connected to an issue-port)
    for (i <- 0 until exe_units.length)
    {
-      if (exe_units(i).writes_irf)
+      if (exe_units(i).writesIrf)
       {
          val fast_wakeup = Wire(Valid(new ExeUnitResp(xLen)))
          val slow_wakeup = Wire(Valid(new ExeUnitResp(xLen)))
@@ -674,7 +674,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
             int_iss_wakeups(iss_wu_idx) := fast_wakeup
             iss_wu_idx += 1
          }
-         if (!exe_units(i).always_bypassable)
+         if (!exe_units(i).alwaysBypassable)
          {
             int_iss_wakeups(iss_wu_idx) := slow_wakeup
             iss_wu_idx += 1
@@ -685,7 +685,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
             int_ren_wakeups(ren_wu_idx) := fast_wakeup
             ren_wu_idx += 1
          }
-         if (!exe_units(i).always_bypassable || !enableFastWakeupsToRename)
+         if (!exe_units(i).alwaysBypassable || !enableFastWakeupsToRename)
          {
             int_ren_wakeups(ren_wu_idx) := slow_wakeup
             ren_wu_idx += 1
@@ -764,7 +764,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    {
       var fu_types = exe_units(w).io.fu_types
       val exe_unit = exe_units(w)
-      if (exe_unit.reads_irf)
+      if (exe_unit.readsIrf)
       {
          if (exe_unit.supportedFuncUnits.muld)
          {
@@ -774,7 +774,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
             fu_types = fu_types & RegNext(~Mux(idiv_issued, FU_DIV, 0.U))
          }
 
-         if (exe_unit.has_mem)
+         if (exe_unit.hasMem)
          {
             iss_valids(iss_idx) := issue_units.mem_iq.io.iss_valids(0)
             iss_uops(iss_idx)   := issue_units.mem_iq.io.iss_uops(0)
@@ -790,7 +790,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
          iss_idx += 1
       }
    }
-   require(iss_idx == exe_units.num_irf_readers)
+   require(iss_idx == exe_units.numIrfReaders)
 
    issue_units.map(_.io.tsc_reg := debug_tsc_reg)
    issue_units.map(_.io.brinfo := br_unit.brinfo)
@@ -850,7 +850,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    // Register Read <- Issue (rrd <- iss)
    iregister_read.io.rf_read_ports <> iregfile.io.read_ports
 
-   for (w <- 0 until exe_units.num_irf_readers)
+   for (w <- 0 until exe_units.numIrfReaders)
    {
       iregister_read.io.iss_valids(w) :=
          iss_valids(w) && !(sxt_ldMiss && (iss_uops(w).iw_p1_poisoned || iss_uops(w).iw_p2_poisoned))
@@ -951,13 +951,13 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    for (w <- 0 until exe_units.length)
    {
       val exe_unit = exe_units(w)
-      if (exe_unit.reads_irf)
+      if (exe_unit.readsIrf)
       {
          exe_unit.io.req <> iregister_read.io.exe_reqs(iss_idx)
 
          if (exe_unit.bypassable)
          {
-            for (i <- 0 until exe_unit.num_bypass_stages)
+            for (i <- 0 until exe_unit.numBypassStages)
             {
                bypasses.valid(bypass_idx) := exe_unit.io.bypass.valid(i)
                bypasses.uop(bypass_idx)   := exe_unit.io.bypass.uop(i)
@@ -969,7 +969,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       }
 
    }
-   require (bypass_idx == exe_units.num_total_bypass_ports)
+   require (bypass_idx == exe_units.numTotalBypassPorts)
 
    //-------------------------------------------------------------
    //-------------------------------------------------------------
@@ -1026,7 +1026,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    iregfile.io.write_ports(0) := WritePort(ll_wbarb.io.out, IPREG_SZ, xLen)
    for (i <- 0 until exe_units.length)
    {
-      if (exe_units(i).writes_irf)
+      if (exe_units(i).writesIrf)
       {
          val wbresp = exe_units(i).io.iresp
          val wbpdst = wbresp.bits.uop.pdst
@@ -1039,7 +1039,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
          iregfile.io.write_ports(w_cnt).valid     := wbIsValid(RT_FIX)
          iregfile.io.write_ports(w_cnt).bits.addr := wbpdst
          wbresp.ready := true.B
-         if (exe_units(i).uses_csr_wport)
+         if (exe_units(i).usesCsrWport)
          {
             iregfile.io.write_ports(w_cnt).bits.data := Mux(wbReadsCSR, csr.io.rw.rdata, wbdata)
          }
@@ -1110,7 +1110,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    var f_cnt = 0 // rob fflags port index
    for (eu <- exe_units)
    {
-      if (eu.writes_irf)
+      if (eu.writesIrf)
       {
          val resp   = eu.io.iresp
          val wb_uop = resp.bits.uop
@@ -1124,7 +1124,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
             rob.io.fflags(f_cnt) <> resp.bits.fflags
             f_cnt += 1
          }
-         if (eu.uses_csr_wport)
+         if (eu.usesCsrWport)
          {
             rob.io.debug_wb_wdata(cnt) := Mux(wb_uop.ctrl.csr_cmd =/= freechips.rocketchip.rocket.CSR.N,
                csr.io.rw.rdata,
@@ -1139,7 +1139,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       }
    }
 
-   require(cnt == num_irf_write_ports + 1)
+   require(cnt == numIrfWritePorts + 1)
    if (usingFPU) {
       for ((wdata, wakeup) <- fp_pipeline.io.debug_wb_wdata zip fp_pipeline.io.wakeups)
       {

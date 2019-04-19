@@ -27,13 +27,13 @@ import boom.util._
  *
  * @param issue_width total issue width from all issue queues
  * @param num_total_read_ports number of read ports
- * @param num_total_bypass_ports number of bypass ports out of the execution units
+ * @param numTotalBypassPorts number of bypass ports out of the execution units
  * @param register_width size of register in bits
  */
 class RegisterReadIO(
    val issue_width: Int,
    val num_total_read_ports: Int,
-   val num_total_bypass_ports: Int,
+   val numTotalBypassPorts: Int,
    val register_width: Int
 )(implicit p: Parameters) extends  BoomBundle()(p)
 {
@@ -44,7 +44,7 @@ class RegisterReadIO(
    // interface with register file's read ports
    val rf_read_ports = Flipped(Vec(num_total_read_ports, new RegisterFileReadPortIO(PREG_SZ, register_width)))
 
-   val bypass = Input(new BypassData(num_total_bypass_ports, register_width))
+   val bypass = Input(new BypassData(numTotalBypassPorts, register_width))
 
    // send micro-ops to the execution pipelines
    val exe_reqs = Vec(issue_width, (new DecoupledIO(new FuncUnitReq(register_width))))
@@ -62,7 +62,7 @@ class RegisterReadIO(
  * @param supported_units_array seq of SupportedFuncUnits classes indicating what the functional units do
  * @param num_total_read_ports number of read ports
  * @param num_read_ports_array execution units read port sequence
- * @param num_total_bypass_ports number of bypass ports out of the execution units
+ * @param numTotalBypassPorts number of bypass ports out of the execution units
  * @param register_width size of register in bits
  */
 class RegisterRead(
@@ -73,11 +73,11 @@ class RegisterRead(
                          // each exe_unit must tell us how many max
                          // operands it can accept (the sum should equal
                          // num_total_read_ports)
-   num_total_bypass_ports: Int,
+   numTotalBypassPorts: Int,
    register_width: Int
 )(implicit p: Parameters) extends BoomModule()(p)
 {
-   val io = IO(new RegisterReadIO(issue_width, num_total_read_ports, num_total_bypass_ports, register_width))
+   val io = IO(new RegisterReadIO(issue_width, num_total_read_ports, numTotalBypassPorts, register_width))
 
    val rrd_valids       = Wire(Vec(issue_width, Bool()))
    val rrd_uops         = Wire(Vec(issue_width, new MicroOp()))

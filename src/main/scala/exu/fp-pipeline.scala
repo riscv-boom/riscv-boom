@@ -64,28 +64,28 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
                            num_wakeup_ports))
    issue_unit.suggestName("fp_issue_unit")
    val fregfile         = Module(new RegisterFileSynthesizable(numFpPhysRegs,
-                                 exe_units.num_frf_read_ports,
-                                 exe_units.num_frf_write_ports + 1, // + 1 for ll writeback
+                                 exe_units.numFrfReadPorts,
+                                 exe_units.numFrfWritePorts + 1, // + 1 for ll writeback
                                  fLen+1,
                                  // No bypassing for any FP units, + 1 for ll_wb
-                                 Seq.fill(exe_units.num_frf_write_ports + 1){ false }
+                                 Seq.fill(exe_units.numFrfWritePorts + 1){ false }
                                  ))
    val fregister_read   = Module(new RegisterRead(
                            issue_unit.issueWidth,
-                           exe_units.withFilter(_.reads_frf).map(_.supportedFuncUnits),
-                           exe_units.num_frf_read_ports,
-                           exe_units.withFilter(_.reads_frf).map(x => 3),
+                           exe_units.withFilter(_.readsFrf).map(_.supportedFuncUnits),
+                           exe_units.numFrfReadPorts,
+                           exe_units.withFilter(_.readsFrf).map(x => 3),
                            0, // No bypass for FP
                            fLen+1))
 
-   require (exe_units.count(_.reads_frf) == issue_unit.issueWidth)
-   require (exe_units.num_frf_write_ports + num_ll_ports == num_wakeup_ports)
+   require (exe_units.count(_.readsFrf) == issue_unit.issueWidth)
+   require (exe_units.numFrfWritePorts + num_ll_ports == num_wakeup_ports)
 
    //*************************************************************
    // Issue window logic
 
-   val iss_valids     = Wire(Vec(exe_units.num_frf_readers, Bool()))
-   val iss_uops       = Wire(Vec(exe_units.num_frf_readers, new MicroOp()))
+   val iss_valids     = Wire(Vec(exe_units.numFrfReaders, Bool()))
+   val iss_uops       = Wire(Vec(exe_units.numFrfReaders, new MicroOp()))
 
    issue_unit.io.tsc_reg := io.debug_tsc_reg
    issue_unit.io.brinfo := io.brinfo
@@ -95,7 +95,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
    issue_unit.io.mem_ldSpecWakeup.bits := 0.U
    issue_unit.io.sxt_ldMiss := false.B
 
-   require (exe_units.num_total_bypass_ports == 0)
+   require (exe_units.numTotalBypassPorts == 0)
 
    //-------------------------------------------------------------
    // **** Dispatch Stage ****
@@ -122,7 +122,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
       }
       issue_unit.io.fu_types(i) := fu_types
 
-      require (exe_units(i).reads_frf)
+      require (exe_units(i).readsFrf)
    }
 
    // Wakeup
@@ -152,12 +152,12 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
 
    exe_units.map(_.io.brinfo := io.brinfo)
 
-   for ((ex,w) <- exe_units.withFilter(_.reads_frf).map(x=>x).zipWithIndex)
+   for ((ex,w) <- exe_units.withFilter(_.readsFrf).map(x=>x).zipWithIndex)
    {
       ex.io.req <> fregister_read.io.exe_reqs(w)
       require (!ex.bypassable)
    }
-   require (exe_units.num_total_bypass_ports == 0)
+   require (exe_units.numTotalBypassPorts == 0)
 
    //-------------------------------------------------------------
    // **** Writeback Stage ****
@@ -186,7 +186,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
    var w_cnt = 1
    for (eu <- exe_units)
    {
-      if (eu.writes_frf)
+      if (eu.writesFrf)
       {
          fregfile.io.write_ports(w_cnt).valid     := eu.io.fresp.valid && eu.io.fresp.bits.uop.ctrl.rf_wen
          fregfile.io.write_ports(w_cnt).bits.addr := eu.io.fresp.bits.uop.pdst
@@ -222,7 +222,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
    w_cnt = 1
    for (eu <- exe_units)
    {
-      if (eu.writes_frf)
+      if (eu.writesFrf)
       {
          val exe_resp = eu.io.fresp
          val wb_uop = eu.io.fresp.bits.uop
@@ -259,5 +259,5 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
    override def toString: String =
       fregfile.toString +
       "\n   Num Wakeup Ports      : " + num_wakeup_ports +
-      "\n   Num Bypass Ports      : " + exe_units.num_total_bypass_ports + "\n"
+      "\n   Num Bypass Ports      : " + exe_units.numTotalBypassPorts + "\n"
 }
