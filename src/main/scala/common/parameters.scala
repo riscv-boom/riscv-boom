@@ -170,7 +170,7 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
 
    // Currently, require issue dispatch widths all equal coreWidth
    issueParams.map(x => require(x.dispatchWidth == coreWidth))
-   // In future, relax this constraint
+   // TODO: In future, relax this constraint
    issueParams.map(x => require(x.dispatchWidth <= coreWidth && x.dispatchWidth > 0))
 
    //************************************
