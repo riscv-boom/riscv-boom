@@ -129,7 +129,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
                                                                     (if (usingFPU) 1 else 0) +
                                                                     (if (usingRoCC) 1 else 0)))
    val iregister_read   = Module(new RegisterRead(
-                                 issue_units.map(_.issue_width).sum,
+                                 issue_units.map(_.issueWidth).sum,
                                  exe_units.withFilter(_.reads_irf).map(_.supportedFuncUnits),
                                  num_irf_read_ports,
                                  exe_units.withFilter(_.reads_irf).map(x => 2),
@@ -148,7 +148,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    int_iss_wakeups := DontCare
    int_ren_wakeups := DontCare
 
-   require (exe_units.length == issue_units.map(_.issue_width).sum)
+   require (exe_units.length == issue_units.map(_.issueWidth).sum)
 
    //***********************************
    // Pipeline State Registers and Wires
@@ -754,7 +754,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    //-------------------------------------------------------------
    //-------------------------------------------------------------
 
-   require (issue_units.map(_.issue_width).sum == exe_units.length)
+   require (issue_units.map(_.issueWidth).sum == exe_units.length)
 
    // Output (Issue)
 
@@ -800,7 +800,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    require (issue_units.count(_.iqType == IQT_MEM.litValue) == 1 || usingUnifiedMemIntIQs)
    val mem_iq = issue_units.mem_iq
 
-   require (mem_iq.issue_width == 1)
+   require (mem_iq.issueWidth == 1)
    val iss_loadIssued =
       mem_iq.io.iss_valids(0) &&
       mem_iq.io.iss_uops(0).is_load &&
@@ -832,13 +832,13 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
    for {
       iu <- issue_units
-      (issport, wakeup) <- iu.io.wakeup_pdsts zip int_iss_wakeups
+      (issport, wakeup) <- iu.io.wakeup_ports zip int_iss_wakeups
    }{
       issport.valid := wakeup.valid
       issport.bits.pdst := wakeup.bits.uop.pdst
       issport.bits.poisoned := wakeup.bits.uop.iw_p1_poisoned || wakeup.bits.uop.iw_p2_poisoned
 
-      require (iu.io.wakeup_pdsts.length == int_iss_wakeups.length)
+      require (iu.io.wakeup_ports.length == int_iss_wakeups.length)
    }
 
    //-------------------------------------------------------------

@@ -30,10 +30,10 @@ import boom.exu.FUConstants._
  * @param iqType type of issue queue
  */
 case class IssueParams(
-   dispatchWidth: Int = 1,
-   issueWidth: Int = 1,
-   numEntries: Int = 8,
-   iqType: BigInt
+  dispatchWidth: Int = 1,
+  issueWidth: Int = 1,
+  numEntries: Int = 8,
+  iqType: BigInt
 )
 
 /**
@@ -41,10 +41,10 @@ case class IssueParams(
  */
 trait IssueUnitConstants
 {
-   // invalid  : slot holds no valid uop.
-   // s_valid_1: slot holds a valid uop.
-   // s_valid_2: slot holds a store-like uop that may be broken into two micro-ops.
-   val s_invalid :: s_valid_1 :: s_valid_2 :: Nil = Enum(3)
+  // invalid  : slot holds no valid uop.
+  // s_valid_1: slot holds a valid uop.
+  // s_valid_2: slot holds a store-like uop that may be broken into two micro-ops.
+  val s_invalid :: s_valid_1 :: s_valid_2 :: Nil = Enum(3)
 }
 
 /**
@@ -55,168 +55,161 @@ trait IssueUnitConstants
  */
 class IqWakeup(val preg_sz: Int) extends Bundle
 {
-   val pdst = UInt(width=preg_sz.W)
-   val poisoned = Bool()
+  val pdst = UInt(width=preg_sz.W)
+  val poisoned = Bool()
 }
 
 /**
  * IO bundle to interact with the issue unit
  *
- * @param issue_width amount of operations that can be issued at once
- * @param num_wakeup_ports number of wakeup ports for issue unit
+ * @param issueWidth amount of operations that can be issued at once
+ * @param numWakeupPorts number of wakeup ports for issue unit
  */
 class IssueUnitIO(
-   val issue_width: Int,
-   val num_wakeup_ports: Int,
-   val dispatchWidth: Int)
-   (implicit p: Parameters) extends BoomBundle()(p)
+  val issueWidth: Int,
+  val numWakeupPorts: Int,
+  val dispatchWidth: Int)
+  (implicit p: Parameters) extends BoomBundle()(p)
 {
-   val dis_uops       = Vec(dispatchWidth, Flipped(Decoupled(new MicroOp)))
+  val dis_uops       = Vec(dispatchWidth, Flipped(Decoupled(new MicroOp)))
 
-   val iss_valids     = Output(Vec(issue_width, Bool()))
-   val iss_uops       = Output(Vec(issue_width, new MicroOp()))
-   val wakeup_pdsts   = Flipped(Vec(num_wakeup_ports, Valid(new IqWakeup(PREG_SZ))))
+  val iss_valids     = Output(Vec(issueWidth, Bool()))
+  val iss_uops       = Output(Vec(issueWidth, new MicroOp()))
+  val wakeup_ports   = Flipped(Vec(numWakeupPorts, Valid(new IqWakeup(PREG_SZ))))
 
-   val mem_ldSpecWakeup= Flipped(Valid(UInt(width=PREG_SZ.W)))
+  val mem_ldSpecWakeup= Flipped(Valid(UInt(width=PREG_SZ.W)))
 
-   // tell the issue unit what each execution pipeline has in terms of functional units
-   val fu_types       = Input(Vec(issue_width, Bits(width=FUC_SZ.W)))
+  // tell the issue unit what each execution pipeline has in terms of functional units
+  val fu_types       = Input(Vec(issueWidth, Bits(width=FUC_SZ.W)))
 
-   val brinfo         = Input(new BrResolutionInfo())
-   val flush_pipeline = Input(Bool())
-   val sxt_ldMiss     = Input(Bool())
+  val brinfo         = Input(new BrResolutionInfo())
+  val flush_pipeline = Input(Bool())
+  val sxt_ldMiss     = Input(Bool())
 
-   val event_empty    = Output(Bool()) // used by HPM events; is the issue unit empty?
+  val event_empty    = Output(Bool()) // used by HPM events; is the issue unit empty?
 
-   val tsc_reg        = Input(UInt(width=xLen.W))
+  val tsc_reg        = Input(UInt(width=xLen.W))
 }
 
 /**
  * Abstract top level issue unit
  *
- * @param num_issue_slots depth of issue queue
- * @param issue_width amoutn of operations that can be issued at once
- * @param num_wakeup_ports number of wakeup ports for issue unit
+ * @param numIssueSlots depth of issue queue
+ * @param issueWidth amoutn of operations that can be issued at once
+ * @param numWakeupPorts number of wakeup ports for issue unit
  * @param iqType type of issue queue (mem, int, fp)
  */
 abstract class IssueUnit(
-   val num_issue_slots: Int,
-   val issue_width: Int,
-   num_wakeup_ports: Int,
-   val iqType: BigInt,
-   val dispatchWidth: Int)
-   (implicit p: Parameters)
-   extends BoomModule()(p)
-   with IssueUnitConstants
+  val num_issue_slots: Int,
+  val issue_width: Int,
+  num_wakeup_ports: Int,
+  val iqType: BigInt,
+  val dispatchWidth: Int)
+  (implicit p: Parameters)
+  extends BoomModule()(p)
+  with IssueUnitConstants
 {
-   val io = IO(new IssueUnitIO(issue_width, num_wakeup_ports, dispatchWidth))
+  val io = IO(new IssueUnitIO(issue_width, num_wakeup_ports, dispatchWidth))
 
-   //-------------------------------------------------------------
-   // Set up the dispatch uops
-   // special case "storing" 2 uops within one issue slot.
+  //-------------------------------------------------------------
+  // Set up the dispatch uops
+  // special case "storing" 2 uops within one issue slot.
 
-   val dis_uops = Array.fill(dispatchWidth) {Wire(new MicroOp())}
-   for (w <- 0 until dispatchWidth)
-   {
-      dis_uops(w) := io.dis_uops(w).bits
-      dis_uops(w).iw_p1_poisoned := false.B
-      dis_uops(w).iw_p2_poisoned := false.B
-      dis_uops(w).iw_state := s_valid_1
+  val dis_uops = Array.fill(dispatchWidth) {Wire(new MicroOp())}
+  for (w <- 0 until dispatchWidth) {
+    dis_uops(w) := io.dis_uops(w).bits
+    dis_uops(w).iw_p1_poisoned := false.B
+    dis_uops(w).iw_p2_poisoned := false.B
+    dis_uops(w).iw_state := s_valid_1
 
-      if (iqType == IQT_MEM.litValue || iqType == IQT_INT.litValue) {
-         // For StoreAddrGen for Int, or AMOAddrGen, we go to addr gen state
-         when ((io.dis_uops(w).bits.uopc === uopSTA && io.dis_uops(w).bits.lrs2_rtype === RT_FIX) || io.dis_uops(w).bits.uopc === uopAMO_AG)
-         {
-            dis_uops(w).iw_state := s_valid_2
-         // For store addr gen for FP, rs2 is the FP register, and we don't wait for that here
-         } .elsewhen (io.dis_uops(w).bits.uopc === uopSTA && io.dis_uops(w).bits.lrs2_rtype =/= RT_FIX) {
-            dis_uops(w).lrs2_rtype := RT_X
-            dis_uops(w).prs2_busy  := false.B
-         }
-      } else if (iqType == IQT_FP.litValue) {
-         // FP "StoreAddrGen" is really storeDataGen, and rs1 is the integer address register
-         when (io.dis_uops(w).bits.uopc === uopSTA) {
-            dis_uops(w).lrs1_rtype := RT_X
-            dis_uops(w).prs1_busy  := false.B
-         }
+    if (iqType == IQT_MEM.litValue || iqType == IQT_INT.litValue) {
+      // For StoreAddrGen for Int, or AMOAddrGen, we go to addr gen state
+      when ((io.dis_uops(w).bits.uopc === uopSTA && io.dis_uops(w).bits.lrs2_rtype === RT_FIX) ||
+             io.dis_uops(w).bits.uopc === uopAMO_AG) {
+        dis_uops(w).iw_state := s_valid_2
+        // For store addr gen for FP, rs2 is the FP register, and we don't wait for that here
+      } .elsewhen (io.dis_uops(w).bits.uopc === uopSTA && io.dis_uops(w).bits.lrs2_rtype =/= RT_FIX) {
+        dis_uops(w).lrs2_rtype := RT_X
+        dis_uops(w).prs2_busy  := false.B
       }
-
-   }
-
-   //-------------------------------------------------------------
-   // Issue Table
-
-   val slots = for (i <- 0 until num_issue_slots) yield { val slot = Module(new IssueSlot(num_wakeup_ports)); slot }
-   val issue_slots = VecInit(slots.map(_.io))
-
-   io.event_empty := !(issue_slots.map(s => s.valid).reduce(_|_))
-
-   //-------------------------------------------------------------
-
-   assert (PopCount(issue_slots.map(s => s.grant)) <= issue_width.U, "[issue] window giving out too many grants.")
-
-   // Check that a ldMiss signal was preceded by a ldSpecWakeup.
-   // However, if the load gets killed before it hits SXT stage, we may see
-   // the sxt_ldMiss signal (from some other load) by not the ldSpecWakeup signal.
-   // So track branch kills for the last 4 cycles to remove false negatives.
-   val brKills = RegInit(0.asUInt(width=4.W))
-   brKills := Cat(brKills, (io.brinfo.valid && io.brinfo.mispredict) || io.flush_pipeline)
-   assert (!(io.sxt_ldMiss && !RegNext(io.mem_ldSpecWakeup.valid, init=false.B) && brKills === 0.U),
-      "[issue] IQ-" + iqType + " a ld miss was not preceded by a spec wakeup.")
-
-   //-------------------------------------------------------------
-
-   if (O3PIPEVIEW_PRINTF)
-   {
-      for (i <- 0 until issue_width)
-      {
-         // only print stores once!
-         when (io.iss_valids(i) && io.iss_uops(i).uopc =/= uopSTD)
-         {
-            printf("%d; O3PipeView:issue: %d\n",
-               io.iss_uops(i).debug_events.fetch_seq,
-               io.tsc_reg)
-         }
+    } else if (iqType == IQT_FP.litValue) {
+      // FP "StoreAddrGen" is really storeDataGen, and rs1 is the integer address register
+      when (io.dis_uops(w).bits.uopc === uopSTA) {
+        dis_uops(w).lrs1_rtype := RT_X
+        dis_uops(w).prs1_busy  := false.B
       }
-   }
+    }
+  }
 
-   if (DEBUG_PRINTF)
-   {
-      for (i <- 0 until num_issue_slots)
-      {
-         printf("  " +
-                this.getType +
-                "_issue_slot[%d](%c)(Req:%c):wen=%c P:(%c,%c,%c) OP:(%d,%d,%d) PDST:%d %c [[DASM(%x)]" +
-                " 0x%x: %d] ri:%d bm=%d imm=0x%x\n",
-                i.U(log2Ceil(num_issue_slots).W),
-                Mux(issue_slots(i).valid, Str("V"), Str("-")),
-                Mux(issue_slots(i).request, Str("R"), Str("-")),
-                Mux(issue_slots(i).in_uop.valid, Str("W"),  Str(" ")),
-                Mux(issue_slots(i).debug.p1, Str("!"), Str(" ")),
-                Mux(issue_slots(i).debug.p2, Str("!"), Str(" ")),
-                Mux(issue_slots(i).debug.p3, Str("!"), Str(" ")),
-                issue_slots(i).uop.pop1,
-                issue_slots(i).uop.pop2,
-                issue_slots(i).uop.pop3,
-                issue_slots(i).uop.pdst,
-                Mux(issue_slots(i).uop.dst_rtype === RT_FIX, Str("X"),
-                Mux(issue_slots(i).uop.dst_rtype === RT_X, Str("-"),
-                Mux(issue_slots(i).uop.dst_rtype === RT_FLT, Str("f"),
-                Mux(issue_slots(i).uop.dst_rtype === RT_PAS, Str("C"), Str("?"))))),
-                issue_slots(i).uop.debug_inst,
-                issue_slots(i).uop.pc(31,0),
-                issue_slots(i).uop.uopc,
-                issue_slots(i).uop.rob_idx,
-                issue_slots(i).uop.br_mask,
-                issue_slots(i).uop.imm_packed
-                )
+  //-------------------------------------------------------------
+  // Issue Table
+
+  val slots = for (i <- 0 until num_issue_slots) yield { val slot = Module(new IssueSlot(num_wakeup_ports)); slot }
+  val issue_slots = VecInit(slots.map(_.io))
+
+  io.event_empty := !(issue_slots.map(s => s.valid).reduce(_|_))
+
+  //-------------------------------------------------------------
+
+  assert (PopCount(issue_slots.map(s => s.grant)) <= issue_width.U, "[issue] window giving out too many grants.")
+
+  // Check that a ldMiss signal was preceded by a ldSpecWakeup.
+  // However, if the load gets killed before it hits SXT stage, we may see
+  // the sxt_ldMiss signal (from some other load) by not the ldSpecWakeup signal.
+  // So track branch kills for the last 4 cycles to remove false negatives.
+  val brKills = RegInit(0.asUInt(width=4.W))
+  brKills := Cat(brKills, (io.brinfo.valid && io.brinfo.mispredict) || io.flush_pipeline)
+  assert (!(io.sxt_ldMiss && !RegNext(io.mem_ldSpecWakeup.valid, init=false.B) && brKills === 0.U),
+    "[issue] IQ-" + iqType + " a ld miss was not preceded by a spec wakeup.")
+
+  //-------------------------------------------------------------
+
+  if (O3PIPEVIEW_PRINTF) {
+    for (i <- 0 until issue_width) {
+      // only print stores once!
+      when (io.iss_valids(i) && io.iss_uops(i).uopc =/= uopSTD) {
+         printf("%d; O3PipeView:issue: %d\n",
+           io.iss_uops(i).debug_events.fetch_seq,
+           io.tsc_reg)
       }
-      printf("-----------------------------------------------------------------------------------------\n")
-   }
+    }
+  }
 
-   def getType: String =
-      if (iqType == IQT_INT.litValue) "int"
-      else if (iqType == IQT_MEM.litValue) "mem"
-      else if (iqType == IQT_FP.litValue) " fp"
-      else "unknown"
+  if (DEBUG_PRINTF) {
+    for (i <- 0 until num_issue_slots) {
+      printf("  " +
+             this.getType +
+             "_issue_slot[%d](%c)(Req:%c):wen=%c P:(%c,%c,%c) OP:(%d,%d,%d) PDST:%d %c [[DASM(%x)]" +
+             " 0x%x: %d] ri:%d bm=%d imm=0x%x\n",
+             i.U(log2Ceil(num_issue_slots).W),
+             Mux(issue_slots(i).valid, Str("V"), Str("-")),
+             Mux(issue_slots(i).request, Str("R"), Str("-")),
+             Mux(issue_slots(i).in_uop.valid, Str("W"),  Str(" ")),
+             Mux(issue_slots(i).debug.p1, Str("!"), Str(" ")),
+             Mux(issue_slots(i).debug.p2, Str("!"), Str(" ")),
+             Mux(issue_slots(i).debug.p3, Str("!"), Str(" ")),
+             issue_slots(i).uop.pop1,
+             issue_slots(i).uop.pop2,
+             issue_slots(i).uop.pop3,
+             issue_slots(i).uop.pdst,
+             Mux(issue_slots(i).uop.dst_rtype === RT_FIX, Str("X"),
+             Mux(issue_slots(i).uop.dst_rtype === RT_X, Str("-"),
+             Mux(issue_slots(i).uop.dst_rtype === RT_FLT, Str("f"),
+             Mux(issue_slots(i).uop.dst_rtype === RT_PAS, Str("C"), Str("?"))))),
+             issue_slots(i).uop.debug_inst,
+             issue_slots(i).uop.pc(31,0),
+             issue_slots(i).uop.uopc,
+             issue_slots(i).uop.rob_idx,
+             issue_slots(i).uop.br_mask,
+             issue_slots(i).uop.imm_packed
+             )
+    }
+    printf("-----------------------------------------------------------------------------------------\n")
+  }
+
+  def getType: String =
+    if (iqType == IQT_INT.litValue) "int"
+    else if (iqType == IQT_MEM.litValue) "mem"
+    else if (iqType == IQT_FP.litValue) " fp"
+    else "unknown"
 }
