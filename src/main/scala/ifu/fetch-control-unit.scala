@@ -159,7 +159,7 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
       // TODO lower toggle frequency
       val c = Counter(fetchWidth)
       c.inc()
-      val ret = AgePriorityEncoder(br_mask.toBools, c.value)
+      val ret = AgePriorityEncoder(br_mask.asBools, c.value)
       ret
    }
 
@@ -429,7 +429,7 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
 
    // catch any BTB mispredictions (and fix-up missed JALs)
    bchecker.io.valid := f3_valid
-   bchecker.io.inst_mask := VecInit(f3_imemresp.mask.toBools)
+   bchecker.io.inst_mask := VecInit(f3_imemresp.mask.asBools)
    bchecker.io.is_br  := is_br
    bchecker.io.is_jal := is_jal
    bchecker.io.is_jr  := is_jr

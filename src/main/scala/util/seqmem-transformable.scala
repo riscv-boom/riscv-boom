@@ -68,7 +68,7 @@ class SeqMem1rwTransformable (
     val waddr = getIdx(io.waddr)
     val wdata = (io.wdata << getOffset(io.waddr))(pWidth-1, 0)
     val wmask = (io.wmask << getOffset(io.waddr))(pWidth-1, 0)
-    smem.write(waddr, VecInit(wdata.toBools), wmask.toBools)
+    smem.write(waddr, VecInit(wdata.asBools), wmask.asBools)
   }
 
   // read

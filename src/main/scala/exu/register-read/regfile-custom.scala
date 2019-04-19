@@ -94,7 +94,7 @@ class RegisterFileSeqCustomArray(
     if (i > 0)
     {
       // ensure there is only 1 writer to a preg (unless its preg0)
-      assert((PopCount(write_select_OH(i).toBools) <= 1.U) || (i.U === 0.U),
+      assert((PopCount(write_select_OH(i).asBools) <= 1.U) || (i.U === 0.U),
         "[custom_regfile] write-select has too many writers to this register p[" + i + "]")
     }
   }
@@ -290,7 +290,7 @@ class RegFileBitModel(
   val z = true.B
 
   // model tri-state buffer to output line
-  (io.rd zip io.oe.toBools).map{ case (rd_bit, oe_bit) => rd_bit := Mux(oe_bit, dout, z) }
+  (io.rd zip io.oe.asBools).map{ case (rd_bit, oe_bit) => rd_bit := Mux(oe_bit, dout, z) }
 
   // note: normally this would have the Z connected to any unused inputs into the mux
   val mux_out = Mux1H(UIntToOH(io.ws), io.wd)

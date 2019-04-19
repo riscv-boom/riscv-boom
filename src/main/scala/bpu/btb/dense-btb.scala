@@ -211,7 +211,7 @@ class DenseBTB(implicit p: Parameters) extends BoomBTB
     val ren       = getBank(io.req.bits.addr) === b.U
     val rout_bits = data.read(s0_idx, ren)
     val rout      = VecInit(rout_bits map { x => x.asTypeOf(new BTBSetData()) })
-    val bank_hits = (bank_vals.toBools zip rout map {case(hit, data) => hit && data.tag === s1_req_tag})
+    val bank_hits = (bank_vals.asBools zip rout map {case(hit, data) => hit && data.tag === s1_req_tag})
 
     if (b == 0) {
       hits      := bank_hits
@@ -232,7 +232,7 @@ class DenseBTB(implicit p: Parameters) extends BoomBTB
       btb_update_q.io.deq.ready := true.B
       val (wmask, wdata) = getBankWriteData(next_way, btb_update_q.io.deq.bits)
       val wdata_bits = VecInit(wdata map { x => x.asUInt })
-      data.write(widx, wdata_bits, wmask.toBools)
+      data.write(widx, wdata_bits, wmask.asBools)
 
       when (btb_update_q.io.deq.bits.level === 0.U) {
         valids(widx)  := valids(widx).bitSet(next_way, true.B)

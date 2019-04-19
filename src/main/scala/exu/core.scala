@@ -291,7 +291,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    //csr.io.events(12) := !rob.io.ready
    //csr.io.events(13) := lsu.io.laq_full
    //csr.io.events(14) := lsu.io.stq_full
-   //csr.io.events(15) := !dis_readys.toBools.reduce(_&_) // issue queues
+   //csr.io.events(15) := !dis_readys.asBools.reduce(_&_) // issue queues
    //csr.io.events(16) := branch_mask_full.reduce(_|_)
    //csr.io.events(17) := rob.io.flush.valid
 
@@ -642,7 +642,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    var dis_readys = issue_units.map(_.io.dis_readys.asUInt).reduce(_&_)
    if (usingFPU) dis_readys = dis_readys & fp_pipeline.io.dis_readys.asUInt
 
-   rename_stage.io.dis_inst_can_proceed := dis_readys.toBools
+   rename_stage.io.dis_inst_can_proceed := dis_readys.asBools
 
    rename_stage.io.kill     := io.ifu.clear_fetchbuffer // mispredict or flush
    rename_stage.io.brinfo   := br_unit.brinfo
