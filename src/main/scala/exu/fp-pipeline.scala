@@ -71,14 +71,14 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
                                  Seq.fill(exe_units.num_frf_write_ports + 1){ false }
                                  ))
    val fregister_read   = Module(new RegisterRead(
-                           issue_unit.issue_width,
+                           issue_unit.issueWidth,
                            exe_units.withFilter(_.reads_frf).map(_.supportedFuncUnits),
                            exe_units.num_frf_read_ports,
                            exe_units.withFilter(_.reads_frf).map(x => 3),
                            0, // No bypass for FP
                            fLen+1))
 
-   require (exe_units.count(_.reads_frf) == issue_unit.issue_width)
+   require (exe_units.count(_.reads_frf) == issue_unit.issueWidth)
    require (exe_units.num_frf_write_ports + num_ll_ports == num_wakeup_ports)
 
    //*************************************************************
@@ -109,7 +109,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
    //-------------------------------------------------------------
 
    // Output (Issue)
-   for (i <- 0 until issue_unit.issue_width)
+   for (i <- 0 until issue_unit.issueWidth)
    {
       iss_valids(i) := issue_unit.io.iss_valids(i)
       iss_uops(i) := issue_unit.io.iss_uops(i)
@@ -126,7 +126,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
    }
 
    // Wakeup
-   for ((writeback, issue_wakeup) <- io.wakeups zip issue_unit.io.wakeup_pdsts)
+   for ((writeback, issue_wakeup) <- io.wakeups zip issue_unit.io.wakeup_ports)
    {
       issue_wakeup.valid := writeback.valid
       issue_wakeup.bits.pdst  := writeback.bits.uop.pdst
