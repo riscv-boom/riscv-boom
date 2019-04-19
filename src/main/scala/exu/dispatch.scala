@@ -28,7 +28,9 @@ class DispatchIO(implicit p: Parameters) extends BoomBundle()(p)
    val ren_uops = Vec(coreWidth, Flipped(DecoupledIO(new MicroOp)))
 
    // outgoing microops to issue queues
-   val dis_uops = MixedVec(issueParams.map(x => Vec(x.dispatchWidth, DecoupledIO(new MicroOp))))
+   // N issues each accept up to dispatchWidth uops
+   // dispatchWidth may vary between issue queues
+   val dis_uops = MixedVec(issueParams.map(ip=>Vec(ip.dispatchWidth, DecoupledIO(new MicroOp))))
 }
 
 abstract class Dispatcher(implicit p: Parameters) extends BoomModule()(p)
@@ -42,9 +44,9 @@ abstract class Dispatcher(implicit p: Parameters) extends BoomModule()(p)
   */
 class BasicDispatcher(implicit p: Parameters) extends Dispatcher
 {
-   issueParams.map(x => require(x.dispatchWidth == coreWidth))
+   issueParams.map(ip=>require(ip.dispatchWidth == coreWidth))
 
-   val ren_readys = io.dis_uops.map(x => VecInit(x.map(u => u.ready)).asUInt).reduce(_&_)
+   val ren_readys = io.dis_uops.map(d=>VecInit(d.map(_.ready)).asUInt).reduce(_&_)
 
    for (w <- 0 until coreWidth)
    {
@@ -56,9 +58,7 @@ class BasicDispatcher(implicit p: Parameters) extends Dispatcher
       val issueParam = issueParams(i)
       val dis        = io.dis_uops(i)
 
-
-      dis(w).valid := io.ren_uops(w).valid && (io.ren_uops(w).bits.iqtype & issueParam.iqType.U) =/= 0.U
+      dis(w).valid := io.ren_uops(w).valid && ((io.ren_uops(w).bits.iqtype & issueParam.iqType.U) =/= 0.U)
       dis(w).bits  := io.ren_uops(w).bits
-
    }
 }
