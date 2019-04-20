@@ -1158,7 +1158,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       }
    }
 
-   require (cnt == rob.num_wakeup_ports)
+   require (cnt == rob.numWakeupPorts)
    require (f_cnt == rob.num_fpu_ports)
 
    // branch resolution

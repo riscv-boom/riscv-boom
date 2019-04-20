@@ -29,9 +29,9 @@ import boom.common._
 class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFPUParameters
 {
   val fpIssueParams = issueParams.find(_.iqType == IQT_FP.litValue).get
-  val num_ll_ports = 1 // hard-wired; used by mem port and i2f port.
-  val num_wakeup_ports = fpIssueParams.issueWidth + num_ll_ports
-  val fp_preg_sz = log2Ceil(numFpPhysRegs)
+  val numLlPorts = 1 // hard-wired; used by mem port and i2f port.
+  val numWakeupPorts = fpIssueParams.issueWidth + numLlPorts
+  val fpPregSz = log2Ceil(numFpPhysRegs)
 
   val io = IO(new Bundle
   {
@@ -47,36 +47,36 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
     val tosdq            = Valid(new MicroOpWithData(fLen))           // to Load/Store Unit
     val toint            = Decoupled(new ExeUnitResp(xLen))           // to integer RF
 
-    val wakeups          = Vec(num_wakeup_ports, Valid(new ExeUnitResp(fLen+1)))
-    val wb_valids        = Input(Vec(num_wakeup_ports, Bool()))
-    val wb_pdsts         = Input(Vec(num_wakeup_ports, UInt(width=fp_preg_sz.W)))
+    val wakeups          = Vec(numWakeupPorts, Valid(new ExeUnitResp(fLen+1)))
+    val wb_valids        = Input(Vec(numWakeupPorts, Bool()))
+    val wb_pdsts         = Input(Vec(numWakeupPorts, UInt(width=fpPregSz.W)))
 
     val debug_tsc_reg    = Input(UInt(width=xLen.W))
-    val debug_wb_wdata   = Output(Vec(num_wakeup_ports, UInt((fLen+1).W)))
+    val debug_wb_wdata   = Output(Vec(numWakeupPorts, UInt((fLen+1).W)))
   })
 
   //**********************************
   // construct all of the modules
 
-  val exe_units        = new boom.exu.ExecutionUnits(fpu=true)
-  val issue_unit       = Module(new IssueUnitCollapsing(
-                           issueParams.find(_.iqType == IQT_FP.litValue).get,
-                           numWakeupPorts))
+  val exe_units      = new boom.exu.ExecutionUnits(fpu=true)
+  val issue_unit     = Module(new IssueUnitCollapsing(
+                         issueParams.find(_.iqType == IQT_FP.litValue).get,
+                         numWakeupPorts))
   issue_unit.suggestName("fp_issue_unit")
-  val fregfile         = Module(new RegisterFileSynthesizable(numFpPhysRegs,
-                           exe_units.numFrfReadPorts,
-                           exe_units.numFrfWritePorts + 1, // + 1 for ll writeback
-                           fLen+1,
-                           // No bypassing for any FP units, + 1 for ll_wb
-                           Seq.fill(exe_units.numFrfWritePorts + 1){ false }
-                           ))
-  val fregister_read   = Module(new RegisterRead(
-                           issue_unit.issueWidth,
-                           exe_units.withFilter(_.readsFrf).map(_.supportedFuncUnits),
-                           exe_units.numFrfReadPorts,
-                           exe_units.withFilter(_.readsFrf).map(x => 3),
-                           0, // No bypass for FP
-                           fLen+1))
+  val fregfile       = Module(new RegisterFileSynthesizable(numFpPhysRegs,
+                         exe_units.numFrfReadPorts,
+                         exe_units.numFrfWritePorts + 1, // + 1 for ll writeback
+                         fLen+1,
+                         // No bypassing for any FP units, + 1 for ll_wb
+                         Seq.fill(exe_units.numFrfWritePorts + 1){ false }
+                         ))
+  val fregister_read = Module(new RegisterRead(
+                         issue_unit.issueWidth,
+                         exe_units.withFilter(_.readsFrf).map(_.supportedFuncUnits),
+                         exe_units.numFrfReadPorts,
+                         exe_units.withFilter(_.readsFrf).map(x => 3),
+                         0, // No bypass for FP
+                         fLen+1))
 
   require (exe_units.count(_.readsFrf) == issue_unit.issueWidth)
   require (exe_units.numFrfWritePorts + numLlPorts == numWakeupPorts)
@@ -102,20 +102,9 @@ class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFP
   //-------------------------------------------------------------
 
   // Input (Dispatch)
-  for (w <- 0 until dispatchWidth) {
-    issue_unit.io.dis_valids(w) := io.dis_valids(w) && io.dis_uops(w).iqtype === issue_unit.iqType.U
-    issue_unit.io.dis_uops(w) := io.dis_uops(w)
-
-    // Or... add STDataGen micro-op for FP stores.
-    when (io.dis_uops(w).uopc === uopSTA && io.dis_uops(w).lrs2_rtype === RT_FLT) {
-      issue_unit.io.dis_valids(w) := io.dis_valids(w)
-      issue_unit.io.dis_uops(w).uopc := uopSTD
-      issue_unit.io.dis_uops(w).fu_code := FUConstants.FU_F2I
-      issue_unit.io.dis_uops(w).lrs1_rtype := RT_X
-      issue_unit.io.dis_uops(w).prs1_busy := false.B
-    }
+  for (w <- 0 until coreWidth) {
+    issue_unit.io.dis_uops(w) <> io.dis_uops(w)
   }
-  io.dis_readys := issue_unit.io.dis_readys
 
   //-------------------------------------------------------------
   // **** Issue Stage ****

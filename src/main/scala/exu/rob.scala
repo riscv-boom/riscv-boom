@@ -20,7 +20,7 @@
 //
 // NOTES:
 //    - Currently we do not compress out bubbles in the ROB.
-//    - commit_width is tied directly to the dispatch_width.
+//    - commit_width is tied directly to the dispatchWidth.
 //    - Exceptions are only taken when at the head of the commit bundle --
 //      this helps deal with loads, stores, and refetch instructions.
 
@@ -42,12 +42,12 @@ import boom.util._
  * IO bundle to interact with the ROB
  *
  * @param machine_width dispatch and commit width
- * @param num_wakeup_ports number of wakeup ports to the rob
+ * @param numWakeupPorts number of wakeup ports to the rob
  * @param num_fpu_ports number of fpu ports that will write back fflags
  */
 class RobIo(
    val machine_width: Int,
-   val num_wakeup_ports: Int,
+   val numWakeupPorts: Int,
    val num_fpu_ports: Int
    )(implicit p: Parameters)  extends BoomBundle()(p)
 {
@@ -71,7 +71,7 @@ class RobIo(
    // Write-back Stage
    // (Update of ROB)
    // Instruction is no longer busy and can be committed
-   val wb_resps = Flipped(Vec(num_wakeup_ports, Valid(new ExeUnitResp(xLen max fLen+1))))
+   val wb_resps = Flipped(Vec(numWakeupPorts, Valid(new ExeUnitResp(xLen max fLen+1))))
 
    // Unbusying ports for stores.
    val lsu_clr_bsy_valid      = Input(Vec(2, Bool()))
@@ -83,8 +83,8 @@ class RobIo(
 
    // Track side-effects for debug purposes.
    // Also need to know when loads write back, whereas we don't need loads to unbusy.
-   val debug_wb_valids = Input(Vec(num_wakeup_ports, Bool()))
-   val debug_wb_wdata  = Input(Vec(num_wakeup_ports, Bits(xLen.W)))
+   val debug_wb_valids = Input(Vec(numWakeupPorts, Bool()))
+   val debug_wb_wdata  = Input(Vec(numWakeupPorts, Bits(xLen.W)))
 
    val fflags = Flipped(Vec(num_fpu_ports, new ValidIO(new FFlagsResp())))
    val lxcpt = Flipped(new ValidIO(new Exception())) // LSU
@@ -209,18 +209,18 @@ class DebugRobSignals(implicit p: Parameters) extends BoomBundle()(p)
  * Reorder Buffer to keep track of dependencies and inflight instructions
  *
  * @param width the dispatch and commit width of the processor
- * @param num_wakeup_ports number of wakeup ports to the ROB
+ * @param numWakeupPorts number of wakeup ports to the ROB
  * @param num_fpu_ports number of FPU units that will write back fflags
  */
 @chiselName
 class Rob(
    width: Int,
    num_rob_entries: Int,
-   val num_wakeup_ports: Int,
+   val numWakeupPorts: Int,
    val num_fpu_ports: Int
    )(implicit p: Parameters) extends BoomModule()(p)
 {
-   val io = IO(new RobIo(width, num_wakeup_ports, num_fpu_ports))
+   val io = IO(new RobIo(width, numWakeupPorts, num_fpu_ports))
 
    require (num_rob_entries % width == 0)
 
@@ -338,7 +338,7 @@ class Rob(
       //-----------------------------------------------
       // Writeback
 
-      for (i <- 0 until num_wakeup_ports)
+      for (i <- 0 until numWakeupPorts)
       {
          val wb_resp = io.wb_resps(i)
          val wb_uop = wb_resp.bits.uop
@@ -532,7 +532,7 @@ class Rob(
       //--------------------------------------------------
       // Debug: for debug purposes, track side-effects to all register destinations
 
-      for (i <- 0 until num_wakeup_ports)
+      for (i <- 0 until numWakeupPorts)
       {
          val rob_idx = io.wb_resps(i).bits.uop.rob_idx
          when (io.debug_wb_valids(i) && MatchBank(GetBankIdx(rob_idx)))

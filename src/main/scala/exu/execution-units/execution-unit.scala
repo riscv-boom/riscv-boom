@@ -566,10 +566,10 @@ class FPUExeUnit(
 
   // Outputs (Write Port #1) -- FpToInt Queuing Unit -----------------------
 
-  if (has_fpiu) {
+  if (hasFpiu) {
     // TODO instantiate our own fpiu; and remove it from fpu.scala.
     // buffer up results since we share write-port on integer regfile.
-    val queue = Module(new BranchKillableQueue(new ExeUnitResp(data_width),
+    val queue = Module(new BranchKillableQueue(new ExeUnitResp(dataWidth),
       entries = dfmaLatency + 3)) // TODO being overly conservative
     queue.io.enq.valid       := (fpu.io.resp.valid &&
                                  fpu.io.resp.bits.uop.fu_code_is(FU_F2I) &&
