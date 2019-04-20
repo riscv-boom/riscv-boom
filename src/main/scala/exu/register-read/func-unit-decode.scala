@@ -30,26 +30,25 @@ import boom.common._
  */
 class RRdCtrlSigs(implicit p: Parameters) extends BoomBundle()(p)
 {
-   val br_type          = UInt(BR_N.getWidth.W)
-   val use_alupipe      = Bool()
-   val use_muldivpipe   = Bool()
-   val use_mempipe      = Bool()
-   val op_fcn      = Bits(SZ_ALU_FN.W)
-   val fcn_dw      = Bool()
-   val op1_sel     = UInt(OP1_X.getWidth.W)
-   val op2_sel     = UInt(OP2_X.getWidth.W)
-   val imm_sel     = UInt(IS_X.getWidth.W)
-   val rf_wen      = Bool()
-   val csr_cmd     = Bits(CSR.SZ.W)
+  val br_type          = UInt(BR_N.getWidth.W)
+  val use_alupipe      = Bool()
+  val use_muldivpipe   = Bool()
+  val use_mempipe      = Bool()
+  val op_fcn      = Bits(SZ_ALU_FN.W)
+  val fcn_dw      = Bool()
+  val op1_sel     = UInt(OP1_X.getWidth.W)
+  val op2_sel     = UInt(OP2_X.getWidth.W)
+  val imm_sel     = UInt(IS_X.getWidth.W)
+  val rf_wen      = Bool()
+  val csr_cmd     = Bits(CSR.SZ.W)
 
-   def decode(uopc: UInt, table: Iterable[(BitPat, List[BitPat])]) =
-   {
-      val decoder = freechips.rocketchip.rocket.DecodeLogic(uopc, AluRRdDecode.default, table)
-      val sigs = Seq(br_type, use_alupipe, use_muldivpipe, use_mempipe, op_fcn,
-                     fcn_dw, op1_sel, op2_sel, imm_sel, rf_wen, csr_cmd)
-      sigs zip decoder map {case(s,d) => s := d}
-      this
-   }
+  def decode(uopc: UInt, table: Iterable[(BitPat, List[BitPat])]) = {
+    val decoder = freechips.rocketchip.rocket.DecodeLogic(uopc, AluRRdDecode.default, table)
+    val sigs = Seq(br_type, use_alupipe, use_muldivpipe, use_mempipe, op_fcn,
+                   fcn_dw, op1_sel, op2_sel, imm_sel, rf_wen, csr_cmd)
+    sigs zip decoder map {case(s,d) => s := d}
+    this
+  }
 }
 
 /**
@@ -57,9 +56,9 @@ class RRdCtrlSigs(implicit p: Parameters) extends BoomBundle()(p)
  */
 abstract trait RRdDecodeConstants
 {
-   val default: List[BitPat] =
-                     List[BitPat](BR_N , Y, N, N, FN_ADD , DW_X  , OP1_X   , OP2_X   , IS_X, REN_0, CSR.N)
-   val table: Array[(BitPat, List[BitPat])]
+  val default: List[BitPat] =
+               List[BitPat](BR_N , Y, N, N, FN_ADD , DW_X  , OP1_X   , OP2_X   , IS_X, REN_0, CSR.N)
+  val table: Array[(BitPat, List[BitPat])]
 }
 
 /**
@@ -67,9 +66,9 @@ abstract trait RRdDecodeConstants
  */
 object AluRRdDecode extends RRdDecodeConstants
 {
-   val table: Array[(BitPat, List[BitPat])] =
-              Array[(BitPat, List[BitPat])](
-                               // br type
+  val table: Array[(BitPat, List[BitPat])] =
+             Array[(BitPat, List[BitPat])](
+                              // br type
                                // |      use alu pipe              op1 sel   op2 sel
                                // |      |  use muldiv pipe        |         |         immsel       csr_cmd
                                // |      |  |  use mem pipe        |         |         |     rf wen |
@@ -115,8 +114,8 @@ object AluRRdDecode extends RRdDecodeConstants
  */
 object BruRRdDecode extends RRdDecodeConstants
 {
-   val table: Array[(BitPat, List[BitPat])] =
-              Array[(BitPat, List[BitPat])](
+  val table: Array[(BitPat, List[BitPat])] =
+             Array[(BitPat, List[BitPat])](
                                // br type
                                // |      use alu pipe              op1 sel   op2 sel
                                // |      |  use muldiv pipe        |         |         immsel       csr_cmd
@@ -140,8 +139,8 @@ object BruRRdDecode extends RRdDecodeConstants
  */
 object MulDivRRdDecode extends RRdDecodeConstants
 {
-   val table: Array[(BitPat, List[BitPat])] =
-              Array[(BitPat, List[BitPat])](
+  val table: Array[(BitPat, List[BitPat])] =
+             Array[(BitPat, List[BitPat])](
                                // br type
                                // |      use alu pipe              op1 sel   op2 sel
                                // |      |  use muldiv pipe        |         |         immsel       csr_cmd
@@ -169,8 +168,8 @@ object MulDivRRdDecode extends RRdDecodeConstants
  */
 object MemRRdDecode extends RRdDecodeConstants
 {
-   val table: Array[(BitPat, List[BitPat])] =
-              Array[(BitPat, List[BitPat])](
+  val table: Array[(BitPat, List[BitPat])] =
+             Array[(BitPat, List[BitPat])](
                                // br type
                                // |      use alu pipe              op1 sel   op2 sel
                                // |      |  use muldiv pipe        |         |         immsel       csr_cmd
@@ -190,8 +189,8 @@ object MemRRdDecode extends RRdDecodeConstants
  */
 object CsrRRdDecode extends RRdDecodeConstants
 {
-   val table: Array[(BitPat, List[BitPat])] =
-              Array[(BitPat, List[BitPat])](
+  val table: Array[(BitPat, List[BitPat])] =
+             Array[(BitPat, List[BitPat])](
                                // br type
                                // |      use alu pipe              op1 sel   op2 sel
                                // |      |  use muldiv pipe        |         |         immsel       csr_cmd
@@ -215,8 +214,8 @@ object CsrRRdDecode extends RRdDecodeConstants
  */
 object FpuRRdDecode extends RRdDecodeConstants
 {
-   val table: Array[(BitPat, List[BitPat])] =
-              Array[(BitPat, List[BitPat])](
+  val table: Array[(BitPat, List[BitPat])] =
+             Array[(BitPat, List[BitPat])](
                                // br type
                                // |      use alu pipe              op1 sel   op2 sel
                                // |      |  use muldiv pipe        |         |         immsel       csr_cmd
@@ -271,8 +270,8 @@ object FpuRRdDecode extends RRdDecodeConstants
  */
 object IfmvRRdDecode extends RRdDecodeConstants
 {
-   val table: Array[(BitPat, List[BitPat])] =
-              Array[(BitPat, List[BitPat])](
+  val table: Array[(BitPat, List[BitPat])] =
+             Array[(BitPat, List[BitPat])](
                                // br type
                                // |      use alu pipe              op1 sel   op2 sel
                                // |      |  use muldiv pipe        |         |         immsel       csr_cmd
@@ -291,8 +290,8 @@ object IfmvRRdDecode extends RRdDecodeConstants
  */
 object FDivRRdDecode extends RRdDecodeConstants
 {
-   val table: Array[(BitPat, List[BitPat])] =
-              Array[(BitPat, List[BitPat])](
+  val table: Array[(BitPat, List[BitPat])] =
+             Array[(BitPat, List[BitPat])](
                                // br type
                                // |      use alu pipe              op1 sel   op2 sel
                                // |      |  use muldiv pipe        |         |         immsel       csr_cmd
@@ -308,58 +307,57 @@ object FDivRRdDecode extends RRdDecodeConstants
 /**
  * Register read decoder
  *
- * @param supported_units indicate what functional units are being used
+ * @param supportedUnits indicate what functional units are being used
  */
-class RegisterReadDecode(supported_units: SupportedFuncUnits)(implicit p: Parameters) extends BoomModule()(p)
+class RegisterReadDecode(supportedUnits: SupportedFuncUnits)(implicit p: Parameters) extends BoomModule()(p)
 {
-   val io = IO(new BoomBundle()(p)
-   {
-      val iss_valid = Input(Bool())
-      val iss_uop   = Input(new MicroOp())
+  val io = IO(new BoomBundle()(p)
+  {
+    val iss_valid = Input(Bool())
+    val iss_uop   = Input(new MicroOp())
 
-      val rrd_valid = Output(Bool())
-      val rrd_uop   = Output(new MicroOp())
-   })
+    val rrd_valid = Output(Bool())
+    val rrd_uop   = Output(new MicroOp())
+  })
 
-   // Issued Instruction
-   val rrd_valid = io.iss_valid
-   io.rrd_uop   := io.iss_uop
+  // Issued Instruction
+  val rrd_valid = io.iss_valid
+  io.rrd_uop   := io.iss_uop
 
-   var dec_table = AluRRdDecode.table
-   if (supported_units.bru) dec_table ++= BruRRdDecode.table
-   if (supported_units.mem) dec_table ++= MemRRdDecode.table
-   if (supported_units.muld) dec_table ++= MulDivRRdDecode.table
-   if (supported_units.csr) dec_table ++= CsrRRdDecode.table
-   if (supported_units.fpu) dec_table ++= FpuRRdDecode.table
-   if (supported_units.fdiv) dec_table ++= FDivRRdDecode.table
-   if (supported_units.ifpu) dec_table ++= IfmvRRdDecode.table
-   val rrd_cs = Wire(new RRdCtrlSigs()).decode(io.rrd_uop.uopc, dec_table)
+  var dec_table = AluRRdDecode.table
+  if (supportedUnits.bru) dec_table ++= BruRRdDecode.table
+  if (supportedUnits.mem) dec_table ++= MemRRdDecode.table
+  if (supportedUnits.muld) dec_table ++= MulDivRRdDecode.table
+  if (supportedUnits.csr) dec_table ++= CsrRRdDecode.table
+  if (supportedUnits.fpu) dec_table ++= FpuRRdDecode.table
+  if (supportedUnits.fdiv) dec_table ++= FDivRRdDecode.table
+  if (supportedUnits.ifpu) dec_table ++= IfmvRRdDecode.table
+  val rrd_cs = Wire(new RRdCtrlSigs()).decode(io.rrd_uop.uopc, dec_table)
 
-   // rrd_use_alupipe is unused
-   io.rrd_uop.ctrl.br_type := rrd_cs.br_type
-   io.rrd_uop.ctrl.rf_wen  := rrd_cs.rf_wen
-   io.rrd_uop.ctrl.op1_sel := rrd_cs.op1_sel
-   io.rrd_uop.ctrl.op2_sel := rrd_cs.op2_sel
-   io.rrd_uop.ctrl.imm_sel := rrd_cs.imm_sel
-   io.rrd_uop.ctrl.op_fcn  := rrd_cs.op_fcn.asUInt
-   io.rrd_uop.ctrl.fcn_dw  := rrd_cs.fcn_dw.toBool
-   io.rrd_uop.ctrl.is_load := io.rrd_uop.uopc === uopLD
-   io.rrd_uop.ctrl.is_sta  := io.rrd_uop.uopc === uopSTA || io.rrd_uop.uopc === uopAMO_AG
-   io.rrd_uop.ctrl.is_std  := io.rrd_uop.uopc === uopSTD || (io.rrd_uop.ctrl.is_sta && io.rrd_uop.lrs2_rtype === RT_FIX)
+  // rrd_use_alupipe is unused
+  io.rrd_uop.ctrl.br_type := rrd_cs.br_type
+  io.rrd_uop.ctrl.rf_wen  := rrd_cs.rf_wen
+  io.rrd_uop.ctrl.op1_sel := rrd_cs.op1_sel
+  io.rrd_uop.ctrl.op2_sel := rrd_cs.op2_sel
+  io.rrd_uop.ctrl.imm_sel := rrd_cs.imm_sel
+  io.rrd_uop.ctrl.op_fcn  := rrd_cs.op_fcn.asUInt
+  io.rrd_uop.ctrl.fcn_dw  := rrd_cs.fcn_dw.asBool
+  io.rrd_uop.ctrl.is_load := io.rrd_uop.uopc === uopLD
+  io.rrd_uop.ctrl.is_sta  := io.rrd_uop.uopc === uopSTA || io.rrd_uop.uopc === uopAMO_AG
+  io.rrd_uop.ctrl.is_std  := io.rrd_uop.uopc === uopSTD || (io.rrd_uop.ctrl.is_sta && io.rrd_uop.lrs2_rtype === RT_FIX)
 
-   when (io.rrd_uop.uopc === uopAMO_AG)
-   {
-      io.rrd_uop.imm_packed := 0.U
-   }
+  when (io.rrd_uop.uopc === uopAMO_AG) {
+    io.rrd_uop.imm_packed := 0.U
+  }
 
-   val raddr1 = io.rrd_uop.pop1 // although renamed, it'll stay 0 if lrs1 = 0
-   val csr_ren = (rrd_cs.csr_cmd === CSR.S || rrd_cs.csr_cmd === CSR.C) && raddr1 === 0.U
-   io.rrd_uop.ctrl.csr_cmd := Mux(csr_ren, CSR.R, rrd_cs.csr_cmd)
+  val raddr1 = io.rrd_uop.pop1 // although renamed, it'll stay 0 if lrs1 = 0
+  val csr_ren = (rrd_cs.csr_cmd === CSR.S || rrd_cs.csr_cmd === CSR.C) && raddr1 === 0.U
+  io.rrd_uop.ctrl.csr_cmd := Mux(csr_ren, CSR.R, rrd_cs.csr_cmd)
 
-   require (rrd_cs.op_fcn.getWidth == FN_SRA.getWidth)
+  require (rrd_cs.op_fcn.getWidth == FN_SRA.getWidth)
 
-   //-------------------------------------------------------------
-   // set outputs
+  //-------------------------------------------------------------
+  // set outputs
 
-   io.rrd_valid := rrd_valid
+  io.rrd_valid := rrd_valid
 }
