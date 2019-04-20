@@ -83,7 +83,7 @@ class MicroOp(implicit p: Parameters) extends BoomBundle()(p)
    val imm_packed       = UInt(LONGEST_IMM_SZ.W) // densely pack the imm in decode...
                                                // then translate and sign-extend in execute
    val csr_addr         = UInt(CSR_ADDR_SZ.W)    // only used for critical path reasons in Exe
-   val rob_idx          = UInt(ROB_ADDR_SZ.W)
+   val rob_idx          = UInt(robAddrSz.W)
    val ldq_idx          = UInt(LDQ_ADDR_SZ.W)
    val stq_idx          = UInt(STQ_ADDR_SZ.W)
    val rxq_idx          = UInt(log2Ceil(NUM_RXQ_ENTRIES).W)

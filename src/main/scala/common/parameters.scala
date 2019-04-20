@@ -118,13 +118,13 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
 
    //************************************
    // Data Structure Sizes
-   val NUM_ROB_ENTRIES = boomParams.numRobEntries       // number of ROB entries (e.g., 32 entries for R10k)
+   val numRobEntries = boomParams.numRobEntries       // number of ROB entries (e.g., 32 entries for R10k)
    val NUM_RXQ_ENTRIES = boomParams.numRXQEntries       // number of RoCC execute queue entries. Keep small since this holds operands and instruction bits
    val NUM_RCQ_ENTRIES = boomParams.numRCQEntries       // number of RoCC commit queue entries. This can be large since it just keeps a pdst
    val NUM_LDQ_ENTRIES = boomParams.numLdqEntries       // number of LAQ entries
    val NUM_STQ_ENTRIES = boomParams.numStqEntries       // number of SAQ/SDQ entries
    val MAX_BR_COUNT    = boomParams.maxBrCount          // number of branches we can speculate simultaneously
-   val ftqSz           = NUM_ROB_ENTRIES / fetchWidth   // number of FTQ entries should match
+   val ftqSz           = numRobEntries / fetchWidth   // number of FTQ entries should match
                                                         //   (or slightly exceed) ROB entries
    val fetchBufferSz   = boomParams.fetchBufferSz       // number of instructions that stored between fetch&decode
 
@@ -237,8 +237,8 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
 
    //************************************
    // Implicitly calculated constants
-   val NUM_ROB_ROWS      = NUM_ROB_ENTRIES/coreWidth
-   val ROB_ADDR_SZ       = log2Ceil(NUM_ROB_ENTRIES)
+   val numRobRows        = numRobEntries/coreWidth
+   val robAddrSz         = log2Ceil(numRobEntries)
    // the f-registers are mapped into the space above the x-registers
    val LOGICAL_REG_COUNT = if (usingFPU) 64 else 32
    val LREG_SZ           = log2Ceil(LOGICAL_REG_COUNT)
@@ -249,14 +249,14 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
    val STQ_ADDR_SZ       = log2Ceil(NUM_STQ_ENTRIES)
    val LSU_ADDR_SZ       = LDQ_ADDR_SZ max STQ_ADDR_SZ
    val BR_TAG_SZ         = log2Ceil(MAX_BR_COUNT)
-   val NUM_BROB_ENTRIES  = NUM_ROB_ROWS //TODO explore smaller BROBs
-   val BROB_ADDR_SZ      = log2Ceil(NUM_BROB_ENTRIES)
+   val NUM_BROB_ENTRIES  = numRobRows //TODO explore smaller BROBs
+   val BrobAddrSz      = log2Ceil(NUM_BROB_ENTRIES)
 
    require (numIntPhysRegs >= (32 + coreWidth))
    require (numFpPhysRegs >= (32 + coreWidth))
    require (MAX_BR_COUNT >=2)
-   require (NUM_ROB_ROWS % 2 == 0)
-   require (NUM_ROB_ENTRIES % coreWidth == 0)
+   require (numRobRows % 2 == 0)
+   require (numRobEntries % coreWidth == 0)
    require ((NUM_LDQ_ENTRIES-1) > coreWidth)
    require ((NUM_STQ_ENTRIES-1) > coreWidth)
 

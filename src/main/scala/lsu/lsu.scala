@@ -118,11 +118,11 @@ class LoadStoreUnitIO(val pl_width: Int)(implicit p: Parameters) extends BoomBun
    // Two ports, one for integer and the other for FP.
    // Otherwise, we must back-pressure incoming FP store-data micro-ops.
    val clr_bsy_valid      = Output(Vec(2, Bool()))
-   val clr_bsy_rob_idx    = Output(Vec(2, UInt(ROB_ADDR_SZ.W)))
+   val clr_bsy_rob_idx    = Output(Vec(2, UInt(robAddrSz.W)))
 
    // LSU can mark its instructions as speculatively safe in the ROB.
    val clr_unsafe_valid   = Output(Bool())
-   val clr_unsafe_rob_idx = Output(UInt(ROB_ADDR_SZ.W))
+   val clr_unsafe_rob_idx = Output(UInt(robAddrSz.W))
 
    val lsu_fencei_rdy     = Output(Bool())
 
@@ -734,7 +734,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
 
    // tell the ROB to clear the busy bit on the incoming store
    val clr_bsy_valid = RegInit(false.B)
-   val clr_bsy_robidx = Reg(UInt(ROB_ADDR_SZ.W))
+   val clr_bsy_robidx = Reg(UInt(robAddrSz.W))
    val clr_bsy_brmask = Reg(UInt(MAX_BR_COUNT.W))
    clr_bsy_valid  := false.B
    clr_bsy_robidx := mem_tlb_uop.rob_idx
