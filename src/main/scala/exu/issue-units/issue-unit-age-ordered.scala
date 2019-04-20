@@ -30,16 +30,16 @@ import boom.common._
  */
 class IssueUnitCollapsing(
   params: IssueParams,
-  num_wakeup_ports: Int)
+  numWakeupPorts: Int)
   (implicit p: Parameters)
-  extends IssueUnit(params.numEntries, params.issueWidth, num_wakeup_ports, params.iqType, params.dispatchWidth)
+  extends IssueUnit(params.numEntries, params.issueWidth, numWakeupPorts, params.iqType, params.dispatchWidth)
 {
   //-------------------------------------------------------------
   // Figure out how much to shift entries by
 
-  val MAX_SHIFT = dispatchWidth
-  val vacants = issue_slots.map(s => !(s.valid)) ++ io.dis_uops.map(_.valid).map(!_.toBool)
-  val shamts_oh = Array.fill(numIssueSlots+dispatchWidth) {Wire(UInt(width=MAX_SHIFT.W))}
+  val maxShift = dispatchWidth
+  val vacants = issue_slots.map(s => !(s.valid)) ++ io.dis_uops.map(_.valid).map(!_.asBool)
+  val shamts_oh = Array.fill(numIssueSlots+dispatchWidth) {Wire(UInt(width=maxShift.W))}
   // track how many to shift up this entry by by counting previous vacant spots
   def SaturatingCounterOH(count_oh:UInt, inc: Bool, max: Int): UInt = {
      val next = Wire(UInt(width=max.W))
@@ -53,7 +53,7 @@ class IssueUnitCollapsing(
   }
   shamts_oh(0) := 0.U
   for (i <- 1 until numIssueSlots + dispatchWidth) {
-    shamts_oh(i) := SaturatingCounterOH(shamts_oh(i-1), vacants(i-1), MAX_SHIFT)
+    shamts_oh(i) := SaturatingCounterOH(shamts_oh(i-1), vacants(i-1), maxShift)
   }
 
   //-------------------------------------------------------------
@@ -98,7 +98,7 @@ class IssueUnitCollapsing(
   // Issue Select Logic
 
   // set default
-  for (w <- 0 until issue_width) {
+  for (w <- 0 until issueWidth) {
     io.iss_valids(w) := false.B
     io.iss_uops(w)   := NullMicroOp
     // unsure if this is overkill
@@ -110,8 +110,8 @@ class IssueUnitCollapsing(
   }
 
   val requests = issue_slots.map(s => s.request)
-  val port_issued = Array.fill(issue_width){Bool()}
-  for (w <- 0 until issue_width) {
+  val port_issued = Array.fill(issueWidth){Bool()}
+  for (w <- 0 until issueWidth) {
     port_issued(w) = false.B
   }
 
@@ -119,7 +119,7 @@ class IssueUnitCollapsing(
     issue_slots(i).grant := false.B
     var uop_issued = false.B
 
-    for (w <- 0 until issue_width) {
+    for (w <- 0 until issueWidth) {
       val can_allocate = (issue_slots(i).uop.fu_code & io.fu_types(w)) =/= 0.U
 
       when (requests(i) && !uop_issued && can_allocate && !port_issued(w)) {
@@ -131,8 +131,5 @@ class IssueUnitCollapsing(
       port_issued(w) = (requests(i) && !uop_issued && can_allocate) | port_issued(w)
       uop_issued = (requests(i) && can_allocate && !was_port_issued_yet) | uop_issued
     }
-    val was_port_issued_yet = port_issued(w)
-    port_issued(w) = (requests(i) && !uop_issued && can_allocate) | port_issued(w)
-    uop_issued = (requests(i) && can_allocate && !was_port_issued_yet) | uop_issued
   }
 }

@@ -71,24 +71,24 @@ class IssueUnitIO(
   val dispatchWidth: Int)
   (implicit p: Parameters) extends BoomBundle()(p)
 {
-  val dis_uops       = Vec(dispatchWidth, Flipped(Decoupled(new MicroOp)))
+  val dis_uops         = Vec(dispatchWidth, Flipped(Decoupled(new MicroOp)))
 
-  val iss_valids     = Output(Vec(issueWidth, Bool()))
-  val iss_uops       = Output(Vec(issueWidth, new MicroOp()))
-  val wakeup_ports   = Flipped(Vec(numWakeupPorts, Valid(new IqWakeup(PREG_SZ))))
+  val iss_valids       = Output(Vec(issueWidth, Bool()))
+  val iss_uops         = Output(Vec(issueWidth, new MicroOp()))
+  val wakeup_ports     = Flipped(Vec(numWakeupPorts, Valid(new IqWakeup(PREG_SZ))))
 
-  val mem_ldSpecWakeup= Flipped(Valid(UInt(width=PREG_SZ.W)))
+  val mem_ldSpecWakeup = Flipped(Valid(UInt(width=PREG_SZ.W)))
 
   // tell the issue unit what each execution pipeline has in terms of functional units
-  val fu_types       = Input(Vec(issueWidth, Bits(width=FUC_SZ.W)))
+  val fu_types         = Input(Vec(issueWidth, Bits(width=FUC_SZ.W)))
 
-  val brinfo         = Input(new BrResolutionInfo())
-  val flush_pipeline = Input(Bool())
-  val sxt_ldMiss     = Input(Bool())
+  val brinfo           = Input(new BrResolutionInfo())
+  val flush_pipeline   = Input(Bool())
+  val sxt_ldMiss       = Input(Bool())
 
-  val event_empty    = Output(Bool()) // used by HPM events; is the issue unit empty?
+  val event_empty      = Output(Bool()) // used by HPM events; is the issue unit empty?
 
-  val tsc_reg        = Input(UInt(width=xLen.W))
+  val tsc_reg          = Input(UInt(width=xLen.W))
 }
 
 /**
@@ -100,16 +100,16 @@ class IssueUnitIO(
  * @param iqType type of issue queue (mem, int, fp)
  */
 abstract class IssueUnit(
-  val num_issue_slots: Int,
-  val issue_width: Int,
-  num_wakeup_ports: Int,
+  val numIssueSlots: Int,
+  val issueWidth: Int,
+  val numWakeupPorts: Int,
   val iqType: BigInt,
   val dispatchWidth: Int)
   (implicit p: Parameters)
   extends BoomModule()(p)
   with IssueUnitConstants
 {
-  val io = IO(new IssueUnitIO(issue_width, num_wakeup_ports, dispatchWidth))
+  val io = IO(new IssueUnitIO(issueWidth, numWakeupPorts, dispatchWidth))
 
   //-------------------------------------------------------------
   // Set up the dispatch uops
@@ -144,14 +144,14 @@ abstract class IssueUnit(
   //-------------------------------------------------------------
   // Issue Table
 
-  val slots = for (i <- 0 until num_issue_slots) yield { val slot = Module(new IssueSlot(num_wakeup_ports)); slot }
+  val slots = for (i <- 0 until numIssueSlots) yield { val slot = Module(new IssueSlot(numWakeupPorts)); slot }
   val issue_slots = VecInit(slots.map(_.io))
 
   io.event_empty := !(issue_slots.map(s => s.valid).reduce(_|_))
 
   //-------------------------------------------------------------
 
-  assert (PopCount(issue_slots.map(s => s.grant)) <= issue_width.U, "[issue] window giving out too many grants.")
+  assert (PopCount(issue_slots.map(s => s.grant)) <= issueWidth.U, "[issue] window giving out too many grants.")
 
   // Check that a ldMiss signal was preceded by a ldSpecWakeup.
   // However, if the load gets killed before it hits SXT stage, we may see
@@ -165,7 +165,7 @@ abstract class IssueUnit(
   //-------------------------------------------------------------
 
   if (O3PIPEVIEW_PRINTF) {
-    for (i <- 0 until issue_width) {
+    for (i <- 0 until issueWidth) {
       // only print stores once!
       when (io.iss_valids(i) && io.iss_uops(i).uopc =/= uopSTD) {
          printf("%d; O3PipeView:issue: %d\n",
@@ -176,12 +176,12 @@ abstract class IssueUnit(
   }
 
   if (DEBUG_PRINTF) {
-    for (i <- 0 until num_issue_slots) {
+    for (i <- 0 until numIssueSlots) {
       printf("  " +
              this.getType +
              "_issue_slot[%d](%c)(Req:%c):wen=%c P:(%c,%c,%c) OP:(%d,%d,%d) PDST:%d %c [[DASM(%x)]" +
              " 0x%x: %d] ri:%d bm=%d imm=0x%x\n",
-             i.U(log2Ceil(num_issue_slots).W),
+             i.U(log2Ceil(numIssueSlots).W),
              Mux(issue_slots(i).valid, Str("V"), Str("-")),
              Mux(issue_slots(i).request, Str("R"), Str("-")),
              Mux(issue_slots(i).in_uop.valid, Str("W"),  Str(" ")),

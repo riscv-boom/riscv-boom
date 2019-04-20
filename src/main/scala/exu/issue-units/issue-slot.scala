@@ -29,7 +29,7 @@ import FUConstants._
 /**
  * IO bundle to interact with Issue slot
  *
- * @param num_wakeup_ports number of wakeup ports for the slot
+ * @param numWakeupPorts number of wakeup ports for the slot
  */
 class IssueSlotIO(val numWakeupPorts: Int)(implicit p: Parameters) extends BoomBundle()(p)
 {
@@ -44,7 +44,7 @@ class IssueSlotIO(val numWakeupPorts: Int)(implicit p: Parameters) extends BoomB
   val clear         = Input(Bool()) // entry being moved elsewhere (not mutually exclusive with grant)
   val ldspec_miss   = Input(Bool()) // Previous cycle's speculative load wakeup was mispredicted.
 
-  val wakeup_ports   = Flipped(Vec(numWakeupPorts, Valid(new IqWakeup(PREG_SZ))))
+  val wakeup_ports  = Flipped(Vec(numWakeupPorts, Valid(new IqWakeup(PREG_SZ))))
   val ldspec_dst    = Flipped(Valid(UInt(width=PREG_SZ.W)))
   val in_uop        = Flipped(Valid(new MicroOp())) // if valid, this WILL overwrite an entry!
   val updated_uop   = Output(new MicroOp()) // the updated slot uop; will be shifted upwards in a collasping queue.

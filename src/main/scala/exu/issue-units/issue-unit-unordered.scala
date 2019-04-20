@@ -76,17 +76,17 @@ class IssueUnitStatic(
 
     for (w <- 0 until dispatchWidth) {
       // TODO add ctrl bit for "allocates iss_slot"
-      temp_uop_val (w) := io.dis_valids(w) &&
-                          !dis_uops(w).exception &&
-                          !dis_uops(w).is_fence &&
-                          !dis_uops(w).is_fencei &&
-                          entry_wen_oh_array(i)(w)
+      temp_uop_val(w) := io.dis_uops(w).valid &&
+                         !dis_uops(w).exception &&
+                         !dis_uops(w).is_fence &&
+                         !dis_uops(w).is_fencei &&
+                         entry_wen_oh_array(i)(w)
     }
     entry_wen_oh(i) := temp_uop_val.asUInt
   }
 
   for (w <- 0 until dispatchWidth) {
-    io.dis_readys(w) := allocated(w)
+    io.dis_uops(w).ready := allocated(w)
   }
 
   //-------------------------------------------------------------
