@@ -36,8 +36,8 @@ class RoCCShimCoreIO(implicit p: Parameters) extends BoomBundle()(p)
   val rxq_full         = Output(Bool())
   val rxq_empty        = Output(Bool())
   val rxq_idx          = Output(UInt(log2Ceil(NUM_RXQ_ENTRIES).W))
-  val rob_pnr_idx      = Input(UInt(ROB_ADDR_SZ.W))
-  val rob_head_idx     = Input(UInt(ROB_ADDR_SZ.W))
+  val rob_pnr_idx      = Input(UInt(robAddrSz.W))
+  val rob_head_idx     = Input(UInt(robAddrSz.W))
 
   val rocc             = Flipped(new RoCCCoreIO)
 }

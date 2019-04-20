@@ -181,7 +181,7 @@ class BrResolutionInfo(implicit p: Parameters) extends BoomBundle()(p)
                                                // used to reset the dec_br_mask
   val pc_lob     = UInt(log2Ceil(fetchWidth*coreInstBytes).W)
   val ftq_idx    = UInt(ftqSz.W)
-  val rob_idx    = UInt(ROB_ADDR_SZ.W)
+  val rob_idx    = UInt(robAddrSz.W)
   val ldq_idx    = UInt(LDQ_ADDR_SZ.W)  // track the "tail" of loads and stores, so we can
   val stq_idx    = UInt(STQ_ADDR_SZ.W)  // quickly reset the LSU on a mispredict
   val rxq_idx    = UInt(log2Ceil(NUM_RXQ_ENTRIES).W) // ditto for RoCC queue

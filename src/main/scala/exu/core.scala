@@ -138,8 +138,6 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    val dc_shim          = Module(new boom.lsu.DCacheShim())
    val lsu              = Module(new boom.lsu.LoadStoreUnit(coreWidth))
    val rob              = Module(new Rob(
-                                 coreWidth,
-                                 NUM_ROB_ENTRIES,
                                  numIrfWritePorts + 1 + num_fp_wakeup_ports, // +1 for ll writebacks
                                  num_fp_wakeup_ports))
    // Used to wakeup registers in rename and issue. ROB needs to listen to something else.
@@ -387,7 +385,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
      + "\n   Fetch Width           : " + fetchWidth
      + "\n   Decode Width          : " + coreWidth
      + "\n   Issue Width           : " + issueParams.map(_.issueWidth).sum
-     + "\n   ROB Size              : " + NUM_ROB_ENTRIES
+     + "\n   ROB Size              : " + numRobEntries
      + "\n   Issue Window Size     : " + issueParams.map(_.numEntries) + iss_str
      + "\n   Load/Store Unit Size  : " + NUM_LDQ_ENTRIES + "/" + NUM_STQ_ENTRIES
      + "\n   Num Int Phys Registers: " + numIntPhysRegs
@@ -1159,7 +1157,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
    }
 
    require (cnt == rob.numWakeupPorts)
-   require (f_cnt == rob.num_fpu_ports)
+   require (f_cnt == rob.numFpuPorts)
 
    // branch resolution
    rob.io.brinfo <> br_unit.brinfo
@@ -1233,7 +1231,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       val numFtqWhitespace = if (DEBUG_PRINTF_FTQ) (ftqSz/4)+1 else 0
       val fetchWhitespace = if (fetchWidth >= 8) 2 else 0
        var whitespace = (debugScreenheight - 25 + 3 -10 + 3 + 4 - coreWidth - (NUM_LDQ_ENTRIES max NUM_STQ_ENTRIES) -
-         issueParams.map(_.numEntries).sum - issueParams.length - (NUM_ROB_ENTRIES/coreWidth) -
+         issueParams.map(_.numEntries).sum - issueParams.length - (numRobEntries/coreWidth) -
          numFtqWhitespace - fetchWhitespace
      )
 
