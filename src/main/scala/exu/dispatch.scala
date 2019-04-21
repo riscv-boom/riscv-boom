@@ -22,7 +22,7 @@ import freechips.rocketchip.config.Parameters
 import boom.common._
 import boom.util._
 
-class DispatchIO(implicit p: Parameters) extends BoomBundle()(p)
+class DispatchIO(implicit p: Parameters) extends BoomBundle
 {
    // incoming microops from rename2
    val ren_uops = Vec(coreWidth, Flipped(DecoupledIO(new MicroOp)))
@@ -33,7 +33,7 @@ class DispatchIO(implicit p: Parameters) extends BoomBundle()(p)
    val dis_uops = MixedVec(issueParams.map(ip=>Vec(ip.dispatchWidth, DecoupledIO(new MicroOp))))
 }
 
-abstract class Dispatcher(implicit p: Parameters) extends BoomModule()(p)
+abstract class Dispatcher(implicit p: Parameters) extends BoomModule
 {
    val io = IO(new DispatchIO)
 }

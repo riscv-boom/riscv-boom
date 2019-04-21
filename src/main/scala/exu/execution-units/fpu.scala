@@ -159,7 +159,7 @@ class FMADecoder extends Module
 /**
  * Bundle representing data to be sent to the FPU
  */
-class FpuReq()(implicit p: Parameters) extends BoomBundle()(p)
+class FpuReq()(implicit p: Parameters) extends BoomBundle
 {
   val uop      = new MicroOp()
   val rs1_data = Bits(65.W)
@@ -171,7 +171,7 @@ class FpuReq()(implicit p: Parameters) extends BoomBundle()(p)
 /**
  * FPU unit that wraps the RocketChip FPU units (which in turn wrap hardfloat)
  */
-class FPU(implicit p: Parameters) extends BoomModule()(p) with tile.HasFPUParameters
+class FPU(implicit p: Parameters) extends BoomModule with tile.HasFPUParameters
 {
   val io = IO(new Bundle
   {

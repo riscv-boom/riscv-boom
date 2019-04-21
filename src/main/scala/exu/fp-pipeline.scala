@@ -26,7 +26,7 @@ import boom.common._
 /**
  * Top level datapath that wraps the floating point issue window, regfile, and arithmetic units.
  */
-class FpPipeline(implicit p: Parameters) extends BoomModule()(p) with tile.HasFPUParameters
+class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUParameters
 {
   val fpIssueParams = issueParams.find(_.iqType == IQT_FP.litValue).get
   val numLlPorts = 1 // hard-wired; used by mem port and i2f port.

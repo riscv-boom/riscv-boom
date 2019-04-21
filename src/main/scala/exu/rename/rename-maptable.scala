@@ -26,7 +26,7 @@ import boom.util._
  *
  * @param plWidth pipeline width
  */
-class RenameMapTableElementIo(val plWidth: Int)(implicit p: Parameters) extends BoomBundle()(p)
+class RenameMapTableElementIo(val plWidth: Int)(implicit p: Parameters) extends BoomBundle
 {
   val element            = Output(UInt(PREG_SZ.W))
 
@@ -58,7 +58,7 @@ class RenameMapTableElementIo(val plWidth: Int)(implicit p: Parameters) extends 
  * @param plWidth pipeline width
  * @param always_zero the element is always zero (used for x0)
  */
-class RenameMapTableElement(plWidth: Int, always_zero: Boolean)(implicit p: Parameters) extends BoomModule()(p)
+class RenameMapTableElement(plWidth: Int, always_zero: Boolean)(implicit p: Parameters) extends BoomModule
 {
   val io = IO(new RenameMapTableElementIo(plWidth))
 
@@ -152,12 +152,12 @@ class RenameMapTable(
   rtype: BigInt,
   numLregs: Int,
   numPregs: Int
-  )(implicit p: Parameters) extends BoomModule()(p)
+  )(implicit p: Parameters) extends BoomModule
   with HasBoomCoreParameters
 {
   private val pregSz = log2Ceil(numPregs)
 
-  val io = IO(new BoomBundle()(p)
+  val io = IO(new BoomBundle
   {
     // Inputs
     val brinfo           = Input(new BrResolutionInfo())

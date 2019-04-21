@@ -35,7 +35,7 @@ class RegisterReadIO(
   val numTotalReadPorts: Int,
   val numTotalBypassPorts: Int,
   val registerWidth: Int
-)(implicit p: Parameters) extends  BoomBundle()(p)
+)(implicit p: Parameters) extends  BoomBundle
 {
   // issued micro-ops
   val iss_valids = Input(Vec(issueWidth, Bool()))
@@ -75,7 +75,7 @@ class RegisterRead(
                         // numTotalReadPorts)
   numTotalBypassPorts: Int,
   registerWidth: Int
-)(implicit p: Parameters) extends BoomModule()(p)
+)(implicit p: Parameters) extends BoomModule
 {
   val io = IO(new RegisterReadIO(issueWidth, numTotalReadPorts, numTotalBypassPorts, registerWidth))
 

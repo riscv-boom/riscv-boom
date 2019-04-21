@@ -37,7 +37,7 @@ import boom.util.{ImmGen, IsKilledByBranch, BranchKillableQueue}
  *
  * @param dataWidth width of the data coming from the execution unit
  */
-class ExeUnitResp(val dataWidth: Int)(implicit p: Parameters) extends BoomBundle()(p)
+class ExeUnitResp(val dataWidth: Int)(implicit p: Parameters) extends BoomBundle
   with HasBoomUOP
 {
   val data = Bits(dataWidth.W)
@@ -47,7 +47,7 @@ class ExeUnitResp(val dataWidth: Int)(implicit p: Parameters) extends BoomBundle
 /**
  * Floating Point flag response
  */
-class FFlagsResp(implicit p: Parameters) extends BoomBundle()(p)
+class FFlagsResp(implicit p: Parameters) extends BoomBundle
 {
   val uop = new MicroOp()
   val flags = Bits(tile.FPConstants.FLAGS_SZ.W)
@@ -74,7 +74,7 @@ class ExecutionUnitIO(
   val hasMem           : Boolean,
   val num_bypass_ports : Int,
   val dataWidth        : Int
-  )(implicit p: Parameters) extends BoomBundle()(p)
+  )(implicit p: Parameters) extends BoomBundle
 {
   // describe which functional units we support (used by the issue window)
   val fu_types = Output(Bits(FUC_SZ.W))
@@ -155,7 +155,7 @@ abstract class ExecutionUnit(
   val hasIfpu          : Boolean       = false,
   val hasFpiu          : Boolean       = false,
   val hasRocc          : Boolean       = false
-  )(implicit p: Parameters) extends BoomModule()(p)
+  )(implicit p: Parameters) extends BoomModule
 {
   val io = IO(new ExecutionUnitIO(writesIrf, writesLlIrf, writesFrf, writesLlFrf,
     hasRocc, hasBrUnit, hasFpu || hasIfpu || hasFdiv, hasMem,
@@ -229,7 +229,7 @@ class ALUExeUnit(
     hasDiv           = hasDiv,
     hasIfpu          = hasIfpu,
     hasMem           = hasMem,
-    hasRocc          = hasRocc)(p)
+    hasRocc          = hasRocc)
   with freechips.rocketchip.rocket.constants.MemoryOpConstants
 {
   require(!(hasRocc && !sharesCsrWport),
@@ -487,7 +487,7 @@ class FPUExeUnit(
     bypassable = false,
     hasFpu  = hasFpu,
     hasFdiv = hasFdiv,
-    hasFpiu = hasFpiu)(p) with tile.HasFPUParameters
+    hasFpiu = hasFpiu) with tile.HasFPUParameters
 {
   val out_str = new StringBuilder
   out_str.append("\n   ==ExeUnit==")

@@ -445,7 +445,7 @@ object RoCCDecode extends DecodeConstants
 /**
  * IO bundle for the Decode unit
  */
-class DecodeUnitIo(implicit p: Parameters) extends BoomBundle()(p)
+class DecodeUnitIo(implicit p: Parameters) extends BoomBundle
 {
   val enq = new Bundle { val uop = Input(new MicroOp()) }
   val deq = new Bundle { val uop = Output(new MicroOp()) }
@@ -460,7 +460,7 @@ class DecodeUnitIo(implicit p: Parameters) extends BoomBundle()(p)
 /**
  * Decode unit that takes in a single instruction and generates a MicroOp.
  */
-class DecodeUnit(implicit p: Parameters) extends BoomModule()(p)
+class DecodeUnit(implicit p: Parameters) extends BoomModule
 {
   val io = IO(new DecodeUnitIo)
 
@@ -640,7 +640,7 @@ class BranchDecode(implicit p: Parameters) extends BoomModule
 /**
  * IO bundle for getting the branch mask
  */
-class DebugBranchMaskGenerationLogicIO(implicit p: Parameters) extends BoomBundle()(p)
+class DebugBranchMaskGenerationLogicIO(implicit p: Parameters) extends BoomBundle
 {
   val branch_mask = UInt(MAX_BR_COUNT.W)
 }
@@ -652,7 +652,7 @@ class DebugBranchMaskGenerationLogicIO(implicit p: Parameters) extends BoomBundl
  *
  * @param pl_width pipeline width for the processor
  */
-class BranchMaskGenerationLogic(val pl_width: Int)(implicit p: Parameters) extends BoomModule()(p)
+class BranchMaskGenerationLogic(val pl_width: Int)(implicit p: Parameters) extends BoomModule
 {
   val io = IO(new Bundle
   {

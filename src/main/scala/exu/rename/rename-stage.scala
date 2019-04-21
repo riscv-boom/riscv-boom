@@ -42,7 +42,7 @@ class RenameStageIO(
   val numFpPregs: Int,
   val numIntWbPorts: Int,
   val numFpWbPorts: Int)
-  (implicit p: Parameters) extends BoomBundle()(p)
+  (implicit p: Parameters) extends BoomBundle
 {
   private val int_preg_sz = log2Ceil(numIntPregs)
   private val fp_preg_sz = log2Ceil(numFpPregs)
@@ -88,7 +88,7 @@ class RenameStageIO(
  * @param int_numPregs number of int physical registers
  * @param fp_numPregs number of FP physical registers
  */
-class DebugRenameStageIO(val int_numPregs: Int, val fp_numPregs: Int)(implicit p: Parameters) extends BoomBundle()(p)
+class DebugRenameStageIO(val int_numPregs: Int, val fp_numPregs: Int)(implicit p: Parameters) extends BoomBundle
 {
   val ifreelist  = Bits(int_numPregs.W)
   val iisprlist  = Bits(int_numPregs.W)
@@ -110,7 +110,7 @@ class RenameStage(
   plWidth: Int,
   numIntWbPorts: Int,
   numFpWbPorts: Int)
-(implicit p: Parameters) extends BoomModule()(p)
+(implicit p: Parameters) extends BoomModule
 {
   val io = IO(new RenameStageIO(plWidth, numIntPhysRegs, numFpPhysRegs, numIntWbPorts, numFpWbPorts))
 
