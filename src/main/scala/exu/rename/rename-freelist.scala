@@ -27,7 +27,7 @@ import boom.util._
 class FreeListIo(
   val numPregs: Int,
   val plWidth: Int)
-(implicit p: Parameters) extends BoomBundle()(p)
+(implicit p: Parameters) extends BoomBundle
 {
   private val pregSz = log2Ceil(numPregs)
 
@@ -86,7 +86,7 @@ class DebugFreeListIO(val numPregs: Int) extends Bundle
 class RenameFreeListHelper(
    numPregs: Int,
    plWidth: Int)
-   (implicit p: Parameters) extends BoomModule()(p)
+   (implicit p: Parameters) extends BoomModule
 {
   val io = IO(new FreeListIo(numPregs, plWidth))
 
@@ -248,7 +248,7 @@ class RenameFreeList(
   plWidth: Int,
   rtype: BigInt,
   numPregs: Int)
-  (implicit p: Parameters) extends BoomModule()(p)
+  (implicit p: Parameters) extends BoomModule
 {
   private val pregSz = log2Ceil(numPregs)
 

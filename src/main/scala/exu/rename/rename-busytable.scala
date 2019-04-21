@@ -35,7 +35,7 @@ class BusyTableIo(
   val numPregs: Int,
   val numReadPorts: Int,
   val numWbPorts: Int)
-  (implicit p: Parameters) extends BoomBundle()(p)
+  (implicit p: Parameters) extends BoomBundle
 {
   private val pregSz = log2Ceil(numPregs)
 
@@ -71,7 +71,7 @@ class BusyTableHelper(
   numPregs: Int,
   numReadPorts: Int,
   numWbPorts: Int)
-  (implicit p: Parameters) extends BoomModule()(p)
+  (implicit p: Parameters) extends BoomModule
 {
   val io = IO(new BusyTableIo(plWidth, numPregs, numReadPorts, numWbPorts))
 
@@ -128,7 +128,7 @@ class BusyTable(
   numPregs: Int,
   numReadPorts: Int,
   numWbPorts: Int)
-  (implicit p: Parameters) extends BoomModule()(p)
+  (implicit p: Parameters) extends BoomModule
 {
   private val pregSz = log2Ceil(numPregs)
 

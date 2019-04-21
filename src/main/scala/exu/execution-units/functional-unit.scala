@@ -94,7 +94,7 @@ class FunctionalUnitIo(
   val dataWidth: Int,
   val isBrUnit: Boolean,
   val needsFcsr: Boolean
-  )(implicit p: Parameters) extends BoomBundle()(p)
+  )(implicit p: Parameters) extends BoomBundle
 {
   val req    = Flipped(new DecoupledIO(new FuncUnitReq(dataWidth)))
   val resp   = (new DecoupledIO(new FuncUnitResp(dataWidth)))
@@ -115,7 +115,7 @@ class FunctionalUnitIo(
 /**
  * Bundle for branch prediction information
  */
-class GetPredictionInfo(implicit p: Parameters) extends BoomBundle()(p)
+class GetPredictionInfo(implicit p: Parameters) extends BoomBundle
 {
   val br_tag = Output(UInt(BR_TAG_SZ.W))
   val info = Input(new BranchPredInfo())
@@ -126,7 +126,7 @@ class GetPredictionInfo(implicit p: Parameters) extends BoomBundle()(p)
  *
  * @param dataWidth width of the data sent to the functional unit
  */
-class FuncUnitReq(val dataWidth: Int)(implicit p: Parameters) extends BoomBundle()(p)
+class FuncUnitReq(val dataWidth: Int)(implicit p: Parameters) extends BoomBundle
   with HasBoomUOP
 {
   val numOperands = 3
@@ -143,7 +143,7 @@ class FuncUnitReq(val dataWidth: Int)(implicit p: Parameters) extends BoomBundle
  *
  * @param dataWidth data sent from the functional unit
  */
-class FuncUnitResp(val dataWidth: Int)(implicit p: Parameters) extends BoomBundle()(p)
+class FuncUnitResp(val dataWidth: Int)(implicit p: Parameters) extends BoomBundle
   with HasBoomUOP
 {
   val data = UInt(dataWidth.W)
@@ -159,7 +159,7 @@ class FuncUnitResp(val dataWidth: Int)(implicit p: Parameters) extends BoomBundl
  * @param numBypassPorts amount of ports to bypass data in a single stage
  * @param dataWidth size of data in the functional unit
  */
-class BypassData(val numBypassPorts: Int, val dataWidth: Int)(implicit p: Parameters) extends BoomBundle()(p)
+class BypassData(val numBypassPorts: Int, val dataWidth: Int)(implicit p: Parameters) extends BoomBundle
 {
   val valid = Vec(numBypassPorts, Bool())
   val uop   = Vec(numBypassPorts, new MicroOp())
@@ -171,7 +171,7 @@ class BypassData(val numBypassPorts: Int, val dataWidth: Int)(implicit p: Parame
 /**
  * Branch resolution information given from the branch unit
  */
-class BrResolutionInfo(implicit p: Parameters) extends BoomBundle()(p)
+class BrResolutionInfo(implicit p: Parameters) extends BoomBundle
 {
   val valid      = Bool()
   val mispredict = Bool()
@@ -202,7 +202,7 @@ class BrResolutionInfo(implicit p: Parameters) extends BoomBundle()(p)
  * Response from the branch unit. Contains branch resolution information.
  * Note: for critical path reasons, some of the elements in this bundle may be delayed.
  */
-class BranchUnitResp(implicit p: Parameters) extends BoomBundle()(p)
+class BranchUnitResp(implicit p: Parameters) extends BoomBundle
 {
   val take_pc         = Bool()
   val target          = UInt(vaddrBitsExtended.W) // TODO XXX REMOVE this -- use FTQ to redirect instead
@@ -231,7 +231,7 @@ abstract class FunctionalUnit(
   val dataWidth: Int,
   val isBranchUnit: Boolean = false,
   val needsFcsr: Boolean = false)
-  (implicit p: Parameters) extends BoomModule()(p)
+  (implicit p: Parameters) extends BoomModule
 {
   val io = IO(new FunctionalUnitIo(numStages, numBypassStages, dataWidth,
     isBranchUnit, needsFcsr))
@@ -262,7 +262,7 @@ abstract class PipelinedFunctionalUnit(
     numBypassStages = numBypassStages,
     dataWidth = dataWidth,
     isBranchUnit = isBranchUnit,
-    needsFcsr = needsFcsr)(p)
+    needsFcsr = needsFcsr)
 {
   // Pipelined functional unit is always ready.
   io.req.ready := true.B
@@ -327,7 +327,7 @@ class ALUUnit(isBranchUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)
     numBypassStages = numStages,
     earliestBypassStage = 0,
     dataWidth = dataWidth,
-    isBranchUnit = isBranchUnit)(p)
+    isBranchUnit = isBranchUnit)
 {
   val uop = io.req.bits.uop
 
@@ -632,7 +632,7 @@ class MemAddrCalcUnit(implicit p: Parameters)
     numBypassStages = 0,
     earliestBypassStage = 0,
     dataWidth = 65, // TODO enable this only if FP is enabled?
-    isBranchUnit = false)(p)
+    isBranchUnit = false)
   with freechips.rocketchip.rocket.constants.MemoryOpConstants
   with freechips.rocketchip.rocket.constants.ScalarOpConstants
 {
@@ -695,7 +695,7 @@ class FPUUnit(implicit p: Parameters)
     numBypassStages = 0,
     earliestBypassStage = 0,
     dataWidth = 65,
-    needsFcsr = true)(p)
+    needsFcsr = true)
 {
   val fpu = Module(new FPU())
   fpu.io.req.valid         := io.req.valid
@@ -722,7 +722,7 @@ class IntToFPUnit(latency: Int)(implicit p: Parameters)
     numBypassStages = 0,
     earliestBypassStage = 0,
     dataWidth = 65,
-    needsFcsr = true)(p)
+    needsFcsr = true)
   with tile.HasFPUParameters
 {
   val fp_decoder = Module(new UOPCodeFPUDecoder) // TODO use a simpler decoder
@@ -775,7 +775,7 @@ abstract class IterativeFunctionalUnit(dataWidth: Int)(implicit p: Parameters)
     numStages = 1,
     numBypassStages = 0,
     dataWidth = dataWidth,
-    isBranchUnit = false)(p)
+    isBranchUnit = false)
 {
   val r_uop = Reg(new MicroOp())
 
@@ -802,7 +802,7 @@ abstract class IterativeFunctionalUnit(dataWidth: Int)(implicit p: Parameters)
  * @param dataWidth data to be passed into the functional unit
  */
 class DivUnit(dataWidth: Int)(implicit p: Parameters)
-  extends IterativeFunctionalUnit(dataWidth)(p)
+  extends IterativeFunctionalUnit(dataWidth)
 {
 
   // We don't use the iterative multiply functionality here.
@@ -838,7 +838,7 @@ class PipelinedMulUnit(numStages: Int, dataWidth: Int)(implicit p: Parameters)
     numStages = numStages,
     numBypassStages = 0,
     earliestBypassStage = 0,
-    dataWidth = dataWidth)(p)
+    dataWidth = dataWidth)
 {
   val imul = Module(new PipelinedMultiplier(xLen, numStages))
   // request

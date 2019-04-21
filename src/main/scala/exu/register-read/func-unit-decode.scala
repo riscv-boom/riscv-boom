@@ -28,7 +28,7 @@ import boom.common._
 /**
  * Control signal bundle for register renaming
  */
-class RRdCtrlSigs(implicit p: Parameters) extends BoomBundle()(p)
+class RRdCtrlSigs(implicit p: Parameters) extends BoomBundle
 {
   val br_type          = UInt(BR_N.getWidth.W)
   val use_alupipe      = Bool()
@@ -309,9 +309,9 @@ object FDivRRdDecode extends RRdDecodeConstants
  *
  * @param supportedUnits indicate what functional units are being used
  */
-class RegisterReadDecode(supportedUnits: SupportedFuncUnits)(implicit p: Parameters) extends BoomModule()(p)
+class RegisterReadDecode(supportedUnits: SupportedFuncUnits)(implicit p: Parameters) extends BoomModule
 {
-  val io = IO(new BoomBundle()(p)
+  val io = IO(new BoomBundle
   {
     val iss_valid = Input(Bool())
     val iss_uop   = Input(new MicroOp())

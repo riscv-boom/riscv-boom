@@ -86,7 +86,7 @@ class FDivSqrtUnit(implicit p: Parameters)
     numStages = 1,
     numBypassStages = 0,
     dataWidth = 65,
-    needsFcsr = true)(p)
+    needsFcsr = true)
   with tile.HasFPUParameters
 {
   //--------------------------------------

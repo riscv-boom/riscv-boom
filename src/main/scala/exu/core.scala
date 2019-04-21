@@ -51,7 +51,7 @@ import boom.util.{GetNewUopAndBrMask, Sext, WrapInc}
 trait HasBoomCoreIO extends freechips.rocketchip.tile.HasTileParameters
 {
   implicit val p: Parameters
-  val io = new freechips.rocketchip.tile.CoreBundle()(p)
+  val io = new freechips.rocketchip.tile.CoreBundle
     with freechips.rocketchip.tile.HasExternallyDrivenTileConstants
   {
     val interrupts = Input(new freechips.rocketchip.tile.CoreInterrupts())
@@ -70,7 +70,7 @@ trait HasBoomCoreIO extends freechips.rocketchip.tile.HasTileParameters
 /**
  * Top level core object that connects the Frontend to the rest of the pipeline.
  */
-class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut) extends BoomModule()(p)
+class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut) extends BoomModule
    with HasBoomCoreIO
 {
   //**********************************

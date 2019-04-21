@@ -28,7 +28,7 @@ import boom.common._
  * @param addrWidth size of register address in bits
  * @param dataWidth size of register in bits
  */
-class RegisterFileReadPortIO(val addrWidth: Int, val dataWidth: Int)(implicit p: Parameters) extends BoomBundle()(p)
+class RegisterFileReadPortIO(val addrWidth: Int, val dataWidth: Int)(implicit p: Parameters) extends BoomBundle
 {
   val addr = Input(UInt(addrWidth.W))
   val data = Output(UInt(dataWidth.W))
@@ -40,7 +40,7 @@ class RegisterFileReadPortIO(val addrWidth: Int, val dataWidth: Int)(implicit p:
  * @param addrWidth size of register address in bits
  * @param dataWidth size of register in bits
  */
-class RegisterFileWritePort(val addrWidth: Int, val dataWidth: Int)(implicit p: Parameters) extends BoomBundle()(p)
+class RegisterFileWritePort(val addrWidth: Int, val dataWidth: Int)(implicit p: Parameters) extends BoomBundle
 {
   val addr = UInt(addrWidth.W)
   val data = UInt(dataWidth.W)
@@ -78,9 +78,9 @@ abstract class RegisterFile(
   numWritePorts: Int,
   registerWidth: Int,
   bypassableArray: Seq[Boolean]) // which write ports can be bypassed to the read ports?
-  (implicit p: Parameters) extends BoomModule()(p)
+  (implicit p: Parameters) extends BoomModule
 {
-  val io = IO(new BoomBundle()(p)
+  val io = IO(new BoomBundle
   {
     val read_ports = Vec(numReadPorts, new RegisterFileReadPortIO(PREG_SZ, registerWidth))
     val write_ports = Flipped(Vec(numWritePorts, Valid(new RegisterFileWritePort(PREG_SZ, registerWidth))))

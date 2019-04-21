@@ -31,7 +31,7 @@ import FUConstants._
  *
  * @param numWakeupPorts number of wakeup ports for the slot
  */
-class IssueSlotIO(val numWakeupPorts: Int)(implicit p: Parameters) extends BoomBundle()(p)
+class IssueSlotIO(val numWakeupPorts: Int)(implicit p: Parameters) extends BoomBundle
 {
   val valid         = Output(Bool())
   val will_be_valid = Output(Bool()) // TODO code review, do we need this signal so explicitely?
@@ -67,7 +67,7 @@ class IssueSlotIO(val numWakeupPorts: Int)(implicit p: Parameters) extends BoomB
  * @param numWakeupPorts number of wakeup ports
  */
 class IssueSlot(val numWakeupPorts: Int)(implicit p: Parameters)
-  extends BoomModule()(p)
+  extends BoomModule
   with IssueUnitConstants
 {
   val io = IO(new IssueSlotIO(numWakeupPorts))

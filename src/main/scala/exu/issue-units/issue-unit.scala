@@ -69,7 +69,7 @@ class IssueUnitIO(
   val issueWidth: Int,
   val numWakeupPorts: Int,
   val dispatchWidth: Int)
-  (implicit p: Parameters) extends BoomBundle()(p)
+  (implicit p: Parameters) extends BoomBundle
 {
   val dis_uops         = Vec(dispatchWidth, Flipped(Decoupled(new MicroOp)))
 
@@ -106,7 +106,7 @@ abstract class IssueUnit(
   val iqType: BigInt,
   val dispatchWidth: Int)
   (implicit p: Parameters)
-  extends BoomModule()(p)
+  extends BoomModule
   with IssueUnitConstants
 {
   val io = IO(new IssueUnitIO(issueWidth, numWakeupPorts, dispatchWidth))

@@ -28,7 +28,7 @@ import boom.util._
 /**
   * IO Bundle representing RoCC shim interface with the core
   */
-class RoCCShimCoreIO(implicit p: Parameters) extends BoomBundle()(p)
+class RoCCShimCoreIO(implicit p: Parameters) extends BoomBundle
 {
   // Decode Stage
   val dec_rocc_vals    = Input(Vec(coreWidth, Bool()))
@@ -46,7 +46,7 @@ class RoCCShimCoreIO(implicit p: Parameters) extends BoomBundle()(p)
  * IO bundle representing the different signals to interact with the RoCC
  * Vaguely follows the IO of a functional unit.
   */
-class RoCCShimIO(implicit p: Parameters) extends BoomBundle()(p)
+class RoCCShimIO(implicit p: Parameters) extends BoomBundle
 {
   val core             = new RoCCShimCoreIO
 
@@ -64,7 +64,7 @@ class RoCCShimIO(implicit p: Parameters) extends BoomBundle()(p)
   *  - After issue, holds queue of translations between logical and physical
   *    specifiers to handle RoCC responses
   */
-class RoCCShim(implicit p: Parameters) extends BoomModule()(p)
+class RoCCShim(implicit p: Parameters) extends BoomModule
 {
   val io = IO(new RoCCShimIO)
 

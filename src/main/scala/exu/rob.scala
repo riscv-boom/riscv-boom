@@ -47,7 +47,7 @@ import boom.util._
 class RobIo(
   val numWakeupPorts: Int,
   val numFpuPorts: Int
-  )(implicit p: Parameters)  extends BoomBundle()(p)
+  )(implicit p: Parameters)  extends BoomBundle
 {
   // Decode Stage
   // (Allocate, write instruction to ROB).
@@ -118,7 +118,7 @@ class RobIo(
 /**
  * Bundle to send commit signals across processor
  */
-class CommitSignals(implicit p: Parameters) extends BoomBundle()(p)
+class CommitSignals(implicit p: Parameters) extends BoomBundle
 {
   val valids     = Vec(retireWidth, Bool())
   val uops       = Vec(retireWidth, new MicroOp())
@@ -137,7 +137,7 @@ class CommitSignals(implicit p: Parameters) extends BoomBundle()(p)
  *
  * TODO combine FlushSignals and ExceptionSignals (currently timed to different cycles).
  */
-class CommitExceptionSignals(implicit p: Parameters) extends BoomBundle()(p)
+class CommitExceptionSignals(implicit p: Parameters) extends BoomBundle
 {
   val ftq_idx    = UInt(log2Ceil(ftqSz).W)
   val edge_inst  = Bool()
@@ -181,7 +181,7 @@ object FlushTypes
 /**
  * Bundle of signals indicating that an exception occurred
  */
-class Exception(implicit p: Parameters) extends BoomBundle()(p)
+class Exception(implicit p: Parameters) extends BoomBundle
 {
   val uop = new MicroOp()
   val cause = Bits(log2Ceil(freechips.rocketchip.rocket.Causes.all.max+2).W)
@@ -192,7 +192,7 @@ class Exception(implicit p: Parameters) extends BoomBundle()(p)
  * Bundle for debug ROB signals
  * These should not be synthesized!
  */
-class DebugRobSignals(implicit p: Parameters) extends BoomBundle()(p)
+class DebugRobSignals(implicit p: Parameters) extends BoomBundle
 {
   val state = UInt()
   val rob_head = UInt(robAddrSz.W)
@@ -212,7 +212,7 @@ class DebugRobSignals(implicit p: Parameters) extends BoomBundle()(p)
 class Rob(
   val numWakeupPorts: Int,
   val numFpuPorts: Int
-  )(implicit p: Parameters) extends BoomModule()(p)
+  )(implicit p: Parameters) extends BoomModule
 {
   val io = IO(new RobIo(numWakeupPorts, numFpuPorts))
 
@@ -275,7 +275,7 @@ class Rob(
   // **************************************************************************
   // Debug
 
-  class DebugRobBundle extends BoomBundle()(p)
+  class DebugRobBundle extends BoomBundle
   {
     val valid      = Bool()
     val busy       = Bool()
