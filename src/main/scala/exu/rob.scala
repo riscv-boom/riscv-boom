@@ -724,7 +724,7 @@ class Rob(
   } else {
     val safe_to_inc    = rob_state === s_normal || rob_state === s_wait_till_empty
     val do_inc_row     = !rob_pnr_unsafe.reduce(_||_) && rob_pnr =/= rob_tail
-    val do_inc_partial = !rob_pnr_unsafe(rob_pnr_lsb) && (rob_pnr =/= rob_tail || (rob_pnr === rob_tail && rob_tail_vals(rob_pnr_lsb)))
+    val do_inc_partial = !rob_pnr_unsafe(rob_pnr_lsb) && (rob_pnr =/= rob_tail || !full && rob_tail_vals(rob_pnr_lsb))
     when (empty && io.enq_valids.asUInt =/= 0.U) {
       // Unforunately for us, the ROB does not use its entries in monotonically
       //  increasing order, even in the case of no exceptions. The edge case
