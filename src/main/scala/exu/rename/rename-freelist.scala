@@ -252,8 +252,7 @@ class RenameFreeList(
 {
   private val pregSz = log2Ceil(numPregs)
 
-  val io = IO(new Bundle
-  {
+  val io = IO(new Bundle {
     // Inputs
     val brinfo           = Input(new BrResolutionInfo())
     val kill             = Input(Bool())

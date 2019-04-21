@@ -27,8 +27,7 @@ import boom.util._
  */
 class UOPCodeFDivDecoder extends Module
 {
-  val io = IO(new Bundle
-  {
+  val io = IO(new Bundle {
     val uopc = Input(Bits(UOPC_SZ.W))
     val sigs = Output(new tile.FPUCtrlSigs())
   })
@@ -44,8 +43,8 @@ class UOPCodeFDivDecoder extends Module
     //                                       | swap32       | div
     //                                       | | singleIn   | | sqrt
     //                            ldst       | | | singleOut| | | wflags
-    //                            | wen      | | | | fromint| | | |
-    //                            | | ren1   | | | | | toint  | | |
+    //                            | wen      | | | | from_int | | |
+    //                            | | ren1   | | | | | to_int | | |
     //                            | | | ren2 | | | | | | fast | | |
     //                            | | | | ren3 | | | | | |  | | | |
     //                            | | | | |  | | | | | | |  | | | |

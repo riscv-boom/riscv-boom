@@ -29,8 +29,7 @@ import boom.util.{ImmGenRm, ImmGenTyp}
  */
 class UOPCodeFPUDecoder extends Module
 {
-  val io = IO(new Bundle
-  {
+  val io = IO(new Bundle {
     val uopc = Input(Bits(UOPC_SZ.W))
     val sigs = Output(new FPUCtrlSigs())
   })
@@ -49,8 +48,8 @@ class UOPCodeFPUDecoder extends Module
     //                                     | swap32       | div
     //                                     | | singleIn   | | sqrt
     //                          ldst       | | | singleOut| | | wflags
-    //                          | wen      | | | | fromint| | | |
-    //                          | | ren1   | | | | | toint| | | |
+    //                          | wen      | | | | from_int | | |
+    //                          | | ren1   | | | | | to_int | | |
     //                          | | | ren2 | | | | | | fastpipe |
     //                          | | | | ren3 | | | | | |  | | | |
     //                          | | | | |  | | | | | | |  | | | |
@@ -125,8 +124,7 @@ class UOPCodeFPUDecoder extends Module
  */
 class FMADecoder extends Module
 {
-  val io = IO(new Bundle
-  {
+  val io = IO(new Bundle {
     val uopc = Input(UInt(UOPC_SZ.W))
     val cmd = Output(UInt(2.W))
   })
@@ -173,8 +171,7 @@ class FpuReq()(implicit p: Parameters) extends BoomBundle
  */
 class FPU(implicit p: Parameters) extends BoomModule with tile.HasFPUParameters
 {
-  val io = IO(new Bundle
-  {
+  val io = IO(new Bundle {
     val req = Flipped(new ValidIO(new FpuReq))
     val resp = new ValidIO(new ExeUnitResp(65))
   })

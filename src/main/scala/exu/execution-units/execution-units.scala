@@ -146,17 +146,17 @@ class ExecutionUnits(val fpu: Boolean)(implicit val p: Parameters) extends HasBo
     }
   }
 
-  val exe_units_str = new StringBuilder
+  val exeUnitsStr = new StringBuilder
   if (!fpu) {
-    exe_units_str.append(
+    exeUnitsStr.append(
       ( "\n   ==" + Seq("One","Two","Three","Four")(coreWidth-1) + "-wide Machine=="
       + "\n   ==" + Seq("Single","Dual","Triple","Quad","Five","Six")(totalIssueWidth-1) + " Issue==\n"))
   }
 
   for (exe_unit <- exe_units) {
-    exe_units_str.append(exe_unit.toString)
+    exeUnitsStr.append(exe_unit.toString)
   }
-  override def toString: String =  exe_units_str.toString
+  override def toString: String =  exeUnitsStr.toString
 
   require (exe_units.length != 0)
   if (!fpu) {

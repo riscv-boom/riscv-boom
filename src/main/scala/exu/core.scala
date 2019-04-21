@@ -109,13 +109,15 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
   val dispatcher       = Module(new BasicDispatcher)
 
   val iregfile         = if (enableCustomRf) {
-                           Module(new RegisterFileSeqCustomArray(numIntPhysRegs,
+                           Module(new RegisterFileSeqCustomArray(
+                             numIntPhysRegs,
                              numIrfReadPorts,
                              numIrfWritePorts + 1, // + 1 for ll writebacks
                              xLen,
                              Seq(true) ++ exe_units.bypassable_write_port_mask)) // 0th is bypassable ll_wb
                          } else {
-                           Module(new RegisterFileSynthesizable(numIntPhysRegs,
+                           Module(new RegisterFileSynthesizable(
+                             numIntPhysRegs,
                              numIrfReadPorts,
                              numIrfWritePorts + 1, // + 1 for ll writebacks
                              xLen,
@@ -125,17 +127,17 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
                                                                    (if (usingFPU) 1 else 0) +
                                                                    (if (usingRoCC) 1 else 0)))
   val iregister_read   = Module(new RegisterRead(
-                                issue_units.map(_.issueWidth).sum,
-                                exe_units.withFilter(_.readsIrf).map(_.supportedFuncUnits),
-                                numIrfReadPorts,
-                                exe_units.withFilter(_.readsIrf).map(x => 2),
-                                exe_units.numTotalBypassPorts,
-                                xLen))
+                           issue_units.map(_.issueWidth).sum,
+                           exe_units.withFilter(_.readsIrf).map(_.supportedFuncUnits),
+                           numIrfReadPorts,
+                           exe_units.withFilter(_.readsIrf).map(x => 2),
+                           exe_units.numTotalBypassPorts,
+                           xLen))
   val dc_shim          = Module(new boom.lsu.DCacheShim())
   val lsu              = Module(new boom.lsu.LoadStoreUnit(coreWidth))
   val rob              = Module(new Rob(
-                                numIrfWritePorts + 1 + numFpWakeupPorts, // +1 for ll writebacks
-                                numFpWakeupPorts))
+                           numIrfWritePorts + 1 + numFpWakeupPorts, // +1 for ll writebacks
+                           numFpWakeupPorts))
   // Used to wakeup registers in rename and issue. ROB needs to listen to something else.
   val int_iss_wakeups  = Wire(Vec(numIntIssueWakeupPorts, Valid(new ExeUnitResp(xLen))))
   val int_ren_wakeups  = Wire(Vec(numIntRenameWakeupPorts, Valid(new ExeUnitResp(xLen))))
@@ -148,16 +150,16 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
   // Pipeline State Registers and Wires
 
   // Instruction Decode Stage
-  val dec_valids     = Wire(Vec(coreWidth, Bool()))  // are the decoded instruction valid? It may be held up though.
-  val dec_uops       = Wire(Vec(coreWidth, new MicroOp()))
-  val dec_will_fire  = Wire(Vec(coreWidth, Bool()))  // can the instruction fire beyond decode?
-                                                         // (can still be stopped in ren or dis)
-  val dec_rdy        = Wire(Bool())
+  val dec_valids    = Wire(Vec(coreWidth, Bool()))  // are the decoded instruction valid? It may be held up though.
+  val dec_uops      = Wire(Vec(coreWidth, new MicroOp()))
+  val dec_will_fire = Wire(Vec(coreWidth, Bool()))  // can the instruction fire beyond decode?
+                                                    // (can still be stopped in ren or dis)
+  val dec_rdy       = Wire(Bool())
 
   // Issue Stage/Register Read
-  val iss_valids     = Wire(Vec(exe_units.numIrfReaders, Bool()))
-  val iss_uops       = Wire(Vec(exe_units.numIrfReaders, new MicroOp()))
-  val bypasses       = Wire(new BypassData(exe_units.numTotalBypassPorts, xLen))
+  val iss_valids    = Wire(Vec(exe_units.numIrfReaders, Bool()))
+  val iss_uops      = Wire(Vec(exe_units.numIrfReaders, new MicroOp()))
+  val bypasses      = Wire(new BypassData(exe_units.numTotalBypassPorts, xLen))
 
   // Branch Unit
   val br_unit = Wire(new BranchUnitResp())
@@ -361,26 +363,26 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
   //****************************************
   // Print-out information about the machine
 
-  val iss_str =
+  val issStr =
     if (enableAgePriorityIssue) " (Age-based Priority)"
     else " (Unordered Priority)"
 
-  val exe_units_str = exe_units.toString
-  val fp_pipeline_str =
-    if (usingFPU) fp_pipeline.fp_string
+  val exeUnitsStr = exe_units.toString
+  val fpPipelineStr =
+    if (usingFPU) fp_pipeline.fpString
     else ""
-  val rob_str = rob.toString
+  val robStr = rob.toString
 
   override def toString: String =
-    ( exe_units_str + "\n"
-    + fp_pipeline_str + "\n"
-    + rob_str + "\n"
+    ( exeUnitsStr + "\n"
+    + fpPipelineStr + "\n"
+    + robStr + "\n"
     + "\n   ==Overall Core Params=="
     + "\n   Fetch Width           : " + fetchWidth
     + "\n   Decode Width          : " + coreWidth
     + "\n   Issue Width           : " + issueParams.map(_.issueWidth).sum
     + "\n   ROB Size              : " + numRobEntries
-    + "\n   Issue Window Size     : " + issueParams.map(_.numEntries) + iss_str
+    + "\n   Issue Window Size     : " + issueParams.map(_.numEntries) + issStr
     + "\n   Load/Store Unit Size  : " + NUM_LDQ_ENTRIES + "/" + NUM_STQ_ENTRIES
     + "\n   Num Int Phys Registers: " + numIntPhysRegs
     + "\n   Num FP  Phys Registers: " + numFpPhysRegs
@@ -884,7 +886,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
   csr.io.fcsr_flags.valid := rob.io.commit.fflags.valid
   csr.io.fcsr_flags.bits  := rob.io.commit.fflags.bits
 
-  exe_units.withFilter(_.has_fcsr).map(_.io.fcsr_rm := csr.io.fcsr_rm)
+  exe_units.withFilter(_.hasFcsr).map(_.io.fcsr_rm := csr.io.fcsr_rm)
   io.fcsr_rm := csr.io.fcsr_rm
 
   if (usingFPU) {
@@ -964,7 +966,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
   lsu.io.release := io.release
 
   if (usingFPU) {
-    lsu.io.fp_stdata <> fp_pipeline.io.tosdq
+    lsu.io.fp_stdata <> fp_pipeline.io.to_sdq
   }
 
   //-------------------------------------------------------------
@@ -1015,9 +1017,9 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
   if (usingFPU) {
     // Connect IFPU
-    fp_pipeline.io.fromint  <> exe_units.ifpu_unit.io.ll_fresp
+    fp_pipeline.io.from_int <> exe_units.ifpu_unit.io.ll_fresp
     // Connect FPIU
-    ll_wbarb.io.in(1)       <> fp_pipeline.io.toint
+    ll_wbarb.io.in(1)       <> fp_pipeline.io.to_int
     // Connect FLDs
     fp_pipeline.io.ll_wport <> exe_units.memory_unit.io.ll_fresp
   }

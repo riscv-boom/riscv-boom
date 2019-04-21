@@ -57,7 +57,7 @@ class CtrlSigs extends Bundle
   val fp_val          = Bool()
   val fp_single       = Bool()
   val uopc            = UInt(UOPC_SZ.W)
-  val iqtype          = UInt(IQT_SZ.W)
+  val iq_type         = UInt(IQT_SZ.W)
   val fu_code         = UInt(FUC_SZ.W)
   val dst_type        = UInt(2.W)
   val rs1_type        = UInt(2.W)
@@ -85,7 +85,7 @@ class CtrlSigs extends Bundle
   def decode(inst: UInt, table: Iterable[(BitPat, List[BitPat])]) = {
     val decoder = freechips.rocketchip.rocket.DecodeLogic(inst, XDecode.decode_default, table)
     val sigs =
-      Seq(legal, fp_val, fp_single, uopc, iqtype, fu_code, dst_type, rs1_type,
+      Seq(legal, fp_val, fp_single, uopc, iq_type, fu_code, dst_type, rs1_type,
           rs2_type, frs3_en, imm_sel, is_load, is_store, is_amo,
           is_fence, is_fencei, mem_cmd, mem_typ, wakeup_delay, bypassable,
           br_or_jmp, is_jal, allocate_brtag, is_sys_pc2epc, inst_unique, flush_on_commit, csr_cmd)
@@ -517,9 +517,9 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule
   //-------------------------------------------------------------
 
   uop.uopc       := cs.uopc
-  uop.iqtype     := cs.iqtype
+  uop.iq_type    := cs.iq_type
   if (usingUnifiedMemIntIQs) {
-    when (cs.iqtype === IQT_MEM) { uop.iqtype := IQT_INT }
+    when (cs.iq_type === IQT_MEM) { uop.iq_type := IQT_INT }
   }
   uop.fu_code    := cs.fu_code
 
@@ -585,8 +585,7 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule
 
 class BranchDecode(implicit p: Parameters) extends BoomModule
 {
-  val io = IO(new Bundle
-  {
+  val io = IO(new Bundle {
     val inst    = Input(UInt(32.W))
     val pc      = Input(UInt(vaddrBitsExtended.W))
     val is_br   = Output(Bool())
@@ -654,8 +653,7 @@ class DebugBranchMaskGenerationLogicIO(implicit p: Parameters) extends BoomBundl
  */
 class BranchMaskGenerationLogic(val pl_width: Int)(implicit p: Parameters) extends BoomModule
 {
-  val io = IO(new Bundle
-  {
+  val io = IO(new Bundle {
     // guess if the uop is a branch (we'll catch this later)
     val is_branch = Input(Vec(pl_width, Bool()))
     // lock in that it's actually a branch and will fire, so we update

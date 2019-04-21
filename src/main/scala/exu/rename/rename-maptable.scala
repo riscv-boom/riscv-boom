@@ -157,8 +157,7 @@ class RenameMapTable(
 {
   private val pregSz = log2Ceil(numPregs)
 
-  val io = IO(new BoomBundle
-  {
+  val io = IO(new BoomBundle {
     // Inputs
     val brinfo           = Input(new BrResolutionInfo())
     val kill             = Input(Bool())
