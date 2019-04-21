@@ -20,7 +20,6 @@
 //
 // NOTES:
 //    - Currently we do not compress out bubbles in the ROB.
-//    - commit_coreWidth is tied directly to the dispatchWidth.
 //    - Exceptions are only taken when at the head of the commit bundle --
 //      this helps deal with loads, stores, and refetch instructions.
 

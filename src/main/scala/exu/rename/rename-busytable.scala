@@ -132,8 +132,7 @@ class BusyTable(
 {
   private val pregSz = log2Ceil(numPregs)
 
-  val io = IO(new Bundle
-  {
+  val io = IO(new Bundle {
     // Inputs
     val ren_will_fire         = Input(Vec(plWidth, Bool()))
     val ren_uops              = Input(Vec(plWidth, new MicroOp()))
@@ -190,10 +189,10 @@ class BusyTable(
                               (busy_table.io.prs_busy(1,w) || prs2_was_bypassed(w))
 
     if (rtype == RT_FLT.litValue) {
-       busy_table.io.prs(2,w) := io.map_table(w).prs3
-       io.values(w).prs3_busy := (io.ren_uops(w).frs3_en) && (busy_table.io.prs_busy(2,w) || prs3_was_bypassed(w))
+      busy_table.io.prs(2,w) := io.map_table(w).prs3
+      io.values(w).prs3_busy := (io.ren_uops(w).frs3_en) && (busy_table.io.prs_busy(2,w) || prs3_was_bypassed(w))
     } else {
-       io.values(w).prs3_busy := false.B
+      io.values(w).prs3_busy := false.B
     }
 
     // Updating the Table (new busy register)

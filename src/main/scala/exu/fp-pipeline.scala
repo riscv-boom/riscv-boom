@@ -33,8 +33,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
   val numWakeupPorts = fpIssueParams.issueWidth + numLlPorts
   val fpPregSz = log2Ceil(numFpPhysRegs)
 
-  val io = IO(new Bundle
-  {
+  val io = IO(new Bundle {
     val brinfo           = Input(new BrResolutionInfo())
     val flush_pipeline   = Input(Bool())
     val fcsr_rm          = Input(UInt(width=freechips.rocketchip.tile.FPConstants.RM_SZ.W))
@@ -43,9 +42,9 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
 
     // +1 for recoding.
     val ll_wport         = Flipped(Decoupled(new ExeUnitResp(fLen+1)))// from memory unit
-    val fromint          = Flipped(Decoupled(new ExeUnitResp(fLen+1)))// from integer RF
-    val tosdq            = Valid(new MicroOpWithData(fLen))           // to Load/Store Unit
-    val toint            = Decoupled(new ExeUnitResp(xLen))           // to integer RF
+    val from_int         = Flipped(Decoupled(new ExeUnitResp(fLen+1)))// from integer RF
+    val to_sdq           = Valid(new MicroOpWithData(fLen))           // to Load/Store Unit
+    val to_int           = Decoupled(new ExeUnitResp(xLen))           // to integer RF
 
     val wakeups          = Vec(numWakeupPorts, Valid(new ExeUnitResp(fLen+1)))
     val wb_valids        = Input(Vec(numWakeupPorts, Bool()))
@@ -162,7 +161,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
   //-------------------------------------------------------------
 
   val ll_wbarb = Module(new Arbiter(new ExeUnitResp(fLen+1), 2))
-  val ifpu_resp = io.fromint
+  val ifpu_resp = io.from_int
 
   // Hookup load writeback -- and recode FP values.
   ll_wbarb.io.in(0) <> io.ll_wport
@@ -199,9 +198,9 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
   require (w_cnt == fregfile.io.write_ports.length)
 
   val fpiu_unit = exe_units.fpiu_unit
-  io.toint <> fpiu_unit.io.ll_iresp
-  io.tosdq.valid := fpiu_unit.io.iresp.valid
-  io.tosdq.bits  := fpiu_unit.io.iresp.bits
+  io.to_int <> fpiu_unit.io.ll_iresp
+  io.to_sdq.valid := fpiu_unit.io.iresp.valid
+  io.to_sdq.bits  := fpiu_unit.io.iresp.bits
   fpiu_unit.io.iresp.ready := true.B
 
   //-------------------------------------------------------------
@@ -246,7 +245,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
     exe_units(w).io.req.bits.kill := io.flush_pipeline
   }
 
-  val fp_string = exe_units.toString
+  val fpString = exe_units.toString
   override def toString: String =
     fregfile.toString +
     "\n   Num Wakeup Ports      : " + numWakeupPorts +

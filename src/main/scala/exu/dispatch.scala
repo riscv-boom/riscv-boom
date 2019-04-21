@@ -58,7 +58,7 @@ class BasicDispatcher(implicit p: Parameters) extends Dispatcher
       val issueParam = issueParams(i)
       val dis        = io.dis_uops(i)
 
-      dis(w).valid := io.ren_uops(w).valid && ((io.ren_uops(w).bits.iqtype & issueParam.iqType.U) =/= 0.U)
+      dis(w).valid := io.ren_uops(w).valid && ((io.ren_uops(w).bits.iq_type & issueParam.iqType.U) =/= 0.U)
       dis(w).bits  := io.ren_uops(w).bits
    }
 }

@@ -60,20 +60,20 @@ class FFlagsResp(implicit p: Parameters) extends BoomBundle
  * @param writesLlIrf does this exe unit need a long latency integer regfile port
  * @param writesFrf does this exe unit need a FP regfile port
  * @param writesLlFrf does this exe unit need a long latency FP regfile port
- * @param num_bypass_ports number of bypass ports for the exe unit
+ * @param numBypassPorts number of bypass ports for the exe unit
  * @param dataWidth width of the data coming out of the execution unit
  */
 class ExecutionUnitIO(
-  val writesIrf        : Boolean,
-  val writesLlIrf      : Boolean,
-  val writesFrf        : Boolean,
-  val writesLlFrf      : Boolean,
-  val hasRocc          : Boolean,
-  val hasBrUnit        : Boolean,
-  val has_fcsr         : Boolean,
-  val hasMem           : Boolean,
-  val num_bypass_ports : Int,
-  val dataWidth        : Int
+  val writesIrf      : Boolean,
+  val writesLlIrf    : Boolean,
+  val writesFrf      : Boolean,
+  val writesLlFrf    : Boolean,
+  val hasRocc        : Boolean,
+  val hasBrUnit      : Boolean,
+  val hasFcsr        : Boolean,
+  val hasMem         : Boolean,
+  val numBypassPorts : Int,
+  val dataWidth      : Int
   )(implicit p: Parameters) extends BoomBundle
 {
   // describe which functional units we support (used by the issue window)
@@ -87,7 +87,7 @@ class ExecutionUnitIO(
   val ll_fresp = if (writesLlFrf) new DecoupledIO(new ExeUnitResp(dataWidth)) else null
 
 
-  val bypass   = Output(new BypassData(num_bypass_ports, dataWidth))
+  val bypass   = Output(new BypassData(numBypassPorts, dataWidth))
   val brinfo   = Input(new BrResolutionInfo())
 
 
@@ -100,7 +100,7 @@ class ExecutionUnitIO(
   val status     = if (hasBrUnit || hasRocc) Input(new freechips.rocketchip.rocket.MStatus()) else null
 
   // only used by the fpu unit
-  val fcsr_rm = if (has_fcsr) Input(Bits(tile.FPConstants.RM_SZ.W)) else null
+  val fcsr_rm = if (hasFcsr) Input(Bits(tile.FPConstants.RM_SZ.W)) else null
 
   // only used by the mem unit
   val lsu_io        = if (hasMem) Flipped(new boom.lsu.LoadStoreUnitIO(coreWidth)) else null
@@ -171,7 +171,7 @@ abstract class ExecutionUnit(
 
   require ((hasFpu || hasFdiv) ^ (hasAlu || hasMul || hasMem || hasIfpu),
     "[execute] we no longer support mixing FP and Integer functional units in the same exe unit.")
-  def has_fcsr = hasIfpu || hasFpu || hasFdiv
+  def hasFcsr = hasIfpu || hasFpu || hasFdiv
 
   require (bypassable || !alwaysBypassable,
     "[execute] an execution unit must be bypassable if it is always bypassable")
@@ -454,8 +454,8 @@ class ALUExeUnit(
     // pulled out for critical path reasons
     // TODO: Does this make sense as part of the iresp bundle?
     if (hasAlu) {
-       io.iresp.bits.uop.csr_addr := ImmGen(alu.io.resp.bits.uop.imm_packed, IS_I).asUInt
-       io.iresp.bits.uop.ctrl.csr_cmd := alu.io.resp.bits.uop.ctrl.csr_cmd
+      io.iresp.bits.uop.csr_addr := ImmGen(alu.io.resp.bits.uop.imm_packed, IS_I).asUInt
+      io.iresp.bits.uop.ctrl.csr_cmd := alu.io.resp.bits.uop.ctrl.csr_cmd
     }
   }
 

@@ -48,7 +48,7 @@ class RegisterFileSeqCustomArray(
 
   // decode addrs into OH's
   val waddr_OH = Wire(Vec(numWritePorts, UInt(numRegisters.W)))
-  val raddr_OH = Reg(Vec( numReadPorts, UInt(numRegisters.W)))
+  val raddr_OH = Reg( Vec(numReadPorts , UInt(numRegisters.W)))
 
   for (w <-0 until numWritePorts) {
     regfile.io.WD(w) := io.write_ports(w).bits.data
@@ -133,8 +133,7 @@ trait HasRegisterFileIO extends chisel3.experimental.BaseModule
   val numWritePorts: Int
   val registerWidth: Int
 
-  val io = IO(new Bundle
-  {
+  val io = IO(new Bundle {
     val clock = Input(Clock())
     val WE = Input(Vec(numRegisters, Bool()))
     val WD = Input(Vec(numWritePorts, UInt(registerWidth.W)))
@@ -219,8 +218,7 @@ class RegFileRegisterModel(
   numWritePorts: Int,
   registerWidth: Int) extends Module
 {
-  val io = IO(new Bundle
-  {
+  val io = IO(new Bundle {
     val we = Input(Bool())
     val ws = Input(UInt(log2Ceil(numWritePorts).W))
     val wd = Input(Vec(numWritePorts, UInt(registerWidth.W)))
@@ -253,8 +251,7 @@ class RegFileBitModel(
   numReadPorts: Int,
   numWritePorts: Int) extends Module
 {
-  val io = IO(new Bundle
-  {
+  val io = IO(new Bundle {
     val we  = Input(Bool())
     val ws  = Input(UInt(log2Ceil(numWritePorts).W))
     val wd  = Input(Vec(numWritePorts, Bool()))

@@ -80,8 +80,7 @@ abstract class RegisterFile(
   bypassableArray: Seq[Boolean]) // which write ports can be bypassed to the read ports?
   (implicit p: Parameters) extends BoomModule
 {
-  val io = IO(new BoomBundle
-  {
+  val io = IO(new BoomBundle {
     val read_ports = Vec(numReadPorts, new RegisterFileReadPortIO(PREG_SZ, registerWidth))
     val write_ports = Flipped(Vec(numWritePorts, Valid(new RegisterFileWritePort(PREG_SZ, registerWidth))))
   })
