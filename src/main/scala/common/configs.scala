@@ -47,7 +47,7 @@ class DefaultBoomConfig extends Config((site, here, up) => {
          numLdqEntries = 32,
          numStqEntries = 18,
          maxBrCount = 16,
-         ftq = FtqParameters(nEntries=25),
+         ftq = FtqParameters(nEntries=32),
          btb = BoomBTBParameters(btbsa=true, densebtb=false, nSets=512, nWays=4, nRAS=16, tagSz=13),
          bpdBaseOnly = None,
          gshare = None,
@@ -132,7 +132,6 @@ class WithRVC extends Config((site, here, up) => {
    case BoomTilesKey => up(BoomTilesKey, site) map {r => r.copy(
       core = r.core.copy(
          fetchWidth = r.core.fetchWidth * 2,
-         ftq = FtqParameters(r.core.ftq.nEntries * 2/3),  // Assume ~67% of instructions are compressed.
          useCompressed = true))}
 })
 
@@ -184,8 +183,7 @@ class WithMediumBooms extends Config((site, here, up) => {
          numLdqEntries = 16,
          numStqEntries = 9,
          maxBrCount = 8,
-         renameLatency = 2,
-         ftq = FtqParameters(nEntries=24),
+         ftq = FtqParameters(nEntries=32),
          btb = BoomBTBParameters(btbsa=true, densebtb=false, nSets=64, nWays=2,
                                  nRAS=8, tagSz=20, bypassCalls=false, rasCheckForEmpty=false),
          bpdBaseOnly = None,
@@ -218,7 +216,7 @@ class WithMegaBooms extends Config((site, here, up) => {
          numLdqEntries = 32,
          numStqEntries = 16,
          maxBrCount = 16,
-         ftq = FtqParameters(nEntries=24),
+         ftq = FtqParameters(nEntries=32),
          btb = BoomBTBParameters(btbsa=true, densebtb=false, nSets=512, nWays=4, nRAS=16, tagSz=20),
          bpdBaseOnly = None,
          gshare = None,
