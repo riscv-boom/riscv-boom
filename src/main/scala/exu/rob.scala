@@ -722,9 +722,13 @@ class Rob(
     if (coreWidth > 1)
       rob_pnr_lsb := next_rob_pnr_idx(log2Ceil(coreWidth)-1, 0)
   } else {
+    // Distinguish between PNR being at head/tail when ROB is full.
+    // Works the same as maybe_full tracking for the ROB tail.
+    val pnr_maybe_at_tail = RegInit(false.B)
+
     val safe_to_inc    = rob_state === s_normal || rob_state === s_wait_till_empty
-    val do_inc_row     = !rob_pnr_unsafe.reduce(_||_) && rob_pnr =/= rob_tail
-    val do_inc_partial = !rob_pnr_unsafe(rob_pnr_lsb) && (rob_pnr =/= rob_tail || !full && rob_tail_vals(rob_pnr_lsb))
+    val do_inc_row     = !rob_pnr_unsafe.reduce(_||_) && (rob_pnr =/= rob_tail || full && !pnr_maybe_at_tail)
+    val do_inc_partial = !rob_pnr_unsafe(rob_pnr_lsb) && (rob_pnr =/= rob_tail || !(full && pnr_maybe_at_tail) && rob_tail_vals(rob_pnr_lsb))
     when (empty && io.enq_valids.asUInt =/= 0.U) {
       // Unforunately for us, the ROB does not use its entries in monotonically
       //  increasing order, even in the case of no exceptions. The edge case
@@ -739,6 +743,8 @@ class Rob(
       // TODO: Fix this, this needs to be faster for coreWidth > 2
       rob_pnr_lsb := rob_pnr_lsb + 1.U
     }
+
+    pnr_maybe_at_tail := !rob_deq && (do_inc_row || pnr_maybe_at_tail)
   }
 
   // Head overrunning PNR likely means an entry hasn't been marked as safe when it should have been.
