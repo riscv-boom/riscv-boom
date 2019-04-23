@@ -254,7 +254,6 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
    require (numIntPhysRegs >= (32 + coreWidth))
    require (numFpPhysRegs >= (32 + coreWidth))
    require (MAX_BR_COUNT >=2)
-   require (numRobRows % 2 == 0)
    require (numRobEntries % coreWidth == 0)
    require ((NUM_LDQ_ENTRIES-1) > coreWidth)
    require ((NUM_STQ_ENTRIES-1) > coreWidth)
