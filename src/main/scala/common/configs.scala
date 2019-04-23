@@ -132,6 +132,7 @@ class WithRVC extends Config((site, here, up) => {
    case BoomTilesKey => up(BoomTilesKey, site) map {r => r.copy(
       core = r.core.copy(
          fetchWidth = r.core.fetchWidth * 2,
+         fetchBufferSz = r.core.fetchBufferSz / 2,
          useCompressed = true))}
 })
 
