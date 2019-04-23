@@ -352,9 +352,26 @@ object AgePriorityEncoder
  */
 object IsOlder
 {
-   def apply(i0: UInt, i1: UInt, head: UInt) = ((i0 < i1) ^ (i0 < head) ^ (i1 < head))
+  def apply(i0: UInt, i1: UInt, head: UInt) = ((i0 < i1) ^ (i0 < head) ^ (i1 < head))
 }
 
+/**
+  * Object to determine whether queue
+  * index i0 is older than index i1.
+  *
+  * is i0 older than i1? (closest to zero). Provide the tail_ptr to the
+  *  queue. This is Cat(i1 <= tail, i1) because the rob_tail can point to a
+  * valid (partially dispatched) row.
+ */
+object MaskLower
+{
+  def apply(in: UInt) = (0 until in.getWidth).map(i => in >> i.U).reduce(_|_)
+}
+
+object MaskUpper
+{
+  def apply(in: UInt) = (0 until in.getWidth).map(i => in << i.U).reduce(_|_)
+}
 
 /**
  * Create a queue that can be killed with a branch kill signal.
