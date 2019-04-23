@@ -125,6 +125,7 @@ class CommitSignals(implicit p: Parameters) extends BoomBundle
 
   // Perform rollback of rename state (in conjuction with commit.uops).
   val rbk_valids = Vec(retireWidth, Bool())
+  val rollback   = Bool()
 
   // tell the LSU how many stores and loads are being committed
   val st_mask    = Vec(retireWidth, Bool())
@@ -402,9 +403,6 @@ class Rob(
     //-----------------------------------------------
     // Commit or Rollback
 
-    // Don't attempt to rollback the tail's row when the rob is full.
-    val rbk_row = rob_state === s_rollback && !full
-
     // Can this instruction commit? (the check for exceptions/rob_state happens later).
     can_commit(w) := rob_val(rob_head) && !(rob_bsy(rob_head)) && !io.csr_stall
 
@@ -416,14 +414,13 @@ class Rob(
 
     // use the same "com_uop" for both rollback AND commit
     // Perform Commit
-    io.commit.valids(w)     := will_commit(w)
-    io.commit.uops(w)       := rob_uop(com_idx)
+    io.commit.valids(w) := will_commit(w)
+    io.commit.uops(w)   := rob_uop(com_idx)
 
-    io.commit.rbk_valids(w) :=
-                            rbk_row &&
-                            rob_val(com_idx) &&
-                            (rob_uop(com_idx).dst_rtype === RT_FIX || rob_uop(com_idx).dst_rtype === RT_FLT) &&
-                            (!(ENABLE_COMMIT_MAP_TABLE.B))
+    // Don't attempt to rollback the tail's row when the rob is full.
+    val rbk_row = rob_state === s_rollback && !full
+
+    io.commit.rbk_valids(w) := rbk_row && rob_val(com_idx) && (!(ENABLE_COMMIT_MAP_TABLE.B))
 
     when (rbk_row) {
       rob_val(com_idx)       := false.B
@@ -433,8 +430,8 @@ class Rob(
     if (ENABLE_COMMIT_MAP_TABLE) {
       when (RegNext(exception_thrown)) {
         for (i <- 0 until numRobRows) {
-          rob_val(i)      := false.B
-          rob_bsy(i)      := false.B
+          rob_val(i) := false.B
+          rob_bsy(i) := false.B
           rob_uop(i).debug_inst := BUBBLE
         }
       }
@@ -869,6 +866,8 @@ class Rob(
       }
     }
   }
+
+  io.commit.rollback := rob_state === s_rollback
 
   // -----------------------------------------------
   // Outputs

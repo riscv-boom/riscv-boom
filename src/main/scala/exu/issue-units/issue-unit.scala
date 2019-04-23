@@ -133,6 +133,7 @@ abstract class IssueUnit(
         dis_uops(w).lrs2_rtype := RT_X
         dis_uops(w).prs2_busy  := false.B
       }
+      dis_uops(w).prs3_busy := false.B
     } else if (iqType == IQT_FP.litValue) {
       // FP "StoreAddrGen" is really storeDataGen, and rs1 is the integer address register
       when (io.dis_uops(w).bits.uopc === uopSTA) {
