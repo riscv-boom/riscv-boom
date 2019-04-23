@@ -74,7 +74,8 @@ class RenameStageIO(
   // commit stage
   val com_valids = Input(Vec(plWidth, Bool()))
   val com_uops = Input(Vec(plWidth, new MicroOp()))
-  val com_rbk_valids = Input(Vec(plWidth, Bool()))
+  val rbk_valids = Input(Vec(plWidth, Bool()))
+  val rollback = Input(Bool())
 
   val flush_pipeline = Input(Bool()) // only used for SCR (single-cycle reset)
 
@@ -117,82 +118,104 @@ class RenameStage(
   // integer registers
   val imaptable = Module(new RenameMapTable(
     plWidth,
-    RT_FIX.litValue,
     32,
-    numIntPhysRegs))
+    numIntPhysRegs,
+    false))
   val ifreelist = Module(new RenameFreeList(
     plWidth,
-    RT_FIX.litValue,
-    numIntPhysRegs))
-  val ibusytable = Module(new BusyTable(
+    numIntPhysRegs,
+    false))
+  val ibusytable = Module(new RenameBusyTable(
     plWidth,
-    RT_FIX.litValue,
-    numPregs = numIntPhysRegs,
-    numReadPorts = plWidth*2,
-    numWbPorts = numIntWbPorts))
+    numIntPhysRegs,
+    numIntWbPorts,
+    false))
 
   // floating point registers
   var fmaptable: RenameMapTable = null
   var ffreelist: RenameFreeList = null
-  var fbusytable: BusyTable = null
+  var fbusytable: RenameBusyTable = null
 
   if (usingFPU) {
     fmaptable = Module(new RenameMapTable(
-       plWidth,
-       RT_FLT.litValue,
-       32,
-       numFpPhysRegs))
+      plWidth,
+      32,
+      numFpPhysRegs,
+      true))
     ffreelist = Module(new RenameFreeList(
-       plWidth,
-       RT_FLT.litValue,
-       numFpPhysRegs))
-    fbusytable = Module(new BusyTable(
-       plWidth,
-       RT_FLT.litValue,
-       numPregs = numFpPhysRegs,
-       numReadPorts = plWidth*3,
-       numWbPorts = numFpWbPorts))
+      plWidth,
+      numFpPhysRegs,
+      true))
+    fbusytable = Module(new RenameBusyTable(
+      plWidth,
+      numFpPhysRegs,
+      numFpWbPorts,
+      true))
   }
 
   //-------------------------------------------------------------
   // Pipeline State & Wires
 
-  val ren1_br_vals   = Wire(Vec(plWidth, Bool()))
+  val ren1_br_tags   = Wire(Vec(plWidth, Valid(UInt(BR_TAG_SZ.W))))
   val ren1_will_fire = Wire(Vec(plWidth, Bool()))
   val ren1_uops      = Wire(Vec(plWidth, new MicroOp()))
 
+  val ren1_int_req_alloc = Wire(Vec(plWidth, Bool()))
+  val ren1_fp_req_alloc  = Wire(Vec(plWidth, Bool()))
+
+  val rob_int_ldst_vals  = Wire(Vec(plWidth, Bool()))
+  val rob_fp_ldst_vals   = Wire(Vec(plWidth, Bool()))
+
+  val ren2_int_req_alloc = Wire(Vec(plWidth, Bool()))
+  val ren2_fp_req_alloc  = Wire(Vec(plWidth, Bool()))
+
   val ren2_valids    = Wire(Vec(plWidth, Bool()))
   val ren2_uops      = Wire(Vec(plWidth, new MicroOp()))
+  val ren2_will_fire = ren2_valids zip io.dis_inst_can_proceed map {case (v,c) => v && c && !io.kill}
 
   for (w <- 0 until plWidth) {
-    // TODO silly, we've already verified this beforehand on the inst_can_proceed
-    ren1_will_fire(w) := io.dec_will_fire(w) && io.inst_can_proceed(w) && !io.kill
-    ren1_uops(w)      := GetNewUopAndBrMask(io.dec_uops(w), io.brinfo)
-    ren1_br_vals(w)   := io.dec_will_fire(w) && io.dec_uops(w).allocate_brtag
+    ren1_will_fire(w) := io.dec_will_fire(w)
+    ren1_uops(w)      := io.dec_uops(w)
+    ren1_br_tags(w).valid := ren1_will_fire(w) && io.dec_uops(w).allocate_brtag
+    ren1_br_tags(w).bits  := io.dec_uops(w).br_tag
+
+    ren1_int_req_alloc(w) := ren1_uops(w).ldst_val && ren1_uops(w).dst_rtype === RT_FIX && ren1_will_fire(w)
+    ren1_fp_req_alloc(w)  := ren1_uops(w).ldst_val && ren1_uops(w).dst_rtype === RT_FLT && ren1_will_fire(w)
+
+    ren2_int_req_alloc(w) := ren2_uops(w).ldst_val && ren2_uops(w).dst_rtype === RT_FIX && ren2_will_fire(w)
+    ren2_fp_req_alloc(w)  := ren2_uops(w).ldst_val && ren2_uops(w).dst_rtype === RT_FLT && ren2_will_fire(w)
+
+    rob_int_ldst_vals(w)  := io.com_uops(w).ldst_val && io.com_uops(w).dst_rtype === RT_FIX
+    rob_fp_ldst_vals(w)   := io.com_uops(w).ldst_val && io.com_uops(w).dst_rtype === RT_FLT
   }
+
+  var ren1_alloc_reqs = Seq(ren1_int_req_alloc)
+  if (usingFPU) ren1_alloc_reqs ++= Seq(ren1_fp_req_alloc)
+
+  var rob_ldst_vals = Seq(rob_int_ldst_vals)
+  if (usingFPU) rob_ldst_vals ++= Seq(rob_fp_ldst_vals)
 
   //-------------------------------------------------------------
   // Free List
 
   var freelists = Seq(ifreelist)
   if (usingFPU) freelists ++= Seq(ffreelist)
-  for (list <- freelists) {
+  for ((list, i) <- freelists.zipWithIndex) {
+    list.io.reqs := ren1_alloc_reqs(i)
     list.io.brinfo := io.brinfo
-    list.io.kill := io.kill
-    list.io.ren_will_fire := ren1_will_fire
-    list.io.ren_uops := ren1_uops
-    list.io.ren_br_vals := ren1_br_vals
-    list.io.com_valids := io.com_valids
-    list.io.com_uops := io.com_uops
-    list.io.com_rbk_valids := io.com_rbk_valids
-    list.io.flush_pipeline := io.flush_pipeline
-    list.io.debug_rob_empty := io.debug_rob_empty
+    list.io.ren_br_tags := ren1_br_tags
+    list.io.rob_uops := io.com_uops
+    list.io.com_valids := io.com_valids zip rob_ldst_vals(i) map {case (v,l) => v && l}
+    list.io.rbk_valids := io.rbk_valids zip rob_ldst_vals(i) map {case (r,l) => r && l}
+    list.io.rollback := io.rollback
+    list.io.debug.rob_empty := io.debug_rob_empty
   }
 
   for ((uop, w) <- ren1_uops.zipWithIndex) {
-    val i_preg = ifreelist.io.req_pregs(w)
-    val f_preg = if (usingFPU) ffreelist.io.req_pregs(w) else 0.U
-    uop.pdst := Mux(uop.dst_rtype === RT_FLT, f_preg, i_preg)
+    val i_preg = ifreelist.io.alloc_pregs(w)
+    val f_preg = if (usingFPU) ffreelist.io.alloc_pregs(w) else 0.U
+    uop.pdst := Mux(uop.dst_rtype === RT_FLT, f_preg,
+                Mux(uop.ldst =/= 0.U, i_preg, 0.U))
   }
 
   //-------------------------------------------------------------
@@ -200,55 +223,46 @@ class RenameStage(
 
   var maptables = Seq(imaptable)
   if (usingFPU) maptables ++= Seq(fmaptable)
-  for (table <- maptables) {
+  for ((table, i) <- maptables.zipWithIndex) {
     table.io.brinfo := io.brinfo
-    table.io.kill := io.kill
-    table.io.ren_will_fire := ren1_will_fire
     table.io.ren_uops := ren1_uops // expects pdst to be set up
-    table.io.ren_br_vals := ren1_br_vals
-    table.io.com_valids := io.com_valids
-    table.io.com_uops := io.com_uops
-    table.io.com_rbk_valids := io.com_rbk_valids
-    table.io.flush_pipeline := io.flush_pipeline
-    table.io.debug_inst_can_proceed := io.inst_can_proceed
-  }
-  imaptable.io.debug_freelist_can_allocate := ifreelist.io.can_allocate
-  if (usingFPU) {
-    fmaptable.io.debug_freelist_can_allocate := ffreelist.io.can_allocate
+    table.io.ren_remap_reqs := ren1_alloc_reqs(i)
+    table.io.ren_br_tags := ren1_br_tags
+    table.io.rbk_uops := io.com_uops
+    table.io.rbk_valids := io.rbk_valids zip rob_ldst_vals(i) map {case (r,l) => r && l}
+    table.io.rollback := io.rollback
   }
 
   for ((uop, w) <- ren1_uops.zipWithIndex) {
-    val imap = imaptable.io.values(w)
-    val fmap = if (usingFPU) fmaptable.io.values(w) else Wire(new MapTableOutput(1))
+    val imap = imaptable.io.map_resps(w)
+    val fmap = if (usingFPU) fmaptable.io.map_resps(w) else Wire(new MapResp(FPREG_SZ))
     if (!usingFPU) fmap := DontCare
 
-    uop.prs1       := Mux(uop.lrs1_rtype === RT_FLT, fmap.prs1, imap.prs1)
-    uop.prs2       := Mux(uop.lrs2_rtype === RT_FLT, fmap.prs2, imap.prs2)
-    uop.prs3       := fmap.prs3 // only FP has 3rd operand
-    uop.stale_pdst := Mux(uop.dst_rtype === RT_FLT,  fmap.stale_pdst, imap.stale_pdst)
+    uop.pop1       := Mux(uop.lrs1_rtype === RT_FLT, fmap.prs1,
+                      Mux(uop.lrs1_rtype === RT_FIX, imap.prs1, uop.lrs1)) // lrs1 can "pass through" to prs1
+    uop.pop2       := Mux(uop.lrs2_rtype === RT_FLT, fmap.prs2, imap.prs2)
+    uop.pop3       := fmap.prs3 // only FP has 3rd operand
+    uop.stale_pdst := Mux(uop.dst_rtype  === RT_FLT, fmap.stale_pdst, imap.stale_pdst)
   }
 
   //-------------------------------------------------------------
   // pipeline registers
-
-  val ren2_will_fire = ren2_valids zip io.dis_inst_can_proceed map {case (v,c) => v && c && !io.kill}
 
   // will ALL ren2 uops proceed to dispatch?
   val ren2_will_proceed =
     if (renameLatency == 2) (ren2_valids zip ren2_will_fire map {case (v,f) => (v === f)}).reduce(_&_)
     else io.dis_inst_can_proceed.reduce(_&_)
 
-
-  val ren2_imapvalues = if (renameLatency == 2) RegEnable(imaptable.io.values, ren2_will_proceed)
-                        else imaptable.io.values
-  val ren2_fmapvalues = if (renameLatency == 2 && usingFPU) RegEnable(fmaptable.io.values, ren2_will_proceed)
-                        else if (usingFPU) fmaptable.io.values
-                        else new MapTableOutput(1)
+  val ren2_imap_resps = if (renameLatency == 2) RegEnable(imaptable.io.map_resps, ren2_will_proceed)
+                        else imaptable.io.map_resps
+  val ren2_fmap_resps = if (renameLatency == 2 && usingFPU) RegEnable(fmaptable.io.map_resps, ren2_will_proceed)
+                        else if (usingFPU) fmaptable.io.map_resps
+                        else new MapResp(1)
 
   for (w <- 0 until plWidth) {
     if (renameLatency == 1) {
       ren2_valids(w) := ren1_will_fire(w)
-      ren2_uops(w)   := GetNewUopAndBrMask(ren1_uops(w), io.brinfo)
+      ren2_uops(w)   := ren1_uops(w)
     } else {
       require (renameLatency == 2)
       val r_valid = RegInit(false.B)
@@ -257,24 +271,24 @@ class RenameStage(
       when (io.kill) {
         r_valid := false.B
       } .elsewhen (ren2_will_proceed) {
-         r_valid := ren1_will_fire(w)
-         r_uop := GetNewUopAndBrMask(ren1_uops(w), io.brinfo)
+        r_valid := ren1_will_fire(w)
+        r_uop := GetNewUopAndBrMask(ren1_uops(w), io.brinfo)
       } .otherwise {
-         r_valid := r_valid && !ren2_will_fire(w) // clear bit if uop gets dispatched
-         r_uop := GetNewUopAndBrMask(r_uop, io.brinfo)
+        r_valid := r_valid && !ren2_will_fire(w) // clear bit if uop gets dispatched
+        r_uop := GetNewUopAndBrMask(r_uop, io.brinfo)
       }
 
       ren2_valids(w) := r_valid
-      ren2_uops  (w) := r_uop
+      ren2_uops(w)   := r_uop
     }
   }
 
   //-------------------------------------------------------------
   // Busy Table
 
-  ibusytable.io.ren_will_fire := ren2_will_fire
   ibusytable.io.ren_uops := ren2_uops  // expects pdst to be set up.
-  ibusytable.io.map_table := ren2_imapvalues
+  ibusytable.io.busy_reqs := ren2_imap_resps
+  ibusytable.io.rebusy_reqs := ren2_int_req_alloc
   ibusytable.io.wb_valids := io.int_wakeups.map(_.valid)
   ibusytable.io.wb_pdsts := io.int_wakeups.map(_.bits.uop.pdst)
 
@@ -285,39 +299,38 @@ class RenameStage(
     assert (!(
       ren2_will_fire(w) &&
       ren2_uops(w).lrs1_rtype === RT_FIX &&
-      ren2_uops(w).prs1 =/= ibusytable.io.map_table(w).prs1),
+      ren2_uops(w).pop1 =/= ibusytable.io.busy_reqs(w).prs1),
       "[rename] ren2 maptable prs1 value don't match uop's values.")
     assert (!(
       ren2_will_fire(w) &&
       ren2_uops(w).lrs2_rtype === RT_FIX &&
-      ren2_uops(w).prs2 =/= ibusytable.io.map_table(w).prs2),
+      ren2_uops(w).pop2 =/= ibusytable.io.busy_reqs(w).prs2),
       "[rename] ren2 maptable prs2 value don't match uop's values.")
   }
 
   if (usingFPU) {
-    fbusytable.io.ren_will_fire := ren2_will_fire
-    // expects pdst to be set up.
-    fbusytable.io.ren_uops := ren2_uops
-    fbusytable.io.map_table := ren2_fmapvalues
+    fbusytable.io.ren_uops := ren2_uops  // expects pdst to be set up.
+    fbusytable.io.busy_reqs := ren2_fmap_resps
+    fbusytable.io.rebusy_reqs := ren2_fp_req_alloc
     fbusytable.io.wb_valids := io.fp_wakeups.map(_.valid)
     fbusytable.io.wb_pdsts := io.fp_wakeups.map(_.bits.uop.pdst)
 
     assert (!(io.fp_wakeups.map(x => x.valid && x.bits.uop.dst_rtype =/= RT_FLT).reduce(_|_)),
       "[rename] fp wakeup is not waking up a FP register.")
-   }
+  }
 
-   for ((uop, w) <- ren2_uops.zipWithIndex) {
-     val ibusy = ibusytable.io.values(w)
-     val fbusy = if (usingFPU) fbusytable.io.values(w) else Wire(new BusyTableOutput)
-     if (!usingFPU) fbusy := DontCare
+  for ((uop, w) <- ren2_uops.zipWithIndex) {
+    val ibusy = ibusytable.io.busy_resps(w)
+    val fbusy = if (usingFPU) fbusytable.io.busy_resps(w) else Wire(new BusyResp)
+    if (!usingFPU) fbusy := DontCare
 
-     uop.prs1_busy := Mux(uop.lrs1_rtype === RT_FLT, fbusy.prs1_busy, ibusy.prs1_busy)
-     uop.prs2_busy := Mux(uop.lrs2_rtype === RT_FLT, fbusy.prs2_busy, ibusy.prs2_busy)
-     uop.prs3_busy := fbusy.prs3_busy
+    uop.prs1_busy := uop.lrs1_rtype === RT_FIX && ibusy.prs1_busy || uop.lrs1_rtype === RT_FLT && fbusy.prs1_busy
+    uop.prs2_busy := uop.lrs2_rtype === RT_FIX && ibusy.prs2_busy || uop.lrs2_rtype === RT_FLT && fbusy.prs2_busy
+    uop.prs3_busy := uop.frs3_en && fbusy.prs3_busy
 
-     val valid = ren2_valids(w)
-     assert (!(valid && ibusy.prs1_busy && uop.lrs1_rtype === RT_FIX && uop.lrs1 === 0.U), "[rename] x0 is busy??")
-     assert (!(valid && ibusy.prs2_busy && uop.lrs2_rtype === RT_FIX && uop.lrs2 === 0.U), "[rename] x0 is busy??")
+    val valid = ren2_valids(w)
+    assert (!(valid && ibusy.prs1_busy && uop.lrs1_rtype === RT_FIX && uop.lrs1 === 0.U), "[rename] x0 is busy??")
+    assert (!(valid && ibusy.prs2_busy && uop.lrs2_rtype === RT_FIX && uop.lrs2 === 0.U), "[rename] x0 is busy??")
   }
 
   //-------------------------------------------------------------
@@ -330,19 +343,18 @@ class RenameStage(
   io.ren2_uops := ren2_uops map {u => GetNewUopAndBrMask(u, io.brinfo)}
 
   for (w <- 0 until plWidth) {
-    val ifl_can_proceed = ifreelist.io.can_allocate(w) && ren1_uops(w).dst_rtype === RT_FIX
-    val ffl_can_proceed =
+    val ifl_can_allocate = ifreelist.io.can_allocate(w)
+    val ffl_can_allocate =
       if (usingFPU) {
-        (ffreelist.io.can_allocate(w) && ren1_uops(w).dst_rtype === RT_FLT)
+        ffreelist.io.can_allocate(w)
       } else {
         false.B
       }
       // Push back against Decode stage if Rename1 can't proceed (and Rename2/Dispatch can't receive).
       io.inst_can_proceed(w) :=
-         ren2_will_proceed &&
-         ((ren1_uops(w).dst_rtype =/= RT_FIX && ren1_uops(w).dst_rtype =/= RT_FLT) ||
-         ifl_can_proceed ||
-         ffl_can_proceed)
+        ren2_will_proceed &&
+        (ren1_uops(w).dst_rtype =/= RT_FIX || ifl_can_allocate) &&
+        (ren1_uops(w).dst_rtype =/= RT_FLT || ffl_can_allocate)
   }
 
   //-------------------------------------------------------------

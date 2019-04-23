@@ -566,7 +566,8 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
   rename_stage.io.com_valids := rob.io.commit.valids
   rename_stage.io.com_uops := rob.io.commit.uops
-  rename_stage.io.com_rbk_valids := rob.io.commit.rbk_valids
+  rename_stage.io.rbk_valids := rob.io.commit.rbk_valids
+  rename_stage.io.rollback := rob.io.commit.rollback
 
   //-------------------------------------------------------------
   //-------------------------------------------------------------
