@@ -726,7 +726,7 @@ class Rob(
     val pnr_maybe_at_tail = RegInit(false.B)
 
     val safe_to_inc = rob_state === s_normal || rob_state === s_wait_till_empty
-    val do_inc_row  = !rob_pnr_unsafe.reduce(_||_) && (rob_pnr =/= rob_tail || full && !pnr_maybe_at_tail)
+    val do_inc_row  = !rob_pnr_unsafe.reduce(_||_) && (rob_pnr =/= rob_tail || (full && !pnr_maybe_at_tail))
     when (empty && io.enq_valids.asUInt =/= 0.U) {
       // Unforunately for us, the ROB does not use its entries in monotonically
       //  increasing order, even in the case of no exceptions. The edge case
@@ -737,7 +737,7 @@ class Rob(
     } .elsewhen (safe_to_inc && do_inc_row) {
       rob_pnr     := WrapInc(rob_pnr, numRobRows)
       rob_pnr_lsb := 0.U
-    } .elsewhen (safe_to_inc && (rob_pnr =/= rob_tail || full && !pnr_maybe_at_tail)) {
+    } .elsewhen (safe_to_inc && (rob_pnr =/= rob_tail || (full && !pnr_maybe_at_tail))) {
       rob_pnr_lsb := PriorityEncoder(rob_pnr_unsafe)
     } .elsewhen (safe_to_inc && !full && !empty) {
       rob_pnr_lsb := PriorityEncoder(rob_pnr_unsafe.asUInt | ~MaskLower(rob_tail_vals.asUInt))
