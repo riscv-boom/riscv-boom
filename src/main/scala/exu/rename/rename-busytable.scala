@@ -93,11 +93,9 @@ class BusyTableHelper(
     }
   }
 
-  // handle bypassing a clearing of the busy-bit
   for (ridx <- 0 until numReadPorts) {
-    val just_cleared = io.unbusy_pdst.map(p => p.valid && (p.bits === io.p_rs(ridx))).reduce(_|_)
     // note: no bypassing of the newly busied (that is done outside this module)
-    io.p_rs_busy(ridx) := (table_bsy(io.p_rs(ridx)) && !just_cleared)
+    io.p_rs_busy(ridx) := table_bsy(io.p_rs(ridx))
   }
 
   io.debug.busytable := table_bsy.asUInt
