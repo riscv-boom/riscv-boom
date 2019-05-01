@@ -157,7 +157,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 
   val icache = outer.icache.module
   val tlb = Module(new TLB(true, log2Ceil(fetchBytes), TLBConfig(nTLBEntries)))
-  val fetch_controller = Module(new FetchControlUnit(fetchWidth))
+  val fetch_controller = Module(new FetchControlUnit)
   val bpdpipeline = Module(new BranchPredictionStage)
 
   val s0_pc = Wire(UInt(vaddrBitsExtended.W))

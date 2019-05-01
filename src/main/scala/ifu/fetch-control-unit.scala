@@ -112,7 +112,7 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
     val fetchpacket       = new DecoupledIO(new FetchBufferResp)
   })
 
-  val bchecker = Module (new BranchChecker(fetchWidth))
+  val bchecker = Module (new BranchChecker)
   val ftq = Module(new FetchTargetQueue(num_entries = ftqSz))
   val fb = Module(new FetchBuffer(num_entries=fetchBufferSz))
   val monitor: Option[FetchMonitor] = (useFetchMonitor).option(Module(new FetchMonitor))
