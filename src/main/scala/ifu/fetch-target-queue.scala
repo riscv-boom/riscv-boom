@@ -227,8 +227,7 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
    //-------------------------------------------------------------
    // **** Commit Data Read ****
    //-------------------------------------------------------------
-   if (DEBUG_PRINTF)
-   {
+   if (DEBUG_PRINTF) {
       printf("FTQ:\n")
    }
 

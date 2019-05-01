@@ -1170,7 +1170,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
     val numFtqWhitespace = if (DEBUG_PRINTF_FTQ) (ftqSz/4)+1 else 0
     val fetchWhitespace = if (fetchWidth >= 8) 2 else 0
-    var whitespace = (debugScreenheight - 25 + 3 -10 + 3 + 4 - decodeWidth - (NUM_LDQ_ENTRIES max NUM_STQ_ENTRIES) -
+    var whitespace = (debugScreenheight - 25 + 3 -10 + 3 + 4 - coreWidth - (NUM_LDQ_ENTRIES max NUM_STQ_ENTRIES) -
       issueParams.map(_.numEntries).sum - issueParams.length - (numRobEntries/coreWidth) -
       numFtqWhitespace - fetchWhitespace)
 
@@ -1181,7 +1181,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       debug_irt_reg & (0xffffff).U)
 
     printf("Decode:\n")
-    for (w <- 0 until decodeWidth) {
+    for (w <- 0 until coreWidth) {
       printf("    Slot:%d (PC:0x%x Valids:%c%c Inst:DASM(%x))\n",
         w.U,
         dec_uops(w).pc(19,0),
@@ -1191,7 +1191,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
     }
 
     printf("Rename:\n")
-    for (w <- 0 until decodeWidth) {
+    for (w <- 0 until coreWidth) {
       printf("    Slot:%d (PC:0x%x Valid:%c Inst:DASM(%x))\n",
         w.U,
         rename_stage.io.ren2_uops(w).pc(19,0),
