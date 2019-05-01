@@ -796,7 +796,7 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
          BoolToChar(io.br_unit.brinfo.mispredict, 'M'),
          BoolToChar(f0_redirect_val, 'T'),
          Mux(io.flush_take_pc, Str("F"),
-             Mux(io.br_unit.take_pc, Str("B"), Str(" "))),
+           Mux(io.br_unit.take_pc, Str("B"), Str(" "))),
          f0_redirect_pc)
 
       // Fetch Stage 2

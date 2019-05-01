@@ -909,8 +909,8 @@ class Rob(
       printf("    ROB[%d]: %c %c (",
         row.U(robAddrSz.W),
         Mux(r_head === row.U && r_tail === row.U, Str("B"),
-            Mux(r_head === row.U, Str("H"),
-                Mux(r_tail === row.U, Str("T"), Str(" ")))),
+          Mux(r_head === row.U, Str("H"),
+            Mux(r_tail === row.U, Str("T"), Str(" ")))),
         Mux(rob_pnr === row.U, Str("P"), Str(" ")))
 
       if (coreWidth == 1) {
@@ -973,9 +973,9 @@ class Rob(
       for (w <- 0 until coreWidth) {
         printf("(d:%c p%d, bm:%x sdt:%d) ",
           Mux(debug_entry(temp_idx).uop.dst_rtype === RT_FIX, Str("X"),
-              Mux(debug_entry(temp_idx).uop.dst_rtype === RT_PAS, Str("C"),
-                  Mux(debug_entry(temp_idx).uop.dst_rtype === RT_FLT, Str("f"),
-                      Mux(debug_entry(temp_idx).uop.dst_rtype === RT_X, Str("-"), Str("?"))))),
+            Mux(debug_entry(temp_idx).uop.dst_rtype === RT_PAS, Str("C"),
+              Mux(debug_entry(temp_idx).uop.dst_rtype === RT_FLT, Str("f"),
+                Mux(debug_entry(temp_idx).uop.dst_rtype === RT_X, Str("-"), Str("?"))))),
           debug_entry(temp_idx).uop.pdst,
           debug_entry(temp_idx).uop.br_mask,
           debug_entry(temp_idx).uop.stale_pdst)
