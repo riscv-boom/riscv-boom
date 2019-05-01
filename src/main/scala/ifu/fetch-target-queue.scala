@@ -20,11 +20,11 @@ package boom.ifu
 
 import chisel3._
 import chisel3.util._
-import chisel3.core.DontCare
-import chisel3.experimental.dontTouch
+import chisel3.core.{DontCare}
+import chisel3.experimental.{dontTouch}
 
-import freechips.rocketchip.config.Parameters
-import freechips.rocketchip.util.Str
+import freechips.rocketchip.config.{Parameters}
+import freechips.rocketchip.util.{Str}
 
 import boom.bpu._
 import boom.common._
