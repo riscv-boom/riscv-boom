@@ -169,8 +169,6 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   val fetch_controller = Module(new FetchControlUnit(fetchWidth))
   val bpdpipeline = Module(new BranchPredictionStage)
 
-  override def toString: String = bpdpipeline.toString + "\n" + icache.toString
-
   val s0_pc = Wire(UInt(vaddrBitsExtended.W))
   val s0_valid = fetch_controller.io.imem_req.valid || fetch_controller.io.imem_resp.ready
   val s1_valid = RegNext(s0_valid)
@@ -324,6 +322,8 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 
   def ccover(cond: Bool, label: String, desc: String)(implicit sourceInfo: SourceInfo) =
     cover(cond, s"FRONTEND_$label", "Rocket;;" + desc)
+
+  override def toString: String = bpdpipeline.toString + "\n" + icache.toString
 }
 
 /**

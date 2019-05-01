@@ -227,6 +227,10 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
    //-------------------------------------------------------------
    // **** Commit Data Read ****
    //-------------------------------------------------------------
+   if (DEBUG_PRINTF)
+   {
+      printf("FTQ:\n")
+   }
 
    // Dequeue entry (it's been committed) and update predictors.
    when (do_deq)
@@ -258,24 +262,27 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
 
       if (DEBUG_PRINTF)
       {
-         printf("FTQ: deq[%d]=0x%x hist=0x%x bim[%d=%x]:%c %c%c %d-%d %d\n",
+         val cfiTypeStrs = CfiTypeToChars(miss_data.cfi_type)
+         printf("    Dequeue: Ptr:%d FPC:0x%x Hist:0x%x BIM:(Idx:(%d=%x) V:%c Mispred:%c Taken:%c CfiIdx:%d CntVal:%d CfiType:%c%c%c%c\n",
             deq_ptr.value,
             com_data.fetch_pc,
             com_data.history,
             io.bim_update.bits.entry_idx,
             io.bim_update.bits.entry_idx,
-            Mux(io.bim_update.valid, Str("V"), Str(" ")),
-            Mux(io.bim_update.bits.mispredicted, Str("M"), Str(" ")),
-            Mux(io.bim_update.bits.taken, Str("T"), Str(" ")),
+            BoolToChar(io.bim_update.valid, 'V'),
+            BoolToChar(io.bim_update.bits.mispredicted, 'M'),
+            BoolToChar(io.bim_update.bits.taken, 'T'),
             io.bim_update.bits.cfi_idx,
             io.bim_update.bits.cntr_value,
-            miss_data.cfi_type
-            )
+            cfiTypeStrs(0),
+            cfiTypeStrs(1),
+            cfiTypeStrs(2),
+            cfiTypeStrs(3))
       }
    }
    .otherwise
    {
-      if (DEBUG_PRINTF) printf("FTQ: no dequeue\n")
+      if (DEBUG_PRINTF) printf("    No dequeue\n")
       io.bim_update.valid := false.B
       io.bpd_update.valid := false.B
       io.bim_update.bits := DontCare
@@ -333,40 +340,47 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
 
    if (DEBUG_PRINTF && DEBUG_PRINTF_FTQ)
    {
-      printf("FTQ: %c %c: %d; commit: %c:%d brinfo: %c:%d [%d %d %d]\n",
-         Mux(io.enq.valid, Str("V"), Str("-")),
-         Mux(io.enq.ready, Str("R"), Str("-")),
+      printf("    Enq:(V:%c Rdy:%c Idx:%d) Commit:(V:%c Idx:%d) BRInfo:(V&Mispred:%c Idx:%d) Enq,Cmt,DeqPtrs:(%d %d %d)\n",
+         BoolToChar(io.enq.valid, 'V'),
+         BoolToChar(io.enq.ready, 'R'),
          io.enq_idx,
-         Mux(io.deq.valid, Str("C"), Str("-")),
+         BoolToChar(io.deq.valid, 'C'),
          io.deq.bits,
-         Mux(io.brinfo.valid && io.brinfo.mispredict, Str("M"), Str("-")),
+         BoolToChar(io.brinfo.valid && io.brinfo.mispredict, 'M'),
          io.brinfo.ftq_idx,
-         enq_ptr.value, commit_ptr, deq_ptr.value
-      )
+         enq_ptr.value,
+         commit_ptr,
+         deq_ptr.value)
 
-      val w = 4
+      printf("    ")
+      val w = 1
       for (
          i <- 0 until (num_entries/w);
          j <- 0 until w
       ){
          val idx = i+j*(num_entries/w)
-         printf(" [%d %c%c%c pc=0x%x 0x%x [h] ms:%c%c%c%d-%d bim[%d]:0x%x]",
+         val cfiTypeStrs = CfiTypeToChars(cfi_info(idx).cfi_type)
+         printf("[Entry:%d Enq,Cmt,DeqPtr:(%c %c %c) PC:0x%x Hist:0x%x " +
+            "CFI:(Exec,Mispred,Taken:(%c %c %c) Type:%c%c%c%c Idx:%d) BIM:(Idx:%d Val:0x%x)] ",
             idx.asUInt(width=5.W),
-            Mux(enq_ptr.value === idx.U, Str("E"), Str(" ")),
-            Mux(commit_ptr === idx.U, Str("C"), Str(" ")),
-            Mux(deq_ptr.value === idx.U, Str("D"), Str(" ")),
+            BoolToChar(enq_ptr.value === idx.U, 'E', ' '),
+            BoolToChar(   commit_ptr === idx.U, 'C', ' '),
+            BoolToChar(deq_ptr.value === idx.U, 'D', ' '),
             ram(idx).fetch_pc(31,0),
             ram(idx).history,
-            Mux(cfi_info(idx).executed, Str("E"), Str(" ")),
-            Mux(cfi_info(idx).mispredicted, Str("V"), Str(" ")),
-            Mux(cfi_info(idx).taken, Str("T"), Str(" ")),
-            cfi_info(idx).cfi_type,
+            BoolToChar(    cfi_info(idx).executed, 'E', ' '),
+            BoolToChar(cfi_info(idx).mispredicted, 'V', ' '),
+            BoolToChar(       cfi_info(idx).taken, 'T', ' '),
+            cfiTypeStrs(0),
+            cfiTypeStrs(1),
+            cfiTypeStrs(2),
+            cfiTypeStrs(3),
             cfi_info(idx).cfi_idx,
             ram(idx).bim_info.entry_idx,
-            ram(idx).bim_info.value
-         )
-         if (j == w-1) printf("\n")
+            ram(idx).bim_info.value)
+         if (j == w-1) printf("\n    ")
       }
+      printf("\n")
    }
 
    // force to show up in the waveform

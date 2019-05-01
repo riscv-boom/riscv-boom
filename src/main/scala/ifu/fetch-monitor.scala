@@ -20,6 +20,7 @@ import chisel3.core.DontCare
 import freechips.rocketchip.config.Parameters
 
 import boom.common._
+import boom.util.{BoolToChar}
 
 /**
  * A class to monitor a vector of MicroOps and their PCs and verify it is a valid sequence.
@@ -55,11 +56,17 @@ class FetchMonitor(implicit p: Parameters) extends BoomModule()(p)
    // What is the target of the previous PC if a CFI.
    var prev_target = WireInit(0.U(vaddrBitsExtended.W))
 
-   for ((uop,i) <- io.uops.zipWithIndex)
+   if (DEBUG_PRINTF)
    {
-      if (DEBUG_PRINTF)
+      printf("FetchMonitor:\n")
+      printf("    Fetch4:\n")
+      for ((uop,i) <- io.uops.zipWithIndex)
       {
-         printf("monitor F4[" + i + "] %d %d 0x%x\n", io.fire, uop.valid, uop.bits.pc)
+         printf("        UOP[%d]: Fire:%c V:%c PC:0x%x\n",
+            i.U,
+            BoolToChar(io.fire, 'F'),
+            BoolToChar(uop.valid, 'V'),
+            uop.bits.pc)
       }
    }
 
@@ -142,7 +149,8 @@ class FetchMonitor(implicit p: Parameters) extends BoomModule()(p)
             when (first_pc =/= last_npc)
             {
                printf("  first_pc: 0x%x last_npc: 0x%x  ",
-                  first_pc, last_npc)
+                  first_pc,
+                  last_npc)
             }
             assert (first_pc === last_npc,
                "[fetchmonitor] A non-cfi instruction is followed by the wrong instruction.")

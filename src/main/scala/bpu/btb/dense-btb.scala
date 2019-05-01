@@ -368,18 +368,18 @@ class DenseBTB(implicit p: Parameters) extends BoomBTB
   //************************************************
   // Debug.
 
-  if (DEBUG_PRINTF) {
-    printf("BTB predi (%c): hits:%x %d (PC= 0x%x, TARG= 0x%x %d) s2_BIM [%d %d 0x%x]\n",
-      Mux(s1_valid, Str("V"), Str("-")),
-      hits.asUInt,
-      true.B,
-      RegNext(io.req.bits.addr),
-      s1_resp_bits.target,
-      s1_resp_bits.cfi_type,
-      bim.io.resp.valid,
-      bim.io.resp.bits.entry_idx,
-      bim.io.resp.bits.rowdata)
-  }
+   if (DEBUG_PRINTF) {
+     printf("BTB predi (%c): hits:%x %d (PC= 0x%x, TARG= 0x%x %d) s2_BIM [%d %d 0x%x]\n",
+       Mux(s1_valid, Str("V"), Str("-")),
+       hits.asUInt,
+       true.B,
+       RegNext(io.req.bits.addr),
+       s1_resp_bits.target,
+       s1_resp_bits.cfi_type,
+       bim.io.resp.valid,
+       bim.io.resp.bits.entry_idx,
+       bim.io.resp.bits.rowdata)
+   }
 
   override def toString: String =
     "   ==Dense BTB==" +

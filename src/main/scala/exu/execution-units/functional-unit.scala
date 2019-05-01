@@ -425,13 +425,23 @@ class ALUUnit(isBranchUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)
     val wrong_taken_target = !io.get_ftq_pc.next_val || (io.get_ftq_pc.next_pc =/= bj_addr)
 
     if (DEBUG_PRINTF) {
-      printf("  BR-UNIT: PC: 0x%x+%x, Next: %d, 0x%x ,bj_addr: 0x%x\n",
-        io.get_ftq_pc.fetch_pc, io.req.bits.uop.pc_lob, io.get_ftq_pc.next_val, io.get_ftq_pc.next_pc, bj_addr)
+      printf("BR-UNIT:\n")
+      printf("    PC:0x%x+0x%x Next:(V:%c PC:0x%x) BJAddr:0x%x\n",
+        io.get_ftq_pc.fetch_pc,
+        io.req.bits.uop.pc_lob,
+        BoolToChar(io.get_ftq_pc.next_val, 'V'),
+        io.get_ftq_pc.next_pc,
+        bj_addr)
     }
+
     when (io.req.valid && uop.is_jal && io.get_ftq_pc.next_val && io.get_ftq_pc.next_pc =/= bj_addr) {
       printf("[func] JAL went to the wrong target [curr: 0x%x+%x next: 0x%x, target: 0x%x]",
-        io.get_ftq_pc.fetch_pc, io.req.bits.uop.pc_lob, io.get_ftq_pc.next_pc, bj_addr)
-      }
+        io.get_ftq_pc.fetch_pc,
+        io.req.bits.uop.pc_lob,
+        io.get_ftq_pc.next_pc,
+        bj_addr)
+    }
+
     assert (!(io.req.valid && uop.is_jal && io.get_ftq_pc.next_val && io.get_ftq_pc.next_pc =/= bj_addr),
       "[func] JAL went to the wrong target.")
 
@@ -461,7 +471,8 @@ class ALUUnit(isBranchUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)
       when (io.get_ftq_pc.next_pc(vaddrBits-1, log2Ceil(coreInstBytes)) =/=
             bj_addr(vaddrBits-1, log2Ceil(coreInstBytes))) {
         printf ("[FuncUnit] Branch jumped to 0x%x, should have jumped to 0x%x.\n",
-        io.get_ftq_pc.next_pc, bj_addr)
+          io.get_ftq_pc.next_pc,
+          bj_addr)
       }
       assert (io.get_ftq_pc.next_pc(vaddrBits-1, log2Ceil(coreInstBytes)) ===
               bj_addr(vaddrBits-1, log2Ceil(coreInstBytes)),
