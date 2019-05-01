@@ -1,5 +1,5 @@
 //******************************************************************************
-// Copyright (c) 2017 - 2018, The Regents of the University of California (Regents).
+// Copyright (c) 2017 - 2019, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
 // Author: Christopher Celio
@@ -43,8 +43,7 @@ trait HasL1ICacheBankedParameters extends HasL1ICacheParameters
   def inLastChunk(addr: UInt) = addr(blockOffBits-1, log2Ceil(bankBytes)) === (numChunks-1).U
 
   // Round address down to the nearest fetch boundary.
-  def alignToFetchBoundary(addr: UInt) =
-  {
+  def alignToFetchBoundary(addr: UInt) = {
     if (icIsBanked) ~(~addr | (bankBytes.U-1.U))
     else ~(~addr | (fetchBytes.U-1.U))
   }
@@ -52,32 +51,24 @@ trait HasL1ICacheBankedParameters extends HasL1ICacheParameters
   // Input: an ALIGNED pc.
   // For the fall-through next PC, where does the next fetch pc start?
   // This is complicated by cache-line wraparound.
-  def nextFetchStart(addr: UInt) =
-  {
-    if (icIsBanked)
-    {
+  def nextFetchStart(addr: UInt) = {
+    if (icIsBanked) {
       addr + Mux(inLastChunk(addr), bankBytes.U, fetchBytes.U)
-    }
-    else
-    {
+    } else {
       addr + fetchBytes.U
     }
   }
 
   // For a given fetch address, what is the mask of validly fetched instructions.
-  def fetchMask(addr: UInt) =
-  {
+  def fetchMask(addr: UInt) = {
     // where is the first instruction, aligned to a log(fetchWidth) boundary?
     val idx = addr.extract(log2Ceil(fetchWidth)+log2Ceil(coreInstBytes)-1, log2Ceil(coreInstBytes))
-    if (icIsBanked)
-    {
+    if (icIsBanked) {
       // shave off the msb of idx since we are aligned to half-fetchWidth boundaries.
       val shamt = idx.extract(log2Ceil(fetchWidth)-2, 0)
       val end_mask = Mux(inLastChunk(addr), Fill(fetchWidth/2, 1.U), Fill(fetchWidth, 1.U))
       ((1 << fetchWidth)-1).U << shamt & end_mask
-    }
-    else
-    {
+    } else {
       ((1 << fetchWidth)-1).U << idx
     }
   }
@@ -86,40 +77,40 @@ trait HasL1ICacheBankedParameters extends HasL1ICacheParameters
 /**
  * IO for the BOOM Frontend to/from the CPU
  */
-class BoomFrontendIO(implicit p: Parameters) extends BoomBundle()(p)
+class BoomFrontendIO(implicit p: Parameters) extends BoomBundle
 {
-   // Give the backend a packet of instructions.
-   val fetchpacket       = Flipped(new DecoupledIO(new FetchBufferResp))
+  // Give the backend a packet of instructions.
+  val fetchpacket       = Flipped(new DecoupledIO(new FetchBufferResp))
 
-   val br_unit           = Output(new BranchUnitResp())
-   val get_pc            = Flipped(new GetPCFromFtqIO())
+  val br_unit           = Output(new BranchUnitResp())
+  val get_pc            = Flipped(new GetPCFromFtqIO())
 
-   val sfence            = Valid(new SFenceReq)
+  val sfence            = Valid(new SFenceReq)
 
-   // sfence needs to steal the TLB CAM part.
-   // TODO redudcant with above sfenceReq
-   val sfence_take_pc    = Output(Bool())
-   val sfence_addr       = Output(UInt((vaddrBits+1).W))
+  // sfence needs to steal the TLB CAM part.
+  // TODO redudcant with above sfenceReq
+  val sfence_take_pc    = Output(Bool())
+  val sfence_addr       = Output(UInt((vaddrBits+1).W))
 
-   val commit            = Valid(UInt(ftqSz.W))
-   val flush_info        = Valid(new CommitExceptionSignals())
-   val flush_take_pc     = Output(Bool())
-   val flush_pc          = Output(UInt((vaddrBits+1).W)) // TODO rename; no longer catch-all flush_pc
-   val flush_icache      = Output(Bool())
+  val commit            = Valid(UInt(ftqSz.W))
+  val flush_info        = Valid(new CommitExceptionSignals())
+  val flush_take_pc     = Output(Bool())
+  val flush_pc          = Output(UInt((vaddrBits+1).W)) // TODO rename; no longer catch-all flush_pc
+  val flush_icache      = Output(Bool())
 
-   val com_ftq_idx       = Output(UInt(log2Ceil(ftqSz).W)) // ROB tells us the commit pointer so we can read out the PC.
-   val com_fetch_pc      = Input(UInt(vaddrBitsExtended.W)) // tell CSRFile the fetch-pc at the FTQ head.
+  val com_ftq_idx       = Output(UInt(log2Ceil(ftqSz).W)) // ROB tells us the commit pointer so we can read out the PC.
+  val com_fetch_pc      = Input(UInt(vaddrBitsExtended.W)) // tell CSRFile the fetch-pc at the FTQ head.
 
-   // bpd pipeline
-   // should I take in the entire rob.io.flush?
-   val flush             = Output(Bool()) // pipeline flush from ROB TODO CODEREVIEW (redudant with fe_clear?)
-   val clear_fetchbuffer = Output(Bool()) // pipeline redirect (rob-flush, sfence request, branch mispredict)
+  // bpd pipeline
+  // should I take in the entire rob.io.flush?
+  val flush             = Output(Bool()) // pipeline flush from ROB TODO CODEREVIEW (redudant with fe_clear?)
+  val clear_fetchbuffer = Output(Bool()) // pipeline redirect (rob-flush, sfence request, branch mispredict)
 
-   val status_prv        = Output(UInt(freechips.rocketchip.rocket.PRV.SZ.W))
-   val status_debug      = Output(Bool())
+  val status_prv        = Output(UInt(freechips.rocketchip.rocket.PRV.SZ.W))
+  val status_debug      = Output(Bool())
 
-   val perf              = Input(new FrontendPerfEvents())
-   val tsc_reg           = Output(UInt(xLen.W))
+  val perf              = Input(new FrontendPerfEvents())
+  val tsc_reg           = Output(UInt(xLen.W))
 }
 
 /**
@@ -142,7 +133,7 @@ class BoomFrontend(val icacheParams: ICacheParams, hartid: Int)(implicit p: Para
  * @param outer top level Frontend class
  */
 class BoomFrontendBundle(val outer: BoomFrontend) extends CoreBundle()(outer.p)
-    with HasExternallyDrivenTileConstants
+  with HasExternallyDrivenTileConstants
 {
   val cpu = Flipped(new BoomFrontendIO())
   val ptw = new TLBPTWIO()
@@ -202,13 +193,12 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
     if (usingCompressed) s1_speculative || s2_valid && !s2_speculative || predicted_taken
     else true.B
   s1_speculative := Mux(fetch_controller.io.imem_req.valid,
-                        fetch_controller.io.imem_req.bits.speculative,
-                        Mux(s2_replay, s2_speculative, s0_speculative))
+                      fetch_controller.io.imem_req.bits.speculative,
+                      Mux(s2_replay, s2_speculative, s0_speculative))
 
   val s2_redirect = WireInit(fetch_controller.io.imem_req.valid)
   s2_valid := false.B
-  when (!s2_replay)
-  {
+  when (!s2_replay) {
     s2_valid := !s2_redirect
     s2_pc := s1_pc
     s2_speculative := s1_speculative
@@ -254,63 +244,63 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   // **** Fetch Controller ****
   //-------------------------------------------------------------
 
-   fetch_controller.io.br_unit           := io.cpu.br_unit
-   fetch_controller.io.tsc_reg           := io.cpu.tsc_reg
+  fetch_controller.io.br_unit           := io.cpu.br_unit
+  fetch_controller.io.tsc_reg           := io.cpu.tsc_reg
 
-   fetch_controller.io.f2_btb_resp       := bpdpipeline.io.f2_btb_resp
-   fetch_controller.io.f3_bpd_resp       := bpdpipeline.io.f3_bpd_resp
-   fetch_controller.io.f2_bpd_resp       := DontCare
+  fetch_controller.io.f2_btb_resp       := bpdpipeline.io.f2_btb_resp
+  fetch_controller.io.f3_bpd_resp       := bpdpipeline.io.f3_bpd_resp
+  fetch_controller.io.f2_bpd_resp       := DontCare
 
-   fetch_controller.io.clear_fetchbuffer := io.cpu.clear_fetchbuffer
+  fetch_controller.io.clear_fetchbuffer := io.cpu.clear_fetchbuffer
 
-   fetch_controller.io.sfence_take_pc    := io.cpu.sfence_take_pc
-   fetch_controller.io.sfence_addr       := io.cpu.sfence_addr
+  fetch_controller.io.sfence_take_pc    := io.cpu.sfence_take_pc
+  fetch_controller.io.sfence_addr       := io.cpu.sfence_addr
 
-   fetch_controller.io.flush_take_pc     := io.cpu.flush_take_pc
-   fetch_controller.io.flush_pc          := io.cpu.flush_pc
-   fetch_controller.io.com_ftq_idx       := io.cpu.com_ftq_idx
+  fetch_controller.io.flush_take_pc     := io.cpu.flush_take_pc
+  fetch_controller.io.flush_pc          := io.cpu.flush_pc
+  fetch_controller.io.com_ftq_idx       := io.cpu.com_ftq_idx
 
-   fetch_controller.io.flush_info        := io.cpu.flush_info
-   fetch_controller.io.commit            := io.cpu.commit
+  fetch_controller.io.flush_info        := io.cpu.flush_info
+  fetch_controller.io.commit            := io.cpu.commit
 
-   io.cpu.get_pc <> fetch_controller.io.get_pc
+  io.cpu.get_pc <> fetch_controller.io.get_pc
 
-   io.cpu.com_fetch_pc := fetch_controller.io.com_fetch_pc
+  io.cpu.com_fetch_pc := fetch_controller.io.com_fetch_pc
 
-   io.cpu.fetchpacket <> fetch_controller.io.fetchpacket
+  io.cpu.fetchpacket <> fetch_controller.io.fetchpacket
 
-   //-------------------------------------------------------------
-   // **** Branch Prediction ****
-   //-------------------------------------------------------------
+  //-------------------------------------------------------------
+  // **** Branch Prediction ****
+  //-------------------------------------------------------------
 
-   bpdpipeline.io.s0_req.valid := s0_valid
-   bpdpipeline.io.s0_req.bits.addr := s0_pc
+  bpdpipeline.io.s0_req.valid := s0_valid
+  bpdpipeline.io.s0_req.bits.addr := s0_pc
 
-   bpdpipeline.io.f2_replay := s2_replay
-   bpdpipeline.io.f2_stall := !fetch_controller.io.imem_resp.ready
-   bpdpipeline.io.f3_stall := fetch_controller.io.f3_stall
-   bpdpipeline.io.f3_is_br := fetch_controller.io.f3_is_br
-   bpdpipeline.io.debug_imemresp_pc := fetch_controller.io.imem_resp.bits.pc
+  bpdpipeline.io.f2_replay := s2_replay
+  bpdpipeline.io.f2_stall := !fetch_controller.io.imem_resp.ready
+  bpdpipeline.io.f3_stall := fetch_controller.io.f3_stall
+  bpdpipeline.io.f3_is_br := fetch_controller.io.f3_is_br
+  bpdpipeline.io.debug_imemresp_pc := fetch_controller.io.imem_resp.bits.pc
 
-   bpdpipeline.io.br_unit_resp := io.cpu.br_unit
-   bpdpipeline.io.ftq_restore := fetch_controller.io.ftq_restore_history
-   bpdpipeline.io.redirect := fetch_controller.io.imem_req.valid
+  bpdpipeline.io.br_unit_resp := io.cpu.br_unit
+  bpdpipeline.io.ftq_restore := fetch_controller.io.ftq_restore_history
+  bpdpipeline.io.redirect := fetch_controller.io.imem_req.valid
 
-   bpdpipeline.io.flush := io.cpu.flush
+  bpdpipeline.io.flush := io.cpu.flush
 
-   bpdpipeline.io.f2_valid := fetch_controller.io.imem_resp.valid
-   bpdpipeline.io.f2_redirect := fetch_controller.io.f2_redirect
-   bpdpipeline.io.f4_redirect := fetch_controller.io.f4_redirect
-   bpdpipeline.io.f4_taken := fetch_controller.io.f4_taken
-   bpdpipeline.io.fe_clear := fetch_controller.io.clear_fetchbuffer
+  bpdpipeline.io.f2_valid := fetch_controller.io.imem_resp.valid
+  bpdpipeline.io.f2_redirect := fetch_controller.io.f2_redirect
+  bpdpipeline.io.f4_redirect := fetch_controller.io.f4_redirect
+  bpdpipeline.io.f4_taken := fetch_controller.io.f4_taken
+  bpdpipeline.io.fe_clear := fetch_controller.io.clear_fetchbuffer
 
-   bpdpipeline.io.f3_ras_update := fetch_controller.io.f3_ras_update
-   bpdpipeline.io.f3_btb_update := fetch_controller.io.f3_btb_update
-   bpdpipeline.io.bim_update    := fetch_controller.io.bim_update
-   bpdpipeline.io.bpd_update    := fetch_controller.io.bpd_update
+  bpdpipeline.io.f3_ras_update := fetch_controller.io.f3_ras_update
+  bpdpipeline.io.f3_btb_update := fetch_controller.io.f3_btb_update
+  bpdpipeline.io.bim_update    := fetch_controller.io.bim_update
+  bpdpipeline.io.bpd_update    := fetch_controller.io.bpd_update
 
-   bpdpipeline.io.status_prv    := io.cpu.status_prv
-   bpdpipeline.io.status_debug  := io.cpu.status_debug
+  bpdpipeline.io.status_prv    := io.cpu.status_prv
+  bpdpipeline.io.status_debug  := io.cpu.status_debug
 
   //-------------------------------------------------------------
   // performance events
