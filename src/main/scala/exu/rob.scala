@@ -915,44 +915,44 @@ class Rob(
 
       if (coreWidth == 1) {
         printf("(%c)(%c)(%c) 0x%x [DASM(%x)] %c ",
-          Mux(debug_entry(r_idx+0).valid, Str("V"), Str(" ")),
-          Mux(debug_entry(r_idx+0).busy, Str("B"),  Str(" ")),
-          Mux(debug_entry(r_idx+0).unsafe, Str("U"),  Str(" ")),
+          BoolToChar( debug_entry(r_idx+0).valid, 'V'),
+          BoolToChar(  debug_entry(r_idx+0).busy, 'B'),
+          BoolToChar(debug_entry(r_idx+0).unsafe, 'U'),
           debug_entry(r_idx+0).uop.pc(31,0),
           debug_entry(r_idx+0).uop.debug_inst,
-          Mux(debug_entry(r_idx+0).exception, Str("E"), Str("-")))
+          BoolToChar(debug_entry(r_idx+0).exception, 'E'))
       } else if (coreWidth == 2) {
         val row_is_val = debug_entry(r_idx+0).valid || debug_entry(r_idx+1).valid
         printf("(%c%c)(%c%c)(%c%c) 0x%x %x [DASM(%x)][DASM(%x)" + "] %c,%c %d,%d ",
-          Mux(debug_entry(r_idx+0).valid, Str("V"), Str(" ")),
-          Mux(debug_entry(r_idx+1).valid, Str("V"), Str(" ")),
-          Mux(debug_entry(r_idx+0).busy,  Str("B"), Str(" ")),
-          Mux(debug_entry(r_idx+1).busy,  Str("B"), Str(" ")),
-          Mux(debug_entry(r_idx+0).unsafe,  Str("U"), Str(" ")),
-          Mux(debug_entry(r_idx+1).unsafe,  Str("U"), Str(" ")),
+          BoolToChar( debug_entry(r_idx+0).valid, 'V'),
+          BoolToChar( debug_entry(r_idx+1).valid, 'V'),
+          BoolToChar(  debug_entry(r_idx+0).busy, 'B'),
+          BoolToChar(  debug_entry(r_idx+1).busy, 'B'),
+          BoolToChar(debug_entry(r_idx+0).unsafe, 'U'),
+          BoolToChar(debug_entry(r_idx+1).unsafe, 'U'),
           debug_entry(r_idx+0).uop.pc(31,0),
           debug_entry(r_idx+1).uop.pc(15,0),
           debug_entry(r_idx+0).uop.debug_inst,
           debug_entry(r_idx+1).uop.debug_inst,
-          Mux(debug_entry(r_idx+0).exception, Str("E"), Str("-")),
-          Mux(debug_entry(r_idx+1).exception, Str("E"), Str("-")),
+          BoolToChar(debug_entry(r_idx+0).exception, 'E'),
+          BoolToChar(debug_entry(r_idx+1).exception, 'E'),
           debug_entry(r_idx+0).uop.ftq_idx,
           debug_entry(r_idx+1).uop.ftq_idx)
       } else if (coreWidth == 4) {
         val row_is_val = debug_entry(r_idx+0).valid || debug_entry(r_idx+1).valid || debug_entry(r_idx+2).valid || debug_entry(r_idx+3).valid
         printf("(%c%c%c%c)(%c%c%c%c)(%c%c%c%c) 0x%x %x %x %x [DASM(%x)][DASM(%x)][DASM(%x)][DASM(%x)" + "]%c%c%c%c",
-          Mux(debug_entry(r_idx+0).valid,  Str("V"), Str(" ")),
-          Mux(debug_entry(r_idx+1).valid,  Str("V"), Str(" ")),
-          Mux(debug_entry(r_idx+2).valid,  Str("V"), Str(" ")),
-          Mux(debug_entry(r_idx+3).valid,  Str("V"), Str(" ")),
-          Mux(debug_entry(r_idx+0).busy,   Str("B"), Str(" ")),
-          Mux(debug_entry(r_idx+1).busy,   Str("B"), Str(" ")),
-          Mux(debug_entry(r_idx+2).busy,   Str("B"), Str(" ")),
-          Mux(debug_entry(r_idx+3).busy,   Str("B"), Str(" ")),
-          Mux(debug_entry(r_idx+0).unsafe, Str("U"), Str(" ")),
-          Mux(debug_entry(r_idx+1).unsafe, Str("U"), Str(" ")),
-          Mux(debug_entry(r_idx+2).unsafe, Str("U"), Str(" ")),
-          Mux(debug_entry(r_idx+3).unsafe, Str("U"), Str(" ")),
+          BoolToChar(debug_entry(r_idx+0).valid,  'V'),
+          BoolToChar(debug_entry(r_idx+1).valid,  'V'),
+          BoolToChar(debug_entry(r_idx+2).valid,  'V'),
+          BoolToChar(debug_entry(r_idx+3).valid,  'V'),
+          BoolToChar(debug_entry(r_idx+0).busy,   'B'),
+          BoolToChar(debug_entry(r_idx+1).busy,   'B'),
+          BoolToChar(debug_entry(r_idx+2).busy,   'B'),
+          BoolToChar(debug_entry(r_idx+3).busy,   'B'),
+          BoolToChar(debug_entry(r_idx+0).unsafe, 'U'),
+          BoolToChar(debug_entry(r_idx+1).unsafe, 'U'),
+          BoolToChar(debug_entry(r_idx+2).unsafe, 'U'),
+          BoolToChar(debug_entry(r_idx+3).unsafe, 'U'),
           debug_entry(r_idx+0).uop.pc(23,0),
           debug_entry(r_idx+1).uop.pc(15,0),
           debug_entry(r_idx+2).uop.pc(15,0),
@@ -961,10 +961,10 @@ class Rob(
           debug_entry(r_idx+1).uop.debug_inst,
           debug_entry(r_idx+2).uop.debug_inst,
           debug_entry(r_idx+3).uop.debug_inst,
-          Mux(debug_entry(r_idx+0).exception, Str("E"), Str("-")),
-          Mux(debug_entry(r_idx+1).exception, Str("E"), Str("-")),
-          Mux(debug_entry(r_idx+2).exception, Str("E"), Str("-")),
-          Mux(debug_entry(r_idx+3).exception, Str("E"), Str("-")))
+          BoolToChar(debug_entry(r_idx+0).exception, 'E'),
+          BoolToChar(debug_entry(r_idx+1).exception, 'E'),
+          BoolToChar(debug_entry(r_idx+2).exception, 'E'),
+          BoolToChar(debug_entry(r_idx+3).exception, 'E'))
       } else {
         println("  BOOM's Chisel printf does not support commit_width >= " + coreWidth)
       }
@@ -973,12 +973,12 @@ class Rob(
       for (w <- 0 until coreWidth) {
         printf("(d:%c p%d, bm:%x sdt:%d) ",
           Mux(debug_entry(temp_idx).uop.dst_rtype === RT_FIX, Str("X"),
-          Mux(debug_entry(temp_idx).uop.dst_rtype === RT_PAS, Str("C"),
-          Mux(debug_entry(temp_idx).uop.dst_rtype === RT_FLT, Str("f"),
-          Mux(debug_entry(temp_idx).uop.dst_rtype === RT_X, Str("-"), Str("?"))))),
-          debug_entry    (temp_idx).uop.pdst,
-          debug_entry    (temp_idx).uop.br_mask,
-          debug_entry    (temp_idx).uop.stale_pdst)
+              Mux(debug_entry(temp_idx).uop.dst_rtype === RT_PAS, Str("C"),
+                  Mux(debug_entry(temp_idx).uop.dst_rtype === RT_FLT, Str("f"),
+                      Mux(debug_entry(temp_idx).uop.dst_rtype === RT_X, Str("-"), Str("?"))))),
+          debug_entry(temp_idx).uop.pdst,
+          debug_entry(temp_idx).uop.br_mask,
+          debug_entry(temp_idx).uop.stale_pdst)
         temp_idx = temp_idx + 1
       }
 
