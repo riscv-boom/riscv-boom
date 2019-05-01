@@ -61,10 +61,12 @@ class BTBsa(implicit p: Parameters) extends BoomBTB
    */
   class BTBSetData extends Bundle
   {
-    val target   = UInt((vaddrBits - log2Ceil(coreInstBytes)).W)
-    val cfi_idx  = UInt(log2Ceil(fetchWidth).W)
-    val bpd_type = BpredType()
-    val cfi_type = CfiType()
+    val target    = UInt((vaddrBits - log2Ceil(coreInstBytes)).W)
+    val cfi_idx   = UInt(log2Ceil(fetchWidth).W)
+    val is_rvc    = Bool()
+    val edge_inst = Bool()
+    val bpd_type  = BpredType()
+    val cfi_type  = CfiType()
   }
 
   val stall = !io.req.valid
@@ -83,7 +85,8 @@ class BTBsa(implicit p: Parameters) extends BoomBTB
 
   // updates
   val r_btb_update = Pipe(io.btb_update)
-  val update_valid = r_btb_update.valid && !io.status_debug
+  val r_status_debug = RegNext(io.status_debug)
+  val update_valid = r_btb_update.valid && !r_status_debug // align the status debug with actual btb update
   val widx = getIdx(r_btb_update.bits.pc)
   val wtag = getTag(r_btb_update.bits.pc)
   // TODO: currently a not-very-clever way to choose a replacement way
@@ -92,22 +95,20 @@ class BTBsa(implicit p: Parameters) extends BoomBTB
 
   // clear entries (e.g., multiple tag hits, which is an invalid variant)
   val clear_valid = WireInit(false.B)
+  val clear_way_oh = Wire(Vec(nWays, Bool()))
+  clear_way_oh.map(_ := false.B)
   val clear_idx = s1_idx
 
-   if (DEBUG_PRINTF) {
-     printf("BTB-SA:\n")
-   }
+  if (DEBUG_PRINTF || DEBUG_BPU_PRINTF) {
+    printf("BTB-SA:\n")
+  }
 
   for (w <- 0 until nWays) {
     val wen = update_valid && way_wen(w)
 
-    val valids   = RegInit(0.U(nSets.W))
-    val tags     = SyncReadMem(nSets, UInt(tagSz.W))
-    val data     = SyncReadMem(nSets, new BTBSetData())
-
-    valids.suggestName(s"btb_valids_$w")
-    tags.suggestName("btb_tag_array")
-    data.suggestName("btb_data_array")
+    val valids   = RegInit(0.U(nSets.W)).suggestName(s"btb_valids_$way")
+    val tags     = SyncReadMem(nSets, UInt(tagSz.W)).suggestName(s"btb_tag_array_$way")
+    val data     = SyncReadMem(nSets, new BTBSetData()).suggestName(s"btb_data_array_$way")
 
     val is_valid = (valids >> s1_idx)(0) && RegNext(!wen)
     val rout     = data.read(s0_idx, !wen)
@@ -121,6 +122,8 @@ class BTBsa(implicit p: Parameters) extends BoomBTB
       val newdata = Wire(new BTBSetData())
       newdata.target  := r_btb_update.bits.target(vaddrBits-1, log2Ceil(coreInstBytes))
       newdata.cfi_idx := r_btb_update.bits.cfi_idx
+      newdata.is_rvc := r_btb_update.bits.is_rvc
+      newdata.edge_inst := r_btb_update.bits.edge_inst
       newdata.bpd_type := r_btb_update.bits.bpd_type
       newdata.cfi_type := r_btb_update.bits.cfi_type
 
@@ -128,9 +131,23 @@ class BTBsa(implicit p: Parameters) extends BoomBTB
       data(widx) := newdata
     }
 
+    assert(!(wen && clear_valid), "[btb-sa] both should not be high")
+
     // if multiple ways hit, clear the set last read
-    when (clear_valid) {
+    when (clear_valid && clear_way_oh(way)) {
+      printf("BTB: Cleared Idx:%d Way:%d\n", clear_idx, way.U)
       valids := valids.bitSet(clear_idx, false.B)
+    }
+
+    if (DEBUG_BPU_PRINTF) {
+      when (wen) {
+         printf("    Write to (Idx:%d Way:%d) <- ((PC:0x%x Tag:0x%x) TARG:0x%x)\n",
+           widx,
+           way.U,
+           r_btb_update.bits.pc,
+           wtag,
+           r_btb_update.bits.target)
+      }
     }
 
     if (DEBUG_PRINTF) {
@@ -142,8 +159,7 @@ class BTBsa(implicit p: Parameters) extends BoomBTB
         r_btb_update.bits.pc,
         r_btb_update.bits.target)
 
-      //for (set <- 0 until nSets)
-      //{
+      //for (set <- 0 until nSets) {
       //  printf("        BTB-ARRAY[%d][%d]: V:%c TAG:0x%x TARG:0x%x [Shifted: TAG:0x%x TARG:0x%x]\n",
       //    way.U,
       //    set.U,
@@ -156,27 +172,34 @@ class BTBsa(implicit p: Parameters) extends BoomBTB
     }
   }
 
-  // if multiple ways hit, invalidate set
+  // if multiple ways hit, invalidate all matched entries
   when (freechips.rocketchip.util.PopCountAtLeast(hits_oh.asUInt, 2)) {
+    clear_way_oh := hits_oh
     clear_valid := true.B
   }
 
   // Mux out the winning hit.
-  s1_valid := PopCount(hits_oh) === 1.U && !io.flush
-  val s1_data = Mux1H(hits_oh, data_out)
+  s1_valid := (PopCount(hits_oh) >= 1.U) && !io.flush
+  val s1_data = PriorityMux(hits_oh, data_out) // arbitrarily choose data out on multiple hit
   val s1_target = Cat(s1_data.target, 0.U(log2Ceil(coreInstBytes).W))
   val s1_cfi_idx = s1_data.cfi_idx
+  val s1_is_rvc = s1_data.is_rvc
+  val s1_edge_inst = s1_data.edge_inst
   val s1_bpd_type = s1_data.bpd_type
   val s1_cfi_type = s1_data.cfi_type
 
   s1_resp_bits.target := s1_target
   s1_resp_bits.cfi_idx := (if (fetchWidth > 1) s1_cfi_idx else 0.U)
+  s1_resp_bits.is_rvc := s1_is_rvc
+  s1_resp_bits.edge_inst := s1_edge_inst
   s1_resp_bits.bpd_type := s1_bpd_type
   s1_resp_bits.cfi_type := s1_cfi_type
 
   val s1_pc = RegEnable(io.req.bits.addr, !stall)
   s1_resp_bits.fetch_pc := s1_pc
 
+  // modify the RAS state and give RAS predictions
+  //   only gives values on BTB hit since you need the BTB prediction to determine the type of instruction
   if (nRAS > 0) {
     val ras = new RAS(nRAS, coreInstBytes)
     val doPeek = (hits_oh zip data_out map {case(hit, data) => hit && BpredType.isReturn(data.bpd_type)}).reduce(_||_)
@@ -185,7 +208,8 @@ class BTBsa(implicit p: Parameters) extends BoomBTB
       s1_resp_bits.target := ras.peek
     }
 
-    when (io.ras_update.valid) {
+    // update the RAS and bypass if available
+    when (io.ras_update.valid && !io.status_debug) {
       when (io.ras_update.bits.is_call) {
         ras.push(io.ras_update.bits.return_addr)
         if (bypassCalls) {
@@ -233,6 +257,30 @@ class BTBsa(implicit p: Parameters) extends BoomBTB
       bim.io.resp.bits.entry_idx,
       bim.io.resp.bits.rowdata)
   }
+
+  if (BPU_PRINTF) {
+    val cfiTypeStrs = PrintUtil.CfiTypeChars(io.resp.bits.cfi_type)
+    val bpdTypeStrs = PrintUtil.BpdTypeChars(io.resp.bits.bpd_type)
+    printf("    Resp: V:%c Hits:b%b T:%c PC:0x%x TARG:0x%x RVC:%c EDGE:%c CfiType:%c%c%c%c BrType:%c%c%c%c\n",
+      BoolToChar(io.resp.valid, 'V'),
+      RegNext(hits_oh.asUInt),
+      BoolToChar(io.resp.bits.taken, 'T'),
+      io.resp.bits.fetch_pc,
+      io.resp.bits.target,
+      BoolToChar(io.resp.bits.is_rvc, 'C'),
+      BoolToChar(io.resp.bits.edge_inst, 'E'),
+      cfiTypeStrs(0),
+      cfiTypeStrs(1),
+      cfiTypeStrs(2),
+      cfiTypeStrs(3),
+      bpdTypeStrs(0),
+      bpdTypeStrs(1),
+      bpdTypeStrs(2),
+      bpdTypeStrs(3))
+    printf("    BimResp: V:%c EntryIdx:%d Row:0x%x\n",
+      BoolToChar(bim.io.resp.valid, 'V'),
+      bim.io.resp.bits.entry_idx,
+      bim.io.resp.bits.rowdata)
 
   override def toString: String =
     "   ==BTB-SA==" +

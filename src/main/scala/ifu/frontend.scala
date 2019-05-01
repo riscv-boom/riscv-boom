@@ -88,7 +88,7 @@ class BoomFrontendIO(implicit p: Parameters) extends BoomBundle
   // Give the backend a packet of instructions.
   val fetchpacket       = Flipped(new DecoupledIO(new FetchBufferResp))
 
-  val br_unit           = Output(new BranchUnitResp())
+  val br_unit_resp      = Output(new BranchUnitResp())
   val get_pc            = Flipped(new GetPCFromFtqIO())
 
   val sfence            = Valid(new SFenceReq)
@@ -179,15 +179,13 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   val s2_tlb_resp = Reg(new TLBResp())
   val s2_xcpt = s2_tlb_resp.ae.inst || s2_tlb_resp.pf.inst
   val s2_speculative = RegInit(false.B)
-  val s2_partial_insn_valid = RegInit(false.B)
-  val s2_partial_insn = Reg(UInt(coreInstBits.W))
-  val wrong_path = Reg(Bool())
 
   val s1_base_pc = alignToFetchBoundary(s1_pc)
-  val ntpc = nextFetchStart(s1_base_pc)
-  val predicted_npc = WireInit(ntpc)
+  val s1_next_pc = nextFetchStart(s1_base_pc)
+  val predicted_npc = WireInit(s1_next_pc)
   val predicted_taken = WireInit(false.B)
 
+  // replay s2 to s0 or just use the NPC
   val s2_replay = Wire(Bool())
   s2_replay := (s2_valid && !fetch_controller.io.imem_resp.fire()) || RegNext(s2_replay && !s0_valid, true.B)
   val npc = Mux(s2_replay, s2_pc, predicted_npc)
@@ -209,6 +207,26 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
     s2_pc := s1_pc
     s2_speculative := s1_speculative
     s2_tlb_resp := tlb.io.resp
+  }
+
+  if (BPU_PRINTF) {
+    printf("---------------------------------------------------------------------------------------------------------------------\n")
+    printf("Frontend:\n")
+    printf("    S0: V:%c From:%c PC:0x%x Spec?:%c\n",
+      BoolToChar(s0_valid, 'V'),
+      BoolToChar(fetch_controller.io.imem_req.valid, 'I', 'N'),
+      s0_pc,
+      BoolToChar(s0_speculative, 'S'))
+    printf("    S1: V:%c PC:0x%x Spec?:%c\n",
+      BoolToChar(s1_valid, 'V'),
+      s1_pc,
+      BoolToChar(s1_speculative, 'S'))
+    printf("    S2: Redir:%c Replay:%c V:%c PC:0x%x Spec?:%c\n",
+      BoolToChar(s2_redirect, 'R'),
+      BoolToChar(s2_replay, 'R'),
+      BoolToChar(s2_valid, 'V'),
+      s2_pc,
+      BoolToChar(s2_speculative, 'S'))
   }
 
   io.ptw <> tlb.io.ptw
@@ -250,7 +268,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   // **** Fetch Controller ****
   //-------------------------------------------------------------
 
-  fetch_controller.io.br_unit           := io.cpu.br_unit
+  fetch_controller.io.br_unit_resp           := io.cpu.br_unit_resp
   fetch_controller.io.tsc_reg           := io.cpu.tsc_reg
 
   fetch_controller.io.f2_btb_resp       := bpdpipeline.io.f2_btb_resp
@@ -288,7 +306,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   bpdpipeline.io.f3_is_br := fetch_controller.io.f3_is_br
   bpdpipeline.io.debug_imemresp_pc := fetch_controller.io.imem_resp.bits.pc
 
-  bpdpipeline.io.br_unit_resp := io.cpu.br_unit
+  bpdpipeline.io.br_unit_resp := io.cpu.br_unit_resp
   bpdpipeline.io.ftq_restore := fetch_controller.io.ftq_restore_history
   bpdpipeline.io.redirect := fetch_controller.io.imem_req.valid
 
@@ -298,7 +316,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   bpdpipeline.io.f2_redirect := fetch_controller.io.f2_redirect
   bpdpipeline.io.f4_redirect := fetch_controller.io.f4_redirect
   bpdpipeline.io.f4_taken := fetch_controller.io.f4_taken
-  bpdpipeline.io.fe_clear := fetch_controller.io.clear_fetchbuffer
+  bpdpipeline.io.fe_clear := io.cpu.clear_fetchbuffer
 
   bpdpipeline.io.f3_ras_update := fetch_controller.io.f3_ras_update
   bpdpipeline.io.f3_btb_update := fetch_controller.io.f3_btb_update

@@ -27,6 +27,7 @@ import freechips.rocketchip.rocket.RVCExpander
 trait BOOMDebugConstants
 {
    val DEBUG_PRINTF        = false // use the Chisel printf functionality
+   val DEBUG_BPU_PRINTF    = true  // debug printf's for just the bpu
    val COMMIT_LOG_PRINTF   = false // dump commit state, for comparision against ISA sim
    val O3PIPEVIEW_PRINTF   = false // dump trace for O3PipeView from gem5
    val O3_CYCLE_TIME       = (1000)// "cycle" time expected by o3pipeview.py
@@ -353,7 +354,7 @@ trait RISCVConstants
 
    def ExpandRVC(inst: UInt)(implicit p: Parameters): UInt =
    {
-      val rvc_exp = Module(new RVCExpander)
+      val rvc_exp = Module(new RVCExpander).suggestName("rvc_exp_helper")
       rvc_exp.io.in := inst
       Mux(rvc_exp.io.rvc, rvc_exp.io.out.bits, inst)
    }
@@ -375,10 +376,10 @@ trait RISCVConstants
    // Note: Accepts only EXPANDED rvc instructions
    def GetCfiType(inst: UInt)(implicit p: Parameters): UInt =
    {
-      val bdecode = Module(new boom.exu.BranchDecode)
-      bdecode.io.inst := inst
-      bdecode.io.pc := 0.U
-      bdecode.io.cfi_type
+      val br_decode = Module(new boom.exu.BranchDecode).suggestName("br_decode_helper")
+      br_decode.io.inst := inst
+      br_decode.io.pc := 0.U
+      br_decode.io.cfi_type
    }
 }
 

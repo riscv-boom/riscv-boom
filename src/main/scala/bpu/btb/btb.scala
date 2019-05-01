@@ -126,6 +126,8 @@ class BoomBTBResp(implicit p: Parameters) extends BoomBTBBundle
   // the low-order PC bits of the predicted branch (after
   //   shifting off the lowest log(inst_bytes) bits off).
   val cfi_idx   = UInt(log2Ceil(fetchWidth).W) // where is cfi we are predicting?
+  val is_rvc    = Bool() // is the cfi a rvc instruction
+  val edge_inst = Bool() // is the cfi a edge instruction (straddling a fetch packet)
   val bpd_type  = BpredType() // which predictor should we use?
   val cfi_type  = CfiType()  // what type of instruction is this?
   val fetch_pc  = UInt(vaddrBits.W) // the PC we're predicting on (start of the fetch packet).
@@ -148,6 +150,8 @@ class BoomBTBUpdate(implicit p: Parameters) extends BoomBTBBundle
   val cfi_idx = UInt(log2Ceil(fetchWidth).W)
 
   // other branch information
+  val is_rvc    = Bool()
+  val edge_inst = Bool()
   val bpd_type = BpredType()
   val cfi_type = CfiType()
 }

@@ -95,8 +95,7 @@ class RestoreHistory(implicit p: Parameters) extends BoomBundle
  *
  * @param historyLength length of the GHR
  */
-abstract class BoomBrPredictor(
-   val historyLength: Int)(implicit p: Parameters) extends BoomModule
+abstract class BoomBrPredictor(val historyLength: Int)(implicit p: Parameters) extends BoomModule
 {
   val io = IO(new BoomBundle {
     // The PC to predict on.
@@ -201,10 +200,10 @@ abstract class BoomBrPredictor(
 
   // As predictions come in (or pipelines are flushed/replayed), we need to correct the history.
   f0_history := Mux(io.ftq_restore.valid,
-                    io.ftq_restore.bits.history,
-                    Mux(io.f4_redirect,
-                        r_f4_history,
-                        r_f1_history)) // valid for f2_redirect
+                  io.ftq_restore.bits.history,
+                  Mux(io.f4_redirect,
+                    r_f4_history,
+                    r_f1_history)) // valid for f2_redirect
 
   // Hash target into history.
   new_history := UpdateHistoryHash(f0_history, io.req.bits.addr)
@@ -221,14 +220,14 @@ abstract class BoomBrPredictor(
      io.f2_redirect
 
   r_f1_history := Mux(io.f2_replay,
-                      r_f2_history,
-                      Mux(io.ftq_restore.valid && !io.ftq_restore.bits.taken,
-                          io.ftq_restore.bits.history,
-                          Mux(io.f4_redirect && !io.f4_taken,
-                              r_f4_history,
-                              Mux(use_new_hash,
-                                  new_history,
-                                  r_f1_history))))
+                    r_f2_history,
+                    Mux(io.ftq_restore.valid && !io.ftq_restore.bits.taken,
+                      io.ftq_restore.bits.history,
+                      Mux(io.f4_redirect && !io.f4_taken,
+                        r_f4_history,
+                        Mux(use_new_hash,
+                          new_history,
+                          r_f1_history))))
 
   assert (!io.f2_redirect || r_f2_history === r_f1_history,
      "[bpd] if a F2 redirect occurs, F2-hist should equal F1-hist.")
@@ -256,6 +255,20 @@ abstract class BoomBrPredictor(
 
   when (io.resp.ready) {
      r_f4_history := q_f3_history.io.deq.bits
+  }
+
+  //************************************************
+  // Printf
+
+  if (BPU_PRINTF) {
+    //printf("BrPredictor:\n")
+    //printf("    F0_Hist:0x%x F1_Hist:0x%x F2_Hist:0x%x F3_Hist:(V:%c Hist:0x%x) F4_Hist:0x%x\n",
+    //  f0_history,
+    //  r_f1_history,
+    //  r_f2_history,
+    //  PrintUtil.ConvertChar(q_f3_history.io.deq.valid, 'V'),
+    //  q_f3_history.io.deq.bits,
+    //  r_f4_history)
   }
 }
 

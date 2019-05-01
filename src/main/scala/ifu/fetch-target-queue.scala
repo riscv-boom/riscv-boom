@@ -77,8 +77,7 @@ class GetPCFromFtqIO(implicit p: Parameters) extends BoomBundle
   val ftq_idx  = Input(UInt(log2Ceil(ftqSz).W))
   val fetch_pc = Output(UInt(vaddrBitsExtended.W))
   // the next_pc may not be valid (stalled or still being fetched)
-  val next_val = Output(Bool())
-  val next_pc  = Output(UInt(vaddrBitsExtended.W))
+  val next_pc  = Valid(UInt(vaddrBitsExtended.W))
 }
 
 /**
@@ -143,7 +142,7 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
     b.mispredicted := false.B
     b.taken := false.B
     b.cfi_idx := cfi_idx
-    b.cfi_type := Mux(br_seen, CfiType.branch, CfiType.none)
+    b.cfi_type := Mux(br_seen, CfiType.BRANCH, CfiType.NONE)
     b
   }
 
@@ -229,7 +228,7 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
     val saturated = (com_cntr === 0.U && !com_taken) || (com_cntr === 3.U && com_taken)
 
     io.bim_update.valid :=
-      miss_data.cfi_type === CfiType.branch &&
+      miss_data.cfi_type === CfiType.BRANCH &&
       (miss_data.mispredicted) ||
       (!miss_data.mispredicted && miss_data.executed && !saturated)
 
@@ -294,8 +293,8 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
   // TODO only perform the read when a branch instruction requests it.
   val curr_idx = io.get_ftq_pc.ftq_idx
   io.get_ftq_pc.fetch_pc := ram(curr_idx).fetch_pc
-  io.get_ftq_pc.next_pc := ram(WrapInc(curr_idx, num_entries)).fetch_pc
-  io.get_ftq_pc.next_val := WrapInc(curr_idx, num_entries) =/= enq_ptr.value
+  io.get_ftq_pc.next_pc.bits := ram(WrapInc(curr_idx, num_entries)).fetch_pc
+  io.get_ftq_pc.next_pc.valid := WrapInc(curr_idx, num_entries) =/= enq_ptr.value
 
   //-------------------------------------------------------------
   // **** Handle Flush/Pipeline Redirections ****

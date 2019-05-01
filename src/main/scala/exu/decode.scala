@@ -586,17 +586,19 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule
 class BranchDecode(implicit p: Parameters) extends BoomModule
 {
   val io = IO(new Bundle {
-    val inst    = Input(UInt(32.W))
+    val inst    = Input(UInt(32.W)) // exanded RvC instruction
     val pc      = Input(UInt(vaddrBitsExtended.W))
+
     val is_br   = Output(Bool())
     val is_jal  = Output(Bool())
     val is_jalr = Output(Bool())
     val is_ret  = Output(Bool())
     val is_call = Output(Bool())
-    val target = Output(UInt(vaddrBitsExtended.W))
+    val target  = Output(UInt(vaddrBitsExtended.W))
     val cfi_type = Output(UInt(CfiType.SZ.W))
   })
 
+  // decode based off bit pattern
   val bpd_csignals =
     freechips.rocketchip.rocket.DecodeLogic(io.inst,
                   List[BitPat](N, N, N, IS_X),
@@ -634,6 +636,12 @@ class BranchDecode(implicit p: Parameters) extends BoomModule
     Mux(cs_is_br,
       CfiType.branch,
       CfiType.none)))
+
+  // -------
+  // Asserts
+  // -------
+
+  assert(PopCount(VecInit(cs_is_br, cs_is_jal, cs_is_jalr)) <= 1.U, "[br-decoder] there should only be 1 type of cfi type if any")
 }
 
 /**

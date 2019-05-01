@@ -63,9 +63,8 @@ object BaseOnlyBrPredictor
  * Class to create a BaseOnlyBr predictor that only uses
  * the BoomBTB's bi-modal table
  */
-class BaseOnlyBrPredictor(
-   )(implicit p: Parameters)
-   extends BoomBrPredictor(8)
+class BaseOnlyBrPredictor(implicit p: Parameters)
+  extends BoomBrPredictor(8)
 {
   //------------------------------------------------------------
   // Predictor state (none: use BIM).

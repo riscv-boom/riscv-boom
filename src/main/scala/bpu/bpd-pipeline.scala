@@ -14,12 +14,11 @@
 // Access BTB and BPD to feed predictions to the FetchControlUnit.
 //
 // Stages (these are in parallel with instruction fetch):
-//    * F0 - Send in next PC into the BTB and the BPD.
-//           Hash the PC with the older history of the BPD.
-//    * F1 - Access the BTB RAMs. Do 1st stage of BPD.
-//    * F2 - Get resp from BTB (send BIM results to BPD). 2nd stage of BPD.
-//    * F3 - Get resp from BPD.
-//    * F4 - Other logic
+//    * F0 - Select next PC, Perform BPD hashing.
+//    * F1 - Access I$ and BTB RAMS. First stage of BPD.
+//    * F2 - 2nd stage of BPD.
+//    * F3 - Begin decoding instrution bits and computing targets from I$. Check results from BPD.
+//           Put data in FB and FTQ.
 
 package boom.bpu
 
@@ -134,27 +133,29 @@ class BranchPredictionStage(implicit p: Parameters) extends BoomModule
 
   //************************************************
   // Update the RAS
-  // TODO XXX  reenable RAS
 
   // update RAS based on BTB's prediction information (or the branch-check correction).
-  //val jmp_idx = f2_btb.bits.cfi_idx
+  val btb_resp = btb.io.resp.bits
 
   btb.io.ras_update := io.f3_ras_update
-  btb.io.ras_update.valid := false.B // TODO XXX renable RAS (f2_btb.valid || io.f3_ras_update.valid) &&
-                                     // !io.fetch_stalled
-  //when (f2_btb.valid) {
-  //   btb.io.ras_update.bits.is_call      := BpredType.isCall(f2_btb.bits.bpd_type)
-  //   btb.io.ras_update.bits.is_ret       := BpredType.isReturn(f2_btb.bits.bpd_type)
-  //   btb.io.ras_update.bits.return_addr  := f2_aligned_pc + (jmp_idx << 2.U) + 4.U
-  //}
+  btb.io.ras_update.valid := (btb.io.resp.valid && !io.f2_stall) || (io.f3_ras_update.valid && !io.f3_stall)
+
+  when (btb.io.resp.valid) {
+    btb.io.ras_update.bits.is_call      := BpredType.isCall(btb_resp.bpd_type)
+    btb.io.ras_update.bits.is_ret       := BpredType.isReturn(btb_resp.bpd_type)
+    // TODO: double check that this is right? how do you know if the return pc is correct here
+    btb.io.ras_update.bits.return_addr  := (btb_resp.fetch_pc
+                                           + (btb_resp.cfi_idx << log2Ceil(coreInstBytes).U)
+                                           + Mux(btb_resp.is_rvc || (btb_resp.edge_inst && (btb_resp.cfi_idx === 0.U)), 2.U, 4.U))
+  }
 
   //************************************************
   // Update the BTB/BIM
 
   // br unit has higher priority than a f3 update
   btb.io.btb_update := Mux(io.br_unit_resp.btb_update.valid,
-                           io.br_unit_resp.btb_update,
-                           io.f3_btb_update)
+                         io.br_unit_resp.btb_update,
+                         io.f3_btb_update)
 
   btb.io.bim_update := io.bim_update
 
@@ -190,6 +191,54 @@ class BranchPredictionStage(implicit p: Parameters) extends BoomModule
       io.s0_req.bits.addr,
       BoolToChar(btb.io.resp.valid, 'V'),
       btb.io.resp.bits.target)
+  }
+
+  if (BPU_PRINTF) {
+    printf("BPD Pipeline:\n")
+    printf("    Fetch0: BTB: Req:(V:%c PC:0x%x)\n",
+           BoolToChar(btb.io.req.valid, 'V'),
+           btb.io.req.bits.addr)
+    printf("    Fetch2: BTB: Resp:(V:%c T:%c ReqPC:0x%x TARG:0x%x)\n",
+           BoolToChar(btb.io.resp.valid, 'V'),
+           BoolToChar(btb.io.resp.bits.taken, 'T'),
+           btb.io.resp.bits.fetch_pc,
+           btb.io.resp.bits.target)
+
+    val cfiTypeStrings = CfiTypeToChars(btb.io.btb_update.bits.cfi_type)
+    val bpdTypeStrings = BpdTypeToChars(btb.io.btb_update.bits.bpd_type)
+    printf("    Update: BTB: V:%c From:%c%c PC:0x%x TARG:0x%x T:%c BpdType:%c%c%c%c CfiType:%c%c%c%c\n",
+           BoolToChar(btb.io.btb_update.valid, 'V'),
+           BoolToChar(io.br_unit_resp.btb_update.valid, 'B', 'F'),
+           BoolToChar(io.br_unit_resp.btb_update.valid, 'R', '3'),
+           btb.io.btb_update.bits.pc,
+           btb.io.btb_update.bits.target,
+           BoolToChar(btb.io.btb_update.bits.taken, 'T'),
+           bpdTypeStrings(0),
+           bpdTypeStrings(1),
+           bpdTypeStrings(2),
+           bpdTypeStrings(3),
+           cfiTypeStrings(0),
+           cfiTypeStrings(1),
+           cfiTypeStrings(2),
+           cfiTypeStrings(3))
+    printf("            RAS: V:%c Call?:%c Ret?:%c RetAddr:0x%x\n",
+           BoolToChar(btb.io.ras_update.valid, 'V'),
+           BoolToChar(btb.io.ras_update.bits.is_call, 'C'),
+           BoolToChar(btb.io.ras_update.bits.is_ret, 'R'),
+           btb.io.ras_update.bits.return_addr)
+    printf("            BIM: V:%c EntryIdx:%d Cntr:%d Mispred:%c T:%c\n",
+           BoolToChar(btb.io.bim_update.valid, 'V'),
+           btb.io.bim_update.bits.entry_idx,
+           btb.io.bim_update.bits.cntr_value,
+           BoolToChar(btb.io.bim_update.bits.mispredicted, 'M'),
+           BoolToChar(btb.io.bim_update.bits.taken, 'T'))
+    printf("            BPD: V:%c PC:0x%x Hist:0x%x Mispred:%c MissCfiIdx:%x T:%c +PriorInfo\n",
+           BoolToChar(bpd.io.commit.valid, 'V'),
+           bpd.io.commit.bits.fetch_pc,
+           bpd.io.commit.bits.history,
+           BoolToChar(bpd.io.commit.bits.mispredict, 'M'),
+           bpd.io.commit.bits.miss_cfi_idx,
+           BoolToChar(bpd.io.commit.bits.taken, 'T'))
   }
 
 

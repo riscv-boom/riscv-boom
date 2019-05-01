@@ -240,6 +240,18 @@ class GShareBrPredictor(
     assert (com_idx === com_info.debugIdx, "[gshare] disagreement on update indices.")
   }
 
+  //-------------------------------------------------------------
+  // Printf
+
+  if (BPU_PRINTF) {
+    printf("GShare:\n")
+    printf("    Resp: V:%c Ts:b%b DbgIdx:%d Row:0x%x\n",
+      PrintUtil.ConvertChar(io.resp.valid, 'V'),
+      io.resp.bits.takens,
+      q_s3_resp.io.deq.bits.debug_index,
+      q_s3_resp.io.deq.bits.rowdata)
+  }
+
   override def toString: String =
     "   ==GShare BPU==" +
     "\n   (" + (nSets * fetchWidth * 2/8/1024) +
