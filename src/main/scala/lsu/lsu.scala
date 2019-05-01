@@ -1299,12 +1299,12 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
 
    val null_uop = NullMicroOp
 
-   when (reset.toBool || io.exception)
+   when (reset.asBool || io.exception)
    {
       laq_head := 0.U(LDQ_ADDR_SZ.W)
       laq_tail := 0.U(LDQ_ADDR_SZ.W)
 
-      when (reset.toBool)
+      when (reset.asBool)
       {
          stq_head := 0.U(STQ_ADDR_SZ.W)
          stq_tail := 0.U(STQ_ADDR_SZ.W)

@@ -176,7 +176,7 @@ class RoCCShim(implicit p: Parameters) extends BoomModule
   //--------------------------
   // Exception / Reset
 
-  when (reset.toBool) {
+  when (reset.asBool) {
     rxq_tail     := 0.U
     rxq_head     := 0.U
     rxq_com_head := 0.U

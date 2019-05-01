@@ -191,7 +191,7 @@ abstract class BoomBrPredictor(
   val r_f4_history = RegInit(0.U(historyLength.W))
 
   // match the other ERegs in the FrontEnd.
-  val q_f3_history = withReset(reset.toBool || io.fe_clear || io.f4_redirect)
+  val q_f3_history = withReset(reset.asBool || io.fe_clear || io.f4_redirect)
      { Module(new ElasticReg(UInt(historyLength.W))) }
 
   require (historyLength == globalHistoryLength)

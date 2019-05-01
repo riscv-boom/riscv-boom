@@ -253,7 +253,7 @@ class TageBrPredictor(
   // Buffer all of the table responses into a queue.
   // Match the other ElasticRegs in the FrontEnd.
   val q_f3_resps = for (i <- 0 until numTables) yield {
-    val q_resp = withReset(reset.toBool || io.fe_clear || io.f4_redirect)
+    val q_resp = withReset(reset.asBool || io.fe_clear || io.f4_redirect)
      {Module(new ElasticReg(Valid(new TageTableResp(tagSizes.max, cntrSz, ubitSz))))}
 
     q_resp.io.enq.valid := io.f2_valid
