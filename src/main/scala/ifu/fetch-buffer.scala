@@ -225,7 +225,7 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule()
       r_valid := false.B
    }
 
-   when (reset.toBool)
+   when (reset.asBool)
    {
       io.deq.bits.uops map { u => u.valid := false.B }
    }

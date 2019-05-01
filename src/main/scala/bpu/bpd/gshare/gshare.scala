@@ -197,7 +197,7 @@ class GShareBrPredictor(
   // return data to superclass (via f2_resp bundle).
   val s2_out = counter_table.read(s1_ridx, this.f1_valid)
 
-  val q_s3_resp = withReset(reset.toBool || io.fe_clear || io.f4_redirect)
+  val q_s3_resp = withReset(reset.asBool || io.fe_clear || io.f4_redirect)
     {Module(new ElasticReg(new GShareResp(fetchWidth, idxSz)))}
 
   q_s3_resp.io.enq.valid := io.f2_valid

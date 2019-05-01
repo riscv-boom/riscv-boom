@@ -174,9 +174,9 @@ class BranchPredictionStage(implicit p: Parameters) extends BoomModule
   //************************************************
   // Handle redirects/flushes
 
-  btb.io.flush := io.flush || reset.toBool || io.redirect || io.f2_replay
+  btb.io.flush := io.flush || reset.asBool || io.redirect || io.f2_replay
 
-  when (io.flush || reset.toBool) {
+  when (io.flush || reset.asBool) {
      btb.io.btb_update.valid := false.B
   }
 

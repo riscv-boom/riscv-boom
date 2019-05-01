@@ -25,7 +25,7 @@ class TestHarness(implicit p: Parameters) extends Module
   println("\n\nBuilding TestHarness for an ExampleBoomSystem.\n")
 
   val dut = Module(LazyModule(new ExampleBoomSystem).module)
-  dut.reset := reset.toBool | dut.debug.ndreset
+  dut.reset := reset.asBool | dut.debug.ndreset
 
   dut.dontTouchPorts()
   dut.tieOffInterrupts()
@@ -34,5 +34,5 @@ class TestHarness(implicit p: Parameters) extends Module
   dut.l2_frontend_bus_axi4.foreach( q => q := DontCare ) // Overridden in next line
   dut.l2_frontend_bus_axi4.foreach(_.tieoff)
 
-  Debug.connectDebug(dut.debug, clock, reset.toBool, io.success)
+  Debug.connectDebug(dut.debug, clock, reset.asBool, io.success)
 }

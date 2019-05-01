@@ -125,9 +125,9 @@ class FetchControlUnit(fetch_width: Int)(implicit p: Parameters) extends BoomMod
    val f0_redirect_pc = Wire(UInt(vaddrBitsExtended.W))
 
    val clear_f3         = WireInit(false.B)
-   val q_f3_imemresp    = withReset(reset.toBool || clear_f3) {
+   val q_f3_imemresp    = withReset(reset.asBool || clear_f3) {
                               Module(new ElasticReg(gen = new freechips.rocketchip.rocket.FrontendResp)) }
-   val q_f3_btb_resp    = withReset(reset.toBool || clear_f3) { Module(new ElasticReg(gen = Valid(new BoomBTBResp))) }
+   val q_f3_btb_resp    = withReset(reset.asBool || clear_f3) { Module(new ElasticReg(gen = Valid(new BoomBTBResp))) }
    val f3_req           = Wire(Valid(new PCReq()))
    val f3_fetch_bundle  = Wire(new FetchBundle)
 
