@@ -1166,7 +1166,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
   //-------------------------------------------------------------
 
   if (DEBUG_PRINTF) {
-    println("\n Chisel Printout Enabled\n")
+    println("   ~~Chisel Printout Enabled~~")
 
     val numFtqWhitespace = if (DEBUG_PRINTF_FTQ) (ftqSz/4)+1 else 0
     val fetchWhitespace = if (fetchWidth >= 8) 2 else 0
@@ -1174,7 +1174,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       issueParams.map(_.numEntries).sum - issueParams.length - (numRobEntries/coreWidth) -
       numFtqWhitespace - fetchWhitespace)
 
-    println("Whitespace padded: " + whitespace)
+    println(s"   Whitespace padded: ${whitespace}\n")
 
     printf("--- Cycle=%d --- Retired Instrs=%d ----------------------------------------------\n",
       debug_tsc_reg,
