@@ -17,10 +17,10 @@ package boom.ifu
 
 import chisel3._
 import chisel3.util._
-import chisel3.experimental.dontTouch
-import chisel3.core.DontCare
+import chisel3.experimental.{dontTouch}
+import chisel3.core.{DontCare}
 
-import freechips.rocketchip.config.Parameters
+import freechips.rocketchip.config.{Parameters}
 
 import boom.common._
 import boom.util.{BoolToChar}
