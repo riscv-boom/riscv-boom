@@ -33,10 +33,10 @@ import chisel3._
 import chisel3.util._
 
 import freechips.rocketchip.config.Parameters
-import freechips.rocketchip.util.Str
 
 import boom.common._
 import boom.exu._
+import boom.util.{BoolToChar, CfiTypeToChars}
 
 /**
  * Normal set-associative branch target buffer. Checks an incoming
@@ -94,6 +94,10 @@ class BTBsa(implicit p: Parameters) extends BoomBTB
   val clear_valid = WireInit(false.B)
   val clear_idx = s1_idx
 
+   if (DEBUG_PRINTF) {
+     printf("BTB-SA:\n")
+   }
+
   for (w <- 0 until nWays) {
     val wen = update_valid && way_wen(w)
 
@@ -130,16 +134,24 @@ class BTBsa(implicit p: Parameters) extends BoomBTB
     }
 
     if (DEBUG_PRINTF) {
-      //printf("BTB write (%c): %d 0x%x (PC= 0x%x, TARG= 0x%x) way=%d C=%d\n", Mux(wen, Str("w"), Str("-")), widx,
-      //wtag, r_btb_update.bits.pc, r_btb_update.bits.target, w.U, clear_valid)
-      //for (i <- 0 until nSets)
+      printf("    Write (%c): (TAG[%d][%d] <- 0x%x) (PC:0x%x TARG:0x%x)\n",
+        BoolToChar(wen, 'W'),
+        w.U,
+        widx,
+        wtag,
+        r_btb_update.bits.pc,
+        r_btb_update.bits.target)
+
+      //for (set <- 0 until nSets)
       //{
-      //   printf("    [%d] %d tag=0x%x targ=0x%x [0x%x 0x%x]\n", i.U, (valids >> i.U)(0),
-      //   tags.read(i.U),
-      //   data.read(i.U).target,
-      //   tags.read(i.U) << UInt(idxSz + log2Ceil(fetchWidth*coreInstBytes)),
-      //   data.read(i.U).target << log2Ceil(coreInstBytes)
-      //   )
+      //  printf("        BTB-ARRAY[%d][%d]: V:%c TAG:0x%x TARG:0x%x [Shifted: TAG:0x%x TARG:0x%x]\n",
+      //    way.U,
+      //    set.U,
+      //    BoolToChar((valids >> set.U)(0), 'V'),
+      //    tags.read(set.U),
+      //    data.read(set.U).target,
+      //    tags.read(set.U) << (idx_sz + log2Ceil(fetchWidth*coreInstBytes)).U,
+      //    data.read(set.U).target << log2Ceil(coreInstBytes))
       //}
     }
   }
@@ -206,9 +218,20 @@ class BTBsa(implicit p: Parameters) extends BoomBTB
   // Debug.
 
   if (DEBUG_PRINTF) {
-    printf("BTB predi (%c): hits:%x %d (PC= 0x%x, TARG= 0x%x %d) s2_BIM [%d %d 0x%x]\n",
-      Mux(s1_valid, Str("V"), Str("-")), hits_oh.asUInt, true.B, RegNext(io.req.bits.addr), s1_target, s1_cfi_type,
-      bim.io.resp.valid, bim.io.resp.bits.entry_idx, bim.io.resp.bits.rowdata)
+    val cfiTypeStrs = CfiTypeToChars(io.resp.bits.cfi_type)
+    printf("    Predicted (%c): Hits:b%b (PC:0x%x -> TARG:0x%x) CFI:%c%c%c%c\n",
+      BoolToChar(io.resp.valid, 'V'),
+      RegNext(hits_oh.asUInt),
+      io.resp.bits.fetch_pc,
+      io.resp.bits.target,
+      cfiTypeStrs(0),
+      cfiTypeStrs(1),
+      cfiTypeStrs(2),
+      cfiTypeStrs(3))
+    printf("    BIM: Predicted (%c): Idx:%d Row:0x%x\n",
+      BoolToChar(bim.io.resp.valid, 'V'),
+      bim.io.resp.bits.entry_idx,
+      bim.io.resp.bits.rowdata)
   }
 
   override def toString: String =

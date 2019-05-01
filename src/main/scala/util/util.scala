@@ -18,6 +18,7 @@ import chisel3.util._
 
 import freechips.rocketchip.rocket.Instructions._
 import freechips.rocketchip.rocket._
+import freechips.rocketchip.util.{Str}
 
 import boom.common.{MicroOp}
 import boom.exu.{BrResolutionInfo}
@@ -459,5 +460,70 @@ class BranchKillableQueue[T <: boom.common.HasBoomUOP](gen: T, entries: Int)
                         entries.asUInt, 0.U),
                     Mux(deq_ptr.value > enq_ptr.value,
                         entries.asUInt + ptr_diff, ptr_diff))
+  }
+}
+
+// ------------------------------------------
+// Printf helper functions
+// ------------------------------------------
+
+object BoolToChar
+{
+  /**
+   * Take in a Chisel Bool and convert it into a Str
+   * based on the Chars given
+   *
+   * @param c_bool Chisel Bool
+   * @param trueChar Scala Char if bool is true
+   * @param falseChar Scala Char if bool is false
+   * @return UInt ASCII Char for "trueChar" or "falseChar"
+   */
+  def apply(c_bool: Bool, trueChar: Char, falseChar: Char = '-'): UInt = {
+    Mux(c_bool, Str(trueChar), Str(falseChar))
+  }
+}
+
+object CfiTypeToChars
+{
+  /**
+   * Get a Vec of Strs that can be used for printing
+   *
+   * @param cfi_type specific cfi type
+   * @return Vec of Strs (must be indexed to get specific char)
+   */
+  def apply(cfi_type: UInt) = {
+    val strings = Seq("----", "BR  ", "JAL ", "JALR")
+    val multiVec = VecInit(for(string <- strings) yield { VecInit(for (c <- string) yield { Str(c) }) })
+    multiVec(cfi_type)
+  }
+}
+
+object BpdTypeToChars
+{
+  /**
+   * Get a Vec of Strs that can be used for printing
+   *
+   * @param bpd_type specific bpd type
+   * @return Vec of Strs (must be indexed to get specific char)
+   */
+  def apply(bpd_type: UInt) = {
+    val strings = Seq("BR  ", "JUMP", "----", "RET ", "----", "CALL", "----", "----")
+    val multiVec = VecInit(for(string <- strings) yield { VecInit(for (c <- string) yield { Str(c) }) })
+    multiVec(bpd_type)
+  }
+}
+
+object RobTypeToChars
+{
+  /**
+   * Get a Vec of Strs that can be used for printing
+   *
+   * @param rob_type specific rob type
+   * @return Vec of Strs (must be indexed to get specific char)
+   */
+  def apply(rob_type: UInt) = {
+    val strings = Seq("RST", "NML", "RBK", " WT")
+    val multiVec = VecInit(for(string <- strings) yield { VecInit(for (c <- string) yield { Str(c) }) })
+    multiVec(rob_type)
   }
 }

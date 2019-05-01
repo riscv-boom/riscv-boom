@@ -28,10 +28,10 @@ import chisel3._
 import chisel3.util._
 
 import freechips.rocketchip.config.{Parameters}
-import freechips.rocketchip.util.{Str}
 
 import boom.common._
 import boom.exu._
+import boom.util.{BoolToChar}
 
 case class BimParameters(
   nSets: Int = 1024, // how many sets (conceptually) should we have?
@@ -195,13 +195,13 @@ class BimodalTable(implicit p: Parameters) extends BoomModule with HasBimParamet
   val s2_bank_idx = getBankFromIdx(s2_logical_idx)
 
   if (DEBUG_PRINTF) {
-    printf("BIM: fetchpc: 0x%x, idx:[%d,%d,%d] s2_resp_idx: %d\n",
+    printf("BIM:\n")
+    printf("    ReqPC:0x%x (LIdx:%d BnkIdx:%d Row:%d) S2RespIdx:%d\n",
       io.req.bits.addr,
       s0_logical_idx,
       s0_bank_idx,
       getRowFromIdx(s0_logical_idx),
-      io.resp.bits.entry_idx
-      )
+      io.resp.bits.entry_idx)
   }
 
   // prediction
@@ -252,7 +252,11 @@ class BimodalTable(implicit p: Parameters) extends BoomModule with HasBimParamet
 
     wq.io.deq.ready := !p_will_read
 
-    if (DEBUG_PRINTF) printf("BIM bank[" + w + "] (r:%d ", ren)
+    if (DEBUG_PRINTF) {
+      printf("    Bank[%d]: REN:%c ",
+        w.U,
+        BoolToChar(ren, 'R'))
+    }
 
     val wen = ((wq.io.deq.valid && !ren) || fsm_state === s_clear)
     when (wen) {
@@ -261,9 +265,10 @@ class BimodalTable(implicit p: Parameters) extends BoomModule with HasBimParamet
       val wmask = Mux(fsm_state === s_clear, Fill(rowSz, 1.U), wq.io.deq.bits.mask).asBools
 
       ram.write(waddr, wdata, wmask)
-      if (DEBUG_PRINTF) printf("w:W (%d==%x) %x %x ", waddr, waddr, wdata.asUInt, VecInit(wmask).asUInt)
+
+      if (DEBUG_PRINTF) printf("WEN:W WAddr:(%d=0x%x) Data:0x%x Msk:0x%x ", waddr, waddr, wdata.asUInt, VecInit(wmask).asUInt)
     } .otherwise {
-      if (DEBUG_PRINTF) printf("w:----------")
+      if (DEBUG_PRINTF) printf("WEN:- ")
     }
 
 
@@ -290,16 +295,16 @@ class BimodalTable(implicit p: Parameters) extends BoomModule with HasBimParamet
     assert(!(uq.io.deq.valid && getBankFromIdx(uq.io.deq.bits.entry_idx) =/= w.U))
 
     if (DEBUG_PRINTF) {
-      printf("uq.enq:(%d,%d) uq.deq:(%d,%d), s0_rmw:%d s2_out: %x rmw_data: %x  wq:%d,%d\n",
-        uq.io.enq.valid,
-        uq.io.enq.ready,
-        uq.io.deq.valid,
-        uq.io.deq.ready,
-        s0_rmw_valid,
+      printf("UpdQ:(Enq:(V:%c R:%c) Deq:(V:%c R:%c)) S0_RMW:%c S2_OUT:0x%x RMW_DATA:0x%x WrQ:(EnqV:%d DeqV:%d)\n",
+        BoolToChar(uq.io.enq.valid, 'V'),
+        BoolToChar(uq.io.enq.ready, 'R'),
+        BoolToChar(uq.io.deq.valid, 'V'),
+        BoolToChar(uq.io.deq.ready, 'R'),
+        BoolToChar(s0_rmw_valid, 'V'),
         s2_read_out(w),
         s2_rmw_data.asUInt,
-        wq.io.enq.valid,
-        wq.io.deq.valid)
+        BoolToChar(wq.io.enq.valid, 'V'),
+        BoolToChar(wq.io.deq.valid, 'V'))
     }
   }
 

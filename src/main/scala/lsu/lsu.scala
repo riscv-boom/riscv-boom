@@ -55,7 +55,7 @@ import freechips.rocketchip.util.Str
 
 import boom.common._
 import boom.exu.{BrResolutionInfo, Exception, FuncUnitResp}
-import boom.util.{AgePriorityEncoder, IsKilledByBranch, GetNewBrMask, WrapInc, IsOlder}
+import boom.util.{BoolToChar, AgePriorityEncoder, IsKilledByBranch, GetNewBrMask, WrapInc, IsOlder}
 
 /**
  * IO bundle representing the different signals to interact with the backend
@@ -1369,48 +1369,47 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
 
    if (DEBUG_PRINTF_LSU)
    {
-      printf("wakeup_idx: %d, ld is head of ROB:%d\n", exe_ld_idx_wakeup, io.commit_load_at_rob_head)
+      printf("LSU:\n")
+      printf("    WakeupIdx:%d LDatROBHead:%c\n",
+         exe_ld_idx_wakeup,
+         BoolToChar(io.commit_load_at_rob_head, 'V'))
       for (i <- 0 until NUM_LDQ_ENTRIES)
       {
          val t_laddr = laq_addr(i)
-         printf("         ldq[%d]=(%c%c%c%c%c%c%c%d) st_dep(%d,m=%x) 0x%x %c %c\n"
-            , i.U(LDQ_ADDR_SZ.W)
-            , Mux(laq_allocated(i), Str("V"), Str("-"))
-            , Mux(laq_addr_val(i), Str("A"), Str("-"))
-            , Mux(laq_executed(i), Str("E"), Str("-"))
-            , Mux(laq_succeeded(i), Str("S"), Str("-"))
-            , Mux(laq_failure(i), Str("F"), Str("_"))
-            , Mux(laq_is_uncacheable(i), Str("U"), Str("_"))
-            , Mux(laq_forwarded_std_val(i), Str("X"), Str("_"))
-            , laq_forwarded_stq_idx(i)
-            , laq_uop(i).stq_idx // youngest dep-store
-            , laq_st_dep_mask(i)
-            , t_laddr(19,0)
-
-            , Mux(laq_head === i.U, Str("H"), Str(" "))
-            , Mux(laq_tail===  i.U, Str("T"), Str(" "))
-         )
+         printf("    LDQ[%d]: State:(%c%c%c%c%c%c%c%d) STDep:(StqIdx:%d,Msk:%x) Addr:0x%x H,T:(%c %c)\n",
+            i.U(LDQ_ADDR_SZ.W),
+            BoolToChar(        laq_allocated(i), 'V'),
+            BoolToChar(         laq_addr_val(i), 'A'),
+            BoolToChar(         laq_executed(i), 'E'),
+            BoolToChar(        laq_succeeded(i), 'S'),
+            BoolToChar(          laq_failure(i), 'F'),
+            BoolToChar(   laq_is_uncacheable(i), 'U'),
+            BoolToChar(laq_forwarded_std_val(i), 'X'),
+            laq_forwarded_stq_idx(i),
+            laq_uop(i).stq_idx, // youngest dep-store
+            laq_st_dep_mask(i),
+            t_laddr(19,0),
+            BoolToChar(laq_head === i.U, 'H', ' '),
+            BoolToChar(laq_tail===  i.U, 'T', ' '))
       }
       for (i <- 0 until NUM_STQ_ENTRIES) {
          val t_saddr = saq_addr(i)
-         printf("         saq[%d]=(%c%c%c%c%c%c%c) b:%x 0x%x -> 0x%x %c %c %c %c\n"
-            , i.U(STQ_ADDR_SZ.W)
-            , Mux(stq_allocated(i), Str("V"), Str("-"))
-            , Mux(saq_val(i), Str("A"), Str("-"))
-            , Mux(sdq_val(i), Str("D"), Str("-"))
-            , Mux(stq_committed(i), Str("C"), Str("-"))
-            , Mux(stq_executed(i), Str("E"), Str("-"))
-            , Mux(stq_succeeded(i), Str("S"), Str("-"))
-            , Mux(saq_is_virtual(i), Str("T"), Str("-"))
-            , stq_uop(i).br_mask
-            , t_saddr(19,0)
-            , sdq_data(i)
-
-            , Mux(stq_head === i.U, Str("H"), Str(" "))
-            , Mux(stq_execute_head === i.U, Str("E"), Str(" "))
-            , Mux(stq_commit_head === i.U, Str("C"), Str(" "))
-            , Mux(stq_tail === i.U, Str("T"), Str(" "))
-         )
+         printf("    SAQ[%d]: State:(%c%c%c%c%c%c%c) BMsk:0x%x (Addr:0x%x -> Data:0x%x) H,ExH,CmH,T:(%c %c %c %c)\n",
+            i.U(STQ_ADDR_SZ.W),
+            BoolToChar( stq_allocated(i), 'V'),
+            BoolToChar(       saq_val(i), 'A'),
+            BoolToChar(       sdq_val(i), 'D'),
+            BoolToChar( stq_committed(i), 'C'),
+            BoolToChar(  stq_executed(i), 'E'),
+            BoolToChar( stq_succeeded(i), 'S'),
+            BoolToChar(saq_is_virtual(i), 'T'),
+            stq_uop(i).br_mask,
+            t_saddr(19,0),
+            sdq_data(i),
+            BoolToChar(        stq_head === i.U, 'H', ' '),
+            BoolToChar(stq_execute_head === i.U, 'E', ' '),
+            BoolToChar( stq_commit_head === i.U, 'C', ' '),
+            BoolToChar(        stq_tail === i.U, 'T', ' '))
       }
    }
 }
