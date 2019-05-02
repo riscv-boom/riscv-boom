@@ -20,7 +20,7 @@
 # -- Project information -----------------------------------------------------
 
 project = 'RISCV-BOOM'
-copyright = '2018, Chris Celio, Jerry Zhao, Abraham Gonzalez, Ben Korpan'
+copyright = '2019, The Regents of the University of California'
 author = 'Chris Celio, Jerry Zhao, Abraham Gonzalez, Ben Korpan'
 
 # The short X.Y version
