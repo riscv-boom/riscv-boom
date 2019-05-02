@@ -20,7 +20,7 @@ package boom.exu
 
 import chisel3._
 import chisel3.util._
-import chisel3.experimental.chiselName
+import chisel3.experimental.{chiselName, dontTouch}
 
 import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.rocket.ALU._
@@ -603,13 +603,13 @@ class ALUUnit(isBranchUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)
 
     io.br_unit := br_unit
 
-    if (BPU_PRINTF) {
+    if (DEBUG_BPU_PRINTF) {
       printf("BR Unit:\n")
       printf("    TakePC:%c TARG:0x%x PC:0x%x\n",
         BoolToChar(br_unit.take_pc, 'T'),
         br_unit.target,
         br_unit.pc)
-      val cfiTypeStrings = PrintUtil.CfiTypeChars(brinfo.cfi_type)
+      val cfiTypeStrings = CfiTypeToChars(brinfo.cfi_type)
       printf("    BR Resolution Info:\n")
       printf("        V:%c Mispred:%c CfiType:%c%c%c%c T:%c BTB:(Mispred:%c Blame:%c) BPD:(Mispred:%c Blame:%c)\n",
         BoolToChar(brinfo.valid, 'V'),

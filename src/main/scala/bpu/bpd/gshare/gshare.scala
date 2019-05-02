@@ -25,7 +25,7 @@ import chisel3.core.withReset
 import freechips.rocketchip.config.{Parameters, Field}
 
 import boom.common._
-import boom.util.{ElasticReg, Fold}
+import boom.util.{ElasticReg, Fold, BoolToChar}
 
 /**
  * GShare configuration parameters used in configurations
@@ -62,7 +62,7 @@ trait HasGShareParameters extends HasBoomCoreParameters
  */
 class GShareResp(val fetchWidth: Int, val idxSz: Int) extends Bundle
 {
-  val debugIdx = UInt(idxSz.W) // Can recompute index during update (but let's check for errors).
+  val debug_idx = UInt(idxSz.W) // Can recompute index during update (but let's check for errors).
   val rowdata = UInt((fetchWidth*2).W) // Store to prevent a re-read during an update.
 
   def isTaken(cfi_idx: UInt) = {
@@ -202,7 +202,7 @@ class GShareBrPredictor(
 
   q_s3_resp.io.enq.valid := io.f2_valid
   q_s3_resp.io.enq.bits.rowdata  := s2_out
-  q_s3_resp.io.enq.bits.debugIdx := RegNext(s1_ridx)
+  q_s3_resp.io.enq.bits.debug_idx := RegNext(s1_ridx)
   assert (q_s3_resp.io.enq.ready === !io.f2_stall)
 
   //------------------------------------------------------------
@@ -237,18 +237,18 @@ class GShareBrPredictor(
   // First commit will have garbage so ignore it.
   val enable_assert = RegInit(false.B); when (io.commit.valid) { enable_assert := true.B }
   when (enable_assert && io.commit.valid) {
-    assert (com_idx === com_info.debugIdx, "[gshare] disagreement on update indices.")
+    assert (com_idx === com_info.debug_idx, "[gshare] disagreement on update indices.")
   }
 
   //-------------------------------------------------------------
   // Printf
 
-  if (BPU_PRINTF) {
+  if (DEBUG_BPU_PRINTF) {
     printf("GShare:\n")
     printf("    Resp: V:%c Ts:b%b DbgIdx:%d Row:0x%x\n",
-      PrintUtil.ConvertChar(io.resp.valid, 'V'),
+      BoolToChar(io.resp.valid, 'V'),
       io.resp.bits.takens,
-      q_s3_resp.io.deq.bits.debug_index,
+      q_s3_resp.io.deq.bits.debug_idx,
       q_s3_resp.io.deq.bits.rowdata)
   }
 

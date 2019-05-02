@@ -31,6 +31,7 @@ import boom.bpu._
 import boom.common._
 import boom.exu.{BranchUnitResp, CommitExceptionSignals}
 import boom.lsu.{CanHaveBoomPTW, CanHaveBoomPTWModule}
+import boom.util.{BoolToChar}
 
 /**
  * Parameters to manage a L1 Banked ICache
@@ -209,7 +210,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
     s2_tlb_resp := tlb.io.resp
   }
 
-  if (BPU_PRINTF) {
+  if (DEBUG_BPU_PRINTF) {
     printf("---------------------------------------------------------------------------------------------------------------------\n")
     printf("Frontend:\n")
     printf("    S0: V:%c From:%c PC:0x%x Spec?:%c\n",

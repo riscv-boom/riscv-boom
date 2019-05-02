@@ -112,7 +112,7 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
     val fetchpacket       = new DecoupledIO(new FetchBufferResp)
   })
 
-  val bchecker = Module (new BranchChecker)
+  val brchecker = Module (new BranchChecker)
   val ftq = Module(new FetchTargetQueue(num_entries = ftqSz))
   val fb = Module(new FetchBuffer(num_entries=fetchBufferSz))
   val monitor: Option[FetchMonitor] = (useFetchMonitor).option(Module(new FetchMonitor))
@@ -169,7 +169,7 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
     io.br_unit_resp.take_pc ||
     io.flush_take_pc ||
     (f4_redirect) ||
-    (io.f2_btb_resp.valid && io.f2_btb_resp.bits.taken && io.imem_resp.ready) ||
+    (io.f2_btb_resp.valid && io.f2_btb_resp.bits.taken && io.imem_resp.ready)
 
   io.imem_req.valid   := f0_redirect_valid // tell front-end we had an unexpected change in the stream
   io.imem_req.bits.pc := f0_redirect_pc
@@ -183,8 +183,8 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
       ftq.io.take_pc.bits.addr,
     Mux(io.flush_take_pc,
       io.flush_pc,
-    Mux(br_unit.take_pc,
-      br_unit.target,
+    Mux(io.br_unit_resp.take_pc,
+      io.br_unit_resp.target,
     Mux(r_f4_redirect_valid && r_f4_redirect_req.valid,
       r_f4_redirect_req.bits.addr,
       io.f2_btb_resp.bits.target)))))
@@ -224,7 +224,7 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
   val f3_valid_mask = Wire(Vec(fetchWidth, Bool()))
   val is_br     = Wire(Vec(fetchWidth, Bool()))
   val is_jal    = Wire(Vec(fetchWidth, Bool()))
-  val is_jr     = Wire(Vec(fetchWidth, Bool()))
+  val is_jalr     = Wire(Vec(fetchWidth, Bool()))
   val is_call   = Wire(Vec(fetchWidth, Bool()))
   val is_ret    = Wire(Vec(fetchWidth, Bool()))
   val is_rvc    = Wire(Vec(fetchWidth, Bool()))
@@ -244,7 +244,7 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
   val use_prev = prev_is_half && f3_fetch_bundle.pc === prev_nextpc
 
   // is the instruction not rvc
-  def isInstNonRvc(inst: UInt) = { inst(1,0) === 3.U }
+  def isInstNonRVC(inst: UInt) = { inst(1,0) === 3.U }
 
   assert(fetchWidth >= 4 || !usingCompressed) // Logic gets kind of annoying with fetchWidth = 2
   for (i <- 0 until fetchWidth) {
@@ -275,32 +275,32 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
       // handle rvc cases
       if (i == 0) {
         when (use_prev) {
-            inst := Cat(f3_imemresp.data(startOffset+addHalfOffset, startOffset), prev_inst_half)
+            inst := Cat(f3_imem_resp.data(startOffset+addHalfOffset, startOffset), prev_inst_half)
             f3_fetch_bundle.edge_inst := true.B
         } .otherwise {
             // could either be rvc or full so store all 32b
-            inst := f3_imemresp.data(startOffset+addFullOffset, startOffset)
+            inst := f3_imem_resp.data(startOffset+addFullOffset, startOffset)
             f3_fetch_bundle.edge_inst := false.B
         }
         is_valid := true.B
       } else if (i == 1) {
         // Need special case since 0th instruction may carry over the wrap around
-        inst     := f3_imemresp.data(startOffset+addFullOffset, startOffset)
+        inst     := f3_imem_resp.data(startOffset+addFullOffset, startOffset)
         is_valid := use_prev || // if last inst was straddling then this must be rvc/normal
                     !isPrevInstFull(i)
       } else if (icIsBanked && i == (fetchWidth / 2) - 1) {
         // If we are using a banked I$ we could get cut-off halfway through the fetch bundle
-        inst     := f3_imemresp.data(startOffset+addFullOffset, startOffset)
+        inst     := f3_imem_resp.data(startOffset+addFullOffset, startOffset)
         is_valid := !isPrevInstFull(i) &&
-                    !(isInstNonRVC(inst) && !f3_imemresp.mask(i+1)) // only got 1/2 of fetch packet
+                    !(isInstNonRVC(inst) && !f3_imem_resp.mask(i+1)) // only got 1/2 of fetch packet
                                                                 //   thus this is invalid
                                                                 //   "straddling bank border"
       } else if (i == fetchWidth - 1) {
-        inst     := Cat(0.U(16.W), f3_imemresp.data(startOffset+addHalfOffset, startOffset))
+        inst     := Cat(0.U(16.W), f3_imem_resp.data(startOffset+addHalfOffset, startOffset))
         is_valid := !(isPrevInstFull(i) ||
                       isInstNonRVC(inst)) // if current inst is non-rvc put into next fetch bundle
       } else {
-        inst     := f3_imemresp.data(startOffset+addFullOffset, startOffset)
+        inst     := f3_imem_resp.data(startOffset+addFullOffset, startOffset)
         is_valid := !isPrevInstFull(i)
       }
     }
@@ -318,10 +318,10 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
     f3_valid_mask(i) := f3_valid && f3_imem_resp.mask(i) && is_valid
     is_br(i)         := f3_valid && bpd_decoder.io.is_br   && f3_imem_resp.mask(i) && is_valid
     is_jal(i)        := f3_valid && bpd_decoder.io.is_jal  && f3_imem_resp.mask(i) && is_valid
-    is_jr(i)         := f3_valid && bpd_decoder.io.is_jalr && f3_imem_resp.mask(i) && is_valid
+    is_jalr(i)       := f3_valid && bpd_decoder.io.is_jalr && f3_imem_resp.mask(i) && is_valid
     is_call(i)       := f3_valid && bpd_decoder.io.is_call && f3_imem_resp.mask(i) && is_valid
     is_ret(i)        := f3_valid && bpd_decoder.io.is_ret  && f3_imem_resp.mask(i) && is_valid
-    is_rvc(i)        := f3_valid_mask(i) && !isInstNonRvc(inst) && usingCompressed.B
+    is_rvc(i)        := f3_valid_mask(i) && !isInstNonRVC(inst) && usingCompressed.B
     br_targs(i)      := bpd_decoder.io.target
     jal_targs(i)     := bpd_decoder.io.target
     jal_targs_ma(i)  := jal_targs(i)(1) && is_jal(i) && !usingCompressed.B
@@ -445,7 +445,7 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
 
   // catch any BTB mispredictions (and fix-up missed JALs)
   brchecker.io.insts.valid := f3_enqueue_fb_ftq_valid // only want to be valid if the stage is moving on
-  brchecker.io.insts.bits.mask := VecInit(f3_imemresp.mask.toBools)
+  brchecker.io.insts.bits.mask := VecInit(f3_imem_resp.mask.asBools)
   for (i <- 0 until fetchWidth) {
     brchecker.io.insts.bits.decode_signals(i).is_br      := is_br(i)
     brchecker.io.insts.bits.decode_signals(i).is_jal     := is_jal(i)
@@ -457,7 +457,7 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
     brchecker.io.insts.bits.decode_signals(i).jal_target := jal_targs(i)
   }
   brchecker.io.insts.bits.edge_inst := f3_fetch_bundle.edge_inst
-  brchecker.io.insts.bits.fetch_pc := f3_imemresp.pc
+  brchecker.io.insts.bits.fetch_pc := f3_imem_resp.pc
   brchecker.io.insts.bits.aligned_pc := f3_aligned_pc
 
   brchecker.io.btb_resp := f3_btb_resp
@@ -498,7 +498,7 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
   f3_kill_mask := KillMask(f3_redirect_req.valid,
                            Mux(f3_bpd_overrides_brchecker, f3_bpd_redirect_cfiidx, brchecker.io.resp.bits.cfi_idx),
                            fetchWidth)
-  f3_btb_mask := Mux(f3_btb_resp.valid && !f3_redirect_req.valid,`
+  f3_btb_mask := Mux(f3_btb_resp.valid && !f3_redirect_req.valid,
                    f3_btb_resp.bits.mask,
                    Fill(fetchWidth, 1.U(1.W)))
 
@@ -543,7 +543,7 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
     f3_fetch_bundle.bpu_info(w).bpd_resp      := io.f3_bpd_resp.bits
 
     // who is to blame for the prediction
-    when (w.U === f3_bpd_br_idx && f3_bpd_overrides_bcheck) {
+    when (w.U === f3_bpd_br_idx && f3_bpd_overrides_brchecker) {
       f3_fetch_bundle.bpu_info(w).bpd_blame := true.B
     } .elsewhen (w.U === f3_btb_resp.bits.cfi_idx && f3_btb_resp.valid && !f3_redirect_req.valid) {
       f3_fetch_bundle.bpu_info(w).btb_blame := true.B
@@ -572,7 +572,7 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
 
   assert (!(r_f4_redirect_req.valid && !r_f4_redirect_valid),
     "[fetch] f4-request is high but f4_valid is not.")
-  assert (!(io.clear_fetchbuffer && !(br_unit.take_pc || io.flush_take_pc || io.sfence_take_pc)),
+  assert (!(io.clear_fetchbuffer && !(io.br_unit_resp.take_pc || io.flush_take_pc || io.sfence_take_pc)),
     "[fetch] F4 should be cleared if a F0_redirect due to BRU/Flush/Sfence.")
 
   //-------------------------------------------------------------
@@ -775,7 +775,7 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
   // **** Printfs ****
   //-------------------------------------------------------------
 
-  if (BPU_PRINTF) {
+  if (DEBUG_BPU_PRINTF) {
     // Fetch Stage 1
     printf("Fetch Controller:\n")
     printf("    Fetch0:\n")
@@ -872,12 +872,12 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
     printf("Fetch Controller:\n")
     printf("    Fetch1:\n")
     printf("        BRUnit: V:%c Tkn:%c Mispred:%c F0Redir:%c TakePc:%c RedirPc:0x%x\n",
-      BoolToChar(io.br_unit.brinfo.valid, 'V'),
-      BoolToChar(io.br_unit.brinfo.taken, 'T'),
-      BoolToChar(io.br_unit.brinfo.mispredict, 'M'),
+      BoolToChar(io.br_unit_resp.brinfo.valid, 'V'),
+      BoolToChar(io.br_unit_resp.brinfo.taken, 'T'),
+      BoolToChar(io.br_unit_resp.brinfo.mispredict, 'M'),
       BoolToChar(f0_redirect_valid, 'T'),
       Mux(io.flush_take_pc, Str("F"),
-        Mux(io.br_unit.take_pc, Str("B"), Str(" "))),
+        Mux(io.br_unit_resp.take_pc, Str("B"), Str(" "))),
       f0_redirect_pc)
 
     // Fetch Stage 2

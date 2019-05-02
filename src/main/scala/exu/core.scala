@@ -1176,7 +1176,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
   //-------------------------------------------------------------
   //-------------------------------------------------------------
 
-  if (BPU_PRINTF) {
+  if (DEBUG_BPU_PRINTF) {
     printf("--- Cycle=%d --- Retired Instrs=%d ----------------------------------------------\n",
       debug_tsc_reg,
       debug_irt_reg & (0xffffff).U)
@@ -1295,8 +1295,8 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       BoolToChar(br_unit_resp.brinfo.valid, 'V'),
       BoolToChar(br_unit_resp.brinfo.mispredict, 'M'),
       BoolToChar(br_unit_resp.brinfo.taken, 'T', 'N'),
-      BoolToChar(exe_units(brunit_idx).io.get_ftq_pc.next_val, 'V'),
-      exe_units(brunit_idx).io.get_ftq_pc.next_pc(19,0))
+      BoolToChar(exe_units(brunit_idx).io.get_ftq_pc.next_pc.valid, 'V'),
+      exe_units(brunit_idx).io.get_ftq_pc.next_pc.bits(19,0))
 
     for (x <- 0 until whitespace) {
       printf("|\n")

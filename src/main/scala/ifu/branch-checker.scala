@@ -24,6 +24,7 @@ import chisel3._
 import chisel3.util._
 
 import freechips.rocketchip.config.{Parameters}
+import freechips.rocketchip.util.{Str}
 
 import boom.bpu._
 import boom.common._
@@ -162,7 +163,7 @@ class BranchChecker(implicit p: Parameters) extends BoomModule
                                     + (jal_idx << log2Ceil(coreInstBytes).U)
                                     + Mux(jal_is_rvc || (io.insts.bits.edge_inst && (jal_idx === 0.U)), 2.U, 4.U))
 
-  if (BPU_PRINTF) {
+  if (DEBUG_BPU_PRINTF) {
     printf("BR Checker:\n")
     when (io.resp.valid) {
       printf("    Redirect -> Was:")

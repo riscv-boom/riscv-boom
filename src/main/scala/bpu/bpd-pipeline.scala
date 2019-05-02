@@ -31,7 +31,7 @@ import freechips.rocketchip.util.{Str, UIntToAugmentedUInt}
 
 import boom.common._
 import boom.exu.{BranchUnitResp}
-import boom.util.{BoolToChar}
+import boom.util.{BoolToChar, CfiTypeToChars, BpdTypeToChars}
 
 /**
  * Give this to each instruction/uop and pass this down the pipeline to the branch unit
@@ -193,7 +193,7 @@ class BranchPredictionStage(implicit p: Parameters) extends BoomModule
       btb.io.resp.bits.target)
   }
 
-  if (BPU_PRINTF) {
+  if (DEBUG_BPU_PRINTF) {
     printf("BPD Pipeline:\n")
     printf("    Fetch0: BTB: Req:(V:%c PC:0x%x)\n",
            BoolToChar(btb.io.req.valid, 'V'),

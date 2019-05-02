@@ -260,7 +260,7 @@ abstract class BoomBrPredictor(val historyLength: Int)(implicit p: Parameters) e
   //************************************************
   // Printf
 
-  if (BPU_PRINTF) {
+  if (DEBUG_BPU_PRINTF) {
     //printf("BrPredictor:\n")
     //printf("    F0_Hist:0x%x F1_Hist:0x%x F2_Hist:0x%x F3_Hist:(V:%c Hist:0x%x) F4_Hist:0x%x\n",
     //  f0_history,

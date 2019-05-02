@@ -36,7 +36,7 @@ import freechips.rocketchip.config.Parameters
 
 import boom.common._
 import boom.exu._
-import boom.util.{BoolToChar, CfiTypeToChars}
+import boom.util.{BoolToChar, CfiTypeToChars, BpdTypeToChars}
 
 /**
  * Normal set-associative branch target buffer. Checks an incoming
@@ -106,9 +106,9 @@ class BTBsa(implicit p: Parameters) extends BoomBTB
   for (w <- 0 until nWays) {
     val wen = update_valid && way_wen(w)
 
-    val valids   = RegInit(0.U(nSets.W)).suggestName(s"btb_valids_$way")
-    val tags     = SyncReadMem(nSets, UInt(tagSz.W)).suggestName(s"btb_tag_array_$way")
-    val data     = SyncReadMem(nSets, new BTBSetData()).suggestName(s"btb_data_array_$way")
+    val valids   = RegInit(0.U(nSets.W)).suggestName(s"btb_valids_$w")
+    val tags     = SyncReadMem(nSets, UInt(tagSz.W)).suggestName(s"btb_tag_array_$w")
+    val data     = SyncReadMem(nSets, new BTBSetData()).suggestName(s"btb_data_array_$w")
 
     val is_valid = (valids >> s1_idx)(0) && RegNext(!wen)
     val rout     = data.read(s0_idx, !wen)
@@ -134,8 +134,10 @@ class BTBsa(implicit p: Parameters) extends BoomBTB
     assert(!(wen && clear_valid), "[btb-sa] both should not be high")
 
     // if multiple ways hit, clear the set last read
-    when (clear_valid && clear_way_oh(way)) {
-      printf("BTB: Cleared Idx:%d Way:%d\n", clear_idx, way.U)
+    when (clear_valid && clear_way_oh(w)) {
+      printf("BTB: Cleared Idx:%d Way:%d\n",
+        clear_idx,
+        w.U)
       valids := valids.bitSet(clear_idx, false.B)
     }
 
@@ -143,7 +145,7 @@ class BTBsa(implicit p: Parameters) extends BoomBTB
       when (wen) {
          printf("    Write to (Idx:%d Way:%d) <- ((PC:0x%x Tag:0x%x) TARG:0x%x)\n",
            widx,
-           way.U,
+           w.U,
            r_btb_update.bits.pc,
            wtag,
            r_btb_update.bits.target)
@@ -258,9 +260,9 @@ class BTBsa(implicit p: Parameters) extends BoomBTB
       bim.io.resp.bits.rowdata)
   }
 
-  if (BPU_PRINTF) {
-    val cfiTypeStrs = PrintUtil.CfiTypeChars(io.resp.bits.cfi_type)
-    val bpdTypeStrs = PrintUtil.BpdTypeChars(io.resp.bits.bpd_type)
+  if (DEBUG_BPU_PRINTF) {
+    val cfiTypeStrs = CfiTypeToChars(io.resp.bits.cfi_type)
+    val bpdTypeStrs = BpdTypeToChars(io.resp.bits.bpd_type)
     printf("    Resp: V:%c Hits:b%b T:%c PC:0x%x TARG:0x%x RVC:%c EDGE:%c CfiType:%c%c%c%c BrType:%c%c%c%c\n",
       BoolToChar(io.resp.valid, 'V'),
       RegNext(hits_oh.asUInt),
@@ -281,6 +283,7 @@ class BTBsa(implicit p: Parameters) extends BoomBTB
       BoolToChar(bim.io.resp.valid, 'V'),
       bim.io.resp.bits.entry_idx,
       bim.io.resp.bits.rowdata)
+  }
 
   override def toString: String =
     "   ==BTB-SA==" +

@@ -630,12 +630,12 @@ class BranchDecode(implicit p: Parameters) extends BoomModule
                               ComputeJALTarget(io.pc, io.inst, xLen))
   io.cfi_type :=
     Mux(cs_is_jalr,
-      CfiType.jalr,
+      CfiType.JALR,
     Mux(cs_is_jal,
-      CfiType.jal,
+      CfiType.JAL,
     Mux(cs_is_br,
-      CfiType.branch,
-      CfiType.none)))
+      CfiType.BRANCH,
+      CfiType.NONE)))
 
   // -------
   // Asserts
