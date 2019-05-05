@@ -73,9 +73,7 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
 
     val f2_btb_resp       = Flipped(Valid(new BoomBTBResp))
     val f2_bpd_resp       = Flipped(Valid(new BpdResp))
-    val f3_ras_update     = Valid(new RasUpdate)
     val f3_bpd_resp       = Flipped(Valid(new BpdResp))
-    val f3_btb_update     = Valid(new BoomBTBUpdate)
     val f3_is_br          = Output(Vec(fetchWidth, Bool()))
 
     val f2_redirect       = Output(Bool())
@@ -86,6 +84,8 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
 
     val bim_update        = Valid(new BimUpdate)
     val bpd_update        = Valid(new BpdUpdate)
+    val btb_update        = Valid(new BoomBTBUpdate)
+    val ras_update        = Valid(new RasUpdate)
 
     val ftq_restore_history = Valid(new RestoreHistory)
 
@@ -340,7 +340,6 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
   val f3_bpd_br_idx = PriorityEncoder(f3_bpd_predictions)
   val f3_bpd_br_is_rvc = is_rvc(f3_bpd_br_idx)
   val f3_bpd_target = br_targs(f3_bpd_br_idx)
-  val f3_bpd_cause_btb_update = WireInit(false.B) // does the BPD cause a BTB update?
   val f3_bpd_may_redirect_taken = WireInit(false.B) // request towards a taken branch target (taking into account what BTB did)
   val f3_bpd_may_redirect_next_pc = WireInit(false.B) // override taken prediction and fetch the next line pc (or take JAL)
   val f3_bpd_may_redirect = f3_bpd_may_redirect_taken || f3_bpd_may_redirect_next_pc // override the taken prediction
@@ -358,7 +357,6 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
   dontTouch(f3_bpd_br_taken)
   //dontTouch(f3_bpd_br_idx)
   //dontTouch(f3_bpd_target)
-  dontTouch(f3_bpd_cause_btb_update)
   dontTouch(f3_bpd_may_redirect_taken)
   dontTouch(f3_bpd_may_redirect_next_pc)
   dontTouch(f3_bpd_may_redirect)
@@ -436,8 +434,6 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
   } .otherwise {
     // BTB made no prediction - let the BPD do what it wants
     f3_bpd_may_redirect_taken := io.f3_bpd_resp.valid && f3_bpd_br_taken
-    // speculatively add branch to the BTB if we think it will be taken
-    f3_bpd_cause_btb_update := f3_bpd_may_redirect_taken
   }
 
   assert (!(f3_bpd_may_redirect_taken && f3_bpd_may_redirect_next_pc),
@@ -476,23 +472,6 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
   f3_redirect_req.valid := f3_valid &&
                   (brchecker.io.resp.valid || (f3_bpd_may_redirect && !f3_jal_overrides_bpd_taken_pred)) // && !(f0_redirect_valid)
   f3_redirect_req.bits.addr := Mux(f3_bpd_overrides_brchecker, f3_bpd_redirect_target, brchecker.io.resp.bits.pc_req.addr)
-
-  // update the BTB and the RAS based on the branch checker or bpd
-  val f3_btb_update_bits = Wire(new BoomBTBUpdate)
-  f3_btb_update_bits := brchecker.io.btb_update.bits
-  when (f3_bpd_overrides_brchecker) {
-    f3_btb_update_bits.target    := f3_bpd_target
-    f3_btb_update_bits.cfi_idx   := f3_bpd_br_idx
-    f3_btb_update_bits.is_rvc    := f3_bpd_br_is_rvc
-    f3_btb_update_bits.edge_inst := f3_fetch_bundle.edge_inst
-    f3_btb_update_bits.bpd_type  := BpredType.BRANCH
-    f3_btb_update_bits.cfi_type  := CfiType.BRANCH
-  }
-
-  // only do the update if the brchecker or bpd need to update it
-  io.f3_btb_update.valid := brchecker.io.btb_update.valid || f3_bpd_cause_btb_update
-  io.f3_btb_update.bits := f3_btb_update_bits
-  io.f3_ras_update := brchecker.io.ras_update
 
   // aggregate signals into the fetch bundle to be enqueued in the fetch buffer
   f3_kill_mask := KillMask(f3_redirect_req.valid,
@@ -598,6 +577,13 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
   //-------------------------------------------------------------
 
   ftq.io.enq.valid := f3_enqueue_fb_ftq_valid
+
+  ftq.io.enq.bits.btb_info.btb_hit := f3_btb_resp.valid
+  ftq.io.enq.bits.btb_info.taken := f3_btb_resp.bits.taken
+  ftq.io.enq.bits.btb_info.target := f3_btb_resp.bits.target
+  ftq.io.enq.bits.bpd_extra_info.takens := io.f3_bpd_resp.bits.takens
+  ftq.io.enq.bits.bpd_extra_info.bpd_hit := io.f3_bpd_resp.valid
+
   ftq.io.enq.bits.fetch_pc := f3_imem_resp.pc
   ftq.io.enq.bits.history := io.f3_bpd_resp.bits.history
   ftq.io.enq.bits.bpd_info := io.f3_bpd_resp.bits.info
@@ -626,6 +612,8 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
 
   io.bim_update := ftq.io.bim_update
   io.bpd_update := ftq.io.bpd_update
+  io.btb_update := ftq.io.btb_update
+  io.ras_update := ftq.io.ras_update
 
   //-------------------------------------------------------------
   // **** Frontend Response ****

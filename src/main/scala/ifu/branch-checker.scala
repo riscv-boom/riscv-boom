@@ -58,10 +58,6 @@ class BranchChecker(implicit p: Parameters) extends BoomModule
     }))
     val btb_resp     = Flipped(Valid(new BoomBTBResp))
 
-    // send a correctional update to the btb/ras
-    val btb_update   = Valid(new BoomBTBUpdate)
-    val ras_update   = Valid(new RasUpdate)
-
     // redirection of the frontend based on results
     val resp         = Valid(new BoomBundle {
       val pc_req = new PCReq // address to redirect to
@@ -137,32 +133,6 @@ class BranchChecker(implicit p: Parameters) extends BoomModule
   // mask out instructions after predicted cfi
   io.resp.bits.cfi_idx := Mux(jal_wins, jal_idx, (fetchWidth-1).U)
 
-  //-------------------------------------------------------------
-  // Perform updates
-
-  // update the BTB for jumps it missed
-  // TODO: XXX: clear bad BTB entries when btb is wrong
-  io.btb_update.valid         := io.insts.valid && jal_wins
-  io.btb_update.bits.pc       := io.insts.bits.fetch_pc
-  io.btb_update.bits.target   := jal_target
-  io.btb_update.bits.taken    := true.B
-  io.btb_update.bits.cfi_idx  := jal_idx
-  io.btb_update.bits.is_rvc   := jal_is_rvc
-  io.btb_update.bits.edge_inst := io.insts.bits.edge_inst
-  io.btb_update.bits.bpd_type := Mux(jal_is_call, BpredType.CALL,
-                                     Mux(jal_is_ret, BpredType.RET,
-                                         BpredType.JUMP))
-  io.btb_update.bits.cfi_type := CfiType.JAL
-
-  // for critical path reasons, remove dependence on bpu_request to ras_update
-  val jal_may_win = jal_vec.reduce(_|_) && (!btb_hit || btb_was_wrong || jal_idx < btb_cfi_idx)
-  io.ras_update.valid            := io.insts.valid && (jal_may_win && (jal_is_call || jal_is_ret))
-  io.ras_update.bits.is_call     := jal_is_call
-  io.ras_update.bits.is_ret      := jal_is_ret
-  io.ras_update.bits.return_addr := (io.insts.bits.aligned_pc
-                                    + (jal_idx << log2Ceil(coreInstBytes).U)
-                                    + Mux(jal_is_rvc || (io.insts.bits.edge_inst && (jal_idx === 0.U)), 2.U, 4.U))
-
   if (DEBUG_BPU_PRINTF) {
     printf("BR Checker:\n")
     when (io.resp.valid) {
@@ -175,21 +145,8 @@ class BranchChecker(implicit p: Parameters) extends BoomModule
       printf(" TARG:0x%x CfiIdx:%d\n",
         io.resp.bits.pc_req.addr,
         io.resp.bits.cfi_idx)
-    }
-
-    when (io.btb_update.valid) {
-      printf("    BTB-Update: PC:0x%x TARG:0x%x CfiIdx:%d\n",
-        io.btb_update.bits.pc,
-        io.btb_update.bits.target,
-        io.btb_update.bits.cfi_idx)
-    }
-
-    when (io.ras_update.valid) {
-      printf("    RAS-Update: CallOrRet:%c RetAddr:0x%x\n",
-        Mux(io.ras_update.bits.is_call, Str("C"),
-          Mux(io.ras_update.bits.is_ret, Str("R"),
-            Str("-"))),
-        io.ras_update.bits.return_addr)
+    } .otherwise {
+      printf("    None\n")
     }
   }
 }

@@ -131,7 +131,8 @@ class BTBsa(implicit p: Parameters) extends BoomBTB
       data(widx) := newdata
     }
 
-    assert(!(wen && clear_valid), "[btb-sa] both should not be high")
+    // currently CLEAR will take priority (may lose updates)
+    //assert(!(wen && clear_valid), "[btb-sa] both should not be high")
 
     // if multiple ways hit, clear the set last read
     when (clear_valid && clear_way_oh(w)) {
@@ -176,7 +177,12 @@ class BTBsa(implicit p: Parameters) extends BoomBTB
 
   // if multiple ways hit, invalidate all matched entries
   when (freechips.rocketchip.util.PopCountAtLeast(hits_oh.asUInt, 2)) {
-    clear_way_oh := hits_oh
+    clear_way_oh := (hits_oh.asUInt & ~PriorityEncoderOH(hits_oh.asUInt)).asBools // Choose bottom bit then use it to not clear that entry
+    //printf("DEBUG: hits_oh:b%b withPri:(b%b,%d) afterwards:b%b\n",
+    //  hits_oh.asUInt,
+    //  PriorityEncoderOH(hits_oh.asUInt),
+    //  PriorityEncoderOH(hits_oh.asUInt),
+    //  hits_oh.asUInt & ~PriorityEncoderOH(hits_oh.asUInt))
     clear_valid := true.B
   }
 

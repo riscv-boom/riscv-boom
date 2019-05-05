@@ -319,10 +319,10 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   bpdpipeline.io.f4_taken := fetch_controller.io.f4_taken
   bpdpipeline.io.fe_clear := io.cpu.clear_fetchbuffer
 
-  bpdpipeline.io.f3_ras_update := fetch_controller.io.f3_ras_update
-  bpdpipeline.io.f3_btb_update := fetch_controller.io.f3_btb_update
-  bpdpipeline.io.bim_update    := fetch_controller.io.bim_update
-  bpdpipeline.io.bpd_update    := fetch_controller.io.bpd_update
+  bpdpipeline.io.ras_update := fetch_controller.io.ras_update
+  bpdpipeline.io.btb_update := fetch_controller.io.btb_update
+  bpdpipeline.io.bim_update := fetch_controller.io.bim_update
+  bpdpipeline.io.bpd_update := fetch_controller.io.bpd_update
 
   bpdpipeline.io.status_prv    := io.cpu.status_prv
   bpdpipeline.io.status_debug  := io.cpu.status_debug

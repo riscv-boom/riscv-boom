@@ -73,8 +73,6 @@ class BranchPredictionStage(implicit p: Parameters) extends BoomModule
     // Fetch3
     val f3_is_br      = Input(Vec(fetchWidth, Bool())) // mask of branches from I$
     val f3_bpd_resp   = Valid(new BpdResp)
-    val f3_btb_update = Flipped(Valid(new BoomBTBUpdate))
-    val f3_ras_update = Flipped(Valid(new RasUpdate))
     val f3_stall      = Input(Bool()) // f4 is not ready -- back-pressure the f3 stage.
 
     // Fetch4
@@ -84,6 +82,8 @@ class BranchPredictionStage(implicit p: Parameters) extends BoomModule
     // Commit
     val bim_update    = Flipped(Valid(new BimUpdate))
     val bpd_update    = Flipped(Valid(new BpdUpdate))
+    val btb_update    = Flipped(Valid(new BoomBTBUpdate))
+    val ras_update    = Flipped(Valid(new RasUpdate))
 
     // Other
     val br_unit_resp  = Input(new BranchUnitResp())
@@ -132,31 +132,10 @@ class BranchPredictionStage(implicit p: Parameters) extends BoomModule
   io.f3_bpd_resp.bits := bpd.io.resp.bits
 
   //************************************************
-  // Update the RAS
+  // Update the BTB/BIM/RAS
 
-  // update RAS based on BTB's prediction information (or the branch-check correction).
-  val btb_resp = btb.io.resp.bits
-
-  btb.io.ras_update := io.f3_ras_update
-  btb.io.ras_update.valid := (btb.io.resp.valid && !io.f2_stall) || (io.f3_ras_update.valid && !io.f3_stall)
-
-  when (btb.io.resp.valid) {
-    btb.io.ras_update.bits.is_call      := BpredType.isCall(btb_resp.bpd_type)
-    btb.io.ras_update.bits.is_ret       := BpredType.isReturn(btb_resp.bpd_type)
-    // TODO: double check that this is right? how do you know if the return pc is correct here
-    btb.io.ras_update.bits.return_addr  := (btb_resp.fetch_pc
-                                           + (btb_resp.cfi_idx << log2Ceil(coreInstBytes).U)
-                                           + Mux(btb_resp.is_rvc || (btb_resp.edge_inst && (btb_resp.cfi_idx === 0.U)), 2.U, 4.U))
-  }
-
-  //************************************************
-  // Update the BTB/BIM
-
-  // br unit has higher priority than a f3 update
-  btb.io.btb_update := Mux(io.br_unit_resp.btb_update.valid,
-                         io.br_unit_resp.btb_update,
-                         io.f3_btb_update)
-
+  btb.io.btb_update := io.btb_update
+  btb.io.ras_update := io.ras_update
   btb.io.bim_update := io.bim_update
 
   //************************************************
@@ -206,10 +185,8 @@ class BranchPredictionStage(implicit p: Parameters) extends BoomModule
 
     val cfiTypeStrings = CfiTypeToChars(btb.io.btb_update.bits.cfi_type)
     val bpdTypeStrings = BpdTypeToChars(btb.io.btb_update.bits.bpd_type)
-    printf("    Update: BTB: V:%c From:%c%c PC:0x%x TARG:0x%x T:%c BpdType:%c%c%c%c CfiType:%c%c%c%c\n",
+    printf("    Update: BTB: V:%c PC:0x%x TARG:0x%x T:%c BpdType:%c%c%c%c CfiType:%c%c%c%c\n",
            BoolToChar(btb.io.btb_update.valid, 'V'),
-           BoolToChar(io.br_unit_resp.btb_update.valid, 'B', 'F'),
-           BoolToChar(io.br_unit_resp.btb_update.valid, 'R', '3'),
            btb.io.btb_update.bits.pc,
            btb.io.btb_update.bits.target,
            BoolToChar(btb.io.btb_update.bits.taken, 'T'),

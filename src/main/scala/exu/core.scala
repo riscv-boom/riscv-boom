@@ -226,7 +226,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       ("nop",                               () => false.B),
       ("branch misprediction",              () => br_unit_resp.brinfo.mispredict),
       ("control-flow target misprediction", () => br_unit_resp.brinfo.mispredict &&
-                                                  br_unit_resp.brinfo.is_jr),
+                                                  br_unit_resp.brinfo.is_jalr),
       ("flush",                             () => rob.io.flush.valid),
       ("branch resolved",                   () => br_unit_resp.brinfo.valid),
       //("btb blame",                         () => br_unit_resp.brinfo.btb_made_pred),
@@ -466,7 +466,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
   io.ifu.flush_icache :=
     Range(0,coreWidth).map{i => rob.io.commit.valids(i) && rob.io.commit.uops(i).is_fencei}.reduce(_|_) ||
-    (br_unit_resp.brinfo.mispredict && br_unit_resp.brinfo.is_jr &&  csr.io.status.debug)
+    (br_unit_resp.brinfo.mispredict && br_unit_resp.brinfo.is_jalr &&  csr.io.status.debug)
 
   // Delay sfence to match pushing the sfence.addr into the TLB's CAM port.
   io.ifu.sfence := RegNext(lsu.io.exe_resp.bits.sfence)

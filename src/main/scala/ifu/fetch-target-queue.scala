@@ -47,8 +47,17 @@ class FTQBundle(implicit p: Parameters) extends BoomBundle
 {
   val fetch_pc = UInt(vaddrBitsExtended.W) // TODO compress out high-order bits
   val history = UInt(globalHistoryLength.W)
+  val btb_info = new Bundle {
+    val target = UInt(vaddrBits.W)
+    val btb_hit = Bool()
+    val taken = Bool()
+  }
   val bim_info = new BimStorage
   val bpd_info = UInt(bpdInfoSize.W)
+  val bpd_extra_info = new Bundle {
+    val takens = UInt(fetchWidth.W)
+    val bpd_hit = Bool()
+  }
 }
 
 /**
@@ -66,6 +75,17 @@ class CfiMissInfo(implicit p: Parameters) extends BoomBundle
   val taken = Bool()         // If a branch, was it taken?
   val cfi_idx = UInt(log2Ceil(fetchWidth).W) // which instruction in fetch group?
   val cfi_type = CfiType()   // What kind of instruction is stored here?
+
+  val is_rvc     = Bool()
+  val edge_inst  = Bool()
+  val target     = UInt()
+  val bpd_type   = BpredType()
+
+  val pc_sel     = UInt()
+  val wrong_target = Bool()
+
+  val btb_blame = Bool()
+  val bpd_blame = Bool()
 }
 
 /**
@@ -117,6 +137,8 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
 
     val bim_update = Valid(new BimUpdate)
     val bpd_update = Valid(new BpdUpdate)
+    val btb_update = Valid(new BoomBTBUpdate)
+    val ras_update = Valid(new RasUpdate)
 
     // BranchResolutionUnit tells us the outcome of branches/jumps.
     val brinfo = Input(new BrResolutionInfo())
@@ -132,8 +154,7 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
   // What is the current commit point of the processor? Dequeue entries until deq_ptr matches commit_ptr.
   val commit_ptr = RegInit(0.asUInt(log2Ceil(num_entries).W))
 
-  val ram = Mem(num_entries, new FTQBundle())
-  ram.suggestName("ftq_bundle_ram")
+  val ram = Mem(num_entries, new FTQBundle()).suggestName("ftq_bundle_ram")
   val cfi_info = Reg(Vec(num_entries, new CfiMissInfo()))
 
   private def initCfiInfo(br_seen: Bool, cfi_idx: UInt): CfiMissInfo = {
@@ -143,6 +164,14 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
     b.taken := false.B
     b.cfi_idx := cfi_idx
     b.cfi_type := Mux(br_seen, CfiType.BRANCH, CfiType.NONE)
+    b.is_rvc := false.B
+    b.edge_inst := false.B
+    b.target := 0.U
+    b.bpd_type := BpredType.BRANCH
+    b.pc_sel := 3.U
+    b.wrong_target := false.B
+    b.btb_blame := false.B
+    b.bpd_blame := false.B
     b
   }
 
@@ -198,13 +227,20 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
     val prev_cfi_idx        = cfi_info(io.brinfo.ftq_idx).cfi_idx
     val new_cfi_idx         = io.brinfo.getCfiIdx
 
-    when ((io.brinfo.mispredict && !prev_mispredicted) ||
-          (io.brinfo.mispredict && (new_cfi_idx < prev_cfi_idx))) {
+    when (io.brinfo.mispredict && (!prev_mispredicted || (new_cfi_idx < prev_cfi_idx))) {
       // Overwrite if a misprediction occurs and is older than previous misprediction, if any.
       cfi_info(io.brinfo.ftq_idx).mispredicted := true.B
       cfi_info(io.brinfo.ftq_idx).taken := io.brinfo.taken
       cfi_info(io.brinfo.ftq_idx).cfi_idx := new_cfi_idx
       cfi_info(io.brinfo.ftq_idx).cfi_type := io.brinfo.cfi_type
+      cfi_info(io.brinfo.ftq_idx).is_rvc := io.brinfo.is_rvc
+      cfi_info(io.brinfo.ftq_idx).edge_inst := io.brinfo.edge_inst
+      cfi_info(io.brinfo.ftq_idx).target := io.brinfo.target
+      cfi_info(io.brinfo.ftq_idx).bpd_type := io.brinfo.bpd_type
+      cfi_info(io.brinfo.ftq_idx).pc_sel := io.brinfo.pc_sel
+      cfi_info(io.brinfo.ftq_idx).wrong_target := io.brinfo.wrong_target
+      cfi_info(io.brinfo.ftq_idx).btb_blame := io.brinfo.btb_made_pred
+      cfi_info(io.brinfo.ftq_idx).bpd_blame := io.brinfo.bpd_made_pred
     } .elsewhen (!prev_mispredicted && (new_cfi_idx === prev_cfi_idx)) {
       cfi_info(io.brinfo.ftq_idx).executed := true.B
       cfi_info(io.brinfo.ftq_idx).taken := io.brinfo.taken
@@ -215,7 +251,7 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
   // **** Commit Data Read ****
   //-------------------------------------------------------------
 
-  if (DEBUG_PRINTF) {
+  if (DEBUG_PRINTF || DEBUG_BPU_PRINTF) {
     printf("FTQ:\n")
   }
 
@@ -225,12 +261,11 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
     val miss_data = cfi_info(deq_ptr.value)
     val com_cntr = com_data.bim_info.value
     val com_taken = miss_data.taken
-    val saturated = (com_cntr === 0.U && !com_taken) || (com_cntr === 3.U && com_taken)
+    val saturated = ((com_cntr === 0.U) && !com_taken) || ((com_cntr === 3.U) && com_taken)
 
-    io.bim_update.valid :=
-      miss_data.cfi_type === CfiType.BRANCH &&
-      (miss_data.mispredicted) ||
-      (!miss_data.mispredicted && miss_data.executed && !saturated)
+    // TODO: Understand this logic
+    io.bim_update.valid := miss_data.mispredicted ||
+                           (!miss_data.mispredicted && miss_data.executed && !saturated)
 
     io.bim_update.bits.entry_idx    := com_data.bim_info.entry_idx
     io.bim_update.bits.cntr_value   := com_cntr
@@ -238,13 +273,100 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
     io.bim_update.bits.taken        := miss_data.taken
     io.bim_update.bits.mispredicted := miss_data.mispredicted
 
-    io.bpd_update.valid              := true.B
+    val btb_mispredicted = miss_data.mispredicted && miss_data.btb_blame
+    val bpd_mispredicted = miss_data.mispredicted && miss_data.bpd_blame
+    val both_didnt_predict = miss_data.mispredicted && (!miss_data.btb_blame && !miss_data.bpd_blame)
+    val was_pcplus4 = miss_data.pc_sel === PC_PLUS4
+    val was_pcbrjmp = miss_data.pc_sel === PC_BRJMP // CfiType.BRANCH encompasses this
+    val was_pcjalr  = miss_data.pc_sel === PC_JALR // CfiType.JALR encompasses this
+    val btb_info = com_data.btb_info
+    val bpd_info = com_data.bpd_extra_info
+
+    // TODO: XXX Double Check (should be updated if not mispredicted also...)
+    //io.bpd_update.valid :=
+    //  both_didnt_predict ||
+    //  (bpd_mispredicted && ((was_pcplus4 && (bpd_info.bpd_hit && bpd_info.takens(miss_data.cfi_idx))) ||
+    //                        (was_pcbrjmp && (!bpd_info.bpd_hit || (bpd_info.bpd_hit && !bpd_info.takens(miss_data.cfi_idx))))))
+    io.bpd_update.valid := (miss_data.cfi_type =/= CfiType.NONE)
+
     io.bpd_update.bits.mispredict    := miss_data.mispredicted
     io.bpd_update.bits.taken         := miss_data.taken
     io.bpd_update.bits.miss_cfi_idx  := miss_data.cfi_idx
     io.bpd_update.bits.fetch_pc      := com_data.fetch_pc
     io.bpd_update.bits.history       := com_data.history
     io.bpd_update.bits.info          := com_data.bpd_info
+
+    // TODO: XXX Double check
+    if (enableBTBContainsBranches) {
+      io.btb_update.valid :=
+        both_didnt_predict ||
+        (btb_mispredicted && ((was_pcjalr && (miss_data.wrong_target || !btb_info.btb_hit)) ||
+                              (was_pcbrjmp && (miss_data.wrong_target || !btb_info.btb_hit)))) ||
+        (bpd_mispredicted && (was_pcbrjmp && (!bpd_info.bpd_hit || (bpd_info.bpd_hit && !bpd_info.takens(miss_data.cfi_idx))) &&
+          ((btb_info.btb_hit && (btb_info.target =/= miss_data.target)) || !btb_info.btb_hit)))
+    } else {
+      io.btb_update.valid := btb_mispredicted && was_pcjalr && (miss_data.wrong_target || !btb_info.btb_hit)
+    }
+    //io.btb_update.valid := false.B
+
+    io.btb_update.bits.pc        := com_data.fetch_pc
+    io.btb_update.bits.target    := miss_data.target
+    io.btb_update.bits.taken     := miss_data.taken
+    io.btb_update.bits.cfi_idx   := miss_data.cfi_idx
+    io.btb_update.bits.is_rvc    := miss_data.is_rvc
+    io.btb_update.bits.edge_inst := miss_data.edge_inst
+    io.btb_update.bits.bpd_type  := miss_data.bpd_type
+    io.btb_update.bits.cfi_type  := miss_data.cfi_type
+
+    // TODO: Double check that this should get updated no matter what... is the fetch pc good?
+    //io.ras_update.valid := false.B
+    io.ras_update.valid := BpredType.isCall(miss_data.bpd_type) || BpredType.isReturn(miss_data.bpd_type)
+    io.ras_update.bits.is_call := BpredType.isCall(miss_data.bpd_type)
+    io.ras_update.bits.is_ret := BpredType.isReturn(miss_data.bpd_type)
+    io.ras_update.bits.return_addr := (com_data.fetch_pc
+                                      + (miss_data.cfi_idx << log2Ceil(coreInstBytes).U)
+                                      + Mux(miss_data.is_rvc || (miss_data.edge_inst && (miss_data.cfi_idx === 0.U)), 2.U, 4.U))
+
+    if (DEBUG_BPU_PRINTF) {
+      printf("   BIM:%c BPD:%c BTB:%c RAS:%c\n",
+        BoolToChar(io.bim_update.valid, 'V'),
+        BoolToChar(io.bpd_update.valid, 'V'),
+        BoolToChar(io.btb_update.valid, 'V'),
+        BoolToChar(io.ras_update.valid, 'V'))
+      val cfiTypeStrs = CfiTypeToChars(miss_data.cfi_type)
+      val bpdTypeStrs = BpdTypeToChars(miss_data.bpd_type)
+      printf("   MissData:(Exe:%c Mispred:%c T:%c Cfi:(Idx:%d Type:%c%c%c%c) RVC:%c E:%c TRG:0x%x BpdType:%c%c%c%c PC_SEL:%c W_TRG:%c Blame:(BTB:%c BPD:%c))\n",
+        BoolToChar(miss_data.executed, 'E'),
+        BoolToChar(miss_data.mispredicted, 'M'),
+        BoolToChar(miss_data.taken, 'T'),
+        miss_data.cfi_idx,
+        cfiTypeStrs(0),
+        cfiTypeStrs(1),
+        cfiTypeStrs(2),
+        cfiTypeStrs(3),
+        BoolToChar(miss_data.is_rvc, 'C'),
+        BoolToChar(miss_data.edge_inst, 'E'),
+        miss_data.target,
+        bpdTypeStrs(0),
+        bpdTypeStrs(1),
+        bpdTypeStrs(2),
+        bpdTypeStrs(3),
+        Mux(miss_data.pc_sel === PC_PLUS4, Str('4'),
+          Mux(miss_data.pc_sel === PC_BRJMP, Str('B'),
+            Mux(miss_data.pc_sel === PC_JALR, Str('J'),
+              Str('?')))),
+        BoolToChar(miss_data.wrong_target, 'W'),
+        BoolToChar(miss_data.btb_blame, 'T'),
+        BoolToChar(miss_data.bpd_blame, 'T'))
+      printf("   ComData:(FPC:0x%x Hist:0x%x BTBInfo:(TRG:0x%x H:%c T:%c) BPDInfo:(T:b%b H:%c))\n",
+        com_data.fetch_pc,
+        com_data.history,
+        com_data.btb_info.target,
+        BoolToChar(com_data.btb_info.btb_hit, 'H'),
+        BoolToChar(com_data.btb_info.taken, 'T'),
+        com_data.bpd_extra_info.takens,
+        BoolToChar(com_data.bpd_extra_info.bpd_hit, 'H'))
+    }
 
     if (DEBUG_PRINTF) {
       val cfiTypeStrs = CfiTypeToChars(miss_data.cfi_type)
@@ -268,8 +390,12 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
     if (DEBUG_PRINTF) printf("    No dequeue\n")
     io.bim_update.valid := false.B
     io.bpd_update.valid := false.B
+    io.ras_update.valid := false.B
+    io.btb_update.valid := false.B
     io.bim_update.bits := DontCare
     io.bpd_update.bits := DontCare
+    io.ras_update.bits := DontCare
+    io.btb_update.bits := DontCare
   }
 
   //-------------------------------------------------------------
