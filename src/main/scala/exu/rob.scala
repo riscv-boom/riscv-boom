@@ -56,8 +56,6 @@ class RobIo(
                                        // and stalling on the rest of it (don't
                                        // advance the tail ptr)
 
-  val enq_new_packet    = Input(Bool()) // we're dispatching the first (and perhaps only) part of a dispatch packet.
-
   val rob_tail_idx = Output(UInt(robAddrSz.W))
   val rob_pnr_idx  = Output(UInt(robAddrSz.W))
   val rob_head_idx = Output(UInt(robAddrSz.W))
