@@ -7,11 +7,7 @@ set -ex
 
 if [ ! -d "$HOME/riscv-tools-install" ]; then
 
-    cd $HOME/boom-template
-
-    # init all submodules including the tools
-    ./scripts/init-submodules.sh
-
-    # build the tools
-    ./scripts/build-tools.sh
+    cd $HOME/riscv-tools
+    git submodule update --init --recursive
+    ./build-tools.sh
 fi
