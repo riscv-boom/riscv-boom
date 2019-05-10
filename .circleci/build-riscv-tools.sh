@@ -4,10 +4,10 @@
 
 # turn echo on and error on earliest command
 set -ex
-
+cd $HOME
 if [ ! -d "$HOME/riscv-tools-install" ]; then
-
+    git clone --progress --verbose https://github.com/riscv/riscv-tools.git
     cd $HOME/riscv-tools
     git submodule update --init --recursive
-    ./build-tools.sh
+    ./build.sh
 fi
