@@ -85,6 +85,7 @@ case class BoomCoreParams(
    useVM: Boolean = true,
    useCompressed: Boolean = false,
    useSCIE: Boolean = false,
+   useBPWatch: Boolean = false,
    clockGate: Boolean = false
 ) extends freechips.rocketchip.tile.CoreParams
 {
@@ -94,7 +95,7 @@ case class BoomCoreParams(
    val lrscCycles: Int = 80 // worst case is 14 mispredicted branches + slop
    val retireWidth = decodeWidth
    val jumpInFrontend: Boolean = false // unused in boom
-   val nPMPs: Int = 8
+   val nPMPs: Int = 0 // TODO Fix this!!!!!
 }
 
 /**

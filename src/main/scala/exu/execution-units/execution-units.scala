@@ -77,8 +77,8 @@ class ExecutionUnits(val fpu: Boolean)(implicit val p: Parameters) extends HasBo
   }
 
   lazy val csr_unit = {
-    require (exe_units.count(_.usesCsrWport) == 1)
-    exe_units.find(_.usesCsrWport).get
+    require (exe_units.count(_.hasCSR) == 1)
+    exe_units.find(_.hasCSR).get
   }
 
   lazy val ifpu_unit = {
@@ -121,19 +121,17 @@ class ExecutionUnits(val fpu: Boolean)(implicit val p: Parameters) extends HasBo
         exe_units += memExeUnit
     }
 
-    val aluExeUnit = Module(new ALUExeUnit(
-      hasBrUnit      = true,
-      sharesCsrWport = true,
-      hasRocc        = usingRoCC,
-      hasMul         = true,
-      hasDiv         = true,
-      hasIfpu        = usingFPU,
-      hasMem         = usingUnifiedMemIntIQs))
 
-    exe_units += aluExeUnit
-
-    for (w <- 0 until int_width-1) {
-      val alu_exe_unit = Module(new ALUExeUnit)
+    for (w <- 0 until int_width) {
+      def is_nth(n: Int): Boolean = w == ((n) % int_width)
+      val alu_exe_unit = Module(new ALUExeUnit(
+        hasBrUnit      = is_nth(0),
+        hasCSR         = is_nth(1),
+        hasRocc        = is_nth(1) && usingRoCC,
+        hasMul         = is_nth(2),
+        hasDiv         = is_nth(3),
+        hasIfpu        = is_nth(4) && usingFPU,
+        hasMem         = usingUnifiedMemIntIQs))
       exe_units += alu_exe_unit
     }
   } else {

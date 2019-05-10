@@ -111,7 +111,7 @@ class RoCCShim(implicit p: Parameters) extends BoomModule
     rxq_tail                := WrapInc(rxq_tail, NUM_RXQ_ENTRIES)
   }
 
-  // Issue
+  // Wait for operands
   when (io.req.valid) {
     val rxq_idx = io.req.bits.uop.rxq_idx
     assert(io.req.bits.uop.rob_idx === rxq_uop(rxq_idx).rob_idx,
@@ -125,11 +125,10 @@ class RoCCShim(implicit p: Parameters) extends BoomModule
     rxq_rs2      (rxq_idx)      := io.req.bits.rs2_data
   }
 
-  // Commit
-  when (rxq_op_val(rxq_com_head) &&
-        rxq_val   (rxq_com_head) &&
+  // Wait for ROB to OK us to execute
+  when (rxq_val   (rxq_com_head) &&
         IsOlder(rxq_uop(rxq_com_head).rob_idx, io.core.rob_pnr_idx, io.core.rob_head_idx)) {
-    rxq_committed(rxq_com_head) := true.B
+    rxq_committed(rxq_com_head)   := true.B
     rxq_com_head                  := WrapInc(rxq_com_head, NUM_RXQ_ENTRIES)
   }
 
@@ -155,7 +154,7 @@ class RoCCShim(implicit p: Parameters) extends BoomModule
 
 
   io.core.rxq_full  := WrapInc(rxq_tail, NUM_RXQ_ENTRIES) === rxq_head
-  io.core.rxq_empty :=  rxq_tail === rxq_head
+  io.core.rxq_empty := rxq_tail === rxq_head
 
   //--------------------------
   // Branches

@@ -20,7 +20,7 @@ import freechips.rocketchip.util.{DontTouch}
  */
 class ExampleBoomSystem(implicit p: Parameters) extends BoomSubsystem
   with HasAsyncExtInterrupts
-  with CanHaveMisalignedMasterAXI4MemPort
+  with CanHaveMasterAXI4MemPort
   with CanHaveMasterAXI4MMIOPort
   with CanHaveSlaveAXI4Port
   with HasPeripheryBootROM
@@ -50,10 +50,10 @@ class ExampleBoomSystem(implicit p: Parameters) extends BoomSubsystem
 /**
  * Example top module with periphery devices and ports, and a BOOM subsystem
  */
-class ExampleBoomSystemModule[+L <: ExampleBoomSystem](_outer: L) extends BoomSubsystemModule(_outer)
+class ExampleBoomSystemModule[+L <: ExampleBoomSystem](_outer: L) extends BoomSubsystemModuleImp(_outer)
   with HasRTCModuleImp
   with HasExtInterruptsModuleImp
-  with CanHaveMisalignedMasterAXI4MemPortModuleImp
+  with CanHaveMasterAXI4MemPortModuleImp
   with CanHaveMasterAXI4MMIOPortModuleImp
   with CanHaveSlaveAXI4PortModuleImp
   with HasPeripheryBootROMModuleImp

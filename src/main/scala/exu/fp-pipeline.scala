@@ -165,8 +165,8 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
 
   // Hookup load writeback -- and recode FP values.
   ll_wbarb.io.in(0) <> io.ll_wport
-  val typ = io.ll_wport.bits.uop.mem_typ
-  val load_single = typ === rocket.MT_W || typ === rocket.MT_WU
+  val size = io.ll_wport.bits.uop.mem_size
+  val load_single = size === 2.U
   ll_wbarb.io.in(0).bits.data := recode(io.ll_wport.bits.data, !load_single)
 
   ll_wbarb.io.in(1) <> ifpu_resp

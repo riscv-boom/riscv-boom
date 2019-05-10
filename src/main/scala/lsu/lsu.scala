@@ -442,8 +442,8 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
                         will_fire_load_retry ||
                         will_fire_sfence
    dtlb.io.req.bits.vaddr := Mux(io.exe_resp.bits.sfence.valid, io.exe_resp.bits.sfence.bits.addr, exe_vaddr)
-   dtlb.io.req.bits.size := exe_tlb_uop.mem_typ
-   dtlb.io.req.bits.cmd := exe_tlb_uop.mem_cmd
+   dtlb.io.req.bits.size := exe_tlb_uop.mem_size
+   dtlb.io.req.bits.cmd  := exe_tlb_uop.mem_cmd
    dtlb.io.req.bits.passthrough := false.B // let status.vm decide
    dtlb.io.sfence := io.exe_resp.bits.sfence
    dtlb.io.kill := DontCare
@@ -798,7 +798,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
    // NOTE: these are fully translated physical addresses, as
    // forwarding requires a full address check.
 
-   val read_mask = GenByteMask(mem_ld_addr, mem_ld_uop.mem_typ)
+   val read_mask = GenByteMask(mem_ld_addr, mem_ld_uop.mem_size)
    val st_dep_mask = laq_st_dep_mask(RegNext(exe_ld_uop.ldq_idx))
 
    // do the double-word addr match? (doesn't necessarily mean a conflict or forward)
@@ -833,7 +833,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
 
       // check the lower-order bits for overlap/conflicts and matches
       ldst_addr_conflicts(i) := false.B
-      val write_mask = GenByteMask(s_addr, stq_uop(i).mem_typ)
+      val write_mask = GenByteMask(s_addr, stq_uop(i).mem_size)
 
       // if overlap on bytes and dword matches, the address conflicts!
       when (((read_mask & write_mask) =/= 0.U) && dword_addr_matches(i))
@@ -864,8 +864,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
                st_dep_mask(i) &&
                (stq_uop(i).is_fence || stq_uop(i).is_amo)) ||
             (dword_addr_matches(i) &&
-//               (mem_ld_uop.mem_typ =/= stq_uop(i).mem_typ) &&
-               (!MemTypesMatch(mem_ld_uop.mem_typ, stq_uop(i).mem_typ)) &&
+               (mem_ld_uop.mem_size =/= stq_uop(i).mem_size) &&
                ((read_mask & write_mask) =/= 0.U)))
       {
          force_ld_to_sleep := true.B
@@ -930,7 +929,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
                         sdq_val(wb_forward_std_idx) &&
                         !(io.nack.valid && io.nack.cache_nack)
    }
-   io.forward_data := LoadDataGenerator(sdq_data(wb_forward_std_idx).asUInt, wb_uop.mem_typ)
+   io.forward_data := LoadDataGenerator(sdq_data(wb_forward_std_idx).asUInt, wb_uop.mem_size, wb_uop.mem_signed)
    io.forward_uop  := wb_uop
 
    //------------------------
@@ -969,7 +968,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
    // load queue CAM search
    val lcam_addr       = Mux(RegNext(will_fire_load_wakeup), mem_ld_addr, mem_tlb_paddr)
    val lcam_uop        = Mux(RegNext(will_fire_load_wakeup), RegNext(laq_uop(exe_ld_idx_wakeup)), mem_tlb_uop)
-   val lcam_mask       = GenByteMask(lcam_addr, lcam_uop.mem_typ)
+   val lcam_mask       = GenByteMask(lcam_addr, lcam_uop.mem_size)
    val lcam_is_fence   = lcam_uop.is_fence
    val lcam_ldq_idx    = lcam_uop.ldq_idx
    val stq_idx         = lcam_uop.stq_idx
@@ -991,7 +990,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
    for (i <- 0 until NUM_LDQ_ENTRIES)
    {
       val l_addr      = laq_addr(i)
-      val l_mask      = GenByteMask(l_addr, laq_uop(i).mem_typ)
+      val l_mask      = GenByteMask(l_addr, laq_uop(i).mem_size)
       val l_allocated = laq_allocated(i)
       val l_addr_val  = laq_addr_val(i)
       val l_is_virtual= laq_is_virtual(i)
@@ -1420,14 +1419,14 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
  */
 object GenByteMask
 {
-   def apply(addr: UInt, typ: UInt): UInt =
+   def apply(addr: UInt, size: UInt): UInt =
    {
       val mask = Wire(UInt(8.W))
       mask := MuxCase(255.U(8.W), Array(
-                   (typ === rocket.MT_B || typ === rocket.MT_BU) -> (1.U(8.W) << addr(2,0)),
-                   (typ === rocket.MT_H || typ === rocket.MT_HU) -> (3.U(8.W) << (addr(2,1) << 1.U)),
-                   (typ === rocket.MT_W || typ === rocket.MT_WU) -> Mux(addr(2), 240.U(8.W), 15.U(8.W)),
-                   (typ === rocket.MT_D)                         -> 255.U(8.W)))
+                   (size === 0.U) -> (1.U(8.W) << addr(2,0)),
+                   (size === 1.U) -> (3.U(8.W) << (addr(2,1) << 1.U)),
+                   (size === 2.U) -> Mux(addr(2), 240.U(8.W), 15.U(8.W)),
+                   (size === 3.U) -> 255.U(8.W)))
       mask
    }
 }
@@ -1441,14 +1440,13 @@ object GenByteMask
  */
 object LoadDataGenerator
 {
-   def apply(data: UInt, mem_type: UInt): UInt =
+   def apply(data: UInt, mem_size: UInt, mem_signed: Bool): UInt =
    {
-     val sext  = (mem_type === rocket.MT_B) || (mem_type === rocket.MT_H) ||
-                 (mem_type === rocket.MT_W) || (mem_type === rocket.MT_D)
-     val word  = (mem_type === rocket.MT_W) || (mem_type === rocket.MT_WU)
-     val half  = (mem_type === rocket.MT_H) || (mem_type === rocket.MT_HU)
-     val byte_ = (mem_type === rocket.MT_B) || (mem_type === rocket.MT_BU)
-     val dword = (mem_type === rocket.MT_D)
+     val sext  = mem_signed
+     val word  = mem_size === 2.U
+     val half  = mem_size === 1.U
+     val byte_ = mem_size === 0.U
+     val dword = mem_size === 3.U
 
       val out = Mux (dword, data,
                 Mux (word , Cat(Fill(32, sext & data(31)), data(31, 0)),
