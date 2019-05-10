@@ -8,6 +8,11 @@ set -ex
 # clone the boom-template repo
 cd $HOME
 
+
+if [ -d "$HOME/boom-template" ]; then
+    rm -rf boom-template
+fi
+
 # clone boom-template and create the riscv-tools
 git clone --progress --verbose https://github.com/riscv-boom/boom-template.git
 cd boom-template
