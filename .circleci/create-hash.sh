@@ -33,5 +33,5 @@ elif [ $1 == "riscv-tools" ]; then
     echo "Contents: $(cat $HOME/$1.hash)"
 fi
 
-# delete boom-template
-rm -rf $HOME/boom-template
+# # delete boom-template
+# rm -rf $HOME/boom-template
