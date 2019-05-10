@@ -11,236 +11,156 @@ jobs:
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
-
         steps:
-            # Checkout the code
             - checkout
-
             - run:
                 name: Create hash of riscv-tools
                 command: |
-                    .circleci/create-hash.sh riscv-tools
-
+                    .circleci/get-riscv-tools-hash.sh
             - restore_cache:
                 keys:
                     - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
-
             - run:
                 name: Building riscv-tools
                 command: |
                     .circleci/build-riscv-tools.sh
                 no_output_timeout: 120m
-
             - save_cache:
                 key: riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
                 paths:
                     - "/home/riscvuser/riscv-tools-install"
-
     prepare-build-environment:
         docker:
             - image: riscvboom/riscvboom-images:0.0.5
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
-
         steps:
-            # Checkout the code
             - checkout
-
             - run:
-                name: Create hash of boom-template
+                name: Create hash of template
                 command: |
-                    .circleci/create-hash.sh boom-template
-
+                    .circleci/get-bhd-hash.sh
             - restore_cache:
                 keys:
-                    - boom-template-with-verilator-v8-{{ checksum "../boom-template.hash" }}
-
+                    - bhd-with-verilator-v8-{{ checksum "../bhd.hash" }}
             - run:
                 name: Build Verilator and setup build environment
                 command: |
                     .circleci/prepare-for-rtl-build.sh
                 no_output_timeout: 120m
-
             - save_cache:
-                key: boom-template-with-verilator-v8-{{ checksum "../boom-template.hash" }}
+                key: bhd-with-verilator-v8-{{ checksum "../bhd.hash" }}
                 paths:
-                    - "/home/riscvuser/boom-template"
-
+                    - "/home/riscvuser/bhd"
     prepare-boomconfig:
         docker:
             - image: riscvboom/riscvboom-images:0.0.5
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
-
         steps:
-            # Checkout the code
             - checkout
-
             - run:
-                name: Create hash of riscv-tools and boom-template
+                name: Create hash of riscv-tools and bhd
                 command: |
-                    .circleci/create-hash.sh riscv-tools
-                    .circleci/create-hash.sh boom-template
-
+                    .circleci/get-bhd-hash.sh
+                    .circleci/get-riscv-tools-hash.sh
             - restore_cache:
                 keys:
                     - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
-
             - restore_cache:
                 keys:
-                    - boom-template-with-verilator-v8-{{ checksum "../boom-template.hash" }}
-
+                    - bhd-with-verilator-v8-{{ checksum "../bhd.hash" }}
             - run:
                 name: Building BoomConfig using Verilator
                 command: .circleci/do-rtl-build.sh BoomConfig
                 no_output_timeout: 120m
-
             - save_cache:
-                key: boom-template-boomconfig-{{ .Branch }}-{{ .Revision }}
+                key: boomconfig-{{ .Branch }}-{{ .Revision }}
                 paths:
-                    - "/home/riscvuser/boom-template"
-
+                    - "/home/riscvuser/bhd"
     prepare-smallrv32unifiedboomconfig:
         docker:
             - image: riscvboom/riscvboom-images:0.0.5
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
-
         steps:
-            # Checkout the code
             - checkout
-
             - run:
-                name: Create hash of riscv-tools and boom-template
+                name: Create hash of riscv-tools and bhd
                 command: |
-                    .circleci/create-hash.sh riscv-tools
-                    .circleci/create-hash.sh boom-template
-
+                    .circleci/get-bhd-hash.sh
+                    .circleci/get-riscv-tools-hash.sh
             - restore_cache:
                 keys:
                     - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
-
             - restore_cache:
                 keys:
-                    - boom-template-with-verilator-v8-{{ checksum "../boom-template.hash" }}
-
+                    - bhd-with-verilator-v8-{{ checksum "../bhd.hash" }}
             - run:
                 name: Building SmallRV32UnifiedBoomConfig using Verilator
                 command: .circleci/do-rtl-build.sh SmallRV32UnifiedBoomConfig
                 no_output_timeout: 120m
-
             - save_cache:
-                key: boom-template-smallrv32unifiedboomconfig-{{ .Branch }}-{{ .Revision }}
+                key: smallrv32unifiedboomconfig-{{ .Branch }}-{{ .Revision }}
                 paths:
-                    - "/home/riscvuser/boom-template"
-
+                    - "/home/riscvuser/bhd"
     prepare-smallboomconfig:
         docker:
             - image: riscvboom/riscvboom-images:0.0.5
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
-
         steps:
-            # Checkout the code
             - checkout
-
             - run:
-                name: Create hash of riscv-tools and boom-template
+                name: Create hash of riscv-tools and bhd
                 command: |
-                    .circleci/create-hash.sh riscv-tools
-                    .circleci/create-hash.sh boom-template
-
+                    .circleci/get-bhd-hash.sh
+                    .circleci/get-riscv-tools-hash.sh
             - restore_cache:
                 keys:
                     - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
-
             - restore_cache:
                 keys:
-                    - boom-template-with-verilator-v8-{{ checksum "../boom-template.hash" }}
-
+                    - bhd-with-verilator-v8-{{ checksum "../bhd.hash" }}
             - run:
                 name: Building SmallBoomConfig using Verilator
                 command: .circleci/do-rtl-build.sh SmallBoomConfig
                 no_output_timeout: 120m
-
             - save_cache:
-                key: boom-template-smallboomconfig-{{ .Branch }}-{{ .Revision }}
+                key: smallboomconfig-{{ .Branch }}-{{ .Revision }}
                 paths:
-                    - "/home/riscvuser/boom-template"
-
+                    - "/home/riscvuser/bhd"
     prepare-mediumboomconfig:
         docker:
             - image: riscvboom/riscvboom-images:0.0.5
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
-
         steps:
-            # Checkout the code
             - checkout
-
             - run:
-                name: Create hash of riscv-tools and boom-template
+                name: Create hash of riscv-tools and bhd
                 command: |
-                    .circleci/create-hash.sh riscv-tools
-                    .circleci/create-hash.sh boom-template
-
+                    .circleci/get-bhd-hash.sh
+                    .circleci/get-riscv-tools-hash.sh
             - restore_cache:
                 keys:
                     - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
-
             - restore_cache:
                 keys:
-                    - boom-template-with-verilator-v8-{{ checksum "../boom-template.hash" }}
-
+                    - bhd-with-verilator-v8-{{ checksum "../bhd.hash" }}
             - run:
                 name: Building MediumBoomConfig using Verilator
                 command: .circleci/do-rtl-build.sh MediumBoomConfig
                 no_output_timeout: 120m
-
             - save_cache:
-                key: boom-template-mediumboomconfig-{{ .Branch }}-{{ .Revision }}
+                key: mediumboomconfig-{{ .Branch }}-{{ .Revision }}
                 paths:
-                    - "/home/riscvuser/boom-template"
-
-    prepare-megaboomconfig:
-        docker:
-            - image: riscvboom/riscvboom-images:0.0.5
-        environment:
-            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
-            TERM: dumb
-
-        steps:
-            # Checkout the code
-            - checkout
-
-            - run:
-                name: Create hash of riscv-tools and boom-template
-                command: |
-                    .circleci/create-hash.sh riscv-tools
-                    .circleci/create-hash.sh boom-template
-
-            - restore_cache:
-                keys:
-                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
-
-            - restore_cache:
-                keys:
-                    - boom-template-with-verilator-v8-{{ checksum "../boom-template.hash" }}
-
-            - run:
-                name: Building MegaBoomConfig using Verilator
-                command: .circleci/do-rtl-build.sh MegaBoomConfig
-                no_output_timeout: 120m
-
-            - save_cache:
-                key: boom-template-megaboomconfig-{{ .Branch }}-{{ .Revision }}
-                paths:
-                    - "/home/riscvuser/boom-template"
+                    - "/home/riscvuser/bhd"
 
     run-scala-checkstyle:
         docker:
@@ -248,20 +168,8 @@ jobs:
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
-
         steps:
-            # Checkout the code
             - checkout
-
-            - run:
-                name: Create hash of riscv-tools based on riscv-tools
-                command: |
-                    .circleci/create-hash.sh riscv-tools
-
-            - restore_cache:
-                keys:
-                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
-
             - run:
                 name: Run Scala checkstyle
                 command: make checkstyle
@@ -272,86 +180,92 @@ jobs:
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
-
         steps:
-            # Checkout the code
             - checkout
-
             - run:
                 name: Create hash of riscv-tools
                 command: |
-                    .circleci/create-hash.sh riscv-tools
-
+                    .circleci/get-riscv-tools-hash.sh
             - restore_cache:
                 keys:
                     - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
-
             - restore_cache:
                 keys:
-                    - boom-template-boomconfig-{{ .Branch }}-{{ .Revision }}
+                    - boomconfig-{{ .Branch }}-{{ .Revision }}
 
             - run:
                 name: Run BoomConfig csmith tests
                 command: .circleci/build-run-csmith-tests.sh BoomConfig 50
                 no_output_timeout: 30m
 
-    boomconfig-run-benchmark-tests:
+    boomconfig-run-riscv-tests:
         docker:
             - image: riscvboom/riscvboom-images:0.0.5
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
-
         steps:
-            # Checkout the code
             - checkout
-
             - run:
                 name: Create hash of riscv-tools
                 command: |
-                    .circleci/create-hash.sh riscv-tools
-
+                    .circleci/get-riscv-tools-hash.sh
             - restore_cache:
                 keys:
                     - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
-
             - restore_cache:
                 keys:
-                    - boom-template-boomconfig-{{ .Branch }}-{{ .Revision }}
-
+                    - boomconfig-{{ .Branch }}-{{ .Revision }}
             - run:
-                name: Run BoomConfig benchmark tests
-                command: make run-bmark-tests -C ../boom-template/verisim CONFIG=BoomConfig
-
-    boomconfig-run-assembly-tests:
+                name: Run BoomConfig riscv tests
+                command: |
+                    - make run-bmark-tests -C ../bhd/sims/verisim CONFIG=BoomConfig SUB_PROJECT=boom
+                    - make run-asm-tests -C ../bhd/sims/verisim CONFIG=BoomConfig SUB_PROJECT=boom
+    smallrv32unifiedboomconfig-run-csmith-tests:
         docker:
             - image: riscvboom/riscvboom-images:0.0.5
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
-
         steps:
-            # Checkout the code
             - checkout
-
             - run:
                 name: Create hash of riscv-tools
                 command: |
-                    .circleci/create-hash.sh riscv-tools
-
+                    .circleci/get-riscv-tools-hash.sh
             - restore_cache:
                 keys:
                     - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
-
             - restore_cache:
                 keys:
-                    - boom-template-boomconfig-{{ .Branch }}-{{ .Revision }}
-
+                    - smallrv32unifiedboomconfig-{{ .Branch }}-{{ .Revision }}
             - run:
-                name: Run BoomConfig assembly tests
-                command: make run-asm-tests -C ../boom-template/verisim CONFIG=BoomConfig
-                no_output_timeout: 300m
+                name: Run BoomConfig csmith tests
+                command: .circleci/build-run-csmith-tests.sh SmallRV32UnifiedBoomConfig 50
+                no_output_timeout: 30m
 
+    smallrv32unifiedboomconfig-run-riscv-tests:
+        docker:
+            - image: riscvboom/riscvboom-images:0.0.5
+        environment:
+            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
+            TERM: dumb
+        steps:
+            - checkout
+            - run:
+                name: Create hash of riscv-tools
+                command: |
+                    .circleci/get-riscv-tools-hash.sh
+            - restore_cache:
+                keys:
+                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
+            - restore_cache:
+                keys:
+                    - smallrv32unifiedboomconfig-{{ .Branch }}-{{ .Revision }}
+            - run:
+                name: Run SmallRV32UnifiedBoomConfig riscv tests
+                command: |
+                    - make run-asm-tests -C ../bhd/sims/verisim CONFIG=SmallRV32UnifiedBoomConfig SUB_PROJECT=boom
     smallboomconfig-run-csmith-tests:
         docker:
             - image: riscvboom/riscvboom-images:0.0.5
@@ -359,280 +273,90 @@ jobs:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
         steps:
-            # Checkout the code
             - checkout
-
             - run:
                 name: Create hash of riscv-tools
                 command: |
-                    .circleci/create-hash.sh riscv-tools
-
+                    .circleci/get-riscv-tools-hash.sh
             - restore_cache:
                 keys:
                     - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
-
             - restore_cache:
                 keys:
-                    - boom-template-smallboomconfig-{{ .Branch }}-{{ .Revision }}
-
+                    - smallboomconfig-{{ .Branch }}-{{ .Revision }}
             - run:
                 name: Run SmallBoomConfig csmith tests
                 command: .circleci/build-run-csmith-tests.sh SmallBoomConfig 50
                 no_output_timeout: 30m
 
-    # No benchmark tests because those are rv64gc
-    smallrv32unifiedboomconfig-run-assembly-tests:
+    smallboomconfig-run-riscv-tests:
         docker:
             - image: riscvboom/riscvboom-images:0.0.5
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
         steps:
-            # Checkout the code
             - checkout
             - run:
                 name: Create hash of riscv-tools
                 command: |
-                    .circleci/create-hash.sh riscv-tools
+                    .circleci/get-riscv-tools-hash.sh
             - restore_cache:
                 keys:
                     - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
             - restore_cache:
                 keys:
-                    - boom-template-smallrv32unifiedboomconfig-{{ .Branch }}-{{ .Revision }}
+                    - smallboomconfig-{{ .Branch }}-{{ .Revision }}
             - run:
-                name: Run SmallRV32UnifiedBoomConfig assembly tests
-                command: make run-asm-tests -C ../boom-template/verisim CONFIG=SmallRV32UnifiedBoomConfig
-                no_output_timeout: 300m
-
-    smallboomconfig-run-benchmark-tests:
-        docker:
-            - image: riscvboom/riscvboom-images:0.0.5
-        environment:
-            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
-            TERM: dumb
-
-        steps:
-            # Checkout the code
-            - checkout
-
-            - run:
-                name: Create hash of riscv-tools
+                name: Run SmallBoomConfig riscv tests
                 command: |
-                    .circleci/create-hash.sh riscv-tools
-
-            - restore_cache:
-                keys:
-                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
-
-            - restore_cache:
-                keys:
-                    - boom-template-smallboomconfig-{{ .Branch }}-{{ .Revision }}
-
-            - run:
-                name: Run SmallBoomConfig benchmark tests
-                command: make run-bmark-tests -C ../boom-template/verisim CONFIG=SmallBoomConfig
-
-    smallboomconfig-run-assembly-tests:
-        docker:
-            - image: riscvboom/riscvboom-images:0.0.5
-        environment:
-            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
-            TERM: dumb
-
-        steps:
-            # Checkout the code
-            - checkout
-
-            - run:
-                name: Create hash of riscv-tools
-                command: |
-                    .circleci/create-hash.sh riscv-tools
-
-            - restore_cache:
-                keys:
-                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
-
-            - restore_cache:
-                keys:
-                    - boom-template-smallboomconfig-{{ .Branch }}-{{ .Revision }}
-
-            - run:
-                name: Run SmallBoomConfig assembly tests
-                command: make run-asm-tests -C ../boom-template/verisim CONFIG=SmallBoomConfig
-                no_output_timeout: 300m
-
+                    - make run-bmark-tests -C ../bhd/sims/verisim CONFIG=SmallBoomConfig SUB_PROJECT=boom
+                    - make run-asm-tests -C ../bhd/sims/verisim CONFIG=SmallBoomConfig SUB_PROJECT=boom
     mediumboomconfig-run-csmith-tests:
         docker:
             - image: riscvboom/riscvboom-images:0.0.5
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
-
         steps:
-            # Checkout the code
             - checkout
-
             - run:
                 name: Create hash of riscv-tools
                 command: |
-                    .circleci/create-hash.sh riscv-tools
-
+                    .circleci/get-riscv-tools-hash.sh
             - restore_cache:
                 keys:
                     - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
-
             - restore_cache:
                 keys:
-                    - boom-template-mediumboomconfig-{{ .Branch }}-{{ .Revision }}
-
+                    - mediumboomconfig-{{ .Branch }}-{{ .Revision }}
             - run:
-                name: Run MediumBoomConfig csmith tests
-                command: .circleci/build-run-csmith-tests.sh MediumBoomConfig 50
+                name: Run MediumBoomconfig csmith tests
+                command: .circleci/build-run-csmith-tests.sh MediumBoomconfig 50
                 no_output_timeout: 30m
-
-    mediumboomconfig-run-benchmark-tests:
+    mediumboomconfig-run-riscv-tests:
         docker:
             - image: riscvboom/riscvboom-images:0.0.5
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
-
         steps:
-            # Checkout the code
             - checkout
-
             - run:
                 name: Create hash of riscv-tools
                 command: |
-                    .circleci/create-hash.sh riscv-tools
-
+                    .circleci/get-riscv-tools-hash.sh
             - restore_cache:
                 keys:
                     - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
-
             - restore_cache:
                 keys:
-                    - boom-template-mediumboomconfig-{{ .Branch }}-{{ .Revision }}
-
+                    - mediumboomconfig-{{ .Branch }}-{{ .Revision }}
             - run:
-                name: Run MediumBoomConfig benchmark tests
-                command: make run-bmark-tests -C ../boom-template/verisim CONFIG=MediumBoomConfig
-
-    mediumboomconfig-run-assembly-tests:
-        docker:
-            - image: riscvboom/riscvboom-images:0.0.5
-        environment:
-            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
-            TERM: dumb
-
-        steps:
-            # Checkout the code
-            - checkout
-
-            - run:
-                name: Create hash of riscv-tools
+                name: Run MediumBoomConfig riscv tests
                 command: |
-                    .circleci/create-hash.sh riscv-tools
-
-            - restore_cache:
-                keys:
-                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
-
-            - restore_cache:
-                keys:
-                    - boom-template-mediumboomconfig-{{ .Branch }}-{{ .Revision }}
-
-            - run:
-                name: Run MediumBoomConfig assembly tests
-                command: make run-asm-tests -C ../boom-template/verisim CONFIG=MediumBoomConfig
-                no_output_timeout: 300m
-
-    megaboomconfig-run-csmith-tests:
-        docker:
-            - image: riscvboom/riscvboom-images:0.0.5
-        environment:
-            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
-            TERM: dumb
-
-        steps:
-            # Checkout the code
-            - checkout
-
-            - run:
-                name: Create hash of riscv-tools
-                command: |
-                    .circleci/create-hash.sh riscv-tools
-
-            - restore_cache:
-                keys:
-                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
-
-            - restore_cache:
-                keys:
-                    - boom-template-megaboomconfig-{{ .Branch }}-{{ .Revision }}
-
-            - run:
-                name: Run MegaBoomConfig csmith tests
-                command: .circleci/build-run-csmith-tests.sh MegaBoomConfig 50
-                no_output_timeout: 30m
-
-    megaboomconfig-run-benchmark-tests:
-        docker:
-            - image: riscvboom/riscvboom-images:0.0.5
-        environment:
-            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
-            TERM: dumb
-
-        steps:
-            # Checkout the code
-            - checkout
-
-            - run:
-                name: Create hash of riscv-tools
-                command: |
-                    .circleci/create-hash.sh riscv-tools
-
-            - restore_cache:
-                keys:
-                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
-
-            - restore_cache:
-                keys:
-                    - boom-template-megaboomconfig-{{ .Branch }}-{{ .Revision }}
-
-            - run:
-                name: Run MegaBoomConfig benchmark tests
-                command: make run-bmark-tests -C ../boom-template/verisim CONFIG=MegaBoomConfig
-
-    megaboomconfig-run-assembly-tests:
-        docker:
-            - image: riscvboom/riscvboom-images:0.0.5
-        environment:
-            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
-            TERM: dumb
-
-        steps:
-            # Checkout the code
-            - checkout
-
-            - run:
-                name: Create hash of riscv-tools
-                command: |
-                    .circleci/create-hash.sh riscv-tools
-
-            - restore_cache:
-                keys:
-                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
-
-            - restore_cache:
-                keys:
-                    - boom-template-megaboomconfig-{{ .Branch }}-{{ .Revision }}
-
-            - run:
-                name: Run MegaBoomConfig assembly tests
-                command: make run-asm-tests -C ../boom-template/verisim CONFIG=MegaBoomConfig
-                no_output_timeout: 300m
+                    - make run-bmark-tests -C ../bhd/sims/verisim CONFIG=MediumBoomconfig SUB_PROJECT=boom
+                    - make run-asm-tests -C ../bhd/sims/verisim CONFIG=MediumCoomconfig SUB_PROJECT=boom
 
 # Order and dependencies of jobs to run
 workflows:
@@ -665,25 +389,17 @@ workflows:
             - prepare-mediumboomconfig:
                 requires:
                     - prepare-build-environment
-            #- prepare-megaboomconfig:
-            #    requires:
-            #        - prepare-build-environment
-
-            # Run the respective tests
 
             # Run the BoomConfig tests
             - boomconfig-run-csmith-tests:
                 requires:
                     - prepare-boomconfig
-            - boomconfig-run-benchmark-tests:
-                requires:
-                    - prepare-boomconfig
-            - boomconfig-run-assembly-tests:
+            - boomconfig-run-riscv-tests:
                 requires:
                     - prepare-boomconfig
 
             # Run the SmallRV32UnifiedBoomConfig tests
-            - smallrv32unifiedboomconfig-run-assembly-tests:
+            - smallrv32unifiedboomconfig-run-riscv-tests:
                 requires:
                     - prepare-smallrv32unifiedboomconfig
 
@@ -691,10 +407,7 @@ workflows:
             - smallboomconfig-run-csmith-tests:
                 requires:
                     - prepare-smallboomconfig
-            - smallboomconfig-run-benchmark-tests:
-                requires:
-                    - prepare-smallboomconfig
-            - smallboomconfig-run-assembly-tests:
+            - smallboomconfig-run-riscv-tests:
                 requires:
                     - prepare-smallboomconfig
 
@@ -702,20 +415,7 @@ workflows:
             - mediumboomconfig-run-csmith-tests:
                 requires:
                     - prepare-mediumboomconfig
-            - mediumboomconfig-run-benchmark-tests:
-                requires:
-                    - prepare-mediumboomconfig
-            - mediumboomconfig-run-assembly-tests:
+            - mediumboomconfig-run-riscv-tests:
                 requires:
                     - prepare-mediumboomconfig
 
-            # Run the MegaBoomConfig tests
-            #- megaboomconfig-run-csmith-tests:
-            #    requires:
-            #        - prepare-megaboomconfig
-            #- megaboomconfig-run-benchmark-tests:
-            #    requires:
-            #        - prepare-megaboomconfig
-            #- megaboomconfig-run-assembly-tests:
-            #    requires:
-            #        - prepare-megaboomconfig
