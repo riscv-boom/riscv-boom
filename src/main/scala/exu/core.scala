@@ -992,7 +992,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       iregfile.io.write_ports(w_cnt).valid     := wbIsValid(RT_FIX)
       iregfile.io.write_ports(w_cnt).bits.addr := wbpdst
       wbresp.ready := true.B
-      if (exe_units(i).usesCsrWport) {
+      if (exe_units(i).hasCSR) {
         iregfile.io.write_ports(w_cnt).bits.data := Mux(wbReadsCSR, csr.io.rw.rdata, wbdata)
       } else {
         iregfile.io.write_ports(w_cnt).bits.data := wbdata
@@ -1070,7 +1070,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
         rob.io.fflags(f_cnt) <> resp.bits.fflags
         f_cnt += 1
       }
-      if (eu.usesCsrWport) {
+      if (eu.hasCSR) {
         rob.io.debug_wb_wdata(cnt) := Mux(wb_uop.ctrl.csr_cmd =/= freechips.rocketchip.rocket.CSR.N,
           csr.io.rw.rdata,
           data)

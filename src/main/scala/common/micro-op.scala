@@ -100,7 +100,8 @@ class MicroOp(implicit p: Parameters) extends BoomBundle()(p)
    val exc_cause        = UInt(xLen.W)          // TODO compress this down, xlen is insanity
    val bypassable       = Bool()                      // can we bypass ALU results? (doesn't include loads, csr, etc...)
    val mem_cmd          = UInt(M_SZ.W)          // sync primitives/cache flushes
-   val mem_typ          = UInt(MT_SZ.W)         // memory mask type for loads/stores
+   val mem_size         = UInt(2.W)
+   val mem_signed       = Bool()
    val is_fence         = Bool()
    val is_fencei        = Bool()
    val is_store         = Bool()                      // anything that goes into the STQ, including fences and AMOs

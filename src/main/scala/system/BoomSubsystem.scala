@@ -14,11 +14,9 @@ import freechips.rocketchip.config.{Field, Parameters}
 import freechips.rocketchip.devices.tilelink._
 import freechips.rocketchip.devices.debug.{HasPeripheryDebug, HasPeripheryDebugModuleImp}
 import freechips.rocketchip.diplomacy._
-import freechips.rocketchip.diplomaticobjectmodel.model.{OMComponent, OMInterruptTarget}
+import freechips.rocketchip.diplomaticobjectmodel.logicaltree._
+import freechips.rocketchip.diplomaticobjectmodel.model._
 import freechips.rocketchip.tile._
-import freechips.rocketchip.tilelink._
-import freechips.rocketchip.interrupts._
-import freechips.rocketchip.util._
 import freechips.rocketchip.subsystem._
 import freechips.rocketchip.amba.axi4._
 
@@ -41,7 +39,7 @@ trait HasBoomTiles extends HasTiles
   //   also based on the crossing type.
   val boomTiles = boomTileParams.zip(crossings).map { case (tp, crossing) =>
     val boomCore = LazyModule(
-      new boom.common.BoomTile(tp, crossing.crossingType)(augmentedTileParameters(tp))).suggestName(tp.name)
+      new boom.common.BoomTile(tp, crossing, PriorityMuxHartIdFromSeq(boomTileParams))).suggestName(tp.name)
 
     connectMasterPortsToSBus(boomCore, crossing)
     connectSlavePortsToCBus(boomCore, crossing)
@@ -50,15 +48,16 @@ trait HasBoomTiles extends HasTiles
     boomCore
   }
 
+  boomTiles.map {
+    r =>
+      def treeNode: RocketTileLogicalTreeNode = new RocketTileLogicalTreeNode(r.rocketLogicalTree.getOMInterruptTargets)
+      LogicalModuleTree.add(logicalTreeNode, r.rocketLogicalTree)
+  }
+
   def coreMonitorBundles = (boomTiles map { t =>
     t.module.core.coreMonitorBundle
   }).toList
 
-  def getOMRocketInterruptTargets(): Seq[OMInterruptTarget] =
-    boomTiles.flatMap(c => c.cpuDevice.getInterruptTargets())
-
-  def getOMRocketCores(resourceBindingsMap: ResourceBindingsMap): Seq[OMComponent] =
-    boomTiles.flatMap(c => c.cpuDevice.getOMComponents(resourceBindingsMap))
 }
 
 trait HasBoomTilesModuleImp extends HasTilesModuleImp
@@ -71,69 +70,69 @@ class BoomSubsystem(implicit p: Parameters) extends BaseSubsystem
   with HasBoomTiles
 {
   val tiles = boomTiles
-  override lazy val module = new BoomSubsystemModule(this)
+  override lazy val module = new BoomSubsystemModuleImp(this)
+  def getOMInterruptDevice(resourceBindingsMap: ResourceBindingsMap): Seq[OMInterrupt] = Nil
 }
 
-class BoomSubsystemModule[+L <: BoomSubsystem](_outer: L) extends BaseSubsystemModuleImp(_outer)
+class BoomSubsystemModuleImp[+L <: BoomSubsystem](_outer: L) extends BaseSubsystemModuleImp(_outer)
+  with HasResetVectorWire
   with HasBoomTilesModuleImp
 {
   tile_inputs.zip(outer.hartIdList).foreach { case(wire, i) =>
-    wire.clock := clock
-    wire.reset := reset
     wire.hartid := i.U
     wire.reset_vector := global_reset_vector
   }
 }
 
-///// Adds a port to the system intended to master an AXI4 DRAM controller that supports a large physical address size
+// ///// Adds a port to the system intended to master an AXI4 DRAM controller that supports a large physical address size
 
-trait CanHaveMisalignedMasterAXI4MemPort
-{ this: BaseSubsystem =>
+// trait CanHaveMisalignedMasterAXI4MemPort
+// { this: BaseSubsystem =>
 
-  val module: CanHaveMisalignedMasterAXI4MemPortModuleImp
+//   val module: CanHaveMisalignedMasterAXI4MemPortModuleImp
 
-  val memAXI4Node = p(ExtMem).map { case MemoryPortParams(memPortParams, nMemoryChannels) =>
-    val portName = "misaligned_axi4"
-    val device = new MemoryDevice
+//   val memAXI4Node = p(ExtMem).map { case MemoryPortParams(memPortParams, nMemoryChannels) =>
+//     val portName = "misaligned_axi4"
+//     val device = new MemoryDevice
 
-    val memAXI4Node = AXI4SlaveNode(Seq.tabulate(nMemoryChannels) { channel =>
-      AXI4SlavePortParameters(
-        slaves = Seq(AXI4SlaveParameters(
-          address       = AddressSet.misaligned(memPortParams.base, memPortParams.size),
-          resources     = device.reg,
-          regionType    = RegionType.UNCACHED, // cacheable
-          executable    = true,
-          supportsWrite = TransferSizes(1, mbus.blockBytes),
-          supportsRead  = TransferSizes(1, mbus.blockBytes),
-          interleavedId = Some(0))), // slave does not interleave read responses
-        beatBytes = memPortParams.beatBytes)
-    })
+//     val memAXI4Node = AXI4SlaveNode(Seq.tabulate(nMemoryChannels) { channel =>
+//       AXI4SlavePortParameters(
+//         slaves = Seq(AXI4SlaveParameters(
+//           address       = AddressSet.misaligned(memPortParams.base, memPortParams.size),
+//           resources     = device.reg,
+//           regionType    = RegionType.UNCACHED, // cacheable
+//           executable    = true,
+//           supportsWrite = TransferSizes(1, mbus.blockBytes),
+//           supportsRead  = TransferSizes(1, mbus.blockBytes),
+//           interleavedId = Some(0))), // slave does not interleave read responses
+//         beatBytes = memPortParams.beatBytes)
+//     })
 
-    memAXI4Node := mbus.toDRAMController(Some(portName)) {
-      AXI4UserYanker() := AXI4IdIndexer(memPortParams.idBits) := TLToAXI4()
-    }
+//     memAXI4Node := mbus.toDRAMController(Some(portName)) {
+//       AXI4UserYanker() := AXI4IdIndexer(memPortParams.idBits) := TLToAXI4()
+//     }
 
-    memAXI4Node
-  }
-}
+//     memAXI4Node
+//   }
+// }
 
-/** Actually generates the corresponding IO in the concrete Module */
-trait CanHaveMisalignedMasterAXI4MemPortModuleImp extends LazyModuleImp
-{
-  val outer: CanHaveMisalignedMasterAXI4MemPort
+// /** Actually generates the corresponding IO in the concrete Module */
+// trait CanHaveMisalignedMasterAXI4MemPortModuleImp extends LazyModuleImp
+// {
+//   val outer: CanHaveMisalignedMasterAXI4MemPort
 
-  val mem_axi4 = outer.memAXI4Node.map(x => IO(HeterogeneousBag.fromNode(x.in)))
-  (mem_axi4 zip outer.memAXI4Node) foreach { case (io, node) =>
-    (io zip node.in).foreach { case (io, (bundle, _)) => io <> bundle }
-  }
+//   val mem_axi4 = outer.memAXI4Node.map(x => IO(HeterogeneousBag.fromNode(x.in)))
+//   (mem_axi4 zip outer.memAXI4Node) foreach { case (io, node) =>
+//     (io zip node.in).foreach { case (io, (bundle, _)) => io <> bundle }
+//   }
 
-  def connectSimAXIMem() {
-    (mem_axi4 zip outer.memAXI4Node).foreach { case (io, node) =>
-      (io zip node.in).foreach { case (io, (_, edge)) =>
-        // setting the max size for simulated memory to be 256MB
-        val mem = LazyModule(new SimAXIMem(edge, size = 0x10000000))
-        Module(mem.module).io.axi4.head <> io
-      }
-    }
-  }
-}
+//   def connectSimAXIMem() {
+//     (mem_axi4 zip outer.memAXI4Node).foreach { case (io, node) =>
+//       (io zip node.in).foreach { case (io, (_, edge)) =>
+//         // setting the max size for simulated memory to be 256MB
+//         val mem = LazyModule(new SimAXIMem(edge, size = 0x10000000))
+//         Module(mem.module).io.axi4.head <> io
+//       }
+//     }
+//   }
+// }

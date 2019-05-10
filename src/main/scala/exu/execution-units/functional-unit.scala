@@ -671,11 +671,11 @@ class MemAddrCalcUnit(implicit p: Parameters)
           "[maddrcalc] assert we never get store data in here.")
 
   // Handle misaligned exceptions
-  val typ = io.req.bits.uop.mem_typ
+  val size = io.req.bits.uop.mem_size
   val misaligned =
-    (((typ === MT_H) || (typ === MT_HU)) && (effective_address(0) =/= 0.U)) ||
-    (((typ === MT_W) || (typ === MT_WU)) && (effective_address(1,0) =/= 0.U)) ||
-    ((typ ===  MT_D) && (effective_address(2,0) =/= 0.U))
+    (size === 1.U && (effective_address(0) =/= 0.U)) ||
+    (size === 2.U && (effective_address(1,0) =/= 0.U)) ||
+    (size === 3.U && (effective_address(2,0) =/= 0.U))
 
   val ma_ld = io.req.valid && io.req.bits.uop.uopc === uopLD && misaligned
   val ma_st = io.req.valid && (io.req.bits.uop.uopc === uopSTA || io.req.bits.uop.uopc === uopAMO_AG) && misaligned
@@ -686,8 +686,8 @@ class MemAddrCalcUnit(implicit p: Parameters)
   assert (!(ma_ld && ma_st), "Mutually-exclusive exceptions are firing.")
 
   io.resp.bits.sfence.valid := io.req.valid && io.req.bits.uop.mem_cmd === M_SFENCE
-  io.resp.bits.sfence.bits.rs1 := typ(0)
-  io.resp.bits.sfence.bits.rs2 := typ(1)
+  io.resp.bits.sfence.bits.rs1 := io.req.bits.uop.mem_size(0)
+  io.resp.bits.sfence.bits.rs2 := io.req.bits.uop.mem_size(1)
   io.resp.bits.sfence.bits.addr := io.req.bits.rs1_data
   io.resp.bits.sfence.bits.asid := io.req.bits.rs2_data
 }

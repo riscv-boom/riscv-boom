@@ -13,8 +13,9 @@ import freechips.rocketchip.config._
 import freechips.rocketchip.subsystem._
 import freechips.rocketchip.devices.tilelink._
 import freechips.rocketchip.diplomacy._
-import freechips.rocketchip.diplomaticobjectmodel.model._
+import freechips.rocketchip.diplomaticobjectmodel.logicaltree.{LogicalModuleTree, RocketLogicalTreeNode}
 import freechips.rocketchip.rocket._
+import freechips.rocketchip.subsystem.RocketCrossingParams
 import freechips.rocketchip.tilelink._
 import freechips.rocketchip.interrupts._
 import freechips.rocketchip.util._
@@ -65,8 +66,10 @@ case class BoomTileParams(
  */
 class BoomTile(
     val boomParams: BoomTileParams,
-    crossing: ClockCrossingType)
-  (implicit p: Parameters) extends BaseTile(boomParams, crossing)(p)
+    crossing: ClockCrossingType,
+    lookup: LookupByHartIdImpl,
+    q: Parameters)
+    extends BaseTile(boomParams, crossing, lookup, q)
     with SinksExternalInterrupts
     with SourcesExternalNotifications
     with HasBoomLazyRoCC  // implies CanHaveSharedFPU with CanHavePTW with HasHellaCache
@@ -75,12 +78,17 @@ class BoomTile(
     with HasBoomICacheFrontend
 {
 
+  // Private constructor ensures altered LazyModule.p is used implicitly
+  def this(params: BoomTileParams, crossing: RocketCrossingParams, lookup: LookupByHartIdImpl)(implicit p: Parameters) =
+    this(params, crossing.crossingType, lookup, p)
+
+
   val intOutwardNode = IntIdentityNode()
   val slaveNode = TLIdentityNode()
-  val masterNode = TLIdentityNode()
+  val masterNode = visibilityNode
 
   val dtim_adapter = tileParams.dcache.flatMap { d => d.scratch.map(s =>
-    LazyModule(new ScratchpadSlavePort(AddressSet(s, d.dataScratchpadBytes-1),
+    LazyModule(new ScratchpadSlavePort(AddressSet.misaligned(s, d.dataScratchpadBytes-1),
                                        xBytes,
                                        tileParams.core.useAtomics && !tileParams.core.useAtomicsOnlyForIO)))
   }
@@ -113,7 +121,7 @@ class BoomTile(
   val itimProperty = tileParams.icache.flatMap(_.itimAddr.map(i => Map(
     "sifive,itim" -> frontend.icache.device.asProperty))).getOrElse(Nil)
 
-  val cpuDevice = new SimpleDevice("cpu", Seq("ucb-bar,boom0", "riscv")) {
+  val cpuDevice: SimpleDevice = new SimpleDevice("cpu", Seq("ucb-bar,boom0", "riscv")) {
     override def parent = Some(ResourceAnchors.cpus)
     override def describe(resources: ResourceBindings): Description = {
       val Description(name, mapping) = super.describe(resources)
@@ -123,85 +131,6 @@ class BoomTile(
                         tileProperties ++
                         dtimProperty ++
                         itimProperty)
-    }
-
-    override def getOMComponents(resourceBindingsMap: ResourceBindingsMap): Seq[OMComponent] = {
-      val cores = getOMRocketCores(resourceBindingsMap)
-      cores
-    }
-
-    def getOMICacheFromBindings(resourceBindingsMap: ResourceBindingsMap): Option[OMICache] = {
-      boomParams.icache.map(i => frontend.icache.device.getOMComponents(resourceBindingsMap) match {
-        case Seq() => throw new IllegalArgumentException
-        case Seq(h) => h.asInstanceOf[OMICache]
-        case _ => throw new IllegalArgumentException
-      })
-    }
-
-    def getOMDCacheFromBindings(dCacheParams: DCacheParams, resourceBindingsMap: ResourceBindingsMap): Option[OMDCache] = {
-      val omDTIM: Option[OMDCache] = dtim_adapter.map(_.device.getMemory(dCacheParams, resourceBindingsMap))
-      val omDCache: Option[OMDCache] = tileParams.dcache.filterNot(_.scratch.isDefined).map(OMCaches.dcache(_, None))
-
-      require(!(omDTIM.isDefined && omDCache.isDefined))
-
-      omDTIM.orElse(omDCache)
-    }
-
-    def getInterruptTargets(): Seq[OMInterruptTarget] = {
-      Seq(OMInterruptTarget(
-        hartId = boomParams.hartId,
-        modes = OMModes.getModes(boomParams.core.useVM)
-      ))
-    }
-
-    def getOMRocketCores(resourceBindingsMap: ResourceBindingsMap): Seq[OMRocketCore] = {
-      val coreParams = rocketCoreParams(boomParams.core)
-
-      val omICache = getOMICacheFromBindings(resourceBindingsMap)
-
-      val omDCache = boomParams.dcache.flatMap{ getOMDCacheFromBindings(_, resourceBindingsMap)}
-
-      Seq(OMRocketCore(
-        isa = OMISA.rocketISA(coreParams, xLen),
-        mulDiv =  coreParams.mulDiv.map{ md => OMMulDiv.makeOMI(md, xLen)},
-        fpu = coreParams.fpu.map{f => OMFPU(fLen = f.fLen)},
-        performanceMonitor = PerformanceMonitor.permon(coreParams),
-        pmp = OMPMP.pmp(coreParams),
-        documentationName = tileParams.name.getOrElse("boom"),
-        hartIds = Seq(hartId),
-        hasVectoredInterrupts = true,
-        interruptLatency = 4,
-        nLocalInterrupts = coreParams.nLocalInterrupts,
-        nBreakpoints = coreParams.nBreakpoints,
-        branchPredictor = boomParams.btb.map(OMBTB.makeOMI),
-        dcache = omDCache,
-        icache = omICache
-      ))
-    }
-
-    def rocketCoreParams(params: BoomCoreParams): RocketCoreParams = {
-      RocketCoreParams(
-        bootFreqHz = params.bootFreqHz,
-        useVM = params.useVM,
-        useUser = params.useUser,
-        useDebug = params.useDebug,
-        useAtomics = params.useAtomics,
-        useAtomicsOnlyForIO = params.useAtomicsOnlyForIO,
-        useCompressed = params.useCompressed,
-        useSCIE = params.useSCIE,
-        mulDiv = params.mulDiv,
-        fpu = params.fpu,
-        nLocalInterrupts = params.nLocalInterrupts,
-        nPMPs = params.nPMPs,
-        nBreakpoints = params.nBreakpoints,
-        nPerfCounters = params.nPerfCounters,
-        haveBasicCounters = params.haveBasicCounters,
-        misaWritable = params.misaWritable,
-        haveCFlush = params.haveCFlush,
-        nL2TLBEntries = params.nL2TLBEntries,
-        mtvecInit = params.mtvecInit,
-        mtvecWritable = params.mtvecWritable
-      )
     }
   }
 
@@ -220,6 +149,28 @@ class BoomTile(
     if (!boomParams.boundaryBuffers) super.makeSlaveBoundaryBuffers
     else TLBuffer(BufferParams.flow, BufferParams.none, BufferParams.none, BufferParams.none, BufferParams.none)
   }
+
+  val fakeRocketParams = RocketTileParams(
+    dcache = boomParams.dcache,
+    hartId = boomParams.hartId,
+    name   = boomParams.name,
+    btb    = boomParams.btb,
+    core = RocketCoreParams(
+      useVM             = boomParams.core.useVM,
+      mulDiv            = boomParams.core.mulDiv,
+      useAtomics        = boomParams.core.useAtomics,
+      fpu               = boomParams.core.fpu,
+      useCompressed     = boomParams.core.useCompressed,
+      useUser           = boomParams.core.useUser,
+      haveBasicCounters = boomParams.core.haveBasicCounters,
+      nPerfCounters     = boomParams.core.nPerfCounters,
+      nPMPs             = boomParams.core.nPMPs,
+      nLocalInterrupts  = boomParams.core.nLocalInterrupts,
+      nBreakpoints      = boomParams.core.nBreakpoints,
+      useSCIE           = boomParams.core.useSCIE)
+  )
+  val rocketLogicalTree: RocketLogicalTreeNode = new RocketLogicalTreeNode(cpuDevice, fakeRocketParams, dtim_adapter, p(XLen), iCacheLogicalTreeNode)
+
 }
 
 /**
@@ -264,6 +215,7 @@ class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer)
 
   // Pass through various external constants and reports
   outer.traceSourceNode.bundle <> core.io.trace
+  outer.bpwatchSourceNode.bundle <> DontCare // core.io.bpwatch
   core.io.hartid := constants.hartid
   outer.dcache.module.io.hartid := constants.hartid
   outer.frontend.module.io.hartid := constants.hartid
