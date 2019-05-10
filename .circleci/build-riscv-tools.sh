@@ -6,7 +6,7 @@
 set -ex
 cd $HOME
 if [ ! -d "$HOME/riscv-tools-install" ]; then
-    git clone --progress --verbose https://github.com/riscv/riscv-tools.git
+    git clone --progress --verbose https://github.com/freechipsproject/rocket-tools.git riscv-tools
     cd $HOME/riscv-tools
     git submodule update --init --recursive
     ./build.sh

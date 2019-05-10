@@ -6,7 +6,7 @@
 set -ex
 
 # clone riscv-tools and get its last commit
-git clone --progress --verbose https://github.com/riscv/riscv-tools.git
+git clone --progress --verbose https://github.com/freechipsproject/rocket-tools.git riscv-tools
 cd riscv-tools
 git rev-parse HEAD > $HOME/riscv-tools.hash
 rm -rf $HOME/riscv-tools
