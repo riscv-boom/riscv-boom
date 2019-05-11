@@ -43,14 +43,14 @@ jobs:
                     .circleci/get-bhd-hash.sh
             - restore_cache:
                 keys:
-                    - bhd-with-verilator-v8-{{ checksum "../bhd.hash" }}
+                    - bhd-with-verilator-v9-{{ checksum "../bhd.hash" }}
             - run:
                 name: Build Verilator and setup build environment
                 command: |
                     .circleci/prepare-for-rtl-build.sh
                 no_output_timeout: 120m
             - save_cache:
-                key: bhd-with-verilator-v8-{{ checksum "../bhd.hash" }}
+                key: bhd-with-verilator-v9-{{ checksum "../bhd.hash" }}
                 paths:
                     - "/home/riscvuser/bhd"
     prepare-boomconfig:
@@ -71,7 +71,7 @@ jobs:
                     - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
             - restore_cache:
                 keys:
-                    - bhd-with-verilator-v8-{{ checksum "../bhd.hash" }}
+                    - bhd-with-verilator-v9-{{ checksum "../bhd.hash" }}
             - run:
                 name: Building BoomConfig using Verilator
                 command: .circleci/do-rtl-build.sh BoomConfig
@@ -98,7 +98,7 @@ jobs:
                     - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
             - restore_cache:
                 keys:
-                    - bhd-with-verilator-v8-{{ checksum "../bhd.hash" }}
+                    - bhd-with-verilator-v9-{{ checksum "../bhd.hash" }}
             - run:
                 name: Building SmallRV32UnifiedBoomConfig using Verilator
                 command: .circleci/do-rtl-build.sh SmallRV32UnifiedBoomConfig
@@ -125,7 +125,7 @@ jobs:
                     - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
             - restore_cache:
                 keys:
-                    - bhd-with-verilator-v8-{{ checksum "../bhd.hash" }}
+                    - bhd-with-verilator-v9-{{ checksum "../bhd.hash" }}
             - run:
                 name: Building SmallBoomConfig using Verilator
                 command: .circleci/do-rtl-build.sh SmallBoomConfig
@@ -152,7 +152,7 @@ jobs:
                     - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
             - restore_cache:
                 keys:
-                    - bhd-with-verilator-v8-{{ checksum "../bhd.hash" }}
+                    - bhd-with-verilator-v9-{{ checksum "../bhd.hash" }}
             - run:
                 name: Building MediumBoomConfig using Verilator
                 command: .circleci/do-rtl-build.sh MediumBoomConfig
