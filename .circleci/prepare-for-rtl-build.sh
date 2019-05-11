@@ -28,6 +28,14 @@ if [ ! -d "$HOME/bhd" ]; then
     echo "Initialize final submodules"
     git submodule update --init --recursive
 
+    # TODO: remove this
+    # Copy chisel/firrtl of rocketchip into rebar base
+    rm -rf $HOME/bhd/tools/chisel3
+    rm -rf $HOME/bhd/tools/firrtl
+    cp -r chisel3 $HOME/bhd/tools
+    cp -r firrtl $HOME/bhd/tools
+
+
     # make boom-template verilator version
     cd $HOME/bhd/sims/verisim
     make verilator_install
