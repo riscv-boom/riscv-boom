@@ -50,7 +50,6 @@ run_once () {
     # Build both a RISCV binary and normal binary
 
     # Test x86-64 first
-    echo "[$1] Testing native binary"
     gcc -I$RISCV/include/csmith-2.4.0 -w $BASE_NAME.c -o $BASE_NAME.bin
     timeout 1s ./$BASE_NAME.bin | awk '{print tolower($0)}' > $BASE_NAME.host.out
     RV=$?
@@ -61,7 +60,6 @@ run_once () {
     fi
 
     # Test RISCV spike version
-    echo "[$1] Testing spike binary"
     riscv64-unknown-elf-gcc -w -I./$SRC_DIR -DPREALLOCATE=1 -mcmodel=medany -static -std=gnu99 -O2 -ffast-math -fno-common -o $BASE_NAME.riscv $BASE_NAME.c $SRC_DIR/syscalls.c $SRC_DIR/crt.S -static -nostdlib -nostartfiles -lm -lgcc -T $SRC_DIR/link.ld -I$RISCV/include/csmith-2.4.0
     timeout --foreground 10s spike $BASE_NAME.riscv 1> $BASE_NAME.spike.out 2> $BASE_NAME.spike.log
     RV=$?
@@ -81,12 +79,11 @@ run_once () {
     fi
 
     # Compare simulator output versus spike
-    echo "[$1] Testing $SIM"
-    timeout 15m $SIM-debug +verbose -v$BASE_NAME.vpd $BASE_NAME.riscv 1> $BASE_NAME.sim.out 2> $BASE_NAME.sim.log
+    timeout 15m $SIM $BASE_NAME.riscv 1> $BASE_NAME.sim.out
     RV=$?
     if [ $RV == 124 ]; then
         echo "[$1] Simulator timed out. Discard and start over."
-        rm $BASE_NAME.*
+        rm $BASE_NAME.bin $BASE_NAME.host.out $BASE_NAME.c $BASE_NAME.riscv $BASE_NAME.spike.out $BASE_NAME.spike.log $BASE_NAME.sim.out
         return 0
     fi
 
@@ -94,10 +91,20 @@ run_once () {
     RV=$?
     if [ $RV -ne 0 ]; then
         echo "[$1] Simulator produced wrong result."
+        if [ $NDEBUG == false ]; then
+            if [ $WDEBUG_EXT == true ]; then
+                ${SIM}-debug $BASE_NAME.riscv +verbose +vcdplusfile=$BASE_NAME.vpd 1> $BASE_NAME.sim.out 2> $BASE_NAME.sim.log
+            else
+                $SIM $BASE_NAME.riscv +verbose +vcdplusfile=$BASE_NAME.vpd 1> $BASE_NAME.sim.out 2> $BASE_NAME.sim.log
+            fi
+            echo "[$1]  Vpd of error file:     $BASE_NAME.vpd"
+            echo "[$1]  Simulator output file: $BASE_NAME.sim.out"
+            echo "[$1]  Simulator log file:    $BASE_NAME.sim.log"
+        fi
         kill_group
     else
         echo "[$1] Simulator and spike agree."
-        rm $BASE_NAME.*
+        rm $BASE_NAME.bin $BASE_NAME.host.out $BASE_NAME.c $BASE_NAME.riscv $BASE_NAME.spike.out $BASE_NAME.spike.log $BASE_NAME.sim.out
         return 0
     fi
 }

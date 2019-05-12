@@ -11,6 +11,6 @@ SIM=${SIM_BASE}${CONFIG}
 AMT_RUNS=$2
 
 # run csmith utility
-cd $HOME/bhd/generators/boom/.circleci/csmith
+cd $HOME/project/.circleci/csmith
 ./install-csmith.sh
 ./run-csmith.sh --sim $HOME/bhd/sims/verisim/$SIM --run $AMT_RUNS --nodebug
