@@ -11,3 +11,4 @@ cd bhd
 git checkout rebar-dev
 git rev-parse HEAD > $HOME/bhd.hash
 rm -rf $HOME/bhd
+

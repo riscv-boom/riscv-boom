@@ -219,8 +219,8 @@ jobs:
             - run:
                 name: Run BoomConfig riscv tests
                 command: |
-                    - make run-bmark-tests -C ../bhd/sims/verisim CONFIG=BoomConfig SUB_PROJECT=boom
-                    - make run-asm-tests -C ../bhd/sims/verisim CONFIG=BoomConfig SUB_PROJECT=boom
+                    make run-bmark-tests -C ../bhd/sims/verisim CONFIG=BoomConfig SUB_PROJECT=boom
+                    make run-asm-tests -C ../bhd/sims/verisim CONFIG=BoomConfig SUB_PROJECT=boom
     smallrv32unifiedboomconfig-run-csmith-tests:
         docker:
             - image: riscvboom/riscvboom-images:0.0.5
@@ -265,7 +265,7 @@ jobs:
             - run:
                 name: Run SmallRV32UnifiedBoomConfig riscv tests
                 command: |
-                    - make run-asm-tests -C ../bhd/sims/verisim CONFIG=SmallRV32UnifiedBoomConfig SUB_PROJECT=boom
+                    make run-asm-tests -C ../bhd/sims/verisim CONFIG=SmallRV32UnifiedBoomConfig SUB_PROJECT=boom
     smallboomconfig-run-csmith-tests:
         docker:
             - image: riscvboom/riscvboom-images:0.0.5
@@ -310,8 +310,8 @@ jobs:
             - run:
                 name: Run SmallBoomConfig riscv tests
                 command: |
-                    - make run-bmark-tests -C ../bhd/sims/verisim CONFIG=SmallBoomConfig SUB_PROJECT=boom
-                    - make run-asm-tests -C ../bhd/sims/verisim CONFIG=SmallBoomConfig SUB_PROJECT=boom
+                    make run-bmark-tests -C ../bhd/sims/verisim CONFIG=SmallBoomConfig SUB_PROJECT=boom
+                    make run-asm-tests -C ../bhd/sims/verisim CONFIG=SmallBoomConfig SUB_PROJECT=boom
     mediumboomconfig-run-csmith-tests:
         docker:
             - image: riscvboom/riscvboom-images:0.0.5
@@ -331,8 +331,8 @@ jobs:
                 keys:
                     - mediumboomconfig-{{ .Branch }}-{{ .Revision }}
             - run:
-                name: Run MediumBoomconfig csmith tests
-                command: .circleci/build-run-csmith-tests.sh MediumBoomconfig 50
+                name: Run MediumBoomConfig csmith tests
+                command: .circleci/build-run-csmith-tests.sh MediumBoomConfig 50
                 no_output_timeout: 30m
     mediumboomconfig-run-riscv-tests:
         docker:
@@ -355,8 +355,8 @@ jobs:
             - run:
                 name: Run MediumBoomConfig riscv tests
                 command: |
-                    - make run-bmark-tests -C ../bhd/sims/verisim CONFIG=MediumBoomconfig SUB_PROJECT=boom
-                    - make run-asm-tests -C ../bhd/sims/verisim CONFIG=MediumCoomconfig SUB_PROJECT=boom
+                    make run-bmark-tests -C ../bhd/sims/verisim CONFIG=MediumBoomConfig SUB_PROJECT=boom
+                    make run-asm-tests -C ../bhd/sims/verisim CONFIG=MediumBoomConfig SUB_PROJECT=boom
 
 # Order and dependencies of jobs to run
 workflows:
