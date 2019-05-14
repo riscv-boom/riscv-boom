@@ -35,6 +35,8 @@ trait HasBoomLSUModule
   // val dcachePorts = ListBuffer[HellaCacheIO]()
   // val dcacheArb = Module(new HellaCacheArbiter(outer.nDCachePorts)(outer.p))
   // outer.dcache.module.io.cpu <> dcacheArb.io.mem
+  val lsu = Module(new LSU)
+  outer.dcache.module.io.lsu <> lsu.io.dmem
 }
 
 
@@ -87,7 +89,7 @@ trait CanHaveBoomPTW extends HasTileParameters with HasBoomLSU { this: BaseTile 
 trait CanHaveBoomPTWModule extends HasBoomLSUModule
 {
   val outer: CanHaveBoomPTW
-  val ptwPorts = ListBuffer(outer.dcache.module.io.ptw)
+  val ptwPorts = ListBuffer(lsu.io.ptw)
   val ptw = Module(new PTW(outer.nPTWPorts)(outer.dcache.node.edges.out(0), outer.p))
   ptw.io <> DontCare // Is overridden below if PTW is connected
   if (outer.usingPTW)

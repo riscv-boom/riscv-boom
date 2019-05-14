@@ -58,6 +58,7 @@ trait HasBoomCoreIO extends freechips.rocketchip.tile.HasTileParameters
     val ifu = new boom.ifu.BoomFrontendIO
     val ptw = Flipped(new freechips.rocketchip.rocket.DatapathPTWIO())
     val rocc = Flipped(new freechips.rocketchip.tile.RoCCCoreIO())
+    val lsu = Flipped(new boom.lsu.LSUCoreIO)
     val ptw_tlb = new freechips.rocketchip.rocket.TLBPTWIO()
     val trace = Output(Vec(coreParams.retireWidth,
       new freechips.rocketchip.rocket.TracedInstruction))
@@ -178,7 +179,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 //  dc_shim.io.core <> exe_units.memory_unit.io.dmem
 
   // Load/Store Unit & ExeUnits
-//  exe_units.memory_unit.io.lsu_io <> lsu.io
+  exe_units.memory_unit.io.lsu_io <> io.lsu.exe
 
   // TODO: Generate this in lsu
   val sxt_ldMiss = Wire(Bool())
@@ -936,7 +937,10 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
   //-------------------------------------------------------------
 
   // enqueue basic load/store info in Decode
-  // lsu.io.dec_uops := dec_uops
+  for (w <- 0 until coreWidth) {
+    io.lsu.dec_uops(w).valid := dec_will_fire(w)
+    io.lsu.dec_uops(w).bits  := dec_uops(w)
+  }
 
   // for (w <- 0 until coreWidth) {
   //   // Decoding instructions request load/store queue entries when they can proceed.
@@ -954,7 +958,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
   // lsu.io.exception := rob.io.flush.valid
 
   // // Handle Branch Mispeculations
-  // lsu.io.brinfo := br_unit.brinfo
+  io.lsu.brinfo := br_unit.brinfo
   // dc_shim.io.core.brinfo := br_unit.brinfo
 
   // lsu.io.debug_tsc := debug_tsc_reg
@@ -967,9 +971,9 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
   // lsu.io.dmem_is_ordered:= dc_shim.io.core.ordered
   // lsu.io.release := io.release
 
-  // if (usingFPU) {
-  //   lsu.io.fp_stdata <> fp_pipeline.io.to_sdq
-  // }
+  if (usingFPU) {
+    io.lsu.fp_stdata <> fp_pipeline.io.to_sdq
+  }
 
   //-------------------------------------------------------------
   //-------------------------------------------------------------

@@ -50,10 +50,11 @@ class BoomNonBlockingDCache(hartid: Int)(implicit p: Parameters) extends LazyMod
   require(!tileParams.core.haveCFlush || cfg.scratch.isEmpty, "CFLUSH_D_L1 instruction requires a D$")
 }
 
+
 class BoomDCacheBundle(implicit p: Parameters) extends BoomBundle()(p) {
   val hartid = Input(UInt(hartIdLen.W))
   val errors = new DCacheErrors
-  val ptw    = new TLBPTWIO
+  val lsu   = Flipped(new LSUDMemIO)
 }
 
 class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModuleImp(outer)

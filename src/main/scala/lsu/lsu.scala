@@ -57,9 +57,77 @@ import boom.common._
 import boom.exu.{BrResolutionInfo, Exception, FuncUnitResp}
 import boom.util.{BoolToChar, AgePriorityEncoder, IsKilledByBranch, GetNewBrMask, WrapInc, IsOlder}
 
+class LSUExeIO(implicit p: Parameters) extends BoomBundle()(p)
+{
+  // The "resp" of the maddrcalc is really a "req" to the LSU
+  val req       = Flipped(new ValidIO(new FuncUnitResp(xLen)))
+
+  // Send load data to regfiles
+  val iresp    = new DecoupledIO(new boom.exu.ExeUnitResp(xLen))
+  val fresp    = new DecoupledIO(new boom.exu.ExeUnitResp(xLen+1)) // TODO: Should this be fLen?
+}
+
+class BoomDCacheReq(implicit p: Parameters) extends BoomBundle()(p)
+{
+  val uop  = new MicroOp
+  val addr = UInt(coreMaxAddrBits.W)
+  val data = Bits(coreDataBits.W)
+}
+
+class BoomDCacheResp(implicit p: Parameters) extends BoomBundle()(p)
+{
+  val data = Bits(coreDataBits.W)
+  val uop  = new MicroOp
+  val size = UInt(2.W)
+  val nack = Bool()
+}
+
+class LSUDMemIO(implicit p: Parameters) extends BoomBundle()(p)
+{
+  val req         = new DecoupledIO(new BoomDCacheReq)
+  val req_s1_kill = Output(Bool())
+  val req_s1_addr = Output(UInt(corePAddrBits.W))
+
+  val resp        = Flipped(new ValidIO(new BoomDCacheResp))
+
+  val brinfo      = Output(new BrResolutionInfo)
+}
+
+class LSUCoreIO(implicit p: Parameters) extends BoomBundle()(p)
+{
+  val exe = new LSUExeIO
+
+  val dec_uops    = Flipped(Vec(coreWidth, Valid(new MicroOp)))
+  val dec_ldq_idx = Output(Vec(coreWidth, UInt(LDQ_ADDR_SZ.W)))
+  val dec_stq_idx = Output(Vec(coreWidth, UInt(STQ_ADDR_SZ.W)))
+
+  val laq_full    = Output(Vec(coreWidth, Bool()))
+  val stq_full    = Output(Vec(coreWidth, Bool()))
+
+  val fp_stdata   = Flipped(Valid(new MicroOpWithData(fLen)))
+
+  val ld_issued   = Valid(UInt(PREG_SZ.W))
+  val ld_miss     = Output(Bool())
+
+  val brinfo      = Input(new BrResolutionInfo)
+
+}
+
+class LSUIO(implicit p: Parameters) extends BoomBundle()(p)
+{
+  val ptw  = new rocket.TLBPTWIO
+  val core = new LSUCoreIO
+  val dmem = new LSUDMemIO
+}
+
+class LSU(implicit p: Parameters) extends BoomModule()(p)
+{
+  val io = IO(new LSUIO)
+}
+
 /**
  * IO bundle representing the different signals to interact with the backend
- * (dcache, dcache shim, etc) memory system.
+ * (dcache, dcache shim, etc) 2memory system.
  *
  * @param pl_width pipeline width of the processor
  */

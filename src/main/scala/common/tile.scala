@@ -232,7 +232,9 @@ class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer)
 
   // Connect the core pipeline to other intra-tile modules
   outer.frontend.module.io.cpu <> core.io.ifu
-//  dcachePorts += core.io.dmem // TODO outer.dcachePorts += () => module.core.io.dmem ??
+  //  dcachePorts += core.io.dmem // TODO outer.dcachePorts += () => module.core.io.dmem ??
+  core.io.lsu <> lsu.io.core
+
   //fpuOpt foreach { fpu => core.io.fpu <> fpu.io } RocketFpu - not needed in boom
   core.io.ptw <> ptw.io.dpath
   fcsr_rm := core.io.fcsr_rm
