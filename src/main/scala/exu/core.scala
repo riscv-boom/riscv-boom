@@ -133,8 +133,8 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
                            exe_units.withFilter(_.readsIrf).map(x => 2),
                            exe_units.numTotalBypassPorts,
                            xLen))
-  val dc_shim          = Module(new boom.lsu.DCacheShim())
-  val lsu              = Module(new boom.lsu.LoadStoreUnit(coreWidth))
+//  val dc_shim          = Module(new boom.lsu.DCacheShim())
+//  val lsu              = Module(new boom.lsu.LoadStoreUnit(coreWidth))
   val rob              = Module(new Rob(
                            numIrfWritePorts + 1 + numFpWakeupPorts, // +1 for ll writebacks
                            numFpWakeupPorts))
@@ -175,11 +175,11 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
   }
 
   // Shim to DCache
-  io.dmem <> dc_shim.io.dmem
-  dc_shim.io.core <> exe_units.memory_unit.io.dmem
+//  io.dmem <> dc_shim.io.dmem
+//  dc_shim.io.core <> exe_units.memory_unit.io.dmem
 
   // Load/Store Unit & ExeUnits
-  exe_units.memory_unit.io.lsu_io <> lsu.io
+//  exe_units.memory_unit.io.lsu_io <> lsu.io
 
   // TODO: Generate this in lsu
   val sxt_ldMiss = Wire(Bool())
@@ -244,10 +244,10 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
     new freechips.rocketchip.rocket.EventSet((mask, hits) => (mask & hits).orR, Seq(
       ("I$ miss",     () => io.ifu.perf.acquire),
-      ("D$ miss",     () => io.dmem.perf.acquire),
-      ("D$ release",  () => io.dmem.perf.release),
+//      ("D$ miss",     () => io.dmem.perf.acquire),
+//      ("D$ release",  () => io.dmem.perf.release),
       ("ITLB miss",   () => io.ifu.perf.tlbMiss),
-      ("DTLB miss",   () => io.dmem.perf.tlbMiss),
+//      ("DTLB miss",   () => io.dmem.perf.tlbMiss),
       ("L2 TLB miss", () => io.ptw.perf.l2miss)))))
 
   val csr = Module(new freechips.rocketchip.rocket.CSRFile(perfEvents))
@@ -421,11 +421,11 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
   // SFence needs access to the PC to inject an address into the TLB's CAM port. The ROB
   // will have to later redirect the PC back to the regularly scheduled program.
-  io.ifu.sfence_take_pc    := lsu.io.exe_resp.bits.sfence.valid
-  io.ifu.sfence_addr       := lsu.io.exe_resp.bits.sfence.bits.addr
+//  io.ifu.sfence_take_pc    := lsu.io.exe_resp.bits.sfence.valid
+//  io.ifu.sfence_addr       := lsu.io.exe_resp.bits.sfence.bits.addr
 
   // We must redirect the PC the cycle after playing the SFENCE game.
-  io.ifu.flush_take_pc     := rob.io.flush.valid || RegNext(lsu.io.exe_resp.bits.sfence.valid)
+  io.ifu.flush_take_pc     := rob.io.flush.valid //|| RegNext(lsu.io.exe_resp.bits.sfence.valid)
 
   // TODO FIX THIS HACK
   // The below code works because of two quirks with the flush mechanism
@@ -458,7 +458,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
     (br_unit.brinfo.mispredict && br_unit.brinfo.is_jr &&  csr.io.status.debug)
 
   // Delay sfence to match pushing the sfence.addr into the TLB's CAM port.
-  io.ifu.sfence := RegNext(lsu.io.exe_resp.bits.sfence)
+  //io.ifu.sfence := RegNext(lsu.io.exe_resp.bits.sfence)
 
   //-------------------------------------------------------------
   //-------------------------------------------------------------
@@ -518,17 +518,17 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
     // TODO tailor this to only care if a given instruction uses a resource?
     val stall_me = (dec_valids(w) &&
                      (  !(rename_stage.io.inst_can_proceed(w))
-                     || (dec_uops(w).is_unique &&
-                        (!(rob.io.empty) || !lsu.io.lsu_fencei_rdy || prev_insts_in_bundle_valid))
+                     || (dec_uops(w).is_unique && (!rob.io.empty || prev_insts_in_bundle_valid))
+//                        (!(rob.io.empty) || !lsu.io.lsu_fencei_rdy || prev_insts_in_bundle_valid))
                      || !rob.io.ready
-                     || lsu.io.laq_full(w) && dec_uops(w).is_load
-                     || lsu.io.stq_full(w) && dec_uops(w).is_store
+//                     || lsu.io.laq_full(w) && dec_uops(w).is_load
+//                     || lsu.io.stq_full(w) && dec_uops(w).is_store
                      || branch_mask_full(w)
                      || br_unit.brinfo.mispredict
                      || rob.io.flush.valid
                      || dec_stall_next_inst
                      || ((dec_uops(w).is_fence || dec_uops(w).is_fencei) && (io.rocc.busy || rocc_shim_busy))
-                     || (dec_uops(w).is_fencei && !lsu.io.lsu_fencei_rdy)
+//                     || (dec_uops(w).is_fencei && !lsu.io.lsu_fencei_rdy)
                      || (dec_uops(w).uopc === uopROCC && dec_rocc_found)
                      )) ||
                    dec_last_inst_was_stalled
@@ -572,8 +572,8 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
   // LD/ST Unit Allocation Logic
 
   for (w <- 0 until decodeWidth) {
-    dec_uops(w).ldq_idx := lsu.io.new_ldq_idx(w)
-    dec_uops(w).stq_idx := lsu.io.new_stq_idx(w)
+    // dec_uops(w).ldq_idx := lsu.io.new_ldq_idx(w)
+    // dec_uops(w).stq_idx := lsu.io.new_stq_idx(w)
   }
 
   //-------------------------------------------------------------
@@ -675,7 +675,8 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
   // Perform load-hit speculative wakeup through a special port (performs a poison wake-up).
   issue_units map { iu =>
-    iu.io.mem_ldSpecWakeup <> lsu.io.mem_ldSpecWakeup
+//    iu.io.mem_ldSpecWakeup <> lsu.io.mem_ldSpecWakeup
+     iu.io.mem_ldSpecWakeup := DontCare
   }
 
   for ((renport, intport) <- rename_stage.io.int_wakeups zip int_ren_wakeups) {
@@ -774,9 +775,10 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
     !mem_iq.io.iss_uops(0).fp_val &&
     mem_iq.io.iss_uops(0).pdst =/= 0.U &&
     !(sxt_ldMiss && (mem_iq.io.iss_uops(0).iw_p1_poisoned || mem_iq.io.iss_uops(0).iw_p2_poisoned))
-  sxt_ldMiss :=
-    ((lsu.io.nack.valid && lsu.io.nack.isload) || dc_shim.io.core.load_miss) &&
-    Pipe(true.B, iss_loadIssued, 4).bits
+  // sxt_ldMiss :=
+  //   ((lsu.io.nack.valid && lsu.io.nack.isload) || dc_shim.io.core.load_miss) &&
+  //   Pipe(true.B, iss_loadIssued, 4).bits
+  sxt_ldMiss := DontCare
   issue_units.map(_.io.sxt_ldMiss := sxt_ldMiss)
 
   // Check that IF we see a speculative load-wakeup and NO load-miss, then we should
@@ -787,12 +789,12 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
   val mem_resp = mem_unit.io.ll_iresp
   mem_unit.io.com_exception := rob.io.flush.valid
 
-  when (RegNext(!sxt_ldMiss) && RegNext(RegNext(lsu.io.mem_ldSpecWakeup.valid)) &&
-        !(RegNext(rob.io.flush.valid || (br_unit.brinfo.valid && br_unit.brinfo.mispredict))) &&
-        !(RegNext(RegNext(rob.io.flush.valid || (br_unit.brinfo.valid && br_unit.brinfo.mispredict))))) {
-    assert (mem_resp.valid && mem_resp.bits.uop.ctrl.rf_wen && mem_resp.bits.uop.dst_rtype === RT_FIX,
-      "[core] We did not see a RF writeback for a speculative load that claimed no load-miss.")
-  }
+  // when (RegNext(!sxt_ldMiss) && RegNext(RegNext(lsu.io.mem_ldSpecWakeup.valid)) &&
+  //       !(RegNext(rob.io.flush.valid || (br_unit.brinfo.valid && br_unit.brinfo.mispredict))) &&
+  //       !(RegNext(RegNext(rob.io.flush.valid || (br_unit.brinfo.valid && br_unit.brinfo.mispredict))))) {
+  //   assert (mem_resp.valid && mem_resp.bits.uop.ctrl.rf_wen && mem_resp.bits.uop.dst_rtype === RT_FIX,
+  //     "[core] We did not see a RF writeback for a speculative load that claimed no load-miss.")
+  // }
 
   // Wakeup (Issue & Writeback)
 
@@ -935,40 +937,40 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
   //-------------------------------------------------------------
 
   // enqueue basic load/store info in Decode
-  lsu.io.dec_uops := dec_uops
+  // lsu.io.dec_uops := dec_uops
 
-  for (w <- 0 until coreWidth) {
-    // Decoding instructions request load/store queue entries when they can proceed.
-    lsu.io.dec_ld_vals(w) := dec_will_fire(w) && dec_uops(w).is_load
-    lsu.io.dec_st_vals(w) := dec_will_fire(w) && dec_uops(w).is_store
+  // for (w <- 0 until coreWidth) {
+  //   // Decoding instructions request load/store queue entries when they can proceed.
+  //   lsu.io.dec_ld_vals(w) := dec_will_fire(w) && dec_uops(w).is_load
+  //   lsu.io.dec_st_vals(w) := dec_will_fire(w) && dec_uops(w).is_store
 
-    lsu.io.dec_uops(w).rob_idx := dec_uops(w).rob_idx // for debug purposes (commit logging)
-  }
+  //   lsu.io.dec_uops(w).rob_idx := dec_uops(w).rob_idx // for debug purposes (commit logging)
+  // }
 
-  lsu.io.commit_store_mask := rob.io.commit.st_mask
-  lsu.io.commit_load_mask  := rob.io.commit.ld_mask
-  lsu.io.commit_load_at_rob_head := rob.io.com_load_is_at_rob_head
+  // lsu.io.commit_store_mask := rob.io.commit.st_mask
+  // lsu.io.commit_load_mask  := rob.io.commit.ld_mask
+  // lsu.io.commit_load_at_rob_head := rob.io.com_load_is_at_rob_head
 
-  //com_xcpt.valid comes too early, will fight against a branch that resolves same cycle as an exception
-  lsu.io.exception := rob.io.flush.valid
+  // //com_xcpt.valid comes too early, will fight against a branch that resolves same cycle as an exception
+  // lsu.io.exception := rob.io.flush.valid
 
-  // Handle Branch Mispeculations
-  lsu.io.brinfo := br_unit.brinfo
-  dc_shim.io.core.brinfo := br_unit.brinfo
+  // // Handle Branch Mispeculations
+  // lsu.io.brinfo := br_unit.brinfo
+  // dc_shim.io.core.brinfo := br_unit.brinfo
 
-  lsu.io.debug_tsc := debug_tsc_reg
+  // lsu.io.debug_tsc := debug_tsc_reg
 
-  dc_shim.io.core.flush_pipe := rob.io.flush.valid
+  // dc_shim.io.core.flush_pipe := rob.io.flush.valid
 
-  lsu.io.nack <> dc_shim.io.core.nack
+  // lsu.io.nack <> dc_shim.io.core.nack
 
-  lsu.io.dmem_req_ready := dc_shim.io.core.req.ready
-  lsu.io.dmem_is_ordered:= dc_shim.io.core.ordered
-  lsu.io.release := io.release
+  // lsu.io.dmem_req_ready := dc_shim.io.core.req.ready
+  // lsu.io.dmem_is_ordered:= dc_shim.io.core.ordered
+  // lsu.io.release := io.release
 
-  if (usingFPU) {
-    lsu.io.fp_stdata <> fp_pipeline.io.to_sdq
-  }
+  // if (usingFPU) {
+  //   lsu.io.fp_stdata <> fp_pipeline.io.to_sdq
+  // }
 
   //-------------------------------------------------------------
   //-------------------------------------------------------------
@@ -1114,11 +1116,16 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
   exe_units(brunit_idx).io.status := csr.io.status
 
   // LSU <> ROB
-  rob.io.lsu_clr_bsy_valid      := lsu.io.clr_bsy_valid
-  rob.io.lsu_clr_bsy_rob_idx    := lsu.io.clr_bsy_rob_idx
-  rob.io.lsu_clr_unsafe_valid   := lsu.io.clr_unsafe_valid
-  rob.io.lsu_clr_unsafe_rob_idx := lsu.io.clr_unsafe_rob_idx
-  rob.io.lxcpt <> lsu.io.xcpt
+  // rob.io.lsu_clr_bsy_valid      := lsu.io.clr_bsy_valid
+  // rob.io.lsu_clr_bsy_rob_idx    := lsu.io.clr_bsy_rob_idx
+  // rob.io.lsu_clr_unsafe_valid   := lsu.io.clr_unsafe_valid
+  // rob.io.lsu_clr_unsafe_rob_idx := lsu.io.clr_unsafe_rob_idx
+  // rob.io.lxcpt <> lsu.io.xcpt
+  rob.io.lsu_clr_bsy_valid := DontCare
+  rob.io.lsu_clr_bsy_rob_idx := DontCare
+  rob.io.lsu_clr_unsafe_valid := DontCare
+  rob.io.lsu_clr_unsafe_rob_idx := DontCare
+  rob.io.lxcpt := DontCare
 
   assert (!(csr.io.singleStep), "[core] single-step is unsupported.")
 
@@ -1234,22 +1241,22 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
     }
 
     if (DEBUG_PRINTF_ROB) {
-      val robTypeStrs = RobTypeToChars(rob.io.debug.state)
-      printf("ROB:\n")
-      printf("    (State:%c%c%c Rdy:%c LAQFull:%c STQFull:%c Flush:%c BMskFull:%c DShimRdy:%c) BMsk:0x%x Mode:%c\n",
-         robTypeStrs(0),
-         robTypeStrs(1),
-         robTypeStrs(2),
-         BoolToChar(           rob.io.ready, '_', '!'),
-         BoolToChar(          lsu.io.laq_full(0), 'L'),
-         BoolToChar(          lsu.io.stq_full(0), 'S'),
-         BoolToChar(          rob.io.flush.valid, 'F'),
-         BoolToChar(branch_mask_full.reduce(_|_), 'B'),
-         BoolToChar(   dc_shim.io.core.req.ready, 'R', 'B'),
-         dec_brmask_logic.io.debug.branch_mask,
-         Mux(csr.io.status.prv === (PRV.M).U, Str("M"),
-           Mux(csr.io.status.prv === (PRV.U).U, Str("U"),
-             Mux(csr.io.status.prv === (PRV.S).U, Str("S"), Str("?")))))
+      // val robTypeStrs = RobTypeToChars(rob.io.debug.state)
+      // printf("ROB:\n")
+      // printf("    (State:%c%c%c Rdy:%c LAQFull:%c STQFull:%c Flush:%c BMskFull:%c DShimRdy:%c) BMsk:0x%x Mode:%c\n",
+      //    robTypeStrs(0),
+      //    robTypeStrs(1),
+      //    robTypeStrs(2),
+      //    BoolToChar(           rob.io.ready, '_', '!'),
+      //    BoolToChar(          lsu.io.laq_full(0), 'L'),
+      //    BoolToChar(          lsu.io.stq_full(0), 'S'),
+      //    BoolToChar(          rob.io.flush.valid, 'F'),
+      //    BoolToChar(branch_mask_full.reduce(_|_), 'B'),
+      //    BoolToChar(   dc_shim.io.core.req.ready, 'R', 'B'),
+      //    dec_brmask_logic.io.debug.branch_mask,
+      //    Mux(csr.io.status.prv === (PRV.M).U, Str("M"),
+      //      Mux(csr.io.status.prv === (PRV.U).U, Str("U"),
+      //        Mux(csr.io.status.prv === (PRV.S).U, Str("S"), Str("?")))))
     }
 
     printf("Other:\n")
@@ -1375,7 +1382,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
   //-------------------------------------------------------------
   // Page Table Walker
 
-  io.ptw_tlb <> lsu.io.ptw
+//  io.ptw_tlb <> lsu.io.ptw
   io.ptw.ptbr       := csr.io.ptbr
   io.ptw.status     := csr.io.status
   io.ptw.pmp        := csr.io.pmp

@@ -74,7 +74,6 @@ class BoomTile(
     with SourcesExternalNotifications
     with HasBoomLazyRoCC  // implies CanHaveSharedFPU with CanHavePTW with HasHellaCache
     with CanHaveBoomPTW
-    with HasBoomHellaCache
     with HasBoomICacheFrontend
 {
 
@@ -190,7 +189,6 @@ class BoomTile(
 class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer)
     with HasBoomLazyRoCCModule
     with CanHaveBoomPTWModule
-    with HasBoomHellaCacheModule
     with HasBoomICacheFrontendModule
 {
   Annotated.params(this, outer.boomParams)
