@@ -17,53 +17,74 @@ import freechips.rocketchip.rocket.{DCache, HellaCache, HellaCacheArbiter, Hella
 import freechips.rocketchip.tile.{BaseTile, HasTileParameters}
 import freechips.rocketchip.tilelink.TLIdentityNode
 
-/**
- * Top level mixin to construct a tile with a BOOM HellaCache.
- */
-trait HasBoomHellaCache { this: BaseTile =>
-  val module: HasBoomHellaCacheModule
-  implicit val p: Parameters
-  var nDCachePorts = 0
-  lazy val dcache: HellaCache = LazyModule(
-    if (tileParams.dcache.get.nMSHRs == 0)
-    {
-      new DCache(hartId, crossing)
-    }
-    else
-    {
-      new NonBlockingDCache(hartId)
-    })
 
-  //tlMasterXbar.node := dcache.node
+trait HasBoomLSU { this: BaseTile =>
+  val module: HasBoomLSUModule
+  implicit val p: Parameters
+  var nExtCachePorts = 0
+  lazy val dcache: BoomNonBlockingDCache = LazyModule(new BoomNonBlockingDCache(hartId))
+
   val dCacheTap = TLIdentityNode()
   tlMasterXbar.node := dCacheTap := dcache.node
 }
 
-/**
- * Mixin to construct a tile with a BOOM HellaCache.
- */
-trait HasBoomHellaCacheModule
+trait HasBoomLSUModule
 {
-  val outer: HasBoomHellaCache with HasTileParameters
+  val outer: HasBoomLSU with HasTileParameters
   implicit val p: Parameters
-  val dcachePorts = ListBuffer[HellaCacheIO]()
-  val dcacheArb = Module(new HellaCacheArbiter(outer.nDCachePorts)(outer.p))
-  outer.dcache.module.io.cpu <> dcacheArb.io.mem
+  // val dcachePorts = ListBuffer[HellaCacheIO]()
+  // val dcacheArb = Module(new HellaCacheArbiter(outer.nDCachePorts)(outer.p))
+  // outer.dcache.module.io.cpu <> dcacheArb.io.mem
 }
+
+
+// /**
+//  * Top level mixin to construct a tile with a BOOM HellaCache.
+//  */
+// trait HasBoomHellaCache { this: BaseTile =>
+//   val module: HasBoomHellaCacheModule
+//   implicit val p: Parameters
+//   var nDCachePorts = 0
+//   lazy val dcache: HellaCache = LazyModule(
+//     if (tileParams.dcache.get.nMSHRs == 0)
+//     {
+//       new DCache(hartId, crossing)
+//     }
+//     else
+//     {
+//       new NonBlockingDCache(hartId)
+//     })
+
+//   //tlMasterXbar.node := dcache.node
+//   val dCacheTap = TLIdentityNode()
+//   tlMasterXbar.node := dCacheTap := dcache.node
+// }
+
+// /**
+//  * Mixin to construct a tile with a BOOM HellaCache.
+//  */
+// trait HasBoomHellaCacheModule
+// {
+//   val outer: HasBoomHellaCache with HasTileParameters
+//   implicit val p: Parameters
+//   val dcachePorts = ListBuffer[HellaCacheIO]()
+//   val dcacheArb = Module(new HellaCacheArbiter(outer.nDCachePorts)(outer.p))
+//   outer.dcache.module.io.cpu <> dcacheArb.io.mem
+// }
 
 /**
  * Top level mixin to construct a tile with a BOOM PTW.
  */
-trait CanHaveBoomPTW extends HasTileParameters with HasBoomHellaCache { this: BaseTile =>
+trait CanHaveBoomPTW extends HasTileParameters with HasBoomLSU { this: BaseTile =>
   val module: CanHaveBoomPTWModule
   var nPTWPorts = 1
-  nDCachePorts += (if (usingPTW) 1 else 0)
+  nExtCachePorts += (if (usingPTW) 1 else 0)
 }
 
 /**
  * Mixin to construct a tile with a BOOM PTW.
  */
-trait CanHaveBoomPTWModule extends HasBoomHellaCacheModule
+trait CanHaveBoomPTWModule extends HasBoomLSUModule
 {
   val outer: CanHaveBoomPTW
   val ptwPorts = ListBuffer(outer.dcache.module.io.ptw)
@@ -71,7 +92,7 @@ trait CanHaveBoomPTWModule extends HasBoomHellaCacheModule
   ptw.io <> DontCare // Is overridden below if PTW is connected
   if (outer.usingPTW)
   {
-    dcachePorts += ptw.io.mem
+//    dcachePorts += ptw.io.mem
   }
 }
 

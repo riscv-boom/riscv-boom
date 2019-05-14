@@ -56,7 +56,6 @@ trait HasBoomCoreIO extends freechips.rocketchip.tile.HasTileParameters
   {
     val interrupts = Input(new freechips.rocketchip.tile.CoreInterrupts())
     val ifu = new boom.ifu.BoomFrontendIO
-    val dmem = new freechips.rocketchip.rocket.HellaCacheIO
     val ptw = Flipped(new freechips.rocketchip.rocket.DatapathPTWIO())
     val rocc = Flipped(new freechips.rocketchip.tile.RoCCCoreIO())
     val ptw_tlb = new freechips.rocketchip.rocket.TLBPTWIO()
