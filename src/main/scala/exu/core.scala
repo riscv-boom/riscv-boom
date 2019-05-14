@@ -70,7 +70,7 @@ trait HasBoomCoreIO extends freechips.rocketchip.tile.HasTileParameters
 /**
  * Top level core object that connects the Frontend to the rest of the pipeline.
  */
-class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut) extends BoomModule
+class BoomCore(implicit p: Parameters) extends BoomModule
    with HasBoomCoreIO
 {
   //**********************************

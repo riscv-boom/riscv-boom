@@ -393,6 +393,8 @@ class ALUExeUnit(
     io.bypass <> maddrcalc.io.bypass // TODO this is not where the bypassing should
                                      // occur from, is there any bypassing happening?!
 
+    io.lsu_io.req := maddrcalc.io.resp
+
     // io.lsu_io.exe_resp.valid := maddrcalc.io.resp.valid
     // io.lsu_io.exe_resp.bits  := maddrcalc.io.resp.bits
 

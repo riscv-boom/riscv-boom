@@ -194,7 +194,7 @@ class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer)
 {
   Annotated.params(this, outer.boomParams)
 
-  val core = Module(new BoomCore()(outer.p, outer.dcache.module.edge))
+  val core = Module(new BoomCore()(outer.p))
 
   // Observe the Tilelink Channel C traffic leaving the L1D (writeback/releases).
   val tl_c = outer.dCacheTap.out(0)._1.c

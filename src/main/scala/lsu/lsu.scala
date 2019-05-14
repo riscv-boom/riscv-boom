@@ -152,7 +152,7 @@ class STQEntry(implicit p: Parameters) extends BoomBundle()(p)
   val committed           = Bool() // committed by ROB
 }
 
-class LSU(implicit p: Parameters) extends BoomModule()(p)
+class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut) extends BoomModule()(p)
 {
   val io = IO(new LSUIO)
 
@@ -253,6 +253,182 @@ class LSU(implicit p: Parameters) extends BoomModule()(p)
    stq_tail := st_enq_idx
 
 //   io.lsu_fencei_rdy := !stq_nonempty && io.dmem_is_ordered
+
+  //-------------------------------------------------------------
+  //-------------------------------------------------------------
+  // Execute stage (access TLB, send requests to Memory)
+  //-------------------------------------------------------------
+  //-------------------------------------------------------------
+
+  //--------------------------------------------
+  // Controller Logic (arbitrate TLB, D$ access)
+  //
+  // There are a couple some-what coupled datapaths here and 7 potential users.
+  // AddrGen -> TLB -> LAQ/D$ (for loads) or SAQ/ROB (for stores)
+  // LAQ     -> optionally TLB -> D$
+  // SAQ     -> TLB -> ROB
+  // uopSTAs and uopSTDs fight over the ROB unbusy port.
+  // And loads and store-addresses must search the LAQ (lcam) for ordering failures (or to prevent ordering failures).
+
+  val will_fire_load_incoming = WireInit(false.B) // uses TLB, D$, SAQ-search, LAQ-search
+  val will_fire_sta_incoming  = WireInit(false.B) // uses TLB,                 LAQ-search, ROB
+  val will_fire_std_incoming  = WireInit(false.B) // uses                                  ROB
+  val will_fire_sta_retry     = WireInit(false.B) // uses TLB,                             ROB
+  val will_fire_load_retry    = WireInit(false.B) // uses TLB, D$, SAQ-search, LAQ-search
+  val will_fire_store_commit  = WireInit(false.B) // uses      D$
+  val will_fire_load_wakeup   = WireInit(false.B) // uses      D$, SAQ-search, LAQ-search
+  val will_fire_sfence        = WireInit(false.B) // uses TLB                            , ROB
+
+  val can_fire_sta_retry      = WireInit(false.B)
+  val can_fire_load_retry     = WireInit(false.B)
+  val can_fire_store_commit   = WireInit(false.B)
+  val can_fire_load_wakeup    = WireInit(false.B)
+
+  val dc_avail  = WireInit(true.B)
+  val tlb_avail = WireInit(true.B)
+  val rob_avail = WireInit(true.B)
+  val lcam_avail= WireInit(true.B)
+
+  val exe_req = io.core.exe.req
+  when (exe_req.valid) {
+    when (exe_req.bits.sfence.valid) {
+      will_fire_sfence := true.B
+      dc_avail   := false.B
+      tlb_avail  := false.B
+      lcam_avail := false.B
+    }
+    when (exe_req.bits.uop.ctrl.is_load) {
+      will_fire_load_incoming := true.B
+      dc_avail   := false.B
+      tlb_avail  := false.B
+      lcam_avail := false.B
+    }
+    when (exe_req.bits.uop.ctrl.is_sta) {
+      will_fire_sta_incoming := true.B
+      tlb_avail  := false.B
+      rob_avail  := false.B
+      lcam_avail := false.B
+    }
+    when (exe_req.bits.uop.ctrl.is_std) {
+      will_fire_std_incoming := true.B
+      rob_avail := false.B
+    }
+  }
+
+  when (tlb_avail) {
+    when (can_fire_sta_retry && rob_avail) {
+      will_fire_sta_retry := true.B
+      lcam_avail := false.B
+    } .elsewhen (can_fire_load_retry) {
+      will_fire_load_retry := true.B
+      dc_avail := false.B
+      lcam_avail := false.B
+    }
+  }
+
+  when (dc_avail) {
+    // TODO allow dyanmic priority here
+    will_fire_store_commit := can_fire_store_commit
+    will_fire_load_wakeup  := !can_fire_store_commit && can_fire_load_wakeup && lcam_avail
+  }
+
+  //--------------------------------------------
+  // TLB Access
+
+  val stq_retry_idx = WireInit(0.U(STQ_ADDR_SZ.W))
+  val ldq_retry_idx = WireInit(0.U(LDQ_ADDR_SZ.W))
+
+  // micro-op going through the TLB generate paddr's. If this is a load, it will continue
+  // to the D$ and search the SAQ. uopSTD also uses this uop.
+  val exe_tlb_uop = Mux(will_fire_sta_retry,  stq(stq_retry_idx).bits.uop,
+                    Mux(will_fire_load_retry, ldq(ldq_retry_idx).bits.uop,
+                                              exe_req.bits.uop))
+
+  val exe_vaddr   = Mux(will_fire_sta_retry,  stq(stq_retry_idx).bits.addr.bits,
+                    Mux(will_fire_load_retry, ldq(ldq_retry_idx).bits.addr.bits,
+                    Mux(will_fire_sfence,     exe_req.bits.sfence.bits.addr,
+                                              exe_req.bits.addr)))
+
+  assert(!(will_fire_sta_retry && !stq(stq_retry_idx).bits.addr.valid),
+    "Can't fire sta retry with no address in the stq!")
+  assert(!(will_fire_sta_retry && !stq(stq_retry_idx).bits.addr_is_virtual),
+    "Can't fire sta retry if the address is not virtual!")
+  assert(!(will_fire_load_retry && !ldq(ldq_retry_idx).bits.addr.valid),
+    "Can't fire load retry with no address in the ldq!")
+  assert(!(will_fire_load_retry && !ldq(ldq_retry_idx).bits.addr_is_virtual),
+    "Can't fire load retry if the address is not virtual!")
+
+  val dtlb = Module(new rocket.TLB(
+    instruction = false, lgMaxSize = log2Ceil(coreDataBytes), rocket.TLBConfig(dcacheParams.nTLBEntries)))
+  dontTouch(dtlb.io)
+
+  io.ptw <> dtlb.io.ptw
+  dtlb.io.req.valid := will_fire_load_incoming ||
+                       will_fire_sta_incoming ||
+                       will_fire_sta_retry ||
+                       will_fire_load_retry ||
+                       will_fire_sfence
+  dtlb.io.req.bits.vaddr := exe_vaddr
+  dtlb.io.req.bits.size  := exe_tlb_uop.mem_size
+  dtlb.io.req.bits.cmd   := exe_tlb_uop.mem_cmd
+  dtlb.io.req.bits.passthrough := false.B // let status.vm decide
+  dtlb.io.sfence         := exe_req.bits.sfence
+  dtlb.io.kill           := false.B
+
+  // exceptions
+  val ma_ld = will_fire_load_incoming && exe_req.bits.mxcpt.valid // We get ma_ld in memaddrcalc
+  val ma_st = will_fire_sta_incoming && exe_req.bits.mxcpt.valid // We get ma_ld in memaddrcalc
+  val pf_ld = dtlb.io.req.valid && dtlb.io.resp.pf.ld && (exe_tlb_uop.is_load || exe_tlb_uop.is_amo)
+  val pf_st = dtlb.io.req.valid && dtlb.io.resp.pf.st && exe_tlb_uop.is_store
+  val ae_ld = dtlb.io.req.valid && dtlb.io.resp.ae.ld && (exe_tlb_uop.is_load || exe_tlb_uop.is_amo)
+  val ae_st = dtlb.io.req.valid && dtlb.io.resp.ae.st && exe_tlb_uop.is_store
+  // TODO check for xcpt_if and verify that never happens on non-speculative instructions.
+  val mem_xcpt_valid = RegNext((pf_ld || pf_st || ae_ld || ae_st || ma_ld || ma_st) &&
+                                !io.core.exception &&
+                                !IsKilledByBranch(io.core.brinfo, exe_tlb_uop),
+                                init=false.B)
+
+  val xcpt_uop       = RegNext(exe_tlb_uop)
+
+  when (mem_xcpt_valid)
+  {
+    // Technically only faulting AMOs need this
+    assert(xcpt_uop.is_load ^ xcpt_uop.is_store)
+    when (xcpt_uop.is_load)
+    {
+      ldq(xcpt_uop.ldq_idx).bits.uop.exception := true.B
+    }
+      .otherwise
+    {
+      stq(xcpt_uop.stq_idx).bits.uop.exception := true.B
+    }
+  }
+
+  val mem_xcpt_cause = RegNext(
+    Mux(ma_ld, rocket.Causes.misaligned_load.U,
+    Mux(ma_st, rocket.Causes.misaligned_store.U,
+    Mux(pf_ld, rocket.Causes.load_page_fault.U,
+    Mux(pf_st, rocket.Causes.store_page_fault.U,
+    Mux(ae_ld, rocket.Causes.load_access.U,
+               rocket.Causes.store_access.U))))))
+
+
+   assert (!(dtlb.io.req.valid && exe_tlb_uop.is_fence), "Fence is pretending to talk to the TLB")
+   assert (!(exe_req.bits.mxcpt.valid && dtlb.io.req.valid &&
+           !(exe_tlb_uop.ctrl.is_load || exe_tlb_uop.ctrl.is_sta)),
+           "A uop that's not a load or store-address is throwing a memory exception.")
+
+   val tlb_miss = dtlb.io.req.valid && (dtlb.io.resp.miss || !dtlb.io.req.ready)
+
+   // output
+   val exe_tlb_paddr = Cat(dtlb.io.resp.paddr(paddrBits-1,corePgIdxBits), exe_vaddr(corePgIdxBits-1,0))
+   assert (exe_tlb_paddr === dtlb.io.resp.paddr || exe_req.bits.sfence.valid, "[lsu] paddrs should match.")
+
+   // check if a load is uncacheable - must stop it from executing speculatively,
+   // as it might have side-effects!
+   val tlb_addr_uncacheable = !(dtlb.io.resp.cacheable)
+
+
 
   //-------------------------------------------------------------
   // Kill speculated entries on branch mispredict
@@ -727,8 +903,8 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
    //--------------------------------------------
    // TLB Access
 
-   val stq_retry_idx = Wire(UInt())
-   val laq_retry_idx = Wire(UInt())
+   val stq_retry_idx = Wire(UInt(STQ_ADDR_SZ.W))
+   val laq_retry_idx = Wire(UInt(LDQ_ADDR_SZ.W))
 
    // micro-op going through the TLB generate paddr's. If this is a load, it will continue
    // to the D$ and search the SAQ. uopSTD also uses this uop.

@@ -35,7 +35,7 @@ trait HasBoomLSUModule
   // val dcachePorts = ListBuffer[HellaCacheIO]()
   // val dcacheArb = Module(new HellaCacheArbiter(outer.nDCachePorts)(outer.p))
   // outer.dcache.module.io.cpu <> dcacheArb.io.mem
-  val lsu = Module(new LSU)
+  val lsu = Module(new LSU()(p, outer.dcache.module.edge))
   outer.dcache.module.io.lsu <> lsu.io.dmem
 }
 
