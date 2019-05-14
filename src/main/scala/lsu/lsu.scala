@@ -101,7 +101,7 @@ class LSUCoreIO(implicit p: Parameters) extends BoomBundle()(p)
   val dec_ldq_idx = Output(Vec(coreWidth, UInt(LDQ_ADDR_SZ.W)))
   val dec_stq_idx = Output(Vec(coreWidth, UInt(STQ_ADDR_SZ.W)))
 
-  val laq_full    = Output(Vec(coreWidth, Bool()))
+  val ldq_full    = Output(Vec(coreWidth, Bool()))
   val stq_full    = Output(Vec(coreWidth, Bool()))
 
   val fp_stdata   = Flipped(Valid(new MicroOpWithData(fLen)))
@@ -110,7 +110,7 @@ class LSUCoreIO(implicit p: Parameters) extends BoomBundle()(p)
   val ld_miss     = Output(Bool())
 
   val brinfo      = Input(new BrResolutionInfo)
-
+  val exception   = Input(Bool())
 }
 
 class LSUIO(implicit p: Parameters) extends BoomBundle()(p)
@@ -120,9 +120,249 @@ class LSUIO(implicit p: Parameters) extends BoomBundle()(p)
   val dmem = new LSUDMemIO
 }
 
+class LDQEntry(implicit p: Parameters) extends BoomBundle()(p)
+{
+  val uop                 = new MicroOp
+
+  val addr                = Valid(UInt(coreMaxAddrBits.W))
+  val addr_is_virtual     = Bool() // Virtual address, we got a TLB miss
+  val addr_is_uncacheable = Bool() // Uncacheable, wait until head of ROB to execute
+
+  val executed            = Bool() // load sent to memory
+  val succeeded           = Bool() // load returned from memory (might still have order failure)
+  val order_fail          = Bool()
+
+  val st_dep_mask         = UInt(NUM_STQ_ENTRIES.W) // list of stores we might
+                                                    // depend (cleared when a
+                                                    // store commits)
+
+  val forward_std_val     = Bool()
+  val forward_stq_idx     = UInt(STQ_ADDR_SZ.W) // Which store did we get the store-load forward from?
+}
+
+class STQEntry(implicit p: Parameters) extends BoomBundle()(p)
+{
+  val uop                 = new MicroOp
+
+  val addr                = Valid(UInt(coreMaxAddrBits.W))
+  val addr_is_virtual     = Bool() // Virtual address, we got a TLB miss
+  val data                = Valid(UInt(xLen.W))
+
+  val executed            = Bool() // sent to memory
+  val committed           = Bool() // committed by ROB
+}
+
 class LSU(implicit p: Parameters) extends BoomModule()(p)
 {
   val io = IO(new LSUIO)
+
+
+  val ldq = Reg(Vec(NUM_LDQ_ENTRIES, Valid(new LDQEntry)))
+  val stq = Reg(Vec(NUM_STQ_ENTRIES, Valid(new STQEntry)))
+
+  val ldq_head         = Reg(UInt(LDQ_ADDR_SZ.W))
+  val ldq_tail         = Reg(UInt(LDQ_ADDR_SZ.W))
+  val stq_head         = Reg(UInt(STQ_ADDR_SZ.W)) // point to next store to clear from STQ (i.e., send to memory)
+  val stq_tail         = Reg(UInt(STQ_ADDR_SZ.W))
+  val stq_commit_head  = Reg(UInt(STQ_ADDR_SZ.W)) // point to next store to commit
+  val stq_execute_head = Reg(UInt(STQ_ADDR_SZ.W)) // point to next store to execute
+
+  dontTouch(io)
+  dontTouch(ldq)
+  dontTouch(stq)
+
+  val clear_store     = WireInit(false.B)
+  val live_store_mask = RegInit(0.U(NUM_STQ_ENTRIES.W))
+  var next_live_store_mask = Mux(clear_store, live_store_mask & ~(1.U << stq_head),
+                                              live_store_mask)
+
+
+  //-------------------------------------------------------------
+  //-------------------------------------------------------------
+  // Enqueue new entries
+  //-------------------------------------------------------------
+  //-------------------------------------------------------------
+
+  // This is a newer store than existing loads, so clear the bit in all the store dependency masks
+  for (i <- 0 until NUM_LDQ_ENTRIES)
+  {
+    when (clear_store)
+    {
+      ldq(i).bits.st_dep_mask := ldq(i).bits.st_dep_mask & ~(1.U << stq_head)
+    }
+  }
+
+  // Decode stage
+  var ld_enq_idx = ldq_tail
+  var st_enq_idx = stq_tail
+
+  val ldq_nonempty = VecInit(ldq.map(_.valid)).asUInt =/= 0.U
+  val stq_nonempty = VecInit(stq.map(_.valid)).asUInt =/= 0.U
+
+  var ldq_full = Bool()
+  var stq_full = Bool()
+
+  for (w <- 0 until coreWidth)
+  {
+    ldq_full = ld_enq_idx === ldq_head && ldq_nonempty
+    io.core.ldq_full(w)    := ldq_full
+    io.core.dec_ldq_idx(w) := ld_enq_idx
+
+    val dec_ld_val = io.core.dec_uops(w).valid && io.core.dec_uops(w).bits.is_load
+
+    when (dec_ld_val)
+    {
+      ldq(ld_enq_idx).valid            := true.B
+      ldq(ld_enq_idx).bits.uop         := io.core.dec_uops(w).bits
+      ldq(ld_enq_idx).bits.st_dep_mask := next_live_store_mask
+
+      ldq(ld_enq_idx).bits.addr.valid  := false.B
+      ldq(ld_enq_idx).bits.executed    := false.B
+      ldq(ld_enq_idx).bits.succeeded   := false.B
+      ldq(ld_enq_idx).bits.order_fail  := false.B
+      ldq(ld_enq_idx).bits.forward_std_val := false.B
+
+      assert (ld_enq_idx === io.core.dec_uops(w).bits.ldq_idx, "[lsu] mismatch enq load tag.")
+    }
+    ld_enq_idx = Mux(dec_ld_val, WrapInc(ld_enq_idx, NUM_LDQ_ENTRIES),
+                                 ld_enq_idx)
+
+    stq_full = st_enq_idx === stq_head && stq_nonempty
+    io.core.stq_full(w)    := stq_full
+    io.core.dec_stq_idx(w) := st_enq_idx
+
+    val dec_st_val = io.core.dec_uops(w).valid && io.core.dec_uops(w).bits.is_store
+    when (dec_st_val)
+    {
+      stq(st_enq_idx).valid           := true.B
+      stq(st_enq_idx).bits.uop        := io.core.dec_uops(w).bits
+      stq(st_enq_idx).bits.addr.valid := false.B
+      stq(st_enq_idx).bits.data.valid := false.B
+      stq(st_enq_idx).bits.executed   := false.B
+      stq(st_enq_idx).bits.committed  := false.B
+
+      assert (st_enq_idx === io.core.dec_uops(w).bits.stq_idx, "[lsu] mismatch enq store tag.")
+    }
+    next_live_store_mask = Mux(dec_st_val, next_live_store_mask | (1.U << st_enq_idx),
+                                           next_live_store_mask)
+    st_enq_idx = Mux(dec_st_val, WrapInc(st_enq_idx, NUM_STQ_ENTRIES),
+                                 st_enq_idx)
+   }
+
+   ldq_tail := ld_enq_idx
+   stq_tail := st_enq_idx
+
+//   io.lsu_fencei_rdy := !stq_nonempty && io.dmem_is_ordered
+
+  //-------------------------------------------------------------
+  // Kill speculated entries on branch mispredict
+  //-------------------------------------------------------------
+  //-------------------------------------------------------------
+
+  // Kill stores
+  val st_brkilled_mask = Wire(Vec(NUM_STQ_ENTRIES, Bool()))
+  for (i <- 0 until NUM_STQ_ENTRIES)
+  {
+    st_brkilled_mask(i) := false.B
+
+    when (stq(i).valid)
+    {
+      stq(i).bits.uop.br_mask := GetNewBrMask(io.core.brinfo, stq(i).bits.uop.br_mask)
+
+      when (IsKilledByBranch(io.core.brinfo, stq(i).bits.uop))
+      {
+        stq(i).valid           := false.B
+        stq(i).bits.addr.valid := false.B
+        stq(i).bits.data.valid := false.B
+        st_brkilled_mask(i)    := true.B
+      }
+    }
+
+    assert (!(IsKilledByBranch(io.core.brinfo, stq(i).bits.uop) && stq(i).valid && stq(i).bits.committed),
+      "Branch is trying to clear a committed store.")
+  }
+
+  // Kill loads
+  for (i <- 0 until NUM_LDQ_ENTRIES)
+  {
+    when (ldq(i).valid)
+    {
+      ldq(i).bits.uop.br_mask := GetNewBrMask(io.core.brinfo, ldq(i).bits.uop.br_mask)
+      when (IsKilledByBranch(io.core.brinfo, ldq(i).bits.uop))
+      {
+        ldq(i).valid           := false.B
+        ldq(i).bits.addr.valid := false.B
+      }
+    }
+  }
+
+  //-------------------------------------------------------------
+  when (io.core.brinfo.valid && io.core.brinfo.mispredict && !io.core.exception)
+  {
+    stq_tail := io.core.brinfo.stq_idx
+    ldq_tail := io.core.brinfo.ldq_idx
+  }
+
+  //-------------------------------------------------------------
+  // Exception / Reset
+
+  // for the live_store_mask, need to kill stores that haven't been committed
+  val st_exc_killed_mask = WireInit(VecInit((0 until NUM_STQ_ENTRIES).map(x=>false.B)))
+
+  when (reset.asBool || io.core.exception)
+  {
+    ldq_head := 0.U
+    ldq_tail := 0.U
+
+    when (reset.asBool)
+    {
+      stq_head := 0.U
+      stq_tail := 0.U
+      stq_commit_head  := 0.U
+      stq_execute_head := 0.U
+
+      for (i <- 0 until NUM_STQ_ENTRIES)
+      {
+        stq(i).valid           := false.B
+        stq(i).bits.addr.valid := false.B
+        stq(i).bits.data.valid := false.B
+        stq(i).bits.uop        := NullMicroOp
+      }
+    }
+      .otherwise // exception
+    {
+      stq_tail := stq_commit_head
+
+      for (i <- 0 until NUM_STQ_ENTRIES)
+      {
+        when (!stq(i).bits.committed)
+        {
+          stq(i).valid           := false.B
+          stq(i).bits.addr.valid := false.B
+          stq(i).bits.data.valid := false.B
+          st_exc_killed_mask(i)  := true.B
+        }
+      }
+    }
+
+    for (i <- 0 until NUM_LDQ_ENTRIES)
+    {
+      ldq(i).valid           := false.B
+      ldq(i).bits.addr.valid := false.B
+      ldq(i).bits.executed   := false.B
+    }
+  }
+
+  //-------------------------------------------------------------
+  // Live Store Mask
+  // track a bit-array of stores that are alive
+  // (could maybe be re-produced from the stq_head/stq_tail, but need to know include spec_killed entries)
+
+  // TODO is this the most efficient way to compute the live store mask?
+  live_store_mask := next_live_store_mask &
+                    ~(st_brkilled_mask.asUInt) &
+                    ~(st_exc_killed_mask.asUInt)
+
 }
 
 /**

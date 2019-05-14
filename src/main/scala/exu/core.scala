@@ -955,6 +955,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
   // lsu.io.commit_load_at_rob_head := rob.io.com_load_is_at_rob_head
 
   // //com_xcpt.valid comes too early, will fight against a branch that resolves same cycle as an exception
+  io.lsu.exception := rob.io.flush.valid
   // lsu.io.exception := rob.io.flush.valid
 
   // // Handle Branch Mispeculations
