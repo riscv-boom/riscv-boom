@@ -109,6 +109,10 @@ class LSUCoreIO(implicit p: Parameters) extends BoomBundle()(p)
   val ld_issued   = Valid(UInt(PREG_SZ.W))
   val ld_miss     = Output(Bool())
 
+  val commit_store_mask = Input(Vec(coreWidth, Bool()))
+  val commit_load_mask  = Input(Vec(coreWidth, Bool()))
+  val commit_load_at_rob_head = Input(Bool())
+
   val brinfo      = Input(new BrResolutionInfo)
   val exception   = Input(Bool())
 }
@@ -413,22 +417,82 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
                rocket.Causes.store_access.U))))))
 
 
-   assert (!(dtlb.io.req.valid && exe_tlb_uop.is_fence), "Fence is pretending to talk to the TLB")
-   assert (!(exe_req.bits.mxcpt.valid && dtlb.io.req.valid &&
-           !(exe_tlb_uop.ctrl.is_load || exe_tlb_uop.ctrl.is_sta)),
-           "A uop that's not a load or store-address is throwing a memory exception.")
+  assert (!(dtlb.io.req.valid && exe_tlb_uop.is_fence), "Fence is pretending to talk to the TLB")
+  assert (!(exe_req.bits.mxcpt.valid && dtlb.io.req.valid &&
+          !(exe_tlb_uop.ctrl.is_load || exe_tlb_uop.ctrl.is_sta)),
+          "A uop that's not a load or store-address is throwing a memory exception.")
 
-   val tlb_miss = dtlb.io.req.valid && (dtlb.io.resp.miss || !dtlb.io.req.ready)
+  val tlb_miss = dtlb.io.req.valid && (dtlb.io.resp.miss || !dtlb.io.req.ready)
 
-   // output
-   val exe_tlb_paddr = Cat(dtlb.io.resp.paddr(paddrBits-1,corePgIdxBits), exe_vaddr(corePgIdxBits-1,0))
-   assert (exe_tlb_paddr === dtlb.io.resp.paddr || exe_req.bits.sfence.valid, "[lsu] paddrs should match.")
+  // output
+  val exe_tlb_paddr = Cat(dtlb.io.resp.paddr(paddrBits-1,corePgIdxBits), exe_vaddr(corePgIdxBits-1,0))
+  assert (exe_tlb_paddr === dtlb.io.resp.paddr || exe_req.bits.sfence.valid, "[lsu] paddrs should match.")
 
-   // check if a load is uncacheable - must stop it from executing speculatively,
-   // as it might have side-effects!
-   val tlb_addr_uncacheable = !(dtlb.io.resp.cacheable)
+  // check if a load is uncacheable - must stop it from executing speculatively,
+  // as it might have side-effects!
+  val tlb_addr_uncacheable = !(dtlb.io.resp.cacheable)
 
+  //-------------------------------------
+  // Can-fire Logic & Wakeup/Retry Select
 
+  // *** Wakeup Load from LAQ ***
+  // TODO make option to only wakeup load at the head (to compare to old behavior)
+  // Compute this for the next cycle to remove can_fire, ld_idx_wakeup off critical path.
+  val exe_ld_idx_wakeup = RegNext(
+    AgePriorityEncoder(ldq.map(e => e.bits.addr.valid && ~e.bits.executed), ldq_head))
+
+  when ( ldq(exe_ld_idx_wakeup).valid                &&
+         ldq(exe_ld_idx_wakeup).bits.addr.valid      &&
+        !ldq(exe_ld_idx_wakeup).bits.addr_is_virtual &&
+        !ldq(exe_ld_idx_wakeup).bits.executed        &&
+        !ldq(exe_ld_idx_wakeup).bits.order_fail      &&
+       (!ldq(exe_ld_idx_wakeup).bits.addr_is_uncacheable || (io.core.commit_load_at_rob_head && ldq_head === exe_ld_idx_wakeup)))
+  {
+    can_fire_load_wakeup := true.B
+  }
+
+  // *** Retry Load TLB-lookup from LAQ ***
+  ldq_retry_idx := exe_ld_idx_wakeup
+
+  when ( ldq(ldq_retry_idx).valid                &&
+         ldq(ldq_retry_idx).bits.addr.valid      &&
+         ldq(ldq_retry_idx).bits.addr_is_virtual &&
+        !ldq(ldq_retry_idx).bits.executed        && // perf lose, but simplifies control
+        !ldq(ldq_retry_idx).bits.order_fail      &&
+         RegNext(dtlb.io.req.ready)) // TODO: Why RegNext here?
+  {
+    can_fire_load_retry := true.B
+  }
+
+  // *** STORES ***
+  when ( stq(stq_execute_head).valid              &&
+        !stq(stq_execute_head).bits.executed      &&
+        !stq(stq_execute_head).bits.uop.is_fence  &&
+        !mem_xcpt_valid                           &&
+        !stq(stq_execute_head).bits.uop.exception &&
+        (stq(stq_execute_head).bits.committed || ( stq(stq_execute_head).bits.uop.is_amo      &&
+                                                   stq(stq_execute_head).bits.addr.valid      &&
+                                                  !stq(stq_execute_head).bits.addr_is_virtual &&
+                                                   stq(stq_execute_head).bits.data.valid)))
+  {
+    can_fire_store_commit := true.B
+  }
+
+  stq_retry_idx := stq_commit_head
+  when (stq(stq_retry_idx).valid                &&
+        stq(stq_retry_idx).bits.addr.valid      &&
+        stq(stq_retry_idx).bits.addr_is_virtual &&
+        RegNext(dtlb.io.req.ready))
+  {
+    can_fire_sta_retry := true.B
+  }
+
+  assert (!(can_fire_store_commit && stq(stq_execute_head).bits.addr_is_virtual),
+            "a committed store is trying to fire to memory that has a bad paddr.")
+
+  assert (stq(stq_execute_head).valid ||
+          stq_head === stq_execute_head || stq_tail === stq_execute_head,
+            "stq_execute_head got off track.")
 
   //-------------------------------------------------------------
   // Kill speculated entries on branch mispredict

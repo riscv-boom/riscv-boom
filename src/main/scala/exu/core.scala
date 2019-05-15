@@ -942,14 +942,10 @@ class BoomCore(implicit p: Parameters) extends BoomModule
     io.lsu.dec_uops(w).bits  := dec_uops(w)
   }
 
-  // for (w <- 0 until coreWidth) {
-  //   // Decoding instructions request load/store queue entries when they can proceed.
-  //   lsu.io.dec_ld_vals(w) := dec_will_fire(w) && dec_uops(w).is_load
-  //   lsu.io.dec_st_vals(w) := dec_will_fire(w) && dec_uops(w).is_store
 
-  //   lsu.io.dec_uops(w).rob_idx := dec_uops(w).rob_idx // for debug purposes (commit logging)
-  // }
-
+  io.lsu.commit_store_mask       := rob.io.commit.st_mask
+  io.lsu.commit_load_mask        := rob.io.commit.ld_mask
+  io.lsu.commit_load_at_rob_head := rob.io.com_load_is_at_rob_head
   // lsu.io.commit_store_mask := rob.io.commit.st_mask
   // lsu.io.commit_load_mask  := rob.io.commit.ld_mask
   // lsu.io.commit_load_at_rob_head := rob.io.com_load_is_at_rob_head
