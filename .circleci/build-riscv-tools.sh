@@ -7,7 +7,12 @@ set -ex
 
 if [ ! -d "$HOME/riscv-tools-install" ]; then
 
-    cd $HOME/boom-template
+    # clone the boom-template repo
+    cd $HOME
+
+    # clone boom-template and create the riscv-tools
+    git clone --progress --verbose https://github.com/riscv-boom/boom-template.git
+    cd boom-template
 
     # init all submodules including the tools
     ./scripts/init-submodules.sh
