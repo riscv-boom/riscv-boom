@@ -104,7 +104,7 @@ pipeline viewer, which is useful for understanding what causes
 pipeline stalls and flushes.
 
 To generate gem5 compatible traces, first set O3PIPEVIEW_PRINTF in
-`boom/src/main/scala/consts.scala` to true:
+`boom/src/main/scala/common/consts.scala` to true:
 
 ````
 val O3PIPEVIEW_PRINTF = true  // dump trace for O3PipeView from gem5
