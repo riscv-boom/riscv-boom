@@ -69,9 +69,10 @@ class LSUExeIO(implicit p: Parameters) extends BoomBundle()(p)
 
 class BoomDCacheReq(implicit p: Parameters) extends BoomBundle()(p)
 {
-  val uop  = new MicroOp
-  val addr = UInt(coreMaxAddrBits.W)
-  val data = Bits(coreDataBits.W)
+  val uop   = new MicroOp
+  val vaddr = UInt(coreMaxAddrBits.W)
+  val paddr = Valid(UInt(corePAddrBits.W))
+  val data  = Bits(coreDataBits.W)
 }
 
 class BoomDCacheResp(implicit p: Parameters) extends BoomBundle()(p)
@@ -85,9 +86,6 @@ class BoomDCacheResp(implicit p: Parameters) extends BoomBundle()(p)
 class LSUDMemIO(implicit p: Parameters) extends BoomBundle()(p)
 {
   val req         = new DecoupledIO(new BoomDCacheReq)
-  val req_s1_kill = Output(Bool())
-  val req_s1_addr = Output(UInt(corePAddrBits.W))
-
   val resp        = Flipped(new ValidIO(new BoomDCacheResp))
 
   val brinfo      = Output(new BrResolutionInfo)
@@ -493,6 +491,59 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
   assert (stq(stq_execute_head).valid ||
           stq_head === stq_execute_head || stq_tail === stq_execute_head,
             "stq_execute_head got off track.")
+
+  //-------------------------
+  // Issue Someting to Memory
+  //
+  // Three locations a memory op can come from.
+  // 1. Incoming load   ("Fast")
+  // 2. Sleeper Load    ("from the LAQ")
+  // 3. Store at Commit ("from SAQ")
+
+  val exe_ldq_idx = Mux(will_fire_load_incoming || will_fire_load_retry, exe_tlb_uop.ldq_idx, exe_ld_idx_wakeup)
+
+
+  // defaults
+  io.dmem.req.valid      := false.B
+  io.dmem.req.bits.uop   := NullMicroOp
+  io.dmem.req.bits.vaddr := 0.U
+  io.dmem.req.bits.data  := 0.U
+
+  io.dmem.req.bits.paddr.valid := false.B // Send this on the next cycle
+  io.dmem.req.bits.paddr.bits  := 0.U
+
+  val mem_fired_st  = RegInit(false.B)
+  mem_fired_st := false.B
+  when (will_fire_store_commit) {
+    io.dmem.req.valid      := true.B
+    io.dmem.req.bits.vaddr := stq(stq_execute_head).bits.addr.bits
+    io.dmem.req.bits.data  := stq(stq_execute_head).bits.data.bits
+    io.dmem.req.bits.uop   := stq(stq_execute_head).bits.uop
+
+    io.dmem.req.bits.paddr.valid := true.B
+    io.dmem.req.bits.paddr.bits  := stq(stq_execute_head).bits.addr.bits // This has already been translated
+
+    // TODO Nacks
+    stq(stq_execute_head).bits.executed := true.B
+    stq_execute_head                    := WrapInc(stq_execute_head, NUM_STQ_ENTRIES)
+    mem_fired_st                        := true.B
+  }
+    .elsewhen (will_fire_load_incoming || will_fire_load_retry || will_fire_load_wakeup)
+  {
+    io.dmem.req.valid      := true.B
+    io.dmem.req.bits.vaddr := exe_vaddr
+    io.dmem.req.bits.uop   := exe_tlb_uop
+
+    io.dmem.req.bits.paddr.valid := !tlb_miss
+    io.dmem.req.bits.paddr.bits  := exe_tlb_paddr
+
+    ldq(exe_ldq_idx).bits.executed  := true.B
+  }
+
+  assert (PopCount(VecInit(will_fire_store_commit, will_fire_load_incoming,
+                           will_fire_load_retry, will_fire_load_wakeup))
+      <= 1.U, "Multiple requestors firing to the data cache.")
+
 
   //-------------------------------------------------------------
   // Kill speculated entries on branch mispredict

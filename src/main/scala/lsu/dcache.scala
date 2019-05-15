@@ -7,6 +7,7 @@
 package boom.lsu
 
 import chisel3._
+import chisel3.experimental.dontTouch
 
 import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.diplomacy._
@@ -62,6 +63,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   implicit val edge = outer.node.edges.out(0)
   val (tl_out, _) = outer.node.out(0)
   val io = IO(new BoomDCacheBundle)
+  dontTouch(io)
 
   private val fifoManagers = edge.manager.managers.filter(TLFIFOFixer.allUncacheable)
   fifoManagers.foreach { m =>
