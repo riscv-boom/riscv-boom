@@ -156,18 +156,27 @@ class BoomTile(
     name   = boomParams.name,
     btb    = boomParams.btb,
     core = RocketCoreParams(
-      useVM             = boomParams.core.useVM,
-      mulDiv            = boomParams.core.mulDiv,
-      useAtomics        = boomParams.core.useAtomics,
-      fpu               = boomParams.core.fpu,
-      useCompressed     = boomParams.core.useCompressed,
-      useUser           = boomParams.core.useUser,
-      haveBasicCounters = boomParams.core.haveBasicCounters,
-      nPerfCounters     = boomParams.core.nPerfCounters,
-      nPMPs             = boomParams.core.nPMPs,
-      nLocalInterrupts  = boomParams.core.nLocalInterrupts,
-      nBreakpoints      = boomParams.core.nBreakpoints,
-      useSCIE           = boomParams.core.useSCIE)
+      bootFreqHz          = boomParams.core.bootFreqHz,
+      useVM               = boomParams.core.useVM,
+      useUser             = boomParams.core.useUser,
+      useDebug            = boomParams.core.useDebug,
+      useAtomics          = boomParams.core.useAtomics,
+      useAtomicsOnlyForIO = boomParams.core.useAtomicsOnlyForIO,
+      useCompressed       = boomParams.core.useCompressed,
+      useSCIE             = boomParams.core.useSCIE
+      mulDiv              = boomParams.core.mulDiv,
+      fpu                 = boomParams.core.fpu,
+      nLocalInterrupts    = boomParams.core.nLocalInterrupts,
+      nPMPs               = boomParams.core.nPMPs,
+      nBreakpoints        = boomParams.core.nBreakpoints
+      nPerfCounters       = boomParams.core.nPerfCounters,
+      haveBasicCounters   = boomParams.core.haveBasicCounters,
+      misaWritable        = boomParams.core.misaWritable,
+      haveCFlush          = boomparams.core.haveCFlush,
+      nL2TLBEntries       = boomparams.core.nL2TLBEntries,
+      mtvecInit           = boomparams.core.mtvecInit,
+      mtvecWritable       = boomparams.core.mtvecWritable
+    )
   )
   val rocketLogicalTree: RocketLogicalTreeNode = new RocketLogicalTreeNode(cpuDevice, fakeRocketParams, dtim_adapter, p(XLen), iCacheLogicalTreeNode)
 
