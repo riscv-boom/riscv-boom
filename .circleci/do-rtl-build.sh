@@ -6,7 +6,9 @@
 set -ex
 
 # this file assumes cache is updated correctly
-
+# copy project to subdir (just in case)
+rm -rf $HOME/bhd/generators/boom
+cp -r $HOME/project $HOME/bhd/generators/boom
 
 # enter the verisim directory and build the specific config
 cd $HOME/bhd/sims/verisim
