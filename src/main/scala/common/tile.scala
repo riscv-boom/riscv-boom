@@ -163,19 +163,19 @@ class BoomTile(
       useAtomics          = boomParams.core.useAtomics,
       useAtomicsOnlyForIO = boomParams.core.useAtomicsOnlyForIO,
       useCompressed       = boomParams.core.useCompressed,
-      useSCIE             = boomParams.core.useSCIE
+      useSCIE             = boomParams.core.useSCIE,
       mulDiv              = boomParams.core.mulDiv,
       fpu                 = boomParams.core.fpu,
       nLocalInterrupts    = boomParams.core.nLocalInterrupts,
       nPMPs               = boomParams.core.nPMPs,
-      nBreakpoints        = boomParams.core.nBreakpoints
+      nBreakpoints        = boomParams.core.nBreakpoints,
       nPerfCounters       = boomParams.core.nPerfCounters,
       haveBasicCounters   = boomParams.core.haveBasicCounters,
       misaWritable        = boomParams.core.misaWritable,
-      haveCFlush          = boomparams.core.haveCFlush,
-      nL2TLBEntries       = boomparams.core.nL2TLBEntries,
-      mtvecInit           = boomparams.core.mtvecInit,
-      mtvecWritable       = boomparams.core.mtvecWritable
+      haveCFlush          = boomParams.core.haveCFlush,
+      nL2TLBEntries       = boomParams.core.nL2TLBEntries,
+      mtvecInit           = boomParams.core.mtvecInit,
+      mtvecWritable       = boomParams.core.mtvecWritable
     )
   )
   val rocketLogicalTree: RocketLogicalTreeNode = new RocketLogicalTreeNode(cpuDevice, fakeRocketParams, dtim_adapter, p(XLen), iCacheLogicalTreeNode)
