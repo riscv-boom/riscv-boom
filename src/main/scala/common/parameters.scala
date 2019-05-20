@@ -12,6 +12,7 @@ import chisel3.util._
 
 import freechips.rocketchip.rocket._
 import freechips.rocketchip.tile._
+import freechips.rocketchip.util._
 import freechips.rocketchip.config.{Parameters, Field}
 
 import boom.ifu._
@@ -89,13 +90,31 @@ case class BoomCoreParams(
    clockGate: Boolean = false
 ) extends freechips.rocketchip.tile.CoreParams
 {
-   val haveFSDirty = false
-   val pmpGranularity: Int = 4
-   val instBits: Int = if (useCompressed) 16 else 32
-   val lrscCycles: Int = 80 // worst case is 14 mispredicted branches + slop
-   val retireWidth = decodeWidth
-   val jumpInFrontend: Boolean = false // unused in boom
-   val nPMPs: Int = 0 // TODO Fix this!!!!!
+  val haveFSDirty = false
+  val pmpGranularity: Int = 4
+  val instBits: Int = if (useCompressed) 16 else 32
+  val lrscCycles: Int = 80 // worst case is 14 mispredicted branches + slop
+  val retireWidth = decodeWidth
+  val jumpInFrontend: Boolean = false // unused in boom
+  val nPMPs: Int = 0 // TODO Fix this!!!!!
+
+  override def customCSRs(implicit p: Parameters) = new BoomCustomCSRs
+}
+
+/**
+  * Defines custom BOOM CSRs
+  */
+class BoomCustomCSRs(implicit p: Parameters) extends freechips.rocketchip.tile.CustomCSRs
+  with HasBoomCoreParameters {
+  override def chickenCSR = {
+    val params = tileParams.core.asInstanceOf[BoomCoreParams]
+    val mask = BigInt(
+      tileParams.dcache.get.clockGate.toInt << 0 |
+      params.clockGate.toInt << 1 |
+      params.clockGate.toInt << 2
+    )
+    Some(CustomCSR(chickenCSRId, mask, Some(mask)))
+  }
 }
 
 /**
