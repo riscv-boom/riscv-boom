@@ -346,7 +346,7 @@ class BimodalTable(implicit p: Parameters) extends BoomModule with HasBimParamet
 
   val size_kbits = nSets * fetchWidth * 2/1024 // assumes 2 bits / fetchWidth
   override def toString: String =
-    "   ==BIM==" +
-    "\n   (" + size_kbits + " Kbits = " + size_kbits/8 + " kB) Bimodal Table (" +
+    "   [Core " + hartId + "] ==BIM==" +
+    "\n   [Core " + hartId + "] (" + size_kbits + " Kbits = " + size_kbits/8 + " kB) Bimodal Table (" +
     nSets + " entries across " + nBanks + " banks)"
 }

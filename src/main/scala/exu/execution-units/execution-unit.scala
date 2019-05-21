@@ -240,13 +240,13 @@ class ALUExeUnit(
     "TODO. Currently do not support AluMemExeUnit with FP")
 
   val out_str = new StringBuilder
-  out_str.append("\n   ==ExeUnit==")
-  if (hasAlu)  out_str.append("\n     - ALU")
-  if (hasMul)  out_str.append("\n     - Mul")
-  if (hasDiv)  out_str.append("\n     - Div")
-  if (hasIfpu) out_str.append("\n     - IFPU")
-  if (hasMem)  out_str.append("\n     - Mem")
-  if (hasRocc) out_str.append("\n     - RoCC")
+  out_str.append("\n   [Core " + hartId + "] ==ExeUnit==")
+  if (hasAlu)  out_str.append("\n   [Core " + hartId + "]  - ALU")
+  if (hasMul)  out_str.append("\n   [Core " + hartId + "]  - Mul")
+  if (hasDiv)  out_str.append("\n   [Core " + hartId + "]  - Div")
+  if (hasIfpu) out_str.append("\n   [Core " + hartId + "]  - IFPU")
+  if (hasMem)  out_str.append("\n   [Core " + hartId + "]  - Mem")
+  if (hasRocc) out_str.append("\n   [Core " + hartId + "]  - RoCC")
 
   override def toString: String = out_str.toString
 
@@ -490,10 +490,10 @@ class FPUExeUnit(
     hasFpiu = hasFpiu) with tile.HasFPUParameters
 {
   val out_str = new StringBuilder
-  out_str.append("\n   ==ExeUnit==")
-  if (hasFpu)  out_str.append("\n     - FPU (Latency: " + dfmaLatency + ")")
-  if (hasFdiv) out_str.append("\n     - FDiv/FSqrt")
-  if (hasFpiu) out_str.append("\n     - FPIU (writes to Integer RF)")
+  out_str.append("\n   [Core " + hartId + "] ==ExeUnit==")
+  if (hasFpu)  out_str.append("\n   [Core " + hartId + "]  - FPU (Latency: " + dfmaLatency + ")")
+  if (hasFdiv) out_str.append("\n   [Core " + hartId + "]  - FDiv/FSqrt")
+  if (hasFpiu) out_str.append("\n   [Core " + hartId + "]  - FPIU (writes to Integer RF)")
 
   val fdiv_busy = WireInit(false.B)
   val fpiu_busy = WireInit(false.B)

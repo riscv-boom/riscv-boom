@@ -35,8 +35,8 @@ class NullBrPredictor(
   historyLength: Int = 12
   )(implicit p: Parameters) extends BoomBrPredictor(historyLength)
 {
-  override def toString: String = "   ==Null BPU==" +
-    "\n   Building (0 kB) Null Predictor (never predict)."
+  override def toString: String = "   [Core " + hartId + "] ==Null BPU==" +
+    "\n   [Core " + hartId + "] Building (0 kB) Null Predictor (never predict)."
   io.resp.valid := false.B
 }
 
@@ -67,8 +67,8 @@ object RandomBrPredictor
 class RandomBrPredictor(
   )(implicit p: Parameters) extends BoomBrPredictor(historyLength = 1)
 {
-  override def toString: String = "   ==Random BPU==" +
-    "\n  Building Random Branch Predictor."
+  override def toString: String = "   [Core " + hartId + "] ==Random BPU==" +
+    "\n   [Core " + hartId + "] Building Random Branch Predictor."
   private val rand_val = RegInit(false.B)
   rand_val := ~rand_val
   private var lfsr= LFSR16(true.B)

@@ -377,38 +377,38 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
     ( exeUnitsStr + "\n"
     + fpPipelineStr + "\n"
     + robStr + "\n"
-    + "\n   ==Overall Core Params=="
-    + "\n   Fetch Width           : " + fetchWidth
-    + "\n   Decode Width          : " + coreWidth
-    + "\n   Issue Width           : " + issueParams.map(_.issueWidth).sum
-    + "\n   ROB Size              : " + numRobEntries
-    + "\n   Issue Window Size     : " + issueParams.map(_.numEntries) + issStr
-    + "\n   Load/Store Unit Size  : " + NUM_LDQ_ENTRIES + "/" + NUM_STQ_ENTRIES
-    + "\n   Num Int Phys Registers: " + numIntPhysRegs
-    + "\n   Num FP  Phys Registers: " + numFpPhysRegs
-    + "\n   Max Branch Count      : " + MAX_BR_COUNT
-    + "\n   BTB Size              : "
+    + "\n   [Core " + hartId + "] ==Overall Core Params=="
+    + "\n   [Core " + hartId + "] Fetch Width           : " + fetchWidth
+    + "\n   [Core " + hartId + "] Decode Width          : " + coreWidth
+    + "\n   [Core " + hartId + "] Issue Width           : " + issueParams.map(_.issueWidth).sum
+    + "\n   [Core " + hartId + "] ROB Size              : " + numRobEntries
+    + "\n   [Core " + hartId + "] Issue Window Size     : " + issueParams.map(_.numEntries) + issStr
+    + "\n   [Core " + hartId + "] Load/Store Unit Size  : " + NUM_LDQ_ENTRIES + "/" + NUM_STQ_ENTRIES
+    + "\n   [Core " + hartId + "] Num Int Phys Registers: " + numIntPhysRegs
+    + "\n   [Core " + hartId + "] Num FP  Phys Registers: " + numFpPhysRegs
+    + "\n   [Core " + hartId + "] Max Branch Count      : " + MAX_BR_COUNT
+    + "\n   [Core " + hartId + "] BTB Size              : "
     + (if (enableBTB) ("" + boomParams.btb.nSets * boomParams.btb.nWays + " entries (" +
          boomParams.btb.nSets + " x " + boomParams.btb.nWays + " ways)") else 0)
-    + "\n   RAS Size              : " + (if (enableBTB) boomParams.btb.nRAS else 0)
-    + "\n   Rename  Stage Latency : " + renameLatency
+    + "\n   [Core " + hartId + "] RAS Size              : " + (if (enableBTB) boomParams.btb.nRAS else 0)
+    + "\n   [Core " + hartId + "] Rename  Stage Latency : " + renameLatency
     + "\n" + iregfile.toString
-    + "\n   Num Slow Wakeup Ports : " + numIrfWritePorts
-    + "\n   Num Fast Wakeup Ports : " + exe_units.count(_.bypassable)
-    + "\n   Num Bypass Ports      : " + exe_units.numTotalBypassPorts
-    + "\n" + (if (usingFPU) fp_pipeline.toString else "")
-    + "\n   DCache Ways           : " + dcacheParams.nWays
-    + "\n   DCache Sets           : " + dcacheParams.nSets
-    + "\n   DCache nMSHRs         : " + dcacheParams.nMSHRs
-    + "\n   ICache Ways           : " + icacheParams.nWays
-    + "\n   ICache Sets           : " + icacheParams.nSets
-    + "\n   D-TLB Entries         : " + dcacheParams.nTLBEntries
-    + "\n   I-TLB Entries         : " + icacheParams.nTLBEntries
-    + "\n   Paddr Bits            : " + paddrBits
-    + "\n   Vaddr Bits            : " + vaddrBits
-    + "\n\n   Using FPU Unit?       : " + usingFPU.toString
-    + "\n   Using FDivSqrt?       : " + usingFDivSqrt.toString
-    + "\n   Using VM?             : " + usingVM.toString)
+    + "\n   [Core " + hartId + "] Num Slow Wakeup Ports : " + numIrfWritePorts
+    + "\n   [Core " + hartId + "] Num Fast Wakeup Ports : " + exe_units.count(_.bypassable)
+    + "\n   [Core " + hartId + "] Num Bypass Ports      : " + exe_units.numTotalBypassPorts
+    + "\n   [Core " + hartId + "] DCache Ways           : " + dcacheParams.nWays
+    + "\n   [Core " + hartId + "] DCache Sets           : " + dcacheParams.nSets
+    + "\n   [Core " + hartId + "] DCache nMSHRs         : " + dcacheParams.nMSHRs
+    + "\n   [Core " + hartId + "] ICache Ways           : " + icacheParams.nWays
+    + "\n   [Core " + hartId + "] ICache Sets           : " + icacheParams.nSets
+    + "\n   [Core " + hartId + "] D-TLB Entries         : " + dcacheParams.nTLBEntries
+    + "\n   [Core " + hartId + "] I-TLB Entries         : " + icacheParams.nTLBEntries
+    + "\n   [Core " + hartId + "] Paddr Bits            : " + paddrBits
+    + "\n   [Core " + hartId + "] Vaddr Bits            : " + vaddrBits
+    + "\n\n   [Core " + hartId + "] Using FPU Unit?       : " + usingFPU.toString
+    + "\n   [Core " + hartId + "] Using FDivSqrt?       : " + usingFDivSqrt.toString
+    + "\n   [Core " + hartId + "] Using VM?             : " + usingVM.toString
+    + "\n")
 
   //-------------------------------------------------------------
   //-------------------------------------------------------------

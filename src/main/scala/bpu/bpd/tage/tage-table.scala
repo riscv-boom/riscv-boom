@@ -287,7 +287,7 @@ class TageTable(
   }
 
   override def toString: String =
-    "   TageTable[" + id + "] - " +
+    "   [Core " + hartId + "] TageTable[" + id + "] - " +
     numEntries + " entries, " +
     historyLength + " bits of history, " +
     tagSz + "-bit tags, " +

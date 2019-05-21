@@ -88,11 +88,11 @@ abstract class RegisterFile(
   private val rf_cost = (numReadPorts + numWritePorts) * (numReadPorts + 2*numWritePorts)
   private val type_str = if (registerWidth == fLen+1) "Floating Point" else "Integer"
   override def toString: String =
-    "\n   ==" + type_str + " Regfile==" +
-    "\n   Num RF Read Ports     : " + numReadPorts +
-    "\n   Num RF Write Ports    : " + numWritePorts +
-    "\n   RF Cost (R+W)*(R+2W)  : " + rf_cost +
-    "\n   Bypassable Units      : " + bypassableArray
+    "\n   [Core " + hartId + "] ==" + type_str + " Regfile==" +
+    "\n   [Core " + hartId + "] Num RF Read Ports     : " + numReadPorts +
+    "\n   [Core " + hartId + "] Num RF Write Ports    : " + numWritePorts +
+    "\n   [Core " + hartId + "] RF Cost (R+W)*(R+2W)  : " + rf_cost +
+    "\n   [Core " + hartId + "] Bypassable Units      : " + bypassableArray
 }
 
 /**

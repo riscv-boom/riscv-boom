@@ -991,11 +991,11 @@ class Rob(
   }
 
   override def toString: String =
-    "\n   ==ROB==" +
-    "\n   Machine Width      : " + coreWidth +
-    "\n   Rob Entries        : " + numRobEntries +
-    "\n   Rob Rows           : " + numRobRows +
-    "\n   Rob Row size       : " + log2Ceil(numRobRows) +
-    "\n   log2Ceil(coreWidth): " + log2Ceil(coreWidth) +
-    "\n   FPU FFlag Ports    : " + numFpuPorts
+    "\n   [Core " + hartId + "] ==ROB==" +
+    "\n   [Core " + hartId + "] Machine Width      : " + coreWidth +
+    "\n   [Core " + hartId + "] Rob Entries        : " + numRobEntries +
+    "\n   [Core " + hartId + "] Rob Rows           : " + numRobRows +
+    "\n   [Core " + hartId + "] Rob Row size       : " + log2Ceil(numRobRows) +
+    "\n   [Core " + hartId + "] log2Ceil(coreWidth): " + log2Ceil(coreWidth) +
+    "\n   [Core " + hartId + "] FPU FFlag Ports    : " + numFpuPorts
 }
