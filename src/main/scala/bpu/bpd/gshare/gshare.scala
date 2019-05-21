@@ -241,8 +241,8 @@ class GShareBrPredictor(
   }
 
   override def toString: String =
-    "   ==GShare BPU==" +
-    "\n   (" + (nSets * fetchWidth * 2/8/1024) +
+    "   [Core " + hartId + "] ==GShare BPU==" +
+    "\n   [Core " + hartId + "] (" + (nSets * fetchWidth * 2/8/1024) +
     " kB) GShare Predictor, with " + historyLength + " bits of history for (" +
     fetchWidth + "-wide fetch) and " + nSets + " entries."
 }

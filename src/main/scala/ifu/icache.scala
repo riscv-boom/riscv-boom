@@ -631,17 +631,17 @@ class ICacheModule(outer: ICache) extends ICacheBaseModule(outer)
 
   val ramWidth = dECC.width(wordBits/nBanks)
   override def toString: String =
-    "\n   ==L1-ICache==" +
-    "\n   Fetch bytes   : " + cacheParams.fetchBytes +
-    "\n   Block bytes   : " + (1 << blockOffBits) +
-    "\n   Row bytes     : " + rowBytes +
-    "\n   Word bits     : " + wordBits +
-    "\n   Sets          : " + nSets +
-    "\n   Ways          : " + nWays +
-    "\n   Refill cycles : " + refillCycles +
-    "\n   RAMs          : (" +  ramWidth + " x " + nSets*refillCycles + ") using " + nBanks + " banks"  +
-    "\n   " + (if (nBanks == 2) "Dual-banked" else "Single-banked") +
-    "\n   I-TLB entries : " + cacheParams.nTLBEntries + "\n"
+    "\n   [Core " + hartId + "] ==L1-ICache==" +
+    "\n   [Core " + hartId + "] Fetch bytes   : " + cacheParams.fetchBytes +
+    "\n   [Core " + hartId + "] Block bytes   : " + (1 << blockOffBits) +
+    "\n   [Core " + hartId + "] Row bytes     : " + rowBytes +
+    "\n   [Core " + hartId + "] Word bits     : " + wordBits +
+    "\n   [Core " + hartId + "] Sets          : " + nSets +
+    "\n   [Core " + hartId + "] Ways          : " + nWays +
+    "\n   [Core " + hartId + "] Refill cycles : " + refillCycles +
+    "\n   [Core " + hartId + "] RAMs          : (" +  ramWidth + " x " + nSets*refillCycles + ") using " + nBanks + " banks"  +
+    "\n   [Core " + hartId + "] " + (if (nBanks == 2) "Dual-banked" else "Single-banked") +
+    "\n   [Core " + hartId + "] I-TLB entries : " + cacheParams.nTLBEntries + "\n"
 }
 
 /**

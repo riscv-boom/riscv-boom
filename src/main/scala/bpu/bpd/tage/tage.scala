@@ -478,8 +478,8 @@ class TageBrPredictor(
   }
 
   override def toString: String =
-    "   ==TAGE BPU==" +
-    "\n   " + (sizeInBits/8/1024.0) + " kB TAGE Predictor (" +
+    "   [Core " + hartId + "] ==TAGE BPU==" +
+    "\n   [Core " + hartId + "] " + (sizeInBits/8/1024.0) + " kB TAGE Predictor (" +
     (sizeInBits/1024) + " Kbits) (max history length: " + historyLengths.max + " bits)\n" +
     tables.mkString("\n")
 }

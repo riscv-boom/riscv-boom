@@ -235,10 +235,10 @@ class BTBsa(implicit p: Parameters) extends BoomBTB
   }
 
   override def toString: String =
-    "   ==BTB-SA==" +
-    "\n   Sets          : " + nSets +
-    "\n   Ways          : " + nWays +
-    "\n   Tag Size      : " + tagSz +
+    "   [Core " + hartId + "] ==BTB-SA==" +
+    "\n   [Core " + hartId + "] Sets          : " + nSets +
+    "\n   [Core " + hartId + "] Ways          : " + nWays +
+    "\n   [Core " + hartId + "] Tag Size      : " + tagSz +
     "\n\n" +
     bim.toString
 }

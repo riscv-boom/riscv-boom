@@ -248,6 +248,6 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
   val fpString = exe_units.toString
   override def toString: String =
     fregfile.toString +
-    "\n   Num Wakeup Ports      : " + numWakeupPorts +
-    "\n   Num Bypass Ports      : " + exe_units.numTotalBypassPorts + "\n"
+    "\n   [Core " + hartId + "] Num Wakeup Ports      : " + numWakeupPorts +
+    "\n   [Core " + hartId + "] Num Bypass Ports      : " + exe_units.numTotalBypassPorts + "\n"
 }
