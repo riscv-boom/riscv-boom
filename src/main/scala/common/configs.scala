@@ -8,6 +8,7 @@
 package boom.common
 
 import chisel3._
+import chisel3.util.{log2Up}
 
 import freechips.rocketchip.config.{Parameters, Config}
 import freechips.rocketchip.subsystem.{SystemBusKey}
@@ -62,6 +63,9 @@ class DefaultBoomConfig extends Config((site, here, up) => {
 
    // Set TL network to 128bits wide
    case SystemBusKey => up(SystemBusKey, site).copy(beatBytes = 16)
+
+   // Make sure there are enough hart bits to support multiple cores
+   case MaxHartIdBits => log2Up(site(BoomTilesKey).size)
 })
 
 /**
