@@ -41,7 +41,7 @@ class ExeUnitResp(val dataWidth: Int)(implicit p: Parameters) extends BoomBundle
   with HasBoomUOP
 {
   val data = Bits(dataWidth.W)
-  val fflags = new ValidIO(new FFlagsResp) // write fflags to ROB
+  val fflags = new ValidIO(new FFlagsResp) // write fflags to ROB // TODO: Do this better
 }
 
 /**
@@ -395,6 +395,9 @@ class ALUExeUnit(
 
     io.lsu_io.req := maddrcalc.io.resp
 
+    io.ll_iresp <> io.lsu_io.iresp
+    io.ll_fresp <> io.lsu_io.fresp
+
     // io.lsu_io.exe_resp.valid := maddrcalc.io.resp.valid
     // io.lsu_io.exe_resp.bits  := maddrcalc.io.resp.bits
 
@@ -484,7 +487,7 @@ class FPUExeUnit(
     readsFrf  = true,
     writesFrf = true,
     writesLlIrf = hasFpiu,
-    writesIrf = hasFpiu, // HACK: the "irf" port actually goes to the LSU fpu SDATAGen
+    writesIrf = false,
     numBypassStages = 0,
     dataWidth = p(tile.TileKey).core.fpu.get.fLen + 1,
     bypassable = false,
@@ -584,13 +587,26 @@ class FPUExeUnit(
     queue.io.flush           := io.req.bits.kill
     io.ll_iresp <> queue.io.deq
 
-    fpiu_busy := !(queue.io.empty)
-
-    io.iresp.valid     := io.req.valid && io.req.bits.uop.uopc === uopSTA
-    io.iresp.bits.uop  := io.req.bits.uop
-    io.iresp.bits.data := ieee(io.req.bits.rs2_data)
-
     assert (queue.io.enq.ready) // If this backs up, we've miscalculated the size of the queue.
+
+    val fp_sdq = Module(new BranchKillableQueue(new ExeUnitResp(dataWidth),
+      entries = 1)) // Lets us backpressure floating point store data
+    fp_sdq.io.enq.valid      := io.req.valid && io.req.bits.uop.uopc === uopSTA
+    fp_sdq.io.enq.bits.uop   := io.req.bits.uop
+    fp_sdq.io.enq.bits.data  := ieee(io.req.bits.rs2_data)
+    fp_sdq.io.enq.bits.fflags:= DontCare
+    fp_sdq.io.brinfo         := io.brinfo
+    fp_sdq.io.flush          := io.req.bits.kill
+
+    assert(!(fp_sdq.io.enq.valid && !fp_sdq.io.enq.ready))
+
+    // We also use the ll_iresp for fp sdq, when its not busy
+    fp_sdq.io.deq.ready := false.B
+    when (!queue.io.deq.fire())
+    {
+      io.ll_iresp <> fp_sdq.io.deq
+    }
+    fpiu_busy := !(queue.io.empty && fp_sdq.io.empty)
   }
 
   override def toString: String = out_str.toString

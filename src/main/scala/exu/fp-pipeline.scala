@@ -43,7 +43,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
     // +1 for recoding.
     val ll_wport         = Flipped(Decoupled(new ExeUnitResp(fLen+1)))// from memory unit
     val from_int         = Flipped(Decoupled(new ExeUnitResp(fLen+1)))// from integer RF
-    val to_sdq           = Valid(new MicroOpWithData(fLen))           // to Load/Store Unit
+    val to_sdq           = Decoupled(new MicroOpWithData(fLen))           // to Load/Store Unit
     val to_int           = Decoupled(new ExeUnitResp(xLen))           // to integer RF
 
     val wakeups          = Vec(numWakeupPorts, Valid(new ExeUnitResp(fLen+1)))
@@ -198,10 +198,12 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
   require (w_cnt == fregfile.io.write_ports.length)
 
   val fpiu_unit = exe_units.fpiu_unit
-  io.to_int <> fpiu_unit.io.ll_iresp
-  io.to_sdq.valid := fpiu_unit.io.iresp.valid
-  io.to_sdq.bits  := fpiu_unit.io.iresp.bits
-  fpiu_unit.io.iresp.ready := true.B
+  val fpiu_is_sdq = fpiu_unit.io.ll_iresp.bits.uop.uopc === uopSTA
+  io.to_int.valid := fpiu_unit.io.ll_iresp.valid && !fpiu_is_sdq
+  io.to_sdq.valid := fpiu_unit.io.ll_iresp.valid &&  fpiu_is_sdq
+  io.to_int.bits  := fpiu_unit.io.ll_iresp.bits
+  io.to_sdq.bits  := fpiu_unit.io.ll_iresp.bits
+  fpiu_unit.io.ll_iresp.ready := io.to_sdq.ready && io.to_int.ready
 
   //-------------------------------------------------------------
   //-------------------------------------------------------------

@@ -76,9 +76,8 @@ class BoomDCacheReq(implicit p: Parameters) extends BoomBundle()(p)
 
 class BoomDCacheResp(implicit p: Parameters) extends BoomBundle()(p)
 {
-  val data = Bits(coreDataBits.W)
   val uop  = new MicroOp
-  val size = UInt(2.W)
+  val data = Bits(coreDataBits.W)
   val nack = Bool()
 }
 
@@ -101,7 +100,7 @@ class LSUCoreIO(implicit p: Parameters) extends BoomBundle()(p)
   val ldq_full    = Output(Vec(coreWidth, Bool()))
   val stq_full    = Output(Vec(coreWidth, Bool()))
 
-  val fp_stdata   = Flipped(Valid(new MicroOpWithData(fLen)))
+  val fp_stdata   = Flipped(Decoupled(new MicroOpWithData(fLen)))
 
   val ld_issued   = Valid(UInt(PREG_SZ.W))
   val ld_miss     = Output(Bool())
@@ -129,8 +128,7 @@ class LDQEntry(implicit p: Parameters) extends BoomBundle()(p)
   val addr_is_virtual     = Bool() // Virtual address, we got a TLB miss
   val addr_is_uncacheable = Bool() // Uncacheable, wait until head of ROB to execute
 
-  val executed            = Bool() // load sent to memory
-  val succeeded           = Bool() // load returned from memory (might still have order failure)
+  val executed            = Bool() // load sent to memory, reset by NACKs
   val order_fail          = Bool()
 
   val st_dep_mask         = UInt(NUM_STQ_ENTRIES.W) // list of stores we might
@@ -149,7 +147,7 @@ class STQEntry(implicit p: Parameters) extends BoomBundle()(p)
   val addr_is_virtual     = Bool() // Virtual address, we got a TLB miss
   val data                = Valid(UInt(xLen.W))
 
-  val executed            = Bool() // sent to memory
+  val executed            = Bool() // sent to memory, reset by NACKs
   val committed           = Bool() // committed by ROB
 }
 
@@ -219,7 +217,6 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
 
       ldq(ld_enq_idx).bits.addr.valid  := false.B
       ldq(ld_enq_idx).bits.executed    := false.B
-      ldq(ld_enq_idx).bits.succeeded   := false.B
       ldq(ld_enq_idx).bits.order_fail  := false.B
       ldq(ld_enq_idx).bits.forward_std_val := false.B
 
@@ -511,29 +508,147 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
   val mem_fired_st  = RegInit(false.B)
   mem_fired_st := false.B
   when (will_fire_store_commit) {
-    io.dmem.req.valid      := true.B
-    io.dmem.req.bits.addr  := stq(stq_execute_head).bits.addr.bits
-    io.dmem.req.bits.data  := stq(stq_execute_head).bits.data.bits
-    io.dmem.req.bits.uop   := stq(stq_execute_head).bits.uop
+    io.dmem.req.valid         := true.B
+    io.dmem.req.bits.addr     := stq(stq_execute_head).bits.addr.bits
+    io.dmem.req.bits.data     := stq(stq_execute_head).bits.data.bits
+    io.dmem.req.bits.uop      := stq(stq_execute_head).bits.uop
 
     // TODO Nacks
     stq(stq_execute_head).bits.executed := true.B
     stq_execute_head                    := WrapInc(stq_execute_head, NUM_STQ_ENTRIES)
     mem_fired_st                        := true.B
   }
-    .elsewhen (will_fire_load_incoming || will_fire_load_retry || will_fire_load_wakeup)
+    .elsewhen (will_fire_load_incoming || will_fire_load_retry)
   {
-    io.dmem.req.valid      := true.B
-    io.dmem.req.bits.addr  := exe_tlb_paddr
-    io.dmem.req.bits.uop   := exe_tlb_uop
+    io.dmem.req.valid         := !tlb_miss
+    io.dmem.req.bits.addr     := exe_tlb_paddr
+    io.dmem.req.bits.uop      := exe_tlb_uop
 
     ldq(exe_ldq_idx).bits.executed  := true.B
+
+    assert(!(will_fire_load_incoming && ldq(exe_ldq_idx).bits.executed),
+      "[lsu] We are firing an incoming load, but the LDQ marks it as executed?")
+    assert(!(will_fire_load_retry    && ldq(exe_ldq_idx).bits.executed),
+      "[lsu] We are retrying a TLB missed load, but the LDQ marks it as executed?")
+  }
+    .elsewhen (will_fire_load_wakeup)
+  {
+    io.dmem.req.valid      := true.B
+    io.dmem.req.bits.addr  := ldq(exe_ldq_idx).bits.addr.bits
+    io.dmem.req.bits.uop   := ldq(exe_ldq_idx).bits.uop
+
+    ldq(exe_ldq_idx).bits.executed := true.B
+
+    assert(!(will_fire_load_wakeup && ldq(exe_ldq_idx).bits.executed),
+      "[lsu] We are firing a load that the D$ rejected, but the LDQ marks it as executed?")
+    assert(!(will_fire_load_wakeup && ldq(exe_ldq_idx).bits.addr_is_virtual),
+      "[lsu] We are firing a load that the D$ rejected, but the address is still virtual?")
+
   }
 
   assert (PopCount(VecInit(will_fire_store_commit, will_fire_load_incoming,
                            will_fire_load_retry, will_fire_load_wakeup))
-      <= 1.U, "Multiple requestors firing to the data cache.")
+    <= 1.U, "Multiple requestors firing to the data cache.")
 
+  //-------------------------------------------------------------
+  // Write Addr into the LAQ/SAQ
+  when (will_fire_load_incoming || will_fire_load_retry)
+  {
+    ldq(exe_ldq_idx).bits.addr.valid          := true.B
+    ldq(exe_ldq_idx).bits.addr.bits           := Mux(tlb_miss, exe_vaddr, exe_tlb_paddr)
+    ldq(exe_ldq_idx).bits.uop.pdst            := exe_tlb_uop.pdst
+    ldq(exe_ldq_idx).bits.addr_is_virtual     := tlb_miss
+    ldq(exe_ldq_idx).bits.addr_is_uncacheable := tlb_addr_uncacheable && !tlb_miss
+
+    assert(!(will_fire_load_incoming && ldq(exe_ldq_idx).bits.addr.valid),
+      "[lsu] Incoming load is overwriting a valid address")
+  }
+
+  when (will_fire_sta_incoming || will_fire_sta_retry)
+  {
+    stq(exe_tlb_uop.stq_idx).bits.addr.valid := !pf_st // Prevent AMOs from executing!
+    stq(exe_tlb_uop.stq_idx).bits.addr.bits  := Mux(tlb_miss, exe_vaddr, exe_tlb_paddr)
+    stq(exe_tlb_uop.stq_idx).bits.uop.pdst   := exe_tlb_uop.pdst // Needed for AMOs
+    stq(exe_tlb_uop.stq_idx).bits.addr_is_virtual := tlb_miss
+
+    assert(!(will_fire_sta_incoming && stq(exe_tlb_uop.stq_idx).bits.addr.valid),
+      "[lsu] Incoming store is overwriting a valid address")
+
+  }
+
+  //-------------------------------------------------------------
+  // Write data into the STQ
+  io.core.fp_stdata.ready := !will_fire_std_incoming
+  when (will_fire_std_incoming || io.core.fp_stdata.fire())
+  {
+    val sidx = Mux(will_fire_std_incoming, exe_req.bits.uop.stq_idx,
+                                           io.core.fp_stdata.bits.uop.stq_idx)
+    stq(sidx).bits.data.valid := true.B
+    stq(sidx).bits.data.bits  := Mux(will_fire_std_incoming, exe_req.bits.data,
+                                                             io.core.fp_stdata.bits.data)
+
+    assert(!(stq(sidx).bits.data.valid),
+      "[lsu] Incoming store is overwriting a valid data entry")
+  }
+  require (xLen >= fLen) // for correct SDQ size
+
+  //-------------------------------------------------------------
+  //-------------------------------------------------------------
+  // Cache Access Cycle (Mem)
+  //-------------------------------------------------------------
+  //-------------------------------------------------------------
+
+  //-------------------------------------------------------------
+  // Load Issue Datapath (ALL loads need to use this path,
+  //    to handle forwarding from the STORE QUEUE, etc.)
+  // search entire STORE QUEUE for match on load
+  //-------------------------------------------------------------
+  // does the incoming load match any store addresses?
+  // NOTE: these are fully translated physical addresses, as
+  // forwarding requires a full address check.
+
+  //-------------------------------------------------------------
+  //-------------------------------------------------------------
+  // Writeback Cycle (St->Ld Forwarding Path)
+  //-------------------------------------------------------------
+  //-------------------------------------------------------------
+
+  //----------------------------------
+  // Handle Memory Responses and nacks
+  //----------------------------------
+
+  io.core.exe.iresp.valid := false.B
+  io.core.exe.fresp.valid := false.B
+  when (io.dmem.resp.valid)
+  {
+    when (io.dmem.resp.bits.nack)
+    {
+      // We have to re-execute this!
+      when (io.dmem.resp.bits.uop.is_load)
+      {
+        assert(ldq(io.dmem.resp.bits.uop.ldq_idx).bits.executed)
+        ldq(io.dmem.resp.bits.uop.ldq_idx).bits.executed  := false.B
+      }
+        .otherwise
+      {
+        assert(stq(io.dmem.resp.bits.uop.stq_idx).bits.executed)
+        stq(io.dmem.resp.bits.uop.stq_idx).bits.executed :=  false.B
+      }
+    }
+      .otherwise
+    {
+      when (io.dmem.resp.bits.uop.is_load)
+      {
+        io.core.exe.iresp.valid     := ldq(io.dmem.resp.bits.uop.ldq_idx).bits.uop.dst_rtype === RT_FIX
+        io.core.exe.iresp.bits.uop  := ldq(io.dmem.resp.bits.uop.ldq_idx).bits.uop
+        io.core.exe.iresp.bits.data := io.dmem.resp.bits.data
+
+        io.core.exe.fresp.valid     := ldq(io.dmem.resp.bits.uop.ldq_idx).bits.uop.dst_rtype === RT_FLT
+        io.core.exe.fresp.bits.uop  := ldq(io.dmem.resp.bits.uop.ldq_idx).bits.uop
+        io.core.exe.fresp.bits.data := io.dmem.resp.bits.data
+      }
+    }
+  }
 
   //-------------------------------------------------------------
   // Kill speculated entries on branch mispredict
