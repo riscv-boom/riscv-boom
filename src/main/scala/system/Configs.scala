@@ -174,7 +174,7 @@ class BoomAndRocketConfig extends Config(
   new freechips.rocketchip.subsystem.WithNBigCores(1) ++
   new freechips.rocketchip.system.BaseConfig)
 
-class SmallDefaultBoomAndRocketConfig extends Config(
+class SmallBoomAndRocketConfig extends Config(
   // final param setup
   new WithRenumberHarts ++
   new WithoutTLMonitors ++
