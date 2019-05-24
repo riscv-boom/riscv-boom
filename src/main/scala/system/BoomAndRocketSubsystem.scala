@@ -80,12 +80,14 @@ trait HasBoomAndRocketTiles extends HasTiles
 }
 
 trait HasBoomAndRocketTilesModuleImp extends HasTilesModuleImp
-    with HasPeripheryDebugModuleImp {
+  with HasPeripheryDebugModuleImp
+{
   val outer: HasBoomAndRocketTiles
 }
 
 class BoomAndRocketSubsystem(implicit p: Parameters) extends BaseSubsystem
-    with HasBoomAndRocketTiles {
+  with HasBoomAndRocketTiles
+{
   val tiles = boomAndRocketTiles
   override lazy val module = new BoomAndRocketSubsystemModuleImp(this)
 
@@ -93,8 +95,9 @@ class BoomAndRocketSubsystem(implicit p: Parameters) extends BaseSubsystem
 }
 
 class BoomAndRocketSubsystemModuleImp[+L <: BoomAndRocketSubsystem](_outer: L) extends BaseSubsystemModuleImp(_outer)
-    with HasResetVectorWire
-    with HasBoomAndRocketTilesModuleImp {
+  with HasResetVectorWire
+  with HasBoomAndRocketTilesModuleImp
+{
   tile_inputs.zip(outer.hartIdList).foreach { case(wire, i) =>
     wire.hartid := i.U
     wire.reset_vector := global_reset_vector
