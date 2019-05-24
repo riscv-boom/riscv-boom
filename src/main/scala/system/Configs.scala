@@ -157,9 +157,11 @@ class SmallRV32UnifiedBoomConfig extends Config(
   new WithoutTLMonitors ++
   new freechips.rocketchip.system.BaseConfig)
 
-// ---------------------
+// --------------------------
 // BOOM + Rocket Configs
-// ---------------------
+// ----
+// Heterogeneous Tile Configs
+// --------------------------
 
 class BoomAndRocketConfig extends Config(
   // final param setup
