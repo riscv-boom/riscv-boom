@@ -1,8 +1,8 @@
 //******************************************************************************
-// Copyright (c) 2017 - 2019, The Regents of the University of California (Regents).
+// Copyright (c) 2019 - 2019, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
-// Author: Christopher Celio
+// Author: Abraham Gonzalez
 //------------------------------------------------------------------------------
 
 package boom.system
@@ -19,14 +19,14 @@ import freechips.rocketchip.util.{DontTouch}
 /**
  * Example top with periphery devices and ports, and a BOOM subsystem
  */
-class ExampleBoomSystem(implicit p: Parameters) extends BoomSubsystem
+class ExampleBoomAndRocketSystem(implicit p: Parameters) extends BoomAndRocketSubsystem
   with HasAsyncExtInterrupts
   with CanHaveMasterAXI4MemPort
   with CanHaveMasterAXI4MMIOPort
   with CanHaveSlaveAXI4Port
   with HasPeripheryBootROM
 {
-  override lazy val module = new ExampleBoomSystemModule(this)
+  override lazy val module = new ExampleBoomAndRocketSystemModule(this)
 
   // The sbus masters the cbus; here we convert TL-UH -> TL-UL
   sbus.crossToBus(cbus, NoCrossing)
@@ -51,7 +51,7 @@ class ExampleBoomSystem(implicit p: Parameters) extends BoomSubsystem
 /**
  * Example top module with periphery devices and ports, and a BOOM subsystem
  */
-class ExampleBoomSystemModule[+L <: ExampleBoomSystem](_outer: L) extends BoomSubsystemModuleImp(_outer)
+class ExampleBoomAndRocketSystemModule[+L <: ExampleBoomAndRocketSystem](_outer: L) extends BoomAndRocketSubsystemModuleImp(_outer)
   with HasRTCModuleImp
   with HasExtInterruptsModuleImp
   with CanHaveMasterAXI4MemPortModuleImp
