@@ -49,9 +49,9 @@ trait HasBoomTiles extends HasTiles
   }
 
   boomTiles.map {
-    r =>
-      def treeNode: RocketTileLogicalTreeNode = new RocketTileLogicalTreeNode(r.rocketLogicalTree.getOMInterruptTargets)
-      LogicalModuleTree.add(logicalTreeNode, r.rocketLogicalTree)
+    b =>
+      def treeNode: RocketTileLogicalTreeNode = new RocketTileLogicalTreeNode(b.rocketLogicalTree.getOMInterruptTargets)
+      LogicalModuleTree.add(logicalTreeNode, b.rocketLogicalTree)
   }
 
   def coreMonitorBundles = (boomTiles map { t =>

@@ -22,6 +22,10 @@ import freechips.rocketchip.util._
 
 import boom.common._
 
+// ---------------------
+// BOOM Configs
+// ---------------------
+
 /**
  * Note: For all these configs, the mix-ins are applied from
  * "bottom" to "top". This means that the "lower" mix-ins set the
@@ -153,35 +157,46 @@ class SmallRV32UnifiedBoomConfig extends Config(
   new WithoutTLMonitors ++
   new freechips.rocketchip.system.BaseConfig)
 
+// ---------------------
+// BOOM + Rocket Configs
+// ---------------------
 
-// Allow for some number N BOOM cores.
-class WithNBoomCores(n: Int) extends Config((site, here, up) => {
-  case BoomTilesKey => {
-    // "big" is vestigial -- we could also add a corresponding "little" vector too for hetereogenous setups.
-    val big = BoomTileParams(
-      core   = BoomCoreParams(mulDiv = Some(MulDivParams(
-        mulUnroll = 8,
-        mulEarlyOut = true,
-        divEarlyOut = true))),
-      dcache = Some(DCacheParams(
-        rowBits = site(SystemBusKey).beatBits,
-        nMSHRs = 0,
-        blockBytes = site(CacheBlockBytes))),
-      icache = Some(ICacheParams(
-        rowBits = site(SystemBusKey).beatBits,
-        blockBytes = site(CacheBlockBytes))))
-    List.tabulate(n)(i => big.copy(hartId = i))
-  }
-})
+class BoomAndRocketConfig extends Config(
+  // final param setup
+  new WithRenumberHarts ++
+  new WithoutTLMonitors ++
+  // boom param setup
+  new WithRVC ++
+  new DefaultBoomConfig ++
+  // create boom tile
+  new WithNBoomCores(1) ++
+  // create rocket tile
+  new freechips.rocketchip.subsystem.WithNBigCores(1) ++
+  new freechips.rocketchip.system.BaseConfig)
 
-// This sets the ECC for the L1 instruction cache.
-class WithL1IECC(tecc: String, decc: String) extends Config((site, here, up) => {
-  case BoomTilesKey => up(BoomTilesKey, site) map { r =>
-    r.copy(icache = r.icache.map(_.copy(tagECC = Some(tecc), dataECC = Some(decc)))) }
-})
+class SmallDefaultBoomAndRocketConfig extends Config(
+  // final param setup
+  new WithRenumberHarts ++
+  new WithoutTLMonitors ++
+  // boom param setup
+  new WithRVC ++
+  new WithSmallBooms ++
+  new DefaultBoomConfig ++
+  // create boom tile
+  new WithNBoomCores(1) ++
+  // create rocket tile
+  new freechips.rocketchip.subsystem.WithNBigCores(1) ++
+  new freechips.rocketchip.system.BaseConfig)
 
-// This sets the ECC for the L1 data cache.
-class WithL1DECC(tecc: String, decc: String) extends Config((site, here, up) => {
-  case BoomTilesKey => up(BoomTilesKey, site) map { r =>
-    r.copy(dcache = r.dcache.map(_.copy(tagECC = Some(tecc), dataECC = Some(decc)))) }
-})
+class DualCoreBoomAndDualRocketConfig extends Config(
+  // final param setup
+  new WithRenumberHarts ++
+  new WithoutTLMonitors ++
+  // boom param setup (applies to all boom cores)
+  new WithRVC ++
+  new DefaultBoomConfig ++
+  // create boom tiles
+  new WithNBoomCores(2) ++
+  // create rocket tiles
+  new freechips.rocketchip.subsystem.WithNBigCores(2) ++
+  new freechips.rocketchip.system.BaseConfig)

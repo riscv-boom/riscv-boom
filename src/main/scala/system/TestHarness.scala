@@ -14,7 +14,7 @@ import freechips.rocketchip.diplomacy.{LazyModule}
 import freechips.rocketchip.devices.debug.{Debug}
 
 /**
- * A test harness to wrap around the BOOM system
+ * A test harness to wrap around the system being simulated
  */
 class TestHarness(implicit p: Parameters) extends Module
 {
@@ -22,9 +22,9 @@ class TestHarness(implicit p: Parameters) extends Module
     val success = Output(Bool())
   })
 
-  println("\n\nBuilding TestHarness for an ExampleBoomSystem.\n")
+  println("\n\nBuilding TestHarness for an ExampleBoomAndRocketSystem.\n")
 
-  val dut = Module(LazyModule(new ExampleBoomSystem).module)
+  val dut = Module(LazyModule(new ExampleBoomAndRocketSystem).module)
   dut.reset := reset.asBool | dut.debug.ndreset
 
   dut.dontTouchPorts()

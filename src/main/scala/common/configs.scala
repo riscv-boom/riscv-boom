@@ -34,8 +34,8 @@ class DefaultBoomConfig extends Config((site, here, up) => {
    case BootROMParams => BootROMParams(contentFileName = s"./bootrom/bootrom.rv${site(XLen)}.img")
 
    // Core Parameters
-   case BoomTilesKey => up(BoomTilesKey, site) map { r => r.copy(
-      core = r.core.copy(
+   case BoomTilesKey => up(BoomTilesKey, site) map { b => b.copy(
+      core = b.core.copy(
          fetchWidth = 4,
          decodeWidth = 2,
          numRobEntries = 100,
@@ -73,9 +73,9 @@ class DefaultBoomConfig extends Config((site, here, up) => {
  */
 class WithBoomRV32 extends Config((site, here, up) => {
   case XLen => 32
-  case BoomTilesKey => up(BoomTilesKey, site) map { r =>
-    r.copy(core = r.core.copy(
-      fpu = r.core.fpu.map(_.copy(fLen = 32)),
+  case BoomTilesKey => up(BoomTilesKey, site) map { b =>
+    b.copy(core = b.core.copy(
+      fpu = b.core.fpu.map(_.copy(fLen = 32)),
       mulDiv = Some(MulDivParams(mulUnroll = 8))))
   }
 })
@@ -84,9 +84,9 @@ class WithBoomRV32 extends Config((site, here, up) => {
  * Combines the Memory and Integer Issue Queues. Similar to BOOM v1.
  */
 class WithUnifiedMemIntIQs extends Config((site, here, up) => {
-  case BoomTilesKey => up(BoomTilesKey, site) map { r =>
-    r.copy(core = r.core.copy(
-       issueParams = r.core.issueParams.filter(_.iqType != IQT_MEM.litValue)
+  case BoomTilesKey => up(BoomTilesKey, site) map { b =>
+    b.copy(core = b.core.copy(
+       issueParams = b.core.issueParams.filter(_.iqType != IQT_MEM.litValue)
     ))
   }
 })
@@ -95,9 +95,9 @@ class WithUnifiedMemIntIQs extends Config((site, here, up) => {
  * Remove FPU
  */
 class WithoutBoomFPU extends Config((site, here, up) => {
-   case BoomTilesKey => up(BoomTilesKey, site) map { r =>
-      r.copy(core = r.core.copy(
-         issueParams = r.core.issueParams.filter(_.iqType != IQT_FP.litValue),
+   case BoomTilesKey => up(BoomTilesKey, site) map { b =>
+      b.copy(core = b.core.copy(
+         issueParams = b.core.issueParams.filter(_.iqType != IQT_FP.litValue),
          fpu = None))
    }
 })
@@ -106,8 +106,8 @@ class WithoutBoomFPU extends Config((site, here, up) => {
  * Remove Fetch Monitor (should not be synthesized (although it can be))
  */
 class WithoutFetchMonitor extends Config((site, here, up) => {
-  case BoomTilesKey => up(BoomTilesKey, site) map { r =>
-    r.copy(core = r.core.copy(
+  case BoomTilesKey => up(BoomTilesKey, site) map { b =>
+    b.copy(core = b.core.copy(
       useFetchMonitor = false
     ))
   }
@@ -117,7 +117,7 @@ class WithoutFetchMonitor extends Config((site, here, up) => {
  * Customize the amount of perf. counters (HPMs) for the core
  */
 class WithNPerfCounters(n: Int) extends Config((site, here, up) => {
-   case BoomTilesKey => up(BoomTilesKey, site) map { r => r.copy(core = r.core.copy(
+   case BoomTilesKey => up(BoomTilesKey, site) map { b => b.copy(core = b.core.copy(
       nPerfCounters = n
    ))}
 })
@@ -126,17 +126,17 @@ class WithNPerfCounters(n: Int) extends Config((site, here, up) => {
  * Enable tracing
  */
 class WithTrace extends Config((site, here, up) => {
-   case BoomTilesKey => up(BoomTilesKey, site) map { r => r.copy(trace = true) }
+   case BoomTilesKey => up(BoomTilesKey, site) map { b => b.copy(trace = true) }
 })
 
 /**
  * Enable RVC
  */
 class WithRVC extends Config((site, here, up) => {
-   case BoomTilesKey => up(BoomTilesKey, site) map {r => r.copy(
-      core = r.core.copy(
-         fetchWidth = r.core.fetchWidth * 2,
-         fetchBufferSz = r.core.fetchBufferSz / 2,
+   case BoomTilesKey => up(BoomTilesKey, site) map { b => b.copy(
+      core = b.core.copy(
+         fetchWidth = b.core.fetchWidth * 2,
+         fetchBufferSz = b.core.fetchBufferSz / 2,
          useCompressed = true))}
 })
 
@@ -144,8 +144,8 @@ class WithRVC extends Config((site, here, up) => {
  * Small BOOM! Try to be fast to compile and easier to debug.
  */
 class WithSmallBooms extends Config((site, here, up) => {
-   case BoomTilesKey => up(BoomTilesKey, site) map { r =>r.copy(
-      core = r.core.copy(
+   case BoomTilesKey => up(BoomTilesKey, site) map { b => b.copy(
+      core = b.core.copy(
          fetchWidth = 2,
          decodeWidth = 1,
          numRobEntries = 16,
@@ -174,8 +174,8 @@ class WithSmallBooms extends Config((site, here, up) => {
  * Intermediate BOOM. Try to match the Cortex-A9.
  */
 class WithMediumBooms extends Config((site, here, up) => {
-   case BoomTilesKey => up(BoomTilesKey, site) map { r =>r.copy(
-      core = r.core.copy(
+   case BoomTilesKey => up(BoomTilesKey, site) map { b => b.copy(
+      core = b.core.copy(
          fetchWidth = 2,
          decodeWidth = 2,
          numRobEntries = 48,
@@ -207,8 +207,8 @@ class WithMediumBooms extends Config((site, here, up) => {
  * Try to match the Cortex-A15.
  */
 class WithMegaBooms extends Config((site, here, up) => {
-   case BoomTilesKey => up(BoomTilesKey, site) map { r =>r.copy(
-      core = r.core.copy(
+   case BoomTilesKey => up(BoomTilesKey, site) map { b => b.copy(
+      core = b.core.copy(
          fetchWidth = 4,
          decodeWidth = 3,
          numRobEntries = 96,
