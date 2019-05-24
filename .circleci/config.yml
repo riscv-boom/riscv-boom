@@ -423,7 +423,7 @@ jobs:
                     - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
             - restore_cache:
                 keys:
-                    - SmallBoomAndRocketConfig-{{ .Branch }}-{{ .Revision }}
+                    - smallboomandrocketconfig-{{ .Branch }}-{{ .Revision }}
             - run:
                 name: Run SmallBoomAndRocketConfig riscv tests
                 command: |
