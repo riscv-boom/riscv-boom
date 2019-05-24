@@ -62,50 +62,20 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
 
   dontTouch(io)
 
-  // // TODO: Optimize this. We don't want to mess with cache during speculation
-  // // s_wb_req         : The line we replaced needs to be written back (it was dirty). Make a request
-  // // s_wb_resp        : Wait for ack for dirty writeback
-  // // s_meta_clear     : Clear the metadata for the evicted line
-  // // s_refill_req     : Send request for refill data
-  // // s_refill_resp    : Wait for refill data to arrive
-  // // s_meta_write_req : Write new metadata back
-  // // s_meta_write_resp: Done writing new metadata back
-  // // s_drain_rpq      : Drain our RPQ
+  // TODO: Optimize this. We don't want to mess with cache during speculation
+  // s_refill_req      : Make a request for a new cache line
+  // s_refill_resp     : Store the refill response into our buffer
+  // s_drain_rpq_loads : Drain out loads from the rpq
+  //                   : If miss was misspeculated, go to s_invalid
+  // s_wb_req          : Write back the evicted cache line
+  // s_wb_resp         : Finish writing back the evicted cache line
+  // s_meta_write_req  : Write the metadata for new cache lne
+  // s_meta_write_resp :
 
-  // val s_invalid :: s_wb_req :: s_wb_resp :: s_meta_clear :: s_refill_req :: s_refill_resp :: s_meta_write_req :: s_meta_write_resp :: s_drain_rpq :: Nil = Enum(9)
+  val s_invalid :: s_refill_req :: s_refill_resp :: s_drain_rpq_loads :: s_wb_req :: s_wb_resp :: s_meta_write_req :: s_meta_write_resp :: s_drain_rpq :: Nil = Enum(9)
+  val state = RegInit(s_invalid)
 
-  // val state = RegInit(s_invalid)
-
-  // val req            = Reg(new BoomDCacheReqInternal)
-  // val req_idx        = req.addr(untagBits-1, blockOffBits)
-  // val req_tag        = req.addr >> untagBits
-  // val req_block_addr = (req.addr >> blockOffBits) << blockOffBits
-
-  // val idx_match      = req_idx === io.req.addr(untagBits-1, blockOffBits)
-
-  // val new_coh = RegInit(ClientMetadata.onReset)
-  // val shrink_param                    = req.old_meta.coh.onCacheControl(M_FLUSH)._2
-  // val coh_on_clear                    = req.old_meta.coh.onCacheControl(M_FLUSH)._3
-  // val grow_param                      = new_coh.onAccess(req.uop.mem_cmd)._2
-  // val coh_on_grant                    = new_coh.onGrant(req.uop.mem_cmd, io.mem_grant.bits.param)
-
-  // // We only accept secondary misses if we haven't yet sent an Acquire to outer memory
-  // // or if the Acquire that was sent will obtain a Grant with sufficient permissions
-  // // to let us replay this new request. I.e. we don't handle multiple outstanding
-  // // Acquires on the same block for now.
-  // val (cmd_requires_second_acquire, is_hit_again, _, dirtier_coh, dirtier_cmd) =
-  //   new_coh.onSecondaryAccess(req.uop.mem_cmd, io.req.uop.mem_cmd)
-
-  // val states_before_refill = Seq(s_wb_req, s_wb_resp, s_meta_clear)
-  // val states_during_refill = Seq(s_refill_req, s_refill_resp)
-  // val (_, _, refill_done, refill_address_inc) = edge.addr_inc(io.mem_grant)
-
-  // // Are we ready to accept a secondary miss (MSHR hit)
-  // val sec_rdy = idx_match && ( state.isOneOf(states_before_refill) ||
-  //                             (state.isOneOf(states_during_refill) && !cmd_requires_second_acquire && !refill_done))
-
-  // TODO: Make this branch-killable
-  //val rpq = Module(new Queue(new BoomDCacheReqInternal, cfg.nRPQ))
+  io.req_pri_rdy := state === s_invalid
 }
 
 class BoomIOMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()(p)
@@ -419,7 +389,6 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   data.io.read.bits.addr   := io.lsu.req.bits.addr
   data.io.read.bits.way_en := ~0.U(nWays.W)
 
-
   val s1_valid = RegNext(io.lsu.req.fire(), init=false.B)
   val s1_req   = RegNext(io.lsu.req.bits)
   val s1_addr  = s1_req.addr
@@ -462,14 +431,15 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   tl_out.d.ready           := true.B // MSHRs should always be ready for refills
 
   val s2_nack_miss = s2_valid && !s2_hit && !mshrs.io.req.ready // MSHRs not ready for request
+  val s2_nack = s2_nack_miss
 
 
   // Mux between cache responses and uncache responses
   val cache_resp   = Wire(Valid(new BoomDCacheResp))
-  cache_resp.valid     := s2_hit && s2_valid
+  cache_resp.valid     := s2_valid && (s2_hit || s2_nack)
   cache_resp.bits.uop  := s2_req.uop
   cache_resp.bits.data := 0.U // TODO: Fix
-  cache_resp.bits.nack := false.B // TODO: Fix
+  cache_resp.bits.nack := s2_nack // TODO: Fix
 
   val uncache_resp = Wire(Valid(new BoomDCacheResp))
   uncache_resp.bits   := mshrs.io.resp.bits
@@ -477,4 +447,6 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   mshrs.io.resp.ready := !cache_resp.valid // We can backpressure the MSHRs, but not cache hits
 
   io.lsu.resp := Mux(mshrs.io.resp.fire(), uncache_resp, cache_resp)
+
+  io.lsu.ordered := mshrs.io.fence_rdy && !s1_valid && !s2_valid
 }

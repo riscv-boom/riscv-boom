@@ -71,12 +71,11 @@ class RobIo(
   val wb_resps = Flipped(Vec(numWakeupPorts, Valid(new ExeUnitResp(xLen max fLen+1))))
 
   // Unbusying ports for stores.
-  val lsu_clr_bsy_valid      = Input(Vec(2, Bool()))
-  val lsu_clr_bsy_rob_idx    = Input(Vec(2, UInt(robAddrSz.W)))
+  val lsu_clr_bsy            = Input(Vec(2, Valid(UInt(robAddrSz.W))))
 
   // Port for unmarking loads/stores as speculation hazards..
-  val lsu_clr_unsafe_valid   = Input(Bool())
-  val lsu_clr_unsafe_rob_idx = Input(UInt(robAddrSz.W))
+  val lsu_clr_unsafe   = Input(Valid(UInt(robAddrSz.W)))
+
 
   // Track side-effects for debug purposes.
   // Also need to know when loads write back, whereas we don't need loads to unbusy.
@@ -343,22 +342,22 @@ class Rob(
     }
 
     // Stores have a separate method to clear busy bits
-    for ((clr_valid, clr_rob_idx) <- io.lsu_clr_bsy_valid zip io.lsu_clr_bsy_rob_idx) {
-      when (clr_valid && MatchBank(GetBankIdx(clr_rob_idx))) {
-        val cidx = GetRowIdx(clr_rob_idx)
+    for (clr_rob_idx <- io.lsu_clr_bsy) {
+      when (clr_rob_idx.valid && MatchBank(GetBankIdx(clr_rob_idx.bits))) {
+        val cidx = GetRowIdx(clr_rob_idx.bits)
         rob_bsy(cidx)    := false.B
         assert (rob_val(cidx) === true.B, "[rob] store writing back to invalid entry.")
         assert (rob_bsy(cidx) === true.B, "[rob] store writing back to a not-busy entry.")
 
         if (O3PIPEVIEW_PRINTF) {
           printf("%d; O3PipeView:complete:%d\n",
-            rob_uop(GetRowIdx(clr_rob_idx)).debug_events.fetch_seq, io.debug_tsc)
+            rob_uop(GetRowIdx(clr_rob_idx.bits)).debug_events.fetch_seq, io.debug_tsc)
         }
       }
     }
 
-    when (io.lsu_clr_unsafe_valid && MatchBank(GetBankIdx(io.lsu_clr_unsafe_rob_idx))) {
-      val cidx = GetRowIdx(io.lsu_clr_unsafe_rob_idx)
+    when (io.lsu_clr_unsafe.valid && MatchBank(GetBankIdx(io.lsu_clr_unsafe.bits))) {
+      val cidx = GetRowIdx(io.lsu_clr_unsafe.bits)
       rob_unsafe(cidx) := false.B
     }
 

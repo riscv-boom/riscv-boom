@@ -87,6 +87,8 @@ class LSUDMemIO(implicit p: Parameters) extends BoomBundle()(p)
   val resp        = Flipped(new ValidIO(new BoomDCacheResp))
 
   val brinfo      = Output(new BrResolutionInfo)
+
+  val ordered     = Input(Bool())
 }
 
 class LSUCoreIO(implicit p: Parameters) extends BoomBundle()(p)
@@ -109,8 +111,17 @@ class LSUCoreIO(implicit p: Parameters) extends BoomBundle()(p)
   val commit_load_mask  = Input(Vec(coreWidth, Bool()))
   val commit_load_at_rob_head = Input(Bool())
 
+  // Stores clear busy bit when stdata is received
+  // 1 for int, 1 for fp (to avoid back-pressure fpstdat)
+  val clr_bsy         = Output(Vec(2, Valid(UInt(robAddrSz.W))))
+
+  // Speculatively safe load (barring memory ordering failure)
+  val clr_unsafe      = Output(Valid(UInt(robAddrSz.W)))
+
   val brinfo      = Input(new BrResolutionInfo)
   val exception   = Input(Bool())
+
+  val fencei_rdy  = Output(Bool())
 }
 
 class LSUIO(implicit p: Parameters) extends BoomBundle()(p)
@@ -149,6 +160,7 @@ class STQEntry(implicit p: Parameters) extends BoomBundle()(p)
 
   val executed            = Bool() // sent to memory, reset by NACKs
   val committed           = Bool() // committed by ROB
+  val succeeded           = Bool()
 }
 
 class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut) extends BoomModule()(p)
@@ -221,6 +233,7 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
       ldq(ld_enq_idx).bits.forward_std_val := false.B
 
       assert (ld_enq_idx === io.core.dec_uops(w).bits.ldq_idx, "[lsu] mismatch enq load tag.")
+      assert (!ldq(ld_enq_idx).valid, "[lsu] Enqueuing uop is overwriting ldq entries")
     }
     ld_enq_idx = Mux(dec_ld_val, WrapInc(ld_enq_idx, NUM_LDQ_ENTRIES),
                                  ld_enq_idx)
@@ -240,17 +253,18 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
       stq(st_enq_idx).bits.committed  := false.B
 
       assert (st_enq_idx === io.core.dec_uops(w).bits.stq_idx, "[lsu] mismatch enq store tag.")
+      assert (!stq(st_enq_idx).valid, "[lsu] Enqueuing uop is overwriting stq entries")
     }
     next_live_store_mask = Mux(dec_st_val, next_live_store_mask | (1.U << st_enq_idx),
                                            next_live_store_mask)
     st_enq_idx = Mux(dec_st_val, WrapInc(st_enq_idx, NUM_STQ_ENTRIES),
                                  st_enq_idx)
-   }
+  }
 
-   ldq_tail := ld_enq_idx
-   stq_tail := st_enq_idx
+  ldq_tail := ld_enq_idx
+  stq_tail := st_enq_idx
 
-//   io.lsu_fencei_rdy := !stq_nonempty && io.dmem_is_ordered
+  io.core.fencei_rdy := !stq_nonempty && io.dmem.ordered
 
   //-------------------------------------------------------------
   //-------------------------------------------------------------
@@ -520,11 +534,12 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
   }
     .elsewhen (will_fire_load_incoming || will_fire_load_retry)
   {
-    io.dmem.req.valid         := !tlb_miss
+    // Uncacheable loads can't be sent until at head of ROB
+    io.dmem.req.valid         := !tlb_miss && !tlb_addr_uncacheable
     io.dmem.req.bits.addr     := exe_tlb_paddr
     io.dmem.req.bits.uop      := exe_tlb_uop
 
-    ldq(exe_ldq_idx).bits.executed  := true.B
+    ldq(exe_ldq_idx).bits.executed  := io.dmem.req.valid
 
     assert(!(will_fire_load_incoming && ldq(exe_ldq_idx).bits.executed),
       "[lsu] We are firing an incoming load, but the LDQ marks it as executed?")
@@ -598,6 +613,100 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
   //-------------------------------------------------------------
   //-------------------------------------------------------------
 
+  // search SAQ for matches
+  val mem_tlb_paddr       = RegNext(exe_tlb_paddr)
+  val mem_tlb_uop         = RegNext(exe_tlb_uop) // not valid for std_incoming
+  mem_tlb_uop.br_mask    := GetNewBrMask(io.core.brinfo, exe_tlb_uop)
+  val mem_tlb_miss        = RegNext(tlb_miss, init=false.B)
+  val mem_tlb_uncacheable = RegNext(tlb_addr_uncacheable, init=false.B)
+  val mem_ld_used_tlb     = RegNext(will_fire_load_incoming || will_fire_load_retry)
+
+  val mem_ld_addr         = RegNext(io.dmem.req.bits.addr) // This should be right?
+  val mem_ld_uop          = RegNext(io.dmem.req.bits.uop)
+  mem_ld_uop.br_mask     := GetNewBrMask(io.core.brinfo, io.dmem.req.bits.uop)
+  val mem_ld_killed       = WireInit(false.B) // was a load killed in executed
+
+  val mem_fired_ld        = RegNext(will_fire_load_incoming || will_fire_load_retry || will_fire_load_wakeup,
+                                    init=false.B)
+  val mem_fired_sta       = RegNext(will_fire_sta_incoming || will_fire_sta_retry,
+                                    init=false.B)
+  val mem_fired_stdi      = RegNext(will_fire_std_incoming,
+                                    init=false.B)
+  val mem_fired_stdf      = RegNext(io.core.fp_stdata.fire(),
+                                    init=false.B)
+  val mem_fired_sfence    = RegNext(will_fire_sfence,
+                                    init=false.B)
+
+
+
+  // TODO: handle mem load killed, ldspecwakeup
+
+  // tell the ROB to clear the busy bit on the incoming store
+  val clr_bsy_valid   = RegInit(false.B)
+  val clr_bsy_rob_idx = Reg(UInt(robAddrSz.W))
+  val clr_bsy_brmask  = Reg(UInt(MAX_BR_COUNT.W))
+  clr_bsy_valid    := false.B
+  clr_bsy_rob_idx  := 0.U
+  clr_bsy_brmask   := 0.U
+
+  when (mem_fired_sta && !mem_tlb_miss && mem_fired_stdi)
+  {
+    clr_bsy_valid   := !mem_tlb_uop.is_amo &&
+                       !IsKilledByBranch(io.core.brinfo, mem_tlb_uop) &&
+                       !io.core.exception &&
+                       !RegNext(io.core.exception)
+    clr_bsy_rob_idx := mem_tlb_uop.rob_idx
+    clr_bsy_brmask  := GetNewBrMask(io.core.brinfo, mem_tlb_uop)
+  }
+  .elsewhen (mem_fired_sta && !mem_tlb_miss)
+  {
+    clr_bsy_valid   := stq(mem_tlb_uop.stq_idx).bits.data.valid &&
+                       !mem_tlb_uop.is_amo &&
+                       !IsKilledByBranch(io.core.brinfo, mem_tlb_uop) &&
+                       !io.core.exception &&
+                       !RegNext(io.core.exception)
+    clr_bsy_rob_idx := mem_tlb_uop.rob_idx
+    clr_bsy_brmask  := GetNewBrMask(io.core.brinfo, mem_tlb_uop)
+  }
+  .elsewhen (mem_fired_stdi)
+  {
+    val mem_std_uop = RegNext(io.core.exe.req.bits.uop)
+    clr_bsy_valid   := stq(mem_std_uop.stq_idx).bits.addr.valid &&
+                       !stq(mem_std_uop.stq_idx).bits.addr_is_virtual &&
+                       !mem_std_uop.is_amo &&
+                       !IsKilledByBranch(io.core.brinfo, mem_std_uop) &&
+                       !io.core.exception &&
+                       !RegNext(io.core.exception)
+    clr_bsy_rob_idx := mem_std_uop.rob_idx
+    clr_bsy_brmask  := GetNewBrMask(io.core.brinfo, mem_std_uop)
+  }
+  .elsewhen (mem_fired_sfence)
+  {
+    clr_bsy_valid   := true.B
+    clr_bsy_rob_idx := mem_tlb_uop.rob_idx
+    clr_bsy_brmask  := GetNewBrMask(io.core.brinfo, mem_tlb_uop)
+  }
+
+  val mem_uop_stdf = RegNext(io.core.fp_stdata.bits.uop)
+  val stdf_clr_bsy_valid = RegNext( mem_fired_stdf &&
+                                    stq(mem_uop_stdf.stq_idx).valid &&
+                                   !stq(mem_uop_stdf.stq_idx).bits.addr_is_virtual &&
+                                   !mem_uop_stdf.is_amo &&
+                                   !IsKilledByBranch(io.core.brinfo, mem_uop_stdf)) &&
+                           (!io.core.exception && RegNext(!io.core.exception))
+  val stdf_clr_bsy_rob_idx = RegNext(mem_uop_stdf.rob_idx)
+  val stdf_clr_bsy_brmask  = RegNext(GetNewBrMask(io.core.brinfo, mem_uop_stdf))
+
+  io.core.clr_bsy(0).valid := clr_bsy_valid &&
+                                      !io.core.exception &&
+                                      !IsKilledByBranch(io.core.brinfo, clr_bsy_brmask)
+  io.core.clr_bsy(0).bits  := clr_bsy_rob_idx
+  io.core.clr_bsy(1).valid := stdf_clr_bsy_valid &&
+                                      !io.core.exception &&
+                                      !IsKilledByBranch(io.core.brinfo, stdf_clr_bsy_brmask)
+  io.core.clr_bsy(1).bits  := stdf_clr_bsy_rob_idx
+
+
   //-------------------------------------------------------------
   // Load Issue Datapath (ALL loads need to use this path,
   //    to handle forwarding from the STORE QUEUE, etc.)
@@ -606,6 +715,13 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
   // does the incoming load match any store addresses?
   // NOTE: these are fully translated physical addresses, as
   // forwarding requires a full address check.
+
+  // Mark instructions as safe after successful address translation.
+  // Need to delay to same cycle as exception broadcast into ROB to avoid
+  // the PNR 'jumping the gun' over a misspeculated ordering.
+  io.core.clr_unsafe.valid   := RegNext(!mem_tlb_miss && (mem_ld_used_tlb || mem_fired_sta))
+  io.core.clr_unsafe.bits    := RegNext(mem_tlb_uop.rob_idx)
+
 
   //-------------------------------------------------------------
   //-------------------------------------------------------------
@@ -646,6 +762,10 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
         io.core.exe.fresp.valid     := ldq(io.dmem.resp.bits.uop.ldq_idx).bits.uop.dst_rtype === RT_FLT
         io.core.exe.fresp.bits.uop  := ldq(io.dmem.resp.bits.uop.ldq_idx).bits.uop
         io.core.exe.fresp.bits.data := io.dmem.resp.bits.data
+      }
+        .otherwise
+      {
+        stq(io.dmem.resp.bits.uop.stq_idx).bits.succeeded := true.B
       }
     }
   }
@@ -698,6 +818,70 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
     stq_tail := io.core.brinfo.stq_idx
     ldq_tail := io.core.brinfo.ldq_idx
   }
+
+  //-------------------------------------------------------------
+  //-------------------------------------------------------------
+  // dequeue old entries on commit
+  //-------------------------------------------------------------
+  //-------------------------------------------------------------
+
+  var temp_stq_commit_head = stq_commit_head
+  for (w <- 0 until coreWidth)
+  {
+    when (io.core.commit_store_mask(w))
+    {
+      stq(temp_stq_commit_head).bits.committed := true.B
+    }
+
+    temp_stq_commit_head = Mux(io.core.commit_store_mask(w),
+                               WrapInc(temp_stq_commit_head, NUM_STQ_ENTRIES),
+                               temp_stq_commit_head)
+  }
+
+  stq_commit_head := temp_stq_commit_head
+
+  // store has been committed AND successfully sent data to memory
+  when (stq(stq_head).valid && stq(stq_head).bits.committed)
+  {
+    clear_store := Mux(stq(stq_head).bits.uop.is_fence, io.dmem.ordered,
+                                                        stq(stq_head).bits.succeeded)
+  }
+
+  when (clear_store)
+  {
+    stq(stq_head).valid           := false.B
+    stq(stq_head).bits.addr.valid := false.B
+    stq(stq_head).bits.data.valid := false.B
+    stq(stq_head).bits.executed   := false.B
+    stq(stq_head).bits.succeeded  := false.B
+    stq(stq_head).bits.committed  := false.B
+
+    stq_head := WrapInc(stq_head, NUM_STQ_ENTRIES)
+    when (stq(stq_head).bits.uop.is_fence)
+    {
+      stq_execute_head := WrapInc(stq_execute_head, NUM_STQ_ENTRIES)
+    }
+  }
+
+  var temp_ldq_head = ldq_head
+  for (w <- 0 until coreWidth)
+  {
+    val idx = temp_ldq_head
+    when (io.core.commit_load_mask(w))
+    {
+      assert (ldq(idx).valid         , "[lsu] trying to commit an un-allocated load entry.")
+      assert (ldq(idx).bits.executed , "[lsu] trying to commit an un-executed load entry.")
+
+      ldq(idx).valid                 := false.B
+      ldq(idx).bits.addr.valid       := false.B
+      ldq(idx).bits.executed         := false.B
+      ldq(idx).bits.order_fail       := false.B
+      ldq(idx).bits.forward_std_val  := false.B
+    }
+
+    temp_ldq_head = Mux(io.core.commit_load_mask(w), WrapInc(temp_ldq_head, NUM_LDQ_ENTRIES), temp_ldq_head)
+  }
+  ldq_head := temp_ldq_head
 
   //-------------------------------------------------------------
   // Exception / Reset

@@ -521,8 +521,8 @@ class BoomCore(implicit p: Parameters) extends BoomModule
                      || (dec_uops(w).is_unique && (!rob.io.empty || prev_insts_in_bundle_valid))
 //                        (!(rob.io.empty) || !lsu.io.lsu_fencei_rdy || prev_insts_in_bundle_valid))
                      || !rob.io.ready
-//                     || lsu.io.laq_full(w) && dec_uops(w).is_load
-//                     || lsu.io.stq_full(w) && dec_uops(w).is_store
+                     || io.lsu.ldq_full(w) && dec_uops(w).is_load
+                     || io.lsu.stq_full(w) && dec_uops(w).is_store
                      || branch_mask_full(w)
                      || br_unit.brinfo.mispredict
                      || rob.io.flush.valid
@@ -571,9 +571,9 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   //-------------------------------------------------------------
   // LD/ST Unit Allocation Logic
 
-  for (w <- 0 until decodeWidth) {
-    // dec_uops(w).ldq_idx := lsu.io.new_ldq_idx(w)
-    // dec_uops(w).stq_idx := lsu.io.new_stq_idx(w)
+  for (w <- 0 until coreWidth) {
+    dec_uops(w).ldq_idx := io.lsu.dec_ldq_idx(w)
+    dec_uops(w).stq_idx := io.lsu.dec_stq_idx(w)
   }
 
   //-------------------------------------------------------------
@@ -1116,15 +1116,13 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   exe_units(brunit_idx).io.status := csr.io.status
 
   // LSU <> ROB
+  rob.io.lsu_clr_bsy    := io.lsu.clr_bsy
+  rob.io.lsu_clr_unsafe := io.lsu.clr_unsafe
   // rob.io.lsu_clr_bsy_valid      := lsu.io.clr_bsy_valid
   // rob.io.lsu_clr_bsy_rob_idx    := lsu.io.clr_bsy_rob_idx
   // rob.io.lsu_clr_unsafe_valid   := lsu.io.clr_unsafe_valid
   // rob.io.lsu_clr_unsafe_rob_idx := lsu.io.clr_unsafe_rob_idx
   // rob.io.lxcpt <> lsu.io.xcpt
-  rob.io.lsu_clr_bsy_valid := DontCare
-  rob.io.lsu_clr_bsy_rob_idx := DontCare
-  rob.io.lsu_clr_unsafe_valid := DontCare
-  rob.io.lsu_clr_unsafe_rob_idx := DontCare
   rob.io.lxcpt := DontCare
 
   assert (!(csr.io.singleStep), "[core] single-step is unsupported.")
