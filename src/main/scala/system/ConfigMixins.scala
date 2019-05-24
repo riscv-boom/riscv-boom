@@ -23,9 +23,9 @@ import freechips.rocketchip.util._
 
 import boom.common._
 
-// ---------------------
+// ------------------
 // BOOM Mixin Configs
-// ---------------------
+// ------------------
 
 /**
  * Create multiple copies of a BOOM tile (and thus a core).

@@ -17,7 +17,7 @@ import freechips.rocketchip.diplomacy._
 import freechips.rocketchip.util.{DontTouch}
 
 /**
- * Example top with periphery devices and ports, and a BOOM subsystem
+ * Example top with periphery devices and ports, and a BOOM + Rocket subsystem
  */
 class ExampleBoomAndRocketSystem(implicit p: Parameters) extends BoomAndRocketSubsystem
   with HasAsyncExtInterrupts
@@ -49,7 +49,7 @@ class ExampleBoomAndRocketSystem(implicit p: Parameters) extends BoomAndRocketSu
 }
 
 /**
- * Example top module with periphery devices and ports, and a BOOM subsystem
+ * Example top module with periphery devices and ports, and a BOOM + Rocket subsystem
  */
 class ExampleBoomAndRocketSystemModule[+L <: ExampleBoomAndRocketSystem](_outer: L) extends BoomAndRocketSubsystemModuleImp(_outer)
   with HasRTCModuleImp
