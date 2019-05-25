@@ -18,6 +18,8 @@ import freechips.rocketchip.util._
 import freechips.rocketchip.rocket._
 
 import boom.common._
+import boom.exu.BrResolutionInfo
+import boom.util.{IsKilledByBranch, GetNewBrMask}
 
 class BoomDCacheReqInternal(implicit p: Parameters) extends BoomDCacheReq()(p)
   with HasL1HellaCacheParameters
@@ -86,6 +88,8 @@ class BoomIOMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomM
     val resp = Decoupled(new BoomDCacheResp)
     val mem_access = Decoupled(new TLBundleA(edge.bundle))
     val mem_ack    = Flipped(Valid(new TLBundleD(edge.bundle)))
+
+    // We don't need brinfo in here because uncacheable operations are guaranteed non-speculative
   })
   dontTouch(io)
 
@@ -389,8 +393,11 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   data.io.read.bits.addr   := io.lsu.req.bits.addr
   data.io.read.bits.way_en := ~0.U(nWays.W)
 
-  val s1_valid = RegNext(io.lsu.req.fire(), init=false.B)
-  val s1_req   = RegNext(io.lsu.req.bits)
+  val s1_valid = RegNext(io.lsu.req.fire() &&
+                         !IsKilledByBranch(io.lsu.brinfo, io.lsu.req.bits.uop), init=false.B)
+  val s1_req   = Reg(new BoomDCacheReq)
+  s1_req             := io.lsu.req.bits
+  s1_req.uop.br_mask := GetNewBrMask(io.lsu.brinfo, io.lsu.req.bits.uop)
   val s1_addr  = s1_req.addr
 
   // tag check
@@ -399,8 +406,10 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   val s1_tag_match_way = wayMap((w: Int) => s1_tag_eq_way(w) && meta.io.resp(w).coh.isValid()).asUInt
 
 
-  val s2_valid = RegNext(s1_valid)
-  val s2_req   = RegNext(s1_req)
+  val s2_valid = RegNext(s1_valid && !IsKilledByBranch(io.lsu.brinfo, s1_req.uop))
+  val s2_req   = Reg(new BoomDCacheReq)
+  s2_req  := s1_req
+  s2_req.uop.br_mask := GetNewBrMask(io.lsu.brinfo, s1_req.uop)
   val s2_tag_match_way = RegNext(s1_tag_match_way)
   val s2_tag_match = s2_tag_match_way.orR
   val s2_hit_state = Mux1H(s2_tag_match_way, wayMap((w: Int) => RegNext(meta.io.resp(w).coh)))
