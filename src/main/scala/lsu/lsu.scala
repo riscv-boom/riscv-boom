@@ -68,15 +68,15 @@ class LSUExeIO(implicit p: Parameters) extends BoomBundle()(p)
 }
 
 class BoomDCacheReq(implicit p: Parameters) extends BoomBundle()(p)
+  with HasBoomUOP
 {
-  val uop   = new MicroOp
   val addr  = UInt(coreMaxAddrBits.W)
   val data  = Bits(coreDataBits.W)
 }
 
 class BoomDCacheResp(implicit p: Parameters) extends BoomBundle()(p)
+  with HasBoomUOP
 {
-  val uop  = new MicroOp
   val data = Bits(coreDataBits.W)
   val nack = Bool()
 }
@@ -86,7 +86,9 @@ class LSUDMemIO(implicit p: Parameters) extends BoomBundle()(p)
   val req         = new DecoupledIO(new BoomDCacheReq)
   val resp        = Flipped(new ValidIO(new BoomDCacheResp))
 
-  val brinfo      = Output(new BrResolutionInfo)
+  val brinfo       = Output(new BrResolutionInfo)
+  val rob_pnr_idx  = Output(UInt(robAddrSz.W))
+  val rob_head_idx = Output(UInt(robAddrSz.W))
 
   val ordered     = Input(Bool())
 }
@@ -118,8 +120,10 @@ class LSUCoreIO(implicit p: Parameters) extends BoomBundle()(p)
   // Speculatively safe load (barring memory ordering failure)
   val clr_unsafe      = Output(Valid(UInt(robAddrSz.W)))
 
-  val brinfo      = Input(new BrResolutionInfo)
-  val exception   = Input(Bool())
+  val brinfo       = Input(new BrResolutionInfo)
+  val rob_pnr_idx  = Input(UInt(robAddrSz.W))
+  val rob_head_idx = Input(UInt(robAddrSz.W))
+  val exception    = Input(Bool())
 
   val fencei_rdy  = Output(Bool())
 }
@@ -514,6 +518,10 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
 
 
   // defaults
+  io.dmem.brinfo         := io.core.brinfo
+  io.dmem.rob_head_idx   := io.core.rob_head_idx
+  io.dmem.rob_pnr_idx    := io.core.rob_pnr_idx
+
   io.dmem.req.valid      := false.B
   io.dmem.req.bits.uop   := NullMicroOp
   io.dmem.req.bits.addr  := 0.U
@@ -530,7 +538,7 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
     // TODO Nacks
     stq(stq_execute_head).bits.executed := true.B
     stq_execute_head                    := WrapInc(stq_execute_head, NUM_STQ_ENTRIES)
-    mem_fired_st                        := true.B
+    mem_fired_st                        := io.dmem.req.fire()
   }
     .elsewhen (will_fire_load_incoming || will_fire_load_retry)
   {
@@ -539,7 +547,7 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
     io.dmem.req.bits.addr     := exe_tlb_paddr
     io.dmem.req.bits.uop      := exe_tlb_uop
 
-    ldq(exe_ldq_idx).bits.executed  := io.dmem.req.valid
+    ldq(exe_ldq_idx).bits.executed  := io.dmem.req.fire()
 
     assert(!(will_fire_load_incoming && ldq(exe_ldq_idx).bits.executed),
       "[lsu] We are firing an incoming load, but the LDQ marks it as executed?")
@@ -552,7 +560,7 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
     io.dmem.req.bits.addr  := ldq(exe_ldq_idx).bits.addr.bits
     io.dmem.req.bits.uop   := ldq(exe_ldq_idx).bits.uop
 
-    ldq(exe_ldq_idx).bits.executed := true.B
+    ldq(exe_ldq_idx).bits.executed := io.dmem.req.fire()
 
     assert(!(will_fire_load_wakeup && ldq(exe_ldq_idx).bits.executed),
       "[lsu] We are firing a load that the D$ rejected, but the LDQ marks it as executed?")

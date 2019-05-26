@@ -956,6 +956,8 @@ class BoomCore(implicit p: Parameters) extends BoomModule
 
   // // Handle Branch Mispeculations
   io.lsu.brinfo := br_unit.brinfo
+  io.lsu.rob_head_idx := rob.io.rob_head_idx
+  io.lsu.rob_pnr_idx  := rob.io.rob_pnr_idx
   // dc_shim.io.core.brinfo := br_unit.brinfo
 
   // lsu.io.debug_tsc := debug_tsc_reg
