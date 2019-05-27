@@ -538,6 +538,8 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
                                                WrapInc(stq_execute_head, NUM_STQ_ENTRIES),
                                                stq_execute_head)
     mem_fired_st                        := io.dmem.req.fire()
+
+    stq(stq_execute_head).bits.succeeded := false.B
   }
     .elsewhen (will_fire_load_incoming || will_fire_load_retry)
   {
@@ -754,7 +756,9 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
       }
         .otherwise
       {
-        stq_execute_head := io.dmem.resp.bits.uop.stq_idx
+        when (IsOlder(io.dmem.resp.bits.uop.stq_idx, stq_execute_head, stq_head)) {
+          stq_execute_head := io.dmem.resp.bits.uop.stq_idx
+        }
       }
     }
       .otherwise
