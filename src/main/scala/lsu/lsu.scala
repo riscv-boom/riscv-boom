@@ -162,9 +162,8 @@ class STQEntry(implicit p: Parameters) extends BoomBundle()(p)
   val addr_is_virtual     = Bool() // Virtual address, we got a TLB miss
   val data                = Valid(UInt(xLen.W))
 
-  val executed            = Bool() // sent to memory, reset by NACKs
   val committed           = Bool() // committed by ROB
-  val succeeded           = Bool()
+  val succeeded           = Bool() // D$ has ack'd this, we don't need to maintain this anymore
 }
 
 class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut) extends BoomModule()(p)
@@ -253,7 +252,6 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
       stq(st_enq_idx).bits.uop        := io.core.dec_uops(w).bits
       stq(st_enq_idx).bits.addr.valid := false.B
       stq(st_enq_idx).bits.data.valid := false.B
-      stq(st_enq_idx).bits.executed   := false.B
       stq(st_enq_idx).bits.committed  := false.B
 
       assert (st_enq_idx === io.core.dec_uops(w).bits.stq_idx, "[lsu] mismatch enq store tag.")
@@ -478,7 +476,6 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
 
   // *** STORES ***
   when ( stq(stq_execute_head).valid              &&
-        !stq(stq_execute_head).bits.executed      &&
         !stq(stq_execute_head).bits.uop.is_fence  &&
         !mem_xcpt_valid                           &&
         !stq(stq_execute_head).bits.uop.exception &&
@@ -536,8 +533,9 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
     io.dmem.req.bits.uop      := stq(stq_execute_head).bits.uop
 
     // TODO Nacks
-    stq(stq_execute_head).bits.executed := true.B
-    stq_execute_head                    := WrapInc(stq_execute_head, NUM_STQ_ENTRIES)
+    stq_execute_head                    := Mux(io.dmem.req.fire(),
+                                               WrapInc(stq_execute_head, NUM_STQ_ENTRIES),
+                                               stq_execute_head)
     mem_fired_st                        := io.dmem.req.fire()
   }
     .elsewhen (will_fire_load_incoming || will_fire_load_retry)
@@ -755,8 +753,7 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
       }
         .otherwise
       {
-        assert(stq(io.dmem.resp.bits.uop.stq_idx).bits.executed)
-        stq(io.dmem.resp.bits.uop.stq_idx).bits.executed :=  false.B
+        stq_execute_head := io.dmem.resp.bits.uop.stq_idx
       }
     }
       .otherwise
@@ -860,7 +857,6 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
     stq(stq_head).valid           := false.B
     stq(stq_head).bits.addr.valid := false.B
     stq(stq_head).bits.data.valid := false.B
-    stq(stq_head).bits.executed   := false.B
     stq(stq_head).bits.succeeded  := false.B
     stq(stq_head).bits.committed  := false.B
 
