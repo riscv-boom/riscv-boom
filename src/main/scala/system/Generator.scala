@@ -55,7 +55,7 @@ object Generator extends GeneratorApp
       "rv32mi-p-sbreak",
       "rv32ui-p-sll")
 
-  override def addTestSuites {
+  override def addTestSuites = {
     import freechips.rocketchip.system.DefaultTestSuites._
     val xlen = params(XLen)
     // TODO: for now only generate tests for the first core in the first subsystem

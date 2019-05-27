@@ -60,7 +60,7 @@ class ICache(
       Seq(TLManagerParameters(
         address         = Seq(AddressSet(itimAddr, size-1)),
         resources       = device.reg("mem"),
-        regionType      = RegionType.UNCACHEABLE,
+        regionType      = RegionType.UNCACHED,
         executable      = true,
         supportsPutFull = TransferSizes(1, wordBytes),
         supportsPutPartial = TransferSizes(1, wordBytes),
