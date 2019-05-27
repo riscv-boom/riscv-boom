@@ -129,7 +129,7 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
   val refill_ctr  = Reg(UInt(log2Ceil(cacheDataBeats).W))
   val commit_line = Reg(Bool())
 
-  io.probe_rdy   := !idx_match
+  io.probe_rdy   := (state === s_invalid) || !idx_match
   io.idx_match   := (state =/= s_invalid) && idx_match
   io.tag         := req_tag
   io.meta_write.valid  := false.B
