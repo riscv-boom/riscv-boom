@@ -124,6 +124,10 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
   io.mem_finish.bits     := grantackq.io.deq.bits
   grantackq.io.deq.ready := io.mem_finish.ready && can_finish
 
+  io.idx_match   := (state =/= s_invalid) && idx_match
+  io.tag         := req_tag
+  io.req_sec_rdy := sec_rdy && rpq.io.enq.ready
+
   val load_buffer = Mem(cacheDataBeats,
                         UInt(encRowBits.W))
   val refill_ctr  = Reg(UInt(log2Ceil(cacheDataBeats).W))
@@ -625,10 +629,15 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   wb_req.uop  := NullMicroOp
   wb_req.addr := Cat(wb.io.meta_read.bits.tag, wb.io.data_req.bits.addr)
   wb_req.data := DontCare
+  // Couple the two decoupled interfaces of the WBUnit's meta_read and data_read
   // Tag read for write-back
-  metaReadArb.io.in(2) <> wb.io.meta_read
+  metaReadArb.io.in(2).valid := wb.io.meta_read.valid
+  metaReadArb.io.in(2).bits  := wb.io.meta_read.bits
+  wb.io.meta_read.ready := metaReadArb.io.in(2).ready && dataReadArb.io.in(1).ready
   // Data read for write-back
-  dataReadArb.io.in(1) <> wb.io.data_req
+  dataReadArb.io.in(1).valid := wb.io.data_req.valid
+  dataReadArb.io.in(1).bits  := wb.io.data_req.bits
+  wb.io.data_req.ready  := metaReadArb.io.in(2).ready && dataReadArb.io.in(1).ready
   assert(!(wb.io.meta_read.fire() ^ wb.io.data_req.fire()))
 
 
