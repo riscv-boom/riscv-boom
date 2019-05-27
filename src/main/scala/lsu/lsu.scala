@@ -633,9 +633,9 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
   val mem_ld_addr         = RegNext(io.dmem.req.bits.addr) // This should be right?
   val mem_ld_uop          = RegNext(io.dmem.req.bits.uop)
   mem_ld_uop.br_mask     := GetNewBrMask(io.core.brinfo, io.dmem.req.bits.uop)
-  val mem_ld_killed       = WireInit(false.B) // was a load killed in executed
 
-  val mem_fired_ld        = RegNext(will_fire_load_incoming || will_fire_load_retry || will_fire_load_wakeup,
+  val mem_fired_ld        = RegNext((will_fire_load_incoming || will_fire_load_retry || will_fire_load_wakeup) &&
+                                    io.dmem.req.fire(),
                                     init=false.B)
   val mem_fired_sta       = RegNext(will_fire_sta_incoming || will_fire_sta_retry,
                                     init=false.B)
@@ -716,6 +716,12 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
   io.core.clr_bsy(1).bits  := stdf_clr_bsy_rob_idx
 
 
+  // Mark instructions as safe after successful address translation.
+  // Need to delay to same cycle as exception broadcast into ROB to avoid
+  // the PNR 'jumping the gun' over a misspeculated ordering.
+  io.core.clr_unsafe.valid   := RegNext(!mem_tlb_miss && (mem_ld_used_tlb || mem_fired_sta))
+  io.core.clr_unsafe.bits    := RegNext(mem_tlb_uop.rob_idx)
+
   //-------------------------------------------------------------
   // Load Issue Datapath (ALL loads need to use this path,
   //    to handle forwarding from the STORE QUEUE, etc.)
@@ -725,18 +731,98 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
   // NOTE: these are fully translated physical addresses, as
   // forwarding requires a full address check.
 
-  // Mark instructions as safe after successful address translation.
-  // Need to delay to same cycle as exception broadcast into ROB to avoid
-  // the PNR 'jumping the gun' over a misspeculated ordering.
-  io.core.clr_unsafe.valid   := RegNext(!mem_tlb_miss && (mem_ld_used_tlb || mem_fired_sta))
-  io.core.clr_unsafe.bits    := RegNext(mem_tlb_uop.rob_idx)
+  val read_mask   = GenByteMask(mem_ld_addr, mem_ld_uop.mem_size)
+  val st_dep_mask = ldq(mem_ld_uop.ldq_idx).bits.st_dep_mask
 
+  // do the double-word addr match? (doesn't necessarily mean conflict or forward)
+  val dword_addr_matches  = Wire(Vec(NUM_STQ_ENTRIES, Bool()))
+  // if there is some overlap on the bytes, might need to sleep the load
+  // (either data not ready, or not a perfect match between addr and type)
+  val ldst_addr_conflicts = Wire(Vec(NUM_STQ_ENTRIES, Bool()))
+  // a full address match
+  val forwarding_matches  = Wire(Vec(NUM_STQ_ENTRIES, Bool()))
+
+  val force_ld_to_sleep = WireInit(false.B)
+
+  // TODO refactor how conflict/forwarding logic is generated
+  for (i <- 0 until NUM_STQ_ENTRIES)
+  {
+    val s_addr = stq(i).bits.addr.bits
+    val s_uop  = stq(i).bits.uop
+
+    dword_addr_matches(i) := (stq(i).valid &&
+                              st_dep_mask(i) &&
+                              stq(i).bits.addr.valid &&
+                              !stq(i).bits.addr_is_virtual &&
+                              (s_addr(corePAddrBits-1,3) === mem_ld_addr(corePAddrBits-1,3)))
+
+
+    // check the lower-order bits for overlap/conflicts and matches
+    ldst_addr_conflicts(i) := false.B
+    val write_mask = GenByteMask(s_addr, s_uop.mem_size)
+
+    // if overlap on bytes and dword matches, the address conflicts!
+    when (((read_mask & write_mask) =/= 0.U) && dword_addr_matches(i))
+    {
+      ldst_addr_conflicts(i) := true.B
+    }
+    // fences/flushes are treated as stores that touch all addresses
+      .elsewhen (stq(i).valid &&
+                 st_dep_mask(i) &&
+                 s_uop.is_fence)
+    {
+      ldst_addr_conflicts(i) := true.B
+    }
+
+    // exact match on masks? we can forward the data, if data is also present!
+    // TODO PERF we can be fancier perhaps, like (r_mask & w_mask === r_mask)
+    forwarding_matches(i) := false.B
+    when ((read_mask === write_mask) &&
+          !(s_uop.is_fence) &&
+          dword_addr_matches(i))
+    {
+      forwarding_matches(i) := true.B
+    }
+
+    // did a load see a conflicting store (sb->lw) or a fence/AMO? if so, put the load to sleep
+    // TODO this shuts down all loads so long as there is a store live in the dependent mask
+    when ((stq(i).valid &&
+           st_dep_mask(i) &&
+           (s_uop.is_fence || s_uop.is_amo)) ||
+          (dword_addr_matches(i) &&
+           (mem_ld_uop.mem_size =/= s_uop.mem_size) &&
+               ((read_mask & write_mask) =/= 0.U)))
+    {
+      force_ld_to_sleep := true.B
+    }
+  }
+
+  val forwarding_age_logic = Module(new ForwardingAgeLogic(NUM_STQ_ENTRIES))
+  forwarding_age_logic.io.addr_matches    := forwarding_matches.asUInt
+  forwarding_age_logic.io.youngest_st_idx := ldq(mem_ld_uop.ldq_idx).bits.uop.stq_idx
+
+  when (mem_fired_ld && forwarding_age_logic.io.forwarding_val && !tlb_miss)
+  {
+    ldq(mem_ld_uop.ldq_idx).bits.forward_std_val := true.B
+    ldq(mem_ld_uop.ldq_idx).bits.forward_stq_idx := forwarding_age_logic.io.forwarding_idx
+  }
 
   //-------------------------------------------------------------
   //-------------------------------------------------------------
   // Writeback Cycle (St->Ld Forwarding Path)
   //-------------------------------------------------------------
   //-------------------------------------------------------------
+
+  // val wb_forward_std_val = RegInit(false.B)
+  // val wb_forward_std_idx = RegNext(forwarding_age_logic.io.forwarding_idx)
+  // val wb_uop             = RegNext(mem_ld_uop)
+  // wb_uop.br_mask        := GetNewBrMask(io.brinfo, mem_ld_uop)
+  // wb_forward_std_val    := !IsKilledByBranch(io.brinfo, mem_ld_uop) &&
+  //                          mem_fired_ld &&
+  //                          forwarding_age_logic.io.forwarding_val &&
+  //                          !force_ld_to_sleep &&
+  //                          !(mem_tlb_miss && mem_ld_used_tlb) &&
+  //                          !io.exception
 
   //----------------------------------
   // Handle Memory Responses and nacks
@@ -765,13 +851,18 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
     {
       when (io.dmem.resp.bits.uop.is_load)
       {
+        val req_was_forwarded = ldq(io.dmem.resp.bits.uop.ldq_idx).bits.forward_std_val
+        val forward_stq_idx = ldq(io.dmem.resp.bits.uop.ldq_idx).bits.forward_stq_idx
+        val forward_data    = LoadDataGenerator(stq(forward_stq_idx).bits.data.bits,
+          io.dmem.resp.bits.uop.mem_size, io.dmem.resp.bits.uop.mem_signed)
+
         io.core.exe.iresp.valid     := ldq(io.dmem.resp.bits.uop.ldq_idx).bits.uop.dst_rtype === RT_FIX
         io.core.exe.iresp.bits.uop  := ldq(io.dmem.resp.bits.uop.ldq_idx).bits.uop
-        io.core.exe.iresp.bits.data := io.dmem.resp.bits.data
+        io.core.exe.iresp.bits.data := Mux(req_was_forwarded, forward_data, io.dmem.resp.bits.data)
 
         io.core.exe.fresp.valid     := ldq(io.dmem.resp.bits.uop.ldq_idx).bits.uop.dst_rtype === RT_FLT
         io.core.exe.fresp.bits.uop  := ldq(io.dmem.resp.bits.uop.ldq_idx).bits.uop
-        io.core.exe.fresp.bits.data := io.dmem.resp.bits.data
+        io.core.exe.fresp.bits.data := Mux(req_was_forwarded, forward_data, io.dmem.resp.bits.data)
       }
         .otherwise
       {
