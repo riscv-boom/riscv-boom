@@ -336,7 +336,9 @@ trait HasBoomICacheFrontend extends CanHaveBoomPTW
   nPTWPorts += 1
   nPTWPorts += 1 // boom -- needs an extra PTW port for its LSU.
 
-  val iCacheLogicalTreeNode = new ICacheLogicalTreeNode(frontend.icache.device, tileParams.icache.get)
+
+  private val deviceOpt = if (tileParams.icache.get.itimAddr.isDefined) Some(frontend.icache.device) else None
+  val iCacheLogicalTreeNode = new ICacheLogicalTreeNode(deviceOpt, tileParams.icache.get)
 
 }
 

@@ -180,7 +180,7 @@ class BoomTile(
       mtvecWritable       = boomParams.core.mtvecWritable
     )
   )
-  val rocketLogicalTree: RocketLogicalTreeNode = new RocketLogicalTreeNode(cpuDevice, fakeRocketParams, dtim_adapter, p(XLen), iCacheLogicalTreeNode)
+  val rocketLogicalTree: RocketLogicalTreeNode = new RocketLogicalTreeNode(cpuDevice, fakeRocketParams, dtim_adapter, p(XLen))
 
 }
 
