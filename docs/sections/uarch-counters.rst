@@ -13,7 +13,7 @@ Setup HPM events to track
 The available HPE's are split into *event sets* and *events*.
 *Event sets* are groupings of similar microarchitectural *events* (branch prediction events,
 memory events, etc). To access an *HPE* you must choose the correct *event set* and
-*event* bit and write to the proper HPE register for that event. An example of event set
+*event* bit and write to the proper HPC register for that event. An example of event set
 numbers and the event bit for a particular event is given below.
 
 .. _uarch-counter-table:
@@ -31,9 +31,9 @@ numbers and the event bit for a particular event is given below.
 
 To access an HPC, you must first set up the privilege access level
 of the particular HPC using ``mcounteren`` and ``scounteren``. Afterwards,
-you write to the particular HPE register to setup which event(s) you want to
-track. The value to write to the HPE register is in bits [7:0] the event set
-and in bits [?:8] the event bitmask. Note that the bitmask can be a
+you write to the particular HPC register to setup which event(s) you want to
+track. Bits [7:0] of the HPC register correspond to the event set while bits [?:8]
+correspond to the event bitmask. Note that the bitmask can be a
 singular event **or** multiple events.
 
 .. _enable-uarch-counters:
@@ -91,7 +91,8 @@ External Resources
 ------------------
 
 Information in this section was adapted from https://static.dev.sifive.com/U54-MC-RVCoreIP.pdf
-which details more about HPE/C's from RocketChip's perspective.
+which details more about HPE/C's from RocketChip's perspective. Note: The HPE's supported by
+Rocket and BOOM differ, but the mechanism to access them is the same!
 
 .. [1]
    Future efforts may add some counters into a memory-mapped access
