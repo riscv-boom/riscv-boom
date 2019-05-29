@@ -21,7 +21,7 @@ import freechips.rocketchip.tilelink.TLIdentityNode
 trait HasBoomLSU { this: BaseTile =>
   val module: HasBoomLSUModule
   implicit val p: Parameters
-  var nExtCachePorts = 0
+  var nHellaCachePorts = 0
   lazy val dcache: BoomNonBlockingDCache = LazyModule(new BoomNonBlockingDCache(hartId))
 
   val dCacheTap = TLIdentityNode()
@@ -32,10 +32,12 @@ trait HasBoomLSUModule
 {
   val outer: HasBoomLSU with HasTileParameters
   implicit val p: Parameters
-  // val dcachePorts = ListBuffer[HellaCacheIO]()
-  // val dcacheArb = Module(new HellaCacheArbiter(outer.nDCachePorts)(outer.p))
+  val hellaCachePorts = ListBuffer[HellaCacheIO]()
+  val hellaCacheArb = Module(new HellaCacheArbiter(outer.nHellaCachePorts)(outer.p))
   // outer.dcache.module.io.cpu <> dcacheArb.io.mem
+  require(outer.nHellaCachePorts == 1, "Only support PTW for now")
   val lsu = Module(new LSU()(p, outer.dcache.module.edge))
+  lsu.io.hellacache <> hellaCacheArb.io.mem
   outer.dcache.module.io.lsu <> lsu.io.dmem
 }
 
@@ -80,7 +82,7 @@ trait HasBoomLSUModule
 trait CanHaveBoomPTW extends HasTileParameters with HasBoomLSU { this: BaseTile =>
   val module: CanHaveBoomPTWModule
   var nPTWPorts = 1
-  nExtCachePorts += (if (usingPTW) 1 else 0)
+  nHellaCachePorts += (if (usingPTW) 1 else 0)
 }
 
 /**
@@ -94,7 +96,7 @@ trait CanHaveBoomPTWModule extends HasBoomLSUModule
   ptw.io <> DontCare // Is overridden below if PTW is connected
   if (outer.usingPTW)
   {
-//    dcachePorts += ptw.io.mem
+    hellaCachePorts += ptw.io.mem
   }
 }
 

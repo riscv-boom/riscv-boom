@@ -72,12 +72,14 @@ class BoomDCacheReq(implicit p: Parameters) extends BoomBundle()(p)
 {
   val addr  = UInt(coreMaxAddrBits.W)
   val data  = Bits(coreDataBits.W)
+  val is_hella = Bool() // Is this the hellacache req? If so this is not tracked in LDQ or STQ
 }
 
 class BoomDCacheResp(implicit p: Parameters) extends BoomBundle()(p)
   with HasBoomUOP
 {
   val data = Bits(coreDataBits.W)
+  val is_hella = Bool()
   val nack = Bool()
 }
 
@@ -130,9 +132,11 @@ class LSUCoreIO(implicit p: Parameters) extends BoomBundle()(p)
 
 class LSUIO(implicit p: Parameters) extends BoomBundle()(p)
 {
-  val ptw  = new rocket.TLBPTWIO
-  val core = new LSUCoreIO
-  val dmem = new LSUDMemIO
+  val ptw   = new rocket.TLBPTWIO
+  val core  = new LSUCoreIO
+  val dmem  = new LSUDMemIO
+
+  val hellacache = Flipped(new freechips.rocketchip.rocket.HellaCacheIO)
 }
 
 class LDQEntry(implicit p: Parameters) extends BoomBundle()(p)
@@ -174,12 +178,32 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
   val ldq = Reg(Vec(NUM_LDQ_ENTRIES, Valid(new LDQEntry)))
   val stq = Reg(Vec(NUM_STQ_ENTRIES, Valid(new STQEntry)))
 
+
+
   val ldq_head         = Reg(UInt(LDQ_ADDR_SZ.W))
   val ldq_tail         = Reg(UInt(LDQ_ADDR_SZ.W))
   val stq_head         = Reg(UInt(STQ_ADDR_SZ.W)) // point to next store to clear from STQ (i.e., send to memory)
   val stq_tail         = Reg(UInt(STQ_ADDR_SZ.W))
   val stq_commit_head  = Reg(UInt(STQ_ADDR_SZ.W)) // point to next store to commit
   val stq_execute_head = Reg(UInt(STQ_ADDR_SZ.W)) // point to next store to execute
+
+  val h_ready :: h_s1 :: h_s2 :: h_s2_nack :: h_wait :: h_replay :: h_dead :: Nil = Enum(7)
+  // s1 : do TLB, if success and not killed, fire request go to h_s2
+  //      store s1_data to register
+  //      if tlb miss, go to s2_nack
+  //      if don't get TLB, go to s2_nack
+  //      store tlb xcpt
+  // s2 : If kill, go to dead
+  //      If tlb xcpt, send tlb xcpt, go to dead
+  // s2_nack : send nack, go to dead
+  // wait : wait for response, if nack, go to replay
+  // replay : refire request, use already translated address
+  // dead : wait for response, ignore it
+  val hella_state           = RegInit(h_ready)
+  val hella_req             = Reg(new rocket.HellaCacheReq)
+  val hella_data            = Reg(new rocket.HellaCacheWriteData)
+  val hella_paddr           = Reg(UInt(paddrBits.W))
+  val hella_xcpt            = Reg(new rocket.HellaCacheExceptions)
 
   dontTouch(io)
   dontTouch(ldq)
@@ -269,6 +293,8 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
 
   io.core.fencei_rdy := !stq_nonempty && io.dmem.ordered
 
+
+
   //-------------------------------------------------------------
   //-------------------------------------------------------------
   // Execute stage (access TLB, send requests to Memory)
@@ -293,11 +319,15 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
   val will_fire_store_commit  = WireInit(false.B) // uses      D$
   val will_fire_load_wakeup   = WireInit(false.B) // uses      D$, SAQ-search, LAQ-search
   val will_fire_sfence        = WireInit(false.B) // uses TLB                            , ROB
+  val will_fire_hella_incoming= WireInit(false.B) // uses TLB, D$
+  val will_fire_hella_wakeup  = WireInit(false.B) // uses      D$
 
   val can_fire_sta_retry      = WireInit(false.B)
   val can_fire_load_retry     = WireInit(false.B)
   val can_fire_store_commit   = WireInit(false.B)
   val can_fire_load_wakeup    = WireInit(false.B)
+  val can_fire_hella_incoming = WireInit(false.B)
+  val can_fire_hella_wakeup   = WireInit(false.B)
 
   val dc_avail  = WireInit(true.B)
   val tlb_avail = WireInit(true.B)
@@ -331,7 +361,10 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
   }
 
   when (tlb_avail) {
-    when (can_fire_sta_retry && rob_avail) {
+    when (can_fire_hella_incoming) {
+      will_fire_hella_incoming := true.B
+      dc_avail := false.B
+    } .elsewhen (can_fire_sta_retry && rob_avail) {
       will_fire_sta_retry := true.B
       lcam_avail := false.B
     } .elsewhen (can_fire_load_retry) {
@@ -344,8 +377,11 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
   when (dc_avail) {
     // TODO allow dyanmic priority here
     will_fire_store_commit := can_fire_store_commit
-    will_fire_load_wakeup  := !can_fire_store_commit && can_fire_load_wakeup && lcam_avail
+    will_fire_load_wakeup  := !will_fire_store_commit && can_fire_load_wakeup && lcam_avail
+    will_fire_hella_wakeup := !will_fire_store_commit && !will_fire_load_wakeup && can_fire_hella_wakeup // TODO: Should this be higher priority?
   }
+
+
 
   //--------------------------------------------
   // TLB Access
@@ -353,16 +389,41 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
   val stq_retry_idx = WireInit(0.U(STQ_ADDR_SZ.W))
   val ldq_retry_idx = WireInit(0.U(LDQ_ADDR_SZ.W))
 
+  val hella_sfence = Wire(Valid(new rocket.SFenceReq))
+  hella_sfence.valid     := hella_req.cmd === rocket.M_SFENCE
+  hella_sfence.bits.rs1  := hella_req.size(0)
+  hella_sfence.bits.rs2  := hella_req.size(1)
+  hella_sfence.bits.addr := hella_req.addr
+  hella_sfence.bits.asid := io.hellacache.s1_data.data
+
+
   // micro-op going through the TLB generate paddr's. If this is a load, it will continue
   // to the D$ and search the SAQ. uopSTD also uses this uop.
-  val exe_tlb_uop = Mux(will_fire_sta_retry,  stq(stq_retry_idx).bits.uop,
-                    Mux(will_fire_load_retry, ldq(ldq_retry_idx).bits.uop,
-                                              exe_req.bits.uop))
+  val exe_tlb_uop = Mux(will_fire_sta_retry,      stq(stq_retry_idx).bits.uop,
+                    Mux(will_fire_load_retry,     ldq(ldq_retry_idx).bits.uop,
+                    Mux(will_fire_hella_incoming, NullMicroOp,
+                                                  exe_req.bits.uop)))
 
-  val exe_vaddr   = Mux(will_fire_sta_retry,  stq(stq_retry_idx).bits.addr.bits,
-                    Mux(will_fire_load_retry, ldq(ldq_retry_idx).bits.addr.bits,
-                    Mux(will_fire_sfence,     exe_req.bits.sfence.bits.addr,
-                                              exe_req.bits.addr)))
+  val exe_vaddr   = Mux(will_fire_sta_retry,      stq(stq_retry_idx).bits.addr.bits,
+                    Mux(will_fire_load_retry,     ldq(ldq_retry_idx).bits.addr.bits,
+                    Mux(will_fire_sfence,         exe_req.bits.sfence.bits.addr,
+                    Mux(will_fire_hella_incoming, hella_req.addr,
+                                                  exe_req.bits.addr))))
+
+  val exe_sfence  = Mux(will_fire_hella_incoming, hella_sfence,
+                                                  exe_req.bits.sfence)
+
+  val exe_size    = Mux(will_fire_hella_incoming, hella_req.size,
+                                                  exe_tlb_uop.mem_size)
+
+  val exe_cmd     = Mux(will_fire_hella_incoming, hella_req.cmd,
+                                                  exe_tlb_uop.mem_cmd)
+
+  val exe_passthr = Mux(will_fire_hella_incoming, hella_req.phys,
+                                                  false.B) // let status.vm decide
+
+  val exe_kill    = Mux(will_fire_hella_incoming, io.hellacache.s1_kill,
+                                                  false.B)
 
   assert(!(will_fire_sta_retry && !stq(stq_retry_idx).bits.addr.valid),
     "Can't fire sta retry with no address in the stq!")
@@ -382,13 +443,14 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
                        will_fire_sta_incoming ||
                        will_fire_sta_retry ||
                        will_fire_load_retry ||
-                       will_fire_sfence
-  dtlb.io.req.bits.vaddr := exe_vaddr
-  dtlb.io.req.bits.size  := exe_tlb_uop.mem_size
-  dtlb.io.req.bits.cmd   := exe_tlb_uop.mem_cmd
-  dtlb.io.req.bits.passthrough := false.B // let status.vm decide
-  dtlb.io.sfence         := exe_req.bits.sfence
-  dtlb.io.kill           := false.B
+                       will_fire_sfence ||
+                       will_fire_hella_incoming
+  dtlb.io.req.bits.vaddr       := exe_vaddr
+  dtlb.io.req.bits.size        := exe_size
+  dtlb.io.req.bits.cmd         := exe_cmd
+  dtlb.io.req.bits.passthrough := exe_passthr
+  dtlb.io.kill                 := exe_kill
+  dtlb.io.sfence               := exe_sfence
 
   // exceptions
   val ma_ld = will_fire_load_incoming && exe_req.bits.mxcpt.valid // We get ma_ld in memaddrcalc
@@ -397,6 +459,7 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
   val pf_st = dtlb.io.req.valid && dtlb.io.resp.pf.st && exe_tlb_uop.is_store
   val ae_ld = dtlb.io.req.valid && dtlb.io.resp.ae.ld && (exe_tlb_uop.is_load || exe_tlb_uop.is_amo)
   val ae_st = dtlb.io.req.valid && dtlb.io.resp.ae.st && exe_tlb_uop.is_store
+
   // TODO check for xcpt_if and verify that never happens on non-speculative instructions.
   val mem_xcpt_valid = RegNext((pf_ld || pf_st || ae_ld || ae_st || ma_ld || ma_st) &&
                                 !io.core.exception &&
@@ -520,10 +583,11 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
   io.dmem.rob_head_idx   := io.core.rob_head_idx
   io.dmem.rob_pnr_idx    := io.core.rob_pnr_idx
 
-  io.dmem.req.valid      := false.B
-  io.dmem.req.bits.uop   := NullMicroOp
-  io.dmem.req.bits.addr  := 0.U
-  io.dmem.req.bits.data  := 0.U
+  io.dmem.req.valid         := false.B
+  io.dmem.req.bits.uop      := NullMicroOp
+  io.dmem.req.bits.addr     := 0.U
+  io.dmem.req.bits.data     := 0.U
+  io.dmem.req.bits.is_hella := false.B
 
   val mem_fired_st  = RegInit(false.B)
   mem_fired_st := false.B
@@ -568,6 +632,30 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
     assert(!(will_fire_load_wakeup && ldq(exe_ldq_idx).bits.addr_is_virtual),
       "[lsu] We are firing a load that the D$ rejected, but the address is still virtual?")
 
+  }
+    .elsewhen (will_fire_hella_incoming)
+  {
+    assert(hella_state === h_s1)
+    io.dmem.req.valid               := !io.hellacache.s1_kill && !tlb_miss
+    io.dmem.req.bits.addr           := exe_tlb_paddr
+    io.dmem.req.bits.data           := io.hellacache.s1_data.data
+    io.dmem.req.bits.uop.mem_cmd    := hella_req.cmd
+    io.dmem.req.bits.uop.mem_size   := hella_req.size
+    io.dmem.req.bits.uop.mem_signed := hella_req.signed
+    io.dmem.req.bits.is_hella       := true.B
+
+    hella_paddr := exe_tlb_paddr
+  }
+    .elsewhen (will_fire_hella_wakeup)
+  {
+    assert(hella_state === h_replay)
+    io.dmem.req.valid               := true.B
+    io.dmem.req.bits.addr           := hella_paddr
+    io.dmem.req.bits.data           := hella_data.data
+    io.dmem.req.bits.uop.mem_cmd    := hella_req.cmd
+    io.dmem.req.bits.uop.mem_size   := hella_req.size
+    io.dmem.req.bits.uop.mem_signed := hella_req.signed
+    io.dmem.req.bits.is_hella       := true.B
   }
 
   assert (PopCount(VecInit(will_fire_store_commit, will_fire_load_incoming,
@@ -645,8 +733,8 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
                                     init=false.B)
   val mem_fired_sfence    = RegNext(will_fire_sfence,
                                     init=false.B)
-
-
+  val mem_fired_hella     = RegNext(will_fire_hella_incoming || will_fire_hella_wakeup,
+                                    init=false.B)
 
   // TODO: handle mem load killed, ldspecwakeup
 
@@ -835,7 +923,11 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
     when (io.dmem.resp.bits.nack)
     {
       // We have to re-execute this!
-      when (io.dmem.resp.bits.uop.is_load)
+      when (io.dmem.resp.bits.is_hella)
+      {
+        assert(hella_state === h_wait)
+      }
+        .elsewhen (io.dmem.resp.bits.uop.is_load)
       {
         assert(ldq(io.dmem.resp.bits.uop.ldq_idx).bits.executed)
         ldq(io.dmem.resp.bits.uop.ldq_idx).bits.executed  := false.B
@@ -982,6 +1074,70 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
     temp_ldq_head = Mux(io.core.commit_load_mask(w), WrapInc(temp_ldq_head, NUM_LDQ_ENTRIES), temp_ldq_head)
   }
   ldq_head := temp_ldq_head
+
+  // -----------------------
+  // Hellacache interface
+  // We need to time things like a HellaCache would
+  io.hellacache.req.ready := false.B
+  io.hellacache.s2_nack   := false.B
+  io.hellacache.s2_xcpt   := (0.U).asTypeOf(new rocket.HellaCacheExceptions)
+  io.hellacache.resp.valid := false.B
+  when (hella_state === h_ready) {
+    io.hellacache.req.ready := true.B
+    when (io.hellacache.req.fire()) {
+      hella_req   := io.hellacache.req.bits
+      hella_state := h_s1
+    }
+  } .elsewhen (hella_state === h_s1) {
+    can_fire_hella_incoming := true.B
+
+    hella_data := io.hellacache.s1_data
+    hella_xcpt := dtlb.io.resp
+
+    when (io.hellacache.s1_kill) {
+      hella_state := h_dead
+    } .elsewhen (will_fire_hella_incoming && io.dmem.req.fire()) {
+      hella_state := h_s2
+    } .otherwise {
+      hella_state := h_s2_nack
+    }
+  } .elsewhen (hella_state === h_s2_nack) {
+    io.hellacache.s2_nack := true.B
+    hella_state := h_ready
+  } .elsewhen (hella_state === h_s2) {
+    io.hellacache.s2_xcpt := hella_xcpt
+    when (io.hellacache.s2_kill || hella_xcpt.asUInt =/= 0.U) {
+      hella_state := h_dead
+    } .otherwise {
+      hella_state := h_wait
+    }
+  } .elsewhen (hella_state === h_wait) {
+    when (io.dmem.resp.valid && io.dmem.resp.bits.is_hella) {
+      when (io.dmem.resp.bits.nack) {
+        hella_state := h_replay
+      } .otherwise {
+        hella_state := h_ready
+
+        io.hellacache.resp.valid       := true.B
+        io.hellacache.resp.bits.addr   := hella_req.addr
+        io.hellacache.resp.bits.tag    := hella_req.tag
+        io.hellacache.resp.bits.cmd    := hella_req.cmd
+        io.hellacache.resp.bits.signed := hella_req.signed
+        io.hellacache.resp.bits.size   := hella_req.size
+        io.hellacache.resp.bits.data   := io.dmem.resp.bits.data
+      }
+    }
+  } .elsewhen (hella_state === h_replay) {
+    can_fire_hella_wakeup := true.B
+
+    when (will_fire_hella_wakeup && io.dmem.req.fire()) {
+      hella_state := h_wait
+    }
+  } .elsewhen (hella_state === h_dead) {
+    when (io.dmem.resp.valid && io.dmem.resp.bits.is_hella) {
+      hella_state := h_ready
+    }
+  }
 
   //-------------------------------------------------------------
   // Exception / Reset

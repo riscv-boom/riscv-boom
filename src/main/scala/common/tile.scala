@@ -232,7 +232,6 @@ class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer)
 
   // Connect the core pipeline to other intra-tile modules
   outer.frontend.module.io.cpu <> core.io.ifu
-  //  dcachePorts += core.io.dmem // TODO outer.dcachePorts += () => module.core.io.dmem ??
   core.io.lsu <> lsu.io.core
 
   //fpuOpt foreach { fpu => core.io.fpu <> fpu.io } RocketFpu - not needed in boom
@@ -252,16 +251,12 @@ class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer)
   }
 
 
-//  outer.dtim_adapter.foreach { lm => dcachePorts += lm.module.io.dmem }
-
   // TODO eliminate this redundancy
-  // val h = dcachePorts.size
-  // val c = core.dcacheArbPorts
-  // val o = outer.nDCachePorts
-  // require(h == c, s"port list size was $h, core expected $c")
-  // require(h == o, s"port list size was $h, outer counted $o")
-  // // TODO figure out how to move the below into their respective mix-ins
-  // dcacheArb.io.requestor <> dcachePorts
+  val h = hellaCachePorts.size
+  val o = outer.nHellaCachePorts
+  require(h == o, s"port list size was $h, outer counted $o")
+  // TODO figure out how to move the below into their respective mix-ins
+  hellaCacheArb.io.requestor <> hellaCachePorts
   ptwPorts += core.io.ptw_tlb
   ptw.io.requestor <> ptwPorts
 
