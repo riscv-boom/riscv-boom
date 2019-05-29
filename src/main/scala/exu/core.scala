@@ -518,8 +518,8 @@ class BoomCore(implicit p: Parameters) extends BoomModule
     // TODO tailor this to only care if a given instruction uses a resource?
     val stall_me = (dec_valids(w) &&
                      (  !(rename_stage.io.inst_can_proceed(w))
-                     || (dec_uops(w).is_unique && (!rob.io.empty || prev_insts_in_bundle_valid))
-//                        (!(rob.io.empty) || !lsu.io.lsu_fencei_rdy || prev_insts_in_bundle_valid))
+                     || (dec_uops(w).is_unique &&
+                        (!(rob.io.empty) || !io.lsu.fencei_rdy || prev_insts_in_bundle_valid))
                      || !rob.io.ready
                      || io.lsu.ldq_full(w) && dec_uops(w).is_load
                      || io.lsu.stq_full(w) && dec_uops(w).is_store

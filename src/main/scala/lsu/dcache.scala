@@ -111,7 +111,7 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
   rpq.io.brinfo := io.brinfo
   rpq.io.flush  := false.B // we should never need to flush this?
 
-  rpq.io.enq.valid := false.B
+  rpq.io.enq.valid := ((io.req_pri_val && io.req_pri_rdy) || (io.req_sec_val && io.req_sec_rdy)) && !isPrefetch(io.req.uop.mem_cmd)
   rpq.io.enq.bits  := io.req
   rpq.io.deq.ready := false.B
 
@@ -145,7 +145,6 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
     io.req_pri_rdy := true.B
 
     when (io.req_pri_val && io.req_pri_rdy) {
-      rpq.io.enq.valid := !isPrefetch(io.req.uop.mem_cmd)
       assert(rpq.io.enq.ready)
 
       req := io.req
@@ -189,10 +188,10 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
     }
   } .elsewhen (state === s_drain_rpq_loads) {
     // TODO: This should not be a PNR check
-    val drain_load = (isRead(rpq.io.deq.bits.uop.mem_cmd) &&
-                      (rpq.io.deq.bits.is_hella ||
-                        IsOlder(rpq.io.deq.bits.uop.rob_idx, io.rob_pnr_idx, io.rob_head_idx)))
-
+    // val drain_load = (isRead(rpq.io.deq.bits.uop.mem_cmd) &&
+    //                   (rpq.io.deq.bits.is_hella ||
+    //                     IsOlder(rpq.io.deq.bits.uop.rob_idx, io.rob_pnr_idx, io.rob_head_idx)))
+    val drain_load = isRead(rpq.io.deq.bits.uop.mem_cmd) // drain all loads for now
     val rp_addr = Cat(req_tag, req_idx, rpq.io.deq.bits.addr(blockOffBits-1,0))
     val loadgen = new LoadGen(rpq.io.deq.bits.uop.mem_size, rpq.io.deq.bits.uop.mem_signed,
       Cat(req_tag, req_idx, rpq.io.deq.bits.addr(blockOffBits-1,0)),
@@ -426,7 +425,7 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
     alloc_arb.io.in(i).bits  := DontCare // Hack to get an Arbiter with no data
 
     mshr.io.req_pri_val := alloc_arb.io.in(i).ready
-    mshr.io.req_sec_val := io.req.valid && sdq_rdy && tag_match
+    mshr.io.req_sec_val := io.req.valid && sdq_rdy && tag_match && cacheable
     mshr.io.req         := io.req.bits
     mshr.io.req_sdq_id  := sdq_alloc_id
 
@@ -571,6 +570,8 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   val mshrs = Module(new BoomMSHRFile)
   mshrs.io := DontCare
   mshrs.io.brinfo := io.lsu.brinfo
+  mshrs.io.rob_pnr_idx  := io.lsu.rob_pnr_idx
+  mshrs.io.rob_head_idx := io.lsu.rob_head_idx
 
   // tags
   def onReset = L1Metadata(0.U, ClientMetadata.onReset)

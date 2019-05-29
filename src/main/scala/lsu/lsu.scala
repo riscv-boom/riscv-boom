@@ -636,7 +636,7 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
     .elsewhen (will_fire_hella_incoming)
   {
     assert(hella_state === h_s1)
-    io.dmem.req.valid               := !io.hellacache.s1_kill && !tlb_miss
+    io.dmem.req.valid               := !io.hellacache.s1_kill && (!tlb_miss || hella_req.phys)
     io.dmem.req.bits.addr           := exe_tlb_paddr
     io.dmem.req.bits.data           := io.hellacache.s1_data.data
     io.dmem.req.bits.uop.mem_cmd    := hella_req.cmd
@@ -1095,7 +1095,11 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
     hella_xcpt := dtlb.io.resp
 
     when (io.hellacache.s1_kill) {
-      hella_state := h_dead
+      when (will_fire_hella_incoming && io.dmem.req.fire()) {
+        hella_state := h_dead
+      } .otherwise {
+        hella_state := h_ready
+      }
     } .elsewhen (will_fire_hella_incoming && io.dmem.req.fire()) {
       hella_state := h_s2
     } .otherwise {
