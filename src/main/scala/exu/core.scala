@@ -421,8 +421,8 @@ class BoomCore(implicit p: Parameters) extends BoomModule
 
   // SFence needs access to the PC to inject an address into the TLB's CAM port. The ROB
   // will have to later redirect the PC back to the regularly scheduled program.
-//  io.ifu.sfence_take_pc    := lsu.io.exe_resp.bits.sfence.valid
-//  io.ifu.sfence_addr       := lsu.io.exe_resp.bits.sfence.bits.addr
+  io.ifu.sfence_take_pc    := io.lsu.exe.req.bits.sfence.valid
+  io.ifu.sfence_addr       := io.lsu.exe.req.bits.sfence.bits.addr
 
   // We must redirect the PC the cycle after playing the SFENCE game.
   io.ifu.flush_take_pc     := rob.io.flush.valid //|| RegNext(lsu.io.exe_resp.bits.sfence.valid)
@@ -458,7 +458,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
     (br_unit.brinfo.mispredict && br_unit.brinfo.is_jr &&  csr.io.status.debug)
 
   // Delay sfence to match pushing the sfence.addr into the TLB's CAM port.
-  //io.ifu.sfence := RegNext(lsu.io.exe_resp.bits.sfence)
+  io.ifu.sfence := RegNext(io.lsu.exe.req.bits.sfence)
 
   //-------------------------------------------------------------
   //-------------------------------------------------------------
