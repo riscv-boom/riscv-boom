@@ -50,6 +50,7 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
     val req         = Input(new BoomDCacheReqInternal)
 
     val idx_match   = Output(Bool())
+    val way_match   = Output(Bool())
     val tag         = Output(UInt(tagBits.W))
 
     val mem_acquire = Decoupled(new TLBundleA(edge.bundle))
@@ -91,6 +92,7 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
   val req_block_addr = (req.addr >> blockOffBits) << blockOffBits
   val req_needs_wb = RegInit(false.B)
   val idx_match = req_idx === io.req.addr(untagBits-1, blockOffBits)
+  val way_match = req.way_en === io.req.way_en
 
   val new_coh = RegInit(ClientMetadata.onReset)
   val (_, shrink_param, coh_on_clear) = req.old_meta.coh.onCacheControl(M_FLUSH)
@@ -131,6 +133,7 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
 
   io.probe_rdy   := (state === s_invalid) || !idx_match
   io.idx_match   := (state =/= s_invalid) && idx_match
+  io.way_match   := (state =/= s_invalid) && way_match
   io.tag         := req_tag
   io.meta_write.valid  := false.B
   io.req_pri_rdy       := false.B
@@ -362,6 +365,7 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
   val io = IO(new Bundle {
     val req  = Flipped(Decoupled(new BoomDCacheReqInternal))
     val resp = Decoupled(new BoomDCacheResp)
+    val secondary_miss = Output(Bool())
 
     val brinfo       = Input(new BrResolutionInfo)
     val rob_pnr_idx  = Input(UInt(robAddrSz.W))
@@ -407,6 +411,7 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
   val refill_arb     = Module(new Arbiter(new L1DataWriteReq           , cfg.nMSHRs))
 
   var idx_match = false.B
+  var way_match = false.B
   var pri_rdy   = false.B
   var sec_rdy   = false.B
 
@@ -445,6 +450,7 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
     pri_rdy   = pri_rdy || mshr.io.req_pri_rdy
     sec_rdy   = sec_rdy || mshr.io.req_sec_rdy
     idx_match = idx_match || mshr.io.idx_match
+    way_match = way_match || mshr.io.way_match
 
     resp_arb.io.in(i) <> mshr.io.resp
 
@@ -494,9 +500,10 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
   TLArbiter.lowestFromSeq(edge, io.mem_acquire, mshrs.map(_.io.mem_acquire) ++ mmios.map(_.io.mem_access))
   TLArbiter.lowestFromSeq(edge, io.mem_finish,  mshrs.map(_.io.mem_finish))
 
-  io.resp <> resp_arb.io.out
-  io.req.ready := Mux(!cacheable, mmio_rdy, sdq_rdy && Mux(idx_match, tag_match && sec_rdy, pri_rdy))
-  io.refill <> refill_arb.io.out
+  io.resp           <> resp_arb.io.out
+  io.req.ready      := Mux(!cacheable, mmio_rdy, sdq_rdy && Mux(idx_match, tag_match && sec_rdy, pri_rdy))
+  io.secondary_miss := idx_match && way_match
+  io.refill         <> refill_arb.io.out
 
   val free_sdq = io.replay.fire() && isWrite(io.replay.bits.uop.mem_cmd)
   io.replay.bits.data := sdq(RegEnable(replay_arb.io.out.bits.sdq_id, free_sdq))
@@ -735,6 +742,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
 
   // Miss handling
   mshrs.io.req.valid          := s2_valid && !s2_hit && (isPrefetch(s2_req.uop.mem_cmd) || isRead(s2_req.uop.mem_cmd) || isWrite(s2_req.uop.mem_cmd)) && !s2_is_probe
+  assert(!(mshrs.io.req.valid && s2_is_replay), "Replays should not need to go back into MSHRs")
   mshrs.io.req.bits.uop       := s2_req.uop
   mshrs.io.req.bits.addr      := s2_req.addr
   mshrs.io.req.bits.tag_match := s2_tag_match
@@ -774,9 +782,10 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   wb.io.data_resp      := s2_data_muxed
   TLArbiter.lowest(edge, tl_out.c, wb.io.release, prober.io.rep)
 
-  val s2_nack_hit  = RegNext(s1_nack) // nack because of prober
-  val s2_nack_miss = s2_valid && !s2_hit && !mshrs.io.req.ready // MSHRs not ready for request
-  val s2_nack      = s2_nack_miss || s2_nack_hit
+  val s2_nack_hit    = RegNext(s1_nack) // nack because of prober
+  val s2_nack_victim = s2_valid &&  s2_hit && mshrs.io.secondary_miss // Nack when we hit something currently being evicted
+  val s2_nack_miss   = s2_valid && !s2_hit && !mshrs.io.req.ready // MSHRs not ready for request
+  val s2_nack        = s2_nack_miss || s2_nack_hit || s2_nack_victim
   val s2_send_resp = (RegNext(s1_send_resp) &&
                       (s2_hit ||
                        s2_nack ||
