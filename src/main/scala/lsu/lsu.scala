@@ -945,6 +945,8 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
     {
       when (io.dmem.resp.bits.uop.is_load)
       {
+        // TODO: keep ctrl signals through cache datapath, or store them in the queues
+
         val req_was_forwarded = ldq(io.dmem.resp.bits.uop.ldq_idx).bits.forward_std_val
         val forward_stq_idx = ldq(io.dmem.resp.bits.uop.ldq_idx).bits.forward_stq_idx
         val forward_data    = LoadDataGenerator(stq(forward_stq_idx).bits.data.bits,
@@ -961,6 +963,11 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
         .otherwise
       {
         stq(io.dmem.resp.bits.uop.stq_idx).bits.succeeded := true.B
+        when (io.dmem.resp.bits.uop.is_amo) {
+          io.core.exe.iresp.valid     := stq(io.dmem.resp.bits.uop.stq_idx).bits.uop.dst_rtype === RT_FIX
+          io.core.exe.iresp.bits.uop  := stq(io.dmem.resp.bits.uop.stq_idx).bits.uop
+          io.core.exe.iresp.bits.data := io.dmem.resp.bits.data
+        }
       }
     }
   }

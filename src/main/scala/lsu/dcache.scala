@@ -815,8 +815,14 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   io.lsu.resp := Mux(mshrs.io.resp.fire(), uncache_resp, cache_resp)
 
   // Store/amo hits
+  val amoalu   = Module(new AMOALU(xLen))
+  amoalu.io.mask := new StoreGen(s2_req.uop.mem_size, s2_req.addr, 0.U, xLen/8).mask
+  amoalu.io.cmd  := s2_req.uop.mem_cmd
+  amoalu.io.lhs  := s2_data_word
+  amoalu.io.rhs  := s2_req.data
   val s3_valid = RegNext(s2_valid && s2_hit && isWrite(s2_req.uop.mem_cmd))
   val s3_req   = RegNext(s2_req)
+  s3_req.data := amoalu.io.out
   val s3_way   = RegNext(s2_tag_match_way)
 
   dataWriteArb.io.in(0).valid       := s3_valid
