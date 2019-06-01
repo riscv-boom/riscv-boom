@@ -342,7 +342,7 @@ trait RISCVConstants
    // memory consistency model
    // The C/C++ atomics MCM requires that two loads to the same address maintain program order.
    // The Cortex A9 does NOT enforce load/load ordering (which leads to buggy behavior).
-   val MCM_ORDER_DEPENDENT_LOADS = false
+   val MCM_ORDER_DEPENDENT_LOADS = true
 
    val jal_opc = (0x6f).U
    val jalr_opc = (0x67).U
