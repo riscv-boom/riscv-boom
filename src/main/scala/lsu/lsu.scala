@@ -958,22 +958,29 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
     {
       when (io.dmem.resp.bits.uop.is_load)
       {
+        val ldq_idx = io.dmem.resp.bits.uop.ldq_idx
         // TODO: keep ctrl signals through cache datapath, or store them in the queues
         // TODO: Get forwarded data out faster, don't wait for response from dcache for the load
-        val req_was_forwarded = ldq(io.dmem.resp.bits.uop.ldq_idx).bits.forward_std_val
-        val forward_stq_idx   = ldq(io.dmem.resp.bits.uop.ldq_idx).bits.forward_stq_idx
+        val forward_stq_idx   = ldq(ldq_idx).bits.forward_stq_idx
+        val req_was_forwarded = ldq(ldq_idx).bits.forward_std_val
+        val stq_val           = stq(forward_stq_idx).valid
+
         val forward_data      = LoadDataGenerator(
           stq(forward_stq_idx).bits.data.bits,
           io.dmem.resp.bits.uop.mem_size,
           io.dmem.resp.bits.uop.mem_signed)
         val forward_ready     = stq(forward_stq_idx).bits.data.valid
 
-        val send_iresp = ldq(io.dmem.resp.bits.uop.ldq_idx).bits.uop.dst_rtype === RT_FIX
-        val send_fresp = ldq(io.dmem.resp.bits.uop.ldq_idx).bits.uop.dst_rtype === RT_FLT
+        val send_iresp = ldq(ldq_idx).bits.uop.dst_rtype === RT_FIX
+        val send_fresp = ldq(ldq_idx).bits.uop.dst_rtype === RT_FLT
 
-        io.core.exe.iresp.bits.uop := ldq(io.dmem.resp.bits.uop.ldq_idx).bits.uop
-        io.core.exe.fresp.bits.uop := ldq(io.dmem.resp.bits.uop.ldq_idx).bits.uop
-        when (req_was_forwarded && forward_ready) {
+        io.core.exe.iresp.bits.uop := ldq(ldq_idx).bits.uop
+        io.core.exe.fresp.bits.uop := ldq(ldq_idx).bits.uop
+        when (req_was_forwarded && !stq_val) {
+          // If the store fired before this did, just fire again normally
+          ldq(ldq_idx).bits.forward_std_val := false.B
+          ldq(ldq_idx).bits.executed        := false.B
+        } .elsewhen (req_was_forwarded && forward_ready) {
           // If we are ready to forward, send out forward data
           io.core.exe.iresp.valid     := send_iresp
           io.core.exe.iresp.bits.data := forward_data
@@ -981,7 +988,7 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
           io.core.exe.fresp.bits.data := forward_data
         } .elsewhen (req_was_forwarded && !forward_ready) {
           // If we are not ready to forward, replay this
-          ldq(io.dmem.resp.bits.uop.ldq_idx).bits.executed := false.B
+          ldq(ldq_idx).bits.executed  := false.B
         } .otherwise {
           io.core.exe.iresp.valid     := send_iresp
           io.core.exe.iresp.bits.data := io.dmem.resp.bits.data

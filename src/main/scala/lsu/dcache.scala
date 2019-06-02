@@ -131,7 +131,7 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
   val refill_ctr  = Reg(UInt(log2Ceil(cacheDataBeats).W))
   val commit_line = Reg(Bool())
 
-  io.probe_rdy   := (state === s_invalid) || !idx_match
+  io.probe_rdy   := true.B
   io.idx_match   := (state =/= s_invalid) && idx_match
   io.way_match   := (state =/= s_invalid) && way_match
   io.tag         := req_tag
@@ -741,16 +741,35 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   val s2_replaced_way_en = UIntToOH(RegNext(replacer.way))
   val s2_repl_meta = Mux1H(s2_replaced_way_en, wayMap((w: Int) => RegNext(meta.io.resp(w))).toSeq)
 
+  val s2_nack_hit    = RegNext(s1_nack) // nack because of incoming probe
+  val s2_nack_victim = s2_valid &&  s2_hit && mshrs.io.secondary_miss // Nack when we hit something currently being evicted
+  val s2_nack_miss   = s2_valid && !s2_hit && !mshrs.io.req.ready // MSHRs not ready for request
+  val s2_nack        = s2_nack_miss || s2_nack_hit || s2_nack_victim
+  val s2_send_resp = (RegNext(s1_send_resp) &&
+                      (s2_hit ||
+                       s2_nack ||
+                       (mshrs.io.req.fire() && isWrite(s2_req.uop.mem_cmd))))
+  // hits always send a response
+  // If MSHR is not available, LSU has to replay this request later
+  // If MSHR is available and this is a store, we don't need to wait for resp later
+
+
   // Miss handling
-  mshrs.io.req.valid          := s2_valid && !s2_hit && (isPrefetch(s2_req.uop.mem_cmd) || isRead(s2_req.uop.mem_cmd) || isWrite(s2_req.uop.mem_cmd)) && !s2_is_probe
+  mshrs.io.req.valid := s2_valid &&
+                        !s2_nack_hit &&
+                        !s2_hit &&
+                        !s2_is_probe &&
+                        !IsKilledByBranch(io.lsu.brinfo, s2_req.uop) &&
+                        (isPrefetch(s2_req.uop.mem_cmd) || isRead(s2_req.uop.mem_cmd) || isWrite(s2_req.uop.mem_cmd))
   assert(!(mshrs.io.req.valid && s2_is_replay), "Replays should not need to go back into MSHRs")
-  mshrs.io.req.bits.uop       := s2_req.uop
-  mshrs.io.req.bits.addr      := s2_req.addr
-  mshrs.io.req.bits.tag_match := s2_tag_match
-  mshrs.io.req.bits.old_meta  := Mux(s2_tag_match, L1Metadata(s2_repl_meta.tag, s2_hit_state), s2_repl_meta)
-  mshrs.io.req.bits.way_en    := Mux(s2_tag_match, s2_tag_match_way, s2_replaced_way_en)
-  mshrs.io.req.bits.data      := s2_req.data
-  mshrs.io.req.bits.is_hella  := s2_req.is_hella
+  mshrs.io.req.bits.uop         := s2_req.uop
+  mshrs.io.req.bits.uop.br_mask := GetNewBrMask(io.lsu.brinfo, s2_req.uop)
+  mshrs.io.req.bits.addr        := s2_req.addr
+  mshrs.io.req.bits.tag_match   := s2_tag_match
+  mshrs.io.req.bits.old_meta    := Mux(s2_tag_match, L1Metadata(s2_repl_meta.tag, s2_hit_state), s2_repl_meta)
+  mshrs.io.req.bits.way_en      := Mux(s2_tag_match, s2_tag_match_way, s2_replaced_way_en)
+  mshrs.io.req.bits.data        := s2_req.data
+  mshrs.io.req.bits.is_hella    := s2_req.is_hella
   when (mshrs.io.req.fire()) { replacer.miss }
   tl_out.a <> mshrs.io.mem_acquire
 
@@ -783,17 +802,6 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   wb.io.data_resp      := s2_data_muxed
   TLArbiter.lowest(edge, tl_out.c, wb.io.release, prober.io.rep)
 
-  val s2_nack_hit    = RegNext(s1_nack) // nack because of prober
-  val s2_nack_victim = s2_valid &&  s2_hit && mshrs.io.secondary_miss // Nack when we hit something currently being evicted
-  val s2_nack_miss   = s2_valid && !s2_hit && !mshrs.io.req.ready // MSHRs not ready for request
-  val s2_nack        = s2_nack_miss || s2_nack_hit || s2_nack_victim
-  val s2_send_resp = (RegNext(s1_send_resp) &&
-                      (s2_hit ||
-                       s2_nack ||
-                       (mshrs.io.req.fire() && isWrite(s2_req.uop.mem_cmd))))
-  // hits always send a response
-  // If MSHR is not available, LSU has to replay this request later
-  // If MSHR is available and this is a store, we don't need to wait for resp later
 
   // load data gen
   val s2_data_word = s2_data_muxed >> Cat(s2_word_idx, 0.U(log2Ceil(coreDataBits).W))
