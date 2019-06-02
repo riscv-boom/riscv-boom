@@ -829,7 +829,8 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   amoalu.io.cmd  := s2_req.uop.mem_cmd
   amoalu.io.lhs  := s2_data_word
   amoalu.io.rhs  := s2_req.data
-  val s3_valid = RegNext(s2_valid && s2_hit && isWrite(s2_req.uop.mem_cmd))
+
+  val s3_valid = RegNext(s2_valid && s2_hit && isWrite(s2_req.uop.mem_cmd) && !(s2_send_resp && s2_nack))
   val s3_req   = RegNext(s2_req)
   s3_req.data := amoalu.io.out
   val s3_way   = RegNext(s2_tag_match_way)

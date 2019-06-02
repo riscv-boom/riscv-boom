@@ -900,6 +900,11 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
     }
   }
 
+  when (ldst_addr_conflicts.asUInt =/= 0.U && mem_fired_ld) {
+    ldq(mem_ld_uop.ldq_idx).bits.executed := false.B
+    io.dmem.s1_kill                       := true.B
+  }
+
   val forwarding_age_logic = Module(new ForwardingAgeLogic(NUM_STQ_ENTRIES))
   forwarding_age_logic.io.addr_matches    := forwarding_matches.asUInt
   forwarding_age_logic.io.youngest_st_idx := ldq(mem_ld_uop.ldq_idx).bits.uop.stq_idx
@@ -1134,7 +1139,7 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
           // Put younger load to sleep -- otherwise an order failure will occur.
 //          ldld_addr_conflict     := true.B
 //          ldq(lcam_ldq_idx).bits.order_fail := true.B
-          io.dmem.s1_kill := true.B && RegNext(io.dmem.req.fire())
+          io.dmem.s1_kill := true.B && mem_fired_ld
           ldq(lcam_ldq_idx).bits.executed := false.B
         }
       }
