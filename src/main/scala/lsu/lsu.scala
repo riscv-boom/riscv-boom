@@ -86,6 +86,7 @@ class BoomDCacheResp(implicit p: Parameters) extends BoomBundle()(p)
 class LSUDMemIO(implicit p: Parameters) extends BoomBundle()(p)
 {
   val req         = new DecoupledIO(new BoomDCacheReq)
+  val s1_kill     = Output(Bool())
   val resp        = Flipped(new ValidIO(new BoomDCacheResp))
 
   val brinfo       = Output(new BrResolutionInfo)
@@ -591,12 +592,17 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
   io.dmem.req.bits.data     := 0.U
   io.dmem.req.bits.is_hella := false.B
 
+  io.dmem.s1_kill           := false.B
+
   val mem_fired_st  = RegInit(false.B)
   mem_fired_st := false.B
   when (will_fire_store_commit) {
     io.dmem.req.valid         := true.B
     io.dmem.req.bits.addr     := stq(stq_execute_head).bits.addr.bits
-    io.dmem.req.bits.data     := stq(stq_execute_head).bits.data.bits
+    io.dmem.req.bits.data     := (new freechips.rocketchip.rocket.StoreGen(
+      stq(stq_execute_head).bits.uop.mem_size, 0.U,
+      stq(stq_execute_head).bits.data.bits,
+      coreDataBytes)).data
     io.dmem.req.bits.uop      := stq(stq_execute_head).bits.uop
 
     // TODO Nacks
@@ -623,6 +629,7 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
   }
     .elsewhen (will_fire_load_wakeup)
   {
+    // TODO: We shouldn't fire this if we will ignore the response with forward-data
     io.dmem.req.valid      := true.B
     io.dmem.req.bits.addr  := ldq(exe_ldq_idx).bits.addr.bits
     io.dmem.req.bits.uop   := ldq(exe_ldq_idx).bits.uop
@@ -640,7 +647,10 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
     assert(hella_state === h_s1)
     io.dmem.req.valid               := !io.hellacache.s1_kill && (!tlb_miss || hella_req.phys)
     io.dmem.req.bits.addr           := exe_tlb_paddr
-    io.dmem.req.bits.data           := io.hellacache.s1_data.data
+    io.dmem.req.bits.data           := (new freechips.rocketchip.rocket.StoreGen(
+      hella_req.size, 0.U,
+      io.hellacache.s1_data.data,
+      coreDataBytes)).data
     io.dmem.req.bits.uop.mem_cmd    := hella_req.cmd
     io.dmem.req.bits.uop.mem_size   := hella_req.size
     io.dmem.req.bits.uop.mem_signed := hella_req.signed
@@ -653,7 +663,10 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
     assert(hella_state === h_replay)
     io.dmem.req.valid               := true.B
     io.dmem.req.bits.addr           := hella_paddr
-    io.dmem.req.bits.data           := hella_data.data
+    io.dmem.req.bits.data           := (new freechips.rocketchip.rocket.StoreGen(
+      hella_req.size, 0.U,
+      hella_data.data,
+      coreDataBytes)).data
     io.dmem.req.bits.uop.mem_cmd    := hella_req.cmd
     io.dmem.req.bits.uop.mem_size   := hella_req.size
     io.dmem.req.bits.uop.mem_signed := hella_req.signed
@@ -946,19 +959,35 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
       when (io.dmem.resp.bits.uop.is_load)
       {
         // TODO: keep ctrl signals through cache datapath, or store them in the queues
-
+        // TODO: Get forwarded data out faster, don't wait for response from dcache for the load
         val req_was_forwarded = ldq(io.dmem.resp.bits.uop.ldq_idx).bits.forward_std_val
-        val forward_stq_idx = ldq(io.dmem.resp.bits.uop.ldq_idx).bits.forward_stq_idx
-        val forward_data    = LoadDataGenerator(stq(forward_stq_idx).bits.data.bits,
-          io.dmem.resp.bits.uop.mem_size, io.dmem.resp.bits.uop.mem_signed)
+        val forward_stq_idx   = ldq(io.dmem.resp.bits.uop.ldq_idx).bits.forward_stq_idx
+        val forward_data      = LoadDataGenerator(
+          stq(forward_stq_idx).bits.data.bits,
+          io.dmem.resp.bits.uop.mem_size,
+          io.dmem.resp.bits.uop.mem_signed)
+        val forward_ready     = stq(forward_stq_idx).bits.data.valid
 
-        io.core.exe.iresp.valid     := ldq(io.dmem.resp.bits.uop.ldq_idx).bits.uop.dst_rtype === RT_FIX
-        io.core.exe.iresp.bits.uop  := ldq(io.dmem.resp.bits.uop.ldq_idx).bits.uop
-        io.core.exe.iresp.bits.data := Mux(req_was_forwarded, forward_data, io.dmem.resp.bits.data)
+        val send_iresp = ldq(io.dmem.resp.bits.uop.ldq_idx).bits.uop.dst_rtype === RT_FIX
+        val send_fresp = ldq(io.dmem.resp.bits.uop.ldq_idx).bits.uop.dst_rtype === RT_FLT
 
-        io.core.exe.fresp.valid     := ldq(io.dmem.resp.bits.uop.ldq_idx).bits.uop.dst_rtype === RT_FLT
-        io.core.exe.fresp.bits.uop  := ldq(io.dmem.resp.bits.uop.ldq_idx).bits.uop
-        io.core.exe.fresp.bits.data := Mux(req_was_forwarded, forward_data, io.dmem.resp.bits.data)
+        io.core.exe.iresp.bits.uop := ldq(io.dmem.resp.bits.uop.ldq_idx).bits.uop
+        io.core.exe.fresp.bits.uop := ldq(io.dmem.resp.bits.uop.ldq_idx).bits.uop
+        when (req_was_forwarded && forward_ready) {
+          // If we are ready to forward, send out forward data
+          io.core.exe.iresp.valid     := send_iresp
+          io.core.exe.iresp.bits.data := forward_data
+          io.core.exe.fresp.valid     := send_fresp
+          io.core.exe.fresp.bits.data := forward_data
+        } .elsewhen (req_was_forwarded && !forward_ready) {
+          // If we are not ready to forward, replay this
+          ldq(io.dmem.resp.bits.uop.ldq_idx).bits.executed := false.B
+        } .otherwise {
+          io.core.exe.iresp.valid     := send_iresp
+          io.core.exe.iresp.bits.data := io.dmem.resp.bits.data
+          io.core.exe.fresp.valid     := send_fresp
+          io.core.exe.fresp.bits.data := io.dmem.resp.bits.data
+        }
       }
         .otherwise
       {
@@ -1076,7 +1105,9 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
               l_executed &&
               ((lcam_mask & l_mask) =/= 0.U))
         {
-//          ldq(i).bits.executed   := false.B
+          // TODO: If the younger load hasn't sent its load data to the core yet, we don't have to fail here. We can just reissue the younger load
+
+          //          ldq(i).bits.executed   := false.B
           ldq(i).bits.order_fail := true.B
           failed_loads(i)        := true.B
           ldld_order_fail        := true.B
@@ -1095,7 +1126,9 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
         {
           // Put younger load to sleep -- otherwise an order failure will occur.
 //          ldld_addr_conflict     := true.B
-          ldq(i).bits.order_fail := true.B
+//          ldq(lcam_ldq_idx).bits.order_fail := true.B
+          io.dmem.s1_kill := true.B && RegNext(io.dmem.req.fire())
+          ldq(lcam_ldq_idx).bits.executed := false.B
         }
       }
     }

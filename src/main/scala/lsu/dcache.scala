@@ -672,7 +672,8 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   val s0_send_resp = io.lsu.req.fire() || (mshrs.io.replay.fire() && isRead(mshrs.io.replay.bits.uop.mem_cmd)) // Does this request need to send a response
 
   val s1_valid = RegNext(s0_valid &&
-                         !IsKilledByBranch(io.lsu.brinfo, s0_req.uop), init=false.B)
+                         !IsKilledByBranch(io.lsu.brinfo, s0_req.uop), init=false.B) && !io.lsu.s1_kill
+  assert(!(io.lsu.s1_kill && !RegNext(io.lsu.req.fire())))
   val s1_req          = Reg(new BoomDCacheReq)
   s1_req             := s0_req
   s1_req.uop.br_mask := GetNewBrMask(io.lsu.brinfo, s0_req.uop)
