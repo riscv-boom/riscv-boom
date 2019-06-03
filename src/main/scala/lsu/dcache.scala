@@ -812,8 +812,8 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   val cache_resp   = Wire(Valid(new BoomDCacheResp))
   cache_resp.valid         := s2_valid && s2_send_resp
   cache_resp.bits.uop      := s2_req.uop
-  cache_resp.bits.data     := loadgen.data // TODO: Fix, add lrsc
-  cache_resp.bits.nack     := s2_nack // TODO: Fix
+  cache_resp.bits.data     := loadgen.data | s2_sc_fail
+  cache_resp.bits.nack     := s2_nack
   cache_resp.bits.is_hella := s2_req.is_hella
 
   val uncache_resp = Wire(Valid(new BoomDCacheResp))
@@ -830,7 +830,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   amoalu.io.lhs  := s2_data_word
   amoalu.io.rhs  := s2_req.data
 
-  val s3_valid = RegNext(s2_valid && s2_hit && isWrite(s2_req.uop.mem_cmd) && !(s2_send_resp && s2_nack))
+  val s3_valid = RegNext(s2_valid && s2_hit && isWrite(s2_req.uop.mem_cmd) && !s2_sc_fail && !(s2_send_resp && s2_nack))
   val s3_req   = RegNext(s2_req)
   s3_req.data := amoalu.io.out
   val s3_way   = RegNext(s2_tag_match_way)
