@@ -521,8 +521,8 @@ class BoomCore(implicit p: Parameters) extends BoomModule
                      || (dec_uops(w).is_unique &&
                         (!(rob.io.empty) || !io.lsu.fencei_rdy || prev_insts_in_bundle_valid))
                      || !rob.io.ready
-                     || io.lsu.ldq_full(w) && dec_uops(w).is_load
-                     || io.lsu.stq_full(w) && dec_uops(w).is_store
+                     || io.lsu.ldq_full(w) && dec_uops(w).uses_ldq
+                     || io.lsu.stq_full(w) && dec_uops(w).uses_stq
                      || branch_mask_full(w)
                      || br_unit.brinfo.mispredict
                      || rob.io.flush.valid
@@ -771,7 +771,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   require (mem_iq.issueWidth == 1)
   val iss_loadIssued =
     mem_iq.io.iss_valids(0) &&
-    mem_iq.io.iss_uops(0).is_load &&
+    mem_iq.io.iss_uops(0).uses_ldq &&
     !mem_iq.io.iss_uops(0).fp_val &&
     mem_iq.io.iss_uops(0).pdst =/= 0.U &&
     !(sxt_ldMiss && (mem_iq.io.iss_uops(0).iw_p1_poisoned || mem_iq.io.iss_uops(0).iw_p2_poisoned))
@@ -1054,7 +1054,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   // ---------
   // First connect the ll_wport
   val ll_uop = ll_wbarb.io.out.bits.uop
-  rob.io.wb_resps(0).valid  := ll_wbarb.io.out.valid && !(ll_uop.is_store && !ll_uop.is_amo)
+  rob.io.wb_resps(0).valid  := ll_wbarb.io.out.valid && !(ll_uop.uses_stq && !ll_uop.is_amo)
   rob.io.wb_resps(0).bits   <> ll_wbarb.io.out.bits
   rob.io.debug_wb_valids(0) := ll_wbarb.io.out.valid && ll_uop.dst_rtype =/= RT_X
   rob.io.debug_wb_wdata(0)  := ll_wbarb.io.out.bits.data
@@ -1067,7 +1067,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
       val wb_uop = resp.bits.uop
       val data   = resp.bits.data
 
-      rob.io.wb_resps(cnt).valid := resp.valid && !(wb_uop.is_store && !wb_uop.is_amo)
+      rob.io.wb_resps(cnt).valid := resp.valid && !(wb_uop.uses_stq && !wb_uop.is_amo)
       rob.io.wb_resps(cnt).bits  <> resp.bits
       rob.io.debug_wb_valids(cnt) := resp.valid && wb_uop.ctrl.rf_wen && wb_uop.dst_rtype === RT_FIX
       if (eu.hasFFlags) {

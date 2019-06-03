@@ -242,8 +242,8 @@ class Rob(
   val rob_pnr_unsafe      = Wire(Vec(coreWidth, Bool())) // are the instructions at the pnr unsafe?
   val rob_head_vals       = Wire(Vec(coreWidth, Bool())) // are the instructions at the head valid?
   val rob_tail_vals       = Wire(Vec(coreWidth, Bool())) // are the instructions at the tail valid? (to track partial row dispatches)
-  val rob_head_is_store   = Wire(Vec(coreWidth, Bool()))
-  val rob_head_is_load    = Wire(Vec(coreWidth, Bool()))
+  val rob_head_uses_stq   = Wire(Vec(coreWidth, Bool()))
+  val rob_head_uses_ldq   = Wire(Vec(coreWidth, Bool()))
   val rob_head_fflags     = Wire(Vec(coreWidth, UInt(freechips.rocketchip.tile.FPConstants.FLAGS_SZ.W)))
 
   val exception_thrown = Wire(Bool())
@@ -466,8 +466,8 @@ class Rob(
     rob_head_vals(w)     := rob_val(rob_head)
     rob_tail_vals(w)     := rob_val(rob_tail)
     rob_head_fflags(w)   := rob_fflags(rob_head)
-    rob_head_is_store(w) := rob_uop(rob_head).is_store
-    rob_head_is_load(w)  := rob_uop(rob_head).is_load
+    rob_head_uses_stq(w) := rob_uop(rob_head).uses_stq
+    rob_head_uses_ldq(w) := rob_uop(rob_head).uses_ldq
 
     //------------------------------------------------
     // Invalid entries are safe; thrown exceptions are unsafe.
@@ -600,7 +600,7 @@ class Rob(
     fflags_val(w) :=
       io.commit.valids(w) &&
       io.commit.uops(w).fp_val &&
-      !(io.commit.uops(w).is_load || io.commit.uops(w).is_store)
+      !(io.commit.uops(w).uses_ldq || io.commit.uops(w).uses_stq)
 
     fflags(w) := Mux(fflags_val(w), rob_head_fflags(w), 0.U)
 
@@ -610,7 +610,7 @@ class Rob(
              "Committed non-FP instruction has non-zero fflag bits.")
     assert (!(io.commit.valids(w) &&
              io.commit.uops(w).fp_val &&
-             (io.commit.uops(w).is_load || io.commit.uops(w).is_store) &&
+             (io.commit.uops(w).uses_ldq || io.commit.uops(w).uses_stq) &&
              rob_head_fflags(w) =/= 0.U),
              "Committed FP load or store has non-zero fflag bits.")
   }
@@ -874,11 +874,11 @@ class Rob(
 
   for (w <- 0 until coreWidth) {
     // tell LSU it is ready to its stores and loads
-    io.commit.st_mask(w) := io.commit.valids(w) && rob_head_is_store(w)
-    io.commit.ld_mask(w) := io.commit.valids(w) && rob_head_is_load(w)
+    io.commit.st_mask(w) := io.commit.valids(w) && rob_head_uses_stq(w)
+    io.commit.ld_mask(w) := io.commit.valids(w) && rob_head_uses_ldq(w)
   }
 
-  io.com_load_is_at_rob_head := rob_head_is_load(PriorityEncoder(rob_head_vals.asUInt))
+  io.com_load_is_at_rob_head := rob_head_uses_ldq(PriorityEncoder(rob_head_vals.asUInt))
 
   //--------------------------------------------------
   // Handle passing out signals to printf in dpath

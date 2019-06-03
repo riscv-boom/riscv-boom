@@ -226,8 +226,8 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
 
       w_cnt += 1
 
-      assert(!(exe_resp.valid && wb_uop.is_store))
-      assert(!(exe_resp.valid && wb_uop.is_load))
+      assert(!(exe_resp.valid && wb_uop.uses_ldq))
+      assert(!(exe_resp.valid && wb_uop.uses_stq))
       assert(!(exe_resp.valid && wb_uop.is_amo))
     }
   }

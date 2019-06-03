@@ -293,8 +293,8 @@ trait ScalarOpConstants
       uop.uopc       := uopNOP // maybe not required, but helps on asserts that try to catch spurious behavior
       uop.bypassable := false.B
       uop.fp_val     := false.B
-      uop.is_store   := false.B
-      uop.is_load    := false.B
+      uop.uses_stq   := false.B
+      uop.uses_ldq   := false.B
       uop.pdst       := 0.U
       uop.dst_rtype  := RT_X
       // TODO these unnecessary? used in regread stage?
