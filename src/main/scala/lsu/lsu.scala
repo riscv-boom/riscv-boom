@@ -737,6 +737,9 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
   val mem_ld_uop          = RegNext(io.dmem.req.bits.uop)
   mem_ld_uop.br_mask     := GetNewBrMask(io.core.brinfo, io.dmem.req.bits.uop)
 
+  val mem_sta_addr        = mem_tlb_paddr
+  val mem_sta_uop         = mem_tlb_uop
+
   val mem_fired_ld        = RegNext((will_fire_load_incoming || will_fire_load_retry || will_fire_load_wakeup) &&
                                     io.dmem.req.fire(),
                                     init=false.B)
@@ -830,90 +833,170 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
   //    to handle forwarding from the STORE QUEUE, etc.)
   // search entire STORE QUEUE for match on load
   //-------------------------------------------------------------
+
+  //-------------------------------------------------------------
+  //-------------------------------------------------------------
+  // Search LAQ/STQ for misspeculated load orderings and possible forwarding
+  //-------------------------------------------------------------
+  //-------------------------------------------------------------
+
+  // At Store (or Load) Execute (address generation)...
+  //    Check the incoming store/load address against younger loads that have
+  //    executed, looking for memory ordering failures. This check occurs the
+  //    cycle after address generation and TLB lookup.
+
+  // Things that can happen here
+  // - Firing load sees older store
+  //  - Address match completely, mark load as forwarded, kill load req, mark load un-executed
+  //  - Addresses match partially, kill load req, mark load un-executed
+  // - Firing load sees older load
+  //  - Older load has not fired, kill load req, mark load un-executed
+  // - Firing load sees younger load
+  //  - Younger load has fired, mark younger load as order fail
+
+  // load queue CAM search
+  val do_st_search = mem_fired_sta
+  val do_ld_search = mem_fired_ld && MCM_ORDER_DEPENDENT_LOADS.B
+
+  val lcam_addr        = Mux(do_st_search, mem_sta_addr, mem_ld_addr)
+  val lcam_uop         = Mux(do_st_search, mem_sta_uop , mem_ld_uop)
+  val lcam_mask        = GenByteMask(lcam_addr, lcam_uop.mem_size)
+  val lcam_st_dep_mask = ldq(mem_ld_uop.ldq_idx).bits.st_dep_mask
+  val lcam_is_fence    = lcam_uop.is_fence
+  val lcam_ldq_idx     = lcam_uop.ldq_idx
+  val lcam_stq_idx     = lcam_uop.stq_idx
+  val failed_loads     = Wire(Vec(NUM_LDQ_ENTRIES, Bool()))
+
+
+  val ldst_forward          = WireInit(false.B)
+  val ldst_forward_matches  = WireInit(VecInit((0 until NUM_STQ_ENTRIES).map(x=>false.B))) // What can we forward from?
+  val stld_order_fail       = WireInit(false.B) // Need to mini-xcpt
+  val ldld_order_fail       = WireInit(false.B) // Need to mini-xcpt
+
+
+
+  require(MCM_ORDER_DEPENDENT_LOADS)
+  assert (!(do_st_search && do_ld_search), "[lsu]: contention on LAQ CAM search.")
+
   // does the incoming load match any store addresses?
   // NOTE: these are fully translated physical addresses, as
   // forwarding requires a full address check.
-
-  val read_mask   = GenByteMask(mem_ld_addr, mem_ld_uop.mem_size)
-  val st_dep_mask = ldq(mem_ld_uop.ldq_idx).bits.st_dep_mask
-
-  // do the double-word addr match? (doesn't necessarily mean conflict or forward)
-  val dword_addr_matches  = Wire(Vec(NUM_STQ_ENTRIES, Bool()))
-  // if there is some overlap on the bytes, might need to sleep the load
-  // (either data not ready, or not a perfect match between addr and type)
-  val ldst_addr_conflicts = Wire(Vec(NUM_STQ_ENTRIES, Bool()))
-  // a full address match
-  val forwarding_matches  = Wire(Vec(NUM_STQ_ENTRIES, Bool()))
-
-  val force_ld_to_sleep = WireInit(false.B)
-
-  // TODO refactor how conflict/forwarding logic is generated
   for (i <- 0 until NUM_STQ_ENTRIES)
   {
     val s_addr = stq(i).bits.addr.bits
     val s_uop  = stq(i).bits.uop
 
-    dword_addr_matches(i) := (stq(i).valid &&
-                              st_dep_mask(i) &&
+    val dword_addr_matches = (lcam_st_dep_mask(i) &&
                               stq(i).bits.addr.valid &&
                               !stq(i).bits.addr_is_virtual &&
-                              (s_addr(corePAddrBits-1,3) === mem_ld_addr(corePAddrBits-1,3)))
-
+                              (s_addr(corePAddrBits-1,3) === lcam_addr(corePAddrBits-1,3)))
 
     // check the lower-order bits for overlap/conflicts and matches
-    ldst_addr_conflicts(i) := false.B
     val write_mask = GenByteMask(s_addr, s_uop.mem_size)
 
-    // if overlap on bytes and dword matches, the address conflicts!
-    when (((read_mask & write_mask) =/= 0.U) && dword_addr_matches(i))
-    {
-      ldst_addr_conflicts(i) := true.B
-    }
-    // fences/flushes are treated as stores that touch all addresses
-      .elsewhen (stq(i).valid &&
-                 st_dep_mask(i) &&
-                 s_uop.is_fence)
-    {
-      ldst_addr_conflicts(i) := true.B
-    }
-
     // exact match on masks? we can forward the data, if data is also present!
-    // TODO PERF we can be fancier perhaps, like (r_mask & w_mask === r_mask)
-    forwarding_matches(i) := false.B
-    when ((read_mask === write_mask) &&
-          !(s_uop.is_fence) &&
-          dword_addr_matches(i))
-    {
-      forwarding_matches(i) := true.B
-    }
-
-    // did a load see a conflicting store (sb->lw) or a fence/AMO? if so, put the load to sleep
-    // TODO this shuts down all loads so long as there is a store live in the dependent mask
-    when ((stq(i).valid &&
-           st_dep_mask(i) &&
-           (s_uop.is_fence || s_uop.is_amo)) ||
-          (dword_addr_matches(i) &&
-           (mem_ld_uop.mem_size =/= s_uop.mem_size) &&
-               ((read_mask & write_mask) =/= 0.U)))
-    {
-      force_ld_to_sleep := true.B
+    when (do_ld_search && stq(i).valid) {
+      when (((lcam_mask & write_mask) === lcam_mask) && !s_uop.is_fence && dword_addr_matches) {
+        ldst_forward            := true.B
+        ldst_forward_matches(i) := true.B
+      } .elsewhen (((lcam_mask & write_mask) =/= 0.U) && dword_addr_matches) {
+        io.dmem.s1_kill := true.B
+        ldq(lcam_ldq_idx).bits.executed := false.B
+      } .elsewhen (lcam_st_dep_mask(i) && (s_uop.is_fence || s_uop.is_amo)) {
+        io.dmem.s1_kill := true.B
+        ldq(lcam_ldq_idx).bits.executed := false.B
+      }
     }
   }
+  for (i <- 0 until NUM_LDQ_ENTRIES)
+  {
+    val l_addr        = ldq(i).bits.addr.bits
+    val l_mask        = GenByteMask(l_addr, ldq(i).bits.uop.mem_size)
+    val l_allocated   = ldq(i).valid
+    val l_addr_val    = ldq(i).bits.addr.valid
+    val l_is_virtual  = ldq(i).bits.addr_is_virtual
+    val l_executed    = ldq(i).bits.executed
+    val l_st_dep_mask = ldq(i).bits.st_dep_mask
+    val l_forwarded   = ldq(i).bits.forward_std_val
 
-  when (ldst_addr_conflicts.asUInt =/= 0.U && mem_fired_ld) {
-    ldq(mem_ld_uop.ldq_idx).bits.executed := false.B
-    io.dmem.s1_kill                       := true.B
+    val fid           = ldq(i).bits.forward_stq_idx
+    val dword_addr_matches = lcam_addr(corePAddrBits-1,3) === l_addr(corePAddrBits-1,3)
+
+    failed_loads(i) := false.B
+    when (do_st_search && l_executed && l_allocated && l_addr_val && !l_is_virtual &&
+          l_st_dep_mask(lcam_stq_idx) && dword_addr_matches)
+    {
+      // We are older than this load, which needs us, but the load didn't get its data
+      // from us. Kill the younger load
+      when (!l_forwarded ||
+            ((fid =/= lcam_stq_idx) && IsOlder(fid, lcam_stq_idx, stq_head)))
+      {
+        ldq(i).bits.order_fail := true.B
+        failed_loads(i)        := true.B
+        stld_order_fail        := true.B
+      }
+
+    } .elsewhen (do_ld_search && l_allocated && l_addr_val && !l_is_virtual &&
+                 dword_addr_matches && (lcam_mask & l_mask) =/= 0.U) {
+      val searcher_is_older = IsOlder(lcam_ldq_idx, i.U, ldq_head)
+      when (searcher_is_older) {
+        // younger load already executed! fail it
+        when (l_executed) {
+          ldq(i).bits.order_fail := true.B
+          failed_loads(i)        := true.B
+          ldld_order_fail        := true.B
+        }
+      } .elsewhen (lcam_ldq_idx =/= i.U) {
+        when (!l_executed) {
+          // kill ourselves, else an order fail will occur
+          io.dmem.s1_kill                 := true.B
+          ldq(lcam_ldq_idx).bits.executed := false.B
+        }
+      }
+    }
+
   }
 
   val forwarding_age_logic = Module(new ForwardingAgeLogic(NUM_STQ_ENTRIES))
-  forwarding_age_logic.io.addr_matches    := forwarding_matches.asUInt
-  forwarding_age_logic.io.youngest_st_idx := ldq(mem_ld_uop.ldq_idx).bits.uop.stq_idx
-
-  when (mem_fired_ld && forwarding_age_logic.io.forwarding_val && !tlb_miss)
-  {
-    ldq(mem_ld_uop.ldq_idx).bits.forward_std_val := true.B
-    ldq(mem_ld_uop.ldq_idx).bits.forward_stq_idx := forwarding_age_logic.io.forwarding_idx
+  forwarding_age_logic.io.addr_matches    := ldst_forward_matches.asUInt
+  forwarding_age_logic.io.youngest_st_idx := lcam_uop.stq_idx
+  when (ldst_forward) {
+    ldq(lcam_uop.ldq_idx).bits.forward_std_val := true.B
+    ldq(lcam_uop.ldq_idx).bits.forward_stq_idx := forwarding_age_logic.io.forwarding_idx
   }
+
+  // detect which loads get marked as failures, but broadcast to the ROB the oldest failing load
+  // TODO encapsulate this in an age-based  priority-encoder
+  //   val l_idx = AgePriorityEncoder((Vec(Vec.tabulate(NUM_LDQ_ENTRIES)(i => failed_loads(i) && i.U >= laq_head)
+  //   ++ failed_loads)).asUInt)
+  val temp_bits = (VecInit(VecInit.tabulate(NUM_LDQ_ENTRIES)(i =>
+    failed_loads(i) && i.U >= ldq_head) ++ failed_loads)).asUInt
+  val l_idx = PriorityEncoder(temp_bits)
+
+
+  // TODO always pad out the input to PECircular() to pow2
+  // convert it to vec[bool], then in.padTo(1 << log2Ceil(in.size), false.B)
+
+
+  // one exception port, but multiple causes!
+   // - 1) the incoming store-address finds a faulting load (it is by definition younger)
+   // - 2) the incoming load or store address is excepting. It must be older and thus takes precedent.
+  val r_xcpt_valid = RegInit(false.B)
+  val r_xcpt       = Reg(new Exception)
+
+  val mem_xcpt_uop = Mux(mem_xcpt_valid, mem_tlb_uop,
+                         ldq(Mux(l_idx >= NUM_LDQ_ENTRIES.U, l_idx - NUM_LDQ_ENTRIES.U, l_idx)).bits.uop)
+
+  r_xcpt_valid := (failed_loads.reduce(_|_) || mem_xcpt_valid) &&
+                   !io.core.exception &&
+                   !IsKilledByBranch(io.core.brinfo, mem_xcpt_uop)
+  r_xcpt.uop         := mem_xcpt_uop
+  r_xcpt.uop.br_mask := GetNewBrMask(io.core.brinfo, mem_xcpt_uop)
+  r_xcpt.cause       := Mux(mem_xcpt_valid, mem_xcpt_cause, MINI_EXCEPTION_MEM_ORDERING)
+  r_xcpt.badvaddr    := RegNext(exe_vaddr) // TODO is there another register we can use instead?
+
+  io.core.lxcpt.valid := r_xcpt_valid && !io.core.exception && !IsKilledByBranch(io.core.brinfo, r_xcpt.uop)
+  io.core.lxcpt.bits  := r_xcpt
 
   //-------------------------------------------------------------
   //-------------------------------------------------------------
@@ -1013,172 +1096,6 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
     }
   }
 
-  //-------------------------------------------------------------
-  //-------------------------------------------------------------
-  // Search LAQ for misspeculated load orderings
-  //-------------------------------------------------------------
-  //-------------------------------------------------------------
-
-  // At Store (or Load) Execute (address generation)...
-  //    Check the incoming store/load address against younger loads that have
-  //    executed, looking for memory ordering failures. This check occurs the
-  //    cycle after address generation and TLB lookup.
-
-  // load queue CAM search
-  val lcam_addr       = Mux(RegNext(will_fire_load_wakeup), mem_ld_addr, mem_tlb_paddr)
-  val lcam_uop        = Mux(RegNext(will_fire_load_wakeup), RegNext(ldq(exe_ld_idx_wakeup).bits.uop), mem_tlb_uop)
-  val lcam_mask       = GenByteMask(lcam_addr, lcam_uop.mem_size)
-  val lcam_is_fence   = lcam_uop.is_fence
-  val lcam_ldq_idx    = lcam_uop.ldq_idx
-  val stq_idx         = lcam_uop.stq_idx
-  val failed_loads    = Wire(Vec(NUM_LDQ_ENTRIES, Bool()))
-  val stld_order_fail = WireInit(false.B)
-  val ldld_order_fail = WireInit(false.B)
-
-  val do_stld_search = RegNext((will_fire_sta_incoming ||
-                                will_fire_sta_retry),
-                            init = false.B)
-  val do_ldld_search = RegNext((will_fire_load_incoming ||
-                                will_fire_load_retry ||
-                                will_fire_load_wakeup),
-                            init = false.B) && MCM_ORDER_DEPENDENT_LOADS.B
-  require(MCM_ORDER_DEPENDENT_LOADS)
-  assert (!(do_stld_search && do_ldld_search), "[lsu]: contention on LAQ CAM search.")
-
-  for (i <- 0 until NUM_LDQ_ENTRIES)
-  {
-    val l_addr      = ldq(i).bits.addr.bits
-    val l_mask      = GenByteMask(l_addr, ldq(i).bits.uop.mem_size)
-    val l_allocated = ldq(i).valid
-    val l_addr_val  = ldq(i).bits.addr.valid
-    val l_is_virtual= ldq(i).bits.addr_is_virtual
-    val l_executed  = ldq(i).bits.executed
-    failed_loads(i) := false.B
-
-    when (do_stld_search)
-    {
-      // does the load depend on this store?
-      // TODO CODE REVIEW what's the best way to perform this bit extract?
-      when (ldq(i).bits.st_dep_mask(stq_idx))
-      {
-        when (lcam_is_fence &&
-              l_allocated &&
-              l_addr_val &&
-              !l_is_virtual &&
-              l_executed)
-        {
-          assert(false.B, "We should have prevented this from happening already")
-          // fences, flushes are like stores that hit all addresses
-//          ldq(i).bits.executed   := false.B
-          ldq(i).bits.order_fail := true.B
-          failed_loads(i)        := true.B
-          stld_order_fail        := true.B
-        }
-        // NOTE: this address check doesn't necessarily have to be across all address bits
-          .elsewhen ((lcam_addr(corePAddrBits-1,3) === l_addr(corePAddrBits-1,3)) &&
-                     l_allocated &&
-                     l_addr_val &&
-                     !l_is_virtual &&
-                     l_executed)
-        {
-          val yid = ldq(i).bits.uop.stq_idx
-          val fid = ldq(i).bits.forward_stq_idx
-
-          // double-words match, now check for conflict of byte masks,
-          // then check if it was forwarded from us,
-          // and if not, then fail OR
-          // if it was forwarded but not us, was the forwarded store older than me
-          // head < forwarded < youngest?
-          when (((lcam_mask & l_mask) =/= 0.U) &&
-                (!ldq(i).bits.forward_std_val ||
-                 ((fid =/= stq_idx) && (Cat(stq_idx < yid, stq_idx) > Cat(fid < yid, fid)))))
-          {
-//            ldq(i).bits.executed   := false.B
-            ldq(i).bits.order_fail := true.B
-            failed_loads(i)        := true.B
-            stld_order_fail        := true.B
-          }
-        }
-      }
-    }
-      .elsewhen (do_ldld_search)
-    {
-      val searcher_is_older = IsOlder(lcam_ldq_idx, i.U, ldq_head)
-
-      // Does the load entry depend on the searching load?
-      // Aka, is the searching load older than the load entry?
-      // If yes, search for ordering failures.
-      when (searcher_is_older)
-      {
-        when ((lcam_addr(corePAddrBits-1,3) === l_addr(corePAddrBits-1,3)) &&
-              l_allocated &&
-              l_addr_val &&
-              !l_is_virtual &&
-              l_executed &&
-              ((lcam_mask & l_mask) =/= 0.U))
-        {
-          // TODO: If the younger load hasn't sent its load data to the core yet, we don't have to fail here. We can just reissue the younger load
-
-          //          ldq(i).bits.executed   := false.B
-          ldq(i).bits.order_fail := true.B
-          failed_loads(i)        := true.B
-          ldld_order_fail        := true.B
-        }
-      }
-        .elsewhen (lcam_ldq_idx =/= i.U)
-      {
-        // Searcher is newer and not itself, should the searching load be
-        // put to sleep because of a potential ordering failure?
-        when ((lcam_addr(corePAddrBits-1,3) === l_addr(corePAddrBits-1,3)) &&
-              l_allocated &&
-              l_addr_val &&
-              !l_is_virtual &&
-              !l_executed &&
-              ((lcam_mask & l_mask) =/= 0.U))
-        {
-          // Put younger load to sleep -- otherwise an order failure will occur.
-//          ldld_addr_conflict     := true.B
-//          ldq(lcam_ldq_idx).bits.order_fail := true.B
-          io.dmem.s1_kill := true.B && mem_fired_ld
-          ldq(lcam_ldq_idx).bits.executed := false.B
-        }
-      }
-    }
-  }
-
-
-  // detect which loads get marked as failures, but broadcast to the ROB the oldest failing load
-  // TODO encapsulate this in an age-based  priority-encoder
-  //   val l_idx = AgePriorityEncoder((Vec(Vec.tabulate(NUM_LDQ_ENTRIES)(i => failed_loads(i) && i.U >= laq_head)
-  //   ++ failed_loads)).asUInt)
-  val temp_bits = (VecInit(VecInit.tabulate(NUM_LDQ_ENTRIES)(i =>
-    failed_loads(i) && i.U >= ldq_head) ++ failed_loads)).asUInt
-  val l_idx = PriorityEncoder(temp_bits)
-
-
-  // TODO always pad out the input to PECircular() to pow2
-  // convert it to vec[bool], then in.padTo(1 << log2Ceil(in.size), false.B)
-
-
-  // one exception port, but multiple causes!
-   // - 1) the incoming store-address finds a faulting load (it is by definition younger)
-   // - 2) the incoming load or store address is excepting. It must be older and thus takes precedent.
-  val r_xcpt_valid = RegInit(false.B)
-  val r_xcpt       = Reg(new Exception)
-
-  val mem_xcpt_uop = Mux(mem_xcpt_valid, mem_tlb_uop,
-                         ldq(Mux(l_idx >= NUM_LDQ_ENTRIES.U, l_idx - NUM_LDQ_ENTRIES.U, l_idx)).bits.uop)
-
-  r_xcpt_valid := (failed_loads.reduce(_|_) || mem_xcpt_valid) &&
-                   !io.core.exception &&
-                   !IsKilledByBranch(io.core.brinfo, mem_xcpt_uop)
-  r_xcpt.uop         := mem_xcpt_uop
-  r_xcpt.uop.br_mask := GetNewBrMask(io.core.brinfo, mem_xcpt_uop)
-  r_xcpt.cause       := Mux(mem_xcpt_valid, mem_xcpt_cause, MINI_EXCEPTION_MEM_ORDERING)
-  r_xcpt.badvaddr    := RegNext(exe_vaddr) // TODO is there another register we can use instead?
-
-  io.core.lxcpt.valid := r_xcpt_valid && !io.core.exception && !IsKilledByBranch(io.core.brinfo, r_xcpt.uop)
-  io.core.lxcpt.bits  := r_xcpt
 
 
   //-------------------------------------------------------------
