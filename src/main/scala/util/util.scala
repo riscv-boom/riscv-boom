@@ -378,7 +378,7 @@ object MaskUpper
  * Create a queue that can be killed with a branch kill signal.
  * Assumption: enq.valid only high if not killed by branch (so don't check IsKilled on io.enq).
  */
-class BranchKillableQueue[T <: boom.common.HasBoomUOP](gen: T, entries: Int)
+class BranchKillableQueue[T <: boom.common.HasBoomUOP](gen: T, entries: Int, flush_fn: boom.common.MicroOp => Bool = u => true.B)
   (implicit p: freechips.rocketchip.config.Parameters)
   extends boom.common.BoomModule()(p)
   with boom.common.HasBoomCoreParameters
@@ -397,6 +397,7 @@ class BranchKillableQueue[T <: boom.common.HasBoomUOP](gen: T, entries: Int)
   private val ram     = Mem(entries, gen)
   private val valids  = RegInit(VecInit(Seq.fill(entries) {false.B}))
   private val brmasks = Reg(Vec(entries, UInt(MAX_BR_COUNT.W)))
+  private val uops    = Reg(Vec(entries, new MicroOp))
 
   private val enq_ptr = Counter(entries)
   private val deq_ptr = Counter(entries)
@@ -412,7 +413,8 @@ class BranchKillableQueue[T <: boom.common.HasBoomUOP](gen: T, entries: Int)
 
   for (i <- 0 until entries) {
     val mask = brmasks(i)
-    valids(i)  := valids(i) && !IsKilledByBranch(io.brinfo, mask) && !io.flush
+    val uop  = uops(i)
+    valids(i)  := valids(i) && !IsKilledByBranch(io.brinfo, mask) && !(io.flush && flush_fn(uop))
     when (valids(i)) {
       brmasks(i) := GetNewBrMask(io.brinfo, mask)
     }
@@ -422,6 +424,7 @@ class BranchKillableQueue[T <: boom.common.HasBoomUOP](gen: T, entries: Int)
     ram(enq_ptr.value) := io.enq.bits
     valids(enq_ptr.value) := true.B //!IsKilledByBranch(io.brinfo, io.enq.bits.uop)
     brmasks(enq_ptr.value) := GetNewBrMask(io.brinfo, io.enq.bits.uop)
+    uops(enq_ptr.value) := io.enq.bits.uop
     enq_ptr.inc()
   }
 

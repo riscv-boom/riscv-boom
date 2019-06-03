@@ -1312,7 +1312,7 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
 
       for (i <- 0 until NUM_STQ_ENTRIES)
       {
-        when (!stq(i).bits.committed)
+        when (!stq(i).bits.committed && !stq(i).bits.succeeded)
         {
           stq(i).valid           := false.B
           stq(i).bits.addr.valid := false.B

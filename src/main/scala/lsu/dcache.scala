@@ -44,6 +44,7 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
     val req_sec_rdy = Output(Bool())
 
     val brinfo       = Input(new BrResolutionInfo)
+    val exception    = Input(Bool())
     val rob_pnr_idx  = Input(UInt(robAddrSz.W))
     val rob_head_idx = Input(UInt(robAddrSz.W))
 
@@ -109,9 +110,9 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
   val (_, _, refill_done, refill_address_inc) = edge.addr_inc(io.mem_grant)
   val sec_rdy = idx_match && !cmd_requires_second_acquire && !state.isOneOf(s_invalid, s_meta_write_req, s_meta_write_resp)// Always accept secondary misses
 
-  val rpq = Module(new BranchKillableQueue(new BoomDCacheReqInternal, cfg.nRPQ))
+  val rpq = Module(new BranchKillableQueue(new BoomDCacheReqInternal, cfg.nRPQ, u => u.uses_ldq))
   rpq.io.brinfo := io.brinfo
-  rpq.io.flush  := false.B // we should never need to flush this?
+  rpq.io.flush  := io.exception
 
   rpq.io.enq.valid := ((io.req_pri_val && io.req_pri_rdy) || (io.req_sec_val && io.req_sec_rdy)) && !isPrefetch(io.req.uop.mem_cmd)
   rpq.io.enq.bits  := io.req
@@ -256,7 +257,7 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
     io.replay <> rpq.io.deq
     io.replay.bits.way_en    := req.way_en
     io.replay.bits.addr := Cat(req_tag, req_idx, rpq.io.deq.bits.addr(blockOffBits-1,0))
-    when (rpq.io.empty) {
+    when (rpq.io.empty ) {
       state := s_meta_write_req
     }
   } .elsewhen (state === s_meta_write_req) {
@@ -368,6 +369,7 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
     val secondary_miss = Output(Bool())
 
     val brinfo       = Input(new BrResolutionInfo)
+    val exception    = Input(Bool())
     val rob_pnr_idx  = Input(UInt(robAddrSz.W))
     val rob_head_idx = Input(UInt(robAddrSz.W))
 
@@ -434,6 +436,7 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
     mshr.io.req.sdq_id   := sdq_alloc_id
 
     mshr.io.brinfo       := io.brinfo
+    mshr.io.exception    := io.exception
     mshr.io.rob_pnr_idx  := io.rob_pnr_idx
     mshr.io.rob_head_idx := io.rob_head_idx
 
@@ -574,8 +577,8 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   val wb = Module(new WritebackUnit)
   val prober = Module(new ProbeUnit)
   val mshrs = Module(new BoomMSHRFile)
-  mshrs.io := DontCare
-  mshrs.io.brinfo := io.lsu.brinfo
+  mshrs.io.brinfo       := io.lsu.brinfo
+  mshrs.io.exception    := io.lsu.exception
   mshrs.io.rob_pnr_idx  := io.lsu.rob_pnr_idx
   mshrs.io.rob_head_idx := io.lsu.rob_head_idx
 
@@ -671,12 +674,14 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
                                       , replay_req)))
   val s0_send_resp = io.lsu.req.fire() || (mshrs.io.replay.fire() && isRead(mshrs.io.replay.bits.uop.mem_cmd)) // Does this request need to send a response
 
-  val s1_valid = RegNext(s0_valid &&
-                         !IsKilledByBranch(io.lsu.brinfo, s0_req.uop), init=false.B) && !io.lsu.s1_kill
-  assert(!(io.lsu.s1_kill && !RegNext(io.lsu.req.fire())))
-  val s1_req          = Reg(new BoomDCacheReq)
-  s1_req             := s0_req
+  val s1_req          = RegNext(s0_req)
   s1_req.uop.br_mask := GetNewBrMask(io.lsu.brinfo, s0_req.uop)
+  val s1_valid = RegNext(s0_valid &&
+                         !IsKilledByBranch(io.lsu.brinfo, s0_req.uop) &&
+                         !(io.lsu.exception && s0_req.uop.uses_ldq),
+                         init=false.B) && !io.lsu.s1_kill
+
+  assert(!(io.lsu.s1_kill && !RegNext(io.lsu.req.fire())))
   val s1_addr         = s1_req.addr
   val s1_nack         = s1_req.addr(idxMSB,idxLSB) === prober.io.meta_write.bits.idx && !prober.io.req.ready
   val s1_send_resp     = RegNext(s0_send_resp)
@@ -690,9 +695,10 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   val s1_tag_match_way = Mux(s1_is_replay, s1_replay_way_en, wayMap((w: Int) => s1_tag_eq_way(w) && meta.io.resp(w).coh.isValid()).asUInt)
 
 
-  val s2_valid = RegNext(s1_valid && !IsKilledByBranch(io.lsu.brinfo, s1_req.uop))
-  val s2_req   = Reg(new BoomDCacheReq)
-  s2_req             := s1_req
+  val s2_req   = RegNext(s1_req)
+  val s2_valid = RegNext(s1_valid &&
+                         !IsKilledByBranch(io.lsu.brinfo, s1_req.uop) &&
+                         !(io.lsu.exception && s1_req.uop.uses_ldq))
   s2_req.uop.br_mask := GetNewBrMask(io.lsu.brinfo, s1_req.uop)
   val s2_is_probe  = RegNext(s1_is_probe)
   val s2_is_replay = RegNext(s1_is_replay)
@@ -748,10 +754,10 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   val s2_send_resp = (RegNext(s1_send_resp) &&
                       (s2_hit ||
                        s2_nack ||
-                       (mshrs.io.req.fire() && isWrite(s2_req.uop.mem_cmd))))
+                       (mshrs.io.req.fire() && isWrite(s2_req.uop.mem_cmd) && !isRead(s2_req.uop.mem_cmd))))
   // hits always send a response
   // If MSHR is not available, LSU has to replay this request later
-  // If MSHR is available and this is a store, we don't need to wait for resp later
+  // If MSHR is available and this is only a store(not a amo), we don't need to wait for resp later
 
 
   // Miss handling
@@ -760,7 +766,10 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
                         !s2_hit &&
                         !s2_is_probe &&
                         !IsKilledByBranch(io.lsu.brinfo, s2_req.uop) &&
-                        (isPrefetch(s2_req.uop.mem_cmd) || isRead(s2_req.uop.mem_cmd) || isWrite(s2_req.uop.mem_cmd))
+                        !(io.lsu.exception && s2_req.uop.uses_ldq) &&
+                        (isPrefetch(s2_req.uop.mem_cmd) ||
+                         isRead(s2_req.uop.mem_cmd) ||
+                         isWrite(s2_req.uop.mem_cmd))
   assert(!(mshrs.io.req.valid && s2_is_replay), "Replays should not need to go back into MSHRs")
   mshrs.io.req.bits.uop         := s2_req.uop
   mshrs.io.req.bits.uop.br_mask := GetNewBrMask(io.lsu.brinfo, s2_req.uop)
@@ -768,6 +777,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   mshrs.io.req.bits.tag_match   := s2_tag_match
   mshrs.io.req.bits.old_meta    := Mux(s2_tag_match, L1Metadata(s2_repl_meta.tag, s2_hit_state), s2_repl_meta)
   mshrs.io.req.bits.way_en      := Mux(s2_tag_match, s2_tag_match_way, s2_replaced_way_en)
+  mshrs.io.req.bits.sdq_id      := DontCare // this is set inside MSHR
   mshrs.io.req.bits.data        := s2_req.data
   mshrs.io.req.bits.is_hella    := s2_req.is_hella
   when (mshrs.io.req.fire()) { replacer.miss }
@@ -821,17 +831,28 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   uncache_resp.valid    := mshrs.io.resp.valid
   mshrs.io.resp.ready := !cache_resp.valid // We can backpressure the MSHRs, but not cache hits
 
-  io.lsu.resp := Mux(mshrs.io.resp.fire(), uncache_resp, cache_resp)
+  val resp = Mux(mshrs.io.resp.fire(), uncache_resp, cache_resp)
+  io.lsu.resp.valid := resp.valid &&
+                       !(io.lsu.exception && resp.bits.uop.uses_ldq) &&
+                       !IsKilledByBranch(io.lsu.brinfo, resp.bits.uop)
+  io.lsu.resp.bits             := resp.bits
+  io.lsu.resp.bits.uop.br_mask := GetNewBrMask(io.lsu.brinfo, resp.bits.uop)
 
   // Store/amo hits
+  val s3_req   = RegNext(s2_req)
+  val s3_valid = RegNext(s2_valid && s2_hit && isWrite(s2_req.uop.mem_cmd) &&
+                         !s2_sc_fail && !(s2_send_resp && s2_nack)) &&
+                 !(io.lsu.exception && s3_req.uop.uses_ldq)
+
+  val s2_bypass_store = s3_valid && ((s2_req.addr >> wordOffBits) === (s3_req.addr >> wordOffBits))
+
   val amoalu   = Module(new AMOALU(xLen))
   amoalu.io.mask := new StoreGen(s2_req.uop.mem_size, s2_req.addr, 0.U, xLen/8).mask
   amoalu.io.cmd  := s2_req.uop.mem_cmd
-  amoalu.io.lhs  := s2_data_word
+  amoalu.io.lhs  := Mux(s2_bypass_store, s3_req.data, s2_data_word)
   amoalu.io.rhs  := s2_req.data
 
-  val s3_valid = RegNext(s2_valid && s2_hit && isWrite(s2_req.uop.mem_cmd) && !s2_sc_fail && !(s2_send_resp && s2_nack))
-  val s3_req   = RegNext(s2_req)
+
   s3_req.data := amoalu.io.out
   val s3_way   = RegNext(s2_tag_match_way)
 
