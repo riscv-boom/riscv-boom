@@ -195,7 +195,8 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
     // val drain_load = (isRead(rpq.io.deq.bits.uop.mem_cmd) &&
     //                   (rpq.io.deq.bits.is_hella ||
     //                     IsOlder(rpq.io.deq.bits.uop.rob_idx, io.rob_pnr_idx, io.rob_head_idx)))
-    val drain_load = isRead(rpq.io.deq.bits.uop.mem_cmd) // drain all loads for now
+    val drain_load = isRead(rpq.io.deq.bits.uop.mem_cmd) && !isWrite(rpq.io.deq.bits.uop.mem_cmd)
+    // drain all loads for now
     val rp_addr = Cat(req_tag, req_idx, rpq.io.deq.bits.addr(blockOffBits-1,0))
     val loadgen = new LoadGen(rpq.io.deq.bits.uop.mem_size, rpq.io.deq.bits.uop.mem_signed,
       Cat(req_tag, req_idx, rpq.io.deq.bits.addr(blockOffBits-1,0)),
@@ -212,7 +213,7 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
       .elsewhen (rpq.io.empty && !commit_line)
     {
       state := s_invalid
-    } .elsewhen (rpq.io.empty || (rpq.io.deq.valid && isWrite(rpq.io.deq.bits.uop.mem_cmd))) {
+    } .elsewhen (rpq.io.empty || (rpq.io.deq.valid && !drain_load)) {
       state := Mux(req_needs_wb, s_wb_req, s_meta_clear)
     }
   } .elsewhen (state === s_wb_req) {

@@ -1046,7 +1046,7 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
     }
       .otherwise
     {
-      when (io.dmem.resp.bits.uop.uses_ldq)
+      when (io.dmem.resp.bits.uop.uses_ldq && !io.dmem.resp.bits.is_hella)
       {
         val ldq_idx = io.dmem.resp.bits.uop.ldq_idx
         // TODO: keep ctrl signals through cache datapath, or store them in the queues
@@ -1086,7 +1086,7 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
           io.core.exe.fresp.bits.data := io.dmem.resp.bits.data
         }
       }
-        .otherwise
+        .elsewhen (io.dmem.resp.bits.uop.uses_stq && !io.dmem.resp.bits.is_hella)
       {
         stq(io.dmem.resp.bits.uop.stq_idx).bits.succeeded := true.B
         when (io.dmem.resp.bits.uop.is_amo) {
