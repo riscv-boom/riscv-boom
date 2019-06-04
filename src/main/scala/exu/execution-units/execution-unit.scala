@@ -585,7 +585,6 @@ class FPUExeUnit(
     queue.io.enq.bits.fflags := fpu.io.resp.bits.fflags
     queue.io.brinfo          := io.brinfo
     queue.io.flush           := io.req.bits.kill
-    io.ll_iresp <> queue.io.deq
 
     assert (queue.io.enq.ready) // If this backs up, we've miscalculated the size of the queue.
 
@@ -600,12 +599,11 @@ class FPUExeUnit(
 
     assert(!(fp_sdq.io.enq.valid && !fp_sdq.io.enq.ready))
 
-    // We also use the ll_iresp for fp sdq, when its not busy
-    fp_sdq.io.deq.ready := false.B
-    when (!queue.io.deq.fire())
-    {
-      io.ll_iresp <> fp_sdq.io.deq
-    }
+    val resp_arb = Module(new Arbiter(new ExeUnitResp(dataWidth), 2))
+    resp_arb.io.in(0) <> queue.io.deq
+    resp_arb.io.in(1) <> fp_sdq.io.deq
+    io.ll_iresp       <> resp_arb.io.out
+
     fpiu_busy := !(queue.io.empty && fp_sdq.io.empty)
   }
 
