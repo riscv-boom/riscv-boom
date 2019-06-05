@@ -23,46 +23,20 @@ import boom.lsu._
 import boom.system.{BoomTilesKey}
 
 /**
- * Try to be a reasonable BOOM design point with a deep speculation window.
+ * Baseline BOOM configuration. A core config must be mixed-in alongside this.
  */
-class DefaultBoomConfig extends Config((site, here, up) => {
-
+class BaseBoomConfig extends Config((site, here, up) => {
    // Top-Level
    case XLen => 64
 
    // Use this boot ROM for SimDTM.
    case BootROMParams => BootROMParams(contentFileName = s"./bootrom/bootrom.rv${site(XLen)}.img")
 
-   // Core Parameters
+   // Specify anything constant between core configs.
    case BoomTilesKey => up(BoomTilesKey, site) map { b => b.copy(
       core = b.core.copy(
-         fetchWidth = 4,
-         decodeWidth = 2,
-         numRobEntries = 100,
-         issueParams = Seq(
-            IssueParams(issueWidth=1, numEntries=20, iqType=IQT_MEM.litValue, dispatchWidth=2),
-            IssueParams(issueWidth=2, numEntries=20, iqType=IQT_INT.litValue, dispatchWidth=2),
-            IssueParams(issueWidth=1, numEntries=20, iqType=IQT_FP.litValue , dispatchWidth=2)),
-         numIntPhysRegisters = 100,
-         numFpPhysRegisters = 64,
-         numLdqEntries = 32,
-         numStqEntries = 18,
-         maxBrCount = 16,
-         ftq = FtqParameters(nEntries=32),
-         btb = BoomBTBParameters(btbsa=true, densebtb=false, nSets=512, nWays=4, nRAS=16, tagSz=13),
-         bpdBaseOnly = None,
-         gshare = Some(GShareParameters(historyLength=11, numSets=2048)),
-         tage = None,
-         bpdRandom = None,
-         nPerfCounters = 29,
-         fpu = Some(freechips.rocketchip.tile.FPUParams(sfmaLatency=4, dfmaLatency=4, divSqrt=true))),
-      btb = Some(BTBParams(nEntries = 0, updatesOutOfOrder = true)),
-      dcache = Some(DCacheParams(rowBits = site(SystemBusKey).beatBits, nSets=64, nWays=8, nMSHRs=4, nTLBEntries=16)),
-      icache = Some(ICacheParams(fetchBytes = 4*4, rowBits = site(SystemBusKey).beatBits, nSets=64, nWays=8))
+         fpu = Some(freechips.rocketchip.tile.FPUParams(sfmaLatency=4, dfmaLatency=4, divSqrt=true)))
       )}
-
-   // Set TL network to 128bits wide
-   case SystemBusKey => up(SystemBusKey, site).copy(beatBytes = 16)
 
    // Make sure there are enough hart bits to support multiple cores
    case MaxHartIdBits => log2Up(site(BoomTilesKey).size)
@@ -140,7 +114,7 @@ class WithRVC extends Config((site, here, up) => {
 })
 
 /**
- * Small BOOM! Try to be fast to compile and easier to debug.
+ * 1-wide BOOM. Try to be fast to compile and easier to debug.
  */
 class WithSmallBooms extends Config((site, here, up) => {
    case BoomTilesKey => up(BoomTilesKey, site) map { b => b.copy(
@@ -170,7 +144,7 @@ class WithSmallBooms extends Config((site, here, up) => {
 })
 
 /**
- * Intermediate BOOM. Try to match the Cortex-A9.
+ * 2-wide BOOM. Try to match the Cortex-A9.
  */
 class WithMediumBooms extends Config((site, here, up) => {
    case BoomTilesKey => up(BoomTilesKey, site) map { b => b.copy(
@@ -203,9 +177,9 @@ class WithMediumBooms extends Config((site, here, up) => {
 })
 
 /**
- * Try to match the Cortex-A15.
+ * 3-wide BOOM. Try to match the Cortex-A15.
  */
-class WithMegaBooms extends Config((site, here, up) => {
+class WithLargeBooms extends Config((site, here, up) => {
    case BoomTilesKey => up(BoomTilesKey, site) map { b => b.copy(
       core = b.core.copy(
          fetchWidth = 4,
@@ -219,6 +193,38 @@ class WithMegaBooms extends Config((site, here, up) => {
          numFpPhysRegisters = 64,
          numLdqEntries = 32,
          numStqEntries = 16,
+         maxBrCount = 12,
+         ftq = FtqParameters(nEntries=32),
+         btb = BoomBTBParameters(btbsa=true, densebtb=false, nSets=512, nWays=4, nRAS=16, tagSz=20),
+         bpdBaseOnly = None,
+         gshare = None,
+         tage = Some(TageParameters()),
+         bpdRandom = None),
+      dcache = Some(DCacheParams(rowBits = site(SystemBusKey).beatBytes*8,
+                                 nSets=64, nWays=8, nMSHRs=4, nTLBEntries=16)),
+      icache = Some(ICacheParams(fetchBytes = 4*4, rowBits = site(SystemBusKey).beatBytes*8, nSets=64, nWays=8))
+      )}
+
+   // Set TL network to 128bits wide
+   case SystemBusKey => up(SystemBusKey, site).copy(beatBytes = 16)
+})
+
+/**
+ * 4-wide BOOM. Our most aggressive design point yet!
+ */
+class WithMegaBooms extends Config((site, here, up) => {
+   case BoomTilesKey => up(BoomTilesKey, site) map { b => b.copy(
+      core = b.core.copy(
+         fetchWidth = 4,
+         decodeWidth = 4,
+         numRobEntries = 128,
+         issueParams = Seq(
+            IssueParams(issueWidth=4, numEntries=32, iqType=IQT_INT.litValue, dispatchWidth=4),
+            IssueParams(issueWidth=2, numEntries=32, iqType=IQT_FP.litValue , dispatchWidth=4)),
+         numIntPhysRegisters = 128,
+         numFpPhysRegisters = 128,
+         numLdqEntries = 32,
+         numStqEntries = 32,
          maxBrCount = 16,
          ftq = FtqParameters(nEntries=32),
          btb = BoomBTBParameters(btbsa=true, densebtb=false, nSets=512, nWays=4, nRAS=16, tagSz=20),
@@ -227,10 +233,11 @@ class WithMegaBooms extends Config((site, here, up) => {
          tage = Some(TageParameters()),
          bpdRandom = None),
       dcache = Some(DCacheParams(rowBits = site(SystemBusKey).beatBytes*8,
-                                 nSets=64, nWays=16, nMSHRs=8, nTLBEntries=32)),
+                                 nSets=64, nWays=8, nMSHRs=8, nTLBEntries=32)),
       icache = Some(ICacheParams(fetchBytes = 4*4, rowBits = site(SystemBusKey).beatBytes*8, nSets=64, nWays=8))
       )}
 
    // Set TL network to 128bits wide
    case SystemBusKey => up(SystemBusKey, site).copy(beatBytes = 16)
 })
+
