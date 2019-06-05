@@ -84,7 +84,7 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
   // s_meta_write_req  : Write the metadata for new cache lne
   // s_meta_write_resp :
 
-  val s_invalid :: s_refill_req :: s_refill_resp :: s_drain_rpq_loads :: s_wb_req :: s_wb_resp :: s_meta_clear :: s_commit_line :: s_drain_rpq :: s_meta_write_req :: s_meta_write_resp ::  Nil = Enum(11)
+  val s_invalid :: s_refill_req :: s_refill_resp :: s_drain_rpq_loads :: s_wb_req :: s_wb_resp :: s_meta_clear :: s_commit_line :: s_meta_write_req :: s_meta_write_resp :: s_drain_rpq :: Nil = Enum(11)
   val state = RegInit(s_invalid)
 
   val req     = Reg(new BoomDCacheReqInternal)
@@ -170,8 +170,7 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
         state   := s_refill_req
       }
     }
-  }
-  .elsewhen (state === s_refill_req) {
+  } .elsewhen (state === s_refill_req) {
     io.mem_acquire.valid := true.B
     io.mem_acquire.bits  := edge.AcquireBlock(
       fromSource      = id.U,
@@ -251,19 +250,10 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
     when (io.refill.fire()) {
       refill_ctr := refill_ctr + 1.U
       when (refill_ctr === (cacheDataBeats - 1).U) {
-        state := s_drain_rpq
+        state := s_meta_write_req
       }
     }
-  } .elsewhen (state === s_drain_rpq) {
-    io.replay <> rpq.io.deq
-    io.replay.bits.way_en    := req.way_en
-    io.replay.bits.addr := Cat(req_tag, req_idx, rpq.io.deq.bits.addr(blockOffBits-1,0))
-    when (rpq.io.empty ) {
-      state := s_meta_write_req
-    }
   } .elsewhen (state === s_meta_write_req) {
-    // Why do we write this meta before emptying the RPQ? Doesn't this allow
-    // stores to go out-of-order?
     io.meta_write.valid         := true.B
     io.meta_write.bits.idx      := req_idx
     io.meta_write.bits.data.coh := new_coh
@@ -274,7 +264,14 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
     }
   } .elsewhen (state === s_meta_write_resp) {
     // This wait state allows us to catch RAW hazards on the tags
-    state := s_invalid
+    state := s_drain_rpq
+  }.elsewhen (state === s_drain_rpq) {
+    io.replay <> rpq.io.deq
+    io.replay.bits.way_en    := req.way_en
+    io.replay.bits.addr := Cat(req_tag, req_idx, rpq.io.deq.bits.addr(blockOffBits-1,0))
+    when (rpq.io.empty ) {
+      state := s_invalid
+    }
   }
 
 
@@ -751,7 +748,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   val s2_nack_hit    = RegNext(s1_nack) // nack because of incoming probe
   val s2_nack_victim = s2_valid &&  s2_hit && mshrs.io.secondary_miss // Nack when we hit something currently being evicted
   val s2_nack_miss   = s2_valid && !s2_hit && !mshrs.io.req.ready // MSHRs not ready for request
-  val s2_nack        = s2_nack_miss || s2_nack_hit || s2_nack_victim
+  val s2_nack        = (s2_nack_miss || s2_nack_hit || s2_nack_victim) && !s2_is_replay
   val s2_send_resp = (RegNext(s1_send_resp) &&
                       (s2_hit ||
                        s2_nack ||
@@ -813,9 +810,9 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   wb.io.data_resp      := s2_data_muxed
   TLArbiter.lowest(edge, tl_out.c, wb.io.release, prober.io.rep)
 
-
   // load data gen
-  val s2_data_word = s2_data_muxed >> Cat(s2_word_idx, 0.U(log2Ceil(coreDataBits).W))
+  val s2_data_word_prebypass = s2_data_muxed >> Cat(s2_word_idx, 0.U(log2Ceil(coreDataBits).W))
+  val s2_data_word = Wire(UInt())
   val loadgen = new LoadGen(s2_req.uop.mem_size, s2_req.uop.mem_signed, s2_req.addr,
                             s2_data_word, s2_sc, wordBytes)
 
@@ -839,18 +836,27 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   io.lsu.resp.bits             := resp.bits
   io.lsu.resp.bits.uop.br_mask := GetNewBrMask(io.lsu.brinfo, resp.bits.uop)
 
+  assert(!(io.lsu.resp.valid && io.lsu.resp.bits.nack && s2_is_replay))
+
   // Store/amo hits
   val s3_req   = RegNext(s2_req)
   val s3_valid = RegNext(s2_valid && s2_hit && isWrite(s2_req.uop.mem_cmd) &&
-                         !s2_sc_fail && !(s2_send_resp && s2_nack)) &&
-                 !(io.lsu.exception && s3_req.uop.uses_ldq)
+                         !s2_sc_fail && !(s2_send_resp && s2_nack))
+  // For bypassing
+  val s4_req   = RegNext(s3_req)
+  val s4_valid = RegNext(s3_valid)
 
-  val s2_bypass_store = s3_valid && ((s2_req.addr >> wordOffBits) === (s3_req.addr >> wordOffBits))
+  val s3_bypass = s3_valid && ((s2_req.addr >> wordOffBits) === (s3_req.addr >> wordOffBits))
+  val s4_bypass = s4_valid && ((s2_req.addr >> wordOffBits) === (s4_req.addr >> wordOffBits))
 
+  // Store -> Load bypassing
+  s2_data_word := Mux(s3_bypass, s3_req.data,
+                  Mux(s4_bypass, s4_req.data,
+                                 s2_data_word_prebypass))
   val amoalu   = Module(new AMOALU(xLen))
   amoalu.io.mask := new StoreGen(s2_req.uop.mem_size, s2_req.addr, 0.U, xLen/8).mask
   amoalu.io.cmd  := s2_req.uop.mem_cmd
-  amoalu.io.lhs  := Mux(s2_bypass_store, s3_req.data, s2_data_word)
+  amoalu.io.lhs  := s2_data_word
   amoalu.io.rhs  := s2_req.data
 
 
