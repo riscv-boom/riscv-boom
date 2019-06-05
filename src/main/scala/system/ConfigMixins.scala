@@ -88,3 +88,30 @@ class WithRenumberHarts(rocketFirst: Boolean = true) extends Config((site, here,
   }
   case MaxHartIdBits => log2Up(up(BoomTilesKey, site).size + up(RocketTilesKey, site).size)
 })
+
+/**
+ * Add a synchronous clock crossing to the tile boundary
+ */
+class WithSynchronousBoomTiles extends Config((site, here, up) => {
+  case BoomCrossingKey => up(BoomCrossingKey, site) map { b =>
+    b.copy(crossingType = SynchronousCrossing())
+  }
+})
+
+/**
+ * Add an asynchronous clock crossing to the tile boundary
+ */
+class WithAsynchronousBoomTiles(depth: Int, sync: Int) extends Config((site, here, up) => {
+  case BoomCrossingKey => up(BoomCrossingKey, site) map { b =>
+    b.copy(crossingType = AsynchronousCrossing(depth, sync))
+  }
+})
+
+/**
+ * Add a rational clock crossing to the tile boundary (used when the clocks are related by a fraction).
+ */
+class WithRationalBoomTiles extends Config((site, here, up) => {
+  case BoomCrossingKey => up(BoomCrossingKey, site) map { b =>
+    b.copy(crossingType = RationalCrossing())
+  }
+})

@@ -23,6 +23,8 @@ import freechips.rocketchip.util._
 import freechips.rocketchip.subsystem._
 import freechips.rocketchip.amba.axi4._
 
+import boom.common.{BoomTile}
+
 trait HasBoomAndRocketTiles extends HasTiles
   with CanHavePeripheryPLIC
   with CanHavePeripheryCLINT
@@ -33,8 +35,9 @@ trait HasBoomAndRocketTiles extends HasTiles
 
   protected val rocketTileParams = p(RocketTilesKey)
   protected val boomTileParams = p(BoomTilesKey)
+  // crossing can either be per tile or global (aka only 1 crossing specified)
   private val rocketCrossings = perTileOrGlobalSetting(p(RocketCrossingKey), rocketTileParams.size)
-  private val boomCrossings = perTileOrGlobalSetting(p(RocketCrossingKey), boomTileParams.size)
+  private val boomCrossings = perTileOrGlobalSetting(p(BoomCrossingKey), boomTileParams.size)
 
   // Make a tile and wire its nodes into the system,
   // according to the specified type of clock crossing.
@@ -57,14 +60,13 @@ trait HasBoomAndRocketTiles extends HasTiles
   }
 
   val boomTiles = boomTileParams.zip(boomCrossings).map { case (tp, crossing) =>
-    val boomCore = LazyModule(
-      new boom.common.BoomTile(tp, crossing, PriorityMuxHartIdFromSeq(boomTileParams)))
+    val boom = LazyModule(new BoomTile(tp, crossing, PriorityMuxHartIdFromSeq(boomTileParams)))
 
-    connectMasterPortsToSBus(boomCore, crossing)
-    connectSlavePortsToCBus(boomCore, crossing)
-    connectInterrupts(boomCore, Some(debug), clintOpt, plicOpt)
+    connectMasterPortsToSBus(boom, crossing)
+    connectSlavePortsToCBus(boom, crossing)
+    connectInterrupts(boom, Some(debug), clintOpt, plicOpt)
 
-    boomCore
+    boom
   }
 
   boomTiles.map {

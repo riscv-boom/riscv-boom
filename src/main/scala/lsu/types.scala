@@ -14,7 +14,6 @@ import chisel3._
 import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.diplomacy.{AddressSet, LazyModule}
 import freechips.rocketchip.rocket.{DCache, HellaCache, HellaCacheArbiter, HellaCacheIO, NonBlockingDCache, PTW}
-import freechips.rocketchip.subsystem.RocketCrossingKey
 import freechips.rocketchip.tile.{BaseTile, HasTileParameters}
 import freechips.rocketchip.tilelink.TLIdentityNode
 

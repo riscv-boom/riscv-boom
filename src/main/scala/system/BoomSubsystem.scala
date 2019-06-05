@@ -20,7 +20,10 @@ import freechips.rocketchip.tile._
 import freechips.rocketchip.subsystem._
 import freechips.rocketchip.amba.axi4._
 
+import boom.common.{BoomTile}
+
 case object BoomTilesKey extends Field[Seq[boom.common.BoomTileParams]](Nil)
+case object BoomCrossingKey extends Field[Seq[RocketCrossingParams]](List(RocketCrossingParams()))
 
 trait HasBoomTiles extends HasTiles
   with CanHavePeripheryPLIC
@@ -31,21 +34,21 @@ trait HasBoomTiles extends HasTiles
   val module: HasBoomTilesModuleImp
 
   protected val boomTileParams = p(BoomTilesKey)
-  private val crossings = perTileOrGlobalSetting(p(RocketCrossingKey), boomTileParams.size)
+  // crossing can either be per tile or global (aka only 1 crossing specified)
+  private val crossings = perTileOrGlobalSetting(p(BoomCrossingKey), boomTileParams.size)
 
   // Make a tile and wire its nodes into the system,
   //   according to the specified type of clock crossing.
   //   Note that we also inject new nodes into the tile itself,
   //   also based on the crossing type.
   val boomTiles = boomTileParams.zip(crossings).map { case (tp, crossing) =>
-    val boomCore = LazyModule(
-      new boom.common.BoomTile(tp, crossing, PriorityMuxHartIdFromSeq(boomTileParams))).suggestName(tp.name)
+    val boom = LazyModule(new BoomTile(tp, crossing, PriorityMuxHartIdFromSeq(boomTileParams)))
 
-    connectMasterPortsToSBus(boomCore, crossing)
-    connectSlavePortsToCBus(boomCore, crossing)
-    connectInterrupts(boomCore, Some(debug), clintOpt, plicOpt)
+    connectMasterPortsToSBus(boom, crossing)
+    connectSlavePortsToCBus(boom, crossing)
+    connectInterrupts(boom, Some(debug), clintOpt, plicOpt)
 
-    boomCore
+    boom
   }
 
   boomTiles.map {
