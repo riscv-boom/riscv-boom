@@ -46,21 +46,19 @@ trait HasBoomTiles extends HasTiles
 
     connectMasterPortsToSBus(boom, crossing)
     connectSlavePortsToCBus(boom, crossing)
-    connectInterrupts(boom, Some(debug), clintOpt, plicOpt)
+
+    def treeNode: RocketTileLogicalTreeNode = new RocketTileLogicalTreeNode(boom.rocketLogicalTree.getOMInterruptTargets)
+    LogicalModuleTree.add(logicalTreeNode, boom.rocketLogicalTree)
 
     boom
   }
 
-  boomTiles.map {
-    b =>
-      def treeNode: RocketTileLogicalTreeNode = new RocketTileLogicalTreeNode(b.rocketLogicalTree.getOMInterruptTargets)
-      LogicalModuleTree.add(logicalTreeNode, b.rocketLogicalTree)
+  // connect interrupts based on the order of harts
+  boomTiles.sortWith(_.tileParams.hartId < _.tileParams.hartId).map {
+    b => connectInterrupts(b, Some(debug), clintOpt, plicOpt)
   }
 
-  def coreMonitorBundles = (boomTiles map { t =>
-    t.module.core.coreMonitorBundle
-  }).toList
-
+  def coreMonitorBundles = (boomTiles map { t => t.module.core.coreMonitorBundle }).toList
 }
 
 trait HasBoomTilesModuleImp extends HasTilesModuleImp

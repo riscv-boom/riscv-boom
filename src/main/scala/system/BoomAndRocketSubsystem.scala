@@ -48,15 +48,11 @@ trait HasBoomAndRocketTiles extends HasTiles
 
     connectMasterPortsToSBus(rocket, crossing)
     connectSlavePortsToCBus(rocket, crossing)
-    connectInterrupts(rocket, Some(debug), clintOpt, plicOpt)
+
+    def treeNode: RocketTileLogicalTreeNode = new RocketTileLogicalTreeNode(rocket.rocketLogicalTree.getOMInterruptTargets)
+    LogicalModuleTree.add(logicalTreeNode, rocket.rocketLogicalTree)
 
     rocket
-  }
-
-  rocketTiles.map {
-    r =>
-      def treeNode: RocketTileLogicalTreeNode = new RocketTileLogicalTreeNode(r.rocketLogicalTree.getOMInterruptTargets)
-      LogicalModuleTree.add(logicalTreeNode, r.rocketLogicalTree)
   }
 
   val boomTiles = boomTileParams.zip(boomCrossings).map { case (tp, crossing) =>
@@ -64,18 +60,21 @@ trait HasBoomAndRocketTiles extends HasTiles
 
     connectMasterPortsToSBus(boom, crossing)
     connectSlavePortsToCBus(boom, crossing)
-    connectInterrupts(boom, Some(debug), clintOpt, plicOpt)
+
+    def treeNode: RocketTileLogicalTreeNode = new RocketTileLogicalTreeNode(boom.rocketLogicalTree.getOMInterruptTargets)
+    LogicalModuleTree.add(logicalTreeNode, boom.rocketLogicalTree)
 
     boom
   }
 
-  boomTiles.map {
-    b =>
-      def treeNode: RocketTileLogicalTreeNode = new RocketTileLogicalTreeNode(b.rocketLogicalTree.getOMInterruptTargets)
-      LogicalModuleTree.add(logicalTreeNode, b.rocketLogicalTree)
-  }
+  // combine tiles and connect interrupts based on the order of harts
+  val boomAndRocketTiles = (rocketTiles ++ boomTiles).sortWith(_.tileParams.hartId < _.tileParams.hartId).map {
+    tile => {
+      connectInterrupts(tile, Some(debug), clintOpt, plicOpt)
 
-  val boomAndRocketTiles = rocketTiles ++ boomTiles
+      tile
+    }
+  }
 
   def coreMonitorBundles = (rocketTiles map { t => t.module.core.rocketImpl.coreMonitorBundle}).toList ++
                              (boomTiles map { t => t.module.core.coreMonitorBundle}).toList
