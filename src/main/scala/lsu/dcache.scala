@@ -335,7 +335,9 @@ class BoomIOMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomM
   io.mem_access.valid := state === s_mem_access
   io.mem_access.bits  := Mux(isAMO(req.uop.mem_cmd), atomics, Mux(isRead(req.uop.mem_cmd), get, put))
 
-  io.resp.valid     := state === s_resp
+  val send_resp = isRead(req.uop.mem_cmd)
+
+  io.resp.valid     := (state === s_resp) && send_resp
   io.resp.bits.uop  := req.uop
   io.resp.bits.data := loadgen.data
 
@@ -352,8 +354,10 @@ class BoomIOMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomM
       grant_word := wordFromBeat(req.addr, io.mem_ack.bits.data)
     }
   }
-  when (io.resp.fire()) {
-    state := s_idle
+  when (state === s_resp) {
+    when (!send_resp || io.resp.fire()) {
+      state := s_idle
+    }
   }
 }
 

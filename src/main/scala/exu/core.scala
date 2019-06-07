@@ -425,7 +425,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   io.ifu.sfence_addr       := io.lsu.exe.req.bits.sfence.bits.addr
 
   // We must redirect the PC the cycle after playing the SFENCE game.
-  io.ifu.flush_take_pc     := rob.io.flush.valid //|| RegNext(lsu.io.exe_resp.bits.sfence.valid)
+  io.ifu.flush_take_pc     := rob.io.flush.valid || RegNext(io.lsu.exe.req.bits.sfence.valid)
 
   // TODO FIX THIS HACK
   // The below code works because of two quirks with the flush mechanism
@@ -528,7 +528,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
                      || rob.io.flush.valid
                      || dec_stall_next_inst
                      || ((dec_uops(w).is_fence || dec_uops(w).is_fencei) && (io.rocc.busy || rocc_shim_busy))
-//                     || (dec_uops(w).is_fencei && !lsu.io.lsu_fencei_rdy)
+                     || (dec_uops(w).is_fencei && !io.lsu.fencei_rdy)
                      || (dec_uops(w).uopc === uopROCC && dec_rocc_found)
                      )) ||
                    dec_last_inst_was_stalled
@@ -946,29 +946,14 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   io.lsu.commit_store_mask       := rob.io.commit.st_mask
   io.lsu.commit_load_mask        := rob.io.commit.ld_mask
   io.lsu.commit_load_at_rob_head := rob.io.com_load_is_at_rob_head
-  // lsu.io.commit_store_mask := rob.io.commit.st_mask
-  // lsu.io.commit_load_mask  := rob.io.commit.ld_mask
-  // lsu.io.commit_load_at_rob_head := rob.io.com_load_is_at_rob_head
 
   // //com_xcpt.valid comes too early, will fight against a branch that resolves same cycle as an exception
   io.lsu.exception := rob.io.flush.valid
-  // lsu.io.exception := rob.io.flush.valid
 
   // // Handle Branch Mispeculations
   io.lsu.brinfo := br_unit.brinfo
   io.lsu.rob_head_idx := rob.io.rob_head_idx
   io.lsu.rob_pnr_idx  := rob.io.rob_pnr_idx
-  // dc_shim.io.core.brinfo := br_unit.brinfo
-
-  // lsu.io.debug_tsc := debug_tsc_reg
-
-  // dc_shim.io.core.flush_pipe := rob.io.flush.valid
-
-  // lsu.io.nack <> dc_shim.io.core.nack
-
-  // lsu.io.dmem_req_ready := dc_shim.io.core.req.ready
-  // lsu.io.dmem_is_ordered:= dc_shim.io.core.ordered
-  // lsu.io.release := io.release
 
   if (usingFPU) {
     io.lsu.fp_stdata <> fp_pipeline.io.to_sdq
@@ -1377,7 +1362,6 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   //-------------------------------------------------------------
   // Page Table Walker
 
-//  io.ptw_tlb <> lsu.io.ptw
   io.ptw.ptbr       := csr.io.ptbr
   io.ptw.status     := csr.io.status
   io.ptw.pmp        := csr.io.pmp
