@@ -60,10 +60,10 @@ class FetchBuffer(numEntries: Int)(implicit p: Parameters) extends BoomModule
   ram.suggestName("fb_uop_ram")
   val deq_vec = Wire(Vec(numRows, Vec(coreWidth, new MicroOp)))
 
-  val head = RegInit(0.U(log2Ceil(numRows).W))
+  val head = RegInit(1.U(numRows.W))
   val tail = RegInit(1.U(numEntries.W))
 
-  val count = RegInit(0.U(log2Ceil(numEntries).W))
+  val maybe_full = RegInit(false.B)
 
   //-------------------------------------------------------------
   // **** Enqueue Uops ****
@@ -72,7 +72,17 @@ class FetchBuffer(numEntries: Int)(implicit p: Parameters) extends BoomModule
   // Step 2: Generate one-hot write indices.
   // Step 3: Write MicroOps into the RAM.
 
-  val do_enq = count < (numEntries-fetchWidth).U
+  def rotateLeft(in: UInt, k: Int) = {
+    val n = in.getWidth
+    Cat(in(n-k-1,0), in(n-1, n-k))
+  }
+
+  val might_hit_head = (1 until fetchWidth).map(k => VecInit(rotateLeft(tail, k).asBools.zipWithIndex.filter
+    {case (e,i) => i % coreWidth == 0}.map {case (e,i) => e}).asUInt).map(tail => head & tail).reduce(_|_).orR
+  val at_head = (VecInit(tail.asBools.zipWithIndex.filter {case (e,i) => i % coreWidth == 0}
+    .map {case (e,i) => e}).asUInt & head).orR
+  val do_enq = !(at_head && maybe_full || might_hit_head)
+
   io.enq.ready := do_enq
 
   // Input microops.
@@ -114,7 +124,7 @@ class FetchBuffer(numEntries: Int)(implicit p: Parameters) extends BoomModule
     Cat(ptr(n-2,0), ptr(n-1))
   }
 
-  var enq_idx = head
+  var enq_idx = tail
   for (i <- 0 until fetchWidth) {
     enq_idxs(i) := enq_idx
     enq_idx = Mux(in_mask(i), inc(enq_idx), enq_idx)
@@ -129,52 +139,49 @@ class FetchBuffer(numEntries: Int)(implicit p: Parameters) extends BoomModule
     }
   }
 
-  // all enqueuing uops have been compacted.
-  // How many incoming uops are there?
-  val popc_enqmask = PopCount(in_mask)
-  // What is the count of uops being added to the ram?
-  val enq_count = Mux(do_enq, popc_enqmask, 0.U)
-
   //-------------------------------------------------------------
   // **** Dequeue Uops ****
   //-------------------------------------------------------------
 
-  val do_deq = io.deq.ready && count >= coreWidth.U
+  val will_hit_tail = (VecInit((0 until numEntries)
+    .map(i => if (i % coreWidth == 0) false.B else head(i/coreWidth))).asUInt & tail).orR
+  val at_tail = at_head
+
+  val deq_valid = !(at_tail && !maybe_full || will_hit_tail)
+  val do_deq = io.deq.ready && deq_valid
 
   // Generate vec for dequeue read port.
   for (i <- 0 until numEntries) {
     deq_vec(i/coreWidth)(i%coreWidth) := ram(i)
   }
 
-  val val_count = Wire(UInt(coreWidth.W))
-  val_count := Mux(count < coreWidth.U, 0.U, coreWidth.U)
-  val deq_count = Mux(do_deq, coreWidth.U, 0.U)
-
-  val val_count_oh = UIntToOH(val_count)
-  val deq_vals = (1 to coreWidth).map(i => val_count_oh >> i.U).reduce(_|_).asBools
-  io.deq.bits.uops zip deq_vals      map {case (d,q) => d.valid := q}
-  io.deq.bits.uops zip deq_vec(head) map {case (d,q) => d.bits  := q}
+  io.deq.bits.uops.map(u => u.valid := deq_valid)
+  io.deq.bits.uops zip Mux1H(head, deq_vec) map {case (d,q) => d.bits := q}
+  io.deq.valid := deq_valid
 
   //-------------------------------------------------------------
   // **** Update State ****
   //-------------------------------------------------------------
 
-  count := count + enq_count - deq_count
-
   when (do_enq) {
     tail := enq_idx
+    when (in_mask.reduce(_||_)) {
+      maybe_full := true.B
+    }
   }
 
   when (do_deq) {
-    head := WrapInc(head, numRows)
+    head := inc(head)
+    maybe_full := false.B
   }
 
   when (io.clear) {
-    count := 0.U
-    head := 0.U
+    head := 1.U
     tail := 1.U
+    maybe_full := false.B
   }
 
+  // TODO Is this necessary?
   when (reset.toBool) {
     io.deq.bits.uops map { u => u.valid := false.B }
   }
@@ -186,28 +193,18 @@ class FetchBuffer(numEntries: Int)(implicit p: Parameters) extends BoomModule
   if (DEBUG_PRINTF) {
     printf("FetchBuffer:\n")
     // TODO a problem if we don't check the f3_valid?
-    printf("    Fetch3: Enq:(V:%c Msk:0x%x PC:0x%x EnqCnt:%d) Clear:%c\n",
+    printf("    Fetch3: Enq:(V:%c Msk:0x%x PC:0x%x) Clear:%c\n",
       BoolToChar(io.enq.valid, 'V'),
       io.enq.bits.mask,
       io.enq.bits.pc,
-      enq_count,
       BoolToChar(io.clear, 'C'))
 
-    printf("    RAM: Cnt:%d WPtr:%d RPtr:%d\n",
-      count,
+    printf("    RAM: WPtr:%d RPtr:%d\n",
       tail,
       head)
 
-    printf("    Fetch4: Deq:(V:%c DeqCnt:%d PC:0x%x)\n",
+    printf("    Fetch4: Deq:(V:%c PC:0x%x)\n",
       BoolToChar(io.deq.valid, 'V'),
-      deq_count,
       io.deq.bits.uops(0).bits.pc)
   }
-
-  //-------------------------------------------------------------
-  // **** Asserts ****
-  //-------------------------------------------------------------
-
-  assert (count >= deq_count, "[fetchbuffer] Trying to dequeue more uops than are available.")
-  //assert (!(count === 0.U && OHToUInt(tail) =/= head), "[fetchbuffer] pointers should match if count is zero.")
 }
