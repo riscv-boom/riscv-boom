@@ -23,7 +23,7 @@ import chisel3.core.{DontCare}
 import freechips.rocketchip.config.{Parameters}
 
 import boom.common._
-import boom.util.{BoolToChar}
+import boom.util.{BoolToChar, WrapInc}
 
 /**
  * Bundle that is made up of converted MicroOps from the Fetch Bundle
@@ -109,12 +109,12 @@ class FetchBuffer(numEntries: Int)(implicit p: Parameters) extends BoomModule
   // Step 2. Generate one-hot write indices.
   val enq_idxs = Wire(Vec(fetchWidth, UInt(numEntries.W)))
 
-  def inc(val ptr: UInt) = {
+  def inc(ptr: UInt) = {
     val n = ptr.getWidth
     Cat(ptr(n-2,0), ptr(n-1))
   }
 
-  val enq_idx = head
+  var enq_idx = head
   for (i <- 0 until fetchWidth) {
     enq_idxs(i) := enq_idx
     enq_idx = Mux(in_mask(i), inc(enq_idx), enq_idx)
@@ -139,19 +139,19 @@ class FetchBuffer(numEntries: Int)(implicit p: Parameters) extends BoomModule
   // **** Dequeue Uops ****
   //-------------------------------------------------------------
 
+  val do_deq = io.deq.ready && count >= coreWidth.U
+
   // Generate vec for dequeue read port.
   for (i <- 0 until numEntries) {
     deq_vec(i/coreWidth)(i%coreWidth) := ram(i)
   }
 
-  val deq_count = Wire(UInt(coreWidth.W))
-  deq_count :=
-    Mux(io.deq.ready,
-      Mux(count < coreWidth.U, count, coreWidth.U),
-      0.U)
+  val val_count = Wire(UInt(coreWidth.W))
+  val_count := Mux(count < coreWidth.U, 0.U, coreWidth.U)
+  val deq_count = Mux(do_deq, coreWidth.U, 0.U)
 
-  val deq_count_oh = UIntToOH(deq_count)
-  val deq_vals := (1 to coreWidth).map(i => deq_count_oh >> i.U).reduce(_|_).asBools
+  val val_count_oh = UIntToOH(val_count)
+  val deq_vals = (1 to coreWidth).map(i => val_count_oh >> i.U).reduce(_|_).asBools
   io.deq.bits.uops zip deq_vals      map {case (d,q) => d.valid := q}
   io.deq.bits.uops zip deq_vec(head) map {case (d,q) => d.bits  := q}
 
@@ -165,12 +165,14 @@ class FetchBuffer(numEntries: Int)(implicit p: Parameters) extends BoomModule
     tail := enq_idx
   }
 
-  head := head + deq_count
+  when (do_deq) {
+    head := WrapInc(head, numRows)
+  }
 
   when (io.clear) {
     count := 0.U
     head := 0.U
-    tail := 0.U
+    tail := 1.U
   }
 
   when (reset.toBool) {
@@ -184,19 +186,17 @@ class FetchBuffer(numEntries: Int)(implicit p: Parameters) extends BoomModule
   if (DEBUG_PRINTF) {
     printf("FetchBuffer:\n")
     // TODO a problem if we don't check the f3_valid?
-    printf("    Fetch3: Enq:(V:%c Msk:0x%x FIdx:%d CmptMsk:0x%x PC:0x%x EnqCnt:%d) Clear:%c\n",
+    printf("    Fetch3: Enq:(V:%c Msk:0x%x PC:0x%x EnqCnt:%d) Clear:%c\n",
       BoolToChar(io.enq.valid, 'V'),
       io.enq.bits.mask,
-      first_index,
-      compact_mask.asUInt,
       io.enq.bits.pc,
       enq_count,
       BoolToChar(io.clear, 'C'))
 
     printf("    RAM: Cnt:%d WPtr:%d RPtr:%d\n",
       count,
-      write_ptr,
-      read_ptr)
+      tail,
+      head)
 
     printf("    Fetch4: Deq:(V:%c DeqCnt:%d PC:0x%x)\n",
       BoolToChar(io.deq.valid, 'V'),
@@ -209,5 +209,5 @@ class FetchBuffer(numEntries: Int)(implicit p: Parameters) extends BoomModule
   //-------------------------------------------------------------
 
   assert (count >= deq_count, "[fetchbuffer] Trying to dequeue more uops than are available.")
-  assert (!(count === 0.U && write_ptr =/= read_ptr), "[fetchbuffer] pointers should match if count is zero.")
+  //assert (!(count === 0.U && OHToUInt(tail) =/= head), "[fetchbuffer] pointers should match if count is zero.")
 }
