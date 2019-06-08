@@ -13,7 +13,7 @@ import freechips.rocketchip.config._
 import freechips.rocketchip.subsystem._
 import freechips.rocketchip.devices.tilelink._
 import freechips.rocketchip.diplomacy._
-import freechips.rocketchip.diplomaticobjectmodel.logicaltree.{LogicalModuleTree, RocketLogicalTreeNode}
+import freechips.rocketchip.diplomaticobjectmodel.logicaltree.{LogicalModuleTree, LogicalTreeNode, RocketLogicalTreeNode}
 import freechips.rocketchip.rocket._
 import freechips.rocketchip.subsystem.RocketCrossingParams
 import freechips.rocketchip.tilelink._
@@ -68,7 +68,9 @@ class BoomTile(
     val boomParams: BoomTileParams,
     crossing: ClockCrossingType,
     lookup: LookupByHartIdImpl,
-    q: Parameters)
+    q: Parameters,
+    logicalTreeNode: LogicalTreeNode
+    )
     extends BaseTile(boomParams, crossing, lookup, q)
     with SinksExternalInterrupts
     with SourcesExternalNotifications
@@ -79,8 +81,8 @@ class BoomTile(
 {
 
   // Private constructor ensures altered LazyModule.p is used implicitly
-  def this(params: BoomTileParams, crossing: RocketCrossingParams, lookup: LookupByHartIdImpl)(implicit p: Parameters) =
-    this(params, crossing.crossingType, lookup, p)
+  def this(params: BoomTileParams, crossing: RocketCrossingParams, lookup: LookupByHartIdImpl, logicalTreeNode: LogicalTreeNode)(implicit p: Parameters) =
+    this(params, crossing.crossingType, lookup, p, logicalTreeNode)
 
 
   val intOutwardNode = IntIdentityNode()
@@ -95,7 +97,7 @@ class BoomTile(
   dtim_adapter.foreach(lm => connectTLSlave(lm.node, xBytes))
 
   val bus_error_unit = boomParams.beuAddr map { a =>
-    val beu = LazyModule(new BusErrorUnit(new L1BusErrors, BusErrorUnitParams(a)))
+    val beu = LazyModule(new BusErrorUnit(new L1BusErrors, BusErrorUnitParams(a), logicalTreeNode))
     intOutwardNode := beu.intNode
     connectTLSlave(beu.node, xBytes)
     beu
@@ -178,7 +180,7 @@ class BoomTile(
       mtvecWritable       = boomParams.core.mtvecWritable
     )
   )
-  val rocketLogicalTree: RocketLogicalTreeNode = new RocketLogicalTreeNode(cpuDevice, fakeRocketParams, dtim_adapter, p(XLen), iCacheLogicalTreeNode)
+  val rocketLogicalTree: RocketLogicalTreeNode = new RocketLogicalTreeNode(cpuDevice, fakeRocketParams, dtim_adapter, p(XLen))
 
 }
 

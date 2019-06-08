@@ -39,7 +39,7 @@ trait HasBoomTiles extends HasTiles
   //   also based on the crossing type.
   val boomTiles = boomTileParams.zip(crossings).map { case (tp, crossing) =>
     val boomCore = LazyModule(
-      new boom.common.BoomTile(tp, crossing, PriorityMuxHartIdFromSeq(boomTileParams))).suggestName(tp.name)
+      new boom.common.BoomTile(tp, crossing, PriorityMuxHartIdFromSeq(boomTileParams), logicalTreeNode)).suggestName(tp.name)
 
     connectMasterPortsToSBus(boomCore, crossing)
     connectSlavePortsToCBus(boomCore, crossing)
