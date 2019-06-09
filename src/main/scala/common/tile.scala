@@ -47,7 +47,7 @@ case class BoomTileParams(
     btb: Option[BTBParams] = Some(BTBParams()),
     dataScratchpadBytes: Int = 0,
     trace: Boolean = false,
-    name: Option[String] = Some("tile"),
+    name: Option[String] = Some("boom_tile"),
     hartId: Int = 0,
     beuAddr: Option[BigInt] = None,
     blockerCtrlAddr: Option[BigInt] = None,
