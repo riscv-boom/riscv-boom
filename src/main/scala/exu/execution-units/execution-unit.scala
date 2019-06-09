@@ -589,7 +589,7 @@ class FPUExeUnit(
     assert (queue.io.enq.ready) // If this backs up, we've miscalculated the size of the queue.
 
     val fp_sdq = Module(new BranchKillableQueue(new ExeUnitResp(dataWidth),
-      entries = 1)) // Lets us backpressure floating point store data
+      entries = 3)) // Lets us backpressure floating point store data
     fp_sdq.io.enq.valid      := io.req.valid && io.req.bits.uop.uopc === uopSTA
     fp_sdq.io.enq.bits.uop   := io.req.bits.uop
     fp_sdq.io.enq.bits.data  := ieee(io.req.bits.rs2_data)
