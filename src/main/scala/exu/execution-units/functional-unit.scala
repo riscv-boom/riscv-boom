@@ -350,7 +350,7 @@ class ALUUnit(isBranchUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)
 
   // operand 2 select
   val op2_data = Mux(io.req.bits.uop.ctrl.op2_sel === OP2_IMM,  Sext(imm_xprlen.asUInt, xLen),
-                 Mux(io.req.bits.uop.ctrl.op2_sel === OP2_IMMC, io.req.bits.uop.pop1(4,0),
+                 Mux(io.req.bits.uop.ctrl.op2_sel === OP2_IMMC, io.req.bits.uop.prs1(4,0),
                  Mux(io.req.bits.uop.ctrl.op2_sel === OP2_RS2 , io.req.bits.rs2_data,
                  Mux(io.req.bits.uop.ctrl.op2_sel === OP2_NEXT, Mux(io.req.bits.uop.is_rvc, 2.U, 4.U),
                                                                 0.U))))

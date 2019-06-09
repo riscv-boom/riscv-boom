@@ -222,9 +222,9 @@ class RenameStage(
     val fmap = if (usingFPU) fmaptable.io.values(w) else Wire(new MapTableOutput(1))
     if (!usingFPU) fmap := DontCare
 
-    uop.pop1       := Mux(uop.lrs1_rtype === RT_FLT, fmap.prs1, imap.prs1)
-    uop.pop2       := Mux(uop.lrs2_rtype === RT_FLT, fmap.prs2, imap.prs2)
-    uop.pop3       := fmap.prs3 // only FP has 3rd operand
+    uop.prs1       := Mux(uop.lrs1_rtype === RT_FLT, fmap.prs1, imap.prs1)
+    uop.prs2       := Mux(uop.lrs2_rtype === RT_FLT, fmap.prs2, imap.prs2)
+    uop.prs3       := fmap.prs3 // only FP has 3rd operand
     uop.stale_pdst := Mux(uop.dst_rtype === RT_FLT,  fmap.stale_pdst, imap.stale_pdst)
   }
 
@@ -285,12 +285,12 @@ class RenameStage(
     assert (!(
       ren2_will_fire(w) &&
       ren2_uops(w).lrs1_rtype === RT_FIX &&
-      ren2_uops(w).pop1 =/= ibusytable.io.map_table(w).prs1),
+      ren2_uops(w).prs1 =/= ibusytable.io.map_table(w).prs1),
       "[rename] ren2 maptable prs1 value don't match uop's values.")
     assert (!(
       ren2_will_fire(w) &&
       ren2_uops(w).lrs2_rtype === RT_FIX &&
-      ren2_uops(w).pop2 =/= ibusytable.io.map_table(w).prs2),
+      ren2_uops(w).prs2 =/= ibusytable.io.map_table(w).prs2),
       "[rename] ren2 maptable prs2 value don't match uop's values.")
   }
 
