@@ -28,27 +28,27 @@ import boom.util._
  */
 class RenameMapTableElementIo(val plWidth: Int)(implicit p: Parameters) extends BoomBundle
 {
-  val element            = Output(UInt(PREG_SZ.W))
+  val element            = Output(UInt(pregSz.W))
 
   val wens               = Input(Vec(plWidth, Bool()))
-  val ren_pdsts          = Input(Vec(plWidth, UInt(PREG_SZ.W)))
+  val ren_pdsts          = Input(Vec(plWidth, UInt(pregSz.W)))
 
   val ren_br_vals        = Input(Vec(plWidth, Bool()))
-  val ren_br_tags        = Input(Vec(plWidth, UInt(BR_TAG_SZ.W)))
+  val ren_br_tags        = Input(Vec(plWidth, UInt(brTagSz.W)))
 
   val br_mispredict      = Input(Bool())
-  val br_mispredict_tag  = Input(UInt(BR_TAG_SZ.W))
+  val br_mispredict_tag  = Input(UInt(brTagSz.W))
 
   // rollback (on exceptions)
   // TODO REMOVE THIS ROLLBACK PORT, since wens is mutually exclusive with rollback_wens
   val rollback_wen        = Input(Bool())
-  val rollback_stale_pdst = Input(UInt(PREG_SZ.W))
+  val rollback_stale_pdst = Input(UInt(pregSz.W))
 
   // TODO scr option
   val flush_pipeline      = Input(Bool())
   val commit_wen          = Input(Bool())
-  val commit_pdst         = Input(UInt(PREG_SZ.W))
-  val committed_element   = Output(UInt(PREG_SZ.W))
+  val commit_pdst         = Input(UInt(pregSz.W))
+  val committed_element   = Output(UInt(pregSz.W))
 }
 
 /**
@@ -70,10 +70,10 @@ class RenameMapTableElement(plWidth: Int, always_zero: Boolean)(implicit p: Para
   // out in the meantime. A software solution is also possible, but I'm
   // unwilling to trust that.
 
-  val element = RegInit(0.U(PREG_SZ.W))
+  val element = RegInit(0.U(pregSz.W))
 
   // handle branch speculation
-  val element_br_copies = Mem(MAX_BR_COUNT, UInt(PREG_SZ.W))
+  val element_br_copies = Mem(maxBrCount, UInt(pregSz.W))
 
   // this is possibly the hardest piece of code I have ever had to reason about in my LIFE.
   // Or maybe that's the 5am talking.
@@ -85,7 +85,7 @@ class RenameMapTableElement(plWidth: Int, always_zero: Boolean)(implicit p: Para
   // 3rd, current element
 
   for (w <- 0 until plWidth) {
-    var elm_cases = Array((false.B, 0.U(PREG_SZ.W)))
+    var elm_cases = Array((false.B, 0.U(pregSz.W)))
 
     for (xx <- w to 0 by -1) {
        elm_cases ++= Array((io.wens(xx),  io.ren_pdsts(xx)))
@@ -108,8 +108,8 @@ class RenameMapTableElement(plWidth: Int, always_zero: Boolean)(implicit p: Para
     element := PriorityMux(io.wens.reverse, io.ren_pdsts.reverse)
   }
 
-  if (ENABLE_COMMIT_MAP_TABLE) {
-    val committed_element = RegInit(0.U(PREG_SZ.W))
+  if (enableCommitMapTable) {
+    val committed_element = RegInit(0.U(pregSz.W))
     when (io.commit_wen) {
       committed_element := io.commit_pdst
     }
@@ -221,7 +221,7 @@ class RenameMapTable(
     }
   }
 
-  if (ENABLE_COMMIT_MAP_TABLE) {
+  if (enableCommitMapTable) {
     for (w <- 0 until plWidth) {
       val ldst = io.com_uops(w).ldst
       when (io.com_valids(w) && (io.com_uops(w).dst_rtype === rtype.U)) {
@@ -232,8 +232,8 @@ class RenameMapTable(
   }
 
   // Read out the map-table entries ASAP, then deal with bypassing busy-bits later.
-  //private val map_table_output = Wire(Vec(plWidth*3, UInt(PREG_SZ.W)))
-  private val map_table_output = Seq.fill(plWidth*3)(Wire(UInt(PREG_SZ.W)))
+  //private val map_table_output = Wire(Vec(plWidth*3, UInt(pregSz.W)))
+  private val map_table_output = Seq.fill(plWidth*3)(Wire(UInt(pregSz.W)))
   def map_table_prs1(w:Int) = map_table_output(w+0*plWidth)
   def map_table_prs2(w:Int) = map_table_output(w+1*plWidth)
   def map_table_prs3(w:Int) = map_table_output(w+2*plWidth)
@@ -250,10 +250,10 @@ class RenameMapTable(
 
   // Bypass the physical register mappings
   for (w <- 0 until plWidth) {
-    var rs1_cases =  Array((false.B, 0.U(PREG_SZ.W)))
-    var rs2_cases =  Array((false.B, 0.U(PREG_SZ.W)))
-    var rs3_cases =  Array((false.B, 0.U(PREG_SZ.W)))
-    var stale_cases= Array((false.B, 0.U(PREG_SZ.W)))
+    var rs1_cases =  Array((false.B, 0.U(pregSz.W)))
+    var rs2_cases =  Array((false.B, 0.U(pregSz.W)))
+    var rs3_cases =  Array((false.B, 0.U(pregSz.W)))
+    var stale_cases= Array((false.B, 0.U(pregSz.W)))
 
     // Handle bypassing new physical destinations to operands (and stale destination)
     // scalastyle:off

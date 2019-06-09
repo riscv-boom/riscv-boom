@@ -76,9 +76,9 @@ class IssueUnitIO(
 
   val iss_valids       = Output(Vec(issueWidth, Bool()))
   val iss_uops         = Output(Vec(issueWidth, new MicroOp()))
-  val wakeup_ports     = Flipped(Vec(numWakeupPorts, Valid(new IqWakeup(PREG_SZ))))
+  val wakeup_ports     = Flipped(Vec(numWakeupPorts, Valid(new IqWakeup(pregSz))))
 
-  val mem_ldSpecWakeup = Flipped(Valid(UInt(width=PREG_SZ.W)))
+  val mem_ldSpecWakeup = Flipped(Valid(UInt(width=pregSz.W)))
 
   // tell the issue unit what each execution pipeline has in terms of functional units
   val fu_types         = Input(Vec(issueWidth, Bits(width=FUC_SZ.W)))

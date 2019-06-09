@@ -82,8 +82,8 @@ abstract class RegisterFile(
   (implicit p: Parameters) extends BoomModule
 {
   val io = IO(new BoomBundle {
-    val read_ports = Vec(numReadPorts, new RegisterFileReadPortIO(PREG_SZ, registerWidth))
-    val write_ports = Flipped(Vec(numWritePorts, Valid(new RegisterFileWritePort(PREG_SZ, registerWidth))))
+    val read_ports = Vec(numReadPorts, new RegisterFileReadPortIO(pregSz, registerWidth))
+    val write_ports = Flipped(Vec(numWritePorts, Valid(new RegisterFileWritePort(pregSz, registerWidth))))
   })
 
   private val rf_cost = (numReadPorts + numWritePorts) * (numReadPorts + 2*numWritePorts)

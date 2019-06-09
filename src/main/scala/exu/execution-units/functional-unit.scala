@@ -117,7 +117,7 @@ class FunctionalUnitIo(
  */
 class GetPredictionInfo(implicit p: Parameters) extends BoomBundle
 {
-  val br_tag = Output(UInt(BR_TAG_SZ.W))
+  val br_tag = Output(UInt(brTagSz.W))
   val info = Input(new BranchPredInfo())
 }
 
@@ -175,16 +175,16 @@ class BrResolutionInfo(implicit p: Parameters) extends BoomBundle
 {
   val valid      = Bool()
   val mispredict = Bool()
-  val mask       = UInt(MAX_BR_COUNT.W) // the resolve mask
-  val tag        = UInt(BR_TAG_SZ.W)    // the branch tag that was resolved
-  val exe_mask   = UInt(MAX_BR_COUNT.W) // the br_mask of the actual branch uop
+  val mask       = UInt(maxBrCount.W) // the resolve mask
+  val tag        = UInt(brTagSz.W)    // the branch tag that was resolved
+  val exe_mask   = UInt(maxBrCount.W) // the br_mask of the actual branch uop
                                                // used to reset the dec_br_mask
   val pc_lob     = UInt(log2Ceil(fetchWidth*coreInstBytes).W)
   val ftq_idx    = UInt(ftqSz.W)
   val rob_idx    = UInt(robAddrSz.W)
-  val ldq_idx    = UInt(LDQ_ADDR_SZ.W)  // track the "tail" of loads and stores, so we can
-  val stq_idx    = UInt(STQ_ADDR_SZ.W)  // quickly reset the LSU on a mispredict
-  val rxq_idx    = UInt(log2Ceil(NUM_RXQ_ENTRIES).W) // ditto for RoCC queue
+  val ldq_idx    = UInt(ldqAddrSz.W)  // track the "tail" of loads and stores, so we can
+  val stq_idx    = UInt(stqAddrSz.W)  // quickly reset the LSU on a mispredict
+  val rxq_idx    = UInt(log2Ceil(numRxqEntries).W) // ditto for RoCC queue
   val taken      = Bool()                     // which direction did the branch go?
   val is_jr      = Bool() // TODO remove use cfi_type instead
   val cfi_type   = CfiType()

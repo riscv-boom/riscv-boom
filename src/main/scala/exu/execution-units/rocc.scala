@@ -35,7 +35,7 @@ class RoCCShimCoreIO(implicit p: Parameters) extends BoomBundle
   val dec_uops         = Input(Vec(coreWidth, new MicroOp))
   val rxq_full         = Output(Bool())
   val rxq_empty        = Output(Bool())
-  val rxq_idx          = Output(UInt(log2Ceil(NUM_RXQ_ENTRIES).W))
+  val rxq_idx          = Output(UInt(log2Ceil(numRxqEntries).W))
   val rob_pnr_idx      = Input(UInt(robAddrSz.W))
   val rob_head_idx     = Input(UInt(robAddrSz.W))
 
@@ -71,28 +71,28 @@ class RoCCShim(implicit p: Parameters) extends BoomModule
   val enq_val      = WireInit(false.B)
 
   // RoCC execute queue. Wait for PNR, holds operands and inst bits
-  val rxq_val       = Reg(Vec(NUM_RXQ_ENTRIES, Bool()))
-  val rxq_op_val    = Reg(Vec(NUM_RXQ_ENTRIES, Bool()))
-  val rxq_committed = Reg(Vec(NUM_RXQ_ENTRIES, Bool()))
-  val rxq_uop       = Reg(Vec(NUM_RXQ_ENTRIES, new MicroOp()))
-  val rxq_inst      = Reg(Vec(NUM_RXQ_ENTRIES, UInt(32.W)))
-  val rxq_rs1       = Reg(Vec(NUM_RXQ_ENTRIES, UInt(xLen.W)))
-  val rxq_rs2       = Reg(Vec(NUM_RXQ_ENTRIES, UInt(xLen.W)))
+  val rxq_val       = Reg(Vec(numRxqEntries, Bool()))
+  val rxq_op_val    = Reg(Vec(numRxqEntries, Bool()))
+  val rxq_committed = Reg(Vec(numRxqEntries, Bool()))
+  val rxq_uop       = Reg(Vec(numRxqEntries, new MicroOp()))
+  val rxq_inst      = Reg(Vec(numRxqEntries, UInt(32.W)))
+  val rxq_rs1       = Reg(Vec(numRxqEntries, UInt(xLen.W)))
+  val rxq_rs2       = Reg(Vec(numRxqEntries, UInt(xLen.W)))
 
   // RoCC commit queue. Wait for response, or immediate unbusy
-  val rcq           = Module(new Queue(new MicroOp(), NUM_RCQ_ENTRIES))
+  val rcq           = Module(new Queue(new MicroOp(), numRcqEntries))
 
   // The instruction we are waiting for response from
-  val rxq_head     = RegInit(0.U(log2Ceil(NUM_RXQ_ENTRIES).W))
+  val rxq_head     = RegInit(0.U(log2Ceil(numRxqEntries).W))
   // The next instruction we are waiting to "commit" through PNR
-  val rxq_com_head = RegInit(0.U(log2Ceil(NUM_RXQ_ENTRIES).W))
-  val rxq_tail     = RegInit(0.U(log2Ceil(NUM_RXQ_ENTRIES).W))
+  val rxq_com_head = RegInit(0.U(log2Ceil(numRxqEntries).W))
+  val rxq_tail     = RegInit(0.U(log2Ceil(numRxqEntries).W))
 
   io.core.rxq_idx := rxq_tail
 
   // Decode
   val rocc_idx = WireInit(0.U)
-  val br_mask = WireInit(0.U(MAX_BR_COUNT.W))
+  val br_mask = WireInit(0.U(maxBrCount.W))
 
   for (w <- 0 until coreWidth) {
     when (io.core.dec_rocc_vals(w)
@@ -108,7 +108,7 @@ class RoCCShim(implicit p: Parameters) extends BoomModule
     rxq_committed(rxq_tail) := false.B
     rxq_uop      (rxq_tail) := io.core.dec_uops(rocc_idx)
     rxq_inst     (rxq_tail) := io.core.dec_uops(rocc_idx).debug_inst
-    rxq_tail                := WrapInc(rxq_tail, NUM_RXQ_ENTRIES)
+    rxq_tail                := WrapInc(rxq_tail, numRxqEntries)
   }
 
   // Wait for operands
@@ -129,7 +129,7 @@ class RoCCShim(implicit p: Parameters) extends BoomModule
   when (rxq_val   (rxq_com_head) &&
         IsOlder(rxq_uop(rxq_com_head).rob_idx, io.core.rob_pnr_idx, io.core.rob_head_idx)) {
     rxq_committed(rxq_com_head)   := true.B
-    rxq_com_head                  := WrapInc(rxq_com_head, NUM_RXQ_ENTRIES)
+    rxq_com_head                  := WrapInc(rxq_com_head, numRxqEntries)
   }
 
   // Execute
@@ -149,16 +149,16 @@ class RoCCShim(implicit p: Parameters) extends BoomModule
     rcq.io.enq.valid               := true.B
 
     rxq_val(rxq_head)              := false.B
-    rxq_head                       := WrapInc(rxq_head, NUM_RXQ_ENTRIES)
+    rxq_head                       := WrapInc(rxq_head, numRxqEntries)
   }
 
 
-  io.core.rxq_full  := WrapInc(rxq_tail, NUM_RXQ_ENTRIES) === rxq_head
+  io.core.rxq_full  := WrapInc(rxq_tail, numRxqEntries) === rxq_head
   io.core.rxq_empty := rxq_tail === rxq_head
 
   //--------------------------
   // Branches
-  for (i <- 0 until NUM_RXQ_ENTRIES) {
+  for (i <- 0 until numRxqEntries) {
     when (rxq_val(i)) {
       rxq_uop(i).br_mask := GetNewBrMask(io.brinfo, rxq_uop(i))
       when (IsKilledByBranch(io.brinfo, rxq_uop(i))) {
@@ -179,14 +179,14 @@ class RoCCShim(implicit p: Parameters) extends BoomModule
     rxq_tail     := 0.U
     rxq_head     := 0.U
     rxq_com_head := 0.U
-    for (i <- 0 until NUM_RXQ_ENTRIES) {
+    for (i <- 0 until numRxqEntries) {
       rxq_val(i)       := false.B
       rxq_op_val(i)    := false.B
       rxq_committed(i) := false.B
     }
   } .elsewhen (io.exception) {
     rxq_tail := rxq_com_head
-    for (i <- 0 until NUM_RXQ_ENTRIES) {
+    for (i <- 0 until numRxqEntries) {
       when (!rxq_committed(i)) {
         rxq_val(i)      := false.B
         rxq_op_val(i)   := false.B

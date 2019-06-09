@@ -143,7 +143,7 @@ class DCacheReq(implicit p: Parameters) extends BoomBundle()(p)
 class NackInfo(implicit p: Parameters) extends BoomBundle()(p)
 {
    val valid      = Bool()
-   val lsu_idx    = UInt(LSU_ADDR_SZ.W)
+   val lsu_idx    = UInt(lsuAddrSz.W)
    val isload     = Bool()
    val cache_nack = Bool() // was the cache nacking us, or the LSU
                            // cache nacks for stuctural hazards (MUST kill st->ld forwardings)
@@ -206,7 +206,7 @@ class DCMemPortIO(implicit p: Parameters) extends BoomBundle()(p)
 class DCacheShim(implicit p: Parameters) extends BoomModule()(p)
    with freechips.rocketchip.rocket.constants.MemoryOpConstants
 {
-   val max_num_inflight = NUM_LDQ_ENTRIES
+   val max_num_inflight = numLdqEntries
 
    val io = IO(new Bundle
    {

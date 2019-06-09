@@ -59,8 +59,8 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   val is_jal           = Bool()                      // is this a JAL (doesn't include JR)? used for branch unit
   val is_ret           = Bool()                      // is jalr with rd=x0, rs1=x1? (i.e., a return)
   val is_call          = Bool()                      //
-  val br_mask          = UInt(MAX_BR_COUNT.W)  // which branches are we being speculated under?
-  val br_tag           = UInt(BR_TAG_SZ.W)
+  val br_mask          = UInt(maxBrCount.W)  // which branches are we being speculated under?
+  val br_tag           = UInt(brTagSz.W)
 
   val br_prediction    = new BranchPredInfo
 
@@ -84,18 +84,18 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
                                               // then translate and sign-extend in execute
   val csr_addr         = UInt(CSR_ADDR_SZ.W)    // only used for critical path reasons in Exe
   val rob_idx          = UInt(robAddrSz.W)
-  val ldq_idx          = UInt(LDQ_ADDR_SZ.W)
-  val stq_idx          = UInt(STQ_ADDR_SZ.W)
-  val rxq_idx          = UInt(log2Ceil(NUM_RXQ_ENTRIES).W)
-  val pdst             = UInt(PREG_SZ.W)
-  val prs1             = UInt(PREG_SZ.W)
-  val prs2             = UInt(PREG_SZ.W)
-  val prs3             = UInt(PREG_SZ.W)
+  val ldq_idx          = UInt(ldqAddrSz.W)
+  val stq_idx          = UInt(stqAddrSz.W)
+  val rxq_idx          = UInt(log2Ceil(numRxqEntries).W)
+  val pdst             = UInt(pregSz.W)
+  val prs1             = UInt(pregSz.W)
+  val prs2             = UInt(pregSz.W)
+  val prs3             = UInt(pregSz.W)
 
   val prs1_busy        = Bool()
   val prs2_busy        = Bool()
   val prs3_busy        = Bool()
-  val stale_pdst       = UInt(PREG_SZ.W)
+  val stale_pdst       = UInt(pregSz.W)
   val exception        = Bool()
   val exc_cause        = UInt(xLen.W)          // TODO compress this down, xlen is insanity
   val bypassable       = Bool()                      // can we bypass ALU results? (doesn't include loads, csr, etc...)
@@ -113,10 +113,10 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   val flush_on_commit  = Bool()                      // some instructions need to flush the pipeline behind them
 
   // logical specifiers (only used in Decode->Rename), except rollback (ldst)
-  val ldst             = UInt(LREG_SZ.W)
-  val lrs1             = UInt(LREG_SZ.W)
-  val lrs2             = UInt(LREG_SZ.W)
-  val lrs3             = UInt(LREG_SZ.W)
+  val ldst             = UInt(lregSz.W)
+  val lrs1             = UInt(lregSz.W)
+  val lrs2             = UInt(lregSz.W)
+  val lrs3             = UInt(lregSz.W)
   val ldst_val         = Bool()              // is there a destination? invalid for stores, rd==x0, etc.
   val dst_rtype        = UInt(2.W)
   val lrs1_rtype       = UInt(2.W)

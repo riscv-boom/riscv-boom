@@ -43,11 +43,11 @@ class FreeListIo(
 
   // handle branches (save copy of freelist on branch, merge on mispredict)
   val ren_br_vals   = Input(Vec(plWidth, Bool()))
-  val ren_br_tags   = Input(Vec(plWidth, UInt(BR_TAG_SZ.W)))
+  val ren_br_tags   = Input(Vec(plWidth, UInt(brTagSz.W)))
 
   // handle mispredicts
   val br_mispredict_val = Input(Bool())
-  val br_mispredict_tag = Input(UInt(BR_TAG_SZ.W))
+  val br_mispredict_tag = Input(UInt(brTagSz.W))
 
   // rollback (on exceptions)
   val rollback_wens  = Input(Vec(plWidth, Bool()))
@@ -95,7 +95,7 @@ class RenameFreeListHelper(
 
   // track all allocations that have occurred since branch passed by
   // can quickly reset pipeline on branch mispredict
-  val allocation_lists = Reg(Vec(MAX_BR_COUNT, Bits(numPregs.W)))
+  val allocation_lists = Reg(Vec(maxBrCount, Bits(numPregs.W)))
 
   // TODO why is this a Vec? can I do this all on one bit-vector?
   val enq_mask = Wire(Vec(plWidth, Bits(numPregs.W)))
@@ -149,8 +149,8 @@ class RenameFreeListHelper(
 
   // track which allocation_lists just got cleared out by a branch,
   // to enforce a write priority to allocation_lists()
-  val br_cleared = Wire(Vec(MAX_BR_COUNT, Bool()))
-  for (i <- 0 until MAX_BR_COUNT) { br_cleared(i) := false.B }
+  val br_cleared = Wire(Vec(maxBrCount, Bool()))
+  for (i <- 0 until maxBrCount) { br_cleared(i) := false.B }
 
   for (w <- plWidth-1 to 0 by -1) {
     // When branching, start a fresh copy of the allocation_list
@@ -166,7 +166,7 @@ class RenameFreeListHelper(
                             just_allocated_mask)
   }
 
-  for (i <- 0 until MAX_BR_COUNT) {
+  for (i <- 0 until maxBrCount) {
     when (!br_cleared(i)) {
       allocation_lists(i) := allocation_lists(i) | just_allocated_mask
     }
@@ -199,7 +199,7 @@ class RenameFreeListHelper(
     free_list := allocation_list | free_list | (enq_mask.reduce(_|_))
 
     // set other branch allocation_lists to zero where allocation_list(j) == 1...
-    for (i <- 0 until MAX_BR_COUNT) {
+    for (i <- 0 until maxBrCount) {
       allocation_lists(i) := allocation_lists(i) & ~allocation_list
     }
   }
@@ -208,7 +208,7 @@ class RenameFreeListHelper(
   // OPTIONALLY: handle single-cycle resets
   // Committed Free List tracks what the free list is at the commit point,
   // allowing for a single-cycle reset of the rename state on a pipeline flush.
-  if (ENABLE_COMMIT_MAP_TABLE) {
+  if (enableCommitMapTable) {
     val committed_free_list = RegInit(~(1.U(numPregs.W)))
 
     val com_mask = Wire(Vec(plWidth,   Bits(numPregs.W)))
