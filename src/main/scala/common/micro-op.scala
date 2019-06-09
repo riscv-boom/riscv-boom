@@ -32,7 +32,7 @@ abstract trait HasBoomUOP extends BoomBundle
 /**
  * MicroOp passing through the pipeline
  */
-class MicroOp(implicit p: Parameters) extends BoomBundle()(p)
+class MicroOp(implicit p: Parameters) extends BoomBundle
   with freechips.rocketchip.rocket.constants.MemoryOpConstants
   with freechips.rocketchip.rocket.constants.ScalarOpConstants
 {
@@ -198,7 +198,7 @@ object CfiType
  *
  * @param data_sz size of data to put with MicroOp
  */
-class MicroOpWithData(val data_sz: Int)(implicit p: Parameters) extends BoomBundle()(p)
+class MicroOpWithData(val data_sz: Int)(implicit p: Parameters) extends BoomBundle
   with HasBoomUOP
 {
   val data = UInt(data_sz.W)

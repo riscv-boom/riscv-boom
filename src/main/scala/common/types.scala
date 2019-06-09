@@ -14,11 +14,11 @@ import freechips.rocketchip.config.Parameters
 /**
  * BOOM module that is used to add parameters to the module
  */
-abstract class BoomModule(implicit p: Parameters) extends freechips.rocketchip.tile.CoreModule()(p)
+abstract class BoomModule(implicit p: Parameters) extends freechips.rocketchip.tile.CoreModule
   with HasBoomCoreParameters
 
 /**
  * BOOM bundle used to add parameters to the object/class/trait/etc
  */
-class BoomBundle(implicit val p: Parameters) extends freechips.rocketchip.util.ParameterizedBundle()(p)
+class BoomBundle(implicit val p: Parameters) extends freechips.rocketchip.util.ParameterizedBundle
   with HasBoomCoreParameters

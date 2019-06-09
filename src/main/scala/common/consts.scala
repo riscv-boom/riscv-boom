@@ -287,7 +287,7 @@ trait ScalarOpConstants
   val BUBBLE  = (0x4033).U(32.W)
 
   def NullMicroOp()(implicit p: Parameters): boom.common.MicroOp = {
-    val uop = Wire(new boom.common.MicroOp()(p))
+    val uop = Wire(new boom.common.MicroOp)
     uop            := DontCare // Overridden in the following lines
     uop.uopc       := uopNOP // maybe not required, but helps on asserts that try to catch spurious behavior
     uop.bypassable := false.B
