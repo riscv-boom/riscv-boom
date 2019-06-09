@@ -99,6 +99,25 @@ object GetNewBrMask
    }
 }
 
+object UpdateBrMask
+{
+  def apply(brinfo: BrResolutionInfo, uop: MicroOp): MicroOp = {
+    val out = WireInit(uop)
+    out.br_mask := GetNewBrMask(brinfo, uop)
+    out
+  }
+  def apply[T <: boom.common.HasBoomUOP](brinfo: BrResolutionInfo, bundle: T): T = {
+    val out = WireInit(bundle)
+    out.uop.br_mask := GetNewBrMask(brinfo, bundle.uop.br_mask)
+    out
+  }
+  def apply[T <: boom.common.HasBoomUOP](brinfo: BrResolutionInfo, bundle: Valid[T]): Valid[T] = {
+    val out = WireInit(bundle)
+    out.bits.uop.br_mask := GetNewBrMask(brinfo, bundle.bits.uop.br_mask)
+    out
+  }
+}
+
 /**
  * Object to check if at least 1 bit matches in two masks
  */
