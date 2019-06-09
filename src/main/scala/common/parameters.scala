@@ -263,8 +263,6 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
   val stqAddrSz       = log2Ceil(numStqEntries)
   val lsuAddrSz       = ldqAddrSz max stqAddrSz
   val brTagSz         = log2Ceil(maxBrCount)
-  val NUM_BROB_ENTRIES  = numRobRows //TODO explore smaller BROBs
-  val BrobAddrSz      = log2Ceil(NUM_BROB_ENTRIES)
 
   require (numIntPhysRegs >= (32 + coreWidth))
   require (numFpPhysRegs >= (32 + coreWidth))
