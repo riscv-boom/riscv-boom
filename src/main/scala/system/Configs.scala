@@ -193,8 +193,8 @@ class MediumBoomAndRocketConfig extends Config(
   new WithoutTLMonitors ++
   // boom param setup
   new WithRVC ++
-  new BaseBoomConfig ++
   new WithMediumBooms ++
+  new BaseBoomConfig ++
   // create boom tile
   new WithNBoomCores(1) ++
   // create rocket tile

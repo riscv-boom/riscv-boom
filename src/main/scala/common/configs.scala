@@ -23,7 +23,7 @@ import boom.lsu._
 import boom.system.{BoomTilesKey}
 
 /**
- * Baseline BOOM configuration. A core config must be mixed-in alongside this.
+ * Baseline BOOM configuration.
  */
 class BaseBoomConfig extends Config((site, here, up) => {
   // Top-Level
@@ -32,7 +32,7 @@ class BaseBoomConfig extends Config((site, here, up) => {
   // Use this boot ROM for SimDTM.
   case BootROMParams => BootROMParams(contentFileName = s"./bootrom/bootrom.rv${site(XLen)}.img")
 
-  // Specify anything constant between core configs.
+  // Specify things which are typically common between core configs.
   case BoomTilesKey => up(BoomTilesKey, site) map { b => b.copy(
     core = b.core.copy(
       fpu = Some(freechips.rocketchip.tile.FPUParams(sfmaLatency=4, dfmaLatency=4, divSqrt=true))),
@@ -114,22 +114,22 @@ class WithRVC extends Config((site, here, up) => {
 })
 
 /**
- * 1-wide BOOM. Try to be fast to compile and easier to debug.
+ * 1-wide BOOM.
  */
 class WithSmallBooms extends Config((site, here, up) => {
   case BoomTilesKey => up(BoomTilesKey, site) map { b => b.copy(
     core = b.core.copy(
       fetchWidth = 2,
       decodeWidth = 1,
-      numRobEntries = 16,
+      numRobEntries = 32,
       issueParams = Seq(
-        IssueParams(issueWidth=1, numEntries=4, iqType=IQT_MEM.litValue, dispatchWidth=1),
-        IssueParams(issueWidth=1, numEntries=4, iqType=IQT_INT.litValue, dispatchWidth=1),
-        IssueParams(issueWidth=1, numEntries=4, iqType=IQT_FP.litValue , dispatchWidth=1)),
-      numIntPhysRegisters = 48,
+        IssueParams(issueWidth=1, numEntries=8, iqType=IQT_MEM.litValue, dispatchWidth=1),
+        IssueParams(issueWidth=1, numEntries=8, iqType=IQT_INT.litValue, dispatchWidth=1),
+        IssueParams(issueWidth=1, numEntries=8, iqType=IQT_FP.litValue , dispatchWidth=1)),
+      numIntPhysRegisters = 52,
       numFpPhysRegisters = 48,
-      numLdqEntries=4,
-      numStqEntries=4,
+      numLdqEntries = 8,
+      numStqEntries = 8,
       maxBrCount = 4,
       bpdBaseOnly = None,
       ftq = FtqParameters(nEntries=8),
@@ -152,15 +152,15 @@ class WithMediumBooms extends Config((site, here, up) => {
     core = b.core.copy(
       fetchWidth = 2,
       decodeWidth = 2,
-      numRobEntries = 48,
+      numRobEntries = 64,
       issueParams = Seq(
-        IssueParams(issueWidth=1, numEntries=20, iqType=IQT_MEM.litValue, dispatchWidth=2),
+        IssueParams(issueWidth=1, numEntries=12, iqType=IQT_MEM.litValue, dispatchWidth=2),
         IssueParams(issueWidth=2, numEntries=16, iqType=IQT_INT.litValue, dispatchWidth=2),
-        IssueParams(issueWidth=1, numEntries=10, iqType=IQT_FP.litValue , dispatchWidth=2)),
-      numIntPhysRegisters = 70,
+        IssueParams(issueWidth=1, numEntries=12, iqType=IQT_FP.litValue , dispatchWidth=2)),
+      numIntPhysRegisters = 80,
       numFpPhysRegisters = 64,
       numLdqEntries = 16,
-      numStqEntries = 9,
+      numStqEntries = 16,
       maxBrCount = 8,
       ftq = FtqParameters(nEntries=32),
       btb = BoomBTBParameters(btbsa=true, densebtb=false, nSets=64, nWays=2,
@@ -188,13 +188,13 @@ class WithLargeBooms extends Config((site, here, up) => {
       decodeWidth = 3,
       numRobEntries = 96,
       issueParams = Seq(
-        IssueParams(issueWidth=1, numEntries=20, iqType=IQT_MEM.litValue, dispatchWidth=3),
-        IssueParams(issueWidth=2, numEntries=20, iqType=IQT_INT.litValue, dispatchWidth=3),
-        IssueParams(issueWidth=1, numEntries=20, iqType=IQT_FP.litValue , dispatchWidth=3)),
-      numIntPhysRegisters = 96,
-      numFpPhysRegisters = 64,
-      numLdqEntries = 32,
-      numStqEntries = 16,
+        IssueParams(issueWidth=1, numEntries=16, iqType=IQT_MEM.litValue, dispatchWidth=3),
+        IssueParams(issueWidth=2, numEntries=24, iqType=IQT_INT.litValue, dispatchWidth=3),
+        IssueParams(issueWidth=1, numEntries=16, iqType=IQT_FP.litValue , dispatchWidth=3)),
+      numIntPhysRegisters = 100,
+      numFpPhysRegisters = 96,
+      numLdqEntries = 24,
+      numStqEntries = 24,
       maxBrCount = 12,
       ftq = FtqParameters(nEntries=32),
       btb = BoomBTBParameters(btbsa=true, densebtb=false, nSets=512, nWays=4, nRAS=16, tagSz=20),
@@ -210,7 +210,7 @@ class WithLargeBooms extends Config((site, here, up) => {
 })
 
 /**
- * 4-wide BOOM. Our most aggressive design point yet!
+ * 4-wide BOOM.
  */
 class WithMegaBooms extends Config((site, here, up) => {
   case BoomTilesKey => up(BoomTilesKey, site) map { b => b.copy(
