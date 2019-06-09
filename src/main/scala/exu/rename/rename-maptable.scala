@@ -155,7 +155,7 @@ class RenameMapTable(
   )(implicit p: Parameters) extends BoomModule
   with HasBoomCoreParameters
 {
-  private val pregSz = log2Ceil(numPregs)
+  override val pregSz = log2Ceil(numPregs)
 
   val io = IO(new BoomBundle {
     // Inputs

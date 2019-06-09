@@ -29,7 +29,7 @@ class FreeListIo(
   val plWidth: Int)
 (implicit p: Parameters) extends BoomBundle
 {
-  private val pregSz = log2Ceil(numPregs)
+  override val pregSz = log2Ceil(numPregs)
 
   val req_preg_vals = Input(Vec(plWidth, Bool()))
   val req_pregs     = Output(Vec(plWidth, UInt(pregSz.W))) // TODO: Confirm functionality
@@ -250,7 +250,7 @@ class RenameFreeList(
   numPregs: Int)
   (implicit p: Parameters) extends BoomModule
 {
-  private val pregSz = log2Ceil(numPregs)
+  override val pregSz = log2Ceil(numPregs)
 
   val io = IO(new Bundle {
     // Inputs
