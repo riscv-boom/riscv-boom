@@ -436,9 +436,10 @@ class BranchKillableQueue[T <: boom.common.HasBoomUOP](gen: T, entries: Int)
   io.enq.ready := !full
 
   private val out = ram(deq_ptr.value)
-  io.deq.valid := deq_ram_valid && valids(deq_ptr.value) && !IsKilledByBranch(io.brinfo, out.uop)
+  val out_brmask = brmasks(deq_ptr.value)
+  io.deq.valid := deq_ram_valid && valids(deq_ptr.value) && !IsKilledByBranch(io.brinfo, out_brmask)
   io.deq.bits := out
-  io.deq.bits.uop.br_mask := GetNewBrMask(io.brinfo, brmasks(deq_ptr.value))
+  io.deq.bits.uop.br_mask := GetNewBrMask(io.brinfo, out_brmask)
 
   // For flow queue behavior.
   when (io.empty) {
