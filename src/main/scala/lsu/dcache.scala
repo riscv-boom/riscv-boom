@@ -678,15 +678,18 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
 
   val s1_req          = RegNext(s0_req)
   s1_req.uop.br_mask := GetNewBrMask(io.lsu.brinfo, s0_req.uop)
-  val s1_valid = RegNext(s0_valid &&
+  val s2_store_failed = Wire(Bool())
+  val s1_valid = RegNext(s0_valid                                     &&
                          !IsKilledByBranch(io.lsu.brinfo, s0_req.uop) &&
-                         !(io.lsu.exception && s0_req.uop.uses_ldq),
-                         init=false.B) && !io.lsu.s1_kill
+                         !(io.lsu.exception && s0_req.uop.uses_ldq)   &&
+                         !(s2_store_failed && io.lsu.req.fire() && s0_req.uop.uses_stq),
+                         init=false.B)
 
   assert(!(io.lsu.s1_kill && !RegNext(io.lsu.req.fire())))
   val s1_addr         = s1_req.addr
   val s1_nack         = s1_req.addr(idxMSB,idxLSB) === prober.io.meta_write.bits.idx && !prober.io.req.ready
   val s1_send_resp     = RegNext(s0_send_resp)
+  val s1_is_lsu        = RegNext(io.lsu.req.fire()) // TODO make this a bundle
   val s1_is_probe      = RegNext(prober_fire)
   val s1_is_replay     = RegNext(mshrs.io.replay.fire())
   val s1_replay_way_en = RegNext(mshrs.io.replay.bits.way_en) // For replays, the metadata isn't written yet
@@ -699,8 +702,10 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
 
   val s2_req   = RegNext(s1_req)
   val s2_valid = RegNext(s1_valid &&
+                         !io.lsu.s1_kill &&
                          !IsKilledByBranch(io.lsu.brinfo, s1_req.uop) &&
-                         !(io.lsu.exception && s1_req.uop.uses_ldq))
+                         !(io.lsu.exception && s1_req.uop.uses_ldq) &&
+                         !(s2_store_failed && s1_is_lsu && s1_req.uop.uses_stq))
   s2_req.uop.br_mask := GetNewBrMask(io.lsu.brinfo, s1_req.uop)
   val s2_is_probe  = RegNext(s1_is_probe)
   val s2_is_replay = RegNext(s1_is_replay)
@@ -760,7 +765,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   // hits always send a response
   // If MSHR is not available, LSU has to replay this request later
   // If MSHR is available and this is only a store(not a amo), we don't need to wait for resp later
-
+  s2_store_failed := s2_valid && s2_nack && s2_send_resp && s2_req.uop.uses_stq
 
   // Miss handling
   mshrs.io.req.valid := s2_valid &&
