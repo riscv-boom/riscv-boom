@@ -63,20 +63,3 @@ class BoomRocketSystemModule[+L <: BoomRocketSystem](_outer: L) extends BoomRock
   with CanHaveSlaveAXI4PortModuleImp
   with HasPeripheryBootROMModuleImp
   with DontTouch
-
-
-// ------------------------------------------------------------------------
-// Base system that uses the the serial interface (TSI) to bringup the core
-// ------------------------------------------------------------------------
-
-class BoomRocketSystemWithTSI(implicit p: Parameters) extends BoomRocketSystem
-  with testchipip.HasNoDebug
-  with testchipip.HasPeripherySerial
-{
-  override lazy val module = new BoomRocketSystemWithTSIModule(this)
-}
-
-class BoomRocketSystemWithTSIModule[+L <: BoomRocketSystemWithTSI](_outer: L) extends BoomRocketSystemModule(_outer)
-  with testchipip.HasNoDebugModuleImp
-  with testchipip.HasPeripherySerialModuleImp
-  with DontTouch

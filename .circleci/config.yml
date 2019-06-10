@@ -74,7 +74,7 @@ jobs:
                     - bhd-with-verilator-v9-{{ checksum "../bhd.hash" }}
             - run:
                 name: Building BoomConfig using Verilator
-                command: .circleci/do-rtl-build.sh SUB_PROJECT=boom TOP=BoomRocketSystemWithTSI MODEL=TestHarnessWithTSI CONFIG=BoomConfig
+                command: .circleci/do-rtl-build.sh SUB_PROJECT=boom TOP=BoomRocketSystem MODEL=TestHarness CONFIG=BoomConfig
                 no_output_timeout: 120m
             - save_cache:
                 key: boomconfig-{{ .Branch }}-{{ .Revision }}
@@ -101,7 +101,7 @@ jobs:
                     - bhd-with-verilator-v9-{{ checksum "../bhd.hash" }}
             - run:
                 name: Building SmallRV32UnifiedBoomConfig using Verilator
-                command: .circleci/do-rtl-build.sh SUB_PROJECT=boom TOP=BoomRocketSystemWithTSI MODEL=TestHarnessWithTSI CONFIG=SmallRV32UnifiedBoomConfig
+                command: .circleci/do-rtl-build.sh SUB_PROJECT=boom TOP=BoomRocketSystem MODEL=TestHarness CONFIG=SmallRV32UnifiedBoomConfig
                 no_output_timeout: 120m
             - save_cache:
                 key: smallrv32unifiedboomconfig-{{ .Branch }}-{{ .Revision }}
@@ -128,7 +128,7 @@ jobs:
                     - bhd-with-verilator-v9-{{ checksum "../bhd.hash" }}
             - run:
                 name: Building SmallBoomConfig using Verilator
-                command: .circleci/do-rtl-build.sh SUB_PROJECT=boom TOP=BoomRocketSystemWithTSI MODEL=TestHarnessWithTSI CONFIG=SmallBoomConfig
+                command: .circleci/do-rtl-build.sh SUB_PROJECT=boom TOP=BoomRocketSystem MODEL=TestHarness CONFIG=SmallBoomConfig
                 no_output_timeout: 120m
             - save_cache:
                 key: smallboomconfig-{{ .Branch }}-{{ .Revision }}
@@ -155,7 +155,7 @@ jobs:
                     - bhd-with-verilator-v9-{{ checksum "../bhd.hash" }}
             - run:
                 name: Building MediumBoomConfig using Verilator
-                command: .circleci/do-rtl-build.sh SUB_PROJECT=boom TOP=BoomRocketSystemWithTSI MODEL=TestHarnessWithTSI CONFIG=MediumBoomConfig
+                command: .circleci/do-rtl-build.sh SUB_PROJECT=boom TOP=BoomRocketSystem MODEL=TestHarness CONFIG=MediumBoomConfig
                 no_output_timeout: 120m
             - save_cache:
                 key: mediumboomconfig-{{ .Branch }}-{{ .Revision }}
@@ -182,13 +182,13 @@ jobs:
                     - bhd-with-verilator-v9-{{ checksum "../bhd.hash" }}
             - run:
                 name: Building SmallBoomAndRocketConfig using Verilator
-                command: .circleci/do-rtl-build.sh SUB_PROJECT=boom TOP=BoomRocketSystemWithTSI MODEL=TestHarnessWithTSI CONFIG=SmallBoomAndRocketConfig
+                command: .circleci/do-rtl-build.sh SUB_PROJECT=boom TOP=BoomRocketSystem MODEL=TestHarness CONFIG=SmallBoomAndRocketConfig
                 no_output_timeout: 120m
             - save_cache:
                 key: smallboomandrocketconfig-{{ .Branch }}-{{ .Revision }}
                 paths:
                     - "/home/riscvuser/bhd"
-    prepare-smallboomconfig-dtm:
+    prepare-example-boomconfig:
         docker:
             - image: riscvboom/riscvboom-images:0.0.5
         environment:
@@ -208,11 +208,38 @@ jobs:
                 keys:
                     - bhd-with-verilator-v9-{{ checksum "../bhd.hash" }}
             - run:
-                name: Building SmallBoomConfig With DTM using Verilator
-                command: .circleci/do-rtl-build.sh SUB_PROJECT=boom TOP=BoomRocketSystem MODEL=TestHarness CONFIG=SmallBoomConfig
+                name: Building BoomConfig with TSI bringup using Verilator
+                command: .circleci/do-rtl-build.sh SUB_PROJECT=example CONFIG=DefaultBoomConfig
                 no_output_timeout: 120m
             - save_cache:
-                key: smallboomconfig-dtm-{{ .Branch }}-{{ .Revision }}
+                key: example-boomconfig-{{ .Branch }}-{{ .Revision }}
+                paths:
+                    - "/home/riscvuser/bhd"
+    prepare-example-smallboomconfig:
+        docker:
+            - image: riscvboom/riscvboom-images:0.0.5
+        environment:
+            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
+            TERM: dumb
+        steps:
+            - checkout
+            - run:
+                name: Create hash of riscv-tools and bhd
+                command: |
+                    .circleci/get-bhd-hash.sh
+                    .circleci/get-riscv-tools-hash.sh
+            - restore_cache:
+                keys:
+                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
+            - restore_cache:
+                keys:
+                    - bhd-with-verilator-v9-{{ checksum "../bhd.hash" }}
+            - run:
+                name: Building SmallBoomConfig with TSI bringup using Verilator
+                command: .circleci/do-rtl-build.sh SUB_PROJECT=example CONFIG=SmallDefaultBoomConfig
+                no_output_timeout: 120m
+            - save_cache:
+                key: example-smallboomconfig-{{ .Branch }}-{{ .Revision }}
                 paths:
                     - "/home/riscvuser/bhd"
     run-scala-checkstyle:
@@ -226,7 +253,7 @@ jobs:
             - run:
                 name: Run Scala checkstyle
                 command: make checkstyle
-    boomconfig-run-csmith-tests:
+    example-boomconfig-run-csmith-tests:
         docker:
             - image: riscvboom/riscvboom-images:0.0.5
         environment:
@@ -243,10 +270,32 @@ jobs:
                     - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
             - restore_cache:
                 keys:
-                    - boomconfig-{{ .Branch }}-{{ .Revision }}
+                    - example-boomconfig-{{ .Branch }}-{{ .Revision }}
             - run:
-                name: Run BoomConfig csmith tests
-                command: .circleci/build-run-csmith-tests.sh BoomConfig 50
+                name: Run BoomConfig with TSI bringup csmith tests
+                command: .circleci/build-run-csmith-tests.sh DefaultBoomConfig 50
+                no_output_timeout: 30m
+    example-smallboomconfig-run-csmith-tests:
+        docker:
+            - image: riscvboom/riscvboom-images:0.0.5
+        environment:
+            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
+            TERM: dumb
+        steps:
+            - checkout
+            - run:
+                name: Create hash of riscv-tools
+                command: |
+                    .circleci/get-riscv-tools-hash.sh
+            - restore_cache:
+                keys:
+                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
+            - restore_cache:
+                keys:
+                    - example-smallboomconfig-{{ .Branch }}-{{ .Revision }}
+            - run:
+                name: Run SmallBoomConfig with TSI bringup csmith tests
+                command: .circleci/build-run-csmith-tests.sh SmallDefaultBoomConfig 50
                 no_output_timeout: 30m
     boomconfig-run-riscv-tests:
         docker:
@@ -269,30 +318,8 @@ jobs:
             - run:
                 name: Run BoomConfig riscv tests
                 command: |
-                    make run-bmark-tests -C ../bhd/sims/verisim SUB_PROJECT=boom TOP=BoomRocketSystemWithTSI MODEL=TestHarnessWithTSI CONFIG=BoomConfig
-                    make run-asm-tests -C ../bhd/sims/verisim SUB_PROJECT=boom TOP=BoomRocketSystemWithTSI MODEL=TestHarnessWithTSI CONFIG=BoomConfig
-    smallrv32unifiedboomconfig-run-csmith-tests:
-        docker:
-            - image: riscvboom/riscvboom-images:0.0.5
-        environment:
-            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
-            TERM: dumb
-        steps:
-            - checkout
-            - run:
-                name: Create hash of riscv-tools
-                command: |
-                    .circleci/get-riscv-tools-hash.sh
-            - restore_cache:
-                keys:
-                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
-            - restore_cache:
-                keys:
-                    - smallrv32unifiedboomconfig-{{ .Branch }}-{{ .Revision }}
-            - run:
-                name: Run BoomConfig csmith tests
-                command: .circleci/build-run-csmith-tests.sh SmallRV32UnifiedBoomConfig 50
-                no_output_timeout: 30m
+                    make run-bmark-tests -C ../bhd/sims/verisim SUB_PROJECT=boom TOP=BoomRocketSystem MODEL=TestHarness CONFIG=BoomConfig
+                    make run-asm-tests -C ../bhd/sims/verisim SUB_PROJECT=boom TOP=BoomRocketSystem MODEL=TestHarness CONFIG=BoomConfig
     smallrv32unifiedboomconfig-run-riscv-tests:
         docker:
             - image: riscvboom/riscvboom-images:0.0.5
@@ -314,29 +341,7 @@ jobs:
             - run:
                 name: Run SmallRV32UnifiedBoomConfig riscv tests
                 command: |
-                    make run-asm-tests -C ../bhd/sims/verisim SUB_PROJECT=boom TOP=BoomRocketSystemWithTSI MODEL=TestHarnessWithTSI CONFIG=SmallRV32UnifiedBoomConfig
-    smallboomconfig-run-csmith-tests:
-        docker:
-            - image: riscvboom/riscvboom-images:0.0.5
-        environment:
-            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
-            TERM: dumb
-        steps:
-            - checkout
-            - run:
-                name: Create hash of riscv-tools
-                command: |
-                    .circleci/get-riscv-tools-hash.sh
-            - restore_cache:
-                keys:
-                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
-            - restore_cache:
-                keys:
-                    - smallboomconfig-{{ .Branch }}-{{ .Revision }}
-            - run:
-                name: Run SmallBoomConfig csmith tests
-                command: .circleci/build-run-csmith-tests.sh SmallBoomConfig 50
-                no_output_timeout: 30m
+                    make run-asm-tests -C ../bhd/sims/verisim SUB_PROJECT=boom TOP=BoomRocketSystem MODEL=TestHarness CONFIG=SmallRV32UnifiedBoomConfig
     smallboomconfig-run-riscv-tests:
         docker:
             - image: riscvboom/riscvboom-images:0.0.5
@@ -358,30 +363,8 @@ jobs:
             - run:
                 name: Run SmallBoomConfig riscv tests
                 command: |
-                    make run-bmark-tests -C ../bhd/sims/verisim SUB_PROJECT=boom TOP=BoomRocketSystemWithTSI MODEL=TestHarnessWithTSI CONFIG=SmallBoomConfig
-                    make run-asm-tests -C ../bhd/sims/verisim SUB_PROJECT=boom TOP=BoomRocketSystemWithTSI MODEL=TestHarnessWithTSI CONFIG=SmallBoomConfig
-    mediumboomconfig-run-csmith-tests:
-        docker:
-            - image: riscvboom/riscvboom-images:0.0.5
-        environment:
-            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
-            TERM: dumb
-        steps:
-            - checkout
-            - run:
-                name: Create hash of riscv-tools
-                command: |
-                    .circleci/get-riscv-tools-hash.sh
-            - restore_cache:
-                keys:
-                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
-            - restore_cache:
-                keys:
-                    - mediumboomconfig-{{ .Branch }}-{{ .Revision }}
-            - run:
-                name: Run MediumBoomConfig csmith tests
-                command: .circleci/build-run-csmith-tests.sh MediumBoomConfig 50
-                no_output_timeout: 30m
+                    make run-bmark-tests -C ../bhd/sims/verisim SUB_PROJECT=boom TOP=BoomRocketSystem MODEL=TestHarness CONFIG=SmallBoomConfig
+                    make run-asm-tests -C ../bhd/sims/verisim SUB_PROJECT=boom TOP=BoomRocketSystem MODEL=TestHarness CONFIG=SmallBoomConfig
     mediumboomconfig-run-riscv-tests:
         docker:
             - image: riscvboom/riscvboom-images:0.0.5
@@ -403,30 +386,8 @@ jobs:
             - run:
                 name: Run MediumBoomConfig riscv tests
                 command: |
-                    make run-bmark-tests -C ../bhd/sims/verisim SUB_PROJECT=boom TOP=BoomRocketSystemWithTSI MODEL=TestHarnessWithTSI CONFIG=MediumBoomConfig
-                    make run-asm-tests -C ../bhd/sims/verisim SUB_PROJECT=boom TOP=BoomRocketSystemWithTSI MODEL=TestHarnessWithTSI CONFIG=MediumBoomConfig
-    smallboomandrocketconfig-run-csmith-tests:
-        docker:
-            - image: riscvboom/riscvboom-images:0.0.5
-        environment:
-            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
-            TERM: dumb
-        steps:
-            - checkout
-            - run:
-                name: Create hash of riscv-tools
-                command: |
-                    .circleci/get-riscv-tools-hash.sh
-            - restore_cache:
-                keys:
-                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
-            - restore_cache:
-                keys:
-                    - smallboomandrocketconfig-{{ .Branch }}-{{ .Revision }}
-            - run:
-                name: Run SmallBoomAndRocketConfig csmith tests
-                command: .circleci/build-run-csmith-tests.sh SmallBoomAndRocketConfig 50
-                no_output_timeout: 30m
+                    make run-bmark-tests -C ../bhd/sims/verisim SUB_PROJECT=boom TOP=BoomRocketSystem MODEL=TestHarness CONFIG=MediumBoomConfig
+                    make run-asm-tests -C ../bhd/sims/verisim SUB_PROJECT=boom TOP=BoomRocketSystem MODEL=TestHarness CONFIG=MediumBoomConfig
     smallboomandrocketconfig-run-riscv-tests:
         docker:
             - image: riscvboom/riscvboom-images:0.0.5
@@ -448,31 +409,8 @@ jobs:
             - run:
                 name: Run SmallBoomAndRocketConfig riscv tests
                 command: |
-                    make run-bmark-tests -C ../bhd/sims/verisim SUB_PROJECT=boom TOP=BoomRocketSystemWithTSI MODEL=TestHarnessWithTSI CONFIG=SmallBoomAndRocketConfig
-                    make run-asm-tests -C ../bhd/sims/verisim SUB_PROJECT=boom TOP=BoomRocketSystemWithTSI MODEL=TestHarnessWithTSI CONFIG=SmallBoomAndRocketConfig
-    smallboomconfig-dtm-run-riscv-tests:
-        docker:
-            - image: riscvboom/riscvboom-images:0.0.5
-        environment:
-            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
-            TERM: dumb
-        steps:
-            - checkout
-            - run:
-                name: Create hash of riscv-tools
-                command: |
-                    .circleci/get-riscv-tools-hash.sh
-            - restore_cache:
-                keys:
-                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
-            - restore_cache:
-                keys:
-                    - smallboomconfig-dtm-{{ .Branch }}-{{ .Revision }}
-            - run:
-                name: Run SmallBoomConfig with DTM riscv tests
-                command: |
-                    make run-bmark-tests -C ../bhd/sims/verisim SUB_PROJECT=boom TOP=BoomRocketSystem MODEL=TestHarness CONFIG=SmallBoomConfig
-                    make run-asm-tests -C ../bhd/sims/verisim SUB_PROJECT=boom TOP=BoomRocketSystem MODEL=TestHarness CONFIG=SmallBoomConfig
+                    make run-bmark-tests -C ../bhd/sims/verisim SUB_PROJECT=boom TOP=BoomRocketSystem MODEL=TestHarness CONFIG=SmallBoomAndRocketConfig
+                    make run-asm-tests -C ../bhd/sims/verisim SUB_PROJECT=boom TOP=BoomRocketSystem MODEL=TestHarness CONFIG=SmallBoomAndRocketConfig
 
 # Order and dependencies of jobs to run
 workflows:
@@ -508,14 +446,22 @@ workflows:
             - prepare-smallboomandrocketconfig:
                 requires:
                     - prepare-build-environment
-            - prepare-smallboomconfig-dtm:
+            - prepare-example-smallboomconfig:
+                requires:
+                    - prepare-build-environment
+            - prepare-example-boomconfig:
                 requires:
                     - prepare-build-environment
 
-            # Run the BoomConfig tests
-            - boomconfig-run-csmith-tests:
+            # Run the TSI versions of csmith (easier to debug when there are issues)
+            - example-boomconfig-run-csmith-tests:
                 requires:
-                    - prepare-boomconfig
+                    - prepare-example-boomconfig
+            - example-smallboomconfig-run-csmith-tests:
+                requires:
+                    - prepare-example-boomconfig
+
+            # Run the BoomConfig tests
             - boomconfig-run-riscv-tests:
                 requires:
                     - prepare-boomconfig
@@ -526,30 +472,16 @@ workflows:
                     - prepare-smallrv32unifiedboomconfig
 
             # Run the SmallBoomConfig tests
-            - smallboomconfig-run-csmith-tests:
-                requires:
-                    - prepare-smallboomconfig
             - smallboomconfig-run-riscv-tests:
                 requires:
                     - prepare-smallboomconfig
 
             # Run the MediumBoomConfig tests
-            - mediumboomconfig-run-csmith-tests:
-                requires:
-                    - prepare-mediumboomconfig
             - mediumboomconfig-run-riscv-tests:
                 requires:
                     - prepare-mediumboomconfig
 
             # Run the SmallBoomAndRocketConfig tests
-            - smallboomandrocketconfig-run-csmith-tests:
-                requires:
-                    - prepare-smallboomandrocketconfig
             - smallboomandrocketconfig-run-riscv-tests:
                 requires:
                     - prepare-smallboomandrocketconfig
-
-            # Run the SmallBoomConfig tests with DTM
-            - smallboomconfig-dtm-run-riscv-tests:
-                requires:
-                    - prepare-smallboomconfig-dtm
