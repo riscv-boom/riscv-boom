@@ -246,8 +246,8 @@ jobs:
             - run:
                 name: Run BoomConfig riscv tests
                 command: |
-                    make run-bmark-tests-fast -C ../bhd/sims/verisim CONFIG=BoomConfig SUB_PROJECT=boom TOP=ExampleBoomAndRocketSystem
-                    make run-asm-tests-fast -C ../bhd/sims/verisim CONFIG=BoomConfig SUB_PROJECT=boom TOP=ExampleBoomAndRocketSystem
+                    make run-bmark-tests-fast -C ../bhd/sims/verisim CONFIG=BoomConfig SUB_PROJECT=boom TOP=BoomRocketSystem
+                    make run-asm-tests-fast -C ../bhd/sims/verisim CONFIG=BoomConfig SUB_PROJECT=boom TOP=BoomRocketSystem
     smallrv32unifiedboomconfig-run-csmith-tests:
         docker:
             - image: riscvboom/riscvboom-images:0.0.5
@@ -292,7 +292,7 @@ jobs:
             - run:
                 name: Run SmallRV32UnifiedBoomConfig riscv tests
                 command: |
-                    make run-asm-tests-fast -C ../bhd/sims/verisim CONFIG=SmallRV32UnifiedBoomConfig SUB_PROJECT=boom TOP=ExampleBoomAndRocketSystem
+                    make run-asm-tests-fast -C ../bhd/sims/verisim CONFIG=SmallRV32UnifiedBoomConfig SUB_PROJECT=boom TOP=BoomRocketSystem
     smallboomconfig-run-csmith-tests:
         docker:
             - image: riscvboom/riscvboom-images:0.0.5
@@ -337,8 +337,8 @@ jobs:
             - run:
                 name: Run SmallBoomConfig riscv tests
                 command: |
-                    make run-bmark-tests-fast -C ../bhd/sims/verisim CONFIG=SmallBoomConfig SUB_PROJECT=boom TOP=ExampleBoomAndRocketSystem
-                    make run-asm-tests-fast -C ../bhd/sims/verisim CONFIG=SmallBoomConfig SUB_PROJECT=boom TOP=ExampleBoomAndRocketSystem
+                    make run-bmark-tests-fast -C ../bhd/sims/verisim CONFIG=SmallBoomConfig SUB_PROJECT=boom TOP=BoomRocketSystem
+                    make run-asm-tests-fast -C ../bhd/sims/verisim CONFIG=SmallBoomConfig SUB_PROJECT=boom TOP=BoomRocketSystem
     mediumboomconfig-run-csmith-tests:
         docker:
             - image: riscvboom/riscvboom-images:0.0.5
@@ -382,8 +382,8 @@ jobs:
             - run:
                 name: Run MediumBoomConfig riscv tests
                 command: |
-                    make run-bmark-tests-fast -C ../bhd/sims/verisim CONFIG=MediumBoomConfig SUB_PROJECT=boom TOP=ExampleBoomAndRocketSystem
-                    make run-asm-tests-fast -C ../bhd/sims/verisim CONFIG=MediumBoomConfig SUB_PROJECT=boom TOP=ExampleBoomAndRocketSystem
+                    make run-bmark-tests-fast -C ../bhd/sims/verisim CONFIG=MediumBoomConfig SUB_PROJECT=boom TOP=BoomRocketSystem
+                    make run-asm-tests-fast -C ../bhd/sims/verisim CONFIG=MediumBoomConfig SUB_PROJECT=boom TOP=BoomRocketSystem
     smallboomandrocketconfig-run-csmith-tests:
         docker:
             - image: riscvboom/riscvboom-images:0.0.5
@@ -427,9 +427,8 @@ jobs:
             - run:
                 name: Run SmallBoomAndRocketConfig riscv tests
                 command: |
-                    make run-bmark-tests-fast -C ../bhd/sims/verisim CONFIG=SmallBoomAndRocketConfig SUB_PROJECT=boom TOP=ExampleBoomAndRocketSystem
-                    make run-asm-tests-fast -C ../bhd/sims/verisim CONFIG=SmallBoomAndRocketConfig SUB_PROJECT=boom TOP=ExampleBoomAndRocketSystem
-
+                    make run-bmark-tests-fast -C ../bhd/sims/verisim CONFIG=SmallBoomAndRocketConfig SUB_PROJECT=boom TOP=BoomRocketSystem
+                    make run-asm-tests-fast -C ../bhd/sims/verisim CONFIG=SmallBoomAndRocketConfig SUB_PROJECT=boom TOP=BoomRocketSystem
 # Order and dependencies of jobs to run
 workflows:
     version: 2
