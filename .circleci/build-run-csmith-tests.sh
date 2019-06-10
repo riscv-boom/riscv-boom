@@ -1,11 +1,12 @@
 #!/bin/bash
 
 # test the verilator simulation using csmith random testing
+# NOTE: uses example project within 'project-template'
 
 # turn echo on and error on earliest command
 set -ex
 
-SIM_BASE=simulator-boom.system-
+SIM_BASE=simulator-example-
 CONFIG=$1
 SIM=${SIM_BASE}${CONFIG}
 AMT_RUNS=$2
