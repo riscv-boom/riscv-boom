@@ -114,6 +114,7 @@ object UpdateBrMask
   def apply[T <: boom.common.HasBoomUOP](brinfo: BrResolutionInfo, bundle: Valid[T]): Valid[T] = {
     val out = WireInit(bundle)
     out.bits.uop.br_mask := GetNewBrMask(brinfo, bundle.bits.uop.br_mask)
+    out.valid := bundle.valid && !IsKilledByBranch(brinfo, bundle.bits.uop.br_mask)
     out
   }
 }

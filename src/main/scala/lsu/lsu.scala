@@ -785,22 +785,25 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
   stdf_clr_bsy_brmask  := 0.U
 
   when (fired_stad_incoming) {
-    clr_bsy_valid   := !mem_tlb_miss &&
+    clr_bsy_valid   := mem_stq_incoming_e.valid            &&
+                       !mem_tlb_miss                       &&
                        !mem_stq_incoming_e.bits.uop.is_amo &&
                        !IsKilledByBranch(io.core.brinfo, mem_stq_incoming_e.bits.uop)
     clr_bsy_rob_idx := mem_stq_incoming_e.bits.uop.rob_idx
     clr_bsy_brmask  := GetNewBrMask(io.core.brinfo, mem_stq_incoming_e.bits.uop)
   } .elsewhen (fired_sta_incoming) {
-    clr_bsy_valid   := mem_stq_incoming_e.bits.data.valid &&
-                       !mem_tlb_miss &&
+    clr_bsy_valid   := mem_stq_incoming_e.valid            &&
+                       mem_stq_incoming_e.bits.data.valid  &&
+                       !mem_tlb_miss                       &&
                        !mem_stq_incoming_e.bits.uop.is_amo &&
                        !IsKilledByBranch(io.core.brinfo, mem_stq_incoming_e.bits.uop)
     clr_bsy_rob_idx := mem_stq_incoming_e.bits.uop.rob_idx
     clr_bsy_brmask  := GetNewBrMask(io.core.brinfo, mem_stq_incoming_e.bits.uop)
   } .elsewhen (fired_std_incoming) {
-    clr_bsy_valid   := mem_stq_incoming_e.bits.addr.valid &&
+    clr_bsy_valid   := mem_stq_incoming_e.valid                 &&
+                       mem_stq_incoming_e.bits.addr.valid       &&
                        !mem_stq_incoming_e.bits.addr_is_virtual &&
-                       !mem_stq_incoming_e.bits.uop.is_amo &&
+                       !mem_stq_incoming_e.bits.uop.is_amo      &&
                        !IsKilledByBranch(io.core.brinfo, mem_stq_incoming_e.bits.uop)
     clr_bsy_rob_idx := mem_stq_incoming_e.bits.uop.rob_idx
     clr_bsy_brmask  := GetNewBrMask(io.core.brinfo, mem_stq_incoming_e.bits.uop)
@@ -809,8 +812,9 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
     clr_bsy_rob_idx := mem_incoming_uop.rob_idx
     clr_bsy_brmask  := GetNewBrMask(io.core.brinfo, mem_incoming_uop)
   } .elsewhen (fired_sta_retry) {
-    clr_bsy_valid   := mem_stq_retry_e.bits.data.valid &&
-                       !mem_tlb_miss &&
+    clr_bsy_valid   := mem_stq_retry_e.valid            &&
+                       mem_stq_retry_e.bits.data.valid  &&
+                       !mem_tlb_miss                    &&
                        !mem_stq_retry_e.bits.uop.is_amo &&
                        !IsKilledByBranch(io.core.brinfo, mem_stq_retry_e.bits.uop)
     clr_bsy_rob_idx := mem_stq_retry_e.bits.uop.rob_idx
@@ -819,9 +823,10 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
 
   when (fired_stdf_incoming) {
     val s_idx = mem_stdf_uop.stq_idx
-    stdf_clr_bsy_valid   := stq(s_idx).bits.addr.valid &&
+    stdf_clr_bsy_valid   := stq(s_idx).valid                 &&
+                            stq(s_idx).bits.addr.valid       &&
                             !stq(s_idx).bits.addr_is_virtual &&
-                            !stq(s_idx).bits.uop.is_amo &&
+                            !stq(s_idx).bits.uop.is_amo      &&
                             !IsKilledByBranch(io.core.brinfo, mem_stdf_uop)
     stdf_clr_bsy_rob_idx := mem_stdf_uop.rob_idx
     stdf_clr_bsy_brmask  := GetNewBrMask(io.core.brinfo, mem_stdf_uop)
