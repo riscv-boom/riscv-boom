@@ -25,6 +25,9 @@ import freechips.rocketchip.amba.axi4._
 
 import boom.common.{BoomTile}
 
+case object BoomTilesKey extends Field[Seq[boom.common.BoomTileParams]](Nil)
+case object BoomCrossingKey extends Field[Seq[RocketCrossingParams]](List(RocketCrossingParams()))
+
 trait HasBoomAndRocketTiles extends HasTiles
   with CanHavePeripheryPLIC
   with CanHavePeripheryCLINT
@@ -86,16 +89,16 @@ trait HasBoomAndRocketTilesModuleImp extends HasTilesModuleImp
   val outer: HasBoomAndRocketTiles
 }
 
-class BoomAndRocketSubsystem(implicit p: Parameters) extends BaseSubsystem
+class BoomRocketSubsystem(implicit p: Parameters) extends BaseSubsystem
   with HasBoomAndRocketTiles
 {
   val tiles = boomAndRocketTiles
-  override lazy val module = new BoomAndRocketSubsystemModuleImp(this)
+  override lazy val module = new BoomRocketSubsystemModuleImp(this)
 
   def getOMInterruptDevice(resourceBindingsMap: ResourceBindingsMap): Seq[OMInterrupt] = Nil
 }
 
-class BoomAndRocketSubsystemModuleImp[+L <: BoomAndRocketSubsystem](_outer: L) extends BaseSubsystemModuleImp(_outer)
+class BoomRocketSubsystemModuleImp[+L <: BoomRocketSubsystem](_outer: L) extends BaseSubsystemModuleImp(_outer)
   with HasResetVectorWire
   with HasBoomAndRocketTilesModuleImp
 {
