@@ -15,7 +15,9 @@ import freechips.rocketchip.util.GeneratorApp
 import freechips.rocketchip.system.{TestGeneration, RegressionTestSuite}
 
 /**
- * A generator for platforms containing Rocket Subsystems
+ * Generator for BOOM systems
+ *
+ * NOTE: Tests are generated based on the BOOM core
  */
 object Generator extends GeneratorApp
 {
@@ -58,8 +60,8 @@ object Generator extends GeneratorApp
   override def addTestSuites {
     import freechips.rocketchip.system.DefaultTestSuites._
     val xlen = params(XLen)
-    // TODO: for now only generate tests for the first core in the first subsystem
-    params(BoomTilesKey).headOption.map { tileParams =>
+    // TODO: generate tests for hart0 of the system since asm tests run on hart0 by default
+    params(BoomTilesKey).find(_.hartId == 0).map { tileParams =>
       val coreParams = tileParams.core
       val vm = coreParams.useVM
       val env = if (vm) List("p","v") else List("p")
