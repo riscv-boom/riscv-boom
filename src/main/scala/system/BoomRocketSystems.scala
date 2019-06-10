@@ -16,17 +16,21 @@ import freechips.rocketchip.devices.tilelink._
 import freechips.rocketchip.diplomacy._
 import freechips.rocketchip.util.{DontTouch}
 
+// ---------------------------------------------------------------------
+// Base system that uses the debug test module (dtm) to bringup the core
+// ---------------------------------------------------------------------
+
 /**
- * Example top with periphery devices and ports, and a BOOM + Rocket subsystem
+ * Base top with periphery devices and ports, and a BOOM + Rocket subsystem
  */
-class ExampleBoomAndRocketSystem(implicit p: Parameters) extends BoomAndRocketSubsystem
+class BoomRocketSystem(implicit p: Parameters) extends BoomRocketSubsystem
   with HasAsyncExtInterrupts
   with CanHaveMasterAXI4MemPort
   with CanHaveMasterAXI4MMIOPort
   with CanHaveSlaveAXI4Port
   with HasPeripheryBootROM
 {
-  override lazy val module = new ExampleBoomAndRocketSystemModule(this)
+  override lazy val module = new BoomRocketSystemModule(this)
 
   // The sbus masters the cbus; here we convert TL-UH -> TL-UL
   sbus.crossToBus(cbus, NoCrossing)
@@ -49,13 +53,30 @@ class ExampleBoomAndRocketSystem(implicit p: Parameters) extends BoomAndRocketSu
 }
 
 /**
- * Example top module with periphery devices and ports, and a BOOM + Rocket subsystem
+ * Base top module implementation with periphery devices and ports, and a BOOM + Rocket subsystem
  */
-class ExampleBoomAndRocketSystemModule[+L <: ExampleBoomAndRocketSystem](_outer: L) extends BoomAndRocketSubsystemModuleImp(_outer)
+class BoomRocketSystemModule[+L <: BoomRocketSystem](_outer: L) extends BoomRocketSubsystemModuleImp(_outer)
   with HasRTCModuleImp
   with HasExtInterruptsModuleImp
   with CanHaveMasterAXI4MemPortModuleImp
   with CanHaveMasterAXI4MMIOPortModuleImp
   with CanHaveSlaveAXI4PortModuleImp
   with HasPeripheryBootROMModuleImp
+  with DontTouch
+
+
+// ------------------------------------------------------------------------
+// Base system that uses the the serial interface (TSI) to bringup the core
+// ------------------------------------------------------------------------
+
+class BoomRocketSystemWithTSI(implicit p: Parameters) extends BoomRocketSystem
+  with HasNoDebug
+  with testchipip.HasPeripherySerial
+{
+  override lazy val module = new BoomRocketSystemWithTSIModule(this)
+}
+
+class BoomRocketSystemWithTSIModule[+L <: BoomRocketSystemWithTSI](_outer: L) extends BoomRocketSystemModule(_outer)
+  with HasNoDebugModuleImp
+  with testchipip.HasPeripherySerialModuleImp
   with DontTouch
