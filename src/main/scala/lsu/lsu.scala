@@ -61,7 +61,6 @@ class LSUExeIO(implicit p: Parameters) extends BoomBundle()(p)
 {
   // The "resp" of the maddrcalc is really a "req" to the LSU
   val req       = Flipped(new ValidIO(new FuncUnitResp(xLen)))
-
   // Send load data to regfiles
   val iresp    = new DecoupledIO(new boom.exu.ExeUnitResp(xLen))
   val fresp    = new DecoupledIO(new boom.exu.ExeUnitResp(xLen+1)) // TODO: Should this be fLen?
@@ -80,14 +79,18 @@ class BoomDCacheResp(implicit p: Parameters) extends BoomBundle()(p)
 {
   val data = Bits(coreDataBits.W)
   val is_hella = Bool()
-  val nack = Bool()
 }
 
 class LSUDMemIO(implicit p: Parameters) extends BoomBundle()(p)
 {
+  // In LSU's dmem stage, send the request
   val req         = new DecoupledIO(new BoomDCacheReq)
+  // In LSU's LCAM search stage, kill if order fail (or forwarding possible)
   val s1_kill     = Output(Bool())
+  // Get a request any cycle
   val resp        = Flipped(new ValidIO(new BoomDCacheResp))
+  // In our response stage, if we get a nack, we need to reexecute
+  val nack        = Flipped(new ValidIO(new BoomDCacheReq))
 
   val brinfo       = Output(new BrResolutionInfo)
   val exception    = Output(Bool())
@@ -887,7 +890,7 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
 
     val dword_addr_matches = lcam_addr(corePAddrBits-1,3) === l_addr(corePAddrBits-1,3)
     val mask_match = (l_mask & lcam_mask) === l_mask
-    val l_is_succeeding = (io.dmem.resp.valid && !io.dmem.resp.bits.nack &&
+    val l_is_succeeding = (io.dmem.resp.valid &&
                            io.dmem.resp.bits.uop.uses_ldq &&
                            io.dmem.resp.bits.uop.ldq_idx === i.U)
 
@@ -932,10 +935,9 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
       } .elsewhen (lcam_ldq_idx =/= i.U) {
         // The load is older, and either it hasn't executed, it was nacked, or it is ignoring its response
         // we need to kill ourselves, and prevent forwarding
-        val older_nacked = (io.dmem.resp.valid &&
-                            io.dmem.resp.bits.nack &&
-                            io.dmem.resp.bits.uop.uses_ldq &&
-                            io.dmem.resp.bits.uop.ldq_idx === i.U)
+        val older_nacked = (io.dmem.nack.valid &&
+                            io.dmem.nack.bits.uop.uses_ldq &&
+                            io.dmem.nack.bits.uop.ldq_idx === i.U)
         when (!l_bits.executed || older_nacked || l_bits.execute_ignore) {
           io.dmem.s1_kill                 := RegNext(io.dmem.req.fire())
           ldq(lcam_ldq_idx).bits.executed := false.B
@@ -1033,64 +1035,64 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
   io.core.exe.iresp.valid := false.B
   io.core.exe.fresp.valid := false.B
   val dmem_resp_fired = WireInit(false.B)
-  when (io.dmem.resp.valid)
+  // Handle nacks
+  when (io.dmem.nack.valid)
   {
-    when (io.dmem.resp.bits.nack)
+    // We have to re-execute this!
+    when (io.dmem.nack.bits.is_hella)
     {
-      // We have to re-execute this!
-      when (io.dmem.resp.bits.is_hella)
-      {
-        assert(hella_state === h_wait)
-      }
-        .elsewhen (io.dmem.resp.bits.uop.uses_ldq)
-      {
-        assert(ldq(io.dmem.resp.bits.uop.ldq_idx).bits.executed)
-        ldq(io.dmem.resp.bits.uop.ldq_idx).bits.executed  := false.B
-        ldq(io.dmem.resp.bits.uop.ldq_idx).bits.execute_ignore  := false.B
-      }
-        .otherwise
-      {
-        assert(io.dmem.resp.bits.uop.uses_stq)
-        when (IsOlder(io.dmem.resp.bits.uop.stq_idx, stq_execute_head, stq_head)) {
-          stq_execute_head := io.dmem.resp.bits.uop.stq_idx
-        }
-      }
+      assert(hella_state === h_wait)
+    }
+      .elsewhen (io.dmem.nack.bits.uop.uses_ldq)
+    {
+      assert(ldq(io.dmem.nack.bits.uop.ldq_idx).bits.executed)
+      ldq(io.dmem.nack.bits.uop.ldq_idx).bits.executed  := false.B
+      ldq(io.dmem.nack.bits.uop.ldq_idx).bits.execute_ignore  := false.B
     }
       .otherwise
     {
-      when (io.dmem.resp.bits.uop.uses_ldq)
-      {
-        assert(!io.dmem.resp.bits.is_hella)
-        val ldq_idx = io.dmem.resp.bits.uop.ldq_idx
-        val send_iresp = ldq(ldq_idx).bits.uop.dst_rtype === RT_FIX
-        val send_fresp = ldq(ldq_idx).bits.uop.dst_rtype === RT_FLT
-
-        io.core.exe.iresp.bits.uop := ldq(ldq_idx).bits.uop
-        io.core.exe.fresp.bits.uop := ldq(ldq_idx).bits.uop
-        io.core.exe.iresp.valid     := send_iresp && !ldq(ldq_idx).bits.execute_ignore
-        io.core.exe.iresp.bits.data := io.dmem.resp.bits.data
-        io.core.exe.fresp.valid     := send_fresp && !ldq(ldq_idx).bits.execute_ignore
-        io.core.exe.fresp.bits.data := io.dmem.resp.bits.data
-
-        assert(send_iresp ^ send_fresp)
-        dmem_resp_fired := true.B
-
-        ldq(ldq_idx).bits.succeeded      := io.core.exe.iresp.valid || io.core.exe.fresp.valid
-        ldq(ldq_idx).bits.execute_ignore := false.B
-      }
-        .elsewhen (io.dmem.resp.bits.uop.uses_stq)
-      {
-        assert(!io.dmem.resp.bits.is_hella)
-        stq(io.dmem.resp.bits.uop.stq_idx).bits.succeeded := true.B
-        when (io.dmem.resp.bits.uop.is_amo) {
-          dmem_resp_fired := true.B
-          io.core.exe.iresp.valid     := true.B
-          io.core.exe.iresp.bits.uop  := stq(io.dmem.resp.bits.uop.stq_idx).bits.uop
-          io.core.exe.iresp.bits.data := io.dmem.resp.bits.data
-        }
+      assert(io.dmem.nack.bits.uop.uses_stq)
+      when (IsOlder(io.dmem.nack.bits.uop.stq_idx, stq_execute_head, stq_head)) {
+        stq_execute_head := io.dmem.nack.bits.uop.stq_idx
       }
     }
   }
+  // Handle the response
+  when (io.dmem.resp.valid)
+  {
+    when (io.dmem.resp.bits.uop.uses_ldq)
+    {
+      assert(!io.dmem.resp.bits.is_hella)
+      val ldq_idx = io.dmem.resp.bits.uop.ldq_idx
+      val send_iresp = ldq(ldq_idx).bits.uop.dst_rtype === RT_FIX
+      val send_fresp = ldq(ldq_idx).bits.uop.dst_rtype === RT_FLT
+
+      io.core.exe.iresp.bits.uop := ldq(ldq_idx).bits.uop
+      io.core.exe.fresp.bits.uop := ldq(ldq_idx).bits.uop
+      io.core.exe.iresp.valid     := send_iresp && !ldq(ldq_idx).bits.execute_ignore
+      io.core.exe.iresp.bits.data := io.dmem.resp.bits.data
+      io.core.exe.fresp.valid     := send_fresp && !ldq(ldq_idx).bits.execute_ignore
+      io.core.exe.fresp.bits.data := io.dmem.resp.bits.data
+
+      assert(send_iresp ^ send_fresp)
+      dmem_resp_fired := true.B
+
+      ldq(ldq_idx).bits.succeeded      := io.core.exe.iresp.valid || io.core.exe.fresp.valid
+      ldq(ldq_idx).bits.execute_ignore := false.B
+    }
+      .elsewhen (io.dmem.resp.bits.uop.uses_stq)
+    {
+      assert(!io.dmem.resp.bits.is_hella)
+      stq(io.dmem.resp.bits.uop.stq_idx).bits.succeeded := true.B
+      when (io.dmem.resp.bits.uop.is_amo) {
+        dmem_resp_fired := true.B
+        io.core.exe.iresp.valid     := true.B
+        io.core.exe.iresp.bits.uop  := stq(io.dmem.resp.bits.uop.stq_idx).bits.uop
+        io.core.exe.iresp.bits.data := io.dmem.resp.bits.data
+      }
+    }
+  }
+
   when (dmem_resp_fired && RegNext(mem_forward_valid))
   {
       //   ldq(lcam_ldq_idx).bits.forward_std_val := true.B
@@ -1285,19 +1287,17 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
     }
   } .elsewhen (hella_state === h_wait) {
     when (io.dmem.resp.valid && io.dmem.resp.bits.is_hella) {
-      when (io.dmem.resp.bits.nack) {
-        hella_state := h_replay
-      } .otherwise {
-        hella_state := h_ready
+      hella_state := h_ready
 
-        io.hellacache.resp.valid       := true.B
-        io.hellacache.resp.bits.addr   := hella_req.addr
-        io.hellacache.resp.bits.tag    := hella_req.tag
-        io.hellacache.resp.bits.cmd    := hella_req.cmd
-        io.hellacache.resp.bits.signed := hella_req.signed
-        io.hellacache.resp.bits.size   := hella_req.size
-        io.hellacache.resp.bits.data   := io.dmem.resp.bits.data
-      }
+      io.hellacache.resp.valid       := true.B
+      io.hellacache.resp.bits.addr   := hella_req.addr
+      io.hellacache.resp.bits.tag    := hella_req.tag
+      io.hellacache.resp.bits.cmd    := hella_req.cmd
+      io.hellacache.resp.bits.signed := hella_req.signed
+      io.hellacache.resp.bits.size   := hella_req.size
+      io.hellacache.resp.bits.data   := io.dmem.resp.bits.data
+    } .elsewhen (io.dmem.nack.valid && io.dmem.nack.bits.is_hella) {
+      hella_state := h_replay
     }
   } .elsewhen (hella_state === h_replay) {
     can_fire_hella_wakeup := true.B

@@ -19,7 +19,7 @@ import freechips.rocketchip.rocket._
 
 import boom.common._
 import boom.exu.BrResolutionInfo
-import boom.util.{IsKilledByBranch, GetNewBrMask, BranchKillableQueue, IsOlder}
+import boom.util.{IsKilledByBranch, GetNewBrMask, BranchKillableQueue, IsOlder, UpdateBrMask}
 
 class BoomDCacheReqInternal(implicit p: Parameters) extends BoomDCacheReq()(p)
   with HasL1HellaCacheParameters
@@ -677,7 +677,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
                  Mux(wb_fire          , wb_req,
                  Mux(prober_fire      , prober_req
                                       , replay_req)))
-  val s0_send_resp = io.lsu.req.fire() || (mshrs.io.replay.fire() && isRead(mshrs.io.replay.bits.uop.mem_cmd)) // Does this request need to send a response
+  val s0_send_resp_or_nack = io.lsu.req.fire() || (mshrs.io.replay.fire() && isRead(mshrs.io.replay.bits.uop.mem_cmd)) // Does this request need to send a response or nack
 
   val s1_req          = RegNext(s0_req)
   s1_req.uop.br_mask := GetNewBrMask(io.lsu.brinfo, s0_req.uop)
@@ -691,7 +691,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   assert(!(io.lsu.s1_kill && !RegNext(io.lsu.req.fire())))
   val s1_addr         = s1_req.addr
   val s1_nack         = s1_req.addr(idxMSB,idxLSB) === prober.io.meta_write.bits.idx && !prober.io.req.ready
-  val s1_send_resp     = RegNext(s0_send_resp)
+  val s1_send_resp_or_nack = RegNext(s0_send_resp_or_nack)
   val s1_is_lsu        = RegNext(io.lsu.req.fire()) // TODO make this a bundle
   val s1_is_probe      = RegNext(prober_fire)
   val s1_is_replay     = RegNext(mshrs.io.replay.fire())
@@ -710,6 +710,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
                          !(io.lsu.exception && s1_req.uop.uses_ldq) &&
                          !(s2_store_failed && s1_is_lsu && s1_req.uop.uses_stq))
   s2_req.uop.br_mask := GetNewBrMask(io.lsu.brinfo, s1_req.uop)
+  val s2_is_lsu    = RegNext(s1_is_lsu)
   val s2_is_probe  = RegNext(s1_is_probe)
   val s2_is_replay = RegNext(s1_is_replay)
 
@@ -761,10 +762,11 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   val s2_nack_victim = s2_valid &&  s2_hit && mshrs.io.secondary_miss // Nack when we hit something currently being evicted
   val s2_nack_miss   = s2_valid && !s2_hit && !mshrs.io.req.ready // MSHRs not ready for request
   val s2_nack        = (s2_nack_miss || s2_nack_hit || s2_nack_victim) && !s2_is_replay
-  val s2_send_resp = (RegNext(s1_send_resp) &&
-                      (s2_hit ||
-                       s2_nack ||
-                       (mshrs.io.req.fire() && isWrite(s2_req.uop.mem_cmd) && !isRead(s2_req.uop.mem_cmd))))
+  val s2_send_resp = (RegNext(s1_send_resp_or_nack) && !s2_nack &&
+                      (s2_hit || (mshrs.io.req.fire() && isWrite(s2_req.uop.mem_cmd) && !isRead(s2_req.uop.mem_cmd))))
+  val s2_send_nack = (RegNext(s1_send_resp_or_nack) && s2_nack)
+  assert(!(s2_send_resp && s2_send_nack))
+
   // hits always send a response
   // If MSHR is not available, LSU has to replay this request later
   // If MSHR is available and this is only a store(not a amo), we don't need to wait for resp later
@@ -833,7 +835,6 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   cache_resp.valid         := s2_valid && s2_send_resp
   cache_resp.bits.uop      := s2_req.uop
   cache_resp.bits.data     := loadgen.data | s2_sc_fail
-  cache_resp.bits.nack     := s2_nack
   cache_resp.bits.is_hella := s2_req.is_hella
 
   val uncache_resp = Wire(Valid(new BoomDCacheResp))
@@ -845,15 +846,18 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   io.lsu.resp.valid := resp.valid &&
                        !(io.lsu.exception && resp.bits.uop.uses_ldq) &&
                        !IsKilledByBranch(io.lsu.brinfo, resp.bits.uop)
-  io.lsu.resp.bits             := resp.bits
-  io.lsu.resp.bits.uop.br_mask := GetNewBrMask(io.lsu.brinfo, resp.bits.uop)
+  io.lsu.resp.bits  := UpdateBrMask(io.lsu.brinfo, resp.bits)
 
-  assert(!(io.lsu.resp.valid && io.lsu.resp.bits.nack && s2_is_replay))
+  io.lsu.nack.valid := s2_valid && s2_send_nack &&
+                       !(io.lsu.exception && s2_req.uop.uses_ldq) &&
+                       !IsKilledByBranch(io.lsu.brinfo, s2_req.uop)
+  io.lsu.nack.bits  := UpdateBrMask(io.lsu.brinfo, s2_req)
+  assert(!(io.lsu.nack.valid && !s2_is_lsu))
 
   // Store/amo hits
   val s3_req   = RegNext(s2_req)
   val s3_valid = RegNext(s2_valid && s2_hit && isWrite(s2_req.uop.mem_cmd) &&
-                         !s2_sc_fail && !(s2_send_resp && s2_nack))
+                         !s2_sc_fail && !(s2_send_nack && s2_nack))
   // For bypassing
   val s4_req   = RegNext(s3_req)
   val s4_valid = RegNext(s3_valid)
