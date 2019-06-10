@@ -197,9 +197,12 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
     val drain_load = isRead(rpq.io.deq.bits.uop.mem_cmd) && !isWrite(rpq.io.deq.bits.uop.mem_cmd)
     // drain all loads for now
     val rp_addr = Cat(req_tag, req_idx, rpq.io.deq.bits.addr(blockOffBits-1,0))
+    val word_idx  = if (rowWords == 1) 0.U else rp_addr(log2Up(rowWords*coreDataBytes)-1, log2Up(wordBytes))
+    val data      = load_buffer(rpq.io.deq.bits.addr >> rowOffBits)
+    val data_word = data >> Cat(word_idx, 0.U(log2Up(coreDataBits).W))
     val loadgen = new LoadGen(rpq.io.deq.bits.uop.mem_size, rpq.io.deq.bits.uop.mem_signed,
       Cat(req_tag, req_idx, rpq.io.deq.bits.addr(blockOffBits-1,0)),
-      load_buffer(rpq.io.deq.bits.addr >> rowOffBits), false.B, wordBytes)
+      data_word, false.B, wordBytes)
 
     rpq.io.deq.ready  := io.resp.ready && drain_load
     io.resp.valid     := rpq.io.deq.valid && drain_load
@@ -746,7 +749,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
     s2_data(w) := regs.asUInt
   }
   val s2_data_muxed = Mux1H(s2_tag_match_way, s2_data)
-  val s2_word_idx   = if (doNarrowRead) 0.U else s2_req.addr(log2Ceil(rowWords*coreDataBytes)-1, log2Ceil(wordBytes))
+  val s2_word_idx   = if (doNarrowRead) 0.U else s2_req.addr(log2Up(rowWords*coreDataBytes)-1, log2Up(wordBytes))
 
   // replacement policy
   val replacer = cacheParams.replacement
