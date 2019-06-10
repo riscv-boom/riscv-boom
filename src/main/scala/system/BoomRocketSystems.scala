@@ -70,13 +70,13 @@ class BoomRocketSystemModule[+L <: BoomRocketSystem](_outer: L) extends BoomRock
 // ------------------------------------------------------------------------
 
 class BoomRocketSystemWithTSI(implicit p: Parameters) extends BoomRocketSystem
-  with HasNoDebug
+  with testchipip.HasNoDebug
   with testchipip.HasPeripherySerial
 {
   override lazy val module = new BoomRocketSystemWithTSIModule(this)
 }
 
 class BoomRocketSystemWithTSIModule[+L <: BoomRocketSystemWithTSI](_outer: L) extends BoomRocketSystemModule(_outer)
-  with HasNoDebugModuleImp
+  with testchipip.HasNoDebugModuleImp
   with testchipip.HasPeripherySerialModuleImp
   with DontTouch
