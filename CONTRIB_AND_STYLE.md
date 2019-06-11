@@ -4,7 +4,7 @@ If you'd like to help but don't know where to start, check out the TODO file or 
 **Bug Reports**
 
 Good bug reports are invaluable!
-Please try to provide reproducable code snippets and try to verify the behavior differs from the Spike RISC-V ISA simulator.
+Please try to provide reproducible code snippets and try to verify the behavior differs from the Spike RISC-V ISA simulator.
 
 **Feature Contributions**
 
