@@ -150,11 +150,9 @@ do
         -e | --seed )       shift
                             SEED=$1
                             ;;
-        --withdebugext | -d )  shift
-                            WDEBUG_EXT=true
+        --withdebugext | -d ) WDEBUG_EXT=true
                             ;;
-        --nodebug | -n )    shift
-                            NDEBUG=true
+        --nodebug | -n )    NDEBUG=true
                             ;;
         -h | --help )       usage
                             exit 0
