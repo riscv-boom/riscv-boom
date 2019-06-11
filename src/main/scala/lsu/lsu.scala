@@ -859,11 +859,14 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
   // Store addrs don't go to memory yet, get it from the TLB response
   // Load wakeups don't go through TLB, get it through memory
   // Load incoming and load retries go through both
+
   val lcam_addr  = Mux(fired_stad_incoming || fired_sta_incoming || fired_sta_retry,
                        RegNext(exe_tlb_paddr), mem_paddr)
   val lcam_uop   = Mux(do_st_search, mem_stq_e.bits.uop,
                    Mux(do_ld_search, mem_ldq_e.bits.uop, NullMicroOp))
 
+  val lcam_valid = Mux(do_st_search, mem_stq_e.valid,
+                   Mux(do_ld_search, mem_ldq_e.valid, false.B))
   val lcam_mask  = GenByteMask(lcam_addr, lcam_uop.mem_size)
   val lcam_st_dep_mask = mem_ldq_e.bits.st_dep_mask
   val lcam_is_fence = lcam_uop.is_fence
@@ -900,12 +903,13 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
                            io.dmem.resp.bits.uop.ldq_idx === i.U)
 
     // Searcher is a store
-    when (do_st_search &&
-          l_valid &&
-          l_bits.addr.valid &&
+    when (do_st_search                                &&
+          lcam_valid                                  &&
+          l_valid                                     &&
+          l_bits.addr.valid                           &&
           (l_bits.executed && !l_bits.execute_ignore) &&
-          !l_bits.addr_is_virtual &&
-          l_bits.st_dep_mask(lcam_stq_idx) &&
+          !l_bits.addr_is_virtual                     &&
+          l_bits.st_dep_mask(lcam_stq_idx)            &&
           dword_addr_matches) {
       // We are older than this load, which overlapped us.
       when (!l_bits.forward_std_val || // If the load wasn't forwarded, it definitely failed
@@ -920,9 +924,10 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
           mem_execute_ignore_ldq_idx := i.U
         }
       }
-    } .elsewhen (do_ld_search &&
-                 l_valid &&
-                 l_bits.addr.valid &&
+    } .elsewhen (do_ld_search            &&
+                 lcam_valid              &&
+                 l_valid                 &&
+                 l_bits.addr.valid       &&
                  !l_bits.addr_is_virtual &&
                  dword_addr_matches &&
                  ((lcam_mask & l_mask) =/= 0.U)) {
@@ -954,12 +959,12 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
   for (i <- 0 until NUM_STQ_ENTRIES) {
     val s_addr = stq(i).bits.addr.bits
     val s_uop  = stq(i).bits.uop
-    val dword_addr_matches = (lcam_st_dep_mask(i) &&
-                              stq(i).bits.addr.valid &&
+    val dword_addr_matches = (lcam_st_dep_mask(i)          &&
+                              stq(i).bits.addr.valid       &&
                               !stq(i).bits.addr_is_virtual &&
                               (s_addr(corePAddrBits-1,3) === lcam_addr(corePAddrBits-1,3)))
     val write_mask = GenByteMask(s_addr, s_uop.mem_size)
-    when (do_ld_search && stq(i).valid) {
+    when (do_ld_search && stq(i).valid && lcam_valid) {
       when (((lcam_mask & write_mask) === lcam_mask) && !s_uop.is_fence && dword_addr_matches && can_forward) {
         ldst_forward_matches(i) := true.B
         io.dmem.s1_kill := RegNext(io.dmem.req.fire())
