@@ -700,7 +700,7 @@ class Rob(
     rob_head_lsb := 0.U
     rob_deq      := true.B
   } .elsewhen (io.commit.valids.asUInt =/= 0.U) {
-    rob_head_lsb := PriorityEncoder(~io.commit.valids.asUInt)
+    rob_head_lsb := PriorityEncoder(~MaskLower(io.commit.valids.asUInt))
   } .elsewhen (empty && io.enq_valids.asUInt =/= 0.U) {
     rob_head_lsb := PriorityEncoder(io.enq_valids)
   }
@@ -764,9 +764,9 @@ class Rob(
     rob_tail     := WrapDec(rob_tail, numRobRows)
     rob_tail_lsb := (coreWidth-1).U
     rob_deq := true.B
-  } .elsewhen (rob_state === s_rollback && (rob_tail === rob_head) && rob_tail_lsb =/= rob_head_lsb) {
+  } .elsewhen (rob_state === s_rollback && (rob_tail === rob_head) && !maybe_full) {
     // Rollback an entry
-    rob_tail_lsb := rob_tail_lsb - 1.U
+    rob_tail_lsb := rob_head_lsb
   } .elsewhen (io.brinfo.mispredict) {
     rob_tail     := WrapInc(GetRowIdx(io.brinfo.rob_idx), numRobRows)
     rob_tail_lsb := 0.U
@@ -775,7 +775,7 @@ class Rob(
     rob_tail_lsb := 0.U
     rob_enq      := true.B
   } .elsewhen (io.enq_valids.asUInt =/= 0.U && io.enq_partial_stall) {
-    rob_tail_lsb := coreWidth.U - PriorityEncoder(Reverse(io.enq_valids.asUInt))
+    rob_tail_lsb := PriorityEncoder(~MaskLower(io.enq_valids.asUInt))
   }
 
 
