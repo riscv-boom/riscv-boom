@@ -903,13 +903,13 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
                            io.dmem.resp.bits.uop.ldq_idx === i.U)
 
     // Searcher is a store
-    when (do_st_search                                &&
-          lcam_valid                                  &&
-          l_valid                                     &&
-          l_bits.addr.valid                           &&
-          (l_bits.executed && !l_bits.execute_ignore) &&
-          !l_bits.addr_is_virtual                     &&
-          l_bits.st_dep_mask(lcam_stq_idx)            &&
+    when (do_st_search                                                      &&
+          lcam_valid                                                        &&
+          l_valid                                                           &&
+          l_bits.addr.valid                                                 &&
+          ((l_bits.executed && !l_bits.execute_ignore) || l_bits.succeeded) &&
+          !l_bits.addr_is_virtual                                           &&
+          l_bits.st_dep_mask(lcam_stq_idx)                                  &&
           dword_addr_matches) {
       // We are older than this load, which overlapped us.
       when (!l_bits.forward_std_val || // If the load wasn't forwarded, it definitely failed
@@ -1089,6 +1089,11 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
 
       ldq(ldq_idx).bits.succeeded      := io.core.exe.iresp.valid || io.core.exe.fresp.valid
       ldq(ldq_idx).bits.execute_ignore := false.B
+      when (ldq(ldq_idx).bits.execute_ignore) {
+        // We were told to ignore this response because of order fail
+        // Clear the execute bit, so we can re-fire this load
+        ldq(ldq_idx).bits.executed := false.B
+      }
     }
       .elsewhen (io.dmem.resp.bits.uop.uses_stq)
     {
