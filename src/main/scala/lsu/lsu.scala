@@ -230,7 +230,6 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
    // TODO not convinced I actually need stq_allocated; I think other ctrl signals gate this off
    val stq_allocated = Reg(Vec(NUM_STQ_ENTRIES, Bool())) // this may be valid, but not TRUE (on exceptions, this doesn't
                                                         // get cleared but STQ_TAIL gets moved)
-   val stq_executed  = Reg(Vec(NUM_STQ_ENTRIES, Bool())) // sent to mem
    val stq_succeeded = Reg(Vec(NUM_STQ_ENTRIES, Bool())) // returned TODO is this needed, or can we just advance the
                                                         // stq_head?
    val stq_committed = Reg(Vec(NUM_STQ_ENTRIES, Bool())) // the ROB has committed us, so we can now send our store
@@ -311,7 +310,6 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
          stq_allocated(st_enq_idx) := true.B
          saq_val      (st_enq_idx) := false.B
          sdq_val      (st_enq_idx) := false.B
-         stq_executed (st_enq_idx) := false.B
          stq_succeeded(st_enq_idx) := false.B
          stq_committed(st_enq_idx) := false.B
 
@@ -549,7 +547,6 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
             !saq_is_virtual(stq_execute_head) &&
             sdq_val(stq_execute_head)
             )) &&
-         !stq_executed(stq_execute_head) &&
          !stq_uop(stq_execute_head).is_fence &&
          !mem_xcpt_valid &&
          !stq_uop(stq_execute_head).exception
@@ -603,7 +600,6 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
       when (!(io.nack.valid && !io.nack.isload))
       {
          io.memreq_val   := true.B
-         stq_executed(stq_execute_head) := true.B
          stq_execute_head := WrapInc(stq_execute_head, NUM_STQ_ENTRIES)
          mem_fired_st := true.B
       }
@@ -1201,7 +1197,6 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
       stq_allocated(stq_head)   := false.B
       saq_val(stq_head)         := false.B
       sdq_val(stq_head)         := false.B
-      stq_executed(stq_head)    := false.B
       stq_succeeded(stq_head)   := false.B
       stq_committed(stq_head)   := false.B
 
@@ -1256,8 +1251,8 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
       // the cache nacked our store
       when (!io.nack.isload)
       {
-         stq_executed(io.nack.lsu_idx) := false.B
-         when (IsOlder(io.nack.lsu_idx, stq_execute_head, stq_head) || stq_executed.reduce(_&&_))
+         // make sure we didn't receive a nack the prior cycle, which would invalidate this nack
+         when (!RegNext(io.nack.valid && !io.nack.isload))
          {
             stq_execute_head := io.nack.lsu_idx
          }
@@ -1395,13 +1390,12 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
       }
       for (i <- 0 until NUM_STQ_ENTRIES) {
          val t_saddr = saq_addr(i)
-         printf("    SAQ[%d]: State:(%c%c%c%c%c%c%c) BMsk:0x%x (Addr:0x%x -> Data:0x%x) H,ExH,CmH,T:(%c %c %c %c)\n",
+         printf("    SAQ[%d]: State:(%c%c%c%c%c%c) BMsk:0x%x (Addr:0x%x -> Data:0x%x) H,ExH,CmH,T:(%c %c %c %c)\n",
             i.U(stqAddrSz.W),
             BoolToChar( stq_allocated(i), 'V'),
             BoolToChar(       saq_val(i), 'A'),
             BoolToChar(       sdq_val(i), 'D'),
             BoolToChar( stq_committed(i), 'C'),
-            BoolToChar(  stq_executed(i), 'E'),
             BoolToChar( stq_succeeded(i), 'S'),
             BoolToChar(saq_is_virtual(i), 'T'),
             stq_uop(i).br_mask,
