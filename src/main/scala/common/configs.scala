@@ -35,7 +35,7 @@ class BaseBoomConfig extends Config((site, here, up) => {
   // Specify things which are typically common between core configs.
   case BoomTilesKey => up(BoomTilesKey, site) map { b => b.copy(
     core = b.core.copy(
-      fpu = Some(freechips.rocketchip.tile.FPUParams(sfmaLatency=4, dfmaLatency=4, divSqrt=true))),
+      fpu = Some(freechips.rocketchip.tile.FPUParams(sfmaLatency=4, dfmaLatency=4, divSqrt=true)))
   )}
 
   // Make sure there are enough hart bits to support multiple cores
