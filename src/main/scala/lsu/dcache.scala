@@ -765,7 +765,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   // hits always send a response
   // If MSHR is not available, LSU has to replay this request later
   // If MSHR is available and this is only a store(not a amo), we don't need to wait for resp later
-  s2_store_failed := s2_valid && s2_nack && s2_send_resp && s2_req.uop.uses_stq
+  s2_store_failed := s2_valid && s2_nack && s2_send_nack && s2_req.uop.uses_stq
 
   // Miss handling
   mshrs.io.req.valid := s2_valid &&
