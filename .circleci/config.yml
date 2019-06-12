@@ -53,33 +53,6 @@ jobs:
                 key: bhd-with-verilator-v9-{{ checksum "../bhd.hash" }}
                 paths:
                     - "/home/riscvuser/bhd"
-    prepare-boomconfig:
-        docker:
-            - image: riscvboom/riscvboom-images:0.0.5
-        environment:
-            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
-            TERM: dumb
-        steps:
-            - checkout
-            - run:
-                name: Create hash of riscv-tools and bhd
-                command: |
-                    .circleci/get-bhd-hash.sh
-                    .circleci/get-riscv-tools-hash.sh
-            - restore_cache:
-                keys:
-                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
-            - restore_cache:
-                keys:
-                    - bhd-with-verilator-v9-{{ checksum "../bhd.hash" }}
-            - run:
-                name: Building BoomConfig using Verilator
-                command: .circleci/do-rtl-build.sh BoomConfig
-                no_output_timeout: 120m
-            - save_cache:
-                key: boomconfig-{{ .Branch }}-{{ .Revision }}
-                paths:
-                    - "/home/riscvuser/bhd"
     prepare-smallrv32unifiedboomconfig:
         docker:
             - image: riscvboom/riscvboom-images:0.0.5
@@ -201,53 +174,6 @@ jobs:
                 name: Run Scala checkstyle
                 command: make checkstyle
 
-    boomconfig-run-csmith-tests:
-        docker:
-            - image: riscvboom/riscvboom-images:0.0.5
-        environment:
-            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
-            TERM: dumb
-        steps:
-            - checkout
-            - run:
-                name: Create hash of riscv-tools
-                command: |
-                    .circleci/get-riscv-tools-hash.sh
-            - restore_cache:
-                keys:
-                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
-            - restore_cache:
-                keys:
-                    - boomconfig-{{ .Branch }}-{{ .Revision }}
-
-            - run:
-                name: Run BoomConfig csmith tests
-                command: .circleci/build-run-csmith-tests.sh BoomConfig 50
-                no_output_timeout: 30m
-
-    boomconfig-run-riscv-tests:
-        docker:
-            - image: riscvboom/riscvboom-images:0.0.5
-        environment:
-            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
-            TERM: dumb
-        steps:
-            - checkout
-            - run:
-                name: Create hash of riscv-tools
-                command: |
-                    .circleci/get-riscv-tools-hash.sh
-            - restore_cache:
-                keys:
-                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
-            - restore_cache:
-                keys:
-                    - boomconfig-{{ .Branch }}-{{ .Revision }}
-            - run:
-                name: Run BoomConfig riscv tests
-                command: |
-                    make run-bmark-tests-fast -C ../bhd/sims/verisim CONFIG=BoomConfig SUB_PROJECT=boom TOP=BoomRocketSystem
-                    make run-asm-tests-fast -C ../bhd/sims/verisim CONFIG=BoomConfig SUB_PROJECT=boom TOP=BoomRocketSystem
     smallrv32unifiedboomconfig-run-csmith-tests:
         docker:
             - image: riscvboom/riscvboom-images:0.0.5
@@ -267,7 +193,7 @@ jobs:
                 keys:
                     - smallrv32unifiedboomconfig-{{ .Branch }}-{{ .Revision }}
             - run:
-                name: Run BoomConfig csmith tests
+                name: Run smallrv32unifiedboomconfig csmith tests
                 command: .circleci/build-run-csmith-tests.sh SmallRV32UnifiedBoomConfig 50
                 no_output_timeout: 30m
 
@@ -448,9 +374,6 @@ workflows:
                     - install-riscv-tools
 
             # Prepare the verilator builds
-            - prepare-boomconfig:
-                requires:
-                    - prepare-build-environment
             - prepare-smallrv32unifiedboomconfig:
                 requires:
                     - prepare-build-environment
@@ -463,14 +386,6 @@ workflows:
             - prepare-smallboomandrocketconfig:
                 requires:
                     - prepare-build-environment
-
-            # Run the BoomConfig tests
-            - boomconfig-run-csmith-tests:
-                requires:
-                    - prepare-boomconfig
-            - boomconfig-run-riscv-tests:
-                requires:
-                    - prepare-boomconfig
 
             # Run the SmallRV32UnifiedBoomConfig tests
             - smallrv32unifiedboomconfig-run-riscv-tests:
