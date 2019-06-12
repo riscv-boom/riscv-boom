@@ -988,8 +988,8 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
   val mem_forward_valid       = (ldst_forward_matches.reduce(_||_) &&
                                  !IsKilledByBranch(io.core.brinfo, lcam_uop))
   val mem_forward_ldq_idx     = lcam_ldq_idx
+  val mem_forward_ld_addr     = lcam_addr
   val mem_forward_stq_idx     = forwarding_age_logic.io.forwarding_idx
-
 
   // Task 3: Clr unsafe bit in ROB for succesful translations
   //         Delay this a cycle to avoid going ahead of the exception broadcast
@@ -1119,19 +1119,25 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
   }
     .elsewhen (!dmem_resp_fired && RegNext(mem_forward_valid))
   {
-    val f_idx = RegNext(mem_forward_ldq_idx)
+    val f_idx       = RegNext(mem_forward_ldq_idx)
     val forward_uop = ldq(f_idx).bits.uop
-    val stq_e = stq(RegNext(mem_forward_stq_idx))
-    val data_ready = stq_e.bits.data.valid
-    val live = !IsKilledByBranch(io.core.brinfo, forward_uop)
-    val forward_data = LoadDataGenerator(stq_e.bits.data.bits,
-                                         forward_uop.mem_size, forward_uop.mem_signed)
+    val stq_e       = stq(RegNext(mem_forward_stq_idx))
+    val data_ready  = stq_e.bits.data.valid
+    val live        = !IsKilledByBranch(io.core.brinfo, forward_uop)
+    val storegen = new freechips.rocketchip.rocket.StoreGen(
+                                stq_e.bits.uop.mem_size, stq_e.bits.addr.bits,
+                                stq_e.bits.data.bits, coreDataBytes)
+    val loadgen  = new freechips.rocketchip.rocket.LoadGen(
+                                forward_uop.mem_size, forward_uop.mem_signed,
+                                RegNext(mem_forward_ld_addr),
+                                storegen.data, false.B, coreDataBytes)
+
     io.core.exe.iresp.valid := (forward_uop.dst_rtype === RT_FIX) && data_ready && live
     io.core.exe.fresp.valid := (forward_uop.dst_rtype === RT_FLT) && data_ready && live
     io.core.exe.iresp.bits.uop  := forward_uop
     io.core.exe.fresp.bits.uop  := forward_uop
-    io.core.exe.iresp.bits.data := forward_data
-    io.core.exe.fresp.bits.data := forward_data
+    io.core.exe.iresp.bits.data := loadgen.data
+    io.core.exe.fresp.bits.data := loadgen.data
 
     when (data_ready && live) {
       ldq(f_idx).bits.succeeded := data_ready
