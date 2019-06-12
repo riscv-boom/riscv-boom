@@ -72,8 +72,6 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
     val probe_rdy   = Output(Bool())
   })
 
-  dontTouch(io)
-
   // TODO: Optimize this. We don't want to mess with cache during speculation
   // s_refill_req      : Make a request for a new cache line
   // s_refill_resp     : Store the refill response into our buffer
@@ -291,7 +289,6 @@ class BoomIOMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomM
 
     // We don't need brinfo in here because uncacheable operations are guaranteed non-speculative
   })
-  dontTouch(io)
 
   def beatOffset(addr: UInt) = addr.extract(beatOffBits-1, wordOffBits)
 
@@ -390,7 +387,6 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
     val fence_rdy = Output(Bool())
     val probe_rdy = Output(Bool())
   })
-  dontTouch(io)
 
   val cacheable = edge.manager.supportsAcquireBFast(io.req.bits.addr, lgCacheBlockBytes.U)
 
@@ -571,7 +567,6 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   implicit val edge = outer.node.edges.out(0)
   val (tl_out, _) = outer.node.out(0)
   val io = IO(new BoomDCacheBundle)
-  dontTouch(io)
 
   private val fifoManagers = edge.manager.managers.filter(TLFIFOFixer.allUncacheable)
   fifoManagers.foreach { m =>
@@ -594,7 +589,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   // 0 goes to MSHR refills, 1 goes to prober
   val metaReadArb = Module(new Arbiter(new L1MetaReadReq, 4))
   // 0 goes to MSHR replays, 1 goes to prober, 2 goes to wb, 3 goes to pipeline
-  dontTouch(meta.io)
+
   meta.io.write <> metaWriteArb.io.out
   meta.io.read  <> metaReadArb.io.out
 
@@ -604,7 +599,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   // 0 goes to pipeline, 1 goes to MSHR refills
   val dataReadArb = Module(new Arbiter(new L1DataReadReq, 3))
   // 0 goes to MSHR replays, 1 goes to wb, 2 goes to pipeline
-  dontTouch(data.io)
+
   data.io.write <> dataWriteArb.io.out
   data.io.read  <> dataReadArb.io.out
 

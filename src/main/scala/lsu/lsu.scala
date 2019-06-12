@@ -210,14 +210,9 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
   val hella_paddr           = Reg(UInt(paddrBits.W))
   val hella_xcpt            = Reg(new rocket.HellaCacheExceptions)
 
-  dontTouch(io)
-  dontTouch(ldq)
-  dontTouch(stq)
-
 
   val dtlb = Module(new rocket.TLB(
     instruction = false, lgMaxSize = log2Ceil(coreDataBytes), rocket.TLBConfig(dcacheParams.nTLBEntries)))
-  dontTouch(dtlb.io)
 
   io.ptw <> dtlb.io.ptw
 
@@ -981,10 +976,7 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
   val forwarding_age_logic = Module(new ForwardingAgeLogic(NUM_STQ_ENTRIES))
   forwarding_age_logic.io.addr_matches    := ldst_forward_matches.asUInt
   forwarding_age_logic.io.youngest_st_idx := lcam_uop.stq_idx
-  // when (ldst_forward_matches.reduce(_||_)) {
-  //   ldq(lcam_ldq_idx).bits.forward_std_val := true.B
-  //   ldq(lcam_ldq_idx).bits.forward_stq_idx := forwarding_age_logic.io.forwarding_idx
-  // }
+
   val mem_forward_valid       = (ldst_forward_matches.reduce(_||_) &&
                                  !IsKilledByBranch(io.core.brinfo, lcam_uop))
   val mem_forward_ldq_idx     = lcam_ldq_idx
@@ -1110,12 +1102,7 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
 
   when (dmem_resp_fired && RegNext(mem_forward_valid))
   {
-      //   ldq(lcam_ldq_idx).bits.forward_std_val := true.B
-  //   ldq(lcam_ldq_idx).bits.forward_stq_idx := forwarding_age_logic.io.forwarding_idx
-    val f_idx = RegNext(mem_forward_ldq_idx)
-    //    ldq(f_idx).bits.executed := false.B
-    //assert(!ldq(f_idx).bits.executed)
-    //ldq(f_idx).bits.execute_ignore := false.B
+    // Twiddle thumbs. Can't forward because dcache response takes precedence
   }
     .elsewhen (!dmem_resp_fired && RegNext(mem_forward_valid))
   {
@@ -1144,9 +1131,6 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
       ldq(f_idx).bits.forward_std_val := true.B
       ldq(f_idx).bits.forward_stq_idx := RegNext(mem_forward_stq_idx)
     }
-    // when (!data_ready) {
-    //   ldq(f_idx).bits.executed := false.B
-    // }
     assert(!ldq(f_idx).bits.execute_ignore)
   }
 
@@ -1409,32 +1393,6 @@ object GenByteMask
                    (size === 2.U) -> Mux(addr(2), 240.U(8.W), 15.U(8.W)),
                    (size === 3.U) -> 255.U(8.W)))
       mask
-   }
-}
-
-/**
- * Object to generate data based on the size of the data (according to
- * its type.
- * TODO currently assumes w_addr and r_addr are identical, so no shifting
- * store data is already aligned (since its the value straight from the register
- * but the load data may need to be re-aligned...
- */
-object LoadDataGenerator
-{
-   def apply(data: UInt, mem_size: UInt, mem_signed: Bool): UInt =
-   {
-     val sext  = mem_signed
-     val word  = mem_size === 2.U
-     val half  = mem_size === 1.U
-     val byte_ = mem_size === 0.U
-     val dword = mem_size === 3.U
-
-      val out = Mux (dword, data,
-                Mux (word , Cat(Fill(32, sext & data(31)), data(31, 0)),
-                Mux (half , Cat(Fill(48, sext & data(15)), data(15, 0)),
-                Mux (byte_, Cat(Fill(56, sext & data( 7)), data( 7, 0)),
-                            data))))
-      out
    }
 }
 
