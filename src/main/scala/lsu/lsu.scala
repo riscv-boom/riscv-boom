@@ -834,12 +834,12 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
 
   io.core.clr_bsy(0).valid := clr_bsy_valid &&
                              !IsKilledByBranch(io.core.brinfo, clr_bsy_brmask) &&
-                             !io.core.exception && !RegNext(io.core.exception)
+                             !io.core.exception && !RegNext(io.core.exception) && !RegNext(RegNext(io.core.exception))
   io.core.clr_bsy(0).bits  := clr_bsy_rob_idx
 
   io.core.clr_bsy(1).valid := stdf_clr_bsy_valid &&
                              !IsKilledByBranch(io.core.brinfo, stdf_clr_bsy_brmask) &&
-                             !io.core.exception && !RegNext(io.core.exception)
+                             !io.core.exception && !RegNext(io.core.exception) && !RegNext(RegNext(io.core.exception))
   io.core.clr_bsy(1).bits  := stdf_clr_bsy_rob_idx
 
 
