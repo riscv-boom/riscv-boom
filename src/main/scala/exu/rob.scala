@@ -741,7 +741,7 @@ class Rob(
       rob_pnr_lsb := PriorityEncoder(rob_pnr_unsafe)
     } .elsewhen (safe_to_inc && !full && !empty) {
       rob_pnr_lsb := PriorityEncoder(rob_pnr_unsafe.asUInt | ~MaskLower(rob_tail_vals.asUInt))
-    } .elsewhen (full) {
+    } .elsewhen (full && pnr_maybe_at_tail) {
       rob_pnr_lsb := 0.U
     }
 

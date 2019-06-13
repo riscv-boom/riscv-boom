@@ -411,7 +411,6 @@ jobs:
                 command: |
                     make run-bmark-tests -C ../bhd/sims/verisim SUB_PROJECT=boom TOP=BoomRocketSystem MODEL=TestHarness CONFIG=SmallBoomAndRocketConfig
                     make run-asm-tests -C ../bhd/sims/verisim SUB_PROJECT=boom TOP=BoomRocketSystem MODEL=TestHarness CONFIG=SmallBoomAndRocketConfig
-
 # Order and dependencies of jobs to run
 workflows:
     version: 2

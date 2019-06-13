@@ -79,7 +79,7 @@ class WithL1DECC(tecc: String, decc: String) extends Config((site, here, up) => 
  * Also makes support for multiple harts depend on Rocket + BOOM
  * Note: Must come after all harts are assigned for it to apply
  */
-class WithRenumberHarts(rocketFirst: Boolean = true) extends Config((site, here, up) => {
+class WithRenumberHarts(rocketFirst: Boolean = false) extends Config((site, here, up) => {
   case RocketTilesKey => up(RocketTilesKey, site).zipWithIndex map { case (r, i) =>
     r.copy(hartId = i + (if(rocketFirst) 0 else up(BoomTilesKey, site).length))
   }

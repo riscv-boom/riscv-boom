@@ -23,7 +23,7 @@ import chisel3.core.{DontCare}
 import freechips.rocketchip.config.{Parameters}
 
 import boom.common._
-import boom.util.{BoolToChar}
+import boom.util.{BoolToChar, WrapInc}
 
 /**
  * Bundle that is made up of converted MicroOps from the Fetch Bundle
@@ -40,7 +40,7 @@ class FetchBufferResp(implicit p: Parameters) extends BoomBundle
  *
  * @param num_entries effectively the number of full-sized fetch packets we can hold.
  */
-class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule
+class FetchBuffer(numEntries: Int)(implicit p: Parameters) extends BoomModule
   with HasBoomCoreParameters
   with HasL1ICacheBankedParameters
 {
@@ -52,40 +52,44 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule
     val clear = Input(Bool())
   })
 
-  require (num_entries > 1)
-  private val num_elements = num_entries*fetchWidth
-  private val ram = Mem(num_elements, new MicroOp())
-  ram.suggestName("fb_uop_ram")
-  private val write_ptr = RegInit(0.U(log2Ceil(num_elements).W))
-  private val read_ptr = RegInit(0.U(log2Ceil(num_elements).W))
+  require (numEntries > fetchWidth)
+  require (numEntries % coreWidth == 0)
+  val numRows = numEntries / coreWidth
 
-  // How many uops are stored within the ram? If zero, bypass to the output flops.
-  private val count = RegInit(0.U(log2Ceil(num_elements).W))
+  val ram = Reg(Vec(numEntries, new MicroOp))
+  ram.suggestName("fb_uop_ram")
+  val deq_vec = Wire(Vec(numRows, Vec(coreWidth, new MicroOp)))
+
+  val head = RegInit(1.U(numRows.W))
+  val tail = RegInit(1.U(numEntries.W))
+
+  val maybe_full = RegInit(false.B)
 
   //-------------------------------------------------------------
   // **** Enqueue Uops ****
   //-------------------------------------------------------------
-  // Step 1: convert FetchPacket into a vector of MicroOps.
-  // Step 2: Compact/shift all MicroOps down towards index=0 (compress out any invalid MicroOps).
-  // Step 3: Write CompactedMicroOps into the RAM.
+  // Step 1: Convert FetchPacket into a vector of MicroOps.
+  // Step 2: Generate one-hot write indices.
+  // Step 3: Write MicroOps into the RAM.
 
-  io.enq.ready := count < (num_elements-fetchWidth).U
+  def rotateLeft(in: UInt, k: Int) = {
+    val n = in.getWidth
+    Cat(in(n-k-1,0), in(n-1, n-k))
+  }
+
+  val might_hit_head = (1 until fetchWidth).map(k => VecInit(rotateLeft(tail, k).asBools.zipWithIndex.filter
+    {case (e,i) => i % coreWidth == 0}.map {case (e,i) => e}).asUInt).map(tail => head & tail).reduce(_|_).orR
+  val at_head = (VecInit(tail.asBools.zipWithIndex.filter {case (e,i) => i % coreWidth == 0}
+    .map {case (e,i) => e}).asUInt & head).orR
+  val do_enq = !(at_head && maybe_full || might_hit_head)
+
+  io.enq.ready := do_enq
 
   // Input microops.
   val in_mask = Wire(Vec(fetchWidth, Bool()))
   val in_uops = Wire(Vec(fetchWidth, new MicroOp()))
 
-  // Compacted/shifted microops (and the shifted valid mask).
-  val compact_mask = Wire(Vec(fetchWidth, Bool()))
-  val compact_uops = Wire(Vec(fetchWidth, new MicroOp()))
-
-  for (i <- 0 until fetchWidth) {
-    compact_mask(i) := false.B
-    compact_uops(i) := DontCare
-    compact_uops(i).debug_inst := 7.U
-  }
-
-  // Step 1. Convert input FetchPacket into an array of MicroOps.
+  // Step 1: Convert FetchPacket into a vector of MicroOps.
   for (i <- 0 until fetchWidth) {
     in_uops(i)                := DontCare
     in_mask(i)                := io.enq.valid && io.enq.bits.mask(i)
@@ -112,62 +116,26 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule
     in_uops(i).debug_events   := io.enq.bits.debug_events(i)
   }
 
-  // Step 2. Shift valids towards 0.
-  // ASSUMPTION: this assumes fetch-packet is aligned to a fetch boundary,
-  // such that index=0 corresponds to AlignedPC(fetch-pc) + (0 << lg(inst_sz)).
-  // The "mask" arrives too late for our purposes, and we only need to know
-  // where the first valid instruction is anyways.
-  val lsb = log2Ceil(coreInstBytes)
-  val msb =
-    if (icIsBanked) log2Ceil(fetchWidth)+lsb-1-1
-    else log2Ceil(fetchWidth)+lsb-1
+  // Step 2. Generate one-hot write indices.
+  val enq_idxs = Wire(Vec(fetchWidth, UInt(numEntries.W)))
 
-  val first_index =
-    if (fetchWidth==1) 0.U
-    else io.enq.bits.pc(msb, lsb)
-  var compact_idx = 0.U(log2Ceil(fetchWidth).W)
-  for (i <- 0 until fetchWidth) {
-    val use_uop = i.U >= first_index && in_mask(i.U)
-    when (use_uop) {
-      compact_uops(compact_idx) := in_uops(i.U)
-      compact_mask(compact_idx) := true.B
-    }
-    compact_idx = compact_idx + use_uop
-
-//    if (DEBUG_PRINTF) {
-//      printf(" shift [" + i + "] pc: 0x%x first: %d enq: %x compact: %d, selects_oh: %x, oob: %d\n",
-//        io.enq.bits.pc,
-//        first_index,
-//        io.enq.bits.mask,
-//        compact_mask(i),
-//        selects_oh,
-//        invalid)
-//    }
+  def inc(ptr: UInt) = {
+    val n = ptr.getWidth
+    Cat(ptr(n-2,0), ptr(n-1))
   }
 
-  // all enqueuing uops have been compacted.
-  // How many incoming uops are there?
-  val popc_enqmask = PopCount(in_mask)
-  // What is the count of uops being added to the ram. Subtract off the bypassed uops.
-  // But only bypass if ram is empty AND dequeue flops will be consumed.
-  val enq_count =
-    Mux(io.enq.fire() && (!io.deq.ready || count =/= 0.U),
-      popc_enqmask,
-    Mux(io.enq.fire() && count === 0.U && popc_enqmask > coreWidth.U,
-      popc_enqmask - coreWidth.U,
-      0.U)) // !enq.fire || (count===0 and popc <= decodeWIdth)
-
-  // If the ram is empty, bypass the first coreWidth uops to the flops,
-  // and only write the remaining uops into the ram.
-  val start_idx = Wire(UInt((log2Ceil(fetchWidth)+1).W))
-  start_idx := Mux(count === 0.U && io.deq.ready, coreWidth.U, 0.U)
+  var enq_idx = tail
   for (i <- 0 until fetchWidth) {
-    when (io.enq.fire() && i.U < enq_count) {
-      ram(write_ptr + i.U) := compact_uops(start_idx + i.U)
-      assert (compact_mask(start_idx + i.U), s"compact_mask[$i] is invalid.")
-    } .otherwise {
-      assert (!io.enq.fire() || ((start_idx+i.U) >= fetchWidth.U) || !compact_mask(start_idx + i.U),
-        "[fetchbuffer] mask(" + i + ") is valid but isn't being written to the RAM.")
+    enq_idxs(i) := enq_idx
+    enq_idx = Mux(in_mask(i), inc(enq_idx), enq_idx)
+  }
+
+  // Step 3: Write MicroOps into the RAM.
+  for (i <- 0 until fetchWidth) {
+    for (j <- 0 until numEntries) {
+      when (do_enq && in_mask(i) && enq_idxs(i)(j)) {
+        ram(j) := in_uops(i)
+      }
     }
   }
 
@@ -175,41 +143,45 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule
   // **** Dequeue Uops ****
   //-------------------------------------------------------------
 
-  val r_valid = RegInit(false.B)
-  val r_uops = Reg(Vec(coreWidth, Valid(new MicroOp())))
+  val will_hit_tail = (VecInit((0 until numEntries)
+    .map(i => if (i % coreWidth == 0) false.B else head(i/coreWidth))).asUInt & tail).orR
+  val at_tail = at_head
 
-  for (w <- 0 until coreWidth) {
-    when (io.deq.ready) {
-      r_valid := count > 0.U || io.enq.valid
-      r_uops(w).bits  := Mux(count === 0.U, compact_uops(w), ram(read_ptr + w.U))
-      r_uops(w).valid := Mux(count === 0.U, compact_mask(w), count > w.U)
-    }
+  val deq_valid = !(at_tail && !maybe_full || will_hit_tail)
+  val do_deq = io.deq.ready && deq_valid
+
+  // Generate vec for dequeue read port.
+  for (i <- 0 until numEntries) {
+    deq_vec(i/coreWidth)(i%coreWidth) := ram(i)
   }
 
-  io.deq.valid := r_valid
-  io.deq.bits.uops := r_uops
+  io.deq.bits.uops.map(u => u.valid := deq_valid)
+  io.deq.bits.uops zip Mux1H(head, deq_vec) map {case (d,q) => d.bits := q}
+  io.deq.valid := deq_valid
 
   //-------------------------------------------------------------
   // **** Update State ****
   //-------------------------------------------------------------
 
-  val deq_count =
-    Mux(io.deq.ready,
-      Mux(count < coreWidth.U, count, coreWidth.U),
-      0.U)
-  count := count + enq_count - deq_count
-
-  // TODO turn into bit-vector
-  write_ptr := write_ptr + enq_count
-  read_ptr := read_ptr + deq_count
-
-  when (io.clear) {
-    count := 0.U
-    write_ptr := 0.U
-    read_ptr := 0.U
-    r_valid := false.B
+  when (do_enq) {
+    tail := enq_idx
+    when (in_mask.reduce(_||_)) {
+      maybe_full := true.B
+    }
   }
 
+  when (do_deq) {
+    head := inc(head)
+    maybe_full := false.B
+  }
+
+  when (io.clear) {
+    head := 1.U
+    tail := 1.U
+    maybe_full := false.B
+  }
+
+  // TODO Is this necessary?
   when (reset.toBool) {
     io.deq.bits.uops map { u => u.valid := false.B }
   }
@@ -221,30 +193,18 @@ class FetchBuffer(num_entries: Int)(implicit p: Parameters) extends BoomModule
   if (DEBUG_PRINTF) {
     printf("FetchBuffer:\n")
     // TODO a problem if we don't check the f3_valid?
-    printf("    Fetch3: Enq:(V:%c Msk:0x%x FIdx:%d CmptMsk:0x%x PC:0x%x EnqCnt:%d) Clear:%c\n",
+    printf("    Fetch3: Enq:(V:%c Msk:0x%x PC:0x%x) Clear:%c\n",
       BoolToChar(io.enq.valid, 'V'),
       io.enq.bits.mask,
-      first_index,
-      compact_mask.asUInt,
       io.enq.bits.pc,
-      enq_count,
       BoolToChar(io.clear, 'C'))
 
-    printf("    RAM: Cnt:%d WPtr:%d RPtr:%d\n",
-      count,
-      write_ptr,
-      read_ptr)
+    printf("    RAM: WPtr:%d RPtr:%d\n",
+      tail,
+      head)
 
-    printf("    Fetch4: Deq:(V:%c DeqCnt:%d PC:0x%x)\n",
+    printf("    Fetch4: Deq:(V:%c PC:0x%x)\n",
       BoolToChar(io.deq.valid, 'V'),
-      deq_count,
       io.deq.bits.uops(0).bits.pc)
   }
-
-  //-------------------------------------------------------------
-  // **** Asserts ****
-  //-------------------------------------------------------------
-
-  assert (count >= deq_count, "[fetchbuffer] Trying to dequeue more uops than are available.")
-  assert (!(count === 0.U && write_ptr =/= read_ptr), "[fetchbuffer] pointers should match if count is zero.")
 }
