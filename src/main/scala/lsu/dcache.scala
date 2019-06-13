@@ -19,7 +19,7 @@ import freechips.rocketchip.rocket._
 
 import boom.common._
 import boom.exu.BrResolutionInfo
-import boom.util.{IsKilledByBranch, GetNewBrMask, BranchKillableQueue, IsOlder, UpdateBrMask}
+import boom.util.{IsKilledByBranch, GetNewBrMask, BranchKillableQueue, IsOlder, UpdateBrMask, AgePriorityEncoder, WrapInc}
 
 class BoomDCacheReqInternal(implicit p: Parameters) extends BoomDCacheReq()(p)
   with HasL1HellaCacheParameters
@@ -132,7 +132,7 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
 
   io.probe_rdy   := true.B
   io.idx_match   := (state =/= s_invalid) && idx_match
-  io.way_match   := (state =/= s_invalid) && way_match
+  io.way_match   := !state.isOneOf(s_invalid, s_refill_req, s_refill_resp, s_drain_rpq_loads) && way_match
   io.tag         := req_tag
   io.meta_write.valid  := false.B
   io.req_pri_rdy       := false.B
@@ -369,6 +369,7 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
     val req  = Flipped(Decoupled(new BoomDCacheReqInternal))
     val resp = Decoupled(new BoomDCacheResp)
     val secondary_miss = Output(Bool())
+    val block_hit = Output(Bool())
 
     val brinfo       = Input(new BrResolutionInfo)
     val exception    = Input(Bool())
@@ -409,18 +410,20 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
   val meta_write_arb = Module(new Arbiter(new L1MetaWriteReq           , cfg.nMSHRs))
   val wb_req_arb     = Module(new Arbiter(new WritebackReq(edge.bundle), cfg.nMSHRs))
   val replay_arb     = Module(new Arbiter(new BoomDCacheReqInternal    , cfg.nMSHRs))
-  val alloc_arb      = Module(new Arbiter(    Bool()                   , cfg.nMSHRs))
   val resp_arb       = Module(new Arbiter(new BoomDCacheResp           , cfg.nMSHRs + nIOMSHRs))
   val refill_arb     = Module(new Arbiter(new L1DataWriteReq           , cfg.nMSHRs))
 
-  var idx_match = false.B
+
   var way_match = false.B
-  var pri_rdy   = false.B
   var sec_rdy   = false.B
 
   io.fence_rdy := true.B
   io.probe_rdy := true.B
 
+  val idx_match = idx_matches.reduce(_||_)
+  val mshr_alloc_idx = Wire(UInt())
+  val pri_rdy = WireInit(false.B)
+  val pri_val = io.req.valid && sdq_rdy && cacheable && !idx_match
   val mshrs = (0 until cfg.nMSHRs) map { i =>
     val mshr = Module(new BoomMSHR(i))
 
@@ -428,10 +431,13 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
     tag_list(i)    := mshr.io.tag
     wb_tag_list(i) := mshr.io.wb_req.bits.tag
 
-    alloc_arb.io.in(i).valid := mshr.io.req_pri_rdy
-    alloc_arb.io.in(i).bits  := DontCare // Hack to get an Arbiter with no data
 
-    mshr.io.req_pri_val  := alloc_arb.io.in(i).ready
+
+    mshr.io.req_pri_val  := (i.U === mshr_alloc_idx) && pri_val
+    when (i.U === mshr_alloc_idx) {
+      pri_rdy := mshr.io.req_pri_rdy
+    }
+
     mshr.io.req_sec_val  := io.req.valid && sdq_rdy && tag_match && cacheable
     mshr.io.req          := io.req.bits
     mshr.io.req.sdq_id   := sdq_alloc_id
@@ -451,9 +457,7 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
 
 
 
-    pri_rdy   = pri_rdy || mshr.io.req_pri_rdy
     sec_rdy   = sec_rdy || mshr.io.req_sec_rdy
-    idx_match = idx_match || mshr.io.idx_match
     way_match = way_match || mshr.io.way_match
 
     resp_arb.io.in(i) <> mshr.io.resp
@@ -467,8 +471,10 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
 
     mshr
   }
-
-  alloc_arb.io.out.ready := io.req.valid && sdq_rdy && cacheable && !idx_match
+  // Try to round-robin the MSHRs
+  val mshr_head      = RegInit(0.U(log2Ceil(cfg.nMSHRs).W))
+  mshr_alloc_idx    := RegNext(AgePriorityEncoder(mshrs.map(m=>m.io.req_pri_rdy), mshr_head))
+  when (pri_rdy && pri_val) { mshr_head := WrapInc(mshr_head, cfg.nMSHRs) }
 
   io.meta_write <> meta_write_arb.io.out
   io.wb_req     <> wb_req_arb.io.out
@@ -506,7 +512,8 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
 
   io.resp           <> resp_arb.io.out
   io.req.ready      := Mux(!cacheable, mmio_rdy, sdq_rdy && Mux(idx_match, tag_match && sec_rdy, pri_rdy))
-  io.secondary_miss := idx_match && way_match
+  io.secondary_miss := idx_match && way_match && !tag_match
+  io.block_hit      := idx_match && tag_match
   io.refill         <> refill_arb.io.out
 
   val free_sdq = io.replay.fire() && isWrite(io.replay.bits.uop.mem_cmd)
@@ -715,7 +722,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   val s2_hit_state = Mux1H(s2_tag_match_way, wayMap((w: Int) => RegNext(meta.io.resp(w).coh)))
   val (s2_has_permission, _, s2_new_hit_state) = s2_hit_state.onAccess(s2_req.uop.mem_cmd)
   //
-  val s2_hit = s2_tag_match && ((s2_has_permission && s2_hit_state === s2_new_hit_state) || s2_is_replay)
+  val s2_hit = (s2_tag_match && (s2_has_permission && s2_hit_state === s2_new_hit_state) && !mshrs.io.block_hit) || s2_is_replay
   assert(!(s2_is_replay && !s2_hit), "Replays should always hit")
 
   // lr/sc
@@ -768,10 +775,10 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   s2_store_failed := s2_valid && s2_nack && s2_send_nack && s2_req.uop.uses_stq
 
   // Miss handling
-  mshrs.io.req.valid := s2_valid &&
-                        !s2_nack_hit &&
-                        !s2_hit &&
-                        !s2_is_probe &&
+  mshrs.io.req.valid := s2_valid          &&
+                        !RegNext(s1_nack) &&
+                        !s2_hit           &&
+                        !s2_is_probe      &&
                         !IsKilledByBranch(io.lsu.brinfo, s2_req.uop) &&
                         !(io.lsu.exception && s2_req.uop.uses_ldq) &&
                         (isPrefetch(s2_req.uop.mem_cmd) ||
