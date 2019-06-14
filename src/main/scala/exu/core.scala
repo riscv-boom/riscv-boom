@@ -1272,7 +1272,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   if (COMMIT_LOG_PRINTF) {
     var new_commit_cnt = 0.U
     for (w <- 0 until coreWidth) {
-      val priv = csr.io.status.prv
+      val priv = RegNext(csr.io.status.prv) // erets change the privilege. Get the old one
 
       // To allow for diffs against spike :/
       def printf_inst(uop: MicroOp) = {
