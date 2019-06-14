@@ -396,8 +396,9 @@ class ALUExeUnit(
     io.lsu_io.req := maddrcalc.io.resp
 
     io.ll_iresp <> io.lsu_io.iresp
-    io.ll_fresp <> io.lsu_io.fresp
-
+    if (usingFPU) {
+      io.ll_fresp <> io.lsu_io.fresp
+    }
     // io.lsu_io.exe_resp.valid := maddrcalc.io.resp.valid
     // io.lsu_io.exe_resp.bits  := maddrcalc.io.resp.bits
 
