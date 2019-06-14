@@ -161,6 +161,33 @@ jobs:
                 key: largeboomconfig-{{ .Branch }}-{{ .Revision }}
                 paths:
                     - "/home/riscvuser/bhd"
+    prepare-megaboomconfig:
+        docker:
+            - image: riscvboom/riscvboom-images:0.0.5
+        environment:
+            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
+            TERM: dumb
+        steps:
+            - checkout
+            - run:
+                name: Create hash of riscv-tools and bhd
+                command: |
+                    .circleci/get-bhd-hash.sh
+                    .circleci/get-riscv-tools-hash.sh
+            - restore_cache:
+                keys:
+                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
+            - restore_cache:
+                keys:
+                    - bhd-with-verilator-v9-{{ checksum "../bhd.hash" }}
+            - run:
+                name: Building MegaBoomConfig using Verilator
+                command: .circleci/do-rtl-build.sh MegaBoomConfig
+                no_output_timeout: 120m
+            - save_cache:
+                key: megaboomconfig-{{ .Branch }}-{{ .Revision }}
+                paths:
+                    - "/home/riscvuser/bhd"
     prepare-smallboomandrocketconfig:
         docker:
             - image: riscvboom/riscvboom-images:0.0.5
@@ -389,6 +416,54 @@ jobs:
                     make run-bmark-tests-fast -C ../bhd/sims/verisim CONFIG=LargeBoomConfig SUB_PROJECT=boom TOP=BoomRocketSystem
                     make run-asm-tests-fast -C ../bhd/sims/verisim CONFIG=LargeBoomConfig SUB_PROJECT=boom TOP=BoomRocketSystem
 
+    megaboomconfig-run-csmith-tests:
+        docker:
+            - image: riscvboom/riscvboom-images:0.0.5
+        environment:
+            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
+            TERM: dumb
+        steps:
+            - checkout
+            - run:
+                name: Create hash of riscv-tools
+                command: |
+                    .circleci/get-riscv-tools-hash.sh
+            - restore_cache:
+                keys:
+                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
+            - restore_cache:
+                keys:
+                    - megaboomconfig-{{ .Branch }}-{{ .Revision }}
+
+            - run:
+                name: Run MegaBoomConfig csmith tests
+                command: .circleci/build-run-csmith-tests.sh MegaBoomConfig 50
+                no_output_timeout: 30m
+
+    megaboomconfig-run-riscv-tests:
+        docker:
+            - image: riscvboom/riscvboom-images:0.0.5
+        environment:
+            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
+            TERM: dumb
+        steps:
+            - checkout
+            - run:
+                name: Create hash of riscv-tools
+                command: |
+                    .circleci/get-riscv-tools-hash.sh
+            - restore_cache:
+                keys:
+                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
+            - restore_cache:
+                keys:
+                    - megaboomconfig-{{ .Branch }}-{{ .Revision }}
+            - run:
+                name: Run MegaBoomConfig riscv tests
+                command: |
+                    make run-bmark-tests-fast -C ../bhd/sims/verisim CONFIG=MegaBoomConfig SUB_PROJECT=boom TOP=BoomRocketSystem
+                    make run-asm-tests-fast -C ../bhd/sims/verisim CONFIG=MegaBoomConfig SUB_PROJECT=boom TOP=BoomRocketSystem
+
     smallboomandrocketconfig-run-csmith-tests:
         docker:
             - image: riscvboom/riscvboom-images:0.0.5
@@ -467,6 +542,9 @@ workflows:
             - prepare-largeboomconfig:
                 requires:
                     - prepare-build-environment
+            - prepare-megaboomconfig:
+                requires:
+                    - prepare-build-environment
             - prepare-smallboomandrocketconfig:
                 requires:
                     - prepare-build-environment
@@ -499,6 +577,14 @@ workflows:
             - largeboomconfig-run-riscv-tests:
                 requires:
                     - prepare-largeboomconfig
+
+            # Run the MegaBoomConfig tests
+            - megaboomconfig-run-csmith-tests:
+                requires:
+                    - prepare-megaboomconfig
+            - megaboomconfig-run-riscv-tests:
+                requires:
+                    - prepare-megaboomconfig
 
             # Run the SmallBoomAndRocketConfig tests
             - smallboomandrocketconfig-run-csmith-tests:
