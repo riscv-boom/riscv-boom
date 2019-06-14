@@ -207,8 +207,8 @@ class DualCoreMediumBoomAndDualRocketConfig extends Config(
   new WithoutTLMonitors ++
   // boom param setup (applies to all boom cores)
   new WithRVC ++
-  new BaseBoomConfig ++
   new WithMediumBooms ++
+  new BaseBoomConfig ++
   // create boom tiles
   new WithNBoomCores(2) ++
   // create rocket tiles
