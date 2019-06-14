@@ -699,6 +699,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
 
    // the load address that will search the SAQ (either a fast load or a retry load)
    val mem_ld_addr = Mux(RegNext(will_fire_load_wakeup), RegNext(laq_addr(exe_ld_idx_wakeup)), mem_tlb_paddr)
+   val mem_ld_uncacheable = Mux(RegNext(will_fire_load_wakeup), RegNext(laq_is_uncacheable(exe_ld_idx_wakeup)), mem_tlb_uncacheable)
    val mem_ld_uop  = RegNext(exe_ld_uop)
    mem_ld_uop.br_mask := GetNewBrMask(io.brinfo, exe_ld_uop)
    val mem_ld_killed = Wire(Bool()) // was a load killed in execute
@@ -825,6 +826,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
       when (stq_allocated(i) &&
             st_dep_mask(i) &&
             saq_val(i) &&
+            !mem_ld_uncacheable &&
             !saq_is_virtual(i) &&
             (s_addr(corePAddrBits-1,3) === mem_ld_addr(corePAddrBits-1,3)))
       {
