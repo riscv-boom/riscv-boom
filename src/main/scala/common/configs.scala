@@ -189,7 +189,7 @@ class WithLargeBooms extends Config((site, here, up) => {
       numRobEntries = 96,
       issueParams = Seq(
         IssueParams(issueWidth=1, numEntries=16, iqType=IQT_MEM.litValue, dispatchWidth=3),
-        IssueParams(issueWidth=2, numEntries=24, iqType=IQT_INT.litValue, dispatchWidth=3),
+        IssueParams(issueWidth=3, numEntries=24, iqType=IQT_INT.litValue, dispatchWidth=3),
         IssueParams(issueWidth=1, numEntries=16, iqType=IQT_FP.litValue , dispatchWidth=3)),
       numIntPhysRegisters = 100,
       numFpPhysRegisters = 96,
@@ -219,6 +219,7 @@ class WithMegaBooms extends Config((site, here, up) => {
       decodeWidth = 4,
       numRobEntries = 128,
       issueParams = Seq(
+        IssueParams(issueWidth=1, numEntries=32, iqType=IQT_MEM.litValue, dispatchWidth=4),
         IssueParams(issueWidth=4, numEntries=32, iqType=IQT_INT.litValue, dispatchWidth=4),
         IssueParams(issueWidth=2, numEntries=32, iqType=IQT_FP.litValue , dispatchWidth=4)),
       numIntPhysRegisters = 128,
