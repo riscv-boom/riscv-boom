@@ -97,7 +97,7 @@ case class BoomCoreParams(
   val lrscCycles: Int = 80 // worst case is 14 mispredicted branches + slop
   val retireWidth = decodeWidth
   val jumpInFrontend: Boolean = false // unused in boom
-  val nPMPs: Int = 0 // TODO Fix this!!!!!
+  val nPMPs: Int = 8
 
   override def customCSRs(implicit p: Parameters) = new BoomCustomCSRs
 }
