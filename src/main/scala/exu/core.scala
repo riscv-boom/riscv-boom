@@ -503,6 +503,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   // stall fetch/dcode because we ran out of branch tags
   val branch_mask_full = Wire(Vec(coreWidth, Bool()))
 
+  io.lsu.fence_dmem := false.B
   for (w <- 0 until coreWidth) {
     dec_valids(w)                      := io.ifu.fetchpacket.valid && dec_fbundle.uops(w).valid &&
                                           !dec_finished_mask(w)
@@ -532,6 +533,10 @@ class BoomCore(implicit p: Parameters) extends BoomModule
                      || (dec_uops(w).uopc === uopROCC && dec_rocc_found)
                      )) ||
                    dec_last_inst_was_stalled
+
+    when (dec_valids(w) && (dec_uops(w).is_unique || dec_uops(w).is_fencei) && !io.lsu.fencei_rdy) {
+      io.lsu.fence_dmem := true.B
+    }
 
     // stall the next instruction following me in the decode bundle?
     dec_last_inst_was_stalled = stall_me

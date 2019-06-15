@@ -92,11 +92,14 @@ class LSUDMemIO(implicit p: Parameters) extends BoomBundle()(p)
   // In our response stage, if we get a nack, we need to reexecute
   val nack        = Flipped(new ValidIO(new BoomDCacheReq))
 
+
   val brinfo       = Output(new BrResolutionInfo)
   val exception    = Output(Bool())
   val rob_pnr_idx  = Output(UInt(robAddrSz.W))
   val rob_head_idx = Output(UInt(robAddrSz.W))
 
+  // Clears prefetching MSHRs
+  val force_order  = Output(Bool())
   val ordered     = Input(Bool())
 }
 
@@ -126,6 +129,9 @@ class LSUCoreIO(implicit p: Parameters) extends BoomBundle()(p)
 
   // Speculatively safe load (barring memory ordering failure)
   val clr_unsafe      = Output(Valid(UInt(robAddrSz.W)))
+
+  // Tell the DCache to clear prefetches/speculating misses
+  val fence_dmem   = Input(Bool())
 
   val brinfo       = Input(new BrResolutionInfo)
   val rob_pnr_idx  = Input(UInt(robAddrSz.W))
@@ -301,7 +307,8 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
   ldq_tail := ld_enq_idx
   stq_tail := st_enq_idx
 
-  io.core.fencei_rdy := !stq_nonempty && io.dmem.ordered
+  io.dmem.force_order   := io.core.fence_dmem
+  io.core.fencei_rdy    := !stq_nonempty && io.dmem.ordered
 
 
   //-------------------------------------------------------------
@@ -877,7 +884,8 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
   val stld_order_fail = WireInit(false.B)
   val ldld_order_fail = WireInit(false.B)
 
-  val can_forward = WireInit(!ldq(lcam_ldq_idx).bits.addr_is_uncacheable) // We might not be able to forward if order fail
+  val can_forward = WireInit(Mux(fired_load_incoming || fired_load_retry, !mem_tlb_addr_uncacheable,
+                                                                          !ldq(lcam_ldq_idx).bits.addr_is_uncacheable))
   val ldst_forward_matches = WireInit(VecInit((0 until NUM_STQ_ENTRIES).map(x=>false.B)))
 
   // We might need to ignore something returning THIS cycle (next stage in pipe)
@@ -1209,6 +1217,9 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
   // store has been committed AND successfully sent data to memory
   when (stq(stq_head).valid && stq(stq_head).bits.committed)
   {
+    when (stq(stq_head).bits.uop.is_fence && !io.dmem.ordered) {
+      io.dmem.force_order := true.B
+    }
     clear_store := Mux(stq(stq_head).bits.uop.is_fence, io.dmem.ordered,
                                                         stq(stq_head).bits.succeeded)
   }

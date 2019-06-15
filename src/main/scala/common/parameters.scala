@@ -199,7 +199,7 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
    val dcacheParams: DCacheParams = tileParams.dcache.get
    val icacheParams: ICacheParams = tileParams.icache.get
    val icBlockBytes = icacheParams.blockBytes
-
+   val enablePrefetching = boomParams.enablePrefetching
    require(icacheParams.nSets <= 64, "Handling aliases in the ICache is buggy.")
 
    //************************************
