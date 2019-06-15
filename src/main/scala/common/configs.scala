@@ -29,9 +29,6 @@ class BaseBoomConfig extends Config((site, here, up) => {
   // Top-Level
   case XLen => 64
 
-  // Use this boot ROM for SimDTM.
-  case BootROMParams => BootROMParams(contentFileName = s"./bootrom/bootrom.rv${site(XLen)}.img")
-
   // Specify things which are typically common between core configs.
   case BoomTilesKey => up(BoomTilesKey, site) map { b => b.copy(
     core = b.core.copy(
@@ -63,6 +60,13 @@ class WithUnifiedMemIntIQs extends Config((site, here, up) => {
       issueParams = b.core.issueParams.filter(_.iqType != IQT_MEM.litValue)
     ))
   }
+})
+
+/**
+  * Adds a boot ROM.
+  */
+class WithBootROM extends Config((site, here, up) => {
+  case BootROMParams => BootROMParams(contentFileName = s"./bootrom/bootrom.rv${site(XLen)}.img")
 })
 
 /**
