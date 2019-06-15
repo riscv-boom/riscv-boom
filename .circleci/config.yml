@@ -539,12 +539,6 @@ workflows:
             - prepare-mediumboomconfig:
                 requires:
                     - prepare-build-environment
-            - prepare-largeboomconfig:
-                requires:
-                    - prepare-build-environment
-            - prepare-megaboomconfig:
-                requires:
-                    - prepare-build-environment
             - prepare-smallboomandrocketconfig:
                 requires:
                     - prepare-build-environment
@@ -569,22 +563,6 @@ workflows:
             - mediumboomconfig-run-riscv-tests:
                 requires:
                     - prepare-mediumboomconfig
-
-            # Run the LargeBoomConfig tests
-            - largeboomconfig-run-csmith-tests:
-                requires:
-                    - prepare-largeboomconfig
-            - largeboomconfig-run-riscv-tests:
-                requires:
-                    - prepare-largeboomconfig
-
-            # Run the MegaBoomConfig tests
-            - megaboomconfig-run-csmith-tests:
-                requires:
-                    - prepare-megaboomconfig
-            - megaboomconfig-run-riscv-tests:
-                requires:
-                    - prepare-megaboomconfig
 
             # Run the SmallBoomAndRocketConfig tests
             - smallboomandrocketconfig-run-csmith-tests:
