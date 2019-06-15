@@ -795,7 +795,7 @@ class Rob(
   // I.E. at least one entry will be empty when in a steady state of dispatching and committing a row each cycle.
   // TODO should we add an extra 'parity bit' onto the ROB pointers to simplify this logic?
 
-  maybe_full := !rob_deq && (rob_enq || maybe_full)
+  maybe_full := !rob_deq && (rob_enq || maybe_full) || io.brinfo.mispredict
   full       := rob_tail === rob_head && maybe_full
   empty      := (rob_head === rob_tail) && (rob_head_vals.asUInt === 0.U)
 
