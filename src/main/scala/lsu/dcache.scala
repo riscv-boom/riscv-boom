@@ -131,7 +131,7 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
 
 
   val grantackq = Module(new Queue(new TLBundleE(edge.bundle), 1))
-  val can_finish = state.isOneOf(s_invalid, s_refill_req)
+  val can_finish = state === s_drain_rpq_loads
   grantackq.io.enq.valid := refill_done && edge.isRequest(io.mem_grant.bits)
   grantackq.io.enq.bits  := edge.GrantAck(io.mem_grant.bits)
   io.mem_finish.valid    := grantackq.io.deq.valid && can_finish
