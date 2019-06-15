@@ -42,7 +42,7 @@ class RegisterReadIO(
   val iss_uops   = Input(Vec(issueWidth, new MicroOp()))
 
   // interface with register file's read ports
-  val rf_read_ports = Flipped(Vec(numTotalReadPorts, new RegisterFileReadPortIO(pregSz, registerWidth)))
+  val rf_read_ports = Flipped(Vec(numTotalReadPorts, new RegisterFileReadPortIO(maxPregSz, registerWidth)))
 
   val bypass = Input(new BypassData(numTotalBypassPorts, registerWidth))
 

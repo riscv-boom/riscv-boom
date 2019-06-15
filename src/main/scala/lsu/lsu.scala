@@ -87,7 +87,7 @@ class LoadStoreUnitIO(val pl_width: Int)(implicit p: Parameters) extends BoomBun
 
    // Memory Stage
    val memreq_kill        = Output(Bool()) // kill request sent out last cycle
-   val mem_ldSpecWakeup   = Valid(UInt(pregSz.W)) // do NOT send out FP loads.
+   val mem_ldSpecWakeup   = Valid(UInt(maxPregSz.W)) // do NOT send out FP loads.
 
    // Forward Store Data to Register File
    // TODO turn into forward bundle

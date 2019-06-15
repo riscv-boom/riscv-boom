@@ -26,7 +26,7 @@ import boom.util._
  *
  * @param plWidth pipeline width
  */
-class RenameMapTableElementIo(val plWidth: Int)(implicit p: Parameters) extends BoomBundle
+class RenameMapTableElementIo(val plWidth: Int, val pregSz: Int)(implicit p: Parameters) extends BoomBundle
 {
   val element            = Output(UInt(pregSz.W))
 
@@ -58,9 +58,9 @@ class RenameMapTableElementIo(val plWidth: Int)(implicit p: Parameters) extends 
  * @param plWidth pipeline width
  * @param always_zero the element is always zero (used for x0)
  */
-class RenameMapTableElement(plWidth: Int, always_zero: Boolean)(implicit p: Parameters) extends BoomModule
+class RenameMapTableElement(val plWidth: Int, val always_zero: Boolean, val pregSz: Int)(implicit p: Parameters) extends BoomModule
 {
-  val io = IO(new RenameMapTableElementIo(plWidth))
+  val io = IO(new RenameMapTableElementIo(plWidth, pregSz))
 
   // Note: I don't use a "valid" signal, since it's annoying to deal with and
   // only necessary until the map tables are filled. So instead I reset the
@@ -148,14 +148,14 @@ class MapTableOutput(val pregSz: Int) extends Bundle
  * @param numPregs number of physical registers
  */
 class RenameMapTable(
-  plWidth: Int,
-  rtype: BigInt,
-  numLregs: Int,
-  numPregs: Int
+  val plWidth: Int,
+  val rtype: BigInt,
+  val numLregs: Int,
+  val numPregs: Int
   )(implicit p: Parameters) extends BoomModule
   with HasBoomCoreParameters
 {
-  override val pregSz = log2Ceil(numPregs)
+  val pregSz = log2Ceil(numPregs)
 
   val io = IO(new BoomBundle {
     // Inputs
@@ -179,7 +179,7 @@ class RenameMapTable(
   })
 
   val entries = for (i <- 0 until numLregs) yield {
-    val entry = Module(new RenameMapTableElement(plWidth, always_zero = (i==0 && rtype == RT_FIX.litValue)))
+    val entry = Module(new RenameMapTableElement(plWidth, always_zero = (i==0 && rtype == RT_FIX.litValue), pregSz))
     entry
   }
   val map_table_io = VecInit(entries.map(_.io))

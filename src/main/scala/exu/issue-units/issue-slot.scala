@@ -44,8 +44,8 @@ class IssueSlotIO(val numWakeupPorts: Int)(implicit p: Parameters) extends BoomB
   val clear         = Input(Bool()) // entry being moved elsewhere (not mutually exclusive with grant)
   val ldspec_miss   = Input(Bool()) // Previous cycle's speculative load wakeup was mispredicted.
 
-  val wakeup_ports  = Flipped(Vec(numWakeupPorts, Valid(new IqWakeup(pregSz))))
-  val ldspec_dst    = Flipped(Valid(UInt(width=pregSz.W)))
+  val wakeup_ports  = Flipped(Vec(numWakeupPorts, Valid(new IqWakeup(maxPregSz))))
+  val ldspec_dst    = Flipped(Valid(UInt(width=maxPregSz.W)))
   val in_uop        = Flipped(Valid(new MicroOp())) // if valid, this WILL overwrite an entry!
   val out_uop   = Output(new MicroOp()) // the updated slot uop; will be shifted upwards in a collasping queue.
   val uop           = Output(new MicroOp()) // the current Slot's uop. Sent down the pipeline when issued.
