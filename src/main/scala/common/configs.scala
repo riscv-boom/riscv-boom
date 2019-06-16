@@ -58,6 +58,8 @@ class WithUnifiedMemIntIQs extends Config((site, here, up) => {
   case BoomTilesKey => up(BoomTilesKey, site) map { b =>
     b.copy(core = b.core.copy(
       issueParams = b.core.issueParams.filter(_.iqType != IQT_MEM.litValue)
+                      .map(iq => if (iq.iqType == IQT_INT.litValue && iq.issueWidth < b.core.decodeWidth)
+                                   iq.copy(issueWidth=b.core.decodeWidth) else iq)
     ))
   }
 })
@@ -193,7 +195,7 @@ class WithLargeBooms extends Config((site, here, up) => {
       numRobEntries = 96,
       issueParams = Seq(
         IssueParams(issueWidth=1, numEntries=24, iqType=IQT_MEM.litValue, dispatchWidth=3),
-        IssueParams(issueWidth=3, numEntries=24, iqType=IQT_INT.litValue, dispatchWidth=3),
+        IssueParams(issueWidth=2, numEntries=24, iqType=IQT_INT.litValue, dispatchWidth=3),
         IssueParams(issueWidth=1, numEntries=24, iqType=IQT_FP.litValue , dispatchWidth=3)),
       numIntPhysRegisters = 100,
       numFpPhysRegisters = 96,
@@ -224,7 +226,7 @@ class WithMegaBooms extends Config((site, here, up) => {
       numRobEntries = 128,
       issueParams = Seq(
         IssueParams(issueWidth=1, numEntries=32, iqType=IQT_MEM.litValue, dispatchWidth=4),
-        IssueParams(issueWidth=4, numEntries=32, iqType=IQT_INT.litValue, dispatchWidth=4),
+        IssueParams(issueWidth=3, numEntries=32, iqType=IQT_INT.litValue, dispatchWidth=4),
         IssueParams(issueWidth=2, numEntries=32, iqType=IQT_FP.litValue , dispatchWidth=4)),
       numIntPhysRegisters = 128,
       numFpPhysRegisters = 128,
