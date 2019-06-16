@@ -194,30 +194,6 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       ("nop",       () => false.B),
       ("nop",       () => false.B))),
 
-      // Unused RocketCore HPE's
-      //("load",   () => id_ctrl.mem && id_ctrl.mem_cmd === M_XRD && !id_ctrl.fp),
-      //("store",  () => id_ctrl.mem && id_ctrl.mem_cmd === M_XWR && !id_ctrl.fp),
-      //("amo",    () => Bool(usingAtomics) && id_ctrl.mem && (isAMO(id_ctrl.mem_cmd) ||
-      //                 id_ctrl.mem_cmd.isOneOf(M_XLR, M_XSC))),
-      //("system", () => =/= CSR.N))),
-      //("arith",  () => id_ctrl.wxd && !(id_ctrl.jal || id_ctrl.jalr || id_ctrl.mem || id_ctrl.fp ||
-      //                id_ctrl.div || id_ctrl.csr =/= CSR.N)),
-      //("branch", () => id_ctrl.branch),
-      //("jal",    () => id_ctrl.jal),
-      //("jalr",   () => id_ctrl.jalr))
-      //++ (if (!usingMulDiv) Seq() else Seq(
-      //  ("mul", () => id_ctrl.div && (id_ctrl.alu_fn & ALU.FN_DIV) =/= ALU.FN_DIV),
-      //  ("div", () => id_ctrl.div && (id_ctrl.alu_fn & ALU.FN_DIV) === ALU.FN_DIV)))
-      //++ (if (!usingFPU) Seq() else Seq(
-      //  ("fp load",     () => id_ctrl.fp && io.fpu.dec.ldst && io.fpu.dec.wen),
-      //  ("fp store",    () => id_ctrl.fp && io.fpu.dec.ldst && !io.fpu.dec.wen),
-      //  ("fp add",      () => id_ctrl.fp && io.fpu.dec.fma && io.fpu.dec.swap23),
-      //  ("fp mul",      () => id_ctrl.fp && io.fpu.dec.fma && !io.fpu.dec.swap23 && !io.fpu.dec.ren3),
-      //  ("fp mul-add",  () => id_ctrl.fp && io.fpu.dec.fma && io.fpu.dec.ren3),
-      //  ("fp div/sqrt", () => id_ctrl.fp && (io.fpu.dec.div || io.fpu.dec.sqrt)),
-      //  ("fp other",    () => id_ctrl.fp && !(io.fpu.dec.ldst || io.fpu.dec.fma ||
-      //                        io.fpu.dec.div || io.fpu.dec.sqrt))))),
-
     new freechips.rocketchip.rocket.EventSet((mask, hits) => (mask & hits).orR, Seq(
       ("I$ blocked",                        () => icache_blocked),
       ("nop",                               () => false.B),
@@ -226,21 +202,6 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
                                                   br_unit.brinfo.is_jr),
       ("flush",                             () => rob.io.flush.valid),
       ("branch resolved",                   () => br_unit.brinfo.valid))),
-
-      // Unused RocketCore HPE's
-      //("load-use interlock",     () => id_ex_hazard && ex_ctrl.mem || id_mem_hazard && mem_ctrl.mem ||
-      //                                 id_wb_hazard && wb_ctrl.mem),
-      //("long-latency interlock", () => id_sboard_hazard),
-      //("csr interlock",          () => id_ex_hazard && ex_ctrl.csr =/= CSR.N ||
-      //                                 id_mem_hazard && mem_ctrl.csr =/= CSR.N ||
-      //                                 id_wb_hazard && wb_ctrl.csr =/= CSR.N),
-      //("D$ blocked",             () => id_ctrl.mem && dcache_blocked),
-      //++ (if (!usingMulDiv) Seq() else Seq(
-      //  ("mul/div interlock", () => id_ex_hazard && ex_ctrl.div || id_mem_hazard &&
-      //                              mem_ctrl.div || id_wb_hazard && wb_ctrl.div)))
-      //++ (if (!usingFPU) Seq() else Seq(
-      //  ("fp interlock", () => id_ex_hazard && ex_ctrl.fp || id_mem_hazard && mem_ctrl.fp ||
-      //                         id_wb_hazard && wb_ctrl.fp || id_ctrl.fp && id_stall_fpu)))),
 
     new freechips.rocketchip.rocket.EventSet((mask, hits) => (mask & hits).orR, Seq(
       ("I$ miss",     () => io.ifu.perf.acquire),
