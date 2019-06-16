@@ -985,8 +985,9 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
   forwarding_age_logic.io.addr_matches    := ldst_forward_matches.asUInt
   forwarding_age_logic.io.youngest_st_idx := lcam_uop.stq_idx
 
-  val mem_forward_valid       = (ldst_forward_matches.reduce(_||_) &&
-                                 !IsKilledByBranch(io.core.brinfo, lcam_uop))
+  val mem_forward_valid       = (ldst_forward_matches.reduce(_||_)           &&
+                                 !IsKilledByBranch(io.core.brinfo, lcam_uop) &&
+                                 !io.core.exception && !RegNext(io.core.exception))
   val mem_forward_ldq_idx     = lcam_ldq_idx
   val mem_forward_ld_addr     = lcam_addr
   val mem_forward_stq_idx     = forwarding_age_logic.io.forwarding_idx
