@@ -158,9 +158,9 @@ class WithMediumBooms extends Config((site, here, up) => {
       decodeWidth = 2,
       numRobEntries = 64,
       issueParams = Seq(
-        IssueParams(issueWidth=1, numEntries=12, iqType=IQT_MEM.litValue, dispatchWidth=2),
+        IssueParams(issueWidth=1, numEntries=16, iqType=IQT_MEM.litValue, dispatchWidth=2),
         IssueParams(issueWidth=2, numEntries=16, iqType=IQT_INT.litValue, dispatchWidth=2),
-        IssueParams(issueWidth=1, numEntries=12, iqType=IQT_FP.litValue , dispatchWidth=2)),
+        IssueParams(issueWidth=1, numEntries=16, iqType=IQT_FP.litValue , dispatchWidth=2)),
       numIntPhysRegisters = 80,
       numFpPhysRegisters = 64,
       numLdqEntries = 16,
@@ -192,9 +192,9 @@ class WithLargeBooms extends Config((site, here, up) => {
       decodeWidth = 3,
       numRobEntries = 96,
       issueParams = Seq(
-        IssueParams(issueWidth=1, numEntries=16, iqType=IQT_MEM.litValue, dispatchWidth=3),
+        IssueParams(issueWidth=1, numEntries=24, iqType=IQT_MEM.litValue, dispatchWidth=3),
         IssueParams(issueWidth=3, numEntries=24, iqType=IQT_INT.litValue, dispatchWidth=3),
-        IssueParams(issueWidth=1, numEntries=16, iqType=IQT_FP.litValue , dispatchWidth=3)),
+        IssueParams(issueWidth=1, numEntries=24, iqType=IQT_FP.litValue , dispatchWidth=3)),
       numIntPhysRegisters = 100,
       numFpPhysRegisters = 96,
       numLdqEntries = 24,
