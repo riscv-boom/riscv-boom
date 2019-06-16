@@ -575,8 +575,9 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
 
 
   assert (!(dtlb.io.req.valid && exe_tlb_uop.is_fence), "Fence is pretending to talk to the TLB")
-  assert (!(exe_req.bits.mxcpt.valid && dtlb.io.req.valid &&
-          !(exe_tlb_uop.ctrl.is_load || exe_tlb_uop.ctrl.is_sta)),
+  assert (!((will_fire_load_incoming || will_fire_sta_incoming || will_fire_stad_incoming) &&
+            exe_req.bits.mxcpt.valid && dtlb.io.req.valid &&
+            !(exe_tlb_uop.ctrl.is_load || exe_tlb_uop.ctrl.is_sta)),
           "A uop that's not a load or store-address is throwing a memory exception.")
 
   val tlb_miss = dtlb.io.req.valid && (dtlb.io.resp.miss || !dtlb.io.req.ready)
