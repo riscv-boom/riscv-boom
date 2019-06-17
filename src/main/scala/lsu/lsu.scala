@@ -165,6 +165,7 @@ class LDQEntry(implicit p: Parameters) extends BoomBundle()(p)
   val order_fail          = Bool()
 
   val st_dep_mask         = UInt(NUM_STQ_ENTRIES.W) // list of stores older than us
+  val youngest_stq_idx      = UInt(STQ_ADDR_SZ.W) // index of the oldest store younger than us
 
   val forward_std_val     = Bool()
   val forward_stq_idx     = UInt(STQ_ADDR_SZ.W) // Which store did we get the store-load forward from?
@@ -248,7 +249,6 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
   var ld_enq_idx = ldq_tail
   var st_enq_idx = stq_tail
 
-  val ldq_nonempty = VecInit(ldq.map(_.valid)).asUInt =/= 0.U
   val stq_nonempty = VecInit(stq.map(_.valid)).asUInt =/= 0.U
 
   var ldq_full = Bool()
@@ -256,7 +256,7 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
 
   for (w <- 0 until coreWidth)
   {
-    ldq_full = ld_enq_idx === ldq_head && ldq_nonempty
+    ldq_full = WrapInc(ld_enq_idx, NUM_LDQ_ENTRIES) === ldq_head
     io.core.ldq_full(w)    := ldq_full
     io.core.dec_ldq_idx(w) := ld_enq_idx
 
@@ -264,9 +264,10 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
 
     when (dec_ld_val)
     {
-      ldq(ld_enq_idx).valid            := true.B
-      ldq(ld_enq_idx).bits.uop         := io.core.dec_uops(w).bits
-      ldq(ld_enq_idx).bits.st_dep_mask := next_live_store_mask
+      ldq(ld_enq_idx).valid                := true.B
+      ldq(ld_enq_idx).bits.uop             := io.core.dec_uops(w).bits
+      ldq(ld_enq_idx).bits.youngest_stq_idx  := st_enq_idx
+      ldq(ld_enq_idx).bits.st_dep_mask     := next_live_store_mask
 
       ldq(ld_enq_idx).bits.addr.valid      := false.B
       ldq(ld_enq_idx).bits.executed        := false.B
@@ -281,7 +282,7 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
     ld_enq_idx = Mux(dec_ld_val, WrapInc(ld_enq_idx, NUM_LDQ_ENTRIES),
                                  ld_enq_idx)
 
-    stq_full = st_enq_idx === stq_head && stq_nonempty
+    stq_full = WrapInc(st_enq_idx, NUM_STQ_ENTRIES) === stq_head
     io.core.stq_full(w)    := stq_full
     io.core.dec_stq_idx(w) := st_enq_idx
 
@@ -902,22 +903,26 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
 
     val dword_addr_matches = lcam_addr(corePAddrBits-1,3) === l_addr(corePAddrBits-1,3)
     val mask_match = (l_mask & lcam_mask) === l_mask
-    val l_is_succeeding = (io.dmem.resp.valid &&
-                           io.dmem.resp.bits.uop.uses_ldq &&
-                           io.dmem.resp.bits.uop.ldq_idx === i.U)
+    val l_is_succeeding = ((io.core.exe.iresp.valid &&
+                            io.core.exe.iresp.bits.uop.uses_ldq &&
+                            io.core.exe.iresp.bits.uop.ldq_idx === i.U) ||
+                           (io.core.exe.fresp.valid &&
+                            io.core.exe.fresp.bits.uop.uses_ldq &&
+                            io.core.exe.fresp.bits.uop.ldq_idx === i.U))
 
     // Searcher is a store
-    when (do_st_search                                                      &&
-          lcam_valid                                                        &&
-          l_valid                                                           &&
-          l_bits.addr.valid                                                 &&
-          ((l_bits.executed && !l_bits.execute_ignore) || l_bits.succeeded) &&
-          !l_bits.addr_is_virtual                                           &&
-          l_bits.st_dep_mask(lcam_stq_idx)                                  &&
+    when (do_st_search                                                                         &&
+          lcam_valid                                                                           &&
+          l_valid                                                                              &&
+          l_bits.addr.valid                                                                    &&
+          ((l_bits.executed && !l_bits.execute_ignore) || l_bits.succeeded || l_is_succeeding) &&
+          !l_bits.addr_is_virtual                                                              &&
+          l_bits.st_dep_mask(lcam_stq_idx)                                                     &&
           dword_addr_matches) {
+      val forwarded_is_older = IsOlder(l_bits.forward_stq_idx, lcam_stq_idx, l_bits.youngest_stq_idx)
       // We are older than this load, which overlapped us.
       when (!l_bits.forward_std_val || // If the load wasn't forwarded, it definitely failed
-        (l_bits.forward_stq_idx =/= lcam_stq_idx) && IsOlder(l_bits.forward_stq_idx, lcam_stq_idx, stq_head)) { // If the load forwarded from us, we might be ok
+        ((l_bits.forward_stq_idx =/= lcam_stq_idx) && forwarded_is_older)) { // If the load forwarded from us, we might be ok
         when (l_bits.succeeded || l_is_succeeding) { // If the younger load already succeeded, we are screwed. Throw order fail
           ldq(i).bits.order_fail := true.B
           failed_loads(i)        := true.B
@@ -964,7 +969,7 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
     val s_addr = stq(i).bits.addr.bits
     val s_uop  = stq(i).bits.uop
     val dword_addr_matches = (lcam_st_dep_mask(i)          &&
-                              stq(i).bits.addr.valid       &&
+      stq(i).bits.addr.valid       &&
                               !stq(i).bits.addr_is_virtual &&
                               (s_addr(corePAddrBits-1,3) === lcam_addr(corePAddrBits-1,3)))
     val write_mask = GenByteMask(s_addr, s_uop.mem_size)
@@ -1041,6 +1046,11 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
   //-------------------------------------------------------------
   //-------------------------------------------------------------
 
+  val wb_forward_valid    = RegNext(mem_forward_valid)
+  val wb_forward_ldq_idx  = RegNext(mem_forward_ldq_idx)
+  val wb_forward_ld_addr  = RegNext(mem_forward_ld_addr)
+  val wb_forward_stq_idx  = RegNext(mem_forward_stq_idx)
+
   // Handle Memory Responses and nacks
   //----------------------------------
 
@@ -1110,15 +1120,15 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
     }
   }
 
-  when (dmem_resp_fired && RegNext(mem_forward_valid))
+  when (dmem_resp_fired && wb_forward_valid)
   {
     // Twiddle thumbs. Can't forward because dcache response takes precedence
   }
-    .elsewhen (!dmem_resp_fired && RegNext(mem_forward_valid))
+    .elsewhen (!dmem_resp_fired && wb_forward_valid)
   {
-    val f_idx       = RegNext(mem_forward_ldq_idx)
+    val f_idx       = wb_forward_ldq_idx
     val forward_uop = ldq(f_idx).bits.uop
-    val stq_e       = stq(RegNext(mem_forward_stq_idx))
+    val stq_e       = stq(wb_forward_stq_idx)
     val data_ready  = stq_e.bits.data.valid
     val live        = !IsKilledByBranch(io.core.brinfo, forward_uop)
     val storegen = new freechips.rocketchip.rocket.StoreGen(
@@ -1126,7 +1136,7 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
                                 stq_e.bits.data.bits, coreDataBytes)
     val loadgen  = new freechips.rocketchip.rocket.LoadGen(
                                 forward_uop.mem_size, forward_uop.mem_signed,
-                                RegNext(mem_forward_ld_addr),
+                                wb_forward_ld_addr,
                                 storegen.data, false.B, coreDataBytes)
 
     io.core.exe.iresp.valid := (forward_uop.dst_rtype === RT_FIX) && data_ready && live
@@ -1139,7 +1149,7 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
     when (data_ready && live) {
       ldq(f_idx).bits.succeeded := data_ready
       ldq(f_idx).bits.forward_std_val := true.B
-      ldq(f_idx).bits.forward_stq_idx := RegNext(mem_forward_stq_idx)
+      ldq(f_idx).bits.forward_stq_idx := wb_forward_stq_idx
     }
     assert(!ldq(f_idx).bits.execute_ignore)
   }
