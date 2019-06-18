@@ -888,7 +888,12 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
 
   val can_forward = WireInit(Mux(fired_load_incoming || fired_load_retry, !mem_tlb_addr_uncacheable,
                                                                           !ldq(lcam_ldq_idx).bits.addr_is_uncacheable))
+
+  // Mask of stores which we conflict on address with
+  val ldst_addr_matches    = WireInit(VecInit((0 until NUM_STQ_ENTRIES).map(x=>false.B)))
+  // Mask of stores which we can forward from
   val ldst_forward_matches = WireInit(VecInit((0 until NUM_STQ_ENTRIES).map(x=>false.B)))
+
 
   // We might need to ignore something returning THIS cycle (next stage in pipe)
   // In that case writing it into the ldq register is to slow
@@ -968,30 +973,41 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
   for (i <- 0 until NUM_STQ_ENTRIES) {
     val s_addr = stq(i).bits.addr.bits
     val s_uop  = stq(i).bits.uop
-    val dword_addr_matches = (lcam_st_dep_mask(i)          &&
-      stq(i).bits.addr.valid       &&
+    val dword_addr_matches = ( stq(i).bits.addr.valid      &&
                               !stq(i).bits.addr_is_virtual &&
                               (s_addr(corePAddrBits-1,3) === lcam_addr(corePAddrBits-1,3)))
     val write_mask = GenByteMask(s_addr, s_uop.mem_size)
-    when (do_ld_search && stq(i).valid && lcam_valid) {
-      when (((lcam_mask & write_mask) === lcam_mask) && !s_uop.is_fence && dword_addr_matches && can_forward) {
-        ldst_forward_matches(i) := true.B
-        io.dmem.s1_kill := RegNext(io.dmem.req.fire())
+    when (do_ld_search && stq(i).valid && lcam_valid && lcam_st_dep_mask(i)) {
+      when (((lcam_mask & write_mask) === lcam_mask) && !s_uop.is_fence && dword_addr_matches && can_forward)
+      {
+        ldst_addr_matches(i)            := true.B
+        ldst_forward_matches(i)         := true.B
+        io.dmem.s1_kill                 := RegNext(io.dmem.req.fire())
         ldq(lcam_ldq_idx).bits.executed := false.B
-      } .elsewhen (((lcam_mask & write_mask) =/= 0.U) && dword_addr_matches) {
-        io.dmem.s1_kill := RegNext(io.dmem.req.fire())
+      }
+        .elsewhen (((lcam_mask & write_mask) =/= 0.U) && dword_addr_matches)
+      {
+        ldst_addr_matches(i)            := true.B
+        io.dmem.s1_kill                 := RegNext(io.dmem.req.fire())
         ldq(lcam_ldq_idx).bits.executed := false.B
-      } .elsewhen (lcam_st_dep_mask(i) && (s_uop.is_fence || s_uop.is_amo)) {
-        io.dmem.s1_kill := RegNext(io.dmem.req.fire())
+      }
+        .elsewhen (s_uop.is_fence || s_uop.is_amo)
+      {
+        ldst_addr_matches(i)            := true.B
+        io.dmem.s1_kill                 := RegNext(io.dmem.req.fire())
         ldq(lcam_ldq_idx).bits.executed := false.B
       }
     }
   }
-  val forwarding_age_logic = Module(new ForwardingAgeLogic(NUM_STQ_ENTRIES))
-  forwarding_age_logic.io.addr_matches    := ldst_forward_matches.asUInt
-  forwarding_age_logic.io.youngest_st_idx := lcam_uop.stq_idx
 
-  val mem_forward_valid       = (ldst_forward_matches.reduce(_||_)           &&
+  // Find the youngest store which the load is dependent on
+  val forwarding_age_logic = Module(new ForwardingAgeLogic(NUM_STQ_ENTRIES))
+  forwarding_age_logic.io.addr_matches    := ldst_addr_matches.asUInt
+  forwarding_age_logic.io.youngest_st_idx := lcam_uop.stq_idx
+  val forwarding_idx = forwarding_age_logic.io.forwarding_idx
+
+  // Forward if st-ld forwarding is possible from the writemask and loadmask
+  val mem_forward_valid       = (ldst_forward_matches(forwarding_idx)        &&
                                  !IsKilledByBranch(io.core.brinfo, lcam_uop) &&
                                  !io.core.exception && !RegNext(io.core.exception))
   val mem_forward_ldq_idx     = lcam_ldq_idx
