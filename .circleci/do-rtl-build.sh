@@ -13,4 +13,4 @@ cp -r $HOME/project $HOME/bhd/generators/boom
 # enter the verisim directory and build the specific config
 cd $HOME/bhd/sims/verisim
 make clean
-make SUB_PROJECT=boom CONFIG=$1 TOP=BoomRocketSystem JAVA_ARGS="-Xmx2G -Xss8M"
+make SUB_PROJECT=boom CONFIG=$1 TOP=BoomRocketSystem JAVA_ARGS="-Xmx2500M -Xss8M"
