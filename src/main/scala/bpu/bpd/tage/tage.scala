@@ -34,7 +34,7 @@ import freechips.rocketchip.config.{Parameters, Field}
 import freechips.rocketchip.util.Str
 
 import boom.common._
-import boom.util.{ElasticReg, Fold}
+import boom.util.{ElasticReg, Fold, AddToStringPrefix}
 
 /**
  * TAGE parameters used in configurations
@@ -477,9 +477,9 @@ class TageBrPredictor(
     assert (r_info.provider_id < numTables.U || !r_info.provider_hit, "[Tage] provider_id is out-of-bounds.")
   }
 
-  override def toString: String =
-    "   [Core " + hartId + "] ==TAGE BPU==" +
-    "\n   [Core " + hartId + "] " + (sizeInBits/8/1024.0) + " kB TAGE Predictor (" +
+  override def toString: String = AddToStringPrefix(
+    "==TAGE BPU==",
+    "" + (sizeInBits/8/1024.0) + " kB TAGE Predictor (" +
     (sizeInBits/1024) + " Kbits) (max history length: " + historyLengths.max + " bits)\n" +
-    tables.mkString("\n")
+    tables.mkString(""))
 }

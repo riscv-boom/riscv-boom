@@ -19,12 +19,12 @@ import chisel3.core.withReset
 
 import freechips.rocketchip.config.{Parameters, Field}
 import freechips.rocketchip.util.{Str}
-import freechips.rocketchip.rocket.RocketCoreParams
+import freechips.rocketchip.rocket.{RocketCoreParams}
 
 import boom.common._
 import boom.exu._
-import boom.exu.BranchUnitResp
-import boom.util.ElasticReg
+import boom.exu.{BranchUnitResp}
+import boom.util.{ElasticReg, AddToStringPrefix}
 
 /**
  * A null branch predictor that makes no predictions
@@ -35,9 +35,11 @@ class NullBrPredictor(
   historyLength: Int = 12
   )(implicit p: Parameters) extends BoomBrPredictor(historyLength)
 {
-  override def toString: String = "   [Core " + hartId + "] ==Null BPU==" +
-    "\n   [Core " + hartId + "] Building (0 kB) Null Predictor (never predict)."
   io.resp.valid := false.B
+
+  override def toString: String = AddToStringPrefix(
+    "==Null BPU==",
+    "Building (0 kB) Null Predictor (never predict)")
 }
 
 /**
@@ -67,8 +69,6 @@ object RandomBrPredictor
 class RandomBrPredictor(
   )(implicit p: Parameters) extends BoomBrPredictor(historyLength = 1)
 {
-  override def toString: String = "   [Core " + hartId + "] ==Random BPU==" +
-    "\n   [Core " + hartId + "] Building Random Branch Predictor."
   private val rand_val = RegInit(false.B)
   rand_val := ~rand_val
   private var lfsr= LFSR16(true.B)
@@ -80,4 +80,8 @@ class RandomBrPredictor(
 
   io.resp.valid := rand_val
   io.resp.bits.takens := rand(fetchWidth)
+
+  override def toString: String = AddToStringPrefix(
+    "==Random BPU==",
+    "Building Random Branch Predictor")
 }

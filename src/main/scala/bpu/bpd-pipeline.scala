@@ -32,7 +32,7 @@ import freechips.rocketchip.util.{Str, UIntToAugmentedUInt}
 
 import boom.common._
 import boom.exu.{BranchUnitResp}
-import boom.util.{BoolToChar}
+import boom.util.{BoolToChar, AddToStringPrefix}
 
 /**
  * Give this to each instruction/uop and pass this down the pipeline to the branch unit
@@ -210,5 +210,10 @@ class BranchPredictionStage(implicit p: Parameters) extends BoomModule
     assert (!(io.f2_btb_resp.valid), "[bpd-pipeline] BTB predicted, but it's been disabled.")
   }
 
-  override def toString: String = btb.toString + "\n\n" + bpd.toString
+  override def toString: String =
+    (AddToStringPrefix("===BPD Pipeline===")
+    + "\n"
+    + btb.toString
+    + "\n"
+    + bpd.toString)
 }

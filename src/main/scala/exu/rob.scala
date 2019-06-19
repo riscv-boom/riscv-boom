@@ -990,12 +990,12 @@ class Rob(
     // scalastyle:off
   }
 
-  override def toString: String =
-    "\n   [Core " + hartId + "] ==ROB==" +
-    "\n   [Core " + hartId + "] Machine Width      : " + coreWidth +
-    "\n   [Core " + hartId + "] Rob Entries        : " + numRobEntries +
-    "\n   [Core " + hartId + "] Rob Rows           : " + numRobRows +
-    "\n   [Core " + hartId + "] Rob Row size       : " + log2Ceil(numRobRows) +
-    "\n   [Core " + hartId + "] log2Ceil(coreWidth): " + log2Ceil(coreWidth) +
-    "\n   [Core " + hartId + "] FPU FFlag Ports    : " + numFpuPorts
+  override def toString: String = AddToStringPrefix(
+    "==ROB==",
+    "Machine Width      : " + coreWidth,
+    "Rob Entries        : " + numRobEntries,
+    "Rob Rows           : " + numRobRows,
+    "Rob Row size       : " + log2Ceil(numRobRows),
+    "log2Ceil(coreWidth): " + log2Ceil(coreWidth),
+    "FPU FFlag Ports    : " + numFpuPorts)
 }
