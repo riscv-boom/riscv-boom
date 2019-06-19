@@ -19,6 +19,8 @@ import chisel3.util._
 import freechips.rocketchip.rocket.Instructions._
 import freechips.rocketchip.rocket._
 import freechips.rocketchip.util.{Str}
+import freechips.rocketchip.config.{Parameters}
+import freechips.rocketchip.tile.{TileKey}
 
 import boom.common.{MicroOp}
 import boom.exu.{BrResolutionInfo}
@@ -72,7 +74,7 @@ object IsKilledByBranch
 object GetNewUopAndBrMask
 {
   def apply(uop: MicroOp, brinfo: BrResolutionInfo)
-    (implicit p: freechips.rocketchip.config.Parameters): MicroOp = {
+    (implicit p: Parameters): MicroOp = {
     val newuop = WireInit(uop)
     newuop.br_mask := Mux(brinfo.valid,
                           (uop.br_mask & ~brinfo.mask),
@@ -379,7 +381,7 @@ object MaskUpper
  * Assumption: enq.valid only high if not killed by branch (so don't check IsKilled on io.enq).
  */
 class BranchKillableQueue[T <: boom.common.HasBoomUOP](gen: T, entries: Int)
-  (implicit p: freechips.rocketchip.config.Parameters)
+  (implicit p: Parameters)
   extends boom.common.BoomModule()(p)
   with boom.common.HasBoomCoreParameters
 {
@@ -570,5 +572,19 @@ object FPRegToChars
                       " ft8", " ft9", "ft10", "ft11")
     val multiVec = VecInit(for(string <- strings) yield { VecInit(for (c <- string) yield { Str(c) }) })
     multiVec(fpreg)
+  }
+}
+
+object AddToStringPrefix
+{
+  /**
+  * Add prefix to BOOM toString strings
+  *
+  * @param strs list of strings
+  * @return String combining the list with the prefix per line
+  */
+  def apply(strs: String*)(implicit p: Parameters) = {
+    val prefix = "[C" + s"${p(TileKey).hartId}" + "] "
+    strs.map(str => prefix + str + "\n").mkString("")
   }
 }

@@ -16,12 +16,13 @@ package boom.exu
 import chisel3._
 import chisel3.util._
 
-import freechips.rocketchip.config.Parameters
+import freechips.rocketchip.config.{Parameters}
 import freechips.rocketchip.rocket
 import freechips.rocketchip.tile
 
 import boom.exu.FUConstants._
 import boom.common._
+import boom.util.{AddToStringPrefix}
 
 /**
  * Top level datapath that wraps the floating point issue window, regfile, and arithmetic units.
@@ -245,9 +246,11 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
     exe_units(w).io.req.bits.kill := io.flush_pipeline
   }
 
-  val fpString = exe_units.toString
   override def toString: String =
-    fregfile.toString +
-    "\n   [Core " + hartId + "] Num Wakeup Ports      : " + numWakeupPorts +
-    "\n   [Core " + hartId + "] Num Bypass Ports      : " + exe_units.numTotalBypassPorts + "\n"
+    (AddToStringPrefix("===FP Pipeline===")
+    + "\n"
+    + fregfile.toString
+    + AddToStringPrefix(
+      "Num Wakeup Ports      : " + numWakeupPorts,
+      "Num Bypass Ports      : " + exe_units.numTotalBypassPorts))
 }

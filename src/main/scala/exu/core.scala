@@ -42,7 +42,7 @@ import freechips.rocketchip.util.{Str, UIntIsOneOf, CoreMonitorBundle}
 import boom.common._
 import boom.exu.FUConstants._
 import boom.system.BoomTilesKey
-import boom.util.{RobTypeToChars, BoolToChar, GetNewUopAndBrMask, Sext, WrapInc}
+import boom.util.{RobTypeToChars, BoolToChar, GetNewUopAndBrMask, Sext, WrapInc, AddToStringPrefix}
 
 /**
  * IO bundle for the BOOM Core. Connects the external components such as
@@ -236,47 +236,60 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
     if (enableAgePriorityIssue) " (Age-based Priority)"
     else " (Unordered Priority)"
 
-  val exeUnitsStr = exe_units.toString
+  val btbStr =
+    if (enableBTB) ("" + boomParams.btb.nSets * boomParams.btb.nWays + " entries (" + boomParams.btb.nSets + " x " + boomParams.btb.nWays + " ways)")
+    else 0
+
   val fpPipelineStr =
-    if (usingFPU) fp_pipeline.fpString
+    if (usingFPU) fp_pipeline.toString
     else ""
-  val robStr = rob.toString
 
   override def toString: String =
-    ( exeUnitsStr + "\n"
-    + fpPipelineStr + "\n"
-    + robStr + "\n"
-    + "\n   [Core " + hartId + "] ==Overall Core Params=="
-    + "\n   [Core " + hartId + "] Fetch Width           : " + fetchWidth
-    + "\n   [Core " + hartId + "] Decode Width          : " + coreWidth
-    + "\n   [Core " + hartId + "] Issue Width           : " + issueParams.map(_.issueWidth).sum
-    + "\n   [Core " + hartId + "] ROB Size              : " + numRobEntries
-    + "\n   [Core " + hartId + "] Issue Window Size     : " + issueParams.map(_.numEntries) + issStr
-    + "\n   [Core " + hartId + "] Load/Store Unit Size  : " + NUM_LDQ_ENTRIES + "/" + NUM_STQ_ENTRIES
-    + "\n   [Core " + hartId + "] Num Int Phys Registers: " + numIntPhysRegs
-    + "\n   [Core " + hartId + "] Num FP  Phys Registers: " + numFpPhysRegs
-    + "\n   [Core " + hartId + "] Max Branch Count      : " + MAX_BR_COUNT
-    + "\n   [Core " + hartId + "] BTB Size              : "
-    + (if (enableBTB) ("" + boomParams.btb.nSets * boomParams.btb.nWays + " entries (" +
-         boomParams.btb.nSets + " x " + boomParams.btb.nWays + " ways)") else 0)
-    + "\n   [Core " + hartId + "] RAS Size              : " + (if (enableBTB) boomParams.btb.nRAS else 0)
-    + "\n   [Core " + hartId + "] Rename  Stage Latency : " + renameLatency
-    + "\n" + iregfile.toString
-    + "\n   [Core " + hartId + "] Num Slow Wakeup Ports : " + numIrfWritePorts
-    + "\n   [Core " + hartId + "] Num Fast Wakeup Ports : " + exe_units.count(_.bypassable)
-    + "\n   [Core " + hartId + "] Num Bypass Ports      : " + exe_units.numTotalBypassPorts
-    + "\n   [Core " + hartId + "] DCache Ways           : " + dcacheParams.nWays
-    + "\n   [Core " + hartId + "] DCache Sets           : " + dcacheParams.nSets
-    + "\n   [Core " + hartId + "] DCache nMSHRs         : " + dcacheParams.nMSHRs
-    + "\n   [Core " + hartId + "] ICache Ways           : " + icacheParams.nWays
-    + "\n   [Core " + hartId + "] ICache Sets           : " + icacheParams.nSets
-    + "\n   [Core " + hartId + "] D-TLB Entries         : " + dcacheParams.nTLBEntries
-    + "\n   [Core " + hartId + "] I-TLB Entries         : " + icacheParams.nTLBEntries
-    + "\n   [Core " + hartId + "] Paddr Bits            : " + paddrBits
-    + "\n   [Core " + hartId + "] Vaddr Bits            : " + vaddrBits
-    + "\n\n   [Core " + hartId + "] Using FPU Unit?       : " + usingFPU.toString
-    + "\n   [Core " + hartId + "] Using FDivSqrt?       : " + usingFDivSqrt.toString
-    + "\n   [Core " + hartId + "] Using VM?             : " + usingVM.toString
+    (AddToStringPrefix("====Overall Core Params====")
+    + "\n"
+    + exe_units.toString
+    + "\n"
+    + fpPipelineStr
+    + "\n"
+    + rob.toString
+    + "\n"
+    + AddToStringPrefix(
+        "===Other Core Params===",
+        "Fetch Width           : " + fetchWidth,
+        "Decode Width          : " + coreWidth,
+        "Issue Width           : " + issueParams.map(_.issueWidth).sum,
+        "ROB Size              : " + numRobEntries,
+        "Issue Window Size     : " + issueParams.map(_.numEntries) + issStr,
+        "Load/Store Unit Size  : " + NUM_LDQ_ENTRIES + "/" + NUM_STQ_ENTRIES,
+        "Num Int Phys Registers: " + numIntPhysRegs,
+        "Num FP  Phys Registers: " + numFpPhysRegs,
+        "Max Branch Count      : " + MAX_BR_COUNT)
+    + AddToStringPrefix(
+        "RAS Size              : " + (if (enableBTB) boomParams.btb.nRAS else 0),
+        "Rename Stage Latency  : " + renameLatency)
+    + "\n"
+    + iregfile.toString
+    + "\n"
+    + AddToStringPrefix(
+        "Num Slow Wakeup Ports : " + numIrfWritePorts,
+        "Num Fast Wakeup Ports : " + exe_units.count(_.bypassable),
+        "Num Bypass Ports      : " + exe_units.numTotalBypassPorts)
+    + "\n"
+    + AddToStringPrefix(
+        "DCache Ways           : " + dcacheParams.nWays,
+        "DCache Sets           : " + dcacheParams.nSets,
+        "DCache nMSHRs         : " + dcacheParams.nMSHRs,
+        "ICache Ways           : " + icacheParams.nWays,
+        "ICache Sets           : " + icacheParams.nSets,
+        "D-TLB Entries         : " + dcacheParams.nTLBEntries,
+        "I-TLB Entries         : " + icacheParams.nTLBEntries,
+        "Paddr Bits            : " + paddrBits,
+        "Vaddr Bits            : " + vaddrBits)
+    + "\n"
+    + AddToStringPrefix(
+        "Using FPU Unit?       : " + usingFPU.toString,
+        "Using FDivSqrt?       : " + usingFDivSqrt.toString,
+        "Using VM?             : " + usingVM.toString)
     + "\n")
 
   //-------------------------------------------------------------

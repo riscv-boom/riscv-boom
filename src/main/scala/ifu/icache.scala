@@ -29,6 +29,7 @@ import freechips.rocketchip.util.property._
 import freechips.rocketchip.rocket.{HasL1ICacheParameters, ICacheParams, ICacheErrors, ICacheReq}
 
 import boom.common._
+import boom.util.{AddToStringPrefix}
 
 /**
  * ICache module
@@ -630,18 +631,18 @@ class ICacheModule(outer: ICache) extends ICacheBaseModule(outer)
   cover(error_cross_covers)
 
   val ramWidth = dECC.width(wordBits/nBanks)
-  override def toString: String =
-    "\n   [Core " + hartId + "] ==L1-ICache==" +
-    "\n   [Core " + hartId + "] Fetch bytes   : " + cacheParams.fetchBytes +
-    "\n   [Core " + hartId + "] Block bytes   : " + (1 << blockOffBits) +
-    "\n   [Core " + hartId + "] Row bytes     : " + rowBytes +
-    "\n   [Core " + hartId + "] Word bits     : " + wordBits +
-    "\n   [Core " + hartId + "] Sets          : " + nSets +
-    "\n   [Core " + hartId + "] Ways          : " + nWays +
-    "\n   [Core " + hartId + "] Refill cycles : " + refillCycles +
-    "\n   [Core " + hartId + "] RAMs          : (" +  ramWidth + " x " + nSets*refillCycles + ") using " + nBanks + " banks"  +
-    "\n   [Core " + hartId + "] " + (if (nBanks == 2) "Dual-banked" else "Single-banked") +
-    "\n   [Core " + hartId + "] I-TLB entries : " + cacheParams.nTLBEntries + "\n"
+  override def toString: String = AddToStringPrefix(
+    "==L1-ICache==",
+    "Fetch bytes   : " + cacheParams.fetchBytes,
+    "Block bytes   : " + (1 << blockOffBits),
+    "Row bytes     : " + rowBytes,
+    "Word bits     : " + wordBits,
+    "Sets          : " + nSets,
+    "Ways          : " + nWays,
+    "Refill cycles : " + refillCycles,
+    "RAMs          : (" +  ramWidth + " x " + nSets*refillCycles + ") using " + nBanks + " banks",
+    "" + (if (nBanks == 2) "Dual-banked" else "Single-banked"),
+    "I-TLB entries : " + cacheParams.nTLBEntries + "\n")
 }
 
 /**

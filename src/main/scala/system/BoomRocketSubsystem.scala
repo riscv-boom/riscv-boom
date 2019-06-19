@@ -106,4 +106,7 @@ class BoomRocketSubsystemModuleImp[+L <: BoomRocketSubsystem](_outer: L) extends
     wire.hartid := i.U
     wire.reset_vector := global_reset_vector
   }
+
+  // create file with boom params
+  ElaborationArtefacts.add("""core.config""", outer.tiles.map(x => x.module.toString).mkString("\n"))
 }

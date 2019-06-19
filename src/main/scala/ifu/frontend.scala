@@ -32,6 +32,7 @@ import boom.bpu._
 import boom.common._
 import boom.exu.{BranchUnitResp, CommitExceptionSignals}
 import boom.lsu.{CanHaveBoomPTW, CanHaveBoomPTWModule}
+import boom.util.{AddToStringPrefix}
 
 /**
  * Parameters to manage a L1 Banked ICache
@@ -320,7 +321,12 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   def ccover(cond: Bool, label: String, desc: String)(implicit sourceInfo: SourceInfo) =
     cover(cond, s"FRONTEND_$label", "Rocket;;" + desc)
 
-  override def toString: String = bpdpipeline.toString + "\n" + icache.toString
+  override def toString: String =
+    (AddToStringPrefix("====Overall Frontend Params====")
+    + "\n"
+    + bpdpipeline.toString
+    + "\n"
+    + icache.toString)
 }
 
 /**
