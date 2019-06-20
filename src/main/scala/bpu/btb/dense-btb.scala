@@ -39,7 +39,7 @@ import freechips.rocketchip.util._
 
 import boom.common._
 import boom.exu._
-import boom.util.{AddToStringPrefix}
+import boom.util.{BoomCoreStringPrefix}
 
 //------------------------------------------------------------------------------
 // DenseBTB
@@ -382,14 +382,13 @@ class DenseBTB(implicit p: Parameters) extends BoomBTB
       bim.io.resp.bits.rowdata)
   }
 
-  override def toString: String = AddToStringPrefix(
+  override def toString: String = BoomCoreStringPrefix(
     "==Dense BTB==",
     "Sets          : " + nSets,
     "Banks         : " + nBanks,
     "Ways          : " + nWays,
     "Branch Levels : " + branchLevels,
     "Tag Size      : " + tagSz,
-    "Offset Size   : " + offsetSz)
-    "\n" +
+    "Offset Size   : " + offsetSz) + "\n" +
     bim.toString
 }

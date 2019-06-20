@@ -24,7 +24,7 @@ import freechips.rocketchip.config.{Parameters}
 
 import boom.common._
 import boom.exu._
-import boom.util.{AddToStringPrefix}
+import boom.util.{BoomCoreStringPrefix}
 
 import freechips.rocketchip.util.{Str}
 
@@ -264,7 +264,7 @@ class NullBTB(implicit p: Parameters) extends BoomBTB
 {
   io.resp.valid := false.B
 
-  override def toString: String = AddToStringPrefix("==Null BTB==")
+  override def toString: String = BoomCoreStringPrefix("==Null BTB==")
 }
 
 /**

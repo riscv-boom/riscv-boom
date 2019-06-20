@@ -45,7 +45,7 @@ import chisel3.util._
 
 import freechips.rocketchip.config.{Parameters}
 
-import boom.util.{SeqMem1rwTransformable, AddToStringPrefix}
+import boom.util.{SeqMem1rwTransformable, BoomCoreStringPrefix}
 import boom.common.{BoomBundle, BoomModule}
 
 class UpdateEntry(val idxSz: Int)(implicit p: Parameters) extends BoomBundle
@@ -247,7 +247,7 @@ class TwobcCounterTable(
 
   //------------------------------------------------------------
 
-  override def toString: String = AddToStringPrefix(
+  override def toString: String = BoomCoreStringPrefix(
     ("Building (" +
     (numEntries * fetchWidth * 2/8/1024) + " kB) 2-bit counter table for (" +
     fetchWidth + "-wide fetch) and " +

@@ -21,7 +21,7 @@ import chisel3.util._
 import freechips.rocketchip.config.Parameters
 
 import boom.common._
-import boom.util.{AddToStringPrefix}
+import boom.util.{BoomCoreStringPrefix}
 
 /**
  * IO bundle for a register read port
@@ -88,7 +88,7 @@ abstract class RegisterFile(
 
   private val rf_cost = (numReadPorts + numWritePorts) * (numReadPorts + 2*numWritePorts)
   private val type_str = if (registerWidth == fLen+1) "Floating Point" else "Integer"
-  override def toString: String = AddToStringPrefix(
+  override def toString: String = BoomCoreStringPrefix(
     "==" + type_str + " Regfile==",
     "Num RF Read Ports     : " + numReadPorts,
     "Num RF Write Ports    : " + numWritePorts,

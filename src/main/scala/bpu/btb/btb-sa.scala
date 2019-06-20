@@ -36,7 +36,7 @@ import freechips.rocketchip.config.Parameters
 
 import boom.common._
 import boom.exu._
-import boom.util.{BoolToChar, CfiTypeToChars, AddToStringPrefix}
+import boom.util.{BoolToChar, CfiTypeToChars, BoomCoreStringPrefix}
 
 /**
  * Normal set-associative branch target buffer. Checks an incoming
@@ -234,11 +234,10 @@ class BTBsa(implicit p: Parameters) extends BoomBTB
       bim.io.resp.bits.rowdata)
   }
 
-  override def toString: String = AddToStringPrefix(
+  override def toString: String = BoomCoreStringPrefix(
     "==BTB-SA==",
     "Sets          : " + nSets,
     "Ways          : " + nWays,
-    "Tag Size      : " + tagSz) +
-    "\n" +
+    "Tag Size      : " + tagSz) + "\n" +
     bim.toString
 }

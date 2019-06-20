@@ -575,10 +575,10 @@ object FPRegToChars
   }
 }
 
-object AddToStringPrefix
+object BoomCoreStringPrefix
 {
   /**
-  * Add prefix to BOOM toString strings
+  * Add prefix to BOOM strings (currently only adds the hartId)
   *
   * @param strs list of strings
   * @return String combining the list with the prefix per line

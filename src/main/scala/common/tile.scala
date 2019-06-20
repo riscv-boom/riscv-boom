@@ -24,7 +24,7 @@ import freechips.rocketchip.tile._
 import boom.exu._
 import boom.ifu._
 import boom.lsu._
-import boom.util.{AddToStringPrefix}
+import boom.util.{BoomCoreStringPrefix}
 
 /**
  * BOOM tile parameter class used in configurations
@@ -267,11 +267,9 @@ class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer)
   val frontendStr = outer.frontend.module.toString
   val coreStr = core.toString
   val boomTileStr =
-    (AddToStringPrefix(s"======BOOM Tile ${p(TileKey).hartId} Params======")
-    + "\n"
+    (BoomCoreStringPrefix(s"======BOOM Tile ${p(TileKey).hartId} Params======") + "\n"
     + frontendStr
-    + coreStr
-    + "\n")
+    + coreStr + "\n")
 
   override def toString: String = boomTileStr
 
