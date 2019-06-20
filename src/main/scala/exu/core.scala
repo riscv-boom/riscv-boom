@@ -42,7 +42,7 @@ import freechips.rocketchip.util.{Str, UIntIsOneOf, CoreMonitorBundle}
 import boom.common._
 import boom.exu.FUConstants._
 import boom.system.BoomTilesKey
-import boom.util.{RobTypeToChars, BoolToChar, GetNewUopAndBrMask, Sext, WrapInc, AddToStringPrefix}
+import boom.util.{RobTypeToChars, BoolToChar, GetNewUopAndBrMask, Sext, WrapInc, BoomCoreStringPrefix}
 
 /**
  * IO bundle for the BOOM Core. Connects the external components such as
@@ -245,15 +245,11 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
     else ""
 
   override def toString: String =
-    (AddToStringPrefix("====Overall Core Params====")
-    + "\n"
-    + exe_units.toString
-    + "\n"
-    + fpPipelineStr
-    + "\n"
-    + rob.toString
-    + "\n"
-    + AddToStringPrefix(
+    (BoomCoreStringPrefix("====Overall Core Params====") + "\n"
+    + exe_units.toString + "\n"
+    + fpPipelineStr + "\n"
+    + rob.toString + "\n"
+    + BoomCoreStringPrefix(
         "===Other Core Params===",
         "Fetch Width           : " + fetchWidth,
         "Decode Width          : " + coreWidth,
@@ -264,18 +260,15 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
         "Num Int Phys Registers: " + numIntPhysRegs,
         "Num FP  Phys Registers: " + numFpPhysRegs,
         "Max Branch Count      : " + MAX_BR_COUNT)
-    + AddToStringPrefix(
+    + BoomCoreStringPrefix(
         "RAS Size              : " + (if (enableBTB) boomParams.btb.nRAS else 0),
-        "Rename Stage Latency  : " + renameLatency)
-    + "\n"
-    + iregfile.toString
-    + "\n"
-    + AddToStringPrefix(
+        "Rename Stage Latency  : " + renameLatency) + "\n"
+    + iregfile.toString + "\n"
+    + BoomCoreStringPrefix(
         "Num Slow Wakeup Ports : " + numIrfWritePorts,
         "Num Fast Wakeup Ports : " + exe_units.count(_.bypassable),
-        "Num Bypass Ports      : " + exe_units.numTotalBypassPorts)
-    + "\n"
-    + AddToStringPrefix(
+        "Num Bypass Ports      : " + exe_units.numTotalBypassPorts) + "\n"
+    + BoomCoreStringPrefix(
         "DCache Ways           : " + dcacheParams.nWays,
         "DCache Sets           : " + dcacheParams.nSets,
         "DCache nMSHRs         : " + dcacheParams.nMSHRs,
@@ -284,13 +277,11 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
         "D-TLB Entries         : " + dcacheParams.nTLBEntries,
         "I-TLB Entries         : " + icacheParams.nTLBEntries,
         "Paddr Bits            : " + paddrBits,
-        "Vaddr Bits            : " + vaddrBits)
-    + "\n"
-    + AddToStringPrefix(
+        "Vaddr Bits            : " + vaddrBits) + "\n"
+    + BoomCoreStringPrefix(
         "Using FPU Unit?       : " + usingFPU.toString,
         "Using FDivSqrt?       : " + usingFDivSqrt.toString,
-        "Using VM?             : " + usingVM.toString)
-    + "\n")
+        "Using VM?             : " + usingVM.toString) + "\n")
 
   //-------------------------------------------------------------
   //-------------------------------------------------------------

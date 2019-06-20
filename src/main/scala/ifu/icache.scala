@@ -29,7 +29,7 @@ import freechips.rocketchip.util.property._
 import freechips.rocketchip.rocket.{HasL1ICacheParameters, ICacheParams, ICacheErrors, ICacheReq}
 
 import boom.common._
-import boom.util.{AddToStringPrefix}
+import boom.util.{BoomCoreStringPrefix}
 
 /**
  * ICache module
@@ -631,7 +631,7 @@ class ICacheModule(outer: ICache) extends ICacheBaseModule(outer)
   cover(error_cross_covers)
 
   val ramWidth = dECC.width(wordBits/nBanks)
-  override def toString: String = AddToStringPrefix(
+  override def toString: String = BoomCoreStringPrefix(
     "==L1-ICache==",
     "Fetch bytes   : " + cacheParams.fetchBytes,
     "Block bytes   : " + (1 << blockOffBits),

@@ -22,7 +22,7 @@ import freechips.rocketchip.tile
 
 import boom.exu.FUConstants._
 import boom.common._
-import boom.util.{AddToStringPrefix}
+import boom.util.{BoomCoreStringPrefix}
 
 /**
  * Top level datapath that wraps the floating point issue window, regfile, and arithmetic units.
@@ -247,10 +247,9 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
   }
 
   override def toString: String =
-    (AddToStringPrefix("===FP Pipeline===")
-    + "\n"
+    (BoomCoreStringPrefix("===FP Pipeline===") + "\n"
     + fregfile.toString
-    + AddToStringPrefix(
+    + BoomCoreStringPrefix(
       "Num Wakeup Ports      : " + numWakeupPorts,
       "Num Bypass Ports      : " + exe_units.numTotalBypassPorts))
 }

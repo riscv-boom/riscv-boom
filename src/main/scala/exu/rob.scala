@@ -990,7 +990,7 @@ class Rob(
     // scalastyle:off
   }
 
-  override def toString: String = AddToStringPrefix(
+  override def toString: String = BoomCoreStringPrefix(
     "==ROB==",
     "Machine Width      : " + coreWidth,
     "Rob Entries        : " + numRobEntries,

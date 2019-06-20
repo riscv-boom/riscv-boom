@@ -24,7 +24,7 @@ import freechips.rocketchip.rocket.{RocketCoreParams}
 import boom.common._
 import boom.exu._
 import boom.exu.{BranchUnitResp}
-import boom.util.{ElasticReg, AddToStringPrefix}
+import boom.util.{ElasticReg, BoomCoreStringPrefix}
 
 /**
  * A null branch predictor that makes no predictions
@@ -37,7 +37,7 @@ class NullBrPredictor(
 {
   io.resp.valid := false.B
 
-  override def toString: String = AddToStringPrefix(
+  override def toString: String = BoomCoreStringPrefix(
     "==Null BPU==",
     "Building (0 kB) Null Predictor (never predict)")
 }
@@ -81,7 +81,7 @@ class RandomBrPredictor(
   io.resp.valid := rand_val
   io.resp.bits.takens := rand(fetchWidth)
 
-  override def toString: String = AddToStringPrefix(
+  override def toString: String = BoomCoreStringPrefix(
     "==Random BPU==",
     "Building Random Branch Predictor")
 }

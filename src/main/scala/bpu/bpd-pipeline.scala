@@ -32,7 +32,7 @@ import freechips.rocketchip.util.{Str, UIntToAugmentedUInt}
 
 import boom.common._
 import boom.exu.{BranchUnitResp}
-import boom.util.{BoolToChar, AddToStringPrefix}
+import boom.util.{BoolToChar, BoomCoreStringPrefix}
 
 /**
  * Give this to each instruction/uop and pass this down the pipeline to the branch unit
@@ -211,9 +211,7 @@ class BranchPredictionStage(implicit p: Parameters) extends BoomModule
   }
 
   override def toString: String =
-    (AddToStringPrefix("===BPD Pipeline===")
-    + "\n"
-    + btb.toString
-    + "\n"
+    (BoomCoreStringPrefix("===BPD Pipeline===") + "\n"
+    + btb.toString + "\n"
     + bpd.toString)
 }

@@ -29,7 +29,7 @@ import freechips.rocketchip.tile
 import FUConstants._
 import boom.common._
 import boom.ifu.{GetPCFromFtqIO}
-import boom.util.{ImmGen, IsKilledByBranch, BranchKillableQueue, AddToStringPrefix}
+import boom.util.{ImmGen, IsKilledByBranch, BranchKillableQueue, BoomCoreStringPrefix}
 
 /**
  * Response from Execution Unit. Bundles a MicroOp with data
@@ -240,13 +240,13 @@ class ALUExeUnit(
     "TODO. Currently do not support AluMemExeUnit with FP")
 
   val out_str =
-    AddToStringPrefix("==ExeUnit==") +
-    (if (hasAlu)  AddToStringPrefix(" - ALU") else "") +
-    (if (hasMul)  AddToStringPrefix(" - Mul") else "") +
-    (if (hasDiv)  AddToStringPrefix(" - Div") else "") +
-    (if (hasIfpu) AddToStringPrefix(" - IFPU") else "") +
-    (if (hasMem)  AddToStringPrefix(" - Mem") else "") +
-    (if (hasRocc) AddToStringPrefix(" - RoCC") else "")
+    BoomCoreStringPrefix("==ExeUnit==") +
+    (if (hasAlu)  BoomCoreStringPrefix(" - ALU") else "") +
+    (if (hasMul)  BoomCoreStringPrefix(" - Mul") else "") +
+    (if (hasDiv)  BoomCoreStringPrefix(" - Div") else "") +
+    (if (hasIfpu) BoomCoreStringPrefix(" - IFPU") else "") +
+    (if (hasMem)  BoomCoreStringPrefix(" - Mem") else "") +
+    (if (hasRocc) BoomCoreStringPrefix(" - RoCC") else "")
 
   override def toString: String = out_str.toString
 
@@ -490,10 +490,10 @@ class FPUExeUnit(
     hasFpiu = hasFpiu) with tile.HasFPUParameters
 {
   val out_str =
-    AddToStringPrefix("==ExeUnit==")
-    (if (hasFpu)  AddToStringPrefix("- FPU (Latency: " + dfmaLatency + ")") else "") +
-    (if (hasFdiv) AddToStringPrefix("- FDiv/FSqrt") else "") +
-    (if (hasFpiu) AddToStringPrefix("- FPIU (writes to Integer RF)") else "")
+    BoomCoreStringPrefix("==ExeUnit==")
+    (if (hasFpu)  BoomCoreStringPrefix("- FPU (Latency: " + dfmaLatency + ")") else "") +
+    (if (hasFdiv) BoomCoreStringPrefix("- FDiv/FSqrt") else "") +
+    (if (hasFpiu) BoomCoreStringPrefix("- FPIU (writes to Integer RF)") else "")
 
   val fdiv_busy = WireInit(false.B)
   val fpiu_busy = WireInit(false.B)
