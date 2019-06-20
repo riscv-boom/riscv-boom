@@ -216,7 +216,7 @@ class MediumBoomAndRocketConfig extends Config(
   new freechips.rocketchip.subsystem.WithNBigCores(1) ++
   new freechips.rocketchip.system.BaseConfig)
 
-class DualCoreMediumBoomAndDualRocketConfig extends Config(
+class DualMediumBoomAndDualRocketConfig extends Config(
   // final param setup
   new WithBootROM ++
   new WithRenumberHarts ++
