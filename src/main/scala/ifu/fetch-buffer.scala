@@ -23,7 +23,7 @@ import chisel3.core.{DontCare}
 import freechips.rocketchip.config.{Parameters}
 
 import boom.common._
-import boom.util.{BoolToChar, WrapInc}
+import boom.util.{BoolToChar, MaskUpper}
 
 /**
  * Bundle that is made up of converted MicroOps from the Fetch Bundle
@@ -143,21 +143,23 @@ class FetchBuffer(numEntries: Int)(implicit p: Parameters) extends BoomModule
   // **** Dequeue Uops ****
   //-------------------------------------------------------------
 
-  val will_hit_tail = (VecInit((0 until numEntries)
-    .map(i => if (i % coreWidth == 0) false.B else head(i/coreWidth))).asUInt & tail).orR
-  val at_tail = at_head
+  val tail_collisions = VecInit((0 until numEntries).map(i =>
+                          head(i/coreWidth) && (!maybe_full || (i % coreWidth != 0).B))).asUInt & tail
+  val slot_will_hit_tail = (0 until numRows).map(i => tail_collisions((i+1)*coreWidth-1, i*coreWidth)).reduce(_|_)
+  val will_hit_tail = slot_will_hit_tail.orR
 
-  val deq_valid = !(at_tail && !maybe_full || will_hit_tail)
-  val do_deq = io.deq.ready && deq_valid
+  val do_deq = io.deq.ready && !will_hit_tail
+
+  val deq_valids = (~MaskUpper(slot_will_hit_tail)).asBools
 
   // Generate vec for dequeue read port.
   for (i <- 0 until numEntries) {
     deq_vec(i/coreWidth)(i%coreWidth) := ram(i)
   }
 
-  io.deq.bits.uops.map(u => u.valid := deq_valid)
-  io.deq.bits.uops zip Mux1H(head, deq_vec) map {case (d,q) => d.bits := q}
-  io.deq.valid := deq_valid
+  io.deq.bits.uops zip deq_valids           map {case (d,v) => d.valid := v}
+  io.deq.bits.uops zip Mux1H(head, deq_vec) map {case (d,q) => d.bits  := q}
+  io.deq.valid := deq_valids.reduce(_||_)
 
   //-------------------------------------------------------------
   // **** Update State ****
