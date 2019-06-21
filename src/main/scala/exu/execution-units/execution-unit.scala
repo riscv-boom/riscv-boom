@@ -221,7 +221,7 @@ class ALUExeUnit(
       else if (hasAlu) 1 else 0,
     dataWidth        = p(tile.XLen) + 1,
     bypassable       = hasAlu,
-    alwaysBypassable = hasAlu && !hasMul && !hasDiv,
+    alwaysBypassable = hasAlu && !(hasMem || hasBrUnit || hasMul || hasDiv || hasCSR || hasIfpu || hasRocc),
     hasCSR           = hasCSR,
     hasBrUnit        = hasBrUnit,
     hasAlu           = hasAlu,
