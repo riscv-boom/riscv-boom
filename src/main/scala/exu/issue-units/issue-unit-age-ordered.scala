@@ -65,7 +65,7 @@ class IssueUnitCollapsing(
                                                         !dis_uops(i).is_fence &&
                                                         !dis_uops(i).is_fencei)
 
-  val uops = issue_slots.map(s=>s.updated_uop) ++ dis_uops.map(s=>s)
+  val uops = issue_slots.map(s=>s.out_uop) ++ dis_uops.map(s=>s)
   for (i <- 0 until numIssueSlots) {
     issue_slots(i).in_uop.valid := false.B
     issue_slots(i).in_uop.bits  := uops(i+1)
