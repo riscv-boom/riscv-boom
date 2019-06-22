@@ -423,14 +423,14 @@ class Rob(
                             rbk_row &&
                             rob_val(com_idx) &&
                             (rob_uop(com_idx).dst_rtype === RT_FIX || rob_uop(com_idx).dst_rtype === RT_FLT) &&
-                            (!(ENABLE_COMMIT_MAP_TABLE.B))
+                            (!(enableCommitMapTable.B))
 
     when (rbk_row) {
       rob_val(com_idx)       := false.B
       rob_exception(com_idx) := false.B
     }
 
-    if (ENABLE_COMMIT_MAP_TABLE) {
+    if (enableCommitMapTable) {
       when (RegNext(exception_thrown)) {
         for (i <- 0 until numRobRows) {
           rob_val(i)      := false.B
@@ -779,7 +779,7 @@ class Rob(
   }
 
 
-  if (ENABLE_COMMIT_MAP_TABLE) {
+  if (enableCommitMapTable) {
     when (RegNext(exception_thrown)) {
       rob_tail     := 0.U
       rob_tail_lsb := 0.U
@@ -810,7 +810,7 @@ class Rob(
   //-----------------------------------------------
 
   // ROB FSM
-  if (!ENABLE_COMMIT_MAP_TABLE) {
+  if (!enableCommitMapTable) {
     switch (rob_state) {
       is (s_reset) {
         rob_state := s_normal

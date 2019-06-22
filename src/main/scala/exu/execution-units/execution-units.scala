@@ -154,8 +154,8 @@ class ExecutionUnits(val fpu: Boolean)(implicit val p: Parameters) extends HasBo
     (BoomCoreStringPrefix("===ExecutionUnits===") + "\n"
     + (if (!fpu) {
       BoomCoreStringPrefix(
-        "==" + Seq("One","Two","Three","Four")(coreWidth-1) + "-wide Machine==",
-        "==" + Seq("Single","Dual","Triple","Quad","Five","Six")(totalIssueWidth-1) + " Issue==")
+        "==" + coreWidth + "-wide Machine==",
+        "==" + totalIssueWidth + " Issue==")
     } else {
       ""
     }) + "\n"

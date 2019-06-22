@@ -44,8 +44,8 @@ class IssueSlotIO(val numWakeupPorts: Int)(implicit p: Parameters) extends BoomB
   val clear         = Input(Bool()) // entry being moved elsewhere (not mutually exclusive with grant)
   val ldspec_miss   = Input(Bool()) // Previous cycle's speculative load wakeup was mispredicted.
 
-  val wakeup_ports  = Flipped(Vec(numWakeupPorts, Valid(new IqWakeup(PREG_SZ))))
-  val ldspec_dst    = Flipped(Valid(UInt(width=PREG_SZ.W)))
+  val wakeup_ports  = Flipped(Vec(numWakeupPorts, Valid(new IqWakeup(maxPregSz))))
+  val ldspec_dst    = Flipped(Valid(UInt(width=maxPregSz.W)))
   val in_uop        = Flipped(Valid(new MicroOp())) // if valid, this WILL overwrite an entry!
   val out_uop   = Output(new MicroOp()) // the updated slot uop; will be shifted upwards in a collasping queue.
   val uop           = Output(new MicroOp()) // the current Slot's uop. Sent down the pipeline when issued.
@@ -171,17 +171,17 @@ class IssueSlot(val numWakeupPorts: Int)(implicit p: Parameters)
 
   for (i <- 0 until numWakeupPorts) {
     when (io.wakeup_ports(i).valid &&
-         (io.wakeup_ports(i).bits.pdst === next_uop.pop1) &&
+         (io.wakeup_ports(i).bits.pdst === next_uop.prs1) &&
          !(io.ldspec_miss && io.wakeup_ports(i).bits.poisoned)) {
       p1 := true.B
     }
     when (io.wakeup_ports(i).valid &&
-         (io.wakeup_ports(i).bits.pdst === next_uop.pop2) &&
+         (io.wakeup_ports(i).bits.pdst === next_uop.prs2) &&
          !(io.ldspec_miss && io.wakeup_ports(i).bits.poisoned)) {
       p2 := true.B
     }
     when (io.wakeup_ports(i).valid &&
-         (io.wakeup_ports(i).bits.pdst === next_uop.pop3)) {
+         (io.wakeup_ports(i).bits.pdst === next_uop.prs3)) {
       p3 := true.B
     }
   }
@@ -190,23 +190,23 @@ class IssueSlot(val numWakeupPorts: Int)(implicit p: Parameters)
     "Loads to x0 should never speculatively wakeup other instructions")
 
   // TODO disable if FP IQ.
-  when (io.ldspec_dst.valid && io.ldspec_dst.bits === next_uop.pop1 && next_uop.lrs1_rtype === RT_FIX) {
+  when (io.ldspec_dst.valid && io.ldspec_dst.bits === next_uop.prs1 && next_uop.lrs1_rtype === RT_FIX) {
     p1 := true.B
     p1_poisoned := true.B
     assert (!next_p1_poisoned)
   }
-  when (io.ldspec_dst.valid && io.ldspec_dst.bits === next_uop.pop2 && next_uop.lrs2_rtype === RT_FIX) {
+  when (io.ldspec_dst.valid && io.ldspec_dst.bits === next_uop.prs2 && next_uop.lrs2_rtype === RT_FIX) {
     p2 := true.B
     p2_poisoned := true.B
     assert (!next_p2_poisoned)
   }
 
   when (io.ldspec_miss && next_p1_poisoned) {
-    assert(next_uop.pop1 =/= 0.U, "Poison bit can't be set for pop1=x0!")
+    assert(next_uop.prs1 =/= 0.U, "Poison bit can't be set for prs1=x0!")
     p1 := false.B
   }
   when (io.ldspec_miss && next_p2_poisoned) {
-    assert(next_uop.pop2 =/= 0.U, "Poison bit can't be set for pop2=x0!")
+    assert(next_uop.prs2 =/= 0.U, "Poison bit can't be set for prs2=x0!")
     p2 := false.B
   }
 

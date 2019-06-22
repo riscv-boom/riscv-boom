@@ -72,8 +72,8 @@ class LoadStoreUnitIO(val pl_width: Int)(implicit p: Parameters) extends BoomBun
    val dec_ld_vals        = Input(Vec(pl_width,  Bool()))
    val dec_uops           = Input(Vec(pl_width, new MicroOp()))
 
-   val new_ldq_idx        = Output(Vec(pl_width, UInt(LDQ_ADDR_SZ.W)))
-   val new_stq_idx        = Output(Vec(pl_width, UInt(STQ_ADDR_SZ.W)))
+   val new_ldq_idx        = Output(Vec(pl_width, UInt(ldqAddrSz.W)))
+   val new_stq_idx        = Output(Vec(pl_width, UInt(stqAddrSz.W)))
 
    // Execute Stage
    val exe_resp           = Flipped(new ValidIO(new FuncUnitResp(xLen)))
@@ -87,7 +87,7 @@ class LoadStoreUnitIO(val pl_width: Int)(implicit p: Parameters) extends BoomBun
 
    // Memory Stage
    val memreq_kill        = Output(Bool()) // kill request sent out last cycle
-   val mem_ldSpecWakeup   = Valid(UInt(PREG_SZ.W)) // do NOT send out FP loads.
+   val mem_ldSpecWakeup   = Valid(UInt(maxPregSz.W)) // do NOT send out FP loads.
 
    // Forward Store Data to Register File
    // TODO turn into forward bundle
@@ -198,7 +198,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
                                                                                  // depend (cleared when a
                                                                                  // store commits)
    val laq_forwarded_std_val  = Reg(Vec(NUM_LDQ_ENTRIES, Bool()))
-   val laq_forwarded_stq_idx  = Reg(Vec(NUM_LDQ_ENTRIES, UInt(LDQ_ADDR_SZ.W)))    // which store did get
+   val laq_forwarded_stq_idx  = Reg(Vec(NUM_LDQ_ENTRIES, UInt(ldqAddrSz.W)))    // which store did get
                                                                                  // store-load forwarded
                                                                                  // data from? compare later
                                                                                  // to see I got things correct
@@ -736,7 +736,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
    // tell the ROB to clear the busy bit on the incoming store
    val clr_bsy_valid = RegInit(false.B)
    val clr_bsy_robidx = Reg(UInt(robAddrSz.W))
-   val clr_bsy_brmask = Reg(UInt(MAX_BR_COUNT.W))
+   val clr_bsy_brmask = Reg(UInt(maxBrCount.W))
    clr_bsy_valid  := false.B
    clr_bsy_robidx := mem_tlb_uop.rob_idx
    clr_bsy_brmask := GetNewBrMask(io.brinfo, mem_tlb_uop)
@@ -1302,15 +1302,15 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
 
    when (reset.asBool || io.exception)
    {
-      laq_head := 0.U(LDQ_ADDR_SZ.W)
-      laq_tail := 0.U(LDQ_ADDR_SZ.W)
+      laq_head := 0.U(ldqAddrSz.W)
+      laq_tail := 0.U(ldqAddrSz.W)
 
       when (reset.asBool)
       {
-         stq_head := 0.U(STQ_ADDR_SZ.W)
-         stq_tail := 0.U(STQ_ADDR_SZ.W)
-         stq_commit_head := 0.U(STQ_ADDR_SZ.W)
-         stq_execute_head := 0.U(STQ_ADDR_SZ.W)
+         stq_head := 0.U(stqAddrSz.W)
+         stq_tail := 0.U(stqAddrSz.W)
+         stq_commit_head := 0.U(stqAddrSz.W)
+         stq_execute_head := 0.U(stqAddrSz.W)
 
          for (i <- 0 until NUM_STQ_ENTRIES)
          {
@@ -1378,7 +1378,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
       {
          val t_laddr = laq_addr(i)
          printf("    LDQ[%d]: State:(%c%c%c%c%c%c%c%d) STDep:(StqIdx:%d,Msk:%x) Addr:0x%x H,T:(%c %c)\n",
-            i.U(LDQ_ADDR_SZ.W),
+            i.U(ldqAddrSz.W),
             BoolToChar(        laq_allocated(i), 'V'),
             BoolToChar(         laq_addr_val(i), 'A'),
             BoolToChar(         laq_executed(i), 'E'),
@@ -1396,7 +1396,7 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
       for (i <- 0 until NUM_STQ_ENTRIES) {
          val t_saddr = saq_addr(i)
          printf("    SAQ[%d]: State:(%c%c%c%c%c%c%c) BMsk:0x%x (Addr:0x%x -> Data:0x%x) H,ExH,CmH,T:(%c %c %c %c)\n",
-            i.U(STQ_ADDR_SZ.W),
+            i.U(stqAddrSz.W),
             BoolToChar( stq_allocated(i), 'V'),
             BoolToChar(       saq_val(i), 'A'),
             BoolToChar(       sdq_val(i), 'D'),
@@ -1468,10 +1468,10 @@ class ForwardingAgeLogic(num_entries: Int)(implicit p: Parameters) extends BoomM
    {
       val addr_matches    = Input(UInt(num_entries.W)) // bit vector of addresses that match
                                                        // between the load and the SAQ
-      val youngest_st_idx = Input(UInt(STQ_ADDR_SZ.W)) // needed to get "age"
+      val youngest_st_idx = Input(UInt(stqAddrSz.W)) // needed to get "age"
 
       val forwarding_val  = Output(Bool())
-      val forwarding_idx  = Output(UInt(STQ_ADDR_SZ.W))
+      val forwarding_idx  = Output(UInt(stqAddrSz.W))
    })
 
    // generating mask that zeroes out anything younger than tail

@@ -38,7 +38,6 @@ riscv-tools).
 
 Current Configurations Tested:
 
-* BoomConfig
 * SmallBoomConfig
 * MediumBoomConfig
 * SmallRV32UnifiedBoomConfig

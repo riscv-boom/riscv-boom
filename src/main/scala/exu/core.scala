@@ -259,7 +259,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
         "Load/Store Unit Size  : " + NUM_LDQ_ENTRIES + "/" + NUM_STQ_ENTRIES,
         "Num Int Phys Registers: " + numIntPhysRegs,
         "Num FP  Phys Registers: " + numFpPhysRegs,
-        "Max Branch Count      : " + MAX_BR_COUNT)
+        "Max Branch Count      : " + maxBrCount)
     + BoomCoreStringPrefix(
         "RAS Size              : " + (if (enableBTB) boomParams.btb.nRAS else 0),
         "Rename Stage Latency  : " + renameLatency) + "\n"
@@ -851,7 +851,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
   var w_cnt = 1
   // 0th goes to ll_wbarb
-  iregfile.io.write_ports(0) := WritePort(ll_wbarb.io.out, IPREG_SZ, xLen)
+  iregfile.io.write_ports(0) := WritePort(ll_wbarb.io.out, ipregSz, xLen)
   for (i <- 0 until exe_units.length) {
     if (exe_units(i).writesIrf) {
       val wbresp = exe_units(i).io.iresp
@@ -1044,7 +1044,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
     val numFtqWhitespace = if (DEBUG_PRINTF_FTQ) (ftqSz/4)+1 else 0
     val fetchWhitespace = if (fetchWidth >= 8) 2 else 0
-    var whitespace = (debugScreenheight - 25 + 3 -10 + 3 + 4 - coreWidth - (NUM_LDQ_ENTRIES max NUM_STQ_ENTRIES) -
+    var whitespace = (debugScreenheight - 25 + 3 -10 + 3 + 4 - coreWidth - (numLdqEntries max numStqEntries) -
       issueParams.map(_.numEntries).sum - issueParams.length - (numRobEntries/coreWidth) -
       numFtqWhitespace - fetchWhitespace)
 
@@ -1089,19 +1089,19 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
           Mux(ren_uop.dst_rtype === RT_X  , Str("-"),
             Mux(ren_uop.dst_rtype === RT_FLT, Str("f"),
               Mux(ren_uop.dst_rtype === RT_PAS, Str("C"), Str("?"))))),
-        ren_uop.pop1,
+        ren_uop.prs1,
         BoolToChar(rename_stage.io.ren2_uops(w).prs1_busy, 'B', 'R'),
         Mux(ren_uop.lrs1_rtype    === RT_FIX, Str("X"),
           Mux(ren_uop.lrs1_rtype === RT_X  , Str("-"),
             Mux(ren_uop.lrs1_rtype === RT_FLT, Str("f"),
               Mux(ren_uop.lrs1_rtype === RT_PAS, Str("C"), Str("?"))))),
-        ren_uop.pop2,
+        ren_uop.prs2,
         BoolToChar(rename_stage.io.ren2_uops(w).prs2_busy, 'B', 'R'),
         Mux(ren_uop.lrs2_rtype    === RT_FIX, Str("X"),
           Mux(ren_uop.lrs2_rtype === RT_X  , Str("-"),
             Mux(ren_uop.lrs2_rtype === RT_FLT, Str("f"),
               Mux(ren_uop.lrs2_rtype === RT_PAS, Str("C"), Str("?"))))),
-        ren_uop.pop3,
+        ren_uop.prs3,
         BoolToChar(rename_stage.io.ren2_uops(w).prs3_busy, 'B', 'R'),
         BoolToChar(ren_uop.frs3_en, 'f', '-'))
     }

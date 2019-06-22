@@ -52,11 +52,11 @@ trait IssueUnitConstants
  * What physical register is broadcasting its wakeup?
  * Is the physical register poisoned (aka, was it woken up by a speculative issue)?
  *
- * @param preg_sz size of physical destination register
+ * @param pregSz size of physical destination register
  */
-class IqWakeup(val preg_sz: Int) extends Bundle
+class IqWakeup(val pregSz: Int) extends Bundle
 {
-  val pdst = UInt(width=preg_sz.W)
+  val pdst = UInt(width=pregSz.W)
   val poisoned = Bool()
 }
 
@@ -76,9 +76,9 @@ class IssueUnitIO(
 
   val iss_valids       = Output(Vec(issueWidth, Bool()))
   val iss_uops         = Output(Vec(issueWidth, new MicroOp()))
-  val wakeup_ports     = Flipped(Vec(numWakeupPorts, Valid(new IqWakeup(PREG_SZ))))
+  val wakeup_ports     = Flipped(Vec(numWakeupPorts, Valid(new IqWakeup(maxPregSz))))
 
-  val mem_ldSpecWakeup = Flipped(Valid(UInt(width=PREG_SZ.W)))
+  val mem_ldSpecWakeup = Flipped(Valid(UInt(width=maxPregSz.W)))
 
   // tell the issue unit what each execution pipeline has in terms of functional units
   val fu_types         = Input(Vec(issueWidth, Bits(width=FUC_SZ.W)))
@@ -195,9 +195,9 @@ abstract class IssueUnit(
             Mux(issue_slots(i).uop.dst_rtype === RT_FLT, Str("f"),
               Mux(issue_slots(i).uop.dst_rtype === RT_PAS, Str("C"), Str("?"))))),
         issue_slots(i).uop.pdst,
-        issue_slots(i).uop.pop1,
-        issue_slots(i).uop.pop2,
-        issue_slots(i).uop.pop3,
+        issue_slots(i).uop.prs1,
+        issue_slots(i).uop.prs2,
+        issue_slots(i).uop.prs3,
         issue_slots(i).uop.pc(31,0),
         issue_slots(i).uop.debug_inst,
         issue_slots(i).uop.uopc,

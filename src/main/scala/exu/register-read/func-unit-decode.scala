@@ -349,7 +349,7 @@ class RegisterReadDecode(supportedUnits: SupportedFuncUnits)(implicit p: Paramet
     io.rrd_uop.imm_packed := 0.U
   }
 
-  val raddr1 = io.rrd_uop.pop1 // although renamed, it'll stay 0 if lrs1 = 0
+  val raddr1 = io.rrd_uop.prs1 // although renamed, it'll stay 0 if lrs1 = 0
   val csr_ren = (rrd_cs.csr_cmd === CSR.S || rrd_cs.csr_cmd === CSR.C) && raddr1 === 0.U
   io.rrd_uop.ctrl.csr_cmd := Mux(csr_ren, CSR.R, rrd_cs.csr_cmd)
 

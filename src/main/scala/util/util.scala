@@ -398,7 +398,7 @@ class BranchKillableQueue[T <: boom.common.HasBoomUOP](gen: T, entries: Int)
 
   private val ram     = Mem(entries, gen)
   private val valids  = RegInit(VecInit(Seq.fill(entries) {false.B}))
-  private val brmasks = Reg(Vec(entries, UInt(MAX_BR_COUNT.W)))
+  private val brmasks = Reg(Vec(entries, UInt(maxBrCount.W)))
 
   private val enq_ptr = Counter(entries)
   private val deq_ptr = Counter(entries)
