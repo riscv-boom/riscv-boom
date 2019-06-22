@@ -419,7 +419,8 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
   dec_fire := (0 until coreWidth).map(w => dec_valids(w) && !dec_stalls(w))
 
   // all decoders are empty and ready for new instructions
-  dec_ready := dec_fire.last
+  if (useNewFetchBuffer) dec_ready := dec_fire.last
+  else                   dec_ready := !dec_stalls.last
 
   when (dec_ready || flush_ifu) {
     dec_finished_mask := 0.U
