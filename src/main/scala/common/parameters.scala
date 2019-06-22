@@ -87,6 +87,7 @@ case class BoomCoreParams(
   useVM: Boolean = true,
   useCompressed: Boolean = false,
   useSCIE: Boolean = false,
+  useRVE: Boolean = false,
   useBPWatch: Boolean = false,
   clockGate: Boolean = false
 ) extends freechips.rocketchip.tile.CoreParams

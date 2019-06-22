@@ -47,7 +47,7 @@ trait HasBoomAndRocketTiles extends HasTiles
   // Note that we also inject new nodes into the tile itself,
   // also based on the crossing type.
   val rocketTiles = rocketTileParams.zip(rocketCrossings).map { case (tp, crossing) =>
-    val rocket = LazyModule(new RocketTile(tp, crossing, PriorityMuxHartIdFromSeq(rocketTileParams)))
+    val rocket = LazyModule(new RocketTile(tp, crossing, PriorityMuxHartIdFromSeq(rocketTileParams), logicalTreeNode))
 
     connectMasterPortsToSBus(rocket, crossing)
     connectSlavePortsToCBus(rocket, crossing)
@@ -59,7 +59,7 @@ trait HasBoomAndRocketTiles extends HasTiles
   }
 
   val boomTiles = boomTileParams.zip(boomCrossings).map { case (tp, crossing) =>
-    val boom = LazyModule(new BoomTile(tp, crossing, PriorityMuxHartIdFromSeq(boomTileParams)))
+    val boom = LazyModule(new BoomTile(tp, crossing, PriorityMuxHartIdFromSeq(boomTileParams), logicalTreeNode))
 
     connectMasterPortsToSBus(boom, crossing)
     connectSlavePortsToCBus(boom, crossing)
