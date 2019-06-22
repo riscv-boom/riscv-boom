@@ -177,6 +177,8 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
                      rob.io.flush.valid ||
                      io.ifu.sfence_take_pc
 
+  assert (!(br_unit.brinfo.mispredict && rob.io.commit.rollback), "Can't have a mispredict during rollback.")
+
   for (eu <- exe_units) {
     eu.io.brinfo := br_unit.brinfo
   }
