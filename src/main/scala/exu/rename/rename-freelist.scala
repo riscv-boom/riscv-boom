@@ -92,6 +92,8 @@ class RenameFreeList(
   io.debug.freelist := free_list
   io.debug.isprlist := 0.U  // TODO track commit free list.
 
+  assert (!(free_list & ret_mask).orR, "[freelist] Returning a free physical register.")
+
   val numLregs = if(float) 32 else 31
   assert (!io.debug.rob_empty || PopCount(free_list) >= (numPregs - numLregs - 1).U,
     "[freelist] Leaking physical registers.")
