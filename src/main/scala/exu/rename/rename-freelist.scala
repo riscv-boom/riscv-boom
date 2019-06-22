@@ -66,7 +66,7 @@ class RenameFreeList(
   val alloc_masks = (preg_sels zip io.reqs).scanRight(0.U(numPregs.W)) {case ((preg, req), mask) => Mux(req, mask | preg, mask)}
 
   // Pregs returned by the ROB via commit or rollback.
-  val ret_valids = Mux(io.rollback, io.rbk_valids, io.com_valids)
+  val ret_valids = io.rbk_valids zip io.com_valids map {case (r,c) => r || c}
   val ret_pregs = io.rob_uops.map(uop => Mux(io.rollback, uop.pdst, uop.stale_pdst))
   val ret_mask = (ret_pregs zip ret_valids).map {case (preg, valid) => UIntToOH(preg)(numPregs-1,0) & Cat(Fill(numPregs-1, valid.asUInt), 0.U(1.W))}.reduce(_|_)
 
