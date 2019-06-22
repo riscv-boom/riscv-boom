@@ -38,15 +38,10 @@ import boom.util._
  */
 class RenameStageIO(
   val plWidth: Int,
-  val numIntPregs: Int,
-  val numFpPregs: Int,
   val numIntWbPorts: Int,
   val numFpWbPorts: Int)
   (implicit p: Parameters) extends BoomBundle
 {
-  private val int_preg_sz = log2Ceil(numIntPregs)
-  private val fp_preg_sz = log2Ceil(numFpPregs)
-
   val inst_can_proceed = Output(Vec(plWidth, Bool()))
 
   val kill = Input(Bool())
@@ -81,16 +76,13 @@ class RenameStageIO(
   val flush_pipeline = Input(Bool()) // only used for SCR (single-cycle reset)
 
   val debug_rob_empty = Input(Bool())
-  val debug = Output(new DebugRenameStageIO(numIntPregs, numFpPregs))
+  val debug = Output(new DebugRenameStageIO)
 }
 
 /**
  * IO bundle to debug the rename stage
- *
- * @param numIntPhysRegs number of int physical registers
- * @param numFpPhysRegs number of FP physical registers
  */
-class DebugRenameStageIO(val numIntPhysRegs: Int, val numFpPhysRegs: Int)(implicit p: Parameters) extends BoomBundle
+class DebugRenameStageIO(implicit p: Parameters) extends BoomBundle
 {
   val ifreelist  = Bits(numIntPhysRegs.W)
   val iisprlist  = Bits(numIntPhysRegs.W)
@@ -114,7 +106,7 @@ class RenameStage(
   numFpWbPorts: Int)
 (implicit p: Parameters) extends BoomModule
 {
-  val io = IO(new RenameStageIO(plWidth, numIntPhysRegs, numFpPhysRegs, numIntWbPorts, numFpWbPorts))
+  val io = IO(new RenameStageIO(plWidth, numIntWbPorts, numFpWbPorts))
 
   // integer registers
   val imaptable = Module(new RenameMapTable(
