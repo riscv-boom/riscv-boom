@@ -421,6 +421,9 @@ class Rob(
     io.commit.rbk_valids(w) := rbk_row && rob_val(com_idx) && !(enableCommitMapTable.B)
     io.commit.rollback := (rob_state === s_rollback)
 
+    assert (!(io.commit.valids.reduce(_||_) && io.commit.rbk_valids.reduce(_||_)),
+      "com_valids and rbk_valids are mutually exclusive")
+
     when (rbk_row) {
       rob_val(com_idx)       := false.B
       rob_exception(com_idx) := false.B
