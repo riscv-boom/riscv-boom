@@ -246,6 +246,7 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
   //************************************
   // Extra Knobs and Features
   val enableCommitMapTable = boomParams.enableCommitMapTable
+  require(!enableCommitMapTable) // TODO Fix the commit map table.
   val enableFastPNR = boomParams.enableFastPNR
   val enableFastWakeupsToRename = boomParams.enableFastWakeupsToRename
 
