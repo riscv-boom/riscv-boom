@@ -39,7 +39,7 @@ case class BoomCoreParams(
   enableCustomRfModel: Boolean = true,
   maxBrCount: Int = 4,
   numFetchBufferEntries: Int = 16,
-  useNewFetchBuffer: Boolean = false,
+  useNewFetchBuffer: Boolean = true,
   enableAgePriorityIssue: Boolean = true,
   enablePrefetching: Boolean = false,
   enableBrResolutionRegister: Boolean = true,
