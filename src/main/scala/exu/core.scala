@@ -396,7 +396,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
   // Decode/Rename1 pipeline logic
 
   val dec_prior_slot_valid = dec_valids.scanLeft(false.B) ((s,v) => s || v)
-  val dec_prior_slot_unique = dec_uops.scanLeft(false.B) ((s,u) => s || u.is_unique)
+  val dec_prior_slot_unique = (dec_uops zip dec_valids).scanLeft(false.B) {case (s,(u,v)) => s || v && u.is_unique}
   val wait_for_empty_pipeline = (0 until coreWidth).map(w => dec_uops(w).is_unique &&
                                   (!rob.io.empty || !lsu.io.lsu_fencei_rdy || dec_prior_slot_valid(w)))
   val wait_for_rocc = (0 until coreWidth).map(w =>
