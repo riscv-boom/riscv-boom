@@ -29,7 +29,7 @@ class RenameFreeList(
     val rollback = Input(Bool())
 
     // Branch info for starting new allocation lists.
-    val ren_br_tags = Input(Vec(plWidth, Valid(UInt(BR_TAG_SZ.W))))
+    val ren_br_tags = Input(Vec(plWidth, Valid(UInt(brTagSz.W))))
 
     // Mispredict info for recovering speculatively allocated registers.
     val brinfo = Input(new BrResolutionInfo)
@@ -43,7 +43,7 @@ class RenameFreeList(
 
   // The free list register array and its branch allocation lists.
   val free_list = RegInit(UInt(numPregs.W), ~(1.U(numPregs.W)))
-  val br_alloc_lists = Reg(Vec(MAX_BR_COUNT, UInt(numPregs.W)))
+  val br_alloc_lists = Reg(Vec(maxBrCount, UInt(numPregs.W)))
 
   // Select pregs from the free list.
   val preg_sels = SelectFirstN(free_list, plWidth)
@@ -59,7 +59,7 @@ class RenameFreeList(
 
   val br_slots = VecInit(io.ren_br_tags.map(tag => tag.valid)).asUInt
   // Create branch allocation lists.
-  for (i <- 0 until MAX_BR_COUNT) {
+  for (i <- 0 until maxBrCount) {
     val list_req = VecInit(io.ren_br_tags.map(tag => UIntToOH(tag.bits)(i))).asUInt & br_slots
     val new_list = list_req.orR
     br_alloc_lists(i) := Mux(new_list, Mux1H(list_req, alloc_masks.slice(1, plWidth+1)), br_alloc_lists(i) | alloc_masks(0))

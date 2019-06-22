@@ -87,17 +87,17 @@ class RenameStageIO(
 /**
  * IO bundle to debug the rename stage
  *
- * @param int_numPregs number of int physical registers
- * @param fp_numPregs number of FP physical registers
+ * @param numIntPhysRegs number of int physical registers
+ * @param numFpPhysRegs number of FP physical registers
  */
-class DebugRenameStageIO(val int_numPregs: Int, val fp_numPregs: Int)(implicit p: Parameters) extends BoomBundle
+class DebugRenameStageIO(val numIntPhysRegs: Int, val numFpPhysRegs: Int)(implicit p: Parameters) extends BoomBundle
 {
-  val ifreelist  = Bits(int_numPregs.W)
-  val iisprlist  = Bits(int_numPregs.W)
-  val ibusytable = UInt(int_numPregs.W)
-  val ffreelist  = Bits(fp_numPregs.W)
-  val fisprlist  = Bits(fp_numPregs.W)
-  val fbusytable = UInt(fp_numPregs.W)
+  val ifreelist  = Bits(numIntPhysRegs.W)
+  val iisprlist  = Bits(numIntPhysRegs.W)
+  val ibusytable = UInt(numIntPhysRegs.W)
+  val ffreelist  = Bits(numFpPhysRegs.W)
+  val fisprlist  = Bits(numFpPhysRegs.W)
+  val fbusytable = UInt(numFpPhysRegs.W)
 }
 
 /**
@@ -157,7 +157,7 @@ class RenameStage(
   //-------------------------------------------------------------
   // Pipeline State & Wires
 
-  val ren1_br_tags = Wire(Vec(plWidth, Valid(UInt(BR_TAG_SZ.W))))
+  val ren1_br_tags = Wire(Vec(plWidth, Valid(UInt(brTagSz.W))))
   val ren1_proceed = Wire(Vec(plWidth, Bool()))
   val ren1_uops    = Wire(Vec(plWidth, new MicroOp()))
 
@@ -237,13 +237,13 @@ class RenameStage(
 
   for ((uop, w) <- ren1_uops.zipWithIndex) {
     val imap = imaptable.io.map_resps(w)
-    val fmap = if (usingFPU) fmaptable.io.map_resps(w) else Wire(new MapResp(FPREG_SZ))
+    val fmap = if (usingFPU) fmaptable.io.map_resps(w) else Wire(new MapResp(fpregSz))
     if (!usingFPU) fmap := DontCare
 
-    uop.pop1       := Mux(uop.lrs1_rtype === RT_FLT, fmap.prs1,
+    uop.prs1       := Mux(uop.lrs1_rtype === RT_FLT, fmap.prs1,
                       Mux(uop.lrs1_rtype === RT_FIX, imap.prs1, uop.lrs1)) // lrs1 can "pass through" to prs1
-    uop.pop2       := Mux(uop.lrs2_rtype === RT_FLT, fmap.prs2, imap.prs2)
-    uop.pop3       := fmap.prs3 // only FP has 3rd operand
+    uop.prs2       := Mux(uop.lrs2_rtype === RT_FLT, fmap.prs2, imap.prs2)
+    uop.prs3       := fmap.prs3 // only FP has 3rd operand
     uop.stale_pdst := Mux(uop.dst_rtype  === RT_FLT, fmap.stale_pdst, imap.stale_pdst)
   }
 
@@ -296,12 +296,12 @@ class RenameStage(
     assert (!(
       ren2_proceed(w) &&
       ren2_uops(w).lrs1_rtype === RT_FIX &&
-      ren2_uops(w).pop1 =/= ibusytable.io.busy_reqs(w).prs1),
+      ren2_uops(w).prs1 =/= ibusytable.io.busy_reqs(w).prs1),
       "[rename] ren2 maptable prs1 value don't match uop's values.")
     assert (!(
       ren2_proceed(w) &&
       ren2_uops(w).lrs2_rtype === RT_FIX &&
-      ren2_uops(w).pop2 =/= ibusytable.io.busy_reqs(w).prs2),
+      ren2_uops(w).prs2 =/= ibusytable.io.busy_reqs(w).prs2),
       "[rename] ren2 maptable prs2 value don't match uop's values.")
   }
 

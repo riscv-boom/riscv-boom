@@ -32,7 +32,7 @@ class RenameMapTable(
     val ren_remap_reqs = Input(Vec(plWidth, Bool()))
 
     // Dispatching branches: need to take snapshots of table state.
-    val ren_br_tags = Input(Vec(plWidth, Valid(UInt(BR_TAG_SZ.W))))
+    val ren_br_tags = Input(Vec(plWidth, Valid(UInt(brTagSz.W))))
 
     // Signals for restoring state following misspeculation.
     val brinfo = Input(new BrResolutionInfo)
@@ -43,7 +43,7 @@ class RenameMapTable(
 
   // The map table register array and its branch snapshots.
   val map_table = RegInit(VecInit(Seq.fill(numLregs){0.U(pregSz.W)}))
-  val br_snapshots = Reg(Vec(MAX_BR_COUNT, Vec(numLregs, UInt(pregSz.W))))
+  val br_snapshots = Reg(Vec(maxBrCount, Vec(numLregs, UInt(pregSz.W))))
 
   // The intermediate states of the map table following modification by each pipeline slot.
   val remap_table = Wire(Vec(plWidth+1, Vec(numLregs, UInt(pregSz.W))))
