@@ -122,21 +122,29 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
   val fseq_reg = RegInit(0.U(xLen.W))
   val f0_redirect_pc = Wire(UInt(vaddrBitsExtended.W))
 
-  val clear_f3         = WireInit(false.B)
-  val q_f3_imemresp    = withReset(reset.toBool || clear_f3) {
-                             Module(new ElasticReg(gen = new freechips.rocketchip.rocket.FrontendResp)) }
-  val q_f3_btb_resp    = withReset(reset.toBool || clear_f3) { Module(new ElasticReg(gen = Valid(new BoomBTBResp))) }
-  val f3_req           = Wire(Valid(new PCReq()))
-  val f3_fetch_bundle  = Wire(new FetchBundle)
+  val clear_f3        = WireInit(false.B)
+  val q_f3_imemresp   = withReset(reset.toBool || clear_f3) {
+                          Module(new ElasticReg(gen = new freechips.rocketchip.rocket.FrontendResp)) }
+  val q_f3_btb_resp   = withReset(reset.toBool || clear_f3) { Module(new ElasticReg(gen = Valid(new BoomBTBResp))) }
+  val f3_req          = Wire(Valid(new PCReq()))
+  val f3_fetch_bundle = Wire(new FetchBundle)
+  val f3_valid        = q_f3_imemresp.io.deq.valid
 
   dontTouch(f3_fetch_bundle)
 
   val r_f4_valid = RegInit(false.B)
+
+  // Can the F3 stage proceed?
+  val f4_ready = fb.io.enq.ready && ftq.io.enq.ready
+  val f4_fire = f3_valid && f4_ready
+
+  // F4 Redirection path.
   val r_f4_req = Reg(Valid(new PCReq()))
   val r_f4_taken = RegInit(false.B)
   val r_f4_fetchpc = Reg(UInt())
-  // Can the F3 stage proceed?
-  val f4_ready = fb.io.enq.ready && ftq.io.enq.ready
+
+  // F4 Instruction path.
+  val r_f4_fetch_bundle = RegEnable(f3_fetch_bundle, f4_fire)
 
   io.f3_stall := !f4_ready
   io.f3_clear := clear_f3
@@ -210,7 +218,6 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
 
   clear_f3 := io.clear_fetchbuffer || (r_f4_valid && r_f4_req.valid)
 
-  val f3_valid = q_f3_imemresp.io.deq.valid
   val f3_imemresp = q_f3_imemresp.io.deq.bits
   val f3_btb_resp = q_f3_btb_resp.io.deq.bits
 
