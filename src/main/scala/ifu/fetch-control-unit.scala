@@ -135,7 +135,7 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
   val r_f4_valid = RegInit(false.B)
 
   // Can the F3 stage proceed?
-  val f4_ready = fb.io.enq.ready && ftq.io.enq.ready
+  val f4_ready = (!r_f4_valid || fb.io.enq.ready) && ftq.io.enq.ready
   val f4_fire = f3_valid && f4_ready
 
   // F4 Redirection path.
@@ -538,8 +538,8 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
   //-------------------------------------------------------------
 
   // Fetch Buffer
-  fb.io.enq.valid := f3_valid && !r_f4_req.valid && f4_ready && f3_fetch_bundle.mask =/= 0.U
-  fb.io.enq.bits  := f3_fetch_bundle
+  fb.io.enq.valid := r_f4_valid && r_f4_fetch_bundle.mask =/= 0.U
+  fb.io.enq.bits  := r_f4_fetch_bundle
   fb.io.clear := io.clear_fetchbuffer
 
   for (i <- 0 until fetchWidth) {
