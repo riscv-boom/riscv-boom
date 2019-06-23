@@ -534,7 +534,7 @@ class Rob(
   // Finally, don't throw an exception if there are instructions in front of
   // it that want to commit (only throw exception when head of the bundle).
 
-  var block_commit = (rob_state =/= s_normal) && (rob_state =/= s_wait_till_empty)
+  var block_commit = (rob_state =/= s_normal) && (rob_state =/= s_wait_till_empty) || RegNext(exception_thrown)
   var will_throw_exception = false.B
   var block_xcpt   = false.B
 
@@ -543,7 +543,7 @@ class Rob(
 
     will_commit(w)       := can_commit(w) && !can_throw_exception(w) && !block_commit
     block_commit         = (rob_head_vals(w) &&
-                           (!can_commit(w) || can_throw_exception(w))) | block_commit
+                           (!can_commit(w) || can_throw_exception(w))) || block_commit
     block_xcpt           = will_commit(w)
   }
 
