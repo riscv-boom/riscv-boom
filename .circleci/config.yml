@@ -40,19 +40,19 @@ jobs:
             - run:
                 name: Create hash of template
                 command: |
-                    .circleci/get-bhd-hash.sh
+                    .circleci/get-chipyard-hash.sh
             - restore_cache:
                 keys:
-                    - bhd-with-verilator-v9-{{ checksum "../bhd.hash" }}
+                    - chipyard-with-verilator-v9-{{ checksum "../chipyard.hash" }}
             - run:
                 name: Build Verilator and setup build environment
                 command: |
                     .circleci/prepare-for-rtl-build.sh
                 no_output_timeout: 120m
             - save_cache:
-                key: bhd-with-verilator-v9-{{ checksum "../bhd.hash" }}
+                key: chipyard-with-verilator-v9-{{ checksum "../chipyard.hash" }}
                 paths:
-                    - "/home/riscvuser/bhd"
+                    - "/home/riscvuser/chipyard"
     prepare-smallrv32unifiedboomconfig:
         docker:
             - image: riscvboom/riscvboom-images:0.0.5
@@ -62,16 +62,16 @@ jobs:
         steps:
             - checkout
             - run:
-                name: Create hash of riscv-tools and bhd
+                name: Create hash of riscv-tools and chipyard
                 command: |
-                    .circleci/get-bhd-hash.sh
+                    .circleci/get-chipyard-hash.sh
                     .circleci/get-riscv-tools-hash.sh
             - restore_cache:
                 keys:
                     - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
             - restore_cache:
                 keys:
-                    - bhd-with-verilator-v9-{{ checksum "../bhd.hash" }}
+                    - chipyard-with-verilator-v9-{{ checksum "../chipyard.hash" }}
             - run:
                 name: Building SmallRV32UnifiedBoomConfig using Verilator
                 command: .circleci/do-rtl-build.sh SmallRV32UnifiedBoomConfig
@@ -79,7 +79,7 @@ jobs:
             - save_cache:
                 key: smallrv32unifiedboomconfig-{{ .Branch }}-{{ .Revision }}
                 paths:
-                    - "/home/riscvuser/bhd"
+                    - "/home/riscvuser/chipyard"
     prepare-smallboomconfig:
         docker:
             - image: riscvboom/riscvboom-images:0.0.5
@@ -89,16 +89,16 @@ jobs:
         steps:
             - checkout
             - run:
-                name: Create hash of riscv-tools and bhd
+                name: Create hash of riscv-tools and chipyard
                 command: |
-                    .circleci/get-bhd-hash.sh
+                    .circleci/get-chipyard-hash.sh
                     .circleci/get-riscv-tools-hash.sh
             - restore_cache:
                 keys:
                     - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
             - restore_cache:
                 keys:
-                    - bhd-with-verilator-v9-{{ checksum "../bhd.hash" }}
+                    - chipyard-with-verilator-v9-{{ checksum "../chipyard.hash" }}
             - run:
                 name: Building SmallBoomConfig using Verilator
                 command: .circleci/do-rtl-build.sh SmallBoomConfig
@@ -106,7 +106,7 @@ jobs:
             - save_cache:
                 key: smallboomconfig-{{ .Branch }}-{{ .Revision }}
                 paths:
-                    - "/home/riscvuser/bhd"
+                    - "/home/riscvuser/chipyard"
     prepare-mediumboomconfig:
         docker:
             - image: riscvboom/riscvboom-images:0.0.5
@@ -116,16 +116,16 @@ jobs:
         steps:
             - checkout
             - run:
-                name: Create hash of riscv-tools and bhd
+                name: Create hash of riscv-tools and chipyard
                 command: |
-                    .circleci/get-bhd-hash.sh
+                    .circleci/get-chipyard-hash.sh
                     .circleci/get-riscv-tools-hash.sh
             - restore_cache:
                 keys:
                     - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
             - restore_cache:
                 keys:
-                    - bhd-with-verilator-v9-{{ checksum "../bhd.hash" }}
+                    - chipyard-with-verilator-v9-{{ checksum "../chipyard.hash" }}
             - run:
                 name: Building MediumBoomConfig using Verilator
                 command: .circleci/do-rtl-build.sh MediumBoomConfig
@@ -133,7 +133,7 @@ jobs:
             - save_cache:
                 key: mediumboomconfig-{{ .Branch }}-{{ .Revision }}
                 paths:
-                    - "/home/riscvuser/bhd"
+                    - "/home/riscvuser/chipyard"
     prepare-largeboomconfig:
         docker:
             - image: riscvboom/riscvboom-images:0.0.5
@@ -143,16 +143,16 @@ jobs:
         steps:
             - checkout
             - run:
-                name: Create hash of riscv-tools and bhd
+                name: Create hash of riscv-tools and chipyard
                 command: |
-                    .circleci/get-bhd-hash.sh
+                    .circleci/get-chipyard-hash.sh
                     .circleci/get-riscv-tools-hash.sh
             - restore_cache:
                 keys:
                     - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
             - restore_cache:
                 keys:
-                    - bhd-with-verilator-v9-{{ checksum "../bhd.hash" }}
+                    - chipyard-with-verilator-v9-{{ checksum "../chipyard.hash" }}
             - run:
                 name: Building LargeBoomConfig using Verilator
                 command: .circleci/do-rtl-build.sh LargeBoomConfig
@@ -160,7 +160,7 @@ jobs:
             - save_cache:
                 key: largeboomconfig-{{ .Branch }}-{{ .Revision }}
                 paths:
-                    - "/home/riscvuser/bhd"
+                    - "/home/riscvuser/chipyard"
     prepare-megaboomconfig:
         docker:
             - image: riscvboom/riscvboom-images:0.0.5
@@ -170,16 +170,16 @@ jobs:
         steps:
             - checkout
             - run:
-                name: Create hash of riscv-tools and bhd
+                name: Create hash of riscv-tools and chipyard
                 command: |
-                    .circleci/get-bhd-hash.sh
+                    .circleci/get-chipyard-hash.sh
                     .circleci/get-riscv-tools-hash.sh
             - restore_cache:
                 keys:
                     - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
             - restore_cache:
                 keys:
-                    - bhd-with-verilator-v9-{{ checksum "../bhd.hash" }}
+                    - chipyard-with-verilator-v9-{{ checksum "../chipyard.hash" }}
             - run:
                 name: Building MegaBoomConfig using Verilator
                 command: .circleci/do-rtl-build.sh MegaBoomConfig
@@ -187,7 +187,7 @@ jobs:
             - save_cache:
                 key: megaboomconfig-{{ .Branch }}-{{ .Revision }}
                 paths:
-                    - "/home/riscvuser/bhd"
+                    - "/home/riscvuser/chipyard"
     prepare-smallboomandrocketconfig:
         docker:
             - image: riscvboom/riscvboom-images:0.0.5
@@ -197,16 +197,16 @@ jobs:
         steps:
             - checkout
             - run:
-                name: Create hash of riscv-tools and bhd
+                name: Create hash of riscv-tools and chipyard
                 command: |
-                    .circleci/get-bhd-hash.sh
+                    .circleci/get-chipyard-hash.sh
                     .circleci/get-riscv-tools-hash.sh
             - restore_cache:
                 keys:
                     - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
             - restore_cache:
                 keys:
-                    - bhd-with-verilator-v9-{{ checksum "../bhd.hash" }}
+                    - chipyard-with-verilator-v9-{{ checksum "../chipyard.hash" }}
             - run:
                 name: Building SmallBoomAndRocketConfig using Verilator
                 command: .circleci/do-rtl-build.sh SmallBoomAndRocketConfig
@@ -214,7 +214,7 @@ jobs:
             - save_cache:
                 key: smallboomandrocketconfig-{{ .Branch }}-{{ .Revision }}
                 paths:
-                    - "/home/riscvuser/bhd"
+                    - "/home/riscvuser/chipyard"
 
     run-scala-checkstyle:
         docker:
@@ -272,7 +272,7 @@ jobs:
             - run:
                 name: Run SmallRV32UnifiedBoomConfig riscv tests
                 command: |
-                    make run-asm-tests-fast -C ../bhd/sims/verisim CONFIG=SmallRV32UnifiedBoomConfig SUB_PROJECT=boom TOP=BoomRocketSystem
+                    make run-asm-tests-fast -C ../chipyard/sims/verisim CONFIG=SmallRV32UnifiedBoomConfig SUB_PROJECT=boom TOP=BoomRocketSystem
 
     smallboomconfig-run-csmith-tests:
         docker:
@@ -318,8 +318,8 @@ jobs:
             - run:
                 name: Run SmallBoomConfig riscv tests
                 command: |
-                    make run-bmark-tests-fast -C ../bhd/sims/verisim CONFIG=SmallBoomConfig SUB_PROJECT=boom TOP=BoomRocketSystem
-                    make run-asm-tests-fast -C ../bhd/sims/verisim CONFIG=SmallBoomConfig SUB_PROJECT=boom TOP=BoomRocketSystem
+                    make run-bmark-tests-fast -C ../chipyard/sims/verisim CONFIG=SmallBoomConfig SUB_PROJECT=boom TOP=BoomRocketSystem
+                    make run-asm-tests-fast -C ../chipyard/sims/verisim CONFIG=SmallBoomConfig SUB_PROJECT=boom TOP=BoomRocketSystem
 
     mediumboomconfig-run-csmith-tests:
         docker:
@@ -365,8 +365,8 @@ jobs:
             - run:
                 name: Run MediumBoomConfig riscv tests
                 command: |
-                    make run-bmark-tests-fast -C ../bhd/sims/verisim CONFIG=MediumBoomConfig SUB_PROJECT=boom TOP=BoomRocketSystem
-                    make run-asm-tests-fast -C ../bhd/sims/verisim CONFIG=MediumBoomConfig SUB_PROJECT=boom TOP=BoomRocketSystem
+                    make run-bmark-tests-fast -C ../chipyard/sims/verisim CONFIG=MediumBoomConfig SUB_PROJECT=boom TOP=BoomRocketSystem
+                    make run-asm-tests-fast -C ../chipyard/sims/verisim CONFIG=MediumBoomConfig SUB_PROJECT=boom TOP=BoomRocketSystem
 
     largeboomconfig-run-csmith-tests:
         docker:
@@ -413,8 +413,8 @@ jobs:
             - run:
                 name: Run LargeBoomConfig riscv tests
                 command: |
-                    make run-bmark-tests-fast -C ../bhd/sims/verisim CONFIG=LargeBoomConfig SUB_PROJECT=boom TOP=BoomRocketSystem
-                    make run-asm-tests-fast -C ../bhd/sims/verisim CONFIG=LargeBoomConfig SUB_PROJECT=boom TOP=BoomRocketSystem
+                    make run-bmark-tests-fast -C ../chipyard/sims/verisim CONFIG=LargeBoomConfig SUB_PROJECT=boom TOP=BoomRocketSystem
+                    make run-asm-tests-fast -C ../chipyard/sims/verisim CONFIG=LargeBoomConfig SUB_PROJECT=boom TOP=BoomRocketSystem
 
     megaboomconfig-run-csmith-tests:
         docker:
@@ -461,8 +461,8 @@ jobs:
             - run:
                 name: Run MegaBoomConfig riscv tests
                 command: |
-                    make run-bmark-tests-fast -C ../bhd/sims/verisim CONFIG=MegaBoomConfig SUB_PROJECT=boom TOP=BoomRocketSystem
-                    make run-asm-tests-fast -C ../bhd/sims/verisim CONFIG=MegaBoomConfig SUB_PROJECT=boom TOP=BoomRocketSystem
+                    make run-bmark-tests-fast -C ../chipyard/sims/verisim CONFIG=MegaBoomConfig SUB_PROJECT=boom TOP=BoomRocketSystem
+                    make run-asm-tests-fast -C ../chipyard/sims/verisim CONFIG=MegaBoomConfig SUB_PROJECT=boom TOP=BoomRocketSystem
 
     smallboomandrocketconfig-run-csmith-tests:
         docker:
@@ -508,8 +508,8 @@ jobs:
             - run:
                 name: Run SmallBoomAndRocketConfig riscv tests
                 command: |
-                    make run-bmark-tests-fast -C ../bhd/sims/verisim CONFIG=SmallBoomAndRocketConfig SUB_PROJECT=boom TOP=BoomRocketSystem
-                    make run-asm-tests-fast -C ../bhd/sims/verisim CONFIG=SmallBoomAndRocketConfig SUB_PROJECT=boom TOP=BoomRocketSystem
+                    make run-bmark-tests-fast -C ../chipyard/sims/verisim CONFIG=SmallBoomAndRocketConfig SUB_PROJECT=boom TOP=BoomRocketSystem
+                    make run-asm-tests-fast -C ../chipyard/sims/verisim CONFIG=SmallBoomAndRocketConfig SUB_PROJECT=boom TOP=BoomRocketSystem
 
 # Order and dependencies of jobs to run
 workflows:
