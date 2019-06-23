@@ -519,7 +519,6 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
   //-------------------------------------------------------------
 
   when (io.clear_fetchbuffer || r_f4_req.valid) {
-    r_f4_valid := false.B
     r_f4_req.valid := false.B
   } .elsewhen (f4_ready) {
     r_f4_valid := f3_valid && !(r_f4_valid && r_f4_req.valid)
