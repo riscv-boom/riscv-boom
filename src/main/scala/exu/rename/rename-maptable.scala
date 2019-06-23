@@ -107,5 +107,8 @@ class RenameMapTable(
     io.map_resps(i).stale_pdst := remapped_col(io.ren_uops(i).ldst)
   }
 
-  remap_pdsts zip remap_reqs foreach {case (p,r) => assert (!r || !map_table.contains(p) || p === 0.U && io.rollback)}
+  // Don't flag the creation of duplicate 'p0' mappings during rollback.
+  // These cases may occur soon after reset, as all maptable entries are initialized to 'p0'.
+  remap_pdsts zip remap_reqs foreach {case (p,r) =>
+    assert (!r || !map_table.contains(p) || p === 0.U && io.rollback, "[maptable] Trying to write a duplicate mapping.")}
 }
