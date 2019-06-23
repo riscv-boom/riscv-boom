@@ -173,9 +173,9 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
   val brunit_idx = exe_units.br_unit_idx
   br_unit <> exe_units.br_unit_io
 
-  val flush = br_unit.brinfo.mispredict ||
-                     rob.io.flush.valid ||
-                     io.ifu.sfence_take_pc
+  val flush_ifu = br_unit.brinfo.mispredict || // In practice, means flushing everything prior to dispatch.
+                         rob.io.flush.valid || // i.e. 'flush in-order part of the pipeline'
+                         io.ifu.sfence_take_pc
 
   assert (!(br_unit.brinfo.mispredict && rob.io.commit.rollback), "Can't have a mispredict during rollback.")
 
@@ -327,7 +327,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
                                   RegNext(csr.io.evec))
   io.ifu.com_ftq_idx       := rob.io.com_xcpt.bits.ftq_idx
 
-  io.ifu.clear_fetchbuffer := flush
+  io.ifu.clear_fetchbuffer := flush_ifu
 
   io.ifu.flush_info.valid  := rob.io.flush.valid
   io.ifu.flush_info.bits   := rob.io.flush.bits
@@ -415,14 +415,14 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
                       || wait_for_empty_pipeline(w)
                       || wait_for_rocc(w)
                       || dec_prior_slot_unique(w)
-                      || flush))
+                      || flush_ifu))
   val dec_stalls = dec_hazards.scanLeft(false.B) ((s,h) => s || h).takeRight(coreWidth)
   dec_proceed := (0 until coreWidth).map(w => dec_valids(w) && !dec_stalls(w))
 
   // all decoders are empty and ready for new instructions
   dec_rdy := !dec_stalls.last
 
-  when (dec_rdy || flush) {
+  when (dec_rdy || flush_ifu) {
     dec_finished_mask := 0.U
   } .otherwise {
     dec_finished_mask := dec_proceed.asUInt | dec_finished_mask
@@ -494,7 +494,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
   //-------------------------------------------------------------
   //-------------------------------------------------------------
 
-  rename_stage.io.kill := flush
+  rename_stage.io.kill := flush_ifu
   rename_stage.io.brinfo := br_unit.brinfo
 
   rename_stage.io.flush_pipeline := rob.io.flush.valid
@@ -525,7 +525,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
   val dis_hazards = (0 until coreWidth).map(w =>
                       dis_valids(w) &&
                       ( !dispatcher.io.ren_uops(w).ready
-                      || flush))
+                      || flush_ifu))
 
   val dis_stalls = dis_hazards.scanLeft(false.B) ((s,h) => s || h).takeRight(coreWidth)
   dis_proceed := dis_valids zip dis_stalls map {case (v,s) => v && !s}
@@ -1243,7 +1243,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
         printf("%d; O3PipeView:dispatch: %d\n", dispatcher.io.ren_uops(w).bits.debug_events.fetch_seq, debug_tsc_reg)
       }
 
-      when (dec_rdy || flush) {
+      when (dec_rdy || flush_ifu) {
         dec_printed_mask := 0.U
       } .otherwise {
         dec_printed_mask := dec_valids.asUInt | dec_printed_mask
