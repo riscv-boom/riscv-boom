@@ -159,7 +159,6 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
   // Rename2/Dispatch stage
   val dis_valids    = Wire(Vec(coreWidth, Bool()))
   val dis_uops      = Wire(Vec(coreWidth, new MicroOp))
-  val dis_stall_dec = Wire(Vec(coreWidth, Bool()))
   val dis_proceed   = Wire(Vec(coreWidth, Bool()))
   val dis_fire      = Wire(Bool())
 
@@ -407,11 +406,11 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
   val dec_hazards = (0 until coreWidth).map(w =>
                       dec_valids(w) &&
                       (  !rob.io.ready
+                      || !dis_fire
                       ||  branch_mask_full(w)
                       || lsu.io.laq_full(w) && dec_uops(w).is_load
                       || lsu.io.stq_full(w) && dec_uops(w).is_store
                       || !rename_stage.io.inst_can_proceed(w)
-                      || dis_stall_dec(w)
                       || wait_for_empty_pipeline(w)
                       || wait_for_rocc(w)
                       || dec_prior_slot_unique(w)
@@ -530,12 +529,6 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
   val dis_stalls = dis_hazards.scanLeft(false.B) ((s,h) => s || h).takeRight(coreWidth)
   dis_proceed := dis_valids zip dis_stalls map {case (v,s) => v && !s}
   dis_fire := !dis_stalls.last
-
-  // Decode pipeline logic either sees a single "fire/ready" signal,
-  //   or we combine the dec/dis hazards when using a single-stage rename pipeline.
-  dis_stall_dec := (0 until coreWidth).map(w =>
-                     if (renameLatency == 2) !dis_fire
-                     else dis_hazards(w))
 
   //-------------------------------------------------------------
   // Dispatch to issue queues

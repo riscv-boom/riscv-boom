@@ -242,34 +242,27 @@ class RenameStage(
   //-------------------------------------------------------------
   // pipeline registers
 
-  val ren2_imap_resps = if (renameLatency == 2) RegEnable(imaptable.io.map_resps, ren2_fire)
-                        else imaptable.io.map_resps
-  val ren2_fmap_resps = if (renameLatency == 2 && usingFPU) RegEnable(fmaptable.io.map_resps, ren2_fire)
-                        else if (usingFPU) fmaptable.io.map_resps
+  val ren2_imap_resps = RegEnable(imaptable.io.map_resps, ren2_fire)
+  val ren2_fmap_resps = if (usingFPU) RegEnable(fmaptable.io.map_resps, ren2_fire)
                         else new MapResp(1)
 
   for (w <- 0 until plWidth) {
-    if (renameLatency == 1) {
-      ren2_valids(w) := ren1_proceed(w)
-      ren2_uops(w)   := ren1_uops(w)
-    } else {
-      require (renameLatency == 2)
-      val r_valid = RegInit(false.B)
-      val r_uop   = Reg(new MicroOp())
+    require (renameLatency == 2)
+    val r_valid = RegInit(false.B)
+    val r_uop   = Reg(new MicroOp())
 
-      when (io.kill) {
-        r_valid := false.B
-      } .elsewhen (ren2_fire) {
-        r_valid := ren1_proceed(w)
-        r_uop := GetNewUopAndBrMask(ren1_uops(w), io.brinfo)
-      } .otherwise {
-        r_valid := r_valid && !ren2_proceed(w) // clear bit if uop gets dispatched
-        r_uop := GetNewUopAndBrMask(r_uop, io.brinfo)
-      }
-
-      ren2_valids(w) := r_valid
-      ren2_uops(w)   := r_uop
+    when (io.kill) {
+      r_valid := false.B
+    } .elsewhen (ren2_fire) {
+      r_valid := ren1_proceed(w)
+      r_uop := GetNewUopAndBrMask(ren1_uops(w), io.brinfo)
+    } .otherwise {
+      r_valid := r_valid && !ren2_proceed(w) // clear bit if uop gets dispatched
+      r_uop := GetNewUopAndBrMask(r_uop, io.brinfo)
     }
+
+    ren2_valids(w) := r_valid
+    ren2_uops(w)   := r_uop
   }
 
   //-------------------------------------------------------------
