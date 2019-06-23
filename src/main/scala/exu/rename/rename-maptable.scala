@@ -106,4 +106,6 @@ class RenameMapTable(
     if (float) io.map_resps(i).prs3 := remapped_col(io.ren_uops(i).lrs3) else io.map_resps(i).prs3 := 0.U(pregSz.W)
     io.map_resps(i).stale_pdst := remapped_col(io.ren_uops(i).ldst)
   }
+
+  remap_pdsts zip remap_reqs foreach {case (p,r) => assert (!r || !map_table.contains(p))}
 }
