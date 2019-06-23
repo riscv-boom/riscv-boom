@@ -107,5 +107,5 @@ class RenameMapTable(
     io.map_resps(i).stale_pdst := remapped_col(io.ren_uops(i).ldst)
   }
 
-  remap_pdsts zip remap_reqs foreach {case (p,r) => assert (!r || !map_table.contains(p))}
+  remap_pdsts zip remap_reqs foreach {case (p,r) => assert (!r || !map_table.contains(p) || p === 0.U && io.rollback)}
 }
