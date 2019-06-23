@@ -815,7 +815,7 @@ class Rob(
         rob_state := s_normal
       }
       is (s_normal) {
-        when (exception_thrown) {
+        when (RegNext(exception_thrown)) {
           rob_state := s_rollback
         } .otherwise {
           for (w <- 0 until coreWidth) {
@@ -831,7 +831,7 @@ class Rob(
         }
       }
       is (s_wait_till_empty) {
-        when (exception_thrown) {
+        when (RegNext(exception_thrown)) {
           rob_state := s_rollback
         } .elsewhen (empty) {
           rob_state := s_normal
