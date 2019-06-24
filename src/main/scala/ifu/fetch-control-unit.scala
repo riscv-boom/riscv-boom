@@ -143,8 +143,7 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
   val r_f4_fetchpc = Reg(UInt())
 
   // F3 is invalidated by redirects.
-  val f3_fire = f3_valid && f4_ready && !clear_f3 && (f3_fetch_bundle.mask =/= 0.U)
-
+  val f3_fire = f3_valid && f4_ready && !clear_f3
   // F4 Instruction path.
   val r_f4_fetch_bundle = RegEnable(f3_fetch_bundle, f3_fire)
 
@@ -357,8 +356,7 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
   val f3_btb_mask = Wire(UInt(fetchWidth.W))
   val f3_bpd_mask = Wire(UInt(fetchWidth.W))
 
-  // Don't use f3_fire here -- this needs to happen even if all instructions are invalid!
-  when (f3_valid && f4_ready) {
+  when (f3_fire) {
     val last_idx  = Mux(inLastChunk(f3_fetch_bundle.pc) && icIsBanked.B,
                       (fetchWidth/2-1).U, (fetchWidth-1).U)
     prev_is_half := (usingCompressed.B
@@ -540,7 +538,7 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
   //-------------------------------------------------------------
 
   // Fetch Buffer
-  fb.io.enq.valid := r_f4_valid
+  fb.io.enq.valid := r_f4_valid && (r_f4_fetch_bundle.mask =/= 0.U)
   fb.io.enq.bits  := r_f4_fetch_bundle
   fb.io.clear := io.clear_fetchbuffer
 
@@ -645,7 +643,7 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
                         + (cfi_idx << log2Ceil(coreInstBytes).U)
                         - Mux(f3_fetch_bundle.edge_inst && cfi_idx === 0.U, 2.U, 0.U))
 
-  when (f3_fire &&
+  when (f3_fire && (f3_fetch_bundle.mask =/= 0.U) &&
         !f3_fetch_bundle.replay_if &&
         !f3_fetch_bundle.xcpt_pf_if &&
         !f3_fetch_bundle.xcpt_ae_if) {
@@ -699,12 +697,12 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
   }
 
   when (io.clear_fetchbuffer ||
-        (f3_fire &&
+        (f3_fire && (f3_fetch_bundle.mask =/= 0.U) &&
     (f3_fetch_bundle.replay_if || f3_fetch_bundle.xcpt_pf_if || f3_fetch_bundle.xcpt_ae_if))) {
     last_valid := false.B
   }
 
-  when (f3_fire &&
+  when (f3_fire && (f3_fetch_bundle.mask =/= 0.U) &&
         !f3_fetch_bundle.replay_if &&
         !f3_fetch_bundle.xcpt_pf_if &&
         !f3_fetch_bundle.xcpt_ae_if) {
