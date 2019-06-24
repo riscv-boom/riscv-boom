@@ -174,15 +174,8 @@ class BoomCore(implicit p: Parameters) extends BoomModule
     fp_pipeline.io.brinfo := br_unit.brinfo
   }
 
-  // Shim to DCache
-//  io.dmem <> dc_shim.io.dmem
-//  dc_shim.io.core <> exe_units.memory_unit.io.dmem
-
   // Load/Store Unit & ExeUnits
   exe_units.memory_unit.io.lsu_io <> io.lsu.exe
-
-  // TODO: Generate this in lsu
-  val sxt_ldMiss = Wire(Bool())
 
   //-------------------------------------------------------------
   // Uarch Hardware Performance Events (HPEs)
@@ -680,15 +673,14 @@ class BoomCore(implicit p: Parameters) extends BoomModule
 
   // Perform load-hit speculative wakeup through a special port (performs a poison wake-up).
   issue_units map { iu =>
-//    iu.io.mem_ldSpecWakeup <> lsu.io.mem_ldSpecWakeup
-     iu.io.mem_ldSpecWakeup := DontCare
+     iu.io.spec_ld_wakeup := io.lsu.spec_ld_wakeup
   }
 
   for ((renport, intport) <- rename_stage.io.int_wakeups zip int_ren_wakeups) {
     // Stop wakeup for bypassable children of spec-loads trying to issue during a ldMiss.
     renport.valid :=
        intport.valid &&
-       !(sxt_ldMiss && (intport.bits.uop.iw_p1_poisoned || intport.bits.uop.iw_p2_poisoned))
+       !(io.lsu.ld_miss && (intport.bits.uop.iw_p1_poisoned || intport.bits.uop.iw_p2_poisoned))
     renport.bits := intport.bits
   }
   if (usingFPU) {
@@ -774,17 +766,16 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   val mem_iq = issue_units.mem_iq
 
   require (mem_iq.issueWidth == 1)
-  val iss_loadIssued =
-    mem_iq.io.iss_valids(0) &&
-    mem_iq.io.iss_uops(0).uses_ldq &&
-    !mem_iq.io.iss_uops(0).fp_val &&
-    mem_iq.io.iss_uops(0).pdst =/= 0.U &&
-    !(sxt_ldMiss && (mem_iq.io.iss_uops(0).iw_p1_poisoned || mem_iq.io.iss_uops(0).iw_p2_poisoned))
+  // val iss_loadIssued =
+  //   mem_iq.io.iss_valids(0) &&
+  //   mem_iq.io.iss_uops(0).uses_ldq &&
+  //   !mem_iq.io.iss_uops(0).fp_val &&
+  //   mem_iq.io.iss_uops(0).pdst =/= 0.U &&
+  //   !(sxt_ldMiss && (mem_iq.io.iss_uops(0).iw_p1_poisoned || mem_iq.io.iss_uops(0).iw_p2_poisoned))
   // sxt_ldMiss :=
   //   ((lsu.io.nack.valid && lsu.io.nack.isload) || dc_shim.io.core.load_miss) &&
   //   Pipe(true.B, iss_loadIssued, 4).bits
-  sxt_ldMiss := DontCare
-  issue_units.map(_.io.sxt_ldMiss := sxt_ldMiss)
+  issue_units.map(_.io.ld_miss := io.lsu.ld_miss)
 
   // Check that IF we see a speculative load-wakeup and NO load-miss, then we should
   // see a writeback to the register file!
@@ -825,7 +816,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
 
   for (w <- 0 until exe_units.numIrfReaders) {
     iregister_read.io.iss_valids(w) :=
-      iss_valids(w) && !(sxt_ldMiss && (iss_uops(w).iw_p1_poisoned || iss_uops(w).iw_p2_poisoned))
+      iss_valids(w) && !(io.lsu.ld_miss && (iss_uops(w).iw_p1_poisoned || iss_uops(w).iw_p2_poisoned))
   }
   iregister_read.io.iss_uops := iss_uops
   iregister_read.io.iss_uops map { u => u.iw_p1_poisoned := false.B; u.iw_p2_poisoned := false.B }

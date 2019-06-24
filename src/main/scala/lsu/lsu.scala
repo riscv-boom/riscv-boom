@@ -116,9 +116,6 @@ class LSUCoreIO(implicit p: Parameters) extends BoomBundle()(p)
 
   val fp_stdata   = Flipped(Decoupled(new MicroOpWithData(fLen)))
 
-  val ld_issued   = Valid(UInt(PREG_SZ.W))
-  val ld_miss     = Output(Bool())
-
   val commit_store_mask = Input(Vec(coreWidth, Bool()))
   val commit_load_mask  = Input(Vec(coreWidth, Bool()))
   val commit_load_at_rob_head = Input(Bool())
@@ -132,6 +129,11 @@ class LSUCoreIO(implicit p: Parameters) extends BoomBundle()(p)
 
   // Tell the DCache to clear prefetches/speculating misses
   val fence_dmem   = Input(Bool())
+
+  // Speculatively tell the IQs that we'll get load data back next cycle
+  val spec_ld_wakeup = Output(Valid(UInt(PREG_SZ.W)))
+  // Tell the IQs that the load we speculated last cycle was misspeculated
+  val ld_miss      = Output(Bool())
 
   val brinfo       = Input(new BrResolutionInfo)
   val rob_pnr_idx  = Input(UInt(robAddrSz.W))
@@ -1049,7 +1051,14 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
   io.core.lxcpt.valid := r_xcpt_valid && !io.core.exception && !IsKilledByBranch(io.core.brinfo, r_xcpt.uop)
   io.core.lxcpt.bits  := r_xcpt
 
-  // Task 4: handle mem load killed, ldspecwakeup
+  // Task 4: Speculatively wakeup loads 1 cycle before they come back
+  io.core.spec_ld_wakeup.valid := enableFastLoadUse.B       &&
+                                  fired_load_incoming       &&
+                                  !mem_incoming_uop.fp_val  &&
+                                  mem_incoming_uop.pdst =/= 0.U
+  io.core.spec_ld_wakeup.bits  := mem_incoming_uop.pdst
+  // TODO: Do this on retry? Wakeup?
+
 
   //-------------------------------------------------------------
   // Load Issue Datapath (ALL loads need to use this path,
@@ -1072,6 +1081,7 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
 
   io.core.exe.iresp.valid := false.B
   io.core.exe.fresp.valid := false.B
+
   val dmem_resp_fired = WireInit(false.B)
   // Handle nacks
   when (io.dmem.nack.valid)
@@ -1170,7 +1180,12 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
     assert(!ldq(f_idx).bits.execute_ignore)
   }
 
-
+  // Initially assume the speculative load wakeup failed
+  io.core.ld_miss         := RegNext(io.core.spec_ld_wakeup.valid)
+  when (io.core.exe.iresp.valid && io.core.exe.iresp.bits.uop.ldq_idx === mem_incoming_uop.ldq_idx) {
+    // We correcty speculated last cycle, so we don't send miss signal
+    io.core.ld_miss := false.B
+  }
 
   //-------------------------------------------------------------
   // Kill speculated entries on branch mispredict

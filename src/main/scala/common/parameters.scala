@@ -42,6 +42,7 @@ case class BoomCoreParams(
    useNewFetchBuffer: Boolean = false,
    enableAgePriorityIssue: Boolean = true,
    enablePrefetching: Boolean = false,
+   enableFastLoadUse: Boolean = true,
    enableBrResolutionRegister: Boolean = true,
    enableCommitMapTable: Boolean = false,
    enableFastPNR: Boolean = false,
@@ -182,6 +183,7 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
 
    val issueParams: Seq[IssueParams] = boomParams.issueParams
    val enableAgePriorityIssue = boomParams.enableAgePriorityIssue
+   val enableFastLoadUse = boomParams.enableFastLoadUse
    val usingUnifiedMemIntIQs = issueParams.count(_.iqType == IQT_MEM.litValue) == 0
 
    // currently, only support one of each.
