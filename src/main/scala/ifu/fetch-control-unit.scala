@@ -557,7 +557,7 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
   // **** FetchTargetQueue ****
   //-------------------------------------------------------------
 
-  ftq.io.enq.valid := f3_valid_masked
+  ftq.io.enq.valid := f4_fire
   ftq.io.enq.bits.fetch_pc := f3_imemresp.pc
   ftq.io.enq.bits.history := io.f3_bpd_resp.bits.history
   ftq.io.enq.bits.bpd_info := io.f3_bpd_resp.bits.info
