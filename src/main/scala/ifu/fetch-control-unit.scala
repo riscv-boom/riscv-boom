@@ -143,7 +143,7 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
   val r_f4_fetchpc = Reg(UInt())
 
   // F3 is invalidated by redirects.
-  val f3_fire = f3_valid && f4_ready && !clear_f3
+  val f3_fire = f3_valid && f4_ready && !clear_f3 && (f3_fetch_bundle.mask =/= 0.U)
 
   // F4 Instruction path.
   val r_f4_fetch_bundle = RegEnable(f3_fetch_bundle, f3_fire)
@@ -539,7 +539,7 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
   //-------------------------------------------------------------
 
   // Fetch Buffer
-  fb.io.enq.valid := r_f4_valid && r_f4_fetch_bundle.mask =/= 0.U
+  fb.io.enq.valid := r_f4_valid
   fb.io.enq.bits  := r_f4_fetch_bundle
   fb.io.clear := io.clear_fetchbuffer
 
