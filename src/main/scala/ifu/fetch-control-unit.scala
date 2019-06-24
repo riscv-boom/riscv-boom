@@ -603,9 +603,9 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
   //-------------------------------------------------------------
 
   if (O3PIPEVIEW_PRINTF) {
-    when (fb.io.enq.fire()) {
-      fseq_reg := fseq_reg + PopCount(fb.io.enq.bits.mask)
-      val bundle = fb.io.enq.bits
+    when (f4_fire) {
+      fseq_reg := fseq_reg + PopCount(f3_fetch_bundle.mask)
+      val bundle = f3_fetch_bundle
       for (i <- 0 until fetchWidth) {
         when (bundle.mask(i)) {
           // TODO for now, manually set the fetch_tsc to point to when the fetch
@@ -621,6 +621,7 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
       }
     }
   }
+  // TODO Add pipeview output for f4 stage.
 
   //-------------------------------------------------------------
   // **** Assertions ****
