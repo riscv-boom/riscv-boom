@@ -357,7 +357,8 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
   val f3_btb_mask = Wire(UInt(fetchWidth.W))
   val f3_bpd_mask = Wire(UInt(fetchWidth.W))
 
-  when (f3_fire) {
+  // Don't use f3_fire here -- this needs to happen even if all instructions are invalid!
+  when (f3_valid && f4_ready) {
     val last_idx  = Mux(inLastChunk(f3_fetch_bundle.pc) && icIsBanked.B,
                       (fetchWidth/2-1).U, (fetchWidth-1).U)
     prev_is_half := (usingCompressed.B
