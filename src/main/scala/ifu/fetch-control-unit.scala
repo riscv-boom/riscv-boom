@@ -144,10 +144,10 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
 
   // F3 is invalidated by redirects.
   val f3_valid_masked = f3_valid && !r_f4_req.valid
-  val f4_fire = f3_valid_masked && f4_ready
+  val f3_fire = f3_valid_masked && f4_ready
 
   // F4 Instruction path.
-  val r_f4_fetch_bundle = RegEnable(f3_fetch_bundle, f4_fire)
+  val r_f4_fetch_bundle = RegEnable(f3_fetch_bundle, f3_fire)
 
   io.f3_stall := !f4_ready
   io.f3_clear := clear_f3
@@ -358,7 +358,7 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
   val f3_btb_mask = Wire(UInt(fetchWidth.W))
   val f3_bpd_mask = Wire(UInt(fetchWidth.W))
 
-  when (f4_fire) {
+  when (f3_fire) {
     val last_idx  = Mux(inLastChunk(f3_fetch_bundle.pc) && icIsBanked.B,
                       (fetchWidth/2-1).U, (fetchWidth-1).U)
     prev_is_half := (usingCompressed.B
@@ -521,14 +521,14 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
   // **** F4 ****
   //-------------------------------------------------------------
 
-  when (f4_fire) {
+  when (f3_fire) {
     r_f4_req := f3_req
     r_f4_fetchpc := f3_imemresp.pc
     r_f4_taken := f3_taken
   } .otherwise {
     r_f4_req.valid := false.B
   }
-  r_f4_valid := (r_f4_valid && !fb.io.enq.ready || f4_fire) && !io.clear_fetchbuffer
+  r_f4_valid := (r_f4_valid && !fb.io.enq.ready || f3_fire) && !io.clear_fetchbuffer
 
   assert (!(r_f4_req.valid && !r_f4_valid),
     "[fetch] f4-request is high but f4_valid is not.")
@@ -557,7 +557,7 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
   // **** FetchTargetQueue ****
   //-------------------------------------------------------------
 
-  ftq.io.enq.valid := f4_fire
+  ftq.io.enq.valid := f3_fire
   ftq.io.enq.bits.fetch_pc := f3_imemresp.pc
   ftq.io.enq.bits.history := io.f3_bpd_resp.bits.history
   ftq.io.enq.bits.bpd_info := io.f3_bpd_resp.bits.info
@@ -606,7 +606,7 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
   //-------------------------------------------------------------
 
   if (O3PIPEVIEW_PRINTF) {
-    when (f4_fire) {
+    when (f3_fire) {
       fseq_reg := fseq_reg + PopCount(f3_fetch_bundle.mask)
       val bundle = f3_fetch_bundle
       for (i <- 0 until fetchWidth) {
@@ -645,7 +645,7 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
                         + (cfi_idx << log2Ceil(coreInstBytes).U)
                         - Mux(f3_fetch_bundle.edge_inst && cfi_idx === 0.U, 2.U, 0.U))
 
-  when (f4_fire &&
+  when (f3_fire &&
         !f3_fetch_bundle.replay_if &&
         !f3_fetch_bundle.xcpt_pf_if &&
         !f3_fetch_bundle.xcpt_ae_if) {
@@ -699,12 +699,12 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
   }
 
   when (io.clear_fetchbuffer ||
-        (f4_fire &&
+        (f3_fire &&
     (f3_fetch_bundle.replay_if || f3_fetch_bundle.xcpt_pf_if || f3_fetch_bundle.xcpt_ae_if))) {
     last_valid := false.B
   }
 
-  when (f4_fire &&
+  when (f3_fire &&
         !f3_fetch_bundle.replay_if &&
         !f3_fetch_bundle.xcpt_pf_if &&
         !f3_fetch_bundle.xcpt_ae_if) {
