@@ -150,22 +150,22 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
   // Pipeline State Registers and Wires
 
   // Decode/Rename1 Stage
-  val dec_valids    = Wire(Vec(coreWidth, Bool()))  // are the decoded instruction valid? It may be held up though.
-  val dec_uops      = Wire(Vec(coreWidth, new MicroOp()))
-  val dec_proceed   = Wire(Vec(coreWidth, Bool()))  // can the instruction fire beyond decode?
+  val dec_valids = Wire(Vec(coreWidth, Bool()))  // are the decoded instruction valid? It may be held up though.
+  val dec_uops   = Wire(Vec(coreWidth, new MicroOp()))
+  val dec_fire   = Wire(Vec(coreWidth, Bool()))  // can the instruction fire beyond decode?
                                                     // (can still be stopped in ren or dis)
-  val dec_rdy       = Wire(Bool())
+  val dec_ready  = Wire(Bool())
 
   // Rename2/Dispatch stage
-  val dis_valids    = Wire(Vec(coreWidth, Bool()))
-  val dis_uops      = Wire(Vec(coreWidth, new MicroOp))
-  val dis_proceed   = Wire(Vec(coreWidth, Bool()))
-  val dis_fire      = Wire(Bool())
+  val dis_valids = Wire(Vec(coreWidth, Bool()))
+  val dis_uops   = Wire(Vec(coreWidth, new MicroOp))
+  val dis_fire   = Wire(Vec(coreWidth, Bool()))
+  val dis_ready  = Wire(Bool())
 
   // Issue Stage/Register Read
-  val iss_valids    = Wire(Vec(exe_units.numIrfReaders, Bool()))
-  val iss_uops      = Wire(Vec(exe_units.numIrfReaders, new MicroOp()))
-  val bypasses      = Wire(new BypassData(exe_units.numTotalBypassPorts, xLen))
+  val iss_valids = Wire(Vec(exe_units.numIrfReaders, Bool()))
+  val iss_uops   = Wire(Vec(exe_units.numIrfReaders, new MicroOp()))
+  val bypasses   = Wire(new BypassData(exe_units.numTotalBypassPorts, xLen))
 
   // Branch Unit
   val br_unit = Wire(new BranchUnitResp())
@@ -369,7 +369,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
   //-------------------------------------------------------------
   // Pull out instructions and send to the Decoders
 
-  io.ifu.fetchpacket.ready := dec_rdy
+  io.ifu.fetchpacket.ready := dec_ready
   val dec_fbundle = io.ifu.fetchpacket.bits
 
   //-------------------------------------------------------------
@@ -406,7 +406,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
   val dec_hazards = (0 until coreWidth).map(w =>
                       dec_valids(w) &&
                       (  !rob.io.ready
-                      || !dis_fire
+                      || !dis_ready
                       ||  branch_mask_full(w)
                       || lsu.io.laq_full(w) && dec_uops(w).is_load
                       || lsu.io.stq_full(w) && dec_uops(w).is_store
@@ -416,15 +416,15 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
                       || dec_prior_slot_unique(w)
                       || flush_ifu))
   val dec_stalls = dec_hazards.scanLeft(false.B) ((s,h) => s || h).takeRight(coreWidth)
-  dec_proceed := (0 until coreWidth).map(w => dec_valids(w) && !dec_stalls(w))
+  dec_fire := (0 until coreWidth).map(w => dec_valids(w) && !dec_stalls(w))
 
   // all decoders are empty and ready for new instructions
-  dec_rdy := !dec_stalls.last
+  dec_ready := !dec_stalls.last
 
-  when (dec_rdy || flush_ifu) {
+  when (dec_ready || flush_ifu) {
     dec_finished_mask := 0.U
   } .otherwise {
-    dec_finished_mask := dec_proceed.asUInt | dec_finished_mask
+    dec_finished_mask := dec_fire.asUInt | dec_finished_mask
   }
 
   //-------------------------------------------------------------
@@ -435,7 +435,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
   for (w <- 0 until coreWidth) {
     dec_brmask_logic.io.is_branch(w) := !dec_finished_mask(w) && dec_uops(w).allocate_brtag
-    dec_brmask_logic.io.will_fire(w) :=  dec_proceed(w) &&
+    dec_brmask_logic.io.will_fire(w) :=  dec_fire(w) &&
                                          dec_uops(w).allocate_brtag // ren, dis can back pressure us
     dec_uops(w).br_tag  := dec_brmask_logic.io.br_tag(w)
     dec_uops(w).br_mask := dec_brmask_logic.io.br_mask(w)
@@ -450,8 +450,8 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
   for (w <- 0 until coreWidth) {
     // Dispatching instructions request load/store queue entries when they can proceed.
-    lsu.io.dec_ld_vals(w) := dec_proceed(w) && dec_uops(w).is_load
-    lsu.io.dec_st_vals(w) := dec_proceed(w) && dec_uops(w).is_store
+    lsu.io.dec_ld_vals(w) := dec_fire(w) && dec_uops(w).is_load
+    lsu.io.dec_st_vals(w) := dec_fire(w) && dec_uops(w).is_store
 
     lsu.io.dec_uops(w).rob_idx := dec_uops(w).rob_idx
     dec_uops(w).ldq_idx := lsu.io.new_ldq_idx(w)
@@ -499,11 +499,11 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
   rename_stage.io.flush_pipeline := rob.io.flush.valid
   rename_stage.io.debug_rob_empty := rob.io.empty
 
-  rename_stage.io.dec_proceed := dec_proceed
+  rename_stage.io.dec_fire := dec_fire
   rename_stage.io.dec_uops := dec_uops
 
-  rename_stage.io.dis_proceed := dis_proceed
   rename_stage.io.dis_fire := dis_fire
+  rename_stage.io.dis_ready := dis_ready
 
   rename_stage.io.com_valids := rob.io.commit.valids
   rename_stage.io.com_uops := rob.io.commit.uops
@@ -527,15 +527,15 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
                       || flush_ifu))
 
   val dis_stalls = dis_hazards.scanLeft(false.B) ((s,h) => s || h).takeRight(coreWidth)
-  dis_proceed := dis_valids zip dis_stalls map {case (v,s) => v && !s}
-  dis_fire := !dis_stalls.last
+  dis_fire := dis_valids zip dis_stalls map {case (v,s) => v && !s}
+  dis_ready := !dis_stalls.last
 
   //-------------------------------------------------------------
   // Dispatch to issue queues
 
   // Get uops from rename2
   for (w <- 0 until coreWidth) {
-    dispatcher.io.ren_uops(w).valid := dis_proceed(w)
+    dispatcher.io.ren_uops(w).valid := dis_fire(w)
     dispatcher.io.ren_uops(w).bits  := dis_uops(w)
   }
 
@@ -1068,7 +1068,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
         w.U,
         dec_uops(w).pc(19,0),
         BoolToChar(io.ifu.fetchpacket.valid && dec_fbundle.uops(w).valid && !dec_finished_mask(w), 'V'),
-        BoolToChar(dec_proceed(w), 'V'),
+        BoolToChar(dec_fire(w), 'V'),
         dec_fbundle.uops(w).bits.debug_inst)
     }
 
@@ -1229,14 +1229,14 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
         printf("%d; O3PipeView:decode:%d\n", dec_uops(w).debug_events.fetch_seq, debug_tsc_reg)
       }
       // Rename begins when uop leaves fetch buffer (Dec+Ren1 are in same stage).
-      when (dec_proceed(w)) {
+      when (dec_fire(w)) {
         printf("%d; O3PipeView:rename: %d\n", dec_uops(w).debug_events.fetch_seq, debug_tsc_reg)
       }
       when (dispatcher.io.ren_uops(w).valid) {
         printf("%d; O3PipeView:dispatch: %d\n", dispatcher.io.ren_uops(w).bits.debug_events.fetch_seq, debug_tsc_reg)
       }
 
-      when (dec_rdy || flush_ifu) {
+      when (dec_ready || flush_ifu) {
         dec_printed_mask := 0.U
       } .otherwise {
         dec_printed_mask := dec_valids.asUInt | dec_printed_mask
@@ -1276,7 +1276,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
     for (w <- 0 until coreWidth) {
        exe_units.rocc_unit.io.rocc.dec_rocc_vals(w) := (
-         dis_proceed(w) &&
+         dis_fire(w) &&
          dis_uops(w).uopc === uopROCC)
     }
   }

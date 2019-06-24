@@ -46,7 +46,7 @@ class RenameStageIO(
 
   val kill = Input(Bool())
 
-  val dec_proceed = Input(Vec(plWidth, Bool())) // will commit state updates
+  val dec_fire  = Input(Vec(plWidth, Bool())) // will commit state updates
   val dec_uops  = Input(Vec(plWidth, new MicroOp()))
 
   // physical specifiers now available (but not the busy/ready status of the operands).
@@ -60,8 +60,8 @@ class RenameStageIO(
   // branch resolution (execute)
   val brinfo = Input(new BrResolutionInfo())
 
-  val dis_proceed = Input(Vec(coreWidth, Bool()))
-  val dis_fire = Input(Bool())
+  val dis_fire  = Input(Vec(coreWidth, Bool()))
+  val dis_ready = Input(Bool())
 
   // wakeup ports
   val int_wakeups = Flipped(Vec(numIntWbPorts, Valid(new ExeUnitResp(xLen))))
@@ -150,7 +150,7 @@ class RenameStage(
   // Pipeline State & Wires
 
   val ren1_br_tags = Wire(Vec(plWidth, Valid(UInt(brTagSz.W))))
-  val ren1_proceed = Wire(Vec(plWidth, Bool()))
+  val ren1_fire    = Wire(Vec(plWidth, Bool()))
   val ren1_uops    = Wire(Vec(plWidth, new MicroOp()))
 
   val ren1_int_alloc_reqs = Wire(Vec(plWidth, Bool()))
@@ -162,22 +162,22 @@ class RenameStage(
   val ren2_int_alloc_reqs = Wire(Vec(plWidth, Bool()))
   val ren2_fp_alloc_reqs  = Wire(Vec(plWidth, Bool()))
 
-  val ren2_valids  = Wire(Vec(plWidth, Bool()))
-  val ren2_uops    = Wire(Vec(plWidth, new MicroOp()))
-  val ren2_proceed = io.dis_proceed
-  val ren2_fire    = io.dis_fire
+  val ren2_valids = Wire(Vec(plWidth, Bool()))
+  val ren2_uops   = Wire(Vec(plWidth, new MicroOp()))
+  val ren2_fire   = io.dis_fire
+  val ren2_ready  = io.dis_ready
 
   for (w <- 0 until plWidth) {
-    ren1_proceed(w)        := io.dec_proceed(w)
+    ren1_fire(w)           := io.dec_fire(w)
     ren1_uops(w)           := io.dec_uops(w)
-    ren1_br_tags(w).valid  := ren1_proceed(w) && io.dec_uops(w).allocate_brtag
+    ren1_br_tags(w).valid  := ren1_fire(w) && io.dec_uops(w).allocate_brtag
     ren1_br_tags(w).bits   := io.dec_uops(w).br_tag
 
-    ren1_int_alloc_reqs(w) := ren1_uops(w).ldst_val && ren1_uops(w).dst_rtype === RT_FIX && ren1_proceed(w)
-    ren1_fp_alloc_reqs(w)  := ren1_uops(w).ldst_val && ren1_uops(w).dst_rtype === RT_FLT && ren1_proceed(w)
+    ren1_int_alloc_reqs(w) := ren1_uops(w).ldst_val && ren1_uops(w).dst_rtype === RT_FIX && ren1_fire(w)
+    ren1_fp_alloc_reqs(w)  := ren1_uops(w).ldst_val && ren1_uops(w).dst_rtype === RT_FLT && ren1_fire(w)
 
-    ren2_int_alloc_reqs(w) := ren2_uops(w).ldst_val && ren2_uops(w).dst_rtype === RT_FIX && ren2_proceed(w)
-    ren2_fp_alloc_reqs(w)  := ren2_uops(w).ldst_val && ren2_uops(w).dst_rtype === RT_FLT && ren2_proceed(w)
+    ren2_int_alloc_reqs(w) := ren2_uops(w).ldst_val && ren2_uops(w).dst_rtype === RT_FIX && ren2_fire(w)
+    ren2_fp_alloc_reqs(w)  := ren2_uops(w).ldst_val && ren2_uops(w).dst_rtype === RT_FLT && ren2_fire(w)
 
     rob_int_ldst_vals(w)   := io.com_uops(w).ldst_val && io.com_uops(w).dst_rtype === RT_FIX
     rob_fp_ldst_vals(w)    := io.com_uops(w).ldst_val && io.com_uops(w).dst_rtype === RT_FLT
@@ -242,8 +242,8 @@ class RenameStage(
   //-------------------------------------------------------------
   // pipeline registers
 
-  val ren2_imap_resps = RegEnable(imaptable.io.map_resps, ren2_fire)
-  val ren2_fmap_resps = if (usingFPU) RegEnable(fmaptable.io.map_resps, ren2_fire)
+  val ren2_imap_resps = RegEnable(imaptable.io.map_resps, ren2_ready)
+  val ren2_fmap_resps = if (usingFPU) RegEnable(fmaptable.io.map_resps, ren2_ready)
                         else new MapResp(1)
 
   for (w <- 0 until plWidth) {
@@ -253,11 +253,11 @@ class RenameStage(
 
     when (io.kill) {
       r_valid := false.B
-    } .elsewhen (ren2_fire) {
-      r_valid := ren1_proceed(w)
+    } .elsewhen (ren2_ready) {
+      r_valid := ren1_fire(w)
       r_uop := GetNewUopAndBrMask(ren1_uops(w), io.brinfo)
     } .otherwise {
-      r_valid := r_valid && !ren2_proceed(w) // clear bit if uop gets dispatched
+      r_valid := r_valid && !ren2_fire(w) // clear bit if uop gets dispatched
       r_uop := GetNewUopAndBrMask(r_uop, io.brinfo)
     }
 
@@ -279,12 +279,12 @@ class RenameStage(
 
   for (w <- 0 until plWidth) {
     assert (!(
-      ren2_proceed(w) &&
+      ren2_fire(w) &&
       ren2_uops(w).lrs1_rtype === RT_FIX &&
       ren2_uops(w).prs1 =/= ibusytable.io.busy_reqs(w).prs1),
       "[rename] ren2 maptable prs1 value don't match uop's values.")
     assert (!(
-      ren2_proceed(w) &&
+      ren2_fire(w) &&
       ren2_uops(w).lrs2_rtype === RT_FIX &&
       ren2_uops(w).prs2 =/= ibusytable.io.busy_reqs(w).prs2),
       "[rename] ren2 maptable prs2 value don't match uop's values.")
@@ -318,7 +318,7 @@ class RenameStage(
   //-------------------------------------------------------------
   // Outputs
 
-  io.ren1_mask := ren1_proceed
+  io.ren1_mask := ren1_fire
   io.ren1_uops := ren1_uops
 
   io.ren2_mask := ren2_valids
