@@ -61,7 +61,7 @@ case class BoomCoreParams(
   bpdRandom: Option[RandomBpdParameters] = None,
   intToFpLatency: Int = 2,
   imulLatency: Int = 3,
-  fetchLatency: Int = 3,
+  fetchLatency: Int = 4,
   renameLatency: Int = 2,
   nPerfCounters: Int = 0,
   numRXQEntries: Int = 4,
