@@ -143,8 +143,7 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
   val r_f4_fetchpc = Reg(UInt())
 
   // F3 is invalidated by redirects.
-  val f3_valid_masked = f3_valid && !r_f4_req.valid
-  val f3_fire = f3_valid_masked && f4_ready
+  val f3_fire = f3_valid && f4_ready && !clear_f3
 
   // F4 Instruction path.
   val r_f4_fetch_bundle = RegEnable(f3_fetch_bundle, f3_fire)
@@ -528,7 +527,7 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
   } .otherwise {
     r_f4_req.valid := false.B
   }
-  r_f4_valid := (r_f4_valid && !fb.io.enq.ready || f3_fire) && !io.clear_fetchbuffer
+  r_f4_valid := r_f4_valid && !fb.io.enq.ready && !io.clear_fetchbuffer || f3_fire
 
   assert (!(r_f4_req.valid && !r_f4_valid),
     "[fetch] f4-request is high but f4_valid is not.")
