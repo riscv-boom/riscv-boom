@@ -1079,7 +1079,7 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
     // We have to re-execute this!
     when (io.dmem.nack.bits.is_hella)
     {
-      assert(hella_state === h_wait)
+      assert(hella_state === h_wait || hella_state === h_dead)
     }
       .elsewhen (io.dmem.nack.bits.uop.uses_ldq)
     {
