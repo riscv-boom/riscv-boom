@@ -641,7 +641,7 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
                         + (cfi_idx << log2Ceil(coreInstBytes).U)
                         - Mux(f3_fetch_bundle.edge_inst && cfi_idx === 0.U, 2.U, 0.U))
 
-  when (fb.io.enq.fire() &&
+  when (f4_fire &&
         !f3_fetch_bundle.replay_if &&
         !f3_fetch_bundle.xcpt_pf_if &&
         !f3_fetch_bundle.xcpt_ae_if) {
@@ -695,12 +695,12 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
   }
 
   when (io.clear_fetchbuffer ||
-        (fb.io.enq.fire() &&
+        (f4_fire &&
     (f3_fetch_bundle.replay_if || f3_fetch_bundle.xcpt_pf_if || f3_fetch_bundle.xcpt_ae_if))) {
     last_valid := false.B
   }
 
-  when (fb.io.enq.fire() &&
+  when (f4_fire &&
         !f3_fetch_bundle.replay_if &&
         !f3_fetch_bundle.xcpt_pf_if &&
         !f3_fetch_bundle.xcpt_ae_if) {
