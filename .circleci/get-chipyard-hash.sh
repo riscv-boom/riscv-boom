@@ -15,6 +15,6 @@ git rev-parse HEAD > $HOME/chipyard-old-rocket.hash
 
 # use rocket-hash that boom uses in ci (to make bumps easier)
 git submodule update --init generators/boom
-cat $HOME/chipyard-old-rocket.hash $HOME/chipyard/generators/boom/ROCKETCHIP_VERSION >> chipyard.hash
+cat $HOME/chipyard-old-rocket.hash $HOME/chipyard/generators/boom/ROCKETCHIP_VERSION > $HOME/chipyard.hash
 
 rm -rf $HOME/chipyard
