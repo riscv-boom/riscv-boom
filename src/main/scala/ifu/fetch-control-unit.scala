@@ -136,12 +136,15 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
 
   // Can the F3 stage proceed?
   val f4_ready = (!r_f4_valid || fb.io.enq.ready) && ftq.io.enq.ready
-  val f4_fire = f3_valid && f4_ready
 
   // F4 Redirection path.
   val r_f4_req = Reg(Valid(new PCReq()))
   val r_f4_taken = RegInit(false.B)
   val r_f4_fetchpc = Reg(UInt())
+
+  // F3 is invalidated by redirects.
+  val f3_valid_masked = f3_valid && !r_f4_req.valid
+  val f4_fire = f3_valid_masked && f4_ready
 
   // F4 Instruction path.
   val r_f4_fetch_bundle = RegEnable(f3_fetch_bundle, f4_fire)
@@ -176,7 +179,7 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
     io.flush_take_pc ||
     io.sfence_take_pc ||
     (io.f2_btb_resp.valid && io.f2_btb_resp.bits.taken && io.imem_resp.ready) ||
-    (r_f4_valid && r_f4_req.valid)
+    r_f4_req.valid
 
   io.imem_req.valid   := f0_redirect_val // tell front-end we had an unexpected change in the stream
   io.imem_req.bits.pc := f0_redirect_pc
@@ -192,7 +195,7 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
       io.flush_pc,
     Mux(br_unit.take_pc,
       br_unit.target,
-    Mux(r_f4_valid && r_f4_req.valid,
+    Mux(r_f4_req.valid,
       r_f4_req.bits.addr,
       io.f2_btb_resp.bits.target)))))
 
@@ -216,7 +219,7 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
   // **** F3 ****
   //-------------------------------------------------------------
 
-  clear_f3 := io.clear_fetchbuffer || (r_f4_valid && r_f4_req.valid)
+  clear_f3 := io.clear_fetchbuffer || r_f4_req.valid
 
   val f3_imemresp = q_f3_imemresp.io.deq.bits
   val f3_btb_resp = q_f3_btb_resp.io.deq.bits
@@ -355,7 +358,7 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
   val f3_btb_mask = Wire(UInt(fetchWidth.W))
   val f3_bpd_mask = Wire(UInt(fetchWidth.W))
 
-  when (f3_valid && f4_ready && !r_f4_req.valid) {
+  when (f4_fire) {
     val last_idx  = Mux(inLastChunk(f3_fetch_bundle.pc) && icIsBanked.B,
                       (fetchWidth/2-1).U, (fetchWidth-1).U)
     prev_is_half := (usingCompressed.B
@@ -518,14 +521,14 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
   // **** F4 ****
   //-------------------------------------------------------------
 
-  when (io.clear_fetchbuffer || r_f4_req.valid) {
-    r_f4_req.valid := false.B
-  } .elsewhen (f4_ready) {
-    r_f4_valid := f3_valid && !(r_f4_valid && r_f4_req.valid)
+  when (f4_fire) {
     r_f4_req := f3_req
     r_f4_fetchpc := f3_imemresp.pc
     r_f4_taken := f3_taken
+  } .otherwise {
+    r_f4_req.valid := false.B
   }
+  r_f4_valid := (r_f4_valid && !fb.io.enq.ready || f4_fire) && !io.clear_fetchbuffer
 
   assert (!(r_f4_req.valid && !r_f4_valid),
     "[fetch] f4-request is high but f4_valid is not.")
@@ -554,7 +557,7 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
   // **** FetchTargetQueue ****
   //-------------------------------------------------------------
 
-  ftq.io.enq.valid := f3_valid && !r_f4_req.valid && f4_ready
+  ftq.io.enq.valid := f3_valid_masked
   ftq.io.enq.bits.fetch_pc := f3_imemresp.pc
   ftq.io.enq.bits.history := io.f3_bpd_resp.bits.history
   ftq.io.enq.bits.bpd_info := io.f3_bpd_resp.bits.info
@@ -578,7 +581,7 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
   io.ftq_restore_history <> ftq.io.restore_history
 
   io.f2_redirect := io.f2_btb_resp.valid && io.f2_btb_resp.bits.taken && io.imem_resp.ready
-  io.f4_redirect := r_f4_valid && r_f4_req.valid
+  io.f4_redirect := r_f4_req.valid
   io.f4_taken    := r_f4_taken
 
   io.bim_update := ftq.io.bim_update
