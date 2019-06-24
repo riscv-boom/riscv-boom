@@ -30,26 +30,19 @@ import boom.common._
 /**
  * Create multiple copies of a BOOM tile (and thus a core).
  * Override with the default mixins to control all params of the tiles.
+ * Default adds small BOOMs.
  *
  * @param n amount of tiles to duplicate
  */
-class WithNBoomCores(n: Int) extends Config((site, here, up) => {
-  case BoomTilesKey => {
-    val boomTileParams = BoomTileParams(
-      core   = BoomCoreParams(mulDiv = Some(MulDivParams(
-        mulUnroll = 8,
-        mulEarlyOut = true,
-        divEarlyOut = true))),
-      dcache = Some(DCacheParams(
-        rowBits = site(SystemBusKey).beatBits,
-        nMSHRs = 0,
-        blockBytes = site(CacheBlockBytes))),
-      icache = Some(ICacheParams(
-        rowBits = site(SystemBusKey).beatBits,
-        blockBytes = site(CacheBlockBytes))))
-    List.tabulate(n)(i => boomTileParams.copy(hartId = i))
-  }
-})
+class WithNBoomCores(n: Int) extends Config(
+  new WithSmallBooms ++
+  new BaseBoomConfig ++
+  new Config((site, here, up) => {
+    case BoomTilesKey => {
+      List.tabulate(n)(i => BoomTileParams(hartId = i))
+    }
+  })
+)
 
 /**
  * This sets the ECC for the L1 instruction cache.
