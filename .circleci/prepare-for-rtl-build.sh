@@ -12,6 +12,7 @@ if [ ! -d "$HOME/chipyard" ]; then
     cd $HOME/chipyard
 
     echo "Checking out Chipyard version: $(cat $HOME/project/CHIPYARD.hash)"
+    git fetch
     git checkout $(cat $HOME/project/CHIPYARD.hash)
 
     # init all submodules (according to what boom-template wants)
