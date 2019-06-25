@@ -1,7 +1,9 @@
 These are the scripts that Circle CI uses to run the tests during a PR.
 
-Note: This uses the most up to date version of riscv-boom/boom-template (**master**) to run the tests using the
-hash of rocket-chip in riscv-boom to specify the version of rocket-chip
+Note: This uses the most up to date version of ucb-bar/project-template (**boom-ci**) to run the tests.
+Thus this requires the **boom-ci** branch to have all the changes needed for boom-ci to work.
+
+WARNING: IF **boom-ci** BRANCH IN ucb-bar/project-template IS GONE. CONTACT THE BOOM DEVELOPERS!!!!
 
 Things to look into:
 --------------------

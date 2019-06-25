@@ -13,20 +13,16 @@ jobs:
             TERM: dumb
         steps:
             - checkout
-            - run:
-                name: Create hash of riscv-tools
-                command: |
-                    .circleci/get-riscv-tools-hash.sh
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
+                    - riscv-tools-installed-v3-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Building riscv-tools
                 command: |
                     .circleci/build-riscv-tools.sh
                 no_output_timeout: 120m
             - save_cache:
-                key: riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
+                key: riscv-tools-installed-v3-{{ checksum "CHIPYARD.hash" }}
                 paths:
                     - "/home/riscvuser/riscv-tools-install"
     prepare-build-environment:
@@ -37,20 +33,16 @@ jobs:
             TERM: dumb
         steps:
             - checkout
-            - run:
-                name: Create hash of template
-                command: |
-                    .circleci/get-chipyard-hash.sh
             - restore_cache:
                 keys:
-                    - chipyard-with-verilator-v9-{{ checksum "../chipyard.hash" }}
+                    - chipyard-with-verilator-v9-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Build Verilator and setup build environment
                 command: |
                     .circleci/prepare-for-rtl-build.sh
                 no_output_timeout: 120m
             - save_cache:
-                key: chipyard-with-verilator-v9-{{ checksum "../chipyard.hash" }}
+                key: chipyard-with-verilator-v9-{{ checksum "CHIPYARD.hash" }}
                 paths:
                     - "/home/riscvuser/chipyard"
     prepare-smallrv32unifiedboomconfig:
@@ -61,17 +53,12 @@ jobs:
             TERM: dumb
         steps:
             - checkout
-            - run:
-                name: Create hash of riscv-tools and chipyard
-                command: |
-                    .circleci/get-chipyard-hash.sh
-                    .circleci/get-riscv-tools-hash.sh
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
+                    - riscv-tools-installed-v3-{{ checksum "CHIPYARD.hash" }}
             - restore_cache:
                 keys:
-                    - chipyard-with-verilator-v9-{{ checksum "../chipyard.hash" }}
+                    - chipyard-with-verilator-v9-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Building SmallRV32UnifiedBoomConfig using Verilator
                 command: .circleci/do-rtl-build.sh SmallRV32UnifiedBoomConfig
@@ -88,17 +75,12 @@ jobs:
             TERM: dumb
         steps:
             - checkout
-            - run:
-                name: Create hash of riscv-tools and chipyard
-                command: |
-                    .circleci/get-chipyard-hash.sh
-                    .circleci/get-riscv-tools-hash.sh
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
+                    - riscv-tools-installed-v3-{{ checksum "CHIPYARD.hash" }}
             - restore_cache:
                 keys:
-                    - chipyard-with-verilator-v9-{{ checksum "../chipyard.hash" }}
+                    - chipyard-with-verilator-v9-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Building SmallBoomConfig using Verilator
                 command: .circleci/do-rtl-build.sh SmallBoomConfig
@@ -115,17 +97,12 @@ jobs:
             TERM: dumb
         steps:
             - checkout
-            - run:
-                name: Create hash of riscv-tools and chipyard
-                command: |
-                    .circleci/get-chipyard-hash.sh
-                    .circleci/get-riscv-tools-hash.sh
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
+                    - riscv-tools-installed-v3-{{ checksum "CHIPYARD.hash" }}
             - restore_cache:
                 keys:
-                    - chipyard-with-verilator-v9-{{ checksum "../chipyard.hash" }}
+                    - chipyard-with-verilator-v9-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Building MediumBoomConfig using Verilator
                 command: .circleci/do-rtl-build.sh MediumBoomConfig
@@ -142,17 +119,12 @@ jobs:
             TERM: dumb
         steps:
             - checkout
-            - run:
-                name: Create hash of riscv-tools and chipyard
-                command: |
-                    .circleci/get-chipyard-hash.sh
-                    .circleci/get-riscv-tools-hash.sh
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
+                    - riscv-tools-installed-v3-{{ checksum "CHIPYARD.hash" }}
             - restore_cache:
                 keys:
-                    - chipyard-with-verilator-v9-{{ checksum "../chipyard.hash" }}
+                    - chipyard-with-verilator-v9-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Building LargeBoomConfig using Verilator
                 command: .circleci/do-rtl-build.sh LargeBoomConfig
@@ -169,17 +141,12 @@ jobs:
             TERM: dumb
         steps:
             - checkout
-            - run:
-                name: Create hash of riscv-tools and chipyard
-                command: |
-                    .circleci/get-chipyard-hash.sh
-                    .circleci/get-riscv-tools-hash.sh
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
+                    - riscv-tools-installed-v3-{{ checksum "CHIPYARD.hash" }}
             - restore_cache:
                 keys:
-                    - chipyard-with-verilator-v9-{{ checksum "../chipyard.hash" }}
+                    - chipyard-with-verilator-v9-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Building MegaBoomConfig using Verilator
                 command: .circleci/do-rtl-build.sh MegaBoomConfig
@@ -196,17 +163,12 @@ jobs:
             TERM: dumb
         steps:
             - checkout
-            - run:
-                name: Create hash of riscv-tools and chipyard
-                command: |
-                    .circleci/get-chipyard-hash.sh
-                    .circleci/get-riscv-tools-hash.sh
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
+                    - riscv-tools-installed-v3-{{ checksum "CHIPYARD.hash" }}
             - restore_cache:
                 keys:
-                    - chipyard-with-verilator-v9-{{ checksum "../chipyard.hash" }}
+                    - chipyard-with-verilator-v9-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Building SmallBoomAndRocketConfig using Verilator
                 command: .circleci/do-rtl-build.sh SmallBoomAndRocketConfig
@@ -236,13 +198,9 @@ jobs:
             TERM: dumb
         steps:
             - checkout
-            - run:
-                name: Create hash of riscv-tools
-                command: |
-                    .circleci/get-riscv-tools-hash.sh
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
+                    - riscv-tools-installed-v3-{{ checksum "CHIPYARD.hash" }}
             - restore_cache:
                 keys:
                     - smallrv32unifiedboomconfig-{{ .Branch }}-{{ .Revision }}
@@ -259,13 +217,9 @@ jobs:
             TERM: dumb
         steps:
             - checkout
-            - run:
-                name: Create hash of riscv-tools
-                command: |
-                    .circleci/get-riscv-tools-hash.sh
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
+                    - riscv-tools-installed-v3-{{ checksum "CHIPYARD.hash" }}
             - restore_cache:
                 keys:
                     - smallrv32unifiedboomconfig-{{ .Branch }}-{{ .Revision }}
@@ -282,13 +236,9 @@ jobs:
             TERM: dumb
         steps:
             - checkout
-            - run:
-                name: Create hash of riscv-tools
-                command: |
-                    .circleci/get-riscv-tools-hash.sh
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
+                    - riscv-tools-installed-v3-{{ checksum "CHIPYARD.hash" }}
             - restore_cache:
                 keys:
                     - smallboomconfig-{{ .Branch }}-{{ .Revision }}
@@ -305,13 +255,9 @@ jobs:
             TERM: dumb
         steps:
             - checkout
-            - run:
-                name: Create hash of riscv-tools
-                command: |
-                    .circleci/get-riscv-tools-hash.sh
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
+                    - riscv-tools-installed-v3-{{ checksum "CHIPYARD.hash" }}
             - restore_cache:
                 keys:
                     - smallboomconfig-{{ .Branch }}-{{ .Revision }}
@@ -329,13 +275,9 @@ jobs:
             TERM: dumb
         steps:
             - checkout
-            - run:
-                name: Create hash of riscv-tools
-                command: |
-                    .circleci/get-riscv-tools-hash.sh
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
+                    - riscv-tools-installed-v3-{{ checksum "CHIPYARD.hash" }}
             - restore_cache:
                 keys:
                     - mediumboomconfig-{{ .Branch }}-{{ .Revision }}
@@ -352,13 +294,9 @@ jobs:
             TERM: dumb
         steps:
             - checkout
-            - run:
-                name: Create hash of riscv-tools
-                command: |
-                    .circleci/get-riscv-tools-hash.sh
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
+                    - riscv-tools-installed-v3-{{ checksum "CHIPYARD.hash" }}
             - restore_cache:
                 keys:
                     - mediumboomconfig-{{ .Branch }}-{{ .Revision }}
@@ -376,13 +314,9 @@ jobs:
             TERM: dumb
         steps:
             - checkout
-            - run:
-                name: Create hash of riscv-tools
-                command: |
-                    .circleci/get-riscv-tools-hash.sh
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
+                    - riscv-tools-installed-v3-{{ checksum "CHIPYARD.hash" }}
             - restore_cache:
                 keys:
                     - largeboomconfig-{{ .Branch }}-{{ .Revision }}
@@ -400,13 +334,9 @@ jobs:
             TERM: dumb
         steps:
             - checkout
-            - run:
-                name: Create hash of riscv-tools
-                command: |
-                    .circleci/get-riscv-tools-hash.sh
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
+                    - riscv-tools-installed-v3-{{ checksum "CHIPYARD.hash" }}
             - restore_cache:
                 keys:
                     - largeboomconfig-{{ .Branch }}-{{ .Revision }}
@@ -424,13 +354,9 @@ jobs:
             TERM: dumb
         steps:
             - checkout
-            - run:
-                name: Create hash of riscv-tools
-                command: |
-                    .circleci/get-riscv-tools-hash.sh
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
+                    - riscv-tools-installed-v3-{{ checksum "CHIPYARD.hash" }}
             - restore_cache:
                 keys:
                     - megaboomconfig-{{ .Branch }}-{{ .Revision }}
@@ -448,13 +374,9 @@ jobs:
             TERM: dumb
         steps:
             - checkout
-            - run:
-                name: Create hash of riscv-tools
-                command: |
-                    .circleci/get-riscv-tools-hash.sh
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
+                    - riscv-tools-installed-v3-{{ checksum "CHIPYARD.hash" }}
             - restore_cache:
                 keys:
                     - megaboomconfig-{{ .Branch }}-{{ .Revision }}
@@ -472,13 +394,9 @@ jobs:
             TERM: dumb
         steps:
             - checkout
-            - run:
-                name: Create hash of riscv-tools
-                command: |
-                    .circleci/get-riscv-tools-hash.sh
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
+                    - riscv-tools-installed-v3-{{ checksum "CHIPYARD.hash" }}
             - restore_cache:
                 keys:
                     - smallboomandrocketconfig-{{ .Branch }}-{{ .Revision }}
@@ -495,13 +413,9 @@ jobs:
             TERM: dumb
         steps:
             - checkout
-            - run:
-                name: Create hash of riscv-tools
-                command: |
-                    .circleci/get-riscv-tools-hash.sh
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
+                    - riscv-tools-installed-v3-{{ checksum "CHIPYARD.hash" }}
             - restore_cache:
                 keys:
                     - smallboomandrocketconfig-{{ .Branch }}-{{ .Revision }}
