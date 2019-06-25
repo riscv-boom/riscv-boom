@@ -1182,7 +1182,7 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
 
   // Initially assume the speculative load wakeup failed
   io.core.ld_miss         := RegNext(io.core.spec_ld_wakeup.valid)
-  when (io.core.exe.iresp.valid && io.core.exe.iresp.bits.uop.ldq_idx === mem_incoming_uop.ldq_idx) {
+  when (io.core.exe.iresp.valid && io.core.exe.iresp.bits.uop.ldq_idx === RegNext(mem_incoming_uop.ldq_idx)) {
     // We correcty speculated last cycle, so we don't send miss signal
     io.core.ld_miss := false.B
   }
