@@ -934,14 +934,19 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   // For bypassing
   val s4_req   = RegNext(s3_req)
   val s4_valid = RegNext(s3_valid)
+  val s5_req   = RegNext(s4_req)
+  val s5_valid = RegNext(s4_valid)
 
+  // TODO: Is this the right time to bypass?
   val s3_bypass = s3_valid && ((s2_req.addr >> wordOffBits) === (s3_req.addr >> wordOffBits))
   val s4_bypass = s4_valid && ((s2_req.addr >> wordOffBits) === (s4_req.addr >> wordOffBits))
+  val s5_bypass = s5_valid && ((s2_req.addr >> wordOffBits) === (s5_req.addr >> wordOffBits))
 
   // Store -> Load bypassing
   s2_data_word := Mux(s3_bypass, s3_req.data,
                   Mux(s4_bypass, s4_req.data,
-                                 s2_data_word_prebypass))
+                  Mux(s5_bypass, s5_req.data,
+                                 s2_data_word_prebypass)))
   val amoalu   = Module(new AMOALU(xLen))
   amoalu.io.mask := new StoreGen(s2_req.uop.mem_size, s2_req.addr, 0.U, xLen/8).mask
   amoalu.io.cmd  := s2_req.uop.mem_cmd
