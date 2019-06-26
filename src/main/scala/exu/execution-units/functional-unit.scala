@@ -207,8 +207,6 @@ class BranchUnitResp(implicit p: Parameters) extends BoomBundle
   val take_pc         = Bool()
   val target          = UInt(vaddrBitsExtended.W) // TODO XXX REMOVE this -- use FTQ to redirect instead
 
-  val pc              = UInt(vaddrBitsExtended.W) // TODO this isn't really a branch_unit thing
-
   val brinfo          = new BrResolutionInfo()
   val btb_update      = Valid(new BoomBTBUpdate)
 
@@ -586,8 +584,6 @@ class ALUUnit(isBranchUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)
     targetXlen  := (target_base + target_offset).asUInt
 
     bj_addr := (encodeVirtualAddress(targetXlen, targetXlen).asSInt & -2.S).asUInt
-
-    br_unit.pc := uop_pc_
 
     // handle misaligned branch/jmp targets
     br_unit.xcpt.valid     := bj_addr(1) && !usingCompressed.B &&
