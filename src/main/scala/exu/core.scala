@@ -407,7 +407,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
                       dec_valids(w) &&
                       (  !rob.io.ready
                       || !dis_ready
-                      ||  branch_mask_full(w)
+                      || branch_mask_full(w)
                       || lsu.io.laq_full(w) && dec_uops(w).is_load
                       || lsu.io.stq_full(w) && dec_uops(w).is_store
                       || !rename_stage.io.inst_can_proceed(w)
@@ -474,7 +474,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       dec_uops(w).rob_idx := rob.io.rob_tail_idx
     } else {
       dec_uops(w).rob_idx := Cat(rob.io.rob_tail_idx >> log2Ceil(coreWidth).U,
-                                w.U(log2Ceil(coreWidth).W))
+                               w.U(log2Ceil(coreWidth).W))
     }
   }
 
