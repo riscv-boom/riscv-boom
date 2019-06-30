@@ -93,6 +93,7 @@ class OldFetchBuffer(numEntries: Int)(implicit p: Parameters) extends BoomModule
     in_uops(i).pc             := (alignToFetchBoundary(io.enq.bits.pc)
                                 + (i << log2Ceil(coreInstBytes)).U)
     in_uops(i).pc_lob         := in_uops(i).pc // LHS width will cut off high-order bits.
+    in_uops(i).cfi_idx        := i.U
     if (i == 0) {
       when (io.enq.bits.edge_inst) {
         assert(usingCompressed.B)
