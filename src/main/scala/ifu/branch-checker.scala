@@ -133,6 +133,7 @@ class BranchChecker(implicit p: Parameters) extends BoomModule
   io.btb_update.bits.cfi_idx  := jal_idx
   io.btb_update.bits.bpd_type := Mux(io.is_call(jal_idx), BpredType.CALL, BpredType.JUMP)
   io.btb_update.bits.cfi_type := CfiType.jal
+  io.btb_update.bits.is_rvc   := io.is_rvc(jal_idx)
 
   // for critical path reasons, remove dependence on bpu_request to ras_update.
   val jal_may_win = io.is_jal.reduce(_|_) && (!btb_hit || btb_was_wrong || jal_idx < btb_idx)
