@@ -140,6 +140,6 @@ class BranchChecker(implicit p: Parameters) extends BoomModule
   io.ras_update.bits.is_call     := true.B
   io.ras_update.bits.is_ret      := false.B
   io.ras_update.bits.return_addr := (io.aligned_pc
-                                    + (jal_idx << log2Ceil(fetchBytes))
+                                    + (jal_idx << log2Ceil(coreInstBytes))
                                     + Mux(io.is_rvc(jal_idx), 2.U, 4.U))
 }
