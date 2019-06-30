@@ -341,6 +341,10 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
   val f3_has_jal = is_jal.reduce(_|_)
   val f3_jal_idx = PriorityEncoder(is_jal.asUInt)
   val f3_jal_target = jal_targs(f3_jal_idx)
+
+  val f3_jr_idx = PriorityEncoder(is_jr)
+  val f3_jr_valid = is_jr.reduce(_||_)
+
   val f3_bpd_btb_update_valid = WireInit(false.B) // does the BPD's choice cause a BTB update?
   val f3_bpd_may_redirect_taken = WireInit(false.B) // request towards a taken branch target
   val f3_bpd_may_redirect_next = WireInit(false.B) // override taken prediction and fetch the next line (or take JAL)
@@ -443,7 +447,10 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
 
   // TODO this logic is broken and vestigial. Do update correctly (remove RegNext)
   val f3_btb_update_bits = Wire(new BoomBTBUpdate)
-  io.f3_btb_update.valid := RegNext(bchecker.io.btb_update.valid || f3_bpd_btb_update_valid) && r_f4_valid
+  val f3_btb_update_valid = Mux(f3_bpd_overrides_bcheck,
+                              f3_bpd_btb_update_valid      && (!f3_jr_valid || f3_bpd_br_idx < f3_jr_idx),
+                              bchecker.io.btb_update.valid && (!f3_jr_valid || f3_jal_idx    < f3_jr_idx))
+  io.f3_btb_update.valid := RegNext(f3_btb_update_valid) && r_f4_valid
   io.f3_btb_update.bits := RegNext(f3_btb_update_bits)
   f3_btb_update_bits := bchecker.io.btb_update.bits
   when (f3_bpd_overrides_bcheck) {
