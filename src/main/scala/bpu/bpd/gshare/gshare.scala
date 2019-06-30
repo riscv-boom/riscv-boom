@@ -119,10 +119,7 @@ class GShareBrPredictor(
   // Given old counter value, provide the new counter value.
   private def updateCounter(cntr: UInt, taken: Bool): UInt = {
     val next = Wire(UInt(2.W))
-    next :=
-      Mux(taken && cntr =/= 3.U, cntr + 1.U,
-          Mux(!taken && cntr =/= 0.U, cntr - 1.U,
-              cntr))
+    next := Mux(cntr(1) ^ cntr(0), Fill(2, cntr(0)), cntr ^ 1.U)
     next
   }
 
