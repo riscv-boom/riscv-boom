@@ -348,10 +348,6 @@ object AgePriorityEncoder
 /**
   * Object to determine whether queue
   * index i0 is older than index i1.
-  *
-  * is i0 older than i1? (closest to zero). Provide the tail_ptr to the
-  *  queue. This is Cat(i1 <= tail, i1) because the rob_tail can point to a
-  * valid (partially dispatched) row.
  */
 object IsOlder
 {
@@ -359,21 +355,32 @@ object IsOlder
 }
 
 /**
-  * Object to determine whether queue
-  * index i0 is older than index i1.
+  * Set all bits below highest order '1'.
   *
-  * is i0 older than i1? (closest to zero). Provide the tail_ptr to the
-  *  queue. This is Cat(i1 <= tail, i1) because the rob_tail can point to a
-  * valid (partially dispatched) row.
  */
 object MaskLower
 {
   def apply(in: UInt) = (0 until in.getWidth).map(i => in >> i.U).reduce(_|_)
 }
 
+/**
+  * Set all bits above lowest order '1'.
+ */
 object MaskUpper
 {
   def apply(in: UInt) = (0 until in.getWidth).map(i => in << i.U).reduce(_|_)
+}
+
+/**
+  * N-wide one-hot priority encoder.
+ */
+object SelectFirstN
+{
+  def apply(in: UInt, n: Int) = {
+    val counts = in.asBools.scanLeft(1.U(n.W))((cnt, elt) => Mux(elt, cnt << 1, cnt))
+    val sels = (0 until n).map(j => VecInit((0 until in.getWidth).map(i => counts(i)(j) & in(i))).asUInt)
+    VecInit(sels)
+  }
 }
 
 /**

@@ -56,8 +56,6 @@ class RobIo(
                                        // and stalling on the rest of it (don't
                                        // advance the tail ptr)
 
-  val enq_new_packet    = Input(Bool()) // we're dispatching the first (and perhaps only) part of a dispatch packet.
-
   val rob_tail_idx = Output(UInt(robAddrSz.W))
   val rob_pnr_idx  = Output(UInt(robAddrSz.W))
   val rob_head_idx = Output(UInt(robAddrSz.W))
@@ -125,6 +123,7 @@ class CommitSignals(implicit p: Parameters) extends BoomBundle
 
   // Perform rollback of rename state (in conjuction with commit.uops).
   val rbk_valids = Vec(retireWidth, Bool())
+  val rollback   = Bool()
 
   // tell the LSU how many stores and loads are being committed
   val st_mask    = Vec(retireWidth, Bool())
@@ -402,9 +401,6 @@ class Rob(
     //-----------------------------------------------
     // Commit or Rollback
 
-    // Don't attempt to rollback the tail's row when the rob is full.
-    val rbk_row = rob_state === s_rollback && !full
-
     // Can this instruction commit? (the check for exceptions/rob_state happens later).
     can_commit(w) := rob_val(rob_head) && !(rob_bsy(rob_head)) && !io.csr_stall
 
@@ -416,14 +412,17 @@ class Rob(
 
     // use the same "com_uop" for both rollback AND commit
     // Perform Commit
-    io.commit.valids(w)     := will_commit(w)
-    io.commit.uops(w)       := rob_uop(com_idx)
+    io.commit.valids(w) := will_commit(w)
+    io.commit.uops(w)   := rob_uop(com_idx)
 
-    io.commit.rbk_valids(w) :=
-                            rbk_row &&
-                            rob_val(com_idx) &&
-                            (rob_uop(com_idx).dst_rtype === RT_FIX || rob_uop(com_idx).dst_rtype === RT_FLT) &&
-                            (!(enableCommitMapTable.B))
+    // Don't attempt to rollback the tail's row when the rob is full.
+    val rbk_row = rob_state === s_rollback && !full
+
+    io.commit.rbk_valids(w) := rbk_row && rob_val(com_idx) && !(enableCommitMapTable.B)
+    io.commit.rollback := (rob_state === s_rollback)
+
+    assert (!(io.commit.valids.reduce(_||_) && io.commit.rbk_valids.reduce(_||_)),
+      "com_valids and rbk_valids are mutually exclusive")
 
     when (rbk_row) {
       rob_val(com_idx)       := false.B
@@ -433,8 +432,8 @@ class Rob(
     if (enableCommitMapTable) {
       when (RegNext(exception_thrown)) {
         for (i <- 0 until numRobRows) {
-          rob_val(i)      := false.B
-          rob_bsy(i)      := false.B
+          rob_val(i) := false.B
+          rob_bsy(i) := false.B
           rob_uop(i).debug_inst := BUBBLE
         }
       }
@@ -535,7 +534,7 @@ class Rob(
   // Finally, don't throw an exception if there are instructions in front of
   // it that want to commit (only throw exception when head of the bundle).
 
-  var block_commit = (rob_state =/= s_normal) && (rob_state =/= s_wait_till_empty)
+  var block_commit = (rob_state =/= s_normal) && (rob_state =/= s_wait_till_empty) || RegNext(exception_thrown)
   var will_throw_exception = false.B
   var block_xcpt   = false.B
 
@@ -544,7 +543,7 @@ class Rob(
 
     will_commit(w)       := can_commit(w) && !can_throw_exception(w) && !block_commit
     block_commit         = (rob_head_vals(w) &&
-                           (!can_commit(w) || can_throw_exception(w))) | block_commit
+                           (!can_commit(w) || can_throw_exception(w))) || block_commit
     block_xcpt           = will_commit(w)
   }
 
@@ -816,7 +815,7 @@ class Rob(
         rob_state := s_normal
       }
       is (s_normal) {
-        when (exception_thrown) {
+        when (RegNext(exception_thrown)) {
           rob_state := s_rollback
         } .otherwise {
           for (w <- 0 until coreWidth) {
@@ -832,7 +831,7 @@ class Rob(
         }
       }
       is (s_wait_till_empty) {
-        when (exception_thrown) {
+        when (RegNext(exception_thrown)) {
           rob_state := s_rollback
         } .elsewhen (empty) {
           rob_state := s_normal
