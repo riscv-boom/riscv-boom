@@ -96,7 +96,8 @@ object GShareBrPredictor
  * @param historyLength length of GHR in bits
  */
 class GShareBrPredictor(
-   historyLength: Int = 12
+   historyLength: Int = 12,
+   bankBytes: Int
    )(implicit p: Parameters)
    extends BoomBrPredictor(historyLength)
    with HasGShareParameters
@@ -106,7 +107,7 @@ class GShareBrPredictor(
   private def Hash (addr: UInt, hist: UInt) = {
     // fold history if too big for our table
     val folded_history = Fold (hist, idxSz, historyLength)
-    ((addr >> (log2Ceil(fetchWidth*coreInstBytes).U)) ^ folded_history)(idxSz-1,0)
+    ((addr >> (log2Ceil(bankBytes).U)) ^ folded_history)(idxSz-1,0)
   }
 
   // for initializing the counter table, this is the value to reset the row to.
