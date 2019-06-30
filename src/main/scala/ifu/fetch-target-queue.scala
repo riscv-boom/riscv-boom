@@ -197,7 +197,7 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
     val prev_executed       = cfi_info(io.brinfo.ftq_idx).executed
     val prev_mispredicted   = cfi_info(io.brinfo.ftq_idx).mispredicted
     val prev_cfi_idx        = cfi_info(io.brinfo.ftq_idx).cfi_idx
-    val new_cfi_idx         = io.brinfo.getCfiIdx
+    val new_cfi_idx         = io.brinfo.cfi_idx
 
     when ((io.brinfo.mispredict && !prev_mispredicted) ||
           (io.brinfo.mispredict && (new_cfi_idx < prev_cfi_idx))) {
