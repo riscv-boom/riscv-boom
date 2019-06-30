@@ -443,7 +443,7 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
 
   // TODO this logic is broken and vestigial. Do update correctly (remove RegNext)
   val f3_btb_update_bits = Wire(new BoomBTBUpdate)
-  io.f3_btb_update.valid := RegNext(bchecker.io.btb_update.valid || f3_bpd_btb_update_valid)
+  io.f3_btb_update.valid := RegNext(bchecker.io.btb_update.valid || f3_bpd_btb_update_valid) && r_f4_valid
   io.f3_btb_update.bits := RegNext(f3_btb_update_bits)
   f3_btb_update_bits := bchecker.io.btb_update.bits
   when (f3_bpd_overrides_bcheck) {
