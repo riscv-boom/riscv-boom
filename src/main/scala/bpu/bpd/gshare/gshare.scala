@@ -149,21 +149,6 @@ class GShareBrPredictor(
     row
   }
 
-  // Update the counters in a row (only one if mispredicted or all counters to strenthen).
-  // Return the new row.
-  private def updateEntireCounterRow (old_row: UInt, was_mispredicted: Bool, cfi_idx: UInt, was_taken: Bool): UInt = {
-    val row = Wire(UInt(rowSz.W))
-
-    when (was_mispredicted) {
-      row := updateCounterInRow(old_row, cfi_idx, was_taken)
-    } .otherwise {
-      // strengthen hysteresis bits on correct
-      val h_mask = Fill(fetchWidth, 0x1.asUInt(width=2.W))
-      row := old_row | h_mask
-    }
-    row
-  }
-
   //------------------------------------------------------------
   // reset/initialization
 
@@ -220,11 +205,13 @@ class GShareBrPredictor(
   val com_info = (io.commit.bits.info).asTypeOf(new GShareResp(fetchWidth, idxSz))
   val com_idx = Hash(io.commit.bits.fetch_pc, io.commit.bits.history)(idxSz-1,0)
 
-  val wen = io.commit.valid || (fsm_state === s_clear)
+  // For now, only update the counter table upon a mispredict.
+  // This is because we are not tracking individual not-taken branches,
+  // and cannot accurately update an entire row at once.
+  val wen = io.commit.valid && io.commit.bits.mispredict || (fsm_state === s_clear)
   when (wen) {
-    val new_row = updateEntireCounterRow(
+    val new_row = updateCounterInRow(
       com_info.rowdata,
-      io.commit.bits.mispredict,
       io.commit.bits.miss_cfi_idx,
       io.commit.bits.taken)
 
