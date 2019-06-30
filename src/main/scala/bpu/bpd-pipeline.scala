@@ -137,16 +137,15 @@ class BranchPredictionStage(val bankBytes: Int)(implicit p: Parameters) extends 
   // TODO XXX  reenable RAS
 
   // update RAS based on BTB's prediction information (or the branch-check correction).
-  //val jmp_idx = f2_btb.bits.cfi_idx
+  //val jmp_idx = btb.io.resp.bits.cfi_idx
 
   btb.io.ras_update := io.f3_ras_update
-  btb.io.ras_update.valid := false.B // TODO XXX renable RAS (f2_btb.valid || io.f3_ras_update.valid) &&
-                                     // !io.fetch_stalled
-  //when (f2_btb.valid) {
-  //   btb.io.ras_update.bits.is_call      := BpredType.isCall(f2_btb.bits.bpd_type)
-  //   btb.io.ras_update.bits.is_ret       := BpredType.isReturn(f2_btb.bits.bpd_type)
-  //   btb.io.ras_update.bits.return_addr  := f2_aligned_pc + (jmp_idx << 2.U) + 4.U
-  //}
+  btb.io.ras_update.valid := btb.io.resp.valid && !io.f2_stall || io.f3_ras_update.valid && !io.f3_stall
+  when (btb.io.resp.valid) {
+     btb.io.ras_update.bits.is_call      := false.B //BpredType.isCall(btb.io.resp.bits.bpd_type)
+     btb.io.ras_update.bits.is_ret       := BpredType.isReturn(btb.io.resp.bits.bpd_type)
+     //btb.io.ras_update.bits.return_addr  := f2_aligned_pc + (jmp_idx << 2.U) + 4.U
+  }
 
   //************************************************
   // Update the BTB/BIM
