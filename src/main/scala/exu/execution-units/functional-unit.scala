@@ -563,6 +563,7 @@ class ALUUnit(isBranchUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)
       Mux(uop.is_call, BpredType.CALL,
       Mux(uop.is_jump, BpredType.JUMP,
                        BpredType.BRANCH)))
+    br_unit.btb_update.bits.is_rvc := uop.is_rvc
 
     // Branch/Jump Target Calculation
     // we can't push this through the ALU though, b/c jalr needs both PC+4 and rs1+offset
