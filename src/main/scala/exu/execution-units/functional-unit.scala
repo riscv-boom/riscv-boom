@@ -179,7 +179,7 @@ class BrResolutionInfo(implicit p: Parameters) extends BoomBundle
   val tag        = UInt(brTagSz.W)    // the branch tag that was resolved
   val exe_mask   = UInt(maxBrCount.W) // the br_mask of the actual branch uop
                                                // used to reset the dec_br_mask
-  val pc_lob     = UInt(log2Ceil(fetchWidth*coreInstBytes).W)
+  val cfi_idx    = UInt(log2Ceil(fetchWidth).W)
   val ftq_idx    = UInt(ftqSz.W)
   val rob_idx    = UInt(robAddrSz.W)
   val ldq_idx    = UInt(ldqAddrSz.W)  // track the "tail" of loads and stores, so we can
@@ -188,8 +188,6 @@ class BrResolutionInfo(implicit p: Parameters) extends BoomBundle
   val taken      = Bool()                     // which direction did the branch go?
   val is_jr      = Bool() // TODO remove use cfi_type instead
   val cfi_type   = CfiType()
-
-  def getCfiIdx = pc_lob >> log2Ceil(coreInstBytes)
 
   // for stats
   val btb_made_pred  = Bool()
@@ -524,7 +522,7 @@ class ALUUnit(isBranchUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)
     brinfo.exe_mask       := GetNewBrMask(io.brinfo, uop.br_mask)
     brinfo.tag            := uop.br_tag
     brinfo.ftq_idx        := uop.ftq_idx
-    brinfo.pc_lob         := uop.pc_lob
+    brinfo.cfi_idx        := uop.cfi_idx
     brinfo.rob_idx        := uop.rob_idx
     brinfo.ldq_idx        := uop.ldq_idx
     brinfo.stq_idx        := uop.stq_idx
@@ -553,8 +551,7 @@ class ALUUnit(isBranchUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)
     }
 
     br_unit.btb_update.bits.pc       := io.get_ftq_pc.fetch_pc// tell the BTB which pc to tag check against
-    br_unit.btb_update.bits.cfi_idx  := Mux(io.req.bits.uop.edge_inst, 0.U,
-                                           (uop_pc_ >> log2Ceil(coreInstBytes)))
+    br_unit.btb_update.bits.cfi_idx  := uop.cfi_idx
     br_unit.btb_update.bits.target   := (target.asSInt & (-coreInstBytes).S).asUInt
     br_unit.btb_update.bits.taken    := is_taken   // was this branch/jal/jalr "taken"
     br_unit.btb_update.bits.cfi_type :=
