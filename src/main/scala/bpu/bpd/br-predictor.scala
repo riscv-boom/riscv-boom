@@ -270,7 +270,7 @@ object BoomBrPredictor
    * @param boomParams general boom core parameters that determine the BPU type
    * @return a BoomBrPredictor instance determined by the input parameters
    */
-  def apply(boomParams: BoomCoreParams)(implicit p: Parameters): BoomBrPredictor = {
+  def apply(boomParams: BoomCoreParams, bankBytes: Int)(implicit p: Parameters): BoomBrPredictor = {
     val boomParams: BoomCoreParams = p(freechips.rocketchip.tile.TileKey).core.asInstanceOf[BoomCoreParams]
 
     val enableCondBrPredictor = boomParams.enableBranchPredictor
@@ -291,7 +291,8 @@ object BoomBrPredictor
         br_predictor = Module(new BaseOnlyBrPredictor())
       } else if (useGshare) {
         br_predictor = Module(new GShareBrPredictor(
-          historyLength = boomParams.gshare.get.historyLength))
+          historyLength = boomParams.gshare.get.historyLength,
+          bankBytes = bankBytes))
       } else if (useTage) {
         br_predictor = Module(new TageBrPredictor(
           numTables = boomParams.tage.get.numTables,
