@@ -66,9 +66,8 @@ class ExecutionUnits(val fpu: Boolean)(implicit val p: Parameters) extends HasBo
     exe_units.count(f)
   }
 
-  lazy val memory_unit = {
-    require (exe_units.count(_.hasMem) == 1) // only one mem_unit supported
-    exe_units.find(_.hasMem).get
+  lazy val memory_units = {
+    exe_units.filter(_.hasMem)
   }
 
   lazy val br_unit = {
@@ -110,18 +109,18 @@ class ExecutionUnits(val fpu: Boolean)(implicit val p: Parameters) extends HasBo
 
   if (!fpu) {
     val int_width = issueParams.find(_.iqType == IQT_INT.litValue).get.issueWidth
-
     if (!usingUnifiedMemIntIQs) {
-      val memExeUnit = Module(new ALUExeUnit(
-        hasAlu = false,
-        hasMem = true))
-
-        memExeUnit.io.ll_iresp.ready := DontCare
-
-        exe_units += memExeUnit
+      val mem_width = issueParams.find(_.iqType == IQT_MEM.litValue).get.issueWidth
+      for (w <- 0 until mem_width) {
+        val mem_exe_unit = Module(new ALUExeUnit(
+          hasAlu = false,
+          hasMem = true))
+        mem_exe_unit.io.ll_iresp.ready := DontCare
+        exe_units += mem_exe_unit
+      }
     }
 
-
+    require(!(usingUnifiedMemIntIQs && memWidth != 1))
     for (w <- 0 until int_width) {
       def is_nth(n: Int): Boolean = w == ((n) % int_width)
       val alu_exe_unit = Module(new ALUExeUnit(
@@ -131,7 +130,7 @@ class ExecutionUnits(val fpu: Boolean)(implicit val p: Parameters) extends HasBo
         hasMul         = is_nth(2),
         hasDiv         = is_nth(3),
         hasIfpu        = is_nth(4) && usingFPU,
-        hasMem         = usingUnifiedMemIntIQs))
+        hasMem         = usingUnifiedMemIntIQs && is_nth(0)))
       exe_units += alu_exe_unit
     }
   } else {

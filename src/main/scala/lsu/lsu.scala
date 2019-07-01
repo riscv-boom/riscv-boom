@@ -105,7 +105,7 @@ class LSUDMemIO(implicit p: Parameters) extends BoomBundle()(p)
 
 class LSUCoreIO(implicit p: Parameters) extends BoomBundle()(p)
 {
-  val exe = new LSUExeIO
+  val exe = Vec(memWidth, new LSUExeIO)
 
   val dec_uops    = Flipped(Vec(coreWidth, Valid(new MicroOp)))
   val dec_ldq_idx = Output(Vec(coreWidth, UInt(LDQ_ADDR_SZ.W)))
@@ -329,7 +329,7 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
   // First we determine what operations are waiting to execute.
   // These are the "can_fire" signals
 
-  val exe_req = io.core.exe.req
+  val exe_req = io.core.exe(0).req
 
   // Can we fire an incoming load
   val ldq_incoming_idx = exe_req.bits.uop.ldq_idx
@@ -910,12 +910,12 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
 
     val dword_addr_matches = lcam_addr(corePAddrBits-1,3) === l_addr(corePAddrBits-1,3)
     val mask_match = (l_mask & lcam_mask) === l_mask
-    val l_is_succeeding = ((io.core.exe.iresp.valid &&
-                            io.core.exe.iresp.bits.uop.uses_ldq &&
-                            io.core.exe.iresp.bits.uop.ldq_idx === i.U) ||
-                           (io.core.exe.fresp.valid &&
-                            io.core.exe.fresp.bits.uop.uses_ldq &&
-                            io.core.exe.fresp.bits.uop.ldq_idx === i.U))
+    val l_is_succeeding = ((io.core.exe(0).iresp.valid &&
+                            io.core.exe(0).iresp.bits.uop.uses_ldq &&
+                            io.core.exe(0).iresp.bits.uop.ldq_idx === i.U) ||
+                           (io.core.exe(0).fresp.valid &&
+                            io.core.exe(0).fresp.bits.uop.uses_ldq &&
+                            io.core.exe(0).fresp.bits.uop.ldq_idx === i.U))
 
     // Searcher is a store
     when (do_st_search                                                                         &&
@@ -1079,8 +1079,8 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
   // Handle Memory Responses and nacks
   //----------------------------------
 
-  io.core.exe.iresp.valid := false.B
-  io.core.exe.fresp.valid := false.B
+  io.core.exe(0).iresp.valid := false.B
+  io.core.exe(0).fresp.valid := false.B
 
   val dmem_resp_fired = WireInit(false.B)
   // Handle nacks
@@ -1115,17 +1115,17 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
       val send_iresp = ldq(ldq_idx).bits.uop.dst_rtype === RT_FIX
       val send_fresp = ldq(ldq_idx).bits.uop.dst_rtype === RT_FLT
 
-      io.core.exe.iresp.bits.uop := ldq(ldq_idx).bits.uop
-      io.core.exe.fresp.bits.uop := ldq(ldq_idx).bits.uop
-      io.core.exe.iresp.valid     := send_iresp && !ldq(ldq_idx).bits.execute_ignore
-      io.core.exe.iresp.bits.data := io.dmem.resp.bits.data
-      io.core.exe.fresp.valid     := send_fresp && !ldq(ldq_idx).bits.execute_ignore
-      io.core.exe.fresp.bits.data := io.dmem.resp.bits.data
+      io.core.exe(0).iresp.bits.uop := ldq(ldq_idx).bits.uop
+      io.core.exe(0).fresp.bits.uop := ldq(ldq_idx).bits.uop
+      io.core.exe(0).iresp.valid     := send_iresp && !ldq(ldq_idx).bits.execute_ignore
+      io.core.exe(0).iresp.bits.data := io.dmem.resp.bits.data
+      io.core.exe(0).fresp.valid     := send_fresp && !ldq(ldq_idx).bits.execute_ignore
+      io.core.exe(0).fresp.bits.data := io.dmem.resp.bits.data
 
       assert(send_iresp ^ send_fresp)
       dmem_resp_fired := true.B
 
-      ldq(ldq_idx).bits.succeeded      := io.core.exe.iresp.valid || io.core.exe.fresp.valid
+      ldq(ldq_idx).bits.succeeded      := io.core.exe(0).iresp.valid || io.core.exe(0).fresp.valid
       ldq(ldq_idx).bits.execute_ignore := false.B
       when (ldq(ldq_idx).bits.execute_ignore) {
         // We were told to ignore this response because of order fail
@@ -1139,9 +1139,9 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
       stq(io.dmem.resp.bits.uop.stq_idx).bits.succeeded := true.B
       when (io.dmem.resp.bits.uop.is_amo) {
         dmem_resp_fired := true.B
-        io.core.exe.iresp.valid     := true.B
-        io.core.exe.iresp.bits.uop  := stq(io.dmem.resp.bits.uop.stq_idx).bits.uop
-        io.core.exe.iresp.bits.data := io.dmem.resp.bits.data
+        io.core.exe(0).iresp.valid     := true.B
+        io.core.exe(0).iresp.bits.uop  := stq(io.dmem.resp.bits.uop.stq_idx).bits.uop
+        io.core.exe(0).iresp.bits.data := io.dmem.resp.bits.data
       }
     }
   }
@@ -1165,12 +1165,12 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
                                 wb_forward_ld_addr,
                                 storegen.data, false.B, coreDataBytes)
 
-    io.core.exe.iresp.valid := (forward_uop.dst_rtype === RT_FIX) && data_ready && live
-    io.core.exe.fresp.valid := (forward_uop.dst_rtype === RT_FLT) && data_ready && live
-    io.core.exe.iresp.bits.uop  := forward_uop
-    io.core.exe.fresp.bits.uop  := forward_uop
-    io.core.exe.iresp.bits.data := loadgen.data
-    io.core.exe.fresp.bits.data := loadgen.data
+    io.core.exe(0).iresp.valid := (forward_uop.dst_rtype === RT_FIX) && data_ready && live
+    io.core.exe(0).fresp.valid := (forward_uop.dst_rtype === RT_FLT) && data_ready && live
+    io.core.exe(0).iresp.bits.uop  := forward_uop
+    io.core.exe(0).fresp.bits.uop  := forward_uop
+    io.core.exe(0).iresp.bits.data := loadgen.data
+    io.core.exe(0).fresp.bits.data := loadgen.data
 
     when (data_ready && live) {
       ldq(f_idx).bits.succeeded := data_ready
@@ -1182,7 +1182,7 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
 
   // Initially assume the speculative load wakeup failed
   io.core.ld_miss         := RegNext(io.core.spec_ld_wakeup.valid)
-  when (io.core.exe.iresp.valid && io.core.exe.iresp.bits.uop.ldq_idx === RegNext(mem_incoming_uop.ldq_idx)) {
+  when (io.core.exe(0).iresp.valid && io.core.exe(0).iresp.bits.uop.ldq_idx === RegNext(mem_incoming_uop.ldq_idx)) {
     // We correcty speculated last cycle, so we don't send miss signal
     io.core.ld_miss := false.B
   }
