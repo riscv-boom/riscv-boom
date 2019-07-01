@@ -133,7 +133,8 @@ class BoomBTBResp(implicit p: Parameters) extends BoomBTBBundle
 
   val bim_resp  = Valid(new BimResp) // Output from the bimodal table. Valid if prediction provided.
 
-  val is_rvc = Bool()
+  val is_rvc    = Bool()
+  val is_edge   = Bool()
 }
 
 /**
@@ -143,17 +144,20 @@ class BoomBTBResp(implicit p: Parameters) extends BoomBTBBundle
 class BoomBTBUpdate(implicit p: Parameters) extends BoomBTBBundle
 {
   // what future fetch PCs will tag match against.
-  val pc = UInt(vaddrBits.W)
-  val target = UInt(vaddrBits.W)
-  val taken = Bool()
+  val pc       = UInt(vaddrBits.W)
+  val target   = UInt(vaddrBits.W)
+  val taken    = Bool()
 
   // the offset of the PC of the branch
-  val cfi_idx = UInt(log2Ceil(fetchWidth).W)
+  val cfi_idx  = UInt(log2Ceil(fetchWidth).W)
 
   // other branch information
   val bpd_type = BpredType()
   val cfi_type = CfiType()
-  val is_rvc = Bool()
+
+
+  val is_rvc   = Bool()
+  val is_edge  = Bool()
 }
 
 /**

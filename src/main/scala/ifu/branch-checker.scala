@@ -52,6 +52,8 @@ class BranchChecker(implicit p: Parameters) extends BoomModule
     val br_targs      = Input(Vec(fetchWidth, UInt(vaddrBitsExtended.W)))
     val jal_targs     = Input(Vec(fetchWidth, UInt(vaddrBitsExtended.W)))
 
+    val edge_inst     = Input(Bool())
+
     val fetch_pc      = Input(UInt(vaddrBitsExtended.W))
     val aligned_pc    = Input(UInt(vaddrBitsExtended.W))
 
@@ -126,7 +128,7 @@ class BranchChecker(implicit p: Parameters) extends BoomModule
 
   // update the BTB for jumps it missed.
   // TODO XXX also allow us to clear bad BTB entries when btb is wrong.
-  io.btb_update.valid := jal_wins
+  io.btb_update.valid         := jal_wins
   io.btb_update.bits.pc       := io.fetch_pc
   io.btb_update.bits.target   := io.jal_targs(jal_idx)
   io.btb_update.bits.taken    := true.B
@@ -134,6 +136,7 @@ class BranchChecker(implicit p: Parameters) extends BoomModule
   io.btb_update.bits.bpd_type := Mux(io.is_call(jal_idx), BpredType.CALL, BpredType.JUMP)
   io.btb_update.bits.cfi_type := CfiType.jal
   io.btb_update.bits.is_rvc   := io.is_rvc(jal_idx)
+  io.btb_update.bits.is_edge  := io.edge_inst && (jal_idx === 0.U)
 
   // for critical path reasons, remove dependence on bpu_request to ras_update.
   val jal_may_win = io.is_jal.reduce(_|_) && (!btb_hit || btb_was_wrong || jal_idx < btb_idx)
