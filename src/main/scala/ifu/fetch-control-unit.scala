@@ -421,6 +421,7 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
   bchecker.io.is_call  := is_call
   bchecker.io.is_ret   := is_ret
   bchecker.io.is_rvc   := is_rvc
+  bchecker.io.edge_inst := f3_fetch_bundle.edge_inst
   bchecker.io.br_targs := br_targs
   bchecker.io.jal_targs := jal_targs
   bchecker.io.fetch_pc := f3_imemresp.pc
