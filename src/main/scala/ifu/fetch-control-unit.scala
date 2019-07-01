@@ -459,6 +459,8 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
     f3_btb_update_bits.cfi_idx  := f3_bpd_br_idx
     f3_btb_update_bits.bpd_type := BpredType.BRANCH
     f3_btb_update_bits.cfi_type := CfiType.branch
+    f3_btb_update_bits.is_rvc   := is_rvc(f3_bpd_br_idx)
+    f3_btb_update_bits.is_edge  := f3_fetch_bundle.edge_inst && (f3_bpd_br_idx === 0.U)
   }
 
   io.f3_ras_update := bchecker.io.ras_update
