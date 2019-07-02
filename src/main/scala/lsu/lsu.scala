@@ -68,9 +68,9 @@ class LoadStoreUnitIO(val pl_width: Int)(implicit p: Parameters) extends BoomBun
    // Decode Stage
    // Track which stores are "alive" in the pipeline
    // allows us to know which stores get killed by branch mispeculation
-   val dec_st_vals        = Input(Vec(pl_width,  Bool()))
-   val dec_ld_vals        = Input(Vec(pl_width,  Bool()))
-   val dec_uops           = Input(Vec(pl_width, new MicroOp()))
+   val dis_st_vals        = Input(Vec(pl_width,  Bool()))
+   val dis_ld_vals        = Input(Vec(pl_width,  Bool()))
+   val dis_uops           = Input(Vec(pl_width, new MicroOp()))
 
    val new_ldq_idx        = Output(Vec(pl_width, UInt(ldqAddrSz.W)))
    val new_stq_idx        = Output(Vec(pl_width, UInt(stqAddrSz.W)))
@@ -282,9 +282,9 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
       io.laq_full(w) := laq_full
       io.new_ldq_idx(w) := ld_enq_idx
 
-      when (io.dec_ld_vals(w))
+      when (io.dis_ld_vals(w))
       {
-         laq_uop(ld_enq_idx)          := io.dec_uops(w)
+         laq_uop(ld_enq_idx)          := io.dis_uops(w)
          laq_st_dep_mask(ld_enq_idx)  := next_live_store_mask
 
          laq_allocated(ld_enq_idx)    := true.B
@@ -295,18 +295,18 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
          laq_forwarded_std_val(ld_enq_idx)  := false.B
          debug_laq_put_to_sleep(ld_enq_idx) := false.B
 
-         assert (ld_enq_idx === io.dec_uops(w).ldq_idx, "[lsu] mismatch enq load tag.")
+         assert (ld_enq_idx === io.dis_uops(w).ldq_idx, "[lsu] mismatch enq load tag.")
       }
-      ld_enq_idx = Mux(io.dec_ld_vals(w), WrapInc(ld_enq_idx, NUM_LDQ_ENTRIES),
+      ld_enq_idx = Mux(io.dis_ld_vals(w), WrapInc(ld_enq_idx, NUM_LDQ_ENTRIES),
                                           ld_enq_idx)
 
       stq_full = st_enq_idx === stq_head && stq_nonempty
       io.stq_full(w) := stq_full
       io.new_stq_idx(w) := st_enq_idx
 
-      when (io.dec_st_vals(w))
+      when (io.dis_st_vals(w))
       {
-         stq_uop(st_enq_idx)       := io.dec_uops(w)
+         stq_uop(st_enq_idx)       := io.dis_uops(w)
 
          stq_allocated(st_enq_idx) := true.B
          saq_val      (st_enq_idx) := false.B
@@ -315,11 +315,11 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
          stq_succeeded(st_enq_idx) := false.B
          stq_committed(st_enq_idx) := false.B
 
-         assert (st_enq_idx === io.dec_uops(w).stq_idx, "[lsu] mismatch enq store tag.")
+         assert (st_enq_idx === io.dis_uops(w).stq_idx, "[lsu] mismatch enq store tag.")
       }
-      next_live_store_mask = Mux(io.dec_st_vals(w), next_live_store_mask | (1.U << st_enq_idx),
+      next_live_store_mask = Mux(io.dis_st_vals(w), next_live_store_mask | (1.U << st_enq_idx),
                                                     next_live_store_mask)
-      st_enq_idx = Mux(io.dec_st_vals(w), WrapInc(st_enq_idx, NUM_STQ_ENTRIES),
+      st_enq_idx = Mux(io.dis_st_vals(w), WrapInc(st_enq_idx, NUM_STQ_ENTRIES),
                                           st_enq_idx)
    }
 
