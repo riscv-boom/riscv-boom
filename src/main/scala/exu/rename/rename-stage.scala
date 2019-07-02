@@ -69,7 +69,7 @@ class RenameStageIO(
   val rbk_valids = Input(Vec(plWidth, Bool()))
   val rollback = Input(Bool())
 
-  val flush_pipeline = Input(Bool()) // only used for SCR (single-cycle reset)
+  val flush = Input(Bool())
 
   val debug_rob_empty = Input(Bool())
   val debug = Output(new DebugRenameStageIO)
@@ -169,6 +169,9 @@ class RenameStage(
   val int_rbk_valids      = Wire(Vec(plWidth, Bool()))
   val fp_rbk_valids       = Wire(Vec(plWidth, Bool()))
 
+  val int_ren2_rbk_valids = Wire(Vec(plWidth, Bool()))
+  val fp_ren2_rbk_valids  = Wire(Vec(plWidth, Bool()))
+
   // TODO: Simplify this by splitting off FP rename from INT rename.
   // Ideally, this will take the form of a decoupled FPU which lives behind a queue.
   for (w <- 0 until plWidth) {
@@ -183,11 +186,14 @@ class RenameStage(
     ren2_int_alloc_reqs(w) := ren2_uops(w).ldst_val && ren2_uops(w).dst_rtype === RT_FIX && ren2_fire(w)
     ren2_fp_alloc_reqs(w)  := ren2_uops(w).ldst_val && ren2_uops(w).dst_rtype === RT_FLT && ren2_fire(w)
 
-    int_com_valids(w)      := io.com_valids(w) && io.com_uops(w).dst_rtype === RT_FIX && io.com_uops(w).ldst =/= 0.U
-    fp_com_valids(w)       := io.com_valids(w) && io.com_uops(w).dst_rtype === RT_FLT
+    int_com_valids(w)      := io.com_uops(w).ldst_val && io.com_uops(w).dst_rtype === RT_FIX && io.com_valids(w)
+    fp_com_valids(w)       := io.com_uops(w).ldst_val && io.com_uops(w).dst_rtype === RT_FLT && io.com_valids(w)
 
-    int_rbk_valids(w)      := io.rbk_valids(w) && io.com_uops(w).dst_rtype === RT_FIX && io.com_uops(w).ldst =/= 0.U
-    fp_rbk_valids(w)       := io.rbk_valids(w) && io.com_uops(w).dst_rtype === RT_FLT
+    int_rbk_valids(w)      := io.com_uops(w).ldst_val && io.com_uops(w).dst_rtype === RT_FIX && io.rbk_valids(w)
+    fp_rbk_valids(w)       := io.com_uops(w).ldst_val && io.com_uops(w).dst_rtype === RT_FLT && io.rbk_valids(w)
+
+    int_ren2_rbk_valids(w) := ren2_uops(w).ldst_val && ren2_uops(w).dst_rtype === RT_FIX && io.flush && ren2_valids(w)
+    fp_ren2_rbk_valids(w)  := ren2_uops(w).ldst_val && ren2_uops(w).dst_rtype === RT_FLT && io.flush && ren2_valids(w)
   }
 
   var ren1_alloc_reqs = Seq(ren1_int_alloc_reqs)
@@ -197,6 +203,8 @@ class RenameStage(
   if (usingFPU) com_valids ++= Seq(fp_com_valids)
   var rbk_valids = Seq(int_rbk_valids)
   if (usingFPU) rbk_valids ++= Seq(fp_rbk_valids)
+  var ren2_rbk_valids = Seq(int_ren2_rbk_valids)
+  if (usingFPU) ren2_rbk_valids ++= Seq(fp_ren2_rbk_valids)
 
   //-------------------------------------------------------------
   // Free List
@@ -209,10 +217,10 @@ class RenameStage(
     list.io.reqs := ren1_alloc_reqs(i)
     list.io.brinfo := io.brinfo
     list.io.ren_br_tags := ren1_br_tags
-    list.io.rob_uops := io.com_uops
+    list.io.rob_uops := Mux(io.flush, ren2_uops, io.com_uops)
     list.io.com_valids := com_valids(i)
-    list.io.rbk_valids := rbk_valids(i)
-    list.io.rollback := io.rollback
+    list.io.rbk_valids := rbk_valids(i) zip ren2_rbk_valids(i) map {case (r1,r2) => r1 || r2}
+    list.io.rollback := io.flush || io.rollback
     list.io.debug.rob_empty := io.debug_rob_empty
   }
 
@@ -237,23 +245,24 @@ class RenameStage(
     val remap_reqs = Wire(Vec(plWidth, new RemapReq(lregSz, pregSz)))
 
     // Generate maptable requests.
-    for (((ren,com),w) <- ren1_uops zip io.com_uops.reverse zipWithIndex) {
-      map_reqs(w).lrs1 := ren.lrs1
-      map_reqs(w).lrs2 := ren.lrs2
-      map_reqs(w).lrs3 := ren.lrs3
-      map_reqs(w).ldst := ren.ldst
+    for ((((ren1,ren2),com),w) <- ren1_uops zip ren2_uops.reverse zip io.com_uops.reverse zipWithIndex) {
+      map_reqs(w).lrs1 := ren1.lrs1
+      map_reqs(w).lrs2 := ren1.lrs2
+      map_reqs(w).lrs3 := ren1.lrs3
+      map_reqs(w).ldst := ren1.ldst
 
-      remap_reqs(w).ldst := Mux(io.rollback, com.ldst,       ren.ldst)
-      remap_reqs(w).pdst := Mux(io.rollback, com.stale_pdst, ren.pdst)
+      remap_reqs(w).ldst := Mux(io.rollback, com.ldst,       Mux(io.flush, ren2.ldst,       ren1.ldst))
+      remap_reqs(w).pdst := Mux(io.rollback, com.stale_pdst, Mux(io.flush, ren2.stale_pdst, ren1.pdst))
     }
-    ren1_alloc_reqs(i) zip rbk_valids(i).reverse zip remap_reqs map {case ((a,r),rr) => rr.valid := a || r}
+    ren1_alloc_reqs(i) zip rbk_valids(i).reverse zip ren2_rbk_valids(i).reverse zip remap_reqs map {
+      case (((a,r1),r2),rr) => rr.valid := a || r1 || r2}
 
     // Hook up inputs.
     table.io.map_reqs    := map_reqs
     table.io.remap_reqs  := remap_reqs
     table.io.ren_br_tags := ren1_br_tags
     table.io.brinfo      := io.brinfo
-    table.io.rollback    := io.rollback
+    table.io.rollback    := io.flush || io.rollback
   }
 
   // Maptable outputs.
