@@ -49,10 +49,6 @@ class RenameStageIO(
   val dec_fire  = Input(Vec(plWidth, Bool())) // will commit state updates
   val dec_uops  = Input(Vec(plWidth, new MicroOp()))
 
-  // physical specifiers now available (but not the busy/ready status of the operands).
-  val ren1_mask = Vec(plWidth, Output(Bool()))
-  val ren1_uops = Vec(plWidth, Output(new MicroOp()))
-
   // physical specifiers available AND busy/ready status available.
   val ren2_mask = Vec(plWidth, Output(Bool())) // mask of valid instructions
   val ren2_uops = Vec(plWidth, Output(new MicroOp()))
@@ -351,9 +347,6 @@ class RenameStage(
 
   //-------------------------------------------------------------
   // Outputs
-
-  io.ren1_mask := ren1_fire
-  io.ren1_uops := ren1_uops
 
   io.ren2_mask := ren2_valids
   io.ren2_uops := ren2_uops map {u => GetNewUopAndBrMask(u, io.brinfo)}
