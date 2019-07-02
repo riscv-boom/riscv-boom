@@ -19,12 +19,27 @@ import boom.common._
 import boom.util._
 import freechips.rocketchip.config.Parameters
 
+class MapReq(val lregSz: Int) extends Bundle
+{
+  val lrs1 = UInt(lregSz.W)
+  val lrs2 = UInt(lregSz.W)
+  val lrs3 = UInt(lregSz.W)
+  val ldst = UInt(lregSz.W)
+}
+
 class MapResp(val pregSz: Int) extends Bundle
 {
   val prs1 = UInt(pregSz.W)
   val prs2 = UInt(pregSz.W)
   val prs3 = UInt(pregSz.W)
   val stale_pdst = UInt(pregSz.W)
+}
+
+class RemapReq(val lregSz: Int, val pregSz: Int) extends Bundle
+{
+  val ldst = UInt(lregSz.W)
+  val pdst = UInt(pregSz.W)
+  val valid = Bool()
 }
 
 class RenameMapTable(
@@ -34,6 +49,7 @@ class RenameMapTable(
   val float: Boolean)
   (implicit p: Parameters) extends BoomModule
 {
+  val lregSz = log2Ceil(numLregs)
   val pregSz = log2Ceil(numPregs)
 
   val io = IO(new BoomBundle()(p) {
