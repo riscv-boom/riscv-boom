@@ -149,24 +149,32 @@ class RenameStage(
   //-------------------------------------------------------------
   // Pipeline State & Wires
 
-  val ren1_br_tags = Wire(Vec(plWidth, Valid(UInt(brTagSz.W))))
-  val ren1_fire    = Wire(Vec(plWidth, Bool()))
-  val ren1_uops    = Wire(Vec(plWidth, new MicroOp()))
+  // Stage 1
+  val ren1_br_tags        = Wire(Vec(plWidth, Valid(UInt(brTagSz.W))))
+  val ren1_fire           = Wire(Vec(plWidth, Bool()))
+  val ren1_uops           = Wire(Vec(plWidth, new MicroOp))
 
   val ren1_int_alloc_reqs = Wire(Vec(plWidth, Bool()))
   val ren1_fp_alloc_reqs  = Wire(Vec(plWidth, Bool()))
 
-  val rob_int_ldst_vals   = Wire(Vec(plWidth, Bool()))
-  val rob_fp_ldst_vals    = Wire(Vec(plWidth, Bool()))
-
+  // Stage 2
   val ren2_int_alloc_reqs = Wire(Vec(plWidth, Bool()))
   val ren2_fp_alloc_reqs  = Wire(Vec(plWidth, Bool()))
 
-  val ren2_valids = Wire(Vec(plWidth, Bool()))
-  val ren2_uops   = Wire(Vec(plWidth, new MicroOp()))
-  val ren2_fire   = io.dis_fire
-  val ren2_ready  = io.dis_ready
+  val ren2_valids         = Wire(Vec(plWidth, Bool()))
+  val ren2_uops           = Wire(Vec(plWidth, new MicroOp))
+  val ren2_fire           = io.dis_fire
+  val ren2_ready          = io.dis_ready
 
+  // Commit/Rollback
+  val int_com_valids      = Wire(Vec(plWidth, Bool()))
+  val fp_com_valids       = Wire(Vec(plWidth, Bool()))
+
+  val int_rbk_valids      = Wire(Vec(plWidth, Bool()))
+  val fp_rbk_valids       = Wire(Vec(plWidth, Bool()))
+
+  // TODO: Simplify this by splitting off FP rename from INT rename.
+  // Ideally, this will take the form of a decoupled FPU which lives behind a queue.
   for (w <- 0 until plWidth) {
     ren1_fire(w)           := io.dec_fire(w)
     ren1_uops(w)           := io.dec_uops(w)
@@ -179,32 +187,40 @@ class RenameStage(
     ren2_int_alloc_reqs(w) := ren2_uops(w).ldst_val && ren2_uops(w).dst_rtype === RT_FIX && ren2_fire(w)
     ren2_fp_alloc_reqs(w)  := ren2_uops(w).ldst_val && ren2_uops(w).dst_rtype === RT_FLT && ren2_fire(w)
 
-    rob_int_ldst_vals(w)   := io.com_uops(w).ldst_val && io.com_uops(w).dst_rtype === RT_FIX
-    rob_fp_ldst_vals(w)    := io.com_uops(w).ldst_val && io.com_uops(w).dst_rtype === RT_FLT
+    int_com_valids(w)      := io.com_valids(w) && io.com_uops(w).dst_rtype === RT_FIX && io.com_uops(w).ldst =/= 0.U
+    fp_com_valids(w)       := io.com_valids(w) && io.com_uops(w).dst_rtype === RT_FLT
+
+    int_rbk_valids(w)      := io.rbk_valids(w) && io.com_uops(w).dst_rtype === RT_FIX && io.com_uops(w).ldst =/= 0.U
+    fp_rbk_valids(w)       := io.rbk_valids(w) && io.com_uops(w).dst_rtype === RT_FLT
   }
 
   var ren1_alloc_reqs = Seq(ren1_int_alloc_reqs)
   if (usingFPU) ren1_alloc_reqs ++= Seq(ren1_fp_alloc_reqs)
 
-  var rob_ldst_vals = Seq(rob_int_ldst_vals)
-  if (usingFPU) rob_ldst_vals ++= Seq(rob_fp_ldst_vals)
+  var com_valids = Seq(int_com_valids)
+  if (usingFPU) com_valids ++= Seq(fp_com_valids)
+  var rbk_valids = Seq(int_rbk_valids)
+  if (usingFPU) rbk_valids ++= Seq(fp_rbk_valids)
 
   //-------------------------------------------------------------
   // Free List
 
   var freelists = Seq(ifreelist)
   if (usingFPU) freelists ++= Seq(ffreelist)
+
+  // Freelist inputs.
   for ((list, i) <- freelists.zipWithIndex) {
     list.io.reqs := ren1_alloc_reqs(i)
     list.io.brinfo := io.brinfo
     list.io.ren_br_tags := ren1_br_tags
     list.io.rob_uops := io.com_uops
-    list.io.com_valids := io.com_valids zip rob_ldst_vals(i) map {case (v,l) => v && l}
-    list.io.rbk_valids := io.rbk_valids zip rob_ldst_vals(i) map {case (r,l) => r && l}
+    list.io.com_valids := com_valids(i)
+    list.io.rbk_valids := rbk_valids(i)
     list.io.rollback := io.rollback
     list.io.debug.rob_empty := io.debug_rob_empty
   }
 
+  // Freelist outputs.
   for ((uop, w) <- ren1_uops.zipWithIndex) {
     val i_preg = ifreelist.io.alloc_pregs(w)
     val f_preg = if (usingFPU) ffreelist.io.alloc_pregs(w) else 0.U
@@ -217,16 +233,34 @@ class RenameStage(
 
   var maptables = Seq(imaptable)
   if (usingFPU) maptables ++= Seq(fmaptable)
+
+  // Maptable inputs.
   for ((table, i) <- maptables.zipWithIndex) {
-    table.io.brinfo := io.brinfo
-    table.io.ren_uops := ren1_uops // expects pdst to be set up
-    table.io.ren_remap_reqs := ren1_alloc_reqs(i)
+    val pregSz = log2Ceil(if (i == 0) numIntPhysRegs else numFpPhysRegs)
+    val map_reqs   = Wire(Vec(plWidth, new MapReq(lregSz)))
+    val remap_reqs = Wire(Vec(plWidth, new RemapReq(lregSz, pregSz)))
+
+    // Generate maptable requests.
+    for (((ren,com),w) <- ren1_uops zip io.com_uops.reverse zipWithIndex) {
+      map_reqs(w).lrs1 := ren.lrs1
+      map_reqs(w).lrs2 := ren.lrs2
+      map_reqs(w).lrs3 := ren.lrs3
+      map_reqs(w).ldst := ren.ldst
+
+      remap_reqs(w).ldst := Mux(io.rollback, com.ldst,       ren.ldst)
+      remap_reqs(w).pdst := Mux(io.rollback, com.stale_pdst, ren.pdst)
+    }
+    ren1_alloc_reqs(i) zip rbk_valids(i).reverse zip remap_reqs map {case ((a,r),rr) => rr.valid := a || r}
+
+    // Hook up inputs.
+    table.io.map_reqs    := map_reqs
+    table.io.remap_reqs  := remap_reqs
     table.io.ren_br_tags := ren1_br_tags
-    table.io.rbk_uops := io.com_uops
-    table.io.rbk_valids := io.rbk_valids zip rob_ldst_vals(i) map {case (r,l) => r && l}
-    table.io.rollback := io.rollback
+    table.io.brinfo      := io.brinfo
+    table.io.rollback    := io.rollback
   }
 
+  // Maptable outputs.
   for ((uop, w) <- ren1_uops.zipWithIndex) {
     val imap = imaptable.io.map_resps(w)
     val fmap = if (usingFPU) fmaptable.io.map_resps(w) else Wire(new MapResp(fpregSz))
