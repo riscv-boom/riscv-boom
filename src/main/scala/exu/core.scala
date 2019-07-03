@@ -402,6 +402,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
   val dec_hazards = (0 until coreWidth).map(w =>
                       dec_valids(w) &&
                       (  !dis_ready
+                      || rob.io.commit.rollback
                       || branch_mask_full(w)
                       || !rename_stage.io.inst_can_proceed(w)
                       || flush_ifu))
@@ -444,7 +445,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
   rename_stage.io.kill := flush_ifu
   rename_stage.io.brinfo := br_unit.brinfo
 
-  rename_stage.io.flush_pipeline := rob.io.flush.valid
+  rename_stage.io.flush := rob.io.flush.valid
   rename_stage.io.debug_rob_empty := rob.io.empty
 
   rename_stage.io.dec_fire := dec_fire
