@@ -48,7 +48,7 @@ class RenameFreeList(
     val brinfo = Input(new BrResolutionInfo)
 
     val debug = new Bundle {
-      val rob_empty = Input(Bool())
+      val pipeline_empty = Input(Bool())
       val freelist = Output(Bits(numPregs.W))
       val isprlist = Output(Bits(numPregs.W))
     }
@@ -95,6 +95,6 @@ class RenameFreeList(
   assert (!(free_list & ret_mask).orR, "[freelist] Returning a free physical register.")
 
   val numLregs = if(float) 32 else 31
-  assert (!io.debug.rob_empty || PopCount(free_list) >= (numPregs - numLregs - 1).U,
+  assert (!io.debug.pipeline_empty || PopCount(free_list) >= (numPregs - numLregs - 1).U,
     "[freelist] Leaking physical registers.")
 }

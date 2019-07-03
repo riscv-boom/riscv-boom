@@ -221,7 +221,7 @@ class RenameStage(
     list.io.com_valids := com_valids(i)
     list.io.rbk_valids := rbk_valids(i) zip ren2_rbk_valids(i) map {case (r1,r2) => r1 || r2}
     list.io.rollback := io.flush || io.rollback
-    list.io.debug.rob_empty := io.debug_rob_empty
+    list.io.debug.pipeline_empty := io.debug_rob_empty && !ren2_valids.reduce(_||_)
   }
 
   // Freelist outputs.
