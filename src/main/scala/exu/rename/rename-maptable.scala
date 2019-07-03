@@ -53,18 +53,18 @@ class RenameMapTable(
 
   val io = IO(new BoomBundle()(p) {
     // Logical sources -> physical sources.
-    val map_reqs = Input(Vec(plWidth, new MapReq(lregSz)))
-    val map_resps = Output(Vec(plWidth, new MapResp(pregSz)))
+    val map_reqs    = Input(Vec(plWidth, new MapReq(lregSz)))
+    val map_resps   = Output(Vec(plWidth, new MapResp(pregSz)))
 
     // Remapping an ldst to a newly allocated pdst?
-    val remap_reqs = Input(Vec(plWidth, new RemapReq(lregSz, pregSz)))
+    val remap_reqs  = Input(Vec(plWidth, new RemapReq(lregSz, pregSz)))
 
     // Dispatching branches: need to take snapshots of table state.
     val ren_br_tags = Input(Vec(plWidth, Valid(UInt(brTagSz.W))))
 
     // Signals for restoring state following misspeculation.
-    val brinfo = Input(new BrResolutionInfo)
-    val rollback = Input(Bool())
+    val brinfo      = Input(new BrResolutionInfo)
+    val rollback    = Input(Bool())
   })
 
   // The map table register array and its branch snapshots.
