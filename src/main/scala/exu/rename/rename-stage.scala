@@ -215,19 +215,19 @@ class RenameStage(
   // Freelist inputs.
   for ((list, i) <- freelists.zipWithIndex) {
     list.io.reqs := ren1_alloc_reqs(i)
-    list.io.brinfo := io.brinfo
+    list.io.dealloc_pregs zip com_valids(i) zip rbk_valids(i) zip ren2_rbk_valids(i) map
+      {case (((d,c),r1),r2) => d.valid := c || r1 || r2}
+    list.io.dealloc_pregs zip io.com_uops zip ren2_uops map
+      {case ((d,c),r) => d.bits := Mux(io.rollback, c.pdst, Mux(io.flush, r.pdst, c.stale_pdst))}
     list.io.ren_br_tags := ren1_br_tags
-    list.io.rob_uops := Mux(io.flush, ren2_uops, io.com_uops)
-    list.io.com_valids := com_valids(i)
-    list.io.rbk_valids := rbk_valids(i) zip ren2_rbk_valids(i) map {case (r1,r2) => r1 || r2}
-    list.io.rollback := io.flush || io.rollback
+    list.io.brinfo := io.brinfo
     list.io.debug.pipeline_empty := io.debug_rob_empty && !ren2_valids.reduce(_||_)
   }
 
   // Freelist outputs.
   for ((uop, w) <- ren1_uops.zipWithIndex) {
-    val i_preg = ifreelist.io.alloc_pregs(w)
-    val f_preg = if (usingFPU) ffreelist.io.alloc_pregs(w) else 0.U
+    val i_preg = ifreelist.io.alloc_pregs(w).bits
+    val f_preg = if (usingFPU) ffreelist.io.alloc_pregs(w).bits else 0.U
     uop.pdst := Mux(uop.dst_rtype === RT_FLT, f_preg,
                 Mux(uop.ldst =/= 0.U, i_preg, 0.U))
   }
@@ -361,10 +361,10 @@ class RenameStage(
   io.ren2_uops := ren2_uops map {u => GetNewUopAndBrMask(u, io.brinfo)}
 
   for (w <- 0 until plWidth) {
-    val ifl_can_allocate = ifreelist.io.can_allocate(w)
+    val ifl_can_allocate = ifreelist.io.alloc_pregs(w).valid
     val ffl_can_allocate =
       if (usingFPU) {
-        ffreelist.io.can_allocate(w)
+        ffreelist.io.alloc_pregs(w).valid
       } else {
         false.B
       }
