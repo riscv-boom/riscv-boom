@@ -81,7 +81,7 @@ trait HasBoomLSUModule
  */
 trait CanHaveBoomPTW extends HasTileParameters with HasBoomLSU { this: BaseTile =>
   val module: CanHaveBoomPTWModule
-  var nPTWPorts = 1
+  var nPTWPorts = 2
   nHellaCachePorts += (if (usingPTW) 1 else 0)
 }
 
@@ -91,7 +91,10 @@ trait CanHaveBoomPTW extends HasTileParameters with HasBoomLSU { this: BaseTile 
 trait CanHaveBoomPTWModule extends HasBoomLSUModule
 {
   val outer: CanHaveBoomPTW
-  val ptwPorts = ListBuffer(lsu.io.ptw)
+  val ptwPorts = ListBuffer.empty[freechips.rocketchip.rocket.TLBPTWIO]
+  for (ptwio <- lsu.io.ptw) {
+    ptwPorts += ptwio
+  }
   val ptw = Module(new PTW(outer.nPTWPorts)(outer.dcache.node.edges.out(0), outer.p))
   ptw.io <> DontCare // Is overridden below if PTW is connected
   if (outer.usingPTW)

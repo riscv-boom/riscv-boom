@@ -44,35 +44,26 @@ import boom.exu.FUConstants._
 import boom.system.BoomTilesKey
 import boom.util.{RobTypeToChars, BoolToChar, GetNewUopAndBrMask, Sext, WrapInc}
 
+
+
 /**
- * IO bundle for the BOOM Core. Connects the external components such as
- * the Frontend to the core.
+ * Top level core object that connects the Frontend to the rest of the pipeline.
  */
-trait HasBoomCoreIO extends freechips.rocketchip.tile.HasTileParameters
+class BoomCore(implicit p: Parameters) extends BoomModule
 {
-  implicit val p: Parameters
   val io = new freechips.rocketchip.tile.CoreBundle
-    with freechips.rocketchip.tile.HasExternallyDrivenTileConstants
+      with freechips.rocketchip.tile.HasExternallyDrivenTileConstants
   {
     val interrupts = Input(new freechips.rocketchip.tile.CoreInterrupts())
     val ifu = new boom.ifu.BoomFrontendIO
     val ptw = Flipped(new freechips.rocketchip.rocket.DatapathPTWIO())
     val rocc = Flipped(new freechips.rocketchip.tile.RoCCCoreIO())
     val lsu = Flipped(new boom.lsu.LSUCoreIO)
-    val ptw_tlb = new freechips.rocketchip.rocket.TLBPTWIO()
     val trace = Output(Vec(coreParams.retireWidth,
       new freechips.rocketchip.rocket.TracedInstruction))
     val release = Flipped(Valid(new boom.lsu.ReleaseInfo))
     val fcsr_rm = UInt(freechips.rocketchip.tile.FPConstants.RM_SZ.W)
   }
-}
-
-/**
- * Top level core object that connects the Frontend to the rest of the pipeline.
- */
-class BoomCore(implicit p: Parameters) extends BoomModule
-   with HasBoomCoreIO
-{
   //**********************************
   // construct all of the modules
 

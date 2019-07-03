@@ -257,7 +257,7 @@ class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer)
   require(h == o, s"port list size was $h, outer counted $o")
   // TODO figure out how to move the below into their respective mix-ins
   hellaCacheArb.io.requestor <> hellaCachePorts
-  ptwPorts += core.io.ptw_tlb
+
   ptw.io.requestor <> ptwPorts
 
   val frontendStr = outer.frontend.module.toString

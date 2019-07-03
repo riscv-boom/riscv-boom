@@ -71,10 +71,10 @@ class RobIo(
   val wb_resps = Flipped(Vec(numWakeupPorts, Valid(new ExeUnitResp(xLen max fLen+1))))
 
   // Unbusying ports for stores.
-  val lsu_clr_bsy            = Input(Vec(2, Valid(UInt(robAddrSz.W))))
+  val lsu_clr_bsy      = Input(Vec(memWidth + 1, Valid(UInt(robAddrSz.W))))
 
   // Port for unmarking loads/stores as speculation hazards..
-  val lsu_clr_unsafe   = Input(Valid(UInt(robAddrSz.W)))
+  val lsu_clr_unsafe   = Input(Vec(memWidth, Valid(UInt(robAddrSz.W))))
 
 
   // Track side-effects for debug purposes.
@@ -356,9 +356,11 @@ class Rob(
       }
     }
 
-    when (io.lsu_clr_unsafe.valid && MatchBank(GetBankIdx(io.lsu_clr_unsafe.bits))) {
-      val cidx = GetRowIdx(io.lsu_clr_unsafe.bits)
-      rob_unsafe(cidx) := false.B
+    for (clr <- io.lsu_clr_unsafe) {
+      when (clr.valid && MatchBank(GetBankIdx(clr.bits))) {
+        val cidx = GetRowIdx(clr.bits)
+        rob_unsafe(cidx) := false.B
+      }
     }
 
     when (io.brinfo.valid && MatchBank(GetBankIdx(io.brinfo.rob_idx))) {
