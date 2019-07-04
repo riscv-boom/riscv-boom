@@ -63,6 +63,10 @@ class GShareEntry(val fetchWidth: Int) extends Bundle {
   def isTaken = counter(1)
   def isWeak  = counter(1) ^ counter(0)
 
+  def getTakens: UInt = {
+    UIntToOH(cfi_idx) & Fill(fetchWidth, isTaken)
+  }
+
   private def updateCounter(taken: Bool): UInt = {
     Mux(taken,
       Mux(counter === 3.U, counter, counter + 1.U),
