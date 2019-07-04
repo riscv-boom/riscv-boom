@@ -58,7 +58,38 @@ trait HasGShareParameters extends HasBoomCoreParameters
  */
 class GShareEntry(val fetchWidth: Int) extends Bundle {
   val cfi_idx = UInt(log2Ceil(fetchWidth).W)
-  val cntr = UInt(2.W)
+  val counter = UInt(2.W)
+
+  def isTaken = counter(1)
+  def isWeak  = counter(1) ^ counter(0)
+
+  private def updateCounter(taken: Bool): UInt = {
+    Mux(taken,
+      Mux(counter === 3.U, counter, counter + 1.U),
+      Mux(counter === 0.U, counter, counter - 1.U))
+  }
+
+  def getUpdated(cfi_idx: UInt, taken: Bool): GShareEntry = {
+    val new_cfi_idx = Wire(UInt(log2Ceil(fetchWidth).W))
+    val new_counter = Wire(UInt(2.W))
+
+    when (cfi_idx === this.cfi_idx) {
+      new_counter := updateCounter(taken)
+      new_cfi_idx := this.cfi_idx
+    } .otherwise {
+      when (isWeak) {
+        new_counter := Mux(taken, 2.U, 1.U)
+      } .otherwise {
+        new_counter := Cat(counter(1), !counter(0))
+      }
+    }
+
+    val new_entry = Wire(new GShareEntry)
+    new_entry.cfi_idx := new_cfi_idx
+    new_entry.counter := new_counter
+
+    new_entry
+  }
 }
 
 /**
