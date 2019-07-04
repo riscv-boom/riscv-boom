@@ -768,34 +768,32 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
 
     //-------------------------------------------------------------
     // Write Addr into the LAQ/SAQ
-    for (i <- 0 until memWidth) {
-      when (will_fire_load_incoming(i) || will_fire_load_retry(i))
-      {
-        val ldq_idx = Mux(will_fire_load_incoming(i), ldq_incoming_idx, ldq_retry_idx)
-        ldq(ldq_idx).bits.addr.valid          := true.B
-        ldq(ldq_idx).bits.addr.bits           := Mux(exe_tlb_miss, exe_tlb_vaddr, exe_tlb_paddr)
-        ldq(ldq_idx).bits.uop.pdst            := exe_tlb_uop.pdst
-        ldq(ldq_idx).bits.addr_is_virtual     := exe_tlb_miss
-        ldq(ldq_idx).bits.addr_is_uncacheable := exe_tlb_uncacheable && !exe_tlb_miss
+    when (will_fire_load_incoming(i) || will_fire_load_retry(i))
+    {
+      val ldq_idx = Mux(will_fire_load_incoming(i), ldq_incoming_idx, ldq_retry_idx)
+      ldq(ldq_idx).bits.addr.valid          := true.B
+      ldq(ldq_idx).bits.addr.bits           := Mux(exe_tlb_miss, exe_tlb_vaddr, exe_tlb_paddr)
+      ldq(ldq_idx).bits.uop.pdst            := exe_tlb_uop.pdst
+      ldq(ldq_idx).bits.addr_is_virtual     := exe_tlb_miss
+      ldq(ldq_idx).bits.addr_is_uncacheable := exe_tlb_uncacheable && !exe_tlb_miss
 
-        assert(!(will_fire_load_incoming(i) && ldq_incoming_e.bits.addr.valid),
-          "[lsu] Incoming load is overwriting a valid address")
+      assert(!(will_fire_load_incoming(i) && ldq_incoming_e.bits.addr.valid),
+        "[lsu] Incoming load is overwriting a valid address")
       }
 
-      when (will_fire_sta_incoming(i) || will_fire_stad_incoming(i) || will_fire_sta_retry(i))
-      {
-        val stq_idx = Mux(will_fire_sta_incoming(i) || will_fire_stad_incoming(i),
-          stq_incoming_idx, stq_retry_idx)
+    when (will_fire_sta_incoming(i) || will_fire_stad_incoming(i) || will_fire_sta_retry(i))
+    {
+      val stq_idx = Mux(will_fire_sta_incoming(i) || will_fire_stad_incoming(i),
+        stq_incoming_idx, stq_retry_idx)
 
-        stq(stq_idx).bits.addr.valid := !pf_st // Prevent AMOs from executing!
-        stq(stq_idx).bits.addr.bits  := Mux(exe_tlb_miss, exe_tlb_vaddr, exe_tlb_paddr)
-        stq(stq_idx).bits.uop.pdst   := exe_tlb_uop.pdst // Needed for AMOs
-        stq(stq_idx).bits.addr_is_virtual := exe_tlb_miss
+      stq(stq_idx).bits.addr.valid := !pf_st // Prevent AMOs from executing!
+      stq(stq_idx).bits.addr.bits  := Mux(exe_tlb_miss, exe_tlb_vaddr, exe_tlb_paddr)
+      stq(stq_idx).bits.uop.pdst   := exe_tlb_uop.pdst // Needed for AMOs
+      stq(stq_idx).bits.addr_is_virtual := exe_tlb_miss
 
-        assert(!(will_fire_sta_incoming(i) && stq_incoming_e.bits.addr.valid),
-          "[lsu] Incoming store is overwriting a valid address")
+      assert(!(will_fire_sta_incoming(i) && stq_incoming_e.bits.addr.valid),
+        "[lsu] Incoming store is overwriting a valid address")
 
-      }
     }
 
     //-------------------------------------------------------------
@@ -803,23 +801,22 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
     if (i == 0) {
       io.core.fp_stdata.ready := !will_fire_std_incoming(i) && !will_fire_stad_incoming(i)
     }
-    for (i <- 0 until memWidth) {
-      val fire_fp_stdata = io.core.fp_stdata.fire() && (i == 0).B
-      when (will_fire_std_incoming(i) || will_fire_stad_incoming(i) || fire_fp_stdata)
-      {
-        val sidx = Mux(will_fire_std_incoming(i) || will_fire_stad_incoming(i),
-          stq_incoming_idx,
-          io.core.fp_stdata.bits.uop.stq_idx)
-        stq(sidx).bits.data.valid := true.B
-        stq(sidx).bits.data.bits  := Mux(will_fire_std_incoming(i) || will_fire_stad_incoming(i),
-                                         exe_req.bits.data,
-                                         io.core.fp_stdata.bits.data)
+    val fire_fp_stdata = io.core.fp_stdata.fire() && (i == 0).B
+    when (will_fire_std_incoming(i) || will_fire_stad_incoming(i) || fire_fp_stdata)
+    {
+      val sidx = Mux(will_fire_std_incoming(i) || will_fire_stad_incoming(i),
+        stq_incoming_idx,
+        io.core.fp_stdata.bits.uop.stq_idx)
+      stq(sidx).bits.data.valid := true.B
+      stq(sidx).bits.data.bits  := Mux(will_fire_std_incoming(i) || will_fire_stad_incoming(i),
+        exe_req.bits.data,
+        io.core.fp_stdata.bits.data)
 
-        assert(!(stq(sidx).bits.data.valid),
-          "[lsu] Incoming store is overwriting a valid data entry")
-      }
+      assert(!(stq(sidx).bits.data.valid),
+        "[lsu] Incoming store is overwriting a valid data entry")
     }
-    val will_fire_stdf_incoming = io.core.fp_stdata.fire()
+
+    val will_fire_stdf_incoming = io.core.fp_stdata.fire() && (i == 0).B
     require (xLen >= fLen) // for correct SDQ size
 
     //-------------------------------------------------------------
