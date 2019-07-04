@@ -16,12 +16,13 @@ package boom.exu
 import chisel3._
 import chisel3.util._
 
-import freechips.rocketchip.config.Parameters
+import freechips.rocketchip.config.{Parameters}
 import freechips.rocketchip.rocket
 import freechips.rocketchip.tile
 
 import boom.exu.FUConstants._
 import boom.common._
+import boom.util.{BoomCoreStringPrefix}
 
 /**
  * Top level datapath that wraps the floating point issue window, regfile, and arithmetic units.
@@ -175,7 +176,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
   // Cut up critical path by delaying the write by a cycle.
   // Wakeup signal is sent on cycle S0, write is now delayed until end of S1,
   // but Issue happens on S1 and RegRead doesn't happen until S2 so we're safe.
-  fregfile.io.write_ports(0) := RegNext(WritePort(ll_wbarb.io.out, FPREG_SZ, fLen+1))
+  fregfile.io.write_ports(0) := RegNext(WritePort(ll_wbarb.io.out, fpregSz, fLen+1))
 
   assert (ll_wbarb.io.in(0).ready) // never backpressure the memory unit.
   when (ifpu_resp.valid) { assert (ifpu_resp.bits.uop.ctrl.rf_wen && ifpu_resp.bits.uop.dst_rtype === RT_FLT) }
@@ -247,9 +248,10 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
     exe_units(w).io.req.bits.kill := io.flush_pipeline
   }
 
-  val fpString = exe_units.toString
   override def toString: String =
-    fregfile.toString +
-    "\n   [Core " + hartId + "] Num Wakeup Ports      : " + numWakeupPorts +
-    "\n   [Core " + hartId + "] Num Bypass Ports      : " + exe_units.numTotalBypassPorts + "\n"
+    (BoomCoreStringPrefix("===FP Pipeline===") + "\n"
+    + fregfile.toString
+    + BoomCoreStringPrefix(
+      "Num Wakeup Ports      : " + numWakeupPorts,
+      "Num Bypass Ports      : " + exe_units.numTotalBypassPorts))
 }

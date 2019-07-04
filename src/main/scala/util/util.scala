@@ -19,6 +19,8 @@ import chisel3.util._
 import freechips.rocketchip.rocket.Instructions._
 import freechips.rocketchip.rocket._
 import freechips.rocketchip.util.{Str}
+import freechips.rocketchip.config.{Parameters}
+import freechips.rocketchip.tile.{TileKey}
 
 import boom.common.{MicroOp}
 import boom.exu.{BrResolutionInfo}
@@ -72,7 +74,7 @@ object IsKilledByBranch
 object GetNewUopAndBrMask
 {
   def apply(uop: MicroOp, brinfo: BrResolutionInfo)
-    (implicit p: freechips.rocketchip.config.Parameters): MicroOp = {
+    (implicit p: Parameters): MicroOp = {
     val newuop = WireInit(uop)
     newuop.br_mask := Mux(brinfo.valid,
                           (uop.br_mask & ~brinfo.mask),
@@ -366,10 +368,6 @@ object AgePriorityEncoder
 /**
   * Object to determine whether queue
   * index i0 is older than index i1.
-  *
-  * is i0 older than i1? (closest to zero). Provide the tail_ptr to the
-  *  queue. This is Cat(i1 <= tail, i1) because the rob_tail can point to a
-  * valid (partially dispatched) row.
  */
 object IsOlder
 {
@@ -377,21 +375,32 @@ object IsOlder
 }
 
 /**
-  * Object to determine whether queue
-  * index i0 is older than index i1.
+  * Set all bits below highest order '1'.
   *
-  * is i0 older than i1? (closest to zero). Provide the tail_ptr to the
-  *  queue. This is Cat(i1 <= tail, i1) because the rob_tail can point to a
-  * valid (partially dispatched) row.
  */
 object MaskLower
 {
   def apply(in: UInt) = (0 until in.getWidth).map(i => in >> i.U).reduce(_|_)
 }
 
+/**
+  * Set all bits above lowest order '1'.
+ */
 object MaskUpper
 {
   def apply(in: UInt) = (0 until in.getWidth).map(i => in << i.U).reduce(_|_)
+}
+
+/**
+  * N-wide one-hot priority encoder.
+ */
+object SelectFirstN
+{
+  def apply(in: UInt, n: Int) = {
+    val counts = in.asBools.scanLeft(1.U(n.W))((cnt, elt) => Mux(elt, cnt << 1, cnt))
+    val sels = (0 until n).map(j => VecInit((0 until in.getWidth).map(i => counts(i)(j) & in(i))).asUInt)
+    VecInit(sels)
+  }
 }
 
 /**
@@ -593,5 +602,19 @@ object FPRegToChars
                       " ft8", " ft9", "ft10", "ft11")
     val multiVec = VecInit(for(string <- strings) yield { VecInit(for (c <- string) yield { Str(c) }) })
     multiVec(fpreg)
+  }
+}
+
+object BoomCoreStringPrefix
+{
+  /**
+  * Add prefix to BOOM strings (currently only adds the hartId)
+  *
+  * @param strs list of strings
+  * @return String combining the list with the prefix per line
+  */
+  def apply(strs: String*)(implicit p: Parameters) = {
+    val prefix = "[C" + s"${p(TileKey).hartId}" + "] "
+    strs.map(str => prefix + str + "\n").mkString("")
   }
 }

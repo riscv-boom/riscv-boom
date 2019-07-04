@@ -25,7 +25,7 @@ import chisel3.core.withReset
 import freechips.rocketchip.config.{Parameters, Field}
 
 import boom.common._
-import boom.util.{ElasticReg, Fold}
+import boom.util.{ElasticReg, Fold, BoomCoreStringPrefix}
 
 /**
  * GShare configuration parameters used in configurations
@@ -240,9 +240,9 @@ class GShareBrPredictor(
     assert (com_idx === com_info.debugIdx, "[gshare] disagreement on update indices.")
   }
 
-  override def toString: String =
-    "   [Core " + hartId + "] ==GShare BPU==" +
-    "\n   [Core " + hartId + "] (" + (nSets * fetchWidth * 2/8/1024) +
+  override def toString: String = BoomCoreStringPrefix(
+    "==GShare BPU==",
+    "(" + (nSets * fetchWidth * 2/8/1024) +
     " kB) GShare Predictor, with " + historyLength + " bits of history for (" +
-    fetchWidth + "-wide fetch) and " + nSets + " entries."
+    fetchWidth + "-wide fetch) and " + nSets + " entries")
 }

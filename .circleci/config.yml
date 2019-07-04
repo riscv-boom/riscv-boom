@@ -13,20 +13,16 @@ jobs:
             TERM: dumb
         steps:
             - checkout
-            - run:
-                name: Create hash of riscv-tools
-                command: |
-                    .circleci/get-riscv-tools-hash.sh
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
+                    - riscv-tools-installed-v3-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Building riscv-tools
                 command: |
                     .circleci/build-riscv-tools.sh
                 no_output_timeout: 120m
             - save_cache:
-                key: riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
+                key: riscv-tools-installed-v3-{{ checksum "CHIPYARD.hash" }}
                 paths:
                     - "/home/riscvuser/riscv-tools-install"
     prepare-build-environment:
@@ -37,49 +33,18 @@ jobs:
             TERM: dumb
         steps:
             - checkout
-            - run:
-                name: Create hash of template
-                command: |
-                    .circleci/get-bhd-hash.sh
             - restore_cache:
                 keys:
-                    - bhd-with-verilator-v9-{{ checksum "../bhd.hash" }}
+                    - chipyard-with-verilator-v9-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Build Verilator and setup build environment
                 command: |
                     .circleci/prepare-for-rtl-build.sh
                 no_output_timeout: 120m
             - save_cache:
-                key: bhd-with-verilator-v9-{{ checksum "../bhd.hash" }}
+                key: chipyard-with-verilator-v9-{{ checksum "CHIPYARD.hash" }}
                 paths:
-                    - "/home/riscvuser/bhd"
-    prepare-boomconfig:
-        docker:
-            - image: riscvboom/riscvboom-images:0.0.5
-        environment:
-            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
-            TERM: dumb
-        steps:
-            - checkout
-            - run:
-                name: Create hash of riscv-tools and bhd
-                command: |
-                    .circleci/get-bhd-hash.sh
-                    .circleci/get-riscv-tools-hash.sh
-            - restore_cache:
-                keys:
-                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
-            - restore_cache:
-                keys:
-                    - bhd-with-verilator-v9-{{ checksum "../bhd.hash" }}
-            - run:
-                name: Building BoomConfig using Verilator
-                command: .circleci/do-rtl-build.sh BoomConfig
-                no_output_timeout: 120m
-            - save_cache:
-                key: boomconfig-{{ .Branch }}-{{ .Revision }}
-                paths:
-                    - "/home/riscvuser/bhd"
+                    - "/home/riscvuser/chipyard"
     prepare-smallrv32unifiedboomconfig:
         docker:
             - image: riscvboom/riscvboom-images:0.0.5
@@ -88,17 +53,12 @@ jobs:
             TERM: dumb
         steps:
             - checkout
-            - run:
-                name: Create hash of riscv-tools and bhd
-                command: |
-                    .circleci/get-bhd-hash.sh
-                    .circleci/get-riscv-tools-hash.sh
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
+                    - riscv-tools-installed-v3-{{ checksum "CHIPYARD.hash" }}
             - restore_cache:
                 keys:
-                    - bhd-with-verilator-v9-{{ checksum "../bhd.hash" }}
+                    - chipyard-with-verilator-v9-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Building SmallRV32UnifiedBoomConfig using Verilator
                 command: .circleci/do-rtl-build.sh SmallRV32UnifiedBoomConfig
@@ -106,7 +66,7 @@ jobs:
             - save_cache:
                 key: smallrv32unifiedboomconfig-{{ .Branch }}-{{ .Revision }}
                 paths:
-                    - "/home/riscvuser/bhd"
+                    - "/home/riscvuser/chipyard"
     prepare-smallboomconfig:
         docker:
             - image: riscvboom/riscvboom-images:0.0.5
@@ -115,17 +75,12 @@ jobs:
             TERM: dumb
         steps:
             - checkout
-            - run:
-                name: Create hash of riscv-tools and bhd
-                command: |
-                    .circleci/get-bhd-hash.sh
-                    .circleci/get-riscv-tools-hash.sh
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
+                    - riscv-tools-installed-v3-{{ checksum "CHIPYARD.hash" }}
             - restore_cache:
                 keys:
-                    - bhd-with-verilator-v9-{{ checksum "../bhd.hash" }}
+                    - chipyard-with-verilator-v9-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Building SmallBoomConfig using Verilator
                 command: .circleci/do-rtl-build.sh SmallBoomConfig
@@ -133,7 +88,7 @@ jobs:
             - save_cache:
                 key: smallboomconfig-{{ .Branch }}-{{ .Revision }}
                 paths:
-                    - "/home/riscvuser/bhd"
+                    - "/home/riscvuser/chipyard"
     prepare-mediumboomconfig:
         docker:
             - image: riscvboom/riscvboom-images:0.0.5
@@ -142,17 +97,12 @@ jobs:
             TERM: dumb
         steps:
             - checkout
-            - run:
-                name: Create hash of riscv-tools and bhd
-                command: |
-                    .circleci/get-bhd-hash.sh
-                    .circleci/get-riscv-tools-hash.sh
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
+                    - riscv-tools-installed-v3-{{ checksum "CHIPYARD.hash" }}
             - restore_cache:
                 keys:
-                    - bhd-with-verilator-v9-{{ checksum "../bhd.hash" }}
+                    - chipyard-with-verilator-v9-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Building MediumBoomConfig using Verilator
                 command: .circleci/do-rtl-build.sh MediumBoomConfig
@@ -160,7 +110,51 @@ jobs:
             - save_cache:
                 key: mediumboomconfig-{{ .Branch }}-{{ .Revision }}
                 paths:
-                    - "/home/riscvuser/bhd"
+                    - "/home/riscvuser/chipyard"
+    prepare-largeboomconfig:
+        docker:
+            - image: riscvboom/riscvboom-images:0.0.5
+        environment:
+            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
+            TERM: dumb
+        steps:
+            - checkout
+            - restore_cache:
+                keys:
+                    - riscv-tools-installed-v3-{{ checksum "CHIPYARD.hash" }}
+            - restore_cache:
+                keys:
+                    - chipyard-with-verilator-v9-{{ checksum "CHIPYARD.hash" }}
+            - run:
+                name: Building LargeBoomConfig using Verilator
+                command: .circleci/do-rtl-build.sh LargeBoomConfig
+                no_output_timeout: 120m
+            - save_cache:
+                key: largeboomconfig-{{ .Branch }}-{{ .Revision }}
+                paths:
+                    - "/home/riscvuser/chipyard"
+    prepare-megaboomconfig:
+        docker:
+            - image: riscvboom/riscvboom-images:0.0.5
+        environment:
+            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
+            TERM: dumb
+        steps:
+            - checkout
+            - restore_cache:
+                keys:
+                    - riscv-tools-installed-v3-{{ checksum "CHIPYARD.hash" }}
+            - restore_cache:
+                keys:
+                    - chipyard-with-verilator-v9-{{ checksum "CHIPYARD.hash" }}
+            - run:
+                name: Building MegaBoomConfig using Verilator
+                command: .circleci/do-rtl-build.sh MegaBoomConfig
+                no_output_timeout: 120m
+            - save_cache:
+                key: megaboomconfig-{{ .Branch }}-{{ .Revision }}
+                paths:
+                    - "/home/riscvuser/chipyard"
     prepare-smallboomandrocketconfig:
         docker:
             - image: riscvboom/riscvboom-images:0.0.5
@@ -169,17 +163,12 @@ jobs:
             TERM: dumb
         steps:
             - checkout
-            - run:
-                name: Create hash of riscv-tools and bhd
-                command: |
-                    .circleci/get-bhd-hash.sh
-                    .circleci/get-riscv-tools-hash.sh
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
+                    - riscv-tools-installed-v3-{{ checksum "CHIPYARD.hash" }}
             - restore_cache:
                 keys:
-                    - bhd-with-verilator-v9-{{ checksum "../bhd.hash" }}
+                    - chipyard-with-verilator-v9-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Building SmallBoomAndRocketConfig using Verilator
                 command: .circleci/do-rtl-build.sh SmallBoomAndRocketConfig
@@ -187,7 +176,7 @@ jobs:
             - save_cache:
                 key: smallboomandrocketconfig-{{ .Branch }}-{{ .Revision }}
                 paths:
-                    - "/home/riscvuser/bhd"
+                    - "/home/riscvuser/chipyard"
 
     run-scala-checkstyle:
         docker:
@@ -201,53 +190,6 @@ jobs:
                 name: Run Scala checkstyle
                 command: make checkstyle
 
-    boomconfig-run-csmith-tests:
-        docker:
-            - image: riscvboom/riscvboom-images:0.0.5
-        environment:
-            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
-            TERM: dumb
-        steps:
-            - checkout
-            - run:
-                name: Create hash of riscv-tools
-                command: |
-                    .circleci/get-riscv-tools-hash.sh
-            - restore_cache:
-                keys:
-                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
-            - restore_cache:
-                keys:
-                    - boomconfig-{{ .Branch }}-{{ .Revision }}
-
-            - run:
-                name: Run BoomConfig csmith tests
-                command: .circleci/build-run-csmith-tests.sh BoomConfig 50
-                no_output_timeout: 30m
-
-    boomconfig-run-riscv-tests:
-        docker:
-            - image: riscvboom/riscvboom-images:0.0.5
-        environment:
-            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
-            TERM: dumb
-        steps:
-            - checkout
-            - run:
-                name: Create hash of riscv-tools
-                command: |
-                    .circleci/get-riscv-tools-hash.sh
-            - restore_cache:
-                keys:
-                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
-            - restore_cache:
-                keys:
-                    - boomconfig-{{ .Branch }}-{{ .Revision }}
-            - run:
-                name: Run BoomConfig riscv tests
-                command: |
-                    make run-bmark-tests-fast -C ../bhd/sims/verisim CONFIG=BoomConfig SUB_PROJECT=boom TOP=BoomRocketSystem
-                    make run-asm-tests-fast -C ../bhd/sims/verisim CONFIG=BoomConfig SUB_PROJECT=boom TOP=BoomRocketSystem
     smallrv32unifiedboomconfig-run-csmith-tests:
         docker:
             - image: riscvboom/riscvboom-images:0.0.5
@@ -256,18 +198,14 @@ jobs:
             TERM: dumb
         steps:
             - checkout
-            - run:
-                name: Create hash of riscv-tools
-                command: |
-                    .circleci/get-riscv-tools-hash.sh
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
+                    - riscv-tools-installed-v3-{{ checksum "CHIPYARD.hash" }}
             - restore_cache:
                 keys:
                     - smallrv32unifiedboomconfig-{{ .Branch }}-{{ .Revision }}
             - run:
-                name: Run BoomConfig csmith tests
+                name: Run SmallRV32UnifiedBoomConfig csmith tests
                 command: .circleci/build-run-csmith-tests.sh SmallRV32UnifiedBoomConfig 50
                 no_output_timeout: 30m
 
@@ -279,20 +217,17 @@ jobs:
             TERM: dumb
         steps:
             - checkout
-            - run:
-                name: Create hash of riscv-tools
-                command: |
-                    .circleci/get-riscv-tools-hash.sh
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
+                    - riscv-tools-installed-v3-{{ checksum "CHIPYARD.hash" }}
             - restore_cache:
                 keys:
                     - smallrv32unifiedboomconfig-{{ .Branch }}-{{ .Revision }}
             - run:
                 name: Run SmallRV32UnifiedBoomConfig riscv tests
                 command: |
-                    make run-asm-tests-fast -C ../bhd/sims/verisim CONFIG=SmallRV32UnifiedBoomConfig SUB_PROJECT=boom TOP=BoomRocketSystem
+                    make run-asm-tests-fast -C ../chipyard/sims/verisim CONFIG=SmallRV32UnifiedBoomConfig SUB_PROJECT=boom TOP=BoomRocketSystem
+
     smallboomconfig-run-csmith-tests:
         docker:
             - image: riscvboom/riscvboom-images:0.0.5
@@ -301,13 +236,9 @@ jobs:
             TERM: dumb
         steps:
             - checkout
-            - run:
-                name: Create hash of riscv-tools
-                command: |
-                    .circleci/get-riscv-tools-hash.sh
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
+                    - riscv-tools-installed-v3-{{ checksum "CHIPYARD.hash" }}
             - restore_cache:
                 keys:
                     - smallboomconfig-{{ .Branch }}-{{ .Revision }}
@@ -324,21 +255,18 @@ jobs:
             TERM: dumb
         steps:
             - checkout
-            - run:
-                name: Create hash of riscv-tools
-                command: |
-                    .circleci/get-riscv-tools-hash.sh
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
+                    - riscv-tools-installed-v3-{{ checksum "CHIPYARD.hash" }}
             - restore_cache:
                 keys:
                     - smallboomconfig-{{ .Branch }}-{{ .Revision }}
             - run:
                 name: Run SmallBoomConfig riscv tests
                 command: |
-                    make run-bmark-tests-fast -C ../bhd/sims/verisim CONFIG=SmallBoomConfig SUB_PROJECT=boom TOP=BoomRocketSystem
-                    make run-asm-tests-fast -C ../bhd/sims/verisim CONFIG=SmallBoomConfig SUB_PROJECT=boom TOP=BoomRocketSystem
+                    make run-bmark-tests-fast -C ../chipyard/sims/verisim CONFIG=SmallBoomConfig SUB_PROJECT=boom TOP=BoomRocketSystem
+                    make run-asm-tests-fast -C ../chipyard/sims/verisim CONFIG=SmallBoomConfig SUB_PROJECT=boom TOP=BoomRocketSystem
+
     mediumboomconfig-run-csmith-tests:
         docker:
             - image: riscvboom/riscvboom-images:0.0.5
@@ -347,13 +275,9 @@ jobs:
             TERM: dumb
         steps:
             - checkout
-            - run:
-                name: Create hash of riscv-tools
-                command: |
-                    .circleci/get-riscv-tools-hash.sh
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
+                    - riscv-tools-installed-v3-{{ checksum "CHIPYARD.hash" }}
             - restore_cache:
                 keys:
                     - mediumboomconfig-{{ .Branch }}-{{ .Revision }}
@@ -361,6 +285,7 @@ jobs:
                 name: Run MediumBoomConfig csmith tests
                 command: .circleci/build-run-csmith-tests.sh MediumBoomConfig 50
                 no_output_timeout: 30m
+
     mediumboomconfig-run-riscv-tests:
         docker:
             - image: riscvboom/riscvboom-images:0.0.5
@@ -369,21 +294,98 @@ jobs:
             TERM: dumb
         steps:
             - checkout
-            - run:
-                name: Create hash of riscv-tools
-                command: |
-                    .circleci/get-riscv-tools-hash.sh
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
+                    - riscv-tools-installed-v3-{{ checksum "CHIPYARD.hash" }}
             - restore_cache:
                 keys:
                     - mediumboomconfig-{{ .Branch }}-{{ .Revision }}
             - run:
                 name: Run MediumBoomConfig riscv tests
                 command: |
-                    make run-bmark-tests-fast -C ../bhd/sims/verisim CONFIG=MediumBoomConfig SUB_PROJECT=boom TOP=BoomRocketSystem
-                    make run-asm-tests-fast -C ../bhd/sims/verisim CONFIG=MediumBoomConfig SUB_PROJECT=boom TOP=BoomRocketSystem
+                    make run-bmark-tests-fast -C ../chipyard/sims/verisim CONFIG=MediumBoomConfig SUB_PROJECT=boom TOP=BoomRocketSystem
+                    make run-asm-tests-fast -C ../chipyard/sims/verisim CONFIG=MediumBoomConfig SUB_PROJECT=boom TOP=BoomRocketSystem
+
+    largeboomconfig-run-csmith-tests:
+        docker:
+            - image: riscvboom/riscvboom-images:0.0.5
+        environment:
+            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
+            TERM: dumb
+        steps:
+            - checkout
+            - restore_cache:
+                keys:
+                    - riscv-tools-installed-v3-{{ checksum "CHIPYARD.hash" }}
+            - restore_cache:
+                keys:
+                    - largeboomconfig-{{ .Branch }}-{{ .Revision }}
+
+            - run:
+                name: Run LargeBoomConfig csmith tests
+                command: .circleci/build-run-csmith-tests.sh LargeBoomConfig 50
+                no_output_timeout: 30m
+
+    largeboomconfig-run-riscv-tests:
+        docker:
+            - image: riscvboom/riscvboom-images:0.0.5
+        environment:
+            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
+            TERM: dumb
+        steps:
+            - checkout
+            - restore_cache:
+                keys:
+                    - riscv-tools-installed-v3-{{ checksum "CHIPYARD.hash" }}
+            - restore_cache:
+                keys:
+                    - largeboomconfig-{{ .Branch }}-{{ .Revision }}
+            - run:
+                name: Run LargeBoomConfig riscv tests
+                command: |
+                    make run-bmark-tests-fast -C ../chipyard/sims/verisim CONFIG=LargeBoomConfig SUB_PROJECT=boom TOP=BoomRocketSystem
+                    make run-asm-tests-fast -C ../chipyard/sims/verisim CONFIG=LargeBoomConfig SUB_PROJECT=boom TOP=BoomRocketSystem
+
+    megaboomconfig-run-csmith-tests:
+        docker:
+            - image: riscvboom/riscvboom-images:0.0.5
+        environment:
+            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
+            TERM: dumb
+        steps:
+            - checkout
+            - restore_cache:
+                keys:
+                    - riscv-tools-installed-v3-{{ checksum "CHIPYARD.hash" }}
+            - restore_cache:
+                keys:
+                    - megaboomconfig-{{ .Branch }}-{{ .Revision }}
+
+            - run:
+                name: Run MegaBoomConfig csmith tests
+                command: .circleci/build-run-csmith-tests.sh MegaBoomConfig 50
+                no_output_timeout: 30m
+
+    megaboomconfig-run-riscv-tests:
+        docker:
+            - image: riscvboom/riscvboom-images:0.0.5
+        environment:
+            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
+            TERM: dumb
+        steps:
+            - checkout
+            - restore_cache:
+                keys:
+                    - riscv-tools-installed-v3-{{ checksum "CHIPYARD.hash" }}
+            - restore_cache:
+                keys:
+                    - megaboomconfig-{{ .Branch }}-{{ .Revision }}
+            - run:
+                name: Run MegaBoomConfig riscv tests
+                command: |
+                    make run-bmark-tests-fast -C ../chipyard/sims/verisim CONFIG=MegaBoomConfig SUB_PROJECT=boom TOP=BoomRocketSystem
+                    make run-asm-tests-fast -C ../chipyard/sims/verisim CONFIG=MegaBoomConfig SUB_PROJECT=boom TOP=BoomRocketSystem
+
     smallboomandrocketconfig-run-csmith-tests:
         docker:
             - image: riscvboom/riscvboom-images:0.0.5
@@ -392,13 +394,9 @@ jobs:
             TERM: dumb
         steps:
             - checkout
-            - run:
-                name: Create hash of riscv-tools
-                command: |
-                    .circleci/get-riscv-tools-hash.sh
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
+                    - riscv-tools-installed-v3-{{ checksum "CHIPYARD.hash" }}
             - restore_cache:
                 keys:
                     - smallboomandrocketconfig-{{ .Branch }}-{{ .Revision }}
@@ -406,6 +404,7 @@ jobs:
                 name: Run SmallBoomAndRocketConfig csmith tests
                 command: .circleci/build-run-csmith-tests.sh SmallBoomAndRocketConfig 50
                 no_output_timeout: 30m
+
     smallboomandrocketconfig-run-riscv-tests:
         docker:
             - image: riscvboom/riscvboom-images:0.0.5
@@ -414,21 +413,18 @@ jobs:
             TERM: dumb
         steps:
             - checkout
-            - run:
-                name: Create hash of riscv-tools
-                command: |
-                    .circleci/get-riscv-tools-hash.sh
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
+                    - riscv-tools-installed-v3-{{ checksum "CHIPYARD.hash" }}
             - restore_cache:
                 keys:
                     - smallboomandrocketconfig-{{ .Branch }}-{{ .Revision }}
             - run:
                 name: Run SmallBoomAndRocketConfig riscv tests
                 command: |
-                    make run-bmark-tests-fast -C ../bhd/sims/verisim CONFIG=SmallBoomAndRocketConfig SUB_PROJECT=boom TOP=BoomRocketSystem
-                    make run-asm-tests-fast -C ../bhd/sims/verisim CONFIG=SmallBoomAndRocketConfig SUB_PROJECT=boom TOP=BoomRocketSystem
+                    make run-bmark-tests-fast -C ../chipyard/sims/verisim CONFIG=SmallBoomAndRocketConfig SUB_PROJECT=boom TOP=BoomRocketSystem
+                    make run-asm-tests-fast -C ../chipyard/sims/verisim CONFIG=SmallBoomAndRocketConfig SUB_PROJECT=boom TOP=BoomRocketSystem
+
 # Order and dependencies of jobs to run
 workflows:
     version: 2
@@ -448,9 +444,6 @@ workflows:
                     - install-riscv-tools
 
             # Prepare the verilator builds
-            - prepare-boomconfig:
-                requires:
-                    - prepare-build-environment
             - prepare-smallrv32unifiedboomconfig:
                 requires:
                     - prepare-build-environment
@@ -463,14 +456,6 @@ workflows:
             - prepare-smallboomandrocketconfig:
                 requires:
                     - prepare-build-environment
-
-            # Run the BoomConfig tests
-            - boomconfig-run-csmith-tests:
-                requires:
-                    - prepare-boomconfig
-            - boomconfig-run-riscv-tests:
-                requires:
-                    - prepare-boomconfig
 
             # Run the SmallRV32UnifiedBoomConfig tests
             - smallrv32unifiedboomconfig-run-riscv-tests:

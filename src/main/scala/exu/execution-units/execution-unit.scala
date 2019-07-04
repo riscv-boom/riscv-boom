@@ -17,19 +17,19 @@
 
 package boom.exu
 
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.{ArrayBuffer}
 
 import chisel3._
 import chisel3.util._
 
-import freechips.rocketchip.config.Parameters
+import freechips.rocketchip.config.{Parameters}
 import freechips.rocketchip.tile.{XLen, RoCCCoreIO}
 import freechips.rocketchip.tile
 
 import FUConstants._
 import boom.common._
-import boom.ifu.GetPCFromFtqIO
-import boom.util.{ImmGen, IsKilledByBranch, BranchKillableQueue}
+import boom.ifu.{GetPCFromFtqIO}
+import boom.util.{ImmGen, IsKilledByBranch, BranchKillableQueue, BoomCoreStringPrefix}
 
 /**
  * Response from Execution Unit. Bundles a MicroOp with data
@@ -222,7 +222,7 @@ class ALUExeUnit(
       else if (hasAlu) 1 else 0,
     dataWidth        = p(tile.XLen) + 1,
     bypassable       = hasAlu,
-    alwaysBypassable = hasAlu && !hasMul && !hasDiv,
+    alwaysBypassable = hasAlu && !(hasMem || hasBrUnit || hasMul || hasDiv || hasCSR || hasIfpu || hasRocc),
     hasCSR           = hasCSR,
     hasBrUnit        = hasBrUnit,
     hasAlu           = hasAlu,
@@ -240,14 +240,14 @@ class ALUExeUnit(
   require(!(hasMem && hasIfpu),
     "TODO. Currently do not support AluMemExeUnit with FP")
 
-  val out_str = new StringBuilder
-  out_str.append("\n   [Core " + hartId + "] ==ExeUnit==")
-  if (hasAlu)  out_str.append("\n   [Core " + hartId + "]  - ALU")
-  if (hasMul)  out_str.append("\n   [Core " + hartId + "]  - Mul")
-  if (hasDiv)  out_str.append("\n   [Core " + hartId + "]  - Div")
-  if (hasIfpu) out_str.append("\n   [Core " + hartId + "]  - IFPU")
-  if (hasMem)  out_str.append("\n   [Core " + hartId + "]  - Mem")
-  if (hasRocc) out_str.append("\n   [Core " + hartId + "]  - RoCC")
+  val out_str =
+    BoomCoreStringPrefix("==ExeUnit==") +
+    (if (hasAlu)  BoomCoreStringPrefix(" - ALU") else "") +
+    (if (hasMul)  BoomCoreStringPrefix(" - Mul") else "") +
+    (if (hasDiv)  BoomCoreStringPrefix(" - Div") else "") +
+    (if (hasIfpu) BoomCoreStringPrefix(" - IFPU") else "") +
+    (if (hasMem)  BoomCoreStringPrefix(" - Mem") else "") +
+    (if (hasRocc) BoomCoreStringPrefix(" - RoCC") else "")
 
   override def toString: String = out_str.toString
 
@@ -496,11 +496,11 @@ class FPUExeUnit(
     hasFdiv = hasFdiv,
     hasFpiu = hasFpiu) with tile.HasFPUParameters
 {
-  val out_str = new StringBuilder
-  out_str.append("\n   [Core " + hartId + "] ==ExeUnit==")
-  if (hasFpu)  out_str.append("\n   [Core " + hartId + "]  - FPU (Latency: " + dfmaLatency + ")")
-  if (hasFdiv) out_str.append("\n   [Core " + hartId + "]  - FDiv/FSqrt")
-  if (hasFpiu) out_str.append("\n   [Core " + hartId + "]  - FPIU (writes to Integer RF)")
+  val out_str =
+    BoomCoreStringPrefix("==ExeUnit==")
+    (if (hasFpu)  BoomCoreStringPrefix("- FPU (Latency: " + dfmaLatency + ")") else "") +
+    (if (hasFdiv) BoomCoreStringPrefix("- FDiv/FSqrt") else "") +
+    (if (hasFpiu) BoomCoreStringPrefix("- FPIU (writes to Integer RF)") else "")
 
   val fdiv_busy = WireInit(false.B)
   val fpiu_busy = WireInit(false.B)

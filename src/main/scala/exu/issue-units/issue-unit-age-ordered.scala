@@ -65,7 +65,7 @@ class IssueUnitCollapsing(
                                                         !dis_uops(i).is_fence &&
                                                         !dis_uops(i).is_fencei)
 
-  val uops = issue_slots.map(s=>s.updated_uop) ++ dis_uops.map(s=>s)
+  val uops = issue_slots.map(s=>s.out_uop) ++ dis_uops.map(s=>s)
   for (i <- 0 until numIssueSlots) {
     issue_slots(i).in_uop.valid := false.B
     issue_slots(i).in_uop.bits  := uops(i+1)
@@ -102,9 +102,9 @@ class IssueUnitCollapsing(
     io.iss_valids(w) := false.B
     io.iss_uops(w)   := NullMicroOp
     // unsure if this is overkill
-    io.iss_uops(w).pop1 := 0.U
-    io.iss_uops(w).pop2 := 0.U
-    io.iss_uops(w).pop3 := 0.U
+    io.iss_uops(w).prs1 := 0.U
+    io.iss_uops(w).prs2 := 0.U
+    io.iss_uops(w).prs3 := 0.U
     io.iss_uops(w).lrs1_rtype := RT_X
     io.iss_uops(w).lrs2_rtype := RT_X
   }

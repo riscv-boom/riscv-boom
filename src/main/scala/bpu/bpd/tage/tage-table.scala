@@ -15,10 +15,11 @@ package boom.bpu
 import chisel3._
 import chisel3.util._
 
-import freechips.rocketchip.config.Parameters
-import freechips.rocketchip.util.Str
+import freechips.rocketchip.config.{Parameters}
+import freechips.rocketchip.util.{Str}
 
 import boom.common._
+import boom.util.{BoomCoreStringPrefix}
 
 /**
  * IO bundle to connect the TAGE table to the TAGE predictor top
@@ -286,10 +287,10 @@ class TageTable(
     assert (widx < numEntries.U, "[TageTable] out of bounds write index.")
   }
 
-  override def toString: String =
-    "   [Core " + hartId + "] TageTable[" + id + "] - " +
+  override def toString: String = BoomCoreStringPrefix(
+    "TageTable[" + id + "] - " +
     numEntries + " entries, " +
     historyLength + " bits of history, " +
     tagSz + "-bit tags, " +
-    cntrSz + "-bit counters"
+    cntrSz + "-bit counters")
 }

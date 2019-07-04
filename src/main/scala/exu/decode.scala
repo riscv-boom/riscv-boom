@@ -642,7 +642,7 @@ class BranchDecode(implicit p: Parameters) extends BoomModule
  */
 class DebugBranchMaskGenerationLogicIO(implicit p: Parameters) extends BoomBundle
 {
-  val branch_mask = UInt(MAX_BR_COUNT.W)
+  val branch_mask = UInt(maxBrCount.W)
 }
 
 /**
@@ -663,8 +663,8 @@ class BranchMaskGenerationLogic(val pl_width: Int)(implicit p: Parameters) exten
 
     // give out tag immediately (needed in rename)
     // mask can come later in the cycle
-    val br_tag    = Output(Vec(pl_width, UInt(BR_TAG_SZ.W)))
-    val br_mask   = Output(Vec(pl_width, UInt(MAX_BR_COUNT.W)))
+    val br_tag    = Output(Vec(pl_width, UInt(brTagSz.W)))
+    val br_mask   = Output(Vec(pl_width, UInt(maxBrCount.W)))
 
      // tell decoders the branch mask has filled up, but on the granularity
      // of an individual micro-op (so some micro-ops can go through)
@@ -676,24 +676,24 @@ class BranchMaskGenerationLogic(val pl_width: Int)(implicit p: Parameters) exten
     val debug = Output(new DebugBranchMaskGenerationLogicIO())
   })
 
-  val branch_mask = RegInit(0.U(MAX_BR_COUNT.W))
+  val branch_mask = RegInit(0.U(maxBrCount.W))
 
   //-------------------------------------------------------------
   // Give out the branch tag to each branch micro-op
 
   var allocate_mask = branch_mask
-  val tag_masks = Wire(Vec(pl_width, UInt(MAX_BR_COUNT.W)))
+  val tag_masks = Wire(Vec(pl_width, UInt(maxBrCount.W)))
 
   for (w <- 0 until pl_width) {
     // TODO this is a loss of performance as we're blocking branches based on potentially fake branches
-    io.is_full(w) := (allocate_mask === ~(0.U(MAX_BR_COUNT.W))) && io.is_branch(w)
+    io.is_full(w) := (allocate_mask === ~(0.U(maxBrCount.W))) && io.is_branch(w)
 
     // find br_tag and compute next br_mask
-    val new_br_tag = Wire(UInt(BR_TAG_SZ.W))
+    val new_br_tag = Wire(UInt(brTagSz.W))
     new_br_tag := 0.U
     tag_masks(w) := 0.U
 
-    for (i <- MAX_BR_COUNT-1 to 0 by -1) {
+    for (i <- maxBrCount-1 to 0 by -1) {
       when (~allocate_mask(i)) {
         new_br_tag := i.U
         tag_masks(w) := (1.U << i.U)

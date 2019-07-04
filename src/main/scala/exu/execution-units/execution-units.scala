@@ -13,13 +13,14 @@
 
 package boom.exu
 
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.{ArrayBuffer}
 
 import chisel3._
 
-import freechips.rocketchip.config.Parameters
+import freechips.rocketchip.config.{Parameters}
 
 import boom.common._
+import boom.util.{BoomCoreStringPrefix}
 
 /**
  * Top level class to wrap all execution units together into a "collection"
@@ -145,16 +146,20 @@ class ExecutionUnits(val fpu: Boolean)(implicit val p: Parameters) extends HasBo
   }
 
   val exeUnitsStr = new StringBuilder
-  if (!fpu) {
-    exeUnitsStr.append(
-      ( "\n   [Core " + hartId + "] ==" + Seq("One","Two","Three","Four")(coreWidth-1) + "-wide Machine=="
-      + "\n   [Core " + hartId + "] ==" + Seq("Single","Dual","Triple","Quad","Five","Six")(totalIssueWidth-1) + " Issue==\n"))
-  }
-
   for (exe_unit <- exe_units) {
     exeUnitsStr.append(exe_unit.toString)
   }
-  override def toString: String =  exeUnitsStr.toString
+
+  override def toString: String =
+    (BoomCoreStringPrefix("===ExecutionUnits===") + "\n"
+    + (if (!fpu) {
+      BoomCoreStringPrefix(
+        "==" + coreWidth + "-wide Machine==",
+        "==" + totalIssueWidth + " Issue==")
+    } else {
+      ""
+    }) + "\n"
+    + exeUnitsStr.toString)
 
   require (exe_units.length != 0)
   if (!fpu) {

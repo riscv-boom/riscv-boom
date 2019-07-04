@@ -31,7 +31,7 @@ import freechips.rocketchip.config.{Parameters}
 
 import boom.common._
 import boom.exu._
-import boom.util.{BoolToChar}
+import boom.util.{BoolToChar, BoomCoreStringPrefix}
 
 case class BimParameters(
   nSets: Int = 1024, // how many sets (conceptually) should we have?
@@ -345,8 +345,7 @@ class BimodalTable(implicit p: Parameters) extends BoomModule with HasBimParamet
   // Trust me, I just work.
 
   val size_kbits = nSets * fetchWidth * 2/1024 // assumes 2 bits / fetchWidth
-  override def toString: String =
-    "   [Core " + hartId + "] ==BIM==" +
-    "\n   [Core " + hartId + "] (" + size_kbits + " Kbits = " + size_kbits/8 + " kB) Bimodal Table (" +
-    nSets + " entries across " + nBanks + " banks)"
+  override def toString: String = BoomCoreStringPrefix(
+    "==BIM==",
+    "(" + size_kbits + " Kbits = " + size_kbits/8 + " kB) Bimodal Table (" + nSets + " entries across " + nBanks + " banks)")
 }

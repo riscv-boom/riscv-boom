@@ -108,8 +108,8 @@ class LSUCoreIO(implicit p: Parameters) extends BoomBundle()(p)
   val exe = new LSUExeIO
 
   val dec_uops    = Flipped(Vec(coreWidth, Valid(new MicroOp)))
-  val dec_ldq_idx = Output(Vec(coreWidth, UInt(LDQ_ADDR_SZ.W)))
-  val dec_stq_idx = Output(Vec(coreWidth, UInt(STQ_ADDR_SZ.W)))
+  val dec_ldq_idx = Output(Vec(coreWidth, UInt(ldqAddrSz.W)))
+  val dec_stq_idx = Output(Vec(coreWidth, UInt(stqAddrSz.W)))
 
   val ldq_full    = Output(Vec(coreWidth, Bool()))
   val stq_full    = Output(Vec(coreWidth, Bool()))
@@ -131,7 +131,7 @@ class LSUCoreIO(implicit p: Parameters) extends BoomBundle()(p)
   val fence_dmem   = Input(Bool())
 
   // Speculatively tell the IQs that we'll get load data back next cycle
-  val spec_ld_wakeup = Output(Valid(UInt(PREG_SZ.W)))
+  val spec_ld_wakeup = Output(Valid(UInt(maxPregSz.W)))
   // Tell the IQs that the load we speculated last cycle was misspeculated
   val ld_miss      = Output(Bool())
 
@@ -167,10 +167,10 @@ class LDQEntry(implicit p: Parameters) extends BoomBundle()(p)
   val order_fail          = Bool()
 
   val st_dep_mask         = UInt(NUM_STQ_ENTRIES.W) // list of stores older than us
-  val youngest_stq_idx      = UInt(STQ_ADDR_SZ.W) // index of the oldest store younger than us
+  val youngest_stq_idx    = UInt(stqAddrSz.W) // index of the oldest store younger than us
 
   val forward_std_val     = Bool()
-  val forward_stq_idx     = UInt(STQ_ADDR_SZ.W) // Which store did we get the store-load forward from?
+  val forward_stq_idx     = UInt(stqAddrSz.W) // Which store did we get the store-load forward from?
 }
 
 class STQEntry(implicit p: Parameters) extends BoomBundle()(p)
@@ -194,12 +194,12 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
 
 
 
-  val ldq_head         = Reg(UInt(LDQ_ADDR_SZ.W))
-  val ldq_tail         = Reg(UInt(LDQ_ADDR_SZ.W))
-  val stq_head         = Reg(UInt(STQ_ADDR_SZ.W)) // point to next store to clear from STQ (i.e., send to memory)
-  val stq_tail         = Reg(UInt(STQ_ADDR_SZ.W))
-  val stq_commit_head  = Reg(UInt(STQ_ADDR_SZ.W)) // point to next store to commit
-  val stq_execute_head = Reg(UInt(STQ_ADDR_SZ.W)) // point to next store to execute
+  val ldq_head         = Reg(UInt(ldqAddrSz.W))
+  val ldq_tail         = Reg(UInt(ldqAddrSz.W))
+  val stq_head         = Reg(UInt(stqAddrSz.W)) // point to next store to clear from STQ (i.e., send to memory)
+  val stq_tail         = Reg(UInt(stqAddrSz.W))
+  val stq_commit_head  = Reg(UInt(stqAddrSz.W)) // point to next store to commit
+  val stq_execute_head = Reg(UInt(stqAddrSz.W)) // point to next store to execute
 
   val h_ready :: h_s1 :: h_s2 :: h_s2_nack :: h_wait :: h_replay :: h_dead :: Nil = Enum(7)
   // s1 : do TLB, if success and not killed, fire request go to h_s2
@@ -778,14 +778,14 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
   // Task 1: Clr ROB busy bit
   val clr_bsy_valid   = RegInit(false.B)
   val clr_bsy_rob_idx = Reg(UInt(robAddrSz.W))
-  val clr_bsy_brmask  = Reg(UInt(MAX_BR_COUNT.W))
+  val clr_bsy_brmask  = Reg(UInt(maxBrCount.W))
   clr_bsy_valid   := false.B
   clr_bsy_rob_idx := 0.U
   clr_bsy_brmask  := 0.U
 
   val stdf_clr_bsy_valid   = RegInit(false.B)
   val stdf_clr_bsy_rob_idx = Reg(UInt(robAddrSz.W))
-  val stdf_clr_bsy_brmask  = Reg(UInt(MAX_BR_COUNT.W))
+  val stdf_clr_bsy_brmask  = Reg(UInt(maxBrCount.W))
   stdf_clr_bsy_valid   := false.B
   stdf_clr_bsy_rob_idx := 0.U
   stdf_clr_bsy_brmask  := 0.U
@@ -1430,6 +1430,7 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
                     ~(st_brkilled_mask.asUInt) &
                     ~(st_exc_killed_mask.asUInt)
 
+
 }
 
 /**
@@ -1459,10 +1460,10 @@ class ForwardingAgeLogic(num_entries: Int)(implicit p: Parameters) extends BoomM
    {
       val addr_matches    = Input(UInt(num_entries.W)) // bit vector of addresses that match
                                                        // between the load and the SAQ
-      val youngest_st_idx = Input(UInt(STQ_ADDR_SZ.W)) // needed to get "age"
+      val youngest_st_idx = Input(UInt(stqAddrSz.W)) // needed to get "age"
 
       val forwarding_val  = Output(Bool())
-      val forwarding_idx  = Output(UInt(STQ_ADDR_SZ.W))
+      val forwarding_idx  = Output(UInt(stqAddrSz.W))
    })
 
    // generating mask that zeroes out anything younger than tail

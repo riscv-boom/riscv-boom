@@ -26,7 +26,7 @@ import chisel3.core.withReset
 
 import freechips.rocketchip.config.{Parameters, Field}
 
-import boom.util.ElasticReg
+import boom.util.{ElasticReg, BoomCoreStringPrefix}
 
 /**
  * BaseOnly predictor configuration parameters used in configurations
@@ -89,6 +89,7 @@ class BaseOnlyBrPredictor(
 
   // Nothing to update, as the BIM is handled externally.
 
-  override def toString: String = "   [Core " + hartId + "] ==Base Only BPU==" +
-    "\n   [Core " + hartId + "] Building no predictor (just using BIM as a base predictor)."
+  override def toString: String = BoomCoreStringPrefix(
+    "==Base Only BPU==",
+    "Building no predictor (just using BIM as a base predictor)")
 }

@@ -42,7 +42,7 @@ class RegisterReadIO(
   val iss_uops   = Input(Vec(issueWidth, new MicroOp()))
 
   // interface with register file's read ports
-  val rf_read_ports = Flipped(Vec(numTotalReadPorts, new RegisterFileReadPortIO(PREG_SZ, registerWidth)))
+  val rf_read_ports = Flipped(Vec(numTotalReadPorts, new RegisterFileReadPortIO(maxPregSz, registerWidth)))
 
   val bypass = Input(new BypassData(numTotalBypassPorts, registerWidth))
 
@@ -121,9 +121,9 @@ class RegisterRead(
     // rrdLatency==1, we need to send read address at end of ISS stage,
     //    in order to get read data back at end of RRD stage.
 
-    val rs1_addr = io.iss_uops(w).pop1
-    val rs2_addr = io.iss_uops(w).pop2
-    val rs3_addr = io.iss_uops(w).pop3
+    val rs1_addr = io.iss_uops(w).prs1
+    val rs2_addr = io.iss_uops(w).prs2
+    val rs3_addr = io.iss_uops(w).prs3
 
     if (numReadPorts > 0) io.rf_read_ports(idx+0).addr := rs1_addr
     if (numReadPorts > 1) io.rf_read_ports(idx+1).addr := rs2_addr
@@ -166,18 +166,18 @@ class RegisterRead(
     var rs1_cases = Array((false.B, 0.U(registerWidth.W)))
     var rs2_cases = Array((false.B, 0.U(registerWidth.W)))
 
-    val pop1       = rrd_uops(w).pop1
+    val prs1       = rrd_uops(w).prs1
     val lrs1_rtype = rrd_uops(w).lrs1_rtype
-    val pop2       = rrd_uops(w).pop2
+    val prs2       = rrd_uops(w).prs2
     val lrs2_rtype = rrd_uops(w).lrs2_rtype
 
     for (b <- 0 until io.bypass.getNumPorts)
     {
       // can't use "io.bypass.valid(b) since it would create a combinational loop on branch kills"
-      rs1_cases ++= Array((io.bypass.valid(b) && (pop1 === io.bypass.uop(b).pdst) && io.bypass.uop(b).ctrl.rf_wen
-        && io.bypass.uop(b).dst_rtype === RT_FIX && lrs1_rtype === RT_FIX && (pop1 =/= 0.U), io.bypass.data(b)))
-      rs2_cases ++= Array((io.bypass.valid(b) && (pop2 === io.bypass.uop(b).pdst) && io.bypass.uop(b).ctrl.rf_wen
-        && io.bypass.uop(b).dst_rtype === RT_FIX && lrs2_rtype === RT_FIX && (pop2 =/= 0.U), io.bypass.data(b)))
+      rs1_cases ++= Array((io.bypass.valid(b) && (prs1 === io.bypass.uop(b).pdst) && io.bypass.uop(b).ctrl.rf_wen
+        && io.bypass.uop(b).dst_rtype === RT_FIX && lrs1_rtype === RT_FIX && (prs1 =/= 0.U), io.bypass.data(b)))
+      rs2_cases ++= Array((io.bypass.valid(b) && (prs2 === io.bypass.uop(b).pdst) && io.bypass.uop(b).ctrl.rf_wen
+        && io.bypass.uop(b).dst_rtype === RT_FIX && lrs2_rtype === RT_FIX && (prs2 =/= 0.U), io.bypass.data(b)))
     }
 
     if (numReadPorts > 0) bypassed_rs1_data(w) := MuxCase(rrd_rs1_data(w), rs1_cases)

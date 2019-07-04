@@ -24,72 +24,73 @@ import boom.lsu._
  * Default BOOM core parameters
  */
 case class BoomCoreParams(
-   fetchWidth: Int = 1,
-   decodeWidth: Int = 1,
-   numRobEntries: Int = 64,
-   issueParams: Seq[IssueParams] = Seq(
-         IssueParams(issueWidth=1, numEntries=16, iqType=IQT_MEM.litValue, dispatchWidth=1),
-         IssueParams(issueWidth=2, numEntries=16, iqType=IQT_INT.litValue, dispatchWidth=1),
-         IssueParams(issueWidth=1, numEntries=16, iqType=IQT_FP.litValue , dispatchWidth=1)),
-   numLdqEntries: Int = 16,
-   numStqEntries: Int = 16,
-   numIntPhysRegisters: Int = 96,
-   numFpPhysRegisters: Int = 64,
-   enableCustomRf: Boolean = false,
-   enableCustomRfModel: Boolean = true,
-   maxBrCount: Int = 4,
-   fetchBufferSz: Int = 8,
-   useNewFetchBuffer: Boolean = false,
-   enableAgePriorityIssue: Boolean = true,
-   enablePrefetching: Boolean = false,
-   enableFastLoadUse: Boolean = true,
-   enableBrResolutionRegister: Boolean = true,
-   enableCommitMapTable: Boolean = false,
-   enableFastPNR: Boolean = false,
-   enableFastWakeupsToRename: Boolean = true,
-   enableBTBContainsBranches: Boolean = true,
-   enableBranchPredictor: Boolean = true,
-   enableBTB: Boolean = true,
-   enableBpdUModeOnly: Boolean = false,
-   enableBpdUSModeHistory: Boolean = false,
-   useAtomicsOnlyForIO: Boolean = false,
-   ftq: FtqParameters = FtqParameters(),
-   btb: BoomBTBParameters = BoomBTBParameters(),
-   bim: BimParameters = BimParameters(),
-   tage: Option[TageParameters] = None,
-   gshare: Option[GShareParameters] = None,
-   bpdBaseOnly: Option[BaseOnlyParameters] = None,
-   bpdRandom: Option[RandomBpdParameters] = None,
-   intToFpLatency: Int = 2,
-   imulLatency: Int = 3,
-   fetchLatency: Int = 3,
-   renameLatency: Int = 2,
-   nPerfCounters: Int = 0,
-   numRXQEntries: Int = 4,
-   numRCQEntries: Int = 8,
-   /* more stuff */
+  fetchWidth: Int = 1,
+  decodeWidth: Int = 1,
+  numRobEntries: Int = 64,
+  issueParams: Seq[IssueParams] = Seq(
+    IssueParams(issueWidth=1, numEntries=16, iqType=IQT_MEM.litValue, dispatchWidth=1),
+    IssueParams(issueWidth=2, numEntries=16, iqType=IQT_INT.litValue, dispatchWidth=1),
+    IssueParams(issueWidth=1, numEntries=16, iqType=IQT_FP.litValue , dispatchWidth=1)),
+  numLdqEntries: Int = 16,
+  numStqEntries: Int = 16,
+  numIntPhysRegisters: Int = 96,
+  numFpPhysRegisters: Int = 64,
+  enableCustomRf: Boolean = false,
+  enableCustomRfModel: Boolean = true,
+  maxBrCount: Int = 4,
+  fetchBufferSz: Int = 8,
+  useNewFetchBuffer: Boolean = false,
+  enableAgePriorityIssue: Boolean = true,
+  enablePrefetching: Boolean = false,
+  enableFastLoadUse: Boolean = true,
+  enableBrResolutionRegister: Boolean = true,
+  enableCommitMapTable: Boolean = false,
+  enableFastPNR: Boolean = false,
+  enableFastWakeupsToRename: Boolean = true,
+  enableBTBContainsBranches: Boolean = true,
+  enableBranchPredictor: Boolean = true,
+  enableBTB: Boolean = true,
+  enableBpdUModeOnly: Boolean = false,
+  enableBpdUSModeHistory: Boolean = false,
+  useAtomicsOnlyForIO: Boolean = false,
+  ftq: FtqParameters = FtqParameters(),
+  btb: BoomBTBParameters = BoomBTBParameters(),
+  bim: BimParameters = BimParameters(),
+  tage: Option[TageParameters] = None,
+  gshare: Option[GShareParameters] = None,
+  bpdBaseOnly: Option[BaseOnlyParameters] = None,
+  bpdRandom: Option[RandomBpdParameters] = None,
+  intToFpLatency: Int = 2,
+  imulLatency: Int = 3,
+  fetchLatency: Int = 3,
+  renameLatency: Int = 2,
+  nPerfCounters: Int = 0,
+  numRXQEntries: Int = 4,
+  numRCQEntries: Int = 8,
+  /* more stuff */
 
-   useFetchMonitor: Boolean = true,
-   bootFreqHz: BigInt = 0,
-   fpu: Option[FPUParams] = Some(FPUParams()),
-   usingFPU: Boolean = true,
-   haveBasicCounters: Boolean = true,
-   misaWritable: Boolean = true,
-   mtvecInit: Option[BigInt] = Some(BigInt(0)),
-   mtvecWritable: Boolean = true,
-   haveCFlush: Boolean = false,
-   mulDiv: Option[freechips.rocketchip.rocket.MulDivParams] = Some(MulDivParams()),
-   nBreakpoints: Int = 1,
-   nL2TLBEntries: Int = 512,
-   nLocalInterrupts: Int = 0,
-   useAtomics: Boolean = true,
-   useDebug: Boolean = true,
-   useUser: Boolean = true,
-   useVM: Boolean = true,
-   useCompressed: Boolean = false,
-   useSCIE: Boolean = false,
-   useBPWatch: Boolean = false,
-   clockGate: Boolean = false
+  useFetchMonitor: Boolean = true,
+  bootFreqHz: BigInt = 0,
+  fpu: Option[FPUParams] = Some(FPUParams()),
+  usingFPU: Boolean = true,
+  haveBasicCounters: Boolean = true,
+  misaWritable: Boolean = true,
+  mtvecInit: Option[BigInt] = Some(BigInt(0)),
+  mtvecWritable: Boolean = true,
+  haveCFlush: Boolean = false,
+  mulDiv: Option[freechips.rocketchip.rocket.MulDivParams] = Some(MulDivParams()),
+  nBreakpoints: Int = 1,
+  nL2TLBEntries: Int = 512,
+  nLocalInterrupts: Int = 0,
+  useAtomics: Boolean = true,
+  useDebug: Boolean = true,
+  useUser: Boolean = true,
+  useVM: Boolean = true,
+  useCompressed: Boolean = false,
+  useSCIE: Boolean = false,
+  useRVE: Boolean = false,
+  useBPWatch: Boolean = false,
+  clockGate: Boolean = false
 ) extends freechips.rocketchip.tile.CoreParams
 {
   val haveFSDirty = false
@@ -124,176 +125,170 @@ class BoomCustomCSRs(implicit p: Parameters) extends freechips.rocketchip.tile.C
  */
 trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
 {
-   val boomParams: BoomCoreParams = tileParams.core.asInstanceOf[BoomCoreParams]
+  val boomParams: BoomCoreParams = tileParams.core.asInstanceOf[BoomCoreParams]
 
-   //************************************
-   // Superscalar Widths
+  //************************************
+  // Superscalar Widths
 
-   // fetchWidth provided by CoreParams class.
-   // decodeWidth provided by CoreParams class.
+  // fetchWidth provided by CoreParams class.
+  // decodeWidth provided by CoreParams class.
 
-   // coreWidth is width of decode, width of integer rename, width of ROB, and commit width
-   val coreWidth = decodeWidth
+  // coreWidth is width of decode, width of integer rename, width of ROB, and commit width
+  val coreWidth = decodeWidth
 
-   require (isPow2(fetchWidth))
-   require (coreWidth <= fetchWidth)
+  require (isPow2(fetchWidth))
+  require (coreWidth <= fetchWidth)
 
-   //************************************
-   // Data Structure Sizes
-   val numRobEntries = boomParams.numRobEntries       // number of ROB entries (e.g., 32 entries for R10k)
-   val NUM_RXQ_ENTRIES = boomParams.numRXQEntries       // number of RoCC execute queue entries. Keep small since this holds operands and instruction bits
-   val NUM_RCQ_ENTRIES = boomParams.numRCQEntries       // number of RoCC commit queue entries. This can be large since it just keeps a pdst
-   val NUM_LDQ_ENTRIES = boomParams.numLdqEntries       // number of LAQ entries
-   val NUM_STQ_ENTRIES = boomParams.numStqEntries       // number of SAQ/SDQ entries
-   val MAX_BR_COUNT    = boomParams.maxBrCount          // number of branches we can speculate simultaneously
-   val ftqSz           = boomParams.ftq.nEntries        // number of FTQ entries
-   val fetchBufferSz   = boomParams.fetchBufferSz       // number of instructions that stored between fetch&decode
-   val useNewFetchBuffer = boomParams.useNewFetchBuffer
+  //************************************
+  // Data Structure Sizes
+  val numRobEntries = boomParams.numRobEntries       // number of ROB entries (e.g., 32 entries for R10k)
+  val numRxqEntries = boomParams.numRXQEntries       // number of RoCC execute queue entries. Keep small since this holds operands and instruction bits
+  val numRcqEntries = boomParams.numRCQEntries       // number of RoCC commit queue entries. This can be large since it just keeps a pdst
+  val numLdqEntries = boomParams.numLdqEntries       // number of LAQ entries
+  val numStqEntries = boomParams.numStqEntries       // number of SAQ/SDQ entries
+  val NUM_LDQ_ENTRIES = numLdqEntries // TODO Remove these after
+  val NUM_STQ_ENTRIES = numStqEntries // completion of lsu refactor.
+  val maxBrCount    = boomParams.maxBrCount          // number of branches we can speculate simultaneously
+  val ftqSz         = boomParams.ftq.nEntries        // number of FTQ entries
+  val fetchBufferSz = boomParams.fetchBufferSz       // number of instructions that stored between fetch&decode
+  val useNewFetchBuffer = boomParams.useNewFetchBuffer
 
-   val numIntPhysRegs  = boomParams.numIntPhysRegisters // size of the integer physical register file
-   val numFpPhysRegs   = boomParams.numFpPhysRegisters  // size of the floating point physical register file
+  val numIntPhysRegs= boomParams.numIntPhysRegisters // size of the integer physical register file
+  val numFpPhysRegs = boomParams.numFpPhysRegisters  // size of the floating point physical register file
 
-   //************************************
-   // Functional Units
-   val usingFDivSqrt = boomParams.fpu.isDefined && boomParams.fpu.get.divSqrt
+  //************************************
+  // Functional Units
+  val usingFDivSqrt = boomParams.fpu.isDefined && boomParams.fpu.get.divSqrt
 
-   val mulDivParams = boomParams.mulDiv.getOrElse(MulDivParams())
-   // TODO: Allow RV32IF
-   require(!(xLen == 32 && usingFPU), "RV32 does not support fp")
+  val mulDivParams = boomParams.mulDiv.getOrElse(MulDivParams())
+  // TODO: Allow RV32IF
+  require(!(xLen == 32 && usingFPU), "RV32 does not support fp")
 
-   //************************************
-   // Pipelining
+  //************************************
+  // Pipelining
 
-   val imulLatency = boomParams.imulLatency
-   val dfmaLatency = if (boomParams.fpu.isDefined) boomParams.fpu.get.dfmaLatency else 3
-   val sfmaLatency = if (boomParams.fpu.isDefined) boomParams.fpu.get.sfmaLatency else 3
-   // All FPU ops padded out to same delay for writeport scheduling.
-   require (sfmaLatency == dfmaLatency)
+  val imulLatency = boomParams.imulLatency
+  val dfmaLatency = if (boomParams.fpu.isDefined) boomParams.fpu.get.dfmaLatency else 3
+  val sfmaLatency = if (boomParams.fpu.isDefined) boomParams.fpu.get.sfmaLatency else 3
+  // All FPU ops padded out to same delay for writeport scheduling.
+  require (sfmaLatency == dfmaLatency)
 
-   val intToFpLatency = boomParams.intToFpLatency
+  val intToFpLatency = boomParams.intToFpLatency
 
-   val fetchLatency = boomParams.fetchLatency // how many cycles does fetch occupy?
-   require (fetchLatency == 3) // do not currently support changing this
-   val renameLatency = boomParams.renameLatency // how many cycles does rename occupy?
+  val fetchLatency = boomParams.fetchLatency // how many cycles does fetch occupy?
+  require (fetchLatency == 3) // do not currently support changing this
+  val renameLatency = boomParams.renameLatency // how many cycles does rename occupy?
 
-   val enableBrResolutionRegister = boomParams.enableBrResolutionRegister
+  val enableBrResolutionRegister = boomParams.enableBrResolutionRegister
 
-   //************************************
-   // Issue Units
+  //************************************
+  // Issue Units
 
-   val issueParams: Seq[IssueParams] = boomParams.issueParams
-   val enableAgePriorityIssue = boomParams.enableAgePriorityIssue
-   val enableFastLoadUse = boomParams.enableFastLoadUse
-   val usingUnifiedMemIntIQs = issueParams.count(_.iqType == IQT_MEM.litValue) == 0
+  val issueParams: Seq[IssueParams] = boomParams.issueParams
+  val enableAgePriorityIssue = boomParams.enableAgePriorityIssue
+  val usingUnifiedMemIntIQs = issueParams.count(_.iqType == IQT_MEM.litValue) == 0
 
-   // currently, only support one of each.
-   require (issueParams.count(_.iqType == IQT_FP.litValue) == 1 || !usingFPU)
-   require (issueParams.count(_.iqType == IQT_MEM.litValue) == 1 || usingUnifiedMemIntIQs)
-   require (issueParams.count(_.iqType == IQT_INT.litValue) == 1)
+  // currently, only support one of each.
+  require (issueParams.count(_.iqType == IQT_FP.litValue) == 1 || !usingFPU)
+  require (issueParams.count(_.iqType == IQT_MEM.litValue) == 1 || usingUnifiedMemIntIQs)
+  require (issueParams.count(_.iqType == IQT_INT.litValue) == 1)
 
-   // Currently, require issue dispatch widths all equal coreWidth
-   issueParams.map(x => require(x.dispatchWidth == coreWidth))
-   // TODO: In future, relax this constraint
-   issueParams.map(x => require(x.dispatchWidth <= coreWidth && x.dispatchWidth > 0))
+  // Currently, require issue dispatch widths all equal coreWidth
+  issueParams.map(x => require(x.dispatchWidth == coreWidth))
+  // TODO: In future, relax this constraint
+  issueParams.map(x => require(x.dispatchWidth <= coreWidth && x.dispatchWidth > 0))
 
-   //************************************
-   // Load/Store Unit
-   val dcacheParams: DCacheParams = tileParams.dcache.get
-   val icacheParams: ICacheParams = tileParams.icache.get
-   val icBlockBytes = icacheParams.blockBytes
-   val enablePrefetching = boomParams.enablePrefetching
-   require(icacheParams.nSets <= 64, "Handling aliases in the ICache is buggy.")
+  //************************************
+  // Load/Store Unit
+  val dcacheParams: DCacheParams = tileParams.dcache.get
+  val icacheParams: ICacheParams = tileParams.icache.get
+  val icBlockBytes = icacheParams.blockBytes
 
-   //************************************
-   // Branch Prediction
+  require(icacheParams.nSets <= 64, "Handling aliases in the ICache is buggy.")
 
-   val enableBTB = boomParams.enableBTB
-   val enableBTBContainsBranches = boomParams.enableBTBContainsBranches
+  val enableFastLoadUse = boomParams.enableFastLoadUse
+  val enablePrefetching = boomParams.enablePrefetching
 
-   val ENABLE_BRANCH_PREDICTOR = boomParams.enableBranchPredictor
+  //************************************
+  // Branch Prediction
 
-   val ENABLE_BPD_UMODE_ONLY = boomParams.enableBpdUModeOnly
-   val ENABLE_BPD_USHISTORY = boomParams.enableBpdUSModeHistory
-   // What is the maximum length of global history tracked?
-   var globalHistoryLength = 0
-   // What is the physical length of the VeryLongHistoryRegister? This must be
-   // able to handle the GHIST_LENGTH as well as being able hold all speculative
-   // updates well beyond the GHIST_LENGTH (i.e., +ROB_SZ and other buffering).
-   var bpdInfoSize = 0
+  val enableBTB = boomParams.enableBTB
+  val enableBTBContainsBranches = boomParams.enableBTBContainsBranches
 
-   val tageBpuParams = boomParams.tage
-   val gshareBpuParams = boomParams.gshare
-   val baseOnlyBpuParams = boomParams.bpdBaseOnly
-   val randomBpuParams = boomParams.bpdRandom
+  val enableBranchPredictor = boomParams.enableBranchPredictor
 
-   if (!ENABLE_BRANCH_PREDICTOR)
-   {
-      bpdInfoSize = 1
-      globalHistoryLength = 1
-   }
-   else if (baseOnlyBpuParams.isDefined && baseOnlyBpuParams.get.enabled)
-   {
-      globalHistoryLength = 8
-      bpdInfoSize = BaseOnlyBrPredictor.GetRespInfoSize()
-   }
-   else if (gshareBpuParams.isDefined && gshareBpuParams.get.enabled)
-   {
-      globalHistoryLength = gshareBpuParams.get.historyLength
-      bpdInfoSize = GShareBrPredictor.GetRespInfoSize(globalHistoryLength)
-   }
-   else if (tageBpuParams.isDefined && tageBpuParams.get.enabled)
-   {
-      globalHistoryLength = tageBpuParams.get.historyLengths.max
-      bpdInfoSize = TageBrPredictor.GetRespInfoSize(p)
-   }
-   else if (randomBpuParams.isDefined && randomBpuParams.get.enabled)
-   {
-      globalHistoryLength = 1
-      bpdInfoSize = RandomBrPredictor.GetRespInfoSize()
-   }
+  val enableBpdUmodeOnly = boomParams.enableBpdUModeOnly
+  val enableBpdUshistory = boomParams.enableBpdUSModeHistory
+  // What is the maximum length of global history tracked?
+  var globalHistoryLength = 0
+  // What is the physical length of the VeryLongHistoryRegister? This must be
+  // able to handle the GHIST_LENGTH as well as being able hold all speculative
+  // updates well beyond the GHIST_LENGTH (i.e., +ROB_SZ and other buffering).
+  var bpdInfoSize = 0
 
-   //************************************
-   // Extra Knobs and Features
-   val ENABLE_COMMIT_MAP_TABLE = boomParams.enableCommitMapTable
-   val enableFastPNR = boomParams.enableFastPNR
-   val enableFastWakeupsToRename = boomParams.enableFastWakeupsToRename
+  val tageBpuParams = boomParams.tage
+  val gshareBpuParams = boomParams.gshare
+  val baseOnlyBpuParams = boomParams.bpdBaseOnly
+  val randomBpuParams = boomParams.bpdRandom
 
-   //************************************
-   // Implicitly calculated constants
-   val numRobRows        = numRobEntries/coreWidth
-   val robAddrSz         = log2Ceil(numRobEntries)
-   // the f-registers are mapped into the space above the x-registers
-   val LOGICAL_REG_COUNT = if (usingFPU) 64 else 32
-   val LREG_SZ           = log2Ceil(LOGICAL_REG_COUNT)
-   val IPREG_SZ          = log2Ceil(numIntPhysRegs)
-   val FPREG_SZ          = log2Ceil(numFpPhysRegs)
-   val PREG_SZ           = IPREG_SZ max FPREG_SZ
-   val LDQ_ADDR_SZ       = log2Ceil(NUM_LDQ_ENTRIES)
-   val STQ_ADDR_SZ       = log2Ceil(NUM_STQ_ENTRIES)
-   val LSU_ADDR_SZ       = LDQ_ADDR_SZ max STQ_ADDR_SZ
-   val BR_TAG_SZ         = log2Ceil(MAX_BR_COUNT)
-   val NUM_BROB_ENTRIES  = numRobRows //TODO explore smaller BROBs
-   val BrobAddrSz      = log2Ceil(NUM_BROB_ENTRIES)
+  if (!enableBranchPredictor) {
+    bpdInfoSize = 1
+    globalHistoryLength = 1
+  } else if (baseOnlyBpuParams.isDefined && baseOnlyBpuParams.get.enabled) {
+    globalHistoryLength = 8
+    bpdInfoSize = BaseOnlyBrPredictor.GetRespInfoSize()
+  } else if (gshareBpuParams.isDefined && gshareBpuParams.get.enabled) {
+    globalHistoryLength = gshareBpuParams.get.historyLength
+    bpdInfoSize = GShareBrPredictor.GetRespInfoSize(globalHistoryLength)
+  } else if (tageBpuParams.isDefined && tageBpuParams.get.enabled) {
+    globalHistoryLength = tageBpuParams.get.historyLengths.max
+    bpdInfoSize = TageBrPredictor.GetRespInfoSize(p)
+  } else if (randomBpuParams.isDefined && randomBpuParams.get.enabled) {
+    globalHistoryLength = 1
+    bpdInfoSize = RandomBrPredictor.GetRespInfoSize()
+  }
 
-   require (numIntPhysRegs >= (32 + coreWidth))
-   require (numFpPhysRegs >= (32 + coreWidth))
-   require (MAX_BR_COUNT >=2)
-   require (numRobEntries % coreWidth == 0)
-   require ((NUM_LDQ_ENTRIES-1) > coreWidth)
-   require ((NUM_STQ_ENTRIES-1) > coreWidth)
+  //************************************
+  // Extra Knobs and Features
+  val enableCommitMapTable = boomParams.enableCommitMapTable
+  require(!enableCommitMapTable) // TODO Fix the commit map table.
+  val enableFastPNR = boomParams.enableFastPNR
+  val enableFastWakeupsToRename = boomParams.enableFastWakeupsToRename
 
-   //************************************
-   // Custom Logic
-   val enableCustomRf      = boomParams.enableCustomRf
-   val enableCustomRfModel = boomParams.enableCustomRfModel
+  //************************************
+  // Implicitly calculated constants
+  val numRobRows      = numRobEntries/coreWidth
+  val robAddrSz       = log2Ceil(numRobRows) + log2Ceil(coreWidth)
+  // the f-registers are mapped into the space above the x-registers
+  val logicalRegCount = if (usingFPU) 64 else 32
+  val lregSz          = log2Ceil(logicalRegCount)
+  val ipregSz         = log2Ceil(numIntPhysRegs)
+  val fpregSz         = log2Ceil(numFpPhysRegs)
+  val maxPregSz       = ipregSz max fpregSz
+  val ldqAddrSz       = log2Ceil(numLdqEntries)
+  val stqAddrSz       = log2Ceil(numStqEntries)
+  val lsuAddrSz       = ldqAddrSz max stqAddrSz
+  val brTagSz         = log2Ceil(maxBrCount)
 
-   //************************************
-   // Other Non/Should-not-be sythesizable modules
-   val useFetchMonitor = boomParams.useFetchMonitor
+  require (numIntPhysRegs >= (32 + coreWidth))
+  require (numFpPhysRegs >= (32 + coreWidth))
+  require (maxBrCount >=2)
+  require (numRobEntries % coreWidth == 0)
+  require ((numLdqEntries-1) > coreWidth)
+  require ((numStqEntries-1) > coreWidth)
 
-   //************************************
-   // Non-BOOM parameters
+  //************************************
+  // Custom Logic
+  val enableCustomRf      = boomParams.enableCustomRf
+  val enableCustomRfModel = boomParams.enableCustomRfModel
 
-   val corePAddrBits = paddrBits
-   val corePgIdxBits = pgIdxBits
+  //************************************
+  // Other Non/Should-not-be sythesizable modules
+  val useFetchMonitor = boomParams.useFetchMonitor
+
+  //************************************
+  // Non-BOOM parameters
+
+  val corePAddrBits = paddrBits
+  val corePgIdxBits = pgIdxBits
 }

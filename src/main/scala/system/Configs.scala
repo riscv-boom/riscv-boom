@@ -38,7 +38,7 @@ import boom.common._
  * class SmallBoomConfig extends Config(
  *    new WithRVC ++ <-- Applied 6th
  *    new WithSmallBooms ++ <-- Applied 5th
- *    new DefaultBoomConfig ++ <-- Applied 4th
+ *    new BaseBoomConfig ++ <-- Applied 4th
  *    new WithNBoomCores(1) ++ <-- Applied 3rd
  *    new WithoutTLMonitors ++ <-- Applied 2nd
  *    new freechips.rocketchip.system.BaseConfig) <-- Applied 1st
@@ -46,36 +46,41 @@ import boom.common._
 
 // scalastyle:off
 
-class BoomConfig extends Config(
-  new WithRVC ++
-  new DefaultBoomConfig ++
-  new WithNBoomCores(1) ++
-  new WithoutTLMonitors ++
-  new freechips.rocketchip.system.BaseConfig)
-
 // Main configs. SmallBoomConfig and MediumBoomConfig are best-maintained
 //   MediumBoomConfig is typically described in documentation
 //   All RV64IMAFDC
 class SmallBoomConfig extends Config(
+  new WithBootROM ++
   new WithRVC ++
   new WithSmallBooms ++
-  new DefaultBoomConfig ++
+  new BaseBoomConfig ++
   new WithNBoomCores(1) ++
   new WithoutTLMonitors ++
   new freechips.rocketchip.system.BaseConfig)
 
 class MediumBoomConfig extends Config(
+  new WithBootROM ++
   new WithRVC ++
   new WithMediumBooms ++
-  new DefaultBoomConfig ++
+  new BaseBoomConfig ++
+  new WithNBoomCores(1) ++
+  new WithoutTLMonitors ++
+  new freechips.rocketchip.system.BaseConfig)
+
+class LargeBoomConfig extends Config(
+  new WithBootROM ++
+  new WithRVC ++
+  new WithLargeBooms ++
+  new BaseBoomConfig ++
   new WithNBoomCores(1) ++
   new WithoutTLMonitors ++
   new freechips.rocketchip.system.BaseConfig)
 
 class MegaBoomConfig extends Config(
+  new WithBootROM ++
   new WithRVC ++
   new WithMegaBooms ++
-  new DefaultBoomConfig ++
+  new BaseBoomConfig ++
   new WithNBoomCores(1) ++
   new WithoutTLMonitors ++
   new freechips.rocketchip.system.BaseConfig)
@@ -84,35 +89,49 @@ class MegaBoomConfig extends Config(
 class MegaBoomECCConfig extends Config(
   new WithL1IECC("parity", "parity") ++
   new WithL1DECC("identity", "parity") ++
+  new WithBootROM ++
   new WithRVC ++
   new WithMegaBooms ++
-  new DefaultBoomConfig ++
+  new BaseBoomConfig ++
   new WithNBoomCores(1) ++
   new WithoutTLMonitors ++
   new freechips.rocketchip.system.BaseConfig)
 
 class jtagSmallBoomConfig extends Config(
+  new WithBootROM ++
   new WithRVC ++
   new WithSmallBooms ++
-  new DefaultBoomConfig ++
+  new BaseBoomConfig ++
   new WithNBoomCores(1) ++
   new WithoutTLMonitors ++
   new freechips.rocketchip.system.BaseConfig ++
   new WithJtagDTM)
 
 class jtagMediumBoomConfig extends Config(
+  new WithBootROM ++
   new WithRVC ++
   new WithMediumBooms ++
-  new DefaultBoomConfig ++
+  new BaseBoomConfig ++
+  new WithNBoomCores(1) ++
+  new WithoutTLMonitors ++
+  new freechips.rocketchip.system.BaseConfig ++
+  new WithJtagDTM)
+
+class jtagLargeBoomConfig extends Config(
+  new WithBootROM ++
+  new WithRVC ++
+  new WithLargeBooms ++
+  new BaseBoomConfig ++
   new WithNBoomCores(1) ++
   new WithoutTLMonitors ++
   new freechips.rocketchip.system.BaseConfig ++
   new WithJtagDTM)
 
 class jtagMegaBoomConfig extends Config(
+  new WithBootROM ++
   new WithRVC ++
   new WithMegaBooms ++
-  new DefaultBoomConfig ++
+  new BaseBoomConfig ++
   new WithNBoomCores(1) ++
   new WithoutTLMonitors ++
   new freechips.rocketchip.system.BaseConfig ++
@@ -120,39 +139,43 @@ class jtagMegaBoomConfig extends Config(
 
 // RV64IMAC
 class SmallIntBoomConfig extends Config(
+  new WithBootROM ++
   new WithRVC ++
   new WithoutBoomFPU ++
   new WithSmallBooms ++
-  new DefaultBoomConfig ++
+  new BaseBoomConfig ++
   new WithNBoomCores(1) ++
   new WithoutTLMonitors ++
   new freechips.rocketchip.system.BaseConfig)
 
 class SmallDualBoomConfig extends Config(
+  new WithBootROM ++
   new WithRVC ++
   new WithSmallBooms ++
-  new DefaultBoomConfig ++
+  new BaseBoomConfig ++
   new WithNBoomCores(2) ++
   new WithoutTLMonitors ++
   new freechips.rocketchip.system.BaseConfig)
 
 class TracedSmallBoomConfig extends Config(
+  new WithBootROM ++
   new WithRVC ++
   new WithTrace ++
   new WithSmallBooms ++
-  new DefaultBoomConfig ++
+  new BaseBoomConfig ++
   new WithNBoomCores(1) ++
   new WithoutTLMonitors ++
   new freechips.rocketchip.system.BaseConfig)
 
 //RV32IMAC TODO: Support FP
 class SmallRV32UnifiedBoomConfig extends Config(
+  new WithBootROM ++
   new WithBoomRV32 ++
   new WithRVC ++
   new WithoutBoomFPU ++
   new WithUnifiedMemIntIQs ++
   new WithSmallBooms ++
-  new DefaultBoomConfig ++
+  new BaseBoomConfig ++
   new WithNBoomCores(1) ++
   new WithoutTLMonitors ++
   new freechips.rocketchip.system.BaseConfig)
@@ -163,40 +186,45 @@ class SmallRV32UnifiedBoomConfig extends Config(
 // Heterogeneous Tile Configs
 // --------------------------
 
-class BoomAndRocketConfig extends Config(
-  // final param setup
-  new WithRenumberHarts ++
-  new WithoutTLMonitors ++
-  // boom param setup
-  new WithRVC ++
-  new DefaultBoomConfig ++
-  // create boom tile
-  new WithNBoomCores(1) ++
-  // create rocket tile
-  new freechips.rocketchip.subsystem.WithNBigCores(1) ++
-  new freechips.rocketchip.system.BaseConfig)
-
 class SmallBoomAndRocketConfig extends Config(
   // final param setup
+  new WithBootROM ++
   new WithRenumberHarts ++
   new WithoutTLMonitors ++
   // boom param setup
   new WithRVC ++
   new WithSmallBooms ++
-  new DefaultBoomConfig ++
+  new BaseBoomConfig ++
   // create boom tile
   new WithNBoomCores(1) ++
   // create rocket tile
   new freechips.rocketchip.subsystem.WithNBigCores(1) ++
   new freechips.rocketchip.system.BaseConfig)
 
-class DualCoreBoomAndDualRocketConfig extends Config(
+class MediumBoomAndRocketConfig extends Config(
   // final param setup
+  new WithBootROM ++
+  new WithRenumberHarts ++
+  new WithoutTLMonitors ++
+  // boom param setup
+  new WithRVC ++
+  new WithMediumBooms ++
+  new BaseBoomConfig ++
+  // create boom tile
+  new WithNBoomCores(1) ++
+  // create rocket tile
+  new freechips.rocketchip.subsystem.WithNBigCores(1) ++
+  new freechips.rocketchip.system.BaseConfig)
+
+class DualMediumBoomAndDualRocketConfig extends Config(
+  // final param setup
+  new WithBootROM ++
   new WithRenumberHarts ++
   new WithoutTLMonitors ++
   // boom param setup (applies to all boom cores)
   new WithRVC ++
-  new DefaultBoomConfig ++
+  new WithMediumBooms ++
+  new BaseBoomConfig ++
   // create boom tiles
   new WithNBoomCores(2) ++
   // create rocket tiles

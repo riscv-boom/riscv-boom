@@ -13,7 +13,7 @@ import freechips.rocketchip.config._
 import freechips.rocketchip.subsystem._
 import freechips.rocketchip.devices.tilelink._
 import freechips.rocketchip.diplomacy._
-import freechips.rocketchip.diplomaticobjectmodel.logicaltree.{LogicalModuleTree, RocketLogicalTreeNode}
+import freechips.rocketchip.diplomaticobjectmodel.logicaltree.{LogicalModuleTree, LogicalTreeNode, RocketLogicalTreeNode}
 import freechips.rocketchip.rocket._
 import freechips.rocketchip.subsystem.RocketCrossingParams
 import freechips.rocketchip.tilelink._
@@ -24,6 +24,7 @@ import freechips.rocketchip.tile._
 import boom.exu._
 import boom.ifu._
 import boom.lsu._
+import boom.util.{BoomCoreStringPrefix}
 
 /**
  * BOOM tile parameter class used in configurations
@@ -41,18 +42,18 @@ import boom.lsu._
  * @param boundaryBuffers ...
  */
 case class BoomTileParams(
-    core: BoomCoreParams = BoomCoreParams(),
-    icache: Option[ICacheParams] = Some(ICacheParams()),
-    dcache: Option[DCacheParams] = Some(DCacheParams()),
-    btb: Option[BTBParams] = Some(BTBParams()),
-    dataScratchpadBytes: Int = 0,
-    trace: Boolean = false,
-    name: Option[String] = Some("boom_tile"),
-    hartId: Int = 0,
-    beuAddr: Option[BigInt] = None,
-    blockerCtrlAddr: Option[BigInt] = None,
-    boundaryBuffers: Boolean = false // if synthesized with hierarchical PnR, cut feed-throughs?
-    ) extends TileParams
+  core: BoomCoreParams = BoomCoreParams(),
+  icache: Option[ICacheParams] = Some(ICacheParams()),
+  dcache: Option[DCacheParams] = Some(DCacheParams()),
+  btb: Option[BTBParams] = Some(BTBParams()),
+  dataScratchpadBytes: Int = 0,
+  trace: Boolean = false,
+  name: Option[String] = Some("boom_tile"),
+  hartId: Int = 0,
+  beuAddr: Option[BigInt] = None,
+  blockerCtrlAddr: Option[BigInt] = None,
+  boundaryBuffers: Boolean = false // if synthesized with hierarchical PnR, cut feed-throughs?
+  ) extends TileParams
 {
   require(icache.isDefined)
   require(dcache.isDefined)
@@ -65,22 +66,23 @@ case class BoomTileParams(
  * @param crossing ...
  */
 class BoomTile(
-    val boomParams: BoomTileParams,
-    crossing: ClockCrossingType,
-    lookup: LookupByHartIdImpl,
-    q: Parameters)
-    extends BaseTile(boomParams, crossing, lookup, q)
-    with SinksExternalInterrupts
-    with SourcesExternalNotifications
-    with HasBoomLazyRoCC  // implies CanHaveSharedFPU with CanHavePTW with HasHellaCache
-    with CanHaveBoomPTW
-    with HasBoomICacheFrontend
-    with HasBoomLSU
+  val boomParams: BoomTileParams,
+  crossing: ClockCrossingType,
+  lookup: LookupByHartIdImpl,
+  q: Parameters,
+  logicalTreeNode: LogicalTreeNode)
+  extends BaseTile(boomParams, crossing, lookup, q)
+  with SinksExternalInterrupts
+  with SourcesExternalNotifications
+  with HasBoomLazyRoCC  // implies CanHaveSharedFPU with CanHavePTW with HasHellaCache
+  with CanHaveBoomPTW
+  with HasBoomICacheFrontend
+  with HasBoomLSU
 {
 
   // Private constructor ensures altered LazyModule.p is used implicitly
-  def this(params: BoomTileParams, crossing: RocketCrossingParams, lookup: LookupByHartIdImpl)(implicit p: Parameters) =
-    this(params, crossing.crossingType, lookup, p)
+  def this(params: BoomTileParams, crossing: RocketCrossingParams, lookup: LookupByHartIdImpl, logicalTreeNode: LogicalTreeNode)
+    (implicit p: Parameters) = this(params, crossing.crossingType, lookup, p, logicalTreeNode)
 
 
   val intOutwardNode = IntIdentityNode()
@@ -95,7 +97,7 @@ class BoomTile(
   dtim_adapter.foreach(lm => connectTLSlave(lm.node, xBytes))
 
   val bus_error_unit = boomParams.beuAddr map { a =>
-    val beu = LazyModule(new BusErrorUnit(new L1BusErrors, BusErrorUnitParams(a)))
+    val beu = LazyModule(new BusErrorUnit(new L1BusErrors, BusErrorUnitParams(a), logicalTreeNode))
     intOutwardNode := beu.intNode
     connectTLSlave(beu.node, xBytes)
     beu
@@ -177,7 +179,7 @@ class BoomTile(
       mtvecWritable       = boomParams.core.mtvecWritable
     )
   )
-  val rocketLogicalTree: RocketLogicalTreeNode = new RocketLogicalTreeNode(cpuDevice, fakeRocketParams, dtim_adapter, p(XLen), iCacheLogicalTreeNode)
+  val rocketLogicalTree: RocketLogicalTreeNode = new RocketLogicalTreeNode(cpuDevice, fakeRocketParams, dtim_adapter, p(XLen))
 
 }
 
@@ -187,10 +189,10 @@ class BoomTile(
  * @param outer top level BOOM tile
  */
 class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer)
-    with HasBoomLazyRoCCModule
-    with CanHaveBoomPTWModule
-    with HasBoomICacheFrontendModule
-    with HasBoomLSUModule
+  with HasBoomLazyRoCCModule
+  with CanHaveBoomPTWModule
+  with HasBoomICacheFrontendModule
+  with HasBoomLSUModule
 {
   Annotated.params(this, outer.boomParams)
 
@@ -241,13 +243,12 @@ class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer)
   core.io.reset_vector := DontCare
 
 
-  if (outer.roccs.size > 0)
-  {
-     cmdRouter.get.io.in <> core.io.rocc.cmd
-     outer.roccs.foreach(_.module.io.exception := core.io.rocc.exception)
-     core.io.rocc.resp <> respArb.get.io.out
-     core.io.rocc.busy <> (cmdRouter.get.io.busy || outer.roccs.map(_.module.io.busy).reduce(_||_))
-     core.io.rocc.interrupt := outer.roccs.map(_.module.io.interrupt).reduce(_||_)
+  if (outer.roccs.size > 0) {
+    cmdRouter.get.io.in <> core.io.rocc.cmd
+    outer.roccs.foreach(_.module.io.exception := core.io.rocc.exception)
+    core.io.rocc.resp <> respArb.get.io.out
+    core.io.rocc.busy <> (cmdRouter.get.io.busy || outer.roccs.map(_.module.io.busy).reduce(_||_))
+    core.io.rocc.interrupt := outer.roccs.map(_.module.io.interrupt).reduce(_||_)
   }
 
 
@@ -261,9 +262,13 @@ class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer)
   ptw.io.requestor <> ptwPorts
 
   val frontendStr = outer.frontend.module.toString
-  ElaborationArtefacts.add(
-    """core.config""",
-    frontendStr + core.toString + "\n"
-  )
-  print(outer.frontend.module.toString + core.toString + "\n")
+  val coreStr = core.toString
+  val boomTileStr =
+    (BoomCoreStringPrefix(s"======BOOM Tile ${p(TileKey).hartId} Params======") + "\n"
+    + frontendStr
+    + coreStr + "\n")
+
+  override def toString: String = boomTileStr
+
+  print(boomTileStr)
 }

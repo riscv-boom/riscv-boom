@@ -20,12 +20,13 @@ package boom.bpu
 import chisel3._
 import chisel3.util._
 
-import freechips.rocketchip.config.Parameters
+import freechips.rocketchip.config.{Parameters}
 
 import boom.common._
 import boom.exu._
+import boom.util.{BoomCoreStringPrefix}
 
-import freechips.rocketchip.util.Str
+import freechips.rocketchip.util.{Str}
 
 //------------------------------------------------------------------------------
 // Parameters and Traits
@@ -263,7 +264,7 @@ class NullBTB(implicit p: Parameters) extends BoomBTB
 {
   io.resp.valid := false.B
 
-  override def toString: String = "   ==Null BTB=="
+  override def toString: String = BoomCoreStringPrefix("==Null BTB==")
 }
 
 /**

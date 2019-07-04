@@ -5,39 +5,25 @@
 # turn echo on and error on earliest command
 set -ex
 
-if [ ! -d "$HOME/bhd" ]; then
+if [ ! -d "$HOME/chipyard" ]; then
     cd $HOME
 
-    git clone --progress --verbose https://github.com/ucb-bar/project-template.git bhd
-    cd bhd
-    git checkout rebar-dev
+    git clone --progress --verbose https://github.com/ucb-bar/project-template.git chipyard
+    cd $HOME/chipyard
+
+    echo "Checking out Chipyard version: $(cat $HOME/project/CHIPYARD.hash)"
+    git fetch
+    git checkout $(cat $HOME/project/CHIPYARD.hash)
 
     # init all submodules (according to what boom-template wants)
     ./scripts/init-submodules-no-riscv-tools.sh
 
     # move the pull request riscv-boom repo into boom-template
-    rm -rf $HOME/bhd/generators/boom
-    cp -r $HOME/project $HOME/bhd/generators/boom/
-
-    # get boom specific rocket-chip version
-    echo "Checking out rocket-chip with hash: $(cat boom/ROCKETCHIP_VERSION)"
-    cd generators/rocket-chip
-    git fetch
-    git checkout $(cat $HOME/bhd/generators/boom/ROCKETCHIP_VERSION)
-
-    echo "Initialize final submodules"
-    git submodule update --init --recursive
-
-    # TODO: remove this
-    # Copy chisel/firrtl of rocketchip into rebar base
-    rm -rf $HOME/bhd/tools/chisel3
-    rm -rf $HOME/bhd/tools/firrtl
-    cp -r chisel3 $HOME/bhd/tools
-    cp -r firrtl $HOME/bhd/tools
-
+    rm -rf $HOME/chipyard/generators/boom
+    cp -r $HOME/project $HOME/chipyard/generators/boom/
 
     # make boom-template verilator version
-    cd $HOME/bhd/sims/verisim
+    cd $HOME/chipyard/sims/verisim
     make verilator_install
 fi
 

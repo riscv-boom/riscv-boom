@@ -32,6 +32,7 @@ import boom.bpu._
 import boom.common._
 import boom.exu.{BranchUnitResp, CommitExceptionSignals}
 import boom.lsu.{CanHaveBoomPTW, CanHaveBoomPTWModule}
+import boom.util.{BoomCoreStringPrefix}
 
 /**
  * Parameters to manage a L1 Banked ICache
@@ -320,7 +321,10 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   def ccover(cond: Bool, label: String, desc: String)(implicit sourceInfo: SourceInfo) =
     cover(cond, s"FRONTEND_$label", "Rocket;;" + desc)
 
-  override def toString: String = bpdpipeline.toString + "\n" + icache.toString
+  override def toString: String =
+    (BoomCoreStringPrefix("====Overall Frontend Params====") + "\n"
+    + bpdpipeline.toString + "\n"
+    + icache.toString)
 }
 
 /**
@@ -336,7 +340,9 @@ trait HasBoomICacheFrontend extends CanHaveBoomPTW
   nPTWPorts += 1
   nPTWPorts += 1 // boom -- needs an extra PTW port for its LSU.
 
-  val iCacheLogicalTreeNode = new ICacheLogicalTreeNode(frontend.icache.device, tileParams.icache.get)
+  private val deviceOpt = if (tileParams.icache.get.itimAddr.isDefined) Some(frontend.icache.device) else None
+
+  val iCacheLogicalTreeNode = new ICacheLogicalTreeNode(deviceOpt, tileParams.icache.get)
 
 }
 
