@@ -76,15 +76,16 @@ class GShareEntry(val fetchWidth: Int) extends Bundle {
   def getUpdated(cfi_idx: UInt, taken: Bool): GShareEntry = {
     val new_cfi_idx = Wire(UInt(log2Ceil(fetchWidth).W))
     val new_counter = Wire(UInt(2.W))
+    new_cfi_idx := this.cfi_idx
 
     when (cfi_idx === this.cfi_idx) {
       new_counter := updateCounter(taken)
-      new_cfi_idx := this.cfi_idx
     } .otherwise {
       when (isWeak) {
         new_counter := Mux(taken, 2.U, 1.U)
       } .otherwise {
         new_counter := Cat(counter(1), !counter(0))
+        new_cfi_idx := cfi_idx
       }
     }
 
@@ -145,7 +146,7 @@ class GShareBrPredictor(
   private def Hash(addr: UInt, hist: UInt) = {
     // fold history if too big for our table
     val folded_history = Fold (hist, idxSz, historyLength)
-    ((addr >> (log2Ceil(bankBytes).U)) ^ folded_history)(idxSz-1,0)
+    ((addr >> (log2Ceil(coreInstBytes).U)) ^ folded_history)(idxSz-1,0)
   }
 
   // for initializing the counter table, this is the value to reset the row to.
