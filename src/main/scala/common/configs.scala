@@ -192,6 +192,7 @@ class WithLargeBooms extends Config((site, here, up) => {
     core = b.core.copy(
       fetchWidth = 4,
       decodeWidth = 3,
+      useNewFetchBuffer = true,
       numRobEntries = 96,
       issueParams = Seq(
         IssueParams(issueWidth=1, numEntries=24, iqType=IQT_MEM.litValue, dispatchWidth=3),

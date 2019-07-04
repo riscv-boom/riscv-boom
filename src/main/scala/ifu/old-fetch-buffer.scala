@@ -44,6 +44,7 @@ class OldFetchBuffer(numEntries: Int)(implicit p: Parameters) extends BoomModule
   with HasBoomCoreParameters
   with HasL1ICacheBankedParameters
 {
+  require(isPow2(coreWidth))
   val io = IO(new BoomBundle {
     val enq = Flipped(Decoupled(new FetchBundle()))
     val deq = new DecoupledIO(new FetchBufferResp())
