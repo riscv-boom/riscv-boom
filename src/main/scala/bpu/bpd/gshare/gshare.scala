@@ -54,6 +54,14 @@ trait HasGShareParameters extends HasBoomCoreParameters
 }
 
 /**
+ * Counter table entry.
+ */
+class GShareEntry(val fetchWidth: Int) extends Bundle {
+  val cfi_idx = UInt(log2Ceil(fetchWidth).W)
+  val cntr = UInt(2.W)
+}
+
+/**
  * Set of data values passed around the GShare predictor and used to update the
  * predictor state at commit
  *
