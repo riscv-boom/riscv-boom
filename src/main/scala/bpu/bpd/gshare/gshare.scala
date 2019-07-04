@@ -83,9 +83,9 @@ class GShareEntry(val fetchWidth: Int) extends Bundle {
     } .otherwise {
       when (isWeak) {
         new_counter := Mux(taken, 2.U, 1.U)
+        new_cfi_idx := cfi_idx
       } .otherwise {
         new_counter := Cat(counter(1), !counter(0))
-        new_cfi_idx := cfi_idx
       }
     }
 
@@ -213,7 +213,7 @@ class GShareBrPredictor(
   val com_info = (io.commit.bits.info).asTypeOf(new GShareResp(fetchWidth, idxSz))
   val com_idx = Hash(io.commit.bits.fetch_pc, io.commit.bits.history)(idxSz-1,0)
 
-  val wen = io.commit.valid && io.commit.bits.mispredict || (fsm_state === s_clear)
+  val wen = io.commit.valid || (fsm_state === s_clear)
   when (wen) {
     val new_entry = com_info.entry.getUpdated(io.commit.bits.miss_cfi_idx, io.commit.bits.taken)
 
