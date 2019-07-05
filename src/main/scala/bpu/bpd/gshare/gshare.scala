@@ -149,7 +149,7 @@ class GShareBrPredictor(
     val pc = addr >> log2Ceil(coreInstBytes).U
     val n = idxSz
     val k = log2Ceil(fetchWidth)
-    val hashed_pc = ((pc >> k.U) ^ (pc << (n-k).U))(n-1,0)
+    val hashed_pc = ((pc >> k.U) ^ pc(k-1,0))(n-1,0)
     hashed_pc ^ folded_history
   }
 
