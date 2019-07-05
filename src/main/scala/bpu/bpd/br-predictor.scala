@@ -166,7 +166,7 @@ abstract class BoomBrPredictor(
     val shamt = 2
     val sz0 = 6
     if (historyLength < (sz0*2+1)) {
-      (old << 1.U) | (foldpc(5) ^ foldpc(6))
+      ret := (old << 1.U) ^ foldpc
     } else {
       val o0 = old(sz0-1,0)
       val o1 = old(2*sz0-1,sz0)
@@ -176,8 +176,9 @@ abstract class BoomBrPredictor(
       val h2 = (o1 ^ (o1 >> (sz0/2).U))(sz0/2-1,0)
       val min = h0.getWidth + h1.getWidth
       ret := Cat(old(historyLength-1, min), h2, h1, h0)
-      ret
     }
+
+    ret
   }
 
   val r_f1_fetchpc = RegEnable(io.req.bits.addr, io.req.valid)
