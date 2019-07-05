@@ -140,7 +140,9 @@ class BranchPredictionStage(val bankBytes: Int)(implicit p: Parameters) extends 
   val jmp_idx = btb.io.resp.bits.cfi_idx
 
   btb.io.ras_update := io.f3_ras_update
-  btb.io.ras_update.valid := btb.io.resp.valid && !io.f2_stall || io.f3_ras_update.valid && !io.f3_stall
+  btb.io.ras_update.valid := (btb.io.resp.valid && !io.f2_stall || io.f3_ras_update.valid && !io.f3_stall) &&
+                               !io.f4_redirect // TODO Have some sort of mechanism to prevent misspeculated RAS updates.
+                                               // Maybe dissasociate the RAS with the BTB, and do all updates in F3?
   when (btb.io.resp.valid) {
      btb.io.ras_update.bits.is_call     := BpredType.isCall(btb.io.resp.bits.bpd_type)
      btb.io.ras_update.bits.is_ret      := BpredType.isReturn(btb.io.resp.bits.bpd_type)
