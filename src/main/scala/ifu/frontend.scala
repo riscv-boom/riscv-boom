@@ -298,6 +298,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 
   bpdpipeline.io.f2_valid := fetch_controller.io.imem_resp.valid
   bpdpipeline.io.f2_redirect := fetch_controller.io.f2_redirect
+  bpdpipeline.io.f3_will_redirect := fetch_controller.io.f3_will_redirect
   bpdpipeline.io.f4_redirect := fetch_controller.io.f4_redirect
   bpdpipeline.io.f4_taken := fetch_controller.io.f4_taken
   bpdpipeline.io.fe_clear := fetch_controller.io.clear_fetchbuffer
