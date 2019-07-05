@@ -221,15 +221,7 @@ abstract class BoomBrPredictor(
      (io.f4_redirect && io.f4_taken) ||
      io.f2_redirect
 
-  r_f1_history := Mux(io.f2_replay,
-                      r_f2_history,
-                      Mux(io.ftq_restore.valid && !io.ftq_restore.bits.taken,
-                          io.ftq_restore.bits.history,
-                          Mux(io.f4_redirect && !io.f4_taken,
-                              r_f4_history,
-                              Mux(use_new_hash,
-                                  new_history,
-                                  r_f1_history))))
+  r_f1_history := Mux(use_new_hash, new_history, r_f1_history)
 
   assert (!io.f2_redirect || r_f2_history === r_f1_history,
      "[bpd] if a F2 redirect occurs, F2-hist should equal F1-hist.")
