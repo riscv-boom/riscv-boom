@@ -146,7 +146,11 @@ class GShareBrPredictor(
   private def Hash(addr: UInt, hist: UInt) = {
     // fold history if too big for our table
     val folded_history = Fold (hist, idxSz, historyLength)
-    ((addr >> (log2Ceil(coreInstBytes).U)) ^ folded_history)(idxSz-1,0)
+    val pc = addr >> log2Ceil(coreInstBytes).U
+    val n = idxSz
+    val k = log2Ceil(fetchWidth)
+    val hashed_pc = ((pc >> k.U) ^ (pc << (n-k).U))(n-1,0)
+    hashed_pc ^ folded_history
   }
 
   // for initializing the counter table, this is the value to reset the row to.
