@@ -7,7 +7,7 @@ version: 2
 jobs:
     install-riscv-tools:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.5
+            - image: riscvboom/riscvboom-images:0.0.10
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -27,7 +27,7 @@ jobs:
                     - "/home/riscvuser/riscv-tools-install"
     prepare-build-environment:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.5
+            - image: riscvboom/riscvboom-images:0.0.10
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -35,52 +35,74 @@ jobs:
             - checkout
             - restore_cache:
                 keys:
-                    - chipyard-with-verilator-v9-{{ checksum "CHIPYARD.hash" }}
+                    - chipyard-v10-{{ checksum "CHIPYARD.hash" }}
+            - restore_cache:
+                keys:
+                    - verilator-v10-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Build Verilator and setup build environment
                 command: |
                     .circleci/prepare-for-rtl-build.sh
                 no_output_timeout: 120m
             - save_cache:
-                key: chipyard-with-verilator-v9-{{ checksum "CHIPYARD.hash" }}
+                key: chipyard-v10-{{ checksum "CHIPYARD.hash" }}
                 paths:
                     - "/home/riscvuser/chipyard"
-    prepare-smallrv32unifiedboomconfig:
+            - save_cache:
+                key: verilator-v10-{{ checksum "CHIPYARD.hash" }}
+                paths:
+                    - "/home/riscvuser/verilator"
+    run-scala-checkstyle:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.5
+            - image: riscvboom/riscvboom-images:0.0.10
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
         steps:
             - checkout
+            - run:
+                name: Run Scala checkstyle
+                command: make checkstyle
+    copy-environment:
+        docker:
+            - image: riscvboom/riscvboom-images:0.0.10
+        environment:
+            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
+            TERM: dumb
+        steps:
+            - checkout
+            - add_ssh_keys:
+                fingerprints:
+                    - "e7:69:4e:24:88:f6:cd:7c:62:da:51:03:54:c4:7f:ec"
             - restore_cache:
                 keys:
                     - riscv-tools-installed-v3-{{ checksum "CHIPYARD.hash" }}
             - restore_cache:
                 keys:
-                    - chipyard-with-verilator-v9-{{ checksum "CHIPYARD.hash" }}
+                    - chipyard-v10-{{ checksum "CHIPYARD.hash" }}
+            - restore_cache:
+                keys:
+                    - verilator-v10-{{ checksum "CHIPYARD.hash" }}
             - run:
-                name: Building SmallRV32UnifiedBoomConfig using Verilator
-                command: .circleci/do-rtl-build.sh SmallRV32UnifiedBoomConfig
+                name: Move riscv-tools, chipyard, and verilator to remote server
+                command: |
+                    .circleci/cleanup-ext.sh
+                    .circleci/move-environment.sh
                 no_output_timeout: 120m
-            - save_cache:
-                key: smallrv32unifiedboomconfig-{{ .Branch }}-{{ .Revision }}
-                paths:
-                    - "/home/riscvuser/chipyard"
     prepare-smallboomconfig:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.5
+            - image: riscvboom/riscvboom-images:0.0.10
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
         steps:
+            - add_ssh_keys:
+                fingerprints:
+                    - "e7:69:4e:24:88:f6:cd:7c:62:da:51:03:54:c4:7f:ec"
             - checkout
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "CHIPYARD.hash" }}
-            - restore_cache:
-                keys:
-                    - chipyard-with-verilator-v9-{{ checksum "CHIPYARD.hash" }}
+                    - chipyard-with-verilator-v10-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Building SmallBoomConfig using Verilator
                 command: .circleci/do-rtl-build.sh SmallBoomConfig
@@ -91,18 +113,18 @@ jobs:
                     - "/home/riscvuser/chipyard"
     prepare-mediumboomconfig:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.5
+            - image: riscvboom/riscvboom-images:0.0.10
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
         steps:
+            - add_ssh_keys:
+                fingerprints:
+                    - "e7:69:4e:24:88:f6:cd:7c:62:da:51:03:54:c4:7f:ec"
             - checkout
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "CHIPYARD.hash" }}
-            - restore_cache:
-                keys:
-                    - chipyard-with-verilator-v9-{{ checksum "CHIPYARD.hash" }}
+                    - chipyard-with-verilator-v10-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Building MediumBoomConfig using Verilator
                 command: .circleci/do-rtl-build.sh MediumBoomConfig
@@ -113,18 +135,18 @@ jobs:
                     - "/home/riscvuser/chipyard"
     prepare-largeboomconfig:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.5
+            - image: riscvboom/riscvboom-images:0.0.10
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
         steps:
+            - add_ssh_keys:
+                fingerprints:
+                    - "e7:69:4e:24:88:f6:cd:7c:62:da:51:03:54:c4:7f:ec"
             - checkout
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "CHIPYARD.hash" }}
-            - restore_cache:
-                keys:
-                    - chipyard-with-verilator-v9-{{ checksum "CHIPYARD.hash" }}
+                    - chipyard-with-verilator-v10-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Building LargeBoomConfig using Verilator
                 command: .circleci/do-rtl-build.sh LargeBoomConfig
@@ -135,18 +157,18 @@ jobs:
                     - "/home/riscvuser/chipyard"
     prepare-megaboomconfig:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.5
+            - image: riscvboom/riscvboom-images:0.0.10
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
         steps:
+            - add_ssh_keys:
+                fingerprints:
+                    - "e7:69:4e:24:88:f6:cd:7c:62:da:51:03:54:c4:7f:ec"
             - checkout
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "CHIPYARD.hash" }}
-            - restore_cache:
-                keys:
-                    - chipyard-with-verilator-v9-{{ checksum "CHIPYARD.hash" }}
+                    - chipyard-with-verilator-v10-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Building MegaBoomConfig using Verilator
                 command: .circleci/do-rtl-build.sh MegaBoomConfig
@@ -157,18 +179,18 @@ jobs:
                     - "/home/riscvuser/chipyard"
     prepare-smallboomandrocketconfig:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.5
+            - image: riscvboom/riscvboom-images:0.0.10
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
         steps:
+            - add_ssh_keys:
+                fingerprints:
+                    - "e7:69:4e:24:88:f6:cd:7c:62:da:51:03:54:c4:7f:ec"
             - checkout
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "CHIPYARD.hash" }}
-            - restore_cache:
-                keys:
-                    - chipyard-with-verilator-v9-{{ checksum "CHIPYARD.hash" }}
+                    - chipyard-with-verilator-v10-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Building SmallBoomAndRocketConfig using Verilator
                 command: .circleci/do-rtl-build.sh SmallBoomAndRocketConfig
@@ -177,60 +199,31 @@ jobs:
                 key: smallboomandrocketconfig-{{ .Branch }}-{{ .Revision }}
                 paths:
                     - "/home/riscvuser/chipyard"
-
-    run-scala-checkstyle:
+    prepare-smallrv32unifiedboomconfig:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.5
+            - image: riscvboom/riscvboom-images:0.0.10
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
         steps:
-            - checkout
-            - run:
-                name: Run Scala checkstyle
-                command: make checkstyle
-
-    smallrv32unifiedboomconfig-run-csmith-tests:
-        docker:
-            - image: riscvboom/riscvboom-images:0.0.5
-        environment:
-            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
-            TERM: dumb
-        steps:
+            - add_ssh_keys:
+                fingerprints:
+                    - "e7:69:4e:24:88:f6:cd:7c:62:da:51:03:54:c4:7f:ec"
             - checkout
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "CHIPYARD.hash" }}
-            - restore_cache:
-                keys:
-                    - smallrv32unifiedboomconfig-{{ .Branch }}-{{ .Revision }}
+                    - chipyard-with-verilator-v10-{{ checksum "CHIPYARD.hash" }}
             - run:
-                name: Run SmallRV32UnifiedBoomConfig csmith tests
-                command: .circleci/build-run-csmith-tests.sh SmallRV32UnifiedBoomConfig 50
-                no_output_timeout: 30m
-
-    smallrv32unifiedboomconfig-run-riscv-tests:
-        docker:
-            - image: riscvboom/riscvboom-images:0.0.5
-        environment:
-            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
-            TERM: dumb
-        steps:
-            - checkout
-            - restore_cache:
-                keys:
-                    - riscv-tools-installed-v3-{{ checksum "CHIPYARD.hash" }}
-            - restore_cache:
-                keys:
-                    - smallrv32unifiedboomconfig-{{ .Branch }}-{{ .Revision }}
-            - run:
-                name: Run SmallRV32UnifiedBoomConfig riscv tests
-                command: |
-                    make run-asm-tests-fast -C ../chipyard/sims/verisim CONFIG=SmallRV32UnifiedBoomConfig SUB_PROJECT=boom TOP=BoomRocketSystem
-
+                name: Building SmallRV32UnifiedBoomConfig using Verilator
+                command: .circleci/do-rtl-build.sh SmallRV32UnifiedBoomConfig
+                no_output_timeout: 120m
+            - save_cache:
+                key: smallrv32unifiedboomconfig-{{ .Branch }}-{{ .Revision }}
+                paths:
+                    - "/home/riscvuser/chipyard"
     smallboomconfig-run-csmith-tests:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.5
+            - image: riscvboom/riscvboom-images:0.0.10
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -242,14 +235,16 @@ jobs:
             - restore_cache:
                 keys:
                     - smallboomconfig-{{ .Branch }}-{{ .Revision }}
+            - restore_cache:
+                keys:
+                    - verilator-v10-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Run SmallBoomConfig csmith tests
                 command: .circleci/build-run-csmith-tests.sh SmallBoomConfig 50
                 no_output_timeout: 30m
-
     smallboomconfig-run-riscv-tests:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.5
+            - image: riscvboom/riscvboom-images:0.0.10
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -261,15 +256,15 @@ jobs:
             - restore_cache:
                 keys:
                     - smallboomconfig-{{ .Branch }}-{{ .Revision }}
+            - restore_cache:
+                keys:
+                    - verilator-v10-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Run SmallBoomConfig riscv tests
-                command: |
-                    make run-bmark-tests-fast -C ../chipyard/sims/verisim CONFIG=SmallBoomConfig SUB_PROJECT=boom TOP=BoomRocketSystem
-                    make run-asm-tests-fast -C ../chipyard/sims/verisim CONFIG=SmallBoomConfig SUB_PROJECT=boom TOP=BoomRocketSystem
-
+                command: .circleci/run-tests.sh SmallBoomConfig
     mediumboomconfig-run-csmith-tests:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.5
+            - image: riscvboom/riscvboom-images:0.0.10
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -281,14 +276,16 @@ jobs:
             - restore_cache:
                 keys:
                     - mediumboomconfig-{{ .Branch }}-{{ .Revision }}
+            - restore_cache:
+                keys:
+                    - verilator-v10-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Run MediumBoomConfig csmith tests
                 command: .circleci/build-run-csmith-tests.sh MediumBoomConfig 50
                 no_output_timeout: 30m
-
     mediumboomconfig-run-riscv-tests:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.5
+            - image: riscvboom/riscvboom-images:0.0.10
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -300,15 +297,15 @@ jobs:
             - restore_cache:
                 keys:
                     - mediumboomconfig-{{ .Branch }}-{{ .Revision }}
+            - restore_cache:
+                keys:
+                    - verilator-v10-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Run MediumBoomConfig riscv tests
-                command: |
-                    make run-bmark-tests-fast -C ../chipyard/sims/verisim CONFIG=MediumBoomConfig SUB_PROJECT=boom TOP=BoomRocketSystem
-                    make run-asm-tests-fast -C ../chipyard/sims/verisim CONFIG=MediumBoomConfig SUB_PROJECT=boom TOP=BoomRocketSystem
-
+                command: .circleci/run-tests.sh MediumBoomConfig
     largeboomconfig-run-csmith-tests:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.5
+            - image: riscvboom/riscvboom-images:0.0.10
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -320,15 +317,16 @@ jobs:
             - restore_cache:
                 keys:
                     - largeboomconfig-{{ .Branch }}-{{ .Revision }}
-
+            - restore_cache:
+                keys:
+                    - verilator-v10-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Run LargeBoomConfig csmith tests
-                command: .circleci/build-run-csmith-tests.sh LargeBoomConfig 50
+                command: .circleci/build-run-csmith-tests.sh LargeBoomConfig 40
                 no_output_timeout: 30m
-
     largeboomconfig-run-riscv-tests:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.5
+            - image: riscvboom/riscvboom-images:0.0.10
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -340,15 +338,15 @@ jobs:
             - restore_cache:
                 keys:
                     - largeboomconfig-{{ .Branch }}-{{ .Revision }}
+            - restore_cache:
+                keys:
+                    - verilator-v10-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Run LargeBoomConfig riscv tests
-                command: |
-                    make run-bmark-tests-fast -C ../chipyard/sims/verisim CONFIG=LargeBoomConfig SUB_PROJECT=boom TOP=BoomRocketSystem
-                    make run-asm-tests-fast -C ../chipyard/sims/verisim CONFIG=LargeBoomConfig SUB_PROJECT=boom TOP=BoomRocketSystem
-
+                command: .circleci/run-tests.sh LargeBoomConfig
     megaboomconfig-run-csmith-tests:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.5
+            - image: riscvboom/riscvboom-images:0.0.10
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -360,15 +358,16 @@ jobs:
             - restore_cache:
                 keys:
                     - megaboomconfig-{{ .Branch }}-{{ .Revision }}
-
+            - restore_cache:
+                keys:
+                    - verilator-v10-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Run MegaBoomConfig csmith tests
-                command: .circleci/build-run-csmith-tests.sh MegaBoomConfig 50
+                command: .circleci/build-run-csmith-tests.sh MegaBoomConfig 40
                 no_output_timeout: 30m
-
     megaboomconfig-run-riscv-tests:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.5
+            - image: riscvboom/riscvboom-images:0.0.10
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -380,15 +379,15 @@ jobs:
             - restore_cache:
                 keys:
                     - megaboomconfig-{{ .Branch }}-{{ .Revision }}
+            - restore_cache:
+                keys:
+                    - verilator-v10-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Run MegaBoomConfig riscv tests
-                command: |
-                    make run-bmark-tests-fast -C ../chipyard/sims/verisim CONFIG=MegaBoomConfig SUB_PROJECT=boom TOP=BoomRocketSystem
-                    make run-asm-tests-fast -C ../chipyard/sims/verisim CONFIG=MegaBoomConfig SUB_PROJECT=boom TOP=BoomRocketSystem
-
+                command: .circleci/run-tests.sh MegaBoomConfig
     smallboomandrocketconfig-run-csmith-tests:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.5
+            - image: riscvboom/riscvboom-images:0.0.10
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -400,14 +399,16 @@ jobs:
             - restore_cache:
                 keys:
                     - smallboomandrocketconfig-{{ .Branch }}-{{ .Revision }}
+            - restore_cache:
+                keys:
+                    - verilator-v10-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Run SmallBoomAndRocketConfig csmith tests
                 command: .circleci/build-run-csmith-tests.sh SmallBoomAndRocketConfig 50
                 no_output_timeout: 30m
-
     smallboomandrocketconfig-run-riscv-tests:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.5
+            - image: riscvboom/riscvboom-images:0.0.10
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -419,11 +420,68 @@ jobs:
             - restore_cache:
                 keys:
                     - smallboomandrocketconfig-{{ .Branch }}-{{ .Revision }}
+            - restore_cache:
+                keys:
+                    - verilator-v10-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Run SmallBoomAndRocketConfig riscv tests
-                command: |
-                    make run-bmark-tests-fast -C ../chipyard/sims/verisim CONFIG=SmallBoomAndRocketConfig SUB_PROJECT=boom TOP=BoomRocketSystem
-                    make run-asm-tests-fast -C ../chipyard/sims/verisim CONFIG=SmallBoomAndRocketConfig SUB_PROJECT=boom TOP=BoomRocketSystem
+                command: .circleci/run-tests.sh SmallBoomAndRocketConfig
+    smallrv32unifiedboomconfig-run-csmith-tests:
+        docker:
+            - image: riscvboom/riscvboom-images:0.0.10
+        environment:
+            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
+            TERM: dumb
+        steps:
+            - checkout
+            - restore_cache:
+                keys:
+                    - riscv-tools-installed-v3-{{ checksum "CHIPYARD.hash" }}
+            - restore_cache:
+                keys:
+                    - smallrv32unifiedboomconfig-{{ .Branch }}-{{ .Revision }}
+            - restore_cache:
+                keys:
+                    - verilator-v10-{{ checksum "CHIPYARD.hash" }}
+            - run:
+                name: Run SmallRV32UnifiedBoomConfig csmith tests
+                command: .circleci/build-run-csmith-tests.sh SmallRV32UnifiedBoomConfig 50
+                no_output_timeout: 30m
+    smallrv32unifiedboomconfig-run-riscv-tests:
+        docker:
+            - image: riscvboom/riscvboom-images:0.0.10
+        environment:
+            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
+            TERM: dumb
+        steps:
+            - checkout
+            - restore_cache:
+                keys:
+                    - riscv-tools-installed-v3-{{ checksum "CHIPYARD.hash" }}
+            - restore_cache:
+                keys:
+                    - smallrv32unifiedboomconfig-{{ .Branch }}-{{ .Revision }}
+            - restore_cache:
+                keys:
+                    - verilator-v10-{{ checksum "CHIPYARD.hash" }}
+            - run:
+                name: Run SmallRV32UnifiedBoomConfig riscv tests
+                command: .circleci/run-tests.sh SmallRV32UnifiedBoomConfig
+    clean-environment:
+        docker:
+            - image: riscvboom/riscvboom-images:0.0.10
+        environment:
+            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
+            TERM: dumb
+        steps:
+            - checkout
+            - add_ssh_keys:
+                fingerprints:
+                    - "e7:69:4e:24:88:f6:cd:7c:62:da:51:03:54:c4:7f:ec"
+            - run:
+                name: Clean up files on remote server
+                command: .circleci/cleanup-ext.sh
+                no_output_timeout: 120m
 
 # Order and dependencies of jobs to run
 workflows:
@@ -434,33 +492,36 @@ workflows:
             - install-riscv-tools
 
             # Build verilator
-            - prepare-build-environment:
-                requires:
-                    - install-riscv-tools
+            - prepare-build-environment
 
             # Run generic syntax checking
-            - run-scala-checkstyle:
+            - run-scala-checkstyle
+
+            # Move files to remote
+            - copy-environment:
                 requires:
+                    - prepare-build-environment
                     - install-riscv-tools
 
             # Prepare the verilator builds
-            - prepare-smallrv32unifiedboomconfig:
-                requires:
-                    - prepare-build-environment
             - prepare-smallboomconfig:
                 requires:
-                    - prepare-build-environment
+                    - copy-environment
             - prepare-mediumboomconfig:
                 requires:
-                    - prepare-build-environment
+                    - copy-environment
+            - prepare-largeboomconfig:
+                requires:
+                    - copy-environment
+            - prepare-megaboomconfig:
+                requires:
+                    - copy-environment
             - prepare-smallboomandrocketconfig:
                 requires:
-                    - prepare-build-environment
-
-            # Run the SmallRV32UnifiedBoomConfig tests
-            - smallrv32unifiedboomconfig-run-riscv-tests:
+                    - copy-environment
+            - prepare-smallrv32unifiedboomconfig:
                 requires:
-                    - prepare-smallrv32unifiedboomconfig
+                    - copy-environment
 
             # Run the SmallBoomConfig tests
             - smallboomconfig-run-csmith-tests:
@@ -478,6 +539,22 @@ workflows:
                 requires:
                     - prepare-mediumboomconfig
 
+            # Run the LargeBoomConfig tests
+            - largeboomconfig-run-csmith-tests:
+                requires:
+                    - prepare-largeboomconfig
+            - largeboomconfig-run-riscv-tests:
+                requires:
+                    - prepare-largeboomconfig
+
+            # Run the MegaBoomConfig tests
+            - megaboomconfig-run-csmith-tests:
+                requires:
+                    - prepare-megaboomconfig
+            - megaboomconfig-run-riscv-tests:
+                requires:
+                    - prepare-megaboomconfig
+
             # Run the SmallBoomAndRocketConfig tests
             - smallboomandrocketconfig-run-csmith-tests:
                 requires:
@@ -485,3 +562,23 @@ workflows:
             - smallboomandrocketconfig-run-riscv-tests:
                 requires:
                     - prepare-smallboomandrocketconfig
+
+            # Run the SmallRV32UnifiedBoomConfig tests
+            - smallrv32unifiedboomconfig-run-riscv-tests:
+                requires:
+                    - prepare-smallrv32unifiedboomconfig
+
+            # Clean up environment after build
+            - clean-environment:
+                requires:
+                    - smallboomconfig-run-csmith-tests
+                    - smallboomconfig-run-riscv-tests
+                    - mediumboomconfig-run-csmith-tests
+                    - mediumboomconfig-run-riscv-tests
+                    - largeboomconfig-run-csmith-tests
+                    - largeboomconfig-run-riscv-tests
+                    - megaboomconfig-run-csmith-tests
+                    - megaboomconfig-run-riscv-tests
+                    - smallboomandrocketconfig-run-csmith-tests
+                    - smallboomandrocketconfig-run-riscv-tests
+                    - smallrv32unifiedboomconfig-run-riscv-tests

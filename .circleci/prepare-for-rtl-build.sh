@@ -5,25 +5,44 @@
 # turn echo on and error on earliest command
 set -ex
 
-if [ ! -d "$HOME/chipyard" ]; then
+# get shared variables
+SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
+source $SCRIPT_DIR/defaults.sh
+
+# check to see if both dirs exist
+if [ ! -d "$LOCAL_VERILATOR_DIR" ] && [ ! -d "$LOCAL_CHIPYARD_DIR" ]; then
     cd $HOME
 
     git clone --progress --verbose https://github.com/ucb-bar/project-template.git chipyard
-    cd $HOME/chipyard
+    cd $LOCAL_CHIPYARD_DIR
 
-    echo "Checking out Chipyard version: $(cat $HOME/project/CHIPYARD.hash)"
+    echo "Checking out Chipyard version: $(cat $LOCAL_CHECKOUT_DIR/CHIPYARD.hash)"
     git fetch
-    git checkout $(cat $HOME/project/CHIPYARD.hash)
+    git checkout $(cat $LOCAL_CHECKOUT_DIR/CHIPYARD.hash)
 
     # init all submodules (according to what boom-template wants)
     ./scripts/init-submodules-no-riscv-tools.sh
 
     # move the pull request riscv-boom repo into boom-template
-    rm -rf $HOME/chipyard/generators/boom
-    cp -r $HOME/project $HOME/chipyard/generators/boom/
+    rm -rf $LOCAL_CHIPYARD_DIR/generators/boom
+    cp -r $LOCAL_CHECKOUT_DIR $LOCAL_CHIPYARD_DIR/generators/boom/
 
-    # make boom-template verilator version
-    cd $HOME/chipyard/sims/verisim
-    make verilator_install
+    # set stricthostkeychecking to no (must happen before rsync)
+    run "echo \"Ping $SERVER\""
+
+    run "mkdir -p $REMOTE_CHIPYARD_DIR"
+    copy $LOCAL_CHIPYARD_DIR/ $SERVER:$REMOTE_CHIPYARD_DIR
+
+    run "make -C $REMOTE_CHIPYARD_DIR/sims/verisim VERILATOR_INSTALL_DIR=$REMOTE_VERILATOR_DIR verilator_install"
+
+    # copy so that circleci can cache
+    mkdir -p $LOCAL_CHIPYARD_DIR
+    mkdir -p $LOCAL_VERILATOR_DIR
+    copy $SERVER:$REMOTE_CHIPYARD_DIR/  $LOCAL_CHIPYARD_DIR
+    copy $SERVER:$REMOTE_VERILATOR_DIR/ $LOCAL_VERILATOR_DIR
+
+    # remove local copies
+    run "rm -rf $REMOTE_CHIPYARD_DIR"
+    run "rm -rf $REMOTE_VERILATOR_DIR"
 fi
 
