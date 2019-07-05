@@ -81,6 +81,7 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
     val f2_redirect       = Output(Bool())
     val f3_stall          = Output(Bool())
     val f3_clear          = Output(Bool())
+    val f3_will_redirect  = Output(Bool())
     val f4_redirect       = Output(Bool())
     val f4_taken          = Output(Bool())
 
@@ -438,7 +439,7 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
   f3_req.valid := f3_valid && (bchecker.io.req.valid ||
                   (f3_bpd_may_redirect && !jal_overrides_bpd)) // && !(f0_redirect_val)
   f3_req.bits.addr := Mux(f3_bpd_overrides_bcheck, f3_bpd_redirect_target, bchecker.io.req.bits.addr)
-
+  io.f3_will_redirect := f3_req.valid
 
   // TODO this logic is broken and vestigial. Do update correctly (remove RegNext)
   val f3_btb_update_bits = Wire(new BoomBTBUpdate)
