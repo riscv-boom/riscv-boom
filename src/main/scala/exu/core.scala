@@ -535,7 +535,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
   // Get uops from rename2
   for (w <- 0 until coreWidth) {
-    dispatcher.io.ren_uops(w).valid := dis_fire(w)
+    dispatcher.io.ren_uops(w).valid := dis_fire(w) && dis_uops(w).uopc =/= uopMV
     dispatcher.io.ren_uops(w).bits  := dis_uops(w)
   }
 

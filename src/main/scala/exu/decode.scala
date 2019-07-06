@@ -573,6 +573,13 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule
   uop.is_call        := (uop.uopc === uopJALR || uop.uopc === uopJAL) &&
                         (uop.ldst === RA)
 
+
+  //------------------------------------------------------------
+  when (cs.uopc === uopADDI && uop.imm_packed === 0.U) {
+    // This is a move
+    uop.uopc := uopMV
+  }
+
   //-------------------------------------------------------------
 
   io.deq.uop := uop

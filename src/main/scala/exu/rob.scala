@@ -304,7 +304,8 @@ class Rob(
     when (io.enq_valids(w)) {
       rob_val(rob_tail)       := true.B
       rob_bsy(rob_tail)       := !(io.enq_uops(w).is_fence ||
-                                   io.enq_uops(w).is_fencei)
+                                   io.enq_uops(w).is_fencei ||
+                                   io.enq_uops(w).uopc === uopMV)
       rob_unsafe(rob_tail)    := io.enq_uops(w).unsafe
       rob_uop(rob_tail)       := io.enq_uops(w)
       rob_exception(rob_tail) := io.enq_uops(w).exception

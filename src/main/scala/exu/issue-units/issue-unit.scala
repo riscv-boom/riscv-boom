@@ -141,6 +141,7 @@ abstract class IssueUnit(
         dis_uops(w).prs1_busy  := false.B
       }
     }
+    assert(!(io.dis_uops(w).valid && io.dis_uops(w).bits.uopc === uopMV))
   }
 
   //-------------------------------------------------------------

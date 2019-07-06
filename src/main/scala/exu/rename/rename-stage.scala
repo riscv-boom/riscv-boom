@@ -152,6 +152,7 @@ class RenameStage(
   val ren1_br_tags = Wire(Vec(plWidth, Valid(UInt(brTagSz.W))))
   val ren1_fire    = Wire(Vec(plWidth, Bool()))
   val ren1_uops    = Wire(Vec(plWidth, new MicroOp()))
+  val ren1_pdsts   = Wire(Vec(plWidth, UInt()))
 
   val ren1_int_alloc_reqs = Wire(Vec(plWidth, Bool()))
   val ren1_fp_alloc_reqs  = Wire(Vec(plWidth, Bool()))
@@ -170,7 +171,7 @@ class RenameStage(
   for (w <- 0 until plWidth) {
     ren1_fire(w)           := io.dec_fire(w)
     ren1_uops(w)           := io.dec_uops(w)
-    ren1_br_tags(w).valid  := ren1_fire(w) && io.dec_uops(w).allocate_brtag
+    ren1_br_tags(w).valid  := ren1_fire(w) && io.dec_uops(w).allocate_brtag 
     ren1_br_tags(w).bits   := io.dec_uops(w).br_tag
 
     ren1_int_alloc_reqs(w) := ren1_uops(w).ldst_val && ren1_uops(w).dst_rtype === RT_FIX && ren1_fire(w)
@@ -195,7 +196,7 @@ class RenameStage(
   var freelists = Seq(ifreelist)
   if (usingFPU) freelists ++= Seq(ffreelist)
   for ((list, i) <- freelists.zipWithIndex) {
-    list.io.reqs := ren1_alloc_reqs(i)
+    list.io.reqs := VecInit((0 until plWidth).map( j => (ren1_alloc_reqs(i)(j) && ren1_uops(j).uopc =/= uopMV)))
     list.io.brinfo := io.brinfo
     list.io.ren_br_tags := ren1_br_tags
     list.io.rob_uops := io.com_uops
@@ -206,10 +207,10 @@ class RenameStage(
   }
 
   for ((uop, w) <- ren1_uops.zipWithIndex) {
-    val i_preg = ifreelist.io.alloc_pregs(w)
-    val f_preg = if (usingFPU) ffreelist.io.alloc_pregs(w) else 0.U
-    uop.pdst := Mux(uop.dst_rtype === RT_FLT, f_preg,
-                Mux(uop.ldst =/= 0.U, i_preg, 0.U))
+    val i_preg  = ifreelist.io.alloc_pregs(w)
+    val f_preg  = if (usingFPU) ffreelist.io.alloc_pregs(w) else 0.U
+    ren1_pdsts(w) := Mux(uop.dst_rtype === RT_FLT, f_preg,
+                     Mux(uop.ldst =/= 0.U, i_preg, 0.U))
   }
 
   //-------------------------------------------------------------
@@ -218,8 +219,12 @@ class RenameStage(
   var maptables = Seq(imaptable)
   if (usingFPU) maptables ++= Seq(fmaptable)
   for ((table, i) <- maptables.zipWithIndex) {
+    val uops = WireInit(ren1_uops)
+    for (w <- 0 until plWidth) {
+      uops(w).pdst := ren1_pdsts(w)
+    }
     table.io.brinfo := io.brinfo
-    table.io.ren_uops := ren1_uops // expects pdst to be set up
+    table.io.ren_uops := uops
     table.io.ren_remap_reqs := ren1_alloc_reqs(i)
     table.io.ren_br_tags := ren1_br_tags
     table.io.rbk_uops := io.com_uops
@@ -237,6 +242,8 @@ class RenameStage(
     uop.prs2       := Mux(uop.lrs2_rtype === RT_FLT, fmap.prs2, imap.prs2)
     uop.prs3       := fmap.prs3 // only FP has 3rd operand
     uop.stale_pdst := Mux(uop.dst_rtype  === RT_FLT, fmap.stale_pdst, imap.stale_pdst)
+    val mv_pdst     = Mux(uop.dst_rtype  === RT_FLT, fmap.prs1, imap.prs1)
+    uop.pdst       := Mux(uop.uopc === uopMV, mv_pdst, ren1_pdsts(w))
   }
 
   //-------------------------------------------------------------
@@ -270,7 +277,7 @@ class RenameStage(
 
   ibusytable.io.ren_uops := ren2_uops  // expects pdst to be set up.
   ibusytable.io.busy_reqs := ren2_imap_resps
-  ibusytable.io.rebusy_reqs := ren2_int_alloc_reqs
+  ibusytable.io.rebusy_reqs := VecInit((0 until plWidth).map(i => ren2_int_alloc_reqs(i) && ren2_uops(i).uopc =/= uopMV))
   ibusytable.io.wb_valids := io.int_wakeups.map(_.valid)
   ibusytable.io.wb_pdsts := io.int_wakeups.map(_.bits.uop.pdst)
 

@@ -15,6 +15,7 @@ package boom.exu
 
 import chisel3._
 import chisel3.util._
+import chisel3.experimental.dontTouch
 import boom.common._
 import boom.util._
 import freechips.rocketchip.config.Parameters
@@ -60,10 +61,13 @@ class RenameMapTable(
 
   // The intermediate states of the map table following modification by each pipeline slot.
   val remap_table = Wire(Vec(plWidth+1, Vec(numLregs, UInt(pregSz.W))))
+  dontTouch(remap_table)
 
   // Uops requesting changes to the map table.
   val remap_reqs = Mux(io.rollback, VecInit(io.rbk_valids.reverse), io.ren_remap_reqs)
+  val remap_is_mv = Mux(io.rollback, VecInit(Seq.fill(plWidth){false.B}), VecInit(io.ren_uops.map(x => x.uopc === uopMV)))
   val remap_ldsts = io.ren_uops zip io.rbk_uops.reverse map {case (ren, rbk) => Mux(io.rollback, rbk.ldst, ren.ldst)}
+  val remap_lrs1s = io.ren_uops.map(_.lrs1)
   val remap_pdsts = io.ren_uops zip io.rbk_uops.reverse map {case (ren, rbk) => Mux(io.rollback, rbk.stale_pdst, ren.pdst)}
   val remap_ldst_reqs = (remap_ldsts zip remap_reqs) map {case (ldst, req) => UIntToOH(ldst) & Fill(numLregs, req.asUInt)}
 
@@ -74,12 +78,24 @@ class RenameMapTable(
         remap_table(j)(i) := 0.U
       }
     } else {
-      val remapped_row = (remap_ldst_reqs.map(ldst => ldst(i)) zip remap_pdsts)
-        .scanLeft(map_table(i)) {case (pdst, (ldst, new_pdst)) => Mux(ldst, new_pdst, pdst)}
-
-      for (j <- 0 until plWidth+1) {
-        remap_table(j)(i) := remapped_row(j)
+      var pdst = map_table(i)
+      for (j <- 0 until plWidth) {
+        remap_table(j)(i) := pdst
+        // If the j'th instruction writes to the i'th logical register
+        //  - for MVs, we can read the map table after the (j-1)th instruction to get the new destination pdst
+        //  - for all other, we take the pdst which the freelist passed into us
+        pdst = Mux(remap_ldst_reqs(j)(i),
+               Mux(remap_is_mv(j)       , remap_table(j)(remap_lrs1s(j))
+                                        , remap_pdsts(j))
+                                        , pdst)
       }
+      remap_table(plWidth)(i) := pdst
+      // val remapped_row = (remap_ldst_reqs.map(ldst => ldst(i)) zip remap_pdsts)
+      //   .scanLeft(map_table(i)) {case (pdst, (ldst, new_pdst)) => Mux(ldst, new_pdst, pdst)}
+
+      // for (j <- 0 until plWidth+1) {
+      //   remap_table(j)(i) := remapped_row(j)
+      // }
     }
   }
 
@@ -109,6 +125,6 @@ class RenameMapTable(
 
   // Don't flag the creation of duplicate 'p0' mappings during rollback.
   // These cases may occur soon after reset, as all maptable entries are initialized to 'p0'.
-  remap_pdsts zip remap_reqs foreach {case (p,r) =>
-    assert (!r || !map_table.contains(p) || p === 0.U && io.rollback, "[maptable] Trying to write a duplicate mapping.")}
+  // remap_pdsts zip remap_reqs foreach {case (p,r) =>
+  //   assert (!r || !map_table.contains(p) || p === 0.U && io.rollback, "[maptable] Trying to write a duplicate mapping.")}
 }
