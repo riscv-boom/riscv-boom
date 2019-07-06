@@ -445,7 +445,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
   rename_stage.io.kill := flush_ifu
   rename_stage.io.brinfo := br_unit.brinfo
 
-  rename_stage.io.flush := rob.io.flush.valid
+  rename_stage.io.flush := rob.io.flush.valid || io.ifu.sfence_take_pc
   rename_stage.io.debug_rob_empty := rob.io.empty
 
   rename_stage.io.dec_fire := dec_fire
