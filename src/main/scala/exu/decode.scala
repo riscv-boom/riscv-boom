@@ -523,9 +523,6 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule
   }
   uop.fu_code    := cs.fu_code
 
-  // x-registers placed in 0-31, f-registers placed in 32-63.
-  // This allows us to straight-up compare register specifiers and not need to
-  // verify the rtypes (e.g., bypassing in rename).
   uop.ldst       := inst(RD_MSB,RD_LSB)
   uop.lrs1       := inst(RS1_MSB,RS1_LSB)
   uop.lrs2       := inst(RS2_MSB,RS2_LSB)
