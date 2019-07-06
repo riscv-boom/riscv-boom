@@ -800,7 +800,8 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   val lrsc_count = RegInit(0.U(log2Ceil(lrscCycles).W))
   val lrsc_valid = lrsc_count > lrscBackoff.U
   val lrsc_addr  = Reg(UInt())
-  val (s2_lr, s2_sc) = (s2_req.uop.mem_cmd === M_XLR, s2_req.uop.mem_cmd === M_XSC)
+  val s2_lr = s2_req.uop.mem_cmd === M_XLR && !RegNext(s1_nack)
+  val s2_sc = s2_req.uop.mem_cmd === M_XSC && !RegNext(s1_nack)
   val s2_lrsc_addr_match = lrsc_valid && lrsc_addr === (s2_req.addr >> blockOffBits)
   val s2_sc_fail = s2_sc && !s2_lrsc_addr_match
   when (lrsc_count > 0.U) { lrsc_count := lrsc_count - 1.U }
