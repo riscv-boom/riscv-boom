@@ -84,7 +84,7 @@ class BoomDCacheResp(implicit p: Parameters) extends BoomBundle()(p)
 class LSUDMemIO(implicit p: Parameters) extends BoomBundle()(p)
 {
   // In LSU's dmem stage, send the request
-  val req         = Vec(memWidth, new DecoupledIO(new BoomDCacheReq))
+  val req         = new DecoupledIO(Vec(memWidth, Valid(new BoomDCacheReq)))
   // In LSU's LCAM search stage, kill if order fail (or forwarding possible)
   val s1_kill     = Vec(memWidth, Output(Bool()))
   // Get a request any cycle
@@ -427,6 +427,11 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
   hella_sfence.bits.asid := io.hellacache.s1_data.data
 
   // Cycle 2: memory access cycle
+  val dmem_req             = Wire(Vec(memWidth, Valid(new BoomDCacheReq)))
+  io.dmem.req.valid       := dmem_req.map(_.valid).reduce(_||_)
+  io.dmem.req.bits        := dmem_req
+  val dmem_req_fire        = (0 until memWidth).map(i => dmem_req(i).valid && io.dmem.req.fire())
+
   val fired_load_incoming  = RegNext(will_fire_load_incoming)
   val fired_stad_incoming  = RegNext(will_fire_stad_incoming)
   val fired_sta_incoming   = RegNext(will_fire_sta_incoming)
@@ -438,6 +443,13 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
   val fired_load_wakeup    = RegNext(will_fire_load_wakeup)
   val fired_hella_incoming = RegNext(will_fire_hella_incoming)
   val fired_hella_wakeup   = RegNext(will_fire_hella_wakeup)
+
+  val mem_executing_ld_mask = WireInit(VecInit((0 until NUM_LDQ_ENTRIES).map(x => false.B)))
+  val do_st_search = Wire(Vec(memWidth, Bool()))
+  val do_ld_search = Wire(Vec(memWidth, Bool()))
+  val lcam_addr    = Wire(Vec(memWidth, UInt()))
+  val lcam_stq_idx = Wire(Vec(memWidth, UInt()))
+  val lcam_ldq_idx = Wire(Vec(memWidth, UInt()))
 
   val failed_loads = WireInit(VecInit((0 until NUM_LDQ_ENTRIES).map(x=>false.B)))
   val mem_execute_ignore_mask = WireInit(VecInit((0 until NUM_LDQ_ENTRIES).map(x=>false.B)))
@@ -471,7 +483,7 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
     can_fire_stad_incoming(i) := exe_req.valid && exe_req.bits.uop.ctrl.is_sta && exe_req.bits.uop.ctrl.is_std
     can_fire_sta_incoming(i)  := exe_req.valid && exe_req.bits.uop.ctrl.is_sta && !exe_req.bits.uop.ctrl.is_std
     can_fire_std_incoming(i)  := exe_req.valid && exe_req.bits.uop.ctrl.is_std && !exe_req.bits.uop.ctrl.is_sta
-    can_fire_sfence(i)        := exe_req.valid && exe_req.bits.sfence.valid
+    can_fire_sfence(i)        := exe_req.valid && exe_req.bits.sfence.valid 
     can_fire_load_retry(i)    := ( ldq_retry_e.valid                            &&
                                    ldq_retry_e.bits.addr.valid                  &&
                                    ldq_retry_e.bits.addr_is_virtual             &&
@@ -490,7 +502,7 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
                                   !stq_commit_e.bits.uop.is_fence               &&
                                   !mem_xcpt_valid                               &&
                                   !stq_commit_e.bits.uop.exception              &&
-                                  !(if (i == 1) will_fire_store_commit(0) else false.B) &&
+                                  (i == 0).B                                    &&
                                   (stq_commit_e.bits.committed || ( stq_commit_e.bits.uop.is_amo      &&
                                                                     stq_commit_e.bits.addr.valid      &&
                                                                    !stq_commit_e.bits.addr_is_virtual &&
@@ -687,83 +699,83 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
     // reading a physical address from the LDQ,STQ, or the HellaCache adapter
 
     // defaults
-    io.dmem.req(i).valid         := false.B
-    io.dmem.req(i).bits.uop      := NullMicroOp
-    io.dmem.req(i).bits.addr     := 0.U
-    io.dmem.req(i).bits.data     := 0.U
-    io.dmem.req(i).bits.is_hella := false.B
+    dmem_req(i).valid         := false.B
+    dmem_req(i).bits.uop      := NullMicroOp
+    dmem_req(i).bits.addr     := 0.U
+    dmem_req(i).bits.data     := 0.U
+    dmem_req(i).bits.is_hella := false.B
 
     io.dmem.s1_kill(i)           := false.B
 
     when (will_fire_load_incoming(i)) {
-      io.dmem.req(i).valid      := !exe_tlb_miss && !exe_tlb_uncacheable
-      io.dmem.req(i).bits.addr  := exe_tlb_paddr
-      io.dmem.req(i).bits.uop   := exe_tlb_uop
+      dmem_req(i).valid      := !exe_tlb_miss && !exe_tlb_uncacheable && !will_fire_store_commit.reduce(_||_)
+      dmem_req(i).bits.addr  := exe_tlb_paddr
+      dmem_req(i).bits.uop   := exe_tlb_uop
 
-      ldq(ldq_incoming_idx).bits.executed := io.dmem.req(i).fire()
+      ldq(ldq_incoming_idx).bits.executed := dmem_req_fire(i)
       assert(!ldq_incoming_e.bits.executed)
 
     } .elsewhen (will_fire_load_retry(i)) {
-      io.dmem.req(i).valid      := !exe_tlb_miss && !exe_tlb_uncacheable
-      io.dmem.req(i).bits.addr  := exe_tlb_paddr
-      io.dmem.req(i).bits.uop   := exe_tlb_uop
+      dmem_req(i).valid      := !exe_tlb_miss && !exe_tlb_uncacheable && !will_fire_store_commit.reduce(_||_)
+      dmem_req(i).bits.addr  := exe_tlb_paddr
+      dmem_req(i).bits.uop   := exe_tlb_uop
 
-      ldq(ldq_retry_idx).bits.executed := io.dmem.req(i).fire()
+      ldq(ldq_retry_idx).bits.executed := dmem_req_fire(i)
       assert(!ldq_retry_e.bits.executed)
 
     } .elsewhen (will_fire_store_commit(i)) {
-      io.dmem.req(i).valid         := true.B
-      io.dmem.req(i).bits.addr     := stq_commit_e.bits.addr.bits
-      io.dmem.req(i).bits.data     := (new freechips.rocketchip.rocket.StoreGen(
+      dmem_req(i).valid         := true.B
+      dmem_req(i).bits.addr     := stq_commit_e.bits.addr.bits
+      dmem_req(i).bits.data     := (new freechips.rocketchip.rocket.StoreGen(
                                        stq_commit_e.bits.uop.mem_size, 0.U,
                                        stq_commit_e.bits.data.bits,
                                        coreDataBytes)).data
-      io.dmem.req(i).bits.uop      := stq_commit_e.bits.uop
+      dmem_req(i).bits.uop      := stq_commit_e.bits.uop
 
-      stq_execute_head             := Mux(io.dmem.req(i).fire(),
-                                          WrapInc(stq_execute_head, NUM_STQ_ENTRIES),
-                                          stq_execute_head)
+      stq_execute_head          := Mux(dmem_req_fire(i),
+                                       WrapInc(stq_execute_head, NUM_STQ_ENTRIES),
+                                       stq_execute_head)
 
       stq(stq_execute_head).bits.succeeded := false.B
 
     } .elsewhen (will_fire_load_wakeup(i)) {
-      io.dmem.req(i).valid      := true.B
-      io.dmem.req(i).bits.addr  := ldq_wakeup_e.bits.addr.bits
-      io.dmem.req(i).bits.uop   := ldq_wakeup_e.bits.uop
+      dmem_req(i).valid      := !will_fire_store_commit.reduce(_||_)
+      dmem_req(i).bits.addr  := ldq_wakeup_e.bits.addr.bits
+      dmem_req(i).bits.uop   := ldq_wakeup_e.bits.uop
 
-      ldq(ldq_wakeup_idx).bits.executed := io.dmem.req(i).fire()
+      ldq(ldq_wakeup_idx).bits.executed := dmem_req_fire(i)
 
       assert(!ldq_wakeup_e.bits.executed && !ldq_wakeup_e.bits.addr_is_virtual)
 
     } .elsewhen (will_fire_hella_incoming(i)) {
       assert(hella_state === h_s1)
 
-      io.dmem.req(i).valid               := !io.hellacache.s1_kill && (!exe_tlb_miss || hella_req.phys)
-      io.dmem.req(i).bits.addr           := exe_tlb_paddr
-      io.dmem.req(i).bits.data           := (new freechips.rocketchip.rocket.StoreGen(
+      dmem_req(i).valid               := !io.hellacache.s1_kill && (!exe_tlb_miss || hella_req.phys)
+      dmem_req(i).bits.addr           := exe_tlb_paddr
+      dmem_req(i).bits.data           := (new freechips.rocketchip.rocket.StoreGen(
                                                hella_req.size, 0.U,
                                                io.hellacache.s1_data.data,
                                                coreDataBytes)).data
-      io.dmem.req(i).bits.uop.mem_cmd    := hella_req.cmd
-      io.dmem.req(i).bits.uop.mem_size   := hella_req.size
-      io.dmem.req(i).bits.uop.mem_signed := hella_req.signed
-      io.dmem.req(i).bits.is_hella       := true.B
+      dmem_req(i).bits.uop.mem_cmd    := hella_req.cmd
+      dmem_req(i).bits.uop.mem_size   := hella_req.size
+      dmem_req(i).bits.uop.mem_signed := hella_req.signed
+      dmem_req(i).bits.is_hella       := true.B
 
       hella_paddr := exe_tlb_paddr
     }
       .elsewhen (will_fire_hella_wakeup(i))
     {
       assert(hella_state === h_replay)
-      io.dmem.req(i).valid               := true.B
-      io.dmem.req(i).bits.addr           := hella_paddr
-      io.dmem.req(i).bits.data           := (new freechips.rocketchip.rocket.StoreGen(
+      dmem_req(i).valid               := true.B
+      dmem_req(i).bits.addr           := hella_paddr
+      dmem_req(i).bits.data           := (new freechips.rocketchip.rocket.StoreGen(
         hella_req.size, 0.U,
         hella_data.data,
         coreDataBytes)).data
-      io.dmem.req(i).bits.uop.mem_cmd    := hella_req.cmd
-      io.dmem.req(i).bits.uop.mem_size   := hella_req.size
-      io.dmem.req(i).bits.uop.mem_signed := hella_req.signed
-      io.dmem.req(i).bits.is_hella       := true.B
+      dmem_req(i).bits.uop.mem_cmd    := hella_req.cmd
+      dmem_req(i).bits.uop.mem_size   := hella_req.size
+      dmem_req(i).bits.uop.mem_signed := hella_req.signed
+      dmem_req(i).bits.is_hella       := true.B
     }
 
     //-------------------------------------------------------------
@@ -843,7 +855,7 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
 
     val mem_tlb_miss         = RegNext(exe_tlb_miss)
     val mem_tlb_uncacheable  = RegNext(exe_tlb_uncacheable)
-    val mem_paddr            = RegNext(io.dmem.req(i).bits.addr)
+    val mem_paddr            = RegNext(io.dmem.req.bits(i).bits.addr)
 
     // Task 1: Clr ROB busy bit
     val clr_bsy_valid   = RegInit(false.B)
@@ -929,40 +941,43 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
     // We have the opportunity to kill a request we sent last cycle. Use it wisely!
 
     // We translated a store last cycle
-    val do_st_search = (fired_stad_incoming(i) || fired_sta_incoming(i) || fired_sta_retry(i)) && !mem_tlb_miss
+    do_st_search(i) := (fired_stad_incoming(i) || fired_sta_incoming(i) || fired_sta_retry(i)) && !mem_tlb_miss
     // We translated a load last cycle
-    val do_ld_search = ((fired_load_incoming(i) || fired_load_retry(i)) && !mem_tlb_miss) ||
+    do_ld_search(i) := ((fired_load_incoming(i) || fired_load_retry(i)) && !mem_tlb_miss) ||
                          fired_load_wakeup(i)
 
-    assert(!(do_st_search && do_ld_search))
+    assert(!(do_st_search(i) && do_ld_search(i)))
 
     // Store addrs don't go to memory yet, get it from the TLB response
     // Load wakeups don't go through TLB, get it through memory
     // Load incoming and load retries go through both
 
-    val lcam_addr  = Mux(fired_stad_incoming(i) || fired_sta_incoming(i) || fired_sta_retry(i),
+    lcam_addr(i)  := Mux(fired_stad_incoming(i) || fired_sta_incoming(i) || fired_sta_retry(i),
                          RegNext(exe_tlb_paddr), mem_paddr)
-    val lcam_uop   = Mux(do_st_search, mem_stq_e.bits.uop,
-                     Mux(do_ld_search, mem_ldq_e.bits.uop, NullMicroOp))
+    val lcam_uop   = Mux(do_st_search(i), mem_stq_e.bits.uop,
+                     Mux(do_ld_search(i), mem_ldq_e.bits.uop, NullMicroOp))
 
-    val lcam_valid = Mux(do_st_search, mem_stq_e.valid,
-                     Mux(do_ld_search, mem_ldq_e.valid, false.B))
-    val lcam_mask  = GenByteMask(lcam_addr, lcam_uop.mem_size)
+    val lcam_valid = Mux(do_st_search(i), mem_stq_e.valid,
+                     Mux(do_ld_search(i), mem_ldq_e.valid, false.B))
+    val lcam_mask  = GenByteMask(lcam_addr(i), lcam_uop.mem_size)
     val lcam_st_dep_mask = mem_ldq_e.bits.st_dep_mask
     val lcam_is_fence = lcam_uop.is_fence
-    val lcam_ldq_idx  = Mux(fired_load_incoming(i), mem_incoming_uop.ldq_idx,
+    lcam_ldq_idx(i)  := Mux(fired_load_incoming(i), mem_incoming_uop.ldq_idx,
                         Mux(fired_load_wakeup(i)  , RegNext(ldq_wakeup_idx),
                         Mux(fired_load_retry(i)   , RegNext(ldq_retry_idx), 0.U)))
-    val lcam_stq_idx  = Mux(fired_stad_incoming(i) ||
+    lcam_stq_idx(i)  := Mux(fired_stad_incoming(i) ||
                             fired_sta_incoming(i) , mem_incoming_uop.stq_idx,
                         Mux(fired_sta_retry(i)    , RegNext(stq_retry_idx), 0.U))
 
+    when (do_ld_search(i)) {
+      mem_executing_ld_mask(lcam_ldq_idx(i)) := true.B
+    }
 
     val stld_order_fail = WireInit(false.B)
     val ldld_order_fail = WireInit(false.B)
 
     val can_forward = WireInit(Mux(fired_load_incoming(i) || fired_load_retry(i), !mem_tlb_uncacheable,
-                                                                                  !ldq(lcam_ldq_idx).bits.addr_is_uncacheable))
+                                                                                  !ldq(lcam_ldq_idx(i)).bits.addr_is_uncacheable))
 
     // Mask of stores which we conflict on address with
     val ldst_addr_matches    = WireInit(VecInit((0 until NUM_STQ_ENTRIES).map(x=>false.B)))
@@ -977,23 +992,23 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
       val l_addr  = ldq(l).bits.addr.bits
       val l_mask  = GenByteMask(l_addr, l_bits.uop.mem_size)
 
-      val dword_addr_matches = lcam_addr(corePAddrBits-1,3) === l_addr(corePAddrBits-1,3)
+      val dword_addr_matches = lcam_addr(i)(corePAddrBits-1,3) === l_addr(corePAddrBits-1,3)
       val mask_match = (l_mask & lcam_mask) === l_mask
       val l_is_succeeding = succeeding_ld_mask(l)
 
       // Searcher is a store
-      when (do_st_search                                                                         &&
+      when (do_st_search(i)                                                                      &&
             lcam_valid                                                                           &&
             l_valid                                                                              &&
             l_bits.addr.valid                                                                    &&
             ((l_bits.executed && !l_bits.execute_ignore) || l_bits.succeeded || l_is_succeeding) &&
             !l_bits.addr_is_virtual                                                              &&
-            l_bits.st_dep_mask(lcam_stq_idx)                                                     &&
+            l_bits.st_dep_mask(lcam_stq_idx(i))                                                  &&
             dword_addr_matches) {
-        val forwarded_is_older = IsOlder(l_bits.forward_stq_idx, lcam_stq_idx, l_bits.youngest_stq_idx)
+        val forwarded_is_older = IsOlder(l_bits.forward_stq_idx, lcam_stq_idx(i), l_bits.youngest_stq_idx)
         // We are older than this load, which overlapped us.
         when (!l_bits.forward_std_val || // If the load wasn't forwarded, it definitely failed
-          ((l_bits.forward_stq_idx =/= lcam_stq_idx) && forwarded_is_older)) { // If the load forwarded from us, we might be ok
+          ((l_bits.forward_stq_idx =/= lcam_stq_idx(i)) && forwarded_is_older)) { // If the load forwarded from us, we might be ok
           when (l_bits.succeeded || l_is_succeeding) { // If the younger load already succeeded, we are screwed. Throw order fail
             ldq(l).bits.order_fail := true.B
             failed_loads(l)        := true.B
@@ -1005,16 +1020,16 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
             mem_execute_ignore_mask(l) := true.B
           }
         }
-      } .elsewhen (do_ld_search            &&
+      } .elsewhen (do_ld_search(i)         &&
                    lcam_valid              &&
                    l_valid                 &&
                    l_bits.addr.valid       &&
                    !l_bits.addr_is_virtual &&
                    dword_addr_matches &&
                    ((lcam_mask & l_mask) =/= 0.U)) {
-        val searcher_is_older = IsOlder(lcam_ldq_idx, l.U, ldq_head)
+        val searcher_is_older = IsOlder(lcam_ldq_idx(i), l.U, ldq_head)
         when (searcher_is_older) {
-          when ((l_bits.executed && !l_bits.execute_ignore)) {
+          when (l_bits.executed && !l_bits.execute_ignore && !mem_executing_ld_mask(l)) { // If the load is proceeding with us, we don't need to kill it
             when (l_bits.succeeded || l_is_succeeding) { // If the younger load is executing and succeeded, we are screwed. Throw order fail
               ldq(l).bits.order_fail := true.B
               failed_loads(l)        := true.B
@@ -1023,14 +1038,14 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
               ldq(l).bits.execute_ignore := true.B
             }
           }
-        } .elsewhen (lcam_ldq_idx =/= l.U) {
+        } .elsewhen (lcam_ldq_idx(i) =/= l.U) {
           // The load is older, and either it hasn't executed, it was nacked, or it is ignoring its response
           // we need to kill ourselves, and prevent forwarding
 
           when (!l_bits.executed || nacking_ld_mask(l) || l_bits.execute_ignore) {
-            io.dmem.s1_kill(i)              := RegNext(io.dmem.req(i).fire())
-            ldq(lcam_ldq_idx).bits.executed := false.B
-            can_forward                     := false.B
+            io.dmem.s1_kill(i)                 := RegNext(dmem_req_fire(i))
+            ldq(lcam_ldq_idx(i)).bits.executed := false.B
+            can_forward                        := false.B
           }
         }
       }
@@ -1041,27 +1056,27 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
       val s_uop  = stq(s).bits.uop
       val dword_addr_matches = ( stq(s).bits.addr.valid      &&
                                 !stq(s).bits.addr_is_virtual &&
-                                (s_addr(corePAddrBits-1,3) === lcam_addr(corePAddrBits-1,3)))
+                                (s_addr(corePAddrBits-1,3) === lcam_addr(i)(corePAddrBits-1,3)))
       val write_mask = GenByteMask(s_addr, s_uop.mem_size)
-      when (do_ld_search && stq(s).valid && lcam_valid && lcam_st_dep_mask(s)) {
+      when (do_ld_search(i) && stq(s).valid && lcam_valid && lcam_st_dep_mask(s)) {
         when (((lcam_mask & write_mask) === lcam_mask) && !s_uop.is_fence && dword_addr_matches && can_forward)
         {
           ldst_addr_matches(s)            := true.B
           ldst_forward_matches(s)         := true.B
-          io.dmem.s1_kill(i)              := RegNext(io.dmem.req(i).fire())
-          ldq(lcam_ldq_idx).bits.executed := false.B
+          io.dmem.s1_kill(i)              := RegNext(dmem_req_fire(i))
+          ldq(lcam_ldq_idx(i)).bits.executed := false.B
         }
           .elsewhen (((lcam_mask & write_mask) =/= 0.U) && dword_addr_matches)
         {
           ldst_addr_matches(s)            := true.B
-          io.dmem.s1_kill(i)              := RegNext(io.dmem.req(i).fire())
-          ldq(lcam_ldq_idx).bits.executed := false.B
+          io.dmem.s1_kill(i)              := RegNext(dmem_req_fire(i))
+          ldq(lcam_ldq_idx(i)).bits.executed := false.B
         }
           .elsewhen (s_uop.is_fence || s_uop.is_amo)
         {
           ldst_addr_matches(s)            := true.B
-          io.dmem.s1_kill(i)              := RegNext(io.dmem.req(i).fire())
-          ldq(lcam_ldq_idx).bits.executed := false.B
+          io.dmem.s1_kill(i)              := RegNext(dmem_req_fire(i))
+          ldq(lcam_ldq_idx(i)).bits.executed := false.B
         }
       }
     }
@@ -1076,14 +1091,14 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
     val mem_forward_valid       = (ldst_forward_matches(forwarding_idx)        &&
                                    !IsKilledByBranch(io.core.brinfo, lcam_uop) &&
                                    !io.core.exception && !RegNext(io.core.exception))
-    val mem_forward_ldq_idx     = lcam_ldq_idx
-    val mem_forward_ld_addr     = lcam_addr
+    val mem_forward_ldq_idx     = lcam_ldq_idx(i)
+    val mem_forward_ld_addr     = lcam_addr(i)
     val mem_forward_stq_idx     = forwarding_age_logic.io.forwarding_idx
 
     // Task 3: Clr unsafe bit in ROB for succesful translations
     //         Delay this a cycle to avoid going ahead of the exception broadcast
     //         The unsafe bit is cleared on the first translation, so no need to fire for load wakeups
-    io.core.clr_unsafe(i).valid := RegNext((do_st_search || do_ld_search) && !fired_load_wakeup(i))
+    io.core.clr_unsafe(i).valid := RegNext((do_st_search(i) || do_ld_search(i)) && !fired_load_wakeup(i))
     io.core.clr_unsafe(i).bits  := RegNext(lcam_uop.rob_idx)
 
 
@@ -1150,12 +1165,12 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
         val send_iresp = ldq(ldq_idx).bits.uop.dst_rtype === RT_FIX
         val send_fresp = ldq(ldq_idx).bits.uop.dst_rtype === RT_FLT
 
-        io.core.exe(0).iresp.bits.uop := ldq(ldq_idx).bits.uop
-        io.core.exe(0).fresp.bits.uop := ldq(ldq_idx).bits.uop
-        io.core.exe(0).iresp.valid     := send_iresp && !ldq(ldq_idx).bits.execute_ignore
-        io.core.exe(0).iresp.bits.data := io.dmem.resp(i).bits.data
-        io.core.exe(0).fresp.valid     := send_fresp && !ldq(ldq_idx).bits.execute_ignore
-        io.core.exe(0).fresp.bits.data := io.dmem.resp(i).bits.data
+        io.core.exe(i).iresp.bits.uop := ldq(ldq_idx).bits.uop
+        io.core.exe(i).fresp.bits.uop := ldq(ldq_idx).bits.uop
+        io.core.exe(i).iresp.valid     := send_iresp && !ldq(ldq_idx).bits.execute_ignore
+        io.core.exe(i).iresp.bits.data := io.dmem.resp(i).bits.data
+        io.core.exe(i).fresp.valid     := send_fresp && !ldq(ldq_idx).bits.execute_ignore
+        io.core.exe(i).fresp.bits.data := io.dmem.resp(i).bits.data
 
         assert(send_iresp ^ send_fresp)
         dmem_resp_fired := true.B
@@ -1174,9 +1189,9 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
         stq(io.dmem.resp(i).bits.uop.stq_idx).bits.succeeded := true.B
         when (io.dmem.resp(i).bits.uop.is_amo) {
           dmem_resp_fired := true.B
-          io.core.exe(0).iresp.valid     := true.B
-          io.core.exe(0).iresp.bits.uop  := stq(io.dmem.resp(i).bits.uop.stq_idx).bits.uop
-          io.core.exe(0).iresp.bits.data := io.dmem.resp(i).bits.data
+          io.core.exe(i).iresp.valid     := true.B
+          io.core.exe(i).iresp.bits.uop  := stq(io.dmem.resp(i).bits.uop.stq_idx).bits.uop
+          io.core.exe(i).iresp.bits.data := io.dmem.resp(i).bits.data
         }
       }
     }
@@ -1200,12 +1215,12 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
                                 wb_forward_ld_addr,
                                 storegen.data, false.B, coreDataBytes)
 
-      io.core.exe(0).iresp.valid := (forward_uop.dst_rtype === RT_FIX) && data_ready && live
-      io.core.exe(0).fresp.valid := (forward_uop.dst_rtype === RT_FLT) && data_ready && live
-      io.core.exe(0).iresp.bits.uop  := forward_uop
-      io.core.exe(0).fresp.bits.uop  := forward_uop
-      io.core.exe(0).iresp.bits.data := loadgen.data
-      io.core.exe(0).fresp.bits.data := loadgen.data
+      io.core.exe(i).iresp.valid := (forward_uop.dst_rtype === RT_FIX) && data_ready && live
+      io.core.exe(i).fresp.valid := (forward_uop.dst_rtype === RT_FLT) && data_ready && live
+      io.core.exe(i).iresp.bits.uop  := forward_uop
+      io.core.exe(i).fresp.bits.uop  := forward_uop
+      io.core.exe(i).iresp.bits.data := loadgen.data
+      io.core.exe(i).fresp.bits.data := loadgen.data
 
       when (data_ready && live) {
         ldq(f_idx).bits.succeeded := data_ready
@@ -1392,23 +1407,22 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
       hella_state := h_s1
     }
   } .elsewhen (hella_state === h_s1) {
-    can_fire_hella_incoming := VecInit((0 until memWidth).map(x=>true.B))
+    can_fire_hella_incoming(0) := true.B
 
     hella_data := io.hellacache.s1_data
     hella_xcpt := hella_dtlb_resp
 
-    for (i <- 0 until memWidth) {
-      when (io.hellacache.s1_kill) {
-        when (will_fire_hella_incoming(i) && io.dmem.req(i).fire()) {
-          hella_state := h_dead
-        } .otherwise {
-          hella_state := h_ready
-        }
-      } .elsewhen (will_fire_hella_incoming(i) && io.dmem.req(i).fire()) {
-        hella_state := h_s2
+
+    when (io.hellacache.s1_kill) {
+      when (will_fire_hella_incoming(0) && dmem_req_fire(0)) {
+        hella_state := h_dead
       } .otherwise {
-        hella_state := h_s2_nack
+        hella_state := h_ready
       }
+    } .elsewhen (will_fire_hella_incoming(0) && dmem_req_fire(0)) {
+      hella_state := h_s2
+    } .otherwise {
+      hella_state := h_s2_nack
     }
   } .elsewhen (hella_state === h_s2_nack) {
     io.hellacache.s2_nack := true.B
@@ -1437,12 +1451,10 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
       }
     }
   } .elsewhen (hella_state === h_replay) {
-    can_fire_hella_wakeup := VecInit((0 until memWidth).map(x=>true.B))
+    can_fire_hella_wakeup(0) := true.B
 
-    for (i <- 0 until memWidth) {
-      when (will_fire_hella_wakeup(i) && io.dmem.req(i).fire()) {
-        hella_state := h_wait
-      }
+    when (will_fire_hella_wakeup(0) && dmem_req_fire(0)) {
+      hella_state := h_wait
     }
   } .elsewhen (hella_state === h_dead) {
     for (i <- 0 until memWidth) {
