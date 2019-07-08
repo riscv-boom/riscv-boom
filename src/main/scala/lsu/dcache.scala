@@ -871,7 +871,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
                                s2_hit_state(i) === s2_new_hit_state(i) &&
                                !mshrs.io.block_hit(i)) || s2_is_replay) && s2_valid(i))
 
-  assert(!(s2_is_replay && (s2_hit.asUInt =/= 1.U)), "Replays should always hit")
+  assert(!(s2_valid.reduce(_||_) && s2_is_replay && (s2_hit.asUInt =/= 1.U)), "Replays should always hit")
 
   // lr/sc
   val lrsc_count = RegInit(0.U(log2Ceil(lrscCycles).W))
