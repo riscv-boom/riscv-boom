@@ -1027,6 +1027,8 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
             ldq(l).bits.execute_ignore := true.B
             // We might need to ignore something returning THIS cycle (next stage in pipe)
             // In that case writing it into the ldq register is to slow
+            // TODO: We actually don't use this. We assume the returning load will succeed, and don't try to kill it
+            //       Which approach is better? Unsure right now
             mem_execute_ignore_mask(l) := true.B
           }
         }
@@ -1046,6 +1048,7 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
               ldld_order_fail        := true.B
             } .otherwise { // The younger load hasn't returned yet, we can kill its response
               ldq(l).bits.execute_ignore := true.B
+              mem_execute_ignore_mask(l) := true.B
             }
           }
         } .elsewhen (lcam_ldq_idx(i) =/= l.U) {
@@ -1053,9 +1056,10 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
           // we need to kill ourselves, and prevent forwarding
 
           when (!l_bits.executed || nacking_ld_mask(l) || l_bits.execute_ignore) {
-            io.dmem.s1_kill(i)                 := RegNext(dmem_req_fire(i))
-            ldq(lcam_ldq_idx(i)).bits.executed := false.B
-            can_forward                        := false.B
+            io.dmem.s1_kill(i)                       := RegNext(dmem_req_fire(i))
+            ldq(lcam_ldq_idx(i)).bits.executed       := false.B
+            ldq(lcam_ldq_idx(i)).bits.execute_ignore := false.B
+            can_forward                              := false.B
           }
         }
       }
@@ -1074,19 +1078,22 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
           ldst_addr_matches(s)            := true.B
           ldst_forward_matches(s)         := true.B
           io.dmem.s1_kill(i)              := RegNext(dmem_req_fire(i))
-          ldq(lcam_ldq_idx(i)).bits.executed := false.B
+          ldq(lcam_ldq_idx(i)).bits.executed       := false.B
+          ldq(lcam_ldq_idx(i)).bits.execute_ignore := false.B
         }
           .elsewhen (((lcam_mask & write_mask) =/= 0.U) && dword_addr_matches)
         {
           ldst_addr_matches(s)            := true.B
           io.dmem.s1_kill(i)              := RegNext(dmem_req_fire(i))
-          ldq(lcam_ldq_idx(i)).bits.executed := false.B
+          ldq(lcam_ldq_idx(i)).bits.executed       := false.B
+          ldq(lcam_ldq_idx(i)).bits.execute_ignore := false.B
         }
           .elsewhen (s_uop.is_fence || s_uop.is_amo)
         {
           ldst_addr_matches(s)            := true.B
           io.dmem.s1_kill(i)              := RegNext(dmem_req_fire(i))
-          ldq(lcam_ldq_idx(i)).bits.executed := false.B
+          ldq(lcam_ldq_idx(i)).bits.executed       := false.B
+          ldq(lcam_ldq_idx(i)).bits.execute_ignore := false.B
         }
       }
     }
@@ -1174,12 +1181,13 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
         val ldq_idx = io.dmem.resp(i).bits.uop.ldq_idx
         val send_iresp = ldq(ldq_idx).bits.uop.dst_rtype === RT_FIX
         val send_fresp = ldq(ldq_idx).bits.uop.dst_rtype === RT_FLT
+        val ignore     = ldq(ldq_idx).bits.execute_ignore
 
         io.core.exe(i).iresp.bits.uop := ldq(ldq_idx).bits.uop
         io.core.exe(i).fresp.bits.uop := ldq(ldq_idx).bits.uop
-        io.core.exe(i).iresp.valid     := send_iresp && !ldq(ldq_idx).bits.execute_ignore
+        io.core.exe(i).iresp.valid     := send_iresp && !ignore
         io.core.exe(i).iresp.bits.data := io.dmem.resp(i).bits.data
-        io.core.exe(i).fresp.valid     := send_fresp && !ldq(ldq_idx).bits.execute_ignore
+        io.core.exe(i).fresp.valid     := send_fresp && !ignore
         io.core.exe(i).fresp.bits.data := io.dmem.resp(i).bits.data
 
         assert(send_iresp ^ send_fresp)
@@ -1187,7 +1195,7 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
 
         ldq(ldq_idx).bits.succeeded      := io.core.exe(i).iresp.valid || io.core.exe(i).fresp.valid
         ldq(ldq_idx).bits.execute_ignore := false.B
-        when (ldq(ldq_idx).bits.execute_ignore) {
+        when (ignore) {
           // We were told to ignore this response because of order fail
           // Clear the execute bit, so we can re-fire this load
           ldq(ldq_idx).bits.executed := false.B
