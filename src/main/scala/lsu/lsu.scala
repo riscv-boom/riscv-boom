@@ -331,6 +331,9 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
 
   val exe_req = io.core.exe.req
 
+  val store_needs_order = WireInit(false.B) // The store at the commit head needs the DCache to appear ordered
+                                            // Delay firing load wakeups and retries now
+
   // Can we fire an incoming load
   val ldq_incoming_idx = exe_req.bits.uop.ldq_idx
   val ldq_incoming_e   = ldq(ldq_incoming_idx)
@@ -369,6 +372,7 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
                                 !p1_block_load_mask(ldq_retry_idx)            &&
                                 !p2_block_load_mask(ldq_retry_idx)            &&
                                 RegNext(dtlb.io.req.ready)                    &&
+                                !store_needs_order                            &&
                                 !ldq_retry_e.bits.order_fail)
 
   // Can we retry a store addrgen that missed in the TLB
@@ -405,6 +409,7 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
                               !ldq_wakeup_e.bits.order_fail            &&
                               !p1_block_load_mask(ldq_wakeup_idx)      &&
                               !p2_block_load_mask(ldq_wakeup_idx)      &&
+                              !store_needs_order                       &&
                               (!ldq_wakeup_e.bits.addr_is_uncacheable || (io.core.commit_load_at_rob_head && ldq_head === ldq_wakeup_idx)))
 
   // Can we fire an incoming hellacache request
@@ -1262,6 +1267,7 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
   {
     when (stq(stq_head).bits.uop.is_fence && !io.dmem.ordered) {
       io.dmem.force_order := true.B
+      store_needs_order   := true.B
     }
     clear_store := Mux(stq(stq_head).bits.uop.is_fence, io.dmem.ordered,
                                                         stq(stq_head).bits.succeeded)
