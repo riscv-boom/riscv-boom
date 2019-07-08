@@ -360,6 +360,13 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
   // ---------------------------------------
 
   // Cycle 1.1: scheduling
+  val exe_reqs = WireInit(VecInit(io.core.exe.map(_.req)))
+  // Sfence goes through both
+  for (i <- 0 until memWidth) {
+    when (io.core.exe(i).req.bits.sfence.valid) {
+      exe_reqs := VecInit(Seq.fill(memWidth) { io.core.exe(i).req })
+    }
+  }
 
   // Don't wakeup a load if we just sent it last cycle or two cycles ago
   val block_load_mask    = WireInit(VecInit((0 until NUM_LDQ_ENTRIES).map(x=>false.B)))
@@ -409,7 +416,7 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
   val will_fire_store_commit   = Wire(Vec(memWidth, Bool()))
   val will_fire_load_wakeup    = Wire(Vec(memWidth, Bool()))
 
-  assert(!will_fire_sfence.reduce(_&&_)         &&
+  assert(!(will_fire_sfence.reduce(_||_) && !will_fire_sfence.reduce(_&&_)) &&
          !will_fire_hella_incoming.reduce(_&&_) &&
          !will_fire_hella_wakeup.reduce(_&&_)   &&
          !will_fire_load_retry.reduce(_&&_)     &&
@@ -471,7 +478,7 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
     // First we determine what operations are waiting to execute.
     // These are the "can_fire" signals
 
-    val exe_req = io.core.exe(i).req
+    val exe_req = exe_reqs(i)
 
     val ldq_incoming_idx = exe_req.bits.uop.ldq_idx
     val ldq_incoming_e   = ldq(ldq_incoming_idx)
@@ -891,9 +898,12 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
       clr_bsy_rob_idx := mem_stq_incoming_e.bits.uop.rob_idx
       clr_bsy_brmask  := GetNewBrMask(io.core.brinfo, mem_stq_incoming_e.bits.uop)
     } .elsewhen (fired_sfence(i)) {
-      clr_bsy_valid   := true.B
-      clr_bsy_rob_idx := mem_incoming_uop.rob_idx
-      clr_bsy_brmask  := GetNewBrMask(io.core.brinfo, mem_incoming_uop)
+      if (i == 0) {
+        // Only allow one path to fire the clear signal from sfence
+        clr_bsy_valid   := true.B
+        clr_bsy_rob_idx := mem_incoming_uop.rob_idx
+        clr_bsy_brmask  := GetNewBrMask(io.core.brinfo, mem_incoming_uop)
+      }
     } .elsewhen (fired_sta_retry(i)) {
       clr_bsy_valid   := mem_stq_retry_e.valid            &&
                          mem_stq_retry_e.bits.data.valid  &&

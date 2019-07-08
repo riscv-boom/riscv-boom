@@ -409,12 +409,16 @@ class BoomCore(implicit p: Parameters) extends BoomModule
 
   // SFence needs access to the PC to inject an address into the TLB's CAM port. The ROB
   // will have to later redirect the PC back to the regularly scheduled program.
-  // TODO. sfence doesn't have to come from the first memaddr unit
-  io.ifu.sfence_take_pc    := io.lsu.exe(0).req.bits.sfence.valid
-  io.ifu.sfence_addr       := io.lsu.exe(0).req.bits.sfence.bits.addr
+  io.ifu.sfence_take_pc    := false.B
+  io.ifu.sfence_addr       := 0.U
+  for (i <- 0 until memWidth) {
+    when (io.lsu.exe(i).req.bits.sfence.valid) {
+      io.ifu.sfence_addr := io.lsu.exe(i).req.bits.sfence.bits.addr
+    }
+  }
 
   // We must redirect the PC the cycle after playing the SFENCE game.
-  io.ifu.flush_take_pc     := rob.io.flush.valid || RegNext(io.lsu.exe(0).req.bits.sfence.valid)
+  io.ifu.flush_take_pc     := rob.io.flush.valid || RegNext(io.ifu.sfence_take_pc)
 
   // TODO FIX THIS HACK
   // The below code works because of two quirks with the flush mechanism
@@ -447,7 +451,14 @@ class BoomCore(implicit p: Parameters) extends BoomModule
     (br_unit.brinfo.mispredict && br_unit.brinfo.is_jr &&  csr.io.status.debug)
 
   // Delay sfence to match pushing the sfence.addr into the TLB's CAM port.
-  io.ifu.sfence := RegNext(io.lsu.exe(0).req.bits.sfence)
+  io.ifu.sfence.valid := false.B
+  io.ifu.sfence.bits  := DontCare
+  for (i <- 0 until memWidth) {
+    when (RegNext(io.lsu.exe(i).req.bits.sfence.valid)) {
+      io.ifu.sfence.valid := true.B
+      io.ifu.sfence.bits  := RegNext(io.lsu.exe(i).req.bits.sfence.bits)
+    }
+  }
 
   //-------------------------------------------------------------
   //-------------------------------------------------------------
