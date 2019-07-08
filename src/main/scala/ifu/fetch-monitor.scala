@@ -78,7 +78,7 @@ class FetchMonitor(implicit p: Parameters) extends BoomModule
         assert (uop.bits.pc === prev_target, "[fetchmonitor] JAL went to bad target.")
       } .otherwise {
         // should only be here if a JALR.
-        assert (prev_cfitype === CfiType.jalr, "[fetchmonitor CFI type not JALR.")
+        assert (prev_cfitype === CfiType.jalr, "[fetchmonitor] CFI type not JALR.")
       }
     }
 
