@@ -81,7 +81,11 @@ trait HasBoomLSUModule
  */
 trait CanHaveBoomPTW extends HasTileParameters with HasBoomLSU { this: BaseTile =>
   val module: CanHaveBoomPTWModule
-  var nPTWPorts = 2
+  implicit val p: Parameters
+  val issueParams = tileParams.core.asInstanceOf[boom.common.BoomCoreParams].issueParams
+  val usingUnifiedMemIntIQs = issueParams.count(_.iqType == boom.common.IQT_MEM.litValue) == 0
+  val memWidth = if (usingUnifiedMemIntIQs) 1 else issueParams.find(_.iqType == boom.common.IQT_MEM.litValue).get.issueWidth
+  var nPTWPorts = memWidth
   nHellaCachePorts += (if (usingPTW) 1 else 0)
 }
 
