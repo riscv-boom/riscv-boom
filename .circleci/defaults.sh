@@ -8,6 +8,11 @@ run () {
     ssh -o "StrictHostKeyChecking no" -t $SERVER $1
 }
 
+clean () {
+    # remove remote work dir
+    run "rm -rf $REMOTE_WORK_DIR"
+}
+
 # remote variables
 REMOTE_WORK_DIR=$CI_DIR/$CIRCLE_PROJECT_REPONAME-$CIRCLE_BRANCH-$CIRCLE_SHA1-$CIRCLE_JOB
 REMOTE_RISCV_DIR=$REMOTE_WORK_DIR/riscv-tools-install

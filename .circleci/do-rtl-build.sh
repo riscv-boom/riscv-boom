@@ -9,15 +9,13 @@ set -ex
 SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 source $SCRIPT_DIR/defaults.sh
 
-# call finish on exit
-finish () {
-    # remove remote work dir
-    run "rm -rf $REMOTE_WORK_DIR"
-}
-trap finish EXIT
+# call clean on exit
+trap clean EXIT
 
 # set stricthostkeychecking to no (must happen before rsync)
 run "echo \"Ping $SERVER\""
+
+clean
 
 # copy over riscv-tools, verilator, and chipyard to remote
 run "mkdir -p $REMOTE_RISCV_DIR"
