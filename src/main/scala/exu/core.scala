@@ -225,7 +225,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
   val csr = Module(new freechips.rocketchip.rocket.CSRFile(perfEvents, boomParams.customCSRs.decls))
   csr.io.inst foreach { c => c := DontCare }
-  csr.io.rocc_interrupt := DontCare
+  csr.io.rocc_interrupt := io.rocc.interrupt
 
   val custom_csrs = Wire(new BoomCustomCSRs)
   (custom_csrs.csrs zip csr.io.customCSRs).map { case (lhs, rhs) => lhs := rhs }
@@ -1270,6 +1270,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
   //-------------------------------------------------------------
 
   io.rocc := DontCare
+  io.rocc.exception := csr.io.exception && csr.io.status.xs.orR
   if (usingRoCC) {
     exe_units.rocc_unit.io.rocc.rocc         <> io.rocc
     exe_units.rocc_unit.io.rocc.dec_uops     := dis_uops
