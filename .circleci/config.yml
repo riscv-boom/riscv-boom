@@ -72,7 +72,7 @@ jobs:
         steps:
             - add_ssh_keys:
                 fingerprints:
-                    - "e7:69:4e:24:88:f6:cd:7c:62:da:51:03:54:c4:7f:ec"
+                    - "3e:c3:02:5b:ed:64:8c:b7:b0:04:43:bc:83:43:73:1e"
             - checkout
             - restore_cache:
                 keys:
@@ -100,7 +100,7 @@ jobs:
         steps:
             - add_ssh_keys:
                 fingerprints:
-                    - "e7:69:4e:24:88:f6:cd:7c:62:da:51:03:54:c4:7f:ec"
+                    - "3e:c3:02:5b:ed:64:8c:b7:b0:04:43:bc:83:43:73:1e"
             - checkout
             - restore_cache:
                 keys:
@@ -128,7 +128,7 @@ jobs:
         steps:
             - add_ssh_keys:
                 fingerprints:
-                    - "e7:69:4e:24:88:f6:cd:7c:62:da:51:03:54:c4:7f:ec"
+                    - "3e:c3:02:5b:ed:64:8c:b7:b0:04:43:bc:83:43:73:1e"
             - checkout
             - restore_cache:
                 keys:
@@ -156,7 +156,7 @@ jobs:
         steps:
             - add_ssh_keys:
                 fingerprints:
-                    - "e7:69:4e:24:88:f6:cd:7c:62:da:51:03:54:c4:7f:ec"
+                    - "3e:c3:02:5b:ed:64:8c:b7:b0:04:43:bc:83:43:73:1e"
             - checkout
             - restore_cache:
                 keys:
@@ -184,7 +184,7 @@ jobs:
         steps:
             - add_ssh_keys:
                 fingerprints:
-                    - "e7:69:4e:24:88:f6:cd:7c:62:da:51:03:54:c4:7f:ec"
+                    - "3e:c3:02:5b:ed:64:8c:b7:b0:04:43:bc:83:43:73:1e"
             - checkout
             - restore_cache:
                 keys:
@@ -212,7 +212,7 @@ jobs:
         steps:
             - add_ssh_keys:
                 fingerprints:
-                    - "e7:69:4e:24:88:f6:cd:7c:62:da:51:03:54:c4:7f:ec"
+                    - "3e:c3:02:5b:ed:64:8c:b7:b0:04:43:bc:83:43:73:1e"
             - checkout
             - restore_cache:
                 keys:
