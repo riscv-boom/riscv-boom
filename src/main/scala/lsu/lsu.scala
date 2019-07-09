@@ -1042,7 +1042,7 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
   val r_xcpt_valid = RegInit(false.B)
   val r_xcpt       = Reg(new Exception)
 
-  val mem_xcpt_uop = Mux(mem_xcpt_valid, RegNext(exe_tlb_uop),
+  val mem_xcpt_uop = Mux(mem_xcpt_valid, RegNext(UpdateBrMask(io.core.brinfo, exe_tlb_uop)),
                          ldq(Mux(l_idx >= NUM_LDQ_ENTRIES.U, l_idx - NUM_LDQ_ENTRIES.U, l_idx)).bits.uop)
 
   r_xcpt_valid := (failed_loads.reduce(_|_) || mem_xcpt_valid) &&
