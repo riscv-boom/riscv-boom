@@ -223,9 +223,12 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       ("DTLB miss",   () => io.dmem.perf.tlbMiss),
       ("L2 TLB miss", () => io.ptw.perf.l2miss)))))
 
-  val csr = Module(new freechips.rocketchip.rocket.CSRFile(perfEvents))
+  val csr = Module(new freechips.rocketchip.rocket.CSRFile(perfEvents, boomParams.customCSRs.decls))
   csr.io.inst foreach { c => c := DontCare }
   csr.io.rocc_interrupt := DontCare
+
+  val custom_csrs = Wire(new BoomCustomCSRs)
+  (custom_csrs.csrs zip csr.io.customCSRs).map { case (lhs, rhs) => lhs := rhs }
 
   // evaluate performance counters
   val icache_blocked = !(io.ifu.fetchpacket.valid || RegNext(io.ifu.fetchpacket.valid))
@@ -398,7 +401,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
   val dec_prior_slot_valid = dec_valids.scanLeft(false.B) ((s,v) => s || v)
   val dec_prior_slot_unique = (dec_uops zip dec_valids).scanLeft(false.B) {case (s,(u,v)) => s || v && u.is_unique}
-  val wait_for_empty_pipeline = (0 until coreWidth).map(w => dec_uops(w).is_unique &&
+  val wait_for_empty_pipeline = (0 until coreWidth).map(w => (dec_uops(w).is_unique || custom_csrs.disableOOO) &&
                                   (!rob.io.empty || !lsu.io.lsu_fencei_rdy || dec_prior_slot_valid(w)))
   val wait_for_rocc = (0 until coreWidth).map(w =>
                         (dec_uops(w).is_fence || dec_uops(w).is_fencei) && (io.rocc.busy || rocc_shim_busy))
