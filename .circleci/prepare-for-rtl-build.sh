@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# build verilator and init submodules with rocket-chip hash given by riscv-boom
+# build verilator and init submodules with chipyard hash given by riscv-boom
 
 # turn echo on and error on earliest command
 set -ex
@@ -9,11 +9,18 @@ set -ex
 SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 source $SCRIPT_DIR/defaults.sh
 
+# call finish on exit
+finish () {
+    # remove remote work dir
+    run "rm -rf $REMOTE_WORK_DIR"
+}
+trap finish EXIT
+
 # check to see if both dirs exist
 if [ ! -d "$LOCAL_VERILATOR_DIR" ] && [ ! -d "$LOCAL_CHIPYARD_DIR" ]; then
     cd $HOME
 
-    git clone --progress --verbose https://github.com/ucb-bar/project-template.git chipyard
+    git clone --progress --verbose https://github.com/ucb-bar/chipyard.git chipyard
     cd $LOCAL_CHIPYARD_DIR
 
     echo "Checking out Chipyard version: $(cat $LOCAL_CHECKOUT_DIR/CHIPYARD.hash)"
@@ -40,9 +47,5 @@ if [ ! -d "$LOCAL_VERILATOR_DIR" ] && [ ! -d "$LOCAL_CHIPYARD_DIR" ]; then
     mkdir -p $LOCAL_VERILATOR_DIR
     copy $SERVER:$REMOTE_CHIPYARD_DIR/  $LOCAL_CHIPYARD_DIR
     copy $SERVER:$REMOTE_VERILATOR_DIR/ $LOCAL_VERILATOR_DIR
-
-    # remove local copies
-    run "rm -rf $REMOTE_CHIPYARD_DIR"
-    run "rm -rf $REMOTE_VERILATOR_DIR"
 fi
 

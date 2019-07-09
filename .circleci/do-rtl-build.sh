@@ -9,14 +9,23 @@ set -ex
 SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 source $SCRIPT_DIR/defaults.sh
 
-REMOTE_JOB_DIR=$REMOTE_WORK_DIR/chipyard-$1
-REMOTE_SIM_DIR=$REMOTE_JOB_DIR/sims/verisim
+# call finish on exit
+finish () {
+    # remove remote work dir
+    run "rm -rf $REMOTE_WORK_DIR"
+}
+trap finish EXIT
 
 # set stricthostkeychecking to no (must happen before rsync)
 run "echo \"Ping $SERVER\""
 
-run "mkdir -p $REMOTE_JOB_DIR"
-run "cp -R $REMOTE_CHIPYARD_DIR/. $REMOTE_JOB_DIR"
+# copy over riscv-tools, verilator, and chipyard to remote
+run "mkdir -p $REMOTE_RISCV_DIR"
+run "mkdir -p $REMOTE_CHIPYARD_DIR"
+run "mkdir -p $REMOTE_VERILATOR_DIR"
+copy $LOCAL_RISCV_DIR/ $SERVER:$REMOTE_RISCV_DIR
+copy $LOCAL_CHIPYARD_DIR/ $SERVER:$REMOTE_CHIPYARD_DIR
+copy $LOCAL_VERILATOR_DIR/ $SERVER:$REMOTE_VERILATOR_DIR
 
 # enter the verisim directory and build the specific config on remote server
 run "make -C $REMOTE_SIM_DIR clean"
@@ -24,4 +33,4 @@ run "export RISCV=\"$REMOTE_RISCV_DIR\"; make -C $REMOTE_SIM_DIR VERILATOR_INSTA
 
 # copy back the final build
 mkdir -p $LOCAL_CHIPYARD_DIR
-copy $SERVER:$REMOTE_JOB_DIR/ $LOCAL_CHIPYARD_DIR
+copy $SERVER:$REMOTE_CHIPYARD_DIR/ $LOCAL_CHIPYARD_DIR

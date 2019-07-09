@@ -63,32 +63,6 @@ jobs:
             - run:
                 name: Run Scala checkstyle
                 command: make checkstyle
-    copy-environment:
-        docker:
-            - image: riscvboom/riscvboom-images:0.0.10
-        environment:
-            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
-            TERM: dumb
-        steps:
-            - checkout
-            - add_ssh_keys:
-                fingerprints:
-                    - "e7:69:4e:24:88:f6:cd:7c:62:da:51:03:54:c4:7f:ec"
-            - restore_cache:
-                keys:
-                    - riscv-tools-installed-v3-{{ checksum "CHIPYARD.hash" }}
-            - restore_cache:
-                keys:
-                    - chipyard-v10-{{ checksum "CHIPYARD.hash" }}
-            - restore_cache:
-                keys:
-                    - verilator-v10-{{ checksum "CHIPYARD.hash" }}
-            - run:
-                name: Move riscv-tools, chipyard, and verilator to remote server
-                command: |
-                    .circleci/cleanup-ext.sh
-                    .circleci/move-environment.sh
-                no_output_timeout: 120m
     prepare-smallboomconfig:
         docker:
             - image: riscvboom/riscvboom-images:0.0.10
@@ -102,7 +76,13 @@ jobs:
             - checkout
             - restore_cache:
                 keys:
-                    - chipyard-with-verilator-v10-{{ checksum "CHIPYARD.hash" }}
+                    - riscv-tools-installed-v3-{{ checksum "CHIPYARD.hash" }}
+            - restore_cache:
+                keys:
+                    - chipyard-v10-{{ checksum "CHIPYARD.hash" }}
+            - restore_cache:
+                keys:
+                    - verilator-v10-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Building SmallBoomConfig using Verilator
                 command: .circleci/do-rtl-build.sh SmallBoomConfig
@@ -124,7 +104,13 @@ jobs:
             - checkout
             - restore_cache:
                 keys:
-                    - chipyard-with-verilator-v10-{{ checksum "CHIPYARD.hash" }}
+                    - riscv-tools-installed-v3-{{ checksum "CHIPYARD.hash" }}
+            - restore_cache:
+                keys:
+                    - chipyard-v10-{{ checksum "CHIPYARD.hash" }}
+            - restore_cache:
+                keys:
+                    - verilator-v10-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Building MediumBoomConfig using Verilator
                 command: .circleci/do-rtl-build.sh MediumBoomConfig
@@ -146,7 +132,13 @@ jobs:
             - checkout
             - restore_cache:
                 keys:
-                    - chipyard-with-verilator-v10-{{ checksum "CHIPYARD.hash" }}
+                    - riscv-tools-installed-v3-{{ checksum "CHIPYARD.hash" }}
+            - restore_cache:
+                keys:
+                    - chipyard-v10-{{ checksum "CHIPYARD.hash" }}
+            - restore_cache:
+                keys:
+                    - verilator-v10-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Building LargeBoomConfig using Verilator
                 command: .circleci/do-rtl-build.sh LargeBoomConfig
@@ -168,7 +160,13 @@ jobs:
             - checkout
             - restore_cache:
                 keys:
-                    - chipyard-with-verilator-v10-{{ checksum "CHIPYARD.hash" }}
+                    - riscv-tools-installed-v3-{{ checksum "CHIPYARD.hash" }}
+            - restore_cache:
+                keys:
+                    - chipyard-v10-{{ checksum "CHIPYARD.hash" }}
+            - restore_cache:
+                keys:
+                    - verilator-v10-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Building MegaBoomConfig using Verilator
                 command: .circleci/do-rtl-build.sh MegaBoomConfig
@@ -190,7 +188,13 @@ jobs:
             - checkout
             - restore_cache:
                 keys:
-                    - chipyard-with-verilator-v10-{{ checksum "CHIPYARD.hash" }}
+                    - riscv-tools-installed-v3-{{ checksum "CHIPYARD.hash" }}
+            - restore_cache:
+                keys:
+                    - chipyard-v10-{{ checksum "CHIPYARD.hash" }}
+            - restore_cache:
+                keys:
+                    - verilator-v10-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Building SmallBoomAndRocketConfig using Verilator
                 command: .circleci/do-rtl-build.sh SmallBoomAndRocketConfig
@@ -212,7 +216,13 @@ jobs:
             - checkout
             - restore_cache:
                 keys:
-                    - chipyard-with-verilator-v10-{{ checksum "CHIPYARD.hash" }}
+                    - riscv-tools-installed-v3-{{ checksum "CHIPYARD.hash" }}
+            - restore_cache:
+                keys:
+                    - chipyard-v10-{{ checksum "CHIPYARD.hash" }}
+            - restore_cache:
+                keys:
+                    - verilator-v10-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Building SmallRV32UnifiedBoomConfig using Verilator
                 command: .circleci/do-rtl-build.sh SmallRV32UnifiedBoomConfig
@@ -467,21 +477,6 @@ jobs:
             - run:
                 name: Run SmallRV32UnifiedBoomConfig riscv tests
                 command: .circleci/run-tests.sh SmallRV32UnifiedBoomConfig
-    clean-environment:
-        docker:
-            - image: riscvboom/riscvboom-images:0.0.10
-        environment:
-            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
-            TERM: dumb
-        steps:
-            - checkout
-            - add_ssh_keys:
-                fingerprints:
-                    - "e7:69:4e:24:88:f6:cd:7c:62:da:51:03:54:c4:7f:ec"
-            - run:
-                name: Clean up files on remote server
-                command: .circleci/cleanup-ext.sh
-                no_output_timeout: 120m
 
 # Order and dependencies of jobs to run
 workflows:
@@ -497,31 +492,31 @@ workflows:
             # Run generic syntax checking
             - run-scala-checkstyle
 
-            # Move files to remote
-            - copy-environment:
-                requires:
-                    - prepare-build-environment
-                    - install-riscv-tools
-
             # Prepare the verilator builds
             - prepare-smallboomconfig:
                 requires:
-                    - copy-environment
+                    - prepare-build-environment
+                    - install-riscv-tools
             - prepare-mediumboomconfig:
                 requires:
-                    - copy-environment
+                    - prepare-build-environment
+                    - install-riscv-tools
             - prepare-largeboomconfig:
                 requires:
-                    - copy-environment
+                    - prepare-build-environment
+                    - install-riscv-tools
             - prepare-megaboomconfig:
                 requires:
-                    - copy-environment
+                    - prepare-build-environment
+                    - install-riscv-tools
             - prepare-smallboomandrocketconfig:
                 requires:
-                    - copy-environment
+                    - prepare-build-environment
+                    - install-riscv-tools
             - prepare-smallrv32unifiedboomconfig:
                 requires:
-                    - copy-environment
+                    - prepare-build-environment
+                    - install-riscv-tools
 
             # Run the SmallBoomConfig tests
             - smallboomconfig-run-csmith-tests:
@@ -567,18 +562,3 @@ workflows:
             - smallrv32unifiedboomconfig-run-riscv-tests:
                 requires:
                     - prepare-smallrv32unifiedboomconfig
-
-            # Clean up environment after build
-            - clean-environment:
-                requires:
-                    - smallboomconfig-run-csmith-tests
-                    - smallboomconfig-run-riscv-tests
-                    - mediumboomconfig-run-csmith-tests
-                    - mediumboomconfig-run-riscv-tests
-                    - largeboomconfig-run-csmith-tests
-                    - largeboomconfig-run-riscv-tests
-                    - megaboomconfig-run-csmith-tests
-                    - megaboomconfig-run-riscv-tests
-                    - smallboomandrocketconfig-run-csmith-tests
-                    - smallboomandrocketconfig-run-riscv-tests
-                    - smallrv32unifiedboomconfig-run-riscv-tests
