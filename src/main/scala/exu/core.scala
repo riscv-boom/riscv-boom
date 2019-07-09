@@ -413,7 +413,8 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   io.ifu.sfence_addr       := 0.U
   for (i <- 0 until memWidth) {
     when (io.lsu.exe(i).req.bits.sfence.valid) {
-      io.ifu.sfence_addr := io.lsu.exe(i).req.bits.sfence.bits.addr
+      io.ifu.sfence_take_pc := true.B
+      io.ifu.sfence_addr    := io.lsu.exe(i).req.bits.sfence.bits.addr
     }
   }
 
