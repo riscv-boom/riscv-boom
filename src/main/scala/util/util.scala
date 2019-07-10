@@ -377,6 +377,17 @@ object MaskUpper
 }
 
 /**
+  * Transpose a matrix of Chisel Vecs.
+ */
+object Transpose
+{
+  def apply[T <: chisel3.core.Data](in: Vec[Vec[T]]) = {
+    val n = in(0).size
+    VecInit((0 until n).map(i => VecInit(in.map(row => row(i)))))
+  }
+}
+
+/**
   * N-wide one-hot priority encoder.
  */
 object SelectFirstN
