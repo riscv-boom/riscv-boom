@@ -400,6 +400,35 @@ object SelectFirstN
 }
 
 /**
+ * Connect the first k of n input interfaces onto k output interfaces.
+ * Related to SelectFirstN, but we don't use that as a helper
+ * to help ensure we end up generating the most efficient hardware.
+ */
+object Compactor
+{
+  def apply[T <: chisel3.core.Data](in: Vec[DecoupledIO[T]], out: Vec[DecoupledIO[T]]) {
+    val n = in.getWidth
+    val k = out.getWidth
+    require(n >= k)
+
+    if (n == k) {
+      in <> out
+    } else {
+      val counts = in.map(_.valid).scanLeft(1.U(k.W)) ((c,e) => Mux(e, c<<1, c))
+      val sels = Transpose(VecInit(counts map (c => VecInit(c.asBools)))) map (col =>
+                   (col zip in.map(_.valid)) map {case (c,v) => c && v})
+
+      val in_readys = counts map (row => (row.asBools zip out.map(_.ready)) map {case (c,r) => c && r} reduce (_||_))
+      val out_valids = sels map (col => col.reduce(_||_))
+      val out_data = sels map (s => Mux1H(s, in.map(_.bits)))
+
+      in zip in_readys foreach {case (i,r) => i.ready := r}
+      out_valids zip out_data zip out foreach {case ((v,d),o) => o.valid := v; o.bits := d}
+    }
+  }
+}
+
+/**
  * Create a queue that can be killed with a branch kill signal.
  * Assumption: enq.valid only high if not killed by branch (so don't check IsKilled on io.enq).
  */
