@@ -135,8 +135,7 @@ object GShareBrPredictor
  * @param historyLength length of GHR in bits
  */
 class GShareBrPredictor(
-   historyLength: Int = 12,
-   bankBytes: Int
+   historyLength: Int = 12
    )(implicit p: Parameters)
    extends BoomBrPredictor(historyLength)
    with HasGShareParameters
