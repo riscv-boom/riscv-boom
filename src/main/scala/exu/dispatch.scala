@@ -61,3 +61,29 @@ class BasicDispatcher(implicit p: Parameters) extends Dispatcher
     dis(w).bits  := io.ren_uops(w).bits
   }
 }
+
+/**
+  * Tries to dispatch as many uops as it can to issue queues which may accept fewer than coreWidth per cycle.
+  */
+class CompactingDispatcher(implicit p: Parameters) extends Dispatcher
+{
+  issueParams.map(ip => require(ip.dispatchWidth >= ip.issueWidth))
+
+  val ren_readys = Wire(Vec(issueParams.size, UInt(coreWidth.W)))
+
+  for (((ip, dis), rdy) <- issueParams zip io.dis_uops zip ren_readys) {
+    val ren = Wire(Vec(coreWidth, Decoupled(new MicroOp)))
+    ren := io.ren_uops
+
+    val uses_iq = ren map (u => (u.bits.iq_type & ip.iqType.U).orR)
+
+    (ren zip io.ren_uops zip uses_iq) foreach {case ((u,v),q) =>
+      u.valid := v.valid && q}
+
+    Compactor(ren, dis)
+
+    rdy := VecInit(ren zip uses_iq map {case (u,q) => u.ready || !q}).asUInt
+  }
+
+  (ren_readys.reduce(_&_).asBools zip io.ren_uops) foreach {case (r,u) => u.ready := r}
+}
