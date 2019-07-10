@@ -80,6 +80,9 @@ class GShareEntry(val fetchWidth: Int) extends Bundle {
     when (cfi_idx === this.cfi_idx) {
       // Update to this CFI.
       new_counter := updateCounter(taken)
+    } .elsewhen (!(isTaken || taken)) {
+      // If current prediction and update are both not-taken, weaken prediction; regardless of CFI index.
+      new_counter := 0.U
     } .otherwise {
       when (isWeak) {
         // Different CFI and our prediction is weak:
