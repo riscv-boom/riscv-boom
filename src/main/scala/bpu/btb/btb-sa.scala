@@ -44,9 +44,9 @@ import boom.util.{BoolToChar, CfiTypeToChars, BoomCoreStringPrefix}
  * a bi-modal table to determine whether the prediction is taken or not
  * taken.
  */
-class BTBsa(implicit p: Parameters) extends BoomBTB
+class BTBsa(val bankBytes: Int)(implicit p: Parameters) extends BoomBTB
 {
-  val bim = Module(new BimodalTable())
+  val bim = Module(new BimodalTable(bankBytes))
   bim.io.req := io.req
   bim.io.do_reset := false.B // TODO
   bim.io.flush := false.B // TODO

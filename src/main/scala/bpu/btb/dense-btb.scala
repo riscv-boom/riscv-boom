@@ -45,7 +45,7 @@ import boom.util.{BoomCoreStringPrefix}
 // DenseBTB
 //------------------------------------------------------------------------------
 
-class DenseBTB(implicit p: Parameters) extends BoomBTB
+class DenseBTB(val bankBytes: Int)(implicit p: Parameters) extends BoomBTB
 {
   private val lsbSz = log2Ceil(coreInstBytes)
   private val bankBit = log2Ceil(fetchWidth*coreInstBytes)
@@ -157,7 +157,7 @@ class DenseBTB(implicit p: Parameters) extends BoomBTB
 
   // bim
 
-  val bim = Module(new BimodalTable())
+  val bim = Module(new BimodalTable(bankBytes))
   bim.io.req := io.req
   bim.io.do_reset := false.B // TODO
   bim.io.flush := false.B // TODO
