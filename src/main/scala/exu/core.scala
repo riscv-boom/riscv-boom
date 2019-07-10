@@ -414,7 +414,8 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   io.lsu.fence_dmem := (dec_valids zip wait_for_empty_pipeline).map {case (v,w) => v && w} .reduce(_||_)
 
   // all decoders are empty and ready for new instructions
-  dec_ready := !dec_stalls.last
+  if (useNewFetchBuffer) dec_ready := dec_fire.last
+  else                   dec_ready := !dec_stalls.last
 
   when (dec_ready || flush_ifu) {
     dec_finished_mask := 0.U

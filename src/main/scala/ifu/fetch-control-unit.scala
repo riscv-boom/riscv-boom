@@ -114,29 +114,39 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
 
   val bchecker = Module (new BranchChecker)
   val ftq = Module(new FetchTargetQueue(num_entries = ftqSz))
-  val fb = if (useNewFetchBuffer) Module(new    FetchBuffer(numEntries=fetchBufferSz*coreWidth))
-           else                   Module(new OldFetchBuffer(numEntries=fetchBufferSz*coreWidth))
+  val fb = if (useNewFetchBuffer) Module(new    FetchBuffer(numEntries=numFetchBufferEntries))
+           else                   Module(new OldFetchBuffer(numEntries=1<<log2Ceil(numFetchBufferEntries)))
   val monitor: Option[FetchMonitor] = (useFetchMonitor).option(Module(new FetchMonitor))
 
   val br_unit = io.br_unit
   val fseq_reg = RegInit(0.U(xLen.W))
   val f0_redirect_pc = Wire(UInt(vaddrBitsExtended.W))
 
-  val clear_f3         = WireInit(false.B)
-  val q_f3_imemresp    = withReset(reset.toBool || clear_f3) {
-                             Module(new ElasticReg(gen = new freechips.rocketchip.rocket.FrontendResp)) }
-  val q_f3_btb_resp    = withReset(reset.toBool || clear_f3) { Module(new ElasticReg(gen = Valid(new BoomBTBResp))) }
-  val f3_req           = Wire(Valid(new PCReq()))
-  val f3_fetch_bundle  = Wire(new FetchBundle)
+  val clear_f3        = WireInit(false.B)
+  val q_f3_imemresp   = withReset(reset.toBool || clear_f3) {
+                          Module(new ElasticReg(gen = new freechips.rocketchip.rocket.FrontendResp)) }
+  val q_f3_btb_resp   = withReset(reset.toBool || clear_f3) { Module(new ElasticReg(gen = Valid(new BoomBTBResp))) }
+  val f3_req          = Wire(Valid(new PCReq()))
+  val f3_fetch_bundle = Wire(new FetchBundle)
+  val f3_valid        = q_f3_imemresp.io.deq.valid
 
   dontTouch(f3_fetch_bundle)
 
   val r_f4_valid = RegInit(false.B)
+
+  // Can the F3 stage proceed?
+  val f4_ready = ((!r_f4_valid && (fetchLatency == 4).B) || fb.io.enq.ready) && ftq.io.enq.ready
+
+  // F4 Redirection path.
   val r_f4_req = Reg(Valid(new PCReq()))
   val r_f4_taken = RegInit(false.B)
   val r_f4_fetchpc = Reg(UInt())
-  // Can the F3 stage proceed?
-  val f4_ready = fb.io.enq.ready && ftq.io.enq.ready
+
+  // F3 is invalidated by redirects.
+  val f3_fire = f3_valid && f4_ready && !clear_f3
+
+  // F4 Instruction path.
+  val r_f4_fetch_bundle = RegEnable(f3_fetch_bundle, f3_fire)
 
   io.f3_stall := !f4_ready
   io.f3_clear := clear_f3
@@ -168,7 +178,7 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
     io.flush_take_pc ||
     io.sfence_take_pc ||
     (io.f2_btb_resp.valid && io.f2_btb_resp.bits.taken && io.imem_resp.ready) ||
-    (r_f4_valid && r_f4_req.valid)
+    r_f4_req.valid
 
   io.imem_req.valid   := f0_redirect_val // tell front-end we had an unexpected change in the stream
   io.imem_req.bits.pc := f0_redirect_pc
@@ -184,7 +194,7 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
       io.flush_pc,
     Mux(br_unit.take_pc,
       br_unit.target,
-    Mux(r_f4_valid && r_f4_req.valid,
+    Mux(r_f4_req.valid,
       r_f4_req.bits.addr,
       io.f2_btb_resp.bits.target)))))
 
@@ -208,9 +218,8 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
   // **** F3 ****
   //-------------------------------------------------------------
 
-  clear_f3 := io.clear_fetchbuffer || (r_f4_valid && r_f4_req.valid)
+  clear_f3 := io.clear_fetchbuffer || r_f4_req.valid
 
-  val f3_valid = q_f3_imemresp.io.deq.valid
   val f3_imemresp = q_f3_imemresp.io.deq.bits
   val f3_btb_resp = q_f3_btb_resp.io.deq.bits
 
@@ -348,7 +357,7 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
   val f3_btb_mask = Wire(UInt(fetchWidth.W))
   val f3_bpd_mask = Wire(UInt(fetchWidth.W))
 
-  when (f3_valid && f4_ready && !r_f4_req.valid) {
+  when (f3_fire) {
     val last_idx  = Mux(inLastChunk(f3_fetch_bundle.pc) && icIsBanked.B,
                       (fetchWidth/2-1).U, (fetchWidth-1).U)
     prev_is_half := (usingCompressed.B
@@ -511,15 +520,14 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
   // **** F4 ****
   //-------------------------------------------------------------
 
-  when (io.clear_fetchbuffer || r_f4_req.valid) {
-    r_f4_valid := false.B
-    r_f4_req.valid := false.B
-  } .elsewhen (f4_ready) {
-    r_f4_valid := f3_valid && !(r_f4_valid && r_f4_req.valid)
+  when (f3_fire) {
     r_f4_req := f3_req
     r_f4_fetchpc := f3_imemresp.pc
     r_f4_taken := f3_taken
+  } .otherwise {
+    r_f4_req.valid := false.B
   }
+  r_f4_valid := r_f4_valid && !fb.io.enq.ready && !io.clear_fetchbuffer && (fetchLatency == 4).B || f3_fire
 
   assert (!(r_f4_req.valid && !r_f4_valid),
     "[fetch] f4-request is high but f4_valid is not.")
@@ -531,8 +539,11 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
   //-------------------------------------------------------------
 
   // Fetch Buffer
-  fb.io.enq.valid := f3_valid && !r_f4_req.valid && f4_ready && f3_fetch_bundle.mask =/= 0.U
-  fb.io.enq.bits  := f3_fetch_bundle
+  if (fetchLatency == 3) fb.io.enq.valid := f3_fire && (f3_fetch_bundle.mask =/= 0.U)
+  else                   fb.io.enq.valid := r_f4_valid && (r_f4_fetch_bundle.mask =/= 0.U)
+
+  if (fetchLatency == 3) fb.io.enq.bits := f3_fetch_bundle
+  else                   fb.io.enq.bits := r_f4_fetch_bundle
   fb.io.clear := io.clear_fetchbuffer
 
   for (i <- 0 until fetchWidth) {
@@ -548,7 +559,7 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
   // **** FetchTargetQueue ****
   //-------------------------------------------------------------
 
-  ftq.io.enq.valid := f3_valid && !r_f4_req.valid && f4_ready
+  ftq.io.enq.valid := f3_fire
   ftq.io.enq.bits.fetch_pc := f3_imemresp.pc
   ftq.io.enq.bits.history := io.f3_bpd_resp.bits.history
   ftq.io.enq.bits.bpd_info := io.f3_bpd_resp.bits.info
@@ -572,7 +583,7 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
   io.ftq_restore_history <> ftq.io.restore_history
 
   io.f2_redirect := io.f2_btb_resp.valid && io.f2_btb_resp.bits.taken && io.imem_resp.ready
-  io.f4_redirect := r_f4_valid && r_f4_req.valid
+  io.f4_redirect := r_f4_req.valid
   io.f4_taken    := r_f4_taken
 
   io.bim_update := ftq.io.bim_update
@@ -597,9 +608,9 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
   //-------------------------------------------------------------
 
   if (O3PIPEVIEW_PRINTF) {
-    when (fb.io.enq.fire()) {
-      fseq_reg := fseq_reg + PopCount(fb.io.enq.bits.mask)
-      val bundle = fb.io.enq.bits
+    when (f3_fire) {
+      fseq_reg := fseq_reg + PopCount(f3_fetch_bundle.mask)
+      val bundle = f3_fetch_bundle
       for (i <- 0 until fetchWidth) {
         when (bundle.mask(i)) {
           // TODO for now, manually set the fetch_tsc to point to when the fetch
@@ -615,6 +626,7 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
       }
     }
   }
+  // TODO Add pipeview output for f4 stage.
 
   //-------------------------------------------------------------
   // **** Assertions ****
@@ -635,7 +647,7 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
                         + (cfi_idx << log2Ceil(coreInstBytes).U)
                         - Mux(f3_fetch_bundle.edge_inst && cfi_idx === 0.U, 2.U, 0.U))
 
-  when (fb.io.enq.fire() &&
+  when (f3_fire && (f3_fetch_bundle.mask =/= 0.U) &&
         !f3_fetch_bundle.replay_if &&
         !f3_fetch_bundle.xcpt_pf_if &&
         !f3_fetch_bundle.xcpt_ae_if) {
@@ -689,12 +701,12 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
   }
 
   when (io.clear_fetchbuffer ||
-        (fb.io.enq.fire() &&
+        (f3_fire && (f3_fetch_bundle.mask =/= 0.U) &&
     (f3_fetch_bundle.replay_if || f3_fetch_bundle.xcpt_pf_if || f3_fetch_bundle.xcpt_ae_if))) {
     last_valid := false.B
   }
 
-  when (fb.io.enq.fire() &&
+  when (f3_fire && (f3_fetch_bundle.mask =/= 0.U) &&
         !f3_fetch_bundle.replay_if &&
         !f3_fetch_bundle.xcpt_pf_if &&
         !f3_fetch_bundle.xcpt_ae_if) {

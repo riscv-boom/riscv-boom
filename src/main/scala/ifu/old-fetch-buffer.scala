@@ -52,6 +52,8 @@ class OldFetchBuffer(numEntries: Int)(implicit p: Parameters) extends BoomModule
     val clear = Input(Bool())
   })
 
+  require (isPow2(numEntries))
+
   private val ram = Mem(numEntries, new MicroOp())
   ram.suggestName("fb_uop_ram")
   private val write_ptr = RegInit(0.U(log2Ceil(numEntries).W))

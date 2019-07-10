@@ -375,20 +375,25 @@ object IsOlder
 }
 
 /**
-  * Set all bits below highest order '1'.
-  *
+ * Set all bits at or below the highest order '1'.
  */
 object MaskLower
 {
-  def apply(in: UInt) = (0 until in.getWidth).map(i => in >> i.U).reduce(_|_)
+  def apply(in: UInt) = {
+    val n = in.getWidth
+    (0 until n).map(i => in >> i.U).reduce(_|_)
+  }
 }
 
 /**
-  * Set all bits above lowest order '1'.
+ * Set all bits at or above the lowest order '1'.
  */
 object MaskUpper
 {
-  def apply(in: UInt) = (0 until in.getWidth).map(i => in << i.U).reduce(_|_)
+  def apply(in: UInt) = {
+    val n = in.getWidth
+    (0 until n).map(i => (in << i.U)(n-1,0)).reduce(_|_)
+  }
 }
 
 /**

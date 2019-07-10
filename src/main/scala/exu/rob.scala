@@ -697,10 +697,8 @@ class Rob(
     rob_head     := WrapInc(rob_head, numRobRows)
     rob_head_lsb := 0.U
     rob_deq      := true.B
-  } .elsewhen (io.commit.valids.asUInt =/= 0.U) {
-    rob_head_lsb := PriorityEncoder(~MaskLower(io.commit.valids.asUInt))
-  } .elsewhen (empty && io.enq_valids.asUInt =/= 0.U) {
-    rob_head_lsb := PriorityEncoder(io.enq_valids)
+  } .otherwise {
+    rob_head_lsb := OHToUInt(PriorityEncoderOH(rob_head_vals.asUInt))
   }
 
   // -----------------------------------------------

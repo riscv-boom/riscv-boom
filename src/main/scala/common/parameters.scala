@@ -38,8 +38,8 @@ case class BoomCoreParams(
   enableCustomRf: Boolean = false,
   enableCustomRfModel: Boolean = true,
   maxBrCount: Int = 4,
-  fetchBufferSz: Int = 8,
-  useNewFetchBuffer: Boolean = false,
+  numFetchBufferEntries: Int = 16,
+  useNewFetchBuffer: Boolean = true,
   enableAgePriorityIssue: Boolean = true,
   enablePrefetching: Boolean = false,
   enableFastLoadUse: Boolean = true,
@@ -62,7 +62,7 @@ case class BoomCoreParams(
   bpdRandom: Option[RandomBpdParameters] = None,
   intToFpLatency: Int = 2,
   imulLatency: Int = 3,
-  fetchLatency: Int = 3,
+  fetchLatency: Int = 4,
   renameLatency: Int = 2,
   nPerfCounters: Int = 0,
   numRXQEntries: Int = 4,
@@ -78,7 +78,7 @@ case class BoomCoreParams(
   mtvecInit: Option[BigInt] = Some(BigInt(0)),
   mtvecWritable: Boolean = true,
   haveCFlush: Boolean = false,
-  mulDiv: Option[freechips.rocketchip.rocket.MulDivParams] = Some(MulDivParams()),
+  mulDiv: Option[freechips.rocketchip.rocket.MulDivParams] = Some(MulDivParams(divEarlyOut=true)),
   nBreakpoints: Int = 1,
   nL2TLBEntries: Int = 512,
   nLocalInterrupts: Int = 0,
@@ -150,7 +150,7 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
   val NUM_STQ_ENTRIES = numStqEntries // completion of lsu refactor.
   val maxBrCount    = boomParams.maxBrCount          // number of branches we can speculate simultaneously
   val ftqSz         = boomParams.ftq.nEntries        // number of FTQ entries
-  val fetchBufferSz = boomParams.fetchBufferSz       // number of instructions that stored between fetch&decode
+  val numFetchBufferEntries = boomParams.numFetchBufferEntries // number of instructions that stored between fetch&decode
   val useNewFetchBuffer = boomParams.useNewFetchBuffer
 
   val numIntPhysRegs= boomParams.numIntPhysRegisters // size of the integer physical register file
@@ -176,7 +176,7 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
   val intToFpLatency = boomParams.intToFpLatency
 
   val fetchLatency = boomParams.fetchLatency // how many cycles does fetch occupy?
-  require (fetchLatency == 3) // do not currently support changing this
+  require (Seq(3, 4).contains(fetchLatency)) // 3 and 4 cycle fetch supported
   val renameLatency = boomParams.renameLatency // how many cycles does rename occupy?
 
   val enableBrResolutionRegister = boomParams.enableBrResolutionRegister
