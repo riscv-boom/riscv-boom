@@ -204,7 +204,7 @@ class RoCCShim(implicit p: Parameters) extends BoomModule
                   && io.resp.ready
                   && rcq.io.deq.valid)
 
-  io.core.rocc.resp.ready := io.resp.ready
+  io.core.rocc.resp.ready := io.resp.ready && rcq.io.deq.bits.dst_rtype =/= RT_X
   io.resp.valid           := false.B
   rcq.io.deq.ready        := false.B
   when (handle_resp) {
