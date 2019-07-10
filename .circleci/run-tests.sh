@@ -26,22 +26,22 @@ run_both () {
 
 case $1 in
     smallboom)
-        run_both $mapping[$1]
+        run_both ${mapping[$1]}
         ;;
     mediumboom)
-        run_both $mapping[$1]
+        run_both ${mapping[$1]}
         ;;
     largeboom)
-        run_bmark $mapping[$1]
+        run_bmark ${mapping[$1]}
         ;;
     megaboom)
-        run_bmark $mapping[$1]
+        run_bmark ${mapping[$1]}
         ;;
     boomandrocket)
-        run_both $mapping[$1]
+        run_both ${mapping[$1]}
         ;;
     rv32unifiedboom)
-        run_asm $mapping[$1]
+        run_asm ${mapping[$1]}
         ;;
     *)
         echo "No set of tests for $1. Did you spell it right?"
