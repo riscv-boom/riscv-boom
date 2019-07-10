@@ -53,8 +53,9 @@ class BTBsa(implicit p: Parameters) extends BoomBTB
   bim.io.update := io.bim_update
 
   private val lsbSz = log2Ceil(coreInstBytes)
+  private val fbSz = log2Ceil(fetchWidth)
   private def getTag (addr: UInt): UInt = addr(tagSz+idxSz+lsbSz-1, idxSz+lsbSz)
-  private def getIdx (addr: UInt): UInt = addr(idxSz+lsbSz-1, lsbSz)
+  private def getIdx (addr: UInt): UInt = addr(idxSz+lsbSz-1, lsbSz) ^ (addr(fbSz+lsbSz-1,lsbSz) << (idxSz - fbSz).U)
 
   /**
    * Data stored in the BTB entry
