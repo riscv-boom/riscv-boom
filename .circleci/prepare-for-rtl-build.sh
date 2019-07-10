@@ -12,7 +12,7 @@ source $SCRIPT_DIR/defaults.sh
 # call clean on exit
 trap clean EXIT
 
-run_script $LOCAL_CHIPYARD_DIR/.circleci/clean-old-files.sh $CI_DIR
+run_script $LOCAL_CHECKOUT_DIR/.circleci/clean-old-files.sh $CI_DIR
 
 # check to see if both dirs exist
 if [ ! -d "$LOCAL_VERILATOR_DIR" ] && [ ! -d "$LOCAL_CHIPYARD_DIR" ]; then
