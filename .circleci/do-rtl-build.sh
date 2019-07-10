@@ -1,6 +1,7 @@
 #!/bin/bash
 
 # create the different verilator builds of BOOM based on arg
+# the command is the make command string
 
 # turn echo on and error on earliest command
 set -ex
@@ -27,7 +28,7 @@ copy $LOCAL_VERILATOR_DIR/ $SERVER:$REMOTE_VERILATOR_DIR
 
 # enter the verisim directory and build the specific config on remote server
 run "make -C $REMOTE_SIM_DIR clean"
-run "export RISCV=\"$REMOTE_RISCV_DIR\"; make -C $REMOTE_SIM_DIR VERILATOR_INSTALL_DIR=$REMOTE_VERILATOR_DIR JAVA_ARGS=\"-Xmx8G -Xss8M\" SUB_PROJECT=boom CONFIG=$1 TOP=BoomRocketSystem"
+run "export RISCV=\"$REMOTE_RISCV_DIR\"; export VERILATOR_ROOT=$REMOTE_VERILATOR_DIR/install/share/verilator; make -C $REMOTE_SIM_DIR VERILATOR_INSTALL_DIR=$REMOTE_VERILATOR_DIR JAVA_ARGS=\"-Xmx8G -Xss8M\" $@"
 run "rm -rf $REMOTE_CHIPYARD_DIR/project"
 
 # copy back the final build

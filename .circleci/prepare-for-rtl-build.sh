@@ -12,6 +12,8 @@ source $SCRIPT_DIR/defaults.sh
 # call clean on exit
 trap clean EXIT
 
+run_script $LOCAL_CHIPYARD_DIR/.circleci/clean-old-files.sh $CI_DIR
+
 # check to see if both dirs exist
 if [ ! -d "$LOCAL_VERILATOR_DIR" ] && [ ! -d "$LOCAL_CHIPYARD_DIR" ]; then
     cd $HOME
@@ -38,12 +40,13 @@ if [ ! -d "$LOCAL_VERILATOR_DIR" ] && [ ! -d "$LOCAL_CHIPYARD_DIR" ]; then
     run "mkdir -p $REMOTE_CHIPYARD_DIR"
     copy $LOCAL_CHIPYARD_DIR/ $SERVER:$REMOTE_CHIPYARD_DIR
 
-    run "make -C $REMOTE_CHIPYARD_DIR/sims/verisim VERILATOR_INSTALL_DIR=$REMOTE_VERILATOR_DIR verilator_install"
+    run "make -C $REMOTE_SIM_DIR VERILATOR_INSTALL_DIR=$REMOTE_VERILATOR_DIR verilator_install"
 
     # copy so that circleci can cache
     mkdir -p $LOCAL_CHIPYARD_DIR
     mkdir -p $LOCAL_VERILATOR_DIR
     copy $SERVER:$REMOTE_CHIPYARD_DIR/  $LOCAL_CHIPYARD_DIR
     copy $SERVER:$REMOTE_VERILATOR_DIR/ $LOCAL_VERILATOR_DIR
-fi
 
+    cp -r $LOCAL_VERILATOR_DIR/install/bin/* $LOCAL_VERILATOR_DIR/install/share/verilator/bin/.
+fi

@@ -5,7 +5,11 @@ copy () {
 }
 
 run () {
-    ssh -o "StrictHostKeyChecking no" -t $SERVER $1
+    ssh -o "StrictHostKeyChecking no" -t $SERVER $@
+}
+
+run_script () {
+    ssh -o "StrictHostKeyChecking no" -t $SERVER 'bash -s' < $1 "$2"
 }
 
 clean () {
