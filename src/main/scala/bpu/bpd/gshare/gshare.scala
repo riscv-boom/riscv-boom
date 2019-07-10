@@ -50,7 +50,6 @@ trait HasGShareParameters extends HasBoomCoreParameters
   val nSets = gsParams.numSets
 
   val idxSz = log2Ceil(nSets)
-  val rowSz = fetchWidth*2
 }
 
 /**
@@ -114,7 +113,7 @@ class GShareResp(val fetchWidth: Int, val idxSz: Int) extends Bundle
   val entry = new GShareEntry(fetchWidth) // Store to prevent a re-read during an update.
 
   def isTaken(cfi_idx: UInt) = {
-    val counter = entry.counter
+    val counter = entry.isTaken
     val taken = counter(1)
     taken
   }

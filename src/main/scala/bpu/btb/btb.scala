@@ -155,7 +155,6 @@ class BoomBTBUpdate(implicit p: Parameters) extends BoomBTBBundle
   val bpd_type = BpredType()
   val cfi_type = CfiType()
 
-
   val is_rvc   = Bool()
   val is_edge  = Bool()
 }
