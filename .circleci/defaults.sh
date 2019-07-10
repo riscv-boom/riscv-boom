@@ -30,3 +30,12 @@ LOCAL_RISCV_DIR=$HOME/riscv-tools-install
 LOCAL_CHIPYARD_DIR=$HOME/chipyard
 LOCAL_VERILATOR_DIR=$HOME/verilator
 LOCAL_SIM_DIR=$LOCAL_CHIPYARD_DIR/sims/verisim
+
+# key value store to get the build strings
+declare -A mapping
+mapping["smallboom"]="SUB_PROJECT=boom CONFIG=SmallBoomConfig TEST=yiker"
+mapping["mediumboom"]="SUB_PROJECT=boom CONFIG=MediumBoomConfig"
+mapping["largeboom"]="SUB_PROJECT=boom CONFIG=LargeBoomConfig"
+mapping["megaboom"]="SUB_PROJECT=boom CONFIG=MegaBoomConfig"
+mapping["boomandrocket"]="SUB_PROJECT=boom CONFIG=SmallBoomAndRocketConfig"
+mapping["rv32unifiedboom"]="SUB_PROJECT=boom CONFIG=SmallRV32UnifiedBoomConfig"

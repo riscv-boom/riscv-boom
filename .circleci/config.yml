@@ -85,7 +85,7 @@ jobs:
                     - verilator-v10-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Building SmallBoomConfig using Verilator
-                command: .circleci/do-rtl-build.sh SmallBoomConfig
+                command: .circleci/do-rtl-build.sh smallboom
                 no_output_timeout: 120m
             - save_cache:
                 key: smallboomconfig-{{ .Branch }}-{{ .Revision }}
@@ -113,7 +113,7 @@ jobs:
                     - verilator-v10-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Building MediumBoomConfig using Verilator
-                command: .circleci/do-rtl-build.sh MediumBoomConfig
+                command: .circleci/do-rtl-build.sh mediumboom
                 no_output_timeout: 120m
             - save_cache:
                 key: mediumboomconfig-{{ .Branch }}-{{ .Revision }}
@@ -141,7 +141,7 @@ jobs:
                     - verilator-v10-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Building LargeBoomConfig using Verilator
-                command: .circleci/do-rtl-build.sh LargeBoomConfig
+                command: .circleci/do-rtl-build.sh largeboom
                 no_output_timeout: 120m
             - save_cache:
                 key: largeboomconfig-{{ .Branch }}-{{ .Revision }}
@@ -169,7 +169,7 @@ jobs:
                     - verilator-v10-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Building MegaBoomConfig using Verilator
-                command: .circleci/do-rtl-build.sh MegaBoomConfig
+                command: .circleci/do-rtl-build.sh megaboom
                 no_output_timeout: 120m
             - save_cache:
                 key: megaboomconfig-{{ .Branch }}-{{ .Revision }}
@@ -197,7 +197,7 @@ jobs:
                     - verilator-v10-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Building SmallBoomAndRocketConfig using Verilator
-                command: .circleci/do-rtl-build.sh SmallBoomAndRocketConfig
+                command: .circleci/do-rtl-build.sh boomandrocket
                 no_output_timeout: 120m
             - save_cache:
                 key: smallboomandrocketconfig-{{ .Branch }}-{{ .Revision }}
@@ -225,7 +225,7 @@ jobs:
                     - verilator-v10-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Building SmallRV32UnifiedBoomConfig using Verilator
-                command: .circleci/do-rtl-build.sh SmallRV32UnifiedBoomConfig
+                command: .circleci/do-rtl-build.sh rv32unifiedboom
                 no_output_timeout: 120m
             - save_cache:
                 key: smallrv32unifiedboomconfig-{{ .Branch }}-{{ .Revision }}
@@ -250,7 +250,7 @@ jobs:
                     - verilator-v10-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Run SmallBoomConfig csmith tests
-                command: .circleci/build-run-csmith-tests.sh SmallBoomConfig 50
+                command: .circleci/build-run-csmith-tests.sh smallboom 50
                 no_output_timeout: 30m
     smallboomconfig-run-riscv-tests:
         docker:
@@ -271,7 +271,7 @@ jobs:
                     - verilator-v10-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Run SmallBoomConfig riscv tests
-                command: .circleci/run-tests.sh SmallBoomConfig
+                command: .circleci/run-tests.sh smallboom
     mediumboomconfig-run-csmith-tests:
         docker:
             - image: riscvboom/riscvboom-images:0.0.10
@@ -291,7 +291,7 @@ jobs:
                     - verilator-v10-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Run MediumBoomConfig csmith tests
-                command: .circleci/build-run-csmith-tests.sh MediumBoomConfig 50
+                command: .circleci/build-run-csmith-tests.sh mediumboom 50
                 no_output_timeout: 30m
     mediumboomconfig-run-riscv-tests:
         docker:
@@ -312,7 +312,7 @@ jobs:
                     - verilator-v10-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Run MediumBoomConfig riscv tests
-                command: .circleci/run-tests.sh MediumBoomConfig
+                command: .circleci/run-tests.sh mediumboom
     largeboomconfig-run-csmith-tests:
         docker:
             - image: riscvboom/riscvboom-images:0.0.10
@@ -332,7 +332,7 @@ jobs:
                     - verilator-v10-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Run LargeBoomConfig csmith tests
-                command: .circleci/build-run-csmith-tests.sh LargeBoomConfig 40
+                command: .circleci/build-run-csmith-tests.sh largeboom 40
                 no_output_timeout: 30m
     largeboomconfig-run-riscv-tests:
         docker:
@@ -353,7 +353,7 @@ jobs:
                     - verilator-v10-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Run LargeBoomConfig riscv tests
-                command: .circleci/run-tests.sh LargeBoomConfig
+                command: .circleci/run-tests.sh largeboom
     megaboomconfig-run-csmith-tests:
         docker:
             - image: riscvboom/riscvboom-images:0.0.10
@@ -373,7 +373,7 @@ jobs:
                     - verilator-v10-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Run MegaBoomConfig csmith tests
-                command: .circleci/build-run-csmith-tests.sh MegaBoomConfig 40
+                command: .circleci/build-run-csmith-tests.sh megaboom 40
                 no_output_timeout: 30m
     megaboomconfig-run-riscv-tests:
         docker:
@@ -394,7 +394,7 @@ jobs:
                     - verilator-v10-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Run MegaBoomConfig riscv tests
-                command: .circleci/run-tests.sh MegaBoomConfig
+                command: .circleci/run-tests.sh megaboom
     smallboomandrocketconfig-run-csmith-tests:
         docker:
             - image: riscvboom/riscvboom-images:0.0.10
@@ -414,7 +414,7 @@ jobs:
                     - verilator-v10-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Run SmallBoomAndRocketConfig csmith tests
-                command: .circleci/build-run-csmith-tests.sh SmallBoomAndRocketConfig 50
+                command: .circleci/build-run-csmith-tests.sh boomandrocket 50
                 no_output_timeout: 30m
     smallboomandrocketconfig-run-riscv-tests:
         docker:
@@ -435,7 +435,7 @@ jobs:
                     - verilator-v10-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Run SmallBoomAndRocketConfig riscv tests
-                command: .circleci/run-tests.sh SmallBoomAndRocketConfig
+                command: .circleci/run-tests.sh boomandrocket
     smallrv32unifiedboomconfig-run-csmith-tests:
         docker:
             - image: riscvboom/riscvboom-images:0.0.10
@@ -455,7 +455,7 @@ jobs:
                     - verilator-v10-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Run SmallRV32UnifiedBoomConfig csmith tests
-                command: .circleci/build-run-csmith-tests.sh SmallRV32UnifiedBoomConfig 50
+                command: .circleci/build-run-csmith-tests.sh rv32unifiedboom 50
                 no_output_timeout: 30m
     smallrv32unifiedboomconfig-run-riscv-tests:
         docker:
@@ -476,7 +476,7 @@ jobs:
                     - verilator-v10-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Run SmallRV32UnifiedBoomConfig riscv tests
-                command: .circleci/run-tests.sh SmallRV32UnifiedBoomConfig
+                command: .circleci/run-tests.sh rv32unifiedboom
 
 # Order and dependencies of jobs to run
 workflows:

@@ -25,23 +25,23 @@ run_both () {
 }
 
 case $1 in
-    SmallBoomConfig)
-        run_both SUB_PROJECT=boom CONFIG=SmallBoomConfig
+    smallboom)
+        run_both $mapping[$1]
         ;;
-    MediumBoomConfig)
-        run_both SUB_PROJECT=boom CONFIG=MediumBoomConfig
+    mediumboom)
+        run_both $mapping[$1]
         ;;
-    LargeBoomConfig)
-        run_bmark SUB_PROJECT=boom CONFIG=LargeBoomConfig
+    largeboom)
+        run_bmark $mapping[$1]
         ;;
-    MegaBoomConfig)
-        run_bmark SUB_PROJECT=boom CONFIG=MegaBoomConfig
+    megaboom)
+        run_bmark $mapping[$1]
         ;;
-    SmallBoomAndRocketConfig)
-        run_both SUB_PROJECT=boom CONFIG=SmallBoomAndRocketConfig
+    boomandrocket)
+        run_both $mapping[$1]
         ;;
-    SmallRV32UnifiedBoomConfig)
-        run_asm SUB_PROJECT=boom CONFIG=SmallRV32UnifiedBoomConfig
+    rv32unifiedboom)
+        run_asm $mapping[$1]
         ;;
     *)
         echo "No set of tests for $1. Did you spell it right?"
