@@ -35,7 +35,7 @@ jobs:
             - checkout
             - restore_cache:
                 keys:
-                    - chipyard-v10-{{ checksum "CHIPYARD.hash" }}
+                    - chipyard-v11-{{ checksum "CHIPYARD.hash" }}
             - restore_cache:
                 keys:
                     - verilator-v11-{{ checksum "CHIPYARD.hash" }}
@@ -45,7 +45,7 @@ jobs:
                     .circleci/prepare-for-rtl-build.sh
                 no_output_timeout: 120m
             - save_cache:
-                key: chipyard-v10-{{ checksum "CHIPYARD.hash" }}
+                key: chipyard-v11-{{ checksum "CHIPYARD.hash" }}
                 paths:
                     - "/home/riscvuser/chipyard"
             - save_cache:
@@ -79,7 +79,7 @@ jobs:
                     - riscv-tools-installed-v3-{{ checksum "CHIPYARD.hash" }}
             - restore_cache:
                 keys:
-                    - chipyard-v10-{{ checksum "CHIPYARD.hash" }}
+                    - chipyard-v11-{{ checksum "CHIPYARD.hash" }}
             - restore_cache:
                 keys:
                     - verilator-v11-{{ checksum "CHIPYARD.hash" }}
@@ -107,7 +107,7 @@ jobs:
                     - riscv-tools-installed-v3-{{ checksum "CHIPYARD.hash" }}
             - restore_cache:
                 keys:
-                    - chipyard-v10-{{ checksum "CHIPYARD.hash" }}
+                    - chipyard-v11-{{ checksum "CHIPYARD.hash" }}
             - restore_cache:
                 keys:
                     - verilator-v11-{{ checksum "CHIPYARD.hash" }}
@@ -135,7 +135,7 @@ jobs:
                     - riscv-tools-installed-v3-{{ checksum "CHIPYARD.hash" }}
             - restore_cache:
                 keys:
-                    - chipyard-v10-{{ checksum "CHIPYARD.hash" }}
+                    - chipyard-v11-{{ checksum "CHIPYARD.hash" }}
             - restore_cache:
                 keys:
                     - verilator-v11-{{ checksum "CHIPYARD.hash" }}
@@ -163,7 +163,7 @@ jobs:
                     - riscv-tools-installed-v3-{{ checksum "CHIPYARD.hash" }}
             - restore_cache:
                 keys:
-                    - chipyard-v10-{{ checksum "CHIPYARD.hash" }}
+                    - chipyard-v11-{{ checksum "CHIPYARD.hash" }}
             - restore_cache:
                 keys:
                     - verilator-v11-{{ checksum "CHIPYARD.hash" }}
@@ -191,7 +191,7 @@ jobs:
                     - riscv-tools-installed-v3-{{ checksum "CHIPYARD.hash" }}
             - restore_cache:
                 keys:
-                    - chipyard-v10-{{ checksum "CHIPYARD.hash" }}
+                    - chipyard-v11-{{ checksum "CHIPYARD.hash" }}
             - restore_cache:
                 keys:
                     - verilator-v11-{{ checksum "CHIPYARD.hash" }}
@@ -219,7 +219,7 @@ jobs:
                     - riscv-tools-installed-v3-{{ checksum "CHIPYARD.hash" }}
             - restore_cache:
                 keys:
-                    - chipyard-v10-{{ checksum "CHIPYARD.hash" }}
+                    - chipyard-v11-{{ checksum "CHIPYARD.hash" }}
             - restore_cache:
                 keys:
                     - verilator-v11-{{ checksum "CHIPYARD.hash" }}
