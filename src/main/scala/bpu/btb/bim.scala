@@ -116,7 +116,7 @@ class BimWrite(implicit p: Parameters) extends BimBundle
   val mask = UInt(rowSz.W)
 }
 
-class BimodalTable(implicit p: Parameters) extends BoomModule with HasBimParameters
+class BimodalTable(val bankBytes: Int)(implicit p: Parameters) extends BoomModule with HasBimParameters
 {
   val io = IO(new Bundle {
     // req.valid is false if stalling (aka, we won't read and use BTB results, on cycle S1).
@@ -134,7 +134,7 @@ class BimodalTable(implicit p: Parameters) extends BoomModule with HasBimParamet
   })
 
   // Which (conceptual) index do we map to?
-  private def getIdx (addr: UInt): UInt = addr >> log2Ceil(fetchWidth*coreInstBytes)
+  private def getIdx (addr: UInt): UInt = addr >> log2Ceil(bankBytes)
   // Which physical row do we map to?
   private def getRowFromIdx (idx: UInt): UInt = idx >> log2Ceil(nBanks)
   // Which physical bank do we map to?

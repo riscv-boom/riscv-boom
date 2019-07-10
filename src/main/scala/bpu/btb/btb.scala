@@ -285,7 +285,7 @@ object BoomBTB
    * @param boomParams general boom core parameters that determine the BTB
    * @return a BoomBTB instance determined by the input parameters
    */
-  def apply(boomParams: BoomCoreParams)(implicit p: Parameters): BoomBTB = {
+  def apply(boomParams: BoomCoreParams, bankBytes: Int)(implicit p: Parameters): BoomBTB = {
     val boomParams: BoomCoreParams = p(freechips.rocketchip.tile.TileKey).core.asInstanceOf[BoomCoreParams]
 
     val enableBTBPredictor = boomParams.enableBTB
@@ -298,9 +298,9 @@ object BoomBTB
     // select BTB based on parameters
     if (enableBTBPredictor) {
       if (boomParams.btb.btbsa) {
-        btb = Module(new BTBsa())
+        btb = Module(new BTBsa(bankBytes))
       } else if (boomParams.btb.densebtb) {
-        btb = Module(new DenseBTB())
+        btb = Module(new DenseBTB(bankBytes))
       }
     } else {
       btb = Module(new NullBTB())
