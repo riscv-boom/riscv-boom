@@ -487,12 +487,12 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
 
   val exe_vaddr   = Mux(will_fire_load_incoming ||
                         will_fire_stad_incoming ||
-                        will_fire_sta_incoming  ||
-                        will_fire_sfence          , exe_req.bits.addr,
+                        will_fire_sta_incoming    , exe_req.bits.addr,
+                    Mux(will_fire_sfence          , exe_req.bits.sfence.bits.addr,
                     Mux(will_fire_load_retry      , ldq_retry_e.bits.addr.bits,
                     Mux(will_fire_sta_retry       , stq_retry_e.bits.addr.bits,
                     Mux(will_fire_hella_incoming  , hella_req.addr,
-                                                    0.U))))
+                                                    0.U)))))
 
   val exe_sfence  = Mux(will_fire_load_incoming ||
                         will_fire_stad_incoming ||
