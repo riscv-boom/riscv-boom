@@ -101,8 +101,8 @@ class BranchPredictionStage(val bankBytes: Int)(implicit p: Parameters) extends 
   //************************************************
   // construct all of the modules
 
-  val btb = BoomBTB(boomParams)
-  val bpd = BoomBrPredictor(boomParams, bankBytes)
+  val btb = BoomBTB(boomParams, bankBytes)
+  val bpd = BoomBrPredictor(boomParams)
 
   btb.io.status_debug := io.status_debug
   bpd.io.status_prv := io.status_prv
