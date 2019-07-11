@@ -444,7 +444,7 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
   val f3_btb_update_valid = Mux(f3_bpd_overrides_bcheck,
                               f3_bpd_btb_update_valid      && (!f3_jr_valid || f3_bpd_br_idx < f3_jr_idx),
                               bchecker.io.btb_update.valid && (!f3_jr_valid || f3_jal_idx    < f3_jr_idx))
-  io.f3_btb_update.valid := RegNext(f3_btb_update_valid) && r_f4_valid
+  io.f3_btb_update.valid := RegNext(f3_btb_update_valid) && r_f4_req.valid
   io.f3_btb_update.bits := RegNext(f3_btb_update_bits)
   f3_btb_update_bits := bchecker.io.btb_update.bits
   when (f3_bpd_overrides_bcheck) {
