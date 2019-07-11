@@ -329,28 +329,29 @@ class ALUUnit(isBranchUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)
 {
   val uop = io.req.bits.uop
 
+  // Get the uop PC for branch resolution.
+  val block_pc = AlignPCToBoundary(io.get_ftq_pc.fetch_pc, icBlockBytes)
+  val uop_maybe_pc = block_pc | uop.pc_lob // Don't consider edge instructions yet.
+
   // immediate generation
   val imm_xprlen = ImmGen(uop.imm_packed, uop.ctrl.imm_sel)
 
   // operand 1 select
   var op1_data: UInt = null
   if (isBranchUnit) {
-    val curr_pc = (AlignPCToBoundary(io.get_ftq_pc.fetch_pc, icBlockBytes)
-                 + uop.pc_lob
-                 - Mux(uop.edge_inst, 2.U, 0.U))
     op1_data = Mux(uop.ctrl.op1_sel.asUInt === OP1_RS1 , io.req.bits.rs1_data,
-               Mux(uop.ctrl.op1_sel.asUInt === OP1_PC  , Sext(curr_pc, xLen),
-                                                                     0.U))
+               Mux(uop.ctrl.op1_sel.asUInt === OP1_PC  , Sext(uop_maybe_pc, xLen),
+                                                         0.U))
   } else {
     op1_data = Mux(uop.ctrl.op1_sel.asUInt === OP1_RS1 , io.req.bits.rs1_data,
-                                                                     0.U)
+                                                         0.U)
   }
 
   // operand 2 select
   val op2_data = Mux(uop.ctrl.op2_sel === OP2_IMM,  Sext(imm_xprlen.asUInt, xLen),
                  Mux(uop.ctrl.op2_sel === OP2_IMMC, io.req.bits.uop.prs1(4,0),
                  Mux(uop.ctrl.op2_sel === OP2_RS2 , io.req.bits.rs2_data,
-                 Mux(uop.ctrl.op2_sel === OP2_NEXT, Mux(uop.is_rvc, 2.U, 4.U),
+                 Mux(uop.ctrl.op2_sel === OP2_NEXT, Mux(uop.is_rvc || uop.edge_inst, 2.U, 4.U),
                                                     0.U))))
 
   val alu = Module(new freechips.rocketchip.rocket.ALU())
@@ -361,7 +362,6 @@ class ALUUnit(isBranchUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)
   alu.io.dw  := uop.ctrl.fcn_dw
 
   if (isBranchUnit) {
-    val block_pc = AlignPCToBoundary(io.get_ftq_pc.fetch_pc, icBlockBytes)
     val uop_pc = (block_pc | uop.pc_lob) - Mux(uop.edge_inst, 2.U, 0.U)
     // The Branch Unit redirects the PC immediately, but delays the mispredict
     // signal a cycle (for critical path reasons)
@@ -384,7 +384,7 @@ class ALUUnit(isBranchUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)
     val br_lt  = (~(rs1(xLen-1) ^ rs2(xLen-1)) & br_ltu |
                    rs1(xLen-1) & ~rs2(xLen-1)).asBool
 
-    val npc = ((block_pc | uop.pc_lob) + Mux(uop.is_rvc || uop.is_edge, 2.U, 4.U))(vaddrBitsExtended-1,0)
+    val npc = uop_maybe_pc + Mux(uop.is_rvc || uop.is_edge, 2.U, 4.U)
 
     val pc_sel = MuxLookup(uop.ctrl.br_type, PC_PLUS4,
                  Seq(   BR_N   -> PC_PLUS4,
