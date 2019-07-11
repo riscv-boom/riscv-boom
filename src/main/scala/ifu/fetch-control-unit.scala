@@ -46,6 +46,7 @@ class FetchBundle(implicit p: Parameters) extends BoomBundle
   val edge_inst     = Bool() // True if 1st instruction in this bundle is pc - 2
   val ftq_idx       = UInt(log2Ceil(ftqSz).W)
   val insts         = Vec(fetchWidth, Bits(32.W))
+  val exp_insts     = Vec(fetchWidth, Bits(32.W))
   val mask          = Bits(fetchWidth.W) // mark which words are valid instructions
   val xcpt_pf_if    = Bool() // I-TLB miss (instruction fetch fault).
   val xcpt_ae_if    = Bool() // Access exception.
@@ -292,9 +293,14 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
     val pc = (f3_aligned_pc
             + (i << log2Ceil(coreInstBytes)).U
             - Mux(use_prev && (i == 0).B, 2.U, 0.U))
-    f3_debug_pcs(i)     := pc
-    bpd_decoder.io.inst := ExpandRVC(inst)
+    f3_debug_pcs(i) := pc
+
+    val exp_inst = ExpandRVC(inst)
+
+    bpd_decoder.io.inst := exp_inst
     bpd_decoder.io.pc   := pc
+
+    f3_fetch_bundle.exp_insts(i) := exp_inst
 
     f3_valid_mask(i) := f3_valid && f3_imemresp.mask(i) && is_valid
     is_br(i)     := f3_valid && bpd_decoder.io.is_br   && f3_imemresp.mask(i) && is_valid
