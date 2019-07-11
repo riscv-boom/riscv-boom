@@ -8,7 +8,7 @@
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
 // The RoCC shim unit. Similar to the LSU, in that we need to allocate entries
-// for instruction bits at decode, and send commands strictly in order.
+// for instruction bits at dispatch, and send commands strictly in order.
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
 
@@ -31,8 +31,8 @@ import boom.util._
 class RoCCShimCoreIO(implicit p: Parameters) extends BoomBundle
 {
   // Decode Stage
-  val dec_rocc_vals    = Input(Vec(coreWidth, Bool()))
-  val dec_uops         = Input(Vec(coreWidth, new MicroOp))
+  val dis_rocc_vals    = Input(Vec(coreWidth, Bool()))
+  val dis_uops         = Input(Vec(coreWidth, new MicroOp))
   val rxq_full         = Output(Bool())
   val rxq_empty        = Output(Bool())
   val rxq_idx          = Output(UInt(log2Ceil(numRxqEntries).W))
@@ -95,8 +95,8 @@ class RoCCShim(implicit p: Parameters) extends BoomModule
   val br_mask = WireInit(0.U(maxBrCount.W))
 
   for (w <- 0 until coreWidth) {
-    when (io.core.dec_rocc_vals(w)
-       && io.core.dec_uops(w).uopc === uopROCC) {
+    when (io.core.dis_rocc_vals(w)
+       && io.core.dis_uops(w).uopc === uopROCC) {
       enq_val      := true.B
       rocc_idx     := w.U
     }
@@ -106,8 +106,8 @@ class RoCCShim(implicit p: Parameters) extends BoomModule
     rxq_val      (rxq_tail) := true.B
     rxq_op_val   (rxq_tail) := false.B
     rxq_committed(rxq_tail) := false.B
-    rxq_uop      (rxq_tail) := io.core.dec_uops(rocc_idx)
-    rxq_inst     (rxq_tail) := io.core.dec_uops(rocc_idx).debug_inst
+    rxq_uop      (rxq_tail) := io.core.dis_uops(rocc_idx)
+    rxq_inst     (rxq_tail) := io.core.dis_uops(rocc_idx).debug_inst
     rxq_tail                := WrapInc(rxq_tail, numRxqEntries)
   }
 
