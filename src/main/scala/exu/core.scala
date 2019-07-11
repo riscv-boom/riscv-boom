@@ -378,10 +378,6 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
   //-------------------------------------------------------------
   // Decoders
 
-  // send only 1 RoCC instructions at a time
-  var dec_rocc_found = if (usingRoCC) exe_units.rocc_unit.io.rocc.rxq_full else false.B
-  val rocc_shim_busy = if (usingRoCC) !exe_units.rocc_unit.io.rocc.rxq_empty else false.B
-
   // stall fetch/dcode because we ran out of branch tags
   val branch_mask_full = Wire(Vec(coreWidth, Bool()))
 
@@ -467,6 +463,8 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
   // **** Dispatch Stage ****
   //-------------------------------------------------------------
   //-------------------------------------------------------------
+
+  val rocc_shim_busy = if (usingRoCC) !exe_units.rocc_unit.io.rocc.rxq_empty else false.B
 
   // Rename2/Dispatch pipeline logic
 
@@ -1274,16 +1272,16 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
   io.rocc.exception := csr.io.exception && csr.io.status.xs.orR
   if (usingRoCC) {
     exe_units.rocc_unit.io.rocc.rocc         <> io.rocc
-    exe_units.rocc_unit.io.rocc.dec_uops     := dec_uops
+    exe_units.rocc_unit.io.rocc.dis_uops     := dis_uops
     exe_units.rocc_unit.io.rocc.rob_head_idx := rob.io.rob_head_idx
     exe_units.rocc_unit.io.rocc.rob_pnr_idx  := rob.io.rob_pnr_idx
     exe_units.rocc_unit.io.com_exception     := rob.io.com_xcpt.valid
     exe_units.rocc_unit.io.status            := csr.io.status
 
     for (w <- 0 until coreWidth) {
-       exe_units.rocc_unit.io.rocc.dec_rocc_vals(w) := (
-         dec_fire(w) &&
-         dec_uops(w).uopc === uopROCC)
+       exe_units.rocc_unit.io.rocc.dis_rocc_vals(w) := (
+         dis_fire(w) &&
+         dis_uops(w).uopc === uopROCC)
     }
   }
 
