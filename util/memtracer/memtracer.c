@@ -92,6 +92,15 @@ void handle_load(uint8_t* mem, uint64_t* mem_history, char* mem_val,
 }
 
 int main(int argc, char* argv) {
+
+  printf("BOOM memtrace utility. 2019. Jerry Zhao\n"
+         "\n"
+         "Build BOOM with the MEMTRACE_PRINTF option enabled to\n"
+         "generate a log of memory operations the LSU commits.\n"
+         "\n"
+         "This utility will process them and announce loads which\n"
+         "do not match with the next youngest store to that address.\n");
+
   int8_t* mem = malloc(MEMSIZE);
   char* mem_val = malloc(MEMSIZE);
   memset(mem_val, 'N', MEMSIZE);
@@ -165,6 +174,33 @@ int main(int argc, char* argv) {
                        tsc, addr, stdata + wbdata, wbdata,
                        memsize);
           break;
+        case 0x9:
+          // amoxor
+          handle_load(mem, mem_history, mem_val,
+                      tsc, addr, stdata, wbdata,
+                      memsize);
+          handle_store(mem, mem_history, mem_val,
+                       tsc, addr, stdata ^ wbdata, wbdata,
+                       memsize);
+          break;
+        case 0xa:
+          // amoor
+          handle_load(mem, mem_history, mem_val,
+                      tsc, addr, stdata, wbdata,
+                      memsize);
+          handle_store(mem, mem_history, mem_val,
+                       tsc, addr, stdata | wbdata, wbdata,
+                       memsize);
+          break;
+        case 0xb:
+          // amoand
+          handle_load(mem, mem_history, mem_val,
+                      tsc, addr, stdata, wbdata,
+                      memsize);
+          handle_store(mem, mem_history, mem_val,
+                       tsc, addr, stdata & wbdata, wbdata,
+                       memsize);
+          break;
         default :
           printf("bad atomic mem_cmd %x\n", memcmd);
           exit(0);
@@ -180,5 +216,7 @@ int main(int argc, char* argv) {
     }
     lct++;
   }
-  printf("success\n");
+  printf("\n");
+  printf("Success\n");
+  return 0;
 }
