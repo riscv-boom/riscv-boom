@@ -578,8 +578,6 @@ class ALUUnit(isBranchUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)
       Cat(msb, ea(vaddrBits-1,0))
     }
 
-    val jalr_target_base = io.req.bits.rs1_data
-    val jal_br_target_base = uop_pc
     val target_offset = imm_xprlen(20,0).asSInt
 
     val jalr_target_base = io.req.bits.rs1_data.asSInt
@@ -589,7 +587,7 @@ class ALUUnit(isBranchUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)
     val jalr_target = (encodeVirtualAddress(jalr_target_xlen, jalr_target_xlen).asSInt & -2.S).asUInt
 
     val jal_br_target = Wire(UInt(vaddrBitsExtended.W))
-    jal_br_target := jal_br_target_base + target_offset
+    jal_br_target := uop_maybe_pc + target_offset - Mux(uop.is_edge, 2.U, 0.U)
 
     bj_addr := Mux(uop.uopc === uopJALR, jalr_target, jal_br_target)
 
