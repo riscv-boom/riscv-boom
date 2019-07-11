@@ -566,6 +566,8 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
 
   when (mem_xcpt_valid)
   {
+    assert(RegNext(will_fire_load_incoming || will_fire_stad_incoming || will_fire_sta_incoming ||
+           will_fire_load_retry || will_fire_sta_retry))
     // Technically only faulting AMOs need this
     assert(xcpt_uop.uses_ldq ^ xcpt_uop.uses_stq)
     when (xcpt_uop.uses_ldq)
