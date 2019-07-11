@@ -847,7 +847,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
   lsu.io.commit_store_mask := rob.io.commit.st_mask
   lsu.io.commit_load_mask  := rob.io.commit.ld_mask
-  lsu.io.commit_load_at_rob_head := rob.io.com_load_is_at_rob_head
+  lsu.io.commit_load_at_rob_head := RegNext(rob.io.com_load_is_at_rob_head) // Delayed a cycle for QoR.
 
   //com_xcpt.valid comes too early, will fight against a branch that resolves same cycle as an exception
   lsu.io.exception := rob.io.flush.valid
