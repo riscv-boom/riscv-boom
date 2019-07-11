@@ -362,7 +362,7 @@ class ALUUnit(isBranchUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)
 
   if (isBranchUnit) {
     val block_pc = AlignPCToBoundary(io.get_ftq_pc.fetch_pc, icBlockBytes)
-    val uop_pc_ = (block_pc | io.req.bits.uop.pc_lob) - Mux(io.req.bits.uop.edge_inst, 2.U, 0.U)
+    val uop_pc = (block_pc | io.req.bits.uop.pc_lob) - Mux(io.req.bits.uop.edge_inst, 2.U, 0.U)
     // The Branch Unit redirects the PC immediately, but delays the mispredict
     // signal a cycle (for critical path reasons)
 
@@ -384,7 +384,7 @@ class ALUUnit(isBranchUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)
     val br_lt  = (~(rs1(xLen-1) ^ rs2(xLen-1)) & br_ltu |
                    rs1(xLen-1) & ~rs2(xLen-1)).asBool
 
-    val pc_plus4 = ((block_pc | uop.pc_lob) + Mux(uop.is_rvc || uop.is_edge, 2.U, 4.U))(vaddrBitsExtended-1,0)
+    val npc = ((block_pc | uop.pc_lob) + Mux(uop.is_rvc || uop.is_edge, 2.U, 4.U))(vaddrBitsExtended-1,0)
 
     val pc_sel = MuxLookup(io.req.bits.uop.ctrl.br_type, PC_PLUS4,
                  Seq(   BR_N   -> PC_PLUS4,
@@ -504,7 +504,7 @@ class ALUUnit(isBranchUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)
 
 
     br_unit.take_pc := mispredict
-    val target = Mux(pc_sel === PC_PLUS4, pc_plus4, bj_addr)
+    val target = Mux(pc_sel === PC_PLUS4, npc, bj_addr)
     br_unit.target := target
 
     // Delay branch resolution a cycle for critical path reasons.
@@ -578,14 +578,14 @@ class ALUUnit(isBranchUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)
       Cat(msb, ea(vaddrBits-1,0))
     }
 
-    val target_base = Mux(uop.uopc === uopJALR, io.req.bits.rs1_data.asSInt, uop_pc_.asSInt)
+    val target_base = Mux(uop.uopc === uopJALR, io.req.bits.rs1_data.asSInt, uop_pc.asSInt)
     val target_offset = imm_xprlen(20,0).asSInt
     val targetXlen = Wire(UInt(xLen.W))
     targetXlen  := (target_base + target_offset).asUInt
 
     bj_addr := (encodeVirtualAddress(targetXlen, targetXlen).asSInt & -2.S).asUInt
 
-    br_unit.pc := uop_pc_
+    br_unit.pc := uop_pc
 
     // handle misaligned branch/jmp targets
     br_unit.xcpt.valid     := bj_addr(1) && !usingCompressed.B &&
