@@ -106,13 +106,13 @@ int main(int argc, char* argv) {
       continue;
     }
     line = line + 3;
-    uint64_t tsc = strtol(line, &line, 16);
-    int uopc = strtol(line, &line, 16);
-    int memcmd = strtol(line, &line, 16);
-    int memsize = strtol(line, &line, 16);
-    uint64_t addr = strtol(line, &line, 16);
-    uint64_t stdata = strtol(line, &line, 16);
-    uint64_t wbdata = strtol(line, &line, 16);
+    uint64_t tsc = strtoul(line, &line, 16);
+    int uopc = strtoul(line, &line, 16);
+    int memcmd = strtoul(line, &line, 16);
+    int memsize = strtoul(line, &line, 16);
+    uint64_t addr = strtoul(line, &line, 16);
+    uint64_t stdata = strtoul(line, &line, 16);
+    uint64_t wbdata = strtoul(line, &line, 16);
 
     //printf("%lu %d %d %lx %lx %lx\n", tsc, uopc, memsize, addr, stdata, wbdata);
 
