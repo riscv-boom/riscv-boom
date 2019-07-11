@@ -384,7 +384,7 @@ class ALUUnit(isBranchUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)
     val br_lt  = (~(rs1(xLen-1) ^ rs2(xLen-1)) & br_ltu |
                    rs1(xLen-1) & ~rs2(xLen-1)).asBool
 
-    val npc = uop_maybe_pc + Mux(uop.is_rvc || uop.is_edge, 2.U, 4.U)
+    val npc = uop_maybe_pc + Mux(uop.is_rvc || uop.edge_inst, 2.U, 4.U)
 
     val pc_sel = MuxLookup(uop.ctrl.br_type, PC_PLUS4,
                  Seq(   BR_N   -> PC_PLUS4,
@@ -587,7 +587,7 @@ class ALUUnit(isBranchUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)
     val jalr_target = (encodeVirtualAddress(jalr_target_xlen, jalr_target_xlen).asSInt & -2.S).asUInt
 
     val jal_br_target = Wire(UInt(vaddrBitsExtended.W))
-    jal_br_target := uop_maybe_pc + target_offset - Mux(uop.is_edge, 2.U, 0.U)
+    jal_br_target := uop_maybe_pc + target_offset - Mux(uop.edge_inst, 2.U, 0.U)
 
     bj_addr := Mux(uop.uopc === uopJALR, jalr_target, jal_br_target)
 
