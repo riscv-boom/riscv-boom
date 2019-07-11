@@ -1264,12 +1264,11 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
   {
     val commit_store = io.core.commit.valids(w) && io.core.commit.uops(w).uses_stq
     val commit_load  = io.core.commit.valids(w) && io.core.commit.uops(w).uses_ldq
+    val idx = Mux(commit_store, temp_stq_commit_head, temp_ldq_head)
     when (commit_store)
     {
-      val idx = temp_stq_commit_head
       stq(idx).bits.committed := true.B
     } .elsewhen (commit_load) {
-      val idx = temp_ldq_head
       assert (ldq(idx).valid, "[lsu] trying to commit an un-allocated load entry.")
       assert ((ldq(idx).bits.executed || ldq(idx).bits.forward_std_val) && ldq(idx).bits.succeeded ,
         "[lsu] trying to commit an un-executed load entry.")
@@ -1281,6 +1280,17 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
       ldq(idx).bits.order_fail       := false.B
       ldq(idx).bits.forward_std_val  := false.B
 
+    }
+
+    if (MEMTRACE_PRINTF) {
+      when (commit_store || commit_load) {
+        val uop    = Mux(commit_store, stq(idx).bits.uop, ldq(idx).bits.uop)
+        val addr   = Mux(commit_store, stq(idx).bits.addr.bits, ldq(idx).bits.addr.bits)
+        val stdata = Mux(commit_store, stq(idx).bits.data.bits, 0.U)
+        val wbdata = Mux(commit_store, stq(idx).bits.debug_wb_data, ldq(idx).bits.debug_wb_data)
+        printf("MT:%x:%x,%x,%x,%x,%x\n",
+          io.core.tsc_reg, uop.uopc, uop.mem_size, addr, stdata, wbdata)
+      }
     }
 
     temp_stq_commit_head = Mux(commit_store,
