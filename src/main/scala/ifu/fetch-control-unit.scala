@@ -366,7 +366,6 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
   // mask out instructions after predicted branch
   val f3_kill_mask = Wire(UInt(fetchWidth.W))
   val f3_btb_mask = Wire(UInt(fetchWidth.W))
-  val f3_bpd_mask = Wire(UInt(fetchWidth.W))
 
   when (f3_fire) {
     val last_idx  = Mux(inLastChunk(f3_fetch_bundle.pc) && icIsBanked.B,
@@ -375,7 +374,6 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
     && !(f3_valid_mask(last_idx-1.U) && f3_fetch_bundle.insts(last_idx-1.U)(1,0) === 3.U)
     && !f3_kill_mask(last_idx)
     && f3_btb_mask(last_idx)
-    && f3_bpd_mask(last_idx)
     && f3_fetch_bundle.insts(last_idx)(1,0) === 3.U)
     prev_half    := f3_fetch_bundle.insts(last_idx)(15,0)
     prev_nextpc  := alignToFetchBoundary(f3_fetch_bundle.pc) + Mux(inLastChunk(f3_fetch_bundle.pc) && icIsBanked.B,
@@ -474,16 +472,9 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
   f3_btb_mask := Mux(f3_btb_resp.valid && !f3_req.valid,
                    f3_btb_resp.bits.mask,
                    Fill(fetchWidth, 1.U(1.W)))
-  f3_bpd_mask := Fill(fetchWidth, 1.U(1.W))  // TODO XXX add back bpd
-//  f3_bpd_mask := Mux(io.f3_bpu_request.valid && !f3_req.valid,
-//                 io.f3_bpu_request.bits.mask,
-//                 Fill(fetchWidth, UInt(1,1)))
-  f3_fetch_bundle.mask := (f3_imemresp.mask
-                          & ~f3_kill_mask
+  f3_fetch_bundle.mask := (~f3_kill_mask
                           & f3_btb_mask
-                          & f3_bpd_mask
-                          & f3_valid_mask.asUInt())
-
+                          & f3_valid_mask.asUInt)
 
   val f3_taken = WireInit(false.B) // was a branch taken in the F3 stage?
   when (f3_req.valid) {
