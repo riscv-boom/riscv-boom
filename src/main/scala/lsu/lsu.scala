@@ -172,6 +172,8 @@ class LDQEntry(implicit p: Parameters) extends BoomBundle()(p)
 
   val forward_std_val     = Bool()
   val forward_stq_idx     = UInt(stqAddrSz.W) // Which store did we get the store-load forward from?
+
+  val debug_wb_data       = UInt(xLen.W)
 }
 
 class STQEntry(implicit p: Parameters) extends BoomBundle()(p)
@@ -183,6 +185,8 @@ class STQEntry(implicit p: Parameters) extends BoomBundle()(p)
 
   val committed           = Bool() // committed by ROB
   val succeeded           = Bool() // D$ has ack'd this, we don't need to maintain this anymore
+
+  val debug_wb_data       = UInt(xLen.W)
 }
 
 class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut) extends BoomModule()(p)
@@ -1138,6 +1142,8 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
         // Clear the execute bit, so we can re-fire this load
         ldq(ldq_idx).bits.executed := false.B
       }
+
+      ldq(ldq_idx).bits.debug_wb_data  := io.dmem.resp.bits.data
     }
       .elsewhen (io.dmem.resp.bits.uop.uses_stq)
     {
@@ -1148,6 +1154,8 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
         io.core.exe.iresp.valid     := true.B
         io.core.exe.iresp.bits.uop  := stq(io.dmem.resp.bits.uop.stq_idx).bits.uop
         io.core.exe.iresp.bits.data := io.dmem.resp.bits.data
+
+        stq(io.dmem.resp.bits.uop.stq_idx).bits.debug_wb_data := io.dmem.resp.bits.data
       }
     }
   }
@@ -1182,6 +1190,8 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
       ldq(f_idx).bits.succeeded := data_ready
       ldq(f_idx).bits.forward_std_val := true.B
       ldq(f_idx).bits.forward_stq_idx := wb_forward_stq_idx
+
+      ldq(f_idx).bits.debug_wb_data   := loadgen.data
     }
     assert(!ldq(f_idx).bits.execute_ignore)
   }
