@@ -123,10 +123,6 @@ class CommitSignals(implicit p: Parameters) extends BoomBundle
   // Perform rollback of rename state (in conjuction with commit.uops).
   val rbk_valids = Vec(retireWidth, Bool())
   val rollback   = Bool()
-
-  // tell the LSU how many stores and loads are being committed
-  val st_mask    = Vec(retireWidth, Bool())
-  val ld_mask    = Vec(retireWidth, Bool())
 }
 
 /**
@@ -868,12 +864,6 @@ class Rob(
 
   // -----------------------------------------------
   // Outputs
-
-  for (w <- 0 until coreWidth) {
-    // tell LSU it is ready to its stores and loads
-    io.commit.st_mask(w) := io.commit.valids(w) && rob_head_uses_stq(w)
-    io.commit.ld_mask(w) := io.commit.valids(w) && rob_head_uses_ldq(w)
-  }
 
   io.com_load_is_at_rob_head := rob_head_uses_ldq(PriorityEncoder(rob_head_vals.asUInt))
 

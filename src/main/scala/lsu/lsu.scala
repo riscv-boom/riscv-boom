@@ -54,7 +54,7 @@ import freechips.rocketchip.rocket
 import freechips.rocketchip.util.Str
 
 import boom.common._
-import boom.exu.{BrResolutionInfo, Exception, FuncUnitResp}
+import boom.exu.{BrResolutionInfo, Exception, FuncUnitResp, CommitSignals}
 import boom.util.{BoolToChar, AgePriorityEncoder, IsKilledByBranch, GetNewBrMask, WrapInc, IsOlder, UpdateBrMask}
 
 class LSUExeIO(implicit p: Parameters) extends BoomBundle()(p)
@@ -116,8 +116,7 @@ class LSUCoreIO(implicit p: Parameters) extends BoomBundle()(p)
 
   val fp_stdata   = Flipped(Decoupled(new MicroOpWithData(fLen)))
 
-  val commit_store_mask = Input(Vec(coreWidth, Bool()))
-  val commit_load_mask  = Input(Vec(coreWidth, Bool()))
+  val commit      = Input(new CommitSignals)
   val commit_load_at_rob_head = Input(Bool())
 
   // Stores clear busy bit when stdata is received
@@ -1248,19 +1247,40 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
   //-------------------------------------------------------------
 
   var temp_stq_commit_head = stq_commit_head
+  var temp_ldq_head        = ldq_head
   for (w <- 0 until coreWidth)
   {
-    when (io.core.commit_store_mask(w))
+    val commit_store = io.core.commit.valids(w) && io.core.commit.uops(w).uses_stq
+    val commit_load  = io.core.commit.valids(w) && io.core.commit.uops(w).uses_ldq
+    when (commit_store)
     {
-      stq(temp_stq_commit_head).bits.committed := true.B
+      val idx = temp_stq_commit_head
+      stq(idx).bits.committed := true.B
+    } .elsewhen (commit_load) {
+      val idx = temp_ldq_head
+      assert (ldq(idx).valid, "[lsu] trying to commit an un-allocated load entry.")
+      assert ((ldq(idx).bits.executed || ldq(idx).bits.forward_std_val) && ldq(idx).bits.succeeded ,
+        "[lsu] trying to commit an un-executed load entry.")
+
+      ldq(idx).valid                 := false.B
+      ldq(idx).bits.addr.valid       := false.B
+      ldq(idx).bits.executed         := false.B
+      ldq(idx).bits.succeeded        := false.B
+      ldq(idx).bits.order_fail       := false.B
+      ldq(idx).bits.forward_std_val  := false.B
+
     }
 
-    temp_stq_commit_head = Mux(io.core.commit_store_mask(w),
+    temp_stq_commit_head = Mux(commit_store,
                                WrapInc(temp_stq_commit_head, NUM_STQ_ENTRIES),
                                temp_stq_commit_head)
-  }
 
+    temp_ldq_head        = Mux(commit_load,
+                               WrapInc(temp_ldq_head, NUM_LDQ_ENTRIES),
+                               temp_ldq_head)
+  }
   stq_commit_head := temp_stq_commit_head
+  ldq_head        := temp_ldq_head
 
   // store has been committed AND successfully sent data to memory
   when (stq(stq_head).valid && stq(stq_head).bits.committed)
@@ -1288,27 +1308,6 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
     }
   }
 
-  var temp_ldq_head = ldq_head
-  for (w <- 0 until coreWidth)
-  {
-    val idx = temp_ldq_head
-    when (io.core.commit_load_mask(w))
-    {
-      assert (ldq(idx).valid         , "[lsu] trying to commit an un-allocated load entry.")
-      assert ((ldq(idx).bits.executed || ldq(idx).bits.forward_std_val) && ldq(idx).bits.succeeded ,
-        "[lsu] trying to commit an un-executed load entry.")
-
-      ldq(idx).valid                 := false.B
-      ldq(idx).bits.addr.valid       := false.B
-      ldq(idx).bits.executed         := false.B
-      ldq(idx).bits.succeeded        := false.B
-      ldq(idx).bits.order_fail       := false.B
-      ldq(idx).bits.forward_std_val  := false.B
-    }
-
-    temp_ldq_head = Mux(io.core.commit_load_mask(w), WrapInc(temp_ldq_head, NUM_LDQ_ENTRIES), temp_ldq_head)
-  }
-  ldq_head := temp_ldq_head
 
   // -----------------------
   // Hellacache interface

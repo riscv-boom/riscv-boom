@@ -832,9 +832,10 @@ class BoomCore(implicit p: Parameters) extends BoomModule
     io.lsu.dec_uops(w).bits  := dec_uops(w)
   }
 
+  // tell LSU about committing loads and stores to clear entries
+  io.lsu.commit                  := rob.io.commit
 
-  io.lsu.commit_store_mask       := rob.io.commit.st_mask
-  io.lsu.commit_load_mask        := rob.io.commit.ld_mask
+  // tell LSU that it should fire a load that waits for the rob to clear
   io.lsu.commit_load_at_rob_head := rob.io.com_load_is_at_rob_head
 
   // //com_xcpt.valid comes too early, will fight against a branch that resolves same cycle as an exception
