@@ -102,6 +102,7 @@ class OldFetchBuffer(numEntries: Int)(implicit p: Parameters) extends BoomModule
       }
     }
     in_uops(i).ftq_idx        := io.enq.bits.ftq_idx
+    in_uops(i).inst           := io.enq.bits.exp_insts(i)
     in_uops(i).debug_inst     := io.enq.bits.insts(i)
     in_uops(i).is_rvc         := io.enq.bits.insts(i)(1,0) =/= 3.U && usingCompressed.B
     in_uops(i).xcpt_pf_if     := io.enq.bits.xcpt_pf_if
