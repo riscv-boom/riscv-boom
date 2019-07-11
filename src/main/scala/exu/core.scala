@@ -838,13 +838,16 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   // tell LSU that it should fire a load that waits for the rob to clear
   io.lsu.commit_load_at_rob_head := rob.io.com_load_is_at_rob_head
 
-  // //com_xcpt.valid comes too early, will fight against a branch that resolves same cycle as an exception
+  //com_xcpt.valid comes too early, will fight against a branch that resolves same cycle as an exception
   io.lsu.exception := rob.io.flush.valid
 
-  // // Handle Branch Mispeculations
+  // Handle Branch Mispeculations
   io.lsu.brinfo := br_unit.brinfo
   io.lsu.rob_head_idx := rob.io.rob_head_idx
   io.lsu.rob_pnr_idx  := rob.io.rob_pnr_idx
+
+  io.lsu.tsc_reg := debug_tsc_reg
+
 
   if (usingFPU) {
     io.lsu.fp_stdata <> fp_pipeline.io.to_sdq

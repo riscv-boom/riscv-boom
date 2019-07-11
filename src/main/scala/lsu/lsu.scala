@@ -142,6 +142,8 @@ class LSUCoreIO(implicit p: Parameters) extends BoomBundle()(p)
   val fencei_rdy  = Output(Bool())
 
   val lxcpt       = Output(Valid(new Exception))
+
+  val tsc_reg     = Input(UInt())
 }
 
 class LSUIO(implicit p: Parameters) extends BoomBundle()(p)
