@@ -336,33 +336,33 @@ class ALUUnit(isBranchUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)
   var op1_data: UInt = null
   if (isBranchUnit) {
     val curr_pc = (AlignPCToBoundary(io.get_ftq_pc.fetch_pc, icBlockBytes)
-                 + io.req.bits.uop.pc_lob
-                 - Mux(io.req.bits.uop.edge_inst, 2.U, 0.U))
-    op1_data = Mux(io.req.bits.uop.ctrl.op1_sel.asUInt === OP1_RS1 , io.req.bits.rs1_data,
-               Mux(io.req.bits.uop.ctrl.op1_sel.asUInt === OP1_PC  , Sext(curr_pc, xLen),
+                 + uop.pc_lob
+                 - Mux(uop.edge_inst, 2.U, 0.U))
+    op1_data = Mux(uop.ctrl.op1_sel.asUInt === OP1_RS1 , io.req.bits.rs1_data,
+               Mux(uop.ctrl.op1_sel.asUInt === OP1_PC  , Sext(curr_pc, xLen),
                                                                      0.U))
   } else {
-    op1_data = Mux(io.req.bits.uop.ctrl.op1_sel.asUInt === OP1_RS1 , io.req.bits.rs1_data,
+    op1_data = Mux(uop.ctrl.op1_sel.asUInt === OP1_RS1 , io.req.bits.rs1_data,
                                                                      0.U)
   }
 
   // operand 2 select
-  val op2_data = Mux(io.req.bits.uop.ctrl.op2_sel === OP2_IMM,  Sext(imm_xprlen.asUInt, xLen),
-                 Mux(io.req.bits.uop.ctrl.op2_sel === OP2_IMMC, io.req.bits.uop.prs1(4,0),
-                 Mux(io.req.bits.uop.ctrl.op2_sel === OP2_RS2 , io.req.bits.rs2_data,
-                 Mux(io.req.bits.uop.ctrl.op2_sel === OP2_NEXT, Mux(io.req.bits.uop.is_rvc, 2.U, 4.U),
-                                                                0.U))))
+  val op2_data = Mux(uop.ctrl.op2_sel === OP2_IMM,  Sext(imm_xprlen.asUInt, xLen),
+                 Mux(uop.ctrl.op2_sel === OP2_IMMC, io.req.bits.uop.prs1(4,0),
+                 Mux(uop.ctrl.op2_sel === OP2_RS2 , io.req.bits.rs2_data,
+                 Mux(uop.ctrl.op2_sel === OP2_NEXT, Mux(uop.is_rvc, 2.U, 4.U),
+                                                    0.U))))
 
   val alu = Module(new freechips.rocketchip.rocket.ALU())
 
   alu.io.in1 := op1_data.asUInt
   alu.io.in2 := op2_data.asUInt
-  alu.io.fn  := io.req.bits.uop.ctrl.op_fcn
-  alu.io.dw  := io.req.bits.uop.ctrl.fcn_dw
+  alu.io.fn  := uop.ctrl.op_fcn
+  alu.io.dw  := uop.ctrl.fcn_dw
 
   if (isBranchUnit) {
     val block_pc = AlignPCToBoundary(io.get_ftq_pc.fetch_pc, icBlockBytes)
-    val uop_pc = (block_pc | io.req.bits.uop.pc_lob) - Mux(io.req.bits.uop.edge_inst, 2.U, 0.U)
+    val uop_pc = (block_pc | uop.pc_lob) - Mux(uop.edge_inst, 2.U, 0.U)
     // The Branch Unit redirects the PC immediately, but delays the mispredict
     // signal a cycle (for critical path reasons)
 
@@ -372,7 +372,7 @@ class ALUUnit(isBranchUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)
     when (io.req.bits.kill ||
            (io.brinfo.valid &&
              io.brinfo.mispredict &&
-             maskMatch(io.brinfo.mask, io.req.bits.uop.br_mask)
+             maskMatch(io.brinfo.mask, uop.br_mask)
           )) {
       killed := true.B
     }
@@ -386,7 +386,7 @@ class ALUUnit(isBranchUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)
 
     val npc = ((block_pc | uop.pc_lob) + Mux(uop.is_rvc || uop.is_edge, 2.U, 4.U))(vaddrBitsExtended-1,0)
 
-    val pc_sel = MuxLookup(io.req.bits.uop.ctrl.br_type, PC_PLUS4,
+    val pc_sel = MuxLookup(uop.ctrl.br_type, PC_PLUS4,
                  Seq(   BR_N   -> PC_PLUS4,
                         BR_NE  -> Mux(!br_eq,  PC_BRJMP, PC_PLUS4),
                         BR_EQ  -> Mux( br_eq,  PC_BRJMP, PC_PLUS4),
@@ -425,7 +425,7 @@ class ALUUnit(isBranchUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)
       printf("BR-UNIT:\n")
       printf("    PC:0x%x+0x%x Next:(V:%c PC:0x%x) BJAddr:0x%x\n",
         io.get_ftq_pc.fetch_pc,
-        io.req.bits.uop.pc_lob,
+        uop.pc_lob,
         BoolToChar(io.get_ftq_pc.next_val, 'V'),
         io.get_ftq_pc.next_pc,
         bj_addr)
@@ -434,7 +434,7 @@ class ALUUnit(isBranchUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)
     when (io.req.valid && uop.is_jal && io.get_ftq_pc.next_val && io.get_ftq_pc.next_pc =/= bj_addr) {
       printf("[func] JAL went to the wrong target [curr: 0x%x+%x next: 0x%x, target: 0x%x]",
         io.get_ftq_pc.fetch_pc,
-        io.req.bits.uop.pc_lob,
+        uop.pc_lob,
         io.get_ftq_pc.next_pc,
         bj_addr)
     }
