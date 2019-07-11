@@ -329,16 +329,16 @@ class ALUUnit(isBranchUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)
 {
   val uop = io.req.bits.uop
 
-  // Get the uop PC for branch resolution.
-  val block_pc = AlignPCToBoundary(io.get_ftq_pc.fetch_pc, icBlockBytes)
-  val uop_maybe_pc = block_pc | uop.pc_lob // Don't consider edge instructions yet.
-
   // immediate generation
   val imm_xprlen = ImmGen(uop.imm_packed, uop.ctrl.imm_sel)
 
   // operand 1 select
   var op1_data: UInt = null
   if (isBranchUnit) {
+    // Get the uop PC for branch resolution.
+    val block_pc = AlignPCToBoundary(io.get_ftq_pc.fetch_pc, icBlockBytes)
+    val uop_maybe_pc = block_pc | uop.pc_lob // Don't consider edge instructions yet.
+
     op1_data = Mux(uop.ctrl.op1_sel.asUInt === OP1_RS1 , io.req.bits.rs1_data,
                Mux(uop.ctrl.op1_sel.asUInt === OP1_PC  , Sext(uop_maybe_pc, xLen),
                                                          0.U))
@@ -362,7 +362,9 @@ class ALUUnit(isBranchUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)
   alu.io.dw  := uop.ctrl.fcn_dw
 
   if (isBranchUnit) {
-    val uop_pc = (block_pc | uop.pc_lob) - Mux(uop.edge_inst, 2.U, 0.U)
+    val block_pc = AlignPCToBoundary(io.get_ftq_pc.fetch_pc, icBlockBytes)
+    val uop_maybe_pc = block_pc | uop.pc_lob // Don't consider edge instructions yet.
+    val uop_pc = uop_maybe_pc - Mux(uop.edge_inst, 2.U, 0.U)
     // The Branch Unit redirects the PC immediately, but delays the mispredict
     // signal a cycle (for critical path reasons)
 
