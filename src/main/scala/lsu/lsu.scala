@@ -1288,8 +1288,8 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
         val addr   = Mux(commit_store, stq(idx).bits.addr.bits, ldq(idx).bits.addr.bits)
         val stdata = Mux(commit_store, stq(idx).bits.data.bits, 0.U)
         val wbdata = Mux(commit_store, stq(idx).bits.debug_wb_data, ldq(idx).bits.debug_wb_data)
-        printf("MT %x %x %x %x %x %x\n",
-          io.core.tsc_reg, uop.uopc, uop.mem_size, addr, stdata, wbdata)
+        printf("MT %x %x %x %x %x %x %x\n",
+          io.core.tsc_reg, uop.uopc, uop.mem_cmd, uop.mem_size, addr, stdata, wbdata)
       }
     }
 
