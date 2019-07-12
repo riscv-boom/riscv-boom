@@ -61,7 +61,7 @@ class RenameFreeList(
 
   // Pregs returned by the ROB via commit or rollback.
   val dealloc_mask = io.dealloc_pregs.map(d =>
-                       UIntToOH(d.bits)(numPregs-1,0) & Cat(Fill(numPregs-1, d.valid.asUInt), 0.U(1.W))).reduce(_|_)
+                       UIntToOH(d.bits)(numPregs-1,0) & Fill(numPregs, d.valid.asUInt)).reduce(_|_)
 
   val br_slots = VecInit(io.ren_br_tags.map(tag => tag.valid)).asUInt
   // Create branch allocation lists.
@@ -74,10 +74,10 @@ class RenameFreeList(
 
   when (io.brinfo.mispredict) {
     // Recover pregs allocated past a mispredicted branch.
-    free_list := free_list | br_alloc_lists(io.brinfo.tag) | dealloc_mask
+    free_list := (free_list | br_alloc_lists(io.brinfo.tag) | dealloc_mask) & ~(1.U(numPregs.W))
   } .otherwise {
     // Update the free list.
-    free_list := free_list & ~alloc_masks(0) | dealloc_mask
+    free_list := (free_list & ~alloc_masks(0) | dealloc_mask) & ~(1.U(numPregs.W))
   }
 
   // Encode outputs.
