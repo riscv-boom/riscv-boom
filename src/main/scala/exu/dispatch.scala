@@ -73,14 +73,16 @@ class CompactingDispatcher(implicit p: Parameters) extends Dispatcher
 
   for (((ip, dis), rdy) <- issueParams zip io.dis_uops zip ren_readys) {
     val ren = Wire(Vec(coreWidth, Decoupled(new MicroOp)))
-    ren := io.ren_uops
+    ren <> io.ren_uops
 
     val uses_iq = ren map (u => (u.bits.iq_type & ip.iqType.U).orR)
 
     (ren zip io.ren_uops zip uses_iq) foreach {case ((u,v),q) =>
       u.valid := v.valid && q}
 
-    Compactor(ren, dis)
+    val compactor = Module(new Compactor(coreWidth, ip.dispatchWidth, new MicroOp))
+    compactor.io.in  <> ren
+    dis <> compactor.io.out
 
     rdy := VecInit(ren zip uses_iq map {case (u,q) => u.ready || !q}).asUInt
   }
