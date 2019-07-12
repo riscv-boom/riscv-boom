@@ -337,10 +337,10 @@ class ALUUnit(isBranchUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)
   if (isBranchUnit) {
     // Get the uop PC for branch resolution.
     val block_pc = AlignPCToBoundary(io.get_ftq_pc.fetch_pc, icBlockBytes)
-    val uop_maybe_pc = block_pc | uop.pc_lob // Don't consider edge instructions yet.
+    val uop_pc = (block_pc | uop.pc_lob) - Mux(uop.edge_inst, 2.U, 0.U)
 
     op1_data = Mux(uop.ctrl.op1_sel.asUInt === OP1_RS1 , io.req.bits.rs1_data,
-               Mux(uop.ctrl.op1_sel.asUInt === OP1_PC  , Sext(uop_maybe_pc, xLen),
+               Mux(uop.ctrl.op1_sel.asUInt === OP1_PC  , Sext(uop_pc, xLen),
                                                          0.U))
   } else {
     op1_data = Mux(uop.ctrl.op1_sel.asUInt === OP1_RS1 , io.req.bits.rs1_data,
@@ -351,7 +351,7 @@ class ALUUnit(isBranchUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)
   val op2_data = Mux(uop.ctrl.op2_sel === OP2_IMM,  Sext(imm_xprlen.asUInt, xLen),
                  Mux(uop.ctrl.op2_sel === OP2_IMMC, io.req.bits.uop.prs1(4,0),
                  Mux(uop.ctrl.op2_sel === OP2_RS2 , io.req.bits.rs2_data,
-                 Mux(uop.ctrl.op2_sel === OP2_NEXT, Mux(uop.is_rvc || uop.edge_inst, 2.U, 4.U),
+                 Mux(uop.ctrl.op2_sel === OP2_NEXT, Mux(uop.is_rvc, 2.U, 4.U),
                                                     0.U))))
 
   val alu = Module(new freechips.rocketchip.rocket.ALU())
