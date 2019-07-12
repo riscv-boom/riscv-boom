@@ -400,31 +400,32 @@ object SelectFirstN
 }
 
 /**
- * Connect the first k of n input interfaces onto k output interfaces.
+ * Connect the first k of n valid input interfaces to k output interfaces.
  * Related to SelectFirstN, but we don't use that as a helper
  * to help ensure we end up generating the most efficient hardware.
  */
-object Compactor
+class Compactor[T <: chisel3.core.Data](n: Int, k: Int, gen: T) extends Module
 {
-  def apply[T <: chisel3.core.Data](in: Vec[DecoupledIO[T]], out: Vec[DecoupledIO[T]]) {
-    val n = in.getWidth
-    val k = out.getWidth
-    require(n >= k)
+  require(n >= k)
 
-    if (n == k) {
-      in <> out
-    } else {
-      val counts = in.map(_.valid).scanLeft(1.U(k.W)) ((c,e) => Mux(e, c<<1, c))
-      val sels = Transpose(VecInit(counts map (c => VecInit(c.asBools)))) map (col =>
-                   (col zip in.map(_.valid)) map {case (c,v) => c && v})
+  val io = IO(new Bundle {
+    val in  = Vec(n, Flipped(DecoupledIO(gen)))
+    val out = Vec(k,         DecoupledIO(gen))
+  })
 
-      val in_readys = counts map (row => (row.asBools zip out.map(_.ready)) map {case (c,r) => c && r} reduce (_||_))
-      val out_valids = sels map (col => col.reduce(_||_))
-      val out_data = sels map (s => Mux1H(s, in.map(_.bits)))
+  if (n == k) {
+    io.out <> io.in
+  } else {
+    val counts = io.in.map(_.valid).scanLeft(1.U(k.W)) ((c,e) => Mux(e, c<<1, c))
+    val sels = Transpose(VecInit(counts map (c => VecInit(c.asBools)))) map (col =>
+                 (col zip io.in.map(_.valid)) map {case (c,v) => c && v})
 
-      in zip in_readys foreach {case (i,r) => i.ready := r}
-      out_valids zip out_data zip out foreach {case ((v,d),o) => o.valid := v; o.bits := d}
-    }
+    val in_readys = counts map (row => (row.asBools zip io.out.map(_.ready)) map {case (c,r) => c && r} reduce (_||_))
+    val out_valids = sels map (col => col.reduce(_||_))
+    val out_data = sels map (s => Mux1H(s, io.in.map(_.bits)))
+
+    in_readys zip io.in foreach {case (r,i) => i.ready := r}
+    out_valids zip out_data zip io.out foreach {case ((v,d),o) => o.valid := v; o.bits := d}
   }
 }
 
