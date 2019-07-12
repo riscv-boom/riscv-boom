@@ -376,6 +376,8 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
     prev_nextpc  := alignToFetchBoundary(f3_fetch_bundle.pc) + Mux(inLastChunk(f3_fetch_bundle.pc) && icIsBanked.B,
                                                                  bankBytes.U,
                                                                  fetchBytes.U)
+  } .elsewhen (io.clear_fetchbuffer) {
+    prev_is_half := false.B
   }
 
   when (f3_valid && f3_btb_resp.valid) {
