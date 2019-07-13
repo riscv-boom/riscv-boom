@@ -52,11 +52,11 @@ class RegisterFileWritePort(val addrWidth: Int, val dataWidth: Int)(implicit p: 
  */
 object WritePort
 {
-  def apply(enq: DecoupledIO[ExeUnitResp], addrWidth: Int, dataWidth: Int)
+  def apply(enq: DecoupledIO[ExeUnitResp], addrWidth: Int, dataWidth: Int, rtype: UInt)
     (implicit p: Parameters): Valid[RegisterFileWritePort] = {
      val wport = Wire(Valid(new RegisterFileWritePort(addrWidth, dataWidth)))
 
-     wport.valid     := enq.valid
+     wport.valid     := enq.valid && enq.bits.uop.dst_rtype === rtype
      wport.bits.addr := enq.bits.uop.pdst
      wport.bits.data := enq.bits.data
      enq.ready       := true.B

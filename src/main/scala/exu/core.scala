@@ -874,7 +874,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
   var w_cnt = 1
   // 0th goes to ll_wbarb
-  iregfile.io.write_ports(0) := WritePort(ll_wbarb.io.out, ipregSz, xLen)
+  iregfile.io.write_ports(0) := WritePort(ll_wbarb.io.out, ipregSz, xLen, RT_FIX)
   for (i <- 0 until exe_units.length) {
     if (exe_units(i).writesIrf) {
       val wbresp = exe_units(i).io.iresp
