@@ -464,7 +464,6 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
   //-------------------------------------------------------------
   //-------------------------------------------------------------
 
-
   // Rename2/Dispatch pipeline logic
 
   val dis_prior_slot_valid = dis_valids.scanLeft(false.B) ((s,v) => s || v)
@@ -475,7 +474,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
   val wait_for_rocc = (0 until coreWidth).map(w =>
                         (dis_uops(w).is_fence || dis_uops(w).is_fencei) && (io.rocc.busy || rocc_shim_busy))
   val rxq_full = if (usingRoCC) exe_units.rocc_unit.io.rocc.rxq_full else false.B
-  val block_rocc = dis_uops.map(_.uopc === uopROCC).scanLeft(false.B)(_||_)
+  val block_rocc = (dis_uops zip dis_valids).map{case (u,v) => v && u.uopc === uopROCC}.scanLeft(rxq_full)(_||_)
   val dis_rocc_alloc_stall = (dis_uops.map(_.uopc === uopROCC) zip block_rocc) map {case (p,r) =>
                                if (usingRoCC) p && r else false.B}
 
