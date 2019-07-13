@@ -377,7 +377,7 @@ object MaskUpper
 }
 
 /**
-  * Transpose a matrix of Chisel Vecs.
+ * Transpose a matrix of Chisel Vecs.
  */
 object Transpose
 {
@@ -401,8 +401,6 @@ object SelectFirstN
 
 /**
  * Connect the first k of n valid input interfaces to k output interfaces.
- * Related to SelectFirstN, but we don't use that as a helper
- * to help ensure we end up generating the most efficient hardware.
  */
 class Compactor[T <: chisel3.core.Data](n: Int, k: Int, gen: T) extends Module
 {
@@ -419,7 +417,6 @@ class Compactor[T <: chisel3.core.Data](n: Int, k: Int, gen: T) extends Module
     val counts = io.in.map(_.valid).scanLeft(1.U(k.W)) ((c,e) => Mux(e, (c<<1)(k-1,0), c))
     val sels = Transpose(VecInit(counts map (c => VecInit(c.asBools)))) map (col =>
                  (col zip io.in.map(_.valid)) map {case (c,v) => c && v})
-
     val in_readys = counts map (row => (row.asBools zip io.out.map(_.ready)) map {case (c,r) => c && r} reduce (_||_))
     val out_valids = sels map (col => col.reduce(_||_))
     val out_data = sels map (s => Mux1H(s, io.in.map(_.bits)))
