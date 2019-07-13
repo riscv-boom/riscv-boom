@@ -39,9 +39,9 @@ abstract class Dispatcher(implicit p: Parameters) extends BoomModule
 }
 
 /**
-  * This Dispatcher assumes worst case, all dispatched uops go to 1 issue queue
-  * This is equivalent to BOOMv2 behavior
-  */
+ * This Dispatcher assumes worst case, all dispatched uops go to 1 issue queue
+ * This is equivalent to BOOMv2 behavior
+ */
 class BasicDispatcher(implicit p: Parameters) extends Dispatcher
 {
   issueParams.map(ip=>require(ip.dispatchWidth == coreWidth))
@@ -63,8 +63,12 @@ class BasicDispatcher(implicit p: Parameters) extends Dispatcher
 }
 
 /**
-  * Tries to dispatch as many uops as it can to issue queues which may accept fewer than coreWidth per cycle.
-  */
+ *  Tries to dispatch as many uops as it can to issue queues,
+ *  which may accept fewer than coreWidth per cycle.
+ *  When dispatchWidth == coreWidth, its behavior differs
+ *  from the BasicDispatcher in that it will only stall dispatch when
+ *  an issue queue required by a uop is full.
+ */
 class CompactingDispatcher(implicit p: Parameters) extends Dispatcher
 {
   issueParams.map(ip => require(ip.dispatchWidth >= ip.issueWidth))
@@ -77,6 +81,7 @@ class CompactingDispatcher(implicit p: Parameters) extends Dispatcher
 
     val uses_iq = ren map (u => (u.bits.iq_type & ip.iqType.U).orR)
 
+    // Only request an issue slot if the uop needs to enter that queue.
     (ren zip io.ren_uops zip uses_iq) foreach {case ((u,v),q) =>
       u.valid := v.valid && q}
 
@@ -84,6 +89,7 @@ class CompactingDispatcher(implicit p: Parameters) extends Dispatcher
     compactor.io.in  <> ren
     dis <> compactor.io.out
 
+    // The queue is considered ready if the uop doesn't use it.
     rdy := VecInit(ren zip uses_iq map {case (u,q) => u.ready || !q}).asUInt
   }
 
