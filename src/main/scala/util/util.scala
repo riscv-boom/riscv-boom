@@ -416,7 +416,7 @@ class Compactor[T <: chisel3.core.Data](n: Int, k: Int, gen: T) extends Module
   if (n == k) {
     io.out <> io.in
   } else {
-    val counts = io.in.map(_.valid).scanLeft(1.U(k.W)) ((c,e) => Mux(e, c<<1, c))
+    val counts = io.in.map(_.valid).scanLeft(1.U(k.W)) ((c,e) => Mux(e, (c<<1)(k-1,0), c))
     val sels = Transpose(VecInit(counts map (c => VecInit(c.asBools)))) map (col =>
                  (col zip io.in.map(_.valid)) map {case (c,v) => c && v})
 
