@@ -314,7 +314,7 @@ class ALUExeUnit(
     io.rocc                   <> rocc.io.core
 
     rocc.io.resp.ready        := io.ll_iresp.ready
-    io.ll_iresp.valid         := rocc.io.resp.valid
+    io.ll_iresp.valid         := rocc.io.resp.valid && rocc.io.resp.bits.uop.dst_rtype === RT_FIX
     io.ll_iresp.bits.uop      := rocc.io.resp.bits.uop
     io.ll_iresp.bits.data     := rocc.io.resp.bits.data
   }
