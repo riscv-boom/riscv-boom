@@ -73,7 +73,7 @@ class CompactingDispatcher(implicit p: Parameters) extends Dispatcher
 {
   issueParams.map(ip => require(ip.dispatchWidth >= ip.issueWidth))
 
-  val ren_readys = Wire(Vec(issueParams.size, UInt(coreWidth.W)))
+  val ren_readys = Wire(Vec(issueParams.size, Vec(coreWidth, Bool())))
 
   for (((ip, dis), rdy) <- issueParams zip io.dis_uops zip ren_readys) {
     val ren = Wire(Vec(coreWidth, Decoupled(new MicroOp)))
@@ -90,8 +90,11 @@ class CompactingDispatcher(implicit p: Parameters) extends Dispatcher
     dis <> compactor.io.out
 
     // The queue is considered ready if the uop doesn't use it.
-    rdy := VecInit(ren zip uses_iq map {case (u,q) => u.ready || !q}).asUInt
+    rdy := ren zip uses_iq map {case (u,q) => u.ready || !q}
   }
 
-  (ren_readys.reduce(_&_).asBools zip io.ren_uops) foreach {case (r,u) => u.ready := r}
+  (ren_readys.reduce((r,i) =>
+      VecInit(r zip i map {case (r,i) =>
+        r && i})) zip io.ren_uops) foreach {case (r,u) =>
+          u.ready := r}
 }
