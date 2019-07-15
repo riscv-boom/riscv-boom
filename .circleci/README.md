@@ -5,11 +5,11 @@ Thus this requires the **boom-ci** branch to have all the changes needed for boo
 
 WARNING: IF **boom-ci** BRANCH IN ucb-bar/project-template IS GONE. CONTACT THE BOOM DEVELOPERS!!!!
 
+Note: This uses $SERVER and $CI_DIR which is given in the CircleCI env var setup to specify a server to build on.
+To change these variables you must change the project settings of CircleCI.
+
+Note: You also need to add the private key of the build server to CircleCI and match the fingerprint it gives in the config.yml
+
 Things to look into:
 --------------------
-- How to build and test MegaBoomConfig (seems to error out saying "Killed/Error 137" which indicates OOM
-since there is only 2GB of RAM per docker instance). So far as I can tell, the only way to fix this is to
-get a paid account with better docker instances (or to use machine for now and stop using once machine is a
-paid service which might happen soon). (Note 1/5/19 BoomConfig seems to suffer from same issue)
-
 * How to get more coverage of pipeline using something like csmith and/or riscv-torture.
