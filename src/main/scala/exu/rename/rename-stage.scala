@@ -219,16 +219,16 @@ class RenameStage(
     val remap_reqs = Wire(Vec(plWidth, new RemapReq(lregSz, pregSz)))
 
     // Generate maptable requests.
-    for ((((ren1,ren2),com),w) <- ren1_uops zip ren2_uops.reverse zip io.com_uops.reverse zipWithIndex) {
+    for ((((ren1,ren2),com),w) <- ren1_uops zip ren2_uops zip io.com_uops.reverse zipWithIndex) {
       map_reqs(w).lrs1 := ren1.lrs1
       map_reqs(w).lrs2 := ren1.lrs2
       map_reqs(w).lrs3 := ren1.lrs3
       map_reqs(w).ldst := ren1.ldst
 
-      remap_reqs(w).ldst := Mux(io.rollback, com.ldst,       Mux(io.flush, ren2.ldst,       ren1.ldst))
-      remap_reqs(w).pdst := Mux(io.rollback, com.stale_pdst, Mux(io.flush, ren2.stale_pdst, ren1.pdst))
+      remap_reqs(w).ldst := Mux(io.rollback, com.ldst,       Mux(io.flush, ren2.ldst,       ren2.ldst))
+      remap_reqs(w).pdst := Mux(io.rollback, com.stale_pdst, Mux(io.flush, ren2.stale_pdst, ren2.pdst))
     }
-    ren1_alloc_reqs(i) zip rbk_valids(i).reverse zip ren2_rbk_valids(i).reverse zip remap_reqs map {
+    ren2_alloc_reqs(i) zip rbk_valids(i).reverse zip ren2_rbk_valids(i).reverse zip remap_reqs map {
       case (((a,r1),r2),rr) => rr.valid := a || r1 || r2}
 
     // Hook up inputs.
