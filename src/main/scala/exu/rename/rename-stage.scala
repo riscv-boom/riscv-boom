@@ -149,9 +149,6 @@ class RenameStage(
   val ren1_fire           = Wire(Vec(plWidth, Bool()))
   val ren1_uops           = Wire(Vec(plWidth, new MicroOp))
 
-  val ren1_int_alloc_reqs = Wire(Vec(plWidth, Bool()))
-  val ren1_fp_alloc_reqs  = Wire(Vec(plWidth, Bool()))
-
   // Stage 2
   val ren2_int_alloc_reqs = Wire(Vec(plWidth, Bool()))
   val ren2_fp_alloc_reqs  = Wire(Vec(plWidth, Bool()))
@@ -169,17 +166,11 @@ class RenameStage(
   val int_rbk_valids      = Wire(Vec(plWidth, Bool()))
   val fp_rbk_valids       = Wire(Vec(plWidth, Bool()))
 
-  val int_ren2_rbk_valids = Wire(Vec(plWidth, Bool()))
-  val fp_ren2_rbk_valids  = Wire(Vec(plWidth, Bool()))
-
   // TODO: Simplify this by splitting off FP rename from INT rename.
   // Ideally, this will take the form of a decoupled FPU which lives behind a queue.
   for (w <- 0 until plWidth) {
     ren1_fire(w)           := io.dec_fire(w)
     ren1_uops(w)           := io.dec_uops(w)
-
-    ren1_int_alloc_reqs(w) := ren1_uops(w).ldst_val && ren1_uops(w).dst_rtype === RT_FIX && ren1_fire(w)
-    ren1_fp_alloc_reqs(w)  := ren1_uops(w).ldst_val && ren1_uops(w).dst_rtype === RT_FLT && ren1_fire(w)
 
     ren2_int_alloc_reqs(w) := ren2_uops(w).ldst_val && ren2_uops(w).dst_rtype === RT_FIX && ren2_fire(w)
     ren2_fp_alloc_reqs(w)  := ren2_uops(w).ldst_val && ren2_uops(w).dst_rtype === RT_FLT && ren2_fire(w)
@@ -192,20 +183,14 @@ class RenameStage(
 
     int_rbk_valids(w)      := io.com_uops(w).ldst_val && io.com_uops(w).dst_rtype === RT_FIX && io.rbk_valids(w)
     fp_rbk_valids(w)       := io.com_uops(w).ldst_val && io.com_uops(w).dst_rtype === RT_FLT && io.rbk_valids(w)
-
-    int_ren2_rbk_valids(w) := ren2_uops(w).ldst_val && ren2_uops(w).dst_rtype === RT_FIX && io.flush && ren2_valids(w)
-    fp_ren2_rbk_valids(w)  := ren2_uops(w).ldst_val && ren2_uops(w).dst_rtype === RT_FLT && io.flush && ren2_valids(w)
   }
 
-  var ren1_alloc_reqs = Seq(ren1_int_alloc_reqs)
-  if (usingFPU) ren1_alloc_reqs ++= Seq(ren1_fp_alloc_reqs)
-
+  var ren2_alloc_reqs = Seq(ren2_int_alloc_reqs)
+  if (usingFPU) ren2_alloc_reqs ++= Seq(ren2_fp_alloc_reqs)
   var com_valids = Seq(int_com_valids)
   if (usingFPU) com_valids ++= Seq(fp_com_valids)
   var rbk_valids = Seq(int_rbk_valids)
   if (usingFPU) rbk_valids ++= Seq(fp_rbk_valids)
-  var ren2_rbk_valids = Seq(int_ren2_rbk_valids)
-  if (usingFPU) ren2_rbk_valids ++= Seq(fp_ren2_rbk_valids)
 
   //-------------------------------------------------------------
   // Rename Table
