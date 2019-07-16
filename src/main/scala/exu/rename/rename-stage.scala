@@ -287,13 +287,13 @@ class RenameStage(
   // Freelist inputs.
   for ((list, i) <- freelists.zipWithIndex) {
     list.io.reqs := ren2_alloc_reqs(i)
-    list.io.dealloc_pregs zip com_valids(i) zip rbk_valids(i) zip ren2_rbk_valids(i) map
-      {case (((d,c),r1),r2) => d.valid := c || r1 || r2}
-    list.io.dealloc_pregs zip io.com_uops zip ren2_uops map
-      {case ((d,c),r) => d.bits := Mux(io.rollback, c.pdst, Mux(io.flush, r.pdst, c.stale_pdst))}
+    list.io.dealloc_pregs zip com_valids(i) zip rbk_valids(i) map
+      {case (((d,c),r)) => d.valid := c || r}
+    list.io.dealloc_pregs zip io.com_uops map
+      {case (d,c) => d.bits := Mux(io.rollback, c.pdst, c.stale_pdst)}
     list.io.ren_br_tags := ren1_br_tags
     list.io.brinfo := io.brinfo
-    list.io.debug.pipeline_empty := io.debug_rob_empty && !ren2_valids.reduce(_||_)
+    list.io.debug.pipeline_empty := io.debug_rob_empty
 
     assert (ren2_alloc_reqs(i) zip list.io.alloc_pregs map {case (r,p) => !r || p.bits =/= 0.U} reduce (_&&_),
              "[rename-stage] A uop is trying to allocate the zero physical register.")
