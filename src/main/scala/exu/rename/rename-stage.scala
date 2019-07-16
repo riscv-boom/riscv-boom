@@ -359,8 +359,8 @@ class RenameStage(
       }
       // Push back against Decode stage if Rename1 can't proceed.
       io.inst_can_proceed(w) :=
-        (ren1_uops(w).dst_rtype =/= RT_FIX || ifl_can_allocate) &&
-        (ren1_uops(w).dst_rtype =/= RT_FLT || ffl_can_allocate)
+        (ren2_uops(w).dst_rtype =/= RT_FIX || ifl_can_allocate) &&
+        (ren2_uops(w).dst_rtype =/= RT_FLT || ffl_can_allocate)
   }
 
   //-------------------------------------------------------------
