@@ -19,5 +19,7 @@ if [ ! -d "$HOME/$1-install" ]; then
     git fetch
     git checkout $(cat $LOCAL_CHECKOUT_DIR/CHIPYARD.hash)
 
+    cd $HOME
+
     CHIPYARD_DIR=$LOCAL_CHIPYARD_DIR $LOCAL_CHIPYARD_DIR/scripts/build-toolchains.sh $1
 fi
