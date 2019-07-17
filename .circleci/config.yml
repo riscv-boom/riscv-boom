@@ -644,7 +644,7 @@ workflows:
         jobs:
             # Make the toolchains
             - install-riscv-toolchain
-            - install-esp-tools
+            - install-esp-toolchain
 
             # Build verilator
             - prepare-build-environment
@@ -680,7 +680,7 @@ workflows:
             - prepare-hwachaboomconfig:
                 requires:
                     - prepare-build-environment
-                    - install-esp-tools
+                    - install-esp-toolchain
 
             # Run the SmallBoomConfig tests
             - smallboomconfig-run-csmith-tests:

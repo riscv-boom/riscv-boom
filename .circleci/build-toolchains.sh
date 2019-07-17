@@ -9,7 +9,7 @@ set -ex
 SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 source $SCRIPT_DIR/defaults.sh
 
-if [ ! -d "$LOCAL_RISCV_DIR" ]; then
+if [ ! -d "$HOME/$1-install" ]; then
     cd $HOME
 
     git clone --progress --verbose https://github.com/ucb-bar/chipyard.git chipyard
@@ -19,5 +19,5 @@ if [ ! -d "$LOCAL_RISCV_DIR" ]; then
     git fetch
     git checkout $(cat $LOCAL_CHECKOUT_DIR/CHIPYARD.hash)
 
-    CHIPYARD_DIR=$LOCAL_CHIPYARD_DIR .$LOCAL_CHIPYARD_DIR/scripts/build-toolchains.sh $1
+    CHIPYARD_DIR=$LOCAL_CHIPYARD_DIR $LOCAL_CHIPYARD_DIR/scripts/build-toolchains.sh $1
 fi
