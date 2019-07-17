@@ -19,14 +19,14 @@ jobs:
                     .circleci/create-hash.sh
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
+                    - riscv-tools-installed-v4-{{ checksum "../riscv-tools.hash" }}
             - run:
                 name: Building riscv-tools
                 command: |
                     .circleci/build-toolchains.sh riscv-tools
                 no_output_timeout: 120m
             - save_cache:
-                key: riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
+                key: riscv-tools-installed-v4-{{ checksum "../riscv-tools.hash" }}
                 paths:
                     - "/home/riscvuser/riscv-tools-install"
     install-esp-toolchain:
@@ -43,14 +43,14 @@ jobs:
                     .circleci/create-hash.sh
             - restore_cache:
                 keys:
-                    - esp-tools-installed-v3-{{ checksum "../esp-tools.hash" }}
+                    - esp-tools-installed-v4-{{ checksum "../esp-tools.hash" }}
             - run:
                 name: Building esp-tools
                 command: |
                     .circleci/build-toolchains.sh esp-tools
                 no_output_timeout: 120m
             - save_cache:
-                key: esp-tools-installed-v3-{{ checksum "../esp-tools.hash" }}
+                key: esp-tools-installed-v4-{{ checksum "../esp-tools.hash" }}
                 paths:
                     - "/home/riscvuser/esp-tools-install"
     prepare-build-environment:
@@ -111,7 +111,7 @@ jobs:
                     .circleci/create-hash.sh
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
+                    - riscv-tools-installed-v4-{{ checksum "../riscv-tools.hash" }}
             - restore_cache:
                 keys:
                     - chipyard-v12-{{ checksum "CHIPYARD.hash" }}
@@ -143,7 +143,7 @@ jobs:
                     .circleci/create-hash.sh
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
+                    - riscv-tools-installed-v4-{{ checksum "../riscv-tools.hash" }}
             - restore_cache:
                 keys:
                     - chipyard-v12-{{ checksum "CHIPYARD.hash" }}
@@ -175,7 +175,7 @@ jobs:
                     .circleci/create-hash.sh
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
+                    - riscv-tools-installed-v4-{{ checksum "../riscv-tools.hash" }}
             - restore_cache:
                 keys:
                     - chipyard-v12-{{ checksum "CHIPYARD.hash" }}
@@ -207,7 +207,7 @@ jobs:
                     .circleci/create-hash.sh
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
+                    - riscv-tools-installed-v4-{{ checksum "../riscv-tools.hash" }}
             - restore_cache:
                 keys:
                     - chipyard-v12-{{ checksum "CHIPYARD.hash" }}
@@ -239,7 +239,7 @@ jobs:
                     .circleci/create-hash.sh
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
+                    - riscv-tools-installed-v4-{{ checksum "../riscv-tools.hash" }}
             - restore_cache:
                 keys:
                     - chipyard-v12-{{ checksum "CHIPYARD.hash" }}
@@ -271,7 +271,7 @@ jobs:
                     .circleci/create-hash.sh
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
+                    - riscv-tools-installed-v4-{{ checksum "../riscv-tools.hash" }}
             - restore_cache:
                 keys:
                     - chipyard-v12-{{ checksum "CHIPYARD.hash" }}
@@ -303,7 +303,7 @@ jobs:
                     .circleci/create-hash.sh
             - restore_cache:
                 keys:
-                    - esp-tools-installed-v3-{{ checksum "../esp-tools.hash" }}
+                    - esp-tools-installed-v4-{{ checksum "../esp-tools.hash" }}
             - restore_cache:
                 keys:
                     - chipyard-v12-{{ checksum "CHIPYARD.hash" }}
@@ -332,7 +332,7 @@ jobs:
                     .circleci/create-hash.sh
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
+                    - riscv-tools-installed-v4-{{ checksum "../riscv-tools.hash" }}
             - restore_cache:
                 keys:
                     - smallboomconfig-{{ .Branch }}-{{ .Revision }}
@@ -357,7 +357,7 @@ jobs:
                     .circleci/create-hash.sh
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
+                    - riscv-tools-installed-v4-{{ checksum "../riscv-tools.hash" }}
             - restore_cache:
                 keys:
                     - smallboomconfig-{{ .Branch }}-{{ .Revision }}
@@ -381,7 +381,7 @@ jobs:
                     .circleci/create-hash.sh
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
+                    - riscv-tools-installed-v4-{{ checksum "../riscv-tools.hash" }}
             - restore_cache:
                 keys:
                     - mediumboomconfig-{{ .Branch }}-{{ .Revision }}
@@ -406,7 +406,7 @@ jobs:
                     .circleci/create-hash.sh
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
+                    - riscv-tools-installed-v4-{{ checksum "../riscv-tools.hash" }}
             - restore_cache:
                 keys:
                     - mediumboomconfig-{{ .Branch }}-{{ .Revision }}
@@ -430,7 +430,7 @@ jobs:
                     .circleci/create-hash.sh
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
+                    - riscv-tools-installed-v4-{{ checksum "../riscv-tools.hash" }}
             - restore_cache:
                 keys:
                     - largeboomconfig-{{ .Branch }}-{{ .Revision }}
@@ -455,7 +455,7 @@ jobs:
                     .circleci/create-hash.sh
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
+                    - riscv-tools-installed-v4-{{ checksum "../riscv-tools.hash" }}
             - restore_cache:
                 keys:
                     - largeboomconfig-{{ .Branch }}-{{ .Revision }}
@@ -479,7 +479,7 @@ jobs:
                     .circleci/create-hash.sh
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
+                    - riscv-tools-installed-v4-{{ checksum "../riscv-tools.hash" }}
             - restore_cache:
                 keys:
                     - megaboomconfig-{{ .Branch }}-{{ .Revision }}
@@ -504,7 +504,7 @@ jobs:
                     .circleci/create-hash.sh
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
+                    - riscv-tools-installed-v4-{{ checksum "../riscv-tools.hash" }}
             - restore_cache:
                 keys:
                     - megaboomconfig-{{ .Branch }}-{{ .Revision }}
@@ -528,7 +528,7 @@ jobs:
                     .circleci/create-hash.sh
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
+                    - riscv-tools-installed-v4-{{ checksum "../riscv-tools.hash" }}
             - restore_cache:
                 keys:
                     - smallboomandrocketconfig-{{ .Branch }}-{{ .Revision }}
@@ -553,7 +553,7 @@ jobs:
                     .circleci/create-hash.sh
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
+                    - riscv-tools-installed-v4-{{ checksum "../riscv-tools.hash" }}
             - restore_cache:
                 keys:
                     - smallboomandrocketconfig-{{ .Branch }}-{{ .Revision }}
@@ -577,7 +577,7 @@ jobs:
                     .circleci/create-hash.sh
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
+                    - riscv-tools-installed-v4-{{ checksum "../riscv-tools.hash" }}
             - restore_cache:
                 keys:
                     - smallrv32unifiedboomconfig-{{ .Branch }}-{{ .Revision }}
@@ -602,7 +602,7 @@ jobs:
                     .circleci/create-hash.sh
             - restore_cache:
                 keys:
-                    - riscv-tools-installed-v3-{{ checksum "../riscv-tools.hash" }}
+                    - riscv-tools-installed-v4-{{ checksum "../riscv-tools.hash" }}
             - restore_cache:
                 keys:
                     - smallrv32unifiedboomconfig-{{ .Branch }}-{{ .Revision }}
@@ -626,7 +626,7 @@ jobs:
                     .circleci/create-hash.sh
             - restore_cache:
                 keys:
-                    - esp-tools-installed-v3-{{ checksum "../esp-tools.hash" }}
+                    - esp-tools-installed-v4-{{ checksum "../esp-tools.hash" }}
             - restore_cache:
                 keys:
                     - hwachaboomconfig-{{ .Branch }}-{{ .Revision }}
