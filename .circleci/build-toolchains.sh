@@ -19,7 +19,5 @@ if [ ! -d "$LOCAL_RISCV_DIR" ]; then
     git fetch
     git checkout $(cat $LOCAL_CHIPYARD_DIR/CHIPYARD.hash)
 
-    git submodule update --init --recursive toolchains/riscv-tools
-    cd toolchains/riscv-tools
-    ./build.sh
+    CHIPYARD_DIR=$LOCAL_CHIPYARD_DIR .$LOCAL_CHIPYARD_DIR/scripts/build-toolchains.sh $1
 fi

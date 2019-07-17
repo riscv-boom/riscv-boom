@@ -20,6 +20,7 @@ clean () {
 # remote variables
 REMOTE_WORK_DIR=$CI_DIR/$CIRCLE_PROJECT_REPONAME-$CIRCLE_BRANCH-$CIRCLE_SHA1-$CIRCLE_JOB
 REMOTE_RISCV_DIR=$REMOTE_WORK_DIR/riscv-tools-install
+REMOTE_ESP_DIR=$REMOTE_WORK_DIR/esp-tools-install
 REMOTE_CHIPYARD_DIR=$REMOTE_WORK_DIR/chipyard
 REMOTE_VERILATOR_DIR=$REMOTE_WORK_DIR/verilator
 REMOTE_SIM_DIR=$REMOTE_CHIPYARD_DIR/sims/verisim
@@ -27,6 +28,7 @@ REMOTE_SIM_DIR=$REMOTE_CHIPYARD_DIR/sims/verisim
 # local variables (aka within the docker container)
 LOCAL_CHECKOUT_DIR=$HOME/project
 LOCAL_RISCV_DIR=$HOME/riscv-tools-install
+LOCAL_ESP_DIR=$HOME/esp-tools-install
 LOCAL_CHIPYARD_DIR=$HOME/chipyard
 LOCAL_VERILATOR_DIR=$HOME/verilator
 LOCAL_SIM_DIR=$LOCAL_CHIPYARD_DIR/sims/verisim
@@ -39,3 +41,4 @@ mapping["largeboom"]="SUB_PROJECT=boom CONFIG=LargeBoomConfig"
 mapping["megaboom"]="SUB_PROJECT=boom CONFIG=MegaBoomConfig"
 mapping["boomandrocket"]="SUB_PROJECT=boom CONFIG=SmallBoomAndRocketConfig"
 mapping["rv32unifiedboom"]="SUB_PROJECT=boom CONFIG=SmallRV32UnifiedBoomConfig"
+mapping["hwachaboom"]="SUB_PROJECT=example CONFIG=HwachaBoomConfig""
