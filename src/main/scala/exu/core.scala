@@ -378,10 +378,6 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
   //-------------------------------------------------------------
   // Decoders
 
-  // send only 1 RoCC instructions at a time
-  var dec_rocc_found = if (usingRoCC) exe_units.rocc_unit.io.rocc.rxq_full else false.B
-  val rocc_shim_busy = if (usingRoCC) !exe_units.rocc_unit.io.rocc.rxq_empty else false.B
-
   // stall fetch/dcode because we ran out of branch tags
   val branch_mask_full = Wire(Vec(coreWidth, Bool()))
 
@@ -399,25 +395,14 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
   // Decode/Rename1 pipeline logic
 
-  val dec_prior_slot_valid = dec_valids.scanLeft(false.B) ((s,v) => s || v)
-  val dec_prior_slot_unique = (dec_uops zip dec_valids).scanLeft(false.B) {case (s,(u,v)) => s || v && u.is_unique}
-  val wait_for_empty_pipeline = (0 until coreWidth).map(w => (dec_uops(w).is_unique || custom_csrs.disableOOO) &&
-                                  (!rob.io.empty || !lsu.io.lsu_fencei_rdy || dec_prior_slot_valid(w)))
-  val wait_for_rocc = (0 until coreWidth).map(w =>
-                        (dec_uops(w).is_fence || dec_uops(w).is_fencei) && (io.rocc.busy || rocc_shim_busy))
-
   val dec_hazards = (0 until coreWidth).map(w =>
                       dec_valids(w) &&
-                      (  !rob.io.ready
-                      || !dis_ready
+                      (  !dis_ready
+                      || rob.io.commit.rollback
                       || branch_mask_full(w)
-                      || lsu.io.laq_full(w) && dec_uops(w).is_load
-                      || lsu.io.stq_full(w) && dec_uops(w).is_store
                       || !rename_stage.io.inst_can_proceed(w)
-                      || wait_for_empty_pipeline(w)
-                      || wait_for_rocc(w)
-                      || dec_prior_slot_unique(w)
                       || flush_ifu))
+
   val dec_stalls = dec_hazards.scanLeft(false.B) ((s,h) => s || h).takeRight(coreWidth)
   dec_fire := (0 until coreWidth).map(w => dec_valids(w) && !dec_stalls(w))
 
@@ -448,50 +433,6 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
   branch_mask_full := dec_brmask_logic.io.is_full
 
   //-------------------------------------------------------------
-  // LDQ/STQ Allocation Logic
-
-  lsu.io.dec_uops := dec_uops
-
-  for (w <- 0 until coreWidth) {
-    // Dispatching instructions request load/store queue entries when they can proceed.
-    lsu.io.dec_ld_vals(w) := dec_fire(w) && dec_uops(w).is_load
-    lsu.io.dec_st_vals(w) := dec_fire(w) && dec_uops(w).is_store
-
-    lsu.io.dec_uops(w).rob_idx := dec_uops(w).rob_idx
-    dec_uops(w).ldq_idx := lsu.io.new_ldq_idx(w)
-    dec_uops(w).stq_idx := lsu.io.new_stq_idx(w)
-  }
-
-  //-------------------------------------------------------------
-  // Rob Allocation Logic
-
-  rob.io.enq_valids := rename_stage.io.ren1_mask
-  rob.io.enq_uops   := rename_stage.io.ren1_uops
-  rob.io.enq_partial_stall := dec_stalls.last // TODO come up with better ROB compacting scheme.
-  rob.io.debug_tsc := debug_tsc_reg
-  rob.io.csr_stall := csr.io.csr_stall
-
-  for (w <- 0 until coreWidth) {
-    // note: this assumes uops haven't been shifted - there's a 1:1 match between PC's LSBs and "w" here
-    // (thus the LSB of the rob_idx gives part of the PC)
-    if (coreWidth == 1) {
-      dec_uops(w).rob_idx := rob.io.rob_tail_idx
-    } else {
-      dec_uops(w).rob_idx := Cat(rob.io.rob_tail_idx >> log2Ceil(coreWidth).U,
-                               w.U(log2Ceil(coreWidth).W))
-    }
-  }
-
-  //-------------------------------------------------------------
-  // RoCC allocation logic
-  if (usingRoCC) {
-    for (w <- 0 until coreWidth) {
-      // We guarantee only decoding 1 RoCC instruction per cycle
-      dec_uops(w).rxq_idx := exe_units.rocc_unit.io.rocc.rxq_idx
-    }
-  }
-
-  //-------------------------------------------------------------
   //-------------------------------------------------------------
   // **** Register Rename Stage ****
   //-------------------------------------------------------------
@@ -500,7 +441,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
   rename_stage.io.kill := flush_ifu
   rename_stage.io.brinfo := br_unit.brinfo
 
-  rename_stage.io.flush_pipeline := rob.io.flush.valid
+  rename_stage.io.flush := rob.io.flush.valid || io.ifu.sfence_take_pc
   rename_stage.io.debug_rob_empty := rob.io.empty
 
   rename_stage.io.dec_fire := dec_fire
@@ -525,14 +466,76 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
   // Rename2/Dispatch pipeline logic
 
+  val dis_prior_slot_valid = dis_valids.scanLeft(false.B) ((s,v) => s || v)
+  val dis_prior_slot_unique = (dis_uops zip dis_valids).scanLeft(false.B) {case (s,(u,v)) => s || v && u.is_unique}
+  val wait_for_empty_pipeline = (0 until coreWidth).map(w => (dis_uops(w).is_unique || custom_csrs.disableOOO) &&
+                                  (!rob.io.empty || !lsu.io.lsu_fencei_rdy || dis_prior_slot_valid(w)))
+  val rocc_shim_busy = if (usingRoCC) !exe_units.rocc_unit.io.rocc.rxq_empty else false.B
+  val wait_for_rocc = (0 until coreWidth).map(w =>
+                        (dis_uops(w).is_fence || dis_uops(w).is_fencei) && (io.rocc.busy || rocc_shim_busy))
+  val rxq_full = if (usingRoCC) exe_units.rocc_unit.io.rocc.rxq_full else false.B
+  val block_rocc = (dis_uops zip dis_valids).map{case (u,v) => v && u.uopc === uopROCC}.scanLeft(rxq_full)(_||_)
+  val dis_rocc_alloc_stall = (dis_uops.map(_.uopc === uopROCC) zip block_rocc) map {case (p,r) =>
+                               if (usingRoCC) p && r else false.B}
+
   val dis_hazards = (0 until coreWidth).map(w =>
                       dis_valids(w) &&
-                      ( !dispatcher.io.ren_uops(w).ready
+                      (  !rob.io.ready
+                      || lsu.io.laq_full(w) && dis_uops(w).is_load
+                      || lsu.io.stq_full(w) && dis_uops(w).is_store
+                      || !dispatcher.io.ren_uops(w).ready
+                      || wait_for_empty_pipeline(w)
+                      || wait_for_rocc(w)
+                      || dis_prior_slot_unique(w)
+                      || dis_rocc_alloc_stall(w)
                       || flush_ifu))
 
   val dis_stalls = dis_hazards.scanLeft(false.B) ((s,h) => s || h).takeRight(coreWidth)
   dis_fire := dis_valids zip dis_stalls map {case (v,s) => v && !s}
   dis_ready := !dis_stalls.last
+
+  //-------------------------------------------------------------
+  // LDQ/STQ Allocation Logic
+
+  lsu.io.dis_uops := dis_uops
+
+  for (w <- 0 until coreWidth) {
+    // Dispatching instructions request load/store queue entries when they can proceed.
+    lsu.io.dis_ld_vals(w) := dis_fire(w) && dis_uops(w).is_load
+    lsu.io.dis_st_vals(w) := dis_fire(w) && dis_uops(w).is_store
+
+    dis_uops(w).ldq_idx := lsu.io.new_ldq_idx(w)
+    dis_uops(w).stq_idx := lsu.io.new_stq_idx(w)
+  }
+
+  //-------------------------------------------------------------
+  // Rob Allocation Logic
+
+  rob.io.enq_valids := dis_fire
+  rob.io.enq_uops   := dis_uops
+  rob.io.enq_partial_stall := dis_stalls.last // TODO come up with better ROB compacting scheme.
+  rob.io.debug_tsc := debug_tsc_reg
+  rob.io.csr_stall := csr.io.csr_stall
+
+  for (w <- 0 until coreWidth) {
+    // note: this assumes uops haven't been shifted - there's a 1:1 match between PC's LSBs and "w" here
+    // (thus the LSB of the rob_idx gives part of the PC)
+    if (coreWidth == 1) {
+      dis_uops(w).rob_idx := rob.io.rob_tail_idx
+    } else {
+      dis_uops(w).rob_idx := Cat(rob.io.rob_tail_idx >> log2Ceil(coreWidth).U,
+                               w.U(log2Ceil(coreWidth).W))
+    }
+  }
+
+  //-------------------------------------------------------------
+  // RoCC allocation logic
+  if (usingRoCC) {
+    for (w <- 0 until coreWidth) {
+      // We guarantee only decoding 1 RoCC instruction per cycle
+      dis_uops(w).rxq_idx := exe_units.rocc_unit.io.rocc.rxq_idx
+    }
+  }
 
   //-------------------------------------------------------------
   // Dispatch to issue queues
@@ -1273,16 +1276,16 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
   io.rocc.exception := csr.io.exception && csr.io.status.xs.orR
   if (usingRoCC) {
     exe_units.rocc_unit.io.rocc.rocc         <> io.rocc
-    exe_units.rocc_unit.io.rocc.dec_uops     := dec_uops
+    exe_units.rocc_unit.io.rocc.dis_uops     := dis_uops
     exe_units.rocc_unit.io.rocc.rob_head_idx := rob.io.rob_head_idx
     exe_units.rocc_unit.io.rocc.rob_pnr_idx  := rob.io.rob_pnr_idx
     exe_units.rocc_unit.io.com_exception     := rob.io.com_xcpt.valid
     exe_units.rocc_unit.io.status            := csr.io.status
 
     for (w <- 0 until coreWidth) {
-       exe_units.rocc_unit.io.rocc.dec_rocc_vals(w) := (
-         dec_fire(w) &&
-         dec_uops(w).uopc === uopROCC)
+       exe_units.rocc_unit.io.rocc.dis_rocc_vals(w) := (
+         dis_fire(w) &&
+         dis_uops(w).uopc === uopROCC)
     }
   }
 
