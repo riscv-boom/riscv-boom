@@ -17,7 +17,7 @@ cd $LOCAL_CHIPYARD_DIR
 
 echo "Checking out Chipyard version: $(cat $LOCAL_CHECKOUT_DIR/CHIPYARD.hash)"
 git fetch
-git checkout $(cat $LOCAL_CHIPYARD_DIR/CHIPYARD.hash)
+git checkout $(cat $LOCAL_CHECKOUT_DIR/CHIPYARD.hash)
 
 # get the version of riscv-tools from the git submodule hash
 git submodule status | grep "riscv-tools" | awk '{print$1}' | grep -o "[[:alnum:]]*" >> $HOME/riscv-tools.hash
