@@ -251,8 +251,6 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
   // Tracks nextpc after the previous fetch bundle
   val prev_nextpc = Reg(UInt(vaddrBitsExtended.W))
 
-  val use_prev = prev_is_half && f3_fetch_bundle.pc === prev_nextpc
-
   assert(fetchWidth >= 4 || !usingCompressed) // Logic gets kind of annoying with fetchWidth = 2
   for (i <- 0 until fetchWidth) {
     val bpd_decoder = Module(new BranchDecode)
@@ -263,7 +261,7 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
       inst     := f3_imemresp.data(i*coreInstBits+coreInstBits-1,i*coreInstBits)
       f3_fetch_bundle.edge_inst := false.B
     } else if (i == 0) {
-      when (use_prev) {
+      when (prev_is_half) {
         inst := Cat(f3_imemresp.data(15,0), prev_half)
         f3_fetch_bundle.edge_inst := true.B
       } .otherwise {
@@ -274,7 +272,7 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
     } else if (i == 1) {
       // Need special case since 0th instruction may carry over the wrap around
       inst     := f3_imemresp.data(i*coreInstBits+2*coreInstBits-1,i*coreInstBits)
-      is_valid := use_prev || !(f3_valid_mask(i-1) && f3_fetch_bundle.insts(i-1)(1,0) === 3.U)
+      is_valid := prev_is_half || !(f3_valid_mask(i-1) && f3_fetch_bundle.insts(i-1)(1,0) === 3.U)
     } else if (icIsBanked && i == (fetchWidth / 2) - 1) {
       // If we are using a banked I$ we could get cut-off halfway through the fetch bundle
       inst     := f3_imemresp.data(i*coreInstBits+2*coreInstBits-1,i*coreInstBits)
@@ -293,7 +291,7 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
     // TODO do not compute a vector of targets
     val pc = (f3_aligned_pc
             + (i << log2Ceil(coreInstBytes)).U
-            - Mux(use_prev && (i == 0).B, 2.U, 0.U))
+            - Mux(prev_is_half && (i == 0).B, 2.U, 0.U))
     f3_debug_pcs(i) := pc
 
     val exp_inst = ExpandRVC(inst)
@@ -379,6 +377,8 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
     prev_nextpc  := alignToFetchBoundary(f3_fetch_bundle.pc) + Mux(inLastChunk(f3_fetch_bundle.pc) && icIsBanked.B,
                                                                  bankBytes.U,
                                                                  fetchBytes.U)
+  } .elsewhen (io.clear_fetchbuffer) {
+    prev_is_half := false.B
   }
 
   when (f3_valid && f3_btb_resp.valid) {
