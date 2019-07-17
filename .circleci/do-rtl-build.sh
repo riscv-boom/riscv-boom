@@ -19,6 +19,11 @@ run "echo \"Ping $SERVER\""
 clean
 
 # copy over riscv/esp-tools, verilator, and chipyard to remote
+run "mkdir -p $REMOTE_CHIPYARD_DIR"
+run "mkdir -p $REMOTE_VERILATOR_DIR"
+copy $LOCAL_CHIPYARD_DIR/ $SERVER:$REMOTE_CHIPYARD_DIR
+copy $LOCAL_VERILATOR_DIR/ $SERVER:$REMOTE_VERILATOR_DIR
+
 TOOLS_DIR=$REMOTE_RISCV_DIR
 LD_LIB_DIR=$REMOTE_RISCV_DIR/lib
 if [ $1 = "hwachaboom" ]; then
