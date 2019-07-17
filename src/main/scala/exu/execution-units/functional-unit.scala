@@ -501,7 +501,7 @@ class ALUUnit(isBranchUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)
     }
 
     val br_unit =
-      if (enableBrResolutionRegister) Reg(new BranchUnitResp)
+      if (enableBrResolutionRegister) RegInit((0.U).asTypeOf(new BranchUnitResp))
       else Wire(new BranchUnitResp)
 
 
@@ -514,7 +514,7 @@ class ALUUnit(isBranchUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)
     // register "brinfo" here, since in that case we would be double counting.
     val brinfo =
       if (enableBrResolutionRegister) Wire(new BrResolutionInfo)
-      else Reg(new BrResolutionInfo)
+      else RegInit((0.U).asTypeOf(new BrResolutionInfo))
 
     // note: jal doesn't allocate a branch-mask, so don't clear a br-mask bit
     brinfo.valid          := io.req.valid && uop.is_br_or_jmp && !uop.is_jal && !killed
@@ -590,7 +590,7 @@ class ALUUnit(isBranchUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)
 
     val jal_br_target = Wire(UInt(vaddrBitsExtended.W))
     jal_br_target := (uop_maybe_pc.asSInt + target_offset +
-                     Cat(Fill(vaddrBitsExtended-1, uop.edge_inst) << 1).asSInt).asUInt
+                     (Fill(vaddrBitsExtended-1, uop.edge_inst) << 1).asSInt).asUInt
 
     bj_addr := Mux(uop.uopc === uopJALR, jalr_target, jal_br_target)
 
