@@ -95,10 +95,12 @@ class DebugRenameStageIO(implicit p: Parameters) extends BoomBundle
 class RenameStage(
   plWidth: Int,
   numPhysRegs: Int,
-  numWbPorts: Int)
+  numWbPorts: Int,
+  float: Boolean)
 (implicit p: Parameters) extends BoomModule
 {
   val pregSz = log2Ceil(numPhysRegs)
+  val rtype = Mux(float.B, RT_FLT, RT_FIX)
 
   val io = IO(new RenameStageIO(plWidth, numWbPorts, numWbPorts))
 
@@ -109,16 +111,16 @@ class RenameStage(
     plWidth,
     32,
     numPhysRegs,
-    false))
+    float))
   val freelist = Module(new RenameFreeList(
     plWidth,
     numPhysRegs,
-    false))
+    float))
   val busytable = Module(new RenameBusyTable(
     plWidth,
     numPhysRegs,
     numWbPorts,
-    false))
+    float))
 
   //-------------------------------------------------------------
   // Pipeline State & Wires
@@ -147,12 +149,12 @@ class RenameStage(
     ren1_br_tags(w).valid := ren1_fire(w) && io.dec_uops(w).allocate_brtag
     ren1_br_tags(w).bits  := io.dec_uops(w).br_tag
 
-    ren1_alloc_reqs(w)    := ren1_uops(w).ldst_val && ren1_uops(w).dst_rtype === RT_FIX && ren1_fire(w)
-    ren2_alloc_reqs(w)    := ren2_uops(w).ldst_val && ren2_uops(w).dst_rtype === RT_FIX && ren2_fire(w)
+    ren1_alloc_reqs(w)    := ren1_uops(w).ldst_val && ren1_uops(w).dst_rtype === rtype && ren1_fire(w)
+    ren2_alloc_reqs(w)    := ren2_uops(w).ldst_val && ren2_uops(w).dst_rtype === rtype && ren2_fire(w)
 
-    int_com_valids(w)     := io.com_uops(w).ldst_val && io.com_uops(w).dst_rtype === RT_FIX && io.com_valids(w)
-    int_rbk_valids(w)     := io.com_uops(w).ldst_val && io.com_uops(w).dst_rtype === RT_FIX && io.rbk_valids(w)
-    ren2_rbk_valids(w)    := ren2_uops(w).ldst_val && ren2_uops(w).dst_rtype === RT_FIX && io.flush && ren2_valids(w)
+    int_com_valids(w)     := io.com_uops(w).ldst_val && io.com_uops(w).dst_rtype === rtype && io.com_valids(w)
+    int_rbk_valids(w)     := io.com_uops(w).ldst_val && io.com_uops(w).dst_rtype === rtype && io.rbk_valids(w)
+    ren2_rbk_valids(w)    := ren2_uops(w).ldst_val && ren2_uops(w).dst_rtype === rtype && io.flush && ren2_valids(w)
   }
 
   //-------------------------------------------------------------
@@ -174,7 +176,7 @@ class RenameStage(
   // Freelist outputs.
   for ((uop, w) <- ren1_uops.zipWithIndex) {
     val preg = freelist.io.alloc_pregs(w).bits
-    uop.pdst := Mux(uop.ldst =/= 0.U, preg, 0.U)
+    uop.pdst := Mux(uop.ldst =/= 0.U || float.B, preg, 0.U)
   }
 
   //-------------------------------------------------------------
@@ -208,7 +210,8 @@ class RenameStage(
   for ((uop, w) <- ren1_uops.zipWithIndex) {
     val mappings = imaptable.io.map_resps(w)
 
-    uop.prs1       := Mux(uop.lrs1_rtype === RT_FIX, mappigns.prs1, uop.lrs1)) // lrs1 can "pass through" to prs1
+    // lrs1 can "pass through" to prs1. Used solely to index the csr file.
+    uop.prs1       := Mux(!float.B && uop.lrs1_rtype === RT_PAS, uop.lrs1, mappings.prs1)
     uop.prs2       := mappings.prs2
     uop.prs3       := mappings.prs3 // only FP has 3rd operand
     uop.stale_pdst := mappings.stale_pdst
@@ -244,19 +247,19 @@ class RenameStage(
   busytable.io.wb_valids := io.wakeups.map(_.valid)
   busytable.io.wb_pdsts := io.wakeups.map(_.bits.uop.pdst)
 
-  assert (!(io.wakeups.map(x => x.valid && x.bits.uop.dst_rtype =/= RT_FIX).reduce(_|_)),
-   "[rename] int wakeup is not waking up a Int register.")
+  assert (!(io.wakeups.map(x => x.valid && x.bits.uop.dst_rtype =/= rtype).reduce(_||_)),
+   "[rename] Wakeup has wrong rtype.")
 
   for ((uop, w) <- ren2_uops.zipWithIndex) {
     val busy = ibusytable.io.busy_resps(w)
 
-    uop.prs1_busy := uop.lrs1_rtype === RT_FIX && busy.prs1_busy
-    uop.prs2_busy := uop.lrs2_rtype === RT_FIX && busy.prs2_busy
+    uop.prs1_busy := uop.lrs1_rtype === rtype && busy.prs1_busy
+    uop.prs2_busy := uop.lrs2_rtype === rtype && busy.prs2_busy
     uop.prs3_busy := uop.frs3_en && busy.prs3_busy
 
     val valid = ren2_valids(w)
-    assert (!(valid && ibusy.prs1_busy && uop.lrs1_rtype === RT_FIX && uop.lrs1 === 0.U), "[rename] x0 is busy??")
-    assert (!(valid && ibusy.prs2_busy && uop.lrs2_rtype === RT_FIX && uop.lrs2 === 0.U), "[rename] x0 is busy??")
+    assert (!(valid && busy.prs1_busy && rtype === RT_FIX && uop.lrs1 === 0.U), "[rename] x0 is busy??")
+    assert (!(valid && busy.prs2_busy && rtype === RT_FIX && uop.lrs2 === 0.U), "[rename] x0 is busy??")
   }
 
   //-------------------------------------------------------------
@@ -269,7 +272,7 @@ class RenameStage(
     val can_allocate = freelist.io.alloc_pregs(w).valid
 
     // Push back against Decode stage if Rename1 can't proceed.
-    io.inst_can_proceed(w) := (ren1_uops(w).dst_rtype =/= RT_FIX) || can_allocate
+    io.inst_can_proceed(w) := (ren1_uops(w).dst_rtype =/= rtype) || can_allocate
   }
 
   //-------------------------------------------------------------
