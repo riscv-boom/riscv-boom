@@ -156,30 +156,23 @@ class RenameStage(
   //-------------------------------------------------------------
   // Free List
 
-  var freelists = Seq(ifreelist)
-  if (usingFPU) freelists ++= Seq(ffreelist)
-
   // Freelist inputs.
-  for ((list, i) <- freelists.zipWithIndex) {
-    list.io.reqs := ren1_alloc_reqs(i)
-    list.io.dealloc_pregs zip com_valids(i) zip rbk_valids(i) zip ren2_rbk_valids(i) map
-      {case (((d,c),r1),r2) => d.valid := c || r1 || r2}
-    list.io.dealloc_pregs zip io.com_uops zip ren2_uops map
-      {case ((d,c),r) => d.bits := Mux(io.rollback, c.pdst, Mux(io.flush, r.pdst, c.stale_pdst))}
-    list.io.ren_br_tags := ren1_br_tags
-    list.io.brinfo := io.brinfo
-    list.io.debug.pipeline_empty := io.debug_rob_empty && !ren2_valids.reduce(_||_)
+  freelist.io.reqs := ren1_alloc_reqs
+  freelist.io.dealloc_pregs zip com_valids zip rbk_valids zip ren2_rbk_valids map
+    {case (((d,c),r1),r2) => d.valid := c || r1 || r2}
+  freelist.io.dealloc_pregs zip io.com_uops zip ren2_uops map
+    {case ((d,c),r) => d.bits := Mux(io.rollback, c.pdst, Mux(io.flush, r.pdst, c.stale_pdst))}
+  freelist.io.ren_br_tags := ren1_br_tags
+  freelist.io.brinfo := io.brinfo
+  freelist.io.debug.pipeline_empty := io.debug_rob_empty && !ren2_valids.reduce(_||_)
 
-    assert (ren1_alloc_reqs(i) zip list.io.alloc_pregs map {case (r,p) => !r || p.bits =/= 0.U} reduce (_&&_),
-             "[rename-stage] A uop is trying to allocate the zero physical register.")
-  }
+  assert (ren1_alloc_reqs zip list.io.alloc_pregs map {case (r,p) => !r || p.bits =/= 0.U} reduce (_&&_),
+           "[rename-stage] A uop is trying to allocate the zero physical register.")
 
   // Freelist outputs.
   for ((uop, w) <- ren1_uops.zipWithIndex) {
-    val i_preg = ifreelist.io.alloc_pregs(w).bits
-    val f_preg = if (usingFPU) ffreelist.io.alloc_pregs(w).bits else 0.U
-    uop.pdst := Mux(uop.dst_rtype === RT_FLT, f_preg,
-                Mux(uop.ldst =/= 0.U, i_preg, 0.U))
+    val preg = freelist.io.alloc_pregs(w).bits
+    uop.pdst := Mux(uop.ldst =/= 0.U, preg, 0.U)
   }
 
   //-------------------------------------------------------------
