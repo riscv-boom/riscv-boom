@@ -107,7 +107,7 @@ class RoCCShim(implicit p: Parameters) extends BoomModule
     rxq_op_val   (rxq_tail) := false.B
     rxq_committed(rxq_tail) := false.B
     rxq_uop      (rxq_tail) := io.core.dis_uops(rocc_idx)
-    rxq_inst     (rxq_tail) := io.core.dis_uops(rocc_idx).debug_inst
+    rxq_inst     (rxq_tail) := io.core.dis_uops(rocc_idx).inst
     rxq_tail                := WrapInc(rxq_tail, numRxqEntries)
   }
 
