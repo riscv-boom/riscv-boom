@@ -243,11 +243,11 @@ class RenameStage(
   //-------------------------------------------------------------
   // Busy Table
 
-  ibusytable.io.ren_uops := ren2_uops  // expects pdst to be set up.
-  ibusytable.io.busy_reqs := ren2_imap_resps
-  ibusytable.io.rebusy_reqs := ren2_int_alloc_reqs
-  ibusytable.io.wb_valids := io.wakeups.map(_.valid)
-  ibusytable.io.wb_pdsts := io.wakeups.map(_.bits.uop.pdst)
+  busytable.io.ren_uops := ren2_uops  // expects pdst to be set up.
+  busytable.io.busy_reqs := ren2_imap_resps
+  busytable.io.rebusy_reqs := ren2_alloc_reqs
+  busytable.io.wb_valids := io.wakeups.map(_.valid)
+  busytable.io.wb_pdsts := io.wakeups.map(_.bits.uop.pdst)
 
   assert (!(io.wakeups.map(x => x.valid && x.bits.uop.dst_rtype =/= RT_FIX).reduce(_|_)),
    "[rename] int wakeup is not waking up a Int register.")
@@ -265,25 +265,12 @@ class RenameStage(
       "[rename] ren2 maptable prs2 value don't match uop's values.")
   }
 
-  if (usingFPU) {
-    fbusytable.io.ren_uops := ren2_uops  // expects pdst to be set up.
-    fbusytable.io.busy_reqs := ren2_fmap_resps
-    fbusytable.io.rebusy_reqs := ren2_fp_alloc_reqs
-    fbusytable.io.wb_valids := io.wakeups.map(_.valid)
-    fbusytable.io.wb_pdsts := io.wakeups.map(_.bits.uop.pdst)
-
-    assert (!(io.wakeups.map(x => x.valid && x.bits.uop.dst_rtype =/= RT_FLT).reduce(_|_)),
-      "[rename] fp wakeup is not waking up a FP register.")
-  }
-
   for ((uop, w) <- ren2_uops.zipWithIndex) {
-    val ibusy = ibusytable.io.busy_resps(w)
-    val fbusy = if (usingFPU) fbusytable.io.busy_resps(w) else Wire(new BusyResp)
-    if (!usingFPU) fbusy := DontCare
+    val busy = ibusytable.io.busy_resps(w)
 
-    uop.prs1_busy := uop.lrs1_rtype === RT_FIX && ibusy.prs1_busy || uop.lrs1_rtype === RT_FLT && fbusy.prs1_busy
-    uop.prs2_busy := uop.lrs2_rtype === RT_FIX && ibusy.prs2_busy || uop.lrs2_rtype === RT_FLT && fbusy.prs2_busy
-    uop.prs3_busy := uop.frs3_en && fbusy.prs3_busy
+    uop.prs1_busy := uop.lrs1_rtype === RT_FIX && busy.prs1_busy
+    uop.prs2_busy := uop.lrs2_rtype === RT_FIX && busy.prs2_busy
+    uop.prs3_busy := uop.frs3_en && busy.prs3_busy
 
     val valid = ren2_valids(w)
     assert (!(valid && ibusy.prs1_busy && uop.lrs1_rtype === RT_FIX && uop.lrs1 === 0.U), "[rename] x0 is busy??")
