@@ -443,7 +443,9 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
   f3_req.valid := f3_valid && (bchecker.io.req.valid ||
                   (f3_bpd_may_redirect && !jal_overrides_bpd)) // && !(f0_redirect_val)
   f3_req.bits.addr := Mux(f3_bpd_overrides_bcheck, f3_bpd_redirect_target, bchecker.io.req.bits.addr)
-  io.f3_will_redirect := f3_req.valid
+
+  // This has a bad effect on QoR.
+  io.f3_will_redirect := false.B //f3_req.valid
 
   // TODO this logic is broken and vestigial. Do update correctly (remove RegNext)
   val f3_btb_update_bits = Wire(new BoomBTBUpdate)
