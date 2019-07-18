@@ -98,6 +98,8 @@ class RenameStage(
   numWbPorts: Int)
 (implicit p: Parameters) extends BoomModule
 {
+  val pregSz = log2Ceil(numPhysRegs)
+
   val io = IO(new RenameStageIO(plWidth, numWbPorts, numWbPorts))
 
   //-------------------------------------------------------------
@@ -178,47 +180,38 @@ class RenameStage(
   //-------------------------------------------------------------
   // Rename Table
 
-  var maptables = Seq(imaptable)
-  if (usingFPU) maptables ++= Seq(fmaptable)
-
   // Maptable inputs.
-  for ((table, i) <- maptables.zipWithIndex) {
-    val pregSz = log2Ceil(if (i == 0) numPhysRegs else numPhysRegs)
-    val map_reqs   = Wire(Vec(plWidth, new MapReq(lregSz)))
-    val remap_reqs = Wire(Vec(plWidth, new RemapReq(lregSz, pregSz)))
+  val map_reqs   = Wire(Vec(plWidth, new MapReq(lregSz)))
+  val remap_reqs = Wire(Vec(plWidth, new RemapReq(lregSz, pregSz)))
 
-    // Generate maptable requests.
-    for ((((ren1,ren2),com),w) <- ren1_uops zip ren2_uops.reverse zip io.com_uops.reverse zipWithIndex) {
-      map_reqs(w).lrs1 := ren1.lrs1
-      map_reqs(w).lrs2 := ren1.lrs2
-      map_reqs(w).lrs3 := ren1.lrs3
-      map_reqs(w).ldst := ren1.ldst
+  // Generate maptable requests.
+  for ((((ren1,ren2),com),w) <- ren1_uops zip ren2_uops.reverse zip io.com_uops.reverse zipWithIndex) {
+    map_reqs(w).lrs1 := ren1.lrs1
+    map_reqs(w).lrs2 := ren1.lrs2
+    map_reqs(w).lrs3 := ren1.lrs3
+    map_reqs(w).ldst := ren1.ldst
 
-      remap_reqs(w).ldst := Mux(io.rollback, com.ldst,       Mux(io.flush, ren2.ldst,       ren1.ldst))
-      remap_reqs(w).pdst := Mux(io.rollback, com.stale_pdst, Mux(io.flush, ren2.stale_pdst, ren1.pdst))
-    }
-    ren1_alloc_reqs(i) zip rbk_valids(i).reverse zip ren2_rbk_valids(i).reverse zip remap_reqs map {
-      case (((a,r1),r2),rr) => rr.valid := a || r1 || r2}
-
-    // Hook up inputs.
-    table.io.map_reqs    := map_reqs
-    table.io.remap_reqs  := remap_reqs
-    table.io.ren_br_tags := ren1_br_tags
-    table.io.brinfo      := io.brinfo
-    table.io.rollback    := io.flush || io.rollback
+    remap_reqs(w).ldst := Mux(io.rollback, com.ldst,       Mux(io.flush, ren2.ldst,       ren1.ldst))
+    remap_reqs(w).pdst := Mux(io.rollback, com.stale_pdst, Mux(io.flush, ren2.stale_pdst, ren1.pdst))
   }
+  ren1_alloc_reqs zip rbk_valids.reverse zip ren2_rbk_valids.reverse zip remap_reqs map {
+    case (((a,r1),r2),rr) => rr.valid := a || r1 || r2}
+
+  // Hook up inputs.
+  maptable.io.map_reqs    := map_reqs
+  maptable.io.remap_reqs  := remap_reqs
+  maptable.io.ren_br_tags := ren1_br_tags
+  maptable.io.brinfo      := io.brinfo
+  maptable.io.rollback    := io.flush || io.rollback
 
   // Maptable outputs.
   for ((uop, w) <- ren1_uops.zipWithIndex) {
-    val imap = imaptable.io.map_resps(w)
-    val fmap = if (usingFPU) fmaptable.io.map_resps(w) else Wire(new MapResp(fpregSz))
-    if (!usingFPU) fmap := DontCare
+    val mappings = imaptable.io.map_resps(w)
 
-    uop.prs1       := Mux(uop.lrs1_rtype === RT_FLT, fmap.prs1,
-                      Mux(uop.lrs1_rtype === RT_FIX, imap.prs1, uop.lrs1)) // lrs1 can "pass through" to prs1
-    uop.prs2       := Mux(uop.lrs2_rtype === RT_FLT, fmap.prs2, imap.prs2)
-    uop.prs3       := fmap.prs3 // only FP has 3rd operand
-    uop.stale_pdst := Mux(uop.dst_rtype  === RT_FLT, fmap.stale_pdst, imap.stale_pdst)
+    uop.prs1       := Mux(uop.lrs1_rtype === RT_FIX, mappigns.prs1, uop.lrs1)) // lrs1 can "pass through" to prs1
+    uop.prs2       := mappings.prs2
+    uop.prs3       := mappings.prs3 // only FP has 3rd operand
+    uop.stale_pdst := mappings.stale_pdst
   }
 
   //-------------------------------------------------------------
