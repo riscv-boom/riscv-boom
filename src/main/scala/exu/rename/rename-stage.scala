@@ -104,43 +104,23 @@ class RenameStage(
 {
   val io = IO(new RenameStageIO(plWidth, numIntWbPorts, numFpWbPorts))
 
-  // integer registers
-  val imaptable = Module(new RenameMapTable(
+  //-------------------------------------------------------------
+  // Rename Structures
+
+  val maptable = Module(new RenameMapTable(
     plWidth,
     32,
     numIntPhysRegs,
     false))
-  val ifreelist = Module(new RenameFreeList(
+  val freelist = Module(new RenameFreeList(
     plWidth,
     numIntPhysRegs,
     false))
-  val ibusytable = Module(new RenameBusyTable(
+  val busytable = Module(new RenameBusyTable(
     plWidth,
     numIntPhysRegs,
     numIntWbPorts,
     false))
-
-  // floating point registers
-  var fmaptable: RenameMapTable = null
-  var ffreelist: RenameFreeList = null
-  var fbusytable: RenameBusyTable = null
-
-  if (usingFPU) {
-    fmaptable = Module(new RenameMapTable(
-      plWidth,
-      32,
-      numFpPhysRegs,
-      true))
-    ffreelist = Module(new RenameFreeList(
-      plWidth,
-      numFpPhysRegs,
-      true))
-    fbusytable = Module(new RenameBusyTable(
-      plWidth,
-      numFpPhysRegs,
-      numFpWbPorts,
-      true))
-  }
 
   //-------------------------------------------------------------
   // Pipeline State & Wires
