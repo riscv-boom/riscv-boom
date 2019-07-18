@@ -145,6 +145,7 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
                         UInt(encRowBits.W))
   val refill_ctr  = Reg(UInt(log2Ceil(cacheDataBeats).W))
   val commit_line = Reg(Bool())
+  val grant_had_data = Reg(Bool())
 
   // Block probes if a tag write we started is still in the pipeline
   val meta_hazard = RegInit(0.U(2.W))
@@ -176,6 +177,7 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
 
   when (state === s_invalid) {
     io.req_pri_rdy := true.B
+    grant_had_data := false.B
 
     when (io.req_pri_val && io.req_pri_rdy) {
       refill_ctr := 0.U
@@ -211,10 +213,12 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
     }
   } .elsewhen (state === s_refill_resp) {
     when (io.mem_grant.fire()) {
+      grant_had_data := edge.hasData(io.mem_grant.bits)
       load_buffer(refill_address_inc >> rowOffBits) := io.mem_grant.bits.data
     }
     when (refill_done) {
-      state := s_drain_rpq_loads
+      state := Mux(grant_had_data, s_drain_rpq_loads, s_drain_rpq)
+      assert(!(!grant_had_data && req_needs_wb))
       commit_line := false.B
       new_coh := coh_on_grant
     }
@@ -998,7 +1002,6 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   prober.io.mshr_rdy    := mshrs.io.probe_rdy
 
   // refills
-  val grant_has_data = edge.hasData(tl_out.d.bits)
   mshrs.io.mem_grant.valid := tl_out.d.fire()
   mshrs.io.mem_grant.bits  := tl_out.d.bits
   tl_out.d.ready           := true.B // MSHRs should always be ready for refills
