@@ -33,13 +33,13 @@ import boom.util._
  * @param plWidth pipeline width
  * @param numIntPregs number of int physical registers
  * @param numFpPregs number of FP physical registers
- * @param numIntWbPorts number of int writeback ports
- * @param numFpWbPorts number of FP writeback ports
+ * @param numWbPorts number of int writeback ports
+ * @param numWbPorts number of FP writeback ports
  */
 class RenameStageIO(
   val plWidth: Int,
-  val numIntWbPorts: Int,
-  val numFpWbPorts: Int)
+  val numWbPorts: Int,
+  val numWbPorts: Int)
   (implicit p: Parameters) extends BoomBundle
 {
   val inst_can_proceed = Output(Vec(plWidth, Bool()))
@@ -60,8 +60,8 @@ class RenameStageIO(
   val dis_ready = Input(Bool())
 
   // wakeup ports
-  val int_wakeups = Flipped(Vec(numIntWbPorts, Valid(new ExeUnitResp(xLen))))
-  val fp_wakeups = Flipped(Vec(numFpWbPorts, Valid(new ExeUnitResp(fLen+1))))
+  val int_wakeups = Flipped(Vec(numWbPorts, Valid(new ExeUnitResp(xLen))))
+  val fp_wakeups = Flipped(Vec(numWbPorts, Valid(new ExeUnitResp(fLen+1))))
 
   // commit stage
   val com_valids = Input(Vec(plWidth, Bool()))
@@ -80,12 +80,12 @@ class RenameStageIO(
  */
 class DebugRenameStageIO(implicit p: Parameters) extends BoomBundle
 {
-  val ifreelist  = Bits(numIntPhysRegs.W)
-  val iisprlist  = Bits(numIntPhysRegs.W)
-  val ibusytable = UInt(numIntPhysRegs.W)
-  val ffreelist  = Bits(numFpPhysRegs.W)
-  val fisprlist  = Bits(numFpPhysRegs.W)
-  val fbusytable = UInt(numFpPhysRegs.W)
+  val ifreelist  = Bits(numPhysRegs.W)
+  val iisprlist  = Bits(numPhysRegs.W)
+  val ibusytable = UInt(numPhysRegs.W)
+  val ffreelist  = Bits(numPhysRegs.W)
+  val fisprlist  = Bits(numPhysRegs.W)
+  val fbusytable = UInt(numPhysRegs.W)
 }
 
 /**
@@ -93,16 +93,16 @@ class DebugRenameStageIO(implicit p: Parameters) extends BoomBundle
  * Can be used in both the FP pipeline and the normal execute pipeline.
  *
  * @param plWidth pipeline width
- * @param numIntWbPorts number of int writeback ports
- * @param numFpWbPorts number of FP writeback ports
+ * @param numWbPorts number of int writeback ports
+ * @param numWbPorts number of FP writeback ports
  */
 class RenameStage(
   plWidth: Int,
-  numIntWbPorts: Int,
-  numFpWbPorts: Int)
+  numPhysRegs: Int,
+  numWbPorts: Int)
 (implicit p: Parameters) extends BoomModule
 {
-  val io = IO(new RenameStageIO(plWidth, numIntWbPorts, numFpWbPorts))
+  val io = IO(new RenameStageIO(plWidth, numWbPorts, numWbPorts))
 
   //-------------------------------------------------------------
   // Rename Structures
@@ -110,16 +110,16 @@ class RenameStage(
   val maptable = Module(new RenameMapTable(
     plWidth,
     32,
-    numIntPhysRegs,
+    numPhysRegs,
     false))
   val freelist = Module(new RenameFreeList(
     plWidth,
-    numIntPhysRegs,
+    numPhysRegs,
     false))
   val busytable = Module(new RenameBusyTable(
     plWidth,
-    numIntPhysRegs,
-    numIntWbPorts,
+    numPhysRegs,
+    numWbPorts,
     false))
 
   //-------------------------------------------------------------
@@ -223,7 +223,7 @@ class RenameStage(
 
   // Maptable inputs.
   for ((table, i) <- maptables.zipWithIndex) {
-    val pregSz = log2Ceil(if (i == 0) numIntPhysRegs else numFpPhysRegs)
+    val pregSz = log2Ceil(if (i == 0) numPhysRegs else numPhysRegs)
     val map_reqs   = Wire(Vec(plWidth, new MapReq(lregSz)))
     val remap_reqs = Wire(Vec(plWidth, new RemapReq(lregSz, pregSz)))
 
