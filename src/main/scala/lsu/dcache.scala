@@ -559,7 +559,7 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
   var mmio_rdy = false.B
 
   val mmios = (0 until nIOMSHRs) map { i =>
-    val id = cfg.nMSHRs + i
+    val id = cfg.nMSHRs + 1 + i // +1 for wb unit
     val mshr = Module(new BoomIOMSHR(id))
 
     mmio_alloc_arb.io.in(i).valid := mshr.io.req.ready
@@ -572,7 +572,7 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
     mshr.io.mem_ack.bits  := io.mem_grant.bits
     mshr.io.mem_ack.valid := io.mem_grant.valid && io.mem_grant.bits.source === id.U
 
-    resp_arb.io.in(id) <> mshr.io.resp
+    resp_arb.io.in(cfg.nMSHRs + i) <> mshr.io.resp
     when (!mshr.io.req.ready) {
       io.fence_rdy := false.B
     }
@@ -614,11 +614,12 @@ class BoomWritebackUnit(implicit edge: TLEdgeOut, p: Parameters) extends L1Hella
     val mshr_resp = Output(Bool())
     val data_req = Decoupled(new L1DataReadReq)
     val data_resp = Input(UInt(encRowBits.W))
+    val mem_grant = Input(Bool())
     val release = Decoupled(new TLBundleC(edge.bundle))
   }
 
   val req = Reg(new WritebackReq(edge.bundle))
-  val s_invalid :: s_fill_buffer :: s_active :: Nil = Enum(3)
+  val s_invalid :: s_fill_buffer :: s_active :: s_grant :: Nil = Enum(4)
   val state = RegInit(s_invalid)
   val r1_data_req_fired = RegInit(false.B)
   val r2_data_req_fired = RegInit(false.B)
@@ -676,15 +677,16 @@ class BoomWritebackUnit(implicit edge: TLEdgeOut, p: Parameters) extends L1Hella
     io.release.valid := data_req_cnt < refillCycles.U
 
     val r_address = Cat(req.tag, req.idx) << blockOffBits
+    val id = cfg.nMSHRs
     val probeResponse = edge.ProbeAck(
-                          fromSource = req.source,
+                          fromSource = id.U,
                           toAddress = r_address,
                           lgSize = lgCacheBlockBytes.U,
                           reportPermissions = req.param,
                           data = wb_buffer(data_req_cnt))
 
     val voluntaryRelease = edge.Release(
-                          fromSource = req.source,
+                          fromSource = id.U,
                           toAddress = r_address,
                           lgSize = lgCacheBlockBytes.U,
                           shrinkPermissions = req.param,
@@ -695,7 +697,11 @@ class BoomWritebackUnit(implicit edge: TLEdgeOut, p: Parameters) extends L1Hella
     when (io.release.fire()) {
       data_req_cnt := data_req_cnt + 1.U
     }
-    when (data_req_cnt === refillCycles.U) {
+    when (data_req_cnt === (refillCycles-1).U) {
+      state := Mux(io.mem_grant, s_invalid, s_grant)
+    }
+  } .elsewhen (state === s_grant) {
+    when (io.mem_grant) {
       state := s_invalid
     }
   }
@@ -714,15 +720,13 @@ class BoomNonBlockingDCache(hartid: Int)(implicit p: Parameters) extends LazyMod
 
   protected def cacheClientParameters = cfg.scratch.map(x => Seq()).getOrElse(Seq(TLClientParameters(
     name          = s"Core ${hartid} DCache",
-    sourceId      = IdRange(0, 1 max cfg.nMSHRs),
+    sourceId      = IdRange(0, 1 max (cfg.nMSHRs + 1)),
     supportsProbe = TransferSizes(cfg.blockBytes, cfg.blockBytes))))
 
   protected def mmioClientParameters = Seq(TLClientParameters(
     name          = s"Core ${hartid} DCache MMIO",
-    sourceId      = IdRange(firstMMIO, firstMMIO + cfg.nMMIOs),
+    sourceId      = IdRange(cfg.nMSHRs + 1, cfg.nMSHRs + 1 + cfg.nMMIOs),
     requestFifo   = true))
-
-  def firstMMIO = (cacheClientParameters.map(_.sourceId.end) :+ 0).max
 
   val node = TLClientNode(Seq(TLClientPortParameters(
     cacheClientParameters ++ mmioClientParameters,
@@ -1002,7 +1006,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   prober.io.mshr_rdy    := mshrs.io.probe_rdy
 
   // refills
-  mshrs.io.mem_grant.valid := tl_out.d.fire()
+  mshrs.io.mem_grant.valid := tl_out.d.fire() && tl_out.d.bits.source =/= cfg.nMSHRs.U
   mshrs.io.mem_grant.bits  := tl_out.d.bits
   tl_out.d.ready           := true.B // MSHRs should always be ready for refills
 
@@ -1017,8 +1021,9 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   wbArb.io.in(0)       <> prober.io.wb_req
   wbArb.io.in(1)       <> mshrs.io.wb_req
   wb.io.req            <> wbArb.io.out
-  wb.io.data_resp      := s2_data_muxed
-  mshrs.io.wb_resp     := wb.io.mshr_resp
+  wb.io.data_resp       := s2_data_muxed
+  mshrs.io.wb_resp      := wb.io.mshr_resp
+  wb.io.mem_grant       := tl_out.d.fire() && tl_out.d.bits.source === cfg.nMSHRs.U
   TLArbiter.lowest(edge, tl_out.c, wb.io.release, prober.io.rep)
 
   // load data gen
