@@ -55,7 +55,6 @@ class SmallBoomConfig extends Config(
   new WithSmallBooms ++
   new BaseBoomConfig ++
   new WithNBoomCores(1) ++
-  new WithoutTLMonitors ++
   new freechips.rocketchip.system.BaseConfig)
 
 class MediumBoomConfig extends Config(
@@ -64,7 +63,6 @@ class MediumBoomConfig extends Config(
   new WithMediumBooms ++
   new BaseBoomConfig ++
   new WithNBoomCores(1) ++
-  new WithoutTLMonitors ++
   new freechips.rocketchip.system.BaseConfig)
 
 class LargeBoomConfig extends Config(
@@ -73,7 +71,6 @@ class LargeBoomConfig extends Config(
   new WithLargeBooms ++
   new BaseBoomConfig ++
   new WithNBoomCores(1) ++
-  new WithoutTLMonitors ++
   new freechips.rocketchip.system.BaseConfig)
 
 class MegaBoomConfig extends Config(
@@ -82,7 +79,6 @@ class MegaBoomConfig extends Config(
   new WithMegaBooms ++
   new BaseBoomConfig ++
   new WithNBoomCores(1) ++
-  new WithoutTLMonitors ++
   new freechips.rocketchip.system.BaseConfig)
 
 // Assorted configs
@@ -118,7 +114,6 @@ class SmallDualBoomConfig extends Config(
   new WithSmallBooms ++
   new BaseBoomConfig ++
   new WithNBoomCores(2) ++
-  new WithoutTLMonitors ++
   new freechips.rocketchip.system.BaseConfig)
 
 class TracedSmallBoomConfig extends Config(
@@ -141,7 +136,6 @@ class SmallBoomAndRocketConfig extends Config(
   // final param setup
   new WithBootROM ++
   new WithRenumberHarts ++
-  new WithoutTLMonitors ++
   // boom param setup
   new WithRVC ++
   new WithSmallBooms ++
@@ -156,7 +150,6 @@ class MediumBoomAndRocketConfig extends Config(
   // final param setup
   new WithBootROM ++
   new WithRenumberHarts ++
-  new WithoutTLMonitors ++
   // boom param setup
   new WithRVC ++
   new WithMediumBooms ++
@@ -171,7 +164,6 @@ class DualMediumBoomAndDualRocketConfig extends Config(
   // final param setup
   new WithBootROM ++
   new WithRenumberHarts ++
-  new WithoutTLMonitors ++
   // boom param setup (applies to all boom cores)
   new WithRVC ++
   new WithMediumBooms ++
