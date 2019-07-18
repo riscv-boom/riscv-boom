@@ -37,9 +37,7 @@ class RenameBusyTable(
 
   val io = IO(new BoomBundle()(p) {
     val ren_uops = Input(Vec(plWidth, new MicroOp))
-    val busy_reqs = Input(Vec(plWidth, new MapResp(pregSz)))
     val busy_resps = Output(Vec(plWidth, new BusyResp))
-
     val rebusy_reqs = Input(Vec(plWidth, Bool()))
 
     val wb_pdsts = Input(Vec(numWbPorts, UInt(pregSz.W)))
@@ -67,9 +65,9 @@ class RenameBusyTable(
     val prs3_was_bypassed = (0 until i).map(j => io.ren_uops(i).lrs3 === io.ren_uops(j).ldst && io.rebusy_reqs(j))
       .foldLeft(false.B)(_||_)
 
-    io.busy_resps(i).prs1_busy := busy_table(io.busy_reqs(i).prs1) || prs1_was_bypassed
-    io.busy_resps(i).prs2_busy := busy_table(io.busy_reqs(i).prs2) || prs2_was_bypassed
-    if (float) io.busy_resps(i).prs3_busy := busy_table(io.busy_reqs(i).prs3) || prs3_was_bypassed
+    io.busy_resps(i).prs1_busy := busy_table(io.ren_uops(i).prs1) || prs1_was_bypassed
+    io.busy_resps(i).prs2_busy := busy_table(io.ren_uops(i).prs2) || prs2_was_bypassed
+    if (float) io.busy_resps(i).prs3_busy := busy_table(io.ren_uops(i).prs3) || prs3_was_bypassed
     else io.busy_resps(i).prs3_busy := false.B
   }
 

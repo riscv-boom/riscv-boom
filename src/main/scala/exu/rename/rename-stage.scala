@@ -217,10 +217,6 @@ class RenameStage(
   //-------------------------------------------------------------
   // pipeline registers
 
-  val ren2_imap_resps = RegEnable(imaptable.io.map_resps, ren2_ready)
-  val ren2_fmap_resps = if (usingFPU) RegEnable(fmaptable.io.map_resps, ren2_ready)
-                        else new MapResp(1)
-
   for (w <- 0 until plWidth) {
     require (renameLatency == 2)
     val r_valid = RegInit(false.B)
@@ -244,26 +240,12 @@ class RenameStage(
   // Busy Table
 
   busytable.io.ren_uops := ren2_uops  // expects pdst to be set up.
-  busytable.io.busy_reqs := ren2_imap_resps
   busytable.io.rebusy_reqs := ren2_alloc_reqs
   busytable.io.wb_valids := io.wakeups.map(_.valid)
   busytable.io.wb_pdsts := io.wakeups.map(_.bits.uop.pdst)
 
   assert (!(io.wakeups.map(x => x.valid && x.bits.uop.dst_rtype =/= RT_FIX).reduce(_|_)),
    "[rename] int wakeup is not waking up a Int register.")
-
-  for (w <- 0 until plWidth) {
-    assert (!(
-      ren2_fire(w) &&
-      ren2_uops(w).lrs1_rtype === RT_FIX &&
-      ren2_uops(w).prs1 =/= ibusytable.io.busy_reqs(w).prs1),
-      "[rename] ren2 maptable prs1 value don't match uop's values.")
-    assert (!(
-      ren2_fire(w) &&
-      ren2_uops(w).lrs2_rtype === RT_FIX &&
-      ren2_uops(w).prs2 =/= ibusytable.io.busy_reqs(w).prs2),
-      "[rename] ren2 maptable prs2 value don't match uop's values.")
-  }
 
   for ((uop, w) <- ren2_uops.zipWithIndex) {
     val busy = ibusytable.io.busy_resps(w)
