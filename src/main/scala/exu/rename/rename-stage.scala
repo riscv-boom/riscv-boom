@@ -275,11 +275,7 @@ class RenameStage(
   //-------------------------------------------------------------
   // Debug signals
 
-  io.debug.ifreelist  := ifreelist.io.debug.freelist
-  io.debug.iisprlist  := ifreelist.io.debug.isprlist
-  io.debug.ibusytable := ibusytable.io.debug.busytable
-
-  io.debug.ffreelist  := (if (usingFPU) ffreelist.io.debug.freelist else 0.U)
-  io.debug.fisprlist  := (if (usingFPU) ffreelist.io.debug.isprlist else 0.U)
-  io.debug.fbusytable := (if (usingFPU) fbusytable.io.debug.busytable else 0.U)
+  io.debug.freelist  := freelist.io.debug.freelist
+  io.debug.isprlist  := freelist.io.debug.isprlist
+  io.debug.busytable := busytable.io.debug.busytable
 }

@@ -670,7 +670,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
     renport.bits := intport.bits
   }
   if (usingFPU) {
-    for ((renport, fpport) <- rename_stage.io.fp_wakeups zip fp_pipeline.io.wakeups) {
+    for ((renport, fpport) <- fp_rename_stage.io.wakeups zip fp_pipeline.io.wakeups) {
        renport <> fpport
     }
   }
@@ -1173,15 +1173,17 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       BoolToChar(rob.io.com_xcpt.valid, 'E'),
       rob.io.com_xcpt.bits.cause,
       rob.io.commit.valids.asUInt,
-      rename_stage.io.debug.ifreelist,
-      PopCount(rename_stage.io.debug.ifreelist),
-      rename_stage.io.debug.iisprlist,
-      PopCount(rename_stage.io.debug.iisprlist))
-    printf("    FFreeList:0x%x TotFree:%d FPrefLst:0x%x TotPreg:%d\n",
-      rename_stage.io.debug.ffreelist,
-      PopCount(rename_stage.io.debug.ffreelist),
-      rename_stage.io.debug.fisprlist,
-      PopCount(rename_stage.io.debug.fisprlist))
+      rename_stage.io.debug.freelist,
+      PopCount(rename_stage.io.debug.freelist),
+      rename_stage.io.debug.isprlist,
+      PopCount(rename_stage.io.debug.isprlist))
+    if (usingFPU) {
+      printf("    FFreeList:0x%x TotFree:%d FPrefLst:0x%x TotPreg:%d\n",
+        fp_rename_stage.io.debug.freelist,
+        PopCount(fp_rename_stage.io.debug.freelist),
+        fp_rename_stage.io.debug.isprlist,
+        PopCount(fp_rename_stage.io.debug.isprlist))
+    }
 
     // branch unit
     printf("Branch Unit:\n")
