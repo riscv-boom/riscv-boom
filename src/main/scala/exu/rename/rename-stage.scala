@@ -60,8 +60,7 @@ class RenameStageIO(
   val dis_ready = Input(Bool())
 
   // wakeup ports
-  val int_wakeups = Flipped(Vec(numWbPorts, Valid(new ExeUnitResp(xLen))))
-  val fp_wakeups = Flipped(Vec(numWbPorts, Valid(new ExeUnitResp(fLen+1))))
+  val wakeups = Flipped(Vec(numWbPorts, Valid(new ExeUnitResp(xLen))))
 
   // commit stage
   val com_valids = Input(Vec(plWidth, Bool()))
@@ -80,12 +79,9 @@ class RenameStageIO(
  */
 class DebugRenameStageIO(implicit p: Parameters) extends BoomBundle
 {
-  val ifreelist  = Bits(numPhysRegs.W)
-  val iisprlist  = Bits(numPhysRegs.W)
-  val ibusytable = UInt(numPhysRegs.W)
-  val ffreelist  = Bits(numPhysRegs.W)
-  val fisprlist  = Bits(numPhysRegs.W)
-  val fbusytable = UInt(numPhysRegs.W)
+  val freelist  = Bits(numPhysRegs.W)
+  val isprlist  = Bits(numPhysRegs.W)
+  val busytable = UInt(numPhysRegs.W)
 }
 
 /**
@@ -293,10 +289,10 @@ class RenameStage(
   ibusytable.io.ren_uops := ren2_uops  // expects pdst to be set up.
   ibusytable.io.busy_reqs := ren2_imap_resps
   ibusytable.io.rebusy_reqs := ren2_int_alloc_reqs
-  ibusytable.io.wb_valids := io.int_wakeups.map(_.valid)
-  ibusytable.io.wb_pdsts := io.int_wakeups.map(_.bits.uop.pdst)
+  ibusytable.io.wb_valids := io.wakeups.map(_.valid)
+  ibusytable.io.wb_pdsts := io.wakeups.map(_.bits.uop.pdst)
 
-  assert (!(io.int_wakeups.map(x => x.valid && x.bits.uop.dst_rtype =/= RT_FIX).reduce(_|_)),
+  assert (!(io.wakeups.map(x => x.valid && x.bits.uop.dst_rtype =/= RT_FIX).reduce(_|_)),
    "[rename] int wakeup is not waking up a Int register.")
 
   for (w <- 0 until plWidth) {
@@ -316,10 +312,10 @@ class RenameStage(
     fbusytable.io.ren_uops := ren2_uops  // expects pdst to be set up.
     fbusytable.io.busy_reqs := ren2_fmap_resps
     fbusytable.io.rebusy_reqs := ren2_fp_alloc_reqs
-    fbusytable.io.wb_valids := io.fp_wakeups.map(_.valid)
-    fbusytable.io.wb_pdsts := io.fp_wakeups.map(_.bits.uop.pdst)
+    fbusytable.io.wb_valids := io.wakeups.map(_.valid)
+    fbusytable.io.wb_pdsts := io.wakeups.map(_.bits.uop.pdst)
 
-    assert (!(io.fp_wakeups.map(x => x.valid && x.bits.uop.dst_rtype =/= RT_FLT).reduce(_|_)),
+    assert (!(io.wakeups.map(x => x.valid && x.bits.uop.dst_rtype =/= RT_FLT).reduce(_|_)),
       "[rename] fp wakeup is not waking up a FP register.")
   }
 
