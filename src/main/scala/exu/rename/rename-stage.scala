@@ -266,17 +266,10 @@ class RenameStage(
   io.ren2_uops := ren2_uops map {u => GetNewUopAndBrMask(u, io.brinfo)}
 
   for (w <- 0 until plWidth) {
-    val ifl_can_allocate = ifreelist.io.alloc_pregs(w).valid
-    val ffl_can_allocate =
-      if (usingFPU) {
-        ffreelist.io.alloc_pregs(w).valid
-      } else {
-        false.B
-      }
-      // Push back against Decode stage if Rename1 can't proceed.
-      io.inst_can_proceed(w) :=
-        (ren1_uops(w).dst_rtype =/= RT_FIX || ifl_can_allocate) &&
-        (ren1_uops(w).dst_rtype =/= RT_FLT || ffl_can_allocate)
+    val can_allocate = freelist.io.alloc_pregs(w).valid
+
+    // Push back against Decode stage if Rename1 can't proceed.
+    io.inst_can_proceed(w) := (ren1_uops(w).dst_rtype =/= RT_FIX) || can_allocate
   }
 
   //-------------------------------------------------------------
