@@ -897,7 +897,8 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   val metaWriteArb = Module(new Arbiter(new L1MetaWriteReq, 2))
   // 0 goes to MSHR refills, 1 goes to prober
   val metaReadArb = Module(new Arbiter(new L1MetaReadReq, 6))
-  // 0 goes to MSHR replays, 1 goes to prober, 2 goes to wb, 3 goes to MSHR meta read, 4 goes to pipeline, 45
+  // 0 goes to MSHR replays, 1 goes to prober, 2 goes to wb, 3 goes to MSHR meta read,
+  // 4 goes to pipeline, 5 goes to prefetcher
   meta.io.write <> metaWriteArb.io.out
   meta.io.read  <> metaReadArb.io.out
 
@@ -914,7 +915,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   // ------------
   // New requests
 
-  io.lsu.req.ready := metaReadArb.io.in(3).ready && dataReadArb.io.in(2).ready
+  io.lsu.req.ready := metaReadArb.io.in(4).ready && dataReadArb.io.in(2).ready
   // Tag read for new requests
   metaReadArb.io.in(4).valid       := io.lsu.req.valid
   metaReadArb.io.in(4).bits.idx    := io.lsu.req.bits.addr >> blockOffBits
