@@ -382,9 +382,15 @@ object MaskUpper
 object SelectFirstN
 {
   def apply(in: UInt, n: Int) = {
-    val counts = in.asBools.scanLeft(1.U(n.W))((cnt, elt) => Mux(elt, cnt << 1, cnt))
-    val sels = (0 until n).map(j => VecInit((0 until in.getWidth).map(i => counts(i)(j) & in(i))).asUInt)
-    VecInit(sels)
+    val sels = Wire(Vec(n, UInt(in.getWidth.W)))
+    var mask = in
+
+    for (i <- 0 until n) {
+      sels(i) := PriorityEncoderOH(mask)
+      mask = mask & ~sels(i)
+    }
+
+    sels
   }
 }
 
