@@ -253,13 +253,13 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
       .elsewhen (rpq.io.empty && !commit_line)
     {
       io.clearable := true.B
-      when (io.clr_entry && !rpq.io.enq.fire()) {
-        state := s_invalid
-      }
+      state := s_invalid
+      // when (io.clr_entry && !rpq.io.enq.fire()) {
+      //   state := s_invalid
+      // }
     } .elsewhen (rpq.io.empty || (rpq.io.deq.valid && !drain_load)) {
       io.commit_val := true.B
       state := s_meta_read
-//      state := Mux(req_needs_wb, s_meta_clear, s_commit_line)
     }
   } .elsewhen (state === s_meta_read) {
     io.meta_read.valid := true.B
