@@ -1024,12 +1024,6 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
   // branch resolution
   rob.io.brinfo <> br_unit.brinfo
 
-  // branch unit requests PCs and predictions from ROB during register read
-  // (fetch PC from ROB cycle earlier than needed for critical path reasons)
-  io.ifu.get_pc.ftq_idx := RegNext(iss_uops(brunit_idx).ftq_idx)
-  exe_units(brunit_idx).io.get_ftq_pc.fetch_pc       := RegNext(io.ifu.get_pc.fetch_pc)
-  exe_units(brunit_idx).io.get_ftq_pc.next_val       := RegNext(io.ifu.get_pc.next_val)
-  exe_units(brunit_idx).io.get_ftq_pc.next_pc        := RegNext(io.ifu.get_pc.next_pc)
   exe_units(brunit_idx).io.status := csr.io.status
 
   // LSU <> ROB
