@@ -127,7 +127,7 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
                  !cmd_requires_second_acquire &&
                  !state.isOneOf(s_invalid, s_meta_write_req, s_meta_write_resp))// Always accept secondary misses
 
-  val rpq = Module(new BranchKillableQueue(new BoomDCacheReqInternal, cfg.nRPQ, u => u.uses_ldq))
+  val rpq = Module(new BranchKillableQueue(new BoomDCacheReqInternal, cfg.nRPQ, u => u.uses_ldq, false))
   rpq.io.brinfo := io.brinfo
   rpq.io.flush  := io.exception
 
