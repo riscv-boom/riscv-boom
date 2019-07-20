@@ -253,7 +253,9 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
       .elsewhen (rpq.io.empty && !commit_line)
     {
       io.clearable := true.B
-      state := s_invalid
+      when (!rpq.io.enq.fire()) {
+        state := s_invalid
+      }
       // when (io.clr_entry && !rpq.io.enq.fire()) {
       //   state := s_invalid
       // }
