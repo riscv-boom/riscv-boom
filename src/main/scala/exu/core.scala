@@ -418,9 +418,9 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
   // Frontend Exception Requests
   val xcpt_idx = PriorityEncoder(dec_xcpts)
-  exc_pc_req.valid := dec_xcpts.reduce(_||_)
-  exc_pc_req.bits  := dec_uops(xcpt_idx).ftq_idx
-  rob.io.xcpt_pc   := RegEnable(io.ifu.get_pc.fetch_pc, dis_ready)
+  exc_pc_req.valid     := dec_xcpts.reduce(_||_)
+  exc_pc_req.bits      := dec_uops(xcpt_idx).ftq_idx
+  rob.io.xcpt_fetch_pc := RegEnable(io.ifu.get_pc.fetch_pc, dis_ready)
 
   // Decode/Rename1 pipeline logic
 

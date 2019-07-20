@@ -56,6 +56,8 @@ class RobIo(
                                        // and stalling on the rest of it (don't
                                        // advance the tail ptr)
 
+  val xcpt_fetch_pc = Input(UInt(vaddrBitsExtended.W))
+
   val rob_tail_idx = Output(UInt(robAddrSz.W))
   val rob_pnr_idx  = Output(UInt(robAddrSz.W))
   val rob_head_idx = Output(UInt(robAddrSz.W))
@@ -648,7 +650,7 @@ class Rob(
       // if no exception yet, dispatch exception wins
       r_xcpt_val      := true.B
       next_xcpt_uop   := io.enq_uops(idx)
-      r_xcpt_badvaddr := io.enq_uops(idx).pc + Mux(io.enq_uops(idx).edge_inst, 2.U, 0.U)
+      r_xcpt_badvaddr := AlignPCToBoundary(io.xcpt_fetch_pc, icBlockBytes) | io.enq_uops(idx).pc_lob
 
       assert(!(usingCompressed.B && (io.enq_uops(idx).uopc === uopJAL) && !io.enq_uops(idx).exc_cause.orR),
         "when using RVC, JAL exceptions should not be seen")
