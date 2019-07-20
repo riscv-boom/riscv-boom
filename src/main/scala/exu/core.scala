@@ -425,11 +425,13 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
   // Decode/Rename1 pipeline logic
 
   dec_xcpts := dec_uops zip dec_valids map {case (u,v) => u.exception && v}
+  val dec_xcpt_stall = dec_xcpts.reduce(_||_) && !exc_pc_req.ready
 
   val dec_hazards = (0 until coreWidth).map(w =>
                       dec_valids(w) &&
                       (  !dis_ready
                       || rob.io.commit.rollback
+                      || dec_xcpt_stall
                       || branch_mask_full(w)
                       || !rename_stage.io.inst_can_proceed(w)
                       || flush_ifu))
