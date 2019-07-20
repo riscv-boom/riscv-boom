@@ -397,13 +397,13 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
   //-------------------------------------------------------------
   // FTQ GetPC Port Arbitration
 
-  val bru_pc_req = Wire(Decoupled(UInt(log2Ceil(ftqSz).W)))
-  val exc_pc_req = Wire(Decoupled(UInt(log2Ceil(ftqSz).W)))
+  val bru_pc_req  = Wire(Decoupled(UInt(log2Ceil(ftqSz).W)))
+  val xcpt_pc_req = Wire(Decoupled(UInt(log2Ceil(ftqSz).W)))
 
   val ftq_arb = Module(new Arbiter(UInt(log2Ceil(ftqSz).W), 2))
 
   ftq_arb.io.in(0) <> bru_pc_req
-  ftq_arb.io.in(1) <> exc_pc_req
+  ftq_arb.io.in(1) <> xcpt_pc_req
 
   // Hookup FTQ
   io.ifu.get_pc.ftq_idx := ftq_arb.io.out.bits
@@ -418,14 +418,15 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
   // Frontend Exception Requests
   val xcpt_idx = PriorityEncoder(dec_xcpts)
-  exc_pc_req.valid     := dec_xcpts.reduce(_||_)
-  exc_pc_req.bits      := dec_uops(xcpt_idx).ftq_idx
+  xcpt_pc_req.valid    := dec_xcpts.reduce(_||_)
+  xcpt_pc_req.bits     := dec_uops(xcpt_idx).ftq_idx
   rob.io.xcpt_fetch_pc := RegEnable(io.ifu.get_pc.fetch_pc, dis_ready)
 
+  //-------------------------------------------------------------
   // Decode/Rename1 pipeline logic
 
   dec_xcpts := dec_uops zip dec_valids map {case (u,v) => u.exception && v}
-  val dec_xcpt_stall = dec_xcpts.reduce(_||_) && !exc_pc_req.ready
+  val dec_xcpt_stall = dec_xcpts.reduce(_||_) && !xcpt_pc_req.ready
 
   val dec_hazards = (0 until coreWidth).map(w =>
                       dec_valids(w) &&
@@ -497,6 +498,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
   //-------------------------------------------------------------
   //-------------------------------------------------------------
 
+  //-------------------------------------------------------------
   // Rename2/Dispatch pipeline logic
 
   val dis_prior_slot_valid = dis_valids.scanLeft(false.B) ((s,v) => s || v)
