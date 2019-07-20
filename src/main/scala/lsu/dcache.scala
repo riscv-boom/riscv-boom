@@ -723,7 +723,7 @@ class BoomWritebackUnit(implicit edge: TLEdgeOut, p: Parameters) extends L1Hella
     when (io.release.fire()) {
       data_req_cnt := data_req_cnt + 1.U
     }
-    when (data_req_cnt === (refillCycles-1).U) {
+    when ((data_req_cnt === (refillCycles-1).U) && io.release.fire()) {
       state := Mux(io.mem_grant || !req.voluntary, s_invalid, s_grant)
     }
   } .elsewhen (state === s_grant) {
