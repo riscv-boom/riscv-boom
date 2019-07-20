@@ -412,7 +412,7 @@ object SelectFirstN
  * Create a queue that can be killed with a branch kill signal.
  * Assumption: enq.valid only high if not killed by branch (so don't check IsKilled on io.enq).
  */
-class BranchKillableQueue[T <: boom.common.HasBoomUOP](gen: T, entries: Int, flush_fn: boom.common.MicroOp => Bool = u => true.B)
+class BranchKillableQueue[T <: boom.common.HasBoomUOP](gen: T, entries: Int, flush_fn: boom.common.MicroOp => Bool = u => true.B, flow: Boolean = true)
   (implicit p: freechips.rocketchip.config.Parameters)
   extends boom.common.BoomModule()(p)
   with boom.common.HasBoomCoreParameters
@@ -478,15 +478,16 @@ class BranchKillableQueue[T <: boom.common.HasBoomUOP](gen: T, entries: Int, flu
   io.deq.bits.uop.br_mask := GetNewBrMask(io.brinfo, out.uop)
 
   // For flow queue behavior.
-  when (io.empty) {
-    io.deq.valid := io.enq.valid //&& !IsKilledByBranch(io.brinfo, io.enq.bits.uop)
-    io.deq.bits := io.enq.bits
-    io.deq.bits.uop.br_mask := GetNewBrMask(io.brinfo, io.enq.bits.uop)
+  if (flow) {
+    when (io.empty) {
+      io.deq.valid := io.enq.valid //&& !IsKilledByBranch(io.brinfo, io.enq.bits.uop)
+      io.deq.bits := io.enq.bits
+      io.deq.bits.uop.br_mask := GetNewBrMask(io.brinfo, io.enq.bits.uop)
 
-    do_deq := false.B
-    when (io.deq.ready) { do_enq := false.B }
+      do_deq := false.B
+      when (io.deq.ready) { do_enq := false.B }
+    }
   }
-
   private val ptr_diff = enq_ptr.value - deq_ptr.value
   if (isPow2(entries)) {
     io.count := Cat(maybe_full && ptr_match, ptr_diff)
