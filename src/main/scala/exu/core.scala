@@ -393,6 +393,21 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
     dec_uops(w) := decode_units(w).io.deq.uop
   }
 
+  //-------------------------------------------------------------
+  // FTQ GetPC Port Arbitration
+
+  val bru_pc_req = Wire(Decoupled(UInt(log2Ceil(ftqSz).W)))
+  val exc_pc_req = Wire(Decoupled(UInt(log2Ceil(ftqSz).W)))
+
+  val ftq_arb = Module(new Arbiter(UInt(log2Ceil(ftqSz).W), 2))
+
+  ftq_arb.io.in(0) <> bru_pc_req
+  ftq_arb.io.in(1) <> exc_pc_req
+
+  // Hookup FTQ
+  io.ifu.get_pc.ftq_idx := ftq_arb.io.out.bits
+  ftq_arb.io.out.ready  := true.B
+
   // Decode/Rename1 pipeline logic
 
   val dec_hazards = (0 until coreWidth).map(w =>
