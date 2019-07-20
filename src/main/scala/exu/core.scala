@@ -155,6 +155,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
   val dec_fire   = Wire(Vec(coreWidth, Bool()))  // can the instruction fire beyond decode?
                                                     // (can still be stopped in ren or dis)
   val dec_ready  = Wire(Bool())
+  val dec_xcpts  = Wire(Vec(coreWidth, Bool()))
 
   // Rename2/Dispatch stage
   val dis_valids = Wire(Vec(coreWidth, Bool()))
@@ -415,7 +416,15 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
   exe_units(brunit_idx).io.get_ftq_pc.next_val := RegNext(io.ifu.get_pc.next_val)
   exe_units(brunit_idx).io.get_ftq_pc.next_pc  := RegNext(io.ifu.get_pc.next_pc)
 
+  // Frontend Exception Requests
+  val xcpt_idx = PriorityEncoder(dec_xcpts)
+  exc_pc_req.valid := dec_xcpts.reduce(_||_)
+  exc_pc_req.bits  := dec_uops(xcpt_idx).ftq_idx
+  rob.io.xcpt_pc   := RegEnable(io.ifu.get_pc.fetch_pc, dis_ready)
+
   // Decode/Rename1 pipeline logic
+
+  dec_xcpts := dec_uops zip dec_valids map {case (u,v) => u.exception && v}
 
   val dec_hazards = (0 until coreWidth).map(w =>
                       dec_valids(w) &&
