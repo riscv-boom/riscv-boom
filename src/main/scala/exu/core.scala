@@ -501,6 +501,30 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
   dis_valids := rename_stage.io.ren2_mask
   ren_stalls := rename_stage.io.ren_stalls
 
+  /**
+   * TODO This is a bit nasty, but it's currently necessary to
+   * split the INT/FP rename pipelines into separate instantiations.
+   * Won't have to do this anymore with a properly decoupled FP pipeline.
+   */
+  if (usingFPU) {
+    for (w <- 0 until coreWidth) {
+      val i_uop = rename_stage.io.ren2_uops(w)
+      val f_uop = fp_rename_stage.io.ren2_uops(w)
+
+      dis_uops(w).prs1 := Mux(dis_uops(w).lrs1_rtype === RT_FLT, f_uop.prs1, i_uop.prs1)
+      dis_uops(w).prs2 := Mux(dis_uops(w).lrs2_rtype === RT_FLT, f_uop.prs2, i_uop.prs2)
+      dis_uops(w).prs3 := f_uop.prs3
+      dis_uops(w).pdst := Mux(dis_uops(w).dst_rtype  === RT_FLT, f_uop.pdst, i_uop.pdst)
+      dis_uops(w).stale_pdst := Mux(dis_uops(w).dst_rtype === RT_FLT, f_uop.stale_pdst, i_uop.stale_pdst)
+
+      dis_uops(w).prs1_busy := Mux(dis_uops(w).lrs1_rtype === RT_FLT, f_uop.prs1_busy, i_uop.prs1_busy)
+      dis_uops(w).prs2_busy := Mux(dis_uops(w).lrs2_rtype === RT_FLT, f_uop.prs2_busy, i_uop.prs2_busy)
+      dis_uops(w).prs3_busy := f_uop.prs3_busy
+
+      ren_stalls(w) := rename_stage.io.ren_stalls(w) || fp_rename_stage.io.ren_stalls(w)
+    }
+  }
+
   //-------------------------------------------------------------
   //-------------------------------------------------------------
   // **** Dispatch Stage ****
