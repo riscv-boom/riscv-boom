@@ -160,6 +160,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
                                                     // (can still be stopped in ren or dis)
   val dec_ready  = Wire(Bool())
   val dec_xcpts  = Wire(Vec(coreWidth, Bool()))
+  val ren_stalls = Wire(Vec(coreWidth, Bool()))
 
   // Rename2/Dispatch stage
   val dis_valids = Wire(Vec(coreWidth, Bool()))
@@ -438,7 +439,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
                       || rob.io.commit.rollback
                       || dec_xcpt_stall
                       || branch_mask_full(w)
-                      || !rename_stage.io.inst_can_proceed(w)
+                      || ren_stalls(w)
                       || flush_ifu))
 
   val dec_stalls = dec_hazards.scanLeft(false.B) ((s,h) => s || h).takeRight(coreWidth)
@@ -498,6 +499,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
   // Outputs
   dis_uops := rename_stage.io.ren2_uops
   dis_valids := rename_stage.io.ren2_mask
+  ren_stalls := rename_stage.io.ren_stalls
 
   //-------------------------------------------------------------
   //-------------------------------------------------------------

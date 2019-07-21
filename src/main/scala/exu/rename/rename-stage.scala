@@ -42,7 +42,7 @@ class RenameStageIO(
   val numWbPorts: Int)
   (implicit p: Parameters) extends BoomBundle
 {
-  val inst_can_proceed = Output(Vec(plWidth, Bool()))
+  val ren_stalls = Output(Vec(plWidth, Bool()))
 
   val kill = Input(Bool())
 
@@ -272,7 +272,7 @@ class RenameStage(
     val can_allocate = freelist.io.alloc_pregs(w).valid
 
     // Push back against Decode stage if Rename1 can't proceed.
-    io.inst_can_proceed(w) := (ren1_uops(w).dst_rtype =/= rtype) || can_allocate
+    io.ren_stalls(w) := (ren1_uops(w).dst_rtype === rtype) && !can_allocate
   }
 
   //-------------------------------------------------------------
