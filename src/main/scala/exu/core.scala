@@ -104,7 +104,11 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
   val decode_units     = for (w <- 0 until decodeWidth) yield { val d = Module(new DecodeUnit); d }
   val dec_brmask_logic = Module(new BranchMaskGenerationLogic(coreWidth))
-  val rename_stage     = Module(new RenameStage(coreWidth, numIntRenameWakeupPorts, numFpWakeupPorts))
+  val rename_stage     = Module(new RenameStage(coreWidth, numIntPhysRegs, numIntRenameWakeupPorts, false))
+  val fp_rename_stage  = if (usingFPU) Module(new RenameStage(coreWidth, numFpPhysRegs, numFpWakeupPorts, true))
+                         else null
+  val rename_stages    = if (usingFPU) Seq(rename_stage, fp_rename_stage) else Seq(rename_stage)
+
   val issue_units      = new boom.exu.IssueUnits(numIntIssueWakeupPorts)
   val dispatcher       = Module(new BasicDispatcher)
 
@@ -471,23 +475,27 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
   //-------------------------------------------------------------
   //-------------------------------------------------------------
 
-  rename_stage.io.kill := flush_ifu
-  rename_stage.io.brinfo := br_unit.brinfo
+  // Inputs
+  for (rename <- rename_stages) {
+    rename.io.kill := flush_ifu
+    rename.io.brinfo := br_unit.brinfo
 
-  rename_stage.io.flush := rob.io.flush.valid || io.ifu.sfence_take_pc
-  rename_stage.io.debug_rob_empty := rob.io.empty
+    rename.io.flush := rob.io.flush.valid || io.ifu.sfence_take_pc
+    rename.io.debug_rob_empty := rob.io.empty
 
-  rename_stage.io.dec_fire := dec_fire
-  rename_stage.io.dec_uops := dec_uops
+    rename.io.dec_fire := dec_fire
+    rename.io.dec_uops := dec_uops
 
-  rename_stage.io.dis_fire := dis_fire
-  rename_stage.io.dis_ready := dis_ready
+    rename.io.dis_fire := dis_fire
+    rename.io.dis_ready := dis_ready
 
-  rename_stage.io.com_valids := rob.io.commit.valids
-  rename_stage.io.com_uops := rob.io.commit.uops
-  rename_stage.io.rbk_valids := rob.io.commit.rbk_valids
-  rename_stage.io.rollback := rob.io.commit.rollback
+    rename.io.com_valids := rob.io.commit.valids
+    rename.io.com_uops := rob.io.commit.uops
+    rename.io.rbk_valids := rob.io.commit.rbk_valids
+    rename.io.rollback := rob.io.commit.rollback
+  }
 
+  // Outputs
   dis_uops := rename_stage.io.ren2_uops
   dis_valids := rename_stage.io.ren2_mask
 
