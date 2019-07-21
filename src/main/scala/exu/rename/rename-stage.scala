@@ -38,7 +38,7 @@ import boom.util._
  */
 class RenameStageIO(
   val plWidth: Int,
-  val numWbPorts: Int,
+  val numPhysRegs: Int,
   val numWbPorts: Int)
   (implicit p: Parameters) extends BoomBundle
 {
@@ -71,13 +71,13 @@ class RenameStageIO(
   val flush = Input(Bool())
 
   val debug_rob_empty = Input(Bool())
-  val debug = Output(new DebugRenameStageIO)
+  val debug = Output(new DebugRenameStageIO(numPhysRegs))
 }
 
 /**
  * IO bundle to debug the rename stage
  */
-class DebugRenameStageIO(implicit p: Parameters) extends BoomBundle
+class DebugRenameStageIO(val numPhysRegs: Int)(implicit p: Parameters) extends BoomBundle
 {
   val freelist  = Bits(numPhysRegs.W)
   val isprlist  = Bits(numPhysRegs.W)
@@ -102,7 +102,7 @@ class RenameStage(
   val pregSz = log2Ceil(numPhysRegs)
   val rtype = Mux(float.B, RT_FLT, RT_FIX)
 
-  val io = IO(new RenameStageIO(plWidth, numWbPorts, numWbPorts))
+  val io = IO(new RenameStageIO(plWidth, numPhysRegs, numWbPorts))
 
   //-------------------------------------------------------------
   // Rename Structures
@@ -152,8 +152,8 @@ class RenameStage(
     ren1_alloc_reqs(w)    := ren1_uops(w).ldst_val && ren1_uops(w).dst_rtype === rtype && ren1_fire(w)
     ren2_alloc_reqs(w)    := ren2_uops(w).ldst_val && ren2_uops(w).dst_rtype === rtype && ren2_fire(w)
 
-    int_com_valids(w)     := io.com_uops(w).ldst_val && io.com_uops(w).dst_rtype === rtype && io.com_valids(w)
-    int_rbk_valids(w)     := io.com_uops(w).ldst_val && io.com_uops(w).dst_rtype === rtype && io.rbk_valids(w)
+    com_valids(w)         := io.com_uops(w).ldst_val && io.com_uops(w).dst_rtype === rtype && io.com_valids(w)
+    rbk_valids(w)         := io.com_uops(w).ldst_val && io.com_uops(w).dst_rtype === rtype && io.rbk_valids(w)
     ren2_rbk_valids(w)    := ren2_uops(w).ldst_val && ren2_uops(w).dst_rtype === rtype && io.flush && ren2_valids(w)
   }
 
@@ -170,7 +170,7 @@ class RenameStage(
   freelist.io.brinfo := io.brinfo
   freelist.io.debug.pipeline_empty := io.debug_rob_empty && !ren2_valids.reduce(_||_)
 
-  assert (ren1_alloc_reqs zip list.io.alloc_pregs map {case (r,p) => !r || p.bits =/= 0.U} reduce (_&&_),
+  assert (ren1_alloc_reqs zip freelist.io.alloc_pregs map {case (r,p) => !r || p.bits =/= 0.U} reduce (_&&_),
            "[rename-stage] A uop is trying to allocate the zero physical register.")
 
   // Freelist outputs.
@@ -208,7 +208,7 @@ class RenameStage(
 
   // Maptable outputs.
   for ((uop, w) <- ren1_uops.zipWithIndex) {
-    val mappings = imaptable.io.map_resps(w)
+    val mappings = maptable.io.map_resps(w)
 
     // lrs1 can "pass through" to prs1. Used solely to index the csr file.
     uop.prs1       := Mux(!float.B && uop.lrs1_rtype === RT_PAS, uop.lrs1, mappings.prs1)
@@ -251,7 +251,7 @@ class RenameStage(
    "[rename] Wakeup has wrong rtype.")
 
   for ((uop, w) <- ren2_uops.zipWithIndex) {
-    val busy = ibusytable.io.busy_resps(w)
+    val busy = busytable.io.busy_resps(w)
 
     uop.prs1_busy := uop.lrs1_rtype === rtype && busy.prs1_busy
     uop.prs2_busy := uop.lrs2_rtype === rtype && busy.prs2_busy
