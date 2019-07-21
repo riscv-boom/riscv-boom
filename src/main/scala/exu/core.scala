@@ -696,7 +696,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
     iu.io.mem_ldSpecWakeup <> lsu.io.mem_ldSpecWakeup
   }
 
-  for ((renport, intport) <- rename_stage.io.int_wakeups zip int_ren_wakeups) {
+  for ((renport, intport) <- rename_stage.io.wakeups zip int_ren_wakeups) {
     // Stop wakeup for bypassable children of spec-loads trying to issue during a ldMiss.
     renport.valid :=
        intport.valid &&
