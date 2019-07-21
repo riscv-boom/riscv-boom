@@ -199,7 +199,7 @@ abstract class IssueUnit(
         issue_slots(i).uop.prs1,
         issue_slots(i).uop.prs2,
         issue_slots(i).uop.prs3,
-        issue_slots(i).uop.pc(31,0),
+        issue_slots(i).uop.debug_pc(31,0),
         issue_slots(i).uop.debug_inst,
         issue_slots(i).uop.uopc,
         issue_slots(i).uop.rob_idx,

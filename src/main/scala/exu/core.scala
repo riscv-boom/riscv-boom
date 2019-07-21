@@ -1102,7 +1102,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
     for (w <- 0 until coreWidth) {
       printf("    Slot:%d (PC:0x%x Valids:%c%c Inst:DASM(%x))\n",
         w.U,
-        dec_uops(w).pc(19,0),
+        dec_uops(w).debug_pc(19,0),
         BoolToChar(io.ifu.fetchpacket.valid && dec_fbundle.uops(w).valid && !dec_finished_mask(w), 'V'),
         BoolToChar(dec_fire(w), 'V'),
         dec_fbundle.uops(w).bits.debug_inst)
@@ -1112,7 +1112,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
     for (w <- 0 until coreWidth) {
       printf("    Slot:%d (PC:0x%x Valid:%c Inst:DASM(%x))\n",
         w.U,
-        rename_stage.io.ren2_uops(w).pc(19,0),
+        rename_stage.io.ren2_uops(w).debug_pc(19,0),
         BoolToChar(rename_stage.io.ren2_mask(w), 'V'),
         rename_stage.io.ren2_uops(w).debug_inst)
     }
@@ -1216,7 +1216,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       when (rob.io.commit.valids(w)) {
         printf("%d 0x%x ",
           priv,
-          Sext(rob.io.commit.uops(w).pc(vaddrBits-1,0), xLen))
+          Sext(rob.io.commit.uops(w).debug_pc(vaddrBits-1,0), xLen))
         printf_inst(rob.io.commit.uops(w))
         when (rob.io.commit.uops(w).dst_rtype === RT_FIX && rob.io.commit.uops(w).ldst =/= 0.U) {
           printf(" x%d 0x%x\n",
@@ -1322,7 +1322,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
   if (p(BoomTilesKey)(0).trace) {
     for (w <- 0 until coreWidth) {
       io.trace(w).valid      := rob.io.commit.valids(w)
-      io.trace(w).iaddr      := Sext(rob.io.commit.uops(w).pc(vaddrBits-1,0), xLen)
+      io.trace(w).iaddr      := Sext(rob.io.commit.uops(w).debug_pc(vaddrBits-1,0), xLen)
       io.trace(w).insn       := rob.io.commit.uops(w).debug_inst
       // I'm uncertain the commit signals from the ROB match these CSR exception signals
       io.trace(w).priv       := csr.io.status.prv
