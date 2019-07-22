@@ -133,8 +133,6 @@ class BoomCore(implicit p: Parameters) extends BoomModule
                            exe_units.withFilter(_.readsIrf).map(x => 2),
                            exe_units.numTotalBypassPorts,
                            xLen))
-//  val dc_shim          = Module(new boom.lsu.DCacheShim())
-//  val lsu              = Module(new boom.lsu.LoadStoreUnit(coreWidth))
   val rob              = Module(new Rob(
                            numIrfWritePorts + 1 + numFpWakeupPorts, // +1 for ll writebacks
                            numFpWakeupPorts))
@@ -660,34 +658,14 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   val mem_iq = issue_units.mem_iq
 
   require (mem_iq.issueWidth == 1)
-  // val iss_loadIssued =
-  //   mem_iq.io.iss_valids(0) &&
-  //   mem_iq.io.iss_uops(0).uses_ldq &&
-  //   !mem_iq.io.iss_uops(0).fp_val &&
-  //   mem_iq.io.iss_uops(0).pdst =/= 0.U &&
-  //   !(sxt_ldMiss && (mem_iq.io.iss_uops(0).iw_p1_poisoned || mem_iq.io.iss_uops(0).iw_p2_poisoned))
-  // sxt_ldMiss :=
-  //   ((lsu.io.nack.valid && lsu.io.nack.isload) || dc_shim.io.core.load_miss) &&
-  //   Pipe(true.B, iss_loadIssued, 4).bits
   issue_units.map(_.io.ld_miss := io.lsu.ld_miss)
-
-  // Check that IF we see a speculative load-wakeup and NO load-miss, then we should
-  // see a writeback to the register file!
 
   // Share the memory port with other long latency operations.
   val mem_unit = exe_units.memory_unit
   val mem_resp = mem_unit.io.ll_iresp
   mem_unit.io.com_exception := rob.io.flush.valid
 
-  // when (RegNext(!sxt_ldMiss) && RegNext(RegNext(lsu.io.mem_ldSpecWakeup.valid)) &&
-  //       !(RegNext(rob.io.flush.valid || (br_unit.brinfo.valid && br_unit.brinfo.mispredict))) &&
-  //       !(RegNext(RegNext(rob.io.flush.valid || (br_unit.brinfo.valid && br_unit.brinfo.mispredict))))) {
-  //   assert (mem_resp.valid && mem_resp.bits.uop.ctrl.rf_wen && mem_resp.bits.uop.dst_rtype === RT_FIX,
-  //     "[core] We did not see a RF writeback for a speculative load that claimed no load-miss.")
-  // }
-
   // Wakeup (Issue & Writeback)
-
   for {
     iu <- issue_units
     (issport, wakeup) <- iu.io.wakeup_ports zip int_iss_wakeups
@@ -1104,22 +1082,21 @@ class BoomCore(implicit p: Parameters) extends BoomModule
     }
 
     if (DEBUG_PRINTF_ROB) {
-      // val robTypeStrs = RobTypeToChars(rob.io.debug.state)
-      // printf("ROB:\n")
-      // printf("    (State:%c%c%c Rdy:%c LAQFull:%c STQFull:%c Flush:%c BMskFull:%c DShimRdy:%c) BMsk:0x%x Mode:%c\n",
-      //    robTypeStrs(0),
-      //    robTypeStrs(1),
-      //    robTypeStrs(2),
-      //    BoolToChar(           rob.io.ready, '_', '!'),
-      //    BoolToChar(          lsu.io.laq_full(0), 'L'),
-      //    BoolToChar(          lsu.io.stq_full(0), 'S'),
-      //    BoolToChar(          rob.io.flush.valid, 'F'),
-      //    BoolToChar(branch_mask_full.reduce(_|_), 'B'),
-      //    BoolToChar(   dc_shim.io.core.req.ready, 'R', 'B'),
-      //    dec_brmask_logic.io.debug.branch_mask,
-      //    Mux(csr.io.status.prv === (PRV.M).U, Str("M"),
-      //      Mux(csr.io.status.prv === (PRV.U).U, Str("U"),
-      //        Mux(csr.io.status.prv === (PRV.S).U, Str("S"), Str("?")))))
+      val robTypeStrs = RobTypeToChars(rob.io.debug.state)
+      printf("ROB:\n")
+      printf("    (State:%c%c%c Rdy:%c LAQFull:%c STQFull:%c Flush:%c BMskFull:%c) BMsk:0x%x Mode:%c\n",
+         robTypeStrs(0),
+         robTypeStrs(1),
+         robTypeStrs(2),
+         BoolToChar(           rob.io.ready, '_', '!'),
+         BoolToChar(          io.lsu.ldq_full(0), 'L'),
+         BoolToChar(          io.lsu.stq_full(0), 'S'),
+         BoolToChar(          rob.io.flush.valid, 'F'),
+         BoolToChar(branch_mask_full.reduce(_|_), 'B'),
+         dec_brmask_logic.io.debug.branch_mask,
+         Mux(csr.io.status.prv === (PRV.M).U, Str("M"),
+           Mux(csr.io.status.prv === (PRV.U).U, Str("U"),
+             Mux(csr.io.status.prv === (PRV.S).U, Str("S"), Str("?")))))
     }
 
     printf("Other:\n")
