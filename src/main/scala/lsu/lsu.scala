@@ -520,7 +520,9 @@ class LoadStoreUnit(pl_width: Int)(implicit p: Parameters,
          laq_allocated      (exe_ld_idx_wakeup) &&
          !laq_executed      (exe_ld_idx_wakeup) &&
          !laq_failure       (exe_ld_idx_wakeup) &&
-         (!laq_is_uncacheable(exe_ld_idx_wakeup) || (io.commit_load_at_rob_head && laq_head === exe_ld_idx_wakeup))
+         (!laq_is_uncacheable(exe_ld_idx_wakeup) || (io.commit_load_at_rob_head &&
+                                                     laq_head === exe_ld_idx_wakeup &&
+                                                     laq_st_dep_mask(exe_ld_idx_wakeup).asUInt === 0.U))
          )
    {
       can_fire_load_wakeup := true.B
