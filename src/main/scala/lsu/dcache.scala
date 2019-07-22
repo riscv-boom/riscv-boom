@@ -1064,6 +1064,9 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
       lrsc_count := 0.U
     }
   }
+  when (s2_valid && !s2_hit && s2_lrsc_addr_match) {
+    lrsc_count := 0.U
+  }
 
   val s2_data = Wire(Vec(nWays, UInt(encRowBits.W)))
   for (w <- 0 until nWays) {
