@@ -72,10 +72,6 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
     val commit_addr = Output(UInt(coreMaxAddrBits.W))
     val commit_cmd  = Output(UInt(M_SZ.W))
 
-    // When we hold a prefetch or speculated load, and we need to clear this
-    val clearable   = Output(Bool())
-    val clr_entry   = Input(Bool())
-
     // Replays go through the cache pipeline again
     val replay      = Decoupled(new BoomDCacheReqInternal)
     // Resp go straight out to the core
@@ -162,7 +158,6 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
   io.commit_val        := false.B
   io.commit_addr       := req.addr
   io.commit_cmd        := Mux(ClientStates.hasWritePermission(new_coh.state), M_PFW, M_PFR)
-  io.clearable         := false.B
   io.meta_read.valid   := false.B
   io.mem_finish.valid  := false.B
 
@@ -249,7 +244,6 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
     }
       .elsewhen (rpq.io.empty && !commit_line)
     {
-      io.clearable := true.B
       when (!rpq.io.enq.fire()) {
         state := s_mem_finish
       }
@@ -503,7 +497,6 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
 
   val idx_match = idx_matches.reduce(_||_)
   val mshr_alloc_idx = Wire(UInt())
-  val mshr_clear_idx = Wire(UInt())
   val pri_rdy = WireInit(false.B)
   val pri_val = io.req.valid && sdq_rdy && cacheable && !idx_match
   val mshrs = (0 until cfg.nMSHRs) map { i =>
@@ -531,10 +524,6 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
 
     mshr.io.wb_resp      := io.wb_resp
 
-    mshr.io.clr_entry    := mshr.io.clearable && ((pri_val && !pri_rdy && (i.U === mshr_clear_idx)) ||              // Clear because no MSHRs are ready
-                                                  io.clear_all                                      ||              // Clear because core is asking us to fence
-                                                  (mshr.io.idx_match && !mshr.io.tag_match)         ||              // Clear because can't have multiple MSHR with same idx
-                                                  (mshr.io.idx_match && mshr.io.tag_match && !mshr.io.req_sec_rdy)) // Clear because we are a write, but this was a prefetch read
     meta_write_arb.io.in(i) <> mshr.io.meta_write
     meta_read_arb.io.in(i)  <> mshr.io.meta_read
     mshr.io.meta_resp       := io.meta_resp
@@ -569,8 +558,6 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
   mshr_alloc_idx    := RegNext(AgePriorityEncoder(mshrs.map(m=>m.io.req_pri_rdy), mshr_head))
   when (pri_rdy && pri_val) { mshr_head := WrapInc(mshr_head, cfg.nMSHRs) }
 
-  // Clear a random MSHR. TODO: Is this suboptimal for prefetching?
-  mshr_clear_idx    := PriorityEncoder(mshrs.map(m=>m.io.clearable))
 
 
   io.meta_write <> meta_write_arb.io.out
