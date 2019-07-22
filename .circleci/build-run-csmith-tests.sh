@@ -5,12 +5,16 @@
 # turn echo on and error on earliest command
 set -ex
 
+# get shared variables
+SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
+source $SCRIPT_DIR/defaults.sh
+
 SIM_BASE=simulator-boom.system-
-CONFIG=$1
+CONFIG=$(echo ${mapping[$1]} | sed -n -e 's/^.*CONFIG=\([a-zA-Z0-9]*\).*/\1/p')
 SIM=${SIM_BASE}${CONFIG}
 AMT_RUNS=$2
 
 # run csmith utility
-cd $HOME/project/util/csmith
+cd $LOCAL_CHECKOUT_DIR/util/csmith
 ./install-csmith.sh
-./run-csmith.sh --sim $HOME/chipyard/sims/verisim/$SIM --run $AMT_RUNS --nodebug
+./run-csmith.sh --sim $LOCAL_SIM_DIR/$SIM --run $AMT_RUNS --nodebug

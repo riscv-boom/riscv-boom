@@ -114,10 +114,18 @@ class BoomCustomCSRs(implicit p: Parameters) extends freechips.rocketchip.tile.C
     val mask = BigInt(
       tileParams.dcache.get.clockGate.toInt << 0 |
       params.clockGate.toInt << 1 |
-      params.clockGate.toInt << 2
+      params.clockGate.toInt << 2 |
+      1 << 3 // Disable OOO when this bit is high
     )
-    Some(CustomCSR(chickenCSRId, mask, Some(mask)))
+    val init = BigInt(
+      tileParams.dcache.get.clockGate.toInt << 0 |
+      params.clockGate.toInt << 1 |
+      params.clockGate.toInt << 2 |
+      0 << 3 // Enable OOO at init
+    )
+    Some(CustomCSR(chickenCSRId, mask, Some(init)))
   }
+  def disableOOO = getOrElse(chickenCSR, _.value(3), true.B)
 }
 
 /**
@@ -193,9 +201,6 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
   require (issueParams.count(_.iqType == IQT_MEM.litValue) == 1 || usingUnifiedMemIntIQs)
   require (issueParams.count(_.iqType == IQT_INT.litValue) == 1)
 
-  // Currently, require issue dispatch widths all equal coreWidth
-  issueParams.map(x => require(x.dispatchWidth == coreWidth))
-  // TODO: In future, relax this constraint
   issueParams.map(x => require(x.dispatchWidth <= coreWidth && x.dispatchWidth > 0))
 
   //************************************

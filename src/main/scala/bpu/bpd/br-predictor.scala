@@ -166,7 +166,7 @@ abstract class BoomBrPredictor(
     val shamt = 2
     val sz0 = 6
     if (historyLength < (sz0*2+1)) {
-      (old << 1.U) | (foldpc(5) ^ foldpc(6))
+      ret := (old << 1.U) ^ foldpc
     } else {
       val o0 = old(sz0-1,0)
       val o1 = old(2*sz0-1,sz0)
@@ -176,8 +176,9 @@ abstract class BoomBrPredictor(
       val h2 = (o1 ^ (o1 >> (sz0/2).U))(sz0/2-1,0)
       val min = h0.getWidth + h1.getWidth
       ret := Cat(old(historyLength-1, min), h2, h1, h0)
-      ret
     }
+
+    ret
   }
 
   val r_f1_fetchpc = RegEnable(io.req.bits.addr, io.req.valid)
@@ -220,15 +221,7 @@ abstract class BoomBrPredictor(
      (io.f4_redirect && io.f4_taken) ||
      io.f2_redirect
 
-  r_f1_history := Mux(io.f2_replay,
-                      r_f2_history,
-                      Mux(io.ftq_restore.valid && !io.ftq_restore.bits.taken,
-                          io.ftq_restore.bits.history,
-                          Mux(io.f4_redirect && !io.f4_taken,
-                              r_f4_history,
-                              Mux(use_new_hash,
-                                  new_history,
-                                  r_f1_history))))
+  r_f1_history := Mux(use_new_hash, new_history, r_f1_history)
 
   assert (!io.f2_redirect || r_f2_history === r_f1_history,
      "[bpd] if a F2 redirect occurs, F2-hist should equal F1-hist.")

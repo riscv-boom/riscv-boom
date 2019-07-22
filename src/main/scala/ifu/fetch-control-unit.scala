@@ -46,6 +46,7 @@ class FetchBundle(implicit p: Parameters) extends BoomBundle
   val edge_inst     = Bool() // True if 1st instruction in this bundle is pc - 2
   val ftq_idx       = UInt(log2Ceil(ftqSz).W)
   val insts         = Vec(fetchWidth, Bits(32.W))
+  val exp_insts     = Vec(fetchWidth, Bits(32.W))
   val mask          = Bits(fetchWidth.W) // mark which words are valid instructions
   val xcpt_pf_if    = Bool() // I-TLB miss (instruction fetch fault).
   val xcpt_ae_if    = Bool() // Access exception.
@@ -81,6 +82,7 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
     val f2_redirect       = Output(Bool())
     val f3_stall          = Output(Bool())
     val f3_clear          = Output(Bool())
+    val f3_will_redirect  = Output(Bool())
     val f4_redirect       = Output(Bool())
     val f4_taken          = Output(Bool())
 
@@ -249,8 +251,6 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
   // Tracks nextpc after the previous fetch bundle
   val prev_nextpc = Reg(UInt(vaddrBitsExtended.W))
 
-  val use_prev = prev_is_half && f3_fetch_bundle.pc === prev_nextpc
-
   assert(fetchWidth >= 4 || !usingCompressed) // Logic gets kind of annoying with fetchWidth = 2
   for (i <- 0 until fetchWidth) {
     val bpd_decoder = Module(new BranchDecode)
@@ -261,7 +261,7 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
       inst     := f3_imemresp.data(i*coreInstBits+coreInstBits-1,i*coreInstBits)
       f3_fetch_bundle.edge_inst := false.B
     } else if (i == 0) {
-      when (use_prev) {
+      when (prev_is_half) {
         inst := Cat(f3_imemresp.data(15,0), prev_half)
         f3_fetch_bundle.edge_inst := true.B
       } .otherwise {
@@ -272,7 +272,7 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
     } else if (i == 1) {
       // Need special case since 0th instruction may carry over the wrap around
       inst     := f3_imemresp.data(i*coreInstBits+2*coreInstBits-1,i*coreInstBits)
-      is_valid := use_prev || !(f3_valid_mask(i-1) && f3_fetch_bundle.insts(i-1)(1,0) === 3.U)
+      is_valid := prev_is_half || !(f3_valid_mask(i-1) && f3_fetch_bundle.insts(i-1)(1,0) === 3.U)
     } else if (icIsBanked && i == (fetchWidth / 2) - 1) {
       // If we are using a banked I$ we could get cut-off halfway through the fetch bundle
       inst     := f3_imemresp.data(i*coreInstBits+2*coreInstBits-1,i*coreInstBits)
@@ -291,10 +291,15 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
     // TODO do not compute a vector of targets
     val pc = (f3_aligned_pc
             + (i << log2Ceil(coreInstBytes)).U
-            - Mux(use_prev && (i == 0).B, 2.U, 0.U))
-    f3_debug_pcs(i)     := pc
-    bpd_decoder.io.inst := ExpandRVC(inst)
+            - Mux(prev_is_half && (i == 0).B, 2.U, 0.U))
+    f3_debug_pcs(i) := pc
+
+    val exp_inst = ExpandRVC(inst)
+
+    bpd_decoder.io.inst := exp_inst
     bpd_decoder.io.pc   := pc
+
+    f3_fetch_bundle.exp_insts(i) := exp_inst
 
     f3_valid_mask(i) := f3_valid && f3_imemresp.mask(i) && is_valid
     is_br(i)     := f3_valid && bpd_decoder.io.is_br   && f3_imemresp.mask(i) && is_valid
@@ -335,6 +340,10 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
   val f3_has_jal = is_jal.reduce(_|_)
   val f3_jal_idx = PriorityEncoder(is_jal.asUInt)
   val f3_jal_target = jal_targs(f3_jal_idx)
+
+  val f3_jr_idx = PriorityEncoder(is_jr)
+  val f3_jr_valid = is_jr.reduce(_||_)
+
   val f3_bpd_btb_update_valid = WireInit(false.B) // does the BPD's choice cause a BTB update?
   val f3_bpd_may_redirect_taken = WireInit(false.B) // request towards a taken branch target
   val f3_bpd_may_redirect_next = WireInit(false.B) // override taken prediction and fetch the next line (or take JAL)
@@ -355,7 +364,6 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
   // mask out instructions after predicted branch
   val f3_kill_mask = Wire(UInt(fetchWidth.W))
   val f3_btb_mask = Wire(UInt(fetchWidth.W))
-  val f3_bpd_mask = Wire(UInt(fetchWidth.W))
 
   when (f3_fire) {
     val last_idx  = Mux(inLastChunk(f3_fetch_bundle.pc) && icIsBanked.B,
@@ -364,12 +372,13 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
     && !(f3_valid_mask(last_idx-1.U) && f3_fetch_bundle.insts(last_idx-1.U)(1,0) === 3.U)
     && !f3_kill_mask(last_idx)
     && f3_btb_mask(last_idx)
-    && f3_bpd_mask(last_idx)
     && f3_fetch_bundle.insts(last_idx)(1,0) === 3.U)
     prev_half    := f3_fetch_bundle.insts(last_idx)(15,0)
     prev_nextpc  := alignToFetchBoundary(f3_fetch_bundle.pc) + Mux(inLastChunk(f3_fetch_bundle.pc) && icIsBanked.B,
                                                                  bankBytes.U,
                                                                  fetchBytes.U)
+  } .elsewhen (io.clear_fetchbuffer) {
+    prev_is_half := false.B
   }
 
   when (f3_valid && f3_btb_resp.valid) {
@@ -417,6 +426,7 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
   bchecker.io.is_call  := is_call
   bchecker.io.is_ret   := is_ret
   bchecker.io.is_rvc   := is_rvc
+  bchecker.io.edge_inst := f3_fetch_bundle.edge_inst
   bchecker.io.br_targs := br_targs
   bchecker.io.jal_targs := jal_targs
   bchecker.io.fetch_pc := f3_imemresp.pc
@@ -433,11 +443,14 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
   f3_req.valid := f3_valid && (bchecker.io.req.valid ||
                   (f3_bpd_may_redirect && !jal_overrides_bpd)) // && !(f0_redirect_val)
   f3_req.bits.addr := Mux(f3_bpd_overrides_bcheck, f3_bpd_redirect_target, bchecker.io.req.bits.addr)
-
+  io.f3_will_redirect := f3_req.valid
 
   // TODO this logic is broken and vestigial. Do update correctly (remove RegNext)
   val f3_btb_update_bits = Wire(new BoomBTBUpdate)
-  io.f3_btb_update.valid := RegNext(bchecker.io.btb_update.valid || f3_bpd_btb_update_valid)
+  val f3_btb_update_valid = Mux(f3_bpd_overrides_bcheck,
+                              f3_bpd_btb_update_valid      && (!f3_jr_valid || f3_bpd_br_idx < f3_jr_idx),
+                              bchecker.io.btb_update.valid && (!f3_jr_valid || f3_jal_idx    < f3_jr_idx))
+  io.f3_btb_update.valid := RegNext(f3_btb_update_valid) && r_f4_req.valid
   io.f3_btb_update.bits := RegNext(f3_btb_update_bits)
   f3_btb_update_bits := bchecker.io.btb_update.bits
   when (f3_bpd_overrides_bcheck) {
@@ -445,6 +458,8 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
     f3_btb_update_bits.cfi_idx  := f3_bpd_br_idx
     f3_btb_update_bits.bpd_type := BpredType.BRANCH
     f3_btb_update_bits.cfi_type := CfiType.branch
+    f3_btb_update_bits.is_rvc   := is_rvc(f3_bpd_br_idx)
+    f3_btb_update_bits.is_edge  := f3_fetch_bundle.edge_inst && (f3_bpd_br_idx === 0.U)
   }
 
   io.f3_ras_update := bchecker.io.ras_update
@@ -457,16 +472,9 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
   f3_btb_mask := Mux(f3_btb_resp.valid && !f3_req.valid,
                    f3_btb_resp.bits.mask,
                    Fill(fetchWidth, 1.U(1.W)))
-  f3_bpd_mask := Fill(fetchWidth, 1.U(1.W))  // TODO XXX add back bpd
-//  f3_bpd_mask := Mux(io.f3_bpu_request.valid && !f3_req.valid,
-//                 io.f3_bpu_request.bits.mask,
-//                 Fill(fetchWidth, UInt(1,1)))
-  f3_fetch_bundle.mask := (f3_imemresp.mask
-                          & ~f3_kill_mask
+  f3_fetch_bundle.mask := (~f3_kill_mask
                           & f3_btb_mask
-                          & f3_bpd_mask
-                          & f3_valid_mask.asUInt())
-
+                          & f3_valid_mask.asUInt)
 
   val f3_taken = WireInit(false.B) // was a branch taken in the F3 stage?
   when (f3_req.valid) {

@@ -865,7 +865,9 @@ class Rob(
   // -----------------------------------------------
   // Outputs
 
-  io.com_load_is_at_rob_head := rob_head_uses_ldq(PriorityEncoder(rob_head_vals.asUInt))
+  io.com_load_is_at_rob_head := RegNext(rob_head_uses_ldq(PriorityEncoder(rob_head_vals.asUInt)) &&
+                                        !will_commit.reduce(_||_))
+
 
   //--------------------------------------------------
   // Handle passing out signals to printf in dpath

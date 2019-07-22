@@ -44,17 +44,18 @@ import boom.util.{BoolToChar, CfiTypeToChars, BoomCoreStringPrefix}
  * a bi-modal table to determine whether the prediction is taken or not
  * taken.
  */
-class BTBsa(implicit p: Parameters) extends BoomBTB
+class BTBsa(val bankBytes: Int)(implicit p: Parameters) extends BoomBTB
 {
-  val bim = Module(new BimodalTable())
+  val bim = Module(new BimodalTable(bankBytes))
   bim.io.req := io.req
   bim.io.do_reset := false.B // TODO
   bim.io.flush := false.B // TODO
   bim.io.update := io.bim_update
 
   private val lsbSz = log2Ceil(coreInstBytes)
+  private val fbSz = log2Ceil(fetchWidth)
   private def getTag (addr: UInt): UInt = addr(tagSz+idxSz+lsbSz-1, idxSz+lsbSz)
-  private def getIdx (addr: UInt): UInt = addr(idxSz+lsbSz-1, lsbSz)
+  private def getIdx (addr: UInt): UInt = addr(idxSz+lsbSz-1, lsbSz) ^ (addr(fbSz+lsbSz-1,lsbSz) << (idxSz - fbSz).U)
 
   /**
    * Data stored in the BTB entry
@@ -65,6 +66,8 @@ class BTBsa(implicit p: Parameters) extends BoomBTB
     val cfi_idx  = UInt(log2Ceil(fetchWidth).W)
     val bpd_type = BpredType()
     val cfi_type = CfiType()
+    val is_rvc   = Bool()
+    val is_edge  = Bool()
   }
 
   val stall = !io.req.valid
@@ -119,10 +122,12 @@ class BTBsa(implicit p: Parameters) extends BoomBTB
       valids := valids.bitSet(widx, true.B)
 
       val newdata = Wire(new BTBSetData())
-      newdata.target  := r_btb_update.bits.target(vaddrBits-1, log2Ceil(coreInstBytes))
-      newdata.cfi_idx := r_btb_update.bits.cfi_idx
+      newdata.target   := r_btb_update.bits.target(vaddrBits-1, log2Ceil(coreInstBytes))
+      newdata.cfi_idx  := r_btb_update.bits.cfi_idx
       newdata.bpd_type := r_btb_update.bits.bpd_type
       newdata.cfi_type := r_btb_update.bits.cfi_type
+      newdata.is_rvc   := r_btb_update.bits.is_rvc
+      newdata.is_edge  := r_btb_update.bits.is_edge
 
       tags(widx) := wtag
       data(widx) := newdata
@@ -169,10 +174,12 @@ class BTBsa(implicit p: Parameters) extends BoomBTB
   val s1_bpd_type = s1_data.bpd_type
   val s1_cfi_type = s1_data.cfi_type
 
-  s1_resp_bits.target := s1_target
-  s1_resp_bits.cfi_idx := (if (fetchWidth > 1) s1_cfi_idx else 0.U)
+  s1_resp_bits.target   := s1_target
+  s1_resp_bits.cfi_idx  := (if (fetchWidth > 1) s1_cfi_idx else 0.U)
   s1_resp_bits.bpd_type := s1_bpd_type
   s1_resp_bits.cfi_type := s1_cfi_type
+  s1_resp_bits.is_rvc   := s1_data.is_rvc
+  s1_resp_bits.is_edge  := s1_data.is_edge
 
   val s1_pc = RegEnable(io.req.bits.addr, !stall)
   s1_resp_bits.fetch_pc := s1_pc

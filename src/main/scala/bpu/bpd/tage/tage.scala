@@ -190,9 +190,12 @@ class TageBrPredictor(
     mask_oh
   }
 
-  private def IdxHash(addr: UInt, hist: UInt, hlen: Int, idx_sz: Int): UInt = {
-    val idx = Cat(Fold(hist, idx_sz, hlen), addr(4)) ^ (addr >> 5)
-    idx
+  private def IdxHash(addr: UInt, hist: UInt, hlen: Int, idxSz: Int): UInt = {
+    val pc = addr >> log2Ceil(coreInstBytes).U
+    val n = idxSz
+    val k = log2Ceil(fetchWidth)
+    val idx = Fold(hist, idxSz, hlen) ^ (pc >> k.U) ^ pc(k-1,0)
+    idx(idxSz-1,0)
   }
 
   private def TagHash(addr: UInt, a: UInt, b: UInt): UInt = {

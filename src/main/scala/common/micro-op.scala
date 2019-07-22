@@ -37,6 +37,7 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   with freechips.rocketchip.rocket.constants.ScalarOpConstants
 {
   val uopc             = UInt(UOPC_SZ.W)       // micro-op code
+  val inst             = UInt(32.W)
   val debug_inst       = UInt(32.W)
   val is_rvc           = Bool()
   val pc               = UInt(coreMaxAddrBits.W) // TODO remove -- use FTQ to get PC. Change to debug_pc.
@@ -74,6 +75,8 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
 
   // Index into FTQ to figure out our fetch PC.
   val ftq_idx          = UInt(log2Ceil(ftqSz).W)
+  // Index in fetch bundle.
+  val cfi_idx          = UInt(log2Ceil(fetchWidth).W)
   // This inst straddles two fetch packets
   val edge_inst        = Bool()
   // Low-order bits of our own PC. Combine with ftq[ftq_idx] to get PC.

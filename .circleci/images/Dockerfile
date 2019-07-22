@@ -6,7 +6,7 @@ FROM openjdk:11.0.1-jdk-sid
 # https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=863199
 RUN apt-get update \
     && mkdir -p /usr/share/man/man1 \
-    && apt-get install -y \ 
+    && apt-get install -y \
                bzip2 \
                ca-certificates \
                curl \
@@ -25,7 +25,6 @@ RUN apt-get update \
                wget \
                xvfb \
                zip
-
 
 # Set timezone to UTC by default
 RUN ln -sf /usr/share/zoneinfo/Etc/UTC /etc/localtime
@@ -89,21 +88,36 @@ RUN groupadd --gid 3434 riscvuser \
 #
 # Created by running:
 # docker run --rm openjdk:9-slim cat /etc/ssl/certs/java/cacerts | #   aws s3 cp - s3://circle-downloads/circleci-images/cache/linux-amd64/openjdk-9-slim-cacerts --acl public-read
-RUN if java -fullversion 2>&1 | grep -q '"9.'; then   curl --silent --show-error --location --fail --retry 3 --output /etc/ssl/certs/java/cacerts        https://circle-downloads.s3.amazonaws.com/circleci-images/cache/linux-amd64/openjdk-9-slim-cacerts;  fi
+RUN if java -fullversion 2>&1 | grep -q '"9.'; then curl --silent --show-error --location --fail --retry 3 --output /etc/ssl/certs/java/cacerts https://circle-downloads.s3.amazonaws.com/circleci-images/cache/linux-amd64/openjdk-9-slim-cacerts; fi
 
 # Install Maven Version: 3.6.0
-RUN curl --silent --show-error --location --fail --retry 3 --output /tmp/apache-maven.tar.gz     https://www.apache.org/dist/maven/maven-3/3.6.0/binaries/apache-maven-3.6.0-bin.tar.gz   && tar xf /tmp/apache-maven.tar.gz -C /opt/   && rm /tmp/apache-maven.tar.gz   && ln -s /opt/apache-maven-* /opt/apache-maven   && /opt/apache-maven/bin/mvn -version
+RUN curl --silent --show-error --location --fail --retry 3 --output /tmp/apache-maven.tar.gz https://www.apache.org/dist/maven/maven-3/3.6.0/binaries/apache-maven-3.6.0-bin.tar.gz \
+    && tar xf /tmp/apache-maven.tar.gz -C /opt/ \
+    && rm /tmp/apache-maven.tar.gz \
+    && ln -s /opt/apache-maven-* /opt/apache-maven \
+    && /opt/apache-maven/bin/mvn -version
 
 # Install Ant Version: 1.10.5
-RUN curl --silent --show-error --location --fail --retry 3 --output /tmp/apache-ant.tar.gz     https://archive.apache.org/dist/ant/binaries/apache-ant-1.10.5-bin.tar.gz   && tar xf /tmp/apache-ant.tar.gz -C /opt/   && ln -s /opt/apache-ant-* /opt/apache-ant   && rm -rf /tmp/apache-ant.tar.gz   && /opt/apache-ant/bin/ant -version
+RUN curl --silent --show-error --location --fail --retry 3 --output /tmp/apache-ant.tar.gz https://archive.apache.org/dist/ant/binaries/apache-ant-1.10.5-bin.tar.gz \
+    && tar xf /tmp/apache-ant.tar.gz -C /opt/ \
+    && ln -s /opt/apache-ant-* /opt/apache-ant \
+    && rm -rf /tmp/apache-ant.tar.gz \
+    && /opt/apache-ant/bin/ant -version
 
 ENV ANT_HOME=/opt/apache-ant
 
 # Install Gradle Version: 5.0
-RUN curl --silent --show-error --location --fail --retry 3 --output /tmp/gradle.zip     https://services.gradle.org/distributions/gradle-5.0-bin.zip   && unzip -d /opt /tmp/gradle.zip   && rm /tmp/gradle.zip   && ln -s /opt/gradle-* /opt/gradle   && /opt/gradle/bin/gradle -version
+RUN curl --silent --show-error --location --fail --retry 3 --output /tmp/gradle.zip https://services.gradle.org/distributions/gradle-5.0-bin.zip \
+    && unzip -d /opt /tmp/gradle.zip \
+    && rm /tmp/gradle.zip \
+    && ln -s /opt/gradle-* /opt/gradle \
+    && /opt/gradle/bin/gradle -version
 
 # Install sbt from https://circle-downloads.s3.amazonaws.com/circleci-images/cache/linux-amd64/sbt-latest.tgz
-RUN curl --silent --show-error --location --fail --retry 3 --output /tmp/sbt.tgz https://circle-downloads.s3.amazonaws.com/circleci-images/cache/linux-amd64/sbt-latest.tgz   && tar -xzf /tmp/sbt.tgz -C /opt/   && rm /tmp/sbt.tgz   && /opt/sbt/bin/sbt sbtVersion
+RUN curl --silent --show-error --location --fail --retry 3 --output /tmp/sbt.tgz https://circle-downloads.s3.amazonaws.com/circleci-images/cache/linux-amd64/sbt-latest.tgz \
+    && tar -xzf /tmp/sbt.tgz -C /opt/ \
+    && rm /tmp/sbt.tgz \
+    && /opt/sbt/bin/sbt sbtVersion
 
 # Install openjfx
 RUN apt-get install -y --no-install-recommends openjfx
@@ -136,7 +150,8 @@ RUN apt-get install -y \
             python \
             python-pexpect \
             texinfo \
-            zlib1g-dev
+            zlib1g-dev \
+            rsync
 
 # Update PATH for Java tools
 ENV PATH="/opt/sbt/bin:/opt/apache-maven/bin:/opt/apache-ant/bin:/opt/gradle/bin:$PATH"
@@ -146,7 +161,11 @@ ENV HOME="/home/riscvuser"
 
 # Update PATH for RISCV toolchain (note: hardcoded for CircleCI)
 ENV RISCV="$HOME/riscv-tools-install"
+ENV LD_LIBRARY_PATH="$RISCV/lib"
 ENV PATH="$RISCV/bin:$PATH"
+
+WORKDIR $HOME
+USER riscvuser
 
 # smoke test with path
 RUN mvn -version \
@@ -154,9 +173,9 @@ RUN mvn -version \
     && gradle -version \
     && sbt sbtVersion
 
-# END IMAGE CUSTOMIZATIONS
+# remove extra folders
+RUN rm -rf project/
 
-WORKDIR $HOME
-USER riscvuser
+# END IMAGE CUSTOMIZATIONS
 
 CMD ["/bin/sh"]

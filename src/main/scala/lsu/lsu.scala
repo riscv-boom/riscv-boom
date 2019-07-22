@@ -107,9 +107,9 @@ class LSUCoreIO(implicit p: Parameters) extends BoomBundle()(p)
 {
   val exe = new LSUExeIO
 
-  val dec_uops    = Flipped(Vec(coreWidth, Valid(new MicroOp)))
-  val dec_ldq_idx = Output(Vec(coreWidth, UInt(ldqAddrSz.W)))
-  val dec_stq_idx = Output(Vec(coreWidth, UInt(stqAddrSz.W)))
+  val dis_uops    = Flipped(Vec(coreWidth, Valid(new MicroOp)))
+  val dis_ldq_idx = Output(Vec(coreWidth, UInt(ldqAddrSz.W)))
+  val dis_stq_idx = Output(Vec(coreWidth, UInt(stqAddrSz.W)))
 
   val ldq_full    = Output(Vec(coreWidth, Bool()))
   val stq_full    = Output(Vec(coreWidth, Bool()))
@@ -265,14 +265,14 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
   {
     ldq_full = WrapInc(ld_enq_idx, NUM_LDQ_ENTRIES) === ldq_head
     io.core.ldq_full(w)    := ldq_full
-    io.core.dec_ldq_idx(w) := ld_enq_idx
+    io.core.dis_ldq_idx(w) := ld_enq_idx
 
-    val dec_ld_val = io.core.dec_uops(w).valid && io.core.dec_uops(w).bits.uses_ldq
+    val dis_ld_val = io.core.dis_uops(w).valid && io.core.dis_uops(w).bits.uses_ldq
 
-    when (dec_ld_val)
+    when (dis_ld_val)
     {
       ldq(ld_enq_idx).valid                := true.B
-      ldq(ld_enq_idx).bits.uop             := io.core.dec_uops(w).bits
+      ldq(ld_enq_idx).bits.uop             := io.core.dis_uops(w).bits
       ldq(ld_enq_idx).bits.youngest_stq_idx  := st_enq_idx
       ldq(ld_enq_idx).bits.st_dep_mask     := next_live_store_mask
 
@@ -283,32 +283,32 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
       ldq(ld_enq_idx).bits.order_fail      := false.B
       ldq(ld_enq_idx).bits.forward_std_val := false.B
 
-      assert (ld_enq_idx === io.core.dec_uops(w).bits.ldq_idx, "[lsu] mismatch enq load tag.")
+      assert (ld_enq_idx === io.core.dis_uops(w).bits.ldq_idx, "[lsu] mismatch enq load tag.")
       assert (!ldq(ld_enq_idx).valid, "[lsu] Enqueuing uop is overwriting ldq entries")
     }
-    ld_enq_idx = Mux(dec_ld_val, WrapInc(ld_enq_idx, NUM_LDQ_ENTRIES),
+    ld_enq_idx = Mux(dis_ld_val, WrapInc(ld_enq_idx, NUM_LDQ_ENTRIES),
                                  ld_enq_idx)
 
     stq_full = WrapInc(st_enq_idx, NUM_STQ_ENTRIES) === stq_head
     io.core.stq_full(w)    := stq_full
-    io.core.dec_stq_idx(w) := st_enq_idx
+    io.core.dis_stq_idx(w) := st_enq_idx
 
-    val dec_st_val = io.core.dec_uops(w).valid && io.core.dec_uops(w).bits.uses_stq
-    when (dec_st_val)
+    val dis_st_val = io.core.dis_uops(w).valid && io.core.dis_uops(w).bits.uses_stq
+    when (dis_st_val)
     {
       stq(st_enq_idx).valid           := true.B
-      stq(st_enq_idx).bits.uop        := io.core.dec_uops(w).bits
+      stq(st_enq_idx).bits.uop        := io.core.dis_uops(w).bits
       stq(st_enq_idx).bits.addr.valid := false.B
       stq(st_enq_idx).bits.data.valid := false.B
       stq(st_enq_idx).bits.committed  := false.B
       stq(st_enq_idx).bits.succeeded  := false.B
 
-      assert (st_enq_idx === io.core.dec_uops(w).bits.stq_idx, "[lsu] mismatch enq store tag.")
+      assert (st_enq_idx === io.core.dis_uops(w).bits.stq_idx, "[lsu] mismatch enq store tag.")
       assert (!stq(st_enq_idx).valid, "[lsu] Enqueuing uop is overwriting stq entries")
     }
-    next_live_store_mask = Mux(dec_st_val, next_live_store_mask | (1.U << st_enq_idx),
+    next_live_store_mask = Mux(dis_st_val, next_live_store_mask | (1.U << st_enq_idx),
                                            next_live_store_mask)
-    st_enq_idx = Mux(dec_st_val, WrapInc(st_enq_idx, NUM_STQ_ENTRIES),
+    st_enq_idx = Mux(dis_st_val, WrapInc(st_enq_idx, NUM_STQ_ENTRIES),
                                  st_enq_idx)
   }
 

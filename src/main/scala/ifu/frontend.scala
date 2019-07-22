@@ -166,7 +166,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   val icache = outer.icache.module
   val tlb = Module(new TLB(true, log2Ceil(fetchBytes), TLBConfig(nTLBEntries)))
   val fetch_controller = Module(new FetchControlUnit)
-  val bpdpipeline = Module(new BranchPredictionStage)
+  val bpdpipeline = Module(new BranchPredictionStage(bankBytes))
 
   val s0_pc = Wire(UInt(vaddrBitsExtended.W))
   val s0_valid = fetch_controller.io.imem_req.valid || fetch_controller.io.imem_resp.ready
@@ -298,10 +298,12 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 
   bpdpipeline.io.f2_valid := fetch_controller.io.imem_resp.valid
   bpdpipeline.io.f2_redirect := fetch_controller.io.f2_redirect
+  bpdpipeline.io.f3_will_redirect := fetch_controller.io.f3_will_redirect
   bpdpipeline.io.f4_redirect := fetch_controller.io.f4_redirect
   bpdpipeline.io.f4_taken := fetch_controller.io.f4_taken
   bpdpipeline.io.fe_clear := fetch_controller.io.clear_fetchbuffer
 
+  bpdpipeline.io.f2_aligned_pc := alignToFetchBoundary(s2_pc)
   bpdpipeline.io.f3_ras_update := fetch_controller.io.f3_ras_update
   bpdpipeline.io.f3_btb_update := fetch_controller.io.f3_btb_update
   bpdpipeline.io.bim_update    := fetch_controller.io.bim_update

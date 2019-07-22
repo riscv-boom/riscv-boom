@@ -132,6 +132,9 @@ class BoomBTBResp(implicit p: Parameters) extends BoomBTBBundle
   val fetch_pc  = UInt(vaddrBits.W) // the PC we're predicting on (start of the fetch packet).
 
   val bim_resp  = Valid(new BimResp) // Output from the bimodal table. Valid if prediction provided.
+
+  val is_rvc    = Bool()
+  val is_edge   = Bool()
 }
 
 /**
@@ -141,16 +144,19 @@ class BoomBTBResp(implicit p: Parameters) extends BoomBTBBundle
 class BoomBTBUpdate(implicit p: Parameters) extends BoomBTBBundle
 {
   // what future fetch PCs will tag match against.
-  val pc = UInt(vaddrBits.W)
-  val target = UInt(vaddrBits.W)
-  val taken = Bool()
+  val pc       = UInt(vaddrBits.W)
+  val target   = UInt(vaddrBits.W)
+  val taken    = Bool()
 
   // the offset of the PC of the branch
-  val cfi_idx = UInt(log2Ceil(fetchWidth).W)
+  val cfi_idx  = UInt(log2Ceil(fetchWidth).W)
 
   // other branch information
   val bpd_type = BpredType()
   val cfi_type = CfiType()
+
+  val is_rvc   = Bool()
+  val is_edge  = Bool()
 }
 
 /**
@@ -278,7 +284,7 @@ object BoomBTB
    * @param boomParams general boom core parameters that determine the BTB
    * @return a BoomBTB instance determined by the input parameters
    */
-  def apply(boomParams: BoomCoreParams)(implicit p: Parameters): BoomBTB = {
+  def apply(boomParams: BoomCoreParams, bankBytes: Int)(implicit p: Parameters): BoomBTB = {
     val boomParams: BoomCoreParams = p(freechips.rocketchip.tile.TileKey).core.asInstanceOf[BoomCoreParams]
 
     val enableBTBPredictor = boomParams.enableBTB
@@ -291,9 +297,9 @@ object BoomBTB
     // select BTB based on parameters
     if (enableBTBPredictor) {
       if (boomParams.btb.btbsa) {
-        btb = Module(new BTBsa())
+        btb = Module(new BTBsa(bankBytes))
       } else if (boomParams.btb.densebtb) {
-        btb = Module(new DenseBTB())
+        btb = Module(new DenseBTB(bankBytes))
       }
     } else {
       btb = Module(new NullBTB())
