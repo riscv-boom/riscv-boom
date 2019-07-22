@@ -415,7 +415,9 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
                               !p1_block_load_mask(ldq_wakeup_idx)      &&
                               !p2_block_load_mask(ldq_wakeup_idx)      &&
                               !store_needs_order                       &&
-                              (!ldq_wakeup_e.bits.addr_is_uncacheable || (io.core.commit_load_at_rob_head && ldq_head === ldq_wakeup_idx)))
+                              (!ldq_wakeup_e.bits.addr_is_uncacheable || (io.core.commit_load_at_rob_head &&
+                                                                          ldq_head === ldq_wakeup_idx &&
+                                                                          ldq_wakeup_e.bits.st_dep_mask.asUInt === 0.U)))
 
   // Can we fire an incoming hellacache request
   val can_fire_hella_incoming  = WireInit(false.B) // This is assigned to in the hellashim controller
