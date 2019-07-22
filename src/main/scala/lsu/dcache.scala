@@ -97,7 +97,7 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
   // s_meta_write_req  : Write the metadata for new cache lne
   // s_meta_write_resp :
 
-  val s_invalid :: s_refill_req :: s_refill_resp :: s_drain_rpq_loads :: s_meta_read :: s_meta_resp_1 :: s_meta_resp_2 :: s_meta_clear :: s_wb_meta_read :: s_wb_req :: s_wb_resp :: s_commit_line :: s_drain_rpq :: s_meta_write_req :: s_meta_write_resp :: Nil = Enum(15)
+  val s_invalid :: s_refill_req :: s_refill_resp :: s_drain_rpq_loads :: s_meta_read :: s_meta_resp_1 :: s_meta_resp_2 :: s_meta_clear :: s_wb_meta_read :: s_wb_req :: s_wb_resp :: s_commit_line :: s_drain_rpq :: s_meta_write_req :: s_mem_finish :: Nil = Enum(15)
   val state = RegInit(s_invalid)
 
   val req     = Reg(new BoomDCacheReqInternal)
@@ -125,7 +125,7 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
   val (_, _, refill_done, refill_address_inc) = edge.addr_inc(io.mem_grant)
   val sec_rdy = (idx_match &&
                  !cmd_requires_second_acquire &&
-                 !state.isOneOf(s_invalid, s_meta_write_req, s_meta_write_resp))// Always accept secondary misses
+                 !state.isOneOf(s_invalid, s_meta_write_req, s_mem_finish))// Always accept secondary misses
 
   val rpq = Module(new BranchKillableQueue(new BoomDCacheReqInternal, cfg.nRPQ, u => u.uses_ldq, false))
   rpq.io.brinfo := io.brinfo
@@ -136,14 +136,7 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
   rpq.io.deq.ready := false.B
 
 
-  val grantackq = Module(new Queue(new TLBundleE(edge.bundle), 1))
-  val can_finish = state === s_invalid
-  grantackq.io.enq.valid := refill_done && edge.isRequest(io.mem_grant.bits)
-  grantackq.io.enq.bits  := edge.GrantAck(io.mem_grant.bits)
-  io.mem_finish.valid    := grantackq.io.deq.valid && can_finish
-  io.mem_finish.bits     := grantackq.io.deq.bits
-  grantackq.io.deq.ready := io.mem_finish.ready && can_finish
-
+  val grantack = Reg(Valid(new TLBundleE(edge.bundle)))
   val load_buffer = Mem(cacheDataBeats,
                         UInt(encRowBits.W))
   val refill_ctr  = Reg(UInt(log2Ceil(cacheDataBeats).W))
@@ -171,6 +164,7 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
   io.commit_cmd        := Mux(ClientStates.hasWritePermission(new_coh.state), M_PFW, M_PFR)
   io.clearable         := false.B
   io.meta_read.valid   := false.B
+  io.mem_finish.valid  := false.B
 
   when (io.req_sec_val && io.req_sec_rdy) {
     req.uop.mem_cmd := dirtier_cmd
@@ -207,6 +201,7 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
     }
   } .elsewhen (state === s_refill_req) {
     io.mem_acquire.valid := true.B
+    // TODO: Use AcquirePerm if just doing permissions acquire
     io.mem_acquire.bits  := edge.AcquireBlock(
       fromSource      = id.U,
       toAddress       = Cat(req_tag, req_idx) << blockOffBits,
@@ -221,6 +216,8 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
       load_buffer(refill_address_inc >> rowOffBits) := io.mem_grant.bits.data
     }
     when (refill_done) {
+      grantack.valid := edge.isRequest(io.mem_grant.bits)
+      grantack.bits := edge.GrantAck(io.mem_grant.bits)
       state := Mux(grant_had_data, s_drain_rpq_loads, s_drain_rpq)
       assert(!(!grant_had_data && req_needs_wb))
       commit_line := false.B
@@ -254,11 +251,8 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
     {
       io.clearable := true.B
       when (!rpq.io.enq.fire()) {
-        state := s_invalid
+        state := s_mem_finish
       }
-      // when (io.clr_entry && !rpq.io.enq.fire()) {
-      //   state := s_invalid
-      // }
     } .elsewhen (rpq.io.empty || (rpq.io.deq.valid && !drain_load)) {
       io.commit_val := true.B
       state := s_meta_read
@@ -334,11 +328,15 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
     io.meta_write.bits.data.tag := req_tag
     io.meta_write.bits.way_en   := req.way_en
     when (io.meta_write.fire()) {
-      state := s_meta_write_resp
+      state := s_mem_finish
     }
-  } .elsewhen (state === s_meta_write_resp) {
-    // This wait state allows us to catch RAW hazards on the tags
-    state := s_invalid
+  } .elsewhen (state === s_mem_finish) {
+    io.mem_finish.valid := grantack.valid
+    io.mem_finish.bits  := grantack.bits
+    when (io.mem_finish.fire() || !grantack.valid) {
+      grantack.valid := false.B
+      state := s_invalid
+    }
   }
 
 
