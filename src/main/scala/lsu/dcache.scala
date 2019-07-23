@@ -173,6 +173,7 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
     grant_had_data := false.B
 
     when (io.req_pri_val && io.req_pri_rdy) {
+      grantack.valid := false.B
       refill_ctr := 0.U
       assert(rpq.io.enq.ready)
       req := io.req
