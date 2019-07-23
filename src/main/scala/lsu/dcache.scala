@@ -1043,6 +1043,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   val (s2_has_permission, _, s2_new_hit_state) = s2_hit_state.onAccess(s2_req.uop.mem_cmd)
 
   val s2_hit = (s2_tag_match && (s2_has_permission && s2_hit_state === s2_new_hit_state) && !mshrs.io.block_hit) || s2_is_replay || s2_is_wb
+  val s2_nack = Wire(Bool())
   assert(!(s2_is_replay && !s2_hit), "Replays should always hit")
   assert(!(s2_is_wb && !s2_hit), "Writeback should always see data hit")
 
@@ -1055,7 +1056,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   val s2_lrsc_addr_match = lrsc_valid && lrsc_addr === (s2_req.addr >> blockOffBits)
   val s2_sc_fail = s2_sc && !s2_lrsc_addr_match
   when (lrsc_count > 0.U) { lrsc_count := lrsc_count - 1.U }
-  when ((s2_valid && s2_hit) || (s2_is_replay && s2_req.uop.mem_cmd =/= M_FLUSH_ALL)) {
+  when ((s2_valid && s2_hit && !s2_nack) || (s2_is_replay && s2_req.uop.mem_cmd =/= M_FLUSH_ALL)) {
     when (s2_lr) {
       lrsc_count := (lrscCycles - 1).U
       lrsc_addr := s2_req.addr >> blockOffBits
@@ -1064,7 +1065,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
       lrsc_count := 0.U
     }
   }
-  when (s2_valid && !s2_hit && s2_lrsc_addr_match) {
+  when (s2_valid && !s2_hit && s2_lrsc_addr_match && !s2_nack) {
     lrsc_count := 0.U
   }
 
@@ -1088,7 +1089,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   val s2_nack_hit    = RegNext(s1_nack) // nack because of incoming probe
   val s2_nack_victim = s2_valid &&  s2_hit && mshrs.io.secondary_miss // Nack when we hit something currently being evicted
   val s2_nack_miss   = s2_valid && !s2_hit && !mshrs.io.req.ready // MSHRs not ready for request
-  val s2_nack        = (s2_nack_miss || s2_nack_hit || s2_nack_victim) && !s2_is_replay
+  s2_nack           := (s2_nack_miss || s2_nack_hit || s2_nack_victim) && !s2_is_replay
   val s2_send_resp = (RegNext(s1_send_resp_or_nack) && !s2_nack &&
                       (s2_hit || (mshrs.io.req.fire() && isWrite(s2_req.uop.mem_cmd) && !isRead(s2_req.uop.mem_cmd))))
   val s2_send_nack = (RegNext(s1_send_resp_or_nack) && s2_nack)
