@@ -87,6 +87,9 @@ class MegaBoomECCConfig extends Config(
   new WithL1DECC("identity", "parity") ++
   new MegaBoomConfig)
 
+// NOTE: To use any jtag config you must use change
+// the top-level module and system instantiated. See
+// the debugging docs. for more information.
 class jtagSmallBoomConfig extends Config(
   new WithJtagDTM ++
   new SmallBoomConfig)

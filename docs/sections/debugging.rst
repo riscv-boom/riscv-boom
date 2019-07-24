@@ -11,6 +11,7 @@ can find the documentation and website at https://fires.im/.
 
 Chicken Bits
 ------------
+
 BOOM supports a chicken-bit to delay all instructions from issue until the
 pipeline clears. This effectively turns BOOM into a unpipelined in-order
 core. The chicken bit is controlled by the third bit of the CSR at 0x7c1.
@@ -88,3 +89,17 @@ You can view the visualization by running:
 
 To learn more about :code:`o3-pipeview.py` and to download gem5 visit
 http://www.m5sim.org/Visualization.
+
+JTAG Debugging
+--------------
+
+JTAG debugging closely follows the instructions listed up on https://github.com/chipsalliance/rocket-chip#-debugging-with-gdb
+and on https://github.com/riscv/riscv-isa-sim#debugging-with-gdb. However, by default BOOM does not attach a JTAG debug module.
+Thus, you have to change your top-level system to add this component. If you are using the Chipyard development environment,
+you can build a JTAG/DTM simulator using the following :code:`make` command:
+
+.. code-block:: bash
+
+    make SUB_PROJECT=boom CONFIG=jtagSmallBoomConfig MODEL=TestHarnessWithDTM TOP=BoomRocketSystem
+
+Here the :code:`MODEL` variable changes which Test Harness to use while the :code:`TOP` variable changes to a JTAG enabled system.
