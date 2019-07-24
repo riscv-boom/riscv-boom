@@ -731,14 +731,15 @@ class BoomProbeUnit(implicit edge: TLEdgeOut, p: Parameters) extends L1HellaCach
     val meta_write = Decoupled(new L1MetaWriteReq)
     val wb_req = Decoupled(new WritebackReq(edge.bundle))
     val way_en = Input(UInt(nWays.W))
-    val wb_rdy = Input(Bool())
-    val mshr_rdy = Input(Bool())
+    val wb_rdy = Input(Bool()) // Is writeback unit currently busy? If so need to retry meta read when its done
+    val mshr_rdy = Input(Bool()) // Is MSHR ready for this request to proceed?
+    val mshr_wb_rdy = Output(Bool()) // Should we block MSHR writebacks while we finish our own?
     val block_state = Input(new ClientMetadata())
   }
 
   val (s_invalid :: s_meta_read :: s_meta_resp :: s_mshr_req ::
        s_mshr_resp :: s_release :: s_writeback_req :: s_writeback_resp ::
-       s_meta_write :: Nil) = Enum(9)
+       s_meta_write :: s_meta_write_resp :: Nil) = Enum(10)
   val state = RegInit(s_invalid)
 
   val req = Reg(new TLBundleB(edge.bundle))
@@ -776,6 +777,10 @@ class BoomProbeUnit(implicit edge: TLEdgeOut, p: Parameters) extends L1HellaCach
   io.wb_req.bits.param := report_param
   io.wb_req.bits.way_en := way_en
   io.wb_req.bits.voluntary := false.B
+
+  io.mshr_wb_rdy := !state.isOneOf(s_release, s_writeback_req, s_writeback_resp, s_meta_write, s_meta_write_resp)
+
+
 
   // state === s_invalid
   when (io.req.fire()) {
@@ -819,6 +824,10 @@ class BoomProbeUnit(implicit edge: TLEdgeOut, p: Parameters) extends L1HellaCach
   }
 
   when (io.meta_write.fire()) {
+    state := s_meta_write_resp
+  }
+
+  when (state === s_meta_write_resp) {
     state := s_invalid
   }
 }
@@ -1126,7 +1135,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   mshrs.io.req.bits.sdq_id      := DontCare // this is set inside MSHR
   mshrs.io.req.bits.data        := s2_req.data
   mshrs.io.req.bits.is_hella    := s2_req.is_hella
-  mshrs.io.meta_resp.valid      := !s2_nack_hit // We should wait for Prober to finish dealing with the line first
+  mshrs.io.meta_resp.valid      := !s2_nack_hit || prober.io.mshr_wb_rdy
   mshrs.io.meta_resp.bits       := Mux1H(s2_tag_match_way, RegNext(meta.io.resp))
   when (mshrs.io.req.fire()) { replacer.miss }
   tl_out.a <> mshrs.io.mem_acquire
