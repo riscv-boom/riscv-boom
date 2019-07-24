@@ -64,7 +64,7 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
 
     val meta_write  = Decoupled(new L1MetaWriteReq)
     val meta_read   = Decoupled(new L1MetaReadReq)
-    val meta_resp   = Input(new L1Metadata)
+    val meta_resp   = Input(Valid(new L1Metadata))
     val wb_req      = Decoupled(new WritebackReq(edge.bundle))
 
     // To inform the prefetcher when we are commiting the fetch of this line
@@ -263,8 +263,9 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
   } .elsewhen (state === s_meta_resp_1) {
     state := s_meta_resp_2
   } .elsewhen (state === s_meta_resp_2) {
-    val needs_wb = io.meta_resp.coh.onCacheControl(M_FLUSH)._1
-    state := Mux(needs_wb, s_meta_clear, s_commit_line)
+    val needs_wb = io.meta_resp.bits.coh.onCacheControl(M_FLUSH)._1
+    state := Mux(!io.meta_resp.valid, s_meta_read, // Prober could have nack'd this read
+             Mux(needs_wb, s_meta_clear, s_commit_line))
   } .elsewhen (state === s_meta_clear) {
     io.meta_write.valid         := true.B
     io.meta_write.bits.idx      := req_idx
@@ -442,7 +443,7 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
     val refill     = Decoupled(new L1DataWriteReq)
     val meta_write = Decoupled(new L1MetaWriteReq)
     val meta_read  = Decoupled(new L1MetaReadReq)
-    val meta_resp  = Input(new L1Metadata)
+    val meta_resp  = Input(Valid(new L1Metadata))
     val replay     = Decoupled(new BoomDCacheReqInternal)
     val prefetch   = Decoupled(new BoomDCacheReq)
     val wb_req     = Decoupled(new WritebackReq(edge.bundle))
@@ -1125,7 +1126,8 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   mshrs.io.req.bits.sdq_id      := DontCare // this is set inside MSHR
   mshrs.io.req.bits.data        := s2_req.data
   mshrs.io.req.bits.is_hella    := s2_req.is_hella
-  mshrs.io.meta_resp             := Mux1H(s2_tag_match_way, RegNext(meta.io.resp))
+  mshrs.io.meta_resp.valid      := !s2_nack_hit // We should wait for Prober to finish dealing with the line first
+  mshrs.io.meta_resp.bits       := Mux1H(s2_tag_match_way, RegNext(meta.io.resp))
   when (mshrs.io.req.fire()) { replacer.miss }
   tl_out.a <> mshrs.io.mem_acquire
 
