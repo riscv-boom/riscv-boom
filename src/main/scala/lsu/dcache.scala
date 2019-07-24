@@ -143,7 +143,7 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
   val meta_hazard = RegInit(0.U(2.W))
   when (meta_hazard =/= 0.U) { meta_hazard := meta_hazard + 1.U }
   when (io.meta_write.fire()) { meta_hazard := 1.U }
-  io.probe_rdy   := (meta_hazard === 0.U && !state.isOneOf(s_drain_rpq_loads, s_meta_read, s_meta_resp_1, s_meta_resp_2, s_meta_clear)) || !idx_match
+  io.probe_rdy   := (meta_hazard === 0.U && state.isOneOf(s_invalid, s_refill_req, s_refill_resp)) || !idx_match
   io.idx_match   := (state =/= s_invalid) && idx_match
   io.way_match   := !state.isOneOf(s_invalid, s_refill_req, s_refill_resp, s_drain_rpq_loads) && way_match
   io.tag_match   := (state =/= s_invalid) && tag_match
@@ -624,6 +624,7 @@ class BoomWritebackUnit(implicit edge: TLEdgeOut, p: Parameters) extends L1Hella
     val req = Flipped(Decoupled(new WritebackReq(edge.bundle)))
     val meta_read = Decoupled(new L1MetaReadReq)
     val resp = Output(Bool())
+    val idx = Output(Valid(UInt()))
     val data_req = Decoupled(new L1DataReadReq)
     val data_resp = Input(UInt(encRowBits.W))
     val mem_grant = Input(Bool())
@@ -641,6 +642,8 @@ class BoomWritebackUnit(implicit edge: TLEdgeOut, p: Parameters) extends L1Hella
   val (_, last_beat, all_beats_done, beat_count) = edge.count(io.release)
   val wb_buffer = Reg(Vec(refillCycles, UInt(encRowBits.W)))
 
+  io.idx.valid       := state =/= s_invalid
+  io.idx.bits        := req.idx
   io.release.valid   := false.B
   io.release.bits    := DontCare
   io.req.ready       := false.B
@@ -727,6 +730,7 @@ class BoomProbeUnit(implicit edge: TLEdgeOut, p: Parameters) extends L1HellaCach
     val meta_write = Decoupled(new L1MetaWriteReq)
     val wb_req = Decoupled(new WritebackReq(edge.bundle))
     val way_en = Input(UInt(nWays.W))
+    val wb_rdy = Input(Bool())
     val mshr_rdy = Input(Bool())
     val block_state = Input(new ClientMetadata())
   }
@@ -792,7 +796,7 @@ class BoomProbeUnit(implicit edge: TLEdgeOut, p: Parameters) extends L1HellaCach
     old_coh := io.block_state
     way_en := io.way_en
     // if the read didn't go through, we need to retry
-    state := Mux(io.mshr_rdy, s_mshr_resp, s_meta_read)
+    state := Mux(io.mshr_rdy && io.wb_rdy, s_mshr_resp, s_meta_read)
   }
 
   when (state === s_mshr_resp) {
@@ -1133,6 +1137,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   prober.io.block_state := s2_hit_state
   metaWriteArb.io.in(1) <> prober.io.meta_write
   prober.io.mshr_rdy    := mshrs.io.probe_rdy
+  prober.io.wb_rdy      := (prober.io.meta_write.bits.idx =/= wb.io.idx.bits) || !wb.io.idx.valid
 
   // refills
   mshrs.io.mem_grant.valid := tl_out.d.fire() && tl_out.d.bits.source =/= cfg.nMSHRs.U
