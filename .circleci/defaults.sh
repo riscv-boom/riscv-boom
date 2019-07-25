@@ -33,9 +33,9 @@ LOCAL_SIM_DIR=$LOCAL_CHIPYARD_DIR/sims/verisim
 
 # key value store to get the build strings
 declare -A mapping
-mapping["smallboom"]="SUB_PROJECT=boom CONFIG=SmallBoomConfig"
-mapping["mediumboom"]="SUB_PROJECT=boom CONFIG=MediumBoomConfig"
-mapping["largeboom"]="SUB_PROJECT=boom CONFIG=LargeBoomConfig"
-mapping["megaboom"]="SUB_PROJECT=boom CONFIG=MegaBoomConfig"
-mapping["boomandrocket"]="SUB_PROJECT=boom CONFIG=SmallBoomAndRocketConfig"
-mapping["rv32unifiedboom"]="SUB_PROJECT=boom CONFIG=SmallRV32UnifiedBoomConfig"
+mapping["smallboom"]="CONFIG=SmallBoomConfig"
+mapping["mediumboom"]="CONFIG=MediumBoomConfig"
+mapping["largeboom"]="CONFIG=LargeBoomConfig"
+mapping["megaboom"]="CONFIG=MegaBoomConfig"
+mapping["boomandrocket"]="CONFIG=SmallBoomAndRocketConfig"
+mapping["rv32unifiedboom"]="CONFIG=SmallRV32UnifiedBoomConfig"

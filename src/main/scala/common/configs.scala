@@ -1,254 +1,149 @@
 //******************************************************************************
-// Copyright (c) 2015 - 2018, The Regents of the University of California (Regents).
+// Copyright (c) 2015 - 2019, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
-// Author: Christopher Celio
+// Author: Christopher Celio, Abraham Gonzalez, Ben Korpan, Jerry Zhao
 //------------------------------------------------------------------------------
 
 package boom.common
 
 import chisel3._
-import chisel3.util.{log2Up}
 
 import freechips.rocketchip.config.{Parameters, Config}
-import freechips.rocketchip.subsystem.{SystemBusKey}
-import freechips.rocketchip.devices.tilelink.{BootROMParams}
+import freechips.rocketchip.devices.debug._
+import freechips.rocketchip.devices.tilelink._
+import freechips.rocketchip.diplomacy._
 import freechips.rocketchip.rocket._
+import freechips.rocketchip.subsystem._
+import freechips.rocketchip.system._
 import freechips.rocketchip.tile._
+import freechips.rocketchip.tilelink._
+import freechips.rocketchip.util._
 
-import boom.ifu._
-import boom.bpu._
-import boom.exu._
-import boom.lsu._
-import boom.system.{BoomTilesKey}
+// ---------------------
+// BOOM Configs
+// ---------------------
 
 /**
- * Baseline BOOM configuration.
+ * Note: For all these configs, the mix-ins are applied from
+ * "bottom" to "top". This means that the "lower" mix-ins set the
+ * default values of the parameters, and the "higher" mix-ins
+ * overwrite the defaults to implement a new configuration.
+ *
+ * This order is specified in the GeneratorApp class (aka foldRight)
+ *
+ * Ex.
+ * class SmallBoomConfig extends Config(
+ *    new WithRVC ++ <-- Applied 6th
+ *    new WithSmallBooms ++ <-- Applied 5th
+ *    new BaseBoomConfig ++ <-- Applied 4th
+ *    new WithNBoomCores(1) ++ <-- Applied 3rd
+ *    new WithoutTLMonitors ++ <-- Applied 2nd
+ *    new freechips.rocketchip.system.BaseConfig) <-- Applied 1st
  */
-class BaseBoomConfig extends Config((site, here, up) => {
-  // Top-Level
-  case XLen => 64
 
-  // Specify things which are typically common between core configs.
-  case BoomTilesKey => up(BoomTilesKey, site) map { b => b.copy(
-    core = b.core.copy(
-      fpu = Some(freechips.rocketchip.tile.FPUParams(sfmaLatency=4, dfmaLatency=4, divSqrt=true)))
-  )}
+// scalastyle:off
 
-  // Make sure there are enough hart bits to support multiple cores
-  case MaxHartIdBits => log2Up(site(BoomTilesKey).size)
-})
+// Main configs. SmallBoomConfig and MediumBoomConfig are best-maintained
+//   MediumBoomConfig is typically described in documentation
+//   All RV64IMAFDC
+class SmallBoomConfig extends Config(
+  new WithRVC ++
+  new WithSmallBooms ++
+  new BaseBoomConfig ++
+  new WithNBoomCores(1) ++
+  new freechips.rocketchip.system.BaseConfig)
 
-/**
- * Enables RV32 version of the core
- */
-class WithBoomRV32 extends Config((site, here, up) => {
-  case XLen => 32
-  case BoomTilesKey => up(BoomTilesKey, site) map { b =>
-    b.copy(core = b.core.copy(
-      fpu = b.core.fpu.map(_.copy(fLen = 32)),
-      mulDiv = Some(MulDivParams(mulUnroll = 8))))
-  }
-})
+class MediumBoomConfig extends Config(
+  new WithRVC ++
+  new WithMediumBooms ++
+  new BaseBoomConfig ++
+  new WithNBoomCores(1) ++
+  new freechips.rocketchip.system.BaseConfig)
 
-/**
- * Combines the Memory and Integer Issue Queues. Similar to BOOM v1.
- */
-class WithUnifiedMemIntIQs extends Config((site, here, up) => {
-  case BoomTilesKey => up(BoomTilesKey, site) map { b =>
-    b.copy(core = b.core.copy(
-      issueParams = b.core.issueParams.filter(_.iqType != IQT_MEM.litValue)
-                      .map(iq => if (iq.iqType == IQT_INT.litValue && iq.issueWidth < b.core.decodeWidth)
-                                   iq.copy(issueWidth=b.core.decodeWidth) else iq)
-    ))
-  }
-})
+class LargeBoomConfig extends Config(
+  new WithRVC ++
+  new WithLargeBooms ++
+  new BaseBoomConfig ++
+  new WithNBoomCores(1) ++
+  new freechips.rocketchip.system.BaseConfig)
 
-/**
-  * Adds a boot ROM.
-  */
-class WithBootROM extends Config((site, here, up) => {
-  case BootROMParams => BootROMParams(contentFileName = s"./bootrom/bootrom.rv${site(XLen)}.img")
-})
+class MegaBoomConfig extends Config(
+  new WithRVC ++
+  new WithMegaBooms ++
+  new BaseBoomConfig ++
+  new WithNBoomCores(1) ++
+  new freechips.rocketchip.system.BaseConfig)
 
-/**
- * Remove FPU
- */
-class WithoutBoomFPU extends Config((site, here, up) => {
-  case BoomTilesKey => up(BoomTilesKey, site) map { b =>
-    b.copy(core = b.core.copy(
-      issueParams = b.core.issueParams.filter(_.iqType != IQT_FP.litValue),
-      fpu = None))
-   }
-})
+// Assorted configs
+class MegaBoomECCConfig extends Config(
+  new WithL1IECC("parity", "parity") ++
+  new WithL1DECC("identity", "parity") ++
+  new MegaBoomConfig)
 
-/**
- * Remove Fetch Monitor (should not be synthesized (although it can be))
- */
-class WithoutFetchMonitor extends Config((site, here, up) => {
-  case BoomTilesKey => up(BoomTilesKey, site) map { b =>
-    b.copy(core = b.core.copy(
-      useFetchMonitor = false
-    ))
-  }
-})
+// RV64IMAC
+class SmallIntBoomConfig extends Config(
+  new WithoutBoomFPU ++
+  new SmallBoomConfig)
 
-/**
- * Customize the amount of perf. counters (HPMs) for the core
- */
-class WithNPerfCounters(n: Int) extends Config((site, here, up) => {
-  case BoomTilesKey => up(BoomTilesKey, site) map { b => b.copy(core = b.core.copy(
-    nPerfCounters = n
-  ))}
-})
+class SmallDualBoomConfig extends Config(
+  new WithRVC ++
+  new WithSmallBooms ++
+  new BaseBoomConfig ++
+  new WithNBoomCores(2) ++
+  new freechips.rocketchip.system.BaseConfig)
 
-/**
- * Enable tracing
- */
-class WithTrace extends Config((site, here, up) => {
-  case BoomTilesKey => up(BoomTilesKey, site) map { b => b.copy(trace = true) }
-})
+class TracedSmallBoomConfig extends Config(
+  new WithTrace ++
+  new SmallBoomConfig)
 
-/**
- * Enable RVC
- */
-class WithRVC extends Config((site, here, up) => {
-  case BoomTilesKey => up(BoomTilesKey, site) map { b => b.copy(
-    core = b.core.copy(
-      fetchWidth = b.core.fetchWidth * 2,
-      useCompressed = true))}
-})
+//RV32IMAC TODO: Support FP
+class SmallRV32UnifiedBoomConfig extends Config(
+  new WithoutBoomFPU ++
+  new WithUnifiedMemIntIQs ++
+  new SmallBoomConfig)
 
-/**
- * 1-wide BOOM.
- */
-class WithSmallBooms extends Config((site, here, up) => {
-  case BoomTilesKey => up(BoomTilesKey, site) map { b => b.copy(
-    core = b.core.copy(
-      fetchWidth = 2,
-      decodeWidth = 1,
-      numRobEntries = 32,
-      issueParams = Seq(
-        IssueParams(issueWidth=1, numEntries=8, iqType=IQT_MEM.litValue, dispatchWidth=1),
-        IssueParams(issueWidth=1, numEntries=8, iqType=IQT_INT.litValue, dispatchWidth=1),
-        IssueParams(issueWidth=1, numEntries=8, iqType=IQT_FP.litValue , dispatchWidth=1)),
-      numIntPhysRegisters = 52,
-      numFpPhysRegisters = 48,
-      numLdqEntries = 8,
-      numStqEntries = 8,
-      maxBrCount = 4,
-      numFetchBufferEntries = 8,
-      ftq = FtqParameters(nEntries=16),
-      btb = BoomBTBParameters(btbsa=true, densebtb=false, nSets=64, nWays=2,
-                              nRAS=8, tagSz=20, bypassCalls=false, rasCheckForEmpty=false),
-      bpdBaseOnly = None,
-      gshare = Some(GShareParameters(historyLength=11, numSets=2048)),
-      tage = None,
-      bpdRandom = None,
-      nPerfCounters = 2),
-    dcache = Some(DCacheParams(rowBits = site(SystemBusKey).beatBits,
-                               nSets=64, nWays=4, nMSHRs=2, nTLBEntries=8)),
-    icache = Some(ICacheParams(rowBits = site(SystemBusKey).beatBits, nSets=64, nWays=4, fetchBytes=2*4))
-    )}
-  case SystemBusKey => up(SystemBusKey, site).copy(beatBytes = 8)
-})
+// --------------------------
+// BOOM + Rocket Configs
+// ----
+// Heterogeneous Tile Configs
+// --------------------------
 
-/**
- * 2-wide BOOM. Try to match the Cortex-A9.
- */
-class WithMediumBooms extends Config((site, here, up) => {
-  case BoomTilesKey => up(BoomTilesKey, site) map { b => b.copy(
-    core = b.core.copy(
-      fetchWidth = 2,
-      decodeWidth = 2,
-      numRobEntries = 64,
-      issueParams = Seq(
-        IssueParams(issueWidth=1, numEntries=16, iqType=IQT_MEM.litValue, dispatchWidth=2),
-        IssueParams(issueWidth=2, numEntries=16, iqType=IQT_INT.litValue, dispatchWidth=2),
-        IssueParams(issueWidth=1, numEntries=16, iqType=IQT_FP.litValue , dispatchWidth=2)),
-      numIntPhysRegisters = 80,
-      numFpPhysRegisters = 64,
-      numLdqEntries = 16,
-      numStqEntries = 16,
-      maxBrCount = 8,
-      numFetchBufferEntries = 16,
-      ftq = FtqParameters(nEntries=32),
-      btb = BoomBTBParameters(btbsa=true, densebtb=false, nSets=64, nWays=2,
-                              nRAS=8, tagSz=20, bypassCalls=false, rasCheckForEmpty=false),
-      bpdBaseOnly = None,
-      gshare = Some(GShareParameters(historyLength=23, numSets=4096)),
-      tage = None,
-      bpdRandom = None,
-      nPerfCounters = 6,
-      fpu = Some(freechips.rocketchip.tile.FPUParams(sfmaLatency=4, dfmaLatency=4, divSqrt=true))),
-    dcache = Some(DCacheParams(rowBits = site(SystemBusKey).beatBits,
-                                 nSets=64, nWays=4, nMSHRs=2, nTLBEntries=8)),
-    icache = Some(ICacheParams(rowBits = site(SystemBusKey).beatBits, nSets=64, nWays=4, fetchBytes=2*4))
-    )}
-  case SystemBusKey => up(SystemBusKey, site).copy(beatBytes = 8)
-})
+class SmallBoomAndRocketConfig extends Config(
+  // final param setup
+  new WithRenumberHarts ++
+  // boom param setup
+  new WithRVC ++
+  new WithSmallBooms ++
+  new BaseBoomConfig ++
+  // create boom tile
+  new WithNBoomCores(1) ++
+  // create rocket tile
+  new freechips.rocketchip.subsystem.WithNBigCores(1) ++
+  new freechips.rocketchip.system.BaseConfig)
 
-/**
- * 3-wide BOOM. Try to match the Cortex-A15.
- */
-class WithLargeBooms extends Config((site, here, up) => {
-  case BoomTilesKey => up(BoomTilesKey, site) map { b => b.copy(
-    core = b.core.copy(
-      fetchWidth = 4,
-      decodeWidth = 3,
-      numRobEntries = 96,
-      issueParams = Seq(
-        IssueParams(issueWidth=1, numEntries=24, iqType=IQT_MEM.litValue, dispatchWidth=3),
-        IssueParams(issueWidth=2, numEntries=24, iqType=IQT_INT.litValue, dispatchWidth=3),
-        IssueParams(issueWidth=1, numEntries=24, iqType=IQT_FP.litValue , dispatchWidth=3)),
-      numIntPhysRegisters = 100,
-      numFpPhysRegisters = 96,
-      numLdqEntries = 24,
-      numStqEntries = 24,
-      maxBrCount = 12,
-      numFetchBufferEntries = 24,
-      ftq = FtqParameters(nEntries=32),
-      btb = BoomBTBParameters(btbsa=true, densebtb=false, nSets=512, nWays=4, nRAS=16, tagSz=20),
-      bpdBaseOnly = None,
-      gshare = Some(GShareParameters(historyLength=23, numSets=4096)),
-      tage = None,
-      bpdRandom = None),
-    dcache = Some(DCacheParams(rowBits = site(SystemBusKey).beatBytes*8,
-                               nSets=64, nWays=8, nMSHRs=4, nTLBEntries=16)),
-    icache = Some(ICacheParams(fetchBytes = 4*4, rowBits = site(SystemBusKey).beatBytes*8, nSets=64, nWays=8))
-    )}
-  case SystemBusKey => up(SystemBusKey, site).copy(beatBytes = 16)
-})
+class MediumBoomAndRocketConfig extends Config(
+  // final param setup
+  new WithRenumberHarts ++
+  // boom param setup
+  new WithRVC ++
+  new WithMediumBooms ++
+  new BaseBoomConfig ++
+  // create boom tile
+  new WithNBoomCores(1) ++
+  // create rocket tile
+  new freechips.rocketchip.subsystem.WithNBigCores(1) ++
+  new freechips.rocketchip.system.BaseConfig)
 
-/**
- * 4-wide BOOM.
- */
-class WithMegaBooms extends Config((site, here, up) => {
-  case BoomTilesKey => up(BoomTilesKey, site) map { b => b.copy(
-    core = b.core.copy(
-      fetchWidth = 4,
-      decodeWidth = 4,
-      numRobEntries = 128,
-      issueParams = Seq(
-        IssueParams(issueWidth=1, numEntries=32, iqType=IQT_MEM.litValue, dispatchWidth=4),
-        IssueParams(issueWidth=3, numEntries=32, iqType=IQT_INT.litValue, dispatchWidth=4),
-        IssueParams(issueWidth=2, numEntries=32, iqType=IQT_FP.litValue , dispatchWidth=4)),
-      numIntPhysRegisters = 128,
-      numFpPhysRegisters = 128,
-      numLdqEntries = 32,
-      numStqEntries = 32,
-      maxBrCount = 16,
-      numFetchBufferEntries = 32,
-      ftq = FtqParameters(nEntries=32),
-      btb = BoomBTBParameters(btbsa=true, densebtb=false, nSets=512, nWays=4, nRAS=16, tagSz=20),
-      bpdBaseOnly = None,
-      gshare = Some(GShareParameters(historyLength=23, numSets=4096)),
-      tage = None,
-      bpdRandom = None),
-    dcache = Some(DCacheParams(rowBits = site(SystemBusKey).beatBytes*8,
-                               nSets=64, nWays=8, nMSHRs=8, nTLBEntries=32)),
-    icache = Some(ICacheParams(fetchBytes = 4*4, rowBits = site(SystemBusKey).beatBytes*8, nSets=64, nWays=8))
-    )}
-  case SystemBusKey => up(SystemBusKey, site).copy(beatBytes = 16)
-})
-
+class DualMediumBoomAndDualRocketConfig extends Config(
+  // final param setup
+  new WithRenumberHarts ++
+  // boom param setup (applies to all boom cores)
+  new WithRVC ++
+  new WithMediumBooms ++
+  new BaseBoomConfig ++
+  // create boom tiles
+  new WithNBoomCores(2) ++
+  // create rocket tiles
+  new freechips.rocketchip.subsystem.WithNBigCores(2) ++
+  new freechips.rocketchip.system.BaseConfig)
