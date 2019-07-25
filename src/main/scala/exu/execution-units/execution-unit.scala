@@ -23,6 +23,7 @@ import chisel3._
 import chisel3.util._
 
 import freechips.rocketchip.config.{Parameters}
+import freechips.rocketchip.rocket.{BP}
 import freechips.rocketchip.tile.{XLen, RoCCCoreIO}
 import freechips.rocketchip.tile
 
@@ -97,7 +98,7 @@ class ExecutionUnitIO(
   // only used by the branch unit
   val br_unit    = if (hasBrUnit) Output(new BranchUnitResp()) else null
   val get_ftq_pc = if (hasBrUnit) Flipped(new GetPCFromFtqIO()) else null
-  val status     = if (hasBrUnit || hasRocc) Input(new freechips.rocketchip.rocket.MStatus()) else null
+  val status     = if (hasBrUnit || hasRocc || hasMem) Input(new freechips.rocketchip.rocket.MStatus()) else null
 
   // only used by the fpu unit
   val fcsr_rm = if (hasFcsr) Input(Bits(tile.FPConstants.RM_SZ.W)) else null
@@ -105,6 +106,8 @@ class ExecutionUnitIO(
   // only used by the mem unit
   val lsu_io        = if (hasMem) Flipped(new boom.lsu.LoadStoreUnitIO(coreWidth)) else null
   val dmem          = if (hasMem) new boom.lsu.DCMemPortIO() else null
+  val bp = if (hasMem) Input(Vec(nBreakpoints, new BP)) else null
+
   // TODO move this out of ExecutionUnit
   val com_exception = if (hasMem || hasRocc) Input(Bool()) else null
 }
@@ -388,6 +391,8 @@ class ALUExeUnit(
     maddrcalc.io.req        <> io.req
     maddrcalc.io.req.valid  := io.req.valid && io.req.bits.uop.fu_code_is(FU_MEM)
     maddrcalc.io.brinfo     <> io.brinfo
+    maddrcalc.io.status     := io.status
+    maddrcalc.io.bp         := io.bp
     maddrcalc.io.resp.ready := DontCare
     io.bypass <> maddrcalc.io.bypass // TODO this is not where the bypassing should
                                      // occur from, is there any bypassing happening?!

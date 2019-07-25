@@ -502,6 +502,8 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule
 
   val (xcpt_valid, xcpt_cause) = checkExceptions(List(
     (io.interrupt,     io.interrupt_cause),
+    (uop.bp_debug_if,  (CSR.debugTriggerCause).U),
+    (uop.bp_xcpt_if,   (Causes.breakpoint).U),
     (uop.replay_if,    MINI_EXCEPTION_REPLAY),
     (uop.xcpt_pf_if,   (Causes.fetch_page_fault).U),
     (uop.xcpt_ae_if,   (Causes.fetch_access).U),
