@@ -155,6 +155,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
   val dec_fire   = Wire(Vec(coreWidth, Bool()))  // can the instruction fire beyond decode?
                                                     // (can still be stopped in ren or dis)
   val dec_ready  = Wire(Bool())
+  val dec_xcpts  = Wire(Vec(coreWidth, Bool()))
 
   // Rename2/Dispatch stage
   val dis_valids = Wire(Vec(coreWidth, Bool()))
@@ -393,12 +394,45 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
     dec_uops(w) := decode_units(w).io.deq.uop
   }
 
+  //-------------------------------------------------------------
+  // FTQ GetPC Port Arbitration
+
+  val bru_pc_req  = Wire(Decoupled(UInt(log2Ceil(ftqSz).W)))
+  val xcpt_pc_req = Wire(Decoupled(UInt(log2Ceil(ftqSz).W)))
+
+  val ftq_arb = Module(new Arbiter(UInt(log2Ceil(ftqSz).W), 2))
+
+  ftq_arb.io.in(0) <> bru_pc_req
+  ftq_arb.io.in(1) <> xcpt_pc_req
+
+  // Hookup FTQ
+  io.ifu.get_pc.ftq_idx := ftq_arb.io.out.bits
+  ftq_arb.io.out.ready  := true.B
+
+  // Branch Unit Requests
+  bru_pc_req.valid := RegNext(iss_valids(brunit_idx))
+  bru_pc_req.bits  := RegNext(iss_uops(brunit_idx).ftq_idx)
+  exe_units(brunit_idx).io.get_ftq_pc.fetch_pc := RegNext(io.ifu.get_pc.fetch_pc)
+  exe_units(brunit_idx).io.get_ftq_pc.next_val := RegNext(io.ifu.get_pc.next_val)
+  exe_units(brunit_idx).io.get_ftq_pc.next_pc  := RegNext(io.ifu.get_pc.next_pc)
+
+  // Frontend Exception Requests
+  val xcpt_idx = PriorityEncoder(dec_xcpts)
+  xcpt_pc_req.valid    := dec_xcpts.reduce(_||_)
+  xcpt_pc_req.bits     := dec_uops(xcpt_idx).ftq_idx
+  rob.io.xcpt_fetch_pc := RegEnable(io.ifu.get_pc.fetch_pc, dis_ready)
+
+  //-------------------------------------------------------------
   // Decode/Rename1 pipeline logic
+
+  dec_xcpts := dec_uops zip dec_valids map {case (u,v) => u.exception && v}
+  val dec_xcpt_stall = dec_xcpts.reduce(_||_) && !xcpt_pc_req.ready
 
   val dec_hazards = (0 until coreWidth).map(w =>
                       dec_valids(w) &&
                       (  !dis_ready
                       || rob.io.commit.rollback
+                      || dec_xcpt_stall
                       || branch_mask_full(w)
                       || !rename_stage.io.inst_can_proceed(w)
                       || flush_ifu))
@@ -464,6 +498,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
   //-------------------------------------------------------------
   //-------------------------------------------------------------
 
+  //-------------------------------------------------------------
   // Rename2/Dispatch pipeline logic
 
   val dis_prior_slot_valid = dis_valids.scanLeft(false.B) ((s,v) => s || v)
@@ -993,12 +1028,6 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
   // branch resolution
   rob.io.brinfo <> br_unit.brinfo
 
-  // branch unit requests PCs and predictions from ROB during register read
-  // (fetch PC from ROB cycle earlier than needed for critical path reasons)
-  io.ifu.get_pc.ftq_idx := RegNext(iss_uops(brunit_idx).ftq_idx)
-  exe_units(brunit_idx).io.get_ftq_pc.fetch_pc       := RegNext(io.ifu.get_pc.fetch_pc)
-  exe_units(brunit_idx).io.get_ftq_pc.next_val       := RegNext(io.ifu.get_pc.next_val)
-  exe_units(brunit_idx).io.get_ftq_pc.next_pc        := RegNext(io.ifu.get_pc.next_pc)
   exe_units(brunit_idx).io.status := csr.io.status
 
   // LSU <> ROB
@@ -1073,7 +1102,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
     for (w <- 0 until coreWidth) {
       printf("    Slot:%d (PC:0x%x Valids:%c%c Inst:DASM(%x))\n",
         w.U,
-        dec_uops(w).pc(19,0),
+        dec_uops(w).debug_pc(19,0),
         BoolToChar(io.ifu.fetchpacket.valid && dec_fbundle.uops(w).valid && !dec_finished_mask(w), 'V'),
         BoolToChar(dec_fire(w), 'V'),
         dec_fbundle.uops(w).bits.debug_inst)
@@ -1083,7 +1112,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
     for (w <- 0 until coreWidth) {
       printf("    Slot:%d (PC:0x%x Valid:%c Inst:DASM(%x))\n",
         w.U,
-        rename_stage.io.ren2_uops(w).pc(19,0),
+        rename_stage.io.ren2_uops(w).debug_pc(19,0),
         BoolToChar(rename_stage.io.ren2_mask(w), 'V'),
         rename_stage.io.ren2_uops(w).debug_inst)
     }
@@ -1187,7 +1216,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       when (rob.io.commit.valids(w)) {
         printf("%d 0x%x ",
           priv,
-          Sext(rob.io.commit.uops(w).pc(vaddrBits-1,0), xLen))
+          Sext(rob.io.commit.uops(w).debug_pc(vaddrBits-1,0), xLen))
         printf_inst(rob.io.commit.uops(w))
         when (rob.io.commit.uops(w).dst_rtype === RT_FIX && rob.io.commit.uops(w).ldst =/= 0.U) {
           printf(" x%d 0x%x\n",
@@ -1293,7 +1322,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
   if (p(BoomTilesKey)(0).trace) {
     for (w <- 0 until coreWidth) {
       io.trace(w).valid      := rob.io.commit.valids(w)
-      io.trace(w).iaddr      := Sext(rob.io.commit.uops(w).pc(vaddrBits-1,0), xLen)
+      io.trace(w).iaddr      := Sext(rob.io.commit.uops(w).debug_pc(vaddrBits-1,0), xLen)
       io.trace(w).insn       := rob.io.commit.uops(w).debug_inst
       // I'm uncertain the commit signals from the ROB match these CSR exception signals
       io.trace(w).priv       := csr.io.status.prv
