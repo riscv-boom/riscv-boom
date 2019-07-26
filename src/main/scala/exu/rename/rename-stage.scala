@@ -105,7 +105,7 @@ class RenameStage(
   //-------------------------------------------------------------
   // Helper Functions
 
-  def BypassAllocations(uop: MicroOp, older_uops: Vec[MicroOp], alloc_reqs: Vec[Bool]): MicroOp = {
+  def BypassAllocations(uop: MicroOp, older_uops: Seq[MicroOp], alloc_reqs: Seq[Bool]): MicroOp = {
     val bypassed_uop = Wire(new MicroOp)
     bypassed_uop := uop
 
@@ -243,7 +243,8 @@ class RenameStage(
     r_uop := GetNewUopAndBrMask(BypassAllocations(next_uop, ren2_uops, ren2_alloc_reqs), io.brinfo)
 
     ren2_valids(w) := r_valid
-    ren2_uops(w)   := r_uop
+    if (w > 0) ren2_uops(w) := BypassAllocations(r_uop, ren2_uops.slice(0,w), ren2_alloc_reqs.slice(0,w))
+    else       ren2_uops(w) := r_uop
   }
 
   //-------------------------------------------------------------
