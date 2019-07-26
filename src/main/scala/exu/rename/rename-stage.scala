@@ -158,28 +158,6 @@ class RenameStage(
   }
 
   //-------------------------------------------------------------
-  // Free List
-
-  // Freelist inputs.
-  freelist.io.reqs := ren1_alloc_reqs
-  freelist.io.dealloc_pregs zip com_valids zip rbk_valids zip ren2_rbk_valids map
-    {case (((d,c),r1),r2) => d.valid := c || r1 || r2}
-  freelist.io.dealloc_pregs zip io.com_uops zip ren2_uops map
-    {case ((d,c),r) => d.bits := Mux(io.rollback, c.pdst, Mux(io.flush, r.pdst, c.stale_pdst))}
-  freelist.io.ren_br_tags := ren1_br_tags
-  freelist.io.brinfo := io.brinfo
-  freelist.io.debug.pipeline_empty := io.debug_rob_empty && !ren2_valids.reduce(_||_)
-
-  assert (ren1_alloc_reqs zip freelist.io.alloc_pregs map {case (r,p) => !r || p.bits =/= 0.U} reduce (_&&_),
-           "[rename-stage] A uop is trying to allocate the zero physical register.")
-
-  // Freelist outputs.
-  for ((uop, w) <- ren1_uops.zipWithIndex) {
-    val preg = freelist.io.alloc_pregs(w).bits
-    uop.pdst := Mux(uop.ldst =/= 0.U || float.B, preg, 0.U)
-  }
-
-  //-------------------------------------------------------------
   // Rename Table
 
   // Maptable inputs.
@@ -237,6 +215,28 @@ class RenameStage(
 
     ren2_valids(w) := r_valid
     ren2_uops(w)   := r_uop
+  }
+
+  //-------------------------------------------------------------
+  // Free List
+
+  // Freelist inputs.
+  freelist.io.reqs := ren1_alloc_reqs
+  freelist.io.dealloc_pregs zip com_valids zip rbk_valids zip ren2_rbk_valids map
+    {case (((d,c),r1),r2) => d.valid := c || r1 || r2}
+  freelist.io.dealloc_pregs zip io.com_uops zip ren2_uops map
+    {case ((d,c),r) => d.bits := Mux(io.rollback, c.pdst, Mux(io.flush, r.pdst, c.stale_pdst))}
+  freelist.io.ren_br_tags := ren1_br_tags
+  freelist.io.brinfo := io.brinfo
+  freelist.io.debug.pipeline_empty := io.debug_rob_empty && !ren2_valids.reduce(_||_)
+
+  assert (ren1_alloc_reqs zip freelist.io.alloc_pregs map {case (r,p) => !r || p.bits =/= 0.U} reduce (_&&_),
+           "[rename-stage] A uop is trying to allocate the zero physical register.")
+
+  // Freelist outputs.
+  for ((uop, w) <- ren1_uops.zipWithIndex) {
+    val preg = freelist.io.alloc_pregs(w).bits
+    uop.pdst := Mux(uop.ldst =/= 0.U || float.B, preg, 0.U)
   }
 
   //-------------------------------------------------------------
