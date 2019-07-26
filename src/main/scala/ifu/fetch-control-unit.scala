@@ -390,7 +390,7 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
 
     val btb_idx = f3_btb_resp.bits.cfi_idx
 
-    when (BpredType.isAlwaysTaken(f3_btb_resp.bits.bpd_type)) {// TODO XXX BUG look at actual inst, not BTB
+    when (BpredType.isAlwaysTaken(f3_btb_resp.bits.bpd_type)) {
       f3_bpd_may_redirect_taken := io.f3_bpd_resp.valid && f3_bpd_br_taken && f3_bpd_br_idx < btb_idx
 
       assert (f3_btb_resp.bits.taken)
@@ -399,7 +399,6 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
       val bpd_agrees_with_btb = f3_bpd_predictions(btb_idx)
       f3_bpd_may_redirect_taken := io.f3_bpd_resp.valid && f3_bpd_br_taken &&
         (f3_bpd_br_idx < btb_idx || !bpd_agrees_with_btb)
-        // XXX in this scenario, ignore the btb mask and go with the bpd mask
       f3_bpd_may_redirect_next := io.f3_bpd_resp.valid && !f3_bpd_br_taken
 
       assert (BpredType.isBranch(f3_btb_resp.bits.bpd_type))
@@ -443,7 +442,6 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
   // This has a bad effect on QoR.
   io.f3_will_redirect := false.B //f3_req.valid
 
-  // TODO this logic is broken and vestigial. Do update correctly (remove RegNext)
   val f3_btb_update_bits = Wire(new BoomBTBUpdate)
   val f3_btb_update_valid = Mux(f3_bpd_overrides_bcheck,
                               f3_bpd_btb_update_valid      && (!f3_jr_valid || f3_bpd_br_idx < f3_jr_idx),
@@ -507,12 +505,7 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
 
     when (w.U === f3_bpd_br_idx && f3_bpd_overrides_bcheck) {
       f3_fetch_bundle.bpu_info(w).bpd_blame := true.B
-    }
-    // TODO deal with blame with bpd
-//    .elsewhen (w.U === f3_btb_resp.bits.cfi_idx && io.f3_bpu_request.valid && !f3_req.valid) {
-//      f3_fetch_bundle.bpu_info(w).bpd_blame := true.B
-//    }
-    .elsewhen (w.U === f3_btb_resp.bits.cfi_idx && f3_btb_resp.valid && !f3_req.valid) {
+    } .elsewhen (w.U === f3_btb_resp.bits.cfi_idx && f3_btb_resp.valid && !f3_req.valid) {
        f3_fetch_bundle.bpu_info(w).btb_blame := true.B
     }
 
