@@ -68,8 +68,6 @@ class RenameStageIO(
   val rbk_valids = Input(Vec(plWidth, Bool()))
   val rollback = Input(Bool())
 
-  val flush = Input(Bool())
-
   val debug_rob_empty = Input(Bool())
   val debug = Output(new DebugRenameStageIO(numPhysRegs))
 }
@@ -128,7 +126,6 @@ class RenameStage(
   // Stage 1
   val ren1_fire       = Wire(Vec(plWidth, Bool()))
   val ren1_uops       = Wire(Vec(plWidth, new MicroOp))
-  val ren1_alloc_reqs = Wire(Vec(plWidth, Bool()))
 
   // Stage 2
   val ren2_valids     = Wire(Vec(plWidth, Bool()))
@@ -141,20 +138,16 @@ class RenameStage(
   // Commit/Rollback
   val com_valids      = Wire(Vec(plWidth, Bool()))
   val rbk_valids      = Wire(Vec(plWidth, Bool()))
-  val ren2_rbk_valids = Wire(Vec(plWidth, Bool()))
 
   for (w <- 0 until plWidth) {
     ren1_fire(w)          := io.dec_fire(w)
     ren1_uops(w)          := io.dec_uops(w)
 
-    ren1_alloc_reqs(w)    := ren1_uops(w).ldst_val && ren1_uops(w).dst_rtype === rtype && ren1_fire(w)
     ren2_alloc_reqs(w)    := ren2_uops(w).ldst_val && ren2_uops(w).dst_rtype === rtype && ren2_fire(w)
+    ren2_br_tags(w).valid := ren2_fire(w) && ren2_uops(w).allocate_brtag
 
     com_valids(w)         := io.com_uops(w).ldst_val && io.com_uops(w).dst_rtype === rtype && io.com_valids(w)
     rbk_valids(w)         := io.com_uops(w).ldst_val && io.com_uops(w).dst_rtype === rtype && io.rbk_valids(w)
-    ren2_rbk_valids(w)    := ren2_uops(w).ldst_val && ren2_uops(w).dst_rtype === rtype && io.flush && ren2_valids(w)
-
-    ren2_br_tags(w).valid := ren2_fire(w) && ren2_uops(w).allocate_brtag
     ren2_br_tags(w).bits  := ren2_uops(w).br_tag
   }
 
