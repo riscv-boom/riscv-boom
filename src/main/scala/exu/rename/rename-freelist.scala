@@ -47,19 +47,19 @@ class RenameFreeList(
       val isprlist = Output(Bits(numPregs.W))
     }
   })
-
   // The free list register array and its branch allocation lists.
   val free_list = RegInit(UInt(numPregs.W), ~(1.U(numPregs.W)))
   val br_alloc_lists = Reg(Vec(maxBrCount, UInt(numPregs.W)))
 
   // Select pregs from the free list.
   val preg_sels = SelectFirstN(free_list, plWidth)
+  val sel_fire  = Wire(Vec(plWidth, Bool()))
 
   // Allocations seen by branches in each pipeline slot.
-  val alloc_masks = (preg_sels zip io.reqs).scanRight(0.U(numPregs.W))
-                      {case ((preg, req), mask) => Mux(req, mask | preg, mask)}
+  val alloc_masks = (io.alloc_pregs zip io.reqs).scanRight(0.U(numPregs.W)) { case ((a,r),m) => m | UIntToOH(a.bits) & Fill(numPregs,r) }
 
-  // Pregs returned by the ROB via commit or rollback.
+  // Masks that modify the freelist array.
+  val sel_mask = (preg_sels zip sel_fire) map { case (s,f) => s & Fill(numPregs,f) } reduce(_|_)
   val dealloc_mask = io.dealloc_pregs.map(d =>
                        UIntToOH(d.bits)(numPregs-1,0) & Fill(numPregs, d.valid.asUInt)).reduce(_|_)
 
@@ -77,13 +77,18 @@ class RenameFreeList(
     free_list := (free_list | br_alloc_lists(io.brinfo.tag) | dealloc_mask) & ~(1.U(numPregs.W))
   } .otherwise {
     // Update the free list.
-    free_list := (free_list & ~alloc_masks(0) | dealloc_mask) & ~(1.U(numPregs.W))
+    free_list := (free_list & ~sel_mask | dealloc_mask) & ~(1.U(numPregs.W))
   }
 
-  // Encode outputs.
-  io.alloc_pregs zip preg_sels map {case (p,s) => p.bits  := OHToUInt(s)}
-  io.alloc_pregs zip preg_sels map {case (p,s) => p.valid := s.orR}
-
+  // Pipeline logic | hookup outputs.
+  for (w <- 0 until plWidth) {
+    val can_sel = preg_sels(w).orR
+    val r_valid = RegEnable(can_sel, false.B, sel_fire(w))
+    val r_sel   = RegEnable(OHToUInt(preg_sels(w)), sel_fire(w))
+    sel_fire(w) := (!r_valid || io.reqs(w)) && can_sel
+    io.alloc_pregs(w).bits  := r_sel
+    io.alloc_pregs(w).valid := r_valid
+  }
   io.debug.freelist := free_list
   io.debug.isprlist := 0.U  // TODO track commit free list.
 
