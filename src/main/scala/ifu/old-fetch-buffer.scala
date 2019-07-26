@@ -90,14 +90,14 @@ class OldFetchBuffer(numEntries: Int)(implicit p: Parameters) extends BoomModule
     in_uops(i)                := DontCare
     in_mask(i)                := io.enq.valid && io.enq.bits.mask(i)
     in_uops(i).edge_inst      := false.B
-    in_uops(i).pc             := (alignToFetchBoundary(io.enq.bits.pc)
+    in_uops(i).debug_pc       := (alignToFetchBoundary(io.enq.bits.pc)
                                 + (i << log2Ceil(coreInstBytes)).U)
-    in_uops(i).pc_lob         := in_uops(i).pc // LHS width will cut off high-order bits.
+    in_uops(i).pc_lob         := in_uops(i).debug_pc // LHS width will cut off high-order bits.
     in_uops(i).cfi_idx        := i.U
     if (i == 0) {
       when (io.enq.bits.edge_inst) {
         assert(usingCompressed.B)
-        in_uops(i).pc       := alignToFetchBoundary(io.enq.bits.pc) - 2.U
+        in_uops(i).debug_pc := alignToFetchBoundary(io.enq.bits.pc) - 2.U
         in_uops(i).pc_lob   := alignToFetchBoundary(io.enq.bits.pc)
         in_uops(i).edge_inst:= true.B
       }
@@ -240,7 +240,7 @@ class OldFetchBuffer(numEntries: Int)(implicit p: Parameters) extends BoomModule
     printf("    Fetch4: Deq:(V:%c DeqCnt:%d PC:0x%x)\n",
       BoolToChar(io.deq.valid, 'V'),
       deq_count,
-      io.deq.bits.uops(0).bits.pc)
+      io.deq.bits.uops(0).bits.debug_pc)
   }
 
   //-------------------------------------------------------------
