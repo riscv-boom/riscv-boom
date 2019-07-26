@@ -103,6 +103,35 @@ class RenameStage(
   val io = IO(new RenameStageIO(plWidth, numPhysRegs, numWbPorts))
 
   //-------------------------------------------------------------
+  // Helper Functions
+
+  def BypassAllocations(uop: MicroOp, older_uops: Vec[MicroOp], alloc_reqs: Vec[Bool]): MicroOp = {
+    val bypassed_uop = Wire(new MicroOp)
+    bypassed_uop := uop
+
+    val bypass_hits_rs1 = (older_uops zip alloc_reqs) map { case (r,a) => a && r.ldst === uop.lrs1 }
+    val bypass_hits_rs2 = (older_uops zip alloc_reqs) map { case (r,a) => a && r.ldst === uop.lrs2 }
+    val bypass_hits_rs3 = (older_uops zip alloc_reqs) map { case (r,a) => a && r.ldst === uop.lrs3 }
+    val bypass_hits_dst = (older_uops zip alloc_reqs) map { case (r,a) => a && r.ldst === uop.ldst }
+
+    val bypass_sel_rs1 = PriorityEncoderOH(bypass_hits_rs1.reverse).reverse
+    val bypass_sel_rs2 = PriorityEncoderOH(bypass_hits_rs2.reverse).reverse
+    val bypass_sel_rs3 = PriorityEncoderOH(bypass_hits_rs3.reverse).reverse
+    val bypass_sel_dst = PriorityEncoderOH(bypass_hits_dst.reverse).reverse
+
+    val bypass_pdsts = older_uops.map(_.pdst)
+
+    when (bypass_hits_rs1.reduce(_||_)) { bypassed_uop.prs1       := Mux1H(bypass_sel_rs1, bypass_pdsts) }
+    when (bypass_hits_rs2.reduce(_||_)) { bypassed_uop.prs2       := Mux1H(bypass_sel_rs2, bypass_pdsts) }
+    when (bypass_hits_rs3.reduce(_||_)) { bypassed_uop.prs3       := Mux1H(bypass_sel_rs3, bypass_pdsts) }
+    when (bypass_hits_dst.reduce(_||_)) { bypassed_uop.stale_pdst := Mux1H(bypass_sel_dst, bypass_pdsts) }
+
+    if (!float) bypassed_uop.prs3 := DontCare
+
+    bypassed_uop
+  }
+
+  //-------------------------------------------------------------
   // Rename Structures
 
   val maptable = Module(new RenameMapTable(
