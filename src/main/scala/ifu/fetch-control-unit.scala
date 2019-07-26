@@ -247,8 +247,6 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
   val prev_half    = Reg(UInt(coreInstBits.W))
   // Tracks if last fetchpacket contained a half-inst
   val prev_is_half = RegInit(false.B)
-  // Tracks nextpc after the previous fetch bundle
-  val prev_nextpc = Reg(UInt(vaddrBitsExtended.W))
 
   assert(fetchWidth >= 4 || !usingCompressed) // Logic gets kind of annoying with fetchWidth = 2
   for (i <- 0 until fetchWidth) {
@@ -312,22 +310,6 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
     jal_targs_ma(i) := jal_targs(i)(1) && is_jal(i) && !usingCompressed.B
   }
 
-  val f3_br_seen = f3_valid &&
-                   !f3_imemresp.xcpt.pf.inst &&
-                   is_br.reduce(_|_) &&
-                   (!is_jal.reduce(_|_) || (PriorityEncoder(is_br.asUInt) < PriorityEncoder(is_jal.asUInt))) &&
-                   (!is_jr.reduce(_|_) || (PriorityEncoder(is_br.asUInt) < PriorityEncoder(is_jr.asUInt)))
-  val f3_jr_seen = f3_valid &&
-                   !f3_imemresp.xcpt.pf.inst &&
-                   is_jr.reduce(_|_) &&
-                   (!is_jal.reduce(_|_) || (PriorityEncoder(is_jr.asUInt) < PriorityEncoder(is_jal.asUInt)))
-
-  // What does the BIM predict?
-//  val f3_bim_predictions = is_br.asUInt & f3_btb_resp.bits.bim_resp.bits.getTakens()
-//  val f3_bim_br_taken = f3_bim_predictions.orR
-//  val f3_bim_br_idx = PriorityEncoder(f3_bim_predictions)
-//  val f3_bim_target = br_targs(f3_bim_br_idx)
-
   // Does the BPD have a prediction to make (in the case of a BTB miss?)
   // Calculate in F3 but don't redirect until F4.
   io.f3_is_br := is_br
@@ -373,9 +355,6 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
     && f3_btb_mask(last_idx)
     && f3_fetch_bundle.insts(last_idx)(1,0) === 3.U)
     prev_half    := f3_fetch_bundle.insts(last_idx)(15,0)
-    prev_nextpc  := alignToFetchBoundary(f3_fetch_bundle.pc) + Mux(inLastChunk(f3_fetch_bundle.pc) && icIsBanked.B,
-                                                                 bankBytes.U,
-                                                                 fetchBytes.U)
   } .elsewhen (io.clear_fetchbuffer) {
     prev_is_half := false.B
   }
