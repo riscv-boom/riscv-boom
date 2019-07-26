@@ -138,6 +138,7 @@ class RenameStage(
     plWidth,
     32,
     numPhysRegs,
+    false,
     float))
   val freelist = Module(new RenameFreeList(
     plWidth,
@@ -223,18 +224,23 @@ class RenameStage(
 
   for (w <- 0 until plWidth) {
     require (renameLatency == 2)
-    val r_valid = RegInit(false.B)
-    val r_uop   = Reg(new MicroOp())
+    val r_valid  = RegInit(false.B)
+    val r_uop    = Reg(new MicroOp)
+    val next_uop = Wire(new MicroOp)
+
+    next_uop := r_uop
 
     when (io.kill) {
       r_valid := false.B
     } .elsewhen (ren2_ready) {
       r_valid := ren1_fire(w)
-      r_uop := GetNewUopAndBrMask(ren1_uops(w), io.brinfo)
+      next_uop := ren1_uops(w)
     } .otherwise {
       r_valid := r_valid && !ren2_fire(w) // clear bit if uop gets dispatched
-      r_uop := GetNewUopAndBrMask(r_uop, io.brinfo)
+      next_uop := r_uop
     }
+
+    r_uop := GetNewUopAndBrMask(BypassAllocations(next_uop, ren2_uops, ren2_alloc_reqs), io.brinfo)
 
     ren2_valids(w) := r_valid
     ren2_uops(w)   := r_uop
